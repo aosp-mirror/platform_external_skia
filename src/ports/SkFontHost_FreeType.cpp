@@ -193,14 +193,14 @@ public:
     }
 
 protected:
-    unsigned generateGlyphCount() SK_OVERRIDE;
-    uint16_t generateCharToGlyph(SkUnichar uni) SK_OVERRIDE;
-    void generateAdvance(SkGlyph* glyph) SK_OVERRIDE;
-    void generateMetrics(SkGlyph* glyph) SK_OVERRIDE;
-    void generateImage(const SkGlyph& glyph) SK_OVERRIDE;
-    void generatePath(const SkGlyph& glyph, SkPath* path) SK_OVERRIDE;
-    void generateFontMetrics(SkPaint::FontMetrics*) SK_OVERRIDE;
-    SkUnichar generateGlyphToChar(uint16_t glyph) SK_OVERRIDE;
+    unsigned generateGlyphCount() override;
+    uint16_t generateCharToGlyph(SkUnichar uni) override;
+    void generateAdvance(SkGlyph* glyph) override;
+    void generateMetrics(SkGlyph* glyph) override;
+    void generateImage(const SkGlyph& glyph) override;
+    void generatePath(const SkGlyph& glyph, SkPath* path) override;
+    void generateFontMetrics(SkPaint::FontMetrics*) override;
+    SkUnichar generateGlyphToChar(uint16_t glyph) override;
 
 private:
     SkFaceRec*  fFaceRec;
@@ -460,7 +460,7 @@ static void populate_glyph_to_unicode(FT_Face& face, SkTDArray<SkUnichar>* glyph
 }
 
 SkAdvancedTypefaceMetrics* SkTypeface_FreeType::onGetAdvancedTypefaceMetrics(
-        SkAdvancedTypefaceMetrics::PerGlyphInfo perGlyphInfo,
+        PerGlyphInfo perGlyphInfo,
         const uint32_t* glyphIDs,
         uint32_t glyphIDsCount) const {
 #if defined(SK_BUILD_FOR_MAC)
@@ -587,10 +587,10 @@ SkAdvancedTypefaceMetrics* SkTypeface_FreeType::onGetAdvancedTypefaceMetrics(
                                     face->bbox.xMax, face->bbox.yMin);
 
     if (!FT_IS_SCALABLE(face)) {
-        perGlyphInfo = SkAdvancedTypefaceMetrics::kNo_PerGlyphInfo;
+        perGlyphInfo = kNo_PerGlyphInfo;
     }
 
-    if (perGlyphInfo & SkAdvancedTypefaceMetrics::kHAdvance_PerGlyphInfo) {
+    if (perGlyphInfo & kHAdvance_PerGlyphInfo) {
         if (FT_IS_FIXED_WIDTH(face)) {
             appendRange(&info->fGlyphWidths, 0);
             int16_t advance = face->max_advance_width;
@@ -624,12 +624,12 @@ SkAdvancedTypefaceMetrics* SkTypeface_FreeType::onGetAdvancedTypefaceMetrics(
         }
     }
 
-    if (perGlyphInfo & SkAdvancedTypefaceMetrics::kVAdvance_PerGlyphInfo &&
+    if (perGlyphInfo & kVAdvance_PerGlyphInfo &&
             FT_HAS_VERTICAL(face)) {
         SkASSERT(false);  // Not implemented yet.
     }
 
-    if (perGlyphInfo & SkAdvancedTypefaceMetrics::kGlyphNames_PerGlyphInfo &&
+    if (perGlyphInfo & kGlyphNames_PerGlyphInfo &&
             info->fType == SkAdvancedTypefaceMetrics::kType1_Font) {
         // Postscript fonts may contain more than 255 glyphs, so we end up
         // using multiple font descriptions with a glyph ordering.  Record
@@ -643,7 +643,7 @@ SkAdvancedTypefaceMetrics* SkTypeface_FreeType::onGetAdvancedTypefaceMetrics(
         }
     }
 
-    if (perGlyphInfo & SkAdvancedTypefaceMetrics::kToUnicode_PerGlyphInfo &&
+    if (perGlyphInfo & kToUnicode_PerGlyphInfo &&
            info->fType != SkAdvancedTypefaceMetrics::kType1_Font &&
            face->num_charmaps) {
         populate_glyph_to_unicode(face, &(info->fGlyphToUnicode));
@@ -1198,8 +1198,7 @@ void SkScalerContext_FreeType::generateMetrics(SkGlyph* glyph) {
     // This means do not try to scale embedded bitmaps; only scale bitmaps in bitmap only fonts.
     if (!FT_IS_SCALABLE(fFace) && fScaleY && fFace->size->metrics.y_ppem) {
         // NOTE: both dimensions are scaled by y_ppem. this is WAI.
-        scaleGlyphMetrics(*glyph, SkScalarDiv(SkFixedToScalar(fScaleY),
-                                              SkIntToScalar(fFace->size->metrics.y_ppem)));
+        scaleGlyphMetrics(*glyph, SkFixedToScalar(fScaleY) / fFace->size->metrics.y_ppem);
     }
 
 #ifdef ENABLE_GLYPH_SPEW
@@ -1315,9 +1314,20 @@ void SkScalerContext_FreeType::generateFontMetrics(SkPaint::FontMetrics* metrics
     SkScalar ascent, descent, leading, xmin, xmax, ymin, ymax;
     SkScalar underlineThickness, underlinePosition;
     if (face->face_flags & FT_FACE_FLAG_SCALABLE) { // scalable outline font
-        ascent = -SkIntToScalar(face->ascender) / upem;
-        descent = -SkIntToScalar(face->descender) / upem;
-        leading = SkIntToScalar(face->height + (face->descender - face->ascender)) / upem;
+        // FreeType will always use HHEA metrics if they're not zero.
+        // It completely ignores the OS/2 fsSelection::UseTypoMetrics bit.
+        // It also ignores the VDMX tables, which are also of interest here
+        // (and override everything else when they apply).
+        static const int kUseTypoMetricsMask = (1 << 7);
+        if (os2 && os2->version != 0xFFFF && (os2->fsSelection & kUseTypoMetricsMask)) {
+            ascent = -SkIntToScalar(os2->sTypoAscender) / upem;
+            descent = -SkIntToScalar(os2->sTypoDescender) / upem;
+            leading = SkIntToScalar(os2->sTypoLineGap) / upem;
+        } else {
+            ascent = -SkIntToScalar(face->ascender) / upem;
+            descent = -SkIntToScalar(face->descender) / upem;
+            leading = SkIntToScalar(face->height + (face->descender - face->ascender)) / upem;
+        }
         xmin = SkIntToScalar(face->bbox.xMin) / upem;
         xmax = SkIntToScalar(face->bbox.xMax) / upem;
         ymin = -SkIntToScalar(face->bbox.yMin) / upem;
@@ -1670,6 +1680,7 @@ bool SkTypeface_FreeType::Scanner::scanFont(
             int const weight;
         } commonWeights [] = {
             // There are probably more common names, but these are known to exist.
+            { "all", SkFontStyle::kNormal_Weight }, // Multiple Masters usually default to normal.
             { "black", SkFontStyle::kBlack_Weight },
             { "bold", SkFontStyle::kBold_Weight },
             { "book", (SkFontStyle::kNormal_Weight + SkFontStyle::kLight_Weight)/2 },

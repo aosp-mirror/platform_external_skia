@@ -1,3 +1,7 @@
+# Copyright 2015 Google Inc.
+#
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
 # Include this gypi to include all 'pdf' files
 # The parent gyp/gypi file must define
 #       'skia_src_path'     e.g. skia/trunk/src
@@ -8,16 +12,14 @@
 {
     'sources': [
         '<(skia_src_path)/doc/SkDocument_PDF.cpp',
+        '<(skia_src_path)/pdf/SkJpegInfo.cpp',
+        '<(skia_src_path)/pdf/SkJpegInfo.h',
         '<(skia_src_path)/pdf/SkPDFBitmap.cpp',
         '<(skia_src_path)/pdf/SkPDFBitmap.h',
         '<(skia_src_path)/pdf/SkPDFCanon.cpp',
         '<(skia_src_path)/pdf/SkPDFCanon.h',
-        '<(skia_src_path)/pdf/SkPDFCatalog.cpp',
-        '<(skia_src_path)/pdf/SkPDFCatalog.h',
         '<(skia_src_path)/pdf/SkPDFDevice.cpp',
         '<(skia_src_path)/pdf/SkPDFDevice.h',
-        '<(skia_src_path)/pdf/SkPDFDocument.cpp',
-        '<(skia_src_path)/pdf/SkPDFDocument.h',
         '<(skia_src_path)/pdf/SkPDFFont.cpp',
         '<(skia_src_path)/pdf/SkPDFFont.h',
         '<(skia_src_path)/pdf/SkPDFFontImpl.h',
@@ -25,10 +27,6 @@
         '<(skia_src_path)/pdf/SkPDFFormXObject.h',
         '<(skia_src_path)/pdf/SkPDFGraphicState.cpp',
         '<(skia_src_path)/pdf/SkPDFGraphicState.h',
-        '<(skia_src_path)/pdf/SkPDFImage.cpp',
-        '<(skia_src_path)/pdf/SkPDFImage.h',
-        '<(skia_src_path)/pdf/SkPDFPage.cpp',
-        '<(skia_src_path)/pdf/SkPDFPage.h',
         '<(skia_src_path)/pdf/SkPDFResourceDict.cpp',
         '<(skia_src_path)/pdf/SkPDFResourceDict.h',
         '<(skia_src_path)/pdf/SkPDFShader.cpp',
@@ -39,6 +37,5 @@
         '<(skia_src_path)/pdf/SkPDFTypes.h',
         '<(skia_src_path)/pdf/SkPDFUtils.cpp',
         '<(skia_src_path)/pdf/SkPDFUtils.h',
-        '<(skia_src_path)/pdf/SkTSet.h',
     ],
 }

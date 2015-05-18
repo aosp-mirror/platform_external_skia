@@ -22,10 +22,12 @@ LOCAL_CPPFLAGS := \
 
 LOCAL_SRC_FILES := \
 	../gm/gm.cpp \
+	CodecBench.cpp \
 	DecodingBench.cpp \
 	DecodingSubsetBench.cpp \
 	GMBench.cpp \
 	RecordingBench.cpp \
+	SKPAnimationBench.cpp \
 	SKPBench.cpp \
 	nanobench.cpp \
 	Benchmark.cpp \
@@ -48,6 +50,7 @@ LOCAL_SRC_FILES := \
 	ColorCubeBench.cpp \
 	ColorFilterBench.cpp \
 	ColorPrivBench.cpp \
+	ControlBench.cpp \
 	CoverageBench.cpp \
 	DashBench.cpp \
 	DeferredSurfaceCopyBench.cpp \
@@ -86,9 +89,9 @@ LOCAL_SRC_FILES := \
 	PatchGridBench.cpp \
 	PathBench.cpp \
 	PathIterBench.cpp \
-	PathUtilsBench.cpp \
 	PerlinNoiseBench.cpp \
 	PictureNestingBench.cpp \
+	PictureOverheadBench.cpp \
 	PicturePlaybackBench.cpp \
 	PremulAndUnpremulAlphaOpsBench.cpp \
 	RTreeBench.cpp \
@@ -108,18 +111,23 @@ LOCAL_SRC_FILES := \
 	StrokeBench.cpp \
 	TableBench.cpp \
 	TextBench.cpp \
+	TextBlobBench.cpp \
 	TileBench.cpp \
 	VertBench.cpp \
 	WritePixelsBench.cpp \
 	WriterBench.cpp \
 	XfermodeBench.cpp \
+	nanobenchAndroid.cpp \
 	../gm/aaclip.cpp \
 	../gm/aarectmodes.cpp \
 	../gm/addarc.cpp \
+	../gm/all_bitmap_configs.cpp \
 	../gm/alphagradients.cpp \
+	../gm/anisotropic.cpp \
 	../gm/arcofzorro.cpp \
 	../gm/arithmode.cpp \
 	../gm/astcbitmap.cpp \
+	../gm/badpaint.cpp \
 	../gm/beziereffects.cpp \
 	../gm/beziers.cpp \
 	../gm/bigblurs.cpp \
@@ -132,12 +140,15 @@ LOCAL_SRC_FILES := \
 	../gm/bitmapscroll.cpp \
 	../gm/bitmapshader.cpp \
 	../gm/bitmapsource.cpp \
+	../gm/bitmapsource2.cpp \
 	../gm/bleed.cpp \
+	../gm/blend.cpp \
 	../gm/blurcircles.cpp \
 	../gm/blurs.cpp \
 	../gm/blurquickreject.cpp \
 	../gm/blurrect.cpp \
 	../gm/blurroundrect.cpp \
+	../gm/bmpfilterqualityrepeat.cpp \
 	../gm/circles.cpp \
 	../gm/circularclips.cpp \
 	../gm/clipdrawdraw.cpp \
@@ -159,6 +170,8 @@ LOCAL_SRC_FILES := \
 	../gm/complexclip3.cpp \
 	../gm/composeshader.cpp \
 	../gm/conicpaths.cpp \
+	../gm/constcolorprocessor.cpp \
+	../gm/convex_all_line_paths.cpp \
 	../gm/convexpaths.cpp \
 	../gm/convexpolyclip.cpp \
 	../gm/convexpolyeffect.cpp \
@@ -183,6 +196,7 @@ LOCAL_SRC_FILES := \
 	../gm/extractbitmap.cpp \
 	../gm/emboss.cpp \
 	../gm/emptypath.cpp \
+	../gm/fadefilter.cpp \
 	../gm/fatpathfill.cpp \
 	../gm/factory.cpp \
 	../gm/filltypes.cpp \
@@ -219,18 +233,22 @@ LOCAL_SRC_FILES := \
 	../gm/lighting.cpp \
 	../gm/lumafilter.cpp \
 	../gm/image.cpp \
+	../gm/imagefilters.cpp \
 	../gm/imagefiltersbase.cpp \
 	../gm/imagefiltersclipped.cpp \
 	../gm/imagefilterscropped.cpp \
 	../gm/imagefiltersgraph.cpp \
 	../gm/imagefiltersscaled.cpp \
+	../gm/imagefilterstransformed.cpp \
 	../gm/internal_links.cpp \
+	../gm/largeglyphblur.cpp \
 	../gm/lcdtext.cpp \
 	../gm/linepaths.cpp \
 	../gm/matrixconvolution.cpp \
 	../gm/matriximagefilter.cpp \
 	../gm/megalooper.cpp \
 	../gm/mixedxfermodes.cpp \
+	../gm/mixedtextblobs.cpp \
 	../gm/mipmap.cpp \
 	../gm/modecolorfilters.cpp \
 	../gm/morphology.cpp \
@@ -254,6 +272,7 @@ LOCAL_SRC_FILES := \
 	../gm/pictureimagefilter.cpp \
 	../gm/pictureshader.cpp \
 	../gm/pictureshadertile.cpp \
+	../gm/pixelsnap.cpp \
 	../gm/points.cpp \
 	../gm/poly2poly.cpp \
 	../gm/polygons.cpp \
@@ -291,7 +310,11 @@ LOCAL_SRC_FILES := \
 	../gm/variedtext.cpp \
 	../gm/tallstretchedbitmaps.cpp \
 	../gm/textblob.cpp \
+	../gm/textbloblooper.cpp \
+	../gm/textblobcolortrans.cpp \
+	../gm/textblobgeometrychange.cpp \
 	../gm/textblobshader.cpp \
+	../gm/textblobtransforms.cpp \
 	../gm/texturedomaineffect.cpp \
 	../gm/thinrects.cpp \
 	../gm/thinstrokedrects.cpp \
@@ -301,7 +324,6 @@ LOCAL_SRC_FILES := \
 	../gm/tilemodes_scaled.cpp \
 	../gm/tinybitmap.cpp \
 	../gm/transparency.cpp \
-	../gm/twopointradial.cpp \
 	../gm/typeface.cpp \
 	../gm/vertices.cpp \
 	../gm/verttext.cpp \
@@ -325,6 +347,8 @@ LOCAL_SRC_FILES := \
 	../tools/Resources.cpp \
 	../tools/sk_tool_utils.cpp \
 	../tools/sk_tool_utils_font.cpp \
+	../src/utils/android/SkAndroidSDKCanvas.cpp \
+	../src/utils/android/SkHwuiRenderer.cpp \
 	../src/gpu/GrContextFactory.cpp \
 	../src/gpu/GrTest.cpp \
 	../tools/flags/SkCommandLineFlags.cpp
@@ -332,6 +356,10 @@ LOCAL_SRC_FILES := \
 LOCAL_SHARED_LIBRARIES := \
 	liblog \
 	libskia \
+	libandroid \
+	libgui \
+	libhwui \
+	libutils \
 	libGLESv2 \
 	libEGL
 
@@ -362,8 +390,11 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../src/utils/debugger \
 	$(LOCAL_PATH)/../src/images \
 	$(LOCAL_PATH)/../src/lazy \
+	$(LOCAL_PATH)/../../../frameworks/base/libs/hwui \
+	$(LOCAL_PATH)/../../../frameworks/native/include \
 	$(LOCAL_PATH)/../tools/timer \
-	$(LOCAL_PATH)/../third_party/etc1
+	$(LOCAL_PATH)/../third_party/etc1 \
+	$(LOCAL_PATH)/../src/utils/android
 
 LOCAL_CFLAGS += \
 	-DSK_CRASH_HANDLER

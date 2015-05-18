@@ -27,13 +27,13 @@ public:
                           const char* outputColor,
                           const char* inputColor,
                           const TransformedCoordsArray& coords,
-                          const TextureSamplerArray& samplers) SK_OVERRIDE {
+                          const TextureSamplerArray& samplers) override {
         // Using highp for GLES here in order to avoid some precision issues on specific GPUs.
         GrGLShaderVar tmpVar("tmpColor", kVec4f_GrSLType, 0, kHigh_GrSLPrecision);
         SkString tmpDecl;
         tmpVar.appendDecl(builder->ctxInfo(), &tmpDecl);
 
-        GrGLFPFragmentBuilder* fsBuilder = builder->getFragmentShaderBuilder();
+        GrGLFragmentBuilder* fsBuilder = builder->getFragmentShaderBuilder();
 
         fsBuilder->codeAppendf("%s;", tmpDecl.c_str());
 
@@ -82,7 +82,7 @@ public:
         fsBuilder->codeAppend(modulate.c_str());
     }
 
-    static inline void GenKey(const GrProcessor& processor, const GrGLCaps&,
+    static inline void GenKey(const GrProcessor& processor, const GrGLSLCaps&,
                               GrProcessorKeyBuilder* b) {
         const GrConfigConversionEffect& conv = processor.cast<GrConfigConversionEffect>();
         uint32_t key = (conv.swapsRedAndBlue() ? 0 : 1) | (conv.pmConversion() << 1);
@@ -142,12 +142,12 @@ GrFragmentProcessor* GrConfigConversionEffect::TestCreate(SkRandom* random,
                                       (textures[GrProcessorUnitTest::kSkiaPMTextureIdx],
                                        swapRB,
                                        pmConv,
-                                       GrProcessorUnitTest::TestMatrix(random)));
+                                       GrTest::TestMatrix(random)));
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
-void GrConfigConversionEffect::getGLProcessorKey(const GrGLCaps& caps,
+void GrConfigConversionEffect::getGLProcessorKey(const GrGLSLCaps& caps,
                                                  GrProcessorKeyBuilder* b) const {
     GrGLConfigConversionEffect::GenKey(*this, caps, b);
 }
@@ -186,16 +186,16 @@ void GrConfigConversionEffect::TestForPreservingPMConversions(GrContext* context
     desc.fHeight = 256;
     desc.fConfig = kRGBA_8888_GrPixelConfig;
 
-    SkAutoTUnref<GrTexture> readTex(context->createTexture(desc, true, NULL, 0));
+    SkAutoTUnref<GrTexture> readTex(context->textureProvider()->createTexture(desc, true, NULL, 0));
     if (!readTex.get()) {
         return;
     }
-    SkAutoTUnref<GrTexture> tempTex(context->createTexture(desc, true, NULL, 0));
+    SkAutoTUnref<GrTexture> tempTex(context->textureProvider()->createTexture(desc, true, NULL, 0));
     if (!tempTex.get()) {
         return;
     }
     desc.fFlags = kNone_GrSurfaceFlags;
-    SkAutoTUnref<GrTexture> dataTex(context->createTexture(desc, true, data, 0));
+    SkAutoTUnref<GrTexture> dataTex(context->textureProvider()->createTexture(desc, true, data, 0));
     if (!dataTex.get()) {
         return;
     }

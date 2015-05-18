@@ -1,3 +1,7 @@
+# Copyright 2015 Google Inc.
+#
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
 {
   'include_dirs': [
     '../src/core',
@@ -41,6 +45,7 @@
     '../bench/ColorCubeBench.cpp',
     '../bench/ColorFilterBench.cpp',
     '../bench/ColorPrivBench.cpp',
+    '../bench/ControlBench.cpp',
     '../bench/CoverageBench.cpp',
     '../bench/DashBench.cpp',
     '../bench/DeferredSurfaceCopyBench.cpp',
@@ -79,9 +84,9 @@
     '../bench/PatchGridBench.cpp',
     '../bench/PathBench.cpp',
     '../bench/PathIterBench.cpp',
-    '../bench/PathUtilsBench.cpp',
     '../bench/PerlinNoiseBench.cpp',
     '../bench/PictureNestingBench.cpp',
+    '../bench/PictureOverheadBench.cpp',
     '../bench/PicturePlaybackBench.cpp',
     '../bench/PremulAndUnpremulAlphaOpsBench.cpp',
     '../bench/RTreeBench.cpp',
@@ -101,6 +106,7 @@
     '../bench/StrokeBench.cpp',
     '../bench/TableBench.cpp',
     '../bench/TextBench.cpp',
+    '../bench/TextBlobBench.cpp',
     '../bench/TileBench.cpp',
     '../bench/VertBench.cpp',
     '../bench/WritePixelsBench.cpp',

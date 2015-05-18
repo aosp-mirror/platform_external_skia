@@ -20,15 +20,9 @@
 // A BitmapFactory that always fails when asked to return pixels.
 class FailureImageGenerator : public SkImageGenerator {
 public:
-    FailureImageGenerator() { }
-    virtual ~FailureImageGenerator() { }
-
+    FailureImageGenerator() : SkImageGenerator(SkImageInfo::MakeN32Premul(100, 100)) {}
 protected:
-    bool onGetInfo(SkImageInfo* info) SK_OVERRIDE {
-        *info = SkImageInfo::MakeN32Premul(100, 100);
-        return true;
-    }
-    // default onGetPixels() returns false, which is what we want.
+    // default onGetPixels() returns kUnimplemented, which is what we want.
 };
 
 // crbug.com/295895
@@ -46,17 +40,17 @@ static void test_faulty_pixelref(skiatest::Reporter* reporter) {
     SkAutoTUnref<SkSurface> surface(SkSurface::NewRasterN32Premul(200, 200));
     SkCanvas* canvas = surface->getCanvas();
 
-    const SkPaint::FilterLevel levels[] = {
-        SkPaint::kNone_FilterLevel,
-        SkPaint::kLow_FilterLevel,
-        SkPaint::kMedium_FilterLevel,
-        SkPaint::kHigh_FilterLevel,
+    const SkFilterQuality levels[] = {
+        kNone_SkFilterQuality,
+        kLow_SkFilterQuality,
+        kMedium_SkFilterQuality,
+        kHigh_SkFilterQuality,
     };
 
     SkPaint paint;
     canvas->scale(2, 2);    // need a scale, otherwise we may ignore filtering
     for (size_t i = 0; i < SK_ARRAY_COUNT(levels); ++i) {
-        paint.setFilterLevel(levels[i]);
+        paint.setFilterQuality(levels[i]);
         canvas->drawBitmap(bm, 0, 0, &paint);
     }
 }
@@ -130,19 +124,19 @@ static void test_treatAsSprite(skiatest::Reporter* reporter) {
     REPORTER_ASSERT(reporter, treat_as_sprite(mat, size, bilerBits));
 
     const SkScalar twoThirds = SK_Scalar1 * 2 / 3;
-    const SkScalar bigScale = SkScalarDiv(size.width() + twoThirds, size.width());
+    const SkScalar bigScale = (size.width() + twoThirds) / size.width();
     mat.setScale(bigScale, bigScale);
     REPORTER_ASSERT(reporter, !treat_as_sprite(mat, size, false));
     REPORTER_ASSERT(reporter, !treat_as_sprite(mat, size, bilerBits));
 
     const SkScalar oneThird = SK_Scalar1 / 3;
-    const SkScalar smallScale = SkScalarDiv(size.width() + oneThird, size.width());
+    const SkScalar smallScale = (size.width() + oneThird) / size.width();
     mat.setScale(smallScale, smallScale);
     REPORTER_ASSERT(reporter, treat_as_sprite(mat, size, false));
     REPORTER_ASSERT(reporter, !treat_as_sprite(mat, size, bilerBits));
 
     const SkScalar oneFortyth = SK_Scalar1 / 40;
-    const SkScalar tinyScale = SkScalarDiv(size.width() + oneFortyth, size.width());
+    const SkScalar tinyScale = (size.width() + oneFortyth) / size.width();
     mat.setScale(tinyScale, tinyScale);
     REPORTER_ASSERT(reporter, treat_as_sprite(mat, size, false));
     REPORTER_ASSERT(reporter, treat_as_sprite(mat, size, bilerBits));

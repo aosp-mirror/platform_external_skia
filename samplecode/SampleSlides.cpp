@@ -197,13 +197,13 @@ static SkShader* MakeSweep(const SkPoint pts[2], const GradData& data, SkShader:
     return SkGradientShader::CreateSweep(center.fX, center.fY, data.fColors, data.fPos, data.fCount);
 }
 
-static SkShader* Make2Radial(const SkPoint pts[2], const GradData& data, SkShader::TileMode tm) {
+static SkShader* Make2Conical(const SkPoint pts[2], const GradData& data, SkShader::TileMode tm) {
     SkPoint center0, center1;
     center0.set(SkScalarAve(pts[0].fX, pts[1].fX),
                 SkScalarAve(pts[0].fY, pts[1].fY));
     center1.set(SkScalarInterp(pts[0].fX, pts[1].fX, SkIntToScalar(3)/5),
                 SkScalarInterp(pts[0].fY, pts[1].fY, SkIntToScalar(1)/4));
-    return SkGradientShader::CreateTwoPointRadial(
+    return SkGradientShader::CreateTwoPointConical(
                                                   center1, (pts[1].fX - pts[0].fX) / 7,
                                                   center0, (pts[1].fX - pts[0].fX) / 2,
                                                   data.fColors, data.fPos, data.fCount, tm);
@@ -211,7 +211,7 @@ static SkShader* Make2Radial(const SkPoint pts[2], const GradData& data, SkShade
 
 typedef SkShader* (*GradMaker)(const SkPoint pts[2], const GradData& data, SkShader::TileMode tm);
 static const GradMaker gGradMakers[] = {
-    MakeLinear, MakeRadial, MakeSweep, Make2Radial
+    MakeLinear, MakeRadial, MakeSweep, Make2Conical
 };
 
 static void gradient_slide(SkCanvas* canvas) {
@@ -438,7 +438,7 @@ static void mesh_slide(SkCanvas* canvas) {
 
     SkPaint paint;
     paint.setDither(true);
-    paint.setFilterLevel(SkPaint::kLow_FilterLevel);
+    paint.setFilterQuality(kLow_SkFilterQuality);
 
     for (size_t i = 0; i < SK_ARRAY_COUNT(fRecs); i++) {
         canvas->save();
@@ -697,7 +697,7 @@ public:
 
 protected:
     // overrides from SkEventSink
-    bool onQuery(SkEvent* evt) SK_OVERRIDE {
+    bool onQuery(SkEvent* evt) override {
         if (SampleCode::TitleQ(*evt)) {
             SampleCode::TitleR(evt, "Slides");
             return true;
@@ -705,12 +705,12 @@ protected:
         return this->INHERITED::onQuery(evt);
     }
 
-    void onDrawContent(SkCanvas* canvas) SK_OVERRIDE {
+    void onDrawContent(SkCanvas* canvas) override {
         this->init();
         gProc[fIndex](canvas);
     }
 
-    SkView::Click* onFindClickHandler(SkScalar x, SkScalar y, unsigned) SK_OVERRIDE {
+    SkView::Click* onFindClickHandler(SkScalar x, SkScalar y, unsigned) override {
         this->init();
         fIndex = (fIndex + 1) % SK_ARRAY_COUNT(gProc);
         this->inval(NULL);

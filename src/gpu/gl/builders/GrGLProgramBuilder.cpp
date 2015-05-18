@@ -14,6 +14,7 @@
 #include "gl/GrGLSLPrettyPrint.h"
 #include "gl/GrGLUniformHandle.h"
 #include "gl/GrGLXferProcessor.h"
+#include "GrAutoLocaleSetter.h"
 #include "GrCoordTransform.h"
 #include "GrGLProgramBuilder.h"
 #include "GrTexture.h"
@@ -30,7 +31,7 @@ public:
     GrGLNvprProgramBuilder(GrGLGpu* gpu, const DrawArgs& args)
         : INHERITED(gpu, args) {}
 
-    GrGLProgram* createProgram(GrGLuint programID) SK_OVERRIDE {
+    GrGLProgram* createProgram(GrGLuint programID) override {
         // this is just for nvpr es, which has separable varyings that are plugged in after
         // building
         GrGLPathProcessor* pathProc =
@@ -53,6 +54,8 @@ private:
 const int GrGLProgramBuilder::kVarsPerBlock = 8;
 
 GrGLProgram* GrGLProgramBuilder::CreateProgram(const DrawArgs& args, GrGLGpu* gpu) {
+    GrAutoLocaleSetter als("C");
+
     // create a builder.  This will be handed off to effects so they can use it to add
     // uniforms, varyings, textures, etc
     SkAutoTDelete<GrGLProgramBuilder> builder(CreateProgramBuilder(args, gpu));
@@ -64,7 +67,9 @@ GrGLProgram* GrGLProgramBuilder::CreateProgram(const DrawArgs& args, GrGLGpu* gp
     GrGLSLExpr4 inputColor;
     GrGLSLExpr4 inputCoverage;
 
-    pb->emitAndInstallProcs(&inputColor, &inputCoverage);
+    if (!pb->emitAndInstallProcs(&inputColor, &inputCoverage)) {
+        return NULL;
+    }
 
     return pb->finalize();
 }
@@ -72,7 +77,7 @@ GrGLProgram* GrGLProgramBuilder::CreateProgram(const DrawArgs& args, GrGLGpu* gp
 GrGLProgramBuilder* GrGLProgramBuilder::CreateProgramBuilder(const DrawArgs& args,
                                                              GrGLGpu* gpu) {
     if (args.fPrimitiveProcessor->isPathRendering()) {
-        SkASSERT(gpu->glCaps().pathRenderingSupport() &&
+        SkASSERT(gpu->glCaps().shaderCaps()->pathRenderingSupport() &&
                  !args.fPrimitiveProcessor->willUseGeoShader() &&
                  args.fPrimitiveProcessor->numAttribs() == 0);
         return SkNEW_ARGS(GrGLNvprProgramBuilder, (gpu, args));
@@ -186,9 +191,12 @@ const GrGLContextInfo& GrGLProgramBuilder::ctxInfo() const {
     return fGpu->ctxInfo();
 }
 
-void GrGLProgramBuilder::emitAndInstallProcs(GrGLSLExpr4* inputColor, GrGLSLExpr4* inputCoverage) {
+bool GrGLProgramBuilder::emitAndInstallProcs(GrGLSLExpr4* inputColor, GrGLSLExpr4* inputCoverage) {
     // First we loop over all of the installed processors and collect coord transforms.  These will
     // be sent to the GrGLPrimitiveProcessor in its emitCode function
+    const GrPrimitiveProcessor& primProc = this->primitiveProcessor();
+    int totalTextures = primProc.numTextures();
+    const int maxTextureUnits = fGpu->glCaps().maxFragmentTextureUnits();
     SkSTArray<8, GrGLProcessor::TransformedCoordsArray> outCoords;
     for (int i = 0; i < this->pipeline().numFragmentStages(); i++) {
         const GrFragmentProcessor* processor = this->pipeline().getFragmentStage(i).processor();
@@ -196,9 +204,14 @@ void GrGLProgramBuilder::emitAndInstallProcs(GrGLSLExpr4* inputColor, GrGLSLExpr
         for (int t = 0; t < processor->numTransforms(); t++) {
             procCoords.push_back(&processor->coordTransform(t));
         }
+
+        totalTextures += processor->numTextures();
+        if (totalTextures >= maxTextureUnits) {
+            GrContextDebugf(fGpu->getContext(), "Program would use too many texture units\n");
+            return false;
+        }
     }
 
-    const GrPrimitiveProcessor& primProc = this->primitiveProcessor();
     this->emitAndInstallProc(primProc, inputColor, inputCoverage);
 
     fFragmentProcessors.reset(SkNEW(GrGLInstalledFragProcs));
@@ -207,6 +220,7 @@ void GrGLProgramBuilder::emitAndInstallProcs(GrGLSLExpr4* inputColor, GrGLSLExpr
     this->emitAndInstallFragProcs(this->pipeline().numColorFragmentStages(), numProcs,
                                   inputCoverage);
     this->emitAndInstallXferProc(*this->pipeline().getXferProcessor(), *inputColor, *inputCoverage);
+    return true;
 }
 
 void GrGLProgramBuilder::emitAndInstallFragProcs(int procOffset,
@@ -299,7 +313,7 @@ void GrGLProgramBuilder::emitAndInstallProc(const GrPrimitiveProcessor& gp,
     fGeometryProcessor = SkNEW(GrGLInstalledGeoProc);
 
     const GrBatchTracker& bt = this->batchTracker();
-    fGeometryProcessor->fGLProc.reset(gp.createGLInstance(bt, fGpu->glCaps()));
+    fGeometryProcessor->fGLProc.reset(gp.createGLInstance(bt, *fGpu->glCaps().glslCaps()));
 
     SkSTArray<4, GrGLProcessor::TextureSampler> samplers(gp.numTextures());
     this->emitSamplers(gp, &samplers, fGeometryProcessor);
@@ -392,19 +406,15 @@ GrGLProgram* GrGLProgramBuilder::finalize() {
     // compile shaders and bind attributes / uniforms
     SkTDArray<GrGLuint> shadersToDelete;
 
-    // Legacy nvpr will not compile with a vertex shader, but newer nvpr requires a dummy vertex
-    // shader
-    bool useNvpr = primitiveProcessor().isPathRendering();
-    if (!(useNvpr && fGpu->glCaps().nvprSupport() == GrGLCaps::kLegacy_NvprSupport)) {
-        if (!fVS.compileAndAttachShaders(programID, &shadersToDelete)) {
-            this->cleanupProgram(programID, shadersToDelete);
-            return NULL;
-        }
+    if (!fVS.compileAndAttachShaders(programID, &shadersToDelete)) {
+        this->cleanupProgram(programID, shadersToDelete);
+        return NULL;
+    }
 
-        // Non fixed function NVPR actually requires a vertex shader to compile
-        if (!useNvpr) {
-            fVS.bindVertexAttributes(programID);
-        }
+    // NVPR actually requires a vertex shader to compile
+    bool useNvpr = primitiveProcessor().isPathRendering();
+    if (!useNvpr) {
+        fVS.bindVertexAttributes(programID);
     }
 
     if (!fFS.compileAndAttachShaders(programID, &shadersToDelete)) {

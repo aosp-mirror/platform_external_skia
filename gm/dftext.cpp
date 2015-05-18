@@ -23,22 +23,15 @@ public:
     }
 
 protected:
-    void onOnceBeforeDraw() SK_OVERRIDE {
-        SkString filename = GetResourcePath("/Funkster.ttf");
-        SkAutoTDelete<SkFILEStream> stream(new SkFILEStream(filename.c_str()));
-        if (!stream->isValid()) {
-            SkDebugf("Could not find Funkster.ttf, please set --resourcePath correctly.\n");
-            return;
-        }
-
-        fTypeface = SkTypeface::CreateFromStream(stream.detach());
+    void onOnceBeforeDraw() override {
+        fTypeface = GetResourceAsTypeface("/fonts/Funkster.ttf");
     }
 
-    SkString onShortName() SK_OVERRIDE {
+    SkString onShortName() override {
         return SkString("dftext");
     }
 
-    SkISize onISize() SK_OVERRIDE {
+    SkISize onISize() override {
         return SkISize::Make(1024, 768);
     }
 
@@ -50,7 +43,7 @@ protected:
         canvas->translate(-px, -py);
     }
 
-    virtual void onDraw(SkCanvas* inputCanvas) SK_OVERRIDE {
+    virtual void onDraw(SkCanvas* inputCanvas) override {
 #ifdef SK_BUILD_FOR_ANDROID
         SkScalar textSizes[] = { 9.0f, 9.0f*2.0f, 9.0f*5.0f, 9.0f*2.0f*5.0f };
 #else
@@ -196,8 +189,29 @@ protected:
             y += paint.getFontMetrics(NULL);
         }
 
+        // check skew
+        {
+            paint.setLCDRenderText(false);
+            SkAutoCanvasRestore acr(canvas, true);
+            canvas->skew(0.0f, 0.151515f);
+            paint.setTextSize(SkIntToScalar(32));
+            canvas->drawText(text, textLen, 745, 70, paint);
+        }
+        {
+            paint.setLCDRenderText(true);
+            SkAutoCanvasRestore acr(canvas, true);
+            canvas->skew(0.5f, 0.0f);
+            paint.setTextSize(SkIntToScalar(32));
+            canvas->drawText(text, textLen, 580, 230, paint);
+        }
+
         // check color emoji
         paint.setTypeface(fTypeface);
+#ifdef SK_BUILD_FOR_ANDROID
+        paint.setTextSize(SkIntToScalar(19));
+#else
+        paint.setTextSize(SkIntToScalar(22));
+#endif
         canvas->drawText(text, textLen, 670, 100, paint);
 
 #if SK_SUPPORT_GPU

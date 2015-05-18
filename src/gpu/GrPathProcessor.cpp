@@ -1,3 +1,10 @@
+/*
+* Copyright 2013 Google Inc.
+*
+* Use of this source code is governed by a BSD-style license that can be
+* found in the LICENSE file.
+*/
+
 #include "GrPathProcessor.h"
 
 #include "gl/GrGLPathProcessor.h"
@@ -6,8 +13,10 @@
 GrPathProcessor::GrPathProcessor(GrColor color,
                                  const SkMatrix& viewMatrix,
                                  const SkMatrix& localMatrix)
-    : INHERITED(viewMatrix, localMatrix, true)
-    , fColor(color) {
+    : INHERITED(true)
+    , fColor(color)
+    , fViewMatrix(viewMatrix)
+    , fLocalMatrix(localMatrix) {
     this->initClassID<GrPathProcessor>();
 }
 
@@ -41,7 +50,8 @@ bool GrPathProcessor::canMakeEqual(const GrBatchTracker& m,
         return false;
     }
 
-    if (!this->viewMatrix().cheapEqualTo(that.viewMatrix())) {
+    const GrPathProcessor& other = that.cast<GrPathProcessor>();
+    if (!this->viewMatrix().cheapEqualTo(other.viewMatrix())) {
         return false;
     }
 
@@ -56,18 +66,13 @@ bool GrPathProcessor::canMakeEqual(const GrBatchTracker& m,
 }
 
 void GrPathProcessor::getGLProcessorKey(const GrBatchTracker& bt,
-                                        const GrGLCaps& caps,
+                                        const GrGLSLCaps& caps,
                                         GrProcessorKeyBuilder* b) const {
     GrGLPathProcessor::GenKey(*this, bt, caps, b);
 }
 
 GrGLPrimitiveProcessor* GrPathProcessor::createGLInstance(const GrBatchTracker& bt,
-                                                          const GrGLCaps& caps) const {
-    SkASSERT(caps.nvprSupport() != GrGLCaps::kNone_NvprSupport);
-    if (caps.nvprSupport() == GrGLCaps::kLegacy_NvprSupport) {
-        return SkNEW_ARGS(GrGLLegacyPathProcessor, (*this, bt,
-                                                    caps.maxFixedFunctionTextureCoords()));
-    } else {
-        return SkNEW_ARGS(GrGLNormalPathProcessor, (*this, bt));
-    }
+                                                          const GrGLSLCaps& caps) const {
+    SkASSERT(caps.pathRenderingSupport());
+    return SkNEW_ARGS(GrGLPathProcessor, (*this, bt));
 }

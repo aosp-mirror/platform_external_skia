@@ -1,3 +1,7 @@
+# Copyright 2015 Google Inc.
+#
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
 # Include this gypi to include all 'utils' files
 # The parent gyp/gypi file must define
 #       'skia_src_path'     e.g. skia/trunk/src
@@ -30,6 +34,7 @@
         '<(skia_include_path)/utils/SkNoSaveLayerCanvas.h',
         '<(skia_include_path)/utils/SkNWayCanvas.h',
         '<(skia_include_path)/utils/SkNullCanvas.h',
+        '<(skia_include_path)/utils/SkPaintFilterCanvas.h',
         '<(skia_include_path)/utils/SkParse.h',
         '<(skia_include_path)/utils/SkParsePaint.h',
         '<(skia_include_path)/utils/SkParsePath.h',
@@ -70,6 +75,7 @@
         '<(skia_src_path)/utils/SkNWayCanvas.cpp',
         '<(skia_src_path)/utils/SkNullCanvas.cpp',
         '<(skia_src_path)/utils/SkOSFile.cpp',
+        '<(skia_src_path)/utils/SkPaintFilterCanvas.cpp',
         '<(skia_src_path)/utils/SkParse.cpp',
         '<(skia_src_path)/utils/SkParseColor.cpp',
         '<(skia_src_path)/utils/SkParsePath.cpp',
@@ -78,7 +84,6 @@
         '<(skia_src_path)/utils/SkPatchGrid.h',
         '<(skia_src_path)/utils/SkPatchUtils.cpp',
         '<(skia_src_path)/utils/SkPatchUtils.h',
-        '<(skia_src_path)/utils/SkPathUtils.cpp',
         '<(skia_src_path)/utils/SkSHA1.cpp',
         '<(skia_src_path)/utils/SkSHA1.h',
         '<(skia_src_path)/utils/SkRTConf.cpp',

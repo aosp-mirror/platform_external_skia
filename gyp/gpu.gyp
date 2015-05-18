@@ -1,3 +1,7 @@
+# Copyright 2015 Google Inc.
+#
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
 # GYP for building gpu
 {
   'target_defaults': {
@@ -22,11 +26,7 @@
         'sources/': [ ['exclude', '_android.(h|cpp)$'],
         ],
       }],
-      ['skia_os != "nacl"', {
-        'sources/': [ ['exclude', '_nacl.(h|cpp)$'],
-        ],
-      }],
-      ['skia_os == "nacl" or skia_egl == 0', {
+      ['skia_egl == 0', {
         'sources/': [ ['exclude', '_egl.(h|cpp)$'],
         ],
       }],
@@ -85,7 +85,7 @@
       'standalone_static_library': 1,
       'dependencies': [
         'core.gyp:*',
-        'utils.gyp:*',
+        'utils.gyp:utils',
         'etc1.gyp:libetc1',
         'ktx.gyp:libSkKTX',
       ],
@@ -163,13 +163,6 @@
               '-lGL',
               '-lGLU',
               '-lX11',
-            ],
-          },
-        }],
-        [ 'skia_os == "nacl"', {
-          'link_settings': {
-            'libraries': [
-              '-lppapi_gles2',
             ],
           },
         }],

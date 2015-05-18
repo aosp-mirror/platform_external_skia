@@ -111,14 +111,14 @@ public:
                                  SkTypeface::Style requested,
                                  FontIdentity* outFontIdentifier,
                                  SkString* outFamilyName,
-                                 SkTypeface::Style* outStyle) SK_OVERRIDE;
-    SkStreamAsset* openStream(const FontIdentity&) SK_OVERRIDE;
+                                 SkTypeface::Style* outStyle) override;
+    SkStreamAsset* openStream(const FontIdentity&) override;
 
     // new APIs
-    SkDataTable* getFamilyNames() SK_OVERRIDE;
+    SkDataTable* getFamilyNames() override;
     virtual bool matchFamilySet(const char inFamilyName[],
                                 SkString* outFamilyName,
-                                SkTArray<FontIdentity>*) SK_OVERRIDE;
+                                SkTArray<FontIdentity>*) override;
 
 private:
     SkMutex mutex_;
@@ -229,6 +229,7 @@ FontEquivClass GetFontEquivClass(const char* fontname)
         { GOTHIC, "MS Gothic" },
         { GOTHIC, "\xef\xbc\xad\xef\xbc\xb3 "
                   "\xe3\x82\xb4\xe3\x82\xb7\xe3\x83\x83\xe3\x82\xaf" },
+        { GOTHIC, "Noto Sans Mono CJK JP" },
         { GOTHIC, "IPAGothic" },
         { GOTHIC, "MotoyaG04GothicMono" },
 

@@ -117,11 +117,6 @@
  */
 //#define SK_DEFAULT_IMAGE_CACHE_LIMIT (1024 * 1024)
 
-/*  If zlib is not available or you don't want to support flate compression
-    in PDF generation, define SK_NO_FLATE.
- */
-//#define SK_NO_FLATE
-
 /*  Define this to allow PDF scalars above 32k.  The PDF/A spec doesn't allow
     them, but modern PDF interpreters should handle them just fine.
  */
@@ -166,14 +161,14 @@
 //#define SK_SUPPORT_GPU 1
 
 
-/* The PDF generation code uses Path Ops to generate inverse fills and complex
- * clipping paths, but at this time, Path Ops is not release ready yet. So,
- * the code is hidden behind this #define guard. If you are feeling adventurous
- * and want the latest and greatest PDF generation code, uncomment the #define.
+/* The PDF generation code uses Path Ops to handle complex clipping paths,
+ * but at this time, Path Ops is not release ready yet. So, the code is
+ * hidden behind this #define guard. If you are feeling adventurous and
+ * want the latest and greatest PDF generation code, uncomment the #define.
  * When Path Ops is release ready, the define guards and this user config
  * define should be removed entirely.
  */
-//#define SK_PDF_USE_PATHOPS
+//#define SK_PDF_USE_PATHOPS_CLIPPING
 
 #endif
 
@@ -210,19 +205,18 @@
 #define SK_GAMMA_CONTRAST 0.0
 #define SK_GAMMA_EXPONENT 1.4
 #define SK_IGNORE_ETC1_SUPPORT
+#define SK_IGNORE_LINEONLY_AA_CONVEX_PATH_OPTS
 #define SK_INTERNAL
-#define SK_LEGACY_DRAWPICTURECALLBACK
-#define SK_OVERRIDE override
+#define SK_PRINT_CODEC_MESSAGES
 #define SK_SCALAR_TO_FLOAT_EXCLUDED
 #define SK_SFNTLY_SUBSETTER "sample/chromium/font_subsetter.h"
 #define SK_SUPPORT_GPU 1
 #define SK_SUPPORT_LEGACY_CLIPTOLAYERFLAG
 #define SK_SUPPORT_LEGACY_GETDEVICE
-#define SK_SUPPORT_LEGACY_GRADIENT_FACTORIES
 #define SK_SUPPORT_LEGACY_PUBLIC_IMAGEINFO_FIELDS
+#define SK_SUPPORT_LEGACY_SCALAR_DIV
 #define SK_SUPPORT_OPENCL 0
 #define SK_SUPPORT_PDF
 #define SK_USE_FREETYPE_EMBOLDEN
-#define SkLONGLONG int64_t
 
 #endif // SkUserConfig_Android_DEFINED

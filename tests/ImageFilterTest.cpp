@@ -20,7 +20,6 @@
 #include "SkGradientShader.h"
 #include "SkLightingImageFilter.h"
 #include "SkMatrixConvolutionImageFilter.h"
-#include "SkMatrixImageFilter.h"
 #include "SkMergeImageFilter.h"
 #include "SkMorphologyImageFilter.h"
 #include "SkOffsetImageFilter.h"
@@ -51,7 +50,7 @@ public:
     }
 
     virtual bool onFilterImage(Proxy*, const SkBitmap& src, const Context& ctx,
-                               SkBitmap* result, SkIPoint* offset) const SK_OVERRIDE {
+                               SkBitmap* result, SkIPoint* offset) const override {
         REPORTER_ASSERT(fReporter, ctx.ctm() == fExpectedMatrix);
         return true;
     }
@@ -60,7 +59,7 @@ public:
     SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(MatrixTestImageFilter)
 
 protected:
-    void flatten(SkWriteBuffer& buffer) const SK_OVERRIDE {
+    void flatten(SkWriteBuffer& buffer) const override {
         this->INHERITED::flatten(buffer);
         buffer.writeFunctionPtr(fReporter);
         buffer.writeMatrix(fExpectedMatrix);
@@ -298,7 +297,7 @@ static void test_crop_rects(SkBaseDevice* device, skiatest::Reporter* reporter) 
         SkBlurImageFilter::Create(SK_Scalar1, SK_Scalar1, input.get(), &cropRect),
         SkDropShadowImageFilter::Create(SK_Scalar1, SK_Scalar1, SK_Scalar1, SK_Scalar1,
             SK_ColorGREEN, SkDropShadowImageFilter::kDrawShadowAndForeground_ShadowMode,
-            input.get(), &cropRect, 0),
+            input.get(), &cropRect),
         SkLightingImageFilter::CreatePointLitDiffuse(location, SK_ColorGREEN, 0, 0, input.get(), &cropRect),
         SkLightingImageFilter::CreatePointLitSpecular(location, SK_ColorGREEN, 0, 0, 0, input.get(), &cropRect),
         SkMatrixConvolutionImageFilter::Create(kernelSize, kernel, gain, bias, SkIPoint::Make(1, 1), SkMatrixConvolutionImageFilter::kRepeat_TileMode, false, input.get(), &cropRect),
@@ -470,7 +469,7 @@ DEF_TEST(ImageFilterDrawTiled, reporter) {
         { "erode", SkErodeImageFilter::Create(2, 3) },
         { "tile", SkTileImageFilter::Create(SkRect::MakeXYWH(0, 0, 50, 50),
                                             SkRect::MakeXYWH(0, 0, 100, 100), NULL) },
-        { "matrix", SkMatrixImageFilter::Create(matrix, SkPaint::kLow_FilterLevel) },
+        { "matrix", SkImageFilter::CreateMatrixFilter(matrix, kLow_SkFilterQuality) },
         { "blur and offset", SkOffsetImageFilter::Create(five, five, blur.get()) },
         { "picture and blur", SkBlurImageFilter::Create(five, five, pictureFilter.get()) },
         { "rect shader and blur", SkBlurImageFilter::Create(five, five, rectShaderFilter.get()) },
@@ -533,7 +532,7 @@ static void draw_saveLayer_picture(int width, int height, int tileSize,
 
     SkAutoTUnref<SkColorFilter> cf(SkColorFilter::CreateModeFilter(SK_ColorWHITE, SkXfermode::kSrc_Mode));
     SkAutoTUnref<SkImageFilter> cfif(SkColorFilterImageFilter::Create(cf.get()));
-    SkAutoTUnref<SkImageFilter> imageFilter(SkMatrixImageFilter::Create(matrix, SkPaint::kNone_FilterLevel, cfif.get()));
+    SkAutoTUnref<SkImageFilter> imageFilter(SkImageFilter::CreateMatrixFilter(matrix, kNone_SkFilterQuality, cfif.get()));
 
     SkPaint paint;
     paint.setImageFilter(imageFilter.get());
@@ -585,7 +584,7 @@ static SkImageFilter* makeDropShadow(SkImageFilter* input = NULL) {
         SkIntToScalar(100), SkIntToScalar(100),
         SkIntToScalar(10), SkIntToScalar(10),
         SK_ColorBLUE, SkDropShadowImageFilter::kDrawShadowAndForeground_ShadowMode,
-        input, NULL, 0);
+        input, NULL);
 }
 
 DEF_TEST(ImageFilterBlurThenShadowBounds, reporter) {
@@ -1076,7 +1075,7 @@ DEF_TEST(ImageFilterNestedSaveLayer, reporter) {
     matrix.setScale(SkIntToScalar(2), SkIntToScalar(2));
     matrix.postTranslate(SkIntToScalar(-20), SkIntToScalar(-20));
     SkAutoTUnref<SkImageFilter> matrixFilter(
-        SkMatrixImageFilter::Create(matrix, SkPaint::kLow_FilterLevel));
+        SkImageFilter::CreateMatrixFilter(matrix, kLow_SkFilterQuality));
 
     // Test that saveLayer() with a filter nested inside another saveLayer() applies the
     // correct offset to the filter matrix.
@@ -1142,6 +1141,9 @@ const SkSurfaceProps gProps = SkSurfaceProps(SkSurfaceProps::kLegacyFontHost_Ini
 
 DEF_GPUTEST(ImageFilterCropRectGPU, reporter, factory) {
     GrContext* context = factory->get(static_cast<GrContextFactory::GLContextType>(0));
+    if (NULL == context) {
+        return;
+    }
     SkAutoTUnref<SkGpuDevice> device(SkGpuDevice::Create(context,
                                                          SkSurface::kNo_Budgeted,
                                                          SkImageInfo::MakeN32Premul(100, 100),
@@ -1152,6 +1154,9 @@ DEF_GPUTEST(ImageFilterCropRectGPU, reporter, factory) {
 
 DEF_GPUTEST(HugeBlurImageFilterGPU, reporter, factory) {
     GrContext* context = factory->get(static_cast<GrContextFactory::GLContextType>(0));
+    if (NULL == context) {
+        return;
+    }
     SkAutoTUnref<SkGpuDevice> device(SkGpuDevice::Create(context,
                                                          SkSurface::kNo_Budgeted,
                                                          SkImageInfo::MakeN32Premul(100, 100),
@@ -1162,6 +1167,9 @@ DEF_GPUTEST(HugeBlurImageFilterGPU, reporter, factory) {
 
 DEF_GPUTEST(XfermodeImageFilterCroppedInputGPU, reporter, factory) {
     GrContext* context = factory->get(static_cast<GrContextFactory::GLContextType>(0));
+    if (NULL == context) {
+        return;
+    }
     SkAutoTUnref<SkGpuDevice> device(SkGpuDevice::Create(context,
                                                          SkSurface::kNo_Budgeted,
                                                          SkImageInfo::MakeN32Premul(1, 1),
@@ -1172,6 +1180,9 @@ DEF_GPUTEST(XfermodeImageFilterCroppedInputGPU, reporter, factory) {
 
 DEF_GPUTEST(TestNegativeBlurSigmaGPU, reporter, factory) {
     GrContext* context = factory->get(static_cast<GrContextFactory::GLContextType>(0));
+    if (NULL == context) {
+        return;
+    }
     SkAutoTUnref<SkGpuDevice> device(SkGpuDevice::Create(context,
                                                          SkSurface::kNo_Budgeted,
                                                          SkImageInfo::MakeN32Premul(1, 1),

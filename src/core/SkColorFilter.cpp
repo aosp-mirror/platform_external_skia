@@ -22,15 +22,6 @@ bool SkColorFilter::asComponentTable(SkBitmap*) const {
     return false;
 }
 
-void SkColorFilter::filterSpan16(const uint16_t s[], int count, uint16_t d[]) const {
-    SkASSERT(this->getFlags() & SkColorFilter::kHasFilter16_Flag);
-    SkDEBUGFAIL("missing implementation of SkColorFilter::filterSpan16");
-
-    if (d != s) {
-        memcpy(d, s, count * sizeof(uint16_t));
-    }
-}
-
 SkColor SkColorFilter::filterColor(SkColor c) const {
     SkPMColor dst, src = SkPreMultiplyColor(c);
     this->filterSpan(&src, 1, &dst);
@@ -51,24 +42,18 @@ SkColor SkColorFilter::filterColor(SkColor c) const {
 
 class SkComposeColorFilter : public SkColorFilter {
 public:
-    uint32_t getFlags() const SK_OVERRIDE {
+    uint32_t getFlags() const override {
         // Can only claim alphaunchanged and 16bit support if both our proxys do.
         return fOuter->getFlags() & fInner->getFlags();
     }
     
-    void filterSpan(const SkPMColor shader[], int count, SkPMColor result[]) const SK_OVERRIDE {
+    void filterSpan(const SkPMColor shader[], int count, SkPMColor result[]) const override {
         fInner->filterSpan(shader, count, result);
         fOuter->filterSpan(result, count, result);
     }
     
-    void filterSpan16(const uint16_t shader[], int count, uint16_t result[]) const SK_OVERRIDE {
-        SkASSERT(this->getFlags() & kHasFilter16_Flag);
-        fInner->filterSpan16(shader, count, result);
-        fOuter->filterSpan16(result, count, result);
-    }
-    
 #ifndef SK_IGNORE_TO_STRING
-    void toString(SkString* str) const SK_OVERRIDE {
+    void toString(SkString* str) const override {
         SkString outerS, innerS;
         fOuter->toString(&outerS);
         fInner->toString(&innerS);
@@ -78,7 +63,7 @@ public:
 
 #if SK_SUPPORT_GPU
     bool asFragmentProcessors(GrContext* context,
-                              SkTDArray<GrFragmentProcessor*>* array) const SK_OVERRIDE {
+                              SkTDArray<GrFragmentProcessor*>* array) const override {
         bool hasFrags = fInner->asFragmentProcessors(context, array);
         hasFrags |= fOuter->asFragmentProcessors(context, array);
         return hasFrags;
@@ -88,7 +73,7 @@ public:
     SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkComposeColorFilter)
     
 protected:
-    void flatten(SkWriteBuffer& buffer) const SK_OVERRIDE {
+    void flatten(SkWriteBuffer& buffer) const override {
         buffer.writeFlattenable(fOuter);
         buffer.writeFlattenable(fInner);
     }
@@ -103,7 +88,7 @@ private:
         SkASSERT(composedFilterCount <= SK_MAX_COMPOSE_COLORFILTER_COUNT);
     }
 
-    int privateComposedFilterCount() const SK_OVERRIDE {
+    int privateComposedFilterCount() const override {
         return fComposedFilterCount;
     }
 

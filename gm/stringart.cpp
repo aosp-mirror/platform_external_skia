@@ -24,15 +24,15 @@ public:
 
 protected:
 
-    SkString onShortName() SK_OVERRIDE {
+    SkString onShortName() override {
         return SkString("stringart");
     }
 
-    SkISize onISize() SK_OVERRIDE {
+    SkISize onISize() override {
         return SkISize::Make(kWidth, kHeight);
     }
 
-    void onDraw(SkCanvas* canvas) SK_OVERRIDE {
+    void onDraw(SkCanvas* canvas) override {
         SkScalar angle = kAngle*SK_ScalarPI + SkScalarHalf(SK_ScalarPI);
         SkScalar size = SkIntToScalar(SkMin32(kWidth, kHeight));
         SkPoint center = SkPoint::Make(SkScalarHalf(kWidth), SkScalarHalf(kHeight));
@@ -47,7 +47,7 @@ protected:
             SkPoint rp = SkPoint::Make(length*SkScalarCos(step) + center.fX,
                                        length*SkScalarSin(step) + center.fY);
             path.lineTo(rp);
-            length += SkScalarDiv(angle, SkScalarHalf(SK_ScalarPI));
+            length += angle / SkScalarHalf(SK_ScalarPI);
             step += angle;
         }
         path.close();

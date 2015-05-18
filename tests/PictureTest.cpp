@@ -28,6 +28,7 @@
 #include "SkRecord.h"
 #include "SkShader.h"
 #include "SkStream.h"
+#include "sk_tool_utils.h"
 
 #if SK_SUPPORT_GPU
 #include "SkSurface.h"
@@ -547,17 +548,17 @@ public:
     }
 
     virtual SaveLayerStrategy willSaveLayer(const SkRect* bounds, const SkPaint* paint,
-                                            SaveFlags flags) SK_OVERRIDE {
+                                            SaveFlags flags) override {
         ++fSaveLayerCount;
         return this->INHERITED::willSaveLayer(bounds, paint, flags);
     }
 
-    void willSave() SK_OVERRIDE {
+    void willSave() override {
         ++fSaveCount;
         this->INHERITED::willSave();
     }
 
-    void willRestore() SK_OVERRIDE {
+    void willRestore() override {
         ++fRestoreCount;
         this->INHERITED::willRestore();
     }
@@ -830,18 +831,6 @@ static void test_bad_bitmap() {
 }
 #endif
 
-// Encodes to PNG, unless there is already encoded data, in which case that gets
-// used.
-// FIXME: Share with PictureRenderer.cpp?
-class PngPixelSerializer : public SkPixelSerializer {
-public:
-    bool onUseEncodedData(const void*, size_t) SK_OVERRIDE { return true; }
-    SkData* onEncodePixels(const SkImageInfo& info, const void* pixels,
-                           size_t rowBytes) SK_OVERRIDE {
-        return SkImageEncoder::EncodeData(info, pixels, rowBytes, SkImageEncoder::kPNG_Type, 100);
-    }
-};
-
 static SkData* serialized_picture_from_bitmap(const SkBitmap& bitmap) {
     SkPictureRecorder recorder;
     SkCanvas* canvas = recorder.beginRecording(SkIntToScalar(bitmap.width()),
@@ -850,7 +839,7 @@ static SkData* serialized_picture_from_bitmap(const SkBitmap& bitmap) {
     SkAutoTUnref<SkPicture> picture(recorder.endRecording());
 
     SkDynamicMemoryWStream wStream;
-    PngPixelSerializer serializer;
+    sk_tool_utils::PngPixelSerializer serializer;
     picture->serialize(&wStream, &serializer);
     return wStream.copyToData();
 }
@@ -1005,26 +994,26 @@ public:
 
     virtual void onClipRect(const SkRect& r,
                             SkRegion::Op op,
-                            ClipEdgeStyle edgeStyle) SK_OVERRIDE {
+                            ClipEdgeStyle edgeStyle) override {
         fClipCount += 1;
         this->INHERITED::onClipRect(r, op, edgeStyle);
     }
 
     virtual void onClipRRect(const SkRRect& rrect,
                              SkRegion::Op op,
-                             ClipEdgeStyle edgeStyle)SK_OVERRIDE {
+                             ClipEdgeStyle edgeStyle)override {
         fClipCount += 1;
         this->INHERITED::onClipRRect(rrect, op, edgeStyle);
     }
 
     virtual void onClipPath(const SkPath& path,
                             SkRegion::Op op,
-                            ClipEdgeStyle edgeStyle) SK_OVERRIDE {
+                            ClipEdgeStyle edgeStyle) override {
         fClipCount += 1;
         this->INHERITED::onClipPath(path, op, edgeStyle);
     }
 
-    void onClipRegion(const SkRegion& deviceRgn, SkRegion::Op op) SK_OVERRIDE {
+    void onClipRegion(const SkRegion& deviceRgn, SkRegion::Op op) override {
         fClipCount += 1;
         this->INHERITED::onClipRegion(deviceRgn, op);
     }
@@ -1130,7 +1119,7 @@ static void test_bytes_used(skiatest::Reporter* reporter) {
 
     // Protect against any unintentional bloat.
     size_t approxUsed = SkPictureUtils::ApproximateBytesUsed(empty.get());
-    REPORTER_ASSERT(reporter, approxUsed <= 136);
+    REPORTER_ASSERT(reporter, approxUsed <= 432);
 
     // Sanity check of nested SkPictures.
     SkPictureRecorder r2;
@@ -1138,7 +1127,7 @@ static void test_bytes_used(skiatest::Reporter* reporter) {
     r2.getRecordingCanvas()->drawPicture(empty.get());
     SkAutoTUnref<SkPicture> nested(r2.endRecording());
 
-    REPORTER_ASSERT(reporter, SkPictureUtils::ApproximateBytesUsed(nested.get()) >
+    REPORTER_ASSERT(reporter, SkPictureUtils::ApproximateBytesUsed(nested.get()) >=
                               SkPictureUtils::ApproximateBytesUsed(empty.get()));
 }
 
@@ -1252,19 +1241,19 @@ struct CountingBBH : public SkBBoxHierarchy {
 
     CountingBBH(const SkRect& bound) : searchCalls(0), rootBound(bound) {}
 
-    void search(const SkRect& query, SkTDArray<unsigned>* results) const SK_OVERRIDE {
+    void search(const SkRect& query, SkTDArray<unsigned>* results) const override {
         this->searchCalls++;
     }
 
-    void insert(const SkRect[], int) SK_OVERRIDE {}
-    virtual size_t bytesUsed() const SK_OVERRIDE { return 0; }
-    SkRect getRootBound() const SK_OVERRIDE { return rootBound; }
+    void insert(const SkRect[], int) override {}
+    virtual size_t bytesUsed() const override { return 0; }
+    SkRect getRootBound() const override { return rootBound; }
 };
 
 class SpoonFedBBHFactory : public SkBBHFactory {
 public:
     explicit SpoonFedBBHFactory(SkBBoxHierarchy* bbh) : fBBH(bbh) {}
-    SkBBoxHierarchy* operator()(const SkRect&) const SK_OVERRIDE {
+    SkBBoxHierarchy* operator()(const SkRect&) const override {
         return SkRef(fBBH);
     }
 private:
@@ -1321,4 +1310,16 @@ DEF_TEST(Picture_BitmapLeak, r) {
     pic.reset(NULL);
     REPORTER_ASSERT(r, mut.pixelRef()->unique());
     REPORTER_ASSERT(r, immut.pixelRef()->unique());
+}
+
+// getRecordingCanvas() should return a SkCanvas when recording, null when not recording.
+DEF_TEST(Picture_getRecordingCanvas, r) {
+    SkPictureRecorder rec;
+    REPORTER_ASSERT(r, !rec.getRecordingCanvas());
+    for (int i = 0; i < 3; i++) {
+        rec.beginRecording(100, 100);
+        REPORTER_ASSERT(r, rec.getRecordingCanvas());
+        rec.endRecording()->unref();
+        REPORTER_ASSERT(r, !rec.getRecordingCanvas());
+    }
 }

@@ -367,6 +367,20 @@ size_t SkMemoryStream::read(void* buffer, size_t size) {
     return size;
 }
 
+bool SkMemoryStream::peek(void* buffer, size_t size) const {
+    SkASSERT(buffer != NULL);
+    const size_t position = fOffset;
+    if (size > fData->size() - position) {
+        // The stream is not large enough to satisfy this request.
+        return false;
+    }
+    SkMemoryStream* nonConstThis = const_cast<SkMemoryStream*>(this);
+    SkDEBUGCODE(const size_t bytesRead =) nonConstThis->read(buffer, size);
+    SkASSERT(bytesRead == size);
+    nonConstThis->fOffset = position;
+    return true;
+}
+
 bool SkMemoryStream::isAtEnd() const {
     return fOffset == fData->size();
 }
@@ -680,7 +694,7 @@ public:
         : fBlockMemory(SkRef(headRef)), fCurrent(fBlockMemory->fHead)
         , fSize(size) , fOffset(0), fCurrentOffset(0) { }
 
-    size_t read(void* buffer, size_t rawCount) SK_OVERRIDE {
+    size_t read(void* buffer, size_t rawCount) override {
         size_t count = rawCount;
         if (fOffset + count > fSize) {
             count = fSize - fOffset;
@@ -706,26 +720,26 @@ public:
         return 0;
     }
 
-    bool isAtEnd() const SK_OVERRIDE {
+    bool isAtEnd() const override {
         return fOffset == fSize;
     }
 
-    bool rewind() SK_OVERRIDE {
+    bool rewind() override {
         fCurrent = fBlockMemory->fHead;
         fOffset = 0;
         fCurrentOffset = 0;
         return true;
     }
 
-    SkBlockMemoryStream* duplicate() const SK_OVERRIDE {
+    SkBlockMemoryStream* duplicate() const override {
         return SkNEW_ARGS(SkBlockMemoryStream, (fBlockMemory.get(), fSize));
     }
 
-    size_t getPosition() const SK_OVERRIDE {
+    size_t getPosition() const override {
         return fOffset;
     }
 
-    bool seek(size_t position) SK_OVERRIDE {
+    bool seek(size_t position) override {
         // If possible, skip forward.
         if (position >= fOffset) {
             size_t skipAmount = position - fOffset;
@@ -742,11 +756,11 @@ public:
         return this->rewind() && this->skip(position) == position;
     }
 
-    bool move(long offset) SK_OVERRIDE {
+    bool move(long offset) override {
         return seek(fOffset + offset);
     }
 
-    SkBlockMemoryStream* fork() const SK_OVERRIDE {
+    SkBlockMemoryStream* fork() const override {
         SkAutoTDelete<SkBlockMemoryStream> that(this->duplicate());
         that->fCurrent = this->fCurrent;
         that->fOffset = this->fOffset;
@@ -754,11 +768,11 @@ public:
         return that.detach();
     }
 
-    size_t getLength() const SK_OVERRIDE {
+    size_t getLength() const override {
         return fSize;
     }
 
-    const void* getMemoryBase() SK_OVERRIDE {
+    const void* getMemoryBase() override {
         if (NULL == fBlockMemory->fHead->fNext) {
             return fBlockMemory->fHead->start();
         }

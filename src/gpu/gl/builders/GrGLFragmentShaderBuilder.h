@@ -15,10 +15,10 @@ class GrGLVarying;
 /*
  * This base class encapsulates the functionality which the GP uses to build fragment shaders
  */
-class GrGLGPFragmentBuilder : public GrGLShaderBuilder {
+class GrGLFragmentBuilder : public GrGLShaderBuilder {
 public:
-    GrGLGPFragmentBuilder(GrGLProgramBuilder* program) : INHERITED(program) {}
-    virtual ~GrGLGPFragmentBuilder() {}
+    GrGLFragmentBuilder(GrGLProgramBuilder* program) : INHERITED(program) {}
+    virtual ~GrGLFragmentBuilder() {}
     /**
      * Use of these features may require a GLSL extension to be enabled. Shaders may not compile
      * if code is added that uses one of these features without calling enableFeature()
@@ -48,7 +48,7 @@ public:
     virtual const char* fragmentPosition() = 0;
 
 private:
-    friend class GrGLNormalPathProcessor;
+    friend class GrGLPathProcessor;
 
     typedef GrGLShaderBuilder INHERITED;
 };
@@ -58,20 +58,25 @@ private:
  * this builder to create their shader.  Because this is the only shader builder the FP sees, we
  * just call it FPShaderBuilder
  */
-class GrGLFPFragmentBuilder : public GrGLGPFragmentBuilder {
+class GrGLXPFragmentBuilder : public GrGLFragmentBuilder {
 public:
-    GrGLFPFragmentBuilder(GrGLProgramBuilder* program) : INHERITED(program) {}
+    GrGLXPFragmentBuilder(GrGLProgramBuilder* program) : INHERITED(program) {}
 
     /** Returns the variable name that holds the color of the destination pixel. This may be NULL if
         no effect advertised that it will read the destination. */
     virtual const char* dstColor() = 0;
 
+    /** Adds any necessary layout qualifiers in order to legalize the supplied blend equation with
+        this shader. It is only legal to call this method with an advanced blend equation, and only
+        if these equations are supported. */
+    virtual void enableAdvancedBlendEquationIfNeeded(GrBlendEquation) = 0;
+
 private:
-    typedef GrGLGPFragmentBuilder INHERITED;
+    typedef GrGLFragmentBuilder INHERITED;
 };
 
 // TODO rename to Fragment Builder
-class GrGLFragmentShaderBuilder : public GrGLFPFragmentBuilder {
+class GrGLFragmentShaderBuilder : public GrGLXPFragmentBuilder {
 public:
     typedef uint8_t DstReadKey;
     typedef uint8_t FragPosKey;
@@ -89,11 +94,13 @@ public:
     GrGLFragmentShaderBuilder(GrGLProgramBuilder* program, uint8_t fragPosKey);
 
     // true public interface, defined explicitly in the abstract interfaces above
-    bool enableFeature(GLSLFeature) SK_OVERRIDE;
+    bool enableFeature(GLSLFeature) override;
     virtual SkString ensureFSCoords2D(const GrGLProcessor::TransformedCoordsArray& coords,
-                                      int index) SK_OVERRIDE;
-    const char* fragmentPosition() SK_OVERRIDE;
-    const char* dstColor() SK_OVERRIDE;
+                                      int index) override;
+    const char* fragmentPosition() override;
+    const char* dstColor() override;
+
+    void enableAdvancedBlendEquationIfNeeded(GrBlendEquation) override;
 
 private:
     // Private public interface, used by GrGLProgramBuilder to build a fragment shader
@@ -123,7 +130,8 @@ private:
      */
     enum GLSLPrivateFeature {
         kFragCoordConventions_GLSLPrivateFeature = kLastGLSLFeature + 1,
-        kLastGLSLPrivateFeature = kFragCoordConventions_GLSLPrivateFeature
+        kBlendEquationAdvanced_GLSLPrivateFeature,
+        kLastGLSLPrivateFeature = kBlendEquationAdvanced_GLSLPrivateFeature
     };
 
     // Interpretation of DstReadKey when generating code
@@ -156,7 +164,7 @@ private:
 
     friend class GrGLProgramBuilder;
 
-    typedef GrGLFPFragmentBuilder INHERITED;
+    typedef GrGLXPFragmentBuilder INHERITED;
 };
 
 #endif

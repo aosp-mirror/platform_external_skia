@@ -37,18 +37,13 @@ do {                                                                            
 
 GrBufferAllocPool::GrBufferAllocPool(GrGpu* gpu,
                                      BufferType bufferType,
-                                     bool frequentResetHint,
                                      size_t blockSize,
-                                     int preallocBufferCnt) :
-        fBlocks(SkTMax(8, 2*preallocBufferCnt)) {
+                                     int preallocBufferCnt)
+    : fBlocks(SkTMax(8, 2*preallocBufferCnt)) {
 
-    SkASSERT(gpu);
-    fGpu = gpu;
-    fGpu->ref();
-    fGpuIsReffed = true;
+    fGpu = SkRef(gpu);
 
     fBufferType = bufferType;
-    fFrequentResetHint = frequentResetHint;
     fBufferPtr = NULL;
     fMinBlockSize = SkTMax(GrBufferAllocPool_MIN_BLOCK_SIZE, blockSize);
 
@@ -73,17 +68,10 @@ GrBufferAllocPool::~GrBufferAllocPool() {
         }
     }
     while (!fBlocks.empty()) {
-        destroyBlock();
+        this->destroyBlock();
     }
     fPreallocBuffers.unrefAll();
-    releaseGpuRef();
-}
-
-void GrBufferAllocPool::releaseGpuRef() {
-    if (fGpuIsReffed) {
-        fGpu->unref();
-        fGpuIsReffed = false;
-    }
+    fGpu->unref();
 }
 
 void GrBufferAllocPool::reset() {
@@ -203,7 +191,7 @@ void* GrBufferAllocPool::makeSpace(size_t size,
     // updateData() if the amount of data passed is less than the full buffer
     // size.
 
-    if (!createBlock(size)) {
+    if (!this->createBlock(size)) {
         return NULL;
     }
     SkASSERT(fBufferPtr);
@@ -217,27 +205,6 @@ void* GrBufferAllocPool::makeSpace(size_t size,
     return fBufferPtr;
 }
 
-int GrBufferAllocPool::currentBufferItems(size_t itemSize) const {
-    VALIDATE();
-    if (fBufferPtr) {
-        const BufferBlock& back = fBlocks.back();
-        size_t usedBytes = back.fBuffer->gpuMemorySize() - back.fBytesFree;
-        size_t pad = GrSizeAlignUpPad(usedBytes, itemSize);
-        return static_cast<int>((back.fBytesFree - pad) / itemSize);
-    } else if (fPreallocBuffersInUse < fPreallocBuffers.count()) {
-        return static_cast<int>(fMinBlockSize / itemSize);
-    }
-    return 0;
-}
-
-int GrBufferAllocPool::preallocatedBuffersRemaining() const {
-    return fPreallocBuffers.count() - fPreallocBuffersInUse;
-}
-
-int GrBufferAllocPool::preallocatedBufferCount() const {
-    return fPreallocBuffers.count();
-}
-
 void GrBufferAllocPool::putBack(size_t bytes) {
     VALIDATE();
 
@@ -248,7 +215,7 @@ void GrBufferAllocPool::putBack(size_t bytes) {
     int preallocBuffersInUse = fPreallocBuffersInUse;
 
     while (bytes) {
-        // caller shouldnt try to put back more than they've taken
+        // caller shouldn't try to put back more than they've taken
         SkASSERT(!fBlocks.empty());
         BufferBlock& block = fBlocks.back();
         size_t bytesUsed = block.fBuffer->gpuMemorySize() - block.fBytesFree;
@@ -317,17 +284,11 @@ bool GrBufferAllocPool::createBlock(size_t requestSize) {
     SkASSERT(NULL == fBufferPtr);
 
     // If the buffer is CPU-backed we map it because it is free to do so and saves a copy.
-    // Otherwise when buffer mapping is supported:
-    //      a) If the frequently reset hint is set we only map when the requested size meets a
-    //      threshold (since we don't expect it is likely that we will see more vertex data)
-    //      b) If the hint is not set we map if the buffer size is greater than the threshold.
+    // Otherwise when buffer mapping is supported we map if the buffer size is greater than the
+    // threshold.
     bool attemptMap = block.fBuffer->isCPUBacked();
     if (!attemptMap && GrDrawTargetCaps::kNone_MapFlags != fGpu->caps()->mapBufferFlags()) {
-        if (fFrequentResetHint) {
-            attemptMap = requestSize > GR_GEOM_BUFFER_MAP_THRESHOLD;
-        } else {
-            attemptMap = size > GR_GEOM_BUFFER_MAP_THRESHOLD;
-        }
+        attemptMap = size > GR_GEOM_BUFFER_MAP_THRESHOLD;
     }
 
     if (attemptMap) {
@@ -395,14 +356,12 @@ GrGeometryBuffer* GrBufferAllocPool::createBuffer(size_t size) {
 ////////////////////////////////////////////////////////////////////////////////
 
 GrVertexBufferAllocPool::GrVertexBufferAllocPool(GrGpu* gpu,
-                                                 bool frequentResetHint,
                                                  size_t bufferSize,
                                                  int preallocBufferCnt)
-: GrBufferAllocPool(gpu,
-                    kVertex_BufferType,
-                    frequentResetHint,
-                    bufferSize,
-                    preallocBufferCnt) {
+    : GrBufferAllocPool(gpu,
+                        kVertex_BufferType,
+                        bufferSize,
+                        preallocBufferCnt) {
 }
 
 void* GrVertexBufferAllocPool::makeSpace(size_t vertexSize,
@@ -427,25 +386,15 @@ void* GrVertexBufferAllocPool::makeSpace(size_t vertexSize,
     return ptr;
 }
 
-int GrVertexBufferAllocPool::preallocatedBufferVertices(size_t vertexSize) const {
-    return static_cast<int>(INHERITED::preallocatedBufferSize() / vertexSize);
-}
-
-int GrVertexBufferAllocPool::currentBufferVertices(size_t vertexSize) const {
-    return currentBufferItems(vertexSize);
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 
 GrIndexBufferAllocPool::GrIndexBufferAllocPool(GrGpu* gpu,
-                                               bool frequentResetHint,
                                                size_t bufferSize,
                                                int preallocBufferCnt)
-: GrBufferAllocPool(gpu,
-                    kIndex_BufferType,
-                    frequentResetHint,
-                    bufferSize,
-                    preallocBufferCnt) {
+    : GrBufferAllocPool(gpu,
+                        kIndex_BufferType,
+                        bufferSize,
+                        preallocBufferCnt) {
 }
 
 void* GrIndexBufferAllocPool::makeSpace(int indexCount,
@@ -469,10 +418,4 @@ void* GrIndexBufferAllocPool::makeSpace(int indexCount,
     return ptr;
 }
 
-int GrIndexBufferAllocPool::preallocatedBufferIndices() const {
-    return static_cast<int>(INHERITED::preallocatedBufferSize() / sizeof(uint16_t));
-}
 
-int GrIndexBufferAllocPool::currentBufferIndices() const {
-    return currentBufferItems(sizeof(uint16_t));
-}

@@ -1,3 +1,8 @@
+# Copyright 2015 Google Inc.
+#
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
 # This GYP file stores the dependencies necessary to build Skia on the Android
 # platform. The OS doesn't provide many stable libraries as part of the
 # distribution so we have to build a few of them ourselves.
@@ -31,18 +36,6 @@
             'direct_dependent_settings': {
               'libraries' : [
                 '-lexpat',
-              ],
-            },
-          },
-          {
-            'target_name': 'gif',
-            'type': 'none',
-            'direct_dependent_settings': {
-              'libraries' : [
-                'libgif.a',
-              ],
-              'include_dirs': [
-                'external/giflib',
               ],
             },
           },

@@ -44,7 +44,7 @@ public:
                                            uvFilterMode, colorSpace));
     }
 
-    const char* name() const SK_OVERRIDE { return "YUV to RGB"; }
+    const char* name() const override { return "YUV to RGB"; }
 
     SkYUVColorSpace getColorSpace() const {
         return fColorSpace;
@@ -56,7 +56,7 @@ public:
         static const GrGLfloat kRec601ConversionMatrix[16];
 
         // this class always generates the same code.
-        static void GenKey(const GrProcessor&, const GrGLCaps&, GrProcessorKeyBuilder*) {}
+        static void GenKey(const GrProcessor&, const GrGLSLCaps&, GrProcessorKeyBuilder*) {}
 
         GLProcessor(const GrProcessor&) {}
 
@@ -65,8 +65,8 @@ public:
                               const char* outputColor,
                               const char* inputColor,
                               const TransformedCoordsArray& coords,
-                              const TextureSamplerArray& samplers) SK_OVERRIDE {
-            GrGLFPFragmentBuilder* fsBuilder = builder->getFragmentShaderBuilder();
+                              const TextureSamplerArray& samplers) override {
+            GrGLFragmentBuilder* fsBuilder = builder->getFragmentShaderBuilder();
 
             const char* yuvMatrix   = NULL;
             fMatrixUni = builder->addUniform(GrGLProgramBuilder::kFragment_Visibility,
@@ -82,7 +82,7 @@ public:
         }
 
         virtual void setData(const GrGLProgramDataManager& pdman,
-                             const GrProcessor& processor) SK_OVERRIDE {
+                             const GrProcessor& processor) override {
             const YUVtoRGBEffect& yuvEffect = processor.cast<YUVtoRGBEffect>();
             switch (yuvEffect.getColorSpace()) {
                 case kJPEG_SkYUVColorSpace:
@@ -100,12 +100,12 @@ public:
         typedef GrGLFragmentProcessor INHERITED;
     };
 
-    virtual void getGLProcessorKey(const GrGLCaps& caps,
-                                   GrProcessorKeyBuilder* b) const SK_OVERRIDE {
+    virtual void getGLProcessorKey(const GrGLSLCaps& caps,
+                                   GrProcessorKeyBuilder* b) const override {
         GLProcessor::GenKey(*this, caps, b);
     }
 
-    GrGLFragmentProcessor* createGLInstance() const SK_OVERRIDE {
+    GrGLFragmentProcessor* createGLInstance() const override {
         return SkNEW_ARGS(GLProcessor, (*this));
     }
 
@@ -129,12 +129,12 @@ private:
         this->addTextureAccess(&fVAccess);
     }
 
-    bool onIsEqual(const GrFragmentProcessor& sBase) const SK_OVERRIDE {
+    bool onIsEqual(const GrFragmentProcessor& sBase) const override {
         const YUVtoRGBEffect& s = sBase.cast<YUVtoRGBEffect>();
         return fColorSpace == s.getColorSpace();
     }
 
-    void onComputeInvariantOutput(GrInvariantOutput* inout) const SK_OVERRIDE {
+    void onComputeInvariantOutput(GrInvariantOutput* inout) const override {
         // YUV is opaque
         inout->setToOther(kA_GrColorComponentFlag, 0xFF << GrColor_SHIFT_A,
                           GrInvariantOutput::kWillNot_ReadInput);

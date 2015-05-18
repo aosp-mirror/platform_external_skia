@@ -36,10 +36,51 @@ static void append_default_precision_qualifier(GrSLPrecision p,
     }
 }
 
+static const char* specific_layout_qualifier_name(GrBlendEquation equation) {
+    SkASSERT(GrBlendEquationIsAdvanced(equation));
+
+    static const char* kLayoutQualifierNames[] = {
+        "blend_support_screen",
+        "blend_support_overlay",
+        "blend_support_darken",
+        "blend_support_lighten",
+        "blend_support_colordodge",
+        "blend_support_colorburn",
+        "blend_support_hardlight",
+        "blend_support_softlight",
+        "blend_support_difference",
+        "blend_support_exclusion",
+        "blend_support_multiply",
+        "blend_support_hsl_hue",
+        "blend_support_hsl_saturation",
+        "blend_support_hsl_color",
+        "blend_support_hsl_luminosity"
+    };
+    return kLayoutQualifierNames[equation - kFirstAdvancedGrBlendEquation];
+
+    GR_STATIC_ASSERT(0 == kScreen_GrBlendEquation - kFirstAdvancedGrBlendEquation);
+    GR_STATIC_ASSERT(1 == kOverlay_GrBlendEquation - kFirstAdvancedGrBlendEquation);
+    GR_STATIC_ASSERT(2 == kDarken_GrBlendEquation - kFirstAdvancedGrBlendEquation);
+    GR_STATIC_ASSERT(3 == kLighten_GrBlendEquation - kFirstAdvancedGrBlendEquation);
+    GR_STATIC_ASSERT(4 == kColorDodge_GrBlendEquation - kFirstAdvancedGrBlendEquation);
+    GR_STATIC_ASSERT(5 == kColorBurn_GrBlendEquation - kFirstAdvancedGrBlendEquation);
+    GR_STATIC_ASSERT(6 == kHardLight_GrBlendEquation - kFirstAdvancedGrBlendEquation);
+    GR_STATIC_ASSERT(7 == kSoftLight_GrBlendEquation - kFirstAdvancedGrBlendEquation);
+    GR_STATIC_ASSERT(8 == kDifference_GrBlendEquation - kFirstAdvancedGrBlendEquation);
+    GR_STATIC_ASSERT(9 == kExclusion_GrBlendEquation - kFirstAdvancedGrBlendEquation);
+    GR_STATIC_ASSERT(10 == kMultiply_GrBlendEquation - kFirstAdvancedGrBlendEquation);
+    GR_STATIC_ASSERT(11 == kHSLHue_GrBlendEquation - kFirstAdvancedGrBlendEquation);
+    GR_STATIC_ASSERT(12 == kHSLSaturation_GrBlendEquation - kFirstAdvancedGrBlendEquation);
+    GR_STATIC_ASSERT(13 == kHSLColor_GrBlendEquation - kFirstAdvancedGrBlendEquation);
+    GR_STATIC_ASSERT(14 == kHSLLuminosity_GrBlendEquation - kFirstAdvancedGrBlendEquation);
+    GR_STATIC_ASSERT(SK_ARRAY_COUNT(kLayoutQualifierNames) ==
+                     kGrBlendEquationCnt - kFirstAdvancedGrBlendEquation);
+}
+
 GrGLFragmentShaderBuilder::DstReadKey
 GrGLFragmentShaderBuilder::KeyForDstRead(const GrTexture* dstCopy, const GrGLCaps& caps) {
     uint32_t key = kYesDstRead_DstReadKeyBit;
-    if (caps.fbFetchSupport()) {
+    if (caps.glslCaps()->fbFetchSupport()) {
         return key;
     }
     SkASSERT(dstCopy);
@@ -79,7 +120,7 @@ bool GrGLFragmentShaderBuilder::enableFeature(GLSLFeature feature) {
     switch (feature) {
         case kStandardDerivatives_GLSLFeature: {
             GrGLGpu* gpu = fProgramBuilder->gpu();
-            if (!gpu->glCaps().shaderDerivativeSupport()) {
+            if (!gpu->glCaps().shaderCaps()->shaderDerivativeSupport()) {
                 return false;
             }
             if (kGLES_GrGLStandard == gpu->glStandard() &&
@@ -166,13 +207,13 @@ const char* GrGLFragmentShaderBuilder::dstColor() {
     fHasReadDstColor = true;
 
     GrGLGpu* gpu = fProgramBuilder->gpu();
-    if (gpu->glCaps().fbFetchSupport()) {
+    if (gpu->glCaps().glslCaps()->fbFetchSupport()) {
         this->addFeature(1 << (GrGLFragmentShaderBuilder::kLastGLSLPrivateFeature + 1),
-                         gpu->glCaps().fbFetchExtensionString());
+                         gpu->glCaps().glslCaps()->fbFetchExtensionString());
 
         // Some versions of this extension string require declaring custom color output on ES 3.0+
-        const char* fbFetchColorName = gpu->glCaps().fbFetchColorName();
-        if (gpu->glCaps().fbFetchNeedsCustomOutput()) {
+        const char* fbFetchColorName = gpu->glCaps().glslCaps()->fbFetchColorName();
+        if (gpu->glCaps().glslCaps()->fbFetchNeedsCustomOutput()) {
             this->enableCustomOutput();
             fOutputs[fCustomColorOutputIndex].setTypeModifier(GrShaderVar::kInOut_TypeModifier);
             fbFetchColorName = declared_color_output_name();
@@ -181,6 +222,23 @@ const char* GrGLFragmentShaderBuilder::dstColor() {
     } else {
         return kDstCopyColorName;
     } 
+}
+
+void GrGLFragmentShaderBuilder::enableAdvancedBlendEquationIfNeeded(GrBlendEquation equation) {
+    SkASSERT(GrBlendEquationIsAdvanced(equation));
+
+    const GrGLSLCaps& caps = *fProgramBuilder->gpu()->glCaps().glslCaps();
+    if (!caps.mustEnableAdvBlendEqs()) {
+        return;
+    }
+
+    this->addFeature(1 << kBlendEquationAdvanced_GLSLPrivateFeature,
+                     "GL_KHR_blend_equation_advanced");
+    if (caps.mustEnableSpecificAdvBlendEqs()) {
+        this->addLayoutQualifier(specific_layout_qualifier_name(equation), kOut_InterfaceQualifier);
+    } else {
+        this->addLayoutQualifier("blend_support_all_equations", kOut_InterfaceQualifier);
+    }
 }
 
 void GrGLFragmentShaderBuilder::enableCustomOutput() {
@@ -215,6 +273,7 @@ bool GrGLFragmentShaderBuilder::compileAndAttachShaders(GrGLuint programId,
     append_default_precision_qualifier(kDefault_GrSLPrecision,
                                        gpu->glStandard(),
                                        &this->precisionQualifier());
+    this->compileAndAppendLayoutQualifiers();
     fProgramBuilder->appendUniformDecls(GrGLProgramBuilder::kFragment_Visibility,
                                         &this->uniforms());
     this->appendDecls(fInputs, &this->inputs());

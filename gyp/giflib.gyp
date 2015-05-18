@@ -11,12 +11,9 @@
     {
       'target_name': 'giflib',
       'conditions': [
-        [ 'skia_giflib_static',
+        [ 'skia_android_framework == 0',
           {
             'type': 'static_library',
-            'defines': [
-              'HAVE_CONFIG_H',
-            ],
             'include_dirs': [
               '../third_party/externals/giflib',
             ],
@@ -30,22 +27,44 @@
             'cflags': [
               '-w',
             ],
+            'xcode_settings': {
+              'WARNING_CFLAGS': [
+                '-w'
+              ],
+            },
+            'msvs_settings': {
+              'VCCLCompilerTool': {
+                'AdditionalOptions': [
+                  '/w',
+                ],
+              },
+            },
             'sources': [
               '../third_party/externals/giflib/dgif_lib.c',
               '../third_party/externals/giflib/gifalloc.c',
               '../third_party/externals/giflib/gif_err.c',
             ],
-          }, {  # not skia_giflib_static
+            'conditions' : [
+              [ 'skia_os == "win"', {
+                  'include_dirs': [
+                    # Used to include a dummy unistd.h file for windows
+                    '../third_party/giflib',
+                  ],
+                },
+              ],
+            ],
+          }, { # skia_android_framework
             'type': 'none',
             'direct_dependent_settings': {
-              'link_settings': {
-                'libraries': [
-                  '-lgif',
-                ],
-              },
-            },
+              'libraries' : [
+                'libgif.a',
+              ],
+              'include_dirs': [
+                'external/giflib',
+              ]
+            }
           }
-        ],
+        ]
       ]
     }
   ]

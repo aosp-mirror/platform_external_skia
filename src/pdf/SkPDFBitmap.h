@@ -17,33 +17,24 @@ class SkPDFCanon;
  * It is designed to use a minimal amout of memory, aside from refing
  * the bitmap's pixels, and its emitObject() does not cache any data.
  *
- * As of now, it only supports 8888 bitmaps (the most common case).
+ * If !bitmap.isImmutable(), then a copy of the bitmap must be made;
+ * there is no way around this.
  *
  * The SkPDFBitmap::Create function will check the canon for duplicates.
  */
 class SkPDFBitmap : public SkPDFObject {
 public:
     // Returns NULL on unsupported bitmap;
-    // TODO(halcanary): support other bitmap colortypes and replace
-    // SkPDFImage.
-    static SkPDFBitmap* Create(SkPDFCanon*,
-                               const SkBitmap&,
-                               const SkIRect& subset);
-    ~SkPDFBitmap();
-    void emitObject(SkWStream*, SkPDFCatalog*) SK_OVERRIDE;
-    void addResources(SkTSet<SkPDFObject*>* resourceSet,
-                      SkPDFCatalog* catalog) const SK_OVERRIDE;
+    static SkPDFBitmap* Create(SkPDFCanon*, const SkBitmap&);
     bool equals(const SkBitmap& other) const {
         return fBitmap.getGenerationID() == other.getGenerationID() &&
                fBitmap.pixelRefOrigin() == other.pixelRefOrigin() &&
                fBitmap.dimensions() == other.dimensions();
     }
 
-private:
+protected:
     const SkBitmap fBitmap;
-    const SkAutoTUnref<SkPDFObject> fSMask;
-    SkPDFBitmap(const SkBitmap&, SkPDFObject*);
-    void emitDict(SkWStream*, SkPDFCatalog*, size_t, bool) const;
+    SkPDFBitmap(const SkBitmap& bm) : fBitmap(bm) {}
 };
 
 #endif  // SkPDFBitmap_DEFINED

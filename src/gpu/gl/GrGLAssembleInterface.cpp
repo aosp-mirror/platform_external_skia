@@ -70,14 +70,28 @@ const GrGLInterface* GrGLAssembleGLInterface(void* ctx, GrGLGetProc get) {
     }
     GET_PROC(BeginQuery);
     GET_PROC(BindTexture);
-    GET_PROC(BlendFunc);
 
-    if (glVer >= GR_GL_VER(1,4) ||
-        extensions.has("GL_ARB_imaging") ||
-        extensions.has("GL_EXT_blend_color")) {
-        GET_PROC(BlendColor);
+    if (extensions.has("GL_KHR_blend_equation_advanced")) {
+        GET_PROC_SUFFIX(BlendBarrier, KHR);
+    } else if (extensions.has("GL_NV_blend_equation_advanced")) {
+        GET_PROC_SUFFIX(BlendBarrier, NV);
     }
 
+    if (glVer >= GR_GL_VER(1,4) ||
+        extensions.has("GL_ARB_imaging")) {
+        GET_PROC(BlendColor);
+    } else if (extensions.has("GL_EXT_blend_color")) {
+        GET_PROC_SUFFIX(BlendColor, EXT);
+    }
+
+    if (glVer >= GR_GL_VER(1,4) ||
+        extensions.has("GL_ARB_imaging")) {
+        GET_PROC(BlendEquation);
+    } else if (extensions.has("GL_EXT_blend_subtract")) {
+        GET_PROC_SUFFIX(BlendEquation, EXT);
+    }
+
+    GET_PROC(BlendFunc);
     GET_PROC(BufferData);
     GET_PROC(BufferSubData);
     GET_PROC(Clear);
@@ -163,6 +177,11 @@ const GrGLInterface* GrGLAssembleGLInterface(void* ctx, GrGLGetProc get) {
         GET_PROC_SUFFIX(TexStorage2D, EXT);
     }
     GET_PROC(TexSubImage2D);
+    if (glVer >= GR_GL_VER(4,5) || extensions.has("GL_ARB_texture_barrier")) {
+        GET_PROC(TextureBarrier);
+    } else if (extensions.has("GL_NV_texture_barrier")) {
+        GET_PROC_SUFFIX(TextureBarrier, NV);
+    }
     GET_PROC(Uniform1f);
     GET_PROC(Uniform1i);
     GET_PROC(Uniform1fv);
@@ -278,6 +297,10 @@ const GrGLInterface* GrGLAssembleGLInterface(void* ctx, GrGLGetProc get) {
         GET_PROC_SUFFIX(PathMemoryGlyphIndexArray, NV);
     }
 
+    if (extensions.has("GL_NV_framebuffer_mixed_samples")) {
+        GET_PROC_SUFFIX(CoverageModulation, NV);
+    }
+
     if (extensions.has("GL_EXT_debug_marker")) {
         GET_PROC_SUFFIX(InsertEventMarker, EXT);
         GET_PROC_SUFFIX(PushGroupMarker, EXT);
@@ -332,7 +355,15 @@ const GrGLInterface* GrGLAssembleGLESInterface(void* ctx, GrGLGetProc get) {
     GET_PROC(BindBuffer);
     GET_PROC(BindTexture);
     GET_PROC_SUFFIX(BindVertexArray, OES);
+
+    if (extensions.has("GL_KHR_blend_equation_advanced")) {
+        GET_PROC_SUFFIX(BlendBarrier, KHR);
+    } else if (extensions.has("GL_NV_blend_equation_advanced")) {
+        GET_PROC_SUFFIX(BlendBarrier, NV);
+    }
+
     GET_PROC(BlendColor);
+    GET_PROC(BlendEquation);
     GET_PROC(BlendFunc);
     GET_PROC(BufferData);
     GET_PROC(BufferSubData);
@@ -398,6 +429,10 @@ const GrGLInterface* GrGLAssembleGLESInterface(void* ctx, GrGLGetProc get) {
         GET_PROC(TexStorage2D);
     } else {
         GET_PROC_SUFFIX(TexStorage2D, EXT);
+    }
+
+    if (extensions.has("GL_NV_texture_barrier")) {
+        GET_PROC_SUFFIX(TextureBarrier, NV);
     }
 
     GET_PROC_SUFFIX(DiscardFramebuffer, EXT);
@@ -517,6 +552,10 @@ const GrGLInterface* GrGLAssembleGLESInterface(void* ctx, GrGLGetProc get) {
         GET_PROC_SUFFIX(StencilThenCoverStrokePathInstanced, NV);
         GET_PROC_SUFFIX(ProgramPathFragmentInputGen, NV);
         GET_PROC_SUFFIX(PathMemoryGlyphIndexArray, NV);
+    }
+
+    if (extensions.has("GL_NV_framebuffer_mixed_samples")) {
+        GET_PROC_SUFFIX(CoverageModulation, NV);
     }
 
     interface->fStandard = kGLES_GrGLStandard;

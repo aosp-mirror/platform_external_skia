@@ -1,3 +1,7 @@
+# Copyright 2015 Google Inc.
+#
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
 # Include this gypi to include all 'effects' files
 # The parent gyp/gypi file must define:
 #       'skia_src_path'     e.g. skia/trunk/src
@@ -56,7 +60,6 @@
     '<(skia_src_path)/effects/SkTableMaskFilter.cpp',
     '<(skia_src_path)/effects/SkTestImageFilters.cpp',
     '<(skia_src_path)/effects/SkTileImageFilter.cpp',
-    '<(skia_src_path)/effects/SkMatrixImageFilter.cpp',
     '<(skia_src_path)/effects/SkTransparentShader.cpp',
     '<(skia_src_path)/effects/SkXfermodeImageFilter.cpp',
 
@@ -71,8 +74,6 @@
     '<(skia_src_path)/effects/gradients/SkLinearGradient.h',
     '<(skia_src_path)/effects/gradients/SkRadialGradient.cpp',
     '<(skia_src_path)/effects/gradients/SkRadialGradient.h',
-    '<(skia_src_path)/effects/gradients/SkTwoPointRadialGradient.cpp',
-    '<(skia_src_path)/effects/gradients/SkTwoPointRadialGradient.h',
     '<(skia_src_path)/effects/gradients/SkTwoPointConicalGradient.cpp',
     '<(skia_src_path)/effects/gradients/SkTwoPointConicalGradient.h',
     '<(skia_src_path)/effects/gradients/SkTwoPointConicalGradient_gpu.cpp',

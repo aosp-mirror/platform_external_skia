@@ -23,7 +23,7 @@
 
 //////////////////////////////////////////////////////////////////////
 
-#if !defined(SK_BUILD_FOR_ANDROID) && !defined(SK_BUILD_FOR_IOS) && !defined(SK_BUILD_FOR_PALM) && !defined(SK_BUILD_FOR_WINCE) && !defined(SK_BUILD_FOR_WIN32) && !defined(SK_BUILD_FOR_UNIX) && !defined(SK_BUILD_FOR_MAC) && !defined(SK_BUILD_FOR_SDL) && !defined(SK_BUILD_FOR_BREW) && !defined(SK_BUILD_FOR_NACL)
+#if !defined(SK_BUILD_FOR_ANDROID) && !defined(SK_BUILD_FOR_IOS) && !defined(SK_BUILD_FOR_PALM) && !defined(SK_BUILD_FOR_WINCE) && !defined(SK_BUILD_FOR_WIN32) && !defined(SK_BUILD_FOR_UNIX) && !defined(SK_BUILD_FOR_MAC) && !defined(SK_BUILD_FOR_SDL) && !defined(SK_BUILD_FOR_BREW)
 
     #ifdef __APPLE__
         #include "TargetConditionals.h"
@@ -195,6 +195,13 @@
 // Disable ARM64 optimizations for iOS due to complications regarding gyp and iOS.
 #if defined(__aarch64__) && !defined(SK_BUILD_FOR_IOS)
     #define SK_CPU_ARM64
+#endif
+
+// All 64-bit ARM chips have NEON.  Many 32-bit ARM chips do too.
+// TODO: Why don't we want NEON on iOS?
+#if !defined(SK_ARM_HAS_NEON) && !defined(SK_BUILD_FOR_IOS) && \
+    (defined(SK_CPU_ARM64) || defined(__ARM_NEON__))
+    #define SK_ARM_HAS_NEON
 #endif
 
 //////////////////////////////////////////////////////////////////////

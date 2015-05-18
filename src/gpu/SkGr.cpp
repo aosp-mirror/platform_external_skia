@@ -12,6 +12,7 @@
 #include "SkConfig8888.h"
 #include "SkData.h"
 #include "SkErrorInternals.h"
+#include "SkGrPixelRef.h"
 #include "SkMessageBus.h"
 #include "SkPixelRef.h"
 #include "SkResourceCache.h"
@@ -163,7 +164,7 @@ public:
 private:
     GrUniqueKeyInvalidatedMessage fMsg;
 
-    void onChange() SK_OVERRIDE {
+    void onChange() override {
         SkMessageBus<GrUniqueKeyInvalidatedMessage>::Post(fMsg);
     }
 };
@@ -177,11 +178,11 @@ static GrTexture* create_texture_for_bmp(GrContext* ctx,
                                          SkPixelRef* pixelRefForInvalidationNotification,
                                          const void* pixels,
                                          size_t rowBytes) {
-    GrTexture* result = ctx->createTexture(desc, true, pixels, rowBytes);
+    GrTexture* result = ctx->textureProvider()->createTexture(desc, true, pixels, rowBytes);
     if (result && optionalKey.isValid()) {
         BitmapInvalidator* listener = SkNEW_ARGS(BitmapInvalidator, (optionalKey));
         pixelRefForInvalidationNotification->addGenIDChangeListener(listener);
-        ctx->addResourceToCache(optionalKey, result);
+        ctx->textureProvider()->assignUniqueKeyToTexture(optionalKey, result);
     }
     return result;
 }
@@ -368,9 +369,9 @@ static GrTexture* load_yuv_texture(GrContext* ctx, const GrUniqueKey& optionalKe
         bool needsExactTexture =
             (yuvDesc.fWidth  != yuvInfo.fSize[0].fWidth) ||
             (yuvDesc.fHeight != yuvInfo.fSize[0].fHeight);
-        yuvTextures[i].reset(ctx->refScratchTexture(yuvDesc,
-            needsExactTexture ? GrContext::kExact_ScratchTexMatch :
-                                GrContext::kApprox_ScratchTexMatch));
+        yuvTextures[i].reset(ctx->textureProvider()->refScratchTexture(yuvDesc,
+            needsExactTexture ? GrTextureProvider::kExact_ScratchTexMatch :
+                                GrTextureProvider::kApprox_ScratchTexMatch));
         if (!yuvTextures[i] ||
             !yuvTextures[i]->writePixels(0, 0, yuvDesc.fWidth, yuvDesc.fHeight,
                                          yuvDesc.fConfig, planes[i], yuvInfo.fRowBytes[i])) {
@@ -471,7 +472,7 @@ static GrTexture* create_bitmap_texture(GrContext* ctx,
         SkAutoTUnref<GrTexture> unstretched;
         // Check if we have the unstretched version in the cache, if not create it.
         if (unstretchedKey.isValid()) {
-            unstretched.reset(ctx->findAndRefCachedTexture(unstretchedKey));
+            unstretched.reset(ctx->textureProvider()->findAndRefTextureByUniqueKey(unstretchedKey));
         }
         if (!unstretched) {
             unstretched.reset(create_unstretched_bitmap_texture(ctx, bmp, unstretchedKey));
@@ -509,7 +510,7 @@ bool GrIsBitmapInCache(const GrContext* ctx,
         }
         GrUniqueKey stretchedKey;
         make_stretched_key(key, stretch, &stretchedKey);
-        return ctx->isResourceInCache(stretchedKey);
+        return ctx->textureProvider()->existsTextureWithUniqueKey(stretchedKey);
     }
 
     // We don't cache volatile bitmaps
@@ -519,7 +520,8 @@ bool GrIsBitmapInCache(const GrContext* ctx,
 
     GrUniqueKey key, stretchedKey;
     make_bitmap_keys(bitmap, stretch, &key, &stretchedKey);
-    return ctx->isResourceInCache((kNo_Stretch == stretch) ? key : stretchedKey);
+    return ctx->textureProvider()->existsTextureWithUniqueKey(
+        (kNo_Stretch == stretch) ? key : stretchedKey);
 }
 
 GrTexture* GrRefCachedBitmapTexture(GrContext* ctx,
@@ -539,7 +541,8 @@ GrTexture* GrRefCachedBitmapTexture(GrContext* ctx,
             const GrUniqueKey& key = result->getUniqueKey();
             if (key.isValid()) {
                 make_stretched_key(key, stretch, &stretchedKey);
-                GrTexture* stretched = ctx->findAndRefCachedTexture(stretchedKey);
+                GrTexture* stretched =
+                    ctx->textureProvider()->findAndRefTextureByUniqueKey(stretchedKey);
                 if (stretched) {
                     return stretched;
                 }
@@ -554,7 +557,8 @@ GrTexture* GrRefCachedBitmapTexture(GrContext* ctx,
         // If the bitmap isn't changing try to find a cached copy first.
         make_bitmap_keys(bitmap, stretch, &key, &resizedKey);
 
-        result = ctx->findAndRefCachedTexture(resizedKey.isValid() ? resizedKey : key);
+        result = ctx->textureProvider()->findAndRefTextureByUniqueKey(
+            resizedKey.isValid() ? resizedKey : key);
         if (result) {
             return result;
         }
@@ -594,6 +598,8 @@ GrPixelConfig SkImageInfo2GrPixelConfig(SkColorType ct, SkAlphaType, SkColorProf
             return kBGRA_8888_GrPixelConfig;
         case kIndex_8_SkColorType:
             return kIndex_8_GrPixelConfig;
+        case kGray_8_SkColorType:
+            return kAlpha_8_GrPixelConfig; // TODO: gray8 support on gpu
     }
     SkASSERT(0);    // shouldn't get here
     return kUnknown_GrPixelConfig;
@@ -640,7 +646,7 @@ bool GrPixelConfig2ColorAndProfileType(GrPixelConfig config, SkColorType* ctOut,
 
 ///////////////////////////////////////////////////////////////////////////////
 
-void SkPaint2GrPaintNoShader(GrContext* context, GrRenderTarget* rt, const SkPaint& skPaint,
+bool SkPaint2GrPaintNoShader(GrContext* context, GrRenderTarget* rt, const SkPaint& skPaint,
                              GrColor paintColor, bool constantColor, GrPaint* grPaint) {
 
     grPaint->setDither(skPaint.isDither());
@@ -650,6 +656,7 @@ void SkPaint2GrPaintNoShader(GrContext* context, GrRenderTarget* rt, const SkPai
     GrXPFactory* xpFactory = NULL;
     if (!SkXfermode::AsXPFactory(mode, &xpFactory)) {
         // Fall back to src-over
+        // return false here?
         xpFactory = GrPorterDuffXPFactory::Create(SkXfermode::kSrcOver_Mode);
     }
     SkASSERT(xpFactory);
@@ -667,6 +674,7 @@ void SkPaint2GrPaintNoShader(GrContext* context, GrRenderTarget* rt, const SkPai
             grPaint->setColor(SkColor2GrColor(filtered));
         } else {
             SkTDArray<GrFragmentProcessor*> array;
+            // return false if failed?
             if (colorFilter->asFragmentProcessors(context, &array)) {
                 for (int i = 0; i < array.count(); ++i) {
                     grPaint->addColorProcessor(array[i]);
@@ -697,15 +705,15 @@ void SkPaint2GrPaintNoShader(GrContext* context, GrRenderTarget* rt, const SkPai
         }
     }
 #endif
+    return true;
 }
 
-void SkPaint2GrPaintShader(GrContext* context, GrRenderTarget* rt, const SkPaint& skPaint,
-                           const SkMatrix& viewM, bool constantColor, GrPaint* grPaint) {
+bool SkPaint2GrPaint(GrContext* context, GrRenderTarget* rt, const SkPaint& skPaint,
+                     const SkMatrix& viewM, bool constantColor, GrPaint* grPaint) {
     SkShader* shader = skPaint.getShader();
     if (NULL == shader) {
-        SkPaint2GrPaintNoShader(context, rt, skPaint, SkColor2GrColor(skPaint.getColor()),
-                                constantColor, grPaint);
-        return;
+        return SkPaint2GrPaintNoShader(context, rt, skPaint, SkColor2GrColor(skPaint.getColor()),
+                                       constantColor, grPaint);
     }
 
     GrColor paintColor = SkColor2GrColor(skPaint.getColor());
@@ -717,7 +725,10 @@ void SkPaint2GrPaintShader(GrContext* context, GrRenderTarget* rt, const SkPaint
         // Allow the shader to modify paintColor and also create an effect to be installed as
         // the first color effect on the GrPaint.
         GrFragmentProcessor* fp = NULL;
-        if (shader->asFragmentProcessor(context, skPaint, viewM, NULL, &paintColor, &fp) && fp) {
+        if (!shader->asFragmentProcessor(context, skPaint, viewM, NULL, &paintColor, &fp)) {
+            return false;
+        }
+        if (fp) {
             grPaint->addColorProcessor(fp)->unref();
             constantColor = false;
         }
@@ -725,5 +736,27 @@ void SkPaint2GrPaintShader(GrContext* context, GrRenderTarget* rt, const SkPaint
 
     // The grcolor is automatically set when calling asFragmentProcessor.
     // If the shader can be seen as an effect it returns true and adds its effect to the grpaint.
-    SkPaint2GrPaintNoShader(context, rt, skPaint, paintColor, constantColor, grPaint);
+    return SkPaint2GrPaintNoShader(context, rt, skPaint, paintColor, constantColor, grPaint);
+}
+
+SkImageInfo GrMakeInfoFromTexture(GrTexture* tex, int w, int h, bool isOpaque) {
+#ifdef SK_DEBUG
+    const GrSurfaceDesc& desc = tex->desc();
+    SkASSERT(w <= desc.fWidth);
+    SkASSERT(h <= desc.fHeight);
+#endif
+    const GrPixelConfig config = tex->config();
+    SkColorType ct;
+    SkAlphaType at = isOpaque ? kOpaque_SkAlphaType : kPremul_SkAlphaType;
+    if (!GrPixelConfig2ColorAndProfileType(config, &ct, NULL)) {
+        ct = kUnknown_SkColorType;
+    }
+    return SkImageInfo::Make(w, h, ct, at);
+}
+
+
+void GrWrapTextureInBitmap(GrTexture* src, int w, int h, bool isOpaque, SkBitmap* dst) {
+    const SkImageInfo info = GrMakeInfoFromTexture(src, w, h, isOpaque);
+    dst->setInfo(info);
+    dst->setPixelRef(SkNEW_ARGS(SkGrPixelRef, (info, src)))->unref();
 }

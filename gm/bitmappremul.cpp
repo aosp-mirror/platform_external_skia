@@ -84,7 +84,7 @@ static SkBitmap make_argb8888_stripes() {
 static SkBitmap make_argb4444_stripes() {
     SkBitmap bitmap;
     init_bitmap(kARGB_4444_SkColorType, &bitmap);
-    uint8_t rowColor = 0;;
+    uint8_t rowColor = 0;
     for (int y = 0; y < SLIDE_SIZE; y++) {
         uint16_t* dst = bitmap.getAddr16(0, y);
         for (int x = 0; x < SLIDE_SIZE; x++) {
@@ -109,15 +109,15 @@ public:
     }
 
 protected:
-    SkString onShortName() SK_OVERRIDE {
+    SkString onShortName() override {
         return SkString("bitmap_premul");
     }
 
-    SkISize onISize() SK_OVERRIDE {
+    SkISize onISize() override {
         return SkISize::Make(SLIDE_SIZE * 2, SLIDE_SIZE * 2);
     }
 
-    void onDraw(SkCanvas* canvas) SK_OVERRIDE {
+    void onDraw(SkCanvas* canvas) override {
         SkScalar slideSize = SkIntToScalar(SLIDE_SIZE);
         canvas->drawBitmap(make_argb8888_gradient(), 0, 0);
         canvas->drawBitmap(make_argb4444_gradient(), slideSize, 0);

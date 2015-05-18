@@ -1,8 +1,15 @@
+#
+# Copyright 2015 Google Inc.
+#
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+#
+
 #!/usr/bin/env python
 
 usage = '''
 Write extra flags to outfile for DM based on the bot name:
-  $ python dm_flags.py outfile Test-Mac10.9-MacMini6.2-HD4000-x86_64-Release
+  $ python dm_flags.py outfile Test-Ubuntu-GCC-GCE-CPU-AVX2-x86-Debug
 Or run self-tests:
   $ python dm_flags.py test
 '''
@@ -23,21 +30,36 @@ def get_args(bot):
   args = []
 
   configs = ['565', '8888', 'gpu']
-  # The S4 crashes and the NP produces a long error stream when we run with
-  # MSAA.
-  if ('GalaxyS4'    not in bot and
-      'NexusPlayer' not in bot):
+
+  if 'Android' not in bot:
+    configs.extend(('upright-matrix-8888', 'upright-matrix-gpu'))
+    args.extend('--matrix 0 1 1 0'.split(' '))
+
+  if '-GCE-' in bot:
+    configs.append('sp-8888')
+
+  if 'TegraK1' in bot or 'GTX550Ti' in bot or 'GTX660' in bot or 'GT610' in bot:
     if 'Android' in bot:
-      configs.extend(['msaa4', 'nvprmsaa4'])
+      configs.append('nvprmsaa4')
     else:
-      configs.extend(['msaa16', 'nvprmsaa16'])
+      configs.append('nvprmsaa16')
+
+  # The S4 crashes and the NP produces a long error stream when we run with
+  # MSAA.  The Tegra2 and Tegra3 just don't support it.
+  if ('GalaxyS4'    not in bot and
+      'NexusPlayer' not in bot and
+      'Tegra3'      not in bot and
+      'iOS'         not in bot):
+    if 'Android' in bot:
+      configs.append('msaa4')
+    else:
+      configs.append('msaa16')
   # Runs out of memory on Android bots and Daisy.  Everyone else seems fine.
   if 'Android' not in bot and 'Daisy' not in bot:
     configs.append('pdf')
 
-  # Xoom and NP are running out of RAM when we run all these modes.  skia:3255
-  if ('Xoom'        not in bot and
-      'NexusPlayer' not in bot):
+  # NP is running out of RAM when we run all these modes.  skia:3255
+  if 'NexusPlayer' not in bot:
     configs.extend(mode + '-8888' for mode in
                    ['serialize', 'tiles_rt', 'pipe'])
     configs.append('tiles_rt-gpu')
@@ -46,38 +68,94 @@ def get_args(bot):
   args.append('--config')
   args.extend(configs)
 
+  if 'GalaxyS' in bot:
+    args.extend(('--threads', '0'))
+
   blacklist = []
   # This image is too large to be a texture for many GPUs.
-  blacklist.extend('gpu _ PANO_20121023_214540.jpg'.split(' '))
-  blacklist.extend('msaa _ PANO_20121023_214540.jpg'.split(' '))
+  blacklist.extend('gpu _ _ PANO_20121023_214540.jpg'.split(' '))
+  blacklist.extend('msaa _ _ PANO_20121023_214540.jpg'.split(' '))
+
+  # Several of the newest version bmps fail on SkImageDecoder
+  blacklist.extend('_ image decode pal8os2v2.bmp'.split(' '))
+  blacklist.extend('_ image decode pal8v4.bmp'.split(' '))
+  blacklist.extend('_ image decode pal8v5.bmp'.split(' '))
+  blacklist.extend('_ image decode rgb16-565.bmp'.split(' '))
+  blacklist.extend('_ image decode rgb16-565pal.bmp'.split(' '))
+  blacklist.extend('_ image decode rgb32-111110.bmp'.split(' '))
+  blacklist.extend('_ image decode rgb32bf.bmp'.split(' '))
+  blacklist.extend('_ image decode rgba32.bmp'.split(' '))
+  blacklist.extend('_ image decode rgba32abf.bmp'.split(' '))
+  blacklist.extend('_ image decode rgb24largepal.bmp'.split(' '))
+  blacklist.extend('_ image decode pal8os2v2-16.bmp'.split(' '))
+  blacklist.extend('_ image decode pal8oversizepal.bmp'.split(' '))
+  blacklist.extend('_ image decode pal4rletrns.bmp'.split(' '))
+  blacklist.extend('_ image decode pal8rletrns.bmp'.split(' '))
+  blacklist.extend('_ image decode 4bpp-pixeldata-cropped.bmp'.split(' '))
+  blacklist.extend('_ image decode 8bpp-pixeldata-cropped.bmp'.split(' '))
+  blacklist.extend('_ image decode 24bpp-pixeldata-cropped.bmp'.split(' '))
+  blacklist.extend('_ image decode 32bpp-pixeldata-cropped.bmp'.split(' '))
+  blacklist.extend('_ image subset rgb24largepal.bmp'.split(' '))
+  blacklist.extend('_ image subset pal8os2v2-16.bmp'.split(' '))
+  blacklist.extend('_ image subset pal8oversizepal.bmp'.split(' '))
+  blacklist.extend('_ image subset 4bpp-pixeldata-cropped.bmp'.split(' '))
+  blacklist.extend('_ image subset 8bpp-pixeldata-cropped.bmp'.split(' '))
+  blacklist.extend('_ image subset 24bpp-pixeldata-cropped.bmp'.split(' '))
+  blacklist.extend('_ image subset 32bpp-pixeldata-cropped.bmp'.split(' '))
+
+  # New ico files that fail on SkImageDecoder
+  blacklist.extend('_ image decode Hopstarter-Mac-Folders-Apple.ico'.split(' '))
+
+  # Leon doesn't care about this, so why run it?
+  if 'Win' in bot:
+    blacklist.extend('_ image decode _'.split(' '))
+    blacklist.extend('_ image subset _'.split(' '))
+
+  # Certain gm's on win7 gpu and pdf are never finishing and keeping the test
+  # running forever
+  if 'Win7' in bot:
+    blacklist.extend('msaa16 gm _ colorwheelnative'.split(' '))
+    blacklist.extend('pdf gm _ fontmgr_iter_factory'.split(' '))
 
   # Drawing SKPs or images into GPU canvases is a New Thing.
   # It seems like we're running out of RAM on some Android bots, so start off
   # with a very wide blacklist disabling all these tests on all Android bots.
   if 'Android' in bot:  # skia:3255
-    blacklist.extend('gpu skp _ gpu image _ gpu subset _'.split(' '))
-    blacklist.extend('msaa skp _ msaa image _ gpu subset _'.split(' '))
+    blacklist.extend('gpu skp _ _ msaa skp _ _'.split(' '))
+    blacklist.extend('gpu image decode _ msaa image decode _'.split(' '))
+    blacklist.extend('gpu image subset _ msaa image subset _'.split(' '))
 
-  # PDF + .webp -> jumps depending on uninitialized memory.  skia:3505
   if 'Valgrind' in bot:
-    blacklist.extend('pdf _ .webp'.split(' '))
-    if 'Valgrind_GPU' in bot:
-      args.append('--nocpu')
-    elif 'Valgrind_CPU' in bot:
-      args.append('--nogpu')
+    # PDF + .webp -> jumps depending on uninitialized memory.  skia:3505
+    blacklist.extend('pdf _ _ .webp'.split(' '))
+    # These take 18+ hours to run.
+    blacklist.extend('pdf gm _ fontmgr_iter'.split(' '))
+    blacklist.extend('pdf _ _ PANO_20121023_214540.jpg'.split(' '))
+    blacklist.extend('pdf skp _ worldjournal'.split(' '))
+    blacklist.extend('pdf skp _ desk_baidu.skp'.split(' '))
+    blacklist.extend('pdf skp _ desk_wikipedia.skp'.split(' '))
+
+  if 'iOS' in bot:
+    blacklist.extend('gpu skp _ _ msaa skp _ _'.split(' '))
+    blacklist.extend('gpu image decode _ msaa image decode _'.split(' '))
+    blacklist.extend('gpu image subset _ msaa image subset _'.split(' '))
+    blacklist.extend('msaa16 gm _ tilemodesProcess'.split(' '))
+
+  if 'GalaxyS4' in bot:
+    # This occasionally runs forever. skia:3802
+    blacklist.extend('tiles_rt-gpu gm _ imagefilterscropped'.split(' '))
 
   if blacklist:
     args.append('--blacklist')
     args.extend(blacklist)
 
   match = []
-  if 'Alex' in bot:  # skia:2793
-    # This machine looks to be running out of heap.
-    # Running with fewer threads may help.
-    args.extend(['--threads', '1'])
   if 'Valgrind' in bot: # skia:3021
     match.append('~Threaded')
-  if 'Xoom' in bot or 'GalaxyS3' in bot:  # skia:1699
+  if 'TSAN' in bot: # skia:3562
+    match.append('~Math')
+
+  if 'GalaxyS3' in bot:  # skia:1699
     match.append('~WritePixels')
 
   # skia:3249: these images flakily don't decode on Android.
@@ -88,17 +166,13 @@ def get_args(bot):
   if 'NexusPlayer' in bot:
     match.append('~ResourceCache')
 
+  if 'iOS' in bot:
+    match.append('~WritePixels')
+
   if match:
     args.append('--match')
     args.extend(match)
 
-  # Though their GPUs are interesting, these don't test anything on
-  # the CPU that other ARMv7+NEON bots don't test faster (N5).
-  if ('Nexus10'  in bot or
-      'Nexus7'   in bot or
-      'GalaxyS3' in bot or
-      'GalaxyS4' in bot):
-    args.append('--nocpu')
   return args
 cov_end = lineno()   # Don't care about code coverage past here.
 
@@ -107,14 +181,16 @@ def self_test():
   import coverage  # This way the bots don't need coverage.py to be installed.
   args = {}
   cases = [
-    'Test-Android-GalaxyS3-Mali400-Arm7-Debug',
-    'Test-Android-Nexus7-Tegra3-Arm7-Release',
-    'Test-Android-NexusPlayer-PowerVR-x86-Release',
-    'Test-Android-Xoom-Tegra2-Arm7-Release',
-    'Test-ChromeOS-Alex-GMA3150-x86-Debug',
-    'Test-Ubuntu12-ShuttleA-GTX550Ti-x86_64-Release-Valgrind_GPU',
-    'Test-Ubuntu14-GCE-NoGPU-x86_64-Release-Valgrind_CPU',
-    'Test-Win7-ShuttleA-HD2000-x86-Debug-ANGLE',
+    'Pretend-iOS-Bot',
+    'Test-Android-GCC-Nexus9-GPU-TegraK1-Arm64-Debug',
+    'Test-Android-GCC-GalaxyS3-GPU-Mali400-Arm7-Debug',
+    'Test-Android-GCC-GalaxyS4-GPU-SGX544-Arm7-Release',
+    'Test-Android-GCC-Nexus7-GPU-Tegra3-Arm7-Release',
+    'Test-Android-GCC-NexusPlayer-CPU-SSSE3-x86-Release',
+    'Test-Ubuntu-GCC-ShuttleA-GPU-GTX550Ti-x86_64-Release-Valgrind',
+    'Test-Ubuntu-GCC-GCE-CPU-AVX2-x86_64-Release-TSAN',
+    'Test-Ubuntu-GCC-GCE-CPU-AVX2-x86_64-Release-Valgrind',
+    'Test-Win7-MSVC-ShuttleA-GPU-HD2000-x86-Debug-ANGLE',
   ]
 
   cov = coverage.coverage()

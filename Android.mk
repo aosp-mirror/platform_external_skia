@@ -62,13 +62,27 @@ LOCAL_CFLAGS += \
 	-Wno-unused-parameter \
 	-U_FORTIFY_SOURCE \
 	-D_FORTIFY_SOURCE=1 \
-	-DSKIA_IMPLEMENTATION=1
+	-DSKIA_IMPLEMENTATION=1 \
+	-Wno-clobbered
 
 LOCAL_CPPFLAGS := \
 	-std=c++11 \
 	-Wno-invalid-offsetof
 
 LOCAL_SRC_FILES := \
+	src/codec/SkCodec.cpp \
+	src/codec/SkCodec_libbmp.cpp \
+	src/codec/SkCodec_libgif.cpp \
+	src/codec/SkCodec_libico.cpp \
+	src/codec/SkCodec_libpng.cpp \
+	src/codec/SkCodec_wbmp.cpp \
+	src/codec/SkGifInterlaceIter.cpp \
+	src/codec/SkJpegCodec.cpp \
+	src/codec/SkJpegDecoderMgr.cpp \
+	src/codec/SkJpegUtility.cpp \
+	src/codec/SkMaskSwizzler.cpp \
+	src/codec/SkMasks.cpp \
+	src/codec/SkSwizzler.cpp \
 	src/c/sk_paint.cpp \
 	src/c/sk_surface.cpp \
 	src/core/SkAAClip.cpp \
@@ -153,6 +167,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkMaskGamma.cpp \
 	src/core/SkMath.cpp \
 	src/core/SkMatrix.cpp \
+	src/core/SkMatrixImageFilter.cpp \
 	src/core/SkMetaData.cpp \
 	src/core/SkMipMap.cpp \
 	src/core/SkMultiPictureDraw.cpp \
@@ -189,6 +204,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkResourceCache.cpp \
 	src/core/SkRRect.cpp \
 	src/core/SkRTree.cpp \
+	src/core/SkRWBuffer.cpp \
 	src/core/SkScalar.cpp \
 	src/core/SkScalerContext.cpp \
 	src/core/SkScan.cpp \
@@ -207,6 +223,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkStrokerPriv.cpp \
 	src/core/SkTaskGroup.cpp \
 	src/core/SkTextBlob.cpp \
+	src/core/SkTime.cpp \
 	src/core/SkTLS.cpp \
 	src/core/SkTSearch.cpp \
 	src/core/SkTypeface.cpp \
@@ -229,21 +246,24 @@ LOCAL_SRC_FILES := \
 	src/pipe/SkGPipeWrite.cpp \
 	src/lazy/SkCachingPixelRef.cpp \
 	src/pathops/SkAddIntersections.cpp \
-	src/pathops/SkDCubicIntersection.cpp \
+	src/pathops/SkDConicLineIntersection.cpp \
 	src/pathops/SkDCubicLineIntersection.cpp \
 	src/pathops/SkDCubicToQuads.cpp \
 	src/pathops/SkDLineIntersection.cpp \
-	src/pathops/SkDQuadImplicit.cpp \
-	src/pathops/SkDQuadIntersection.cpp \
 	src/pathops/SkDQuadLineIntersection.cpp \
 	src/pathops/SkIntersections.cpp \
 	src/pathops/SkOpAngle.cpp \
+	src/pathops/SkOpBuilder.cpp \
+	src/pathops/SkOpCoincidence.cpp \
 	src/pathops/SkOpContour.cpp \
+	src/pathops/SkOpCubicHull.cpp \
 	src/pathops/SkOpEdgeBuilder.cpp \
 	src/pathops/SkOpSegment.cpp \
-	src/pathops/SkPathOpsBounds.cpp \
+	src/pathops/SkOpSpan.cpp \
 	src/pathops/SkPathOpsCommon.cpp \
+	src/pathops/SkPathOpsConic.cpp \
 	src/pathops/SkPathOpsCubic.cpp \
+	src/pathops/SkPathOpsCurve.cpp \
 	src/pathops/SkPathOpsDebug.cpp \
 	src/pathops/SkPathOpsLine.cpp \
 	src/pathops/SkPathOpsOp.cpp \
@@ -251,11 +271,11 @@ LOCAL_SRC_FILES := \
 	src/pathops/SkPathOpsQuad.cpp \
 	src/pathops/SkPathOpsRect.cpp \
 	src/pathops/SkPathOpsSimplify.cpp \
+	src/pathops/SkPathOpsTSect.cpp \
 	src/pathops/SkPathOpsTightBounds.cpp \
-	src/pathops/SkPathOpsTriangle.cpp \
 	src/pathops/SkPathOpsTypes.cpp \
+	src/pathops/SkPathOpsWinding.cpp \
 	src/pathops/SkPathWriter.cpp \
-	src/pathops/SkQuarticRoot.cpp \
 	src/pathops/SkReduceOrder.cpp \
 	src/effects/Sk1DPathEffect.cpp \
 	src/effects/Sk2DPathEffect.cpp \
@@ -301,7 +321,6 @@ LOCAL_SRC_FILES := \
 	src/effects/SkTableMaskFilter.cpp \
 	src/effects/SkTestImageFilters.cpp \
 	src/effects/SkTileImageFilter.cpp \
-	src/effects/SkMatrixImageFilter.cpp \
 	src/effects/SkTransparentShader.cpp \
 	src/effects/SkXfermodeImageFilter.cpp \
 	src/effects/gradients/SkClampRange.cpp \
@@ -309,7 +328,6 @@ LOCAL_SRC_FILES := \
 	src/effects/gradients/SkGradientShader.cpp \
 	src/effects/gradients/SkLinearGradient.cpp \
 	src/effects/gradients/SkRadialGradient.cpp \
-	src/effects/gradients/SkTwoPointRadialGradient.cpp \
 	src/effects/gradients/SkTwoPointConicalGradient.cpp \
 	src/effects/gradients/SkTwoPointConicalGradient_gpu.cpp \
 	src/effects/gradients/SkSweepGradient.cpp \
@@ -336,25 +354,19 @@ LOCAL_SRC_FILES := \
 	src/images/SkScaledBitmapSampler.cpp \
 	src/ports/SkImageGenerator_skia.cpp \
 	src/doc/SkDocument_PDF.cpp \
+	src/pdf/SkJpegInfo.cpp \
 	src/pdf/SkPDFBitmap.cpp \
 	src/pdf/SkPDFCanon.cpp \
-	src/pdf/SkPDFCatalog.cpp \
 	src/pdf/SkPDFDevice.cpp \
-	src/pdf/SkPDFDocument.cpp \
 	src/pdf/SkPDFFont.cpp \
 	src/pdf/SkPDFFormXObject.cpp \
 	src/pdf/SkPDFGraphicState.cpp \
-	src/pdf/SkPDFImage.cpp \
-	src/pdf/SkPDFPage.cpp \
 	src/pdf/SkPDFResourceDict.cpp \
 	src/pdf/SkPDFShader.cpp \
 	src/pdf/SkPDFStream.cpp \
 	src/pdf/SkPDFTypes.cpp \
 	src/pdf/SkPDFUtils.cpp \
 	src/core/SkForceCPlusPlusLinking.cpp \
-	src/codec/SkCodec.cpp \
-	src/codec/SkCodec_libpng.cpp \
-	src/codec/SkSwizzler.cpp \
 	src/fonts/SkFontMgr_indirect.cpp \
 	src/fonts/SkRemotableFontMgr.cpp \
 	src/ports/SkGlobalInitialization_default.cpp \
@@ -396,13 +408,13 @@ LOCAL_SRC_FILES := \
 	src/utils/SkNWayCanvas.cpp \
 	src/utils/SkNullCanvas.cpp \
 	src/utils/SkOSFile.cpp \
+	src/utils/SkPaintFilterCanvas.cpp \
 	src/utils/SkParse.cpp \
 	src/utils/SkParseColor.cpp \
 	src/utils/SkParsePath.cpp \
 	src/utils/SkPictureUtils.cpp \
 	src/utils/SkPatchGrid.cpp \
 	src/utils/SkPatchUtils.cpp \
-	src/utils/SkPathUtils.cpp \
 	src/utils/SkSHA1.cpp \
 	src/utils/SkRTConf.cpp \
 	src/utils/SkTextBox.cpp \
@@ -416,31 +428,35 @@ LOCAL_SRC_FILES := \
 	src/fonts/SkTestScalerContext.cpp \
 	src/gpu/GrAAHairLinePathRenderer.cpp \
 	src/gpu/GrAAConvexPathRenderer.cpp \
+	src/gpu/GrAAConvexTessellator.cpp \
 	src/gpu/GrAADistanceFieldPathRenderer.cpp \
 	src/gpu/GrAARectRenderer.cpp \
 	src/gpu/GrAddPathRenderers_default.cpp \
 	src/gpu/GrAtlas.cpp \
+	src/gpu/GrAtlasTextContext.cpp \
 	src/gpu/GrBatch.cpp \
+	src/gpu/GrBatchAtlas.cpp \
+	src/gpu/GrBatchFontCache.cpp \
 	src/gpu/GrBatchTarget.cpp \
-	src/gpu/GrBitmapTextContext.cpp \
+	src/gpu/GrBatchTest.cpp \
 	src/gpu/GrBlend.cpp \
 	src/gpu/GrBufferAllocPool.cpp \
 	src/gpu/GrClip.cpp \
 	src/gpu/GrClipMaskCache.cpp \
 	src/gpu/GrClipMaskManager.cpp \
 	src/gpu/GrContext.cpp \
+	src/gpu/GrCommandBuilder.cpp \
 	src/gpu/GrCoordTransform.cpp \
+	src/gpu/GrDashLinePathRenderer.cpp \
 	src/gpu/GrDefaultGeoProcFactory.cpp \
 	src/gpu/GrDefaultPathRenderer.cpp \
-	src/gpu/GrDistanceFieldTextContext.cpp \
 	src/gpu/GrDrawTarget.cpp \
-	src/gpu/GrFlushToGpuDrawTarget.cpp \
 	src/gpu/GrFontScaler.cpp \
-	src/gpu/GrGeometryProcessor.cpp \
 	src/gpu/GrGpu.cpp \
 	src/gpu/GrGpuResource.cpp \
 	src/gpu/GrGpuFactory.cpp \
 	src/gpu/GrInvariantOutput.cpp \
+	src/gpu/GrInOrderCommandBuilder.cpp \
 	src/gpu/GrInOrderDrawBuffer.cpp \
 	src/gpu/GrLayerCache.cpp \
 	src/gpu/GrLayerHoister.cpp \
@@ -464,25 +480,32 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrRecordReplaceDraw.cpp \
 	src/gpu/GrRectanizer_pow2.cpp \
 	src/gpu/GrRectanizer_skyline.cpp \
+	src/gpu/GrRectBatch.cpp \
 	src/gpu/GrRenderTarget.cpp \
 	src/gpu/GrReducedClip.cpp \
+	src/gpu/GrReorderCommandBuilder.cpp \
 	src/gpu/GrResourceCache.cpp \
+	src/gpu/GrResourceProvider.cpp \
 	src/gpu/GrStencil.cpp \
 	src/gpu/GrStencilAndCoverPathRenderer.cpp \
 	src/gpu/GrStencilAndCoverTextContext.cpp \
-	src/gpu/GrStencilBuffer.cpp \
+	src/gpu/GrStencilAttachment.cpp \
+	src/gpu/GrStrokeInfo.cpp \
 	src/gpu/GrTargetCommands.cpp \
 	src/gpu/GrTraceMarker.cpp \
 	src/gpu/GrTessellatingPathRenderer.cpp \
+	src/gpu/GrTestUtils.cpp \
 	src/gpu/GrSWMaskHelper.cpp \
 	src/gpu/GrSoftwarePathRenderer.cpp \
 	src/gpu/GrSurface.cpp \
+	src/gpu/GrTextBlobCache.cpp \
 	src/gpu/GrTextContext.cpp \
-	src/gpu/GrFontCache.cpp \
 	src/gpu/GrTexture.cpp \
+	src/gpu/GrTextureProvider.cpp \
 	src/gpu/GrTextureAccess.cpp \
 	src/gpu/GrXferProcessor.cpp \
 	src/gpu/effects/GrConfigConversionEffect.cpp \
+	src/gpu/effects/GrConstColorProcessor.cpp \
 	src/gpu/effects/GrCoverageSetOpXP.cpp \
 	src/gpu/effects/GrCustomXfermode.cpp \
 	src/gpu/effects/GrBezierEffect.cpp \
@@ -492,7 +515,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/effects/GrBitmapTextGeoProc.cpp \
 	src/gpu/effects/GrDashingEffect.cpp \
 	src/gpu/effects/GrDisableColorXP.cpp \
-	src/gpu/effects/GrDistanceFieldTextureEffect.cpp \
+	src/gpu/effects/GrDistanceFieldGeoProc.cpp \
 	src/gpu/effects/GrDitherEffect.cpp \
 	src/gpu/effects/GrMatrixConvolutionEffect.cpp \
 	src/gpu/effects/GrOvalEffect.cpp \
@@ -525,7 +548,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/GrGLProgramDataManager.cpp \
 	src/gpu/gl/GrGLRenderTarget.cpp \
 	src/gpu/gl/GrGLSL.cpp \
-	src/gpu/gl/GrGLStencilBuffer.cpp \
+	src/gpu/gl/GrGLStencilAttachment.cpp \
 	src/gpu/gl/GrGLTexture.cpp \
 	src/gpu/gl/GrGLUtil.cpp \
 	src/gpu/gl/GrGLVertexArray.cpp \
@@ -576,21 +599,26 @@ LOCAL_SHARED_LIBRARIES := \
 	libft2
 
 LOCAL_STATIC_LIBRARIES := \
+	libgif \
 	libwebp-decode \
 	libwebp-encode \
-	libgif \
 	libsfntly
 
 LOCAL_C_INCLUDES := \
+	external/jpeg \
+	external/libpng \
+	$(LOCAL_PATH)/include/codec \
+	$(LOCAL_PATH)/src/codec \
+	$(LOCAL_PATH)/src/core \
 	$(LOCAL_PATH)/include/c \
 	$(LOCAL_PATH)/include/config \
 	$(LOCAL_PATH)/include/core \
 	$(LOCAL_PATH)/include/pathops \
 	$(LOCAL_PATH)/include/pipe \
+	external/giflib \
 	$(LOCAL_PATH)/include/ports \
 	$(LOCAL_PATH)/include/utils \
 	$(LOCAL_PATH)/include/images \
-	$(LOCAL_PATH)/src/core \
 	$(LOCAL_PATH)/src/sfnt \
 	$(LOCAL_PATH)/src/image \
 	$(LOCAL_PATH)/src/opts \
@@ -599,15 +627,10 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/src/gpu \
 	$(LOCAL_PATH)/include/effects \
 	$(LOCAL_PATH)/src/effects \
-	external/jpeg \
 	$(LOCAL_PATH)/src/lazy \
 	$(LOCAL_PATH)/third_party/etc1 \
 	$(LOCAL_PATH)/third_party/ktx \
 	external/webp/include \
-	external/giflib \
-	external/libpng \
-	$(LOCAL_PATH)/include/codec \
-	$(LOCAL_PATH)/src/codec \
 	external/expat/lib \
 	external/freetype/include \
 	$(LOCAL_PATH)/include/utils/win \
@@ -617,6 +640,7 @@ LOCAL_C_INCLUDES := \
 	external/zlib
 
 LOCAL_EXPORT_C_INCLUDE_DIRS := \
+	$(LOCAL_PATH)/include/codec \
 	$(LOCAL_PATH)/include/c \
 	$(LOCAL_PATH)/include/config \
 	$(LOCAL_PATH)/include/core \
@@ -640,8 +664,7 @@ LOCAL_SRC_FILES_arm += \
 	src/opts/SkMorphology_opts_arm.cpp \
 	src/opts/SkTextureCompression_opts_arm.cpp \
 	src/opts/SkUtils_opts_arm.cpp \
-	src/opts/SkXfermode_opts_arm.cpp \
-	src/opts/memset.arm.S
+	src/opts/SkXfermode_opts_arm.cpp
 
 ifeq ($(ARCH_ARM_HAVE_NEON), true)
 LOCAL_SRC_FILES_arm += \
@@ -652,9 +675,8 @@ LOCAL_SRC_FILES_arm += \
 	src/opts/SkBlurImage_opts_neon.cpp \
 	src/opts/SkMorphology_opts_neon.cpp \
 	src/opts/SkTextureCompression_opts_neon.cpp \
-	src/opts/SkXfermode_opts_arm_neon.cpp \
-	src/opts/memset16_neon.S \
-	src/opts/memset32_neon.S
+	src/opts/SkUtils_opts_arm_neon.cpp \
+	src/opts/SkXfermode_opts_arm_neon.cpp
 
 LOCAL_CFLAGS_arm += \
 	-DSK_ARM_HAS_NEON

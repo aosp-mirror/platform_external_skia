@@ -35,11 +35,11 @@ static void makebm(SkBitmap* bm, SkColorType ct, int w, int h) {
     canvas.drawPaint(paint);
 }
 
-static void setup(SkPaint* paint, const SkBitmap& bm, SkPaint::FilterLevel filter_level,
+static void setup(SkPaint* paint, const SkBitmap& bm, SkFilterQuality filter_level,
                   SkShader::TileMode tmx, SkShader::TileMode tmy) {
     SkShader* shader = SkShader::CreateBitmapShader(bm, tmx, tmy);
     paint->setShader(shader)->unref();
-    paint->setFilterLevel(filter_level);
+    paint->setFilterQuality(filter_level);
 }
 
 static const SkColorType gColorTypes[] = {
@@ -65,7 +65,7 @@ protected:
         kNPOTSize = 3,
     };
 
-    SkString onShortName() SK_OVERRIDE {
+    SkString onShortName() override {
         SkString name("scaled_tilemodes");
         if (!fPowerOfTwoSize) {
             name.append("_npot");
@@ -73,16 +73,16 @@ protected:
         return name;
     }
 
-    SkISize onISize() SK_OVERRIDE { return SkISize::Make(880, 760); }
+    SkISize onISize() override { return SkISize::Make(880, 760); }
 
-    void onOnceBeforeDraw() SK_OVERRIDE {
+    void onOnceBeforeDraw() override {
         int size = fPowerOfTwoSize ? kPOTSize : kNPOTSize;
         for (size_t i = 0; i < SK_ARRAY_COUNT(gColorTypes); i++) {
             makebm(&fTexture[i], gColorTypes[i], size, size);
         }
     }
 
-    void onDraw(SkCanvas* canvas) SK_OVERRIDE {
+    void onDraw(SkCanvas* canvas) override {
         float scale = 32.f/kPOTSize;
 
         int size = fPowerOfTwoSize ? kPOTSize : kNPOTSize;
@@ -91,12 +91,12 @@ protected:
 
         static const char* gColorTypeNames[] = { "8888" , "565", "4444" };
 
-        static const SkPaint::FilterLevel           gFilterLevels[] =
-            { SkPaint::kNone_FilterLevel,
-              SkPaint::kLow_FilterLevel,
-              SkPaint::kMedium_FilterLevel,
-              SkPaint::kHigh_FilterLevel };
-        static const char*          gFilterNames[] = { "None", "Low", "Medium", "High" };
+        static const SkFilterQuality gFilterQualitys[] =
+            { kNone_SkFilterQuality,
+              kLow_SkFilterQuality,
+              kMedium_SkFilterQuality,
+              kHigh_SkFilterQuality };
+        static const char* gFilterNames[] = { "None", "Low", "Medium", "High" };
 
         static const SkShader::TileMode gModes[] = { SkShader::kClamp_TileMode, SkShader::kRepeat_TileMode, SkShader::kMirror_TileMode };
         static const char*          gModeNames[] = {    "C",                    "R",                   "M" };
@@ -124,7 +124,7 @@ protected:
         y = SkIntToScalar(40) / scale;
 
         for (size_t i = 0; i < SK_ARRAY_COUNT(gColorTypes); i++) {
-            for (size_t j = 0; j < SK_ARRAY_COUNT(gFilterLevels); j++) {
+            for (size_t j = 0; j < SK_ARRAY_COUNT(gFilterQualitys); j++) {
                 x = SkIntToScalar(10)/scale;
                 for (size_t kx = 0; kx < SK_ARRAY_COUNT(gModes); kx++) {
                     for (size_t ky = 0; ky < SK_ARRAY_COUNT(gModes); ky++) {
@@ -135,7 +135,7 @@ protected:
                             makebm(&fTexture[i], gColorTypes[i], size, size);
                         }
 #endif
-                        setup(&paint, fTexture[i], gFilterLevels[j], gModes[kx], gModes[ky]);
+                        setup(&paint, fTexture[i], gFilterQualitys[j], gModes[kx], gModes[ky]);
                         paint.setDither(true);
 
                         canvas->save();
@@ -207,13 +207,13 @@ public:
 
 protected:
 
-    SkString onShortName() SK_OVERRIDE {
+    SkString onShortName() override {
         return fName;
     }
 
-    SkISize onISize() SK_OVERRIDE { return SkISize::Make(880, 560); }
+    SkISize onISize() override { return SkISize::Make(880, 560); }
 
-    void onDraw(SkCanvas* canvas) SK_OVERRIDE {
+    void onDraw(SkCanvas* canvas) override {
         canvas->scale(SkIntToScalar(3)/2, SkIntToScalar(3)/2);
 
         const SkScalar w = SkIntToScalar(gWidth);

@@ -8,6 +8,7 @@
 
 #include "SkRadialGradient.h"
 #include "SkRadialGradient_Table.h"
+#include "SkNx.h"
 
 #define kSQRT_TABLE_BITS    11
 #define kSQRT_TABLE_SIZE    (1 << kSQRT_TABLE_BITS)
@@ -269,106 +270,77 @@ void SkRadialGradient::flatten(SkWriteBuffer& buffer) const {
 
 namespace {
 
-inline bool radial_completely_pinned(int fx, int dx, int fy, int dy) {
-    // fast, overly-conservative test: checks unit square instead
-    // of unit circle
-    bool xClamped = (fx >= SK_FixedHalf && dx >= 0) ||
-                    (fx <= -SK_FixedHalf && dx <= 0);
-    bool yClamped = (fy >= SK_FixedHalf && dy >= 0) ||
-                    (fy <= -SK_FixedHalf && dy <= 0);
-
+inline bool radial_completely_pinned(SkScalar fx, SkScalar dx, SkScalar fy, SkScalar dy) {
+    // fast, overly-conservative test: checks unit square instead of unit circle
+    bool xClamped = (fx >= 1 && dx >= 0) || (fx <= -1 && dx <= 0);
+    bool yClamped = (fy >= 1 && dy >= 0) || (fy <= -1 && dy <= 0);
     return xClamped || yClamped;
 }
-
-// Return true if (fx * fy) is always inside the unit circle
-// SkPin32 is expensive, but so are all the SkFixedMul in this test,
-// so it shouldn't be run if count is small.
-inline bool no_need_for_radial_pin(int fx, int dx,
-                                          int fy, int dy, int count) {
-    SkASSERT(count > 0);
-    if (SkAbs32(fx) > 0x7FFF || SkAbs32(fy) > 0x7FFF) {
-        return false;
-    }
-    if (fx*fx + fy*fy > 0x7FFF*0x7FFF) {
-        return false;
-    }
-    fx += (count - 1) * dx;
-    fy += (count - 1) * dy;
-    if (SkAbs32(fx) > 0x7FFF || SkAbs32(fy) > 0x7FFF) {
-        return false;
-    }
-    return fx*fx + fy*fy <= 0x7FFF*0x7FFF;
-}
-
-#define UNPINNED_RADIAL_STEP \
-    fi = (fx * fx + fy * fy) >> (14 + 16 - kSQRT_TABLE_BITS); \
-    *dstC++ = cache[toggle + \
-                    (sqrt_table[fi] >> SkGradientShaderBase::kSqrt32Shift)]; \
-    toggle = next_dither_toggle(toggle); \
-    fx += dx; \
-    fy += dy;
 
 typedef void (* RadialShadeProc)(SkScalar sfx, SkScalar sdx,
         SkScalar sfy, SkScalar sdy,
         SkPMColor* dstC, const SkPMColor* cache,
         int count, int toggle);
 
-// On Linux, this is faster with SkPMColor[] params than SkPMColor* SK_RESTRICT
-void shadeSpan_radial_clamp(SkScalar sfx, SkScalar sdx,
-        SkScalar sfy, SkScalar sdy,
-        SkPMColor* SK_RESTRICT dstC, const SkPMColor* SK_RESTRICT cache,
-        int count, int toggle) {
-    // Floating point seems to be slower than fixed point,
-    // even when we have float hardware.
-    const uint8_t* SK_RESTRICT sqrt_table = gSqrt8Table;
-    SkFixed fx = SkScalarToFixed(sfx) >> 1;
-    SkFixed dx = SkScalarToFixed(sdx) >> 1;
-    SkFixed fy = SkScalarToFixed(sfy) >> 1;
-    SkFixed dy = SkScalarToFixed(sdy) >> 1;
-    if ((count > 4) && radial_completely_pinned(fx, dx, fy, dy)) {
+static inline Sk4f fast_sqrt(const Sk4f& R) {
+    // R * R.rsqrt0() is much faster, but it's non-monotonic, which isn't so pretty for gradients.
+    return R * R.rsqrt1();
+}
+
+static inline Sk4f sum_squares(const Sk4f& a, const Sk4f& b) {
+    return a * a + b * b;
+}
+
+void shadeSpan_radial_clamp2(SkScalar sfx, SkScalar sdx, SkScalar sfy, SkScalar sdy,
+                             SkPMColor* SK_RESTRICT dstC, const SkPMColor* SK_RESTRICT cache,
+                             int count, int toggle) {
+    if (radial_completely_pinned(sfx, sdx, sfy, sdy)) {
         unsigned fi = SkGradientShaderBase::kCache32Count - 1;
         sk_memset32_dither(dstC,
-            cache[toggle + fi],
-            cache[next_dither_toggle(toggle) + fi],
-            count);
-    } else if ((count > 4) &&
-               no_need_for_radial_pin(fx, dx, fy, dy, count)) {
-        unsigned fi;
-        // 4x unroll appears to be no faster than 2x unroll on Linux
-        while (count > 1) {
-            UNPINNED_RADIAL_STEP;
-            UNPINNED_RADIAL_STEP;
-            count -= 2;
+                           cache[toggle + fi],
+                           cache[next_dither_toggle(toggle) + fi],
+                           count);
+    } else {
+        const Sk4f max(255);
+        const float scale = 255;
+        sfx *= scale;
+        sfy *= scale;
+        sdx *= scale;
+        sdy *= scale;
+        const Sk4f fx4(sfx, sfx + sdx, sfx + 2*sdx, sfx + 3*sdx);
+        const Sk4f fy4(sfy, sfy + sdy, sfy + 2*sdy, sfy + 3*sdy);
+        const Sk4f dx4(sdx * 4);
+        const Sk4f dy4(sdy * 4);
+
+        Sk4f tmpxy = fx4 * dx4 + fy4 * dy4;
+        Sk4f tmpdxdy = sum_squares(dx4, dy4);
+        Sk4f R = sum_squares(fx4, fy4);
+        Sk4f dR = tmpxy + tmpxy + tmpdxdy;
+        const Sk4f ddR = tmpdxdy + tmpdxdy;
+
+        for (int i = 0; i < (count >> 2); ++i) {
+            Sk4f dist = Sk4f::Min(fast_sqrt(R), max);
+            R += dR;
+            dR += ddR;
+
+            int fi[4];
+            dist.castTrunc().store(fi);
+
+            for (int i = 0; i < 4; i++) {
+                *dstC++ = cache[toggle + fi[i]];
+                toggle = next_dither_toggle(toggle);
+            }
         }
+        count &= 3;
         if (count) {
-            UNPINNED_RADIAL_STEP;
-        }
-    } else  {
-        // Specializing for dy == 0 gains us 25% on Skia benchmarks
-        if (dy == 0) {
-            unsigned yy = SkPin32(fy, -0xFFFF >> 1, 0xFFFF >> 1);
-            yy *= yy;
-            do {
-                unsigned xx = SkPin32(fx, -0xFFFF >> 1, 0xFFFF >> 1);
-                unsigned fi = (xx * xx + yy) >> (14 + 16 - kSQRT_TABLE_BITS);
-                fi = SkFastMin32(fi, 0xFFFF >> (16 - kSQRT_TABLE_BITS));
-                *dstC++ = cache[toggle + (sqrt_table[fi] >>
-                    SkGradientShaderBase::kSqrt32Shift)];
+            Sk4f dist = Sk4f::Min(fast_sqrt(R), max);
+
+            int fi[4];
+            dist.castTrunc().store(fi);
+            for (int i = 0; i < count; i++) {
+                *dstC++ = cache[toggle + fi[i]];
                 toggle = next_dither_toggle(toggle);
-                fx += dx;
-            } while (--count != 0);
-        } else {
-            do {
-                unsigned xx = SkPin32(fx, -0xFFFF >> 1, 0xFFFF >> 1);
-                unsigned fi = SkPin32(fy, -0xFFFF >> 1, 0xFFFF >> 1);
-                fi = (xx * xx + fi * fi) >> (14 + 16 - kSQRT_TABLE_BITS);
-                fi = SkFastMin32(fi, 0xFFFF >> (16 - kSQRT_TABLE_BITS));
-                *dstC++ = cache[toggle + (sqrt_table[fi] >>
-                    SkGradientShaderBase::kSqrt32Shift)];
-                toggle = next_dither_toggle(toggle);
-                fx += dx;
-                fy += dy;
-            } while (--count != 0);
+            }
         }
     }
 }
@@ -435,7 +407,7 @@ void SkRadialGradient::RadialGradientContext::shadeSpan(int x, int y,
 
         RadialShadeProc shadeProc = shadeSpan_radial_repeat;
         if (SkShader::kClamp_TileMode == radialGradient.fTileMode) {
-            shadeProc = shadeSpan_radial_clamp;
+            shadeProc = shadeSpan_radial_clamp2;
         } else if (SkShader::kMirror_TileMode == radialGradient.fTileMode) {
             shadeProc = shadeSpan_radial_mirror;
         } else {
@@ -473,9 +445,9 @@ public:
                           const char* outputColor,
                           const char* inputColor,
                           const TransformedCoordsArray&,
-                          const TextureSamplerArray&) SK_OVERRIDE;
+                          const TextureSamplerArray&) override;
 
-    static void GenKey(const GrProcessor& processor, const GrGLCaps&, GrProcessorKeyBuilder* b) {
+    static void GenKey(const GrProcessor& processor, const GrGLSLCaps&, GrProcessorKeyBuilder* b) {
         b->add32(GenBaseGradientKey(processor));
     }
 
@@ -498,14 +470,14 @@ public:
 
     virtual ~GrRadialGradient() { }
 
-    const char* name() const SK_OVERRIDE { return "Radial Gradient"; }
+    const char* name() const override { return "Radial Gradient"; }
 
-    virtual void getGLProcessorKey(const GrGLCaps& caps,
-                                   GrProcessorKeyBuilder* b) const SK_OVERRIDE {
+    virtual void getGLProcessorKey(const GrGLSLCaps& caps,
+                                   GrProcessorKeyBuilder* b) const override {
         GrGLRadialGradient::GenKey(*this, caps, b);
     }
 
-    GrGLFragmentProcessor* createGLInstance() const SK_OVERRIDE {
+    GrGLFragmentProcessor* createGLInstance() const override {
         return SkNEW_ARGS(GrGLRadialGradient, (*this));
     }
 
@@ -546,7 +518,7 @@ GrFragmentProcessor* GrRadialGradient::TestCreate(SkRandom* random,
     GrColor paintColor;
     GrFragmentProcessor* fp;
     SkAssertResult(shader->asFragmentProcessor(context, paint,
-                                               GrProcessorUnitTest::TestMatrix(random), NULL,
+                                               GrTest::TestMatrix(random), NULL,
                                                &paintColor, &fp));
     return fp;
 }

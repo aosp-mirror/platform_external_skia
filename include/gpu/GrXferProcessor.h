@@ -14,17 +14,51 @@
 #include "GrTypes.h"
 #include "SkXfermode.h"
 
-class GrDrawTargetCaps;
-class GrGLCaps;
+class GrShaderCaps;
+class GrGLSLCaps;
 class GrGLXferProcessor;
 class GrProcOptInfo;
+
+/**
+ * Equations for alpha-blending.
+ */
+enum GrBlendEquation {
+    // Basic blend equations.
+    kAdd_GrBlendEquation,             //<! Cs*S + Cd*D
+    kSubtract_GrBlendEquation,        //<! Cs*S - Cd*D
+    kReverseSubtract_GrBlendEquation, //<! Cd*D - Cs*S
+
+    // Advanced blend equations. These are described in the SVG and PDF specs.
+    kScreen_GrBlendEquation,
+    kOverlay_GrBlendEquation,
+    kDarken_GrBlendEquation,
+    kLighten_GrBlendEquation,
+    kColorDodge_GrBlendEquation,
+    kColorBurn_GrBlendEquation,
+    kHardLight_GrBlendEquation,
+    kSoftLight_GrBlendEquation,
+    kDifference_GrBlendEquation,
+    kExclusion_GrBlendEquation,
+    kMultiply_GrBlendEquation,
+    kHSLHue_GrBlendEquation,
+    kHSLSaturation_GrBlendEquation,
+    kHSLColor_GrBlendEquation,
+    kHSLLuminosity_GrBlendEquation,
+
+    kFirstAdvancedGrBlendEquation = kScreen_GrBlendEquation,
+    kLast_GrBlendEquation = kHSLLuminosity_GrBlendEquation
+};
+
+static const int kGrBlendEquationCnt = kLast_GrBlendEquation + 1;
+
+inline bool GrBlendEquationIsAdvanced(GrBlendEquation equation) {
+    return equation >= kFirstAdvancedGrBlendEquation;
+}
 
 /**
  * Coeffecients for alpha-blending.
  */
 enum GrBlendCoeff {
-    kInvalid_GrBlendCoeff = -1,
-
     kZero_GrBlendCoeff,    //<! 0
     kOne_GrBlendCoeff,     //<! 1
     kSC_GrBlendCoeff,      //<! src color
@@ -44,7 +78,18 @@ enum GrBlendCoeff {
     kS2A_GrBlendCoeff,
     kIS2A_GrBlendCoeff,
 
-    kTotalGrBlendCoeffCount
+    kLast_GrBlendCoeff = kIS2A_GrBlendCoeff
+};
+
+static const int kGrBlendCoeffCnt = kLast_GrBlendCoeff + 1;
+
+/**
+ * Barriers for blending. When a shader reads the dst directly, an Xfer barrier is sometimes
+ * required after a pixel has been written, before it can be safely read again.
+ */
+enum GrXferBarrierType {
+    kTexture_GrXferBarrierType, //<! Required when a shader reads and renders to the same texture.
+    kBlend_GrXferBarrierType,   //<! Required by certain blend extensions.
 };
 
 /**
@@ -66,7 +111,7 @@ public:
      * Sets a unique key on the GrProcessorKeyBuilder calls onGetGLProcessorKey(...) to get the
      * specific subclass's key.
      */ 
-    void getGLProcessorKey(const GrGLCaps& caps, GrProcessorKeyBuilder* b) const;
+    void getGLProcessorKey(const GrGLSLCaps& caps, GrProcessorKeyBuilder* b) const;
 
     /** Returns a new instance of the appropriate *GL* implementation class
         for the given GrXferProcessor; caller is responsible for deleting
@@ -118,22 +163,42 @@ public:
      * A caller who calls this function on a XP is required to honor the returned OptFlags
      * and color values for its draw.
      */
-    virtual OptFlags getOptimizations(const GrProcOptInfo& colorPOI,
-                                      const GrProcOptInfo& coveragePOI,
-                                      bool doesStencilWrite,
-                                      GrColor* overrideColor,
-                                      const GrDrawTargetCaps& caps) = 0;
+    OptFlags getOptimizations(const GrProcOptInfo& colorPOI,
+                              const GrProcOptInfo& coveragePOI,
+                              bool doesStencilWrite,
+                              GrColor* overrideColor,
+                              const GrDrawTargetCaps& caps);
+
+    /**
+     * Returns whether this XP will require an Xfer barrier on the given rt. If true, outBarrierType
+     * is updated to contain the type of barrier needed.
+     */
+    bool willNeedXferBarrier(const GrRenderTarget* rt,
+                             const GrDrawTargetCaps& caps,
+                             GrXferBarrierType* outBarrierType) const;
 
     struct BlendInfo {
-        BlendInfo() : fWriteColor(true) {}
+        void reset() {
+            fEquation = kAdd_GrBlendEquation;
+            fSrcBlend = kOne_GrBlendCoeff;
+            fDstBlend = kZero_GrBlendCoeff;
+            fBlendConstant = 0;
+            fWriteColor = true;
+        }
 
-        GrBlendCoeff fSrcBlend;
-        GrBlendCoeff fDstBlend;
-        GrColor      fBlendConstant;
-        bool         fWriteColor;
+        SkDEBUGCODE(SkString dump() const;)
+
+        GrBlendEquation fEquation;
+        GrBlendCoeff    fSrcBlend;
+        GrBlendCoeff    fDstBlend;
+        GrColor         fBlendConstant;
+        bool            fWriteColor;
     };
 
-    virtual void getBlendInfo(BlendInfo* blendInfo) const = 0;
+    void getBlendInfo(BlendInfo* blendInfo) const {
+        blendInfo->reset();
+        this->onGetBlendInfo(blendInfo);
+    }
 
     bool willReadDstColor() const { return fWillReadDstColor; }
 
@@ -152,6 +217,11 @@ public:
         SkASSERT(this->getDstCopyTexture());
         return fDstCopyTextureOffset;
     }
+
+    /**
+     * Returns whether or not the XP will look at coverage when doing its blending.
+     */
+    bool readsCoverage() const { return fReadsCoverage; }
 
     /** 
      * Returns whether or not this xferProcossor will set a secondary output to be used with dual
@@ -173,6 +243,9 @@ public:
         if (this->fWillReadDstColor != that.fWillReadDstColor) {
             return false;
         }
+        if (this->fReadsCoverage != that.fReadsCoverage) {
+            return false;
+        }
         if (this->fDstCopy.getTexture() != that.fDstCopy.getTexture()) {
             return false;
         }
@@ -187,16 +260,40 @@ protected:
     GrXferProcessor(const GrDeviceCoordTexture* dstCopy, bool willReadDstColor);
 
 private:
+    virtual OptFlags onGetOptimizations(const GrProcOptInfo& colorPOI,
+                                        const GrProcOptInfo& coveragePOI,
+                                        bool doesStencilWrite,
+                                        GrColor* overrideColor,
+                                        const GrDrawTargetCaps& caps) = 0;
+
     /**
      * Sets a unique key on the GrProcessorKeyBuilder that is directly associated with this xfer
      * processor's GL backend implementation.
      */
-    virtual void onGetGLProcessorKey(const GrGLCaps& caps,
+    virtual void onGetGLProcessorKey(const GrGLSLCaps& caps,
                                      GrProcessorKeyBuilder* b) const = 0;
+
+    /**
+     * If not using a texture barrier, retrieves whether the subclass will require a different type
+     * of barrier.
+     */
+    virtual bool onWillNeedXferBarrier(const GrRenderTarget*,
+                                       const GrDrawTargetCaps&,
+                                       GrXferBarrierType* outBarrierType SK_UNUSED) const {
+        return false;
+    }
+
+    /**
+     * Retrieves the hardware blend state required by this Xfer processor. The BlendInfo struct
+     * comes initialized to default values, so the Xfer processor only needs to set the state it
+     * needs. It may not even need to override this method at all.
+     */
+    virtual void onGetBlendInfo(BlendInfo*) const {}
 
     virtual bool onIsEqual(const GrXferProcessor&) const = 0;
 
     bool                    fWillReadDstColor;
+    bool                    fReadsCoverage;
     SkIPoint                fDstCopyTextureOffset;
     GrTextureAccess         fDstCopy;
 
@@ -245,13 +342,6 @@ public:
      */
     virtual void getInvariantOutput(const GrProcOptInfo& colorPOI, const GrProcOptInfo& coveragePOI,
                                     InvariantOutput*) const = 0;
-
-    /**
-     * Determines whether multiplying the computed per-pixel color by the pixel's fractional
-     * coverage before the blend will give the correct final destination color. In general it
-     * will not as coverage is applied after blending.
-     */
-    virtual bool canTweakAlphaForCoverage() const = 0;
 
     bool willNeedDstCopy(const GrDrawTargetCaps& caps, const GrProcOptInfo& colorPOI,
                          const GrProcOptInfo& coveragePOI) const;

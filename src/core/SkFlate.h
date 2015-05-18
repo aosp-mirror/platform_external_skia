@@ -12,8 +12,6 @@
 
 #include "SkTypes.h"
 
-#ifndef Sk_NO_FLATE
-
 #include "SkStream.h"
 class SkData;
 
@@ -66,13 +64,12 @@ public:
     void finalize();
 
     // The SkWStream interface:
-    bool write(const void*, size_t) SK_OVERRIDE;
-    size_t bytesWritten() const SK_OVERRIDE;
+    bool write(const void*, size_t) override;
+    size_t bytesWritten() const override;
 
 private:
     struct Impl;
     SkAutoTDelete<Impl> fImpl;
 };
 
-#endif  // SK_NO_FLATE
 #endif  // SkFlate_DEFINED

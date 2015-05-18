@@ -19,8 +19,8 @@ public:
                              const GrPipelineBuilder*,
                              const SkMatrix& viewMatrix,
                              const SkPath&,
-                             const SkStrokeRec&,
-                             bool antiAlias) const SK_OVERRIDE;
+                             const GrStrokeInfo&,
+                             bool antiAlias) const override;
 
 protected:
     virtual bool onDrawPath(GrDrawTarget*,
@@ -28,8 +28,8 @@ protected:
                             GrColor,
                             const SkMatrix& viewMatrix,
                             const SkPath&,
-                            const SkStrokeRec&,
-                            bool antiAlias) SK_OVERRIDE;
+                            const GrStrokeInfo&,
+                            bool antiAlias) override;
 };
 
 #endif

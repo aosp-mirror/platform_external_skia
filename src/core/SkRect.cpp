@@ -45,6 +45,13 @@ void SkRect::toQuad(SkPoint quad[4]) const {
     quad[3].set(fLeft, fBottom);
 }
 
+#include "SkNx.h"
+
+static inline bool is_finite(const Sk4s& value) {
+    auto finite = value * Sk4s(0) == Sk4s(0);
+    return finite.allTrue();
+}
+
 bool SkRect::setBoundsCheck(const SkPoint pts[], int count) {
     SkASSERT((pts && count > 0) || count == 0);
 
@@ -53,39 +60,46 @@ bool SkRect::setBoundsCheck(const SkPoint pts[], int count) {
     if (count <= 0) {
         sk_bzero(this, sizeof(SkRect));
     } else {
-        SkScalar    l, t, r, b;
+        Sk4s min, max, accum;
 
-        l = r = pts[0].fX;
-        t = b = pts[0].fY;
+        if (count & 1) {
+            min = Sk4s(pts[0].fX, pts[0].fY, pts[0].fX, pts[0].fY);
+            pts += 1;
+            count -= 1;
+        } else {
+            min = Sk4s::Load(&pts[0].fX);
+            pts += 2;
+            count -= 2;
+        }
+        accum = max = min;
+        accum *= Sk4s(0);
 
-        // If all of the points are finite, accum should stay 0. If we encounter
-        // a NaN or infinity, then accum should become NaN.
-        float accum = 0;
-        accum *= l; accum *= t;
-
-        for (int i = 1; i < count; i++) {
-            SkScalar x = pts[i].fX;
-            SkScalar y = pts[i].fY;
-
-            accum *= x; accum *= y;
-
-            // we use if instead of if/else, so we can generate min/max
-            // float instructions (at least on SSE)
-            if (x < l) l = x;
-            if (x > r) r = x;
-
-            if (y < t) t = y;
-            if (y > b) b = y;
+        count >>= 1;
+        for (int i = 0; i < count; ++i) {
+            Sk4s xy = Sk4s::Load(&pts->fX);
+            accum *= xy;
+            min = Sk4s::Min(min, xy);
+            max = Sk4s::Max(max, xy);
+            pts += 2;
         }
 
-        SkASSERT(!accum || !SkScalarIsFinite(accum));
-        if (accum) {
-            l = t = r = b = 0;
+        /**
+         *  With some trickery, we may be able to use Min/Max to also propogate non-finites,
+         *  in which case we could eliminate accum entirely, and just check min and max for
+         *  "is_finite".
+         */
+        if (is_finite(accum)) {
+            float minArray[4], maxArray[4];
+            min.store(minArray);
+            max.store(maxArray);
+            this->set(SkTMin(minArray[0], minArray[2]), SkTMin(minArray[1], minArray[3]),
+                      SkTMax(maxArray[0], maxArray[2]), SkTMax(maxArray[1], maxArray[3]));
+        } else {
+            // we hit a non-finite value, so zero everything and return false
+            this->setEmpty();
             isFinite = false;
         }
-        this->set(l, t, r, b);
     }
-
     return isFinite;
 }
 

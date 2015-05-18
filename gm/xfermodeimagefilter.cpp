@@ -25,7 +25,7 @@ public:
     }
 
 protected:
-    SkString onShortName() SK_OVERRIDE {
+    SkString onShortName() override {
         return SkString("xfermodeimagefilter");
     }
 
@@ -42,7 +42,7 @@ protected:
         canvas.drawText(str, strlen(str), SkIntToScalar(15), SkIntToScalar(65), paint);
     }
 
-    SkISize onISize() SK_OVERRIDE {
+    SkISize onISize() override {
         return SkISize::Make(WIDTH, HEIGHT);
     }
 
@@ -65,7 +65,7 @@ protected:
         canvas->restore();
     }
 
-    void onOnceBeforeDraw() SK_OVERRIDE {
+    void onOnceBeforeDraw() override {
         make_bitmap();
 
         fCheckerboard.allocN32Pixels(80, 80);
@@ -73,8 +73,8 @@ protected:
         sk_tool_utils::draw_checkerboard(&checkerboardCanvas, 0xFFA0A0A0, 0xFF404040, 8);
     }
 
-    void onDraw(SkCanvas* canvas) SK_OVERRIDE {
-        canvas->clear(0x00000000);
+    void onDraw(SkCanvas* canvas) override {
+        canvas->clear(SK_ColorBLACK);
         SkPaint paint;
 
         const struct {

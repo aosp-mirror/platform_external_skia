@@ -23,8 +23,8 @@ public:
                           const char* outputColor,
                           const char* inputColor,
                           const TransformedCoordsArray& coords,
-                          const TextureSamplerArray& samplers) SK_OVERRIDE {
-        GrGLFPFragmentBuilder* fsBuilder = builder->getFragmentShaderBuilder();
+                          const TextureSamplerArray& samplers) override {
+        GrGLFragmentBuilder* fsBuilder = builder->getFragmentShaderBuilder();
         fsBuilder->codeAppendf("\t%s = ", outputColor);
         fsBuilder->appendTextureLookupAndModulate(inputColor,
                                                   samplers[0],
@@ -43,7 +43,7 @@ void GrSimpleTextureEffect::onComputeInvariantOutput(GrInvariantOutput* inout) c
     this->updateInvariantOutputForModulation(inout);
 }
 
-void GrSimpleTextureEffect::getGLProcessorKey(const GrGLCaps& caps,
+void GrSimpleTextureEffect::getGLProcessorKey(const GrGLSLCaps& caps,
                                               GrProcessorKeyBuilder* b) const {
     GrGLSimpleTextureEffect::GenKey(*this, caps, b);
 }
@@ -80,6 +80,6 @@ GrFragmentProcessor* GrSimpleTextureEffect::TestCreate(SkRandom* random,
     };
     GrCoordSet coordSet = kCoordSets[random->nextULessThan(SK_ARRAY_COUNT(kCoordSets))];
 
-    const SkMatrix& matrix = GrProcessorUnitTest::TestMatrix(random);
+    const SkMatrix& matrix = GrTest::TestMatrix(random);
     return GrSimpleTextureEffect::Create(textures[texIdx], matrix, coordSet);
 }

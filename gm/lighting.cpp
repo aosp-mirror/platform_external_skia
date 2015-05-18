@@ -7,9 +7,10 @@
 
 #include "gm.h"
 #include "SkLightingImageFilter.h"
+#include "SkOffsetImageFilter.h"
 
 #define WIDTH 330
-#define HEIGHT 440
+#define HEIGHT 660
 
 namespace skiagm {
 
@@ -21,7 +22,7 @@ public:
 
 protected:
 
-    SkString onShortName() SK_OVERRIDE {
+    SkString onShortName() override {
         return SkString("lighting");
     }
 
@@ -38,7 +39,7 @@ protected:
         canvas.drawText(str, strlen(str), SkIntToScalar(20), SkIntToScalar(70), paint);
     }
 
-    SkISize onISize() SK_OVERRIDE {
+    SkISize onISize() override {
         return SkISize::Make(WIDTH, HEIGHT);
     }
 
@@ -51,7 +52,7 @@ protected:
         canvas->restore();
     }
 
-    void onDraw(SkCanvas* canvas) SK_OVERRIDE {
+    void onDraw(SkCanvas* canvas) override {
         if (!fInitialized) {
             make_bitmap();
             fInitialized = true;
@@ -86,28 +87,70 @@ protected:
         SkPaint paint;
 
         SkImageFilter::CropRect cropRect(SkRect::MakeXYWH(20, 10, 60, 65));
+        SkImageFilter::CropRect fullSizeCropRect(SkRect::MakeXYWH(0, 0, 100, 100));
+        SkAutoTUnref<SkImageFilter> noopCropped(SkOffsetImageFilter::Create(0, 0, NULL, &cropRect));
 
         int y = 0;
-        for (int i = 0; i < 2; i++) {
-            const SkImageFilter::CropRect* cr = (i == 0) ? NULL : &cropRect;
-            paint.setImageFilter(SkLightingImageFilter::CreatePointLitDiffuse(pointLocation, white, surfaceScale, kd, NULL, cr))->unref();
+        for (int i = 0; i < 3; i++) {
+            const SkImageFilter::CropRect* cr = (i == 1) ? &cropRect : (i == 2) ? &fullSizeCropRect : NULL;
+            SkImageFilter* input = (i == 2) ? noopCropped.get() : NULL;
+            paint.setImageFilter(SkLightingImageFilter::CreatePointLitDiffuse(pointLocation,
+                                                                              white,
+                                                                              surfaceScale,
+                                                                              kd,
+                                                                              input,
+                                                                              cr))->unref();
             drawClippedBitmap(canvas, paint, 0, y);
 
-            paint.setImageFilter(SkLightingImageFilter::CreateDistantLitDiffuse(distantDirection, white, surfaceScale, kd, NULL, cr))->unref();
+            paint.setImageFilter(SkLightingImageFilter::CreateDistantLitDiffuse(distantDirection,
+                                                                                white,
+                                                                                surfaceScale,
+                                                                                kd,
+                                                                                input,
+                                                                                cr))->unref();
             drawClippedBitmap(canvas, paint, 110, y);
 
-            paint.setImageFilter(SkLightingImageFilter::CreateSpotLitDiffuse(spotLocation, spotTarget, spotExponent, cutoffAngle, white, surfaceScale, kd, NULL, cr))->unref();
+            paint.setImageFilter(SkLightingImageFilter::CreateSpotLitDiffuse(spotLocation,
+                                                                             spotTarget,
+                                                                             spotExponent,
+                                                                             cutoffAngle,
+                                                                             white,
+                                                                             surfaceScale,
+                                                                             kd,
+                                                                             input,
+                                                                             cr))->unref();
             drawClippedBitmap(canvas, paint, 220, y);
 
             y += 110;
 
-            paint.setImageFilter(SkLightingImageFilter::CreatePointLitSpecular(pointLocation, white, surfaceScale, ks, shininess, NULL, cr))->unref();
+            paint.setImageFilter(SkLightingImageFilter::CreatePointLitSpecular(pointLocation,
+                                                                               white,
+                                                                               surfaceScale,
+                                                                               ks,
+                                                                               shininess,
+                                                                               input,
+                                                                               cr))->unref();
             drawClippedBitmap(canvas, paint, 0, y);
 
-            paint.setImageFilter(SkLightingImageFilter::CreateDistantLitSpecular(distantDirection, white, surfaceScale, ks, shininess, NULL, cr))->unref();
+            paint.setImageFilter(SkLightingImageFilter::CreateDistantLitSpecular(distantDirection,
+                                                                                 white,
+                                                                                 surfaceScale,
+                                                                                 ks,
+                                                                                 shininess,
+                                                                                 input,
+                                                                                 cr))->unref();
             drawClippedBitmap(canvas, paint, 110, y);
 
-            paint.setImageFilter(SkLightingImageFilter::CreateSpotLitSpecular(spotLocation, spotTarget, spotExponent, cutoffAngle, white, surfaceScale, ks, shininess, NULL, cr))->unref();
+            paint.setImageFilter(SkLightingImageFilter::CreateSpotLitSpecular(spotLocation,
+                                                                              spotTarget,
+                                                                              spotExponent,
+                                                                              cutoffAngle,
+                                                                              white,
+                                                                              surfaceScale,
+                                                                              ks,
+                                                                              shininess,
+                                                                              input,
+                                                                              cr))->unref();
             drawClippedBitmap(canvas, paint, 220, y);
 
             y += 110;

@@ -28,11 +28,11 @@ public:
                           const char* outputColor,
                           const char* inputColor,
                           const TransformedCoordsArray&,
-                          const TextureSamplerArray&) SK_OVERRIDE;
+                          const TextureSamplerArray&) override;
 
-    void setData(const GrGLProgramDataManager&, const GrProcessor&) SK_OVERRIDE;
+    void setData(const GrGLProgramDataManager&, const GrProcessor&) override;
 
-    static inline void GenKey(const GrProcessor& effect, const GrGLCaps&,
+    static inline void GenKey(const GrProcessor& effect, const GrGLSLCaps&,
                               GrProcessorKeyBuilder* b) {
         const GrTextureDomain& domain = effect.cast<GrBicubicEffect>().domain();
         b->add32(GrTextureDomain::GLDomain::DomainKey(domain));
@@ -79,7 +79,7 @@ void GrGLBicubicEffect::emitCode(GrGLFPBuilder* builder,
         GrGLShaderVar("c2",            kVec4f_GrSLType),
         GrGLShaderVar("c3",            kVec4f_GrSLType),
     };
-    GrGLFPFragmentBuilder* fsBuilder = builder->getFragmentShaderBuilder();
+    GrGLFragmentBuilder* fsBuilder = builder->getFragmentShaderBuilder();
     SkString coords2D = fsBuilder->ensureFSCoords2D(coords, 0);
     fsBuilder->emitFunction(kVec4f_GrSLType,
                             "cubicBlend",
@@ -158,7 +158,7 @@ GrBicubicEffect::GrBicubicEffect(GrTexture* texture,
 GrBicubicEffect::~GrBicubicEffect() {
 }
 
-void GrBicubicEffect::getGLProcessorKey(const GrGLCaps& caps,
+void GrBicubicEffect::getGLProcessorKey(const GrGLSLCaps& caps,
                                         GrProcessorKeyBuilder* b) const {
     GrGLBicubicEffect::GenKey(*this, caps, b);
 }

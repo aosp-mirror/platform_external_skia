@@ -1,14 +1,24 @@
+/*
+ * Copyright 2015 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
 #include "SkChecksum.h"
 #include "SkString.h"
 #include "SkTHash.h"
 #include "Test.h"
 
-namespace { uint32_t hash_int(const int& k) { return SkChecksum::Mix(k); } }
-
-static void set_negative_key(int key, double* d) { *d = -key; }
+// Tests use of const foreach().  map.count() is of course the better way to do this.
+static int count(const SkTHashMap<int, double>& map) {
+    int n = 0;
+    map.foreach([&n](int, double) { n++; });
+    return n;
+}
 
 DEF_TEST(HashMap, r) {
-    SkTHashMap<int, double, hash_int> map;
+    SkTHashMap<int, double> map;
 
     map.set(3, 4.0);
     REPORTER_ASSERT(r, map.count() == 1);
@@ -17,7 +27,9 @@ DEF_TEST(HashMap, r) {
     REPORTER_ASSERT(r, found);
     REPORTER_ASSERT(r, *found == 4.0);
 
-    map.foreach(set_negative_key);
+    map.foreach([](int key, double* d){ *d = -key; });
+    REPORTER_ASSERT(r, count(map) == 1);
+
     found = map.find(3);
     REPORTER_ASSERT(r, found);
     REPORTER_ASSERT(r, *found == -3.0);
@@ -30,7 +42,7 @@ DEF_TEST(HashMap, r) {
         map.set(i, 2.0*i);
     }
     for (int i = 0; i < N; i++) {
-        double* found = map.find(i);;
+        double* found = map.find(i);
         REPORTER_ASSERT(r, found);
         REPORTER_ASSERT(r, *found == i*2.0);
     }
@@ -40,14 +52,21 @@ DEF_TEST(HashMap, r) {
 
     REPORTER_ASSERT(r, map.count() == N);
 
+    for (int i = 0; i < N/2; i++) {
+        map.remove(i);
+    }
+    for (int i = 0; i < N; i++) {
+        double* found = map.find(i);
+        REPORTER_ASSERT(r, (found == nullptr) ==  (i < N/2));
+    }
+    REPORTER_ASSERT(r, map.count() == N/2);
+
     map.reset();
     REPORTER_ASSERT(r, map.count() == 0);
 }
 
-namespace { uint32_t hash_string(const SkString& s) { return SkToInt(s.size()); } }
-
 DEF_TEST(HashSet, r) {
-    SkTHashSet<SkString, hash_string> set;
+    SkTHashSet<SkString> set;
 
     set.add(SkString("Hello"));
     set.add(SkString("World"));
@@ -57,6 +76,13 @@ DEF_TEST(HashSet, r) {
     REPORTER_ASSERT(r, set.contains(SkString("Hello")));
     REPORTER_ASSERT(r, set.contains(SkString("World")));
     REPORTER_ASSERT(r, !set.contains(SkString("Goodbye")));
+
+    REPORTER_ASSERT(r, set.find(SkString("Hello")));
+    REPORTER_ASSERT(r, *set.find(SkString("Hello")) == SkString("Hello"));
+
+    set.remove(SkString("Hello"));
+    REPORTER_ASSERT(r, !set.contains(SkString("Hello")));
+    REPORTER_ASSERT(r, set.count() == 1);
 
     set.reset();
     REPORTER_ASSERT(r, set.count() == 0);

@@ -9,7 +9,6 @@
 #include "SkBitmapDevice.h"
 #include "SkBitmapSource.h"
 #include "SkColor.h"
-#include "SkMatrixImageFilter.h"
 #include "SkRefCnt.h"
 
 namespace skiagm {
@@ -28,13 +27,13 @@ protected:
     void draw(SkCanvas* canvas,
               const SkRect& rect,
               const SkSize& deviceSize,
-              SkPaint::FilterLevel filterLevel,
+              SkFilterQuality filterQuality,
               SkImageFilter* input = NULL) {
         SkRect dstRect;
         canvas->getTotalMatrix().mapRect(&dstRect, rect);
         canvas->save();
-        SkScalar deviceScaleX = SkScalarDiv(deviceSize.width(), dstRect.width());
-        SkScalar deviceScaleY = SkScalarDiv(deviceSize.height(), dstRect.height());
+        SkScalar deviceScaleX = deviceSize.width() / dstRect.width();
+        SkScalar deviceScaleY = deviceSize.height() / dstRect.height();
         canvas->translate(rect.x(), rect.y());
         canvas->scale(deviceScaleX, deviceScaleY);
         canvas->translate(-rect.x(), -rect.y());
@@ -42,7 +41,7 @@ protected:
         matrix.setScale(SkScalarInvert(deviceScaleX),
                         SkScalarInvert(deviceScaleY));
         SkAutoTUnref<SkImageFilter> imageFilter(
-            SkMatrixImageFilter::Create(matrix, filterLevel, input));
+            SkImageFilter::CreateMatrixFilter(matrix, filterQuality, input));
         SkPaint filteredPaint;
         filteredPaint.setImageFilter(imageFilter.get());
         canvas->saveLayer(&rect, &filteredPaint);
@@ -60,7 +59,7 @@ protected:
     }
 
     virtual void onDraw(SkCanvas* canvas) {
-        canvas->clear(0x00000000);
+        canvas->clear(SK_ColorBLACK);
 
         SkRect srcRect = SkRect::MakeWH(96, 96);
 
@@ -68,25 +67,25 @@ protected:
         draw(canvas,
              srcRect,
              deviceSize,
-             SkPaint::kNone_FilterLevel);
+             kNone_SkFilterQuality);
 
         canvas->translate(srcRect.width() + SkIntToScalar(10), 0);
         draw(canvas,
              srcRect,
              deviceSize,
-             SkPaint::kLow_FilterLevel);
+             kLow_SkFilterQuality);
 
         canvas->translate(srcRect.width() + SkIntToScalar(10), 0);
         draw(canvas,
              srcRect,
              deviceSize,
-             SkPaint::kMedium_FilterLevel);
+             kMedium_SkFilterQuality);
 
         canvas->translate(srcRect.width() + SkIntToScalar(10), 0);
         draw(canvas,
              srcRect,
              deviceSize,
-             SkPaint::kHigh_FilterLevel);
+             kHigh_SkFilterQuality);
 
         SkBitmap bitmap;
         bitmap.allocN32Pixels(16, 16);
@@ -97,7 +96,7 @@ protected:
             SkPaint paint;
             paint.setColor(0xFF00FF00);
             SkRect ovalRect = SkRect::MakeWH(16, 16);
-            ovalRect.inset(SkScalarDiv(2.0f, 3.0f), SkScalarDiv(2.0f, 3.0f));
+            ovalRect.inset(SkIntToScalar(2)/3, SkIntToScalar(2)/3);
             bitmapCanvas.drawOval(ovalRect, paint);
         }
         SkRect inRect = SkRect::MakeXYWH(-4, -4, 20, 20);
@@ -107,7 +106,7 @@ protected:
         draw(canvas,
              srcRect,
              deviceSize,
-             SkPaint::kHigh_FilterLevel,
+             kHigh_SkFilterQuality,
              source.get());
     }
 

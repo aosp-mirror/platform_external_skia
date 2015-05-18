@@ -5,10 +5,13 @@
  * found in the LICENSE file.
  */
 
+#ifndef DecodingBench_DEFINED
+#define DecodingBench_DEFINED
+
 #include "Benchmark.h"
+#include "SkData.h"
 #include "SkImageDecoder.h"
-#include "SkImageInfo.h"
-#include "SkStream.h"
+#include "SkRefCnt.h"
 #include "SkString.h"
 
 /*
@@ -22,14 +25,16 @@ public:
     DecodingBench(SkString path, SkColorType colorType);
 
 protected:
-    const char* onGetName() SK_OVERRIDE;
-    bool isSuitableFor(Backend backend) SK_OVERRIDE;
-    void onDraw(const int n, SkCanvas* canvas) SK_OVERRIDE;
-    
+    const char* onGetName() override;
+    bool isSuitableFor(Backend backend) override;
+    void onDraw(const int n, SkCanvas* canvas) override;
+    void onPreDraw() override;
+
 private:
-    SkString fName;
-    SkColorType fColorType;
-    SkAutoTDelete<SkMemoryStream> fStream;
-    SkAutoTDelete<SkImageDecoder> fDecoder;
+    SkString                fName;
+    SkColorType             fColorType;
+    SkAutoTUnref<SkData>    fData;
+    SkAutoMalloc            fPixelStorage;
     typedef Benchmark INHERITED;
 };
+#endif // DecodingBench_DEFINED

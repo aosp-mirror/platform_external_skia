@@ -9,17 +9,15 @@
 #define GrBatch_DEFINED
 
 #include <new>
-// TODO remove this header when we move entirely to batch
+#include "GrBatchTarget.h"
 #include "GrGeometryProcessor.h"
+#include "GrVertices.h"
 #include "SkRefCnt.h"
 #include "SkThread.h"
 #include "SkTypes.h"
 
-class GrBatchTarget;
 class GrGpu;
-class GrIndexBufferAllocPool;
 class GrPipeline;
-class GrVertexBufferAllocPool;
 
 struct GrInitInvariantOutput;
 
@@ -42,7 +40,7 @@ struct GrInitInvariantOutput;
 class GrBatch : public SkRefCnt {
 public:
     SK_DECLARE_INST_COUNT(GrBatch)
-    GrBatch() : fNumberOfDraws(0) { SkDEBUGCODE(fUsed = false;) }
+    GrBatch() : fClassID(kIllegalBatchClassID), fNumberOfDraws(0) { SkDEBUGCODE(fUsed = false;) }
     virtual ~GrBatch() {}
 
     virtual const char* name() const = 0;
@@ -60,12 +58,14 @@ public:
             return false;
         }
 
-        return onCombineIfPossible(that);
+        return this->onCombineIfPossible(that);
     }
 
     virtual bool onCombineIfPossible(GrBatch*) = 0;
 
     virtual void generateGeometry(GrBatchTarget*, const GrPipeline*) = 0;
+
+    const SkRect& bounds() const { return fBounds; }
 
     // TODO this goes away when batches are everywhere
     void setNumberOfDraws(int numberOfDraws) { fNumberOfDraws = numberOfDraws; }
@@ -101,6 +101,54 @@ protected:
     }
 
     uint32_t fClassID;
+
+    // NOTE, compute some bounds, even if extremely conservative.  Do *NOT* setLargest on the bounds
+    // rect because we outset it for dst copy textures
+    void setBounds(const SkRect& newBounds) { fBounds = newBounds; }
+
+    void joinBounds(const SkRect& otherBounds) {
+        return fBounds.joinPossiblyEmptyRect(otherBounds);
+    }
+
+    /** Helper for rendering instances using an instanced index index buffer. This class creates the
+        space for the vertices and flushes the draws to the batch target.*/
+   class InstancedHelper {
+   public:
+        InstancedHelper() {}
+        /** Returns the allocated storage for the vertices. The caller should populate the before
+            vertices before calling issueDraws(). */
+        void* init(GrBatchTarget* batchTarget, GrPrimitiveType, size_t vertexStride,
+                   const GrIndexBuffer*, int verticesPerInstance, int indicesPerInstance,
+                   int instancesToDraw);
+
+        /** Call after init() to issue draws to the batch target.*/
+        void issueDraw(GrBatchTarget* batchTarget) {
+            SkASSERT(fVertices.instanceCount());
+            batchTarget->draw(fVertices);
+        }
+    private:
+        GrVertices  fVertices;
+    };
+
+    static const int kVerticesPerQuad = 4;
+    static const int kIndicesPerQuad = 6;
+
+    /** A specialization of InstanceHelper for quad rendering. */
+    class QuadHelper : private InstancedHelper {
+    public:
+        QuadHelper() : INHERITED() {}
+        /** Finds the cached quad index buffer and reserves vertex space. Returns NULL on failure
+            and on sucess a pointer to the vertex data that the caller should populate before
+            calling issueDraws(). */
+        void* init(GrBatchTarget* batchTarget, size_t vertexStride, int quadsToDraw);
+
+        using InstancedHelper::issueDraw;
+
+    private:
+        typedef InstancedHelper INHERITED;
+    };
+
+    SkRect fBounds;
 
 private:
     static uint32_t GenClassID() {

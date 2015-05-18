@@ -5,6 +5,9 @@
  * found in the LICENSE file.
  */
 
+// Include here to ensure SK_SUPPORT_GPU is set correctly before it is examined.
+#include "SkTypes.h"
+
 #if SK_SUPPORT_GPU
 
 #include "GrContext.h"
@@ -73,31 +76,34 @@ static void test_stencil_buffers(skiatest::Reporter* reporter, GrContext* contex
     smallDesc.fHeight = 4;
     smallDesc.fSampleCnt = 0;
 
+    GrTextureProvider* cache = context->textureProvider();
     // Test that two budgeted RTs with the same desc share a stencil buffer.
-    SkAutoTUnref<GrTexture> smallRT0(context->createTexture(smallDesc, true));
+    SkAutoTUnref<GrTexture> smallRT0(cache->createTexture(smallDesc, true));
     if (smallRT0 && smallRT0->asRenderTarget()) {
-        smallRT0->asRenderTarget()->renderTargetPriv().attachStencilBuffer();
+        smallRT0->asRenderTarget()->renderTargetPriv().attachStencilAttachment();
     }
 
-    SkAutoTUnref<GrTexture> smallRT1(context->createTexture(smallDesc, true));
+    SkAutoTUnref<GrTexture> smallRT1(cache->createTexture(smallDesc, true));
     if (smallRT1 && smallRT1->asRenderTarget()) {
-        smallRT1->asRenderTarget()->renderTargetPriv().attachStencilBuffer();
+        smallRT1->asRenderTarget()->renderTargetPriv().attachStencilAttachment();
     }
 
-    REPORTER_ASSERT(reporter, smallRT0 && smallRT1 &&
-                              smallRT0->asRenderTarget() && smallRT1->asRenderTarget() &&
-                              smallRT0->asRenderTarget()->renderTargetPriv().getStencilBuffer() ==
-                              smallRT1->asRenderTarget()->renderTargetPriv().getStencilBuffer());
+    REPORTER_ASSERT(reporter,
+                    smallRT0 && smallRT1 &&
+                    smallRT0->asRenderTarget() && smallRT1->asRenderTarget() &&
+                    smallRT0->asRenderTarget()->renderTargetPriv().getStencilAttachment() ==
+                    smallRT1->asRenderTarget()->renderTargetPriv().getStencilAttachment());
 
     // An unbudgeted RT with the same desc should also share.
-    SkAutoTUnref<GrTexture> smallRT2(context->createTexture(smallDesc, false));
+    SkAutoTUnref<GrTexture> smallRT2(cache->createTexture(smallDesc, false));
     if (smallRT2 && smallRT2->asRenderTarget()) {
-        smallRT2->asRenderTarget()->renderTargetPriv().attachStencilBuffer();
+        smallRT2->asRenderTarget()->renderTargetPriv().attachStencilAttachment();
     }
-    REPORTER_ASSERT(reporter, smallRT0 && smallRT2 &&
-                              smallRT0->asRenderTarget() && smallRT2->asRenderTarget() &&
-                              smallRT0->asRenderTarget()->renderTargetPriv().getStencilBuffer() ==
-                              smallRT2->asRenderTarget()->renderTargetPriv().getStencilBuffer());
+    REPORTER_ASSERT(reporter,
+                    smallRT0 && smallRT2 &&
+                    smallRT0->asRenderTarget() && smallRT2->asRenderTarget() &&
+                    smallRT0->asRenderTarget()->renderTargetPriv().getStencilAttachment() ==
+                    smallRT2->asRenderTarget()->renderTargetPriv().getStencilAttachment());
 
     // An RT with a much larger size should not share.
     GrSurfaceDesc bigDesc;
@@ -106,22 +112,23 @@ static void test_stencil_buffers(skiatest::Reporter* reporter, GrContext* contex
     bigDesc.fWidth = 400;
     bigDesc.fHeight = 200;
     bigDesc.fSampleCnt = 0;
-    SkAutoTUnref<GrTexture> bigRT(context->createTexture(bigDesc, false));
+    SkAutoTUnref<GrTexture> bigRT(cache->createTexture(bigDesc, false));
     if (bigRT && bigRT->asRenderTarget()) {
-        bigRT->asRenderTarget()->renderTargetPriv().attachStencilBuffer();
+        bigRT->asRenderTarget()->renderTargetPriv().attachStencilAttachment();
     }
-    REPORTER_ASSERT(reporter, smallRT0 && bigRT &&
-                              smallRT0->asRenderTarget() && bigRT->asRenderTarget() &&
-                              smallRT0->asRenderTarget()->renderTargetPriv().getStencilBuffer() !=
-                              bigRT->asRenderTarget()->renderTargetPriv().getStencilBuffer());
+    REPORTER_ASSERT(reporter,
+                    smallRT0 && bigRT &&
+                    smallRT0->asRenderTarget() && bigRT->asRenderTarget() &&
+                    smallRT0->asRenderTarget()->renderTargetPriv().getStencilAttachment() !=
+                    bigRT->asRenderTarget()->renderTargetPriv().getStencilAttachment());
 
     if (context->getMaxSampleCount() >= 4) {
         // An RT with a different sample count should not share. 
         GrSurfaceDesc smallMSAADesc = smallDesc;
         smallMSAADesc.fSampleCnt = 4;
-        SkAutoTUnref<GrTexture> smallMSAART0(context->createTexture(smallMSAADesc, false));
+        SkAutoTUnref<GrTexture> smallMSAART0(cache->createTexture(smallMSAADesc, false));
         if (smallMSAART0 && smallMSAART0->asRenderTarget()) {
-            smallMSAART0->asRenderTarget()->renderTargetPriv().attachStencilBuffer();
+            smallMSAART0->asRenderTarget()->renderTargetPriv().attachStencilAttachment();
         }
 #ifdef SK_BUILD_FOR_ANDROID
         if (!smallMSAART0) {
@@ -132,35 +139,35 @@ static void test_stencil_buffers(skiatest::Reporter* reporter, GrContext* contex
         REPORTER_ASSERT(reporter,
                         smallRT0 && smallMSAART0 &&
                         smallRT0->asRenderTarget() && smallMSAART0->asRenderTarget() &&
-                        smallRT0->asRenderTarget()->renderTargetPriv().getStencilBuffer() !=
-                        smallMSAART0->asRenderTarget()->renderTargetPriv().getStencilBuffer());
+                        smallRT0->asRenderTarget()->renderTargetPriv().getStencilAttachment() !=
+                        smallMSAART0->asRenderTarget()->renderTargetPriv().getStencilAttachment());
         // A second MSAA RT should share with the first MSAA RT.
-        SkAutoTUnref<GrTexture> smallMSAART1(context->createTexture(smallMSAADesc, false));
+        SkAutoTUnref<GrTexture> smallMSAART1(cache->createTexture(smallMSAADesc, false));
         if (smallMSAART1 && smallMSAART1->asRenderTarget()) {
-            smallMSAART1->asRenderTarget()->renderTargetPriv().attachStencilBuffer();
+            smallMSAART1->asRenderTarget()->renderTargetPriv().attachStencilAttachment();
         }
         REPORTER_ASSERT(reporter,
                         smallMSAART0 && smallMSAART1 &&
                         smallMSAART0->asRenderTarget() &&
                         smallMSAART1->asRenderTarget() &&
-                        smallMSAART0->asRenderTarget()->renderTargetPriv().getStencilBuffer() ==
-                        smallMSAART1->asRenderTarget()->renderTargetPriv().getStencilBuffer());
+                        smallMSAART0->asRenderTarget()->renderTargetPriv().getStencilAttachment() ==
+                        smallMSAART1->asRenderTarget()->renderTargetPriv().getStencilAttachment());
         // But not one with a larger sample count should not. (Also check that the request for 4
         // samples didn't get rounded up to >= 8 or else they could share.).
         if (context->getMaxSampleCount() >= 8 && smallMSAART0 && smallMSAART0->asRenderTarget() &&
             smallMSAART0->asRenderTarget()->numSamples() < 8) {
             smallMSAADesc.fSampleCnt = 8;
-            smallMSAART1.reset(context->createTexture(smallMSAADesc, false));
-            SkAutoTUnref<GrTexture> smallMSAART1(context->createTexture(smallMSAADesc, false));
+            smallMSAART1.reset(cache->createTexture(smallMSAADesc, false));
+            SkAutoTUnref<GrTexture> smallMSAART1(cache->createTexture(smallMSAADesc, false));
             if (smallMSAART1 && smallMSAART1->asRenderTarget()) {
-                smallMSAART1->asRenderTarget()->renderTargetPriv().attachStencilBuffer();
+                smallMSAART1->asRenderTarget()->renderTargetPriv().attachStencilAttachment();
             }
             REPORTER_ASSERT(reporter,
-                            smallMSAART0 && smallMSAART1 &&
-                            smallMSAART0->asRenderTarget() &&
-                            smallMSAART1->asRenderTarget() &&
-                            smallMSAART0->asRenderTarget()->renderTargetPriv().getStencilBuffer() !=
-                            smallMSAART1->asRenderTarget()->renderTargetPriv().getStencilBuffer());
+                        smallMSAART0 && smallMSAART1 &&
+                        smallMSAART0->asRenderTarget() &&
+                        smallMSAART1->asRenderTarget() &&
+                        smallMSAART0->asRenderTarget()->renderTargetPriv().getStencilAttachment() !=
+                        smallMSAART1->asRenderTarget()->renderTargetPriv().getStencilAttachment());
         }
     }
 }
@@ -248,7 +255,7 @@ private:
         this->registerWithCache();
     }
 
-    size_t onGpuMemorySize() const SK_OVERRIDE { return fSize; }
+    size_t onGpuMemorySize() const override { return fSize; }
 
     TestResource* fToDelete;
     size_t fSize;
@@ -1023,6 +1030,88 @@ static void test_timestamp_wrap(skiatest::Reporter* reporter) {
     }
 }
 
+static void test_flush(skiatest::Reporter* reporter) {
+    Mock mock(1000000, 1000000);
+    GrContext* context = mock.context();
+    GrResourceCache* cache = mock.cache();
+
+    // The current cache impl will round the max flush count to the next power of 2. So we choose a
+    // power of two here to keep things simpler.
+    static const int kFlushCount = 16;
+    cache->setLimits(1000000, 1000000, kFlushCount);
+
+    {
+        // Insert a resource and send a flush notification kFlushCount times.
+        for (int i = 0; i < kFlushCount; ++i) {
+            TestResource* r = SkNEW_ARGS(TestResource, (context->getGpu()));
+            GrUniqueKey k;
+            make_unique_key<1>(&k, i);
+            r->resourcePriv().setUniqueKey(k);
+            r->unref();
+            cache->notifyFlushOccurred();
+        }
+
+        // Send flush notifications to the cache. Each flush should purge the oldest resource.
+        for (int i = 0; i < kFlushCount - 1; ++i) {
+            // The first resource was purged after the last flush in the initial loop, hence the -1.
+            REPORTER_ASSERT(reporter, kFlushCount - i - 1 == cache->getResourceCount());
+            for (int j = 0; j < i; ++j) {
+                GrUniqueKey k;
+                make_unique_key<1>(&k, j);
+                GrGpuResource* r = cache->findAndRefUniqueResource(k);
+                REPORTER_ASSERT(reporter, !SkToBool(r));
+                SkSafeUnref(r);
+            }
+            cache->notifyFlushOccurred();
+        }
+
+        REPORTER_ASSERT(reporter, 0 == cache->getResourceCount());
+        cache->purgeAllUnlocked();
+    }
+
+    // Do a similar test but where we leave refs on some resources to prevent them from being
+    // purged.
+    {
+        GrGpuResource* refedResources[kFlushCount >> 1];
+        for (int i = 0; i < kFlushCount; ++i) {
+            TestResource* r = SkNEW_ARGS(TestResource, (context->getGpu()));
+            GrUniqueKey k;
+            make_unique_key<1>(&k, i);
+            r->resourcePriv().setUniqueKey(k);
+            // Leave a ref on every other resource, beginning with the first.
+            if (SkToBool(i & 0x1)) {
+                refedResources[i/2] = r;
+            } else {
+                r->unref();
+            }
+            cache->notifyFlushOccurred();
+        }
+
+        for (int i = 0; i < kFlushCount; ++i) {
+            // Should get a resource purged every other flush.
+            REPORTER_ASSERT(reporter, kFlushCount - i/2 - 1 == cache->getResourceCount());
+            cache->notifyFlushOccurred();
+        }
+
+        // Unref all the resources that we kept refs on in the first loop.
+        for (int i = 0; i < kFlushCount >> 1; ++i) {
+            refedResources[i]->unref();
+        }
+
+        // When we unref'ed them their timestamps got updated. So nothing should be purged until we
+        // get kFlushCount additional flushes. Then everything should be purged.
+        for (int i = 0; i < kFlushCount; ++i) {
+            REPORTER_ASSERT(reporter, kFlushCount >> 1 == cache->getResourceCount());
+            cache->notifyFlushOccurred();
+        }
+        REPORTER_ASSERT(reporter, 0 == cache->getResourceCount());
+
+        cache->purgeAllUnlocked();
+    }
+
+    REPORTER_ASSERT(reporter, 0 == cache->getResourceCount());
+}
+
 static void test_large_resource_count(skiatest::Reporter* reporter) {
     // Set the cache size to double the resource count because we're going to create 2x that number
     // resources, using two different key domains. Add a little slop to the bytes because we resize
@@ -1118,6 +1207,7 @@ DEF_GPUTEST(ResourceCache, reporter, factory) {
     test_cache_chained_purge(reporter);
     test_resource_size_changed(reporter);
     test_timestamp_wrap(reporter);
+    test_flush(reporter);
     test_large_resource_count(reporter);
 }
 

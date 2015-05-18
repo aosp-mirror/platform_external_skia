@@ -51,7 +51,7 @@ static SkShader* Make2Radial(const SkPoint pts[2], const GradData& data, SkShade
                 SkScalarAve(pts[0].fY, pts[1].fY));
     center1.set(SkScalarInterp(pts[0].fX, pts[1].fX, SkIntToScalar(3)/5),
                 SkScalarInterp(pts[0].fY, pts[1].fY, SkIntToScalar(1)/4));
-    return SkGradientShader::CreateTwoPointRadial(
+    return SkGradientShader::CreateTwoPointConical(
         center1, (pts[1].fX - pts[0].fX) / 7,
         center0, (pts[1].fX - pts[0].fX) / 2,
         data.fColors, data.fPos, data.fCount, tm);
@@ -59,8 +59,8 @@ static SkShader* Make2Radial(const SkPoint pts[2], const GradData& data, SkShade
 
 static SkShader* Make2Conical(const SkPoint pts[2], const GradData& data, SkShader::TileMode tm) {
     SkPoint center0, center1;
-    SkScalar radius0 = SkScalarDiv(pts[1].fX - pts[0].fX, 10);
-    SkScalar radius1 = SkScalarDiv(pts[1].fX - pts[0].fX, 3);
+    SkScalar radius0 = (pts[1].fX - pts[0].fX) / 10;
+    SkScalar radius1 = (pts[1].fX - pts[0].fX) / 3;
     center0.set(pts[0].fX + radius0, pts[0].fY + radius0);
     center1.set(pts[1].fX - radius1, pts[1].fY - radius1);
     return SkGradientShader::CreateTwoPointConical(center1, radius1,
@@ -86,10 +86,10 @@ public:
 
 protected:
 
-    SkString onShortName() SK_OVERRIDE { return SkString("gradients_no_texture"); }
-    SkISize onISize() SK_OVERRIDE { return SkISize::Make(640, 615); }
+    SkString onShortName() override { return SkString("gradients_no_texture"); }
+    SkISize onISize() override { return SkISize::Make(640, 615); }
 
-    void onDraw(SkCanvas* canvas) SK_OVERRIDE {
+    void onDraw(SkCanvas* canvas) override {
         static const SkPoint kPts[2] = { { 0, 0 },
                                          { SkIntToScalar(50), SkIntToScalar(50) } };
         static const SkShader::TileMode kTM = SkShader::kClamp_TileMode;
@@ -209,10 +209,10 @@ public:
 
 protected:
 
-    SkString onShortName() SK_OVERRIDE { return SkString("gradients_many"); }
-    SkISize onISize() SK_OVERRIDE { return SkISize::Make(850, 100); }
+    SkString onShortName() override { return SkString("gradients_many"); }
+    SkISize onISize() override { return SkISize::Make(850, 100); }
 
-    void onDraw(SkCanvas* canvas) SK_OVERRIDE {
+    void onDraw(SkCanvas* canvas) override {
         const Proc procs[] = {
             make0, make1, make2,
         };

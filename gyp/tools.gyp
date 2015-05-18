@@ -1,3 +1,7 @@
+# Copyright 2015 Google Inc.
+#
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
     # GYP file to build various tools.
 #
 # To build on Linux:
@@ -14,6 +18,7 @@
       'type': 'none',
       'dependencies': [
         'bench_pictures',
+        'chrome_fuzz',
         'dump_record',
         'filter',
         'gpuveto',
@@ -40,6 +45,16 @@
             ],
           },
         ],
+      ],
+    },
+    {
+      'target_name': 'chrome_fuzz',
+      'type': 'executable',
+      'sources': [
+        '../tools/chrome_fuzz.cpp',
+      ],
+      'dependencies': [
+        'skia_lib.gyp:skia_lib',
       ],
     },
     {
@@ -238,22 +253,12 @@
       'target_name': 'skhello',
       'type': 'executable',
       'dependencies': [
+        'flags.gyp:flags',
+        'pdf.gyp:pdf',
         'skia_lib.gyp:skia_lib',
       ],
-      'conditions': [
-        [ 'skia_os == "nacl"', {
-          'sources': [
-            '../platform_tools/nacl/src/nacl_hello.cpp',
-          ],
-        }, {
-          'sources': [
-            '../tools/skhello.cpp',
-          ],
-          'dependencies': [
-            'flags.gyp:flags',
-            'pdf.gyp:pdf',
-          ],
-        }],
+      'sources': [
+        '../tools/skhello.cpp',
       ],
     },
     {
@@ -649,7 +654,6 @@
           '<(skia_include_path)/views/SkOSWindow_Android.h',
           '<(skia_include_path)/views/SkOSWindow_iOS.h',
           '<(skia_include_path)/views/SkOSWindow_Mac.h',
-          '<(skia_include_path)/views/SkOSWindow_NaCl.h',
           '<(skia_include_path)/views/SkOSWindow_SDL.h',
           '<(skia_include_path)/views/SkOSWindow_Unix.h',
           '<(skia_include_path)/views/SkOSWindow_Win.h',

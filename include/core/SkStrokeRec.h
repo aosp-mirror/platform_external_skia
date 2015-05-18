@@ -64,6 +64,11 @@ public:
         fMiterLimit = miterLimit;
     }
 
+    void setResScale(SkScalar rs) {
+        SkASSERT(rs > 0 && SkScalarIsFinite(rs));
+        fResScale = rs;
+    }
+
     /**
      *  Returns true if this specifes any thick stroking, i.e. applyToPath()
      *  will return true.
@@ -90,12 +95,20 @@ public:
      */
     void applyToPaint(SkPaint* paint) const;
 
-    bool operator==(const SkStrokeRec& other) const {
-            return fWidth == other.fWidth &&
-                   fMiterLimit == other.fMiterLimit &&
-                   fCap == other.fCap &&
-                   fJoin == other.fJoin &&
-                   fStrokeAndFill == other.fStrokeAndFill;
+    /**
+     * Compare if two SkStrokeRecs have an equal effect on a path.
+     * Equal SkStrokeRecs produce equal paths. Equality of produced
+     * paths does not take the ResScale parameter into account.
+     */
+    bool hasEqualEffect(const SkStrokeRec& other) const {
+        if (!this->needToApply()) {
+            return this->getStyle() == other.getStyle();
+        }
+        return fWidth == other.fWidth &&
+               fMiterLimit == other.fMiterLimit &&
+               fCap == other.fCap &&
+               fJoin == other.fJoin &&
+               fStrokeAndFill == other.fStrokeAndFill;
     }
 
 private:

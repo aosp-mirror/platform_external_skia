@@ -1,3 +1,9 @@
+/*
+* Copyright 2015 Google Inc.
+*
+* Use of this source code is governed by a BSD-style license that can be
+* found in the LICENSE file.
+*/
 
 #include "SkBitmap.h"
 #include "SkTableColorFilter.h"
@@ -40,14 +46,14 @@ public:
         SkDELETE(fBitmap);
     }
 
-    bool asComponentTable(SkBitmap* table) const SK_OVERRIDE;
-    SkColorFilter* newComposed(const SkColorFilter* inner) const SK_OVERRIDE;
+    bool asComponentTable(SkBitmap* table) const override;
+    SkColorFilter* newComposed(const SkColorFilter* inner) const override;
 
 #if SK_SUPPORT_GPU
-    bool asFragmentProcessors(GrContext*, SkTDArray<GrFragmentProcessor*>*) const SK_OVERRIDE;
+    bool asFragmentProcessors(GrContext*, SkTDArray<GrFragmentProcessor*>*) const override;
 #endif
 
-    void filterSpan(const SkPMColor src[], int count, SkPMColor dst[]) const SK_OVERRIDE;
+    void filterSpan(const SkPMColor src[], int count, SkPMColor dst[]) const override;
 
     SK_TO_STRING_OVERRIDE()
 
@@ -61,7 +67,7 @@ public:
     };
 
 protected:
-    void flatten(SkWriteBuffer&) const SK_OVERRIDE;
+    void flatten(SkWriteBuffer&) const override;
 
 private:
     mutable const SkBitmap* fBitmap; // lazily allocated
@@ -338,19 +344,19 @@ public:
 
     virtual ~ColorTableEffect();
 
-    const char* name() const SK_OVERRIDE { return "ColorTable"; }
+    const char* name() const override { return "ColorTable"; }
 
-    void getGLProcessorKey(const GrGLCaps&, GrProcessorKeyBuilder*) const SK_OVERRIDE;
+    void getGLProcessorKey(const GrGLSLCaps&, GrProcessorKeyBuilder*) const override;
 
-    GrGLFragmentProcessor* createGLInstance() const SK_OVERRIDE;
+    GrGLFragmentProcessor* createGLInstance() const override;
 
     const GrTextureStripAtlas* atlas() const { return fAtlas; }
     int atlasRow() const { return fRow; }
 
 private:
-    bool onIsEqual(const GrFragmentProcessor&) const SK_OVERRIDE;
+    bool onIsEqual(const GrFragmentProcessor&) const override;
 
-    void onComputeInvariantOutput(GrInvariantOutput* inout) const SK_OVERRIDE;
+    void onComputeInvariantOutput(GrInvariantOutput* inout) const override;
 
     ColorTableEffect(GrTexture* texture, GrTextureStripAtlas* atlas, int row, unsigned flags);
 
@@ -376,11 +382,11 @@ public:
                           const char* outputColor,
                           const char* inputColor,
                           const TransformedCoordsArray&,
-                          const TextureSamplerArray&) SK_OVERRIDE;
+                          const TextureSamplerArray&) override;
 
-    void setData(const GrGLProgramDataManager&, const GrProcessor&) SK_OVERRIDE;
+    void setData(const GrGLProgramDataManager&, const GrProcessor&) override;
 
-    static void GenKey(const GrProcessor&, const GrGLCaps&, GrProcessorKeyBuilder* b) {}
+    static void GenKey(const GrProcessor&, const GrGLSLCaps&, GrProcessorKeyBuilder* b) {}
 
 private:
     UniformHandle fRGBAYValuesUni;
@@ -421,7 +427,7 @@ void GLColorTableEffect::emitCode(GrGLFPBuilder* builder,
                                           "yoffsets", &yoffsets);
     static const float kColorScaleFactor = 255.0f / 256.0f;
     static const float kColorOffsetFactor = 1.0f / 512.0f;
-    GrGLFPFragmentBuilder* fsBuilder = builder->getFragmentShaderBuilder();
+    GrGLFragmentBuilder* fsBuilder = builder->getFragmentShaderBuilder();
     if (NULL == inputColor) {
         // the input color is solid white (all ones).
         static const float kMaxValue = kColorScaleFactor + kColorOffsetFactor;
@@ -501,7 +507,7 @@ ColorTableEffect::~ColorTableEffect() {
     }
 }
 
-void ColorTableEffect::getGLProcessorKey(const GrGLCaps& caps,
+void ColorTableEffect::getGLProcessorKey(const GrGLSLCaps& caps,
                                          GrProcessorKeyBuilder* b) const {
     GLColorTableEffect::GenKey(*this, caps, b);
 }

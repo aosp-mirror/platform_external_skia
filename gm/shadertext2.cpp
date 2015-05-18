@@ -48,13 +48,13 @@ public:
 
 protected:
 
-    SkString onShortName() SK_OVERRIDE {
+    SkString onShortName() override {
         return SkString("shadertext2");
     }
 
-    SkISize onISize() SK_OVERRIDE { return SkISize::Make(1800, 900); }
+    SkISize onISize() override { return SkISize::Make(1800, 900); }
 
-    void onDraw(SkCanvas* canvas) SK_OVERRIDE {
+    void onDraw(SkCanvas* canvas) override {
         static const char kText[] = "SKIA";
         static const int kTextLen = SK_ARRAY_COUNT(kText) - 1;
         static const int kPointSize = 55;
@@ -92,7 +92,7 @@ protected:
         fillPaint.setAntiAlias(true);
         sk_tool_utils::set_portable_typeface(&fillPaint);
         fillPaint.setTextSize(SkIntToScalar(kPointSize));
-        fillPaint.setFilterLevel(SkPaint::kLow_FilterLevel);
+        fillPaint.setFilterQuality(kLow_SkFilterQuality);
 
         SkPaint outlinePaint;
         outlinePaint.setAntiAlias(true);

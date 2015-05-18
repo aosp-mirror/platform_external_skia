@@ -1,3 +1,7 @@
+# Copyright 2015 Google Inc.
+#
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
 # Common gypi for pathops unit tests.
 {
   'include_dirs': [
@@ -19,24 +23,27 @@
 
     '../tests/PathOpsAngleTest.cpp',
     '../tests/PathOpsBoundsTest.cpp',
+    '../tests/PathOpsBuilderTest.cpp',
+    '../tests/PathOpsBuildUseTest.cpp',
+    '../tests/PathOpsConicIntersectionTest.cpp',
+    '../tests/PathOpsConicLineIntersectionTest.cpp',
     '../tests/PathOpsCubicIntersectionTest.cpp',
     '../tests/PathOpsCubicIntersectionTestData.cpp',
     '../tests/PathOpsCubicLineIntersectionTest.cpp',
     '../tests/PathOpsCubicQuadIntersectionTest.cpp',
     '../tests/PathOpsCubicReduceOrderTest.cpp',
-    '../tests/PathOpsCubicToQuadsTest.cpp',
     '../tests/PathOpsDCubicTest.cpp',
     '../tests/PathOpsDLineTest.cpp',
     '../tests/PathOpsDPointTest.cpp',
-    '../tests/PathOpsDQuadTest.cpp',
     '../tests/PathOpsDRectTest.cpp',
-    '../tests/PathOpsDTriangleTest.cpp',
     '../tests/PathOpsDVectorTest.cpp',
     '../tests/PathOpsExtendedTest.cpp',
     '../tests/PathOpsFuzz763Test.cpp',
     '../tests/PathOpsInverseTest.cpp',
+    '../tests/PathOpsIssue3651.cpp',
     '../tests/PathOpsLineIntersectionTest.cpp',
     '../tests/PathOpsLineParametetersTest.cpp',
+    '../tests/PathOpsOpCircleThreadedTest.cpp',
     '../tests/PathOpsOpCubicThreadedTest.cpp',
     '../tests/PathOpsOpRectThreadedTest.cpp',
     '../tests/PathOpsOpTest.cpp',
@@ -44,7 +51,6 @@
     '../tests/PathOpsQuadIntersectionTestData.cpp',
     '../tests/PathOpsQuadLineIntersectionTest.cpp',
     '../tests/PathOpsQuadLineIntersectionThreadedTest.cpp',
-    '../tests/PathOpsQuadParameterizationTest.cpp',
     '../tests/PathOpsQuadReduceOrderTest.cpp',
     '../tests/PathOpsSimplifyDegenerateThreadedTest.cpp',
     '../tests/PathOpsSimplifyFailTest.cpp',
@@ -56,11 +62,15 @@
     '../tests/PathOpsSkpTest.cpp',
     '../tests/PathOpsTestCommon.cpp',
     '../tests/PathOpsThreadedCommon.cpp',
-    '../tests/PathOpsTightBoundsTest.cpp',
+    '../tests/PathOpsThreeWayTest.cpp',
+    '../tests/PathOpsTightBoundsTest.cpp', 
+    '../tests/PathOpsTypesTest.cpp', 
+
     '../tests/PathOpsCubicIntersectionTestData.h',
     '../tests/PathOpsExtendedTest.h',
     '../tests/PathOpsQuadIntersectionTestData.h',
     '../tests/PathOpsTestCommon.h',
     '../tests/PathOpsThreadedCommon.h',
+    '../tests/PathOpsTSectDebug.h',
   ],
 }

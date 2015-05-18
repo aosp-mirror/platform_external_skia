@@ -15,7 +15,7 @@
 #include "SkStream.h"
 #include "SkTemplates.h"
 
-class SkPDFCatalog;
+class SkPDFObjNumMap;
 
 /** \class SkPDFStream
 
@@ -40,7 +40,9 @@ public:
     virtual ~SkPDFStream();
 
     // The SkPDFObject interface.
-    virtual void emitObject(SkWStream* stream, SkPDFCatalog* catalog) SK_OVERRIDE;
+    void emitObject(SkWStream* stream,
+                    const SkPDFObjNumMap& objNumMap,
+                    const SkPDFSubstituteMap& substitutes) override;
 
 protected:
     enum State {
@@ -50,27 +52,10 @@ protected:
         kCompressed_State,     //!< The stream's already been compressed.
     };
 
-    /** Create a PDF stream with the same content and dictionary entries
-     *  as the passed one.
-     */
-    explicit SkPDFStream(const SkPDFStream& pdfStream);
-
     /* Create a PDF stream with no data.  The setData method must be called to
      * set the data.
      */
     SkPDFStream();
-
-    // Populate the stream dictionary.  This method returns false if
-    // fSubstitute should be used.
-    virtual bool populate(SkPDFCatalog* catalog);
-
-    void setSubstitute(SkPDFStream* stream) {
-        fSubstitute.reset(stream);
-    }
-
-    SkPDFStream* getSubstitute() const {
-        return fSubstitute.get();
-    }
 
     void setData(SkData* data);
     void setData(SkStream* stream);
@@ -81,16 +66,11 @@ protected:
         fState = state;
     }
 
-    State getState() const {
-        return fState;
-    }
-
 private:
     // Indicates what form (or if) the stream has been requested.
     State fState;
 
     SkAutoTDelete<SkStreamRewindable> fDataStream;
-    SkAutoTUnref<SkPDFStream> fSubstitute;
 
     typedef SkPDFDict INHERITED;
 };

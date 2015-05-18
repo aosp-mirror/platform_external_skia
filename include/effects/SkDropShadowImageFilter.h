@@ -20,46 +20,26 @@ public:
 
     static const int kShadowModeCount = kLast_ShadowMode+1;
 
-    /** @deprecated use another Create function below instead */
-    static SkDropShadowImageFilter* Create(SkScalar dx, SkScalar dy,
-                                           SkScalar sigmaX, SkScalar sigmaY, SkColor color,
-                                           SkImageFilter* input = NULL,
-                                           const CropRect* cropRect = NULL,
-                                           uint32_t uniqueID = 0) {
-        return SkNEW_ARGS(SkDropShadowImageFilter, (dx, dy, sigmaX, sigmaY, color,
-                                                    kDrawShadowAndForeground_ShadowMode,
-                                                    input, cropRect, uniqueID));
-    }
-
     static SkDropShadowImageFilter* Create(SkScalar dx, SkScalar dy,
                                            SkScalar sigmaX, SkScalar sigmaY, SkColor color,
                                            ShadowMode shadowMode,
-                                           SkImageFilter* input,
-                                           const CropRect* cropRect,
-                                           uint32_t uniqueID) {
+                                           SkImageFilter* input = NULL,
+                                           const CropRect* cropRect = NULL) {
         return SkNEW_ARGS(SkDropShadowImageFilter, (dx, dy, sigmaX, sigmaY, color,
-                                                    shadowMode, input, cropRect, uniqueID));
+                                                    shadowMode, input, cropRect));
     }
 
-    static SkDropShadowImageFilter* Create(SkScalar dx, SkScalar dy,
-                                           SkScalar sigmaX, SkScalar sigmaY, SkColor color,
-                                           ShadowMode shadowMode) {
-        return SkNEW_ARGS(SkDropShadowImageFilter, (dx, dy, sigmaX, sigmaY, color,
-                                                    shadowMode, NULL, NULL, 0));
-    }
-
-    void computeFastBounds(const SkRect&, SkRect*) const SK_OVERRIDE;
+    void computeFastBounds(const SkRect&, SkRect*) const override;
     SK_TO_STRING_OVERRIDE()
     SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkDropShadowImageFilter)
 
 protected:
     SkDropShadowImageFilter(SkScalar dx, SkScalar dy, SkScalar sigmaX, SkScalar sigmaY, SkColor,
-                            ShadowMode shadowMode, SkImageFilter* input, const CropRect* cropRect,
-                            uint32_t uniqueID);
-    void flatten(SkWriteBuffer&) const SK_OVERRIDE;
-    bool onFilterImage(Proxy*, const SkBitmap& source, const Context&, SkBitmap* result, SkIPoint* loc) const SK_OVERRIDE;
+                            ShadowMode shadowMode, SkImageFilter* input, const CropRect* cropRect);
+    void flatten(SkWriteBuffer&) const override;
+    bool onFilterImage(Proxy*, const SkBitmap& source, const Context&, SkBitmap* result, SkIPoint* loc) const override;
     virtual bool onFilterBounds(const SkIRect& src, const SkMatrix&,
-                                SkIRect* dst) const SK_OVERRIDE;
+                                SkIRect* dst) const override;
 
 private:
     SkScalar fDx, fDy, fSigmaX, fSigmaY;

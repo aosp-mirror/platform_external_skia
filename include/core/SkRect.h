@@ -162,15 +162,22 @@ struct SK_API SkIRect {
     /**
      *  Return a new IRect, built as an offset of this rect.
      */
-    SkIRect makeOffset(int dx, int dy) const {
+    SkIRect makeOffset(int32_t dx, int32_t dy) const {
         return MakeLTRB(fLeft + dx, fTop + dy, fRight + dx, fBottom + dy);
     }
 
     /**
      *  Return a new IRect, built as an inset of this rect.
      */
-    SkIRect makeInset(int dx, int dy) const {
+    SkIRect makeInset(int32_t dx, int32_t dy) const {
         return MakeLTRB(fLeft + dx, fTop + dy, fRight - dx, fBottom - dy);
+    }
+
+    /**
+     *  Return a new Rect, built as an outset of this rect.
+     */
+    SkIRect makeOutset(int32_t dx, int32_t dy) const {
+        return MakeLTRB(fLeft - dx, fTop - dy, fRight + dx, fBottom + dy);
     }
 
     /** Offset set the rectangle by adding dx to its left and right,
@@ -274,7 +281,6 @@ struct SK_API SkIRect {
         If either rectangle is empty, do nothing and return false.
     */
     bool SK_WARN_UNUSED_RESULT intersect(const SkIRect& r) {
-        SkASSERT(&r);
         return this->intersect(r.fLeft, r.fTop, r.fRight, r.fBottom);
     }
 
@@ -608,12 +614,19 @@ struct SK_API SkRect {
     SkRect makeOffset(SkScalar dx, SkScalar dy) const {
         return MakeLTRB(fLeft + dx, fTop + dy, fRight + dx, fBottom + dy);
     }
-
+    
     /**
      *  Return a new Rect, built as an inset of this rect.
      */
     SkRect makeInset(SkScalar dx, SkScalar dy) const {
         return MakeLTRB(fLeft + dx, fTop + dy, fRight - dx, fBottom - dy);
+    }
+
+    /**
+     *  Return a new Rect, built as an outset of this rect.
+     */
+    SkRect makeOutset(SkScalar dx, SkScalar dy) const {
+        return MakeLTRB(fLeft - dx, fTop - dy, fRight + dx, fBottom + dy);
     }
 
     /** Offset set the rectangle by adding dx to its left and right,
@@ -734,11 +747,19 @@ public:
         if (fLeft >= fRight || fTop >= fBottom) {
             *this = r;
         } else {
-            fLeft   = SkMinScalar(fLeft, r.left());
-            fTop    = SkMinScalar(fTop, r.top());
-            fRight  = SkMaxScalar(fRight, r.right());
-            fBottom = SkMaxScalar(fBottom, r.bottom());
+            this->joinPossiblyEmptyRect(r);
         }
+    }
+
+    /**
+     * Joins the rectangle with another without checking if either are empty (may produce unexpected
+     * results if either rect is inverted).
+     */
+    void joinPossiblyEmptyRect(const SkRect& r) {
+        fLeft   = SkMinScalar(fLeft, r.left());
+        fTop    = SkMinScalar(fTop, r.top());
+        fRight  = SkMaxScalar(fRight, r.right());
+        fBottom = SkMaxScalar(fBottom, r.bottom());
     }
 
     /**

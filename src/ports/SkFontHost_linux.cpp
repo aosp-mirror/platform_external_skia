@@ -21,12 +21,6 @@
 
 #include <limits>
 
-#ifndef SK_FONT_FILE_PREFIX
-#    define SK_FONT_FILE_PREFIX "/usr/share/fonts/"
-#endif
-
-///////////////////////////////////////////////////////////////////////////////
-
 /** The base SkTypeface implementation for the custom font manager. */
 class SkTypeface_Custom : public SkTypeface_FreeType {
 public:
@@ -38,16 +32,13 @@ public:
 
     bool isSysFont() const { return fIsSysFont; }
 
-    virtual const char* getUniqueString() const = 0;
-
 protected:
-    void onGetFamilyName(SkString* familyName) const SK_OVERRIDE {
+    void onGetFamilyName(SkString* familyName) const override {
         *familyName = fFamilyName;
     }
 
-    void onGetFontDescriptor(SkFontDescriptor* desc, bool* isLocal) const SK_OVERRIDE {
+    void onGetFontDescriptor(SkFontDescriptor* desc, bool* isLocal) const override {
         desc->setFamilyName(fFamilyName.c_str());
-        desc->setFontFileName(this->getUniqueString());
         desc->setFontIndex(fIndex);
         *isLocal = !this->isSysFont();
     }
@@ -69,10 +60,8 @@ class SkTypeface_Empty : public SkTypeface_Custom {
 public:
     SkTypeface_Empty() : INHERITED(SkFontStyle(), false, true, SkString(), 0) {}
 
-    const char* getUniqueString() const SK_OVERRIDE { return NULL; }
-
 protected:
-    SkStreamAsset* onOpenStream(int*) const SK_OVERRIDE { return NULL; }
+    SkStreamAsset* onOpenStream(int*) const override { return NULL; }
 
 private:
     typedef SkTypeface_Custom INHERITED;
@@ -87,10 +76,8 @@ public:
         , fStream(stream)
     { }
 
-    const char* getUniqueString() const SK_OVERRIDE { return NULL; }
-
 protected:
-    SkStreamAsset* onOpenStream(int* ttcIndex) const SK_OVERRIDE {
+    SkStreamAsset* onOpenStream(int* ttcIndex) const override {
         *ttcIndex = this->getIndex();
         return fStream->duplicate();
     }
@@ -118,16 +105,8 @@ public:
         , fStream(c_CustomTypefaceRetain ? SkStream::NewFromFile(fPath.c_str()) : NULL)
     { }
 
-    const char* getUniqueString() const SK_OVERRIDE {
-        const char* str = strrchr(fPath.c_str(), '/');
-        if (str) {
-            str += 1;   // skip the '/'
-        }
-        return str;
-    }
-
 protected:
-    SkStreamAsset* onOpenStream(int* ttcIndex) const SK_OVERRIDE {
+    SkStreamAsset* onOpenStream(int* ttcIndex) const override {
         *ttcIndex = this->getIndex();
         if (fStream.get()) {
             return fStream->duplicate();
@@ -154,11 +133,16 @@ class SkFontStyleSet_Custom : public SkFontStyleSet {
 public:
     explicit SkFontStyleSet_Custom(const SkString familyName) : fFamilyName(familyName) { }
 
-    int count() SK_OVERRIDE {
+    /** Should only be called during the inital build phase. */
+    void appendTypeface(SkTypeface_Custom* typeface) {
+        fStyles.push_back().reset(typeface);
+    }
+
+    int count() override {
         return fStyles.count();
     }
 
-    void getStyle(int index, SkFontStyle* style, SkString* name) SK_OVERRIDE {
+    void getStyle(int index, SkFontStyle* style, SkString* name) override {
         SkASSERT(index < fStyles.count());
         bool bold = fStyles[index]->isBold();
         bool italic = fStyles[index]->isItalic();
@@ -168,7 +152,7 @@ public:
         name->reset();
     }
 
-    SkTypeface* createTypeface(int index) SK_OVERRIDE {
+    SkTypeface* createTypeface(int index) override {
         SkASSERT(index < fStyles.count());
         return SkRef(fStyles[index].get());
     }
@@ -181,7 +165,7 @@ public:
         return score;
     }
 
-    SkTypeface* matchStyle(const SkFontStyle& pattern) SK_OVERRIDE {
+    SkTypeface* matchStyle(const SkFontStyle& pattern) override {
         if (0 == fStyles.count()) {
             return NULL;
         }
@@ -206,13 +190,11 @@ public:
         return SkRef(closest);
     }
 
+    SkString getFamilyName() { return fFamilyName; }
+
 private:
     SkTArray<SkAutoTUnref<SkTypeface_Custom>, true> fStyles;
     SkString fFamilyName;
-
-    void appendTypeface(SkTypeface_Custom* typeface) {
-        fStyles.push_back().reset(typeface);
-    }
 
     friend class SkFontMgr_Custom;
 };
@@ -226,50 +208,80 @@ private:
  */
 class SkFontMgr_Custom : public SkFontMgr {
 public:
-    explicit SkFontMgr_Custom(const char* dir) {
-        this->load_system_fonts(dir);
+    typedef SkTArray<SkAutoTUnref<SkFontStyleSet_Custom>, true> Families;
+    class SystemFontLoader {
+    public:
+        virtual ~SystemFontLoader() { }
+        virtual void loadSystemFonts(const SkTypeface_FreeType::Scanner&, Families*) const = 0;
+    };
+    explicit SkFontMgr_Custom(const SystemFontLoader& loader) {
+        loader.loadSystemFonts(fScanner, &fFamilies);
+
+        // Try to pick a default font.
+        static const char* defaultNames[] = {
+            "Arial", "Verdana", "Times New Roman", "Droid Sans", NULL
+        };
+        for (size_t i = 0; i < SK_ARRAY_COUNT(defaultNames); ++i) {
+            SkFontStyleSet_Custom* set = this->onMatchFamily(defaultNames[i]);
+            if (NULL == set) {
+                continue;
+            }
+
+            SkTypeface* tf = set->matchStyle(SkFontStyle(SkFontStyle::kNormal_Weight,
+                                                         SkFontStyle::kNormal_Width,
+                                                         SkFontStyle::kUpright_Slant));
+            if (NULL == tf) {
+                continue;
+            }
+
+            fDefaultFamily = set;
+            break;
+        }
+        if (NULL == fDefaultFamily) {
+            fDefaultFamily = fFamilies[0];
+        }
     }
 
 protected:
-    int onCountFamilies() const SK_OVERRIDE {
+    int onCountFamilies() const override {
         return fFamilies.count();
     }
 
-    void onGetFamilyName(int index, SkString* familyName) const SK_OVERRIDE {
+    void onGetFamilyName(int index, SkString* familyName) const override {
         SkASSERT(index < fFamilies.count());
-        familyName->set(fFamilies[index]->fFamilyName);
+        familyName->set(fFamilies[index]->getFamilyName());
     }
 
-    SkFontStyleSet_Custom* onCreateStyleSet(int index) const SK_OVERRIDE {
+    SkFontStyleSet_Custom* onCreateStyleSet(int index) const override {
         SkASSERT(index < fFamilies.count());
         return SkRef(fFamilies[index].get());
     }
 
-    SkFontStyleSet_Custom* onMatchFamily(const char familyName[]) const SK_OVERRIDE {
+    SkFontStyleSet_Custom* onMatchFamily(const char familyName[]) const override {
         for (int i = 0; i < fFamilies.count(); ++i) {
-            if (fFamilies[i]->fFamilyName.equals(familyName)) {
+            if (fFamilies[i]->getFamilyName().equals(familyName)) {
                 return SkRef(fFamilies[i].get());
             }
         }
         return NULL;
     }
 
-    virtual SkTypeface* onMatchFamilyStyle(const char familyName[],
-                                           const SkFontStyle& fontStyle) const SK_OVERRIDE
+    SkTypeface* onMatchFamilyStyle(const char familyName[],
+                                   const SkFontStyle& fontStyle) const override
     {
         SkAutoTUnref<SkFontStyleSet> sset(this->matchFamily(familyName));
         return sset->matchStyle(fontStyle);
     }
 
-    virtual SkTypeface* onMatchFamilyStyleCharacter(const char familyName[], const SkFontStyle&,
-                                                    const char* bcp47[], int bcp47Count,
-                                                    SkUnichar character) const SK_OVERRIDE
+    SkTypeface* onMatchFamilyStyleCharacter(const char familyName[], const SkFontStyle&,
+                                            const char* bcp47[], int bcp47Count,
+                                            SkUnichar character) const override
     {
         return NULL;
     }
 
-    virtual SkTypeface* onMatchFaceStyle(const SkTypeface* familyMember,
-                                         const SkFontStyle& fontStyle) const SK_OVERRIDE
+    SkTypeface* onMatchFaceStyle(const SkTypeface* familyMember,
+                                 const SkFontStyle& fontStyle) const override
     {
         for (int i = 0; i < fFamilies.count(); ++i) {
             for (int j = 0; j < fFamilies[i]->fStyles.count(); ++j) {
@@ -281,11 +293,11 @@ protected:
         return NULL;
     }
 
-    SkTypeface* onCreateFromData(SkData* data, int ttcIndex) const SK_OVERRIDE {
+    SkTypeface* onCreateFromData(SkData* data, int ttcIndex) const override {
         return this->createFromStream(new SkMemoryStream(data), ttcIndex);
     }
 
-    SkTypeface* onCreateFromStream(SkStreamAsset* bareStream, int ttcIndex) const SK_OVERRIDE {
+    SkTypeface* onCreateFromStream(SkStreamAsset* bareStream, int ttcIndex) const override {
         SkAutoTDelete<SkStreamAsset> stream(bareStream);
         if (NULL == stream || stream->getLength() <= 0) {
             return NULL;
@@ -302,14 +314,12 @@ protected:
         }
     }
 
-    SkTypeface* onCreateFromFile(const char path[], int ttcIndex) const SK_OVERRIDE {
+    SkTypeface* onCreateFromFile(const char path[], int ttcIndex) const override {
         SkAutoTDelete<SkStreamAsset> stream(SkStream::NewFromFile(path));
         return stream.get() ? this->createFromStream(stream.detach(), ttcIndex) : NULL;
     }
 
-    virtual SkTypeface* onLegacyCreateTypeface(const char familyName[],
-                                               unsigned styleBits) const SK_OVERRIDE
-    {
+    SkTypeface* onLegacyCreateTypeface(const char familyName[], unsigned styleBits) const override {
         SkTypeface::Style oldStyle = (SkTypeface::Style)styleBits;
         SkFontStyle style = SkFontStyle(oldStyle & SkTypeface::kBold
                                                  ? SkFontStyle::kBold_Weight
@@ -325,15 +335,55 @@ protected:
         }
 
         if (NULL == tf) {
-            tf = gDefaultFamily->matchStyle(style);
+            tf = fDefaultFamily->matchStyle(style);
         }
 
         return SkSafeRef(tf);
     }
 
 private:
+    Families fFamilies;
+    SkFontStyleSet_Custom* fDefaultFamily;
+    SkTypeface_FreeType::Scanner fScanner;
+};
 
-    void load_directory_fonts(const SkString& directory, const char* suffix) {
+///////////////////////////////////////////////////////////////////////////////
+
+class DirectorySystemFontLoader : public SkFontMgr_Custom::SystemFontLoader {
+public:
+    DirectorySystemFontLoader(const char* dir) : fBaseDirectory(dir) { }
+
+    void loadSystemFonts(const SkTypeface_FreeType::Scanner& scanner,
+                         SkFontMgr_Custom::Families* families) const override
+    {
+        load_directory_fonts(scanner, fBaseDirectory, ".ttf", families);
+        load_directory_fonts(scanner, fBaseDirectory, ".ttc", families);
+        load_directory_fonts(scanner, fBaseDirectory, ".otf", families);
+        load_directory_fonts(scanner, fBaseDirectory, ".pfb", families);
+
+        if (families->empty()) {
+            SkFontStyleSet_Custom* family = new SkFontStyleSet_Custom(SkString());
+            families->push_back().reset(family);
+            family->appendTypeface(SkNEW(SkTypeface_Empty));
+        }
+    }
+
+private:
+    static SkFontStyleSet_Custom* find_family(SkFontMgr_Custom::Families& families,
+                                              const char familyName[])
+    {
+       for (int i = 0; i < families.count(); ++i) {
+            if (families[i]->getFamilyName().equals(familyName)) {
+                return families[i].get();
+            }
+        }
+        return NULL;
+    }
+
+    static void load_directory_fonts(const SkTypeface_FreeType::Scanner& scanner,
+                                     const SkString& directory, const char* suffix,
+                                     SkFontMgr_Custom::Families* families)
+    {
         SkOSFile::Iter iter(directory.c_str(), suffix);
         SkString name;
 
@@ -346,7 +396,7 @@ private:
             }
 
             int numFaces;
-            if (!fScanner.recognizedFont(stream, &numFaces)) {
+            if (!scanner.recognizedFont(stream, &numFaces)) {
                 SkDebugf("---- failed to open <%s> as a font\n", filename.c_str());
                 continue;
             }
@@ -355,7 +405,7 @@ private:
                 bool isFixedPitch;
                 SkString realname;
                 SkFontStyle style = SkFontStyle(); // avoid uninitialized warning
-                if (!fScanner.scanFont(stream, faceIndex, &realname, &style, &isFixedPitch)) {
+                if (!scanner.scanFont(stream, faceIndex, &realname, &style, &isFixedPitch)) {
                     SkDebugf("---- failed to open <%s> <%d> as a font\n",
                              filename.c_str(), faceIndex);
                     continue;
@@ -366,12 +416,13 @@ private:
                                                     isFixedPitch,
                                                     true,  // system-font (cannot delete)
                                                     realname,
-                                                    filename.c_str(), 0));
+                                                    filename.c_str(),
+                                                    faceIndex));
 
-                SkFontStyleSet_Custom* addTo = this->onMatchFamily(realname.c_str());
+                SkFontStyleSet_Custom* addTo = find_family(*families, realname.c_str());
                 if (NULL == addTo) {
                     addTo = new SkFontStyleSet_Custom(realname);
-                    fFamilies.push_back().reset(addTo);
+                    families->push_back().reset(addTo);
                 }
                 addTo->appendTypeface(tf);
             }
@@ -383,56 +434,102 @@ private:
                 continue;
             }
             SkString dirname(SkOSPath::Join(directory.c_str(), name.c_str()));
-            load_directory_fonts(dirname, suffix);
+            load_directory_fonts(scanner, dirname, suffix, families);
         }
     }
 
-    void load_system_fonts(const char* dir) {
-        SkString baseDirectory(dir);
-        load_directory_fonts(baseDirectory, ".ttf");
-        load_directory_fonts(baseDirectory, ".ttc");
-        load_directory_fonts(baseDirectory, ".otf");
-        load_directory_fonts(baseDirectory, ".pfb");
-
-        if (fFamilies.empty()) {
-            SkFontStyleSet_Custom* family = new SkFontStyleSet_Custom(SkString());
-            fFamilies.push_back().reset(family);
-            family->appendTypeface(SkNEW(SkTypeface_Empty));
-        }
-
-        // Try to pick a default font.
-        static const char* gDefaultNames[] = {
-            "Arial", "Verdana", "Times New Roman", "Droid Sans", NULL
-        };
-        for (size_t i = 0; i < SK_ARRAY_COUNT(gDefaultNames); ++i) {
-            SkFontStyleSet_Custom* set = this->onMatchFamily(gDefaultNames[i]);
-            if (NULL == set) {
-                continue;
-            }
-
-            SkTypeface* tf = set->matchStyle(SkFontStyle(SkFontStyle::kNormal_Weight,
-                                                         SkFontStyle::kNormal_Width,
-                                                         SkFontStyle::kUpright_Slant));
-            if (NULL == tf) {
-                continue;
-            }
-
-            gDefaultFamily = set;
-            gDefaultNormal = tf;
-            break;
-        }
-        if (NULL == gDefaultNormal) {
-            gDefaultFamily = fFamilies[0];
-            gDefaultNormal = gDefaultFamily->fStyles[0];
-        }
-    }
-
-    SkTArray<SkAutoTUnref<SkFontStyleSet_Custom>, true> fFamilies;
-    SkFontStyleSet_Custom* gDefaultFamily;
-    SkTypeface* gDefaultNormal;
-    SkTypeface_FreeType::Scanner fScanner;
+    SkString fBaseDirectory;
 };
 
+struct SkEmbeddedResource { const uint8_t* data; size_t size; };
+struct SkEmbeddedResourceHeader { const SkEmbeddedResource* entries; int count; };
+
+class EmbeddedSystemFontLoader : public SkFontMgr_Custom::SystemFontLoader {
+public:
+    EmbeddedSystemFontLoader(const SkEmbeddedResourceHeader* header) : fHeader(header) { }
+
+    void loadSystemFonts(const SkTypeface_FreeType::Scanner& scanner,
+                         SkFontMgr_Custom::Families* families) const override
+    {
+        for (int i = 0; i < fHeader->count; ++i) {
+            const SkEmbeddedResource& fontEntry = fHeader->entries[i];
+            load_embedded_font(scanner, fontEntry.data, fontEntry.size, i, families);
+        }
+
+        if (families->empty()) {
+            SkFontStyleSet_Custom* family = new SkFontStyleSet_Custom(SkString());
+            families->push_back().reset(family);
+            family->appendTypeface(SkNEW(SkTypeface_Empty));
+        }
+    }
+
+private:
+    static SkFontStyleSet_Custom* find_family(SkFontMgr_Custom::Families& families,
+                                              const char familyName[])
+    {
+       for (int i = 0; i < families.count(); ++i) {
+            if (families[i]->getFamilyName().equals(familyName)) {
+                return families[i].get();
+            }
+        }
+        return NULL;
+    }
+
+    static void load_embedded_font(const SkTypeface_FreeType::Scanner& scanner,
+                                   const uint8_t* data, size_t size, int index,
+                                   SkFontMgr_Custom::Families* families)
+    {
+        SkAutoTDelete<SkMemoryStream> stream(new SkMemoryStream(data, size, false));
+
+        int numFaces;
+        if (!scanner.recognizedFont(stream, &numFaces)) {
+            SkDebugf("---- failed to open <%d> as a font\n", index);
+            return;
+        }
+
+        for (int faceIndex = 0; faceIndex < numFaces; ++faceIndex) {
+            bool isFixedPitch;
+            SkString realname;
+            SkFontStyle style = SkFontStyle(); // avoid uninitialized warning
+            if (!scanner.scanFont(stream, faceIndex, &realname, &style, &isFixedPitch)) {
+                SkDebugf("---- failed to open <%d> <%d> as a font\n", index, faceIndex);
+                return;
+            }
+
+            SkTypeface_Custom* tf = SkNEW_ARGS(SkTypeface_Stream, (
+                                                style,
+                                                isFixedPitch,
+                                                true,  // system-font (cannot delete)
+                                                realname,
+                                                stream.detach(),
+                                                faceIndex));
+
+            SkFontStyleSet_Custom* addTo = find_family(*families, realname.c_str());
+            if (NULL == addTo) {
+                addTo = new SkFontStyleSet_Custom(realname);
+                families->push_back().reset(addTo);
+            }
+            addTo->appendTypeface(tf);
+        }
+    }
+
+    const SkEmbeddedResourceHeader* fHeader;
+};
+
+#ifdef SK_EMBEDDED_FONTS
+
+extern "C" const SkEmbeddedResourceHeader SK_EMBEDDED_FONTS;
 SkFontMgr* SkFontMgr::Factory() {
-    return new SkFontMgr_Custom(SK_FONT_FILE_PREFIX);
+    return new SkFontMgr_Custom(EmbeddedSystemFontLoader(&SK_EMBEDDED_FONTS));
 }
+
+#else
+
+#ifndef SK_FONT_FILE_PREFIX
+#    define SK_FONT_FILE_PREFIX "/usr/share/fonts/"
+#endif
+SkFontMgr* SkFontMgr::Factory() {
+    return new SkFontMgr_Custom(DirectorySystemFontLoader(SK_FONT_FILE_PREFIX));
+}
+
+#endif

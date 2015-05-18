@@ -13,7 +13,6 @@
 #include "SkDropShadowImageFilter.h"
 #include "SkGradientShader.h"
 #include "SkLightingImageFilter.h"
-#include "SkMatrixImageFilter.h"
 #include "SkMorphologyImageFilter.h"
 #include "SkOffsetImageFilter.h"
 #include "SkPerlinNoiseShader.h"
@@ -69,7 +68,7 @@ protected:
             this->make_gradient_circle(64, 64);
             fInitialized = true;
         }
-        canvas->clear(0x00000000);
+        canvas->clear(SK_ColorBLACK);
 
         SkAutoTUnref<SkImageFilter> gradient(SkBitmapSource::Create(fGradientCircle));
         SkAutoTUnref<SkImageFilter> checkerboard(SkBitmapSource::Create(fCheckerboard));
@@ -100,7 +99,7 @@ protected:
             SkDilateImageFilter::Create(1, 1, checkerboard.get()),
             SkErodeImageFilter::Create(1, 1, checkerboard.get()),
             SkOffsetImageFilter::Create(SkIntToScalar(32), 0),
-            SkMatrixImageFilter::Create(resizeMatrix, SkPaint::kNone_FilterLevel),
+            SkImageFilter::CreateMatrixFilter(resizeMatrix, kNone_SkFilterQuality),
             SkRectShaderImageFilter::Create(noise),
             SkLightingImageFilter::CreatePointLitDiffuse(pointLocation, white, surfaceScale, kd),
             SkLightingImageFilter::CreateSpotLitDiffuse(spotLocation, spotTarget, spotExponent,
@@ -135,8 +134,7 @@ protected:
                     canvas->scale(SkScalarInvert(RESIZE_FACTOR),
                                   SkScalarInvert(RESIZE_FACTOR));
                 }
-                canvas->drawCircle(r.centerX(), r.centerY(),
-                                   SkScalarDiv(r.width()*2, SkIntToScalar(5)), paint);
+                canvas->drawCircle(r.centerX(), r.centerY(), r.width()*2/5, paint);
                 canvas->restore();
                 canvas->translate(r.width() * scales[j].fX + margin, 0);
             }

@@ -1,3 +1,7 @@
+# Copyright 2015 Google Inc.
+#
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
 # GYP file to build performance testbench.
 #
 {
@@ -10,10 +14,12 @@
       'type': 'executable',
       'sources': [
         '../gm/gm.cpp',
+        '../bench/CodecBench.cpp',
         '../bench/DecodingBench.cpp',
         '../bench/DecodingSubsetBench.cpp',
         '../bench/GMBench.cpp',
         '../bench/RecordingBench.cpp',
+        '../bench/SKPAnimationBench.cpp',
         '../bench/SKPBench.cpp',
         '../bench/nanobench.cpp',
       ],
@@ -33,6 +39,20 @@
         ['skia_android_framework', {
           'libraries': [
             '-lskia',
+            '-landroid',
+            '-lgui',
+            '-lhwui',
+            '-lutils',
+          ],
+          'include_dirs': [
+            '../../../frameworks/base/libs/hwui/',
+            '../../../frameworks/native/include/',
+          ],
+          'sources': [
+            '../bench/nanobenchAndroid.cpp',
+          ],
+          'dependencies': [
+            'utils.gyp:android_utils',
           ],
         }],
       ],

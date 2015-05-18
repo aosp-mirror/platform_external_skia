@@ -215,14 +215,19 @@ SkBlitRow::Proc16 SkBlitRow::PlatformFactory565(unsigned flags) {
     }
 }
 
-static const SkBlitRow::ColorProc16 platform_565_colorprocs_SSE4[] = {
-    Color32A_D565_SSE4,                 // Color32A_D565,
+static const SkBlitRow::ColorProc16 platform_565_colorprocs_SSE2[] = {
+    Color32A_D565_SSE2,                 // Color32A_D565,
     NULL,                               // Color32A_D565_Dither
 };
 
 SkBlitRow::ColorProc16 SkBlitRow::PlatformColorFactory565(unsigned flags) {
-    if (supports_simd(SK_CPU_SSE_LEVEL_SSE41)) {
-        return platform_565_colorprocs_SSE4[flags];
+/* If you're thinking about writing an SSE4 version of this, do check it's
+ * actually faster on Atom. Our original SSE4 version was slower than this
+ * SSE2 version on Silvermont, and only marginally faster on a Core i7,
+ * mainly due to the MULLD timings.
+ */
+    if (supports_simd(SK_CPU_SSE_LEVEL_SSE2)) {
+        return platform_565_colorprocs_SSE2[flags];
     } else {
         return NULL;
     }
@@ -248,14 +253,6 @@ SkBlitRow::Proc32 SkBlitRow::PlatformProcs32(unsigned flags) {
     } else
     if (supports_simd(SK_CPU_SSE_LEVEL_SSE2)) {
         return platform_32_procs_SSE2[flags];
-    } else {
-        return NULL;
-    }
-}
-
-SkBlitRow::ColorProc SkBlitRow::PlatformColorProc() {
-    if (supports_simd(SK_CPU_SSE_LEVEL_SSE2)) {
-        return Color32_SSE2;
     } else {
         return NULL;
     }
@@ -353,20 +350,15 @@ SkMorphologyImageFilter::Proc SkMorphologyGetPlatformProc(SkMorphologyProcType t
 ////////////////////////////////////////////////////////////////////////////////
 
 bool SkBoxBlurGetPlatformProcs(SkBoxBlurProc* boxBlurX,
-                               SkBoxBlurProc* boxBlurY,
                                SkBoxBlurProc* boxBlurXY,
                                SkBoxBlurProc* boxBlurYX) {
-#ifdef SK_DISABLE_BLUR_DIVISION_OPTIMIZATION
-    return false;
-#else
     if (supports_simd(SK_CPU_SSE_LEVEL_SSE41)) {
-        return SkBoxBlurGetPlatformProcs_SSE4(boxBlurX, boxBlurY, boxBlurXY, boxBlurYX);
+        return SkBoxBlurGetPlatformProcs_SSE4(boxBlurX, boxBlurXY, boxBlurYX);
     }
     else if (supports_simd(SK_CPU_SSE_LEVEL_SSE2)) {
-        return SkBoxBlurGetPlatformProcs_SSE2(boxBlurX, boxBlurY, boxBlurXY, boxBlurYX);
+        return SkBoxBlurGetPlatformProcs_SSE2(boxBlurX, boxBlurXY, boxBlurYX);
     }
     return false;
-#endif
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -155,7 +155,7 @@ public:
                                          const char* output) = 0;
 
     // TODO rename getFragmentBuilder
-    virtual GrGLGPFragmentBuilder* getFragmentShaderBuilder() = 0;
+    virtual GrGLFragmentBuilder* getFragmentShaderBuilder() = 0;
     virtual GrGLVertexBuilder* getVertexShaderBuilder() = 0;
 
     /*
@@ -166,7 +166,7 @@ public:
 /* a specializations for FPs. Lets the user add uniforms and FS code */
 class GrGLFPBuilder : public virtual GrGLUniformBuilder {
 public:
-    virtual GrGLFPFragmentBuilder* getFragmentShaderBuilder() = 0;
+    virtual GrGLFragmentBuilder* getFragmentShaderBuilder() = 0;
 
     /*
      * *NOTE* NO MEMBERS ALLOWED, MULTIPLE INHERITANCE
@@ -176,7 +176,7 @@ public:
 /* a specializations for XPs. Lets the user add uniforms and FS code */
 class GrGLXPBuilder : public virtual GrGLUniformBuilder {
 public:
-    virtual GrGLFPFragmentBuilder* getFragmentShaderBuilder() = 0;
+    virtual GrGLXPFragmentBuilder* getFragmentShaderBuilder() = 0;
 
     /*
      * *NOTE* NO MEMBERS ALLOWED, MULTIPLE INHERITANCE
@@ -234,30 +234,30 @@ public:
                                   GrSLPrecision precision,
                                   const char* name,
                                   int arrayCount,
-                                  const char** outName) SK_OVERRIDE;
+                                  const char** outName) override;
 
-    const GrGLShaderVar& getUniformVariable(UniformHandle u) const SK_OVERRIDE {
+    const GrGLShaderVar& getUniformVariable(UniformHandle u) const override {
         return fUniforms[u.toShaderBuilderIndex()].fVariable;
     }
 
-    const char* getUniformCStr(UniformHandle u) const SK_OVERRIDE {
+    const char* getUniformCStr(UniformHandle u) const override {
         return this->getUniformVariable(u).c_str();
     }
 
-    const GrGLContextInfo& ctxInfo() const SK_OVERRIDE;
+    const GrGLContextInfo& ctxInfo() const override;
 
-    GrGLGpu* gpu() const SK_OVERRIDE { return fGpu; }
+    GrGLGpu* gpu() const override { return fGpu; }
 
-    GrGLFPFragmentBuilder* getFragmentShaderBuilder() SK_OVERRIDE { return &fFS; }
-    GrGLVertexBuilder* getVertexShaderBuilder() SK_OVERRIDE { return &fVS; }
+    GrGLXPFragmentBuilder* getFragmentShaderBuilder() override { return &fFS; }
+    GrGLVertexBuilder* getVertexShaderBuilder() override { return &fVS; }
 
     void addVarying(
             const char* name,
             GrGLVarying*,
-            GrSLPrecision fsPrecision = kDefault_GrSLPrecision) SK_OVERRIDE;
+            GrSLPrecision fsPrecision = kDefault_GrSLPrecision) override;
 
     void addPassThroughAttribute(const GrPrimitiveProcessor::Attribute*,
-                                 const char* output) SK_OVERRIDE;
+                                 const char* output) override;
 
 
     // Handles for program uniforms (other than per-effect uniforms)
@@ -290,8 +290,7 @@ protected:
     // Generates a possibly mangled name for a stage variable and writes it to the fragment shader.
     // If GrGLSLExpr4 has a valid name then it will use that instead
     void nameExpression(GrGLSLExpr4*, const char* baseName);
-    void emitAndInstallProcs(GrGLSLExpr4* inputColor,
-                             GrGLSLExpr4* inputCoverage);
+    bool emitAndInstallProcs(GrGLSLExpr4* inputColor, GrGLSLExpr4* inputCoverage);
     void emitAndInstallFragProcs(int procOffset, int numProcs, GrGLSLExpr4* inOut);
     void emitAndInstallProc(const GrPendingFragmentStage&,
                             int index,

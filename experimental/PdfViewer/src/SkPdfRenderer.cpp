@@ -212,8 +212,8 @@ public:
     explicit PdfInlineImageLooper(SkPdfTokenLooper* parent)
         : INHERITED(parent) {}
 
-    SkPdfResult consumeToken(PdfToken& token) SK_OVERRIDE;
-    void loop() SK_OVERRIDE;
+    SkPdfResult consumeToken(PdfToken& token) override;
+    void loop() override;
 
 private:
     typedef SkPdfTokenLooper INHERITED;
@@ -224,8 +224,8 @@ public:
     explicit PdfCompatibilitySectionLooper(SkPdfTokenLooper* parent)
         : INHERITED (parent) {}
 
-    SkPdfResult consumeToken(PdfToken& token) SK_OVERRIDE;
-    void loop() SK_OVERRIDE;
+    SkPdfResult consumeToken(PdfToken& token) override;
+    void loop() override;
 
 private:
     typedef SkPdfTokenLooper INHERITED;
@@ -1069,7 +1069,7 @@ static SkPdfResult PdfOp_Tm(SkPdfContext* pdfContext, SkCanvas* canvas, SkPdfTok
                 "Text positioning not implemented for 2+ chars", NULL, pdfContext);
 
     pdfContext->fGraphicsState.fMatrixTm = matrix;
-    pdfContext->fGraphicsState.fMatrixTlm = matrix;;
+    pdfContext->fGraphicsState.fMatrixTlm = matrix;
 
     return kPartial_SkPdfResult;
 }

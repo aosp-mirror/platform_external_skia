@@ -11,7 +11,7 @@
 #include "GrSurface.h"
 #include "SkRect.h"
 
-class GrStencilBuffer;
+class GrStencilAttachment;
 class GrRenderTargetPriv;
 
 /**
@@ -26,8 +26,8 @@ public:
     SK_DECLARE_INST_COUNT(GrRenderTarget)
 
     // GrSurface overrides
-    GrRenderTarget* asRenderTarget() SK_OVERRIDE { return this; }
-    const GrRenderTarget* asRenderTarget() const  SK_OVERRIDE { return this; }
+    GrRenderTarget* asRenderTarget() override { return this; }
+    const GrRenderTarget* asRenderTarget() const  override { return this; }
 
     // GrRenderTarget
     /**
@@ -96,13 +96,13 @@ public:
 protected:
     GrRenderTarget(GrGpu* gpu, LifeCycle lifeCycle, const GrSurfaceDesc& desc)
         : INHERITED(gpu, lifeCycle, desc)
-        , fStencilBuffer(NULL) {
+        , fStencilAttachment(NULL) {
         fResolveRect.setLargestInverted();
     }
 
     // override of GrResource
-    void onAbandon() SK_OVERRIDE;
-    void onRelease() SK_OVERRIDE;
+    void onAbandon() override;
+    void onRelease() override;
 
 private:
     // Checked when this object is asked to attach a stencil buffer.
@@ -110,9 +110,9 @@ private:
 
     friend class GrRenderTargetPriv;
 
-    GrStencilBuffer*  fStencilBuffer;
+    GrStencilAttachment*  fStencilAttachment;
 
-    SkIRect           fResolveRect;
+    SkIRect               fResolveRect;
 
     typedef GrSurface INHERITED;
 };

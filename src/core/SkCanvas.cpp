@@ -8,6 +8,7 @@
 #include "SkCanvas.h"
 #include "SkCanvasPriv.h"
 #include "SkBitmapDevice.h"
+#include "SkColorFilter.h"
 #include "SkDeviceImageFilterProxy.h"
 #include "SkDraw.h"
 #include "SkDrawable.h"
@@ -111,13 +112,16 @@ struct DeviceCM {
     DeviceCM*           fNext;
     SkBaseDevice*       fDevice;
     SkRasterClip        fClip;
-    const SkMatrix*     fMatrix;
     SkPaint*            fPaint; // may be null (in the future)
+    const SkMatrix*     fMatrix;
+    SkMatrix            fMatrixStorage;
+    const bool          fDeviceIsBitmapDevice;
 
     DeviceCM(SkBaseDevice* device, const SkPaint* paint, SkCanvas* canvas,
-             bool conservativeRasterClip)
+             bool conservativeRasterClip, bool deviceIsBitmapDevice)
         : fNext(NULL)
         , fClip(conservativeRasterClip)
+        , fDeviceIsBitmapDevice(deviceIsBitmapDevice)
     {
         if (NULL != device) {
             device->ref();
@@ -133,6 +137,13 @@ struct DeviceCM {
             fDevice->unref();
         }
         SkDELETE(fPaint);
+    }
+
+    void reset(const SkIRect& bounds) {
+        SkASSERT(!fPaint);
+        SkASSERT(!fNext);
+        SkASSERT(fDevice);
+        fClip.setRect(bounds);
     }
 
     void updateMC(const SkMatrix& totalMatrix, const SkRasterClip& totalClip,
@@ -173,9 +184,6 @@ struct DeviceCM {
         }
 #endif
     }
-
-private:
-    SkMatrix    fMatrixStorage;
 };
 
 /*  This is the record we keep for each save/restore level in the stack.
@@ -224,6 +232,15 @@ public:
         SkDELETE(fLayer);
         dec_rec();
     }
+
+    void reset(const SkIRect& bounds) {
+        SkASSERT(fLayer);
+        SkASSERT(fDeferredSaveCount == 0);
+
+        fMatrix.reset();
+        fRasterClip.setRect(bounds);
+        fLayer->reset(bounds);
+    }
 };
 
 class SkDrawIter : public SkDraw {
@@ -233,7 +250,7 @@ public:
         fCanvas = canvas;
         canvas->updateDeviceCMCache();
 
-        fClipStack = canvas->fClipStack.get();
+        fClipStack = canvas->fClipStack;
         fCurrLayer = canvas->fMCRec->fTopLayer;
         fSkipEmptyClips = skipEmptyClips;
     }
@@ -283,6 +300,37 @@ private:
 
 /////////////////////////////////////////////////////////////////////////////
 
+static SkPaint* set_if_needed(SkLazyPaint* lazy, const SkPaint& orig) {
+    return lazy->isValid() ? lazy->get() : lazy->set(orig);
+}
+
+/**
+ *  If the paint has an imagefilter, but it can be simplified to just a colorfilter, return that
+ *  colorfilter, else return NULL.
+ */
+static SkColorFilter* image_to_color_filter(const SkPaint& paint) {
+    SkImageFilter* imgf = paint.getImageFilter();
+    if (!imgf) {
+        return NULL;
+    }
+
+    SkColorFilter* imgCF;
+    if (!imgf->asAColorFilter(&imgCF)) {
+        return NULL;
+    }
+
+    SkColorFilter* paintCF = paint.getColorFilter();
+    if (NULL == paintCF) {
+        // there is no existing paint colorfilter, so we can just return the imagefilter's
+        return imgCF;
+    }
+
+    // The paint has both a colorfilter(paintCF) and an imagefilter-which-is-a-colorfilter(imgCF)
+    // and we need to combine them into a single colorfilter.
+    SkAutoTUnref<SkColorFilter> autoImgCF(imgCF);
+    return SkColorFilter::CreateComposeFilter(imgCF, paintCF);
+}
+
 class AutoDrawLooper {
 public:
     AutoDrawLooper(SkCanvas* canvas, const SkSurfaceProps& props, const SkPaint& paint,
@@ -292,17 +340,40 @@ public:
         fFilter = canvas->getDrawFilter();
         fPaint = &fOrigPaint;
         fSaveCount = canvas->getSaveCount();
-        fDoClearImageFilter = false;
+        fTempLayerForImageFilter = false;
         fDone = false;
 
-        if (!skipLayerForImageFilter && fOrigPaint.getImageFilter()) {
+        SkColorFilter* simplifiedCF = image_to_color_filter(fOrigPaint);
+        if (simplifiedCF) {
+            SkPaint* paint = set_if_needed(&fLazyPaintInit, fOrigPaint);
+            paint->setColorFilter(simplifiedCF)->unref();
+            paint->setImageFilter(NULL);
+            fPaint = paint;
+        }
+
+        if (!skipLayerForImageFilter && fPaint->getImageFilter()) {
+            /**
+             *  We implement ImageFilters for a given draw by creating a layer, then applying the
+             *  imagefilter to the pixels of that layer (its backing surface/image), and then
+             *  we call restore() to xfer that layer to the main canvas.
+             *
+             *  1. SaveLayer (with a paint containing the current imagefilter and xfermode)
+             *  2. Generate the src pixels:
+             *      Remove the imagefilter and the xfermode from the paint that we (AutoDrawLooper)
+             *      return (fPaint). We then draw the primitive (using srcover) into a cleared
+             *      buffer/surface.
+             *  3. Restore the layer created in #1
+             *      The imagefilter is passed the buffer/surface from the layer (now filled with the
+             *      src pixels of the primitive). It returns a new "filtered" buffer, which we
+             *      draw onto the previous layer using the xfermode from the original paint.
+             */
             SkPaint tmp;
-            tmp.setImageFilter(fOrigPaint.getImageFilter());
+            tmp.setImageFilter(fPaint->getImageFilter());
+            tmp.setXfermode(fPaint->getXfermode());
             (void)canvas->internalSaveLayer(bounds, &tmp, SkCanvas::kARGB_ClipLayer_SaveFlag,
-                                            true, SkCanvas::kFullLayer_SaveLayerStrategy);
-            // we'll clear the imageFilter for the actual draws in next(), so
-            // it will only be applied during the restore().
-            fDoClearImageFilter = true;
+                                            SkCanvas::kFullLayer_SaveLayerStrategy);
+            fTempLayerForImageFilter = true;
+            // we remove the imagefilter/xfermode inside doNext()
         }
 
         if (SkDrawLooper* looper = paint.getLooper()) {
@@ -313,13 +384,13 @@ public:
         } else {
             fLooperContext = NULL;
             // can we be marked as simple?
-            fIsSimple = !fFilter && !fDoClearImageFilter;
+            fIsSimple = !fFilter && !fTempLayerForImageFilter;
         }
 
         uint32_t oldFlags = paint.getFlags();
         fNewPaintFlags = filter_paint_flags(props, oldFlags);
         if (fIsSimple && (fNewPaintFlags != oldFlags)) {
-            SkPaint* paint = fLazyPaint.set(fOrigPaint);
+            SkPaint* paint = set_if_needed(&fLazyPaintInit, fOrigPaint);
             paint->setFlags(fNewPaintFlags);
             fPaint = paint;
             // if we're not simple, doNext() will take care of calling setFlags()
@@ -327,7 +398,7 @@ public:
     }
 
     ~AutoDrawLooper() {
-        if (fDoClearImageFilter) {
+        if (fTempLayerForImageFilter) {
             fCanvas->internalRestore();
         }
         SkASSERT(fCanvas->getSaveCount() == fSaveCount);
@@ -350,14 +421,15 @@ public:
     }
 
 private:
-    SkLazyPaint     fLazyPaint;
+    SkLazyPaint     fLazyPaintInit; // base paint storage in case we need to modify it
+    SkLazyPaint     fLazyPaintPerLooper;  // per-draw-looper storage, so the looper can modify it
     SkCanvas*       fCanvas;
     const SkPaint&  fOrigPaint;
     SkDrawFilter*   fFilter;
     const SkPaint*  fPaint;
     int             fSaveCount;
     uint32_t        fNewPaintFlags;
-    bool            fDoClearImageFilter;
+    bool            fTempLayerForImageFilter;
     bool            fDone;
     bool            fIsSimple;
     SkDrawLooper::Context* fLooperContext;
@@ -369,13 +441,15 @@ private:
 bool AutoDrawLooper::doNext(SkDrawFilter::Type drawType) {
     fPaint = NULL;
     SkASSERT(!fIsSimple);
-    SkASSERT(fLooperContext || fFilter || fDoClearImageFilter);
+    SkASSERT(fLooperContext || fFilter || fTempLayerForImageFilter);
 
-    SkPaint* paint = fLazyPaint.set(fOrigPaint);
+    SkPaint* paint = fLazyPaintPerLooper.set(fLazyPaintInit.isValid() ?
+                                             *fLazyPaintInit.get() : fOrigPaint);
     paint->setFlags(fNewPaintFlags);
 
-    if (fDoClearImageFilter) {
+    if (fTempLayerForImageFilter) {
         paint->setImageFilter(NULL);
+        paint->setXfermode(NULL);
     }
 
     if (fLooperContext && !fLooperContext->next(fCanvas, paint)) {
@@ -425,6 +499,18 @@ bool AutoDrawLooper::doNext(SkDrawFilter::Type drawType) {
 
 ////////////////////////////////////////////////////////////////////////////
 
+void SkCanvas::resetForNextPicture(const SkIRect& bounds) {
+    this->restoreToCount(1);
+    fCachedLocalClipBounds.setEmpty();
+    fCachedLocalClipBoundsDirty = true;
+    fClipStack->reset();
+    fMCRec->reset(bounds);
+
+    // We're peering through a lot of structs here.  Only at this scope do we
+    // know that the device is an SkBitmapDevice (really an SkNoPixelsBitmapDevice).
+    static_cast<SkBitmapDevice*>(fMCRec->fLayer->fDevice)->setNewSize(bounds.size());
+}
+
 SkBaseDevice* SkCanvas::init(SkBaseDevice* device, InitFlags flags) {
     fConservativeRasterClip = SkToBool(flags & kConservativeRasterClip_InitFlag);
     fCachedLocalClipBounds.setEmpty();
@@ -435,15 +521,18 @@ SkBaseDevice* SkCanvas::init(SkBaseDevice* device, InitFlags flags) {
     fSaveCount = 1;
     fMetaData = NULL;
 
+    fClipStack.reset(SkNEW(SkClipStack));
+
     fMCRec = (MCRec*)fMCStack.push_back();
     new (fMCRec) MCRec(fConservativeRasterClip);
 
-    fMCRec->fLayer = SkNEW_ARGS(DeviceCM, (NULL, NULL, NULL, fConservativeRasterClip));
+    SkASSERT(sizeof(DeviceCM) <= sizeof(fDeviceCMStorage));
+    fMCRec->fLayer = (DeviceCM*)fDeviceCMStorage;
+    new (fDeviceCMStorage) DeviceCM(NULL, NULL, NULL, fConservativeRasterClip, false);
+
     fMCRec->fTopLayer = fMCRec->fLayer;
 
     fSurfaceBase = NULL;
-
-    fClipStack.reset(SkNEW(SkClipStack));
 
     if (device) {
         device->initForRootLayer(fProps.pixelGeometry());
@@ -558,6 +647,7 @@ SkDrawFilter* SkCanvas::getDrawFilter() const {
 }
 
 SkDrawFilter* SkCanvas::setDrawFilter(SkDrawFilter* filter) {
+    this->checkForDeferredSave();
     SkRefCnt_SafeAssign(fMCRec->fFilter, filter);
     return filter;
 }
@@ -753,7 +843,6 @@ void SkCanvas::updateDeviceCMCache() {
 
 void SkCanvas::checkForDeferredSave() {
     if (fMCRec->fDeferredSaveCount > 0) {
-        fMCRec->fDeferredSaveCount -= 1;
         this->doSave();
     }
 }
@@ -782,6 +871,9 @@ int SkCanvas::save() {
 
 void SkCanvas::doSave() {
     this->willSave();
+
+    SkASSERT(fMCRec->fDeferredSaveCount > 0);
+    fMCRec->fDeferredSaveCount -= 1;
     this->internalSave();
 }
 
@@ -880,7 +972,7 @@ int SkCanvas::saveLayer(const SkRect* bounds, const SkPaint* paint) {
     }
     SaveLayerStrategy strategy = this->willSaveLayer(bounds, paint, kARGB_ClipLayer_SaveFlag);
     fSaveCount += 1;
-    this->internalSaveLayer(bounds, paint, kARGB_ClipLayer_SaveFlag, false, strategy);
+    this->internalSaveLayer(bounds, paint, kARGB_ClipLayer_SaveFlag, strategy);
     return this->getSaveCount() - 1;
 }
 
@@ -890,12 +982,12 @@ int SkCanvas::saveLayer(const SkRect* bounds, const SkPaint* paint, SaveFlags fl
     }
     SaveLayerStrategy strategy = this->willSaveLayer(bounds, paint, flags);
     fSaveCount += 1;
-    this->internalSaveLayer(bounds, paint, flags, false, strategy);
+    this->internalSaveLayer(bounds, paint, flags, strategy);
     return this->getSaveCount() - 1;
 }
 
 void SkCanvas::internalSaveLayer(const SkRect* bounds, const SkPaint* paint, SaveFlags flags,
-                                bool justForImageFilter, SaveLayerStrategy strategy) {
+                                 SaveLayerStrategy strategy) {
 #ifndef SK_SUPPORT_LEGACY_CLIPTOLAYERFLAG
     flags |= kClipToLayer_SaveFlag;
 #endif
@@ -917,21 +1009,15 @@ void SkCanvas::internalSaveLayer(const SkRect* bounds, const SkPaint* paint, Sav
         return;
     }
 
-    // Kill the imagefilter if our device doesn't allow it
-    SkLazyPaint lazyP;
-    if (paint && paint->getImageFilter()) {
-        if (!this->getTopDevice()->allowImageFilter(paint->getImageFilter())) {
-            if (justForImageFilter) {
-                // early exit if the layer was just for the imageFilter
-                return;
-            }
-            SkPaint* p = lazyP.set(*paint);
-            p->setImageFilter(NULL);
-            paint = p;
+    bool isOpaque = !SkToBool(flags & kHasAlphaLayer_SaveFlag);
+    SkPixelGeometry geo = fProps.pixelGeometry();
+    if (paint) {
+        // TODO: perhaps add a query to filters so we might preserve opaqueness...
+        if (paint->getImageFilter() || paint->getColorFilter()) {
+            isOpaque = false;
+            geo = kUnknown_SkPixelGeometry;
         }
     }
-
-    bool isOpaque = !SkToBool(flags & kHasAlphaLayer_SaveFlag);
     SkImageInfo info = SkImageInfo::MakeN32(ir.width(), ir.height(),
                         isOpaque ? kOpaque_SkAlphaType : kPremul_SkAlphaType);
 
@@ -941,20 +1027,27 @@ void SkCanvas::internalSaveLayer(const SkRect* bounds, const SkPaint* paint, Sav
         return;
     }
 
-    SkBaseDevice::Usage usage = SkBaseDevice::kSaveLayer_Usage;
-    if (paint && paint->getImageFilter()) {
-        usage = SkBaseDevice::kImageFilter_Usage;
-    }
-    device = device->onCreateCompatibleDevice(SkBaseDevice::CreateInfo(info, usage,
-                                                                       fProps.pixelGeometry()));
-    if (NULL == device) {
-        SkErrorInternals::SetError( kInternalError_SkError,
-                                    "Unable to create device for layer.");
-        return;
+    bool forceSpriteOnRestore = false;
+    {
+        const SkBaseDevice::TileUsage usage = SkBaseDevice::kNever_TileUsage;
+        const SkBaseDevice::CreateInfo createInfo = SkBaseDevice::CreateInfo(info, usage, geo);
+        SkBaseDevice* newDev = device->onCreateDevice(createInfo, paint);
+        if (NULL == newDev) {
+            // If onCreateDevice didn't succeed, try raster (e.g. PDF couldn't handle the paint)
+            newDev = SkBitmapDevice::Create(createInfo.fInfo);
+            if (NULL == newDev) {
+                SkErrorInternals::SetError(kInternalError_SkError,
+                                           "Unable to create device for layer.");
+                return;
+            }
+            forceSpriteOnRestore = true;
+        }
+        device = newDev;
     }
 
     device->setOrigin(ir.fLeft, ir.fTop);
-    DeviceCM* layer = SkNEW_ARGS(DeviceCM, (device, paint, this, fConservativeRasterClip));
+    DeviceCM* layer = SkNEW_ARGS(DeviceCM, (device, paint, this, fConservativeRasterClip,
+                                            forceSpriteOnRestore));
     device->unref();
 
     layer->fNext = fMCRec->fTopLayer;
@@ -1003,11 +1096,15 @@ void SkCanvas::internalRestore() {
         if (layer->fNext) {
             const SkIPoint& origin = layer->fDevice->getOrigin();
             this->internalDrawDevice(layer->fDevice, origin.x(), origin.y(),
-                                     layer->fPaint);
+                                     layer->fPaint, layer->fDeviceIsBitmapDevice);
             // reset this, since internalDrawDevice will have set it to true
             fDeviceCMDirty = true;
+            SkDELETE(layer);
+        } else {
+            // we're at the root
+            SkASSERT(layer == (void*)fDeviceCMStorage);
+            layer->~DeviceCM();
         }
-        SkDELETE(layer);
     }
 }
 
@@ -1111,7 +1208,7 @@ void SkCanvas::internalDrawBitmap(const SkBitmap& bitmap,
 }
 
 void SkCanvas::internalDrawDevice(SkBaseDevice* srcDev, int x, int y,
-                                  const SkPaint* paint) {
+                                  const SkPaint* paint, bool deviceIsBitmapDevice) {
     SkPaint tmp;
     if (NULL == paint) {
         paint = &tmp;
@@ -1139,6 +1236,9 @@ void SkCanvas::internalDrawDevice(SkBaseDevice* srcDev, int x, int y,
                 dstDev->drawSprite(iter, dst, pos.x() + offset.x(), pos.y() + offset.y(),
                                    tmpUnfiltered);
             }
+        } else if (deviceIsBitmapDevice) {
+            const SkBitmap& src = srcDev->accessBitmap(false);
+            dstDev->drawSprite(iter, src, pos.x(), pos.y(), *paint);
         } else {
             dstDev->drawDevice(iter, srcDev, pos.x(), pos.y(), *paint);
         }
@@ -1266,7 +1366,7 @@ void SkCanvas::onClipRect(const SkRect& rect, SkRegion::Op op, ClipEdgeStyle edg
             fDeviceCMDirty = true;
             fCachedLocalClipBoundsDirty = true;
 
-            fClipStack.clipEmpty();
+            fClipStack->clipEmpty();
             return fMCRec->fRasterClip.setEmpty();
         }
     }
@@ -1365,7 +1465,7 @@ void SkCanvas::onClipPath(const SkPath& path, SkRegion::Op op, ClipEdgeStyle edg
             fDeviceCMDirty = true;
             fCachedLocalClipBoundsDirty = true;
 
-            fClipStack.clipEmpty();
+            fClipStack->clipEmpty();
             return fMCRec->fRasterClip.setEmpty();
         }
     }
@@ -1634,30 +1734,45 @@ void SkCanvas::drawPath(const SkPath& path, const SkPaint& paint) {
     this->onDrawPath(path, paint);
 }
 
-void SkCanvas::drawImage(const SkImage* image, SkScalar dx, SkScalar dy, const SkPaint* paint) {
-    this->onDrawImage(image, dx, dy, paint);
+void SkCanvas::drawImage(const SkImage* image, SkScalar x, SkScalar y, const SkPaint* paint) {
+    this->onDrawImage(image, x, y, paint);
 }
 
 void SkCanvas::drawImageRect(const SkImage* image, const SkRect* src, const SkRect& dst,
                              const SkPaint* paint) {
+    if (dst.isEmpty()) {
+        return;
+    }
     this->onDrawImageRect(image, src, dst, paint);
 }
 
 void SkCanvas::drawBitmap(const SkBitmap& bitmap, SkScalar dx, SkScalar dy, const SkPaint* paint) {
+    if (bitmap.empty()) {
+        return;
+    }
     this->onDrawBitmap(bitmap, dx, dy, paint);
 }
 
 void SkCanvas::drawBitmapRectToRect(const SkBitmap& bitmap, const SkRect* src, const SkRect& dst,
                                     const SkPaint* paint, DrawBitmapRectFlags flags) {
+    if (bitmap.empty()) {
+        return;
+    }
     this->onDrawBitmapRect(bitmap, src, dst, paint, flags);
 }
 
 void SkCanvas::drawBitmapNine(const SkBitmap& bitmap, const SkIRect& center, const SkRect& dst,
                               const SkPaint* paint) {
+    if (bitmap.empty()) {
+        return;
+    }
     this->onDrawBitmapNine(bitmap, center, dst, paint);
 }
 
 void SkCanvas::drawSprite(const SkBitmap& bitmap, int left, int top, const SkPaint* paint) {
+    if (bitmap.empty()) {
+        return;
+    }
     this->onDrawSprite(bitmap, left, top, paint);
 }
 
@@ -1847,15 +1962,58 @@ void SkCanvas::onDrawPath(const SkPath& path, const SkPaint& paint) {
     LOOPER_END
 }
 
-void SkCanvas::onDrawImage(const SkImage* image, SkScalar dx, SkScalar dy, const SkPaint* paint) {
+void SkCanvas::onDrawImage(const SkImage* image, SkScalar x, SkScalar y, const SkPaint* paint) {
     TRACE_EVENT0("disabled-by-default-skia", "SkCanvas::drawImage()");
-    image->draw(this, dx, dy, paint);
+    SkRect bounds = SkRect::MakeXYWH(x, y,
+                                     SkIntToScalar(image->width()), SkIntToScalar(image->height()));
+    if (NULL == paint || paint->canComputeFastBounds()) {
+        if (paint) {
+            paint->computeFastBounds(bounds, &bounds);
+        }
+        if (this->quickReject(bounds)) {
+            return;
+        }
+    }
+    
+    SkLazyPaint lazy;
+    if (NULL == paint) {
+        paint = lazy.init();
+    }
+    
+    LOOPER_BEGIN(*paint, SkDrawFilter::kBitmap_Type, &bounds)
+    
+    while (iter.next()) {
+        iter.fDevice->drawImage(iter, image, x, y, looper.paint());
+    }
+    
+    LOOPER_END
 }
 
 void SkCanvas::onDrawImageRect(const SkImage* image, const SkRect* src, const SkRect& dst,
                                const SkPaint* paint) {
     TRACE_EVENT0("disabled-by-default-skia", "SkCanvas::drawImageRect()");
-    image->drawRect(this, src, dst, paint);
+    SkRect storage;
+    const SkRect* bounds = &dst;
+    if (NULL == paint || paint->canComputeFastBounds()) {
+        if (paint) {
+            bounds = &paint->computeFastBounds(dst, &storage);
+        }
+        if (this->quickReject(*bounds)) {
+            return;
+        }
+    }
+    SkLazyPaint lazy;
+    if (NULL == paint) {
+        paint = lazy.init();
+    }
+    
+    LOOPER_BEGIN(*paint, SkDrawFilter::kBitmap_Type, bounds)
+    
+    while (iter.next()) {
+        iter.fDevice->drawImageRect(iter, image, src, dst, looper.paint());
+    }
+    
+    LOOPER_END
 }
 
 void SkCanvas::onDrawBitmap(const SkBitmap& bitmap, SkScalar x, SkScalar y, const SkPaint* paint) {
@@ -2392,20 +2550,28 @@ void SkCanvas::drawTextOnPathHV(const void* text, size_t byteLength,
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-void SkCanvas::drawPicture(const SkPicture* picture) {
-    TRACE_EVENT0("disabled-by-default-skia", "SkCanvas::drawPicture()");
-    if (picture) {
-        this->onDrawPicture(picture, NULL, NULL);
-    }
-}
+
+/**
+ *  This constant is trying to balance the speed of ref'ing a subpicture into a parent picture,
+ *  against the playback cost of recursing into the subpicture to get at its actual ops.
+ *
+ *  For now we pick a conservatively small value, though measurement (and other heuristics like
+ *  the type of ops contained) may justify changing this value.
+ */
+#define kMaxPictureOpsToUnrollInsteadOfRef  1
 
 void SkCanvas::drawPicture(const SkPicture* picture, const SkMatrix* matrix, const SkPaint* paint) {
-    TRACE_EVENT0("disabled-by-default-skia", "SkCanvas::drawPicture(SkMatrix, SkPaint)");
+    TRACE_EVENT0("disabled-by-default-skia", "SkCanvas::drawPicture()");
     if (picture) {
         if (matrix && matrix->isIdentity()) {
             matrix = NULL;
         }
-        this->onDrawPicture(picture, matrix, paint);
+        if (picture->approximateOpCount() <= kMaxPictureOpsToUnrollInsteadOfRef) {
+            SkAutoCanvasMatrixPaint acmp(this, matrix, paint, picture->cullRect());
+            picture->playback(this);
+        } else {
+            this->onDrawPicture(picture, matrix, paint);
+        }
     }
 }
 
@@ -2421,7 +2587,6 @@ void SkCanvas::onDrawPicture(const SkPicture* picture, const SkMatrix* matrix,
     }
 
     SkAutoCanvasMatrixPaint acmp(this, matrix, paint, picture->cullRect());
-
     picture->playback(this);
 }
 

@@ -106,6 +106,8 @@ private:
         );
     };
 
+    SkDEBUGCODE(void printUnused(const Uniform&) const;)
+
     SkTArray<Uniform, true> fUniforms;
     GrGLGpu* fGpu;
 

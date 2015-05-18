@@ -53,12 +53,10 @@ public:
     SkImage_Raster(const SkImageInfo&, SkData*, size_t rb, const SkSurfaceProps*);
     virtual ~SkImage_Raster();
 
-    void onDraw(SkCanvas*, SkScalar, SkScalar, const SkPaint*) const SK_OVERRIDE;
-    void onDrawRect(SkCanvas*, const SkRect*, const SkRect&, const SkPaint*) const SK_OVERRIDE;
-    SkSurface* onNewSurface(const SkImageInfo&, const SkSurfaceProps&) const SK_OVERRIDE;
-    bool onReadPixels(const SkImageInfo&, void*, size_t, int srcX, int srcY) const SK_OVERRIDE;
-    const void* onPeekPixels(SkImageInfo*, size_t* /*rowBytes*/) const SK_OVERRIDE;
-    bool getROPixels(SkBitmap*) const SK_OVERRIDE;
+    SkSurface* onNewSurface(const SkImageInfo&, const SkSurfaceProps&) const override;
+    bool onReadPixels(const SkImageInfo&, void*, size_t, int srcX, int srcY) const override;
+    const void* onPeekPixels(SkImageInfo*, size_t* /*rowBytes*/) const override;
+    bool getROPixels(SkBitmap*) const override;
 
     // exposed for SkSurface_Raster via SkNewImageFromPixelRef
     SkImage_Raster(const SkImageInfo&, SkPixelRef*, const SkIPoint& pixelRefOrigin, size_t rowBytes,
@@ -66,11 +64,11 @@ public:
 
     SkPixelRef* getPixelRef() const { return fBitmap.pixelRef(); }
 
-    virtual SkShader* onNewShader(SkShader::TileMode,
-                                  SkShader::TileMode,
-                                  const SkMatrix* localMatrix) const SK_OVERRIDE;
+    SkShader* onNewShader(SkShader::TileMode,
+                          SkShader::TileMode,
+                          const SkMatrix* localMatrix) const override;
 
-    bool isOpaque() const SK_OVERRIDE;
+    bool isOpaque() const override;
 
     SkImage_Raster(const SkBitmap& bm, const SkSurfaceProps* props)
         : INHERITED(bm.width(), bm.height(), props)
@@ -118,17 +116,6 @@ SkImage_Raster::~SkImage_Raster() {}
 SkShader* SkImage_Raster::onNewShader(SkShader::TileMode tileX, SkShader::TileMode tileY,
                                       const SkMatrix* localMatrix) const {
     return SkShader::CreateBitmapShader(fBitmap, tileX, tileY, localMatrix);
-}
-
-void SkImage_Raster::onDraw(SkCanvas* canvas, SkScalar x, SkScalar y, const SkPaint* paint) const {
-    SkBitmap shallowCopy(fBitmap);
-    canvas->drawBitmap(shallowCopy, x, y, paint);
-}
-
-void SkImage_Raster::onDrawRect(SkCanvas* canvas, const SkRect* src, const SkRect& dst,
-                                      const SkPaint* paint) const {
-    SkBitmap shallowCopy(fBitmap);
-    canvas->drawBitmapRectToRect(shallowCopy, src, dst, paint);
 }
 
 SkSurface* SkImage_Raster::onNewSurface(const SkImageInfo& info, const SkSurfaceProps& props) const {

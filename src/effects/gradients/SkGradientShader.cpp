@@ -8,7 +8,6 @@
 #include "SkGradientShaderPriv.h"
 #include "SkLinearGradient.h"
 #include "SkRadialGradient.h"
-#include "SkTwoPointRadialGradient.h"
 #include "SkTwoPointConicalGradient.h"
 #include "SkSweepGradient.h"
 
@@ -802,30 +801,6 @@ SkShader* SkGradientShader::CreateRadial(const SkPoint& center, SkScalar radius,
     return SkNEW_ARGS(SkRadialGradient, (center, radius, desc));
 }
 
-SkShader* SkGradientShader::CreateTwoPointRadial(const SkPoint& start,
-                                                 SkScalar startRadius,
-                                                 const SkPoint& end,
-                                                 SkScalar endRadius,
-                                                 const SkColor colors[],
-                                                 const SkScalar pos[],
-                                                 int colorCount,
-                                                 SkShader::TileMode mode,
-                                                 uint32_t flags,
-                                                 const SkMatrix* localMatrix) {
-    if (startRadius < 0 || endRadius < 0) {
-        return NULL;
-    }
-    if (!valid_grad(colors, pos, colorCount, mode)) {
-        return NULL;
-    }
-    EXPAND_1_COLOR(colorCount);
-
-    SkGradientShaderBase::Descriptor desc;
-    desc_init(&desc, colors, pos, colorCount, mode, flags, localMatrix);
-    return SkNEW_ARGS(SkTwoPointRadialGradient,
-                      (start, startRadius, end, endRadius, desc));
-}
-
 SkShader* SkGradientShader::CreateTwoPointConical(const SkPoint& start,
                                                   SkScalar startRadius,
                                                   const SkPoint& end,
@@ -897,7 +872,6 @@ SK_DEFINE_FLATTENABLE_REGISTRAR_GROUP_START(SkGradientShader)
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkLinearGradient)
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkRadialGradient)
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkSweepGradient)
-    SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkTwoPointRadialGradient)
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkTwoPointConicalGradient)
 SK_DEFINE_FLATTENABLE_REGISTRAR_GROUP_END
 
@@ -1028,7 +1002,7 @@ void GrGLGradientEffect::emitColor(GrGLFPBuilder* builder,
                                    const char* outputColor,
                                    const char* inputColor,
                                    const TextureSamplerArray& samplers) {
-    GrGLFPFragmentBuilder* fsBuilder = builder->getFragmentShaderBuilder();
+    GrGLFragmentBuilder* fsBuilder = builder->getFragmentShaderBuilder();
     if (SkGradientShaderBase::kTwo_GpuColorType == ge.getColorType()){
         fsBuilder->codeAppendf("\tvec4 colorTemp = mix(%s, %s, clamp(%s, 0.0, 1.0));\n",
                                builder->getUniformVariable(fColorStartUni).c_str(),

@@ -9,18 +9,21 @@
 #include "GrSoftwarePathRenderer.h"
 #include "GrContext.h"
 #include "GrSWMaskHelper.h"
+#include "GrVertexBuffer.h"
 
 ////////////////////////////////////////////////////////////////////////////////
 bool GrSoftwarePathRenderer::canDrawPath(const GrDrawTarget*,
                                          const GrPipelineBuilder*,
                                          const SkMatrix& viewMatrix,
                                          const SkPath&,
-                                         const SkStrokeRec&,
+                                         const GrStrokeInfo& stroke,
                                          bool antiAlias) const {
     if (NULL == fContext) {
         return false;
     }
-
+    if (stroke.isDashed()) {
+        return false;
+    }
     return true;
 }
 
@@ -28,7 +31,7 @@ GrPathRenderer::StencilSupport
 GrSoftwarePathRenderer::onGetStencilSupport(const GrDrawTarget*,
                                             const GrPipelineBuilder*,
                                             const SkPath&,
-                                            const SkStrokeRec&) const {
+                                            const GrStrokeInfo&) const {
     return GrPathRenderer::kNoSupport_StencilSupport;
 }
 
@@ -119,9 +122,8 @@ bool GrSoftwarePathRenderer::onDrawPath(GrDrawTarget* target,
                                         GrColor color,
                                         const SkMatrix& viewMatrix,
                                         const SkPath& path,
-                                        const SkStrokeRec& stroke,
+                                        const GrStrokeInfo& stroke,
                                         bool antiAlias) {
-
     if (NULL == fContext) {
         return false;
     }
@@ -137,7 +139,7 @@ bool GrSoftwarePathRenderer::onDrawPath(GrDrawTarget* target,
     }
 
     SkAutoTUnref<GrTexture> texture(
-            GrSWMaskHelper::DrawPathMaskToTexture(fContext, path, stroke,
+            GrSWMaskHelper::DrawPathMaskToTexture(fContext, path, stroke.getStrokeRec(),
                                                   devPathBounds,
                                                   antiAlias, &viewMatrix));
     if (NULL == texture) {

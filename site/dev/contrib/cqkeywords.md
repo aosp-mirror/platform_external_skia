@@ -4,8 +4,10 @@ Commit Queue Keywords
 COMMIT
 ------
 
-If you want to test your CL through the commit queue but are not ready to commit 
-the changes yet, you can add the following line to the CL description:
+If you are working on experimental code and do not want to risk accidentally
+submitting the change via the CQ, then you can mark it with "COMMIT=false".
+The CQ will immediately abandon the change if it contains this option.
+To do a dry run through the CQ please use Rietveld's [dry run](https://groups.google.com/a/chromium.org/forum/#!topic/chromium-dev/G5-X0_tfmok) feature.
 
     COMMIT=false
 
@@ -25,7 +27,7 @@ Here are some real world examples:
 
     CQ_INCLUDE_TRYBOTS=tryserver.chromium:linux_layout_rel
 
-    CQ_INCLUDE_TRYBOTS=tryserver.skia:Build-Ubuntu13.10-GCC4.8-NaCl-Release-Trybot
+    CQ_INCLUDE_TRYBOTS=tryserver.skia:Build-Mac10.9-Clang-x86_64-Debug
 
     CQ_EXCLUDE_TRYBOTS
 
@@ -94,3 +96,12 @@ If you cannot wait for the try job results, you can add the following line to th
     NOTRY=true
 
 The CQ will then not run any try jobs for your change and will commit the CL as soon as the tree is open, assuming the presubmit check passes.
+
+NO_MERGE_BUILDS
+---------------
+
+This keyword prevents the Skia build masters from building this commit with others. Use it when your
+commit may have effects that you don't want mis-attributed to other commits. Just include the keyword
+somewhere in the commit message:
+
+    NO_MERGE_BUILDS

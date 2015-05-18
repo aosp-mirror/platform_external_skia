@@ -98,14 +98,14 @@ public:
         fHasAlpha = 0;
     }
 
-    Format getFormat() const SK_OVERRIDE {
+    Format getFormat() const override {
         return kWEBP_Format;
     }
 
 protected:
-    bool onBuildTileIndex(SkStreamRewindable *stream, int *width, int *height) SK_OVERRIDE;
-    bool onDecodeSubset(SkBitmap* bitmap, const SkIRect& rect) SK_OVERRIDE;
-    Result onDecode(SkStream* stream, SkBitmap* bm, Mode) SK_OVERRIDE;
+    bool onBuildTileIndex(SkStreamRewindable *stream, int *width, int *height) override;
+    bool onDecodeSubset(SkBitmap* bitmap, const SkIRect& rect) override;
+    Result onDecode(SkStream* stream, SkBitmap* bm, Mode) override;
 
 private:
     /**
@@ -395,8 +395,8 @@ bool SkWEBPImageDecoder::onDecodeSubset(SkBitmap* decodedBitmap,
     }
 
     if (!directDecode) {
-        cropBitmap(decodedBitmap, bitmap, sampleSize, region.x(), region.y(),
-                   region.width(), region.height(), rect.x(), rect.y());
+        return cropBitmap(decodedBitmap, bitmap, sampleSize, region.x(), region.y(),
+                          region.width(), region.height(), rect.x(), rect.y());
     }
     return true;
 }
@@ -583,7 +583,7 @@ static int stream_writer(const uint8_t* data, size_t data_size,
 
 class SkWEBPImageEncoder : public SkImageEncoder {
 protected:
-    bool onEncode(SkWStream* stream, const SkBitmap& bm, int quality) SK_OVERRIDE;
+    bool onEncode(SkWStream* stream, const SkBitmap& bm, int quality) override;
 
 private:
     typedef SkImageEncoder INHERITED;

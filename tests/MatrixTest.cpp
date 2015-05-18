@@ -270,8 +270,8 @@ static void test_matrix_min_max_scale(skiatest::Reporter* reporter) {
         mat.mapVectors(vectors, SK_ARRAY_COUNT(vectors));
         for (size_t i = 0; i < SK_ARRAY_COUNT(vectors); ++i) {
             SkScalar d = vectors[i].length();
-            REPORTER_ASSERT(reporter, SkScalarDiv(d, maxScale) < gVectorScaleTol);
-            REPORTER_ASSERT(reporter, SkScalarDiv(minScale, d) < gVectorScaleTol);
+            REPORTER_ASSERT(reporter, d / maxScale < gVectorScaleTol);
+            REPORTER_ASSERT(reporter, minScale / d < gVectorScaleTol);
             if (max < d) {
                 max = d;
             }
@@ -279,8 +279,8 @@ static void test_matrix_min_max_scale(skiatest::Reporter* reporter) {
                 min = d;
             }
         }
-        REPORTER_ASSERT(reporter, SkScalarDiv(max, maxScale) >= gCloseScaleTol);
-        REPORTER_ASSERT(reporter, SkScalarDiv(minScale, min) >= gCloseScaleTol);
+        REPORTER_ASSERT(reporter, max / maxScale >= gCloseScaleTol);
+        REPORTER_ASSERT(reporter, minScale / min >= gCloseScaleTol);
     }
 }
 
@@ -771,6 +771,34 @@ static void test_matrix_homogeneous(skiatest::Reporter* reporter) {
 
 }
 
+static bool check_decompScale(const SkMatrix& matrix) {
+    SkSize scale;
+    SkMatrix remaining;
+
+    if (!matrix.decomposeScale(&scale, &remaining)) {
+        return false;
+    }
+    if (scale.width() <= 0 || scale.height() <= 0) {
+        return false;
+    }
+    remaining.preScale(scale.width(), scale.height());
+    return nearly_equal(matrix, remaining);
+}
+
+static void test_decompScale(skiatest::Reporter* reporter) {
+    SkMatrix m;
+
+    m.reset();
+    REPORTER_ASSERT(reporter, check_decompScale(m));
+    m.setScale(2, 3);
+    REPORTER_ASSERT(reporter, check_decompScale(m));
+    m.setRotate(35, 0, 0);
+    REPORTER_ASSERT(reporter, check_decompScale(m));
+
+    m.setScale(1, 0);
+    REPORTER_ASSERT(reporter, !check_decompScale(m));
+}
+
 DEF_TEST(Matrix, reporter) {
     SkMatrix    mat, inverse, iden1, iden2;
 
@@ -889,6 +917,8 @@ DEF_TEST(Matrix, reporter) {
     test_matrix_decomposition(reporter);
     test_matrix_homogeneous(reporter);
     test_set9(reporter);
+
+    test_decompScale(reporter);
 }
 
 DEF_TEST(Matrix_Concat, r) {

@@ -23,6 +23,24 @@ class SkString;
 */
 class SK_API SkMatrix {
 public:
+    static SkMatrix SK_WARN_UNUSED_RESULT MakeScale(SkScalar sx, SkScalar sy) {
+        SkMatrix m;
+        m.setScale(sx, sy);
+        return m;
+    }
+    
+    static SkMatrix SK_WARN_UNUSED_RESULT MakeScale(SkScalar scale) {
+        SkMatrix m;
+        m.setScale(scale, scale);
+        return m;
+    }
+    
+    static SkMatrix SK_WARN_UNUSED_RESULT MakeTrans(SkScalar dx, SkScalar dy) {
+        SkMatrix m;
+        m.setTranslate(dx, dy);
+        return m;
+    }
+
     /** Enum of bit fields for the mask return by getType().
         Use this to identify the complexity of the matrix.
     */
@@ -401,7 +419,12 @@ public:
         @param count The number of points in src to read, and then transform
                      into dst.
     */
-    void mapPoints(SkPoint dst[], const SkPoint src[], int count) const;
+    void mapPoints(SkPoint dst[], const SkPoint src[], int count) const {
+        SkASSERT((dst && src && count > 0) || 0 == count);
+        // no partial overlap
+        SkASSERT(src == dst || &dst[count] <= &src[0] || &src[count] <= &dst[0]);
+        this->getMapPtsProc()(*this, dst, src, count);
+    }
 
     /** Apply this matrix to the array of points, overwriting it with the
         transformed values.
@@ -457,6 +480,12 @@ public:
         this->getMapXYProc()(*this, x, y, result);
     }
 
+    SkPoint mapXY(SkScalar x, SkScalar y) const {
+        SkPoint result;
+        this->getMapXYProc()(*this, x, y, &result);
+        return result;
+    }
+
     /** Apply this matrix to the array of vectors specified by src, and write
         the transformed vectors into the array of vectors specified by dst.
         This is similar to mapPoints, but ignores any translation in the matrix.
@@ -478,6 +507,17 @@ public:
     */
     void mapVectors(SkVector vecs[], int count) const {
         this->mapVectors(vecs, vecs, count);
+    }
+
+    void mapVector(SkScalar dx, SkScalar dy, SkVector* result) const {
+        SkVector vec = { dx, dy };
+        this->mapVectors(result, &vec, 1);
+    }
+
+    SkVector mapVector(SkScalar dx, SkScalar dy) const {
+        SkVector vec = { dx, dy };
+        this->mapVectors(&vec, &vec, 1);
+        return vec;
     }
 
     /** Apply this matrix to the src rectangle, and write the transformed
@@ -605,6 +645,19 @@ public:
      * will be unchanged.
      */
     bool getMinMaxScales(SkScalar scaleFactors[2]) const;
+
+    /**
+     *  Attempt to decompose this matrix into a scale-only component and whatever remains, where
+     *  the scale component is to be applied first.
+     *
+     *  M -> Remaining * Scale
+     *
+     *  On success, return true and assign the scale and remaining components (assuming their
+     *  respective parameters are not null). On failure return false and ignore the parameters.
+     *
+     *  Possible reasons to fail: perspective, one or more scale factors are zero.
+     */
+    bool decomposeScale(SkSize* scale, SkMatrix* remaining = NULL) const;
 
     /**
      *  Return a reference to a const identity matrix
@@ -750,10 +803,9 @@ private:
     static void Scale_pts(const SkMatrix&, SkPoint dst[], const SkPoint[], int);
     static void ScaleTrans_pts(const SkMatrix&, SkPoint dst[], const SkPoint[],
                                int count);
-    static void Rot_pts(const SkMatrix&, SkPoint dst[], const SkPoint[], int);
-    static void RotTrans_pts(const SkMatrix&, SkPoint dst[], const SkPoint[],
-                             int count);
     static void Persp_pts(const SkMatrix&, SkPoint dst[], const SkPoint[], int);
+
+    static void Affine_vpts(const SkMatrix&, SkPoint dst[], const SkPoint[], int);
 
     static const MapPtsProc gMapPtsProcs[];
 

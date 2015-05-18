@@ -1,3 +1,7 @@
+# Copyright 2015 Google Inc.
+#
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
 #
 {
   'variables': {
@@ -87,7 +91,6 @@
         '../samplecode/SamplePath.cpp',
         '../samplecode/SamplePathClip.cpp',
         '../samplecode/SamplePathFuzz.cpp',
-        '../samplecode/SamplePathUtils.cpp',
         '../samplecode/SamplePathEffects.cpp',
         '../samplecode/SamplePicture.cpp',
         '../samplecode/SamplePictFile.cpp',
@@ -291,11 +294,6 @@
         [ 'skia_gpu == 1', {
           'dependencies': [
             'gputest.gyp:skgputest',
-          ],
-        }],
-        [ 'skia_os == "nacl"', {
-          'sources': [
-            '../../nacl/src/nacl_sample.cpp',
           ],
         }],
       ],

@@ -11,6 +11,7 @@
 #include "SkChecksum.h"
 #include "SkDevice.h"
 #include "SkLazyPtr.h"
+#include "SkMatrixImageFilter.h"
 #include "SkReadBuffer.h"
 #include "SkWriteBuffer.h"
 #include "SkRect.h"
@@ -23,7 +24,11 @@
 #include "SkGr.h"
 #endif
 
-enum { kDefaultCacheSize = 128 * 1024 * 1024 };
+#ifdef SK_BUILD_FOR_IOS
+  enum { kDefaultCacheSize = 2 * 1024 * 1024 };
+#else 
+  enum { kDefaultCacheSize = 128 * 1024 * 1024 };
+#endif 
 
 static int32_t next_image_filter_unique_id() {
     static int32_t gImageFilterUniqueID;
@@ -100,18 +105,21 @@ bool SkImageFilter::Common::unflatten(SkReadBuffer& buffer, int expectedCount) {
 
     uint32_t flags = buffer.readUInt();
     fCropRect = CropRect(rect, flags);
-    fUniqueID = buffer.readUInt();
+    if (buffer.isVersionLT(SkReadBuffer::kImageFilterNoUniqueID_Version)) {
+
+        (void) buffer.readUInt();
+    }
     return buffer.isValid();
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-SkImageFilter::SkImageFilter(int inputCount, SkImageFilter** inputs, const CropRect* cropRect, uint32_t uniqueID)
+SkImageFilter::SkImageFilter(int inputCount, SkImageFilter** inputs, const CropRect* cropRect)
   : fInputCount(inputCount),
     fInputs(new SkImageFilter*[inputCount]),
     fUsesSrcInput(false),
     fCropRect(cropRect ? *cropRect : CropRect(SkRect(), 0x0)),
-    fUniqueID(uniqueID ? uniqueID : next_image_filter_unique_id()) {
+    fUniqueID(next_image_filter_unique_id()) {
     for (int i = 0; i < inputCount; ++i) {
         if (NULL == inputs[i] || inputs[i]->usesSrcInput()) {
             fUsesSrcInput = true;
@@ -129,7 +137,8 @@ SkImageFilter::~SkImageFilter() {
 }
 
 SkImageFilter::SkImageFilter(int inputCount, SkReadBuffer& buffer)
-  : fUsesSrcInput(false) {
+  : fUsesSrcInput(false)
+  , fUniqueID(next_image_filter_unique_id()) {
     Common common;
     if (common.unflatten(buffer, inputCount)) {
         fCropRect = common.cropRect();
@@ -141,7 +150,6 @@ SkImageFilter::SkImageFilter(int inputCount, SkReadBuffer& buffer)
                 fUsesSrcInput = true;
             }
         }
-        fUniqueID = buffer.isCrossProcess() ? next_image_filter_unique_id() : common.uniqueID();
     } else {
         fInputCount = 0;
         fInputs = NULL;
@@ -159,7 +167,6 @@ void SkImageFilter::flatten(SkWriteBuffer& buffer) const {
     }
     buffer.writeRect(fCropRect.rect());
     buffer.writeUInt(fCropRect.flags());
-    buffer.writeUInt(fUniqueID);
 }
 
 bool SkImageFilter::filterImage(Proxy* proxy, const SkBitmap& src,
@@ -190,7 +197,6 @@ bool SkImageFilter::filterImage(Proxy* proxy, const SkBitmap& src,
 
 bool SkImageFilter::filterBounds(const SkIRect& src, const SkMatrix& ctm,
                                  SkIRect* dst) const {
-    SkASSERT(&src);
     SkASSERT(dst);
     return this->onFilterBounds(src, ctm, dst);
 }
@@ -251,8 +257,8 @@ bool SkImageFilter::filterImageGPU(Proxy* proxy, const SkBitmap& src, const Cont
     desc.fHeight = bounds.height();
     desc.fConfig = kRGBA_8888_GrPixelConfig;
 
-    SkAutoTUnref<GrTexture> dst(
-        context->refScratchTexture(desc, GrContext::kApprox_ScratchTexMatch));
+    SkAutoTUnref<GrTexture> dst(context->textureProvider()->refScratchTexture(
+        desc, GrTextureProvider::kApprox_ScratchTexMatch));
     if (!dst) {
         return false;
     }
@@ -366,6 +372,12 @@ bool SkImageFilter::asFragmentProcessor(GrFragmentProcessor**, GrTexture*, const
     return false;
 }
 
+SkImageFilter* SkImageFilter::CreateMatrixFilter(const SkMatrix& matrix,
+                                                 SkFilterQuality filterQuality,
+                                                 SkImageFilter* input) {
+    return SkMatrixImageFilter::Create(matrix, filterQuality, input);
+}
+
 #if SK_SUPPORT_GPU
 
 void SkImageFilter::WrapTexture(GrTexture* texture, int width, int height, SkBitmap* result) {
@@ -431,7 +443,7 @@ public:
         }
         SK_DECLARE_INTERNAL_LLIST_INTERFACE(Value);
     };
-    bool get(const Key& key, SkBitmap* result, SkIPoint* offset) const SK_OVERRIDE {
+    bool get(const Key& key, SkBitmap* result, SkIPoint* offset) const override {
         SkAutoMutexAcquire mutex(fMutex);
         if (Value* v = fLookup.find(key)) {
             *result = v->fBitmap;
@@ -444,7 +456,7 @@ public:
         }
         return false;
     }
-    void set(const Key& key, const SkBitmap& result, const SkIPoint& offset) SK_OVERRIDE {
+    void set(const Key& key, const SkBitmap& result, const SkIPoint& offset) override {
         SkAutoMutexAcquire mutex(fMutex);
         if (Value* v = fLookup.find(key)) {
             removeInternal(v);

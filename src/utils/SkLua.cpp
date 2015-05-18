@@ -927,15 +927,15 @@ static int lpaint_getHinting(lua_State* L) {
     return 1;
 }
 
-static int lpaint_getFilterLevel(lua_State* L) {
-    SkLua(L).pushU32(get_obj<SkPaint>(L, 1)->getFilterLevel());
+static int lpaint_getFilterQuality(lua_State* L) {
+    SkLua(L).pushU32(get_obj<SkPaint>(L, 1)->getFilterQuality());
     return 1;
 }
 
-static int lpaint_setFilterLevel(lua_State* L) {
+static int lpaint_setFilterQuality(lua_State* L) {
     int level = lua2int_def(L, 2, -1);
     if (level >= 0 && level <= 3) {
-        get_obj<SkPaint>(L, 1)->setFilterLevel((SkPaint::FilterLevel)level);
+        get_obj<SkPaint>(L, 1)->setFilterQuality((SkFilterQuality)level);
     }
     return 0;
 }
@@ -1131,8 +1131,8 @@ static const struct luaL_Reg gSkPaint_Methods[] = {
     { "setAntiAlias", lpaint_setAntiAlias },
     { "isDither", lpaint_isDither },
     { "setDither", lpaint_setDither },
-    { "getFilterLevel", lpaint_getFilterLevel },
-    { "setFilterLevel", lpaint_setFilterLevel },
+    { "getFilterQuality", lpaint_getFilterQuality },
+    { "setFilterQuality", lpaint_setFilterQuality },
     { "isUnderlineText", lpaint_isUnderlineText },
     { "isStrikeThruText", lpaint_isStrikeThruText },
     { "isFakeBoldText", lpaint_isFakeBoldText },
@@ -1495,10 +1495,10 @@ static const char* dir2string(SkPath::Direction dir) {
     return gStr[dir];
 }
 
-static int lpath_isNestedRects(lua_State* L) {
+static int lpath_isNestedFillRects(lua_State* L) {
     SkRect rects[2];
     SkPath::Direction dirs[2];
-    bool pred = get_obj<SkPath>(L, 1)->isNestedRects(rects, dirs);
+    bool pred = get_obj<SkPath>(L, 1)->isNestedFillRects(rects, dirs);
     int ret_count = 1;
     lua_pushboolean(L, pred);
     if (pred) {
@@ -1562,7 +1562,7 @@ static const struct luaL_Reg gSkPath_Methods[] = {
     { "isConvex", lpath_isConvex },
     { "isEmpty", lpath_isEmpty },
     { "isRect", lpath_isRect },
-    { "isNestedRects", lpath_isNestedRects },
+    { "isNestedFillRects", lpath_isNestedFillRects },
     { "countPoints", lpath_countPoints },
     { "reset", lpath_reset },
     { "moveTo", lpath_moveTo },

@@ -32,11 +32,30 @@ enum PlaybackMode {
     kSilent_PlaybackMode,
 };
 
-static bool should_draw_immediately(const SkBitmap* bitmap, const SkPaint* paint,
-                                    size_t bitmapSizeThreshold) {
+static uint64_t image_area(const SkImage* image) {
+    return sk_64_mul(image->width(), image->height());
+}
+
+// HACK -- see crbug.com/485243
+//
+// Work around case where Blink gives us an image, but will "mutate" it (by changing its contents
+// directly using webgl). Until that is fixed at the call-site, we treat gpu-backed-images as
+// mutable for now (at least for the purposes of deferred canvas)
+//
+static bool should_draw_gpu_image_immediately(const SkImage* image) {
+    return image->getTexture() != NULL;
+}
+
+static bool should_draw_immediately(const SkBitmap* bitmap, const SkImage* image,
+                                    const SkPaint* paint, size_t bitmapSizeThreshold) {
     if (bitmap && ((bitmap->getTexture() && !bitmap->isImmutable()) ||
-        (bitmap->getSize() > bitmapSizeThreshold))) {
+                   (bitmap->getSize() > bitmapSizeThreshold))) {
         return true;
+    }
+    if (image) {
+        if (should_draw_gpu_image_immediately(image) || image_area(image) > bitmapSizeThreshold) {
+            return true;
+        }
     }
     if (paint) {
         SkShader* shader = paint->getShader();
@@ -65,8 +84,8 @@ public:
     DeferredPipeController();
     void setPlaybackCanvas(SkCanvas*);
     virtual ~DeferredPipeController();
-    void* requestBlock(size_t minRequest, size_t* actual) SK_OVERRIDE;
-    void notifyWritten(size_t bytes) SK_OVERRIDE;
+    void* requestBlock(size_t minRequest, size_t* actual) override;
+    void notifyWritten(size_t bytes) override;
     void playback(bool silent);
     bool hasPendingCommands() const { return fAllocator.totalUsed() != 0; }
     size_t storageAllocatedForRecording() const { return fAllocator.totalCapacity(); }
@@ -158,93 +177,95 @@ public:
     void recordedDrawCommand();
     void setIsDrawingToLayer(bool value) {fIsDrawingToLayer = value;}
 
-    SkImageInfo imageInfo() const SK_OVERRIDE;
+    SkImageInfo imageInfo() const override;
 
-    GrRenderTarget* accessRenderTarget() SK_OVERRIDE;
+    GrRenderTarget* accessRenderTarget() override;
 
-    SkBaseDevice* onCreateCompatibleDevice(const CreateInfo&) SK_OVERRIDE;
+    SkBaseDevice* onCreateDevice(const CreateInfo&, const SkPaint*) override;
 
-    SkSurface* newSurface(const SkImageInfo&, const SkSurfaceProps&) SK_OVERRIDE;
+    SkSurface* newSurface(const SkImageInfo&, const SkSurfaceProps&) override;
 
 protected:
-    const SkBitmap& onAccessBitmap() SK_OVERRIDE;
-    bool onReadPixels(const SkImageInfo&, void*, size_t, int x, int y) SK_OVERRIDE;
-    bool onWritePixels(const SkImageInfo&, const void*, size_t, int x, int y) SK_OVERRIDE;
+    const SkBitmap& onAccessBitmap() override;
+    bool onReadPixels(const SkImageInfo&, void*, size_t, int x, int y) override;
+    bool onWritePixels(const SkImageInfo&, const void*, size_t, int x, int y) override;
 
     // None of the following drawing methods should ever get called on the
     // deferred device
-    void drawPaint(const SkDraw&, const SkPaint& paint) SK_OVERRIDE
+    void drawPaint(const SkDraw&, const SkPaint& paint) override
         {SkASSERT(0);}
-    virtual void drawPoints(const SkDraw&, SkCanvas::PointMode mode,
-                            size_t count, const SkPoint[],
-                            const SkPaint& paint) SK_OVERRIDE
+    void drawPoints(const SkDraw&, SkCanvas::PointMode mode,
+                    size_t count, const SkPoint[],
+                    const SkPaint& paint) override
         {SkASSERT(0);}
-    virtual void drawRect(const SkDraw&, const SkRect& r,
-                            const SkPaint& paint) SK_OVERRIDE
+    void drawRect(const SkDraw&, const SkRect& r,
+                  const SkPaint& paint) override
         {SkASSERT(0);}
-    void drawOval(const SkDraw&, const SkRect&, const SkPaint&) SK_OVERRIDE
+    void drawOval(const SkDraw&, const SkRect&, const SkPaint&) override
         {SkASSERT(0);}
-    virtual void drawRRect(const SkDraw&, const SkRRect& rr,
-                           const SkPaint& paint) SK_OVERRIDE
+    void drawRRect(const SkDraw&, const SkRRect& rr,
+                   const SkPaint& paint) override
     {SkASSERT(0);}
-    virtual void drawPath(const SkDraw&, const SkPath& path,
-                            const SkPaint& paint,
-                            const SkMatrix* prePathMatrix = NULL,
-                            bool pathIsMutable = false) SK_OVERRIDE
+    void drawPath(const SkDraw&, const SkPath& path,
+                  const SkPaint& paint,
+                  const SkMatrix* prePathMatrix = NULL,
+                  bool pathIsMutable = false) override
         {SkASSERT(0);}
-    virtual void drawBitmap(const SkDraw&, const SkBitmap& bitmap,
-                            const SkMatrix& matrix, const SkPaint& paint) SK_OVERRIDE
+    void drawBitmap(const SkDraw&, const SkBitmap& bitmap,
+                    const SkMatrix& matrix, const SkPaint& paint) override
         {SkASSERT(0);}
-    virtual void drawBitmapRect(const SkDraw&, const SkBitmap&, const SkRect*,
-                                const SkRect&, const SkPaint&,
-                                SkCanvas::DrawBitmapRectFlags) SK_OVERRIDE
+    void drawBitmapRect(const SkDraw&, const SkBitmap&, const SkRect*,
+                        const SkRect&, const SkPaint&,
+                        SkCanvas::DrawBitmapRectFlags) override
         {SkASSERT(0);}
-    virtual void drawSprite(const SkDraw&, const SkBitmap& bitmap,
-                            int x, int y, const SkPaint& paint) SK_OVERRIDE
+    void drawSprite(const SkDraw&, const SkBitmap& bitmap,
+                    int x, int y, const SkPaint& paint) override
         {SkASSERT(0);}
-    virtual void drawText(const SkDraw&, const void* text, size_t len,
-                            SkScalar x, SkScalar y, const SkPaint& paint) SK_OVERRIDE
+    void drawImage(const SkDraw&, const SkImage*, SkScalar, SkScalar, const SkPaint&) override
         {SkASSERT(0);}
-    virtual void drawPosText(const SkDraw&, const void* text, size_t len,
-                             const SkScalar pos[], int scalarsPerPos,
-                             const SkPoint& offset, const SkPaint& paint) SK_OVERRIDE
+    void drawImageRect(const SkDraw&, const SkImage*, const SkRect*, const SkRect&,
+                       const SkPaint&) override
         {SkASSERT(0);}
-    virtual void drawTextOnPath(const SkDraw&, const void* text,
-                                size_t len, const SkPath& path,
-                                const SkMatrix* matrix,
-                                const SkPaint& paint) SK_OVERRIDE
+    void drawText(const SkDraw&, const void* text, size_t len,
+                  SkScalar x, SkScalar y, const SkPaint& paint) override
         {SkASSERT(0);}
-    virtual void drawVertices(const SkDraw&, SkCanvas::VertexMode,
-                                int vertexCount, const SkPoint verts[],
-                                const SkPoint texs[], const SkColor colors[],
-                                SkXfermode* xmode, const uint16_t indices[],
-                                int indexCount, const SkPaint& paint) SK_OVERRIDE
+    void drawPosText(const SkDraw&, const void* text, size_t len,
+                     const SkScalar pos[], int scalarsPerPos,
+                     const SkPoint& offset, const SkPaint& paint) override
         {SkASSERT(0);}
-    virtual void drawPatch(const SkDraw&, const SkPoint cubics[12], const SkColor colors[4],
-                           const SkPoint texCoords[4], SkXfermode* xmode,
-                           const SkPaint& paint) SK_OVERRIDE
+    void drawTextOnPath(const SkDraw&, const void* text,
+                        size_t len, const SkPath& path,
+                        const SkMatrix* matrix,
+                        const SkPaint& paint) override
         {SkASSERT(0);}
-    virtual void drawDevice(const SkDraw&, SkBaseDevice*, int x, int y,
-                            const SkPaint&) SK_OVERRIDE
+    void drawVertices(const SkDraw&, SkCanvas::VertexMode,
+                      int vertexCount, const SkPoint verts[],
+                      const SkPoint texs[], const SkColor colors[],
+                      SkXfermode* xmode, const uint16_t indices[],
+                      int indexCount, const SkPaint& paint) override
+        {SkASSERT(0);}
+    void drawPatch(const SkDraw&, const SkPoint cubics[12], const SkColor colors[4],
+                   const SkPoint texCoords[4], SkXfermode* xmode,
+                   const SkPaint& paint) override
+        {SkASSERT(0);}
+    void drawDevice(const SkDraw&, SkBaseDevice*, int x, int y,
+                    const SkPaint&) override
         {SkASSERT(0);}
 
-    void lockPixels() SK_OVERRIDE {}
-    void unlockPixels() SK_OVERRIDE {}
+    void lockPixels() override {}
+    void unlockPixels() override {}
 
-    bool allowImageFilter(const SkImageFilter*) SK_OVERRIDE {
+    bool canHandleImageFilter(const SkImageFilter*) override {
         return false;
     }
-    bool canHandleImageFilter(const SkImageFilter*) SK_OVERRIDE {
-        return false;
-    }
-    virtual bool filterImage(const SkImageFilter*, const SkBitmap&,
-                             const SkImageFilter::Context&, SkBitmap*, SkIPoint*) SK_OVERRIDE {
+    bool filterImage(const SkImageFilter*, const SkBitmap&,
+                     const SkImageFilter::Context&, SkBitmap*, SkIPoint*) override {
         return false;
     }
 
 private:
-    void flush() SK_OVERRIDE;
-    void replaceBitmapBackendForRasterSurface(const SkBitmap&) SK_OVERRIDE {}
+    void flush() override;
+    void replaceBitmapBackendForRasterSurface(const SkBitmap&) override {}
 
     void beginRecording();
     void init();
@@ -445,11 +466,11 @@ bool SkDeferredDevice::onWritePixels(const SkImageInfo& info, const void* pixels
     SkASSERT(x + info.width() <= width());
     SkASSERT(y + info.height() <= height());
 
-    this->flushPendingCommands(kNormal_PlaybackMode);
-
     const SkImageInfo deviceInfo = this->imageInfo();
     if (info.width() == deviceInfo.width() && info.height() == deviceInfo.height()) {
         this->skipPendingCommands();
+    } else {
+        this->flushPendingCommands(kNormal_PlaybackMode);
     }
 
     this->prepareForImmediatePixelWrite();
@@ -461,16 +482,13 @@ const SkBitmap& SkDeferredDevice::onAccessBitmap() {
     return immediateDevice()->accessBitmap(false);
 }
 
-SkBaseDevice* SkDeferredDevice::onCreateCompatibleDevice(const CreateInfo& cinfo) {
-    // Save layer usage not supported, and not required by SkDeferredCanvas.
-    SkASSERT(cinfo.fUsage != kSaveLayer_Usage);
-
+SkBaseDevice* SkDeferredDevice::onCreateDevice(const CreateInfo& cinfo, const SkPaint* layerPaint) {
     // Create a compatible non-deferred device.
     // We do not create a deferred device because we know the new device
     // will not be used with a deferred canvas (there is no API for that).
     // And connecting a SkDeferredDevice to non-deferred canvas can result
     // in unpredictable behavior.
-    return immediateDevice()->onCreateCompatibleDevice(cinfo);
+    return immediateDevice()->onCreateDevice(cinfo, layerPaint);
 }
 
 SkSurface* SkDeferredDevice::newSurface(const SkImageInfo& info, const SkSurfaceProps& props) {
@@ -487,11 +505,15 @@ class AutoImmediateDrawIfNeeded {
 public:
     AutoImmediateDrawIfNeeded(SkDeferredCanvas& canvas, const SkBitmap* bitmap,
                               const SkPaint* paint) {
-        this->init(canvas, bitmap, paint);
+        this->init(canvas, bitmap, NULL, paint);
+    }
+    AutoImmediateDrawIfNeeded(SkDeferredCanvas& canvas, const SkImage* image,
+                              const SkPaint* paint) {
+        this->init(canvas, NULL, image, paint);
     }
 
     AutoImmediateDrawIfNeeded(SkDeferredCanvas& canvas, const SkPaint* paint) {
-        this->init(canvas, NULL, paint);
+        this->init(canvas, NULL, NULL, paint);
     }
 
     ~AutoImmediateDrawIfNeeded() {
@@ -500,9 +522,10 @@ public:
         }
     }
 private:
-    void init(SkDeferredCanvas& canvas, const SkBitmap* bitmap, const SkPaint* paint) {
+    void init(SkDeferredCanvas& canvas, const SkBitmap* bitmap, const SkImage* image,
+              const SkPaint* paint) {
         if (canvas.isDeferredDrawing() &&
-            should_draw_immediately(bitmap, paint, canvas.getBitmapSizeThreshold())) {
+            should_draw_immediately(bitmap, image, paint, canvas.getBitmapSizeThreshold())) {
             canvas.setDeferredDrawing(false);
             fCanvas = &canvas;
         } else {
@@ -839,6 +862,34 @@ void SkDeferredCanvas::onDrawBitmapRect(const SkBitmap& bitmap, const SkRect* sr
 
     AutoImmediateDrawIfNeeded autoDraw(*this, &bitmap, paint);
     this->drawingCanvas()->drawBitmapRectToRect(bitmap, src, dst, paint, flags);
+    this->recordedDrawCommand();
+}
+
+
+void SkDeferredCanvas::onDrawImage(const SkImage* image, SkScalar x, SkScalar y,
+                                   const SkPaint* paint) {
+    SkRect bounds = SkRect::MakeXYWH(x, y,
+                                     SkIntToScalar(image->width()), SkIntToScalar(image->height()));
+    if (fDeferredDrawing &&
+        this->isFullFrame(&bounds, paint) &&
+        isPaintOpaque(paint, image)) {
+        this->getDeferredDevice()->skipPendingCommands();
+    }
+    
+    AutoImmediateDrawIfNeeded autoDraw(*this, image, paint);
+    this->drawingCanvas()->drawImage(image, x, y, paint);
+    this->recordedDrawCommand();
+}
+void SkDeferredCanvas::onDrawImageRect(const SkImage* image, const SkRect* src, const SkRect& dst,
+                                       const SkPaint* paint) {
+    if (fDeferredDrawing &&
+        this->isFullFrame(&dst, paint) &&
+        isPaintOpaque(paint, image)) {
+        this->getDeferredDevice()->skipPendingCommands();
+    }
+    
+    AutoImmediateDrawIfNeeded autoDraw(*this, image, paint);
+    this->drawingCanvas()->drawImageRect(image, src, dst, paint);
     this->recordedDrawCommand();
 }
 

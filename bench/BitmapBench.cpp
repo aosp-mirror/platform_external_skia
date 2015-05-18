@@ -247,7 +247,7 @@ protected:
         INHERITED::onDraw(loops, canvas);
     }
 
-    void setupPaint(SkPaint* paint) SK_OVERRIDE {
+    void setupPaint(SkPaint* paint) override {
         this->INHERITED::setupPaint(paint);
 
         int index = 0;
@@ -257,13 +257,13 @@ protected:
         if (fFlags & kBicubic_Flag) {
             index |= 2;
         }
-        static const SkPaint::FilterLevel gLevels[] = {
-            SkPaint::kNone_FilterLevel,
-            SkPaint::kLow_FilterLevel,
-            SkPaint::kMedium_FilterLevel,
-            SkPaint::kHigh_FilterLevel
+        static const SkFilterQuality gQualitys[] = {
+            kNone_SkFilterQuality,
+            kLow_SkFilterQuality,
+            kMedium_SkFilterQuality,
+            kHigh_SkFilterQuality
         };
-        paint->setFilterLevel(gLevels[index]);
+        paint->setFilterQuality(gQualitys[index]);
 }
 
 private:
@@ -303,7 +303,7 @@ protected:
         return fFullName.c_str();
     }
 
-    void onDrawIntoBitmap(const SkBitmap& bm) SK_OVERRIDE {
+    void onDrawIntoBitmap(const SkBitmap& bm) override {
         const int w = bm.width();
         const int h = bm.height();
 

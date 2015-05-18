@@ -8,6 +8,7 @@
 #ifndef SkImageFilter_DEFINED
 #define SkImageFilter_DEFINED
 
+#include "SkFilterQuality.h"
 #include "SkFlattenable.h"
 #include "SkMatrix.h"
 #include "SkRect.h"
@@ -192,6 +193,13 @@ public:
     // Default impl returns union of all input bounds.
     virtual void computeFastBounds(const SkRect&, SkRect*) const;
 
+    /**
+     * Create an SkMatrixImageFilter, which transforms its input by the given matrix.
+     */
+    static SkImageFilter* CreateMatrixFilter(const SkMatrix& matrix,
+                                             SkFilterQuality,
+                                             SkImageFilter* input = NULL);
+
 #if SK_SUPPORT_GPU
     /**
      * Wrap the given texture in a texture-backed SkBitmap.
@@ -228,7 +236,6 @@ protected:
         const CropRect& cropRect() const { return fCropRect; }
         int             inputCount() const { return fInputs.count(); }
         SkImageFilter** inputs() const { return fInputs.get(); }
-        uint32_t        uniqueID() const { return fUniqueID; }
 
         SkImageFilter*  getInput(int index) const { return fInputs[index]; }
 
@@ -242,12 +249,11 @@ protected:
         CropRect fCropRect;
         // most filters accept at most 2 input-filters
         SkAutoSTArray<2, SkImageFilter*> fInputs;
-        uint32_t fUniqueID;
 
         void allocInputs(int count);
     };
 
-    SkImageFilter(int inputCount, SkImageFilter** inputs, const CropRect* cropRect = NULL, uint32_t uniqueID = 0);
+    SkImageFilter(int inputCount, SkImageFilter** inputs, const CropRect* cropRect = NULL);
 
     virtual ~SkImageFilter();
 
@@ -260,7 +266,7 @@ protected:
      */
     explicit SkImageFilter(int inputCount, SkReadBuffer& rb);
 
-    void flatten(SkWriteBuffer&) const SK_OVERRIDE;
+    void flatten(SkWriteBuffer&) const override;
 
     /**
      *  This is the virtual which should be overridden by the derived class

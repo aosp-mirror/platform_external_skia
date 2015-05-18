@@ -15,13 +15,16 @@ void GrGLXferProcessor::emitCode(const EmitArgs& args) {
     if (args.fXP.getDstCopyTexture()) {
         bool topDown = kTopLeft_GrSurfaceOrigin == args.fXP.getDstCopyTexture()->origin();
 
-        GrGLFPFragmentBuilder* fsBuilder = args.fPB->getFragmentShaderBuilder();
+        GrGLXPFragmentBuilder* fsBuilder = args.fPB->getFragmentShaderBuilder();
 
-        // We don't think any shaders actually output negative coverage, but just as a safety check
-        // for floating point precision errors we compare with <= here
-        fsBuilder->codeAppendf("if (all(lessThanEqual(%s, vec4(0)))) {"
-                               "    discard;"
-                               "}", args.fInputCoverage);
+        if (args.fXP.readsCoverage()) {
+            // We don't think any shaders actually output negative coverage, but just as a safety
+            // check for floating point precision errors we compare with <= here
+            fsBuilder->codeAppendf("if (all(lessThanEqual(%s, vec4(0)))) {"
+                                   "    discard;"
+                                   "}", args.fInputCoverage);
+        }
+
         const char* dstColor = fsBuilder->dstColor();
 
         const char* dstCopyTopLeftName;

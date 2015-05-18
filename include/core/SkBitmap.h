@@ -694,7 +694,7 @@ public:
     */
     class HeapAllocator : public Allocator {
     public:
-        bool allocPixelRef(SkBitmap*, SkColorTable*) SK_OVERRIDE;
+        bool allocPixelRef(SkBitmap*, SkColorTable*) override;
     };
 
     class RLEPixels {
@@ -752,8 +752,6 @@ private:
     */
     void freePixels();
     void updatePixelsFromRef() const;
-
-    void legacyUnflatten(SkReadBuffer&);
 
     static void WriteRawPixels(SkWriteBuffer*, const SkBitmap&);
     static bool ReadRawPixels(SkReadBuffer*, SkBitmap*);

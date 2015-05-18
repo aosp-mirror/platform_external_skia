@@ -8,7 +8,6 @@
 #ifndef GrPipelineBuilder_DEFINED
 #define GrPipelineBuilder_DEFINED
 
-#include "GrBatch.h"
 #include "GrBlend.h"
 #include "GrClip.h"
 #include "GrDrawTargetCaps.h"
@@ -24,6 +23,7 @@
 #include "effects/GrPorterDuffXferProcessor.h"
 #include "effects/GrSimpleTextureEffect.h"
 
+class GrBatch;
 class GrDrawTargetCaps;
 class GrPaint;
 class GrTexture;
@@ -137,13 +137,6 @@ public:
     ///////////////////////////////////////////////////////////////////////////
     /// @name Blending
     ////
-
-    /**
-     * Determines whether multiplying the computed per-pixel color by the pixel's fractional
-     * coverage before the blend will give the correct final destination color. In general it
-     * will not as coverage is applied after blending.
-     */
-    bool canTweakAlphaForCoverage() const;
 
     /**
      * This function returns true if the render target destination pixel values will be read for
@@ -275,49 +268,56 @@ public:
      *  Flags that affect rendering. Controlled using enable/disableState(). All
      *  default to disabled.
      */
-    enum StateBits {
+    enum Flags {
         /**
          * Perform dithering. TODO: Re-evaluate whether we need this bit
          */
-        kDither_StateBit        = 0x01,
+        kDither_Flag        = 0x01,
         /**
          * Perform HW anti-aliasing. This means either HW FSAA, if supported by the render target,
          * or smooth-line rendering if a line primitive is drawn and line smoothing is supported by
          * the 3D API.
          */
-        kHWAntialias_StateBit   = 0x02,
+        kHWAntialias_Flag   = 0x02,
 
-        kLast_StateBit = kHWAntialias_StateBit,
+        /**
+         * Modifies the vertex shader so that vertices will be positioned at pixel centers.
+         */
+        kSnapVerticesToPixelCenters_Flag = 0x04,
+
+        kLast_Flag = kSnapVerticesToPixelCenters_Flag,
     };
 
-    bool isDither() const { return 0 != (fFlagBits & kDither_StateBit); }
-    bool isHWAntialias() const { return 0 != (fFlagBits & kHWAntialias_StateBit); }
+    bool isDither() const { return SkToBool(fFlags & kDither_Flag); }
+    bool isHWAntialias() const { return SkToBool(fFlags & kHWAntialias_Flag); }
+    bool snapVerticesToPixelCenters() const {
+        return SkToBool(fFlags & kSnapVerticesToPixelCenters_Flag); }
 
     /**
      * Enable render state settings.
      *
-     * @param stateBits bitfield of StateBits specifying the states to enable
+     * @param flags bitfield of Flags specifying the states to enable
      */
-    void enableState(uint32_t stateBits) { fFlagBits |= stateBits; }
-
+    void enableState(uint32_t flags) { fFlags |= flags; }
+        
     /**
      * Disable render state settings.
      *
-     * @param stateBits bitfield of StateBits specifying the states to disable
+     * @param flags bitfield of Flags specifying the states to disable
      */
-    void disableState(uint32_t stateBits) { fFlagBits &= ~(stateBits); }
+    void disableState(uint32_t flags) { fFlags &= ~(flags); }
 
     /**
-     * Enable or disable stateBits based on a boolean.
+     * Enable or disable flags based on a boolean.
      *
-     * @param stateBits bitfield of StateBits to enable or disable
+     * @param flags bitfield of Flags to enable or disable
      * @param enable    if true enable stateBits, otherwise disable
      */
-    void setState(uint32_t stateBits, bool enable) {
+    void setState(uint32_t flags, bool enable) {
         if (enable) {
-            this->enableState(stateBits);
+            this->enableState(flags);
         } else {
-            this->disableState(stateBits);
+            this->disableState(flags);
         }
     }
 
@@ -422,7 +422,7 @@ private:
     typedef SkSTArray<4, GrFragmentStage> FragmentStageArray;
 
     SkAutoTUnref<GrRenderTarget>            fRenderTarget;
-    uint32_t                                fFlagBits;
+    uint32_t                                fFlags;
     GrStencilSettings                       fStencilSettings;
     DrawFace                                fDrawFace;
     mutable SkAutoTUnref<const GrXPFactory> fXPFactory;

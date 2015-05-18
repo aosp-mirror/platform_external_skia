@@ -32,24 +32,27 @@ LOCAL_SRC_FILES := \
 	../tests/Test.cpp \
 	../tests/PathOpsAngleTest.cpp \
 	../tests/PathOpsBoundsTest.cpp \
+	../tests/PathOpsBuilderTest.cpp \
+	../tests/PathOpsBuildUseTest.cpp \
+	../tests/PathOpsConicIntersectionTest.cpp \
+	../tests/PathOpsConicLineIntersectionTest.cpp \
 	../tests/PathOpsCubicIntersectionTest.cpp \
 	../tests/PathOpsCubicIntersectionTestData.cpp \
 	../tests/PathOpsCubicLineIntersectionTest.cpp \
 	../tests/PathOpsCubicQuadIntersectionTest.cpp \
 	../tests/PathOpsCubicReduceOrderTest.cpp \
-	../tests/PathOpsCubicToQuadsTest.cpp \
 	../tests/PathOpsDCubicTest.cpp \
 	../tests/PathOpsDLineTest.cpp \
 	../tests/PathOpsDPointTest.cpp \
-	../tests/PathOpsDQuadTest.cpp \
 	../tests/PathOpsDRectTest.cpp \
-	../tests/PathOpsDTriangleTest.cpp \
 	../tests/PathOpsDVectorTest.cpp \
 	../tests/PathOpsExtendedTest.cpp \
 	../tests/PathOpsFuzz763Test.cpp \
 	../tests/PathOpsInverseTest.cpp \
+	../tests/PathOpsIssue3651.cpp \
 	../tests/PathOpsLineIntersectionTest.cpp \
 	../tests/PathOpsLineParametetersTest.cpp \
+	../tests/PathOpsOpCircleThreadedTest.cpp \
 	../tests/PathOpsOpCubicThreadedTest.cpp \
 	../tests/PathOpsOpRectThreadedTest.cpp \
 	../tests/PathOpsOpTest.cpp \
@@ -57,7 +60,6 @@ LOCAL_SRC_FILES := \
 	../tests/PathOpsQuadIntersectionTestData.cpp \
 	../tests/PathOpsQuadLineIntersectionTest.cpp \
 	../tests/PathOpsQuadLineIntersectionThreadedTest.cpp \
-	../tests/PathOpsQuadParameterizationTest.cpp \
 	../tests/PathOpsQuadReduceOrderTest.cpp \
 	../tests/PathOpsSimplifyDegenerateThreadedTest.cpp \
 	../tests/PathOpsSimplifyFailTest.cpp \
@@ -69,7 +71,9 @@ LOCAL_SRC_FILES := \
 	../tests/PathOpsSkpTest.cpp \
 	../tests/PathOpsTestCommon.cpp \
 	../tests/PathOpsThreadedCommon.cpp \
+	../tests/PathOpsThreeWayTest.cpp \
 	../tests/PathOpsTightBoundsTest.cpp \
+	../tests/PathOpsTypesTest.cpp \
 	../tests/AAClipTest.cpp \
 	../tests/ARGBImageEncoderTest.cpp \
 	../tests/AnnotationTest.cpp \
@@ -97,6 +101,7 @@ LOCAL_SRC_FILES := \
 	../tests/ClipCubicTest.cpp \
 	../tests/ClipStackTest.cpp \
 	../tests/ClipperTest.cpp \
+	../tests/CodexTest.cpp \
 	../tests/ColorFilterTest.cpp \
 	../tests/ColorPrivTest.cpp \
 	../tests/ColorTest.cpp \
@@ -111,6 +116,7 @@ LOCAL_SRC_FILES := \
 	../tests/DiscardableMemoryTest.cpp \
 	../tests/DocumentTest.cpp \
 	../tests/DrawBitmapRectTest.cpp \
+	../tests/DrawFilterTest.cpp \
 	../tests/DrawPathTest.cpp \
 	../tests/DrawTextTest.cpp \
 	../tests/DynamicHashTest.cpp \
@@ -126,6 +132,7 @@ LOCAL_SRC_FILES := \
 	../tests/FontNamesTest.cpp \
 	../tests/FontObjTest.cpp \
 	../tests/FrontBufferedStreamTest.cpp \
+	../tests/FunctionTest.cpp \
 	../tests/GLInterfaceValidationTest.cpp \
 	../tests/GLProgramsTest.cpp \
 	../tests/GeometryTest.cpp \
@@ -152,6 +159,7 @@ LOCAL_SRC_FILES := \
 	../tests/ImageGeneratorTest.cpp \
 	../tests/ImageIsOpaqueTest.cpp \
 	../tests/ImageNewShaderTest.cpp \
+	../tests/IndexedPngOverflowTest.cpp \
 	../tests/InfRectTest.cpp \
 	../tests/InterpolatorTest.cpp \
 	../tests/InvalidIndexedPngTest.cpp \
@@ -186,7 +194,6 @@ LOCAL_SRC_FILES := \
 	../tests/PathCoverageTest.cpp \
 	../tests/PathMeasureTest.cpp \
 	../tests/PathTest.cpp \
-	../tests/PathUtilsTest.cpp \
 	../tests/PictureBBHTest.cpp \
 	../tests/PictureShaderTest.cpp \
 	../tests/PictureTest.cpp \
@@ -220,7 +227,7 @@ LOCAL_SRC_FILES := \
 	../tests/ShaderImageFilterTest.cpp \
 	../tests/ShaderOpacityTest.cpp \
 	../tests/SizeTest.cpp \
-	../tests/Sk4xTest.cpp \
+	../tests/SkNxTest.cpp \
 	../tests/SkBase64Test.cpp \
 	../tests/SkImageTest.cpp \
 	../tests/SkResourceCacheTest.cpp \
@@ -233,12 +240,13 @@ LOCAL_SRC_FILES := \
 	../tests/StrokerTest.cpp \
 	../tests/SurfaceTest.cpp \
 	../tests/SVGDeviceTest.cpp \
+	../tests/SwizzlerTest.cpp \
 	../tests/TessellatingPathRendererTests.cpp \
 	../tests/TArrayTest.cpp \
+	../tests/TemplatesTest.cpp \
 	../tests/TDPQueueTest.cpp \
 	../tests/Time.cpp \
 	../tests/TLSTest.cpp \
-	../tests/TSetTest.cpp \
 	../tests/TextBlobTest.cpp \
 	../tests/TextureCompressionTest.cpp \
 	../tests/ToUnicodeTest.cpp \
@@ -258,10 +266,13 @@ LOCAL_SRC_FILES := \
 	../gm/aaclip.cpp \
 	../gm/aarectmodes.cpp \
 	../gm/addarc.cpp \
+	../gm/all_bitmap_configs.cpp \
 	../gm/alphagradients.cpp \
+	../gm/anisotropic.cpp \
 	../gm/arcofzorro.cpp \
 	../gm/arithmode.cpp \
 	../gm/astcbitmap.cpp \
+	../gm/badpaint.cpp \
 	../gm/beziereffects.cpp \
 	../gm/beziers.cpp \
 	../gm/bigblurs.cpp \
@@ -274,12 +285,15 @@ LOCAL_SRC_FILES := \
 	../gm/bitmapscroll.cpp \
 	../gm/bitmapshader.cpp \
 	../gm/bitmapsource.cpp \
+	../gm/bitmapsource2.cpp \
 	../gm/bleed.cpp \
+	../gm/blend.cpp \
 	../gm/blurcircles.cpp \
 	../gm/blurs.cpp \
 	../gm/blurquickreject.cpp \
 	../gm/blurrect.cpp \
 	../gm/blurroundrect.cpp \
+	../gm/bmpfilterqualityrepeat.cpp \
 	../gm/circles.cpp \
 	../gm/circularclips.cpp \
 	../gm/clipdrawdraw.cpp \
@@ -301,6 +315,8 @@ LOCAL_SRC_FILES := \
 	../gm/complexclip3.cpp \
 	../gm/composeshader.cpp \
 	../gm/conicpaths.cpp \
+	../gm/constcolorprocessor.cpp \
+	../gm/convex_all_line_paths.cpp \
 	../gm/convexpaths.cpp \
 	../gm/convexpolyclip.cpp \
 	../gm/convexpolyeffect.cpp \
@@ -325,6 +341,7 @@ LOCAL_SRC_FILES := \
 	../gm/extractbitmap.cpp \
 	../gm/emboss.cpp \
 	../gm/emptypath.cpp \
+	../gm/fadefilter.cpp \
 	../gm/fatpathfill.cpp \
 	../gm/factory.cpp \
 	../gm/filltypes.cpp \
@@ -361,18 +378,22 @@ LOCAL_SRC_FILES := \
 	../gm/lighting.cpp \
 	../gm/lumafilter.cpp \
 	../gm/image.cpp \
+	../gm/imagefilters.cpp \
 	../gm/imagefiltersbase.cpp \
 	../gm/imagefiltersclipped.cpp \
 	../gm/imagefilterscropped.cpp \
 	../gm/imagefiltersgraph.cpp \
 	../gm/imagefiltersscaled.cpp \
+	../gm/imagefilterstransformed.cpp \
 	../gm/internal_links.cpp \
+	../gm/largeglyphblur.cpp \
 	../gm/lcdtext.cpp \
 	../gm/linepaths.cpp \
 	../gm/matrixconvolution.cpp \
 	../gm/matriximagefilter.cpp \
 	../gm/megalooper.cpp \
 	../gm/mixedxfermodes.cpp \
+	../gm/mixedtextblobs.cpp \
 	../gm/mipmap.cpp \
 	../gm/modecolorfilters.cpp \
 	../gm/morphology.cpp \
@@ -396,6 +417,7 @@ LOCAL_SRC_FILES := \
 	../gm/pictureimagefilter.cpp \
 	../gm/pictureshader.cpp \
 	../gm/pictureshadertile.cpp \
+	../gm/pixelsnap.cpp \
 	../gm/points.cpp \
 	../gm/poly2poly.cpp \
 	../gm/polygons.cpp \
@@ -433,7 +455,11 @@ LOCAL_SRC_FILES := \
 	../gm/variedtext.cpp \
 	../gm/tallstretchedbitmaps.cpp \
 	../gm/textblob.cpp \
+	../gm/textbloblooper.cpp \
+	../gm/textblobcolortrans.cpp \
+	../gm/textblobgeometrychange.cpp \
 	../gm/textblobshader.cpp \
+	../gm/textblobtransforms.cpp \
 	../gm/texturedomaineffect.cpp \
 	../gm/thinrects.cpp \
 	../gm/thinstrokedrects.cpp \
@@ -443,7 +469,6 @@ LOCAL_SRC_FILES := \
 	../gm/tilemodes_scaled.cpp \
 	../gm/tinybitmap.cpp \
 	../gm/transparency.cpp \
-	../gm/twopointradial.cpp \
 	../gm/typeface.cpp \
 	../gm/vertices.cpp \
 	../gm/verttext.cpp \
@@ -477,6 +502,8 @@ LOCAL_SRC_FILES := \
 	../experimental/SkSetPoly3To3_D.cpp \
 	../tools/flags/SkCommonFlags.cpp \
 	../tools/picture_utils.cpp \
+	../src/utils/android/SkAndroidSDKCanvas.cpp \
+	../src/utils/android/SkHwuiRenderer.cpp \
 	../src/gpu/GrContextFactory.cpp \
 	../src/gpu/GrTest.cpp
 
@@ -524,6 +551,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../src/utils/debugger \
 	$(LOCAL_PATH)/../tests \
 	$(LOCAL_PATH)/../src/pathops \
+	$(LOCAL_PATH)/../src/codec \
 	$(LOCAL_PATH)/../src/image \
 	$(LOCAL_PATH)/../src/pdf \
 	$(LOCAL_PATH)/../experimental/PdfViewer \
@@ -533,7 +561,8 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../src/ports \
 	$(LOCAL_PATH)/../third_party/etc1 \
 	$(LOCAL_PATH)/../tools/timer \
-	$(LOCAL_PATH)/../experimental
+	$(LOCAL_PATH)/../experimental \
+	$(LOCAL_PATH)/../src/utils/android
 
 LOCAL_CFLAGS += \
 	-DSK_CRASH_HANDLER

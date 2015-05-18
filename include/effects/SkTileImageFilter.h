@@ -20,21 +20,21 @@ public:
         @param input    Input from which the subregion defined by srcRect will be tiled
     */
     static SkTileImageFilter* Create(const SkRect& srcRect, const SkRect& dstRect,
-                                     SkImageFilter* input, uint32_t uniqueID = 0);
+                                     SkImageFilter* input);
 
     virtual bool onFilterImage(Proxy* proxy, const SkBitmap& src, const Context& ctx,
-                               SkBitmap* dst, SkIPoint* offset) const SK_OVERRIDE;
+                               SkBitmap* dst, SkIPoint* offset) const override;
     virtual bool onFilterBounds(const SkIRect& src, const SkMatrix&,
-                                SkIRect* dst) const SK_OVERRIDE;
+                                SkIRect* dst) const override;
 
     SK_TO_STRING_OVERRIDE()
     SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkTileImageFilter)
 
 protected:
-    SkTileImageFilter(const SkRect& srcRect, const SkRect& dstRect, SkImageFilter* input, uint32_t uniqueID)
-        : INHERITED(1, &input, NULL, uniqueID), fSrcRect(srcRect), fDstRect(dstRect) {}
+    SkTileImageFilter(const SkRect& srcRect, const SkRect& dstRect, SkImageFilter* input)
+        : INHERITED(1, &input, NULL), fSrcRect(srcRect), fDstRect(dstRect) {}
 
-    void flatten(SkWriteBuffer& buffer) const SK_OVERRIDE;
+    void flatten(SkWriteBuffer& buffer) const override;
 
 private:
     SkRect fSrcRect;

@@ -11,6 +11,8 @@
 
 DEFINE_bool(undefok, false, "Silently ignore unknown flags instead of crashing.");
 
+template <typename T> static void ignore_result(const T&) {}
+
 bool SkFlagInfo::CreateStringFlag(const char* name, const char* shortName,
                                   SkCommandLineFlags::StringArray* pStrings,
                                   const char* defaultValue, const char* helpString) {
@@ -140,10 +142,10 @@ void SkCommandLineFlags::SetUsage(const char* usage) {
 }
 
 // Maximum line length for the help message.
-#define LINE_LENGTH 80
+#define LINE_LENGTH 72
 
 static void print_help_for_flag(const SkFlagInfo* flag) {
-    SkDebugf("\t--%s", flag->name().c_str());
+    SkDebugf("    --%s", flag->name().c_str());
     const SkString& shortName = flag->shortName();
     if (shortName.size() > 0) {
         SkDebugf(" or -%s", shortName.c_str());
@@ -160,7 +162,7 @@ static void print_help_for_flag(const SkFlagInfo* flag) {
     while (currLine < stop) {
         if (strlen(currLine) < LINE_LENGTH) {
             // Only one line length's worth of text left.
-            SkDebugf("\t\t%s\n", currLine);
+            SkDebugf("        %s\n", currLine);
             break;
         }
         int lineBreak = SkStrFind(currLine, "\n");
@@ -180,12 +182,12 @@ static void print_help_for_flag(const SkFlagInfo* flag) {
                 // Skip the space on the next line
                 gap = 1;
             }
-            SkDebugf("\t\t%.*s\n", spaceIndex, currLine);
+            SkDebugf("        %.*s\n", spaceIndex, currLine);
             currLine += spaceIndex + gap;
         } else {
             // the line break is within the limit. Break there.
             lineBreak++;
-            SkDebugf("\t\t%.*s", lineBreak, currLine);
+            SkDebugf("        %.*s", lineBreak, currLine);
             currLine += lineBreak;
         }
     }
@@ -256,7 +258,7 @@ void SkCommandLineFlags::Parse(int argc, char** argv) {
             if (helpFlags.count() > 0) {
                 SkDebugf("Requested help for unrecognized flags:\n");
                 for (int k = 0; k < helpFlags.count(); k++) {
-                    SkDebugf("\t--%s\n", helpFlags[k]);
+                    SkDebugf("    --%s\n", helpFlags[k]);
                 }
             }
             helpPrinted = true;
@@ -284,7 +286,8 @@ void SkCommandLineFlags::Parse(int argc, char** argv) {
                             // Add all arguments until another flag is reached.
                             while (i+1 < argc) {
                                 char* end = NULL;
-                                (void)strtod(argv[i+1], &end); // Negative numbers aren't flags.
+                                // Negative numbers aren't flags.
+                                ignore_result(strtod(argv[i+1], &end));
                                 if (end == argv[i+1] && SkStrStartsWith(argv[i+1], '-')) {
                                     break;
                                 }
@@ -313,8 +316,10 @@ void SkCommandLineFlags::Parse(int argc, char** argv) {
                         i++;  // skip YES
                 } else
 #endif
-                if (!FLAGS_undefok) {
-                    SkDebugf("Got unknown flag \"%s\". Exiting.\n", argv[i]);
+                if (FLAGS_undefok) {
+                    SkDebugf("FYI: ignoring unknown flag '%s'.\n", argv[i]);
+                } else {
+                    SkDebugf("Got unknown flag '%s'. Exiting.\n", argv[i]);
                     exit(-1);
                 }
             }

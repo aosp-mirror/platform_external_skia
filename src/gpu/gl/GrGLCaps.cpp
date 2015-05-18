@@ -25,12 +25,10 @@ void GrGLCaps::reset() {
     fMSFBOType = kNone_MSFBOType;
     fInvalidateFBType = kNone_InvalidateFBType;
     fLATCAlias = kLATC_LATCAlias;
-    fNvprSupport = kNone_NvprSupport;
     fMapBufferType = kNone_MapBufferType;
     fMaxFragmentUniformVectors = 0;
     fMaxVertexAttributes = 0;
     fMaxFragmentTextureUnits = 0;
-    fMaxFixedFunctionTextureCoords = 0;
     fRGBA8RenderbufferSupport = false;
     fBGRAIsInternalFormat = false;
     fTextureSwizzleSupport = false;
@@ -49,15 +47,12 @@ void GrGLCaps::reset() {
     fUseNonVBOVertexAndIndexDynamicData = false;
     fIsCoreProfile = false;
     fFullClearIsFree = false;
-    fDropsTileOnZeroDivide = false;
-    fFBFetchSupport = false;
-    fFBFetchNeedsCustomOutput = false;
-    fBindFBOToReadAndDrawForAddingAttachments = false;
-    
-    fFBFetchColorName = NULL;
-    fFBFetchExtensionString = NULL;
+    fFBMixedSamplesSupport = false;
 
     fReadPixelsSupportedCache.reset();
+
+    fShaderCaps.reset(SkNEW(GrGLSLCaps));
+
 }
 
 GrGLCaps::GrGLCaps(const GrGLCaps& caps) : GrDrawTargetCaps() {
@@ -70,11 +65,9 @@ GrGLCaps& GrGLCaps::operator= (const GrGLCaps& caps) {
     fStencilFormats = caps.fStencilFormats;
     fStencilVerifiedColorConfigs = caps.fStencilVerifiedColorConfigs;
     fLATCAlias = caps.fLATCAlias;
-    fNvprSupport = caps.fNvprSupport;
     fMaxFragmentUniformVectors = caps.fMaxFragmentUniformVectors;
     fMaxVertexAttributes = caps.fMaxVertexAttributes;
     fMaxFragmentTextureUnits = caps.fMaxFragmentTextureUnits;
-    fMaxFixedFunctionTextureCoords = caps.fMaxFixedFunctionTextureCoords;
     fMSFBOType = caps.fMSFBOType;
     fInvalidateFBType = caps.fInvalidateFBType;
     fMapBufferType = caps.fMapBufferType;
@@ -96,12 +89,10 @@ GrGLCaps& GrGLCaps::operator= (const GrGLCaps& caps) {
     fUseNonVBOVertexAndIndexDynamicData = caps.fUseNonVBOVertexAndIndexDynamicData;
     fIsCoreProfile = caps.fIsCoreProfile;
     fFullClearIsFree = caps.fFullClearIsFree;
-    fDropsTileOnZeroDivide = caps.fDropsTileOnZeroDivide;
-    fFBFetchSupport = caps.fFBFetchSupport;
-    fFBFetchNeedsCustomOutput = caps.fFBFetchNeedsCustomOutput;
-    fFBFetchColorName = caps.fFBFetchColorName;
-    fFBFetchExtensionString = caps.fFBFetchExtensionString;
-    fBindFBOToReadAndDrawForAddingAttachments = caps.fBindFBOToReadAndDrawForAddingAttachments;
+    fFBMixedSamplesSupport = caps.fFBMixedSamplesSupport;
+
+    *(reinterpret_cast<GrGLSLCaps*>(fShaderCaps.get())) = 
+                                          *(reinterpret_cast<GrGLSLCaps*>(caps.fShaderCaps.get()));
 
     return *this;
 }
@@ -132,11 +123,6 @@ bool GrGLCaps::init(const GrGLContextInfo& ctxInfo, const GrGLInterface* gli) {
             GrGLint profileMask;
             GR_GL_GetIntegerv(gli, GR_GL_CONTEXT_PROFILE_MASK, &profileMask);
             fIsCoreProfile = SkToBool(profileMask & GR_GL_CONTEXT_CORE_PROFILE_BIT);
-        }
-        if (!fIsCoreProfile) {
-            GR_GL_GetIntegerv(gli, GR_GL_MAX_TEXTURE_COORDS, &fMaxFixedFunctionTextureCoords);
-            // Sanity check
-            SkASSERT(fMaxFixedFunctionTextureCoords > 0 && fMaxFixedFunctionTextureCoords < 128);
         }
     }
     GR_GL_GetIntegerv(gli, GR_GL_MAX_VERTEX_ATTRIBS, &fMaxVertexAttributes);
@@ -185,6 +171,14 @@ bool GrGLCaps::init(const GrGLContextInfo& ctxInfo, const GrGLInterface* gli) {
         fTexStorageSupport = (version >= GR_GL_VER(3,0) &&
                               kQualcomm_GrGLVendor != ctxInfo.vendor()) ||
                              ctxInfo.hasExtension("GL_EXT_texture_storage");
+    }
+
+    if (kGL_GrGLStandard == standard) {
+        fTextureBarrierSupport = version >= GR_GL_VER(4,5) ||
+                                 ctxInfo.hasExtension("GL_ARB_texture_barrier") ||
+                                 ctxInfo.hasExtension("GL_NV_texture_barrier");
+    } else {
+        fTextureBarrierSupport = ctxInfo.hasExtension("GL_NV_texture_barrier");
     }
 
     // ARB_texture_rg is part of OpenGL 3.0, but mesa doesn't support GL_RED 
@@ -255,38 +249,8 @@ bool GrGLCaps::init(const GrGLContextInfo& ctxInfo, const GrGLInterface* gli) {
         fES2CompatibilitySupport = true;
     }
 
-    if (kGLES_GrGLStandard == standard) {
-        if (ctxInfo.hasExtension("GL_EXT_shader_framebuffer_fetch")) {
-            fFBFetchNeedsCustomOutput = (version >= GR_GL_VER(3, 0));
-            fFBFetchSupport = true;
-            fFBFetchColorName = "gl_LastFragData[0]";
-            fFBFetchExtensionString = "GL_EXT_shader_framebuffer_fetch";
-        } else if (ctxInfo.hasExtension("GL_NV_shader_framebuffer_fetch")) {
-            // Actually, we haven't seen an ES3.0 device with this extension yet, so we don't know
-            fFBFetchNeedsCustomOutput = false;
-            fFBFetchSupport = true;
-            fFBFetchColorName = "gl_LastFragData[0]";
-            fFBFetchExtensionString = "GL_NV_shader_framebuffer_fetch";
-        } else if (ctxInfo.hasExtension("GL_ARM_shader_framebuffer_fetch")) {
-            // The arm extension also requires an additional flag which we will set onResetContext
-            fFBFetchNeedsCustomOutput = false;
-            fFBFetchSupport = true;
-            fFBFetchColorName = "gl_LastFragColorARM";
-            fFBFetchExtensionString = "GL_ARM_shader_framebuffer_fetch";
-        }
-    }
-
-    // Adreno GPUs have a tendency to drop tiles when there is a divide-by-zero in a shader
-    fDropsTileOnZeroDivide = kQualcomm_GrGLVendor == ctxInfo.vendor();
-
     this->initFSAASupport(ctxInfo, gli);
     this->initStencilFormats(ctxInfo);
-
-#ifdef SK_BUILD_FOR_MAC
-    // This relies on the fact that initFSAASupport() was already called.
-    fBindFBOToReadAndDrawForAddingAttachments = ctxInfo.isChromium() &&
-                                                this->usesMSAARenderBuffers();
-#endif
 
     /**************************************************************************
      * GrDrawTargetCaps fields
@@ -305,6 +269,23 @@ bool GrGLCaps::init(const GrGLContextInfo& ctxInfo, const GrGLInterface* gli) {
         fStencilWrapOpsSupport = true;
     }
 
+// Disabling advanced blend until we can resolve various bugs
+#if 0
+    if (kIntel_GrGLVendor != ctxInfo.vendor()) {
+        if (ctxInfo.hasExtension("GL_KHR_blend_equation_advanced_coherent") ||
+            ctxInfo.hasExtension("GL_NV_blend_equation_advanced_coherent")) {
+            fBlendEquationSupport = kAdvancedCoherent_BlendEquationSupport;
+        } else if (ctxInfo.hasExtension("GL_KHR_blend_equation_advanced") ||
+                   ctxInfo.hasExtension("GL_NV_blend_equation_advanced")) {
+            fBlendEquationSupport = kAdvanced_BlendEquationSupport;
+        } else {
+            fBlendEquationSupport = kBasic_BlendEquationSupport;
+        }
+    } else {
+        // On Intel platforms, KHR_blend_equation_advanced is not conformant.
+        fBlendEquationSupport = kBasic_BlendEquationSupport;
+    }
+#endif
     if (kGL_GrGLStandard == standard) {
         fMapBufferFlags = kCanMap_MapFlag; // we require VBO support and the desktop VBO
                                             // extension includes glMapBuffer.
@@ -346,63 +327,19 @@ bool GrGLCaps::init(const GrGLContextInfo& ctxInfo, const GrGLInterface* gli) {
         fMipMapSupport = fNPOTTextureTileSupport || ctxInfo.hasExtension("GL_IMG_texture_npot");
     }
 
-    fHWAALineSupport = (kGL_GrGLStandard == standard);
-
     GR_GL_GetIntegerv(gli, GR_GL_MAX_TEXTURE_SIZE, &fMaxTextureSize);
     GR_GL_GetIntegerv(gli, GR_GL_MAX_RENDERBUFFER_SIZE, &fMaxRenderTargetSize);
     // Our render targets are always created with textures as the color
     // attachment, hence this min:
     fMaxRenderTargetSize = SkTMin(fMaxTextureSize, fMaxRenderTargetSize);
 
-    fPathRenderingSupport = ctxInfo.hasExtension("GL_NV_path_rendering");
-
-    if (fPathRenderingSupport) {
-        if (kGL_GrGLStandard == standard) {
-            // We need one of the two possible texturing methods: using fixed function pipeline
-            // (PathTexGen, texcoords, ...)  or using the newer NVPR API additions that support
-            // setting individual fragment inputs with ProgramPathFragmentInputGen. The API
-            // additions are detected by checking the existence of the function. Eventually we may
-            // choose to remove the fixed function codepath.
-            // Set fMaxFixedFunctionTextureCoords = 0 here if you want to force
-            // ProgramPathFragmentInputGen usage on desktop.
-            fPathRenderingSupport = ctxInfo.hasExtension("GL_EXT_direct_state_access") &&
-                (fMaxFixedFunctionTextureCoords > 0 ||
-                 ((ctxInfo.version() >= GR_GL_VER(4,3) ||
-                   ctxInfo.hasExtension("GL_ARB_program_interface_query")) &&
-                  gli->fFunctions.fProgramPathFragmentInputGen));
-            if (fPathRenderingSupport) {
-                fNvprSupport = gli->fFunctions.fProgramPathFragmentInputGen ? kNormal_NvprSupport :
-                                                                              kLegacy_NvprSupport;
-            }
-        } else {
-            fPathRenderingSupport = ctxInfo.version() >= GR_GL_VER(3,1);
-            fNvprSupport = fPathRenderingSupport ? kNormal_NvprSupport : kNone_NvprSupport;
-        }
-    } else {
-        fNvprSupport = kNone_NvprSupport;
-    }
+    fFBMixedSamplesSupport = ctxInfo.hasExtension("GL_NV_framebuffer_mixed_samples");
 
     fGpuTracingSupport = ctxInfo.hasExtension("GL_EXT_debug_marker");
-
-    // For now these two are equivalent but we could have dst read in shader via some other method
-    fDstReadInShaderSupport = fFBFetchSupport;
 
     // Disable scratch texture reuse on Mali and Adreno devices
     fReuseScratchTextures = kARM_GrGLVendor != ctxInfo.vendor() &&
                             kQualcomm_GrGLVendor != ctxInfo.vendor();
-
-    // Enable supported shader-related caps
-    if (kGL_GrGLStandard == standard) {
-        fDualSourceBlendingSupport = ctxInfo.version() >= GR_GL_VER(3,3) ||
-                                     ctxInfo.hasExtension("GL_ARB_blend_func_extended");
-        fShaderDerivativeSupport = true;
-        // we don't support GL_ARB_geometry_shader4, just GL 3.2+ GS
-        fGeometryShaderSupport = ctxInfo.version() >= GR_GL_VER(3,2) &&
-                                 ctxInfo.glslGeneration() >= k150_GrGLSLGeneration;
-    } else {
-        fShaderDerivativeSupport = ctxInfo.version() >= GR_GL_VER(3, 0) ||
-                                   ctxInfo.hasExtension("GL_OES_standard_derivatives");
-    }
 
     if (GrGLCaps::kES_IMG_MsToTexture_MSFBOType == fMSFBOType) {
         GR_GL_GetIntegerv(gli, GR_GL_MAX_SAMPLES_IMG, &fMaxSampleCount);
@@ -432,7 +369,7 @@ bool GrGLCaps::init(const GrGLContextInfo& ctxInfo, const GrGLInterface* gli) {
     this->initConfigTexturableTable(ctxInfo, gli);
     this->initConfigRenderableTable(ctxInfo);
 
-    this->initShaderPrecisionTable(ctxInfo, gli);
+    reinterpret_cast<GrGLSLCaps*>(fShaderCaps.get())->init(ctxInfo, gli, *this);
 
     return true;
 }
@@ -798,7 +735,7 @@ void GrGLCaps::initFSAASupport(const GrGLContextInfo& ctxInfo, const GrGLInterfa
 }
 
 namespace {
-const GrGLuint kUnknownBitCount = GrGLStencilBuffer::kUnknownBitCount;
+const GrGLuint kUnknownBitCount = GrGLStencilAttachment::kUnknownBitCount;
 }
 
 void GrGLCaps::initStencilFormats(const GrGLContextInfo& ctxInfo) {
@@ -855,88 +792,9 @@ void GrGLCaps::initStencilFormats(const GrGLContextInfo& ctxInfo) {
     fStencilVerifiedColorConfigs.push_back_n(fStencilFormats.count());
 }
 
-static GrGLenum precision_to_gl_float_type(GrSLPrecision p) {
-    switch (p) {
-        case kLow_GrSLPrecision:
-            return GR_GL_LOW_FLOAT;
-        case kMedium_GrSLPrecision:
-            return GR_GL_MEDIUM_FLOAT;
-        case kHigh_GrSLPrecision:
-            return GR_GL_HIGH_FLOAT;
-    }
-    SkFAIL("Unknown precision.");
-    return -1;
-}
-
-static GrGLenum shader_type_to_gl_shader(GrShaderType type) {
-    switch (type) {
-        case kVertex_GrShaderType:
-            return GR_GL_VERTEX_SHADER;
-        case kGeometry_GrShaderType:
-            return GR_GL_GEOMETRY_SHADER;
-        case kFragment_GrShaderType:
-            return GR_GL_FRAGMENT_SHADER;
-    }
-    SkFAIL("Unknown shader type.");
-    return -1;
-}
-
-void GrGLCaps::initShaderPrecisionTable(const GrGLContextInfo& ctxInfo, const GrGLInterface* intf) {
-    if (kGLES_GrGLStandard == ctxInfo.standard() || ctxInfo.version() >= GR_GL_VER(4,1) ||
-        ctxInfo.hasExtension("GL_ARB_ES2_compatibility")) {
-        for (int s = 0; s < kGrShaderTypeCount; ++s) {
-            if (kGeometry_GrShaderType != s) {
-                GrShaderType shaderType = static_cast<GrShaderType>(s);
-                GrGLenum glShader = shader_type_to_gl_shader(shaderType);
-                PrecisionInfo* first = NULL;
-                fShaderPrecisionVaries = false;
-                for (int p = 0; p < kGrSLPrecisionCount; ++p) {
-                    GrSLPrecision precision = static_cast<GrSLPrecision>(p);
-                    GrGLenum glPrecision = precision_to_gl_float_type(precision);
-                    GrGLint range[2];
-                    GrGLint bits;
-                    GR_GL_GetShaderPrecisionFormat(intf, glShader, glPrecision, range, &bits);
-                    if (bits) {
-                        fFloatPrecisions[s][p].fLogRangeLow = range[0];
-                        fFloatPrecisions[s][p].fLogRangeHigh = range[1];
-                        fFloatPrecisions[s][p].fBits = bits;
-                        if (!first) {
-                            first = &fFloatPrecisions[s][p];
-                        } else if (!fShaderPrecisionVaries) {
-                            fShaderPrecisionVaries = (*first != fFloatPrecisions[s][p]);
-                        }
-                    }
-                }
-            }
-        }
-    } else {
-        // We're on a desktop GL that doesn't have precision info. Assume they're all 32bit float.
-        fShaderPrecisionVaries = false;
-        for (int s = 0; s < kGrShaderTypeCount; ++s) {
-            if (kGeometry_GrShaderType != s) {
-                for (int p = 0; p < kGrSLPrecisionCount; ++p) {
-                    fFloatPrecisions[s][p].fLogRangeLow = 127;
-                    fFloatPrecisions[s][p].fLogRangeHigh = 127;
-                    fFloatPrecisions[s][p].fBits = 23;
-                }
-            }
-        }
-    }
-    // GetShaderPrecisionFormat doesn't accept GL_GEOMETRY_SHADER as a shader type. Assume they're
-    // the same as the vertex shader. Only fragment shaders were ever allowed to omit support for
-    // highp. GS was added after GetShaderPrecisionFormat was added to the list of features that
-    // are recommended against.
-    if (fGeometryShaderSupport) {
-        for (int p = 0; p < kGrSLPrecisionCount; ++p) {
-            fFloatPrecisions[kGeometry_GrShaderType][p] = fFloatPrecisions[kVertex_GrShaderType][p];
-        }
-    }
-}
-
-
 void GrGLCaps::markColorConfigAndStencilFormatAsVerified(
                                     GrPixelConfig config,
-                                    const GrGLStencilBuffer::Format& format) {
+                                    const GrGLStencilAttachment::Format& format) {
 #if !GR_GL_CHECK_FBO_STATUS_ONCE_PER_FORMAT
     return;
 #endif
@@ -959,7 +817,7 @@ void GrGLCaps::markColorConfigAndStencilFormatAsVerified(
 
 bool GrGLCaps::isColorConfigAndStencilFormatVerified(
                                 GrPixelConfig config,
-                                const GrGLStencilBuffer::Format& format) const {
+                                const GrGLStencilAttachment::Format& format) const {
 #if !GR_GL_CHECK_FBO_STATUS_ONCE_PER_FORMAT
     return false;
 #endif
@@ -1033,14 +891,10 @@ SkString GrGLCaps::dump() const {
 
     r.appendf("Core Profile: %s\n", (fIsCoreProfile ? "YES" : "NO"));
     r.appendf("MSAA Type: %s\n", kMSFBOExtStr[fMSFBOType]);
-    r.appendf("FB Fetch Support: %s\n", (fFBFetchSupport ? "YES" : "NO"));
     r.appendf("Invalidate FB Type: %s\n", kInvalidateFBTypeStr[fInvalidateFBType]);
     r.appendf("Map Buffer Type: %s\n", kMapBufferTypeStr[fMapBufferType]);
     r.appendf("Max FS Uniform Vectors: %d\n", fMaxFragmentUniformVectors);
     r.appendf("Max FS Texture Units: %d\n", fMaxFragmentTextureUnits);
-    if (!fIsCoreProfile) {
-        r.appendf("Max Fixed Function Texture Coords: %d\n", fMaxFixedFunctionTextureCoords);
-    }
     r.appendf("Max Vertex Attributes: %d\n", fMaxVertexAttributes);
     r.appendf("Support RGBA8 Render Buffer: %s\n", (fRGBA8RenderbufferSupport ? "YES": "NO"));
     r.appendf("BGRA is an internal format: %s\n", (fBGRAIsInternalFormat ? "YES": "NO"));
@@ -1061,6 +915,244 @@ SkString GrGLCaps::dump() const {
     r.appendf("Use non-VBO for dynamic data: %s\n",
              (fUseNonVBOVertexAndIndexDynamicData ? "YES" : "NO"));
     r.appendf("Full screen clear is free: %s\n", (fFullClearIsFree ? "YES" : "NO"));
-    r.appendf("Drops tile on zero divide: %s\n", (fDropsTileOnZeroDivide ? "YES" : "NO"));
     return r;
 }
+
+////////////////////////////////////////////////////////////////////////////////////////////
+
+GrGLSLCaps::GrGLSLCaps() {
+    this->reset();
+}
+
+
+void GrGLSLCaps::reset() {
+    INHERITED::reset();
+
+    fDropsTileOnZeroDivide = false;
+    fFBFetchSupport = false;
+    fFBFetchNeedsCustomOutput = false;
+    fAdvBlendEqInteraction = kNotSupported_AdvBlendEqInteraction;
+    fFBFetchColorName = NULL;
+    fFBFetchExtensionString = NULL;
+}
+
+GrGLSLCaps::GrGLSLCaps(const GrGLSLCaps& caps) : GrShaderCaps() {
+    *this = caps;
+}
+
+GrGLSLCaps& GrGLSLCaps::operator= (const GrGLSLCaps& caps) {
+    INHERITED::operator=(caps);
+    fDropsTileOnZeroDivide = caps.fDropsTileOnZeroDivide;
+    fFBFetchSupport = caps.fFBFetchSupport;
+    fFBFetchNeedsCustomOutput = caps.fFBFetchNeedsCustomOutput;
+    fAdvBlendEqInteraction = caps.fAdvBlendEqInteraction;
+    fFBFetchColorName = caps.fFBFetchColorName;
+    fFBFetchExtensionString = caps.fFBFetchExtensionString;
+
+    return *this;
+}
+
+bool GrGLSLCaps::init(const GrGLContextInfo& ctxInfo,
+                      const GrGLInterface* gli,
+                      const GrGLCaps& glCaps) {
+    this->reset();
+    if (!ctxInfo.isInitialized()) {
+        return false;
+    }
+
+    GrGLStandard standard = ctxInfo.standard();
+    GrGLVersion version = ctxInfo.version();
+
+    /**************************************************************************
+    * Caps specific to GrGLSLCaps
+    **************************************************************************/
+
+    if (kGLES_GrGLStandard == standard) {
+        if (ctxInfo.hasExtension("GL_EXT_shader_framebuffer_fetch")) {
+            fFBFetchNeedsCustomOutput = (version >= GR_GL_VER(3, 0));
+            fFBFetchSupport = true;
+            fFBFetchColorName = "gl_LastFragData[0]";
+            fFBFetchExtensionString = "GL_EXT_shader_framebuffer_fetch";
+        }
+        else if (ctxInfo.hasExtension("GL_NV_shader_framebuffer_fetch")) {
+            // Actually, we haven't seen an ES3.0 device with this extension yet, so we don't know
+            fFBFetchNeedsCustomOutput = false;
+            fFBFetchSupport = true;
+            fFBFetchColorName = "gl_LastFragData[0]";
+            fFBFetchExtensionString = "GL_NV_shader_framebuffer_fetch";
+        }
+        else if (ctxInfo.hasExtension("GL_ARM_shader_framebuffer_fetch")) {
+            // The arm extension also requires an additional flag which we will set onResetContext
+            fFBFetchNeedsCustomOutput = false;
+            fFBFetchSupport = true;
+            fFBFetchColorName = "gl_LastFragColorARM";
+            fFBFetchExtensionString = "GL_ARM_shader_framebuffer_fetch";
+        }
+    }
+
+    // Adreno GPUs have a tendency to drop tiles when there is a divide-by-zero in a shader
+    fDropsTileOnZeroDivide = kQualcomm_GrGLVendor == ctxInfo.vendor();
+
+    /**************************************************************************
+    * GrShaderCaps fields
+    **************************************************************************/
+
+    fPathRenderingSupport = ctxInfo.hasExtension("GL_NV_path_rendering");
+
+    if (fPathRenderingSupport) {
+        if (kGL_GrGLStandard == standard) {
+            // We only support v1.3+ of GL_NV_path_rendering which allows us to
+            // set individual fragment inputs with ProgramPathFragmentInputGen. The API
+            // additions are detected by checking the existence of the function.
+            fPathRenderingSupport = ctxInfo.hasExtension("GL_EXT_direct_state_access") &&
+                ((ctxInfo.version() >= GR_GL_VER(4, 3) ||
+                ctxInfo.hasExtension("GL_ARB_program_interface_query")) &&
+                gli->fFunctions.fProgramPathFragmentInputGen);
+        }
+        else {
+            fPathRenderingSupport = ctxInfo.version() >= GR_GL_VER(3, 1);
+        }
+    }
+
+    // For now these two are equivalent but we could have dst read in shader via some other method
+    fDstReadInShaderSupport = fFBFetchSupport;
+
+    // Enable supported shader-related caps
+    if (kGL_GrGLStandard == standard) {
+        fDualSourceBlendingSupport = ctxInfo.version() >= GR_GL_VER(3, 3) ||
+            ctxInfo.hasExtension("GL_ARB_blend_func_extended");
+        fShaderDerivativeSupport = true;
+        // we don't support GL_ARB_geometry_shader4, just GL 3.2+ GS
+        fGeometryShaderSupport = ctxInfo.version() >= GR_GL_VER(3, 2) &&
+            ctxInfo.glslGeneration() >= k150_GrGLSLGeneration;
+    }
+    else {
+        fShaderDerivativeSupport = ctxInfo.version() >= GR_GL_VER(3, 0) ||
+            ctxInfo.hasExtension("GL_OES_standard_derivatives");
+    }
+
+    if (glCaps.advancedBlendEquationSupport()) {
+        bool coherent = glCaps.advancedCoherentBlendEquationSupport();
+        if (ctxInfo.hasExtension(coherent ? "GL_NV_blend_equation_advanced_coherent"
+                                          : "GL_NV_blend_equation_advanced")) {
+            fAdvBlendEqInteraction = kAutomatic_AdvBlendEqInteraction;
+        } else {
+            fAdvBlendEqInteraction = kGeneralEnable_AdvBlendEqInteraction;
+            // TODO: Use the following on any platform where "blend_support_all_equations" is slow.
+            //fAdvBlendEqInteraction = kSpecificEnables_AdvBlendEqInteraction;
+        }
+    }
+
+    this->initShaderPrecisionTable(ctxInfo, gli);
+
+    return true;
+}
+
+SkString GrGLSLCaps::dump() const {
+    SkString r = INHERITED::dump();
+
+    static const char* kAdvBlendEqInteractionStr[] = {
+        "Not Supported",
+        "Automatic",
+        "General Enable",
+        "Specific Enables",
+    };
+    GR_STATIC_ASSERT(0 == kNotSupported_AdvBlendEqInteraction);
+    GR_STATIC_ASSERT(1 == kAutomatic_AdvBlendEqInteraction);
+    GR_STATIC_ASSERT(2 == kGeneralEnable_AdvBlendEqInteraction);
+    GR_STATIC_ASSERT(3 == kSpecificEnables_AdvBlendEqInteraction);
+    GR_STATIC_ASSERT(SK_ARRAY_COUNT(kAdvBlendEqInteractionStr) == kLast_AdvBlendEqInteraction + 1);
+
+    r.appendf("--- GLSL-Specific ---\n");
+
+    r.appendf("FB Fetch Support: %s\n", (fFBFetchSupport ? "YES" : "NO"));
+    r.appendf("Drops tile on zero divide: %s\n", (fDropsTileOnZeroDivide ? "YES" : "NO"));
+    r.appendf("Advanced blend equation interaction: %s\n",
+              kAdvBlendEqInteractionStr[fAdvBlendEqInteraction]);
+    return r;
+}
+
+static GrGLenum precision_to_gl_float_type(GrSLPrecision p) {
+    switch (p) {
+    case kLow_GrSLPrecision:
+        return GR_GL_LOW_FLOAT;
+    case kMedium_GrSLPrecision:
+        return GR_GL_MEDIUM_FLOAT;
+    case kHigh_GrSLPrecision:
+        return GR_GL_HIGH_FLOAT;
+    }
+    SkFAIL("Unknown precision.");
+    return -1;
+}
+
+static GrGLenum shader_type_to_gl_shader(GrShaderType type) {
+    switch (type) {
+    case kVertex_GrShaderType:
+        return GR_GL_VERTEX_SHADER;
+    case kGeometry_GrShaderType:
+        return GR_GL_GEOMETRY_SHADER;
+    case kFragment_GrShaderType:
+        return GR_GL_FRAGMENT_SHADER;
+    }
+    SkFAIL("Unknown shader type.");
+    return -1;
+}
+
+void GrGLSLCaps::initShaderPrecisionTable(const GrGLContextInfo& ctxInfo,
+                                          const GrGLInterface* intf) {
+    if (kGLES_GrGLStandard == ctxInfo.standard() || ctxInfo.version() >= GR_GL_VER(4, 1) ||
+        ctxInfo.hasExtension("GL_ARB_ES2_compatibility")) {
+        for (int s = 0; s < kGrShaderTypeCount; ++s) {
+            if (kGeometry_GrShaderType != s) {
+                GrShaderType shaderType = static_cast<GrShaderType>(s);
+                GrGLenum glShader = shader_type_to_gl_shader(shaderType);
+                PrecisionInfo* first = NULL;
+                fShaderPrecisionVaries = false;
+                for (int p = 0; p < kGrSLPrecisionCount; ++p) {
+                    GrSLPrecision precision = static_cast<GrSLPrecision>(p);
+                    GrGLenum glPrecision = precision_to_gl_float_type(precision);
+                    GrGLint range[2];
+                    GrGLint bits;
+                    GR_GL_GetShaderPrecisionFormat(intf, glShader, glPrecision, range, &bits);
+                    if (bits) {
+                        fFloatPrecisions[s][p].fLogRangeLow = range[0];
+                        fFloatPrecisions[s][p].fLogRangeHigh = range[1];
+                        fFloatPrecisions[s][p].fBits = bits;
+                        if (!first) {
+                            first = &fFloatPrecisions[s][p];
+                        }
+                        else if (!fShaderPrecisionVaries) {
+                            fShaderPrecisionVaries = (*first != fFloatPrecisions[s][p]);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    else {
+        // We're on a desktop GL that doesn't have precision info. Assume they're all 32bit float.
+        fShaderPrecisionVaries = false;
+        for (int s = 0; s < kGrShaderTypeCount; ++s) {
+            if (kGeometry_GrShaderType != s) {
+                for (int p = 0; p < kGrSLPrecisionCount; ++p) {
+                    fFloatPrecisions[s][p].fLogRangeLow = 127;
+                    fFloatPrecisions[s][p].fLogRangeHigh = 127;
+                    fFloatPrecisions[s][p].fBits = 23;
+                }
+            }
+        }
+    }
+    // GetShaderPrecisionFormat doesn't accept GL_GEOMETRY_SHADER as a shader type. Assume they're
+    // the same as the vertex shader. Only fragment shaders were ever allowed to omit support for
+    // highp. GS was added after GetShaderPrecisionFormat was added to the list of features that
+    // are recommended against.
+    if (fGeometryShaderSupport) {
+        for (int p = 0; p < kGrSLPrecisionCount; ++p) {
+            fFloatPrecisions[kGeometry_GrShaderType][p] = fFloatPrecisions[kVertex_GrShaderType][p];
+        }
+    }
+}
+
+
+
+

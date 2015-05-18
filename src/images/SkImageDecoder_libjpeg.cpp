@@ -232,19 +232,19 @@ public:
     }
 #endif
 
-    Format getFormat() const SK_OVERRIDE {
+    Format getFormat() const override {
         return kJPEG_Format;
     }
 
 protected:
 #ifdef SK_BUILD_FOR_ANDROID
-    bool onBuildTileIndex(SkStreamRewindable *stream, int *width, int *height) SK_OVERRIDE;
-    bool onDecodeSubset(SkBitmap* bitmap, const SkIRect& rect) SK_OVERRIDE;
+    bool onBuildTileIndex(SkStreamRewindable *stream, int *width, int *height) override;
+    bool onDecodeSubset(SkBitmap* bitmap, const SkIRect& rect) override;
 #endif
-    Result onDecode(SkStream* stream, SkBitmap* bm, Mode) SK_OVERRIDE;
-    virtual bool onDecodeYUV8Planes(SkStream* stream, SkISize componentSizes[3],
-                                    void* planes[3], size_t rowBytes[3],
-                                    SkYUVColorSpace* colorSpace) SK_OVERRIDE;
+    Result onDecode(SkStream* stream, SkBitmap* bm, Mode) override;
+    bool onDecodeYUV8Planes(SkStream* stream, SkISize componentSizes[3],
+                            void* planes[3], size_t rowBytes[3],
+                            SkYUVColorSpace* colorSpace) override;
 
 private:
 #ifdef SK_BUILD_FOR_ANDROID
@@ -768,14 +768,31 @@ static SkISize compute_yuv_size(const jpeg_decompress_struct& info, int componen
                          info.cur_comp_info[component]->downsampled_height);
 }
 
+static bool appears_to_be_yuv(const jpeg_decompress_struct& info) {
+    return (info.jpeg_color_space == JCS_YCbCr)
+        && (DCTSIZE == 8)
+        && (info.num_components == 3)
+        && (info.comps_in_scan >= info.num_components)
+        && (info.scale_denom <= 8)
+        && (info.cur_comp_info[0])
+        && (info.cur_comp_info[1])
+        && (info.cur_comp_info[2])
+        && (info.cur_comp_info[1]->h_samp_factor == 1)
+        && (info.cur_comp_info[1]->v_samp_factor == 1)
+        && (info.cur_comp_info[2]->h_samp_factor == 1)
+        && (info.cur_comp_info[2]->v_samp_factor == 1);
+}
+
 static void update_components_sizes(const jpeg_decompress_struct& cinfo, SkISize componentSizes[3],
                                     SizeType sizeType) {
+    SkASSERT(appears_to_be_yuv(cinfo));
     for (int i = 0; i < 3; ++i) {
         componentSizes[i] = compute_yuv_size(cinfo, i, sizeType);
     }
 }
 
 static bool output_raw_data(jpeg_decompress_struct& cinfo, void* planes[3], size_t rowBytes[3]) {
+    SkASSERT(appears_to_be_yuv(cinfo));
     // U size and V size have to be the same if we're calling output_raw_data()
     SkISize uvSize = compute_yuv_size(cinfo, 1, kSizeForMemoryAllocation_SizeType);
     SkASSERT(uvSize == compute_yuv_size(cinfo, 2, kSizeForMemoryAllocation_SizeType));
@@ -861,7 +878,6 @@ bool SkJPEGImageDecoder::onDecodeYUV8Planes(SkStream* stream, SkISize componentS
 #ifdef TIME_DECODE
     SkAutoTime atm("JPEG YUV8 Decode");
 #endif
-
     if (this->getSampleSize() != 1) {
         return false; // Resizing not supported
     }
@@ -888,7 +904,7 @@ bool SkJPEGImageDecoder::onDecodeYUV8Planes(SkStream* stream, SkISize componentS
         return return_false(cinfo, "read_header YUV8");
     }
 
-    if (cinfo.jpeg_color_space != JCS_YCbCr) {
+    if (!appears_to_be_yuv(cinfo)) {
         // It's not an error to not be encoded in YUV, so no need to use return_false()
         return false;
     }
@@ -918,6 +934,12 @@ bool SkJPEGImageDecoder::onDecodeYUV8Planes(SkStream* stream, SkISize componentS
     */
     if (!jpeg_start_decompress(&cinfo)) {
         return return_false(cinfo, "start_decompress YUV8");
+    }
+
+    // Seems like jpeg_start_decompress is updating our opinion of whether cinfo represents YUV.
+    // Again, not really an error.
+    if (!appears_to_be_yuv(cinfo)) {
+        return false;
     }
 
     if (!output_raw_data(cinfo, planes, rowBytes)) {
@@ -1103,11 +1125,11 @@ bool SkJPEGImageDecoder::onDecodeSubset(SkBitmap* bm, const SkIRect& region) {
 
         if (swapOnly) {
             bm->swap(bitmap);
-        } else {
-            cropBitmap(bm, &bitmap, actualSampleSize, region.x(), region.y(),
-                       region.width(), region.height(), startX, startY);
+            return true;
         }
-        return true;
+
+        return cropBitmap(bm, &bitmap, actualSampleSize, region.x(), region.y(),
+                          region.width(), region.height(), startX, startY);
     }
 #endif
 
@@ -1162,11 +1184,10 @@ bool SkJPEGImageDecoder::onDecodeSubset(SkBitmap* bm, const SkIRect& region) {
     }
     if (swapOnly) {
         bm->swap(bitmap);
-    } else {
-        cropBitmap(bm, &bitmap, actualSampleSize, region.x(), region.y(),
-                   region.width(), region.height(), startX, startY);
+        return true;
     }
-    return true;
+    return cropBitmap(bm, &bitmap, actualSampleSize, region.x(), region.y(),
+                      region.width(), region.height(), startX, startY);
 }
 #endif
 

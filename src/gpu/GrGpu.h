@@ -14,15 +14,15 @@
 #include "SkPath.h"
 
 class GrContext;
-class GrIndexBufferAllocPool;
+class GrNonInstancedVertices;
 class GrPath;
 class GrPathRange;
 class GrPathRenderer;
 class GrPathRendererChain;
 class GrPipeline;
 class GrPrimitiveProcessor;
-class GrStencilBuffer;
-class GrVertexBufferAllocPool;
+class GrStencilAttachment;
+class GrVertices;
 
 class GrGpu : public SkRefCnt {
 public:
@@ -36,7 +36,7 @@ public:
     ////////////////////////////////////////////////////////////////////////////
 
     GrGpu(GrContext* context);
-    ~GrGpu() SK_OVERRIDE;
+    ~GrGpu() override;
 
     GrContext* getContext() { return fContext; }
     const GrContext* getContext() const { return fContext; }
@@ -117,34 +117,6 @@ public:
      * @return The index buffer if successful, otherwise NULL.
      */
     GrIndexBuffer* createIndexBuffer(size_t size, bool dynamic);
-
-    /**
-     * Creates an index buffer for instance drawing with a specific pattern.
-     *
-     * @param pattern     the pattern to repeat
-     * @param patternSize size in bytes of the pattern
-     * @param reps        number of times to repeat the pattern
-     * @param vertCount   number of vertices the pattern references
-     * @param dynamic     hints whether the data will be frequently changed
-     *                    by either GrIndexBuffer::map() or
-     *                    GrIndexBuffer::updateData().
-     *
-     * @return The index buffer if successful, otherwise NULL.
-     */
-    GrIndexBuffer* createInstancedIndexBuffer(const uint16_t* pattern,
-                                              int patternSize,
-                                              int reps,
-                                              int vertCount,
-                                              bool isDynamic = false);
-
-    /**
-     * Returns an index buffer that can be used to render quads.
-     * Six indices per quad: 0, 1, 2, 0, 2, 3, etc.
-     * The max number of quads can be queried using GrIndexBuffer::maxQuads().
-     * Draw with kTriangles_GrPrimitiveType
-     * @ return the quad index buffer
-     */
-    const GrIndexBuffer* getQuadIndexBuffer() const;
 
     /**
      * Resolves MSAA.
@@ -304,8 +276,10 @@ public:
                              const SkIRect& srcRect,
                              const SkIPoint& dstPoint) = 0;
 
+    // Called before certain draws in order to guarantee coherent results from dst reads.
+    virtual void xferBarrier(GrRenderTarget*, GrXferBarrierType) = 0;
+
     struct DrawArgs {
-        typedef GrDrawTarget::DrawInfo DrawInfo;
         DrawArgs(const GrPrimitiveProcessor* primProc,
                  const GrPipeline* pipeline,
                  const GrProgramDesc* desc,
@@ -322,7 +296,7 @@ public:
         const GrBatchTracker* fBatchTracker;
     };
 
-    void draw(const DrawArgs&, const GrDrawTarget::DrawInfo&);
+    void draw(const DrawArgs&, const GrVertices&);
 
     /** None of these params are optional, pointers used just to avoid making copies. */
     struct StencilPathState {
@@ -358,7 +332,7 @@ public:
             fShaderCompilations = 0;
             fTextureCreates = 0;
             fTextureUploads = 0;
-            fStencilBufferCreates = 0;
+            fStencilAttachmentCreates = 0;
         }
 
         int renderTargetBinds() const { return fRenderTargetBinds; }
@@ -369,7 +343,7 @@ public:
         void incTextureCreates() { fTextureCreates++; }
         int textureUploads() const { return fTextureUploads; }
         void incTextureUploads() { fTextureUploads++; }
-        void incStencilBufferCreates() { fStencilBufferCreates++; }
+        void incStencilAttachmentCreates() { fStencilAttachmentCreates++; }
         void dump(SkString*);
 
     private:
@@ -377,14 +351,14 @@ public:
         int fShaderCompilations;
         int fTextureCreates;
         int fTextureUploads;
-        int fStencilBufferCreates;
+        int fStencilAttachmentCreates;
 #else
         void dump(SkString*) {};
         void incRenderTargetBinds() {}
         void incShaderCompilations() {}
         void incTextureCreates() {}
         void incTextureUploads() {}
-        void incStencilBufferCreates() {}
+        void incStencilAttachmentCreates() {}
 #endif
     };
 
@@ -410,7 +384,7 @@ public:
     void restoreActiveTraceMarkers();
 
     // Given a rt, find or create a stencil buffer and attach it
-    bool attachStencilBufferToRenderTarget(GrRenderTarget* target);
+    bool attachStencilAttachmentToRenderTarget(GrRenderTarget* target);
 
 protected:
     // Functions used to map clip-respecting stencil tests into normal
@@ -437,9 +411,13 @@ private:
     virtual void onResetContext(uint32_t resetBits) = 0;
 
     // overridden by backend-specific derived class to create objects.
-    virtual GrTexture* onCreateTexture(const GrSurfaceDesc& desc, bool budgeted,
+    // Texture size and sample size will have already been validated in base class before
+    // onCreateTexture/CompressedTexture are called.
+    virtual GrTexture* onCreateTexture(const GrSurfaceDesc& desc,
+                                       GrGpuResource::LifeCycle lifeCycle,
                                        const void* srcData, size_t rowBytes) = 0;
-    virtual GrTexture* onCreateCompressedTexture(const GrSurfaceDesc& desc, bool budgeted,
+    virtual GrTexture* onCreateCompressedTexture(const GrSurfaceDesc& desc,
+                                                 GrGpuResource::LifeCycle lifeCycle,
                                                  const void* srcData) = 0;
     virtual GrTexture* onWrapBackendTexture(const GrBackendTextureDesc&) = 0;
     virtual GrRenderTarget* onWrapBackendRenderTarget(const GrBackendRenderTargetDesc&) = 0;
@@ -456,7 +434,7 @@ private:
     virtual void onClearStencilClip(GrRenderTarget*, const SkIRect& rect, bool insideClip) = 0;
 
     // overridden by backend-specific derived class to perform the draw call.
-    virtual void onDraw(const DrawArgs&, const GrDrawTarget::DrawInfo&) = 0;
+    virtual void onDraw(const DrawArgs&, const GrNonInstancedVertices&) = 0;
     virtual void onStencilPath(const GrPath*, const StencilPathState&) = 0;
 
     virtual void onDrawPath(const DrawArgs&, const GrPath*, const GrStencilSettings&) = 0;
@@ -488,10 +466,10 @@ private:
     // width and height may be larger than rt (if underlying API allows it).
     // Should attach the SB to the RT. Returns false if compatible sb could
     // not be created.
-    virtual bool createStencilBufferForRenderTarget(GrRenderTarget*, int width, int height) = 0;
+    virtual bool createStencilAttachmentForRenderTarget(GrRenderTarget*, int width, int height) = 0;
 
     // attaches an existing SB to an existing RT.
-    virtual bool attachStencilBufferToRenderTarget(GrStencilBuffer*, GrRenderTarget*) = 0;
+    virtual bool attachStencilAttachmentToRenderTarget(GrStencilAttachment*, GrRenderTarget*) = 0;
 
     // clears target's entire stencil buffer to 0
     virtual void clearStencil(GrRenderTarget* target) = 0;
@@ -513,8 +491,6 @@ private:
 
     ResetTimestamp                                                      fResetTimestamp;
     uint32_t                                                            fResetBits;
-    // these are mutable so they can be created on-demand
-    mutable GrIndexBuffer*                                              fQuadIndexBuffer;
     // To keep track that we always have at least as many debug marker adds as removes
     int                                                                 fGpuTraceMarkerCount;
     GrTraceMarkerSet                                                    fActiveTraceMarkers;

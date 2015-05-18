@@ -14,12 +14,11 @@
 #include "SkMatrix.h"
 #include "SkXfermode.h"
 
-// TODO: clean up Skia internals so we can remove this and only keep it for clients
-#define SK_SUPPORT_LEGACY_FILTERLEVEL_ENUM
-
 class SkAnnotation;
+class SkAutoDescriptor;
 class SkAutoGlyphCache;
 class SkColorFilter;
+class SkData;
 class SkDescriptor;
 struct SkDeviceProperties;
 class SkReadBuffer;
@@ -336,23 +335,6 @@ public:
      *  drawing scaled images.
      */
     void setFilterQuality(SkFilterQuality quality);
-
-    /**
-     *  If the predicate is true, set the filterLevel to Low, else set it to
-     *  None.
-     */
-    SK_ATTR_DEPRECATED("use setFilterLevel")
-    void setFilterBitmap(bool doFilter) {
-        this->setFilterLevel(doFilter ? kLow_FilterLevel : kNone_FilterLevel);
-    }
-
-    /**
-     *  Returns true if getFilterLevel() returns anything other than None.
-     */
-    SK_ATTR_DEPRECATED("use getFilterLevel")
-    bool isFilterBitmap() const {
-        return kNone_FilterLevel != this->getFilterLevel();
-    }
 
     /** Styles apply to rect, oval, path, and text.
         Bitmaps are always drawn in "fill", and lines are always drawn in
@@ -1080,12 +1062,26 @@ private:
     SkScalar measure_text(SkGlyphCache*, const char* text, size_t length,
                           int* count, SkRect* bounds) const;
 
+    /*
+     * Allocs an SkDescriptor on the heap and return it to the caller as a refcnted
+     * SkData.  Caller is responsible for managing the lifetime of this object.
+     */
+    void getScalerContextDescriptor(SkAutoDescriptor*, const SkDeviceProperties* deviceProperties,
+                                    const SkMatrix*, bool ignoreGamma) const;
+
     SkGlyphCache* detachCache(const SkDeviceProperties* deviceProperties, const SkMatrix*,
                               bool ignoreGamma) const;
 
     void descriptorProc(const SkDeviceProperties* deviceProperties, const SkMatrix* deviceMatrix,
                         void (*proc)(SkTypeface*, const SkDescriptor*, void*),
                         void* context, bool ignoreGamma = false) const;
+
+    /*
+     * The luminance color is used to determine which Gamma Canonical color to map to.  This is
+     * really only used by backends which want to cache glyph masks, and need some way to know if
+     * they need to generate new masks based off a given color.
+     */
+    SkColor computeLuminanceColor() const;
 
     static void Term();
 
@@ -1134,10 +1130,13 @@ private:
     friend class SkGraphics; // So Term() can be called.
     friend class SkPDFDevice;
     friend class GrBitmapTextContext;
+    friend class GrAtlasTextContext;
     friend class GrDistanceFieldTextContext;
     friend class GrStencilAndCoverTextContext;
     friend class GrPathRendering;
+    friend class GrTextContext;
     friend class GrGLPathRendering;
+    friend class SkScalerContext;
     friend class SkTextToPathIter;
     friend class SkCanonicalizePaint;
 };

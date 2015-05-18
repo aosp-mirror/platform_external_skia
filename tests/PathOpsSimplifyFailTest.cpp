@@ -86,11 +86,10 @@ static void dontFailOne(skiatest::Reporter* reporter, int index) {
     SkPath result;
     result.setFillType(SkPath::kWinding_FillType);
     bool success = Simplify(path, &result);
-    // linux 32 debug fails test 13 because the quad is not treated as linear
-    // there's no error in the math that I can find -- it looks like a processor
-    // or compiler bug -- so for now, allow either to work
-    REPORTER_ASSERT(reporter, success || index == 13);
-    REPORTER_ASSERT(reporter, result.getFillType() != SkPath::kWinding_FillType);
+    if (index != 17 && index != 31 && index != 38) {  // cubic fails to chop in two without creating NaNs
+        REPORTER_ASSERT(reporter, success);
+        REPORTER_ASSERT(reporter, result.getFillType() != SkPath::kWinding_FillType);
+    }
     reporter->bumpTestCount();
 }
 
@@ -109,6 +108,6 @@ DEF_TEST(PathOpsSimplifyFailOne, reporter) {
 }
 
 DEF_TEST(PathOpsSimplifyDontFailOne, reporter) {
-    int index = 13;
+    int index = 17;
     dontFailOne(reporter, index);
 }

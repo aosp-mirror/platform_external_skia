@@ -64,6 +64,24 @@ public:
      */
     static SkImage* NewFromData(SkData* data);
 
+    /**
+     *  Create a new image from the specified descriptor. Note - the caller is responsible for
+     *  managing the lifetime of the underlying platform texture.
+     *
+     *  Will return NULL if the specified descriptor is unsupported.
+     */
+    static SkImage* NewFromTexture(GrContext*, const GrBackendTextureDesc&,
+                                   SkAlphaType = kPremul_SkAlphaType);
+
+    /**
+     *  Create a new image by copying the pixels from the specified descriptor. No reference is
+     *  kept to the original platform texture.
+     *
+     *  Will return NULL if the specified descriptor is unsupported.
+     */
+    static SkImage* NewFromTextureCopy(GrContext*, const GrBackendTextureDesc&,
+                                       SkAlphaType = kPremul_SkAlphaType);
+
     int width() const { return fWidth; }
     int height() const { return fHeight; }
     uint32_t uniqueID() const { return fUniqueID; }
@@ -172,19 +190,6 @@ private:
     static uint32_t NextUniqueID();
 
     typedef SkRefCnt INHERITED;
-
-    friend class SkCanvas;
-
-    void draw(SkCanvas*, SkScalar x, SkScalar y, const SkPaint*) const;
-
-    /**
-     *  Draw the image, cropped to the src rect, to the dst rect of a canvas.
-     *  If src is larger than the bounds of the image, the rest of the image is
-     *  filled with transparent black pixels.
-     *
-     *  See SkCanvas::drawBitmapRectToRect for similar behavior.
-     */
-    void drawRect(SkCanvas*, const SkRect* src, const SkRect& dst, const SkPaint*) const;
 };
 
 #endif

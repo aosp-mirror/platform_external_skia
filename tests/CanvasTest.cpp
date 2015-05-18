@@ -45,6 +45,7 @@
  */
 #include "SkBitmap.h"
 #include "SkCanvas.h"
+#include "SkClipStack.h"
 #include "SkDeferredCanvas.h"
 #include "SkDevice.h"
 #include "SkDocument.h"
@@ -118,7 +119,7 @@ public:
     { }
 
     SkRect fRect;
-    SkMatrix fMatrix;;
+    SkMatrix fMatrix;
     SkPath fPath;
     SkPath fNearlyZeroLengthPath;
     SkIRect fIRect;
@@ -190,13 +191,13 @@ class Canvas2CanvasClipVisitor : public SkCanvas::ClipVisitor {
 public:
     Canvas2CanvasClipVisitor(SkCanvas* target) : fTarget(target) {}
 
-    void clipRect(const SkRect& r, SkRegion::Op op, bool aa) SK_OVERRIDE {
+    void clipRect(const SkRect& r, SkRegion::Op op, bool aa) override {
         fTarget->clipRect(r, op, aa);
     }
-    void clipRRect(const SkRRect& r, SkRegion::Op op, bool aa) SK_OVERRIDE {
+    void clipRRect(const SkRRect& r, SkRegion::Op op, bool aa) override {
         fTarget->clipRRect(r, op, aa);
     }
-    void clipPath(const SkPath& p, SkRegion::Op op, bool aa) SK_OVERRIDE {
+    void clipPath(const SkPath& p, SkRegion::Op op, bool aa) override {
         fTarget->clipPath(p, op, aa);
     }
 
@@ -215,6 +216,18 @@ static void test_clipVisitor(skiatest::Reporter* reporter, SkCanvas* canvas) {
     canvas->replayClips(&visitor);
 
     REPORTER_ASSERT(reporter, equal_clips(c, *canvas));
+}
+
+static void test_clipstack(skiatest::Reporter* reporter) {
+    // The clipstack is refcounted, and needs to be able to out-live the canvas if a client has
+    // ref'd it.
+    const SkClipStack* cs = NULL;
+    {
+        SkCanvas canvas(10, 10);
+        cs = SkRef(canvas.getClipStack());
+    }
+    REPORTER_ASSERT(reporter, cs->unique());
+    cs->unref();
 }
 
 // Format strings that describe the test context.  The %s token is where
@@ -671,6 +684,7 @@ static void TestOverrideStateConsistency(skiatest::Reporter* reporter, const Tes
     if (false) { // avoid bit rot, suppress warning
         test_clipVisitor(reporter, &referenceCanvas);
     }
+    test_clipstack(reporter);
 }
 
 static void test_newraster(skiatest::Reporter* reporter) {
@@ -746,4 +760,20 @@ DEF_TEST(Canvas_SaveState, reporter) {
     REPORTER_ASSERT(reporter, 2 == canvas.getSaveCount());
     canvas.restore();
     REPORTER_ASSERT(reporter, 1 == canvas.getSaveCount());
+}
+
+DEF_TEST(Canvas_ClipEmptyPath, reporter) {
+    SkCanvas canvas(10, 10);
+    canvas.save();
+    SkPath path;
+    canvas.clipPath(path);
+    canvas.restore();
+    canvas.save();
+    path.moveTo(5, 5);
+    canvas.clipPath(path);
+    canvas.restore();
+    canvas.save();
+    path.moveTo(7, 7);
+    canvas.clipPath(path);  // should not assert here
+    canvas.restore();
 }

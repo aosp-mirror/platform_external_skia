@@ -12,7 +12,7 @@
 #include "GrInvariantOutput.h"
 #include "GrMemoryPool.h"
 #include "GrXferProcessor.h"
-#include "SkMutex.h"
+#include "SkSpinlock.h"
 
 #if SK_ALLOW_STATIC_GLOBAL_INITIALIZERS
 
@@ -76,38 +76,18 @@ void GrProcessorTestFactory<GrXPFactory>::VerifyFactoryCount() {
 
 #endif
 
-namespace GrProcessorUnitTest {
-const SkMatrix& TestMatrix(SkRandom* random) {
-    static SkMatrix gMatrices[5];
-    static bool gOnce;
-    if (!gOnce) {
-        gMatrices[0].reset();
-        gMatrices[1].setTranslate(SkIntToScalar(-100), SkIntToScalar(100));
-        gMatrices[2].setRotate(SkIntToScalar(17));
-        gMatrices[3].setRotate(SkIntToScalar(185));
-        gMatrices[3].postTranslate(SkIntToScalar(66), SkIntToScalar(-33));
-        gMatrices[3].postScale(SkIntToScalar(2), SK_ScalarHalf);
-        gMatrices[4].setRotate(SkIntToScalar(215));
-        gMatrices[4].set(SkMatrix::kMPersp0, 0.00013f);
-        gMatrices[4].set(SkMatrix::kMPersp1, -0.000039f);
-        gOnce = true;
-    }
-    return gMatrices[random->nextULessThan(static_cast<uint32_t>(SK_ARRAY_COUNT(gMatrices)))];
-}
-}
 
-
-// We use a global pool protected by a mutex. Chrome may use the same GrContext on different
-// threads. The GrContext is not used concurrently on different threads and there is a memory
-// barrier between accesses of a context on different threads. Also, there may be multiple
+// We use a global pool protected by a mutex(spinlock). Chrome may use the same GrContext on
+// different threads. The GrContext is not used concurrently on different threads and there is a
+// memory barrier between accesses of a context on different threads. Also, there may be multiple
 // GrContexts and those contexts may be in use concurrently on different threads.
 namespace {
-SK_DECLARE_STATIC_MUTEX(gProcessorPoolMutex);
+SK_DECLARE_STATIC_SPINLOCK(gProcessorSpinlock);
 class MemoryPoolAccessor {
 public:
-    MemoryPoolAccessor() { gProcessorPoolMutex.acquire(); }
+    MemoryPoolAccessor() { gProcessorSpinlock.acquire(); }
 
-    ~MemoryPoolAccessor() { gProcessorPoolMutex.release(); }
+    ~MemoryPoolAccessor() { gProcessorSpinlock.release(); }
 
     GrMemoryPool* pool() const {
         static GrMemoryPool gPool(4096, 4096);

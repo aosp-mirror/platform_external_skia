@@ -512,7 +512,7 @@ static void transform_offsets(SkScalar* stopOffsets, const int numOffsets,
         SkScalar startToStop = (stopTransformed.fX - startTransformed.fX)
                              + (stopTransformed.fY - startTransformed.fY);
         //Percentage along transformed line.
-        stopOffsets[i] = SkScalarDiv(startToStop, startToEnd);
+        stopOffsets[i] = startToStop / startToEnd;
     }
 }
 
@@ -1044,8 +1044,7 @@ HRESULT SkXPSDevice::createXpsBrush(const SkPaint& skPaint,
             return S_OK;
         }
 
-        if (SkShader::kRadial2_GradientType == gradientType ||
-            SkShader::kConical_GradientType == gradientType) {
+        if (SkShader::kConical_GradientType == gradientType) {
             //simple if affine and one is 0, otherwise will have to fake
         }
 
@@ -1061,8 +1060,6 @@ HRESULT SkXPSDevice::createXpsBrush(const SkPaint& skPaint,
                                                         &outMatrix,
                                                         xy);
     switch (bitmapType) {
-        case SkShader::kNone_BitmapType:
-            break;
         case SkShader::kDefault_BitmapType: {
             //TODO: outMatrix??
             SkMatrix localMatrix = shader->getLocalMatrix();
@@ -1081,9 +1078,6 @@ HRESULT SkXPSDevice::createXpsBrush(const SkPaint& skPaint,
 
             return S_OK;
         }
-        case SkShader::kRadial_BitmapType:
-        case SkShader::kSweep_BitmapType:
-        case SkShader::kTwoPointRadial_BitmapType:
         default:
             break;
     }
@@ -1402,10 +1396,8 @@ void SkXPSDevice::convertToPpm(const SkMaskFilter* filter,
                                SkVector* ppuScale,
                                const SkIRect& clip, SkIRect* clipIRect) {
     //This action is in unit space, but the ppm is specified in physical space.
-    ppuScale->fX = SkScalarDiv(this->fCurrentPixelsPerMeter.fX,
-                               this->fCurrentUnitsPerMeter.fX);
-    ppuScale->fY = SkScalarDiv(this->fCurrentPixelsPerMeter.fY,
-                               this->fCurrentUnitsPerMeter.fY);
+    ppuScale->set(fCurrentPixelsPerMeter.fX / fCurrentUnitsPerMeter.fX,
+                  fCurrentPixelsPerMeter.fY / fCurrentUnitsPerMeter.fY);
 
     matrix->postScale(ppuScale->fX, ppuScale->fY);
 
@@ -2251,7 +2243,7 @@ void SkXPSDevice::drawDevice(const SkDraw& d, SkBaseDevice* dev,
          "Could not add layer to current visuals.");
 }
 
-SkBaseDevice* SkXPSDevice::onCreateCompatibleDevice(const CreateInfo& info) {
+SkBaseDevice* SkXPSDevice::onCreateDevice(const CreateInfo& info, const SkPaint*) {
 //Conditional for bug compatibility with PDF device.
 #if 0
     if (SkBaseDevice::kGeneral_Usage == info.fUsage) {
@@ -2282,6 +2274,3 @@ SkXPSDevice::SkXPSDevice(IXpsOMObjectFactory* xpsFactory)
          "Could not create canvas for layer.");
 }
 
-bool SkXPSDevice::allowImageFilter(const SkImageFilter*) {
-    return false;
-}

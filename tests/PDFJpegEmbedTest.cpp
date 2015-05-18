@@ -81,19 +81,47 @@ DEF_TEST(PDFJpegEmbedTest, r) {
     SkASSERT(pdfData);
     pdf.reset();
 
-    // Test disabled, waiting on resolution to http://skbug.com/3180
-    // REPORTER_ASSERT(r, is_subset_of(mandrillData, pdfData));
+    REPORTER_ASSERT(r, is_subset_of(mandrillData, pdfData));
 
     // This JPEG uses a nonstandard colorspace - it can not be
     // embedded into the PDF directly.
     REPORTER_ASSERT(r, !is_subset_of(cmykData, pdfData));
+}
 
-    // The following is for debugging purposes only.
-    const char* outputPath = getenv("SKIA_TESTS_PDF_JPEG_EMBED_OUTPUT_PATH");
-    if (outputPath) {
-        SkFILEWStream output(outputPath);
-        if (output.isValid()) {
-            output.write(pdfData->data(), pdfData->size());
+#include "SkJpegInfo.h"
+
+DEF_TEST(JpegIdentification, r) {
+    static struct {
+        const char* path;
+        bool isJfif;
+        SkJFIFInfo::Type type;
+    } kTests[] = {{"CMYK.jpg", false, SkJFIFInfo::kGrayscale},
+                  {"color_wheel.jpg", true, SkJFIFInfo::kYCbCr},
+                  {"grayscale.jpg", true, SkJFIFInfo::kGrayscale},
+                  {"mandrill_512_q075.jpg", true, SkJFIFInfo::kYCbCr},
+                  {"randPixels.jpg", true, SkJFIFInfo::kYCbCr}};
+    for (size_t i = 0; i < SK_ARRAY_COUNT(kTests); ++i) {
+        SkAutoTUnref<SkData> data(
+                load_resource(r, "JpegIdentification", kTests[i].path));
+        if (!data) {
+            continue;
+        }
+        SkJFIFInfo info;
+        bool isJfif = SkIsJFIF(data, &info);
+        if (isJfif != kTests[i].isJfif) {
+            ERRORF(r, "%s failed isJfif test", kTests[i].path);
+            continue;
+        }
+        if (!isJfif) {
+            continue;  // not applicable
+        }
+        if (kTests[i].type != info.fType) {
+            ERRORF(r, "%s failed jfif type test", kTests[i].path);
+            continue;
+        }
+        if (r->verbose()) {
+            SkDebugf("\nJpegIdentification: %s [%d x %d]\n", kTests[i].path,
+                     info.fWidth, info.fHeight);
         }
     }
 }

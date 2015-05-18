@@ -1,3 +1,7 @@
+# Copyright 2015 Google Inc.
+#
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
 # target_defaults used for executable targets that generate a console app
 {
   'target_defaults': {
@@ -23,11 +27,6 @@
         ],
         'dependencies': [
           'android_output.gyp:android_output',
-        ],
-      }],
-      [ 'skia_os == "nacl"', {
-        'dependencies': [
-          'nacl.gyp:nacl_interface',
         ],
       }],
       ['skia_os == "ios"', {

@@ -63,14 +63,14 @@ public:
         return SkRef(gLumaEffect);
     }
 
-    const char* name() const SK_OVERRIDE { return "Luminance-to-Alpha"; }
+    const char* name() const override { return "Luminance-to-Alpha"; }
 
-    virtual void getGLProcessorKey(const GrGLCaps& caps,
-                                   GrProcessorKeyBuilder* b) const SK_OVERRIDE {
+    virtual void getGLProcessorKey(const GrGLSLCaps& caps,
+                                   GrProcessorKeyBuilder* b) const override {
         GLProcessor::GenKey(*this, caps, b);
     }
 
-    GrGLFragmentProcessor* createGLInstance() const SK_OVERRIDE {
+    GrGLFragmentProcessor* createGLInstance() const override {
         return SkNEW_ARGS(GLProcessor, (*this));
     }
 
@@ -78,19 +78,19 @@ public:
     public:
         GLProcessor(const GrProcessor&) {}
 
-        static void GenKey(const GrProcessor&, const GrGLCaps&, GrProcessorKeyBuilder* b) {}
+        static void GenKey(const GrProcessor&, const GrGLSLCaps&, GrProcessorKeyBuilder* b) {}
 
         virtual void emitCode(GrGLFPBuilder* builder,
                               const GrFragmentProcessor&,
                               const char* outputColor,
                               const char* inputColor,
                               const TransformedCoordsArray&,
-                              const TextureSamplerArray&) SK_OVERRIDE {
+                              const TextureSamplerArray&) override {
             if (NULL == inputColor) {
                 inputColor = "vec4(1)";
             }
 
-            GrGLFPFragmentBuilder* fsBuilder = builder->getFragmentShaderBuilder();
+            GrGLFragmentBuilder* fsBuilder = builder->getFragmentShaderBuilder();
             fsBuilder->codeAppendf("\tfloat luma = dot(vec3(%f, %f, %f), %s.rgb);\n",
                                    SK_ITU_BT709_LUM_COEFF_R,
                                    SK_ITU_BT709_LUM_COEFF_G,
@@ -110,9 +110,9 @@ private:
         this->initClassID<LumaColorFilterEffect>();
     }
 
-    bool onIsEqual(const GrFragmentProcessor&) const SK_OVERRIDE { return true; }
+    bool onIsEqual(const GrFragmentProcessor&) const override { return true; }
 
-    void onComputeInvariantOutput(GrInvariantOutput* inout) const SK_OVERRIDE {
+    void onComputeInvariantOutput(GrInvariantOutput* inout) const override {
         // The output is always black. The alpha value for the color passed in is arbitrary.
         inout->setToOther(kRGB_GrColorComponentFlags, GrColorPackRGBA(0, 0, 0, 0),
                           GrInvariantOutput::kWill_ReadInput);

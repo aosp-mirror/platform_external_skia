@@ -12,6 +12,7 @@
 #include "SkPictureRecord.h"
 #include "SkPictureRecorder.h"
 
+#include "SkAtomics.h"
 #include "SkBitmapDevice.h"
 #include "SkCanvas.h"
 #include "SkChunkAlloc.h"
@@ -44,18 +45,6 @@ DECLARE_SKMESSAGEBUS_MESSAGE(SkPicture::DeletionMessage);
 
 template <typename T> int SafeCount(const T* obj) {
     return obj ? obj->count() : 0;
-}
-
-static int32_t gPictureGenerationID;
-
-// never returns a 0
-static int32_t next_picture_generation_id() {
-    // Loop in case our global wraps around.
-    int32_t genID;
-    do {
-        genID = sk_atomic_inc(&gPictureGenerationID) + 1;
-    } while (0 == genID);
-    return genID;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -144,27 +133,18 @@ struct TextHunter {
 struct SkPicture::PathCounter {
     SK_CREATE_MEMBER_DETECTOR(paint);
 
-    PathCounter()
-        : numPaintWithPathEffectUses (0)
-        , numFastPathDashEffects (0)
-        , numAAConcavePaths (0)
-        , numAAHairlineConcavePaths (0)
-        , numAADFEligibleConcavePaths(0) {
-    }
+    PathCounter() : fNumSlowPathsAndDashEffects(0) {}
 
     // Recurse into nested pictures.
     void operator()(const SkRecords::DrawPicture& op) {
-        const SkPicture::Analysis& analysis = op.picture->fAnalysis;
-        numPaintWithPathEffectUses += analysis.fNumPaintWithPathEffectUses;
-        numFastPathDashEffects     += analysis.fNumFastPathDashEffects;
-        numAAConcavePaths          += analysis.fNumAAConcavePaths;
-        numAAHairlineConcavePaths  += analysis.fNumAAHairlineConcavePaths;
-        numAADFEligibleConcavePaths  += analysis.fNumAADFEligibleConcavePaths;
+        const SkPicture::Analysis& analysis = op.picture->analysis();
+        fNumSlowPathsAndDashEffects += analysis.fNumSlowPathsAndDashEffects;
     }
 
     void checkPaint(const SkPaint* paint) {
         if (paint && paint->getPathEffect()) {
-            numPaintWithPathEffectUses++;
+            // Initially assume it's slow.
+            fNumSlowPathsAndDashEffects++;
         }
     }
 
@@ -176,7 +156,7 @@ struct SkPicture::PathCounter {
             SkPathEffect::DashType dashType = effect->asADash(&info);
             if (2 == op.count && SkPaint::kRound_Cap != op.paint.getStrokeCap() &&
                 SkPathEffect::kDash_DashType == dashType && 2 == info.fCount) {
-                numFastPathDashEffects++;
+                fNumSlowPathsAndDashEffects--;
             }
         }
     }
@@ -184,16 +164,16 @@ struct SkPicture::PathCounter {
     void operator()(const SkRecords::DrawPath& op) {
         this->checkPaint(&op.paint);
         if (op.paint.isAntiAlias() && !op.path.isConvex()) {
-            numAAConcavePaths++;
-
             SkPaint::Style paintStyle = op.paint.getStyle();
             const SkRect& pathBounds = op.path.getBounds();
             if (SkPaint::kStroke_Style == paintStyle &&
                 0 == op.paint.getStrokeWidth()) {
-                numAAHairlineConcavePaths++;
+                // AA hairline concave path is not slow.
             } else if (SkPaint::kFill_Style == paintStyle && pathBounds.width() < 64.f &&
                        pathBounds.height() < 64.f && !op.path.isVolatile()) {
-                numAADFEligibleConcavePaths++;
+                // AADF eligible concave path is not slow.
+            } else {
+                fNumSlowPathsAndDashEffects++;
             }
         }
     }
@@ -206,11 +186,7 @@ struct SkPicture::PathCounter {
     template <typename T>
     SK_WHEN(!HasMember_paint<T>, void) operator()(const T& op) { /* do nothing */ }
 
-    int numPaintWithPathEffectUses;
-    int numFastPathDashEffects;
-    int numAAConcavePaths;
-    int numAAHairlineConcavePaths;
-    int numAADFEligibleConcavePaths;
+    int fNumSlowPathsAndDashEffects;
 };
 
 SkPicture::Analysis::Analysis(const SkRecord& record) {
@@ -220,11 +196,7 @@ SkPicture::Analysis::Analysis(const SkRecord& record) {
     for (unsigned i = 0; i < record.count(); i++) {
         record.visit<void>(i, counter);
     }
-    fNumPaintWithPathEffectUses = counter.numPaintWithPathEffectUses;
-    fNumFastPathDashEffects     = counter.numFastPathDashEffects;
-    fNumAAConcavePaths          = counter.numAAConcavePaths;
-    fNumAAHairlineConcavePaths  = counter.numAAHairlineConcavePaths;
-    fNumAADFEligibleConcavePaths  = counter.numAADFEligibleConcavePaths;
+    fNumSlowPathsAndDashEffects = SkTMin<int>(counter.fNumSlowPathsAndDashEffects, 255);
 
     fHasText = false;
     TextHunter text;
@@ -241,17 +213,7 @@ bool SkPicture::Analysis::suitableForGpuRasterization(const char** reason,
     // TODO: the heuristic used here needs to be refined
     static const int kNumSlowPathsTol = 6;
 
-    int numSlowPathDashedPaths = fNumPaintWithPathEffectUses;
-    if (0 == sampleCount) {
-        // The fast dashing path only works when MSAA is disabled
-        numSlowPathDashedPaths -= fNumFastPathDashEffects;
-    }
-
-    int numSlowPaths = fNumAAConcavePaths - 
-                       fNumAAHairlineConcavePaths -
-                       fNumAADFEligibleConcavePaths;
-
-    bool ret = numSlowPathDashedPaths + numSlowPaths < kNumSlowPathsTol;
+    bool ret = fNumSlowPathsAndDashEffects < kNumSlowPathsTol;
 
     if (!ret && reason) {
         *reason = "Too many slow paths (either concave or dashed).";
@@ -270,13 +232,13 @@ SkPicture const* const* SkPicture::drawablePicts() const {
 }
 
 SkPicture::~SkPicture() {
-    SkPicture::DeletionMessage msg;
-    msg.fUniqueID = this->uniqueID();
-    SkMessageBus<SkPicture::DeletionMessage>::Post(msg);
-}
-
-void SkPicture::EXPERIMENTAL_addAccelData(const SkPicture::AccelData* data) const {
-    fAccelData.reset(SkRef(data));
+    // If the ID is still zero, no one has read it, so no need to send this message.
+    uint32_t id = sk_atomic_load(&fUniqueID, sk_memory_order_relaxed);
+    if (id != 0) {
+        SkPicture::DeletionMessage msg;
+        msg.fUniqueID = id;
+        SkMessageBus<SkPicture::DeletionMessage>::Post(msg);
+    }
 }
 
 const SkPicture::AccelData* SkPicture::EXPERIMENTAL_getAccelData(
@@ -476,22 +438,49 @@ void SkPicture::flatten(SkWriteBuffer& buffer) const {
     }
 }
 
+const SkPicture::Analysis& SkPicture::analysis() const {
+    auto create = [&](){ return SkNEW_ARGS(Analysis, (*fRecord)); };
+    return *fAnalysis.get(create);
+}
+
 #if SK_SUPPORT_GPU
 bool SkPicture::suitableForGpuRasterization(GrContext*, const char **reason) const {
-    return fAnalysis.suitableForGpuRasterization(reason, 0);
+    return this->analysis().suitableForGpuRasterization(reason, 0);
 }
 #endif
 
-bool SkPicture::hasText()             const { return fAnalysis.fHasText; }
-bool SkPicture::willPlayBackBitmaps() const { return fAnalysis.fWillPlaybackBitmaps; }
+bool SkPicture::hasText()             const { return this->analysis().fHasText; }
+bool SkPicture::willPlayBackBitmaps() const { return this->analysis().fWillPlaybackBitmaps; }
 int  SkPicture::approximateOpCount()  const { return fRecord->count(); }
 
-SkPicture::SkPicture(const SkRect& cullRect, SkRecord* record, SnapshotArray* drawablePicts,
-                     SkBBoxHierarchy* bbh)
-    : fUniqueID(next_picture_generation_id())
+SkPicture::SkPicture(const SkRect& cullRect,
+                     SkRecord* record,
+                     SnapshotArray* drawablePicts,
+                     SkBBoxHierarchy* bbh,
+                     AccelData* accelData,
+                     size_t approxBytesUsedBySubPictures)
+    : fUniqueID(0)
     , fCullRect(cullRect)
-    , fRecord(SkRef(record))
-    , fBBH(SkSafeRef(bbh))
-    , fDrawablePicts(drawablePicts)     // take ownership
-    , fAnalysis(*fRecord)
+    , fRecord(record)               // Take ownership of caller's ref.
+    , fDrawablePicts(drawablePicts) // Take ownership.
+    , fBBH(bbh)                     // Take ownership of caller's ref.
+    , fAccelData(accelData)         // Take ownership of caller's ref.
+    , fApproxBytesUsedBySubPictures(approxBytesUsedBySubPictures)
 {}
+
+
+static uint32_t gNextID = 1;
+uint32_t SkPicture::uniqueID() const {
+    uint32_t id = sk_atomic_load(&fUniqueID, sk_memory_order_relaxed);
+    while (id == 0) {
+        uint32_t next = sk_atomic_fetch_add(&gNextID, 1u);
+        if (sk_atomic_compare_exchange(&fUniqueID, &id, next,
+                                       sk_memory_order_relaxed,
+                                       sk_memory_order_relaxed)) {
+            id = next;
+        } else {
+            // sk_atomic_compare_exchange replaced id with the current value of fUniqueID.
+        }
+    }
+    return id;
+}

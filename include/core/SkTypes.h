@@ -14,6 +14,12 @@
 #include <stdint.h>
 #include <sys/types.h>
 
+#if defined(SK_ARM_HAS_NEON)
+    #include <arm_neon.h>
+#elif SK_CPU_SSE_LEVEL >= SK_CPU_SSE_LEVEL_SSE2
+    #include <immintrin.h>
+#endif
+
 /** \file SkTypes.h
 */
 
@@ -73,7 +79,7 @@ static inline void sk_bzero(void* buffer, size_t size) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifdef SK_OVERRIDE_GLOBAL_NEW
+#ifdef override_GLOBAL_NEW
 #include <new>
 
 inline void* operator new(size_t size) {
@@ -138,7 +144,7 @@ inline void operator delete(void* p) {
     #define SK_TO_STRING_NONVIRT() void toString(SkString* str) const;
     #define SK_TO_STRING_VIRT() virtual void toString(SkString* str) const;
     #define SK_TO_STRING_PUREVIRT() virtual void toString(SkString* str) const = 0;
-    #define SK_TO_STRING_OVERRIDE() void toString(SkString* str) const SK_OVERRIDE;
+    #define SK_TO_STRING_OVERRIDE() void toString(SkString* str) const override;
 #endif
 
 template <bool>
@@ -290,9 +296,9 @@ static inline bool SkIsU16(long x) {
     #define SK_OFFSETOF(type, field)    (size_t)((char*)&(((type*)1)->field) - (char*)1)
 #endif
 
-/** Returns the number of entries in an array (not a pointer)
-*/
-#define SK_ARRAY_COUNT(array)       (sizeof(array) / sizeof(array[0]))
+/** Returns the number of entries in an array (not a pointer) */
+template <typename T, size_t N> char (&SkArrayCountHelper(T (&array)[N]))[N];
+#define SK_ARRAY_COUNT(array) (sizeof(SkArrayCountHelper(array)))
 
 #define SkAlign2(x)     (((x) + 1) >> 1 << 1)
 #define SkIsAlign2(x)   (0 == ((x) & 1))
@@ -400,16 +406,13 @@ static inline int32_t SkFastMin32(int32_t value, int32_t max) {
     return value;
 }
 
-/** Returns signed 32 bit value pinned between min and max, inclusively
-*/
+template <typename T> static inline const T& SkTPin(const T& x, const T& min, const T& max) {
+    return SkTMax(SkTMin(x, max), min);
+}
+
+/** Returns signed 32 bit value pinned between min and max, inclusively. */
 static inline int32_t SkPin32(int32_t value, int32_t min, int32_t max) {
-    if (value < min) {
-        value = min;
-    }
-    if (value > max) {
-        value = max;
-    }
-    return value;
+    return SkTPin(value, min, max);
 }
 
 static inline uint32_t SkSetClearShift(uint32_t bits, bool cond,
@@ -448,7 +451,7 @@ template <typename Dst> Dst SkTCast(const void* ptr) {
 
 /** \class SkNoncopyable
 
-SkNoncopyable is the base class for objects that may do not want to
+SkNoncopyable is the base class for objects that do not want to
 be copied. It hides its copy-constructor and its assignment-operator.
 */
 class SK_API SkNoncopyable {

@@ -7,45 +7,6 @@
 #include "SkIntersections.h"
 #include "SkPathOpsLine.h"
 
-/* Determine the intersection point of two lines. This assumes the lines are not parallel,
-   and that that the lines are infinite.
-   From http://en.wikipedia.org/wiki/Line-line_intersection
- */
-SkDPoint SkIntersections::Line(const SkDLine& a, const SkDLine& b) {
-    double axLen = a[1].fX - a[0].fX;
-    double ayLen = a[1].fY - a[0].fY;
-    double bxLen = b[1].fX - b[0].fX;
-    double byLen = b[1].fY - b[0].fY;
-    double denom = byLen * axLen - ayLen * bxLen;
-    SkASSERT(denom);
-    double term1 = a[1].fX * a[0].fY - a[1].fY * a[0].fX;
-    double term2 = b[1].fX * b[0].fY - b[1].fY * b[0].fX;
-    SkDPoint p;
-    p.fX = (term1 * bxLen - axLen * term2) / denom;
-    p.fY = (term1 * byLen - ayLen * term2) / denom;
-    return p;
-}
-
-int SkIntersections::cleanUpCoincidence() {
-    do {
-        int last = fUsed - 1;
-        for (int index = 0; index < last; ++index) {
-            if (fT[0][index] == fT[0][index + 1]) {
-                removeOne(index + (int) (fT[1][index] == 0 || fT[1][index] == 1));
-                goto tryAgain;
-            }
-        }
-        for (int index = 0; index < last; ++index) {
-            if (fT[1][index] == fT[1][index + 1]) {
-                removeOne(index + (int) (fT[0][index] == 0 || fT[0][index] == 1));
-                goto tryAgain;
-            }
-        }
-        return fUsed;
-tryAgain: ;
-    } while (true);
-}
-
 void SkIntersections::cleanUpParallelLines(bool parallel) {
     while (fUsed > 2) {
         removeOne(1);
@@ -57,6 +18,9 @@ void SkIntersections::cleanUpParallelLines(bool parallel) {
             SkASSERT(startMatch || endMatch);
             removeOne(endMatch);
         }
+    }
+    if (fUsed == 2) {
+        fIsCoincident[0] = fIsCoincident[1] = 0x03;
     }
 }
 
@@ -81,12 +45,6 @@ int SkIntersections::intersectRay(const SkDLine& a, const SkDLine& b) {
     SkDVector ab0 = a[0] - b[0];
     double numerA = ab0.fY * bLen.fX - bLen.fY * ab0.fX;
     double numerB = ab0.fY * aLen.fX - aLen.fY * ab0.fX;
-#if 0
-    if (!between(0, numerA, denom) || !between(0, numerB, denom)) {
-        fUsed = 0;
-        return 0;
-    }
-#endif
     numerA /= denom;
     numerB /= denom;
     int used;
@@ -190,7 +148,6 @@ int SkIntersections::intersect(const SkDLine& a, const SkDLine& b) {
                     }
                     SkASSERT(a[iA] != b[nearer]);
                     SkASSERT(iA == (bNearA[nearer] > 0.5));
-                    fNearlySame[iA] = true;
                     insertNear(iA, nearer, a[iA], b[nearer]);
                     aNearB[iA] = -1;
                     bNearA[nearer] = -1;
@@ -231,20 +188,8 @@ static int horizontal_coincident(const SkDLine& line, double y) {
     return 1;
 }
 
-static double horizontal_intercept(const SkDLine& line, double y) {
+double SkIntersections::HorizontalIntercept(const SkDLine& line, double y) {
      return SkPinT((y - line[0].fY) / (line[1].fY - line[0].fY));
-}
-
-int SkIntersections::horizontal(const SkDLine& line, double y) {
-    fMax = 2;
-    int horizontalType = horizontal_coincident(line, y);
-    if (horizontalType == 1) {
-        fT[0][0] = horizontal_intercept(line, y);
-    } else if (horizontalType == 2) {
-        fT[0][0] = 0;
-        fT[0][1] = 1;
-    }
-    return fUsed = horizontalType;
 }
 
 int SkIntersections::horizontal(const SkDLine& line, double left, double right,
@@ -269,7 +214,7 @@ int SkIntersections::horizontal(const SkDLine& line, double left, double right,
     }
     int result = horizontal_coincident(line, y);
     if (result == 1 && fUsed == 0) {
-        fT[0][0] = horizontal_intercept(line, y);
+        fT[0][0] = HorizontalIntercept(line, y);
         double xIntercept = line[0].fX + fT[0][0] * (line[1].fX - line[0].fX);
         if (between(left, xIntercept, right)) {
             fT[1][0] = (xIntercept - left) / (right - left);
@@ -319,20 +264,8 @@ static int vertical_coincident(const SkDLine& line, double x) {
     return 1;
 }
 
-static double vertical_intercept(const SkDLine& line, double x) {
+double SkIntersections::VerticalIntercept(const SkDLine& line, double x) {
     return SkPinT((x - line[0].fX) / (line[1].fX - line[0].fX));
-}
-
-int SkIntersections::vertical(const SkDLine& line, double x) {
-    fMax = 2;
-    int verticalType = vertical_coincident(line, x);
-    if (verticalType == 1) {
-        fT[0][0] = vertical_intercept(line, x);
-    } else if (verticalType == 2) {
-        fT[0][0] = 0;
-        fT[0][1] = 1;
-    }
-    return fUsed = verticalType;
 }
 
 int SkIntersections::vertical(const SkDLine& line, double top, double bottom,
@@ -357,7 +290,7 @@ int SkIntersections::vertical(const SkDLine& line, double top, double bottom,
     }
     int result = vertical_coincident(line, x);
     if (result == 1 && fUsed == 0) {
-        fT[0][0] = vertical_intercept(line, x);
+        fT[0][0] = VerticalIntercept(line, x);
         double yIntercept = line[0].fY + fT[0][0] * (line[1].fY - line[0].fY);
         if (between(top, yIntercept, bottom)) {
             fT[1][0] = (yIntercept - top) / (bottom - top);
@@ -393,14 +326,3 @@ int SkIntersections::vertical(const SkDLine& line, double top, double bottom,
     return fUsed;
 }
 
-// from http://www.bryceboe.com/wordpress/wp-content/uploads/2006/10/intersect.py
-// 4 subs, 2 muls, 1 cmp
-static bool ccw(const SkDPoint& A, const SkDPoint& B, const SkDPoint& C) {
-    return (C.fY - A.fY) * (B.fX - A.fX) > (B.fY - A.fY) * (C.fX - A.fX);
-}
-
-// 16 subs, 8 muls, 6 cmps
-bool SkIntersections::Test(const SkDLine& a, const SkDLine& b) {
-    return ccw(a[0], b[0], b[1]) != ccw(a[1], b[0], b[1])
-            && ccw(a[0], a[1], b[0]) != ccw(a[0], a[1], b[1]);
-}

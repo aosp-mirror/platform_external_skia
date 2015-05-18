@@ -84,12 +84,12 @@ public:
       struct TestReporter : public skiatest::Reporter {
       public:
           TestReporter() : fError(false), fTestCount(0) {}
-          void bumpTestCount() SK_OVERRIDE { ++fTestCount; }
-          bool allowExtendedTest() const SK_OVERRIDE {
+          void bumpTestCount() override { ++fTestCount; }
+          bool allowExtendedTest() const override {
               return FLAGS_extendedTest;
           }
-          bool verbose() const SK_OVERRIDE { return FLAGS_veryVerbose; }
-          void reportFailed(const skiatest::Failure& failure) SK_OVERRIDE {
+          bool verbose() const override { return FLAGS_veryVerbose; }
+          void reportFailed(const skiatest::Failure& failure) override {
               SkDebugf("\nFAILED: %s", failure.toString().c_str());
               fError = true;
           }
@@ -229,7 +229,7 @@ int test_main() {
     return (status.failCount() == 0) ? 0 : 1;
 }
 
-#if !defined(SK_BUILD_FOR_IOS) && !defined(SK_BUILD_FOR_NACL)
+#if !defined(SK_BUILD_FOR_IOS)
 int main(int argc, char** argv) {
     SkCommandLineFlags::Parse(argc, argv);
     return test_main();

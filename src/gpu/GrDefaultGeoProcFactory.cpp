@@ -24,57 +24,44 @@ public:
                                        GrColor color,
                                        const SkMatrix& viewMatrix,
                                        const SkMatrix& localMatrix,
-                                       bool opaqueVertexColors,
                                        uint8_t coverage) {
         return SkNEW_ARGS(DefaultGeoProc, (gpTypeFlags,
                                            color,
                                            viewMatrix,
                                            localMatrix,
-                                           opaqueVertexColors,
                                            coverage));
     }
 
-    const char* name() const SK_OVERRIDE { return "DefaultGeometryProcessor"; }
+    const char* name() const override { return "DefaultGeometryProcessor"; }
 
     const Attribute* inPosition() const { return fInPosition; }
     const Attribute* inColor() const { return fInColor; }
     const Attribute* inLocalCoords() const { return fInLocalCoords; }
     const Attribute* inCoverage() const { return fInCoverage; }
+    GrColor color() const { return fColor; }
+    const SkMatrix& viewMatrix() const { return fViewMatrix; }
+    const SkMatrix& localMatrix() const { return fLocalMatrix; }
     uint8_t coverage() const { return fCoverage; }
 
-    void initBatchTracker(GrBatchTracker* bt, const GrPipelineInfo& init) const SK_OVERRIDE {
+    void initBatchTracker(GrBatchTracker* bt, const GrPipelineInfo& init) const override {
         BatchTracker* local = bt->cast<BatchTracker>();
         local->fInputColorType = GetColorInputType(&local->fColor, this->color(), init,
                                                    SkToBool(fInColor));
 
         bool hasVertexCoverage = SkToBool(fInCoverage) && !init.fCoverageIgnored;
         bool covIsSolidWhite = !hasVertexCoverage && 0xff == this->coverage();
-        if (covIsSolidWhite) {
+        if (init.fCoverageIgnored) {
+            local->fInputCoverageType = kIgnored_GrGPInput;
+        } else if (covIsSolidWhite) {
             local->fInputCoverageType = kAllOnes_GrGPInput;
-        } else if (!hasVertexCoverage) {
-            local->fInputCoverageType = kUniform_GrGPInput;
-            local->fCoverage = this->coverage();
         } else if (hasVertexCoverage) {
             SkASSERT(fInCoverage);
             local->fInputCoverageType = kAttribute_GrGPInput;
         } else {
-            local->fInputCoverageType = kIgnored_GrGPInput;
+            local->fInputCoverageType = kUniform_GrGPInput;
+            local->fCoverage = this->coverage();
         }
-
         local->fUsesLocalCoords = init.fUsesLocalCoords;
-    }
-
-    bool onCanMakeEqual(const GrBatchTracker& m,
-                        const GrGeometryProcessor& that,
-                        const GrBatchTracker& t) const SK_OVERRIDE {
-        const BatchTracker& mine = m.cast<BatchTracker>();
-        const BatchTracker& theirs = t.cast<BatchTracker>();
-        return CanCombineLocalMatrices(*this, mine.fUsesLocalCoords,
-                                       that, theirs.fUsesLocalCoords) &&
-               CanCombineOutput(mine.fInputColorType, mine.fColor,
-                                theirs.fInputColorType, theirs.fColor) &&
-               CanCombineOutput(mine.fInputCoverageType, mine.fCoverage,
-                                theirs.fInputCoverageType, theirs.fCoverage);
     }
 
     class GLProcessor : public GrGLGeometryProcessor {
@@ -82,11 +69,11 @@ public:
         GLProcessor(const GrGeometryProcessor& gp, const GrBatchTracker&)
             : fColor(GrColor_ILLEGAL), fCoverage(0xff) {}
 
-        void onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) SK_OVERRIDE {
+        void onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) override {
             const DefaultGeoProc& gp = args.fGP.cast<DefaultGeoProc>();
             GrGLGPBuilder* pb = args.fPB;
             GrGLVertexBuilder* vsBuilder = pb->getVertexShaderBuilder();
-            GrGLGPFragmentBuilder* fs = args.fPB->getFragmentShaderBuilder();
+            GrGLFragmentBuilder* fs = args.fPB->getFragmentShaderBuilder();
             const BatchTracker& local = args.fBT.cast<BatchTracker>();
 
             // emit attributes
@@ -129,21 +116,22 @@ public:
 
         static inline void GenKey(const GrGeometryProcessor& gp,
                                   const GrBatchTracker& bt,
-                                  const GrGLCaps&,
+                                  const GrGLSLCaps&,
                                   GrProcessorKeyBuilder* b) {
             const DefaultGeoProc& def = gp.cast<DefaultGeoProc>();
             const BatchTracker& local = bt.cast<BatchTracker>();
             uint32_t key = def.fFlags;
             key |= local.fInputColorType << 8 | local.fInputCoverageType << 16;
-            key |= local.fUsesLocalCoords && gp.localMatrix().hasPerspective() ? 0x1 << 24 : 0x0;
-            key |= ComputePosKey(gp.viewMatrix()) << 25;
+            key |= local.fUsesLocalCoords && def.localMatrix().hasPerspective() ? 0x1 << 24 : 0x0;
+            key |= ComputePosKey(def.viewMatrix()) << 25;
             b->add32(key);
         }
 
         virtual void setData(const GrGLProgramDataManager& pdman,
                              const GrPrimitiveProcessor& gp,
-                             const GrBatchTracker& bt) SK_OVERRIDE {
-            this->setUniformViewMatrix(pdman, gp.viewMatrix());
+                             const GrBatchTracker& bt) override {
+            const DefaultGeoProc& dgp = gp.cast<DefaultGeoProc>();
+            this->setUniformViewMatrix(pdman, dgp.viewMatrix());
 
             const BatchTracker& local = bt.cast<BatchTracker>();
             if (kUniform_GrGPInput == local.fInputColorType && local.fColor != fColor) {
@@ -158,6 +146,13 @@ public:
             }
         }
 
+        void setTransformData(const GrPrimitiveProcessor& primProc,
+                              const GrGLProgramDataManager& pdman,
+                              int index,
+                              const SkTArray<const GrCoordTransform*, true>& transforms) override {
+            this->setTransformDataHelper<DefaultGeoProc>(primProc, pdman, index, transforms);
+        }
+
     private:
         GrColor fColor;
         uint8_t fCoverage;
@@ -168,13 +163,13 @@ public:
     };
 
     virtual void getGLProcessorKey(const GrBatchTracker& bt,
-                                   const GrGLCaps& caps,
-                                   GrProcessorKeyBuilder* b) const SK_OVERRIDE {
+                                   const GrGLSLCaps& caps,
+                                   GrProcessorKeyBuilder* b) const override {
         GLProcessor::GenKey(*this, bt, caps, b);
     }
 
     virtual GrGLPrimitiveProcessor* createGLInstance(const GrBatchTracker& bt,
-                                                     const GrGLCaps&) const SK_OVERRIDE {
+                                                     const GrGLSLCaps&) const override {
         return SkNEW_ARGS(GLProcessor, (*this, bt));
     }
 
@@ -183,13 +178,14 @@ private:
                    GrColor color,
                    const SkMatrix& viewMatrix,
                    const SkMatrix& localMatrix,
-                   bool opaqueVertexColors,
                    uint8_t coverage)
-        : INHERITED(color, viewMatrix, localMatrix, opaqueVertexColors)
-        , fInPosition(NULL)
+        : fInPosition(NULL)
         , fInColor(NULL)
         , fInLocalCoords(NULL)
         , fInCoverage(NULL)
+        , fColor(color)
+        , fViewMatrix(viewMatrix)
+        , fLocalMatrix(localMatrix)
         , fCoverage(coverage)
         , fFlags(gpTypeFlags) {
         this->initClassID<DefaultGeoProc>();
@@ -199,7 +195,6 @@ private:
         fInPosition = &this->addVertexAttrib(Attribute("inPosition", kVec2f_GrVertexAttribType));
         if (hasColor) {
             fInColor = &this->addVertexAttrib(Attribute("inColor", kVec4ub_GrVertexAttribType));
-            this->setHasVertexColor();
         }
         if (hasLocalCoord) {
             fInLocalCoords = &this->addVertexAttrib(Attribute("inLocalCoord",
@@ -209,20 +204,6 @@ private:
         if (hasCoverage) {
             fInCoverage = &this->addVertexAttrib(Attribute("inCoverage",
                                                              kFloat_GrVertexAttribType));
-        }
-    }
-
-    bool onIsEqual(const GrGeometryProcessor& other) const SK_OVERRIDE {
-        const DefaultGeoProc& gp = other.cast<DefaultGeoProc>();
-        return gp.fFlags == this->fFlags;
-    }
-
-    void onGetInvariantOutputCoverage(GrInitInvariantOutput* out) const SK_OVERRIDE {
-        if (fInCoverage) {
-            out->setUnknownSingleComponent();
-        } else {
-            // uniform coverage
-            out->setKnownSingleComponent(this->coverage());
         }
     }
 
@@ -238,6 +219,9 @@ private:
     const Attribute* fInColor;
     const Attribute* fInLocalCoords;
     const Attribute* fInCoverage;
+    GrColor fColor;
+    SkMatrix fViewMatrix;
+    SkMatrix fLocalMatrix;
     uint8_t fCoverage;
     uint32_t fFlags;
 
@@ -265,9 +249,8 @@ GrGeometryProcessor* DefaultGeoProc::TestCreate(SkRandom* random,
 
     return DefaultGeoProc::Create(flags,
                                   GrRandomColor(random),
-                                  GrProcessorUnitTest::TestMatrix(random),
-                                  GrProcessorUnitTest::TestMatrix(random),
-                                  random->nextBool(),
+                                  GrTest::TestMatrix(random),
+                                  GrTest::TestMatrix(random),
                                   GrRandomCoverage(random));
 }
 
@@ -275,12 +258,10 @@ const GrGeometryProcessor* GrDefaultGeoProcFactory::Create(uint32_t gpTypeFlags,
                                                            GrColor color,
                                                            const SkMatrix& viewMatrix,
                                                            const SkMatrix& localMatrix,
-                                                           bool opaqueVertexColors,
                                                            uint8_t coverage) {
     return DefaultGeoProc::Create(gpTypeFlags,
                                   color,
                                   viewMatrix,
                                   localMatrix,
-                                  opaqueVertexColors,
                                   coverage);
 }

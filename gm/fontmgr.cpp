@@ -68,15 +68,15 @@ public:
     }
 
 protected:
-    SkString onShortName() SK_OVERRIDE {
+    SkString onShortName() override {
         return fName;
     }
 
-    SkISize onISize() SK_OVERRIDE {
+    SkISize onISize() override {
         return SkISize::Make(1536, 768);
     }
 
-    void onDraw(SkCanvas* canvas) SK_OVERRIDE {
+    void onDraw(SkCanvas* canvas) override {
         SkScalar y = 20;
         SkPaint paint;
         paint.setAntiAlias(true);
@@ -88,10 +88,10 @@ protected:
         int count = SkMin32(fm->countFamilies(), MAX_FAMILIES);
 
         for (int i = 0; i < count; ++i) {
-            SkString fname;
-            fm->getFamilyName(i, &fname);
+            SkString familyName;
+            fm->getFamilyName(i, &familyName);
             paint.setTypeface(NULL);
-            (void)drawString(canvas, fname, 20, y, paint);
+            (void)drawString(canvas, familyName, 20, y, paint);
 
             SkScalar x = 220;
 
@@ -106,10 +106,10 @@ protected:
                 x = drawString(canvas, sname, x, y, paint) + 20;
 
                 // check to see that we get different glyphs in japanese and chinese
-                x = drawCharacter(canvas, 0x5203, x, y, paint, fm, fName.c_str(), &zh, 1, fs);
-                x = drawCharacter(canvas, 0x5203, x, y, paint, fm, fName.c_str(), &ja, 1, fs);
+                x = drawCharacter(canvas, 0x5203, x, y, paint, fm, familyName.c_str(), &zh, 1, fs);
+                x = drawCharacter(canvas, 0x5203, x, y, paint, fm, familyName.c_str(), &ja, 1, fs);
                 // check that emoji characters are found
-                x = drawCharacter(canvas, 0x1f601, x, y, paint, fm, fName.c_str(), NULL, 0, fs);
+                x = drawCharacter(canvas, 0x1f601, x, y, paint, fm, familyName.c_str(), NULL,0, fs);
             }
             y += 24;
         }
@@ -130,11 +130,11 @@ public:
     }
 
 protected:
-    SkString onShortName() SK_OVERRIDE {
+    SkString onShortName() override {
         return SkString("fontmgr_match");
     }
 
-    SkISize onISize() SK_OVERRIDE {
+    SkISize onISize() override {
         return SkISize::Make(640, 1024);
     }
 
@@ -176,7 +176,7 @@ protected:
         }
     }
 
-    void onDraw(SkCanvas* canvas) SK_OVERRIDE {
+    void onDraw(SkCanvas* canvas) override {
         SkPaint paint;
         paint.setAntiAlias(true);
         paint.setLCDRenderText(true);
@@ -237,15 +237,15 @@ public:
     }
 
 protected:
-    SkString onShortName() SK_OVERRIDE {
+    SkString onShortName() override {
         return fName;
     }
 
-    SkISize onISize() SK_OVERRIDE {
+    SkISize onISize() override {
         return SkISize::Make(1024, 850);
     }
 
-    void onDraw(SkCanvas* canvas) SK_OVERRIDE {
+    void onDraw(SkCanvas* canvas) override {
         SkPaint paint;
         paint.setAntiAlias(true);
         paint.setSubpixelText(true);

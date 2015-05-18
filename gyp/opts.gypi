@@ -1,3 +1,7 @@
+# Copyright 2015 Google Inc.
+#
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
 {
         'none_sources': [
             '<(skia_src_path)/opts/SkBitmapProcState_opts_none.cpp',
@@ -19,7 +23,6 @@
             '<(skia_src_path)/opts/SkTextureCompression_opts_arm.cpp',
             '<(skia_src_path)/opts/SkUtils_opts_arm.cpp',
             '<(skia_src_path)/opts/SkXfermode_opts_arm.cpp',
-            '<(skia_src_path)/opts/memset.arm.S',
         ],
         'neon_sources': [
             '<(skia_src_path)/opts/SkBitmapProcState_arm_neon.cpp',
@@ -29,9 +32,8 @@
             '<(skia_src_path)/opts/SkBlurImage_opts_neon.cpp',
             '<(skia_src_path)/opts/SkMorphology_opts_neon.cpp',
             '<(skia_src_path)/opts/SkTextureCompression_opts_neon.cpp',
+            '<(skia_src_path)/opts/SkUtils_opts_arm_neon.cpp',
             '<(skia_src_path)/opts/SkXfermode_opts_arm_neon.cpp',
-            '<(skia_src_path)/opts/memset16_neon.S',
-            '<(skia_src_path)/opts/memset32_neon.S',
         ],
         'arm64_sources': [
             '<(skia_src_path)/opts/SkBitmapProcState_arm_neon.cpp',

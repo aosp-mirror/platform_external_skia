@@ -25,10 +25,9 @@ public:
 
     static SkXfermodeImageFilter* Create(SkXfermode* mode, SkImageFilter* background,
                                          SkImageFilter* foreground = NULL,
-                                         const CropRect* cropRect = NULL,
-                                         uint32_t uniqueID = 0) {
+                                         const CropRect* cropRect = NULL) {
         SkImageFilter* inputs[2] = { background, foreground };
-        return SkNEW_ARGS(SkXfermodeImageFilter, (mode, inputs, cropRect, uniqueID));
+        return SkNEW_ARGS(SkXfermodeImageFilter, (mode, inputs, cropRect));
     }
 
     SK_TO_STRING_OVERRIDE()
@@ -38,17 +37,17 @@ public:
                                const SkBitmap& src,
                                const Context& ctx,
                                SkBitmap* dst,
-                               SkIPoint* offset) const SK_OVERRIDE;
+                               SkIPoint* offset) const override;
 #if SK_SUPPORT_GPU
-    bool canFilterImageGPU() const SK_OVERRIDE;
+    bool canFilterImageGPU() const override;
     virtual bool filterImageGPU(Proxy* proxy, const SkBitmap& src, const Context& ctx,
-                                SkBitmap* result, SkIPoint* offset) const SK_OVERRIDE;
+                                SkBitmap* result, SkIPoint* offset) const override;
 #endif
 
 protected:
     SkXfermodeImageFilter(SkXfermode* mode, SkImageFilter* inputs[2],
-                          const CropRect* cropRect, uint32_t uniqueID);
-    void flatten(SkWriteBuffer&) const SK_OVERRIDE;
+                          const CropRect* cropRect);
+    void flatten(SkWriteBuffer&) const override;
 
 private:
     SkXfermode* fMode;

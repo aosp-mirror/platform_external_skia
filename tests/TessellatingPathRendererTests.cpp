@@ -5,6 +5,8 @@
  * found in the LICENSE file.
  */
 
+#include "SkPath.h"
+
 #if SK_SUPPORT_GPU
 #include "GrContextFactory.h"
 #include "GrTessellatingPathRenderer.h"
@@ -234,21 +236,23 @@ static void test_path(GrDrawTarget* dt, GrRenderTarget* rt, const SkPath& path) 
     GrTessellatingPathRenderer tess;
     GrPipelineBuilder pipelineBuilder;
     pipelineBuilder.setRenderTarget(rt);
-    SkStrokeRec stroke(SkStrokeRec::kFill_InitStyle);
+    GrStrokeInfo stroke(SkStrokeRec::kFill_InitStyle);
     tess.drawPath(dt, &pipelineBuilder, SK_ColorWHITE, SkMatrix::I(), path, stroke, false);
 }
 
 DEF_GPUTEST(TessellatingPathRendererTests, reporter, factory) {
     GrContext* context = factory->get(static_cast<GrContextFactory::GLContextType>(0));
+    if (NULL == context) {
+        return;
+    }
     GrSurfaceDesc desc;
     desc.fFlags = kRenderTarget_GrSurfaceFlag;
     desc.fWidth = 800;
     desc.fHeight = 800;
     desc.fConfig = kSkia8888_GrPixelConfig;
     desc.fOrigin = kTopLeft_GrSurfaceOrigin;
-    SkAutoTUnref<GrTexture> texture(
-        context->refScratchTexture(desc, GrContext::kExact_ScratchTexMatch)
-    );
+    SkAutoTUnref<GrTexture> texture(context->textureProvider()->refScratchTexture(desc,
+        GrTextureProvider::kExact_ScratchTexMatch));
     GrTestTarget tt;
     context->getTestTarget(&tt);
     GrRenderTarget* rt = texture->asRenderTarget();

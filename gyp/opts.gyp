@@ -1,3 +1,7 @@
+# Copyright 2015 Google Inc.
+#
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
 # Gyp file for building opts target.
 {
   # Source lists live in opts.gypi.  This makes it easier to maintain our Chrome GYP/GN setup.
@@ -61,14 +65,6 @@
           'conditions': [
             [ 'arm_neon == 1 or arm_neon_optional == 1', {
               'dependencies': [ 'opts_neon' ]
-            }],
-            [ 'skia_os == "ios"', {
-              'sources!': [
-                # these fail to compile under xcode for ios
-                '../src/opts/memset.arm.S',
-                '../src/opts/SkBitmapProcState_opts_arm.cpp',
-                '../src/opts/SkBlitRow_opts_arm.cpp',
-              ],
             }],
           ],
         }],

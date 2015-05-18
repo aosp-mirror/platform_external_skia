@@ -179,8 +179,6 @@ bool operator==(const SkPath& a, const SkPath& b) {
 }
 
 void SkPath::swap(SkPath& that) {
-    SkASSERT(&that != NULL);
-
     if (this != &that) {
         fPathRef.swap(&that.fPathRef);
         SkTSwap<int>(fLastMoveToIndex, that.fLastMoveToIndex);
@@ -396,13 +394,16 @@ bool SkPath::isRectContour(bool allowPartial, int* currVerb, const SkPoint** pts
     int nextDirection = 0;
     bool closedOrMoved = false;
     bool autoClose = false;
+    bool insertClose = false;
     int verbCnt = fPathRef->countVerbs();
     while (*currVerb < verbCnt && (!allowPartial || !autoClose)) {
-        switch (fPathRef->atVerb(*currVerb)) {
+        uint8_t verb = insertClose ? (uint8_t) kClose_Verb : fPathRef->atVerb(*currVerb);
+        switch (verb) {
             case kClose_Verb:
                 savePts = pts;
                 pts = *ptsPtr;
                 autoClose = true;
+                insertClose = false;
             case kLine_Verb: {
                 SkScalar left = last.fX;
                 SkScalar top = last.fY;
@@ -455,6 +456,11 @@ bool SkPath::isRectContour(bool allowPartial, int* currVerb, const SkPoint** pts
             case kCubic_Verb:
                 return false; // quadratic, cubic not allowed
             case kMove_Verb:
+                if (allowPartial && !autoClose && firstDirection) {
+                    insertClose = true;
+                    *currVerb -= 1;  // try move again afterwards
+                    goto addMissingClose;
+                }
                 last = *pts++;
                 closedOrMoved = true;
                 break;
@@ -464,6 +470,8 @@ bool SkPath::isRectContour(bool allowPartial, int* currVerb, const SkPoint** pts
         }
         *currVerb += 1;
         lastDirection = nextDirection;
+addMissingClose:
+        ;
     }
     // Success if 4 corners and first point equals last
     bool result = 4 == corners && (first == last || autoClose);
@@ -518,7 +526,7 @@ bool SkPath::isRect(SkRect* rect, bool* isClosed, Direction* direction) const {
     return true;
 }
 
-bool SkPath::isNestedRects(SkRect rects[2], Direction dirs[2]) const {
+bool SkPath::isNestedFillRects(SkRect rects[2], Direction dirs[2]) const {
     SkDEBUGCODE(this->validate();)
     int currVerb = 0;
     const SkPoint* pts = fPathRef->points();
@@ -529,8 +537,12 @@ bool SkPath::isNestedRects(SkRect rects[2], Direction dirs[2]) const {
     }
     const SkPoint* last = pts;
     SkRect testRects[2];
-    if (isRectContour(false, &currVerb, &pts, NULL, &testDirs[1])) {
+    bool isClosed;
+    if (isRectContour(false, &currVerb, &pts, &isClosed, &testDirs[1])) {
         testRects[0].set(first, SkToS32(last - first));
+        if (!isClosed) {
+            pts = fPathRef->points() + fPathRef->countPoints();
+        }
         testRects[1].set(last, SkToS32(pts - last));
         if (testRects[0].contains(testRects[1])) {
             if (rects) {
@@ -615,6 +627,18 @@ bool SkPath::getLastPt(SkPoint* lastPt) const {
         lastPt->set(0, 0);
     }
     return false;
+}
+
+void SkPath::setPt(int index, SkScalar x, SkScalar y) {
+    SkDEBUGCODE(this->validate();)
+
+    int count = fPathRef->countPoints();
+    if (count <= index) {
+        return;
+    } else {
+        SkPathRef::Editor ed(&fPathRef);
+        ed.atPoint(index)->set(x, y);
+    }
 }
 
 void SkPath::setLastPt(SkScalar x, SkScalar y) {
@@ -924,17 +948,6 @@ static void angles_to_unit_vectors(SkScalar startAngle, SkScalar sweepAngle,
     *dir = sweepAngle > 0 ? kCW_SkRotationDirection : kCCW_SkRotationDirection;
 }
 
-#ifdef SK_SUPPORT_LEGACY_ARCTO_QUADS
-static int build_arc_points(const SkRect& oval, const SkVector& start, const SkVector& stop,
-                            SkRotationDirection dir, SkPoint pts[kSkBuildQuadArcStorage]) {
-    SkMatrix    matrix;
-
-    matrix.setScale(SkScalarHalf(oval.width()), SkScalarHalf(oval.height()));
-    matrix.postTranslate(oval.centerX(), oval.centerY());
-
-    return SkBuildQuadArc(start, stop, dir, &matrix, pts);
-}
-#else
 /**
  *  If this returns 0, then the caller should just line-to the singlePt, else it should
  *  ignore singlePt and append the specified number of conics.
@@ -953,7 +966,6 @@ static int build_arc_conics(const SkRect& oval, const SkVector& start, const SkV
     }
     return count;
 }
-#endif
 
 void SkPath::addRoundRect(const SkRect& rect, const SkScalar radii[],
                           Direction dir) {
@@ -1130,17 +1142,6 @@ void SkPath::arcTo(const SkRect& oval, SkScalar startAngle, SkScalar sweepAngle,
     SkRotationDirection dir;
     angles_to_unit_vectors(startAngle, sweepAngle, &startV, &stopV, &dir);
 
-#ifdef SK_SUPPORT_LEGACY_ARCTO_QUADS
-    SkPoint pts[kSkBuildQuadArcStorage];
-    int count = build_arc_points(oval, startV, stopV, dir, pts);
-    SkASSERT((count & 1) == 1);
-
-    this->incReserve(count);
-    forceMoveTo ? this->moveTo(pts[0]) : this->lineTo(pts[0]);
-    for (int i = 1; i < count; i += 2) {
-        this->quadTo(pts[i], pts[i+1]);
-    }
-#else
     SkPoint singlePt;
     SkConic conics[SkConic::kMaxConicsForArc];
     int count = build_arc_conics(oval, startV, stopV, dir, conics, &singlePt);
@@ -1154,7 +1155,6 @@ void SkPath::arcTo(const SkRect& oval, SkScalar startAngle, SkScalar sweepAngle,
     } else {
         forceMoveTo ? this->moveTo(singlePt) : this->lineTo(singlePt);
     }
-#endif
 }
 
 void SkPath::addArc(const SkRect& oval, SkScalar startAngle, SkScalar sweepAngle) {
@@ -1777,7 +1777,7 @@ SkPath::RawIter::RawIter() {
 #ifdef SK_DEBUG
     fPts = NULL;
     fConicWeights = NULL;
-    fMoveTo.fX = fMoveTo.fY = fLastPt.fX = fLastPt.fY = 0;
+    fMoveTo.fX = fMoveTo.fY = 0;
 #endif
     // need to init enough to make next() harmlessly return kDone_Verb
     fVerbs = NULL;
@@ -1794,7 +1794,6 @@ void SkPath::RawIter::setPath(const SkPath& path) {
     fVerbStop = path.fPathRef->verbsMemBegin();
     fConicWeights = path.fPathRef->conicWeights() - 1; // begin one behind
     fMoveTo.fX = fMoveTo.fY = 0;
-    fLastPt.fX = fLastPt.fY = 0;
 }
 
 SkPath::Verb SkPath::RawIter::next(SkPoint pts[4]) {
@@ -1809,34 +1808,31 @@ SkPath::Verb SkPath::RawIter::next(SkPoint pts[4]) {
 
     switch (verb) {
         case kMove_Verb:
-            pts[0] = *srcPts;
-            fMoveTo = srcPts[0];
-            fLastPt = fMoveTo;
+            fMoveTo = pts[0] = srcPts[0];
             srcPts += 1;
             break;
         case kLine_Verb:
-            pts[0] = fLastPt;
+            pts[0] = srcPts[-1];
             pts[1] = srcPts[0];
-            fLastPt = srcPts[0];
             srcPts += 1;
             break;
         case kConic_Verb:
             fConicWeights += 1;
             // fall-through
         case kQuad_Verb:
-            pts[0] = fLastPt;
-            memcpy(&pts[1], srcPts, 2 * sizeof(SkPoint));
-            fLastPt = srcPts[1];
+            pts[0] = srcPts[-1];
+            pts[1] = srcPts[0];
+            pts[2] = srcPts[1];
             srcPts += 2;
             break;
         case kCubic_Verb:
-            pts[0] = fLastPt;
-            memcpy(&pts[1], srcPts, 3 * sizeof(SkPoint));
-            fLastPt = srcPts[2];
+            pts[0] = srcPts[-1];
+            pts[1] = srcPts[0];
+            pts[2] = srcPts[1];
+            pts[3] = srcPts[2];
             srcPts += 3;
             break;
         case kClose_Verb:
-            fLastPt = fMoveTo;
             pts[0] = fMoveTo;
             break;
     }
@@ -1976,11 +1972,13 @@ void SkPath::dump(SkWStream* wStream, bool forceClose, bool dumpAsHex) const {
                 verb = kDone_Verb;  // stop the loop
                 break;
         }
+        if (!wStream && builder.size()) {
+            SkDebugf("%s", builder.c_str());
+            builder.reset();
+        }
     }
     if (wStream) {
         wStream->writeText(builder.c_str());
-    } else {
-        SkDebugf("%s", builder.c_str());
     }
 }
 
@@ -1994,7 +1992,6 @@ void SkPath::dumpHex() const {
 
 #ifdef SK_DEBUG
 void SkPath::validate() const {
-    SkASSERT(this != NULL);
     SkASSERT((fFillType & ~3) == 0);
 
 #ifdef SK_DEBUG_PATH

@@ -9,36 +9,64 @@
 
 #include "GrGpu.h"
 
-#include "GrBufferAllocPool.h"
 #include "GrContext.h"
 #include "GrDrawTargetCaps.h"
 #include "GrGpuResourcePriv.h"
 #include "GrIndexBuffer.h"
 #include "GrResourceCache.h"
 #include "GrRenderTargetPriv.h"
-#include "GrStencilBuffer.h"
+#include "GrStencilAttachment.h"
 #include "GrVertexBuffer.h"
+#include "GrVertices.h"
+
+GrVertices& GrVertices::operator =(const GrVertices& di) {
+    fPrimitiveType  = di.fPrimitiveType;
+    fStartVertex    = di.fStartVertex;
+    fStartIndex     = di.fStartIndex;
+    fVertexCount    = di.fVertexCount;
+    fIndexCount     = di.fIndexCount;
+
+    fInstanceCount          = di.fInstanceCount;
+    fVerticesPerInstance    = di.fVerticesPerInstance;
+    fIndicesPerInstance     = di.fIndicesPerInstance;
+    fMaxInstancesPerDraw    = di.fMaxInstancesPerDraw;
+
+    fVertexBuffer.reset(di.vertexBuffer());
+    fIndexBuffer.reset(di.indexBuffer());
+
+    return *this;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
 GrGpu::GrGpu(GrContext* context)
     : fResetTimestamp(kExpiredTimestamp+1)
     , fResetBits(kAll_GrBackendState)
-    , fQuadIndexBuffer(NULL)
     , fGpuTraceMarkerCount(0)
     , fContext(context) {
 }
 
-GrGpu::~GrGpu() {
-    SkSafeSetNull(fQuadIndexBuffer);
-}
+GrGpu::~GrGpu() {}
 
 void GrGpu::contextAbandoned() {}
 
 ////////////////////////////////////////////////////////////////////////////////
 
-GrTexture* GrGpu::createTexture(const GrSurfaceDesc& desc, bool budgeted,
+static GrSurfaceOrigin resolve_origin(GrSurfaceOrigin origin, bool renderTarget) {
+    // By default, GrRenderTargets are GL's normal orientation so that they
+    // can be drawn to by the outside world without the client having
+    // to render upside down.
+    if (kDefault_GrSurfaceOrigin == origin) {
+        return renderTarget ? kBottomLeft_GrSurfaceOrigin : kTopLeft_GrSurfaceOrigin;
+    } else {
+        return origin;
+    }
+}
+
+GrTexture* GrGpu::createTexture(const GrSurfaceDesc& origDesc, bool budgeted,
                                 const void* srcData, size_t rowBytes) {
+    GrSurfaceDesc desc = origDesc;
+
     if (!this->caps()->isConfigTexturable(desc.fConfig)) {
         return NULL;
     }
@@ -48,10 +76,38 @@ GrTexture* GrGpu::createTexture(const GrSurfaceDesc& desc, bool budgeted,
         return NULL;
     }
 
+    // We currently not support multisampled textures
+    if (!isRT && desc.fSampleCnt > 0) {
+        return NULL;
+    }
+
     GrTexture *tex = NULL;
+
+    if (isRT) {
+        int maxRTSize = this->caps()->maxRenderTargetSize();
+        if (desc.fWidth > maxRTSize || desc.fHeight > maxRTSize) {
+            return NULL;
+        }
+    } else {
+        int maxSize = this->caps()->maxTextureSize();
+        if (desc.fWidth > maxSize || desc.fHeight > maxSize) {
+            return NULL;
+        }
+    }
+
+    GrGpuResource::LifeCycle lifeCycle = budgeted ? GrGpuResource::kCached_LifeCycle :
+                                                    GrGpuResource::kUncached_LifeCycle;
+
+    desc.fSampleCnt = SkTMin(desc.fSampleCnt, this->caps()->maxSampleCount());
+    // Attempt to catch un- or wrongly initialized sample counts;
+    SkASSERT(desc.fSampleCnt >= 0 && desc.fSampleCnt <= 64);
+
+    desc.fOrigin = resolve_origin(desc.fOrigin, isRT);
+
     if (GrPixelConfigIsCompressed(desc.fConfig)) {
         // We shouldn't be rendering into this
-        SkASSERT((desc.fFlags & kRenderTarget_GrSurfaceFlag) == 0);
+        SkASSERT(!isRT);
+        SkASSERT(0 == desc.fSampleCnt);
 
         if (!this->caps()->npotTextureTileSupport() &&
             (!SkIsPow2(desc.fWidth) || !SkIsPow2(desc.fHeight))) {
@@ -59,10 +115,10 @@ GrTexture* GrGpu::createTexture(const GrSurfaceDesc& desc, bool budgeted,
         }
 
         this->handleDirtyContext();
-        tex = this->onCreateCompressedTexture(desc, budgeted, srcData);
+        tex = this->onCreateCompressedTexture(desc, lifeCycle, srcData);
     } else {
         this->handleDirtyContext();
-        tex = this->onCreateTexture(desc, budgeted, srcData, rowBytes);
+        tex = this->onCreateTexture(desc, lifeCycle, srcData, rowBytes);
     }
     if (!this->caps()->reuseScratchTextures() && !isRT) {
         tex->resourcePriv().removeScratchKey();
@@ -76,29 +132,40 @@ GrTexture* GrGpu::createTexture(const GrSurfaceDesc& desc, bool budgeted,
     return tex;
 }
 
-bool GrGpu::attachStencilBufferToRenderTarget(GrRenderTarget* rt) {
-    SkASSERT(NULL == rt->renderTargetPriv().getStencilBuffer());
+bool GrGpu::attachStencilAttachmentToRenderTarget(GrRenderTarget* rt) {
+    SkASSERT(NULL == rt->renderTargetPriv().getStencilAttachment());
     GrUniqueKey sbKey;
 
     int width = rt->width();
     int height = rt->height();
+#if 0
     if (this->caps()->oversizedStencilSupport()) {
         width  = SkNextPow2(width);
         height = SkNextPow2(height);
     }
+#endif
 
-    GrStencilBuffer::ComputeSharedStencilBufferKey(width, height, rt->numSamples(), &sbKey);
-    SkAutoTUnref<GrStencilBuffer> sb(static_cast<GrStencilBuffer*>(
+    GrStencilAttachment::ComputeSharedStencilAttachmentKey(width, height, rt->numSamples(), &sbKey);
+    SkAutoTUnref<GrStencilAttachment> sb(static_cast<GrStencilAttachment*>(
         this->getContext()->getResourceCache()->findAndRefUniqueResource(sbKey)));
     if (sb) {
-        if (this->attachStencilBufferToRenderTarget(sb, rt)) {
-            rt->renderTargetPriv().didAttachStencilBuffer(sb);
+        if (this->attachStencilAttachmentToRenderTarget(sb, rt)) {
+            rt->renderTargetPriv().didAttachStencilAttachment(sb);
             return true;
         }
         return false;
     }
-    if (this->createStencilBufferForRenderTarget(rt, width, height)) {
-        GrStencilBuffer* sb = rt->renderTargetPriv().getStencilBuffer();
+    if (this->createStencilAttachmentForRenderTarget(rt, width, height)) {
+        // Right now we're clearing the stencil buffer here after it is
+        // attached to an RT for the first time. When we start matching
+        // stencil buffers with smaller color targets this will no longer
+        // be correct because it won't be guaranteed to clear the entire
+        // sb.
+        // We used to clear down in the GL subclass using a special purpose
+        // FBO. But iOS doesn't allow a stencil-only FBO. It reports unsupported
+        // FBO status.
+        this->clearStencil(rt);
+        GrStencilAttachment* sb = rt->renderTargetPriv().getStencilAttachment();
         sb->resourcePriv().setUniqueKey(sbKey);
         return true;
     } else {
@@ -114,7 +181,7 @@ GrTexture* GrGpu::wrapBackendTexture(const GrBackendTextureDesc& desc) {
     }
     // TODO: defer this and attach dynamically
     GrRenderTarget* tgt = tex->asRenderTarget();
-    if (tgt && !this->attachStencilBufferToRenderTarget(tgt)) {
+    if (tgt && !this->attachStencilAttachmentToRenderTarget(tgt)) {
         tex->unref();
         return NULL;
     } else {
@@ -135,39 +202,6 @@ GrVertexBuffer* GrGpu::createVertexBuffer(size_t size, bool dynamic) {
 GrIndexBuffer* GrGpu::createIndexBuffer(size_t size, bool dynamic) {
     this->handleDirtyContext();
     return this->onCreateIndexBuffer(size, dynamic);
-}
-
-GrIndexBuffer* GrGpu::createInstancedIndexBuffer(const uint16_t* pattern,
-                                                 int patternSize,
-                                                 int reps,
-                                                 int vertCount,
-                                                 bool isDynamic) {
-    size_t bufferSize = patternSize * reps * sizeof(uint16_t);
-    GrGpu* me = const_cast<GrGpu*>(this);
-    GrIndexBuffer* buffer = me->createIndexBuffer(bufferSize, isDynamic);
-    if (buffer) {
-        uint16_t* data = (uint16_t*) buffer->map();
-        bool useTempData = (NULL == data);
-        if (useTempData) {
-            data = SkNEW_ARRAY(uint16_t, reps * patternSize);
-        }
-        for (int i = 0; i < reps; ++i) {
-            int baseIdx = i * patternSize;
-            uint16_t baseVert = (uint16_t)(i * vertCount);
-            for (int j = 0; j < patternSize; ++j) {
-                data[baseIdx+j] = baseVert + pattern[j];
-            }
-        }
-        if (useTempData) {
-            if (!buffer->updateData(data, bufferSize)) {
-                SkFAIL("Can't get indices into buffer!");
-            }
-            SkDELETE_ARRAY(data);
-        } else {
-            buffer->unmap();
-        }
-    }
-    return buffer;
 }
 
 void GrGpu::clear(const SkIRect* rect,
@@ -258,32 +292,13 @@ void GrGpu::removeGpuTraceMarker(const GrGpuTraceMarker* marker) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const int MAX_QUADS = 1 << 12; // max possible: (1 << 14) - 1;
-
-GR_STATIC_ASSERT(4 * MAX_QUADS <= 65535);
-
-static const uint16_t gQuadIndexPattern[] = {
-  0, 1, 2, 0, 2, 3
-};
-
-const GrIndexBuffer* GrGpu::getQuadIndexBuffer() const {
-    if (NULL == fQuadIndexBuffer || fQuadIndexBuffer->wasDestroyed()) {
-        SkSafeUnref(fQuadIndexBuffer);
-        GrGpu* me = const_cast<GrGpu*>(this);
-        fQuadIndexBuffer = me->createInstancedIndexBuffer(gQuadIndexPattern,
-                                                          6,
-                                                          MAX_QUADS,
-                                                          4);
-    }
-
-    return fQuadIndexBuffer;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-void GrGpu::draw(const DrawArgs& args, const GrDrawTarget::DrawInfo& info) {
+void GrGpu::draw(const DrawArgs& args, const GrVertices& vertices) {
     this->handleDirtyContext();
-    this->onDraw(args, info);
+    GrVertices::Iterator iter;
+    const GrNonInstancedVertices* verts = iter.init(vertices);
+    do {
+        this->onDraw(args, *verts);
+    } while ((verts = iter.next()));
 }
 
 void GrGpu::stencilPath(const GrPath* path, const StencilPathState& state) {

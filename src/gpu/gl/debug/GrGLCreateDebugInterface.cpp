@@ -382,8 +382,7 @@ GrGLvoid GR_GL_FUNCTION_TYPE debugGLReadPixels(GrGLint x,
                                                              GrGLenum renderbuffertarget,
                                                              GrGLuint renderBufferID) {
 
-    GrAlwaysAssert(GR_GL_FRAMEBUFFER == target || GR_GL_READ_FRAMEBUFFER == target ||
-                   GR_GL_DRAW_FRAMEBUFFER == target);
+     GrAlwaysAssert(GR_GL_FRAMEBUFFER == target);
      GrAlwaysAssert(GR_GL_COLOR_ATTACHMENT0 == attachment ||
                     GR_GL_DEPTH_ATTACHMENT == attachment ||
                     GR_GL_STENCIL_ATTACHMENT == attachment);
@@ -423,8 +422,7 @@ GrGLvoid GR_GL_FUNCTION_TYPE debugGLReadPixels(GrGLint x,
                                                           GrGLuint textureID,
                                                           GrGLint level) {
 
-    GrAlwaysAssert(GR_GL_FRAMEBUFFER == target || GR_GL_READ_FRAMEBUFFER == target ||
-                   GR_GL_DRAW_FRAMEBUFFER == target);
+     GrAlwaysAssert(GR_GL_FRAMEBUFFER == target);
      GrAlwaysAssert(GR_GL_COLOR_ATTACHMENT0 == attachment ||
                     GR_GL_DEPTH_ATTACHMENT == attachment ||
                     GR_GL_STENCIL_ATTACHMENT == attachment);
@@ -798,7 +796,7 @@ public:
         fWrapped.reset(interface);
     }
 
-    void abandon() const SK_OVERRIDE {
+    void abandon() const override {
         GrDebugGL::abandon();
     }
 
@@ -852,6 +850,7 @@ const GrGLInterface* GrGLCreateDebugInterface() {
     functions->fBindTexture = debugGLBindTexture;
     functions->fBindVertexArray = debugGLBindVertexArray;
     functions->fBlendColor = noOpGLBlendColor;
+    functions->fBlendEquation = noOpGLBlendEquation;
     functions->fBlendFunc = noOpGLBlendFunc;
     functions->fBufferData = debugGLBufferData;
     functions->fBufferSubData = noOpGLBufferSubData;

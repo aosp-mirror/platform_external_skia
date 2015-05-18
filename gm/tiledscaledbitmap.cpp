@@ -31,11 +31,11 @@ public:
     }
 
 protected:
-    SkString onShortName() SK_OVERRIDE {
+    SkString onShortName() override {
         return SkString("tiledscaledbitmap");
     }
 
-    SkISize onISize() SK_OVERRIDE {
+    SkISize onISize() override {
         return SkISize::Make(1016, 616);
     }
 
@@ -50,15 +50,15 @@ protected:
         return bm;
     }
 
-    void onOnceBeforeDraw() SK_OVERRIDE {
+    void onOnceBeforeDraw() override {
         fBitmap = make_bm(360, 288);
     }
 
-    void onDraw(SkCanvas* canvas) SK_OVERRIDE {
+    void onDraw(SkCanvas* canvas) override {
         SkPaint paint;
 
         paint.setAntiAlias(true);
-        paint.setFilterLevel(SkPaint::kHigh_FilterLevel);
+        paint.setFilterQuality(kHigh_SkFilterQuality);
 
         SkMatrix mat;
         mat.setScale(121.f/360.f, 93.f/288.f);

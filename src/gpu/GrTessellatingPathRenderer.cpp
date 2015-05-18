@@ -9,8 +9,10 @@
 
 #include "GrBatch.h"
 #include "GrBatchTarget.h"
+#include "GrBatchTest.h"
 #include "GrDefaultGeoProcFactory.h"
 #include "GrPathUtils.h"
+#include "GrVertices.h"
 #include "SkChunkAlloc.h"
 #include "SkGeometry.h"
 
@@ -67,21 +69,16 @@
  * Only type 2 vertices (see paper) require the O(N) lookups, and these are much less
  * frequent. There may be other data structures worth investigating, however.
  *
- * Note that there is a compile-time flag (SWEEP_IN_X) which changes the orientation of the
- * line sweep algorithms. When SWEEP_IN_X is unset, we sort vertices based on increasing
- * Y coordinate, and secondarily by increasing X coordinate. When SWEEP_IN_X is set, we sort by
- * increasing X coordinate, but secondarily by *decreasing* Y coordinate. This is so that the
- * "left" and "right" orientation in the code remains correct (edges to the left are increasing
- * in Y; edges to the right are decreasing in Y). That is, the setting rotates 90 degrees
- * counterclockwise, rather that transposing.
- *
- * The choice is arbitrary, but most test cases are wider than they are tall, so the
- * default is to sweep in X. In the future, we may want to make this a runtime parameter
- * and base it on the aspect ratio of the clip bounds.
+ * Note that the orientation of the line sweep algorithms is determined by the aspect ratio of the
+ * path bounds. When the path is taller than it is wide, we sort vertices based on increasing Y
+ * coordinate, and secondarily by increasing X coordinate. When the path is wider than it is tall,
+ * we sort by increasing X coordinate, but secondarily by *decreasing* Y coordinate. This is so
+ * that the "left" and "right" orientation in the code remains correct (edges to the left are
+ * increasing in Y; edges to the right are decreasing in Y). That is, the setting rotates 90
+ * degrees counterclockwise, rather that transposing.
  */
 #define LOGGING_ENABLED 0
 #define WIREFRAME 0
-#define SWEEP_IN_X 1
 
 #if LOGGING_ENABLED
 #define LOG printf
@@ -165,29 +162,35 @@ struct Vertex {
 
 /***************************************************************************************/
 
-bool sweep_lt(const SkPoint& a, const SkPoint& b) {
-#if SWEEP_IN_X
+typedef bool (*CompareFunc)(const SkPoint& a, const SkPoint& b);
+
+struct Comparator {
+    CompareFunc sweep_lt;
+    CompareFunc sweep_gt;
+};
+
+bool sweep_lt_horiz(const SkPoint& a, const SkPoint& b) {
     return a.fX == b.fX ? a.fY > b.fY : a.fX < b.fX;
-#else
+}
+
+bool sweep_lt_vert(const SkPoint& a, const SkPoint& b) {
     return a.fY == b.fY ? a.fX < b.fX : a.fY < b.fY;
-#endif
 }
 
-bool sweep_gt(const SkPoint& a, const SkPoint& b) {
-#if SWEEP_IN_X
+bool sweep_gt_horiz(const SkPoint& a, const SkPoint& b) {
     return a.fX == b.fX ? a.fY < b.fY : a.fX > b.fX;
-#else
+}
+
+bool sweep_gt_vert(const SkPoint& a, const SkPoint& b) {
     return a.fY == b.fY ? a.fX > b.fX : a.fY > b.fY;
-#endif
 }
 
-inline void* emit_vertex(Vertex* v, void* data) {
-    SkPoint* d = static_cast<SkPoint*>(data);
-    *d++ = v->fPoint;
-    return d;
+inline SkPoint* emit_vertex(Vertex* v, SkPoint* data) {
+    *data++ = v->fPoint;
+    return data;
 }
 
-void* emit_triangle(Vertex* v0, Vertex* v1, Vertex* v2, void* data) {
+SkPoint* emit_triangle(Vertex* v0, Vertex* v1, Vertex* v2, SkPoint* data) {
 #if WIREFRAME
     data = emit_vertex(v0, data);
     data = emit_vertex(v1, data);
@@ -202,6 +205,12 @@ void* emit_triangle(Vertex* v0, Vertex* v1, Vertex* v2, void* data) {
 #endif
     return data;
 }
+
+struct EdgeList {
+    EdgeList() : fHead(NULL), fTail(NULL) {}
+    Edge* fHead;
+    Edge* fTail;
+};
 
 /**
  * An Edge joins a top Vertex to a bottom Vertex. Edge ordering for the list of "edges above" and
@@ -292,8 +301,8 @@ struct Edge {
         p->fY = SkDoubleToScalar(fTop->fPoint.fY + s * fDY);
         return true;
     }
-    bool isActive(Edge** activeEdges) const {
-        return activeEdges && (fLeft || fRight || *activeEdges == this);
+    bool isActive(EdgeList* activeEdges) const {
+        return activeEdges && (fLeft || fRight || activeEdges->fHead == this);
     }
 };
 
@@ -350,14 +359,11 @@ struct Poly {
             return done;
         }
 
-        void* emit(void* data) {
+        SkPoint* emit(SkPoint* data) {
             Vertex* first = fHead;
             Vertex* v = first->fNext;
             while (v != fTail) {
                 SkASSERT(v && v->fPrev && v->fNext);
-#ifdef SK_DEBUG
-                validate();
-#endif
                 Vertex* prev = v->fPrev;
                 Vertex* curr = v;
                 Vertex* next = v->fNext;
@@ -376,27 +382,10 @@ struct Poly {
                     }
                 } else {
                     v = v->fNext;
-                    SkASSERT(v != fTail);
                 }
             }
             return data;
         }
-
-#ifdef SK_DEBUG
-        void validate() {
-            int winding = sweep_lt(fHead->fPoint, fTail->fPoint) ? 1 : -1;
-            Vertex* top = winding < 0 ? fTail : fHead;
-            Vertex* bottom = winding < 0 ? fHead : fTail;
-            Edge e(top, bottom, winding);
-            for (Vertex* v = fHead->fNext; v != fTail; v = v->fNext) {
-                if (fSide == kRight_Side) {
-                    SkASSERT(!e.isRightOf(v));
-                } else if (fSide == Poly::kLeft_Side) {
-                    SkASSERT(!e.isLeftOf(v));
-                }
-            }
-        }
-#endif
     };
     Poly* addVertex(Vertex* v, Side side, SkChunkAlloc& alloc) {
         LOG("addVertex() to %d at %g (%g, %g), %s side\n", fID, v->fID, v->fPoint.fX, v->fPoint.fY,
@@ -410,9 +399,6 @@ struct Poly {
             fActive = ALLOC_NEW(MonotonePoly, (), alloc);
         }
         if (fActive->addVertex(v, side, alloc)) {
-#ifdef SK_DEBUG
-            fActive->validate();
-#endif
             if (fTail) {
                 fActive->fPrev = fTail;
                 fTail->fNext = fActive;
@@ -441,7 +427,7 @@ struct Poly {
         }
         addVertex(v, fActive->fSide == kLeft_Side ? kRight_Side : kLeft_Side, alloc);
     }
-    void* emit(void *data) {
+    SkPoint* emit(SkPoint *data) {
         if (fCount < 3) {
             return data;
         }
@@ -476,67 +462,6 @@ Poly* new_poly(Poly** head, Vertex* v, int winding, SkChunkAlloc& alloc) {
     *head = poly;
     return poly;
 }
-
-#ifdef SK_DEBUG
-void validate_edges(Edge* head) {
-    for (Edge* e = head; e != NULL; e = e->fRight) {
-        SkASSERT(e->fTop != e->fBottom);
-        if (e->fLeft) {
-            SkASSERT(e->fLeft->fRight == e);
-            if (sweep_gt(e->fTop->fPoint, e->fLeft->fTop->fPoint)) {
-                SkASSERT(e->fLeft->isLeftOf(e->fTop));
-            }
-            if (sweep_lt(e->fBottom->fPoint, e->fLeft->fBottom->fPoint)) {
-                SkASSERT(e->fLeft->isLeftOf(e->fBottom));
-            }
-        } else {
-            SkASSERT(e == head);
-        }
-        if (e->fRight) {
-            SkASSERT(e->fRight->fLeft == e);
-            if (sweep_gt(e->fTop->fPoint, e->fRight->fTop->fPoint)) {
-                SkASSERT(e->fRight->isRightOf(e->fTop));
-            }
-            if (sweep_lt(e->fBottom->fPoint, e->fRight->fBottom->fPoint)) {
-                SkASSERT(e->fRight->isRightOf(e->fBottom));
-            }
-        }
-    }
-}
-
-void validate_connectivity(Vertex* v) {
-    for (Edge* e = v->fFirstEdgeAbove; e != NULL; e = e->fNextEdgeAbove) {
-        SkASSERT(e->fBottom == v);
-        if (e->fPrevEdgeAbove) {
-            SkASSERT(e->fPrevEdgeAbove->fNextEdgeAbove == e);
-            SkASSERT(e->fPrevEdgeAbove->isLeftOf(e->fTop));
-        } else {
-            SkASSERT(e == v->fFirstEdgeAbove);
-        }
-        if (e->fNextEdgeAbove) {
-            SkASSERT(e->fNextEdgeAbove->fPrevEdgeAbove == e);
-            SkASSERT(e->fNextEdgeAbove->isRightOf(e->fTop));
-        } else {
-            SkASSERT(e == v->fLastEdgeAbove);
-        }
-    }
-    for (Edge* e = v->fFirstEdgeBelow; e != NULL; e = e->fNextEdgeBelow) {
-        SkASSERT(e->fTop == v);
-        if (e->fPrevEdgeBelow) {
-            SkASSERT(e->fPrevEdgeBelow->fNextEdgeBelow == e);
-            SkASSERT(e->fPrevEdgeBelow->isLeftOf(e->fBottom));
-        } else {
-            SkASSERT(e == v->fFirstEdgeBelow);
-        }
-        if (e->fNextEdgeBelow) {
-            SkASSERT(e->fNextEdgeBelow->fPrevEdgeBelow == e);
-            SkASSERT(e->fNextEdgeBelow->isRightOf(e->fBottom));
-        } else {
-            SkASSERT(e == v->fLastEdgeBelow);
-        }
-    }
-}
-#endif
 
 Vertex* append_point_to_contour(const SkPoint& p, Vertex* prev, Vertex** head,
                                 SkChunkAlloc& alloc) {
@@ -641,7 +566,7 @@ void path_to_contours(const SkPath& path, SkScalar tolerance, const SkRect& clip
                 SkScalar weight = iter.conicWeight();
                 const SkPoint* quadPts = converter.computeQuads(pts, weight, toleranceSqd);
                 for (int i = 0; i < converter.countQuads(); ++i) {
-                    int pointsLeft = GrPathUtils::quadraticPointCount(quadPts, toleranceSqd);
+                    int pointsLeft = GrPathUtils::quadraticPointCount(quadPts, tolerance);
                     prev = generate_quadratic_points(quadPts[0], quadPts[1], quadPts[2],
                                                      toleranceSqd, prev, &head, pointsLeft, alloc);
                     quadPts += 2;
@@ -662,13 +587,13 @@ void path_to_contours(const SkPath& path, SkScalar tolerance, const SkRect& clip
                 break;
             }
             case SkPath::kQuad_Verb: {
-                int pointsLeft = GrPathUtils::quadraticPointCount(pts, toleranceSqd);
+                int pointsLeft = GrPathUtils::quadraticPointCount(pts, tolerance);
                 prev = generate_quadratic_points(pts[0], pts[1], pts[2], toleranceSqd, prev,
                                                  &head, pointsLeft, alloc);
                 break;
             }
             case SkPath::kCubic_Verb: {
-                int pointsLeft = GrPathUtils::cubicPointCount(pts, toleranceSqd);
+                int pointsLeft = GrPathUtils::cubicPointCount(pts, tolerance);
                 prev = generate_cubic_points(pts[0], pts[1], pts[2], pts[3],
                                 toleranceSqd, prev, &head, pointsLeft, alloc);
                 break;
@@ -709,54 +634,54 @@ inline bool apply_fill_type(SkPath::FillType fillType, int winding) {
     }
 }
 
-Edge* new_edge(Vertex* prev, Vertex* next, SkChunkAlloc& alloc) {
-    int winding = sweep_lt(prev->fPoint, next->fPoint) ? 1 : -1;
+Edge* new_edge(Vertex* prev, Vertex* next, SkChunkAlloc& alloc, Comparator& c) {
+    int winding = c.sweep_lt(prev->fPoint, next->fPoint) ? 1 : -1;
     Vertex* top = winding < 0 ? next : prev;
     Vertex* bottom = winding < 0 ? prev : next;
     return ALLOC_NEW(Edge, (top, bottom, winding), alloc);
 }
 
-void remove_edge(Edge* edge, Edge** head) {
+void remove_edge(Edge* edge, EdgeList* edges) {
     LOG("removing edge %g -> %g\n", edge->fTop->fID, edge->fBottom->fID);
-    SkASSERT(edge->isActive(head));
-    remove<Edge, &Edge::fLeft, &Edge::fRight>(edge, head, NULL);
+    SkASSERT(edge->isActive(edges));
+    remove<Edge, &Edge::fLeft, &Edge::fRight>(edge, &edges->fHead, &edges->fTail);
 }
 
-void insert_edge(Edge* edge, Edge* prev, Edge** head) {
+void insert_edge(Edge* edge, Edge* prev, EdgeList* edges) {
     LOG("inserting edge %g -> %g\n", edge->fTop->fID, edge->fBottom->fID);
-    SkASSERT(!edge->isActive(head));
-    Edge* next = prev ? prev->fRight : *head;
-    insert<Edge, &Edge::fLeft, &Edge::fRight>(edge, prev, next, head, NULL);
+    SkASSERT(!edge->isActive(edges));
+    Edge* next = prev ? prev->fRight : edges->fHead;
+    insert<Edge, &Edge::fLeft, &Edge::fRight>(edge, prev, next, &edges->fHead, &edges->fTail);
 }
 
-void find_enclosing_edges(Vertex* v, Edge* head, Edge** left, Edge** right) {
+void find_enclosing_edges(Vertex* v, EdgeList* edges, Edge** left, Edge** right) {
     if (v->fFirstEdgeAbove) {
         *left = v->fFirstEdgeAbove->fLeft;
         *right = v->fLastEdgeAbove->fRight;
         return;
     }
-    Edge* prev = NULL;
-    Edge* next;
-    for (next = head; next != NULL; next = next->fRight) {
-        if (next->isRightOf(v)) {
+    Edge* next = NULL;
+    Edge* prev;
+    for (prev = edges->fTail; prev != NULL; prev = prev->fLeft) {
+        if (prev->isLeftOf(v)) {
             break;
         }
-        prev = next;
+        next = prev;
     }
     *left = prev;
     *right = next;
     return;
 }
 
-void find_enclosing_edges(Edge* edge, Edge* head, Edge** left, Edge** right) {
+void find_enclosing_edges(Edge* edge, EdgeList* edges, Comparator& c, Edge** left, Edge** right) {
     Edge* prev = NULL;
     Edge* next;
-    for (next = head; next != NULL; next = next->fRight) {
-        if ((sweep_gt(edge->fTop->fPoint, next->fTop->fPoint) && next->isRightOf(edge->fTop)) ||
-            (sweep_gt(next->fTop->fPoint, edge->fTop->fPoint) && edge->isLeftOf(next->fTop)) ||
-            (sweep_lt(edge->fBottom->fPoint, next->fBottom->fPoint) &&
+    for (next = edges->fHead; next != NULL; next = next->fRight) {
+        if ((c.sweep_gt(edge->fTop->fPoint, next->fTop->fPoint) && next->isRightOf(edge->fTop)) ||
+            (c.sweep_gt(next->fTop->fPoint, edge->fTop->fPoint) && edge->isLeftOf(next->fTop)) ||
+            (c.sweep_lt(edge->fBottom->fPoint, next->fBottom->fPoint) &&
              next->isRightOf(edge->fBottom)) ||
-            (sweep_lt(next->fBottom->fPoint, edge->fBottom->fPoint) &&
+            (c.sweep_lt(next->fBottom->fPoint, edge->fBottom->fPoint) &&
              edge->isLeftOf(next->fBottom))) {
             break;
         }
@@ -767,7 +692,7 @@ void find_enclosing_edges(Edge* edge, Edge* head, Edge** left, Edge** right) {
     return;
 }
 
-void fix_active_state(Edge* edge, Edge** activeEdges) {
+void fix_active_state(Edge* edge, EdgeList* activeEdges, Comparator& c) {
     if (edge->isActive(activeEdges)) {
         if (edge->fBottom->fProcessed || !edge->fTop->fProcessed) {
             remove_edge(edge, activeEdges);
@@ -775,15 +700,14 @@ void fix_active_state(Edge* edge, Edge** activeEdges) {
     } else if (edge->fTop->fProcessed && !edge->fBottom->fProcessed) {
         Edge* left;
         Edge* right;
-        find_enclosing_edges(edge, *activeEdges, &left, &right);
+        find_enclosing_edges(edge, activeEdges, c, &left, &right);
         insert_edge(edge, left, activeEdges);
     }
 }
 
-void insert_edge_above(Edge* edge, Vertex* v) {
+void insert_edge_above(Edge* edge, Vertex* v, Comparator& c) {
     if (edge->fTop->fPoint == edge->fBottom->fPoint ||
-        sweep_gt(edge->fTop->fPoint, edge->fBottom->fPoint)) {
-        SkASSERT(false);
+        c.sweep_gt(edge->fTop->fPoint, edge->fBottom->fPoint)) {
         return;
     }
     LOG("insert edge (%g -> %g) above vertex %g\n", edge->fTop->fID, edge->fBottom->fID, v->fID);
@@ -799,10 +723,9 @@ void insert_edge_above(Edge* edge, Vertex* v) {
         edge, prev, next, &v->fFirstEdgeAbove, &v->fLastEdgeAbove);
 }
 
-void insert_edge_below(Edge* edge, Vertex* v) {
+void insert_edge_below(Edge* edge, Vertex* v, Comparator& c) {
     if (edge->fTop->fPoint == edge->fBottom->fPoint ||
-        sweep_gt(edge->fTop->fPoint, edge->fBottom->fPoint)) {
-        SkASSERT(false);
+        c.sweep_gt(edge->fTop->fPoint, edge->fBottom->fPoint)) {
         return;
     }
     LOG("insert edge (%g -> %g) below vertex %g\n", edge->fTop->fID, edge->fBottom->fID, v->fID);
@@ -832,39 +755,39 @@ void remove_edge_below(Edge* edge) {
         edge, &edge->fTop->fFirstEdgeBelow, &edge->fTop->fLastEdgeBelow);
 }
 
-void erase_edge_if_zero_winding(Edge* edge, Edge** head) {
+void erase_edge_if_zero_winding(Edge* edge, EdgeList* edges) {
     if (edge->fWinding != 0) {
         return;
     }
     LOG("erasing edge (%g -> %g)\n", edge->fTop->fID, edge->fBottom->fID);
     remove_edge_above(edge);
     remove_edge_below(edge);
-    if (edge->isActive(head)) {
-        remove_edge(edge, head);
+    if (edge->isActive(edges)) {
+        remove_edge(edge, edges);
     }
 }
 
-void merge_collinear_edges(Edge* edge, Edge** activeEdges);
+void merge_collinear_edges(Edge* edge, EdgeList* activeEdges, Comparator& c);
 
-void set_top(Edge* edge, Vertex* v, Edge** activeEdges) {
+void set_top(Edge* edge, Vertex* v, EdgeList* activeEdges, Comparator& c) {
     remove_edge_below(edge);
     edge->fTop = v;
     edge->recompute();
-    insert_edge_below(edge, v);
-    fix_active_state(edge, activeEdges);
-    merge_collinear_edges(edge, activeEdges);
+    insert_edge_below(edge, v, c);
+    fix_active_state(edge, activeEdges, c);
+    merge_collinear_edges(edge, activeEdges, c);
 }
 
-void set_bottom(Edge* edge, Vertex* v, Edge** activeEdges) {
+void set_bottom(Edge* edge, Vertex* v, EdgeList* activeEdges, Comparator& c) {
     remove_edge_above(edge);
     edge->fBottom = v;
     edge->recompute();
-    insert_edge_above(edge, v);
-    fix_active_state(edge, activeEdges);
-    merge_collinear_edges(edge, activeEdges);
+    insert_edge_above(edge, v, c);
+    fix_active_state(edge, activeEdges, c);
+    merge_collinear_edges(edge, activeEdges, c);
 }
 
-void merge_edges_above(Edge* edge, Edge* other, Edge** activeEdges) {
+void merge_edges_above(Edge* edge, Edge* other, EdgeList* activeEdges, Comparator& c) {
     if (coincident(edge->fTop->fPoint, other->fTop->fPoint)) {
         LOG("merging coincident above edges (%g, %g) -> (%g, %g)\n",
             edge->fTop->fPoint.fX, edge->fTop->fPoint.fY,
@@ -873,18 +796,18 @@ void merge_edges_above(Edge* edge, Edge* other, Edge** activeEdges) {
         erase_edge_if_zero_winding(other, activeEdges);
         edge->fWinding = 0;
         erase_edge_if_zero_winding(edge, activeEdges);
-    } else if (sweep_lt(edge->fTop->fPoint, other->fTop->fPoint)) {
+    } else if (c.sweep_lt(edge->fTop->fPoint, other->fTop->fPoint)) {
         other->fWinding += edge->fWinding;
         erase_edge_if_zero_winding(other, activeEdges);
-        set_bottom(edge, other->fTop, activeEdges);
+        set_bottom(edge, other->fTop, activeEdges, c);
     } else {
         edge->fWinding += other->fWinding;
         erase_edge_if_zero_winding(edge, activeEdges);
-        set_bottom(other, edge->fTop, activeEdges);
+        set_bottom(other, edge->fTop, activeEdges, c);
     }
 }
 
-void merge_edges_below(Edge* edge, Edge* other, Edge** activeEdges) {
+void merge_edges_below(Edge* edge, Edge* other, EdgeList* activeEdges, Comparator& c) {
     if (coincident(edge->fBottom->fPoint, other->fBottom->fPoint)) {
         LOG("merging coincident below edges (%g, %g) -> (%g, %g)\n",
             edge->fTop->fPoint.fX, edge->fTop->fPoint.fY,
@@ -893,105 +816,107 @@ void merge_edges_below(Edge* edge, Edge* other, Edge** activeEdges) {
         erase_edge_if_zero_winding(other, activeEdges);
         edge->fWinding = 0;
         erase_edge_if_zero_winding(edge, activeEdges);
-    } else if (sweep_lt(edge->fBottom->fPoint, other->fBottom->fPoint)) {
+    } else if (c.sweep_lt(edge->fBottom->fPoint, other->fBottom->fPoint)) {
         edge->fWinding += other->fWinding;
         erase_edge_if_zero_winding(edge, activeEdges);
-        set_top(other, edge->fBottom, activeEdges);
+        set_top(other, edge->fBottom, activeEdges, c);
     } else {
         other->fWinding += edge->fWinding;
         erase_edge_if_zero_winding(other, activeEdges);
-        set_top(edge, other->fBottom, activeEdges);
+        set_top(edge, other->fBottom, activeEdges, c);
     }
 }
 
-void merge_collinear_edges(Edge* edge, Edge** activeEdges) {
+void merge_collinear_edges(Edge* edge, EdgeList* activeEdges, Comparator& c) {
     if (edge->fPrevEdgeAbove && (edge->fTop == edge->fPrevEdgeAbove->fTop ||
                                  !edge->fPrevEdgeAbove->isLeftOf(edge->fTop))) {
-        merge_edges_above(edge, edge->fPrevEdgeAbove, activeEdges);
+        merge_edges_above(edge, edge->fPrevEdgeAbove, activeEdges, c);
     } else if (edge->fNextEdgeAbove && (edge->fTop == edge->fNextEdgeAbove->fTop ||
                                         !edge->isLeftOf(edge->fNextEdgeAbove->fTop))) {
-        merge_edges_above(edge, edge->fNextEdgeAbove, activeEdges);
+        merge_edges_above(edge, edge->fNextEdgeAbove, activeEdges, c);
     }
     if (edge->fPrevEdgeBelow && (edge->fBottom == edge->fPrevEdgeBelow->fBottom ||
                                  !edge->fPrevEdgeBelow->isLeftOf(edge->fBottom))) {
-        merge_edges_below(edge, edge->fPrevEdgeBelow, activeEdges);
+        merge_edges_below(edge, edge->fPrevEdgeBelow, activeEdges, c);
     } else if (edge->fNextEdgeBelow && (edge->fBottom == edge->fNextEdgeBelow->fBottom ||
                                         !edge->isLeftOf(edge->fNextEdgeBelow->fBottom))) {
-        merge_edges_below(edge, edge->fNextEdgeBelow, activeEdges);
+        merge_edges_below(edge, edge->fNextEdgeBelow, activeEdges, c);
     }
 }
 
-void split_edge(Edge* edge, Vertex* v, Edge** activeEdges, SkChunkAlloc& alloc);
+void split_edge(Edge* edge, Vertex* v, EdgeList* activeEdges, Comparator& c, SkChunkAlloc& alloc);
 
-void cleanup_active_edges(Edge* edge, Edge** activeEdges, SkChunkAlloc& alloc) {
+void cleanup_active_edges(Edge* edge, EdgeList* activeEdges, Comparator& c, SkChunkAlloc& alloc) {
     Vertex* top = edge->fTop;
     Vertex* bottom = edge->fBottom;
     if (edge->fLeft) {
         Vertex* leftTop = edge->fLeft->fTop;
         Vertex* leftBottom = edge->fLeft->fBottom;
-        if (sweep_gt(top->fPoint, leftTop->fPoint) && !edge->fLeft->isLeftOf(top)) {
-            split_edge(edge->fLeft, edge->fTop, activeEdges, alloc);
-        } else if (sweep_gt(leftTop->fPoint, top->fPoint) && !edge->isRightOf(leftTop)) {
-            split_edge(edge, leftTop, activeEdges, alloc);
-        } else if (sweep_lt(bottom->fPoint, leftBottom->fPoint) && !edge->fLeft->isLeftOf(bottom)) {
-            split_edge(edge->fLeft, bottom, activeEdges, alloc);
-        } else if (sweep_lt(leftBottom->fPoint, bottom->fPoint) && !edge->isRightOf(leftBottom)) {
-            split_edge(edge, leftBottom, activeEdges, alloc);
+        if (c.sweep_gt(top->fPoint, leftTop->fPoint) && !edge->fLeft->isLeftOf(top)) {
+            split_edge(edge->fLeft, edge->fTop, activeEdges, c, alloc);
+        } else if (c.sweep_gt(leftTop->fPoint, top->fPoint) && !edge->isRightOf(leftTop)) {
+            split_edge(edge, leftTop, activeEdges, c, alloc);
+        } else if (c.sweep_lt(bottom->fPoint, leftBottom->fPoint) &&
+                   !edge->fLeft->isLeftOf(bottom)) {
+            split_edge(edge->fLeft, bottom, activeEdges, c, alloc);
+        } else if (c.sweep_lt(leftBottom->fPoint, bottom->fPoint) && !edge->isRightOf(leftBottom)) {
+            split_edge(edge, leftBottom, activeEdges, c, alloc);
         }
     }
     if (edge->fRight) {
         Vertex* rightTop = edge->fRight->fTop;
         Vertex* rightBottom = edge->fRight->fBottom;
-        if (sweep_gt(top->fPoint, rightTop->fPoint) && !edge->fRight->isRightOf(top)) {
-            split_edge(edge->fRight, top, activeEdges, alloc);
-        } else if (sweep_gt(rightTop->fPoint, top->fPoint) && !edge->isLeftOf(rightTop)) {
-            split_edge(edge, rightTop, activeEdges, alloc);
-        } else if (sweep_lt(bottom->fPoint, rightBottom->fPoint) &&
+        if (c.sweep_gt(top->fPoint, rightTop->fPoint) && !edge->fRight->isRightOf(top)) {
+            split_edge(edge->fRight, top, activeEdges, c, alloc);
+        } else if (c.sweep_gt(rightTop->fPoint, top->fPoint) && !edge->isLeftOf(rightTop)) {
+            split_edge(edge, rightTop, activeEdges, c, alloc);
+        } else if (c.sweep_lt(bottom->fPoint, rightBottom->fPoint) &&
                    !edge->fRight->isRightOf(bottom)) {
-            split_edge(edge->fRight, bottom, activeEdges, alloc);
-        } else if (sweep_lt(rightBottom->fPoint, bottom->fPoint) &&
+            split_edge(edge->fRight, bottom, activeEdges, c, alloc);
+        } else if (c.sweep_lt(rightBottom->fPoint, bottom->fPoint) &&
                    !edge->isLeftOf(rightBottom)) {
-            split_edge(edge, rightBottom, activeEdges, alloc);
+            split_edge(edge, rightBottom, activeEdges, c, alloc);
         }
     }
 }
 
-void split_edge(Edge* edge, Vertex* v, Edge** activeEdges, SkChunkAlloc& alloc) {
+void split_edge(Edge* edge, Vertex* v, EdgeList* activeEdges, Comparator& c, SkChunkAlloc& alloc) {
     LOG("splitting edge (%g -> %g) at vertex %g (%g, %g)\n",
         edge->fTop->fID, edge->fBottom->fID,
         v->fID, v->fPoint.fX, v->fPoint.fY);
-    if (sweep_lt(v->fPoint, edge->fTop->fPoint)) {
-        set_top(edge, v, activeEdges);
-    } else if (sweep_gt(v->fPoint, edge->fBottom->fPoint)) {
-        set_bottom(edge, v, activeEdges);
+    if (c.sweep_lt(v->fPoint, edge->fTop->fPoint)) {
+        set_top(edge, v, activeEdges, c);
+    } else if (c.sweep_gt(v->fPoint, edge->fBottom->fPoint)) {
+        set_bottom(edge, v, activeEdges, c);
     } else {
         Edge* newEdge = ALLOC_NEW(Edge, (v, edge->fBottom, edge->fWinding), alloc);
-        insert_edge_below(newEdge, v);
-        insert_edge_above(newEdge, edge->fBottom);
-        set_bottom(edge, v, activeEdges);
-        cleanup_active_edges(edge, activeEdges, alloc);
-        fix_active_state(newEdge, activeEdges);
-        merge_collinear_edges(newEdge, activeEdges);
+        insert_edge_below(newEdge, v, c);
+        insert_edge_above(newEdge, edge->fBottom, c);
+        set_bottom(edge, v, activeEdges, c);
+        cleanup_active_edges(edge, activeEdges, c, alloc);
+        fix_active_state(newEdge, activeEdges, c);
+        merge_collinear_edges(newEdge, activeEdges, c);
     }
 }
 
-void merge_vertices(Vertex* src, Vertex* dst, Vertex** head, SkChunkAlloc& alloc) {
+void merge_vertices(Vertex* src, Vertex* dst, Vertex** head, Comparator& c, SkChunkAlloc& alloc) {
     LOG("found coincident verts at %g, %g; merging %g into %g\n", src->fPoint.fX, src->fPoint.fY,
         src->fID, dst->fID);
     for (Edge* edge = src->fFirstEdgeAbove; edge;) {
         Edge* next = edge->fNextEdgeAbove;
-        set_bottom(edge, dst, NULL);
+        set_bottom(edge, dst, NULL, c);
         edge = next;
     }
     for (Edge* edge = src->fFirstEdgeBelow; edge;) {
         Edge* next = edge->fNextEdgeBelow;
-        set_top(edge, dst, NULL);
+        set_top(edge, dst, NULL, c);
         edge = next;
     }
     remove<Vertex, &Vertex::fPrev, &Vertex::fNext>(src, head, NULL);
 }
 
-Vertex* check_for_intersection(Edge* edge, Edge* other, Edge** activeEdges, SkChunkAlloc& alloc) {
+Vertex* check_for_intersection(Edge* edge, Edge* other, EdgeList* activeEdges, Comparator& c,
+                               SkChunkAlloc& alloc) {
     SkPoint p;
     if (!edge || !other) {
         return NULL;
@@ -999,24 +924,24 @@ Vertex* check_for_intersection(Edge* edge, Edge* other, Edge** activeEdges, SkCh
     if (edge->intersect(*other, &p)) {
         Vertex* v;
         LOG("found intersection, pt is %g, %g\n", p.fX, p.fY);
-        if (p == edge->fTop->fPoint || sweep_lt(p, edge->fTop->fPoint)) {
-            split_edge(other, edge->fTop, activeEdges, alloc);
+        if (p == edge->fTop->fPoint || c.sweep_lt(p, edge->fTop->fPoint)) {
+            split_edge(other, edge->fTop, activeEdges, c, alloc);
             v = edge->fTop;
-        } else if (p == edge->fBottom->fPoint || sweep_gt(p, edge->fBottom->fPoint)) {
-            split_edge(other, edge->fBottom, activeEdges, alloc);
+        } else if (p == edge->fBottom->fPoint || c.sweep_gt(p, edge->fBottom->fPoint)) {
+            split_edge(other, edge->fBottom, activeEdges, c, alloc);
             v = edge->fBottom;
-        } else if (p == other->fTop->fPoint || sweep_lt(p, other->fTop->fPoint)) {
-            split_edge(edge, other->fTop, activeEdges, alloc);
+        } else if (p == other->fTop->fPoint || c.sweep_lt(p, other->fTop->fPoint)) {
+            split_edge(edge, other->fTop, activeEdges, c, alloc);
             v = other->fTop;
-        } else if (p == other->fBottom->fPoint || sweep_gt(p, other->fBottom->fPoint)) {
-            split_edge(edge, other->fBottom, activeEdges, alloc);
+        } else if (p == other->fBottom->fPoint || c.sweep_gt(p, other->fBottom->fPoint)) {
+            split_edge(edge, other->fBottom, activeEdges, c, alloc);
             v = other->fBottom;
         } else {
             Vertex* nextV = edge->fTop;
-            while (sweep_lt(p, nextV->fPoint)) {
+            while (c.sweep_lt(p, nextV->fPoint)) {
                 nextV = nextV->fPrev;
             }
-            while (sweep_lt(nextV->fPoint, p)) {
+            while (c.sweep_lt(nextV->fPoint, p)) {
                 nextV = nextV->fNext;
             }
             Vertex* prevV = nextV->fPrev;
@@ -1037,12 +962,9 @@ Vertex* check_for_intersection(Edge* edge, Edge* other, Edge** activeEdges, SkCh
                 prevV->fNext = v;
                 nextV->fPrev = v;
             }
-            split_edge(edge, v, activeEdges, alloc);
-            split_edge(other, v, activeEdges, alloc);
+            split_edge(edge, v, activeEdges, c, alloc);
+            split_edge(other, v, activeEdges, c, alloc);
         }
-#ifdef SK_DEBUG
-        validate_connectivity(v);
-#endif
         return v;
     }
     return NULL;
@@ -1072,34 +994,34 @@ void sanitize_contours(Vertex** contours, int contourCnt) {
     }
 }
 
-void merge_coincident_vertices(Vertex** vertices, SkChunkAlloc& alloc) {
+void merge_coincident_vertices(Vertex** vertices, Comparator& c, SkChunkAlloc& alloc) {
     for (Vertex* v = (*vertices)->fNext; v != NULL; v = v->fNext) {
-        if (sweep_lt(v->fPoint, v->fPrev->fPoint)) {
+        if (c.sweep_lt(v->fPoint, v->fPrev->fPoint)) {
             v->fPoint = v->fPrev->fPoint;
         }
         if (coincident(v->fPrev->fPoint, v->fPoint)) {
-            merge_vertices(v->fPrev, v, vertices, alloc);
+            merge_vertices(v->fPrev, v, vertices, c, alloc);
         }
     }
 }
 
 // Stage 2: convert the contours to a mesh of edges connecting the vertices.
 
-Vertex* build_edges(Vertex** contours, int contourCnt, SkChunkAlloc& alloc) {
+Vertex* build_edges(Vertex** contours, int contourCnt, Comparator& c, SkChunkAlloc& alloc) {
     Vertex* vertices = NULL;
     Vertex* prev = NULL;
     for (int i = 0; i < contourCnt; ++i) {
         for (Vertex* v = contours[i]; v != NULL;) {
             Vertex* vNext = v->fNext;
-            Edge* edge = new_edge(v->fPrev, v, alloc);
+            Edge* edge = new_edge(v->fPrev, v, alloc, c);
             if (edge->fWinding > 0) {
-                insert_edge_below(edge, v->fPrev);
-                insert_edge_above(edge, v);
+                insert_edge_below(edge, v->fPrev, c);
+                insert_edge_above(edge, v, c);
             } else {
-                insert_edge_below(edge, v);
-                insert_edge_above(edge, v->fPrev);
+                insert_edge_below(edge, v, c);
+                insert_edge_above(edge, v->fPrev, c);
             }
-            merge_collinear_edges(edge, NULL);
+            merge_collinear_edges(edge, NULL, c);
             if (prev) {
                 prev->fNext = v;
                 v->fPrev = prev;
@@ -1117,9 +1039,9 @@ Vertex* build_edges(Vertex** contours, int contourCnt, SkChunkAlloc& alloc) {
     return vertices;
 }
 
-// Stage 3: sort the vertices by increasing Y (or X if SWEEP_IN_X is on).
+// Stage 3: sort the vertices by increasing sweep direction.
 
-Vertex* sorted_merge(Vertex* a, Vertex* b);
+Vertex* sorted_merge(Vertex* a, Vertex* b, Comparator& c);
 
 void front_back_split(Vertex* v, Vertex** pFront, Vertex** pBack) {
     Vertex* fast;
@@ -1146,7 +1068,7 @@ void front_back_split(Vertex* v, Vertex** pFront, Vertex** pBack) {
     }
 }
 
-void merge_sort(Vertex** head) {
+void merge_sort(Vertex** head, Comparator& c) {
     if (!*head || !(*head)->fNext) {
         return;
     }
@@ -1155,37 +1077,49 @@ void merge_sort(Vertex** head) {
     Vertex* b;
     front_back_split(*head, &a, &b);
 
-    merge_sort(&a);
-    merge_sort(&b);
+    merge_sort(&a, c);
+    merge_sort(&b, c);
 
-    *head = sorted_merge(a, b);
+    *head = sorted_merge(a, b, c);
 }
 
-Vertex* sorted_merge(Vertex* a, Vertex* b) {
-    if (!a) {
-        return b;
-    } else if (!b) {
-        return a;
-    }
+inline void append_vertex(Vertex* v, Vertex** head, Vertex** tail) {
+    insert<Vertex, &Vertex::fPrev, &Vertex::fNext>(v, *tail, NULL, head, tail);
+}
 
-    Vertex* result = NULL;
+inline void append_vertex_list(Vertex* v, Vertex** head, Vertex** tail) {
+    insert<Vertex, &Vertex::fPrev, &Vertex::fNext>(v, *tail, v->fNext, head, tail);
+}
 
-    if (sweep_lt(a->fPoint, b->fPoint)) {
-        result = a;
-        result->fNext = sorted_merge(a->fNext, b);
-    } else {
-        result = b;
-        result->fNext = sorted_merge(a, b->fNext);
+Vertex* sorted_merge(Vertex* a, Vertex* b, Comparator& c) {
+    Vertex* head = NULL;
+    Vertex* tail = NULL;
+
+    while (a && b) {
+        if (c.sweep_lt(a->fPoint, b->fPoint)) {
+            Vertex* next = a->fNext;
+            append_vertex(a, &head, &tail);
+            a = next;
+        } else {
+            Vertex* next = b->fNext;
+            append_vertex(b, &head, &tail);
+            b = next;
+        }
     }
-    result->fNext->fPrev = result;
-    return result;
+    if (a) {
+        append_vertex_list(a, &head, &tail);
+    }
+    if (b) {
+        append_vertex_list(b, &head, &tail);
+    }
+    return head;
 }
 
 // Stage 4: Simplify the mesh by inserting new vertices at intersecting edges.
 
-void simplify(Vertex* vertices, SkChunkAlloc& alloc) {
+void simplify(Vertex* vertices, Comparator& c, SkChunkAlloc& alloc) {
     LOG("simplifying complex polygons\n");
-    Edge* activeEdges = NULL;
+    EdgeList activeEdges;
     for (Vertex* v = vertices; v != NULL; v = v->fNext) {
         if (!v->fFirstEdgeAbove && !v->fFirstEdgeBelow) {
             continue;
@@ -1193,30 +1127,27 @@ void simplify(Vertex* vertices, SkChunkAlloc& alloc) {
 #if LOGGING_ENABLED
         LOG("\nvertex %g: (%g,%g)\n", v->fID, v->fPoint.fX, v->fPoint.fY);
 #endif
-#ifdef SK_DEBUG
-        validate_connectivity(v);
-#endif
         Edge* leftEnclosingEdge = NULL;
         Edge* rightEnclosingEdge = NULL;
         bool restartChecks;
         do {
             restartChecks = false;
-            find_enclosing_edges(v, activeEdges, &leftEnclosingEdge, &rightEnclosingEdge);
+            find_enclosing_edges(v, &activeEdges, &leftEnclosingEdge, &rightEnclosingEdge);
             if (v->fFirstEdgeBelow) {
                 for (Edge* edge = v->fFirstEdgeBelow; edge != NULL; edge = edge->fNextEdgeBelow) {
-                    if (check_for_intersection(edge, leftEnclosingEdge, &activeEdges, alloc)) {
+                    if (check_for_intersection(edge, leftEnclosingEdge, &activeEdges, c, alloc)) {
                         restartChecks = true;
                         break;
                     }
-                    if (check_for_intersection(edge, rightEnclosingEdge, &activeEdges, alloc)) {
+                    if (check_for_intersection(edge, rightEnclosingEdge, &activeEdges, c, alloc)) {
                         restartChecks = true;
                         break;
                     }
                 }
             } else {
                 if (Vertex* pv = check_for_intersection(leftEnclosingEdge, rightEnclosingEdge,
-                                                        &activeEdges, alloc)) {
-                    if (sweep_lt(pv->fPoint, v->fPoint)) {
+                                                        &activeEdges, c, alloc)) {
+                    if (c.sweep_lt(pv->fPoint, v->fPoint)) {
                         v = pv;
                     }
                     restartChecks = true;
@@ -1224,11 +1155,6 @@ void simplify(Vertex* vertices, SkChunkAlloc& alloc) {
 
             }
         } while (restartChecks);
-        SkASSERT(!leftEnclosingEdge || leftEnclosingEdge->isLeftOf(v));
-        SkASSERT(!rightEnclosingEdge || rightEnclosingEdge->isRightOf(v));
-#ifdef SK_DEBUG
-        validate_edges(activeEdges);
-#endif
         for (Edge* e = v->fFirstEdgeAbove; e; e = e->fNextEdgeAbove) {
             remove_edge(e, &activeEdges);
         }
@@ -1245,7 +1171,7 @@ void simplify(Vertex* vertices, SkChunkAlloc& alloc) {
 
 Poly* tessellate(Vertex* vertices, SkChunkAlloc& alloc) {
     LOG("tessellating simple polygons\n");
-    Edge* activeEdges = NULL;
+    EdgeList activeEdges;
     Poly* polys = NULL;
     for (Vertex* v = vertices; v != NULL; v = v->fNext) {
         if (!v->fFirstEdgeAbove && !v->fFirstEdgeBelow) {
@@ -1254,17 +1180,9 @@ Poly* tessellate(Vertex* vertices, SkChunkAlloc& alloc) {
 #if LOGGING_ENABLED
         LOG("\nvertex %g: (%g,%g)\n", v->fID, v->fPoint.fX, v->fPoint.fY);
 #endif
-#ifdef SK_DEBUG
-        validate_connectivity(v);
-#endif
         Edge* leftEnclosingEdge = NULL;
         Edge* rightEnclosingEdge = NULL;
-        find_enclosing_edges(v, activeEdges, &leftEnclosingEdge, &rightEnclosingEdge);
-        SkASSERT(!leftEnclosingEdge || leftEnclosingEdge->isLeftOf(v));
-        SkASSERT(!rightEnclosingEdge || rightEnclosingEdge->isRightOf(v));
-#ifdef SK_DEBUG
-        validate_edges(activeEdges);
-#endif
+        find_enclosing_edges(v, &activeEdges, &leftEnclosingEdge, &rightEnclosingEdge);
         Poly* leftPoly = NULL;
         Poly* rightPoly = NULL;
         if (v->fFirstEdgeAbove) {
@@ -1356,12 +1274,9 @@ Poly* tessellate(Vertex* vertices, SkChunkAlloc& alloc) {
             }
             v->fLastEdgeBelow->fRightPoly = rightPoly;
         }
-#ifdef SK_DEBUG
-        validate_edges(activeEdges);
-#endif
 #if LOGGING_ENABLED
         LOG("\nactive edges:\n");
-        for (Edge* e = activeEdges; e != NULL; e = e->fRight) {
+        for (Edge* e = activeEdges.fHead; e != NULL; e = e->fRight) {
             LOG("%g -> %g, lpoly %d, rpoly %d\n", e->fTop->fID, e->fBottom->fID,
                 e->fLeftPoly ? e->fLeftPoly->fID : -1, e->fRightPoly ? e->fRightPoly->fID : -1);
         }
@@ -1372,7 +1287,7 @@ Poly* tessellate(Vertex* vertices, SkChunkAlloc& alloc) {
 
 // This is a driver function which calls stages 2-5 in turn.
 
-Poly* contours_to_polys(Vertex** contours, int contourCnt, SkChunkAlloc& alloc) {
+Poly* contours_to_polys(Vertex** contours, int contourCnt, Comparator& c, SkChunkAlloc& alloc) {
 #if LOGGING_ENABLED
     for (int i = 0; i < contourCnt; ++i) {
         Vertex* v = contours[i];
@@ -1384,28 +1299,28 @@ Poly* contours_to_polys(Vertex** contours, int contourCnt, SkChunkAlloc& alloc) 
     }
 #endif
     sanitize_contours(contours, contourCnt);
-    Vertex* vertices = build_edges(contours, contourCnt, alloc);
+    Vertex* vertices = build_edges(contours, contourCnt, c, alloc);
     if (!vertices) {
         return NULL;
     }
 
     // Sort vertices in Y (secondarily in X).
-    merge_sort(&vertices);
-    merge_coincident_vertices(&vertices, alloc);
+    merge_sort(&vertices, c);
+    merge_coincident_vertices(&vertices, c, alloc);
 #if LOGGING_ENABLED
     for (Vertex* v = vertices; v != NULL; v = v->fNext) {
         static float gID = 0.0f;
         v->fID = gID++;
     }
 #endif
-    simplify(vertices, alloc);
+    simplify(vertices, c, alloc);
     return tessellate(vertices, alloc);
 }
 
 // Stage 6: Triangulate the monotone polygons into a vertex buffer.
 
-void* polys_to_triangles(Poly* polys, SkPath::FillType fillType, void* data) {
-    void* d = data;
+SkPoint* polys_to_triangles(Poly* polys, SkPath::FillType fillType, SkPoint* data) {
+    SkPoint* d = data;
     for (Poly* poly = polys; poly; poly = poly->fNext) {
         if (apply_fill_type(fillType, poly->fWinding)) {
             d = poly->emit(d);
@@ -1423,7 +1338,7 @@ GrPathRenderer::StencilSupport GrTessellatingPathRenderer::onGetStencilSupport(
                                                             const GrDrawTarget*,
                                                             const GrPipelineBuilder*,
                                                             const SkPath&,
-                                                            const SkStrokeRec&) const {
+                                                            const GrStrokeInfo&) const {
     return GrPathRenderer::kNoSupport_StencilSupport;
 }
 
@@ -1431,7 +1346,7 @@ bool GrTessellatingPathRenderer::canDrawPath(const GrDrawTarget* target,
                                              const GrPipelineBuilder* pipelineBuilder,
                                              const SkMatrix& viewMatrix,
                                              const SkPath& path,
-                                             const SkStrokeRec& stroke,
+                                             const GrStrokeInfo& stroke,
                                              bool antiAlias) const {
     // This path renderer can draw all fill styles, but does not do antialiasing. It can do convex
     // and concave paths, but we'll leave the convex ones to simpler algorithms.
@@ -1448,17 +1363,17 @@ public:
         return SkNEW_ARGS(TessellatingPathBatch, (color, path, viewMatrix, clipBounds));
     }
 
-    const char* name() const SK_OVERRIDE { return "TessellatingPathBatch"; }
+    const char* name() const override { return "TessellatingPathBatch"; }
 
-    void getInvariantOutputColor(GrInitInvariantOutput* out) const SK_OVERRIDE {
+    void getInvariantOutputColor(GrInitInvariantOutput* out) const override {
         out->setKnownFourComponents(fColor);
     }
 
-    void getInvariantOutputCoverage(GrInitInvariantOutput* out) const SK_OVERRIDE {
+    void getInvariantOutputCoverage(GrInitInvariantOutput* out) const override {
         out->setUnknownSingleComponent();
     }
 
-    void initBatchTracker(const GrPipelineInfo& init) SK_OVERRIDE {
+    void initBatchTracker(const GrPipelineInfo& init) override {
         // Handle any color overrides
         if (init.fColorIgnored) {
             fColor = GrColor_ILLEGAL;
@@ -1468,8 +1383,18 @@ public:
         fPipelineInfo = init;
     }
 
-    void generateGeometry(GrBatchTarget* batchTarget, const GrPipeline* pipeline) SK_OVERRIDE {
-        SkScalar tol = GrPathUtils::scaleToleranceToSrc(SK_Scalar1, fViewMatrix, fPath.getBounds());
+    void generateGeometry(GrBatchTarget* batchTarget, const GrPipeline* pipeline) override {
+        SkRect pathBounds = fPath.getBounds();
+        Comparator c;
+        if (pathBounds.width() > pathBounds.height()) {
+            c.sweep_lt = sweep_lt_horiz;
+            c.sweep_gt = sweep_gt_horiz;
+        } else {
+            c.sweep_lt = sweep_lt_vert;
+            c.sweep_gt = sweep_gt_vert;
+        }
+        SkScalar screenSpaceTol = GrPathUtils::kDefaultTolerance;
+        SkScalar tol = GrPathUtils::scaleToleranceToSrc(screenSpaceTol, fViewMatrix, pathBounds);
         int contourCnt;
         int maxPts = GrPathUtils::worstCasePointCount(fPath, &contourCnt, tol);
         if (maxPts <= 0) {
@@ -1500,50 +1425,45 @@ public:
         SkChunkAlloc alloc(maxPts * (3 * sizeof(Vertex) + sizeof(Edge)));
         path_to_contours(fPath, tol, fClipBounds, contours.get(), alloc);
         Poly* polys;
-        polys = contours_to_polys(contours.get(), contourCnt, alloc);
+        polys = contours_to_polys(contours.get(), contourCnt, c, alloc);
         int count = 0;
         for (Poly* poly = polys; poly; poly = poly->fNext) {
             if (apply_fill_type(fillType, poly->fWinding) && poly->fCount >= 3) {
                 count += (poly->fCount - 2) * (WIREFRAME ? 6 : 3);
             }
         }
+        if (0 == count) {
+            return;
+        }
 
         size_t stride = gp->getVertexStride();
+        SkASSERT(stride == sizeof(SkPoint));
         const GrVertexBuffer* vertexBuffer;
         int firstVertex;
-        void* vertices = batchTarget->vertexPool()->makeSpace(stride,
-                                                              count,
-                                                              &vertexBuffer,
-                                                              &firstVertex);
-
-        if (!vertices) {
+        SkPoint* verts = static_cast<SkPoint*>(
+            batchTarget->makeVertSpace(stride, count, &vertexBuffer, &firstVertex));
+        if (!verts) {
             SkDebugf("Could not allocate vertices\n");
             return;
         }
 
         LOG("emitting %d verts\n", count);
-        void* end = polys_to_triangles(polys, fillType, vertices);
-        int actualCount = static_cast<int>(
-            (static_cast<char*>(end) - static_cast<char*>(vertices)) / stride);
+        SkPoint* end = polys_to_triangles(polys, fillType, verts);
+        int actualCount = static_cast<int>(end - verts);
         LOG("actual count: %d\n", actualCount);
         SkASSERT(actualCount <= count);
 
         GrPrimitiveType primitiveType = WIREFRAME ? kLines_GrPrimitiveType
                                                   : kTriangles_GrPrimitiveType;
-        GrDrawTarget::DrawInfo drawInfo;
-        drawInfo.setPrimitiveType(primitiveType);
-        drawInfo.setVertexBuffer(vertexBuffer);
-        drawInfo.setStartVertex(firstVertex);
-        drawInfo.setVertexCount(actualCount);
-        drawInfo.setStartIndex(0);
-        drawInfo.setIndexCount(0);
-        batchTarget->draw(drawInfo);
+        GrVertices vertices;
+        vertices.init(primitiveType, vertexBuffer, firstVertex, actualCount);
+        batchTarget->draw(vertices);
 
         batchTarget->putBackVertices((size_t)(count - actualCount), stride);
         return;
     }
 
-    bool onCombineIfPossible(GrBatch*) SK_OVERRIDE {
+    bool onCombineIfPossible(GrBatch*) override {
         return false;
     }
 
@@ -1557,6 +1477,9 @@ private:
       , fViewMatrix(viewMatrix)
       , fClipBounds(clipBounds) {
         this->initClassID<TessellatingPathBatch>();
+
+        fBounds = path.getBounds();
+        viewMatrix.mapRect(&fBounds);
     }
 
     GrColor        fColor;
@@ -1571,7 +1494,7 @@ bool GrTessellatingPathRenderer::onDrawPath(GrDrawTarget* target,
                                             GrColor color,
                                             const SkMatrix& viewM,
                                             const SkPath& path,
-                                            const SkStrokeRec& stroke,
+                                            const GrStrokeInfo&,
                                             bool antiAlias) {
     SkASSERT(!antiAlias);
     const GrRenderTarget* rt = pipelineBuilder->getRenderTarget();
@@ -1592,3 +1515,23 @@ bool GrTessellatingPathRenderer::onDrawPath(GrDrawTarget* target,
 
     return true;
 }
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+#ifdef GR_TEST_UTILS
+
+BATCH_TEST_DEFINE(TesselatingPathBatch) {
+    GrColor color = GrRandomColor(random);
+    SkMatrix viewMatrix = GrTest::TestMatrixInvertible(random);
+    SkPath path = GrTest::TestPath(random);
+    SkRect clipBounds = GrTest::TestRect(random);
+    SkMatrix vmi;
+    bool result = viewMatrix.invert(&vmi);
+    if (!result) {
+        SkFAIL("Cannot invert matrix\n");
+    }
+    vmi.mapRect(&clipBounds);
+    return TessellatingPathBatch::Create(color, path, viewMatrix, clipBounds);
+}
+
+#endif

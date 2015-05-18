@@ -13,11 +13,10 @@
 #include "SkString.h"
 #include "SkTRegistry.h"
 
-#define DEF_BENCH(code)                                                 \
-namespace {                                                             \
-static Benchmark* SK_MACRO_APPEND_LINE(factory)(void*) { code; }      \
-BenchRegistry SK_MACRO_APPEND_LINE(g_R_)(SK_MACRO_APPEND_LINE(factory)); \
-}
+#define DEF_BENCH3(code, N) \
+    static BenchRegistry gBench##N([](void*) -> Benchmark* { code; });
+#define DEF_BENCH2(code, N) DEF_BENCH3(code, N)
+#define DEF_BENCH(code) DEF_BENCH2(code, __COUNTER__)
 
 /*
  *  With the above macros, you can register benches as follows (at the bottom
@@ -57,6 +56,7 @@ public:
         kRaster_Backend,
         kGPU_Backend,
         kPDF_Backend,
+        kHWUI_Backend,
     };
 
     // Call to determine whether the benchmark is intended for

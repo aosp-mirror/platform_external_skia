@@ -1,6 +1,11 @@
+# Copyright 2015 Google Inc.
+#
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
 # Common gypi for unit tests.
 {
   'include_dirs': [
+    '../src/codec',
     '../src/core',
     '../src/effects',
     '../src/image',
@@ -71,6 +76,7 @@
     '../tests/ClipCubicTest.cpp',
     '../tests/ClipStackTest.cpp',
     '../tests/ClipperTest.cpp',
+    '../tests/CodexTest.cpp',
     '../tests/ColorFilterTest.cpp',
     '../tests/ColorPrivTest.cpp',
     '../tests/ColorTest.cpp',
@@ -85,6 +91,7 @@
     '../tests/DiscardableMemoryTest.cpp',
     '../tests/DocumentTest.cpp',
     '../tests/DrawBitmapRectTest.cpp',
+    '../tests/DrawFilterTest.cpp',
     '../tests/DrawPathTest.cpp',
     '../tests/DrawTextTest.cpp',
     '../tests/DynamicHashTest.cpp',
@@ -100,6 +107,7 @@
     '../tests/FontNamesTest.cpp',
     '../tests/FontObjTest.cpp',
     '../tests/FrontBufferedStreamTest.cpp',
+    '../tests/FunctionTest.cpp',
     '../tests/GLInterfaceValidationTest.cpp',
     '../tests/GLProgramsTest.cpp',
     '../tests/GeometryTest.cpp',
@@ -126,6 +134,7 @@
     '../tests/ImageGeneratorTest.cpp',
     '../tests/ImageIsOpaqueTest.cpp',
     '../tests/ImageNewShaderTest.cpp',
+    '../tests/IndexedPngOverflowTest.cpp',
     '../tests/InfRectTest.cpp',
     '../tests/InterpolatorTest.cpp',
     '../tests/InvalidIndexedPngTest.cpp',
@@ -160,7 +169,6 @@
     '../tests/PathCoverageTest.cpp',
     '../tests/PathMeasureTest.cpp',
     '../tests/PathTest.cpp',
-    '../tests/PathUtilsTest.cpp',
     '../tests/PictureBBHTest.cpp',
     '../tests/PictureShaderTest.cpp',
     '../tests/PictureTest.cpp',
@@ -194,7 +202,7 @@
     '../tests/ShaderImageFilterTest.cpp',
     '../tests/ShaderOpacityTest.cpp',
     '../tests/SizeTest.cpp',
-    '../tests/Sk4xTest.cpp',
+    '../tests/SkNxTest.cpp',
     '../tests/SkBase64Test.cpp',
     '../tests/SkImageTest.cpp',
     '../tests/SkResourceCacheTest.cpp',
@@ -207,12 +215,13 @@
     '../tests/StrokerTest.cpp',
     '../tests/SurfaceTest.cpp',
     '../tests/SVGDeviceTest.cpp',
+    '../tests/SwizzlerTest.cpp',
     '../tests/TessellatingPathRendererTests.cpp',
     '../tests/TArrayTest.cpp',
+    '../tests/TemplatesTest.cpp',
     '../tests/TDPQueueTest.cpp',
     '../tests/Time.cpp',
     '../tests/TLSTest.cpp',
-    '../tests/TSetTest.cpp',
     '../tests/TextBlobTest.cpp',
     '../tests/TextureCompressionTest.cpp',
     '../tests/ToUnicodeTest.cpp',

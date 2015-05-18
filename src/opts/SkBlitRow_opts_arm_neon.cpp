@@ -246,13 +246,19 @@ void S32A_D565_Opaque_neon(uint16_t* SK_RESTRICT dst,
                       "vaddhn.u16 d6, q14, q8                 \n\t"
                       "vshr.u16   q8, q12, #5                 \n\t"
                       "vaddhn.u16 d5, q13, q9                 \n\t"
-                      "vqadd.u8   d6, d6, d0                  \n\t"  // moved up
                       "vaddhn.u16 d4, q12, q8                 \n\t"
                       // intentionally don't calculate alpha
                       // result in d4-d6
 
+            #ifdef SK_PMCOLOR_IS_RGBA
+                      "vqadd.u8   d6, d6, d0                  \n\t"
                       "vqadd.u8   d5, d5, d1                  \n\t"
                       "vqadd.u8   d4, d4, d2                  \n\t"
+            #else
+                      "vqadd.u8   d6, d6, d2                  \n\t"
+                      "vqadd.u8   d5, d5, d1                  \n\t"
+                      "vqadd.u8   d4, d4, d0                  \n\t"
+            #endif
 
                       // pack 8888 {d4-d6} to 0565 q10
                       "vshll.u8   q10, d6, #8                 \n\t"
@@ -326,13 +332,19 @@ void S32A_D565_Opaque_neon(uint16_t* SK_RESTRICT dst,
                       "vaddhn.u16 d6, q14, q8                 \n\t"
                       "vshr.u16   q8, q12, #5                 \n\t"
                       "vaddhn.u16 d5, q13, q9                 \n\t"
-                      "vqadd.u8   d6, d6, d0                  \n\t"  // moved up
                       "vaddhn.u16 d4, q12, q8                 \n\t"
                       // intentionally don't calculate alpha
                       // result in d4-d6
 
+            #ifdef SK_PMCOLOR_IS_RGBA
+                      "vqadd.u8   d6, d6, d0                  \n\t"
                       "vqadd.u8   d5, d5, d1                  \n\t"
                       "vqadd.u8   d4, d4, d2                  \n\t"
+            #else
+                      "vqadd.u8   d6, d6, d2                  \n\t"
+                      "vqadd.u8   d5, d5, d1                  \n\t"
+                      "vqadd.u8   d4, d4, d0                  \n\t"
+            #endif
 
                       // pack 8888 {d4-d6} to 0565 q10
                       "vshll.u8   q10, d6, #8                 \n\t"
@@ -1664,107 +1676,6 @@ void S32_D565_Opaque_Dither_neon(uint16_t* SK_RESTRICT dst,
             *dst++ = SkDitherRGB32To565(c, dither);
             DITHER_INC_X(x);
         } while (--count != 0);
-    }
-}
-
-void Color32_arm_neon(SkPMColor* dst, const SkPMColor* src, int count,
-                      SkPMColor color) {
-    if (count <= 0) {
-        return;
-    }
-
-    if (0 == color) {
-        if (src != dst) {
-            memcpy(dst, src, count * sizeof(SkPMColor));
-        }
-        return;
-    }
-
-    unsigned colorA = SkGetPackedA32(color);
-    if (255 == colorA) {
-        sk_memset32(dst, color, count);
-        return;
-    }
-
-    unsigned scale = 256 - SkAlpha255To256(colorA);
-
-    if (count >= 8) {
-        uint32x4_t vcolor;
-        uint8x8_t vscale;
-
-        vcolor = vdupq_n_u32(color);
-
-        // scale numerical interval [0-255], so load as 8 bits
-        vscale = vdup_n_u8(scale);
-
-        do {
-            // load src color, 8 pixels, 4 64 bit registers
-            // (and increment src).
-            uint32x2x4_t vsrc;
-#if defined(SK_CPU_ARM32) && ((__GNUC__ > 4) || ((__GNUC__ == 4) && (__GNUC_MINOR__ > 6)))
-            asm (
-                "vld1.32    %h[vsrc], [%[src]]!"
-                : [vsrc] "=w" (vsrc), [src] "+r" (src)
-                : :
-            );
-#else // 64bit targets and Clang
-            vsrc.val[0] = vld1_u32(src);
-            vsrc.val[1] = vld1_u32(src+2);
-            vsrc.val[2] = vld1_u32(src+4);
-            vsrc.val[3] = vld1_u32(src+6);
-            src += 8;
-#endif
-
-            // multiply long by scale, 64 bits at a time,
-            // destination into a 128 bit register.
-            uint16x8x4_t vtmp;
-            vtmp.val[0] = vmull_u8(vreinterpret_u8_u32(vsrc.val[0]), vscale);
-            vtmp.val[1] = vmull_u8(vreinterpret_u8_u32(vsrc.val[1]), vscale);
-            vtmp.val[2] = vmull_u8(vreinterpret_u8_u32(vsrc.val[2]), vscale);
-            vtmp.val[3] = vmull_u8(vreinterpret_u8_u32(vsrc.val[3]), vscale);
-
-            // shift the 128 bit registers, containing the 16
-            // bit scaled values back to 8 bits, narrowing the
-            // results to 64 bit registers.
-            uint8x16x2_t vres;
-            vres.val[0] = vcombine_u8(
-                            vshrn_n_u16(vtmp.val[0], 8),
-                            vshrn_n_u16(vtmp.val[1], 8));
-            vres.val[1] = vcombine_u8(
-                            vshrn_n_u16(vtmp.val[2], 8),
-                            vshrn_n_u16(vtmp.val[3], 8));
-
-            // adding back the color, using 128 bit registers.
-            uint32x4x2_t vdst;
-            vdst.val[0] = vreinterpretq_u32_u8(vres.val[0] +
-                                               vreinterpretq_u8_u32(vcolor));
-            vdst.val[1] = vreinterpretq_u32_u8(vres.val[1] +
-                                               vreinterpretq_u8_u32(vcolor));
-
-            // store back the 8 calculated pixels (2 128 bit
-            // registers), and increment dst.
-#if defined(SK_CPU_ARM32) && ((__GNUC__ > 4) || ((__GNUC__ == 4) && (__GNUC_MINOR__ > 6)))
-            asm (
-                "vst1.32    %h[vdst], [%[dst]]!"
-                : [dst] "+r" (dst)
-                : [vdst] "w" (vdst)
-                : "memory"
-            );
-#else // 64bit targets and Clang
-            vst1q_u32(dst, vdst.val[0]);
-            vst1q_u32(dst+4, vdst.val[1]);
-            dst += 8;
-#endif
-            count -= 8;
-
-        } while (count >= 8);
-    }
-
-    while (count > 0) {
-        *dst = color + SkAlphaMulQ(*src, scale);
-        src += 1;
-        dst += 1;
-        count--;
     }
 }
 

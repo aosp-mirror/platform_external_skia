@@ -1,3 +1,10 @@
+/*
+ * Copyright 2015 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
 #include "Benchmark.h"
 #include "SkPMFloat.h"
 
@@ -14,10 +21,10 @@ static uint32_t lcg_rand(uint32_t* seed) {
 
 // I'm having better luck getting these to constant-propagate away as template parameters.
 template <bool kClamp, bool kWide>
-struct PMFloatBench : public Benchmark {
-    PMFloatBench() {}
+struct PMFloatGetSetBench : public Benchmark {
+    PMFloatGetSetBench() {}
 
-    const char* onGetName() SK_OVERRIDE {
+    const char* onGetName() override {
         switch (kClamp << 1 | kWide) {
             case 0: return "SkPMFloat_get_1x";
             case 1: return "SkPMFloat_get_4x";
@@ -27,9 +34,9 @@ struct PMFloatBench : public Benchmark {
         SkFAIL("unreachable");
         return "oh bother";
     }
-    bool isSuitableFor(Backend backend) SK_OVERRIDE { return backend == kNonRendering_Backend; }
+    bool isSuitableFor(Backend backend) override { return backend == kNonRendering_Backend; }
 
-    void onDraw(const int loops, SkCanvas* canvas) SK_OVERRIDE {
+    void onDraw(const int loops, SkCanvas* canvas) override {
         // Unlike blackhole, junk can and probably will be a register.
         uint32_t junk = 0;
         uint32_t seed = 0;
@@ -49,21 +56,32 @@ struct PMFloatBench : public Benchmark {
             colors[3] = seed + 3;
         #endif
 
-            SkPMFloat floats[4];
+            SkPMFloat fa,fb,fc,fd;
             if (kWide) {
-                SkPMFloat::From4PMColors(floats, colors);
+                SkPMFloat::From4PMColors(colors, &fa, &fb, &fc, &fd);
             } else {
-                for (int i = 0; i < 4; i++) {
-                    floats[i] = SkPMFloat::FromPMColor(colors[i]);
-                }
+                fa = SkPMFloat::FromPMColor(colors[0]);
+                fb = SkPMFloat::FromPMColor(colors[1]);
+                fc = SkPMFloat::FromPMColor(colors[2]);
+                fd = SkPMFloat::FromPMColor(colors[3]);
             }
 
             SkPMColor back[4];
             switch (kClamp << 1 | kWide) {
-                case 0: for (int i = 0; i < 4; i++) { back[i] = floats[i].get(); }     break;
-                case 1: SkPMFloat::To4PMColors(back, floats);                          break;
-                case 2: for (int i = 0; i < 4; i++) { back[i] = floats[i].clamped(); } break;
-                case 3: SkPMFloat::ClampTo4PMColors(back, floats);                     break;
+                case 0: {
+                    back[0] = fa.round();
+                    back[1] = fb.round();
+                    back[2] = fc.round();
+                    back[3] = fd.round();
+                } break;
+                case 1: SkPMFloat::RoundTo4PMColors(fa, fb, fc, fd, back); break;
+                case 2: {
+                    back[0] = fa.roundClamp();
+                    back[1] = fb.roundClamp();
+                    back[2] = fc.roundClamp();
+                    back[3] = fd.roundClamp();
+                } break;
+                case 3: SkPMFloat::RoundClampTo4PMColors(fa, fb, fc, fd, back); break;
             }
             for (int i = 0; i < 4; i++) {
                 junk ^= back[i];
@@ -74,7 +92,42 @@ struct PMFloatBench : public Benchmark {
 };
 
 // Extra () help DEF_BENCH not get confused by the comma inside the <>.
-DEF_BENCH(return (new PMFloatBench< true,  true>);)
-DEF_BENCH(return (new PMFloatBench<false,  true>);)
-DEF_BENCH(return (new PMFloatBench< true, false>);)
-DEF_BENCH(return (new PMFloatBench<false, false>);)
+DEF_BENCH(return (new PMFloatGetSetBench< true,  true>);)
+DEF_BENCH(return (new PMFloatGetSetBench<false,  true>);)
+DEF_BENCH(return (new PMFloatGetSetBench< true, false>);)
+DEF_BENCH(return (new PMFloatGetSetBench<false, false>);)
+
+struct PMFloatGradientBench : public Benchmark {
+    const char* onGetName() override { return "PMFloat_gradient"; }
+    bool isSuitableFor(Backend backend) override { return backend == kNonRendering_Backend; }
+
+    SkPMColor fDevice[100];
+    void onDraw(const int loops, SkCanvas*) override {
+        Sk4f c0 = SkPMFloat::FromARGB(255, 255, 0, 0),
+             c1 = SkPMFloat::FromARGB(255, 0, 0, 255),
+             dc = c1 - c0,
+             fx(0.1f),
+             dx(0.002f),
+             dcdx(dc*dx),
+             dcdx4(dcdx+dcdx+dcdx+dcdx);
+
+        for (int n = 0; n < loops; n++) {
+            Sk4f a = c0 + dc*fx + Sk4f(0.5f),  // The +0.5f lets us call trunc() instead of get().
+                 b = a + dcdx,
+                 c = b + dcdx,
+                 d = c + dcdx;
+            for (size_t i = 0; i < SK_ARRAY_COUNT(fDevice); i += 4) {
+                fDevice[i+0] = SkPMFloat(a).trunc();
+                fDevice[i+1] = SkPMFloat(b).trunc();
+                fDevice[i+2] = SkPMFloat(c).trunc();
+                fDevice[i+3] = SkPMFloat(d).trunc();
+                a += dcdx4;
+                b += dcdx4;
+                c += dcdx4;
+                d += dcdx4;
+            }
+        }
+    }
+};
+
+DEF_BENCH(return new PMFloatGradientBench;)

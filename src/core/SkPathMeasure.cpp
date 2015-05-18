@@ -341,8 +341,7 @@ static void seg_to(const SkPoint pts[], int segType,
                 if (SK_Scalar1 == stopT) {
                     dst->quadTo(tmp0[3], tmp0[4]);
                 } else {
-                    SkChopQuadAt(&tmp0[2], tmp1, SkScalarDiv(stopT - startT,
-                                                         SK_Scalar1 - startT));
+                    SkChopQuadAt(&tmp0[2], tmp1, (stopT - startT) / (1 - startT));
                     dst->quadTo(tmp1[1], tmp1[2]);
                 }
             }
@@ -383,8 +382,7 @@ static void seg_to(const SkPoint pts[], int segType,
                 if (SK_Scalar1 == stopT) {
                     dst->cubicTo(tmp0[4], tmp0[5], tmp0[6]);
                 } else {
-                    SkChopCubicAt(&tmp0[3], tmp1, SkScalarDiv(stopT - startT,
-                                                        SK_Scalar1 - startT));
+                    SkChopCubicAt(&tmp0[3], tmp1, (stopT - startT) / (1 - startT));
                     dst->cubicTo(tmp1[1], tmp1[2], tmp1[3]);
                 }
             }
@@ -442,6 +440,36 @@ SkScalar SkPathMeasure::getLength() {
     return fLength;
 }
 
+template <typename T, typename K>
+int SkTKSearch(const T base[], int count, const K& key) {
+    SkASSERT(count >= 0);
+    if (count <= 0) {
+        return ~0;
+    }
+    
+    SkASSERT(base != NULL); // base may be NULL if count is zero
+    
+    int lo = 0;
+    int hi = count - 1;
+    
+    while (lo < hi) {
+        int mid = (hi + lo) >> 1;
+        if (base[mid].fDistance < key) {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    
+    if (base[hi].fDistance < key) {
+        hi += 1;
+        hi = ~hi;
+    } else if (key < base[hi].fDistance) {
+        hi = ~hi;
+    }
+    return hi;
+}
+
 const SkPathMeasure::Segment* SkPathMeasure::distanceToSegment(
                                             SkScalar distance, SkScalar* t) {
     SkDEBUGCODE(SkScalar length = ) this->getLength();
@@ -450,7 +478,7 @@ const SkPathMeasure::Segment* SkPathMeasure::distanceToSegment(
     const Segment*  seg = fSegments.begin();
     int             count = fSegments.count();
 
-    int index = SkTSearch<SkScalar>(&seg->fDistance, count, distance, sizeof(Segment));
+    int index = SkTKSearch<Segment, SkScalar>(seg, count, distance);
     // don't care if we hit an exact match or not, so we xor index if it is negative
     index ^= (index >> 31);
     seg = &seg[index];

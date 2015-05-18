@@ -78,10 +78,19 @@ int herdCats(const Array& cats) {
 }
 ~~~~
 
-Enum values are prefixed with k and have post fix that consists of an underscore
-and singular name of the enum name. The enum itself should be singular for
-exclusive values or plural for a bitfield. If a count is needed it is 
-k<singular enum name>Count and not be a member of the enum (see example):
+Enum values are prefixed with k. Unscoped enum values are post fixed with
+an underscore and singular name of the enum name. The enum itself should be
+singular for exclusive values or plural for a bitfield. If a count is needed it
+is  k&lt;singular enum name&gt;Count and not be a member of the enum (see example):
+
+<!--?prettify?-->
+~~~~
+enum class SkPancakeType {
+     kBlueberry,
+     kPlain,
+     kChocolateChip,
+};
+~~~~
 
 <!--?prettify?-->
 ~~~~
@@ -321,12 +330,12 @@ private:
 };
 ~~~~
 
-Virtual functions that are overridden in derived classes should use SK_OVERRIDE
+Virtual functions that are overridden in derived classes should use override
 (and not the override keyword). The virtual keyword can be omitted.
 
 <!--?prettify?-->
 ~~~~
-void myVirtual() SK_OVERRIDE {
+void myVirtual() override {
 }
 ~~~~
 
@@ -335,7 +344,7 @@ base-class implementations of a virtual function should be explicitly qualified:
 
 <!--?prettify?-->
 ~~~~
-void myVirtual() SK_OVERRIDE {
+void myVirtual() override {
     ...
     this->INHERITED::myVirtual();
     ...
@@ -343,7 +352,7 @@ void myVirtual() SK_OVERRIDE {
 ~~~~
 
 As in the above example, derived classes that redefine virtual functions should
-use SK_OVERRIDE to note that explicitly.
+use override to note that explicitly.
 
 Constructor initializers should be one per line, indented, with punctuation
 placed before the initializer. This is a fairly new rule so much of the existing
@@ -376,7 +385,7 @@ Method calls within method calls should be prefixed with dereference of the
 <!--?prettify?-->
 ~~~~
 this->method();
-Memory Managemt
+Memory Management
 ~~~~
 
 All memory allocation should be routed through SkNEW and its variants. These are
@@ -456,7 +465,7 @@ checking for NULL pointers (as documentation):
 
 <!--?prettify?-->
 ~~~~
-if (NULL == x) {  // slightly preferred over if (x)
+if (NULL == x) {  // slightly preferred over if (!x)
    ...
 }
 ~~~~

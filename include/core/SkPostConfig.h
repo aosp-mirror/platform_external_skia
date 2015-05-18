@@ -232,18 +232,6 @@
          SK_ ## C3 ## 32_SHIFT == 24)
 #endif
 
-//////////////////////////////////////////////////////////////////////
-
-// TODO: rebaseline as needed so we can remove this flag entirely.
-//  - all platforms have int64_t now
-//  - we have slightly different fixed math results because of this check
-//    since we don't define this for linux/android
-#if defined(SK_BUILD_FOR_WIN32) || defined(SK_BUILD_FOR_MAC)
-#  ifndef SkLONGLONG
-#    define SkLONGLONG int64_t
-#  endif
-#endif
-
 //////////////////////////////////////////////////////////////////////////////////////////////
 #ifndef SK_BUILD_FOR_WINCE
 #  include <string.h>
@@ -291,32 +279,6 @@
 #    define new DEBUG_CLIENTBLOCK
 #  else
 #    define DEBUG_CLIENTBLOCK
-#  endif
-#endif
-
-//////////////////////////////////////////////////////////////////////
-
-#ifndef SK_OVERRIDE
-#  if defined(_MSC_VER)
-#    define SK_OVERRIDE override
-#  elif defined(__clang__)
-     // Using __attribute__((override)) on clang does not appear to always work.
-     // Clang defaults to C++03 and warns about using override. Squelch that. Intentionally no
-     // push/pop here so all users of SK_OVERRIDE ignore the warning too. This is like passing
-     // -Wno-c++11-extensions, except that GCC won't die (because it won't see this pragma).
-#    pragma clang diagnostic ignored "-Wc++11-extensions"
-#
-#    if __has_feature(cxx_override_control)
-#      define SK_OVERRIDE override
-#    elif defined(__has_extension) && __has_extension(cxx_override_control)
-#      define SK_OVERRIDE override
-#    endif
-   // if GCC >= 4.7
-#  elif defined(__GNUC__) && (__GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 7))
-#    define SK_OVERRIDE override
-#  endif
-#  ifndef SK_OVERRIDE
-#    define SK_OVERRIDE
 #  endif
 #endif
 
@@ -392,7 +354,7 @@
 //////////////////////////////////////////////////////////////////////
 
 #ifndef SK_EGL
-#  if defined(SK_BUILD_FOR_ANDROID) || defined(SK_BUILD_FOR_NACL)
+#  if defined(SK_BUILD_FOR_ANDROID)
 #    define SK_EGL 1
 #  else
 #    define SK_EGL 0
@@ -407,6 +369,12 @@
 #  define SK_GAMMA_EXPONENT (0.0f)
 #elif !defined(SK_GAMMA_EXPONENT)
 #  define SK_GAMMA_EXPONENT (2.2f)
+#endif
+
+//////////////////////////////////////////////////////////////////////
+
+#ifndef GR_TEST_UTILS
+#  define GR_TEST_UTILS 1
 #endif
 
 #endif // SkPostConfig_DEFINED

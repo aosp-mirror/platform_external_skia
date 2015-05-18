@@ -16,11 +16,11 @@ public:
     static SkBlurImageFilter* Create(SkScalar sigmaX,
                                      SkScalar sigmaY,
                                      SkImageFilter* input = NULL,
-                                     const CropRect* cropRect = NULL, uint32_t uniqueID = 0) {
-        return SkNEW_ARGS(SkBlurImageFilter, (sigmaX, sigmaY, input, cropRect, uniqueID));
+                                     const CropRect* cropRect = NULL) {
+        return SkNEW_ARGS(SkBlurImageFilter, (sigmaX, sigmaY, input, cropRect));
     }
 
-    void computeFastBounds(const SkRect&, SkRect*) const SK_OVERRIDE;
+    void computeFastBounds(const SkRect&, SkRect*) const override;
 
     SK_TO_STRING_OVERRIDE()
     SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkBlurImageFilter)
@@ -29,18 +29,17 @@ protected:
     SkBlurImageFilter(SkScalar sigmaX,
                       SkScalar sigmaY,
                       SkImageFilter* input,
-                      const CropRect* cropRect,
-                      uint32_t uniqueID);
-    void flatten(SkWriteBuffer&) const SK_OVERRIDE;
+                      const CropRect* cropRect);
+    void flatten(SkWriteBuffer&) const override;
 
     virtual bool onFilterImage(Proxy*, const SkBitmap& src, const Context&,
-                               SkBitmap* result, SkIPoint* offset) const SK_OVERRIDE;
+                               SkBitmap* result, SkIPoint* offset) const override;
     virtual bool onFilterBounds(const SkIRect& src, const SkMatrix&,
-                                SkIRect* dst) const SK_OVERRIDE;
+                                SkIRect* dst) const override;
 
-    bool canFilterImageGPU() const SK_OVERRIDE { return true; }
+    bool canFilterImageGPU() const override { return true; }
     virtual bool filterImageGPU(Proxy* proxy, const SkBitmap& src, const Context& ctx,
-                                SkBitmap* result, SkIPoint* offset) const SK_OVERRIDE;
+                                SkBitmap* result, SkIPoint* offset) const override;
 
 private:
     SkSize   fSigma;

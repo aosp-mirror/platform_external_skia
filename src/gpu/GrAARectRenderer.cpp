@@ -8,11 +8,15 @@
 #include "GrAARectRenderer.h"
 #include "GrBatch.h"
 #include "GrBatchTarget.h"
-#include "GrBufferAllocPool.h"
+#include "GrBatchTest.h"
+#include "GrContext.h"
 #include "GrDefaultGeoProcFactory.h"
 #include "GrGeometryProcessor.h"
-#include "GrGpu.h"
 #include "GrInvariantOutput.h"
+#include "GrResourceKey.h"
+#include "GrResourceProvider.h"
+#include "GrTestUtils.h"
+#include "GrVertexBuffer.h"
 #include "SkColorPriv.h"
 #include "gl/GrGLProcessor.h"
 #include "gl/GrGLGeometryProcessor.h"
@@ -26,32 +30,20 @@ static void set_inset_fan(SkPoint* pts, size_t stride,
                     r.fRight - dx, r.fBottom - dy, stride);
 }
 
-static const uint16_t gFillAARectIdx[] = {
-    0, 1, 5, 5, 4, 0,
-    1, 2, 6, 6, 5, 1,
-    2, 3, 7, 7, 6, 2,
-    3, 0, 4, 4, 7, 3,
-    4, 5, 6, 6, 7, 4,
-};
-
-static const int kIndicesPerAAFillRect = SK_ARRAY_COUNT(gFillAARectIdx);
-static const int kVertsPerAAFillRect = 8;
-static const int kNumAAFillRectsInIndexBuffer = 256;
-
 static const GrGeometryProcessor* create_fill_rect_gp(bool tweakAlphaForCoverage,
                                                       const SkMatrix& localMatrix) {
     uint32_t flags = GrDefaultGeoProcFactory::kColor_GPType;
     const GrGeometryProcessor* gp;
     if (tweakAlphaForCoverage) {
-        gp = GrDefaultGeoProcFactory::Create(flags, GrColor_WHITE, SkMatrix::I(), localMatrix,
-                                             false, 0xff);
+        gp = GrDefaultGeoProcFactory::Create(flags, GrColor_WHITE, SkMatrix::I(), localMatrix);
     } else {
         flags |= GrDefaultGeoProcFactory::kCoverage_GPType;
-        gp = GrDefaultGeoProcFactory::Create(flags, GrColor_WHITE, SkMatrix::I(), localMatrix,
-                                             false, 0xff);
+        gp = GrDefaultGeoProcFactory::Create(flags, GrColor_WHITE, SkMatrix::I(), localMatrix);
     }
     return gp;
 }
+
+GR_DECLARE_STATIC_UNIQUE_KEY(gAAFillRectIndexBufferKey);
 
 class AAFillRectBatch : public GrBatch {
 public:
@@ -62,22 +54,22 @@ public:
         SkRect fDevRect;
     };
 
-    static GrBatch* Create(const Geometry& geometry, const GrIndexBuffer* indexBuffer) {
-        return SkNEW_ARGS(AAFillRectBatch, (geometry, indexBuffer));
+    static GrBatch* Create(const Geometry& geometry) {
+        return SkNEW_ARGS(AAFillRectBatch, (geometry));
     }
 
-    const char* name() const SK_OVERRIDE { return "AAFillRectBatch"; }
+    const char* name() const override { return "AAFillRectBatch"; }
 
-    void getInvariantOutputColor(GrInitInvariantOutput* out) const SK_OVERRIDE {
+    void getInvariantOutputColor(GrInitInvariantOutput* out) const override {
         // When this is called on a batch, there is only one geometry bundle
         out->setKnownFourComponents(fGeoData[0].fColor);
     }
 
-    void getInvariantOutputCoverage(GrInitInvariantOutput* out) const SK_OVERRIDE {
+    void getInvariantOutputCoverage(GrInitInvariantOutput* out) const override {
         out->setUnknownSingleComponent();
     }
 
-    void initBatchTracker(const GrPipelineInfo& init) SK_OVERRIDE {
+    void initBatchTracker(const GrPipelineInfo& init) override {
         // Handle any color overrides
         if (init.fColorIgnored) {
             fGeoData[0].fColor = GrColor_ILLEGAL;
@@ -93,7 +85,7 @@ public:
         fBatch.fCanTweakAlphaForCoverage = init.fCanTweakAlphaForCoverage;
     }
 
-    void generateGeometry(GrBatchTarget* batchTarget, const GrPipeline* pipeline) SK_OVERRIDE {
+    void generateGeometry(GrBatchTarget* batchTarget, const GrPipeline* pipeline) override {
         bool canTweakAlphaForCoverage = this->canTweakAlphaForCoverage();
 
         SkMatrix localMatrix;
@@ -118,23 +110,18 @@ public:
         gp->initBatchTracker(batchTarget->currentBatchTracker(), init);
 
         size_t vertexStride = gp->getVertexStride();
-
         SkASSERT(canTweakAlphaForCoverage ?
                  vertexStride == sizeof(GrDefaultGeoProcFactory::PositionColorAttr) :
                  vertexStride == sizeof(GrDefaultGeoProcFactory::PositionColorCoverageAttr));
-
         int instanceCount = fGeoData.count();
-        int vertexCount = kVertsPerAAFillRect * instanceCount;
 
-        const GrVertexBuffer* vertexBuffer;
-        int firstVertex;
-
-        void* vertices = batchTarget->vertexPool()->makeSpace(vertexStride,
-                                                              vertexCount,
-                                                              &vertexBuffer,
-                                                              &firstVertex);
-
-        if (!vertices) {
+        SkAutoTUnref<const GrIndexBuffer> indexBuffer(this->getIndexBuffer(
+            batchTarget->resourceProvider()));
+        InstancedHelper helper;
+        void* vertices = helper.init(batchTarget, kTriangles_GrPrimitiveType, vertexStride,
+                                     indexBuffer, kVertsPerAAFillRect, kIndicesPerAAFillRect,
+                                     instanceCount);
+        if (!vertices || !indexBuffer) {
             SkDebugf("Could not allocate vertices\n");
             return;
         }
@@ -151,37 +138,37 @@ public:
                                              canTweakAlphaForCoverage);
         }
 
-        GrDrawTarget::DrawInfo drawInfo;
-        drawInfo.setPrimitiveType(kTriangles_GrPrimitiveType);
-        drawInfo.setStartVertex(0);
-        drawInfo.setStartIndex(0);
-        drawInfo.setVerticesPerInstance(kVertsPerAAFillRect);
-        drawInfo.setIndicesPerInstance(kIndicesPerAAFillRect);
-        drawInfo.adjustStartVertex(firstVertex);
-        drawInfo.setVertexBuffer(vertexBuffer);
-        drawInfo.setIndexBuffer(fIndexBuffer);
-
-        int maxInstancesPerDraw = kNumAAFillRectsInIndexBuffer;
-
-        while (instanceCount) {
-            drawInfo.setInstanceCount(SkTMin(instanceCount, maxInstancesPerDraw));
-            drawInfo.setVertexCount(drawInfo.instanceCount() * drawInfo.verticesPerInstance());
-            drawInfo.setIndexCount(drawInfo.instanceCount() * drawInfo.indicesPerInstance());
-
-            batchTarget->draw(drawInfo);
-
-            drawInfo.setStartVertex(drawInfo.startVertex() + drawInfo.vertexCount());
-            instanceCount -= drawInfo.instanceCount();
-        }
+        helper.issueDraw(batchTarget);
     }
 
     SkSTArray<1, Geometry, true>* geoData() { return &fGeoData; }
 
 private:
-    AAFillRectBatch(const Geometry& geometry, const GrIndexBuffer* indexBuffer)
-        : fIndexBuffer(indexBuffer) {
+    AAFillRectBatch(const Geometry& geometry) {
         this->initClassID<AAFillRectBatch>();
         fGeoData.push_back(geometry);
+
+        this->setBounds(geometry.fDevRect);
+    }
+
+    static const int kNumAAFillRectsInIndexBuffer = 256;
+    static const int kVertsPerAAFillRect = 8;
+    static const int kIndicesPerAAFillRect = 30;
+
+    const GrIndexBuffer* getIndexBuffer(GrResourceProvider* resourceProvider) {
+        GR_DEFINE_STATIC_UNIQUE_KEY(gAAFillRectIndexBufferKey);
+
+        static const uint16_t gFillAARectIdx[] = {
+            0, 1, 5, 5, 4, 0,
+            1, 2, 6, 6, 5, 1,
+            2, 3, 7, 7, 6, 2,
+            3, 0, 4, 4, 7, 3,
+            4, 5, 6, 6, 7, 4,
+        };
+        GR_STATIC_ASSERT(SK_ARRAY_COUNT(gFillAARectIdx) == kIndicesPerAAFillRect);
+        return resourceProvider->refOrCreateInstancedIndexBuffer(gFillAARectIdx,
+            kIndicesPerAAFillRect, kNumAAFillRectsInIndexBuffer, kVertsPerAAFillRect,
+            gAAFillRectIndexBufferKey);
     }
 
     GrColor color() const { return fBatch.fColor; }
@@ -190,7 +177,7 @@ private:
     bool colorIgnored() const { return fBatch.fColorIgnored; }
     const SkMatrix& viewMatrix() const { return fGeoData[0].fViewMatrix; }
 
-    bool onCombineIfPossible(GrBatch* t) SK_OVERRIDE {
+    bool onCombineIfPossible(GrBatch* t) override {
         AAFillRectBatch* that = t->cast<AAFillRectBatch>();
 
         SkASSERT(this->usesLocalCoords() == that->usesLocalCoords());
@@ -212,6 +199,7 @@ private:
         }
 
         fGeoData.push_back_n(that->geoData()->count(), that->geoData()->begin());
+        this->joinBounds(that->bounds());
         return true;
     }
 
@@ -317,7 +305,6 @@ private:
     };
 
     BatchTracker fBatch;
-    const GrIndexBuffer* fIndexBuffer;
     SkSTArray<1, Geometry, true> fGeoData;
 };
 
@@ -329,147 +316,21 @@ enum CoverageAttribType {
 };
 }
 
-void GrAARectRenderer::reset() {
-    SkSafeSetNull(fAAFillRectIndexBuffer);
-    SkSafeSetNull(fAAMiterStrokeRectIndexBuffer);
-    SkSafeSetNull(fAABevelStrokeRectIndexBuffer);
-}
-
-static const uint16_t gMiterStrokeAARectIdx[] = {
-    0 + 0, 1 + 0, 5 + 0, 5 + 0, 4 + 0, 0 + 0,
-    1 + 0, 2 + 0, 6 + 0, 6 + 0, 5 + 0, 1 + 0,
-    2 + 0, 3 + 0, 7 + 0, 7 + 0, 6 + 0, 2 + 0,
-    3 + 0, 0 + 0, 4 + 0, 4 + 0, 7 + 0, 3 + 0,
-
-    0 + 4, 1 + 4, 5 + 4, 5 + 4, 4 + 4, 0 + 4,
-    1 + 4, 2 + 4, 6 + 4, 6 + 4, 5 + 4, 1 + 4,
-    2 + 4, 3 + 4, 7 + 4, 7 + 4, 6 + 4, 2 + 4,
-    3 + 4, 0 + 4, 4 + 4, 4 + 4, 7 + 4, 3 + 4,
-
-    0 + 8, 1 + 8, 5 + 8, 5 + 8, 4 + 8, 0 + 8,
-    1 + 8, 2 + 8, 6 + 8, 6 + 8, 5 + 8, 1 + 8,
-    2 + 8, 3 + 8, 7 + 8, 7 + 8, 6 + 8, 2 + 8,
-    3 + 8, 0 + 8, 4 + 8, 4 + 8, 7 + 8, 3 + 8,
-};
-
-static const int kIndicesPerMiterStrokeRect = SK_ARRAY_COUNT(gMiterStrokeAARectIdx);
-static const int kVertsPerMiterStrokeRect = 16;
-static const int kNumMiterStrokeRectsInIndexBuffer = 256;
-
-/**
- * As in miter-stroke, index = a + b, and a is the current index, b is the shift
- * from the first index. The index layout:
- * outer AA line: 0~3, 4~7
- * outer edge:    8~11, 12~15
- * inner edge:    16~19
- * inner AA line: 20~23
- * Following comes a bevel-stroke rect and its indices:
- *
- *           4                                 7
- *            *********************************
- *          *   ______________________________  *
- *         *  / 12                          15 \  *
- *        *  /                                  \  *
- *     0 *  |8     16_____________________19  11 |  * 3
- *       *  |       |                    |       |  *
- *       *  |       |  ****************  |       |  *
- *       *  |       |  * 20        23 *  |       |  *
- *       *  |       |  *              *  |       |  *
- *       *  |       |  * 21        22 *  |       |  *
- *       *  |       |  ****************  |       |  *
- *       *  |       |____________________|       |  *
- *     1 *  |9    17                      18   10|  * 2
- *        *  \                                  /  *
- *         *  \13 __________________________14/  *
- *          *                                   *
- *           **********************************
- *          5                                  6
- */
-static const uint16_t gBevelStrokeAARectIdx[] = {
-    // Draw outer AA, from outer AA line to outer edge, shift is 0.
-    0 + 0, 1 + 0, 9 + 0, 9 + 0, 8 + 0, 0 + 0,
-    1 + 0, 5 + 0, 13 + 0, 13 + 0, 9 + 0, 1 + 0,
-    5 + 0, 6 + 0, 14 + 0, 14 + 0, 13 + 0, 5 + 0,
-    6 + 0, 2 + 0, 10 + 0, 10 + 0, 14 + 0, 6 + 0,
-    2 + 0, 3 + 0, 11 + 0, 11 + 0, 10 + 0, 2 + 0,
-    3 + 0, 7 + 0, 15 + 0, 15 + 0, 11 + 0, 3 + 0,
-    7 + 0, 4 + 0, 12 + 0, 12 + 0, 15 + 0, 7 + 0,
-    4 + 0, 0 + 0, 8 + 0, 8 + 0, 12 + 0, 4 + 0,
-
-    // Draw the stroke, from outer edge to inner edge, shift is 8.
-    0 + 8, 1 + 8, 9 + 8, 9 + 8, 8 + 8, 0 + 8,
-    1 + 8, 5 + 8, 9 + 8,
-    5 + 8, 6 + 8, 10 + 8, 10 + 8, 9 + 8, 5 + 8,
-    6 + 8, 2 + 8, 10 + 8,
-    2 + 8, 3 + 8, 11 + 8, 11 + 8, 10 + 8, 2 + 8,
-    3 + 8, 7 + 8, 11 + 8,
-    7 + 8, 4 + 8, 8 + 8, 8 + 8, 11 + 8, 7 + 8,
-    4 + 8, 0 + 8, 8 + 8,
-
-    // Draw the inner AA, from inner edge to inner AA line, shift is 16.
-    0 + 16, 1 + 16, 5 + 16, 5 + 16, 4 + 16, 0 + 16,
-    1 + 16, 2 + 16, 6 + 16, 6 + 16, 5 + 16, 1 + 16,
-    2 + 16, 3 + 16, 7 + 16, 7 + 16, 6 + 16, 2 + 16,
-    3 + 16, 0 + 16, 4 + 16, 4 + 16, 7 + 16, 3 + 16,
-};
-
-static const int kIndicesPerBevelStrokeRect = SK_ARRAY_COUNT(gBevelStrokeAARectIdx);
-static const int kVertsPerBevelStrokeRect = 24;
-static const int kNumBevelStrokeRectsInIndexBuffer = 256;
-
-static int aa_stroke_rect_index_count(bool miterStroke) {
-    return miterStroke ? SK_ARRAY_COUNT(gMiterStrokeAARectIdx) :
-                         SK_ARRAY_COUNT(gBevelStrokeAARectIdx);
-}
-
-GrIndexBuffer* GrAARectRenderer::aaStrokeRectIndexBuffer(bool miterStroke) {
-    if (miterStroke) {
-        if (NULL == fAAMiterStrokeRectIndexBuffer) {
-            fAAMiterStrokeRectIndexBuffer =
-                    fGpu->createInstancedIndexBuffer(gMiterStrokeAARectIdx,
-                                                     kIndicesPerMiterStrokeRect,
-                                                     kNumMiterStrokeRectsInIndexBuffer,
-                                                     kVertsPerMiterStrokeRect);
-        }
-        return fAAMiterStrokeRectIndexBuffer;
-    } else {
-        if (NULL == fAABevelStrokeRectIndexBuffer) {
-            fAABevelStrokeRectIndexBuffer =
-                    fGpu->createInstancedIndexBuffer(gBevelStrokeAARectIdx,
-                                                     kIndicesPerBevelStrokeRect,
-                                                     kNumBevelStrokeRectsInIndexBuffer,
-                                                     kVertsPerBevelStrokeRect);
-        }
-        return fAABevelStrokeRectIndexBuffer;
-    }
-}
-
 void GrAARectRenderer::geometryFillAARect(GrDrawTarget* target,
                                           GrPipelineBuilder* pipelineBuilder,
                                           GrColor color,
                                           const SkMatrix& viewMatrix,
                                           const SkRect& rect,
                                           const SkRect& devRect) {
-    if (!fAAFillRectIndexBuffer) {
-        fAAFillRectIndexBuffer = fGpu->createInstancedIndexBuffer(gFillAARectIdx,
-                                                                  kIndicesPerAAFillRect,
-                                                                  kNumAAFillRectsInIndexBuffer,
-                                                                  kVertsPerAAFillRect);
-    }
-
-    if (!fAAFillRectIndexBuffer) {
-        SkDebugf("Unable to create index buffer\n");
-        return;
-    }
-
     AAFillRectBatch::Geometry geometry;
     geometry.fRect = rect;
     geometry.fViewMatrix = viewMatrix;
     geometry.fDevRect = devRect;
     geometry.fColor = color;
 
-    SkAutoTUnref<GrBatch> batch(AAFillRectBatch::Create(geometry, fAAFillRectIndexBuffer));
-    target->drawBatch(pipelineBuilder, batch, &devRect);
+
+    SkAutoTUnref<GrBatch> batch(AAFillRectBatch::Create(geometry));
+    target->drawBatch(pipelineBuilder, batch);
 }
 
 void GrAARectRenderer::strokeAARect(GrDrawTarget* target,
@@ -493,14 +354,6 @@ void GrAARectRenderer::strokeAARect(GrDrawTarget* target,
     const SkScalar dy = devStrokeSize.fY;
     const SkScalar rx = SkScalarMul(dx, SK_ScalarHalf);
     const SkScalar ry = SkScalarMul(dy, SK_ScalarHalf);
-
-    // Temporarily #if'ed out. We don't want to pass in the devRect but
-    // right now it is computed in GrContext::apply_aa_to_rect and we don't
-    // want to throw away the work
-#if 0
-    SkRect devRect;
-    combinedMatrix.mapRect(&devRect, rect);
-#endif
 
     SkScalar spare;
     {
@@ -542,6 +395,9 @@ void GrAARectRenderer::strokeAARect(GrDrawTarget* target,
                                devOutsideAssist, devInside, miterStroke);
 }
 
+GR_DECLARE_STATIC_UNIQUE_KEY(gMiterIndexBufferKey);
+GR_DECLARE_STATIC_UNIQUE_KEY(gBevelIndexBufferKey);
+
 class AAStrokeRectBatch : public GrBatch {
 public:
     // TODO support AA rotated stroke rects by copying around view matrices
@@ -553,23 +409,22 @@ public:
         bool fMiterStroke;
     };
 
-    static GrBatch* Create(const Geometry& geometry, const SkMatrix& viewMatrix,
-                           const GrIndexBuffer* indexBuffer) {
-        return SkNEW_ARGS(AAStrokeRectBatch, (geometry, viewMatrix, indexBuffer));
+    static GrBatch* Create(const Geometry& geometry, const SkMatrix& viewMatrix) {
+        return SkNEW_ARGS(AAStrokeRectBatch, (geometry, viewMatrix));
     }
 
-    const char* name() const SK_OVERRIDE { return "AAStrokeRect"; }
+    const char* name() const override { return "AAStrokeRect"; }
 
-    void getInvariantOutputColor(GrInitInvariantOutput* out) const SK_OVERRIDE {
+    void getInvariantOutputColor(GrInitInvariantOutput* out) const override {
         // When this is called on a batch, there is only one geometry bundle
         out->setKnownFourComponents(fGeoData[0].fColor);
     }
 
-    void getInvariantOutputCoverage(GrInitInvariantOutput* out) const SK_OVERRIDE {
+    void getInvariantOutputCoverage(GrInitInvariantOutput* out) const override {
         out->setUnknownSingleComponent();
     }
 
-    void initBatchTracker(const GrPipelineInfo& init) SK_OVERRIDE {
+    void initBatchTracker(const GrPipelineInfo& init) override {
         // Handle any color overrides
         if (init.fColorIgnored) {
             fGeoData[0].fColor = GrColor_ILLEGAL;
@@ -586,7 +441,7 @@ public:
         fBatch.fCanTweakAlphaForCoverage = init.fCanTweakAlphaForCoverage;
     }
 
-    void generateGeometry(GrBatchTarget* batchTarget, const GrPipeline* pipeline) SK_OVERRIDE {
+    void generateGeometry(GrBatchTarget* batchTarget, const GrPipeline* pipeline) override {
         bool canTweakAlphaForCoverage = this->canTweakAlphaForCoverage();
 
         // Local matrix is ignored if we don't have local coords.  If we have localcoords we only
@@ -617,31 +472,27 @@ public:
         SkASSERT(canTweakAlphaForCoverage ?
                  vertexStride == sizeof(GrDefaultGeoProcFactory::PositionColorAttr) :
                  vertexStride == sizeof(GrDefaultGeoProcFactory::PositionColorCoverageAttr));
-
         int innerVertexNum = 4;
         int outerVertexNum = this->miterStroke() ? 4 : 8;
-        int totalVertexNum = (outerVertexNum + innerVertexNum) * 2;
-
+        int verticesPerInstance = (outerVertexNum + innerVertexNum) * 2;
+        int indicesPerInstance = this->miterStroke() ? kMiterIndexCnt : kBevelIndexCnt;
         int instanceCount = fGeoData.count();
-        int vertexCount = totalVertexNum * instanceCount;
 
-        const GrVertexBuffer* vertexBuffer;
-        int firstVertex;
-
-        void* vertices = batchTarget->vertexPool()->makeSpace(vertexStride,
-                                                              vertexCount,
-                                                              &vertexBuffer,
-                                                              &firstVertex);
-
-        if (!vertices) {
-            SkDebugf("Could not allocate vertices\n");
-            return;
-        }
+        const SkAutoTUnref<const GrIndexBuffer> indexBuffer(
+            GetIndexBuffer(batchTarget->resourceProvider(), this->miterStroke()));
+        InstancedHelper helper;
+        void* vertices = helper.init(batchTarget, kTriangles_GrPrimitiveType, vertexStride,
+                                     indexBuffer, verticesPerInstance,  indicesPerInstance,
+                                     instanceCount);
+        if (!vertices || !indexBuffer) {
+             SkDebugf("Could not allocate vertices\n");
+             return;
+         }
 
         for (int i = 0; i < instanceCount; i++) {
             const Geometry& args = fGeoData[i];
             this->generateAAStrokeRectGeometry(vertices,
-                                               i * totalVertexNum * vertexStride,
+                                               i * verticesPerInstance * vertexStride,
                                                vertexStride,
                                                outerVertexNum,
                                                innerVertexNum,
@@ -652,40 +503,121 @@ public:
                                                args.fMiterStroke,
                                                canTweakAlphaForCoverage);
         }
-
-        GrDrawTarget::DrawInfo drawInfo;
-        drawInfo.setPrimitiveType(kTriangles_GrPrimitiveType);
-        drawInfo.setStartVertex(0);
-        drawInfo.setStartIndex(0);
-        drawInfo.setVerticesPerInstance(totalVertexNum);
-        drawInfo.setIndicesPerInstance(aa_stroke_rect_index_count(this->miterStroke()));
-        drawInfo.adjustStartVertex(firstVertex);
-        drawInfo.setVertexBuffer(vertexBuffer);
-        drawInfo.setIndexBuffer(fIndexBuffer);
-
-        int maxInstancesPerDraw = kNumBevelStrokeRectsInIndexBuffer;
-
-        while (instanceCount) {
-            drawInfo.setInstanceCount(SkTMin(instanceCount, maxInstancesPerDraw));
-            drawInfo.setVertexCount(drawInfo.instanceCount() * drawInfo.verticesPerInstance());
-            drawInfo.setIndexCount(drawInfo.instanceCount() * drawInfo.indicesPerInstance());
-
-            batchTarget->draw(drawInfo);
-
-            drawInfo.setStartVertex(drawInfo.startVertex() + drawInfo.vertexCount());
-            instanceCount -= drawInfo.instanceCount();
-        }
+        helper.issueDraw(batchTarget);
     }
 
     SkSTArray<1, Geometry, true>* geoData() { return &fGeoData; }
 
 private:
-    AAStrokeRectBatch(const Geometry& geometry, const SkMatrix& viewMatrix,
-                      const GrIndexBuffer* indexBuffer)
-        : fIndexBuffer(indexBuffer) {
+    AAStrokeRectBatch(const Geometry& geometry, const SkMatrix& viewMatrix)  {
         this->initClassID<AAStrokeRectBatch>();
         fBatch.fViewMatrix = viewMatrix;
         fGeoData.push_back(geometry);
+
+        // If we have miterstroke then we inset devOutside and outset devOutsideAssist, so we need
+        // the join for proper bounds
+        fBounds = geometry.fDevOutside;
+        fBounds.join(geometry.fDevOutsideAssist);
+    }
+
+
+    static const int kMiterIndexCnt = 3 * 24;
+    static const int kMiterVertexCnt = 16;
+    static const int kNumMiterRectsInIndexBuffer = 256;
+
+    static const int kBevelIndexCnt = 48 + 36 + 24;
+    static const int kBevelVertexCnt = 24;
+    static const int kNumBevelRectsInIndexBuffer = 256;
+
+    static const GrIndexBuffer* GetIndexBuffer(GrResourceProvider* resourceProvider,
+                                               bool miterStroke) {
+
+        if (miterStroke) {
+            static const uint16_t gMiterIndices[] = {
+                0 + 0, 1 + 0, 5 + 0, 5 + 0, 4 + 0, 0 + 0,
+                1 + 0, 2 + 0, 6 + 0, 6 + 0, 5 + 0, 1 + 0,
+                2 + 0, 3 + 0, 7 + 0, 7 + 0, 6 + 0, 2 + 0,
+                3 + 0, 0 + 0, 4 + 0, 4 + 0, 7 + 0, 3 + 0,
+
+                0 + 4, 1 + 4, 5 + 4, 5 + 4, 4 + 4, 0 + 4,
+                1 + 4, 2 + 4, 6 + 4, 6 + 4, 5 + 4, 1 + 4,
+                2 + 4, 3 + 4, 7 + 4, 7 + 4, 6 + 4, 2 + 4,
+                3 + 4, 0 + 4, 4 + 4, 4 + 4, 7 + 4, 3 + 4,
+
+                0 + 8, 1 + 8, 5 + 8, 5 + 8, 4 + 8, 0 + 8,
+                1 + 8, 2 + 8, 6 + 8, 6 + 8, 5 + 8, 1 + 8,
+                2 + 8, 3 + 8, 7 + 8, 7 + 8, 6 + 8, 2 + 8,
+                3 + 8, 0 + 8, 4 + 8, 4 + 8, 7 + 8, 3 + 8,
+            };
+            GR_STATIC_ASSERT(SK_ARRAY_COUNT(gMiterIndices) == kMiterIndexCnt);
+            GR_DEFINE_STATIC_UNIQUE_KEY(gMiterIndexBufferKey);
+            return resourceProvider->refOrCreateInstancedIndexBuffer(gMiterIndices,
+                kMiterIndexCnt, kNumMiterRectsInIndexBuffer, kMiterVertexCnt,
+                gMiterIndexBufferKey);
+        } else {
+            /**
+             * As in miter-stroke, index = a + b, and a is the current index, b is the shift
+             * from the first index. The index layout:
+             * outer AA line: 0~3, 4~7
+             * outer edge:    8~11, 12~15
+             * inner edge:    16~19
+             * inner AA line: 20~23
+             * Following comes a bevel-stroke rect and its indices:
+             *
+             *           4                                 7
+             *            *********************************
+             *          *   ______________________________  *
+             *         *  / 12                          15 \  *
+             *        *  /                                  \  *
+             *     0 *  |8     16_____________________19  11 |  * 3
+             *       *  |       |                    |       |  *
+             *       *  |       |  ****************  |       |  *
+             *       *  |       |  * 20        23 *  |       |  *
+             *       *  |       |  *              *  |       |  *
+             *       *  |       |  * 21        22 *  |       |  *
+             *       *  |       |  ****************  |       |  *
+             *       *  |       |____________________|       |  *
+             *     1 *  |9    17                      18   10|  * 2
+             *        *  \                                  /  *
+             *         *  \13 __________________________14/  *
+             *          *                                   *
+             *           **********************************
+             *          5                                  6
+             */
+            static const uint16_t gBevelIndices[] = {
+                // Draw outer AA, from outer AA line to outer edge, shift is 0.
+                0 + 0, 1 + 0,  9 + 0,  9 + 0,  8 + 0, 0 + 0,
+                1 + 0, 5 + 0, 13 + 0, 13 + 0,  9 + 0, 1 + 0,
+                5 + 0, 6 + 0, 14 + 0, 14 + 0, 13 + 0, 5 + 0,
+                6 + 0, 2 + 0, 10 + 0, 10 + 0, 14 + 0, 6 + 0,
+                2 + 0, 3 + 0, 11 + 0, 11 + 0, 10 + 0, 2 + 0,
+                3 + 0, 7 + 0, 15 + 0, 15 + 0, 11 + 0, 3 + 0,
+                7 + 0, 4 + 0, 12 + 0, 12 + 0, 15 + 0, 7 + 0,
+                4 + 0, 0 + 0,  8 + 0,  8 + 0, 12 + 0, 4 + 0,
+
+                // Draw the stroke, from outer edge to inner edge, shift is 8.
+                0 + 8, 1 + 8, 9 + 8, 9 + 8, 8 + 8, 0 + 8,
+                1 + 8, 5 + 8, 9 + 8,
+                5 + 8, 6 + 8, 10 + 8, 10 + 8, 9 + 8, 5 + 8,
+                6 + 8, 2 + 8, 10 + 8,
+                2 + 8, 3 + 8, 11 + 8, 11 + 8, 10 + 8, 2 + 8,
+                3 + 8, 7 + 8, 11 + 8,
+                7 + 8, 4 + 8, 8 + 8, 8 + 8, 11 + 8, 7 + 8,
+                4 + 8, 0 + 8, 8 + 8,
+
+                // Draw the inner AA, from inner edge to inner AA line, shift is 16.
+                0 + 16, 1 + 16, 5 + 16, 5 + 16, 4 + 16, 0 + 16,
+                1 + 16, 2 + 16, 6 + 16, 6 + 16, 5 + 16, 1 + 16,
+                2 + 16, 3 + 16, 7 + 16, 7 + 16, 6 + 16, 2 + 16,
+                3 + 16, 0 + 16, 4 + 16, 4 + 16, 7 + 16, 3 + 16,
+            };
+            GR_STATIC_ASSERT(SK_ARRAY_COUNT(gBevelIndices) == kBevelIndexCnt);
+
+            GR_DEFINE_STATIC_UNIQUE_KEY(gBevelIndexBufferKey);
+            return resourceProvider->refOrCreateInstancedIndexBuffer(gBevelIndices,
+                kBevelIndexCnt, kNumBevelRectsInIndexBuffer, kBevelVertexCnt,
+                gBevelIndexBufferKey);
+        }
     }
 
     GrColor color() const { return fBatch.fColor; }
@@ -695,7 +627,7 @@ private:
     const SkMatrix& viewMatrix() const { return fBatch.fViewMatrix; }
     bool miterStroke() const { return fBatch.fMiterStroke; }
 
-    bool onCombineIfPossible(GrBatch* t) SK_OVERRIDE {
+    bool onCombineIfPossible(GrBatch* t) override {
         AAStrokeRectBatch* that = t->cast<AAStrokeRectBatch>();
 
         // TODO batch across miterstroke changes
@@ -720,6 +652,7 @@ private:
             fBatch.fColor = GrColor_ILLEGAL;
         }
         fGeoData.push_back_n(that->geoData()->count(), that->geoData()->begin());
+        this->joinBounds(that->bounds());
         return true;
     }
 
@@ -847,10 +780,8 @@ private:
     };
 
     BatchTracker fBatch;
-    const GrIndexBuffer* fIndexBuffer;
     SkSTArray<1, Geometry, true> fGeoData;
 };
-
 
 void GrAARectRenderer::geometryStrokeAARect(GrDrawTarget* target,
                                             GrPipelineBuilder* pipelineBuilder,
@@ -860,12 +791,6 @@ void GrAARectRenderer::geometryStrokeAARect(GrDrawTarget* target,
                                             const SkRect& devOutsideAssist,
                                             const SkRect& devInside,
                                             bool miterStroke) {
-    GrIndexBuffer* indexBuffer = this->aaStrokeRectIndexBuffer(miterStroke);
-    if (!indexBuffer) {
-        SkDebugf("Failed to create index buffer!\n");
-        return;
-    }
-
     AAStrokeRectBatch::Geometry geometry;
     geometry.fColor = color;
     geometry.fDevOutside = devOutside;
@@ -873,7 +798,7 @@ void GrAARectRenderer::geometryStrokeAARect(GrDrawTarget* target,
     geometry.fDevInside = devInside;
     geometry.fMiterStroke = miterStroke;
 
-    SkAutoTUnref<GrBatch> batch(AAStrokeRectBatch::Create(geometry, viewMatrix, indexBuffer));
+    SkAutoTUnref<GrBatch> batch(AAStrokeRectBatch::Create(geometry, viewMatrix));
     target->drawBatch(pipelineBuilder, batch);
 }
 
@@ -885,7 +810,7 @@ void GrAARectRenderer::fillAANestedRects(GrDrawTarget* target,
     SkASSERT(viewMatrix.rectStaysRect());
     SkASSERT(!rects[1].isEmpty());
 
-    SkRect devOutside, devOutsideAssist, devInside;
+    SkRect devOutside, devInside;
     viewMatrix.mapRect(&devOutside, rects[0]);
     // can't call mapRect for devInside since it calls sort
     viewMatrix.mapPoints((SkPoint*)&devInside, (const SkPoint*)&rects[1], 2);
@@ -896,5 +821,42 @@ void GrAARectRenderer::fillAANestedRects(GrDrawTarget* target,
     }
 
     this->geometryStrokeAARect(target, pipelineBuilder, color, viewMatrix, devOutside,
-                               devOutsideAssist, devInside, true);
+                               devOutside, devInside, true);
 }
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+#ifdef GR_TEST_UTILS
+
+BATCH_TEST_DEFINE(AAFillRectBatch) {
+    AAFillRectBatch::Geometry geo;
+    geo.fColor = GrRandomColor(random);
+    geo.fViewMatrix = GrTest::TestMatrix(random);
+    geo.fRect = GrTest::TestRect(random);
+    geo.fDevRect = GrTest::TestRect(random);
+    return AAFillRectBatch::Create(geo);
+}
+
+BATCH_TEST_DEFINE(AAStrokeRectBatch) {
+    bool miterStroke = random->nextBool();
+
+    // Create mock stroke rect
+    SkRect outside = GrTest::TestRect(random);
+    SkScalar minDim = SkMinScalar(outside.width(), outside.height());
+    SkScalar strokeWidth = minDim * 0.1f;
+    SkRect outsideAssist = outside;
+    outsideAssist.outset(strokeWidth, strokeWidth);
+    SkRect inside = outside;
+    inside.inset(strokeWidth, strokeWidth);
+
+    AAStrokeRectBatch::Geometry geo;
+    geo.fColor = GrRandomColor(random);
+    geo.fDevOutside = outside;
+    geo.fDevOutsideAssist = outsideAssist;
+    geo.fDevInside = inside;
+    geo.fMiterStroke = miterStroke;
+
+    return AAStrokeRectBatch::Create(geo, GrTest::TestMatrix(random));
+}
+
+#endif

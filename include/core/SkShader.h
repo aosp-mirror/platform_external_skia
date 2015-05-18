@@ -65,8 +65,10 @@ public:
         /** only draw within the original domain, return 0 everywhere else */
         kDecal_TileMode,
 #endif
+    };
 
-        kTileModeCount
+    enum {
+        kTileModeCount = kMirror_TileMode + 1
     };
 
     // override these in your subclass
@@ -244,19 +246,6 @@ public:
                             //   to (0,0) as bitmap x coord, where angle = 0 is
                             //   bitmap left edge of bitmap = 2pi is the
                             //   right edge. Bitmap is 1 pixel tall. No extras
-        kTwoPointRadial_BitmapType,
-                            //<! Matrix transforms to space where (0,0) is
-                            //   the center of the starting circle.  The second
-                            //   circle will be centered (x, 0) where x  may be
-                            //   0. The post-matrix space is normalized such
-                            //   that 1 is the second radius - first radius.
-                            //   Three extra parameters are returned:
-                            //      0: x-offset of second circle center
-                            //         to first.
-                            //      1: radius of first circle in post-matrix
-                            //         space
-                            //      2: the second radius minus the first radius
-                            //         in pre-transformed space.
         kTwoPointConical_BitmapType,
                             //<! Matrix transforms to space where (0,0) is
                             //   the center of the starting circle.  The second
@@ -312,7 +301,7 @@ public:
      *      fPoint[0] and fPoint[1] are the end-points of the gradient
      *  Radial:
      *      fPoint[0] and fRadius[0] are the center and radius
-     *  Radial2:
+     *  Conical:
      *      fPoint[0] and fRadius[0] are the center and radius of the 1st circle
      *      fPoint[1] and fRadius[1] are the center and radius of the 2nd circle
      *  Sweep:
@@ -324,7 +313,6 @@ public:
         kColor_GradientType,
         kLinear_GradientType,
         kRadial_GradientType,
-        kRadial2_GradientType,
         kSweep_GradientType,
         kConical_GradientType,
         kLast_GradientType = kConical_GradientType
@@ -474,7 +462,7 @@ public:
     SK_DEFINE_FLATTENABLE_TYPE(SkShader)
 
 protected:
-    void flatten(SkWriteBuffer&) const SK_OVERRIDE;
+    void flatten(SkWriteBuffer&) const override;
 
     bool computeTotalInverse(const ContextRec&, SkMatrix* totalInverse) const;
 

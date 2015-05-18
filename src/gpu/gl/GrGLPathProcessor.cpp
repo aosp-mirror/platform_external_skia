@@ -16,7 +16,7 @@ GrGLPathProcessor::GrGLPathProcessor(const GrPathProcessor&, const GrBatchTracke
 
 void GrGLPathProcessor::emitCode(EmitArgs& args) {
     GrGLGPBuilder* pb = args.fPB;
-    GrGLGPFragmentBuilder* fs = args.fPB->getFragmentShaderBuilder();
+    GrGLFragmentBuilder* fs = args.fPB->getFragmentShaderBuilder();
     const PathBatchTracker& local = args.fBT.cast<PathBatchTracker>();
 
     // emit transforms
@@ -41,7 +41,7 @@ void GrGLPathProcessor::emitCode(EmitArgs& args) {
 
 void GrGLPathProcessor::GenKey(const GrPathProcessor&,
                                const GrBatchTracker& bt,
-                               const GrGLCaps&,
+                               const GrGLSLCaps&,
                                GrProcessorKeyBuilder* b) {
     const PathBatchTracker& local = bt.cast<PathBatchTracker>();
     b->add32(local.fInputColorType | local.fInputCoverageType << 16);
@@ -59,59 +59,8 @@ void GrGLPathProcessor::setData(const GrGLProgramDataManager& pdman,
     }
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////////////
-
-void GrGLLegacyPathProcessor::emitTransforms(GrGLGPBuilder*, const TransformsIn& tin,
-                                             TransformsOut* tout) {
-    tout->push_back_n(tin.count());
-    fInstalledTransforms.push_back_n(tin.count());
-    for (int i = 0; i < tin.count(); i++) {
-        const ProcCoords& coordTransforms = tin[i];
-        int texCoordIndex = this->addTexCoordSets(coordTransforms.count());
-
-        // Use the first uniform location as the texcoord index.
-        fInstalledTransforms[i].push_back_n(1);
-        fInstalledTransforms[i][0].fHandle = ShaderVarHandle(texCoordIndex);
-
-        SkString name;
-        for (int t = 0; t < coordTransforms.count(); ++t) {
-            GrSLType type = coordTransforms[t]->getMatrix().hasPerspective() ? kVec3f_GrSLType :
-                                                                               kVec2f_GrSLType;
-
-            name.printf("%s(gl_TexCoord[%i])", GrGLSLTypeString(type), texCoordIndex++);
-            SkNEW_APPEND_TO_TARRAY(&(*tout)[i], GrGLProcessor::TransformedCoords, (name, type));
-        }
-    }
-}
-
-void GrGLLegacyPathProcessor::setTransformData(
-        const GrPrimitiveProcessor& primProc,
-        int index,
-        const SkTArray<const GrCoordTransform*, true>& transforms,
-        GrGLPathRendering* glpr,
-        GrGLuint) {
-    // We've hidden the texcoord index in the first entry of the transforms array for each
-    // effect
-    int texCoordIndex = fInstalledTransforms[index][0].fHandle.handle();
-    for (int t = 0; t < transforms.count(); ++t) {
-        const SkMatrix& transform = GetTransformMatrix(primProc.localMatrix(), *transforms[t]);
-        GrGLPathRendering::PathTexGenComponents components =
-                GrGLPathRendering::kST_PathTexGenComponents;
-        if (transform.hasPerspective()) {
-            components = GrGLPathRendering::kSTR_PathTexGenComponents;
-        }
-        glpr->enablePathTexGen(texCoordIndex++, components, transform);
-    }
-}
-
-void GrGLLegacyPathProcessor::didSetData(GrGLPathRendering* glpr) {
-    glpr->flushPathTexGenSettings(fTexCoordSetCnt);
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////////////
-
-void GrGLNormalPathProcessor::emitTransforms(GrGLGPBuilder* pb, const TransformsIn& tin,
-                                             TransformsOut* tout) {
+void GrGLPathProcessor::emitTransforms(GrGLGPBuilder* pb, const TransformsIn& tin,
+                                       TransformsOut* tout) {
     tout->push_back_n(tin.count());
     fInstalledTransforms.push_back_n(tin.count());
     for (int i = 0; i < tin.count(); i++) {
@@ -140,7 +89,7 @@ void GrGLNormalPathProcessor::emitTransforms(GrGLGPBuilder* pb, const Transforms
     }
 }
 
-void GrGLNormalPathProcessor::resolveSeparableVaryings(GrGLGpu* gpu, GrGLuint programId) {
+void GrGLPathProcessor::resolveSeparableVaryings(GrGLGpu* gpu, GrGLuint programId) {
     int count = fSeparableVaryingInfos.count();
     for (int i = 0; i < count; ++i) {
         GrGLint location;
@@ -153,17 +102,18 @@ void GrGLNormalPathProcessor::resolveSeparableVaryings(GrGLGpu* gpu, GrGLuint pr
     }
 }
 
-void GrGLNormalPathProcessor::setTransformData(
+void GrGLPathProcessor::setTransformData(
         const GrPrimitiveProcessor& primProc,
         int index,
         const SkTArray<const GrCoordTransform*, true>& coordTransforms,
         GrGLPathRendering* glpr,
         GrGLuint programID) {
+    const GrPathProcessor& pathProc = primProc.cast<GrPathProcessor>();
     SkSTArray<2, Transform, true>& transforms = fInstalledTransforms[index];
     int numTransforms = transforms.count();
     for (int t = 0; t < numTransforms; ++t) {
         SkASSERT(transforms[t].fHandle.isValid());
-        const SkMatrix& transform = GetTransformMatrix(primProc.localMatrix(),
+        const SkMatrix& transform = GetTransformMatrix(pathProc.localMatrix(),
                                                        *coordTransforms[t]);
         if (transforms[t].fCurrentValue.cheapEqualTo(transform)) {
             continue;

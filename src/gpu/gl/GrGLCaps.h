@@ -10,12 +10,13 @@
 #define GrGLCaps_DEFINED
 
 #include "GrDrawTargetCaps.h"
-#include "GrGLStencilBuffer.h"
+#include "GrGLStencilAttachment.h"
 #include "SkChecksum.h"
 #include "SkTHash.h"
 #include "SkTArray.h"
 
 class GrGLContextInfo;
+class GrGLSLCaps;
 
 /**
  * Stores some capabilities of a GL context. Most are determined by the GL
@@ -26,7 +27,7 @@ class GrGLCaps : public GrDrawTargetCaps {
 public:
     SK_DECLARE_INST_COUNT(GrGLCaps)
 
-    typedef GrGLStencilBuffer::Format StencilFormat;
+    typedef GrGLStencilAttachment::Format StencilFormat;
 
     /**
      * The type of MSAA for FBOs supported. Different extensions have different
@@ -99,7 +100,7 @@ public:
     /**
      * Resets the caps such that nothing is supported.
      */
-    void reset() SK_OVERRIDE;
+    void reset() override;
 
     /**
      * Initializes the GrGLCaps to the set of features supported in the current
@@ -132,7 +133,7 @@ public:
      */
     void markColorConfigAndStencilFormatAsVerified(
                     GrPixelConfig config,
-                    const GrGLStencilBuffer::Format& format);
+                    const GrGLStencilAttachment::Format& format);
 
     /**
      * Call to check whether color config / stencil format pair has already
@@ -140,7 +141,7 @@ public:
      */
     bool isColorConfigAndStencilFormatVerified(
                     GrPixelConfig config,
-                    const GrGLStencilBuffer::Format& format) const;
+                    const GrGLStencilAttachment::Format& format) const;
 
     /**
      * Reports the type of MSAA FBO support.
@@ -165,18 +166,7 @@ public:
                kES_EXT_MsToTexture_MSFBOType == fMSFBOType;
     }
 
-    /**
-     * Some helper functions for encapsulating various extensions to read FB Buffer on openglES
-     *
-     * TODO(joshualitt) On desktop opengl 4.2+ we can achieve something similar to this effect
-     */
-    bool fbFetchSupport() const { return fFBFetchSupport; }
-
-    bool fbFetchNeedsCustomOutput() const { return fFBFetchNeedsCustomOutput; }
-
-    const char* fbFetchColorName() const { return fFBFetchColorName; }
-
-    const char* fbFetchExtensionString() const { return fFBFetchExtensionString; }
+    bool fbMixedSamplesSupport() const { return fFBMixedSamplesSupport; }
 
     InvalidateFBType invalidateFBType() const { return fInvalidateFBType; }
 
@@ -200,9 +190,6 @@ public:
 
     /// maximum number of texture units accessible in the fragment shader.
     int maxFragmentTextureUnits() const { return fMaxFragmentTextureUnits; }
-
-    /// maximum number of fixed-function texture coords, or zero if no fixed-function.
-    int maxFixedFunctionTextureCoords() const { return fMaxFixedFunctionTextureCoords; }
 
     /// ES requires an extension to support RGBA8 in RenderBufferStorage
     bool rgba8RenderbufferSupport() const { return fRGBA8RenderbufferSupport; }
@@ -266,16 +253,10 @@ public:
 
     bool fullClearIsFree() const { return fFullClearIsFree; }
 
-    bool dropsTileOnZeroDivide() const { return fDropsTileOnZeroDivide; }
-    
-    bool bindFBOToReadAndDrawForAddingAttachments() const {
-        return fBindFBOToReadAndDrawForAddingAttachments;
-    }
-
     /**
      * Returns a string containing the caps info.
      */
-    SkString dump() const SK_OVERRIDE;
+    SkString dump() const override;
 
     /**
      * LATC can appear under one of three possible names. In order to know
@@ -290,17 +271,7 @@ public:
 
     LATCAlias latcAlias() const { return fLATCAlias; }
 
-    /**
-     * Which type of path rendering is supported, if any
-     * TODO delete this when we only support normal non-legacy nvpr
-     */
-    enum NvprSupport {
-        kNone_NvprSupport,
-        kLegacy_NvprSupport,
-        kNormal_NvprSupport,
-    };
-
-    NvprSupport nvprSupport() const { return fNvprSupport; }
+    GrGLSLCaps* glslCaps() const { return reinterpret_cast<GrGLSLCaps*>(fShaderCaps.get()); }
 
 private:
     /**
@@ -346,9 +317,6 @@ private:
     void initConfigRenderableTable(const GrGLContextInfo&);
     void initConfigTexturableTable(const GrGLContextInfo&, const GrGLInterface*);
 
-    // Must be called after fGeometryShaderSupport is initialized.
-    void initShaderPrecisionTable(const GrGLContextInfo&, const GrGLInterface*);
-
     bool doReadPixelsSupported(const GrGLInterface* intf, GrGLenum format, GrGLenum type) const;
 
     // tracks configs that have been verified to pass the FBO completeness when
@@ -364,13 +332,11 @@ private:
     int fMaxFragmentUniformVectors;
     int fMaxVertexAttributes;
     int fMaxFragmentTextureUnits;
-    int fMaxFixedFunctionTextureCoords;
 
     MSFBOType           fMSFBOType;
     InvalidateFBType    fInvalidateFBType;
     MapBufferType       fMapBufferType;
     LATCAlias           fLATCAlias;
-    NvprSupport         fNvprSupport;
 
     bool fRGBA8RenderbufferSupport : 1;
     bool fBGRAIsInternalFormat : 1;
@@ -390,13 +356,7 @@ private:
     bool fUseNonVBOVertexAndIndexDynamicData : 1;
     bool fIsCoreProfile : 1;
     bool fFullClearIsFree : 1;
-    bool fDropsTileOnZeroDivide : 1;
-    bool fFBFetchSupport : 1;
-    bool fFBFetchNeedsCustomOutput : 1;
-    bool fBindFBOToReadAndDrawForAddingAttachments : 1;
-
-    const char* fFBFetchColorName;
-    const char* fFBFetchExtensionString;
+    bool fFBMixedSamplesSupport : 1;
 
     struct ReadPixelsSupportedFormat {
         GrGLenum fFormat;
@@ -408,15 +368,97 @@ private:
                 && fType      == rhs.fType
                 && fFboFormat == rhs.fFboFormat;
         }
-        static uint32_t Hash(const ReadPixelsSupportedFormat& r) {
-            return SkChecksum::Murmur3(reinterpret_cast<const uint32_t*>(&r), sizeof(r));
-        }
     };
-
-    mutable SkTHashMap<ReadPixelsSupportedFormat, bool, ReadPixelsSupportedFormat::Hash>
-        fReadPixelsSupportedCache;
+    mutable SkTHashMap<ReadPixelsSupportedFormat, bool> fReadPixelsSupportedCache;
 
     typedef GrDrawTargetCaps INHERITED;
 };
+
+
+class GrGLSLCaps : public GrShaderCaps {
+public:
+    SK_DECLARE_INST_COUNT(GrGLSLCaps)
+
+    /**
+    * Indicates how GLSL must interact with advanced blend equations. The KHR extension requires
+    * special layout qualifiers in the fragment shader.
+    */
+    enum AdvBlendEqInteraction {
+        kNotSupported_AdvBlendEqInteraction,     //<! No _blend_equation_advanced extension
+        kAutomatic_AdvBlendEqInteraction,        //<! No interaction required
+        kGeneralEnable_AdvBlendEqInteraction,    //<! layout(blend_support_all_equations) out
+        kSpecificEnables_AdvBlendEqInteraction,  //<! Specific layout qualifiers per equation
+
+        kLast_AdvBlendEqInteraction = kSpecificEnables_AdvBlendEqInteraction
+    };
+
+    /**
+     * Creates a GrGLSLCaps that advertises no support for any extensions,
+     * formats, etc. Call init to initialize from a GrGLContextInfo.
+     */
+    GrGLSLCaps();
+    ~GrGLSLCaps() override {}
+
+    GrGLSLCaps(const GrGLSLCaps& caps);
+
+    GrGLSLCaps& operator = (const GrGLSLCaps& caps);
+
+    /**
+     * Resets the caps such that nothing is supported.
+     */
+    void reset() override;
+
+    /**
+     * Initializes the GrGLSLCaps to the set of features supported in the current
+     * OpenGL context accessible via ctxInfo.
+     */
+    bool init(const GrGLContextInfo&, const GrGLInterface*, const GrGLCaps&);
+
+    /**
+     * Some helper functions for encapsulating various extensions to read FB Buffer on openglES
+     *
+     * TODO(joshualitt) On desktop opengl 4.2+ we can achieve something similar to this effect
+     */
+    bool fbFetchSupport() const { return fFBFetchSupport; }
+
+    bool fbFetchNeedsCustomOutput() const { return fFBFetchNeedsCustomOutput; }
+
+    const char* fbFetchColorName() const { return fFBFetchColorName; }
+
+    const char* fbFetchExtensionString() const { return fFBFetchExtensionString; }
+
+    bool dropsTileOnZeroDivide() const { return fDropsTileOnZeroDivide; }
+
+    AdvBlendEqInteraction advBlendEqInteraction() const { return fAdvBlendEqInteraction; }
+
+    bool mustEnableAdvBlendEqs() const {
+        return fAdvBlendEqInteraction >= kGeneralEnable_AdvBlendEqInteraction;
+    }
+
+    bool mustEnableSpecificAdvBlendEqs() const {
+        return fAdvBlendEqInteraction == kSpecificEnables_AdvBlendEqInteraction;
+    }
+
+    /**
+    * Returns a string containing the caps info.
+    */
+    SkString dump() const override;
+
+private:
+    // Must be called after fGeometryShaderSupport is initialized.
+    void initShaderPrecisionTable(const GrGLContextInfo&, const GrGLInterface*);
+
+    bool fDropsTileOnZeroDivide : 1;
+    bool fFBFetchSupport : 1;
+    bool fFBFetchNeedsCustomOutput : 1;
+
+    const char* fFBFetchColorName;
+    const char* fFBFetchExtensionString;
+
+    AdvBlendEqInteraction fAdvBlendEqInteraction;
+
+    typedef GrShaderCaps INHERITED;
+};
+
 
 #endif

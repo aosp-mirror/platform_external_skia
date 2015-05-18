@@ -10,9 +10,7 @@
 #include "SkPDFFormXObject.h"
 
 #include "SkMatrix.h"
-#include "SkPDFCatalog.h"
 #include "SkPDFDevice.h"
-#include "SkPDFResourceDict.h"
 #include "SkPDFUtils.h"
 #include "SkStream.h"
 #include "SkTypes.h"
@@ -21,13 +19,13 @@ SkPDFFormXObject::SkPDFFormXObject(SkPDFDevice* device) {
     // We don't want to keep around device because we'd have two copies
     // of content, so reference or copy everything we need (content and
     // resources).
-    SkPDFResourceDict* resourceDict = device->getResourceDict();
+    SkAutoTUnref<SkPDFDict> resourceDict(device->createResourceDict());
 
     SkAutoTDelete<SkStreamAsset> content(device->content());
     this->setData(content.get());
 
     SkAutoTUnref<SkPDFArray> bboxArray(device->copyMediaBox());
-    init(NULL, resourceDict, bboxArray);
+    this->init(NULL, resourceDict.get(), bboxArray);
 
     // We invert the initial transform and apply that to the xobject so that
     // it doesn't get applied twice. We can't just undo it because it's
@@ -39,7 +37,7 @@ SkPDFFormXObject::SkPDFFormXObject(SkPDFDevice* device) {
             SkASSERT(false);
             inverse.reset();
         }
-        insert("Matrix", SkPDFUtils::MatrixToArray(inverse))->unref();
+        this->insertObject("Matrix", SkPDFUtils::MatrixToArray(inverse));
     }
 }
 
@@ -47,7 +45,7 @@ SkPDFFormXObject::SkPDFFormXObject(SkPDFDevice* device) {
  * Creates a FormXObject from a content stream and associated resources.
  */
 SkPDFFormXObject::SkPDFFormXObject(SkStream* content, SkRect bbox,
-                                   SkPDFResourceDict* resourceDict) {
+                                   SkPDFDict* resourceDict) {
     setData(content);
 
     SkAutoTUnref<SkPDFArray> bboxArray(SkPDFUtils::RectToArray(bbox));
@@ -60,10 +58,10 @@ SkPDFFormXObject::SkPDFFormXObject(SkStream* content, SkRect bbox,
  */
 void SkPDFFormXObject::init(const char* colorSpace,
                             SkPDFDict* resourceDict, SkPDFArray* bbox) {
-    insertName("Type", "XObject");
-    insertName("Subtype", "Form");
-    insert("Resources", resourceDict);
-    insert("BBox", bbox);
+    this->insertName("Type", "XObject");
+    this->insertName("Subtype", "Form");
+    this->insertObject("Resources", SkRef(resourceDict));
+    this->insertObject("BBox", SkRef(bbox));
 
     // Right now SkPDFFormXObject is only used for saveLayer, which implies
     // isolated blending.  Do this conditionally if that changes.
@@ -73,8 +71,8 @@ void SkPDFFormXObject::init(const char* colorSpace,
     if (colorSpace != NULL) {
         group->insertName("CS", colorSpace);
     }
-    group->insert("I", new SkPDFBool(true))->unref();  // Isolated.
-    insert("Group", group.get());
+    group->insertBool("I", true);  // Isolated.
+    this->insertObject("Group", group.detach());
 }
 
 SkPDFFormXObject::~SkPDFFormXObject() {}

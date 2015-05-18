@@ -70,8 +70,8 @@ struct BitmapShaderRec : public SkResourceCache::Rec {
     SkAutoTUnref<SkShader> fShader;
     size_t                 fBitmapBytes;
 
-    const Key& getKey() const SK_OVERRIDE { return fKey; }
-    size_t bytesUsed() const SK_OVERRIDE {
+    const Key& getKey() const override { return fKey; }
+    size_t bytesUsed() const override {
         return sizeof(fKey) + sizeof(SkShader) + fBitmapBytes;
     }
 
@@ -141,7 +141,8 @@ void SkPictureShader::flatten(SkWriteBuffer& buffer) const {
     fPicture->flatten(buffer);
 }
 
-SkShader* SkPictureShader::refBitmapShader(const SkMatrix& matrix, const SkMatrix* localM) const {
+SkShader* SkPictureShader::refBitmapShader(const SkMatrix& matrix, const SkMatrix* localM,
+                                            const int maxTextureSize) const {
     SkASSERT(fPicture && !fPicture->cullRect().isEmpty());
 
     SkMatrix m;
@@ -152,6 +153,9 @@ SkShader* SkPictureShader::refBitmapShader(const SkMatrix& matrix, const SkMatri
 
     // Use a rotation-invariant scale
     SkPoint scale;
+    //
+    // TODO: replace this with decomposeScale() -- but beware LayoutTest rebaselines!
+    //
     if (!SkDecomposeUpper2x2(m, NULL, &scale, NULL)) {
         // Decomposition failed, use an approximation.
         scale.set(SkScalarSqrt(m.getScaleX() * m.getScaleX() + m.getSkewX() * m.getSkewX()),
@@ -160,14 +164,24 @@ SkShader* SkPictureShader::refBitmapShader(const SkMatrix& matrix, const SkMatri
     SkSize scaledSize = SkSize::Make(SkScalarAbs(scale.x() * fTile.width()),
                                      SkScalarAbs(scale.y() * fTile.height()));
 
-    // Clamp the tile size to about 16M pixels
-    static const SkScalar kMaxTileArea = 4096 * 4096;
+    // Clamp the tile size to about 4M pixels
+    static const SkScalar kMaxTileArea = 2048 * 2048;
     SkScalar tileArea = SkScalarMul(scaledSize.width(), scaledSize.height());
     if (tileArea > kMaxTileArea) {
-        SkScalar clampScale = SkScalarSqrt(SkScalarDiv(kMaxTileArea, tileArea));
+        SkScalar clampScale = SkScalarSqrt(kMaxTileArea / tileArea);
         scaledSize.set(SkScalarMul(scaledSize.width(), clampScale),
                        SkScalarMul(scaledSize.height(), clampScale));
     }
+#if SK_SUPPORT_GPU
+    // Scale down the tile size if larger than maxTextureSize for GPU Path or it should fail on create texture
+    if (maxTextureSize) {
+        if (scaledSize.width() > maxTextureSize || scaledSize.height() > maxTextureSize) {
+            SkScalar downScale = maxTextureSize / SkMax32(scaledSize.width(), scaledSize.height());
+            scaledSize.set(SkScalarFloorToScalar(SkScalarMul(scaledSize.width(), downScale)),
+                           SkScalarFloorToScalar(SkScalarMul(scaledSize.height(), downScale)));
+        }
+    }
+#endif
 
     SkISize tileSize = scaledSize.toRound();
     if (tileSize.isEmpty()) {
@@ -296,7 +310,11 @@ bool SkPictureShader::asFragmentProcessor(GrContext* context, const SkPaint& pai
                                           const SkMatrix& viewM, const SkMatrix* localMatrix,
                                           GrColor* paintColor,
                                           GrFragmentProcessor** fp) const {
-    SkAutoTUnref<SkShader> bitmapShader(this->refBitmapShader(viewM, localMatrix));
+    int maxTextureSize = 0;
+    if (context) {
+        maxTextureSize = context->getMaxTextureSize();
+    }
+    SkAutoTUnref<SkShader> bitmapShader(this->refBitmapShader(viewM, localMatrix, maxTextureSize));
     if (!bitmapShader) {
         return false;
     }

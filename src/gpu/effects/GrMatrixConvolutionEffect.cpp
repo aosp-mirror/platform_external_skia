@@ -18,11 +18,11 @@ public:
                           const char* outputColor,
                           const char* inputColor,
                           const TransformedCoordsArray&,
-                          const TextureSamplerArray&) SK_OVERRIDE;
+                          const TextureSamplerArray&) override;
 
-    static inline void GenKey(const GrProcessor&, const GrGLCaps&, GrProcessorKeyBuilder*);
+    static inline void GenKey(const GrProcessor&, const GrGLSLCaps&, GrProcessorKeyBuilder*);
 
-    void setData(const GrGLProgramDataManager&, const GrProcessor&) SK_OVERRIDE;
+    void setData(const GrGLProgramDataManager&, const GrProcessor&) override;
 
 private:
     typedef GrGLProgramDataManager::UniformHandle UniformHandle;
@@ -74,7 +74,7 @@ void GrGLMatrixConvolutionEffect::emitCode(GrGLFPBuilder* builder,
     int kWidth = fKernelSize.width();
     int kHeight = fKernelSize.height();
 
-    GrGLFPFragmentBuilder* fsBuilder = builder->getFragmentShaderBuilder();
+    GrGLFragmentBuilder* fsBuilder = builder->getFragmentShaderBuilder();
     SkString coords2D = fsBuilder->ensureFSCoords2D(coords, 0);
     fsBuilder->codeAppend("vec4 sum = vec4(0, 0, 0, 0);");
     fsBuilder->codeAppendf("vec2 coord = %s - %s * %s;", coords2D.c_str(), kernelOffset,
@@ -90,6 +90,7 @@ void GrGLMatrixConvolutionEffect::emitCode(GrGLFPBuilder* builder,
             fDomain.sampleTexture(fsBuilder, domain, "c", coord, samplers[0]);
             if (!fConvolveAlpha) {
                 fsBuilder->codeAppend("c.rgb /= c.a;");
+                fsBuilder->codeAppend("c.rgb = clamp(c.rgb, 0.0, 1.0);");
             }
             fsBuilder->codeAppend("sum += c * k;");
         }
@@ -111,7 +112,7 @@ void GrGLMatrixConvolutionEffect::emitCode(GrGLFPBuilder* builder,
 }
 
 void GrGLMatrixConvolutionEffect::GenKey(const GrProcessor& processor,
-                                         const GrGLCaps&, GrProcessorKeyBuilder* b) {
+                                         const GrGLSLCaps&, GrProcessorKeyBuilder* b) {
     const GrMatrixConvolutionEffect& m = processor.cast<GrMatrixConvolutionEffect>();
     SkASSERT(m.kernelSize().width() <= 0x7FFF && m.kernelSize().height() <= 0xFFFF);
     uint32_t key = m.kernelSize().width() << 16 | m.kernelSize().height();
@@ -152,7 +153,7 @@ GrMatrixConvolutionEffect::GrMatrixConvolutionEffect(GrTexture* texture,
     fGain(SkScalarToFloat(gain)),
     fBias(SkScalarToFloat(bias) / 255.0f),
     fConvolveAlpha(convolveAlpha),
-    fDomain(GrTextureDomain::MakeTexelDomain(texture, bounds), tileMode) {
+    fDomain(GrTextureDomain::MakeTexelDomainForMode(texture, bounds, tileMode), tileMode) {
     this->initClassID<GrMatrixConvolutionEffect>();
     for (int i = 0; i < kernelSize.width() * kernelSize.height(); i++) {
         fKernel[i] = SkScalarToFloat(kernel[i]);
@@ -164,7 +165,7 @@ GrMatrixConvolutionEffect::GrMatrixConvolutionEffect(GrTexture* texture,
 GrMatrixConvolutionEffect::~GrMatrixConvolutionEffect() {
 }
 
-void GrMatrixConvolutionEffect::getGLProcessorKey(const GrGLCaps& caps,
+void GrMatrixConvolutionEffect::getGLProcessorKey(const GrGLSLCaps& caps,
                                                   GrProcessorKeyBuilder* b) const {
     GrGLMatrixConvolutionEffect::GenKey(*this, caps, b);
 }

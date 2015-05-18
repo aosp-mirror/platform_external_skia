@@ -130,7 +130,7 @@ public:
      * origin of the base layer is always (0,0). The current drawable area may be
      * smaller (due to clipping or saveLayer).
      */
-    SkISize getBaseLayerSize() const;
+    virtual SkISize getBaseLayerSize() const;
 
     /**
      *  DEPRECATED: call getBaseLayerSize
@@ -951,7 +951,9 @@ public:
         @param picture The recorded drawing commands to playback into this
                        canvas.
     */
-    void drawPicture(const SkPicture* picture);
+    void drawPicture(const SkPicture* picture) {
+        this->drawPicture(picture, NULL, NULL);
+    }
 
     /**
      *  Draw the picture into this canvas.
@@ -1256,7 +1258,13 @@ private:
     // points to top of stack
     MCRec*      fMCRec;
     // the first N recs that can fit here mean we won't call malloc
-    uint32_t    fMCRecStorage[32];
+    enum {
+        kMCRecSize      = 128,  // most recent measurement
+        kMCRecCount     = 8,    // common depth for save/restores
+        kDeviceCMSize   = 136,  // most recent measurement
+    };
+    intptr_t fMCRecStorage[kMCRecSize * kMCRecCount / sizeof(intptr_t)];
+    intptr_t fDeviceCMStorage[kDeviceCMSize / sizeof(intptr_t)];
 
     const SkSurfaceProps fProps;
 
@@ -1295,6 +1303,8 @@ private:
     SkCanvas(const SkIRect& bounds, InitFlags);
     SkCanvas(SkBaseDevice*, const SkSurfaceProps*, InitFlags);
 
+    void resetForNextPicture(const SkIRect& bounds);
+
     // needs gettotalclip()
     friend class SkCanvasStateUtils;
 
@@ -1321,9 +1331,8 @@ private:
     void internalDrawBitmapNine(const SkBitmap& bitmap, const SkIRect& center,
                                 const SkRect& dst, const SkPaint* paint);
     void internalDrawPaint(const SkPaint& paint);
-    void internalSaveLayer(const SkRect* bounds, const SkPaint* paint,
-                           SaveFlags, bool justForImageFilter, SaveLayerStrategy strategy);
-    void internalDrawDevice(SkBaseDevice*, int x, int y, const SkPaint*);
+    void internalSaveLayer(const SkRect* bounds, const SkPaint*, SaveFlags, SaveLayerStrategy);
+    void internalDrawDevice(SkBaseDevice*, int x, int y, const SkPaint*, bool isBitmapDevice);
 
     // shared by save() and saveLayer()
     void internalSave();

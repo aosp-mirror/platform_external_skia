@@ -29,28 +29,28 @@ public:
                              const GrPipelineBuilder*,
                              const SkMatrix& viewMatrix,
                              const SkPath&,
-                             const SkStrokeRec&,
-                             bool antiAlias) const SK_OVERRIDE;
+                             const GrStrokeInfo&,
+                             bool antiAlias) const override;
 
 protected:
     virtual StencilSupport onGetStencilSupport(const GrDrawTarget*,
                                                const GrPipelineBuilder*,
                                                const SkPath&,
-                                               const SkStrokeRec&) const SK_OVERRIDE;
+                                               const GrStrokeInfo&) const override;
 
     virtual bool onDrawPath(GrDrawTarget*,
                             GrPipelineBuilder*,
                             GrColor,
                             const SkMatrix& viewMatrix,
                             const SkPath&,
-                            const SkStrokeRec&,
-                            bool antiAlias) SK_OVERRIDE;
+                            const GrStrokeInfo&,
+                            bool antiAlias) override;
 
     virtual void onStencilPath(GrDrawTarget*,
                                GrPipelineBuilder*,
                                const SkMatrix& viewMatrix,
                                const SkPath&,
-                               const SkStrokeRec&) SK_OVERRIDE;
+                               const GrStrokeInfo&) override;
 
 private:
     GrStencilAndCoverPathRenderer(GrGpu*);

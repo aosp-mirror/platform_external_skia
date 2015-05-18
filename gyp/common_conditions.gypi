@@ -1,3 +1,8 @@
+# Copyright 2015 Google Inc.
+#
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
 # conditions used in both common.gypi and skia.gyp in chromium
 #
 {
@@ -203,7 +208,7 @@
     ],
 
     # The following section is common to linux + derivatives and android
-    [ 'skia_os in ["linux", "freebsd", "openbsd", "solaris", "nacl", "chromeos", "android"]',
+    [ 'skia_os in ["linux", "freebsd", "openbsd", "solaris", "chromeos", "android"]',
       {
         'cflags': [
           '-g',
@@ -225,6 +230,7 @@
           '-Wno-invalid-offsetof',  # GCC <4.6 is old-school strict about what is POD.
         ],
         'conditions': [
+          [ 'skia_fast', { 'cflags': [ '<@(skia_fast_flags)' ] }],
           [ 'skia_os != "chromeos"', {
             'conditions': [
               [ 'skia_arch_type == "x86_64" and not skia_android_framework', {
@@ -259,28 +265,10 @@
               '-fno-omit-frame-pointer',
             ],
           }],
-          [ 'skia_arch_type == "arm" and arm_thumb == 1', {
-            'cflags': [
-              '-mthumb',
-            ],
-            # The --fix-cortex-a8 switch enables a link-time workaround for
-            # an erratum in certain Cortex-A8 processors.  The workaround is
-            # enabled by default if you target the ARM v7-A arch profile.
-            # It can be enabled otherwise by specifying --fix-cortex-a8, or
-            # disabled unconditionally by specifying --no-fix-cortex-a8.
-            #
-            # The erratum only affects Thumb-2 code.
-            'conditions': [
-              [ 'arm_version < 7', {
-                'ldflags': [
-                  '-Wl,--fix-cortex-a8',
-                ],
-              }],
-            ],
-          }],
           [ 'skia_arch_type == "arm" and arm_version >= 7', {
             'cflags': [
               '-march=armv7-a',
+              '-mthumb',
             ],
             'ldflags': [
               '-march=armv7-a',
@@ -341,13 +329,6 @@
       },
     ],
 
-    [ 'skia_os == "nacl"', {
-      # NaCl compiler is GCC 4.4, which is too old to understand 'c++11', so call it '0x'.
-      # NaCl's newlib needs gnu++ mode to see snprintf, vsnprintf, etc in C++11 mode.
-      'cflags_cc!': [ '-std=c++11' ],
-      'cflags_cc' : [ '-std=gnu++0x' ],
-    }],
-
     ['skia_android_framework', {
       'includes' : [
         'skia_for_android_framework_defines.gypi',
@@ -407,20 +388,19 @@
         # Optimizations for chromium (m30)
         'GR_GL_CUSTOM_SETUP_HEADER "gl/GrGLConfig_chrome.h"',
         'IGNORE_ROT_AA_RECT_OPT',
-        'SkLONGLONG int64_t',
         'SK_DEFAULT_FONT_CACHE_LIMIT   (768 * 1024)',
         'SK_DEFAULT_GLOBAL_DISCARDABLE_MEMORY_POOL_SIZE (512 * 1024)',
         'SK_IGNORE_ETC1_SUPPORT',
         # We can't use the skia_shared_library gyp setting because we need expose
         # this define globally and the the implemention define as a cflag.
         'SKIA_DLL',
-        'SK_OVERRIDE override',
+        'SK_PRINT_CODEC_MESSAGES',
         # Defines from skia_for_android_framework_defines.gypi
         '<@(skia_for_android_framework_defines)',
       ],
     }],
 
-    [ 'skia_os in ["linux", "freebsd", "openbsd", "solaris", "nacl", "chromeos"]',
+    [ 'skia_os in ["linux", "freebsd", "openbsd", "solaris", "chromeos"]',
       {
         'defines': [
           'SK_SAMPLES_FOR_X',
@@ -446,26 +426,6 @@
               'SKIA_DLL',
               'SKIA_IMPLEMENTATION=1',
             ],
-          }],
-          [ 'skia_os == "nacl"', {
-            'defines': [
-              'SK_BUILD_FOR_NACL',
-            ],
-            'variables': {
-              'nacl_sdk_root': '<!(echo ${NACL_SDK_ROOT})',
-            },
-            'link_settings': {
-              'libraries': [
-                '-lppapi',
-                '-lppapi_cpp',
-                '-lnosys',
-                '-pthread',
-              ],
-              'ldflags': [
-                '-L<(nacl_sdk_root)/lib/newlib_x86_<(skia_arch_width)/Release',
-                '-L<(nacl_sdk_root)/ports/lib/newlib_x86_<(skia_arch_width)/Release',
-              ],
-            },
           }],
           # Enable asan, tsan, etc.
           [ 'skia_sanitizer', {
@@ -526,6 +486,7 @@
         },
         'xcode_settings': {
           'conditions': [
+            [ 'skia_fast', { 'WARNING_CFLAGS': [ '<@(skia_fast_flags)' ] } ],
             [ 'skia_warnings_as_errors', { 'GCC_TREAT_WARNINGS_AS_ERRORS': 'YES' }],
             [ 'skia_arch_width == 32', { 'ARCHS': ['i386']   }],
             [ 'skia_arch_width == 64', { 'ARCHS': ['x86_64'] }],
@@ -585,7 +546,7 @@
         'xcode_settings': {
           'ARCHS': ['armv7'],
           'CODE_SIGNING_REQUIRED': 'NO',
-          'CODE_SIGN_IDENTITY[sdk=iphoneos*]': '',
+          'CODE_SIGN_IDENTITY[sdk=iphoneos*]': 'iPhone Developer: Google Development (3F4Y5873JF)',
           'IPHONEOS_DEPLOYMENT_TARGET': '<(ios_sdk_version)',
           'SDKROOT': 'iphoneos',
           'TARGETED_DEVICE_FAMILY': '1,2',

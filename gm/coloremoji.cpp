@@ -53,16 +53,9 @@ protected:
         SkTypeface* typeface;
         const char* text;
     } emojiFonts[2];
-    virtual void onOnceBeforeDraw() SK_OVERRIDE {
-        SkString filename = GetResourcePath("/Funkster.ttf");
-        SkAutoTDelete<SkFILEStream> stream(new SkFILEStream(filename.c_str()));
-        if (stream->isValid()) {
-            fCBDT_CBLC_Typeface.reset(SkTypeface::CreateFromStream(stream.detach()));
-            emojiFonts[0].typeface = fCBDT_CBLC_Typeface;
-        } else {
-            SkDebugf("Could not find Funkster.ttf, please set --resourcePath correctly.\n");
-            emojiFonts[0].typeface = NULL;
-        }
+    virtual void onOnceBeforeDraw() override {
+        fCBDT_CBLC_Typeface.reset(GetResourceAsTypeface("/fonts/Funkster.ttf"));
+        emojiFonts[0].typeface = fCBDT_CBLC_Typeface;
         emojiFonts[0].text = "hamburgerfons";
 
         fSBIX_Typeface.reset(SkTypeface::CreateFromName("Apple Color Emoji", SkTypeface::kNormal));
@@ -74,15 +67,15 @@ protected:
                              "\xF0\x9F\x87\xBA" "\xF0\x9F\x87\xB8" "\xF0\x9F\x87\xA6"; // 🇺🇸🇦
     }
 
-    SkString onShortName() SK_OVERRIDE {
+    SkString onShortName() override {
         return SkString("coloremoji");
     }
 
-    SkISize onISize() SK_OVERRIDE {
+    SkISize onISize() override {
         return SkISize::Make(650, 900);
     }
 
-    void onDraw(SkCanvas* canvas) SK_OVERRIDE {
+    void onDraw(SkCanvas* canvas) override {
 
         canvas->drawColor(SK_ColorGRAY);
 

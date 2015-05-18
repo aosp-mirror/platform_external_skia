@@ -18,14 +18,14 @@ public:
     }
 
 protected:
-    SkString onShortName() SK_OVERRIDE {
+    SkString onShortName() override {
         return SkString("pictureimagefilter");
     }
 
     void makePicture() {
         SkPictureRecorder recorder;
         SkCanvas* canvas = recorder.beginRecording(100, 100, NULL, 0);
-        canvas->clear(0x00000000);
+        canvas->clear(SK_ColorBLACK);
         SkPaint paint;
         paint.setAntiAlias(true);
         sk_tool_utils::set_portable_typeface(&paint);
@@ -36,9 +36,9 @@ protected:
         fPicture.reset(recorder.endRecording());
     }
 
-    SkISize onISize() SK_OVERRIDE { return SkISize::Make(600, 300); }
+    SkISize onISize() override { return SkISize::Make(600, 300); }
 
-    void onOnceBeforeDraw() SK_OVERRIDE {
+    void onOnceBeforeDraw() override {
         this->makePicture();
     }
 
@@ -51,8 +51,8 @@ protected:
         canvas->restore();
     }
 
-    void onDraw(SkCanvas* canvas) SK_OVERRIDE {
-        canvas->clear(0x00000000);
+    void onDraw(SkCanvas* canvas) override {
+        canvas->clear(SK_ColorBLACK);
         {
             SkRect srcRect = SkRect::MakeXYWH(20, 20, 30, 30);
             SkRect emptyRect = SkRect::MakeXYWH(20, 20, 0, 0);
@@ -65,10 +65,10 @@ protected:
                 SkPictureImageFilter::Create(fPicture, emptyRect));
             SkAutoTUnref<SkPictureImageFilter> pictureSourceResampled(
                 SkPictureImageFilter::CreateForLocalSpace(fPicture, fPicture->cullRect(),
-                    SkPaint::kLow_FilterLevel));
+                    kLow_SkFilterQuality));
             SkAutoTUnref<SkPictureImageFilter> pictureSourcePixelated(
                 SkPictureImageFilter::CreateForLocalSpace(fPicture, fPicture->cullRect(),
-                    SkPaint::kNone_FilterLevel));
+                    kNone_SkFilterQuality));
 
             canvas->save();
             // Draw the picture unscaled.

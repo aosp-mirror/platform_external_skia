@@ -10,6 +10,7 @@
 #define SkPicture_DEFINED
 
 #include "SkImageDecoder.h"
+#include "SkLazyPtr.h"
 #include "SkRefCnt.h"
 #include "SkTDArray.h"
 
@@ -41,8 +42,7 @@ namespace SkRecords {
 */
 class SK_API SkPicture : public SkNVRefCnt<SkPicture> {
 public:
-    // AccelData provides a base class for device-specific acceleration
-    // data. It is added to the picture via EXPERIMENTAL_addAccelData.
+    // AccelData provides a base class for device-specific acceleration data.
     class AccelData : public SkRefCnt {
     public:
         typedef uint8_t Domain;
@@ -58,9 +58,6 @@ public:
     private:
         Key fKey;
     };
-
-    /**  PRIVATE / EXPERIMENTAL -- do not call */
-    void EXPERIMENTAL_addAccelData(const AccelData*) const;
 
     /**  PRIVATE / EXPERIMENTAL -- do not call */
     const AccelData* EXPERIMENTAL_getAccelData(AccelData::Key) const;
@@ -136,7 +133,7 @@ public:
 
     /** Return a non-zero, unique value representing the picture.
      */
-    uint32_t uniqueID() const { return fUniqueID; }
+    uint32_t uniqueID() const;
 
     /**
      *  Serialize to a stream. If non NULL, serializer will be used to serialize
@@ -243,31 +240,43 @@ private:
     // V37: Added shadow only option to SkDropShadowImageFilter (last version to record CLEAR)
     // V38: Added PictureResolution option to SkPictureImageFilter
     // V39: Added FilterLevel option to SkPictureImageFilter
+    // V40: Remove UniqueID serialization from SkImageFilter.
+    // V41: Added serialization of SkBitmapSource's filterQuality parameter
 
     // Note: If the picture version needs to be increased then please follow the
     // steps to generate new SKPs in (only accessible to Googlers): http://goo.gl/qATVcw
 
     // Only SKPs within the min/current picture version range (inclusive) can be read.
     static const uint32_t MIN_PICTURE_VERSION = 35;     // Produced by Chrome M39.
-    static const uint32_t CURRENT_PICTURE_VERSION = 39;
+    static const uint32_t CURRENT_PICTURE_VERSION = 41;
+
+    static_assert(MIN_PICTURE_VERSION <= 41,
+                  "Remove kFontFileName and related code from SkFontDescriptor.cpp.");
 
     void createHeader(SkPictInfo* info) const;
     static bool IsValidPictInfo(const SkPictInfo& info);
 
-    // Takes ownership of the SkRecord and (optional) SnapshotArray, refs the (optional) BBH.
-    SkPicture(const SkRect& cullRect, SkRecord*, SnapshotArray*, SkBBoxHierarchy*);
+    // Takes ownership of the (optional) SnapshotArray.
+    // For performance, we take ownership of the caller's refs on the SkRecord, BBH, and AccelData.
+    SkPicture(const SkRect& cullRect,
+              SkRecord*,
+              SnapshotArray*,
+              SkBBoxHierarchy*,
+              AccelData*,
+              size_t approxBytesUsedBySubPictures);
 
     static SkPicture* Forwardport(const SkPictInfo&, const SkPictureData*);
     static SkPictureData* Backport(const SkRecord&, const SkPictInfo&,
                                    SkPicture const* const drawablePics[], int drawableCount);
 
     // uint32_t fRefCnt; from SkNVRefCnt<SkPicture>
-    const uint32_t                        fUniqueID;
+    mutable uint32_t                      fUniqueID;
     const SkRect                          fCullRect;
-    mutable SkAutoTUnref<const AccelData> fAccelData;
     SkAutoTUnref<const SkRecord>          fRecord;
-    SkAutoTUnref<const SkBBoxHierarchy>   fBBH;
     SkAutoTDelete<const SnapshotArray>    fDrawablePicts;
+    SkAutoTUnref<const SkBBoxHierarchy>   fBBH;
+    SkAutoTUnref<const AccelData>         fAccelData;
+    const size_t                          fApproxBytesUsedBySubPictures;
 
     // helpers for fDrawablePicts
     int drawableCount() const;
@@ -282,14 +291,12 @@ private:
 
         bool suitableForGpuRasterization(const char** reason, int sampleCount) const;
 
-        bool        fWillPlaybackBitmaps;
-        bool        fHasText;
-        int         fNumPaintWithPathEffectUses;
-        int         fNumFastPathDashEffects;
-        int         fNumAAConcavePaths;
-        int         fNumAAHairlineConcavePaths;
-        int         fNumAADFEligibleConcavePaths;
-    } fAnalysis;
+        uint8_t     fNumSlowPathsAndDashEffects;
+        bool        fWillPlaybackBitmaps : 1;
+        bool        fHasText             : 1;
+    };
+    SkLazyPtr<Analysis> fAnalysis;
+    const Analysis& analysis() const;
 
     friend class SkPictureRecorder;            // SkRecord-based constructor.
     friend class GrLayerHoister;               // access to fRecord
@@ -297,6 +304,6 @@ private:
     friend class SkPictureUtils;
     friend class SkRecordedDrawable;
 };
-SK_COMPILE_ASSERT(sizeof(SkPicture) <= 96, SkPictureSize);
+SK_COMPILE_ASSERT(sizeof(SkPicture) <= 88, SkPictureSize);
 
 #endif

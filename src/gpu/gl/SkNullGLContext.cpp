@@ -337,7 +337,7 @@ GrGLvoid GR_GL_FUNCTION_TYPE nullGLGetBufferParameteriv(GrGLenum target, GrGLenu
 class NullInterface : public GrGLInterface {
 public:
     NullInterface(State* state) : fState(SkRef(state)) {}
-    ~NullInterface() SK_OVERRIDE {
+    ~NullInterface() override {
         fState->unref();
     }
     State* fState;
@@ -360,6 +360,7 @@ static GrGLInterface* create_null_interface(State* state) {
     functions->fBindTexture = nullGLBindTexture;
     functions->fBindVertexArray = nullGLBindVertexArray;
     functions->fBlendColor = noOpGLBlendColor;
+    functions->fBlendEquation = noOpGLBlendEquation;
     functions->fBlendFunc = noOpGLBlendFunc;
     functions->fBufferData = nullGLBufferData;
     functions->fBufferSubData = noOpGLBufferSubData;

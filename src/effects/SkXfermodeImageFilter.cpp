@@ -14,7 +14,7 @@
 #include "SkXfermode.h"
 #if SK_SUPPORT_GPU
 #include "GrContext.h"
-#include "effects/GrSimpleTextureEffect.h"
+#include "effects/GrTextureDomain.h"
 #include "SkGr.h"
 #endif
 
@@ -22,9 +22,8 @@
 
 SkXfermodeImageFilter::SkXfermodeImageFilter(SkXfermode* mode,
                                              SkImageFilter* inputs[2],
-                                             const CropRect* cropRect,
-                                             uint32_t uniqueID)
-  : INHERITED(2, inputs, cropRect, uniqueID), fMode(mode) {
+                                             const CropRect* cropRect)
+  : INHERITED(2, inputs, cropRect), fMode(mode) {
     SkSafeRef(fMode);
 }
 
@@ -35,7 +34,7 @@ SkXfermodeImageFilter::~SkXfermodeImageFilter() {
 SkFlattenable* SkXfermodeImageFilter::CreateProc(SkReadBuffer& buffer) {
     SK_IMAGEFILTER_UNFLATTEN_COMMON(common, 2);
     SkAutoTUnref<SkXfermode> mode(buffer.readXfermode());
-    return Create(mode, common.getInput(0), common.getInput(1), &common.cropRect(), common.uniqueID());
+    return Create(mode, common.getInput(0), common.getInput(1), &common.cropRect());
 }
 
 void SkXfermodeImageFilter::flatten(SkWriteBuffer& buffer) const {
@@ -149,8 +148,8 @@ bool SkXfermodeImageFilter::filterImageGPU(Proxy* proxy,
     desc.fWidth = src.width();
     desc.fHeight = src.height();
     desc.fConfig = kSkia8888_GrPixelConfig;
-    SkAutoTUnref<GrTexture> dst(
-        context->refScratchTexture(desc, GrContext::kApprox_ScratchTexMatch));
+    SkAutoTUnref<GrTexture> dst(context->textureProvider()->refScratchTexture(
+        desc, GrTextureProvider::kApprox_ScratchTexMatch));
     if (!dst) {
         return false;
     }
@@ -170,7 +169,14 @@ bool SkXfermodeImageFilter::filterImageGPU(Proxy* proxy,
     src.getBounds(&srcRect);
 
     GrPaint paint;
-    paint.addColorTextureProcessor(foregroundTex, foregroundMatrix);
+    SkAutoTUnref<GrFragmentProcessor> foregroundDomain(GrTextureDomainEffect::Create(
+        foregroundTex, foregroundMatrix,
+        GrTextureDomain::MakeTexelDomain(foregroundTex, foreground.bounds()),
+        GrTextureDomain::kDecal_Mode,
+        GrTextureParams::kNone_FilterMode)
+    );
+
+    paint.addColorProcessor(foregroundDomain.get());
     paint.addColorProcessor(xferProcessor)->unref();
     context->drawRect(dst->asRenderTarget(), GrClip::WideOpen(), paint, SkMatrix::I(), srcRect);
 

@@ -9,7 +9,6 @@
 #include "SkBitmapSource.h"
 #include "SkBlurImageFilter.h"
 #include "SkDropShadowImageFilter.h"
-#include "SkMatrixImageFilter.h"
 #include "SkOffsetImageFilter.h"
 #include "SkPictureImageFilter.h"
 #include "SkPictureRecorder.h"
@@ -93,8 +92,8 @@ static void create_paints(SkImageFilter* source, SkTArray<SkPaint>* paints) {
         SkMatrix scale;
         scale.setScale(2.0f, 2.0f);
 
-        SkAutoTUnref<SkMatrixImageFilter> scaleMIF(
-            SkMatrixImageFilter::Create(scale, SkPaint::kLow_FilterLevel, source));
+        SkAutoTUnref<SkImageFilter> scaleMIF(
+            SkImageFilter::CreateMatrixFilter(scale, kLow_SkFilterQuality, source));
 
         add_paint(scaleMIF, paints);
     }
@@ -103,8 +102,8 @@ static void create_paints(SkImageFilter* source, SkTArray<SkPaint>* paints) {
         SkMatrix rot;
         rot.setRotate(-33.3f);
 
-        SkAutoTUnref<SkMatrixImageFilter> rotMIF(
-            SkMatrixImageFilter::Create(rot, SkPaint::kLow_FilterLevel, source));
+        SkAutoTUnref<SkImageFilter> rotMIF(
+            SkImageFilter::CreateMatrixFilter(rot, kLow_SkFilterQuality, source));
 
         add_paint(rotMIF, paints);
     }
@@ -117,7 +116,7 @@ static void create_paints(SkImageFilter* source, SkTArray<SkPaint>* paints) {
             SkDropShadowImageFilter::Create(10.0f, 10.0f,
                                             3.0f, 3.0f,
                                             SK_ColorRED, kBoth,
-                                            source, NULL, 0));
+                                            source, NULL));
 
         add_paint(dsif, paints);
     }
@@ -128,7 +127,7 @@ static void create_paints(SkImageFilter* source, SkTArray<SkPaint>* paints) {
                                             3.0f, 3.0f,
                                             SK_ColorRED,
                                             SkDropShadowImageFilter::kDrawShadowOnly_ShadowMode,
-                                            source, NULL, 0));
+                                            source, NULL));
 
         add_paint(dsif, paints);
     }
@@ -160,9 +159,9 @@ protected:
     static const int kNumVertTiles = 6;
     static const int kNumXtraCols = 2;
 
-    SkString onShortName() SK_OVERRIDE{ return SkString("filterfastbounds"); }
+    SkString onShortName() override{ return SkString("filterfastbounds"); }
 
-    SkISize onISize() SK_OVERRIDE{
+    SkISize onISize() override{
         return SkISize::Make((SK_ARRAY_COUNT(gDrawMthds) + kNumXtraCols) * kTileWidth,
                              kNumVertTiles * kTileHeight);
     }
@@ -225,7 +224,7 @@ protected:
         canvas->restore();
     }
 
-    void onDraw(SkCanvas* canvas) SK_OVERRIDE{
+    void onDraw(SkCanvas* canvas) override{
 
         SkPaint blackFill;
 

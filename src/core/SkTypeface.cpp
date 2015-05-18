@@ -29,36 +29,36 @@ public:
 protected:
     SkEmptyTypeface() : SkTypeface(SkFontStyle(), 0, true) { }
 
-    SkStreamAsset* onOpenStream(int* ttcIndex) const SK_OVERRIDE { return NULL; }
-    SkScalerContext* onCreateScalerContext(const SkDescriptor*) const SK_OVERRIDE {
+    SkStreamAsset* onOpenStream(int* ttcIndex) const override { return NULL; }
+    SkScalerContext* onCreateScalerContext(const SkDescriptor*) const override {
         return NULL;
     }
-    void onFilterRec(SkScalerContextRec*) const SK_OVERRIDE { }
+    void onFilterRec(SkScalerContextRec*) const override { }
     virtual SkAdvancedTypefaceMetrics* onGetAdvancedTypefaceMetrics(
-                                SkAdvancedTypefaceMetrics::PerGlyphInfo,
-                                const uint32_t*, uint32_t) const SK_OVERRIDE { return NULL; }
-    void onGetFontDescriptor(SkFontDescriptor*, bool*) const SK_OVERRIDE { }
+                                PerGlyphInfo,
+                                const uint32_t*, uint32_t) const override { return NULL; }
+    void onGetFontDescriptor(SkFontDescriptor*, bool*) const override { }
     virtual int onCharsToGlyphs(const void* chars, Encoding encoding,
-                                uint16_t glyphs[], int glyphCount) const SK_OVERRIDE {
+                                uint16_t glyphs[], int glyphCount) const override {
         if (glyphs && glyphCount > 0) {
             sk_bzero(glyphs, glyphCount * sizeof(glyphs[0]));
         }
         return 0;
     }
-    int onCountGlyphs() const SK_OVERRIDE { return 0; };
-    int onGetUPEM() const SK_OVERRIDE { return 0; };
+    int onCountGlyphs() const override { return 0; };
+    int onGetUPEM() const override { return 0; };
     class EmptyLocalizedStrings : public SkTypeface::LocalizedStrings {
     public:
-        bool next(SkTypeface::LocalizedString*) SK_OVERRIDE { return false; }
+        bool next(SkTypeface::LocalizedString*) override { return false; }
     };
-    void onGetFamilyName(SkString* familyName) const SK_OVERRIDE {
+    void onGetFamilyName(SkString* familyName) const override {
         familyName->reset();
     }
-    SkTypeface::LocalizedStrings* onCreateFamilyNameIterator() const SK_OVERRIDE {
+    SkTypeface::LocalizedStrings* onCreateFamilyNameIterator() const override {
         return SkNEW(EmptyLocalizedStrings);
     };
-    int onGetTableTags(SkFontTableTag tags[]) const SK_OVERRIDE { return 0; }
-    size_t onGetTableData(SkFontTableTag, size_t, size_t, void*) const SK_OVERRIDE {
+    int onGetTableTags(SkFontTableTag tags[]) const override { return 0; }
+    size_t onGetTableData(SkFontTableTag, size_t, size_t, void*) const override {
         return 0;
     }
 };
@@ -76,7 +76,7 @@ SkTypeface* sk_create_default_typeface(int style) {
     SkAutoMutexAcquire lock(&gCreateDefaultMutex);
 
     SkAutoTUnref<SkFontMgr> fm(SkFontMgr::RefDefault());
-    SkTypeface* t = fm->legacyCreateTypeface(NULL, style);;
+    SkTypeface* t = fm->legacyCreateTypeface(NULL, style);
     return t ? t : SkEmptyTypeface::Create();
 }
 
@@ -265,7 +265,7 @@ void SkTypeface::getFamilyName(SkString* name) const {
 }
 
 SkAdvancedTypefaceMetrics* SkTypeface::getAdvancedTypefaceMetrics(
-                                SkAdvancedTypefaceMetrics::PerGlyphInfo info,
+                                PerGlyphInfo info,
                                 const uint32_t* glyphIDs,
                                 uint32_t glyphIDsCount) const {
     SkAdvancedTypefaceMetrics* result =

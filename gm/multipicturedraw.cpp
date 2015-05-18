@@ -154,7 +154,7 @@ static const SkPicture* make_tri_picture() {
 
     SkPaint fill;
     fill.setStyle(SkPaint::kFill_Style);
-    fill.setColor(SK_ColorLTGRAY);;
+    fill.setColor(SK_ColorLTGRAY);
 
     SkPaint stroke;
     stroke.setStyle(SkPaint::kStroke_Style);
@@ -423,8 +423,8 @@ static void tiled(SkCanvas* finalCanvas, SkMultiPictureDraw* mpd,
 
             SkCanvas* subCanvas = step.fSurf->getCanvas();
 
-            SkMatrix trans;
-            trans.setTranslate(-SkIntToScalar(x*kTileWidth), -SkIntToScalar(y*kTileHeight));
+            const SkMatrix trans = SkMatrix::MakeTrans(-SkIntToScalar(x*kTileWidth), 
+                                                       -SkIntToScalar(y*kTileHeight));
 
             create_content(mpd, pfGen, pictures, subCanvas, trans);
         }
@@ -486,14 +486,14 @@ namespace skiagm {
         Layout           fLayout;
         const SkPicture* fPictures[kNumPictures];
 
-        void onOnceBeforeDraw() SK_OVERRIDE {
+        void onOnceBeforeDraw() override {
             fPictures[0] = make_hex_plane_picture(SK_ColorWHITE);
             fPictures[1] = make_hex_plane_picture(SK_ColorGRAY);
             fPictures[2] = make_sierpinski_picture();
             fPictures[3] = make_single_layer_hex_plane_picture();
         }
 
-        void onDraw(SkCanvas* canvas) SK_OVERRIDE {
+        void onDraw(SkCanvas* canvas) override {
             SkMultiPictureDraw mpd;
             SkTArray<ComposeStep> composeSteps;
 
@@ -514,9 +514,9 @@ namespace skiagm {
             }
         }
 
-        SkISize onISize() SK_OVERRIDE { return SkISize::Make(kPicWidth, kPicHeight); }
+        SkISize onISize() override { return SkISize::Make(kPicWidth, kPicHeight); }
 
-        SkString onShortName() SK_OVERRIDE {
+        SkString onShortName() override {
             static const char* gContentNames[] = {
                 "noclip", "rectclip", "rrectclip", "pathclip", 
                 "invpathclip", "sierpinski", "biglayer"
@@ -534,7 +534,7 @@ namespace skiagm {
             return name;
         }
 
-        bool runAsBench() const SK_OVERRIDE { return true; }
+        bool runAsBench() const override { return true; }
 
     private:
         typedef GM INHERITED;

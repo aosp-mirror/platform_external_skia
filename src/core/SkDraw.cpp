@@ -4,6 +4,7 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
+#define __STDC_LIMIT_MACROS
 
 #include "SkDraw.h"
 #include "SkBlitter.h"
@@ -32,7 +33,6 @@
 #include "SkBitmapProcShader.h"
 #include "SkDrawProcs.h"
 #include "SkMatrixUtils.h"
-
 
 //#define TRACE_BITMAP_DRAWS
 
@@ -381,15 +381,13 @@ static void bw_pt_hair_proc(const PtProcRec& rec, const SkPoint devPts[],
 static void bw_line_hair_proc(const PtProcRec& rec, const SkPoint devPts[],
                               int count, SkBlitter* blitter) {
     for (int i = 0; i < count; i += 2) {
-        SkScan::HairLine(devPts[i], devPts[i+1], *rec.fRC, blitter);
+        SkScan::HairLine(&devPts[i], 2, *rec.fRC, blitter);
     }
 }
 
 static void bw_poly_hair_proc(const PtProcRec& rec, const SkPoint devPts[],
                               int count, SkBlitter* blitter) {
-    for (int i = 0; i < count - 1; i++) {
-        SkScan::HairLine(devPts[i], devPts[i+1], *rec.fRC, blitter);
-    }
+    SkScan::HairLine(devPts, count, *rec.fRC, blitter);
 }
 
 // aa versions
@@ -397,15 +395,13 @@ static void bw_poly_hair_proc(const PtProcRec& rec, const SkPoint devPts[],
 static void aa_line_hair_proc(const PtProcRec& rec, const SkPoint devPts[],
                               int count, SkBlitter* blitter) {
     for (int i = 0; i < count; i += 2) {
-        SkScan::AntiHairLine(devPts[i], devPts[i+1], *rec.fRC, blitter);
+        SkScan::AntiHairLine(&devPts[i], 2, *rec.fRC, blitter);
     }
 }
 
 static void aa_poly_hair_proc(const PtProcRec& rec, const SkPoint devPts[],
                               int count, SkBlitter* blitter) {
-    for (int i = 0; i < count - 1; i++) {
-        SkScan::AntiHairLine(devPts[i], devPts[i+1], *rec.fRC, blitter);
-    }
+    SkScan::AntiHairLine(devPts, count, *rec.fRC, blitter);
 }
 
 // square procs (strokeWidth > 0 but matrix is square-scale (sx == sy)
@@ -1444,6 +1440,15 @@ void SkDraw::drawText_asPaths(const char text[], size_t byteLength,
 //////////////////////////////////////////////////////////////////////////////
 
 static void D1G_RectClip(const SkDraw1Glyph& state, Sk48Dot16 fx, Sk48Dot16 fy, const SkGlyph& glyph) {
+    // Prevent glyphs from being drawn outside of or straddling the edge of device space.
+    if ((fx >> 16) > INT_MAX - (INT16_MAX + UINT16_MAX) ||
+        (fx >> 16) < INT_MIN - (INT16_MIN + 0 /*UINT16_MIN*/) ||
+        (fy >> 16) > INT_MAX - (INT16_MAX + UINT16_MAX) ||
+        (fy >> 16) < INT_MIN - (INT16_MIN + 0 /*UINT16_MIN*/))
+    {
+        return;
+    }
+
     int left = Sk48Dot16FloorToInt(fx);
     int top = Sk48Dot16FloorToInt(fy);
     SkASSERT(glyph.fWidth > 0 && glyph.fHeight > 0);
@@ -1867,10 +1872,7 @@ void SkDraw::drawPosText(const char text[], size_t byteLength,
 
 ///////////////////////////////////////////////////////////////////////////////
 
-typedef void (*HairProc)(const SkPoint&, const SkPoint&, const SkRasterClip&,
-                         SkBlitter*);
-
-static HairProc ChooseHairProc(bool doAntiAlias) {
+static SkScan::HairRCProc ChooseHairProc(bool doAntiAlias) {
     return doAntiAlias ? SkScan::AntiHairLine : SkScan::HairLine;
 }
 
@@ -1891,7 +1893,7 @@ class SkTriColorShader : public SkShader {
 public:
     SkTriColorShader() {}
 
-    size_t contextSize() const SK_OVERRIDE;
+    size_t contextSize() const override;
 
     class TriColorShaderContext : public SkShader::Context {
     public:
@@ -1900,7 +1902,7 @@ public:
 
         bool setup(const SkPoint pts[], const SkColor colors[], int, int, int);
 
-        void shadeSpan(int x, int y, SkPMColor dstC[], int count) SK_OVERRIDE;
+        void shadeSpan(int x, int y, SkPMColor dstC[], int count) override;
 
     private:
         SkMatrix    fDstToUnit;
@@ -1912,10 +1914,10 @@ public:
     SK_TO_STRING_OVERRIDE()
 
     // For serialization.  This will never be called.
-    Factory getFactory() const SK_OVERRIDE { sk_throw(); return NULL; }
+    Factory getFactory() const override { sk_throw(); return NULL; }
 
 protected:
-    Context* onCreateContext(const ContextRec& rec, void* storage) const SK_OVERRIDE {
+    Context* onCreateContext(const ContextRec& rec, void* storage) const override {
         return SkNEW_PLACEMENT_ARGS(storage, TriColorShaderContext, (*this, rec));
     }
 
@@ -2136,12 +2138,13 @@ void SkDraw::drawVertices(SkCanvas::VertexMode vmode, int count,
         }
     } else {
         // no colors[] and no texture, stroke hairlines with paint's color.
-        HairProc hairProc = ChooseHairProc(paint.isAntiAlias());
+        SkScan::HairRCProc hairProc = ChooseHairProc(paint.isAntiAlias());
         const SkRasterClip& clip = *fRC;
         while (vertProc(&state)) {
-            hairProc(devVerts[state.f0], devVerts[state.f1], clip, blitter.get());
-            hairProc(devVerts[state.f1], devVerts[state.f2], clip, blitter.get());
-            hairProc(devVerts[state.f2], devVerts[state.f0], clip, blitter.get());
+            SkPoint array[] = {
+                devVerts[state.f0], devVerts[state.f1], devVerts[state.f2], devVerts[state.f0]
+            };
+            hairProc(array, 4, clip, blitter.get());
         }
     }
 }
@@ -2181,11 +2184,7 @@ static bool compute_bounds(const SkPath& devPath, const SkIRect* clipBounds,
     }
 
     //  init our bounds from the path
-    {
-        SkRect pathBounds = devPath.getBounds();
-        pathBounds.inset(-SK_ScalarHalf, -SK_ScalarHalf);
-        pathBounds.roundOut(bounds);
-    }
+    *bounds = devPath.getBounds().makeOutset(SK_ScalarHalf, SK_ScalarHalf).roundOut();
 
     SkIPoint margin = SkIPoint::Make(0, 0);
     if (filter) {
@@ -2204,7 +2203,6 @@ static bool compute_bounds(const SkPath& devPath, const SkIRect* clipBounds,
     // (possibly) trim the bounds to reflect the clip
     // (plus whatever slop the filter needs)
     if (clipBounds) {
-        SkIRect tmp = *clipBounds;
         // Ugh. Guard against gigantic margins from wacky filters. Without this
         // check we can request arbitrary amounts of slop beyond our visible
         // clip, and bring down the renderer (at least on finite RAM machines
@@ -2212,9 +2210,8 @@ static bool compute_bounds(const SkPath& devPath, const SkIRect* clipBounds,
         // quality of large filters like blurs, and the corresponding memory
         // requests.
         static const int MAX_MARGIN = 128;
-        tmp.inset(-SkMin32(margin.fX, MAX_MARGIN),
-                  -SkMin32(margin.fY, MAX_MARGIN));
-        if (!bounds->intersect(tmp)) {
+        if (!bounds->intersect(clipBounds->makeOutset(SkMin32(margin.fX, MAX_MARGIN),
+                                                      SkMin32(margin.fY, MAX_MARGIN)))) {
             return false;
         }
     }

@@ -66,10 +66,8 @@ private:
     SkAlignedSStorage<kMaxSize> fData;
 };
 
-class GrIndexBufferAllocPool;
-class GrGLCaps;
+class GrGLSLCaps;
 class GrGLPrimitiveProcessor;
-class GrVertexBufferAllocPool;
 
 struct GrInitInvariantOutput;
 
@@ -104,11 +102,6 @@ enum GrGPInput {
  */
 class GrPrimitiveProcessor : public GrProcessor {
 public:
-    // TODO let the PrimProc itself set this in its setData call, this should really live on the
-    // bundle of primitive data
-    const SkMatrix& viewMatrix() const { return fViewMatrix; }
-    const SkMatrix& localMatrix() const { return fLocalMatrix; }
-
     virtual void initBatchTracker(GrBatchTracker*, const GrPipelineInfo&) const = 0;
 
     virtual bool canMakeEqual(const GrBatchTracker& mine,
@@ -163,7 +156,7 @@ public:
      * processor's GL backend implementation.
      */
     virtual void getGLProcessorKey(const GrBatchTracker& bt,
-                                   const GrGLCaps& caps,
+                                   const GrGLSLCaps& caps,
                                    GrProcessorKeyBuilder* b) const = 0;
 
 
@@ -171,48 +164,15 @@ public:
         for the given GrProcessor; caller is responsible for deleting
         the object. */
     virtual GrGLPrimitiveProcessor* createGLInstance(const GrBatchTracker& bt,
-                                                     const GrGLCaps& caps) const = 0;
+                                                     const GrGLSLCaps& caps) const = 0;
 
     bool isPathRendering() const { return fIsPathRendering; }
 
 protected:
-    GrPrimitiveProcessor(const SkMatrix& viewMatrix, const SkMatrix& localMatrix,
-                         bool isPathRendering)
+    GrPrimitiveProcessor(bool isPathRendering)
         : fNumAttribs(0)
         , fVertexStride(0)
-        , fViewMatrix(viewMatrix)
-        , fLocalMatrix(localMatrix)
         , fIsPathRendering(isPathRendering) {}
-
-    /*
-     * CanCombineOutput will return true if two draws are 'batchable' from a color perspective.
-     * TODO remove this when GPs can upgrade to attribute color
-     */
-    static bool CanCombineOutput(GrGPInput left, GrColor lColor, GrGPInput right, GrColor rColor) {
-        if (left != right) {
-            return false;
-        }
-
-        if (kUniform_GrGPInput == left && lColor != rColor) {
-            return false;
-        }
-
-        return true;
-    }
-
-    static bool CanCombineLocalMatrices(const GrPrimitiveProcessor& left,
-                                        bool leftUsesLocalCoords,
-                                        const GrPrimitiveProcessor& right,
-                                        bool rightUsesLocalCoords) {
-        if (leftUsesLocalCoords != rightUsesLocalCoords) {
-            return false;
-        }
-
-        if (leftUsesLocalCoords && !left.localMatrix().cheapEqualTo(right.localMatrix())) {
-            return false;
-        }
-        return true;
-    }
 
     Attribute fAttribs[kMaxVertexAttribs];
     int fNumAttribs;
@@ -221,8 +181,6 @@ protected:
 private:
     virtual bool hasExplicitLocalCoords() const = 0;
 
-    const SkMatrix fViewMatrix;
-    SkMatrix fLocalMatrix;
     bool fIsPathRendering;
 
     typedef GrProcessor INHERITED;

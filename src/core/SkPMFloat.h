@@ -1,55 +1,60 @@
+/*
+ * Copyright 2015 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
 #ifndef SkPM_DEFINED
 #define SkPM_DEFINED
 
 #include "SkTypes.h"
 #include "SkColor.h"
-#include "Sk4x.h"
+#include "SkColorPriv.h"
+#include "SkNx.h"
 
 // A pre-multiplied color storing each component in the same order as SkPMColor,
 // but as a float in the range [0, 255].
-class SK_STRUCT_ALIGN(16) SkPMFloat {
+class SkPMFloat : public Sk4f {
 public:
     static SkPMFloat FromPMColor(SkPMColor c) { return SkPMFloat(c); }
     static SkPMFloat FromARGB(float a, float r, float g, float b) { return SkPMFloat(a,r,g,b); }
 
     // May be more efficient than one at a time.  No special alignment assumed for SkPMColors.
-    static void From4PMColors(SkPMFloat[4], const SkPMColor[4]);
-
-    explicit SkPMFloat(SkPMColor);
-    SkPMFloat(float a, float r, float g, float b) {
-        // TODO: faster when specialized?
-        fColor[SK_A32_SHIFT / 8] = a;
-        fColor[SK_R32_SHIFT / 8] = r;
-        fColor[SK_G32_SHIFT / 8] = g;
-        fColor[SK_B32_SHIFT / 8] = b;
-    }
+    static void From4PMColors(const SkPMColor[4], SkPMFloat*, SkPMFloat*, SkPMFloat*, SkPMFloat*);
 
     // Uninitialized.
     SkPMFloat() {}
+    explicit SkPMFloat(SkPMColor);
+    SkPMFloat(float a, float r, float g, float b)
+    #ifdef SK_PMCOLOR_IS_RGBA
+        : INHERITED(r,g,b,a) {}
+    #else
+        : INHERITED(b,g,r,a) {}
+    #endif
 
-    // Copy and assign are fastest if we remind the compiler we work best as Sk4f.
-    SkPMFloat(const SkPMFloat& that) { Sk4f(that).storeAligned(fColor); }
-    SkPMFloat& operator=(const SkPMFloat& that) {
-        Sk4f(that).storeAligned(fColor);
-        return *this;
-    }
+    SkPMFloat(const Sk4f& fs) : INHERITED(fs) {}
 
-    // Freely autoconvert between SkPMFloat and Sk4f.
-    /*implicit*/ SkPMFloat(const Sk4f& fs) { fs.storeAligned(fColor); }
-    /*implicit*/ operator Sk4f() const { return Sk4f::LoadAligned(fColor); }
+    float a() const { return this->kth<SK_A32_SHIFT / 8>(); }
+    float r() const { return this->kth<SK_R32_SHIFT / 8>(); }
+    float g() const { return this->kth<SK_G32_SHIFT / 8>(); }
+    float b() const { return this->kth<SK_B32_SHIFT / 8>(); }
 
-    float a() const { return fColor[SK_A32_SHIFT / 8]; }
-    float r() const { return fColor[SK_R32_SHIFT / 8]; }
-    float g() const { return fColor[SK_G32_SHIFT / 8]; }
-    float b() const { return fColor[SK_B32_SHIFT / 8]; }
+    // N.B. All methods returning an SkPMColor call SkPMColorAssert on that result before returning.
 
-    // get() and clamped() round component values to the nearest integer.
-    SkPMColor     get() const;  // May SkASSERT(this->isValid()).  Some implementations may clamp.
-    SkPMColor clamped() const;  // Will clamp all values to [0, 255].  Then may assert isValid().
+    // round() and roundClamp() round component values to the nearest integer.
+    SkPMColor round() const;  // Assumes all values in [0, 255].  Some implementations may clamp.
+    SkPMColor roundClamp() const;  // Will clamp all values to [0, 255].
 
-    // 4-at-a-time versions of get() and clamped().  Like From4PMColors(), no alignment assumed.
-    static void To4PMColors(SkPMColor[4], const SkPMFloat[4]);
-    static void ClampTo4PMColors(SkPMColor[4], const SkPMFloat[4]);
+    // Like round(), but truncates instead of rounding.
+    // The domain of this function is (-1.0f, 256.0f).  Values in (-1.0f, 0.0f] trunc to a zero.
+    SkPMColor trunc() const;
+
+    // 4-at-a-time versions of round() and roundClamp(). Like From4PMColors(), no alignment assumed.
+    static void RoundTo4PMColors(
+            const SkPMFloat&, const SkPMFloat&, const SkPMFloat&, const SkPMFloat&, SkPMColor[4]);
+    static void RoundClampTo4PMColors(
+            const SkPMFloat&, const SkPMFloat&, const SkPMFloat&, const SkPMFloat&, SkPMColor[4]);
 
     bool isValid() const {
         return this->a() >= 0 && this->a() <= 255
@@ -59,17 +64,22 @@ public:
     }
 
 private:
-    float fColor[4];
+    typedef Sk4f INHERITED;
 };
 
-#if SK_CPU_SSE_LEVEL >= SK_CPU_SSE_LEVEL_SSSE3
-    #include "../opts/SkPMFloat_SSSE3.h"
-#elif SK_CPU_SSE_LEVEL >= SK_CPU_SSE_LEVEL_SSE2
-    #include "../opts/SkPMFloat_SSE2.h"
-#elif defined(__ARM_NEON__)
-    #include "../opts/SkPMFloat_neon.h"
-#else
+#ifdef SKNX_NO_SIMD
+    // Platform implementations of SkPMFloat assume Sk4f uses SSE or NEON.  _none is generic.
     #include "../opts/SkPMFloat_none.h"
+#else
+    #if SK_CPU_SSE_LEVEL >= SK_CPU_SSE_LEVEL_SSSE3
+        #include "../opts/SkPMFloat_SSSE3.h"
+    #elif SK_CPU_SSE_LEVEL >= SK_CPU_SSE_LEVEL_SSE2
+        #include "../opts/SkPMFloat_SSE2.h"
+    #elif defined(SK_ARM_HAS_NEON)
+        #include "../opts/SkPMFloat_neon.h"
+    #else
+        #include "../opts/SkPMFloat_none.h"
+    #endif
 #endif
 
 #endif//SkPM_DEFINED

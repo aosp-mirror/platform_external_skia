@@ -125,10 +125,9 @@ public:
     };
 
 protected:
-    enum Usage {
-       kGeneral_Usage,
-       kSaveLayer_Usage,  // <! internal use only
-       kImageFilter_Usage // <! internal use only
+    enum TileUsage {
+        kPossible_TileUsage,    //!< the created device may be drawn tiled
+        kNever_TileUsage,       //!< the created device will never be drawn tiled
     };
 
     struct TextFlags {
@@ -210,6 +209,10 @@ protected:
                                 const SkPaint& paint,
                                 SkCanvas::DrawBitmapRectFlags flags) = 0;
 
+    virtual void drawImage(const SkDraw&, const SkImage*, SkScalar x, SkScalar y, const SkPaint&);
+    virtual void drawImageRect(const SkDraw&, const SkImage*, const SkRect* src, const SkRect& dst,
+                               const SkPaint&);
+
     /**
      *  Does not handle text decoration.
      *  Decorations (underline and stike-thru) will be handled by SkCanvas.
@@ -231,7 +234,7 @@ protected:
     virtual void drawPatch(const SkDraw&, const SkPoint cubics[12], const SkColor colors[4],
                            const SkPoint texCoords[4], SkXfermode* xmode, const SkPaint& paint);
     /** The SkDevice passed will be an SkDevice which was returned by a call to
-        onCreateCompatibleDevice on this device with kSaveLayer_Usage.
+        onCreateDevice on this device with kNeverTile_TileExpectation.
      */
     virtual void drawDevice(const SkDraw&, SkBaseDevice*, int x, int y,
                             const SkPaint&) = 0;
@@ -253,14 +256,6 @@ protected:
     */
     virtual void lockPixels() {}
     virtual void unlockPixels() {}
-
-    /**
-     *  Returns true if the device allows processing of this imagefilter. If
-     *  false is returned, then the filter is ignored. This may happen for
-     *  some subclasses that do not support pixel manipulations after drawing
-     *  has occurred (e.g. printing). The default implementation returns true.
-     */
-    virtual bool allowImageFilter(const SkImageFilter*) { return true; }
 
     /**
      *  Override and return true for filters that the device can handle
@@ -336,21 +331,36 @@ protected:
                                           const SkPaint*);
 
     struct CreateInfo {
-        static SkPixelGeometry AdjustGeometry(const SkImageInfo&, Usage, SkPixelGeometry geo);
+        static SkPixelGeometry AdjustGeometry(const SkImageInfo&, TileUsage, SkPixelGeometry);
 
-        // The construct may change the pixel geometry based on usage as needed.
-        CreateInfo(const SkImageInfo& info, Usage usage, SkPixelGeometry geo)
+        // The constructor may change the pixel geometry based on other parameters.
+        CreateInfo(const SkImageInfo& info,
+                   TileUsage tileUsage,
+                   SkPixelGeometry geo,
+                   bool forImageFilter = false)
             : fInfo(info)
-            , fUsage(usage)
-            , fPixelGeometry(AdjustGeometry(info, usage, geo))
-        {}
+            , fTileUsage(tileUsage)
+            , fPixelGeometry(AdjustGeometry(info, tileUsage, geo))
+            , fForImageFilter(forImageFilter) {}
 
-        const SkImageInfo     fInfo;
-        const Usage           fUsage;
-        const SkPixelGeometry fPixelGeometry;
+        const SkImageInfo       fInfo;
+        const TileUsage         fTileUsage;
+        const SkPixelGeometry   fPixelGeometry;
+        const bool              fForImageFilter;
     };
 
-    virtual SkBaseDevice* onCreateCompatibleDevice(const CreateInfo&) {
+    /**
+     *  Create a new device based on CreateInfo. If the paint is not null, then it represents a
+     *  preview of how the new device will be composed with its creator device (this).
+     *
+     *  The subclass may be handed this device in drawDevice(), so it must always return
+     *  a device that it knows how to draw, and that it knows how to identify if it is not of the
+     *  same subclass (since drawDevice is passed a SkBaseDevice*). If the subclass cannot fulfill
+     *  that contract (e.g. PDF cannot support some settings on the paint) it should return NULL,
+     *  and the caller may then decide to explicitly create a bitmapdevice, knowing that later
+     *  it could not call drawDevice with it (but it could call drawSprite or drawBitmap).
+     */
+    virtual SkBaseDevice* onCreateDevice(const CreateInfo&, const SkPaint*) {
         return NULL;
     }
 

@@ -1,3 +1,7 @@
+# Copyright 2015 Google Inc.
+#
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
 {
   'targets': [
     {
@@ -10,7 +14,6 @@
           'defines': [ 'SK_XPS_USE_DETERMINISTIC_IDS', ],
           'dependencies': [
             'skia_lib.gyp:skia_lib',
-            'sfnt.gyp:sfnt',
           ],
           'include_dirs': [
             '../include/device/xps',

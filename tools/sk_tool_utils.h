@@ -9,7 +9,9 @@
 #define sk_tool_utils_DEFINED
 
 #include "SkColor.h"
+#include "SkImageEncoder.h"
 #include "SkImageInfo.h"
+#include "SkPixelSerializer.h"
 #include "SkTypeface.h"
 
 class SkBitmap;
@@ -17,6 +19,7 @@ class SkCanvas;
 class SkPaint;
 class SkShader;
 class SkTestFont;
+class SkTextBlobBuilder;
 
 namespace sk_tool_utils {
 
@@ -54,6 +57,22 @@ namespace sk_tool_utils {
     inline void draw_checkerboard(SkCanvas* canvas) {
         sk_tool_utils::draw_checkerboard(canvas, 0xFF999999, 0xFF666666, 8);
     }
+
+    // Encodes to PNG, unless there is already encoded data, in which case that gets
+    // used.
+    class PngPixelSerializer : public SkPixelSerializer {
+    public:
+        bool onUseEncodedData(const void*, size_t) override { return true; }
+        SkData* onEncodePixels(const SkImageInfo& info, const void* pixels,
+                               size_t rowBytes) override {
+            return SkImageEncoder::EncodeData(info, pixels, rowBytes,
+                                              SkImageEncoder::kPNG_Type, 100);
+        }
+    };
+
+    // A helper for inserting a drawtext call into a SkTextBlobBuilder
+    void add_to_text_blob(SkTextBlobBuilder* builder, const char* text, const SkPaint& origPaint,
+                          SkScalar x, SkScalar y);
 
 }  // namespace sk_tool_utils
 

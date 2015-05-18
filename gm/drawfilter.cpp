@@ -19,34 +19,36 @@
  * the second red and sharp.
  */
 
+namespace {
 class TestFilter : public SkDrawFilter {
 public:
-    bool filter(SkPaint* p, Type) SK_OVERRIDE {
+    bool filter(SkPaint* p, Type) override {
         p->setColor(SK_ColorRED);
         p->setMaskFilter(NULL);
         return true;
     }
 };
+}
 
 class DrawFilterGM : public skiagm::GM {
     SkAutoTUnref<SkMaskFilter> fBlur;
 
 protected:
-    SkISize onISize() SK_OVERRIDE {
+    SkISize onISize() override {
         return SkISize::Make(320, 240);
     }
 
-    SkString onShortName() SK_OVERRIDE {
+    SkString onShortName() override {
         return SkString("drawfilter");
     }
 
-    void onOnceBeforeDraw() SK_OVERRIDE {
+    void onOnceBeforeDraw() override {
         fBlur.reset(SkBlurMaskFilter::Create(kNormal_SkBlurStyle,
                     SkBlurMask::ConvertRadiusToSigma(10.0f),
                     kLow_SkBlurQuality));
     }
 
-    void onDraw(SkCanvas* canvas) SK_OVERRIDE {
+    void onDraw(SkCanvas* canvas) override {
         SkPaint p;
         p.setColor(SK_ColorBLUE);
         p.setMaskFilter(fBlur.get());

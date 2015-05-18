@@ -472,9 +472,9 @@ public:
                           const char* outputColor,
                           const char* inputColor,
                           const TransformedCoordsArray&,
-                          const TextureSamplerArray&) SK_OVERRIDE;
+                          const TextureSamplerArray&) override;
 
-    static void GenKey(const GrProcessor& processor, const GrGLCaps&, GrProcessorKeyBuilder* b) {
+    static void GenKey(const GrProcessor& processor, const GrGLSLCaps&, GrProcessorKeyBuilder* b) {
         b->add32(GenBaseGradientKey(processor));
     }
 
@@ -497,14 +497,14 @@ public:
 
     virtual ~GrLinearGradient() { }
 
-    const char* name() const SK_OVERRIDE { return "Linear Gradient"; }
+    const char* name() const override { return "Linear Gradient"; }
 
-    virtual void getGLProcessorKey(const GrGLCaps& caps,
-                                   GrProcessorKeyBuilder* b) const SK_OVERRIDE {
+    virtual void getGLProcessorKey(const GrGLSLCaps& caps,
+                                   GrProcessorKeyBuilder* b) const override {
         GrGLLinearGradient::GenKey(*this, caps, b);
     }
 
-    GrGLFragmentProcessor* createGLInstance() const SK_OVERRIDE {
+    GrGLFragmentProcessor* createGLInstance() const override {
         return SkNEW_ARGS(GrGLLinearGradient, (*this));
     }
 
@@ -544,7 +544,7 @@ GrFragmentProcessor* GrLinearGradient::TestCreate(SkRandom* random,
     GrColor paintColor;
     GrFragmentProcessor* fp;
     SkAssertResult(shader->asFragmentProcessor(context, paint,
-                                               GrProcessorUnitTest::TestMatrix(random), NULL,
+                                               GrTest::TestMatrix(random), NULL,
                                                &paintColor, &fp));
     return fp;
 }

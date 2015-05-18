@@ -57,11 +57,11 @@ public:
     }
 
 protected:
-    const char* onGetName() SK_OVERRIDE {
+    const char* onGetName() override {
         return fName.c_str();
     }
 
-    void onDraw(const int loops, SkCanvas* canvas) SK_OVERRIDE {
+    void onDraw(const int loops, SkCanvas* canvas) override {
         SkPaint paint;
         this->setupPaint(&paint);
         paint.setStyle(SkPaint::kStroke_Style);
@@ -106,7 +106,7 @@ public:
 
 protected:
     virtual void handlePath(SkCanvas* canvas, const SkPath& path,
-                            const SkPaint& paint, int N) SK_OVERRIDE {
+                            const SkPaint& paint, int N) override {
         SkPoint pts[2];
         if (!path.isLine(pts) || pts[0].fY != pts[1].fY) {
             this->INHERITED::handlePath(canvas, path, paint, N);
@@ -153,8 +153,7 @@ static void make_unit_star(SkPath* path, int n) {
 
 static void make_poly(SkPath* path) {
     make_unit_star(path, 9);
-    SkMatrix matrix;
-    matrix.setScale(SkIntToScalar(100), SkIntToScalar(100));
+    const SkMatrix matrix = SkMatrix::MakeScale(SkIntToScalar(100), SkIntToScalar(100));
     path->transform(matrix);
 }
 
@@ -190,11 +189,11 @@ public:
     }
 
 protected:
-    const char* onGetName() SK_OVERRIDE {
+    const char* onGetName() override {
         return fName.c_str();
     }
 
-    void onDraw(const int loops, SkCanvas*) SK_OVERRIDE {
+    void onDraw(const int loops, SkCanvas*) override {
         SkPath dst;
         for (int i = 0; i < loops; ++i) {
             SkStrokeRec rec(SkStrokeRec::kHairline_InitStyle);
@@ -228,11 +227,11 @@ public:
     }
 
 protected:
-    const char* onGetName() SK_OVERRIDE {
+    const char* onGetName() override {
         return fName.c_str();
     }
 
-    void onDraw(const int loops, SkCanvas* canvas) SK_OVERRIDE {
+    void onDraw(const int loops, SkCanvas* canvas) override {
         SkPaint paint;
         this->setupPaint(&paint);
         paint.setStrokeWidth(fStrokeWidth);
@@ -267,11 +266,11 @@ public:
     }
 
 protected:
-    const char* onGetName() SK_OVERRIDE {
+    const char* onGetName() override {
         return fName.c_str();
     }
 
-    void onDraw(const int loops, SkCanvas* canvas) SK_OVERRIDE {
+    void onDraw(const int loops, SkCanvas* canvas) override {
         SkPaint p;
         this->setupPaint(&p);
         p.setColor(SK_ColorBLACK);
@@ -353,11 +352,11 @@ public:
     }
 
 protected:
-    const char* onGetName() SK_OVERRIDE {
+    const char* onGetName() override {
         return fName.c_str();
     }
 
-    void onDraw(const int loops, SkCanvas* canvas) SK_OVERRIDE {
+    void onDraw(const int loops, SkCanvas* canvas) override {
         SkPaint p;
         this->setupPaint(&p);
         p.setStyle(SkPaint::kStroke_Style);
@@ -393,11 +392,11 @@ public:
     }
 
 protected:
-    const char* onGetName() SK_OVERRIDE {
+    const char* onGetName() override {
         return fName.c_str();
     }
 
-    void onDraw(const int loops, SkCanvas* canvas) SK_OVERRIDE {
+    void onDraw(const int loops, SkCanvas* canvas) override {
         SkPaint p;
         this->setupPaint(&p);
         p.setColor(SK_ColorBLACK);

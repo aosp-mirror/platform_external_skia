@@ -131,36 +131,27 @@ SkBlitRow::Proc32 SkBlitRow::Factory32(unsigned flags) {
     return proc;
 }
 
-SkBlitRow::Proc32 SkBlitRow::ColorProcFactory() {
-    SkBlitRow::ColorProc proc = PlatformColorProc();
-    if (NULL == proc) {
-        proc = Color32;
-    }
-    SkASSERT(proc);
-    return proc;
-}
+#include "Sk4px.h"
 
-void SkBlitRow::Color32(SkPMColor* SK_RESTRICT dst,
-                        const SkPMColor* SK_RESTRICT src,
-                        int count, SkPMColor color) {
-    if (count > 0) {
-        if (0 == color) {
-            if (src != dst) {
-                memcpy(dst, src, count * sizeof(SkPMColor));
-            }
-            return;
-        }
-        unsigned colorA = SkGetPackedA32(color);
-        if (255 == colorA) {
-            sk_memset32(dst, color, count);
-        } else {
-            unsigned scale = 256 - SkAlpha255To256(colorA);
-            do {
-                *dst = color + SkAlphaMulQ(*src, scale);
-                src += 1;
-                dst += 1;
-            } while (--count);
-        }
+// Color32 uses the blend_256_round_alt algorithm from tests/BlendTest.cpp.
+// It's not quite perfect, but it's never wrong in the interesting edge cases,
+// and it's quite a bit faster than blend_perfect.
+//
+// blend_256_round_alt is our currently blessed algorithm.  Please use it or an analogous one.
+void SkBlitRow::Color32(SkPMColor dst[], const SkPMColor src[], int count, SkPMColor color) {
+    switch (SkGetPackedA32(color)) {
+        case   0: memmove(dst, src, count * sizeof(SkPMColor)); return;
+        case 255: sk_memset32(dst, color, count);               return;
     }
-}
 
+    unsigned invA = 255 - SkGetPackedA32(color);
+    invA += invA >> 7;
+    SkASSERT(invA < 256);  // We've already handled alpha == 0 above.
+
+    Sk16h colorHighAndRound = Sk4px(color).widenHi() + Sk16h(128);
+    Sk16b invA_16x(invA);
+
+    Sk4px::MapSrc(count, dst, src, [&](const Sk4px& src4) -> Sk4px {
+        return src4.mulWiden(invA_16x).addNarrowHi(colorHighAndRound);
+    });
+}

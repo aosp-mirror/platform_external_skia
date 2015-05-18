@@ -10,9 +10,9 @@
 #include "SkPathOps.h"
 
 void SkOpBuilder::add(const SkPath& path, SkPathOp op) {
-    if (0 == fOps.count() && op != kUnion_PathOp) {
+    if (0 == fOps.count() && op != kUnion_SkPathOp) {
         fPathRefs.push_back() = SkPath();
-        *fOps.append() = kUnion_PathOp;
+        *fOps.append() = kUnion_SkPathOp;
     }
     fPathRefs.push_back() = path;
     *fOps.append() = op;
@@ -27,12 +27,13 @@ void SkOpBuilder::reset() {
    paths with union ops could be locally resolved and still improve over doing the
    ops one at a time. */
 bool SkOpBuilder::resolve(SkPath* result) {
+    SkPath original = *result;
     int count = fOps.count();
     bool allUnion = true;
     SkPath::Direction firstDir;
     for (int index = 0; index < count; ++index) {
         SkPath* test = &fPathRefs[index];
-        if (kUnion_PathOp != fOps[index] || test->isInverseFillType()) {
+        if (kUnion_SkPathOp != fOps[index] || test->isInverseFillType()) {
             allUnion = false;
             break;
         }
@@ -67,6 +68,7 @@ bool SkOpBuilder::resolve(SkPath* result) {
         for (int index = 1; index < count; ++index) {
             if (!Op(*result, fPathRefs[index], fOps[index], result)) {
                 reset();
+                *result = original;
                 return false;
             }
         }
@@ -77,10 +79,16 @@ bool SkOpBuilder::resolve(SkPath* result) {
     for (int index = 0; index < count; ++index) {
         if (!Simplify(fPathRefs[index], &fPathRefs[index])) {
             reset();
+            *result = original;
             return false;
         }
         sum.addPath(fPathRefs[index]);
     }
     reset();
-    return Simplify(sum, result);
+    sum.setFillType(SkPath::kEvenOdd_FillType);
+    bool success = Simplify(sum, result);
+    if (!success) {
+        *result = original;
+    }
+    return success;
 }

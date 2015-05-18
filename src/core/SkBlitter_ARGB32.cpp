@@ -52,7 +52,6 @@ SkARGB32_Blitter::SkARGB32_Blitter(const SkBitmap& device, const SkPaint& paint)
     fSrcB = SkAlphaMul(SkColorGetB(color), scale);
 
     fPMColor = SkPackARGB32(fSrcA, fSrcR, fSrcG, fSrcB);
-    fColor32Proc = SkBlitRow::ColorProcFactory();
 }
 
 const SkBitmap* SkARGB32_Blitter::justAnOpaqueColor(uint32_t* value) {
@@ -72,7 +71,7 @@ void SkARGB32_Blitter::blitH(int x, int y, int width) {
     SkASSERT(x >= 0 && y >= 0 && x + width <= fDevice.width());
 
     uint32_t*   device = fDevice.getAddr32(x, y);
-    fColor32Proc(device, device, width, fPMColor);
+    SkBlitRow::Color32(device, device, width, fPMColor);
 }
 
 void SkARGB32_Blitter::blitAntiH(int x, int y, const SkAlpha antialias[],
@@ -97,13 +96,30 @@ void SkARGB32_Blitter::blitAntiH(int x, int y, const SkAlpha antialias[],
                 sk_memset32(device, color, count);
             } else {
                 uint32_t sc = SkAlphaMulQ(color, SkAlpha255To256(aa));
-                fColor32Proc(device, device, count, sc);
+                SkBlitRow::Color32(device, device, count, sc);
             }
         }
         runs += count;
         antialias += count;
         device += count;
     }
+}
+
+void SkARGB32_Blitter::blitAntiH2(int x, int y, U8CPU a0, U8CPU a1) {
+    uint32_t* device = fDevice.getAddr32(x, y);
+    SkDEBUGCODE((void)fDevice.getAddr32(x + 1, y);)
+
+    device[0] = SkBlendARGB32(fPMColor, device[0], a0);
+    device[1] = SkBlendARGB32(fPMColor, device[1], a1);
+}
+
+void SkARGB32_Blitter::blitAntiV2(int x, int y, U8CPU a0, U8CPU a1) {
+    uint32_t* device = fDevice.getAddr32(x, y);
+    SkDEBUGCODE((void)fDevice.getAddr32(x, y + 1);)
+
+    device[0] = SkBlendARGB32(fPMColor, device[0], a0);
+    device = (uint32_t*)((char*)device + fDevice.rowBytes());
+    device[0] = SkBlendARGB32(fPMColor, device[0], a1);
 }
 
 //////////////////////////////////////////////////////////////////////////////////////
@@ -180,6 +196,23 @@ void SkARGB32_Opaque_Blitter::blitMask(const SkMask& mask,
     }
 }
 
+void SkARGB32_Opaque_Blitter::blitAntiH2(int x, int y, U8CPU a0, U8CPU a1) {
+    uint32_t* device = fDevice.getAddr32(x, y);
+    SkDEBUGCODE((void)fDevice.getAddr32(x + 1, y);)
+
+    device[0] = SkFastFourByteInterp(fPMColor, device[0], a0);
+    device[1] = SkFastFourByteInterp(fPMColor, device[1], a1);
+}
+
+void SkARGB32_Opaque_Blitter::blitAntiV2(int x, int y, U8CPU a0, U8CPU a1) {
+    uint32_t* device = fDevice.getAddr32(x, y);
+    SkDEBUGCODE((void)fDevice.getAddr32(x, y + 1);)
+
+    device[0] = SkFastFourByteInterp(fPMColor, device[0], a0);
+    device = (uint32_t*)((char*)device + fDevice.rowBytes());
+    device[0] = SkFastFourByteInterp(fPMColor, device[0], a1);
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 
 void SkARGB32_Blitter::blitV(int x, int y, int height, SkAlpha alpha) {
@@ -214,7 +247,7 @@ void SkARGB32_Blitter::blitRect(int x, int y, int width, int height) {
     size_t      rowBytes = fDevice.rowBytes();
 
     while (--height >= 0) {
-        fColor32Proc(device, device, width, color);
+        SkBlitRow::Color32(device, device, width, color);
         device = (uint32_t*)((char*)device + rowBytes);
     }
 }
@@ -254,6 +287,23 @@ void SkARGB32_Black_Blitter::blitAntiH(int x, int y, const SkAlpha antialias[],
         antialias += count;
         device += count;
     }
+}
+
+void SkARGB32_Black_Blitter::blitAntiH2(int x, int y, U8CPU a0, U8CPU a1) {
+    uint32_t* device = fDevice.getAddr32(x, y);
+    SkDEBUGCODE((void)fDevice.getAddr32(x + 1, y);)
+
+    device[0] = (a0 << SK_A32_SHIFT) + SkAlphaMulQ(device[0], 256 - a0);
+    device[1] = (a1 << SK_A32_SHIFT) + SkAlphaMulQ(device[1], 256 - a1);
+}
+
+void SkARGB32_Black_Blitter::blitAntiV2(int x, int y, U8CPU a0, U8CPU a1) {
+    uint32_t* device = fDevice.getAddr32(x, y);
+    SkDEBUGCODE((void)fDevice.getAddr32(x, y + 1);)
+
+    device[0] = (a0 << SK_A32_SHIFT) + SkAlphaMulQ(device[0], 256 - a0);
+    device = (uint32_t*)((char*)device + fDevice.rowBytes());
+    device[0] = (a1 << SK_A32_SHIFT) + SkAlphaMulQ(device[0], 256 - a1);
 }
 
 ///////////////////////////////////////////////////////////////////////////////

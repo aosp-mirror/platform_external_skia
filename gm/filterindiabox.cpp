@@ -24,9 +24,9 @@ static SkSize computeSize(const SkBitmap& bm, const SkMatrix& mat) {
 }
 
 static void draw_cell(SkCanvas* canvas, const SkBitmap& bm, const SkMatrix& mat, SkScalar dx,
-                      SkPaint::FilterLevel lvl) {
+                      SkFilterQuality lvl) {
     SkPaint paint;
-    paint.setFilterLevel(lvl);
+    paint.setFilterQuality(lvl);
 
     SkAutoCanvasRestore acr(canvas, true);
 
@@ -36,14 +36,14 @@ static void draw_cell(SkCanvas* canvas, const SkBitmap& bm, const SkMatrix& mat,
 }
 
 static void draw_row(SkCanvas* canvas, const SkBitmap& bm, const SkMatrix& mat, SkScalar dx) {
-    draw_cell(canvas, bm, mat, 0 * dx, SkPaint::kNone_FilterLevel);
-    draw_cell(canvas, bm, mat, 1 * dx, SkPaint::kLow_FilterLevel);
-    draw_cell(canvas, bm, mat, 2 * dx, SkPaint::kMedium_FilterLevel);
-    draw_cell(canvas, bm, mat, 3 * dx, SkPaint::kHigh_FilterLevel);
+    draw_cell(canvas, bm, mat, 0 * dx, kNone_SkFilterQuality);
+    draw_cell(canvas, bm, mat, 1 * dx, kLow_SkFilterQuality);
+    draw_cell(canvas, bm, mat, 2 * dx, kMedium_SkFilterQuality);
+    draw_cell(canvas, bm, mat, 3 * dx, kHigh_SkFilterQuality);
 }
 
 class FilterIndiaBoxGM : public skiagm::GM {
-    void onOnceBeforeDraw() SK_OVERRIDE {
+    void onOnceBeforeDraw() override {
         this->makeBitmap();
 
         SkScalar cx = SkScalarHalf(fBM.width());
@@ -70,15 +70,15 @@ public:
     }
 
 protected:
-    SkString onShortName() SK_OVERRIDE {
+    SkString onShortName() override {
         return fName;
     }
 
-    SkISize onISize() SK_OVERRIDE {
+    SkISize onISize() override {
         return SkISize::Make(1024, 768);
     }
 
-    void onDraw(SkCanvas* canvas) SK_OVERRIDE {
+    void onDraw(SkCanvas* canvas) override {
         canvas->translate(10, 10);
         for (size_t i = 0; i < SK_ARRAY_COUNT(fMatrix); ++i) {
             SkSize size = computeSize(fBM, fMatrix[i]);

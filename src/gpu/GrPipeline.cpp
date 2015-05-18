@@ -64,15 +64,15 @@ GrPipeline::GrPipeline(const GrPipelineBuilder& pipelineBuilder,
     if (pipelineBuilder.isDither()) {
         fFlags |= kDither_Flag;
     }
+    if (pipelineBuilder.snapVerticesToPixelCenters()) {
+        fFlags |= kSnapVertices_Flag;
+    }
 
     int firstColorStageIdx = colorPOI.firstEffectiveStageIndex();
 
     // TODO: Once we can handle single or four channel input into coverage stages then we can use
     // GrPipelineBuilder's coverageProcInfo (like color above) to set this initial information.
     int firstCoverageStageIdx = 0;
-
-    GrXferProcessor::BlendInfo blendInfo;
-    fXferProcessor->getBlendInfo(&blendInfo);
 
     this->adjustProgramFromOptimizations(pipelineBuilder, optFlags, colorPOI, coveragePOI,
                                          &firstColorStageIdx, &firstCoverageStageIdx);
@@ -112,13 +112,15 @@ void GrPipeline::adjustProgramFromOptimizations(const GrPipelineBuilder& pipelin
                                                 const GrProcOptInfo& coveragePOI,
                                                 int* firstColorStageIdx,
                                                 int* firstCoverageStageIdx) {
-    fReadsFragPosition = false;
+    fReadsFragPosition = fXferProcessor->willReadFragmentPosition();
 
     if ((flags & GrXferProcessor::kIgnoreColor_OptFlag) ||
         (flags & GrXferProcessor::kOverrideColor_OptFlag)) {
         *firstColorStageIdx = pipelineBuilder.numColorFragmentStages();
     } else {
-        fReadsFragPosition = colorPOI.readsFragPosition();
+        if (coveragePOI.readsFragPosition()) {
+            fReadsFragPosition = true;
+        }
     }
 
     if (flags & GrXferProcessor::kIgnoreCoverage_OptFlag) {

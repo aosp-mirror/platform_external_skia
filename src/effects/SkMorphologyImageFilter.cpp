@@ -24,9 +24,8 @@
 SkMorphologyImageFilter::SkMorphologyImageFilter(int radiusX,
                                                  int radiusY,
                                                  SkImageFilter* input,
-                                                 const CropRect* cropRect,
-                                                 uint32_t uniqueID)
-    : INHERITED(1, &input, cropRect, uniqueID), fRadius(SkISize::Make(radiusX, radiusY)) {
+                                                 const CropRect* cropRect)
+    : INHERITED(1, &input, cropRect), fRadius(SkISize::Make(radiusX, radiusY)) {
 }
 
 void SkMorphologyImageFilter::flatten(SkWriteBuffer& buffer) const {
@@ -254,14 +253,14 @@ SkFlattenable* SkErodeImageFilter::CreateProc(SkReadBuffer& buffer) {
     SK_IMAGEFILTER_UNFLATTEN_COMMON(common, 1);
     const int width = buffer.readInt();
     const int height = buffer.readInt();
-    return Create(width, height, common.getInput(0), &common.cropRect(), common.uniqueID());
+    return Create(width, height, common.getInput(0), &common.cropRect());
 }
 
 SkFlattenable* SkDilateImageFilter::CreateProc(SkReadBuffer& buffer) {
     SK_IMAGEFILTER_UNFLATTEN_COMMON(common, 1);
     const int width = buffer.readInt();
     const int height = buffer.readInt();
-    return Create(width, height, common.getInput(0), &common.cropRect(), common.uniqueID());
+    return Create(width, height, common.getInput(0), &common.cropRect());
 }
 
 #ifndef SK_IGNORE_TO_STRING
@@ -314,11 +313,11 @@ public:
     bool useRange() const { return fUseRange; }
     const float* range() const { return fRange; }
 
-    const char* name() const SK_OVERRIDE { return "Morphology"; }
+    const char* name() const override { return "Morphology"; }
 
-    void getGLProcessorKey(const GrGLCaps&, GrProcessorKeyBuilder*) const SK_OVERRIDE;
+    void getGLProcessorKey(const GrGLSLCaps&, GrProcessorKeyBuilder*) const override;
 
-    GrGLFragmentProcessor* createGLInstance() const SK_OVERRIDE;
+    GrGLFragmentProcessor* createGLInstance() const override;
 
 protected:
 
@@ -327,9 +326,9 @@ protected:
     float fRange[2];
 
 private:
-    bool onIsEqual(const GrFragmentProcessor&) const SK_OVERRIDE;
+    bool onIsEqual(const GrFragmentProcessor&) const override;
 
-    void onComputeInvariantOutput(GrInvariantOutput* inout) const SK_OVERRIDE;
+    void onComputeInvariantOutput(GrInvariantOutput* inout) const override;
 
     GrMorphologyEffect(GrTexture*, Direction, int radius, MorphologyType);
     GrMorphologyEffect(GrTexture*, Direction, int radius, MorphologyType, float bounds[2]);
@@ -350,11 +349,11 @@ public:
                           const char* outputColor,
                           const char* inputColor,
                           const TransformedCoordsArray&,
-                          const TextureSamplerArray&) SK_OVERRIDE;
+                          const TextureSamplerArray&) override;
 
-    static inline void GenKey(const GrProcessor&, const GrGLCaps&, GrProcessorKeyBuilder* b);
+    static inline void GenKey(const GrProcessor&, const GrGLSLCaps&, GrProcessorKeyBuilder* b);
 
-    void setData(const GrGLProgramDataManager&, const GrProcessor&) SK_OVERRIDE;
+    void setData(const GrGLProgramDataManager&, const GrProcessor&) override;
 
 private:
     int width() const { return GrMorphologyEffect::WidthFromRadius(fRadius); }
@@ -392,7 +391,7 @@ void GrGLMorphologyEffect::emitCode(GrGLFPBuilder* builder,
                                             "Range");
     const char* range = builder->getUniformCStr(fRangeUni);
 
-    GrGLFPFragmentBuilder* fsBuilder = builder->getFragmentShaderBuilder();
+    GrGLFragmentBuilder* fsBuilder = builder->getFragmentShaderBuilder();
     SkString coords2D = fsBuilder->ensureFSCoords2D(coords, 0);
     const char* func;
     switch (fType) {
@@ -451,7 +450,7 @@ void GrGLMorphologyEffect::emitCode(GrGLFPBuilder* builder,
 }
 
 void GrGLMorphologyEffect::GenKey(const GrProcessor& proc,
-                                  const GrGLCaps&, GrProcessorKeyBuilder* b) {
+                                  const GrGLSLCaps&, GrProcessorKeyBuilder* b) {
     const GrMorphologyEffect& m = proc.cast<GrMorphologyEffect>();
     uint32_t key = static_cast<uint32_t>(m.radius());
     key |= (m.type() << 8);
@@ -518,7 +517,7 @@ GrMorphologyEffect::GrMorphologyEffect(GrTexture* texture,
 GrMorphologyEffect::~GrMorphologyEffect() {
 }
 
-void GrMorphologyEffect::getGLProcessorKey(const GrGLCaps& caps, GrProcessorKeyBuilder* b) const {
+void GrMorphologyEffect::getGLProcessorKey(const GrGLSLCaps& caps, GrProcessorKeyBuilder* b) const {
     GrGLMorphologyEffect::GenKey(*this, caps, b);
 }
 
@@ -668,7 +667,8 @@ bool apply_morphology(const SkBitmap& input,
     SkIRect srcRect = rect;
 
     if (radius.fWidth > 0) {
-        GrTexture* texture = context->refScratchTexture(desc, GrContext::kApprox_ScratchTexMatch);
+        GrTexture* texture = context->textureProvider()->refScratchTexture(
+            desc, GrTextureProvider::kApprox_ScratchTexMatch);
         if (NULL == texture) {
             return false;
         }
@@ -685,7 +685,8 @@ bool apply_morphology(const SkBitmap& input,
         srcRect = dstRect;
     }
     if (radius.fHeight > 0) {
-        GrTexture* texture = context->refScratchTexture(desc, GrContext::kApprox_ScratchTexMatch);
+        GrTexture* texture = context->textureProvider()->refScratchTexture(desc,
+            GrTextureProvider::kApprox_ScratchTexMatch);
         if (NULL == texture) {
             return false;
         }

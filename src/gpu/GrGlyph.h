@@ -8,6 +8,7 @@
 #ifndef GrGlyph_DEFINED
 #define GrGlyph_DEFINED
 
+#include "GrBatchAtlas.h"
 #include "GrRect.h"
 #include "GrTypes.h"
 
@@ -23,22 +24,32 @@ class GrPlot;
     - failed to get metrics
  */
 struct GrGlyph {
+    enum MaskStyle {
+        kCoverage_MaskStyle,
+        kDistance_MaskStyle
+    };
+    
     typedef uint32_t PackedID;
 
-    GrPlot*      fPlot;
-    SkPath*      fPath;
-    PackedID     fPackedID;
-    GrMaskFormat fMaskFormat;
-    GrIRect16    fBounds;
-    SkIPoint16   fAtlasLocation;
+    // TODO either plot or AtlasID will be valid, not both
+    GrBatchAtlas::AtlasID fID;
+    GrPlot*               fPlot;
+    SkPath*               fPath;
+    PackedID              fPackedID;
+    GrMaskFormat          fMaskFormat;
+    GrIRect16             fBounds;
+    SkIPoint16            fAtlasLocation;
+    bool                  fTooLargeForAtlas;
 
     void init(GrGlyph::PackedID packed, const SkIRect& bounds, GrMaskFormat format) {
+        fID = GrBatchAtlas::kInvalidAtlasID;
         fPlot = NULL;
         fPath = NULL;
         fPackedID = packed;
         fBounds.set(bounds);
         fMaskFormat = format;
         fAtlasLocation.set(0, 0);
+        fTooLargeForAtlas = GrBatchAtlas::GlyphTooLargeForAtlas(bounds.width(), bounds.height());
     }
 
     void free() {
@@ -60,10 +71,11 @@ struct GrGlyph {
         return (pos >> 14) & 3;
     }
 
-    static inline PackedID Pack(uint16_t glyphID, SkFixed x, SkFixed y) {
+    static inline PackedID Pack(uint16_t glyphID, SkFixed x, SkFixed y, MaskStyle ms) {
         x = ExtractSubPixelBitsFromFixed(x);
         y = ExtractSubPixelBitsFromFixed(y);
-        return (x << 18) | (y << 16) | glyphID;
+        int dfFlag = (ms == kDistance_MaskStyle) ? 0x1 : 0x0;
+        return (dfFlag << 20) | (x << 18) | (y << 16) | glyphID;
     }
 
     static inline SkFixed UnpackFixedX(PackedID packed) {
@@ -74,6 +86,10 @@ struct GrGlyph {
         return ((packed >> 16) & 3) << 14;
     }
 
+    static inline MaskStyle UnpackMaskStyle(PackedID packed) {
+        return ((packed >> 20) & 1) ? kDistance_MaskStyle : kCoverage_MaskStyle;
+    }
+    
     static inline uint16_t UnpackID(PackedID packed) {
         return (uint16_t)packed;
     }
@@ -83,7 +99,7 @@ struct GrGlyph {
     }
 
     static inline uint32_t Hash(GrGlyph::PackedID key) {
-        return SkChecksum::Murmur3(&key, sizeof(key));
+        return SkChecksum::Mix(key);
     }
 };
 

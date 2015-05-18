@@ -9,6 +9,7 @@
 #define GrTestBatch_DEFINED
 
 #include "GrBatch.h"
+#include "GrVertexBuffer.h"
 
 /*
  * A simple batch only for testing purposes which actually doesn't batch at all, but can fit into
@@ -20,22 +21,18 @@ public:
         GrColor fColor;
     };
 
-    virtual const char* name() const SK_OVERRIDE = 0;
+    virtual const char* name() const override = 0;
 
-    void getInvariantOutputColor(GrInitInvariantOutput* out) const SK_OVERRIDE {
+    void getInvariantOutputColor(GrInitInvariantOutput* out) const override {
         // When this is called on a batch, there is only one geometry bundle
-        if (fGeometryProcessor->hasVertexColor()) {
-            out->setUnknownFourComponents();
-        } else {
-            out->setKnownFourComponents(fGeometryProcessor->color());
-        }
+        out->setKnownFourComponents(this->geoData(0)->fColor);
     }
 
-    void getInvariantOutputCoverage(GrInitInvariantOutput* out) const SK_OVERRIDE {
+    void getInvariantOutputCoverage(GrInitInvariantOutput* out) const override {
         out->setUnknownSingleComponent();
     }
 
-    void initBatchTracker(const GrPipelineInfo& init) SK_OVERRIDE {
+    void initBatchTracker(const GrPipelineInfo& init) override {
         // Handle any color overrides
         if (init.fColorIgnored) {
             this->geoData(0)->fColor = GrColor_ILLEGAL;
@@ -50,7 +47,7 @@ public:
         fBatch.fCoverageIgnored = init.fCoverageIgnored;
     }
 
-    void generateGeometry(GrBatchTarget* batchTarget, const GrPipeline* pipeline) SK_OVERRIDE {
+    void generateGeometry(GrBatchTarget* batchTarget, const GrPipeline* pipeline) override {
         batchTarget->initDraw(fGeometryProcessor, pipeline);
 
         // TODO this is hacky, but the only way we have to initialize the GP is to use the
@@ -67,16 +64,19 @@ public:
     }
 
 protected:
-    GrTestBatch(const GrGeometryProcessor* gp) {
+    GrTestBatch(const GrGeometryProcessor* gp, const SkRect& bounds) {
         fGeometryProcessor.reset(SkRef(gp));
+
+        this->setBounds(bounds);
     }
 
     const GrGeometryProcessor* geometryProcessor() const { return fGeometryProcessor; }
 
 private:
     virtual Geometry* geoData(int index) = 0;
+    virtual const Geometry* geoData(int index) const = 0;
 
-    bool onCombineIfPossible(GrBatch* t) SK_OVERRIDE {
+    bool onCombineIfPossible(GrBatch* t) override {
         return false;
     }
 

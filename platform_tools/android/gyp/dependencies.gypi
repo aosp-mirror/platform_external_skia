@@ -1,3 +1,8 @@
+# Copyright 2015 Google Inc.
+#
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
 # This GYP file stores the dependencies necessary to build Skia on the Android
 # platform. The OS doesn't provide many stable libraries as part of the
 # distribution so we have to build a few of them ourselves.
@@ -30,6 +35,19 @@
       ],
     },
     {
+      'target_name': 'ashmem',
+      'type': 'static_library',
+      'sources': [
+        '../third_party/ashmem/cutils/ashmem.h',
+        '../third_party/ashmem/cutils/ashmem-dev.c'
+      ],
+      'direct_dependent_settings': {
+        'include_dirs': [
+          '../third_party/ashmem',
+        ]
+      },
+    },
+    {
       'target_name': 'expat',
       'type': 'static_library',
       'sources': [
@@ -51,27 +69,6 @@
       'direct_dependent_settings': {
         'include_dirs': [
           '../third_party/externals/expat/lib',  # For expat.h
-        ],
-      }
-    },
-    {
-      'target_name': 'gif',
-      'type': 'static_library',
-      'sources': [
-        '../third_party/externals/gif/dgif_lib.c',
-        '../third_party/externals/gif/gifalloc.c',
-        '../third_party/externals/gif/gif_err.c',
-      ],
-      'include_dirs': [
-        '../third_party/externals/gif',
-      ],
-      'cflags': [
-        '-w',
-        '-DHAVE_CONFIG_H',
-      ],
-      'direct_dependent_settings': {
-        'include_dirs': [
-          '../third_party/externals/gif',
         ],
       }
     },
@@ -118,6 +115,9 @@
     {
       'target_name': 'jpeg',
       'type': 'static_library',
+      'dependencies': [
+        'ashmem'
+      ],
       'sources': [
         '../third_party/externals/jpeg/jcapimin.c',
         '../third_party/externals/jpeg/jcapistd.c',
@@ -160,11 +160,46 @@
         '../third_party/externals/jpeg/jidctfst.c',
         '../third_party/externals/jpeg/jidctint.c',
         '../third_party/externals/jpeg/jidctred.c',
+        '../third_party/externals/jpeg/jmem-ashmem.c',
+        '../third_party/externals/jpeg/jmemmgr.c',
         '../third_party/externals/jpeg/jquant1.c',
         '../third_party/externals/jpeg/jquant2.c',
         '../third_party/externals/jpeg/jutils.c',
-        '../third_party/externals/jpeg/jmemmgr.c',
-        '../third_party/externals/jpeg/jmem-android.c', # ashmem is also available
+      ],
+      'conditions': [
+        [ 'arm_neon == 1 and skia_clang_build == 0',
+          {
+            'sources' : [
+              '../third_party/externals/jpeg/armv6_idct.S',
+              '../third_party/externals/jpeg/jsimd_arm_neon.S',
+              '../third_party/externals/jpeg/jsimd_neon.c',
+            ],
+            'defines' : [
+              'NV_ARM_NEON',
+            ],
+          },
+        ],
+        [ 'skia_arch_type == "mips" and mips_dsp == 2',
+          {
+            'sources' : [
+              '../third_party/externals/jpeg/mips_jidctfst.c',
+              '../third_party/externals/jpeg/mips_idct_le.S',
+            ],
+            'defines' : [
+              'ANDROID_MIPS_IDCT',
+            ],
+          },
+        ],
+        [ '"x86" in skia_arch_type',
+          {
+            'sources' : [
+              '../third_party/externals/jpeg/jidctintelsse.c',
+            ],
+            'defines' : [
+              'ANDROID_INTELSSE2_IDCT',
+            ],
+          },
+        ],
       ],
       'include_dirs': [
         '../third_party/externals/jpeg',
@@ -173,6 +208,7 @@
         '-w',
         '-fvisibility=hidden',
         '-DAVOID_TABLES',
+        '-DUSE_ANDROID_ASHMEM',
         '-O3',
         '-fstrict-aliasing',
         '-fprefetch-loop-arrays',

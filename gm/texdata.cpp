@@ -27,15 +27,15 @@ public:
     }
 
 protected:
-    SkString onShortName() SK_OVERRIDE {
+    SkString onShortName() override {
         return SkString("texdata");
     }
 
-    SkISize onISize() SK_OVERRIDE {
+    SkISize onISize() override {
         return SkISize::Make(2*S, 2*S);
     }
 
-    void onDraw(SkCanvas* canvas) SK_OVERRIDE {
+    void onDraw(SkCanvas* canvas) override {
         GrRenderTarget* target = canvas->internal_private_accessTopLayerRenderTarget();
         GrContext* ctx = canvas->getGrContext();
         if (ctx && target) {
@@ -84,7 +84,8 @@ protected:
                 desc.fConfig    = kSkia8888_GrPixelConfig;
                 desc.fWidth     = 2 * S;
                 desc.fHeight    = 2 * S;
-                GrTexture* texture = ctx->createTexture(desc, false, gTextureData.get(), 0);
+                GrTexture* texture = ctx->textureProvider()->createTexture(
+                    desc, false, gTextureData.get(), 0);
 
                 if (!texture) {
                     return;

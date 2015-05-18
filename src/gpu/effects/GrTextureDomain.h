@@ -69,6 +69,19 @@ public:
         return result;
     }
 
+    static const SkRect MakeTexelDomainForMode(const GrTexture* texture, const SkIRect& texelRect, Mode mode) {
+        // For Clamp mode, inset by half a texel.
+        SkScalar wInv = SK_Scalar1 / texture->width();
+        SkScalar hInv = SK_Scalar1 / texture->height();
+        SkScalar inset = (mode == kClamp_Mode && !texelRect.isEmpty()) ? SK_ScalarHalf : 0;
+        return SkRect::MakeLTRB(
+            (texelRect.fLeft + inset) * wInv,
+            (texelRect.fTop + inset) * hInv,
+            (texelRect.fRight - inset) * wInv,
+            (texelRect.fBottom - inset) * hInv
+        );
+    }
+
     bool operator== (const GrTextureDomain& that) const {
         return fMode == that.fMode && (kIgnore_Mode == fMode || fDomain == that.fDomain);
     }
@@ -153,11 +166,11 @@ public:
 
     virtual ~GrTextureDomainEffect();
 
-    const char* name() const SK_OVERRIDE { return "TextureDomain"; }
+    const char* name() const override { return "TextureDomain"; }
 
-    void getGLProcessorKey(const GrGLCaps&, GrProcessorKeyBuilder*) const SK_OVERRIDE;
+    void getGLProcessorKey(const GrGLSLCaps&, GrProcessorKeyBuilder*) const override;
 
-    GrGLFragmentProcessor* createGLInstance() const SK_OVERRIDE;
+    GrGLFragmentProcessor* createGLInstance() const override;
 
     const GrTextureDomain& textureDomain() const { return fTextureDomain; }
 
@@ -172,9 +185,9 @@ private:
                           GrTextureParams::FilterMode,
                           GrCoordSet);
 
-    bool onIsEqual(const GrFragmentProcessor&) const SK_OVERRIDE;
+    bool onIsEqual(const GrFragmentProcessor&) const override;
 
-    void onComputeInvariantOutput(GrInvariantOutput* inout) const SK_OVERRIDE;
+    void onComputeInvariantOutput(GrInvariantOutput* inout) const override;
 
     GR_DECLARE_FRAGMENT_PROCESSOR_TEST;
 

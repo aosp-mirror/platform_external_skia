@@ -1,3 +1,7 @@
+# Copyright 2015 Google Inc.
+#
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
 # Port-specific Skia library code.
 {
   'targets': [
@@ -22,7 +26,6 @@
         '../src/utils',
       ],
       'sources': [
-        '../src/ports/SkDebug_nacl.cpp',
         '../src/ports/SkDebug_stdio.cpp',
         '../src/ports/SkDebug_win.cpp',
 
@@ -55,7 +58,7 @@
         '../include/ports/SkRemotableFontMgr.h',
       ],
       'conditions': [
-        [ 'skia_os in ["linux", "freebsd", "openbsd", "solaris", "chromeos", "nacl", "android"]', {
+        [ 'skia_os in ["linux", "freebsd", "openbsd", "solaris", "chromeos", "android"]', {
           'sources': [
             '../src/ports/SkFontHost_FreeType.cpp',
             '../src/ports/SkFontHost_FreeType_common.cpp',
@@ -66,7 +69,43 @@
         }],
         [ 'skia_os in ["linux", "freebsd", "openbsd", "solaris", "chromeos"]', {
           'conditions': [
-            [ 'skia_no_fontconfig', {
+            [ 'skia_embedded_fonts', {
+              'link_settings': {
+                'libraries': [
+                  '-ldl',
+                ],
+              },
+              'variables': {
+                'embedded_font_data_identifier': 'sk_fonts',
+                'fonts_to_include': [
+                  '../resources/fonts/Funkster.ttf',
+                ],
+              },
+              'sources': [
+                '../src/ports/SkFontHost_linux.cpp',
+              ],
+              'actions': [{
+                'action_name': 'generate_embedded_font_data',
+                'inputs': [
+                  '../tools/embed_resources.py',
+                  '<@(fonts_to_include)',
+                ],
+                'outputs': [
+                  '<(SHARED_INTERMEDIATE_DIR)/ports/fonts/fonts.cpp',
+                ],
+                'action': ['python', '../tools/embed_resources.py',
+                                     '--align', '4',
+                                     '--name', '<(embedded_font_data_identifier)',
+                                     '--input', '<@(fonts_to_include)',
+                                     '--output', '<@(_outputs)',
+                ],
+                'message': 'Generating <@(_outputs)',
+                'process_outputs_as_sources': 1,
+              }],
+              'defines': [
+                'SK_EMBEDDED_FONTS=<(embedded_font_data_identifier)',
+              ],
+            }, 'skia_no_fontconfig', {
               'link_settings': {
                 'libraries': [
                   '-ldl',
@@ -88,18 +127,6 @@
                 '../src/ports/SkFontConfigInterface_direct.cpp',
               ],
             }]
-          ],
-        }],
-        [ 'skia_os == "nacl"', {
-          'sources': [
-            '../src/ports/SkFontHost_linux.cpp',
-          ],
-          'sources!': [
-            '../src/ports/SkDebug_stdio.cpp',
-          ],
-        }, {
-          'sources!': [
-            '../src/ports/SkDebug_nacl.cpp',
           ],
         }],
         [ 'skia_os == "mac"', {

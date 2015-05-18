@@ -67,11 +67,8 @@ enum ImageType {
 #include "SkImageGenerator.h"
 
 class EmptyGenerator : public SkImageGenerator {
-protected:
-    bool onGetInfo(SkImageInfo* info) SK_OVERRIDE {
-        *info = SkImageInfo::Make(0, 0, kN32_SkColorType, kPremul_SkAlphaType);
-        return true;
-    }
+public:
+    EmptyGenerator() : SkImageGenerator(SkImageInfo::MakeN32Premul(0, 0)) {}
 };
 
 static void test_empty_image(skiatest::Reporter* reporter) {
@@ -92,6 +89,45 @@ static void test_empty_surface(skiatest::Reporter* reporter, GrContext* ctx) {
                         SkSurface::NewRenderTarget(ctx, SkSurface::kNo_Budgeted, info, 0, NULL));
     }
 }
+
+#if SK_SUPPORT_GPU
+static void test_wrapped_texture_surface(skiatest::Reporter* reporter, GrContext* ctx) {
+    if (NULL == ctx) {
+        return;
+    }
+    // Test the wrapped factory for SkSurface by creating a texture using ctx and then treat it as
+    // an external texture and wrap it in a SkSurface.
+
+    GrSurfaceDesc texDesc;
+    texDesc.fConfig = kRGBA_8888_GrPixelConfig;
+    texDesc.fFlags = kRenderTarget_GrSurfaceFlag;
+    texDesc.fWidth = texDesc.fHeight = 100;
+    texDesc.fSampleCnt = 0;
+    texDesc.fOrigin = kTopLeft_GrSurfaceOrigin;
+    SkAutoTUnref<GrSurface> dummySurface(ctx->textureProvider()->createTexture(texDesc, false));
+
+    REPORTER_ASSERT(reporter, dummySurface && dummySurface->asTexture() &&
+                              dummySurface->asRenderTarget());
+    if (!dummySurface || !dummySurface->asTexture() || !dummySurface->asRenderTarget()) {
+        return;
+    }
+    
+    GrBackendObject textureHandle = dummySurface->asTexture()->getTextureHandle();
+
+    GrBackendTextureDesc wrappedDesc;
+    wrappedDesc.fConfig = dummySurface->config();
+    wrappedDesc.fWidth = dummySurface->width();
+    wrappedDesc.fHeight = dummySurface->height();
+    wrappedDesc.fOrigin = dummySurface->origin();
+    wrappedDesc.fSampleCnt = dummySurface->asRenderTarget()->numSamples();
+    wrappedDesc.fFlags = kRenderTarget_GrBackendTextureFlag;
+    wrappedDesc.fTextureHandle = textureHandle;
+
+    SkAutoTUnref<SkSurface> surface(SkSurface::NewWrappedRenderTarget(ctx, wrappedDesc, NULL));
+    REPORTER_ASSERT(reporter, surface);
+}
+#endif
+
 
 static void test_image(skiatest::Reporter* reporter) {
     SkImageInfo info = SkImageInfo::MakeN32Premul(1, 1);
@@ -215,6 +251,9 @@ static void test_imagepeek(skiatest::Reporter* reporter, GrContextFactory* facto
     GrContext* ctx = NULL;
 #if SK_SUPPORT_GPU
     ctx = factory->get(GrContextFactory::kNative_GLContextType);
+    if (NULL == ctx) {
+        return;
+    }
 #endif
 
     for (size_t i = 0; i < SK_ARRAY_COUNT(gRec); ++i) {
@@ -572,8 +611,75 @@ DEF_GPUTEST(Surface, reporter, factory) {
                 TestGetTexture(reporter, kGpuScratch_SurfaceType, context);
                 test_empty_surface(reporter, context);
                 test_surface_budget(reporter, context);
+                test_wrapped_texture_surface(reporter, context);
             }
         }
     }
 #endif
 }
+
+#if SK_SUPPORT_GPU
+static SkImage* make_desc_image(GrContext* ctx, int w, int h, GrBackendObject texID, bool doCopy) {
+    GrBackendTextureDesc desc;
+    desc.fConfig = kSkia8888_GrPixelConfig;
+    // need to be a rendertarget for now...
+    desc.fFlags = kRenderTarget_GrBackendTextureFlag;
+    desc.fWidth = w;
+    desc.fHeight = h;
+    desc.fSampleCnt = 0;
+    desc.fTextureHandle = texID;
+    return doCopy ? SkImage::NewFromTextureCopy(ctx, desc) : SkImage::NewFromTexture(ctx, desc);
+}
+
+static void test_image_color(skiatest::Reporter* reporter, SkImage* image, SkPMColor expected) {
+    const SkImageInfo info = SkImageInfo::MakeN32Premul(1, 1);
+    SkPMColor pixel;
+    REPORTER_ASSERT(reporter, image->readPixels(info, &pixel, sizeof(pixel), 0, 0));
+    REPORTER_ASSERT(reporter, pixel == expected);
+}
+
+DEF_GPUTEST(SkImage_NewFromTexture, reporter, factory) {
+    GrContext* ctx = factory->get(GrContextFactory::kNative_GLContextType);
+    if (!ctx) {
+        REPORTER_ASSERT(reporter, false);
+        return;
+    }
+    GrTextureProvider* provider = ctx->textureProvider();
+    
+    const int w = 10;
+    const int h = 10;
+    SkPMColor storage[w * h];
+    const SkPMColor expected0 = SkPreMultiplyColor(SK_ColorRED);
+    sk_memset32(storage, expected0, w * h);
+    
+    GrSurfaceDesc desc;
+    desc.fFlags = kRenderTarget_GrSurfaceFlag;  // needs to be a rendertarget for readpixels();
+    desc.fOrigin = kDefault_GrSurfaceOrigin;
+    desc.fWidth = w;
+    desc.fHeight = h;
+    desc.fConfig = kSkia8888_GrPixelConfig;
+    desc.fSampleCnt = 0;
+    
+    SkAutoTUnref<GrTexture> tex(provider->createTexture(desc, false, storage, w * 4));
+    if (!tex) {
+        REPORTER_ASSERT(reporter, false);
+        return;
+    }
+    
+    GrBackendObject srcTex = tex->getTextureHandle();
+    SkAutoTUnref<SkImage> refImg(make_desc_image(ctx, w, h, srcTex, false));
+    SkAutoTUnref<SkImage> cpyImg(make_desc_image(ctx, w, h, srcTex, true));
+
+    test_image_color(reporter, refImg, expected0);
+    test_image_color(reporter, cpyImg, expected0);
+
+    // Now lets jam new colors into our "external" texture, and see if the images notice
+    const SkPMColor expected1 = SkPreMultiplyColor(SK_ColorBLUE);
+    sk_memset32(storage, expected1, w * h);
+    tex->writePixels(0, 0, w, h, kSkia8888_GrPixelConfig, storage, GrContext::kFlushWrites_PixelOp);
+
+    // We expect the ref'd image to see the new color, but cpy'd one should still see the old color
+    test_image_color(reporter, refImg, expected1);
+    test_image_color(reporter, cpyImg, expected0);
+}
+#endif

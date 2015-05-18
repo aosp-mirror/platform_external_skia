@@ -17,6 +17,7 @@
 #include "GrTextureAccess.h"
 #include "SkXfermode.h"
 #include "gl/GrGLCaps.h"
+#include "gl/GrGLGpu.h"
 #include "gl/GrGLProcessor.h"
 #include "gl/GrGLProgramDataManager.h"
 #include "gl/builders/GrGLProgramBuilder.h"
@@ -29,7 +30,28 @@ bool GrCustomXfermode::IsSupportedMode(SkXfermode::Mode mode) {
 // Static helpers
 ///////////////////////////////////////////////////////////////////////////////
 
-static void hard_light(GrGLFPFragmentBuilder* fsBuilder,
+static GrBlendEquation hw_blend_equation(SkXfermode::Mode mode) {
+    enum { kOffset = kOverlay_GrBlendEquation - SkXfermode::kOverlay_Mode };
+    return static_cast<GrBlendEquation>(mode + kOffset);
+
+    GR_STATIC_ASSERT(kOverlay_GrBlendEquation == SkXfermode::kOverlay_Mode + kOffset);
+    GR_STATIC_ASSERT(kDarken_GrBlendEquation == SkXfermode::kDarken_Mode + kOffset);
+    GR_STATIC_ASSERT(kLighten_GrBlendEquation == SkXfermode::kLighten_Mode + kOffset);
+    GR_STATIC_ASSERT(kColorDodge_GrBlendEquation == SkXfermode::kColorDodge_Mode + kOffset);
+    GR_STATIC_ASSERT(kColorBurn_GrBlendEquation == SkXfermode::kColorBurn_Mode + kOffset);
+    GR_STATIC_ASSERT(kHardLight_GrBlendEquation == SkXfermode::kHardLight_Mode + kOffset);
+    GR_STATIC_ASSERT(kSoftLight_GrBlendEquation == SkXfermode::kSoftLight_Mode + kOffset);
+    GR_STATIC_ASSERT(kDifference_GrBlendEquation == SkXfermode::kDifference_Mode + kOffset);
+    GR_STATIC_ASSERT(kExclusion_GrBlendEquation == SkXfermode::kExclusion_Mode + kOffset);
+    GR_STATIC_ASSERT(kMultiply_GrBlendEquation == SkXfermode::kMultiply_Mode + kOffset);
+    GR_STATIC_ASSERT(kHSLHue_GrBlendEquation == SkXfermode::kHue_Mode + kOffset);
+    GR_STATIC_ASSERT(kHSLSaturation_GrBlendEquation == SkXfermode::kSaturation_Mode + kOffset);
+    GR_STATIC_ASSERT(kHSLColor_GrBlendEquation == SkXfermode::kColor_Mode + kOffset);
+    GR_STATIC_ASSERT(kHSLLuminosity_GrBlendEquation == SkXfermode::kLuminosity_Mode + kOffset);
+    GR_STATIC_ASSERT(kGrBlendEquationCnt == SkXfermode::kLastMode + 1 + kOffset);
+}
+
+static void hard_light(GrGLFragmentBuilder* fsBuilder,
                        const char* final,
                        const char* src,
                        const char* dst) {
@@ -50,7 +72,7 @@ static void hard_light(GrGLFPFragmentBuilder* fsBuilder,
 }
 
 // Does one component of color-dodge
-static void color_dodge_component(GrGLFPFragmentBuilder* fsBuilder,
+static void color_dodge_component(GrGLFragmentBuilder* fsBuilder,
                                   const char* final,
                                   const char* src,
                                   const char* dst,
@@ -74,7 +96,7 @@ static void color_dodge_component(GrGLFPFragmentBuilder* fsBuilder,
 }
 
 // Does one component of color-burn
-static void color_burn_component(GrGLFPFragmentBuilder* fsBuilder,
+static void color_burn_component(GrGLFragmentBuilder* fsBuilder,
                                  const char* final,
                                  const char* src,
                                  const char* dst,
@@ -95,7 +117,7 @@ static void color_burn_component(GrGLFPFragmentBuilder* fsBuilder,
 }
 
 // Does one component of soft-light. Caller should have already checked that dst alpha > 0.
-static void soft_light_component_pos_dst_alpha(GrGLFPFragmentBuilder* fsBuilder,
+static void soft_light_component_pos_dst_alpha(GrGLFragmentBuilder* fsBuilder,
                                                const char* final,
                                                const char* src,
                                                const char* dst,
@@ -138,7 +160,7 @@ static void soft_light_component_pos_dst_alpha(GrGLFPFragmentBuilder* fsBuilder,
 // hue and saturation of the first color, the luminosity of the second color, and the input
 // alpha. It has this signature:
 //      vec3 set_luminance(vec3 hueSatColor, float alpha, vec3 lumColor).
-static void add_lum_function(GrGLFPFragmentBuilder* fsBuilder, SkString* setLumFunction) {
+static void add_lum_function(GrGLFragmentBuilder* fsBuilder, SkString* setLumFunction) {
     // Emit a helper that gets the luminance of a color.
     SkString getFunction;
     GrGLShaderVar getLumArgs[] = {
@@ -183,7 +205,7 @@ static void add_lum_function(GrGLFPFragmentBuilder* fsBuilder, SkString* setLumF
 // Adds a function that creates a color with the hue and luminosity of one input color and
 // the saturation of another color. It will have this signature:
 //      float set_saturation(vec3 hueLumColor, vec3 satColor)
-static void add_sat_function(GrGLFPFragmentBuilder* fsBuilder, SkString* setSatFunction) {
+static void add_sat_function(GrGLFragmentBuilder* fsBuilder, SkString* setSatFunction) {
     // Emit a helper that gets the saturation of a color
     SkString getFunction;
     GrGLShaderVar getSatArgs[] = { GrGLShaderVar("color", kVec3f_GrSLType) };
@@ -256,7 +278,7 @@ static void add_sat_function(GrGLFPFragmentBuilder* fsBuilder, SkString* setSatF
 }
 
 static void emit_custom_xfermode_code(SkXfermode::Mode mode,
-                                      GrGLFPFragmentBuilder* fsBuilder,
+                                      GrGLFragmentBuilder* fsBuilder,
                                       const char* outputColor,
                                       const char* inputColor,
                                       const char* dstColor) {
@@ -407,16 +429,16 @@ GrFragmentProcessor* GrCustomXfermode::CreateFP(SkXfermode::Mode mode, GrTexture
 class GLCustomXferFP : public GrGLFragmentProcessor {
 public:
     GLCustomXferFP(const GrFragmentProcessor&) {}
-    ~GLCustomXferFP() SK_OVERRIDE {};
+    ~GLCustomXferFP() override {};
 
     void emitCode(GrGLFPBuilder* builder,
                   const GrFragmentProcessor& fp,
                   const char* outputColor,
                   const char* inputColor,
                   const TransformedCoordsArray& coords,
-                  const TextureSamplerArray& samplers) SK_OVERRIDE {
+                  const TextureSamplerArray& samplers) override {
         SkXfermode::Mode mode = fp.cast<GrCustomXferFP>().mode();
-        GrGLFPFragmentBuilder* fsBuilder = builder->getFragmentShaderBuilder();
+        GrGLFragmentBuilder* fsBuilder = builder->getFragmentShaderBuilder();
         const char* dstColor = "bgColor";
         fsBuilder->codeAppendf("vec4 %s = ", dstColor);
         fsBuilder->appendTextureLookup(samplers[0], coords[0].c_str(), coords[0].getType());
@@ -425,9 +447,9 @@ public:
         emit_custom_xfermode_code(mode, fsBuilder, outputColor, inputColor, dstColor); 
     }
 
-    void setData(const GrGLProgramDataManager&, const GrProcessor&) SK_OVERRIDE {}
+    void setData(const GrGLProgramDataManager&, const GrProcessor&) override {}
 
-    static void GenKey(const GrFragmentProcessor& proc, const GrGLCaps&, GrProcessorKeyBuilder* b) {
+    static void GenKey(const GrFragmentProcessor& proc, const GrGLSLCaps&, GrProcessorKeyBuilder* b) {
         // The background may come from the dst or from a texture.
         uint32_t key = proc.numTextures();
         SkASSERT(key <= 1);
@@ -453,7 +475,7 @@ GrCustomXferFP::GrCustomXferFP(SkXfermode::Mode mode, GrTexture* background)
     this->addTextureAccess(&fBackgroundAccess);
 }
 
-void GrCustomXferFP::getGLProcessorKey(const GrGLCaps& caps, GrProcessorKeyBuilder* b) const {
+void GrCustomXferFP::getGLProcessorKey(const GrGLSLCaps& caps, GrProcessorKeyBuilder* b) const {
     GLCustomXferFP::GenKey(*this, caps, b);
 }
 
@@ -495,36 +517,43 @@ public:
         }
     }
 
-    ~CustomXP() SK_OVERRIDE {};
+    ~CustomXP() override {};
 
-    const char* name() const SK_OVERRIDE { return "Custom Xfermode"; }
+    const char* name() const override { return "Custom Xfermode"; }
 
-    GrGLXferProcessor* createGLInstance() const SK_OVERRIDE;
+    GrGLXferProcessor* createGLInstance() const override;
 
-    bool hasSecondaryOutput() const SK_OVERRIDE { return false; }
-
-    GrXferProcessor::OptFlags getOptimizations(const GrProcOptInfo& colorPOI,
-                                               const GrProcOptInfo& coveragePOI,
-                                               bool doesStencilWrite,
-                                               GrColor* overrideColor,
-                                               const GrDrawTargetCaps& caps) SK_OVERRIDE;
-
-    void getBlendInfo(GrXferProcessor::BlendInfo* blendInfo) const SK_OVERRIDE {
-        blendInfo->fSrcBlend = kOne_GrBlendCoeff;
-        blendInfo->fDstBlend = kZero_GrBlendCoeff;
-        blendInfo->fBlendConstant = 0;
-    }
+    bool hasSecondaryOutput() const override { return false; }
 
     SkXfermode::Mode mode() const { return fMode; }
+    bool hasHWBlendEquation() const { return -1 != static_cast<int>(fHWBlendEquation); }
+
+    GrBlendEquation hwBlendEquation() const {
+        SkASSERT(this->hasHWBlendEquation());
+        return fHWBlendEquation;
+    }
 
 private:
     CustomXP(SkXfermode::Mode mode, const GrDeviceCoordTexture* dstCopy, bool willReadDstColor);
 
-    void onGetGLProcessorKey(const GrGLCaps& caps, GrProcessorKeyBuilder* b) const SK_OVERRIDE;
+    GrXferProcessor::OptFlags onGetOptimizations(const GrProcOptInfo& colorPOI,
+                                                 const GrProcOptInfo& coveragePOI,
+                                                 bool doesStencilWrite,
+                                                 GrColor* overrideColor,
+                                                 const GrDrawTargetCaps& caps) override;
 
-    bool onIsEqual(const GrXferProcessor& xpBase) const SK_OVERRIDE;
+    void onGetGLProcessorKey(const GrGLSLCaps& caps, GrProcessorKeyBuilder* b) const override;
+
+    bool onWillNeedXferBarrier(const GrRenderTarget* rt,
+                               const GrDrawTargetCaps& caps,
+                               GrXferBarrierType* outBarrierType) const override;
+
+    void onGetBlendInfo(BlendInfo*) const override;
+
+    bool onIsEqual(const GrXferProcessor& xpBase) const override;
 
     SkXfermode::Mode fMode;
+    GrBlendEquation  fHWBlendEquation;
 
     typedef GrXferProcessor INHERITED;
 };
@@ -544,29 +573,53 @@ GrXPFactory* GrCustomXfermode::CreateXPFactory(SkXfermode::Mode mode) {
 class GLCustomXP : public GrGLXferProcessor {
 public:
     GLCustomXP(const GrXferProcessor&) {}
-    ~GLCustomXP() SK_OVERRIDE {}
+    ~GLCustomXP() override {}
 
-    static void GenKey(const GrXferProcessor& proc, const GrGLCaps&, GrProcessorKeyBuilder* b) {
-        uint32_t key = proc.numTextures();
+    static void GenKey(const GrXferProcessor& p, const GrGLSLCaps& caps, GrProcessorKeyBuilder* b) {
+        const CustomXP& xp = p.cast<CustomXP>();
+        uint32_t key = xp.numTextures();
         SkASSERT(key <= 1);
-        key |= proc.cast<CustomXP>().mode() << 1;
+        key |= xp.readsCoverage() << 1;
+        if (xp.hasHWBlendEquation()) {
+            SkASSERT(caps.advBlendEqInteraction() > 0);  // 0 will mean !xp.hasHWBlendEquation().
+            key |= caps.advBlendEqInteraction() << 2;
+        }
+        if (!xp.hasHWBlendEquation() || caps.mustEnableSpecificAdvBlendEqs()) {
+            GR_STATIC_ASSERT(GrGLSLCaps::kLast_AdvBlendEqInteraction < 4);
+            key |= xp.mode() << 4;
+        }
         b->add32(key);
     }
 
 private:
-    void onEmitCode(const EmitArgs& args) SK_OVERRIDE {
-        SkXfermode::Mode mode = args.fXP.cast<CustomXP>().mode();
-        GrGLFPFragmentBuilder* fsBuilder = args.fPB->getFragmentShaderBuilder();
-        const char* dstColor = fsBuilder->dstColor();
+    void onEmitCode(const EmitArgs& args) override {
+        const CustomXP& xp = args.fXP.cast<CustomXP>();
+        GrGLXPFragmentBuilder* fsBuilder = args.fPB->getFragmentShaderBuilder();
 
-        emit_custom_xfermode_code(mode, fsBuilder, args.fOutputPrimary, args.fInputColor, dstColor);
-
-        fsBuilder->codeAppendf("%s = %s * %s + (vec4(1.0) - %s) * %s;",
-                               args.fOutputPrimary, args.fOutputPrimary, args.fInputCoverage,
-                               args.fInputCoverage, dstColor);
+        if (xp.hasHWBlendEquation()) {
+            // The blend mode will be implemented in hardware; only output the src color.
+            fsBuilder->enableAdvancedBlendEquationIfNeeded(xp.hwBlendEquation());
+            if (xp.readsCoverage()) {
+                // Do coverage modulation by multiplying it into the src color before blending.
+                // (See getOptimizations())
+                fsBuilder->codeAppendf("%s = %s * %s;",
+                                       args.fOutputPrimary, args.fInputCoverage, args.fInputColor);
+            } else {
+                fsBuilder->codeAppendf("%s = %s;", args.fOutputPrimary, args.fInputColor);
+            }
+        } else {
+            const char* dstColor = fsBuilder->dstColor();
+            emit_custom_xfermode_code(xp.mode(), fsBuilder, args.fOutputPrimary, args.fInputColor,
+                                      dstColor);
+            if (xp.readsCoverage()) {
+                fsBuilder->codeAppendf("%s = %s * %s + (vec4(1.0) - %s) * %s;",
+                                       args.fOutputPrimary, args.fOutputPrimary,
+                                       args.fInputCoverage, args.fInputCoverage, dstColor);
+            }
+        }
     }
 
-    void onSetData(const GrGLProgramDataManager&, const GrXferProcessor&) SK_OVERRIDE {}
+    void onSetData(const GrGLProgramDataManager&, const GrXferProcessor&) override {}
 
     typedef GrGLFragmentProcessor INHERITED;
 };
@@ -575,29 +628,155 @@ private:
 
 CustomXP::CustomXP(SkXfermode::Mode mode, const GrDeviceCoordTexture* dstCopy,
                    bool willReadDstColor)
-    : INHERITED(dstCopy, willReadDstColor), fMode(mode) {
+    : INHERITED(dstCopy, willReadDstColor),
+      fMode(mode),
+      fHWBlendEquation(static_cast<GrBlendEquation>(-1)) {
     this->initClassID<CustomXP>();
 }
 
-void CustomXP::onGetGLProcessorKey(const GrGLCaps& caps, GrProcessorKeyBuilder* b) const {
+void CustomXP::onGetGLProcessorKey(const GrGLSLCaps& caps, GrProcessorKeyBuilder* b) const {
     GLCustomXP::GenKey(*this, caps, b);
 }
 
 GrGLXferProcessor* CustomXP::createGLInstance() const {
+    SkASSERT(this->willReadDstColor() != this->hasHWBlendEquation());
     return SkNEW_ARGS(GLCustomXP, (*this));
 }
 
 bool CustomXP::onIsEqual(const GrXferProcessor& other) const {
     const CustomXP& s = other.cast<CustomXP>();
-    return fMode == s.fMode;
+    return fMode == s.fMode && fHWBlendEquation == s.fHWBlendEquation;
 }
 
-GrXferProcessor::OptFlags CustomXP::getOptimizations(const GrProcOptInfo& colorPOI,
+GrXferProcessor::OptFlags CustomXP::onGetOptimizations(const GrProcOptInfo& colorPOI,
                                                        const GrProcOptInfo& coveragePOI,
                                                        bool doesStencilWrite,
                                                        GrColor* overrideColor,
                                                        const GrDrawTargetCaps& caps) {
-   return GrXferProcessor::kNone_Opt;
+  /*
+    Most the optimizations we do here are based on tweaking alpha for coverage.
+
+    The general SVG blend equation is defined in the spec as follows:
+
+      Dca' = B(Sc, Dc) * Sa * Da + Y * Sca * (1-Da) + Z * Dca * (1-Sa)
+      Da'  = X * Sa * Da + Y * Sa * (1-Da) + Z * Da * (1-Sa)
+
+    (Note that Sca, Dca indicate RGB vectors that are premultiplied by alpha,
+     and that B(Sc, Dc) is a mode-specific function that accepts non-multiplied
+     RGB colors.)
+
+    For every blend mode supported by this class, i.e. the "advanced" blend
+    modes, X=Y=Z=1 and this equation reduces to the PDF blend equation.
+
+    It can be shown that when X=Y=Z=1, these equations can modulate alpha for
+    coverage.
+
+
+    == Color ==
+
+    We substitute Y=Z=1 and define a blend() function that calculates Dca' in
+    terms of premultiplied alpha only:
+
+      blend(Sca, Dca, Sa, Da) = {Dca : if Sa == 0,
+                                 Sca : if Da == 0,
+                                 B(Sca/Sa, Dca/Da) * Sa * Da + Sca * (1-Da) + Dca * (1-Sa) : if Sa,Da != 0}
+
+    And for coverage modulation, we use a post blend src-over model:
+
+      Dca'' = f * blend(Sca, Dca, Sa, Da) + (1-f) * Dca
+
+    (Where f is the fractional coverage.)
+
+    Next we show that canTweakAlphaForCoverage() is true by proving the
+    following relationship:
+
+      blend(f*Sca, Dca, f*Sa, Da) == f * blend(Sca, Dca, Sa, Da) + (1-f) * Dca
+
+    General case (f,Sa,Da != 0):
+
+      f * blend(Sca, Dca, Sa, Da) + (1-f) * Dca
+        = f * (B(Sca/Sa, Dca/Da) * Sa * Da + Sca * (1-Da) + Dca * (1-Sa)) + (1-f) * Dca  [Sa,Da != 0, definition of blend()]
+        = B(Sca/Sa, Dca/Da) * f*Sa * Da + f*Sca * (1-Da) + f*Dca * (1-Sa) + Dca - f*Dca
+        = B(Sca/Sa, Dca/Da) * f*Sa * Da + f*Sca - f*Sca * Da + f*Dca - f*Dca * Sa + Dca - f*Dca
+        = B(Sca/Sa, Dca/Da) * f*Sa * Da + f*Sca - f*Sca * Da - f*Dca * Sa + Dca
+        = B(Sca/Sa, Dca/Da) * f*Sa * Da + f*Sca * (1-Da) - f*Dca * Sa + Dca
+        = B(Sca/Sa, Dca/Da) * f*Sa * Da + f*Sca * (1-Da) + Dca * (1 - f*Sa)
+        = B(f*Sca/f*Sa, Dca/Da) * f*Sa * Da + f*Sca * (1-Da) + Dca * (1 - f*Sa)  [f!=0]
+        = blend(f*Sca, Dca, f*Sa, Da)  [definition of blend()]
+
+    Corner cases (Sa=0, Da=0, and f=0):
+
+      Sa=0: f * blend(Sca, Dca, Sa, Da) + (1-f) * Dca
+              = f * Dca + (1-f) * Dca  [Sa=0, definition of blend()]
+              = Dca
+              = blend(0, Dca, 0, Da)  [definition of blend()]
+              = blend(f*Sca, Dca, f*Sa, Da)  [Sa=0]
+
+      Da=0: f * blend(Sca, Dca, Sa, Da) + (1-f) * Dca
+              = f * Sca + (1-f) * Dca  [Da=0, definition of blend()]
+              = f * Sca  [Da=0]
+              = blend(f*Sca, 0, f*Sa, 0)  [definition of blend()]
+              = blend(f*Sca, Dca, f*Sa, Da)  [Da=0]
+
+      f=0: f * blend(Sca, Dca, Sa, Da) + (1-f) * Dca
+             = Dca  [f=0]
+             = blend(0, Dca, 0, Da)  [definition of blend()]
+             = blend(f*Sca, Dca, f*Sa, Da)  [f=0]
+
+    == Alpha ==
+
+    We substitute X=Y=Z=1 and define a blend() function that calculates Da':
+
+      blend(Sa, Da) = Sa * Da + Sa * (1-Da) + Da * (1-Sa)
+                    = Sa * Da + Sa - Sa * Da + Da - Da * Sa
+                    = Sa + Da - Sa * Da
+
+    We use the same model for coverage modulation as we did with color:
+
+      Da'' = f * blend(Sa, Da) + (1-f) * Da
+
+    And show that canTweakAlphaForCoverage() is true by proving the following
+    relationship:
+
+      blend(f*Sa, Da) == f * blend(Sa, Da) + (1-f) * Da
+
+
+      f * blend(Sa, Da) + (1-f) * Da
+        = f * (Sa + Da - Sa * Da) + (1-f) * Da
+        = f*Sa + f*Da - f*Sa * Da + Da - f*Da
+        = f*Sa - f*Sa * Da + Da
+        = f*Sa + Da - f*Sa * Da
+        = blend(f*Sa, Da)
+   */
+
+    OptFlags flags = kNone_Opt;
+    if (colorPOI.allStagesMultiplyInput()) {
+        flags |= kCanTweakAlphaForCoverage_OptFlag;
+    }
+    if (coveragePOI.isSolidWhite()) {
+        flags |= kIgnoreCoverage_OptFlag;
+    }
+    if (caps.advancedBlendEquationSupport() && !coveragePOI.isFourChannelOutput()) {
+        // This blend mode can be implemented in hardware.
+        fHWBlendEquation = hw_blend_equation(fMode);
+    }
+    return flags;
+}
+
+bool CustomXP::onWillNeedXferBarrier(const GrRenderTarget* rt,
+                                     const GrDrawTargetCaps& caps,
+                                     GrXferBarrierType* outBarrierType) const {
+    if (this->hasHWBlendEquation() && !caps.advancedCoherentBlendEquationSupport()) {
+        *outBarrierType = kBlend_GrXferBarrierType;
+        return true;
+    }
+    return false;
+}
+
+void CustomXP::onGetBlendInfo(BlendInfo* blendInfo) const {
+    if (this->hasHWBlendEquation()) {
+        blendInfo->fEquation = this->hwBlendEquation();
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -615,6 +794,19 @@ GrCustomXPFactory::onCreateXferProcessor(const GrDrawTargetCaps& caps,
     return CustomXP::Create(fMode, dstCopy, this->willReadDstColor(caps, colorPOI, coveragePOI));
 }
 
+bool GrCustomXPFactory::willReadDstColor(const GrDrawTargetCaps& caps,
+                                         const GrProcOptInfo& colorPOI,
+                                         const GrProcOptInfo& coveragePOI) const {
+    if (!caps.advancedBlendEquationSupport()) {
+        // No hardware support for advanced blend equations; we will need to do it in the shader.
+        return true;
+    }
+    if (coveragePOI.isFourChannelOutput()) {
+        // Advanced blend equations can't tweak alpha for RGB coverage.
+        return true;
+    }
+    return false;
+}
 
 void GrCustomXPFactory::getInvariantOutput(const GrProcOptInfo& colorPOI,
                                                const GrProcOptInfo& coveragePOI,

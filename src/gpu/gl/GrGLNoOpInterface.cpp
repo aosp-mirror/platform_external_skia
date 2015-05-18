@@ -27,7 +27,6 @@ static const char* kExtensions[] = {
     "GL_ARB_timer_query",
     "GL_ARB_draw_buffers",
     "GL_ARB_occlusion_query",
-    "GL_EXT_blend_color",
     "GL_EXT_stencil_wrap"
 };
 
@@ -48,15 +47,18 @@ const GrGLubyte* combined_extensions_string() {
 }
 }
 
+GrGLvoid GR_GL_FUNCTION_TYPE noOpGLBindFragDataLocation(GrGLuint program,
+                                                        GrGLuint colorNumber,
+                                                        const GrGLchar* name) {
+}
+
 GrGLvoid GR_GL_FUNCTION_TYPE noOpGLBlendColor(GrGLclampf red,
                                               GrGLclampf green,
                                               GrGLclampf blue,
                                               GrGLclampf alpha) {
 }
 
-GrGLvoid GR_GL_FUNCTION_TYPE noOpGLBindFragDataLocation(GrGLuint program,
-                                                        GrGLuint colorNumber,
-                                                        const GrGLchar* name) {
+GrGLvoid GR_GL_FUNCTION_TYPE noOpGLBlendEquation(GrGLenum mode) {
 }
 
 GrGLvoid GR_GL_FUNCTION_TYPE noOpGLBlendFunc(GrGLenum sfactor,
@@ -440,8 +442,7 @@ GrGLvoid GR_GL_FUNCTION_TYPE noOpGLBindFragDataLocationIndexed(GrGLuint program,
 
 GrGLenum GR_GL_FUNCTION_TYPE noOpGLCheckFramebufferStatus(GrGLenum target) {
 
-    GrAlwaysAssert(GR_GL_FRAMEBUFFER == target || GR_GL_READ_FRAMEBUFFER == target ||
-                   GR_GL_DRAW_FRAMEBUFFER == target);
+    GrAlwaysAssert(GR_GL_FRAMEBUFFER == target);
 
     return GR_GL_FRAMEBUFFER_COMPLETE;
 }
