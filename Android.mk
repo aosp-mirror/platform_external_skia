@@ -90,7 +90,6 @@ LOCAL_SRC_FILES := \
 	src/core/SkAdvancedTypefaceMetrics.cpp \
 	src/core/SkAlphaRuns.cpp \
 	src/core/SkBBHFactory.cpp \
-	src/core/SkBigPicture.cpp \
 	src/core/SkBitmap.cpp \
 	src/core/SkBitmapCache.cpp \
 	src/core/SkBitmapDevice.cpp \
@@ -158,6 +157,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkImageFilter.cpp \
 	src/core/SkImageInfo.cpp \
 	src/core/SkImageGenerator.cpp \
+	src/core/SkLayerInfo.cpp \
 	src/core/SkLocalMatrixShader.cpp \
 	src/core/SkLineClipper.cpp \
 	src/core/SkMallocPixelRef.cpp \
@@ -170,7 +170,6 @@ LOCAL_SRC_FILES := \
 	src/core/SkMatrixImageFilter.cpp \
 	src/core/SkMetaData.cpp \
 	src/core/SkMipMap.cpp \
-	src/core/SkMiniRecorder.cpp \
 	src/core/SkMultiPictureDraw.cpp \
 	src/core/SkPackBits.cpp \
 	src/core/SkPaint.cpp \
@@ -413,6 +412,7 @@ LOCAL_SRC_FILES := \
 	src/utils/SkParse.cpp \
 	src/utils/SkParseColor.cpp \
 	src/utils/SkParsePath.cpp \
+	src/utils/SkPictureUtils.cpp \
 	src/utils/SkPatchGrid.cpp \
 	src/utils/SkPatchUtils.cpp \
 	src/utils/SkSHA1.cpp \
