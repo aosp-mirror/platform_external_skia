@@ -455,6 +455,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrGpu.cpp \
 	src/gpu/GrGpuResource.cpp \
 	src/gpu/GrGpuFactory.cpp \
+	src/gpu/GrImmediateDrawTarget.cpp \
 	src/gpu/GrInvariantOutput.cpp \
 	src/gpu/GrInOrderCommandBuilder.cpp \
 	src/gpu/GrInOrderDrawBuffer.cpp \
