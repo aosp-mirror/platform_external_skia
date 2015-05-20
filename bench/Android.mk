@@ -203,6 +203,7 @@ LOCAL_SRC_FILES := \
 	../gm/bitmapshader.cpp \
 	../gm/fatpathfill.cpp \
 	../gm/peekpixels.cpp \
+	../gm/fontscalerdistortable.cpp \
 	../gm/blend.cpp \
 	../gm/ninepatchstretch.cpp \
 	../gm/filterindiabox.cpp \
