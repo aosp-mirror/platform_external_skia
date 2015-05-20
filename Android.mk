@@ -236,6 +236,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkWriteBuffer.cpp \
 	src/core/SkWriter32.cpp \
 	src/core/SkXfermode.cpp \
+	src/core/SkXfermodeInterpretation.cpp \
 	src/core/SkYUVPlanesCache.cpp \
 	src/doc/SkDocument.cpp \
 	src/image/SkImage.cpp \
