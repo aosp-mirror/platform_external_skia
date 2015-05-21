@@ -138,7 +138,6 @@ LOCAL_SRC_FILES := \
 	../gm/bitmappremul.cpp \
 	../gm/bitmaprect.cpp \
 	../gm/bitmaprecttest.cpp \
-	../gm/bitmapscroll.cpp \
 	../gm/bitmapshader.cpp \
 	../gm/bitmapsource.cpp \
 	../gm/bitmapsource2.cpp \

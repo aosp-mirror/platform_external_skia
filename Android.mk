@@ -100,7 +100,6 @@ LOCAL_SRC_FILES := \
 	src/core/SkBitmapProcState.cpp \
 	src/core/SkBitmapProcState_matrixProcs.cpp \
 	src/core/SkBitmapScaler.cpp \
-	src/core/SkBitmap_scroll.cpp \
 	src/core/SkBlitMask_D32.cpp \
 	src/core/SkBlitRow_D16.cpp \
 	src/core/SkBlitRow_D32.cpp \
