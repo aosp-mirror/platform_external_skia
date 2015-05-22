@@ -148,6 +148,7 @@ LOCAL_SRC_FILES := \
 	../tests/GrGLSLPrettyPrintTest.cpp \
 	../tests/GrMemoryPoolTest.cpp \
 	../tests/GrOrderedSetTest.cpp \
+	../tests/GrPorterDuffTest.cpp \
 	../tests/GrRedBlackTreeTest.cpp \
 	../tests/GrSurfaceTest.cpp \
 	../tests/GrTBSearchTest.cpp \
@@ -266,6 +267,7 @@ LOCAL_SRC_FILES := \
 	DMSrcSinkAndroid.cpp \
 	../gm/aaclip.cpp \
 	../gm/aarectmodes.cpp \
+	../gm/aaxfermodes.cpp \
 	../gm/addarc.cpp \
 	../gm/all_bitmap_configs.cpp \
 	../gm/alphagradients.cpp \

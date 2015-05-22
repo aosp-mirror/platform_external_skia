@@ -121,6 +121,7 @@ LOCAL_SRC_FILES := \
 	nanobenchAndroid.cpp \
 	../gm/aaclip.cpp \
 	../gm/aarectmodes.cpp \
+	../gm/aaxfermodes.cpp \
 	../gm/addarc.cpp \
 	../gm/all_bitmap_configs.cpp \
 	../gm/alphagradients.cpp \
