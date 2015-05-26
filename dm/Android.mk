@@ -460,6 +460,7 @@ LOCAL_SRC_FILES := \
 	../gm/textbloblooper.cpp \
 	../gm/textblobshader.cpp \
 	../gm/textblobtransforms.cpp \
+	../gm/textblobuseaftergpufree.cpp \
 	../gm/texteffects.cpp \
 	../gm/texturedomaineffect.cpp \
 	../gm/thinrects.cpp \
