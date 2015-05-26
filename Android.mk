@@ -441,6 +441,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrBatchTest.cpp \
 	src/gpu/GrBlend.cpp \
 	src/gpu/GrBufferAllocPool.cpp \
+	src/gpu/GrCaps.cpp \
 	src/gpu/GrClip.cpp \
 	src/gpu/GrClipMaskCache.cpp \
 	src/gpu/GrClipMaskManager.cpp \
