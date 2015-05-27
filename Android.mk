@@ -441,6 +441,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrBatchTarget.cpp \
 	src/gpu/GrBatchTest.cpp \
 	src/gpu/GrBlend.cpp \
+	src/gpu/GrBlurUtils.cpp \
 	src/gpu/GrBufferAllocPool.cpp \
 	src/gpu/GrCaps.cpp \
 	src/gpu/GrClip.cpp \
