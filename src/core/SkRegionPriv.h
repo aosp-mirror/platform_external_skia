@@ -12,7 +12,6 @@
 
 #include "SkRegion.h"
 #include "SkThread.h"
-#include "Sk64.h"
 
 #define assert_sentinel(value, isSentinel) \
     SkASSERT(((value) == SkRegion::kRunTypeSentinel) == isSentinel)
@@ -66,12 +65,7 @@ public:
 
         SkASSERT(count >= SkRegion::kRectRegionRuns);
 
-        Sk64 size64;
-        size64.setMul(count, sizeof(RunType));
-        size64.add(sizeof(RunHead));
-        if (count < 0 || !size64.is32()) { SK_CRASH(); }
-
-        RunHead* head = (RunHead*)sk_malloc_throw(size64.get32());
+        RunHead* head = (RunHead*)sk_malloc_throw(sizeof(RunHead) + count * sizeof(RunType));
         head->fRefCnt = 1;
         head->fRunCount = count;
         // these must be filled in later, otherwise we will be invalid
