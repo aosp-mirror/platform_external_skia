@@ -263,6 +263,7 @@ LOCAL_SRC_FILES := \
 	../tests/Writer32Test.cpp \
 	../tests/XfermodeTest.cpp \
 	../tests/YUVCacheTest.cpp \
+	../tests/skpdf_opaquesrcmodetosrcover.cpp \
 	DMSrcSinkAndroid.cpp \
 	../gm/aaclip.cpp \
 	../gm/aarectmodes.cpp \
