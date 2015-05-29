@@ -383,6 +383,7 @@ LOCAL_SRC_FILES := \
 	../gm/imagefiltersgraph.cpp \
 	../gm/imagefiltersscaled.cpp \
 	../gm/imagefilterstransformed.cpp \
+	../gm/imagefromyuvtextures.cpp \
 	../gm/imagemagnifier.cpp \
 	../gm/imageresizetiled.cpp \
 	../gm/internal_links.cpp \
