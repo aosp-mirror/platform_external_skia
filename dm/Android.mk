@@ -104,6 +104,7 @@ LOCAL_SRC_FILES := \
 	../tests/ClipperTest.cpp \
 	../tests/CodexTest.cpp \
 	../tests/ColorFilterTest.cpp \
+	../tests/ColorMatrixTest.cpp \
 	../tests/ColorPrivTest.cpp \
 	../tests/ColorTest.cpp \
 	../tests/DashPathEffectTest.cpp \
