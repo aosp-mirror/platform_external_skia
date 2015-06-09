@@ -48,7 +48,6 @@ LOCAL_SRC_FILES := \
 	CoverageBench.cpp \
 	DashBench.cpp \
 	DecodingBench.cpp \
-	DecodingSubsetBench.cpp \
 	DeferredSurfaceCopyBench.cpp \
 	DisplacementBench.cpp \
 	ETCBitmapBench.cpp \
@@ -119,6 +118,10 @@ LOCAL_SRC_FILES := \
 	XfermodeBench.cpp \
 	nanobench.cpp \
 	nanobenchAndroid.cpp \
+	subset/SubsetDivisorBench.cpp \
+	subset/SubsetSingleBench.cpp \
+	subset/SubsetTranslateBench.cpp \
+	subset/SubsetZoomBench.cpp \
 	../gm/aaclip.cpp \
 	../gm/aarectmodes.cpp \
 	../gm/aaxfermodes.cpp \
@@ -392,6 +395,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../src/gpu \
 	$(LOCAL_PATH)/../src/fonts \
 	$(LOCAL_PATH)/../tools \
+	$(LOCAL_PATH)/subset \
 	$(LOCAL_PATH)/../src/effects \
 	$(LOCAL_PATH)/../gm \
 	$(LOCAL_PATH)/../src/utils/debugger \
