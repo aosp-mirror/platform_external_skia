@@ -429,6 +429,7 @@ LOCAL_SRC_FILES := \
 	src/fonts/SkTestScalerContext.cpp \
 	src/gpu/GrAAHairLinePathRenderer.cpp \
 	src/gpu/GrAAConvexPathRenderer.cpp \
+	src/gpu/GrAALinearizingConvexPathRenderer.cpp \
 	src/gpu/GrAAConvexTessellator.cpp \
 	src/gpu/GrAADistanceFieldPathRenderer.cpp \
 	src/gpu/GrAARectRenderer.cpp \
