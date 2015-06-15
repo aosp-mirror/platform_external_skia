@@ -154,6 +154,7 @@ LOCAL_SRC_FILES := \
 	../tests/GrSurfaceTest.cpp \
 	../tests/GrTBSearchTest.cpp \
 	../tests/GrTRecorderTest.cpp \
+	../tests/GrTextureMipMapInvalidationTest.cpp \
 	../tests/GradientTest.cpp \
 	../tests/HashTest.cpp \
 	../tests/ImageCacheTest.cpp \
