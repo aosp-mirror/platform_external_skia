@@ -341,7 +341,7 @@ LOCAL_SRC_FILES := \
 	src/images/SkImageEncoder.cpp \
 	src/images/SkImageEncoder_Factory.cpp \
 	src/images/SkImageEncoder_argb.cpp \
-	src/images/SkJpegUtility_images.cpp \
+	src/images/SkJpegUtility.cpp \
 	src/images/SkMovie.cpp \
 	src/images/SkMovie_gif.cpp \
 	src/images/SkPageFlipper.cpp \
