@@ -364,6 +364,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkForceCPlusPlusLinking.cpp \
 	src/fonts/SkFontMgr_indirect.cpp \
 	src/fonts/SkRemotableFontMgr.cpp \
+	src/ports/SkFontMgr_android_factory.cpp \
 	src/ports/SkGlobalInitialization_default.cpp \
 	src/ports/SkMemory_malloc.cpp \
 	src/ports/SkOSFile_posix.cpp \
