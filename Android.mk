@@ -206,6 +206,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkScan_Antihair.cpp \
 	src/core/SkScan_Hairline.cpp \
 	src/core/SkScan_Path.cpp \
+	src/core/SkSemaphore.cpp \
 	src/core/SkShader.cpp \
 	src/core/SkSpriteBlitter_ARGB32.cpp \
 	src/core/SkSpriteBlitter_RGB16.cpp \
@@ -377,7 +378,6 @@ LOCAL_SRC_FILES := \
 	src/ports/SkFontMgr_android.cpp \
 	src/sfnt/SkOTTable_name.cpp \
 	src/sfnt/SkOTUtils.cpp \
-	src/utils/SkCondVar.cpp \
 	src/utils/SkBase64.cpp \
 	src/utils/SkBitmapHasher.cpp \
 	src/utils/SkBitSet.cpp \
