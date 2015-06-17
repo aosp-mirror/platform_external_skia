@@ -118,7 +118,6 @@ LOCAL_SRC_FILES := \
 	XfermodeBench.cpp \
 	nanobench.cpp \
 	nanobenchAndroid.cpp \
-	subset/SubsetDivisorBench.cpp \
 	subset/SubsetSingleBench.cpp \
 	subset/SubsetTranslateBench.cpp \
 	subset/SubsetZoomBench.cpp \
