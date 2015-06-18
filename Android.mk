@@ -75,6 +75,7 @@ LOCAL_SRC_FILES := \
 	src/codec/SkMaskSwizzler.cpp \
 	src/codec/SkMasks.cpp \
 	src/codec/SkSwizzler.cpp \
+	src/codec/SkWebpCodec.cpp \
 	src/c/sk_paint.cpp \
 	src/c/sk_surface.cpp \
 	src/core/SkAAClip.cpp \
@@ -614,6 +615,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/include/pathops \
 	$(LOCAL_PATH)/include/pipe \
 	external/giflib \
+	external/webp/include \
 	$(LOCAL_PATH)/include/ports \
 	$(LOCAL_PATH)/include/utils \
 	$(LOCAL_PATH)/include/images \
@@ -628,7 +630,6 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/src/lazy \
 	$(LOCAL_PATH)/third_party/etc1 \
 	$(LOCAL_PATH)/third_party/ktx \
-	external/webp/include \
 	external/expat/lib \
 	external/freetype/include \
 	$(LOCAL_PATH)/include/utils/win \
