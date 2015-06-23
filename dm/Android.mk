@@ -127,9 +127,9 @@ LOCAL_SRC_FILES := \
 	../tests/FitsInTest.cpp \
 	../tests/FlateTest.cpp \
 	../tests/FloatingPointTextureTest.cpp \
-	../tests/FontConfigParser.cpp \
 	../tests/FontHostStreamTest.cpp \
 	../tests/FontHostTest.cpp \
+	../tests/FontMgrAndroidParserTest.cpp \
 	../tests/FontMgrTest.cpp \
 	../tests/FontNamesTest.cpp \
 	../tests/FontObjTest.cpp \
