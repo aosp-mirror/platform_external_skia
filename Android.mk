@@ -530,6 +530,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/GrGLCaps.cpp \
 	src/gpu/gl/GrGLContext.cpp \
 	src/gpu/gl/GrGLGeometryProcessor.cpp \
+	src/gpu/gl/GrGLGLSL.cpp \
 	src/gpu/gl/GrGLGpu.cpp \
 	src/gpu/gl/GrGLGpuProgramCache.cpp \
 	src/gpu/gl/GrGLExtensions.cpp \
@@ -546,7 +547,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/GrGLProgramDesc.cpp \
 	src/gpu/gl/GrGLProgramDataManager.cpp \
 	src/gpu/gl/GrGLRenderTarget.cpp \
-	src/gpu/gl/GrGLSL.cpp \
 	src/gpu/gl/GrGLStencilAttachment.cpp \
 	src/gpu/gl/GrGLTexture.cpp \
 	src/gpu/gl/GrGLUtil.cpp \
@@ -560,6 +560,8 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/builders/GrGLVertexShaderBuilder.cpp \
 	src/gpu/gl/builders/GrGLFragmentShaderBuilder.cpp \
 	src/gpu/gl/builders/GrGLGeometryShaderBuilder.cpp \
+	src/gpu/glsl/GrGLSLCaps.cpp \
+	src/gpu/glsl/GrGLSL.cpp \
 	src/gpu/SkGpuDevice.cpp \
 	src/gpu/SkGr.cpp \
 	src/gpu/SkGrPixelRef.cpp \
