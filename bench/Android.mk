@@ -383,6 +383,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../include/pathops \
 	$(LOCAL_PATH)/../include/pipe \
 	$(LOCAL_PATH)/../include/codec \
+	$(LOCAL_PATH)/../third_party/externals/libjpeg-turbo \
 	$(LOCAL_PATH)/../include/effects \
 	$(LOCAL_PATH)/../include/images \
 	$(LOCAL_PATH)/../include/ports \

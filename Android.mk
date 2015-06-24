@@ -55,7 +55,8 @@ LOCAL_CFLAGS += \
 	-U_FORTIFY_SOURCE \
 	-D_FORTIFY_SOURCE=1 \
 	-DSKIA_IMPLEMENTATION=1 \
-	-Wno-clobbered
+	-Wno-clobbered \
+	-w
 
 LOCAL_CPPFLAGS := \
 	-std=c++11 \
@@ -583,6 +584,51 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/debug/SkDebugGLContext.cpp \
 	src/gpu/gl/GrGLCreateNullInterface.cpp \
 	src/gpu/gl/SkNullGLContext.cpp \
+	third_party/externals/libjpeg-turbo/jaricom.c \
+	third_party/externals/libjpeg-turbo/jcapimin.c \
+	third_party/externals/libjpeg-turbo/jcapistd.c \
+	third_party/externals/libjpeg-turbo/jcarith.c \
+	third_party/externals/libjpeg-turbo/jccoefct.c \
+	third_party/externals/libjpeg-turbo/jccolor.c \
+	third_party/externals/libjpeg-turbo/jcdctmgr.c \
+	third_party/externals/libjpeg-turbo/jchuff.c \
+	third_party/externals/libjpeg-turbo/jcinit.c \
+	third_party/externals/libjpeg-turbo/jcmainct.c \
+	third_party/externals/libjpeg-turbo/jcmarker.c \
+	third_party/externals/libjpeg-turbo/jcmaster.c \
+	third_party/externals/libjpeg-turbo/jcomapi.c \
+	third_party/externals/libjpeg-turbo/jcparam.c \
+	third_party/externals/libjpeg-turbo/jcphuff.c \
+	third_party/externals/libjpeg-turbo/jcprepct.c \
+	third_party/externals/libjpeg-turbo/jcsample.c \
+	third_party/externals/libjpeg-turbo/jdapimin.c \
+	third_party/externals/libjpeg-turbo/jdapistd.c \
+	third_party/externals/libjpeg-turbo/jdarith.c \
+	third_party/externals/libjpeg-turbo/jdcoefct.c \
+	third_party/externals/libjpeg-turbo/jdcolor.c \
+	third_party/externals/libjpeg-turbo/jddctmgr.c \
+	third_party/externals/libjpeg-turbo/jdhuff.c \
+	third_party/externals/libjpeg-turbo/jdinput.c \
+	third_party/externals/libjpeg-turbo/jdmainct.c \
+	third_party/externals/libjpeg-turbo/jdmarker.c \
+	third_party/externals/libjpeg-turbo/jdmaster.c \
+	third_party/externals/libjpeg-turbo/jdmerge.c \
+	third_party/externals/libjpeg-turbo/jdphuff.c \
+	third_party/externals/libjpeg-turbo/jdpostct.c \
+	third_party/externals/libjpeg-turbo/jdsample.c \
+	third_party/externals/libjpeg-turbo/jerror.c \
+	third_party/externals/libjpeg-turbo/jfdctflt.c \
+	third_party/externals/libjpeg-turbo/jfdctfst.c \
+	third_party/externals/libjpeg-turbo/jfdctint.c \
+	third_party/externals/libjpeg-turbo/jidctflt.c \
+	third_party/externals/libjpeg-turbo/jidctfst.c \
+	third_party/externals/libjpeg-turbo/jidctint.c \
+	third_party/externals/libjpeg-turbo/jidctred.c \
+	third_party/externals/libjpeg-turbo/jmemmgr.c \
+	third_party/externals/libjpeg-turbo/jmemnobs.c \
+	third_party/externals/libjpeg-turbo/jquant1.c \
+	third_party/externals/libjpeg-turbo/jquant2.c \
+	third_party/externals/libjpeg-turbo/jutils.c \
 	third_party/etc1/etc1.cpp \
 	third_party/ktx/ktx.cpp \
 	src/core/SkFlate.cpp
@@ -592,8 +638,8 @@ LOCAL_SHARED_LIBRARIES := \
 	libGLESv2 \
 	libEGL \
 	libz \
-	libjpeg \
 	libpng \
+	libjpeg \
 	libicuuc \
 	libicui18n \
 	libexpat \
@@ -606,7 +652,6 @@ LOCAL_STATIC_LIBRARIES := \
 	libsfntly
 
 LOCAL_C_INCLUDES := \
-	external/jpeg \
 	external/libpng \
 	$(LOCAL_PATH)/include/codec \
 	$(LOCAL_PATH)/src/codec \
@@ -617,6 +662,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/include/pathops \
 	$(LOCAL_PATH)/include/pipe \
 	external/giflib \
+	$(LOCAL_PATH)/third_party/externals/libjpeg-turbo \
 	external/webp/include \
 	$(LOCAL_PATH)/include/ports \
 	$(LOCAL_PATH)/include/utils \
@@ -629,6 +675,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/src/gpu \
 	$(LOCAL_PATH)/include/effects \
 	$(LOCAL_PATH)/src/effects \
+	external/jpeg \
 	$(LOCAL_PATH)/src/lazy \
 	$(LOCAL_PATH)/third_party/etc1 \
 	$(LOCAL_PATH)/third_party/ktx \
@@ -642,6 +689,7 @@ LOCAL_C_INCLUDES := \
 
 LOCAL_EXPORT_C_INCLUDE_DIRS := \
 	$(LOCAL_PATH)/include/codec \
+	$(LOCAL_PATH)/third_party/externals/libjpeg-turbo \
 	$(LOCAL_PATH)/include/c \
 	$(LOCAL_PATH)/include/config \
 	$(LOCAL_PATH)/include/core \
@@ -677,7 +725,9 @@ LOCAL_SRC_FILES_arm += \
 	src/opts/SkMorphology_opts_neon.cpp \
 	src/opts/SkTextureCompression_opts_neon.cpp \
 	src/opts/SkUtils_opts_arm_neon.cpp \
-	src/opts/SkXfermode_opts_arm_neon.cpp
+	src/opts/SkXfermode_opts_arm_neon.cpp \
+	third_party/externals/libjpeg-turbo/simd/jsimd_arm.c \
+	third_party/externals/libjpeg-turbo/simd/jsimd_arm_neon.S
 
 LOCAL_CFLAGS_arm += \
 	-DSK_ARM_HAS_NEON
@@ -686,7 +736,10 @@ endif
 
 LOCAL_CFLAGS_x86 += \
 	-msse2 \
-	-mfpmath=sse
+	-mfpmath=sse \
+	-std=gnu99 \
+	-ansi \
+	-pedantic
 
 LOCAL_SRC_FILES_x86 += \
 	src/opts/SkBitmapFilter_opts_SSE2.cpp \
@@ -698,9 +751,149 @@ LOCAL_SRC_FILES_x86 += \
 	src/opts/SkUtils_opts_SSE2.cpp \
 	src/opts/SkXfermode_opts_SSE2.cpp \
 	src/opts/opts_check_x86.cpp \
+	third_party/externals/libjpeg-turbo/simd/jsimd_i386.c \
+	third_party/externals/libjpeg-turbo/simd/jccolor-mmx.asm \
+	third_party/externals/libjpeg-turbo/simd/jccolor-sse2.asm \
+	third_party/externals/libjpeg-turbo/simd/jcgray-mmx.asm \
+	third_party/externals/libjpeg-turbo/simd/jcgray-sse2.asm \
+	third_party/externals/libjpeg-turbo/simd/jcsample-mmx.asm \
+	third_party/externals/libjpeg-turbo/simd/jcsample-sse2.asm \
+	third_party/externals/libjpeg-turbo/simd/jdcolor-mmx.asm \
+	third_party/externals/libjpeg-turbo/simd/jdcolor-sse2.asm \
+	third_party/externals/libjpeg-turbo/simd/jdmerge-mmx.asm \
+	third_party/externals/libjpeg-turbo/simd/jdmerge-sse2.asm \
+	third_party/externals/libjpeg-turbo/simd/jdsample-mmx.asm \
+	third_party/externals/libjpeg-turbo/simd/jdsample-sse2.asm \
+	third_party/externals/libjpeg-turbo/simd/jfdctflt-3dn.asm \
+	third_party/externals/libjpeg-turbo/simd/jfdctflt-sse.asm \
+	third_party/externals/libjpeg-turbo/simd/jfdctfst-mmx.asm \
+	third_party/externals/libjpeg-turbo/simd/jfdctfst-sse2.asm \
+	third_party/externals/libjpeg-turbo/simd/jfdctint-mmx.asm \
+	third_party/externals/libjpeg-turbo/simd/jfdctint-sse2.asm \
+	third_party/externals/libjpeg-turbo/simd/jidctflt-3dn.asm \
+	third_party/externals/libjpeg-turbo/simd/jidctflt-sse2.asm \
+	third_party/externals/libjpeg-turbo/simd/jidctflt-sse.asm \
+	third_party/externals/libjpeg-turbo/simd/jidctfst-mmx.asm \
+	third_party/externals/libjpeg-turbo/simd/jidctfst-sse2.asm \
+	third_party/externals/libjpeg-turbo/simd/jidctint-mmx.asm \
+	third_party/externals/libjpeg-turbo/simd/jidctint-sse2.asm \
+	third_party/externals/libjpeg-turbo/simd/jidctred-mmx.asm \
+	third_party/externals/libjpeg-turbo/simd/jidctred-sse2.asm \
+	third_party/externals/libjpeg-turbo/simd/jquant-3dn.asm \
+	third_party/externals/libjpeg-turbo/simd/jquantf-sse2.asm \
+	third_party/externals/libjpeg-turbo/simd/jquanti-sse2.asm \
+	third_party/externals/libjpeg-turbo/simd/jquant-mmx.asm \
+	third_party/externals/libjpeg-turbo/simd/jquant-sse.asm \
+	third_party/externals/libjpeg-turbo/simd/jsimdcpu.asm \
+	third_party/externals/yasm/source/patched-yasm/frontends/yasm/yasm-options.c \
+	third_party/externals/yasm/source/patched-yasm/frontends/yasm/yasm.c \
+	third_party/externals/yasm/source/patched-yasm/libyasm/assocdat.c \
+	third_party/externals/yasm/source/patched-yasm/libyasm/bc-align.c \
+	third_party/externals/yasm/source/patched-yasm/libyasm/bc-data.c \
+	third_party/externals/yasm/source/patched-yasm/libyasm/bc-incbin.c \
+	third_party/externals/yasm/source/patched-yasm/libyasm/bc-org.c \
+	third_party/externals/yasm/source/patched-yasm/libyasm/bc-reserve.c \
+	third_party/externals/yasm/source/patched-yasm/libyasm/bitvect.c \
+	third_party/externals/yasm/source/patched-yasm/libyasm/bytecode.c \
+	third_party/externals/yasm/source/patched-yasm/libyasm/errwarn.c \
+	third_party/externals/yasm/source/patched-yasm/libyasm/expr.c \
+	third_party/externals/yasm/source/patched-yasm/libyasm/file.c \
+	third_party/externals/yasm/source/patched-yasm/libyasm/floatnum.c \
+	third_party/externals/yasm/source/patched-yasm/libyasm/hamt.c \
+	third_party/externals/yasm/source/patched-yasm/libyasm/insn.c \
+	third_party/externals/yasm/source/patched-yasm/libyasm/intnum.c \
+	third_party/externals/yasm/source/patched-yasm/libyasm/inttree.c \
+	third_party/externals/yasm/source/patched-yasm/libyasm/linemap.c \
+	third_party/externals/yasm/source/patched-yasm/libyasm/md5.c \
+	third_party/externals/yasm/source/patched-yasm/libyasm/mergesort.c \
+	third_party/externals/yasm/source/patched-yasm/libyasm/section.c \
+	third_party/externals/yasm/source/patched-yasm/libyasm/strcasecmp.c \
+	third_party/externals/yasm/source/patched-yasm/libyasm/strsep.c \
+	third_party/externals/yasm/source/patched-yasm/libyasm/symrec.c \
+	third_party/externals/yasm/source/patched-yasm/libyasm/valparam.c \
+	third_party/externals/yasm/source/patched-yasm/libyasm/value.c \
+	third_party/externals/yasm/source/patched-yasm/modules/arch/lc3b/lc3barch.c \
+	third_party/externals/yasm/source/patched-yasm/modules/arch/lc3b/lc3bbc.c \
+	third_party/externals/yasm/source/patched-yasm/modules/arch/x86/x86arch.c \
+	third_party/externals/yasm/source/patched-yasm/modules/arch/x86/x86bc.c \
+	third_party/externals/yasm/source/patched-yasm/modules/arch/x86/x86expr.c \
+	third_party/externals/yasm/source/patched-yasm/modules/arch/x86/x86id.c \
+	third_party/externals/yasm/source/patched-yasm/modules/dbgfmts/codeview/cv-dbgfmt.c \
+	third_party/externals/yasm/source/patched-yasm/modules/dbgfmts/codeview/cv-symline.c \
+	third_party/externals/yasm/source/patched-yasm/modules/dbgfmts/codeview/cv-type.c \
+	third_party/externals/yasm/source/patched-yasm/modules/dbgfmts/dwarf2/dwarf2-aranges.c \
+	third_party/externals/yasm/source/patched-yasm/modules/dbgfmts/dwarf2/dwarf2-dbgfmt.c \
+	third_party/externals/yasm/source/patched-yasm/modules/dbgfmts/dwarf2/dwarf2-info.c \
+	third_party/externals/yasm/source/patched-yasm/modules/dbgfmts/dwarf2/dwarf2-line.c \
+	third_party/externals/yasm/source/patched-yasm/modules/dbgfmts/null/null-dbgfmt.c \
+	third_party/externals/yasm/source/patched-yasm/modules/dbgfmts/stabs/stabs-dbgfmt.c \
+	third_party/externals/yasm/source/patched-yasm/modules/listfmts/nasm/nasm-listfmt.c \
+	third_party/externals/yasm/source/patched-yasm/modules/objfmts/bin/bin-objfmt.c \
+	third_party/externals/yasm/source/patched-yasm/modules/objfmts/coff/coff-objfmt.c \
+	third_party/externals/yasm/source/patched-yasm/modules/objfmts/coff/win64-except.c \
+	third_party/externals/yasm/source/patched-yasm/modules/objfmts/dbg/dbg-objfmt.c \
+	third_party/externals/yasm/source/patched-yasm/modules/objfmts/elf/elf-objfmt.c \
+	third_party/externals/yasm/source/patched-yasm/modules/objfmts/elf/elf-x86-amd64.c \
+	third_party/externals/yasm/source/patched-yasm/modules/objfmts/elf/elf-x86-x86.c \
+	third_party/externals/yasm/source/patched-yasm/modules/objfmts/elf/elf.c \
+	third_party/externals/yasm/source/patched-yasm/modules/objfmts/macho/macho-objfmt.c \
+	third_party/externals/yasm/source/patched-yasm/modules/objfmts/rdf/rdf-objfmt.c \
+	third_party/externals/yasm/source/patched-yasm/modules/objfmts/xdf/xdf-objfmt.c \
+	third_party/externals/yasm/source/patched-yasm/modules/parsers/gas/gas-parse.c \
+	third_party/externals/yasm/source/patched-yasm/modules/parsers/gas/gas-parse-intel.c \
+	third_party/externals/yasm/source/patched-yasm/modules/parsers/gas/gas-parser.c \
+	third_party/externals/yasm/source/patched-yasm/modules/parsers/nasm/nasm-parse.c \
+	third_party/externals/yasm/source/patched-yasm/modules/parsers/nasm/nasm-parser.c \
+	third_party/externals/yasm/source/patched-yasm/modules/preprocs/cpp/cpp-preproc.c \
+	third_party/externals/yasm/source/patched-yasm/modules/preprocs/nasm/nasm-eval.c \
+	third_party/externals/yasm/source/patched-yasm/modules/preprocs/nasm/nasm-pp.c \
+	third_party/externals/yasm/source/patched-yasm/modules/preprocs/nasm/nasm-preproc.c \
+	third_party/externals/yasm/source/patched-yasm/modules/preprocs/nasm/nasmlib.c \
+	third_party/externals/yasm/source/patched-yasm/modules/preprocs/raw/raw-preproc.c \
+	third_party/externals/yasm/source/patched-yasm/modules/parsers/gas/gas-token.re \
+	third_party/externals/yasm/source/patched-yasm/modules/parsers/nasm/nasm-token.re \
+	skia/<(SHARED_INTERMEDIATE_DIR)/third_party/yasm/x86insn_nasm.gperf \
+	skia/<(SHARED_INTERMEDIATE_DIR)/third_party/yasm/x86insn_gas.gperf \
+	skia/<(SHARED_INTERMEDIATE_DIR)/third_party/yasm/x86cpu.c \
+	skia/<(SHARED_INTERMEDIATE_DIR)/third_party/yasm/x86regtmod.c \
+	third_party/yasm/config/android/Makefile \
+	third_party/externals/yasm/source/patched-yasm/tools/genmacro/genmacro.c \
+	third_party/externals/yasm/source/patched-yasm/libyasm/genmodule.c \
+	third_party/externals/yasm/source/patched-yasm/tools/genperf/genperf.c \
+	third_party/externals/yasm/source/patched-yasm/tools/genperf/perfect.c \
+	third_party/externals/yasm/source/patched-yasm/libyasm/phash.c \
+	third_party/externals/yasm/source/patched-yasm/libyasm/xmalloc.c \
+	third_party/externals/yasm/source/patched-yasm/libyasm/xstrdup.c \
+	third_party/externals/yasm/source/patched-yasm/modules/arch/x86/x86cpu.gperf \
+	third_party/externals/yasm/source/patched-yasm/modules/arch/x86/x86regtmod.gperf \
+	third_party/externals/yasm/source/patched-yasm/modules/preprocs/nasm/genversion.c \
+	third_party/externals/yasm/source/patched-yasm/genstring.c \
+	third_party/externals/yasm/source/patched-yasm/tools/re2c/main.c \
+	third_party/externals/yasm/source/patched-yasm/tools/re2c/code.c \
+	third_party/externals/yasm/source/patched-yasm/tools/re2c/dfa.c \
+	third_party/externals/yasm/source/patched-yasm/tools/re2c/parser.c \
+	third_party/externals/yasm/source/patched-yasm/tools/re2c/actions.c \
+	third_party/externals/yasm/source/patched-yasm/tools/re2c/scanner.c \
+	third_party/externals/yasm/source/patched-yasm/tools/re2c/mbo_getopt.c \
+	third_party/externals/yasm/source/patched-yasm/tools/re2c/substr.c \
+	third_party/externals/yasm/source/patched-yasm/tools/re2c/translate.c \
 	src/opts/SkBitmapProcState_opts_SSSE3.cpp \
 	src/opts/SkBlurImage_opts_SSE4.cpp \
 	src/opts/SkBlitRow_opts_SSE4.cpp
+
+LOCAL_C_INCLUDES_x86 += \
+	$(LOCAL_PATH)/third_party/yasm/config/android \
+	$(LOCAL_PATH)/third_party/externals/yasm/source/patched-yasm \
+	$(LOCAL_PATH)/skia/<(SHARED_INTERMEDIATE_DIR)/third_party/yasm \
+	$(LOCAL_PATH)/skia/<(INTERMEDIATE_DIR)/third_party/yasm
+
+LOCAL_CFLAGS_x86 += \
+	-DHAVE_CONFIG_H
+
+LOCAL_CFLAGS_x86_64 += \
+	-std=gnu99 \
+	-ansi \
+	-pedantic
 
 LOCAL_SRC_FILES_x86_64 += \
 	src/opts/SkBitmapFilter_opts_SSE2.cpp \
@@ -712,9 +905,126 @@ LOCAL_SRC_FILES_x86_64 += \
 	src/opts/SkUtils_opts_SSE2.cpp \
 	src/opts/SkXfermode_opts_SSE2.cpp \
 	src/opts/opts_check_x86.cpp \
+	third_party/externals/libjpeg-turbo/simd/jsimd_x86_64.c \
+	third_party/externals/libjpeg-turbo/simd/jccolor-sse2-64.asm \
+	third_party/externals/libjpeg-turbo/simd/jcgray-sse2-64.asm \
+	third_party/externals/libjpeg-turbo/simd/jcsample-sse2-64.asm \
+	third_party/externals/libjpeg-turbo/simd/jdcolor-sse2-64.asm \
+	third_party/externals/libjpeg-turbo/simd/jdmerge-sse2-64.asm \
+	third_party/externals/libjpeg-turbo/simd/jdsample-sse2-64.asm \
+	third_party/externals/libjpeg-turbo/simd/jfdctflt-sse-64.asm \
+	third_party/externals/libjpeg-turbo/simd/jfdctfst-sse2-64.asm \
+	third_party/externals/libjpeg-turbo/simd/jfdctint-sse2-64.asm \
+	third_party/externals/libjpeg-turbo/simd/jidctflt-sse2-64.asm \
+	third_party/externals/libjpeg-turbo/simd/jidctfst-sse2-64.asm \
+	third_party/externals/libjpeg-turbo/simd/jidctint-sse2-64.asm \
+	third_party/externals/libjpeg-turbo/simd/jidctred-sse2-64.asm \
+	third_party/externals/libjpeg-turbo/simd/jquantf-sse2-64.asm \
+	third_party/externals/libjpeg-turbo/simd/jquanti-sse2-64.asm \
+	third_party/externals/yasm/source/patched-yasm/frontends/yasm/yasm-options.c \
+	third_party/externals/yasm/source/patched-yasm/frontends/yasm/yasm.c \
+	third_party/externals/yasm/source/patched-yasm/libyasm/assocdat.c \
+	third_party/externals/yasm/source/patched-yasm/libyasm/bc-align.c \
+	third_party/externals/yasm/source/patched-yasm/libyasm/bc-data.c \
+	third_party/externals/yasm/source/patched-yasm/libyasm/bc-incbin.c \
+	third_party/externals/yasm/source/patched-yasm/libyasm/bc-org.c \
+	third_party/externals/yasm/source/patched-yasm/libyasm/bc-reserve.c \
+	third_party/externals/yasm/source/patched-yasm/libyasm/bitvect.c \
+	third_party/externals/yasm/source/patched-yasm/libyasm/bytecode.c \
+	third_party/externals/yasm/source/patched-yasm/libyasm/errwarn.c \
+	third_party/externals/yasm/source/patched-yasm/libyasm/expr.c \
+	third_party/externals/yasm/source/patched-yasm/libyasm/file.c \
+	third_party/externals/yasm/source/patched-yasm/libyasm/floatnum.c \
+	third_party/externals/yasm/source/patched-yasm/libyasm/hamt.c \
+	third_party/externals/yasm/source/patched-yasm/libyasm/insn.c \
+	third_party/externals/yasm/source/patched-yasm/libyasm/intnum.c \
+	third_party/externals/yasm/source/patched-yasm/libyasm/inttree.c \
+	third_party/externals/yasm/source/patched-yasm/libyasm/linemap.c \
+	third_party/externals/yasm/source/patched-yasm/libyasm/md5.c \
+	third_party/externals/yasm/source/patched-yasm/libyasm/mergesort.c \
+	third_party/externals/yasm/source/patched-yasm/libyasm/section.c \
+	third_party/externals/yasm/source/patched-yasm/libyasm/strcasecmp.c \
+	third_party/externals/yasm/source/patched-yasm/libyasm/strsep.c \
+	third_party/externals/yasm/source/patched-yasm/libyasm/symrec.c \
+	third_party/externals/yasm/source/patched-yasm/libyasm/valparam.c \
+	third_party/externals/yasm/source/patched-yasm/libyasm/value.c \
+	third_party/externals/yasm/source/patched-yasm/modules/arch/lc3b/lc3barch.c \
+	third_party/externals/yasm/source/patched-yasm/modules/arch/lc3b/lc3bbc.c \
+	third_party/externals/yasm/source/patched-yasm/modules/arch/x86/x86arch.c \
+	third_party/externals/yasm/source/patched-yasm/modules/arch/x86/x86bc.c \
+	third_party/externals/yasm/source/patched-yasm/modules/arch/x86/x86expr.c \
+	third_party/externals/yasm/source/patched-yasm/modules/arch/x86/x86id.c \
+	third_party/externals/yasm/source/patched-yasm/modules/dbgfmts/codeview/cv-dbgfmt.c \
+	third_party/externals/yasm/source/patched-yasm/modules/dbgfmts/codeview/cv-symline.c \
+	third_party/externals/yasm/source/patched-yasm/modules/dbgfmts/codeview/cv-type.c \
+	third_party/externals/yasm/source/patched-yasm/modules/dbgfmts/dwarf2/dwarf2-aranges.c \
+	third_party/externals/yasm/source/patched-yasm/modules/dbgfmts/dwarf2/dwarf2-dbgfmt.c \
+	third_party/externals/yasm/source/patched-yasm/modules/dbgfmts/dwarf2/dwarf2-info.c \
+	third_party/externals/yasm/source/patched-yasm/modules/dbgfmts/dwarf2/dwarf2-line.c \
+	third_party/externals/yasm/source/patched-yasm/modules/dbgfmts/null/null-dbgfmt.c \
+	third_party/externals/yasm/source/patched-yasm/modules/dbgfmts/stabs/stabs-dbgfmt.c \
+	third_party/externals/yasm/source/patched-yasm/modules/listfmts/nasm/nasm-listfmt.c \
+	third_party/externals/yasm/source/patched-yasm/modules/objfmts/bin/bin-objfmt.c \
+	third_party/externals/yasm/source/patched-yasm/modules/objfmts/coff/coff-objfmt.c \
+	third_party/externals/yasm/source/patched-yasm/modules/objfmts/coff/win64-except.c \
+	third_party/externals/yasm/source/patched-yasm/modules/objfmts/dbg/dbg-objfmt.c \
+	third_party/externals/yasm/source/patched-yasm/modules/objfmts/elf/elf-objfmt.c \
+	third_party/externals/yasm/source/patched-yasm/modules/objfmts/elf/elf-x86-amd64.c \
+	third_party/externals/yasm/source/patched-yasm/modules/objfmts/elf/elf-x86-x86.c \
+	third_party/externals/yasm/source/patched-yasm/modules/objfmts/elf/elf.c \
+	third_party/externals/yasm/source/patched-yasm/modules/objfmts/macho/macho-objfmt.c \
+	third_party/externals/yasm/source/patched-yasm/modules/objfmts/rdf/rdf-objfmt.c \
+	third_party/externals/yasm/source/patched-yasm/modules/objfmts/xdf/xdf-objfmt.c \
+	third_party/externals/yasm/source/patched-yasm/modules/parsers/gas/gas-parse.c \
+	third_party/externals/yasm/source/patched-yasm/modules/parsers/gas/gas-parse-intel.c \
+	third_party/externals/yasm/source/patched-yasm/modules/parsers/gas/gas-parser.c \
+	third_party/externals/yasm/source/patched-yasm/modules/parsers/nasm/nasm-parse.c \
+	third_party/externals/yasm/source/patched-yasm/modules/parsers/nasm/nasm-parser.c \
+	third_party/externals/yasm/source/patched-yasm/modules/preprocs/cpp/cpp-preproc.c \
+	third_party/externals/yasm/source/patched-yasm/modules/preprocs/nasm/nasm-eval.c \
+	third_party/externals/yasm/source/patched-yasm/modules/preprocs/nasm/nasm-pp.c \
+	third_party/externals/yasm/source/patched-yasm/modules/preprocs/nasm/nasm-preproc.c \
+	third_party/externals/yasm/source/patched-yasm/modules/preprocs/nasm/nasmlib.c \
+	third_party/externals/yasm/source/patched-yasm/modules/preprocs/raw/raw-preproc.c \
+	third_party/externals/yasm/source/patched-yasm/modules/parsers/gas/gas-token.re \
+	third_party/externals/yasm/source/patched-yasm/modules/parsers/nasm/nasm-token.re \
+	skia/<(SHARED_INTERMEDIATE_DIR)/third_party/yasm/x86insn_nasm.gperf \
+	skia/<(SHARED_INTERMEDIATE_DIR)/third_party/yasm/x86insn_gas.gperf \
+	skia/<(SHARED_INTERMEDIATE_DIR)/third_party/yasm/x86cpu.c \
+	skia/<(SHARED_INTERMEDIATE_DIR)/third_party/yasm/x86regtmod.c \
+	third_party/yasm/config/android/Makefile \
+	third_party/externals/yasm/source/patched-yasm/tools/genmacro/genmacro.c \
+	third_party/externals/yasm/source/patched-yasm/libyasm/genmodule.c \
+	third_party/externals/yasm/source/patched-yasm/tools/genperf/genperf.c \
+	third_party/externals/yasm/source/patched-yasm/tools/genperf/perfect.c \
+	third_party/externals/yasm/source/patched-yasm/libyasm/phash.c \
+	third_party/externals/yasm/source/patched-yasm/libyasm/xmalloc.c \
+	third_party/externals/yasm/source/patched-yasm/libyasm/xstrdup.c \
+	third_party/externals/yasm/source/patched-yasm/modules/arch/x86/x86cpu.gperf \
+	third_party/externals/yasm/source/patched-yasm/modules/arch/x86/x86regtmod.gperf \
+	third_party/externals/yasm/source/patched-yasm/modules/preprocs/nasm/genversion.c \
+	third_party/externals/yasm/source/patched-yasm/genstring.c \
+	third_party/externals/yasm/source/patched-yasm/tools/re2c/main.c \
+	third_party/externals/yasm/source/patched-yasm/tools/re2c/code.c \
+	third_party/externals/yasm/source/patched-yasm/tools/re2c/dfa.c \
+	third_party/externals/yasm/source/patched-yasm/tools/re2c/parser.c \
+	third_party/externals/yasm/source/patched-yasm/tools/re2c/actions.c \
+	third_party/externals/yasm/source/patched-yasm/tools/re2c/scanner.c \
+	third_party/externals/yasm/source/patched-yasm/tools/re2c/mbo_getopt.c \
+	third_party/externals/yasm/source/patched-yasm/tools/re2c/substr.c \
+	third_party/externals/yasm/source/patched-yasm/tools/re2c/translate.c \
 	src/opts/SkBitmapProcState_opts_SSSE3.cpp \
 	src/opts/SkBlurImage_opts_SSE4.cpp \
 	src/opts/SkBlitRow_opts_SSE4.cpp
+
+LOCAL_C_INCLUDES_x86_64 += \
+	$(LOCAL_PATH)/third_party/yasm/config/android \
+	$(LOCAL_PATH)/third_party/externals/yasm/source/patched-yasm \
+	$(LOCAL_PATH)/skia/<(SHARED_INTERMEDIATE_DIR)/third_party/yasm \
+	$(LOCAL_PATH)/skia/<(INTERMEDIATE_DIR)/third_party/yasm
+
+LOCAL_CFLAGS_x86_64 += \
+	-DHAVE_CONFIG_H
 
 LOCAL_CFLAGS_mips += \
 	-EL
@@ -754,7 +1064,9 @@ LOCAL_SRC_FILES_arm64 += \
 	src/opts/SkTextureCompression_opts_none.cpp \
 	src/opts/SkUtils_opts_none.cpp \
 	src/opts/SkXfermode_opts_arm.cpp \
-	src/opts/SkXfermode_opts_arm_neon.cpp
+	src/opts/SkXfermode_opts_arm_neon.cpp \
+	third_party/externals/libjpeg-turbo/simd/jsimd_arm64.c \
+	third_party/externals/libjpeg-turbo/simd/jsimd_arm64_neon.S
 
 include $(BUILD_SHARED_LIBRARY)
 
