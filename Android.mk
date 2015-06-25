@@ -165,6 +165,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkMipMap.cpp \
 	src/core/SkMiniRecorder.cpp \
 	src/core/SkMultiPictureDraw.cpp \
+	src/core/SkNinePatchIter.cpp \
 	src/core/SkPackBits.cpp \
 	src/core/SkPaint.cpp \
 	src/core/SkPaintPriv.cpp \
