@@ -182,6 +182,7 @@ LOCAL_SRC_FILES := \
 	../gm/convexpolyclip.cpp \
 	../gm/convexpolyeffect.cpp \
 	../gm/copyTo4444.cpp \
+	../gm/cropdisp.cpp \
 	../gm/cubicpaths.cpp \
 	../gm/dashcubics.cpp \
 	../gm/dashing.cpp \
