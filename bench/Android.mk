@@ -258,7 +258,6 @@ LOCAL_SRC_FILES := \
 	../gm/megalooper.cpp \
 	../gm/mipmap.cpp \
 	../gm/mixedtextblobs.cpp \
-	../gm/mixedxfermodes.cpp \
 	../gm/modecolorfilters.cpp \
 	../gm/morphology.cpp \
 	../gm/multipicturedraw.cpp \
