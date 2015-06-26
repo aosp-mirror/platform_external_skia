@@ -54,6 +54,7 @@ LOCAL_SRC_FILES := \
 	FSRectBench.cpp \
 	FontCacheBench.cpp \
 	FontScalerBench.cpp \
+	GLInstancedArraysBench.cpp \
 	GMBench.cpp \
 	GameBench.cpp \
 	GeometryBench.cpp \
