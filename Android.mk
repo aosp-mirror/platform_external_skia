@@ -147,7 +147,6 @@ LOCAL_SRC_FILES := \
 	src/core/SkGlyphCache.cpp \
 	src/core/SkGraphics.cpp \
 	src/core/SkHalf.cpp \
-	src/core/SkInstCnt.cpp \
 	src/core/SkImageFilter.cpp \
 	src/core/SkImageInfo.cpp \
 	src/core/SkImageGenerator.cpp \
