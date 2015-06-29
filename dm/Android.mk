@@ -238,6 +238,7 @@ LOCAL_SRC_FILES := \
 	../tests/SkImageTest.cpp \
 	../tests/SkNxTest.cpp \
 	../tests/SkResourceCacheTest.cpp \
+	../tests/SkSharedMutexTest.cpp \
 	../tests/SmallAllocatorTest.cpp \
 	../tests/SortTest.cpp \
 	../tests/SrcOverTest.cpp \
