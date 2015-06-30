@@ -539,6 +539,8 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/GrGLInterface.cpp \
 	src/gpu/gl/GrGLNameAllocator.cpp \
 	src/gpu/gl/GrGLNoOpInterface.cpp \
+	src/gpu/gl/GrGLPathProgram.cpp \
+	src/gpu/gl/GrGLPathProgramDataManager.cpp \
 	src/gpu/gl/GrGLPath.cpp \
 	src/gpu/gl/GrGLPathProcessor.cpp \
 	src/gpu/gl/GrGLPathRange.cpp \
@@ -554,6 +556,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/GrGLVertexArray.cpp \
 	src/gpu/gl/GrGLVertexBuffer.cpp \
 	src/gpu/gl/GrGLXferProcessor.cpp \
+	src/gpu/gl/builders/GrGLPathProgramBuilder.cpp \
 	src/gpu/gl/builders/GrGLProgramBuilder.cpp \
 	src/gpu/gl/builders/GrGLShaderBuilder.cpp \
 	src/gpu/gl/builders/GrGLShaderStringBuilder.cpp \
