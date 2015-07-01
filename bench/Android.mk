@@ -397,7 +397,6 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../src/gpu \
 	$(LOCAL_PATH)/../src/fonts \
 	$(LOCAL_PATH)/../tools \
-	$(LOCAL_PATH)/../include/private \
 	$(LOCAL_PATH)/subset \
 	$(LOCAL_PATH)/../src/effects \
 	$(LOCAL_PATH)/../gm \
