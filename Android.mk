@@ -623,7 +623,6 @@ LOCAL_C_INCLUDES := \
 	external/giflib \
 	external/webp/include \
 	$(LOCAL_PATH)/include/ports \
-	$(LOCAL_PATH)/include/private \
 	$(LOCAL_PATH)/include/utils \
 	$(LOCAL_PATH)/include/images \
 	$(LOCAL_PATH)/src/sfnt \
