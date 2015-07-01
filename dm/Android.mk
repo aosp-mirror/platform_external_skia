@@ -550,6 +550,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../src/utils \
 	$(LOCAL_PATH)/../include/gpu \
 	$(LOCAL_PATH)/../src/core \
+	$(LOCAL_PATH)/../include/private \
 	$(LOCAL_PATH)/../include/svg \
 	$(LOCAL_PATH)/../include/xml \
 	$(LOCAL_PATH)/../src/fonts \
