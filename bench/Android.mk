@@ -50,6 +50,7 @@ LOCAL_SRC_FILES := \
 	DecodingBench.cpp \
 	DeferredSurfaceCopyBench.cpp \
 	DisplacementBench.cpp \
+	DrawBitmapAABench.cpp \
 	ETCBitmapBench.cpp \
 	FSRectBench.cpp \
 	FontCacheBench.cpp \
