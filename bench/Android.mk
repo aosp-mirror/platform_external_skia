@@ -196,6 +196,7 @@ LOCAL_SRC_FILES := \
 	../gm/displacement.cpp \
 	../gm/distantclip.cpp \
 	../gm/downsamplebitmap.cpp \
+	../gm/drawable.cpp \
 	../gm/drawatlas.cpp \
 	../gm/drawfilter.cpp \
 	../gm/drawlooper.cpp \
