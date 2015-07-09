@@ -472,6 +472,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrPrimitiveProcessor.cpp \
 	src/gpu/GrProgramElement.cpp \
 	src/gpu/GrProcessor.cpp \
+	src/gpu/GrProcessorDataManager.cpp \
 	src/gpu/GrProcOptInfo.cpp \
 	src/gpu/GrGpuResourceRef.cpp \
 	src/gpu/GrRecordReplaceDraw.cpp \
@@ -483,7 +484,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrReorderCommandBuilder.cpp \
 	src/gpu/GrResourceCache.cpp \
 	src/gpu/GrResourceProvider.cpp \
-	src/gpu/GrShaderDataManager.cpp \
 	src/gpu/GrStencil.cpp \
 	src/gpu/GrStencilAndCoverPathRenderer.cpp \
 	src/gpu/GrStencilAndCoverTextContext.cpp \
