@@ -152,7 +152,6 @@ LOCAL_SRC_FILES := \
 	../tests/GrPorterDuffTest.cpp \
 	../tests/GrRedBlackTreeTest.cpp \
 	../tests/GrSurfaceTest.cpp \
-	../tests/GrTBSearchTest.cpp \
 	../tests/GrTRecorderTest.cpp \
 	../tests/GrTextureMipMapInvalidationTest.cpp \
 	../tests/GradientTest.cpp \
