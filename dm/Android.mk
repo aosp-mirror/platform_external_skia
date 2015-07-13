@@ -302,6 +302,7 @@ LOCAL_SRC_FILES := \
 	../gm/blurroundrect.cpp \
 	../gm/blurs.cpp \
 	../gm/bmpfilterqualityrepeat.cpp \
+	../gm/buggy_blend_modes.cpp \
 	../gm/cgm.c \
 	../gm/cgms.cpp \
 	../gm/circles.cpp \
