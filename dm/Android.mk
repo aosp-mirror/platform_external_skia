@@ -203,6 +203,7 @@ LOCAL_SRC_FILES := \
 	../tests/PictureTest.cpp \
 	../tests/PipeTest.cpp \
 	../tests/PixelRefTest.cpp \
+	../tests/Point3Test.cpp \
 	../tests/PointTest.cpp \
 	../tests/PremulAlphaRoundTripTest.cpp \
 	../tests/QuickRejectTest.cpp \
