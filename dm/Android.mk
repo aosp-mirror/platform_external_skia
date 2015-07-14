@@ -148,9 +148,7 @@ LOCAL_SRC_FILES := \
 	../tests/GrDrawTargetTest.cpp \
 	../tests/GrGLSLPrettyPrintTest.cpp \
 	../tests/GrMemoryPoolTest.cpp \
-	../tests/GrOrderedSetTest.cpp \
 	../tests/GrPorterDuffTest.cpp \
-	../tests/GrRedBlackTreeTest.cpp \
 	../tests/GrSurfaceTest.cpp \
 	../tests/GrTRecorderTest.cpp \
 	../tests/GrTextureMipMapInvalidationTest.cpp \

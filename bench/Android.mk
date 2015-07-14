@@ -63,7 +63,6 @@ LOCAL_SRC_FILES := \
 	GameBench.cpp \
 	GeometryBench.cpp \
 	GrMemoryPoolBench.cpp \
-	GrOrderedSetBench.cpp \
 	GrResourceCacheBench.cpp \
 	GradientBench.cpp \
 	HairlinePathBench.cpp \
