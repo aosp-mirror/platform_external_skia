@@ -567,11 +567,11 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../src/codec \
 	$(LOCAL_PATH)/../src/image \
 	$(LOCAL_PATH)/../src/pdf \
+	$(LOCAL_PATH)/../src/ports \
 	$(LOCAL_PATH)/../experimental/PdfViewer \
 	$(LOCAL_PATH)/../experimental/PdfViewer/src \
 	$(LOCAL_PATH)/../../../frameworks/base/libs/hwui \
 	$(LOCAL_PATH)/../../../frameworks/native/include \
-	$(LOCAL_PATH)/../src/ports \
 	$(LOCAL_PATH)/../third_party/etc1 \
 	$(LOCAL_PATH)/../tools/timer \
 	$(LOCAL_PATH)/../experimental \

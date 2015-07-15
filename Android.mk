@@ -375,9 +375,10 @@ LOCAL_SRC_FILES := \
 	src/ports/SkTLS_pthread.cpp \
 	src/ports/SkFontHost_FreeType.cpp \
 	src/ports/SkFontHost_FreeType_common.cpp \
-	src/ports/SkDebug_android.cpp \
 	src/ports/SkFontMgr_android.cpp \
 	src/ports/SkFontMgr_android_parser.cpp \
+	src/ports/SkFontMgr_custom.cpp \
+	src/ports/SkDebug_android.cpp \
 	src/sfnt/SkOTTable_name.cpp \
 	src/sfnt/SkOTUtils.cpp \
 	src/utils/SkBase64.cpp \
