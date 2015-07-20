@@ -703,7 +703,7 @@ LOCAL_SRC_FILES_x86 += \
 	src/opts/SkMorphology_opts_SSE2.cpp \
 	src/opts/SkTextureCompression_opts_none.cpp \
 	src/opts/SkUtils_opts_SSE2.cpp \
-	src/opts/SkXfermode_opts_SSE2.cpp \
+	src/opts/SkXfermode_opts_none.cpp \
 	src/opts/opts_check_x86.cpp \
 	src/opts/SkBitmapProcState_opts_SSSE3.cpp \
 	src/opts/SkBlurImage_opts_SSE4.cpp \
@@ -717,7 +717,7 @@ LOCAL_SRC_FILES_x86_64 += \
 	src/opts/SkMorphology_opts_SSE2.cpp \
 	src/opts/SkTextureCompression_opts_none.cpp \
 	src/opts/SkUtils_opts_SSE2.cpp \
-	src/opts/SkXfermode_opts_SSE2.cpp \
+	src/opts/SkXfermode_opts_none.cpp \
 	src/opts/opts_check_x86.cpp \
 	src/opts/SkBitmapProcState_opts_SSSE3.cpp \
 	src/opts/SkBlurImage_opts_SSE4.cpp \
