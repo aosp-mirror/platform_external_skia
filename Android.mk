@@ -642,14 +642,12 @@ LOCAL_C_INCLUDES := \
 	external/freetype/include \
 	$(LOCAL_PATH)/include/utils/win \
 	$(LOCAL_PATH)/src/ports \
-	$(LOCAL_PATH)/third_party/externals/libjpeg-turbo \
 	$(LOCAL_PATH)/src/pdf \
 	external/sfntly/cpp/src \
 	external/zlib
 
 LOCAL_EXPORT_C_INCLUDE_DIRS := \
 	$(LOCAL_PATH)/include/codec \
-	$(LOCAL_PATH)/third_party/externals/libjpeg-turbo \
 	$(LOCAL_PATH)/include/c \
 	$(LOCAL_PATH)/include/config \
 	$(LOCAL_PATH)/include/core \
