@@ -320,8 +320,8 @@ void shadeSpan_radial_clamp2(SkScalar sfx, SkScalar sdx, SkScalar sfy, SkScalar 
 
         for (int i = 0; i < (count >> 2); ++i) {
             Sk4f dist = Sk4f::Min(fast_sqrt(R), max);
-            R += dR;
-            dR += ddR;
+            R = R + dR;
+            dR = dR + ddR;
 
             int fi[4];
             dist.castTrunc().store(fi);
@@ -440,12 +440,7 @@ public:
     GrGLRadialGradient(const GrProcessor&) {}
     virtual ~GrGLRadialGradient() { }
 
-    virtual void emitCode(GrGLFPBuilder*,
-                          const GrFragmentProcessor&,
-                          const char* outputColor,
-                          const char* inputColor,
-                          const TransformedCoordsArray&,
-                          const TextureSamplerArray&) override;
+    virtual void emitCode(EmitArgs&) override;
 
     static void GenKey(const GrProcessor& processor, const GrGLSLCaps&, GrProcessorKeyBuilder* b) {
         b->add32(GenBaseGradientKey(processor));
@@ -462,10 +457,11 @@ private:
 class GrRadialGradient : public GrGradientEffect {
 public:
     static GrFragmentProcessor* Create(GrContext* ctx,
+                                       GrProcessorDataManager* procDataManager,
                                        const SkRadialGradient& shader,
                                        const SkMatrix& matrix,
                                        SkShader::TileMode tm) {
-        return SkNEW_ARGS(GrRadialGradient, (ctx, shader, matrix, tm));
+        return SkNEW_ARGS(GrRadialGradient, (ctx, procDataManager, shader, matrix, tm));
     }
 
     virtual ~GrRadialGradient() { }
@@ -483,10 +479,11 @@ public:
 
 private:
     GrRadialGradient(GrContext* ctx,
+                     GrProcessorDataManager* procDataManager,
                      const SkRadialGradient& shader,
                      const SkMatrix& matrix,
                      SkShader::TileMode tm)
-        : INHERITED(ctx, shader, matrix, tm) {
+        : INHERITED(ctx, procDataManager, shader, matrix, tm) {
         this->initClassID<GrRadialGradient>();
     }
 
@@ -499,44 +496,37 @@ private:
 
 GR_DEFINE_FRAGMENT_PROCESSOR_TEST(GrRadialGradient);
 
-GrFragmentProcessor* GrRadialGradient::TestCreate(SkRandom* random,
-                                                  GrContext* context,
-                                                  const GrDrawTargetCaps&,
-                                                  GrTexture**) {
-    SkPoint center = {random->nextUScalar1(), random->nextUScalar1()};
-    SkScalar radius = random->nextUScalar1();
+GrFragmentProcessor* GrRadialGradient::TestCreate(GrProcessorTestData* d) {
+    SkPoint center = {d->fRandom->nextUScalar1(), d->fRandom->nextUScalar1()};
+    SkScalar radius = d->fRandom->nextUScalar1();
 
     SkColor colors[kMaxRandomGradientColors];
     SkScalar stopsArray[kMaxRandomGradientColors];
     SkScalar* stops = stopsArray;
     SkShader::TileMode tm;
-    int colorCount = RandomGradientParams(random, colors, &stops, &tm);
+    int colorCount = RandomGradientParams(d->fRandom, colors, &stops, &tm);
     SkAutoTUnref<SkShader> shader(SkGradientShader::CreateRadial(center, radius,
                                                                  colors, stops, colorCount,
                                                                  tm));
     SkPaint paint;
     GrColor paintColor;
     GrFragmentProcessor* fp;
-    SkAssertResult(shader->asFragmentProcessor(context, paint,
-                                               GrTest::TestMatrix(random), NULL,
-                                               &paintColor, &fp));
+    SkAssertResult(shader->asFragmentProcessor(d->fContext, paint,
+                                               GrTest::TestMatrix(d->fRandom), NULL,
+                                               &paintColor, d->fProcDataManager, &fp));
     return fp;
 }
 
 /////////////////////////////////////////////////////////////////////
 
-void GrGLRadialGradient::emitCode(GrGLFPBuilder* builder,
-                                  const GrFragmentProcessor& fp,
-                                  const char* outputColor,
-                                  const char* inputColor,
-                                  const TransformedCoordsArray& coords,
-                                  const TextureSamplerArray& samplers) {
-    const GrRadialGradient& ge = fp.cast<GrRadialGradient>();
-    this->emitUniforms(builder, ge);
+void GrGLRadialGradient::emitCode(EmitArgs& args) {
+    const GrRadialGradient& ge = args.fFp.cast<GrRadialGradient>();
+    this->emitUniforms(args.fBuilder, ge);
     SkString t("length(");
-    t.append(builder->getFragmentShaderBuilder()->ensureFSCoords2D(coords, 0));
+    t.append(args.fBuilder->getFragmentShaderBuilder()->ensureFSCoords2D(args.fCoords, 0));
     t.append(")");
-    this->emitColor(builder, ge, t.c_str(), outputColor, inputColor, samplers);
+    this->emitColor(args.fBuilder, ge, t.c_str(), args.fOutputColor, args.fInputColor,
+                    args.fSamplers);
 }
 
 /////////////////////////////////////////////////////////////////////
@@ -544,6 +534,7 @@ void GrGLRadialGradient::emitCode(GrGLFPBuilder* builder,
 bool SkRadialGradient::asFragmentProcessor(GrContext* context, const SkPaint& paint,
                                            const SkMatrix& viewM,
                                            const SkMatrix* localMatrix, GrColor* paintColor,
+                                           GrProcessorDataManager* procDataManager,
                                            GrFragmentProcessor** fp) const {
     SkASSERT(context);
 
@@ -561,7 +552,7 @@ bool SkRadialGradient::asFragmentProcessor(GrContext* context, const SkPaint& pa
     matrix.postConcat(fPtsToUnit);
 
     *paintColor = SkColor2GrColorJustAlpha(paint.getColor());
-    *fp = GrRadialGradient::Create(context, *this, matrix, fTileMode);
+    *fp = GrRadialGradient::Create(context, procDataManager, *this, matrix, fTileMode);
 
     return true;
 }
@@ -569,7 +560,7 @@ bool SkRadialGradient::asFragmentProcessor(GrContext* context, const SkPaint& pa
 #else
 
 bool SkRadialGradient::asFragmentProcessor(GrContext*, const SkPaint&, const SkMatrix&,
-                                           const SkMatrix*, GrColor*,
+                                           const SkMatrix*, GrColor*, GrProcessorDataManager*,
                                            GrFragmentProcessor**) const {
     SkDEBUGFAIL("Should not call in GPU-less build");
     return false;

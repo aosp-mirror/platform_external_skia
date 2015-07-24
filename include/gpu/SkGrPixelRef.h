@@ -20,7 +20,6 @@
  */
 class SK_API SkROLockPixelsPixelRef : public SkPixelRef {
 public:
-    SK_DECLARE_INST_COUNT(SkROLockPixelsPixelRef)
     SkROLockPixelsPixelRef(const SkImageInfo&);
     virtual ~SkROLockPixelsPixelRef();
 
@@ -39,7 +38,6 @@ private:
  */
 class SK_API SkGrPixelRef : public SkROLockPixelsPixelRef {
 public:
-    SK_DECLARE_INST_COUNT(SkGrPixelRef)
     /**
      * Constructs a pixel ref around a GrSurface.
      */
@@ -52,8 +50,9 @@ public:
 protected:
     // overrides from SkPixelRef
     bool onReadPixels(SkBitmap* dst, const SkIRect* subset) override;
-    virtual SkPixelRef* deepCopy(SkColorType, SkColorProfileType,
-                                 const SkIRect* subset) override;
+    SkPixelRef* deepCopy(SkColorType, SkColorProfileType,
+                         const SkIRect* subset) override;
+    void onNotifyPixelsChanged() override;
 
 private:
     GrSurface*  fSurface;

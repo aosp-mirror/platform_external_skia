@@ -9,9 +9,9 @@
 #include "SkDWriteFontFileStream.h"
 #include "SkFontMgr.h"
 #include "SkHRESULT.h"
+#include "SkMutex.h"
 #include "SkStream.h"
 #include "SkTScopedComPtr.h"
-#include "SkThread.h"
 #include "SkTypeface.h"
 #include "SkTypefaceCache.h"
 #include "SkTypeface_win_dw.h"
@@ -51,7 +51,7 @@ public:
     SkAutoTDelete<SkStreamAsset> fStream;
 
 private:
-    StreamFontFileLoader(SkStreamAsset* stream) : fRefCount(1), fStream(stream) { }
+    StreamFontFileLoader(SkStreamAsset* stream) : fStream(stream), fRefCount(1) { }
     virtual ~StreamFontFileLoader() { }
 
     ULONG fRefCount;

@@ -42,7 +42,6 @@ void DWriteFontTypeface::onGetFontDescriptor(SkFontDescriptor* desc,
     sk_get_locale_string(familyNames.get(), NULL/*fMgr->fLocaleName.get()*/, &utf8FamilyName);
 
     desc->setFamilyName(utf8FamilyName.c_str());
-    desc->setFontIndex(fDWriteFontFace->GetIndex());
     *isLocalStream = SkToBool(fDWriteFontFileLoader.get());
 }
 
@@ -287,15 +286,17 @@ using namespace skia_advanced_typeface_metrics_utils;
 static void populate_glyph_to_unicode(IDWriteFontFace* fontFace,
                                       const unsigned glyphCount,
                                       SkTDArray<SkUnichar>* glyphToUnicode) {
-    HRESULT hr = S_OK;
-
     //Do this like free type instead
     SkAutoTMalloc<SkUnichar> glyphToUni(glyphCount);
     int maxGlyph = -1;
     for (UINT32 c = 0; c < 0x10FFFF; ++c) {
-        UINT16 glyph;
-        hr = fontFace->GetGlyphIndices(&c, 1, &glyph);
-        SkASSERT(glyph < glyphCount);
+        UINT16 glyph = 0;
+        HRVM(fontFace->GetGlyphIndices(&c, 1, &glyph),
+             "Failed to get glyph index.");
+        // Intermittent DW bug on Windows 10. See crbug.com/470146.
+        if (glyph >= glyphCount) {
+          return;
+        }
         if (0 < glyph) {
             maxGlyph = SkTMax(static_cast<int>(glyph), maxGlyph);
             glyphToUni[glyph] = c;
@@ -338,8 +339,6 @@ SkAdvancedTypefaceMetrics* DWriteFontTypeface::onGetAdvancedTypefaceMetrics(
     info = new SkAdvancedTypefaceMetrics;
     info->fEmSize = dwfm.designUnitsPerEm;
     info->fLastGlyphID = SkToU16(glyphCount - 1);
-    info->fStyle = 0;
-    info->fFlags = SkAdvancedTypefaceMetrics::kEmpty_FontFlag;
 
     // SkAdvancedTypefaceMetrics::fFontName is in theory supposed to be
     // the PostScript name of the font. However, due to the way it is currently
@@ -364,13 +363,9 @@ SkAdvancedTypefaceMetrics* DWriteFontTypeface::onGetAdvancedTypefaceMetrics(
         fontType == DWRITE_FONT_FACE_TYPE_TRUETYPE_COLLECTION) {
         info->fType = SkAdvancedTypefaceMetrics::kTrueType_Font;
     } else {
-        info->fType = SkAdvancedTypefaceMetrics::kOther_Font;
-        info->fItalicAngle = 0;
         info->fAscent = dwfm.ascent;
         info->fDescent = dwfm.descent;
-        info->fStemV = 0;
         info->fCapHeight = dwfm.capHeight;
-        info->fBBox = SkIRect::MakeEmpty();
         return info;
     }
 
@@ -379,12 +374,9 @@ SkAdvancedTypefaceMetrics* DWriteFontTypeface::onGetAdvancedTypefaceMetrics(
     AutoTDWriteTable<SkOTTableHorizontalHeader> hheaTable(fDWriteFontFace.get());
     AutoTDWriteTable<SkOTTableOS2> os2Table(fDWriteFontFace.get());
     if (!headTable.fExists || !postTable.fExists || !hheaTable.fExists || !os2Table.fExists) {
-        info->fItalicAngle = 0;
         info->fAscent = dwfm.ascent;
         info->fDescent = dwfm.descent;
-        info->fStemV = 0;
         info->fCapHeight = dwfm.capHeight;
-        info->fBBox = SkIRect::MakeEmpty();
         return info;
     }
 

@@ -25,19 +25,19 @@ SkDrawCommand::~SkDrawCommand() {
 
 const char* SkDrawCommand::GetCommandString(OpType type) {
     switch (type) {
-        case kBeginCommentGroup_OpType: return "BeginCommentGroup";
         case kBeginDrawPicture_OpType: return "BeginDrawPicture";
         case kClipPath_OpType: return "ClipPath";
         case kClipRegion_OpType: return "ClipRegion";
         case kClipRect_OpType: return "ClipRect";
         case kClipRRect_OpType: return "ClipRRect";
-        case kComment_OpType: return "Comment";
         case kConcat_OpType: return "Concat";
         case kDrawBitmap_OpType: return "DrawBitmap";
         case kDrawBitmapNine_OpType: return "DrawBitmapNine";
         case kDrawBitmapRect_OpType: return "DrawBitmapRect";
         case kDrawClear_OpType: return "DrawClear";
         case kDrawDRRect_OpType: return "DrawDRRect";
+        case kDrawImage_OpType: return "DrawImage";
+        case kDrawImageRect_OpType: return "DrawImageRect";
         case kDrawOval_OpType: return "DrawOval";
         case kDrawPaint_OpType: return "DrawPaint";
         case kDrawPatch_OpType: return "DrawPatch";
@@ -52,7 +52,6 @@ const char* SkDrawCommand::GetCommandString(OpType type) {
         case kDrawTextBlob_OpType: return "DrawTextBlob";
         case kDrawTextOnPath_OpType: return "DrawTextOnPath";
         case kDrawVertices_OpType: return "DrawVertices";
-        case kEndCommentGroup_OpType: return "EndCommentGroup";
         case kEndDrawPicture_OpType: return "EndDrawPicture";
         case kRestore_OpType: return "Restore";
         case kSave_OpType: return "Save";
@@ -132,7 +131,7 @@ void render_bitmap(SkCanvas* canvas, const SkBitmap& input, const SkRect* srcRec
                                   yScale * input.height());
 
     canvas->clear(0xFFFFFFFF);
-    canvas->drawBitmapRect(input, NULL, dst);
+    canvas->drawBitmapRect(input, dst);
 
     if (srcRect) {
         SkRect r = SkRect::MakeLTRB(srcRect->fLeft * xScale + SK_Scalar1,
@@ -323,7 +322,7 @@ bool SkDrawBitmapNineCommand::render(SkCanvas* canvas) const {
 
 SkDrawBitmapRectCommand::SkDrawBitmapRectCommand(const SkBitmap& bitmap, const SkRect* src,
                                                  const SkRect& dst, const SkPaint* paint,
-                                                 SkCanvas::DrawBitmapRectFlags flags)
+                                                 SkCanvas::SrcRectConstraint constraint)
     : INHERITED(kDrawBitmapRect_OpType) {
     fBitmap = bitmap;
     if (src) {
@@ -339,7 +338,7 @@ SkDrawBitmapRectCommand::SkDrawBitmapRectCommand(const SkBitmap& bitmap, const S
     } else {
         fPaintPtr = NULL;
     }
-    fFlags = flags;
+    fConstraint = constraint;
 
     fInfo.push(SkObjectParser::BitmapToString(bitmap));
     if (src) {
@@ -349,11 +348,11 @@ SkDrawBitmapRectCommand::SkDrawBitmapRectCommand(const SkBitmap& bitmap, const S
     if (paint) {
         fInfo.push(SkObjectParser::PaintToString(*paint));
     }
-    fInfo.push(SkObjectParser::IntToString(fFlags, "Flags: "));
+    fInfo.push(SkObjectParser::IntToString(fConstraint, "Constraint: "));
 }
 
 void SkDrawBitmapRectCommand::execute(SkCanvas* canvas) const {
-    canvas->drawBitmapRectToRect(fBitmap, this->srcRect(), fDst, fPaintPtr, fFlags);
+    canvas->drawBitmapRect(fBitmap, this->srcRect(), fDst, fPaintPtr, fConstraint);
 }
 
 bool SkDrawBitmapRectCommand::render(SkCanvas* canvas) const {
@@ -361,25 +360,62 @@ bool SkDrawBitmapRectCommand::render(SkCanvas* canvas) const {
     return true;
 }
 
-SkBeginCommentGroupCommand::SkBeginCommentGroupCommand(const char* description)
-    : INHERITED(kBeginCommentGroup_OpType)
-    , fDescription(description) {
-    SkString* temp = new SkString;
-    temp->appendf("Description: %s", description);
-    fInfo.push(temp);
+SkDrawImageCommand::SkDrawImageCommand(const SkImage* image, SkScalar left, SkScalar top,
+                                       const SkPaint* paint)
+    : INHERITED(kDrawImage_OpType)
+    , fImage(SkRef(image))
+    , fLeft(left)
+    , fTop(top) {
+
+    if (paint) {
+        fPaint.set(*paint);
+    }
 }
 
-SkCommentCommand::SkCommentCommand(const char* kywd, const char* value)
-    : INHERITED(kComment_OpType)
-    , fKywd(kywd)
-    , fValue(value) {
-    SkString* temp = new SkString;
-    temp->appendf("%s: %s", kywd, value);
-    fInfo.push(temp);
+void SkDrawImageCommand::execute(SkCanvas* canvas) const {
+    canvas->drawImage(fImage, fLeft, fTop, fPaint.getMaybeNull());
 }
 
-SkEndCommentGroupCommand::SkEndCommentGroupCommand()
-    : INHERITED(kEndCommentGroup_OpType) {
+bool SkDrawImageCommand::render(SkCanvas* canvas) const {
+    SkAutoCanvasRestore acr(canvas, true);
+    canvas->clear(0xFFFFFFFF);
+
+    xlate_and_scale_to_bounds(canvas, SkRect::MakeXYWH(fLeft, fTop,
+                                                       SkIntToScalar(fImage->width()),
+                                                       SkIntToScalar(fImage->height())));
+    this->execute(canvas);
+    return true;
+}
+
+SkDrawImageRectCommand::SkDrawImageRectCommand(const SkImage* image, const SkRect* src,
+                                               const SkRect& dst, const SkPaint* paint,
+                                               SkCanvas::SrcRectConstraint constraint)
+    : INHERITED(kDrawImageRect_OpType)
+    , fImage(SkRef(image))
+    , fDst(dst)
+    , fConstraint(constraint) {
+
+    if (src) {
+        fSrc.set(*src);
+    }
+
+    if (paint) {
+        fPaint.set(*paint);
+    }
+}
+
+void SkDrawImageRectCommand::execute(SkCanvas* canvas) const {
+    canvas->drawImageRect(fImage, fSrc.getMaybeNull(), fDst, fPaint.getMaybeNull(), fConstraint);
+}
+
+bool SkDrawImageRectCommand::render(SkCanvas* canvas) const {
+    SkAutoCanvasRestore acr(canvas, true);
+    canvas->clear(0xFFFFFFFF);
+
+    xlate_and_scale_to_bounds(canvas, fDst);
+
+    this->execute(canvas);
+    return true;
 }
 
 SkDrawOvalCommand::SkDrawOvalCommand(const SkRect& oval, const SkPaint& paint)

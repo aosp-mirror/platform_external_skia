@@ -172,7 +172,7 @@ GrDefaultPathRenderer::onGetStencilSupport(const GrDrawTarget*,
                                            const GrPipelineBuilder*,
                                            const SkPath& path,
                                            const GrStrokeInfo& stroke) const {
-    if (single_pass_path(path, stroke.getStrokeRec())) {
+    if (single_pass_path(path, stroke)) {
         return GrPathRenderer::kNoRestriction_StencilSupport;
     } else {
         return GrPathRenderer::kStencilOnly_StencilSupport;
@@ -237,23 +237,24 @@ public:
 
     void initBatchTracker(const GrPipelineInfo& init) override {
         // Handle any color overrides
-        if (init.fColorIgnored) {
+        if (!init.readsColor()) {
             fGeoData[0].fColor = GrColor_ILLEGAL;
-        } else if (GrColor_ILLEGAL != init.fOverrideColor) {
-            fGeoData[0].fColor = init.fOverrideColor;
         }
+        init.getOverrideColorIfSet(&fGeoData[0].fColor);
 
         // setup batch properties
-        fBatch.fColorIgnored = init.fColorIgnored;
+        fBatch.fColorIgnored = !init.readsColor();
         fBatch.fColor = fGeoData[0].fColor;
-        fBatch.fUsesLocalCoords = init.fUsesLocalCoords;
-        fBatch.fCoverageIgnored = init.fCoverageIgnored;
+        fBatch.fUsesLocalCoords = init.readsLocalCoords();
+        fBatch.fCoverageIgnored = !init.readsCoverage();
     }
 
     void generateGeometry(GrBatchTarget* batchTarget, const GrPipeline* pipeline) override {
         SkAutoTUnref<const GrGeometryProcessor> gp(
                 GrDefaultGeoProcFactory::Create(GrDefaultGeoProcFactory::kPosition_GPType,
                                                 this->color(),
+                                                this->usesLocalCoords(),
+                                                this->coverageIgnored(),
                                                 this->viewMatrix(),
                                                 SkMatrix::I(),
                                                 this->coverage()));
@@ -262,16 +263,6 @@ public:
         SkASSERT(vertexStride == sizeof(SkPoint));
 
         batchTarget->initDraw(gp, pipeline);
-
-        // TODO this is hacky, but the only way we have to initialize the GP is to use the
-        // GrPipelineInfo struct so we can generate the correct shader.  Once we have GrBatch
-        // everywhere we can remove this nastiness
-        GrPipelineInfo init;
-        init.fColorIgnored = fBatch.fColorIgnored;
-        init.fOverrideColor = GrColor_ILLEGAL;
-        init.fCoverageIgnored = fBatch.fCoverageIgnored;
-        init.fUsesLocalCoords = this->usesLocalCoords();
-        gp->initBatchTracker(batchTarget->currentBatchTracker(), init);
 
         int instanceCount = fGeoData.count();
 
@@ -393,6 +384,10 @@ private:
     }
 
     bool onCombineIfPossible(GrBatch* t) override {
+        if (!this->pipeline()->isEqual(*t->pipeline())) {
+            return false;
+        }
+
         DefaultPathBatch* that = t->cast<DefaultPathBatch>();
 
         if (this->color() != that->color()) {
@@ -518,6 +513,7 @@ private:
     bool usesLocalCoords() const { return fBatch.fUsesLocalCoords; }
     const SkMatrix& viewMatrix() const { return fBatch.fViewMatrix; }
     bool isHairline() const { return fBatch.fIsHairline; }
+    bool coverageIgnored() const { return fBatch.fCoverageIgnored; }
 
     struct BatchTracker {
         GrColor fColor;
@@ -547,12 +543,12 @@ bool GrDefaultPathRenderer::internalDrawPath(GrDrawTarget* target,
     if (IsStrokeHairlineOrEquivalent(*stroke, viewMatrix, &hairlineCoverage)) {
         newCoverage = SkScalarRoundToInt(hairlineCoverage * 0xff);
 
-        if (!stroke->getStrokeRec().isHairlineStyle()) {
-            stroke.writable()->getStrokeRecPtr()->setHairlineStyle();
+        if (!stroke->isHairlineStyle()) {
+            stroke.writable()->setHairlineStyle();
         }
     }
 
-    const bool isHairline = stroke->getStrokeRec().isHairlineStyle();
+    const bool isHairline = stroke->isHairlineStyle();
 
     // Save the current xp on the draw state so we can reset it if needed
     SkAutoTUnref<const GrXPFactory> backupXPFactory(SkRef(pipelineBuilder->getXPFactory()));
@@ -575,7 +571,7 @@ bool GrDefaultPathRenderer::internalDrawPath(GrDrawTarget* target,
         lastPassIsBounds = false;
         drawFace[0] = GrPipelineBuilder::kBoth_DrawFace;
     } else {
-        if (single_pass_path(path, stroke->getStrokeRec())) {
+        if (single_pass_path(path, *stroke)) {
             passCount = 1;
             if (stencilOnly) {
                 passes[0] = &gDirectToStencil;
@@ -686,7 +682,7 @@ bool GrDefaultPathRenderer::internalDrawPath(GrDrawTarget* target,
             }
             const SkMatrix& viewM = (reverse && viewMatrix.hasPerspective()) ? SkMatrix::I() :
                                                                                viewMatrix;
-            target->drawRect(pipelineBuilder, color, viewM, bounds, NULL, &localMatrix);
+            target->drawBWRect(*pipelineBuilder, color, viewM, bounds, NULL, &localMatrix);
         } else {
             if (passCount > 1) {
                 pipelineBuilder->setDisableColorXPFactory();
@@ -700,7 +696,7 @@ bool GrDefaultPathRenderer::internalDrawPath(GrDrawTarget* target,
             SkAutoTUnref<GrBatch> batch(DefaultPathBatch::Create(geometry, newCoverage, viewMatrix,
                                                                  isHairline, devBounds));
 
-            target->drawBatch(pipelineBuilder, batch);
+            target->drawBatch(*pipelineBuilder, batch);
         }
     }
     return true;

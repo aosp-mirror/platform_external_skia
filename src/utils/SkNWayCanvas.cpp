@@ -170,8 +170,7 @@ void SkNWayCanvas::onDrawRRect(const SkRRect& rrect, const SkPaint& paint) {
     }
 }
 
-void SkNWayCanvas::onDrawDRRect(const SkRRect& outer, const SkRRect& inner,
-                                const SkPaint& paint) {
+void SkNWayCanvas::onDrawDRRect(const SkRRect& outer, const SkRRect& inner, const SkPaint& paint) {
     Iter iter(fList);
     while (iter.next()) {
         iter->drawDRRect(outer, inner, paint);
@@ -194,10 +193,10 @@ void SkNWayCanvas::onDrawBitmap(const SkBitmap& bitmap, SkScalar x, SkScalar y,
 }
 
 void SkNWayCanvas::onDrawBitmapRect(const SkBitmap& bitmap, const SkRect* src, const SkRect& dst,
-                                    const SkPaint* paint, DrawBitmapRectFlags flags) {
+                                    const SkPaint* paint, SK_VIRTUAL_CONSTRAINT_TYPE constraint) {
     Iter iter(fList);
     while (iter.next()) {
-        iter->drawBitmapRectToRect(bitmap, src, dst, paint, flags);
+        iter->drawBitmapRect(bitmap, src, dst, paint, (SrcRectConstraint)constraint);
     }
 }
 
@@ -218,10 +217,10 @@ void SkNWayCanvas::onDrawImage(const SkImage* image, SkScalar left, SkScalar top
 }
 
 void SkNWayCanvas::onDrawImageRect(const SkImage* image, const SkRect* src, const SkRect& dst,
-                                   const SkPaint* paint) {
+                                   const SkPaint* paint SRC_RECT_CONSTRAINT_PARAM(constraint)) {
     Iter iter(fList);
     while (iter.next()) {
-        iter->drawImageRect(image, src, dst, paint);
+        iter->drawImageRect(image, src, dst, paint SRC_RECT_CONSTRAINT_ARG(constraint));
     }
 }
 
@@ -307,25 +306,4 @@ SkDrawFilter* SkNWayCanvas::setDrawFilter(SkDrawFilter* filter) {
         iter->setDrawFilter(filter);
     }
     return this->INHERITED::setDrawFilter(filter);
-}
-
-void SkNWayCanvas::beginCommentGroup(const char* description) {
-    Iter iter(fList);
-    while (iter.next()) {
-        iter->beginCommentGroup(description);
-    }
-}
-
-void SkNWayCanvas::addComment(const char* kywd, const char* value) {
-    Iter iter(fList);
-    while (iter.next()) {
-        iter->addComment(kywd, value);
-    }
-}
-
-void SkNWayCanvas::endCommentGroup() {
-    Iter iter(fList);
-    while (iter.next()) {
-        iter->endCommentGroup();
-    }
 }

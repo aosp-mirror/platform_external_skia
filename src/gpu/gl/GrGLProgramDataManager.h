@@ -9,7 +9,6 @@
 #define GrGLProgramDataManager_DEFINED
 
 #include "gl/GrGLShaderVar.h"
-#include "gl/GrGLSL.h"
 #include "GrAllocator.h"
 
 #include "SkTArray.h"
@@ -23,7 +22,7 @@ class GrGLProgramBuilder;
  * The resources are objects the program uses to communicate with the
  * application code.
  */
-class GrGLProgramDataManager : public SkRefCnt {
+class GrGLProgramDataManager : SkNoncopyable {
 public:
     // Opaque handle to a uniform
     class ShaderResourceHandle {
@@ -111,6 +110,7 @@ private:
     SkTArray<Uniform, true> fUniforms;
     GrGLGpu* fGpu;
 
-    typedef SkRefCnt INHERITED;
+    typedef SkNoncopyable INHERITED;
 };
+
 #endif

@@ -96,7 +96,7 @@ public:
     void drawBitmapRect(const SkDraw& draw, const SkBitmap& bitmap,
                         const SkRect* src, const SkRect& dst,
                         const SkPaint& paint,
-                        SkCanvas::DrawBitmapRectFlags flags) override;
+                        SK_VIRTUAL_CONSTRAINT_TYPE) override;
     void drawBitmap(const SkDraw&, const SkBitmap& bitmap,
                     const SkMatrix& matrix, const SkPaint&) override;
     void drawSprite(const SkDraw&, const SkBitmap& bitmap, int x, int y,
@@ -273,8 +273,7 @@ private:
     int addGraphicStateResource(SkPDFObject* gs);
     int addXObjectResource(SkPDFObject* xObject);
 
-    void updateFont(const SkPaint& paint, uint16_t glyphID,
-                    ContentEntry* contentEntry);
+    void updateFont(const SkPaint& paint, uint16_t glyphID, ContentEntry* contentEntry);
     int getFontResourceIndex(SkTypeface* typeface, uint16_t glyphID);
 
     void internalDrawPaint(const SkPaint& paint, ContentEntry* contentEntry);
@@ -293,17 +292,9 @@ private:
     bool handleInversePath(const SkDraw& d, const SkPath& origPath,
                            const SkPaint& paint, bool pathIsMutable,
                            const SkMatrix* prePathMatrix = NULL);
-    bool handleRectAnnotation(const SkRect& r, const SkMatrix& matrix,
-                              const SkPaint& paint);
     bool handlePointAnnotation(const SkPoint* points, size_t count,
-                               const SkMatrix& matrix, const SkPaint& paint);
+                               const SkMatrix& matrix, SkAnnotation* annot);
     void addAnnotation(SkPDFDict*);
-    void handleLinkToURL(SkData* urlData, const SkRect& r,
-                         const SkMatrix& matrix);
-    void handleLinkToNamedDest(SkData* nameData, const SkRect& r,
-                               const SkMatrix& matrix);
-    void defineNamedDestination(SkData* nameData, const SkPoint& point,
-                                const SkMatrix& matrix);
 
     typedef SkBaseDevice INHERITED;
 

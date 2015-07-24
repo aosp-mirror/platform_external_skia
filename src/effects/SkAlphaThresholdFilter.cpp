@@ -10,6 +10,9 @@
 #include "SkReadBuffer.h"
 #include "SkWriteBuffer.h"
 #include "SkRegion.h"
+#if SK_SUPPORT_GPU
+#include "GrDrawContext.h"
+#endif
 
 class SK_API SkAlphaThresholdFilterImpl : public SkImageFilter {
 public:
@@ -22,11 +25,11 @@ public:
 protected:
     void flatten(SkWriteBuffer&) const override;
 
-    virtual bool onFilterImage(Proxy*, const SkBitmap& src, const Context&,
-                               SkBitmap* result, SkIPoint* offset) const override;
+    bool onFilterImage(Proxy*, const SkBitmap& src, const Context&,
+                       SkBitmap* result, SkIPoint* offset) const override;
 #if SK_SUPPORT_GPU
-    virtual bool asFragmentProcessor(GrFragmentProcessor**, GrTexture*, const SkMatrix&,
-                                     const SkIRect& bounds) const override;
+    bool asFragmentProcessor(GrFragmentProcessor**, GrProcessorDataManager*, GrTexture*,
+                             const SkMatrix&, const SkIRect& bounds) const override;
 #endif
 
 private:
@@ -53,17 +56,19 @@ SkImageFilter* SkAlphaThresholdFilter::Create(const SkRegion& region,
 
 #include "SkGr.h"
 
-#include "gl/GrGLProcessor.h"
+#include "gl/GrGLFragmentProcessor.h"
 #include "gl/builders/GrGLProgramBuilder.h"
 
 class AlphaThresholdEffect : public GrFragmentProcessor {
 
 public:
-    static GrFragmentProcessor* Create(GrTexture* texture,
+    static GrFragmentProcessor* Create(GrProcessorDataManager* procDataManager,
+                                       GrTexture* texture,
                                        GrTexture* maskTexture,
                                        float innerThreshold,
                                        float outerThreshold) {
-        return SkNEW_ARGS(AlphaThresholdEffect, (texture,
+        return SkNEW_ARGS(AlphaThresholdEffect, (procDataManager,
+                                                 texture,
                                                  maskTexture,
                                                  innerThreshold,
                                                  outerThreshold));
@@ -81,7 +86,8 @@ public:
     GrGLFragmentProcessor* createGLInstance() const override;
 
 private:
-    AlphaThresholdEffect(GrTexture* texture,
+    AlphaThresholdEffect(GrProcessorDataManager*,
+                         GrTexture* texture,
                          GrTexture* maskTexture,
                          float innerThreshold,
                          float outerThreshold)
@@ -122,12 +128,7 @@ class GrGLAlphaThresholdEffect : public GrGLFragmentProcessor {
 public:
     GrGLAlphaThresholdEffect(const GrFragmentProcessor&) {}
 
-    virtual void emitCode(GrGLFPBuilder*,
-                          const GrFragmentProcessor&,
-                          const char* outputColor,
-                          const char* inputColor,
-                          const TransformedCoordsArray&,
-                          const TextureSamplerArray&) override;
+    virtual void emitCode(EmitArgs&) override;
 
     void setData(const GrGLProgramDataManager&, const GrProcessor&) override;
 
@@ -139,38 +140,33 @@ private:
     typedef GrGLFragmentProcessor INHERITED;
 };
 
-void GrGLAlphaThresholdEffect::emitCode(GrGLFPBuilder* builder,
-                                        const GrFragmentProcessor&,
-                                        const char* outputColor,
-                                        const char* inputColor,
-                                        const TransformedCoordsArray& coords,
-                                        const TextureSamplerArray& samplers) {
-    fInnerThresholdVar = builder->addUniform(
+void GrGLAlphaThresholdEffect::emitCode(EmitArgs& args) {
+    fInnerThresholdVar = args.fBuilder->addUniform(
         GrGLProgramBuilder::kFragment_Visibility,
         kFloat_GrSLType, kDefault_GrSLPrecision,
         "inner_threshold");
-    fOuterThresholdVar = builder->addUniform(
+    fOuterThresholdVar = args.fBuilder->addUniform(
         GrGLProgramBuilder::kFragment_Visibility,
         kFloat_GrSLType, kDefault_GrSLPrecision,
         "outer_threshold");
 
-    GrGLFragmentBuilder* fsBuilder = builder->getFragmentShaderBuilder();
-    SkString coords2D = fsBuilder->ensureFSCoords2D(coords, 0);
-    SkString maskCoords2D = fsBuilder->ensureFSCoords2D(coords, 1);
+    GrGLFragmentBuilder* fsBuilder = args.fBuilder->getFragmentShaderBuilder();
+    SkString coords2D = fsBuilder->ensureFSCoords2D(args.fCoords, 0);
+    SkString maskCoords2D = fsBuilder->ensureFSCoords2D(args.fCoords, 1);
 
     fsBuilder->codeAppendf("\t\tvec2 coord = %s;\n", coords2D.c_str());
     fsBuilder->codeAppendf("\t\tvec2 mask_coord = %s;\n", maskCoords2D.c_str());
     fsBuilder->codeAppend("\t\tvec4 input_color = ");
-    fsBuilder->appendTextureLookup(samplers[0], "coord");
+    fsBuilder->appendTextureLookup(args.fSamplers[0], "coord");
     fsBuilder->codeAppend(";\n");
     fsBuilder->codeAppend("\t\tvec4 mask_color = ");
-    fsBuilder->appendTextureLookup(samplers[1], "mask_coord");
+    fsBuilder->appendTextureLookup(args.fSamplers[1], "mask_coord");
     fsBuilder->codeAppend(";\n");
 
     fsBuilder->codeAppendf("\t\tfloat inner_thresh = %s;\n",
-                           builder->getUniformCStr(fInnerThresholdVar));
+                           args.fBuilder->getUniformCStr(fInnerThresholdVar));
     fsBuilder->codeAppendf("\t\tfloat outer_thresh = %s;\n",
-                           builder->getUniformCStr(fOuterThresholdVar));
+                           args.fBuilder->getUniformCStr(fOuterThresholdVar));
     fsBuilder->codeAppend("\t\tfloat mask = mask_color.a;\n");
 
     fsBuilder->codeAppend("vec4 color = input_color;\n");
@@ -186,8 +182,8 @@ void GrGLAlphaThresholdEffect::emitCode(GrGLFPBuilder* builder,
                           "\t\t\tcolor.a = inner_thresh;\n"
                           "\t\t}\n");
 
-    fsBuilder->codeAppendf("%s = %s;\n", outputColor,
-                           (GrGLSLExpr4(inputColor) * GrGLSLExpr4("color")).c_str());
+    fsBuilder->codeAppendf("%s = %s;\n", args.fOutputColor,
+                           (GrGLSLExpr4(args.fInputColor) * GrGLSLExpr4("color")).c_str());
 }
 
 void GrGLAlphaThresholdEffect::setData(const GrGLProgramDataManager& pdman,
@@ -201,15 +197,13 @@ void GrGLAlphaThresholdEffect::setData(const GrGLProgramDataManager& pdman,
 
 GR_DEFINE_FRAGMENT_PROCESSOR_TEST(AlphaThresholdEffect);
 
-GrFragmentProcessor* AlphaThresholdEffect::TestCreate(SkRandom* random,
-                                           GrContext* context,
-                                           const GrDrawTargetCaps&,
-                                           GrTexture** textures) {
-    GrTexture* bmpTex = textures[GrProcessorUnitTest::kSkiaPMTextureIdx];
-    GrTexture* maskTex = textures[GrProcessorUnitTest::kAlphaTextureIdx];
-    float inner_thresh = random->nextUScalar1();
-    float outer_thresh = random->nextUScalar1();
-    return AlphaThresholdEffect::Create(bmpTex, maskTex, inner_thresh, outer_thresh);
+GrFragmentProcessor* AlphaThresholdEffect::TestCreate(GrProcessorTestData* d) {
+    GrTexture* bmpTex = d->fTextures[GrProcessorUnitTest::kSkiaPMTextureIdx];
+    GrTexture* maskTex = d->fTextures[GrProcessorUnitTest::kAlphaTextureIdx];
+    float innerThresh = d->fRandom->nextUScalar1();
+    float outerThresh = d->fRandom->nextUScalar1();
+    return AlphaThresholdEffect::Create(d->fProcDataManager, bmpTex, maskTex, innerThresh,
+                                        outerThresh);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -262,13 +256,14 @@ SkAlphaThresholdFilterImpl::SkAlphaThresholdFilterImpl(const SkRegion& region,
 
 #if SK_SUPPORT_GPU
 bool SkAlphaThresholdFilterImpl::asFragmentProcessor(GrFragmentProcessor** fp,
+                                                     GrProcessorDataManager* procDataManager,
                                                      GrTexture* texture,
                                                      const SkMatrix& in_matrix,
                                                      const SkIRect&) const {
     if (fp) {
         GrContext* context = texture->getContext();
         GrSurfaceDesc maskDesc;
-        if (context->isConfigRenderable(kAlpha_8_GrPixelConfig, false)) {
+        if (context->caps()->isConfigRenderable(kAlpha_8_GrPixelConfig, false)) {
             maskDesc.fConfig = kAlpha_8_GrPixelConfig;
         } else {
             maskDesc.fConfig = kRGBA_8888_GrPixelConfig;
@@ -284,21 +279,23 @@ bool SkAlphaThresholdFilterImpl::asFragmentProcessor(GrFragmentProcessor** fp,
             return false;
         }
 
-        {
+        GrDrawContext* drawContext = context->drawContext();
+        if (drawContext) {
             GrPaint grPaint;
             grPaint.setPorterDuffXPFactory(SkXfermode::kSrc_Mode);
             SkRegion::Iterator iter(fRegion);
-            context->clear(NULL, 0x0, true, maskTexture->asRenderTarget());
+            drawContext->clear(maskTexture->asRenderTarget(), NULL, 0x0, true);
 
             while (!iter.done()) {
                 SkRect rect = SkRect::Make(iter.rect());
-                context->drawRect(maskTexture->asRenderTarget(), GrClip::WideOpen(), grPaint,
-                                  in_matrix, rect);
+                drawContext->drawRect(maskTexture->asRenderTarget(), GrClip::WideOpen(), grPaint,
+                                      in_matrix, rect);
                 iter.next();
             }
         }
 
-        *fp = AlphaThresholdEffect::Create(texture,
+        *fp = AlphaThresholdEffect::Create(procDataManager,
+                                           texture,
                                            maskTexture,
                                            fInnerThreshold,
                                            fOuterThreshold);

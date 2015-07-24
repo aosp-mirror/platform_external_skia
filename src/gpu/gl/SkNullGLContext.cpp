@@ -19,7 +19,7 @@ static SkNullGLContext::ContextState* current_context();
 
 class BufferObj {
 public:
-    SK_DECLARE_INST_COUNT(BufferObj);
+    
 
     BufferObj(GrGLuint id) : fID(id), fDataPtr(NULL), fSize(0), fMapped(false) {}
     ~BufferObj() { SkDELETE_ARRAY(fDataPtr); }
@@ -51,7 +51,7 @@ private:
 // This class maintains a sparsely populated array of buffer pointers.
 class BufferManager {
 public:
-    SK_DECLARE_INST_COUNT(BufferManager);
+    
 
     BufferManager() : fFreeListHead(kFreeListEnd) {}
 
@@ -117,7 +117,7 @@ private:
  */
 class SkNullGLContext::ContextState : public SkRefCnt {
 public:
-    SK_DECLARE_INST_COUNT(ContextState);
+    
 
     BufferManager   fBufferManager;
     GrGLuint        fCurrArrayBuffer;
@@ -385,9 +385,11 @@ static GrGLInterface* create_null_interface(State* state) {
     functions->fDisable = noOpGLDisable;
     functions->fDisableVertexAttribArray = noOpGLDisableVertexAttribArray;
     functions->fDrawArrays = noOpGLDrawArrays;
+    functions->fDrawArraysInstanced = noOpGLDrawArraysInstanced;
     functions->fDrawBuffer = noOpGLDrawBuffer;
     functions->fDrawBuffers = noOpGLDrawBuffers;
     functions->fDrawElements = noOpGLDrawElements;
+    functions->fDrawElementsInstanced = noOpGLDrawElementsInstanced;
     functions->fEnable = noOpGLEnable;
     functions->fEnableVertexAttribArray = noOpGLEnableVertexAttribArray;
     functions->fEndQuery = noOpGLEndQuery;
@@ -467,6 +469,7 @@ static GrGLInterface* create_null_interface(State* state) {
     functions->fVertexAttrib3fv = noOpGLVertexAttrib3fv;
     functions->fVertexAttrib4fv = noOpGLVertexAttrib4fv;
     functions->fVertexAttribPointer = noOpGLVertexAttribPointer;
+    functions->fVertexAttribDivisor = noOpGLVertexAttribDivisor;
     functions->fViewport = nullGLViewport;
     functions->fBindFramebuffer = nullGLBindFramebuffer;
     functions->fBindRenderbuffer = nullGLBindRenderbuffer;
@@ -544,7 +547,7 @@ SkNullGLContext* SkNullGLContext::Create(GrGLStandard forcedGpuAPI) {
 SkNullGLContext::SkNullGLContext() {
     fState = SkNEW(ContextState);
     GrGLInterface* interface = create_null_interface(fState);
-    fGL.reset(interface);
+    this->init(interface);
 #if GR_GL_PER_GL_FUNC_CALLBACK
     interface->fCallback = set_current_context_from_interface;
     interface->fCallbackData = reinterpret_cast<GrGLInterfaceCallbackData>(fState);
@@ -552,8 +555,8 @@ SkNullGLContext::SkNullGLContext() {
 }
 
 SkNullGLContext::~SkNullGLContext() {
-    fGL.reset(NULL);
+    this->teardown();
     fState->unref();
 }
 
-void SkNullGLContext::makeCurrent() const { set_current_context(fState); }
+void SkNullGLContext::onPlatformMakeCurrent() const { set_current_context(fState); }

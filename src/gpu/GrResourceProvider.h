@@ -8,10 +8,17 @@
 #ifndef GrResourceProvider_DEFINED
 #define GrResourceProvider_DEFINED
 
+#include "GrIndexBuffer.h"
 #include "GrTextureProvider.h"
+#include "GrPathRange.h"
 
 class GrIndexBuffer;
+class GrPath;
+class GrStrokeInfo;
 class GrVertexBuffer;
+class SkDescriptor;
+class SkPath;
+class SkTypeface;
 
 /**
  * An extension of the texture provider for arbitrary resource types. This class is intended for
@@ -66,10 +73,21 @@ public:
         return this->createQuadIndexBuffer();
     }
 
+    /**
+     * Factories for GrPath and GrPathRange objects. It's an error to call these if path rendering
+     * is not supported.
+     */
+    GrPath* createPath(const SkPath&, const GrStrokeInfo&);
+    GrPathRange* createPathRange(GrPathRange::PathGenerator*, const GrStrokeInfo&);
+    GrPathRange* createGlyphs(const SkTypeface*, const SkDescriptor*, const GrStrokeInfo&);
+
 
     using GrTextureProvider::assignUniqueKeyToResource;
     using GrTextureProvider::findAndRefResourceByUniqueKey;
     using GrTextureProvider::abandon;
+
+    GrIndexBuffer* getIndexBuffer(size_t size, bool dynamic, bool calledDuringFlush);
+    GrVertexBuffer* getVertexBuffer(size_t size, bool dynamic, bool calledDuringFlush);
 
 private:
     const GrIndexBuffer* createInstancedIndexBuffer(const uint16_t* pattern,

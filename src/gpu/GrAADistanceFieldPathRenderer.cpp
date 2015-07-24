@@ -157,16 +157,15 @@ public:
 
     void initBatchTracker(const GrPipelineInfo& init) override {
         // Handle any color overrides
-        if (init.fColorIgnored) {
+        if (!init.readsColor()) {
             fBatch.fColor = GrColor_ILLEGAL;
-        } else if (GrColor_ILLEGAL != init.fOverrideColor) {
-            fBatch.fColor = init.fOverrideColor;
         }
+        init.getOverrideColorIfSet(&fBatch.fColor);
 
         // setup batch properties
-        fBatch.fColorIgnored = init.fColorIgnored;
-        fBatch.fUsesLocalCoords = init.fUsesLocalCoords;
-        fBatch.fCoverageIgnored = init.fCoverageIgnored;
+        fBatch.fColorIgnored = !init.readsColor();
+        fBatch.fUsesLocalCoords = init.readsLocalCoords();
+        fBatch.fCoverageIgnored = !init.readsCoverage();
     }
 
     struct FlushInfo {
@@ -197,9 +196,10 @@ public:
                                                    this->viewMatrix(),
                                                    atlas->getTexture(),
                                                    params,
-                                                   flags));
+                                                   flags,
+                                                   this->usesLocalCoords()));
 
-        this->initDraw(batchTarget, dfProcessor, pipeline);
+        batchTarget->initDraw(dfProcessor, pipeline);
 
         FlushInfo flushInfo;
 
@@ -353,14 +353,12 @@ private:
         SkIRect pathBounds = SkIRect::MakeWH(devPathBounds.width(),
                                              devPathBounds.height());
 
-        SkBitmap bmp;
-        const SkImageInfo bmImageInfo = SkImageInfo::MakeA8(pathBounds.fRight,
-                                                            pathBounds.fBottom);
-        if (!bmp.tryAllocPixels(bmImageInfo)) {
+        SkAutoPixmapStorage dst;
+        if (!dst.tryAlloc(SkImageInfo::MakeA8(pathBounds.width(),
+                                              pathBounds.height()))) {
             return false;
         }
-
-        sk_bzero(bmp.getPixels(), bmp.getSafeSize());
+        sk_bzero(dst.writable_addr(), dst.getSafeSize());
 
         // rasterize path
         SkPaint paint;
@@ -387,7 +385,7 @@ private:
         draw.fRC = &rasterClip;
         draw.fClip = &rasterClip.bwRgn();
         draw.fMatrix = &drawMatrix;
-        draw.fBitmap = &bmp;
+        draw.fDst = dst;
 
         draw.drawPathCoverage(path, paint);
 
@@ -399,13 +397,9 @@ private:
         SkAutoSMalloc<1024> dfStorage(width * height * sizeof(unsigned char));
 
         // Generate signed distance field
-        {
-            SkAutoLockPixels alp(bmp);
-
-            SkGenerateDistanceFieldFromA8Image((unsigned char*)dfStorage.get(),
-                                               (const unsigned char*)bmp.getPixels(),
-                                               bmp.width(), bmp.height(), bmp.rowBytes());
-        }
+        SkGenerateDistanceFieldFromA8Image((unsigned char*)dfStorage.get(),
+                                           (const unsigned char*)dst.addr(),
+                                           dst.width(), dst.height(), dst.rowBytes());
 
         // add to atlas
         SkIPoint16 atlasLocation;
@@ -414,7 +408,7 @@ private:
                                          &atlasLocation);
         if (!success) {
             this->flush(batchTarget, flushInfo);
-            this->initDraw(batchTarget, dfProcessor, pipeline);
+            batchTarget->initDraw(dfProcessor, pipeline);
 
             SkDEBUGCODE(success =) atlas->addToAtlas(&id, batchTarget, width, height,
                                                      dfStorage.get(), &atlasLocation);
@@ -491,20 +485,6 @@ private:
                                   vertexStride);
     }
 
-    void initDraw(GrBatchTarget* batchTarget,
-                  const GrGeometryProcessor* dfProcessor,
-                  const GrPipeline* pipeline) {
-        batchTarget->initDraw(dfProcessor, pipeline);
-
-        // TODO remove this when batch is everywhere
-        GrPipelineInfo init;
-        init.fColorIgnored = fBatch.fColorIgnored;
-        init.fOverrideColor = GrColor_ILLEGAL;
-        init.fCoverageIgnored = fBatch.fCoverageIgnored;
-        init.fUsesLocalCoords = this->usesLocalCoords();
-        dfProcessor->initBatchTracker(batchTarget->currentBatchTracker(), init);
-    }
-
     void flush(GrBatchTarget* batchTarget, FlushInfo* flushInfo) {
         GrVertices vertices;
         int maxInstancesPerDraw = flushInfo->fIndexBuffer->maxQuads();
@@ -521,6 +501,10 @@ private:
     bool usesLocalCoords() const { return fBatch.fUsesLocalCoords; }
 
     bool onCombineIfPossible(GrBatch* t) override {
+        if (!this->pipeline()->isEqual(*t->pipeline())) {
+            return false;
+        }
+
         AADistanceFieldPathBatch* that = t->cast<AADistanceFieldPathBatch>();
 
         // TODO we could actually probably do a bunch of this work on the CPU, ie map viewMatrix,
@@ -597,13 +581,13 @@ bool GrAADistanceFieldPathRenderer::onDrawPath(GrDrawTarget* target,
         }
     }
 
-    AADistanceFieldPathBatch::Geometry geometry(stroke.getStrokeRec());
+    AADistanceFieldPathBatch::Geometry geometry(stroke);
     geometry.fPath = path;
     geometry.fAntiAlias = antiAlias;
 
     SkAutoTUnref<GrBatch> batch(AADistanceFieldPathBatch::Create(geometry, color, viewMatrix,
                                                                  fAtlas, &fPathCache, &fPathList));
-    target->drawBatch(pipelineBuilder, batch);
+    target->drawBatch(*pipelineBuilder, batch);
 
     return true;
 }

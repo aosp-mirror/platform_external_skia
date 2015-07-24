@@ -7,7 +7,7 @@
  */
 
 #include "GrContext.h"
-#include "GrDrawTargetCaps.h"
+#include "GrCaps.h"
 #include "GrGpu.h"
 #include "GrResourceKey.h"
 #include "GrRenderTarget.h"
@@ -51,7 +51,7 @@ void GrTexture::validateDesc() const {
     if (this->asRenderTarget()) {
         // This texture has a render target
         SkASSERT(0 != (fDesc.fFlags & kRenderTarget_GrSurfaceFlag));
-        SkASSERT(fDesc.fSampleCnt == this->asRenderTarget()->numSamples());
+        SkASSERT(fDesc.fSampleCnt == this->asRenderTarget()->numColorSamples());
     } else {
         SkASSERT(0 == (fDesc.fFlags & kRenderTarget_GrSurfaceFlag));
         SkASSERT(0 == fDesc.fSampleCnt);
@@ -81,7 +81,7 @@ GrTexture::GrTexture(GrGpu* gpu, LifeCycle lifeCycle, const GrSurfaceDesc& desc)
     : INHERITED(gpu, lifeCycle, desc)
     , fMipMapsStatus(kNotAllocated_MipMapsStatus) {
 
-    if (kWrapped_LifeCycle != lifeCycle && !GrPixelConfigIsCompressed(desc.fConfig)) {
+    if (!this->isExternal() && !GrPixelConfigIsCompressed(desc.fConfig)) {
         GrScratchKey key;
         GrTexturePriv::ComputeScratchKey(desc, &key);
         this->setScratchKey(key);

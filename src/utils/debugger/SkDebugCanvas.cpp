@@ -78,7 +78,9 @@ protected:
         }
     }
 
-    void onDrawPicture(const SkPicture* picture, const SkMatrix* matrix, const SkPaint* paint) {
+    void onDrawPicture(const SkPicture* picture,
+                       const SkMatrix* matrix,
+                       const SkPaint* paint) override {
         // We need to replay the picture onto this canvas in order to filter its internal paints.
         this->SkCanvas::onDrawPicture(picture, matrix, paint);
     }
@@ -413,8 +415,9 @@ void SkDebugCanvas::onDrawBitmap(const SkBitmap& bitmap, SkScalar left,
 }
 
 void SkDebugCanvas::onDrawBitmapRect(const SkBitmap& bitmap, const SkRect* src, const SkRect& dst,
-                                     const SkPaint* paint, DrawBitmapRectFlags flags) {
-    this->addDrawCommand(new SkDrawBitmapRectCommand(bitmap, src, dst, paint, flags));
+                                     const SkPaint* paint, SK_VIRTUAL_CONSTRAINT_TYPE constraint) {
+    this->addDrawCommand(new SkDrawBitmapRectCommand(bitmap, src, dst, paint,
+                                                     (SrcRectConstraint)constraint));
 }
 
 void SkDebugCanvas::onDrawBitmapNine(const SkBitmap& bitmap, const SkIRect& center,
@@ -424,24 +427,13 @@ void SkDebugCanvas::onDrawBitmapNine(const SkBitmap& bitmap, const SkIRect& cent
 
 void SkDebugCanvas::onDrawImage(const SkImage* image, SkScalar left, SkScalar top,
                                 const SkPaint* paint) {
-    SkDebugf("SkDebugCanvas::onDrawImage unimplemented\n");
+    this->addDrawCommand(new SkDrawImageCommand(image, left, top, paint));
 }
 
 void SkDebugCanvas::onDrawImageRect(const SkImage* image, const SkRect* src, const SkRect& dst,
-                                    const SkPaint* paint) {
-    SkDebugf("SkDebugCanvas::onDrawImageRect unimplemented\n");
-}
-
-void SkDebugCanvas::beginCommentGroup(const char* description) {
-    this->addDrawCommand(new SkBeginCommentGroupCommand(description));
-}
-
-void SkDebugCanvas::addComment(const char* kywd, const char* value) {
-    this->addDrawCommand(new SkCommentCommand(kywd, value));
-}
-
-void SkDebugCanvas::endCommentGroup() {
-    this->addDrawCommand(new SkEndCommentGroupCommand());
+                                    const SkPaint* paint SRC_RECT_CONSTRAINT_PARAM(constraint)) {
+    SRC_RECT_CONSTRAINT_LOCAL_DEFAULT(constraint);
+    this->addDrawCommand(new SkDrawImageRectCommand(image, src, dst, paint, constraint));
 }
 
 void SkDebugCanvas::onDrawOval(const SkRect& oval, const SkPaint& paint) {

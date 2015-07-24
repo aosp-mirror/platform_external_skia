@@ -16,15 +16,14 @@ class SkGpuDevice;
 
 class SkSurface_Gpu : public SkSurface_Base {
 public:
-    SK_DECLARE_INST_COUNT(SkSurface_Gpu)
-
     SkSurface_Gpu(SkGpuDevice*);
     virtual ~SkSurface_Gpu();
 
+    GrBackendObject onGetTextureHandle(BackendHandleAccess) override;
+    bool onGetRenderTargetHandle(GrBackendObject*, BackendHandleAccess) override;
     SkCanvas* onNewCanvas() override;
     SkSurface* onNewSurface(const SkImageInfo&) override;
     SkImage* onNewImageSnapshot(Budgeted) override;
-    void onDraw(SkCanvas*, SkScalar x, SkScalar y, const SkPaint*) override;
     void onCopyOnWrite(ContentChangeMode) override;
     void onDiscard() override;
 

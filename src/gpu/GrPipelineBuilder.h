@@ -9,11 +9,12 @@
 #define GrPipelineBuilder_DEFINED
 
 #include "GrBlend.h"
+#include "GrCaps.h"
 #include "GrClip.h"
-#include "GrDrawTargetCaps.h"
 #include "GrGpuResourceRef.h"
-#include "GrFragmentStage.h"
+#include "GrStagedProcessor.h"
 #include "GrProcOptInfo.h"
+#include "GrProcessorDataManager.h"
 #include "GrRenderTarget.h"
 #include "GrStencil.h"
 #include "GrXferProcessor.h"
@@ -24,7 +25,7 @@
 #include "effects/GrSimpleTextureEffect.h"
 
 class GrBatch;
-class GrDrawTargetCaps;
+class GrCaps;
 class GrPaint;
 class GrTexture;
 
@@ -37,15 +38,15 @@ public:
         *this = pipelineBuilder;
     }
 
-    virtual ~GrPipelineBuilder();
-
     /**
-     * Initializes the GrPipelineBuilder based on a GrPaint, view matrix and render target. Note
+     * Initializes the GrPipelineBuilder based on a GrPaint, render target, and clip. Note
      * that GrPipelineBuilder encompasses more than GrPaint. Aspects of GrPipelineBuilder that have
      * no GrPaint equivalents are set to default values with the exception of vertex attribute state
      * which is unmodified by this function and clipping which will be enabled.
      */
-    void setFromPaint(const GrPaint&, GrRenderTarget*, const GrClip&);
+    GrPipelineBuilder(const GrPaint&, GrRenderTarget*, const GrClip&);
+
+    virtual ~GrPipelineBuilder();
 
     ///////////////////////////////////////////////////////////////////////////
     /// @name Fragment Processors
@@ -83,53 +84,74 @@ public:
      * Creates a GrSimpleTextureEffect that uses local coords as texture coordinates.
      */
     void addColorTextureProcessor(GrTexture* texture, const SkMatrix& matrix) {
-        this->addColorProcessor(GrSimpleTextureEffect::Create(texture, matrix))->unref();
+        this->addColorProcessor(GrSimpleTextureEffect::Create(fProcDataManager, texture,
+                                                              matrix))->unref();
     }
 
     void addCoverageTextureProcessor(GrTexture* texture, const SkMatrix& matrix) {
-        this->addCoverageProcessor(GrSimpleTextureEffect::Create(texture, matrix))->unref();
+        this->addCoverageProcessor(GrSimpleTextureEffect::Create(fProcDataManager, texture,
+                                                                 matrix))->unref();
     }
 
     void addColorTextureProcessor(GrTexture* texture,
                                   const SkMatrix& matrix,
                                   const GrTextureParams& params) {
-        this->addColorProcessor(GrSimpleTextureEffect::Create(texture, matrix, params))->unref();
+        this->addColorProcessor(GrSimpleTextureEffect::Create(fProcDataManager, texture, matrix,
+                                                              params))->unref();
     }
 
     void addCoverageTextureProcessor(GrTexture* texture,
                                      const SkMatrix& matrix,
                                      const GrTextureParams& params) {
-        this->addCoverageProcessor(GrSimpleTextureEffect::Create(texture, matrix, params))->unref();
+        this->addCoverageProcessor(GrSimpleTextureEffect::Create(fProcDataManager, texture, matrix,
+                                                                 params))->unref();
     }
 
     /**
      * When this object is destroyed it will remove any color/coverage FPs from the pipeline builder
-     * that were added after its constructor.
+     * and also remove any additions to the GrProcessorDataManager that were added after its
+     * constructor.
+     * This class can transiently modify its "const" GrPipelineBuilder object but will restore it
+     * when done - so it is notionally "const" correct.
      */
-    class AutoRestoreFragmentProcessors : public ::SkNoncopyable {
+    class AutoRestoreFragmentProcessorState : public ::SkNoncopyable {
     public:
-        AutoRestoreFragmentProcessors() 
+        AutoRestoreFragmentProcessorState() 
             : fPipelineBuilder(NULL)
             , fColorEffectCnt(0)
-            , fCoverageEffectCnt(0) {}
+            , fCoverageEffectCnt(0)
+            , fSaveMarker(0) {}
 
-        AutoRestoreFragmentProcessors(GrPipelineBuilder* ds)
+        AutoRestoreFragmentProcessorState(const GrPipelineBuilder& ds)
             : fPipelineBuilder(NULL)
             , fColorEffectCnt(0)
-            , fCoverageEffectCnt(0) {
-            this->set(ds);
+            , fCoverageEffectCnt(0)
+            , fSaveMarker(0) {
+            this->set(&ds);
         }
 
-        ~AutoRestoreFragmentProcessors() { this->set(NULL); }
+        ~AutoRestoreFragmentProcessorState() { this->set(NULL); }
 
-        void set(GrPipelineBuilder* ds);
+        void set(const GrPipelineBuilder* ds);
 
         bool isSet() const { return SkToBool(fPipelineBuilder); }
 
+        GrProcessorDataManager* getProcessorDataManager() {
+            SkASSERT(this->isSet());
+            return fPipelineBuilder->getProcessorDataManager();
+        }
+
+        const GrFragmentProcessor* addCoverageProcessor(const GrFragmentProcessor* processor) {
+            SkASSERT(this->isSet());
+            return fPipelineBuilder->addCoverageProcessor(processor);
+        }
+
     private:
+        // notionally const (as marginalia)
         GrPipelineBuilder*    fPipelineBuilder;
-        int             fColorEffectCnt;
-        int             fCoverageEffectCnt;
+        int                   fColorEffectCnt;
+        int                   fCoverageEffectCnt;
+        uint32_t              fSaveMarker;
     };
 
     /// @}
@@ -139,10 +161,12 @@ public:
     ////
 
     /**
-     * This function returns true if the render target destination pixel values will be read for
-     * blending during draw.
+     * Returns true if this pipeline's color output will be affected by the existing render target
+     * destination pixel values (meaning we need to be careful with overlapping draws). Note that we
+     * can conflate coverage and color, so the destination color may still bleed into pixels that
+     * have partial coverage, even if this function returns false.
      */
-    bool willBlendWithDst(const GrPrimitiveProcessor*) const;
+    bool willColorBlendWithDst(const GrPrimitiveProcessor*) const;
 
     /**
      * Installs a GrXPFactory. This object controls how src color, fractional pixel coverage,
@@ -177,10 +201,10 @@ public:
     }
 
     /**
-     * Checks whether the xp will need a copy of the destination to correctly blend.
+     * Checks whether the xp will need destination in a texture to correctly blend.
      */
-    bool willXPNeedDstCopy(const GrDrawTargetCaps& caps, const GrProcOptInfo& colorPOI,
-                           const GrProcOptInfo& coveragePOI) const;
+    bool willXPNeedDstTexture(const GrCaps& caps, const GrProcOptInfo& colorPOI,
+                              const GrProcOptInfo& coveragePOI) const;
 
     /// @}
 
@@ -202,6 +226,14 @@ public:
      * @param target  The render target to set.
      */
     void setRenderTarget(GrRenderTarget* target) { fRenderTarget.reset(SkSafeRef(target)); }
+
+    /**
+     * Returns whether the rasterizer and stencil test (if any) will run at a higher sample rate
+     * than the color buffer. In is scenario, the higher sample rate is resolved during blending.
+     */
+    bool hasMixedSamples() const {
+        return this->isHWAntialias() && !fRenderTarget->isUnifiedMultisampled();
+    }
 
     /// @}
 
@@ -231,20 +263,22 @@ public:
      * AutoRestoreStencil
      *
      * This simple struct saves and restores the stencil settings
+     * This class can transiently modify its "const" GrPipelineBuilder object but will restore it
+     * when done - so it is notionally "const" correct.
      */
     class AutoRestoreStencil : public ::SkNoncopyable {
     public:
         AutoRestoreStencil() : fPipelineBuilder(NULL) {}
 
-        AutoRestoreStencil(GrPipelineBuilder* ds) : fPipelineBuilder(NULL) { this->set(ds); }
+        AutoRestoreStencil(const GrPipelineBuilder& ds) : fPipelineBuilder(NULL) { this->set(&ds); }
 
         ~AutoRestoreStencil() { this->set(NULL); }
 
-        void set(GrPipelineBuilder* ds) {
+        void set(const GrPipelineBuilder* ds) {
             if (fPipelineBuilder) {
                 fPipelineBuilder->setStencil(fStencilSettings);
             }
-            fPipelineBuilder = ds;
+            fPipelineBuilder = const_cast<GrPipelineBuilder*>(ds);
             if (ds) {
                 fStencilSettings = ds->getStencil();
             }
@@ -252,7 +286,13 @@ public:
 
         bool isSet() const { return SkToBool(fPipelineBuilder); }
 
+        void setStencil(const GrStencilSettings& settings) {
+            SkASSERT(this->isSet());
+            fPipelineBuilder->setStencil(settings);
+        }
+
     private:
+        // notionally const (as marginalia)
         GrPipelineBuilder*  fPipelineBuilder;
         GrStencilSettings   fStencilSettings;
     };
@@ -381,13 +421,16 @@ public:
     void setClip(const GrClip& clip) { fClip = clip; }
     const GrClip& clip() const { return fClip; }
 
+    GrProcessorDataManager* getProcessorDataManager() { return fProcDataManager.get(); }
+    const GrProcessorDataManager* processorDataManager() const { return fProcDataManager.get(); }
+
 private:
     // Calculating invariant color / coverage information is expensive, so we partially cache the
     // results.
     //
     // canUseFracCoveragePrimProc() - Called in regular skia draw, caches results but only for a
     //                                specific color and coverage.  May be called multiple times
-    // willBlendWithDst() - only called by Nvpr, does not cache results
+    // willColorBlendWithDst() - only called by Nvpr, does not cache results
     // GrOptDrawState constructor - never caches results
 
     /**
@@ -417,10 +460,11 @@ private:
 
     // Some of the auto restore objects assume that no effects are removed during their lifetime.
     // This is used to assert that this condition holds.
-    SkDEBUGCODE(int fBlockEffectRemovalCnt;)
+    SkDEBUGCODE(mutable int fBlockEffectRemovalCnt;)
 
     typedef SkSTArray<4, GrFragmentStage> FragmentStageArray;
 
+    SkAutoTUnref<GrProcessorDataManager>    fProcDataManager;
     SkAutoTUnref<GrRenderTarget>            fRenderTarget;
     uint32_t                                fFlags;
     GrStencilSettings                       fStencilSettings;

@@ -20,10 +20,6 @@ SkStrokeRec::SkStrokeRec(InitStyle s) {
     fStrokeAndFill  = false;
 }
 
-SkStrokeRec::SkStrokeRec(const SkStrokeRec& src) {
-    memcpy(this, &src, sizeof(src));
-}
-
 SkStrokeRec::SkStrokeRec(const SkPaint& paint, SkScalar resScale) {
     this->init(paint, paint.getStyle(), resScale);
 }
@@ -100,7 +96,7 @@ void SkStrokeRec::setStrokeStyle(SkScalar width, bool strokeAndFill) {
 
 #include "SkStroke.h"
 
-#if !defined SK_LEGACY_STROKE_CURVES && defined SK_DEBUG  
+#ifdef SK_DEBUG  
     // enables tweaking these values at runtime from SampleApp
     bool gDebugStrokerErrorSet = false;
     SkScalar gDebugStrokerError;
@@ -117,7 +113,7 @@ bool SkStrokeRec::applyToPath(SkPath* dst, const SkPath& src) const {
     stroker.setMiterLimit(fMiterLimit);
     stroker.setWidth(fWidth);
     stroker.setDoFill(fStrokeAndFill);
-#if !defined SK_LEGACY_STROKE_CURVES && defined SK_DEBUG
+#ifdef SK_DEBUG
     stroker.setResScale(gDebugStrokerErrorSet ? gDebugStrokerError : fResScale);
 #else
     stroker.setResScale(fResScale);

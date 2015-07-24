@@ -13,8 +13,72 @@ bool SkOpPtT::alias() const {
     return this->span()->ptT() != this;
 }
 
+bool SkOpPtT::collapsed(const SkOpPtT* check) const {
+    if (fPt != check->fPt) {
+        return false;
+    }
+    SkASSERT(this != check);
+    const SkOpSegment* segment = this->segment();
+    SkASSERT(segment == check->segment());
+    return segment->collapsed();
+}
+
+bool SkOpPtT::contains(const SkOpPtT* check) const {
+    SkASSERT(this != check);
+    const SkOpPtT* ptT = this;
+    const SkOpPtT* stopPtT = ptT;
+    while ((ptT = ptT->next()) != stopPtT) {
+        if (ptT == check) {
+            return true;
+        }
+    }
+    return false;
+}
+
+SkOpPtT* SkOpPtT::contains(const SkOpSegment* check) {
+    SkASSERT(this->segment() != check);
+    SkOpPtT* ptT = this;
+    const SkOpPtT* stopPtT = ptT;
+    while ((ptT = ptT->next()) != stopPtT) {
+        if (ptT->segment() == check) {
+            return ptT;
+        }
+    }
+    return NULL;
+}
+
 SkOpContour* SkOpPtT::contour() const {
     return segment()->contour();
+}
+
+SkOpPtT* SkOpPtT::doppelganger() {
+    SkASSERT(fDeleted);
+    SkOpPtT* ptT = fNext;
+    while (ptT->fDeleted) {
+        ptT = ptT->fNext;
+    }
+    const SkOpPtT* stopPtT = ptT;
+    do {
+        if (ptT->fSpan == fSpan) {
+            return ptT;
+        }
+        ptT = ptT->fNext;
+    } while (stopPtT != ptT);
+    SkASSERT(0);
+    return NULL;
+}
+
+SkOpPtT* SkOpPtT::find(SkOpSegment* segment) {
+    SkOpPtT* ptT = this;
+    const SkOpPtT* stopPtT = ptT;
+    do {
+        if (ptT->segment() == segment) {
+            return ptT;
+        }
+        ptT = ptT->fNext;
+    } while (stopPtT != ptT);
+    SkASSERT(0);
+    return NULL;
 }
 
 SkOpGlobalState* SkOpPtT::globalState() const {
@@ -279,7 +343,10 @@ void SkOpSpan::detach(SkOpPtT* kept) {
     prev->setNext(next);
     next->setPrev(prev);
     this->segment()->detach(this);
-    this->globalState()->coincidence()->fixUp(this->ptT(), kept);
+    SkOpCoincidence* coincidence = this->globalState()->coincidence();
+    if (coincidence) {
+        coincidence->fixUp(this->ptT(), kept);
+    }
     this->ptT()->setDeleted();
 }
 

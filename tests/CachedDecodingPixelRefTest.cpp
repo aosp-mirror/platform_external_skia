@@ -142,7 +142,7 @@ static void test_three_encodings(skiatest::Reporter* reporter,
 
 ////////////////////////////////////////////////////////////////////////////////
 static bool install_skCachingPixelRef(SkData* encoded, SkBitmap* dst) {
-    return SkCachingPixelRef::Install(SkImageGenerator::NewFromData(encoded), dst);
+    return SkCachingPixelRef::Install(SkImageGenerator::NewFromEncoded(encoded), dst);
 }
 static bool install_skDiscardablePixelRef(SkData* encoded, SkBitmap* dst) {
     // Use system-default discardable memory.
@@ -182,16 +182,29 @@ protected:
                                     kOpaque_SkAlphaType);
     }
 
-    virtual Result onGetPixels(const SkImageInfo& info, void* pixels, size_t rowBytes,
-                               const Options&,
-                               SkPMColor ctable[], int* ctableCount) override {
+#ifdef SK_LEGACY_IMAGE_GENERATOR_ENUMS_AND_OPTIONS
+    Result onGetPixels(const SkImageInfo& info, void* pixels, size_t rowBytes,
+                       const Options&,
+                       SkPMColor ctable[], int* ctableCount) override {
+#else
+    bool onGetPixels(const SkImageInfo& info, void* pixels, size_t rowBytes,
+                     SkPMColor ctable[], int* ctableCount) override {
+#endif
         REPORTER_ASSERT(fReporter, pixels != NULL);
         REPORTER_ASSERT(fReporter, rowBytes >= info.minRowBytes());
         if (fType != kSucceedGetPixels_TestType) {
+#ifdef SK_LEGACY_IMAGE_GENERATOR_ENUMS_AND_OPTIONS
             return kUnimplemented;
+#else
+            return false;
+#endif
         }
         if (info.colorType() != kN32_SkColorType) {
+#ifdef SK_LEGACY_IMAGE_GENERATOR_ENUMS_AND_OPTIONS
             return kInvalidConversion;
+#else
+            return false;
+#endif
         }
         char* bytePtr = static_cast<char*>(pixels);
         for (int y = 0; y < info.height(); ++y) {
@@ -199,7 +212,11 @@ protected:
                         TestImageGenerator::Color(), info.width());
             bytePtr += rowBytes;
         }
+#ifdef SK_LEGACY_IMAGE_GENERATOR_ENUMS_AND_OPTIONS
         return kSuccess;
+#else
+        return true;
+#endif
     }
 
 private:
@@ -249,7 +266,7 @@ static void check_pixelref(TestImageGenerator::TestType type,
         // Ignore factory; use global cache.
         success = SkCachingPixelRef::Install(gen.detach(), &lazy);
     } else {
-        success = SkInstallDiscardablePixelRef(gen.detach(), &lazy, factory);
+        success = SkInstallDiscardablePixelRef(gen.detach(), NULL, &lazy, factory);
     }
     REPORTER_ASSERT(reporter, success);
     if (TestImageGenerator::kSucceedGetPixels_TestType == type) {
@@ -262,11 +279,13 @@ static void check_pixelref(TestImageGenerator::TestType type,
 
 // new/lock/delete is an odd pattern for a pixelref, but it needs to not assert
 static void test_newlockdelete(skiatest::Reporter* reporter) {
+#ifdef SK_SUPPORT_LEGACY_UNBALANCED_PIXELREF_LOCKCOUNT
     SkBitmap bm;
     SkImageGenerator* ig = new TestImageGenerator(
         TestImageGenerator::kSucceedGetPixels_TestType, reporter);
     SkInstallDiscardablePixelRef(ig, &bm);
     bm.pixelRef()->lockPixels();
+#endif
 }
 
 /**

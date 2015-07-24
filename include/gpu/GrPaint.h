@@ -11,7 +11,8 @@
 #define GrPaint_DEFINED
 
 #include "GrColor.h"
-#include "GrFragmentStage.h"
+#include "GrStagedProcessor.h"
+#include "GrProcessorDataManager.h"
 #include "GrXferProcessor.h"
 #include "effects/GrPorterDuffXferProcessor.h"
 
@@ -124,25 +125,33 @@ public:
         fCoverageStages = paint.fCoverageStages;
 
         fXPFactory.reset(SkRef(paint.getXPFactory()));
+        fProcDataManager.reset(SkNEW_ARGS(GrProcessorDataManager, (*paint.processorDataManager())));
 
         return *this;
     }
 
     /**
-     * Returns true if isOpaque would return true and the paint represents a solid constant color
-     * draw. If the result is true, constantColor will be updated to contain the constant color.
+     * Returns true if the paint's output color will be constant after blending. If the result is
+     * true, constantColor will be updated to contain the constant color. Note that we can conflate
+     * coverage and color, so the actual values written to pixels with partial coverage may still
+     * not seem constant, even if this function returns true.
      */
-    bool isOpaqueAndConstantColor(GrColor* constantColor) const;
+    bool isConstantBlendedColor(GrColor* constantColor) const;
+
+    GrProcessorDataManager* getProcessorDataManager() { return fProcDataManager.get(); }
+
+    const GrProcessorDataManager* processorDataManager() const { return fProcDataManager.get(); }
 
 private:
     mutable SkAutoTUnref<const GrXPFactory> fXPFactory;
-    SkSTArray<4, GrFragmentStage>   fColorStages;
-    SkSTArray<2, GrFragmentStage>   fCoverageStages;
+    SkSTArray<4, GrFragmentStage>        fColorStages;
+    SkSTArray<2, GrFragmentStage>        fCoverageStages;
 
-    bool                            fAntiAlias;
-    bool                            fDither;
+    bool                                 fAntiAlias;
+    bool                                 fDither;
 
-    GrColor                         fColor;
+    GrColor                              fColor;
+    SkAutoTUnref<GrProcessorDataManager> fProcDataManager;
 };
 
 #endif

@@ -7,34 +7,16 @@
 
 #include "GrGLFragmentShaderBuilder.h"
 #include "GrGLProgramBuilder.h"
-#include "../GrGLGpu.h"
+#include "gl/GrGLGpu.h"
+#include "gl/GrGLGLSL.h"
+#include "glsl/GrGLSLCaps.h"
 
 #define GL_CALL(X) GR_GL_CALL(fProgramBuilder->gpu()->glInterface(), X)
 #define GL_CALL_RET(R, X) GR_GL_CALL_RET(fProgramBuilder->gpu()->glInterface(), R, X)
 
-const char* GrGLFragmentShaderBuilder::kDstCopyColorName = "_dstColor";
+const char* GrGLFragmentShaderBuilder::kDstTextureColorName = "_dstColor";
 static const char* declared_color_output_name() { return "fsColorOut"; }
 static const char* dual_source_output_name() { return "dualSourceOut"; }
-static void append_default_precision_qualifier(GrSLPrecision p,
-                                               GrGLStandard standard,
-                                               SkString* str) {
-    // Desktop GLSL has added precision qualifiers but they don't do anything.
-    if (kGLES_GrGLStandard == standard) {
-        switch (p) {
-            case kHigh_GrSLPrecision:
-                str->append("precision highp float;\n");
-                break;
-            case kMedium_GrSLPrecision:
-                str->append("precision mediump float;\n");
-                break;
-            case kLow_GrSLPrecision:
-                str->append("precision lowp float;\n");
-                break;
-            default:
-                SkFAIL("Unknown precision value.");
-        }
-    }
-}
 
 static const char* specific_layout_qualifier_name(GrBlendEquation equation) {
     SkASSERT(GrBlendEquationIsAdvanced(equation));
@@ -78,17 +60,17 @@ static const char* specific_layout_qualifier_name(GrBlendEquation equation) {
 }
 
 GrGLFragmentShaderBuilder::DstReadKey
-GrGLFragmentShaderBuilder::KeyForDstRead(const GrTexture* dstCopy, const GrGLCaps& caps) {
+GrGLFragmentShaderBuilder::KeyForDstRead(const GrTexture* dstTexture, const GrGLCaps& caps) {
     uint32_t key = kYesDstRead_DstReadKeyBit;
     if (caps.glslCaps()->fbFetchSupport()) {
         return key;
     }
-    SkASSERT(dstCopy);
-    if (!caps.textureSwizzleSupport() && GrPixelConfigIsAlphaOnly(dstCopy->config())) {
+    SkASSERT(dstTexture);
+    if (!caps.textureSwizzleSupport() && GrPixelConfigIsAlphaOnly(dstTexture->config())) {
         // The fact that the config is alpha-only must be considered when generating code.
         key |= kUseAlphaConfig_DstReadKeyBit;
     }
-    if (kTopLeft_GrSurfaceOrigin == dstCopy->origin()) {
+    if (kTopLeft_GrSurfaceOrigin == dstTexture->origin()) {
         key |= kTopLeftOrigin_DstReadKeyBit;
     }
     SkASSERT(static_cast<DstReadKey>(key) == key);
@@ -177,6 +159,7 @@ const char* GrGLFragmentShaderBuilder::fragmentPosition() {
         }
         return "gl_FragCoord";
     } else {
+        static const char* kTempName = "tmpXYFragCoord";
         static const char* kCoordName = "fragCoordYDown";
         if (!fSetupFragPosition) {
             // temporarily change the stage index because we're inserting non-stage code.
@@ -191,11 +174,14 @@ const char* GrGLFragmentShaderBuilder::fragmentPosition() {
                                                 "RTHeight",
                                                 &rtHeightName);
 
-            // Using glFragCoord.zw for the last two components tickles an Adreno driver bug that
-            // causes programs to fail to link. Making this function return a vec2() didn't fix the
-            // problem but using 1.0 for the last two components does.
-            this->codePrependf("\tvec4 %s = vec4(gl_FragCoord.x, %s - gl_FragCoord.y, 1.0, "
-                               "1.0);\n", kCoordName, rtHeightName);
+            // The Adreno compiler seems to be very touchy about access to "gl_FragCoord".
+            // Accessing glFragCoord.zw can cause a program to fail to link. Additionally,
+            // depending on the surrounding code, accessing .xy with a uniform involved can
+            // do the same thing. Copying gl_FragCoord.xy into a temp vec2 beforehand 
+            // (and only accessing .xy) seems to "fix" things.
+            this->codePrependf("\tvec4 %s = vec4(%s.x, %s - %s.y, 1.0, 1.0);\n",
+                               kCoordName, kTempName, rtHeightName, kTempName);
+            this->codePrependf("vec2 %s = gl_FragCoord.xy;", kTempName);
             fSetupFragPosition = true;
         }
         SkASSERT(fProgramBuilder->fUniformHandles.fRTHeightUni.isValid());
@@ -220,7 +206,7 @@ const char* GrGLFragmentShaderBuilder::dstColor() {
         }
         return fbFetchColorName;
     } else {
-        return kDstCopyColorName;
+        return kDstTextureColorName;
     } 
 }
 
@@ -269,10 +255,10 @@ const char* GrGLFragmentShaderBuilder::getSecondaryColorOutputName() const {
 bool GrGLFragmentShaderBuilder::compileAndAttachShaders(GrGLuint programId,
                                                         SkTDArray<GrGLuint>* shaderIds) {
     GrGLGpu* gpu = fProgramBuilder->gpu();
-    this->versionDecl() = GrGetGLSLVersionDecl(gpu->ctxInfo());
-    append_default_precision_qualifier(kDefault_GrSLPrecision,
-                                       gpu->glStandard(),
-                                       &this->precisionQualifier());
+    this->versionDecl() = GrGLGetGLSLVersionDecl(gpu->ctxInfo());
+    GrGLAppendGLSLDefaultFloatPrecisionDeclaration(kDefault_GrSLPrecision,
+                                                   gpu->glStandard(),
+                                                   &this->precisionQualifier());
     this->compileAndAppendLayoutQualifiers();
     fProgramBuilder->appendUniformDecls(GrGLProgramBuilder::kFragment_Visibility,
                                         &this->uniforms());
@@ -284,9 +270,7 @@ bool GrGLFragmentShaderBuilder::compileAndAttachShaders(GrGLuint programId,
 }
 
 void GrGLFragmentShaderBuilder::bindFragmentShaderLocations(GrGLuint programID) {
-    // ES 3.00 requires custom color output but doesn't support bindFragDataLocation
-    if (fHasCustomColorOutput &&
-        kGLES_GrGLStandard != fProgramBuilder->gpu()->ctxInfo().standard()) {
+    if (fHasCustomColorOutput && fProgramBuilder->gpu()->glCaps().bindFragDataLocationSupport()) {
         GL_CALL(BindFragDataLocation(programID, 0, declared_color_output_name()));
     }
     if (fHasSecondaryOutput) {

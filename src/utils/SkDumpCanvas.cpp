@@ -346,7 +346,7 @@ void SkDumpCanvas::onDrawBitmap(const SkBitmap& bitmap, SkScalar x, SkScalar y,
 }
 
 void SkDumpCanvas::onDrawBitmapRect(const SkBitmap& bitmap, const SkRect* src, const SkRect& dst,
-                                    const SkPaint* paint, DrawBitmapRectFlags flags) {
+                                    const SkPaint* paint, SK_VIRTUAL_CONSTRAINT_TYPE) {
     SkString bs, rs;
     bitmap.toString(&bs);
     toString(dst, &rs);
@@ -359,8 +359,7 @@ void SkDumpCanvas::onDrawBitmapRect(const SkBitmap& bitmap, const SkRect* src, c
         rs.prependf("%s ", ss.c_str());
     }
 
-    this->dump(kDrawBitmap_Verb, paint, "drawBitmapRectToRect(%s %s)",
-               bs.c_str(), rs.c_str());
+    this->dump(kDrawBitmap_Verb, paint, "drawBitmapRect(%s %s)", bs.c_str(), rs.c_str());
 }
 
 void SkDumpCanvas::onDrawBitmapNine(const SkBitmap& bitmap, const SkIRect& center,
@@ -381,7 +380,7 @@ void SkDumpCanvas::onDrawImage(const SkImage* image, SkScalar x, SkScalar y, con
 }
 
 void SkDumpCanvas::onDrawImageRect(const SkImage* image, const SkRect* src, const SkRect& dst,
-                                   const SkPaint* paint) {
+                                   const SkPaint* paint SRC_RECT_CONSTRAINT_PARAM(constraint)) {
     SkString bs, rs;
     image->toString(&bs);
     toString(dst, &rs);
@@ -488,18 +487,6 @@ void SkDumpCanvas::onDrawPatch(const SkPoint cubics[12], const SkColor colors[4]
               colors[0], colors[1], colors[2], colors[3],
               texCoords[0].x(), texCoords[0].y(), texCoords[1].x(), texCoords[1].y(),
               texCoords[2].x(), texCoords[2].y(), texCoords[3].x(), texCoords[3].y());
-}
-
-void SkDumpCanvas::beginCommentGroup(const char* description) {
-    this->dump(kBeginCommentGroup_Verb, NULL, "beginCommentGroup(%s)", description);
-}
-
-void SkDumpCanvas::addComment(const char* kywd, const char* value) {
-    this->dump(kAddComment_Verb, NULL, "addComment(%s, %s)", kywd, value);
-}
-
-void SkDumpCanvas::endCommentGroup() {
-    this->dump(kEndCommentGroup_Verb, NULL, "endCommentGroup()");
 }
 
 ///////////////////////////////////////////////////////////////////////////////

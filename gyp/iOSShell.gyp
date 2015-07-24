@@ -22,14 +22,6 @@
             'xml.gyp:xml',
           ],
           'sources': [
-            '../bench/CodecBench.cpp',
-            '../bench/DecodingBench.cpp',
-            '../bench/DecodingSubsetBench.cpp',
-            '../bench/GMBench.cpp',
-            '../bench/RecordingBench.cpp',
-            '../bench/SKPBench.cpp',
-            '../bench/SKPAnimationBench.cpp',
-            '../bench/nanobench.cpp',
             '../tests/skia_test.cpp',
             '../tools/iOSShell.cpp',
             '../src/views/mac/SkEventNotifier.mm',
@@ -52,7 +44,6 @@
             '../experimental/iOSSampleApp/iPhone/MainWindow_iPhone.xib',
 
             '../src/views/ios/SkOSWindow_iOS.mm',
-            '../src/utils/ios/SkStream_NSData.mm',
             '../src/utils/mac/SkCreateCGImageRef.cpp',
           ],
           'link_settings': {

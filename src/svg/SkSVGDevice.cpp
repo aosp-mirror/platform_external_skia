@@ -569,7 +569,8 @@ SkBaseDevice* SkSVGDevice::Create(const SkISize& size, SkXMLWriter* writer) {
 }
 
 SkSVGDevice::SkSVGDevice(const SkISize& size, SkXMLWriter* writer)
-    : fWriter(writer)
+    : INHERITED(SkSurfaceProps(0, kUnknown_SkPixelGeometry))
+    , fWriter(writer)
     , fResourceBucket(SkNEW(ResourceBucket)) {
     SkASSERT(writer);
 
@@ -715,7 +716,7 @@ void SkSVGDevice::drawSprite(const SkDraw& draw, const SkBitmap& bitmap,
 
 void SkSVGDevice::drawBitmapRect(const SkDraw& draw, const SkBitmap& bm, const SkRect* srcOrNull,
                                  const SkRect& dst, const SkPaint& paint,
-                                 SkCanvas::DrawBitmapRectFlags) {
+                                 SK_VIRTUAL_CONSTRAINT_TYPE) {
     SkMatrix adjustedMatrix;
     adjustedMatrix.setRectToRect(srcOrNull ? *srcOrNull : SkRect::Make(bm.bounds()),
                                  dst,

@@ -15,7 +15,7 @@
 // Because this class is virtually derived from GrSurface we must explicitly call its constructor.
 GrGLRenderTarget::GrGLRenderTarget(GrGLGpu* gpu, const GrSurfaceDesc& desc, const IDDesc& idDesc)
     : GrSurface(gpu, idDesc.fLifeCycle, desc)
-    , INHERITED(gpu, idDesc.fLifeCycle, desc) {
+    , INHERITED(gpu, idDesc.fLifeCycle, desc, idDesc.fSampleConfig) {
     this->init(desc, idDesc);
     this->registerWithCache();
 }
@@ -23,7 +23,7 @@ GrGLRenderTarget::GrGLRenderTarget(GrGLGpu* gpu, const GrSurfaceDesc& desc, cons
 GrGLRenderTarget::GrGLRenderTarget(GrGLGpu* gpu, const GrSurfaceDesc& desc, const IDDesc& idDesc,
                                    Derived)
     : GrSurface(gpu, idDesc.fLifeCycle, desc)
-    , INHERITED(gpu, idDesc.fLifeCycle, desc) {
+    , INHERITED(gpu, idDesc.fLifeCycle, desc, idDesc.fSampleConfig) {
     this->init(desc, idDesc);
 }
 
@@ -31,7 +31,7 @@ void GrGLRenderTarget::init(const GrSurfaceDesc& desc, const IDDesc& idDesc) {
     fRTFBOID                = idDesc.fRTFBOID;
     fTexFBOID               = idDesc.fTexFBOID;
     fMSColorRenderbufferID  = idDesc.fMSColorRenderbufferID;
-    fIsWrapped              = kWrapped_LifeCycle == idDesc.fLifeCycle;
+    fRTLifecycle            = idDesc.fLifeCycle;
 
     fViewport.fLeft   = 0;
     fViewport.fBottom = 0;
@@ -59,7 +59,7 @@ size_t GrGLRenderTarget::onGpuMemorySize() const {
 }
 
 void GrGLRenderTarget::onRelease() {
-    if (!fIsWrapped) {
+    if (kBorrowed_LifeCycle != fRTLifecycle) {
         if (fTexFBOID) {
             GL_CALL(DeleteFramebuffers(1, &fTexFBOID));
         }
@@ -73,7 +73,6 @@ void GrGLRenderTarget::onRelease() {
     fRTFBOID                = 0;
     fTexFBOID               = 0;
     fMSColorRenderbufferID  = 0;
-    fIsWrapped              = false;
     INHERITED::onRelease();
 }
 
@@ -81,6 +80,5 @@ void GrGLRenderTarget::onAbandon() {
     fRTFBOID                = 0;
     fTexFBOID               = 0;
     fMSColorRenderbufferID  = 0;
-    fIsWrapped              = false;
     INHERITED::onAbandon();
 }

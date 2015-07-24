@@ -30,7 +30,7 @@ struct GrPoint;
  */
 class SK_API GrPathRenderer : public SkRefCnt {
 public:
-    SK_DECLARE_INST_COUNT(GrPathRenderer)
+    
 
     /**
      * This is called to install custom path renderers in every GrContext at create time. The
@@ -160,14 +160,14 @@ public:
         if (stroke.isDashed()) {
             return false;
         }
-        if (stroke.getStrokeRec().isHairlineStyle()) {
+        if (stroke.isHairlineStyle()) {
             if (outCoverage) {
                 *outCoverage = SK_Scalar1;
             }
             return true;
         }
-        return stroke.getStrokeRec().getStyle() == SkStrokeRec::kStroke_Style &&
-            SkDrawTreatAAStrokeAsHairline(stroke.getStrokeRec().getWidth(), matrix, outCoverage);
+        return stroke.getStyle() == SkStrokeRec::kStroke_Style &&
+            SkDrawTreatAAStrokeAsHairline(stroke.getWidth(), matrix, outCoverage);
     }
 
 protected:

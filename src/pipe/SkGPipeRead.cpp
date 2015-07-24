@@ -20,11 +20,12 @@
 #include "SkDrawLooper.h"
 #include "SkImageFilter.h"
 #include "SkMaskFilter.h"
-#include "SkReadBuffer.h"
 #include "SkPatchUtils.h"
 #include "SkPathEffect.h"
 #include "SkRasterizer.h"
+#include "SkReadBuffer.h"
 #include "SkRRect.h"
+#include "SkRSXform.h"
 #include "SkShader.h"
 #include "SkTextBlob.h"
 #include "SkTypeface.h"
@@ -479,6 +480,33 @@ static void drawVertices_rp(SkCanvas* canvas, SkReader32* reader, uint32_t op32,
     }
 }
 
+static void drawAtlas_rp(SkCanvas* canvas, SkReader32* reader, uint32_t op32, SkGPipeState* state) {
+    unsigned flags = DrawOp_unpackFlags(op32);
+
+    const SkPaint* paint = NULL;
+    if (flags & kDrawAtlas_HasPaint_DrawOpFlag) {
+        paint = &state->paint();
+    }
+    const int slot = reader->readU32();
+    const SkImage* atlas = state->getImage(slot);
+    const int count = reader->readU32();
+    SkXfermode::Mode mode = (SkXfermode::Mode)reader->readU32();
+    const SkRSXform* xform = skip<SkRSXform>(reader, count);
+    const SkRect* tex = skip<SkRect>(reader, count);
+    const SkColor* colors = NULL;
+    if (flags & kDrawAtlas_HasColors_DrawOpFlag) {
+        colors = skip<SkColor>(reader, count);
+    }
+    const SkRect* cull = NULL;
+    if (flags & kDrawAtlas_HasCull_DrawOpFlag) {
+        cull = skip<SkRect>(reader, 1);
+    }
+
+    if (state->shouldDraw()) {
+        canvas->drawAtlas(atlas, xform, tex, colors, count, mode, cull, paint);
+    }
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 
 static void drawText_rp(SkCanvas* canvas, SkReader32* reader, uint32_t op32,
@@ -615,15 +643,14 @@ static void drawBitmapRect_rp(SkCanvas* canvas, SkReader32* reader,
     } else {
         src = NULL;
     }
-    SkCanvas::DrawBitmapRectFlags dbmrFlags = SkCanvas::kNone_DrawBitmapRectFlag;
+    SkCanvas::SrcRectConstraint constraint = SkCanvas::kStrict_SrcRectConstraint;
     if (flags & kDrawBitmap_Bleed_DrawOpFlag) {
-        dbmrFlags = (SkCanvas::DrawBitmapRectFlags)(dbmrFlags|SkCanvas::kBleed_DrawBitmapRectFlag);
+        constraint = SkCanvas::kFast_SrcRectConstraint;
     }
     const SkRect* dst = skip<SkRect>(reader);
     const SkBitmap* bitmap = holder.getBitmap();
     if (state->shouldDraw()) {
-        canvas->drawBitmapRectToRect(*bitmap, src, *dst,
-                                     hasPaint ? &state->paint() : NULL, dbmrFlags);
+        canvas->drawBitmapRect(*bitmap, src, *dst, hasPaint ? &state->paint() : NULL, constraint);
     }
 }
 
@@ -661,9 +688,24 @@ static void drawImageRect_rp(SkCanvas* canvas, SkReader32* reader, uint32_t op32
         src = skip<SkRect>(reader);
     }
     const SkRect* dst = skip<SkRect>(reader);
+    SkCanvas::SrcRectConstraint constraint = (SkCanvas::SrcRectConstraint)reader->readInt();
+
     const SkImage* image = state->getImage(slot);
     if (state->shouldDraw()) {
-        canvas->drawImageRect(image, src, *dst, hasPaint ? &state->paint() : NULL);
+        canvas->drawImageRect(image, src, *dst, hasPaint ? &state->paint() : NULL, constraint);
+    }
+}
+
+static void drawImageNine_rp(SkCanvas* canvas, SkReader32* reader, uint32_t op32,
+                             SkGPipeState* state) {
+    unsigned slot = DrawOp_unpackData(op32);
+    unsigned flags = DrawOp_unpackFlags(op32);
+    bool hasPaint = SkToBool(flags & kDrawBitmap_HasPaint_DrawOpFlag);
+    const SkIRect* center = skip<SkIRect>(reader);
+    const SkRect* dst = skip<SkRect>(reader);
+    const SkImage* image = state->getImage(slot);
+    if (state->shouldDraw()) {
+        canvas->drawImageNine(image, *center, *dst, hasPaint ? &state->paint() : NULL);
     }
 }
 
@@ -831,12 +873,14 @@ static const ReadProc gReadTable[] = {
     clipRect_rp,
     clipRRect_rp,
     concat_rp,
+    drawAtlas_rp,
     drawBitmap_rp,
     drawBitmapNine_rp,
     drawBitmapRect_rp,
     drawDRRect_rp,
     drawImage_rp,
     drawImageRect_rp,
+    drawImageNine_rp,
     drawOval_rp,
     drawPaint_rp,
     drawPatch_rp,

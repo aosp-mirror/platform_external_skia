@@ -23,23 +23,25 @@ public:
         return true;
     }
 
-    void getInvariantOutput(const GrProcOptInfo& colorPOI, const GrProcOptInfo& coveragePOI,
-                            GrXPFactory::InvariantOutput* output) const override {
-        output->fBlendedColorFlags = 0;
-        output->fWillBlendWithDst = 0;
+    void getInvariantBlendedColor(const GrProcOptInfo& colorPOI,
+                                  GrXPFactory::InvariantBlendedColor* blendedColor) const override {
+        blendedColor->fKnownColorFlags = kNone_GrColorComponentFlags;
+        blendedColor->fWillBlendWithDst = false;
     }
 
 private:
     GrDisableColorXPFactory();
 
-    GrXferProcessor* onCreateXferProcessor(const GrDrawTargetCaps& caps,
+    GrXferProcessor* onCreateXferProcessor(const GrCaps& caps,
                                            const GrProcOptInfo& colorPOI,
                                            const GrProcOptInfo& coveragePOI,
-                                           const GrDeviceCoordTexture* dstCopy) const override;
+                                           bool hasMixedSamples,
+                                           const DstTexture* dstTexture) const override;
 
-    bool willReadDstColor(const GrDrawTargetCaps& caps,
+    bool willReadDstColor(const GrCaps& caps,
                           const GrProcOptInfo& colorPOI,
-                          const GrProcOptInfo& coveragePOI) const override {
+                          const GrProcOptInfo& coveragePOI,
+                          bool hasMixedSamples) const override {
         return false;
     }
 

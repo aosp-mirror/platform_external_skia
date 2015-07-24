@@ -18,6 +18,7 @@
 #include "GrContextFactory.h"
 #include "GrInvariantOutput.h"
 #include "GrPipeline.h"
+#include "GrResourceProvider.h"
 #include "GrTest.h"
 #include "GrXferProcessor.h"
 #include "SkChecksum.h"
@@ -39,15 +40,10 @@ class GLBigKeyProcessor : public GrGLFragmentProcessor {
 public:
     GLBigKeyProcessor(const GrProcessor&) {}
 
-    virtual void emitCode(GrGLFPBuilder* builder,
-                          const GrFragmentProcessor& fp,
-                          const char* outputColor,
-                          const char* inputColor,
-                          const TransformedCoordsArray&,
-                          const TextureSamplerArray&) {
+    virtual void emitCode(EmitArgs& args) override {
         // pass through
-        GrGLFragmentBuilder* fsBuilder = builder->getFragmentShaderBuilder();
-        fsBuilder->codeAppendf("%s = %s;\n", outputColor, inputColor);
+        GrGLFragmentBuilder* fsBuilder = args.fBuilder->getFragmentShaderBuilder();
+        fsBuilder->codeAppendf("%s = %s;\n", args.fOutputColor, args.fInputColor);
     }
 
     static void GenKey(const GrProcessor& processor, const GrGLSLCaps&, GrProcessorKeyBuilder* b) {
@@ -92,10 +88,7 @@ private:
 
 GR_DEFINE_FRAGMENT_PROCESSOR_TEST(BigKeyProcessor);
 
-GrFragmentProcessor* BigKeyProcessor::TestCreate(SkRandom*,
-                                                 GrContext*,
-                                                 const GrDrawTargetCaps&,
-                                                 GrTexture*[]) {
+GrFragmentProcessor* BigKeyProcessor::TestCreate(GrProcessorTestData*) {
     return BigKeyProcessor::Create();
 }
 
@@ -105,8 +98,8 @@ GrFragmentProcessor* BigKeyProcessor::TestCreate(SkRandom*,
 static const int kRenderTargetHeight = 1;
 static const int kRenderTargetWidth = 1;
 
-static GrRenderTarget* random_render_target(GrContext* context, SkRandom* random,
-                                            const GrDrawTargetCaps* caps) {
+static GrRenderTarget* random_render_target(GrTextureProvider* textureProvider, SkRandom* random,
+                                            const GrCaps* caps) {
     // setup render target
     GrTextureParams params;
     GrSurfaceDesc texDesc;
@@ -125,39 +118,30 @@ static GrRenderTarget* random_render_target(GrContext* context, SkRandom* random
     builder[1] = texDesc.fSampleCnt;
     builder.finish();
 
-    GrTexture* texture = context->textureProvider()->findAndRefTextureByUniqueKey(key);
+    GrTexture* texture = textureProvider->findAndRefTextureByUniqueKey(key);
     if (!texture) {
-        texture = context->textureProvider()->createTexture(texDesc, true);
+        texture = textureProvider->createTexture(texDesc, true);
         if (texture) {
-            context->textureProvider()->assignUniqueKeyToTexture(key, texture);
+            textureProvider->assignUniqueKeyToTexture(key, texture);
         }
     }
     return texture ? texture->asRenderTarget() : NULL;
 }
 
-static void set_random_xpf(GrContext* context, const GrDrawTargetCaps& caps,
-                           GrPipelineBuilder* pipelineBuilder, SkRandom* random,
-                           GrTexture* dummyTextures[]) {
-    SkAutoTUnref<const GrXPFactory> xpf(
-        GrProcessorTestFactory<GrXPFactory>::CreateStage(random, context, caps, dummyTextures));
+static void set_random_xpf(GrPipelineBuilder* pipelineBuilder, GrProcessorTestData* d) {
+    SkAutoTUnref<const GrXPFactory> xpf(GrProcessorTestFactory<GrXPFactory>::CreateStage(d));
     SkASSERT(xpf);
     pipelineBuilder->setXPFactory(xpf.get());
 }
 
-static void set_random_color_coverage_stages(GrGLGpu* gpu,
-                                             GrPipelineBuilder* pipelineBuilder,
-                                             int maxStages,
-                                             SkRandom* random,
-                                             GrTexture* dummyTextures[]) {
-    int numProcs = random->nextULessThan(maxStages + 1);
-    int numColorProcs = random->nextULessThan(numProcs + 1);
+static void set_random_color_coverage_stages(GrPipelineBuilder* pipelineBuilder,
+                                             GrProcessorTestData* d, int maxStages) {
+    int numProcs = d->fRandom->nextULessThan(maxStages + 1);
+    int numColorProcs = d->fRandom->nextULessThan(numProcs + 1);
 
     for (int s = 0; s < numProcs;) {
         SkAutoTUnref<const GrFragmentProcessor> fp(
-                GrProcessorTestFactory<GrFragmentProcessor>::CreateStage(random,
-                                                                         gpu->getContext(),
-                                                                         *gpu->caps(),
-                                                                         dummyTextures));
+                GrProcessorTestFactory<GrFragmentProcessor>::CreateStage(d));
         SkASSERT(fp);
 
         // finally add the stage to the correct pipeline in the drawstate
@@ -178,7 +162,7 @@ static void set_random_state(GrPipelineBuilder* pipelineBuilder, SkRandom* rando
 
     // If we don't have an MSAA rendertarget then we have to disable useHWAA
     if ((state | GrPipelineBuilder::kHWAntialias_Flag) &&
-        !pipelineBuilder->getRenderTarget()->isMultisampled()) {
+        !pipelineBuilder->getRenderTarget()->isUnifiedMultisampled()) {
         state &= ~GrPipelineBuilder::kHWAntialias_Flag;
     }
     pipelineBuilder->enableState(state);
@@ -208,20 +192,21 @@ static void set_random_stencil(GrPipelineBuilder* pipelineBuilder, SkRandom* ran
     }
 }
 
-bool GrDrawTarget::programUnitTest(int maxStages) {
-    GrGLGpu* gpu = static_cast<GrGLGpu*>(fContext->getGpu());
+bool GrDrawTarget::programUnitTest(GrContext* context, int maxStages) {
     // setup dummy textures
     GrSurfaceDesc dummyDesc;
     dummyDesc.fFlags = kRenderTarget_GrSurfaceFlag;
     dummyDesc.fConfig = kSkia8888_GrPixelConfig;
     dummyDesc.fWidth = 34;
     dummyDesc.fHeight = 18;
-    SkAutoTUnref<GrTexture> dummyTexture1(gpu->createTexture(dummyDesc, false, NULL, 0));
+    SkAutoTUnref<GrTexture> dummyTexture1(
+        fResourceProvider->createTexture(dummyDesc, false, NULL, 0));
     dummyDesc.fFlags = kNone_GrSurfaceFlags;
     dummyDesc.fConfig = kAlpha_8_GrPixelConfig;
     dummyDesc.fWidth = 16;
     dummyDesc.fHeight = 22;
-    SkAutoTUnref<GrTexture> dummyTexture2(gpu->createTexture(dummyDesc, false, NULL, 0));
+    SkAutoTUnref<GrTexture> dummyTexture2(
+        fResourceProvider->createTexture(dummyDesc, false, NULL, 0));
 
     if (!dummyTexture1 || ! dummyTexture2) {
         SkDebugf("Could not allocate dummy textures");
@@ -240,7 +225,8 @@ bool GrDrawTarget::programUnitTest(int maxStages) {
     static const int NUM_TESTS = 2048;
     for (int t = 0; t < NUM_TESTS; t++) {
         // setup random render target(can fail)
-        SkAutoTUnref<GrRenderTarget> rt(random_render_target(fContext, &random, this->caps()));
+        SkAutoTUnref<GrRenderTarget> rt(random_render_target(
+            fResourceProvider, &random, this->caps()));
         if (!rt.get()) {
             SkDebugf("Could not allocate render target");
             return false;
@@ -250,22 +236,17 @@ bool GrDrawTarget::programUnitTest(int maxStages) {
         pipelineBuilder.setRenderTarget(rt.get());
         pipelineBuilder.setClip(clip);
 
-        SkAutoTUnref<GrBatch> batch(GrRandomBatch(&random, fContext));
+        SkAutoTUnref<GrBatch> batch(GrRandomBatch(&random, context));
         SkASSERT(batch);
 
-        set_random_color_coverage_stages(gpu,
-                                         &pipelineBuilder,
-                                         maxStages,
-                                         &random,
-                                         dummyTextures);
-
-        // creates a random xfer processor factory on the draw state 
-        set_random_xpf(fContext, gpu->glCaps(), &pipelineBuilder, &random, dummyTextures);
-
+        GrProcessorDataManager procDataManager;
+        GrProcessorTestData ptd(&random, context, &procDataManager, fGpu->caps(), dummyTextures);
+        set_random_color_coverage_stages(&pipelineBuilder, &ptd, maxStages);
+        set_random_xpf(&pipelineBuilder, &ptd);
         set_random_state(&pipelineBuilder, &random);
         set_random_stencil(&pipelineBuilder, &random);
 
-        this->drawBatch(&pipelineBuilder, batch);
+        this->drawBatch(pipelineBuilder, batch);
     }
 
     // Flush everything, test passes if flush is successful(ie, no asserts are hit, no crashes)
@@ -283,7 +264,7 @@ DEF_GPUTEST(GLPrograms, reporter, factory) {
 #endif
 
     // We suppress prints to avoid spew
-    GrContext::Options opts;
+    GrContextOptions opts;
     opts.fSuppressPrints = true;
     GrContextFactory debugFactory(opts);
     for (int type = 0; type < GrContextFactory::kLastGLContextType; ++type) {
@@ -314,7 +295,7 @@ DEF_GPUTEST(GLPrograms, reporter, factory) {
 #endif
             GrTestTarget target;
             context->getTestTarget(&target);
-            REPORTER_ASSERT(reporter, target.target()->programUnitTest(maxStages));
+            REPORTER_ASSERT(reporter, target.target()->programUnitTest(context, maxStages));
         }
     }
 }

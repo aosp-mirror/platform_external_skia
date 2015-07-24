@@ -34,7 +34,7 @@ public:
     }
 
     bool asFragmentProcessor(GrContext*, const SkPaint& paint, const SkMatrix& viewM,
-                             const SkMatrix* localMatrix, GrColor* color,
+                             const SkMatrix* localMatrix, GrColor* color, GrProcessorDataManager*,
                              GrFragmentProcessor** fp) const override;
 
 #ifndef SK_IGNORE_TO_STRING
@@ -55,7 +55,7 @@ SkFlattenable* DCShader::CreateProc(SkReadBuffer& buf) {
 
 class DCFP : public GrFragmentProcessor {
 public:
-    DCFP(const SkMatrix& m) : fDeviceTransform(kDevice_GrCoordSet, m) {
+    DCFP(GrProcessorDataManager*, const SkMatrix& m) : fDeviceTransform(kDevice_GrCoordSet, m) {
         this->addCoordTransform(&fDeviceTransform);
         this->initClassID<DCFP>();
     }
@@ -65,14 +65,9 @@ public:
 
     GrGLFragmentProcessor* createGLInstance() const override {
         class DCGLFP : public GrGLFragmentProcessor {
-            void emitCode(GrGLFPBuilder* builder,
-                            const GrFragmentProcessor& fp,
-                            const char* outputColor,
-                            const char* inputColor,
-                            const TransformedCoordsArray& coords,
-                            const TextureSamplerArray& samplers) {
-                GrGLFragmentBuilder* fpb = builder->getFragmentShaderBuilder();
-                fpb->codeAppendf("vec2 c = %s;", fpb->ensureFSCoords2D(coords, 0).c_str());
+            void emitCode(EmitArgs& args) override {
+                GrGLFragmentBuilder* fpb = args.fBuilder->getFragmentShaderBuilder();
+                fpb->codeAppendf("vec2 c = %s;", fpb->ensureFSCoords2D(args.fCoords, 0).c_str());
                 fpb->codeAppend("vec2 r = mod(c, vec2(20.0));");
                 fpb->codeAppend("vec4 color = vec4(0.5*sin(c.x / 15.0) + 0.5,"
                                                     "0.5*cos((c.x + c.y) / 15.0) + 0.5,"
@@ -80,7 +75,7 @@ public:
                                                     "distance(r, vec2(15.0)) / 20.0 + 0.2);");
                 fpb->codeAppendf("color.rgb *= color.a;"
                                     "%s = color * %s;",
-                                    outputColor, GrGLSLExpr4(inputColor).c_str());
+                                    args.fOutputColor, GrGLSLExpr4(args.fInputColor).c_str());
             }
             void setData(const GrGLProgramDataManager&, const GrProcessor&) override {}
         };
@@ -101,8 +96,9 @@ private:
 
 bool DCShader::asFragmentProcessor(GrContext*, const SkPaint& paint, const SkMatrix& viewM,
                                    const SkMatrix* localMatrix, GrColor* color,
+                                   GrProcessorDataManager* procDataManager,
                                    GrFragmentProcessor** fp) const {
-    *fp = SkNEW_ARGS(DCFP, (fDeviceMatrix));
+    *fp = SkNEW_ARGS(DCFP, (procDataManager, fDeviceMatrix));
     *color = GrColorPackA4(paint.getAlpha());
     return true;
 }
@@ -110,7 +106,7 @@ bool DCShader::asFragmentProcessor(GrContext*, const SkPaint& paint, const SkMat
 class DCShaderGM : public GM {
 public:
     DCShaderGM() {
-        this->setBGColor(0xFFAABBCC);
+        this->setBGColor(sk_tool_utils::color_to_565(0xFFAABBCC));
     }
 
     ~DCShaderGM() override {
@@ -210,24 +206,12 @@ protected:
             }
 
             virtual void setFont(SkPaint* paint) {
-                sk_tool_utils::set_portable_typeface(paint);
+                sk_tool_utils::set_portable_typeface_always(paint);
             }
 
             virtual const char* text() const { return "Hello, Skia!"; }
         };
 
-        struct BmpText : public Text {
-           void setFont(SkPaint* paint) override {
-               if (!fTypeface) {
-                    fTypeface.reset(GetResourceAsTypeface("/fonts/Funkster.ttf"));
-               }
-               paint->setTypeface(fTypeface);
-            }
-
-            const char* text() const override { return "Hi, Skia!"; }
-
-            SkAutoTUnref<SkTypeface> fTypeface;
-        };
         fPrims.push_back(SkNEW(Rect));
         fPrims.push_back(SkNEW(Circle));
         fPrims.push_back(SkNEW(RRect));
@@ -237,7 +221,6 @@ protected:
         fPrims.push_back(SkNEW(Points(SkCanvas::kLines_PointMode)));
         fPrims.push_back(SkNEW(Points(SkCanvas::kPolygon_PointMode)));
         fPrims.push_back(SkNEW(Text));
-        fPrims.push_back(SkNEW(BmpText));
     }
 
     void onDraw(SkCanvas* canvas) override {

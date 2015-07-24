@@ -18,6 +18,7 @@
 #include "GrRenderTarget.h"
 #include "GrRenderTargetPriv.h"
 #include "GrResourceCache.h"
+#include "GrTest.h"
 #include "SkCanvas.h"
 #include "SkGr.h"
 #include "SkMessageBus.h"
@@ -122,7 +123,7 @@ static void test_stencil_buffers(skiatest::Reporter* reporter, GrContext* contex
                     smallRT0->asRenderTarget()->renderTargetPriv().getStencilAttachment() !=
                     bigRT->asRenderTarget()->renderTargetPriv().getStencilAttachment());
 
-    if (context->getMaxSampleCount() >= 4) {
+    if (context->caps()->maxSampleCount() >= 4) {
         // An RT with a different sample count should not share. 
         GrSurfaceDesc smallMSAADesc = smallDesc;
         smallMSAADesc.fSampleCnt = 4;
@@ -154,8 +155,9 @@ static void test_stencil_buffers(skiatest::Reporter* reporter, GrContext* contex
                         smallMSAART1->asRenderTarget()->renderTargetPriv().getStencilAttachment());
         // But not one with a larger sample count should not. (Also check that the request for 4
         // samples didn't get rounded up to >= 8 or else they could share.).
-        if (context->getMaxSampleCount() >= 8 && smallMSAART0 && smallMSAART0->asRenderTarget() &&
-            smallMSAART0->asRenderTarget()->numSamples() < 8) {
+        if (context->caps()->maxSampleCount() >= 8 &&
+            smallMSAART0 && smallMSAART0->asRenderTarget() &&
+            smallMSAART0->asRenderTarget()->numColorSamples() < 8) {
             smallMSAADesc.fSampleCnt = 8;
             smallMSAART1.reset(cache->createTexture(smallMSAADesc, false));
             SkAutoTUnref<GrTexture> smallMSAART1(cache->createTexture(smallMSAADesc, false));
@@ -172,11 +174,61 @@ static void test_stencil_buffers(skiatest::Reporter* reporter, GrContext* contex
     }
 }
 
+static void test_wrapped_resources(skiatest::Reporter* reporter, GrContext* context) {
+    const GrGpu* gpu = context->getGpu();
+    // this test is only valid for GL
+    if (!gpu || !gpu->glContextForTesting()) {
+        return;
+    }
+
+    GrBackendObject texIDs[2];
+    static const int kW = 100;
+    static const int kH = 100;
+
+    texIDs[0] = gpu->createTestingOnlyBackendTexture(NULL, kW, kH, kRGBA_8888_GrPixelConfig);
+    texIDs[1] = gpu->createTestingOnlyBackendTexture(NULL, kW, kH, kRGBA_8888_GrPixelConfig);
+
+    context->resetContext();
+
+    GrBackendTextureDesc desc;
+    desc.fConfig = kBGRA_8888_GrPixelConfig;
+    desc.fWidth = kW;
+    desc.fHeight = kH;
+
+    desc.fTextureHandle = texIDs[0];
+    SkAutoTUnref<GrTexture> borrowed(context->textureProvider()->wrapBackendTexture(
+                                     desc, kBorrow_GrWrapOwnership));
+
+    desc.fTextureHandle = texIDs[1];
+    SkAutoTUnref<GrTexture> adopted(context->textureProvider()->wrapBackendTexture(
+                                    desc, kAdopt_GrWrapOwnership));
+
+    REPORTER_ASSERT(reporter, SkToBool(borrowed) && SkToBool(adopted));
+    if (!SkToBool(borrowed) || !SkToBool(adopted)) {
+        return;
+    }
+
+    borrowed.reset(NULL);
+    adopted.reset(NULL);
+
+    context->flush();
+
+    bool borrowedIsAlive = gpu->isTestingOnlyBackendTexture(texIDs[0]);
+    bool adoptedIsAlive = gpu->isTestingOnlyBackendTexture(texIDs[1]);
+
+    REPORTER_ASSERT(reporter, borrowedIsAlive);
+    REPORTER_ASSERT(reporter, !adoptedIsAlive);
+
+    gpu->deleteTestingOnlyBackendTexture(texIDs[0]);
+
+    context->resetContext();
+}
+
 class TestResource : public GrGpuResource {
     static const size_t kDefaultSize = 100;
     enum ScratchConstructor { kScratchConstructor };
 public:
-    SK_DECLARE_INST_COUNT(TestResource);
+    
     /** Property that distinctly categorizes the resource.
      * For example, textures have width, height, ... */
     enum SimulatedProperty { kA_SimulatedProperty, kB_SimulatedProperty };
@@ -356,7 +408,7 @@ static void test_budgeting(skiatest::Reporter* reporter) {
     unique->setSize(11);
     unique->resourcePriv().setUniqueKey(uniqueKey);
     TestResource* wrapped = SkNEW_ARGS(TestResource,
-                                       (context->getGpu(), GrGpuResource::kWrapped_LifeCycle));
+                                       (context->getGpu(), GrGpuResource::kBorrowed_LifeCycle));
     wrapped->setSize(12);
     TestResource* unbudgeted = SkNEW_ARGS(TestResource,
                                           (context->getGpu(), GrGpuResource::kUncached_LifeCycle));
@@ -394,7 +446,7 @@ static void test_budgeting(skiatest::Reporter* reporter) {
                               unbudgeted->gpuMemorySize() == cache->getResourceBytes());
 
     // Now try freeing the budgeted resources first
-    wrapped = SkNEW_ARGS(TestResource, (context->getGpu(), GrGpuResource::kWrapped_LifeCycle));
+    wrapped = SkNEW_ARGS(TestResource, (context->getGpu(), GrGpuResource::kBorrowed_LifeCycle));
     scratch->setSize(12);
     unique->unref();
     cache->purgeAllUnlocked();
@@ -471,7 +523,7 @@ static void test_unbudgeted(skiatest::Reporter* reporter) {
     REPORTER_ASSERT(reporter, 21 == cache->getBudgetedResourceBytes());
 
     wrapped = SkNEW_ARGS(TestResource,
-                         (context->getGpu(), large, GrGpuResource::kWrapped_LifeCycle));
+                         (context->getGpu(), large, GrGpuResource::kBorrowed_LifeCycle));
     REPORTER_ASSERT(reporter, 3 == cache->getResourceCount());
     REPORTER_ASSERT(reporter, 21 + large == cache->getResourceBytes());
     REPORTER_ASSERT(reporter, 2 == cache->getBudgetedResourceCount());
@@ -1192,6 +1244,7 @@ DEF_GPUTEST(ResourceCache, reporter, factory) {
                                                                    SkSurface::kNo_Budgeted, info));
         test_cache(reporter, context, surface->getCanvas());
         test_stencil_buffers(reporter, context);
+        test_wrapped_resources(reporter, context);
     }
 
     // The below tests create their own mock contexts.

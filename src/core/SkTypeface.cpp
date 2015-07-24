@@ -10,6 +10,7 @@
 #include "SkFontDescriptor.h"
 #include "SkFontMgr.h"
 #include "SkLazyPtr.h"
+#include "SkMutex.h"
 #include "SkOTTable_OS_2.h"
 #include "SkStream.h"
 #include "SkTypeface.h"
@@ -18,6 +19,9 @@ SkTypeface::SkTypeface(const SkFontStyle& style, SkFontID fontID, bool isFixedPi
     : fUniqueID(fontID), fStyle(style), fIsFixedPitch(isFixedPitch) { }
 
 SkTypeface::~SkTypeface() { }
+
+
+SkTypeface* (*gCreateTypefaceDelegate)(const char [], SkTypeface::Style ) = NULL;
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -104,12 +108,18 @@ uint32_t SkTypeface::UniqueID(const SkTypeface* face) {
 }
 
 bool SkTypeface::Equal(const SkTypeface* facea, const SkTypeface* faceb) {
-    return SkTypeface::UniqueID(facea) == SkTypeface::UniqueID(faceb);
+    return facea == faceb || SkTypeface::UniqueID(facea) == SkTypeface::UniqueID(faceb);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
 SkTypeface* SkTypeface::CreateFromName(const char name[], Style style) {
+    if (gCreateTypefaceDelegate) {
+        SkTypeface* result = (*gCreateTypefaceDelegate)(name, style);
+        if (result) {
+            return result;
+        }
+    }
     if (NULL == name) {
         return RefDefault(style);
     }
@@ -143,6 +153,11 @@ SkTypeface* SkTypeface::CreateFromStream(SkStreamAsset* stream, int index) {
     return fm->createFromStream(stream, index);
 }
 
+SkTypeface* SkTypeface::CreateFromFontData(SkFontData* data) {
+    SkAutoTUnref<SkFontMgr> fm(SkFontMgr::RefDefault());
+    return fm->createFromFontData(data);
+}
+
 SkTypeface* SkTypeface::CreateFromFile(const char path[], int index) {
     SkAutoTUnref<SkFontMgr> fm(SkFontMgr::RefDefault());
     return fm->createFromFile(path, index);
@@ -157,9 +172,7 @@ void SkTypeface::serialize(SkWStream* wstream) const {
 
     // Embed font data if it's a local font.
     if (isLocal && !desc.hasFontData()) {
-        int ttcIndex;
-        desc.setFontData(this->onOpenStream(&ttcIndex));
-        desc.setFontIndex(ttcIndex);
+        desc.setFontData(this->onCreateFontData());
     }
     desc.serialize(wstream);
 }
@@ -171,18 +184,16 @@ void SkTypeface::serializeForcingEmbedding(SkWStream* wstream) const {
 
     // Always embed font data.
     if (!desc.hasFontData()) {
-        int ttcIndex;
-        desc.setFontData(this->onOpenStream(&ttcIndex));
-        desc.setFontIndex(ttcIndex);
+        desc.setFontData(this->onCreateFontData());
     }
     desc.serialize(wstream);
 }
 
 SkTypeface* SkTypeface::Deserialize(SkStream* stream) {
     SkFontDescriptor desc(stream);
-    SkStreamAsset* data = desc.transferFontData();
+    SkFontData* data = desc.detachFontData();
     if (data) {
-        SkTypeface* typeface = SkTypeface::CreateFromStream(data, desc.getFontIndex());
+        SkTypeface* typeface = SkTypeface::CreateFromFontData(data);
         if (typeface) {
             return typeface;
         }
@@ -217,6 +228,17 @@ SkStreamAsset* SkTypeface::openStream(int* ttcIndex) const {
     }
     return this->onOpenStream(ttcIndex);
 }
+
+SkFontData* SkTypeface::createFontData() const {
+    return this->onCreateFontData();
+}
+
+// This implementation is temporary until this method can be made pure virtual.
+SkFontData* SkTypeface::onCreateFontData() const {
+    int index;
+    SkAutoTDelete<SkStreamAsset> stream(this->onOpenStream(&index));
+    return new SkFontData(stream.detach(), index, NULL, 0);
+};
 
 int SkTypeface::charsToGlyphs(const void* chars, Encoding encoding,
                               uint16_t glyphs[], int glyphCount) const {

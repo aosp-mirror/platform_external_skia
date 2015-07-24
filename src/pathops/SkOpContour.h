@@ -34,6 +34,14 @@ public:
                 : fBounds.fTop < rh.fBounds.fTop;
     }
 
+    void addAlignIntersections(SkOpContourHead* contourList, SkChunkAlloc* allocator) {
+        SkASSERT(fCount > 0);
+        SkOpSegment* segment = &fHead;
+        do {
+            segment->addAlignIntersections(contourList, allocator);
+        } while ((segment = segment->next()));
+    }
+
     void addConic(SkPoint pts[3], SkScalar weight, SkChunkAlloc* allocator) {
         appendSegment(allocator).addConic(pts, weight, this);
     }
@@ -184,6 +192,15 @@ public:
         return fTail->pts()[SkPathOpsVerbToPoints(fTail->verb())];
     }
 
+    bool findCollapsed() {
+        SkASSERT(fCount > 0);
+        SkOpSegment* segment = &fHead;
+        do {
+            segment->findCollapsed();
+        } while ((segment = segment->next()));
+        return true;
+    }
+
     SkOpSpan* findSortableTop(SkOpContour* );
 
     SkOpSegment* first() {
@@ -207,20 +224,38 @@ public:
         SkDEBUGCODE(fID = globalState->nextContourID());
     }
 
+    int isCcw() const {
+        return fCcw;
+    }
+
     bool isXor() const {
         return fXor;
     }
 
-    void missingCoincidence(SkOpCoincidence* coincidences, SkChunkAlloc* allocator) {
+    void markDone() {
+        SkOpSegment* segment = &fHead;
+        do {
+            segment->markAllDone();
+        } while ((segment = segment->next()));
+    }
+
+    bool missingCoincidence(SkOpCoincidence* coincidences, SkChunkAlloc* allocator) {
         SkASSERT(fCount > 0);
         SkOpSegment* segment = &fHead;
+        bool result = false;
         do {
             if (fState->angleCoincidence()) {
                 segment->checkAngleCoin(coincidences, allocator);
-            } else {
-                segment->missingCoincidence(coincidences, allocator);
+            } else if (segment->missingCoincidence(coincidences, allocator)) {
+                result = true;
+    // FIXME: trying again loops forever in issue3651_6
+    // The continue below is speculative -- once there's an actual case that requires it,
+    // add the plumbing necessary to look for another missing coincidence in the same segment
+         //       continue; // try again in case another missing coincidence is further along
             }
-        } while ((segment = segment->next()));
+            segment = segment->next();
+        } while (segment);
+        return result;
     }
 
     bool moveMultiples() {
@@ -289,6 +324,18 @@ public:
         SkDEBUGCODE(fDebugIndent = 0);
     }
 
+    void resetReverse() {
+        SkOpContour* next = this;
+        do {
+            next->fCcw = -1;
+            next->fReverse = false;
+        } while ((next = next->next()));
+    }
+
+    bool reversed() const {
+        return fReverse;
+    }
+
     void setBounds() {
         SkASSERT(fCount > 0);
         const SkOpSegment* segment = &fHead;
@@ -296,6 +343,10 @@ public:
         while ((segment = segment->next())) {
             fBounds.add(segment->bounds());
         }
+    }
+
+    void setCcw(int ccw) {
+        fCcw = ccw;
     }
 
     void setGlobalState(SkOpGlobalState* state) {
@@ -313,6 +364,10 @@ public:
 
     void setOppXor(bool isOppXor) {
         fOppXor = isOppXor;
+    }
+
+    void setReverse() {
+        fReverse = true;
     }
 
     void setXor(bool isXor) {
@@ -347,6 +402,7 @@ public:
         } while ((segment = segment->next()));
     }
 
+    void toReversePath(SkPathWriter* path) const;
     void toPath(SkPathWriter* path) const;
     SkOpSegment* undoneSegment(SkOpSpanBase** startPtr, SkOpSpanBase** endPtr);
 
@@ -356,11 +412,13 @@ private:
     SkOpSegment* fTail;
     SkOpContour* fNext;
     SkPathOpsBounds fBounds;
+    int fCcw;
     int fCount;
     int fFirstSorted;
     bool fDone;  // set by find top segment
     bool fTopsFound;
     bool fOperand;  // true for the second argument to a binary operator
+    bool fReverse;  // true if contour should be reverse written to path (used only by fix winding)
     bool fXor;  // set if original path had even-odd fill
     bool fOppXor;  // set if opposite path had even-odd fill
     SkDEBUGCODE(int fID);

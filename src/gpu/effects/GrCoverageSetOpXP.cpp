@@ -7,8 +7,8 @@
  */
 
 #include "effects/GrCoverageSetOpXP.h"
+#include "GrCaps.h"
 #include "GrColor.h"
-#include "GrDrawTargetCaps.h"
 #include "GrProcessor.h"
 #include "GrProcOptInfo.h"
 #include "gl/GrGLXferProcessor.h"
@@ -27,8 +27,6 @@ public:
 
     GrGLXferProcessor* createGLInstance() const override;
 
-    bool hasSecondaryOutput() const override { return false; }
-
     bool invertCoverage() const { return fInvertCoverage; }
 
 private:
@@ -38,7 +36,7 @@ private:
                                                  const GrProcOptInfo& coveragePOI,
                                                  bool doesStencilWrite,
                                                  GrColor* color,
-                                                 const GrDrawTargetCaps& caps) override;
+                                                 const GrCaps& caps) override;
 
     void onGetGLProcessorKey(const GrGLSLCaps& caps, GrProcessorKeyBuilder* b) const override;
 
@@ -72,7 +70,7 @@ public:
     };
 
 private:
-    void onEmitCode(const EmitArgs& args) override {
+    void emitOutputsForBlendState(const EmitArgs& args) override {
         const CoverageSetOpXP& xp = args.fXP.cast<CoverageSetOpXP>();
         GrGLXPFragmentBuilder* fsBuilder = args.fPB->getFragmentShaderBuilder();
 
@@ -112,7 +110,7 @@ CoverageSetOpXP::onGetOptimizations(const GrProcOptInfo& colorPOI,
                                     const GrProcOptInfo& coveragePOI,
                                     bool doesStencilWrite,
                                     GrColor* color,
-                                    const GrDrawTargetCaps& caps) {
+                                    const GrCaps& caps) {
     // We never look at the color input
     return GrXferProcessor::kIgnoreColor_OptFlag; 
 }
@@ -223,39 +221,33 @@ GrXPFactory* GrCoverageSetOpXPFactory::Create(SkRegion::Op regionOp, bool invert
 }
 
 GrXferProcessor*
-GrCoverageSetOpXPFactory::onCreateXferProcessor(const GrDrawTargetCaps& caps,
+GrCoverageSetOpXPFactory::onCreateXferProcessor(const GrCaps& caps,
                                                 const GrProcOptInfo& colorPOI,
                                                 const GrProcOptInfo& covPOI,
-                                                const GrDeviceCoordTexture* dstCopy) const {
+                                                bool hasMixedSamples,
+                                                const DstTexture* dst) const {
+    // We don't support inverting coverage with mixed samples. We don't expect to ever want this in
+    // the future, however we could at some point make this work using an inverted coverage
+    // modulation table. Note that an inverted table still won't work if there are coverage procs.
+    if (fInvertCoverage && hasMixedSamples) {
+        SkASSERT(false);
+        return NULL;
+    }
+
     return CoverageSetOpXP::Create(fRegionOp, fInvertCoverage);
 }
 
-void GrCoverageSetOpXPFactory::getInvariantOutput(const GrProcOptInfo& colorPOI,
-                                                  const GrProcOptInfo& coveragePOI,
-                                                  GrXPFactory::InvariantOutput* output) const {
-    if (SkRegion::kReplace_Op == fRegionOp) {
-        if (coveragePOI.isSolidWhite()) {
-            output->fBlendedColor = GrColor_WHITE;
-            output->fBlendedColorFlags = kRGBA_GrColorComponentFlags;
-        } else {
-            output->fBlendedColorFlags = 0;
-        }
-
-        output->fWillBlendWithDst = false;
-    } else {
-        output->fBlendedColorFlags = 0;
-        output->fWillBlendWithDst = true;
-    }
+void GrCoverageSetOpXPFactory::getInvariantBlendedColor(const GrProcOptInfo& colorPOI,
+                                                        InvariantBlendedColor* blendedColor) const {
+    blendedColor->fWillBlendWithDst = SkRegion::kReplace_Op != fRegionOp;
+    blendedColor->fKnownColorFlags = kNone_GrColorComponentFlags;
 }
 
 GR_DEFINE_XP_FACTORY_TEST(GrCoverageSetOpXPFactory);
 
-GrXPFactory* GrCoverageSetOpXPFactory::TestCreate(SkRandom* random,
-                                                  GrContext*,
-                                                  const GrDrawTargetCaps&,
-                                                  GrTexture*[]) {
-    SkRegion::Op regionOp = SkRegion::Op(random->nextULessThan(SkRegion::kLastOp + 1));
-    bool invertCoverage = random->nextBool();
+GrXPFactory* GrCoverageSetOpXPFactory::TestCreate(GrProcessorTestData* d) {
+    SkRegion::Op regionOp = SkRegion::Op(d->fRandom->nextULessThan(SkRegion::kLastOp + 1));
+    bool invertCoverage = d->fRandom->nextBool();
     return GrCoverageSetOpXPFactory::Create(regionOp, invertCoverage);
 }
 

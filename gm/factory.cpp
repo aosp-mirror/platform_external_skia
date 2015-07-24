@@ -36,20 +36,20 @@ protected:
             // bitmap is unlocked.
             SkAutoTUnref<SkDiscardableMemoryPool> pool(
                 SkDiscardableMemoryPool::Create(1));
-            SkAssertResult(SkInstallDiscardablePixelRef(SkImageGenerator::NewFromData(data),
-                                                        &fBitmap, pool));
+            SkAssertResult(SkInstallDiscardablePixelRef(SkImageGenerator::NewFromEncoded(data),
+                                                        NULL, &fBitmap, pool));
         }
     }
 
-    virtual SkString onShortName() override {
+    SkString onShortName() override {
         return SkString("factory");
     }
 
-    virtual SkISize onISize() override {
+    SkISize onISize() override {
         return SkISize::Make(640, 480);
     }
 
-    virtual void onDraw(SkCanvas* canvas) override {
+    void onDraw(SkCanvas* canvas) override {
         canvas->drawBitmap(fBitmap, 0, 0);
     }
 

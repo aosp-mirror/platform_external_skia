@@ -12,7 +12,16 @@
 
 class ColorTypeGM : public skiagm::GM {
 public:
-    ColorTypeGM() {
+    ColorTypeGM()
+        : fColorType(NULL) {
+    }
+
+    virtual ~ColorTypeGM() {
+        SkSafeUnref(fColorType);
+    }
+
+protected:
+    void onOnceBeforeDraw() override {
         const SkColor colors[] = {
             SK_ColorRED, SK_ColorGREEN, SK_ColorBLUE,
             SK_ColorMAGENTA, SK_ColorCYAN, SK_ColorYELLOW
@@ -26,7 +35,7 @@ public:
         paint.setAntiAlias(true);
         paint.setShader(s)->unref();
 
-        SkTypeface* orig = sk_tool_utils::create_portable_typeface("Times",
+        SkTypeface* orig = sk_tool_utils::create_portable_typeface_always("serif",
                                                             SkTypeface::kBold);
         if (NULL == orig) {
             orig = SkTypeface::RefDefault();
@@ -35,11 +44,6 @@ public:
         orig->unref();
     }
 
-    virtual ~ColorTypeGM() {
-        fColorType->unref();
-    }
-
-protected:
     SkString onShortName() override {
         return SkString("colortype");
     }

@@ -10,7 +10,10 @@
 
 #include "SkCanvas.h"
 #include "SkDrawable.h"
+#include "SkMatrix.h"
+#include "SkPathPriv.h"
 #include "SkPicture.h"
+#include "SkRSXform.h"
 #include "SkTextBlob.h"
 
 namespace SkRecords {
@@ -35,16 +38,15 @@ namespace SkRecords {
     M(ClipRRect)                                                    \
     M(ClipRect)                                                     \
     M(ClipRegion)                                                   \
-    M(BeginCommentGroup)                                            \
-    M(AddComment)                                                   \
-    M(EndCommentGroup)                                              \
     M(DrawBitmap)                                                   \
     M(DrawBitmapNine)                                               \
-    M(DrawBitmapRectToRect)                                         \
-    M(DrawBitmapRectToRectBleed)                                    \
+    M(DrawBitmapRect)                                               \
+    M(DrawBitmapRectFast)                                           \
+    M(DrawBitmapRectFixedSize)                                      \
     M(DrawDrawable)                                                 \
     M(DrawImage)                                                    \
     M(DrawImageRect)                                                \
+    M(DrawImageNine)                                                \
     M(DrawDRRect)                                                   \
     M(DrawOval)                                                     \
     M(DrawPaint)                                                    \
@@ -60,6 +62,7 @@ namespace SkRecords {
     M(DrawRect)                                                     \
     M(DrawSprite)                                                   \
     M(DrawTextBlob)                                                 \
+    M(DrawAtlas)                                                    \
     M(DrawVertices)
 
 // Defines SkRecords::Type, an enum of all record types.
@@ -74,48 +77,65 @@ struct T {                              \
     static const Type kType = T##_Type; \
 };
 
-// We try to be flexible about the types the constructors take.  Instead of requring the exact type
-// A here, we take any type Z which implicitly casts to A.  This allows the delay_copy() trick to
-// work, allowing the caller to decide whether to pass by value or by const&.
+// Instead of requring the exact type A here, we take any type Z which implicitly casts to A.
+// This lets our wrappers like ImmutableBitmap work seamlessly.
 
 #define RECORD1(T, A, a)                \
 struct T {                              \
     static const Type kType = T##_Type; \
+    T() {}                              \
     template <typename Z>               \
-    T(Z a) : a(a) {}                    \
+    T(const Z& a) : a(a) {}             \
     A a;                                \
 };
 
-#define RECORD2(T, A, a, B, b)          \
-struct T {                              \
-    static const Type kType = T##_Type; \
-    template <typename Z, typename Y>   \
-    T(Z a, Y b) : a(a), b(b) {}         \
-    A a; B b;                           \
+#define RECORD2(T, A, a, B, b)                \
+struct T {                                    \
+    static const Type kType = T##_Type;       \
+    T() {}                                    \
+    template <typename Z, typename Y>         \
+    T(const Z& a, const Y& b) : a(a), b(b) {} \
+    A a; B b;                                 \
 };
 
-#define RECORD3(T, A, a, B, b, C, c)              \
-struct T {                                        \
-    static const Type kType = T##_Type;           \
-    template <typename Z, typename Y, typename X> \
-    T(Z a, Y b, X c) : a(a), b(b), c(c) {}        \
-    A a; B b; C c;                                \
+#define RECORD3(T, A, a, B, b, C, c)                            \
+struct T {                                                      \
+    static const Type kType = T##_Type;                         \
+    T() {}                                                      \
+    template <typename Z, typename Y, typename X>               \
+    T(const Z& a, const Y& b, const X& c) : a(a), b(b), c(c) {} \
+    A a; B b; C c;                                              \
 };
 
-#define RECORD4(T, A, a, B, b, C, c, D, d)                    \
-struct T {                                                    \
-    static const Type kType = T##_Type;                       \
-    template <typename Z, typename Y, typename X, typename W> \
-    T(Z a, Y b, X c, W d) : a(a), b(b), c(c), d(d) {}         \
-    A a; B b; C c; D d;                                       \
+#define RECORD4(T, A, a, B, b, C, c, D, d)                                        \
+struct T {                                                                        \
+    static const Type kType = T##_Type;                                           \
+    T() {}                                                                        \
+    template <typename Z, typename Y, typename X, typename W>                     \
+    T(const Z& a, const Y& b, const X& c, const W& d) : a(a), b(b), c(c), d(d) {} \
+    A a; B b; C c; D d;                                                           \
 };
 
 #define RECORD5(T, A, a, B, b, C, c, D, d, E, e)                          \
 struct T {                                                                \
     static const Type kType = T##_Type;                                   \
+    T() {}                                                                \
     template <typename Z, typename Y, typename X, typename W, typename V> \
-    T(Z a, Y b, X c, W d, V e) : a(a), b(b), c(c), d(d), e(e) {}          \
+    T(const Z& a, const Y& b, const X& c, const W& d, const V& e)         \
+        : a(a), b(b), c(c), d(d), e(e) {}                                 \
     A a; B b; C c; D d; E e;                                              \
+};
+
+#define RECORD8(T, A, a, B, b, C, c, D, d, E, e, F, f, G, g, H, h) \
+struct T {                                                         \
+    static const Type kType = T##_Type;                            \
+    T() {}                                                         \
+    template <typename Z, typename Y, typename X, typename W,      \
+              typename V, typename U, typename S, typename R>      \
+    T(const Z& a, const Y& b, const X& c, const W& d,              \
+      const V& e, const U& f, const S& g, const R& h)              \
+        : a(a), b(b), c(c), d(d), e(e), f(f), g(g), h(h) {}        \
+    A a; B b; C c; D d; E e; F f; G g; H h;                        \
 };
 
 #define ACT_AS_PTR(ptr)                 \
@@ -125,6 +145,7 @@ struct T {                                                                \
 template <typename T>
 class RefBox : SkNoncopyable {
 public:
+    RefBox() {}
     RefBox(T* obj) : fObj(SkSafeRef(obj)) {}
     ~RefBox() { SkSafeUnref(fObj); }
 
@@ -138,6 +159,7 @@ private:
 template <typename T>
 class Optional : SkNoncopyable {
 public:
+    Optional() : fPtr(nullptr) {}
     Optional(T* ptr) : fPtr(ptr) {}
     ~Optional() { if (fPtr) fPtr->~T(); }
 
@@ -167,6 +189,7 @@ private:
 template <typename T>
 class PODArray {
 public:
+    PODArray() {}
     PODArray(T* ptr) : fPtr(ptr) {}
     // Default copy and assign.
 
@@ -181,6 +204,7 @@ private:
 // Using this, we guarantee the immutability of all bitmaps we record.
 class ImmutableBitmap : SkNoncopyable {
 public:
+    ImmutableBitmap() {}
     explicit ImmutableBitmap(const SkBitmap& bitmap) {
         if (bitmap.isImmutable()) {
             fBitmap = bitmap;
@@ -203,16 +227,20 @@ private:
 // SkPath::cheapComputeDirection() is similar.
 // Recording is a convenient time to cache these, or we can delay it to between record and playback.
 struct PreCachedPath : public SkPath {
+    PreCachedPath() {}
     explicit PreCachedPath(const SkPath& path) : SkPath(path) {
         this->updateBoundsCache();
-        SkPath::Direction junk;
-        (void)this->cheapComputeDirection(&junk);
+#if 0  // Disabled to see if we ever really race on this.  It costs time, chromium:496982.
+        SkPathPriv::FirstDirection junk;
+        (void)SkPathPriv::CheapComputeFirstDirection(*this, &junk);
+#endif
     }
 };
 
 // Like SkPath::getBounds(), SkMatrix::getType() isn't thread safe unless we precache it.
 // This may not cover all SkMatrices used by the picture (e.g. some could be hiding in a shader).
 struct TypedMatrix : public SkMatrix {
+    TypedMatrix() {}
     explicit TypedMatrix(const SkMatrix& matrix) : SkMatrix(matrix) {
         (void)this->getType();
     }
@@ -227,6 +255,7 @@ RECORD3(SaveLayer, Optional<SkRect>, bounds, Optional<SkPaint>, paint, SkCanvas:
 RECORD1(SetMatrix, TypedMatrix, matrix);
 
 struct RegionOpAndAA {
+    RegionOpAndAA() {}
     RegionOpAndAA(SkRegion::Op op, bool aa) : op(op), aa(aa) {}
     SkRegion::Op op : 31;  // This really only needs to be 3, but there's no win today to do so.
     unsigned     aa :  1;  // MSVC won't pack an enum with an bool, so we call this an unsigned.
@@ -238,10 +267,6 @@ RECORD3(ClipRRect,  SkIRect, devBounds, SkRRect,       rrect, RegionOpAndAA, opA
 RECORD3(ClipRect,   SkIRect, devBounds, SkRect,         rect, RegionOpAndAA, opAA);
 RECORD3(ClipRegion, SkIRect, devBounds, SkRegion,     region, SkRegion::Op,    op);
 
-RECORD1(BeginCommentGroup, PODArray<char>, description);
-RECORD2(AddComment, PODArray<char>, key, PODArray<char>, value);
-RECORD0(EndCommentGroup);
-
 // While not strictly required, if you have an SkPaint, it's fastest to put it first.
 RECORD4(DrawBitmap, Optional<SkPaint>, paint,
                     ImmutableBitmap, bitmap,
@@ -251,23 +276,33 @@ RECORD4(DrawBitmapNine, Optional<SkPaint>, paint,
                         ImmutableBitmap, bitmap,
                         SkIRect, center,
                         SkRect, dst);
-RECORD4(DrawBitmapRectToRect, Optional<SkPaint>, paint,
-                              ImmutableBitmap, bitmap,
-                              Optional<SkRect>, src,
-                              SkRect, dst);
-RECORD4(DrawBitmapRectToRectBleed, Optional<SkPaint>, paint,
-                                   ImmutableBitmap, bitmap,
-                                   Optional<SkRect>, src,
-                                   SkRect, dst);
+RECORD4(DrawBitmapRect, Optional<SkPaint>, paint,
+                        ImmutableBitmap, bitmap,
+                        Optional<SkRect>, src,
+                        SkRect, dst);
+RECORD4(DrawBitmapRectFast, Optional<SkPaint>, paint,
+                            ImmutableBitmap, bitmap,
+                            Optional<SkRect>, src,
+                            SkRect, dst);
+RECORD5(DrawBitmapRectFixedSize, SkPaint, paint,
+                                 ImmutableBitmap, bitmap,
+                                 SkRect, src,
+                                 SkRect, dst,
+                                 SkCanvas::SrcRectConstraint, constraint);
 RECORD3(DrawDRRect, SkPaint, paint, SkRRect, outer, SkRRect, inner);
-RECORD2(DrawDrawable, SkRect, worstCaseBounds, int32_t, index);
+RECORD3(DrawDrawable, Optional<SkMatrix>, matrix, SkRect, worstCaseBounds, int32_t, index);
 RECORD4(DrawImage, Optional<SkPaint>, paint,
                    RefBox<const SkImage>, image,
                    SkScalar, left,
                    SkScalar, top);
-RECORD4(DrawImageRect, Optional<SkPaint>, paint,
+RECORD5(DrawImageRect, Optional<SkPaint>, paint,
                        RefBox<const SkImage>, image,
                        Optional<SkRect>, src,
+                       SkRect, dst,
+                       SkCanvas::SrcRectConstraint, constraint);
+RECORD4(DrawImageNine, Optional<SkPaint>, paint,
+                       RefBox<const SkImage>, image,
+                       SkIRect, center,
                        SkRect, dst);
 RECORD2(DrawOval, SkPaint, paint, SkRect, oval);
 RECORD1(DrawPaint, SkPaint, paint);
@@ -309,6 +344,15 @@ RECORD5(DrawPatch, SkPaint, paint,
                    PODArray<SkPoint>, texCoords,
                    RefBox<SkXfermode>, xmode);
 
+RECORD8(DrawAtlas,  Optional<SkPaint>, paint,
+                    RefBox<const SkImage>, atlas,
+                    PODArray<SkRSXform>, xforms,
+                    PODArray<SkRect>, texs,
+                    PODArray<SkColor>, colors,
+                    int, count,
+                    SkXfermode::Mode, mode,
+                    Optional<SkRect>, cull);
+
 // This guy is so ugly we just write it manually.
 struct DrawVertices {
     static const Type kType = DrawVertices_Type;
@@ -349,6 +393,7 @@ struct DrawVertices {
 #undef RECORD3
 #undef RECORD4
 #undef RECORD5
+#undef RECORD8
 
 }  // namespace SkRecords
 

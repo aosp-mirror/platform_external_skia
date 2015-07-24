@@ -4,6 +4,9 @@
 # found in the LICENSE file.
 #
 {
+  'includes': [
+    'apptype_console.gypi',
+  ],
   'variables': {
     #manually set sample_pdf_file_viewer to 1 to have the PdfViewer in SampleApp
     'sample_pdf_file_viewer%': 0,
@@ -12,7 +15,6 @@
     {
       'target_name': 'SampleApp',
       'type': 'executable',
-      'mac_bundle' : 1,
       'include_dirs' : [
         '../src/core',
         '../src/effects', #needed for BlurMask.h
@@ -43,6 +45,7 @@
         '../samplecode/SampleAnimBlur.cpp',
         '../samplecode/SampleApp.cpp',
         '../samplecode/SampleArc.cpp',
+        '../samplecode/SampleAtlas.cpp',
         '../samplecode/SampleBigBlur.cpp',
         '../samplecode/SampleBigGradient.cpp',
         '../samplecode/SampleBitmapRect.cpp',
@@ -83,6 +86,7 @@
         '../samplecode/SampleLayerMask.cpp',
         '../samplecode/SampleLayers.cpp',
         '../samplecode/SampleLCD.cpp',
+	'../samplecode/SampleLighting.cpp',
         '../samplecode/SampleLines.cpp',
         '../samplecode/SampleLua.cpp',
         '../samplecode/SampleManyRects.cpp',
@@ -178,38 +182,6 @@
             '../samplecode/SampleEncode.cpp',
           ],
         }],
-        [ 'skia_os == "mac"', {
-          'sources': [
-            # Sample App specific files
-            '../src/views/mac/SampleApp-Info.plist',
-            '../src/views/mac/SampleAppDelegate.h',
-            '../src/views/mac/SampleAppDelegate.mm',
-            '../src/views/mac/SkSampleNSView.h',
-            '../src/views/mac/SkSampleNSView.mm',
-
-            # Mac files
-            '../src/views/mac/SkEventNotifier.h',
-            '../src/views/mac/SkEventNotifier.mm',
-            '../src/views/mac/skia_mac.mm',
-            '../src/views/mac/SkNSView.h',
-            '../src/views/mac/SkNSView.mm',
-            '../src/views/mac/SkOptionsTableView.h',
-            '../src/views/mac/SkOptionsTableView.mm',
-            '../src/views/mac/SkOSWindow_Mac.mm',
-            '../src/views/mac/SkTextFieldCell.h',
-            '../src/views/mac/SkTextFieldCell.m',
-          ],
-          'libraries': [
-            '$(SDKROOT)/System/Library/Frameworks/QuartzCore.framework',
-            '$(SDKROOT)/System/Library/Frameworks/OpenGL.framework',
-          ],
-          'xcode_settings' : {
-            'INFOPLIST_FILE' : '../src/views/mac/SampleApp-Info.plist',
-          },
-          'mac_bundle_resources' : [
-            '../src/views/mac/SampleApp.xib',
-          ],
-        }],
         [ 'skia_os == "ios"', {
           # TODO: This doesn't build properly yet, but it's getting there.
           'sources!': [
@@ -241,9 +213,6 @@
             '../experimental/iOSSampleApp/iPhone/MainWindow_iPhone.xib',
 
             '../src/views/ios/SkOSWindow_iOS.mm',
-            '../src/utils/ios/SkStream_NSData.mm',
-            # Not fully implemented yet
-            # '../src/utils/ios/SkOSFile_iOS.mm',
 
             '../src/utils/mac/SkCreateCGImageRef.cpp',
             '../experimental/iOSSampleApp/SkiOSSampleApp-Debug.xcconfig',
@@ -291,17 +260,17 @@
             'android_deps.gyp:Android_SampleApp',
           ],
         }],
+	[ 'skia_os == "chromeos"', {
+	  'sources!': [
+	    '../samplecode/SampleLighting.cpp',  #doesn't compile due to gpu dependencies
+          ],
+        }],
         [ 'skia_gpu == 1', {
           'dependencies': [
             'gputest.gyp:skgputest',
           ],
         }],
       ],
-      'msvs_settings': {
-        'VCLinkerTool': {
-          'SubSystem': '2',
-        },
-      },
     },
   ],
 }

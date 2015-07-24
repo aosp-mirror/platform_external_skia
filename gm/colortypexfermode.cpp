@@ -16,17 +16,19 @@ namespace skiagm {
 static uint16_t gData[] = { 0xFFFF, 0xCCCF, 0xCCCF, 0xFFFF };
 
 class ColorTypeXfermodeGM : public GM {
-    SkBitmap    fBG;
-
-    void onOnceBeforeDraw() override {
-        fBG.installPixels(SkImageInfo::Make(2, 2, kARGB_4444_SkColorType,
-                                            kOpaque_SkAlphaType), gData, 4);
-    }
-
 public:
     const static int W = 64;
     const static int H = 64;
-    ColorTypeXfermodeGM() {
+    ColorTypeXfermodeGM()
+        : fColorType(NULL) {
+    }
+
+    virtual ~ColorTypeXfermodeGM() {
+        SkSafeUnref(fColorType);
+    }
+
+protected:
+    void onOnceBeforeDraw() override {
         const SkColor colors[] = {
             SK_ColorRED, SK_ColorGREEN, SK_ColorBLUE,
             SK_ColorMAGENTA, SK_ColorCYAN, SK_ColorYELLOW
@@ -40,20 +42,18 @@ public:
         paint.setAntiAlias(true);
         paint.setShader(s)->unref();
 
-        SkTypeface* orig = sk_tool_utils::create_portable_typeface("Times",
+        SkTypeface* orig = sk_tool_utils::create_portable_typeface_always("serif",
                                                             SkTypeface::kBold);
         if (NULL == orig) {
             orig = SkTypeface::RefDefault();
         }
         fColorType = SkNEW_ARGS(SkGTypeface, (orig, paint));
         orig->unref();
+
+        fBG.installPixels(SkImageInfo::Make(2, 2, kARGB_4444_SkColorType,
+                                            kOpaque_SkAlphaType), gData, 4);
     }
 
-    virtual ~ColorTypeXfermodeGM() {
-        fColorType->unref();
-    }
-
-protected:
     virtual SkString onShortName() override {
         return SkString("colortype_xfermodes");
     }
@@ -112,7 +112,7 @@ protected:
 
         SkPaint labelP;
         labelP.setAntiAlias(true);
-        sk_tool_utils::set_portable_typeface(&labelP);
+        sk_tool_utils::set_portable_typeface_always(&labelP);
         labelP.setTextAlign(SkPaint::kCenter_Align);
 
         SkPaint textP;
@@ -157,6 +157,7 @@ protected:
     }
 
 private:
+    SkBitmap    fBG;
     SkTypeface* fColorType;
 
     typedef GM INHERITED;

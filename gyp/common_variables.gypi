@@ -36,6 +36,7 @@
   # which deals with these same constraints in a similar manner.
   #
   'variables': {  # level 1
+    'angle_path%': '../',
     'variables': {  # level 2
 
       # Variables needed by conditions list within the level-2 variables dict.
@@ -75,10 +76,12 @@
         [ 'skia_android_framework == 1', {
           'skia_os%': 'android',
           'skia_chrome_utils%': 0,
+          'skia_use_android_framework_defines%': 1,
           'skia_use_system_json%': 1,
         }, {
           'skia_os%': '<(skia_os)',
           'skia_chrome_utils%': 1,
+          'skia_use_android_framework_defines%': 0,
           'skia_use_system_json%': 0,
         }],
         [ 'skia_os == "win"', {
@@ -196,6 +199,7 @@
     'skia_gpu_extra_dependency_path%': '<(skia_gpu_extra_dependency_path)',
     'skia_stroke_path_rendering%': '<(skia_stroke_path_rendering)',
     'skia_android_framework%': '<(skia_android_framework)',
+    'skia_use_android_framework_defines%': '<(skia_use_android_framework_defines)',
     'skia_use_system_json%': '<(skia_use_system_json)',
     'skia_android_path_rendering%': '<(skia_android_path_rendering)',
     'skia_resource_cache_mb_limit%': '<(skia_resource_cache_mb_limit)',
@@ -208,6 +212,7 @@
     'skia_gpu%': '<(skia_gpu)',
     'skia_win_exceptions%': 0,
     'skia_win_ltcg%': 1,
+    'sknx_no_simd%': 0,
     'skia_osx_deployment_target%': '<(skia_osx_deployment_target)',
     'skia_profile_enabled%': '<(skia_profile_enabled)',
     'skia_shared_lib%': '<(skia_shared_lib)',

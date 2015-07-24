@@ -5,8 +5,39 @@
  * found in the LICENSE file.
  */
 
+#include "SkData.h"
+#include "SkGraphics.h"
 #include "SkImageGenerator.h"
 #include "Test.h"
+
+static bool gMyFactoryWasCalled;
+
+static SkImageGenerator* my_factory(SkData*) {
+    gMyFactoryWasCalled = true;
+    return NULL;
+}
+
+static void test_imagegenerator_factory(skiatest::Reporter* reporter) {
+    // just need a non-empty data to test things
+    SkAutoTUnref<SkData> data(SkData::NewWithCString("test_imagegenerator_factory"));
+
+    gMyFactoryWasCalled = false;
+
+    SkImageGenerator* gen;
+    REPORTER_ASSERT(reporter, !gMyFactoryWasCalled);
+
+    gen = SkImageGenerator::NewFromEncoded(data);
+    REPORTER_ASSERT(reporter, NULL == gen);
+    REPORTER_ASSERT(reporter, !gMyFactoryWasCalled);
+
+    // Test is racy, in that it hopes no other thread is changing this global...
+    SkGraphics::ImageGeneratorFromEncodedFactory prev =
+                                    SkGraphics::SetImageGeneratorFromEncodedFactory(my_factory);
+    gen = SkImageGenerator::NewFromEncoded(data);
+    REPORTER_ASSERT(reporter, NULL == gen);
+    REPORTER_ASSERT(reporter, gMyFactoryWasCalled);
+    SkGraphics::SetImageGeneratorFromEncodedFactory(prev);
+}
 
 class MyImageGenerator : public SkImageGenerator {
 public:
@@ -36,4 +67,6 @@ DEF_TEST(ImageGenerator, reporter) {
     rowBytes[0] = rowBytes[1] = rowBytes[2] = 250;
 
     ig.getYUV8Planes(sizes, planes, rowBytes, &colorSpace);
+
+    test_imagegenerator_factory(reporter);
 }

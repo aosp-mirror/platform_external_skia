@@ -6,20 +6,29 @@
  */
 
 #include "GrXferProcessor.h"
+#include "GrPipelineBuilder.h"
+#include "GrProcOptInfo.h"
 #include "gl/GrGLCaps.h"
 
 GrXferProcessor::GrXferProcessor()
-    : fWillReadDstColor(false), fReadsCoverage(true), fDstCopyTextureOffset() {
+    : fWillReadDstColor(false)
+    , fDstReadUsesMixedSamples(false)
+    , fReadsCoverage(true)
+    , fDstTextureOffset() {
 }
 
-GrXferProcessor::GrXferProcessor(const GrDeviceCoordTexture* dstCopy, bool willReadDstColor)
+GrXferProcessor::GrXferProcessor(const DstTexture* dstTexture,
+                                 bool willReadDstColor,
+                                 bool hasMixedSamples)
     : fWillReadDstColor(willReadDstColor)
+    , fDstReadUsesMixedSamples(willReadDstColor && hasMixedSamples)
     , fReadsCoverage(true)
-    , fDstCopyTextureOffset() {
-    if (dstCopy && dstCopy->texture()) {
-        fDstCopy.reset(dstCopy->texture());
-        fDstCopyTextureOffset = dstCopy->offset();
-        this->addTextureAccess(&fDstCopy);
+    , fDstTextureOffset() {
+    if (dstTexture && dstTexture->texture()) {
+        SkASSERT(willReadDstColor);
+        fDstTexture.reset(dstTexture->texture());
+        fDstTextureOffset = dstTexture->offset();
+        this->addTextureAccess(&fDstTexture);
         this->setWillReadFragmentPosition();
     }
 }
@@ -28,33 +37,66 @@ GrXferProcessor::OptFlags GrXferProcessor::getOptimizations(const GrProcOptInfo&
                                                             const GrProcOptInfo& coveragePOI,
                                                             bool doesStencilWrite,
                                                             GrColor* overrideColor,
-                                                            const GrDrawTargetCaps& caps) {
+                                                            const GrCaps& caps) {
     GrXferProcessor::OptFlags flags = this->onGetOptimizations(colorPOI,
                                                                coveragePOI,
                                                                doesStencilWrite,
                                                                overrideColor,
                                                                caps);
 
+    if (this->willReadDstColor()) {
+        // When performing a dst read we handle coverage in the base class.
+        SkASSERT(!(flags & GrXferProcessor::kIgnoreCoverage_OptFlag));
+        if (coveragePOI.isSolidWhite()) {
+            flags |= GrXferProcessor::kIgnoreCoverage_OptFlag;
+        }
+    }
     if (flags & GrXferProcessor::kIgnoreCoverage_OptFlag) {
         fReadsCoverage = false;
     }
     return flags;
 }
 
+bool GrXferProcessor::hasSecondaryOutput() const {
+    if (!this->willReadDstColor()) {
+        return this->onHasSecondaryOutput();
+    }
+    return this->dstReadUsesMixedSamples();
+}
+
+void GrXferProcessor::getBlendInfo(BlendInfo* blendInfo) const {
+    blendInfo->reset();
+    if (!this->willReadDstColor()) {
+        this->onGetBlendInfo(blendInfo);
+    } else if (this->dstReadUsesMixedSamples()) {
+        blendInfo->fDstBlend = kIS2A_GrBlendCoeff;
+    }
+}
+
 void GrXferProcessor::getGLProcessorKey(const GrGLSLCaps& caps, GrProcessorKeyBuilder* b) const {
     uint32_t key = this->willReadDstColor() ? 0x1 : 0x0;
-    if (this->getDstCopyTexture() &&
-        kTopLeft_GrSurfaceOrigin == this->getDstCopyTexture()->origin()) {
-        key |= 0x2;
+    if (key) {
+        if (const GrTexture* dstTexture = this->getDstTexture()) {
+            key |= 0x2;
+            if (kTopLeft_GrSurfaceOrigin == dstTexture->origin()) {
+                key |= 0x4;
+            }
+        }
+        if (this->readsCoverage()) {
+            key |= 0x8;
+        }
+        if (this->dstReadUsesMixedSamples()) {
+            key |= 0x10;
+        }
     }
     b->add32(key);
     this->onGetGLProcessorKey(caps, b);
 }
 
 bool GrXferProcessor::willNeedXferBarrier(const GrRenderTarget* rt,
-                                          const GrDrawTargetCaps& caps,
+                                          const GrCaps& caps,
                                           GrXferBarrierType* outBarrierType) const {
-    if (static_cast<const GrSurface*>(rt) == this->getDstCopyTexture()) {
+    if (static_cast<const GrSurface*>(rt) == this->getDstTexture()) {
         // Texture barriers are required when a shader reads and renders to the same texture.
         SkASSERT(rt);
         SkASSERT(caps.textureBarrierSupport());
@@ -162,25 +204,28 @@ SkString GrXferProcessor::BlendInfo::dump() const {
 
 GrXferProcessor* GrXPFactory::createXferProcessor(const GrProcOptInfo& colorPOI,
                                                   const GrProcOptInfo& coveragePOI,
-                                                  const GrDeviceCoordTexture* dstCopy,
-                                                  const GrDrawTargetCaps& caps) const {
+                                                  bool hasMixedSamples,
+                                                  const DstTexture* dstTexture,
+                                                  const GrCaps& caps) const {
 #ifdef SK_DEBUG
-    if (this->willReadDstColor(caps, colorPOI, coveragePOI)) {
+    if (this->willReadDstColor(caps, colorPOI, coveragePOI, hasMixedSamples)) {
         if (!caps.shaderCaps()->dstReadInShaderSupport()) {
-            SkASSERT(dstCopy && dstCopy->texture());
+            SkASSERT(dstTexture && dstTexture->texture());
         } else {
-            SkASSERT(!dstCopy || !dstCopy->texture()); 
+            SkASSERT(!dstTexture || !dstTexture->texture()); 
         }
     } else {
-        SkASSERT(!dstCopy || !dstCopy->texture()); 
+        SkASSERT(!dstTexture || !dstTexture->texture()); 
     }
+    SkASSERT(!hasMixedSamples || caps.shaderCaps()->dualSourceBlendingSupport());
 #endif
-    return this->onCreateXferProcessor(caps, colorPOI, coveragePOI, dstCopy);
+    return this->onCreateXferProcessor(caps, colorPOI, coveragePOI, hasMixedSamples, dstTexture);
 }
 
-bool GrXPFactory::willNeedDstCopy(const GrDrawTargetCaps& caps, const GrProcOptInfo& colorPOI,
-                                  const GrProcOptInfo& coveragePOI) const {
-    return (this->willReadDstColor(caps, colorPOI, coveragePOI) 
-            && !caps.shaderCaps()->dstReadInShaderSupport());
+bool GrXPFactory::willNeedDstTexture(const GrCaps& caps,
+                                     const GrProcOptInfo& colorPOI,
+                                     const GrProcOptInfo& coveragePOI,
+                                     bool hasMixedSamples) const {
+    return (this->willReadDstColor(caps, colorPOI, coveragePOI, hasMixedSamples) &&
+            !caps.shaderCaps()->dstReadInShaderSupport());
 }
-

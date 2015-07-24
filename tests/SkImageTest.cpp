@@ -5,7 +5,7 @@
  * found in the LICENSE file.
  */
 
-#include "SkBitmapDevice.h"
+#include "SkCanvas.h"
 #include "SkImagePriv.h"
 #include "Test.h"
 
@@ -19,21 +19,19 @@ DEF_TEST(SkImageFromBitmap_extractSubset, reporter) {
         SkBitmap srcBitmap;
         srcBitmap.allocN32Pixels(gWidth, gHeight);
         srcBitmap.eraseColor(SK_ColorRED);
-        SkBitmapDevice dev(srcBitmap);
-        SkCanvas canvas(&dev);
+        SkCanvas canvas(srcBitmap);
         SkIRect r = SkIRect::MakeXYWH(5, 5, gWidth - 5, gWidth - 5);
         SkPaint p;
         p.setColor(SK_ColorGREEN);
         canvas.drawIRect(r, p);
         SkBitmap dstBitmap;
         srcBitmap.extractSubset(&dstBitmap, r);
-        image.reset(SkNewImageFromBitmap(dstBitmap, true, NULL));
+        image.reset(SkNewImageFromRasterBitmap(dstBitmap, true, NULL));
     }
 
     SkBitmap tgt;
     tgt.allocN32Pixels(gWidth, gHeight);
-    SkBitmapDevice dev(tgt);
-    SkCanvas canvas(&dev);
+    SkCanvas canvas(tgt);
     canvas.clear(SK_ColorTRANSPARENT);
     canvas.drawImage(image, 0, 0, NULL);
 

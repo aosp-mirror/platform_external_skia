@@ -10,6 +10,7 @@
 
 #include "GrBatchAtlas.h"
 #include "GrBufferAllocPool.h"
+#include "GrContext.h"
 #include "GrPendingProgramElement.h"
 #include "GrPipeline.h"
 #include "GrTRecorder.h"
@@ -104,13 +105,7 @@ public:
         fInlineUploads.reset();
     }
 
-    // TODO This goes away when everything uses batch
-    GrBatchTracker* currentBatchTracker() {
-        SkASSERT(!fFlushBuffer.empty());
-        return &fFlushBuffer.back().fBatchTracker;
-    }
-
-    const GrDrawTargetCaps& caps() const { return *fGpu->caps(); }
+    const GrCaps& caps() const { return *fGpu->caps(); }
 
     GrResourceProvider* resourceProvider() const { return fGpu->getContext()->resourceProvider(); }
 
@@ -120,26 +115,26 @@ public:
                              const GrIndexBuffer** buffer, int* startIndex);
 
     // A helper for draws which overallocate and then return data to the pool
-    void putBackIndices(size_t indices) { fIndexPool->putBack(indices * sizeof(uint16_t)); }
+    void putBackIndices(size_t indices) { fIndexPool.putBack(indices * sizeof(uint16_t)); }
 
     void putBackVertices(size_t vertices, size_t vertexStride) {
-        fVertexPool->putBack(vertices * vertexStride);
+        fVertexPool.putBack(vertices * vertexStride);
     }
 
     void reset() {
-        fVertexPool->reset();
-        fIndexPool->reset();    
+        fVertexPool.reset();
+        fIndexPool.reset();    
     }
 
 private:
     void unmapVertexAndIndexBuffers() {
-        fVertexPool->unmap();
-        fIndexPool->unmap();
+        fVertexPool.unmap();
+        fIndexPool.unmap();
     }
 
     GrGpu* fGpu;
-    SkAutoTDelete<GrVertexBufferAllocPool> fVertexPool;
-    SkAutoTDelete<GrIndexBufferAllocPool> fIndexPool;
+    GrVertexBufferAllocPool fVertexPool;
+    GrIndexBufferAllocPool fIndexPool;
 
     typedef void* TBufferAlign; // This wouldn't be enough align if a command used long double.
 

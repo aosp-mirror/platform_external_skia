@@ -6,9 +6,12 @@
  */
 
 #include "SkImage_Gpu.h"
-#include "SkCanvas.h"
 #include "GrContext.h"
+#include "GrDrawContext.h"
+#include "effects/GrYUVtoRGBEffect.h"
+#include "SkCanvas.h"
 #include "SkGpuDevice.h"
+
 
 SkImage_Gpu::SkImage_Gpu(int w, int h, SkAlphaType at, GrTexture* tex,
                          int sampleCountForNewSurfaces, SkSurface::Budgeted budgeted)
@@ -33,7 +36,7 @@ SkSurface* SkImage_Gpu::onNewSurface(const SkImageInfo& info, const SkSurfacePro
 }
 
 extern void SkTextureImageApplyBudgetedDecision(SkImage* image) {
-    if (image->getTexture()) {
+    if (as_IB(image)->getTexture()) {
         ((SkImage_Gpu*)image)->applyBudgetDecision();
     }
 }
@@ -58,7 +61,7 @@ bool SkImage_Gpu::getROPixels(SkBitmap* dst) const {
 }
 
 bool SkImage_Gpu::isOpaque() const {
-    return GrPixelConfigIsOpaque(fTexture->config());
+    return GrPixelConfigIsOpaque(fTexture->config()) || fAlphaType == kOpaque_SkAlphaType;
 }
 
 static void apply_premul(const SkImageInfo& info, void* pixels, size_t rowBytes) {
@@ -111,51 +114,148 @@ bool SkImage_Gpu::onReadPixels(const SkImageInfo& info, void* pixels, size_t row
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-SkImage* SkImage::NewFromTexture(GrContext* ctx, const GrBackendTextureDesc& desc, SkAlphaType at) {
+static SkImage* new_wrapped_texture_common(GrContext* ctx, const GrBackendTextureDesc& desc,
+                                           SkAlphaType at, GrWrapOwnership ownership,
+                                           SkImage::TextureReleaseProc releaseProc,
+                                           SkImage::ReleaseContext releaseCtx) {
     if (desc.fWidth <= 0 || desc.fHeight <= 0) {
         return NULL;
     }
-    SkAutoTUnref<GrTexture> tex(ctx->textureProvider()->wrapBackendTexture(desc));
+    SkAutoTUnref<GrTexture> tex(ctx->textureProvider()->wrapBackendTexture(desc, ownership));
     if (!tex) {
         return NULL;
     }
+    if (releaseProc) {
+        tex->setRelease(releaseProc, releaseCtx);
+    }
+
     const SkSurface::Budgeted budgeted = SkSurface::kNo_Budgeted;
     return SkNEW_ARGS(SkImage_Gpu, (desc.fWidth, desc.fHeight, at, tex, 0, budgeted));
+
 }
 
-SkImage* SkImage::NewFromTextureCopy(GrContext* ctx, const GrBackendTextureDesc& srcDesc,
-                                     SkAlphaType at) {
-    const bool isBudgeted = true;
-    const SkSurface::Budgeted budgeted = SkSurface::kYes_Budgeted;
+SkImage* SkImage::NewFromTexture(GrContext* ctx, const GrBackendTextureDesc& desc, SkAlphaType at,
+                                 TextureReleaseProc releaseP, ReleaseContext releaseC) {
+    return new_wrapped_texture_common(ctx, desc, at, kBorrow_GrWrapOwnership, releaseP, releaseC);
+}
 
-    if (srcDesc.fWidth <= 0 || srcDesc.fHeight <= 0) {
+SkImage* SkImage::NewFromAdoptedTexture(GrContext* ctx, const GrBackendTextureDesc& desc,
+                                        SkAlphaType at) {
+    return new_wrapped_texture_common(ctx, desc, at, kAdopt_GrWrapOwnership, NULL, NULL);
+}
+
+SkImage* SkImage::NewFromTextureCopy(GrContext* ctx, const GrBackendTextureDesc& desc,
+                                     SkAlphaType at) {
+    if (desc.fWidth <= 0 || desc.fHeight <= 0) {
         return NULL;
     }
-    SkAutoTUnref<GrTexture> src(ctx->textureProvider()->wrapBackendTexture(srcDesc));
+
+    SkAutoTUnref<GrTexture> src(ctx->textureProvider()->wrapBackendTexture(
+        desc, kBorrow_GrWrapOwnership));
     if (!src) {
         return NULL;
     }
 
-    GrSurfaceDesc dstDesc;
-    // need to be a rendertarget for readpixels to work, instead of kNone_GrSurfaceFlags
-    dstDesc.fFlags = kRenderTarget_GrSurfaceFlag;
-    dstDesc.fOrigin = srcDesc.fOrigin;
-    dstDesc.fWidth = srcDesc.fWidth;
-    dstDesc.fHeight = srcDesc.fHeight;
-    dstDesc.fConfig = srcDesc.fConfig;
-    dstDesc.fSampleCnt = srcDesc.fSampleCnt;
-
-    SkAutoTUnref<GrTexture> dst(ctx->textureProvider()->createTexture(
-                                                                  dstDesc, isBudgeted, NULL, 0));
+    const bool isBudgeted = true;
+    SkAutoTUnref<GrTexture> dst(GrDeepCopyTexture(src, isBudgeted));
     if (!dst) {
         return NULL;
     }
 
-    const SkIRect srcR = SkIRect::MakeWH(dstDesc.fWidth, dstDesc.fHeight);
-    const SkIPoint dstP = SkIPoint::Make(0, 0);
-    ctx->copySurface(dst, src, srcR, dstP, GrContext::kFlushWrites_PixelOp);
-
+    const SkSurface::Budgeted budgeted = SkSurface::kYes_Budgeted;
     const int sampleCount = 0;  // todo: make this an explicit parameter to newSurface()?
-    return SkNEW_ARGS(SkImage_Gpu, (dstDesc.fWidth, dstDesc.fHeight, at, dst, sampleCount,
+    return SkNEW_ARGS(SkImage_Gpu, (desc.fWidth, desc.fHeight, at, dst, sampleCount, budgeted));
+}
+
+SkImage* SkImage::NewFromYUVTexturesCopy(GrContext* ctx , SkYUVColorSpace colorSpace,
+                                         const GrBackendObject yuvTextureHandles[3],
+                                         const SkISize yuvSizes[3],
+                                         GrSurfaceOrigin origin) {
+    const SkSurface::Budgeted budgeted = SkSurface::kYes_Budgeted;
+
+    if (yuvSizes[0].fWidth <= 0 || yuvSizes[0].fHeight <= 0 ||
+        yuvSizes[1].fWidth <= 0 || yuvSizes[1].fHeight <= 0 ||
+        yuvSizes[2].fWidth <= 0 || yuvSizes[2].fHeight <= 0) {
+        return NULL;
+    }
+    static const GrPixelConfig kConfig = kAlpha_8_GrPixelConfig;
+    GrBackendTextureDesc yDesc;
+    yDesc.fConfig = kConfig;
+    yDesc.fOrigin = origin;
+    yDesc.fSampleCnt = 0;
+    yDesc.fTextureHandle = yuvTextureHandles[0];
+    yDesc.fWidth = yuvSizes[0].fWidth;
+    yDesc.fHeight = yuvSizes[0].fHeight;
+
+    GrBackendTextureDesc uDesc;
+    uDesc.fConfig = kConfig;
+    uDesc.fOrigin = origin;
+    uDesc.fSampleCnt = 0;
+    uDesc.fTextureHandle = yuvTextureHandles[1];
+    uDesc.fWidth = yuvSizes[1].fWidth;
+    uDesc.fHeight = yuvSizes[1].fHeight;
+
+    GrBackendTextureDesc vDesc;
+    vDesc.fConfig = kConfig;
+    vDesc.fOrigin = origin;
+    vDesc.fSampleCnt = 0;
+    vDesc.fTextureHandle = yuvTextureHandles[2];
+    vDesc.fWidth = yuvSizes[2].fWidth;
+    vDesc.fHeight = yuvSizes[2].fHeight;
+
+    SkAutoTUnref<GrTexture> yTex(ctx->textureProvider()->wrapBackendTexture(
+        yDesc, kBorrow_GrWrapOwnership));
+    SkAutoTUnref<GrTexture> uTex(ctx->textureProvider()->wrapBackendTexture(
+        uDesc, kBorrow_GrWrapOwnership));
+    SkAutoTUnref<GrTexture> vTex(ctx->textureProvider()->wrapBackendTexture(
+        vDesc, kBorrow_GrWrapOwnership));
+    if (!yTex || !uTex || !vTex) {
+        return NULL;
+    }
+
+    GrSurfaceDesc dstDesc;
+    // Needs to be a render target in order to draw to it for the yuv->rgb conversion.
+    dstDesc.fFlags = kRenderTarget_GrSurfaceFlag;
+    dstDesc.fOrigin = origin;
+    dstDesc.fWidth = yuvSizes[0].fWidth;
+    dstDesc.fHeight = yuvSizes[0].fHeight;
+    dstDesc.fConfig = kRGBA_8888_GrPixelConfig;
+    dstDesc.fSampleCnt = 0;
+
+    SkAutoTUnref<GrTexture> dst(ctx->textureProvider()->refScratchTexture(
+        dstDesc, GrTextureProvider::kExact_ScratchTexMatch));
+    if (!dst) {
+        return NULL;
+    }
+
+    GrPaint paint;
+    paint.setPorterDuffXPFactory(SkXfermode::kSrc_Mode);
+    paint.addColorProcessor(GrYUVtoRGBEffect::Create(paint.getProcessorDataManager(), yTex, uTex,
+                                                     vTex, yuvSizes, colorSpace))->unref();
+
+    const SkRect rect = SkRect::MakeWH(SkIntToScalar(dstDesc.fWidth),
+                                       SkIntToScalar(dstDesc.fHeight));
+    GrDrawContext* drawContext = ctx->drawContext();
+    drawContext->drawRect(dst->asRenderTarget(), GrClip::WideOpen(), paint, SkMatrix::I(), rect);
+    ctx->flushSurfaceWrites(dst);
+    return SkNEW_ARGS(SkImage_Gpu, (dstDesc.fWidth, dstDesc.fHeight, kOpaque_SkAlphaType, dst, 0,
                                     budgeted));
 }
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+GrTexture* GrDeepCopyTexture(GrTexture* src, bool budgeted) {
+    GrContext* ctx = src->getContext();
+
+    GrSurfaceDesc desc = src->desc();
+    GrTexture* dst = ctx->textureProvider()->createTexture(desc, budgeted, NULL, 0);
+    if (!dst) {
+        return NULL;
+    }
+    
+    const SkIRect srcR = SkIRect::MakeWH(desc.fWidth, desc.fHeight);
+    const SkIPoint dstP = SkIPoint::Make(0, 0);
+    ctx->copySurface(dst, src, srcR, dstP, GrContext::kFlushWrites_PixelOp);
+    return dst;
+}
+

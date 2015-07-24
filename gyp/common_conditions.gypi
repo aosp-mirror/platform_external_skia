@@ -46,6 +46,7 @@
           'SK_BUILD_FOR_WIN32',
           '_CRT_SECURE_NO_WARNINGS',
           'GR_GL_FUNCTION_TYPE=__stdcall',
+          '_HAS_EXCEPTIONS=0',
         ],
         'msvs_disabled_warnings': [
             4275,  # An exported class was derived from a class that was not exported
@@ -330,9 +331,6 @@
     ],
 
     ['skia_android_framework', {
-      'includes' : [
-        'skia_for_android_framework_defines.gypi',
-      ],
       'cflags': [
         # Skia does not enforce this usage pattern so we disable it here to avoid
         # unecessary log spew when building
@@ -395,7 +393,18 @@
         # this define globally and the the implemention define as a cflag.
         'SKIA_DLL',
         'SK_PRINT_CODEC_MESSAGES',
-        # Defines from skia_for_android_framework_defines.gypi
+      ],
+    }],
+
+    ['skia_use_android_framework_defines', {
+      # Add these defines when building for the Android framework, or when
+      # specifically requested. These should be temporary staging defines. Any
+      # permanent defines should be moved into the skia_android_framework block
+      # above.
+      'includes' : [
+        'skia_for_android_framework_defines.gypi',
+      ],
+      'defines': [
         '<@(skia_for_android_framework_defines)',
       ],
     }],
@@ -408,8 +417,15 @@
         ],
         'configurations': {
           'Coverage': {
-            'cflags': ['--coverage'],
-            'ldflags': ['--coverage'],
+            'conditions': [
+              [ 'skia_clang_build', {
+                'cflags': ['-fprofile-instr-generate', '-fcoverage-mapping'],
+                'ldflags': ['-fprofile-instr-generate', '-fcoverage-mapping'],
+              }, {
+                'cflags': ['--coverage'],
+                'ldflags': ['--coverage'],
+              }],
+            ],
           },
           'Debug': {
           },
@@ -619,6 +635,10 @@
       'defines': [
         # add flags here (e.g. SK_SUPPORT_LEGACY_...) needed by moz2d
       ],
+    }],
+
+    [ 'sknx_no_simd', {
+      'defines': [ 'SKNX_NO_SIMD' ],
     }],
 
   ], # end 'conditions'

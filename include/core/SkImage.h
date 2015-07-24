@@ -17,6 +17,7 @@
 
 class SkData;
 class SkCanvas;
+class SkColorTable;
 class SkImageGenerator;
 class SkPaint;
 class SkString;
@@ -41,28 +42,50 @@ class GrTexture;
  */
 class SK_API SkImage : public SkRefCnt {
 public:
-    SK_DECLARE_INST_COUNT(SkImage)
-
     typedef SkImageInfo Info;
+    typedef void* ReleaseContext;
 
-    static SkImage* NewRasterCopy(const Info&, const void* pixels, size_t rowBytes);
+    static SkImage* NewRasterCopy(const Info&, const void* pixels, size_t rowBytes,
+                                  SkColorTable* ctable = NULL);
     static SkImage* NewRasterData(const Info&, SkData* pixels, size_t rowBytes);
 
+    typedef void (*RasterReleaseProc)(const void* pixels, ReleaseContext);
+
+    /**
+     *  Return a new Image referencing the specified pixels. These must remain valid and unchanged
+     *  until the specified release-proc is called, indicating that Skia no longer has a reference
+     *  to the pixels.
+     *
+     *  Returns NULL if the requested Info is unsupported.
+     */
+    static SkImage* NewFromRaster(const Info&, const void* pixels, size_t rowBytes,
+                                  RasterReleaseProc, ReleaseContext);
+
+    /**
+     *  Construct a new image from the specified bitmap. If the bitmap is marked immutable, and
+     *  its pixel memory is shareable, it may be shared instead of copied.
+     */
+    static SkImage* NewFromBitmap(const SkBitmap&);
+    
     /**
      *  Construct a new SkImage based on the given ImageGenerator.
      *  This function will always take ownership of the passed
      *  ImageGenerator.  Returns NULL on error.
+     *
+     *  If a subset is specified, it must be contained within the generator's bounds.
      */
-    static SkImage* NewFromGenerator(SkImageGenerator*);
+    static SkImage* NewFromGenerator(SkImageGenerator*, const SkIRect* subset = NULL);
 
     /**
      *  Construct a new SkImage based on the specified encoded data. Returns NULL on failure,
      *  which can mean that the format of the encoded data was not recognized/supported.
      *
+     *  If a subset is specified, it must be contained within the encoded data's bounds.
+     *
      *  Regardless of success or failure, the caller is responsible for managing their ownership
      *  of the data.
      */
-    static SkImage* NewFromData(SkData* data);
+    static SkImage* NewFromEncoded(SkData* encoded, const SkIRect* subset = NULL);
 
     /**
      *  Create a new image from the specified descriptor. Note - the caller is responsible for
@@ -70,8 +93,34 @@ public:
      *
      *  Will return NULL if the specified descriptor is unsupported.
      */
-    static SkImage* NewFromTexture(GrContext*, const GrBackendTextureDesc&,
-                                   SkAlphaType = kPremul_SkAlphaType);
+    static SkImage* NewFromTexture(GrContext* ctx, const GrBackendTextureDesc& desc) {
+        return NewFromTexture(ctx, desc, kPremul_SkAlphaType, NULL, NULL);
+    }
+
+    static SkImage* NewFromTexture(GrContext* ctx, const GrBackendTextureDesc& de, SkAlphaType at) {
+        return NewFromTexture(ctx, de, at, NULL, NULL);
+    }
+
+    typedef void (*TextureReleaseProc)(ReleaseContext);
+
+    /**
+     *  Create a new image from the specified descriptor. The underlying platform texture must stay
+     *  valid and unaltered until the specified release-proc is invoked, indicating that Skia
+     *  no longer is holding a reference to it.
+     *
+     *  Will return NULL if the specified descriptor is unsupported.
+     */
+    static SkImage* NewFromTexture(GrContext*, const GrBackendTextureDesc&, SkAlphaType,
+                                   TextureReleaseProc, ReleaseContext);
+
+    /**
+     *  Create a new image from the specified descriptor. Note - Skia will delete or recycle the
+     *  texture when the image is released.
+     *
+     *  Will return NULL if the specified descriptor is unsupported.
+     */
+    static SkImage* NewFromAdoptedTexture(GrContext*, const GrBackendTextureDesc&,
+                                          SkAlphaType = kPremul_SkAlphaType);
 
     /**
      *  Create a new image by copying the pixels from the specified descriptor. No reference is
@@ -82,17 +131,20 @@ public:
     static SkImage* NewFromTextureCopy(GrContext*, const GrBackendTextureDesc&,
                                        SkAlphaType = kPremul_SkAlphaType);
 
+    /**
+     *  Create a new image by copying the pixels from the specified y, u, v textures. The data
+     *  from the textures is immediately ingested into the image and the textures can be modified or
+     *  deleted after the function returns. The image will have the dimensions of the y texture.
+     */
+    static SkImage* NewFromYUVTexturesCopy(GrContext*, SkYUVColorSpace,
+                                           const GrBackendObject yuvTextureHandles[3],
+                                           const SkISize yuvSizes[3],
+                                           GrSurfaceOrigin);
+
     int width() const { return fWidth; }
     int height() const { return fHeight; }
     uint32_t uniqueID() const { return fUniqueID; }
     virtual bool isOpaque() const { return false; }
-
-    /**
-     * Return the GrTexture that stores the image pixels. Calling getTexture
-     * does not affect the reference count of the GrTexture object.
-     * Will return NULL if the image does not use a texture.
-     */
-    GrTexture* getTexture() const;
 
     virtual SkShader* newShader(SkShader::TileMode,
                                 SkShader::TileMode,
@@ -108,6 +160,30 @@ public:
      *  ignored.
      */
     const void* peekPixels(SkImageInfo* info, size_t* rowBytes) const;
+
+    /**
+     *  If the image has direct access to its pixels (i.e. they are in local
+     *  RAM) return the (const) address of those pixels, and if not null, return
+     *  true, and if pixmap is not NULL, set it to point into the image.
+     *
+     *  On failure, return false and ignore the pixmap parameter.
+     */
+    bool peekPixels(SkPixmap* pixmap) const;
+
+    // DEPRECATED
+    GrTexture* getTexture() const;
+
+    /**
+     *  Returns true if the image is texture backed.
+     */
+    bool isTextureBacked() const;
+
+    /**
+     *  Retrieves the backend API handle of the texture. If flushPendingGrContextIO then the
+     *  GrContext will issue to the backend API any deferred IO operations on the texture before
+     *  returning.
+     */
+    GrBackendObject getTextureHandle(bool flushPendingGrContextIO) const;
 
     /**
      *  Copy the pixels from the image into the specified buffer (pixels + rowBytes),
@@ -130,6 +206,8 @@ public:
     bool readPixels(const SkImageInfo& dstInfo, void* dstPixels, size_t dstRowBytes,
                     int srcX, int srcY) const;
 
+    bool readPixels(const SkPixmap& dst, int srcX, int srcY) const;
+
     /**
      *  Encode the image's pixels and return the result as a new SkData, which
      *  the caller must manage (i.e. call unref() when they are done).
@@ -137,8 +215,22 @@ public:
      *  If the image type cannot be encoded, or the requested encoder type is
      *  not supported, this will return NULL.
      */
-    SkData* encode(SkImageEncoder::Type t = SkImageEncoder::kPNG_Type,
-                   int quality = 80) const;
+    SkData* encode(SkImageEncoder::Type, int quality) const;
+
+    SkData* encode() const {
+        return this->encode(SkImageEncoder::kPNG_Type, 100);
+    }
+
+    /**
+     *  If the image already has its contents in encoded form (e.g. PNG or JPEG), return a ref
+     *  to that data (which the caller must call unref() on). The caller is responsible for calling
+     *  unref on the data when they are done.
+     *
+     *  If the image does not already has its contents in encoded form, return NULL.
+     *
+     *  Note: to force the image to return its contents as encoded data, try calling encode(...).
+     */
+    SkData* refEncoded() const;
 
     /**
      *  Return a new surface that is compatible with this image's internal representation
@@ -172,6 +264,24 @@ public:
     SkImage* newImage(int newWidth, int newHeight, const SkIRect* subset = NULL,
                       SkFilterQuality = kNone_SkFilterQuality) const;
 
+    // Helper functions to convert to SkBitmap
+
+    enum LegacyBitmapMode {
+        kRO_LegacyBitmapMode,
+        kRW_LegacyBitmapMode,
+    };
+
+    /**
+     *  Attempt to create a bitmap with the same pixels as the image. The result will always be
+     *  a raster-backed bitmap (texture-backed bitmaps are DEPRECATED, and not supported here).
+     *
+     *  If the mode is kRO (read-only), the resulting bitmap will be marked as immutable.
+     *
+     *  On succcess, returns true. On failure, returns false and the bitmap parameter will be reset
+     *  to empty.
+     */
+    bool asLegacyBitmap(SkBitmap*, LegacyBitmapMode) const;
+    
 protected:
     SkImage(int width, int height) :
         fWidth(width),

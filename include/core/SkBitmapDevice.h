@@ -14,26 +14,28 @@
 ///////////////////////////////////////////////////////////////////////////////
 class SK_API SkBitmapDevice : public SkBaseDevice {
 public:
-    SK_DECLARE_INST_COUNT(SkBitmapDevice)
+    /**
+     *  Construct a new device with the specified bitmap as its backend. It is
+     *  valid for the bitmap to have no pixels associated with it. In that case,
+     *  any drawing to this device will have no effect.
+     */
+    SkBitmapDevice(const SkBitmap& bitmap);
+
+    /**
+     * Create a new device along with its requisite pixel memory using
+     * default SkSurfaceProps (i.e., kLegacyFontHost_InitType-style).
+     * Note: this entry point is slated for removal - no one should call it.
+     */
+    static SkBitmapDevice* Create(const SkImageInfo& info);
 
     /**
      *  Construct a new device with the specified bitmap as its backend. It is
      *  valid for the bitmap to have no pixels associated with it. In that case,
      *  any drawing to this device will have no effect.
-    */
-    SkBitmapDevice(const SkBitmap& bitmap);
-private:
-    /**
-     *  Construct a new device with the specified bitmap as its backend. It is
-     *  valid for the bitmap to have no pixels associated with it. In that case,
-     *  any drawing to this device will have no effect.
-    */
-    SkBitmapDevice(const SkBitmap& bitmap, const SkDeviceProperties& deviceProperties);
-    static SkBitmapDevice* Create(const SkImageInfo&, const SkDeviceProperties*);
-public:
-    static SkBitmapDevice* Create(const SkImageInfo& info) {
-        return Create(info, NULL);
-    }
+     */
+    SkBitmapDevice(const SkBitmap& bitmap, const SkSurfaceProps& surfaceProps);
+
+    static SkBitmapDevice* Create(const SkImageInfo&, const SkSurfaceProps&);
 
     SkImageInfo imageInfo() const override;
 
@@ -79,10 +81,8 @@ protected:
      *  The default impl. will create a bitmap-shader from the bitmap,
      *  and call drawRect with it.
      */
-    virtual void drawBitmapRect(const SkDraw&, const SkBitmap&,
-                                const SkRect* srcOrNull, const SkRect& dst,
-                                const SkPaint& paint,
-                                SkCanvas::DrawBitmapRectFlags flags) override;
+    void drawBitmapRect(const SkDraw&, const SkBitmap&, const SkRect*, const SkRect&,
+                        const SkPaint&, SK_VIRTUAL_CONSTRAINT_TYPE) override;
 
     /**
      *  Does not handle text decoration.
@@ -118,13 +118,10 @@ protected:
 
     bool onReadPixels(const SkImageInfo&, void*, size_t, int x, int y) override;
     bool onWritePixels(const SkImageInfo&, const void*, size_t, int, int) override;
-    void* onAccessPixels(SkImageInfo* info, size_t* rowBytes) override;
-
-    /** Called when this device is installed into a Canvas. Balanced by a call
-        to unlockPixels() when the device is removed from a Canvas.
-    */
-    void lockPixels() override;
-    void unlockPixels() override;
+    bool onPeekPixels(SkPixmap*) override;
+    bool onAccessPixels(SkPixmap*) override;
+    void onAttachToCanvas(SkCanvas*) override;
+    void onDetachFromCanvas() override;
 
 private:
     friend class SkCanvas;
@@ -132,7 +129,6 @@ private:
     friend class SkDraw;
     friend class SkDrawIter;
     friend class SkDeviceFilteredPaint;
-    friend class SkDeviceImageFilterProxy;
 
     friend class SkSurface_Raster;
 
@@ -144,7 +140,6 @@ private:
     SkBaseDevice* onCreateDevice(const CreateInfo&, const SkPaint*) override;
 
     SkSurface* newSurface(const SkImageInfo&, const SkSurfaceProps&) override;
-    const void* peekPixels(SkImageInfo*, size_t* rowBytes) override;
 
     SkImageFilter::Cache* getImageFilterCache() override;
 

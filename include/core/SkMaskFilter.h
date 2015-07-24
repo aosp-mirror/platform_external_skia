@@ -16,9 +16,10 @@
 #include "SkPaint.h"
 
 class GrClip;
-class GrContext;
+class GrDrawContext;
 class GrPaint;
 class GrRenderTarget;
+class GrTextureProvider;
 class SkBitmap;
 class SkBlitter;
 class SkCachedData;
@@ -41,8 +42,6 @@ class SkStrokeRec;
 */
 class SK_API SkMaskFilter : public SkFlattenable {
 public:
-    SK_DECLARE_INST_COUNT(SkMaskFilter)
-
     /** Returns the format of the resulting mask that this subclass will return
         when its filterMask() method is called.
     */
@@ -98,7 +97,8 @@ public:
      *  Try to directly render the mask filter into the target.  Returns
      *  true if drawing was successful.
      */
-    virtual bool directFilterMaskGPU(GrContext* context,
+    virtual bool directFilterMaskGPU(GrTextureProvider* texProvider,
+                                     GrDrawContext* drawContext,
                                      GrRenderTarget* rt,
                                      GrPaint* grp,
                                      const GrClip&,
@@ -109,7 +109,8 @@ public:
      *  Try to directly render a rounded rect mask filter into the target.  Returns
      *  true if drawing was successful.
      */
-    virtual bool directFilterRRectMaskGPU(GrContext* context,
+    virtual bool directFilterRRectMaskGPU(GrTextureProvider* texProvider,
+                                          GrDrawContext* drawContext,
                                           GrRenderTarget* rt,
                                           GrPaint* grp,
                                           const GrClip&,

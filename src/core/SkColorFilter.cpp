@@ -62,10 +62,10 @@ public:
 #endif
 
 #if SK_SUPPORT_GPU
-    bool asFragmentProcessors(GrContext* context,
+    bool asFragmentProcessors(GrContext* context, GrProcessorDataManager* procDataManager,
                               SkTDArray<GrFragmentProcessor*>* array) const override {
-        bool hasFrags = fInner->asFragmentProcessors(context, array);
-        hasFrags |= fOuter->asFragmentProcessors(context, array);
+        bool hasFrags = fInner->asFragmentProcessors(context, procDataManager, array);
+        hasFrags |= fOuter->asFragmentProcessors(context, procDataManager, array);
         return hasFrags;
     }
 #endif

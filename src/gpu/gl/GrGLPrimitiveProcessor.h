@@ -10,6 +10,7 @@
 
 #include "GrPrimitiveProcessor.h"
 #include "GrGLProcessor.h"
+#include "GrGLPathProgramDataManager.h"
 
 class GrBatchTracker;
 class GrPrimitiveProcessor;
@@ -17,10 +18,10 @@ class GrGLGPBuilder;
 
 class GrGLPrimitiveProcessor {
 public:
-    GrGLPrimitiveProcessor() : fViewMatrixName(NULL) { fViewMatrix = SkMatrix::InvalidMatrix(); }
     virtual ~GrGLPrimitiveProcessor() {}
 
     typedef GrGLProgramDataManager::UniformHandle UniformHandle;
+    typedef GrGLPathProgramDataManager::SeparableVaryingHandle SeparableVaryingHandle;
     typedef GrGLProcessor::TextureSamplerArray TextureSamplerArray;
 
     typedef SkSTArray<2, const GrCoordTransform*, true> ProcCoords;
@@ -74,28 +75,7 @@ public:
     static SkMatrix GetTransformMatrix(const SkMatrix& localMatrix, const GrCoordTransform&);
 
 protected:
-    /** a helper which can setup vertex, constant, or uniform color depending on inputType.
-     *  This function will only do the minimum required to emit the correct shader code.  If
-     *  inputType == attribute, then colorAttr must not be NULL.  Likewise, if inputType == Uniform
-     *  then colorUniform must not be NULL.
-     */
-    void setupColorPassThrough(GrGLGPBuilder* pb,
-                               GrGPInput inputType,
-                               const char* inputName,
-                               const GrPrimitiveProcessor::Attribute* colorAttr,
-                               UniformHandle* colorUniform);
-
-    const char* uViewM() const { return fViewMatrixName; }
-
-    /** a helper function to setup the uniform handle for the uniform view matrix */
-    void addUniformViewMatrix(GrGLGPBuilder*);
-
-
-    /** a helper function to upload a uniform viewmatrix.
-     * TODO we can remove this function when we have deferred geometry in place
-     */
-    void setUniformViewMatrix(const GrGLProgramDataManager&,
-                              const SkMatrix& viewMatrix);
+    void setupUniformColor(GrGLGPBuilder* pb, const char* outputName, UniformHandle* colorUniform);
 
     class ShaderVarHandle {
     public:
@@ -106,6 +86,10 @@ protected:
         UniformHandle convertToUniformHandle() {
             SkASSERT(this->isValid());
             return GrGLProgramDataManager::UniformHandle::CreateFromUniformIndex(fHandle);
+        }
+        SeparableVaryingHandle convertToSeparableVaryingHandle() {
+            SkASSERT(this->isValid());
+            return SeparableVaryingHandle::CreateFromSeparableVaryingIndex(fHandle);
         }
 
     private:
@@ -120,11 +104,6 @@ protected:
     };
 
     SkSTArray<8, SkSTArray<2, Transform, true> > fInstalledTransforms;
-
-private:
-    UniformHandle fViewMatrixUniform;
-    SkMatrix fViewMatrix;
-    const char* fViewMatrixName;
 };
 
 #endif

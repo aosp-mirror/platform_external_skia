@@ -8,8 +8,8 @@
 #ifndef GrCustomXfermodePriv_DEFINED
 #define GrCustomXfermodePriv_DEFINED
 
+#include "GrCaps.h"
 #include "GrCoordTransform.h"
-#include "GrDrawTargetCaps.h"
 #include "GrFragmentProcessor.h"
 #include "GrTextureAccess.h"
 #include "GrXferProcessor.h"
@@ -27,7 +27,7 @@ class GrTexture;
 
 class GrCustomXferFP : public GrFragmentProcessor {
 public:
-    GrCustomXferFP(SkXfermode::Mode mode, GrTexture* background);
+    GrCustomXferFP(GrProcessorDataManager*, SkXfermode::Mode mode, GrTexture* background);
 
     void getGLProcessorKey(const GrGLSLCaps& caps, GrProcessorKeyBuilder* b) const override; 
 
@@ -64,18 +64,20 @@ public:
         return true;
     }
 
-    void getInvariantOutput(const GrProcOptInfo& colorPOI, const GrProcOptInfo& coveragePOI,
-                            GrXPFactory::InvariantOutput*) const override;
+    void getInvariantBlendedColor(const GrProcOptInfo& colorPOI,
+                                  GrXPFactory::InvariantBlendedColor*) const override;
 
 private:
-    GrXferProcessor* onCreateXferProcessor(const GrDrawTargetCaps& caps,
+    GrXferProcessor* onCreateXferProcessor(const GrCaps& caps,
                                            const GrProcOptInfo& colorPOI,
                                            const GrProcOptInfo& coveragePOI,
-                                           const GrDeviceCoordTexture* dstCopy) const override; 
+                                           bool hasMixedSamples,
+                                           const DstTexture*) const override; 
 
-    bool willReadDstColor(const GrDrawTargetCaps& caps,
+    bool willReadDstColor(const GrCaps& caps,
                           const GrProcOptInfo& colorPOI,
-                          const GrProcOptInfo& coveragePOI) const override;
+                          const GrProcOptInfo& coveragePOI,
+                          bool hasMixedSamples) const override;
 
     bool onIsEqual(const GrXPFactory& xpfBase) const override {
         const GrCustomXPFactory& xpf = xpfBase.cast<GrCustomXPFactory>();
@@ -85,6 +87,7 @@ private:
     GR_DECLARE_XP_FACTORY_TEST;
 
     SkXfermode::Mode fMode;
+    GrBlendEquation  fHWBlendEquation;
 
     typedef GrXPFactory INHERITED;
 };

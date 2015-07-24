@@ -24,7 +24,7 @@ static void drawJpeg(SkCanvas* canvas, const SkISize& size) {
     if (NULL == data.get()) {
         return;
     }
-    SkImage* image = SkImage::NewFromData(data);
+    SkImage* image = SkImage::NewFromEncoded(data);
     if (image) {
         SkAutoCanvasRestore acr(canvas, true);
         canvas->scale(size.width() * 1.0f / image->width(),
@@ -149,7 +149,7 @@ protected:
 
         SkPaint textPaint;
         textPaint.setAntiAlias(true);
-        sk_tool_utils::set_portable_typeface(&textPaint);
+        sk_tool_utils::set_portable_typeface_always(&textPaint);
         textPaint.setTextSize(8);
 
         canvas->drawText(kLabel1, strlen(kLabel1), 10,  60, textPaint);

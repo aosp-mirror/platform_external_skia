@@ -30,8 +30,6 @@ class GrRenderTarget;
  */
 class SK_API SkSurface : public SkRefCnt {
 public:
-    SK_DECLARE_INST_COUNT(SkSurface)
-
     /**
      *  Indicates whether a new surface or image should count against a cache budget. Currently this
      *  is only used by the GPU backend (sw-raster surfaces and images are never counted against the
@@ -76,11 +74,6 @@ public:
      *  specified width and height, and populates the rest of info to match
      *  pixels in SkPMColor format.
      */
-#ifdef SK_SUPPORT_LEGACY_NewRasterPMColor
-    static SkSurface* NewRasterPMColor(int width, int height, const SkSurfaceProps* props = NULL) {
-        return NewRaster(SkImageInfo::MakeN32Premul(width, height), props);
-    }
-#endif
     static SkSurface* NewRasterN32Premul(int width, int height, const SkSurfaceProps* props = NULL) {
         return NewRaster(SkImageInfo::MakeN32Premul(width, height), props);
     }
@@ -89,18 +82,34 @@ public:
      *  Return a new surface using the specified render target.
      */
     static SkSurface* NewRenderTargetDirect(GrRenderTarget*, const SkSurfaceProps*);
-    
+
     static SkSurface* NewRenderTargetDirect(GrRenderTarget* target) {
         return NewRenderTargetDirect(target, NULL);
     }
 
     /**
-     *  Used to wrap a pre-existing backend 3D API texture in a SkSurface. The kRenderTarget flag
-     *  must be set on GrBackendTextureDesc for this to succeed.
+     *  Used to wrap a pre-existing backend 3D API texture as a SkSurface. The kRenderTarget flag
+     *  must be set on GrBackendTextureDesc for this to succeed. Skia will not assume ownership
+     *  of the texture and the client must ensure the texture is valid for the lifetime of the
+     *  SkSurface.
      */
-    static SkSurface* NewWrappedRenderTarget(GrContext*, GrBackendTextureDesc,
-                                             const SkSurfaceProps*);
-    
+    static SkSurface* NewFromBackendTexture(GrContext*, const GrBackendTextureDesc&,
+                                            const SkSurfaceProps*);
+    // Legacy alias
+    static SkSurface* NewWrappedRenderTarget(GrContext* ctx, const GrBackendTextureDesc& desc,
+                                             const SkSurfaceProps* props) {
+        return NewFromBackendTexture(ctx, desc, props);
+    }
+
+
+    /**
+     *  Used to wrap a pre-existing 3D API rendering target as a SkSurface. Skia will not assume
+     *  ownership of the render target and the client must ensure the render target is valid for the
+     *  lifetime of the SkSurface.
+     */
+    static SkSurface* NewFromBackendRenderTarget(GrContext*, const GrBackendRenderTargetDesc&,
+                                                 const SkSurfaceProps*);
+
     /**
      *  Return a new surface whose contents will be drawn to an offscreen
      *  render target, allocated by the surface.
@@ -145,8 +154,44 @@ public:
     /**
      *  Call this if the contents are about to change. This will (lazily) force a new
      *  value to be returned from generationID() when it is called next.
+     *
+     *  CAN WE DEPRECATE THIS?
      */
     void notifyContentWillChange(ContentChangeMode mode);
+
+    enum BackendHandleAccess {
+        kFlushRead_BackendHandleAccess,     //!< caller may read from the backend object
+        kFlushWrite_BackendHandleAccess,    //!< caller may write to the backend object
+        kDiscardWrite_BackendHandleAccess,  //!< caller must over-write the entire backend object
+    };
+
+    /*
+     * These are legacy aliases which will be removed soon
+     */
+    static const BackendHandleAccess kFlushRead_TextureHandleAccess =
+            kFlushRead_BackendHandleAccess;
+    static const BackendHandleAccess kFlushWrite_TextureHandleAccess =
+            kFlushWrite_BackendHandleAccess;
+    static const BackendHandleAccess kDiscardWrite_TextureHandleAccess =
+            kDiscardWrite_BackendHandleAccess;
+
+
+    /**
+     *  Retrieves the backend API handle of the texture used by this surface, or 0 if the surface
+     *  is not backed by a GPU texture.
+     *
+     *  The returned texture-handle is only valid until the next draw-call into the surface,
+     *  or the surface is deleted.
+     */
+    GrBackendObject getTextureHandle(BackendHandleAccess);
+
+    /**
+     *  Retrieves the backend API handle of the RenderTarget backing this surface.  Callers must
+     *  ensure this function returns 'true' or else the GrBackendObject will be invalid
+     *
+     *  In OpenGL this will return the FramebufferObject ID.
+     */
+    bool getRenderTargetHandle(GrBackendObject*, BackendHandleAccess);
 
     /**
      *  Return a canvas that will draw into this surface. This will always

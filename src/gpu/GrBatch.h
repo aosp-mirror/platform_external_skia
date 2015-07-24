@@ -11,9 +11,9 @@
 #include <new>
 #include "GrBatchTarget.h"
 #include "GrGeometryProcessor.h"
+#include "GrNonAtomicRef.h"
 #include "GrVertices.h"
-#include "SkRefCnt.h"
-#include "SkThread.h"
+#include "SkAtomics.h"
 #include "SkTypes.h"
 
 class GrGpu;
@@ -37,9 +37,8 @@ struct GrInitInvariantOutput;
  * information will be communicated to the GrBatch prior to geometry generation.
  */
 
-class GrBatch : public SkRefCnt {
+class GrBatch : public GrNonAtomicRef {
 public:
-    SK_DECLARE_INST_COUNT(GrBatch)
     GrBatch() : fClassID(kIllegalBatchClassID), fNumberOfDraws(0) { SkDEBUGCODE(fUsed = false;) }
     virtual ~GrBatch() {}
 
@@ -94,13 +93,14 @@ public:
 
     SkDEBUGCODE(bool isUsed() const { return fUsed; })
 
+    const GrPipeline* pipeline() const { return fPipeline; }
+    void setPipeline(const GrPipeline* pipeline) { fPipeline.reset(SkRef(pipeline)); }
+
 protected:
     template <typename PROC_SUBCLASS> void initClassID() {
          static uint32_t kClassID = GenClassID();
          fClassID = kClassID;
     }
-
-    uint32_t fClassID;
 
     // NOTE, compute some bounds, even if extremely conservative.  Do *NOT* setLargest on the bounds
     // rect because we outset it for dst copy textures
@@ -148,6 +148,7 @@ protected:
         typedef InstancedHelper INHERITED;
     };
 
+    uint32_t fClassID;
     SkRect fBounds;
 
 private:
@@ -166,11 +167,10 @@ private:
     enum {
         kIllegalBatchClassID = 0,
     };
+    SkAutoTUnref<const GrPipeline> fPipeline;
     static int32_t gCurrBatchClassID;
-
-    SkDEBUGCODE(bool fUsed;)
-
     int fNumberOfDraws;
+    SkDEBUGCODE(bool fUsed;)
 
     typedef SkRefCnt INHERITED;
 };

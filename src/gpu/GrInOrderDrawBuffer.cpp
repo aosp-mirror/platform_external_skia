@@ -7,9 +7,15 @@
 
 #include "GrInOrderDrawBuffer.h"
 
+// We will use the reordering buffer, unless we have NVPR.
+// TODO move NVPR to batch so we can reorder
+static inline bool allow_reordering(const GrCaps* caps) {
+    return caps && caps->shaderCaps() && !caps->shaderCaps()->pathRenderingSupport();
+}
+
 GrInOrderDrawBuffer::GrInOrderDrawBuffer(GrContext* context)
     : INHERITED(context)
-    , fCommands(GrCommandBuilder::Create(context->getGpu(), false))
+    , fCommands(GrCommandBuilder::Create(context->getGpu(), allow_reordering(context->caps())))
     , fPathIndexBuffer(kPathIdxBufferMinReserve * sizeof(char)/4)
     , fPathTransformBuffer(kPathXformBufferMinReserve * sizeof(float)/4)
     , fPipelineBuffer(kPipelineBufferMinReserve)
@@ -121,7 +127,6 @@ void GrInOrderDrawBuffer::onCopySurface(GrSurface* dst,
                                         GrSurface* src,
                                         const SkIRect& srcRect,
                                         const SkIPoint& dstPoint) {
-    SkASSERT(this->getGpu()->canCopySurface(dst, src, srcRect, dstPoint));
     GrTargetCommands::Cmd* cmd = fCommands->recordCopySurface(dst, src, srcRect, dstPoint);
     this->recordTraceMarkersIfNecessary(cmd);
 }
@@ -152,8 +157,8 @@ GrInOrderDrawBuffer::setupPipelineAndShouldDraw(const GrPrimitiveProcessor* prim
         return NULL;
     }
 
-    state->fPrimitiveProcessor->initBatchTracker(&state->fBatchTracker,
-                                                 state->getPipeline()->getInitBatchTracker());
+    state->fPrimitiveProcessor->initBatchTracker(
+        &state->fBatchTracker, state->getPipeline()->infoForPrimitiveProcessor());
 
     if (fPrevState && fPrevState->fPrimitiveProcessor.get() &&
         fPrevState->fPrimitiveProcessor->canMakeEqual(fPrevState->fBatchTracker,
@@ -181,7 +186,7 @@ GrInOrderDrawBuffer::setupPipelineAndShouldDraw(GrBatch* batch,
         return NULL;
     }
 
-    batch->initBatchTracker(state->getPipeline()->getInitBatchTracker());
+    batch->initBatchTracker(state->getPipeline()->infoForPrimitiveProcessor());
 
     if (fPrevState && !fPrevState->fPrimitiveProcessor.get() &&
         fPrevState->getPipeline()->isEqual(*state->getPipeline())) {

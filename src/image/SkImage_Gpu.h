@@ -17,7 +17,7 @@
 
 class SkImage_Gpu : public SkImage_Base {
 public:
-    SK_DECLARE_INST_COUNT(SkImage_Gpu)
+    
 
     /**
      *  An "image" can be a subset/window into a larger texture, so we explicit take the
@@ -37,7 +37,7 @@ public:
     }
 
     bool getROPixels(SkBitmap*) const override;
-    GrTexture* onGetTexture() const override { return fTexture; }
+    GrTexture* getTexture() const override { return fTexture; }
     SkShader* onNewShader(SkShader::TileMode,
                           SkShader::TileMode,
                           const SkMatrix* localMatrix) const override;

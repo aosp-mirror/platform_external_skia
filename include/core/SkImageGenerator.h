@@ -15,7 +15,7 @@ class SkBitmap;
 class SkData;
 class SkImageGenerator;
 
-//#define SK_SUPPORT_LEGACY_OPTIONLESS_GET_PIXELS
+//#define SK_LEGACY_IMAGE_GENERATOR_ENUMS_AND_OPTIONS
 
 /**
  *  Takes ownership of SkImageGenerator.  If this method fails for
@@ -69,6 +69,7 @@ public:
      */
     const SkImageInfo& getInfo() const { return fInfo; }
 
+#ifdef SK_LEGACY_IMAGE_GENERATOR_ENUMS_AND_OPTIONS
     /**
      *  Used to describe the result of a call to getPixels().
      *
@@ -139,6 +140,7 @@ public:
 
         ZeroInitialized fZeroInitialized;
     };
+#endif
 
     /**
      *  Decode into the given pixels, a block of memory of size at
@@ -167,16 +169,16 @@ public:
      *  If info is not kIndex8_SkColorType, then the last two parameters may be NULL. If ctableCount
      *  is not null, it will be set to 0.
      *
-     *  @return Result kSuccess, or another value explaining the type of failure.
+     *  @return true on success.
      */
-    Result getPixels(const SkImageInfo& info, void* pixels, size_t rowBytes, const Options*,
-                     SkPMColor ctable[], int* ctableCount);
+    bool getPixels(const SkImageInfo& info, void* pixels, size_t rowBytes,
+                   SkPMColor ctable[], int* ctableCount);
 
     /**
      *  Simplified version of getPixels() that asserts that info is NOT kIndex8_SkColorType and
      *  uses the default Options.
      */
-    Result getPixels(const SkImageInfo& info, void* pixels, size_t rowBytes);
+    bool getPixels(const SkImageInfo& info, void* pixels, size_t rowBytes);
 
     /**
      *  If planes or rowBytes is NULL or if any entry in planes is NULL or if any entry in rowBytes
@@ -197,27 +199,32 @@ public:
      *  this returns a new ImageGenerator for it. Otherwise this returns NULL. Either way
      *  the caller is still responsible for managing their ownership of the data.
      */
-    static SkImageGenerator* NewFromData(SkData*);
+    static SkImageGenerator* NewFromEncoded(SkData*);
 
 protected:
     SkImageGenerator(const SkImageInfo& info) : fInfo(info) {}
 
     virtual SkData* onRefEncodedData();
 
-#ifdef SK_SUPPORT_LEGACY_OPTIONLESS_GET_PIXELS
-    virtual Result onGetPixels(const SkImageInfo& info,
-                               void* pixels, size_t rowBytes,
-                               SkPMColor ctable[], int* ctableCount);
-#endif
+#ifdef SK_LEGACY_IMAGE_GENERATOR_ENUMS_AND_OPTIONS
     virtual Result onGetPixels(const SkImageInfo& info,
                                void* pixels, size_t rowBytes, const Options&,
                                SkPMColor ctable[], int* ctableCount);
+#else
+    virtual bool onGetPixels(const SkImageInfo& info, void* pixels, size_t rowBytes,
+                             SkPMColor ctable[], int* ctableCount);
+#endif
     virtual bool onGetYUV8Planes(SkISize sizes[3], void* planes[3], size_t rowBytes[3]);
     virtual bool onGetYUV8Planes(SkISize sizes[3], void* planes[3], size_t rowBytes[3],
                                  SkYUVColorSpace* colorSpace);
 
 private:
     const SkImageInfo fInfo;
+
+    // This is our default impl, which may be different on different platforms.
+    // It is called from NewFromEncoded() after it has checked for any runtime factory.
+    // The SkData will never be NULL, as that will have been checked by NewFromEncoded.
+    static SkImageGenerator* NewFromEncodedImpl(SkData*);
 };
 
 #endif  // SkImageGenerator_DEFINED

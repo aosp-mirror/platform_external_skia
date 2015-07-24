@@ -7,6 +7,7 @@
 
 #include "GrGLVertexShaderBuilder.h"
 #include "GrGLProgramBuilder.h"
+#include "../GrGLGLSL.h"
 #include "../GrGLGpu.h"
 
 #define GL_CALL(X) GR_GL_CALL(fProgramBuilder->gpu()->glInterface(), X)
@@ -36,10 +37,15 @@ void GrGLVertexBuilder::emitAttributes(const GrGeometryProcessor& gp) {
 void GrGLVertexBuilder::transformToNormalizedDeviceSpace(const GrShaderVar& posVar) {
     SkASSERT(!fRtAdjustName);
 
+    GrSLPrecision precision = kDefault_GrSLPrecision;
+    if (fProgramBuilder->ctxInfo().vendor() == kARM_GrGLVendor) {
+        precision = kHigh_GrSLPrecision;
+    }
+
     // setup RT Uniform
     fProgramBuilder->fUniformHandles.fRTAdjustmentUni =
             fProgramBuilder->addUniform(GrGLProgramBuilder::kVertex_Visibility,
-                                        kVec4f_GrSLType, kDefault_GrSLPrecision,
+                                        kVec4f_GrSLType, precision,
                                         fProgramBuilder->rtAdjustment(),
                                         &fRtAdjustName);
     if (this->getProgramBuilder()->desc().header().fSnapVerticesToPixelCenters) {
@@ -80,7 +86,7 @@ void GrGLVertexBuilder::bindVertexAttributes(GrGLuint programID) {
 
 bool
 GrGLVertexBuilder::compileAndAttachShaders(GrGLuint programId, SkTDArray<GrGLuint>* shaderIds) {
-    this->versionDecl() = GrGetGLSLVersionDecl(fProgramBuilder->ctxInfo());
+    this->versionDecl() = GrGLGetGLSLVersionDecl(fProgramBuilder->ctxInfo());
     this->compileAndAppendLayoutQualifiers();
     fProgramBuilder->appendUniformDecls(GrGLProgramBuilder::kVertex_Visibility, &this->uniforms());
     this->appendDecls(fInputs, &this->inputs());

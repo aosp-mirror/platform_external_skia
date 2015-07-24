@@ -18,17 +18,12 @@
  */
 class SK_API SkNulCanvas : public SkCanvas {
 public:
-    SK_DECLARE_INST_COUNT(SkNulCanvas);
-
     SkNulCanvas() {}
     explicit SkNulCanvas(SkBaseDevice* device) : SkCanvas(device) {}
 
     explicit SkNulCanvas(const SkBitmap& bitmap) : SkCanvas(bitmap) {}
     virtual ~SkNulCanvas() {}
 
-    void beginCommentGroup(const char* description) override {}
-    void addComment(const char* kywd, const char* value) override {}
-    void endCommentGroup() override {}
     SkDrawFilter* setDrawFilter(SkDrawFilter* filter) override {return NULL;}
 
     bool isClipEmpty() const override { return false; }
@@ -87,10 +82,10 @@ protected:
     void onDrawBitmapRect(const SkBitmap& bitmap, const SkRect* src,
                           const SkRect& dst,
                           const SkPaint* paint,
-                          DrawBitmapRectFlags flags) override {}
+                          SK_VIRTUAL_CONSTRAINT_TYPE) override {}
     void onDrawImage(const SkImage*, SkScalar left, SkScalar top, const SkPaint*) override {}
-    void onDrawImageRect(const SkImage*, const SkRect* src, const SkRect& dst,
-                         const SkPaint*) override{}
+    void onDrawImageRect(const SkImage*, const SkRect*, const SkRect&, const SkPaint*
+                         SRC_RECT_CONSTRAINT_PARAM(constraint)) override {}
     void onDrawBitmapNine(const SkBitmap& bitmap, const SkIRect& center,
                           const SkRect& dst, const SkPaint* paint = NULL) override {}
     void onDrawSprite(const SkBitmap& bitmap, int left, int top,
@@ -101,7 +96,7 @@ protected:
                         const uint16_t indices[], int indexCount,
                         const SkPaint& paint) override {}
 
-    
+
 private:
     typedef SkCanvas INHERITED;
 };

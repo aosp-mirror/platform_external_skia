@@ -23,6 +23,7 @@
 #include "SkPictureUtils.h"
 #include "SkPixelRef.h"
 #include "SkPixelSerializer.h"
+#include "SkMiniRecorder.h"
 #include "SkRRect.h"
 #include "SkRandom.h"
 #include "SkRecord.h"
@@ -363,9 +364,10 @@ static void test_savelayer_extraction(skiatest::Reporter* reporter) {
 
     // Now test out the SaveLayer extraction
     if (!SkCanvas::Internal_Private_GetIgnoreSaveLayerBounds()) {
-        SkPicture::AccelData::Key key = SkLayerInfo::ComputeKey();
+        const SkBigPicture* bp = pict->asSkBigPicture();
+        REPORTER_ASSERT(reporter, bp);
 
-        const SkPicture::AccelData* data = pict->EXPERIMENTAL_getAccelData(key);
+        const SkBigPicture::AccelData* data = bp->accelData();
         REPORTER_ASSERT(reporter, data);
 
         const SkLayerInfo *gpuData = static_cast<const SkLayerInfo*>(data);
@@ -688,7 +690,7 @@ DEF_TEST(PictureRecorder_replay, reporter) {
         make_bm(&bm, 10, 10, SK_ColorRED, true);
 
         r.offset(5.0f, 5.0f);
-        canvas->drawBitmapRectToRect(bm, NULL, r);
+        canvas->drawBitmapRect(bm, r);
 
         SkAutoTUnref<SkPicture> final(recorder.endRecording());
         REPORTER_ASSERT(reporter, final->willPlayBackBitmaps());
@@ -982,6 +984,34 @@ static void test_clip_bound_opt(skiatest::Reporter* reporter) {
     }
 }
 
+static void test_cull_rect_reset(skiatest::Reporter* reporter) {
+    SkPictureRecorder recorder;
+    SkRect bounds = SkRect::MakeWH(10, 10);
+    SkRTreeFactory factory;
+    SkCanvas* canvas = recorder.beginRecording(bounds, &factory);
+    bounds = SkRect::MakeWH(100, 100);
+    SkPaint paint;
+    canvas->drawRect(bounds, paint);
+    canvas->drawRect(bounds, paint);
+    SkAutoTUnref<const SkPicture> p(recorder.endRecordingAsPicture(bounds));
+    const SkBigPicture* picture = p->asSkBigPicture();
+    REPORTER_ASSERT(reporter, picture);
+
+    SkRect finalCullRect = picture->cullRect();
+    REPORTER_ASSERT(reporter, 0 == finalCullRect.fLeft);
+    REPORTER_ASSERT(reporter, 0 == finalCullRect.fTop);
+    REPORTER_ASSERT(reporter, 100 == finalCullRect.fBottom);
+    REPORTER_ASSERT(reporter, 100 == finalCullRect.fRight);
+
+    const SkBBoxHierarchy* pictureBBH = picture->bbh();
+    SkRect bbhCullRect = pictureBBH->getRootBound();
+    REPORTER_ASSERT(reporter, 0 == bbhCullRect.fLeft);
+    REPORTER_ASSERT(reporter, 0 == bbhCullRect.fTop);
+    REPORTER_ASSERT(reporter, 100 == bbhCullRect.fBottom);
+    REPORTER_ASSERT(reporter, 100 == bbhCullRect.fRight);
+}
+
+
 /**
  * A canvas that records the number of clip commands.
  */
@@ -1107,30 +1137,6 @@ static void test_gen_id(skiatest::Reporter* reporter) {
     REPORTER_ASSERT(reporter, hasData->uniqueID() != empty->uniqueID());
 }
 
-static void test_bytes_used(skiatest::Reporter* reporter) {
-    SkPictureRecorder recorder;
-
-    recorder.beginRecording(0, 0);
-    SkAutoTUnref<SkPicture> empty(recorder.endRecording());
-
-    // Sanity check to make sure we aren't under-measuring.
-    REPORTER_ASSERT(reporter, SkPictureUtils::ApproximateBytesUsed(empty.get()) >=
-                              sizeof(SkPicture) + sizeof(SkRecord));
-
-    // Protect against any unintentional bloat.
-    size_t approxUsed = SkPictureUtils::ApproximateBytesUsed(empty.get());
-    REPORTER_ASSERT(reporter, approxUsed <= 432);
-
-    // Sanity check of nested SkPictures.
-    SkPictureRecorder r2;
-    r2.beginRecording(0, 0);
-    r2.getRecordingCanvas()->drawPicture(empty.get());
-    SkAutoTUnref<SkPicture> nested(r2.endRecording());
-
-    REPORTER_ASSERT(reporter, SkPictureUtils::ApproximateBytesUsed(nested.get()) >=
-                              SkPictureUtils::ApproximateBytesUsed(empty.get()));
-}
-
 DEF_TEST(Picture, reporter) {
 #ifdef SK_DEBUG
     test_deleting_empty_picture();
@@ -1151,7 +1157,7 @@ DEF_TEST(Picture, reporter) {
     test_hierarchical(reporter);
     test_gen_id(reporter);
     test_savelayer_extraction(reporter);
-    test_bytes_used(reporter);
+    test_cull_rect_reset(reporter);
 }
 
 static void draw_bitmaps(const SkBitmap bitmap, SkCanvas* canvas) {
@@ -1161,7 +1167,7 @@ static void draw_bitmaps(const SkBitmap bitmap, SkCanvas* canvas) {
 
     // Don't care what these record, as long as they're legal.
     canvas->drawBitmap(bitmap, 0.0f, 0.0f, &paint);
-    canvas->drawBitmapRectToRect(bitmap, &rect, rect, &paint, SkCanvas::kNone_DrawBitmapRectFlag);
+    canvas->drawBitmapRect(bitmap, &rect, rect, &paint, SkCanvas::kStrict_SrcRectConstraint);
     canvas->drawBitmapNine(bitmap, irect, rect, &paint);
     canvas->drawSprite(bitmap, 1, 1);
 }
@@ -1191,8 +1197,8 @@ DEF_TEST(DontOptimizeSaveLayerDrawDrawRestore, reporter) {
     // This test is from crbug.com/344987.
     // The commands are:
     //   saveLayer with paint that modifies alpha
-    //     drawBitmapRectToRect
-    //     drawBitmapRectToRect
+    //     drawBitmapRect
+    //     drawBitmapRect
     //   restore
     // The bug was that this structure was modified so that:
     //  - The saveLayer and restore were eliminated
@@ -1267,7 +1273,10 @@ DEF_TEST(Picture_SkipBBH, r) {
     SpoonFedBBHFactory factory(&bbh);
 
     SkPictureRecorder recorder;
-    recorder.beginRecording(bound, &factory);
+    SkCanvas* c = recorder.beginRecording(bound, &factory);
+    // Record a few ops so we don't hit a small- or empty- picture optimization.
+        c->drawRect(bound, SkPaint());
+        c->drawRect(bound, SkPaint());
     SkAutoTUnref<const SkPicture> picture(recorder.endRecording());
 
     SkCanvas big(640, 480), small(300, 200);
@@ -1322,4 +1331,34 @@ DEF_TEST(Picture_getRecordingCanvas, r) {
         rec.endRecording()->unref();
         REPORTER_ASSERT(r, !rec.getRecordingCanvas());
     }
+}
+
+DEF_TEST(MiniRecorderLeftHanging, r) {
+    // Any shader or other ref-counted effect will do just fine here.
+    SkPaint paint;
+    paint.setShader(SkShader::CreateColorShader(SK_ColorRED))->unref();
+
+    SkMiniRecorder rec;
+    REPORTER_ASSERT(r, rec.drawRect(SkRect::MakeWH(20,30), paint));
+    // Don't call rec.detachPicture().  Test succeeds by not asserting or leaking the shader.
+}
+
+DEF_TEST(Picture_preserveCullRect, r) {
+    SkPictureRecorder recorder;
+
+    SkCanvas* c = recorder.beginRecording(SkRect::MakeLTRB(1, 2, 3, 4));
+    c->clear(SK_ColorCYAN);
+
+    SkAutoTUnref<SkPicture> picture(recorder.endRecording());
+    SkDynamicMemoryWStream wstream;
+    picture->serialize(&wstream);
+
+    SkAutoTDelete<SkStream> rstream(wstream.detachAsStream());
+    SkAutoTUnref<SkPicture> deserializedPicture(SkPicture::CreateFromStream(rstream));
+
+    REPORTER_ASSERT(r, SkToBool(deserializedPicture));
+    REPORTER_ASSERT(r, deserializedPicture->cullRect().left() == 1);
+    REPORTER_ASSERT(r, deserializedPicture->cullRect().top() == 2);
+    REPORTER_ASSERT(r, deserializedPicture->cullRect().right() == 3);
+    REPORTER_ASSERT(r, deserializedPicture->cullRect().bottom() == 4);
 }

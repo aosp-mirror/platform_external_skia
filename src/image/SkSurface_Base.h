@@ -18,6 +18,14 @@ public:
     SkSurface_Base(const SkImageInfo&, const SkSurfaceProps*);
     virtual ~SkSurface_Base();
 
+    virtual GrBackendObject onGetTextureHandle(BackendHandleAccess) {
+        return 0;
+    }
+
+    virtual bool onGetRenderTargetHandle(GrBackendObject*, BackendHandleAccess) {
+        return false;
+    }
+
     /**
      *  Allocate a canvas that will draw into this surface. We will cache this
      *  canvas, to return the same object to the caller multiple times. We
@@ -71,6 +79,11 @@ private:
     SkImage*    fCachedImage;
 
     void aboutToDraw(ContentChangeMode mode);
+
+    // Returns true if there is an outstanding image-snapshot, indicating that a call to aboutToDraw
+    // would trigger a copy-on-write.
+    bool outstandingImageSnapshot() const;
+
     friend class SkCanvas;
     friend class SkSurface;
 

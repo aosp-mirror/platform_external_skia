@@ -1284,7 +1284,7 @@ SkPoint SkConic::evalAt(SkScalar t) const {
     Sk2s numer = quad_poly_eval(A, B, C, tt);
 
     B = times_2(ww - one);
-    A = -B;
+    A = Sk2s(0)-B;
     Sk2s denom = quad_poly_eval(A, B, one, tt);
 
     return to_point(numer / denom);
@@ -1474,10 +1474,12 @@ void SkConic::computeFastBounds(SkRect* bounds) const {
     bounds->set(fPts, 3);
 }
 
+#if 0  // unimplemented
 bool SkConic::findMaxCurvature(SkScalar* t) const {
     // TODO: Implement me
     return false;
 }
+#endif
 
 SkScalar SkConic::TransformW(const SkPoint pts[], SkScalar w,
                              const SkMatrix& matrix) {

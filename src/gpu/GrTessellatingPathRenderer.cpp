@@ -1375,11 +1375,10 @@ public:
 
     void initBatchTracker(const GrPipelineInfo& init) override {
         // Handle any color overrides
-        if (init.fColorIgnored) {
+        if (!init.readsColor()) {
             fColor = GrColor_ILLEGAL;
-        } else if (GrColor_ILLEGAL != init.fOverrideColor) {
-            fColor = init.fOverrideColor;
         }
+        init.getOverrideColorIfSet(&fColor);
         fPipelineInfo = init;
     }
 
@@ -1412,9 +1411,10 @@ public:
         LOG("got %d pts, %d contours\n", maxPts, contourCnt);
         uint32_t flags = GrDefaultGeoProcFactory::kPosition_GPType;
         SkAutoTUnref<const GrGeometryProcessor> gp(
-            GrDefaultGeoProcFactory::Create(flags, fColor, fViewMatrix, SkMatrix::I()));
+            GrDefaultGeoProcFactory::Create(flags, fColor, fPipelineInfo.readsLocalCoords(),
+                                            !fPipelineInfo.readsCoverage(), fViewMatrix,
+                                            SkMatrix::I()));
         batchTarget->initDraw(gp, pipeline);
-        gp->initBatchTracker(batchTarget->currentBatchTracker(), fPipelineInfo);
 
         SkAutoTDeleteArray<Vertex*> contours(SkNEW_ARRAY(Vertex *, contourCnt));
 
@@ -1511,7 +1511,7 @@ bool GrTessellatingPathRenderer::onDrawPath(GrDrawTarget* target,
     }
     vmi.mapRect(&clipBounds);
     SkAutoTUnref<GrBatch> batch(TessellatingPathBatch::Create(color, path, viewM, clipBounds));
-    target->drawBatch(pipelineBuilder, batch);
+    target->drawBatch(*pipelineBuilder, batch);
 
     return true;
 }

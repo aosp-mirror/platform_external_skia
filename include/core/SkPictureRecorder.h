@@ -8,6 +8,7 @@
 #ifndef SkPictureRecorder_DEFINED
 #define SkPictureRecorder_DEFINED
 
+#include "../../src/core/SkMiniRecorder.h"
 #include "SkBBHFactory.h"
 #include "SkPicture.h"
 #include "SkRefCnt.h"
@@ -32,7 +33,11 @@ public:
     enum RecordFlags {
         // This flag indicates that, if some BHH is being computed, saveLayer
         // information should also be extracted at the same time.
-        kComputeSaveLayerInfo_RecordFlag = 0x01
+        kComputeSaveLayerInfo_RecordFlag = 0x01,
+
+        // If you call drawPicture() on the recording canvas, this flag forces
+        // that to use SkPicture::playback() immediately rather than (e.g.) reffing the picture.
+        kPlaybackDrawPicture_RecordFlag  = 0x02,
     };
 
     /** Returns the canvas that records the drawing commands.
@@ -70,6 +75,17 @@ public:
     SkPicture* SK_WARN_UNUSED_RESULT endRecordingAsPicture();
 
     /**
+     *  Signal that the caller is done recording, and update the cull rect to use for bounding
+     *  box hierarchy (BBH) generation. The behavior is the same as calling
+     *  endRecordingAsPicture(), except that this method updates the cull rect initially passed
+     *  into beginRecording.
+     *  @param cullRect the new culling rectangle to use as the overall bound for BBH generation
+     *                  and subsequent culling operations.
+     *  @return the picture containing the recorded content.
+     */
+    SkPicture* SK_WARN_UNUSED_RESULT endRecordingAsPicture(const SkRect& cullRect);
+
+    /**
      *  Signal that the caller is done recording. This invalidates the canvas returned by
      *  beginRecording/getRecordingCanvas. Ownership of the object is passed to the caller, who
      *  must call unref() when they are done using it.
@@ -102,6 +118,7 @@ private:
     SkAutoTUnref<SkBBoxHierarchy> fBBH;
     SkAutoTUnref<SkRecorder>      fRecorder;
     SkAutoTUnref<SkRecord>        fRecord;
+    SkMiniRecorder                fMiniRecorder;
 
     typedef SkNoncopyable INHERITED;
 };

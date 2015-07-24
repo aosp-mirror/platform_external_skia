@@ -5,31 +5,23 @@
  * found in the LICENSE file.
  */
 
+#include "SkColorFilter.h"
 #include "SkDevice.h"
-#include "SkDeviceProperties.h"
 #include "SkDraw.h"
 #include "SkDrawFilter.h"
 #include "SkImage_Base.h"
 #include "SkMetaData.h"
+#include "SkNinePatchIter.h"
 #include "SkPatchUtils.h"
 #include "SkPathMeasure.h"
 #include "SkRasterClip.h"
+#include "SkRSXform.h"
 #include "SkShader.h"
 #include "SkTextBlob.h"
 #include "SkTextToPathIter.h"
 
-SkBaseDevice::SkBaseDevice()
-    : fLeakyProperties(SkNEW_ARGS(SkDeviceProperties, (SkDeviceProperties::kLegacyLCD_InitType)))
-#ifdef SK_DEBUG
-    , fAttachedToCanvas(false)
-#endif
-{
-    fOrigin.setZero();
-    fMetaData = NULL;
-}
-
-SkBaseDevice::SkBaseDevice(const SkDeviceProperties& dp)
-    : fLeakyProperties(SkNEW_ARGS(SkDeviceProperties, (dp)))
+SkBaseDevice::SkBaseDevice(const SkSurfaceProps& surfaceProps)
+    : fSurfaceProps(surfaceProps)
 #ifdef SK_DEBUG
     , fAttachedToCanvas(false)
 #endif
@@ -39,7 +31,6 @@ SkBaseDevice::SkBaseDevice(const SkDeviceProperties& dp)
 }
 
 SkBaseDevice::~SkBaseDevice() {
-    SkDELETE(fLeakyProperties);
     SkDELETE(fMetaData);
 }
 
@@ -81,19 +72,6 @@ SkPixelGeometry SkBaseDevice::CreateInfo::AdjustGeometry(const SkImageInfo& info
     }
     return geo;
 }
-
-void SkBaseDevice::initForRootLayer(SkPixelGeometry geo) {
-    // For now we don't expect to change the geometry for the root-layer, but we make the call
-    // anyway to document logically what is going on.
-    //
-    fLeakyProperties->setPixelGeometry(CreateInfo::AdjustGeometry(this->imageInfo(),
-                                                                  kPossible_TileUsage,
-                                                                  geo));
-}
-
-SkSurface* SkBaseDevice::newSurface(const SkImageInfo&, const SkSurfaceProps&) { return NULL; }
-
-const void* SkBaseDevice::peekPixels(SkImageInfo*, size_t*) { return NULL; }
 
 void SkBaseDevice::drawDRRect(const SkDraw& draw, const SkRRect& outer,
                               const SkRRect& inner, const SkPaint& paint) {
@@ -176,13 +154,66 @@ void SkBaseDevice::drawImage(const SkDraw& draw, const SkImage* image, SkScalar 
 }
 
 void SkBaseDevice::drawImageRect(const SkDraw& draw, const SkImage* image, const SkRect* src,
-                                 const SkRect& dst, const SkPaint& paint) {
+                                 const SkRect& dst, const SkPaint& paint,
+                                 SkCanvas::SrcRectConstraint constraint) {
     // Default impl : turns everything into raster bitmap
     SkBitmap bm;
     if (as_IB(image)->getROPixels(&bm)) {
-        this->drawBitmapRect(draw, bm, src, dst, paint, SkCanvas::kNone_DrawBitmapRectFlag);
+        this->drawBitmapRect(draw, bm, src, dst, paint, (SK_VIRTUAL_CONSTRAINT_TYPE)constraint);
     }
 }
+
+void SkBaseDevice::drawImageNine(const SkDraw& draw, const SkImage* image, const SkIRect& center,
+                                 const SkRect& dst, const SkPaint& paint) {
+    SkNinePatchIter iter(image->width(), image->height(), center, dst);
+
+    SkRect srcR, dstR;
+    while (iter.next(&srcR, &dstR)) {
+        this->drawImageRect(draw, image, &srcR, dstR, paint, SkCanvas::kStrict_SrcRectConstraint);
+    }
+}
+
+void SkBaseDevice::drawBitmapNine(const SkDraw& draw, const SkBitmap& bitmap, const SkIRect& center,
+                                  const SkRect& dst, const SkPaint& paint) {
+    SkNinePatchIter iter(bitmap.width(), bitmap.height(), center, dst);
+    
+    SkRect srcR, dstR;
+    while (iter.next(&srcR, &dstR)) {
+        this->drawBitmapRect(draw, bitmap, &srcR, dstR, paint,
+                             (SK_VIRTUAL_CONSTRAINT_TYPE)SkCanvas::kStrict_SrcRectConstraint);
+    }
+}
+
+void SkBaseDevice::drawAtlas(const SkDraw& draw, const SkImage* atlas, const SkRSXform xform[],
+                             const SkRect tex[], const SkColor colors[], int count,
+                             SkXfermode::Mode mode, const SkPaint& paint) {
+    SkPath path;
+    path.setIsVolatile(true);
+
+    for (int i = 0; i < count; ++i) {
+        SkPoint quad[4];
+        xform[i].toQuad(tex[i].width(), tex[i].height(), quad);
+        
+        SkMatrix localM;
+        localM.setRSXform(xform[i]);
+        localM.preTranslate(-tex[i].left(), -tex[i].top());
+
+        SkPaint pnt(paint);
+        pnt.setShader(atlas->newShader(SkShader::kClamp_TileMode, SkShader::kClamp_TileMode,
+                                       &localM))->unref();
+        if (colors && colors[i] != SK_ColorWHITE) {
+            SkAutoTUnref<SkColorFilter> cf(SkColorFilter::CreateModeFilter(colors[i], mode));
+            pnt.setColorFilter(cf);
+        }
+        
+        path.rewind();
+        path.addPoly(quad, 4, true);
+        path.setConvexity(SkPath::kConvex_Convexity);
+        this->drawPath(draw, path, pnt, NULL, true);
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
 
 bool SkBaseDevice::readPixels(const SkImageInfo& info, void* dstP, size_t rowBytes, int x, int y) {
 #ifdef SK_DEBUG
@@ -221,26 +252,26 @@ bool SkBaseDevice::onReadPixels(const SkImageInfo&, void*, size_t, int x, int y)
     return false;
 }
 
-void* SkBaseDevice::accessPixels(SkImageInfo* info, size_t* rowBytes) {
-    SkImageInfo tmpInfo;
-    size_t tmpRowBytes;
-    if (NULL == info) {
-        info = &tmpInfo;
-    }
-    if (NULL == rowBytes) {
-        rowBytes = &tmpRowBytes;
-    }
-    return this->onAccessPixels(info, rowBytes);
-}
-
-void* SkBaseDevice::onAccessPixels(SkImageInfo* info, size_t* rowBytes) {
-    return NULL;
-}
-
 bool SkBaseDevice::EXPERIMENTAL_drawPicture(SkCanvas*, const SkPicture*, const SkMatrix*,
                                             const SkPaint*) {
     // The base class doesn't perform any accelerated picture rendering
     return false;
+}
+
+bool SkBaseDevice::accessPixels(SkPixmap* pmap) {
+    SkPixmap tempStorage;
+    if (NULL == pmap) {
+        pmap = &tempStorage;
+    }
+    return this->onAccessPixels(pmap);
+}
+
+bool SkBaseDevice::peekPixels(SkPixmap* pmap) {
+    SkPixmap tempStorage;
+    if (NULL == pmap) {
+        pmap = &tempStorage;
+    }
+    return this->onPeekPixels(pmap);
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -375,7 +406,7 @@ uint32_t SkBaseDevice::filterTextFlags(const SkPaint& paint) const {
         return flags;
     }
 
-    if (kUnknown_SkPixelGeometry == fLeakyProperties->pixelGeometry()
+    if (kUnknown_SkPixelGeometry == fSurfaceProps.pixelGeometry()
         || this->onShouldDisableLCD(paint)) {
 
         flags &= ~SkPaint::kLCDRenderText_Flag;

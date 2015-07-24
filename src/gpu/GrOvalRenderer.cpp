@@ -22,7 +22,6 @@
 #include "SkTLazy.h"
 #include "effects/GrRRectEffect.h"
 #include "gl/GrGLProcessor.h"
-#include "gl/GrGLSL.h"
 #include "gl/GrGLGeometryProcessor.h"
 #include "gl/builders/GrGLProgramBuilder.h"
 
@@ -71,14 +70,17 @@ inline bool circle_stays_circle(const SkMatrix& m) {
 
 class CircleEdgeEffect : public GrGeometryProcessor {
 public:
-    static GrGeometryProcessor* Create(GrColor color, bool stroke, const SkMatrix& localMatrix) {
-        return SkNEW_ARGS(CircleEdgeEffect, (color, stroke, localMatrix));
+    static GrGeometryProcessor* Create(GrColor color, bool stroke, const SkMatrix& localMatrix,
+                                       bool usesLocalCoords) {
+        return SkNEW_ARGS(CircleEdgeEffect, (color, stroke, localMatrix, usesLocalCoords));
     }
 
     const Attribute* inPosition() const { return fInPosition; }
     const Attribute* inCircleEdge() const { return fInCircleEdge; }
     GrColor color() const { return fColor; }
+    bool colorIgnored() const { return GrColor_ILLEGAL == fColor; }
     const SkMatrix& localMatrix() const { return fLocalMatrix; }
+    bool usesLocalCoords() const { return fUsesLocalCoords; }
     virtual ~CircleEdgeEffect() {}
 
     const char* name() const override { return "CircleEdge"; }
@@ -94,7 +96,6 @@ public:
         void onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) override{
             const CircleEdgeEffect& ce = args.fGP.cast<CircleEdgeEffect>();
             GrGLGPBuilder* pb = args.fPB;
-            const BatchTracker& local = args.fBT.cast<BatchTracker>();
             GrGLVertexBuilder* vsBuilder = args.fPB->getVertexShaderBuilder();
 
             // emit attributes
@@ -104,9 +105,10 @@ public:
             args.fPB->addVarying("CircleEdge", &v);
             vsBuilder->codeAppendf("%s = %s;", v.vsOut(), ce.inCircleEdge()->fName);
 
-            // Setup pass through color
-            this->setupColorPassThrough(pb, local.fInputColorType, args.fOutputColor, NULL,
-                                        &fColorUniform);
+            // setup pass through color
+            if (!ce.colorIgnored()) {
+                this->setupUniformColor(pb, args.fOutputColor, &fColorUniform);
+            }
 
             // Setup position
             this->setupPosition(pb, gpArgs, ce.inPosition()->fName);
@@ -131,22 +133,22 @@ public:
                            const GrBatchTracker& bt,
                            const GrGLSLCaps&,
                            GrProcessorKeyBuilder* b) {
-            const BatchTracker& local = bt.cast<BatchTracker>();
             const CircleEdgeEffect& ce = gp.cast<CircleEdgeEffect>();
             uint16_t key = ce.isStroked() ? 0x1 : 0x0;
-            key |= local.fUsesLocalCoords && ce.localMatrix().hasPerspective() ? 0x2 : 0x0;
-            b->add32(key << 16 | local.fInputColorType);
+            key |= ce.usesLocalCoords() && ce.localMatrix().hasPerspective() ? 0x2 : 0x0;
+            key |= ce.colorIgnored() ? 0x4 : 0x0;
+            b->add32(key);
         }
 
         virtual void setData(const GrGLProgramDataManager& pdman,
                              const GrPrimitiveProcessor& gp,
                              const GrBatchTracker& bt) override {
-            const BatchTracker& local = bt.cast<BatchTracker>();
-            if (kUniform_GrGPInput == local.fInputColorType && local.fColor != fColor) {
+            const CircleEdgeEffect& ce = gp.cast<CircleEdgeEffect>();
+            if (ce.color() != fColor) {
                 GrGLfloat c[4];
-                GrColorToRGBAFloat(local.fColor, c);
+                GrColorToRGBAFloat(ce.color(), c);
                 pdman.set4fv(fColorUniform, 1, c);
-                fColor = local.fColor;
+                fColor = ce.color();
             }
         }
 
@@ -174,16 +176,11 @@ public:
         return SkNEW_ARGS(GLProcessor, (*this, bt));
     }
 
-    void initBatchTracker(GrBatchTracker* bt, const GrPipelineInfo& init) const override {
-        BatchTracker* local = bt->cast<BatchTracker>();
-        local->fInputColorType = GetColorInputType(&local->fColor, this->color(), init, false);
-        local->fUsesLocalCoords = init.fUsesLocalCoords;
-    }
-
 private:
-    CircleEdgeEffect(GrColor color, bool stroke, const SkMatrix& localMatrix)
+    CircleEdgeEffect(GrColor color, bool stroke, const SkMatrix& localMatrix, bool usesLocalCoords)
         : fColor(color)
-        , fLocalMatrix(localMatrix) {
+        , fLocalMatrix(localMatrix)
+        , fUsesLocalCoords(usesLocalCoords) {
         this->initClassID<CircleEdgeEffect>();
         fInPosition = &this->addVertexAttrib(Attribute("inPosition", kVec2f_GrVertexAttribType,
                                                        kHigh_GrSLPrecision));
@@ -192,17 +189,12 @@ private:
         fStroke = stroke;
     }
 
-    struct BatchTracker {
-        GrGPInput fInputColorType;
-        GrColor fColor;
-        bool fUsesLocalCoords;
-    };
-
     GrColor fColor;
     SkMatrix fLocalMatrix;
     const Attribute* fInPosition;
     const Attribute* fInCircleEdge;
     bool fStroke;
+    bool fUsesLocalCoords;
 
     GR_DECLARE_GEOMETRY_PROCESSOR_TEST;
 
@@ -211,13 +203,11 @@ private:
 
 GR_DEFINE_GEOMETRY_PROCESSOR_TEST(CircleEdgeEffect);
 
-GrGeometryProcessor* CircleEdgeEffect::TestCreate(SkRandom* random,
-                                                  GrContext* context,
-                                                  const GrDrawTargetCaps&,
-                                                  GrTexture* textures[]) {
-    return CircleEdgeEffect::Create(GrRandomColor(random),
-                                    random->nextBool(),
-                                    GrTest::TestMatrix(random));
+GrGeometryProcessor* CircleEdgeEffect::TestCreate(GrProcessorTestData* d) {
+    return CircleEdgeEffect::Create(GrRandomColor(d->fRandom),
+                                    d->fRandom->nextBool(),
+                                    GrTest::TestMatrix(d->fRandom),
+                                    d->fRandom->nextBool());
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -232,8 +222,9 @@ GrGeometryProcessor* CircleEdgeEffect::TestCreate(SkRandom* random,
 
 class EllipseEdgeEffect : public GrGeometryProcessor {
 public:
-    static GrGeometryProcessor* Create(GrColor color, bool stroke, const SkMatrix& localMatrix) {
-        return SkNEW_ARGS(EllipseEdgeEffect, (color, stroke, localMatrix));
+    static GrGeometryProcessor* Create(GrColor color, bool stroke, const SkMatrix& localMatrix,
+                                       bool usesLocalCoords) {
+        return SkNEW_ARGS(EllipseEdgeEffect, (color, stroke, localMatrix, usesLocalCoords));
     }
 
     virtual ~EllipseEdgeEffect() {}
@@ -244,7 +235,9 @@ public:
     const Attribute* inEllipseOffset() const { return fInEllipseOffset; }
     const Attribute* inEllipseRadii() const { return fInEllipseRadii; }
     GrColor color() const { return fColor; }
+    bool colorIgnored() const { return GrColor_ILLEGAL == fColor; }
     const SkMatrix& localMatrix() const { return fLocalMatrix; }
+    bool usesLocalCoords() const { return fUsesLocalCoords; }
 
     inline bool isStroked() const { return fStroke; }
 
@@ -257,7 +250,6 @@ public:
         void onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) override{
             const EllipseEdgeEffect& ee = args.fGP.cast<EllipseEdgeEffect>();
             GrGLGPBuilder* pb = args.fPB;
-            const BatchTracker& local = args.fBT.cast<BatchTracker>();
             GrGLVertexBuilder* vsBuilder = args.fPB->getVertexShaderBuilder();
 
             // emit attributes
@@ -273,9 +265,10 @@ public:
             vsBuilder->codeAppendf("%s = %s;", ellipseRadii.vsOut(),
                                    ee.inEllipseRadii()->fName);
 
-            // Setup pass through color
-            this->setupColorPassThrough(pb, local.fInputColorType, args.fOutputColor, NULL,
-                                        &fColorUniform);
+            // setup pass through color
+            if (!ee.colorIgnored()) {
+                this->setupUniformColor(pb, args.fOutputColor, &fColorUniform);
+            }
 
             // Setup position
             this->setupPosition(pb, gpArgs, ee.inPosition()->fName);
@@ -315,23 +308,22 @@ public:
                            const GrBatchTracker& bt,
                            const GrGLSLCaps&,
                            GrProcessorKeyBuilder* b) {
-            const BatchTracker& local = bt.cast<BatchTracker>();
             const EllipseEdgeEffect& ee = gp.cast<EllipseEdgeEffect>();
             uint16_t key = ee.isStroked() ? 0x1 : 0x0;
-            key |= local.fUsesLocalCoords && ee.localMatrix().hasPerspective() ? 0x2 : 0x0;
-            b->add32(key << 16 | local.fInputColorType);
+            key |= ee.usesLocalCoords() && ee.localMatrix().hasPerspective() ? 0x2 : 0x0;
+            key |= ee.colorIgnored() ? 0x4 : 0x0;
+            b->add32(key);
         }
 
         virtual void setData(const GrGLProgramDataManager& pdman,
                              const GrPrimitiveProcessor& gp,
                              const GrBatchTracker& bt) override {
-
-            const BatchTracker& local = bt.cast<BatchTracker>();
-            if (kUniform_GrGPInput == local.fInputColorType && local.fColor != fColor) {
+            const EllipseEdgeEffect& ee = gp.cast<EllipseEdgeEffect>();
+            if (ee.color() != fColor) {
                 GrGLfloat c[4];
-                GrColorToRGBAFloat(local.fColor, c);
+                GrColorToRGBAFloat(ee.color(), c);
                 pdman.set4fv(fColorUniform, 1, c);
-                fColor = local.fColor;
+                fColor = ee.color();
             }
         }
 
@@ -360,16 +352,12 @@ public:
         return SkNEW_ARGS(GLProcessor, (*this, bt));
     }
 
-    void initBatchTracker(GrBatchTracker* bt, const GrPipelineInfo& init) const override {
-        BatchTracker* local = bt->cast<BatchTracker>();
-        local->fInputColorType = GetColorInputType(&local->fColor, this->color(), init, false);
-        local->fUsesLocalCoords = init.fUsesLocalCoords;
-    }
-
 private:
-    EllipseEdgeEffect(GrColor color, bool stroke, const SkMatrix& localMatrix)
+    EllipseEdgeEffect(GrColor color, bool stroke, const SkMatrix& localMatrix,
+                      bool usesLocalCoords)
         : fColor(color)
-        , fLocalMatrix(localMatrix) {
+        , fLocalMatrix(localMatrix)
+        , fUsesLocalCoords(usesLocalCoords) {
         this->initClassID<EllipseEdgeEffect>();
         fInPosition = &this->addVertexAttrib(Attribute("inPosition", kVec2f_GrVertexAttribType));
         fInEllipseOffset = &this->addVertexAttrib(Attribute("inEllipseOffset",
@@ -379,18 +367,13 @@ private:
         fStroke = stroke;
     }
 
-    struct BatchTracker {
-        GrGPInput fInputColorType;
-        GrColor fColor;
-        bool fUsesLocalCoords;
-    };
-
     const Attribute* fInPosition;
     const Attribute* fInEllipseOffset;
     const Attribute* fInEllipseRadii;
     GrColor fColor;
     SkMatrix fLocalMatrix;
     bool fStroke;
+    bool fUsesLocalCoords;
 
     GR_DECLARE_GEOMETRY_PROCESSOR_TEST;
 
@@ -399,13 +382,11 @@ private:
 
 GR_DEFINE_GEOMETRY_PROCESSOR_TEST(EllipseEdgeEffect);
 
-GrGeometryProcessor* EllipseEdgeEffect::TestCreate(SkRandom* random,
-                                                   GrContext* context,
-                                                   const GrDrawTargetCaps&,
-                                                   GrTexture* textures[]) {
-    return EllipseEdgeEffect::Create(GrRandomColor(random),
-                                     random->nextBool(),
-                                     GrTest::TestMatrix(random));
+GrGeometryProcessor* EllipseEdgeEffect::TestCreate(GrProcessorTestData* d) {
+    return EllipseEdgeEffect::Create(GrRandomColor(d->fRandom),
+                                     d->fRandom->nextBool(),
+                                     GrTest::TestMatrix(d->fRandom),
+                                     d->fRandom->nextBool());
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -423,8 +404,9 @@ class DIEllipseEdgeEffect : public GrGeometryProcessor {
 public:
     enum Mode { kStroke = 0, kHairline, kFill };
 
-    static GrGeometryProcessor* Create(GrColor color, const SkMatrix& viewMatrix, Mode mode) {
-        return SkNEW_ARGS(DIEllipseEdgeEffect, (color, viewMatrix, mode));
+    static GrGeometryProcessor* Create(GrColor color, const SkMatrix& viewMatrix, Mode mode,
+                                       bool usesLocalCoords) {
+        return SkNEW_ARGS(DIEllipseEdgeEffect, (color, viewMatrix, mode, usesLocalCoords));
     }
 
     virtual ~DIEllipseEdgeEffect() {}
@@ -435,7 +417,9 @@ public:
     const Attribute* inEllipseOffsets0() const { return fInEllipseOffsets0; }
     const Attribute* inEllipseOffsets1() const { return fInEllipseOffsets1; }
     GrColor color() const { return fColor; }
+    bool colorIgnored() const { return GrColor_ILLEGAL == fColor; }
     const SkMatrix& viewMatrix() const { return fViewMatrix; }
+    bool usesLocalCoords() const { return fUsesLocalCoords; }
 
     inline Mode getMode() const { return fMode; }
 
@@ -443,12 +427,11 @@ public:
     public:
         GLProcessor(const GrGeometryProcessor&,
                     const GrBatchTracker&)
-            : fColor(GrColor_ILLEGAL) {}
+            : fViewMatrix(SkMatrix::InvalidMatrix()), fColor(GrColor_ILLEGAL) {}
 
         void onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) override{
             const DIEllipseEdgeEffect& ee = args.fGP.cast<DIEllipseEdgeEffect>();
             GrGLGPBuilder* pb = args.fPB;
-            const BatchTracker& local = args.fBT.cast<BatchTracker>();
             GrGLVertexBuilder* vsBuilder = args.fPB->getVertexShaderBuilder();
 
             // emit attributes
@@ -464,12 +447,14 @@ public:
             vsBuilder->codeAppendf("%s = %s;", offsets1.vsOut(),
                                    ee.inEllipseOffsets1()->fName);
 
-            // Setup pass through color
-            this->setupColorPassThrough(pb, local.fInputColorType, args.fOutputColor, NULL,
-                                        &fColorUniform);
+            // setup pass through color
+            if (!ee.colorIgnored()) {
+                this->setupUniformColor(pb, args.fOutputColor, &fColorUniform);
+            }
 
             // Setup position
-            this->setupPosition(pb, gpArgs, ee.inPosition()->fName, ee.viewMatrix());
+            this->setupPosition(pb, gpArgs, ee.inPosition()->fName, ee.viewMatrix(),
+                                &fViewMatrixUniform);
 
             // emit transforms
             this->emitTransforms(args.fPB, gpArgs->fPositionVar, ee.inPosition()->fName,
@@ -520,31 +505,38 @@ public:
                            const GrBatchTracker& bt,
                            const GrGLSLCaps&,
                            GrProcessorKeyBuilder* b) {
-            const BatchTracker& local = bt.cast<BatchTracker>();
             const DIEllipseEdgeEffect& ellipseEffect = gp.cast<DIEllipseEdgeEffect>();
             uint16_t key = ellipseEffect.getMode();
-            key |= ComputePosKey(ellipseEffect.viewMatrix()) << 9;
-            b->add32(key << 16 | local.fInputColorType);
+            key |= ellipseEffect.colorIgnored() << 9;
+            key |= ComputePosKey(ellipseEffect.viewMatrix()) << 10;
+            b->add32(key);
         }
 
         virtual void setData(const GrGLProgramDataManager& pdman,
                              const GrPrimitiveProcessor& gp,
                              const GrBatchTracker& bt) override {
             const DIEllipseEdgeEffect& dee = gp.cast<DIEllipseEdgeEffect>();
-            this->setUniformViewMatrix(pdman, dee.viewMatrix());
 
-            const BatchTracker& local = bt.cast<BatchTracker>();
-            if (kUniform_GrGPInput == local.fInputColorType && local.fColor != fColor) {
+            if (!dee.viewMatrix().isIdentity() && !fViewMatrix.cheapEqualTo(dee.viewMatrix())) {
+                fViewMatrix = dee.viewMatrix();
+                GrGLfloat viewMatrix[3 * 3];
+                GrGLGetMatrix<3>(viewMatrix, fViewMatrix);
+                pdman.setMatrix3f(fViewMatrixUniform, viewMatrix);
+            }
+
+            if (dee.color() != fColor) {
                 GrGLfloat c[4];
-                GrColorToRGBAFloat(local.fColor, c);
+                GrColorToRGBAFloat(dee.color(), c);
                 pdman.set4fv(fColorUniform, 1, c);
-                fColor = local.fColor;
+                fColor = dee.color();
             }
         }
 
     private:
+        SkMatrix fViewMatrix;
         GrColor fColor;
         UniformHandle fColorUniform;
+        UniformHandle fViewMatrixUniform;
 
         typedef GrGLGeometryProcessor INHERITED;
     };
@@ -560,31 +552,21 @@ public:
         return SkNEW_ARGS(GLProcessor, (*this, bt));
     }
 
-    void initBatchTracker(GrBatchTracker* bt, const GrPipelineInfo& init) const override {
-        BatchTracker* local = bt->cast<BatchTracker>();
-        local->fInputColorType = GetColorInputType(&local->fColor, this->color(), init, false);
-        local->fUsesLocalCoords = init.fUsesLocalCoords;
-    }
-
 private:
-    DIEllipseEdgeEffect(GrColor color, const SkMatrix& viewMatrix, Mode mode)
+    DIEllipseEdgeEffect(GrColor color, const SkMatrix& viewMatrix, Mode mode,
+                        bool usesLocalCoords)
         : fColor(color)
-        , fViewMatrix(viewMatrix) {
+        , fViewMatrix(viewMatrix)
+        , fUsesLocalCoords(usesLocalCoords) {
         this->initClassID<DIEllipseEdgeEffect>();
         fInPosition = &this->addVertexAttrib(Attribute("inPosition", kVec2f_GrVertexAttribType,
                                                        kHigh_GrSLPrecision));
         fInEllipseOffsets0 = &this->addVertexAttrib(Attribute("inEllipseOffsets0",
-                                                                kVec2f_GrVertexAttribType));
+                                                              kVec2f_GrVertexAttribType));
         fInEllipseOffsets1 = &this->addVertexAttrib(Attribute("inEllipseOffsets1",
-                                                                kVec2f_GrVertexAttribType));
+                                                              kVec2f_GrVertexAttribType));
         fMode = mode;
     }
-
-    struct BatchTracker {
-        GrGPInput fInputColorType;
-        GrColor fColor;
-        bool fUsesLocalCoords;
-    };
 
     const Attribute* fInPosition;
     const Attribute* fInEllipseOffsets0;
@@ -592,6 +574,7 @@ private:
     GrColor fColor;
     SkMatrix fViewMatrix;
     Mode fMode;
+    bool fUsesLocalCoords;
 
     GR_DECLARE_GEOMETRY_PROCESSOR_TEST;
 
@@ -600,26 +583,23 @@ private:
 
 GR_DEFINE_GEOMETRY_PROCESSOR_TEST(DIEllipseEdgeEffect);
 
-GrGeometryProcessor* DIEllipseEdgeEffect::TestCreate(SkRandom* random,
-                                                     GrContext* context,
-                                                     const GrDrawTargetCaps&,
-                                                     GrTexture* textures[]) {
-    return DIEllipseEdgeEffect::Create(GrRandomColor(random),
-                                       GrTest::TestMatrix(random),
-                                       (Mode)(random->nextRangeU(0,2)));
+GrGeometryProcessor* DIEllipseEdgeEffect::TestCreate(GrProcessorTestData* d) {
+    return DIEllipseEdgeEffect::Create(GrRandomColor(d->fRandom),
+                                       GrTest::TestMatrix(d->fRandom),
+                                       (Mode)(d->fRandom->nextRangeU(0,2)),
+                                       d->fRandom->nextBool());
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
-bool GrOvalRenderer::drawOval(GrDrawTarget* target,
-                              GrPipelineBuilder* pipelineBuilder,
+bool GrOvalRenderer::DrawOval(GrDrawTarget* target,
+                              const GrPipelineBuilder& pipelineBuilder,
                               GrColor color,
                               const SkMatrix& viewMatrix,
                               bool useAA,
                               const SkRect& oval,
-                              const SkStrokeRec& stroke)
-{
-    bool useCoverageAA = useAA && !pipelineBuilder->getRenderTarget()->isMultisampled();
+                              const SkStrokeRec& stroke) {
+    bool useCoverageAA = useAA && !pipelineBuilder.getRenderTarget()->isUnifiedMultisampled();
 
     if (!useCoverageAA) {
         return false;
@@ -627,15 +607,15 @@ bool GrOvalRenderer::drawOval(GrDrawTarget* target,
 
     // we can draw circles
     if (SkScalarNearlyEqual(oval.width(), oval.height()) && circle_stays_circle(viewMatrix)) {
-        this->drawCircle(target, pipelineBuilder, color, viewMatrix, useCoverageAA, oval, stroke);
+        DrawCircle(target, pipelineBuilder, color, viewMatrix, useCoverageAA, oval, stroke);
     // if we have shader derivative support, render as device-independent
     } else if (target->caps()->shaderCaps()->shaderDerivativeSupport()) {
-        return this->drawDIEllipse(target, pipelineBuilder, color, viewMatrix, useCoverageAA, oval,
-                                   stroke);
+        return DrawDIEllipse(target, pipelineBuilder, color, viewMatrix, useCoverageAA, oval,
+                             stroke);
     // otherwise axis-aligned ellipses only
     } else if (viewMatrix.rectStaysRect()) {
-        return this->drawEllipse(target, pipelineBuilder, color, viewMatrix, useCoverageAA, oval,
-                                 stroke);
+        return DrawEllipse(target, pipelineBuilder, color, viewMatrix, useCoverageAA, oval,
+                           stroke);
     } else {
         return false;
     }
@@ -671,18 +651,17 @@ public:
 
     void initBatchTracker(const GrPipelineInfo& init) override {
         // Handle any color overrides
-        if (init.fColorIgnored) {
+        if (!init.readsColor()) {
             fGeoData[0].fColor = GrColor_ILLEGAL;
-        } else if (GrColor_ILLEGAL != init.fOverrideColor) {
-            fGeoData[0].fColor = init.fOverrideColor;
         }
+        init.getOverrideColorIfSet(&fGeoData[0].fColor);
 
         // setup batch properties
-        fBatch.fColorIgnored = init.fColorIgnored;
+        fBatch.fColorIgnored = !init.readsColor();
         fBatch.fColor = fGeoData[0].fColor;
         fBatch.fStroke = fGeoData[0].fStroke;
-        fBatch.fUsesLocalCoords = init.fUsesLocalCoords;
-        fBatch.fCoverageIgnored = init.fCoverageIgnored;
+        fBatch.fUsesLocalCoords = init.readsLocalCoords();
+        fBatch.fCoverageIgnored = !init.readsCoverage();
     }
 
     void generateGeometry(GrBatchTarget* batchTarget, const GrPipeline* pipeline) override {
@@ -694,19 +673,10 @@ public:
         // Setup geometry processor
         SkAutoTUnref<GrGeometryProcessor> gp(CircleEdgeEffect::Create(this->color(),
                                                                       this->stroke(),
-                                                                      invert));
+                                                                      invert,
+                                                                      this->usesLocalCoords()));
 
         batchTarget->initDraw(gp, pipeline);
-
-        // TODO this is hacky, but the only way we have to initialize the GP is to use the
-        // GrPipelineInfo struct so we can generate the correct shader.  Once we have GrBatch
-        // everywhere we can remove this nastiness
-        GrPipelineInfo init;
-        init.fColorIgnored = fBatch.fColorIgnored;
-        init.fOverrideColor = GrColor_ILLEGAL;
-        init.fCoverageIgnored = fBatch.fCoverageIgnored;
-        init.fUsesLocalCoords = this->usesLocalCoords();
-        gp->initBatchTracker(batchTarget->currentBatchTracker(), init);
 
         int instanceCount = fGeoData.count();
         size_t vertexStride = gp->getVertexStride();
@@ -764,6 +734,10 @@ private:
     }
 
     bool onCombineIfPossible(GrBatch* t) override {
+        if (!this->pipeline()->isEqual(*t->pipeline())) {
+            return false;
+        }
+
         CircleBatch* that = t->cast<CircleBatch>();
 
         // TODO use vertex color to avoid breaking batches
@@ -852,8 +826,8 @@ static GrBatch* create_circle_batch(GrColor color,
     return CircleBatch::Create(geometry);
 }
 
-void GrOvalRenderer::drawCircle(GrDrawTarget* target,
-                                GrPipelineBuilder* pipelineBuilder,
+void GrOvalRenderer::DrawCircle(GrDrawTarget* target,
+                                const GrPipelineBuilder& pipelineBuilder,
                                 GrColor color,
                                 const SkMatrix& viewMatrix,
                                 bool useCoverageAA,
@@ -895,18 +869,17 @@ public:
 
     void initBatchTracker(const GrPipelineInfo& init) override {
         // Handle any color overrides
-        if (init.fColorIgnored) {
+        if (!init.readsCoverage()) {
             fGeoData[0].fColor = GrColor_ILLEGAL;
-        } else if (GrColor_ILLEGAL != init.fOverrideColor) {
-            fGeoData[0].fColor = init.fOverrideColor;
         }
+        init.getOverrideColorIfSet(&fGeoData[0].fColor);
 
         // setup batch properties
-        fBatch.fColorIgnored = init.fColorIgnored;
+        fBatch.fColorIgnored = !init.readsColor();
         fBatch.fColor = fGeoData[0].fColor;
         fBatch.fStroke = fGeoData[0].fStroke;
-        fBatch.fUsesLocalCoords = init.fUsesLocalCoords;
-        fBatch.fCoverageIgnored = init.fCoverageIgnored;
+        fBatch.fUsesLocalCoords = init.readsLocalCoords();
+        fBatch.fCoverageIgnored = !init.readsCoverage();
     }
 
     void generateGeometry(GrBatchTarget* batchTarget, const GrPipeline* pipeline) override {
@@ -918,19 +891,10 @@ public:
         // Setup geometry processor
         SkAutoTUnref<GrGeometryProcessor> gp(EllipseEdgeEffect::Create(this->color(),
                                                                        this->stroke(),
-                                                                       invert));
+                                                                       invert,
+                                                                       this->usesLocalCoords()));
 
         batchTarget->initDraw(gp, pipeline);
-
-        // TODO this is hacky, but the only way we have to initialize the GP is to use the
-        // GrPipelineInfo struct so we can generate the correct shader.  Once we have GrBatch
-        // everywhere we can remove this nastiness
-        GrPipelineInfo init;
-        init.fColorIgnored = fBatch.fColorIgnored;
-        init.fOverrideColor = GrColor_ILLEGAL;
-        init.fCoverageIgnored = fBatch.fCoverageIgnored;
-        init.fUsesLocalCoords = this->usesLocalCoords();
-        gp->initBatchTracker(batchTarget->currentBatchTracker(), init);
 
         int instanceCount = fGeoData.count();
         QuadHelper helper;
@@ -993,6 +957,10 @@ private:
     }
 
     bool onCombineIfPossible(GrBatch* t) override {
+        if (!this->pipeline()->isEqual(*t->pipeline())) {
+            return false;
+        }
+
         EllipseBatch* that = t->cast<EllipseBatch>();
 
         // TODO use vertex color to avoid breaking batches
@@ -1118,8 +1086,8 @@ static GrBatch* create_ellipse_batch(GrColor color,
     return EllipseBatch::Create(geometry);
 }
 
-bool GrOvalRenderer::drawEllipse(GrDrawTarget* target,
-                                 GrPipelineBuilder* pipelineBuilder,
+bool GrOvalRenderer::DrawEllipse(GrDrawTarget* target,
+                                 const GrPipelineBuilder& pipelineBuilder,
                                  GrColor color,
                                  const SkMatrix& viewMatrix,
                                  bool useCoverageAA,
@@ -1168,37 +1136,27 @@ public:
 
     void initBatchTracker(const GrPipelineInfo& init) override {
         // Handle any color overrides
-        if (init.fColorIgnored) {
+        if (!init.readsColor()) {
             fGeoData[0].fColor = GrColor_ILLEGAL;
-        } else if (GrColor_ILLEGAL != init.fOverrideColor) {
-            fGeoData[0].fColor = init.fOverrideColor;
         }
+        init.getOverrideColorIfSet(&fGeoData[0].fColor);
 
         // setup batch properties
-        fBatch.fColorIgnored = init.fColorIgnored;
+        fBatch.fColorIgnored = !init.readsColor();
         fBatch.fColor = fGeoData[0].fColor;
         fBatch.fMode = fGeoData[0].fMode;
-        fBatch.fUsesLocalCoords = init.fUsesLocalCoords;
-        fBatch.fCoverageIgnored = init.fCoverageIgnored;
+        fBatch.fUsesLocalCoords = init.readsLocalCoords();
+        fBatch.fCoverageIgnored = !init.readsCoverage();
     }
 
     void generateGeometry(GrBatchTarget* batchTarget, const GrPipeline* pipeline) override {
         // Setup geometry processor
         SkAutoTUnref<GrGeometryProcessor> gp(DIEllipseEdgeEffect::Create(this->color(),
                                                                          this->viewMatrix(),
-                                                                         this->mode()));
+                                                                         this->mode(),
+                                                                         this->usesLocalCoords()));
 
         batchTarget->initDraw(gp, pipeline);
-
-        // TODO this is hacky, but the only way we have to initialize the GP is to use the
-        // GrPipelineInfo struct so we can generate the correct shader.  Once we have GrBatch
-        // everywhere we can remove this nastiness
-        GrPipelineInfo init;
-        init.fColorIgnored = fBatch.fColorIgnored;
-        init.fOverrideColor = GrColor_ILLEGAL;
-        init.fCoverageIgnored = fBatch.fCoverageIgnored;
-        init.fUsesLocalCoords = this->usesLocalCoords();
-        gp->initBatchTracker(batchTarget->currentBatchTracker(), init);
 
         int instanceCount = fGeoData.count();
         size_t vertexStride = gp->getVertexStride();
@@ -1257,6 +1215,10 @@ private:
     }
 
     bool onCombineIfPossible(GrBatch* t) override {
+        if (!this->pipeline()->isEqual(*t->pipeline())) {
+            return false;
+        }
+
         DIEllipseBatch* that = t->cast<DIEllipseBatch>();
 
         // TODO use vertex color to avoid breaking batches
@@ -1373,8 +1335,8 @@ static GrBatch* create_diellipse_batch(GrColor color,
     return DIEllipseBatch::Create(geometry, devBounds);
 }
 
-bool GrOvalRenderer::drawDIEllipse(GrDrawTarget* target,
-                                   GrPipelineBuilder* pipelineBuilder,
+bool GrOvalRenderer::DrawDIEllipse(GrDrawTarget* target,
+                                   const GrPipelineBuilder& pipelineBuilder,
                                    GrColor color,
                                    const SkMatrix& viewMatrix,
                                    bool useCoverageAA,
@@ -1432,16 +1394,15 @@ static const GrIndexBuffer* ref_rrect_index_buffer(bool strokeOnly,
     }
 }
 
-bool GrOvalRenderer::drawDRRect(GrDrawTarget* target,
-                                GrPipelineBuilder* pipelineBuilder,
+bool GrOvalRenderer::DrawDRRect(GrDrawTarget* target,
+                                const GrPipelineBuilder& pipelineBuilder,
                                 GrColor color,
                                 const SkMatrix& viewMatrix,
                                 bool useAA,
                                 const SkRRect& origOuter,
                                 const SkRRect& origInner) {
-    bool applyAA = useAA &&
-                   !pipelineBuilder->getRenderTarget()->isMultisampled();
-    GrPipelineBuilder::AutoRestoreFragmentProcessors arfp;
+    bool applyAA = useAA && !pipelineBuilder.getRenderTarget()->isUnifiedMultisampled();
+    GrPipelineBuilder::AutoRestoreFragmentProcessorState arfps;
     if (!origInner.isEmpty()) {
         SkTCopyOnFirstWrite<SkRRect> inner(origInner);
         if (!viewMatrix.isIdentity()) {
@@ -1457,12 +1418,12 @@ bool GrOvalRenderer::drawDRRect(GrDrawTarget* target,
         if (NULL == fp) {
             return false;
         }
-        arfp.set(pipelineBuilder);
-        pipelineBuilder->addCoverageProcessor(fp)->unref();
+        arfps.set(&pipelineBuilder);
+        arfps.addCoverageProcessor(fp)->unref();
     }
 
     SkStrokeRec fillRec(SkStrokeRec::kFill_InitStyle);
-    if (this->drawRRect(target, pipelineBuilder, color, viewMatrix, useAA, origOuter, fillRec)) {
+    if (DrawRRect(target, pipelineBuilder, color, viewMatrix, useAA, origOuter, fillRec)) {
         return true;
     }
 
@@ -1479,8 +1440,8 @@ bool GrOvalRenderer::drawDRRect(GrDrawTarget* target,
     if (NULL == effect) {
         return false;
     }
-    if (!arfp.isSet()) {
-        arfp.set(pipelineBuilder);
+    if (!arfps.isSet()) {
+        arfps.set(&pipelineBuilder);
     }
 
     SkMatrix invert;
@@ -1488,12 +1449,12 @@ bool GrOvalRenderer::drawDRRect(GrDrawTarget* target,
         return false;
     }
 
-    pipelineBuilder->addCoverageProcessor(effect)->unref();
+    arfps.addCoverageProcessor(effect)->unref();
     SkRect bounds = outer->getBounds();
     if (applyAA) {
         bounds.outset(SK_ScalarHalf, SK_ScalarHalf);
     }
-    target->drawRect(pipelineBuilder, color, SkMatrix::I(), bounds, NULL, &invert);
+    target->drawBWRect(pipelineBuilder, color, SkMatrix::I(), bounds, NULL, &invert);
     return true;
 }
 
@@ -1526,18 +1487,17 @@ public:
 
     void initBatchTracker(const GrPipelineInfo& init) override {
         // Handle any color overrides
-        if (init.fColorIgnored) {
+        if (!init.readsColor()) {
             fGeoData[0].fColor = GrColor_ILLEGAL;
-        } else if (GrColor_ILLEGAL != init.fOverrideColor) {
-            fGeoData[0].fColor = init.fOverrideColor;
         }
+        init.getOverrideColorIfSet(&fGeoData[0].fColor);
 
         // setup batch properties
-        fBatch.fColorIgnored = init.fColorIgnored;
+        fBatch.fColorIgnored = !init.readsColor();
         fBatch.fColor = fGeoData[0].fColor;
         fBatch.fStroke = fGeoData[0].fStroke;
-        fBatch.fUsesLocalCoords = init.fUsesLocalCoords;
-        fBatch.fCoverageIgnored = init.fCoverageIgnored;
+        fBatch.fUsesLocalCoords = init.readsLocalCoords();
+        fBatch.fCoverageIgnored = !init.readsCoverage();
     }
 
     void generateGeometry(GrBatchTarget* batchTarget, const GrPipeline* pipeline) override {
@@ -1551,19 +1511,10 @@ public:
         // Setup geometry processor
         SkAutoTUnref<GrGeometryProcessor> gp(CircleEdgeEffect::Create(this->color(),
                                                                       this->stroke(),
-                                                                      invert));
+                                                                      invert,
+                                                                      this->usesLocalCoords()));
 
         batchTarget->initDraw(gp, pipeline);
-
-        // TODO this is hacky, but the only way we have to initialize the GP is to use the
-        // GrPipelineInfo struct so we can generate the correct shader.  Once we have GrBatch
-        // everywhere we can remove this nastiness
-        GrPipelineInfo init;
-        init.fColorIgnored = fBatch.fColorIgnored;
-        init.fOverrideColor = GrColor_ILLEGAL;
-        init.fCoverageIgnored = fBatch.fCoverageIgnored;
-        init.fUsesLocalCoords = this->usesLocalCoords();
-        gp->initBatchTracker(batchTarget->currentBatchTracker(), init);
 
         int instanceCount = fGeoData.count();
         size_t vertexStride = gp->getVertexStride();
@@ -1641,6 +1592,10 @@ private:
     }
 
     bool onCombineIfPossible(GrBatch* t) override {
+        if (!this->pipeline()->isEqual(*t->pipeline())) {
+            return false;
+        }
+
         RRectCircleRendererBatch* that = t->cast<RRectCircleRendererBatch>();
 
         // TODO use vertex color to avoid breaking batches
@@ -1708,18 +1663,17 @@ public:
 
     void initBatchTracker(const GrPipelineInfo& init) override {
         // Handle any color overrides
-        if (init.fColorIgnored) {
+        if (!init.readsColor()) {
             fGeoData[0].fColor = GrColor_ILLEGAL;
-        } else if (GrColor_ILLEGAL != init.fOverrideColor) {
-            fGeoData[0].fColor = init.fOverrideColor;
         }
+        init.getOverrideColorIfSet(&fGeoData[0].fColor);
 
         // setup batch properties
-        fBatch.fColorIgnored = init.fColorIgnored;
+        fBatch.fColorIgnored = !init.readsColor();
         fBatch.fColor = fGeoData[0].fColor;
         fBatch.fStroke = fGeoData[0].fStroke;
-        fBatch.fUsesLocalCoords = init.fUsesLocalCoords;
-        fBatch.fCoverageIgnored = init.fCoverageIgnored;
+        fBatch.fUsesLocalCoords = init.readsLocalCoords();
+        fBatch.fCoverageIgnored = !init.readsCoverage();
     }
 
     void generateGeometry(GrBatchTarget* batchTarget, const GrPipeline* pipeline) override {
@@ -1733,19 +1687,10 @@ public:
         // Setup geometry processor
         SkAutoTUnref<GrGeometryProcessor> gp(EllipseEdgeEffect::Create(this->color(),
                                                                        this->stroke(),
-                                                                       invert));
+                                                                       invert,
+                                                                       this->usesLocalCoords()));
 
         batchTarget->initDraw(gp, pipeline);
-
-        // TODO this is hacky, but the only way we have to initialize the GP is to use the
-        // GrPipelineInfo struct so we can generate the correct shader.  Once we have GrBatch
-        // everywhere we can remove this nastiness
-        GrPipelineInfo init;
-        init.fColorIgnored = fBatch.fColorIgnored;
-        init.fOverrideColor = GrColor_ILLEGAL;
-        init.fCoverageIgnored = fBatch.fCoverageIgnored;
-        init.fUsesLocalCoords = this->usesLocalCoords();
-        gp->initBatchTracker(batchTarget->currentBatchTracker(), init);
 
         int instanceCount = fGeoData.count();
         size_t vertexStride = gp->getVertexStride();
@@ -1833,6 +1778,10 @@ private:
     }
 
     bool onCombineIfPossible(GrBatch* t) override {
+        if (!this->pipeline()->isEqual(*t->pipeline())) {
+            return false;
+        }
+
         RRectEllipseRendererBatch* that = t->cast<RRectEllipseRendererBatch>();
 
         // TODO use vertex color to avoid breaking batches
@@ -2020,19 +1969,19 @@ static GrBatch* create_rrect_batch(GrColor color,
     }
 }
 
-bool GrOvalRenderer::drawRRect(GrDrawTarget* target,
-                               GrPipelineBuilder* pipelineBuilder,
+bool GrOvalRenderer::DrawRRect(GrDrawTarget* target,
+                               const GrPipelineBuilder& pipelineBuilder,
                                GrColor color,
                                const SkMatrix& viewMatrix,
                                bool useAA,
                                const SkRRect& rrect,
                                const SkStrokeRec& stroke) {
     if (rrect.isOval()) {
-        return this->drawOval(target, pipelineBuilder, color, viewMatrix, useAA, rrect.getBounds(),
-                              stroke);
+        return DrawOval(target, pipelineBuilder, color, viewMatrix, useAA, rrect.getBounds(),
+                        stroke);
     }
 
-    bool useCoverageAA = useAA && !pipelineBuilder->getRenderTarget()->isMultisampled();
+    bool useCoverageAA = useAA && !pipelineBuilder.getRenderTarget()->isUnifiedMultisampled();
 
     // only anti-aliased rrects for now
     if (!useCoverageAA) {

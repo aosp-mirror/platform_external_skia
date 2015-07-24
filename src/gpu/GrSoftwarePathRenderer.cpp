@@ -94,22 +94,22 @@ void draw_around_inv_path(GrDrawTarget* target,
     if (devClipBounds.fTop < devPathBounds.fTop) {
         rect.iset(devClipBounds.fLeft, devClipBounds.fTop,
                   devClipBounds.fRight, devPathBounds.fTop);
-        target->drawRect(pipelineBuilder, color, SkMatrix::I(), rect, NULL, &invert);
+        target->drawBWRect(*pipelineBuilder, color, SkMatrix::I(), rect, NULL, &invert);
     }
     if (devClipBounds.fLeft < devPathBounds.fLeft) {
         rect.iset(devClipBounds.fLeft, devPathBounds.fTop,
                   devPathBounds.fLeft, devPathBounds.fBottom);
-        target->drawRect(pipelineBuilder, color, SkMatrix::I(), rect, NULL, &invert);
+        target->drawBWRect(*pipelineBuilder, color, SkMatrix::I(), rect, NULL, &invert);
     }
     if (devClipBounds.fRight > devPathBounds.fRight) {
         rect.iset(devPathBounds.fRight, devPathBounds.fTop,
                   devClipBounds.fRight, devPathBounds.fBottom);
-        target->drawRect(pipelineBuilder, color, SkMatrix::I(), rect, NULL, &invert);
+        target->drawBWRect(*pipelineBuilder, color, SkMatrix::I(), rect, NULL, &invert);
     }
     if (devClipBounds.fBottom > devPathBounds.fBottom) {
         rect.iset(devClipBounds.fLeft, devPathBounds.fBottom,
                   devClipBounds.fRight, devClipBounds.fBottom);
-        target->drawRect(pipelineBuilder, color, SkMatrix::I(), rect, NULL, &invert);
+        target->drawBWRect(*pipelineBuilder, color, SkMatrix::I(), rect, NULL, &invert);
     }
 }
 
@@ -139,15 +139,14 @@ bool GrSoftwarePathRenderer::onDrawPath(GrDrawTarget* target,
     }
 
     SkAutoTUnref<GrTexture> texture(
-            GrSWMaskHelper::DrawPathMaskToTexture(fContext, path, stroke.getStrokeRec(),
+            GrSWMaskHelper::DrawPathMaskToTexture(fContext, path, stroke,
                                                   devPathBounds,
                                                   antiAlias, &viewMatrix));
     if (NULL == texture) {
         return false;
     }
 
-    GrPipelineBuilder copy = *pipelineBuilder;
-    GrSWMaskHelper::DrawToTargetWithPathMask(texture, target, &copy, color, viewMatrix,
+    GrSWMaskHelper::DrawToTargetWithPathMask(texture, target, pipelineBuilder, color, viewMatrix,
                                              devPathBounds);
 
     if (path.isInverseFillType()) {

@@ -10,11 +10,12 @@
 
 #include "GrTextContext.h"
 #include "GrDrawTarget.h"
-#include "SkStrokeRec.h"
+#include "GrStrokeInfo.h"
 
 class GrTextStrike;
 class GrPath;
 class GrPathRange;
+class SkSurfaceProps;
 
 /*
  * This class implements text rendering using stencil and cover path rendering
@@ -23,8 +24,8 @@ class GrPathRange;
  */
 class GrStencilAndCoverTextContext : public GrTextContext {
 public:
-    static GrStencilAndCoverTextContext* Create(GrContext*, SkGpuDevice*,
-                                                const SkDeviceProperties&);
+    static GrStencilAndCoverTextContext* Create(GrContext*, GrDrawContext*,
+                                                const SkSurfaceProps&);
 
     virtual ~GrStencilAndCoverTextContext();
 
@@ -52,13 +53,11 @@ private:
         kMaxPerformance_RenderMode,
     };
 
-    GrPipelineBuilder                                   fPipelineBuilder;
-    GrPipelineBuilder::AutoRestoreFragmentProcessors    fStateRestore;
     SkScalar                                            fTextRatio;
     float                                               fTextInverseRatio;
     SkGlyphCache*                                       fGlyphCache;
     GrPathRange*                                        fGlyphs;
-    SkStrokeRec                                         fStroke;
+    GrStrokeInfo                                        fStroke;
     uint16_t                                            fGlyphIndices[kGlyphBufferSize];
     SkPoint                                             fGlyphPositions[kGlyphBufferSize];
     int                                                 fQueuedGlyphCount;
@@ -67,8 +66,14 @@ private:
     SkMatrix                                            fViewMatrix;
     SkMatrix                                            fLocalMatrix;
     bool                                                fUsingDeviceSpaceGlyphs;
+    SkAutoTUnref<GrRenderTarget>                        fRenderTarget;
+    GrClip                                              fClip;
+    SkIRect                                             fClipRect;
+    SkIRect                                             fRegionClipBounds;
+    GrPaint                                             fPaint;
+    SkPaint                                             fSkPaint;
 
-    GrStencilAndCoverTextContext(GrContext*, SkGpuDevice*, const SkDeviceProperties&);
+    GrStencilAndCoverTextContext(GrContext*, GrDrawContext*, const SkSurfaceProps&);
 
     bool canDraw(const GrRenderTarget*, const GrClip&, const GrPaint&,
                  const SkPaint&, const SkMatrix& viewMatrix) override;

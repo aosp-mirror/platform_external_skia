@@ -38,7 +38,7 @@ static inline float sk_float_copysign(float x, float y) {
 #    define SK_BUILD_WITH_CLANG_CL 0
 #endif
 #if (!SK_BUILD_WITH_CLANG_CL && __cplusplus >= 201103L) || (_MSC_VER >= 1800)
-    return copysign(x, y);
+    return copysignf(x, y);
 
 // Posix has demanded 'float copysignf(float, float)' (from C99) since Issue 6.
 #elif defined(_POSIX_VERSION) && _POSIX_VERSION >= 200112L
@@ -91,6 +91,8 @@ static inline float sk_float_copysign(float x, float y) {
     #define sk_float_log(x)         logf(x)
 #endif
 
+#define sk_float_round(x) sk_float_floor((x) + 0.5f)
+
 // can't find log2f on android, but maybe that just a tool bug?
 #ifdef SK_BUILD_FOR_ANDROID
     static inline float sk_float_log2(float x) {
@@ -141,12 +143,6 @@ extern const uint32_t gIEEENegativeInfinity;
 #define SK_FloatInfinity            (*SkTCast<const float*>(&gIEEEInfinity))
 #define SK_FloatNegativeInfinity    (*SkTCast<const float*>(&gIEEENegativeInfinity))
 
-#if defined(__SSE__)
-#include <xmmintrin.h>
-#elif defined(SK_ARM_HAS_NEON)
-#include <arm_neon.h>
-#endif
-
 // Fast, approximate inverse square root.
 // Compare to name-brand "1.0f / sk_float_sqrt(x)".  Should be around 10x faster on SSE, 2x on NEON.
 static inline float sk_float_rsqrt(const float x) {
@@ -155,10 +151,10 @@ static inline float sk_float_rsqrt(const float x) {
 //
 // We do one step of Newton's method to refine the estimates in the NEON and null paths.  No
 // refinement is faster, but very innacurate.  Two steps is more accurate, but slower than 1/sqrt.
-#if defined(__SSE__)
-    float result;
-    _mm_store_ss(&result, _mm_rsqrt_ss(_mm_set_ss(x)));
-    return result;
+//
+// Optimized constants in the null path courtesy of http://rrrola.wz.cz/inv_sqrt.html
+#if SK_CPU_SSE_LEVEL >= SK_CPU_SSE_LEVEL_SSE1
+    return _mm_cvtss_f32(_mm_rsqrt_ss(_mm_set_ss(x)));
 #elif defined(SK_ARM_HAS_NEON)
     // Get initial estimate.
     const float32x2_t xx = vdup_n_f32(x);  // Clever readers will note we're doing everything 2x.
@@ -171,12 +167,12 @@ static inline float sk_float_rsqrt(const float x) {
 #else
     // Get initial estimate.
     int i = *SkTCast<int*>(&x);
-    i = 0x5f3759df - (i>>1);
+    i = 0x5F1FFFF9 - (i>>1);
     float estimate = *SkTCast<float*>(&i);
 
     // One step of Newton's method to refine.
     const float estimate_sq = estimate*estimate;
-    estimate *= (1.5f-0.5f*x*estimate_sq);
+    estimate *= 0.703952253f*(2.38924456f-x*estimate_sq);
     return estimate;
 #endif
 }

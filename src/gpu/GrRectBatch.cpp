@@ -12,7 +12,6 @@
 #include "GrBatchTest.h"
 #include "GrDefaultGeoProcFactory.h"
 #include "GrPrimitiveProcessor.h"
-#include "GrTemplates.h"
 
 /** We always use per-vertex colors so that rects can be batched across color changes. Sometimes we
     have explicit local coords and sometimes not. We *could* always provide explicit local coords
@@ -25,15 +24,19 @@
     The vertex attrib order is always pos, color, [local coords].
  */
 static const GrGeometryProcessor* create_rect_gp(bool hasExplicitLocalCoords,
-                                                 GrColor color,
-                                                 const SkMatrix* localMatrix) {
+                                                 const SkMatrix* localMatrix,
+                                                 bool usesLocalCoords,
+                                                 bool coverageIgnored) {
+    // TODO remove color when we have ignored color from the XP
     uint32_t flags = GrDefaultGeoProcFactory::kPosition_GPType |
                      GrDefaultGeoProcFactory::kColor_GPType;
     flags |= hasExplicitLocalCoords ? GrDefaultGeoProcFactory::kLocalCoord_GPType : 0;
     if (localMatrix) {
-        return GrDefaultGeoProcFactory::Create(flags, color, SkMatrix::I(), *localMatrix);
+        return GrDefaultGeoProcFactory::Create(flags, GrColor_WHITE, usesLocalCoords,
+                                               coverageIgnored, SkMatrix::I(), *localMatrix);
     } else {
-        return GrDefaultGeoProcFactory::Create(flags, color, SkMatrix::I(), SkMatrix::I());
+        return GrDefaultGeoProcFactory::Create(flags, GrColor_WHITE, usesLocalCoords,
+                                               coverageIgnored, SkMatrix::I(), SkMatrix::I());
     }
 }
 
@@ -66,17 +69,16 @@ public:
 
     void initBatchTracker(const GrPipelineInfo& init) override {
         // Handle any color overrides
-        if (init.fColorIgnored) {
+        if (!init.readsColor()) {
             fGeoData[0].fColor = GrColor_ILLEGAL;
-        } else if (GrColor_ILLEGAL != init.fOverrideColor) {
-            fGeoData[0].fColor = init.fOverrideColor;
         }
+        init.getOverrideColorIfSet(&fGeoData[0].fColor);
 
         // setup batch properties
-        fBatch.fColorIgnored = init.fColorIgnored;
+        fBatch.fColorIgnored = !init.readsColor();
         fBatch.fColor = fGeoData[0].fColor;
-        fBatch.fUsesLocalCoords = init.fUsesLocalCoords;
-        fBatch.fCoverageIgnored = init.fCoverageIgnored;
+        fBatch.fUsesLocalCoords = init.readsLocalCoords();
+        fBatch.fCoverageIgnored = !init.readsCoverage();
     }
 
     void generateGeometry(GrBatchTarget* batchTarget, const GrPipeline* pipeline) override {
@@ -98,20 +100,11 @@ public:
         }
 
         SkAutoTUnref<const GrGeometryProcessor> gp(create_rect_gp(hasExplicitLocalCoords,
-                                                                  this->color(),
-                                                                  &invert));
+                                                                  &invert,
+                                                                  this->usesLocalCoords(),
+                                                                  this->coverageIgnored()));
 
         batchTarget->initDraw(gp, pipeline);
-
-        // TODO this is hacky, but the only way we have to initialize the GP is to use the
-        // GrPipelineInfo struct so we can generate the correct shader.  Once we have GrBatch
-        // everywhere we can remove this nastiness
-        GrPipelineInfo init;
-        init.fColorIgnored = fBatch.fColorIgnored;
-        init.fOverrideColor = GrColor_ILLEGAL;
-        init.fCoverageIgnored = fBatch.fCoverageIgnored;
-        init.fUsesLocalCoords = this->usesLocalCoords();
-        gp->initBatchTracker(batchTarget->currentBatchTracker(), init);
 
         int instanceCount = fGeoData.count();
         size_t vertexStride = gp->getVertexStride();
@@ -125,12 +118,12 @@ public:
             return;
         }
 
-
         for (int i = 0; i < instanceCount; i++) {
             const Geometry& geom = fGeoData[i];
 
-            intptr_t offset = GrTCast<intptr_t>(vertices) + kVerticesPerQuad * i * vertexStride;
-            SkPoint* positions = GrTCast<SkPoint*>(offset);
+            intptr_t offset = reinterpret_cast<intptr_t>(vertices) +
+                              kVerticesPerQuad * i * vertexStride;
+            SkPoint* positions = reinterpret_cast<SkPoint*>(offset);
 
             positions->setRectFan(geom.fRect.fLeft, geom.fRect.fTop,
                                   geom.fRect.fRight, geom.fRect.fBottom, vertexStride);
@@ -138,7 +131,7 @@ public:
 
             if (geom.fHasLocalRect) {
                 static const int kLocalOffset = sizeof(SkPoint) + sizeof(GrColor);
-                SkPoint* coords = GrTCast<SkPoint*>(offset + kLocalOffset);
+                SkPoint* coords = reinterpret_cast<SkPoint*>(offset + kLocalOffset);
                 coords->setRectFan(geom.fLocalRect.fLeft, geom.fLocalRect.fTop,
                                    geom.fLocalRect.fRight, geom.fLocalRect.fBottom,
                                    vertexStride);
@@ -148,7 +141,7 @@ public:
             }
 
             static const int kColorOffset = sizeof(SkPoint);
-            GrColor* vertColor = GrTCast<GrColor*>(offset + kColorOffset);
+            GrColor* vertColor = reinterpret_cast<GrColor*>(offset + kColorOffset);
             for (int j = 0; j < 4; ++j) {
                 *vertColor = geom.fColor;
                 vertColor = (GrColor*) ((intptr_t) vertColor + vertexStride);
@@ -176,8 +169,13 @@ private:
     const SkMatrix& localMatrix() const { return fGeoData[0].fLocalMatrix; }
     bool hasLocalRect() const { return fGeoData[0].fHasLocalRect; }
     bool hasLocalMatrix() const { return fGeoData[0].fHasLocalMatrix; }
+    bool coverageIgnored() const { return fBatch.fCoverageIgnored; }
 
     bool onCombineIfPossible(GrBatch* t) override {
+        if (!this->pipeline()->isEqual(*t->pipeline())) {
+            return false;
+        }
+
         RectBatch* that = t->cast<RectBatch>();
 
         if (this->hasLocalRect() != that->hasLocalRect()) {

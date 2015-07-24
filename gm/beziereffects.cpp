@@ -46,6 +46,7 @@ private:
     BezierCubicOrConicTestBatch(const GrGeometryProcessor* gp, const Geometry& geo,
                                 const SkScalar klmEqs[9], SkScalar sign)
         : INHERITED(gp, geo.fBounds) {
+        this->initClassID<BezierCubicOrConicTestBatch>();
         for (int i = 0; i < 9; i++) {
             fKlmEqs[i] = klmEqs[i];
         }
@@ -229,7 +230,7 @@ protected:
                     SkAutoTUnref<GrBatch> batch(
                             BezierCubicOrConicTestBatch::Create(gp, geometry, klmEqs, klmSigns[c]));
 
-                    tt.target()->drawBatch(&pipelineBuilder, batch);
+                    tt.target()->drawBatch(pipelineBuilder, batch);
                 }
                 ++col;
                 if (numCols == col) {
@@ -310,7 +311,7 @@ protected:
                     }
                     GrPrimitiveEdgeType et = (GrPrimitiveEdgeType)edgeType;
                     gp.reset(GrConicEffect::Create(color, SkMatrix::I(), et,
-                                                   *tt.target()->caps(), SkMatrix::I()));
+                                                   *tt.target()->caps(), SkMatrix::I(), false));
                     if (!gp) {
                         continue;
                     }
@@ -374,7 +375,7 @@ protected:
                     SkAutoTUnref<GrBatch> batch(
                             BezierCubicOrConicTestBatch::Create(gp, geometry, klmEqs, 1.f));
 
-                    tt.target()->drawBatch(&pipelineBuilder, batch);
+                    tt.target()->drawBatch(pipelineBuilder, batch);
                 }
                 ++col;
                 if (numCols == col) {
@@ -447,6 +448,7 @@ private:
         : INHERITED(gp, geo.fBounds)
         , fGeometry(geo)
         , fDevToUV(devToUV) {
+        this->initClassID<BezierQuadTestBatch>();
     }
 
     struct Vertex {
@@ -550,7 +552,7 @@ protected:
                     }
                     GrPrimitiveEdgeType et = (GrPrimitiveEdgeType)edgeType;
                     gp.reset(GrQuadEffect::Create(color, SkMatrix::I(), et,
-                                                  *tt.target()->caps(), SkMatrix::I()));
+                                                  *tt.target()->caps(), SkMatrix::I(), false));
                     if (!gp) {
                         continue;
                     }
@@ -612,7 +614,7 @@ protected:
 
                     SkAutoTUnref<GrBatch> batch(BezierQuadTestBatch::Create(gp, geometry, DevToUV));
 
-                    tt.target()->drawBatch(&pipelineBuilder, batch);
+                    tt.target()->drawBatch(pipelineBuilder, batch);
                 }
                 ++col;
                 if (numCols == col) {

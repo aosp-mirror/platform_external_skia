@@ -8,6 +8,7 @@
 #include "SkChecksum.h"
 #include "SkMessageBus.h"
 #include "SkMipMap.h"
+#include "SkMutex.h"
 #include "SkPixelRef.h"
 #include "SkResourceCache.h"
 
@@ -74,7 +75,7 @@ void SkResourceCache::init() {
 
 class SkOneShotDiscardablePixelRef : public SkPixelRef {
 public:
-    SK_DECLARE_INST_COUNT(SkOneShotDiscardablePixelRef)
+
     // Ownership of the discardablememory is transfered to the pixelref
     SkOneShotDiscardablePixelRef(const SkImageInfo&, SkDiscardableMemory*, size_t rowBytes);
     ~SkOneShotDiscardablePixelRef();
@@ -236,7 +237,7 @@ static bool gDumpCacheTransactions;
 
 void SkResourceCache::add(Rec* rec) {
     this->checkMessages();
-    
+
     SkASSERT(rec);
     // See if we already have this key (racy inserts, etc.)
     Rec* existing = fHash->find(rec->getKey());
@@ -244,7 +245,7 @@ void SkResourceCache::add(Rec* rec) {
         SkDELETE(rec);
         return;
     }
-    
+
     this->addToHead(rec);
     fHash->add(rec);
 
@@ -357,7 +358,7 @@ size_t SkResourceCache::setTotalByteLimit(size_t newLimit) {
 
 SkCachedData* SkResourceCache::newCachedData(size_t bytes) {
     this->checkMessages();
-    
+
     if (fDiscardableFactory) {
         SkDiscardableMemory* dm = fDiscardableFactory(bytes);
         return dm ? SkNEW_ARGS(SkCachedData, (bytes, dm)) : NULL;
@@ -515,8 +516,6 @@ void SkResourceCache::checkMessages() {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "SkThread.h"
-
 SK_DECLARE_STATIC_MUTEX(gMutex);
 static SkResourceCache* gResourceCache = NULL;
 static void cleanup_gResourceCache() {
@@ -618,6 +617,7 @@ void SkResourceCache::PostPurgeSharedID(uint64_t sharedID) {
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "SkGraphics.h"
+#include "SkImageFilter.h"
 
 size_t SkGraphics::GetResourceCacheTotalBytesUsed() {
     return SkResourceCache::GetTotalBytesUsed();
@@ -640,6 +640,7 @@ size_t SkGraphics::SetResourceCacheSingleAllocationByteLimit(size_t newLimit) {
 }
 
 void SkGraphics::PurgeResourceCache() {
+    SkImageFilter::PurgeCache();
     return SkResourceCache::PurgeAll();
 }
 

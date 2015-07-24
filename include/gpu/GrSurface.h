@@ -18,10 +18,8 @@ class GrRenderTarget;
 class GrSurfacePriv;
 class GrTexture;
 
-class GrSurface : public GrGpuResource {
+class SK_API GrSurface : public GrGpuResource {
 public:
-    SK_DECLARE_INST_COUNT(GrSurface);
-
     /**
      * Retrieves the width of the surface.
      */
@@ -118,18 +116,26 @@ public:
 
 
     /**
-     * After this returns any pending writes to the surface will be issued to the backend 3D API and
+     * After this returns any pending surface IO will be issued to the backend 3D API and
      * if the surface has MSAA it will be resolved.
      */
-    void prepareForExternalRead();
-    
+    void prepareForExternalIO();
+
     /** Access methods that are only to be used within Skia code. */
     inline GrSurfacePriv surfacePriv();
     inline const GrSurfacePriv surfacePriv() const;
 
+    typedef void* ReleaseCtx;
+    typedef void (*ReleaseProc)(ReleaseCtx);
+
+    void setRelease(ReleaseProc proc, ReleaseCtx ctx) {
+        fReleaseProc = proc;
+        fReleaseCtx = ctx;
+    }
+
 protected:
     // Methods made available via GrSurfacePriv
-    SkImageInfo info() const;
+    SkImageInfo info(SkAlphaType) const;
     bool savePixels(const char* filename);
     bool hasPendingRead() const;
     bool hasPendingWrite() const;
@@ -140,12 +146,32 @@ protected:
 
     GrSurface(GrGpu* gpu, LifeCycle lifeCycle, const GrSurfaceDesc& desc)
         : INHERITED(gpu, lifeCycle)
-        , fDesc(desc) {
+        , fDesc(desc)
+        , fReleaseProc(NULL)
+        , fReleaseCtx(NULL)
+    {}
+
+    ~GrSurface() override {
+        // check that invokeReleaseProc has been called (if needed)
+        SkASSERT(NULL == fReleaseProc);
     }
 
     GrSurfaceDesc fDesc;
 
+    void onRelease() override;
+    void onAbandon() override;
+
 private:
+    void invokeReleaseProc() {
+        if (fReleaseProc) {
+            fReleaseProc(fReleaseCtx);
+            fReleaseProc = NULL;
+        }
+    }
+
+    ReleaseProc fReleaseProc;
+    ReleaseCtx  fReleaseCtx;
+
     typedef GrGpuResource INHERITED;
 };
 

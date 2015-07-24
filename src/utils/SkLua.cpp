@@ -1993,7 +1993,8 @@ static int lsk_newRasterSurface(lua_State* L) {
     int width = lua2int_def(L, 1, 0);
     int height = lua2int_def(L, 2, 0);
     SkImageInfo info = SkImageInfo::MakeN32Premul(width, height);
-    SkSurface* surface = SkSurface::NewRaster(info);
+    SkSurfaceProps props(0, kUnknown_SkPixelGeometry);
+    SkSurface* surface = SkSurface::NewRaster(info, &props);
     if (NULL == surface) {
         lua_pushnil(L);
     } else {
@@ -2007,7 +2008,7 @@ static int lsk_loadImage(lua_State* L) {
         const char* name = lua_tolstring(L, 1, NULL);
         SkAutoDataUnref data(SkData::NewFromFileName(name));
         if (data.get()) {
-            SkImage* image = SkImage::NewFromData(data);
+            SkImage* image = SkImage::NewFromEncoded(data);
             if (image) {
                 push_ref(L, image)->unref();
                 return 1;

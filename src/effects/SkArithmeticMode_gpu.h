@@ -12,8 +12,8 @@
 
 #if SK_SUPPORT_GPU
 
+#include "GrCaps.h"
 #include "GrCoordTransform.h"
-#include "GrDrawTargetCaps.h"
 #include "GrFragmentProcessor.h"
 #include "GrTextureAccess.h"
 #include "GrTypes.h"
@@ -31,9 +31,11 @@ class GrGLArtithmeticFP;
 
 class GrArithmeticFP : public GrFragmentProcessor {
 public:
-    static GrFragmentProcessor* Create(float k1, float k2, float k3, float k4, bool enforcePMColor,
-                               GrTexture* background) {
-        return SkNEW_ARGS(GrArithmeticFP, (k1, k2, k3, k4, enforcePMColor, background));
+    static GrFragmentProcessor* Create(GrProcessorDataManager* procDataManager, float k1, float k2,
+                                       float k3, float k4, bool enforcePMColor,
+                                       GrTexture* background) {
+        return SkNEW_ARGS(GrArithmeticFP, (procDataManager, k1, k2, k3, k4, enforcePMColor,
+                                           background));
     }
 
     ~GrArithmeticFP() override {};
@@ -55,8 +57,8 @@ private:
 
     void onComputeInvariantOutput(GrInvariantOutput* inout) const override;
 
-    GrArithmeticFP(float k1, float k2, float k3, float k4, bool enforcePMColor,
-                   GrTexture* background);
+    GrArithmeticFP(GrProcessorDataManager*, float k1, float k2, float k3, float k4,
+                   bool enforcePMColor, GrTexture* background);
 
     float                       fK1, fK2, fK3, fK4;
     bool                        fEnforcePMColor;
@@ -81,20 +83,22 @@ public:
         return true;
     }
 
-    void getInvariantOutput(const GrProcOptInfo& colorPOI, const GrProcOptInfo& coveragePOI,
-                            GrXPFactory::InvariantOutput*) const override;
+    void getInvariantBlendedColor(const GrProcOptInfo& colorPOI,
+                                  GrXPFactory::InvariantBlendedColor*) const override;
 
 private:
     GrArithmeticXPFactory(float k1, float k2, float k3, float k4, bool enforcePMColor); 
 
-    GrXferProcessor* onCreateXferProcessor(const GrDrawTargetCaps& caps,
+    GrXferProcessor* onCreateXferProcessor(const GrCaps& caps,
                                            const GrProcOptInfo& colorPOI,
                                            const GrProcOptInfo& coveragePOI,
-                                           const GrDeviceCoordTexture* dstCopy) const override; 
+                                           bool hasMixedSamples,
+                                           const DstTexture*) const override; 
 
-    bool willReadDstColor(const GrDrawTargetCaps& caps,
+    bool willReadDstColor(const GrCaps& caps,
                           const GrProcOptInfo& colorPOI,
-                          const GrProcOptInfo& coveragePOI) const override {
+                          const GrProcOptInfo& coveragePOI,
+                          bool hasMixedSamples) const override {
         return true;
     }
 

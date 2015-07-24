@@ -7,8 +7,8 @@
 
 #include "GrPipeline.h"
 
+#include "GrCaps.h"
 #include "GrBatch.h"
-#include "GrDrawTargetCaps.h"
 #include "GrGpu.h"
 #include "GrPipelineBuilder.h"
 #include "GrProcOptInfo.h"
@@ -17,19 +17,20 @@
 GrPipeline::GrPipeline(const GrPipelineBuilder& pipelineBuilder,
                        const GrProcOptInfo& colorPOI,
                        const GrProcOptInfo& coveragePOI,
-                       const GrDrawTargetCaps& caps,
+                       const GrCaps& caps,
                        const GrScissorState& scissorState,
-                       const GrDeviceCoordTexture* dstCopy) {
+                       const GrXferProcessor::DstTexture* dstTexture) {
     // Create XferProcessor from DS's XPFactory
     SkAutoTUnref<GrXferProcessor> xferProcessor(
-        pipelineBuilder.getXPFactory()->createXferProcessor(colorPOI, coveragePOI, dstCopy, caps));
+        pipelineBuilder.getXPFactory()->createXferProcessor(
+            colorPOI, coveragePOI, pipelineBuilder.hasMixedSamples(), dstTexture, caps));
 
     GrColor overrideColor = GrColor_ILLEGAL;
     if (colorPOI.firstEffectiveStageIndex() != 0) {
         overrideColor = colorPOI.inputColorToEffectiveStage();
     }
 
-    GrXferProcessor::OptFlags optFlags;
+    GrXferProcessor::OptFlags optFlags = GrXferProcessor::kNone_OptFlags;
     if (xferProcessor) {
         fXferProcessor.reset(xferProcessor.get());
 
@@ -38,6 +39,11 @@ GrPipeline::GrPipeline(const GrPipelineBuilder& pipelineBuilder,
                                                    pipelineBuilder.getStencil().doesWrite(),
                                                    &overrideColor,
                                                    caps);
+    }
+
+    // No need to have an override color if it isn't even going to be used.
+    if (SkToBool(GrXferProcessor::kIgnoreColor_OptFlag & optFlags)) {
+        overrideColor = GrColor_ILLEGAL;
     }
 
     // When path rendering the stencil settings are not always set on the GrPipelineBuilder
@@ -97,13 +103,25 @@ GrPipeline::GrPipeline(const GrPipelineBuilder& pipelineBuilder,
                           pipelineBuilder.fCoverageStages[i].processor()->usesLocalCoords();
     }
 
-    // let the GP init the batch tracker
-    fInitBT.fColorIgnored = SkToBool(optFlags & GrXferProcessor::kIgnoreColor_OptFlag);
-    fInitBT.fOverrideColor = fInitBT.fColorIgnored ? GrColor_ILLEGAL : overrideColor;
-    fInitBT.fCoverageIgnored = SkToBool(optFlags & GrXferProcessor::kIgnoreCoverage_OptFlag);
-    fInitBT.fUsesLocalCoords = usesLocalCoords;
-    fInitBT.fCanTweakAlphaForCoverage =
-        SkToBool(optFlags & GrXferProcessor::kCanTweakAlphaForCoverage_OptFlag);
+    // Setup info we need to pass to GrPrimitiveProcessors that are used with this GrPipeline.
+    fInfoForPrimitiveProcessor.fFlags = 0;
+    if (!SkToBool(optFlags & GrXferProcessor::kIgnoreColor_OptFlag)) {
+        fInfoForPrimitiveProcessor.fFlags |= GrPipelineInfo::kReadsColor_GrPipelineInfoFlag;
+    }
+    if (GrColor_ILLEGAL != overrideColor) {
+        fInfoForPrimitiveProcessor.fFlags |= GrPipelineInfo::kUseOverrideColor_GrPipelineInfoFlag;
+        fInfoForPrimitiveProcessor.fOverrideColor = overrideColor;
+    }
+    if (!SkToBool(optFlags & GrXferProcessor::kIgnoreCoverage_OptFlag)) {
+        fInfoForPrimitiveProcessor.fFlags |= GrPipelineInfo::kReadsCoverage_GrPipelineInfoFlag;
+    }
+    if (usesLocalCoords) {
+        fInfoForPrimitiveProcessor.fFlags |= GrPipelineInfo::kReadsLocalCoords_GrPipelineInfoFlag;
+    }
+    if (SkToBool(optFlags & GrXferProcessor::kCanTweakAlphaForCoverage_OptFlag)) {
+       fInfoForPrimitiveProcessor.fFlags |=
+           GrPipelineInfo::kCanTweakAlphaForCoverage_GrPipelineInfoFlag; 
+    }
 }
 
 void GrPipeline::adjustProgramFromOptimizations(const GrPipelineBuilder& pipelineBuilder,
@@ -135,6 +153,11 @@ void GrPipeline::adjustProgramFromOptimizations(const GrPipelineBuilder& pipelin
 ////////////////////////////////////////////////////////////////////////////////
 
 bool GrPipeline::isEqual(const GrPipeline& that) const {
+    // If we point to the same pipeline, then we are necessarily equal
+    if (this == &that) {
+        return true;
+    }
+
     if (this->getRenderTarget() != that.getRenderTarget() ||
         this->fFragmentStages.count() != that.fFragmentStages.count() ||
         this->fNumColorStages != that.fNumColorStages ||

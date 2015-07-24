@@ -23,6 +23,7 @@
 #include "SkImageEncoder.h"
 #include "SkOSFile.h"
 #include "SkPaint.h"
+#include "SkPaintFilterCanvas.h"
 #include "SkPicture.h"
 #include "SkPictureRecorder.h"
 #include "SkStream.h"
@@ -175,7 +176,7 @@ public:
 #endif
     }
 
-    virtual void setUpBackend(SampleWindow* win, int msaaSampleCount) {
+    void setUpBackend(SampleWindow* win, int msaaSampleCount) override {
         SkASSERT(kNone_BackEndType == fBackend);
 
         fBackend = kNone_BackEndType;
@@ -249,7 +250,7 @@ public:
         this->windowSizeChanged(win);
     }
 
-    virtual void tearDownBackend(SampleWindow *win) {
+    void tearDownBackend(SampleWindow *win) override {
 #if SK_SUPPORT_GPU
         if (fCurContext) {
             // in case we have outstanding refs to this guy (lua?)
@@ -268,8 +269,7 @@ public:
         fBackend = kNone_BackEndType;
     }
 
-    virtual SkSurface* createSurface(SampleWindow::DeviceType dType,
-                                     SampleWindow* win) override {
+    SkSurface* createSurface(SampleWindow::DeviceType dType, SampleWindow* win) override {
 #if SK_SUPPORT_GPU
         if (IsGpuDeviceType(dType) && fCurContext) {
             SkSurfaceProps props(win->getSurfaceProps());
@@ -279,9 +279,8 @@ public:
         return NULL;
     }
 
-    virtual void publishCanvas(SampleWindow::DeviceType dType,
-                               SkCanvas* canvas,
-                               SampleWindow* win) {
+    void publishCanvas(SampleWindow::DeviceType dType,
+                       SkCanvas* canvas, SampleWindow* win) override {
 #if SK_SUPPORT_GPU
         if (fCurContext) {
             // in case we have queued drawing calls
@@ -304,7 +303,7 @@ public:
         win->present();
     }
 
-    virtual void windowSizeChanged(SampleWindow* win) {
+    void windowSizeChanged(SampleWindow* win) override {
 #if SK_SUPPORT_GPU
         if (fCurContext) {
             AttachmentInfo attachmentInfo;
@@ -315,7 +314,7 @@ public:
 #endif
     }
 
-    virtual GrContext* getGrContext() {
+    GrContext* getGrContext() override {
 #if SK_SUPPORT_GPU
         return fCurContext;
 #else
@@ -463,20 +462,23 @@ static FilterQualityState gFilterQualityStates[] = {
     { kHigh_SkFilterQuality,   "High",     "F3 "   },
 };
 
-class FlagsDrawFilter : public SkDrawFilter {
+class FlagsFilterCanvas : public SkPaintFilterCanvas {
 public:
-    FlagsDrawFilter(SkOSMenu::TriState lcd, SkOSMenu::TriState aa,
-                    SkOSMenu::TriState subpixel, int hinting, int filterQuality)
-        : fLCDState(lcd)
+    FlagsFilterCanvas(SkCanvas* canvas, SkOSMenu::TriState lcd, SkOSMenu::TriState aa,
+                      SkOSMenu::TriState subpixel, int hinting, int filterQuality)
+        : INHERITED(canvas->imageInfo().width(), canvas->imageInfo().height())
+        , fLCDState(lcd)
         , fAAState(aa)
         , fSubpixelState(subpixel)
         , fHintingState(hinting)
-        , fFilterQualityIndex(filterQuality)
-    {
+        , fFilterQualityIndex(filterQuality) {
         SkASSERT((unsigned)filterQuality < SK_ARRAY_COUNT(gFilterQualityStates));
+
+        this->addCanvas(canvas);
     }
 
-    virtual bool filter(SkPaint* paint, Type t) {
+protected:
+    void onFilterPaint(SkPaint* paint, Type t) const override {
         if (kText_Type == t && SkOSMenu::kMixedState != fLCDState) {
             paint->setLCDRenderText(SkOSMenu::kOnState == fLCDState);
         }
@@ -492,7 +494,6 @@ public:
         if (0 != fHintingState && fHintingState < (int)SK_ARRAY_COUNT(gHintingStates)) {
             paint->setHinting(gHintingStates[fHintingState].hinting);
         }
-        return true;
     }
 
 private:
@@ -501,6 +502,8 @@ private:
     SkOSMenu::TriState  fSubpixelState;
     int fHintingState;
     int fFilterQualityIndex;
+
+    typedef SkPaintFilterCanvas INHERITED;
 };
 
 //////////////////////////////////////////////////////////////////////////////
@@ -697,6 +700,7 @@ DEFINE_string(pictureDir, "", "Read pictures from here.");
 DEFINE_string(picture, "", "Path to single picture.");
 DEFINE_bool(sort, false, "Sort samples by title.");
 DEFINE_bool(list, false, "List samples?");
+DEFINE_string(key, "", "");  // dummy to enable gm tests that have platform-specific names
 #ifdef SAMPLE_PDF_FILE_VIEWER
 DEFINE_string(pdfPath, "", "Path to direcotry of pdf files.");
 #endif
@@ -1113,7 +1117,7 @@ void SampleWindow::showZoomer(SkCanvas* canvas) {
         // Clear the background behind our zoomed in view
         paint.setColor(SK_ColorWHITE);
         canvas->drawRect(dest, paint);
-        canvas->drawBitmapRect(bitmap, &src, dest);
+        canvas->drawBitmapRect(bitmap, src, dest, NULL);
         paint.setColor(SK_ColorBLACK);
         paint.setStyle(SkPaint::kStroke_Style);
         // Draw a border around the pixel in the middle
@@ -1211,10 +1215,24 @@ SkCanvas* SampleWindow::beforeChildren(SkCanvas* canvas) {
         canvas->clipPath(fClipPath, SkRegion::kIntersect_Op, true);
     }
 
+    // Install a flags filter proxy canvas if needed
+    if (fLCDState != SkOSMenu::kMixedState ||
+        fAAState != SkOSMenu::kMixedState ||
+        fSubpixelState != SkOSMenu::kMixedState ||
+        fHintingState > 0 ||
+        fFilterQualityIndex > 0) {
+
+        canvas = SkNEW_ARGS(FlagsFilterCanvas, (canvas, fLCDState, fAAState, fSubpixelState,
+                                                fHintingState, fFilterQualityIndex));
+        fFlagsFilterCanvas.reset(canvas);
+    }
+
     return canvas;
 }
 #include "SkMultiPictureDraw.h"
 void SampleWindow::afterChildren(SkCanvas* orig) {
+    fFlagsFilterCanvas.reset(NULL);
+
     if (fSaveToPdf) {
         fSaveToPdf = false;
         fPDFDocument->endPage();
@@ -1242,8 +1260,6 @@ void SampleWindow::afterChildren(SkCanvas* orig) {
         SkAutoTUnref<const SkPicture> picture(fRecorder.endRecording());
 
         if (true) {
-            this->installDrawFilter(orig);
-            
             if (true) {
                 SkImageInfo info;
                 size_t rowBytes;
@@ -1337,8 +1353,6 @@ void SampleWindow::beforeChild(SkView* child, SkCanvas* canvas) {
         canvas->concat(m);
     }
 
-    this->installDrawFilter(canvas);
-
     if (fMeasureFPS) {
         if (SampleView::SetRepeatDraw(child, FPS_REPEAT_COUNT)) {
             fMeasureFPS_StartTime = SkTime::GetMSecs();
@@ -1349,10 +1363,6 @@ void SampleWindow::beforeChild(SkView* child, SkCanvas* canvas) {
     if (fPerspAnim || fRotate) {
         this->inval(NULL);
     }
-}
-
-void SampleWindow::afterChild(SkView* child, SkCanvas* canvas) {
-    canvas->setDrawFilter(NULL);
 }
 
 void SampleWindow::changeZoomLevel(float delta) {
@@ -1432,11 +1442,6 @@ int SampleWindow::sampleCount() {
 
 void SampleWindow::showOverview() {
     this->loadView(create_overview(fSamples.count(), fSamples.begin()));
-}
-
-void SampleWindow::installDrawFilter(SkCanvas* canvas) {
-    canvas->setDrawFilter(new FlagsDrawFilter(fLCDState, fAAState, fSubpixelState,
-                                              fHintingState, fFilterQualityIndex))->unref();
 }
 
 void SampleWindow::postAnimatingEvent() {
@@ -1953,9 +1958,9 @@ void SampleWindow::updateTitle() {
     if (IsGpuDeviceType(fDeviceType) &&
         fDevManager &&
         fDevManager->getGrRenderTarget() &&
-        fDevManager->getGrRenderTarget()->numSamples() > 0) {
+        fDevManager->getGrRenderTarget()->numColorSamples() > 0) {
         title.appendf(" [MSAA: %d]",
-                       fDevManager->getGrRenderTarget()->numSamples());
+                       fDevManager->getGrRenderTarget()->numColorSamples());
     }
 #endif
 

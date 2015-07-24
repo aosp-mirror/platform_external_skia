@@ -27,7 +27,7 @@ public:
         kEffect_Type,
     };
     RRectGM(Type type) : fType(type) {
-        this->setBGColor(0xFFDDDDDD);
+        this->setBGColor(sk_tool_utils::color_to_565(0xFFDDDDDD));
         this->setUpRRects();
     }
 
@@ -120,7 +120,7 @@ protected:
                             SkRect bounds = rrect.getBounds();
                             bounds.outset(2.f, 2.f);
 
-                            tt.target()->drawSimpleRect(&pipelineBuilder,
+                            tt.target()->drawSimpleRect(pipelineBuilder,
                                                         0xff000000,
                                                         SkMatrix::I(),
                                                         bounds);

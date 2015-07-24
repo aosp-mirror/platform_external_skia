@@ -10,6 +10,8 @@
 #include "gl/GrGLPathProcessor.h"
 #include "gl/GrGLGpu.h"
 
+#include "glsl/GrGLSLCaps.h"
+
 GrPathProcessor::GrPathProcessor(GrColor color,
                                  const SkMatrix& viewMatrix,
                                  const SkMatrix& localMatrix)
@@ -30,17 +32,18 @@ void GrPathProcessor::getInvariantOutputCoverage(GrInitInvariantOutput* out) con
 
 void GrPathProcessor::initBatchTracker(GrBatchTracker* bt, const GrPipelineInfo& init) const {
     PathBatchTracker* local = bt->cast<PathBatchTracker>();
-    if (init.fColorIgnored) {
+    if (!init.readsColor()) {
         local->fInputColorType = kIgnored_GrGPInput;
         local->fColor = GrColor_ILLEGAL;
     } else {
         local->fInputColorType = kUniform_GrGPInput;
-        local->fColor = GrColor_ILLEGAL == init.fOverrideColor ? this->color() :
-                                                                 init.fOverrideColor;
+        if (!init.getOverrideColorIfSet(&local->fColor)) {
+            local->fColor = this->color();
+        }
     }
 
-    local->fInputCoverageType = init.fCoverageIgnored ? kIgnored_GrGPInput : kAllOnes_GrGPInput;
-    local->fUsesLocalCoords = init.fUsesLocalCoords;
+    local->fInputCoverageType = init.readsCoverage() ? kAllOnes_GrGPInput : kIgnored_GrGPInput;
+    local->fUsesLocalCoords = init.readsLocalCoords();
 }
 
 bool GrPathProcessor::canMakeEqual(const GrBatchTracker& m,
@@ -57,12 +60,19 @@ bool GrPathProcessor::canMakeEqual(const GrBatchTracker& m,
 
     const PathBatchTracker& mine = m.cast<PathBatchTracker>();
     const PathBatchTracker& theirs = t.cast<PathBatchTracker>();
-    return CanCombineLocalMatrices(*this, mine.fUsesLocalCoords,
-                                   that, theirs.fUsesLocalCoords) &&
-           CanCombineOutput(mine.fInputColorType, mine.fColor,
-                            theirs.fInputColorType, theirs.fColor) &&
-           CanCombineOutput(mine.fInputCoverageType, 0xff,
-                            theirs.fInputCoverageType, 0xff);
+    if (mine.fColor != theirs.fColor) {
+        return false;
+    }
+
+    if (mine.fUsesLocalCoords != theirs.fUsesLocalCoords) {
+        return false;
+    }
+
+    if (mine.fUsesLocalCoords && !this->localMatrix().cheapEqualTo(other.localMatrix())) {
+        return false;
+    }
+
+    return true;
 }
 
 void GrPathProcessor::getGLProcessorKey(const GrBatchTracker& bt,

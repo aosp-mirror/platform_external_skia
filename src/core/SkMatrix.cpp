@@ -7,6 +7,7 @@
 
 #include "SkMatrix.h"
 #include "SkFloatBits.h"
+#include "SkRSXform.h"
 #include "SkString.h"
 #include "SkNx.h"
 
@@ -440,6 +441,22 @@ void SkMatrix::setSinCos(SkScalar sinV, SkScalar cosV, SkScalar px, SkScalar py)
     this->setTypeMask(kUnknown_Mask | kOnlyPerspectiveValid_Mask);
 }
 
+SkMatrix& SkMatrix::setRSXform(const SkRSXform& xform) {
+    fMat[kMScaleX]  = xform.fSCos;
+    fMat[kMSkewX]   = -xform.fSSin;
+    fMat[kMTransX]  = xform.fTx;
+    
+    fMat[kMSkewY]   = xform.fSSin;
+    fMat[kMScaleY]  = xform.fSCos;
+    fMat[kMTransY]  = xform.fTy;
+    
+    fMat[kMPersp0] = fMat[kMPersp1] = 0;
+    fMat[kMPersp2] = 1;
+    
+    this->setTypeMask(kUnknown_Mask | kOnlyPerspectiveValid_Mask);
+    return *this;
+}
+
 void SkMatrix::setSinCos(SkScalar sinV, SkScalar cosV) {
     fMat[kMScaleX]  = cosV;
     fMat[kMSkewX]   = -sinV;
@@ -776,6 +793,37 @@ bool SkMatrix::asAffine(SkScalar affine[6]) const {
     return true;
 }
 
+void SkMatrix::ComputeInv(SkScalar dst[9], const SkScalar src[9], double invDet, bool isPersp) {
+    SkASSERT(src != dst);
+    SkASSERT(src && dst);
+
+    if (isPersp) {
+        dst[kMScaleX] = scross_dscale(src[kMScaleY], src[kMPersp2], src[kMTransY], src[kMPersp1], invDet);
+        dst[kMSkewX]  = scross_dscale(src[kMTransX], src[kMPersp1], src[kMSkewX],  src[kMPersp2], invDet);
+        dst[kMTransX] = scross_dscale(src[kMSkewX],  src[kMTransY], src[kMTransX], src[kMScaleY], invDet);
+
+        dst[kMSkewY]  = scross_dscale(src[kMTransY], src[kMPersp0], src[kMSkewY],  src[kMPersp2], invDet);
+        dst[kMScaleY] = scross_dscale(src[kMScaleX], src[kMPersp2], src[kMTransX], src[kMPersp0], invDet);
+        dst[kMTransY] = scross_dscale(src[kMTransX], src[kMSkewY],  src[kMScaleX], src[kMTransY], invDet);
+
+        dst[kMPersp0] = scross_dscale(src[kMSkewY],  src[kMPersp1], src[kMScaleY], src[kMPersp0], invDet);
+        dst[kMPersp1] = scross_dscale(src[kMSkewX],  src[kMPersp0], src[kMScaleX], src[kMPersp1], invDet);
+        dst[kMPersp2] = scross_dscale(src[kMScaleX], src[kMScaleY], src[kMSkewX],  src[kMSkewY],  invDet);
+    } else {   // not perspective
+        dst[kMScaleX] = SkDoubleToScalar(src[kMScaleY] * invDet);
+        dst[kMSkewX]  = SkDoubleToScalar(-src[kMSkewX] * invDet);
+        dst[kMTransX] = dcross_dscale(src[kMSkewX], src[kMTransY], src[kMScaleY], src[kMTransX], invDet);
+
+        dst[kMSkewY]  = SkDoubleToScalar(-src[kMSkewY] * invDet);
+        dst[kMScaleY] = SkDoubleToScalar(src[kMScaleX] * invDet);
+        dst[kMTransY] = dcross_dscale(src[kMSkewY], src[kMTransX], src[kMScaleX], src[kMTransY], invDet);
+
+        dst[kMPersp0] = 0;
+        dst[kMPersp1] = 0;
+        dst[kMPersp2] = 1;
+    }
+}
+
 bool SkMatrix::invertNonIdentity(SkMatrix* inv) const {
     SkASSERT(!this->isIdentity());
 
@@ -819,50 +867,32 @@ bool SkMatrix::invertNonIdentity(SkMatrix* inv) const {
     }
 
     int    isPersp = mask & kPerspective_Mask;
-    double scale = sk_inv_determinant(fMat, isPersp);
+    double invDet = sk_inv_determinant(fMat, isPersp);
 
-    if (scale == 0) { // underflow
+    if (invDet == 0) { // underflow
         return false;
     }
 
-    if (inv) {
-        SkMatrix tmp;
-        if (inv == this) {
-            inv = &tmp;
-        }
+    bool applyingInPlace = (inv == this);
 
-        if (isPersp) {
-            inv->fMat[kMScaleX] = scross_dscale(fMat[kMScaleY], fMat[kMPersp2], fMat[kMTransY], fMat[kMPersp1], scale);
-            inv->fMat[kMSkewX]  = scross_dscale(fMat[kMTransX], fMat[kMPersp1], fMat[kMSkewX],  fMat[kMPersp2], scale);
-            inv->fMat[kMTransX] = scross_dscale(fMat[kMSkewX],  fMat[kMTransY], fMat[kMTransX], fMat[kMScaleY], scale);
+    SkMatrix* tmp = inv;
 
-            inv->fMat[kMSkewY]  = scross_dscale(fMat[kMTransY], fMat[kMPersp0], fMat[kMSkewY],  fMat[kMPersp2], scale);
-            inv->fMat[kMScaleY] = scross_dscale(fMat[kMScaleX], fMat[kMPersp2], fMat[kMTransX], fMat[kMPersp0], scale);
-            inv->fMat[kMTransY] = scross_dscale(fMat[kMTransX], fMat[kMSkewY],  fMat[kMScaleX], fMat[kMTransY], scale);
-
-            inv->fMat[kMPersp0] = scross_dscale(fMat[kMSkewY],  fMat[kMPersp1], fMat[kMScaleY], fMat[kMPersp0], scale);
-            inv->fMat[kMPersp1] = scross_dscale(fMat[kMSkewX],  fMat[kMPersp0], fMat[kMScaleX], fMat[kMPersp1], scale);
-            inv->fMat[kMPersp2] = scross_dscale(fMat[kMScaleX], fMat[kMScaleY], fMat[kMSkewX],  fMat[kMSkewY],  scale);
-        } else {   // not perspective
-            inv->fMat[kMScaleX] = SkDoubleToScalar(fMat[kMScaleY] * scale);
-            inv->fMat[kMSkewX]  = SkDoubleToScalar(-fMat[kMSkewX] * scale);
-            inv->fMat[kMTransX] = dcross_dscale(fMat[kMSkewX], fMat[kMTransY], fMat[kMScaleY], fMat[kMTransX], scale);
-
-            inv->fMat[kMSkewY]  = SkDoubleToScalar(-fMat[kMSkewY] * scale);
-            inv->fMat[kMScaleY] = SkDoubleToScalar(fMat[kMScaleX] * scale);
-            inv->fMat[kMTransY] = dcross_dscale(fMat[kMSkewY], fMat[kMTransX], fMat[kMScaleX], fMat[kMTransY], scale);
-
-            inv->fMat[kMPersp0] = 0;
-            inv->fMat[kMPersp1] = 0;
-            inv->fMat[kMPersp2] = 1;
-        }
-
-        inv->setTypeMask(fTypeMask);
-
-        if (inv == &tmp) {
-            *(SkMatrix*)this = tmp;
-        }
+    SkMatrix storage;
+    if (applyingInPlace || NULL == tmp) {
+        tmp = &storage;     // we either need to avoid trampling memory or have no memory
     }
+
+    ComputeInv(tmp->fMat, fMat, invDet, isPersp);
+    if (!tmp->isFinite()) {
+        return false;
+    }
+
+    tmp->setTypeMask(fTypeMask);
+
+    if (applyingInPlace) {
+        *inv = storage; // need to copy answer back
+    }
+
     return true;
 }
 
@@ -1800,3 +1830,30 @@ bool SkDecomposeUpper2x2(const SkMatrix& matrix,
 
     return true;
 }
+
+//////////////////////////////////////////////////////////////////////////////////////////////////
+
+void SkRSXform::toQuad(SkScalar width, SkScalar height, SkPoint quad[4]) const {
+#if 0
+    // This is the slow way, but it documents what we're doing
+    quad[0].set(0, 0);
+    quad[1].set(width, 0);
+    quad[2].set(width, height);
+    quad[3].set(0, height);
+    SkMatrix m;
+    m.setRSXform(*this).mapPoints(quad, quad, 4);
+#else
+    const SkScalar m00 = fSCos;
+    const SkScalar m01 = -fSSin;
+    const SkScalar m02 = fTx;
+    const SkScalar m10 = -m01;
+    const SkScalar m11 = m00;
+    const SkScalar m12 = fTy;
+
+    quad[0].set(m02, m12);
+    quad[1].set(m00 * width + m02, m10 * width + m12);
+    quad[2].set(m00 * width + m01 * height + m02, m10 * width + m11 * height + m12);
+    quad[3].set(m01 * height + m02, m11 * height + m12);
+#endif
+}
+

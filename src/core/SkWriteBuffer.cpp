@@ -198,12 +198,13 @@ void SkWriteBuffer::writeBitmap(const SkBitmap& bitmap) {
         }
 
         // see if the caller wants to manually encode
-        if (fPixelSerializer) {
+        SkAutoPixmapUnlock result;
+        if (fPixelSerializer && bitmap.requestLock(&result)) {
+            const SkPixmap& pmap = result.pixmap();
             SkASSERT(NULL == fBitmapHeap);
-            SkAutoLockPixels alp(bitmap);
-            SkAutoDataUnref data(fPixelSerializer->encodePixels(bitmap.info(),
-                                                                bitmap.getPixels(),
-                                                                bitmap.rowBytes()));
+            SkAutoDataUnref data(fPixelSerializer->encodePixels(pmap.info(),
+                                                                pmap.addr(),
+                                                                pmap.rowBytes()));
             if (data.get() != NULL) {
                 // if we have to "encode" the bitmap, then we assume there is no
                 // offset to share, since we are effectively creating a new pixelref
@@ -215,6 +216,34 @@ void SkWriteBuffer::writeBitmap(const SkBitmap& bitmap) {
 
     this->writeUInt(0); // signal raw pixels
     SkBitmap::WriteRawPixels(this, bitmap);
+}
+
+static bool try_write_encoded(SkWriteBuffer* buffer, SkData* encoded) {
+    SkPixelSerializer* ps = buffer->getPixelSerializer();
+    // Assumes that if the client did not set a serializer, they are
+    // happy to get the encoded data.
+    if (!ps || ps->useEncodedData(encoded->data(), encoded->size())) {
+        write_encoded_bitmap(buffer, encoded, SkIPoint::Make(0, 0));
+        return true;
+    }
+    return false;
+}
+
+void SkWriteBuffer::writeImage(const SkImage* image) {
+    this->writeInt(image->width());
+    this->writeInt(image->height());
+
+    SkAutoTUnref<SkData> encoded(image->refEncoded());
+    if (encoded && try_write_encoded(this, encoded)) {
+        return;
+    }
+
+    encoded.reset(image->encode(SkImageEncoder::kPNG_Type, 100));
+    if (encoded && try_write_encoded(this, encoded)) {
+        return;
+    }
+    
+    this->writeUInt(0); // signal no pixels (in place of the size of the encoded data)
 }
 
 void SkWriteBuffer::writeTypeface(SkTypeface* obj) {

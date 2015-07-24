@@ -25,7 +25,19 @@
 
 class SkAdvancedTypefaceMetrics : public SkRefCnt {
 public:
-    SK_DECLARE_INST_COUNT(SkAdvancedTypefaceMetrics)
+
+    SkAdvancedTypefaceMetrics()
+        : fType(SkAdvancedTypefaceMetrics::kOther_Font)
+        , fFlags(SkAdvancedTypefaceMetrics::kEmpty_FontFlag)
+        , fLastGlyphID(0)
+        , fEmSize(0)
+        , fStyle(0)
+        , fItalicAngle(0)
+        , fAscent(0)
+        , fDescent(0)
+        , fStemV(0)
+        , fCapHeight(0)
+        , fBBox(SkIRect::MakeEmpty()) {}
 
     SkString fFontName;
 
@@ -43,7 +55,7 @@ public:
 
     enum FontFlags {
         kEmpty_FontFlag          = 0x0,  //!<No flags set
-        kMultiMaster_FontFlag    = 0x1,  //!<May be true for Type1 or CFF fonts.
+        kMultiMaster_FontFlag    = 0x1,  //!<May be true for Type1, CFF, or TrueType fonts.
         kNotEmbeddable_FontFlag  = 0x2,  //!<May not be embedded.
         kNotSubsettable_FontFlag = 0x4,  //!<May not be subset.
     };

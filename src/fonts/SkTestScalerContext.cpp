@@ -42,7 +42,7 @@ SkTestFont::~SkTestFont() {
 
 #ifdef SK_DEBUG
 
-#include "SkThread.h"
+#include "SkMutex.h"
 SK_DECLARE_STATIC_MUTEX(gUsedCharsMutex);
 
 #endif
@@ -137,7 +137,6 @@ void SkTestTypeface::getPath(const SkGlyph& glyph, SkPath* path) {
 
 void SkTestTypeface::onFilterRec(SkScalerContextRec* rec) const {
     rec->setHinting(SkPaint::kNo_Hinting);
-    rec->fMaskFormat = SkMask::kA8_Format;
 }
 
 SkAdvancedTypefaceMetrics* SkTestTypeface::onGetAdvancedTypefaceMetrics(
@@ -146,17 +145,8 @@ SkAdvancedTypefaceMetrics* SkTestTypeface::onGetAdvancedTypefaceMetrics(
                                 uint32_t glyphIDsCount) const {
 // pdf only
     SkAdvancedTypefaceMetrics* info = new SkAdvancedTypefaceMetrics;
-    info->fEmSize = 0;
-    info->fLastGlyphID = SkToU16(onCountGlyphs() - 1);
-    info->fStyle = 0;
     info->fFontName.set(fTestFont->fName);
-    info->fType = SkAdvancedTypefaceMetrics::kOther_Font;
-    info->fItalicAngle = 0;
-    info->fAscent = 0;
-    info->fDescent = 0;
-    info->fStemV = 0;
-    info->fCapHeight = 0;
-    info->fBBox = SkIRect::MakeEmpty();
+    info->fLastGlyphID = SkToU16(onCountGlyphs() - 1);
     return info;
 }
 
@@ -243,7 +233,6 @@ protected:
         glyph->fTop = ibounds.fTop;
         glyph->fWidth = ibounds.width();
         glyph->fHeight = ibounds.height();
-        glyph->fMaskFormat = SkMask::kARGB32_Format;
     }
 
     void generateImage(const SkGlyph& glyph) override {

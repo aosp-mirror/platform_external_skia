@@ -32,20 +32,21 @@
 
 #endif
 
-#define INVALIDATE_DELAY_MS 200
-
-static SkOSWindow* gCurrOSWin;
-static HWND gEventTarget;
-
 #define WM_EVENT_CALLBACK (WM_USER+0)
 
-void post_skwinevent()
+void post_skwinevent(HWND hwnd)
 {
-    PostMessage(gEventTarget, WM_EVENT_CALLBACK, 0, 0);
+    PostMessage(hwnd, WM_EVENT_CALLBACK, 0, 0);
 }
 
-SkOSWindow::SkOSWindow(void* hWnd) {
-    fHWND = hWnd;
+SkTHashMap<void*, SkOSWindow*> SkOSWindow::gHwndToOSWindowMap;
+
+SkOSWindow::SkOSWindow(const void* winInit) {
+    fWinInit = *(const WindowInit*)winInit;
+
+    fHWND = CreateWindow(fWinInit.fClass, NULL, WS_OVERLAPPEDWINDOW,
+                         CW_USEDEFAULT, 0, CW_USEDEFAULT, 0, NULL, NULL, fWinInit.fInstance, NULL);
+    gHwndToOSWindowMap.set(fHWND, this);
 #if SK_SUPPORT_GPU
 #if SK_ANGLE
     fDisplay = EGL_NO_DISPLAY;
@@ -55,7 +56,7 @@ SkOSWindow::SkOSWindow(void* hWnd) {
     fHGLRC = NULL;
 #endif
     fAttached = kNone_BackEndType;
-    gEventTarget = (HWND)hWnd;
+    fFullscreen = false;
 }
 
 SkOSWindow::~SkOSWindow() {
@@ -80,6 +81,7 @@ SkOSWindow::~SkOSWindow() {
     }
 #endif // SK_ANGLE
 #endif // SK_SUPPORT_GPU
+    this->closeWindow();
 }
 
 static SkKey winToskKey(WPARAM vk) {
@@ -144,14 +146,6 @@ bool SkOSWindow::wndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             return true;
             } break;
 
-        case WM_TIMER: {
-            RECT* rect = (RECT*)wParam;
-            InvalidateRect(hWnd, rect, FALSE);
-            KillTimer(hWnd, (UINT_PTR)rect);
-            delete rect;
-            return true;
-        } break;
-
         case WM_LBUTTONDOWN:
             this->handleClick(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam),
                               Click::kDown_State, NULL, getModifiers(message));
@@ -169,7 +163,7 @@ bool SkOSWindow::wndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 
         case WM_EVENT_CALLBACK:
             if (SkEvent::ProcessEvent()) {
-                post_skwinevent();
+                post_skwinevent(hWnd);
             }
             return true;
     }
@@ -218,22 +212,20 @@ void SkOSWindow::doPaint(void* ctx) {
     }
 }
 
-#if 0
 void SkOSWindow::updateSize()
 {
     RECT    r;
-    GetWindowRect((HWND)this->getHWND(), &r);
+    GetWindowRect((HWND)fHWND, &r);
     this->resize(r.right - r.left, r.bottom - r.top);
 }
-#endif
 
 void SkOSWindow::onHandleInval(const SkIRect& r) {
-    RECT* rect = new RECT;
-    rect->left    = r.fLeft;
-    rect->top     = r.fTop;
-    rect->right   = r.fRight;
-    rect->bottom  = r.fBottom;
-    SetTimer((HWND)fHWND, (UINT_PTR)rect, INVALIDATE_DELAY_MS, NULL);
+    RECT rect;
+    rect.left    = r.fLeft;
+    rect.top     = r.fTop;
+    rect.right   = r.fRight;
+    rect.bottom  = r.fBottom;
+    InvalidateRect((HWND)fHWND, &rect, FALSE);
 }
 
 void SkOSWindow::onAddMenu(const SkOSMenu* sk_menu)
@@ -300,8 +292,9 @@ static SkKey raw2key(uint32_t raw)
 
 void SkEvent::SignalNonEmptyQueue()
 {
-    post_skwinevent();
-    //SkDebugf("signal nonempty\n");
+    SkOSWindow::ForAllWindows([](void* hWND, SkOSWindow**) {
+        post_skwinevent((HWND)hWND);
+    });
 }
 
 static UINT_PTR gTimer;
@@ -377,7 +370,6 @@ void SkOSWindow::detachGL() {
 }
 
 void SkOSWindow::presentGL() {
-    glFlush();
     HDC dc = GetDC((HWND)fHWND);
     SwapBuffers(dc);
     ReleaseDC((HWND)fHWND, dc);
@@ -619,4 +611,90 @@ void SkOSWindow::present() {
     }
 }
 
+bool SkOSWindow::makeFullscreen() {
+    if (fFullscreen) {
+        return true;
+    }
+    if (fHGLRC) {
+        this->detachGL();
+    }
+    // This is hacked together from various sources on the web. It can certainly be improved and be
+    // made more robust.
+
+    // Save current window/resolution information. We do this in case we ever implement switching
+    // back to windowed mode.
+    fSavedWindowState.fZoomed = SkToBool(IsZoomed((HWND)fHWND));
+    if (fSavedWindowState.fZoomed) {
+        SendMessage((HWND)fHWND, WM_SYSCOMMAND, SC_RESTORE, 0);
+    }
+    fSavedWindowState.fStyle = GetWindowLong((HWND)fHWND, GWL_STYLE);
+    fSavedWindowState.fExStyle = GetWindowLong((HWND)fHWND, GWL_EXSTYLE);
+    GetWindowRect((HWND)fHWND, &fSavedWindowState.fRect);
+    DEVMODE currScreenSettings;
+    memset(&currScreenSettings,0,sizeof(currScreenSettings));
+    currScreenSettings.dmSize = sizeof(currScreenSettings);
+    EnumDisplaySettings(NULL, ENUM_CURRENT_SETTINGS, &currScreenSettings);
+    fSavedWindowState.fScreenWidth = currScreenSettings.dmPelsWidth;
+    fSavedWindowState.fScreenHeight = currScreenSettings.dmPelsHeight;
+    fSavedWindowState.fScreenBits = currScreenSettings.dmBitsPerPel;
+    fSavedWindowState.fHWND = fHWND;
+
+    // Try different sizes to find an allowed setting? Use ChangeDisplaySettingsEx?
+    static const int kWidth = 1280;
+    static const int kHeight = 1024;
+    DEVMODE newScreenSettings;
+    memset(&newScreenSettings, 0, sizeof(newScreenSettings));
+    newScreenSettings.dmSize = sizeof(newScreenSettings);
+    newScreenSettings.dmPelsWidth    = kWidth;
+    newScreenSettings.dmPelsHeight   = kHeight;
+    newScreenSettings.dmBitsPerPel   = 32;
+    newScreenSettings.dmFields = DM_BITSPERPEL|DM_PELSWIDTH|DM_PELSHEIGHT;
+    if (ChangeDisplaySettings(&newScreenSettings, CDS_FULLSCREEN) != DISP_CHANGE_SUCCESSFUL) {
+        return false;
+    }
+    RECT WindowRect;
+    WindowRect.left = 0;
+    WindowRect.right = kWidth;
+    WindowRect.top = 0;
+    WindowRect.bottom = kHeight;     
+    ShowCursor(FALSE);
+    AdjustWindowRectEx(&WindowRect, WS_POPUP, FALSE, WS_EX_APPWINDOW);
+    HWND fsHWND = CreateWindowEx(
+        WS_EX_APPWINDOW,
+        fWinInit.fClass,
+        NULL,
+        WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_POPUP,
+        0, 0, WindowRect.right-WindowRect.left, WindowRect.bottom-WindowRect.top,
+        NULL,
+        NULL,
+        fWinInit.fInstance,
+        NULL
+    );
+    if (!fsHWND) {
+        return false;
+    }
+    // Hide the old window and set the entry in the global mapping for this SkOSWindow to the
+    // new HWND.
+    ShowWindow((HWND)fHWND, SW_HIDE);
+    gHwndToOSWindowMap.remove(fHWND);
+    fHWND = fsHWND;
+    gHwndToOSWindowMap.set(fHWND, this);
+    this->updateSize();
+
+    fFullscreen = true;
+    return true;
+}
+
+void SkOSWindow::setVsync(bool enable) {
+    SkWGLExtensions wgl;
+    wgl.swapInterval(enable ? 1 : 0);
+}
+
+void SkOSWindow::closeWindow() {
+    DestroyWindow((HWND)fHWND);
+    if (fFullscreen) {
+        DestroyWindow((HWND)fSavedWindowState.fHWND);
+    }
+    gHwndToOSWindowMap.remove(fHWND);
+}
 #endif

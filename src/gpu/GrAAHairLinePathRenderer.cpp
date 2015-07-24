@@ -10,9 +10,9 @@
 #include "GrBatch.h"
 #include "GrBatchTarget.h"
 #include "GrBatchTest.h"
+#include "GrCaps.h"
 #include "GrContext.h"
 #include "GrDefaultGeoProcFactory.h"
-#include "GrDrawTargetCaps.h"
 #include "GrIndexBuffer.h"
 #include "GrPathUtils.h"
 #include "GrPipelineBuilder.h"
@@ -345,7 +345,7 @@ static int gather_lines_and_quads(const SkPath& path,
                 if (SkIRect::Intersects(devClipBounds, ibounds)) {
                     PREALLOC_PTARRAY(32) q;
                     // we don't need a direction if we aren't constraining the subdivision
-                    static const SkPath::Direction kDummyDir = SkPath::kCCW_Direction;
+                    const SkPathPriv::FirstDirection kDummyDir = SkPathPriv::kCCW_FirstDirection;
                     // We convert cubics to quadratics (for now).
                     // In perspective have to do conversion in src space.
                     if (persp) {
@@ -700,17 +700,16 @@ public:
 
     void initBatchTracker(const GrPipelineInfo& init) override {
         // Handle any color overrides
-        if (init.fColorIgnored) {
+        if (!init.readsColor()) {
             fGeoData[0].fColor = GrColor_ILLEGAL;
-        } else if (GrColor_ILLEGAL != init.fOverrideColor) {
-            fGeoData[0].fColor = init.fOverrideColor;
         }
+        init.getOverrideColorIfSet(&fGeoData[0].fColor);
 
         // setup batch properties
-        fBatch.fColorIgnored = init.fColorIgnored;
+        fBatch.fColorIgnored = !init.readsColor();
         fBatch.fColor = fGeoData[0].fColor;
-        fBatch.fUsesLocalCoords = init.fUsesLocalCoords;
-        fBatch.fCoverageIgnored = init.fCoverageIgnored;
+        fBatch.fUsesLocalCoords = init.readsLocalCoords();
+        fBatch.fCoverageIgnored = !init.readsCoverage();
         fBatch.fCoverage = fGeoData[0].fCoverage;
     }
 
@@ -737,6 +736,10 @@ private:
     }
 
     bool onCombineIfPossible(GrBatch* t) override {
+        if (!this->pipeline()->isEqual(*t->pipeline())) {
+            return false;
+        }
+
         AAHairlineBatch* that = t->cast<AAHairlineBatch>();
 
         if (this->viewMatrix().hasPerspective() != that->viewMatrix().hasPerspective()) {
@@ -774,6 +777,7 @@ private:
     uint8_t coverage() const { return fBatch.fCoverage; }
     bool usesLocalCoords() const { return fBatch.fUsesLocalCoords; }
     const SkMatrix& viewMatrix() const { return fGeoData[0].fViewMatrix; }
+    bool coverageIgnored() const { return fBatch.fCoverageIgnored; }
 
     struct BatchTracker {
         GrColor fColor;
@@ -815,6 +819,8 @@ void AAHairlineBatch::generateGeometry(GrBatchTarget* batchTarget, const GrPipel
     SkAutoTUnref<const GrGeometryProcessor> lineGP(
             GrDefaultGeoProcFactory::Create(gpFlags,
                                             this->color(),
+                                            this->usesLocalCoords(),
+                                            this->coverageIgnored(),
                                             *geometryProcessorViewM,
                                             *geometryProcessorLocalM,
                                             this->coverage()));
@@ -825,6 +831,7 @@ void AAHairlineBatch::generateGeometry(GrBatchTarget* batchTarget, const GrPipel
                                  kHairlineAA_GrProcessorEdgeType,
                                  batchTarget->caps(),
                                  *geometryProcessorLocalM,
+                                 this->usesLocalCoords(),
                                  this->coverage()));
 
     SkAutoTUnref<const GrGeometryProcessor> conicGP(
@@ -833,6 +840,7 @@ void AAHairlineBatch::generateGeometry(GrBatchTarget* batchTarget, const GrPipel
                                   kHairlineAA_GrProcessorEdgeType,
                                   batchTarget->caps(),
                                   *geometryProcessorLocalM,
+                                  this->usesLocalCoords(),
                                   this->coverage()));
 
     // This is hand inlined for maximum performance.
@@ -858,14 +866,6 @@ void AAHairlineBatch::generateGeometry(GrBatchTarget* batchTarget, const GrPipel
         SkAutoTUnref<const GrIndexBuffer> linesIndexBuffer(
             ref_lines_index_buffer(batchTarget->resourceProvider()));
         batchTarget->initDraw(lineGP, pipeline);
-
-        // TODO remove this when batch is everywhere
-        GrPipelineInfo init;
-        init.fColorIgnored = fBatch.fColorIgnored;
-        init.fOverrideColor = GrColor_ILLEGAL;
-        init.fCoverageIgnored = fBatch.fCoverageIgnored;
-        init.fUsesLocalCoords = this->usesLocalCoords();
-        lineGP->initBatchTracker(batchTarget->currentBatchTracker(), init);
 
         const GrVertexBuffer* vertexBuffer;
         int firstVertex;
@@ -929,14 +929,6 @@ void AAHairlineBatch::generateGeometry(GrBatchTarget* batchTarget, const GrPipel
         if (quadCount > 0) {
             batchTarget->initDraw(quadGP, pipeline);
 
-            // TODO remove this when batch is everywhere
-            GrPipelineInfo init;
-            init.fColorIgnored = fBatch.fColorIgnored;
-            init.fOverrideColor = GrColor_ILLEGAL;
-            init.fCoverageIgnored = fBatch.fCoverageIgnored;
-            init.fUsesLocalCoords = this->usesLocalCoords();
-            quadGP->initBatchTracker(batchTarget->currentBatchTracker(), init);
-
             {
                 GrVertices verts;
                 verts.initInstanced(kTriangles_GrPrimitiveType, vertexBuffer, quadsIndexBuffer,
@@ -949,14 +941,6 @@ void AAHairlineBatch::generateGeometry(GrBatchTarget* batchTarget, const GrPipel
 
         if (conicCount > 0) {
             batchTarget->initDraw(conicGP, pipeline);
-
-            // TODO remove this when batch is everywhere
-            GrPipelineInfo init;
-            init.fColorIgnored = fBatch.fColorIgnored;
-            init.fOverrideColor = GrColor_ILLEGAL;
-            init.fCoverageIgnored = fBatch.fCoverageIgnored;
-            init.fUsesLocalCoords = this->usesLocalCoords();
-            conicGP->initBatchTracker(batchTarget->currentBatchTracker(), init);
 
             {
                 GrVertices verts;
@@ -1003,7 +987,7 @@ bool GrAAHairLinePathRenderer::onDrawPath(GrDrawTarget* target,
 
     SkAutoTUnref<GrBatch> batch(create_hairline_batch(color, viewMatrix, path, stroke,
                                                       devClipBounds));
-    target->drawBatch(pipelineBuilder, batch);
+    target->drawBatch(*pipelineBuilder, batch);
 
     return true;
 }

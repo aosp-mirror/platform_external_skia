@@ -27,8 +27,6 @@ public:
 
     GrGLXferProcessor* createGLInstance() const override;
 
-    bool hasSecondaryOutput() const override { return false; }
-
 private:
     DisableColorXP();
 
@@ -36,7 +34,7 @@ private:
                                                  const GrProcOptInfo& coveragePOI,
                                                  bool doesStencilWrite,
                                                  GrColor* color,
-                                                 const GrDrawTargetCaps& caps) override {
+                                                 const GrCaps& caps) override {
         return GrXferProcessor::kIgnoreColor_OptFlag | GrXferProcessor::kIgnoreCoverage_OptFlag;
     }
 
@@ -62,7 +60,7 @@ public:
     static void GenKey(const GrProcessor&, const GrGLSLCaps&, GrProcessorKeyBuilder*) {}
 
 private:
-    void onEmitCode(const EmitArgs& args) override {
+    void emitOutputsForBlendState(const EmitArgs& args) override {
         // This emit code should be empty. However, on the nexus 6 there is a driver bug where if
         // you do not give gl_FragColor a value, the gl context is lost and we end up drawing
         // nothing. So this fix just sets the gl_FragColor arbitrarily to 0.
@@ -100,19 +98,17 @@ GrDisableColorXPFactory::GrDisableColorXPFactory() {
 }
 
 GrXferProcessor*
-GrDisableColorXPFactory::onCreateXferProcessor(const GrDrawTargetCaps& caps,
+GrDisableColorXPFactory::onCreateXferProcessor(const GrCaps& caps,
                                                const GrProcOptInfo& colorPOI,
                                                const GrProcOptInfo& covPOI,
-                                               const GrDeviceCoordTexture* dstCopy) const {
+                                               bool hasMixedSamples,
+                                               const DstTexture* dst) const {
     return DisableColorXP::Create();
 }
 
 GR_DEFINE_XP_FACTORY_TEST(GrDisableColorXPFactory);
 
-GrXPFactory* GrDisableColorXPFactory::TestCreate(SkRandom* random,
-                                                  GrContext*,
-                                                  const GrDrawTargetCaps&,
-                                                  GrTexture*[]) {
+GrXPFactory* GrDisableColorXPFactory::TestCreate(GrProcessorTestData*) {
     return GrDisableColorXPFactory::Create();
 }
 

@@ -39,6 +39,11 @@ if [[ -z "$BUILDTYPE" ]]; then
   BUILDTYPE="Debug"
 fi
 
+# Out dir is $SKIA_SRC_DIR/out by default. 
+if [[ -z "$SKIA_OUT" ]]; then 
+  SKIA_OUT="$SKIA_SRC_DIR/out"
+fi 
+
 ios_uninstall_app() {
   ideviceinstaller -U "$IOS_BUNDLE_ID"
 }
@@ -82,7 +87,7 @@ ios_mount() {
   # If this is already mounted we unmount it.
   if $(mount | grep --quiet "$IOS_MOUNT_POINT"); then
     >&2 echo "Device already mounted at: $IOS_MOUNT_POINT - Unmounting."
-    ios_umount
+    ios_umount || true   
   fi
 
   # Ensure there is a mount directory.
@@ -102,6 +107,7 @@ ios_umount() {
 
 # ios_restart: restarts the iOS device.
 ios_restart() {
+  ios_umount || true 
   idevicediagnostics restart
 }
 

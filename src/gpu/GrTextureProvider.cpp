@@ -73,10 +73,10 @@ GrTexture* GrTextureProvider::internalRefScratchTexture(const GrSurfaceDesc& inD
     if (fGpu->caps()->reuseScratchTextures() || (desc->fFlags & kRenderTarget_GrSurfaceFlag)) {
         if (!(kExact_ScratchTextureFlag & flags)) {
             // bin by pow2 with a reasonable min
-            static const int MIN_SIZE = 16;
+            const int minSize = SkTMin(16, fGpu->caps()->minTextureSize());
             GrSurfaceDesc* wdesc = desc.writable();
-            wdesc->fWidth  = SkTMax(MIN_SIZE, GrNextPow2(desc->fWidth));
-            wdesc->fHeight = SkTMax(MIN_SIZE, GrNextPow2(desc->fHeight));
+            wdesc->fWidth  = SkTMax(minSize, GrNextPow2(desc->fWidth));
+            wdesc->fHeight = SkTMax(minSize, GrNextPow2(desc->fHeight));
         }
 
         GrScratchKey key;
@@ -107,15 +107,17 @@ GrTexture* GrTextureProvider::internalRefScratchTexture(const GrSurfaceDesc& inD
     return NULL;
 }
 
-GrTexture* GrTextureProvider::wrapBackendTexture(const GrBackendTextureDesc& desc) {
+GrTexture* GrTextureProvider::wrapBackendTexture(const GrBackendTextureDesc& desc,
+                                                 GrWrapOwnership ownership) {
     if (this->isAbandoned()) {
         return NULL;
     }
-    return fGpu->wrapBackendTexture(desc);
+    return fGpu->wrapBackendTexture(desc, ownership);
 }
 
 GrRenderTarget* GrTextureProvider::wrapBackendRenderTarget(const GrBackendRenderTargetDesc& desc) {
-    return this->isAbandoned() ? NULL : fGpu->wrapBackendRenderTarget(desc);
+    return this->isAbandoned() ? NULL : fGpu->wrapBackendRenderTarget(desc,
+                                                                      kBorrow_GrWrapOwnership);
 }
 
 void GrTextureProvider::assignUniqueKeyToResource(const GrUniqueKey& key, GrGpuResource* resource) {

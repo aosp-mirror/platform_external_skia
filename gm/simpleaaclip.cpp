@@ -64,7 +64,7 @@ protected:
 
         fBasePath.addRoundRect(fBase, SkIntToScalar(5), SkIntToScalar(5));
         fRectPath.addRoundRect(fRect, SkIntToScalar(5), SkIntToScalar(5));
-        INHERITED::setBGColor(0xFFDDDDDD);
+        INHERITED::setBGColor(sk_tool_utils::color_to_565(0xFFDDDDDD));
     }
 
     void buildRgn(SkAAClip* clip, SkRegion::Op op) {
@@ -126,7 +126,7 @@ protected:
         canvas->restore();
     }
 
-    virtual SkString onShortName() {
+    SkString onShortName() override {
         SkString str;
         str.printf("simpleaaclip_%s",
                     kRect_GeomType == fGeomType ? "rect" :
@@ -135,11 +135,11 @@ protected:
         return str;
     }
 
-    virtual SkISize onISize() {
+    SkISize onISize() override {
         return SkISize::Make(640, 480);
     }
 
-    virtual void onDraw(SkCanvas* canvas) {
+    void onDraw(SkCanvas* canvas) override {
 
         static const struct {
             SkColor         fColor;
@@ -156,7 +156,7 @@ protected:
 
         SkPaint textPaint;
         textPaint.setAntiAlias(true);
-        sk_tool_utils::set_portable_typeface(&textPaint);
+        sk_tool_utils::set_portable_typeface_always(&textPaint);
         textPaint.setTextSize(SK_Scalar1*24);
         int xOff = 0;
 

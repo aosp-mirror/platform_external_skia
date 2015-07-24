@@ -17,7 +17,8 @@
 #endif
 #include "gl/SkGLContext.h"
 #include "gl/SkNullGLContext.h"
-
+#include "gl/GrGLGpu.h"
+#include "GrCaps.h"
 
 GrContext* GrContextFactory::get(GLContextType type, GrGLStandard forcedGpuAPI) {
     for (int i = 0; i < fContexts.count(); ++i) {
@@ -60,25 +61,44 @@ GrContext* GrContextFactory::get(GLContextType type, GrGLStandard forcedGpuAPI) 
 
     SkASSERT(glCtx->isValid());
 
-    // Ensure NVPR is available for the NVPR type and block it from other types.
+    // Block NVPR from non-NVPR types.
     SkAutoTUnref<const GrGLInterface> glInterface(SkRef(glCtx->gl()));
-    if (kNVPR_GLContextType == type) {
-        if (!glInterface->hasExtension("GL_NV_path_rendering")) {
+    if (kNVPR_GLContextType != type) {
+        glInterface.reset(GrGLInterfaceRemoveNVPR(glInterface));
+        if (!glInterface) {
             return NULL;
         }
     } else {
-        glInterface.reset(GrGLInterfaceRemoveNVPR(glInterface));
-        if (!glInterface) {
+        if (!glInterface->hasExtension("GL_NV_path_rendering")) {
             return NULL;
         }
     }
 
     glCtx->makeCurrent();
     GrBackendContext p3dctx = reinterpret_cast<GrBackendContext>(glInterface.get());
-    grCtx.reset(GrContext::Create(kOpenGL_GrBackend, p3dctx, &fGlobalOptions));
+    grCtx.reset(GrContext::Create(kOpenGL_GrBackend, p3dctx, fGlobalOptions));
     if (!grCtx.get()) {
         return NULL;
     }
+    // Warn if path rendering support is not available for the NVPR type.
+    if (kNVPR_GLContextType == type) {
+        if (!grCtx->caps()->shaderCaps()->pathRenderingSupport()) {
+            GrGpu* gpu = grCtx->getGpu();
+            const GrGLContext* ctx = gpu->glContextForTesting();
+            if (ctx) {
+                const GrGLubyte* verUByte;
+                GR_GL_CALL_RET(ctx->interface(), verUByte, GetString(GR_GL_VERSION));
+                const char* ver = reinterpret_cast<const char*>(verUByte);
+                SkDebugf("\nWARNING: nvprmsaa config requested, but driver path rendering "
+                         "support not available. Maybe update the driver? Your driver version "
+                         "string: \"%s\"\n", ver);
+            } else {
+                SkDebugf("\nWARNING: nvprmsaa config requested, but driver path rendering "
+                         "support not available.\n");
+            }
+        }
+    }
+
     GPUContext& ctx = fContexts.push_back();
     ctx.fGLContext = glCtx.get();
     ctx.fGLContext->ref();

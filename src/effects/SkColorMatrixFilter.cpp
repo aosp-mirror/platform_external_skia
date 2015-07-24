@@ -239,25 +239,9 @@ uint32_t SkColorMatrixFilter::getFlags() const {
     return this->INHERITED::getFlags() | fFlags;
 }
 
-/**
- *  Need inv255 = 1 / 255 as a constant, so when we premul a SkPMFloat, we can do this
- *
- *      new_red = old_red * alpha * inv255
- *
- *  instead of (much slower)
- *
- *      new_red = old_red * alpha / 255
- *
- *  However, 1.0f/255 comes to (in hex) 0x3B808081, which is slightly bigger than the "actual"
- *  value of 0x3B808080(repeat 80)... This slightly too-big value can cause us to compute
- *  new_red > alpha, which is a problem (for valid premul). To fix this, we use a
- *  hand-computed value of 0x3B808080, 1 ULP smaller. This keeps our colors valid.
- */
-static const float gInv255 = 0.0039215683f; //  (1.0f / 255) - ULP == SkBits2Float(0x3B808080)
-
 static Sk4f premul(const Sk4f& x) {
-    float scale = SkPMFloat(x).a() * gInv255;
-    Sk4f pm = x * Sk4f(scale, scale, scale, 1);
+    float scale = SkPMFloat(x).a();
+    Sk4f pm = x * SkPMFloat(1, scale, scale, scale);
 
 #ifdef SK_DEBUG
     SkPMFloat pmf(pm);
@@ -268,12 +252,12 @@ static Sk4f premul(const Sk4f& x) {
 }
 
 static Sk4f unpremul(const SkPMFloat& pm) {
-    float scale = 255 / pm.a(); // candidate for fast/approx invert?
-    return pm * Sk4f(scale, scale, scale, 1);
+    float scale = 1 / pm.a(); // candidate for fast/approx invert?
+    return pm * SkPMFloat(1, scale, scale, scale);
 }
 
-static Sk4f clamp_0_255(const Sk4f& value) {
-    return Sk4f::Max(Sk4f::Min(value, Sk4f(255)), Sk4f(0));
+static Sk4f clamp_0_1(const Sk4f& value) {
+    return Sk4f::Max(Sk4f::Min(value, Sk4f(1)), Sk4f(0));
 }
 
 void SkColorMatrixFilter::filterSpan(const SkPMColor src[], int count, SkPMColor dst[]) const {
@@ -292,14 +276,16 @@ void SkColorMatrixFilter::filterSpan(const SkPMColor src[], int count, SkPMColor
 #endif
 
     if (use_floats) {
+        // c0-c3 are already in [0,1].
         const Sk4f c0 = Sk4f::Load(fTranspose + 0);
         const Sk4f c1 = Sk4f::Load(fTranspose + 4);
         const Sk4f c2 = Sk4f::Load(fTranspose + 8);
         const Sk4f c3 = Sk4f::Load(fTranspose + 12);
-        const Sk4f c4 = Sk4f::Load(fTranspose + 16);  // translates
+        // c4 (the translate vector) is in [0, 255].  Bring it back to [0,1].
+        const Sk4f c4 = Sk4f::Load(fTranspose + 16)*Sk4f(1.0f/255);
 
         // todo: we could cache this in the constructor...
-        SkPMColor matrix_translate_pmcolor = SkPMFloat(premul(clamp_0_255(c4))).roundClamp();
+        SkPMColor matrix_translate_pmcolor = SkPMFloat(premul(clamp_0_1(c4))).round();
 
         for (int i = 0; i < count; i++) {
             const SkPMColor src_c = src[i];
@@ -323,7 +309,7 @@ void SkColorMatrixFilter::filterSpan(const SkPMColor src[], int count, SkPMColor
             Sk4f dst4 = c0 * r4 + c1 * g4 + c2 * b4 + c3 * a4 + c4;
 
             // clamp, re-premul, and write
-            dst[i] = SkPMFloat(premul(clamp_0_255(dst4))).round();
+            dst[i] = SkPMFloat(premul(clamp_0_1(dst4))).round();
         }
     } else {
         const State& state = fState;
@@ -397,7 +383,7 @@ SkColorFilter* SkColorMatrixFilter::newComposed(const SkColorFilter* innerFilter
 #if SK_SUPPORT_GPU
 #include "GrFragmentProcessor.h"
 #include "GrInvariantOutput.h"
-#include "gl/GrGLProcessor.h"
+#include "gl/GrGLFragmentProcessor.h"
 #include "gl/builders/GrGLProgramBuilder.h"
 
 class ColorMatrixEffect : public GrFragmentProcessor {
@@ -427,34 +413,31 @@ public:
 
         GLProcessor(const GrProcessor&) {}
 
-        virtual void emitCode(GrGLFPBuilder* builder,
-                              const GrFragmentProcessor&,
-                              const char* outputColor,
-                              const char* inputColor,
-                              const TransformedCoordsArray&,
-                              const TextureSamplerArray&) override {
-            fMatrixHandle = builder->addUniform(GrGLProgramBuilder::kFragment_Visibility,
+        virtual void emitCode(EmitArgs& args) override {
+            fMatrixHandle = args.fBuilder->addUniform(GrGLProgramBuilder::kFragment_Visibility,
                                                 kMat44f_GrSLType, kDefault_GrSLPrecision,
                                                 "ColorMatrix");
-            fVectorHandle = builder->addUniform(GrGLProgramBuilder::kFragment_Visibility,
+            fVectorHandle = args.fBuilder->addUniform(GrGLProgramBuilder::kFragment_Visibility,
                                                 kVec4f_GrSLType, kDefault_GrSLPrecision,
                                                 "ColorMatrixVector");
 
-            if (NULL == inputColor) {
+            if (NULL == args.fInputColor) {
                 // could optimize this case, but we aren't for now.
-                inputColor = "vec4(1)";
+                args.fInputColor = "vec4(1)";
             }
-            GrGLFragmentBuilder* fsBuilder = builder->getFragmentShaderBuilder();
+            GrGLFragmentBuilder* fsBuilder = args.fBuilder->getFragmentShaderBuilder();
             // The max() is to guard against 0 / 0 during unpremul when the incoming color is
             // transparent black.
-            fsBuilder->codeAppendf("\tfloat nonZeroAlpha = max(%s.a, 0.00001);\n", inputColor);
+            fsBuilder->codeAppendf("\tfloat nonZeroAlpha = max(%s.a, 0.00001);\n",
+                                   args.fInputColor);
             fsBuilder->codeAppendf("\t%s = %s * vec4(%s.rgb / nonZeroAlpha, nonZeroAlpha) + %s;\n",
-                                   outputColor,
-                                   builder->getUniformCStr(fMatrixHandle),
-                                   inputColor,
-                                   builder->getUniformCStr(fVectorHandle));
-            fsBuilder->codeAppendf("\t%s = clamp(%s, 0.0, 1.0);\n", outputColor, outputColor);
-            fsBuilder->codeAppendf("\t%s.rgb *= %s.a;\n", outputColor, outputColor);
+                                   args.fOutputColor,
+                                   args.fBuilder->getUniformCStr(fMatrixHandle),
+                                   args.fInputColor,
+                                   args.fBuilder->getUniformCStr(fVectorHandle));
+            fsBuilder->codeAppendf("\t%s = clamp(%s, 0.0, 1.0);\n",
+                                   args.fOutputColor, args.fOutputColor);
+            fsBuilder->codeAppendf("\t%s.rgb *= %s.a;\n", args.fOutputColor, args.fOutputColor);
         }
 
         virtual void setData(const GrGLProgramDataManager& uniManager,
@@ -545,23 +528,23 @@ private:
 
 GR_DEFINE_FRAGMENT_PROCESSOR_TEST(ColorMatrixEffect);
 
-GrFragmentProcessor* ColorMatrixEffect::TestCreate(SkRandom* random,
-                                                   GrContext*,
-                                                   const GrDrawTargetCaps&,
-                                                   GrTexture* dummyTextures[2]) {
+GrFragmentProcessor* ColorMatrixEffect::TestCreate(GrProcessorTestData* d) {
     SkColorMatrix colorMatrix;
     for (size_t i = 0; i < SK_ARRAY_COUNT(colorMatrix.fMat); ++i) {
-        colorMatrix.fMat[i] = random->nextSScalar1();
+        colorMatrix.fMat[i] = d->fRandom->nextSScalar1();
     }
     return ColorMatrixEffect::Create(colorMatrix);
 }
 
-bool SkColorMatrixFilter::asFragmentProcessors(GrContext*,
+bool SkColorMatrixFilter::asFragmentProcessors(GrContext*, GrProcessorDataManager*,
                                                SkTDArray<GrFragmentProcessor*>* array) const {
     GrFragmentProcessor* frag = ColorMatrixEffect::Create(fMatrix);
     if (frag) {
         if (array) {
             *array->append() = frag;
+        } else {
+            frag->unref();
+            SkDEBUGCODE(frag = NULL;)
         }
         return true;
     }

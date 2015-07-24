@@ -15,19 +15,19 @@
 class SK_API SkDrawCommand {
 public:
     enum OpType {
-        kBeginCommentGroup_OpType,
         kBeginDrawPicture_OpType,
         kClipPath_OpType,
         kClipRegion_OpType,
         kClipRect_OpType,
         kClipRRect_OpType,
-        kComment_OpType,
         kConcat_OpType,
         kDrawBitmap_OpType,
         kDrawBitmapNine_OpType,
         kDrawBitmapRect_OpType,
         kDrawClear_OpType,
         kDrawDRRect_OpType,
+        kDrawImage_OpType,
+        kDrawImageRect_OpType,
         kDrawOval_OpType,
         kDrawPaint_OpType,
         kDrawPatch_OpType,
@@ -42,7 +42,6 @@ public:
         kDrawTextBlob_OpType,
         kDrawTextOnPath_OpType,
         kDrawVertices_OpType,
-        kEndCommentGroup_OpType,
         kEndDrawPicture_OpType,
         kRestore_OpType,
         kSave_OpType,
@@ -232,7 +231,7 @@ class SkDrawBitmapRectCommand : public SkDrawCommand {
 public:
     SkDrawBitmapRectCommand(const SkBitmap& bitmap, const SkRect* src,
                             const SkRect& dst, const SkPaint* paint,
-                            SkCanvas::DrawBitmapRectFlags flags);
+                            SkCanvas::SrcRectConstraint);
     void execute(SkCanvas* canvas) const override;
     bool render(SkCanvas* canvas) const override;
 
@@ -253,8 +252,8 @@ public:
     const SkRect& dstRect() const { return fDst; }
     void setDstRect(const SkRect& dst) { fDst = dst; }
 
-    SkCanvas::DrawBitmapRectFlags flags() const { return fFlags; }
-    void setFlags(SkCanvas::DrawBitmapRectFlags flags) { fFlags = flags; }
+    SkCanvas::SrcRectConstraint constraint() const { return fConstraint; }
+    void setConstraint(SkCanvas::SrcRectConstraint constraint) { fConstraint = constraint; }
 
 private:
     SkBitmap                      fBitmap;
@@ -262,43 +261,38 @@ private:
     SkRect                        fDst;
     SkPaint                       fPaint;
     SkPaint*                      fPaintPtr;
-    SkCanvas::DrawBitmapRectFlags fFlags;
+    SkCanvas::SrcRectConstraint   fConstraint;
 
     typedef SkDrawCommand INHERITED;
 };
 
-class SkBeginCommentGroupCommand : public SkDrawCommand {
+class SkDrawImageCommand : public SkDrawCommand {
 public:
-    SkBeginCommentGroupCommand(const char* description);
-    void execute(SkCanvas* canvas) const override {
-        canvas->beginCommentGroup(fDescription.c_str());
-    };
+    SkDrawImageCommand(const SkImage* image, SkScalar left, SkScalar top, const SkPaint* paint);
+    void execute(SkCanvas* canvas) const override;
+    bool render(SkCanvas* canvas) const override;
 private:
-    SkString fDescription;
+    SkAutoTUnref<const SkImage> fImage;
+    SkScalar                    fLeft;
+    SkScalar                    fTop;
+    SkTLazy<SkPaint>            fPaint;
 
     typedef SkDrawCommand INHERITED;
 };
 
-class SkCommentCommand : public SkDrawCommand {
+class SkDrawImageRectCommand : public SkDrawCommand {
 public:
-    SkCommentCommand(const char* kywd, const char* value);
-    void execute(SkCanvas* canvas) const override {
-        canvas->addComment(fKywd.c_str(), fValue.c_str());
-    };
+    SkDrawImageRectCommand(const SkImage* image, const SkRect* src, const SkRect& dst,
+                           const SkPaint* paint, SkCanvas::SrcRectConstraint constraint);
+    void execute(SkCanvas* canvas) const override;
+    bool render(SkCanvas* canvas) const override;
 private:
-    SkString fKywd;
-    SkString fValue;
+    SkAutoTUnref<const SkImage> fImage;
+    SkTLazy<SkRect>             fSrc;
+    SkRect                      fDst;
+    SkTLazy<SkPaint>            fPaint;
+    SkCanvas::SrcRectConstraint fConstraint;
 
-    typedef SkDrawCommand INHERITED;
-};
-
-class SkEndCommentGroupCommand : public SkDrawCommand {
-public:
-    SkEndCommentGroupCommand();
-    void execute(SkCanvas* canvas) const override {
-        canvas->endCommentGroup();
-    };
-private:
     typedef SkDrawCommand INHERITED;
 };
 

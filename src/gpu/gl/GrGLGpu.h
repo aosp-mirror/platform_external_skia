@@ -32,19 +32,20 @@ class GrNonInstancedVertices;
 
 class GrGLGpu : public GrGpu {
 public:
-    GrGLGpu(const GrGLContext& ctx, GrContext* context);
+    static GrGpu* Create(GrBackendContext backendContext, const GrContextOptions& options,
+                         GrContext* context);
     ~GrGLGpu() override;
 
     void contextAbandoned() override;
 
-    const GrGLContext& glContext() const { return fGLContext; }
+    const GrGLContext& glContext() const { return *fGLContext; }
 
-    const GrGLInterface* glInterface() const { return fGLContext.interface(); }
-    const GrGLContextInfo& ctxInfo() const { return fGLContext; }
-    GrGLStandard glStandard() const { return fGLContext.standard(); }
-    GrGLVersion glVersion() const { return fGLContext.version(); }
-    GrGLSLGeneration glslGeneration() const { return fGLContext.glslGeneration(); }
-    const GrGLCaps& glCaps() const { return *fGLContext.caps(); }
+    const GrGLInterface* glInterface() const { return fGLContext->interface(); }
+    const GrGLContextInfo& ctxInfo() const { return *fGLContext; }
+    GrGLStandard glStandard() const { return fGLContext->standard(); }
+    GrGLVersion glVersion() const { return fGLContext->version(); }
+    GrGLSLGeneration glslGeneration() const { return fGLContext->glslGeneration(); }
+    const GrGLCaps& glCaps() const { return *fGLContext->caps(); }
 
     GrGLPathRendering* glPathRendering() {
         SkASSERT(glCaps().shaderCaps()->pathRenderingSupport());
@@ -53,24 +54,20 @@ public:
 
     void discard(GrRenderTarget*) override;
 
-    // Used by GrGLProgram and GrGLPathTexGenProgramEffects to configure OpenGL
-    // state.
+    // Used by GrGLProgram to configure OpenGL state.
     void bindTexture(int unitIdx, const GrTextureParams& params, GrGLTexture* texture);
 
+    bool getReadPixelsInfo(GrSurface* srcSurface, int readWidth, int readHeight, size_t rowBytes,
+                           GrPixelConfig readConfig, DrawPreference*,
+                           ReadPixelTempDrawInfo*) override;
+
+
     // GrGpu overrides
-    GrPixelConfig preferredReadPixelsConfig(GrPixelConfig readConfig,
-                                            GrPixelConfig surfaceConfig) const override;
     GrPixelConfig preferredWritePixelsConfig(GrPixelConfig writeConfig,
                                              GrPixelConfig surfaceConfig) const override;
     bool canWriteTexturePixels(const GrTexture*, GrPixelConfig srcConfig) const override;
-    bool readPixelsWillPayForYFlip(GrRenderTarget* renderTarget,
-                                   int left, int top,
-                                   int width, int height,
-                                   GrPixelConfig config,
-                                   size_t rowBytes) const override;
-    bool fullReadPixelsIsFasterThanPartial() const override;
 
-    bool initCopySurfaceDstDesc(const GrSurface* src, GrSurfaceDesc* desc) override;
+    bool initCopySurfaceDstDesc(const GrSurface* src, GrSurfaceDesc* desc) const override;
 
     // These functions should be used to bind GL objects. They track the GL state and skip redundant
     // bindings. Making the equivalent glBind calls directly will confuse the state tracking.
@@ -101,11 +98,6 @@ public:
                      const SkIRect& srcRect,
                      const SkIPoint& dstPoint) override;
 
-    bool canCopySurface(const GrSurface* dst,
-                        const GrSurface* src,
-                        const SkIRect& srcRect,
-                        const SkIPoint& dstPoint) override;
-
     void xferBarrier(GrRenderTarget*, GrXferBarrierType) override;
 
     void buildProgramDesc(GrProgramDesc*,
@@ -113,7 +105,18 @@ public:
                           const GrPipeline&,
                           const GrBatchTracker&) const override;
 
+    const GrGLContext* glContextForTesting() const override {
+        return &this->glContext();
+    }
+
+    GrBackendObject createTestingOnlyBackendTexture(void* pixels, int w, int h,
+                                                    GrPixelConfig config) const override;
+    bool isTestingOnlyBackendTexture(GrBackendObject id) const override;
+    void deleteTestingOnlyBackendTexture(GrBackendObject id) const override;
+
 private:
+    GrGLGpu(GrGLContext* ctx, GrContext* context);
+
     // GrGpu overrides
     void onResetContext(uint32_t resetBits) override;
 
@@ -124,8 +127,9 @@ private:
                                          const void* srcData) override;
     GrVertexBuffer* onCreateVertexBuffer(size_t size, bool dynamic) override;
     GrIndexBuffer* onCreateIndexBuffer(size_t size, bool dynamic) override;
-    GrTexture* onWrapBackendTexture(const GrBackendTextureDesc&) override;
-    GrRenderTarget* onWrapBackendRenderTarget(const GrBackendRenderTargetDesc&) override;
+    GrTexture* onWrapBackendTexture(const GrBackendTextureDesc&, GrWrapOwnership) override;
+    GrRenderTarget* onWrapBackendRenderTarget(const GrBackendRenderTargetDesc&,
+                                              GrWrapOwnership) override;
     bool createStencilAttachmentForRenderTarget(GrRenderTarget* rt, int width, int height) override;
     bool attachStencilAttachmentToRenderTarget(GrStencilAttachment* sb,
                                                GrRenderTarget* rt) override;
@@ -150,16 +154,6 @@ private:
     void onResolveRenderTarget(GrRenderTarget* target) override;
 
     void onDraw(const DrawArgs&, const GrNonInstancedVertices&) override;
-    void onStencilPath(const GrPath*, const StencilPathState&) override;
-    void onDrawPath(const DrawArgs&, const GrPath*, const GrStencilSettings&) override;
-    void onDrawPaths(const DrawArgs&,
-                     const GrPathRange*,
-                     const void* indices,
-                     GrDrawTarget::PathIndexType,
-                     const float transformValues[],
-                     GrDrawTarget::PathTransformType,
-                     int count,
-                     const GrStencilSettings&) override;
 
     void clearStencil(GrRenderTarget*) override;
 
@@ -183,7 +177,20 @@ private:
     // Subclasses should call this to flush the blend state.
     void flushBlend(const GrXferProcessor::BlendInfo& blendInfo);
 
-    bool hasExtension(const char* ext) const { return fGLContext.hasExtension(ext); }
+    bool hasExtension(const char* ext) const { return fGLContext->hasExtension(ext); }
+
+    void copySurfaceAsDraw(GrSurface* dst,
+                           GrSurface* src,
+                           const SkIRect& srcRect,
+                           const SkIPoint& dstPoint);
+    void copySurfaceAsCopyTexSubImage(GrSurface* dst,
+                                      GrSurface* src,
+                                      const SkIRect& srcRect,
+                                      const SkIPoint& dstPoint);
+    bool copySurfaceAsBlitFramebuffer(GrSurface* dst,
+                                      GrSurface* src,
+                                      const SkIRect& srcRect,
+                                      const SkIPoint& dstPoint);
 
     static bool BlendCoeffReferencesConstant(GrBlendCoeff coeff);
 
@@ -193,7 +200,7 @@ private:
         ~ProgramCache();
 
         void abandon();
-        GrGLProgram* getProgram(const DrawArgs&);
+        GrGLProgram* refProgram(const DrawArgs&);
 
     private:
         enum {
@@ -260,7 +267,7 @@ private:
                            bool getSizedInternal,
                            GrGLenum* internalFormat,
                            GrGLenum* externalFormat,
-                           GrGLenum* externalType);
+                           GrGLenum* externalType) const;
     // helper for onCreateTexture and writeTexturePixels
     bool uploadTexData(const GrSurfaceDesc& desc,
                        bool isNewTexture,
@@ -294,11 +301,12 @@ private:
 
     void unbindTextureFromFBO(GrGLenum fboTarget);
 
-    GrGLContext fGLContext;
+    SkAutoTUnref<GrGLContext>  fGLContext;
+
+    void createCopyProgram();
 
     // GL program-related state
     ProgramCache*               fProgramCache;
-    SkAutoTUnref<GrGLProgram>   fCurrentProgram;
 
     ///////////////////////////////////////////////////////////////////////////
     ///@name Caching of GL State
@@ -327,7 +335,7 @@ private:
         }
     } fHWScissorSettings;
 
-    GrGLIRect   fHWViewport;
+    GrGLIRect                   fHWViewport;
 
     /**
      * Tracks bound vertex and index buffers and vertex attrib array state.
@@ -420,7 +428,17 @@ private:
                                                         const GrGLVertexBuffer* vbuffer,
                                                         const GrGLIndexBuffer* ibuffer);
 
+        /** Variants of the above that takes GL buffer IDs. Note that 0 does not imply that a 
+            buffer won't be bound. The "default buffer" will be bound, which is used for client-side
+            array rendering. */
+        GrGLAttribArrayState* bindArrayAndBufferToDraw(GrGLGpu* gpu, GrGLuint vbufferID);
+        GrGLAttribArrayState* bindArrayAndBuffersToDraw(GrGLGpu* gpu,
+                                                        GrGLuint vbufferID,
+                                                        GrGLuint ibufferID);
+
     private:
+        GrGLAttribArrayState* internalBind(GrGLGpu* gpu, GrGLuint vbufferID, GrGLuint* ibufferID);
+
         GrGLuint                fBoundVertexArrayID;
         GrGLuint                fBoundVertexBufferID;
         bool                    fBoundVertexArrayIDIsValid;
@@ -453,6 +471,15 @@ private:
             fEnabled = kUnknown_TriState;
         }
     } fHWBlendState;
+
+    /** IDs for copy surface program. */
+    struct {
+        GrGLuint    fProgram;
+        GrGLint     fTextureUniform;
+        GrGLint     fTexCoordXformUniform;
+        GrGLint     fPosXformUniform;
+        GrGLuint    fArrayBuffer;
+    } fCopyProgram;
 
     TriState fMSAAEnabled;
 

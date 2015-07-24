@@ -68,13 +68,6 @@
 //#define SK_DEBUG_GLYPH_CACHE
 //#define SK_DEBUG_PATH
 
-/*  To assist debugging, Skia provides an instance counting utility in
-    include/core/SkInstCount.h. This flag turns on and off that utility to
-    allow instance count tracking in either debug or release builds. By
-    default it is enabled in debug but disabled in release.
- */
-//#define SK_ENABLE_INST_COUNT 1
-
 /*  If, in debugging mode, Skia needs to stop (presumably to invoke a debugger)
     it will call SK_CRASH(). If this is not defined it, it is defined in
     SkPostConfig.h to write to an illegal address
@@ -212,9 +205,12 @@
 #define SK_SFNTLY_SUBSETTER "sample/chromium/font_subsetter.h"
 #define SK_SUPPORT_GPU 1
 #define SK_SUPPORT_LEGACY_CLIPTOLAYERFLAG
+#define SK_SUPPORT_LEGACY_DRAWBITMAPRECTFLAGS_TYPE
 #define SK_SUPPORT_LEGACY_GETDEVICE
+#define SK_SUPPORT_LEGACY_ONDRAWIMAGERECT
 #define SK_SUPPORT_LEGACY_PUBLIC_IMAGEINFO_FIELDS
 #define SK_SUPPORT_LEGACY_SCALAR_DIV
+#define SK_SUPPORT_LEGACY_UNBALANCED_PIXELREF_LOCKCOUNT
 #define SK_SUPPORT_OPENCL 0
 #define SK_SUPPORT_PDF
 #define SK_USE_FREETYPE_EMBOLDEN

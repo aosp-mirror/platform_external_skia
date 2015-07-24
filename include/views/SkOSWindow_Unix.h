@@ -46,6 +46,10 @@ public:
 
     //static bool PostEvent(SkEvent* evt, SkEventSinkID, SkMSec delay);
 
+    bool makeFullscreen();
+    void setVsync(bool);
+    void closeWindow();
+
 protected:
     // Overridden from from SkWindow:
     void onSetTitle(const char title[]) override;
@@ -61,7 +65,9 @@ private:
     void doPaint();
     void mapWindowAndWait();
 
-    void closeWindow();
+    // Forcefully closes the window.  If a graceful shutdown is desired then call the public
+    // closeWindow method
+    void internalCloseWindow();
     void initWindow(int newMSAASampleCount, AttachmentInfo* info);
 
     SkUnixWindow fUnixWindow;

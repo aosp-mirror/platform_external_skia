@@ -12,7 +12,7 @@
 class BlursGM : public skiagm::GM {
 public:
     BlursGM() {
-        this->setBGColor(0xFFDDDDDD);
+        this->setBGColor(sk_tool_utils::color_to_565(0xFFDDDDDD));
     }
 
 protected:
@@ -40,7 +40,7 @@ protected:
 
         SkPaint paint;
         paint.setAntiAlias(true);
-        sk_tool_utils::set_portable_typeface(&paint);
+        sk_tool_utils::set_portable_typeface_always(&paint);
         paint.setTextSize(SkIntToScalar(25));
         canvas->translate(SkIntToScalar(-40), SkIntToScalar(0));
 

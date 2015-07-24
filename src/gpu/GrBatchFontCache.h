@@ -9,7 +9,6 @@
 #define GrBatchFontCache_DEFINED
 
 #include "GrBatchAtlas.h"
-#include "GrDrawTarget.h"
 #include "GrFontScaler.h"
 #include "GrGlyph.h"
 #include "SkTDynamicHash.h"
@@ -20,9 +19,8 @@ class GrBatchTarget;
 class GrGpu;
 
 /**
- *  The GrBatchTextStrike manages a pool of CPU backing memory for Glyph Masks.  This backing memory
- *  is abstracted by GrGlyph, and indexed by a PackedID and GrFontScaler.  The GrFontScaler is what
- *  actually creates the mask.
+ *  The GrBatchTextStrike manages a pool of CPU backing memory for GrGlyphs.  This backing memory
+ *  is indexed by a PackedID and GrFontScaler.  The GrFontScaler is what actually creates the mask.
  */
 class GrBatchTextStrike : public SkNVRefCnt<GrBatchTextStrike> {
 public:
@@ -148,11 +146,20 @@ public:
         return this->getAtlas(format)->atlasGeneration();
     }
 
-    GrPixelConfig getPixelConfig(GrMaskFormat) const;
-
     void dump() const;
 
 private:
+    static GrPixelConfig MaskFormatToPixelConfig(GrMaskFormat format) {
+        static const GrPixelConfig kPixelConfigs[] = {
+            kAlpha_8_GrPixelConfig,
+            kRGB_565_GrPixelConfig,
+            kSkia8888_GrPixelConfig
+        };
+        SK_COMPILE_ASSERT(SK_ARRAY_COUNT(kPixelConfigs) == kMaskFormatCount, array_size_mismatch);
+
+        return kPixelConfigs[format];
+    }
+
     // There is a 1:1 mapping between GrMaskFormats and atlas indices
     static int MaskFormatToAtlasIndex(GrMaskFormat format) {
         static const int sAtlasIndices[] = {

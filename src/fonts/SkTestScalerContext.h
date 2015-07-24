@@ -30,7 +30,7 @@ struct SkTestFontData {
 
 class SkTestFont : public SkRefCnt {
 public:
-    SK_DECLARE_INST_COUNT(SkTestFont)
+    
 
     SkTestFont(const SkTestFontData& );
     virtual ~SkTestFont();
@@ -74,7 +74,6 @@ protected:
         uint32_t glyphIDsCount) const override;
 
     SkStreamAsset* onOpenStream(int* ttcIndex) const override {
-        SkASSERT(0);  // don't expect to get here
         return NULL;
     }
 

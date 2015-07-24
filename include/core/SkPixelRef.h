@@ -10,14 +10,14 @@
 
 #include "SkAtomics.h"
 #include "SkBitmap.h"
+#include "SkFilterQuality.h"
 #include "SkImageInfo.h"
 #include "SkMutex.h"
+#include "SkPixmap.h"
 #include "SkRefCnt.h"
 #include "SkSize.h"
 #include "SkString.h"
 #include "SkTDArray.h"
-
-//#define xed
 
 #ifdef SK_DEBUG
     /**
@@ -49,8 +49,6 @@ class GrTexture;
 */
 class SK_API SkPixelRef : public SkRefCnt {
 public:
-    SK_DECLARE_INST_COUNT(SkPixelRef)
-
     explicit SkPixelRef(const SkImageInfo&);
     SkPixelRef(const SkImageInfo&, SkBaseMutex* mutex);
     virtual ~SkPixelRef();
@@ -75,6 +73,8 @@ public:
      *  Calling lockPixels returns a LockRec struct (on success).
      */
     struct LockRec {
+        LockRec() : fPixels(NULL), fColorTable(NULL) {}
+
         void*           fPixels;
         SkColorTable*   fColorTable;
         size_t          fRowBytes;
@@ -193,6 +193,32 @@ public:
         return this->onRefEncodedData();
     }
 
+    struct LockRequest {
+        SkISize         fSize;
+        SkFilterQuality fQuality;
+    };
+
+    struct LockResult {
+        LockResult() : fPixels(NULL), fCTable(NULL) {}
+
+        void        (*fUnlockProc)(void* ctx);
+        void*       fUnlockContext;
+
+        const void* fPixels;
+        SkColorTable* fCTable;  // should be NULL unless colortype is kIndex8
+        size_t      fRowBytes;
+        SkISize     fSize;
+
+        void unlock() {
+            if (fUnlockProc) {
+                fUnlockProc(fUnlockContext);
+                fUnlockProc = NULL; // can't unlock twice!
+            }
+        }
+    };
+
+    bool requestLock(const LockRequest&, LockResult*);
+
     /** Are we really wrapping a texture instead of a bitmap?
      */
     virtual GrTexture* getTexture() { return NULL; }
@@ -285,6 +311,9 @@ protected:
     // default impl returns NULL.
     virtual SkData* onRefEncodedData();
 
+    // default impl does nothing.
+    virtual void onNotifyPixelsChanged();
+
     // default impl returns false.
     virtual bool onGetYUV8Planes(SkISize sizes[3], void* planes[3], size_t rowBytes[3],
                                  SkYUVColorSpace* colorSpace);
@@ -298,6 +327,8 @@ protected:
      *  @return default impl returns 0.
      */
     virtual size_t getAllocatedSizeInBytes() const;
+
+    virtual bool onRequestLock(const LockRequest&, LockResult*);
 
     /** Return the mutex associated with this pixelref. This value is assigned
         in the constructor, and cannot change during the lifetime of the object.
@@ -318,6 +349,8 @@ private:
     // LockRec is only valid if we're in a locked state (isLocked())
     LockRec         fRec;
     int             fLockCount;
+
+    bool lockPixelsInsideMutex();
 
     // Bottom bit indicates the Gen ID is unique.
     bool genIDIsUnique() const { return SkToBool(fTaggedGenID.load() & 1); }

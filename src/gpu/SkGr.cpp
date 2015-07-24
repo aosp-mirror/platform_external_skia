@@ -7,9 +7,12 @@
 
 #include "SkGr.h"
 
+#include "GrCaps.h"
+#include "GrDrawContext.h"
 #include "GrXferProcessor.h"
 #include "SkColorFilter.h"
 #include "SkConfig8888.h"
+#include "SkCanvas.h"
 #include "SkData.h"
 #include "SkErrorInternals.h"
 #include "SkGrPixelRef.h"
@@ -86,34 +89,62 @@ static void build_index8_data(void* buffer, const SkBitmap& bitmap) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-enum Stretch {
-    kNo_Stretch,
-    kBilerp_Stretch,
-    kNearest_Stretch
+struct Stretch {
+    enum Type {
+        kNone_Type,
+        kBilerp_Type,
+        kNearest_Type
+    } fType;
+    int fWidth;
+    int fHeight;
 };
 
-static Stretch get_stretch_type(const GrContext* ctx, int width, int height,
-                                const GrTextureParams* params) {
-    if (params && params->isTiled()) {
-        if (!ctx->npotTextureTileSupport() && (!SkIsPow2(width) || !SkIsPow2(height))) {
+static void get_stretch(const GrContext* ctx, int width, int height,
+                        const GrTextureParams* params, Stretch* stretch) {
+    stretch->fType = Stretch::kNone_Type;
+    bool doStretch = false;
+    if (params && params->isTiled() && !ctx->caps()->npotTextureTileSupport() &&
+        (!SkIsPow2(width) || !SkIsPow2(height))) {
+        doStretch = true;
+        stretch->fWidth  = GrNextPow2(SkTMax(width, ctx->caps()->minTextureSize()));
+        stretch->fHeight = GrNextPow2(SkTMax(height, ctx->caps()->minTextureSize()));
+    } else if (width < ctx->caps()->minTextureSize() || height < ctx->caps()->minTextureSize()) {
+        // The small texture issues appear to be with tiling. Hence it seems ok to scale them
+        // up using the GPU. If issues persist we may need to CPU-stretch.
+        doStretch = true;
+        stretch->fWidth = SkTMax(width, ctx->caps()->minTextureSize());
+        stretch->fHeight = SkTMax(height, ctx->caps()->minTextureSize());
+    }
+    if (doStretch) {
+        if (params) {
             switch(params->filterMode()) {
                 case GrTextureParams::kNone_FilterMode:
-                    return kNearest_Stretch;
+                    stretch->fType = Stretch::kNearest_Type;
+                    break;
                 case GrTextureParams::kBilerp_FilterMode:
                 case GrTextureParams::kMipMap_FilterMode:
-                    return kBilerp_Stretch;
+                    stretch->fType = Stretch::kBilerp_Type;
+                    break;
             }
+        } else {
+            stretch->fType = Stretch::kBilerp_Type;
         }
+    } else {
+        stretch->fWidth  = -1;
+        stretch->fHeight = -1;
+        stretch->fType = Stretch::kNone_Type;
     }
-    return kNo_Stretch;
 }
 
-static bool make_stretched_key(const GrUniqueKey& origKey, Stretch stretch,
+static bool make_stretched_key(const GrUniqueKey& origKey, const Stretch& stretch,
                                GrUniqueKey* stretchedKey) {
-    if (origKey.isValid() && kNo_Stretch != stretch) {
+    if (origKey.isValid() && Stretch::kNone_Type != stretch.fType) {
+        uint32_t width = SkToU16(stretch.fWidth);
+        uint32_t height = SkToU16(stretch.fHeight);
         static const GrUniqueKey::Domain kDomain = GrUniqueKey::GenerateDomain();
-        GrUniqueKey::Builder builder(stretchedKey, origKey, kDomain, 1);
-        builder[0] = stretch;
+        GrUniqueKey::Builder builder(stretchedKey, origKey, kDomain, 3);
+        builder[0] = stretch.fType;
+        builder[1] = width | (height << 16);
         builder.finish();
         return true;
     }
@@ -138,11 +169,11 @@ static void make_unstretched_key(const SkBitmap& bitmap, GrUniqueKey* key) {
 }
 
 static void make_bitmap_keys(const SkBitmap& bitmap,
-                             Stretch stretch,
+                             const Stretch& stretch,
                              GrUniqueKey* key,
                              GrUniqueKey* stretchedKey) {
     make_unstretched_key(bitmap, key);
-    if (kNo_Stretch != stretch) {
+    if (Stretch::kNone_Type != stretch.fType) {
         make_stretched_key(*key, stretch, stretchedKey);
     }
 }
@@ -187,38 +218,39 @@ static GrTexture* create_texture_for_bmp(GrContext* ctx,
     return result;
 }
 
-// creates a new texture that is the input texture scaled up to the next power of two in
-// width or height. If optionalKey is valid it will be set on the new texture. stretch
-// controls whether the scaling is done using nearest or bilerp filtering.
-GrTexture* stretch_texture_to_next_pot(GrTexture* inputTexture, Stretch stretch,
-                                       SkPixelRef* pixelRef,
-                                       const GrUniqueKey& optionalKey) {
-    SkASSERT(kNo_Stretch != stretch);
+// creates a new texture that is the input texture scaled up. If optionalKey is valid it will be
+// set on the new texture. stretch controls whether the scaling is done using nearest or bilerp
+// filtering and the size to stretch the texture to.
+GrTexture* stretch_texture(GrTexture* inputTexture, const Stretch& stretch,
+                           SkPixelRef* pixelRef,
+                           const GrUniqueKey& optionalKey) {
+    SkASSERT(Stretch::kNone_Type != stretch.fType);
 
     GrContext* context = inputTexture->getContext();
     SkASSERT(context);
+    const GrCaps* caps = context->caps();
 
     // Either it's a cache miss or the original wasn't cached to begin with.
     GrSurfaceDesc rtDesc = inputTexture->desc();
     rtDesc.fFlags =  rtDesc.fFlags | kRenderTarget_GrSurfaceFlag;
-    rtDesc.fWidth  = GrNextPow2(rtDesc.fWidth);
-    rtDesc.fHeight = GrNextPow2(rtDesc.fHeight);
+    rtDesc.fWidth  = stretch.fWidth;
+    rtDesc.fHeight = stretch.fHeight;
     rtDesc.fConfig = GrMakePixelConfigUncompressed(rtDesc.fConfig);
 
     // If the config isn't renderable try converting to either A8 or an 32 bit config. Otherwise,
     // fail.
-    if (!context->isConfigRenderable(rtDesc.fConfig, false)) {
+    if (!caps->isConfigRenderable(rtDesc.fConfig, false)) {
         if (GrPixelConfigIsAlphaOnly(rtDesc.fConfig)) {
-            if (context->isConfigRenderable(kAlpha_8_GrPixelConfig, false)) {
+            if (caps->isConfigRenderable(kAlpha_8_GrPixelConfig, false)) {
                 rtDesc.fConfig = kAlpha_8_GrPixelConfig;
-            } else if (context->isConfigRenderable(kSkia8888_GrPixelConfig, false)) {
+            } else if (caps->isConfigRenderable(kSkia8888_GrPixelConfig, false)) {
                 rtDesc.fConfig = kSkia8888_GrPixelConfig;
             } else {
                 return NULL;
             }
         } else if (kRGB_GrColorComponentFlags ==
                    (kRGB_GrColorComponentFlags & GrPixelConfigComponentMask(rtDesc.fConfig))) {
-            if (context->isConfigRenderable(kSkia8888_GrPixelConfig, false)) {
+            if (caps->isConfigRenderable(kSkia8888_GrPixelConfig, false)) {
                 rtDesc.fConfig = kSkia8888_GrPixelConfig;
             } else {
                 return NULL;
@@ -238,15 +270,21 @@ GrTexture* stretch_texture_to_next_pot(GrTexture* inputTexture, Stretch stretch,
     // If filtering is not desired then we want to ensure all texels in the resampled image are
     // copies of texels from the original.
     GrTextureParams params(SkShader::kClamp_TileMode,
-                           kBilerp_Stretch == stretch ? GrTextureParams::kBilerp_FilterMode :
-                                                        GrTextureParams::kNone_FilterMode);
+                           Stretch::kBilerp_Type == stretch.fType ?
+                              GrTextureParams::kBilerp_FilterMode :
+                              GrTextureParams::kNone_FilterMode);
     paint.addColorTextureProcessor(inputTexture, SkMatrix::I(), params);
 
     SkRect rect = SkRect::MakeWH(SkIntToScalar(rtDesc.fWidth), SkIntToScalar(rtDesc.fHeight));
     SkRect localRect = SkRect::MakeWH(1.f, 1.f);
 
-    context->drawNonAARectToRect(stretched->asRenderTarget(), GrClip::WideOpen(), paint,
-                                 SkMatrix::I(), rect, localRect);
+    GrDrawContext* drawContext = context->drawContext();
+    if (!drawContext) {
+        return NULL;
+    }
+
+    drawContext->drawNonAARectToRect(stretched->asRenderTarget(), GrClip::WideOpen(), paint,
+                                     SkMatrix::I(), rect, localRect);
 
     return stretched;
 }
@@ -390,15 +428,21 @@ static GrTexture* load_yuv_texture(GrContext* ctx, const GrUniqueKey& optionalKe
     GrRenderTarget* renderTarget = result->asRenderTarget();
     SkASSERT(renderTarget);
 
-    SkAutoTUnref<GrFragmentProcessor>
-        yuvToRgbProcessor(GrYUVtoRGBEffect::Create(yuvTextures[0], yuvTextures[1], yuvTextures[2],
-                                                   yuvInfo.fSize, yuvInfo.fColorSpace));
     GrPaint paint;
+    SkAutoTUnref<GrFragmentProcessor>
+        yuvToRgbProcessor(GrYUVtoRGBEffect::Create(paint.getProcessorDataManager(), yuvTextures[0],
+                                                   yuvTextures[1], yuvTextures[2],
+                                                   yuvInfo.fSize, yuvInfo.fColorSpace));
     paint.addColorProcessor(yuvToRgbProcessor);
     SkRect r = SkRect::MakeWH(SkIntToScalar(yuvInfo.fSize[0].fWidth),
                               SkIntToScalar(yuvInfo.fSize[0].fHeight));
 
-    ctx->drawRect(renderTarget, GrClip::WideOpen(), paint, SkMatrix::I(), r);
+    GrDrawContext* drawContext = ctx->drawContext();
+    if (!drawContext) {
+        return NULL;
+    }
+
+    drawContext->drawRect(renderTarget, GrClip::WideOpen(), paint, SkMatrix::I(), r);
 
     return result;
 }
@@ -406,15 +450,20 @@ static GrTexture* load_yuv_texture(GrContext* ctx, const GrUniqueKey& optionalKe
 static GrTexture* create_unstretched_bitmap_texture(GrContext* ctx,
                                                     const SkBitmap& origBitmap,
                                                     const GrUniqueKey& optionalKey) {
+    if (origBitmap.width() < ctx->caps()->minTextureSize() ||
+        origBitmap.height() < ctx->caps()->minTextureSize()) {
+        return NULL;
+    }
     SkBitmap tmpBitmap;
 
     const SkBitmap* bitmap = &origBitmap;
 
     GrSurfaceDesc desc;
     generate_bitmap_texture_desc(*bitmap, &desc);
+    const GrCaps* caps = ctx->caps();
 
     if (kIndex_8_SkColorType == bitmap->colorType()) {
-        if (ctx->isConfigTexturable(kIndex_8_GrPixelConfig)) {
+        if (caps->isConfigTexturable(kIndex_8_GrPixelConfig)) {
             size_t imageSize = GrCompressedFormatDataSize(kIndex_8_GrPixelConfig,
                                                           bitmap->width(), bitmap->height());
             SkAutoMalloc storage(imageSize);
@@ -436,7 +485,7 @@ static GrTexture* create_unstretched_bitmap_texture(GrContext* ctx,
 #ifndef SK_IGNORE_ETC1_SUPPORT
     // Make sure that the underlying device supports ETC1 textures before we go ahead
     // and check the data.
-    else if (ctx->isConfigTexturable(kETC1_GrPixelConfig)
+    else if (caps->isConfigTexturable(kETC1_GrPixelConfig)
             // If the bitmap had compressed data and was then uncompressed, it'll still return
             // compressed data on 'refEncodedData' and upload it. Probably not good, since if
             // the bitmap has available pixels, then they might not be what the decompressed
@@ -463,12 +512,33 @@ static GrTexture* create_unstretched_bitmap_texture(GrContext* ctx,
                                   bitmap->getPixels(), bitmap->rowBytes());
 }
 
+static SkBitmap stretch_on_cpu(const SkBitmap& bmp, const Stretch& stretch) {
+    SkBitmap stretched;
+    stretched.allocN32Pixels(stretch.fWidth, stretch.fHeight);
+    SkCanvas canvas(stretched);
+    SkPaint paint;
+    switch (stretch.fType) {
+        case Stretch::kNearest_Type:
+            paint.setFilterQuality(kNone_SkFilterQuality);
+            break;
+        case Stretch::kBilerp_Type:
+            paint.setFilterQuality(kLow_SkFilterQuality);
+            break;
+        case Stretch::kNone_Type:
+            SkDEBUGFAIL("Shouldn't get here.");
+            break;
+    }
+    SkRect dstRect = SkRect::MakeWH(SkIntToScalar(stretch.fWidth), SkIntToScalar(stretch.fHeight));
+    canvas.drawBitmapRect(bmp, dstRect, &paint);
+    return stretched;
+}
+
 static GrTexture* create_bitmap_texture(GrContext* ctx,
                                         const SkBitmap& bmp,
-                                        Stretch stretch,
+                                        const Stretch& stretch,
                                         const GrUniqueKey& unstretchedKey,
                                         const GrUniqueKey& stretchedKey) {
-    if (kNo_Stretch != stretch) {
+    if (Stretch::kNone_Type != stretch.fType) {
         SkAutoTUnref<GrTexture> unstretched;
         // Check if we have the unstretched version in the cache, if not create it.
         if (unstretchedKey.isValid()) {
@@ -477,27 +547,27 @@ static GrTexture* create_bitmap_texture(GrContext* ctx,
         if (!unstretched) {
             unstretched.reset(create_unstretched_bitmap_texture(ctx, bmp, unstretchedKey));
             if (!unstretched) {
-                return NULL;
+                // We might not have been able to create a unstrecthed texture because it is smaller
+                // than the min texture size. In that case do cpu stretching.
+                SkBitmap stretchedBmp = stretch_on_cpu(bmp, stretch);
+                return create_unstretched_bitmap_texture(ctx, stretchedBmp, stretchedKey);
             }
         }
-        GrTexture* stretched = stretch_texture_to_next_pot(unstretched, stretch, bmp.pixelRef(),
-                                                           stretchedKey);
-        return stretched;
+        return stretch_texture(unstretched, stretch, bmp.pixelRef(), stretchedKey);
     }
-
     return create_unstretched_bitmap_texture(ctx, bmp, unstretchedKey);
-
 }
 
 bool GrIsBitmapInCache(const GrContext* ctx,
                        const SkBitmap& bitmap,
                        const GrTextureParams* params) {
-    Stretch stretch = get_stretch_type(ctx, bitmap.width(), bitmap.height(), params);
+    Stretch stretch;
+    get_stretch(ctx, bitmap.width(), bitmap.height(), params, &stretch);
 
     // Handle the case where the bitmap is explicitly texture backed.
     GrTexture* texture = bitmap.getTexture();
     if (texture) {
-        if (kNo_Stretch == stretch) {
+        if (Stretch::kNone_Type == stretch.fType) {
             return true;
         }
         // No keys for volatile bitmaps.
@@ -521,18 +591,19 @@ bool GrIsBitmapInCache(const GrContext* ctx,
     GrUniqueKey key, stretchedKey;
     make_bitmap_keys(bitmap, stretch, &key, &stretchedKey);
     return ctx->textureProvider()->existsTextureWithUniqueKey(
-        (kNo_Stretch == stretch) ? key : stretchedKey);
+        (Stretch::kNone_Type == stretch.fType) ? key : stretchedKey);
 }
 
 GrTexture* GrRefCachedBitmapTexture(GrContext* ctx,
                                     const SkBitmap& bitmap,
                                     const GrTextureParams* params) {
 
-    Stretch stretch = get_stretch_type(ctx, bitmap.width(), bitmap.height(), params);
+    Stretch stretch;
+    get_stretch(ctx, bitmap.width(), bitmap.height(), params, &stretch);
 
     GrTexture* result = bitmap.getTexture();
     if (result) {
-        if (kNo_Stretch == stretch) {
+        if (Stretch::kNone_Type == stretch.fType) {
             return SkRef(result);
         }
         GrUniqueKey stretchedKey;
@@ -548,7 +619,7 @@ GrTexture* GrRefCachedBitmapTexture(GrContext* ctx,
                 }
             }
         }
-        return stretch_texture_to_next_pot(result, stretch, bitmap.pixelRef(), stretchedKey);
+        return stretch_texture(result, stretch, bitmap.pixelRef(), stretchedKey);
     }
 
     GrUniqueKey key, resizedKey;
@@ -590,9 +661,9 @@ GrPixelConfig SkImageInfo2GrPixelConfig(SkColorType ct, SkAlphaType, SkColorProf
         case kARGB_4444_SkColorType:
             return kRGBA_4444_GrPixelConfig;
         case kRGBA_8888_SkColorType:
-//            if (kSRGB_SkColorProfileType == pt) {
-//                return kSRGBA_8888_GrPixelConfig;
-//            }
+            //if (kSRGB_SkColorProfileType == pt) {
+            //    return kSRGBA_8888_GrPixelConfig;
+            //}
             return kRGBA_8888_GrPixelConfig;
         case kBGRA_8888_SkColorType:
             return kBGRA_8888_GrPixelConfig;
@@ -675,7 +746,8 @@ bool SkPaint2GrPaintNoShader(GrContext* context, GrRenderTarget* rt, const SkPai
         } else {
             SkTDArray<GrFragmentProcessor*> array;
             // return false if failed?
-            if (colorFilter->asFragmentProcessors(context, &array)) {
+            if (colorFilter->asFragmentProcessors(context, grPaint->getProcessorDataManager(),
+                                                  &array)) {
                 for (int i = 0; i < array.count(); ++i) {
                     grPaint->addColorProcessor(array[i]);
                     array[i]->unref();
@@ -725,7 +797,8 @@ bool SkPaint2GrPaint(GrContext* context, GrRenderTarget* rt, const SkPaint& skPa
         // Allow the shader to modify paintColor and also create an effect to be installed as
         // the first color effect on the GrPaint.
         GrFragmentProcessor* fp = NULL;
-        if (!shader->asFragmentProcessor(context, skPaint, viewM, NULL, &paintColor, &fp)) {
+        if (!shader->asFragmentProcessor(context, skPaint, viewM, NULL, &paintColor,
+                                         grPaint->getProcessorDataManager(), &fp)) {
             return false;
         }
         if (fp) {

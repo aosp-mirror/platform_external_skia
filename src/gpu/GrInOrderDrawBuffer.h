@@ -34,9 +34,6 @@ public:
 
     ~GrInOrderDrawBuffer() override;
 
-    // tracking for draws
-    DrawToken getCurrentDrawToken() override { return DrawToken(this, fDrawID); }
-
     void clearStencilClip(const SkIRect& rect,
                           bool insideClip,
                           GrRenderTarget* renderTarget) override;
@@ -112,8 +109,6 @@ private:
                        const SkIRect& srcRect,
                        const SkIPoint& dstPoint) override;
 
-    // We lazily record clip changes in order to skip clips that have no effect.
-    void recordClipIfNecessary();
     // Records any trace markers for a command
     void recordTraceMarkersIfNecessary(GrTargetCommands::Cmd*);
     SkString getCmdString(int index) const {

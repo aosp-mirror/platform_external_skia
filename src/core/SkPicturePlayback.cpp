@@ -11,6 +11,7 @@
 #include "SkPicturePlayback.h"
 #include "SkPictureRecord.h"
 #include "SkReader32.h"
+#include "SkRSXform.h"
 #include "SkTextBlob.h"
 #include "SkTDArray.h"
 #include "SkTypes.h"
@@ -156,20 +157,38 @@ void SkPicturePlayback::handleOp(SkReader32* reader,
             canvas->concat(matrix);
             break;
         }
+        case DRAW_ATLAS: {
+            const SkPaint* paint = fPictureData->getPaint(reader);
+            const SkImage* atlas = fPictureData->getImage(reader);
+            const uint32_t flags = reader->readU32();
+            const int count = reader->readU32();
+            const SkRSXform* xform = (const SkRSXform*)reader->skip(count * sizeof(SkRSXform));
+            const SkRect* tex = (const SkRect*)reader->skip(count * sizeof(SkRect));
+            const SkColor* colors = NULL;
+            SkXfermode::Mode mode = SkXfermode::kDst_Mode;
+            if (flags & DRAW_ATLAS_HAS_COLORS) {
+                colors = (const SkColor*)reader->skip(count * sizeof(SkColor));
+                mode = (SkXfermode::Mode)reader->readU32();
+            }
+            const SkRect* cull = NULL;
+            if (flags & DRAW_ATLAS_HAS_CULL) {
+                cull = (const SkRect*)reader->skip(sizeof(SkRect));
+            }
+            canvas->drawAtlas(atlas, xform, tex, colors, count, mode, cull, paint);
+        } break;
         case DRAW_BITMAP: {
             const SkPaint* paint = fPictureData->getPaint(reader);
             const SkBitmap bitmap = shallow_copy(fPictureData->getBitmap(reader));
             const SkPoint& loc = reader->skipT<SkPoint>();
             canvas->drawBitmap(bitmap, loc.fX, loc.fY, paint);
         } break;
-        case DRAW_BITMAP_RECT_TO_RECT: {
+        case DRAW_BITMAP_RECT: {
             const SkPaint* paint = fPictureData->getPaint(reader);
             const SkBitmap bitmap = shallow_copy(fPictureData->getBitmap(reader));
             const SkRect* src = get_rect_ptr(reader);   // may be null
             const SkRect& dst = reader->skipT<SkRect>();     // required
-            SkCanvas::DrawBitmapRectFlags flags;
-            flags = (SkCanvas::DrawBitmapRectFlags) reader->readInt();
-            canvas->drawBitmapRectToRect(bitmap, src, dst, paint, flags);
+            SkCanvas::SrcRectConstraint constraint = (SkCanvas::SrcRectConstraint)reader->readInt();
+            canvas->drawBitmapRect(bitmap, src, dst, paint, constraint);
         } break;
         case DRAW_BITMAP_MATRIX: {
             const SkPaint* paint = fPictureData->getPaint(reader);
@@ -204,17 +223,44 @@ void SkPicturePlayback::handleOp(SkReader32* reader,
             reader->readRRect(&inner);
             canvas->drawDRRect(outer, inner, paint);
         } break;
-        case BEGIN_COMMENT_GROUP: {
-            const char* desc = reader->readString();
-            canvas->beginCommentGroup(desc);
+        case BEGIN_COMMENT_GROUP:
+            reader->readString();
+            // deprecated (M44)
+            break;
+        case COMMENT:
+            reader->readString();
+            reader->readString();
+            // deprecated (M44)
+            break;
+        case END_COMMENT_GROUP:
+            // deprecated (M44)
+            break;
+        case DRAW_IMAGE: {
+            const SkPaint* paint = fPictureData->getPaint(reader);
+            const SkImage* image = fPictureData->getImage(reader);
+            const SkPoint& loc = reader->skipT<SkPoint>();
+            canvas->drawImage(image, loc.fX, loc.fY, paint);
         } break;
-        case COMMENT: {
-            const char* kywd = reader->readString();
-            const char* value = reader->readString();
-            canvas->addComment(kywd, value);
+        case DRAW_IMAGE_NINE: {
+            const SkPaint* paint = fPictureData->getPaint(reader);
+            const SkImage* image = fPictureData->getImage(reader);
+            const SkIRect& center = reader->skipT<SkIRect>();
+            const SkRect& dst = reader->skipT<SkRect>();
+            canvas->drawImageNine(image, center, dst, paint);
         } break;
-        case END_COMMENT_GROUP: {
-            canvas->endCommentGroup();
+        case DRAW_IMAGE_RECT_STRICT:
+        case DRAW_IMAGE_RECT: {
+            const SkPaint* paint = fPictureData->getPaint(reader);
+            const SkImage* image = fPictureData->getImage(reader);
+            const SkRect* src = get_rect_ptr(reader);   // may be null
+            const SkRect& dst = reader->skipT<SkRect>();     // required
+            // DRAW_IMAGE_RECT_STRICT assumes this constraint, and doesn't store it
+            SkCanvas::SrcRectConstraint constraint = SkCanvas::kStrict_SrcRectConstraint;
+            if (DRAW_IMAGE_RECT == op) {
+                // newer op-code stores the constraint explicitly
+                constraint = (SkCanvas::SrcRectConstraint)reader->readInt();
+            }
+            canvas->drawImageRect(image, src, dst, paint, constraint);
         } break;
         case DRAW_OVAL: {
             const SkPaint& paint = *fPictureData->getPaint(reader);

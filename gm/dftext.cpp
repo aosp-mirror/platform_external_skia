@@ -15,20 +15,18 @@ class DFTextGM : public skiagm::GM {
 public:
     DFTextGM() {
         this->setBGColor(0xFFFFFFFF);
-        fTypeface = NULL;
-    }
-
-    virtual ~DFTextGM() {
-        SkSafeUnref(fTypeface);
     }
 
 protected:
     void onOnceBeforeDraw() override {
-        fTypeface = GetResourceAsTypeface("/fonts/Funkster.ttf");
+        sk_tool_utils::emoji_typeface(&fEmojiTypeface);
+        fEmojiText = sk_tool_utils::emoji_sample_text();
     }
 
     SkString onShortName() override {
-        return SkString("dftext");
+        SkString name("dftext");
+        name.append(sk_tool_utils::platform_os_emoji());
+        return name;
     }
 
     SkISize onISize() override {
@@ -44,11 +42,7 @@ protected:
     }
 
     virtual void onDraw(SkCanvas* inputCanvas) override {
-#ifdef SK_BUILD_FOR_ANDROID
         SkScalar textSizes[] = { 9.0f, 9.0f*2.0f, 9.0f*5.0f, 9.0f*2.0f*5.0f };
-#else
-        SkScalar textSizes[] = { 11.0f, 11.0f*2.0f, 11.0f*5.0f, 11.0f*2.0f*5.0f };
-#endif
         SkScalar scales[] = { 2.0f*5.0f, 5.0f, 2.0f, 1.0f };
 
         // set up offscreen rendering with distance field text
@@ -72,10 +66,8 @@ protected:
         SkPaint paint;
         paint.setAntiAlias(true);
         paint.setSubpixelText(true);
-#if !SK_SUPPORT_GPU
-        paint.setDistanceFieldTextTEMP(true);
-#endif
-        sk_tool_utils::set_portable_typeface(&paint, "Times New Roman", SkTypeface::kNormal);
+
+        sk_tool_utils::set_portable_typeface_always(&paint, "serif", SkTypeface::kNormal);
 
         const char* text = "Hamburgefons";
         const size_t textLen = strlen(text);
@@ -153,17 +145,13 @@ protected:
             0xFF000000,
         };
 
-        paint.setColor(0xFFF1F1F1);
-        SkRect r = SkRect::MakeLTRB(670, 250, 820, 460);
+        paint.setColor(0xFFF7F3F7);
+        SkRect r = SkRect::MakeLTRB(670, 215, 820, 397);
         canvas->drawRect(r, paint);
 
         x = SkIntToScalar(680);
-        y = SkIntToScalar(270);
-#ifdef SK_BUILD_FOR_ANDROID
+        y = SkIntToScalar(235);
         paint.setTextSize(SkIntToScalar(19));
-#else
-        paint.setTextSize(SkIntToScalar(22));
-#endif
         for (size_t i = 0; i < SK_ARRAY_COUNT(fg); ++i) {
             paint.setColor(fg[i]);
 
@@ -171,17 +159,13 @@ protected:
             y += paint.getFontMetrics(NULL);
         }
 
-        paint.setColor(0xFF1F1F1F);
-        r = SkRect::MakeLTRB(820, 250, 970, 460);
+        paint.setColor(0xFF181C18);
+        r = SkRect::MakeLTRB(820, 215, 970, 397);
         canvas->drawRect(r, paint);
 
         x = SkIntToScalar(830);
-        y = SkIntToScalar(270);
-#ifdef SK_BUILD_FOR_ANDROID
+        y = SkIntToScalar(235);
         paint.setTextSize(SkIntToScalar(19));
-#else
-        paint.setTextSize(SkIntToScalar(22));
-#endif
         for (size_t i = 0; i < SK_ARRAY_COUNT(fg); ++i) {
             paint.setColor(fg[i]);
 
@@ -202,18 +186,15 @@ protected:
             SkAutoCanvasRestore acr(canvas, true);
             canvas->skew(0.5f, 0.0f);
             paint.setTextSize(SkIntToScalar(32));
-            canvas->drawText(text, textLen, 580, 230, paint);
+            canvas->drawText(text, textLen, 580, 125, paint);
         }
 
         // check color emoji
-        paint.setTypeface(fTypeface);
-#ifdef SK_BUILD_FOR_ANDROID
-        paint.setTextSize(SkIntToScalar(19));
-#else
-        paint.setTextSize(SkIntToScalar(22));
-#endif
-        canvas->drawText(text, textLen, 670, 100, paint);
-
+        if (fEmojiTypeface) {
+            paint.setTypeface(fEmojiTypeface);
+            paint.setTextSize(SkIntToScalar(19));
+            canvas->drawText(fEmojiText, strlen(fEmojiText), 670, 90, paint);
+        }
 #if SK_SUPPORT_GPU
         // render offscreen buffer
         if (surface) {
@@ -228,7 +209,8 @@ protected:
     }
 
 private:
-    SkTypeface* fTypeface;
+    SkAutoTUnref<SkTypeface> fEmojiTypeface;
+    const char* fEmojiText;
 
     typedef skiagm::GM INHERITED;
 };

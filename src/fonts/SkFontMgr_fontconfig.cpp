@@ -5,14 +5,14 @@
  * found in the LICENSE file.
  */
 
-#include "SkFontMgr.h"
-#include "SkFontStyle.h"
 #include "SkFontConfigInterface.h"
 #include "SkFontConfigTypeface.h"
+#include "SkFontMgr.h"
+#include "SkFontStyle.h"
 #include "SkMath.h"
+#include "SkMutex.h"
 #include "SkString.h"
 #include "SkTDArray.h"
-#include "SkThread.h"
 
 // for now we pull these in directly. eventually we will solely rely on the
 // SkFontConfigInterface instance.
@@ -308,7 +308,7 @@ protected:
         // TODO should the caller give us the style or should we get it from freetype?
         SkFontStyle style;
         bool isFixedWidth = false;
-        if (!fScanner.scanFont(stream, 0, NULL, &style, &isFixedWidth)) {
+        if (!fScanner.scanFont(stream, 0, NULL, &style, &isFixedWidth, NULL)) {
             return NULL;
         }
 

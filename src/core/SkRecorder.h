@@ -8,7 +8,9 @@
 #ifndef SkRecorder_DEFINED
 #define SkRecorder_DEFINED
 
+#include "SkBigPicture.h"
 #include "SkCanvas.h"
+#include "SkMiniRecorder.h"
 #include "SkRecord.h"
 #include "SkRecords.h"
 #include "SkTDArray.h"
@@ -17,6 +19,7 @@ class SkBBHFactory;
 
 class SkDrawableList : SkNoncopyable {
 public:
+    SkDrawableList() {}
     ~SkDrawableList();
 
     int count() const { return fArray.count(); }
@@ -25,7 +28,7 @@ public:
     void append(SkDrawable* drawable);
 
     // Return a new or ref'd array of pictures that were snapped from our drawables.
-    SkPicture::SnapshotArray* newDrawableSnapshot();
+    SkBigPicture::SnapshotArray* newDrawableSnapshot();
 
 private:
     SkTDArray<SkDrawable*> fArray;
@@ -36,10 +39,11 @@ private:
 class SkRecorder : public SkCanvas {
 public:
     // Does not take ownership of the SkRecord.
-    SkRecorder(SkRecord*, int width, int height);   // legacy version
-    SkRecorder(SkRecord*, const SkRect& bounds);
+    SkRecorder(SkRecord*, int width, int height, SkMiniRecorder* = nullptr);   // legacy version
+    SkRecorder(SkRecord*, const SkRect& bounds, SkMiniRecorder* = nullptr);
 
-    void reset(SkRecord*, const SkRect& bounds);
+    enum DrawPictureMode { Record_DrawPictureMode, Playback_DrawPictureMode };
+    void reset(SkRecord*, const SkRect& bounds, DrawPictureMode, SkMiniRecorder* = nullptr);
 
     size_t approxBytesUsedBySubPictures() const { return fApproxBytesUsedBySubPictures; }
 
@@ -58,7 +62,7 @@ public:
     void didSetMatrix(const SkMatrix&) override;
 
     void onDrawDRRect(const SkRRect&, const SkRRect&, const SkPaint&) override;
-    void onDrawDrawable(SkDrawable*) override;
+    void onDrawDrawable(SkDrawable*, const SkMatrix*) override;
     void onDrawText(const void* text,
                     size_t byteLength,
                     SkScalar x,
@@ -94,9 +98,11 @@ public:
     void onDrawPath(const SkPath&, const SkPaint&) override;
     void onDrawBitmap(const SkBitmap&, SkScalar left, SkScalar top, const SkPaint*) override;
     void onDrawBitmapRect(const SkBitmap&, const SkRect* src, const SkRect& dst, const SkPaint*,
-                          DrawBitmapRectFlags flags) override;
+                          SK_VIRTUAL_CONSTRAINT_TYPE) override;
     void onDrawImage(const SkImage*, SkScalar left, SkScalar top, const SkPaint*) override;
     void onDrawImageRect(const SkImage*, const SkRect* src, const SkRect& dst,
+                         const SkPaint* SRC_RECT_CONSTRAINT_PARAM(constraint)) override;
+    void onDrawImageNine(const SkImage*, const SkIRect& center, const SkRect& dst,
                          const SkPaint*) override;
     void onDrawBitmapNine(const SkBitmap&, const SkIRect& center, const SkRect& dst,
                           const SkPaint*) override;
@@ -106,6 +112,8 @@ public:
                         const SkColor colors[], SkXfermode* xmode,
                         const uint16_t indices[], int indexCount,
                         const SkPaint&) override;
+    void onDrawAtlas(const SkImage*, const SkRSXform[], const SkRect[], const SkColor[],
+                     int count, SkXfermode::Mode, const SkRect* cull, const SkPaint*) override;
 
     void onClipRect(const SkRect& rect, SkRegion::Op op, ClipEdgeStyle edgeStyle) override;
     void onClipRRect(const SkRRect& rrect, SkRegion::Op op, ClipEdgeStyle edgeStyle) override;
@@ -114,11 +122,9 @@ public:
 
     void onDrawPicture(const SkPicture*, const SkMatrix*, const SkPaint*) override;
 
-    void beginCommentGroup(const char*) override;
-    void addComment(const char*, const char*) override;
-    void endCommentGroup() override;
-
     SkSurface* onNewSurface(const SkImageInfo&, const SkSurfaceProps&) override { return NULL; }
+
+    void flushMiniRecorder();
 
 private:
     template <typename T>
@@ -133,9 +139,12 @@ private:
         return devBounds;
     }
 
+    DrawPictureMode fDrawPictureMode;
     size_t fApproxBytesUsedBySubPictures;
     SkRecord* fRecord;
     SkAutoTDelete<SkDrawableList> fDrawableList;
+
+    SkMiniRecorder* fMiniRecorder;
 };
 
 #endif//SkRecorder_DEFINED

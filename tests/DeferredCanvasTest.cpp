@@ -8,7 +8,6 @@
 #include "../src/image/SkImagePriv.h"
 #include "../src/image/SkSurface_Base.h"
 #include "SkBitmap.h"
-#include "SkBitmapDevice.h"
 #include "SkBitmapProcShader.h"
 #include "SkDeferredCanvas.h"
 #include "SkGradientShader.h"
@@ -65,7 +64,7 @@ public:
     }
 
     SkImage* onNewImageSnapshot(Budgeted) override {
-        return SkNewImageFromBitmap(fBitmap, true, &this->props());
+        return SkNewImageFromRasterBitmap(fBitmap, true, &this->props());
     }
 
     void onCopyOnWrite(ContentChangeMode mode) override {
@@ -440,19 +439,6 @@ static void TestDeferredCanvasFreshFrame(skiatest::Reporter* reporter) {
     }
 }
 
-class MockDevice : public SkBitmapDevice {
-public:
-    MockDevice(const SkBitmap& bm) : SkBitmapDevice(bm) {
-        fDrawBitmapCallCount = 0;
-    }
-    virtual void drawBitmap(const SkDraw&, const SkBitmap&,
-                            const SkMatrix&, const SkPaint&) override {
-        fDrawBitmapCallCount++;
-    }
-
-    int fDrawBitmapCallCount;
-};
-
 class NotificationCounter : public SkDeferredCanvas::NotificationClient {
 public:
     NotificationCounter() {
@@ -689,6 +675,22 @@ static void TestDeferredCanvasBitmapSizeThreshold(skiatest::Reporter* reporter) 
     }
 }
 
+static void TestDeferredCanvasImageFreeAfterFlush(skiatest::Reporter* reporter) {
+    SkAutoTUnref<SkSurface> surface(SkSurface::NewRasterN32Premul(100, 100));
+    SkAutoTUnref<SkSurface> sourceSurface(SkSurface::NewRasterN32Premul(100, 100));
+    SkAutoTUnref<SkImage> sourceImage(sourceSurface->newImageSnapshot());
+    SkAutoTUnref<SkDeferredCanvas> canvas(SkDeferredCanvas::Create(surface.get()));
+
+    canvas->drawImage(sourceImage, 0, 0, NULL);
+
+    size_t newBytesAllocated = canvas->storageAllocatedForRecording();
+    REPORTER_ASSERT(reporter, newBytesAllocated > 0);
+
+    canvas->flush();
+    
+    newBytesAllocated = canvas->storageAllocatedForRecording();
+    REPORTER_ASSERT(reporter, newBytesAllocated == 0);
+}
 
 typedef const void* PixelPtr;
 // Returns an opaque pointer which, either points to a GrTexture or RAM pixel
@@ -930,6 +932,7 @@ DEF_TEST(DeferredCanvas_CPU, reporter) {
     TestDeferredCanvasSkip(reporter);
     TestDeferredCanvasBitmapShaderNoLeak(reporter);
     TestDeferredCanvasBitmapSizeThreshold(reporter);
+    TestDeferredCanvasImageFreeAfterFlush(reporter);    
     TestDeferredCanvasCreateCompatibleDevice(reporter);
     TestDeferredCanvasWritePixelsToSurface(reporter);
     TestDeferredCanvasGetCanvasSize(reporter);

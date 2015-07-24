@@ -21,6 +21,7 @@
         'chrome_fuzz',
         'dump_record',
         'filter',
+        'flatten',
         'gpuveto',
         'lua_app',
         'lua_pictures',
@@ -189,6 +190,7 @@
           'link_settings': {
             'libraries': [
               '-lrt',
+              '-pthread',
             ],
           },
         }],
@@ -272,6 +274,16 @@
       ],
       'dependencies': [
         'flags.gyp:flags',
+        'skia_lib.gyp:skia_lib',
+      ],
+    },
+    {
+      'target_name': 'flatten',
+      'type': 'executable',
+      'sources': [
+        '../tools/flatten.cpp',
+      ],
+      'dependencies': [
         'skia_lib.gyp:skia_lib',
       ],
     },
@@ -641,6 +653,7 @@
           '<(skia_include_path)/ports/SkAtomics_std.h',
           '<(skia_include_path)/ports/SkAtomics_atomic.h',
           '<(skia_include_path)/ports/SkAtomics_sync.h',
+          '<(skia_include_path)/ports/SkFontMgr_fontconfig.h',
           '<(skia_include_path)/ports/SkMutex_pthread.h',
           '<(skia_include_path)/ports/SkMutex_win.h',
           '<(skia_include_path)/ports/SkTypeface_mac.h',

@@ -16,7 +16,8 @@
 #include "effects/GrPorterDuffXferProcessor.h"
 
 GrPipelineBuilder::GrPipelineBuilder()
-    : fFlags(0x0)
+    : fProcDataManager(SkNEW(GrProcessorDataManager))
+    , fFlags(0x0)
     , fDrawFace(kBoth_DrawFace)
     , fColorProcInfoValid(false)
     , fCoverageProcInfoValid(false)
@@ -26,6 +27,7 @@ GrPipelineBuilder::GrPipelineBuilder()
 }
 
 GrPipelineBuilder& GrPipelineBuilder::operator=(const GrPipelineBuilder& that) {
+    fProcDataManager.reset(SkNEW_ARGS(GrProcessorDataManager, (*that.processorDataManager())));
     fRenderTarget.reset(SkSafeRef(that.fRenderTarget.get()));
     fFlags = that.fFlags;
     fStencilSettings = that.fStencilSettings;
@@ -48,8 +50,12 @@ GrPipelineBuilder& GrPipelineBuilder::operator=(const GrPipelineBuilder& that) {
     return *this;
 }
 
-void GrPipelineBuilder::setFromPaint(const GrPaint& paint, GrRenderTarget* rt, const GrClip& clip) {
-    SkASSERT(0 == fBlockEffectRemovalCnt || 0 == this->numFragmentStages());
+GrPipelineBuilder::GrPipelineBuilder(const GrPaint& paint, GrRenderTarget* rt, const GrClip& clip) {
+    SkDEBUGCODE(fBlockEffectRemovalCnt = 0;)
+
+    // TODO keep this logically const using an AutoReset
+    fProcDataManager.reset(
+         const_cast<GrProcessorDataManager*>(SkRef(paint.processorDataManager())));
 
     fColorStages.reset();
     fCoverageStages.reset();
@@ -75,7 +81,7 @@ void GrPipelineBuilder::setFromPaint(const GrPaint& paint, GrRenderTarget* rt, c
 
     this->setState(GrPipelineBuilder::kDither_Flag, paint.isDither());
     this->setState(GrPipelineBuilder::kHWAntialias_Flag,
-                   rt->isMultisampled() && paint.isAntiAlias());
+                   rt->isUnifiedMultisampled() && paint.isAntiAlias());
 
     fColorProcInfoValid = false;
     fCoverageProcInfoValid = false;
@@ -86,13 +92,15 @@ void GrPipelineBuilder::setFromPaint(const GrPaint& paint, GrRenderTarget* rt, c
 
 //////////////////////////////////////////////////////////////////////////////s
 
-bool GrPipelineBuilder::willXPNeedDstCopy(const GrDrawTargetCaps& caps,
-                                          const GrProcOptInfo& colorPOI,
-                                          const GrProcOptInfo& coveragePOI) const {
-    return this->getXPFactory()->willNeedDstCopy(caps, colorPOI, coveragePOI);
+bool GrPipelineBuilder::willXPNeedDstTexture(const GrCaps& caps,
+                                             const GrProcOptInfo& colorPOI,
+                                             const GrProcOptInfo& coveragePOI) const {
+    return this->getXPFactory()->willNeedDstTexture(caps, colorPOI, coveragePOI,
+                                                    this->hasMixedSamples());
 }
 
-void GrPipelineBuilder::AutoRestoreFragmentProcessors::set(GrPipelineBuilder* pipelineBuilder) {
+void GrPipelineBuilder::AutoRestoreFragmentProcessorState::set(
+                                                         const GrPipelineBuilder* pipelineBuilder) {
     if (fPipelineBuilder) {
         int m = fPipelineBuilder->numColorFragmentStages() - fColorEffectCnt;
         SkASSERT(m >= 0);
@@ -106,12 +114,14 @@ void GrPipelineBuilder::AutoRestoreFragmentProcessors::set(GrPipelineBuilder* pi
             fPipelineBuilder->fCoverageProcInfoValid = false;
         }
         SkDEBUGCODE(--fPipelineBuilder->fBlockEffectRemovalCnt;)
+        fPipelineBuilder->getProcessorDataManager()->restoreToSaveMarker(/*fSaveMarker*/);
     }
-    fPipelineBuilder = pipelineBuilder;
+    fPipelineBuilder = const_cast<GrPipelineBuilder*>(pipelineBuilder);
     if (NULL != pipelineBuilder) {
         fColorEffectCnt = pipelineBuilder->numColorFragmentStages();
         fCoverageEffectCnt = pipelineBuilder->numCoverageFragmentStages();
         SkDEBUGCODE(++pipelineBuilder->fBlockEffectRemovalCnt;)
+        fSaveMarker = pipelineBuilder->processorDataManager()->currentSaveMarker();
     }
 }
 
@@ -123,13 +133,12 @@ GrPipelineBuilder::~GrPipelineBuilder() {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool GrPipelineBuilder::willBlendWithDst(const GrPrimitiveProcessor* pp) const {
+bool GrPipelineBuilder::willColorBlendWithDst(const GrPrimitiveProcessor* pp) const {
     this->calcColorInvariantOutput(pp);
-    this->calcCoverageInvariantOutput(pp);
     
-    GrXPFactory::InvariantOutput output;
-    fXPFactory->getInvariantOutput(fColorProcInfo, fCoverageProcInfo, &output);
-    return output.fWillBlendWithDst;
+    GrXPFactory::InvariantBlendedColor blendedColor;
+    fXPFactory->getInvariantBlendedColor(fColorProcInfo, &blendedColor);
+    return blendedColor.fWillBlendWithDst;
 }
 
 void GrPipelineBuilder::calcColorInvariantOutput(const GrPrimitiveProcessor* pp) const {

@@ -5,10 +5,10 @@
  * found in the LICENSE file.
  */
 
-#include "SkPathOpsDebug.h"
+#include "SkMutex.h"
 #include "SkPath.h"
+#include "SkPathOpsDebug.h"
 #include "SkString.h"
-#include "SkThread.h"
 
 #if DEBUG_VALIDATE
 extern bool FLAGS_runFail;
@@ -134,6 +134,18 @@ void SkPathOpsDebug::ShowPath(const SkPath& a, const SkPath& b, SkPathOp shapeOp
     ShowOnePath(b, "pathB", true);
     show_op(shapeOp, "path", "pathB");
 }
+
+#include "SkPathOpsTypes.h"
+
+#ifdef SK_DEBUG
+bool SkOpGlobalState::debugRunFail() const {
+#if DEBUG_VALIDATE
+    return FLAGS_runFail;
+#else
+    return false;
+#endif
+}
+#endif
 
 #include "SkPathOpsCubic.h"
 #include "SkPathOpsQuad.h"
@@ -304,7 +316,7 @@ SkString SkOpAngle::debugPart() const {
             break;
         default:
             SkASSERT(0);
-    } 
+    }
     return result;
 }
 #endif
@@ -547,7 +559,9 @@ int SkOpPtT::debugLoopLimit(bool report) const {
 
 void SkOpPtT::debugValidate() const {
 #if DEBUG_VALIDATE
-    if (contour()->globalState()->phase() == SkOpGlobalState::kIntersecting) {
+    SkOpGlobalState::Phase phase = contour()->globalState()->phase();
+    if (phase == SkOpGlobalState::kIntersecting
+            || phase == SkOpGlobalState::kFixWinding) {
         return;
     }
     SkASSERT(fNext);

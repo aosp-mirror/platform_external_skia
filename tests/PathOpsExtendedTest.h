@@ -12,8 +12,6 @@
 #include "SkPath.h"
 #include "SkPathOpsTypes.h"
 #include "SkStream.h"
-#include "SkThread.h"
-#include "SkThreadUtils.h"
 #include "Test.h"
 
 DECLARE_bool(runFail);
@@ -29,6 +27,13 @@ struct TestDesc {
 //extern int comparePaths(const SkPath& one, const SkPath& two);
 extern int comparePaths(skiatest::Reporter* reporter, const char* filename,
                         const SkPath& one, const SkPath& two, SkBitmap& bitmap);
+
+inline int comparePaths(skiatest::Reporter* reporter, const char* filename,
+                        const SkPath& one, const SkPath& two) {
+    SkBitmap bitmap;
+    return comparePaths(reporter, filename, one, two, bitmap);
+}
+
 extern bool drawAsciiPaths(const SkPath& one, const SkPath& two, bool drawPaths);
 extern void showOp(const SkPathOp op);
 extern bool testPathOp(skiatest::Reporter* reporter, const SkPath& a, const SkPath& b,

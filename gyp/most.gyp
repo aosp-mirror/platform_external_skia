@@ -27,20 +27,36 @@
         'pathops_skpclip.gyp:*',
 #       'pdfviewer.gyp:pdfviewer',
         'dm.gyp:dm',
+        'visualbench.gyp:visualbench',
       ],
       'conditions': [
+        [ 'skia_gpu == 0', { 
+          'dependencies!': [ 
+            'visualbench.gyp:visualbench' 
+          ] 
+        }],
         [ 'skia_gpu == 0 or skia_os == "android"', {
           'dependencies!': [
             'example.gyp:HelloWorld',
           ],
         }],
         ['skia_os == "android"', {
-          'dependencies': [ 'android_system.gyp:SampleApp_APK' ],
+          'dependencies': [ 
+            'android_system.gyp:SampleApp_APK', 
+          ],
+          'conditions': [
+            [ 'skia_gpu == 1', {
+              'dependencies': [
+                'android_system.gyp:VisualBench_APK', 
+              ],
+            }],
+          ],
         }],
         ['skia_os == "ios"', {
           'dependencies!': [
             'example.gyp:HelloWorld',
             'SampleApp.gyp:SampleApp',
+            'visualbench.gyp:visualbench',
           ],
           'dependencies': ['iOSShell.gyp:iOSShell' ],
         }],
@@ -52,6 +68,7 @@
             'dependencies!': [
               'example.gyp:HelloWorld',
               'SampleApp.gyp:SampleApp',
+              'visualbench.gyp:visualbench',
             ]
           }
         ]

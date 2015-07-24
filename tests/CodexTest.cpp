@@ -9,6 +9,8 @@
 #include "SkBitmap.h"
 #include "SkCodec.h"
 #include "SkMD5.h"
+#include "SkRandom.h"
+#include "SkScanlineDecoder.h"
 #include "Test.h"
 
 static SkStreamAsset* resource(const char path[]) {
@@ -27,10 +29,36 @@ static void md5(const SkBitmap& bm, SkMD5::Digest* digest) {
     md5.finish(*digest);
 }
 
+/**
+ *  Compute the digest for bm and compare it to a known good digest.
+ *  @param r Reporter to assert that bm's digest matches goodDigest.
+ *  @param goodDigest The known good digest to compare to.
+ *  @param bm The bitmap to test.
+ */
+static void compare_to_good_digest(skiatest::Reporter* r, const SkMD5::Digest& goodDigest,
+                           const SkBitmap& bm) {
+    SkMD5::Digest digest;
+    md5(bm, &digest);
+    REPORTER_ASSERT(r, digest == goodDigest);
+}
+
+SkIRect generate_random_subset(SkRandom* rand, int w, int h) {
+    SkIRect rect;
+    do {
+        rect.fLeft = rand->nextRangeU(0, w);
+        rect.fTop = rand->nextRangeU(0, h);
+        rect.fRight = rand->nextRangeU(0, w);
+        rect.fBottom = rand->nextRangeU(0, h);
+        rect.sort();
+    } while (rect.isEmpty());
+    return rect;
+}
+
 static void check(skiatest::Reporter* r,
                   const char path[],
                   SkISize size,
-                  bool supportsScanlineDecoding) {
+                  bool supportsScanlineDecoding,
+                  bool supportsSubsetDecoding) {
     SkAutoTDelete<SkStream> stream(resource(path));
     if (!stream) {
         SkDebugf("Missing resource '%s'\n", path);
@@ -51,80 +79,125 @@ static void check(skiatest::Reporter* r,
     SkBitmap bm;
     bm.allocPixels(info);
     SkAutoLockPixels autoLockPixels(bm);
-    SkImageGenerator::Result result =
+    SkCodec::Result result =
         codec->getPixels(info, bm.getPixels(), bm.rowBytes(), NULL, NULL, NULL);
-    REPORTER_ASSERT(r, result == SkImageGenerator::kSuccess);
+    REPORTER_ASSERT(r, result == SkCodec::kSuccess);
 
-    SkMD5::Digest digest1, digest2;
-    md5(bm, &digest1);
+    SkMD5::Digest digest;
+    md5(bm, &digest);
 
     bm.eraseColor(SK_ColorYELLOW);
 
     result =
         codec->getPixels(info, bm.getPixels(), bm.rowBytes(), NULL, NULL, NULL);
 
-    REPORTER_ASSERT(r, result == SkImageGenerator::kSuccess);
+    REPORTER_ASSERT(r, result == SkCodec::kSuccess);
     // verify that re-decoding gives the same result.
-    md5(bm, &digest2);
-    REPORTER_ASSERT(r, digest1 == digest2);
+    compare_to_good_digest(r, digest, bm);
 
-    SkScanlineDecoder* scanlineDecoder = codec->getScanlineDecoder(info);
+    SkAutoTDelete<SkScanlineDecoder> scanlineDecoder(codec->getScanlineDecoder(info));
     if (supportsScanlineDecoding) {
         bm.eraseColor(SK_ColorYELLOW);
         REPORTER_ASSERT(r, scanlineDecoder);
+
+        // Regular decodes should not be affected by creating a scanline decoder
+        result = codec->getPixels(info, bm.getPixels(), bm.rowBytes(), NULL, NULL, NULL);
+        REPORTER_ASSERT(r, SkCodec::kSuccess == result);
+        compare_to_good_digest(r, digest, bm);
+
+        bm.eraseColor(SK_ColorYELLOW);
+
         for (int y = 0; y < info.height(); y++) {
             result = scanlineDecoder->getScanlines(bm.getAddr(0, y), 1, 0);
-            REPORTER_ASSERT(r, result == SkImageGenerator::kSuccess);
+            REPORTER_ASSERT(r, result == SkCodec::kSuccess);
         }
         // verify that scanline decoding gives the same result.
-        SkMD5::Digest digest3;
-        md5(bm, &digest3);
-        REPORTER_ASSERT(r, digest3 == digest1);
+        compare_to_good_digest(r, digest, bm);
     } else {
         REPORTER_ASSERT(r, !scanlineDecoder);
+    }
+
+    // The rest of this function tests decoding subsets, and will decode an arbitrary number of
+    // random subsets.
+    // Do not attempt to decode subsets of an image of only once pixel, since there is no
+    // meaningful subset.
+    if (size.width() * size.height() == 1) {
+        return;
+    }
+
+    SkRandom rand;
+    SkIRect subset;
+    SkCodec::Options opts;
+    opts.fSubset = &subset;
+    for (int i = 0; i < 5; i++) {
+        subset = generate_random_subset(&rand, size.width(), size.height());
+        SkASSERT(!subset.isEmpty());
+        const bool supported = codec->getValidSubset(&subset);
+        REPORTER_ASSERT(r, supported == supportsSubsetDecoding);
+
+        SkImageInfo subsetInfo = info.makeWH(subset.width(), subset.height());
+        SkBitmap bm;
+        bm.allocPixels(subsetInfo);
+        const SkCodec::Result result = codec->getPixels(bm.info(), bm.getPixels(), bm.rowBytes(),
+                                                        &opts, NULL, NULL);
+
+        if (supportsSubsetDecoding) {
+            REPORTER_ASSERT(r, result == SkCodec::kSuccess);
+            // Webp is the only codec that supports subsets, and it will have modified the subset
+            // to have even left/top.
+            REPORTER_ASSERT(r, SkIsAlign2(subset.fLeft) && SkIsAlign2(subset.fTop));
+        } else {
+            // No subsets will work.
+            REPORTER_ASSERT(r, result == SkCodec::kUnimplemented);
+        }
     }
 }
 
 DEF_TEST(Codec, r) {
     // WBMP
-    check(r, "mandrill.wbmp", SkISize::Make(512, 512), false);
+    check(r, "mandrill.wbmp", SkISize::Make(512, 512), false, false);
+
+    // WEBP
+    check(r, "baby_tux.webp", SkISize::Make(386, 395), false, true);
+    check(r, "color_wheel.webp", SkISize::Make(128, 128), false, true);
+    check(r, "yellow_rose.webp", SkISize::Make(400, 301), false, true);
 
     // BMP
-    check(r, "randPixels.bmp", SkISize::Make(8, 8), false);
+    check(r, "randPixels.bmp", SkISize::Make(8, 8), false, false);
 
     // ICO
     // These two tests examine interestingly different behavior:
     // Decodes an embedded BMP image
-    check(r, "color_wheel.ico", SkISize::Make(128, 128), false);
+    check(r, "color_wheel.ico", SkISize::Make(128, 128), false, false);
     // Decodes an embedded PNG image
-    check(r, "google_chrome.ico", SkISize::Make(256, 256), false);
+    check(r, "google_chrome.ico", SkISize::Make(256, 256), false, false);
 
     // GIF
-    check(r, "box.gif", SkISize::Make(200, 55), false);
-    check(r, "color_wheel.gif", SkISize::Make(128, 128), false);
-    check(r, "randPixels.gif", SkISize::Make(8, 8), false);
+    check(r, "box.gif", SkISize::Make(200, 55), false, false);
+    check(r, "color_wheel.gif", SkISize::Make(128, 128), false, false);
+    check(r, "randPixels.gif", SkISize::Make(8, 8), false, false);
 
     // JPG
-    check(r, "CMYK.jpg", SkISize::Make(642, 516), true);
-    check(r, "color_wheel.jpg", SkISize::Make(128, 128), true);
-    check(r, "grayscale.jpg", SkISize::Make(128, 128), true);
-    check(r, "mandrill_512_q075.jpg", SkISize::Make(512, 512), true);
-    check(r, "randPixels.jpg", SkISize::Make(8, 8), true);
+    check(r, "CMYK.jpg", SkISize::Make(642, 516), true, false);
+    check(r, "color_wheel.jpg", SkISize::Make(128, 128), true, false);
+    check(r, "grayscale.jpg", SkISize::Make(128, 128), true, false);
+    check(r, "mandrill_512_q075.jpg", SkISize::Make(512, 512), true, false);
+    check(r, "randPixels.jpg", SkISize::Make(8, 8), true, false);
 
     // PNG
-    check(r, "arrow.png", SkISize::Make(187, 312), true);
-    check(r, "baby_tux.png", SkISize::Make(240, 246), true);
-    check(r, "color_wheel.png", SkISize::Make(128, 128), true);
-    check(r, "half-transparent-white-pixel.png", SkISize::Make(1, 1), true);
-    check(r, "mandrill_128.png", SkISize::Make(128, 128), true);
-    check(r, "mandrill_16.png", SkISize::Make(16, 16), true);
-    check(r, "mandrill_256.png", SkISize::Make(256, 256), true);
-    check(r, "mandrill_32.png", SkISize::Make(32, 32), true);
-    check(r, "mandrill_512.png", SkISize::Make(512, 512), true);
-    check(r, "mandrill_64.png", SkISize::Make(64, 64), true);
-    check(r, "plane.png", SkISize::Make(250, 126), true);
-    check(r, "randPixels.png", SkISize::Make(8, 8), true);
-    check(r, "yellow_rose.png", SkISize::Make(400, 301), true);
+    check(r, "arrow.png", SkISize::Make(187, 312), true, false);
+    check(r, "baby_tux.png", SkISize::Make(240, 246), true, false);
+    check(r, "color_wheel.png", SkISize::Make(128, 128), true, false);
+    check(r, "half-transparent-white-pixel.png", SkISize::Make(1, 1), true, false);
+    check(r, "mandrill_128.png", SkISize::Make(128, 128), true, false);
+    check(r, "mandrill_16.png", SkISize::Make(16, 16), true, false);
+    check(r, "mandrill_256.png", SkISize::Make(256, 256), true, false);
+    check(r, "mandrill_32.png", SkISize::Make(32, 32), true, false);
+    check(r, "mandrill_512.png", SkISize::Make(512, 512), true, false);
+    check(r, "mandrill_64.png", SkISize::Make(64, 64), true, false);
+    check(r, "plane.png", SkISize::Make(250, 126), true, false);
+    check(r, "randPixels.png", SkISize::Make(8, 8), true, false);
+    check(r, "yellow_rose.png", SkISize::Make(400, 301), true, false);
 }
 
 static void test_invalid_stream(skiatest::Reporter* r, const void* stream, size_t len) {
@@ -180,9 +253,9 @@ static void test_dimensions(skiatest::Reporter* r, const char path[]) {
         size_t totalBytes = scaledInfo.getSafeSize(rowBytes);
         SkAutoTMalloc<SkPMColor> pixels(totalBytes);
 
-        SkImageGenerator::Result result =
+        SkCodec::Result result =
                 codec->getPixels(scaledInfo, pixels.get(), rowBytes, NULL, NULL, NULL);
-        REPORTER_ASSERT(r, SkImageGenerator::kSuccess == result);
+        REPORTER_ASSERT(r, SkCodec::kSuccess == result);
     }
 }
 

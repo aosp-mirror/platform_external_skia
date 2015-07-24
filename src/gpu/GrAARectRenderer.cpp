@@ -11,6 +11,7 @@
 #include "GrBatchTest.h"
 #include "GrContext.h"
 #include "GrDefaultGeoProcFactory.h"
+#include "GrDrawTarget.h"
 #include "GrGeometryProcessor.h"
 #include "GrInvariantOutput.h"
 #include "GrResourceKey.h"
@@ -31,14 +32,18 @@ static void set_inset_fan(SkPoint* pts, size_t stride,
 }
 
 static const GrGeometryProcessor* create_fill_rect_gp(bool tweakAlphaForCoverage,
-                                                      const SkMatrix& localMatrix) {
+                                                      const SkMatrix& localMatrix,
+                                                      bool usesLocalCoords,
+                                                      bool coverageIgnored) {
     uint32_t flags = GrDefaultGeoProcFactory::kColor_GPType;
     const GrGeometryProcessor* gp;
     if (tweakAlphaForCoverage) {
-        gp = GrDefaultGeoProcFactory::Create(flags, GrColor_WHITE, SkMatrix::I(), localMatrix);
+        gp = GrDefaultGeoProcFactory::Create(flags, GrColor_WHITE, usesLocalCoords, coverageIgnored,
+                                             SkMatrix::I(), localMatrix);
     } else {
         flags |= GrDefaultGeoProcFactory::kCoverage_GPType;
-        gp = GrDefaultGeoProcFactory::Create(flags, GrColor_WHITE, SkMatrix::I(), localMatrix);
+        gp = GrDefaultGeoProcFactory::Create(flags, GrColor_WHITE, usesLocalCoords, coverageIgnored,
+                                             SkMatrix::I(), localMatrix);
     }
     return gp;
 }
@@ -71,18 +76,17 @@ public:
 
     void initBatchTracker(const GrPipelineInfo& init) override {
         // Handle any color overrides
-        if (init.fColorIgnored) {
+        if (!init.readsColor()) {
             fGeoData[0].fColor = GrColor_ILLEGAL;
-        } else if (GrColor_ILLEGAL != init.fOverrideColor) {
-            fGeoData[0].fColor = init.fOverrideColor;
         }
+        init.getOverrideColorIfSet(&fGeoData[0].fColor);
 
         // setup batch properties
-        fBatch.fColorIgnored = init.fColorIgnored;
+        fBatch.fColorIgnored = !init.readsColor();
         fBatch.fColor = fGeoData[0].fColor;
-        fBatch.fUsesLocalCoords = init.fUsesLocalCoords;
-        fBatch.fCoverageIgnored = init.fCoverageIgnored;
-        fBatch.fCanTweakAlphaForCoverage = init.fCanTweakAlphaForCoverage;
+        fBatch.fUsesLocalCoords = init.readsLocalCoords();
+        fBatch.fCoverageIgnored = !init.readsCoverage();
+        fBatch.fCanTweakAlphaForCoverage = init.canTweakAlphaForCoverage();
     }
 
     void generateGeometry(GrBatchTarget* batchTarget, const GrPipeline* pipeline) override {
@@ -95,19 +99,11 @@ public:
         }
 
         SkAutoTUnref<const GrGeometryProcessor> gp(create_fill_rect_gp(canTweakAlphaForCoverage,
-                                                                       localMatrix));
+                                                                       localMatrix,
+                                                                       this->usesLocalCoords(),
+                                                                       this->coverageIgnored()));
 
         batchTarget->initDraw(gp, pipeline);
-
-        // TODO this is hacky, but the only way we have to initialize the GP is to use the
-        // GrPipelineInfo struct so we can generate the correct shader.  Once we have GrBatch
-        // everywhere we can remove this nastiness
-        GrPipelineInfo init;
-        init.fColorIgnored = fBatch.fColorIgnored;
-        init.fOverrideColor = GrColor_ILLEGAL;
-        init.fCoverageIgnored = fBatch.fCoverageIgnored;
-        init.fUsesLocalCoords = this->usesLocalCoords();
-        gp->initBatchTracker(batchTarget->currentBatchTracker(), init);
 
         size_t vertexStride = gp->getVertexStride();
         SkASSERT(canTweakAlphaForCoverage ?
@@ -176,8 +172,13 @@ private:
     bool canTweakAlphaForCoverage() const { return fBatch.fCanTweakAlphaForCoverage; }
     bool colorIgnored() const { return fBatch.fColorIgnored; }
     const SkMatrix& viewMatrix() const { return fGeoData[0].fViewMatrix; }
+    bool coverageIgnored() const { return fBatch.fCoverageIgnored; }
 
     bool onCombineIfPossible(GrBatch* t) override {
+        if (!this->pipeline()->isEqual(*t->pipeline())) {
+            return false;
+        }
+
         AAFillRectBatch* that = t->cast<AAFillRectBatch>();
 
         SkASSERT(this->usesLocalCoords() == that->usesLocalCoords());
@@ -316,8 +317,8 @@ enum CoverageAttribType {
 };
 }
 
-void GrAARectRenderer::geometryFillAARect(GrDrawTarget* target,
-                                          GrPipelineBuilder* pipelineBuilder,
+void GrAARectRenderer::GeometryFillAARect(GrDrawTarget* target,
+                                          const GrPipelineBuilder& pipelineBuilder,
                                           GrColor color,
                                           const SkMatrix& viewMatrix,
                                           const SkRect& rect,
@@ -333,8 +334,8 @@ void GrAARectRenderer::geometryFillAARect(GrDrawTarget* target,
     target->drawBatch(pipelineBuilder, batch);
 }
 
-void GrAARectRenderer::strokeAARect(GrDrawTarget* target,
-                                    GrPipelineBuilder* pipelineBuilder,
+void GrAARectRenderer::StrokeAARect(GrDrawTarget* target,
+                                    const GrPipelineBuilder& pipelineBuilder,
                                     GrColor color,
                                     const SkMatrix& viewMatrix,
                                     const SkRect& rect,
@@ -374,7 +375,7 @@ void GrAARectRenderer::strokeAARect(GrDrawTarget* target,
     }
 
     if (spare <= 0 && miterStroke) {
-        this->fillAARect(target, pipelineBuilder, color, viewMatrix, devOutside, devOutside);
+        FillAARect(target, pipelineBuilder, color, viewMatrix, devOutside, devOutside);
         return;
     }
 
@@ -391,8 +392,8 @@ void GrAARectRenderer::strokeAARect(GrDrawTarget* target,
         devOutsideAssist.outset(0, ry);
     }
 
-    this->geometryStrokeAARect(target, pipelineBuilder, color, viewMatrix, devOutside,
-                               devOutsideAssist, devInside, miterStroke);
+    GeometryStrokeAARect(target, pipelineBuilder, color, viewMatrix, devOutside,
+                         devOutsideAssist, devInside, miterStroke);
 }
 
 GR_DECLARE_STATIC_UNIQUE_KEY(gMiterIndexBufferKey);
@@ -426,19 +427,18 @@ public:
 
     void initBatchTracker(const GrPipelineInfo& init) override {
         // Handle any color overrides
-        if (init.fColorIgnored) {
+        if (!init.readsColor()) {
             fGeoData[0].fColor = GrColor_ILLEGAL;
-        } else if (GrColor_ILLEGAL != init.fOverrideColor) {
-            fGeoData[0].fColor = init.fOverrideColor;
         }
+        init.getOverrideColorIfSet(&fGeoData[0].fColor);
 
         // setup batch properties
-        fBatch.fColorIgnored = init.fColorIgnored;
+        fBatch.fColorIgnored = !init.readsColor();
         fBatch.fColor = fGeoData[0].fColor;
-        fBatch.fUsesLocalCoords = init.fUsesLocalCoords;
-        fBatch.fCoverageIgnored = init.fCoverageIgnored;
+        fBatch.fUsesLocalCoords = init.readsLocalCoords();
+        fBatch.fCoverageIgnored = !init.readsCoverage();
         fBatch.fMiterStroke = fGeoData[0].fMiterStroke;
-        fBatch.fCanTweakAlphaForCoverage = init.fCanTweakAlphaForCoverage;
+        fBatch.fCanTweakAlphaForCoverage = init.canTweakAlphaForCoverage();
     }
 
     void generateGeometry(GrBatchTarget* batchTarget, const GrPipeline* pipeline) override {
@@ -453,19 +453,11 @@ public:
         }
 
         SkAutoTUnref<const GrGeometryProcessor> gp(create_fill_rect_gp(canTweakAlphaForCoverage,
-                                                                       localMatrix));
+                                                                       localMatrix,
+                                                                       this->usesLocalCoords(),
+                                                                       this->coverageIgnored()));
 
         batchTarget->initDraw(gp, pipeline);
-
-        // TODO this is hacky, but the only way we have to initialize the GP is to use the
-        // GrPipelineInfo struct so we can generate the correct shader.  Once we have GrBatch
-        // everywhere we can remove this nastiness
-        GrPipelineInfo init;
-        init.fColorIgnored = fBatch.fColorIgnored;
-        init.fOverrideColor = GrColor_ILLEGAL;
-        init.fCoverageIgnored = fBatch.fCoverageIgnored;
-        init.fUsesLocalCoords = this->usesLocalCoords();
-        gp->initBatchTracker(batchTarget->currentBatchTracker(), init);
 
         size_t vertexStride = gp->getVertexStride();
 
@@ -626,8 +618,13 @@ private:
     bool colorIgnored() const { return fBatch.fColorIgnored; }
     const SkMatrix& viewMatrix() const { return fBatch.fViewMatrix; }
     bool miterStroke() const { return fBatch.fMiterStroke; }
+    bool coverageIgnored() const { return fBatch.fCoverageIgnored; }
 
     bool onCombineIfPossible(GrBatch* t) override {
+        if (!this->pipeline()->isEqual(*t->pipeline())) {
+            return false;
+        }
+
         AAStrokeRectBatch* that = t->cast<AAStrokeRectBatch>();
 
         // TODO batch across miterstroke changes
@@ -783,8 +780,8 @@ private:
     SkSTArray<1, Geometry, true> fGeoData;
 };
 
-void GrAARectRenderer::geometryStrokeAARect(GrDrawTarget* target,
-                                            GrPipelineBuilder* pipelineBuilder,
+void GrAARectRenderer::GeometryStrokeAARect(GrDrawTarget* target,
+                                            const GrPipelineBuilder& pipelineBuilder,
                                             GrColor color,
                                             const SkMatrix& viewMatrix,
                                             const SkRect& devOutside,
@@ -802,26 +799,25 @@ void GrAARectRenderer::geometryStrokeAARect(GrDrawTarget* target,
     target->drawBatch(pipelineBuilder, batch);
 }
 
-void GrAARectRenderer::fillAANestedRects(GrDrawTarget* target,
-                                         GrPipelineBuilder* pipelineBuilder,
+void GrAARectRenderer::FillAANestedRects(GrDrawTarget* target,
+                                         const GrPipelineBuilder& pipelineBuilder,
                                          GrColor color,
                                          const SkMatrix& viewMatrix,
                                          const SkRect rects[2]) {
     SkASSERT(viewMatrix.rectStaysRect());
-    SkASSERT(!rects[1].isEmpty());
+    SkASSERT(!rects[0].isEmpty() && !rects[1].isEmpty());
 
     SkRect devOutside, devInside;
     viewMatrix.mapRect(&devOutside, rects[0]);
-    // can't call mapRect for devInside since it calls sort
-    viewMatrix.mapPoints((SkPoint*)&devInside, (const SkPoint*)&rects[1], 2);
+    viewMatrix.mapRect(&devInside, rects[1]);
 
     if (devInside.isEmpty()) {
-        this->fillAARect(target, pipelineBuilder, color, viewMatrix, devOutside, devOutside);
+        FillAARect(target, pipelineBuilder, color, viewMatrix, devOutside, devOutside);
         return;
     }
 
-    this->geometryStrokeAARect(target, pipelineBuilder, color, viewMatrix, devOutside,
-                               devOutside, devInside, true);
+    GeometryStrokeAARect(target, pipelineBuilder, color, viewMatrix, devOutside,
+                         devOutside, devInside, true);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

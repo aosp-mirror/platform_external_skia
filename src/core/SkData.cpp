@@ -32,7 +32,7 @@ SkData::SkData(size_t size) {
 
 SkData::~SkData() {
     if (fReleaseProc) {
-        fReleaseProc(fPtr, fSize, fReleaseProcContext);
+        fReleaseProc(fPtr, fReleaseProcContext);
     }
 }
 
@@ -63,7 +63,14 @@ SkData* SkData::PrivateNewWithCopy(const void* srcOrNull, size_t length) {
     if (0 == length) {
         return SkData::NewEmpty();
     }
-    char* storage = (char*)sk_malloc_throw(sizeof(SkData) + length);
+
+    const size_t actualLength = length + sizeof(SkData);
+    if (actualLength < length) {
+        // we overflowed
+        sk_throw();
+    }
+
+    char* storage = (char*)sk_malloc_throw(actualLength);
     SkData* data = new (storage) SkData(length);
     if (srcOrNull) {
         memcpy(data->writable_data(), srcOrNull, length);
@@ -84,7 +91,7 @@ SkData* SkData::NewEmpty() {
 }
 
 // assumes fPtr was allocated via sk_malloc
-static void sk_free_releaseproc(const void* ptr, size_t, void*) {
+static void sk_free_releaseproc(const void* ptr, void*) {
     sk_free((void*)ptr);
 }
 
@@ -101,13 +108,13 @@ SkData* SkData::NewUninitialized(size_t length) {
     return PrivateNewWithCopy(NULL, length);
 }
 
-SkData* SkData::NewWithProc(const void* data, size_t length,
-                            ReleaseProc proc, void* context) {
-    return new SkData(data, length, proc, context);
+SkData* SkData::NewWithProc(const void* ptr, size_t length, ReleaseProc proc, void* context) {
+    return new SkData(ptr, length, proc, context);
 }
 
 // assumes fPtr was allocated with sk_fmmap
-static void sk_mmap_releaseproc(const void* addr, size_t length, void*) {
+static void sk_mmap_releaseproc(const void* addr, void* ctx) {
+    size_t length = reinterpret_cast<size_t>(ctx);
     sk_fmunmap(addr, length);
 }
 
@@ -118,7 +125,7 @@ SkData* SkData::NewFromFILE(SkFILE* f) {
         return NULL;
     }
 
-    return SkData::NewWithProc(addr, size, sk_mmap_releaseproc, NULL);
+    return SkData::NewWithProc(addr, size, sk_mmap_releaseproc, reinterpret_cast<void*>(size));
 }
 
 SkData* SkData::NewFromFileName(const char path[]) {
@@ -142,7 +149,7 @@ SkData* SkData::NewFromFD(int fd) {
 }
 
 // assumes context is a SkData
-static void sk_dataref_releaseproc(const void*, size_t, void* context) {
+static void sk_dataref_releaseproc(const void*, void* context) {
     SkData* src = reinterpret_cast<SkData*>(context);
     src->unref();
 }

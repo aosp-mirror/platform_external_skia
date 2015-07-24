@@ -42,14 +42,6 @@ ifneq ($(strip $(TARGET_FDO_CFLAGS)),)
 endif
 
 LOCAL_ARM_MODE := thumb
-ifeq ($(TARGET_ARCH),arm)
-	ifeq ($(ARCH_ARM_HAVE_VFP),true)
-		LOCAL_CFLAGS += -DANDROID_LARGE_MEMORY_DEVICE
-	endif
-else
-	LOCAL_CFLAGS += -DANDROID_LARGE_MEMORY_DEVICE
-endif
-
 # used for testing
 #LOCAL_CFLAGS += -g -O0
 
@@ -77,12 +69,10 @@ LOCAL_SRC_FILES := \
 	src/codec/SkCodec_libpng.cpp \
 	src/codec/SkCodec_wbmp.cpp \
 	src/codec/SkGifInterlaceIter.cpp \
-	src/codec/SkJpegCodec.cpp \
-	src/codec/SkJpegDecoderMgr.cpp \
-	src/codec/SkJpegUtility.cpp \
 	src/codec/SkMaskSwizzler.cpp \
 	src/codec/SkMasks.cpp \
 	src/codec/SkSwizzler.cpp \
+	src/codec/SkWebpCodec.cpp \
 	src/c/sk_paint.cpp \
 	src/c/sk_surface.cpp \
 	src/core/SkAAClip.cpp \
@@ -90,8 +80,10 @@ LOCAL_SRC_FILES := \
 	src/core/SkAdvancedTypefaceMetrics.cpp \
 	src/core/SkAlphaRuns.cpp \
 	src/core/SkBBHFactory.cpp \
+	src/core/SkBigPicture.cpp \
 	src/core/SkBitmap.cpp \
 	src/core/SkBitmapCache.cpp \
+	src/core/SkBitmapController.cpp \
 	src/core/SkBitmapDevice.cpp \
 	src/core/SkBitmapFilter.cpp \
 	src/core/SkBitmapHeap.cpp \
@@ -99,7 +91,6 @@ LOCAL_SRC_FILES := \
 	src/core/SkBitmapProcState.cpp \
 	src/core/SkBitmapProcState_matrixProcs.cpp \
 	src/core/SkBitmapScaler.cpp \
-	src/core/SkBitmap_scroll.cpp \
 	src/core/SkBlitMask_D32.cpp \
 	src/core/SkBlitRow_D16.cpp \
 	src/core/SkBlitRow_D32.cpp \
@@ -153,11 +144,9 @@ LOCAL_SRC_FILES := \
 	src/core/SkGlyphCache.cpp \
 	src/core/SkGraphics.cpp \
 	src/core/SkHalf.cpp \
-	src/core/SkInstCnt.cpp \
 	src/core/SkImageFilter.cpp \
 	src/core/SkImageInfo.cpp \
 	src/core/SkImageGenerator.cpp \
-	src/core/SkLayerInfo.cpp \
 	src/core/SkLocalMatrixShader.cpp \
 	src/core/SkLineClipper.cpp \
 	src/core/SkMallocPixelRef.cpp \
@@ -170,7 +159,9 @@ LOCAL_SRC_FILES := \
 	src/core/SkMatrixImageFilter.cpp \
 	src/core/SkMetaData.cpp \
 	src/core/SkMipMap.cpp \
+	src/core/SkMiniRecorder.cpp \
 	src/core/SkMultiPictureDraw.cpp \
+	src/core/SkNinePatchIter.cpp \
 	src/core/SkPackBits.cpp \
 	src/core/SkPaint.cpp \
 	src/core/SkPaintPriv.cpp \
@@ -187,6 +178,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkPictureRecorder.cpp \
 	src/core/SkPictureShader.cpp \
 	src/core/SkPixelRef.cpp \
+	src/core/SkPixmap.cpp \
 	src/core/SkPoint.cpp \
 	src/core/SkPtrRecorder.cpp \
 	src/core/SkQuadClipper.cpp \
@@ -212,7 +204,10 @@ LOCAL_SRC_FILES := \
 	src/core/SkScan_Antihair.cpp \
 	src/core/SkScan_Hairline.cpp \
 	src/core/SkScan_Path.cpp \
+	src/core/SkSemaphore.cpp \
 	src/core/SkShader.cpp \
+	src/core/SkSharedMutex.cpp \
+	src/core/SkSpinlock.cpp \
 	src/core/SkSpriteBlitter_ARGB32.cpp \
 	src/core/SkSpriteBlitter_RGB16.cpp \
 	src/core/SkStream.cpp \
@@ -317,12 +312,12 @@ LOCAL_SRC_FILES := \
 	src/effects/SkPerlinNoiseShader.cpp \
 	src/effects/SkPictureImageFilter.cpp \
 	src/effects/SkPixelXorXfermode.cpp \
+	src/effects/SkPoint3.cpp \
 	src/effects/SkRectShaderImageFilter.cpp \
 	src/effects/SkTableColorFilter.cpp \
 	src/effects/SkTableMaskFilter.cpp \
 	src/effects/SkTestImageFilters.cpp \
 	src/effects/SkTileImageFilter.cpp \
-	src/effects/SkTransparentShader.cpp \
 	src/effects/SkXfermodeImageFilter.cpp \
 	src/effects/gradients/SkClampRange.cpp \
 	src/effects/gradients/SkGradientBitmapCache.cpp \
@@ -370,6 +365,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkForceCPlusPlusLinking.cpp \
 	src/fonts/SkFontMgr_indirect.cpp \
 	src/fonts/SkRemotableFontMgr.cpp \
+	src/ports/SkFontMgr_android_factory.cpp \
 	src/ports/SkGlobalInitialization_default.cpp \
 	src/ports/SkMemory_malloc.cpp \
 	src/ports/SkOSFile_posix.cpp \
@@ -379,12 +375,12 @@ LOCAL_SRC_FILES := \
 	src/ports/SkTLS_pthread.cpp \
 	src/ports/SkFontHost_FreeType.cpp \
 	src/ports/SkFontHost_FreeType_common.cpp \
-	src/ports/SkDebug_android.cpp \
-	src/ports/SkFontConfigParser_android.cpp \
 	src/ports/SkFontMgr_android.cpp \
+	src/ports/SkFontMgr_android_parser.cpp \
+	src/ports/SkFontMgr_custom.cpp \
+	src/ports/SkDebug_android.cpp \
 	src/sfnt/SkOTTable_name.cpp \
 	src/sfnt/SkOTUtils.cpp \
-	src/utils/SkCondVar.cpp \
 	src/utils/SkBase64.cpp \
 	src/utils/SkBitmapHasher.cpp \
 	src/utils/SkBitSet.cpp \
@@ -413,7 +409,6 @@ LOCAL_SRC_FILES := \
 	src/utils/SkParse.cpp \
 	src/utils/SkParseColor.cpp \
 	src/utils/SkParsePath.cpp \
-	src/utils/SkPictureUtils.cpp \
 	src/utils/SkPatchGrid.cpp \
 	src/utils/SkPatchUtils.cpp \
 	src/utils/SkSHA1.cpp \
@@ -429,19 +424,22 @@ LOCAL_SRC_FILES := \
 	src/fonts/SkTestScalerContext.cpp \
 	src/gpu/GrAAHairLinePathRenderer.cpp \
 	src/gpu/GrAAConvexPathRenderer.cpp \
+	src/gpu/GrAALinearizingConvexPathRenderer.cpp \
 	src/gpu/GrAAConvexTessellator.cpp \
 	src/gpu/GrAADistanceFieldPathRenderer.cpp \
 	src/gpu/GrAARectRenderer.cpp \
 	src/gpu/GrAddPathRenderers_default.cpp \
 	src/gpu/GrAtlas.cpp \
+	src/gpu/GrAtlasTextBlob.cpp \
 	src/gpu/GrAtlasTextContext.cpp \
 	src/gpu/GrBatch.cpp \
 	src/gpu/GrBatchAtlas.cpp \
 	src/gpu/GrBatchFontCache.cpp \
 	src/gpu/GrBatchTarget.cpp \
 	src/gpu/GrBatchTest.cpp \
-	src/gpu/GrBlend.cpp \
+	src/gpu/GrBlurUtils.cpp \
 	src/gpu/GrBufferAllocPool.cpp \
+	src/gpu/GrCaps.cpp \
 	src/gpu/GrClip.cpp \
 	src/gpu/GrClipMaskCache.cpp \
 	src/gpu/GrClipMaskManager.cpp \
@@ -451,11 +449,13 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrDashLinePathRenderer.cpp \
 	src/gpu/GrDefaultGeoProcFactory.cpp \
 	src/gpu/GrDefaultPathRenderer.cpp \
+	src/gpu/GrDrawContext.cpp \
 	src/gpu/GrDrawTarget.cpp \
 	src/gpu/GrFontScaler.cpp \
 	src/gpu/GrGpu.cpp \
 	src/gpu/GrGpuResource.cpp \
 	src/gpu/GrGpuFactory.cpp \
+	src/gpu/GrImmediateDrawTarget.cpp \
 	src/gpu/GrInvariantOutput.cpp \
 	src/gpu/GrInOrderCommandBuilder.cpp \
 	src/gpu/GrInOrderDrawBuffer.cpp \
@@ -476,6 +476,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrPrimitiveProcessor.cpp \
 	src/gpu/GrProgramElement.cpp \
 	src/gpu/GrProcessor.cpp \
+	src/gpu/GrProcessorDataManager.cpp \
 	src/gpu/GrProcOptInfo.cpp \
 	src/gpu/GrGpuResourceRef.cpp \
 	src/gpu/GrRecordReplaceDraw.cpp \
@@ -532,6 +533,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/GrGLCaps.cpp \
 	src/gpu/gl/GrGLContext.cpp \
 	src/gpu/gl/GrGLGeometryProcessor.cpp \
+	src/gpu/gl/GrGLGLSL.cpp \
 	src/gpu/gl/GrGLGpu.cpp \
 	src/gpu/gl/GrGLGpuProgramCache.cpp \
 	src/gpu/gl/GrGLExtensions.cpp \
@@ -539,6 +541,8 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/GrGLInterface.cpp \
 	src/gpu/gl/GrGLNameAllocator.cpp \
 	src/gpu/gl/GrGLNoOpInterface.cpp \
+	src/gpu/gl/GrGLPathProgram.cpp \
+	src/gpu/gl/GrGLPathProgramDataManager.cpp \
 	src/gpu/gl/GrGLPath.cpp \
 	src/gpu/gl/GrGLPathProcessor.cpp \
 	src/gpu/gl/GrGLPathRange.cpp \
@@ -548,13 +552,13 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/GrGLProgramDesc.cpp \
 	src/gpu/gl/GrGLProgramDataManager.cpp \
 	src/gpu/gl/GrGLRenderTarget.cpp \
-	src/gpu/gl/GrGLSL.cpp \
 	src/gpu/gl/GrGLStencilAttachment.cpp \
 	src/gpu/gl/GrGLTexture.cpp \
 	src/gpu/gl/GrGLUtil.cpp \
 	src/gpu/gl/GrGLVertexArray.cpp \
 	src/gpu/gl/GrGLVertexBuffer.cpp \
 	src/gpu/gl/GrGLXferProcessor.cpp \
+	src/gpu/gl/builders/GrGLPathProgramBuilder.cpp \
 	src/gpu/gl/builders/GrGLProgramBuilder.cpp \
 	src/gpu/gl/builders/GrGLShaderBuilder.cpp \
 	src/gpu/gl/builders/GrGLShaderStringBuilder.cpp \
@@ -562,6 +566,8 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/builders/GrGLVertexShaderBuilder.cpp \
 	src/gpu/gl/builders/GrGLFragmentShaderBuilder.cpp \
 	src/gpu/gl/builders/GrGLGeometryShaderBuilder.cpp \
+	src/gpu/glsl/GrGLSLCaps.cpp \
+	src/gpu/glsl/GrGLSL.cpp \
 	src/gpu/SkGpuDevice.cpp \
 	src/gpu/SkGr.cpp \
 	src/gpu/SkGrPixelRef.cpp \
@@ -592,8 +598,8 @@ LOCAL_SHARED_LIBRARIES := \
 	libGLESv2 \
 	libEGL \
 	libz \
-	libjpeg \
 	libpng \
+	libjpeg \
 	libicuuc \
 	libicui18n \
 	libexpat \
@@ -606,7 +612,6 @@ LOCAL_STATIC_LIBRARIES := \
 	libsfntly
 
 LOCAL_C_INCLUDES := \
-	external/jpeg \
 	external/libpng \
 	$(LOCAL_PATH)/include/codec \
 	$(LOCAL_PATH)/src/codec \
@@ -617,6 +622,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/include/pathops \
 	$(LOCAL_PATH)/include/pipe \
 	external/giflib \
+	external/webp/include \
 	$(LOCAL_PATH)/include/ports \
 	$(LOCAL_PATH)/include/utils \
 	$(LOCAL_PATH)/include/images \
@@ -628,10 +634,10 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/src/gpu \
 	$(LOCAL_PATH)/include/effects \
 	$(LOCAL_PATH)/src/effects \
+	external/jpeg \
 	$(LOCAL_PATH)/src/lazy \
 	$(LOCAL_PATH)/third_party/etc1 \
 	$(LOCAL_PATH)/third_party/ktx \
-	external/webp/include \
 	external/expat/lib \
 	external/freetype/include \
 	$(LOCAL_PATH)/include/utils/win \
@@ -696,7 +702,7 @@ LOCAL_SRC_FILES_x86 += \
 	src/opts/SkMorphology_opts_SSE2.cpp \
 	src/opts/SkTextureCompression_opts_none.cpp \
 	src/opts/SkUtils_opts_SSE2.cpp \
-	src/opts/SkXfermode_opts_SSE2.cpp \
+	src/opts/SkXfermode_opts_none.cpp \
 	src/opts/opts_check_x86.cpp \
 	src/opts/SkBitmapProcState_opts_SSSE3.cpp \
 	src/opts/SkBlurImage_opts_SSE4.cpp \
@@ -710,7 +716,7 @@ LOCAL_SRC_FILES_x86_64 += \
 	src/opts/SkMorphology_opts_SSE2.cpp \
 	src/opts/SkTextureCompression_opts_none.cpp \
 	src/opts/SkUtils_opts_SSE2.cpp \
-	src/opts/SkXfermode_opts_SSE2.cpp \
+	src/opts/SkXfermode_opts_none.cpp \
 	src/opts/opts_check_x86.cpp \
 	src/opts/SkBitmapProcState_opts_SSSE3.cpp \
 	src/opts/SkBlurImage_opts_SSE4.cpp \

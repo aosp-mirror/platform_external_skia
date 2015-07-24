@@ -43,13 +43,6 @@ public:
         return SkNEW_ARGS(SkPictureImageFilter, (picture, cropRect,
                                                  kLocalSpace_PictureResolution, filterQuality));
     }
-#ifdef SK_SUPPORT_LEGACY_FILTERLEVEL_ENUM
-    static SkPictureImageFilter* CreateForLocalSpace(const SkPicture* picture,
-                                                     const SkRect& cropRect,
-                                                     SkPaint::FilterLevel filterLevel) {
-        return CreateForLocalSpace(picture, cropRect, (SkFilterQuality)filterLevel);
-    }
-#endif
     SK_TO_STRING_OVERRIDE()
     SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkPictureImageFilter)
 
@@ -76,7 +69,7 @@ protected:
 private:
 
 
-    void drawPictureAtDeviceResolution(Proxy*, SkBaseDevice*, const SkIRect& deviceBounds,
+    void drawPictureAtDeviceResolution(SkBaseDevice*, const SkIRect& deviceBounds,
                                        const Context&) const;
     void drawPictureAtLocalResolution(Proxy*, SkBaseDevice*, const SkIRect& deviceBounds,
                                       const Context&) const;

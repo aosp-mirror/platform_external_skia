@@ -5,7 +5,6 @@
  * found in the LICENSE file.
  */
 
-
 #ifndef SkShader_DEFINED
 #define SkShader_DEFINED
 
@@ -21,6 +20,7 @@ class SkPicture;
 class SkXfermode;
 class GrContext;
 class GrFragmentProcessor;
+class GrProcessorDataManager;
 
 /** \class SkShader
  *
@@ -34,8 +34,6 @@ class GrFragmentProcessor;
  */
 class SK_API SkShader : public SkFlattenable {
 public:
-    SK_DECLARE_INST_COUNT(SkShader)
-
     SkShader(const SkMatrix* localMatrix = NULL);
     virtual ~SkShader();
 
@@ -114,14 +112,11 @@ public:
      *  ContextRec acts as a parameter bundle for creating Contexts.
      */
     struct ContextRec {
-        ContextRec() : fDevice(NULL), fPaint(NULL), fMatrix(NULL), fLocalMatrix(NULL) {}
-        ContextRec(const SkBitmap& device, const SkPaint& paint, const SkMatrix& matrix)
-            : fDevice(&device)
-            , fPaint(&paint)
+        ContextRec(const SkPaint& paint, const SkMatrix& matrix, const SkMatrix* localM)
+            : fPaint(&paint)
             , fMatrix(&matrix)
-            , fLocalMatrix(NULL) {}
+            , fLocalMatrix(localM) {}
 
-        const SkBitmap* fDevice;        // the bitmap we are drawing into
         const SkPaint*  fPaint;         // the current paint associated with the draw
         const SkMatrix* fMatrix;        // the current matrix in the canvas
         const SkMatrix* fLocalMatrix;   // optional local matrix
@@ -370,7 +365,7 @@ public:
      */
     virtual bool asFragmentProcessor(GrContext*, const SkPaint&, const SkMatrix& viewM,
                                      const SkMatrix* localMatrix, GrColor*,
-                                     GrFragmentProcessor**) const;
+                                     GrProcessorDataManager*, GrFragmentProcessor**) const;
 
     /**
      *  If the shader can represent its "average" luminance in a single color, return true and

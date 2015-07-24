@@ -10,9 +10,9 @@
 
 #include "GrColor.h"
 #include "GrInvariantOutput.h"
+#include "GrStagedProcessor.h"
 
 class GrBatch;
-class GrFragmentStage;
 class GrFragmentProcessor;
 class GrPrimitiveProcessor;
 class GrProcessor;
@@ -54,7 +54,10 @@ public:
                                                fInOut.isLCDCoverage(); }
 
     GrColor color() const { return fInOut.color(); }
-    uint8_t validFlags() const { return fInOut.validFlags(); }
+
+    GrColorComponentFlags validFlags() const {
+        return static_cast<GrColorComponentFlags>(fInOut.validFlags());
+    }
 
     /**
      * Returns the index of the first effective color stage. If an intermediate stage doesn't read

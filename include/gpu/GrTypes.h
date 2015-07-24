@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2010 Google Inc.
  *
@@ -250,7 +249,12 @@ enum GrPixelConfig {
      */
     kAlpha_half_GrPixelConfig,
 
-    kLast_GrPixelConfig = kAlpha_half_GrPixelConfig
+    /**
+    * Byte order is r, g, b, a.  This color format is 16 bits per channel
+    */
+    kRGBA_half_GrPixelConfig,
+
+    kLast_GrPixelConfig = kRGBA_half_GrPixelConfig
 };
 static const int kGrPixelConfigCnt = kLast_GrPixelConfig + 1;
 
@@ -335,6 +339,8 @@ static inline size_t GrBytesPerPixel(GrPixelConfig config) {
         case kBGRA_8888_GrPixelConfig:
         case kSRGBA_8888_GrPixelConfig:
             return 4;
+        case kRGBA_half_GrPixelConfig:
+            return 8;
         case kRGBA_float_GrPixelConfig:
             return 16;
         default:
@@ -350,6 +356,7 @@ static inline size_t GrUnpackAlignment(GrPixelConfig config) {
         case kRGB_565_GrPixelConfig:
         case kRGBA_4444_GrPixelConfig:
         case kAlpha_half_GrPixelConfig:
+        case kRGBA_half_GrPixelConfig:
             return 2;
         case kRGBA_8888_GrPixelConfig:
         case kBGRA_8888_GrPixelConfig:
@@ -465,6 +472,16 @@ enum GrClipType {
 
 // opaque type for 3D API object handles
 typedef intptr_t GrBackendObject;
+
+
+/** Ownership rules for external GPU resources imported into Skia. */
+enum GrWrapOwnership {
+    /** Skia will assume the client will keep the resource alive and Skia will not free it. */
+    kBorrow_GrWrapOwnership,
+
+    /** Skia will assume ownership of the resource and free it. */
+    kAdopt_GrWrapOwnership,
+};
 
 /**
  * Gr can wrap an existing texture created by the client with a GrTexture
@@ -608,22 +625,4 @@ static inline size_t GrCompressedFormatDataSize(GrPixelConfig config,
  */
 static const uint32_t kAll_GrBackendState = 0xffffffff;
 
-///////////////////////////////////////////////////////////////////////////////
-
-#if GR_ALWAYS_ALLOCATE_ON_HEAP
-    #define GrAutoMallocBaseType SkAutoMalloc
-#else
-    #define GrAutoMallocBaseType SkAutoSMalloc<S>
-#endif
-
-template <size_t S> class GrAutoMalloc : public GrAutoMallocBaseType {
-public:
-    GrAutoMalloc() : INHERITED() {}
-    explicit GrAutoMalloc(size_t size) : INHERITED(size) {}
-    virtual ~GrAutoMalloc() {}
-private:
-    typedef GrAutoMallocBaseType INHERITED;
-};
-
-#undef GrAutoMallocBaseType
 #endif

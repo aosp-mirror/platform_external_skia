@@ -5,7 +5,7 @@
  * found in the LICENSE file.
  */
 
-#include "gl/GrGLPathRendering.h"
+#include "gl/GrGLProgramDataManager.h"
 #include "gl/GrGLUniformHandle.h"
 #include "gl/GrGLGpu.h"
 #include "SkMatrix.h"
@@ -261,7 +261,7 @@ void GrGLProgramDataManager::setSkMatrix(UniformHandle u, const SkMatrix& matrix
 #ifdef SK_DEBUG
 void GrGLProgramDataManager::printUnused(const Uniform& uni) const {
     if (kUnusedUniform == uni.fFSLocation && kUnusedUniform == uni.fVSLocation) {
-        GrContextDebugf(fGpu->getContext(), "Unused uniform in shader\n");
+        GrCapsDebugf(fGpu->caps(), "Unused uniform in shader\n");
     }
 }
 #endif

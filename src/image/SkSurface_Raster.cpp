@@ -109,7 +109,7 @@ SkCanvas* SkSurface_Raster::onNewCanvas() {
 }
 
 SkSurface* SkSurface_Raster::onNewSurface(const SkImageInfo& info) {
-    return SkSurface::NewRaster(info);
+    return SkSurface::NewRaster(info, &this->props());
 }
 
 void SkSurface_Raster::onDraw(SkCanvas* canvas, SkScalar x, SkScalar y,
@@ -118,7 +118,7 @@ void SkSurface_Raster::onDraw(SkCanvas* canvas, SkScalar x, SkScalar y,
 }
 
 SkImage* SkSurface_Raster::onNewImageSnapshot(Budgeted) {
-    return SkNewImageFromBitmap(fBitmap, fWeOwnThePixels, &this->props());
+    return SkNewImageFromRasterBitmap(fBitmap, fWeOwnThePixels, &this->props());
 }
 
 void SkSurface_Raster::onCopyOnWrite(ContentChangeMode mode) {

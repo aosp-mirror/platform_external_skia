@@ -9,7 +9,7 @@
 #define GrGLShaderBuilder_DEFINED
 
 #include "SkTArray.h"
-#include "gl/GrGLProcessor.h"
+#include "gl/GrGLFragmentProcessor.h"
 #include "gl/GrGLProgramDesc.h"
 #include "gl/GrGLProgramDataManager.h"
 
@@ -203,5 +203,6 @@ protected:
     bool fFinalized;
 
     friend class GrGLProgramBuilder;
+    friend class GrGLPathProgramBuilder; // to access fInputs.
 };
 #endif

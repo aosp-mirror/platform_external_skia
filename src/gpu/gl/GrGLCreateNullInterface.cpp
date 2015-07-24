@@ -20,7 +20,7 @@ namespace {
 
 class BufferObj {
 public:
-    SK_DECLARE_INST_COUNT(BufferObj);
+    
 
     BufferObj(GrGLuint id) : fID(id), fDataPtr(NULL), fSize(0), fMapped(false) {
     }
@@ -53,7 +53,7 @@ private:
 // This class maintains a sparsely populated array of buffer pointers.
 class BufferManager {
 public:
-    SK_DECLARE_INST_COUNT(BufferManager);
+    
 
     BufferManager() : fFreeListHead(kFreeListEnd) {}
 
@@ -122,7 +122,7 @@ private:
  */
 struct ThreadContext {
 public:
-    SK_DECLARE_INST_COUNT(ThreadContext);
+    
 
     BufferManager   fBufferManager;
     GrGLuint        fCurrArrayBuffer;
@@ -382,9 +382,11 @@ const GrGLInterface* GrGLCreateNullInterface() {
     functions->fDisable = noOpGLDisable;
     functions->fDisableVertexAttribArray = noOpGLDisableVertexAttribArray;
     functions->fDrawArrays = noOpGLDrawArrays;
+    functions->fDrawArraysInstanced = noOpGLDrawArraysInstanced;
     functions->fDrawBuffer = noOpGLDrawBuffer;
     functions->fDrawBuffers = noOpGLDrawBuffers;
     functions->fDrawElements = noOpGLDrawElements;
+    functions->fDrawElementsInstanced = noOpGLDrawElementsInstanced;
     functions->fEnable = noOpGLEnable;
     functions->fEnableVertexAttribArray = noOpGLEnableVertexAttribArray;
     functions->fEndQuery = noOpGLEndQuery;
@@ -464,6 +466,7 @@ const GrGLInterface* GrGLCreateNullInterface() {
     functions->fVertexAttrib3fv = noOpGLVertexAttrib3fv;
     functions->fVertexAttrib4fv = noOpGLVertexAttrib4fv;
     functions->fVertexAttribPointer = noOpGLVertexAttribPointer;
+    functions->fVertexAttribDivisor = noOpGLVertexAttribDivisor;
     functions->fViewport = nullGLViewport;
     functions->fBindFramebuffer = nullGLBindFramebuffer;
     functions->fBindRenderbuffer = nullGLBindRenderbuffer;

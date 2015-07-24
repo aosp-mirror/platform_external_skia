@@ -8,15 +8,14 @@
 #include "CrashHandler.h"
 #include "OverwriteLine.h"
 #include "Resources.h"
+#include "SkAtomics.h"
 #include "SkCommonFlags.h"
 #include "SkGraphics.h"
-#include "SkInstCnt.h"
 #include "SkOSFile.h"
 #include "SkRunnable.h"
 #include "SkTArray.h"
 #include "SkTaskGroup.h"
 #include "SkTemplates.h"
-#include "SkThread.h"
 #include "SkTime.h"
 #include "Test.h"
 
@@ -130,12 +129,6 @@ static bool should_run(const char* testName, bool isGPUTest) {
 int test_main();
 int test_main() {
     SetupCrashHandler();
-
-#if SK_ENABLE_INST_COUNT
-    if (FLAGS_leaks) {
-        gPrintInstCount = true;
-    }
-#endif
 
     SkAutoGraphics ag;
 

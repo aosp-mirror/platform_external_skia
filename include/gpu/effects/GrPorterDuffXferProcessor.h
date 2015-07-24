@@ -20,31 +20,34 @@ public:
 
     bool supportsRGBCoverage(GrColor knownColor, uint32_t knownColorFlags) const override;
 
-    void getInvariantOutput(const GrProcOptInfo& colorPOI, const GrProcOptInfo& coveragePOI,
-                            GrXPFactory::InvariantOutput*) const override;
+    void getInvariantBlendedColor(const GrProcOptInfo& colorPOI,
+                                  GrXPFactory::InvariantBlendedColor*) const override;
 
 private:
-    GrPorterDuffXPFactory(GrBlendCoeff src, GrBlendCoeff dst); 
+    GrPorterDuffXPFactory(SkXfermode::Mode);
 
-    GrXferProcessor* onCreateXferProcessor(const GrDrawTargetCaps& caps,
+    GrXferProcessor* onCreateXferProcessor(const GrCaps& caps,
                                            const GrProcOptInfo& colorPOI,
                                            const GrProcOptInfo& coveragePOI,
-                                           const GrDeviceCoordTexture* dstCopy) const override;
+                                           bool hasMixedSamples,
+                                           const DstTexture*) const override;
 
-    bool willReadDstColor(const GrDrawTargetCaps& caps,
+    bool willReadDstColor(const GrCaps& caps,
                           const GrProcOptInfo& colorPOI,
-                          const GrProcOptInfo& coveragePOI) const override;
+                          const GrProcOptInfo& coveragePOI,
+                          bool hasMixedSamples) const override;
 
     bool onIsEqual(const GrXPFactory& xpfBase) const override {
         const GrPorterDuffXPFactory& xpf = xpfBase.cast<GrPorterDuffXPFactory>();
-        return (fSrcCoeff == xpf.fSrcCoeff && fDstCoeff == xpf.fDstCoeff);
+        return fXfermode == xpf.fXfermode;
     }
 
     GR_DECLARE_XP_FACTORY_TEST;
+    static void TestGetXPOutputTypes(const GrXferProcessor*, int* outPrimary, int* outSecondary);
 
-    GrBlendCoeff fSrcCoeff;
-    GrBlendCoeff fDstCoeff;
+    SkXfermode::Mode fXfermode;
 
+    friend class GrPorterDuffTest; // for TestGetXPOutputTypes()
     typedef GrXPFactory INHERITED;
 };
 

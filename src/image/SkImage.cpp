@@ -7,12 +7,20 @@
 
 #include "SkBitmap.h"
 #include "SkCanvas.h"
+#include "SkData.h"
 #include "SkImageGenerator.h"
 #include "SkImagePriv.h"
 #include "SkImage_Base.h"
+#include "SkPixelRef.h"
 #include "SkReadPixelsRec.h"
 #include "SkString.h"
 #include "SkSurface.h"
+
+#if SK_SUPPORT_GPU
+#include "GrTexture.h"
+#include "GrContext.h"
+#include "SkImage_Gpu.h"
+#endif
 
 uint32_t SkImage::NextUniqueID() {
     static int32_t gUniqueID;
@@ -46,10 +54,6 @@ bool SkImage::readPixels(const SkImageInfo& dstInfo, void* dstPixels, size_t dst
     return as_IB(this)->onReadPixels(rec.fInfo, rec.fPixels, rec.fRowBytes, rec.fX, rec.fY);
 }
 
-GrTexture* SkImage::getTexture() const {
-    return as_IB(this)->onGetTexture();
-}
-
 SkShader* SkImage::newShader(SkShader::TileMode tileX,
                              SkShader::TileMode tileY,
                              const SkMatrix* localMatrix) const {
@@ -64,12 +68,16 @@ SkData* SkImage::encode(SkImageEncoder::Type type, int quality) const {
     return NULL;
 }
 
-SkImage* SkImage::NewFromData(SkData* data) {
-    if (NULL == data) {
+SkData* SkImage::refEncoded() const {
+    return as_IB(this)->onRefEncoded();
+}
+
+SkImage* SkImage::NewFromEncoded(SkData* encoded, const SkIRect* subset) {
+    if (NULL == encoded || 0 == encoded->size()) {
         return NULL;
     }
-    SkImageGenerator* generator = SkImageGenerator::NewFromData(data);
-    return generator ? SkImage::NewFromGenerator(generator) : NULL;
+    SkImageGenerator* generator = SkImageGenerator::NewFromEncoded(encoded);
+    return generator ? SkImage::NewFromGenerator(generator, subset) : NULL;
 }
 
 SkSurface* SkImage::newSurface(const SkImageInfo& info, const SkSurfaceProps* props) const {
@@ -108,6 +116,38 @@ SkImage* SkImage::newImage(int newWidth, int newHeight, const SkIRect* subset,
 
     return as_IB(this)->onNewImage(newWidth, newHeight, subset, quality);
 }
+
+#if SK_SUPPORT_GPU
+
+GrTexture* SkImage::getTexture() const {
+    return as_IB(this)->getTexture();
+}
+
+bool SkImage::isTextureBacked() const { return SkToBool(as_IB(this)->getTexture()); }
+
+GrBackendObject SkImage::getTextureHandle(bool flushPendingGrContextIO) const {
+    GrTexture* texture = as_IB(this)->getTexture();
+    if (texture) {
+        GrContext* context = texture->getContext();
+        if (context) {            
+            if (flushPendingGrContextIO) {
+                context->prepareSurfaceForExternalIO(texture);
+            }
+        }
+        return texture->getTextureHandle();
+    }
+    return 0;
+}
+
+#else
+
+GrTexture* SkImage::getTexture() const { return NULL; }
+
+bool SkImage::isTextureBacked() const { return false; }
+
+GrBackendObject SkImage::getTextureHandle(bool) const { return 0; }
+
+#endif
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -169,11 +209,87 @@ SkImage* SkImage_Base::onNewImage(int newWidth, int newHeight, const SkIRect* su
     return surface->newImageSnapshot();
 }
 
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+bool SkImage::peekPixels(SkPixmap* pmap) const {
+    SkImageInfo info;
+    size_t rowBytes;
+    const void* pixels = this->peekPixels(&info, &rowBytes);
+    if (pixels) {
+        if (pmap) {
+            pmap->reset(info, pixels, rowBytes);
+        }
+        return true;
+    }
+    return false;
+}
+
+bool SkImage::readPixels(const SkPixmap& pmap, int srcX, int srcY) const {
+    return this->readPixels(pmap.info(), pmap.writable_addr(), pmap.rowBytes(), srcX, srcY);
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+SkImage* SkImage::NewFromBitmap(const SkBitmap& bm) {
+    SkPixelRef* pr = bm.pixelRef();
+    if (NULL == pr) {
+        return NULL;
+    }
+
+#if SK_SUPPORT_GPU
+    if (GrTexture* tex = pr->getTexture()) {
+        SkAutoTUnref<GrTexture> unrefCopy;
+        if (!bm.isImmutable()) {
+            const bool notBudgeted = false;
+            tex = GrDeepCopyTexture(tex, notBudgeted);
+            if (NULL == tex) {
+                return NULL;
+            }
+            unrefCopy.reset(tex);
+        }
+        const SkImageInfo info = bm.info();
+        return SkNEW_ARGS(SkImage_Gpu, (info.width(), info.height(), info.alphaType(),
+                                        tex, 0, SkSurface::kNo_Budgeted));
+    }
+#endif
+
+    // This will check for immutable (share or copy)
+    return SkNewImageFromRasterBitmap(bm, false, NULL);
+}
+
+bool SkImage::asLegacyBitmap(SkBitmap* bitmap, LegacyBitmapMode mode) const {
+    return as_IB(this)->onAsLegacyBitmap(bitmap, mode);
+}
+
+bool SkImage_Base::onAsLegacyBitmap(SkBitmap* bitmap, LegacyBitmapMode mode) const {
+    // As the base-class, all we can do is make a copy (regardless of mode).
+    // Subclasses that want to be more optimal should override.
+    SkImageInfo info = SkImageInfo::MakeN32(this->width(), this->height(),
+                                    this->isOpaque() ? kOpaque_SkAlphaType : kPremul_SkAlphaType);
+    if (!bitmap->tryAllocPixels(info)) {
+        return false;
+    }
+    if (!this->readPixels(bitmap->info(), bitmap->getPixels(), bitmap->rowBytes(), 0, 0)) {
+        bitmap->reset();
+        return false;
+    }
+
+    if (kRO_LegacyBitmapMode == mode) {
+        bitmap->setImmutable();
+    }
+    return true;
+}
+
 //////////////////////////////////////////////////////////////////////////////////////
 
 #if !SK_SUPPORT_GPU
 
-SkImage* SkImage::NewFromTexture(GrContext*, const GrBackendTextureDesc&, SkAlphaType) {
+SkImage* SkImage::NewFromTexture(GrContext*, const GrBackendTextureDesc&, SkAlphaType,
+                                 TextureReleaseProc, ReleaseContext) {
+    return NULL;
+}
+
+SkImage* SkImage::NewFromAdoptedTexture(GrContext*, const GrBackendTextureDesc&, SkAlphaType) {
     return NULL;
 }
 

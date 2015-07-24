@@ -9,10 +9,11 @@
 
 #include "GrGpu.h"
 
+#include "GrCaps.h"
 #include "GrContext.h"
-#include "GrDrawTargetCaps.h"
 #include "GrGpuResourcePriv.h"
 #include "GrIndexBuffer.h"
+#include "GrPathRendering.h"
 #include "GrResourceCache.h"
 #include "GrRenderTargetPriv.h"
 #include "GrStencilAttachment.h"
@@ -145,7 +146,8 @@ bool GrGpu::attachStencilAttachmentToRenderTarget(GrRenderTarget* rt) {
     }
 #endif
 
-    GrStencilAttachment::ComputeSharedStencilAttachmentKey(width, height, rt->numSamples(), &sbKey);
+    GrStencilAttachment::ComputeSharedStencilAttachmentKey(width, height,
+        rt->numStencilSamples(), &sbKey);
     SkAutoTUnref<GrStencilAttachment> sb(static_cast<GrStencilAttachment*>(
         this->getContext()->getResourceCache()->findAndRefUniqueResource(sbKey)));
     if (sb) {
@@ -173,9 +175,9 @@ bool GrGpu::attachStencilAttachmentToRenderTarget(GrRenderTarget* rt) {
     }
 }
 
-GrTexture* GrGpu::wrapBackendTexture(const GrBackendTextureDesc& desc) {
+GrTexture* GrGpu::wrapBackendTexture(const GrBackendTextureDesc& desc, GrWrapOwnership ownership) {
     this->handleDirtyContext();
-    GrTexture* tex = this->onWrapBackendTexture(desc);
+    GrTexture* tex = this->onWrapBackendTexture(desc, ownership);
     if (NULL == tex) {
         return NULL;
     }
@@ -189,19 +191,28 @@ GrTexture* GrGpu::wrapBackendTexture(const GrBackendTextureDesc& desc) {
     }
 }
 
-GrRenderTarget* GrGpu::wrapBackendRenderTarget(const GrBackendRenderTargetDesc& desc) {
+GrRenderTarget* GrGpu::wrapBackendRenderTarget(const GrBackendRenderTargetDesc& desc,
+                                               GrWrapOwnership ownership) {
     this->handleDirtyContext();
-    return this->onWrapBackendRenderTarget(desc);
+    return this->onWrapBackendRenderTarget(desc, ownership);
 }
 
 GrVertexBuffer* GrGpu::createVertexBuffer(size_t size, bool dynamic) {
     this->handleDirtyContext();
-    return this->onCreateVertexBuffer(size, dynamic);
+    GrVertexBuffer* vb = this->onCreateVertexBuffer(size, dynamic);
+    if (!this->caps()->reuseScratchBuffers()) {
+        vb->resourcePriv().removeScratchKey();
+    }
+    return vb;
 }
 
 GrIndexBuffer* GrGpu::createIndexBuffer(size_t size, bool dynamic) {
     this->handleDirtyContext();
-    return this->onCreateIndexBuffer(size, dynamic);
+    GrIndexBuffer* ib = this->onCreateIndexBuffer(size, dynamic);
+    if (!this->caps()->reuseScratchBuffers()) {
+        ib->resourcePriv().removeScratchKey();
+    }
+    return ib;
 }
 
 void GrGpu::clear(const SkIRect* rect,
@@ -299,30 +310,4 @@ void GrGpu::draw(const DrawArgs& args, const GrVertices& vertices) {
     do {
         this->onDraw(args, *verts);
     } while ((verts = iter.next()));
-}
-
-void GrGpu::stencilPath(const GrPath* path, const StencilPathState& state) {
-    this->handleDirtyContext();
-    this->onStencilPath(path, state);
-}
-
-void GrGpu::drawPath(const DrawArgs& args,
-                     const GrPath* path,
-                     const GrStencilSettings& stencilSettings) {
-    this->handleDirtyContext();
-    this->onDrawPath(args, path, stencilSettings);
-}
-
-void GrGpu::drawPaths(const DrawArgs& args,
-                      const GrPathRange* pathRange,
-                      const void* indices,
-                      GrDrawTarget::PathIndexType indexType,
-                      const float transformValues[],
-                      GrDrawTarget::PathTransformType transformType,
-                      int count,
-                      const GrStencilSettings& stencilSettings) {
-    this->handleDirtyContext();
-    pathRange->willDrawPaths(indices, indexType, count);
-    this->onDrawPaths(args, pathRange, indices, indexType, transformValues,
-                      transformType, count, stencilSettings);
 }

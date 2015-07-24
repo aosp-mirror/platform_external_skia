@@ -11,6 +11,7 @@
 
 #include "GrContext.h"
 #include "GrDrawTarget.h"
+#include "gl/GrGLContext.h"
 
 /** Allows a test to temporarily draw to a GrDrawTarget owned by a GrContext. Tests that use this
     should be careful not to mix using the GrDrawTarget directly and drawing via SkCanvas or

@@ -16,6 +16,7 @@
 class SkBitmap;
 class GrProcessor;
 class GrContext;
+class GrProcessorDataManager;
 
 /**
  *  ColorFilters are optional objects in the drawing pipeline. When present in
@@ -27,8 +28,6 @@ class GrContext;
  */
 class SK_API SkColorFilter : public SkFlattenable {
 public:
-    SK_DECLARE_INST_COUNT(SkColorFilter)
-
     /**
      *  If the filter can be represented by a source color plus Mode, this
      *  returns true, and sets (if not NULL) the color and mode appropriately.
@@ -136,7 +135,8 @@ public:
      *
      *  If the subclass returns false, then it should not modify the array at all.
      */
-    virtual bool asFragmentProcessors(GrContext*, SkTDArray<GrFragmentProcessor*>*) const {
+    virtual bool asFragmentProcessors(GrContext*, GrProcessorDataManager*,
+                                      SkTDArray<GrFragmentProcessor*>*) const {
         return false;
     }
 

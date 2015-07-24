@@ -43,8 +43,6 @@ public:
 
 class Benchmark : public SkRefCnt {
 public:
-    SK_DECLARE_INST_COUNT(Benchmark)
-
     Benchmark();
 
     const char* getName();
@@ -63,6 +61,10 @@ public:
     // the rendering mode.
     virtual bool isSuitableFor(Backend backend) {
         return backend != kNonRendering_Backend;
+    }
+
+    virtual int calculateLoops(int defaultLoops) const {
+        return defaultLoops;
     }
 
     // Call before draw, allows the benchmark to do setup work outside of the
@@ -99,6 +101,11 @@ public:
         fOrMask = orMask;
         fClearMask = clearMask;
     }
+
+    /*
+     * Benches which support running in a visual mode can advertise this functionality
+     */
+    virtual bool isVisual() { return false; }
 
 protected:
     virtual void setupPaint(SkPaint* paint);

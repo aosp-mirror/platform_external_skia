@@ -24,13 +24,25 @@ class SkTextBlobBuilder;
 namespace sk_tool_utils {
 
     const char* colortype_name(SkColorType);
+    SkColor color_to_565(SkColor color);
+    void emoji_typeface(SkAutoTUnref<SkTypeface>* );
+    const char* emoji_sample_text();
+    const char* platform_os_emoji();
+    const char* platform_os_name();
+    const char* platform_extra_config(const char* config);
 
     /**
-     * Sets the paint to use a platform-independent text renderer.
+     * Sets the paint to use a platform-independent text renderer if FLAGS_portableFonts is set.
+     * FIXME: will become obsolete as GMs migrate to set portable typeface always.
      */
     void set_portable_typeface(SkPaint* paint, const char* name = NULL,
                                SkTypeface::Style style = SkTypeface::kNormal);
+    void set_portable_typeface_always(SkPaint* paint, const char* name = NULL,
+                               SkTypeface::Style style = SkTypeface::kNormal);
     SkTypeface* create_portable_typeface(const char* name, SkTypeface::Style style);
+    SkTypeface* create_portable_typeface_always(const char* name, SkTypeface::Style style);
+    /** Call to clean up portable font references. */
+    void release_portable_typefaces();
     void report_used_chars();
 
     /**

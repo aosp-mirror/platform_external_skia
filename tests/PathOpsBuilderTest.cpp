@@ -33,8 +33,9 @@ DEF_TEST(PathOpsBuilder, reporter) {
     SkPath::Direction dir;
     REPORTER_ASSERT(reporter, result.isRect(NULL, &closed, &dir));
     REPORTER_ASSERT(reporter, closed);
-    REPORTER_ASSERT(reporter, dir == SkPath::kCW_Direction);
-    REPORTER_ASSERT(reporter, rectPath == result);
+    REPORTER_ASSERT(reporter, dir == SkPath::kCCW_Direction);
+    int pixelDiff = comparePaths(reporter, __FUNCTION__, rectPath, result);
+    REPORTER_ASSERT(reporter, pixelDiff == 0);
 
     rectPath.reset();
     rectPath.setFillType(SkPath::kEvenOdd_FillType);
@@ -44,7 +45,7 @@ DEF_TEST(PathOpsBuilder, reporter) {
     REPORTER_ASSERT(reporter, result.isRect(NULL, &closed, &dir));
     REPORTER_ASSERT(reporter, closed);
     REPORTER_ASSERT(reporter, dir == SkPath::kCCW_Direction);
-     REPORTER_ASSERT(reporter, rectPath == result);
+    REPORTER_ASSERT(reporter, rectPath == result);
 
     builder.add(rectPath, kDifference_SkPathOp);
     REPORTER_ASSERT(reporter, builder.resolve(&result));
@@ -74,12 +75,11 @@ DEF_TEST(PathOpsBuilder, reporter) {
     builder.add(circle2, kUnion_SkPathOp);
     builder.add(circle3, kDifference_SkPathOp);
     REPORTER_ASSERT(reporter, builder.resolve(&result));
-    SkBitmap bitmap;
-    int pixelDiff = comparePaths(reporter, __FUNCTION__, opCompare, result, bitmap);
+    pixelDiff = comparePaths(reporter, __FUNCTION__, opCompare, result);
     REPORTER_ASSERT(reporter, pixelDiff == 0);
 }
 
-DEF_TEST(Issue3838, reporter) {
+DEF_TEST(BuilderIssue3838, reporter) {
     SkPath path;
     path.moveTo(200, 170);
     path.lineTo(220, 170);
@@ -93,14 +93,181 @@ DEF_TEST(Issue3838, reporter) {
     path.lineTo(200, 250);
     path.lineTo(200, 170);
     path.close();
-    testSimplify(reporter, path, __FUNCTION__);
-    SkPath path3;
-    Simplify(path, &path3);
     SkPath path2;
     SkOpBuilder builder;
     builder.add(path, kUnion_SkPathOp);
     builder.resolve(&path2);
-    SkBitmap bitmap;
-    int pixelDiff = comparePaths(reporter, __FUNCTION__, path, path2, bitmap);
+    int pixelDiff = comparePaths(reporter, __FUNCTION__, path, path2);
     REPORTER_ASSERT(reporter, pixelDiff == 0);
 }
+
+DEF_TEST(BuilderIssue3838_2, reporter) {
+    SkPath path;
+    path.addCircle(100, 100, 50);
+
+    SkOpBuilder builder;
+    builder.add(path, kUnion_SkPathOp);
+    builder.add(path, kUnion_SkPathOp);
+
+    SkPath result;
+    builder.resolve(&result);
+    int pixelDiff = comparePaths(reporter, __FUNCTION__, path, result);
+    REPORTER_ASSERT(reporter, pixelDiff == 0);
+}
+
+DEF_TEST(BuilderIssue3838_3, reporter) {
+    SkPath path;
+    path.moveTo(40, 10);
+    path.lineTo(60, 10);
+    path.lineTo(60, 30);
+    path.lineTo(40, 30);
+    path.lineTo(40, 10);
+    path.moveTo(41, 11);
+    path.lineTo(41, 29);
+    path.lineTo(59, 29);
+    path.lineTo(59, 11);
+    path.lineTo(41, 11);
+
+    SkOpBuilder builder;
+    builder.add(path, kUnion_SkPathOp);
+    SkPath result;
+    builder.resolve(&result);
+    int pixelDiff = comparePaths(reporter, __FUNCTION__, path, result);
+    REPORTER_ASSERT(reporter, pixelDiff == 0);
+}
+
+DEF_TEST(BuilderIssue502792_2, reporter) {
+    SkPath path, pathB;
+    path.setFillType(SkPath::kWinding_FillType);
+    path.addRect(0, 0, 1, 1, SkPath::kCW_Direction);
+    path.addRect(2, 2, 3, 3, SkPath::kCW_Direction);
+    pathB.setFillType(SkPath::kEvenOdd_FillType);
+    pathB.addRect(3, 3, 4, 4, SkPath::kCW_Direction);
+    pathB.addRect(3, 3, 4, 4, SkPath::kCW_Direction);
+    SkOpBuilder builder;
+    builder.add(path, kUnion_SkPathOp);
+    builder.add(pathB, kDifference_SkPathOp);
+    SkPath result;
+    builder.resolve(&result);
+}
+
+DEF_TEST(Fuzz846, reporter) {
+/*
+<clipPath id="clip-circle">
+    <circle id="circle" cx="60" cy="60" r="50" />
+</clipPath>
+<clipPath id="clip-rect">
+    <clipPath id="clip-rect">
+        <clipPath id="clip-rect">
+            <clipPath id="clip-rect">
+                <rect x="10" y="30" width="0" height="60" />
+                <rect x="10" y="30" width="0" height="60" />
+                <rect x="10" y="30" width="100" height="60" />
+                <rect x="10" y="30" width="32668" />
+                <rect x="10" y="30" width="100" height="18446744073709551615" />
+                <rect x="10" y="255" width="100" height="60" />
+                <rect width="100" height="60" />
+                <rect x="10" y="30" width="100" height="60" />
+                <rect x="10" y="30" width="100" height="4294967236" />
+                <rect x="10" y="30" width="100" height="60" />
+            </clipPath>
+            <rect x="10" y="30" width="0" height="60" />
+            <rect x="10" y="30" width="0" height="0.18093252719929986369568203" />
+            <rect x="10" y="30" width="100" height="60" />
+            <rect x="10" y="30" width="32668" height="60" />
+            <rect x="10" y="30" width="100" height="18446744073709551615" />
+            <rect x="10" y="255" width="100" height="60" />
+            <rect x="2147483649" y="30" width="100" height="60" />
+            <rect x="10" y="30" width="100" height="60" />
+            <rect x="10" y="30" width="100" height="60" />
+            <rect x="10" y="30" width="100" height="60" />
+        </clipPath>
+        <rect x="10" y="30" width="0" height="60" />
+        <rect x="10" y="30" width="0" height="60" />
+        <rect x="10" y="30" width="100" height="60" />
+        <rect x="10" y="30" width="32668" height="60" />
+        <rect x="10" y="30" width="100" height="18446744073709551615" />
+        <rect x="10" y="255" width="100" height="60" />
+        <rect x="2147483649" y="30" width="100" height="60" />
+        <rect x="10" y="30" width="100" height="60" />
+        <rect x="10" y="2879753595" width="100" height="60" />
+        <rect x="10" y="30" width="100" height="60" />
+    </clipPath>
+    <rect x="10" y="30" width="100" height="60" />
+    <rect x="10" y="30" width="0" height="60" />
+    <rect x="10" y="30" width="100" height="60" />
+    <rect x="10" y="30" width="32668" height="60" />
+    <rect x="10" y="30" width="100" height="18446744073709551615" />
+    <rect x="10" y="255" width="100" height="60" />
+    <rect x="2147483649" y="30" width="100" height="60" />
+    <rect x="10" y="30" width="100" height="60" />
+    <rect x="10" y="30" width="100" height="4294967236" />
+    <rect x="10" y="30" width="100" height="4294967236" />
+    <rect x="10" y="30" width="100" height="4294967236" />
+    <rect x="10" y="30" width="100" height="4294967236" />
+    <rect x="10" y="30" width="100" height="60" />
+    <rect x="757798030" y="30" width="100" height="60" />
+*/
+    SkPath clipCircle, clipRect;
+    SkPath inner;
+    clipCircle.addCircle(60, 60, 50);             // <circle id="circle" cx="60" cy="60" r="50" />
+
+    inner.addRect(10, 30, 10+0, 30+60);           // <rect x="10" y="30" width="0" height="60" />
+    inner.addRect(10, 30, 10+0, 30+60);           // <rect x="10" y="30" width="0" height="60" />
+    inner.addRect(10, 30, 10+100, 30+60);         // <rect x="10" y="30" width="100" height="60" />
+    inner.addRect(10, 30, 10+32668, 30+0);        // <rect x="10" y="30" width="32668" />
+    inner.addRect(10, 30, 10+100, 30+18446744073709551615.f); // <rect x="10" y="30" width="100" height="18446744073709551615" />
+    inner.addRect(10, 255, 10+100, 255+60);       // <rect x="10" y="255" width="100" height="60" />
+    inner.addRect(0, 0, 0+100, 0+60);             //  <rect width="100" height="60" />
+    inner.addRect(10, 30, 10+100, 30+60);         // <rect x="10" y="30" width="100" height="60" />
+    inner.addRect(10, 30, 10+100, 30+4294967236.f); // <rect x="10" y="30" width="100" height="4294967236" />
+    inner.addRect(10, 30, 10+100, 30+60);         // <rect x="10" y="30" width="100" height="60" />
+    clipRect.addPath(inner);
+    inner.reset();
+    inner.addRect(10, 30, 10+0, 30+60);           // <rect x="10" y="30" width="0" height="60" />
+    inner.addRect(10, 30, 10+0, 30+0.18093252719929986369568203f); // <rect x="10" y="30" width="0" height="0.18093252719929986369568203" />
+    inner.addRect(10, 30, 10+100, 30+60);         // <rect x="10" y="30" width="100" height="60" />
+    inner.addRect(10, 30, 10+32668, 30+60);       // <rect x="10" y="30" width="32668" height="60" />
+    inner.addRect(10, 30, 10+100, 30+18446744073709551615.f); // <rect x="10" y="30" width="100" height="18446744073709551615" />
+    inner.addRect(10, 255, 10+100, 255+60);       // <rect x="10" y="255" width="100" height="60" />
+    inner.addRect(2147483649.f, 30, 2147483649.f+100, 30+60); // <rect x="2147483649" y="30" width="100" height="60" />
+    inner.addRect(10, 30, 10+100, 30+60);         // <rect x="10" y="30" width="100" height="60" />
+    inner.addRect(10, 30, 10+100, 30+60);         // <rect x="10" y="30" width="100" height="60" />
+    inner.addRect(10, 30, 10+100, 30+60);         // <rect x="10" y="30" width="100" height="60" />
+    clipRect.addPath(inner);
+    inner.reset();
+    inner.addRect(10, 30, 10+0, 30+60);           // <rect x="10" y="30" width="0" height="60" />
+    inner.addRect(10, 30, 10+0, 30+60);           // <rect x="10" y="30" width="0" height="60" />
+    inner.addRect(10, 30, 10+100, 30+60);         // <rect x="10" y="30" width="100" height="60" />
+    inner.addRect(10, 30, 10+32668, 30+60);       // <rect x="10" y="30" width="32668" height="60" />
+    inner.addRect(10, 30, 10+100, 30+18446744073709551615.f); // <rect x="10" y="30" width="100" height="18446744073709551615" />
+    inner.addRect(10, 255, 10+100, 255+60);       // <rect x="10" y="255" width="100" height="60" />
+    inner.addRect(2147483649.f, 30, 2147483649.f+100, 30+60); // <rect x="2147483649" y="30" width="100" height="60" />
+    inner.addRect(10, 30, 10+100, 30+60);         // <rect x="10" y="30" width="100" height="60" />
+    inner.addRect(10, 2879753595.f, 10+100, 30+2879753595.f); // <rect x="10" y="2879753595" width="100" height="60" />
+    inner.addRect(10, 30, 10+100, 30+60);         // <rect x="10" y="30" width="100" height="60" />
+    clipRect.addPath(inner);
+    inner.reset();
+    inner.addRect(10, 30, 10+100, 30+60);         // <rect x="10" y="30" width="100" height="60" />
+    inner.addRect(10, 30, 10+0, 30+60);           // <rect x="10" y="30" width="0" height="60" />
+    inner.addRect(10, 30, 10+100, 30+60);         // <rect x="10" y="30" width="100" height="60" />
+    inner.addRect(10, 30, 10+32668, 30+60);       // <rect x="10" y="30" width="32668" height="60" />
+    inner.addRect(10, 30, 10+100, 30+18446744073709551615.f); // <rect x="10" y="30" width="100" height="18446744073709551615" />
+    inner.addRect(10, 255, 10+100, 255+60);       // <rect x="10" y="255" width="100" height="60" />
+    inner.addRect(2147483649.f, 30, 2147483649.f+100, 30+60); // <rect x="2147483649" y="30" width="100" height="60" />
+    inner.addRect(10, 30, 10+100, 30+60);         // <rect x="10" y="30" width="100" height="60" />
+    inner.addRect(10, 30, 10+100, 30+4294967236.f); // <rect x="10" y="30" width="100" height="4294967236" />
+    inner.addRect(10, 30, 10+100, 30+4294967236.f); // <rect x="10" y="30" width="100" height="4294967236" />
+    inner.addRect(10, 30, 10+100, 30+4294967236.f); // <rect x="10" y="30" width="100" height="4294967236" />
+    inner.addRect(10, 30, 10+100, 30+4294967236.f); // <rect x="10" y="30" width="100" height="4294967236" />
+    inner.addRect(10, 30, 10+100, 30+60);         // <rect x="10" y="30" width="100" height="60" />
+    inner.addRect(757798030.f, 30, 757798030.f+100, 30+60); // <rect x="757798030" y="30" width="100" height="60" />
+    clipRect.addPath(inner);
+
+    SkOpBuilder builder;
+    builder.add(clipCircle, kUnion_SkPathOp);
+    builder.add(clipRect, kDifference_SkPathOp);
+    SkPath result;
+    builder.resolve(&result);
+}
+

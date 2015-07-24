@@ -112,8 +112,23 @@ static SkBitmap make_fake_bitmap(int width, int height) {
 
 // TODO: should inherit from SkBaseDevice instead of SkBitmapDevice...
 SkXPSDevice::SkXPSDevice()
-    : SkBitmapDevice(make_fake_bitmap(10000, 10000))
+    : INHERITED(make_fake_bitmap(10000, 10000), SkSurfaceProps(0, kUnknown_SkPixelGeometry))
     , fCurrentPage(0) {
+}
+
+SkXPSDevice::SkXPSDevice(IXpsOMObjectFactory* xpsFactory)
+    : INHERITED(make_fake_bitmap(10000, 10000), SkSurfaceProps(0, kUnknown_SkPixelGeometry))
+    , fCurrentPage(0) {
+
+    HRVM(CoCreateInstance(
+             CLSID_XpsOMObjectFactory,
+             NULL,
+             CLSCTX_INPROC_SERVER,
+             IID_PPV_ARGS(&this->fXpsFactory)),
+         "Could not create factory for layer.");
+
+    HRVM(this->fXpsFactory->CreateCanvas(&this->fCurrentXpsCanvas),
+         "Could not create canvas for layer.");
 }
 
 SkXPSDevice::~SkXPSDevice() {
@@ -1934,7 +1949,7 @@ HRESULT SkXPSDevice::CreateTypefaceUse(const SkPaint& paint,
     newTypefaceUse.fontData = fontData;
     newTypefaceUse.xpsFont = xpsFontResource.release();
 
-    SkAutoGlyphCache agc(paint, NULL, &SkMatrix::I());
+    SkAutoGlyphCache agc(paint, &this->surfaceProps(), &SkMatrix::I());
     SkGlyphCache* glyphCache = agc.getCache();
     unsigned int glyphCount = glyphCache->getGlyphCount();
     newTypefaceUse.glyphsUsed = new SkBitSet(glyphCount);
@@ -2257,20 +2272,5 @@ SkBaseDevice* SkXPSDevice::onCreateDevice(const CreateInfo& info, const SkPaint*
     }
 #endif
     return new SkXPSDevice(this->fXpsFactory.get());
-}
-
-SkXPSDevice::SkXPSDevice(IXpsOMObjectFactory* xpsFactory)
-    : SkBitmapDevice(make_fake_bitmap(10000, 10000))
-    , fCurrentPage(0) {
-
-    HRVM(CoCreateInstance(
-             CLSID_XpsOMObjectFactory,
-             NULL,
-             CLSCTX_INPROC_SERVER,
-             IID_PPV_ARGS(&this->fXpsFactory)),
-         "Could not create factory for layer.");
-
-    HRVM(this->fXpsFactory->CreateCanvas(&this->fCurrentXpsCanvas),
-         "Could not create canvas for layer.");
 }
 

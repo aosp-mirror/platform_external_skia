@@ -8,6 +8,8 @@
 #include "GrResourceProvider.h"
 
 #include "GrGpu.h"
+#include "GrIndexBuffer.h"
+#include "GrPathRendering.h"
 #include "GrResourceCache.h"
 #include "GrResourceKey.h"
 #include "GrVertexBuffer.h"
@@ -26,7 +28,7 @@ const GrIndexBuffer* GrResourceProvider::createInstancedIndexBuffer(const uint16
                                                                     const GrUniqueKey& key) {
     size_t bufferSize = patternSize * reps * sizeof(uint16_t);
 
-    GrIndexBuffer* buffer = this->gpu()->createIndexBuffer(bufferSize, /* dynamic = */ false);
+    GrIndexBuffer* buffer = this->getIndexBuffer(bufferSize, /* dynamic = */ false, true);
     if (!buffer) {
         return NULL;
     }
@@ -63,3 +65,76 @@ const GrIndexBuffer* GrResourceProvider::createQuadIndexBuffer() {
     return this->createInstancedIndexBuffer(kPattern, 6, kMaxQuads, 4, fQuadIndexBufferKey);
 }
 
+GrPath* GrResourceProvider::createPath(const SkPath& path, const GrStrokeInfo& stroke) {
+    SkASSERT(this->gpu()->pathRendering());
+    return this->gpu()->pathRendering()->createPath(path, stroke);
+}
+
+GrPathRange* GrResourceProvider::createPathRange(GrPathRange::PathGenerator* gen,
+                                                 const GrStrokeInfo& stroke) {
+    SkASSERT(this->gpu()->pathRendering());
+    return this->gpu()->pathRendering()->createPathRange(gen, stroke);
+}
+
+GrPathRange* GrResourceProvider::createGlyphs(const SkTypeface* tf, const SkDescriptor* desc,
+                                              const GrStrokeInfo& stroke) {
+
+    SkASSERT(this->gpu()->pathRendering());
+    return this->gpu()->pathRendering()->createGlyphs(tf, desc, stroke);
+}
+
+GrIndexBuffer* GrResourceProvider::getIndexBuffer(size_t size, bool dynamic,
+                                                  bool calledDuringFlush) {
+    if (this->isAbandoned()) {
+        return NULL;
+    }
+
+    if (dynamic) {
+        // bin by pow2 with a reasonable min
+        static const uint32_t MIN_SIZE = 1 << 12;
+        size = SkTMax(MIN_SIZE, GrNextPow2(SkToUInt(size)));
+
+        GrScratchKey key;
+        GrIndexBuffer::ComputeScratchKey(size, dynamic, &key);
+        uint32_t scratchFlags = 0;
+        if (calledDuringFlush) {
+            scratchFlags = GrResourceCache::kRequireNoPendingIO_ScratchFlag;
+        } else {
+            scratchFlags = GrResourceCache::kPreferNoPendingIO_ScratchFlag;
+        }
+        GrGpuResource* resource = this->cache()->findAndRefScratchResource(key, scratchFlags);
+        if (resource) {
+            return static_cast<GrIndexBuffer*>(resource);
+        }
+    }
+
+    return this->gpu()->createIndexBuffer(size, dynamic);    
+}
+
+GrVertexBuffer* GrResourceProvider::getVertexBuffer(size_t size, bool dynamic, 
+                                                    bool calledDuringFlush) {
+    if (this->isAbandoned()) {
+        return NULL;
+    }
+
+    if (dynamic) {
+        // bin by pow2 with a reasonable min
+        static const uint32_t MIN_SIZE = 1 << 15;
+        size = SkTMax(MIN_SIZE, GrNextPow2(SkToUInt(size)));
+
+        GrScratchKey key;
+        GrVertexBuffer::ComputeScratchKey(size, dynamic, &key);
+        uint32_t scratchFlags = 0;
+        if (calledDuringFlush) {
+            scratchFlags = GrResourceCache::kRequireNoPendingIO_ScratchFlag;
+        } else {
+            scratchFlags = GrResourceCache::kPreferNoPendingIO_ScratchFlag;
+        }
+        GrGpuResource* resource = this->cache()->findAndRefScratchResource(key, scratchFlags);
+        if (resource) {
+            return static_cast<GrVertexBuffer*>(resource);
+        }
+    }
+
+    return this->gpu()->createVertexBuffer(size, dynamic);
+}

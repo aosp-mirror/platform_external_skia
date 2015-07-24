@@ -16,15 +16,15 @@
 #if SK_SUPPORT_GPU
 #include "GrInvariantOutput.h"
 #include "effects/GrSingleTextureEffect.h"
-#include "gl/GrGLProcessor.h"
-#include "gl/GrGLSL.h"
+#include "gl/GrGLFragmentProcessor.h"
 #include "gl/GrGLTexture.h"
 #include "gl/builders/GrGLProgramBuilder.h"
 
 class GrMagnifierEffect : public GrSingleTextureEffect {
 
 public:
-    static GrFragmentProcessor* Create(GrTexture* texture,
+    static GrFragmentProcessor* Create(GrProcessorDataManager* procDataManager,
+                                       GrTexture* texture,
                                        const SkRect& bounds,
                                        float xOffset,
                                        float yOffset,
@@ -32,7 +32,8 @@ public:
                                        float yInvZoom,
                                        float xInvInset,
                                        float yInvInset) {
-        return SkNEW_ARGS(GrMagnifierEffect, (texture,
+        return SkNEW_ARGS(GrMagnifierEffect, (procDataManager,
+                                              texture,
                                               bounds,
                                               xOffset,
                                               yOffset,
@@ -64,7 +65,8 @@ public:
     float y_inv_inset() const { return fYInvInset; }
 
 private:
-    GrMagnifierEffect(GrTexture* texture,
+    GrMagnifierEffect(GrProcessorDataManager* procDataManager,
+                      GrTexture* texture,
                       const SkRect& bounds,
                       float xOffset,
                       float yOffset,
@@ -72,7 +74,7 @@ private:
                       float yInvZoom,
                       float xInvInset,
                       float yInvInset)
-        : GrSingleTextureEffect(texture, GrCoordTransform::MakeDivByTextureWHMatrix(texture))
+        : INHERITED(procDataManager, texture, GrCoordTransform::MakeDivByTextureWHMatrix(texture))
         , fBounds(bounds)
         , fXOffset(xOffset)
         , fYOffset(yOffset)
@@ -107,12 +109,7 @@ class GrGLMagnifierEffect : public GrGLFragmentProcessor {
 public:
     GrGLMagnifierEffect(const GrProcessor&);
 
-    virtual void emitCode(GrGLFPBuilder*,
-                          const GrFragmentProcessor&,
-                          const char* outputColor,
-                          const char* inputColor,
-                          const TransformedCoordsArray&,
-                          const TextureSamplerArray&) override;
+    virtual void emitCode(EmitArgs&) override;
 
     void setData(const GrGLProgramDataManager&, const GrProcessor&) override;
 
@@ -128,40 +125,36 @@ private:
 GrGLMagnifierEffect::GrGLMagnifierEffect(const GrProcessor&) {
 }
 
-void GrGLMagnifierEffect::emitCode(GrGLFPBuilder* builder,
-                                   const GrFragmentProcessor&,
-                                   const char* outputColor,
-                                   const char* inputColor,
-                                   const TransformedCoordsArray& coords,
-                                   const TextureSamplerArray& samplers) {
-    fOffsetVar = builder->addUniform(
+void GrGLMagnifierEffect::emitCode(EmitArgs& args) {
+    fOffsetVar = args.fBuilder->addUniform(
         GrGLProgramBuilder::kFragment_Visibility |
         GrGLProgramBuilder::kVertex_Visibility,
         kVec2f_GrSLType, kDefault_GrSLPrecision, "Offset");
-    fInvZoomVar = builder->addUniform(
+    fInvZoomVar = args.fBuilder->addUniform(
         GrGLProgramBuilder::kFragment_Visibility |
         GrGLProgramBuilder::kVertex_Visibility,
         kVec2f_GrSLType, kDefault_GrSLPrecision, "InvZoom");
-    fInvInsetVar = builder->addUniform(
+    fInvInsetVar = args.fBuilder->addUniform(
         GrGLProgramBuilder::kFragment_Visibility |
         GrGLProgramBuilder::kVertex_Visibility,
         kVec2f_GrSLType, kDefault_GrSLPrecision, "InvInset");
-    fBoundsVar = builder->addUniform(
+    fBoundsVar = args.fBuilder->addUniform(
         GrGLProgramBuilder::kFragment_Visibility |
         GrGLProgramBuilder::kVertex_Visibility,
         kVec4f_GrSLType, kDefault_GrSLPrecision, "Bounds");
 
-    GrGLFragmentBuilder* fsBuilder = builder->getFragmentShaderBuilder();
-    SkString coords2D = fsBuilder->ensureFSCoords2D(coords, 0);
+    GrGLFragmentBuilder* fsBuilder = args.fBuilder->getFragmentShaderBuilder();
+    SkString coords2D = fsBuilder->ensureFSCoords2D(args.fCoords, 0);
     fsBuilder->codeAppendf("\t\tvec2 coord = %s;\n", coords2D.c_str());
     fsBuilder->codeAppendf("\t\tvec2 zoom_coord = %s + %s * %s;\n",
-                           builder->getUniformCStr(fOffsetVar),
+                           args.fBuilder->getUniformCStr(fOffsetVar),
                            coords2D.c_str(),
-                           builder->getUniformCStr(fInvZoomVar));
-    const char* bounds = builder->getUniformCStr(fBoundsVar);
+                           args.fBuilder->getUniformCStr(fInvZoomVar));
+    const char* bounds = args.fBuilder->getUniformCStr(fBoundsVar);
     fsBuilder->codeAppendf("\t\tvec2 delta = (coord - %s.xy) * %s.zw;\n", bounds, bounds);
     fsBuilder->codeAppendf("\t\tdelta = min(delta, vec2(1.0, 1.0) - delta);\n");
-    fsBuilder->codeAppendf("\t\tdelta = delta * %s;\n", builder->getUniformCStr(fInvInsetVar));
+    fsBuilder->codeAppendf("\t\tdelta = delta * %s;\n",
+                           args.fBuilder->getUniformCStr(fInvInsetVar));
 
     fsBuilder->codeAppend("\t\tfloat weight = 0.0;\n");
     fsBuilder->codeAppend("\t\tif (delta.s < 2.0 && delta.t < 2.0) {\n");
@@ -176,12 +169,12 @@ void GrGLMagnifierEffect::emitCode(GrGLFPBuilder* builder,
 
     fsBuilder->codeAppend("\t\tvec2 mix_coord = mix(coord, zoom_coord, weight);\n");
     fsBuilder->codeAppend("\t\tvec4 output_color = ");
-    fsBuilder->appendTextureLookup(samplers[0], "mix_coord");
+    fsBuilder->appendTextureLookup(args.fSamplers[0], "mix_coord");
     fsBuilder->codeAppend(";\n");
 
-    fsBuilder->codeAppendf("\t\t%s = output_color;", outputColor);
+    fsBuilder->codeAppendf("\t\t%s = output_color;", args.fOutputColor);
     SkString modulate;
-    GrGLSLMulVarBy4f(&modulate, outputColor, inputColor);
+    GrGLSLMulVarBy4f(&modulate, args.fOutputColor, args.fInputColor);
     fsBuilder->codeAppend(modulate.c_str());
 }
 
@@ -208,21 +201,19 @@ GrGLFragmentProcessor* GrMagnifierEffect::createGLInstance() const {
 
 GR_DEFINE_FRAGMENT_PROCESSOR_TEST(GrMagnifierEffect);
 
-GrFragmentProcessor* GrMagnifierEffect::TestCreate(SkRandom* random,
-                                                   GrContext* context,
-                                                   const GrDrawTargetCaps&,
-                                                   GrTexture** textures) {
-    GrTexture* texture = textures[0];
+GrFragmentProcessor* GrMagnifierEffect::TestCreate(GrProcessorTestData* d) {
+    GrTexture* texture = d->fTextures[0];
     const int kMaxWidth = 200;
     const int kMaxHeight = 200;
     const int kMaxInset = 20;
-    uint32_t width = random->nextULessThan(kMaxWidth);
-    uint32_t height = random->nextULessThan(kMaxHeight);
-    uint32_t x = random->nextULessThan(kMaxWidth - width);
-    uint32_t y = random->nextULessThan(kMaxHeight - height);
-    uint32_t inset = random->nextULessThan(kMaxInset);
+    uint32_t width = d->fRandom->nextULessThan(kMaxWidth);
+    uint32_t height = d->fRandom->nextULessThan(kMaxHeight);
+    uint32_t x = d->fRandom->nextULessThan(kMaxWidth - width);
+    uint32_t y = d->fRandom->nextULessThan(kMaxHeight - height);
+    uint32_t inset = d->fRandom->nextULessThan(kMaxInset);
 
     GrFragmentProcessor* effect = GrMagnifierEffect::Create(
+        d->fProcDataManager,
         texture,
         SkRect::MakeWH(SkIntToScalar(kMaxWidth), SkIntToScalar(kMaxHeight)),
         (float) width / texture->width(),
@@ -277,8 +268,10 @@ SkMagnifierImageFilter::SkMagnifierImageFilter(const SkRect& srcRect, SkScalar i
 }
 
 #if SK_SUPPORT_GPU
-bool SkMagnifierImageFilter::asFragmentProcessor(GrFragmentProcessor** fp, GrTexture* texture,
-                                                 const SkMatrix&, const SkIRect&bounds) const {
+bool SkMagnifierImageFilter::asFragmentProcessor(GrFragmentProcessor** fp,
+                                                 GrProcessorDataManager* procDataManager,
+                                                 GrTexture* texture, const SkMatrix&,
+                                                 const SkIRect&bounds) const {
     if (fp) {
         SkScalar yOffset = texture->origin() == kTopLeft_GrSurfaceOrigin ? fSrcRect.y() :
            texture->height() - fSrcRect.height() * texture->height() / bounds.height()
@@ -291,7 +284,8 @@ bool SkMagnifierImageFilter::asFragmentProcessor(GrFragmentProcessor** fp, GrTex
             SkIntToScalar(texture->width()) / bounds.width(),
             SkIntToScalar(texture->height()) / bounds.height());
         SkScalar invInset = fInset > 0 ? SkScalarInvert(fInset) : SK_Scalar1;
-        *fp = GrMagnifierEffect::Create(texture,
+        *fp = GrMagnifierEffect::Create(procDataManager,
+                                        texture,
                                         effectBounds,
                                         fSrcRect.x() / texture->width(),
                                         yOffset / texture->height(),

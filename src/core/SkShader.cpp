@@ -5,17 +5,17 @@
  * found in the LICENSE file.
  */
 
+#include "SkAtomics.h"
 #include "SkBitmapProcShader.h"
 #include "SkColorShader.h"
 #include "SkEmptyShader.h"
-#include "SkReadBuffer.h"
 #include "SkMallocPixelRef.h"
 #include "SkPaint.h"
 #include "SkPicture.h"
 #include "SkPictureShader.h"
+#include "SkReadBuffer.h"
 #include "SkScalar.h"
 #include "SkShader.h"
-#include "SkThread.h"
 #include "SkWriteBuffer.h"
 
 //#define SK_TRACK_SHADER_LIFETIME
@@ -215,7 +215,8 @@ SkShader::GradientType SkShader::asAGradient(GradientInfo* info) const {
 }
 
 bool SkShader::asFragmentProcessor(GrContext*, const SkPaint&, const SkMatrix&, const SkMatrix*,
-                                   GrColor*, GrFragmentProcessor**)  const {
+                                   GrColor*, GrProcessorDataManager*,
+                                   GrFragmentProcessor**)  const {
     return false;
 }
 
@@ -347,7 +348,7 @@ SkShader::GradientType SkColorShader::asAGradient(GradientInfo* info) const {
 
 bool SkColorShader::asFragmentProcessor(GrContext*, const SkPaint& paint, const SkMatrix&,
                                         const SkMatrix*, GrColor* paintColor,
-                                        GrFragmentProcessor** fp) const {
+                                        GrProcessorDataManager*, GrFragmentProcessor** fp) const {
     *fp = NULL;
     SkColor skColor = fColor;
     U8CPU newA = SkMulDiv255Round(SkColorGetA(fColor), paint.getAlpha());
@@ -358,7 +359,7 @@ bool SkColorShader::asFragmentProcessor(GrContext*, const SkPaint& paint, const 
 #else
 
 bool SkColorShader::asFragmentProcessor(GrContext*, const SkPaint&, const SkMatrix&,
-                                        const SkMatrix*, GrColor*,
+                                        const SkMatrix*, GrColor*, GrProcessorDataManager*,
                                         GrFragmentProcessor**) const {
     SkDEBUGFAIL("Should not call in GPU-less build");
     return false;

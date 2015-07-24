@@ -59,6 +59,7 @@ struct Src {
     virtual Error SK_WARN_UNUSED_RESULT draw(SkCanvas*) const = 0;
     virtual SkISize size() const = 0;
     virtual Name name() const = 0;
+    virtual void modifyGrContextOptions(GrContextOptions* options) const {}
 };
 
 struct Sink {
@@ -85,6 +86,8 @@ public:
     Error draw(SkCanvas*) const override;
     SkISize size() const override;
     Name name() const override;
+    void modifyGrContextOptions(GrContextOptions* options) const override;
+
 private:
     skiagm::GMRegistry::Factory fFactory;
 };
@@ -94,13 +97,16 @@ public:
     enum Mode {
         kNormal_Mode,
         kScanline_Mode,
+        kScanline_Subset_Mode,
+        kStripe_Mode, // Tests the skipping of scanlines
+        kSubset_Mode, // For codecs that support subsets directly.
     };
     enum DstColorType {
         kGetFromCanvas_DstColorType,
         kIndex8_Always_DstColorType,
         kGrayscale_Always_DstColorType,
     };
-    CodecSrc(Path, Mode, DstColorType);
+    CodecSrc(Path, Mode, DstColorType, float);
 
     Error draw(SkCanvas*) const override;
     SkISize size() const override;
@@ -109,6 +115,7 @@ private:
     Path                   fPath;
     Mode                   fMode;
     DstColorType           fDstColorType;
+    float                  fScale;
 };
 
 

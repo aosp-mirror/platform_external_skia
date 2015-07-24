@@ -18,6 +18,7 @@
 #include "GrPipelineBuilder.h"
 #include "GrTraceMarker.h"
 #include "GrVertexBuffer.h"
+#include "GrXferProcessor.h"
 
 #include "SkClipStack.h"
 #include "SkMatrix.h"
@@ -29,14 +30,14 @@
 #include "SkXfermode.h"
 
 class GrClip;
-class GrDrawTargetCaps;
+class GrCaps;
 class GrPath;
 class GrPathRange;
 class GrPipeline;
 
 class GrDrawTarget : public SkRefCnt {
 public:
-    SK_DECLARE_INST_COUNT(GrDrawTarget)
+    
 
     typedef GrPathRange::PathIndexType PathIndexType;
     typedef GrPathRendering::PathTransformType PathTransformType;
@@ -45,9 +46,9 @@ public:
 
     // The context may not be fully constructed and should not be used during GrDrawTarget
     // construction.
-    GrDrawTarget(GrContext* context);
+    GrDrawTarget(GrGpu* gpu, GrResourceProvider*);
 
-    virtual ~GrDrawTarget() {}
+    virtual ~GrDrawTarget();
 
     /**
      * Empties the draw buffer of any queued up draws.
@@ -63,9 +64,9 @@ public:
     /**
      * Gets the capabilities of the draw target.
      */
-    const GrDrawTargetCaps* caps() const { return fCaps.get(); }
+    const GrCaps* caps() const { return fCaps; }
 
-    void drawBatch(GrPipelineBuilder*, GrBatch*);
+    void drawBatch(const GrPipelineBuilder&, GrBatch*);
 
     /**
      * Draws path into the stencil buffer. The fill must be either even/odd or
@@ -73,14 +74,14 @@ public:
      * on the GrPipelineBuilder (if possible in the 3D API).  Note, we will never have an inverse
      * fill with stencil path
      */
-    void stencilPath(GrPipelineBuilder*, const GrPathProcessor*, const GrPath*,
+    void stencilPath(const GrPipelineBuilder&, const GrPathProcessor*, const GrPath*,
                      GrPathRendering::FillType);
 
     /**
      * Draws a path. Fill must not be a hairline. It will respect the HW
      * antialias flag on the GrPipelineBuilder (if possible in the 3D API).
      */
-    void drawPath(GrPipelineBuilder*, const GrPathProcessor*, const GrPath*,
+    void drawPath(const GrPipelineBuilder&, const GrPathProcessor*, const GrPath*,
                   GrPathRendering::FillType);
 
     /**
@@ -96,7 +97,7 @@ public:
      * @param count           Number of paths to draw
      * @param fill            Fill type for drawing all the paths
      */
-    void drawPaths(GrPipelineBuilder*,
+    void drawPaths(const GrPipelineBuilder&,
                    const GrPathProcessor*,
                    const GrPathRange* pathRange,
                    const void* indices,
@@ -117,26 +118,31 @@ public:
      *                    that rectangle before it is input to GrCoordTransforms that read local
      *                    coordinates
      */
-    void drawRect(GrPipelineBuilder* pipelineBuilder,
-                  GrColor color,
-                  const SkMatrix& viewMatrix,
-                  const SkRect& rect,
-                  const SkRect* localRect,
-                  const SkMatrix* localMatrix);
+    void drawBWRect(const GrPipelineBuilder& pipelineBuilder,
+                    GrColor color,
+                    const SkMatrix& viewMatrix,
+                    const SkRect& rect,
+                    const SkRect* localRect,
+                    const SkMatrix* localMatrix);
 
     /**
      * Helper for drawRect when the caller doesn't need separate local rects or matrices.
      */
-    void drawSimpleRect(GrPipelineBuilder* ds, GrColor color, const SkMatrix& viewM,
+    void drawSimpleRect(const GrPipelineBuilder& ds, GrColor color, const SkMatrix& viewM,
                         const SkRect& rect) {
-        this->drawRect(ds, color, viewM, rect, NULL, NULL);
+        this->drawBWRect(ds, color, viewM, rect, NULL, NULL);
     }
-    void drawSimpleRect(GrPipelineBuilder* ds, GrColor color, const SkMatrix& viewM,
+    void drawSimpleRect(const GrPipelineBuilder& ds, GrColor color, const SkMatrix& viewM,
                         const SkIRect& irect) {
         SkRect rect = SkRect::Make(irect);
-        this->drawRect(ds, color, viewM, rect, NULL, NULL);
+        this->drawBWRect(ds, color, viewM, rect, NULL, NULL);
     }
 
+    void drawAARect(const GrPipelineBuilder& pipelineBuilder,
+                    GrColor color,
+                    const SkMatrix& viewMatrix,
+                    const SkRect& rect,
+                    const SkRect& devRect);
 
     /**
      * Clear the passed in render target. Ignores the GrPipelineBuilder and clip. Clears the whole
@@ -178,48 +184,21 @@ public:
      * copied are specified by srcRect. They are copied to a rect of the same
      * size in dst with top left at dstPoint. If the src rect is clipped by the
      * src bounds then  pixel values in the dst rect corresponding to area clipped
-     * by the src rect are not overwritten. This method can fail and return false
+     * by the src rect are not overwritten. This method is not guaranteed to succeed
      * depending on the type of surface, configs, etc, and the backend-specific
-     * limitations. If rect is clipped out entirely by the src or dst bounds then
-     * true is returned since there is no actual copy necessary to succeed.
+     * limitations.
      */
-    bool copySurface(GrSurface* dst,
+    void copySurface(GrSurface* dst,
                      GrSurface* src,
                      const SkIRect& srcRect,
                      const SkIPoint& dstPoint);
-    /**
-     * Function that determines whether a copySurface call would succeed without actually
-     * performing the copy.
-     */
-    bool canCopySurface(const GrSurface* dst,
-                        const GrSurface* src,
-                        const SkIRect& srcRect,
-                        const SkIPoint& dstPoint);
-
     /**
      * Release any resources that are cached but not currently in use. This
      * is intended to give an application some recourse when resources are low.
      */
     virtual void purgeResources() {};
 
-    ///////////////////////////////////////////////////////////////////////////
-    // Draw execution tracking (for font atlases and other resources)
-    class DrawToken {
-    public:
-        DrawToken(GrDrawTarget* drawTarget, uint32_t drawID) :
-                  fDrawTarget(drawTarget), fDrawID(drawID) {}
-
-        bool isIssued() { return fDrawTarget && fDrawTarget->isIssued(fDrawID); }
-
-    private:
-        GrDrawTarget*  fDrawTarget;
-        uint32_t       fDrawID;   // this may wrap, but we're doing direct comparison
-                                  // so that should be okay
-    };
-
-    virtual DrawToken getCurrentDrawToken() { return DrawToken(this, 0); }
-
-    bool programUnitTest(int maxStages);
+    bool programUnitTest(GrContext* owner, int maxStages);
 
 protected:
     friend class GrCommandBuilder; // for PipelineInfo
@@ -227,17 +206,8 @@ protected:
     friend class GrReorderCommandBuilder; // for PipelineInfo
     friend class GrTargetCommands; // for PipelineInfo
 
-    GrContext* getContext() { return fContext; }
-    const GrContext* getContext() const { return fContext; }
-
-    GrGpu* getGpu() {
-        SkASSERT(fContext && fContext->getGpu());
-        return fContext->getGpu();
-    }
-    const GrGpu* getGpu() const {
-        SkASSERT(fContext && fContext->getGpu());
-        return fContext->getGpu();
-    }
+    GrGpu* getGpu() { return fGpu; }
+    const GrGpu* getGpu() const { return fGpu; }
 
     const GrTraceMarkerSet& getActiveTraceMarkers() { return fActiveTraceMarkers; }
 
@@ -247,31 +217,31 @@ protected:
     bool setupDstReadIfNecessary(const GrPipelineBuilder&,
                                  const GrProcOptInfo& colorPOI,
                                  const GrProcOptInfo& coveragePOI,
-                                 GrDeviceCoordTexture* dstCopy,
+                                 GrXferProcessor::DstTexture*,
                                  const SkRect* drawBounds);
 
     struct PipelineInfo {
-        PipelineInfo(GrPipelineBuilder* pipelineBuilder, GrScissorState* scissor,
+        PipelineInfo(const GrPipelineBuilder& pipelineBuilder, GrScissorState* scissor,
                      const GrPrimitiveProcessor* primProc,
                      const SkRect* devBounds, GrDrawTarget* target);
 
-        PipelineInfo(GrPipelineBuilder* pipelineBuilder, GrScissorState* scissor,
+        PipelineInfo(const GrPipelineBuilder& pipelineBuilder, GrScissorState* scissor,
                      const GrBatch* batch, const SkRect* devBounds,
                      GrDrawTarget* target);
 
-        bool willBlendWithDst(const GrPrimitiveProcessor* primProc) const {
-            return fPipelineBuilder->willBlendWithDst(primProc);
+        bool willColorBlendWithDst(const GrPrimitiveProcessor* primProc) const {
+            return fPipelineBuilder->willColorBlendWithDst(primProc);
         }
     private:
         friend class GrDrawTarget;
 
         bool mustSkipDraw() const { return (NULL == fPipelineBuilder); }
 
-        GrPipelineBuilder*      fPipelineBuilder;
-        GrScissorState*         fScissor;
-        GrProcOptInfo           fColorPOI; 
-        GrProcOptInfo           fCoveragePOI; 
-        GrDeviceCoordTexture    fDstCopy;
+        const GrPipelineBuilder*    fPipelineBuilder;
+        GrScissorState*             fScissor;
+        GrProcOptInfo               fColorPOI; 
+        GrProcOptInfo               fCoveragePOI; 
+        GrXferProcessor::DstTexture fDstTexture;
     };
 
     void setupPipeline(const PipelineInfo& pipelineInfo, GrPipeline* pipeline);
@@ -317,20 +287,20 @@ private:
                                            const GrStencilAttachment*,
                                            GrStencilSettings*);
     virtual GrClipMaskManager* clipMaskManager() = 0;
-    virtual bool setupClip(GrPipelineBuilder*,
-                           GrPipelineBuilder::AutoRestoreFragmentProcessors*,
+    virtual bool setupClip(const GrPipelineBuilder&,
+                           GrPipelineBuilder::AutoRestoreFragmentProcessorState*,
                            GrPipelineBuilder::AutoRestoreStencil*,
                            GrScissorState*,
                            const SkRect* devBounds) = 0;
 
-    // The context owns us, not vice-versa, so this ptr is not ref'ed by DrawTarget.
-    GrContext*                                                      fContext;
-    SkAutoTUnref<const GrDrawTargetCaps>                            fCaps;
+    GrGpu*                  fGpu;
+    const GrCaps*           fCaps;
+    GrResourceProvider*     fResourceProvider;
     // To keep track that we always have at least as many debug marker adds as removes
-    int                                                             fGpuTraceMarkerCount;
-    GrTraceMarkerSet                                                fActiveTraceMarkers;
-    GrTraceMarkerSet                                                fStoredTraceMarkers;
-    bool                                                            fFlushing;
+    int                     fGpuTraceMarkerCount;
+    GrTraceMarkerSet        fActiveTraceMarkers;
+    GrTraceMarkerSet        fStoredTraceMarkers;
+    bool                    fFlushing;
 
     typedef SkRefCnt INHERITED;
 };
@@ -340,16 +310,13 @@ private:
  */
 class GrClipTarget : public GrDrawTarget {
 public:
-    GrClipTarget(GrContext* context)
-        : INHERITED(context) {
-        fClipMaskManager.setClipTarget(this);
-    }
+    GrClipTarget(GrContext*);
 
     /* Clip mask manager needs access to the context.
      * TODO we only need a very small subset of context in the CMM.
      */
-    GrContext* getContext() { return INHERITED::getContext(); }
-    const GrContext* getContext() const { return INHERITED::getContext(); }
+    GrContext* getContext() { return fContext; }
+    const GrContext* getContext() const { return fContext; }
 
     /**
      * Clip Mask Manager(and no one else) needs to clear private stencil bits.
@@ -363,23 +330,20 @@ public:
      * Release any resources that are cached but not currently in use. This
      * is intended to give an application some recourse when resources are low.
      */
-    void purgeResources() override {
-        // The clip mask manager can rebuild all its clip masks so just
-        // get rid of them all.
-        fClipMaskManager.purgeResources();
-    };
+    void purgeResources() override;
 
 protected:
-    GrClipMaskManager           fClipMaskManager;
+    SkAutoTDelete<GrClipMaskManager> fClipMaskManager;
+    GrContext*                       fContext;
 
 private:
-    GrClipMaskManager* clipMaskManager() override { return &fClipMaskManager; }
+    GrClipMaskManager* clipMaskManager() override { return fClipMaskManager; }
 
-    virtual bool setupClip(GrPipelineBuilder*,
-                           GrPipelineBuilder::AutoRestoreFragmentProcessors*,
-                           GrPipelineBuilder::AutoRestoreStencil*,
-                           GrScissorState* scissorState,
-                           const SkRect* devBounds) override;
+    bool setupClip(const GrPipelineBuilder&,
+                   GrPipelineBuilder::AutoRestoreFragmentProcessorState*,
+                   GrPipelineBuilder::AutoRestoreStencil*,
+                   GrScissorState* scissorState,
+                   const SkRect* devBounds) override;
 
     typedef GrDrawTarget INHERITED;
 };

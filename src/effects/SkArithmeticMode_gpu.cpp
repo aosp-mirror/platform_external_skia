@@ -14,7 +14,7 @@
 #include "GrProcessor.h"
 #include "GrTexture.h"
 #include "gl/GrGLCaps.h"
-#include "gl/GrGLProcessor.h"
+#include "gl/GrGLFragmentProcessor.h"
 #include "gl/GrGLProgramDataManager.h"
 #include "gl/builders/GrGLProgramBuilder.h"
 
@@ -60,24 +60,21 @@ public:
 
     ~GLArithmeticFP() override {}
 
-    void emitCode(GrGLFPBuilder* builder,
-                  const GrFragmentProcessor& fp,
-                  const char* outputColor,
-                  const char* inputColor,
-                  const TransformedCoordsArray& coords,
-                  const TextureSamplerArray& samplers) override {
-        GrGLFragmentBuilder* fsBuilder = builder->getFragmentShaderBuilder();
+    void emitCode(EmitArgs& args) override {
+        GrGLFragmentBuilder* fsBuilder = args.fBuilder->getFragmentShaderBuilder();
         fsBuilder->codeAppend("vec4 bgColor = ");
-        fsBuilder->appendTextureLookup(samplers[0], coords[0].c_str(), coords[0].getType());
+        fsBuilder->appendTextureLookup(args.fSamplers[0], args.fCoords[0].c_str(),
+                                       args.fCoords[0].getType());
         fsBuilder->codeAppendf(";");
         const char* dstColor = "bgColor";
 
-        fKUni = builder->addUniform(GrGLProgramBuilder::kFragment_Visibility,
+        fKUni = args.fBuilder->addUniform(GrGLProgramBuilder::kFragment_Visibility,
                                     kVec4f_GrSLType, kDefault_GrSLPrecision,
                                     "k");
-        const char* kUni = builder->getUniformCStr(fKUni);
+        const char* kUni = args.fBuilder->getUniformCStr(fKUni);
 
-        add_arithmetic_code(fsBuilder, inputColor, dstColor, outputColor, kUni, fEnforcePMColor);
+        add_arithmetic_code(fsBuilder, args.fInputColor, dstColor, args.fOutputColor, kUni,
+                            fEnforcePMColor);
     }
 
     void setData(const GrGLProgramDataManager& pdman, const GrProcessor& proc) override {
@@ -101,7 +98,7 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-GrArithmeticFP::GrArithmeticFP(float k1, float k2, float k3, float k4,
+GrArithmeticFP::GrArithmeticFP(GrProcessorDataManager*, float k1, float k2, float k3, float k4,
                                bool enforcePMColor, GrTexture* background)
   : fK1(k1), fK2(k2), fK3(k3), fK4(k4), fEnforcePMColor(enforcePMColor) {
     this->initClassID<GrArithmeticFP>();
@@ -139,17 +136,15 @@ void GrArithmeticFP::onComputeInvariantOutput(GrInvariantOutput* inout) const {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-GrFragmentProcessor* GrArithmeticFP::TestCreate(SkRandom* rand,
-                                                GrContext*,
-                                                const GrDrawTargetCaps&,
-                                                GrTexture* textures[]) {
-    float k1 = rand->nextF();
-    float k2 = rand->nextF();
-    float k3 = rand->nextF();
-    float k4 = rand->nextF();
-    bool enforcePMColor = rand->nextBool();
+GrFragmentProcessor* GrArithmeticFP::TestCreate(GrProcessorTestData* d) {
+    float k1 = d->fRandom->nextF();
+    float k2 = d->fRandom->nextF();
+    float k3 = d->fRandom->nextF();
+    float k4 = d->fRandom->nextF();
+    bool enforcePMColor = d->fRandom->nextBool();
 
-    return SkNEW_ARGS(GrArithmeticFP, (k1, k2, k3, k4, enforcePMColor, textures[0]));
+    return SkNEW_ARGS(GrArithmeticFP, (d->fProcDataManager, k1, k2, k3, k4, enforcePMColor,
+                                       d->fTextures[0]));
 }
 
 GR_DEFINE_FRAGMENT_PROCESSOR_TEST(GrArithmeticFP);
@@ -160,20 +155,12 @@ GR_DEFINE_FRAGMENT_PROCESSOR_TEST(GrArithmeticFP);
 
 class ArithmeticXP : public GrXferProcessor {
 public:
-    static GrXferProcessor* Create(float k1, float k2, float k3, float k4, bool enforcePMColor,
-                                   const GrDeviceCoordTexture* dstCopy,
-                                   bool willReadDstColor) {
-        return SkNEW_ARGS(ArithmeticXP, (k1, k2, k3, k4, enforcePMColor, dstCopy,
-                                         willReadDstColor));
-    }
-
-    ~ArithmeticXP() override {};
+    ArithmeticXP(const DstTexture*, bool hasMixedSamples,
+                 float k1, float k2, float k3, float k4, bool enforcePMColor);
 
     const char* name() const override { return "Arithmetic"; }
 
     GrGLXferProcessor* createGLInstance() const override;
-
-    bool hasSecondaryOutput() const override { return false; }
 
     float k1() const { return fK1; }
     float k2() const { return fK2; }
@@ -182,14 +169,11 @@ public:
     bool enforcePMColor() const { return fEnforcePMColor; }
 
 private:
-    ArithmeticXP(float k1, float k2, float k3, float k4, bool enforcePMColor,
-                   const GrDeviceCoordTexture* dstCopy, bool willReadDstColor);
-
     GrXferProcessor::OptFlags onGetOptimizations(const GrProcOptInfo& colorPOI,
                                                  const GrProcOptInfo& coveragePOI,
                                                  bool doesStencilWrite,
                                                  GrColor* overrideColor,
-                                                 const GrDrawTargetCaps& caps) override;
+                                                 const GrCaps& caps) override;
 
     void onGetGLProcessorKey(const GrGLSLCaps& caps, GrProcessorKeyBuilder* b) const override;
 
@@ -229,22 +213,16 @@ public:
     }
 
 private:
-    void onEmitCode(const EmitArgs& args) override {
-        GrGLXPFragmentBuilder* fsBuilder = args.fPB->getFragmentShaderBuilder();
+    void emitBlendCodeForDstRead(GrGLXPBuilder* pb, const char* srcColor, const char* dstColor,
+                                 const char* outColor, const GrXferProcessor& proc) override {
+        GrGLXPFragmentBuilder* fsBuilder = pb->getFragmentShaderBuilder();
 
-        const char* dstColor = fsBuilder->dstColor();
+        fKUni = pb->addUniform(GrGLProgramBuilder::kFragment_Visibility,
+                               kVec4f_GrSLType, kDefault_GrSLPrecision,
+                               "k");
+        const char* kUni = pb->getUniformCStr(fKUni);
 
-        fKUni = args.fPB->addUniform(GrGLProgramBuilder::kFragment_Visibility,
-                                     kVec4f_GrSLType, kDefault_GrSLPrecision,
-                                     "k");
-        const char* kUni = args.fPB->getUniformCStr(fKUni);
-
-        add_arithmetic_code(fsBuilder, args.fInputColor, dstColor, args.fOutputPrimary, kUni, 
-                            fEnforcePMColor);
-
-        fsBuilder->codeAppendf("%s = %s * %s + (vec4(1.0) - %s) * %s;",
-                               args.fOutputPrimary, args.fOutputPrimary, args.fInputCoverage,
-                               args.fInputCoverage, dstColor);
+        add_arithmetic_code(fsBuilder, srcColor, dstColor, outColor, kUni, fEnforcePMColor);
     }
 
     void onSetData(const GrGLProgramDataManager& pdman,
@@ -262,9 +240,9 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-ArithmeticXP::ArithmeticXP(float k1, float k2, float k3, float k4, bool enforcePMColor,
-                           const GrDeviceCoordTexture* dstCopy, bool willReadDstColor)
-    : INHERITED(dstCopy, willReadDstColor)
+ArithmeticXP::ArithmeticXP(const DstTexture* dstTexture, bool hasMixedSamples,
+                           float k1, float k2, float k3, float k4, bool enforcePMColor)
+    : INHERITED(dstTexture, true, hasMixedSamples)
     , fK1(k1)
     , fK2(k2)
     , fK3(k3)
@@ -285,8 +263,8 @@ GrXferProcessor::OptFlags ArithmeticXP::onGetOptimizations(const GrProcOptInfo& 
                                                            const GrProcOptInfo& coveragePOI,
                                                            bool doesStencilWrite,
                                                            GrColor* overrideColor,
-                                                           const GrDrawTargetCaps& caps) {
-   return GrXferProcessor::kNone_Opt;
+                                                           const GrCaps& caps) {
+   return GrXferProcessor::kNone_OptFlags;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -298,37 +276,34 @@ GrArithmeticXPFactory::GrArithmeticXPFactory(float k1, float k2, float k3, float
 }
 
 GrXferProcessor*
-GrArithmeticXPFactory::onCreateXferProcessor(const GrDrawTargetCaps& caps,
+GrArithmeticXPFactory::onCreateXferProcessor(const GrCaps& caps,
                                              const GrProcOptInfo& colorPOI,
                                              const GrProcOptInfo& coveragePOI,
-                                             const GrDeviceCoordTexture* dstCopy) const {
-    return ArithmeticXP::Create(fK1, fK2, fK3, fK4, fEnforcePMColor, dstCopy,
-                                this->willReadDstColor(caps, colorPOI, coveragePOI));
+                                             bool hasMixedSamples,
+                                             const DstTexture* dstTexture) const {
+    return SkNEW_ARGS(ArithmeticXP, (dstTexture, hasMixedSamples, fK1, fK2, fK3, fK4,
+                                     fEnforcePMColor));
 }
 
 
-void GrArithmeticXPFactory::getInvariantOutput(const GrProcOptInfo& colorPOI,
-                                               const GrProcOptInfo& coveragePOI,
-                                               GrXPFactory::InvariantOutput* output) const {
-    output->fWillBlendWithDst = true;
+void GrArithmeticXPFactory::getInvariantBlendedColor(const GrProcOptInfo& colorPOI,
+                                                     InvariantBlendedColor* blendedColor) const {
+    blendedColor->fWillBlendWithDst = true;
 
-    // TODO: We could try to optimize this more. For example if we have solid coverage and fK1 and
-    // fK3 are zero, then we won't be blending the color with dst at all so we can know what the
-    // output color is (up to the valid color components passed in).
-    output->fBlendedColorFlags = 0;
+    // TODO: We could try to optimize this more. For example if fK1 and fK3 are zero, then we won't
+    // be blending the color with dst at all so we can know what the output color is (up to the
+    // valid color components passed in).
+    blendedColor->fKnownColorFlags = kNone_GrColorComponentFlags;
 }
 
 GR_DEFINE_XP_FACTORY_TEST(GrArithmeticXPFactory);
 
-GrXPFactory* GrArithmeticXPFactory::TestCreate(SkRandom* random,
-                                               GrContext*,
-                                               const GrDrawTargetCaps&,
-                                               GrTexture*[]) {
-    float k1 = random->nextF();
-    float k2 = random->nextF();
-    float k3 = random->nextF();
-    float k4 = random->nextF();
-    bool enforcePMColor = random->nextBool();
+GrXPFactory* GrArithmeticXPFactory::TestCreate(GrProcessorTestData* d) {
+    float k1 = d->fRandom->nextF();
+    float k2 = d->fRandom->nextF();
+    float k3 = d->fRandom->nextF();
+    float k4 = d->fRandom->nextF();
+    bool enforcePMColor = d->fRandom->nextBool();
 
     return GrArithmeticXPFactory::Create(k1, k2, k3, k4, enforcePMColor);
 }

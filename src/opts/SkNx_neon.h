@@ -8,7 +8,7 @@
 #ifndef SkNx_neon_DEFINED
 #define SkNx_neon_DEFINED
 
-#include <arm_neon.h>
+namespace {  // See SkNx.h
 
 // Well, this is absurd.  The shifts require compile-time constant arguments.
 
@@ -33,34 +33,7 @@
     case 31: return op(v, 31); } return fVec
 
 template <>
-class SkNb<2, 4> {
-public:
-    SkNb(uint32x2_t vec) : fVec(vec) {}
-
-    SkNb() {}
-    bool allTrue() const { return vget_lane_u32(fVec, 0) && vget_lane_u32(fVec, 1); }
-    bool anyTrue() const { return vget_lane_u32(fVec, 0) || vget_lane_u32(fVec, 1); }
-
-    uint32x2_t fVec;
-};
-
-template <>
-class SkNb<4, 4> {
-public:
-    SkNb(uint32x4_t vec) : fVec(vec) {}
-
-    SkNb() {}
-    bool allTrue() const { return vgetq_lane_u32(fVec, 0) && vgetq_lane_u32(fVec, 1)
-                               && vgetq_lane_u32(fVec, 2) && vgetq_lane_u32(fVec, 3); }
-    bool anyTrue() const { return vgetq_lane_u32(fVec, 0) || vgetq_lane_u32(fVec, 1)
-                               || vgetq_lane_u32(fVec, 2) || vgetq_lane_u32(fVec, 3); }
-
-    uint32x4_t fVec;
-};
-
-template <>
 class SkNf<2, float> {
-    typedef SkNb<2, 4> Nb;
 public:
     SkNf(float32x2_t vec) : fVec(vec) {}
 
@@ -93,12 +66,14 @@ public:
     #endif
     }
 
-    Nb operator == (const SkNf& o) const { return vceq_f32(fVec, o.fVec); }
-    Nb operator  < (const SkNf& o) const { return vclt_f32(fVec, o.fVec); }
-    Nb operator  > (const SkNf& o) const { return vcgt_f32(fVec, o.fVec); }
-    Nb operator <= (const SkNf& o) const { return vcle_f32(fVec, o.fVec); }
-    Nb operator >= (const SkNf& o) const { return vcge_f32(fVec, o.fVec); }
-    Nb operator != (const SkNf& o) const { return vmvn_u32(vceq_f32(fVec, o.fVec)); }
+    SkNf operator == (const SkNf& o) const { return vreinterpret_f32_u32(vceq_f32(fVec, o.fVec)); }
+    SkNf operator  < (const SkNf& o) const { return vreinterpret_f32_u32(vclt_f32(fVec, o.fVec)); }
+    SkNf operator  > (const SkNf& o) const { return vreinterpret_f32_u32(vcgt_f32(fVec, o.fVec)); }
+    SkNf operator <= (const SkNf& o) const { return vreinterpret_f32_u32(vcle_f32(fVec, o.fVec)); }
+    SkNf operator >= (const SkNf& o) const { return vreinterpret_f32_u32(vcge_f32(fVec, o.fVec)); }
+    SkNf operator != (const SkNf& o) const {
+        return vreinterpret_f32_u32(vmvn_u32(vceq_f32(fVec, o.fVec)));
+    }
 
     static SkNf Min(const SkNf& l, const SkNf& r) { return vmin_f32(l.fVec, r.fVec); }
     static SkNf Max(const SkNf& l, const SkNf& r) { return vmax_f32(l.fVec, r.fVec); }
@@ -126,25 +101,21 @@ public:
         return vget_lane_f32(fVec, k&1);
     }
 
+    bool allTrue() const {
+        auto v = vreinterpret_u32_f32(fVec);
+        return vget_lane_u32(v,0) && vget_lane_u32(v,1);
+    }
+    bool anyTrue() const {
+        auto v = vreinterpret_u32_f32(fVec);
+        return vget_lane_u32(v,0) || vget_lane_u32(v,1);
+    }
+
     float32x2_t fVec;
 };
 
 #if defined(SK_CPU_ARM64)
 template <>
-class SkNb<2, 8> {
-public:
-    SkNb(uint64x2_t vec) : fVec(vec) {}
-
-    SkNb() {}
-    bool allTrue() const { return vgetq_lane_u64(fVec, 0) && vgetq_lane_u64(fVec, 1); }
-    bool anyTrue() const { return vgetq_lane_u64(fVec, 0) || vgetq_lane_u64(fVec, 1); }
-
-    uint64x2_t fVec;
-};
-
-template <>
 class SkNf<2, double> {
-    typedef SkNb<2, 8> Nb;
 public:
     SkNf(float64x2_t vec) : fVec(vec) {}
 
@@ -160,13 +131,14 @@ public:
     SkNf operator * (const SkNf& o) const { return vmulq_f64(fVec, o.fVec); }
     SkNf operator / (const SkNf& o) const { return vdivq_f64(fVec, o.fVec); }
 
-    Nb operator == (const SkNf& o) const { return vceqq_f64(fVec, o.fVec); }
-    Nb operator  < (const SkNf& o) const { return vcltq_f64(fVec, o.fVec); }
-    Nb operator  > (const SkNf& o) const { return vcgtq_f64(fVec, o.fVec); }
-    Nb operator <= (const SkNf& o) const { return vcleq_f64(fVec, o.fVec); }
-    Nb operator >= (const SkNf& o) const { return vcgeq_f64(fVec, o.fVec); }
-    Nb operator != (const SkNf& o) const {
-        return vreinterpretq_u64_u32(vmvnq_u32(vreinterpretq_u32_u64(vceqq_f64(fVec, o.fVec))));
+    // vreinterpretq_f64_u64 and vreinterpretq_f64_u32 don't seem to exist....  weird.
+    SkNf operator==(const SkNf& o) const { return (float64x2_t)(vceqq_f64(fVec, o.fVec)); }
+    SkNf operator <(const SkNf& o) const { return (float64x2_t)(vcltq_f64(fVec, o.fVec)); }
+    SkNf operator >(const SkNf& o) const { return (float64x2_t)(vcgtq_f64(fVec, o.fVec)); }
+    SkNf operator<=(const SkNf& o) const { return (float64x2_t)(vcleq_f64(fVec, o.fVec)); }
+    SkNf operator>=(const SkNf& o) const { return (float64x2_t)(vcgeq_f64(fVec, o.fVec)); }
+    SkNf operator != (const SkNf& o) const {
+        return (float64x2_t)(vmvnq_u32(vreinterpretq_u32_u64(vceqq_f64(fVec, o.fVec))));
     }
 
     static SkNf Min(const SkNf& l, const SkNf& r) { return vminq_f64(l.fVec, r.fVec); }
@@ -202,6 +174,16 @@ public:
         return vgetq_lane_f64(fVec, k&1);
     }
 
+    // vreinterpretq_u64_f64 doesn't seem to exist....  weird.
+    bool allTrue() const {
+        auto v = (uint64x2_t)(fVec);
+        return vgetq_lane_u64(v,0) && vgetq_lane_u64(v,1);
+    }
+    bool anyTrue() const {
+        auto v = (uint64x2_t)(fVec);
+        return vgetq_lane_u64(v,0) || vgetq_lane_u64(v,1);
+    }
+
     float64x2_t fVec;
 };
 #endif//defined(SK_CPU_ARM64)
@@ -235,7 +217,6 @@ public:
 
 template <>
 class SkNf<4, float> {
-    typedef SkNb<4, 4> Nb;
 public:
     SkNf(float32x4_t vec) : fVec(vec) {}
 
@@ -270,12 +251,14 @@ public:
     #endif
     }
 
-    Nb operator == (const SkNf& o) const { return vceqq_f32(fVec, o.fVec); }
-    Nb operator  < (const SkNf& o) const { return vcltq_f32(fVec, o.fVec); }
-    Nb operator  > (const SkNf& o) const { return vcgtq_f32(fVec, o.fVec); }
-    Nb operator <= (const SkNf& o) const { return vcleq_f32(fVec, o.fVec); }
-    Nb operator >= (const SkNf& o) const { return vcgeq_f32(fVec, o.fVec); }
-    Nb operator != (const SkNf& o) const { return vmvnq_u32(vceqq_f32(fVec, o.fVec)); }
+    SkNf operator==(const SkNf& o) const { return vreinterpretq_f32_u32(vceqq_f32(fVec, o.fVec)); }
+    SkNf operator <(const SkNf& o) const { return vreinterpretq_f32_u32(vcltq_f32(fVec, o.fVec)); }
+    SkNf operator >(const SkNf& o) const { return vreinterpretq_f32_u32(vcgtq_f32(fVec, o.fVec)); }
+    SkNf operator<=(const SkNf& o) const { return vreinterpretq_f32_u32(vcleq_f32(fVec, o.fVec)); }
+    SkNf operator>=(const SkNf& o) const { return vreinterpretq_f32_u32(vcgeq_f32(fVec, o.fVec)); }
+    SkNf operator!=(const SkNf& o) const {
+        return vreinterpretq_f32_u32(vmvnq_u32(vceqq_f32(fVec, o.fVec)));
+    }
 
     static SkNf Min(const SkNf& l, const SkNf& r) { return vminq_f32(l.fVec, r.fVec); }
     static SkNf Max(const SkNf& l, const SkNf& r) { return vmaxq_f32(l.fVec, r.fVec); }
@@ -301,6 +284,24 @@ public:
     template <int k> float kth() const {
         SkASSERT(0 <= k && k < 4);
         return vgetq_lane_f32(fVec, k&3);
+    }
+
+    bool allTrue() const {
+        auto v = vreinterpretq_u32_f32(fVec);
+        return vgetq_lane_u32(v,0) && vgetq_lane_u32(v,1)
+            && vgetq_lane_u32(v,2) && vgetq_lane_u32(v,3);
+    }
+    bool anyTrue() const {
+        auto v = vreinterpretq_u32_f32(fVec);
+        return vgetq_lane_u32(v,0) || vgetq_lane_u32(v,1)
+            || vgetq_lane_u32(v,2) || vgetq_lane_u32(v,3);
+    }
+
+    SkNf thenElse(const SkNf& t, const SkNf& e) const {
+        uint32x4_t ci = vreinterpretq_u32_f32(fVec),
+                   ti = vreinterpretq_u32_f32(t.fVec),
+                   ei = vreinterpretq_u32_f32(e.fVec);
+        return vreinterpretq_f32_u32(vorrq_u32(vandq_u32(ti, ci), vbicq_u32(ei, ci)));
     }
 
     float32x4_t fVec;
@@ -336,6 +337,11 @@ public:
         return vgetq_lane_u16(fVec, k&7);
     }
 
+    SkNi thenElse(const SkNi& t, const SkNi& e) const {
+        return vorrq_u16(vandq_u16(t.fVec, fVec),
+                         vbicq_u16(e.fVec, fVec));
+    }
+
     uint16x8_t fVec;
 };
 
@@ -361,16 +367,18 @@ public:
 
     SkNi operator + (const SkNi& o) const { return vaddq_u8(fVec, o.fVec); }
     SkNi operator - (const SkNi& o) const { return vsubq_u8(fVec, o.fVec); }
-    SkNi operator * (const SkNi& o) const { return vmulq_u8(fVec, o.fVec); }
-
-    SkNi operator << (int bits) const { SHIFT8(vshlq_n_u8, fVec, bits); }
-    SkNi operator >> (int bits) const { SHIFT8(vshrq_n_u8, fVec, bits); }
 
     static SkNi Min(const SkNi& a, const SkNi& b) { return vminq_u8(a.fVec, b.fVec); }
+    SkNi operator < (const SkNi& o) const { return vcltq_u8(fVec, o.fVec); }
 
     template <int k> uint8_t kth() const {
         SkASSERT(0 <= k && k < 15);
         return vgetq_lane_u8(fVec, k&16);
+    }
+
+    SkNi thenElse(const SkNi& t, const SkNi& e) const {
+        return vorrq_u8(vandq_u8(t.fVec, fVec),
+                        vbicq_u8(e.fVec, fVec));
     }
 
     uint8x16_t fVec;
@@ -379,5 +387,7 @@ public:
 #undef SHIFT32
 #undef SHIFT16
 #undef SHIFT8
+
+}  // namespace
 
 #endif//SkNx_neon_DEFINED

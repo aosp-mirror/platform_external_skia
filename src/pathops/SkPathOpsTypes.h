@@ -28,27 +28,14 @@ class SkOpContourHead;
 
 class SkOpGlobalState {
 public:
-    SkOpGlobalState(SkOpCoincidence* coincidence, SkOpContourHead* head)
-        : fCoincidence(coincidence)
-        , fContourHead(head)
-        , fWindingFailed(false)
-        , fAngleCoincidence(false)
-#if DEBUG_VALIDATE
-        , fPhase(kIntersecting)
-#endif
-        SkDEBUGPARAMS(fAngleID(0))
-        SkDEBUGPARAMS(fContourID(0))
-        SkDEBUGPARAMS(fPtTID(0))
-        SkDEBUGPARAMS(fSegmentID(0))
-        SkDEBUGPARAMS(fSpanID(0)) {
-    }
+    SkOpGlobalState(SkOpCoincidence* coincidence, SkOpContourHead* head
+                    SkDEBUGPARAMS(const char* testName));
 
-#if DEBUG_VALIDATE
     enum Phase {
         kIntersecting,
-        kWalking
+        kWalking,
+        kFixWinding,
     };
-#endif
 
     enum {
         kMaxWindingTries = 10
@@ -56,6 +43,14 @@ public:
 
     bool angleCoincidence() {
         return fAngleCoincidence;
+    }
+
+    void bumpNested() {
+        ++fNested;
+    }
+
+    void clearNested() {
+        fNested = 0;
     }
 
     SkOpCoincidence* coincidence() {
@@ -70,9 +65,17 @@ public:
     const struct SkOpAngle* debugAngle(int id) const;
     SkOpContour* debugContour(int id);
     const class SkOpPtT* debugPtT(int id) const;
+    bool debugRunFail() const;
     const class SkOpSegment* debugSegment(int id) const;
     const class SkOpSpanBase* debugSpan(int id) const;
+    const char* debugTestName() const { return fDebugTestName; }
+#endif
 
+    int nested() const {
+        return fNested;
+    }
+
+#ifdef SK_DEBUG
     int nextAngleID() {
         return ++fAngleID;
     }
@@ -93,11 +96,9 @@ public:
     }
 #endif
 
-#if DEBUG_VALIDATE
     Phase phase() const {
         return fPhase;
     }
-#endif
 
     void setAngleCoincidence() {
         fAngleCoincidence = true;
@@ -107,12 +108,10 @@ public:
         fContourHead = contourHead;
     }
 
-#if DEBUG_VALIDATE
     void setPhase(Phase phase) {
         SkASSERT(fPhase != phase);
         fPhase = phase;
     }
-#endif
 
     // called in very rare cases where angles are sorted incorrectly -- signfies op will fail
     void setWindingFailed() {
@@ -126,12 +125,12 @@ public:
 private:
     SkOpCoincidence* fCoincidence;
     SkOpContourHead* fContourHead;
+    int fNested;
     bool fWindingFailed;
     bool fAngleCoincidence;
-#if DEBUG_VALIDATE
     Phase fPhase;
-#endif
 #ifdef SK_DEBUG
+    const char* fDebugTestName;
     int fAngleID;
     int fContourID;
     int fPtTID;

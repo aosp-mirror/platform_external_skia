@@ -200,8 +200,8 @@ static void test_map2(skiatest::Reporter* reporter, const SkMatrix44& mat) {
     SkMScalar dstA[4], dstB[4];
 
     for (int i = 0; i < 4; ++i) {
-        dstA[i] = 123456789;
-        dstB[i] = 987654321;
+        dstA[i] = SkDoubleToMScalar(123456789);
+        dstB[i] = SkDoubleToMScalar(987654321);
     }
 
     mat.map2(src2, 1, dstA);
@@ -368,15 +368,15 @@ static void test_invert(skiatest::Reporter* reporter) {
                      0,   0,    0,     1);
 
     SkMatrix44 scaleTranslation(SkMatrix44::kUninitialized_Constructor);
-    scaleTranslation.setScale(10, 100, 1000);
+    scaleTranslation.setScale(32, 128, 1024);
     scaleTranslation.preTranslate(2, 3, 4);
     scaleTranslation.invert(&inverse);
     inverse.asRowMajord(inverseData);
     assert16<double>(reporter, inverseData,
-                     0.1,  0,    0,   -2,
-                     0,   0.01,  0,   -3,
-                     0,    0,  0.001, -4,
-                     0,    0,    0,   1);
+                     0.03125,  0,          0,            -2,
+                     0,        0.0078125,  0,            -3,
+                     0,        0,          0.0009765625, -4,
+                     0,        0,          0,             1);
 
     SkMatrix44 rotation(SkMatrix44::kUninitialized_Constructor);
     rotation.setRotateDegreesAbout(0, 0, 1, 90);
@@ -426,6 +426,31 @@ static void test_invert(skiatest::Reporter* reporter) {
              0,   0,   -1,    1};
     expected.setRowMajord(expectedInverseAffineAndPerspective);
     REPORTER_ASSERT(reporter, nearly_equal(expected, inverse));
+
+    SkMatrix44 tinyScale(SkMatrix44::kIdentity_Constructor);
+    tinyScale.setDouble(0, 0, 1e-39);
+    REPORTER_ASSERT(reporter, tinyScale.getType() == SkMatrix44::kScale_Mask);
+    REPORTER_ASSERT(reporter, !tinyScale.invert(NULL));
+    REPORTER_ASSERT(reporter, !tinyScale.invert(&inverse));
+
+    SkMatrix44 tinyScaleTranslate(SkMatrix44::kIdentity_Constructor);
+    tinyScaleTranslate.setDouble(0, 0, 1e-38);
+    REPORTER_ASSERT(reporter, tinyScaleTranslate.invert(NULL));
+    tinyScaleTranslate.setDouble(0, 3, 10);
+    REPORTER_ASSERT(
+        reporter, tinyScaleTranslate.getType() ==
+                      (SkMatrix44::kScale_Mask | SkMatrix44::kTranslate_Mask));
+    REPORTER_ASSERT(reporter, !tinyScaleTranslate.invert(NULL));
+    REPORTER_ASSERT(reporter, !tinyScaleTranslate.invert(&inverse));
+
+    SkMatrix44 tinyScalePerspective(SkMatrix44::kIdentity_Constructor);
+    tinyScalePerspective.setDouble(0, 0, 1e-39);
+    tinyScalePerspective.setDouble(3, 2, -1);
+    REPORTER_ASSERT(reporter, (tinyScalePerspective.getType() &
+                               SkMatrix44::kPerspective_Mask) ==
+                                  SkMatrix44::kPerspective_Mask);
+    REPORTER_ASSERT(reporter, !tinyScalePerspective.invert(NULL));
+    REPORTER_ASSERT(reporter, !tinyScalePerspective.invert(&inverse));
 }
 
 static void test_transpose(skiatest::Reporter* reporter) {
@@ -532,29 +557,29 @@ static void test_3x3_conversion(skiatest::Reporter* reporter) {
 static void test_has_perspective(skiatest::Reporter* reporter) {
     SkMatrix44 transform(SkMatrix44::kIdentity_Constructor);
 
-    transform.set(3, 2, -0.1);
+    transform.setDouble(3, 2, -0.1);
     REPORTER_ASSERT(reporter, transform.hasPerspective());
 
     transform.reset();
     REPORTER_ASSERT(reporter, !transform.hasPerspective());
 
-    transform.set(3, 0, -1.0);
+    transform.setDouble(3, 0, -1.0);
     REPORTER_ASSERT(reporter, transform.hasPerspective());
 
     transform.reset();
-    transform.set(3, 1, -1.0);
+    transform.setDouble(3, 1, -1.0);
     REPORTER_ASSERT(reporter, transform.hasPerspective());
 
     transform.reset();
-    transform.set(3, 2, -0.3);
+    transform.setDouble(3, 2, -0.3);
     REPORTER_ASSERT(reporter, transform.hasPerspective());
 
     transform.reset();
-    transform.set(3, 3, 0.5);
+    transform.setDouble(3, 3, 0.5);
     REPORTER_ASSERT(reporter, transform.hasPerspective());
- 
+
     transform.reset();
-    transform.set(3, 3, 0.0);
+    transform.setDouble(3, 3, 0.0);
     REPORTER_ASSERT(reporter, transform.hasPerspective());
 }
 
@@ -757,13 +782,13 @@ static void test_preserves_2d_axis_alignment(skiatest::Reporter* reporter) {
 
   // Perspective cases.
   transform.setIdentity();
-  transform.set(3, 2, -0.1); // Perspective depth 10
+  transform.setDouble(3, 2, -0.1); // Perspective depth 10
   transform2.setRotateDegreesAbout(0.0, 1.0, 0.0, 45.0);
   transform.preConcat(transform2);
   test(false, reporter, transform);
 
   transform.setIdentity();
-  transform.set(3, 2, -0.1); // Perspective depth 10
+  transform.setDouble(3, 2, -0.1); // Perspective depth 10
   transform2.setRotateDegreesAbout(0.0, 0.0, 1.0, 90.0);
   transform.preConcat(transform2);
   test(true, reporter, transform);
@@ -819,10 +844,11 @@ DEF_TEST(Matrix44, reporter) {
 
     // test tiny-valued matrix inverse
     mat.reset();
-    mat.setScale(1.0e-12, 1.0e-12, 1.0e-12);
+    auto v = SkDoubleToMScalar(1.0e-12);
+    mat.setScale(v,v,v);
     rot.setRotateDegreesAbout(0, 0, -1, 90);
     mat.postConcat(rot);
-    mat.postTranslate(1.0e-12, 1.0e-12, 1.0e-12);
+    mat.postTranslate(v,v,v);
     REPORTER_ASSERT(reporter, mat.invert(NULL));
     mat.invert(&inverse);
     iden1.setConcat(mat, inverse);
@@ -830,10 +856,14 @@ DEF_TEST(Matrix44, reporter) {
 
     // test mixed-valued matrix inverse
     mat.reset();
-    mat.setScale(1.0e-10, 3.0, 1.0e+10);
+    mat.setScale(SkDoubleToMScalar(1.0e-2),
+                 SkDoubleToMScalar(3.0),
+                 SkDoubleToMScalar(1.0e+2));
     rot.setRotateDegreesAbout(0, 0, -1, 90);
     mat.postConcat(rot);
-    mat.postTranslate(1.0e+10, 3.0, 1.0e-10);
+    mat.postTranslate(SkDoubleToMScalar(1.0e+2),
+                      SkDoubleToMScalar(3.0),
+                      SkDoubleToMScalar(1.0e-2));
     REPORTER_ASSERT(reporter, mat.invert(NULL));
     mat.invert(&inverse);
     iden1.setConcat(mat, inverse);

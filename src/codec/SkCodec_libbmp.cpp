@@ -585,6 +585,10 @@ SkCodec::Result SkBmpCodec::onGetPixels(const SkImageInfo& dstInfo,
             return kCouldNotRewind;
         }
     }
+    if (opts.fSubset) {
+        // Subsets are not supported.
+        return kUnimplemented;
+    }
     if (dstInfo.dimensions() != this->getInfo().dimensions()) {
         SkCodecPrintf("Error: scaling not supported.\n");
         return kInvalidScale;
@@ -1130,8 +1134,7 @@ SkCodec::Result SkBmpCodec::decode(const SkImageInfo& dstInfo,
 
     // Create swizzler
     SkAutoTDelete<SkSwizzler> swizzler(SkSwizzler::CreateSwizzler(config,
-            colorPtr, dstInfo, dst, dstRowBytes,
-            SkImageGenerator::kNo_ZeroInitialized));
+            colorPtr, dstInfo, dst, dstRowBytes, kNo_ZeroInitialized));
 
     // Allocate space for a row buffer and a source for the swizzler
     SkAutoTDeleteArray<uint8_t> srcBuffer(SkNEW_ARRAY(uint8_t, rowBytes));

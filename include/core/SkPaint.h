@@ -20,7 +20,6 @@ class SkAutoGlyphCache;
 class SkColorFilter;
 class SkData;
 class SkDescriptor;
-struct SkDeviceProperties;
 class SkReadBuffer;
 class SkWriteBuffer;
 class SkGlyph;
@@ -33,6 +32,7 @@ class SkPathEffect;
 struct SkPoint;
 class SkRasterizer;
 class SkShader;
+class SkSurfaceProps;
 class SkTypeface;
 
 typedef const SkGlyph& (*SkDrawCacheProc)(SkGlyphCache*, const char**,
@@ -116,8 +116,6 @@ public:
         kAutoHinting_Flag     = 0x800,  //!< mask to force Freetype's autohinter
         kVerticalText_Flag    = 0x1000,
         kGenA8FromLCD_Flag    = 0x2000, // hack for GDI -- do not use if you can help it
-        kDistanceFieldTextTEMP_Flag = 0x4000, //!< TEMPORARY mask to enable distance fields
-                                              // currently overrides LCD and subpixel rendering
         // when adding extra flags, note that the fFlags member is specified
         // with a bit-width and you'll have to expand it.
 
@@ -283,44 +281,6 @@ public:
                             flags, false to clear it.
     */
     void setDevKernText(bool devKernText);
-
-    /** Helper for getFlags(), returns true if kDistanceFieldTextTEMP_Flag bit is set
-     @return true if the distanceFieldText bit is set in the paint's flags.
-     */
-    bool isDistanceFieldTextTEMP() const {
-        return SkToBool(this->getFlags() & kDistanceFieldTextTEMP_Flag);
-    }
-
-    /** Helper for setFlags(), setting or clearing the kDistanceFieldTextTEMP_Flag bit
-     @param distanceFieldText true to set the kDistanceFieldTextTEMP_Flag bit in the paint's
-     flags, false to clear it.
-     */
-    void setDistanceFieldTextTEMP(bool distanceFieldText);
-
-#ifdef SK_SUPPORT_LEGACY_FILTERLEVEL_ENUM
-    enum FilterLevel {
-        kNone_FilterLevel   = kNone_SkFilterQuality,
-        kLow_FilterLevel    = kLow_SkFilterQuality,
-        kMedium_FilterLevel = kMedium_SkFilterQuality,
-        kHigh_FilterLevel   = kHigh_SkFilterQuality
-    };
-
-    /**
-     *  Return the filter level. This affects the quality (and performance) of
-     *  drawing scaled images.
-     */
-    FilterLevel getFilterLevel() const {
-        return (FilterLevel)this->getFilterQuality();
-    }
-
-    /**
-     *  Set the filter level. This affects the quality (and performance) of
-     *  drawing scaled images.
-     */
-    void setFilterLevel(FilterLevel level) {
-        this->setFilterQuality((SkFilterQuality)level);
-    }
-#endif
 
     /**
      *  Return the filter level. This affects the quality (and performance) of
@@ -854,8 +814,7 @@ public:
         to zero. Note: this does not look at the text-encoding setting in the
         paint, only at the typeface.
     */
-    void glyphsToUnichars(const uint16_t glyphs[], int count,
-                          SkUnichar text[]) const;
+    void glyphsToUnichars(const uint16_t glyphs[], int count, SkUnichar text[]) const;
 
     /** Return the number of drawable units in the specified text buffer.
         This looks at the current TextEncoding field of the paint. If you also
@@ -1066,15 +1025,15 @@ private:
      * Allocs an SkDescriptor on the heap and return it to the caller as a refcnted
      * SkData.  Caller is responsible for managing the lifetime of this object.
      */
-    void getScalerContextDescriptor(SkAutoDescriptor*, const SkDeviceProperties* deviceProperties,
+    void getScalerContextDescriptor(SkAutoDescriptor*, const SkSurfaceProps& surfaceProps,
                                     const SkMatrix*, bool ignoreGamma) const;
 
-    SkGlyphCache* detachCache(const SkDeviceProperties* deviceProperties, const SkMatrix*,
+    SkGlyphCache* detachCache(const SkSurfaceProps* surfaceProps, const SkMatrix*,
                               bool ignoreGamma) const;
 
-    void descriptorProc(const SkDeviceProperties* deviceProperties, const SkMatrix* deviceMatrix,
+    void descriptorProc(const SkSurfaceProps* surfaceProps, const SkMatrix* deviceMatrix,
                         void (*proc)(SkTypeface*, const SkDescriptor*, void*),
-                        void* context, bool ignoreGamma = false) const;
+                        void* context, bool ignoreGamma) const;
 
     /*
      * The luminance color is used to determine which Gamma Canonical color to map to.  This is

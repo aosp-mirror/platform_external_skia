@@ -10,16 +10,21 @@
 #include "SkMultiPictureDraw.h"
 #include "SkSurface.h"
 
-DEFINE_int32(benchTileW, 1600, "Tile width  used for SKP playback.");
-DEFINE_int32(benchTileH, 512, "Tile height used for SKP playback.");
+// These CPU tile sizes are not good per se, but they are similar to what Chrome uses.
+DEFINE_int32(CPUbenchTileW, 256, "Tile width  used for CPU SKP playback.");
+DEFINE_int32(CPUbenchTileH, 256, "Tile height used for CPU SKP playback.");
+
+DEFINE_int32(GPUbenchTileW, 1600, "Tile width  used for GPU SKP playback.");
+DEFINE_int32(GPUbenchTileH, 512, "Tile height used for GPU SKP playback.");
 
 SKPBench::SKPBench(const char* name, const SkPicture* pic, const SkIRect& clip, SkScalar scale,
-                   bool useMultiPictureDraw)
+                   bool useMultiPictureDraw, bool doLooping)
     : fPic(SkRef(pic))
     , fClip(clip)
     , fScale(scale)
     , fName(name)
-    , fUseMultiPictureDraw(useMultiPictureDraw) {
+    , fUseMultiPictureDraw(useMultiPictureDraw)
+    , fDoLooping(doLooping) {
     fUniqueName.printf("%s_%.2g", name, scale);  // Scale makes this unqiue for perf.skia.org traces.
     if (useMultiPictureDraw) {
         fUniqueName.append("_mpd");
@@ -44,8 +49,12 @@ void SKPBench::onPerCanvasPreDraw(SkCanvas* canvas) {
     SkIRect bounds;
     SkAssertResult(canvas->getClipDeviceBounds(&bounds));
 
-    int tileW = SkTMin(FLAGS_benchTileW, bounds.width());
-    int tileH = SkTMin(FLAGS_benchTileH, bounds.height());
+    const bool gpu = canvas->getGrContext() != nullptr;
+    int tileW = gpu ? FLAGS_GPUbenchTileW : FLAGS_CPUbenchTileW,
+        tileH = gpu ? FLAGS_GPUbenchTileH : FLAGS_CPUbenchTileH;
+
+    tileW = SkTMin(tileW, bounds.width());
+    tileH = SkTMin(tileH, bounds.height());
 
     int xTiles = SkScalarCeilToInt(bounds.width()  / SkIntToScalar(tileW));
     int yTiles = SkScalarCeilToInt(bounds.height() / SkIntToScalar(tileH));
@@ -96,6 +105,7 @@ SkIPoint SKPBench::onGetSize() {
 }
 
 void SKPBench::onDraw(const int loops, SkCanvas* canvas) {
+    SkASSERT(fDoLooping || 1 == loops);
     if (fUseMultiPictureDraw) {
         for (int i = 0; i < loops; i++) {
             this->drawMPDPicture();

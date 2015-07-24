@@ -6,6 +6,7 @@
  */
 
 #include "GrBatchFontCache.h"
+#include "GrContext.h"
 #include "GrFontAtlasSizes.h"
 #include "GrGpu.h"
 #include "GrRectanizer.h"
@@ -38,7 +39,7 @@ static GrBatchAtlas* make_atlas(GrContext* context, GrPixelConfig config,
 bool GrBatchFontCache::initAtlas(GrMaskFormat format) {
     int index = MaskFormatToAtlasIndex(format);
     if (!fAtlases[index]) {
-        GrPixelConfig config = this->getPixelConfig(format);
+        GrPixelConfig config = MaskFormatToPixelConfig(format);
         if (kA8_GrMaskFormat == format) {
             fAtlases[index] = make_atlas(fContext, config,
                                          GR_FONT_ATLAS_A8_TEXTURE_WIDTH,
@@ -75,6 +76,7 @@ GrBatchFontCache::GrBatchFontCache(GrContext* context)
 GrBatchFontCache::~GrBatchFontCache() {
     SkTDynamicHash<GrBatchTextStrike, GrFontDescKey>::Iter iter(&fCache);
     while (!iter.done()) {
+        (*iter).fIsAbandoned = true;
         (*iter).unref();
         ++iter;
     }
@@ -86,6 +88,7 @@ GrBatchFontCache::~GrBatchFontCache() {
 void GrBatchFontCache::freeAll() {
     SkTDynamicHash<GrBatchTextStrike, GrFontDescKey>::Iter iter(&fCache);
     while (!iter.done()) {
+        (*iter).fIsAbandoned = true;
         (*iter).unref();
         ++iter;
     }
@@ -94,17 +97,6 @@ void GrBatchFontCache::freeAll() {
         SkDELETE(fAtlases[i]);
         fAtlases[i] = NULL;
     }
-}
-
-GrPixelConfig GrBatchFontCache::getPixelConfig(GrMaskFormat format) const {
-    static const GrPixelConfig kPixelConfigs[] = {
-        kAlpha_8_GrPixelConfig,
-        kRGB_565_GrPixelConfig,
-        kSkia8888_GrPixelConfig
-    };
-    SK_COMPILE_ASSERT(SK_ARRAY_COUNT(kPixelConfigs) == kMaskFormatCount, array_size_mismatch);
-
-    return kPixelConfigs[format];
 }
 
 void GrBatchFontCache::HandleEviction(GrBatchAtlas::AtlasID id, void* ptr) {
@@ -215,7 +207,7 @@ bool GrBatchTextStrike::addGlyphToAtlas(GrBatchTarget* batchTarget, GrGlyph* gly
     int bytesPerPixel = GrMaskFormatBytesPerPixel(glyph->fMaskFormat);
 
     size_t size = glyph->fBounds.area() * bytesPerPixel;
-    GrAutoMalloc<1024> storage(size);
+    SkAutoSMalloc<1024> storage(size);
 
     if (GrGlyph::kDistance_MaskStyle == GrGlyph::UnpackMaskStyle(glyph->fPackedID)) {
         if (!scaler->getPackedGlyphDFImage(glyph->fPackedID, glyph->width(),

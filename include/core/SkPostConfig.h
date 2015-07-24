@@ -24,13 +24,12 @@
 
 /**
  * Matrix calculations may be float or double.
- * The default is double, as that is faster given our impl uses doubles
- * for intermediate calculations.
+ * The default is float, as that's what Chromium's using.
  */
 #if defined(SK_MSCALAR_IS_DOUBLE) && defined(SK_MSCALAR_IS_FLOAT)
 #  error "cannot define both SK_MSCALAR_IS_DOUBLE and SK_MSCALAR_IS_FLOAT"
 #elif !defined(SK_MSCALAR_IS_DOUBLE) && !defined(SK_MSCALAR_IS_FLOAT)
-#  define SK_MSCALAR_IS_DOUBLE
+#  define SK_MSCALAR_IS_FLOAT
 #endif
 
 #if defined(SK_CPU_LENDIAN) && defined(SK_CPU_BENDIAN)
@@ -118,23 +117,6 @@
 #    else
 #      define SK_CRASH() do { SkNO_RETURN_HINT(); } while (true)
 #    endif
-#  endif
-#endif
-
-///////////////////////////////////////////////////////////////////////////////
-
-/**
- * SK_ENABLE_INST_COUNT controlls printing how many reference counted objects
- * are still held on exit.
- * Defaults to 1 in DEBUG and 0 in RELEASE.
- */
-#ifndef SK_ENABLE_INST_COUNT
-// Only enabled for static builds, because instance counting relies on static
-// variables in functions defined in header files.
-#  if SK_DEVELOPER && !defined(SKIA_DLL)
-#    define SK_ENABLE_INST_COUNT 1
-#  else
-#    define SK_ENABLE_INST_COUNT 0
 #  endif
 #endif
 
@@ -313,6 +295,14 @@
 #  else
 #    define SK_ALWAYS_INLINE SK_ATTRIBUTE(always_inline) inline
 #  endif
+#endif
+
+#if defined(SK_BUILD_FOR_WIN)
+    #define SK_VECTORCALL __vectorcall
+#elif defined(SK_CPU_ARM32)
+    #define SK_VECTORCALL __attribute__((pcs("aapcs-vfp")))
+#else
+    #define SK_VECTORCALL
 #endif
 
 //////////////////////////////////////////////////////////////////////

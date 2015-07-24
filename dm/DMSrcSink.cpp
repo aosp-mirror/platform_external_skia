@@ -57,12 +57,18 @@ Name GMSrc::name() const {
     return gm->getName();
 }
 
+void GMSrc::modifyGrContextOptions(GrContextOptions* options) const {
+    SkAutoTDelete<skiagm::GM> gm(fFactory(NULL));
+    gm->modifyGrContextOptions(options);
+}
+
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
-CodecSrc::CodecSrc(Path path, Mode mode, DstColorType dstColorType)
+CodecSrc::CodecSrc(Path path, Mode mode, DstColorType dstColorType, float scale)
     : fPath(path)
     , fMode(mode)
     , fDstColorType(dstColorType)
+    , fScale(scale)
 {}
 
 Error CodecSrc::draw(SkCanvas* canvas) const {
@@ -103,6 +109,13 @@ Error CodecSrc::draw(SkCanvas* canvas) const {
             break;
     }
 
+    // Try to scale the image if it is desired
+    SkISize size = codec->getScaledDimensions(fScale);
+    if (size == decodeInfo.dimensions() && 1.0f != fScale) {
+        return Error::Nonfatal("Test without scaling is uninteresting.");
+    }
+    decodeInfo = decodeInfo.makeWH(size.width(), size.height());
+
     // Construct a color table for the decode if necessary
     SkAutoTUnref<SkColorTable> colorTable(NULL);
     SkPMColor* colorPtr = NULL;
@@ -127,43 +140,299 @@ Error CodecSrc::draw(SkCanvas* canvas) const {
     }
 
     switch (fMode) {
-        case kNormal_Mode:
+        case kNormal_Mode: {
             switch (codec->getPixels(decodeInfo, bitmap.getPixels(), bitmap.rowBytes(), NULL,
                     colorPtr, colorCountPtr)) {
-                case SkImageGenerator::kSuccess:
+                case SkCodec::kSuccess:
                     // We consider incomplete to be valid, since we should still decode what is
                     // available.
-                case SkImageGenerator::kIncompleteInput:
+                case SkCodec::kIncompleteInput:
                     break;
-                case SkImageGenerator::kInvalidConversion:
+                case SkCodec::kInvalidConversion:
                     return Error::Nonfatal("Incompatible colortype conversion");
                 default:
                     // Everything else is considered a failure.
                     return SkStringPrintf("Couldn't getPixels %s.", fPath.c_str());
             }
+            canvas->drawBitmap(bitmap, 0, 0);
             break;
+        }
         case kScanline_Mode: {
-            SkScanlineDecoder* scanlineDecoder = codec->getScanlineDecoder(decodeInfo, NULL,
-                    colorPtr, colorCountPtr);
+            SkAutoTDelete<SkScanlineDecoder> scanlineDecoder(codec->getScanlineDecoder(
+                    decodeInfo, NULL, colorPtr, colorCountPtr));
             if (NULL == scanlineDecoder) {
                 return Error::Nonfatal("Cannot use scanline decoder for all images");
             }
-            for (int y = 0; y < decodeInfo.height(); ++y) {
-                const SkImageGenerator::Result result = scanlineDecoder->getScanlines(
-                        bitmap.getAddr(0, y), 1, 0);
-                switch (result) {
-                    case SkImageGenerator::kSuccess:
-                    case SkImageGenerator::kIncompleteInput:
-                        break;
-                    default:
-                        return SkStringPrintf("%s failed after %d scanlines with error message %d",
-                                              fPath.c_str(), y-1, (int) result);
+            const SkCodec::Result result = scanlineDecoder->getScanlines(
+                    bitmap.getAddr(0, 0), decodeInfo.height(), bitmap.rowBytes());
+            switch (result) {
+                case SkCodec::kSuccess:
+                case SkCodec::kIncompleteInput:
+                    break;
+                default:
+                    return SkStringPrintf("%s failed with error message %d",
+                                          fPath.c_str(), (int) result);
+            }
+            canvas->drawBitmap(bitmap, 0, 0);
+            break;
+        }
+        case kScanline_Subset_Mode: {
+            //this mode decodes the image in divisor*divisor subsets, using a scanline decoder
+            const int divisor = 2;
+            const int w = decodeInfo.width();
+            const int h = decodeInfo.height();
+            if (divisor > w || divisor > h) {
+                return Error::Nonfatal(SkStringPrintf("Cannot decode subset: divisor %d is too big"
+                        "for %s with dimensions (%d x %d)", divisor, fPath.c_str(), w, h));
+            }
+            const int subsetWidth = w/divisor;
+            const int subsetHeight = h/divisor;
+            // One of our subsets will be larger to contain any pixels that do not divide evenly.
+            const int extraX = w % divisor;
+            const int extraY = h % divisor;
+            /*
+            * if w or h are not evenly divided by divisor need to adjust width and height of end
+            * subsets to cover entire image.
+            * Add extraX and extraY to largestSubsetBm's width and height to adjust width
+            * and height of end subsets.
+            * subsetBm is extracted from largestSubsetBm.
+            * subsetBm's size is determined based on the current subset and may be larger for end
+            * subsets.
+            */
+            SkImageInfo largestSubsetDecodeInfo =
+                    decodeInfo.makeWH(subsetWidth + extraX, subsetHeight + extraY);
+            SkBitmap largestSubsetBm;
+            if (!largestSubsetBm.tryAllocPixels(largestSubsetDecodeInfo, NULL, colorTable.get())) {
+                return SkStringPrintf("Image(%s) is too large (%d x %d)\n", fPath.c_str(),
+                        largestSubsetDecodeInfo.width(), largestSubsetDecodeInfo.height());
+            }
+            const size_t rowBytes = decodeInfo.minRowBytes();
+            char* buffer = SkNEW_ARRAY(char, largestSubsetDecodeInfo.height() * rowBytes);
+            SkAutoTDeleteArray<char> lineDeleter(buffer);
+            for (int col = 0; col < divisor; col++) {
+                //currentSubsetWidth may be larger than subsetWidth for rightmost subsets
+                const int currentSubsetWidth = (col + 1 == divisor) ?
+                        subsetWidth + extraX : subsetWidth;
+                const int x = col * subsetWidth;
+                for (int row = 0; row < divisor; row++) {
+                    //currentSubsetHeight may be larger than subsetHeight for bottom subsets
+                    const int currentSubsetHeight = (row + 1 == divisor) ?
+                            subsetHeight + extraY : subsetHeight;
+                    const int y = row * subsetHeight;
+                    //create scanline decoder for each subset
+                    SkAutoTDelete<SkScanlineDecoder> subsetScanlineDecoder(
+                            codec->getScanlineDecoder(decodeInfo, NULL, colorPtr, colorCountPtr));
+                    if (NULL == subsetScanlineDecoder) {
+                        if (x == 0 && y == 0) {
+                            //first try, image may not be compatible
+                            return Error::Nonfatal("Cannot use scanline decoder for all images");
+                        } else {
+                            return "Error scanline decoder is NULL";
+                        }
+                    }
+                    //skip to first line of subset
+                    const SkCodec::Result skipResult =
+                            subsetScanlineDecoder->skipScanlines(y);
+                    switch (skipResult) {
+                        case SkCodec::kSuccess:
+                        case SkCodec::kIncompleteInput:
+                            break;
+                        default:
+                            return SkStringPrintf("%s failed after attempting to skip %d scanlines"
+                                    "with error message %d", fPath.c_str(), y, (int) skipResult);
+                    }
+                    //create and set size of subsetBm
+                    SkBitmap subsetBm;
+                    SkIRect bounds = SkIRect::MakeWH(subsetWidth, subsetHeight);
+                    bounds.setXYWH(0, 0, currentSubsetWidth, currentSubsetHeight);
+                    SkAssertResult(largestSubsetBm.extractSubset(&subsetBm, bounds));
+                    SkAutoLockPixels autlockSubsetBm(subsetBm, true);
+                    const SkCodec::Result subsetResult =
+                        subsetScanlineDecoder->getScanlines(buffer, currentSubsetHeight, rowBytes);
+                    switch (subsetResult) {
+                        case SkCodec::kSuccess:
+                        case SkCodec::kIncompleteInput:
+                            break;
+                        default:
+                            return SkStringPrintf("%s failed with error message %d",
+                                    fPath.c_str(), (int) subsetResult);
+                    }
+                    const size_t bpp = decodeInfo.bytesPerPixel();
+                    /*
+                     * we copy all the lines at once becuase when calling getScanlines for
+                     * interlaced pngs the entire image must be read regardless of the number
+                     * of lines requested.  Reading an interlaced png in a loop, line-by-line, would
+                     * decode the entire image height times, which is very slow
+                     * it is aknowledged that copying each line as you read it in a loop
+                     * may be faster for other types of images.  Since this is a correctness test
+                     * that's okay.
+                    */
+                    char* bufferRow = buffer;
+                    for (int subsetY = 0; subsetY < currentSubsetHeight; ++subsetY) {
+                        memcpy(subsetBm.getAddr(0, subsetY), bufferRow + x*bpp,
+                                currentSubsetWidth*bpp);
+                        bufferRow += rowBytes;
+                    }
+
+                    canvas->drawBitmap(subsetBm, SkIntToScalar(x), SkIntToScalar(y));
                 }
             }
             break;
         }
+        case kStripe_Mode: {
+            const int height = decodeInfo.height();
+            // This value is chosen arbitrarily.  We exercise more cases by choosing a value that
+            // does not align with image blocks.
+            const int stripeHeight = 37;
+            const int numStripes = (height + stripeHeight - 1) / stripeHeight;
+
+            // Decode odd stripes
+            SkAutoTDelete<SkScanlineDecoder> decoder(
+                    codec->getScanlineDecoder(decodeInfo, NULL, colorPtr, colorCountPtr));
+            if (NULL == decoder) {
+                return Error::Nonfatal("Cannot use scanline decoder for all images");
+            }
+            for (int i = 0; i < numStripes; i += 2) {
+                // Skip a stripe
+                const int linesToSkip = SkTMin(stripeHeight, height - i * stripeHeight);
+                SkCodec::Result result = decoder->skipScanlines(linesToSkip);
+                switch (result) {
+                    case SkCodec::kSuccess:
+                    case SkCodec::kIncompleteInput:
+                        break;
+                    default:
+                        return SkStringPrintf("Cannot skip scanlines for %s.", fPath.c_str());
+                }
+
+                // Read a stripe
+                const int startY = (i + 1) * stripeHeight;
+                const int linesToRead = SkTMin(stripeHeight, height - startY);
+                if (linesToRead > 0) {
+                    result = decoder->getScanlines(bitmap.getAddr(0, startY),
+                            linesToRead, bitmap.rowBytes());
+                    switch (result) {
+                        case SkCodec::kSuccess:
+                        case SkCodec::kIncompleteInput:
+                            break;
+                        default:
+                            return SkStringPrintf("Cannot get scanlines for %s.", fPath.c_str());
+                    }
+                }
+            }
+
+            // Decode even stripes
+            decoder.reset(codec->getScanlineDecoder(decodeInfo, NULL, colorPtr, colorCountPtr));
+            if (NULL == decoder) {
+                return "Failed to create second scanline decoder.";
+            }
+            for (int i = 0; i < numStripes; i += 2) {
+                // Read a stripe
+                const int startY = i * stripeHeight;
+                const int linesToRead = SkTMin(stripeHeight, height - startY);
+                SkCodec::Result result = decoder->getScanlines(bitmap.getAddr(0, startY),
+                        linesToRead, bitmap.rowBytes());
+                switch (result) {
+                    case SkCodec::kSuccess:
+                    case SkCodec::kIncompleteInput:
+                        break;
+                    default:
+                        return SkStringPrintf("Cannot get scanlines for %s.", fPath.c_str());
+                }
+
+                // Skip a stripe
+                const int linesToSkip = SkTMin(stripeHeight, height - (i + 1) * stripeHeight);
+                if (linesToSkip > 0) {
+                    result = decoder->skipScanlines(linesToSkip);
+                    switch (result) {
+                        case SkCodec::kSuccess:
+                        case SkCodec::kIncompleteInput:
+                            break;
+                        default:
+                            return SkStringPrintf("Cannot skip scanlines for %s.", fPath.c_str());
+                    }
+                }
+            }
+            canvas->drawBitmap(bitmap, 0, 0);
+            break;
+        }
+        case kSubset_Mode: {
+            // Arbitrarily choose a divisor.
+            int divisor = 2;
+            // Total width/height of the image.
+            const int W = codec->getInfo().width();
+            const int H = codec->getInfo().height();
+            if (divisor > W || divisor > H) {
+                return Error::Nonfatal(SkStringPrintf("Cannot codec subset: divisor %d is too big "
+                                                      "for %s with dimensions (%d x %d)", divisor,
+                                                      fPath.c_str(), W, H));
+            }
+            // subset dimensions
+            // SkWebpCodec, the only one that supports subsets, requires even top/left boundaries.
+            const int w = SkAlign2(W / divisor);
+            const int h = SkAlign2(H / divisor);
+            SkIRect subset;
+            SkCodec::Options opts;
+            opts.fSubset = &subset;
+            SkBitmap subsetBm;
+            // We will reuse pixel memory from bitmap.
+            void* pixels = bitmap.getPixels();
+            // Keep track of left and top (for drawing subsetBm into canvas). We could use
+            // fScale * x and fScale * y, but we want integers such that the next subset will start
+            // where the last one ended. So we'll add decodeInfo.width() and height().
+            int left = 0;
+            for (int x = 0; x < W; x += w) {
+                int top = 0;
+                for (int y = 0; y < H; y+= h) {
+                    // Do not make the subset go off the edge of the image.
+                    const int preScaleW = SkTMin(w, W - x);
+                    const int preScaleH = SkTMin(h, H - y);
+                    subset.setXYWH(x, y, preScaleW, preScaleH);
+                    // And scale
+                    // FIXME: Should we have a version of getScaledDimensions that takes a subset
+                    // into account?
+                    decodeInfo = decodeInfo.makeWH(SkScalarRoundToInt(preScaleW * fScale),
+                                                   SkScalarRoundToInt(preScaleH * fScale));
+                    size_t rowBytes = decodeInfo.minRowBytes();
+                    if (!subsetBm.installPixels(decodeInfo, pixels, rowBytes, colorTable.get(),
+                                                NULL, NULL)) {
+                        return SkStringPrintf("could not install pixels for %s.", fPath.c_str());
+                    }
+                    const SkCodec::Result result = codec->getPixels(decodeInfo, pixels, rowBytes,
+                            &opts, colorPtr, colorCountPtr);
+                    switch (result) {
+                        case SkCodec::kSuccess:
+                        case SkCodec::kIncompleteInput:
+                            break;
+                        case SkCodec::kInvalidConversion:
+                            if (0 == (x|y)) {
+                                // First subset is okay to return unimplemented.
+                                return Error::Nonfatal("Incompatible colortype conversion");
+                            }
+                            // If the first subset succeeded, a later one should not fail.
+                            // fall through to failure
+                        case SkCodec::kUnimplemented:
+                            if (0 == (x|y)) {
+                                // First subset is okay to return unimplemented.
+                                return Error::Nonfatal("subset codec not supported");
+                            }
+                            // If the first subset succeeded, why would a later one fail?
+                            // fall through to failure
+                        default:
+                            return SkStringPrintf("subset codec failed to decode (%d, %d, %d, %d) "
+                                                  "from %s with dimensions (%d x %d)\t error %d",
+                                                  x, y, decodeInfo.width(), decodeInfo.height(),
+                                                  fPath.c_str(), W, H, result);
+                    }
+                    canvas->drawBitmap(subsetBm, SkIntToScalar(left), SkIntToScalar(top));
+                    // translate by the scaled height.
+                    top += decodeInfo.height();
+                }
+                // translate by the scaled width.
+                left += decodeInfo.width();
+            }
+            return "";
+        }
     }
-    canvas->drawBitmap(bitmap, 0, 0);
     return "";
 }
 
@@ -171,14 +440,19 @@ SkISize CodecSrc::size() const {
     SkAutoTUnref<SkData> encoded(SkData::NewFromFileName(fPath.c_str()));
     SkAutoTDelete<SkCodec> codec(SkCodec::NewFromData(encoded));
     if (NULL != codec) {
-        return codec->getInfo().dimensions();
+        SkISize size = codec->getScaledDimensions(fScale);
+        return size;
     } else {
         return SkISize::Make(0, 0);
     }
 }
 
 Name CodecSrc::name() const {
-    return SkOSPath::Basename(fPath.c_str());
+    if (1.0f == fScale) {
+        return SkOSPath::Basename(fPath.c_str());
+    } else {
+        return SkStringPrintf("%s_%.3f", SkOSPath::Basename(fPath.c_str()).c_str(), fScale);
+    }
 }
 
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
@@ -220,14 +494,14 @@ Error ImageSrc::draw(SkCanvas* canvas) const {
     }
     stream->rewind();
     int w,h;
-    if (!decoder->buildTileIndex(stream.detach(), &w, &h) || w*h == 1) {
+    if (!decoder->buildTileIndex(stream.detach(), &w, &h)) {
         return Error::Nonfatal("Subset decoding not supported.");
     }
 
     // Divide the image into subsets that cover the entire image.
     if (fDivisor > w || fDivisor > h) {
-        return SkStringPrintf("divisor %d is too big for %s with dimensions (%d x %d)",
-                              fDivisor, fPath.c_str(), w, h);
+        return Error::Nonfatal(SkStringPrintf("Cannot decode subset: divisor %d is too big"
+                "for %s with dimensions (%d x %d)", fDivisor, fPath.c_str(), w, h));
     }
     const int subsetWidth  = w / fDivisor,
               subsetHeight = h / fDivisor;
@@ -340,7 +614,10 @@ int GPUSink::enclave() const {
 void PreAbandonGpuContextErrorHandler(SkError, void*) {}
 
 Error GPUSink::draw(const Src& src, SkBitmap* dst, SkWStream*, SkString* log) const {
-    GrContextFactory factory;
+    GrContextOptions options;
+    src.modifyGrContextOptions(&options);
+
+    GrContextFactory factory(options);
     const SkISize size = src.size();
     const SkImageInfo info =
         SkImageInfo::Make(size.width(), size.height(), kN32_SkColorType, kPremul_SkAlphaType);
@@ -730,6 +1007,7 @@ Error ViaTwice::draw(const Src& src, SkBitmap* bitmap, SkWStream* stream, SkStri
 // This is an only-slightly-exaggerated simluation of Blink's Slimming Paint pictures.
 struct DrawsAsSingletonPictures {
     SkCanvas* fCanvas;
+    const SkDrawableList& fDrawables;
 
     SK_CREATE_MEMBER_DETECTOR(paint);
 
@@ -738,7 +1016,8 @@ struct DrawsAsSingletonPictures {
         // We must pass SkMatrix::I() as our initial matrix.
         // By default SkRecords::Draw() uses the canvas' matrix as its initial matrix,
         // which would have the funky effect of applying transforms over and over.
-        SkRecords::Draw(canvas, nullptr, nullptr, 0, &SkMatrix::I())(op);
+        SkRecords::Draw d(canvas, nullptr, fDrawables.begin(), fDrawables.count(), &SkMatrix::I());
+        d(op);
     }
 
     // Most things that have paints are Draw-type ops.  Create sub-pictures for each.
@@ -775,7 +1054,14 @@ Error ViaSingletonPictures::draw(
         SkPictureRecorder macroRec;
         SkCanvas* macroCanvas = macroRec.beginRecording(SkIntToScalar(size.width()),
                                                         SkIntToScalar(size.height()));
-        DrawsAsSingletonPictures drawsAsSingletonPictures = { macroCanvas };
+
+        SkAutoTDelete<SkDrawableList> drawables(recorder.detachDrawableList());
+        const SkDrawableList empty;
+
+        DrawsAsSingletonPictures drawsAsSingletonPictures = {
+            macroCanvas,
+            drawables ? *drawables : empty,
+        };
         for (unsigned i = 0; i < skr.count(); i++) {
             skr.visit<void>(i, drawsAsSingletonPictures);
         }

@@ -142,12 +142,16 @@ enum GrColorComponentFlags {
     kB_GrColorComponentFlag = 1 << (GrColor_SHIFT_B / 8),
     kA_GrColorComponentFlag = 1 << (GrColor_SHIFT_A / 8),
 
+    kNone_GrColorComponentFlags = 0,
+
     kRGB_GrColorComponentFlags = (kR_GrColorComponentFlag | kG_GrColorComponentFlag |
                                   kB_GrColorComponentFlag),
 
     kRGBA_GrColorComponentFlags = (kR_GrColorComponentFlag | kG_GrColorComponentFlag |
                                    kB_GrColorComponentFlag | kA_GrColorComponentFlag)
 };
+
+GR_MAKE_BITFIELD_OPS(GrColorComponentFlags)
 
 static inline char GrColorComponentFlagToChar(GrColorComponentFlags component) {
     SkASSERT(SkIsPow2(component));
@@ -183,6 +187,7 @@ static inline uint32_t GrPixelConfigComponentMask(GrPixelConfig config) {
         kRGBA_GrColorComponentFlags,    // kASTC_12x12_GrPixelConfig
         kRGBA_GrColorComponentFlags,    // kRGBA_float_GrPixelConfig
         kA_GrColorComponentFlag,        // kAlpha_16_GrPixelConfig
+        kRGBA_GrColorComponentFlags,    // kRGBA_half_GrPixelConfig
     };
     return kFlags[config];
 
@@ -200,6 +205,7 @@ static inline uint32_t GrPixelConfigComponentMask(GrPixelConfig config) {
     GR_STATIC_ASSERT(11 == kASTC_12x12_GrPixelConfig);
     GR_STATIC_ASSERT(12 == kRGBA_float_GrPixelConfig);
     GR_STATIC_ASSERT(13 == kAlpha_half_GrPixelConfig);
+    GR_STATIC_ASSERT(14 == kRGBA_half_GrPixelConfig);
     GR_STATIC_ASSERT(SK_ARRAY_COUNT(kFlags) == kGrPixelConfigCnt);
 }
 

@@ -10,21 +10,20 @@
 
 #include "GrGpuResource.h"
 #include "SkRefCnt.h"
-#include "SkStrokeRec.h"
 #include "SkTArray.h"
 
 class SkPath;
 class SkDescriptor;
 
 /**
- * Represents a contiguous range of GPU path objects, all with a common stroke.
+ * Represents a contiguous range of GPU path objects.
  * This object is immutable with the exception that individual paths may be
  * initialized lazily.
  */
 
 class GrPathRange : public GrGpuResource {
 public:
-    SK_DECLARE_INST_COUNT(GrPathRange);
+    
 
     enum PathIndexType {
         kU8_PathIndexType,   //!< uint8_t
@@ -50,7 +49,9 @@ public:
     public:
         virtual int getNumPaths() = 0;
         virtual void generatePath(int index, SkPath* out) = 0;
+#ifdef SK_DEBUG
         virtual bool isEqualTo(const SkDescriptor&) const { return false; }
+#endif
         virtual ~PathGenerator() {}
     };
 
@@ -58,22 +59,22 @@ public:
      * Initialize a lazy-loaded path range. This class will generate an SkPath and call
      * onInitPath() for each path within the range before it is drawn for the first time.
      */
-    GrPathRange(GrGpu*, PathGenerator*, const SkStrokeRec& stroke);
+    GrPathRange(GrGpu*, PathGenerator*);
 
     /**
      * Initialize an eager-loaded path range. The subclass is responsible for ensuring all
      * the paths are initialized up front.
      */
-    GrPathRange(GrGpu*, int numPaths, const SkStrokeRec& stroke);
+    GrPathRange(GrGpu*, int numPaths);
 
+    int getNumPaths() const { return fNumPaths; }
+    const PathGenerator* getPathGenerator() const { return fPathGenerator.get(); }
+
+#ifdef SK_DEBUG
     virtual bool isEqualTo(const SkDescriptor& desc) const {
         return NULL != fPathGenerator.get() && fPathGenerator->isEqualTo(desc);
     }
-
-    int getNumPaths() const { return fNumPaths; }
-    const SkStrokeRec& getStroke() const { return fStroke; }
-    const PathGenerator* getPathGenerator() const { return fPathGenerator.get(); }
-
+#endif
 protected:
     // Initialize a path in the range before drawing. This is only called when
     // fPathGenerator is non-null. The child class need not call didChangeGpuMemorySize(),
@@ -82,14 +83,13 @@ protected:
 
 private:
     // Notify when paths will be drawn in case this is a lazy-loaded path range.
-    friend class GrGpu;
+    friend class GrPathRendering;
     void willDrawPaths(const void* indices, PathIndexType, int count) const;
     template<typename IndexType> void willDrawPaths(const void* indices, int count) const;
 
     mutable SkAutoTUnref<PathGenerator> fPathGenerator;
     mutable SkTArray<uint8_t, true /*MEM_COPY*/> fGeneratedPaths;
     const int fNumPaths;
-    const SkStrokeRec fStroke;
 
     typedef GrGpuResource INHERITED;
 };

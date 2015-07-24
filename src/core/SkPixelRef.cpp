@@ -6,9 +6,12 @@
  */
 
 #include "SkBitmapCache.h"
+#include "SkMutex.h"
 #include "SkPixelRef.h"
-#include "SkThread.h"
 #include "SkTraceEvent.h"
+
+//#define SK_SUPPORT_LEGACY_UNBALANCED_PIXELREF_LOCKCOUNT
+//#define SK_TRACE_PIXELREF_LIFETIME
 
 #ifdef SK_BUILD_FOR_WIN32
     // We don't have SK_BASE_MUTEX_INIT on Windows.
@@ -85,6 +88,10 @@ static SkImageInfo validate_info(const SkImageInfo& info) {
     return info.makeAlphaType(newAlphaType);
 }
 
+#ifdef SK_TRACE_PIXELREF_LIFETIME
+    static int32_t gInstCounter;
+#endif
+
 SkPixelRef::SkPixelRef(const SkImageInfo& info)
     : fInfo(validate_info(info))
 #ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
@@ -92,6 +99,9 @@ SkPixelRef::SkPixelRef(const SkImageInfo& info)
 #endif
 
 {
+#ifdef SK_TRACE_PIXELREF_LIFETIME
+    SkDebugf(" pixelref %d\n", sk_atomic_inc(&gInstCounter));
+#endif
     this->setMutex(NULL);
     fRec.zero();
     fLockCount = 0;
@@ -108,6 +118,9 @@ SkPixelRef::SkPixelRef(const SkImageInfo& info, SkBaseMutex* mutex)
     , fStableID(next_gen_id())
 #endif
 {
+#ifdef SK_TRACE_PIXELREF_LIFETIME
+    SkDebugf(" pixelref %d\n", sk_atomic_inc(&gInstCounter));
+#endif
     this->setMutex(mutex);
     fRec.zero();
     fLockCount = 0;
@@ -118,6 +131,13 @@ SkPixelRef::SkPixelRef(const SkImageInfo& info, SkBaseMutex* mutex)
 }
 
 SkPixelRef::~SkPixelRef() {
+#ifndef SK_SUPPORT_LEGACY_UNBALANCED_PIXELREF_LOCKCOUNT
+    SkASSERT(SKPIXELREF_PRELOCKED_LOCKCOUNT == fLockCount || 0 == fLockCount);
+#endif
+
+#ifdef SK_TRACE_PIXELREF_LIFETIME
+    SkDebugf("~pixelref %d\n", sk_atomic_dec(&gInstCounter) - 1);
+#endif
     this->callGenIDChangeListeners();
 }
 
@@ -140,8 +160,22 @@ void SkPixelRef::cloneGenID(const SkPixelRef& that) {
     SkASSERT(!that. genIDIsUnique());
 }
 
+static void validate_pixels_ctable(const SkImageInfo& info, const void* pixels,
+                                   const SkColorTable* ctable) {
+    if (info.isEmpty()) {
+        return; // can't require pixels if the dimensions are empty
+    }
+    SkASSERT(pixels);
+    if (kIndex_8_SkColorType == info.colorType()) {
+        SkASSERT(ctable);
+    } else {
+        SkASSERT(NULL == ctable);
+    }
+}
+
 void SkPixelRef::setPreLocked(void* pixels, size_t rowBytes, SkColorTable* ctable) {
 #ifndef SK_IGNORE_PIXELREF_SETPRELOCKED
+    validate_pixels_ctable(fInfo, pixels, ctable);
     // only call me in your constructor, otherwise fLockCount tracking can get
     // out of sync.
     fRec.fPixels = pixels;
@@ -152,32 +186,53 @@ void SkPixelRef::setPreLocked(void* pixels, size_t rowBytes, SkColorTable* ctabl
 #endif
 }
 
-bool SkPixelRef::lockPixels(LockRec* rec) {
+// Increments fLockCount only on success
+bool SkPixelRef::lockPixelsInsideMutex() {
+    fMutex->assertHeld();
+
+    if (1 == ++fLockCount) {
+        SkASSERT(fRec.isZero());
+        if (!this->onNewLockPixels(&fRec)) {
+            fRec.zero();
+            fLockCount -= 1;    // we return fLockCount unchanged if we fail.
+            return false;
+        }
+    }
+    validate_pixels_ctable(fInfo, fRec.fPixels, fRec.fColorTable);
+    return fRec.fPixels != NULL;
+}
+
+// For historical reasons, we always inc fLockCount, even if we return false.
+// It would be nice to change this (it seems), and only inc if we actually succeed...
+bool SkPixelRef::lockPixels() {
     SkASSERT(!fPreLocked || SKPIXELREF_PRELOCKED_LOCKCOUNT == fLockCount);
 
     if (!fPreLocked) {
         TRACE_EVENT_BEGIN0("skia", "SkPixelRef::lockPixelsMutex");
         SkAutoMutexAcquire  ac(*fMutex);
         TRACE_EVENT_END0("skia", "SkPixelRef::lockPixelsMutex");
+        SkDEBUGCODE(int oldCount = fLockCount;)
+        bool success = this->lockPixelsInsideMutex();
+        // lockPixelsInsideMutex only increments the count if it succeeds.
+        SkASSERT(oldCount + (int)success == fLockCount);
 
-        if (1 == ++fLockCount) {
-            SkASSERT(fRec.isZero());
-
-            LockRec rec;
-            if (!this->onNewLockPixels(&rec)) {
-                return false;
-            }
-            SkASSERT(!rec.isZero());    // else why did onNewLock return true?
-            fRec = rec;
+        if (!success) {
+            // For compatibility with SkBitmap calling lockPixels, we still want to increment
+            // fLockCount even if we failed. If we updated SkBitmap we could remove this oddity.
+            fLockCount += 1;
+            return false;
         }
     }
-    *rec = fRec;
-    return true;
+    validate_pixels_ctable(fInfo, fRec.fPixels, fRec.fColorTable);
+    return fRec.fPixels != NULL;
 }
 
-bool SkPixelRef::lockPixels() {
-    LockRec rec;
-    return this->lockPixels(&rec);
+bool SkPixelRef::lockPixels(LockRec* rec) {
+    if (this->lockPixels()) {
+        *rec = fRec;
+        return true;
+    }
+    return false;
 }
 
 void SkPixelRef::unlockPixels() {
@@ -197,6 +252,33 @@ void SkPixelRef::unlockPixels() {
             }
         }
     }
+}
+
+bool SkPixelRef::requestLock(const LockRequest& request, LockResult* result) {
+    SkASSERT(result);
+    if (request.fSize.isEmpty()) {
+        return false;
+    }
+    // until we support subsets, we have to check this...
+    if (request.fSize.width() != fInfo.width() || request.fSize.height() != fInfo.height()) {
+        return false;
+    }
+
+    if (fPreLocked) {
+        result->fUnlockProc = NULL;
+        result->fUnlockContext = NULL;
+        result->fCTable = fRec.fColorTable;
+        result->fPixels = fRec.fPixels;
+        result->fRowBytes = fRec.fRowBytes;
+        result->fSize.set(fInfo.width(), fInfo.height());
+    } else {
+        SkAutoMutexAcquire  ac(*fMutex);
+        if (!this->onRequestLock(request, result)) {
+            return false;
+        }
+    }
+    validate_pixels_ctable(fInfo, result->fPixels, result->fCTable);
+    return result->fPixels != NULL;
 }
 
 bool SkPixelRef::lockPixelsAreWritable() const {
@@ -257,6 +339,7 @@ void SkPixelRef::notifyPixelsChanged() {
 #endif
     this->callGenIDChangeListeners();
     this->needsNewGenID();
+    this->onNotifyPixelsChanged();
 }
 
 void SkPixelRef::changeAlphaType(SkAlphaType at) {
@@ -271,9 +354,13 @@ bool SkPixelRef::readPixels(SkBitmap* dst, const SkIRect* subset) {
     return this->onReadPixels(dst, subset);
 }
 
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
 bool SkPixelRef::onReadPixels(SkBitmap* dst, const SkIRect* subset) {
     return false;
 }
+
+void SkPixelRef::onNotifyPixelsChanged() { }
 
 SkData* SkPixelRef::onRefEncodedData() {
     return NULL;
@@ -288,3 +375,22 @@ size_t SkPixelRef::getAllocatedSizeInBytes() const {
     return 0;
 }
 
+static void unlock_legacy_result(void* ctx) {
+    SkPixelRef* pr = (SkPixelRef*)ctx;
+    pr->unlockPixels();
+    pr->unref();    // balancing the Ref in onRequestLoc
+}
+
+bool SkPixelRef::onRequestLock(const LockRequest& request, LockResult* result) {
+    if (!this->lockPixelsInsideMutex()) {
+        return false;
+    }
+
+    result->fUnlockProc = unlock_legacy_result;
+    result->fUnlockContext = SkRef(this);   // this is balanced in our fUnlockProc
+    result->fCTable = fRec.fColorTable;
+    result->fPixels = fRec.fPixels;
+    result->fRowBytes = fRec.fRowBytes;
+    result->fSize.set(fInfo.width(), fInfo.height());
+    return true;
+}

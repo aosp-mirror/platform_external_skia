@@ -8,20 +8,30 @@
 #ifndef GrGpu_DEFINED
 #define GrGpu_DEFINED
 
-#include "GrDrawTarget.h"
-#include "GrPathRendering.h"
+#include "GrPipelineBuilder.h"
 #include "GrProgramDesc.h"
+#include "GrStencil.h"
+#include "GrTraceMarker.h"
+#include "GrXferProcessor.h"
 #include "SkPath.h"
 
+class GrBatchTracker;
 class GrContext;
+class GrGLContext;
+class GrIndexBuffer;
 class GrNonInstancedVertices;
 class GrPath;
 class GrPathRange;
 class GrPathRenderer;
 class GrPathRendererChain;
+class GrPathRendering;
 class GrPipeline;
 class GrPrimitiveProcessor;
+class GrRenderTarget;
 class GrStencilAttachment;
+class GrSurface;
+class GrTexture;
+class GrVertexBuffer;
 class GrVertices;
 
 class GrGpu : public SkRefCnt {
@@ -31,7 +41,7 @@ public:
      * not supported (at compile-time or run-time) this returns NULL. The context will not be
      * fully constructed and should not be used by GrGpu until after this function returns.
      */
-    static GrGpu* Create(GrBackend, GrBackendContext, GrContext* context);
+    static GrGpu* Create(GrBackend, GrBackendContext, const GrContextOptions&, GrContext* context);
 
     ////////////////////////////////////////////////////////////////////////////
 
@@ -44,9 +54,9 @@ public:
     /**
      * Gets the capabilities of the draw target.
      */
-    const GrDrawTargetCaps* caps() const { return fCaps.get(); }
+    const GrCaps* caps() const { return fCaps.get(); }
 
-    GrPathRendering* pathRendering() { return fPathRendering.get(); }
+    GrPathRendering* pathRendering() { return fPathRendering.get();  }
 
     // Called by GrContext when the underlying backend context has been destroyed.
     // GrGpu should use this to ensure that no backend API calls will be made from
@@ -66,7 +76,7 @@ public:
      * Creates a texture object. If kRenderTarget_GrSurfaceFlag the texture can
      * be used as a render target by calling GrTexture::asRenderTarget(). Not all
      * pixel configs can be used as render targets. Support for configs as textures
-     * or render targets can be checked using GrDrawTargetCaps.
+     * or render targets can be checked using GrCaps.
      *
      * @param desc        describes the texture to be created.
      * @param budgeted    does this texture count against the resource cache budget?
@@ -87,12 +97,12 @@ public:
     /**
      * Implements GrContext::wrapBackendTexture
      */
-    GrTexture* wrapBackendTexture(const GrBackendTextureDesc&);
+    GrTexture* wrapBackendTexture(const GrBackendTextureDesc&, GrWrapOwnership);
 
     /**
      * Implements GrContext::wrapBackendTexture
      */
-    GrRenderTarget* wrapBackendRenderTarget(const GrBackendRenderTargetDesc&);
+    GrRenderTarget* wrapBackendRenderTarget(const GrBackendRenderTargetDesc&, GrWrapOwnership);
 
     /**
      * Creates a vertex buffer.
@@ -123,15 +133,58 @@ public:
      */
     void resolveRenderTarget(GrRenderTarget* target);
 
+    /** Info struct returned by getReadPixelsInfo about performing intermediate draws before 
+        reading pixels for performance or correctness. */
+    struct ReadPixelTempDrawInfo {
+        /** If the GrGpu is requesting that the caller do a draw to an intermediate surface then
+            this is descriptor for the temp surface. The draw should always be a rect with
+            dst 0,0,w,h. */
+        GrSurfaceDesc   fTempSurfaceDesc;
+        /** Indicates whether there is a performance advantage to using an exact match texture
+            (in terms of width and height) for the intermediate texture instead of approximate. */
+        bool            fUseExactScratch;
+        /** The caller should swap the R and B channel in the temp draw and then instead of reading
+            the desired config back it should read GrPixelConfigSwapRAndB(readConfig). The swap
+            during the draw and the swap at readback time cancel and the client gets the correct
+            data. The swapped read back is either faster for or required by the underlying backend
+            3D API. */
+        bool            fSwapRAndB;
+    };
+    /** Describes why an intermediate draw must/should be performed before readPixels. */
+    enum DrawPreference {
+        /** On input means that the caller would proceed without draw if the GrGpu doesn't request
+            one.
+            On output means that the GrGpu is not requesting a draw. */
+        kNoDraw_DrawPreference,
+        /** Means that the client would prefer a draw for performance of the readback but
+            can satisfy a straight readPixels call on the inputs without an intermediate draw.
+            getReadPixelsInfo will never set the draw preference to this value but may leave
+            it set. */
+        kCallerPrefersDraw_DrawPreference,
+        /** On output means that GrGpu would prefer a draw for performance of the readback but
+            can satisfy a straight readPixels call on the inputs without an intermediate draw. The
+            caller of getReadPixelsInfo should never specify this on intput. */
+        kGpuPrefersDraw_DrawPreference,
+        /** On input means that the caller requires a draw to do a transformation and there is no
+            CPU fallback.
+            On output means that GrGpu can only satisfy the readPixels request if the intermediate
+            draw is performed.
+          */
+        kRequireDraw_DrawPreference
+    };
+
+    /** Used to negotiates whether and how an intermediate draw should or must be performed before
+        a readPixels call. If this returns false then GrGpu could not deduce an intermediate draw
+        that would allow a successful readPixels call. */
+    virtual bool getReadPixelsInfo(GrSurface* srcSurface, int readWidth, int readHeight,
+                                   size_t rowBytes, GrPixelConfig readConfig, DrawPreference*,
+                                   ReadPixelTempDrawInfo *) = 0;
+
     /**
-     * Gets a preferred 8888 config to use for writing/reading pixel data to/from a surface with
+     * Gets a preferred 8888 config to use for writing pixel data to a surface with
      * config surfaceConfig. The returned config must have at least as many bits per channel as the
-     * readConfig or writeConfig param.
+     * writeConfig param.
      */
-    virtual GrPixelConfig preferredReadPixelsConfig(GrPixelConfig readConfig,
-                                                    GrPixelConfig surfaceConfig) const {
-        return readConfig;
-    }
     virtual GrPixelConfig preferredWritePixelsConfig(GrPixelConfig writeConfig,
                                                      GrPixelConfig surfaceConfig) const {
         return writeConfig;
@@ -142,35 +195,6 @@ public:
      * match the texture's config.
      */
     virtual bool canWriteTexturePixels(const GrTexture*, GrPixelConfig srcConfig) const = 0;
-
-    /**
-     * OpenGL's readPixels returns the result bottom-to-top while the skia
-     * API is top-to-bottom. Thus we have to do a y-axis flip. The obvious
-     * solution is to have the subclass do the flip using either the CPU or GPU.
-     * However, the caller (GrContext) may have transformations to apply and can
-     * simply fold in the y-flip for free. On the other hand, the subclass may
-     * be able to do it for free itself. For example, the subclass may have to
-     * do memcpys to handle rowBytes that aren't tight. It could do the y-flip
-     * concurrently.
-     *
-     * This function returns true if a y-flip is required to put the pixels in
-     * top-to-bottom order and the subclass cannot do it for free.
-     *
-     * See read pixels for the params
-     * @return true if calling readPixels with the same set of params will
-     *              produce bottom-to-top data
-     */
-     virtual bool readPixelsWillPayForYFlip(GrRenderTarget* renderTarget,
-                                            int left, int top,
-                                            int width, int height,
-                                            GrPixelConfig config,
-                                            size_t rowBytes) const = 0;
-     /**
-      * This should return true if reading a NxM rectangle of pixels from a
-      * render target is faster if the target has dimensons N and M and the read
-      * rectangle has its top-left at 0,0.
-      */
-     virtual bool fullReadPixelsIsFasterThanPartial() const { return false; };
 
     /**
      * Reads a rectangle of pixels from a render target.
@@ -235,7 +259,7 @@ public:
      * efficiently succeed. It should only succeed if it can allow copySurface to perform a copy
      * that would be more effecient than drawing the src to a dst render target.
      */
-    virtual bool initCopySurfaceDstDesc(const GrSurface* src, GrSurfaceDesc* desc) = 0;
+    virtual bool initCopySurfaceDstDesc(const GrSurface* src, GrSurfaceDesc* desc) const = 0;
 
     // After the client interacts directly with the 3D context state the GrGpu
     // must resync its internal state and assumptions about 3D context state.
@@ -256,16 +280,6 @@ public:
                                   const GrPrimitiveProcessor&,
                                   const GrPipeline&,
                                   const GrBatchTracker&) const = 0;
-
-    // Called to determine whether a copySurface call would succeed or not. Derived
-    // classes must keep this consistent with their implementation of onCopySurface(). Fallbacks
-    // to issuing a draw from the src to dst take place at the GrDrawTarget level and this function
-    // should only return true if a faster copy path exists. The rect and point are pre-clipped. The
-    // src rect and implied dst rect are guaranteed to be within the src/dst bounds and non-empty.
-    virtual bool canCopySurface(const GrSurface* dst,
-                                const GrSurface* src,
-                                const SkIRect& srcRect,
-                                const SkIPoint& dstPoint) = 0;
 
     // Called to perform a surface to surface copy. Fallbacks to issuing a draw from the src to dst
     // take place at the GrDrawTarget level and this function implement faster copy paths. The rect
@@ -297,27 +311,6 @@ public:
     };
 
     void draw(const DrawArgs&, const GrVertices&);
-
-    /** None of these params are optional, pointers used just to avoid making copies. */
-    struct StencilPathState {
-        bool fUseHWAA;
-        GrRenderTarget* fRenderTarget;
-        const SkMatrix* fViewMatrix;
-        const GrStencilSettings* fStencil;
-        const GrScissorState* fScissor;
-    };
-
-    void stencilPath(const GrPath*, const StencilPathState&);
-
-    void drawPath(const DrawArgs&, const GrPath*, const GrStencilSettings&);
-    void drawPaths(const DrawArgs&,
-                   const GrPathRange*,
-                   const void* indices,
-                   GrDrawTarget::PathIndexType,
-                   const float transformValues[],
-                   GrDrawTarget::PathTransformType,
-                   int count,
-                   const GrStencilSettings&);
 
     ///////////////////////////////////////////////////////////////////////////
     // Debugging and Stats
@@ -383,8 +376,18 @@ public:
     void saveActiveTraceMarkers();
     void restoreActiveTraceMarkers();
 
+    // creation and deletion of raw texture for testing
+    // only to be used in GPU-specific tests
+    virtual GrBackendObject createTestingOnlyBackendTexture(void* pixels, int w, int h,
+                                                            GrPixelConfig config) const = 0;
+    virtual bool isTestingOnlyBackendTexture(GrBackendObject id) const = 0;
+    virtual void deleteTestingOnlyBackendTexture(GrBackendObject id) const = 0;
+
     // Given a rt, find or create a stencil buffer and attach it
     bool attachStencilAttachmentToRenderTarget(GrRenderTarget* target);
+
+    // This is only to be used in GL-specific tests.
+    virtual const GrGLContext* glContextForTesting() const { return NULL; }
 
 protected:
     // Functions used to map clip-respecting stencil tests into normal
@@ -403,7 +406,7 @@ protected:
     Stats                                   fStats;
     SkAutoTDelete<GrPathRendering>          fPathRendering;
     // Subclass must initialize this in its constructor.
-    SkAutoTUnref<const GrDrawTargetCaps>    fCaps;
+    SkAutoTUnref<const GrCaps>    fCaps;
 
 private:
     // called when the 3D context state is unknown. Subclass should emit any
@@ -419,8 +422,9 @@ private:
     virtual GrTexture* onCreateCompressedTexture(const GrSurfaceDesc& desc,
                                                  GrGpuResource::LifeCycle lifeCycle,
                                                  const void* srcData) = 0;
-    virtual GrTexture* onWrapBackendTexture(const GrBackendTextureDesc&) = 0;
-    virtual GrRenderTarget* onWrapBackendRenderTarget(const GrBackendRenderTargetDesc&) = 0;
+    virtual GrTexture* onWrapBackendTexture(const GrBackendTextureDesc&, GrWrapOwnership) = 0;
+    virtual GrRenderTarget* onWrapBackendRenderTarget(const GrBackendRenderTargetDesc&,
+                                                      GrWrapOwnership) = 0;
     virtual GrVertexBuffer* onCreateVertexBuffer(size_t size, bool dynamic) = 0;
     virtual GrIndexBuffer* onCreateIndexBuffer(size_t size, bool dynamic) = 0;
 
@@ -435,19 +439,7 @@ private:
 
     // overridden by backend-specific derived class to perform the draw call.
     virtual void onDraw(const DrawArgs&, const GrNonInstancedVertices&) = 0;
-    virtual void onStencilPath(const GrPath*, const StencilPathState&) = 0;
 
-    virtual void onDrawPath(const DrawArgs&, const GrPath*, const GrStencilSettings&) = 0;
-    virtual void onDrawPaths(const DrawArgs&,
-                             const GrPathRange*,
-                             const void* indices,
-                             GrDrawTarget::PathIndexType,
-                             const float transformValues[],
-                             GrDrawTarget::PathTransformType,
-                             int count,
-                             const GrStencilSettings&) = 0;
-
-    // overridden by backend-specific derived class to perform the read pixels.
     virtual bool onReadPixels(GrRenderTarget* target,
                               int left, int top, int width, int height,
                               GrPixelConfig,
@@ -498,6 +490,7 @@ private:
     // The context owns us, not vice-versa, so this ptr is not ref'ed by Gpu.
     GrContext*                                                          fContext;
 
+    friend class GrPathRendering;
     typedef SkRefCnt INHERITED;
 };
 

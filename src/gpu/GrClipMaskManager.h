@@ -8,7 +8,6 @@
 #define GrClipMaskManager_DEFINED
 
 #include "GrClipMaskCache.h"
-#include "GrContext.h"
 #include "GrPipelineBuilder.h"
 #include "GrReducedClip.h"
 #include "GrStencil.h"
@@ -35,11 +34,7 @@ class SkPath;
  */
 class GrClipMaskManager : SkNoncopyable {
 public:
-    GrClipMaskManager()
-        : fCurrClipMaskType(kNone_ClipMaskType)
-        , fClipTarget(NULL)
-        , fClipMode(kIgnoreClip_StencilClipMode) {
-    }
+    GrClipMaskManager(GrClipTarget* owner);
 
     /**
      * Creates a clip mask if necessary as a stencil buffer or alpha texture
@@ -48,8 +43,8 @@ public:
      * the manager when it must install additional effects to implement the
      * clip. devBounds is optional but can help optimize clipping.
      */
-    bool setupClipping(GrPipelineBuilder*,
-                       GrPipelineBuilder::AutoRestoreFragmentProcessors*,
+    bool setupClipping(const GrPipelineBuilder&,
+                       GrPipelineBuilder::AutoRestoreFragmentProcessorState*,
                        GrPipelineBuilder::AutoRestoreStencil*,
                        GrScissorState*,
                        const SkRect* devBounds);
@@ -68,15 +63,13 @@ public:
         return kAlpha_ClipMaskType == fCurrClipMaskType;
     }
 
-    GrContext* getContext() {
-        return fAACache.getContext();
-    }
-
     void setClipTarget(GrClipTarget*);
 
     void adjustPathStencilParams(const GrStencilAttachment*, GrStencilSettings*);
 
 private:
+    inline GrContext* getContext();
+
     /**
      * Informs the helper function adjustStencilParams() about how the stencil
      * buffer clip is being used.
@@ -93,8 +86,8 @@ private:
 
     // Attempts to install a series of coverage effects to implement the clip. Return indicates
     // whether the element list was successfully converted to effects.
-    bool installClipEffects(GrPipelineBuilder*,
-                            GrPipelineBuilder::AutoRestoreFragmentProcessors*,
+    bool installClipEffects(const GrPipelineBuilder&,
+                            GrPipelineBuilder::AutoRestoreFragmentProcessorState*,
                             const GrReducedClip::ElementList&,
                             const SkVector& clipOffset,
                             const SkRect* devBounds);
@@ -132,7 +125,7 @@ private:
                                 const SkIRect& clipSpaceIBounds,
                                 bool willUpload);
 
-    bool useSWOnlyPath(const GrPipelineBuilder*,
+    bool useSWOnlyPath(const GrPipelineBuilder&,
                        const SkVector& clipToMaskOffset,
                        const GrReducedClip::ElementList& elements);
 
@@ -168,7 +161,8 @@ private:
      * Called prior to return control back the GrGpu in setupClipping. It updates the
      * GrPipelineBuilder with stencil settings that account for stencil-based clipping.
      */
-    void setPipelineBuilderStencil(GrPipelineBuilder*, GrPipelineBuilder::AutoRestoreStencil*);
+    void setPipelineBuilderStencil(const GrPipelineBuilder&,
+                                   GrPipelineBuilder::AutoRestoreStencil*);
 
     /**
      * Adjusts the stencil settings to account for interaction with stencil
@@ -190,7 +184,7 @@ private:
     } fCurrClipMaskType;
 
     GrClipMaskCache fAACache;       // cache for the AA path
-    GrClipTarget*   fClipTarget;
+    GrClipTarget*   fClipTarget;    // This is our owning clip target.
     StencilClipMode fClipMode;
 
     typedef SkNoncopyable INHERITED;

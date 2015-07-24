@@ -9,14 +9,19 @@
 #define SkScanlineDecoder_DEFINED
 
 #include "SkTypes.h"
+#include "SkCodec.h"
 #include "SkTemplates.h"
-#include "SkImageGenerator.h"
 #include "SkImageInfo.h"
 
 class SkScanlineDecoder : public SkNoncopyable {
 public:
-    // Note for implementations: An SkScanlineDecoder will be deleted by (and
-    // therefore *before*) its associated SkCodec, in case the order matters.
+    /**
+     *  Clean up after reading/skipping scanlines.
+     *
+     *  It is possible that not all scanlines will have been read/skipped.  In
+     *  fact, in the case of subset decodes, it is likely that there will be
+     *  scanlines at the bottom of the image that have been ignored.
+     */
     virtual ~SkScanlineDecoder() {}
 
     /**
@@ -28,13 +33,13 @@ public:
      *  @param rowBytes Number of bytes per row. Must be large enough to hold
      *      a scanline based on the SkImageInfo used to create this object.
      */
-    SkImageGenerator::Result getScanlines(void* dst, int countLines, size_t rowBytes) {
+    SkCodec::Result getScanlines(void* dst, int countLines, size_t rowBytes) {
         if ((rowBytes < fDstInfo.minRowBytes() && countLines > 1 ) || countLines <= 0
                 || fCurrScanline + countLines > fDstInfo.height()) {
-            return SkImageGenerator::kInvalidParameters;
+            return SkCodec::kInvalidParameters;
         }
-        const SkImageGenerator::Result result = this->onGetScanlines(dst, countLines, rowBytes);
-        this->checkForFinish(countLines);
+        const SkCodec::Result result = this->onGetScanlines(dst, countLines, rowBytes);
+        fCurrScanline += countLines;
         return result;
     }
 
@@ -46,15 +51,15 @@ public:
      *  will make reallyHasAlpha return true, when it could have returned
      *  false.
      */
-    SkImageGenerator::Result skipScanlines(int countLines) {
+    SkCodec::Result skipScanlines(int countLines) {
         if (fCurrScanline + countLines > fDstInfo.height()) {
             // Arguably, we could just skip the scanlines which are remaining,
             // and return kSuccess. We choose to return invalid so the client
             // can catch their bug.
-            return SkImageGenerator::kInvalidParameters;
+            return SkCodec::kInvalidParameters;
         }
-        const SkImageGenerator::Result result = this->onSkipScanlines(countLines);
-        this->checkForFinish(countLines);
+        const SkCodec::Result result = this->onSkipScanlines(countLines);
+        fCurrScanline += countLines;
         return result;
     }
 
@@ -84,7 +89,7 @@ private:
     int                 fCurrScanline;
 
     // Naive default version just calls onGetScanlines on temp memory.
-    virtual SkImageGenerator::Result onSkipScanlines(int countLines) {
+    virtual SkCodec::Result onSkipScanlines(int countLines) {
         SkAutoMalloc storage(fDstInfo.minRowBytes());
         // Note that we pass 0 to rowBytes so we continue to use the same memory.
         // Also note that while getScanlines checks that rowBytes is big enough,
@@ -94,24 +99,8 @@ private:
         return this->onGetScanlines(storage.get(), countLines, 0);
     }
 
-    virtual SkImageGenerator::Result onGetScanlines(void* dst, int countLines,
+    virtual SkCodec::Result onGetScanlines(void* dst, int countLines,
                                                     size_t rowBytes) = 0;
 
-    /**
-     *  Called after any set of scanlines read/skipped. Updates fCurrScanline,
-     *  and, if we are at the end, calls onFinish().
-     */
-    void checkForFinish(int countLines) {
-        fCurrScanline += countLines;
-        if (fCurrScanline >= fDstInfo.height()) {
-            this->onFinish();
-        }
-    }
-
-    /**
-     *  This function will be called after reading/skipping all scanlines to do
-     *  any necessary cleanups.
-     */
-    virtual void onFinish() {} // Default does nothing.
 };
 #endif // SkScanlineDecoder_DEFINED

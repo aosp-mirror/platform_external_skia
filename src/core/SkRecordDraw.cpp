@@ -86,21 +86,20 @@ DRAW(ClipRRect, clipRRect(r.rrect, r.opAA.op, r.opAA.aa));
 DRAW(ClipRect, clipRect(r.rect, r.opAA.op, r.opAA.aa));
 DRAW(ClipRegion, clipRegion(r.region, r.op));
 
-DRAW(BeginCommentGroup, beginCommentGroup(r.description));
-DRAW(AddComment, addComment(r.key, r.value));
-DRAW(EndCommentGroup, endCommentGroup());
-
 DRAW(DrawBitmap, drawBitmap(r.bitmap.shallowCopy(), r.left, r.top, r.paint));
 DRAW(DrawBitmapNine, drawBitmapNine(r.bitmap.shallowCopy(), r.center, r.dst, r.paint));
-DRAW(DrawBitmapRectToRect,
-        drawBitmapRectToRect(r.bitmap.shallowCopy(), r.src, r.dst, r.paint,
-                             SkCanvas::kNone_DrawBitmapRectFlag));
-DRAW(DrawBitmapRectToRectBleed,
-        drawBitmapRectToRect(r.bitmap.shallowCopy(), r.src, r.dst, r.paint,
-                             SkCanvas::kBleed_DrawBitmapRectFlag));
+DRAW(DrawBitmapRect,
+        drawBitmapRect(r.bitmap.shallowCopy(), r.src, r.dst, r.paint,
+                             SkCanvas::kStrict_SrcRectConstraint));
+DRAW(DrawBitmapRectFast,
+        drawBitmapRect(r.bitmap.shallowCopy(), r.src, r.dst, r.paint,
+                       SkCanvas::kFast_SrcRectConstraint));
+DRAW(DrawBitmapRectFixedSize,
+        drawBitmapRect(r.bitmap.shallowCopy(), &r.src, r.dst, &r.paint, r.constraint));
 DRAW(DrawDRRect, drawDRRect(r.outer, r.inner, r.paint));
 DRAW(DrawImage, drawImage(r.image, r.left, r.top, r.paint));
 DRAW(DrawImageRect, drawImageRect(r.image, r.src, r.dst, r.paint));
+DRAW(DrawImageNine, drawImageNine(r.image, r.center, r.dst, r.paint));
 DRAW(DrawOval, drawOval(r.oval, r.paint));
 DRAW(DrawPaint, drawPaint(r.paint));
 DRAW(DrawPath, drawPath(r.path, r.paint));
@@ -115,6 +114,7 @@ DRAW(DrawSprite, drawSprite(r.bitmap.shallowCopy(), r.left, r.top, r.paint));
 DRAW(DrawText, drawText(r.text, r.byteLength, r.x, r.y, r.paint));
 DRAW(DrawTextBlob, drawTextBlob(r.blob, r.x, r.y, r.paint));
 DRAW(DrawTextOnPath, drawTextOnPath(r.text, r.byteLength, r.path, &r.matrix, r.paint));
+DRAW(DrawAtlas, drawAtlas(r.atlas, r.xforms, r.texs, r.colors, r.count, r.mode, r.cull, r.paint));
 DRAW(DrawVertices, drawVertices(r.vmode, r.vertexCount, r.vertices, r.texs, r.colors,
                                 r.xmode.get(), r.indices, r.indexCount, r.paint));
 #undef DRAW
@@ -124,9 +124,9 @@ template <> void Draw::draw(const DrawDrawable& r) {
     SkASSERT(r.index < fDrawableCount);
     if (fDrawables) {
         SkASSERT(NULL == fDrawablePicts);
-        fCanvas->drawDrawable(fDrawables[r.index]);
+        fCanvas->drawDrawable(fDrawables[r.index], r.matrix);
     } else {
-        fCanvas->drawPicture(fDrawablePicts[r.index]);
+        fCanvas->drawPicture(fDrawablePicts[r.index], r.matrix, NULL);
     }
 }
 
@@ -289,9 +289,6 @@ private:
     void trackBounds(const ClipRRect&)         { this->pushControl(); }
     void trackBounds(const ClipPath&)          { this->pushControl(); }
     void trackBounds(const ClipRegion&)        { this->pushControl(); }
-    void trackBounds(const BeginCommentGroup&) { this->pushControl(); }
-    void trackBounds(const AddComment&)        { this->pushControl(); }
-    void trackBounds(const EndCommentGroup&)   { this->pushControl(); }
 
     // For all other ops, we can calculate and store the bounds directly now.
     template <typename T> void trackBounds(const T& op) {
@@ -419,11 +416,17 @@ private:
     Bounds bounds(const DrawImageRect& op) const {
         return this->adjustAndMap(op.dst, op.paint);
     }
-    Bounds bounds(const DrawBitmapRectToRect& op) const {
+    Bounds bounds(const DrawImageNine& op) const {
         return this->adjustAndMap(op.dst, op.paint);
     }
-    Bounds bounds(const DrawBitmapRectToRectBleed& op) const {
+    Bounds bounds(const DrawBitmapRect& op) const {
         return this->adjustAndMap(op.dst, op.paint);
+    }
+    Bounds bounds(const DrawBitmapRectFast& op) const {
+        return this->adjustAndMap(op.dst, op.paint);
+    }
+    Bounds bounds(const DrawBitmapRectFixedSize& op) const {
+        return this->adjustAndMap(op.dst, &op.paint);
     }
     Bounds bounds(const DrawBitmapNine& op) const {
         return this->adjustAndMap(op.dst, op.paint);
@@ -457,6 +460,14 @@ private:
         SkRect dst;
         dst.set(op.vertices, op.vertexCount);
         return this->adjustAndMap(dst, &op.paint);
+    }
+
+    Bounds bounds(const DrawAtlas& op) const {
+        if (op.cull) {
+            return this->adjustAndMap(*op.cull, op.paint);
+        } else {
+            return fCurrentClipBounds;
+        }
     }
 
     Bounds bounds(const DrawPicture& op) const {
@@ -587,7 +598,7 @@ private:
 class CollectLayers : SkNoncopyable {
 public:
     CollectLayers(const SkRect& cullRect, const SkRecord& record,
-                  const SkPicture::SnapshotArray* pictList, SkLayerInfo* accelData)
+                  const SkBigPicture::SnapshotArray* pictList, SkLayerInfo* accelData)
         : fSaveLayersInStack(0)
         , fAccelData(accelData)
         , fPictList(pictList)
@@ -640,10 +651,10 @@ private:
     void trackSaveLayersForPicture(const SkPicture* picture, const SkPaint* paint) {
         // For sub-pictures, we wrap their layer information within the parent
         // picture's rendering hierarchy
-        SkPicture::AccelData::Key key = SkLayerInfo::ComputeKey();
-
-        const SkLayerInfo* childData =
-            static_cast<const SkLayerInfo*>(picture->EXPERIMENTAL_getAccelData(key));
+        const SkLayerInfo* childData = NULL;
+        if (const SkBigPicture* bp = picture->asSkBigPicture()) {
+            childData = static_cast<const SkLayerInfo*>(bp->accelData());
+        }
         if (!childData) {
             // If the child layer hasn't been generated with saveLayer data we
             // assume the worst (i.e., that it does contain layers which nest
@@ -774,7 +785,7 @@ private:
     // The op code indices of all the currently active saveLayers
     SkTDArray<unsigned>      fSaveLayerOpStack;
     SkLayerInfo*             fAccelData;
-    const SkPicture::SnapshotArray* fPictList;
+    const SkBigPicture::SnapshotArray* fPictList;
 
     SkRecords::FillBounds fFillBounds;
 };
@@ -793,7 +804,7 @@ void SkRecordFillBounds(const SkRect& cullRect, const SkRecord& record, SkBBoxHi
 }
 
 void SkRecordComputeLayers(const SkRect& cullRect, const SkRecord& record,
-                           const SkPicture::SnapshotArray* pictList, SkBBoxHierarchy* bbh,
+                           const SkBigPicture::SnapshotArray* pictList, SkBBoxHierarchy* bbh,
                            SkLayerInfo* data) {
     SkRecords::CollectLayers visitor(cullRect, record, pictList, data);
 

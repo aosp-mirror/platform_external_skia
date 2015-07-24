@@ -8,6 +8,7 @@
 #ifndef GrXferProcessor_DEFINED
 #define GrXferProcessor_DEFINED
 
+#include "GrBlend.h"
 #include "GrColor.h"
 #include "GrProcessor.h"
 #include "GrTexture.h"
@@ -20,70 +21,6 @@ class GrGLXferProcessor;
 class GrProcOptInfo;
 
 /**
- * Equations for alpha-blending.
- */
-enum GrBlendEquation {
-    // Basic blend equations.
-    kAdd_GrBlendEquation,             //<! Cs*S + Cd*D
-    kSubtract_GrBlendEquation,        //<! Cs*S - Cd*D
-    kReverseSubtract_GrBlendEquation, //<! Cd*D - Cs*S
-
-    // Advanced blend equations. These are described in the SVG and PDF specs.
-    kScreen_GrBlendEquation,
-    kOverlay_GrBlendEquation,
-    kDarken_GrBlendEquation,
-    kLighten_GrBlendEquation,
-    kColorDodge_GrBlendEquation,
-    kColorBurn_GrBlendEquation,
-    kHardLight_GrBlendEquation,
-    kSoftLight_GrBlendEquation,
-    kDifference_GrBlendEquation,
-    kExclusion_GrBlendEquation,
-    kMultiply_GrBlendEquation,
-    kHSLHue_GrBlendEquation,
-    kHSLSaturation_GrBlendEquation,
-    kHSLColor_GrBlendEquation,
-    kHSLLuminosity_GrBlendEquation,
-
-    kFirstAdvancedGrBlendEquation = kScreen_GrBlendEquation,
-    kLast_GrBlendEquation = kHSLLuminosity_GrBlendEquation
-};
-
-static const int kGrBlendEquationCnt = kLast_GrBlendEquation + 1;
-
-inline bool GrBlendEquationIsAdvanced(GrBlendEquation equation) {
-    return equation >= kFirstAdvancedGrBlendEquation;
-}
-
-/**
- * Coeffecients for alpha-blending.
- */
-enum GrBlendCoeff {
-    kZero_GrBlendCoeff,    //<! 0
-    kOne_GrBlendCoeff,     //<! 1
-    kSC_GrBlendCoeff,      //<! src color
-    kISC_GrBlendCoeff,     //<! one minus src color
-    kDC_GrBlendCoeff,      //<! dst color
-    kIDC_GrBlendCoeff,     //<! one minus dst color
-    kSA_GrBlendCoeff,      //<! src alpha
-    kISA_GrBlendCoeff,     //<! one minus src alpha
-    kDA_GrBlendCoeff,      //<! dst alpha
-    kIDA_GrBlendCoeff,     //<! one minus dst alpha
-    kConstC_GrBlendCoeff,  //<! constant color
-    kIConstC_GrBlendCoeff, //<! one minus constant color
-    kConstA_GrBlendCoeff,  //<! constant color alpha
-    kIConstA_GrBlendCoeff, //<! one minus constant color alpha
-    kS2C_GrBlendCoeff,
-    kIS2C_GrBlendCoeff,
-    kS2A_GrBlendCoeff,
-    kIS2A_GrBlendCoeff,
-
-    kLast_GrBlendCoeff = kIS2A_GrBlendCoeff
-};
-
-static const int kGrBlendCoeffCnt = kLast_GrBlendCoeff + 1;
-
-/**
  * Barriers for blending. When a shader reads the dst directly, an Xfer barrier is sometimes
  * required after a pixel has been written, before it can be safely read again.
  */
@@ -94,19 +31,63 @@ enum GrXferBarrierType {
 
 /**
  * GrXferProcessor is responsible for implementing the xfer mode that blends the src color and dst
- * color. It does this by emitting fragment shader code and controlling the fixed-function blend
- * state. The inputs to its shader code are the final computed src color and fractional pixel
- * coverage. The GrXferProcessor's shader code writes the fragment shader output color that goes
- * into the fixed-function blend. When dual-source blending is available, it may also write a
- * seconday fragment shader output color. When allowed by the backend API, the GrXferProcessor may
- * read the destination color. The GrXferProcessor is responsible for setting the blend coefficients
- * and blend constant color.
+ * color, and for applying any coverage. It does this by emitting fragment shader code and
+ * controlling the fixed-function blend state. When dual-source blending is available, it may also
+ * write a seconday fragment shader output color. GrXferProcessor has two modes of operation:
+ *
+ * Dst read: When allowed by the backend API, or when supplied a texture of the destination, the
+ * GrXferProcessor may read the destination color. While operating in this mode, the subclass only
+ * provides shader code that blends the src and dst colors, and the base class applies coverage.
+ *
+ * No dst read: When not performing a dst read, the subclass is given full control of the fixed-
+ * function blend state and/or secondary output, and is responsible to apply coverage on its own.
  *
  * A GrXferProcessor is never installed directly into our draw state, but instead is created from a
  * GrXPFactory once we have finalized the state of our draw.
  */
 class GrXferProcessor : public GrProcessor {
 public:
+    /**
+     * A texture that contains the dst pixel values and an integer coord offset from device space
+     * to the space of the texture. Depending on GPU capabilities a DstTexture may be used by a
+     * GrXferProcessor for blending in the fragment shader.
+     */
+    class DstTexture {
+    public:
+        DstTexture() { fOffset.set(0, 0); }
+
+        DstTexture(const DstTexture& other) {
+            *this = other;
+        }
+
+        DstTexture(GrTexture* texture, const SkIPoint& offset)
+            : fTexture(SkSafeRef(texture))
+            , fOffset(offset) {
+        }
+
+        DstTexture& operator=(const DstTexture& other) {
+            fTexture.reset(SkSafeRef(other.fTexture.get()));
+            fOffset = other.fOffset;
+            return *this;
+        }
+
+        const SkIPoint& offset() const { return fOffset; }
+
+        void setOffset(const SkIPoint& offset) { fOffset = offset; }
+        void setOffset(int ox, int oy) { fOffset.set(ox, oy); }
+
+        GrTexture* texture() const { return fTexture.get(); }
+
+        GrTexture* setTexture(GrTexture* texture) {
+            fTexture.reset(SkSafeRef(texture));
+            return texture;
+        }
+
+    private:
+        SkAutoTUnref<GrTexture> fTexture;
+        SkIPoint                fOffset;
+    };
+
     /**
      * Sets a unique key on the GrProcessorKeyBuilder calls onGetGLProcessorKey(...) to get the
      * specific subclass's key.
@@ -122,10 +103,6 @@ public:
      * Optimizations for blending / coverage that an OptDrawState should apply to itself.
      */
     enum OptFlags {
-        /**
-         * No optimizations needed
-         */
-        kNone_Opt                         = 0,
         /**
          * The draw can be skipped completely.
          */
@@ -143,14 +120,12 @@ public:
          */
         kOverrideColor_OptFlag            = 0x8,
         /**
-         * Set CoverageDrawing_StateBit
-         */
-        kSetCoverageDrawing_OptFlag       = 0x10,
-        /**
          * Can tweak alpha for coverage. Currently this flag should only be used by a batch
          */
         kCanTweakAlphaForCoverage_OptFlag = 0x20,
     };
+
+    static const OptFlags kNone_OptFlags = (OptFlags)0;
 
     GR_DECL_BITFIELD_OPS_FRIENDS(OptFlags);
 
@@ -167,14 +142,14 @@ public:
                               const GrProcOptInfo& coveragePOI,
                               bool doesStencilWrite,
                               GrColor* overrideColor,
-                              const GrDrawTargetCaps& caps);
+                              const GrCaps& caps);
 
     /**
      * Returns whether this XP will require an Xfer barrier on the given rt. If true, outBarrierType
      * is updated to contain the type of barrier needed.
      */
     bool willNeedXferBarrier(const GrRenderTarget* rt,
-                             const GrDrawTargetCaps& caps,
+                             const GrCaps& caps,
                              GrXferBarrierType* outBarrierType) const;
 
     struct BlendInfo {
@@ -195,10 +170,7 @@ public:
         bool            fWriteColor;
     };
 
-    void getBlendInfo(BlendInfo* blendInfo) const {
-        blendInfo->reset();
-        this->onGetBlendInfo(blendInfo);
-    }
+    void getBlendInfo(BlendInfo* blendInfo) const;
 
     bool willReadDstColor() const { return fWillReadDstColor; }
 
@@ -207,27 +179,34 @@ public:
      * shader. If the returned texture is NULL then the XP is either not reading the dst or we have
      * extentions that support framebuffer fetching and thus don't need a copy of the dst texture.
      */
-    const GrTexture* getDstCopyTexture() const { return fDstCopy.getTexture(); }
+    const GrTexture* getDstTexture() const { return fDstTexture.getTexture(); }
 
     /**
-     * Returns the offset into the DstCopyTexture to use when reading it in the shader. This value
-     * is only valid if getDstCopyTexture() != NULL.
+     * Returns the offset in device coords to use when accessing the dst texture to get the dst
+     * pixel color in the shader. This value is only valid if getDstTexture() != NULL.
      */
-    const SkIPoint& dstCopyTextureOffset() const {
-        SkASSERT(this->getDstCopyTexture());
-        return fDstCopyTextureOffset;
+    const SkIPoint& dstTextureOffset() const {
+        SkASSERT(this->getDstTexture());
+        return fDstTextureOffset;
     }
+
+    /**
+     * If we are performing a dst read, returns whether the base class will use mixed samples to
+     * antialias the shader's final output. If not doing a dst read, the subclass is responsible
+     * for antialiasing and this returns false.
+     */
+    bool dstReadUsesMixedSamples() const { return fDstReadUsesMixedSamples; }
 
     /**
      * Returns whether or not the XP will look at coverage when doing its blending.
      */
     bool readsCoverage() const { return fReadsCoverage; }
 
-    /** 
+    /**
      * Returns whether or not this xferProcossor will set a secondary output to be used with dual
      * source blending.
      */
-    virtual bool hasSecondaryOutput() const { return false; }
+    bool hasSecondaryOutput() const;
 
     /** Returns true if this and other processor conservatively draw identically. It can only return
         true when the two processor are of the same subclass (i.e. they return the same object from
@@ -246,10 +225,13 @@ public:
         if (this->fReadsCoverage != that.fReadsCoverage) {
             return false;
         }
-        if (this->fDstCopy.getTexture() != that.fDstCopy.getTexture()) {
+        if (this->fDstTexture.getTexture() != that.fDstTexture.getTexture()) {
             return false;
         }
-        if (this->fDstCopyTextureOffset != that.fDstCopyTextureOffset) {
+        if (this->fDstTextureOffset != that.fDstTextureOffset) {
+            return false;
+        }
+        if (this->fDstReadUsesMixedSamples != that.fDstReadUsesMixedSamples) {
             return false;
         }
         return this->onIsEqual(that);
@@ -257,14 +239,14 @@ public:
    
 protected:
     GrXferProcessor();
-    GrXferProcessor(const GrDeviceCoordTexture* dstCopy, bool willReadDstColor);
+    GrXferProcessor(const DstTexture*, bool willReadDstColor, bool hasMixedSamples);
 
 private:
     virtual OptFlags onGetOptimizations(const GrProcOptInfo& colorPOI,
                                         const GrProcOptInfo& coveragePOI,
                                         bool doesStencilWrite,
                                         GrColor* overrideColor,
-                                        const GrDrawTargetCaps& caps) = 0;
+                                        const GrCaps& caps) = 0;
 
     /**
      * Sets a unique key on the GrProcessorKeyBuilder that is directly associated with this xfer
@@ -278,24 +260,32 @@ private:
      * of barrier.
      */
     virtual bool onWillNeedXferBarrier(const GrRenderTarget*,
-                                       const GrDrawTargetCaps&,
+                                       const GrCaps&,
                                        GrXferBarrierType* outBarrierType SK_UNUSED) const {
         return false;
     }
 
     /**
-     * Retrieves the hardware blend state required by this Xfer processor. The BlendInfo struct
-     * comes initialized to default values, so the Xfer processor only needs to set the state it
-     * needs. It may not even need to override this method at all.
+     * If we are not performing a dst read, returns whether the subclass will set a secondary
+     * output. When using dst reads, the base class controls the secondary output and this method
+     * will not be called.
+     */
+    virtual bool onHasSecondaryOutput() const { return false; }
+
+    /**
+     * If we are not performing a dst read, retrieves the fixed-function blend state required by the
+     * subclass. When using dst reads, the base class controls the fixed-function blend state and
+     * this method will not be called. The BlendInfo struct comes initialized to "no blending".
      */
     virtual void onGetBlendInfo(BlendInfo*) const {}
 
     virtual bool onIsEqual(const GrXferProcessor&) const = 0;
 
     bool                    fWillReadDstColor;
+    bool                    fDstReadUsesMixedSamples;
     bool                    fReadsCoverage;
-    SkIPoint                fDstCopyTextureOffset;
-    GrTextureAccess         fDstCopy;
+    SkIPoint                fDstTextureOffset;
+    GrTextureAccess         fDstTexture;
 
     typedef GrFragmentProcessor INHERITED;
 };
@@ -317,10 +307,12 @@ GR_MAKE_BITFIELD_OPS(GrXferProcessor::OptFlags);
  */
 class GrXPFactory : public SkRefCnt {
 public:
+    typedef GrXferProcessor::DstTexture DstTexture;
     GrXferProcessor* createXferProcessor(const GrProcOptInfo& colorPOI,
                                          const GrProcOptInfo& coveragePOI,
-                                         const GrDeviceCoordTexture* dstCopy,
-                                         const GrDrawTargetCaps& caps) const;
+                                         bool hasMixedSamples,
+                                         const DstTexture*,
+                                         const GrCaps& caps) const;
 
     /**
      * This function returns true if the GrXferProcessor generated from this factory will be able to
@@ -329,22 +321,26 @@ public:
      */
     virtual bool supportsRGBCoverage(GrColor knownColor, uint32_t knownColorFlags) const = 0;
 
-    struct InvariantOutput {
-        bool        fWillBlendWithDst;
-        GrColor     fBlendedColor;
-        uint32_t    fBlendedColorFlags;
+    /**
+     * Known color information after blending, but before accounting for any coverage.
+     */
+    struct InvariantBlendedColor {
+        bool                     fWillBlendWithDst;
+        GrColor                  fKnownColor;
+        GrColorComponentFlags    fKnownColorFlags;
     };
 
     /** 
-     * This function returns known information about the output of the xfer processor produced by
-     * this xp factory. The invariant color information returned by this function refers to the
-     * final color produced after all blending.
+     * Returns information about the output color, produced by XPs from this factory, that will be
+     * known after blending. Note that we can conflate coverage and color, so the actual values
+     * written to pixels with partial coverage may not always seem consistent with the invariant
+     * information returned by this function.
      */
-    virtual void getInvariantOutput(const GrProcOptInfo& colorPOI, const GrProcOptInfo& coveragePOI,
-                                    InvariantOutput*) const = 0;
+    virtual void getInvariantBlendedColor(const GrProcOptInfo& colorPOI,
+                                          InvariantBlendedColor*) const = 0;
 
-    bool willNeedDstCopy(const GrDrawTargetCaps& caps, const GrProcOptInfo& colorPOI,
-                         const GrProcOptInfo& coveragePOI) const;
+    bool willNeedDstTexture(const GrCaps& caps, const GrProcOptInfo& colorPOI,
+                            const GrProcOptInfo& coveragePOI, bool hasMixedSamples) const;
 
     bool isEqual(const GrXPFactory& that) const {
         if (this->classID() != that.classID()) {
@@ -371,17 +367,19 @@ protected:
     uint32_t fClassID;
 
 private:
-    virtual GrXferProcessor* onCreateXferProcessor(const GrDrawTargetCaps& caps,
+    virtual GrXferProcessor* onCreateXferProcessor(const GrCaps& caps,
                                                    const GrProcOptInfo& colorPOI,
                                                    const GrProcOptInfo& coveragePOI,
-                                                   const GrDeviceCoordTexture* dstCopy) const = 0;
+                                                   bool hasMixedSamples,
+                                                   const DstTexture*) const = 0;
     /**
      *  Returns true if the XP generated by this factory will explicitly read dst in the fragment
      *  shader.
      */
-    virtual bool willReadDstColor(const GrDrawTargetCaps& caps,
+    virtual bool willReadDstColor(const GrCaps& caps,
                                   const GrProcOptInfo& colorPOI,
-                                  const GrProcOptInfo& coveragePOI) const = 0;
+                                  const GrProcOptInfo& coveragePOI,
+                                  bool hasMixedSamples) const = 0;
 
     virtual bool onIsEqual(const GrXPFactory&) const = 0;
 

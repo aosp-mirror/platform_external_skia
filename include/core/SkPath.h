@@ -8,7 +8,6 @@
 #ifndef SkPath_DEFINED
 #define SkPath_DEFINED
 
-#include "SkInstCnt.h"
 #include "SkMatrix.h"
 #include "SkPathRef.h"
 #include "SkTDArray.h"
@@ -28,8 +27,6 @@ class SkWStream;
 */
 class SK_API SkPath {
 public:
-    SK_DECLARE_INST_COUNT(SkPath);
-
     SkPath();
     SkPath(const SkPath&);
     ~SkPath();
@@ -209,8 +206,8 @@ public:
 
         @return true if the line is of zero length; otherwise false.
     */
-    static bool IsLineDegenerate(const SkPoint& p1, const SkPoint& p2) {
-        return p1.equalsWithinTolerance(p2);
+    static bool IsLineDegenerate(const SkPoint& p1, const SkPoint& p2, bool exact) {
+        return exact ? p1 == p2 : p1.equalsWithinTolerance(p2);
     }
 
     /** Test a quad for zero length
@@ -218,8 +215,8 @@ public:
         @return true if the quad is of zero length; otherwise false.
     */
     static bool IsQuadDegenerate(const SkPoint& p1, const SkPoint& p2,
-                                 const SkPoint& p3) {
-        return p1.equalsWithinTolerance(p2) &&
+                                 const SkPoint& p3, bool exact) {
+        return exact ? p1 == p2 && p2 == p3 : p1.equalsWithinTolerance(p2) &&
                p2.equalsWithinTolerance(p3);
     }
 
@@ -228,8 +225,8 @@ public:
         @return true if the cubic is of zero length; otherwise false.
     */
     static bool IsCubicDegenerate(const SkPoint& p1, const SkPoint& p2,
-                                  const SkPoint& p3, const SkPoint& p4) {
-        return p1.equalsWithinTolerance(p2) &&
+                                  const SkPoint& p3, const SkPoint& p4, bool exact) {
+        return exact ? p1 == p2 && p2 == p3 && p3 == p4 : p1.equalsWithinTolerance(p2) &&
                p2.equalsWithinTolerance(p3) &&
                p3.equalsWithinTolerance(p4);
     }
@@ -492,24 +489,11 @@ public:
     void close();
 
     enum Direction {
-        /** Direction either has not been or could not be computed */
-        kUnknown_Direction,
         /** clockwise direction for adding closed contours */
         kCW_Direction,
         /** counter-clockwise direction for adding closed contours */
         kCCW_Direction,
     };
-
-    /**
-     *  Return the opposite of the specified direction. kUnknown is its own
-     *  opposite.
-     */
-    static Direction OppositeDirection(Direction dir) {
-        static const Direction gOppositeDir[] = {
-            kUnknown_Direction, kCCW_Direction, kCW_Direction
-        };
-        return gOppositeDir[dir];
-    }
 
     /**
      *  Returns whether or not a fill type is inverted
@@ -541,27 +525,6 @@ public:
         SK_COMPILE_ASSERT(2 == kInverseWinding_FillType, fill_type_mismatch);
         SK_COMPILE_ASSERT(3 == kInverseEvenOdd_FillType, fill_type_mismatch);
         return (FillType)(fill & 1);
-    }
-
-    /**
-     *  Tries to quickly compute the direction of the first non-degenerate
-     *  contour. If it can be computed, return true and set dir to that
-     *  direction. If it cannot be (quickly) determined, return false and ignore
-     *  the dir parameter. If the direction was determined, it is cached to make
-     *  subsequent calls return quickly.
-     */
-    bool cheapComputeDirection(Direction* dir) const;
-
-    /**
-     *  Returns true if the path's direction can be computed via
-     *  cheapComputDirection() and if that computed direction matches the
-     *  specified direction. If dir is kUnknown, returns true if the direction
-     *  cannot be computed.
-     */
-    bool cheapIsDirection(Direction dir) const {
-        Direction computedDir = kUnknown_Direction;
-        (void)this->cheapComputeDirection(&computedDir);
-        return computedDir == dir;
     }
 
     /**
@@ -598,8 +561,7 @@ public:
     /**
      *  Add a closed rectangle contour to the path
      *  @param rect The rectangle to add as a closed contour to the path
-     *  @param dir  The direction to wind the rectangle's contour. Cannot be
-     *              kUnknown_Direction.
+     *  @param dir  The direction to wind the rectangle's contour.
      */
     void addRect(const SkRect& rect, Direction dir = kCW_Direction);
 
@@ -614,8 +576,7 @@ public:
      *                  to the path
      *  @param bottom   The bottom of a rectangle to add as a closed contour to
      *                  the path
-     *  @param dir  The direction to wind the rectangle's contour. Cannot be
-     *              kUnknown_Direction.
+     *  @param dir  The direction to wind the rectangle's contour.
      */
     void addRect(SkScalar left, SkScalar top, SkScalar right, SkScalar bottom,
                  Direction dir = kCW_Direction);
@@ -624,8 +585,7 @@ public:
      *  Add a closed oval contour to the path
      *
      *  @param oval The bounding oval to add as a closed contour to the path
-     *  @param dir  The direction to wind the oval's contour. Cannot be
-     *              kUnknown_Direction.
+     *  @param dir  The direction to wind the oval's contour.
      */
     void addOval(const SkRect& oval, Direction dir = kCW_Direction);
 
@@ -638,8 +598,7 @@ public:
      *                  closed contour to the path
      *  @param radius   The radius of a circle to add as a closed contour to the
      *                  path
-     *  @param dir  The direction to wind the circle's contour. Cannot be
-     *              kUnknown_Direction.
+     *  @param dir  The direction to wind the circle's contour.
      */
     void addCircle(SkScalar x, SkScalar y, SkScalar radius,
                    Direction dir = kCW_Direction);
@@ -657,8 +616,7 @@ public:
      *  @param rect The bounds of a round-rectangle to add as a closed contour
      *  @param rx   The x-radius of the rounded corners on the round-rectangle
      *  @param ry   The y-radius of the rounded corners on the round-rectangle
-     *  @param dir  The direction to wind the rectangle's contour. Cannot be
-     *              kUnknown_Direction.
+     *  @param dir  The direction to wind the rectangle's contour.
      */
     void addRoundRect(const SkRect& rect, SkScalar rx, SkScalar ry,
                       Direction dir = kCW_Direction);
@@ -669,8 +627,7 @@ public:
      *  bottom-right, bottom-left.
      *  @param rect The bounds of a round-rectangle to add as a closed contour
      *  @param radii Array of 8 scalars, 4 [X,Y] pairs for each corner
-     *  @param dir  The direction to wind the rectangle's contour. Cannot be
-     *              kUnknown_Direction.
+     *  @param dir  The direction to wind the rectangle's contour.
      * Note: The radii here now go through the same constraint handling as the
      *       SkRRect radii (i.e., either radii at a corner being 0 implies a
      *       sqaure corner and oversized radii are proportionally scaled down).
@@ -681,8 +638,7 @@ public:
     /**
      *  Add an SkRRect contour to the path
      *  @param rrect The rounded rect to add as a closed contour
-     *  @param dir   The winding direction for the new contour. Cannot be
-     *               kUnknown_Direction.
+     *  @param dir   The winding direction for the new contour.
      */
     void addRRect(const SkRRect& rrect, Direction dir = kCW_Direction);
 
@@ -844,11 +800,15 @@ public:
             @param  pts The points representing the current verb and/or segment
             @param doConsumeDegerates If true, first scan for segments that are
                    deemed degenerate (too short) and skip those.
+            @param exact if doConsumeDegenerates is true and exact is true, skip only
+                   degenerate elements with lengths exactly equal to zero. If exact
+                   is false, skip degenerate elements with lengths close to zero. If
+                   doConsumeDegenerates is false, exact has no effect.
             @return The verb for the current segment
         */
-        Verb next(SkPoint pts[4], bool doConsumeDegerates = true) {
+        Verb next(SkPoint pts[4], bool doConsumeDegerates = true, bool exact = false) {
             if (doConsumeDegerates) {
-                this->consumeDegenerateSegments();
+                this->consumeDegenerateSegments(exact);
             }
             return this->doNext(pts);
         }
@@ -888,7 +848,7 @@ public:
 
         inline const SkPoint& cons_moveTo();
         Verb autoClose(SkPoint pts[2]);
-        void consumeDegenerateSegments();
+        void consumeDegenerateSegments(bool exact);
         Verb doNext(SkPoint pts[4]);
     };
 
@@ -917,7 +877,6 @@ public:
         const uint8_t*  fVerbs;
         const uint8_t*  fVerbStop;
         const SkScalar* fConicWeights;
-        SkPoint         fMoveTo;
     };
 
     /**
@@ -969,7 +928,13 @@ private:
         // 1 free bit at 24
         kConvexity_SerializationShift = 16, // requires 8 bits
         kFillType_SerializationShift = 8,   // requires 8 bits
-        // 8 free bits at 0
+        // low-8-bits are version
+    };
+
+    enum SerializationVersions {
+        kPathPrivFirstDirection_Version = 1,
+
+        kCurrent_Version = 1
     };
 
     SkAutoTUnref<SkPathRef> fPathRef;
@@ -977,7 +942,7 @@ private:
     int                 fLastMoveToIndex;
     uint8_t             fFillType;
     mutable uint8_t     fConvexity;
-    mutable uint8_t     fDirection;
+    mutable uint8_t     fFirstDirection;    // SkPathPriv::FirstDirection
     mutable SkBool8     fIsVolatile;
 
     /** Resets all fields other than fPathRef to their initial 'empty' values.
@@ -993,7 +958,7 @@ private:
     void copyFields(const SkPath& that);
 
     friend class Iter;
-
+    friend class SkPathPriv;
     friend class SkPathStroker;
 
     /*  Append, in reverse order, the first contour of path, ignoring path's

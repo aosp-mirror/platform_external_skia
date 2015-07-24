@@ -28,7 +28,7 @@ bool sk_tools::LazyDecodeBitmap(const void* src, size_t length, SkBitmap* dst) {
         return false;
     }
 
-    SkAutoTDelete<SkImageGenerator> gen(SkImageGenerator::NewFromData(data));
+    SkAutoTDelete<SkImageGenerator> gen(SkImageGenerator::NewFromEncoded(data));
     if (NULL == gen.get()) {
         return false;
     }
@@ -40,5 +40,5 @@ bool sk_tools::LazyDecodeBitmap(const void* src, size_t length, SkBitmap* dst) {
         // Only meaningful if platform has a default discardable
         // memory implementation that differs from the global DM pool.
     }
-    return SkInstallDiscardablePixelRef(gen.detach(), dst, pool);
+    return SkInstallDiscardablePixelRef(gen.detach(), NULL, dst, pool);
 }

@@ -6,27 +6,25 @@
  */
 
 #include "Resources.h"
+#include "SkFontMgr.h"
+#include "SkMutex.h"
 #include "SkOSFile.h"
 #include "SkTestScalerContext.h"
-#include "SkThread.h"
 #include "SkUtils.h"
 #include "sk_tool_utils.h"
 
 namespace sk_tool_utils {
 
-#include "test_font_data.cpp"
+#include "test_font_monospace.cpp"
+#include "test_font_sans_serif.cpp"
+#include "test_font_serif.cpp"
+#include "test_font_index.cpp"
 
-static void release_portable_typefaces() {
-    // We'll clean this up in our own tests, but disable for clients.
-    // Chrome seems to have funky multi-process things going on in unit tests that
-    // makes this unsafe to delete when the main process atexit()s.
-    // SkLazyPtr does the same sort of thing.
-#if SK_DEVELOPER
+void release_portable_typefaces() {
     for (int index = 0; index < gTestFontsCount; ++index) {
         SkTestFontData& fontData = gTestFonts[index];
         SkSafeUnref(fontData.fFontCache);
     }
-#endif
 }
 
 SK_DECLARE_STATIC_MUTEX(gTestFontMutex);
@@ -43,8 +41,13 @@ SkTypeface* create_font(const char* name, SkTypeface::Style style) {
             }
         }
         if (!fontData) {
+            // Once all legacy callers to portable fonts are converted, replace this with
+            // SK_CRASH();
             SkDebugf("missing %s %d\n", name, style);
-            return SkTypeface::CreateFromName(name, style);
+            // If we called SkTypeface::CreateFromName() here we'd recurse infinitely,
+            // so we reimplement its core logic here inline without the recursive aspect.
+            SkAutoTUnref<SkFontMgr> fm(SkFontMgr::RefDefault());
+            return fm->legacyCreateTypeface(name, style);
         }
     } else {
         sub = &gSubFonts[gDefaultFontIndex];
@@ -60,7 +63,6 @@ SkTypeface* create_font(const char* name, SkTypeface::Style style) {
             SkDEBUGCODE(font->fDebugName = sub->fName);
             SkDEBUGCODE(font->fDebugStyle = sub->fStyle);
             fontData->fFontCache = SkSafeRef(font);
-            atexit(release_portable_typefaces);
         }
     }
     return SkNEW_ARGS(SkTestTypeface, (font, SkFontStyle(style)));

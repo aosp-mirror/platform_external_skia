@@ -43,6 +43,7 @@ private:
     ConvexPolyTestBatch(const GrGeometryProcessor* gp, const Geometry& geo)
         : INHERITED(gp, geo.fBounds)
         , fGeometry(geo) {
+        this->initClassID<ConvexPolyTestBatch>();
     }
 
     Geometry* geoData(int index) override {
@@ -158,7 +159,8 @@ protected:
 
         static const GrColor color = 0xff000000;
         SkAutoTUnref<const GrGeometryProcessor> gp(
-                GrDefaultGeoProcFactory::Create(GrDefaultGeoProcFactory::kPosition_GPType, color));
+                GrDefaultGeoProcFactory::Create(GrDefaultGeoProcFactory::kPosition_GPType, color,
+                                                false, false));
 
         SkScalar y = 0;
         for (SkTLList<SkPath>::Iter iter(fPaths, SkTLList<SkPath>::Iter::kHead_IterStart);
@@ -194,7 +196,7 @@ protected:
 
                 SkAutoTUnref<GrBatch> batch(ConvexPolyTestBatch::Create(gp, geometry));
 
-                tt.target()->drawBatch(&pipelineBuilder, batch);
+                tt.target()->drawBatch(pipelineBuilder, batch);
 
                 x += SkScalarCeilToScalar(path->getBounds().width() + 10.f);
             }
@@ -243,7 +245,7 @@ protected:
 
                 SkAutoTUnref<GrBatch> batch(ConvexPolyTestBatch::Create(gp, geometry));
 
-                tt.target()->drawBatch(&pipelineBuilder, batch);
+                tt.target()->drawBatch(pipelineBuilder, batch);
 
                 x += SkScalarCeilToScalar(rect.width() + 10.f);
             }
