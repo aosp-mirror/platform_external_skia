@@ -439,6 +439,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrBatchTest.cpp \
 	src/gpu/GrBlurUtils.cpp \
 	src/gpu/GrBufferAllocPool.cpp \
+	src/gpu/GrBufferedDrawTarget.cpp \
 	src/gpu/GrCaps.cpp \
 	src/gpu/GrClip.cpp \
 	src/gpu/GrClipMaskCache.cpp \
@@ -458,7 +459,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrImmediateDrawTarget.cpp \
 	src/gpu/GrInvariantOutput.cpp \
 	src/gpu/GrInOrderCommandBuilder.cpp \
-	src/gpu/GrInOrderDrawBuffer.cpp \
 	src/gpu/GrLayerCache.cpp \
 	src/gpu/GrLayerHoister.cpp \
 	src/gpu/GrMemoryPool.cpp \
