@@ -302,6 +302,7 @@ LOCAL_SRC_FILES := \
 	src/effects/SkLayerRasterizer.cpp \
 	src/effects/SkLerpXfermode.cpp \
 	src/effects/SkLightingImageFilter.cpp \
+	src/effects/SkLightingShader.cpp \
 	src/effects/SkLumaColorFilter.cpp \
 	src/effects/SkMagnifierImageFilter.cpp \
 	src/effects/SkMatrixConvolutionImageFilter.cpp \

@@ -254,6 +254,7 @@ LOCAL_SRC_FILES := \
 	../gm/lcdtext.cpp \
 	../gm/lerpmode.cpp \
 	../gm/lighting.cpp \
+	../gm/lightingshader.cpp \
 	../gm/linepaths.cpp \
 	../gm/lumafilter.cpp \
 	../gm/matrixconvolution.cpp \
