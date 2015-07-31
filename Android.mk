@@ -675,8 +675,7 @@ LOCAL_SRC_FILES_arm += \
 	src/opts/SkBlitRow_opts_arm.cpp \
 	src/opts/SkBlurImage_opts_arm.cpp \
 	src/opts/SkMorphology_opts_arm.cpp \
-	src/opts/SkTextureCompression_opts_arm.cpp \
-	src/opts/SkXfermode_opts_arm.cpp
+	src/opts/SkTextureCompression_opts_arm.cpp
 
 ifeq ($(ARCH_ARM_HAVE_NEON), true)
 LOCAL_SRC_FILES_arm += \
@@ -687,7 +686,6 @@ LOCAL_SRC_FILES_arm += \
 	src/opts/SkBlurImage_opts_neon.cpp \
 	src/opts/SkMorphology_opts_neon.cpp \
 	src/opts/SkTextureCompression_opts_neon.cpp \
-	src/opts/SkXfermode_opts_arm_neon.cpp \
 	src/opts/SkOpts_neon.cpp
 
 LOCAL_CFLAGS_arm += \
@@ -706,7 +704,6 @@ LOCAL_SRC_FILES_x86 += \
 	src/opts/SkBlurImage_opts_SSE2.cpp \
 	src/opts/SkMorphology_opts_SSE2.cpp \
 	src/opts/SkTextureCompression_opts_none.cpp \
-	src/opts/SkXfermode_opts_none.cpp \
 	src/opts/opts_check_x86.cpp \
 	src/opts/SkOpts_sse2.cpp \
 	src/opts/SkBitmapProcState_opts_SSSE3.cpp \
@@ -722,7 +719,6 @@ LOCAL_SRC_FILES_x86_64 += \
 	src/opts/SkBlurImage_opts_SSE2.cpp \
 	src/opts/SkMorphology_opts_SSE2.cpp \
 	src/opts/SkTextureCompression_opts_none.cpp \
-	src/opts/SkXfermode_opts_none.cpp \
 	src/opts/opts_check_x86.cpp \
 	src/opts/SkOpts_sse2.cpp \
 	src/opts/SkBitmapProcState_opts_SSSE3.cpp \
@@ -740,8 +736,7 @@ LOCAL_SRC_FILES_mips += \
 	src/opts/SkBlitRow_opts_none.cpp \
 	src/opts/SkBlurImage_opts_none.cpp \
 	src/opts/SkMorphology_opts_none.cpp \
-	src/opts/SkTextureCompression_opts_none.cpp \
-	src/opts/SkXfermode_opts_none.cpp
+	src/opts/SkTextureCompression_opts_none.cpp
 
 LOCAL_CFLAGS_mips64 += \
 	-EL
@@ -752,8 +747,7 @@ LOCAL_SRC_FILES_mips64 += \
 	src/opts/SkBlitRow_opts_none.cpp \
 	src/opts/SkBlurImage_opts_none.cpp \
 	src/opts/SkMorphology_opts_none.cpp \
-	src/opts/SkTextureCompression_opts_none.cpp \
-	src/opts/SkXfermode_opts_none.cpp
+	src/opts/SkTextureCompression_opts_none.cpp
 
 LOCAL_SRC_FILES_arm64 += \
 	src/opts/SkBitmapProcState_arm_neon.cpp \
@@ -768,8 +762,6 @@ LOCAL_SRC_FILES_arm64 += \
 	src/opts/SkMorphology_opts_arm.cpp \
 	src/opts/SkMorphology_opts_neon.cpp \
 	src/opts/SkTextureCompression_opts_none.cpp \
-	src/opts/SkXfermode_opts_arm.cpp \
-	src/opts/SkXfermode_opts_arm_neon.cpp \
 	src/opts/SkOpts_neon.cpp
 
 include $(BUILD_SHARED_LIBRARY)
