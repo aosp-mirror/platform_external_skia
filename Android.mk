@@ -736,6 +736,9 @@ LOCAL_SRC_FILES_mips += \
 	src/opts/SkUtils_opts_none.cpp \
 	src/opts/SkXfermode_opts_none.cpp
 
+LOCAL_CFLAGS_mips64 += \
+	-EL
+
 LOCAL_SRC_FILES_mips64 += \
 	src/opts/SkBitmapProcState_opts_none.cpp \
 	src/opts/SkBlitMask_opts_none.cpp \
