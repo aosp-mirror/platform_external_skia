@@ -198,6 +198,7 @@ LOCAL_SRC_FILES := \
 	../gm/downsamplebitmap.cpp \
 	../gm/drawable.cpp \
 	../gm/drawatlas.cpp \
+	../gm/drawatlascolor.cpp \
 	../gm/drawfilter.cpp \
 	../gm/drawlooper.cpp \
 	../gm/dropshadowimagefilter.cpp \
