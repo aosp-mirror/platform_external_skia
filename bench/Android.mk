@@ -324,6 +324,7 @@ LOCAL_SRC_FILES := \
 	../gm/textblobcolortrans.cpp \
 	../gm/textblobgeometrychange.cpp \
 	../gm/textbloblooper.cpp \
+	../gm/textblobrandomfont.cpp \
 	../gm/textblobshader.cpp \
 	../gm/textblobtransforms.cpp \
 	../gm/textblobuseaftergpufree.cpp \
