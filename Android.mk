@@ -186,6 +186,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkRasterizer.cpp \
 	src/core/SkReadBuffer.cpp \
 	src/core/SkRecord.cpp \
+	src/core/SkRecords.cpp \
 	src/core/SkRecordDraw.cpp \
 	src/core/SkRecordOpts.cpp \
 	src/core/SkRecorder.cpp \
