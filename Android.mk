@@ -615,6 +615,7 @@ LOCAL_STATIC_LIBRARIES := \
 LOCAL_C_INCLUDES := \
 	external/libpng \
 	$(LOCAL_PATH)/include/codec \
+	$(LOCAL_PATH)/include/private \
 	$(LOCAL_PATH)/src/codec \
 	$(LOCAL_PATH)/src/core \
 	$(LOCAL_PATH)/include/c \
