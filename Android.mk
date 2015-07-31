@@ -162,7 +162,6 @@ LOCAL_SRC_FILES := \
 	src/core/SkMiniRecorder.cpp \
 	src/core/SkMultiPictureDraw.cpp \
 	src/core/SkNinePatchIter.cpp \
-	src/core/SkOpts.cpp \
 	src/core/SkPackBits.cpp \
 	src/core/SkPaint.cpp \
 	src/core/SkPaintPriv.cpp \
@@ -685,8 +684,7 @@ LOCAL_SRC_FILES_arm += \
 	src/opts/SkMorphology_opts_neon.cpp \
 	src/opts/SkTextureCompression_opts_neon.cpp \
 	src/opts/SkUtils_opts_arm_neon.cpp \
-	src/opts/SkXfermode_opts_arm_neon.cpp \
-	src/opts/SkOpts_neon.cpp
+	src/opts/SkXfermode_opts_arm_neon.cpp
 
 LOCAL_CFLAGS_arm += \
 	-DSK_ARM_HAS_NEON
@@ -707,12 +705,9 @@ LOCAL_SRC_FILES_x86 += \
 	src/opts/SkUtils_opts_SSE2.cpp \
 	src/opts/SkXfermode_opts_none.cpp \
 	src/opts/opts_check_x86.cpp \
-	src/opts/SkOpts_sse2.cpp \
 	src/opts/SkBitmapProcState_opts_SSSE3.cpp \
-	src/opts/SkOpts_ssse3.cpp \
 	src/opts/SkBlurImage_opts_SSE4.cpp \
-	src/opts/SkBlitRow_opts_SSE4.cpp \
-	src/opts/SkOpts_sse41.cpp
+	src/opts/SkBlitRow_opts_SSE4.cpp
 
 LOCAL_SRC_FILES_x86_64 += \
 	src/opts/SkBitmapFilter_opts_SSE2.cpp \
@@ -724,12 +719,9 @@ LOCAL_SRC_FILES_x86_64 += \
 	src/opts/SkUtils_opts_SSE2.cpp \
 	src/opts/SkXfermode_opts_none.cpp \
 	src/opts/opts_check_x86.cpp \
-	src/opts/SkOpts_sse2.cpp \
 	src/opts/SkBitmapProcState_opts_SSSE3.cpp \
-	src/opts/SkOpts_ssse3.cpp \
 	src/opts/SkBlurImage_opts_SSE4.cpp \
-	src/opts/SkBlitRow_opts_SSE4.cpp \
-	src/opts/SkOpts_sse41.cpp
+	src/opts/SkBlitRow_opts_SSE4.cpp
 
 LOCAL_CFLAGS_mips += \
 	-EL
@@ -772,8 +764,7 @@ LOCAL_SRC_FILES_arm64 += \
 	src/opts/SkTextureCompression_opts_none.cpp \
 	src/opts/SkUtils_opts_none.cpp \
 	src/opts/SkXfermode_opts_arm.cpp \
-	src/opts/SkXfermode_opts_arm_neon.cpp \
-	src/opts/SkOpts_neon.cpp
+	src/opts/SkXfermode_opts_arm_neon.cpp
 
 include $(BUILD_SHARED_LIBRARY)
 
