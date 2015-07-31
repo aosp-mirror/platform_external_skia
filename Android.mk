@@ -421,6 +421,7 @@ LOCAL_SRC_FILES := \
 	src/utils/SkThreadUtils_pthread.cpp \
 	src/utils/SkThreadUtils_pthread_other.cpp \
 	src/fonts/SkGScalerContext.cpp \
+	src/fonts/SkRandomScalerContext.cpp \
 	src/fonts/SkTestScalerContext.cpp \
 	src/gpu/GrAAHairLinePathRenderer.cpp \
 	src/gpu/GrAAConvexPathRenderer.cpp \
