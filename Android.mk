@@ -62,8 +62,8 @@ LOCAL_CPPFLAGS := \
 	-Wno-invalid-offsetof
 
 LOCAL_SRC_FILES := \
+	src/codec/SkBmpCodec.cpp \
 	src/codec/SkCodec.cpp \
-	src/codec/SkCodec_libbmp.cpp \
 	src/codec/SkCodec_libgif.cpp \
 	src/codec/SkCodec_libico.cpp \
 	src/codec/SkCodec_libpng.cpp \
