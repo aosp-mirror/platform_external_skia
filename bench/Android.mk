@@ -66,6 +66,7 @@ LOCAL_SRC_FILES := \
 	GrResourceCacheBench.cpp \
 	GradientBench.cpp \
 	HairlinePathBench.cpp \
+	ImageBench.cpp \
 	ImageCacheBench.cpp \
 	ImageFilterCollapse.cpp \
 	ImageFilterDAGBench.cpp \
