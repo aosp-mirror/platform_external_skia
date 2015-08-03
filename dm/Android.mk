@@ -285,6 +285,7 @@ LOCAL_SRC_FILES := \
 	../gm/beziers.cpp \
 	../gm/bigblurs.cpp \
 	../gm/bigmatrix.cpp \
+	../gm/bigrrectaaeffect.cpp \
 	../gm/bigtext.cpp \
 	../gm/bigtileimagefilter.cpp \
 	../gm/bitmapfilters.cpp \
