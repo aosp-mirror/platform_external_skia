@@ -249,7 +249,6 @@ LOCAL_SRC_FILES := \
 	../tests/SwizzlerTest.cpp \
 	../tests/TArrayTest.cpp \
 	../tests/TDPQueueTest.cpp \
-	../tests/TDStackNesterTest.cpp \
 	../tests/TLSTest.cpp \
 	../tests/TemplatesTest.cpp \
 	../tests/TessellatingPathRendererTests.cpp \
@@ -573,8 +572,6 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../src/image \
 	$(LOCAL_PATH)/../src/pdf \
 	$(LOCAL_PATH)/../src/ports \
-	$(LOCAL_PATH)/../experimental/PdfViewer \
-	$(LOCAL_PATH)/../experimental/PdfViewer/src \
 	$(LOCAL_PATH)/../../../frameworks/base/libs/hwui \
 	$(LOCAL_PATH)/../../../frameworks/native/include \
 	$(LOCAL_PATH)/../third_party/etc1 \
