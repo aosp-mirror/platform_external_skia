@@ -284,6 +284,7 @@ LOCAL_SRC_FILES := \
 	../gm/perlinnoise.cpp \
 	../gm/picture.cpp \
 	../gm/pictureimagefilter.cpp \
+	../gm/pictureimagegenerator.cpp \
 	../gm/pictureshader.cpp \
 	../gm/pictureshadertile.cpp \
 	../gm/pixelsnap.cpp \

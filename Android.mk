@@ -175,6 +175,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkPictureContentInfo.cpp \
 	src/core/SkPictureData.cpp \
 	src/core/SkPictureFlat.cpp \
+	src/core/SkPictureImageGenerator.cpp \
 	src/core/SkPicturePlayback.cpp \
 	src/core/SkPictureRecord.cpp \
 	src/core/SkPictureRecorder.cpp \
