@@ -63,6 +63,9 @@ LOCAL_CPPFLAGS := \
 
 LOCAL_SRC_FILES := \
 	src/codec/SkBmpCodec.cpp \
+	src/codec/SkBmpMaskCodec.cpp \
+	src/codec/SkBmpRLECodec.cpp \
+	src/codec/SkBmpStandardCodec.cpp \
 	src/codec/SkCodec.cpp \
 	src/codec/SkCodec_libgif.cpp \
 	src/codec/SkCodec_libico.cpp \
