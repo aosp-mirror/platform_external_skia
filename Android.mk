@@ -515,6 +515,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrXferProcessor.cpp \
 	src/gpu/batches/GrBatch.cpp \
 	src/gpu/batches/GrDrawAtlasBatch.cpp \
+	src/gpu/batches/GrDrawVerticesBatch.cpp \
 	src/gpu/batches/GrRectBatch.cpp \
 	src/gpu/batches/GrStrokeRectBatch.cpp \
 	src/gpu/effects/GrConfigConversionEffect.cpp \
