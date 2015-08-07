@@ -441,7 +441,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrAtlas.cpp \
 	src/gpu/GrAtlasTextBlob.cpp \
 	src/gpu/GrAtlasTextContext.cpp \
-	src/gpu/GrBatch.cpp \
 	src/gpu/GrBatchAtlas.cpp \
 	src/gpu/GrBatchFontCache.cpp \
 	src/gpu/GrBatchTarget.cpp \
@@ -491,7 +490,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrRecordReplaceDraw.cpp \
 	src/gpu/GrRectanizer_pow2.cpp \
 	src/gpu/GrRectanizer_skyline.cpp \
-	src/gpu/GrRectBatch.cpp \
 	src/gpu/GrRenderTarget.cpp \
 	src/gpu/GrReducedClip.cpp \
 	src/gpu/GrReorderCommandBuilder.cpp \
@@ -509,13 +507,15 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrSWMaskHelper.cpp \
 	src/gpu/GrSoftwarePathRenderer.cpp \
 	src/gpu/GrSurface.cpp \
-	src/gpu/GrStrokeRectBatch.cpp \
 	src/gpu/GrTextBlobCache.cpp \
 	src/gpu/GrTextContext.cpp \
 	src/gpu/GrTexture.cpp \
 	src/gpu/GrTextureProvider.cpp \
 	src/gpu/GrTextureAccess.cpp \
 	src/gpu/GrXferProcessor.cpp \
+	src/gpu/batches/GrBatch.cpp \
+	src/gpu/batches/GrRectBatch.cpp \
+	src/gpu/batches/GrStrokeRectBatch.cpp \
 	src/gpu/effects/GrConfigConversionEffect.cpp \
 	src/gpu/effects/GrConstColorProcessor.cpp \
 	src/gpu/effects/GrCoverageSetOpXP.cpp \
