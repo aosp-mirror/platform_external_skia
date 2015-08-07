@@ -458,7 +458,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrDashLinePathRenderer.cpp \
 	src/gpu/GrDefaultGeoProcFactory.cpp \
 	src/gpu/GrDefaultPathRenderer.cpp \
-	src/gpu/GrDrawAtlasBatch.cpp \
 	src/gpu/GrDrawContext.cpp \
 	src/gpu/GrDrawTarget.cpp \
 	src/gpu/GrFontScaler.cpp \
