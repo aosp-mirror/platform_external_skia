@@ -513,6 +513,8 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrTextureProvider.cpp \
 	src/gpu/GrTextureAccess.cpp \
 	src/gpu/GrXferProcessor.cpp \
+	src/gpu/batches/GrAAFillRectBatch.cpp \
+	src/gpu/batches/GrAAStrokeRectBatch.cpp \
 	src/gpu/batches/GrBatch.cpp \
 	src/gpu/batches/GrDrawAtlasBatch.cpp \
 	src/gpu/batches/GrDrawVerticesBatch.cpp \
