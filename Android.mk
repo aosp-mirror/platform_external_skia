@@ -436,7 +436,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrAALinearizingConvexPathRenderer.cpp \
 	src/gpu/GrAAConvexTessellator.cpp \
 	src/gpu/GrAADistanceFieldPathRenderer.cpp \
-	src/gpu/GrAARectRenderer.cpp \
 	src/gpu/GrAddPathRenderers_default.cpp \
 	src/gpu/GrAtlas.cpp \
 	src/gpu/GrAtlasTextBlob.cpp \
