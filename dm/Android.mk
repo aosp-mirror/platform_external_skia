@@ -110,12 +110,10 @@ LOCAL_SRC_FILES := \
 	../tests/DashPathEffectTest.cpp \
 	../tests/DataRefTest.cpp \
 	../tests/DeferredCanvasTest.cpp \
-	../tests/DeflateWStream.cpp \
 	../tests/DequeTest.cpp \
 	../tests/DeviceLooperTest.cpp \
 	../tests/DiscardableMemoryPoolTest.cpp \
 	../tests/DiscardableMemoryTest.cpp \
-	../tests/DocumentTest.cpp \
 	../tests/DrawBitmapRectTest.cpp \
 	../tests/DrawFilterTest.cpp \
 	../tests/DrawPathTest.cpp \
@@ -125,7 +123,6 @@ LOCAL_SRC_FILES := \
 	../tests/ErrorTest.cpp \
 	../tests/FillPathTest.cpp \
 	../tests/FitsInTest.cpp \
-	../tests/FlateTest.cpp \
 	../tests/FloatingPointTextureTest.cpp \
 	../tests/FontHostStreamTest.cpp \
 	../tests/FontHostTest.cpp \
@@ -186,8 +183,13 @@ LOCAL_SRC_FILES := \
 	../tests/NameAllocatorTest.cpp \
 	../tests/OSPathTest.cpp \
 	../tests/OnceTest.cpp \
+	../tests/PDFDeflateWStreamTest.cpp \
+	../tests/PDFDocumentTest.cpp \
+	../tests/PDFFlateTest.cpp \
+	../tests/PDFGlyphsToUnicodeTest.cpp \
 	../tests/PDFInvalidBitmapTest.cpp \
 	../tests/PDFJpegEmbedTest.cpp \
+	../tests/PDFOpaqueSrcModeToSrcOverTest.cpp \
 	../tests/PDFPrimitivesTest.cpp \
 	../tests/PMFloatTest.cpp \
 	../tests/PackBitsTest.cpp \
@@ -256,7 +258,6 @@ LOCAL_SRC_FILES := \
 	../tests/TextBlobTest.cpp \
 	../tests/TextureCompressionTest.cpp \
 	../tests/Time.cpp \
-	../tests/ToUnicodeTest.cpp \
 	../tests/TracingTest.cpp \
 	../tests/TypefaceTest.cpp \
 	../tests/UnicodeTest.cpp \
@@ -267,7 +268,6 @@ LOCAL_SRC_FILES := \
 	../tests/Writer32Test.cpp \
 	../tests/XfermodeTest.cpp \
 	../tests/YUVCacheTest.cpp \
-	../tests/skpdf_opaquesrcmodetosrcover.cpp \
 	DMSrcSinkAndroid.cpp \
 	../gm/aaclip.cpp \
 	../gm/aarectmodes.cpp \
