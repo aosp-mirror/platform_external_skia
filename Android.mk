@@ -357,6 +357,7 @@ LOCAL_SRC_FILES := \
 	src/images/SkPageFlipper.cpp \
 	src/images/SkScaledBitmapSampler.cpp \
 	src/ports/SkImageGenerator_skia.cpp \
+	src/core/SkFlate.cpp \
 	src/doc/SkDocument_PDF.cpp \
 	src/pdf/SkJpegInfo.cpp \
 	src/pdf/SkPDFBitmap.cpp \
@@ -605,14 +606,13 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/GrGLCreateNullInterface.cpp \
 	src/gpu/gl/SkNullGLContext.cpp \
 	third_party/etc1/etc1.cpp \
-	third_party/ktx/ktx.cpp \
-	src/core/SkFlate.cpp
+	third_party/ktx/ktx.cpp
 
 LOCAL_SHARED_LIBRARIES := \
 	liblog \
+	libz \
 	libGLESv2 \
 	libEGL \
-	libz \
 	libpng \
 	libjpeg \
 	libicuuc \
