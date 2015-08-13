@@ -151,6 +151,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkHalf.cpp \
 	src/core/SkImageFilter.cpp \
 	src/core/SkImageInfo.cpp \
+	src/core/SkImageCacherator.cpp \
 	src/core/SkImageGenerator.cpp \
 	src/core/SkLocalMatrixShader.cpp \
 	src/core/SkLineClipper.cpp \
