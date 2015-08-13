@@ -515,10 +515,10 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrXferProcessor.cpp \
 	src/gpu/batches/GrAAFillRectBatch.cpp \
 	src/gpu/batches/GrAAStrokeRectBatch.cpp \
+	src/gpu/batches/GrBWFillRectBatch.cpp \
 	src/gpu/batches/GrBatch.cpp \
 	src/gpu/batches/GrDrawAtlasBatch.cpp \
 	src/gpu/batches/GrDrawVerticesBatch.cpp \
-	src/gpu/batches/GrRectBatch.cpp \
 	src/gpu/batches/GrRectBatchFactory.cpp \
 	src/gpu/batches/GrStrokeRectBatch.cpp \
 	src/gpu/effects/GrConfigConversionEffect.cpp \
