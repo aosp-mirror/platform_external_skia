@@ -287,6 +287,7 @@ LOCAL_SRC_FILES := \
 	../gm/bigrrectaaeffect.cpp \
 	../gm/bigtext.cpp \
 	../gm/bigtileimagefilter.cpp \
+	../gm/bitmapcopy.cpp \
 	../gm/bitmapfilters.cpp \
 	../gm/bitmappremul.cpp \
 	../gm/bitmaprect.cpp \
@@ -343,6 +344,7 @@ LOCAL_SRC_FILES := \
 	../gm/drawable.cpp \
 	../gm/drawatlas.cpp \
 	../gm/drawatlascolor.cpp \
+	../gm/drawbitmaprect.cpp \
 	../gm/drawfilter.cpp \
 	../gm/drawlooper.cpp \
 	../gm/drawminibitmaprect.cpp \
@@ -389,6 +391,7 @@ LOCAL_SRC_FILES := \
 	../gm/imagefilters.cpp \
 	../gm/imagefiltersbase.cpp \
 	../gm/imagefiltersclipped.cpp \
+	../gm/imagefilterscropexpand.cpp \
 	../gm/imagefilterscropped.cpp \
 	../gm/imagefiltersgraph.cpp \
 	../gm/imagefiltersscaled.cpp \
@@ -449,6 +452,9 @@ LOCAL_SRC_FILES := \
 	../gm/samplerstress.cpp \
 	../gm/selftest.cpp \
 	../gm/shaderbounds.cpp \
+	../gm/shadertext.cpp \
+	../gm/shadertext2.cpp \
+	../gm/shadertext3.cpp \
 	../gm/shadows.cpp \
 	../gm/shallowgradient.cpp \
 	../gm/simpleaaclip.cpp \
@@ -492,6 +498,7 @@ LOCAL_SRC_FILES := \
 	../gm/vertices.cpp \
 	../gm/verttext.cpp \
 	../gm/verttext2.cpp \
+	../gm/verylargebitmap.cpp \
 	../gm/xfermodeimagefilter.cpp \
 	../gm/xfermodes.cpp \
 	../gm/xfermodes2.cpp \
