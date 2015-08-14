@@ -569,6 +569,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../tools \
 	$(LOCAL_PATH)/../tools/flags \
 	$(LOCAL_PATH)/../src/gpu \
+	$(LOCAL_PATH)/../../src/gpu \
 	$(LOCAL_PATH)/../gm \
 	$(LOCAL_PATH)/../src/effects \
 	$(LOCAL_PATH)/../src/images \
