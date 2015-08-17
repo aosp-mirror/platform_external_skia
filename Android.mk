@@ -337,103 +337,6 @@ LOCAL_SRC_FILES := \
 	src/effects/gradients/SkTwoPointConicalGradient.cpp \
 	src/effects/gradients/SkTwoPointConicalGradient_gpu.cpp \
 	src/effects/gradients/SkSweepGradient.cpp \
-	src/images/bmpdecoderhelper.cpp \
-	src/images/SkDecodingImageGenerator.cpp \
-	src/images/SkForceLinking.cpp \
-	src/images/SkImageDecoder.cpp \
-	src/images/SkImageDecoder_FactoryDefault.cpp \
-	src/images/SkImageDecoder_FactoryRegistrar.cpp \
-	src/images/SkImageDecoder_wbmp.cpp \
-	src/images/SkImageDecoder_libbmp.cpp \
-	src/images/SkImageDecoder_libgif.cpp \
-	src/images/SkImageDecoder_libico.cpp \
-	src/images/SkImageDecoder_libwebp.cpp \
-	src/images/SkImageDecoder_libjpeg.cpp \
-	src/images/SkImageDecoder_libpng.cpp \
-	src/images/SkImageEncoder.cpp \
-	src/images/SkImageEncoder_Factory.cpp \
-	src/images/SkImageEncoder_argb.cpp \
-	src/images/SkJpegUtility.cpp \
-	src/images/SkMovie.cpp \
-	src/images/SkMovie_gif.cpp \
-	src/images/SkPageFlipper.cpp \
-	src/images/SkScaledBitmapSampler.cpp \
-	src/ports/SkImageGenerator_skia.cpp \
-	src/doc/SkDocument_PDF.cpp \
-	src/pdf/SkDeflate.cpp \
-	src/pdf/SkJpegInfo.cpp \
-	src/pdf/SkPDFBitmap.cpp \
-	src/pdf/SkPDFCanon.cpp \
-	src/pdf/SkPDFDevice.cpp \
-	src/pdf/SkPDFFont.cpp \
-	src/pdf/SkPDFFormXObject.cpp \
-	src/pdf/SkPDFGraphicState.cpp \
-	src/pdf/SkPDFResourceDict.cpp \
-	src/pdf/SkPDFShader.cpp \
-	src/pdf/SkPDFStream.cpp \
-	src/pdf/SkPDFTypes.cpp \
-	src/pdf/SkPDFUtils.cpp \
-	src/core/SkForceCPlusPlusLinking.cpp \
-	src/fonts/SkFontMgr_indirect.cpp \
-	src/fonts/SkRemotableFontMgr.cpp \
-	src/ports/SkFontMgr_android_factory.cpp \
-	src/ports/SkGlobalInitialization_default.cpp \
-	src/ports/SkMemory_malloc.cpp \
-	src/ports/SkOSFile_posix.cpp \
-	src/ports/SkOSFile_stdio.cpp \
-	src/ports/SkDiscardableMemory_none.cpp \
-	src/ports/SkTime_Unix.cpp \
-	src/ports/SkTLS_pthread.cpp \
-	src/ports/SkFontHost_FreeType.cpp \
-	src/ports/SkFontHost_FreeType_common.cpp \
-	src/ports/SkFontMgr_android.cpp \
-	src/ports/SkFontMgr_android_parser.cpp \
-	src/ports/SkFontMgr_custom.cpp \
-	src/ports/SkDebug_android.cpp \
-	src/sfnt/SkOTTable_name.cpp \
-	src/sfnt/SkOTUtils.cpp \
-	src/utils/SkBase64.cpp \
-	src/utils/SkBitmapHasher.cpp \
-	src/utils/SkBitSet.cpp \
-	src/utils/SkBoundaryPatch.cpp \
-	src/utils/SkFrontBufferedStream.cpp \
-	src/utils/SkCamera.cpp \
-	src/utils/SkCanvasStack.cpp \
-	src/utils/SkCanvasStateUtils.cpp \
-	src/utils/SkCubicInterval.cpp \
-	src/utils/SkCullPoints.cpp \
-	src/utils/SkDashPath.cpp \
-	src/utils/SkDeferredCanvas.cpp \
-	src/utils/SkDumpCanvas.cpp \
-	src/utils/SkEventTracer.cpp \
-	src/utils/SkInterpolator.cpp \
-	src/utils/SkLayer.cpp \
-	src/utils/SkMatrix22.cpp \
-	src/utils/SkMatrix44.cpp \
-	src/utils/SkMD5.cpp \
-	src/utils/SkMeshUtils.cpp \
-	src/utils/SkNinePatch.cpp \
-	src/utils/SkNWayCanvas.cpp \
-	src/utils/SkNullCanvas.cpp \
-	src/utils/SkOSFile.cpp \
-	src/utils/SkPaintFilterCanvas.cpp \
-	src/utils/SkParse.cpp \
-	src/utils/SkParseColor.cpp \
-	src/utils/SkParsePath.cpp \
-	src/utils/SkPatchGrid.cpp \
-	src/utils/SkPatchUtils.cpp \
-	src/utils/SkSHA1.cpp \
-	src/utils/SkRTConf.cpp \
-	src/utils/SkTextBox.cpp \
-	src/utils/SkTextureCompressor.cpp \
-	src/utils/SkTextureCompressor_ASTC.cpp \
-	src/utils/SkTextureCompressor_R11EAC.cpp \
-	src/utils/SkTextureCompressor_LATC.cpp \
-	src/utils/SkThreadUtils_pthread.cpp \
-	src/utils/SkThreadUtils_pthread_other.cpp \
-	src/fonts/SkGScalerContext.cpp \
-	src/fonts/SkRandomScalerContext.cpp \
-	src/fonts/SkTestScalerContext.cpp \
 	src/gpu/GrAAHairLinePathRenderer.cpp \
 	src/gpu/GrAAConvexPathRenderer.cpp \
 	src/gpu/GrAALinearizingConvexPathRenderer.cpp \
@@ -609,14 +512,111 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/debug/SkDebugGLContext.cpp \
 	src/gpu/gl/GrGLCreateNullInterface.cpp \
 	src/gpu/gl/SkNullGLContext.cpp \
+	src/images/bmpdecoderhelper.cpp \
+	src/images/SkDecodingImageGenerator.cpp \
+	src/images/SkForceLinking.cpp \
+	src/images/SkImageDecoder.cpp \
+	src/images/SkImageDecoder_FactoryDefault.cpp \
+	src/images/SkImageDecoder_FactoryRegistrar.cpp \
+	src/images/SkImageDecoder_wbmp.cpp \
+	src/images/SkImageDecoder_libbmp.cpp \
+	src/images/SkImageDecoder_libgif.cpp \
+	src/images/SkImageDecoder_libico.cpp \
+	src/images/SkImageDecoder_libwebp.cpp \
+	src/images/SkImageDecoder_libjpeg.cpp \
+	src/images/SkImageDecoder_libpng.cpp \
+	src/images/SkImageEncoder.cpp \
+	src/images/SkImageEncoder_Factory.cpp \
+	src/images/SkImageEncoder_argb.cpp \
+	src/images/SkJpegUtility.cpp \
+	src/images/SkMovie.cpp \
+	src/images/SkMovie_gif.cpp \
+	src/images/SkPageFlipper.cpp \
+	src/images/SkScaledBitmapSampler.cpp \
+	src/ports/SkImageGenerator_skia.cpp \
+	src/doc/SkDocument_PDF.cpp \
+	src/pdf/SkDeflate.cpp \
+	src/pdf/SkJpegInfo.cpp \
+	src/pdf/SkPDFBitmap.cpp \
+	src/pdf/SkPDFCanon.cpp \
+	src/pdf/SkPDFDevice.cpp \
+	src/pdf/SkPDFFont.cpp \
+	src/pdf/SkPDFFormXObject.cpp \
+	src/pdf/SkPDFGraphicState.cpp \
+	src/pdf/SkPDFResourceDict.cpp \
+	src/pdf/SkPDFShader.cpp \
+	src/pdf/SkPDFStream.cpp \
+	src/pdf/SkPDFTypes.cpp \
+	src/pdf/SkPDFUtils.cpp \
+	src/core/SkForceCPlusPlusLinking.cpp \
+	src/fonts/SkFontMgr_indirect.cpp \
+	src/fonts/SkRemotableFontMgr.cpp \
+	src/ports/SkFontMgr_android_factory.cpp \
+	src/ports/SkGlobalInitialization_default.cpp \
+	src/ports/SkMemory_malloc.cpp \
+	src/ports/SkOSFile_posix.cpp \
+	src/ports/SkOSFile_stdio.cpp \
+	src/ports/SkDiscardableMemory_none.cpp \
+	src/ports/SkTime_Unix.cpp \
+	src/ports/SkTLS_pthread.cpp \
+	src/ports/SkFontHost_FreeType.cpp \
+	src/ports/SkFontHost_FreeType_common.cpp \
+	src/ports/SkFontMgr_android.cpp \
+	src/ports/SkFontMgr_android_parser.cpp \
+	src/ports/SkFontMgr_custom.cpp \
+	src/ports/SkDebug_android.cpp \
+	src/sfnt/SkOTTable_name.cpp \
+	src/sfnt/SkOTUtils.cpp \
+	src/utils/SkBase64.cpp \
+	src/utils/SkBitmapHasher.cpp \
+	src/utils/SkBitSet.cpp \
+	src/utils/SkBoundaryPatch.cpp \
+	src/utils/SkFrontBufferedStream.cpp \
+	src/utils/SkCamera.cpp \
+	src/utils/SkCanvasStack.cpp \
+	src/utils/SkCanvasStateUtils.cpp \
+	src/utils/SkCubicInterval.cpp \
+	src/utils/SkCullPoints.cpp \
+	src/utils/SkDashPath.cpp \
+	src/utils/SkDeferredCanvas.cpp \
+	src/utils/SkDumpCanvas.cpp \
+	src/utils/SkEventTracer.cpp \
+	src/utils/SkInterpolator.cpp \
+	src/utils/SkLayer.cpp \
+	src/utils/SkMatrix22.cpp \
+	src/utils/SkMatrix44.cpp \
+	src/utils/SkMD5.cpp \
+	src/utils/SkMeshUtils.cpp \
+	src/utils/SkNinePatch.cpp \
+	src/utils/SkNWayCanvas.cpp \
+	src/utils/SkNullCanvas.cpp \
+	src/utils/SkOSFile.cpp \
+	src/utils/SkPaintFilterCanvas.cpp \
+	src/utils/SkParse.cpp \
+	src/utils/SkParseColor.cpp \
+	src/utils/SkParsePath.cpp \
+	src/utils/SkPatchGrid.cpp \
+	src/utils/SkPatchUtils.cpp \
+	src/utils/SkSHA1.cpp \
+	src/utils/SkRTConf.cpp \
+	src/utils/SkTextBox.cpp \
+	src/utils/SkTextureCompressor.cpp \
+	src/utils/SkTextureCompressor_ASTC.cpp \
+	src/utils/SkTextureCompressor_R11EAC.cpp \
+	src/utils/SkTextureCompressor_LATC.cpp \
+	src/utils/SkThreadUtils_pthread.cpp \
+	src/utils/SkThreadUtils_pthread_other.cpp \
+	src/fonts/SkGScalerContext.cpp \
+	src/fonts/SkRandomScalerContext.cpp \
+	src/fonts/SkTestScalerContext.cpp \
 	third_party/externals/android_native/opengl/libs/ETC1/etc1.cpp \
 	third_party/ktx/ktx.cpp
 
 LOCAL_SHARED_LIBRARIES := \
 	liblog \
-	libz \
 	libGLESv2 \
 	libEGL \
+	libz \
 	libpng \
 	libjpeg \
 	libicuuc \
@@ -654,10 +654,10 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/src/gpu \
 	$(LOCAL_PATH)/include/effects \
 	$(LOCAL_PATH)/src/effects \
-	external/jpeg \
-	$(LOCAL_PATH)/src/lazy \
 	$(LOCAL_PATH)/third_party/externals/android_native/opengl/include/ETC1 \
 	$(LOCAL_PATH)/third_party/ktx \
+	external/jpeg \
+	$(LOCAL_PATH)/src/lazy \
 	external/expat/lib \
 	external/freetype/include \
 	$(LOCAL_PATH)/include/utils/win \
@@ -675,6 +675,7 @@ LOCAL_EXPORT_C_INCLUDE_DIRS := \
 	$(LOCAL_PATH)/include/pathops \
 	$(LOCAL_PATH)/include/pipe \
 	$(LOCAL_PATH)/include/effects \
+	$(LOCAL_PATH)/include/gpu \
 	$(LOCAL_PATH)/include/images \
 	$(LOCAL_PATH)/include/ports \
 	$(LOCAL_PATH)/include/utils \
