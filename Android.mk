@@ -348,7 +348,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrAtlasTextContext.cpp \
 	src/gpu/GrBatchAtlas.cpp \
 	src/gpu/GrBatchFontCache.cpp \
-	src/gpu/GrBatchTarget.cpp \
+	src/gpu/GrBatchFlushState.cpp \
 	src/gpu/GrBatchTest.cpp \
 	src/gpu/GrBlurUtils.cpp \
 	src/gpu/GrBufferAllocPool.cpp \
