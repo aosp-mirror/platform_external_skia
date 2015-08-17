@@ -609,7 +609,7 @@ LOCAL_SRC_FILES := \
 	src/fonts/SkGScalerContext.cpp \
 	src/fonts/SkRandomScalerContext.cpp \
 	src/fonts/SkTestScalerContext.cpp \
-	third_party/externals/android_native/opengl/libs/ETC1/etc1.cpp \
+	third_party/etc1/etc1.cpp \
 	third_party/ktx/ktx.cpp
 
 LOCAL_SHARED_LIBRARIES := \
@@ -654,7 +654,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/src/gpu \
 	$(LOCAL_PATH)/include/effects \
 	$(LOCAL_PATH)/src/effects \
-	$(LOCAL_PATH)/third_party/externals/android_native/opengl/include/ETC1 \
+	$(LOCAL_PATH)/third_party/etc1 \
 	$(LOCAL_PATH)/third_party/ktx \
 	external/jpeg \
 	$(LOCAL_PATH)/src/lazy \
@@ -664,8 +664,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/src/ports \
 	$(LOCAL_PATH)/src/pdf \
 	external/sfntly/cpp/src \
-	external/zlib \
-	$(LOCAL_PATH)/third_party/externals/android_native/opengl/include
+	external/zlib
 
 LOCAL_EXPORT_C_INCLUDE_DIRS := \
 	$(LOCAL_PATH)/include/codec \
