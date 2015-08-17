@@ -585,7 +585,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../src/ports \
 	$(LOCAL_PATH)/../../../frameworks/base/libs/hwui \
 	$(LOCAL_PATH)/../../../frameworks/native/include \
-	$(LOCAL_PATH)/../third_party/etc1 \
+	$(LOCAL_PATH)/../third_party/externals/android_native/opengl/include/ETC1 \
 	$(LOCAL_PATH)/../tools/timer \
 	$(LOCAL_PATH)/../experimental \
 	$(LOCAL_PATH)/../src/utils/android

@@ -609,7 +609,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/debug/SkDebugGLContext.cpp \
 	src/gpu/gl/GrGLCreateNullInterface.cpp \
 	src/gpu/gl/SkNullGLContext.cpp \
-	third_party/etc1/etc1.cpp \
+	third_party/externals/android_native/opengl/libs/ETC1/etc1.cpp \
 	third_party/ktx/ktx.cpp
 
 LOCAL_SHARED_LIBRARIES := \
@@ -656,7 +656,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/src/effects \
 	external/jpeg \
 	$(LOCAL_PATH)/src/lazy \
-	$(LOCAL_PATH)/third_party/etc1 \
+	$(LOCAL_PATH)/third_party/externals/android_native/opengl/include/ETC1 \
 	$(LOCAL_PATH)/third_party/ktx \
 	external/expat/lib \
 	external/freetype/include \
@@ -664,7 +664,8 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/src/ports \
 	$(LOCAL_PATH)/src/pdf \
 	external/sfntly/cpp/src \
-	external/zlib
+	external/zlib \
+	$(LOCAL_PATH)/third_party/externals/android_native/opengl/include
 
 LOCAL_EXPORT_C_INCLUDE_DIRS := \
 	$(LOCAL_PATH)/include/codec \
