@@ -185,7 +185,6 @@ LOCAL_SRC_FILES := \
 	../tests/OnceTest.cpp \
 	../tests/PDFDeflateWStreamTest.cpp \
 	../tests/PDFDocumentTest.cpp \
-	../tests/PDFFlateTest.cpp \
 	../tests/PDFGlyphsToUnicodeTest.cpp \
 	../tests/PDFInvalidBitmapTest.cpp \
 	../tests/PDFJpegEmbedTest.cpp \
@@ -541,9 +540,9 @@ LOCAL_SHARED_LIBRARIES := \
 	libhwui \
 	libutils \
 	libdl \
+	libz \
 	libGLESv2 \
-	libEGL \
-	libz
+	libEGL
 
 LOCAL_STATIC_LIBRARIES := \
 	libjsoncpp
@@ -588,6 +587,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../third_party/etc1 \
 	$(LOCAL_PATH)/../tools/timer \
 	$(LOCAL_PATH)/../experimental \
+	external/zlib \
 	$(LOCAL_PATH)/../src/utils/android
 
 LOCAL_CFLAGS += \
