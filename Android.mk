@@ -460,6 +460,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/GrGLGpu.cpp \
 	src/gpu/gl/GrGLGpuProgramCache.cpp \
 	src/gpu/gl/GrGLExtensions.cpp \
+	src/gpu/gl/GrGLFragmentProcessor.cpp \
 	src/gpu/gl/GrGLIndexBuffer.cpp \
 	src/gpu/gl/GrGLInterface.cpp \
 	src/gpu/gl/GrGLNameAllocator.cpp \
