@@ -449,6 +449,7 @@ LOCAL_SRC_FILES := \
 	../gm/rrect.cpp \
 	../gm/rrects.cpp \
 	../gm/samplerstress.cpp \
+	../gm/scaledstrokes.cpp \
 	../gm/selftest.cpp \
 	../gm/shaderbounds.cpp \
 	../gm/shadertext.cpp \
