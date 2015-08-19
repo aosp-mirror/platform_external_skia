@@ -14,7 +14,9 @@ LOCAL_CFLAGS += \
 	-Wno-unused-parameter \
 	-U_FORTIFY_SOURCE \
 	-D_FORTIFY_SOURCE=1 \
-	-DSKIA_IMPLEMENTATION=1
+	-DSKIA_IMPLEMENTATION=1 \
+	-w \
+	-fvisibility=hidden
 
 LOCAL_CPPFLAGS := \
 	-std=c++11 \
@@ -506,6 +508,21 @@ LOCAL_SRC_FILES := \
 	../gm/yuvtorgbeffect.cpp \
 	../tools/AndroidSkDebugToStdOut.cpp \
 	../tools/flags/SkCommandLineFlags.cpp \
+	../third_party/externals/libpng/png.c \
+	../third_party/externals/libpng/pngerror.c \
+	../third_party/externals/libpng/pngget.c \
+	../third_party/externals/libpng/pngmem.c \
+	../third_party/externals/libpng/pngpread.c \
+	../third_party/externals/libpng/pngread.c \
+	../third_party/externals/libpng/pngrio.c \
+	../third_party/externals/libpng/pngrtran.c \
+	../third_party/externals/libpng/pngrutil.c \
+	../third_party/externals/libpng/pngset.c \
+	../third_party/externals/libpng/pngtrans.c \
+	../third_party/externals/libpng/pngwio.c \
+	../third_party/externals/libpng/pngwrite.c \
+	../third_party/externals/libpng/pngwtran.c \
+	../third_party/externals/libpng/pngwutil.c \
 	../src/svg/SkSVGCanvas.cpp \
 	../src/svg/SkSVGDevice.cpp \
 	../tools/CrashHandler.cpp \
@@ -530,7 +547,10 @@ LOCAL_SRC_FILES := \
 	../src/utils/android/SkAndroidSDKCanvas.cpp \
 	../src/utils/android/SkHwuiRenderer.cpp \
 	../src/gpu/GrContextFactory.cpp \
-	../src/gpu/GrTest.cpp
+	../src/gpu/GrTest.cpp \
+	../third_party/externals/libpng/arm/arm_init.c \
+	../third_party/externals/libpng/arm/filter_neon.S \
+	../third_party/externals/libpng/arm/filter_neon_intrinsics.c
 
 LOCAL_SHARED_LIBRARIES := \
 	liblog \
@@ -563,6 +583,9 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../include/gpu \
 	$(LOCAL_PATH)/../include/private \
 	$(LOCAL_PATH)/../src/core \
+	$(LOCAL_PATH)/../third_party/libpng \
+	$(LOCAL_PATH)/../third_party/externals/libpng \
+	external/zlib \
 	$(LOCAL_PATH)/../include/svg \
 	$(LOCAL_PATH)/../include/xml \
 	$(LOCAL_PATH)/../src/fonts \
@@ -587,11 +610,11 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../third_party/etc1 \
 	$(LOCAL_PATH)/../tools/timer \
 	$(LOCAL_PATH)/../experimental \
-	external/zlib \
 	$(LOCAL_PATH)/../src/utils/android
 
 LOCAL_CFLAGS += \
-	-DSK_CRASH_HANDLER
+	-DSK_CRASH_HANDLER \
+	-DSKIA_PNG_PREFIXED
 
 LOCAL_MODULE_TAGS := \
 	tests
