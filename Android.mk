@@ -153,8 +153,9 @@ LOCAL_SRC_FILES := \
 	src/core/SkImageInfo.cpp \
 	src/core/SkImageCacherator.cpp \
 	src/core/SkImageGenerator.cpp \
-	src/core/SkLocalMatrixShader.cpp \
+	src/core/SkLightingShader.cpp \
 	src/core/SkLineClipper.cpp \
+	src/core/SkLocalMatrixShader.cpp \
 	src/core/SkMallocPixelRef.cpp \
 	src/core/SkMask.cpp \
 	src/core/SkMaskCache.cpp \
@@ -188,6 +189,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkPixelRef.cpp \
 	src/core/SkPixmap.cpp \
 	src/core/SkPoint.cpp \
+	src/core/SkPoint3.cpp \
 	src/core/SkPtrRecorder.cpp \
 	src/core/SkQuadClipper.cpp \
 	src/core/SkRasterClip.cpp \
@@ -311,7 +313,6 @@ LOCAL_SRC_FILES := \
 	src/effects/SkLayerRasterizer.cpp \
 	src/effects/SkLerpXfermode.cpp \
 	src/effects/SkLightingImageFilter.cpp \
-	src/effects/SkLightingShader.cpp \
 	src/effects/SkLumaColorFilter.cpp \
 	src/effects/SkMagnifierImageFilter.cpp \
 	src/effects/SkMatrixConvolutionImageFilter.cpp \
@@ -322,7 +323,6 @@ LOCAL_SRC_FILES := \
 	src/effects/SkPerlinNoiseShader.cpp \
 	src/effects/SkPictureImageFilter.cpp \
 	src/effects/SkPixelXorXfermode.cpp \
-	src/effects/SkPoint3.cpp \
 	src/effects/SkRectShaderImageFilter.cpp \
 	src/effects/SkTableColorFilter.cpp \
 	src/effects/SkTableMaskFilter.cpp \
