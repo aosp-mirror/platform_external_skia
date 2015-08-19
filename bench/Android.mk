@@ -48,7 +48,6 @@ LOCAL_SRC_FILES := \
 	CoverageBench.cpp \
 	DashBench.cpp \
 	DecodingBench.cpp \
-	DeferredSurfaceCopyBench.cpp \
 	DisplacementBench.cpp \
 	DrawBitmapAABench.cpp \
 	ETCBitmapBench.cpp \

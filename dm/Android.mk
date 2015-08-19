@@ -109,7 +109,6 @@ LOCAL_SRC_FILES := \
 	../tests/ColorTest.cpp \
 	../tests/DashPathEffectTest.cpp \
 	../tests/DataRefTest.cpp \
-	../tests/DeferredCanvasTest.cpp \
 	../tests/DequeTest.cpp \
 	../tests/DeviceLooperTest.cpp \
 	../tests/DiscardableMemoryPoolTest.cpp \

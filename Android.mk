@@ -580,7 +580,6 @@ LOCAL_SRC_FILES := \
 	src/utils/SkCubicInterval.cpp \
 	src/utils/SkCullPoints.cpp \
 	src/utils/SkDashPath.cpp \
-	src/utils/SkDeferredCanvas.cpp \
 	src/utils/SkDumpCanvas.cpp \
 	src/utils/SkEventTracer.cpp \
 	src/utils/SkInterpolator.cpp \
