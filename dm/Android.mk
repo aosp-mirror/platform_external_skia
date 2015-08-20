@@ -256,6 +256,7 @@ LOCAL_SRC_FILES := \
 	../tests/TextBlobTest.cpp \
 	../tests/TextureCompressionTest.cpp \
 	../tests/Time.cpp \
+	../tests/TraceMemoryDumpTest.cpp \
 	../tests/TracingTest.cpp \
 	../tests/TypefaceTest.cpp \
 	../tests/UnicodeTest.cpp \
