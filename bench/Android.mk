@@ -240,6 +240,7 @@ LOCAL_SRC_FILES := \
 	../gm/hittestpath.cpp \
 	../gm/image.cpp \
 	../gm/image_pict.cpp \
+	../gm/image_shader.cpp \
 	../gm/imagealphathreshold.cpp \
 	../gm/imageblur.cpp \
 	../gm/imageblur2.cpp \
