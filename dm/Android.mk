@@ -542,6 +542,7 @@ LOCAL_SHARED_LIBRARIES := \
 	libhwui \
 	libutils \
 	libdl \
+	libpng \
 	libz \
 	libGLESv2 \
 	libEGL
@@ -565,6 +566,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../include/gpu \
 	$(LOCAL_PATH)/../include/private \
 	$(LOCAL_PATH)/../src/core \
+	external/libpng \
 	$(LOCAL_PATH)/../include/svg \
 	$(LOCAL_PATH)/../include/xml \
 	$(LOCAL_PATH)/../src/fonts \
