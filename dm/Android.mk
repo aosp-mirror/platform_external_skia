@@ -17,8 +17,7 @@ LOCAL_CFLAGS += \
 	-DSKIA_IMPLEMENTATION=1
 
 LOCAL_CPPFLAGS := \
-	-std=c++11 \
-	-Wno-invalid-offsetof
+	-std=c++11
 
 LOCAL_SRC_FILES := \
 	DM.cpp \

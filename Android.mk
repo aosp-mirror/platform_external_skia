@@ -58,8 +58,7 @@ LOCAL_CFLAGS += \
 	-Wno-clobbered
 
 LOCAL_CPPFLAGS := \
-	-std=c++11 \
-	-Wno-invalid-offsetof
+	-std=c++11
 
 LOCAL_SRC_FILES := \
 	src/codec/SkBmpCodec.cpp \
