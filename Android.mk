@@ -419,12 +419,12 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrXferProcessor.cpp \
 	src/gpu/batches/GrAAFillRectBatch.cpp \
 	src/gpu/batches/GrAAStrokeRectBatch.cpp \
-	src/gpu/batches/GrBWFillRectBatch.cpp \
 	src/gpu/batches/GrBatch.cpp \
 	src/gpu/batches/GrCopySurfaceBatch.cpp \
 	src/gpu/batches/GrDrawBatch.cpp \
 	src/gpu/batches/GrDrawAtlasBatch.cpp \
 	src/gpu/batches/GrDrawVerticesBatch.cpp \
+	src/gpu/batches/GrNonAAFillRectBatch.cpp \
 	src/gpu/batches/GrRectBatchFactory.cpp \
 	src/gpu/batches/GrStrokeRectBatch.cpp \
 	src/gpu/batches/GrVertexBatch.cpp \
