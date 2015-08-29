@@ -429,7 +429,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/batches/GrVertexBatch.cpp \
 	src/gpu/effects/GrConfigConversionEffect.cpp \
 	src/gpu/effects/GrConstColorProcessor.cpp \
-	src/gpu/effects/GrExtractAlphaFragmentProcessor.cpp \
 	src/gpu/effects/GrCoverageSetOpXP.cpp \
 	src/gpu/effects/GrCustomXfermode.cpp \
 	src/gpu/effects/GrBezierEffect.cpp \
