@@ -188,7 +188,6 @@ LOCAL_SRC_FILES := \
 	../tests/PDFJpegEmbedTest.cpp \
 	../tests/PDFOpaqueSrcModeToSrcOverTest.cpp \
 	../tests/PDFPrimitivesTest.cpp \
-	../tests/PMFloatTest.cpp \
 	../tests/PackBitsTest.cpp \
 	../tests/PaintTest.cpp \
 	../tests/ParsePathTest.cpp \

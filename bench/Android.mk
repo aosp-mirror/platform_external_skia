@@ -82,7 +82,6 @@ LOCAL_SRC_FILES := \
 	MipMapBench.cpp \
 	MorphologyBench.cpp \
 	MutexBench.cpp \
-	PMFloatBench.cpp \
 	PatchBench.cpp \
 	PatchGridBench.cpp \
 	PathBench.cpp \
@@ -107,6 +106,7 @@ LOCAL_SRC_FILES := \
 	SKPBench.cpp \
 	ScalarBench.cpp \
 	ShaderMaskBench.cpp \
+	Sk4fBench.cpp \
 	SkipZeroesBench.cpp \
 	SortBench.cpp \
 	StrokeBench.cpp \
