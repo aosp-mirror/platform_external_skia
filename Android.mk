@@ -335,11 +335,6 @@ LOCAL_SRC_FILES := \
 	src/effects/gradients/SkTwoPointConicalGradient.cpp \
 	src/effects/gradients/SkTwoPointConicalGradient_gpu.cpp \
 	src/effects/gradients/SkSweepGradient.cpp \
-	src/gpu/GrAAHairLinePathRenderer.cpp \
-	src/gpu/GrAAConvexPathRenderer.cpp \
-	src/gpu/GrAALinearizingConvexPathRenderer.cpp \
-	src/gpu/GrAAConvexTessellator.cpp \
-	src/gpu/GrAADistanceFieldPathRenderer.cpp \
 	src/gpu/GrAddPathRenderers_default.cpp \
 	src/gpu/GrAtlas.cpp \
 	src/gpu/GrAtlasTextBlob.cpp \
@@ -358,7 +353,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrContext.cpp \
 	src/gpu/GrCommandBuilder.cpp \
 	src/gpu/GrCoordTransform.cpp \
-	src/gpu/GrDashLinePathRenderer.cpp \
 	src/gpu/GrDefaultGeoProcFactory.cpp \
 	src/gpu/GrDefaultPathRenderer.cpp \
 	src/gpu/GrDrawContext.cpp \
@@ -399,13 +393,11 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrResourceCache.cpp \
 	src/gpu/GrResourceProvider.cpp \
 	src/gpu/GrStencil.cpp \
-	src/gpu/GrStencilAndCoverPathRenderer.cpp \
 	src/gpu/GrStencilAndCoverTextContext.cpp \
 	src/gpu/GrStencilAttachment.cpp \
 	src/gpu/GrStrokeInfo.cpp \
 	src/gpu/GrTargetCommands.cpp \
 	src/gpu/GrTraceMarker.cpp \
-	src/gpu/GrTessellatingPathRenderer.cpp \
 	src/gpu/GrTestUtils.cpp \
 	src/gpu/GrSWMaskHelper.cpp \
 	src/gpu/GrSoftwarePathRenderer.cpp \
@@ -416,16 +408,24 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrTextureProvider.cpp \
 	src/gpu/GrTextureAccess.cpp \
 	src/gpu/GrXferProcessor.cpp \
+	src/gpu/batches/GrAAHairLinePathRenderer.cpp \
+	src/gpu/batches/GrAALinearizingConvexPathRenderer.cpp \
+	src/gpu/batches/GrAAConvexTessellator.cpp \
+	src/gpu/batches/GrAADistanceFieldPathRenderer.cpp \
+	src/gpu/batches/GrAAConvexPathRenderer.cpp \
 	src/gpu/batches/GrAAFillRectBatch.cpp \
 	src/gpu/batches/GrAAStrokeRectBatch.cpp \
 	src/gpu/batches/GrBatch.cpp \
 	src/gpu/batches/GrCopySurfaceBatch.cpp \
+	src/gpu/batches/GrDashLinePathRenderer.cpp \
 	src/gpu/batches/GrDrawBatch.cpp \
 	src/gpu/batches/GrDrawAtlasBatch.cpp \
 	src/gpu/batches/GrDrawVerticesBatch.cpp \
 	src/gpu/batches/GrNonAAFillRectBatch.cpp \
 	src/gpu/batches/GrRectBatchFactory.cpp \
 	src/gpu/batches/GrStrokeRectBatch.cpp \
+	src/gpu/batches/GrStencilAndCoverPathRenderer.cpp \
+	src/gpu/batches/GrTessellatingPathRenderer.cpp \
 	src/gpu/batches/GrVertexBatch.cpp \
 	src/gpu/effects/GrConfigConversionEffect.cpp \
 	src/gpu/effects/GrConstColorProcessor.cpp \
