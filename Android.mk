@@ -335,7 +335,6 @@ LOCAL_SRC_FILES := \
 	src/effects/gradients/SkTwoPointConicalGradient.cpp \
 	src/effects/gradients/SkTwoPointConicalGradient_gpu.cpp \
 	src/effects/gradients/SkSweepGradient.cpp \
-	src/gpu/GrAddPathRenderers_default.cpp \
 	src/gpu/GrAtlas.cpp \
 	src/gpu/GrAtlasTextBlob.cpp \
 	src/gpu/GrAtlasTextContext.cpp \
@@ -354,7 +353,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrCommandBuilder.cpp \
 	src/gpu/GrCoordTransform.cpp \
 	src/gpu/GrDefaultGeoProcFactory.cpp \
-	src/gpu/GrDefaultPathRenderer.cpp \
 	src/gpu/GrDrawContext.cpp \
 	src/gpu/GrDrawTarget.cpp \
 	src/gpu/GrFontScaler.cpp \
@@ -418,6 +416,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/batches/GrBatch.cpp \
 	src/gpu/batches/GrCopySurfaceBatch.cpp \
 	src/gpu/batches/GrDashLinePathRenderer.cpp \
+	src/gpu/batches/GrDefaultPathRenderer.cpp \
 	src/gpu/batches/GrDrawBatch.cpp \
 	src/gpu/batches/GrDrawAtlasBatch.cpp \
 	src/gpu/batches/GrDrawVerticesBatch.cpp \
