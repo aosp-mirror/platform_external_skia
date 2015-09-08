@@ -406,6 +406,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrTextureProvider.cpp \
 	src/gpu/GrTextureAccess.cpp \
 	src/gpu/GrXferProcessor.cpp \
+	src/gpu/GrYUVProvider.cpp \
 	src/gpu/batches/GrAAHairLinePathRenderer.cpp \
 	src/gpu/batches/GrAALinearizingConvexPathRenderer.cpp \
 	src/gpu/batches/GrAAConvexTessellator.cpp \
