@@ -512,6 +512,9 @@ LOCAL_SRC_FILES := \
 	../tools/flags/SkCommandLineFlags.cpp \
 	../src/svg/SkSVGCanvas.cpp \
 	../src/svg/SkSVGDevice.cpp \
+	../tools/SkBitmapRegionCanvas.cpp \
+	../tools/SkBitmapRegionDecoderInterface.cpp \
+	../tools/SkBitmapRegionSampler.cpp \
 	../tools/CrashHandler.cpp \
 	../tools/ProcStats.cpp \
 	../tools/sk_tool_utils.cpp \
