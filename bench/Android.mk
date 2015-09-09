@@ -17,7 +17,8 @@ LOCAL_CFLAGS += \
 	-DSKIA_IMPLEMENTATION=1
 
 LOCAL_CPPFLAGS := \
-	-std=c++11
+	-std=c++11 \
+	-fno-threadsafe-statics
 
 LOCAL_SRC_FILES := \
 	../gm/gm.cpp \

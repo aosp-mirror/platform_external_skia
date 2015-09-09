@@ -58,7 +58,8 @@ LOCAL_CFLAGS += \
 	-Wno-clobbered
 
 LOCAL_CPPFLAGS := \
-	-std=c++11
+	-std=c++11 \
+	-fno-threadsafe-statics
 
 LOCAL_SRC_FILES := \
 	src/codec/SkBmpCodec.cpp \
