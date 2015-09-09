@@ -420,6 +420,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/batches/GrDefaultPathRenderer.cpp \
 	src/gpu/batches/GrDrawBatch.cpp \
 	src/gpu/batches/GrDrawAtlasBatch.cpp \
+	src/gpu/batches/GrDrawPathBatch.cpp \
 	src/gpu/batches/GrDrawVerticesBatch.cpp \
 	src/gpu/batches/GrNonAAFillRectBatch.cpp \
 	src/gpu/batches/GrRectBatchFactory.cpp \
