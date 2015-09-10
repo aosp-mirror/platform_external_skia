@@ -345,13 +345,11 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrBatchTest.cpp \
 	src/gpu/GrBlurUtils.cpp \
 	src/gpu/GrBufferAllocPool.cpp \
-	src/gpu/GrBufferedDrawTarget.cpp \
 	src/gpu/GrCaps.cpp \
 	src/gpu/GrClip.cpp \
 	src/gpu/GrClipMaskCache.cpp \
 	src/gpu/GrClipMaskManager.cpp \
 	src/gpu/GrContext.cpp \
-	src/gpu/GrCommandBuilder.cpp \
 	src/gpu/GrCoordTransform.cpp \
 	src/gpu/GrDefaultGeoProcFactory.cpp \
 	src/gpu/GrDrawContext.cpp \
@@ -360,9 +358,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrGpu.cpp \
 	src/gpu/GrGpuResource.cpp \
 	src/gpu/GrGpuFactory.cpp \
-	src/gpu/GrImmediateDrawTarget.cpp \
 	src/gpu/GrInvariantOutput.cpp \
-	src/gpu/GrInOrderCommandBuilder.cpp \
 	src/gpu/GrLayerCache.cpp \
 	src/gpu/GrLayerHoister.cpp \
 	src/gpu/GrMemoryPool.cpp \
@@ -388,14 +384,12 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrRectanizer_skyline.cpp \
 	src/gpu/GrRenderTarget.cpp \
 	src/gpu/GrReducedClip.cpp \
-	src/gpu/GrReorderCommandBuilder.cpp \
 	src/gpu/GrResourceCache.cpp \
 	src/gpu/GrResourceProvider.cpp \
 	src/gpu/GrStencil.cpp \
 	src/gpu/GrStencilAndCoverTextContext.cpp \
 	src/gpu/GrStencilAttachment.cpp \
 	src/gpu/GrStrokeInfo.cpp \
-	src/gpu/GrTargetCommands.cpp \
 	src/gpu/GrTraceMarker.cpp \
 	src/gpu/GrTestUtils.cpp \
 	src/gpu/GrSWMaskHelper.cpp \
