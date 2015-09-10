@@ -245,6 +245,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkYUVPlanesCache.cpp \
 	src/doc/SkDocument.cpp \
 	src/image/SkImage.cpp \
+	src/image/SkImage_Generator.cpp \
 	src/image/SkImage_Raster.cpp \
 	src/image/SkSurface.cpp \
 	src/image/SkSurface_Raster.cpp \
