@@ -464,7 +464,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/GrGLNameAllocator.cpp \
 	src/gpu/gl/GrGLNoOpInterface.cpp \
 	src/gpu/gl/GrGLPath.cpp \
-	src/gpu/gl/GrGLPathProcessor.cpp \
 	src/gpu/gl/GrGLPathRange.cpp \
 	src/gpu/gl/GrGLPathRendering.cpp \
 	src/gpu/gl/GrGLPrimitiveProcessor.cpp \
