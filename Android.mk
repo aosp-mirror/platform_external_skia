@@ -308,6 +308,7 @@ LOCAL_SRC_FILES := \
 	src/effects/SkDropShadowImageFilter.cpp \
 	src/effects/SkEmbossMask.cpp \
 	src/effects/SkEmbossMaskFilter.cpp \
+	src/effects/SkImageSource.cpp \
 	src/effects/SkGpuBlurUtils.cpp \
 	src/effects/SkLayerDrawLooper.cpp \
 	src/effects/SkLayerRasterizer.cpp \
