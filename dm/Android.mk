@@ -404,6 +404,7 @@ LOCAL_SRC_FILES := \
 	../gm/internal_links.cpp \
 	../gm/inversepaths.cpp \
 	../gm/largeglyphblur.cpp \
+	../gm/lcdblendmodes.cpp \
 	../gm/lcdtext.cpp \
 	../gm/lerpmode.cpp \
 	../gm/lighting.cpp \
