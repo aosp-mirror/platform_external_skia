@@ -347,6 +347,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrBatchFontCache.cpp \
 	src/gpu/GrBatchFlushState.cpp \
 	src/gpu/GrBatchTest.cpp \
+	src/gpu/GrBlend.cpp \
 	src/gpu/GrBlurUtils.cpp \
 	src/gpu/GrBufferAllocPool.cpp \
 	src/gpu/GrCaps.cpp \
@@ -453,7 +454,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/effects/GrXfermodeFragmentProcessor.cpp \
 	src/gpu/effects/GrYUVtoRGBEffect.cpp \
 	src/gpu/gl/GrGLAssembleInterface.cpp \
-	src/gpu/gl/GrGLBlend.cpp \
+	src/gpu/gl/GrGLSLBlend.cpp \
 	src/gpu/gl/GrGLBufferImpl.cpp \
 	src/gpu/gl/GrGLCaps.cpp \
 	src/gpu/gl/GrGLContext.cpp \

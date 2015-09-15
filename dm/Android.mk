@@ -143,6 +143,7 @@ LOCAL_SRC_FILES := \
 	../tests/GrContextFactoryTest.cpp \
 	../tests/GrDrawTargetTest.cpp \
 	../tests/GrGLSLPrettyPrintTest.cpp \
+	../tests/GrGetCoeffBlendKnownComponentsTest.cpp \
 	../tests/GrMemoryPoolTest.cpp \
 	../tests/GrPorterDuffTest.cpp \
 	../tests/GrSurfaceTest.cpp \
