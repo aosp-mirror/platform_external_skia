@@ -150,7 +150,6 @@ LOCAL_SRC_FILES := \
 	../gm/bitmaprecttest.cpp \
 	../gm/bitmapshader.cpp \
 	../gm/bitmapsource.cpp \
-	../gm/bitmapsource2.cpp \
 	../gm/bleed.cpp \
 	../gm/blend.cpp \
 	../gm/blurcircles.cpp \
@@ -258,6 +257,7 @@ LOCAL_SRC_FILES := \
 	../gm/imagemagnifier.cpp \
 	../gm/imageresizetiled.cpp \
 	../gm/imagesource.cpp \
+	../gm/imagesource2.cpp \
 	../gm/internal_links.cpp \
 	../gm/inversepaths.cpp \
 	../gm/largeglyphblur.cpp \
