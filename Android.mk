@@ -381,8 +381,8 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrPrimitiveProcessor.cpp \
 	src/gpu/GrProgramElement.cpp \
 	src/gpu/GrProcessor.cpp \
-	src/gpu/GrProcessorUnitTest.cpp \
 	src/gpu/GrProcessorDataManager.cpp \
+	src/gpu/GrProcessorUnitTest.cpp \
 	src/gpu/GrProcOptInfo.cpp \
 	src/gpu/GrGpuResourceRef.cpp \
 	src/gpu/GrRecordReplaceDraw.cpp \
