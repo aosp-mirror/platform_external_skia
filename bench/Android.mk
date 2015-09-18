@@ -108,6 +108,7 @@ LOCAL_SRC_FILES := \
 	ScalarBench.cpp \
 	ShaderMaskBench.cpp \
 	Sk4fBench.cpp \
+	SkGlyphCacheBench.cpp \
 	SkipZeroesBench.cpp \
 	SortBench.cpp \
 	StrokeBench.cpp \
