@@ -360,6 +360,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrDrawContext.cpp \
 	src/gpu/GrDrawTarget.cpp \
 	src/gpu/GrFontScaler.cpp \
+	src/gpu/GrFragmentProcessor.cpp \
 	src/gpu/GrGpu.cpp \
 	src/gpu/GrGpuResource.cpp \
 	src/gpu/GrGpuFactory.cpp \
