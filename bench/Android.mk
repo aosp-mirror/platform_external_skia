@@ -30,6 +30,7 @@ LOCAL_SRC_FILES := \
 	BigPathBench.cpp \
 	BitmapBench.cpp \
 	BitmapRectBench.cpp \
+	BitmapRegionDecoderBench.cpp \
 	BitmapScaleBench.cpp \
 	BlurBench.cpp \
 	BlurImageFilterBench.cpp \
@@ -380,6 +381,9 @@ LOCAL_SRC_FILES := \
 	../tools/timer/TimerData.cpp \
 	../tools/timer/GpuTimer.cpp \
 	../tools/timer/SysTimer_posix.cpp \
+	../tools/SkBitmapRegionCanvas.cpp \
+	../tools/SkBitmapRegionDecoderInterface.cpp \
+	../tools/SkBitmapRegionSampler.cpp \
 	../tools/Resources.cpp \
 	../tools/sk_tool_utils.cpp \
 	../tools/sk_tool_utils_font.cpp \
