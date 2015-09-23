@@ -252,7 +252,6 @@ LOCAL_SRC_FILES := \
 	src/image/SkSurface_Raster.cpp \
 	src/pipe/SkGPipeRead.cpp \
 	src/pipe/SkGPipeWrite.cpp \
-	src/lazy/SkCachingPixelRef.cpp \
 	src/pathops/SkAddIntersections.cpp \
 	src/pathops/SkDConicLineIntersection.cpp \
 	src/pathops/SkDCubicLineIntersection.cpp \
