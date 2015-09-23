@@ -188,6 +188,7 @@ LOCAL_SRC_FILES := \
 	../tests/PDFGlyphsToUnicodeTest.cpp \
 	../tests/PDFInvalidBitmapTest.cpp \
 	../tests/PDFJpegEmbedTest.cpp \
+	../tests/PDFMetadataAttributeTest.cpp \
 	../tests/PDFOpaqueSrcModeToSrcOverTest.cpp \
 	../tests/PDFPrimitivesTest.cpp \
 	../tests/PackBitsTest.cpp \
