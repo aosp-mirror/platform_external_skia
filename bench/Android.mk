@@ -198,6 +198,7 @@ LOCAL_SRC_FILES := \
 	../gm/displacement.cpp \
 	../gm/distantclip.cpp \
 	../gm/downsamplebitmap.cpp \
+	../gm/draw_bitmap_rect_skbug4374.cpp \
 	../gm/drawable.cpp \
 	../gm/drawatlas.cpp \
 	../gm/drawatlascolor.cpp \
