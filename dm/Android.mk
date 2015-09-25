@@ -294,7 +294,6 @@ LOCAL_SRC_FILES := \
 	../gm/bitmaprect.cpp \
 	../gm/bitmaprecttest.cpp \
 	../gm/bitmapshader.cpp \
-	../gm/bitmapsource.cpp \
 	../gm/bleed.cpp \
 	../gm/blend.cpp \
 	../gm/blurcircles.cpp \

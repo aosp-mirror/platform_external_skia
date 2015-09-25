@@ -292,7 +292,6 @@ LOCAL_SRC_FILES := \
 	src/effects/SkArcToPathEffect.cpp \
 	src/effects/SkArithmeticMode.cpp \
 	src/effects/SkArithmeticMode_gpu.cpp \
-	src/effects/SkBitmapSource.cpp \
 	src/effects/SkBlurDrawLooper.cpp \
 	src/effects/SkBlurMask.cpp \
 	src/effects/SkBlurImageFilter.cpp \
@@ -570,6 +569,7 @@ LOCAL_SRC_FILES := \
 	src/sfnt/SkOTUtils.cpp \
 	src/utils/SkBase64.cpp \
 	src/utils/SkBitmapHasher.cpp \
+	src/utils/SkBitmapSourceDeserializer.cpp \
 	src/utils/SkBitSet.cpp \
 	src/utils/SkBoundaryPatch.cpp \
 	src/utils/SkFrontBufferedStream.cpp \
