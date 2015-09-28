@@ -187,7 +187,6 @@ LOCAL_SRC_FILES := \
 	src/core/SkPictureRecorder.cpp \
 	src/core/SkPictureShader.cpp \
 	src/core/SkPixelRef.cpp \
-	src/core/SkPixelSerializer.cpp \
 	src/core/SkPixmap.cpp \
 	src/core/SkPoint.cpp \
 	src/core/SkPoint3.cpp \
