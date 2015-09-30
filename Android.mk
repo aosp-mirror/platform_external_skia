@@ -248,6 +248,7 @@ LOCAL_SRC_FILES := \
 	src/image/SkImage.cpp \
 	src/image/SkImage_Generator.cpp \
 	src/image/SkImage_Raster.cpp \
+	src/image/SkImageShader.cpp \
 	src/image/SkSurface.cpp \
 	src/image/SkSurface_Raster.cpp \
 	src/pipe/SkGPipeRead.cpp \
