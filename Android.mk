@@ -74,7 +74,6 @@ LOCAL_SRC_FILES := \
 	src/codec/SkMaskSwizzler.cpp \
 	src/codec/SkMasks.cpp \
 	src/codec/SkScaledCodec.cpp \
-	src/codec/SkScanlineDecoder.cpp \
 	src/codec/SkSwizzler.cpp \
 	src/codec/SkWebpCodec.cpp \
 	src/c/sk_paint.cpp \
