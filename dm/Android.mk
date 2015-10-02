@@ -98,7 +98,7 @@ LOCAL_SRC_FILES := \
 	../tests/CanvasTest.cpp \
 	../tests/ChecksumTest.cpp \
 	../tests/ClampRangeTest.cpp \
-	../tests/ClipCacheTest.cpp \
+	../tests/ClipBoundsTest.cpp \
 	../tests/ClipCubicTest.cpp \
 	../tests/ClipStackTest.cpp \
 	../tests/ClipperTest.cpp \
