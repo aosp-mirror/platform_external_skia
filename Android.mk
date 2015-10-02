@@ -556,6 +556,7 @@ LOCAL_SRC_FILES := \
 	src/ports/SkMemory_malloc.cpp \
 	src/ports/SkOSFile_posix.cpp \
 	src/ports/SkOSFile_stdio.cpp \
+	src/ports/SkOSLibrary_posix.cpp \
 	src/ports/SkDiscardableMemory_none.cpp \
 	src/ports/SkTime_Unix.cpp \
 	src/ports/SkTLS_pthread.cpp \
