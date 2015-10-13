@@ -425,6 +425,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../include/private \
 	$(LOCAL_PATH)/../src/core \
 	$(LOCAL_PATH)/../src/gpu \
+	$(LOCAL_PATH)/../src/codec \
 	$(LOCAL_PATH)/../src/fonts \
 	$(LOCAL_PATH)/../tools \
 	$(LOCAL_PATH)/../../src/gpu \
