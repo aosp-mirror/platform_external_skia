@@ -542,7 +542,6 @@ LOCAL_SRC_FILES := \
 	src/pdf/SkPDFFont.cpp \
 	src/pdf/SkPDFFormXObject.cpp \
 	src/pdf/SkPDFGraphicState.cpp \
-	src/pdf/SkPDFMetadata.cpp \
 	src/pdf/SkPDFResourceDict.cpp \
 	src/pdf/SkPDFShader.cpp \
 	src/pdf/SkPDFStream.cpp \
