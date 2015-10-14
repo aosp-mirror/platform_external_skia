@@ -270,6 +270,7 @@ LOCAL_SRC_FILES := \
 	../gm/lighting.cpp \
 	../gm/lightingshader.cpp \
 	../gm/linepaths.cpp \
+	../gm/localmatriximagefilter.cpp \
 	../gm/lumafilter.cpp \
 	../gm/matrixconvolution.cpp \
 	../gm/matriximagefilter.cpp \

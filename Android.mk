@@ -155,6 +155,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkImageGenerator.cpp \
 	src/core/SkLightingShader.cpp \
 	src/core/SkLineClipper.cpp \
+	src/core/SkLocalMatrixImageFilter.cpp \
 	src/core/SkLocalMatrixShader.cpp \
 	src/core/SkMallocPixelRef.cpp \
 	src/core/SkMask.cpp \
