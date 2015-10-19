@@ -117,6 +117,7 @@ LOCAL_SRC_FILES := \
 	TextBench.cpp \
 	TextBlobBench.cpp \
 	TileBench.cpp \
+	TopoSortBench.cpp \
 	VertBench.cpp \
 	WritePixelsBench.cpp \
 	WriterBench.cpp \
