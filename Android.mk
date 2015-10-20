@@ -612,7 +612,6 @@ LOCAL_SRC_FILES := \
 	src/utils/SkTextureCompressor_R11EAC.cpp \
 	src/utils/SkTextureCompressor_LATC.cpp \
 	src/utils/SkThreadUtils_pthread.cpp \
-	src/utils/SkThreadUtils_pthread_other.cpp \
 	src/utils/SkWhitelistTypefaces.cpp \
 	src/fonts/SkGScalerContext.cpp \
 	src/fonts/SkRandomScalerContext.cpp \
