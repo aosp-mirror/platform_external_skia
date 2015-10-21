@@ -63,6 +63,7 @@ LOCAL_CPPFLAGS := \
 	-fno-threadsafe-statics
 
 LOCAL_SRC_FILES := \
+	src/codec/SkAndroidCodec.cpp \
 	src/codec/SkBmpCodec.cpp \
 	src/codec/SkBmpMaskCodec.cpp \
 	src/codec/SkBmpRLECodec.cpp \
@@ -77,6 +78,7 @@ LOCAL_SRC_FILES := \
 	src/codec/SkSampler.cpp \
 	src/codec/SkScaledCodec.cpp \
 	src/codec/SkSwizzler.cpp \
+	src/codec/SkWebpAdapterCodec.cpp \
 	src/codec/SkWebpCodec.cpp \
 	src/c/sk_paint.cpp \
 	src/c/sk_surface.cpp \
