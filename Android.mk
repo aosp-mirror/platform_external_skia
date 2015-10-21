@@ -495,8 +495,8 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/builders/GrGLVertexShaderBuilder.cpp \
 	src/gpu/gl/builders/GrGLFragmentShaderBuilder.cpp \
 	src/gpu/gl/builders/GrGLGeometryShaderBuilder.cpp \
-	src/gpu/glsl/GrGLSLCaps.cpp \
 	src/gpu/glsl/GrGLSL.cpp \
+	src/gpu/glsl/GrGLSLCaps.cpp \
 	src/gpu/SkGpuDevice.cpp \
 	src/gpu/SkGr.cpp \
 	src/gpu/SkGrPixelRef.cpp \
