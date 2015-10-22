@@ -386,6 +386,7 @@ LOCAL_SRC_FILES := \
 	../tools/timer/GpuTimer.cpp \
 	../tools/timer/SysTimer_posix.cpp \
 	../tools/SkBitmapRegionCanvas.cpp \
+	../tools/SkBitmapRegionCodec.cpp \
 	../tools/SkBitmapRegionDecoderInterface.cpp \
 	../tools/SkBitmapRegionSampler.cpp \
 	../tools/Resources.cpp \
