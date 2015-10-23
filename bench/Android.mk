@@ -382,6 +382,9 @@ LOCAL_SRC_FILES := \
 	../tools/CrashHandler.cpp \
 	../tools/ProcStats.cpp \
 	../tools/timer/Timer.cpp \
+	../tools/timer/TimerData.cpp \
+	../tools/timer/GpuTimer.cpp \
+	../tools/timer/SysTimer_posix.cpp \
 	../tools/SkBitmapRegionCanvas.cpp \
 	../tools/SkBitmapRegionCodec.cpp \
 	../tools/SkBitmapRegionDecoderInterface.cpp \
@@ -424,11 +427,11 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../include/gpu \
 	$(LOCAL_PATH)/../tools/flags \
 	$(LOCAL_PATH)/../include/private \
+	$(LOCAL_PATH)/../src/core \
+	$(LOCAL_PATH)/../src/gpu \
 	$(LOCAL_PATH)/../src/codec \
 	$(LOCAL_PATH)/../src/fonts \
-	$(LOCAL_PATH)/../src/core \
 	$(LOCAL_PATH)/../tools \
-	$(LOCAL_PATH)/../src/gpu \
 	$(LOCAL_PATH)/../../src/gpu \
 	$(LOCAL_PATH)/subset \
 	$(LOCAL_PATH)/../src/effects \

@@ -531,6 +531,9 @@ LOCAL_SRC_FILES := \
 	../tools/sk_tool_utils.cpp \
 	../tools/sk_tool_utils_font.cpp \
 	../tools/timer/Timer.cpp \
+	../tools/timer/TimerData.cpp \
+	../tools/timer/GpuTimer.cpp \
+	../tools/timer/SysTimer_posix.cpp \
 	../src/xml/SkBML_XMLParser.cpp \
 	../src/xml/SkDOM.cpp \
 	../src/xml/SkXMLParser.cpp \
