@@ -5,6 +5,8 @@
  * found in the LICENSE file.
  */
 
+#include <unistd.h>
+
 #include "CrashHandler.h"
 #include "DMJsonWriter.h"
 #include "DMSrcSink.h"
