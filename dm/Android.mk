@@ -543,7 +543,6 @@ LOCAL_SRC_FILES := \
 	../tools/flags/SkCommonFlags.cpp \
 	../tools/picture_utils.cpp \
 	../src/utils/android/SkAndroidSDKCanvas.cpp \
-	../src/utils/android/SkHwuiRenderer.cpp \
 	../src/gpu/GrContextFactory.cpp \
 	../src/gpu/GrTest.cpp
 
@@ -551,7 +550,6 @@ LOCAL_SHARED_LIBRARIES := \
 	liblog \
 	libskia \
 	libandroid \
-	libgui \
 	libhwui \
 	libutils \
 	libdl \
@@ -600,7 +598,6 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../src/pdf \
 	$(LOCAL_PATH)/../src/ports \
 	$(LOCAL_PATH)/../../../frameworks/base/libs/hwui \
-	$(LOCAL_PATH)/../../../frameworks/native/include \
 	$(LOCAL_PATH)/../third_party/etc1 \
 	$(LOCAL_PATH)/../tools/timer \
 	$(LOCAL_PATH)/../experimental \
