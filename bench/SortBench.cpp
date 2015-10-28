@@ -10,8 +10,6 @@
 #include "SkString.h"
 #include "SkTSort.h"
 
-#include <stdlib.h>
-
 static const int N = 1000;
 
 static void rand_proc(int array[N]) {
@@ -119,12 +117,12 @@ protected:
     }
 
     // Delayed initialization only done if onDraw will be called.
-    void onDelayedSetup() override {
+    void onPreDraw() override {
         fUnsorted.reset(N);
         gRec[fType].fProc(fUnsorted.get());
     }
 
-    void onDraw(int loops, SkCanvas*) override {
+    void onDraw(const int loops, SkCanvas*) override {
         SkAutoTMalloc<int> sorted(N);
         for (int i = 0; i < loops; i++) {
             memcpy(sorted.get(), fUnsorted.get(), N*sizeof(int));

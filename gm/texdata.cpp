@@ -17,12 +17,29 @@
 #include "effects/GrPorterDuffXferProcessor.h"
 #include "effects/GrSimpleTextureEffect.h"
 
+namespace skiagm {
+
 static const int S = 200;
 
-DEF_SIMPLE_GM_BG(texdata, canvas, 2 * S, 2 * S, SK_ColorBLACK) {
+class TexDataGM : public GM {
+public:
+    TexDataGM() {
+        this->setBGColor(0xff000000);
+    }
+
+protected:
+    SkString onShortName() override {
+        return SkString("texdata");
+    }
+
+    SkISize onISize() override {
+        return SkISize::Make(2*S, 2*S);
+    }
+
+    void onDraw(SkCanvas* canvas) override {
         GrRenderTarget* target = canvas->internal_private_accessTopLayerRenderTarget();
         GrContext* ctx = canvas->getGrContext();
-        SkAutoTUnref<GrDrawContext> drawContext(ctx ? ctx->drawContext(target) : nullptr);
+        GrDrawContext* drawContext = ctx ? ctx->drawContext() : NULL;
         if (drawContext && target) {
             SkAutoTArray<SkPMColor> gTextureData((2 * S) * (2 * S));
             static const int stride = 2 * S;
@@ -96,7 +113,7 @@ DEF_SIMPLE_GM_BG(texdata, canvas, 2 * S, 2 * S, SK_ColorBLACK) {
                 tm.postIDiv(2*S, 2*S);
                 paint.addColorTextureProcessor(texture, tm);
 
-                drawContext->drawRect(clip, paint, vm, SkRect::MakeWH(2*S, 2*S));
+                drawContext->drawRect(target, clip, paint, vm, SkRect::MakeWH(2*S, 2*S));
 
                 // now update the lower right of the texture in first pass
                 // or upper right in second pass
@@ -110,10 +127,22 @@ DEF_SIMPLE_GM_BG(texdata, canvas, 2 * S, 2 * S, SK_ColorBLACK) {
                 texture->writePixels(S, (i ? 0 : S), S, S,
                                      texture->config(), gTextureData.get(),
                                      4 * stride);
-                drawContext->drawRect(clip, paint, vm, SkRect::MakeWH(2*S, 2*S));
+                drawContext->drawRect(target, clip, paint, vm, SkRect::MakeWH(2*S, 2*S));
             }
         } else {
-            skiagm::GM::DrawGpuOnlyMessage(canvas);
+            this->drawGpuOnlyMessage(canvas);
         }
+    }
+
+private:
+    typedef GM INHERITED;
+};
+
+//////////////////////////////////////////////////////////////////////////////
+
+static GM* MyFactory(void*) { return new TexDataGM; }
+static GMRegistry reg(MyFactory);
+
 }
+
 #endif

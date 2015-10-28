@@ -18,8 +18,7 @@ struct GrContextOptions {
         , fMinTextureSizeOverride(0)
         , fSuppressDualSourceBlending(false)
         , fGeometryBufferMapThreshold(-1)
-        , fUseDrawInsteadOfPartialRenderTargetWrite(false)
-        , fImmediateMode(false) {}
+        , fUseDrawInsteadOfPartialRenderTargetWrite(false) {}
 
     // EXPERIMENTAL
     // May be removed in the future, or may become standard depending
@@ -44,10 +43,6 @@ struct GrContextOptions {
 
     /** some gpus have problems with partial writes of the rendertarget */
     bool fUseDrawInsteadOfPartialRenderTargetWrite;
-
-    /** The GrContext operates in immedidate mode. It will issue all draws to the backend API
-        immediately. Intended to ease debugging. */
-    bool fImmediateMode;
 };
 
 #endif

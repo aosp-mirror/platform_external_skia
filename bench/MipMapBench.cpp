@@ -22,14 +22,14 @@ protected:
 
     const char* onGetName() override { return "mipmap_build"; }
 
-    void onDelayedSetup() override {
+    void onPreDraw() override {
         fBitmap.allocN32Pixels(1000, 1000, true);
         fBitmap.eraseColor(SK_ColorWHITE);  // so we don't read uninitialized memory
     }
 
-    void onDraw(int loops, SkCanvas*) override {
+    void onDraw(const int loops, SkCanvas*) override {
         for (int i = 0; i < loops; i++) {
-            SkMipMap::Build(fBitmap, nullptr)->unref();
+            SkMipMap::Build(fBitmap, NULL)->unref();
         }
     }
 

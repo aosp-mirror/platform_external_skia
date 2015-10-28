@@ -20,8 +20,7 @@ struct SkSVGAttribute {
 };
 
 #ifndef SK_OFFSETOF
-    // This is offsetof for types which are not standard layout.
-    #define SK_OFFSETOF(type, field) (size_t)((char*)&(((type*)1024)->field) - (char*)1024)
+#define SK_OFFSETOF(a, b) (((size_t) (&(((a*) 1)->b)))-1)
 #endif
 
 #ifdef SK_DEBUG

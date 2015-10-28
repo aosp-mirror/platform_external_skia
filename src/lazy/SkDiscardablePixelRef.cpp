@@ -17,10 +17,10 @@ SkDiscardablePixelRef::SkDiscardablePixelRef(const SkImageInfo& info,
     , fGenerator(generator)
     , fDMFactory(fact)
     , fRowBytes(rowBytes)
-    , fDiscardableMemory(nullptr)
+    , fDiscardableMemory(NULL)
     , fDiscardableMemoryIsLocked(false)
 {
-    SkASSERT(fGenerator != nullptr);
+    SkASSERT(fGenerator != NULL);
     SkASSERT(fRowBytes > 0);
     // The SkImageGenerator contract requires fGenerator to always
     // decode the same image on each call to getPixels().
@@ -33,13 +33,13 @@ SkDiscardablePixelRef::~SkDiscardablePixelRef() {
         fDiscardableMemory->unlock();
         fDiscardableMemoryIsLocked = false;
     }
-    delete fDiscardableMemory;
+    SkDELETE(fDiscardableMemory);
     SkSafeUnref(fDMFactory);
-    delete fGenerator;
+    SkDELETE(fGenerator);
 }
 
 bool SkDiscardablePixelRef::onNewLockPixels(LockRec* rec) {
-    if (fDiscardableMemory != nullptr) {
+    if (fDiscardableMemory != NULL) {
         if (fDiscardableMemory->lock()) {
             fDiscardableMemoryIsLocked = true;
             rec->fPixels = fDiscardableMemory->data();
@@ -47,21 +47,21 @@ bool SkDiscardablePixelRef::onNewLockPixels(LockRec* rec) {
             rec->fRowBytes = fRowBytes;
             return true;
         }
-        delete fDiscardableMemory;
-        fDiscardableMemory = nullptr;
+        SkDELETE(fDiscardableMemory);
+        fDiscardableMemory = NULL;
         fDiscardableMemoryIsLocked = false;
     }
 
     const size_t size = this->info().getSafeSize(fRowBytes);
 
-    if (fDMFactory != nullptr) {
+    if (fDMFactory != NULL) {
         fDiscardableMemory = fDMFactory->create(size);
         fDiscardableMemoryIsLocked = true;
     } else {
         fDiscardableMemory = SkDiscardableMemory::Create(size);
         fDiscardableMemoryIsLocked = true;
     }
-    if (nullptr == fDiscardableMemory) {
+    if (NULL == fDiscardableMemory) {
         fDiscardableMemoryIsLocked = false;
         return false;  // Memory allocation failed.
     }
@@ -74,8 +74,8 @@ bool SkDiscardablePixelRef::onNewLockPixels(LockRec* rec) {
     if (!fGenerator->getPixels(info, pixels, fRowBytes, colors, &colorCount)) {
         fDiscardableMemory->unlock();
         fDiscardableMemoryIsLocked = false;
-        delete fDiscardableMemory;
-        fDiscardableMemory = nullptr;
+        SkDELETE(fDiscardableMemory);
+        fDiscardableMemory = NULL;
         return false;
     }
 
@@ -85,9 +85,9 @@ bool SkDiscardablePixelRef::onNewLockPixels(LockRec* rec) {
     // could move it into the block, but then again perhaps it is small enough that this doesn't
     // really matter.
     if (colorCount > 0) {
-        fCTable.reset(new SkColorTable(colors, colorCount));
+        fCTable.reset(SkNEW_ARGS(SkColorTable, (colors, colorCount)));
     } else {
-        fCTable.reset(nullptr);
+        fCTable.reset(NULL);
     }
 
     rec->fPixels = pixels;
@@ -101,10 +101,10 @@ void SkDiscardablePixelRef::onUnlockPixels() {
     fDiscardableMemoryIsLocked = false;
 }
 
-bool SkDEPRECATED_InstallDiscardablePixelRef(SkImageGenerator* generator, const SkIRect* subset,
-                                             SkBitmap* dst, SkDiscardableMemory::Factory* factory) {
+bool SkInstallDiscardablePixelRef(SkImageGenerator* generator, const SkIRect* subset, SkBitmap* dst,
+                                  SkDiscardableMemory::Factory* factory) {
     SkAutoTDelete<SkImageGenerator> autoGenerator(generator);
-    if (nullptr == autoGenerator.get()) {
+    if (NULL == autoGenerator.get()) {
         return false;
     }
 
@@ -137,19 +137,19 @@ bool SkDEPRECATED_InstallDiscardablePixelRef(SkImageGenerator* generator, const 
         return dst->tryAllocPixels();
     }
     SkAutoTUnref<SkDiscardablePixelRef> ref(
-            new SkDiscardablePixelRef(prInfo, autoGenerator.detach(), dst->rowBytes(), factory));
+        SkNEW_ARGS(SkDiscardablePixelRef,
+                   (prInfo, autoGenerator.detach(), dst->rowBytes(), factory)));
     dst->setPixelRef(ref, origin.x(), origin.y());
     return true;
 }
 
 // These are the public API
 
-bool SkDEPRECATED_InstallDiscardablePixelRef(SkImageGenerator* generator, SkBitmap* dst) {
-    return SkDEPRECATED_InstallDiscardablePixelRef(generator, nullptr, dst, nullptr);
+bool SkInstallDiscardablePixelRef(SkImageGenerator* generator, SkBitmap* dst) {
+    return SkInstallDiscardablePixelRef(generator, NULL, dst, NULL);
 }
 
-bool SkDEPRECATED_InstallDiscardablePixelRef(SkData* encoded, SkBitmap* dst) {
+bool SkInstallDiscardablePixelRef(SkData* encoded, SkBitmap* dst) {
     SkImageGenerator* generator = SkImageGenerator::NewFromEncoded(encoded);
-    return generator ?
-            SkDEPRECATED_InstallDiscardablePixelRef(generator, nullptr, dst, nullptr) : false;
+    return generator ? SkInstallDiscardablePixelRef(generator, NULL, dst, NULL) : false;
 }

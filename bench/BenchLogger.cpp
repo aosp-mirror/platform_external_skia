@@ -10,16 +10,16 @@
 #include "SkStream.h"
 
 BenchLogger::BenchLogger()
-: fFileStream(nullptr) {}
+: fFileStream(NULL) {}
 
 BenchLogger::~BenchLogger() {
     if (fFileStream) {
-        delete fFileStream;
+        SkDELETE(fFileStream);
     }
 }
 
 bool BenchLogger::SetLogFile(const char *file) {
-    fFileStream = new SkFILEWStream(file);
+    fFileStream = SkNEW_ARGS(SkFILEWStream, (file));
     return fFileStream->isValid();
 }
 

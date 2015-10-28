@@ -56,7 +56,7 @@ protected:
         fName.printf( "bitmap_scale_%s_%d_%d", name, fInputSize, fOutputSize );
     }
 
-    void onDelayedSetup() override {
+    void onPreDraw() override {
         fInputBitmap.allocN32Pixels(fInputSize, fInputSize, true);
         fInputBitmap.eraseColor(SK_ColorWHITE);
 
@@ -65,7 +65,7 @@ protected:
         fMatrix.setScale( scale(), scale() );
     }
 
-    void onDraw(int loops, SkCanvas*) override {
+    void onDraw(const int loops, SkCanvas*) override {
         SkPaint paint;
         this->setupPaint(&paint);
 

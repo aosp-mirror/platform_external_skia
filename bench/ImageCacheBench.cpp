@@ -26,8 +26,6 @@ struct TestRec : public SkResourceCache::Rec {
 
     const Key& getKey() const override { return fKey; }
     size_t bytesUsed() const override { return sizeof(fKey) + sizeof(fValue); }
-    const char* getCategory() const override { return "imagecachebench-test"; }
-    SkDiscardableMemory* diagnostic_only_getDiscardable() const override { return nullptr; }
 
     static bool Visitor(const SkResourceCache::Rec&, void*) {
         return true;
@@ -46,7 +44,7 @@ public:
 
     void populateCache() {
         for (int i = 0; i < CACHE_COUNT; ++i) {
-            fCache.add(new TestRec(TestKey(i), i));
+            fCache.add(SkNEW_ARGS(TestRec, (TestKey(i), i)));
         }
     }
 
@@ -55,7 +53,7 @@ protected:
         return "imagecache";
     }
 
-    void onDraw(int loops, SkCanvas*) override {
+    void onDraw(const int loops, SkCanvas*) override {
         if (fCache.getTotalBytesUsed() == 0) {
             this->populateCache();
         }
@@ -63,7 +61,7 @@ protected:
         TestKey key(-1);
         // search for a miss (-1)
         for (int i = 0; i < loops; ++i) {
-            SkDEBUGCODE(bool found =) fCache.find(key, TestRec::Visitor, nullptr);
+            SkDEBUGCODE(bool found =) fCache.find(key, TestRec::Visitor, NULL);
             SkASSERT(!found);
         }
     }

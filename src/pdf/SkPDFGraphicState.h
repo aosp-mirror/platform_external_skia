@@ -12,6 +12,7 @@
 
 #include "SkPaint.h"
 #include "SkPDFTypes.h"
+#include "SkTemplates.h"
 #include "SkChecksum.h"
 
 class SkPDFCanon;
@@ -32,9 +33,9 @@ public:
 
     // Override emitObject so that we can populate the dictionary on
     // demand.
-    void emitObject(SkWStream* stream,
-                    const SkPDFObjNumMap& objNumMap,
-                    const SkPDFSubstituteMap& substitutes) const override;
+    virtual void emitObject(SkWStream* stream,
+                            const SkPDFObjNumMap& objNumMap,
+                            const SkPDFSubstituteMap& substitutes);
 
     /** Get the graphic state for the passed SkPaint. The reference count of
      *  the object is incremented and it is the caller's responsibility to

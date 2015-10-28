@@ -13,7 +13,7 @@
 #define kSQRT_TABLE_BITS    11
 #define kSQRT_TABLE_SIZE    (1 << kSQRT_TABLE_BITS)
 
-static_assert(sizeof(gSqrt8Table) == kSQRT_TABLE_SIZE, "SqrtTableSizesMatch");
+SK_COMPILE_ASSERT(sizeof(gSqrt8Table) == kSQRT_TABLE_SIZE, SqrtTableSizesMatch);
 
 #if 0
 
@@ -92,10 +92,10 @@ void shadeSpan16_radial_clamp(SkScalar sfx, SkScalar sdx,
     // might perform this check for the other modes,
     // but the win will be a smaller % of the total
     if (dy == 0) {
-        fy = SkTPin(fy, -0xFFFF >> 1, 0xFFFF >> 1);
+        fy = SkPin32(fy, -0xFFFF >> 1, 0xFFFF >> 1);
         fy *= fy;
         do {
-            unsigned xx = SkTPin(fx, -0xFFFF >> 1, 0xFFFF >> 1);
+            unsigned xx = SkPin32(fx, -0xFFFF >> 1, 0xFFFF >> 1);
             unsigned fi = (xx * xx + fy) >> (14 + 16 - kSQRT_TABLE_BITS);
             fi = SkFastMin32(fi, 0xFFFF >> (16 - kSQRT_TABLE_BITS));
             fx += dx;
@@ -105,8 +105,8 @@ void shadeSpan16_radial_clamp(SkScalar sfx, SkScalar sdx,
         } while (--count != 0);
     } else {
         do {
-            unsigned xx = SkTPin(fx, -0xFFFF >> 1, 0xFFFF >> 1);
-            unsigned fi = SkTPin(fy, -0xFFFF >> 1, 0xFFFF >> 1);
+            unsigned xx = SkPin32(fx, -0xFFFF >> 1, 0xFFFF >> 1);
+            unsigned fi = SkPin32(fy, -0xFFFF >> 1, 0xFFFF >> 1);
             fi = (xx * xx + fi * fi) >> (14 + 16 - kSQRT_TABLE_BITS);
             fi = SkFastMin32(fi, 0xFFFF >> (16 - kSQRT_TABLE_BITS));
             fx += dx;
@@ -160,7 +160,7 @@ size_t SkRadialGradient::contextSize() const {
 }
 
 SkShader::Context* SkRadialGradient::onCreateContext(const ContextRec& rec, void* storage) const {
-    return new (storage) RadialGradientContext(*this, rec);
+    return SkNEW_PLACEMENT_ARGS(storage, RadialGradientContext, (*this, rec));
 }
 
 SkRadialGradient::RadialGradientContext::RadialGradientContext(
@@ -225,6 +225,23 @@ void SkRadialGradient::RadialGradientContext::shadeSpan16(int x, int y, uint16_t
     }
 }
 
+SkShader::BitmapType SkRadialGradient::asABitmap(SkBitmap* bitmap,
+    SkMatrix* matrix, SkShader::TileMode* xy) const {
+    if (bitmap) {
+        this->getGradientTableBitmap(bitmap);
+    }
+    if (matrix) {
+        matrix->setScale(SkIntToScalar(kCache32Count),
+                         SkIntToScalar(kCache32Count));
+        matrix->preConcat(fPtsToUnit);
+    }
+    if (xy) {
+        xy[0] = fTileMode;
+        xy[1] = kClamp_TileMode;
+    }
+    return kRadial_BitmapType;
+}
+
 SkShader::GradientType SkRadialGradient::asAGradient(GradientInfo* info) const {
     if (info) {
         commonAsAGradient(info);
@@ -237,7 +254,7 @@ SkShader::GradientType SkRadialGradient::asAGradient(GradientInfo* info) const {
 SkFlattenable* SkRadialGradient::CreateProc(SkReadBuffer& buffer) {
     DescriptorScope desc;
     if (!desc.unflatten(buffer)) {
-        return nullptr;
+        return NULL;
     }
     const SkPoint center = buffer.readPoint();
     const SkScalar radius = buffer.readScalar();
@@ -440,32 +457,34 @@ private:
 class GrRadialGradient : public GrGradientEffect {
 public:
     static GrFragmentProcessor* Create(GrContext* ctx,
+                                       GrProcessorDataManager* procDataManager,
                                        const SkRadialGradient& shader,
                                        const SkMatrix& matrix,
                                        SkShader::TileMode tm) {
-        return new GrRadialGradient(ctx, shader, matrix, tm);
+        return SkNEW_ARGS(GrRadialGradient, (ctx, procDataManager, shader, matrix, tm));
     }
 
     virtual ~GrRadialGradient() { }
 
     const char* name() const override { return "Radial Gradient"; }
 
+    virtual void getGLProcessorKey(const GrGLSLCaps& caps,
+                                   GrProcessorKeyBuilder* b) const override {
+        GrGLRadialGradient::GenKey(*this, caps, b);
+    }
+
+    GrGLFragmentProcessor* createGLInstance() const override {
+        return SkNEW_ARGS(GrGLRadialGradient, (*this));
+    }
+
 private:
     GrRadialGradient(GrContext* ctx,
+                     GrProcessorDataManager* procDataManager,
                      const SkRadialGradient& shader,
                      const SkMatrix& matrix,
                      SkShader::TileMode tm)
-        : INHERITED(ctx, shader, matrix, tm) {
+        : INHERITED(ctx, procDataManager, shader, matrix, tm) {
         this->initClassID<GrRadialGradient>();
-    }
-
-    GrGLFragmentProcessor* onCreateGLInstance() const override {
-        return new GrGLRadialGradient(*this);
-    }
-
-    virtual void onGetGLProcessorKey(const GrGLSLCaps& caps,
-                                     GrProcessorKeyBuilder* b) const override {
-        GrGLRadialGradient::GenKey(*this, caps, b);
     }
 
     GR_DECLARE_FRAGMENT_PROCESSOR_TEST;
@@ -477,7 +496,7 @@ private:
 
 GR_DEFINE_FRAGMENT_PROCESSOR_TEST(GrRadialGradient);
 
-const GrFragmentProcessor* GrRadialGradient::TestCreate(GrProcessorTestData* d) {
+GrFragmentProcessor* GrRadialGradient::TestCreate(GrProcessorTestData* d) {
     SkPoint center = {d->fRandom->nextUScalar1(), d->fRandom->nextUScalar1()};
     SkScalar radius = d->fRandom->nextUScalar1();
 
@@ -489,9 +508,12 @@ const GrFragmentProcessor* GrRadialGradient::TestCreate(GrProcessorTestData* d) 
     SkAutoTUnref<SkShader> shader(SkGradientShader::CreateRadial(center, radius,
                                                                  colors, stops, colorCount,
                                                                  tm));
-    const GrFragmentProcessor* fp = shader->asFragmentProcessor(d->fContext,
-        GrTest::TestMatrix(d->fRandom), NULL, kNone_SkFilterQuality);
-    GrAlwaysAssert(fp);
+    SkPaint paint;
+    GrColor paintColor;
+    GrFragmentProcessor* fp;
+    SkAssertResult(shader->asFragmentProcessor(d->fContext, paint,
+                                               GrTest::TestMatrix(d->fRandom), NULL,
+                                               &paintColor, d->fProcDataManager, &fp));
     return fp;
 }
 
@@ -509,28 +531,39 @@ void GrGLRadialGradient::emitCode(EmitArgs& args) {
 
 /////////////////////////////////////////////////////////////////////
 
-const GrFragmentProcessor* SkRadialGradient::asFragmentProcessor(
-                                                 GrContext* context,
-                                                 const SkMatrix& viewM,
-                                                 const SkMatrix* localMatrix,
-                                                 SkFilterQuality) const {
+bool SkRadialGradient::asFragmentProcessor(GrContext* context, const SkPaint& paint,
+                                           const SkMatrix& viewM,
+                                           const SkMatrix* localMatrix, GrColor* paintColor,
+                                           GrProcessorDataManager* procDataManager,
+                                           GrFragmentProcessor** fp) const {
     SkASSERT(context);
 
     SkMatrix matrix;
     if (!this->getLocalMatrix().invert(&matrix)) {
-        return nullptr;
+        return false;
     }
     if (localMatrix) {
         SkMatrix inv;
         if (!localMatrix->invert(&inv)) {
-            return nullptr;
+            return false;
         }
         matrix.postConcat(inv);
     }
     matrix.postConcat(fPtsToUnit);
-        SkAutoTUnref<const GrFragmentProcessor> inner(
-            GrRadialGradient::Create(context, *this, matrix, fTileMode));
-    return GrFragmentProcessor::MulOutputByInputAlpha(inner);
+
+    *paintColor = SkColor2GrColorJustAlpha(paint.getColor());
+    *fp = GrRadialGradient::Create(context, procDataManager, *this, matrix, fTileMode);
+
+    return true;
+}
+
+#else
+
+bool SkRadialGradient::asFragmentProcessor(GrContext*, const SkPaint&, const SkMatrix&,
+                                           const SkMatrix*, GrColor*, GrProcessorDataManager*,
+                                           GrFragmentProcessor**) const {
+    SkDEBUGFAIL("Should not call in GPU-less build");
+    return false;
 }
 
 #endif

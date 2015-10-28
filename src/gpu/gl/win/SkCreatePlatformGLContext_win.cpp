@@ -39,23 +39,23 @@ private:
 ATOM WinGLContext::gWC = 0;
 
 WinGLContext::WinGLContext(GrGLStandard forcedGpuAPI)
-    : fWindow(nullptr)
-    , fDeviceContext(nullptr)
+    : fWindow(NULL)
+    , fDeviceContext(NULL)
     , fGlRenderContext(0)
-    , fPbufferContext(nullptr) {
-    HINSTANCE hInstance = (HINSTANCE)GetModuleHandle(nullptr);
+    , fPbufferContext(NULL) {
+    HINSTANCE hInstance = (HINSTANCE)GetModuleHandle(NULL);
 
     if (!gWC) {
         WNDCLASS wc;
         wc.cbClsExtra = 0;
         wc.cbWndExtra = 0;
-        wc.hbrBackground = nullptr;
-        wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
-        wc.hIcon = LoadIcon(nullptr, IDI_APPLICATION);
+        wc.hbrBackground = NULL;
+        wc.hCursor = LoadCursor(NULL, IDC_ARROW);
+        wc.hIcon = LoadIcon(NULL, IDI_APPLICATION);
         wc.hInstance = hInstance;
         wc.lpfnWndProc = (WNDPROC) DefWindowProc;
         wc.lpszClassName = TEXT("Griffin");
-        wc.lpszMenuName = nullptr;
+        wc.lpszMenuName = NULL;
         wc.style = CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
 
         gWC = RegisterClass(&wc);
@@ -69,8 +69,8 @@ WinGLContext::WinGLContext(GrGLStandard forcedGpuAPI)
                                  TEXT("The Invisible Man"),
                                  WS_OVERLAPPEDWINDOW,
                                  0, 0, 1, 1,
-                                 nullptr, nullptr,
-                                 hInstance, nullptr))) {
+                                 NULL, NULL,
+                                 hInstance, NULL))) {
         SkDebugf("Could not create window.\n");
         return;
     }
@@ -91,7 +91,7 @@ WinGLContext::WinGLContext(GrGLStandard forcedGpuAPI)
     HDC dc;
     HGLRC glrc;
 
-    if (nullptr == fPbufferContext) {
+    if (NULL == fPbufferContext) {
         if (!(fGlRenderContext = SkCreateWGLContext(fDeviceContext, 0, contextType))) {
             SkDebugf("Could not create rendering context.\n");
             this->destroyGLContext();
@@ -116,7 +116,7 @@ WinGLContext::WinGLContext(GrGLStandard forcedGpuAPI)
     }
 
     SkAutoTUnref<const GrGLInterface> gl(GrGLCreateNativeInterface());
-    if (nullptr == gl.get()) {
+    if (NULL == gl.get()) {
         SkDebugf("Could not create GL interface.\n");
         this->destroyGLContext();
         return;
@@ -155,7 +155,7 @@ void WinGLContext::onPlatformMakeCurrent() const {
     HDC dc;
     HGLRC glrc;
 
-    if (nullptr == fPbufferContext) {
+    if (NULL == fPbufferContext) {
         dc = fDeviceContext;
         glrc = fGlRenderContext;
     } else {
@@ -171,7 +171,7 @@ void WinGLContext::onPlatformMakeCurrent() const {
 void WinGLContext::onPlatformSwapBuffers() const {
     HDC dc;
 
-    if (nullptr == fPbufferContext) {
+    if (NULL == fPbufferContext) {
         dc = fDeviceContext;
     } else {
         dc = fPbufferContext->getDC();
@@ -188,10 +188,10 @@ GrGLFuncPtr WinGLContext::onPlatformGetProcAddress(const char* name) const {
 } // anonymous namespace
 
 SkGLContext* SkCreatePlatformGLContext(GrGLStandard forcedGpuAPI) {
-    WinGLContext* ctx = new WinGLContext(forcedGpuAPI);
+    WinGLContext* ctx = SkNEW_ARGS(WinGLContext, (forcedGpuAPI));
     if (!ctx->isValid()) {
-        delete ctx;
-        return nullptr;
+        SkDELETE(ctx);
+        return NULL;
     }
     return ctx;
 }

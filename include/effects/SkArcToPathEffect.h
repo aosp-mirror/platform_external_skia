@@ -19,7 +19,7 @@ public:
         if (radius <= 0) {
             return NULL;
         }
-        return new SkArcToPathEffect(radius);
+        return SkNEW_ARGS(SkArcToPathEffect, (radius));
     }
 
     bool filterPath(SkPath* dst, const SkPath& src, SkStrokeRec*, const SkRect*) const override;

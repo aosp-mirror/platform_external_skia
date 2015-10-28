@@ -47,7 +47,7 @@ protected:
                 size_t rowBytes;
                 const void* addr = surfCanvas->peekPixels(&info, &rowBytes);
                 if (addr && bitmap.installPixels(info, const_cast<void*>(addr), rowBytes)) {
-                    canvas->drawBitmap(bitmap, 0, 0, nullptr);
+                    canvas->drawBitmap(bitmap, 0, 0, NULL);
                 }
             }
 
@@ -55,12 +55,12 @@ protected:
             canvas->translate(120, 0);
             SkAutoROCanvasPixels ropixels(surfCanvas);
             if (ropixels.asROBitmap(&bitmap)) {
-                canvas->drawBitmap(bitmap, 0, 0, nullptr);
+                canvas->drawBitmap(bitmap, 0, 0, NULL);
             }
 
             // test Surface
             canvas->translate(120, 0);
-            surface->draw(canvas, 0, 0, nullptr);
+            surface->draw(canvas, 0, 0, NULL);
         }
     }
 
@@ -68,4 +68,4 @@ private:
     typedef skiagm::GM INHERITED;
 };
 
-DEF_GM(return new PeekPixelsGM;)
+DEF_GM( return SkNEW(PeekPixelsGM); )

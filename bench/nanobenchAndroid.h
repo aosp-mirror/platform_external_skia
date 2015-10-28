@@ -9,14 +9,14 @@
 #define nanobenchAndroid_DEFINED
 
 #include "SkAndroidSDKCanvas.h"
-#include <utils/TestWindowContext.h>
+#include "SkHwuiRenderer.h"
 
 #include "nanobench.h"
 
 struct HWUITarget : public Target {
     explicit HWUITarget(const Config& c, Benchmark* bench);
 
-    android::uirenderer::TestWindowContext renderer;
+    SkHwuiRenderer renderer;
     SkAndroidSDKCanvas fc;
 
     void setup() override;

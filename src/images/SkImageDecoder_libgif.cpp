@@ -77,8 +77,8 @@ public:
             if (gStartingIterlaceYValue +
                     SK_ARRAY_COUNT(gStartingIterlaceYValue) == fStartYPtr) {
                 // we done
-                SkDEBUGCODE(fStartYPtr = nullptr;)
-                SkDEBUGCODE(fDeltaYPtr = nullptr;)
+                SkDEBUGCODE(fStartYPtr = NULL;)
+                SkDEBUGCODE(fDeltaYPtr = NULL;)
                 y = 0;
             } else {
                 y = *fStartYPtr++;
@@ -114,21 +114,21 @@ void CheckFreeExtension(SavedImage* Image) {
     }
 }
 
-// return nullptr on failure
+// return NULL on failure
 static const ColorMapObject* find_colormap(const GifFileType* gif) {
     const ColorMapObject* cmap = gif->Image.ColorMap;
-    if (nullptr == cmap) {
+    if (NULL == cmap) {
         cmap = gif->SColorMap;
     }
 
-    if (nullptr == cmap) {
+    if (NULL == cmap) {
         // no colormap found
-        return nullptr;
+        return NULL;
     }
     // some sanity checks
     if (cmap && ((unsigned)cmap->ColorCount > 256 ||
                  cmap->ColorCount != (1 << cmap->BitsPerPixel))) {
-        cmap = nullptr;
+        cmap = NULL;
     }
     return cmap;
 }
@@ -197,7 +197,7 @@ static void sanitize_indexed_bitmap(SkBitmap* bm) {
         SkAutoLockPixels alp(*bm);
         if (bm->getPixels()) {
             SkColorTable* ct = bm->getColorTable();  // Index8 must have it.
-            SkASSERT(ct != nullptr);
+            SkASSERT(ct != NULL);
             uint32_t count = ct->count();
             SkASSERT(count > 0);
             SkASSERT(count <= 0x100);
@@ -235,7 +235,7 @@ int close_gif(GifFileType* gif) {
 #if GIFLIB_MAJOR < 5 || (GIFLIB_MAJOR == 5 && GIFLIB_MINOR == 0)
     return DGifCloseFile(gif);
 #else
-    return DGifCloseFile(gif, nullptr);
+    return DGifCloseFile(gif, NULL);
 #endif
 }
 }//namespace
@@ -244,16 +244,16 @@ SkImageDecoder::Result SkGIFImageDecoder::onDecode(SkStream* sk_stream, SkBitmap
 #if GIFLIB_MAJOR < 5
     GifFileType* gif = DGifOpen(sk_stream, DecodeCallBackProc);
 #else
-    GifFileType* gif = DGifOpen(sk_stream, DecodeCallBackProc, nullptr);
+    GifFileType* gif = DGifOpen(sk_stream, DecodeCallBackProc, NULL);
 #endif
-    if (nullptr == gif) {
+    if (NULL == gif) {
         return error_return(*bm, "DGifOpen");
     }
 
     SkAutoTCallIProc<GifFileType, close_gif> acp(gif);
 
     SavedImage temp_save;
-    temp_save.ExtensionBlocks=nullptr;
+    temp_save.ExtensionBlocks=NULL;
     temp_save.ExtensionBlockCount=0;
     SkAutoTCallVProc<SavedImage, CheckFreeExtension> acp2(&temp_save);
 
@@ -337,7 +337,7 @@ SkImageDecoder::Result SkGIFImageDecoder::onDecode(SkStream* sk_stream, SkBitmap
                 // Declare colorPtr here for scope.
                 SkPMColor colorPtr[256]; // storage for worst-case
                 const ColorMapObject* cmap = find_colormap(gif);
-                if (cmap != nullptr) {
+                if (cmap != NULL) {
                     SkASSERT(cmap->ColorCount == (1 << (cmap->BitsPerPixel)));
                     colorCount = cmap->ColorCount;
                     if (colorCount > 256) {
@@ -350,7 +350,7 @@ SkImageDecoder::Result SkGIFImageDecoder::onDecode(SkStream* sk_stream, SkBitmap
                                                        cmap->Colors[index].Blue);
                     }
                 } else {
-                    // find_colormap() returned nullptr.  Some (rare, broken)
+                    // find_colormap() returned NULL.  Some (rare, broken)
                     // GIFs don't have a color table, so we force one.
                     gif_warning(*bm, "missing colormap");
                     colorCount = 256;
@@ -365,7 +365,7 @@ SkImageDecoder::Result SkGIFImageDecoder::onDecode(SkStream* sk_stream, SkBitmap
                     fillIndex = 0;  // If not, fix it.
                 }
 
-                SkAutoTUnref<SkColorTable> ctable(new SkColorTable(colorPtr, colorCount));
+                SkAutoTUnref<SkColorTable> ctable(SkNEW_ARGS(SkColorTable, (colorPtr, colorCount)));
                 if (!this->allocPixelRef(bm, ctable)) {
                     return error_return(*bm, "allocPixelRef");
                 }
@@ -471,7 +471,7 @@ SkImageDecoder::Result SkGIFImageDecoder::onDecode(SkStream* sk_stream, SkBitmap
                 return error_return(*bm, "DGifGetExtension");
             }
 
-            while (extData != nullptr) {
+            while (extData != NULL) {
                 /* Create an extension block with our data */
 #if GIFLIB_MAJOR < 5
                 if (AddExtensionBlock(&temp_save, extData[0],
@@ -524,9 +524,9 @@ static bool is_gif(SkStreamRewindable* stream) {
 
 static SkImageDecoder* sk_libgif_dfactory(SkStreamRewindable* stream) {
     if (is_gif(stream)) {
-        return new SkGIFImageDecoder;
+        return SkNEW(SkGIFImageDecoder);
     }
-    return nullptr;
+    return NULL;
 }
 
 static SkImageDecoder_DecodeReg gReg(sk_libgif_dfactory);

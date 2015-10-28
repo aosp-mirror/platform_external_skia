@@ -6,8 +6,8 @@
  */
 
 #include "SkData.h"
+#include "SkLazyPtr.h"
 #include "SkOSFile.h"
-#include "SkOncePtr.h"
 #include "SkReadBuffer.h"
 #include "SkStream.h"
 #include "SkWriteBuffer.h"
@@ -26,8 +26,8 @@ SkData::SkData(const void* ptr, size_t size, ReleaseProc proc, void* context) {
 SkData::SkData(size_t size) {
     fPtr = (char*)(this + 1);   // contents are immediately after this
     fSize = size;
-    fReleaseProc = nullptr;
-    fReleaseProcContext = nullptr;
+    fReleaseProc = NULL;
+    fReleaseProcContext = NULL;
 }
 
 SkData::~SkData() {
@@ -37,7 +37,7 @@ SkData::~SkData() {
 }
 
 bool SkData::equals(const SkData* other) const {
-    if (nullptr == other) {
+    if (NULL == other) {
         return false;
     }
 
@@ -80,9 +80,14 @@ SkData* SkData::PrivateNewWithCopy(const void* srcOrNull, size_t length) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-SK_DECLARE_STATIC_ONCE_PTR(SkData, gEmpty);
+// As a template argument these must have external linkage.
+SkData* sk_new_empty_data() { return new SkData(NULL, 0, NULL, NULL); }
+namespace { void sk_unref_data(SkData* ptr) { return SkSafeUnref(ptr); } }
+
+SK_DECLARE_STATIC_LAZY_PTR(SkData, empty, sk_new_empty_data, sk_unref_data);
+
 SkData* SkData::NewEmpty() {
-    return SkRef(gEmpty.get([]{return new SkData(nullptr, 0, nullptr, nullptr); }));
+    return SkRef(empty.get());
 }
 
 // assumes fPtr was allocated via sk_malloc
@@ -91,7 +96,7 @@ static void sk_free_releaseproc(const void* ptr, void*) {
 }
 
 SkData* SkData::NewFromMalloc(const void* data, size_t length) {
-    return new SkData(data, length, sk_free_releaseproc, nullptr);
+    return new SkData(data, length, sk_free_releaseproc, NULL);
 }
 
 SkData* SkData::NewWithCopy(const void* src, size_t length) {
@@ -100,7 +105,7 @@ SkData* SkData::NewWithCopy(const void* src, size_t length) {
 }
 
 SkData* SkData::NewUninitialized(size_t length) {
-    return PrivateNewWithCopy(nullptr, length);
+    return PrivateNewWithCopy(NULL, length);
 }
 
 SkData* SkData::NewWithProc(const void* ptr, size_t length, ReleaseProc proc, void* context) {
@@ -116,17 +121,17 @@ static void sk_mmap_releaseproc(const void* addr, void* ctx) {
 SkData* SkData::NewFromFILE(SkFILE* f) {
     size_t size;
     void* addr = sk_fmmap(f, &size);
-    if (nullptr == addr) {
-        return nullptr;
+    if (NULL == addr) {
+        return NULL;
     }
 
     return SkData::NewWithProc(addr, size, sk_mmap_releaseproc, reinterpret_cast<void*>(size));
 }
 
 SkData* SkData::NewFromFileName(const char path[]) {
-    SkFILE* f = path ? sk_fopen(path, kRead_SkFILE_Flag) : nullptr;
-    if (nullptr == f) {
-        return nullptr;
+    SkFILE* f = path ? sk_fopen(path, kRead_SkFILE_Flag) : NULL;
+    if (NULL == f) {
+        return NULL;
     }
     SkData* data = NewFromFILE(f);
     sk_fclose(f);
@@ -136,11 +141,11 @@ SkData* SkData::NewFromFileName(const char path[]) {
 SkData* SkData::NewFromFD(int fd) {
     size_t size;
     void* addr = sk_fdmmap(fd, &size);
-    if (nullptr == addr) {
-        return nullptr;
+    if (NULL == addr) {
+        return NULL;
     }
 
-    return SkData::NewWithProc(addr, size, sk_mmap_releaseproc, nullptr);
+    return SkData::NewWithProc(addr, size, sk_mmap_releaseproc, NULL);
 }
 
 // assumes context is a SkData
@@ -173,7 +178,7 @@ SkData* SkData::NewSubset(const SkData* src, size_t offset, size_t length) {
 
 SkData* SkData::NewWithCString(const char cstr[]) {
     size_t size;
-    if (nullptr == cstr) {
+    if (NULL == cstr) {
         cstr = "";
         size = 1;
     } else {
@@ -187,7 +192,7 @@ SkData* SkData::NewWithCString(const char cstr[]) {
 SkData* SkData::NewFromStream(SkStream* stream, size_t size) {
     SkAutoDataUnref data(SkData::NewUninitialized(size));
     if (stream->read(data->writable_data(), size) != size) {
-        return nullptr;
+        return NULL;
     }
     return data.detach();
 }

@@ -7,7 +7,6 @@
 
 #include "GrGLTexture.h"
 #include "GrGLGpu.h"
-#include "SkTraceMemoryDump.h"
 
 #define GPUGL static_cast<GrGLGpu*>(this->getGpu())
 #define GL_CALL(X) GR_GL_CALL(GPUGL->glInterface(), X)
@@ -30,7 +29,6 @@ void GrGLTexture::init(const GrSurfaceDesc& desc, const IDDesc& idDesc) {
     SkASSERT(0 != idDesc.fTextureID);
     fTexParams.invalidate();
     fTexParamsTimestamp = GrGpu::kExpiredTimestamp;
-    fTarget = idDesc.fTarget;
     fTextureID = idDesc.fTextureID;
     fTextureIDLifecycle = idDesc.fLifeCycle;
 }
@@ -52,12 +50,4 @@ void GrGLTexture::onAbandon() {
 
 GrBackendObject GrGLTexture::getTextureHandle() const {
     return static_cast<GrBackendObject>(this->textureID());
-}
-
-void GrGLTexture::setMemoryBacking(SkTraceMemoryDump* traceMemoryDump,
-                                   const SkString& dumpName) const {
-    SkString texture_id;
-    texture_id.appendU32(this->textureID());
-    traceMemoryDump->setMemoryBacking(dumpName.c_str(), "gl_texture",
-                                      texture_id.c_str());
 }

@@ -13,7 +13,7 @@
 GrGLContext* GrGLContext::Create(const GrGLInterface* interface, const GrContextOptions& options) {
     // We haven't validated the GrGLInterface yet, so check for GetString function pointer
     if (!interface->fFunctions.fGetString) {
-        return nullptr;
+        return NULL;
     }
     ConstructorArgs args;
     args.fInterface = interface;
@@ -27,16 +27,16 @@ GrGLContext* GrGLContext::Create(const GrGLInterface* interface, const GrContext
     const char* renderer = reinterpret_cast<const char*>(rendererUByte);
 
     if (!interface->validate()) {
-        return nullptr;
+        return NULL;
     }
 
     args.fGLVersion = GrGLGetVersionFromString(ver);
     if (GR_GL_INVALID_VER == args.fGLVersion) {
-        return nullptr;
+        return NULL;
     }
 
     if (!GrGLGetGLSLGeneration(interface, &args.fGLSLGeneration)) {
-        return nullptr;
+        return NULL;
     }
 
     args.fVendor = GrGLGetVendor(interface);
@@ -60,7 +60,7 @@ GrGLContext* GrGLContext::Create(const GrGLInterface* interface, const GrContext
 
     args.fContextOptions = &options;
 
-    return new GrGLContext(args);
+    return SkNEW_ARGS(GrGLContext, (args));
 }
 
 GrGLContextInfo::GrGLContextInfo(const ConstructorArgs& args) {
@@ -72,5 +72,5 @@ GrGLContextInfo::GrGLContextInfo(const ConstructorArgs& args) {
     fDriver = args.fDriver;
     fDriverVersion = args.fDriverVersion;
 
-    fGLCaps.reset(new GrGLCaps(*args.fContextOptions, *this, fInterface));
+    fGLCaps.reset(SkNEW_ARGS(GrGLCaps, (*args.fContextOptions, *this, fInterface)));
 }

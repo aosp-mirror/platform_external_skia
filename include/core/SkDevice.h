@@ -9,12 +9,12 @@
 #define SkDevice_DEFINED
 
 #include "SkRefCnt.h"
+#include "SkBitmap.h"
 #include "SkCanvas.h"
 #include "SkColor.h"
 #include "SkImageFilter.h"
 #include "SkSurfaceProps.h"
 
-class SkBitmap;
 class SkClipStack;
 class SkDraw;
 class SkDrawFilter;
@@ -217,7 +217,7 @@ protected:
     virtual void drawBitmapRect(const SkDraw&, const SkBitmap&,
                                 const SkRect* srcOrNull, const SkRect& dst,
                                 const SkPaint& paint,
-                                SkCanvas::SrcRectConstraint) = 0;
+                                SK_VIRTUAL_CONSTRAINT_TYPE) = 0;
     virtual void drawBitmapNine(const SkDraw&, const SkBitmap&, const SkIRect& center,
                                const SkRect& dst, const SkPaint&);
 
@@ -372,7 +372,8 @@ private:
     friend class SkDraw;
     friend class SkDrawIter;
     friend class SkDeviceFilteredPaint;
-    friend class SkImageFilter::DeviceProxy;
+    friend class SkImageFilter::Proxy;
+    friend class SkDeferredDevice;    // for newSurface
     friend class SkNoPixelsBitmapDevice;
 
     friend class SkSurface_Raster;

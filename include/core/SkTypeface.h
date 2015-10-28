@@ -10,11 +10,11 @@
 #ifndef SkTypeface_DEFINED
 #define SkTypeface_DEFINED
 
-#include "../private/SkOncePtr.h"
-#include "../private/SkWeakRefCnt.h"
 #include "SkFontStyle.h"
+#include "SkLazyPtr.h"
 #include "SkRect.h"
 #include "SkString.h"
+#include "SkWeakRefCnt.h"
 
 class SkDescriptor;
 class SkFontData;
@@ -144,6 +144,10 @@ public:
      */
     void serialize(SkWStream*) const;
 
+    /** Like serialize, but write the whole font (not just a signature) if possible.
+     */
+    void serializeForcingEmbedding(SkWStream*) const;
+
     /** Given the data previously written by serialize(), return a new instance
         to a typeface referring to the same font. If that font is not available,
         return null. If an instance is returned, the caller is responsible for
@@ -259,7 +263,7 @@ public:
     public:
         virtual ~LocalizedStrings() { }
         virtual bool next(LocalizedString* localizedString) = 0;
-        void unref() { delete this; }
+        void unref() { SkDELETE(this); }
     };
     /**
      *  Returns an iterator which will attempt to enumerate all of the
@@ -373,7 +377,6 @@ protected:
 
 private:
     friend class SkGTypeface;
-    friend class SkRandomTypeface;
     friend class SkPDFFont;
     friend class SkPDFCIDFont;
     friend class GrPathRendering;
@@ -398,7 +401,10 @@ private:
     static SkTypeface* CreateDefault(int style);  // SkLazyPtr requires an int, not a Style.
     static void        DeleteDefault(SkTypeface*);
 
-    SkOncePtr<SkRect>   fLazyBounds;
+    struct BoundsComputer;
+//    friend struct BoundsComputer;
+
+    SkLazyPtr<SkRect>   fLazyBounds;
     SkFontID            fUniqueID;
     SkFontStyle         fStyle;
     bool                fIsFixedPitch;

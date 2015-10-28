@@ -1,10 +1,3 @@
-/*
- * Copyright 2015 Google Inc.
- *
- * Use of this source code is governed by a BSD-style license that can be
- * found in the LICENSE file.
- */
-
 #ifndef SkRecordPattern_DEFINED
 #define SkRecordPattern_DEFINED
 
@@ -19,7 +12,7 @@ namespace SkRecords {
 template <typename T>
 class Is {
 public:
-    Is() : fPtr(nullptr) {}
+    Is() : fPtr(NULL) {}
 
     typedef T type;
     type* get() { return fPtr; }
@@ -31,7 +24,7 @@ public:
 
     template <typename U>
     bool operator()(U*) {
-        fPtr = nullptr;
+        fPtr = NULL;
         return false;
     }
 
@@ -41,27 +34,28 @@ private:
 
 // Matches any command that draws, and stores its paint.
 class IsDraw {
+    SK_CREATE_MEMBER_DETECTOR(paint);
 public:
-    IsDraw() : fPaint(nullptr) {}
+    IsDraw() : fPaint(NULL) {}
 
     typedef SkPaint type;
     type* get() { return fPaint; }
 
     template <typename T>
-    SK_WHEN(T::kTags & kDraw_Tag, bool) operator()(T* draw) {
+    SK_WHEN(HasMember_paint<T>, bool) operator()(T* draw) {
         fPaint = AsPtr(draw->paint);
         return true;
     }
 
-    bool operator()(DrawDrawable*) {
-        static_assert(DrawDrawable::kTags & kDraw_Tag, "");
-        fPaint = nullptr;
-        return true;
+    template <typename T>
+    SK_WHEN(!HasMember_paint<T>, bool) operator()(T*) {
+        fPaint = NULL;
+        return false;
     }
 
-    template <typename T>
-    SK_WHEN(!(T::kTags & kDraw_Tag), bool) operator()(T* draw) {
-        fPaint = nullptr;
+    // SaveLayer has an SkPaint named paint, but it's not a draw.
+    bool operator()(SaveLayer*) {
+        fPaint = NULL;
         return false;
     }
 
@@ -115,14 +109,14 @@ class Cons {
 public:
     // If this pattern matches the SkRecord starting at i,
     // return the index just past the end of the pattern, otherwise return 0.
-    SK_ALWAYS_INLINE int match(SkRecord* record, int i) {
+    SK_ALWAYS_INLINE unsigned match(SkRecord* record, unsigned i) {
         i = this->matchHead(&fHead, record, i);
         return i == 0 ? 0 : fTail.match(record, i);
     }
 
     // Starting from *end, walk through the SkRecord to find the first span matching this pattern.
     // If there is no such span, return false.  If there is, return true and set [*begin, *end).
-    SK_ALWAYS_INLINE bool search(SkRecord* record, int* begin, int* end) {
+    SK_ALWAYS_INLINE bool search(SkRecord* record, unsigned* begin, unsigned* end) {
         for (*begin = *end; *begin < record->count(); ++(*begin)) {
             *end = this->match(record, *begin);
             if (*end != 0) {
@@ -143,7 +137,7 @@ public:
 private:
     // If head isn't a Star, try to match at i once.
     template <typename T>
-    int matchHead(T*, SkRecord* record, int i) {
+    unsigned matchHead(T*, SkRecord* record, unsigned i) {
         if (i < record->count()) {
             if (record->mutate<bool>(i, fHead)) {
                 return i+1;
@@ -154,7 +148,7 @@ private:
 
     // If head is a Star, walk i until it doesn't match.
     template <typename T>
-    int matchHead(Star<T>*, SkRecord* record, int i) {
+    unsigned matchHead(Star<T>*, SkRecord* record, unsigned i) {
         while (i < record->count()) {
             if (!record->mutate<bool>(i, fHead)) {
                 return i;
@@ -174,7 +168,7 @@ private:
 // Nil is the end of every pattern Cons chain.
 struct Nil {
     // Bottoms out recursion down the fTail chain.  Just return whatever i the front decided on.
-    int match(SkRecord*, int i) { return i; }
+    unsigned match(SkRecord*, unsigned i) { return i; }
 };
 
 // These Pattern# types are syntax sugar over Cons and Nil, just to help eliminate some of the

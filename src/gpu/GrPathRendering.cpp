@@ -19,7 +19,9 @@ public:
 #ifdef SK_DEBUG
         , fDesc(desc.copy())
 #endif
-    {}
+    {
+        fFlipMatrix.setScale(1, -1);
+    }
 
     virtual ~GlyphGenerator() {
 #ifdef SK_DEBUG
@@ -37,6 +39,7 @@ public:
         fScalerContext->getMetrics(&skGlyph);
 
         fScalerContext->getPath(skGlyph, out);
+        out->transform(fFlipMatrix); // Load glyphs with the inverted y-direction.
     }
 #ifdef SK_DEBUG
     bool isEqualTo(const SkDescriptor& desc) const override {
@@ -45,6 +48,7 @@ public:
 #endif
 private:
     const SkAutoTDelete<SkScalerContext> fScalerContext;
+    SkMatrix fFlipMatrix;
 #ifdef SK_DEBUG
     SkDescriptor* const fDesc;
 #endif
@@ -53,13 +57,13 @@ private:
 GrPathRange* GrPathRendering::createGlyphs(const SkTypeface* typeface,
                                            const SkDescriptor* desc,
                                            const GrStrokeInfo& stroke) {
-    if (nullptr == typeface) {
+    if (NULL == typeface) {
         typeface = SkTypeface::GetDefaultTypeface();
-        SkASSERT(nullptr != typeface);
+        SkASSERT(NULL != typeface);
     }
 
     if (desc) {
-        SkAutoTUnref<GlyphGenerator> generator(new GlyphGenerator(*typeface, *desc));
+        SkAutoTUnref<GlyphGenerator> generator(SkNEW_ARGS(GlyphGenerator, (*typeface, *desc)));
         return this->createPathRange(generator, stroke);
     }
 
@@ -77,6 +81,6 @@ GrPathRange* GrPathRendering::createGlyphs(const SkTypeface* typeface,
     genericDesc->addEntry(kRec_SkDescriptorTag, sizeof(rec), &rec);
     genericDesc->computeChecksum();
 
-    SkAutoTUnref<GlyphGenerator> generator(new GlyphGenerator(*typeface, *genericDesc));
+    SkAutoTUnref<GlyphGenerator> generator(SkNEW_ARGS(GlyphGenerator, (*typeface, *genericDesc)));
     return this->createPathRange(generator, stroke);
 }

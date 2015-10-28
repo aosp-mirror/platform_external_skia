@@ -11,12 +11,11 @@
 
 #if SK_SUPPORT_GPU
 #include "GLBench.h"
-#include "gl/GrGLContext.h"
+#include "gl/GrGLGLSL.h"
 #include "gl/GrGLInterface.h"
+#include "gl/GrGLShaderVar.h"
 #include "gl/GrGLUtil.h"
-#include "glsl/GrGLSL.h"
 #include "glsl/GrGLSLCaps.h"
-#include "glsl/GrGLSLShaderVar.h"
 
 /*
  * This is a native GL benchmark for instanced arrays vs vertex buffer objects.  To benchmark this
@@ -63,7 +62,7 @@ protected:
 
     const GrGLContext* onGetGLContext(const GrGLContext*) override;
     void setup(const GrGLContext*) override;
-    void glDraw(int loops, const GrGLContext*) override;
+    void glDraw(const int loops, const GrGLContext*) override;
     void teardown(const GrGLInterface*) override;
 
 private:
@@ -107,20 +106,19 @@ private:
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 GrGLuint GLCpuPosInstancedArraysBench::setupShader(const GrGLContext* ctx) {
-    const GrGLSLCaps* glslCaps = ctx->caps()->glslCaps();
-    const char* version = glslCaps->versionDeclString();
+    const char* version = GrGLGetGLSLVersionDecl(*ctx);
 
     // setup vertex shader
-    GrGLSLShaderVar aPosition("a_position", kVec2f_GrSLType, GrShaderVar::kAttribute_TypeModifier);
-    GrGLSLShaderVar aColor("a_color", kVec3f_GrSLType, GrShaderVar::kAttribute_TypeModifier);
-    GrGLSLShaderVar oColor("o_color", kVec3f_GrSLType, GrShaderVar::kVaryingOut_TypeModifier);
+    GrGLShaderVar aPosition("a_position", kVec2f_GrSLType, GrShaderVar::kAttribute_TypeModifier);
+    GrGLShaderVar aColor("a_color", kVec3f_GrSLType, GrShaderVar::kAttribute_TypeModifier);
+    GrGLShaderVar oColor("o_color", kVec3f_GrSLType, GrShaderVar::kVaryingOut_TypeModifier);
 
     SkString vshaderTxt(version);
-    aPosition.appendDecl(glslCaps, &vshaderTxt);
+    aPosition.appendDecl(*ctx, &vshaderTxt);
     vshaderTxt.append(";\n");
-    aColor.appendDecl(glslCaps, &vshaderTxt);
+    aColor.appendDecl(*ctx, &vshaderTxt);
     vshaderTxt.append(";\n");
-    oColor.appendDecl(glslCaps, &vshaderTxt);
+    oColor.appendDecl(*ctx, &vshaderTxt);
     vshaderTxt.append(";\n");
 
     vshaderTxt.append(
@@ -133,16 +131,17 @@ GrGLuint GLCpuPosInstancedArraysBench::setupShader(const GrGLContext* ctx) {
     const GrGLInterface* gl = ctx->interface();
 
     // setup fragment shader
-    GrGLSLShaderVar oFragColor("o_FragColor", kVec4f_GrSLType, GrShaderVar::kOut_TypeModifier);
+    GrGLShaderVar oFragColor("o_FragColor", kVec4f_GrSLType, GrShaderVar::kOut_TypeModifier);
     SkString fshaderTxt(version);
-    GrGLSLAppendDefaultFloatPrecisionDeclaration(kDefault_GrSLPrecision, *glslCaps, &fshaderTxt);
+    GrGLAppendGLSLDefaultFloatPrecisionDeclaration(kDefault_GrSLPrecision, gl->fStandard,
+                                                   &fshaderTxt);
     oColor.setTypeModifier(GrShaderVar::kVaryingIn_TypeModifier);
-    oColor.appendDecl(glslCaps, &fshaderTxt);
+    oColor.appendDecl(*ctx, &fshaderTxt);
     fshaderTxt.append(";\n");
 
     const char* fsOutName;
-    if (glslCaps->mustDeclareFragmentShaderOutput()) {
-        oFragColor.appendDecl(glslCaps, &fshaderTxt);
+    if (ctx->caps()->glslCaps()->mustDeclareFragmentShaderOutput()) {
+        oFragColor.appendDecl(*ctx, &fshaderTxt);
         fshaderTxt.append(";\n");
         fsOutName = oFragColor.c_str();
     } else {
@@ -173,7 +172,7 @@ static void setup_matrices(int numQuads, Func f) {
 const GrGLContext* GLCpuPosInstancedArraysBench::onGetGLContext(const GrGLContext* ctx) {
     // We only care about gpus with drawArraysInstanced support
     if (!ctx->interface()->fFunctions.fDrawArraysInstanced) {
-        return nullptr;
+        return NULL;
     }
     return ctx;
 }
@@ -340,7 +339,7 @@ void GLCpuPosInstancedArraysBench::setup(const GrGLContext* ctx) {
     GR_GL_CALL(gl, BindVertexArray(fVAO));
 }
 
-void GLCpuPosInstancedArraysBench::glDraw(int loops, const GrGLContext* ctx) {
+void GLCpuPosInstancedArraysBench::glDraw(const int loops, const GrGLContext* ctx) {
     const GrGLInterface* gl = ctx->interface();
 
     uint32_t maxTrianglesPerFlush = fDrawDiv == 0 ?  kNumTri :

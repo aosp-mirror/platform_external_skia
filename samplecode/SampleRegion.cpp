@@ -43,12 +43,12 @@ static void test_strokerect(SkCanvas* canvas) {
     // use the rect
     c.clear(SK_ColorTRANSPARENT);
     c.drawRect(r, paint);
-    canvas->drawBitmap(bitmap, 0, 0, nullptr);
+    canvas->drawBitmap(bitmap, 0, 0, NULL);
 
     // use the path
     c.clear(SK_ColorTRANSPARENT);
     c.drawPath(path, paint);
-    canvas->drawBitmap(bitmap, SkIntToScalar(2*width), 0, nullptr);
+    canvas->drawBitmap(bitmap, SkIntToScalar(2*width), 0, NULL);
 }
 
 static void drawFadingText(SkCanvas* canvas,
@@ -65,7 +65,7 @@ static void drawFadingText(SkCanvas* canvas,
     // antialiasing
     bounds.inset(-SkIntToScalar(2), -SkIntToScalar(2));
 
-    canvas->saveLayer(&bounds, nullptr);
+    canvas->saveLayer(&bounds, NULL);
     canvas->drawText(text, len, x, y, paint);
 
     const SkPoint pts[] = {
@@ -112,7 +112,7 @@ static void test_text(SkCanvas* canvas) {
     canvas->drawText(str, len, x, y, paint);
 
     y += 20;
-    paint.setShader(nullptr);
+    paint.setShader(NULL);
     drawFadingText(canvas, str, len, x, y, paint);
 }
 
@@ -269,7 +269,7 @@ protected:
 
             {
                 char    buffer[1000];
-                SkDEBUGCODE(size_t  size = ) tmp.writeToMemory(nullptr);
+                SkDEBUGCODE(size_t  size = ) tmp.writeToMemory(NULL);
                 SkASSERT(size <= sizeof(buffer));
                 SkDEBUGCODE(size_t  size2 = ) tmp.writeToMemory(buffer);
                 SkASSERT(size == size2);
@@ -392,13 +392,13 @@ protected:
     virtual SkView::Click* onFindClickHandler(SkScalar x, SkScalar y,
                                               unsigned modi) override {
         return fRect.contains(SkScalarRoundToInt(x),
-                              SkScalarRoundToInt(y)) ? new Click(this) : nullptr;
+                              SkScalarRoundToInt(y)) ? new Click(this) : NULL;
     }
 
     bool onClick(Click* click) override {
         fRect.offset(click->fICurr.fX - click->fIPrev.fX,
                      click->fICurr.fY - click->fIPrev.fY);
-        this->inval(nullptr);
+        this->inval(NULL);
         return true;
     }
 

@@ -24,7 +24,7 @@ void SkMergeImageFilter::initAllocModes() {
             fModes = SkTCast<uint8_t*>(sk_malloc_throw(size));
         }
     } else {
-        fModes = nullptr;
+        fModes = NULL;
     }
 }
 
@@ -36,7 +36,7 @@ void SkMergeImageFilter::initModes(const SkXfermode::Mode modes[]) {
             fModes[i] = SkToU8(modes[i]);
         }
     } else {
-        fModes = nullptr;
+        fModes = NULL;
     }
 }
 
@@ -71,7 +71,7 @@ bool SkMergeImageFilter::onFilterImage(Proxy* proxy, const SkBitmap& src,
     const int y0 = bounds.top();
 
     SkAutoTUnref<SkBaseDevice> dst(proxy->createDevice(bounds.width(), bounds.height()));
-    if (nullptr == dst) {
+    if (NULL == dst) {
         return false;
     }
     SkCanvas canvas(dst);
@@ -81,17 +81,24 @@ bool SkMergeImageFilter::onFilterImage(Proxy* proxy, const SkBitmap& src,
     int inputCount = countInputs();
     for (int i = 0; i < inputCount; ++i) {
         SkBitmap tmp;
-        SkBitmap input = src;
+        const SkBitmap* srcPtr;
         SkIPoint pos = SkIPoint::Make(0, 0);
-        if (!this->filterInput(i, proxy, src, ctx, &input, &pos)) {
-            continue;
+        SkImageFilter* filter = getInput(i);
+        if (filter) {
+            if (!filter->filterImage(proxy, src, ctx, &tmp, &pos)) {
+                continue;
+            }
+            srcPtr = &tmp;
+        } else {
+            srcPtr = &src;
         }
+
         if (fModes) {
             paint.setXfermodeMode((SkXfermode::Mode)fModes[i]);
         } else {
-            paint.setXfermode(nullptr);
+            paint.setXfermode(NULL);
         }
-        canvas.drawSprite(input, pos.x() - x0, pos.y() - y0, &paint);
+        canvas.drawSprite(*srcPtr, pos.x() - x0, pos.y() - y0, &paint);
         didProduceResult = true;
     }
 
@@ -107,7 +114,7 @@ bool SkMergeImageFilter::onFilterImage(Proxy* proxy, const SkBitmap& src,
 SkFlattenable* SkMergeImageFilter::CreateProc(SkReadBuffer& buffer) {
     Common common;
     if (!common.unflatten(buffer, -1)) {
-        return nullptr;
+        return NULL;
     }
 
     const int count = common.inputCount();
@@ -116,23 +123,23 @@ SkFlattenable* SkMergeImageFilter::CreateProc(SkReadBuffer& buffer) {
         SkAutoSTArray<4, SkXfermode::Mode> modes(count);
         SkAutoSTArray<4, uint8_t> modes8(count);
         if (!buffer.readByteArray(modes8.get(), count)) {
-            return nullptr;
+            return NULL;
         }
         for (int i = 0; i < count; ++i) {
             modes[i] = (SkXfermode::Mode)modes8[i];
             buffer.validate(SkIsValidMode(modes[i]));
         }
         if (!buffer.isValid()) {
-            return nullptr;
+            return NULL;
         }
         return Create(common.inputs(), count, modes.get(), &common.cropRect());
     }
-    return Create(common.inputs(), count, nullptr, &common.cropRect());
+    return Create(common.inputs(), count, NULL, &common.cropRect());
 }
 
 void SkMergeImageFilter::flatten(SkWriteBuffer& buffer) const {
     this->INHERITED::flatten(buffer);
-    buffer.writeBool(fModes != nullptr);
+    buffer.writeBool(fModes != NULL);
     if (fModes) {
         buffer.writeByteArray(fModes, countInputs() * sizeof(fModes[0]));
     }

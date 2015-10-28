@@ -56,7 +56,7 @@ static int32_t gCounter;
 
 static void* FakeCreateTLS() {
     sk_atomic_inc(&gCounter);
-    return nullptr;
+    return NULL;
 }
 
 static void FakeDeleteTLS(void*) {

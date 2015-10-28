@@ -31,7 +31,7 @@ protected:
         return fName.c_str();
     }
 
-    void onDraw(int loops, SkCanvas*) override {
+    void onDraw(const int loops, SkCanvas*) override {
         for (int i = 0; i < loops; i++) {
             this->performTest();
         }
@@ -146,7 +146,7 @@ public:
     DecomposeMatrixBench() : INHERITED("decompose") {}
 
 protected:
-    void onDelayedSetup() override {
+    void onPreDraw() override {
         for (int i = 0; i < 10; ++i) {
             SkScalar rot0 = (fRandom.nextBool()) ? fRandom.nextRangeF(-180, 180) : 0.0f;
             SkScalar sx = fRandom.nextRangeF(-3000.f, 3000.f);

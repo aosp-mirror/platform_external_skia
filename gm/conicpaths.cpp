@@ -7,7 +7,6 @@
 
 #include "gm.h"
 #include "SkCanvas.h"
-#include "SkPath.h"
 #include "SkTArray.h"
 
 class ConicPathsGM : public skiagm::GM {
@@ -128,7 +127,7 @@ private:
     SkPath           fGiantCircle;
     typedef skiagm::GM INHERITED;
 };
-DEF_GM(return new ConicPathsGM;)
+DEF_GM( return SkNEW(ConicPathsGM); )
 
 //////////////////////////////////////////////////////////////////////////////
 

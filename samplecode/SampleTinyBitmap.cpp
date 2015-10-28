@@ -24,7 +24,7 @@ static SkBitmap make_bitmap() {
     SkBitmap bm;
     bm.allocPixels(SkImageInfo::Make(1, 1, kIndex_8_SkColorType,
                                      kPremul_SkAlphaType),
-                   nullptr, ctable);
+                   NULL, ctable);
     ctable->unref();
 
     bm.lockPixels();

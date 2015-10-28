@@ -9,8 +9,6 @@
 
 #include "SkPathOps.h"
 #include "SkTypes.h"
-
-#include <stdlib.h>
 #include <stdio.h>
 
 #ifdef SK_RELEASE
@@ -43,10 +41,8 @@
 #define DEBUG_ACTIVE_SPANS 0
 #define DEBUG_ADD_INTERSECTING_TS 0
 #define DEBUG_ADD_T 0
-#define DEBUG_ALIGNMENT 0
 #define DEBUG_ANGLE 0
 #define DEBUG_ASSEMBLE 0
-#define DEBUG_COINCIDENCE 0
 #define DEBUG_CUBIC_BINARY_SEARCH 0
 #define DEBUG_CUBIC_SPLIT 0
 #define DEBUG_DUMP_SEGMENTS 0
@@ -59,11 +55,9 @@
 #define DEBUG_SORT 0
 #define DEBUG_T_SECT 0
 #define DEBUG_T_SECT_DUMP 0
-#define DEBUG_T_SECT_LOOP_COUNT 0
 #define DEBUG_VALIDATE 0
 #define DEBUG_WINDING 0
 #define DEBUG_WINDING_AT_T 0
-
 
 #else
 
@@ -71,10 +65,8 @@
 #define DEBUG_ACTIVE_SPANS 1
 #define DEBUG_ADD_INTERSECTING_TS 1
 #define DEBUG_ADD_T 1
-#define DEBUG_ALIGNMENT 0
 #define DEBUG_ANGLE 1
 #define DEBUG_ASSEMBLE 1
-#define DEBUG_COINCIDENCE 0
 #define DEBUG_CUBIC_BINARY_SEARCH 0
 #define DEBUG_CUBIC_SPLIT 1
 #define DEBUG_DUMP_SEGMENTS 1
@@ -87,7 +79,6 @@
 #define DEBUG_SORT 1
 #define DEBUG_T_SECT 0
 #define DEBUG_T_SECT_DUMP 0
-#define DEBUG_T_SECT_LOOP_COUNT 0
 #define DEBUG_VALIDATE 1
 #define DEBUG_WINDING 1
 #define DEBUG_WINDING_AT_T 1
@@ -124,13 +115,6 @@
     extern int gDumpTSectNum;
 #endif
 
-#if DEBUG_COINCIDENCE
-    #define DEBUG_COINCIDENCE_HEALTH(contourList, id) \
-            SkPathOpsDebug::CheckHealth(contourList, id)
-#else
-    #define DEBUG_COINCIDENCE_HEALTH(contourList, id)
-#endif
-
 #define CUBIC_DEBUG_STR  "{{{%1.9g,%1.9g}, {%1.9g,%1.9g}, {%1.9g,%1.9g}, {%1.9g,%1.9g}}}"
 #define CONIC_DEBUG_STR "{{{{%1.9g,%1.9g}, {%1.9g,%1.9g}, {%1.9g,%1.9g}}}, %1.9g}"
 #define QUAD_DEBUG_STR   "{{{%1.9g,%1.9g}, {%1.9g,%1.9g}, {%1.9g,%1.9g}}}"
@@ -156,7 +140,6 @@
 class SkPathOpsDebug {
 public:
     static const char* kLVerbStr[];
-    struct GlitchLog;
 
 #if defined(SK_DEBUG) || !FORCE_RELEASE
     static int gContourID;
@@ -172,7 +155,6 @@ public:
     static const char* kPathOpStr[];
 #endif
 
-    static void CoincidentHealth(class SkOpContourHead* contourList, const char* id);
     static void MathematicaIze(char* str, size_t bufferSize);
     static bool ValidWind(int winding);
     static void WindingPrintf(int winding);
@@ -190,8 +172,6 @@ public:
     static void ShowPath(const SkPath& one, const SkPath& two, SkPathOp op, const char* name);
 
     static bool ChaseContains(const SkTDArray<class SkOpSpanBase*>& , const class SkOpSpanBase* );
-
-    static void CheckHealth(class SkOpContourHead* contourList, const char* id);
 
     static const struct SkOpAngle* DebugAngleAngle(const struct SkOpAngle*, int id);
     static class SkOpContour* DebugAngleContour(struct SkOpAngle*, int id);

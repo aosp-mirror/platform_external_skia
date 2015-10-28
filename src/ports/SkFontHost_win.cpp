@@ -87,9 +87,9 @@ using namespace skia_advanced_typeface_metrics_utils;
 
 static void tchar_to_skstring(const TCHAR t[], SkString* s) {
 #ifdef UNICODE
-    size_t sSize = WideCharToMultiByte(CP_UTF8, 0, t, -1, nullptr, 0, nullptr, nullptr);
+    size_t sSize = WideCharToMultiByte(CP_UTF8, 0, t, -1, NULL, 0, NULL, NULL);
     s->resize(sSize);
-    WideCharToMultiByte(CP_UTF8, 0, t, -1, s->writable_str(), sSize, nullptr, nullptr);
+    WideCharToMultiByte(CP_UTF8, 0, t, -1, s->writable_str(), sSize, NULL, NULL);
 #else
     s->set(t);
 #endif
@@ -97,9 +97,9 @@ static void tchar_to_skstring(const TCHAR t[], SkString* s) {
 
 static void dcfontname_to_skstring(HDC deviceContext, const LOGFONT& lf, SkString* familyName) {
     int fontNameLen; //length of fontName in TCHARS.
-    if (0 == (fontNameLen = GetTextFace(deviceContext, 0, nullptr))) {
+    if (0 == (fontNameLen = GetTextFace(deviceContext, 0, NULL))) {
         call_ensure_accessible(lf);
-        if (0 == (fontNameLen = GetTextFace(deviceContext, 0, nullptr))) {
+        if (0 == (fontNameLen = GetTextFace(deviceContext, 0, NULL))) {
             fontNameLen = 0;
         }
     }
@@ -169,7 +169,7 @@ static unsigned calculateGlyphCount(HDC hdc, const LOGFONT& lf) {
     while (min < max) {
         int32_t mid = min + ((max - min) / 2);
         if (GetGlyphOutlineW(hdc, mid, GGO_METRICS | GGO_GLYPH_INDEX, &gm, 0,
-                             nullptr, &mat2) == GDI_ERROR) {
+                             NULL, &mat2) == GDI_ERROR) {
             max = mid;
         } else {
             min = mid + 1;
@@ -212,7 +212,7 @@ public:
         // If the font has cubic outlines, it will not be rendered with ClearType.
         HFONT font = CreateFontIndirect(&lf);
 
-        HDC deviceContext = ::CreateCompatibleDC(nullptr);
+        HDC deviceContext = ::CreateCompatibleDC(NULL);
         HFONT savefont = (HFONT)SelectObject(deviceContext, font);
 
         TEXTMETRIC textMetric;
@@ -320,7 +320,7 @@ SkTypeface* SkCreateTypefaceFromLOGFONT(const LOGFONT& origLF) {
     LOGFONT lf = origLF;
     make_canonical(&lf);
     SkTypeface* face = SkTypefaceCache::FindByProcAndRef(FindByLogFont, &lf);
-    if (nullptr == face) {
+    if (NULL == face) {
         face = LogFontTypeface::Create(lf);
         SkTypefaceCache::Add(face, get_style(lf));
     }
@@ -341,7 +341,7 @@ SkTypeface* SkCreateFontMemResourceTypefaceFromLOGFONT(const LOGFONT& origLF, HA
  *  This guy is public
  */
 void SkLOGFONTFromTypeface(const SkTypeface* face, LOGFONT* lf) {
-    if (nullptr == face) {
+    if (NULL == face) {
         *lf = get_default_font();
     } else {
         *lf = static_cast<const LogFontTypeface*>(face)->fLogFont;
@@ -356,7 +356,7 @@ void SkLOGFONTFromTypeface(const SkTypeface* face, LOGFONT* lf) {
 // of calling GetFontUnicodeRange().
 static void populate_glyph_to_unicode(HDC fontHdc, const unsigned glyphCount,
                                       SkTDArray<SkUnichar>* glyphToUnicode) {
-    DWORD glyphSetBufferSize = GetFontUnicodeRanges(fontHdc, nullptr);
+    DWORD glyphSetBufferSize = GetFontUnicodeRanges(fontHdc, NULL);
     if (!glyphSetBufferSize) {
         return;
     }
@@ -416,7 +416,7 @@ public:
         fFont = 0;
         fDC = 0;
         fBM = 0;
-        fBits = nullptr;
+        fBits = NULL;
         fWidth = fHeight = 0;
         fIsBW = false;
     }
@@ -455,7 +455,7 @@ const void* HDCOffscreen::draw(const SkGlyph& glyph, bool isBW,
     if (0 == fDC) {
         fDC = CreateCompatibleDC(0);
         if (0 == fDC) {
-            return nullptr;
+            return NULL;
         }
         SetGraphicsMode(fDC, GM_ADVANCED);
         SetBkMode(fDC, TRANSPARENT);
@@ -498,7 +498,7 @@ const void* HDCOffscreen::draw(const SkGlyph& glyph, bool isBW,
         }
         fBM = CreateDIBSection(fDC, &info, DIB_RGB_COLORS, &fBits, 0, 0);
         if (0 == fBM) {
-            return nullptr;
+            return NULL;
         }
         SelectObject(fDC, fBM);
     }
@@ -514,10 +514,10 @@ const void* HDCOffscreen::draw(const SkGlyph& glyph, bool isBW,
     SetWorldTransform(fDC, &xform);
 
     uint16_t glyphID = glyph.getGlyphID();
-    BOOL ret = ExtTextOutW(fDC, 0, 0, ETO_GLYPH_INDEX, nullptr, reinterpret_cast<LPCWSTR>(&glyphID), 1, nullptr);
+    BOOL ret = ExtTextOutW(fDC, 0, 0, ETO_GLYPH_INDEX, NULL, reinterpret_cast<LPCWSTR>(&glyphID), 1, NULL);
     GdiFlush();
     if (0 == ret) {
-        return nullptr;
+        return NULL;
     }
     *srcRBPtr = srcRB;
     // offset to the start of the image
@@ -606,7 +606,7 @@ SkScalerContext_GDI::SkScalerContext_GDI(SkTypeface* rawTypeface,
 {
     LogFontTypeface* typeface = reinterpret_cast<LogFontTypeface*>(rawTypeface);
 
-    fDDC = ::CreateCompatibleDC(nullptr);
+    fDDC = ::CreateCompatibleDC(NULL);
     if (!fDDC) {
         return;
     }
@@ -806,13 +806,13 @@ uint16_t SkScalerContext_GDI::generateCharToGlyph(SkUnichar utf32) {
         // Use uniscribe to detemine glyph index for non-BMP characters.
         static const int numWCHAR = 2;
         static const int maxItems = 2;
-        // MSDN states that this can be nullptr, but some things don't work then.
+        // MSDN states that this can be NULL, but some things don't work then.
         SCRIPT_CONTROL sc = { 0 };
         // Add extra item to SCRIPT_ITEM to work around a bug (now documented).
         // https://bugzilla.mozilla.org/show_bug.cgi?id=366643
         SCRIPT_ITEM si[maxItems + 1];
         int numItems;
-        HRZM(ScriptItemize(utf16, numWCHAR, maxItems, &sc, nullptr, si, &numItems),
+        HRZM(ScriptItemize(utf16, numWCHAR, maxItems, &sc, NULL, si, &numItems),
              "Could not itemize character.");
 
         // Sometimes ScriptShape cannot find a glyph for a non-BMP and returns 2 space glyphs.
@@ -883,10 +883,10 @@ void SkScalerContext_GDI::generateMetrics(SkGlyph* glyph) {
     GLYPHMETRICS gm;
     sk_bzero(&gm, sizeof(gm));
 
-    DWORD status = GetGlyphOutlineW(fDDC, glyphId, GGO_METRICS | GGO_GLYPH_INDEX, &gm, 0, nullptr, &fMat22);
+    DWORD status = GetGlyphOutlineW(fDDC, glyphId, GGO_METRICS | GGO_GLYPH_INDEX, &gm, 0, NULL, &fMat22);
     if (GDI_ERROR == status) {
         LogFontTypeface::EnsureAccessible(this->getTypeface());
-        status = GetGlyphOutlineW(fDDC, glyphId, GGO_METRICS | GGO_GLYPH_INDEX, &gm, 0, nullptr, &fMat22);
+        status = GetGlyphOutlineW(fDDC, glyphId, GGO_METRICS | GGO_GLYPH_INDEX, &gm, 0, NULL, &fMat22);
         if (GDI_ERROR == status) {
             glyph->zeroMetrics();
             return;
@@ -899,7 +899,7 @@ void SkScalerContext_GDI::generateMetrics(SkGlyph* glyph) {
     // is to be drawn, like a '.'. We need to outset '.' but do not wish to outset ' '.
     if (1 == gm.gmBlackBoxX && 1 == gm.gmBlackBoxY) {
         // If GetGlyphOutline with GGO_NATIVE returns 0, we know there was no outline.
-        DWORD bufferSize = GetGlyphOutlineW(fDDC, glyphId, GGO_NATIVE | GGO_GLYPH_INDEX, &gm, 0, nullptr, &fMat22);
+        DWORD bufferSize = GetGlyphOutlineW(fDDC, glyphId, GGO_NATIVE | GGO_GLYPH_INDEX, &gm, 0, NULL, &fMat22);
         empty = (0 == bufferSize);
     }
 
@@ -925,7 +925,7 @@ void SkScalerContext_GDI::generateMetrics(SkGlyph* glyph) {
 
     if (this->isSubpixel()) {
         sk_bzero(&gm, sizeof(gm));
-        status = GetGlyphOutlineW(fDDC, glyphId, GGO_METRICS | GGO_GLYPH_INDEX, &gm, 0, nullptr, &fHighResMat22);
+        status = GetGlyphOutlineW(fDDC, glyphId, GGO_METRICS | GGO_GLYPH_INDEX, &gm, 0, NULL, &fHighResMat22);
         if (GDI_ERROR != status) {
             SkPoint advance;
             fHiResMatrix.mapXY(SkIntToScalar(gm.gmCellIncX), SkIntToScalar(gm.gmCellIncY), &advance);
@@ -933,7 +933,7 @@ void SkScalerContext_GDI::generateMetrics(SkGlyph* glyph) {
             glyph->fAdvanceY = SkScalarToFixed(advance.fY);
         }
     } else if (!isAxisAligned(this->fRec)) {
-        status = GetGlyphOutlineW(fDDC, glyphId, GGO_METRICS | GGO_GLYPH_INDEX, &gm, 0, nullptr, &fGsA);
+        status = GetGlyphOutlineW(fDDC, glyphId, GGO_METRICS | GGO_GLYPH_INDEX, &gm, 0, NULL, &fGsA);
         if (GDI_ERROR != status) {
             SkPoint advance;
             fG_inv.mapXY(SkIntToScalar(gm.gmCellIncX), SkIntToScalar(gm.gmCellIncY), &advance);
@@ -945,7 +945,7 @@ void SkScalerContext_GDI::generateMetrics(SkGlyph* glyph) {
 
 static const MAT2 gMat2Identity = {{0, 1}, {0, 0}, {0, 0}, {0, 1}};
 void SkScalerContext_GDI::generateFontMetrics(SkPaint::FontMetrics* metrics) {
-    if (nullptr == metrics) {
+    if (NULL == metrics) {
         return;
     }
     sk_bzero(metrics, sizeof(*metrics));
@@ -1223,6 +1223,11 @@ static void rgb_to_lcd16(const SkGdiRGB* SK_RESTRICT src, size_t srcRB, const Sk
     }
 }
 
+static inline unsigned clamp255(unsigned x) {
+    SkASSERT(x <= 256);
+    return x - (x >> 8);
+}
+
 void SkScalerContext_GDI::generateImage(const SkGlyph& glyph) {
     SkASSERT(fDDC);
 
@@ -1231,10 +1236,10 @@ void SkScalerContext_GDI::generateImage(const SkGlyph& glyph) {
 
     size_t srcRB;
     const void* bits = fOffscreen.draw(glyph, isBW, &srcRB);
-    if (nullptr == bits) {
+    if (NULL == bits) {
         LogFontTypeface::EnsureAccessible(this->getTypeface());
         bits = fOffscreen.draw(glyph, isBW, &srcRB);
-        if (nullptr == bits) {
+        if (NULL == bits) {
             sk_bzero(glyph.fImage, glyph.computeImageSize());
             return;
         }
@@ -1322,22 +1327,22 @@ public:
 nextHeader:
         if (!fCurveIter.isSet()) {
             const TTPOLYGONHEADER* header = fHeaderIter.next();
-            if (nullptr == header) {
-                return nullptr;
+            if (NULL == header) {
+                return NULL;
             }
             fCurveIter.set(header);
             const TTPOLYCURVE* curve = fCurveIter.next();
-            if (nullptr == curve) {
-                return nullptr;
+            if (NULL == curve) {
+                return NULL;
             }
             fPointIter.set(curve);
             return &header->pfxStart;
         }
 
         const POINTFX* nextPoint = fPointIter.next();
-        if (nullptr == nextPoint) {
+        if (NULL == nextPoint) {
             const TTPOLYCURVE* curve = fCurveIter.next();
-            if (nullptr == curve) {
+            if (NULL == curve) {
                 fCurveIter.set();
                 goto nextHeader;
             } else {
@@ -1363,7 +1368,7 @@ private:
 
         const TTPOLYGONHEADER* next() {
             if (fCurPolygon >= fEndPolygon) {
-                return nullptr;
+                return NULL;
             }
             const TTPOLYGONHEADER* thisPolygon = fCurPolygon;
             fCurPolygon = SkTAddOffset<const TTPOLYGONHEADER>(fCurPolygon, fCurPolygon->cb);
@@ -1377,27 +1382,27 @@ private:
     /** Iterates over all of the polygon curves in a polygon header. */
     class GDIPolygonCurveIter {
     public:
-        GDIPolygonCurveIter() : fCurCurve(nullptr), fEndCurve(nullptr) { }
+        GDIPolygonCurveIter() : fCurCurve(NULL), fEndCurve(NULL) { }
 
         GDIPolygonCurveIter(const TTPOLYGONHEADER* curPolygon)
             : fCurCurve(SkTAddOffset<const TTPOLYCURVE>(curPolygon, sizeof(TTPOLYGONHEADER)))
             , fEndCurve(SkTAddOffset<const TTPOLYCURVE>(curPolygon, curPolygon->cb))
         { }
 
-        bool isSet() { return fCurCurve != nullptr; }
+        bool isSet() { return fCurCurve != NULL; }
 
         void set(const TTPOLYGONHEADER* curPolygon) {
             fCurCurve = SkTAddOffset<const TTPOLYCURVE>(curPolygon, sizeof(TTPOLYGONHEADER));
             fEndCurve = SkTAddOffset<const TTPOLYCURVE>(curPolygon, curPolygon->cb);
         }
         void set() {
-            fCurCurve = nullptr;
-            fEndCurve = nullptr;
+            fCurCurve = NULL;
+            fEndCurve = NULL;
         }
 
         const TTPOLYCURVE* next() {
             if (fCurCurve >= fEndCurve) {
-                return nullptr;
+                return NULL;
             }
             const TTPOLYCURVE* thisCurve = fCurCurve;
             fCurCurve = SkTAddOffset<const TTPOLYCURVE>(fCurCurve, size_of_TTPOLYCURVE(*fCurCurve));
@@ -1414,7 +1419,7 @@ private:
     /** Iterates over all of the polygon points in a polygon curve. */
     class GDIPolygonCurvePointIter {
     public:
-        GDIPolygonCurvePointIter() : fCurveType(0), fCurPoint(nullptr), fEndPoint(nullptr) { }
+        GDIPolygonCurvePointIter() : fCurveType(0), fCurPoint(NULL), fEndPoint(NULL) { }
 
         GDIPolygonCurvePointIter(const TTPOLYCURVE* curPolygon)
             : fCurveType(curPolygon->wType)
@@ -1422,7 +1427,7 @@ private:
             , fEndPoint(&curPolygon->apfx[curPolygon->cpfx])
         { }
 
-        bool isSet() { return fCurPoint != nullptr; }
+        bool isSet() { return fCurPoint != NULL; }
 
         void set(const TTPOLYCURVE* curPolygon) {
             fCurveType = curPolygon->wType;
@@ -1430,13 +1435,13 @@ private:
             fEndPoint = &curPolygon->apfx[curPolygon->cpfx];
         }
         void set() {
-            fCurPoint = nullptr;
-            fEndPoint = nullptr;
+            fCurPoint = NULL;
+            fEndPoint = NULL;
         }
 
         const POINTFX* next() {
             if (fCurPoint >= fEndPoint) {
-                return nullptr;
+                return NULL;
             }
             const POINTFX* thisPoint = fCurPoint;
             ++fCurPoint;
@@ -1505,7 +1510,7 @@ static void sk_path_from_gdi_path(SkPath* path, const uint8_t* glyphbuf, DWORD t
 
 #define move_next_expected_hinted_point(iter, pElem) do {\
     pElem = iter.next(); \
-    if (nullptr == pElem) return false; \
+    if (NULL == pElem) return false; \
 } while(0)
 
 // It is possible for the hinted and unhinted versions of the same path to have
@@ -1591,10 +1596,10 @@ DWORD SkScalerContext_GDI::getGDIGlyphPath(const SkGlyph& glyph, UINT flags,
         // GDI_ERROR because the BUFFERSIZE was too small, or because the data was not accessible.
         // When the data is not accessable GetGlyphOutlineW fails rather quickly,
         // so just try to get the size. If that fails then ensure the data is accessible.
-        total_size = GetGlyphOutlineW(fDDC, glyph.getGlyphID(), flags, &gm, 0, nullptr, &fMat22);
+        total_size = GetGlyphOutlineW(fDDC, glyph.getGlyphID(), flags, &gm, 0, NULL, &fMat22);
         if (GDI_ERROR == total_size) {
             LogFontTypeface::EnsureAccessible(this->getTypeface());
-            total_size = GetGlyphOutlineW(fDDC, glyph.getGlyphID(), flags, &gm, 0, nullptr, &fMat22);
+            total_size = GetGlyphOutlineW(fDDC, glyph.getGlyphID(), flags, &gm, 0, NULL, &fMat22);
             if (GDI_ERROR == total_size) {
                 // GetGlyphOutlineW is known to fail for some characters, such as spaces.
                 // In these cases, just return that the glyph does not have a shape.
@@ -1668,7 +1673,7 @@ static void logfont_for_name(const char* familyName, LOGFONT* lf) {
 #ifdef UNICODE
     // Get the buffer size needed first.
     size_t str_len = ::MultiByteToWideChar(CP_UTF8, 0, familyName,
-                                            -1, nullptr, 0);
+                                            -1, NULL, 0);
     // Allocate a buffer (str_len already has terminating null
     // accounted for).
     wchar_t *wideFamilyName = new wchar_t[str_len];
@@ -1688,7 +1693,7 @@ void LogFontTypeface::onGetFamilyName(SkString* familyName) const {
     // Get the actual name of the typeface. The logfont may not know this.
     HFONT font = CreateFontIndirect(&fLogFont);
 
-    HDC deviceContext = ::CreateCompatibleDC(nullptr);
+    HDC deviceContext = ::CreateCompatibleDC(NULL);
     HFONT savefont = (HFONT)SelectObject(deviceContext, font);
 
     dcfontname_to_skstring(deviceContext, fLogFont, familyName);
@@ -1716,7 +1721,7 @@ static bool getWidthAdvance(HDC hdc, int gId, int16_t* advance) {
                         SkScalarToFIXED(0), SkScalarToFIXED(1)};
     int flags = GGO_METRICS | GGO_GLYPH_INDEX;
     GLYPHMETRICS gm;
-    if (GDI_ERROR == GetGlyphOutline(hdc, gId, flags, &gm, 0, nullptr, &mat2)) {
+    if (GDI_ERROR == GetGlyphOutline(hdc, gId, flags, &gm, 0, NULL, &mat2)) {
         return false;
     }
     SkASSERT(advance);
@@ -1729,12 +1734,12 @@ SkAdvancedTypefaceMetrics* LogFontTypeface::onGetAdvancedTypefaceMetrics(
         const uint32_t* glyphIDs,
         uint32_t glyphIDsCount) const {
     LOGFONT lf = fLogFont;
-    SkAdvancedTypefaceMetrics* info = nullptr;
+    SkAdvancedTypefaceMetrics* info = NULL;
 
-    HDC hdc = CreateCompatibleDC(nullptr);
+    HDC hdc = CreateCompatibleDC(NULL);
     HFONT font = CreateFontIndirect(&lf);
     HFONT savefont = (HFONT)SelectObject(hdc, font);
-    HFONT designFont = nullptr;
+    HFONT designFont = NULL;
 
     const char stem_chars[] = {'i', 'I', '!', '1'};
     int16_t min_width;
@@ -1852,10 +1857,10 @@ ReturnInfo:
 
 //Dummy representation of a Base64 encoded GUID from create_unique_font_name.
 #define BASE64_GUID_ID "XXXXXXXXXXXXXXXXXXXXXXXX"
-//Length of GUID representation from create_id, including nullptr terminator.
+//Length of GUID representation from create_id, including NULL terminator.
 #define BASE64_GUID_ID_LEN SK_ARRAY_COUNT(BASE64_GUID_ID)
 
-static_assert(BASE64_GUID_ID_LEN < LF_FACESIZE, "GUID_longer_than_facesize");
+SK_COMPILE_ASSERT(BASE64_GUID_ID_LEN < LF_FACESIZE, GUID_longer_than_facesize);
 
 /**
    NameID 6 Postscript names cannot have the character '/'.
@@ -1899,7 +1904,7 @@ static HRESULT create_unique_font_name(char* buffer, size_t bufferSize) {
 }
 
 /**
-   Introduces a font to GDI. On failure will return nullptr. The returned handle
+   Introduces a font to GDI. On failure will return NULL. The returned handle
    should eventually be passed to RemoveFontMemResourceEx.
 */
 static HANDLE activate_font(SkData* fontData) {
@@ -1910,9 +1915,9 @@ static HANDLE activate_font(SkData* fontData) {
                                              0,
                                              &numFonts);
 
-    if (fontHandle != nullptr && numFonts < 1) {
+    if (fontHandle != NULL && numFonts < 1) {
         RemoveFontMemResourceEx(fontHandle);
-        return nullptr;
+        return NULL;
     }
 
     return fontHandle;
@@ -1925,19 +1930,19 @@ static SkTypeface* create_from_stream(SkStreamAsset* stream) {
     char familyName[BASE64_GUID_ID_LEN];
     const int familyNameSize = SK_ARRAY_COUNT(familyName);
     if (FAILED(create_unique_font_name(familyName, familyNameSize))) {
-        return nullptr;
+        return NULL;
     }
 
     // Change the name of the font.
     SkAutoTUnref<SkData> rewrittenFontData(SkOTUtils::RenameFont(stream, familyName, familyNameSize-1));
-    if (nullptr == rewrittenFontData.get()) {
-        return nullptr;
+    if (NULL == rewrittenFontData.get()) {
+        return NULL;
     }
 
     // Register the font with GDI.
     HANDLE fontReference = activate_font(rewrittenFontData.get());
-    if (nullptr == fontReference) {
-        return nullptr;
+    if (NULL == fontReference) {
+        return NULL;
     }
 
     // Create the typeface.
@@ -1954,17 +1959,17 @@ SkStreamAsset* LogFontTypeface::onOpenStream(int* ttcIndex) const {
         SkEndian_SwapBE32(SkSetFourByteTag('t', 't', 'c', 'f'));
     LOGFONT lf = fLogFont;
 
-    HDC hdc = ::CreateCompatibleDC(nullptr);
+    HDC hdc = ::CreateCompatibleDC(NULL);
     HFONT font = CreateFontIndirect(&lf);
     HFONT savefont = (HFONT)SelectObject(hdc, font);
 
-    SkMemoryStream* stream = nullptr;
+    SkMemoryStream* stream = NULL;
     DWORD tables[2] = {kTTCTag, 0};
     for (int i = 0; i < SK_ARRAY_COUNT(tables); i++) {
-        DWORD bufferSize = GetFontData(hdc, tables[i], 0, nullptr, 0);
+        DWORD bufferSize = GetFontData(hdc, tables[i], 0, NULL, 0);
         if (bufferSize == GDI_ERROR) {
             call_ensure_accessible(lf);
-            bufferSize = GetFontData(hdc, tables[i], 0, nullptr, 0);
+            bufferSize = GetFontData(hdc, tables[i], 0, NULL, 0);
         }
         if (bufferSize != GDI_ERROR) {
             stream = new SkMemoryStream(bufferSize);
@@ -1972,7 +1977,7 @@ SkStreamAsset* LogFontTypeface::onOpenStream(int* ttcIndex) const {
                 break;
             } else {
                 delete stream;
-                stream = nullptr;
+                stream = NULL;
             }
         }
     }
@@ -2015,13 +2020,13 @@ static uint16_t nonBmpCharToGlyph(HDC hdc, SCRIPT_CACHE* scriptCache, const WCHA
     // Use uniscribe to detemine glyph index for non-BMP characters.
     static const int numWCHAR = 2;
     static const int maxItems = 2;
-    // MSDN states that this can be nullptr, but some things don't work then.
+    // MSDN states that this can be NULL, but some things don't work then.
     SCRIPT_CONTROL scriptControl = { 0 };
     // Add extra item to SCRIPT_ITEM to work around a bug (now documented).
     // https://bugzilla.mozilla.org/show_bug.cgi?id=366643
     SCRIPT_ITEM si[maxItems + 1];
     int numItems;
-    HRZM(ScriptItemize(utf16, numWCHAR, maxItems, &scriptControl, nullptr, si, &numItems),
+    HRZM(ScriptItemize(utf16, numWCHAR, maxItems, &scriptControl, NULL, si, &numItems),
          "Could not itemize character.");
 
     // Sometimes ScriptShape cannot find a glyph for a non-BMP and returns 2 space glyphs.
@@ -2042,7 +2047,7 @@ static uint16_t nonBmpCharToGlyph(HDC hdc, SCRIPT_CACHE* scriptCache, const WCHA
 class SkAutoHDC {
 public:
     SkAutoHDC(const LOGFONT& lf)
-        : fHdc(::CreateCompatibleDC(nullptr))
+        : fHdc(::CreateCompatibleDC(NULL))
         , fFont(::CreateFontIndirect(&lf))
         , fSavefont((HFONT)SelectObject(fHdc, fFont))
     { }
@@ -2075,7 +2080,7 @@ int LogFontTypeface::onCharsToGlyphs(const void* chars, Encoding encoding,
 
     SkAutoSTMalloc<256, uint16_t> scratchGlyphs;
     uint16_t* glyphs;
-    if (userGlyphs != nullptr) {
+    if (userGlyphs != NULL) {
         glyphs = userGlyphs;
     } else {
         glyphs = scratchGlyphs.reset(glyphCount);
@@ -2189,7 +2194,7 @@ int LogFontTypeface::onCharsToGlyphs(const void* chars, Encoding encoding,
 }
 
 int LogFontTypeface::onCountGlyphs() const {
-    HDC hdc = ::CreateCompatibleDC(nullptr);
+    HDC hdc = ::CreateCompatibleDC(NULL);
     HFONT font = CreateFontIndirect(&fLogFont);
     HFONT savefont = (HFONT)SelectObject(hdc, font);
 
@@ -2203,7 +2208,7 @@ int LogFontTypeface::onCountGlyphs() const {
 }
 
 int LogFontTypeface::onGetUPEM() const {
-    HDC hdc = ::CreateCompatibleDC(nullptr);
+    HDC hdc = ::CreateCompatibleDC(NULL);
     HFONT font = CreateFontIndirect(&fLogFont);
     HFONT savefont = (HFONT)SelectObject(hdc, font);
 
@@ -2219,7 +2224,7 @@ int LogFontTypeface::onGetUPEM() const {
 SkTypeface::LocalizedStrings* LogFontTypeface::onCreateFamilyNameIterator() const {
     SkTypeface::LocalizedStrings* nameIter =
         SkOTUtils::LocalizedStrings_NameTable::CreateForFamilyNames(*this);
-    if (nullptr == nameIter) {
+    if (NULL == nameIter) {
         SkString familyName;
         this->getFamilyName(&familyName);
         SkString language("und"); //undetermined
@@ -2255,12 +2260,12 @@ size_t LogFontTypeface::onGetTableData(SkFontTableTag tag, size_t offset,
 {
     LOGFONT lf = fLogFont;
 
-    HDC hdc = ::CreateCompatibleDC(nullptr);
+    HDC hdc = ::CreateCompatibleDC(NULL);
     HFONT font = CreateFontIndirect(&lf);
     HFONT savefont = (HFONT)SelectObject(hdc, font);
 
     tag = SkEndian_SwapBE32(tag);
-    if (nullptr == data) {
+    if (NULL == data) {
         length = 0;
     }
     DWORD bufferSize = GetFontData(hdc, tag, (DWORD) offset, data, (DWORD) length);
@@ -2277,10 +2282,11 @@ size_t LogFontTypeface::onGetTableData(SkFontTableTag tag, size_t offset,
 }
 
 SkScalerContext* LogFontTypeface::onCreateScalerContext(const SkDescriptor* desc) const {
-    SkScalerContext_GDI* ctx = new SkScalerContext_GDI(const_cast<LogFontTypeface*>(this), desc);
+    SkScalerContext_GDI* ctx = SkNEW_ARGS(SkScalerContext_GDI,
+                                                (const_cast<LogFontTypeface*>(this), desc));
     if (!ctx->isValid()) {
-        delete ctx;
-        ctx = nullptr;
+        SkDELETE(ctx);
+        ctx = NULL;
     }
     return ctx;
 }
@@ -2378,7 +2384,7 @@ public:
         lf.lfCharSet = DEFAULT_CHARSET;
         _tcscpy_s(lf.lfFaceName, familyName);
 
-        HDC hdc = ::CreateCompatibleDC(nullptr);
+        HDC hdc = ::CreateCompatibleDC(NULL);
         ::EnumFontFamiliesEx(hdc, &lf, enum_family_proc, (LPARAM)&fArray, 0);
         ::DeleteDC(hdc);
     }
@@ -2424,7 +2430,7 @@ public:
         sk_bzero(&lf, sizeof(lf));
         lf.lfCharSet = DEFAULT_CHARSET;
 
-        HDC hdc = ::CreateCompatibleDC(nullptr);
+        HDC hdc = ::CreateCompatibleDC(NULL);
         ::EnumFontFamiliesEx(hdc, &lf, enum_family_proc, (LPARAM)&fLogFontArray, 0);
         ::DeleteDC(hdc);
     }
@@ -2441,16 +2447,16 @@ protected:
 
     SkFontStyleSet* onCreateStyleSet(int index) const override {
         SkASSERT((unsigned)index < (unsigned)fLogFontArray.count());
-        return new SkFontStyleSetGDI(fLogFontArray[index].elfLogFont.lfFaceName);
+        return SkNEW_ARGS(SkFontStyleSetGDI, (fLogFontArray[index].elfLogFont.lfFaceName));
     }
 
     SkFontStyleSet* onMatchFamily(const char familyName[]) const override {
-        if (nullptr == familyName) {
+        if (NULL == familyName) {
             familyName = "";    // do we need this check???
         }
         LOGFONT lf;
         logfont_for_name(familyName, &lf);
-        return new SkFontStyleSetGDI(lf.lfFaceName);
+        return SkNEW_ARGS(SkFontStyleSetGDI, (lf.lfFaceName));
     }
 
     virtual SkTypeface* onMatchFamilyStyle(const char familyName[],
@@ -2463,7 +2469,7 @@ protected:
     virtual SkTypeface* onMatchFamilyStyleCharacter(const char familyName[], const SkFontStyle&,
                                                     const char* bcp47[], int bcp47Count,
                                                     SkUnichar character) const override {
-        return nullptr;
+        return NULL;
     }
 
     virtual SkTypeface* onMatchFaceStyle(const SkTypeface* familyMember,
@@ -2481,7 +2487,7 @@ protected:
 
     SkTypeface* onCreateFromData(SkData* data, int ttcIndex) const override {
         // could be in base impl
-        return this->createFromStream(new SkMemoryStream(data));
+        return this->createFromStream(SkNEW_ARGS(SkMemoryStream, (data)));
     }
 
     SkTypeface* onCreateFromFile(const char path[], int ttcIndex) const override {
@@ -2492,7 +2498,7 @@ protected:
     virtual SkTypeface* onLegacyCreateTypeface(const char familyName[],
                                                unsigned styleBits) const override {
         LOGFONT lf;
-        if (nullptr == familyName) {
+        if (NULL == familyName) {
             lf = get_default_font();
         } else {
             logfont_for_name(familyName, &lf);
@@ -2510,4 +2516,6 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-SkFontMgr* SkFontMgr_New_GDI() { return new SkFontMgrGDI; }
+SkFontMgr* SkFontMgr_New_GDI() {
+    return SkNEW(SkFontMgrGDI);
+}

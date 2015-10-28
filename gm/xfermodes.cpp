@@ -232,7 +232,7 @@ protected:
 
         SkPaint labelP;
         labelP.setAntiAlias(true);
-        sk_tool_utils::set_portable_typeface(&labelP);
+        sk_tool_utils::set_portable_typeface_always(&labelP);
         labelP.setTextAlign(SkPaint::kCenter_Align);
 
         const int W = 5;
@@ -255,14 +255,14 @@ protected:
                 p.setShader(s);
                 canvas->drawRect(r, p);
 
-                canvas->saveLayer(&r, nullptr);
+                canvas->saveLayer(&r, NULL);
                 draw_mode(canvas, mode, static_cast<SrcType>(sourceType),
                           r.fLeft, r.fTop);
                 canvas->restore();
 
                 r.inset(-SK_ScalarHalf, -SK_ScalarHalf);
                 p.setStyle(SkPaint::kStroke_Style);
-                p.setShader(nullptr);
+                p.setShader(NULL);
                 canvas->drawRect(r, p);
 
 #if 1

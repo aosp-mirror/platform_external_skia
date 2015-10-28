@@ -15,7 +15,9 @@ class GrProcOptInfo;
 
 class GrDisableColorXPFactory : public GrXPFactory {
 public:
-    static GrXPFactory* Create() { return new GrDisableColorXPFactory; }
+    static GrXPFactory* Create() {
+        return SkNEW(GrDisableColorXPFactory);
+    }
 
     bool supportsRGBCoverage(GrColor knownColor, uint32_t knownColorFlags) const override {
         return true;

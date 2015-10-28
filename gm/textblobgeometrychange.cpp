@@ -31,7 +31,7 @@ protected:
         const char text[] = "Hamburgefons";
 
         SkPaint paint;
-        sk_tool_utils::set_portable_typeface(&paint);
+        sk_tool_utils::set_portable_typeface_always(&paint);
         paint.setTextSize(20);
         paint.setAntiAlias(true);
         paint.setLCDRenderText(true);
@@ -77,5 +77,5 @@ private:
 
 //////////////////////////////////////////////////////////////////////////////
 
-DEF_GM(return new TextBlobGeometryChange;)
+DEF_GM( return SkNEW(TextBlobGeometryChange); )
 }

@@ -71,7 +71,7 @@ static void textPathMatrix(SkCanvas* canvas) {
     SkPathMeasure   meas(path, false);
     SkScalar pathLen = meas.getLength();
 
-    canvas->drawTextOnPath(text, len, path, nullptr, paint);
+    canvas->drawTextOnPath(text, len, path, NULL, paint);
 
     paint.setColor(SK_ColorRED);
     matrix.setScale(-SK_Scalar1, SK_Scalar1);
@@ -148,12 +148,12 @@ protected:
         textPathMatrix(canvas);
 
         if (REPEAT_COUNT > 1)
-            this->inval(nullptr);
+            this->inval(NULL);
     }
 
     SkView::Click* onFindClickHandler(SkScalar x, SkScalar y, unsigned modi) override {
         fHints += 1;
-        this->inval(nullptr);
+        this->inval(NULL);
         return this->INHERITED::onFindClickHandler(x, y, modi);
     }
 

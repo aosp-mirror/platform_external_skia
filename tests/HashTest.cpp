@@ -23,8 +23,6 @@ DEF_TEST(HashMap, r) {
     map.set(3, 4.0);
     REPORTER_ASSERT(r, map.count() == 1);
 
-    REPORTER_ASSERT(r, map.approxBytesUsed() > 0);
-
     double* found = map.find(3);
     REPORTER_ASSERT(r, found);
     REPORTER_ASSERT(r, *found == 4.0);
@@ -94,7 +92,7 @@ namespace {
 
 class CopyCounter {
 public:
-    CopyCounter() : fID(0), fCounter(nullptr) {}
+    CopyCounter() : fID(0), fCounter(NULL) {}
 
     CopyCounter(uint32_t id, uint32_t* counter) : fID(id), fCounter(counter) {}
 
@@ -120,16 +118,14 @@ private:
     uint32_t* fCounter;
 };
 
-struct HashCopyCounter {
-    uint32_t operator()(const CopyCounter&) const {
-        return 0; // let them collide, what do we care?
-    }
-};
+uint32_t hash_copy_counter(const CopyCounter&) {
+    return 0; // let them collide, what do we care?
+}
 
 }
 
 DEF_TEST(HashSetCopyCounter, r) {
-    SkTHashSet<CopyCounter, HashCopyCounter> set;
+    SkTHashSet<CopyCounter, hash_copy_counter> set;
 
     uint32_t globalCounter = 0;
     CopyCounter copyCounter1(1, &globalCounter);

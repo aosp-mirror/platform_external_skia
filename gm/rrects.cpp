@@ -57,13 +57,13 @@ protected:
     SkISize onISize() override { return SkISize::Make(kImageWidth, kImageHeight); }
 
     void onDraw(SkCanvas* canvas) override {
-        GrContext* context = nullptr;
+        GrContext* context = NULL;
 #if SK_SUPPORT_GPU
         GrRenderTarget* rt = canvas->internal_private_accessTopLayerRenderTarget();
-        context = rt ? rt->getContext() : nullptr;
+        context = rt ? rt->getContext() : NULL;
 #endif
-        if (kEffect_Type == fType && nullptr == context) {
-            skiagm::GM::DrawGpuOnlyMessage(canvas);
+        if (kEffect_Type == fType && NULL == context) {
+            this->drawGpuOnlyMessage(canvas);
             return;
         }
 
@@ -102,7 +102,7 @@ protected:
 #if SK_SUPPORT_GPU
                         GrTestTarget tt;
                         context->getTestTarget(&tt);
-                        if (nullptr == tt.target()) {
+                        if (NULL == tt.target()) {
                             SkDEBUGFAIL("Couldn't get Gr test target.");
                             return;
                         }
@@ -114,16 +114,16 @@ protected:
                         SkAutoTUnref<GrFragmentProcessor> fp(GrRRectEffect::Create(edgeType,
                                                                                    rrect));
                         if (fp) {
-                            pipelineBuilder.addCoverageFragmentProcessor(fp);
+                            pipelineBuilder.addCoverageProcessor(fp);
                             pipelineBuilder.setRenderTarget(rt);
 
                             SkRect bounds = rrect.getBounds();
                             bounds.outset(2.f, 2.f);
 
-                            tt.target()->drawNonAARect(pipelineBuilder,
-                                                       0xff000000,
-                                                       SkMatrix::I(),
-                                                       bounds);
+                            tt.target()->drawSimpleRect(pipelineBuilder,
+                                                        0xff000000,
+                                                        SkMatrix::I(),
+                                                        bounds);
                         } else {
                             drew = false;
                         }

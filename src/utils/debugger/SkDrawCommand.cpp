@@ -63,7 +63,7 @@ const char* SkDrawCommand::GetCommandString(OpType type) {
             break;
     }
     SkDEBUGFAIL("DrawType UNUSED\n");
-    return nullptr;
+    return NULL;
 }
 
 SkString SkDrawCommand::toString() const {
@@ -100,13 +100,10 @@ void xlate_and_scale_to_bounds(SkCanvas* canvas, const SkRect& bounds) {
 
 void render_path(SkCanvas* canvas, const SkPath& path) {
     canvas->clear(0xFFFFFFFF);
+    canvas->save();
 
     const SkRect& bounds = path.getBounds();
-    if (bounds.isEmpty()) {
-        return;
-    }
 
-    SkAutoCanvasRestore acr(canvas, true);
     xlate_and_scale_to_bounds(canvas, bounds);
 
     SkPaint p;
@@ -114,9 +111,10 @@ void render_path(SkCanvas* canvas, const SkPath& path) {
     p.setStyle(SkPaint::kStroke_Style);
 
     canvas->drawPath(path, p);
+    canvas->restore();
 }
 
-void render_bitmap(SkCanvas* canvas, const SkBitmap& input, const SkRect* srcRect = nullptr) {
+void render_bitmap(SkCanvas* canvas, const SkBitmap& input, const SkRect* srcRect = NULL) {
     const SkISize& size = canvas->getDeviceSize();
 
     SkScalar xScale = SkIntToScalar(size.fWidth-2) / input.width();
@@ -132,26 +130,8 @@ void render_bitmap(SkCanvas* canvas, const SkBitmap& input, const SkRect* srcRec
                                   xScale * input.width(),
                                   yScale * input.height());
 
-    static const int kNumBlocks = 8;
-
     canvas->clear(0xFFFFFFFF);
-    SkISize block = {
-        canvas->imageInfo().width()/kNumBlocks,
-        canvas->imageInfo().height()/kNumBlocks
-    };
-    for (int y = 0; y < kNumBlocks; ++y) {
-        for (int x = 0; x < kNumBlocks; ++x) {
-            SkPaint paint;
-            paint.setColor((x+y)%2 ? SK_ColorLTGRAY : SK_ColorDKGRAY);
-            SkRect r = SkRect::MakeXYWH(SkIntToScalar(x*block.width()),
-                                        SkIntToScalar(y*block.height()),
-                                        SkIntToScalar(block.width()),
-                                        SkIntToScalar(block.height()));
-            canvas->drawRect(r, paint);
-        }
-    }
-
-    canvas->drawBitmapRect(input, dst, nullptr);
+    canvas->drawBitmapRect(input, dst);
 
     if (srcRect) {
         SkRect r = SkRect::MakeLTRB(srcRect->fLeft * xScale + SK_Scalar1,
@@ -290,7 +270,7 @@ SkDrawBitmapCommand::SkDrawBitmapCommand(const SkBitmap& bitmap, SkScalar left, 
         fPaint = *paint;
         fPaintPtr = &fPaint;
     } else {
-        fPaintPtr = nullptr;
+        fPaintPtr = NULL;
     }
 
     fInfo.push(SkObjectParser::BitmapToString(bitmap));
@@ -320,7 +300,7 @@ SkDrawBitmapNineCommand::SkDrawBitmapNineCommand(const SkBitmap& bitmap, const S
         fPaint = *paint;
         fPaintPtr = &fPaint;
     } else {
-        fPaintPtr = nullptr;
+        fPaintPtr = NULL;
     }
 
     fInfo.push(SkObjectParser::BitmapToString(bitmap));
@@ -356,7 +336,7 @@ SkDrawBitmapRectCommand::SkDrawBitmapRectCommand(const SkBitmap& bitmap, const S
         fPaint = *paint;
         fPaintPtr = &fPaint;
     } else {
-        fPaintPtr = nullptr;
+        fPaintPtr = NULL;
     }
     fConstraint = constraint;
 
@@ -372,7 +352,7 @@ SkDrawBitmapRectCommand::SkDrawBitmapRectCommand(const SkBitmap& bitmap, const S
 }
 
 void SkDrawBitmapRectCommand::execute(SkCanvas* canvas) const {
-    canvas->legacy_drawBitmapRect(fBitmap, this->srcRect(), fDst, fPaintPtr, fConstraint);
+    canvas->drawBitmapRect(fBitmap, this->srcRect(), fDst, fPaintPtr, fConstraint);
 }
 
 bool SkDrawBitmapRectCommand::render(SkCanvas* canvas) const {
@@ -422,20 +402,10 @@ SkDrawImageRectCommand::SkDrawImageRectCommand(const SkImage* image, const SkRec
     if (paint) {
         fPaint.set(*paint);
     }
-
-    fInfo.push(SkObjectParser::ImageToString(image));
-    if (src) {
-        fInfo.push(SkObjectParser::RectToString(*src, "Src: "));
-    }
-    fInfo.push(SkObjectParser::RectToString(dst, "Dst: "));
-    if (paint) {
-        fInfo.push(SkObjectParser::PaintToString(*paint));
-    }
-    fInfo.push(SkObjectParser::IntToString(fConstraint, "Constraint: "));
 }
 
 void SkDrawImageRectCommand::execute(SkCanvas* canvas) const {
-    canvas->legacy_drawImageRect(fImage, fSrc.getMaybeNull(), fDst, fPaint.getMaybeNull(), fConstraint);
+    canvas->drawImageRect(fImage, fSrc.getMaybeNull(), fDst, fPaint.getMaybeNull(), fConstraint);
 }
 
 bool SkDrawImageRectCommand::render(SkCanvas* canvas) const {
@@ -784,7 +754,7 @@ SkDrawSpriteCommand::SkDrawSpriteCommand(const SkBitmap& bitmap, int left, int t
         fPaint = *paint;
         fPaintPtr = &fPaint;
     } else {
-        fPaintPtr = nullptr;
+        fPaintPtr = NULL;
     }
 
     fInfo.push(SkObjectParser::BitmapToString(bitmap));
@@ -849,7 +819,7 @@ SkDrawTextOnPathCommand::SkDrawTextOnPathCommand(const void* text, size_t byteLe
 
 void SkDrawTextOnPathCommand::execute(SkCanvas* canvas) const {
     canvas->drawTextOnPath(fText, fByteLength, fPath,
-                           fMatrix.isIdentity() ? nullptr : &fMatrix,
+                           fMatrix.isIdentity() ? NULL : &fMatrix,
                            fPaint);
 }
 
@@ -870,14 +840,14 @@ SkDrawVerticesCommand::SkDrawVerticesCommand(SkCanvas::VertexMode vmode, int ver
         fTexs = new SkPoint[vertexCount];
         memcpy(fTexs, texs, vertexCount * sizeof(SkPoint));
     } else {
-        fTexs = nullptr;
+        fTexs = NULL;
     }
 
     if (colors) {
         fColors = new SkColor[vertexCount];
         memcpy(fColors, colors, vertexCount * sizeof(SkColor));
     } else {
-        fColors = nullptr;
+        fColors = NULL;
     }
 
     fXfermode = xfermode;
@@ -889,7 +859,7 @@ SkDrawVerticesCommand::SkDrawVerticesCommand(SkCanvas::VertexMode vmode, int ver
         fIndices = new uint16_t[indexCount];
         memcpy(fIndices, indices, indexCount * sizeof(uint16_t));
     } else {
-        fIndices = nullptr;
+        fIndices = NULL;
     }
 
     fIndexCount = indexCount;
@@ -944,7 +914,7 @@ SkSaveLayerCommand::SkSaveLayerCommand(const SkRect* bounds, const SkPaint* pain
         fPaint = *paint;
         fPaintPtr = &fPaint;
     } else {
-        fPaintPtr = nullptr;
+        fPaintPtr = NULL;
     }
     fFlags = flags;
 
@@ -958,7 +928,7 @@ SkSaveLayerCommand::SkSaveLayerCommand(const SkRect* bounds, const SkPaint* pain
 }
 
 void SkSaveLayerCommand::execute(SkCanvas* canvas) const {
-    canvas->saveLayer(fBounds.isEmpty() ? nullptr : &fBounds,
+    canvas->saveLayer(fBounds.isEmpty() ? NULL : &fBounds,
                       fPaintPtr,
                       fFlags);
 }

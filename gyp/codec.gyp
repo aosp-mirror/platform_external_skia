@@ -27,30 +27,23 @@
       ],
       'include_dirs': [
         '../include/codec',
-        '../include/private',
         '../src/codec',
         '../src/core',
       ],
       'sources': [
-        '../src/codec/SkAndroidCodec.cpp',
-        '../src/codec/SkBmpCodec.cpp',
-        '../src/codec/SkBmpMaskCodec.cpp',
-        '../src/codec/SkBmpRLECodec.cpp',
-        '../src/codec/SkBmpStandardCodec.cpp',
         '../src/codec/SkCodec.cpp',
+        '../src/codec/SkCodec_libbmp.cpp',
         '../src/codec/SkCodec_libgif.cpp',
         '../src/codec/SkCodec_libico.cpp',
         '../src/codec/SkCodec_libpng.cpp',
         '../src/codec/SkCodec_wbmp.cpp',
+        '../src/codec/SkGifInterlaceIter.cpp',
         '../src/codec/SkJpegCodec.cpp',
         '../src/codec/SkJpegDecoderMgr.cpp',
         '../src/codec/SkJpegUtility_codec.cpp',
         '../src/codec/SkMaskSwizzler.cpp',
         '../src/codec/SkMasks.cpp',
-        '../src/codec/SkSampler.cpp',
-        '../src/codec/SkScaledCodec.cpp',
         '../src/codec/SkSwizzler.cpp',
-        '../src/codec/SkWebpAdapterCodec.cpp',
         '../src/codec/SkWebpCodec.cpp',
       ],
       'direct_dependent_settings': {
@@ -83,8 +76,8 @@
             'export_dependent_settings': [
               'libjpeg-turbo.gyp:libjpeg-turbo',
             ],
-            'defines': [
-              'TURBO_HAS_SKIP',
+            'cflags': [
+              '-DTURBO_HAS_SKIP',
             ],
           }
         ]

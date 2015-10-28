@@ -167,7 +167,7 @@ bool Simplify(const SkPath& path, SkPath* result) {
     SkOpCoincidence coincidence;
     SkOpContour contour;
     SkOpContourHead* contourList = static_cast<SkOpContourHead*>(&contour);
-    SkOpGlobalState globalState(&coincidence, contourList  SkDEBUGPARAMS(nullptr));
+    SkOpGlobalState globalState(&coincidence, contourList  SkDEBUGPARAMS(NULL));
 #if DEBUG_SORT
     SkPathOpsDebug::gSortCount = SkPathOpsDebug::gSortCountDefault;
 #endif
@@ -176,7 +176,7 @@ bool Simplify(const SkPath& path, SkPath* result) {
         return false;
     }
 #if DEBUG_DUMP_SEGMENTS
-    contour.dumpSegments();
+    contour.dumpSegments((SkPathOp) -1);
 #endif
     if (!SortContourList(&contourList, false, false)) {
         result->reset();
@@ -196,9 +196,6 @@ bool Simplify(const SkPath& path, SkPath* result) {
     if (!HandleCoincidence(contourList, &coincidence, &allocator)) {
         return false;
     }
-#if DEBUG_DUMP_ALIGNMENT
-    contour.dumpSegments("aligned");
-#endif
     // construct closed contours
     result->reset();
     result->setFillType(fillType);

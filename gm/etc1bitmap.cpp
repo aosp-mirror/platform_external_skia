@@ -98,13 +98,17 @@ protected:
         SkString filename = GetResourcePath("mandrill_128.");
         filename.append(this->fileExtension());
         SkAutoTUnref<SkData> fileData(SkData::NewFromFileName(filename.c_str()));
-        if (nullptr == fileData) {
+        if (NULL == fileData) {
             SkDebugf("Could not open the file. Did you forget to set the resourcePath?\n");
             return;
         }
 
-        SkAutoTUnref<SkImage> image(SkImage::NewFromEncoded(fileData));
-        canvas->drawImage(image, 0, 0);
+        if (!SkInstallDiscardablePixelRef(fileData, &bm)) {
+            SkDebugf("Could not install discardable pixel ref.\n");
+            return;
+        }
+
+        canvas->drawBitmap(bm, 0, 0);
     }
 
 private:
@@ -178,7 +182,7 @@ protected:
         SkBitmap bm;
         SkString pkmFilename = GetResourcePath("mandrill_128.pkm");
         SkAutoDataUnref fileData(SkData::NewFromFileName(pkmFilename.c_str()));
-        if (nullptr == fileData) {
+        if (NULL == fileData) {
             SkDebugf("Could not open the file. Did you forget to set the resourcePath?\n");
             return;
         }
@@ -198,8 +202,12 @@ protected:
         size_t dataSz = etc1_get_encoded_data_size(width, height) + ETC_PKM_HEADER_SIZE;
         SkAutoDataUnref nonPOTData(SkData::NewWithCopy(am.get(), dataSz));
 
-        SkAutoTUnref<SkImage> image(SkImage::NewFromEncoded(nonPOTData));
-        canvas->drawImage(image, 0, 0);
+        if (!SkInstallDiscardablePixelRef(nonPOTData, &bm)) {
+            SkDebugf("Could not install discardable pixel ref.\n");
+            return;
+        }
+
+        canvas->drawBitmap(bm, 0, 0);
     }
 
 private:
@@ -211,10 +219,10 @@ private:
 
 //////////////////////////////////////////////////////////////////////////////
 
-DEF_GM(return new skiagm::ETC1Bitmap_PKM_GM;)
-DEF_GM(return new skiagm::ETC1Bitmap_KTX_GM;)
-DEF_GM(return new skiagm::ETC1Bitmap_R11_KTX_GM;)
+DEF_GM( return SkNEW(skiagm::ETC1Bitmap_PKM_GM); )
+DEF_GM( return SkNEW(skiagm::ETC1Bitmap_KTX_GM); )
+DEF_GM( return SkNEW(skiagm::ETC1Bitmap_R11_KTX_GM); )
 
 #ifndef SK_IGNORE_ETC1_SUPPORT
-DEF_GM(return new skiagm::ETC1Bitmap_NPOT_GM;)
+DEF_GM( return SkNEW(skiagm::ETC1Bitmap_NPOT_GM); )
 #endif  // SK_IGNORE_ETC1_SUPPORT

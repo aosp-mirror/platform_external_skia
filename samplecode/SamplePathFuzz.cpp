@@ -14,7 +14,6 @@
 #include "SkColor.h"
 #include "SkTDArray.h"
 #include "SkRandom.h"
-#include "SkRRect.h"
 
 enum RandomAddPath {
     kMoveToPath,
@@ -685,7 +684,7 @@ protected:
             path_fuzz_stroker(&offscreen, fIndex += 100);
             canvas->drawBitmap(offscreen, 0, 0);
         }
-        this->inval(nullptr);
+        this->inval(NULL);
     }
 
 private:

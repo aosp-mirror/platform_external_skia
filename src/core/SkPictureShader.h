@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2014 Google Inc.
  *
@@ -24,18 +23,16 @@ class SkPictureShader : public SkShader {
 public:
     static SkShader* Create(const SkPicture*, TileMode, TileMode, const SkMatrix*,
                                    const SkRect*);
+    virtual ~SkPictureShader();
 
     size_t contextSize() const override;
 
     SK_TO_STRING_OVERRIDE()
     SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkPictureShader)
 
-#if SK_SUPPORT_GPU
-    const GrFragmentProcessor* asFragmentProcessor(GrContext*,
-                                                   const SkMatrix& viewM,
-                                                   const SkMatrix*,
-                                                   SkFilterQuality) const override;
-#endif
+    bool asFragmentProcessor(GrContext*, const SkPaint&, const SkMatrix& viewM, const SkMatrix*,
+                             GrColor*, GrProcessorDataManager*,
+                             GrFragmentProcessor**) const override;
 
 protected:
     SkPictureShader(SkReadBuffer&);
@@ -47,9 +44,9 @@ private:
 
     SkShader* refBitmapShader(const SkMatrix&, const SkMatrix* localMatrix, const int maxTextureSize = 0) const;
 
-    SkAutoTUnref<const SkPicture> fPicture;
-    SkRect                        fTile;
-    TileMode                      fTmx, fTmy;
+    const SkPicture* fPicture;
+    SkRect           fTile;
+    TileMode         fTmx, fTmy;
 
     class PictureShaderContext : public SkShader::Context {
     public:

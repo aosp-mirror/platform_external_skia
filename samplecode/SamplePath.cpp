@@ -26,8 +26,6 @@
 
 #include "SkGeometry.h"
 
-#include <stdlib.h>
-
 // http://code.google.com/p/skia/issues/detail?id=32
 static void test_cubic() {
     SkPoint src[4] = {
@@ -57,9 +55,9 @@ static void test_cubic2() {
     {
 #ifdef SK_BUILD_FOR_WIN
         // windows doesn't have strtof
-        float x = (float)strtod("9.94099e+07", nullptr);
+        float x = (float)strtod("9.94099e+07", NULL);
 #else
-        float x = strtof("9.94099e+07", nullptr);
+        float x = strtof("9.94099e+07", NULL);
 #endif
         int ix = (int)x;
         int fx = (int)(x * 65536);
@@ -211,7 +209,7 @@ protected:
 
     SkView::Click* onFindClickHandler(SkScalar x, SkScalar y, unsigned modi) override {
         fShowHairline = !fShowHairline;
-        this->inval(nullptr);
+        this->inval(NULL);
         return this->INHERITED::onFindClickHandler(x, y, modi);
     }
 
@@ -269,7 +267,7 @@ public:
 
     void toggle(bool& value) {
         value = !value;
-        this->inval(nullptr);
+        this->inval(NULL);
     }
 
 protected:
@@ -323,7 +321,7 @@ protected:
         if (click->fMeta.findS32("index", &index)) {
             SkASSERT((unsigned)index < N);
             fPts[index] = click->fCurr;
-            this->inval(nullptr);
+            this->inval(NULL);
             return true;
         }
         return false;

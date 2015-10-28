@@ -31,7 +31,7 @@ static int find_string(const SkTArray<SkString>& strings, const char ext[]) {
     return idx;
 }
 
-GrGLExtensions::GrGLExtensions(const GrGLExtensions& that) : fStrings(new SkTArray<SkString>) {
+GrGLExtensions::GrGLExtensions(const GrGLExtensions& that) : fStrings(SkNEW(SkTArray<SkString>)) {
     *this = that;
 }
 
@@ -48,7 +48,7 @@ bool GrGLExtensions::init(GrGLStandard standard,
     fInitialized = false;
     fStrings->reset();
 
-    if (nullptr == getString) {
+    if (NULL == getString) {
         return false;
     }
 
@@ -62,7 +62,7 @@ bool GrGLExtensions::init(GrGLStandard standard,
     bool indexed = version >= GR_GL_VER(3, 0);
 
     if (indexed) {
-        if (nullptr == getStringi || nullptr == getIntegerv) {
+        if (NULL == getStringi || NULL == getIntegerv) {
             return false;
         }
         GrGLint extensionCnt = 0;
@@ -74,7 +74,7 @@ bool GrGLExtensions::init(GrGLStandard standard,
         }
     } else {
         const char* extensions = (const char*) getString(GR_GL_EXTENSIONS);
-        if (nullptr == extensions) {
+        if (NULL == extensions) {
             return false;
         }
         while (true) {
@@ -112,7 +112,7 @@ bool GrGLExtensions::remove(const char ext[]) {
         // This is not terribly effecient but we really only expect this function to be called at
         // most a handful of times when our test programs start.
         SkAutoTDelete< SkTArray<SkString> > oldStrings(fStrings.detach());
-        fStrings.reset(new SkTArray<SkString>(oldStrings->count() - 1));
+        fStrings.reset(SkNEW(SkTArray<SkString>(oldStrings->count() - 1)));
         fStrings->push_back_n(idx, &oldStrings->front());
         fStrings->push_back_n(oldStrings->count() - idx - 1, &(*oldStrings)[idx] + 1);
         return true;
@@ -133,7 +133,7 @@ void GrGLExtensions::add(const char ext[]) {
 }
 
 void GrGLExtensions::print(const char* sep) const {
-    if (nullptr == sep) {
+    if (NULL == sep) {
         sep = " ";
     }
     int cnt = fStrings->count();

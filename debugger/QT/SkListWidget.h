@@ -23,7 +23,7 @@ public:
         Constructs the list widget with the specified parent for layout purposes.
         @param parent  The parent container of this widget
      */
-    SkListWidget(QObject* parent = nullptr) {}
+    SkListWidget(QObject* parent = NULL) {}
 
     virtual ~SkListWidget() {}
 

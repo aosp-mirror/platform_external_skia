@@ -17,10 +17,10 @@ SkSVGGroup::SkSVGGroup() {
 SkSVGElement* SkSVGGroup::getGradient() {
     for (SkSVGElement** ptr = fChildren.begin(); ptr < fChildren.end(); ptr++) {
         SkSVGElement* result = (*ptr)->getGradient();
-        if (result != nullptr)
+        if (result != NULL)
             return result;
     }
-    return nullptr;
+    return NULL;
 }
 
 bool SkSVGGroup::isDef() {

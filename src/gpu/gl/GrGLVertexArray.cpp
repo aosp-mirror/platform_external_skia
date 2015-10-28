@@ -75,7 +75,7 @@ GrGLVertexArray::GrGLVertexArray(GrGLint id, int attribCount)
 
 GrGLAttribArrayState* GrGLVertexArray::bind(GrGLGpu* gpu) {
     if (0 == fID) {
-        return nullptr;
+        return NULL;
     }
     gpu->bindVertexArray(fID);
     return &fAttribArrays;

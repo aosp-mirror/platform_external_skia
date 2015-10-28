@@ -20,7 +20,7 @@ private:
     /*
      * an internal call for GrGLFullProgramBuilder to add varyings
      */
-    void addVarying(const char* name, GrSLPrecision precision, GrGLVarying*);
+    void addVarying(const char* name, GrGLVarying*);
 
     bool compileAndAttachShaders(GrGLuint programId, SkTDArray<GrGLuint>* shaderIds);
 

@@ -12,7 +12,7 @@
 
 struct GrInitInvariantOutput {
     GrInitInvariantOutput()
-        : fValidFlags(kNone_GrColorComponentFlags)
+        : fValidFlags(0)
         , fColor(0)
         , fIsSingleComponent(false)
         , fIsLCDCoverage(false) {}
@@ -24,12 +24,12 @@ struct GrInitInvariantOutput {
     }
 
     void setUnknownFourComponents() {
-        fValidFlags = kNone_GrColorComponentFlags;
+        fValidFlags = 0;
         fIsSingleComponent = false;
     }
 
     void setUnknownOpaqueFourComponents() {
-        fColor = 0xffU << GrColor_SHIFT_A;
+        fColor = 0xff << GrColor_SHIFT_A;
         fValidFlags = kA_GrColorComponentFlag;
         fIsSingleComponent = false;
     }
@@ -41,17 +41,16 @@ struct GrInitInvariantOutput {
     }
 
     void setUnknownSingleComponent() {
-        fValidFlags = kNone_GrColorComponentFlags;
+        fValidFlags = 0;
         fIsSingleComponent = true;
     }
 
     void setUsingLCDCoverage() { fIsLCDCoverage = true; }
 
-    GrColorComponentFlags   fValidFlags;
-    GrColor                 fColor;
-    bool                    fIsSingleComponent;
-    bool                    fIsLCDCoverage; // Temorary data member until texture pixel configs are
-                                            // updated
+    uint32_t fValidFlags;
+    GrColor fColor;
+    bool fIsSingleComponent;
+    bool fIsLCDCoverage; // Temorary data member until texture pixel configs are updated
 };
 
 class GrInvariantOutput {
@@ -108,7 +107,7 @@ public:
             this->internalSetToTransparentBlack();
         } else {
             // We don't need to change fIsSingleComponent in this case
-            fValidFlags = kNone_GrColorComponentFlags;
+            fValidFlags = 0;
         }
         SkDEBUGCODE(this->validate());
     }
@@ -172,7 +171,7 @@ public:
             }
         } else {
             fIsSingleComponent = false;
-            fValidFlags = kNone_GrColorComponentFlags;
+            fValidFlags = 0;
         }
         SkDEBUGCODE(this->validate());
     }
@@ -190,16 +189,16 @@ public:
                 fColor = GrColorPackRGBA(a, a, a, a);
                 fValidFlags = kRGBA_GrColorComponentFlags;
             } else {
-                fValidFlags = kNone_GrColorComponentFlags;
+                fValidFlags = 0;
             }
             fIsSingleComponent = true;
         }
         SkDEBUGCODE(this->validate());
     }
 
-    void invalidateComponents(GrColorComponentFlags invalidateFlags, ReadInput readsInput) {
+    void invalidateComponents(uint8_t invalidateFlags, ReadInput readsInput) {
         SkDEBUGCODE(this->validate());
-        fValidFlags = (fValidFlags & ~invalidateFlags);
+        fValidFlags &= ~invalidateFlags;
         fIsSingleComponent = false;
         fNonMulStageFound = true;
         if (kWillNot_ReadInput == readsInput) {
@@ -208,7 +207,7 @@ public:
         SkDEBUGCODE(this->validate());
     }
 
-    void setToOther(GrColorComponentFlags validFlags, GrColor color, ReadInput readsInput) {
+    void setToOther(uint8_t validFlags, GrColor color, ReadInput readsInput) {
         SkDEBUGCODE(this->validate());
         fValidFlags = validFlags;
         fColor = color;
@@ -221,6 +220,11 @@ public:
             uint32_t a;
             if (GetAlphaAndCheckSingleChannel(color, &a)) {
                 fIsSingleComponent = true;
+            }
+        } else if (kA_GrColorComponentFlag & fValidFlags) {
+            // Assuming fColor is premul means if a is 0 the color must be all 0s.
+            if (!GrColorUnpackA(fColor)) {
+                this->internalSetToTransparentBlack();
             }
         }
         SkDEBUGCODE(this->validate());
@@ -243,8 +247,7 @@ public:
     }
 
     GrColor color() const { return fColor; }
-    GrColorComponentFlags validFlags() const { return fValidFlags; }
-    bool willUseInputColor() const { return fWillUseInputColor; }
+    uint8_t validFlags() const { return fValidFlags; }
 
     /**
      * If isSingleComponent is true, then the flag values for r, g, b, and a must all be the
@@ -286,7 +289,7 @@ private:
     }
 
     void internalSetToUnknown() {
-        fValidFlags = kNone_GrColorComponentFlags;
+        fValidFlags = 0;
         fIsSingleComponent = false;
     }
 
@@ -304,6 +307,7 @@ private:
 
     bool isSingleComponent() const { return fIsSingleComponent; }
 
+    bool willUseInputColor() const { return fWillUseInputColor; }
     void resetWillUseInputColor() { fWillUseInputColor = true; }
 
     bool allStagesMulInput() const { return !fNonMulStageFound; }
@@ -318,7 +322,7 @@ private:
     SkDEBUGCODE(bool validPreMulColor() const;)
 
     GrColor fColor;
-    GrColorComponentFlags fValidFlags;
+    uint32_t fValidFlags;
     bool fIsSingleComponent;
     bool fNonMulStageFound;
     bool fWillUseInputColor;

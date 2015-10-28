@@ -9,7 +9,6 @@
 
 #include "SkDashPathEffect.h"
 #include "SkWriteBuffer.h"
-#include "SkStrokeRec.h"
 
 // crbug.com/348821 was rooted in SkDashPathEffect refusing to flatten and unflatten itself when
 // fInitialDashLength < 0 (a signal the effect is nonsense).  Here we test that it flattens.
@@ -20,8 +19,8 @@ DEF_TEST(DashPathEffectTest_crbug_348821, r) {
     SkScalar phase = SK_ScalarInfinity;  // Used to force the bad fInitialDashLength = -1 path.
     SkAutoTUnref<SkDashPathEffect> dash(SkDashPathEffect::Create(intervals, count, phase));
 
-    // nullptr -> refuses to work with flattening framework.
-    REPORTER_ASSERT(r, dash->getFactory() != nullptr);
+    // NULL -> refuses to work with flattening framework.
+    REPORTER_ASSERT(r, dash->getFactory() != NULL);
 
     SkWriteBuffer buffer;
     buffer.writeFlattenable(dash);

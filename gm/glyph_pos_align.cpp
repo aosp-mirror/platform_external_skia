@@ -17,15 +17,26 @@ static const int kHeight = 600;
 static const SkScalar kTextHeight = 64.0f;
 static const int kMaxStringLength = 12;
 
-static void drawTestCase(SkCanvas*, const char*, SkScalar, const SkPaint&);
+namespace skiagm {
 
-DEF_SIMPLE_GM_BG(glyph_pos_align, canvas, kWidth, kHeight, SK_ColorBLACK) {
+class GlyphPosAlignGM : public GM {
+protected:
+
+    SkString onShortName() override {
+        return SkString("glyph_pos_align");
+    }
+
+    SkISize onISize() override { return SkISize::Make(kWidth, kHeight); }
+
+    void onDraw(SkCanvas* canvas) override {
+        canvas->clear(SK_ColorBLACK);
+
         SkPaint paint;
         paint.setTextSize(kTextHeight);
         paint.setFakeBoldText(true);
         const SkColor colors[] = { SK_ColorRED, SK_ColorGREEN, SK_ColorBLUE };
         const SkPoint pts[] = {{0, 0}, {kWidth, kHeight}};
-        SkAutoTUnref<SkShader> grad(SkGradientShader::CreateLinear(pts, colors, nullptr,
+        SkAutoTUnref<SkShader> grad(SkGradientShader::CreateLinear(pts, colors, NULL,
                                                                    SK_ARRAY_COUNT(colors),
                                                                    SkShader::kMirror_TileMode));
         paint.setShader(grad);
@@ -39,9 +50,9 @@ DEF_SIMPLE_GM_BG(glyph_pos_align, canvas, kWidth, kHeight, SK_ColorBLACK) {
 
         paint.setTextAlign(SkPaint::kLeft_Align);
         drawTestCase(canvas, "Left Align", 7 * kTextHeight, paint);
-}
+    }
 
-void drawTestCase(SkCanvas* canvas, const char* text, SkScalar y, const SkPaint& paint) {
+    void drawTestCase(SkCanvas* canvas, const char* text, SkScalar y, const SkPaint& paint) {
         SkScalar widths[kMaxStringLength];
         SkScalar posX[kMaxStringLength];
         SkPoint pos[kMaxStringLength];
@@ -67,4 +78,19 @@ void drawTestCase(SkCanvas* canvas, const char* text, SkScalar y, const SkPaint&
 
         canvas->drawPosTextH(text, length, posX, y, paint);
         canvas->drawPosText(text, length, pos, paint);
+    }
+
+private:
+
+    typedef GM INHERITED;
+};
+
+//////////////////////////////////////////////////////////////////////////////
+
+static GM* GlyphPosAlignFactory(void*) {
+    return new GlyphPosAlignGM();
+}
+
+static GMRegistry reg(GlyphPosAlignFactory);
+
 }

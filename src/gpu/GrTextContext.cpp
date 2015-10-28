@@ -16,34 +16,34 @@
 #include "SkDrawProcs.h"
 #include "SkGlyphCache.h"
 #include "SkGpuDevice.h"
-#include "SkGrPriv.h"
-#include "SkTextBlobRunIterator.h"
+#include "SkTextBlob.h"
 #include "SkTextMapStateProc.h"
 #include "SkTextToPathIter.h"
 
-GrTextContext::GrTextContext(GrContext* context, const SkSurfaceProps& surfaceProps)
-    : fFallbackTextContext(nullptr)
+GrTextContext::GrTextContext(GrContext* context, GrDrawContext* drawContext,
+                             const SkSurfaceProps& surfaceProps)
+    : fFallbackTextContext(NULL)
     , fContext(context)
-    , fSurfaceProps(surfaceProps) {
+    , fSurfaceProps(surfaceProps)
+    , fDrawContext(drawContext) {
 }
 
 GrTextContext::~GrTextContext() {
-    delete fFallbackTextContext;
+    SkDELETE(fFallbackTextContext);
 }
 
-void GrTextContext::drawText(GrDrawContext* dc, GrRenderTarget* rt,
-                             const GrClip& clip, const GrPaint& paint,
+void GrTextContext::drawText(GrRenderTarget* rt, const GrClip& clip, const GrPaint& paint,
                              const SkPaint& skPaint, const SkMatrix& viewMatrix,
                              const char text[], size_t byteLength,
                              SkScalar x, SkScalar y, const SkIRect& clipBounds) {
-    if (fContext->abandoned()) {
+    if (fContext->abandoned() || !fDrawContext) {
         return;
     }
 
     GrTextContext* textContext = this;
     do {
         if (textContext->canDraw(rt, clip, paint, skPaint, viewMatrix)) {
-            textContext->onDrawText(dc, rt, clip, paint, skPaint, viewMatrix,
+            textContext->onDrawText(rt, clip, paint, skPaint, viewMatrix,
                                     text, byteLength, x, y, clipBounds);
             return;
         }
@@ -51,24 +51,23 @@ void GrTextContext::drawText(GrDrawContext* dc, GrRenderTarget* rt,
     } while (textContext);
 
     // fall back to drawing as a path
-    this->drawTextAsPath(dc, rt, clip, skPaint, viewMatrix,
+    this->drawTextAsPath(rt, clip, skPaint, viewMatrix,
                          text, byteLength, x, y, clipBounds);
 }
 
-void GrTextContext::drawPosText(GrDrawContext* dc, GrRenderTarget* rt,
-                                const GrClip& clip, const GrPaint& paint,
+void GrTextContext::drawPosText(GrRenderTarget* rt, const GrClip& clip, const GrPaint& paint,
                                 const SkPaint& skPaint, const SkMatrix& viewMatrix,
                                 const char text[], size_t byteLength,
                                 const SkScalar pos[], int scalarsPerPosition,
                                 const SkPoint& offset, const SkIRect& clipBounds) {
-    if (fContext->abandoned()) {
+    if (fContext->abandoned() || !fDrawContext) {
         return;
     }
 
     GrTextContext* textContext = this;
     do {
         if (textContext->canDraw(rt, clip, paint, skPaint, viewMatrix)) {
-            textContext->onDrawPosText(dc, rt, clip, paint, skPaint, viewMatrix,
+            textContext->onDrawPosText(rt, clip, paint, skPaint, viewMatrix,
                                        text, byteLength, pos,
                                        scalarsPerPosition, offset, clipBounds);
             return;
@@ -77,14 +76,16 @@ void GrTextContext::drawPosText(GrDrawContext* dc, GrRenderTarget* rt,
     } while (textContext);
 
     // fall back to drawing as a path
-    this->drawPosTextAsPath(dc, rt, clip, skPaint, viewMatrix, text, byteLength, pos,
+    this->drawPosTextAsPath(rt, clip, skPaint, viewMatrix, text, byteLength, pos,
                             scalarsPerPosition, offset, clipBounds);
 }
 
 bool GrTextContext::ShouldDisableLCD(const SkPaint& paint) {
-    if (!SkXfermode::AsMode(paint.getXfermode(), nullptr) ||
+    if (paint.getShader() ||
+        !SkXfermode::IsMode(paint.getXfermode(), SkXfermode::kSrcOver_Mode) ||
         paint.getMaskFilter() ||
         paint.getRasterizer() ||
+        paint.getColorFilter() ||
         paint.getPathEffect() ||
         paint.isFakeBoldText() ||
         paint.getStyle() != SkPaint::kFill_Style)
@@ -109,14 +110,14 @@ uint32_t GrTextContext::FilterTextFlags(const SkSurfaceProps& surfaceProps, cons
     return flags;
 }
 
-void GrTextContext::drawTextBlob(GrDrawContext* dc, GrRenderTarget* rt,
+void GrTextContext::drawTextBlob(GrRenderTarget* rt,
                                  const GrClip& clip, const SkPaint& skPaint,
                                  const SkMatrix& viewMatrix, const SkTextBlob* blob,
                                  SkScalar x, SkScalar y,
                                  SkDrawFilter* drawFilter, const SkIRect& clipBounds) {
     SkPaint runPaint = skPaint;
 
-    SkTextBlobRunIterator it(blob);
+    SkTextBlob::RunIterator it(blob);
     for (;!it.done(); it.next()) {
         size_t textLen = it.glyphCount() * sizeof(uint16_t);
         const SkPoint& offset = it.offset();
@@ -133,21 +134,21 @@ void GrTextContext::drawTextBlob(GrDrawContext* dc, GrRenderTarget* rt,
         runPaint.setFlags(FilterTextFlags(fSurfaceProps, runPaint));
 
         GrPaint grPaint;
-        if (!SkPaintToGrPaint(fContext, runPaint, viewMatrix, &grPaint)) {
+        if (!SkPaint2GrPaint(fContext, rt, runPaint, viewMatrix, true, &grPaint)) {
             return;
         }
 
         switch (it.positioning()) {
         case SkTextBlob::kDefault_Positioning:
-            this->drawText(dc, rt, clip, grPaint, runPaint, viewMatrix, (const char *)it.glyphs(),
+            this->drawText(rt, clip, grPaint, runPaint, viewMatrix, (const char *)it.glyphs(),
                            textLen, x + offset.x(), y + offset.y(), clipBounds);
             break;
         case SkTextBlob::kHorizontal_Positioning:
-            this->drawPosText(dc, rt, clip, grPaint, runPaint, viewMatrix, (const char*)it.glyphs(),
+            this->drawPosText(rt, clip, grPaint, runPaint, viewMatrix, (const char*)it.glyphs(),
                               textLen, it.pos(), 1, SkPoint::Make(x, y + offset.y()), clipBounds);
             break;
         case SkTextBlob::kFull_Positioning:
-            this->drawPosText(dc, rt, clip, grPaint, runPaint, viewMatrix, (const char*)it.glyphs(),
+            this->drawPosText(rt, clip, grPaint, runPaint, viewMatrix, (const char*)it.glyphs(),
                               textLen, it.pos(), 2, SkPoint::Make(x, y), clipBounds);
             break;
         default:
@@ -161,7 +162,7 @@ void GrTextContext::drawTextBlob(GrDrawContext* dc, GrRenderTarget* rt,
     }
 }
 
-void GrTextContext::drawTextAsPath(GrDrawContext* dc, GrRenderTarget* rt,
+void GrTextContext::drawTextAsPath(GrRenderTarget* rt,
                                    const GrClip& clip,
                                    const SkPaint& skPaint, const SkMatrix& viewMatrix,
                                    const char text[], size_t byteLength, SkScalar x, SkScalar y,
@@ -179,14 +180,14 @@ void GrTextContext::drawTextAsPath(GrDrawContext* dc, GrRenderTarget* rt,
         matrix.postTranslate(xpos - prevXPos, 0);
         if (iterPath) {
             const SkPaint& pnt = iter.getPaint();
-            GrBlurUtils::drawPathWithMaskFilter(fContext, dc, rt, clip, *iterPath,
+            GrBlurUtils::drawPathWithMaskFilter(fContext, fDrawContext, rt, clip, *iterPath,
                                                 pnt, viewMatrix, &matrix, clipBounds, false);
         }
         prevXPos = xpos;
     }
 }
 
-void GrTextContext::drawPosTextAsPath(GrDrawContext* dc, GrRenderTarget* rt,
+void GrTextContext::drawPosTextAsPath(GrRenderTarget* rt,
                                       const GrClip& clip,
                                       const SkPaint& origPaint, const SkMatrix& viewMatrix,
                                       const char text[], size_t byteLength,
@@ -201,10 +202,10 @@ void GrTextContext::drawPosTextAsPath(GrDrawContext* dc, GrRenderTarget* rt,
 
     // Temporarily jam in kFill, so we only ever ask for the raw outline from the cache.
     paint.setStyle(SkPaint::kFill_Style);
-    paint.setPathEffect(nullptr);
+    paint.setPathEffect(NULL);
 
     SkDrawCacheProc     glyphCacheProc = paint.getDrawCacheProc();
-    SkAutoGlyphCache    autoCache(paint, &fSurfaceProps, nullptr);
+    SkAutoGlyphCache    autoCache(paint, &fSurfaceProps, NULL);
     SkGlyphCache*       cache = autoCache.getCache();
 
     const char*        stop = text + byteLength;
@@ -227,7 +228,7 @@ void GrTextContext::drawPosTextAsPath(GrDrawContext* dc, GrRenderTarget* rt,
 
                 matrix[SkMatrix::kMTransX] = loc.fX;
                 matrix[SkMatrix::kMTransY] = loc.fY;
-                GrBlurUtils::drawPathWithMaskFilter(fContext, dc, rt, clip, *path, paint,
+                GrBlurUtils::drawPathWithMaskFilter(fContext, fDrawContext, rt, clip, *path, paint,
                                                     viewMatrix, &matrix, clipBounds, false);
             }
         }
@@ -235,7 +236,7 @@ void GrTextContext::drawPosTextAsPath(GrDrawContext* dc, GrRenderTarget* rt,
     }
 }
 
-// *** change to output positions?
+//*** change to output positions?
 int GrTextContext::MeasureText(SkGlyphCache* cache, SkDrawCacheProc glyphCacheProc,
                                 const char text[], size_t byteLength, SkVector* stopVector) {
     SkFixed     x = 0, y = 0;
@@ -267,13 +268,13 @@ static void GlyphCacheAuxProc(void* data) {
 
 GrFontScaler* GrTextContext::GetGrFontScaler(SkGlyphCache* cache) {
     void* auxData;
-    GrFontScaler* scaler = nullptr;
+    GrFontScaler* scaler = NULL;
 
     if (cache->getAuxProcData(GlyphCacheAuxProc, &auxData)) {
         scaler = (GrFontScaler*)auxData;
     }
-    if (nullptr == scaler) {
-        scaler = new GrFontScaler(cache);
+    if (NULL == scaler) {
+        scaler = SkNEW_ARGS(GrFontScaler, (cache));
         cache->setAuxProc(GlyphCacheAuxProc, scaler);
     }
 

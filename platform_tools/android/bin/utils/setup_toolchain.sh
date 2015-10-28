@@ -32,41 +32,47 @@ if [ -z "$SCRIPT_DIR" ]; then
 fi
 
 function default_toolchain() {
-  TOOLCHAINS=${SCRIPT_DIR}/../toolchains
-
+  NDK_REV=${NDK_REV-10c}
   ANDROID_ARCH=${ANDROID_ARCH-arm}
-  LLVM=3.6
-  NDK=r10e
-
+  
   if [[ $ANDROID_ARCH == *64* ]]; then
-      API=21  # Android 5.0
+    API_LEVEL=21 # Official Android 5.0 (Lollipop) system images
   else
-      API=14  # Android 4.0
+    API_LEVEL=14 # Official Android 4.0 system images
   fi
 
-  TOOLCHAIN=$ANDROID_ARCH-$NDK-$API
-  HOST=`uname | tr '[A-Z]' '[a-z]'`
+  TOOLCHAIN_DIR=${SCRIPT_DIR}/../toolchains
+  if [ $(uname) == "Darwin" ]; then
+    verbose "Using Mac toolchain."
+    TOOLCHAIN_TYPE=ndk-r$NDK_REV-$ANDROID_ARCH-darwin_v$API_LEVEL
+  else
+    verbose "Using Linux toolchain."
+    TOOLCHAIN_TYPE=ndk-r$NDK_REV-$ANDROID_ARCH-linux_v$API_LEVEL
+  fi
+  exportVar ANDROID_TOOLCHAIN "${TOOLCHAIN_DIR}/${TOOLCHAIN_TYPE}/bin"
 
-  exportVar ANDROID_TOOLCHAIN "${TOOLCHAINS}/${TOOLCHAIN}/bin"
+  # Hack for NDK_REV == 10c to ensure that clang is present as it was
+  # added to the tarball after it was initially distributed.
+  if [ ! -x ${ANDROID_TOOLCHAIN}/clang ]; then
+    rm -rf ${TOOLCHAIN_DIR}/${TOOLCHAIN_TYPE}
+  fi
 
+  # if the toolchain doesn't exist on your machine then we need to fetch it
   if [ ! -d "$ANDROID_TOOLCHAIN" ]; then
-    mkdir -p $TOOLCHAINS
-    pushd $TOOLCHAINS
-    curl -o $NDK.bin https://dl.google.com/android/ndk/android-ndk-$NDK-$HOST-x86_64.bin
-    chmod +x $NDK.bin
-    ./$NDK.bin -y
-    ./android-ndk-$NDK/build/tools/make-standalone-toolchain.sh \
-        --arch=$ANDROID_ARCH    \
-        --llvm-version=$LLVM    \
-        --platform=android-$API \
-        --install_dir=$TOOLCHAIN
-    cp android-ndk-$NDK/prebuilt/android-$ANDROID_ARCH/gdbserver/gdbserver $TOOLCHAIN
-    rm $NDK.bin
-    rm -rf android-ndk-$NDK
+    mkdir -p $TOOLCHAIN_DIR
+    # enter the toolchain directory then download, unpack, and remove the tarball
+    pushd $TOOLCHAIN_DIR
+    TARBALL=ndk-r$NDK_REV-v$API_LEVEL.tgz
+
+    ${SCRIPT_DIR}/download_toolchains.py \
+        http://chromium-skia-gm.commondatastorage.googleapis.com/android-toolchains/$TARBALL \
+        $TOOLCHAIN_DIR/$TARBALL
+    tar -xzf $TARBALL $TOOLCHAIN_TYPE
+    rm $TARBALL
     popd
   fi
 
-  verbose "Targeting NDK API $API (NDK Revision $NDK)"
+  verbose "Targeting NDK API $API_LEVEL (NDK Revision $NDK_REV)"
 }
 
 #check to see if the toolchain has been defined and if not setup the default toolchain

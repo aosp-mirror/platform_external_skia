@@ -69,7 +69,7 @@ public:
         SkSafeRef(fXfermode);
 
         fBufferSize = 0;
-        fBuffer = nullptr;
+        fBuffer = NULL;
 
         unsigned flags32 = 0;
         if (255 != paint.getAlpha()) {
@@ -137,7 +137,7 @@ public:
             }
 
             if (xfermode) {
-                xfermode->xfer32(dst, tmp, width, nullptr);
+                xfermode->xfer32(dst, tmp, width, NULL);
             } else {
                 fProc32(dst, tmp, width, fAlpha);
             }
@@ -182,7 +182,7 @@ public:
                 colorFilter->filterSpan(buffer, width, buffer);
             }
             if (xfermode) {
-                xfermode->xfer32(dst, buffer, width, nullptr);
+                xfermode->xfer32(dst, buffer, width, NULL);
             } else {
                 fProc32(dst, buffer, width, fAlpha);
             }
@@ -258,21 +258,21 @@ public:
 
 SkSpriteBlitter* SkSpriteBlitter::ChooseD32(const SkPixmap& source, const SkPaint& paint,
         SkTBlitterAllocator* allocator) {
-    SkASSERT(allocator != nullptr);
+    SkASSERT(allocator != NULL);
 
-    if (paint.getMaskFilter() != nullptr) {
-        return nullptr;
+    if (paint.getMaskFilter() != NULL) {
+        return NULL;
     }
 
     U8CPU       alpha = paint.getAlpha();
     SkXfermode* xfermode = paint.getXfermode();
     SkColorFilter* filter = paint.getColorFilter();
-    SkSpriteBlitter* blitter = nullptr;
+    SkSpriteBlitter* blitter = NULL;
 
     switch (source.colorType()) {
         case kARGB_4444_SkColorType:
             if (alpha != 0xFF) {
-                return nullptr;    // we only have opaque sprites
+                return NULL;    // we only have opaque sprites
             }
             if (xfermode || filter) {
                 blitter = allocator->createT<Sprite_D32_S4444_XferFilter>(source, paint);

@@ -47,12 +47,16 @@ public:
         typedef SkShader::Context INHERITED;
     };
 
+    // we return false for this, use asAGradient
+    virtual BitmapType asABitmap(SkBitmap* outTexture,
+                                 SkMatrix* outMatrix,
+                                 TileMode xy[2]) const override;
+
     GradientType asAGradient(GradientInfo* info) const override;
 
-#if SK_SUPPORT_GPU
-    const GrFragmentProcessor* asFragmentProcessor(GrContext*, const SkMatrix& viewM,
-                                                   const SkMatrix*, SkFilterQuality) const override;
-#endif
+    bool asFragmentProcessor(GrContext*, const SkPaint&, const SkMatrix& viewM,
+                             const SkMatrix*, GrColor*, GrProcessorDataManager*,
+                             GrFragmentProcessor**) const override;
 
     SK_TO_STRING_OVERRIDE()
     SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkColorShader)

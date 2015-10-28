@@ -63,7 +63,9 @@ SkGScalerContext::SkGScalerContext(SkGTypeface* face, const SkDescriptor* desc)
     fMatrix.preScale(SK_Scalar1 / STD_SIZE, SK_Scalar1 / STD_SIZE);
 }
 
-SkGScalerContext::~SkGScalerContext() { delete fProxy; }
+SkGScalerContext::~SkGScalerContext() {
+    SkDELETE(fProxy);
+}
 
 unsigned SkGScalerContext::generateGlyphCount() {
     return fProxy->getGlyphCount();
@@ -166,7 +168,7 @@ SkGTypeface::~SkGTypeface() {
 
 SkScalerContext* SkGTypeface::onCreateScalerContext(
                                             const SkDescriptor* desc) const {
-    return new SkGScalerContext(const_cast<SkGTypeface*>(this), desc);
+    return SkNEW_ARGS(SkGScalerContext, (const_cast<SkGTypeface*>(this), desc));
 }
 
 void SkGTypeface::onFilterRec(SkScalerContextRec* rec) const {

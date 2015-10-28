@@ -16,23 +16,23 @@ class SkANGLEGLContext : public SkGLContext {
 public:
     ~SkANGLEGLContext() override;
 
-    static SkANGLEGLContext* Create(GrGLStandard forcedGpuAPI, bool useGLBackend) {
+    static SkANGLEGLContext* Create(GrGLStandard forcedGpuAPI) {
         if (kGL_GrGLStandard == forcedGpuAPI) {
             return NULL;
         }
-        SkANGLEGLContext* ctx = new SkANGLEGLContext(useGLBackend);
+        SkANGLEGLContext* ctx = SkNEW(SkANGLEGLContext);
         if (!ctx->isValid()) {
-            delete ctx;
+            SkDELETE(ctx);
             return NULL;
         }
         return ctx;
     }
 
     // The param is an EGLNativeDisplayType and the return is an EGLDispay.
-    static void* GetD3DEGLDisplay(void* nativeDisplay, bool useGLBackend);
+    static void* GetD3DEGLDisplay(void* nativeDisplay);
 
 private:
-    SkANGLEGLContext(bool preferGLBackend);
+    SkANGLEGLContext();
     void destroyGLContext();
 
     void onPlatformMakeCurrent() const override;

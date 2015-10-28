@@ -57,13 +57,15 @@ public:
     // Used by GrGLProgram to configure OpenGL state.
     void bindTexture(int unitIdx, const GrTextureParams& params, GrGLTexture* texture);
 
-    bool onGetReadPixelsInfo(GrSurface* srcSurface, int readWidth, int readHeight, size_t rowBytes,
-                             GrPixelConfig readConfig, DrawPreference*,
-                             ReadPixelTempDrawInfo*) override;
+    bool getReadPixelsInfo(GrSurface* srcSurface, int readWidth, int readHeight, size_t rowBytes,
+                           GrPixelConfig readConfig, DrawPreference*,
+                           ReadPixelTempDrawInfo*) override;
 
-    bool onGetWritePixelsInfo(GrSurface* dstSurface, int width, int height,
-                              size_t rowBytes, GrPixelConfig srcConfig, DrawPreference*,
-                              WritePixelTempDrawInfo*) override;
+
+    // GrGpu overrides
+    GrPixelConfig preferredWritePixelsConfig(GrPixelConfig writeConfig,
+                                             GrPixelConfig surfaceConfig) const override;
+    bool canWriteTexturePixels(const GrTexture*, GrPixelConfig srcConfig) const override;
 
     bool initCopySurfaceDstDesc(const GrSurface* src, GrSurfaceDesc* desc) const override;
 
@@ -91,37 +93,21 @@ public:
         fHWGeometryState.notifyIndexBufferDelete(id);
     }
 
+    bool copySurface(GrSurface* dst,
+                     GrSurface* src,
+                     const SkIRect& srcRect,
+                     const SkIPoint& dstPoint) override;
+
+    void xferBarrier(GrRenderTarget*, GrXferBarrierType) override;
+
     void buildProgramDesc(GrProgramDesc*,
                           const GrPrimitiveProcessor&,
-                          const GrPipeline&) const override;
-
-    // id and type (GL_ARRAY_BUFFER or GL_ELEMENT_ARRAY_BUFFER) of buffer to bind
-    void bindBuffer(GrGLuint id, GrGLenum type);
-
-    void releaseBuffer(GrGLuint id, GrGLenum type);
-
-    // sizes are in bytes
-    void* mapBuffer(GrGLuint id, GrGLenum type, bool dynamic, size_t currentSize,
-                    size_t requestedSize);
-
-    void unmapBuffer(GrGLuint id, GrGLenum type, void* mapPtr);
-
-    void bufferData(GrGLuint id, GrGLenum type, bool dynamic, size_t currentSize,
-                    const void* src, size_t srcSizeInBytes);
+                          const GrPipeline&,
+                          const GrBatchTracker&) const override;
 
     const GrGLContext* glContextForTesting() const override {
         return &this->glContext();
     }
-
-    void clearStencil(GrRenderTarget*) override;
-
-    void invalidateBoundRenderTarget() {
-        fHWBoundRenderTargetUniqueID = SK_InvalidUniqueID;
-    }
-
-    GrStencilAttachment* createStencilAttachmentForRenderTarget(const GrRenderTarget* rt,
-                                                                int width,
-                                                                int height) override;
 
     GrBackendObject createTestingOnlyBackendTexture(void* pixels, int w, int h,
                                                     GrPixelConfig config) const override;
@@ -134,8 +120,6 @@ private:
     // GrGpu overrides
     void onResetContext(uint32_t resetBits) override;
 
-    void xferBarrier(GrRenderTarget*, GrXferBarrierType) override;
-
     GrTexture* onCreateTexture(const GrSurfaceDesc& desc, GrGpuResource::LifeCycle lifeCycle,
                                const void* srcData, size_t rowBytes) override;
     GrTexture* onCreateCompressedTexture(const GrSurfaceDesc& desc,
@@ -146,34 +130,36 @@ private:
     GrTexture* onWrapBackendTexture(const GrBackendTextureDesc&, GrWrapOwnership) override;
     GrRenderTarget* onWrapBackendRenderTarget(const GrBackendRenderTargetDesc&,
                                               GrWrapOwnership) override;
-    // Given a GrPixelConfig return the index into the stencil format array on GrGLCaps to a
-    // compatible stencil format.
-    int getCompatibleStencilIndex(GrPixelConfig config);
+    bool createStencilAttachmentForRenderTarget(GrRenderTarget* rt, int width, int height) override;
+    bool attachStencilAttachmentToRenderTarget(GrStencilAttachment* sb,
+                                               GrRenderTarget* rt) override;
 
-    void onClear(GrRenderTarget*, const SkIRect& rect, GrColor color) override;
+    void onClear(GrRenderTarget*, const SkIRect* rect, GrColor color,
+                 bool canIgnoreRect) override;
 
     void onClearStencilClip(GrRenderTarget*, const SkIRect& rect, bool insideClip) override;
 
-    bool onReadPixels(GrSurface*,
+    bool onReadPixels(GrRenderTarget* target,
                       int left, int top,
                       int width, int height,
                       GrPixelConfig,
                       void* buffer,
                       size_t rowBytes) override;
 
-    bool onWritePixels(GrSurface*,
-                       int left, int top, int width, int height,
-                       GrPixelConfig config, const void* buffer,
-                       size_t rowBytes) override;
+    bool onWriteTexturePixels(GrTexture* texture,
+                              int left, int top, int width, int height,
+                              GrPixelConfig config, const void* buffer,
+                              size_t rowBytes) override;
 
     void onResolveRenderTarget(GrRenderTarget* target) override;
 
     void onDraw(const DrawArgs&, const GrNonInstancedVertices&) override;
 
-    bool onCopySurface(GrSurface* dst,
-                       GrSurface* src,
-                       const SkIRect& srcRect,
-                       const SkIPoint& dstPoint) override;
+    void clearStencil(GrRenderTarget*) override;
+
+    // GrDrawTarget overrides
+    void didAddGpuTraceMarker() override;
+    void didRemoveGpuTraceMarker() override;
 
     // binds texture unit in GL
     void setTextureUnit(int unitIdx);
@@ -248,6 +234,7 @@ private:
 #endif
     };
 
+    void flushDither(bool dither);
     void flushColorWrite(bool writeColor);
     void flushDrawFace(GrPipelineBuilder::DrawFace face);
 
@@ -269,16 +256,12 @@ private:
     // ensures that such operations don't negatively interact with tracking bound textures.
     void setScratchTextureUnit();
 
-    // colocates all samples at pixel center for render target, if MSAA.
-    // allows drawing coverage based AA shapes in MSAA mode.
-    void setColocatedSampleLocations(GrRenderTarget* rt, bool useColocatedSampleLocations);
-
     // bounds is region that may be modified and therefore has to be resolved.
-    // nullptr means whole target. Can be an empty rect.
+    // NULL means whole target. Can be an empty rect.
     void flushRenderTarget(GrGLRenderTarget*, const SkIRect* bounds);
 
     void flushStencil(const GrStencilSettings&);
-    void flushHWAAState(GrRenderTarget* rt, bool useHWAA, bool stencilEnabled);
+    void flushHWAAState(GrRenderTarget* rt, bool useHWAA);
 
     bool configToGLFormats(GrPixelConfig config,
                            bool getSizedInternal,
@@ -287,7 +270,6 @@ private:
                            GrGLenum* externalType) const;
     // helper for onCreateTexture and writeTexturePixels
     bool uploadTexData(const GrSurfaceDesc& desc,
-                       GrGLenum target,
                        bool isNewTexture,
                        int left, int top, int width, int height,
                        GrPixelConfig dataConfig,
@@ -301,29 +283,23 @@ private:
     // the texture is already in GPU memory and that it's going to be updated
     // with new data.
     bool uploadCompressedTexData(const GrSurfaceDesc& desc,
-                                 GrGLenum target,
                                  const void* data,
                                  bool isNewTexture = true,
                                  int left = 0, int top = 0,
                                  int width = -1, int height = -1);
 
     bool createRenderTargetObjects(const GrSurfaceDesc&, GrGpuResource::LifeCycle lifeCycle,
-                                   GrGLenum textureTarget, GrGLuint texID,
-                                   GrGLRenderTarget::IDDesc*);
+                                   GrGLuint texID, GrGLRenderTarget::IDDesc*);
 
     enum TempFBOTarget {
         kSrc_TempFBOTarget,
         kDst_TempFBOTarget
     };
 
-    // Binds a surface as a FBO for a copy operation. If the surface already owns an FBO ID then
-    // that ID is bound. If not the surface is temporarily bound to a FBO and that FBO is bound.
-    // This must be paired with a call to unbindSurfaceFBOForCopy().
-    void bindSurfaceFBOForCopy(GrSurface* surface, GrGLenum fboTarget, GrGLIRect* viewport,
+    GrGLuint bindSurfaceAsFBO(GrSurface* surface, GrGLenum fboTarget, GrGLIRect* viewport,
                               TempFBOTarget tempFBOTarget);
 
-    // Must be called if bindSurfaceFBOForCopy was used to bind a surface for copying.
-    void unbindTextureFBOForCopy(GrGLenum fboTarget, GrSurface* surface);
+    void unbindTextureFromFBO(GrGLenum fboTarget);
 
     SkAutoTUnref<GrGLContext>  fGLContext;
 
@@ -366,9 +342,9 @@ private:
      */
     class HWGeometryState {
     public:
-        HWGeometryState() { fVBOVertexArray = nullptr; this->invalidate(); }
+        HWGeometryState() { fVBOVertexArray = NULL; this->invalidate(); }
 
-        ~HWGeometryState() { delete fVBOVertexArray; }
+        ~HWGeometryState() { SkDELETE(fVBOVertexArray); }
 
         void invalidate() {
             fBoundVertexArrayIDIsValid = false;
@@ -445,7 +421,7 @@ private:
         /**
          * Binds the vertex array object that should be used to render from the vertex buffer.
          * The vertex array is bound and its attrib array state object is returned. The vertex
-         * buffer is bound. The index buffer (if non-nullptr) is bound to the vertex array. The
+         * buffer is bound. The index buffer (if non-NULL) is bound to the vertex array. The
          * returned GrGLAttribArrayState should be used to set vertex attribute arrays.
          */
         GrGLAttribArrayState* bindArrayAndBuffersToDraw(GrGLGpu* gpu,
@@ -513,15 +489,15 @@ private:
 
     GrPipelineBuilder::DrawFace fHWDrawFace;
     TriState                    fHWWriteToColor;
+    TriState                    fHWDitherEnabled;
     uint32_t                    fHWBoundRenderTargetUniqueID;
-    TriState                    fHWSRGBFramebuffer;
     SkTArray<uint32_t, true>    fHWBoundTextureUniqueIDs;
 
     ///@}
 
-    // Mapping of pixel configs to known supported stencil formats to be used
-    // when adding a stencil buffer to a framebuffer.
-    int fPixelConfigToStencilIndex[kGrPixelConfigCnt];
+    // we record what stencil format worked last time to hopefully exit early
+    // from our loop that tries stencil formats and calls check fb status.
+    int fLastSuccessfulStencilFmtIdx;
 
     typedef GrGpu INHERITED;
     friend class GrGLPathRendering; // For accessing setTextureUnit.

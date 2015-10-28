@@ -11,7 +11,6 @@
 #include "SkReadBuffer.h"
 #include "SkWriteBuffer.h"
 #include "SkPathMeasure.h"
-#include "SkStrokeRec.h"
 
 bool Sk1DPathEffect::filterPath(SkPath* dst, const SkPath& src,
                                 SkStrokeRec*, const SkRect*) const {
@@ -161,7 +160,7 @@ SkFlattenable* SkPath1DPathEffect::CreateProc(SkReadBuffer& buffer) {
         Style style = (Style)buffer.readUInt();
         return SkPath1DPathEffect::Create(path, advance, phase, style);
     }
-    return nullptr;
+    return NULL;
 }
 
 void SkPath1DPathEffect::flatten(SkWriteBuffer& buffer) const {
@@ -178,7 +177,7 @@ SkScalar SkPath1DPathEffect::next(SkPath* dst, SkScalar distance,
     switch (fStyle) {
         case kTranslate_Style: {
             SkPoint pos;
-            if (meas.getPosTan(distance, &pos, nullptr)) {
+            if (meas.getPosTan(distance, &pos, NULL)) {
                 dst->addPath(fPath, pos.fX, pos.fY);
             }
         } break;

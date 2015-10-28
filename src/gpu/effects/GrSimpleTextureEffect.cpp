@@ -37,20 +37,20 @@ void GrSimpleTextureEffect::onComputeInvariantOutput(GrInvariantOutput* inout) c
     this->updateInvariantOutputForModulation(inout);
 }
 
-void GrSimpleTextureEffect::onGetGLProcessorKey(const GrGLSLCaps& caps,
+void GrSimpleTextureEffect::getGLProcessorKey(const GrGLSLCaps& caps,
                                               GrProcessorKeyBuilder* b) const {
     GrGLSimpleTextureEffect::GenKey(*this, caps, b);
 }
 
-GrGLFragmentProcessor* GrSimpleTextureEffect::onCreateGLInstance() const  {
-    return new GrGLSimpleTextureEffect(*this);
+GrGLFragmentProcessor* GrSimpleTextureEffect::createGLInstance() const  {
+    return SkNEW_ARGS(GrGLSimpleTextureEffect, (*this));
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
 GR_DEFINE_FRAGMENT_PROCESSOR_TEST(GrSimpleTextureEffect);
 
-const GrFragmentProcessor* GrSimpleTextureEffect::TestCreate(GrProcessorTestData* d) {
+GrFragmentProcessor* GrSimpleTextureEffect::TestCreate(GrProcessorTestData* d) {
     int texIdx = d->fRandom->nextBool() ? GrProcessorUnitTest::kSkiaPMTextureIdx :
                                           GrProcessorUnitTest::kAlphaTextureIdx;
     static const SkShader::TileMode kTileModes[] = {
@@ -72,5 +72,6 @@ const GrFragmentProcessor* GrSimpleTextureEffect::TestCreate(GrProcessorTestData
     GrCoordSet coordSet = kCoordSets[d->fRandom->nextULessThan(SK_ARRAY_COUNT(kCoordSets))];
 
     const SkMatrix& matrix = GrTest::TestMatrix(d->fRandom);
-    return GrSimpleTextureEffect::Create(d->fTextures[texIdx], matrix, coordSet);
+    return GrSimpleTextureEffect::Create(d->fProcDataManager, d->fTextures[texIdx], matrix,
+                                         coordSet);
 }

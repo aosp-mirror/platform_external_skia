@@ -9,21 +9,23 @@
 
 #include "gl/GrGLFragmentProcessor.h"
 #include "gl/GrGLGeometryProcessor.h"
-#include "gl/GrGLUtil.h"
 #include "gl/builders/GrGLProgramBuilder.h"
 
 class GrGLConicEffect : public GrGLGeometryProcessor {
 public:
-    GrGLConicEffect(const GrGeometryProcessor&);
+    GrGLConicEffect(const GrGeometryProcessor&,
+                    const GrBatchTracker&);
 
     void onEmitCode(EmitArgs&, GrGPArgs*) override;
 
     static inline void GenKey(const GrGeometryProcessor&,
+                              const GrBatchTracker&,
                               const GrGLSLCaps&,
                               GrProcessorKeyBuilder*);
 
-    void setData(const GrGLProgramDataManager& pdman,
-                 const GrPrimitiveProcessor& primProc) override {
+    virtual void setData(const GrGLProgramDataManager& pdman,
+                         const GrPrimitiveProcessor& primProc,
+                         const GrBatchTracker& bt) override {
         const GrConicEffect& ce = primProc.cast<GrConicEffect>();
 
         if (!ce.viewMatrix().isIdentity() && !fViewMatrix.cheapEqualTo(ce.viewMatrix())) {
@@ -65,7 +67,8 @@ private:
     typedef GrGLGeometryProcessor INHERITED;
 };
 
-GrGLConicEffect::GrGLConicEffect(const GrGeometryProcessor& processor)
+GrGLConicEffect::GrGLConicEffect(const GrGeometryProcessor& processor,
+                                 const GrBatchTracker& bt)
     : fViewMatrix(SkMatrix::InvalidMatrix()), fColor(GrColor_ILLEGAL), fCoverageScale(0xff) {
     const GrConicEffect& ce = processor.cast<GrConicEffect>();
     fEdgeType = ce.getEdgeType();
@@ -167,6 +170,7 @@ void GrGLConicEffect::onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) {
 }
 
 void GrGLConicEffect::GenKey(const GrGeometryProcessor& gp,
+                             const GrBatchTracker& bt,
                              const GrGLSLCaps&,
                              GrProcessorKeyBuilder* b) {
     const GrConicEffect& ce = gp.cast<GrConicEffect>();
@@ -182,13 +186,15 @@ void GrGLConicEffect::GenKey(const GrGeometryProcessor& gp,
 
 GrConicEffect::~GrConicEffect() {}
 
-void GrConicEffect::getGLProcessorKey(const GrGLSLCaps& caps,
+void GrConicEffect::getGLProcessorKey(const GrBatchTracker& bt,
+                                      const GrGLSLCaps& caps,
                                       GrProcessorKeyBuilder* b) const {
-    GrGLConicEffect::GenKey(*this, caps, b);
+    GrGLConicEffect::GenKey(*this, bt, caps, b);
 }
 
-GrGLPrimitiveProcessor* GrConicEffect::createGLInstance(const GrGLSLCaps&) const {
-    return new GrGLConicEffect(*this);
+GrGLPrimitiveProcessor* GrConicEffect::createGLInstance(const GrBatchTracker& bt,
+                                                        const GrGLSLCaps&) const {
+    return SkNEW_ARGS(GrGLConicEffect, (*this, bt));
 }
 
 GrConicEffect::GrConicEffect(GrColor color, const SkMatrix& viewMatrix, uint8_t coverage,
@@ -211,7 +217,7 @@ GrConicEffect::GrConicEffect(GrColor color, const SkMatrix& viewMatrix, uint8_t 
 
 GR_DEFINE_GEOMETRY_PROCESSOR_TEST(GrConicEffect);
 
-const GrGeometryProcessor* GrConicEffect::TestCreate(GrProcessorTestData* d) {
+GrGeometryProcessor* GrConicEffect::TestCreate(GrProcessorTestData* d) {
     GrGeometryProcessor* gp;
     do {
         GrPrimitiveEdgeType edgeType =
@@ -220,7 +226,7 @@ const GrGeometryProcessor* GrConicEffect::TestCreate(GrProcessorTestData* d) {
         gp = GrConicEffect::Create(GrRandomColor(d->fRandom), GrTest::TestMatrix(d->fRandom),
                                    edgeType, *d->fCaps,
                                    GrTest::TestMatrix(d->fRandom), d->fRandom->nextBool());
-    } while (nullptr == gp);
+    } while (NULL == gp);
     return gp;
 }
 
@@ -230,16 +236,19 @@ const GrGeometryProcessor* GrConicEffect::TestCreate(GrProcessorTestData* d) {
 
 class GrGLQuadEffect : public GrGLGeometryProcessor {
 public:
-    GrGLQuadEffect(const GrGeometryProcessor&);
+    GrGLQuadEffect(const GrGeometryProcessor&,
+                   const GrBatchTracker&);
 
     void onEmitCode(EmitArgs&, GrGPArgs*) override;
 
     static inline void GenKey(const GrGeometryProcessor&,
+                              const GrBatchTracker&,
                               const GrGLSLCaps&,
                               GrProcessorKeyBuilder*);
 
-    void setData(const GrGLProgramDataManager& pdman,
-                 const GrPrimitiveProcessor& primProc) override {
+    virtual void setData(const GrGLProgramDataManager& pdman,
+                         const GrPrimitiveProcessor& primProc,
+                         const GrBatchTracker& bt) override {
         const GrQuadEffect& qe = primProc.cast<GrQuadEffect>();
 
         if (!qe.viewMatrix().isIdentity() && !fViewMatrix.cheapEqualTo(qe.viewMatrix())) {
@@ -281,7 +290,8 @@ private:
     typedef GrGLGeometryProcessor INHERITED;
 };
 
-GrGLQuadEffect::GrGLQuadEffect(const GrGeometryProcessor& processor)
+GrGLQuadEffect::GrGLQuadEffect(const GrGeometryProcessor& processor,
+                               const GrBatchTracker& bt)
     : fViewMatrix(SkMatrix::InvalidMatrix()), fColor(GrColor_ILLEGAL), fCoverageScale(0xff) {
     const GrQuadEffect& ce = processor.cast<GrQuadEffect>();
     fEdgeType = ce.getEdgeType();
@@ -368,6 +378,7 @@ void GrGLQuadEffect::onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) {
 }
 
 void GrGLQuadEffect::GenKey(const GrGeometryProcessor& gp,
+                            const GrBatchTracker& bt,
                             const GrGLSLCaps&,
                             GrProcessorKeyBuilder* b) {
     const GrQuadEffect& ce = gp.cast<GrQuadEffect>();
@@ -383,13 +394,15 @@ void GrGLQuadEffect::GenKey(const GrGeometryProcessor& gp,
 
 GrQuadEffect::~GrQuadEffect() {}
 
-void GrQuadEffect::getGLProcessorKey(const GrGLSLCaps& caps,
+void GrQuadEffect::getGLProcessorKey(const GrBatchTracker& bt,
+                                     const GrGLSLCaps& caps,
                                      GrProcessorKeyBuilder* b) const {
-    GrGLQuadEffect::GenKey(*this, caps, b);
+    GrGLQuadEffect::GenKey(*this, bt, caps, b);
 }
 
-GrGLPrimitiveProcessor* GrQuadEffect::createGLInstance(const GrGLSLCaps&) const {
-    return new GrGLQuadEffect(*this);
+GrGLPrimitiveProcessor* GrQuadEffect::createGLInstance(const GrBatchTracker& bt,
+                                                       const GrGLSLCaps&) const {
+    return SkNEW_ARGS(GrGLQuadEffect, (*this, bt));
 }
 
 GrQuadEffect::GrQuadEffect(GrColor color, const SkMatrix& viewMatrix, uint8_t coverage,
@@ -412,7 +425,7 @@ GrQuadEffect::GrQuadEffect(GrColor color, const SkMatrix& viewMatrix, uint8_t co
 
 GR_DEFINE_GEOMETRY_PROCESSOR_TEST(GrQuadEffect);
 
-const GrGeometryProcessor* GrQuadEffect::TestCreate(GrProcessorTestData* d) {
+GrGeometryProcessor* GrQuadEffect::TestCreate(GrProcessorTestData* d) {
     GrGeometryProcessor* gp;
     do {
         GrPrimitiveEdgeType edgeType = static_cast<GrPrimitiveEdgeType>(
@@ -422,7 +435,7 @@ const GrGeometryProcessor* GrQuadEffect::TestCreate(GrProcessorTestData* d) {
                                   edgeType, *d->fCaps,
                                   GrTest::TestMatrix(d->fRandom),
                                   d->fRandom->nextBool());
-    } while (nullptr == gp);
+    } while (NULL == gp);
     return gp;
 }
 
@@ -432,16 +445,19 @@ const GrGeometryProcessor* GrQuadEffect::TestCreate(GrProcessorTestData* d) {
 
 class GrGLCubicEffect : public GrGLGeometryProcessor {
 public:
-    GrGLCubicEffect(const GrGeometryProcessor&);
+    GrGLCubicEffect(const GrGeometryProcessor&,
+                    const GrBatchTracker&);
 
     void onEmitCode(EmitArgs&, GrGPArgs*) override;
 
     static inline void GenKey(const GrGeometryProcessor&,
+                              const GrBatchTracker&,
                               const GrGLSLCaps&,
                               GrProcessorKeyBuilder*);
 
-    void setData(const GrGLProgramDataManager& pdman,
-                 const GrPrimitiveProcessor& primProc) override {
+    virtual void setData(const GrGLProgramDataManager& pdman,
+                         const GrPrimitiveProcessor& primProc,
+                         const GrBatchTracker& bt) override {
         const GrCubicEffect& ce = primProc.cast<GrCubicEffect>();
 
         if (!ce.viewMatrix().isIdentity() && !fViewMatrix.cheapEqualTo(ce.viewMatrix())) {
@@ -469,7 +485,8 @@ private:
     typedef GrGLGeometryProcessor INHERITED;
 };
 
-GrGLCubicEffect::GrGLCubicEffect(const GrGeometryProcessor& processor)
+GrGLCubicEffect::GrGLCubicEffect(const GrGeometryProcessor& processor,
+                                 const GrBatchTracker&)
     : fViewMatrix(SkMatrix::InvalidMatrix()), fColor(GrColor_ILLEGAL) {
     const GrCubicEffect& ce = processor.cast<GrCubicEffect>();
     fEdgeType = ce.getEdgeType();
@@ -501,14 +518,14 @@ void GrGLCubicEffect::onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) {
 
     GrGLFragmentBuilder* fsBuilder = args.fPB->getFragmentShaderBuilder();
 
-    GrGLSLShaderVar edgeAlpha("edgeAlpha", kFloat_GrSLType, 0, kHigh_GrSLPrecision);
-    GrGLSLShaderVar dklmdx("dklmdx", kVec3f_GrSLType, 0, kHigh_GrSLPrecision);
-    GrGLSLShaderVar dklmdy("dklmdy", kVec3f_GrSLType, 0, kHigh_GrSLPrecision);
-    GrGLSLShaderVar dfdx("dfdx", kFloat_GrSLType, 0, kHigh_GrSLPrecision);
-    GrGLSLShaderVar dfdy("dfdy", kFloat_GrSLType, 0, kHigh_GrSLPrecision);
-    GrGLSLShaderVar gF("gF", kVec2f_GrSLType, 0, kHigh_GrSLPrecision);
-    GrGLSLShaderVar gFM("gFM", kFloat_GrSLType, 0, kHigh_GrSLPrecision);
-    GrGLSLShaderVar func("func", kFloat_GrSLType, 0, kHigh_GrSLPrecision);
+    GrGLShaderVar edgeAlpha("edgeAlpha", kFloat_GrSLType, 0, kHigh_GrSLPrecision);
+    GrGLShaderVar dklmdx("dklmdx", kVec3f_GrSLType, 0, kHigh_GrSLPrecision);
+    GrGLShaderVar dklmdy("dklmdy", kVec3f_GrSLType, 0, kHigh_GrSLPrecision);
+    GrGLShaderVar dfdx("dfdx", kFloat_GrSLType, 0, kHigh_GrSLPrecision);
+    GrGLShaderVar dfdy("dfdy", kFloat_GrSLType, 0, kHigh_GrSLPrecision);
+    GrGLShaderVar gF("gF", kVec2f_GrSLType, 0, kHigh_GrSLPrecision);
+    GrGLShaderVar gFM("gFM", kFloat_GrSLType, 0, kHigh_GrSLPrecision);
+    GrGLShaderVar func("func", kFloat_GrSLType, 0, kHigh_GrSLPrecision);
 
     fsBuilder->declAppend(edgeAlpha);
     fsBuilder->declAppend(dklmdx);
@@ -587,6 +604,7 @@ void GrGLCubicEffect::onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) {
 }
 
 void GrGLCubicEffect::GenKey(const GrGeometryProcessor& gp,
+                             const GrBatchTracker& bt,
                              const GrGLSLCaps&,
                              GrProcessorKeyBuilder* b) {
     const GrCubicEffect& ce = gp.cast<GrCubicEffect>();
@@ -600,12 +618,15 @@ void GrGLCubicEffect::GenKey(const GrGeometryProcessor& gp,
 
 GrCubicEffect::~GrCubicEffect() {}
 
-void GrCubicEffect::getGLProcessorKey(const GrGLSLCaps& caps, GrProcessorKeyBuilder* b) const {
-    GrGLCubicEffect::GenKey(*this, caps, b);
+void GrCubicEffect::getGLProcessorKey(const GrBatchTracker& bt,
+                                      const GrGLSLCaps& caps,
+                                      GrProcessorKeyBuilder* b) const {
+    GrGLCubicEffect::GenKey(*this, bt, caps, b);
 }
 
-GrGLPrimitiveProcessor* GrCubicEffect::createGLInstance(const GrGLSLCaps&) const {
-    return new GrGLCubicEffect(*this);
+GrGLPrimitiveProcessor* GrCubicEffect::createGLInstance(const GrBatchTracker& bt,
+                                                        const GrGLSLCaps&) const {
+    return SkNEW_ARGS(GrGLCubicEffect, (*this, bt));
 }
 
 GrCubicEffect::GrCubicEffect(GrColor color, const SkMatrix& viewMatrix,
@@ -624,7 +645,7 @@ GrCubicEffect::GrCubicEffect(GrColor color, const SkMatrix& viewMatrix,
 
 GR_DEFINE_GEOMETRY_PROCESSOR_TEST(GrCubicEffect);
 
-const GrGeometryProcessor* GrCubicEffect::TestCreate(GrProcessorTestData* d) {
+GrGeometryProcessor* GrCubicEffect::TestCreate(GrProcessorTestData* d) {
     GrGeometryProcessor* gp;
     do {
         GrPrimitiveEdgeType edgeType =
@@ -632,7 +653,7 @@ const GrGeometryProcessor* GrCubicEffect::TestCreate(GrProcessorTestData* d) {
                         d->fRandom->nextULessThan(kGrProcessorEdgeTypeCnt));
         gp = GrCubicEffect::Create(GrRandomColor(d->fRandom),
                                    GrTest::TestMatrix(d->fRandom), edgeType, *d->fCaps);
-    } while (nullptr == gp);
+    } while (NULL == gp);
     return gp;
 }
 

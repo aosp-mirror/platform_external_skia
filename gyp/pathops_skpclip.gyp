@@ -12,7 +12,6 @@
       'target_name': 'pathops_skpclip',
       'type': 'executable',
       'include_dirs': [
-        '../include/private',
         '../src/core',
         '../src/effects',
         '../src/lazy',
@@ -27,7 +26,7 @@
         'tools.gyp:resources',
       ],
       'sources': [
-        '../tests/PathOpsDebug.cpp',
+		'../tests/PathOpsDebug.cpp',
         '../tests/PathOpsSkpClipTest.cpp',
       ],
       'conditions': [

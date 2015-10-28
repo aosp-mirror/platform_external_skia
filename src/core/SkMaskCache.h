@@ -21,24 +21,24 @@ public:
      * On success, return a ref to the SkCachedData that holds the pixels, and have mask
      * already point to that memory.
      *
-     * On failure, return nullptr.
+     * On failure, return NULL.
      */
     static SkCachedData* FindAndRef(SkScalar sigma, SkBlurStyle style, SkBlurQuality quality,
                                     const SkRRect& rrect, SkMask* mask,
-                                    SkResourceCache* localCache = nullptr);
+                                    SkResourceCache* localCache = NULL);
     static SkCachedData* FindAndRef(SkScalar sigma, SkBlurStyle style, SkBlurQuality quality,
                                     const SkRect rects[], int count, SkMask* mask,
-                                    SkResourceCache* localCache = nullptr);
+                                    SkResourceCache* localCache = NULL);
 
     /**
      * Add a mask and its pixel-data to the cache.
      */
     static void Add(SkScalar sigma, SkBlurStyle style, SkBlurQuality quality,
                     const SkRRect& rrect, const SkMask& mask, SkCachedData* data,
-                    SkResourceCache* localCache = nullptr);
+                    SkResourceCache* localCache = NULL);
     static void Add(SkScalar sigma, SkBlurStyle style, SkBlurQuality quality,
                     const SkRect rects[], int count, const SkMask& mask, SkCachedData* data,
-                    SkResourceCache* localCache = nullptr);
+                    SkResourceCache* localCache = NULL);
 };
 
 #endif

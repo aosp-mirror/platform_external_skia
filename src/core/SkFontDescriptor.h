@@ -32,7 +32,7 @@ public:
             fAxis[i] = that.fAxis[i];
         }
     }
-    bool hasStream() const { return fStream.get() != nullptr; }
+    bool hasStream() const { return fStream.get() != NULL; }
     SkStreamAsset* duplicateStream() const { return fStream->duplicate(); }
     SkStreamAsset* detachStream() { return fStream.detach(); }
     SkStreamAsset* getStream() { return fStream.get(); }
@@ -61,7 +61,7 @@ public:
     const char* getFamilyName() const { return fFamilyName.c_str(); }
     const char* getFullName() const { return fFullName.c_str(); }
     const char* getPostscriptName() const { return fPostscriptName.c_str(); }
-    bool hasFontData() const { return fFontData.get() != nullptr; }
+    bool hasFontData() const { return fFontData.get() != NULL; }
     SkFontData* detachFontData() { return fFontData.detach(); }
 
     void setFamilyName(const char* name) { fFamilyName.set(name); }

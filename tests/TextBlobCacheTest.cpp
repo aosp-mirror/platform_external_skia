@@ -6,7 +6,6 @@
  */
 
 #include "sk_tool_utils.h"
-
 #include "SkCanvas.h"
 #include "SkPaint.h"
 #include "SkPoint.h"
@@ -15,7 +14,6 @@
 #include "SkGraphics.h"
 #include "SkSurface.h"
 #include "SkTypeface.h"
-#include "../src/fonts/SkRandomScalerContext.h"
 
 #ifdef SK_BUILD_FOR_WIN
     #include "SkTypeface_win.h"
@@ -25,7 +23,6 @@
 
 #if SK_SUPPORT_GPU
 #include "GrContextFactory.h"
-#include "GrTest.h"
 
 struct TextBlobWrapper {
     // This class assumes it 'owns' the textblob it wraps, and thus does not need to take a ref
@@ -48,26 +45,21 @@ static void draw(SkCanvas* canvas, int redraw, const SkTArray<TextBlobWrapper>& 
     }
 }
 
+// limit this just so we don't take too long to draw
+#define MAX_TOTAL_TEXT 4096
+#define MAX_CHAR 256
+#define MAX_FAMILIES 30
+
 static const int kWidth = 1024;
 static const int kHeight = 768;
 
 // This test hammers the GPU textblobcache and font atlas
-static void text_blob_cache_inner(skiatest::Reporter* reporter, GrContextFactory* factory,
-                                  int maxTotalText, int maxGlyphID, int maxFamilies, bool normal,
-                                  bool stressTest) {
+DEF_GPUTEST(TextBlobCache, reporter, factory) {
     // setup surface
     uint32_t flags = 0;
     SkSurfaceProps props(flags, SkSurfaceProps::kLegacyFontHost_InitType);
 
-    // We don't typically actually draw with this unittest
-    GrContext* ctx = factory->get(GrContextFactory::kNull_GLContextType);
-
-    // configure our context for maximum stressing of cache and atlas
-    if (stressTest) {
-        GrTest::SetupAlwaysEvictAtlas(ctx);
-        ctx->setTextBlobCacheLimit_ForTesting(0);
-    }
-
+    GrContext* ctx = factory->get(GrContextFactory::kNative_GLContextType);
     SkImageInfo info = SkImageInfo::Make(kWidth, kHeight, kN32_SkColorType, kPremul_SkAlphaType);
     SkAutoTUnref<SkSurface> surface(SkSurface::NewRenderTarget(ctx, SkSurface::kNo_Budgeted, info,
                                                                0, &props));
@@ -80,12 +72,12 @@ static void text_blob_cache_inner(skiatest::Reporter* reporter, GrContextFactory
 
     SkAutoTUnref<SkFontMgr> fm(SkFontMgr::RefDefault());
 
-    int count = SkMin32(fm->countFamilies(), maxFamilies);
+    int count = SkMin32(fm->countFamilies(), MAX_FAMILIES);
 
     // make a ton of text
-    SkAutoTArray<uint16_t> text(maxTotalText);
-    for (int i = 0; i < maxTotalText; i++) {
-        text[i] = i % maxGlyphID;
+    uint16_t text[MAX_TOTAL_TEXT];
+    for (int i = 0; i < MAX_TOTAL_TEXT; i++) {
+        text[i] = i % MAX_CHAR;
     }
 
     // generate textblobs
@@ -100,16 +92,9 @@ static void text_blob_cache_inner(skiatest::Reporter* reporter, GrContextFactory
         SkAutoTUnref<SkFontStyleSet> set(fm->createStyleSet(i));
         for (int j = 0; j < set->count(); ++j) {
             SkFontStyle fs;
-            set->getStyle(j, &fs, nullptr);
+            set->getStyle(j, &fs, NULL);
 
-            // We use a typeface which randomy returns unexpected mask formats to fuzz
-            SkAutoTUnref<SkTypeface> orig(set->createTypeface(j));
-            if (normal) {
-                paint.setTypeface(orig);
-            } else {
-                SkAutoTUnref<SkTypeface> typeface(new SkRandomTypeface(orig, paint, true));
-                paint.setTypeface(typeface);
-            }
+            SkSafeUnref(paint.setTypeface(set->createTypeface(j)));
 
             SkTextBlobBuilder builder;
             for (int aa = 0; aa < 2; aa++) {
@@ -118,14 +103,11 @@ static void text_blob_cache_inner(skiatest::Reporter* reporter, GrContextFactory
                         paint.setAntiAlias(SkToBool(aa));
                         paint.setSubpixelText(SkToBool(subpixel));
                         paint.setLCDRenderText(SkToBool(lcd));
-                        if (!SkToBool(lcd)) {
-                            paint.setTextSize(160);
-                        }
                         const SkTextBlobBuilder::RunBuffer& run = builder.allocRun(paint,
-                                                                                   maxTotalText,
+                                                                                   MAX_TOTAL_TEXT,
                                                                                    0, 0,
-                                                                                   nullptr);
-                        memcpy(run.glyphs, text.get(), maxTotalText * sizeof(uint16_t));
+                                                                                   NULL);
+                        memcpy(run.glyphs, text, MAX_TOTAL_TEXT * sizeof(uint16_t));
                     }
                 }
             }
@@ -158,21 +140,5 @@ static void text_blob_cache_inner(skiatest::Reporter* reporter, GrContextFactory
     // test draw after abandon
     ctx->abandonContext();
     draw(canvas, 1, blobs);
-}
-
-DEF_GPUTEST(TextBlobCache, reporter, factory) {
-    text_blob_cache_inner(reporter, factory, 1024, 256, 30, true, false);
-}
-
-DEF_GPUTEST(TextBlobStressCache, reporter, factory) {
-    text_blob_cache_inner(reporter, factory, 256, 256, 10, true, true);
-}
-
-DEF_GPUTEST(TextBlobAbnormal, reporter, factory) {
-    text_blob_cache_inner(reporter, factory, 256, 256, 10, false, false);
-}
-
-DEF_GPUTEST(TextBlobStressAbnormal, reporter, factory) {
-    text_blob_cache_inner(reporter, factory, 256, 256, 10, false, true);
 }
 #endif

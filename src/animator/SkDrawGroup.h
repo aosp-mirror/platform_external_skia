@@ -38,7 +38,7 @@ public:
     SkGroup* getOriginal() { return fOriginal; }
     bool hasEnable() const override;
     void initialize() override;
-    SkBool isACopy() { return fOriginal != nullptr; }
+    SkBool isACopy() { return fOriginal != NULL; }
     void markCopyClear(int index);
     void markCopySet(int index);
     void markCopySize(int index);

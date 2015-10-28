@@ -11,7 +11,7 @@
 
 #include "../GrPathRange.h"
 #include "GrStrokeInfo.h"
-#include "gl/GrGLTypes.h"
+#include "gl/GrGLFunctions.h"
 
 class GrGLGpu;
 

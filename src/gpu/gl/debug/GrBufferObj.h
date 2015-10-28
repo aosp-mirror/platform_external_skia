@@ -19,7 +19,7 @@ class GrBufferObj : public GrFakeRefObj {
 public:
     GrBufferObj()
         : GrFakeRefObj()
-        , fDataPtr(nullptr)
+        , fDataPtr(NULL)
         , fMapped(false)
         , fBound(false)
         , fSize(0)

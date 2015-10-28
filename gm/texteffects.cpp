@@ -17,7 +17,7 @@ static void r0(SkLayerRasterizer::Builder* rastBuilder, SkPaint& p) {
                               SkBlurMask::ConvertRadiusToSigma(SkIntToScalar(3))))->unref();
     rastBuilder->addLayer(p, SkIntToScalar(3), SkIntToScalar(3));
 
-    p.setMaskFilter(nullptr);
+    p.setMaskFilter(NULL);
     p.setStyle(SkPaint::kStroke_Style);
     p.setStrokeWidth(SK_Scalar1);
     rastBuilder->addLayer(p);
@@ -68,7 +68,7 @@ static void r4(SkLayerRasterizer::Builder* rastBuilder, SkPaint& p) {
     p.setXfermodeMode(SkXfermode::kClear_Mode);
     rastBuilder->addLayer(p, SK_Scalar1*3/2, SK_Scalar1*3/2);
 
-    p.setXfermode(nullptr);
+    p.setXfermode(NULL);
     rastBuilder->addLayer(p);
 }
 
@@ -119,8 +119,8 @@ static void r8(SkLayerRasterizer::Builder* rastBuilder, SkPaint& p) {
     p.setXfermodeMode(SkXfermode::kClear_Mode);
     rastBuilder->addLayer(p);
 
-    p.setPathEffect(nullptr);
-    p.setXfermode(nullptr);
+    p.setPathEffect(NULL);
+    p.setXfermode(NULL);
     p.setStyle(SkPaint::kStroke_Style);
     p.setStrokeWidth(SK_Scalar1);
     rastBuilder->addLayer(p);
@@ -136,8 +136,8 @@ static void r9(SkLayerRasterizer::Builder* rastBuilder, SkPaint& p) {
     p.setXfermodeMode(SkXfermode::kClear_Mode);
     rastBuilder->addLayer(p);
 
-    p.setPathEffect(nullptr);
-    p.setXfermode(nullptr);
+    p.setPathEffect(NULL);
+    p.setXfermode(NULL);
     p.setStyle(SkPaint::kStroke_Style);
     p.setStrokeWidth(SK_Scalar1);
     rastBuilder->addLayer(p);
@@ -170,12 +170,25 @@ static void apply_shader(SkPaint* paint, int index) {
     paint->setColor(SK_ColorBLUE);
 }
 
-DEF_SIMPLE_GM(texteffects, canvas, 460, 680) {
+class TextEffectsGM : public skiagm::GM {
+public:
+    TextEffectsGM() {}
+
+protected:
+    SkString onShortName() override {
+        return SkString("texteffects");
+    }
+
+    SkISize onISize() override {
+        return SkISize::Make(460, 680);
+    }
+
+    void onDraw(SkCanvas* canvas) override {
         canvas->save();
 
         SkPaint     paint;
         paint.setAntiAlias(true);
-        sk_tool_utils::set_portable_typeface(&paint);
+        sk_tool_utils::set_portable_typeface_always(&paint);
         paint.setTextSize(SkIntToScalar(56));
 
         SkScalar    x = SkIntToScalar(20);
@@ -186,7 +199,7 @@ DEF_SIMPLE_GM(texteffects, canvas, 460, 680) {
         for (int i = 0; i < static_cast<int>(SK_ARRAY_COUNT(gRastProcs)); i++) {
             apply_shader(&paint, i);
 
-            //  paint.setMaskFilter(nullptr);
+            //  paint.setMaskFilter(NULL);
             //  paint.setColor(SK_ColorBLACK);
 
             canvas->drawText(str.c_str(), str.size(), x, y, paint);
@@ -195,4 +208,13 @@ DEF_SIMPLE_GM(texteffects, canvas, 460, 680) {
         }
 
         canvas->restore();
-}
+    }
+
+private:
+    typedef skiagm::GM INHERITED;
+};
+
+//////////////////////////////////////////////////////////////////////////////
+
+static skiagm::GM* MyFactory(void*) { return new TextEffectsGM; }
+static skiagm::GMRegistry reg(MyFactory);

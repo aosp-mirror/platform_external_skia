@@ -5,8 +5,6 @@
  * found in the LICENSE file.
  */
 
-#include "SkTypes.h"
-
 #if SK_SUPPORT_GPU
 #include "Test.h"
 #include "gl/GrGLSLPrettyPrint.h"
@@ -119,7 +117,7 @@ DEF_TEST(GrGLSLPrettyPrint, r) {
 
     // Just test we don't crash with garbage input
     ASSERT(GrGLSLPrettyPrint::PrettyPrintGLSL(testStr.begin(), lengths.begin(), 1,
-                                              true).c_str() != nullptr);
+                                              true).c_str() != NULL);
 }
 
 #endif

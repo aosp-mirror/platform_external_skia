@@ -25,7 +25,6 @@ public:
     Error draw(const Src&, SkBitmap*, SkWStream*, SkString*) const override;
     int enclave() const override { return kGPU_Enclave; }
     const char* fileExtension() const override { return "png"; }
-    SinkFlags flags() const override { return SinkFlags{ SinkFlags::kGPU, SinkFlags::kDirect }; }
 };
 
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
@@ -39,11 +38,6 @@ public:
     Error draw(const Src&, SkBitmap*, SkWStream*, SkString*) const override;
     int enclave() const override { return fSink->enclave(); }
     const char* fileExtension() const override { return fSink->fileExtension(); }
-    SinkFlags flags() const override {
-        SinkFlags flags = fSink->flags();
-        flags.approach = SinkFlags::kIndirect;
-        return flags;
-    }
 
 private:
     SkAutoTDelete<Sink> fSink;

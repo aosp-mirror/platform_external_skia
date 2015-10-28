@@ -17,7 +17,7 @@
 #include "SkRasterClip.h"
 #include "SkRSXform.h"
 #include "SkShader.h"
-#include "SkTextBlobRunIterator.h"
+#include "SkTextBlob.h"
 #include "SkTextToPathIter.h"
 
 SkBaseDevice::SkBaseDevice(const SkSurfaceProps& surfaceProps)
@@ -27,15 +27,17 @@ SkBaseDevice::SkBaseDevice(const SkSurfaceProps& surfaceProps)
 #endif
 {
     fOrigin.setZero();
-    fMetaData = nullptr;
+    fMetaData = NULL;
 }
 
-SkBaseDevice::~SkBaseDevice() { delete fMetaData; }
+SkBaseDevice::~SkBaseDevice() {
+    SkDELETE(fMetaData);
+}
 
 SkMetaData& SkBaseDevice::getMetaData() {
     // metadata users are rare, so we lazily allocate it. If that changes we
     // can decide to just make it a field in the device (rather than a ptr)
-    if (nullptr == fMetaData) {
+    if (NULL == fMetaData) {
         fMetaData = new SkMetaData;
     }
     return *fMetaData;
@@ -78,7 +80,7 @@ void SkBaseDevice::drawDRRect(const SkDraw& draw, const SkRRect& outer,
     path.addRRect(inner);
     path.setFillType(SkPath::kEvenOdd_FillType);
 
-    const SkMatrix* preMatrix = nullptr;
+    const SkMatrix* preMatrix = NULL;
     const bool pathIsMutable = true;
     this->drawPath(draw, path, paint, preMatrix, pathIsMutable);
 }
@@ -103,7 +105,7 @@ void SkBaseDevice::drawTextBlob(const SkDraw& draw, const SkTextBlob* blob, SkSc
 
     SkPaint runPaint = paint;
 
-    SkTextBlobRunIterator it(blob);
+    SkTextBlob::RunIterator it(blob);
     for (;!it.done(); it.next()) {
         size_t textLen = it.glyphCount() * sizeof(uint16_t);
         const SkPoint& offset = it.offset();
@@ -157,7 +159,7 @@ void SkBaseDevice::drawImageRect(const SkDraw& draw, const SkImage* image, const
     // Default impl : turns everything into raster bitmap
     SkBitmap bm;
     if (as_IB(image)->getROPixels(&bm)) {
-        this->drawBitmapRect(draw, bm, src, dst, paint, constraint);
+        this->drawBitmapRect(draw, bm, src, dst, paint, (SK_VIRTUAL_CONSTRAINT_TYPE)constraint);
     }
 }
 
@@ -177,7 +179,8 @@ void SkBaseDevice::drawBitmapNine(const SkDraw& draw, const SkBitmap& bitmap, co
     
     SkRect srcR, dstR;
     while (iter.next(&srcR, &dstR)) {
-        this->drawBitmapRect(draw, bitmap, &srcR, dstR, paint, SkCanvas::kStrict_SrcRectConstraint);
+        this->drawBitmapRect(draw, bitmap, &srcR, dstR, paint,
+                             (SK_VIRTUAL_CONSTRAINT_TYPE)SkCanvas::kStrict_SrcRectConstraint);
     }
 }
 
@@ -196,15 +199,9 @@ void SkBaseDevice::drawAtlas(const SkDraw& draw, const SkImage* atlas, const SkR
         localM.preTranslate(-tex[i].left(), -tex[i].top());
 
         SkPaint pnt(paint);
-        SkAutoTUnref<SkShader> shader(atlas->newShader(SkShader::kClamp_TileMode,
-                                                       SkShader::kClamp_TileMode,
-                                                       &localM));
-        if (!shader) {
-            break;
-        }
-        pnt.setShader(shader);
-
-        if (colors) {
+        pnt.setShader(atlas->newShader(SkShader::kClamp_TileMode, SkShader::kClamp_TileMode,
+                                       &localM))->unref();
+        if (colors && colors[i] != SK_ColorWHITE) {
             SkAutoTUnref<SkColorFilter> cf(SkColorFilter::CreateModeFilter(colors[i], mode));
             pnt.setColorFilter(cf);
         }
@@ -212,7 +209,7 @@ void SkBaseDevice::drawAtlas(const SkDraw& draw, const SkImage* atlas, const SkR
         path.rewind();
         path.addPoly(quad, 4, true);
         path.setConvexity(SkPath::kConvex_Convexity);
-        this->drawPath(draw, path, pnt, nullptr, true);
+        this->drawPath(draw, path, pnt, NULL, true);
     }
 }
 
@@ -263,7 +260,7 @@ bool SkBaseDevice::EXPERIMENTAL_drawPicture(SkCanvas*, const SkPicture*, const S
 
 bool SkBaseDevice::accessPixels(SkPixmap* pmap) {
     SkPixmap tempStorage;
-    if (nullptr == pmap) {
+    if (NULL == pmap) {
         pmap = &tempStorage;
     }
     return this->onAccessPixels(pmap);
@@ -271,7 +268,7 @@ bool SkBaseDevice::accessPixels(SkPixmap* pmap) {
 
 bool SkBaseDevice::peekPixels(SkPixmap* pmap) {
     SkPixmap tempStorage;
-    if (nullptr == pmap) {
+    if (NULL == pmap) {
         pmap = &tempStorage;
     }
     return this->onPeekPixels(pmap);
@@ -357,10 +354,10 @@ static void morphpath(SkPath* dst, const SkPath& src, SkPathMeasure& meas,
 void SkBaseDevice::drawTextOnPath(const SkDraw& draw, const void* text, size_t byteLength,
                                   const SkPath& follow, const SkMatrix* matrix,
                                   const SkPaint& paint) {
-    SkASSERT(byteLength == 0 || text != nullptr);
+    SkASSERT(byteLength == 0 || text != NULL);
     
     // nothing to draw
-    if (text == nullptr || byteLength == 0 || draw.fRC->isEmpty()) {
+    if (text == NULL || byteLength == 0 || draw.fRC->isEmpty()) {
         return;
     }
     
@@ -395,7 +392,7 @@ void SkBaseDevice::drawTextOnPath(const SkDraw& draw, const void* text, size_t b
                 m.postConcat(*matrix);
             }
             morphpath(&tmp, *iterPath, meas, m);
-            this->drawPath(draw, tmp, iter.getPaint(), nullptr, true);
+            this->drawPath(draw, tmp, iter.getPaint(), NULL, true);
         }
     }
 }

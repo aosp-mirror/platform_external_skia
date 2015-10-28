@@ -6,14 +6,12 @@
  */
 
 #include "SkOSFile.h"
-#include "SkString.h"
+
 #include "SkTFitsIn.h"
-#include "SkTemplates.h"
 #include "SkTypes.h"
 
 #include <dirent.h>
 #include <stdio.h>
-#include <string.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -63,19 +61,19 @@ void sk_fmunmap(const void* addr, size_t length) {
 void* sk_fdmmap(int fd, size_t* size) {
     struct stat status;
     if (0 != fstat(fd, &status)) {
-        return nullptr;
+        return NULL;
     }
     if (!S_ISREG(status.st_mode)) {
-        return nullptr;
+        return NULL;
     }
     if (!SkTFitsIn<size_t>(status.st_size)) {
-        return nullptr;
+        return NULL;
     }
     size_t fileSize = static_cast<size_t>(status.st_size);
 
-    void* addr = mmap(nullptr, fileSize, PROT_READ, MAP_PRIVATE, fd, 0);
+    void* addr = mmap(NULL, fileSize, PROT_READ, MAP_PRIVATE, fd, 0);
     if (MAP_FAILED == addr) {
-        return nullptr;
+        return NULL;
     }
 
     *size = fileSize;
@@ -89,7 +87,7 @@ int sk_fileno(SkFILE* f) {
 void* sk_fmmap(SkFILE* f, size_t* size) {
     int fd = sk_fileno(f);
     if (fd < 0) {
-        return nullptr;
+        return NULL;
     }
 
     return sk_fdmmap(fd, size);
@@ -102,12 +100,14 @@ struct SkOSFileIterData {
     DIR* fDIR;
     SkString fPath, fSuffix;
 };
-static_assert(sizeof(SkOSFileIterData) <= SkOSFile::Iter::kStorageSize, "not_enough_space");
+SK_COMPILE_ASSERT(sizeof(SkOSFileIterData) <= SkOSFile::Iter::kStorageSize, not_enough_space);
 
-SkOSFile::Iter::Iter() { new (fSelf.get()) SkOSFileIterData; }
+SkOSFile::Iter::Iter() {
+    SkNEW_PLACEMENT(fSelf.get(), SkOSFileIterData);
+}
 
 SkOSFile::Iter::Iter(const char path[], const char suffix[]) {
-    new (fSelf.get()) SkOSFileIterData;
+    SkNEW_PLACEMENT(fSelf.get(), SkOSFileIterData);
     this->reset(path, suffix);
 }
 
@@ -149,7 +149,7 @@ bool SkOSFile::Iter::next(SkString* name, bool getDir) {
     if (self.fDIR) {
         dirent* entry;
 
-        while ((entry = ::readdir(self.fDIR)) != nullptr) {
+        while ((entry = ::readdir(self.fDIR)) != NULL) {
             struct stat s;
             SkString str(self.fPath);
 

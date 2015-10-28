@@ -39,7 +39,7 @@ static void draw_text(SkCanvas* canvas, const SkRect& r, SkImageFilter* imf) {
     paint.setImageFilter(imf);
     paint.setColor(SK_ColorGREEN);
     paint.setAntiAlias(true);
-    sk_tool_utils::set_portable_typeface(&paint);
+    sk_tool_utils::set_portable_typeface_always(&paint);
     paint.setTextSize(r.height()/2);
     paint.setTextAlign(SkPaint::kCenter_Align);
     canvas->save();
@@ -58,7 +58,7 @@ static void draw_bitmap(SkCanvas* canvas, const SkRect& r, SkImageFilter* imf) {
     bm.allocN32Pixels(bounds.width(), bounds.height());
     bm.eraseColor(SK_ColorTRANSPARENT);
     SkCanvas c(bm);
-    draw_path(&c, r, nullptr);
+    draw_path(&c, r, NULL);
 
     paint.setImageFilter(imf);
     canvas->save();
@@ -125,7 +125,7 @@ protected:
                                           SkImageFilter::CropRect::kHasAll_CropEdge);
 
         SkImageFilter* filters[] = {
-            nullptr,
+            NULL,
             SkDropShadowImageFilter::Create(7.0f, 0.0f, 0.0f, 3.0f, SK_ColorBLUE,
                 SkDropShadowImageFilter::kDrawShadowAndForeground_ShadowMode),
             SkDropShadowImageFilter::Create(0.0f, 7.0f, 3.0f, 0.0f, SK_ColorBLUE,
@@ -133,11 +133,11 @@ protected:
             SkDropShadowImageFilter::Create(7.0f, 7.0f, 3.0f, 3.0f, SK_ColorBLUE,
                 SkDropShadowImageFilter::kDrawShadowAndForeground_ShadowMode),
             SkDropShadowImageFilter::Create(7.0f, 7.0f, 3.0f, 3.0f, SK_ColorBLUE,
-                SkDropShadowImageFilter::kDrawShadowAndForeground_ShadowMode, cfif, nullptr),
+                SkDropShadowImageFilter::kDrawShadowAndForeground_ShadowMode, cfif, NULL),
             SkDropShadowImageFilter::Create(7.0f, 7.0f, 3.0f, 3.0f, SK_ColorBLUE,
-                SkDropShadowImageFilter::kDrawShadowAndForeground_ShadowMode, nullptr, &cropRect),
+                SkDropShadowImageFilter::kDrawShadowAndForeground_ShadowMode, NULL, &cropRect),
             SkDropShadowImageFilter::Create(7.0f, 7.0f, 3.0f, 3.0f, SK_ColorBLUE,
-                SkDropShadowImageFilter::kDrawShadowAndForeground_ShadowMode, nullptr, &bogusRect),
+                SkDropShadowImageFilter::kDrawShadowAndForeground_ShadowMode, NULL, &bogusRect),
             SkDropShadowImageFilter::Create(7.0f, 7.0f, 3.0f, 3.0f, SK_ColorBLUE,
                 SkDropShadowImageFilter::kDrawShadowOnly_ShadowMode),
         };

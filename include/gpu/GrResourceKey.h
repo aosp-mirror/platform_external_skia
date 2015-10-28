@@ -9,10 +9,9 @@
 #ifndef GrResourceKey_DEFINED
 #define GrResourceKey_DEFINED
 
-#include "../private/SkTemplates.h"
 #include "GrTypes.h"
-#include "SkData.h"
-#include "../private/SkOnce.h"
+#include "SkOnce.h"
+#include "SkTemplates.h"
 
 uint32_t GrResourceKeyHash(const uint32_t* data, size_t size);
 
@@ -138,8 +137,8 @@ private:
 
     friend class TestResource; // For unit test to access kMetaDataCnt.
 
-    // bmp textures require 5 uint32_t values.
-    SkAutoSTMalloc<kMetaDataCnt + 5, uint32_t> fKey;
+    // bmp textures require 4 uint32_t values.
+    SkAutoSTMalloc<kMetaDataCnt + 4, uint32_t> fKey;
 };
 
 /**
@@ -238,7 +237,6 @@ public:
 
     GrUniqueKey& operator=(const GrUniqueKey& that) {
         this->INHERITED::operator=(that);
-        this->setCustomData(that.getCustomData());
         return *this;
     }
 
@@ -246,14 +244,6 @@ public:
         return this->INHERITED::operator==(that);
     }
     bool operator!=(const GrUniqueKey& that) const { return !(*this == that); }
-
-    void setCustomData(const SkData* data) {
-        SkSafeRef(data);
-        fData.reset(data);
-    }
-    const SkData* getCustomData() const {
-        return fData.get();
-    }
 
     class Builder : public INHERITED::Builder {
     public:
@@ -278,9 +268,6 @@ public:
             return SkToInt((innerKey.dataSize() >> 2) + 1);
         }
     };
-
-private:
-    SkAutoTUnref<const SkData> fData;
 };
 
 /**

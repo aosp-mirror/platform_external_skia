@@ -10,7 +10,6 @@
 #include "SkPictureCommon.h"
 #include "SkRecord.h"
 #include "SkRecordDraw.h"
-#include "SkTraceEvent.h"
 
 SkBigPicture::SkBigPicture(const SkRect& cull,
                            SkRecord* record,
@@ -44,8 +43,8 @@ void SkBigPicture::playback(SkCanvas* canvas, AbortCallback* callback) const {
 }
 
 void SkBigPicture::partialPlayback(SkCanvas* canvas,
-                                   int start,
-                                   int stop,
+                                   unsigned start,
+                                   unsigned stop,
                                    const SkMatrix& initialCTM) const {
     SkASSERT(canvas);
     SkRecordPartialDraw(*fRecord,
@@ -58,7 +57,8 @@ void SkBigPicture::partialPlayback(SkCanvas* canvas,
 }
 
 const SkBigPicture::Analysis& SkBigPicture::analysis() const {
-    return *fAnalysis.get([&]{ return new Analysis(*fRecord); });
+    auto create = [&]() { return SkNEW_ARGS(Analysis, (*fRecord)); };
+    return *fAnalysis.get(create);
 }
 
 SkRect SkBigPicture::cullRect()            const { return fCullRect; }
@@ -81,13 +81,12 @@ SkPicture const* const* SkBigPicture::drawablePicts() const {
 }
 
 SkBigPicture::Analysis::Analysis(const SkRecord& record) {
-    TRACE_EVENT0("disabled-by-default-skia", "SkBigPicture::Analysis::Analysis()");
     SkTextHunter   text;
     SkBitmapHunter bitmap;
     SkPathCounter  path;
 
     bool hasText = false, hasBitmap = false;
-    for (int i = 0; i < record.count(); i++) {
+    for (unsigned i = 0; i < record.count(); i++) {
         hasText   = hasText   || record.visit<bool>(i,   text);
         hasBitmap = hasBitmap || record.visit<bool>(i, bitmap);
         record.visit<void>(i, path);

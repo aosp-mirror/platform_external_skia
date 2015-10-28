@@ -15,7 +15,7 @@
 #include "GrContext.h"
 #include "GrTest.h"
 #include "effects/GrConstColorProcessor.h"
-#include "SkGrPriv.h"
+#include "SkGr.h"
 #include "SkGradientShader.h"
 
 namespace skiagm {
@@ -40,18 +40,18 @@ protected:
     void onOnceBeforeDraw() override {
         SkColor colors[] = { 0xFFFF0000, 0x2000FF00, 0xFF0000FF};
         SkPoint pts[] = { SkPoint::Make(0, 0), SkPoint::Make(kRectSize, kRectSize) };
-        fShader.reset(SkGradientShader::CreateLinear(pts, colors, nullptr, SK_ARRAY_COUNT(colors),
+        fShader.reset(SkGradientShader::CreateLinear(pts, colors, NULL, SK_ARRAY_COUNT(colors),
                        SkShader::kClamp_TileMode));
     }
 
     void onDraw(SkCanvas* canvas) override {
         GrRenderTarget* rt = canvas->internal_private_accessTopLayerRenderTarget();
-        if (nullptr == rt) {
+        if (NULL == rt) {
             return;
         }
         GrContext* context = rt->getContext();
-        if (nullptr == context) {
-            skiagm::GM::DrawGpuOnlyMessage(canvas);
+        if (NULL == context) {
+            this->drawGpuOnlyMessage(canvas);
             return;
         }
 
@@ -92,7 +92,7 @@ protected:
 
                     GrTestTarget tt;
                     context->getTestTarget(&tt);
-                    if (nullptr == tt.target()) {
+                    if (NULL == tt.target()) {
                         SkDEBUGFAIL("Couldn't get Gr test target.");
                         return;
                     }
@@ -104,7 +104,8 @@ protected:
                     } else {
                         skPaint.setColor(kPaintColors[paintType]);
                     }
-                    SkAssertResult(SkPaintToGrPaint(context, skPaint, viewMatrix, &grPaint));
+                    SkAssertResult(SkPaint2GrPaint(context, rt, skPaint, viewMatrix, false,
+                                                   &grPaint));
 
                     GrConstColorProcessor::InputMode mode = (GrConstColorProcessor::InputMode) m;
                     GrColor color = kColors[procColor];
@@ -112,17 +113,17 @@ protected:
 
                     GrClip clip;
                     GrPipelineBuilder pipelineBuilder(grPaint, rt, clip);
-                    pipelineBuilder.addColorFragmentProcessor(fp);
+                    pipelineBuilder.addColorProcessor(fp);
 
-                    tt.target()->drawNonAARect(pipelineBuilder,
-                                               grPaint.getColor(),
-                                               viewMatrix,
-                                               renderRect);
+                    tt.target()->drawSimpleRect(pipelineBuilder,
+                                                grPaint.getColor(),
+                                                viewMatrix,
+                                                renderRect);
 
                     // Draw labels for the input to the processor and the processor to the right of
                     // the test rect. The input label appears above the processor label.
                     SkPaint labelPaint;
-                    sk_tool_utils::set_portable_typeface(&labelPaint);
+                    sk_tool_utils::set_portable_typeface_always(&labelPaint);
                     labelPaint.setAntiAlias(true);
                     labelPaint.setTextSize(10.f);
                     SkString inputLabel;
@@ -191,7 +192,7 @@ private:
 const SkScalar ConstColorProcessor::kPad = 10.f;
 const SkScalar ConstColorProcessor::kRectSize = 20.f;
 
-DEF_GM(return new ConstColorProcessor;)
+DEF_GM( return SkNEW(ConstColorProcessor); )
 }
 
 #endif

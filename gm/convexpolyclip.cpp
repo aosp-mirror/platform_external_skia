@@ -10,7 +10,6 @@
 
 #include "SkBitmap.h"
 #include "SkGradientShader.h"
-#include "SkPath.h"
 #include "SkTLList.h"
 
 static SkBitmap make_bmp(int w, int h) {
@@ -57,7 +56,7 @@ static SkBitmap make_bmp(int w, int h) {
     }
 
     paint.setAntiAlias(true);
-    sk_tool_utils::set_portable_typeface(&paint);
+    sk_tool_utils::set_portable_typeface_always(&paint);
     paint.setTextSize(wScalar / 2.2f);
     paint.setShader(0);
     paint.setColor(sk_tool_utils::color_to_565(SK_ColorLTGRAY));
@@ -151,7 +150,7 @@ protected:
         SkPaint txtPaint;
         txtPaint.setTextSize(23.f);
         txtPaint.setAntiAlias(true);
-        sk_tool_utils::set_portable_typeface(&txtPaint);
+        sk_tool_utils::set_portable_typeface_always(&txtPaint);
         txtPaint.setColor(sk_tool_utils::color_to_565(SK_ColorDKGRAY));
         SkScalar textW = txtPaint.measureText(kTxt, SK_ARRAY_COUNT(kTxt)-1);
 
@@ -169,7 +168,7 @@ protected:
                         clip->getBounds(&bounds);
                         bounds.outset(2, 2);
                         bounds.offset(x, y);
-                        canvas->saveLayer(&bounds, nullptr);
+                        canvas->saveLayer(&bounds, NULL);
                     } else {
                         canvas->save();
                     }
@@ -192,7 +191,7 @@ protected:
                         clip->getBounds(&bounds);
                         bounds.outset(2, 2);
                         bounds.offset(x, y);
-                        canvas->saveLayer(&bounds, nullptr);
+                        canvas->saveLayer(&bounds, NULL);
                     } else {
                         canvas->save();
                     }
@@ -297,5 +296,6 @@ private:
     typedef GM INHERITED;
 };
 
-DEF_GM(return new ConvexPolyClip;)
+DEF_GM( return SkNEW(ConvexPolyClip); )
+
 }

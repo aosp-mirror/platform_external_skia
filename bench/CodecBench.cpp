@@ -6,7 +6,6 @@
  */
 
 #include "CodecBench.h"
-#include "CodecBenchPriv.h"
 #include "SkBitmap.h"
 #include "SkCodec.h"
 #include "SkOSFile.h"
@@ -16,7 +15,21 @@ CodecBench::CodecBench(SkString baseName, SkData* encoded, SkColorType colorType
     , fData(SkRef(encoded))
 {
     // Parse filename and the color type to give the benchmark a useful name
-    fName.printf("Codec_%s_%s", baseName.c_str(), color_type_to_str(colorType));
+    const char* colorName;
+    switch(colorType) {
+        case kN32_SkColorType:
+            colorName = "N32";
+            break;
+        case kRGB_565_SkColorType:
+            colorName = "565";
+            break;
+        case kAlpha_8_SkColorType:
+            colorName = "Alpha8";
+            break;
+        default:
+            colorName = "Unknown";
+    }
+    fName.printf("Codec_%s_%s", baseName.c_str(), colorName);
 #ifdef SK_DEBUG
     // Ensure that we can create an SkCodec from this data.
     SkAutoTDelete<SkCodec> codec(SkCodec::NewFromData(fData));
@@ -32,7 +45,7 @@ bool CodecBench::isSuitableFor(Backend backend) {
     return kNonRendering_Backend == backend;
 }
 
-void CodecBench::onDelayedSetup() {
+void CodecBench::onPreDraw() {
     SkAutoTDelete<SkCodec> codec(SkCodec::NewFromData(fData));
 
     fInfo = codec->getInfo().makeColorType(fColorType);
@@ -48,7 +61,7 @@ void CodecBench::onDelayedSetup() {
     fPixelStorage.reset(fInfo.getSafeSize(fInfo.minRowBytes()));
 }
 
-void CodecBench::onDraw(int n, SkCanvas* canvas) {
+void CodecBench::onDraw(const int n, SkCanvas* canvas) {
     SkAutoTDelete<SkCodec> codec;
     SkPMColor colorTable[256];
     int colorCount;
@@ -59,7 +72,7 @@ void CodecBench::onDraw(int n, SkCanvas* canvas) {
         const SkCodec::Result result =
 #endif
         codec->getPixels(fInfo, fPixelStorage.get(), fInfo.minRowBytes(),
-                         nullptr, colorTable, &colorCount);
+                         NULL, colorTable, &colorCount);
         SkASSERT(result == SkCodec::kSuccess
                  || result == SkCodec::kIncompleteInput);
     }

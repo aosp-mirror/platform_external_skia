@@ -183,23 +183,19 @@
         '../third_party/externals/jpeg/jutils.c',
       ],
       'conditions': [
-        # FIXME (msarett):
-        # Turn off Arm NEON optimizations to avoid namespace conflicts when
-        # compiling libjpeg and libjpeg-turbo.  This is a temporary step in the
-        # plan to replace libjpeg with libjpeg-turbo.
-        #[ 'arm_neon == 1 and skia_clang_build == 0',
-        #  {
-        #    'sources' : [
-        #      '../third_party/externals/jpeg/armv6_idct.S',
-        #      '../third_party/externals/jpeg/jsimd_arm_neon.S',
-        #      '../third_party/externals/jpeg/jsimd_neon.c',
-        #    ],
-        #    'defines' : [
-        #      'NV_ARM_NEON',
-        #    ],
-        #  },
-        #],
-        [ '"mips" in skia_arch_type and mips_dsp == 2',
+        [ 'arm_neon == 1 and skia_clang_build == 0',
+          {
+            'sources' : [
+              '../third_party/externals/jpeg/armv6_idct.S',
+              '../third_party/externals/jpeg/jsimd_arm_neon.S',
+              '../third_party/externals/jpeg/jsimd_neon.c',
+            ],
+            'defines' : [
+              'NV_ARM_NEON',
+            ],
+          },
+        ],
+        [ 'skia_arch_type == "mips" and mips_dsp == 2',
           {
             'sources' : [
               '../third_party/externals/jpeg/mips_jidctfst.c',
@@ -291,7 +287,7 @@
           }],
         ],
         'sources': [
-          '../apps/sample_app/src/main/jni/com_skia_SkiaSampleRenderer.cpp',
+          '../app/jni/com_skia_SkiaSampleRenderer.cpp',
         ],
       },
     },
@@ -324,8 +320,8 @@
           '../../../tools/VisualBench/',
         ],
         'sources': [
-          '../apps/visualbench/src/main/jni/SkOSWindow_AndroidNative.cpp',
-          '../apps/visualbench/src/main/jni/main.cpp',
+          '../visualbench/jni/SkOSWindow_AndroidNative.cpp',
+          '../visualbench/jni/main.cpp',
         ],
       },
     },

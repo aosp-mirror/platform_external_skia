@@ -5,7 +5,6 @@
 # Common gypi for pathops unit tests.
 {
   'include_dirs': [
-    '../include/private',
     '../src/core',
     '../src/effects',
     '../src/lazy',
@@ -28,7 +27,6 @@
     '../tests/PathOpsBuildUseTest.cpp',
     '../tests/PathOpsConicIntersectionTest.cpp',
     '../tests/PathOpsConicLineIntersectionTest.cpp',
-    '../tests/PathOpsCubicConicIntersectionTest.cpp',
     '../tests/PathOpsCubicIntersectionTest.cpp',
     '../tests/PathOpsCubicIntersectionTestData.cpp',
     '../tests/PathOpsCubicLineIntersectionTest.cpp',
@@ -65,8 +63,8 @@
     '../tests/PathOpsTestCommon.cpp',
     '../tests/PathOpsThreadedCommon.cpp',
     '../tests/PathOpsThreeWayTest.cpp',
-    '../tests/PathOpsTightBoundsTest.cpp',
-    '../tests/PathOpsTypesTest.cpp',
+    '../tests/PathOpsTightBoundsTest.cpp', 
+    '../tests/PathOpsTypesTest.cpp', 
 
     '../tests/PathOpsCubicIntersectionTestData.h',
     '../tests/PathOpsExtendedTest.h',

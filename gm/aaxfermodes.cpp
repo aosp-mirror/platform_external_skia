@@ -7,7 +7,6 @@
  */
 #include "gm.h"
 #include "SkArithmeticMode.h"
-#include "SkPath.h"
 #include "SkShader.h"
 #include "SkXfermode.h"
 
@@ -69,7 +68,7 @@ protected:
 
     void onOnceBeforeDraw() override {
         fLabelPaint.setAntiAlias(true);
-        sk_tool_utils::set_portable_typeface(&fLabelPaint);
+        sk_tool_utils::set_portable_typeface_always(&fLabelPaint);
         fLabelPaint.setTextSize(5 * kShapeSize/8);
         fLabelPaint.setSubpixelText(true);
 
@@ -161,7 +160,7 @@ protected:
 
     void onDraw(SkCanvas* canvas) override {
         draw_pass(canvas, kCheckerboard_Pass);
-        canvas->saveLayer(nullptr, nullptr);
+        canvas->saveLayer(NULL, NULL);
 
         canvas->translate(kMargin, kMargin);
         draw_pass(canvas, kBackground_Pass);

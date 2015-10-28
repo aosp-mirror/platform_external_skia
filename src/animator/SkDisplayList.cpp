@@ -52,7 +52,7 @@ bool SkDisplayList::draw(SkAnimateMaker& maker, SkMSec inTime) {
 
 int SkDisplayList::findGroup(SkADrawable* match, SkTDDrawableArray** list,
         SkGroup** parent, SkGroup** found, SkTDDrawableArray**grandList) {
-    *parent = nullptr;
+    *parent = NULL;
     *list = &fDrawList;
     *grandList = &fDrawList;
     return SearchForMatch(match, list, parent, found, grandList);
@@ -70,7 +70,7 @@ bool SkDisplayList::onIRect(const SkIRect& r) {
 
 int SkDisplayList::SearchForMatch(SkADrawable* match, SkTDDrawableArray** list,
         SkGroup** parent, SkGroup** found, SkTDDrawableArray**grandList) {
-    *found = nullptr;
+    *found = NULL;
     for (int index = 0; index < (*list)->count(); index++) {
         SkADrawable* draw = (**list)[index];
         if (draw == match)

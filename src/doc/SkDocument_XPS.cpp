@@ -33,7 +33,7 @@ protected:
                           const SkRect& trimBox) override {
         fDevice.beginSheet(fUnitsPerMeter, fPixelsPerMeter,
                            SkSize::Make(width, height));
-        fCanvas.reset(new SkCanvas(&fDevice));
+        fCanvas.reset(SkNEW_ARGS(SkCanvas, (&fDevice)));
         fCanvas->clipRect(trimBox);
         fCanvas->translate(trimBox.x(), trimBox.y());
         return fCanvas.get();
@@ -42,7 +42,7 @@ protected:
     void onEndPage() override {
         SkASSERT(fCanvas.get());
         fCanvas->flush();
-        fCanvas.reset(nullptr);
+        fCanvas.reset(NULL);
         fDevice.endSheet();
     }
 
@@ -63,15 +63,17 @@ private:
 ///////////////////////////////////////////////////////////////////////////////
 
 SkDocument* SkDocument::CreateXPS(SkWStream* stream, SkScalar dpi) {
-    return stream ? new SkDocument_XPS(stream, nullptr, dpi) : nullptr;
+    return stream ? SkNEW_ARGS(SkDocument_XPS, (stream, NULL, dpi)) : NULL;
 }
 
-static void delete_wstream(SkWStream* stream, bool aborted) { delete stream; }
+static void delete_wstream(SkWStream* stream, bool aborted) {
+    SkDELETE(stream);
+}
 
 SkDocument* SkDocument::CreateXPS(const char path[], SkScalar dpi) {
-    SkAutoTDelete<SkFILEWStream> stream(new SkFILEWStream(path));
+    SkAutoTDelete<SkFILEWStream> stream(SkNEW_ARGS(SkFILEWStream, (path)));
     if (!stream->isValid()) {
-        return nullptr;
+        return NULL;
     }
-    return new SkDocument_XPS(stream.detach(), delete_wstream, dpi);
+    return SkNEW_ARGS(SkDocument_XPS, (stream.detach(), delete_wstream, dpi));
 }

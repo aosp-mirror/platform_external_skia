@@ -105,7 +105,7 @@ private:
     typedef skiagm::GM INHERITED;
 };
 
-DEF_GM(return new AAClipGM;)
+DEF_GM( return SkNEW(AAClipGM); )
 
 /////////////////////////////////////////////////////////////////////////
 
@@ -118,7 +118,7 @@ static SkCanvas* make_canvas(const SkBitmap& bm) {
                                             (SkPMColor*)bm.getPixels(),
                                             bm.rowBytes());
     } else {
-        return new SkCanvas(bm);
+        return SkNEW_ARGS(SkCanvas, (bm));
     }
 }
 
@@ -140,7 +140,7 @@ static void test_image(SkCanvas* canvas, const SkImageInfo& info) {
     newc->drawCircle(50, 50, 49, paint);
     canvas->drawBitmap(bm, 10, 10);
 
-    CGImageRef image = SkCreateCGImageRefWithColorspace(bm, nullptr);
+    CGImageRef image = SkCreateCGImageRefWithColorspace(bm, NULL);
 
     SkBitmap bm2;
     SkCreateBitmapFromCGImage(&bm2, image);
@@ -190,7 +190,7 @@ private:
 };
 
 #if 0 // Disabled pending fix from reed@
-DEF_GM( return new CGImageGM; )
+DEF_GM( return SkNEW(CGImageGM); )
 #endif
 #endif
 
@@ -225,7 +225,7 @@ protected:
         SkPaint paint;
         paint.setAntiAlias(true);
         
-        paint.setColor(sk_tool_utils::color_to_565(0xFFCCCCCC));
+        paint.setColor(0xFFCCCCCC);
         canvas->drawPath(path, paint);
         
         paint.setColor(SK_ColorRED);
@@ -238,7 +238,7 @@ protected:
 
         SkRect r = SkRect::MakeXYWH(0, H/4, W, H/2);
         SkPaint paint;
-        paint.setColor(sk_tool_utils::color_to_565(0xFF8888FF));
+        paint.setColor(0xFF8888FF);
 
         canvas->drawRect(r, paint);
         this->doDraw(canvas, path);
@@ -260,4 +260,5 @@ protected:
 private:
     typedef skiagm::GM INHERITED;
 };
-DEF_GM(return new ClipCubicGM;)
+DEF_GM( return SkNEW(ClipCubicGM); )
+

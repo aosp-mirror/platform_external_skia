@@ -178,13 +178,13 @@ protected:
                 p.setShader(s);
                 canvas->drawRect(r, p);
 
-                canvas->saveLayer(&r, nullptr);
+                canvas->saveLayer(&r, NULL);
                 draw_mode(canvas, mode, twice ? 0x88 : 0xFF, r.fLeft, r.fTop);
                 canvas->restore();
 
                 r.inset(-SK_ScalarHalf, -SK_ScalarHalf);
                 p.setStyle(SkPaint::kStroke_Style);
-                p.setShader(nullptr);
+                p.setShader(NULL);
                 canvas->drawRect(r, p);
 
                 canvas->drawText(gModes[i].fLabel, strlen(gModes[i].fLabel),

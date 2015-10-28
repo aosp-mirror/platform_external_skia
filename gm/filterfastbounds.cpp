@@ -6,14 +6,13 @@
  */
 
 #include "gm.h"
+#include "SkBitmapSource.h"
 #include "SkBlurImageFilter.h"
 #include "SkDropShadowImageFilter.h"
-#include "SkImageSource.h"
 #include "SkOffsetImageFilter.h"
 #include "SkPictureImageFilter.h"
 #include "SkPictureRecorder.h"
 #include "SkRandom.h"
-#include "SkSurface.h"
 
 namespace skiagm {
 
@@ -113,34 +112,34 @@ static void create_paints(SkImageFilter* source, SkTArray<SkPaint>* paints) {
         static const SkDropShadowImageFilter::ShadowMode kBoth =
                     SkDropShadowImageFilter::kDrawShadowAndForeground_ShadowMode;
 
-        SkAutoTUnref<SkImageFilter> dsif(
+        SkAutoTUnref<SkDropShadowImageFilter> dsif(
             SkDropShadowImageFilter::Create(10.0f, 10.0f,
                                             3.0f, 3.0f,
                                             SK_ColorRED, kBoth,
-                                            source, nullptr));
+                                            source, NULL));
 
         add_paint(dsif, paints);
     }
 
     {
-        SkAutoTUnref<SkImageFilter> dsif(
+        SkAutoTUnref<SkDropShadowImageFilter> dsif(
             SkDropShadowImageFilter::Create(27.0f, 27.0f,
                                             3.0f, 3.0f,
                                             SK_ColorRED,
                                             SkDropShadowImageFilter::kDrawShadowOnly_ShadowMode,
-                                            source, nullptr));
+                                            source, NULL));
 
         add_paint(dsif, paints);
     }
 
     {
-        SkAutoTUnref<SkImageFilter> bif(SkBlurImageFilter::Create(3, 3, source));
+        SkAutoTUnref<SkBlurImageFilter> bif(SkBlurImageFilter::Create(3, 3, source));
 
         add_paint(bif, paints);
     }
 
     {
-        SkAutoTUnref<SkImageFilter> oif(SkOffsetImageFilter::Create(15, 15, source));
+        SkAutoTUnref<SkOffsetImageFilter> oif(SkOffsetImageFilter::Create(15, 15, source));
 
         add_paint(oif, paints);
     }
@@ -232,7 +231,7 @@ protected:
         //-----------
         // Normal paints (no source)
         SkTArray<SkPaint> paints;
-        create_paints(nullptr, &paints);
+        create_paints(NULL, &paints);
 
         //-----------
         // Paints with a PictureImageFilter as a source
@@ -246,30 +245,30 @@ protected:
             pic.reset(rec.endRecording());
         }
 
-        SkAutoTUnref<SkImageFilter> pif(SkPictureImageFilter::Create(pic));
+        SkAutoTUnref<SkPictureImageFilter> pif(SkPictureImageFilter::Create(pic));
 
         SkTArray<SkPaint> pifPaints;
         create_paints(pif, &pifPaints);
 
         //-----------
-        // Paints with a SkImageSource as a source
+        // Paints with a BitmapSource as a source
+        SkBitmap bm;
 
-        SkAutoTUnref<SkSurface> surface(SkSurface::NewRasterN32Premul(10, 10));
         {
             SkPaint p;
-            SkCanvas* temp = surface->getCanvas();
-            temp->clear(SK_ColorYELLOW);
+            bm.allocN32Pixels(10, 10);
+            SkCanvas temp(bm);
+            temp.clear(SK_ColorYELLOW);
             p.setColor(SK_ColorBLUE);
-            temp->drawRect(SkRect::MakeLTRB(5, 5, 10, 10), p);
+            temp.drawRect(SkRect::MakeLTRB(5, 5, 10, 10), p);
             p.setColor(SK_ColorGREEN);
-            temp->drawRect(SkRect::MakeLTRB(5, 0, 10, 5), p);
+            temp.drawRect(SkRect::MakeLTRB(5, 0, 10, 5), p);
         }
 
-        SkAutoTUnref<SkImage> image(surface->newImageSnapshot());
-        SkAutoTUnref<SkImageFilter> imageSource(SkImageSource::Create(image));
+        SkAutoTUnref<SkBitmapSource> bms(SkBitmapSource::Create(bm));
 
         SkTArray<SkPaint> bmsPaints;
-        create_paints(imageSource, &bmsPaints);
+        create_paints(bms, &bmsPaints);
 
         //-----------
         SkASSERT(paints.count() == kNumVertTiles);
@@ -322,5 +321,6 @@ private:
 
 //////////////////////////////////////////////////////////////////////////////
 
-DEF_GM(return new ImageFilterFastBoundGM;)
+DEF_GM(return SkNEW(ImageFilterFastBoundGM);)
+
 }

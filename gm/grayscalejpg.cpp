@@ -6,7 +6,7 @@
  */
 
 #include "Resources.h"
-#include "SkImage.h"
+#include "SkCanvas.h"
 #include "gm.h"
 
 /*
@@ -15,9 +15,9 @@
  */
 DEF_SIMPLE_GM(grayscalejpg, canvas, 128, 128) {
     const char kResource[] = "grayscale.jpg";
-    SkAutoTUnref<SkImage> image(GetResourceAsImage(kResource));
-    if (image) {
-        canvas->drawImage(image, 0.0f, 0.0f);
+    SkBitmap bitmap;
+    if (GetResourceAsBitmap(kResource, &bitmap)) {
+        canvas->drawBitmap(bitmap, 0.0f, 0.0f);
     } else {
         SkDebugf("\nCould not decode file '%s'. Did you forget"
                  " to set the resourcePath?\n", kResource);

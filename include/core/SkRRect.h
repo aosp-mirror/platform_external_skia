@@ -96,13 +96,8 @@ public:
     inline bool isRect() const { return kRect_Type == this->getType(); }
     inline bool isOval() const { return kOval_Type == this->getType(); }
     inline bool isSimple() const { return kSimple_Type == this->getType(); }
-    // TODO: should isSimpleCircular & isCircle take a tolerance? This could help
-    // instances where the mapping to device space is noisy.
     inline bool isSimpleCircular() const {
-        return this->isSimple() && SkScalarNearlyEqual(fRadii[0].fX, fRadii[0].fY);
-    }
-    inline bool isCircle() const {
-        return this->isOval() && SkScalarNearlyEqual(fRadii[0].fX, fRadii[0].fY);
+        return this->isSimple() && fRadii[0].fX == fRadii[0].fY;
     }
     inline bool isNinePatch() const { return kNinePatch_Type == this->getType(); }
     inline bool isComplex() const { return kComplex_Type == this->getType(); }
@@ -127,30 +122,16 @@ public:
      * Set this RR to match the supplied rect. All radii will be 0.
      */
     void setRect(const SkRect& rect) {
-        fRect = rect;
-        fRect.sort();
-
-        if (fRect.isEmpty()) {
+        if (rect.isEmpty()) {
             this->setEmpty();
             return;
         }
 
+        fRect = rect;
         memset(fRadii, 0, sizeof(fRadii));
         fType = kRect_Type;
 
         SkDEBUGCODE(this->validate();)
-    }
-
-    static SkRRect MakeRect(const SkRect& r) {
-        SkRRect rr;
-        rr.setRect(r);
-        return rr;
-    }
-    
-    static SkRRect MakeOval(const SkRect& oval) {
-        SkRRect rr;
-        rr.setOval(oval);
-        return rr;
     }
 
     /**
@@ -158,17 +139,15 @@ public:
      * width and all y radii will equal half the height.
      */
     void setOval(const SkRect& oval) {
-        fRect = oval;
-        fRect.sort();
-
-        if (fRect.isEmpty()) {
+        if (oval.isEmpty()) {
             this->setEmpty();
             return;
         }
 
-        SkScalar xRad = SkScalarHalf(fRect.width());
-        SkScalar yRad = SkScalarHalf(fRect.height());
+        SkScalar xRad = SkScalarHalf(oval.width());
+        SkScalar yRad = SkScalarHalf(oval.height());
 
+        fRect = oval;
         for (int i = 0; i < 4; ++i) {
             fRadii[i].set(xRad, yRad);
         }

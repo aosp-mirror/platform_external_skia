@@ -26,6 +26,8 @@ class GrGLSLCaps;
  */
 class GrGLCaps : public GrCaps {
 public:
+    
+
     typedef GrGLStencilAttachment::Format StencilFormat;
 
     /**
@@ -113,6 +115,24 @@ public:
     bool isConfigVerifiedColorAttachment(GrPixelConfig config) const {
         return fVerifiedColorConfigs.isVerified(config);
     }
+
+    /**
+     * Call to note that a color config / stencil format pair passed
+     * FBO status check. We may skip calling glCheckFramebufferStatus for
+     * this combination in the future using
+     * isColorConfigAndStencilFormatVerified().
+     */
+    void markColorConfigAndStencilFormatAsVerified(
+                    GrPixelConfig config,
+                    const GrGLStencilAttachment::Format& format);
+
+    /**
+     * Call to check whether color config / stencil format pair has already
+     * passed FBO status check.
+     */
+    bool isColorConfigAndStencilFormatVerified(
+                    GrPixelConfig config,
+                    const GrGLStencilAttachment::Format& format) const;
 
     /**
      * Reports the type of MSAA FBO support.
@@ -234,16 +254,10 @@ public:
 
     bool isCoreProfile() const { return fIsCoreProfile; }
 
+
+    bool fullClearIsFree() const { return fFullClearIsFree; }
+
     bool bindFragDataLocationSupport() const { return fBindFragDataLocationSupport; }
-
-    bool bindUniformLocationSupport() const { return fBindUniformLocationSupport; }
-
-    /**
-     * Is there support for enabling/disabling sRGB writes for sRGB-capable color attachments?
-     * If false this does not mean sRGB is not supported but rather that if it is supported
-     * it cannot be turned off for configs that support it.
-     */
-    bool srgbWriteControl() const { return fSRGBWriteControl; }
 
     /**
      * Returns a string containing the caps info.
@@ -263,14 +277,10 @@ public:
 
     LATCAlias latcAlias() const { return fLATCAlias; }
 
-    bool rgba8888PixelsOpsAreSlow() const { return fRGBA8888PixelsOpsAreSlow; }
-    bool partialFBOReadIsSlow() const { return fPartialFBOReadIsSlow; }
-
-    const GrGLSLCaps* glslCaps() const { return reinterpret_cast<GrGLSLCaps*>(fShaderCaps.get()); }
+    GrGLSLCaps* glslCaps() const { return reinterpret_cast<GrGLSLCaps*>(fShaderCaps.get()); }
 
 private:
     void init(const GrContextOptions&, const GrGLContextInfo&, const GrGLInterface*);
-    void initGLSL(const GrGLContextInfo&);
     bool hasPathRenderingSupport(const GrGLContextInfo&, const GrGLInterface*);
 
     /**
@@ -314,8 +324,8 @@ private:
     void initBlendEqationSupport(const GrGLContextInfo&);
     void initStencilFormats(const GrGLContextInfo&);
     // This must be called after initFSAASupport().
-    void initConfigRenderableTable(const GrGLContextInfo&, bool srgbSupport);
-    void initConfigTexturableTable(const GrGLContextInfo&, const GrGLInterface*, bool srgbSupport);
+    void initConfigRenderableTable(const GrGLContextInfo&);
+    void initConfigTexturableTable(const GrGLContextInfo&, const GrGLInterface*);
 
     bool doReadPixelsSupported(const GrGLInterface* intf, GrGLenum format, GrGLenum type) const;
 
@@ -328,6 +338,10 @@ private:
     VerifiedColorConfigs fVerifiedColorConfigs;
 
     SkTArray<StencilFormat, true> fStencilFormats;
+    // tracks configs that have been verified to pass the FBO completeness when
+    // used as a color attachment when a particular stencil format is used
+    // as a stencil attachment.
+    SkTArray<VerifiedColorConfigs, true> fStencilVerifiedColorConfigs;
 
     int fMaxFragmentUniformVectors;
     int fMaxVertexAttributes;
@@ -359,11 +373,8 @@ private:
     bool fMultisampleDisableSupport : 1;
     bool fUseNonVBOVertexAndIndexDynamicData : 1;
     bool fIsCoreProfile : 1;
+    bool fFullClearIsFree : 1;
     bool fBindFragDataLocationSupport : 1;
-    bool fSRGBWriteControl : 1;
-    bool fRGBA8888PixelsOpsAreSlow : 1;
-    bool fPartialFBOReadIsSlow : 1;
-    bool fBindUniformLocationSupport : 1;
 
     struct ReadPixelsSupportedFormat {
         GrGLenum fFormat;

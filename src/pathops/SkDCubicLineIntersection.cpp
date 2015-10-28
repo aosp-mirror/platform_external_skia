@@ -98,7 +98,7 @@ public:
         for (int index = 0; index < last; ) {
             double cubicMidT = ((*fIntersections)[0][index] + (*fIntersections)[0][index + 1]) / 2;
             SkDPoint cubicMidPt = fCubic.ptAtT(cubicMidT);
-            double t = fLine.nearPoint(cubicMidPt, nullptr);
+            double t = fLine.nearPoint(cubicMidPt, NULL);
             if (t < 0) {
                 ++index;
                 continue;
@@ -285,7 +285,7 @@ public:
             if (fIntersections->hasT(cubicT)) {
                 continue;
             }
-            double lineT = fLine.nearPoint(fCubic[cIndex], nullptr);
+            double lineT = fLine.nearPoint(fCubic[cIndex], NULL);
             if (lineT < 0) {
                 continue;
             }

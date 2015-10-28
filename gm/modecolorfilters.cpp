@@ -20,11 +20,11 @@ static SkShader* make_color_shader(SkColor color) {
     static const SkPoint kPts[] = {{0, 0}, {1, 1}};
     SkColor colors[] = {color, color};
 
-    return SkGradientShader::CreateLinear(kPts, colors, nullptr, 2, SkShader::kClamp_TileMode);
+    return SkGradientShader::CreateLinear(kPts, colors, NULL, 2, SkShader::kClamp_TileMode);
 }
 
 static SkShader* make_solid_shader() {
-    return make_color_shader(SkColorSetARGB(0xFF, 0x42, 0x82, 0x21));
+    return make_color_shader(SkColorSetARGB(0xFF, 0x40, 0x80, 0x20));
 }
 
 static SkShader* make_transparent_shader() {
@@ -40,16 +40,17 @@ static SkShader* make_bg_shader(int checkSize) {
     SkBitmap bmp;
     bmp.allocN32Pixels(2 * checkSize, 2 * checkSize);
     SkCanvas canvas(bmp);
-    canvas.clear(sk_tool_utils::color_to_565(0xFF800000));
+    canvas.clear(0xFF800000);
     SkPaint paint;
-    paint.setColor(sk_tool_utils::color_to_565(0xFF000080));
+    paint.setColor(0xFF000080);
     SkRect rect0 = SkRect::MakeXYWH(0, 0,
                                     SkIntToScalar(checkSize), SkIntToScalar(checkSize));
     SkRect rect1 = SkRect::MakeXYWH(SkIntToScalar(checkSize), SkIntToScalar(checkSize),
                                     SkIntToScalar(checkSize), SkIntToScalar(checkSize));
     canvas.drawRect(rect1, paint);
     canvas.drawRect(rect0, paint);
-    return new SkBitmapProcShader(bmp, SkShader::kRepeat_TileMode, SkShader::kRepeat_TileMode);
+    return SkNEW_ARGS(SkBitmapProcShader, (bmp, SkShader::kRepeat_TileMode,
+                                                SkShader::kRepeat_TileMode));
 }
 
 class ModeColorFilterGM : public GM {
@@ -82,7 +83,7 @@ protected:
         bgPaint.setXfermodeMode(SkXfermode::kSrc_Mode);
 
         SkShader* shaders[] = {
-            nullptr,                                   // use a paint color instead of a shader
+            NULL,                                   // use a paint color instead of a shader
             make_solid_shader(),
             make_transparent_shader(),
             make_trans_black_shader(),
@@ -93,7 +94,7 @@ protected:
             SkColorSetARGB(0xFF, 0xFF, 0xFF, 0xFF),
             SkColorSetARGB(0xFF, 0x00, 0x00, 0x00),
             SkColorSetARGB(0x00, 0x00, 0x00, 0x00),
-            SkColorSetARGB(0xFF, 0x10, 0x20, 0x42),
+            SkColorSetARGB(0xFF, 0x10, 0x20, 0x40),
             SkColorSetARGB(0xA0, 0x20, 0x30, 0x90),
         };
 
@@ -127,7 +128,7 @@ protected:
                 paint.setColorFilter(cf);
                 for (size_t s = 0; s < SK_ARRAY_COUNT(shaders); ++s) {
                     paint.setShader(shaders[s]);
-                    bool hasShader = nullptr == paint.getShader();
+                    bool hasShader = NULL == paint.getShader();
                     int paintColorCnt = hasShader ? SK_ARRAY_COUNT(alphas) : SK_ARRAY_COUNT(colors);
                     SkColor* paintColors = hasShader ? alphas : colors;
                     for (int pc = 0; pc < paintColorCnt; ++pc) {
@@ -137,7 +138,7 @@ protected:
                         SkRect rect = SkRect::MakeXYWH(x * kRectWidth, y * kRectHeight,
                                                        SkIntToScalar(kRectWidth),
                                                        SkIntToScalar(kRectHeight));
-                        canvas->saveLayer(&rect, nullptr);
+                        canvas->saveLayer(&rect, NULL);
                         canvas->drawRect(rect, bgPaint);
                         canvas->drawRect(rect, paint);
                         canvas->restore();

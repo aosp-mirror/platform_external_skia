@@ -27,9 +27,7 @@ public:
 protected:
     
     SkString onShortName() {
-        SkString name("lcdtext");
-        name.append(sk_tool_utils::major_platform_os_name());
-        return name;
+        return SkString("lcdtext");
     }
     
     SkISize onISize() { return SkISize::Make(640, 480); }
@@ -53,6 +51,7 @@ protected:
         paint.setColor(SK_ColorBLACK);
         paint.setDither(true);
         paint.setAntiAlias(true);
+        sk_tool_utils::set_portable_typeface(&paint);
         paint.setSubpixelText(subpixelTextEnabled);
         paint.setLCDRenderText(lcdRenderTextEnabled);
         paint.setTextSize(textHeight);

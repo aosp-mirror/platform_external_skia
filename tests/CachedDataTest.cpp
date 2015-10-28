@@ -31,9 +31,9 @@ static SkCachedData* make_data(size_t size, SkDiscardableMemoryPool* pool) {
         SkDiscardableMemory* dm = pool->create(size);
         // the pool "can" return null, but it shouldn't in these controlled conditions
         SK_ALWAYSBREAK(dm);
-        return new SkCachedData(size, dm);
+        return SkNEW_ARGS(SkCachedData, (size, dm));
     } else {
-        return new SkCachedData(sk_malloc_throw(size), size);
+        return SkNEW_ARGS(SkCachedData, (sk_malloc_throw(size), size));
     }
 }
 
@@ -78,14 +78,14 @@ DEF_TEST(CachedData, reporter) {
         const size_t size = 100;
 
         // test with client as last owner
-        SkCachedData* data = test_locking(reporter, size, useDiscardable ? pool.get() : nullptr);
+        SkCachedData* data = test_locking(reporter, size, useDiscardable ? pool.get() : NULL);
         check_data(reporter, data, 2, kInCache, kLocked);
         data->detachFromCacheAndUnref();
         check_data(reporter, data, 1, kNotInCache, kLocked);
         data->unref();
 
         // test with cache as last owner
-        data = test_locking(reporter, size, useDiscardable ? pool.get() : nullptr);
+        data = test_locking(reporter, size, useDiscardable ? pool.get() : NULL);
         check_data(reporter, data, 2, kInCache, kLocked);
         data->unref();
         check_data(reporter, data, 1, kInCache, kUnlocked);

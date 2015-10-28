@@ -101,7 +101,7 @@ static SkBitmap* prepareForImageRef(const SkBitmap& bm,
                                     CGBitmapInfo* info) {
     bool upscaleTo32;
     if (!getBitmapInfo(bm, bitsPerComponent, info, &upscaleTo32)) {
-        return nullptr;
+        return NULL;
     }
 
     SkBitmap* copy;
@@ -122,8 +122,8 @@ CGImageRef SkCreateCGImageRefWithColorspace(const SkBitmap& bm,
     CGBitmapInfo info       SK_INIT_TO_AVOID_WARNING;
 
     SkBitmap* bitmap = prepareForImageRef(bm, &bitsPerComponent, &info);
-    if (nullptr == bitmap) {
-        return nullptr;
+    if (NULL == bitmap) {
+        return NULL;
     }
 
     const int w = bitmap->width();
@@ -138,7 +138,7 @@ CGImageRef SkCreateCGImageRefWithColorspace(const SkBitmap& bm,
                                                              SkBitmap_ReleaseInfo);
 
     bool releaseColorSpace = false;
-    if (nullptr == colorSpace) {
+    if (NULL == colorSpace) {
         colorSpace = CGColorSpaceCreateDeviceRGB();
         releaseColorSpace = true;
     }
@@ -146,7 +146,7 @@ CGImageRef SkCreateCGImageRefWithColorspace(const SkBitmap& bm,
     CGImageRef ref = CGImageCreate(w, h, bitsPerComponent,
                                    bitmap->bytesPerPixel() * 8,
                                    bitmap->rowBytes(), colorSpace, info, dataRef,
-                                   nullptr, false, kCGRenderingIntentDefault);
+                                   NULL, false, kCGRenderingIntentDefault);
 
     if (releaseColorSpace) {
         CGColorSpaceRelease(colorSpace);
@@ -192,19 +192,19 @@ private:
 
 bool SkPDFDocumentToBitmap(SkStream* stream, SkBitmap* output) {
     CGDataProviderRef data = SkCreateDataProviderFromStream(stream);
-    if (nullptr == data) {
+    if (NULL == data) {
         return false;
     }
 
     CGPDFDocumentRef pdf = CGPDFDocumentCreateWithProvider(data);
     CGDataProviderRelease(data);
-    if (nullptr == pdf) {
+    if (NULL == pdf) {
         return false;
     }
     SkAutoPDFRelease releaseMe(pdf);
 
     CGPDFPageRef page = CGPDFDocumentGetPage(pdf, 1);
-    if (nullptr == page) {
+    if (NULL == page) {
         return false;
     }
 
@@ -221,7 +221,7 @@ bool SkPDFDocumentToBitmap(SkStream* stream, SkBitmap* output) {
 
     size_t bitsPerComponent;
     CGBitmapInfo info;
-    getBitmapInfo(bitmap, &bitsPerComponent, &info, nullptr);
+    getBitmapInfo(bitmap, &bitsPerComponent, &info, NULL);
 
     CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
     CGContextRef ctx = CGBitmapContextCreate(bitmap.getPixels(), w, h,
@@ -261,7 +261,7 @@ SK_API bool SkCopyPixelsFromCGImage(const SkImageInfo& info, size_t rowBytes, vo
     CGContextRef cg = CGBitmapContextCreate(pixels, info.width(), info.height(), bitsPerComponent,
                                             rowBytes, cs, cg_bitmap_info);
     CFRelease(cs);
-    if (nullptr == cg) {
+    if (NULL == cg) {
         return false;
     }
 

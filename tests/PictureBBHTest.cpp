@@ -29,7 +29,7 @@ public:
 
     void run(skiatest::Reporter* reporter) {
         // No BBH
-        this->run(nullptr, reporter);
+        this->run(NULL, reporter);
 
         // With an R-Tree
         SkRTreeFactory RTreeFactory;

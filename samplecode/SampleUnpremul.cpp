@@ -88,7 +88,7 @@ protected:
                                      SkBlurMask::ConvertRadiusToSigma(SkIntToScalar(2)),
                                      0, 0));
         paint.setLooper(looper);
-        SkScalar height = paint.getFontMetrics(nullptr);
+        SkScalar height = paint.getFontMetrics(NULL);
         if (!fDecodeSucceeded) {
             SkString failure;
             if (fResPath.size() == 0) {
@@ -169,7 +169,7 @@ private:
         }
         SkFILEStream stream(fCurrFile.c_str());
         SkAutoTDelete<SkImageDecoder> decoder(SkImageDecoder::Factory(&stream));
-        if (nullptr == decoder.get()) {
+        if (NULL == decoder.get()) {
             fDecodeSucceeded = false;
             return;
         }
@@ -178,7 +178,7 @@ private:
         }
         fDecodeSucceeded = decoder->decode(&stream, &fBitmap, kN32_SkColorType,
                 SkImageDecoder::kDecodePixels_Mode) != SkImageDecoder::kFailure;
-        this->inval(nullptr);
+        this->inval(NULL);
     }
 
     void togglePremul() {

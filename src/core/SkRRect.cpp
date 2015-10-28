@@ -11,10 +11,7 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 void SkRRect::setRectXY(const SkRect& rect, SkScalar xRad, SkScalar yRad) {
-    fRect = rect;
-    fRect.sort();
-
-    if (fRect.isEmpty() || !fRect.isFinite()) {
+    if (rect.isEmpty() || !rect.isFinite()) {
         this->setEmpty();
         return;
     }
@@ -28,13 +25,14 @@ void SkRRect::setRectXY(const SkRect& rect, SkScalar xRad, SkScalar yRad) {
         return;
     }
 
-    if (fRect.width() < xRad+xRad || fRect.height() < yRad+yRad) {
-        SkScalar scale = SkMinScalar(fRect.width() / (xRad + xRad), fRect.height() / (yRad + yRad));
+    if (rect.width() < xRad+xRad || rect.height() < yRad+yRad) {
+        SkScalar scale = SkMinScalar(rect.width() / (xRad + xRad), rect.height() / (yRad + yRad));
         SkASSERT(scale < SK_Scalar1);
         xRad = SkScalarMul(xRad, scale);
         yRad = SkScalarMul(yRad, scale);
     }
 
+    fRect = rect;
     for (int i = 0; i < 4; ++i) {
         fRadii[i].set(xRad, yRad);
     }
@@ -49,10 +47,7 @@ void SkRRect::setRectXY(const SkRect& rect, SkScalar xRad, SkScalar yRad) {
 
 void SkRRect::setNinePatch(const SkRect& rect, SkScalar leftRad, SkScalar topRad,
                            SkScalar rightRad, SkScalar bottomRad) {
-    fRect = rect;
-    fRect.sort();
-
-    if (fRect.isEmpty() || !fRect.isFinite()) {
+    if (rect.isEmpty() || !rect.isFinite()) {
         this->setEmpty();
         return;
     }
@@ -69,11 +64,11 @@ void SkRRect::setNinePatch(const SkRect& rect, SkScalar leftRad, SkScalar topRad
     bottomRad = SkMaxScalar(bottomRad, 0);
 
     SkScalar scale = SK_Scalar1;
-    if (leftRad + rightRad > fRect.width()) {
-        scale = fRect.width() / (leftRad + rightRad);
+    if (leftRad + rightRad > rect.width()) {
+        scale = rect.width() / (leftRad + rightRad);
     }
-    if (topRad + bottomRad > fRect.height()) {
-        scale = SkMinScalar(scale, fRect.height() / (topRad + bottomRad));
+    if (topRad + bottomRad > rect.height()) {
+        scale = SkMinScalar(scale, rect.height() / (topRad + bottomRad));
     }
 
     if (scale < SK_Scalar1) {
@@ -84,7 +79,7 @@ void SkRRect::setNinePatch(const SkRect& rect, SkScalar leftRad, SkScalar topRad
     }
 
     if (leftRad == rightRad && topRad == bottomRad) {
-        if (leftRad >= SkScalarHalf(fRect.width()) && topRad >= SkScalarHalf(fRect.height())) {
+        if (leftRad >= SkScalarHalf(rect.width()) && topRad >= SkScalarHalf(rect.height())) {
             fType = kOval_Type;
         } else if (0 == leftRad || 0 == topRad) {
             // If the left and (by equality check above) right radii are zero then it is a rect.
@@ -101,6 +96,7 @@ void SkRRect::setNinePatch(const SkRect& rect, SkScalar leftRad, SkScalar topRad
         fType = kNinePatch_Type;
     }
 
+    fRect = rect;
     fRadii[kUpperLeft_Corner].set(leftRad, topRad);
     fRadii[kUpperRight_Corner].set(rightRad, topRad);
     fRadii[kLowerRight_Corner].set(rightRad, bottomRad);
@@ -142,10 +138,7 @@ static double compute_min_scale(double rad1, double rad2, double limit, double c
 }
 
 void SkRRect::setRectRadii(const SkRect& rect, const SkVector radii[4]) {
-    fRect = rect;
-    fRect.sort();
-
-    if (fRect.isEmpty() || !fRect.isFinite()) {
+    if (rect.isEmpty() || !rect.isFinite()) {
         this->setEmpty();
         return;
     }
@@ -155,6 +148,7 @@ void SkRRect::setRectRadii(const SkRect& rect, const SkVector radii[4]) {
         return;
     }
 
+    fRect = rect;
     memcpy(fRadii, radii, sizeof(fRadii));
 
     bool allCornersSquare = true;
@@ -190,10 +184,10 @@ void SkRRect::setRectRadii(const SkRect& rect, const SkVector radii[4]) {
     // If f < 1, then all corner radii are reduced by multiplying them by f."
     double scale = 1.0;
 
-    scale = compute_min_scale(fRadii[0].fX, fRadii[1].fX, fRect.width(),  scale);
-    scale = compute_min_scale(fRadii[1].fY, fRadii[2].fY, fRect.height(), scale);
-    scale = compute_min_scale(fRadii[2].fX, fRadii[3].fX, fRect.width(),  scale);
-    scale = compute_min_scale(fRadii[3].fY, fRadii[0].fY, fRect.height(), scale);
+    scale = compute_min_scale(fRadii[0].fX, fRadii[1].fX, rect.width(),  scale);
+    scale = compute_min_scale(fRadii[1].fY, fRadii[2].fY, rect.height(), scale);
+    scale = compute_min_scale(fRadii[2].fX, fRadii[3].fX, rect.width(),  scale);
+    scale = compute_min_scale(fRadii[3].fY, fRadii[0].fY, rect.height(), scale);
 
     if (scale < 1.0) {
         for (int i = 0; i < 4; ++i) {
@@ -210,8 +204,8 @@ void SkRRect::setRectRadii(const SkRect& rect, const SkVector radii[4]) {
     //     path.addRRect(rrect);
     //     rrect.rect() != path.getBounds()
     for (int i = 0; i < 4; ++i) {
-        fRadii[i].fX = clamp_radius_check_predicates(fRadii[i].fX, fRect.fLeft, fRect.fRight);
-        fRadii[i].fY = clamp_radius_check_predicates(fRadii[i].fY, fRect.fTop, fRect.fBottom);
+        fRadii[i].fX = clamp_radius_check_predicates(fRadii[i].fX, rect.fLeft, rect.fRight);
+        fRadii[i].fY = clamp_radius_check_predicates(fRadii[i].fY, rect.fTop, rect.fBottom);
     }
     // At this point we're either oval, simple, or complex (not empty or rect).
     this->computeType();
@@ -365,7 +359,7 @@ static bool matrix_only_scale_and_translate(const SkMatrix& matrix) {
 }
 
 bool SkRRect::transform(const SkMatrix& matrix, SkRRect* dst) const {
-    if (nullptr == dst) {
+    if (NULL == dst) {
         return false;
     }
 

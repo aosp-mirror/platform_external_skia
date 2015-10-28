@@ -13,7 +13,6 @@
 
 #include "SkDescriptor.h"
 
-class SkGlyph;
 class SkPath;
 
 /*
@@ -50,14 +49,14 @@ public:
     
     const GrFontDescKey* getKey();
     GrMaskFormat getMaskFormat() const;
-    GrMaskFormat getPackedGlyphMaskFormat(const SkGlyph&) const;
-    bool getPackedGlyphBounds(const SkGlyph&, SkIRect* bounds);
-    bool getPackedGlyphImage(const SkGlyph&, int width, int height, int rowBytes,
-                             GrMaskFormat expectedMaskFormat, void* image);
-    bool getPackedGlyphDFBounds(const SkGlyph&, SkIRect* bounds);
-    bool getPackedGlyphDFImage(const SkGlyph&, int width, int height, void* image);
-    const SkPath* getGlyphPath(const SkGlyph&);
-    const SkGlyph& grToSkGlyph(GrGlyph::PackedID);
+    GrMaskFormat getPackedGlyphMaskFormat(GrGlyph::PackedID) const;
+    bool getPackedGlyphBounds(GrGlyph::PackedID, SkIRect* bounds);
+    bool getPackedGlyphImage(GrGlyph::PackedID, int width, int height,
+                                     int rowBytes, void* image);
+    bool getPackedGlyphDFBounds(GrGlyph::PackedID, SkIRect* bounds);
+    bool getPackedGlyphDFImage(GrGlyph::PackedID, int width, int height,
+                                       void* image);
+    bool getGlyphPath(uint16_t glyphID, SkPath*);
     
 private:
     SkGlyphCache*  fStrike;

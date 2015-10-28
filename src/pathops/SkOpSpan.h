@@ -58,14 +58,13 @@ public:
     }
 
     const SkOpAngle* debugAngle(int id) const;
-    bool debugContains(const SkOpPtT* ) const;
-    const SkOpPtT* debugContains(const SkOpSegment* check) const;
     SkOpContour* debugContour(int id);
     int debugLoopLimit(bool report) const;
     bool debugMatchID(int id) const;
     const SkOpPtT* debugPtT(int id) const;
     const SkOpSegment* debugSegment(int id) const;
     const SkOpSpanBase* debugSpan(int id) const;
+    SkOpGlobalState* globalState() const;
     void debugValidate() const;
 
     bool deleted() const {
@@ -83,7 +82,6 @@ public:
     void dumpBase() const;
 
     SkOpPtT* find(SkOpSegment* );
-    SkOpGlobalState* globalState() const;
     void init(SkOpSpanBase* , double t, const SkPoint& , bool dup);
 
     void insert(SkOpPtT* span) {
@@ -107,11 +105,11 @@ public:
         SkOpPtT* start1 = s1->fT < e1->fT ? s1 : e1;
         SkOpPtT* start2 = s2->fT < e2->fT ? s2 : e2;
         *sOut = between(s1->fT, start2->fT, e1->fT) ? start2
-                : between(s2->fT, start1->fT, e2->fT) ? start1 : nullptr;
+                : between(s2->fT, start1->fT, e2->fT) ? start1 : NULL;
         SkOpPtT* end1 = s1->fT < e1->fT ? e1 : s1;
         SkOpPtT* end2 = s2->fT < e2->fT ? e2 : s2;
         *eOut = between(s1->fT, end2->fT, e1->fT) ? end2
-                : between(s2->fT, end1->fT, e2->fT) ? end1 : nullptr;
+                : between(s2->fT, end1->fT, e2->fT) ? end1 : NULL;
         if (*sOut == *eOut) {
             SkASSERT(start1->fT >= end2->fT || start2->fT >= end1->fT);
             return false;
@@ -206,16 +204,12 @@ public:
         return SkDEBUGRELEASE(fID, -1);
     }
 
-    bool debugAlignedEnd(double t, const SkPoint& pt) const;
-    bool debugAlignedInner() const;
     const SkOpAngle* debugAngle(int id) const;
     bool debugCoinEndLoopCheck() const;
-    bool debugContains(const SkOpSegment* ) const;
     SkOpContour* debugContour(int id);
     const SkOpPtT* debugPtT(int id) const;
     const SkOpSegment* debugSegment(int id) const;
     const SkOpSpanBase* debugSpan(int id) const;
-    const SkOpSpan* debugStarter(SkOpSpanBase const** endPtr) const;
     SkOpGlobalState* globalState() const;
     void debugValidate() const;
 
@@ -347,11 +341,11 @@ public:
     }
 
     SkOpSpan* upCastable() {
-        return final() ? nullptr : upCast();
+        return final() ? NULL : upCast();
     }
 
     const SkOpSpan* upCastable() const {
-        return final() ? nullptr : upCast();
+        return final() ? NULL : upCast();
     }
 
 private:

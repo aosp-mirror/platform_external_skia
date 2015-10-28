@@ -8,9 +8,8 @@
 #ifndef GrStrokeInfo_DEFINED
 #define GrStrokeInfo_DEFINED
 
-#include "SkPathEffect.h"
 #include "SkStrokeRec.h"
-#include "SkTemplates.h"
+#include "SkPathEffect.h"
 
 class GrUniqueKey;
 

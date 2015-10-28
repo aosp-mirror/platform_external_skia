@@ -86,7 +86,7 @@ public:
     }
 
     SkRect pictureCull() const   { 
-        return nullptr == fPicture ? SkRect::MakeEmpty() : fPicture->cullRect();
+        return NULL == fPicture ? SkRect::MakeEmpty() : fPicture->cullRect();
     }
 
     int index() {

@@ -14,7 +14,7 @@
 
 SkAutoCoInitialize::SkAutoCoInitialize() :
     fHR(
-        CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE)
+        CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE)
     )
 { }
 

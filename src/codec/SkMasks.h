@@ -4,9 +4,6 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-#ifndef SkMasks_DEFINED
-#define SkMasks_DEFINED
-
 #include "SkTypes.h"
 
 /*
@@ -52,10 +49,10 @@ public:
      * Get a color component
      *
      */
-    uint8_t getRed(uint32_t pixel) const;
-    uint8_t getGreen(uint32_t pixel) const;
-    uint8_t getBlue(uint32_t pixel) const;
-    uint8_t getAlpha(uint32_t pixel) const;
+    uint8_t getRed(uint32_t pixel);
+    uint8_t getGreen(uint32_t pixel);
+    uint8_t getBlue(uint32_t pixel);
+    uint8_t getAlpha(uint32_t pixel);
 
     /*
      *
@@ -63,7 +60,7 @@ public:
      * The alpha mask may be used in other decoding modes
      *
      */
-     uint32_t getAlphaMask() const {
+     uint32_t getAlphaMask() {
         return fAlpha.mask;
      }
 
@@ -71,16 +68,14 @@ private:
 
     /*
      *
-     * Constructor
+     * Constrcutor
      *
      */
-    SkMasks(const MaskInfo& red, const MaskInfo& green, const MaskInfo& blue,
-            const MaskInfo& alpha);
+    SkMasks(const MaskInfo red, const MaskInfo green, const MaskInfo blue,
+            const MaskInfo alpha);
 
     const MaskInfo fRed;
     const MaskInfo fGreen;
     const MaskInfo fBlue;
     const MaskInfo fAlpha;
 };
-
-#endif

@@ -29,7 +29,7 @@ private:
 };
 
 MacGLContext::MacGLContext()
-    : fContext(nullptr)
+    : fContext(NULL)
     , fGLLibrary(RTLD_DEFAULT) {
     CGLPixelFormatAttribute attributes[] = {
 #if MAC_OS_X_VERSION_10_7
@@ -43,15 +43,15 @@ MacGLContext::MacGLContext()
 
     CGLChoosePixelFormat(attributes, &pixFormat, &npix);
 
-    if (nullptr == pixFormat) {
+    if (NULL == pixFormat) {
         SkDebugf("CGLChoosePixelFormat failed.");
         return;
     }
 
-    CGLCreateContext(pixFormat, nullptr, &fContext);
+    CGLCreateContext(pixFormat, NULL, &fContext);
     CGLReleasePixelFormat(pixFormat);
 
-    if (nullptr == fContext) {
+    if (NULL == fContext) {
         SkDebugf("CGLCreateContext failed.");
         return;
     }
@@ -59,7 +59,7 @@ MacGLContext::MacGLContext()
     CGLSetCurrentContext(fContext);
 
     SkAutoTUnref<const GrGLInterface> gl(GrGLCreateNativeInterface());
-    if (nullptr == gl.get()) {
+    if (NULL == gl.get()) {
         SkDebugf("Context could not create GL interface.\n");
         this->destroyGLContext();
         return;
@@ -85,7 +85,7 @@ MacGLContext::~MacGLContext() {
 void MacGLContext::destroyGLContext() {
     if (fContext) {
         CGLReleaseContext(fContext);
-        fContext = nullptr;
+        fContext = NULL;
     }
     if (RTLD_DEFAULT != fGLLibrary) {
         dlclose(fGLLibrary);
@@ -108,12 +108,12 @@ GrGLFuncPtr MacGLContext::onPlatformGetProcAddress(const char* procName) const {
 
 SkGLContext* SkCreatePlatformGLContext(GrGLStandard forcedGpuAPI) {
     if (kGLES_GrGLStandard == forcedGpuAPI) {
-        return nullptr;
+        return NULL;
     }
-    MacGLContext* ctx = new MacGLContext;
+    MacGLContext* ctx = SkNEW(MacGLContext);
     if (!ctx->isValid()) {
-        delete ctx;
-        return nullptr;
+        SkDELETE(ctx);
+        return NULL;
     }
     return ctx;
 }

@@ -133,8 +133,6 @@ public:
         fReleaseCtx = ctx;
     }
 
-    static size_t WorseCaseSize(const GrSurfaceDesc& desc);
-
 protected:
     // Methods made available via GrSurfacePriv
     SkImageInfo info(SkAlphaType) const;

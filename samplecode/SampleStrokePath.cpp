@@ -210,7 +210,7 @@ protected:
 
     virtual SkView::Click* onFindClickHandler(SkScalar x, SkScalar y,
                                               unsigned modi) override {
-        this->inval(nullptr);
+        this->inval(NULL);
         return this->INHERITED::onFindClickHandler(x, y, modi);
     }
 private:

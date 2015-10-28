@@ -17,22 +17,23 @@
 class DitherEffect : public GrFragmentProcessor {
 public:
     static GrFragmentProcessor* Create() {
-        return new DitherEffect;
+        GR_CREATE_STATIC_PROCESSOR(gDitherEffect, DitherEffect, ())
+        return SkRef(gDitherEffect);
     }
 
     virtual ~DitherEffect() {};
 
     const char* name() const override { return "Dither"; }
 
+    void getGLProcessorKey(const GrGLSLCaps&, GrProcessorKeyBuilder*) const override;
+
+    GrGLFragmentProcessor* createGLInstance() const override;
+
 private:
     DitherEffect() {
         this->initClassID<DitherEffect>();
         this->setWillReadFragmentPosition();
     }
-
-    GrGLFragmentProcessor* onCreateGLInstance() const override;
-
-    void onGetGLProcessorKey(const GrGLSLCaps&, GrProcessorKeyBuilder*) const override;
 
     // All dither effects are equal
     bool onIsEqual(const GrFragmentProcessor&) const override { return true; }
@@ -52,7 +53,7 @@ void DitherEffect::onComputeInvariantOutput(GrInvariantOutput* inout) const {
 
 GR_DEFINE_FRAGMENT_PROCESSOR_TEST(DitherEffect);
 
-const GrFragmentProcessor* DitherEffect::TestCreate(GrProcessorTestData*) {
+GrFragmentProcessor* DitherEffect::TestCreate(GrProcessorTestData*) {
     return DitherEffect::Create();
 }
 
@@ -91,13 +92,13 @@ void GLDitherEffect::emitCode(EmitArgs& args) {
 
 //////////////////////////////////////////////////////////////////////////////
 
-void DitherEffect::onGetGLProcessorKey(const GrGLSLCaps& caps,
+void DitherEffect::getGLProcessorKey(const GrGLSLCaps& caps,
                                      GrProcessorKeyBuilder* b) const {
     GLDitherEffect::GenKey(*this, caps, b);
 }
 
-GrGLFragmentProcessor* DitherEffect::onCreateGLInstance() const  {
-    return new GLDitherEffect(*this);
+GrGLFragmentProcessor* DitherEffect::createGLInstance() const  {
+    return SkNEW_ARGS(GLDitherEffect, (*this));
 }
 
 GrFragmentProcessor* GrDitherEffect::Create() { return DitherEffect::Create(); }

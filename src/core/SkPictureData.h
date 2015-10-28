@@ -62,13 +62,12 @@ public:
     // Does not affect ownership of SkStream.
     static SkPictureData* CreateFromStream(SkStream*,
                                            const SkPictInfo&,
-                                           SkPicture::InstallPixelRefProc,
-                                           SkTypefacePlayback*);
+                                           SkPicture::InstallPixelRefProc);
     static SkPictureData* CreateFromBuffer(SkReadBuffer&, const SkPictInfo&);
 
     virtual ~SkPictureData();
 
-    void serialize(SkWStream*, SkPixelSerializer*, SkRefCntSet*) const;
+    void serialize(SkWStream*, SkPixelSerializer*) const;
     void flatten(SkWriteBuffer&) const;
 
     bool containsBitmaps() const;
@@ -83,7 +82,7 @@ protected:
     explicit SkPictureData(const SkPictInfo& info);
 
     // Does not affect ownership of SkStream.
-    bool parseStream(SkStream*, SkPicture::InstallPixelRefProc, SkTypefacePlayback*);
+    bool parseStream(SkStream*, SkPicture::InstallPixelRefProc);
     bool parseBuffer(SkReadBuffer& buffer);
 
 public:
@@ -96,7 +95,7 @@ public:
         const int index = reader->readInt();
         return fImageRefs[index];
     }
-
+    
     const SkPath& getPath(SkReader32* reader) const {
         int index = reader->readInt() - 1;
         return fPaths[index];
@@ -111,7 +110,7 @@ public:
     const SkPaint* getPaint(SkReader32* reader) const {
         int index = reader->readInt();
         if (index == 0) {
-            return nullptr;
+            return NULL;
         }
         return &fPaints[index - 1];
     }
@@ -145,8 +144,7 @@ private:
 
     // these help us with reading/writing
     // Does not affect ownership of SkStream.
-    bool parseStreamTag(SkStream*, uint32_t tag, uint32_t size,
-                        SkPicture::InstallPixelRefProc, SkTypefacePlayback*);
+    bool parseStreamTag(SkStream*, uint32_t tag, uint32_t size, SkPicture::InstallPixelRefProc);
     bool parseBufferTag(SkReadBuffer&, uint32_t tag, uint32_t size);
     void flattenToBuffer(SkWriteBuffer&) const;
 

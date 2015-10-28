@@ -8,7 +8,6 @@
 #include "SampleCode.h"
 #include "SkCanvas.h"
 #include "SkPaint.h"
-#include "SkPath.h"
 #include "SkRandom.h"
 #include "SkView.h"
 
@@ -24,7 +23,7 @@ static void gen_data(SkScalar yAvg, SkScalar ySpread, int count, SkTDArray<SkSca
 
 // Generates a path to stroke along the top of each plot and a fill path for the area below each
 // plot. The fill path is bounded below by the bottomData plot points or a horizontal line at
-// yBase if bottomData == nullptr.
+// yBase if bottomData == NULL.
 // The plots are animated by rotating the data points by leftShift.
 static void gen_paths(const SkTDArray<SkScalar>& topData,
                       const SkTDArray<SkScalar>* bottomData,
@@ -35,7 +34,7 @@ static void gen_paths(const SkTDArray<SkScalar>& topData,
     plot->rewind();
     fill->rewind();
     plot->incReserve(topData.count());
-    if (nullptr == bottomData) {
+    if (NULL == bottomData) {
         fill->incReserve(topData.count() + 2);
     } else {
         fill->incReserve(2 * topData.count());
@@ -142,7 +141,7 @@ protected:
         fillPaint.setAntiAlias(true);
         fillPaint.setStyle(SkPaint::kFill_Style);
 
-        SkTDArray<SkScalar>* prevData = nullptr;
+        SkTDArray<SkScalar>* prevData = NULL;
         for (int i = 0; i < kNumGraphs; ++i) {
             gen_paths(fData[i],
                       prevData,
@@ -164,7 +163,7 @@ protected:
         }
 
         fShift += kShiftPerFrame;
-        this->inval(nullptr);
+        this->inval(NULL);
     }
 
 private:

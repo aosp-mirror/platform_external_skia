@@ -6,6 +6,7 @@
  */
 #include "SampleCode.h"
 #include "SkAlphaThresholdFilter.h"
+#include "SkBitmapSource.h"
 #include "SkBlurImageFilter.h"
 #include "SkCanvas.h"
 #include "SkColorCubeFilter.h"
@@ -16,7 +17,6 @@
 #include "SkDisplacementMapEffect.h"
 #include "SkDropShadowImageFilter.h"
 #include "SkFlattenableSerialization.h"
-#include "SkImageSource.h"
 #include "SkLightingImageFilter.h"
 #include "SkMagnifierImageFilter.h"
 #include "SkMatrixConvolutionImageFilter.h"
@@ -39,7 +39,7 @@
 //#define SK_ADD_RANDOM_BIT_FLIPS
 //#define SK_FUZZER_IS_VERBOSE
 
-static const uint32_t kSeed = (uint32_t)(time(nullptr));
+static const uint32_t kSeed = (uint32_t)(time(NULL));
 static SkRandom gRand(kSeed);
 static bool return_large = false;
 static bool return_undef = false;
@@ -245,7 +245,7 @@ static void drawSomething(SkCanvas* canvas) {
 
     canvas->save();
     canvas->scale(0.5f, 0.5f);
-    canvas->drawBitmap(make_bitmap(), 0, 0, nullptr);
+    canvas->drawBitmap(make_bitmap(), 0, 0, NULL);
     canvas->restore();
 
     paint.setAntiAlias(true);
@@ -260,7 +260,7 @@ static void drawSomething(SkCanvas* canvas) {
 static SkImageFilter* make_image_filter(bool canBeNull = true) {
     SkImageFilter* filter = 0;
 
-    // Add a 1 in 3 chance to get a nullptr input
+    // Add a 1 in 3 chance to get a NULL input
     if (canBeNull && (R(3) == 1)) { return filter; }
 
     enum { ALPHA_THRESHOLD, MERGE, COLOR, LUT3D, BLUR, MAGNIFIER,
@@ -380,7 +380,7 @@ static SkImageFilter* make_image_filter(bool canBeNull = true) {
     case DROP_SHADOW:
         filter = SkDropShadowImageFilter::Create(make_scalar(), make_scalar(), make_scalar(true),
                     make_scalar(true), make_color(), make_shadow_mode(), make_image_filter(),
-                    nullptr);
+                    NULL);
         break;
     case MORPHOLOGY:
         if (R(2) == 1) {
@@ -392,14 +392,11 @@ static SkImageFilter* make_image_filter(bool canBeNull = true) {
         }
         break;
     case BITMAP:
-    {
-        SkAutoTUnref<SkImage> image(SkImage::NewFromBitmap(make_bitmap()));
         if (R(2) == 1) {
-            filter = SkImageSource::Create(image, make_rect(), make_rect(), kHigh_SkFilterQuality);
+            filter = SkBitmapSource::Create(make_bitmap(), make_rect(), make_rect());
         } else {
-            filter = SkImageSource::Create(image);
+            filter = SkBitmapSource::Create(make_bitmap());
         }
-    }
         break;
     case DISPLACE:
         filter = SkDisplacementMapEffect::Create(make_channel_selector_type(),

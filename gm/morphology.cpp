@@ -31,7 +31,7 @@ protected:
         canvas.clear(0x0);
         SkPaint paint;
         paint.setAntiAlias(true);
-        sk_tool_utils::set_portable_typeface(&paint);
+        sk_tool_utils::set_portable_typeface_always(&paint);
         const char* str1 = "ABC";
         const char* str2 = "XYZ";
         paint.setColor(0xFFFFFFFF);
@@ -73,18 +73,18 @@ protected:
 
         for (unsigned j = 0; j < 4; ++j) {
             for (unsigned i = 0; i < SK_ARRAY_COUNT(samples); ++i) {
-                const SkImageFilter::CropRect* cr = j & 0x02 ? &cropRect : nullptr;
+                const SkImageFilter::CropRect* cr = j & 0x02 ? &cropRect : NULL;
                 if (j & 0x01) {
                     paint.setImageFilter(SkErodeImageFilter::Create(
                         samples[i].fRadiusX,
                         samples[i].fRadiusY,
-                        nullptr,
+                        NULL,
                         cr))->unref();
                 } else {
                     paint.setImageFilter(SkDilateImageFilter::Create(
                         samples[i].fRadiusX,
                         samples[i].fRadiusY,
-                        nullptr,
+                        NULL,
                         cr))->unref();
                 }
                 drawClippedBitmap(canvas, paint, i * 140, j * 140);

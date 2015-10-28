@@ -10,7 +10,6 @@
 #include "SkBase64.h"
 #include "SkBitmap.h"
 #include "SkChecksum.h"
-#include "SkClipStack.h"
 #include "SkData.h"
 #include "SkDraw.h"
 #include "SkImageEncoder.h"
@@ -38,11 +37,11 @@ static SkScalar svg_opacity(SkColor color) {
 
 // Keep in sync with SkPaint::Cap
 static const char* cap_map[]  = {
-    nullptr,    // kButt_Cap (default)
+    NULL,    // kButt_Cap (default)
     "round", // kRound_Cap
     "square" // kSquare_Cap
 };
-static_assert(SK_ARRAY_COUNT(cap_map) == SkPaint::kCapCount, "missing_cap_map_entry");
+SK_COMPILE_ASSERT(SK_ARRAY_COUNT(cap_map) == SkPaint::kCapCount, missing_cap_map_entry);
 
 static const char* svg_cap(SkPaint::Cap cap) {
     SkASSERT(cap < SK_ARRAY_COUNT(cap_map));
@@ -51,11 +50,11 @@ static const char* svg_cap(SkPaint::Cap cap) {
 
 // Keep in sync with SkPaint::Join
 static const char* join_map[] = {
-    nullptr,    // kMiter_Join (default)
+    NULL,    // kMiter_Join (default)
     "round", // kRound_Join
     "bevel"  // kBevel_Join
 };
-static_assert(SK_ARRAY_COUNT(join_map) == SkPaint::kJoinCount, "missing_join_map_entry");
+SK_COMPILE_ASSERT(SK_ARRAY_COUNT(join_map) == SkPaint::kJoinCount, missing_join_map_entry);
 
 static const char* svg_join(SkPaint::Join join) {
     SkASSERT(join < SK_ARRAY_COUNT(join_map));
@@ -64,12 +63,12 @@ static const char* svg_join(SkPaint::Join join) {
 
 // Keep in sync with SkPaint::Align
 static const char* text_align_map[] = {
-    nullptr,     // kLeft_Align (default)
+    NULL,     // kLeft_Align (default)
     "middle", // kCenter_Align
     "end"     // kRight_Align
 };
-static_assert(SK_ARRAY_COUNT(text_align_map) == SkPaint::kAlignCount,
-              "missing_text_align_map_entry");
+SK_COMPILE_ASSERT(SK_ARRAY_COUNT(text_align_map) == SkPaint::kAlignCount,
+                  missing_text_align_map_entry);
 static const char* svg_text_align(SkPaint::Align align) {
     SkASSERT(align < SK_ARRAY_COUNT(text_align_map));
     return text_align_map[align];
@@ -115,7 +114,7 @@ struct Resources {
 class SVGTextBuilder : SkNoncopyable {
 public:
     SVGTextBuilder(const void* text, size_t byteLen, const SkPaint& paint, const SkPoint& offset,
-                   unsigned scalarsPerPos, const SkScalar pos[] = nullptr)
+                   unsigned scalarsPerPos, const SkScalar pos[] = NULL)
         : fOffset(offset)
         , fScalarsPerPos(scalarsPerPos)
         , fPos(pos)
@@ -277,7 +276,7 @@ class SkSVGDevice::AutoElement : ::SkNoncopyable {
 public:
     AutoElement(const char name[], SkXMLWriter* writer)
         : fWriter(writer)
-        , fResourceBucket(nullptr) {
+        , fResourceBucket(NULL) {
         fWriter->startElement(name);
     }
 
@@ -290,7 +289,7 @@ public:
         if (!res.fClip.isEmpty()) {
             // The clip is in device space. Apply it via a <g> wrapper to avoid local transform
             // interference.
-            fClipGroup.reset(new AutoElement("g", fWriter));
+            fClipGroup.reset(SkNEW_ARGS(AutoElement, ("g", fWriter)));
             fClipGroup->addAttribute("clip-path",res.fClip);
         }
 
@@ -563,16 +562,16 @@ void SkSVGDevice::AutoElement::addTextAttributes(const SkPaint& paint) {
 
 SkBaseDevice* SkSVGDevice::Create(const SkISize& size, SkXMLWriter* writer) {
     if (!writer) {
-        return nullptr;
+        return NULL;
     }
 
-    return new SkSVGDevice(size, writer);
+    return SkNEW_ARGS(SkSVGDevice, (size, writer));
 }
 
 SkSVGDevice::SkSVGDevice(const SkISize& size, SkXMLWriter* writer)
     : INHERITED(SkSurfaceProps(0, kUnknown_SkPixelGeometry))
     , fWriter(writer)
-    , fResourceBucket(new ResourceBucket) {
+    , fResourceBucket(SkNEW(ResourceBucket)) {
     SkASSERT(writer);
 
     fLegacyBitmap.setInfo(SkImageInfo::MakeUnknown(size.width(), size.height()));
@@ -580,7 +579,7 @@ SkSVGDevice::SkSVGDevice(const SkISize& size, SkXMLWriter* writer)
     fWriter->writeHeader();
 
     // The root <svg> tag gets closed by the destructor.
-    fRootElement.reset(new AutoElement("svg", fWriter));
+    fRootElement.reset(SkNEW_ARGS(AutoElement, ("svg", fWriter)));
 
     fRootElement->addAttribute("xmlns", "http://www.w3.org/2000/svg");
     fRootElement->addAttribute("xmlns:xlink", "http://www.w3.org/1999/xlink");
@@ -670,7 +669,7 @@ void SkSVGDevice::drawBitmapCommon(const SkDraw& draw, const SkBitmap& bm,
         return;
     }
 
-    size_t b64Size = SkBase64::Encode(pngData->data(), pngData->size(), nullptr);
+    size_t b64Size = SkBase64::Encode(pngData->data(), pngData->size(), NULL);
     SkAutoTMalloc<char> b64Data(b64Size);
     SkBase64::Encode(pngData->data(), pngData->size(), b64Data.get());
 
@@ -717,7 +716,7 @@ void SkSVGDevice::drawSprite(const SkDraw& draw, const SkBitmap& bitmap,
 
 void SkSVGDevice::drawBitmapRect(const SkDraw& draw, const SkBitmap& bm, const SkRect* srcOrNull,
                                  const SkRect& dst, const SkPaint& paint,
-                                 SkCanvas::SrcRectConstraint) {
+                                 SK_VIRTUAL_CONSTRAINT_TYPE) {
     SkMatrix adjustedMatrix;
     adjustedMatrix.setRectToRect(srcOrNull ? *srcOrNull : SkRect::Make(bm.bounds()),
                                  dst,

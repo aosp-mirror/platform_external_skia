@@ -13,7 +13,6 @@
 #include "SkPath.h"
 #include "SkRandom.h"
 #include "SkString.h"
-#include "SkStrokeRec.h"
 #include "SkTDArray.h"
 
 
@@ -62,7 +61,7 @@ protected:
         return fName.c_str();
     }
 
-    void onDraw(int loops, SkCanvas* canvas) override {
+    void onDraw(const int loops, SkCanvas* canvas) override {
         SkPaint paint;
         this->setupPaint(&paint);
         paint.setStyle(SkPaint::kStroke_Style);
@@ -120,7 +119,7 @@ protected:
 
             SkPaint p(paint);
             p.setStyle(SkPaint::kFill_Style);
-            p.setPathEffect(nullptr);
+            p.setPathEffect(NULL);
 
             int count = SkScalarRoundToInt((pts[1].fX - pts[0].fX) / (2*fWidth));
             SkScalar dx = SkIntToScalar(2 * fWidth);
@@ -194,12 +193,12 @@ protected:
         return fName.c_str();
     }
 
-    void onDraw(int loops, SkCanvas*) override {
+    void onDraw(const int loops, SkCanvas*) override {
         SkPath dst;
         for (int i = 0; i < loops; ++i) {
             SkStrokeRec rec(SkStrokeRec::kHairline_InitStyle);
 
-            fPE->filterPath(&dst, fPath, &rec, nullptr);
+            fPE->filterPath(&dst, fPath, &rec, NULL);
             dst.rewind();
         }
     }
@@ -232,7 +231,7 @@ protected:
         return fName.c_str();
     }
 
-    void onDraw(int loops, SkCanvas* canvas) override {
+    void onDraw(const int loops, SkCanvas* canvas) override {
         SkPaint paint;
         this->setupPaint(&paint);
         paint.setStrokeWidth(fStrokeWidth);
@@ -271,7 +270,7 @@ protected:
         return fName.c_str();
     }
 
-    void onDraw(int loops, SkCanvas* canvas) override {
+    void onDraw(const int loops, SkCanvas* canvas) override {
         SkPaint p;
         this->setupPaint(&p);
         p.setColor(SK_ColorBLACK);
@@ -312,7 +311,7 @@ public:
 
     static const char* LineTypeName(LineType lt) {
         static const char* gNames[] = { "hori", "vert", "diag" };
-        static_assert(kLineTypeCount == SK_ARRAY_COUNT(gNames), "names_wrong_size");
+        SK_COMPILE_ASSERT(kLineTypeCount == SK_ARRAY_COUNT(gNames), names_wrong_size);
         return gNames[lt];
     }
 
@@ -357,7 +356,7 @@ protected:
         return fName.c_str();
     }
 
-    void onDraw(int loops, SkCanvas* canvas) override {
+    void onDraw(const int loops, SkCanvas* canvas) override {
         SkPaint p;
         this->setupPaint(&p);
         p.setStyle(SkPaint::kStroke_Style);
@@ -397,7 +396,7 @@ protected:
         return fName.c_str();
     }
 
-    void onDraw(int loops, SkCanvas* canvas) override {
+    void onDraw(const int loops, SkCanvas* canvas) override {
         SkPaint p;
         this->setupPaint(&p);
         p.setColor(SK_ColorBLACK);

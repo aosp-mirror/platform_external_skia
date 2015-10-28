@@ -65,7 +65,7 @@ protected:
     void onDrawContent(SkCanvas* canvas) override {
         SkBitmap bm;
         SkImageDecoder::DecodeFile("/kill.gif", &bm);
-        canvas->drawBitmap(bm, 0, 0, nullptr);
+        canvas->drawBitmap(bm, 0, 0, NULL);
 
         this->drawRings(canvas);
         return;
@@ -98,8 +98,8 @@ protected:
 
     SkView::Click* onFindClickHandler(SkScalar x, SkScalar y, unsigned) override {
         fAlpha = SkScalarRoundToInt(y);
-        this->inval(nullptr);
-        return nullptr;
+        this->inval(NULL);
+        return NULL;
     }
 private:
 

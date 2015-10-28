@@ -1,9 +1,3 @@
-/*
- * Copyright 2013 Google Inc.
- *
- * Use of this source code is governed by a BSD-style license that can be
- * found in the LICENSE file.
- */
 #include "Benchmark.h"
 #include "SkColorPriv.h"
 #include "SkRandom.h"
@@ -24,7 +18,7 @@ public:
 
     const char* onGetName() override { return fName.c_str(); }
 
-    void onDelayedSetup() override {
+    void onPreDraw() override {
         // A handful of random srcs and dsts.
         SkRandom rand;
         for (int i = 0; i < kInputs; i++) {
@@ -39,7 +33,7 @@ public:
         if (kScale) fScales[256] = 255;  // We'll just do 255 twice if we're limited to [0,255].
     }
 
-    void onDraw(int loops, SkCanvas*) override {
+    void onDraw(const int loops, SkCanvas*) override {
         // We xor results of FourByteInterp into junk to make sure the function runs.
         volatile SkPMColor junk = 0;
 
@@ -80,8 +74,8 @@ private:
 };
 
 #define COMMA ,
-DEF_BENCH(return (new FourByteInterpBench<true COMMA true>);)
-DEF_BENCH(return (new FourByteInterpBench<true COMMA false>);)
-DEF_BENCH(return (new FourByteInterpBench<false COMMA true>);)
-DEF_BENCH(return (new FourByteInterpBench<false COMMA false>);)
+DEF_BENCH( return SkNEW(FourByteInterpBench<true COMMA true>); )
+DEF_BENCH( return SkNEW(FourByteInterpBench<true COMMA false>); )
+DEF_BENCH( return SkNEW(FourByteInterpBench<false COMMA true>); )
+DEF_BENCH( return SkNEW(FourByteInterpBench<false COMMA false>); )
 #undef COMMA

@@ -12,7 +12,6 @@
 #include "SkAnimTimer.h"
 #include "SkCanvas.h"
 #include "SkInterpolator.h"
-#include "SkPath.h"
 #include "SkSurface.h"
 #include "SkRandom.h"
 #include "SkTime.h"
@@ -46,20 +45,20 @@ static SkImage* make_image() {
     return surface->newImageSnapshot();
 }
 
-static SkImage* zoom_up(SkSurface* origSurf, SkImage* orig) {
+static SkImage* zoom_up(SkImage* orig) {
     const SkScalar S = 8;    // amount to scale up
     const int D = 2;    // dimension scaling for the offscreen
     // since we only view the center, don't need to produce the entire thing
     
     SkImageInfo info = SkImageInfo::MakeN32(orig->width() * D, orig->height() * D,
                                             kOpaque_SkAlphaType);
-    SkAutoTUnref<SkSurface> surface(origSurf->newSurface(info));
+    SkAutoTUnref<SkSurface> surface(orig->newSurface(info));
     SkCanvas* canvas = surface->getCanvas();
     canvas->drawColor(SK_ColorWHITE);
     canvas->scale(S, S);
     canvas->translate(-SkScalarHalf(orig->width()) * (S - D) / S,
                       -SkScalarHalf(orig->height()) * (S - D) / S);
-    canvas->drawImage(orig, 0, 0, nullptr);
+    canvas->drawImage(orig, 0, 0, NULL);
     
     if (S > 3) {
         SkPaint paint;
@@ -165,11 +164,11 @@ protected:
         SkUnichar uni;
         if (SampleCode::CharQ(*evt, &uni)) {
             switch (uni) {
-                case '1': fAngle.inc(-ANGLE_DELTA); this->inval(nullptr); return true;
-                case '2': fAngle.inc( ANGLE_DELTA); this->inval(nullptr); return true;
-                case '3': fScale.inc(-SCALE_DELTA); this->inval(nullptr); return true;
-                case '4': fScale.inc( SCALE_DELTA); this->inval(nullptr); return true;
-                case '5': fShowFatBits = !fShowFatBits; this->inval(nullptr); return true;
+                case '1': fAngle.inc(-ANGLE_DELTA); this->inval(NULL); return true;
+                case '2': fAngle.inc( ANGLE_DELTA); this->inval(NULL); return true;
+                case '3': fScale.inc(-SCALE_DELTA); this->inval(NULL); return true;
+                case '4': fScale.inc( SCALE_DELTA); this->inval(NULL); return true;
+                case '5': fShowFatBits = !fShowFatBits; this->inval(NULL); return true;
                 default: break;
             }
         }
@@ -221,7 +220,7 @@ protected:
 
         if (surface) {
             SkAutoTUnref<SkImage> orig(surface->newImageSnapshot());
-            SkAutoTUnref<SkImage> zoomed(zoom_up(surface, orig));
+            SkAutoTUnref<SkImage> zoomed(zoom_up(orig));
             origCanvas->drawImage(zoomed,
                                   SkScalarHalf(fCell.width() - zoomed->width()),
                                   SkScalarHalf(fCell.height() - zoomed->height()));
@@ -283,7 +282,7 @@ protected:
     }
 
     virtual bool handleKey(SkKey key) {
-        this->inval(nullptr);
+        this->inval(NULL);
         return true;
     }
 

@@ -11,7 +11,7 @@
 
 PathOpsThreadedTestRunner::~PathOpsThreadedTestRunner() {
     for (int index = 0; index < fRunnables.count(); index++) {
-        delete fRunnables[index];
+        SkDELETE(fRunnables[index]);
     }
 }
 

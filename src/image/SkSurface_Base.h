@@ -68,16 +68,8 @@ public:
      */
     virtual void onCopyOnWrite(ContentChangeMode) = 0;
 
-    /**
-     *  Signal the surface to remind its backing store that it's mutable again.
-     *  Called only when we _didn't_ copy-on-write; we assume the copies start mutable.
-     */
-    virtual void onRestoreBackingMutability() {}
-
     inline SkCanvas* getCachedCanvas();
     inline SkImage* getCachedImage(Budgeted);
-
-    bool hasCachedImage() const { return fCachedImage != nullptr; }
 
     // called by SkSurface to compute a new genID
     uint32_t newGenerationID();
@@ -99,7 +91,7 @@ private:
 };
 
 SkCanvas* SkSurface_Base::getCachedCanvas() {
-    if (nullptr == fCachedCanvas) {
+    if (NULL == fCachedCanvas) {
         fCachedCanvas = this->onNewCanvas();
         if (fCachedCanvas) {
             fCachedCanvas->setSurfaceBase(this);
@@ -109,7 +101,7 @@ SkCanvas* SkSurface_Base::getCachedCanvas() {
 }
 
 SkImage* SkSurface_Base::getCachedImage(Budgeted budgeted) {
-    if (nullptr == fCachedImage) {
+    if (NULL == fCachedImage) {
         fCachedImage = this->onNewImageSnapshot(budgeted);
         SkASSERT(!fCachedCanvas || fCachedCanvas->getSurfaceBase() == this);
     }

@@ -24,9 +24,6 @@ public:
 #if SK_SUPPORT_GPU
         kNativeGL_BackEndType,
 #endif
-#if SK_COMMAND_BUFFER
-        kCommandBuffer_BackEndType,
-#endif // SK_COMMAND_BUFFER
     };
 
     void    detach();

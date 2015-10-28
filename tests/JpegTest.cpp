@@ -456,17 +456,23 @@ DEF_TEST(Jpeg, reporter) {
 
 DEF_TEST(Jpeg_YUV, reporter) {
     size_t len = sizeof(goodJpegImage);
-    SkMemoryStream* stream = new SkMemoryStream(goodJpegImage, len);
+    SkMemoryStream* stream = SkNEW_ARGS(SkMemoryStream, (goodJpegImage, len));
+
+    SkBitmap bitmap;
     SkDecodingImageGenerator::Options opts;
-    SkAutoTDelete<SkImageGenerator> gen(SkDecodingImageGenerator::Create(stream, opts));
-    REPORTER_ASSERT(reporter, gen);
-    if (!gen) {
+    bool pixelsInstalled = SkInstallDiscardablePixelRef(
+                SkDecodingImageGenerator::Create(stream, opts), &bitmap);
+    REPORTER_ASSERT(reporter, pixelsInstalled);
+
+    if (!pixelsInstalled) {
         return;
     }
 
+    SkPixelRef* pixelRef = bitmap.pixelRef();
     SkISize yuvSizes[3];
-    bool sizesComputed = gen->getYUV8Planes(yuvSizes, nullptr, nullptr, nullptr);
+    bool sizesComputed = (NULL != pixelRef) && pixelRef->getYUV8Planes(yuvSizes, NULL, NULL, NULL);
     REPORTER_ASSERT(reporter, sizesComputed);
+
     if (!sizesComputed) {
         return;
     }
@@ -489,5 +495,5 @@ DEF_TEST(Jpeg_YUV, reporter) {
     planes[2] = (uint8_t*)planes[1] + sizes[1];
 
     // Get the YUV planes
-    REPORTER_ASSERT(reporter, gen->getYUV8Planes(yuvSizes, planes, rowBytes, nullptr));
+    REPORTER_ASSERT(reporter, pixelRef->getYUV8Planes(yuvSizes, planes, rowBytes, NULL));
 }

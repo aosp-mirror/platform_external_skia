@@ -18,11 +18,7 @@ class GrGLFragmentProcessor {
 public:
     GrGLFragmentProcessor() {}
 
-    virtual ~GrGLFragmentProcessor() {
-        for (int i = 0; i < fChildProcessors.count(); ++i) {
-            delete fChildProcessors[i];
-        }
-    }
+    virtual ~GrGLFragmentProcessor() {}
 
     typedef GrGLProgramDataManager::UniformHandle UniformHandle;
     typedef GrGLProcessor::TransformedCoordsArray TransformedCoordsArray;
@@ -38,14 +34,14 @@ public:
         @param outputColor  A predefined vec4 in the FS in which the stage should place its output
                             color (or coverage).
         @param inputColor   A vec4 that holds the input color to the stage in the FS. This may be
-                            nullptr in which case the implied input is solid white (all ones).
+                            NULL in which case the implied input is solid white (all ones).
                             TODO: Better system for communicating optimization info (e.g. input
                             color is solid white, trans black, known to be opaque, etc.) that allows
                             the processor to communicate back similar known info about its output.
         @param samplers     Contains one entry for each GrTextureAccess of the GrProcessor. These
                             can be passed to the builder to emit texture reads in the generated
                             code.
-     */
+        */
 
     struct EmitArgs {
         EmitArgs(GrGLFPBuilder* builder,
@@ -70,45 +66,17 @@ public:
 
     virtual void emitCode(EmitArgs&) = 0;
 
-    void setData(const GrGLProgramDataManager& pdman, const GrFragmentProcessor& processor);
+    /** A GrGLFragmentProcessor instance can be reused with any GrFragmentProcessor that produces
+        the same stage key; this function reads data from a GrFragmentProcessor and uploads any
+        uniform variables required by the shaders created in emitCode(). The GrFragmentProcessor
+        parameter is guaranteed to be of the same type that created this GrGLFragmentProcessor and
+        to have an identical processor key as the one that created this GrGLFragmentProcessor.  */
+    // TODO update this to pass in GrFragmentProcessor
+    virtual void setData(const GrGLProgramDataManager&, const GrProcessor&) {}
 
     static void GenKey(const GrProcessor&, const GrGLSLCaps&, GrProcessorKeyBuilder*) {}
 
-    int numChildProcessors() const { return fChildProcessors.count(); }
-
-    GrGLFragmentProcessor* childProcessor(int index) const {
-        return fChildProcessors[index];
-    }
-
-    /** Will emit the code of a child proc in its own scope. Pass in the parent's EmitArgs and
-     *  emitChild will automatically extract the coords and samplers of that child and pass them
-     *  on to the child's emitCode(). Also, any uniforms or functions emitted by the child will
-     *  have their names mangled to prevent redefinitions. The output color name is also mangled
-     *  therefore in an in/out param. It will be declared in mangled form by emitChild(). It is
-     *  legal to pass nullptr as inputColor, since all fragment processors are required to work
-     *  without an input color.
-     */
-    void emitChild(int childIndex, const char* inputColor, SkString* outputColor,
-                   EmitArgs& parentArgs);
-
-    /** Variation that uses the parent's output color variable to hold the child's output.*/
-    void emitChild(int childIndex, const char* inputColor, EmitArgs& parentArgs);
-
-protected:
-    /** A GrGLFragmentProcessor instance can be reused with any GrFragmentProcessor that produces
-    the same stage key; this function reads data from a GrFragmentProcessor and uploads any
-    uniform variables required by the shaders created in emitCode(). The GrFragmentProcessor
-    parameter is guaranteed to be of the same type that created this GrGLFragmentProcessor and
-    to have an identical processor key as the one that created this GrGLFragmentProcessor.  */
-    // TODO update this to pass in GrFragmentProcessor
-    virtual void onSetData(const GrGLProgramDataManager&, const GrProcessor&) {}
-
 private:
-    void internalEmitChild(int, const char*, const char*, EmitArgs&);
-
-    SkTArray<GrGLFragmentProcessor*, true> fChildProcessors;
-
-    friend class GrFragmentProcessor;
     typedef GrGLProcessor INHERITED;
 };
 

@@ -18,8 +18,8 @@ struct SkGradientBitmapCache::Entry {
     SkBitmap    fBitmap;
 
     Entry(const void* buffer, size_t size, const SkBitmap& bm)
-            : fPrev(nullptr),
-              fNext(nullptr),
+            : fPrev(NULL),
+              fNext(NULL),
               fBitmap(bm) {
         fBuffer = sk_malloc_throw(size);
         fSize = size;
@@ -35,7 +35,7 @@ struct SkGradientBitmapCache::Entry {
 
 SkGradientBitmapCache::SkGradientBitmapCache(int max) : fMaxEntries(max) {
     fEntryCount = 0;
-    fHead = fTail = nullptr;
+    fHead = fTail = NULL;
 
     this->validate();
 }
@@ -70,7 +70,7 @@ SkGradientBitmapCache::Entry* SkGradientBitmapCache::detach(Entry* entry) const 
 }
 
 void SkGradientBitmapCache::attachToHead(Entry* entry) const {
-    entry->fPrev = nullptr;
+    entry->fPrev = NULL;
     entry->fNext = fHead;
     if (fHead) {
         fHead->fPrev = entry;
@@ -108,7 +108,7 @@ void SkGradientBitmapCache::add(const void* buffer, size_t len, const SkBitmap& 
         fEntryCount -= 1;
     }
 
-    Entry* entry = new Entry(buffer, len, bm);
+    Entry* entry = SkNEW_ARGS(Entry, (buffer, len, bm));
     this->attachToHead(entry);
     fEntryCount += 1;
 }
@@ -121,8 +121,8 @@ void SkGradientBitmapCache::validate() const {
     SkASSERT(fEntryCount >= 0 && fEntryCount <= fMaxEntries);
 
     if (fEntryCount > 0) {
-        SkASSERT(nullptr == fHead->fPrev);
-        SkASSERT(nullptr == fTail->fNext);
+        SkASSERT(NULL == fHead->fPrev);
+        SkASSERT(NULL == fTail->fNext);
 
         if (fEntryCount == 1) {
             SkASSERT(fHead == fTail);
@@ -145,8 +145,8 @@ void SkGradientBitmapCache::validate() const {
         }
         SkASSERT(0 == count);
     } else {
-        SkASSERT(nullptr == fHead);
-        SkASSERT(nullptr == fTail);
+        SkASSERT(NULL == fHead);
+        SkASSERT(NULL == fTail);
     }
 }
 

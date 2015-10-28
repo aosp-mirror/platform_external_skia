@@ -4,10 +4,8 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-
 #include "SampleCode.h"
 #include "SkCanvas.h"
-#include "SkPath.h"
 
 // Reproduces https://code.google.com/p/chromium/issues/detail?id=279014
 
@@ -59,8 +57,8 @@ protected:
 
     SkView::Click* onFindClickHandler(SkScalar x, SkScalar y, unsigned) override {
         fAngle = x/width();
-        this->inval(nullptr);
-        return nullptr;
+        this->inval(NULL);
+        return NULL;
     }
 private:
 

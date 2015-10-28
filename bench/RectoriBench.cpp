@@ -10,7 +10,6 @@
 #include "SkCanvas.h"
 #include "SkLayerDrawLooper.h"
 #include "SkPaint.h"
-#include "SkPath.h"
 #include "SkRandom.h"
 
 // This bench replicates a problematic use case of a draw looper used
@@ -25,7 +24,7 @@ protected:
         return "rectori";
     }
 
-    void onDraw(int loops, SkCanvas* canvas) override {
+    void onDraw(const int loops, SkCanvas* canvas) override {
         SkRandom Random;
 
         for (int i = 0; i < loops; i++) {
@@ -102,4 +101,4 @@ private:
     typedef Benchmark INHERITED;
 };
 
-DEF_BENCH(return new RectoriBench();)
+DEF_BENCH( return SkNEW_ARGS(RectoriBench, ()); )

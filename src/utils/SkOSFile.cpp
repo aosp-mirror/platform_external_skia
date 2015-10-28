@@ -20,7 +20,7 @@ SkString SkOSPath::Basename(const char* fullPath) {
         return SkString();
     }
     const char* filename = strrchr(fullPath, SkPATH_SEPARATOR);
-    if (nullptr == filename) {
+    if (NULL == filename) {
         filename = fullPath;
     } else {
         ++filename;
@@ -33,7 +33,7 @@ SkString SkOSPath::Dirname(const char* fullPath) {
         return SkString();
     }
     const char* end = strrchr(fullPath, SkPATH_SEPARATOR);
-    if (nullptr == end) {
+    if (NULL == end) {
         return SkString();
     }
     if (end == fullPath) {

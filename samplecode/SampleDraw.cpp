@@ -22,7 +22,7 @@ static void test_clearonlayers(SkCanvas* canvas) {
 
     c.clipRect(rect);
 
-    c.saveLayer(nullptr, nullptr);
+    c.saveLayer(NULL, NULL);
     rect = SkRect::MakeXYWH(50, 10, 40, 80);
     c.clipRect(rect, SkRegion::kUnion_Op);
 
@@ -262,7 +262,7 @@ class DrawView : public SkView {
     SkTDArray<Draw*> fList;
 
 public:
-    DrawView() : fDraw(nullptr) {
+    DrawView() : fDraw(NULL) {
         fFactory = new RectFactory;
     }
 
@@ -289,7 +289,7 @@ public:
                 return *iter;
             }
         }
-        return nullptr;
+        return NULL;
     }
 
 protected:
@@ -344,7 +344,7 @@ protected:
                 } else {
                     fDraw->unref();
                 }
-                fDraw = nullptr;
+                fDraw = NULL;
             }
             return true;
         }
@@ -365,7 +365,7 @@ protected:
                 }
             }
         }
-        this->inval(nullptr);
+        this->inval(NULL);
         return true;
     }
 

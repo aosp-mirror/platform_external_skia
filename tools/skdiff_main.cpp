@@ -15,9 +15,8 @@
 #include "SkOSFile.h"
 #include "SkStream.h"
 #include "SkTDArray.h"
+#include "SkTemplates.h"
 #include "SkTSearch.h"
-
-#include <stdlib.h>
 
 __SK_FORCE_IMAGE_DECODER_LINKING;
 
@@ -329,13 +328,13 @@ class AutoReleasePixels {
 public:
     AutoReleasePixels(DiffRecord* drp)
     : fDrp(drp) {
-        SkASSERT(drp != nullptr);
+        SkASSERT(drp != NULL);
     }
     ~AutoReleasePixels() {
-        fDrp->fBase.fBitmap.setPixelRef(nullptr);
-        fDrp->fComparison.fBitmap.setPixelRef(nullptr);
-        fDrp->fDifference.fBitmap.setPixelRef(nullptr);
-        fDrp->fWhite.fBitmap.setPixelRef(nullptr);
+        fDrp->fBase.fBitmap.setPixelRef(NULL);
+        fDrp->fComparison.fBitmap.setPixelRef(NULL);
+        fDrp->fDifference.fBitmap.setPixelRef(NULL);
+        fDrp->fWhite.fBitmap.setPixelRef(NULL);
     }
 
 private:
@@ -345,7 +344,7 @@ private:
 static void get_bounds(DiffResource& resource, const char* name) {
     if (resource.fBitmap.empty() && !DiffResource::isStatusFailed(resource.fStatus)) {
         SkAutoDataUnref fileBits(read_file(resource.fFullPath.c_str()));
-        if (nullptr == fileBits) {
+        if (NULL == fileBits) {
             SkDebugf("WARNING: couldn't read %s file <%s>\n", name, resource.fFullPath.c_str());
             resource.fStatus = DiffResource::kCouldNotRead_Status;
         } else {
@@ -477,12 +476,12 @@ static void create_diff_images (DiffMetricProc dmp,
             if (comparisonFileBits) {
                 drp->fComparison.fStatus = DiffResource::kRead_Status;
             }
-            if (nullptr == baseFileBits || nullptr == comparisonFileBits) {
-                if (nullptr == baseFileBits) {
+            if (NULL == baseFileBits || NULL == comparisonFileBits) {
+                if (NULL == baseFileBits) {
                     drp->fBase.fStatus = DiffResource::kCouldNotRead_Status;
                     VERBOSE_STATUS("READ FAIL", ANSI_COLOR_RED, baseFiles[i]);
                 }
-                if (nullptr == comparisonFileBits) {
+                if (NULL == comparisonFileBits) {
                     drp->fComparison.fStatus = DiffResource::kCouldNotRead_Status;
                     VERBOSE_STATUS("READ FAIL", ANSI_COLOR_RED, comparisonFiles[j]);
                 }

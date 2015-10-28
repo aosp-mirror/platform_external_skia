@@ -36,9 +36,8 @@ protected:
             // bitmap is unlocked.
             SkAutoTUnref<SkDiscardableMemoryPool> pool(
                 SkDiscardableMemoryPool::Create(1));
-            SkAssertResult(SkDEPRECATED_InstallDiscardablePixelRef(
-                                                        SkImageGenerator::NewFromEncoded(data),
-                                                        nullptr, &fBitmap, pool));
+            SkAssertResult(SkInstallDiscardablePixelRef(SkImageGenerator::NewFromEncoded(data),
+                                                        NULL, &fBitmap, pool));
         }
     }
 

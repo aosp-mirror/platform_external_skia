@@ -214,11 +214,6 @@ public:
 
     SkIRect bounds() const { return fInfo.bounds(); }
     SkISize dimensions() const { return fInfo.dimensions(); }
-    // Returns the bounds of this bitmap, offset by its pixelref origin.
-    SkIRect getSubset() const {
-        return SkIRect::MakeXYWH(fPixelRefOrigin.x(), fPixelRefOrigin.y(),
-                                 fInfo.width(), fInfo.height());
-    }
 
     bool setInfo(const SkImageInfo&, size_t rowBytes = 0);
 
@@ -754,6 +749,7 @@ private:
     static void WriteRawPixels(SkWriteBuffer*, const SkBitmap&);
     static bool ReadRawPixels(SkReadBuffer*, SkBitmap*);
 
+    friend class SkBitmapSource;    // unflatten
     friend class SkReadBuffer;      // unflatten, rawpixels
     friend class SkWriteBuffer;     // rawpixels
     friend struct SkBitmapProcState;

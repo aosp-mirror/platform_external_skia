@@ -14,7 +14,7 @@
 #include "SkValidationUtils.h"
 
 SkPictureImageFilter::SkPictureImageFilter(const SkPicture* picture)
-    : INHERITED(0, 0, nullptr)
+    : INHERITED(0, 0, NULL)
     , fPicture(SkSafeRef(picture))
     , fCropRect(picture ? picture->cullRect() : SkRect::MakeEmpty())
     , fPictureResolution(kDeviceSpace_PictureResolution) 
@@ -24,7 +24,7 @@ SkPictureImageFilter::SkPictureImageFilter(const SkPicture* picture)
 SkPictureImageFilter::SkPictureImageFilter(const SkPicture* picture, const SkRect& cropRect,
                                            PictureResolution pictureResolution,
                                            SkFilterQuality filterQuality)
-    : INHERITED(0, 0, nullptr)
+    : INHERITED(0, 0, NULL)
     , fPicture(SkSafeRef(picture))
     , fCropRect(cropRect)
     , fPictureResolution(pictureResolution)
@@ -71,7 +71,7 @@ void SkPictureImageFilter::flatten(SkWriteBuffer& buffer) const {
     if (buffer.isCrossProcess() && SkPicture::PictureIOSecurityPrecautionsEnabled()) {
         buffer.writeBool(false);
     } else {
-        bool hasPicture = (fPicture != nullptr);
+        bool hasPicture = (fPicture != NULL);
         buffer.writeBool(hasPicture);
         if (hasPicture) {
             fPicture->flatten(buffer);
@@ -104,7 +104,7 @@ bool SkPictureImageFilter::onFilterImage(Proxy* proxy, const SkBitmap&, const Co
     }
 
     SkAutoTUnref<SkBaseDevice> device(proxy->createDevice(bounds.width(), bounds.height()));
-    if (nullptr == device.get()) {
+    if (NULL == device.get()) {
         return false;
     }
 

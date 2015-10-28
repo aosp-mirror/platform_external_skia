@@ -25,7 +25,7 @@ public:
 
     bool advance() {
         fSegment = fSegment->next();
-        return fSegment != nullptr;
+        return fSegment != NULL;
     }
 
     SkScalar bottom() const {
@@ -76,7 +76,7 @@ public:
 
     bool startAfter(const SkIntersectionHelper& after) {
         fSegment = after.fSegment->next();
-        return fSegment != nullptr;
+        return fSegment != NULL;
     }
 
     SkScalar top() const {

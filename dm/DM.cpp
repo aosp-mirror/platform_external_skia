@@ -15,8 +15,6 @@
 #include "ProcStats.h"
 #include "SkBBHFactory.h"
 #include "SkChecksum.h"
-#include "SkCodec.h"
-#include "SkCodecTools.h"
 #include "SkCommonFlags.h"
 #include "SkFontMgr.h"
 #include "SkForceLinking.h"
@@ -30,18 +28,6 @@
 #include "Test.h"
 #include "Timer.h"
 #include "sk_tool_utils.h"
-
-#ifdef SK_PDF_IMAGE_STATS
-extern void SkPDFImageDumpStats();
-#endif
-
-#ifdef SKIA_PNG_PREFIXED
-    // this must proceed png.h
-    #include "pngprefix.h"
-#endif
-#include "png.h"
-
-#include <stdlib.h>
 
 DEFINE_string(src, "tests gm skp image", "Source types to test.");
 DEFINE_bool(nameByHash, false,
@@ -146,11 +132,7 @@ struct Gold : public SkString {
         this->append(name);
         this->append(md5);
     }
-    struct Hash {
-        uint32_t operator()(const Gold& g) const {
-            return SkGoodHash()((const SkString&)g);
-        }
-    };
+    static uint32_t Hash(const Gold& g) { return SkGoodHash((const SkString&)g); }
 };
 static SkTHashSet<Gold, Gold::Hash> gGold;
 
@@ -175,11 +157,6 @@ static SkTHashSet<SkString> gUninterestingHashes;
 static void gather_uninteresting_hashes() {
     if (!FLAGS_uninterestingHashesFile.isEmpty()) {
         SkAutoTUnref<SkData> data(SkData::NewFromFileName(FLAGS_uninterestingHashesFile[0]));
-        if (!data) {
-            SkDebugf("WARNING: unable to read uninteresting hashes from %s\n",
-                     FLAGS_uninterestingHashesFile[0]);
-            return;
-        }
         SkTArray<SkString> hashes;
         SkStrSplit((const char*)data->data(), "\n", &hashes);
         for (const SkString& hash : hashes) {
@@ -190,106 +167,32 @@ static void gather_uninteresting_hashes() {
 
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
-struct TaggedSrc : public SkAutoTDelete<Src> {
-    ImplicitString tag;
-    ImplicitString options;
-};
-
-struct TaggedSink : public SkAutoTDelete<Sink> {
-    const char* tag;
+template <typename T>
+struct Tagged : public SkAutoTDelete<T> {
+  const char* tag;
+  const char* options;
 };
 
 static const bool kMemcpyOK = true;
 
-static SkTArray<TaggedSrc,  kMemcpyOK>  gSrcs;
-static SkTArray<TaggedSink, kMemcpyOK> gSinks;
+static SkTArray<Tagged<Src>,  kMemcpyOK>  gSrcs;
+static SkTArray<Tagged<Sink>, kMemcpyOK> gSinks;
 
 static bool in_shard() {
     static int N = 0;
     return N++ % FLAGS_shards == FLAGS_shard;
 }
 
-static void push_src(ImplicitString tag, ImplicitString options, Src* s) {
+static void push_src(const char* tag, const char* options, Src* s) {
     SkAutoTDelete<Src> src(s);
     if (in_shard() &&
-        FLAGS_src.contains(tag.c_str()) &&
+        FLAGS_src.contains(tag) &&
         !SkCommandLineFlags::ShouldSkip(FLAGS_match, src->name().c_str())) {
-        TaggedSrc& s = gSrcs.push_back();
+        Tagged<Src>& s = gSrcs.push_back();
         s.reset(src.detach());
         s.tag = tag;
         s.options = options;
     }
-}
-
-static void push_codec_src(Path path, CodecSrc::Mode mode, CodecSrc::DstColorType dstColorType,
-        float scale) {
-    SkString folder;
-    switch (mode) {
-        case CodecSrc::kCodec_Mode:
-            folder.append("codec");
-            break;
-        case CodecSrc::kScanline_Mode:
-            folder.append("scanline");
-            break;
-        case CodecSrc::kScanline_Subset_Mode:
-            folder.append("scanline_subset");
-            break;
-        case CodecSrc::kStripe_Mode:
-            folder.append("stripe");
-            break;
-        case CodecSrc::kSubset_Mode:
-            folder.append("codec_subset");
-            break;
-    }
-
-    switch (dstColorType) {
-        case CodecSrc::kGrayscale_Always_DstColorType:
-            folder.append("_kGray8");
-            break;
-        case CodecSrc::kIndex8_Always_DstColorType:
-            folder.append("_kIndex8");
-            break;
-        default:
-            break;
-    }
-
-    if (1.0f != scale) {
-        folder.appendf("_%.3f", scale);
-    }
-
-    CodecSrc* src = new CodecSrc(path, mode, dstColorType, scale);
-    push_src("image", folder, src);
-}
-
-static void push_android_codec_src(Path path, AndroidCodecSrc::Mode mode,
-        CodecSrc::DstColorType dstColorType, int sampleSize) {
-    SkString folder;
-    switch (mode) {
-        case AndroidCodecSrc::kFullImage_Mode:
-            folder.append("scaled_codec");
-            break;
-        case AndroidCodecSrc::kDivisor_Mode:
-            folder.append("scaled_codec_divisor");
-            break;
-    }
-
-    switch (dstColorType) {
-        case CodecSrc::kGrayscale_Always_DstColorType:
-            folder.append("_kGray8");
-            break;
-        case CodecSrc::kIndex8_Always_DstColorType:
-            folder.append("_kIndex8");
-            break;
-        default:
-            break;
-    }
-
-    if (1 != sampleSize) {
-        folder.appendf("_%.3f", get_scale_from_sample_size(sampleSize));
-    }
-
-    AndroidCodecSrc* src = new AndroidCodecSrc(path, mode, dstColorType, sampleSize);
-    push_src("image", folder, src);
 }
 
 static void push_codec_srcs(Path path) {
@@ -299,224 +202,77 @@ static void push_codec_srcs(Path path) {
         return;
     }
     SkAutoTDelete<SkCodec> codec(SkCodec::NewFromData(encoded));
-    if (nullptr == codec.get()) {
+    if (NULL == codec.get()) {
         SkDebugf("Couldn't create codec for %s.", path.c_str());
         return;
     }
 
-    // Native Scales
+    // Choose scales for scaling tests.
+    // TODO (msarett): Add more scaling tests as we implement more flexible scaling.
     // TODO (msarett): Implement scaling tests for SkImageDecoder in order to compare with these
     //                 tests.  SkImageDecoder supports downscales by integer factors.
-    // SkJpegCodec natively supports scaling to: 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875
-    const float nativeScales[] = { 0.125f, 0.25f, 0.375f, 0.5f, 0.625f, 0.750f, 0.875f, 1.0f };
+    const float scales[] = { 0.125f, 0.25f, 0.375f, 0.5f, 0.625f, 0.750f, 0.875f, 1.0f };
 
-    const CodecSrc::Mode nativeModes[] = { CodecSrc::kCodec_Mode, CodecSrc::kScanline_Mode,
-            CodecSrc::kScanline_Subset_Mode, CodecSrc::kStripe_Mode, CodecSrc::kSubset_Mode };
-
-    CodecSrc::DstColorType colorTypes[3];
-    uint32_t numColorTypes;
-    switch (codec->getInfo().colorType()) {
-        case kGray_8_SkColorType:
-            // FIXME: Is this a long term solution for testing wbmps decodes to kIndex8?
-            // Further discussion on this topic is at skbug.com/3683.
-            // This causes us to try to convert grayscale jpegs to kIndex8.  We currently
-            // fail non-fatally in this case.
-            colorTypes[0] = CodecSrc::kGetFromCanvas_DstColorType;
-            colorTypes[1] = CodecSrc::kGrayscale_Always_DstColorType;
-            colorTypes[2] = CodecSrc::kIndex8_Always_DstColorType;
-            numColorTypes = 3;
-            break;
-        case kIndex_8_SkColorType:
-            colorTypes[0] = CodecSrc::kGetFromCanvas_DstColorType;
-            colorTypes[1] = CodecSrc::kIndex8_Always_DstColorType;
-            numColorTypes = 2;
-            break;
-        default:
-            colorTypes[0] = CodecSrc::kGetFromCanvas_DstColorType;
-            numColorTypes = 1;
-            break;
-    }
-
-    for (float scale : nativeScales) {
-        for (CodecSrc::Mode mode : nativeModes) {
-            for (uint32_t i = 0; i < numColorTypes; i++) {
-                push_codec_src(path, mode, colorTypes[i], scale);
-            }
-        }
-    }
-
-    // skbug.com/4428
-    static const char* const exts[] = {
-        "jpg", "jpeg", "png", "webp",
-        "JPG", "JPEG", "PNG", "WEBP",
-    };
-    bool supported = false;
-    for (const char* ext : exts) {
-        if (path.endsWith(ext)) {
-            supported = true;
-            break;
-        }
-    }
-    if (!supported) {
-        return;
-    }
-
-    const int sampleSizes[] = { 1, 2, 3, 4, 5, 6, 7, 8 };
-
-    const AndroidCodecSrc::Mode androidModes[] = {
-            AndroidCodecSrc::kFullImage_Mode,
-            AndroidCodecSrc::kDivisor_Mode,
-    };
-
-    for (int sampleSize : sampleSizes) {
-        for (AndroidCodecSrc::Mode mode : androidModes) {
-            for (uint32_t i = 0; i < numColorTypes; i++) {
-                push_android_codec_src(path, mode, colorTypes[i], sampleSize);
-            }
-        }
-    }
-}
-
-static bool brd_color_type_supported(SkBitmapRegionDecoderInterface::Strategy strategy,
-        CodecSrc::DstColorType dstColorType) {
-    switch (strategy) {
-        case SkBitmapRegionDecoderInterface::kCanvas_Strategy:
-            if (CodecSrc::kGetFromCanvas_DstColorType == dstColorType) {
-                return true;
-            }
-            return false;
-        case SkBitmapRegionDecoderInterface::kOriginal_Strategy:
-            switch (dstColorType) {
-                case CodecSrc::kGetFromCanvas_DstColorType:
-                case CodecSrc::kIndex8_Always_DstColorType:
-                case CodecSrc::kGrayscale_Always_DstColorType:
-                    return true;
-                default:
-                    return false;
-            }
-        case SkBitmapRegionDecoderInterface::kAndroidCodec_Strategy:
-            switch (dstColorType) {
-                case CodecSrc::kGetFromCanvas_DstColorType:
-                case CodecSrc::kIndex8_Always_DstColorType:
-                case CodecSrc::kGrayscale_Always_DstColorType:
-                    return true;
-                default:
-                    return false;
-            }
-        default:
-            SkASSERT(false);
-            return false;
-    }
-}
-
-static void push_brd_src(Path path, SkBitmapRegionDecoderInterface::Strategy strategy,
-        CodecSrc::DstColorType dstColorType, BRDSrc::Mode mode, uint32_t sampleSize) {
-    SkString folder;
-    switch (strategy) {
-        case SkBitmapRegionDecoderInterface::kCanvas_Strategy:
-            folder.append("brd_canvas");
-            break;
-        case SkBitmapRegionDecoderInterface::kOriginal_Strategy:
-            folder.append("brd_sample");
-            break;
-        case SkBitmapRegionDecoderInterface::kAndroidCodec_Strategy:
-            folder.append("brd_android_codec");
-            break;
-        default:
-            SkASSERT(false);
-            return;
-    }
-
-    switch (mode) {
-        case BRDSrc::kFullImage_Mode:
-            break;
-        case BRDSrc::kDivisor_Mode:
-            folder.append("_divisor");
-            break;
-        default:
-            SkASSERT(false);
-            return;
-    }
-
-    switch (dstColorType) {
-        case CodecSrc::kGetFromCanvas_DstColorType:
-            break;
-        case CodecSrc::kIndex8_Always_DstColorType:
-            folder.append("_kIndex");
-            break;
-        case CodecSrc::kGrayscale_Always_DstColorType:
-            folder.append("_kGray");
-            break;
-        default:
-            SkASSERT(false);
-            return;
-    }
-
-    if (1 != sampleSize) {
-        folder.appendf("_%.3f", get_scale_from_sample_size(sampleSize));
-    }
-
-    BRDSrc* src = new BRDSrc(path, strategy, mode, dstColorType, sampleSize);
-    push_src("image", folder, src);
-}
-
-static void push_brd_srcs(Path path) {
-
-    const SkBitmapRegionDecoderInterface::Strategy strategies[] = {
-            SkBitmapRegionDecoderInterface::kCanvas_Strategy,
-            SkBitmapRegionDecoderInterface::kOriginal_Strategy,
-            SkBitmapRegionDecoderInterface::kAndroidCodec_Strategy,
-    };
-
-    const uint32_t sampleSizes[] = { 1, 2, 3, 4, 5, 6, 7, 8 };
-
-    // We will only test to one backend (8888), but we will test all of the
-    // color types that we need to decode to on this backend.
-    const CodecSrc::DstColorType dstColorTypes[] = {
-            CodecSrc::kGetFromCanvas_DstColorType,
-            CodecSrc::kIndex8_Always_DstColorType,
-            CodecSrc::kGrayscale_Always_DstColorType,
-    };
-
-    const BRDSrc::Mode modes[] = {
-            BRDSrc::kFullImage_Mode,
-            BRDSrc::kDivisor_Mode,
-    };
-
-    for (SkBitmapRegionDecoderInterface::Strategy strategy : strategies) {
-
-        // We disable png testing for kOriginal_Strategy because the implementation leaks
-        // memory in our forked libpng.
-        // TODO (msarett): Decide if we want to test pngs in this mode and how we might do this.
-        if (SkBitmapRegionDecoderInterface::kOriginal_Strategy == strategy &&
-                (path.endsWith(".png") || path.endsWith(".PNG"))) {
+    for (float scale : scales) {
+        if (scale != 1.0f && (path.endsWith(".webp") || path.endsWith(".WEBP"))) {
+            // FIXME: skbug.com/4038 Scaling webp seems to leave some pixels uninitialized/
+            // compute their colors based on uninitialized values.
             continue;
         }
-        for (uint32_t sampleSize : sampleSizes) {
-
-            // kOriginal_Strategy does not work for jpegs that are scaled to non-powers of two.
-            // We don't need to test this.  We know it doesn't work, and it causes images with
-            // uninitialized memory to show up on Gold.
-            if (SkBitmapRegionDecoderInterface::kOriginal_Strategy == strategy &&
-                    (path.endsWith(".jpg") || path.endsWith(".JPG") ||
-                    path.endsWith(".jpeg") || path.endsWith(".JPEG")) && !SkIsPow2(sampleSize)) {
-                continue;
-            }
-            for (CodecSrc::DstColorType dstColorType : dstColorTypes) {
-                if (brd_color_type_supported(strategy, dstColorType)) {
-                    for (BRDSrc::Mode mode : modes) {
-                        push_brd_src(path, strategy, dstColorType, mode, sampleSize);
-                    }
-                }
-            }
+        // Build additional test cases for images that decode natively to non-canvas types
+        switch(codec->getInfo().colorType()) {
+            case kGray_8_SkColorType:
+                push_src("image", "codec_kGray8", new CodecSrc(path, CodecSrc::kNormal_Mode,
+                        CodecSrc::kGrayscale_Always_DstColorType, scale));
+                push_src("image", "scanline_kGray8", new CodecSrc(path, CodecSrc::kScanline_Mode,
+                        CodecSrc::kGrayscale_Always_DstColorType, scale));
+                push_src("image", "scanline_subset_kGray8", new CodecSrc(path,
+                        CodecSrc::kScanline_Subset_Mode, CodecSrc::kGrayscale_Always_DstColorType,
+                        scale));
+                push_src("image", "stripe_kGray8", new CodecSrc(path, CodecSrc::kStripe_Mode,
+                        CodecSrc::kGrayscale_Always_DstColorType, scale));
+                // Intentional fall through
+                // FIXME: Is this a long term solution for testing wbmps decodes to kIndex8?
+                // Further discussion on this topic is at skbug.com/3683
+            case kIndex_8_SkColorType:
+                push_src("image", "codec_kIndex8", new CodecSrc(path, CodecSrc::kNormal_Mode,
+                        CodecSrc::kIndex8_Always_DstColorType, scale));
+                push_src("image", "scanline_kIndex8", new CodecSrc(path, CodecSrc::kScanline_Mode,
+                        CodecSrc::kIndex8_Always_DstColorType, scale));
+                push_src("image", "scanline_subset_kIndex8", new CodecSrc(path,
+                        CodecSrc::kScanline_Subset_Mode, CodecSrc::kIndex8_Always_DstColorType,
+                        scale));
+                push_src("image", "stripe_kIndex8", new CodecSrc(path, CodecSrc::kStripe_Mode,
+                        CodecSrc::kIndex8_Always_DstColorType, scale));
+                break;
+            default:
+                // Do nothing
+                break;
         }
+
+        // Decode all images to the canvas color type
+        push_src("image", "codec", new CodecSrc(path, CodecSrc::kNormal_Mode,
+                CodecSrc::kGetFromCanvas_DstColorType, scale));
+        push_src("image", "scanline", new CodecSrc(path, CodecSrc::kScanline_Mode,
+                CodecSrc::kGetFromCanvas_DstColorType, scale));
+        push_src("image", "scanline_subset", new CodecSrc(path, CodecSrc::kScanline_Subset_Mode,
+                CodecSrc::kGetFromCanvas_DstColorType, scale));
+        push_src("image", "stripe", new CodecSrc(path, CodecSrc::kStripe_Mode,
+                CodecSrc::kGetFromCanvas_DstColorType, scale));
+        // Note: The only codec which supports subsets natively is SkWebpCodec, which will never
+        // report kIndex_8 or kGray_8, so there is no need to test kSubset_mode with those color
+        // types specifically requested.
+        push_src("image", "codec_subset", new CodecSrc(path, CodecSrc::kSubset_Mode,
+                CodecSrc::kGetFromCanvas_DstColorType, scale));
     }
 }
 
-static bool brd_supported(const char* ext) {
+static bool codec_supported(const char* ext) {
+    // FIXME: Once other versions of SkCodec are available, we can add them to this
+    // list (and eventually we can remove this check once they are all supported).
     static const char* const exts[] = {
-        "jpg", "jpeg", "png", "webp",
-        "JPG", "JPEG", "PNG", "WEBP",
+        "bmp", "gif", "jpg", "jpeg", "png", "ico", "wbmp", "webp",
+        "BMP", "GIF", "JPG", "JPEG", "PNG", "ICO", "WBMP", "WEBP",
     };
 
     for (uint32_t i = 0; i < SK_ARRAY_COUNT(exts); i++) {
@@ -555,9 +311,8 @@ static void gather_srcs() {
                     SkString path = SkOSPath::Join(flag, file.c_str());
                     push_src("image", "decode", new ImageSrc(path)); // Decode entire image
                     push_src("image", "subset", new ImageSrc(path, 2)); // Decode into 2x2 subsets
-                    push_codec_srcs(path);
-                    if (brd_supported(exts[j])) {
-                        push_brd_srcs(path);
+                    if (codec_supported(exts[j])) {
+                        push_codec_srcs(path);
                     }
                 }
             }
@@ -566,7 +321,6 @@ static void gather_srcs() {
             push_src("image", "decode", new ImageSrc(flag)); // Decode entire image.
             push_src("image", "subset", new ImageSrc(flag, 2)); // Decode into 2 x 2 subsets
             push_codec_srcs(flag);
-            push_brd_srcs(flag);
         }
     }
 }
@@ -582,26 +336,23 @@ static void push_sink(const char* tag, Sink* s) {
     if (!FLAGS_config.contains(tag)) {
         return;
     }
-    // Try a simple Src as a canary.  If it fails, skip this sink.
+    // Try a noop Src as a canary.  If it fails, skip this sink.
     struct : public Src {
-        Error draw(SkCanvas* c) const override {
-            c->drawRect(SkRect::MakeWH(1,1), SkPaint());
-            return "";
-        }
+        Error draw(SkCanvas*) const override { return ""; }
         SkISize size() const override { return SkISize::Make(16, 16); }
-        Name name() const override { return "justOneRect"; }
-    } justOneRect;
+        Name name() const override { return "noop"; }
+    } noop;
 
     SkBitmap bitmap;
     SkDynamicMemoryWStream stream;
     SkString log;
-    Error err = sink->draw(justOneRect, &bitmap, &stream, &log);
+    Error err = sink->draw(noop, &bitmap, &stream, &log);
     if (err.isFatal()) {
         SkDebugf("Could not run %s: %s\n", tag, err.c_str());
         exit(1);
     }
 
-    TaggedSink& ts = gSinks.push_back();
+    Tagged<Sink>& ts = gSinks.push_back();
     ts.reset(sink.detach());
     ts.tag = tag;
 }
@@ -619,23 +370,19 @@ static Sink* create_sink(const char* tag) {
     if (gpu_supported()) {
         typedef GrContextFactory Gr;
         const GrGLStandard api = get_gpu_api();
-        SINK("gpunull",       GPUSink, Gr::kNull_GLContextType,          api,  0, false, FLAGS_gpu_threading);
-        SINK("gpudebug",      GPUSink, Gr::kDebug_GLContextType,         api,  0, false, FLAGS_gpu_threading);
-        SINK("gpu",           GPUSink, Gr::kNative_GLContextType,        api,  0, false, FLAGS_gpu_threading);
-        SINK("gpudft",        GPUSink, Gr::kNative_GLContextType,        api,  0,  true, FLAGS_gpu_threading);
-        SINK("msaa4",         GPUSink, Gr::kNative_GLContextType,        api,  4, false, FLAGS_gpu_threading);
-        SINK("msaa16",        GPUSink, Gr::kNative_GLContextType,        api, 16, false, FLAGS_gpu_threading);
-        SINK("nvprmsaa4",     GPUSink, Gr::kNVPR_GLContextType,          api,  4,  true, FLAGS_gpu_threading);
-        SINK("nvprmsaa16",    GPUSink, Gr::kNVPR_GLContextType,          api, 16,  true, FLAGS_gpu_threading);
+        SINK("gpunull",    GPUSink, Gr::kNull_GLContextType,   api,  0, false, FLAGS_gpu_threading);
+        SINK("gpudebug",   GPUSink, Gr::kDebug_GLContextType,  api,  0, false, FLAGS_gpu_threading);
+        SINK("gpu",        GPUSink, Gr::kNative_GLContextType, api,  0, false, FLAGS_gpu_threading);
+        SINK("gpudft",     GPUSink, Gr::kNative_GLContextType, api,  0,  true, FLAGS_gpu_threading);
+        SINK("msaa4",      GPUSink, Gr::kNative_GLContextType, api,  4, false, FLAGS_gpu_threading);
+        SINK("msaa16",     GPUSink, Gr::kNative_GLContextType, api, 16, false, FLAGS_gpu_threading);
+        SINK("nvprmsaa4",  GPUSink, Gr::kNVPR_GLContextType,   api,  4, false, FLAGS_gpu_threading);
+        SINK("nvprmsaa16", GPUSink, Gr::kNVPR_GLContextType,   api, 16, false, FLAGS_gpu_threading);
     #if SK_ANGLE
-        SINK("angle",         GPUSink, Gr::kANGLE_GLContextType,         api,  0, false, FLAGS_gpu_threading);
-        SINK("angle-gl",      GPUSink, Gr::kANGLE_GL_GLContextType,      api,  0, false, FLAGS_gpu_threading);
-    #endif
-    #if SK_COMMAND_BUFFER
-        SINK("commandbuffer", GPUSink, Gr::kCommandBuffer_GLContextType, api,  0, false, FLAGS_gpu_threading);
+        SINK("angle",      GPUSink, Gr::kANGLE_GLContextType,  api,  0, false, FLAGS_gpu_threading);
     #endif
     #if SK_MESA
-        SINK("mesa",          GPUSink, Gr::kMESA_GLContextType,          api,  0, false, FLAGS_gpu_threading);
+        SINK("mesa",       GPUSink, Gr::kMESA_GLContextType,   api,  0, false, FLAGS_gpu_threading);
     #endif
     }
 
@@ -646,28 +393,26 @@ static Sink* create_sink(const char* tag) {
     if (FLAGS_cpu) {
         SINK("565",  RasterSink, kRGB_565_SkColorType);
         SINK("8888", RasterSink, kN32_SkColorType);
-        SINK("pdf",  PDFSink, "Pdfium");
-        SINK("pdf_poppler",  PDFSink, "Poppler");
+        SINK("pdf",  PDFSink);
         SINK("skp",  SKPSink);
         SINK("svg",  SVGSink);
         SINK("null", NullSink);
         SINK("xps",  XPSSink);
     }
 #undef SINK
-    return nullptr;
+    return NULL;
 }
 
 static Sink* create_via(const char* tag, Sink* wrapped) {
 #define VIA(t, via, ...) if (0 == strcmp(t, tag)) { return new via(__VA_ARGS__); }
-    VIA("twice",     ViaTwice,             wrapped);
-    VIA("pipe",      ViaPipe,              wrapped);
-    VIA("serialize", ViaSerialization,     wrapped);
-    VIA("2ndpic",    ViaSecondPicture,     wrapped);
+    VIA("twice",     ViaTwice,         wrapped);
+    VIA("pipe",      ViaPipe,          wrapped);
+    VIA("serialize", ViaSerialization, wrapped);
+    VIA("deferred",  ViaDeferred,      wrapped);
+    VIA("2ndpic",    ViaSecondPicture, wrapped);
     VIA("sp",        ViaSingletonPictures, wrapped);
-    VIA("tiles",     ViaTiles, 256, 256, nullptr,            wrapped);
+    VIA("tiles",     ViaTiles, 256, 256,               NULL, wrapped);
     VIA("tiles_rt",  ViaTiles, 256, 256, new SkRTreeFactory, wrapped);
-    VIA("remote",       ViaRemote, false, wrapped);
-    VIA("remote_cache", ViaRemote, true,  wrapped);
 
     if (FLAGS_matrix.count() == 4) {
         SkMatrix m;
@@ -685,7 +430,7 @@ static Sink* create_via(const char* tag, Sink* wrapped) {
 #endif
 
 #undef VIA
-    return nullptr;
+    return NULL;
 }
 
 static void gather_sinks() {
@@ -694,14 +439,14 @@ static void gather_sinks() {
         SkTArray<SkString> parts;
         SkStrSplit(config, "-", &parts);
 
-        Sink* sink = nullptr;
+        Sink* sink = NULL;
         for (int i = parts.count(); i-- > 0;) {
             const char* part = parts[i].c_str();
-            Sink* next = (sink == nullptr) ? create_sink(part) : create_via(part, sink);
-            if (next == nullptr) {
+            Sink* next = (sink == NULL) ? create_sink(part) : create_via(part, sink);
+            if (next == NULL) {
                 SkDebugf("Skipping %s: Don't understand '%s'.\n", config, part);
                 delete sink;
-                sink = nullptr;
+                sink = NULL;
                 break;
             }
             sink = next;
@@ -712,83 +457,8 @@ static void gather_sinks() {
     }
 }
 
-static bool dump_png(SkBitmap bitmap, const char* path, const char* md5) {
-    const int w = bitmap.width(),
-              h = bitmap.height();
-
-    // First get the bitmap into N32 color format.  The next step will work only there.
-    if (bitmap.colorType() != kN32_SkColorType) {
-        SkBitmap n32;
-        if (!bitmap.copyTo(&n32, kN32_SkColorType)) {
-            return false;
-        }
-        bitmap = n32;
-    }
-
-    // Convert our N32 bitmap into unpremul RGBA for libpng.
-    SkAutoTMalloc<uint32_t> rgba(w*h);
-    if (!bitmap.readPixels(SkImageInfo::Make(w,h, kRGBA_8888_SkColorType, kUnpremul_SkAlphaType),
-                           rgba, 4*w, 0,0)) {
-        return false;
-    }
-
-    // We don't need bitmap anymore.  Might as well drop our ref.
-    bitmap.reset();
-
-    FILE* f = fopen(path, "wb");
-    if (!f) { return false; }
-
-    png_structp png = png_create_write_struct(PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
-    if (!png) {
-        fclose(f);
-        return false;
-    }
-
-    png_infop info = png_create_info_struct(png);
-    if (!info) {
-        png_destroy_write_struct(&png, &info);
-        fclose(f);
-        return false;
-    }
-
-    SkString description;
-    description.append("Key: ");
-    for (int i = 0; i < FLAGS_key.count(); i++) {
-        description.appendf("%s ", FLAGS_key[i]);
-    }
-    description.append("Properties: ");
-    for (int i = 0; i < FLAGS_properties.count(); i++) {
-        description.appendf("%s ", FLAGS_properties[i]);
-    }
-    description.appendf("MD5: %s", md5);
-
-    png_text text[2];
-    text[0].key = (png_charp)"Author";
-    text[0].text = (png_charp)"DM dump_png()";
-    text[0].compression = PNG_TEXT_COMPRESSION_NONE;
-    text[1].key = (png_charp)"Description";
-    text[1].text = (png_charp)description.c_str();
-    text[1].compression = PNG_TEXT_COMPRESSION_NONE;
-    png_set_text(png, info, text, 2);
-
-    png_init_io(png, f);
-    png_set_IHDR(png, info, (png_uint_32)w, (png_uint_32)h, 8,
-                 PNG_COLOR_TYPE_RGB_ALPHA, PNG_INTERLACE_NONE,
-                 PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
-    png_write_info(png, info);
-    for (int j = 0; j < h; j++) {
-        png_bytep row = (png_bytep)(rgba.get() + w*j);
-        png_write_rows(png, &row, 1);
-    }
-    png_write_end(png, info);
-
-    png_destroy_write_struct(&png, &info);
-    fclose(f);
-    return true;
-}
-
 static bool match(const char* needle, const char* haystack) {
-    return 0 == strcmp("_", needle) || nullptr != strstr(haystack, needle);
+    return 0 == strcmp("_", needle) || NULL != strstr(haystack, needle);
 }
 
 static ImplicitString is_blacklisted(const char* sink, const char* src,
@@ -809,28 +479,22 @@ static ImplicitString is_blacklisted(const char* sink, const char* src,
 // The finest-grained unit of work we can run: draw a single Src into a single Sink,
 // report any errors, and perhaps write out the output: a .png of the bitmap, or a raw stream.
 struct Task {
-    Task(const TaggedSrc& src, const TaggedSink& sink) : src(src), sink(sink) {}
-    const TaggedSrc&  src;
-    const TaggedSink& sink;
+    Task(const Tagged<Src>& src, const Tagged<Sink>& sink) : src(src), sink(sink) {}
+    const Tagged<Src>&  src;
+    const Tagged<Sink>& sink;
 
     static void Run(Task* task) {
         SkString name = task->src->name();
-
-        // We'll skip drawing this Src/Sink pair if:
-        //   - the Src vetoes the Sink;
-        //   - this Src / Sink combination is on the blacklist;
-        //   - it's a dry run.
-        SkString note(task->src->veto(task->sink->flags()) ? " (veto)" : "");
-        SkString whyBlacklisted = is_blacklisted(task->sink.tag, task->src.tag.c_str(),
-                                                 task->src.options.c_str(), name.c_str());
+        SkString note;
+        SkString whyBlacklisted = is_blacklisted(task->sink.tag, task->src.tag,
+                                                 task->src.options, name.c_str());
         if (!whyBlacklisted.isEmpty()) {
             note.appendf(" (--blacklist %s)", whyBlacklisted.c_str());
         }
-
         SkString log;
         WallTimer timer;
         timer.start();
-        if (!FLAGS_dryRun && note.isEmpty()) {
+        if (!FLAGS_dryRun && whyBlacklisted.isEmpty()) {
             SkBitmap bitmap;
             SkDynamicMemoryWStream stream;
             if (FLAGS_pre_log) {
@@ -843,8 +507,8 @@ struct Task {
                 if (err.isFatal()) {
                     fail(SkStringPrintf("%s %s %s %s: %s",
                                         task->sink.tag,
-                                        task->src.tag.c_str(),
-                                        task->src.options.c_str(),
+                                        task->src.tag,
+                                        task->src.options,
                                         name.c_str(),
                                         err.c_str()));
                 } else {
@@ -883,13 +547,13 @@ struct Task {
             }
 
             if (!FLAGS_readPath.isEmpty() &&
-                !gGold.contains(Gold(task->sink.tag, task->src.tag.c_str(),
-                                     task->src.options.c_str(), name, md5))) {
+                !gGold.contains(Gold(task->sink.tag, task->src.tag,
+                                     task->src.options, name, md5))) {
                 fail(SkStringPrintf("%s not found for %s %s %s %s in %s",
                                     md5.c_str(),
                                     task->sink.tag,
-                                    task->src.tag.c_str(),
-                                    task->src.options.c_str(),
+                                    task->src.tag,
+                                    task->src.options,
                                     name.c_str(),
                                     FLAGS_readPath[0]));
             }
@@ -897,16 +561,15 @@ struct Task {
             if (!FLAGS_writePath.isEmpty()) {
                 const char* ext = task->sink->fileExtension();
                 if (data->getLength()) {
-                    WriteToDisk(*task, md5, ext, data, data->getLength(), nullptr);
+                    WriteToDisk(*task, md5, ext, data, data->getLength(), NULL);
                     SkASSERT(bitmap.drawsNothing());
                 } else if (!bitmap.drawsNothing()) {
-                    WriteToDisk(*task, md5, ext, nullptr, 0, &bitmap);
+                    WriteToDisk(*task, md5, ext, NULL, 0, &bitmap);
                 }
             }
         }
         timer.end();
-        done(timer.fWall, task->sink.tag, task->src.tag.c_str(), task->src.options.c_str(), name,
-                note, log);
+        done(timer.fWall, task->sink.tag, task->src.tag, task->src.options, name, note, log);
     }
 
     static void WriteToDisk(const Task& task,
@@ -946,10 +609,10 @@ struct Task {
         } else {
             path = SkOSPath::Join(dir, task.sink.tag);
             sk_mkdir(path.c_str());
-            path = SkOSPath::Join(path.c_str(), task.src.tag.c_str());
+            path = SkOSPath::Join(path.c_str(), task.src.tag);
             sk_mkdir(path.c_str());
-            if (strcmp(task.src.options.c_str(), "") != 0) {
-              path = SkOSPath::Join(path.c_str(), task.src.options.c_str());
+            if (strcmp(task.src.options, "") != 0) {
+              path = SkOSPath::Join(path.c_str(), task.src.options);
               sk_mkdir(path.c_str());
             }
             path = SkOSPath::Join(path.c_str(), task.src->name().c_str());
@@ -957,17 +620,27 @@ struct Task {
             path.append(ext);
         }
 
+        SkFILEWStream file(path.c_str());
+        if (!file.isValid()) {
+            fail(SkStringPrintf("Can't open %s for writing.\n", path.c_str()));
+            return;
+        }
+
         if (bitmap) {
-            if (!dump_png(*bitmap, path.c_str(), result.md5.c_str())) {
+            // We can't encode A8 bitmaps as PNGs.  Convert them to 8888 first.
+            SkBitmap converted;
+            if (bitmap->info().colorType() == kAlpha_8_SkColorType) {
+                if (!bitmap->copyTo(&converted, kN32_SkColorType)) {
+                    fail("Can't convert A8 to 8888.\n");
+                    return;
+                }
+                bitmap = &converted;
+            }
+            if (!SkImageEncoder::EncodeStream(&file, *bitmap, SkImageEncoder::kPNG_Type, 100)) {
                 fail(SkStringPrintf("Can't encode PNG to %s.\n", path.c_str()));
                 return;
             }
         } else {
-            SkFILEWStream file(path.c_str());
-            if (!file.isValid()) {
-                fail(SkStringPrintf("Can't open %s for writing.\n", path.c_str()));
-                return;
-            }
             if (!file.writeStream(data, len)) {
                 fail(SkStringPrintf("Can't write to %s.\n", path.c_str()));
                 return;
@@ -1086,9 +759,9 @@ static void start_keepalive() {
 static SkTypeface* create_from_name(const char familyName[], SkTypeface::Style style) {
     if (familyName && strlen(familyName) > sizeof(PORTABLE_FONT_PREFIX)
             && !strncmp(familyName, PORTABLE_FONT_PREFIX, sizeof(PORTABLE_FONT_PREFIX) - 1)) {
-        return sk_tool_utils::create_portable_typeface(familyName, style);
+        return sk_tool_utils::create_portable_typeface_always(familyName, style);
     }
-    return nullptr;
+    return NULL;
 }
 
 #undef PORTABLE_FONT_PREFIX
@@ -1158,9 +831,6 @@ int dm_main() {
         SkDebugf("Hrm, we didn't seem to run everything we intended to!  Please file a bug.\n");
         return 1;
     }
-    #ifdef SK_PDF_IMAGE_STATS
-    SkPDFImageDumpStats();
-    #endif  // SK_PDF_IMAGE_STATS
     return 0;
 }
 

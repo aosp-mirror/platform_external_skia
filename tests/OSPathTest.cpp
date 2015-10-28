@@ -86,8 +86,8 @@ DEF_TEST(OSPath, reporter) {
     SkString baseOfDir = SkOSPath::Basename(dir.c_str());
     REPORTER_ASSERT(reporter, baseOfDir.size() == 0);
 
-    // Basename of nullptr is an empty string.
-    SkString empty = SkOSPath::Basename(nullptr);
+    // Basename of NULL is an empty string.
+    SkString empty = SkOSPath::Basename(NULL);
     REPORTER_ASSERT(reporter, empty.size() == 0);
 
     // File in root dir
@@ -99,7 +99,7 @@ DEF_TEST(OSPath, reporter) {
     filename.reset();
     test_dir_with_file(reporter, dir, filename);
 
-    // Test that nullptr can be used for the directory and filename.
-    SkString emptyPath = SkOSPath::Join(nullptr, nullptr);
+    // Test that NULL can be used for the directory and filename.
+    SkString emptyPath = SkOSPath::Join(NULL, NULL);
     REPORTER_ASSERT(reporter, emptyPath.isEmpty());
 }

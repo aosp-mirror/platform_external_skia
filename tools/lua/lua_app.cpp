@@ -11,8 +11,6 @@
 #include "SkData.h"
 #include "SkOSFile.h"
 
-#include <stdlib.h>
-
 extern "C" {
     #include "lua.h"
     #include "lualib.h"
@@ -33,7 +31,7 @@ int tool_main(int argc, char** argv) {
     SkLua L;
 
     for (int i = 1; i < argc; ++i) {
-        SkData* data = nullptr;
+        SkData* data = NULL;
         const void* ptr;
         size_t len;
 

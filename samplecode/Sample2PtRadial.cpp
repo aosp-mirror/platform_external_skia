@@ -34,7 +34,7 @@ protected:
         SkPoint c1 = { 100, 100 };
         SkScalar r1 = 100;
         SkShader* s = SkGradientShader::CreateTwoPointConical(c0, r0, c1, r1, colors,
-                                                             nullptr, 2,
+                                                             NULL, 2,
                                                              SkShader::kClamp_TileMode);
 
         SkPaint paint;

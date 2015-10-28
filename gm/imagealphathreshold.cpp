@@ -47,7 +47,7 @@ protected:
         SkPaint paint;
         paint.setImageFilter(
             SkAlphaThresholdFilter::Create(region, 0.2f, 0.7f))->unref();
-        canvas->saveLayer(nullptr, &paint);
+        canvas->saveLayer(NULL, &paint);
         paint.setAntiAlias(true);
 
         SkPaint rect_paint;

@@ -17,7 +17,6 @@
           ],
           'include_dirs': [
             '../include/device/xps',
-            '../include/private',
             '../include/utils/win',
             '../src/core', # needed to get SkGlyphCache.h
             '../src/utils', # needed to get SkBitSet.h

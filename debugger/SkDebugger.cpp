@@ -12,7 +12,7 @@
 
 
 SkDebugger::SkDebugger()
-    : fPicture(nullptr)
+    : fPicture(NULL)
     , fIndex(-1) {
     // Create this some other dynamic way?
     fDebugCanvas = new SkDebugCanvas(0, 0);
@@ -32,7 +32,7 @@ void SkDebugger::loadPicture(SkPicture* picture) {
                                      SkScalarCeilToInt(this->pictureCull().height()));
     fDebugCanvas->setPicture(picture);
     picture->playback(fDebugCanvas);
-    fDebugCanvas->setPicture(nullptr);
+    fDebugCanvas->setPicture(NULL);
     fIndex = fDebugCanvas->getSize() - 1;
 }
 
@@ -83,7 +83,7 @@ void SkDebugger::getOverviewText(const SkTDArray<double>* typeTimes,
     for (int i = 0; i < SkDrawCommand::kOpTypeCount; ++i) {
         if (0 == counts[i]) {
             // if there were no commands of this type then they should've consumed no time
-            SkASSERT(nullptr == typeTimes || 0.0 == (*typeTimes)[i]);
+            SkASSERT(NULL == typeTimes || 0.0 == (*typeTimes)[i]);
             continue;
         }
 

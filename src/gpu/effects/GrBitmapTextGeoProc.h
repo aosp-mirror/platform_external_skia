@@ -24,7 +24,8 @@ public:
     static GrGeometryProcessor* Create(GrColor color, GrTexture* tex, const GrTextureParams& p,
                                        GrMaskFormat format, const SkMatrix& localMatrix,
                                        bool usesLocalCoords) {
-        return new GrBitmapTextGeoProc(color, tex, p, format, localMatrix, usesLocalCoords);
+        return SkNEW_ARGS(GrBitmapTextGeoProc, (color, tex, p, format, localMatrix,
+                usesLocalCoords));
     }
 
     virtual ~GrBitmapTextGeoProc() {}
@@ -41,9 +42,12 @@ public:
     const SkMatrix& localMatrix() const { return fLocalMatrix; }
     bool usesLocalCoords() const { return fUsesLocalCoords; }
 
-    void getGLProcessorKey(const GrGLSLCaps& caps, GrProcessorKeyBuilder* b) const override;
+    virtual void getGLProcessorKey(const GrBatchTracker& bt,
+                                   const GrGLSLCaps& caps,
+                                   GrProcessorKeyBuilder* b) const override;
 
-    GrGLPrimitiveProcessor* createGLInstance(const GrGLSLCaps& caps) const override;
+    virtual GrGLPrimitiveProcessor* createGLInstance(const GrBatchTracker& bt,
+                                                     const GrGLSLCaps& caps) const override;
 
 private:
     GrBitmapTextGeoProc(GrColor, GrTexture* texture, const GrTextureParams& params,

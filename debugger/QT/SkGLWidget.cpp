@@ -38,8 +38,8 @@ void SkGLWidget::initializeGL() {
     if (fCurContext) {
         fCurContext->abandonContext();
     }
-    fGpuDevice.reset(nullptr);
-    fCanvas.reset(nullptr);
+    fGpuDevice.reset(NULL);
+    fCanvas.reset(NULL);
 
     fCurContext.reset(GrContext::Create(kOpenGL_GrBackend, (GrBackendContext) fCurIntf.get()));
 }
@@ -55,8 +55,8 @@ void SkGLWidget::createRenderTarget() {
     glClear(GL_STENCIL_BUFFER_BIT);
     fCurContext->resetContext();
 
-    fGpuDevice.reset(nullptr);
-    fCanvas.reset(nullptr);
+    fGpuDevice.reset(NULL);
+    fCanvas.reset(NULL);
 
     GrBackendRenderTargetDesc desc = this->getDesc(this->width(), this->height());
     desc.fOrigin = kBottomLeft_GrSurfaceOrigin;

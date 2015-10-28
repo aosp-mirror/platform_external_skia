@@ -13,8 +13,8 @@
 SkScalar SkScalarInterpFunc(SkScalar searchKey, const SkScalar keys[],
                             const SkScalar values[], int length) {
     SkASSERT(length > 0);
-    SkASSERT(keys != nullptr);
-    SkASSERT(values != nullptr);
+    SkASSERT(keys != NULL);
+    SkASSERT(values != NULL);
 #ifdef SK_DEBUG
     for (int i = 1; i < length; i++)
         SkASSERT(keys[i] >= keys[i-1]);

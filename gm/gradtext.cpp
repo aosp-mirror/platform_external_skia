@@ -14,7 +14,7 @@
 static SkShader* make_grad(SkScalar width) {
     SkColor colors[] = { SK_ColorRED, 0x0000FF00, SK_ColorBLUE };
     SkPoint pts[] = { { 0, 0 }, { width, 0 } };
-    return SkGradientShader::CreateLinear(pts, colors, nullptr,
+    return SkGradientShader::CreateLinear(pts, colors, NULL,
                                           SK_ARRAY_COUNT(colors),
                                           SkShader::kMirror_TileMode);
 }
@@ -23,7 +23,7 @@ static SkShader* make_grad(SkScalar width) {
 static SkShader* make_grad2(SkScalar width) {
     SkColor colors[] = { SK_ColorRED, SK_ColorGREEN, SK_ColorBLUE };
     SkPoint pts[] = { { 0, 0 }, { width, 0 } };
-    return SkGradientShader::CreateLinear(pts, colors, nullptr,
+    return SkGradientShader::CreateLinear(pts, colors, NULL,
                                           SK_ARRAY_COUNT(colors),
                                           SkShader::kMirror_TileMode);
 }
@@ -31,7 +31,7 @@ static SkShader* make_grad2(SkScalar width) {
 static SkShader* make_chrome_solid() {
     SkColor colors[] = { SK_ColorGREEN, SK_ColorGREEN };
     SkPoint pts[] = { { 0, 0 }, { 1, 0 } };
-    return SkGradientShader::CreateLinear(pts, colors, nullptr, 2,
+    return SkGradientShader::CreateLinear(pts, colors, NULL, 2,
                                           SkShader::kClamp_TileMode);
 }
 
@@ -47,7 +47,7 @@ protected:
     virtual SkISize onISize() { return SkISize::Make(500, 480); }
     virtual void onDraw(SkCanvas* canvas) {
         SkPaint paint;
-        sk_tool_utils::set_portable_typeface(&paint);
+        sk_tool_utils::set_portable_typeface_always(&paint);
         SkRect r = SkRect::MakeWH(SkIntToScalar(100), SkIntToScalar(100));
 
         canvas->clipRect(r);
@@ -76,7 +76,7 @@ protected:
     virtual SkISize onISize() { return SkISize::Make(500, 480); }
     virtual void onDraw(SkCanvas* canvas) {
         SkPaint paint;
-        sk_tool_utils::set_portable_typeface(&paint);
+        sk_tool_utils::set_portable_typeface_always(&paint);
 
         paint.setStyle(SkPaint::kFill_Style);
         canvas->drawText("Normal Fill Text", 16, 0, 50, paint);
@@ -129,7 +129,7 @@ protected:
 
     void onDraw(SkCanvas* canvas) override {
         SkPaint paint;
-        sk_tool_utils::set_portable_typeface(&paint);
+        sk_tool_utils::set_portable_typeface_always(&paint);
         paint.setTextSize(SkIntToScalar(26));
 
         const SkISize& size = this->getISize();

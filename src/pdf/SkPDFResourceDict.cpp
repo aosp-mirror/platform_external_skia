@@ -12,10 +12,14 @@
 // expected values as defined in the arrays below.
 // If these are failing, you may need to update the resource_type_prefixes
 // and resource_type_names arrays below.
-static_assert(SkPDFResourceDict::kExtGState_ResourceType == 0, "resource_type_mismatch");
-static_assert(SkPDFResourceDict::kPattern_ResourceType == 1, "resource_type_mismatch");
-static_assert(SkPDFResourceDict::kXObject_ResourceType == 2, "resource_type_mismatch");
-static_assert(SkPDFResourceDict::kFont_ResourceType == 3, "resource_type_mismatch");
+SK_COMPILE_ASSERT(SkPDFResourceDict::kExtGState_ResourceType == 0,
+                  resource_type_mismatch);
+SK_COMPILE_ASSERT(SkPDFResourceDict::kPattern_ResourceType == 1,
+                  resource_type_mismatch);
+SK_COMPILE_ASSERT(SkPDFResourceDict::kXObject_ResourceType == 2,
+                  resource_type_mismatch);
+SK_COMPILE_ASSERT(SkPDFResourceDict::kFont_ResourceType == 3,
+                  resource_type_mismatch);
 
 static const char resource_type_prefixes[] = {
         'G',
@@ -61,7 +65,7 @@ static void add_subdict(
     if (0 == resourceList.count()) {
         return;
     }
-    SkAutoTUnref<SkPDFDict> resources(new SkPDFDict);
+    SkAutoTUnref<SkPDFDict> resources(SkNEW(SkPDFDict));
     for (int i = 0; i < resourceList.count(); i++) {
         resources->insertObjRef(SkPDFResourceDict::getResourceName(type, i),
                                 SkRef(resourceList[i]));
@@ -74,10 +78,10 @@ SkPDFDict* SkPDFResourceDict::Create(
         const SkTDArray<SkPDFObject*>* patternResources,
         const SkTDArray<SkPDFObject*>* xObjectResources,
         const SkTDArray<SkPDFObject*>* fontResources) {
-    SkAutoTUnref<SkPDFDict> dict(new SkPDFDict);
+    SkAutoTUnref<SkPDFDict> dict(SkNEW(SkPDFDict));
     static const char kProcs[][7] = {
         "PDF", "Text", "ImageB", "ImageC", "ImageI"};
-    SkAutoTUnref<SkPDFArray> procSets(new SkPDFArray);
+    SkAutoTUnref<SkPDFArray> procSets(SkNEW(SkPDFArray));
 
     procSets->reserve(SK_ARRAY_COUNT(kProcs));
     for (size_t i = 0; i < SK_ARRAY_COUNT(kProcs); i++) {

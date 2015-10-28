@@ -17,25 +17,26 @@
       'target_name': 'tools',
       'type': 'none',
       'dependencies': [
-        'bitmap_region_decoder',
+        'bench_pictures',
         'chrome_fuzz',
+        'dump_record',
         'filter',
+        'flatten',
         'gpuveto',
-        'imgblur',
-        'imgconv',
-        'imgslice',
         'lua_app',
         'lua_pictures',
+        'imgconv',
         'pinspect',
         'render_pdfs',
+        'render_pictures',
         'skdiff',
         'skhello',
+        'skp2svg',
         'skpdiff',
         'skpinfo',
         'skpmaker',
         'test_image_decoder',
         'test_public_includes',
-        'whitelist_typefaces',
       ],
       'conditions': [
         ['skia_shared_lib',
@@ -45,23 +46,6 @@
             ],
           },
         ],
-      ],
-    },
-    {
-      'target_name': 'bitmap_region_decoder',
-      'type': 'static_library',
-      'sources': [
-        '../tools/SkBitmapRegionCanvas.cpp',
-        '../tools/SkBitmapRegionCodec.cpp',
-        '../tools/SkBitmapRegionDecoderInterface.cpp',
-        '../tools/SkBitmapRegionSampler.cpp',
-      ],
-      'include_dirs': [
-        '../include/private',
-        '../src/codec',
-      ],
-      'dependencies': [
-        'skia_lib.gyp:skia_lib',
       ],
     },
     {
@@ -116,9 +100,7 @@
         '../tools/sk_tool_utils_font.cpp',
       ],
       'include_dirs': [
-        '../include/private',
         '../src/fonts',
-        '../src/core',
       ],
       'dependencies': [
         'resources',
@@ -132,11 +114,38 @@
     {
       'target_name' : 'timer',
       'type': 'static_library',
-      'sources': [ '../tools/timer/Timer.cpp' ],
+      'sources': [
+        '../tools/timer/Timer.cpp',
+        '../tools/timer/TimerData.cpp',
+      ],
+      'include_dirs': [
+        '../src/core',
+        '../src/gpu',
+      ],
       'direct_dependent_settings': {
         'include_dirs': ['../tools/timer'],
       },
-      'dependencies': [ 'skia_lib.gyp:skia_lib' ],
+      'dependencies': [
+        'skia_lib.gyp:skia_lib',
+        'jsoncpp.gyp:jsoncpp',
+      ],
+      'conditions': [
+        ['skia_gpu == 1', {
+          'sources': [ '../tools/timer/GpuTimer.cpp' ],
+        }],
+        [ 'skia_os in ["mac", "ios"]', {
+          'sources': [ '../tools/timer/SysTimer_mach.cpp' ],
+        }],
+        [ 'skia_os == "win"', {
+          'sources': [ '../tools/timer/SysTimer_windows.cpp' ],
+        }],
+        [ 'skia_os in ["linux", "freebsd", "openbsd", "solaris", "android", "chromeos"]', {
+          'sources': [ '../tools/timer/SysTimer_posix.cpp' ],
+        }],
+        [ 'skia_os in ["linux", "freebsd", "openbsd", "solaris", "chromeos"]', {
+          'link_settings': { 'libraries': [ '-lrt' ] },
+        }],
+      ],
     },
     {
       'target_name': 'skdiff',
@@ -153,16 +162,6 @@
       'dependencies': [
         'skia_lib.gyp:skia_lib',
       ],
-      'xcode_settings': {
-        'conditions': [
-          [ 'skia_osx_deployment_target==""', {
-            'MACOSX_DEPLOYMENT_TARGET': '10.7', # -mmacos-version-min, passed in env to ld.
-          }, {
-            'MACOSX_DEPLOYMENT_TARGET': '<(skia_osx_deployment_target)',
-          }],
-        ],
-        'CLANG_CXX_LIBRARY': 'libc++',
-      },
     },
     {
       'target_name': 'skpdiff',
@@ -175,7 +174,6 @@
         '../tools/skpdiff/skpdiff_util.cpp',
       ],
       'include_dirs': [
-        '../include/private',
         '../src/core/', # needed for SkTLList.h
         '../tools/',    # needed for picture_utils::replace_char
       ],
@@ -230,7 +228,6 @@
         '../tools/skpmaker.cpp',
       ],
       'include_dirs': [
-        '../include/private',
         '../src/core',
       ],
       'dependencies': [
@@ -273,7 +270,6 @@
         '../tools/skpinfo.cpp',
       ],
       'include_dirs': [
-        '../include/private',
         '../src/core/',
       ],
       'dependencies': [
@@ -282,62 +278,48 @@
       ],
     },
     {
-      'target_name': 'imgblur',
+      'target_name': 'flatten',
       'type': 'executable',
       'sources': [
-        '../tools/imgblur.cpp',
-      ],
-      'include_dirs': [
-        '../include/core',
+        '../tools/flatten.cpp',
       ],
       'dependencies': [
-        'flags.gyp:flags',
-        'flags.gyp:flags_common',
-        'skia_lib.gyp:skia_lib',
-        'tools.gyp:sk_tool_utils',
-      ],
-    },
-    {
-      'target_name': 'imgslice',
-      'type': 'executable',
-      'sources': [
-        '../tools/imgslice.cpp',
-      ],
-      'include_dirs': [
-        '../include/core',
-      ],
-      'dependencies': [
-        'flags.gyp:flags',
         'skia_lib.gyp:skia_lib',
       ],
     },
     {
-        'target_name': 'lazy_decode_bitmap',
-        'type': 'static_library',
-        'sources': [ '../tools/LazyDecodeBitmap.cpp' ],
-        'include_dirs': [
-            '../include/private',
-            '../src/core',
-            '../src/lazy',
-        ],
-        'dependencies': [
-            'flags.gyp:flags',
-            'skia_lib.gyp:skia_lib'
-        ],
+      # Superseded by dm, should be removed.
+      'target_name': 'skp2svg',
+      'type': 'executable',
+      'sources': [
+        '../src/svg/skp2svg.cpp',
+        '../tools/LazyDecodeBitmap.cpp',
+      ],
+      'include_dirs': [
+        '../src/core/',
+        '../src/lazy/',
+        '../tools/',
+      ],
+      'dependencies': [
+        'flags.gyp:flags',
+        'skia_lib.gyp:skia_lib',
+        'svg.gyp:svg',
+        'xml.gyp:xml',
+      ],
     },
     {
       'target_name': 'gpuveto',
       'type': 'executable',
       'sources': [
         '../tools/gpuveto.cpp',
+        '../tools/LazyDecodeBitmap.cpp',
       ],
       'include_dirs': [
-        '../include/private',
         '../src/core/',
         '../src/images',
+        '../src/lazy',
       ],
       'dependencies': [
-        'lazy_decode_bitmap',
         'flags.gyp:flags',
         'skia_lib.gyp:skia_lib',
       ],
@@ -350,7 +332,6 @@
         '../src/utils/SkLua.cpp',
       ],
       'include_dirs': [
-        '../include/private',
         # Lua exposes GrReduceClip which in turn requires src/core for SkTLList
         '../src/gpu/',
         '../src/core/',
@@ -373,17 +354,16 @@
         '../src/utils/SkLua.cpp',
       ],
       'include_dirs': [
-        '../include/private',
         # Lua exposes GrReduceClip which in turn requires src/core for SkTLList
         '../src/gpu/',
         '../src/core/',
       ],
       'dependencies': [
-        'lazy_decode_bitmap',
         'effects.gyp:effects',
         'flags.gyp:flags',
         'images.gyp:images',
         'lua.gyp:lua',
+        'tools.gyp:picture_renderer',
         'tools.gyp:picture_utils',
         'pdf.gyp:pdf',
         'ports.gyp:ports',
@@ -391,22 +371,104 @@
       ],
     },
     {
+      'target_name': 'render_pictures',
+      'type': 'executable',
+      'sources': [
+        '../tools/render_pictures_main.cpp',
+      ],
+      'include_dirs': [
+        '../src/core',
+        '../src/images',
+        '../src/lazy',
+        '../src/pipe/utils/',
+      ],
+      'dependencies': [
+        'flags.gyp:flags',
+        'skia_lib.gyp:skia_lib',
+        'tools.gyp:picture_renderer',
+        'tools.gyp:picture_utils',
+      ],
+    },
+    {
+      'target_name': 'bench_pictures',
+      'type': 'executable',
+      'sources': [
+        '../bench/BenchLogger.cpp',
+        '../bench/BenchLogger.h',
+        '../tools/PictureBenchmark.cpp',
+        '../tools/PictureResultsWriter.h',
+        '../tools/bench_pictures_main.cpp',
+      ],
+      'include_dirs': [
+        '../src/core/',
+        '../bench',
+        '../src/lazy/',
+      ],
+      'dependencies': [
+        'timer',
+        'crash_handler',
+        'flags.gyp:flags',
+        'jsoncpp.gyp:jsoncpp',
+        'skia_lib.gyp:skia_lib',
+        'tools.gyp:picture_renderer',
+        'tools.gyp:picture_utils',
+      ],
+      'conditions': [
+        ['skia_android_framework == 1', {
+          'libraries': [ '-lskia' ],
+        }],
+      ],
+    },
+    {
+      'target_name': 'dump_record',
+      'type': 'executable',
+      'sources': [
+        '../tools/dump_record.cpp',
+        '../tools/DumpRecord.cpp',
+        '../tools/LazyDecodeBitmap.cpp',
+      ],
+      'include_dirs': [
+        '../src/core/',
+        '../src/images',
+        '../src/lazy',
+      ],
+      'dependencies': [
+        'timer',
+        'flags.gyp:flags',
+        'skia_lib.gyp:skia_lib',
+      ],
+    },
+    {
       'target_name': 'picture_renderer',
       'type': 'static_library',
       'sources': [
+        '../tools/image_expectations.h',
+        '../tools/image_expectations.cpp',
+        '../tools/LazyDecodeBitmap.cpp',
         '../tools/PictureRenderer.h',
         '../tools/PictureRenderer.cpp',
+        '../tools/PictureRenderingFlags.h',
+        '../tools/PictureRenderingFlags.cpp',
+        '../tools/CopyTilesRenderer.h',
+        '../tools/CopyTilesRenderer.cpp',
+        '../src/pipe/utils/SamplePipeControllers.h',
+        '../src/pipe/utils/SamplePipeControllers.cpp',
       ],
       'include_dirs': [
-        '../include/private',
         '../src/core',
         '../src/images',
         '../src/lazy',
         '../src/pipe/utils/',
         '../src/utils/',
       ],
+      'direct_dependent_settings': {
+        'include_dirs': [
+          # needed for JSON headers used within image_expectations.h
+          '../third_party/externals/jsoncpp-chromium/overrides/include/',
+          '../third_party/externals/jsoncpp/include/',
+        ],
+      },
       'dependencies': [
-        'lazy_decode_bitmap',
         'flags.gyp:flags',
         'jsoncpp.gyp:jsoncpp',
         'skia_lib.gyp:skia_lib',
@@ -435,7 +497,6 @@
         '../tools/render_pdfs_main.cpp',
       ],
       'include_dirs': [
-        '../include/private',
         '../src/core',
         '../src/pipe/utils/',
         '../src/utils/',
@@ -458,7 +519,7 @@
         # VS static libraries don't have a linker option. We must set a global
         # project linker option, or add it to each executable.
         ['skia_win_debuggers_path and skia_os == "win" and '
-         'skia_arch_type == "x86_64"',
+         'skia_arch_width == 64',
           {
             'msvs_settings': {
               'VCLinkerTool': {
@@ -470,7 +531,7 @@
           },
         ],
         ['skia_win_debuggers_path and skia_os == "win" and '
-         'skia_arch_type == "x86"',
+         'skia_arch_width == 32',
           {
             'msvs_settings': {
               'VCLinkerTool': {
@@ -506,9 +567,9 @@
         '../tools/pinspect.cpp',
       ],
       'dependencies': [
-        'lazy_decode_bitmap',
         'flags.gyp:flags',
         'skia_lib.gyp:skia_lib',
+        'tools.gyp:picture_renderer',
       ],
     },
     {
@@ -526,7 +587,6 @@
       'target_name': 'filter',
       'type': 'executable',
       'include_dirs' : [
-        '../include/private',
         '../src/core',
         '../src/utils/debugger',
       ],
@@ -566,16 +626,6 @@
       },
     },
     {
-      'target_name': 'whitelist_typefaces',
-      'type': 'executable',
-      'sources': [
-        '../tools/whitelist_typefaces.cpp',
-      ],
-      'dependencies': [
-        'skia_lib.gyp:skia_lib',
-      ],
-    },
-    {
       'target_name': 'test_public_includes',
       'type': 'static_library',
       # Ensure that our public headers don't have unused params so that clients
@@ -604,6 +654,8 @@
           '<(skia_include_path)/ports/SkAtomics_atomic.h',
           '<(skia_include_path)/ports/SkAtomics_sync.h',
           '<(skia_include_path)/ports/SkFontMgr_fontconfig.h',
+          '<(skia_include_path)/ports/SkMutex_pthread.h',
+          '<(skia_include_path)/ports/SkMutex_win.h',
           '<(skia_include_path)/ports/SkTypeface_mac.h',
           '<(skia_include_path)/ports/SkTypeface_win.h',
           '<(skia_include_path)/utils/ios',
@@ -662,7 +714,6 @@
               '../src/utils/SkLua.cpp',
             ],
             'include_dirs': [
-              '../include/private',
               # Lua exposes GrReduceClip which in turn requires src/core for SkTLList
               '../src/gpu/',
               '../src/core/',
@@ -726,7 +777,6 @@
               '../tools/create_test_font.cpp',
             ],
             'include_dirs': [
-              '../include/private',
               '../src/core',
             ],
             'dependencies': [

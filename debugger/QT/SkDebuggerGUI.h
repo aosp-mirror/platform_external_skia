@@ -78,6 +78,11 @@ private slots:
     void actionBreakpoints();
 
     /**
+        Profile the commands
+     */
+    void actionProfile();
+
+    /**
         Cancels the command filter in the list widget.
      */
     void actionCancel();
@@ -233,6 +238,7 @@ private:
 
     QAction fActionOpen;
     QAction fActionBreakpoint;
+    QAction fActionProfile;
     QAction fActionCancel;
     QAction fActionClearBreakpoints;
     QAction fActionClearDeletes;
@@ -327,6 +333,15 @@ private:
         Fills in the overview pane with text
      */
     void setupOverviewText(const SkTDArray<double>* typeTimes, double totTime, int numRuns);
+
+
+    /**
+        Render the supplied picture several times tracking the time consumed
+        by each command.
+     */
+    void run(const SkPicture* pict,
+             sk_tools::PictureRenderer* renderer,
+             int repeats);
 
     bool isPaused() const {
         return fActionPause.isChecked();

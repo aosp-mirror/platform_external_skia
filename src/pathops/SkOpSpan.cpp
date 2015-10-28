@@ -44,7 +44,7 @@ SkOpPtT* SkOpPtT::contains(const SkOpSegment* check) {
             return ptT;
         }
     }
-    return nullptr;
+    return NULL;
 }
 
 SkOpContour* SkOpPtT::contour() const {
@@ -65,7 +65,7 @@ SkOpPtT* SkOpPtT::doppelganger() {
         ptT = ptT->fNext;
     } while (stopPtT != ptT);
     SkASSERT(0);
-    return nullptr;
+    return NULL;
 }
 
 SkOpPtT* SkOpPtT::find(SkOpSegment* segment) {
@@ -78,7 +78,7 @@ SkOpPtT* SkOpPtT::find(SkOpSegment* segment) {
         ptT = ptT->fNext;
     } while (stopPtT != ptT);
     SkASSERT(0);
-    return nullptr;
+    return NULL;
 }
 
 SkOpGlobalState* SkOpPtT::globalState() const {
@@ -127,7 +127,7 @@ SkOpPtT* SkOpPtT::remove() {
         prev = next;
     } while (prev != this);
     SkASSERT(0);
-    return nullptr;
+    return NULL;
 }
 
 void SkOpPtT::removeNext(SkOpPtT* kept) {
@@ -252,7 +252,7 @@ SkOpPtT* SkOpSpanBase::contains(const SkOpSegment* segment) {
             return walk;
         }
     }
-    return nullptr;
+    return NULL;
 }
 
 bool SkOpSpanBase::containsCoinEnd(const SkOpSegment* segment) const {
@@ -278,7 +278,7 @@ void SkOpSpanBase::initBase(SkOpSegment* segment, SkOpSpan* prev, double t, cons
     fSegment = segment;
     fPtT.init(this, t, pt, false);
     fCoinEnd = this;
-    fFromAngle = nullptr;
+    fFromAngle = NULL;
     fPrev = prev;
     fSpanAdds = 0;
     fAligned = true;
@@ -354,7 +354,7 @@ void SkOpSpan::init(SkOpSegment* segment, SkOpSpan* prev, double t, const SkPoin
     SkASSERT(t != 1);
     initBase(segment, prev, t, pt);
     fCoincident = this;
-    fToAngle = nullptr;
+    fToAngle = NULL;
     fWindSum = fOppSum = SK_MinS32;
     fWindValue = 1;
     fOppValue = 0;
@@ -369,7 +369,7 @@ void SkOpSpan::setOppSum(int oppSum) {
         this->globalState()->setWindingFailed();
         return;
     }
-    SkASSERT(!DEBUG_LIMIT_WIND_SUM || SkTAbs(oppSum) <= DEBUG_LIMIT_WIND_SUM);
+    SkASSERT(!DEBUG_LIMIT_WIND_SUM || abs(oppSum) <= DEBUG_LIMIT_WIND_SUM);
     fOppSum = oppSum;
 }
 
@@ -379,6 +379,6 @@ void SkOpSpan::setWindSum(int windSum) {
         this->globalState()->setWindingFailed();
         return;
     }
-    SkASSERT(!DEBUG_LIMIT_WIND_SUM || SkTAbs(windSum) <= DEBUG_LIMIT_WIND_SUM);
+    SkASSERT(!DEBUG_LIMIT_WIND_SUM || abs(windSum) <= DEBUG_LIMIT_WIND_SUM);
     fWindSum = windSum;
 }

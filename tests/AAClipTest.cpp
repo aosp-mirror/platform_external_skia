@@ -10,7 +10,6 @@
 #include "SkMask.h"
 #include "SkPath.h"
 #include "SkRandom.h"
-#include "SkRRect.h"
 #include "Test.h"
 
 static bool operator==(const SkMask& a, const SkMask& b) {
@@ -62,7 +61,7 @@ static void copyToMask(const SkRegion& rgn, SkMask* mask) {
     if (rgn.isEmpty()) {
         mask->fBounds.setEmpty();
         mask->fRowBytes = 0;
-        mask->fImage = nullptr;
+        mask->fImage = NULL;
         return;
     }
 
@@ -185,7 +184,7 @@ static void test_path_bounds(skiatest::Reporter* reporter) {
 
     path.addOval(SkRect::MakeWH(sheight, sheight));
     REPORTER_ASSERT(reporter, sheight == path.getBounds().height());
-    clip.setPath(path, nullptr, true);
+    clip.setPath(path, NULL, true);
     REPORTER_ASSERT(reporter, height == clip.getBounds().height());
 
     // this is the trimmed height of this cubic (with aa). The critical thing
@@ -199,7 +198,7 @@ static void test_path_bounds(skiatest::Reporter* reporter) {
     imoveTo(path, 0, 20);
     icubicTo(path, 40, 40, 40, 0, 0, 20);
     REPORTER_ASSERT(reporter, sheight == path.getBounds().height());
-    clip.setPath(path, nullptr, true);
+    clip.setPath(path, NULL, true);
     REPORTER_ASSERT(reporter, teardrop_height == clip.getBounds().height());
 }
 
@@ -228,9 +227,9 @@ static void test_empty(skiatest::Reporter* reporter) {
     REPORTER_ASSERT(reporter, clip1 == clip0);
 
     SkMask mask;
-    mask.fImage = nullptr;
+    mask.fImage = NULL;
     clip0.copyToMask(&mask);
-    REPORTER_ASSERT(reporter, nullptr == mask.fImage);
+    REPORTER_ASSERT(reporter, NULL == mask.fImage);
     REPORTER_ASSERT(reporter, mask.fBounds.isEmpty());
 }
 
@@ -308,7 +307,7 @@ static void test_path_with_hole(skiatest::Reporter* reporter) {
 
     for (int i = 0; i < 2; ++i) {
         SkAAClip clip;
-        clip.setPath(path, nullptr, 1 == i);
+        clip.setPath(path, NULL, 1 == i);
 
         SkMask mask;
         clip.copyToMask(&mask);

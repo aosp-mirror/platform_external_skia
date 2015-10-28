@@ -18,7 +18,7 @@ LOCAL_CFLAGS += \
 
 LOCAL_CPPFLAGS := \
 	-std=c++11 \
-	-fno-threadsafe-statics
+	-Wno-invalid-offsetof
 
 LOCAL_SRC_FILES := \
 	DM.cpp \
@@ -36,7 +36,6 @@ LOCAL_SRC_FILES := \
 	../tests/PathOpsBuildUseTest.cpp \
 	../tests/PathOpsConicIntersectionTest.cpp \
 	../tests/PathOpsConicLineIntersectionTest.cpp \
-	../tests/PathOpsCubicConicIntersectionTest.cpp \
 	../tests/PathOpsCubicIntersectionTest.cpp \
 	../tests/PathOpsCubicIntersectionTestData.cpp \
 	../tests/PathOpsCubicLineIntersectionTest.cpp \
@@ -99,7 +98,7 @@ LOCAL_SRC_FILES := \
 	../tests/CanvasTest.cpp \
 	../tests/ChecksumTest.cpp \
 	../tests/ClampRangeTest.cpp \
-	../tests/ClipBoundsTest.cpp \
+	../tests/ClipCacheTest.cpp \
 	../tests/ClipCubicTest.cpp \
 	../tests/ClipStackTest.cpp \
 	../tests/ClipperTest.cpp \
@@ -110,10 +109,13 @@ LOCAL_SRC_FILES := \
 	../tests/ColorTest.cpp \
 	../tests/DashPathEffectTest.cpp \
 	../tests/DataRefTest.cpp \
+	../tests/DeferredCanvasTest.cpp \
+	../tests/DeflateWStream.cpp \
 	../tests/DequeTest.cpp \
 	../tests/DeviceLooperTest.cpp \
 	../tests/DiscardableMemoryPoolTest.cpp \
 	../tests/DiscardableMemoryTest.cpp \
+	../tests/DocumentTest.cpp \
 	../tests/DrawBitmapRectTest.cpp \
 	../tests/DrawFilterTest.cpp \
 	../tests/DrawPathTest.cpp \
@@ -123,6 +125,7 @@ LOCAL_SRC_FILES := \
 	../tests/ErrorTest.cpp \
 	../tests/FillPathTest.cpp \
 	../tests/FitsInTest.cpp \
+	../tests/FlateTest.cpp \
 	../tests/FloatingPointTextureTest.cpp \
 	../tests/FontHostStreamTest.cpp \
 	../tests/FontHostTest.cpp \
@@ -144,7 +147,6 @@ LOCAL_SRC_FILES := \
 	../tests/GrContextFactoryTest.cpp \
 	../tests/GrDrawTargetTest.cpp \
 	../tests/GrGLSLPrettyPrintTest.cpp \
-	../tests/GrGetCoeffBlendKnownComponentsTest.cpp \
 	../tests/GrMemoryPoolTest.cpp \
 	../tests/GrPorterDuffTest.cpp \
 	../tests/GrSurfaceTest.cpp \
@@ -168,6 +170,7 @@ LOCAL_SRC_FILES := \
 	../tests/LListTest.cpp \
 	../tests/LayerDrawLooperTest.cpp \
 	../tests/LayerRasterizerTest.cpp \
+	../tests/LazyPtrTest.cpp \
 	../tests/MD5Test.cpp \
 	../tests/MallocPixelRefTest.cpp \
 	../tests/MaskCacheTest.cpp \
@@ -182,16 +185,11 @@ LOCAL_SRC_FILES := \
 	../tests/MipMapTest.cpp \
 	../tests/NameAllocatorTest.cpp \
 	../tests/OSPathTest.cpp \
-	../tests/OncePtrTest.cpp \
 	../tests/OnceTest.cpp \
-	../tests/PDFDeflateWStreamTest.cpp \
-	../tests/PDFDocumentTest.cpp \
-	../tests/PDFGlyphsToUnicodeTest.cpp \
 	../tests/PDFInvalidBitmapTest.cpp \
 	../tests/PDFJpegEmbedTest.cpp \
-	../tests/PDFMetadataAttributeTest.cpp \
-	../tests/PDFOpaqueSrcModeToSrcOverTest.cpp \
 	../tests/PDFPrimitivesTest.cpp \
+	../tests/PMFloatTest.cpp \
 	../tests/PackBitsTest.cpp \
 	../tests/PaintTest.cpp \
 	../tests/ParsePathTest.cpp \
@@ -228,7 +226,6 @@ LOCAL_SRC_FILES := \
 	../tests/RoundRectTest.cpp \
 	../tests/RuntimeConfigTest.cpp \
 	../tests/SHA1Test.cpp \
-	../tests/SRGBReadWritePixelsTest.cpp \
 	../tests/SVGDeviceTest.cpp \
 	../tests/ScalarTest.cpp \
 	../tests/SerializationTest.cpp \
@@ -251,6 +248,7 @@ LOCAL_SRC_FILES := \
 	../tests/SwizzlerTest.cpp \
 	../tests/TArrayTest.cpp \
 	../tests/TDPQueueTest.cpp \
+	../tests/TDStackNesterTest.cpp \
 	../tests/TLSTest.cpp \
 	../tests/TemplatesTest.cpp \
 	../tests/TessellatingPathRendererTests.cpp \
@@ -258,8 +256,7 @@ LOCAL_SRC_FILES := \
 	../tests/TextBlobTest.cpp \
 	../tests/TextureCompressionTest.cpp \
 	../tests/Time.cpp \
-	../tests/TopoSortTest.cpp \
-	../tests/TraceMemoryDumpTest.cpp \
+	../tests/ToUnicodeTest.cpp \
 	../tests/TracingTest.cpp \
 	../tests/TypefaceTest.cpp \
 	../tests/UnicodeTest.cpp \
@@ -270,6 +267,7 @@ LOCAL_SRC_FILES := \
 	../tests/Writer32Test.cpp \
 	../tests/XfermodeTest.cpp \
 	../tests/YUVCacheTest.cpp \
+	../tests/skpdf_opaquesrcmodetosrcover.cpp \
 	DMSrcSinkAndroid.cpp \
 	../gm/aaclip.cpp \
 	../gm/aarectmodes.cpp \
@@ -287,15 +285,15 @@ LOCAL_SRC_FILES := \
 	../gm/beziers.cpp \
 	../gm/bigblurs.cpp \
 	../gm/bigmatrix.cpp \
-	../gm/bigrrectaaeffect.cpp \
 	../gm/bigtext.cpp \
 	../gm/bigtileimagefilter.cpp \
-	../gm/bitmapcopy.cpp \
 	../gm/bitmapfilters.cpp \
 	../gm/bitmappremul.cpp \
 	../gm/bitmaprect.cpp \
 	../gm/bitmaprecttest.cpp \
 	../gm/bitmapshader.cpp \
+	../gm/bitmapsource.cpp \
+	../gm/bitmapsource2.cpp \
 	../gm/bleed.cpp \
 	../gm/blend.cpp \
 	../gm/blurcircles.cpp \
@@ -342,14 +340,10 @@ LOCAL_SRC_FILES := \
 	../gm/displacement.cpp \
 	../gm/distantclip.cpp \
 	../gm/downsamplebitmap.cpp \
-	../gm/draw_bitmap_rect_skbug4374.cpp \
 	../gm/drawable.cpp \
 	../gm/drawatlas.cpp \
-	../gm/drawatlascolor.cpp \
-	../gm/drawbitmaprect.cpp \
 	../gm/drawfilter.cpp \
 	../gm/drawlooper.cpp \
-	../gm/drawminibitmaprect.cpp \
 	../gm/dropshadowimagefilter.cpp \
 	../gm/drrect.cpp \
 	../gm/dstreadshuffle.cpp \
@@ -385,8 +379,6 @@ LOCAL_SRC_FILES := \
 	../gm/hairmodes.cpp \
 	../gm/hittestpath.cpp \
 	../gm/image.cpp \
-	../gm/image_pict.cpp \
-	../gm/image_shader.cpp \
 	../gm/imagealphathreshold.cpp \
 	../gm/imageblur.cpp \
 	../gm/imageblur2.cpp \
@@ -394,28 +386,20 @@ LOCAL_SRC_FILES := \
 	../gm/imagefilters.cpp \
 	../gm/imagefiltersbase.cpp \
 	../gm/imagefiltersclipped.cpp \
-	../gm/imagefilterscropexpand.cpp \
 	../gm/imagefilterscropped.cpp \
 	../gm/imagefiltersgraph.cpp \
 	../gm/imagefiltersscaled.cpp \
-	../gm/imagefiltersstroked.cpp \
 	../gm/imagefilterstransformed.cpp \
 	../gm/imagefromyuvtextures.cpp \
 	../gm/imagemagnifier.cpp \
 	../gm/imageresizetiled.cpp \
-	../gm/imagesource.cpp \
-	../gm/imagesource2.cpp \
 	../gm/internal_links.cpp \
 	../gm/inversepaths.cpp \
 	../gm/largeglyphblur.cpp \
-	../gm/lcdblendmodes.cpp \
-	../gm/lcdoverlap.cpp \
 	../gm/lcdtext.cpp \
 	../gm/lerpmode.cpp \
 	../gm/lighting.cpp \
-	../gm/lightingshader.cpp \
 	../gm/linepaths.cpp \
-	../gm/localmatriximagefilter.cpp \
 	../gm/lumafilter.cpp \
 	../gm/matrixconvolution.cpp \
 	../gm/matriximagefilter.cpp \
@@ -432,20 +416,16 @@ LOCAL_SRC_FILES := \
 	../gm/ovals.cpp \
 	../gm/patch.cpp \
 	../gm/patchgrid.cpp \
-	../gm/path_stroke_with_zero_length.cpp \
 	../gm/patheffects.cpp \
 	../gm/pathfill.cpp \
 	../gm/pathinterior.cpp \
 	../gm/pathopsinverse.cpp \
 	../gm/pathopsskpclip.cpp \
 	../gm/pathreverse.cpp \
-	../gm/pdf_never_embed.cpp \
 	../gm/peekpixels.cpp \
 	../gm/perlinnoise.cpp \
-	../gm/perspshaders.cpp \
 	../gm/picture.cpp \
 	../gm/pictureimagefilter.cpp \
-	../gm/pictureimagegenerator.cpp \
 	../gm/pictureshader.cpp \
 	../gm/pictureshadertile.cpp \
 	../gm/pixelsnap.cpp \
@@ -462,12 +442,8 @@ LOCAL_SRC_FILES := \
 	../gm/rrect.cpp \
 	../gm/rrects.cpp \
 	../gm/samplerstress.cpp \
-	../gm/scaledstrokes.cpp \
 	../gm/selftest.cpp \
 	../gm/shaderbounds.cpp \
-	../gm/shadertext.cpp \
-	../gm/shadertext2.cpp \
-	../gm/shadertext3.cpp \
 	../gm/shadows.cpp \
 	../gm/shallowgradient.cpp \
 	../gm/simpleaaclip.cpp \
@@ -492,8 +468,6 @@ LOCAL_SRC_FILES := \
 	../gm/textblobcolortrans.cpp \
 	../gm/textblobgeometrychange.cpp \
 	../gm/textbloblooper.cpp \
-	../gm/textblobmixedsizes.cpp \
-	../gm/textblobrandomfont.cpp \
 	../gm/textblobshader.cpp \
 	../gm/textblobtransforms.cpp \
 	../gm/textblobuseaftergpufree.cpp \
@@ -512,7 +486,6 @@ LOCAL_SRC_FILES := \
 	../gm/vertices.cpp \
 	../gm/verttext.cpp \
 	../gm/verttext2.cpp \
-	../gm/verylargebitmap.cpp \
 	../gm/xfermodeimagefilter.cpp \
 	../gm/xfermodes.cpp \
 	../gm/xfermodes2.cpp \
@@ -522,15 +495,14 @@ LOCAL_SRC_FILES := \
 	../tools/flags/SkCommandLineFlags.cpp \
 	../src/svg/SkSVGCanvas.cpp \
 	../src/svg/SkSVGDevice.cpp \
-	../tools/SkBitmapRegionCanvas.cpp \
-	../tools/SkBitmapRegionCodec.cpp \
-	../tools/SkBitmapRegionDecoderInterface.cpp \
-	../tools/SkBitmapRegionSampler.cpp \
 	../tools/CrashHandler.cpp \
 	../tools/ProcStats.cpp \
 	../tools/sk_tool_utils.cpp \
 	../tools/sk_tool_utils_font.cpp \
 	../tools/timer/Timer.cpp \
+	../tools/timer/TimerData.cpp \
+	../tools/timer/GpuTimer.cpp \
+	../tools/timer/SysTimer_posix.cpp \
 	../src/xml/SkBML_XMLParser.cpp \
 	../src/xml/SkDOM.cpp \
 	../src/xml/SkXMLParser.cpp \
@@ -543,6 +515,7 @@ LOCAL_SRC_FILES := \
 	../tools/flags/SkCommonFlags.cpp \
 	../tools/picture_utils.cpp \
 	../src/utils/android/SkAndroidSDKCanvas.cpp \
+	../src/utils/android/SkHwuiRenderer.cpp \
 	../src/gpu/GrContextFactory.cpp \
 	../src/gpu/GrTest.cpp
 
@@ -550,13 +523,13 @@ LOCAL_SHARED_LIBRARIES := \
 	liblog \
 	libskia \
 	libandroid \
+	libgui \
 	libhwui \
 	libutils \
 	libdl \
-	libpng \
-	libz \
 	libGLESv2 \
-	libEGL
+	libEGL \
+	libz
 
 LOCAL_STATIC_LIBRARIES := \
 	libjsoncpp
@@ -575,17 +548,13 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../include/utils \
 	$(LOCAL_PATH)/../src/utils \
 	$(LOCAL_PATH)/../include/gpu \
-	$(LOCAL_PATH)/../include/private \
 	$(LOCAL_PATH)/../src/core \
-	external/libpng \
 	$(LOCAL_PATH)/../include/svg \
 	$(LOCAL_PATH)/../include/xml \
-	$(LOCAL_PATH)/../src/codec \
 	$(LOCAL_PATH)/../src/fonts \
 	$(LOCAL_PATH)/../tools \
 	$(LOCAL_PATH)/../tools/flags \
 	$(LOCAL_PATH)/../src/gpu \
-	$(LOCAL_PATH)/../../src/gpu \
 	$(LOCAL_PATH)/../gm \
 	$(LOCAL_PATH)/../src/effects \
 	$(LOCAL_PATH)/../src/images \
@@ -594,14 +563,17 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../src/utils/debugger \
 	$(LOCAL_PATH)/../tests \
 	$(LOCAL_PATH)/../src/pathops \
+	$(LOCAL_PATH)/../src/codec \
 	$(LOCAL_PATH)/../src/image \
 	$(LOCAL_PATH)/../src/pdf \
 	$(LOCAL_PATH)/../src/ports \
+	$(LOCAL_PATH)/../experimental/PdfViewer \
+	$(LOCAL_PATH)/../experimental/PdfViewer/src \
 	$(LOCAL_PATH)/../../../frameworks/base/libs/hwui \
+	$(LOCAL_PATH)/../../../frameworks/native/include \
 	$(LOCAL_PATH)/../third_party/etc1 \
 	$(LOCAL_PATH)/../tools/timer \
 	$(LOCAL_PATH)/../experimental \
-	external/zlib \
 	$(LOCAL_PATH)/../src/utils/android
 
 LOCAL_CFLAGS += \

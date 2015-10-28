@@ -7,11 +7,9 @@
  */
 
 #include "GrTextureStripAtlas.h"
-#include "GrContext.h"
-#include "GrTexture.h"
-#include "SkGr.h"
 #include "SkPixelRef.h"
 #include "SkTSearch.h"
+#include "GrTexture.h"
 
 #ifdef SK_DEBUG
     #define VALIDATE this->validate()
@@ -24,12 +22,12 @@ class GrTextureStripAtlas::Hash : public SkTDynamicHash<GrTextureStripAtlas::Atl
 
 int32_t GrTextureStripAtlas::gCacheCount = 0;
 
-GrTextureStripAtlas::Hash* GrTextureStripAtlas::gAtlasCache = nullptr;
+GrTextureStripAtlas::Hash* GrTextureStripAtlas::gAtlasCache = NULL;
 
 GrTextureStripAtlas::Hash* GrTextureStripAtlas::GetCache() {
 
-    if (nullptr == gAtlasCache) {
-        gAtlasCache = new Hash;
+    if (NULL == gAtlasCache) {
+        gAtlasCache = SkNEW(Hash);
     }
 
     return gAtlasCache;
@@ -45,20 +43,20 @@ void GrTextureStripAtlas::CleanUp(const GrContext*, void* info) {
     GetCache()->remove(entry->fDesc);
 
     // remove the actual entry
-    delete entry;
+    SkDELETE(entry);
 
     if (0 == GetCache()->count()) {
-        delete gAtlasCache;
-        gAtlasCache = nullptr;
+        SkDELETE(gAtlasCache);
+        gAtlasCache = NULL;
     }
 }
 
 GrTextureStripAtlas* GrTextureStripAtlas::GetAtlas(const GrTextureStripAtlas::Desc& desc) {
     AtlasEntry* entry = GetCache()->find(desc);
-    if (nullptr == entry) {
-        entry = new AtlasEntry;
+    if (NULL == entry) {
+        entry = SkNEW(AtlasEntry);
 
-        entry->fAtlas = new GrTextureStripAtlas(desc);
+        entry->fAtlas = SkNEW_ARGS(GrTextureStripAtlas, (desc));
         entry->fDesc = desc;
 
         desc.fContext->addCleanUp(CleanUp, entry);
@@ -74,17 +72,19 @@ GrTextureStripAtlas::GrTextureStripAtlas(GrTextureStripAtlas::Desc desc)
     , fLockedRows(0)
     , fDesc(desc)
     , fNumRows(desc.fHeight / desc.fRowHeight)
-    , fTexture(nullptr)
-    , fRows(new AtlasRow[fNumRows])
-    , fLRUFront(nullptr)
-    , fLRUBack(nullptr) {
+    , fTexture(NULL)
+    , fRows(SkNEW_ARRAY(AtlasRow, fNumRows))
+    , fLRUFront(NULL)
+    , fLRUBack(NULL) {
     SkASSERT(fNumRows * fDesc.fRowHeight == fDesc.fHeight);
     this->initLRU();
     fNormalizedYHeight = SK_Scalar1 / fDesc.fHeight;
     VALIDATE;
 }
 
-GrTextureStripAtlas::~GrTextureStripAtlas() { delete[] fRows; }
+GrTextureStripAtlas::~GrTextureStripAtlas() {
+    SkDELETE_ARRAY(fRows);
+}
 
 int GrTextureStripAtlas::lockRow(const SkBitmap& data) {
     VALIDATE;
@@ -120,11 +120,11 @@ int GrTextureStripAtlas::lockRow(const SkBitmap& data) {
 
         ++fLockedRows;
 
-        if (nullptr == row) {
+        if (NULL == row) {
             // force a flush, which should unlock all the rows; then try again
             fDesc.fContext->flush();
             row = this->getLRU();
-            if (nullptr == row) {
+            if (NULL == row) {
                 --fLockedRows;
                 return -1;
             }
@@ -203,8 +203,8 @@ void GrTextureStripAtlas::lockTexture() {
     builder.finish();
 
     fTexture = fDesc.fContext->textureProvider()->findAndRefTextureByUniqueKey(key);
-    if (nullptr == fTexture) {
-        fTexture = fDesc.fContext->textureProvider()->createTexture(texDesc, true, nullptr, 0);
+    if (NULL == fTexture) {
+        fTexture = fDesc.fContext->textureProvider()->createTexture(texDesc, true, NULL, 0);
         if (!fTexture) {
             return;
         }
@@ -219,26 +219,26 @@ void GrTextureStripAtlas::lockTexture() {
 void GrTextureStripAtlas::unlockTexture() {
     SkASSERT(fTexture && 0 == fLockedRows);
     fTexture->unref();
-    fTexture = nullptr;
+    fTexture = NULL;
 }
 
 void GrTextureStripAtlas::initLRU() {
-    fLRUFront = nullptr;
-    fLRUBack = nullptr;
+    fLRUFront = NULL;
+    fLRUBack = NULL;
     // Initially all the rows are in the LRU list
     for (int i = 0; i < fNumRows; ++i) {
         fRows[i].fKey = kEmptyAtlasRowKey;
-        fRows[i].fNext = nullptr;
-        fRows[i].fPrev = nullptr;
+        fRows[i].fNext = NULL;
+        fRows[i].fPrev = NULL;
         this->appendLRU(fRows + i);
     }
-    SkASSERT(nullptr == fLRUFront || nullptr == fLRUFront->fPrev);
-    SkASSERT(nullptr == fLRUBack || nullptr == fLRUBack->fNext);
+    SkASSERT(NULL == fLRUFront || NULL == fLRUFront->fPrev);
+    SkASSERT(NULL == fLRUBack || NULL == fLRUBack->fNext);
 }
 
 void GrTextureStripAtlas::appendLRU(AtlasRow* row) {
-    SkASSERT(nullptr == row->fPrev && nullptr == row->fNext);
-    if (nullptr == fLRUFront && nullptr == fLRUBack) {
+    SkASSERT(NULL == row->fPrev && NULL == row->fNext);
+    if (NULL == fLRUFront && NULL == fLRUBack) {
         fLRUFront = row;
         fLRUBack = row;
     } else {
@@ -254,23 +254,23 @@ void GrTextureStripAtlas::removeFromLRU(AtlasRow* row) {
         row->fPrev->fNext = row->fNext;
         row->fNext->fPrev = row->fPrev;
     } else {
-        if (nullptr == row->fNext) {
+        if (NULL == row->fNext) {
             SkASSERT(row == fLRUBack);
             fLRUBack = row->fPrev;
             if (fLRUBack) {
-                fLRUBack->fNext = nullptr;
+                fLRUBack->fNext = NULL;
             }
         }
-        if (nullptr == row->fPrev) {
+        if (NULL == row->fPrev) {
             SkASSERT(row == fLRUFront);
             fLRUFront = row->fNext;
             if (fLRUFront) {
-                fLRUFront->fPrev = nullptr;
+                fLRUFront->fPrev = NULL;
             }
         }
     }
-    row->fNext = nullptr;
-    row->fPrev = nullptr;
+    row->fNext = NULL;
+    row->fPrev = NULL;
 }
 
 int GrTextureStripAtlas::searchByKey(uint32_t key) {
@@ -296,10 +296,10 @@ void GrTextureStripAtlas::validate() {
 
     int lruCount = 0;
     // Validate LRU pointers, and count LRU entries
-    SkASSERT(nullptr == fLRUFront || nullptr == fLRUFront->fPrev);
-    SkASSERT(nullptr == fLRUBack  || nullptr == fLRUBack->fNext);
-    for (AtlasRow* r = fLRUFront; r != nullptr; r = r->fNext) {
-        if (nullptr == r->fNext) {
+    SkASSERT(NULL == fLRUFront || NULL == fLRUFront->fPrev);
+    SkASSERT(NULL == fLRUBack  || NULL == fLRUBack->fNext);
+    for (AtlasRow* r = fLRUFront; r != NULL; r = r->fNext) {
+        if (NULL == r->fNext) {
             SkASSERT(r == fLRUBack);
         } else {
             SkASSERT(r->fNext->fPrev == r);
@@ -316,7 +316,7 @@ void GrTextureStripAtlas::validate() {
             ++freeRows;
             bool inLRU = false;
             // Step through the LRU and make sure it's present
-            for (AtlasRow* r = fLRUFront; r != nullptr; r = r->fNext) {
+            for (AtlasRow* r = fLRUFront; r != NULL; r = r->fNext) {
                 if (r == &fRows[i]) {
                     inLRU = true;
                     break;
@@ -343,7 +343,7 @@ void GrTextureStripAtlas::validate() {
     // If we have locked rows, we should have a locked texture, otherwise
     // it should be unlocked
     if (fLockedRows == 0) {
-        SkASSERT(nullptr == fTexture);
+        SkASSERT(NULL == fTexture);
     } else {
         SkASSERT(fTexture);
     }

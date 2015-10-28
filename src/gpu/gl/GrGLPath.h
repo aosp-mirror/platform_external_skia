@@ -10,7 +10,7 @@
 #define GrGLPath_DEFINED
 
 #include "../GrPath.h"
-#include "gl/GrGLTypes.h"
+#include "gl/GrGLFunctions.h"
 
 class GrGLGpu;
 

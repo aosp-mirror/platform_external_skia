@@ -72,11 +72,11 @@ public:
 
 protected:
     void onOnceBeforeDraw() override {
-        fTypeface.reset(sk_tool_utils::create_portable_typeface("serif", SkTypeface::kNormal));
+        fTypeface.reset(sk_tool_utils::create_portable_typeface_always("serif", SkTypeface::kNormal));
         SkPaint p;
         p.setTypeface(fTypeface);
         size_t txtLen = strlen(fText);
-        int glyphCount = p.textToGlyphs(fText, txtLen, nullptr);
+        int glyphCount = p.textToGlyphs(fText, txtLen, NULL);
 
         fGlyphs.append(glyphCount);
         p.textToGlyphs(fText, txtLen, fGlyphs.begin());
@@ -186,4 +186,4 @@ private:
     typedef skiagm::GM INHERITED;
 };
 
-DEF_GM(return new TextBlobGM("hamburgefons");)
+DEF_GM( return SkNEW_ARGS(TextBlobGM, ("hamburgefons")); )

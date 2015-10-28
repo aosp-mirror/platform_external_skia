@@ -1,9 +1,3 @@
-/*
- * Copyright 2013 Google Inc.
- *
- * Use of this source code is governed by a BSD-style license that can be
- * found in the LICENSE file.
- */
 #include "windows.h"
 #include "stdio.h"
 
@@ -18,7 +12,7 @@ BOOL CALLBACK MyFuncLocaleEx(LPWSTR pStr, DWORD dwFlags, LPARAM lparam) {
         return (TRUE);
     }
 
-    LCID lcid = LocaleNameToLCID(pStr, nullptr);
+    LCID lcid = LocaleNameToLCID(pStr, NULL);
     if (lcid == 0) {
         wprintf(L"Error %d getting LCID\n", GetLastError());
         return (TRUE);
@@ -33,5 +27,5 @@ BOOL CALLBACK MyFuncLocaleEx(LPWSTR pStr, DWORD dwFlags, LPARAM lparam) {
 }
 
 int main(int argc, wchar_t* argv[]) {
-    EnumSystemLocalesEx(MyFuncLocaleEx, LOCALE_ALL, nullptr, nullptr);
+    EnumSystemLocalesEx(MyFuncLocaleEx, LOCALE_ALL, NULL, NULL);
 }

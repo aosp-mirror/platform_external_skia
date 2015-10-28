@@ -131,8 +131,8 @@ class SkGlyph {
 
     void initCommon(uint32_t id) {
         fID             = id;
-        fImage          = nullptr;
-        fPath           = nullptr;
+        fImage          = NULL;
+        fPath           = NULL;
         fMaskFormat     = MASK_FORMAT_UNKNOWN;
         fForceBW        = 0;
     }

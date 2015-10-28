@@ -8,11 +8,8 @@
 #ifndef SkFontMgr_android_parser_DEFINED
 #define SkFontMgr_android_parser_DEFINED
 
-#include "SkFixed.h"
 #include "SkString.h"
-#include "SkTArray.h"
 #include "SkTDArray.h"
-#include "SkTypes.h"
 
 #include <climits>
 #include <limits>
@@ -115,7 +112,7 @@ void GetCustomFontFamilies(SkTDArray<FontFamily*>& fontFamilies,
                            const SkString& basePath,
                            const char* fontsXml,
                            const char* fallbackFontsXml,
-                           const char* langFallbackFontsDir = nullptr);
+                           const char* langFallbackFontsDir = NULL);
 
 } // SkFontMgr_Android_Parser namespace
 
@@ -126,7 +123,7 @@ void GetCustomFontFamilies(SkTDArray<FontFamily*>& fontFamilies,
  *  If the string cannot be parsed into 'value', returns false and does not change 'value'.
  */
 template <typename T> static bool parse_non_negative_integer(const char* s, T* value) {
-    static_assert(std::numeric_limits<T>::is_integer, "T_must_be_integer");
+    SK_COMPILE_ASSERT(std::numeric_limits<T>::is_integer, T_must_be_integer);
 
     if (*s == '\0') {
         return false;
@@ -163,9 +160,9 @@ template <typename T> static bool parse_non_negative_integer(const char* s, T* v
  *  If the string cannot be parsed into 'value', returns false and does not change 'value'.
  */
 template <int N, typename T> static bool parse_fixed(const char* s, T* value) {
-    static_assert(std::numeric_limits<T>::is_integer, "T_must_be_integer");
-    static_assert(std::numeric_limits<T>::is_signed, "T_must_be_signed");
-    static_assert(sizeof(T) * CHAR_BIT - N >= 5, "N_must_leave_four_bits_plus_sign");
+    SK_COMPILE_ASSERT(std::numeric_limits<T>::is_integer, T_must_be_integer);
+    SK_COMPILE_ASSERT(std::numeric_limits<T>::is_signed, T_must_be_signed);
+    SK_COMPILE_ASSERT(sizeof(T) * CHAR_BIT - N >= 5, N_must_leave_four_bits_plus_sign);
 
     bool negate = false;
     if (*s == '-') {

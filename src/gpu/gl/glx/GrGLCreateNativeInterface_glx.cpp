@@ -13,15 +13,15 @@
 #include <GL/glx.h>
 
 static GrGLFuncPtr glx_get(void* ctx, const char name[]) {
-    SkASSERT(nullptr == ctx);
+    SkASSERT(NULL == ctx);
     SkASSERT(glXGetCurrentContext());
     return glXGetProcAddress(reinterpret_cast<const GLubyte*>(name));
 }
 
 const GrGLInterface* GrGLCreateNativeInterface() {
-    if (nullptr == glXGetCurrentContext()) {
-        return nullptr;
+    if (NULL == glXGetCurrentContext()) {
+        return NULL;
     }
 
-    return GrGLAssembleInterface(nullptr, glx_get);
+    return GrGLAssembleInterface(NULL, glx_get);
 }

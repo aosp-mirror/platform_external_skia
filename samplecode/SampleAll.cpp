@@ -84,7 +84,7 @@ static void r0(SkLayerRasterizer::Builder* rastBuilder, SkPaint& p) {
                                              SkBlurMaskFilter::kNone_BlurFlag))->unref();
     rastBuilder->addLayer(p, SkIntToScalar(3), SkIntToScalar(3));
 
-    p.setMaskFilter(nullptr);
+    p.setMaskFilter(NULL);
     p.setStyle(SkPaint::kStroke_Style);
     p.setStrokeWidth(SK_Scalar1);
     rastBuilder->addLayer(p);
@@ -135,7 +135,7 @@ static void r4(SkLayerRasterizer::Builder* rastBuilder, SkPaint& p) {
     p.setXfermodeMode(SkXfermode::kClear_Mode);
     rastBuilder->addLayer(p, SK_Scalar1*3/2, SK_Scalar1*3/2);
 
-    p.setXfermode(nullptr);
+    p.setXfermode(NULL);
     rastBuilder->addLayer(p);
 }
 
@@ -199,8 +199,8 @@ static void r8(SkLayerRasterizer::Builder* rastBuilder, SkPaint& p) {
     p.setXfermodeMode(SkXfermode::kClear_Mode);
     rastBuilder->addLayer(p);
 
-    p.setPathEffect(nullptr);
-    p.setXfermode(nullptr);
+    p.setPathEffect(NULL);
+    p.setXfermode(NULL);
     p.setStyle(SkPaint::kStroke_Style);
     p.setStrokeWidth(SK_Scalar1);
     rastBuilder->addLayer(p);
@@ -216,8 +216,8 @@ static void r9(SkLayerRasterizer::Builder* rastBuilder, SkPaint& p) {
     p.setXfermodeMode(SkXfermode::kClear_Mode);
     rastBuilder->addLayer(p);
 
-    p.setPathEffect(nullptr);
-    p.setXfermode(nullptr);
+    p.setPathEffect(NULL);
+    p.setXfermode(NULL);
     p.setStyle(SkPaint::kStroke_Style);
     p.setStrokeWidth(SK_Scalar1);
     rastBuilder->addLayer(p);
@@ -303,7 +303,7 @@ protected:
         {
             SkPictureRecorder recorder;
             {
-                SkCanvas* record = recorder.beginRecording(320, 480, nullptr, 0);
+                SkCanvas* record = recorder.beginRecording(320, 480, NULL, 0);
                 this->drawPicture(record, 120);
             }
             SkAutoTUnref<SkPicture> picture(recorder.endRecording());
@@ -359,7 +359,7 @@ protected:
         // shaders
         SkPoint linearPoints[] = { { 0, 0, }, { SkIntToScalar(40), SkIntToScalar(40) } };
         SkColor linearColors[] = { SK_ColorRED, SK_ColorBLUE };
-        SkScalar* linearPos = nullptr;
+        SkScalar* linearPos = NULL;
         int linearCount = 2;
         SkShader::TileMode linearMode = SkShader::kMirror_TileMode;
         SkShader* linear = SkGradientShader::CreateLinear(linearPoints,
@@ -409,8 +409,8 @@ protected:
         paint.setXfermode(xfermode)->unref();
         paint.setColorFilter(lightingFilter)->unref();
         canvas->drawLine(start.fX, start.fY, stop.fX, stop.fY, paint); // should not be green
-        paint.setXfermode(nullptr);
-        paint.setColorFilter(nullptr);
+        paint.setXfermode(NULL);
+        paint.setColorFilter(NULL);
 
         // rectangle
         paint.setStyle(SkPaint::kFill_Style);
@@ -419,7 +419,7 @@ protected:
         paint.setShader(linear)->unref();
         paint.setPathEffect(pathEffectTest())->unref();
         canvas->drawRect(rect, paint);
-        paint.setPathEffect(nullptr);
+        paint.setPathEffect(NULL);
 
         // circle w/ emboss & transparent (exercises 3dshader)
         canvas->translate(SkIntToScalar(50), 0);
@@ -436,10 +436,10 @@ protected:
         paint.setStyle(SkPaint::kStroke_Style);
         paint.setStrokeWidth(SkIntToScalar(5));
         paint.setShader(radial)->unref();
-        paint.setMaskFilter(nullptr);
+        paint.setMaskFilter(NULL);
         canvas->drawPath(path, paint);
 
-        paint.setShader(nullptr);
+        paint.setShader(NULL);
         // bitmap, sprite
         canvas->translate(SkIntToScalar(50), 0);
         paint.setStyle(SkPaint::kFill_Style);
@@ -452,7 +452,7 @@ protected:
         canvas->translate(-SkIntToScalar(30), SkIntToScalar(30));
         paint.setShader(shaderTest())->unref(); // test compose shader
         canvas->drawRect(rect2, paint);
-        paint.setShader(nullptr);
+        paint.setShader(NULL);
 
         canvas->restore();
         // text
@@ -482,7 +482,7 @@ protected:
 
     virtual SkView::Click* onFindClickHandler(SkScalar x, SkScalar y, unsigned modi) {
         fClickPt.set(x, y);
-        this->inval(nullptr);
+        this->inval(NULL);
         return this->INHERITED::onFindClickHandler(x, y, modi);
     }
 
@@ -508,11 +508,11 @@ protected:
     SkShader* shaderTest() {
         SkPoint pts[] = { { 0, 0, }, { SkIntToScalar(100), 0 } };
         SkColor colors[] = { SK_ColorRED, SK_ColorBLUE };
-        SkShader* shaderA = SkGradientShader::CreateLinear(pts, colors, nullptr,
+        SkShader* shaderA = SkGradientShader::CreateLinear(pts, colors, NULL,
             2, SkShader::kClamp_TileMode);
         pts[1].set(0, SkIntToScalar(100));
         SkColor colors2[] = {SK_ColorBLACK,  SkColorSetARGB(0x80, 0, 0, 0)};
-        SkShader* shaderB = SkGradientShader::CreateLinear(pts, colors2, nullptr,
+        SkShader* shaderB = SkGradientShader::CreateLinear(pts, colors2, NULL,
             2, SkShader::kClamp_TileMode);
         SkXfermode* mode = SkXfermode::Create(SkXfermode::kDstIn_Mode);
         SkShader* result = new SkComposeShader(shaderA, shaderB, mode);
@@ -550,7 +550,7 @@ protected:
         for (size_t i = 0; i < SK_ARRAY_COUNT(gRastProcs); i++) {
             apply_shader(&paint, (int)i);
 
-          //  paint.setMaskFilter(nullptr);
+          //  paint.setMaskFilter(NULL);
           //  paint.setColor(SK_ColorBLACK);
 
 #if 01

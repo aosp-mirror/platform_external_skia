@@ -35,9 +35,7 @@
             'msvs_settings': {
               'VCCLCompilerTool': {
                 'AdditionalOptions': [
-                  '/wd4996',
-                  '/wd4018',
-                  '/wd4267',
+                  '/w',
                 ],
               },
             },

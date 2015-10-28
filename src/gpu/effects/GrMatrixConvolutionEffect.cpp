@@ -16,8 +16,7 @@ public:
 
     static inline void GenKey(const GrProcessor&, const GrGLSLCaps&, GrProcessorKeyBuilder*);
 
-protected:
-    void onSetData(const GrGLProgramDataManager&, const GrProcessor&) override;
+    void setData(const GrGLProgramDataManager&, const GrProcessor&) override;
 
 private:
     typedef GrGLProgramDataManager::UniformHandle UniformHandle;
@@ -111,7 +110,7 @@ void GrGLMatrixConvolutionEffect::GenKey(const GrProcessor& processor,
     b->add32(GrTextureDomain::GLDomain::DomainKey(m.domain()));
 }
 
-void GrGLMatrixConvolutionEffect::onSetData(const GrGLProgramDataManager& pdman,
+void GrGLMatrixConvolutionEffect::setData(const GrGLProgramDataManager& pdman,
                                           const GrProcessor& processor) {
     const GrMatrixConvolutionEffect& conv = processor.cast<GrMatrixConvolutionEffect>();
     GrTexture& texture = *conv.texture(0);
@@ -129,7 +128,8 @@ void GrGLMatrixConvolutionEffect::onSetData(const GrGLProgramDataManager& pdman,
     fDomain.setData(pdman, conv.domain(), texture.origin());
 }
 
-GrMatrixConvolutionEffect::GrMatrixConvolutionEffect(GrTexture* texture,
+GrMatrixConvolutionEffect::GrMatrixConvolutionEffect(GrProcessorDataManager* procDataManager,
+                                                     GrTexture* texture,
                                                      const SkIRect& bounds,
                                                      const SkISize& kernelSize,
                                                      const SkScalar* kernel,
@@ -138,7 +138,7 @@ GrMatrixConvolutionEffect::GrMatrixConvolutionEffect(GrTexture* texture,
                                                      const SkIPoint& kernelOffset,
                                                      GrTextureDomain::Mode tileMode,
                                                      bool convolveAlpha)
-  : INHERITED(texture, GrCoordTransform::MakeDivByTextureWHMatrix(texture)),
+  : INHERITED(procDataManager, texture, GrCoordTransform::MakeDivByTextureWHMatrix(texture)),
     fKernelSize(kernelSize),
     fGain(SkScalarToFloat(gain)),
     fBias(SkScalarToFloat(bias) / 255.0f),
@@ -155,13 +155,13 @@ GrMatrixConvolutionEffect::GrMatrixConvolutionEffect(GrTexture* texture,
 GrMatrixConvolutionEffect::~GrMatrixConvolutionEffect() {
 }
 
-void GrMatrixConvolutionEffect::onGetGLProcessorKey(const GrGLSLCaps& caps,
+void GrMatrixConvolutionEffect::getGLProcessorKey(const GrGLSLCaps& caps,
                                                   GrProcessorKeyBuilder* b) const {
     GrGLMatrixConvolutionEffect::GenKey(*this, caps, b);
 }
 
-GrGLFragmentProcessor* GrMatrixConvolutionEffect::onCreateGLInstance() const  {
-    return new GrGLMatrixConvolutionEffect(*this);
+GrGLFragmentProcessor* GrMatrixConvolutionEffect::createGLInstance() const  {
+    return SkNEW_ARGS(GrGLMatrixConvolutionEffect, (*this));
 }
 
 bool GrMatrixConvolutionEffect::onIsEqual(const GrFragmentProcessor& sBase) const {
@@ -178,7 +178,8 @@ bool GrMatrixConvolutionEffect::onIsEqual(const GrFragmentProcessor& sBase) cons
 
 // Static function to create a 2D convolution
 GrFragmentProcessor*
-GrMatrixConvolutionEffect::CreateGaussian(GrTexture* texture,
+GrMatrixConvolutionEffect::CreateGaussian(GrProcessorDataManager* procDataManager,
+                                          GrTexture* texture,
                                           const SkIRect& bounds,
                                           const SkISize& kernelSize,
                                           SkScalar gain,
@@ -214,13 +215,21 @@ GrMatrixConvolutionEffect::CreateGaussian(GrTexture* texture,
     for (int i = 0; i < width * height; ++i) {
         kernel[i] *= scale;
     }
-    return new GrMatrixConvolutionEffect(texture, bounds, kernelSize, kernel, gain, bias,
-                                         kernelOffset, tileMode, convolveAlpha);
+    return SkNEW_ARGS(GrMatrixConvolutionEffect, (procDataManager,
+                                                  texture,
+                                                  bounds,
+                                                  kernelSize,
+                                                  kernel,
+                                                  gain,
+                                                  bias,
+                                                  kernelOffset,
+                                                  tileMode,
+                                                  convolveAlpha));
 }
 
 GR_DEFINE_FRAGMENT_PROCESSOR_TEST(GrMatrixConvolutionEffect);
 
-const GrFragmentProcessor* GrMatrixConvolutionEffect::TestCreate(GrProcessorTestData* d) {
+GrFragmentProcessor* GrMatrixConvolutionEffect::TestCreate(GrProcessorTestData* d) {
     int texIdx = d->fRandom->nextBool() ? GrProcessorUnitTest::kSkiaPMTextureIdx :
                                           GrProcessorUnitTest::kAlphaTextureIdx;
     int width = d->fRandom->nextRangeU(1, MAX_KERNEL_SIZE);
@@ -241,7 +250,8 @@ const GrFragmentProcessor* GrMatrixConvolutionEffect::TestCreate(GrProcessorTest
     GrTextureDomain::Mode tileMode =
             static_cast<GrTextureDomain::Mode>(d->fRandom->nextRangeU(0, 2));
     bool convolveAlpha = d->fRandom->nextBool();
-    return GrMatrixConvolutionEffect::Create(d->fTextures[texIdx],
+    return GrMatrixConvolutionEffect::Create(d->fProcDataManager,
+                                             d->fTextures[texIdx],
                                              bounds,
                                              kernelSize,
                                              kernel.get(),

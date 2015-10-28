@@ -28,7 +28,7 @@ SkIPoint RecordingBench::onGetSize() {
                           SkScalarCeilToInt(fSrc->cullRect().height()));
 }
 
-void RecordingBench::onDraw(int loops, SkCanvas*) {
+void RecordingBench::onDraw(const int loops, SkCanvas*) {
     SkRTreeFactory factory;
     const SkScalar w = fSrc->cullRect().width(),
                    h = fSrc->cullRect().height();
@@ -37,7 +37,7 @@ void RecordingBench::onDraw(int loops, SkCanvas*) {
                    | SkPictureRecorder::kPlaybackDrawPicture_RecordFlag;
     for (int i = 0; i < loops; i++) {
         SkPictureRecorder recorder;
-        fSrc->playback(recorder.beginRecording(w, h, fUseBBH ? &factory : nullptr, flags));
+        fSrc->playback(recorder.beginRecording(w, h, fUseBBH ? &factory : NULL, flags));
         SkSafeUnref(recorder.endRecording());
     }
 }

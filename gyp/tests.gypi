@@ -5,7 +5,6 @@
 # Common gypi for unit tests.
 {
   'include_dirs': [
-    '../include/private',
     '../src/codec',
     '../src/core',
     '../src/effects',
@@ -18,6 +17,10 @@
     '../src/pipe/utils',
     '../src/utils',
     '../src/utils/debugger',
+
+    # Needed for TDStackNesterTest.
+    '../experimental/PdfViewer',
+    '../experimental/PdfViewer/src',
   ],
   'dependencies': [
     'experimental.gyp:experimental',
@@ -27,7 +30,6 @@
     'tools.gyp:picture_utils',
     'tools.gyp:resources',
     'tools.gyp:sk_tool_utils',
-    'zlib.gyp:zlib',
   ],
   'conditions': [
     [ 'skia_os not in ["linux", "freebsd", "openbsd", "solaris", "chromeos", "android"]', {
@@ -36,16 +38,6 @@
     [ 'skia_android_framework == 1', {
       'libraries': [
         '-ldl',
-      ],
-    }],
-    [ 'not skia_pdf', {
-      'dependencies!': [ 'pdf.gyp:pdf', 'zlib.gyp:zlib' ],
-      'dependencies': [ 'pdf.gyp:nopdf' ],
-      'sources!': [ '<!@(python find.py ../tests "PDF*.c*")', ],
-    }],
-    [ 'skia_gpu_extra_tests_path', {
-      'sources': [
-        '<!@(python find.py <(skia_gpu_extra_tests_path) "*.c*")',
       ],
     }],
   ],
@@ -59,6 +51,7 @@
     '../src/utils/debugger/SkObjectParser.h',
     '../src/utils/debugger/SkObjectParser.cpp',
     '../src/pipe/utils/SamplePipeControllers.cpp',
+    '../experimental/PdfViewer/src/SkTDStackNester.h',
   ],
   'sources!': [
     '../tests/SkpSkGrTest.cpp',

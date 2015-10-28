@@ -11,7 +11,6 @@
 #include "SkString.h"
 
 class SkBitmap;
-class SkImage;
 class SkStreamAsset;
 class SkTypeface;
 
@@ -19,7 +18,6 @@ SkString GetResourcePath(const char* resource = "");
 void SetResourcePath(const char* );
 
 bool GetResourceAsBitmap(const char* resource, SkBitmap* dst);
-SkImage* GetResourceAsImage(const char* resource);
 SkStreamAsset* GetResourceAsStream(const char* resource);
 SkTypeface* GetResourceAsTypeface(const char* resource);
 

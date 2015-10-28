@@ -81,7 +81,7 @@ public:
 
     SkOpContour* appendContour(SkChunkAlloc* allocator) {
         SkOpContour* contour = SkOpTAllocator<SkOpContour>::New(allocator);
-        contour->setNext(nullptr);
+        contour->setNext(NULL);
         SkOpContour* prev = this;
         SkOpContour* next;
         while ((next = prev->next())) {
@@ -129,28 +129,23 @@ public:
 #endif
 
     const SkOpAngle* debugAngle(int id) const {
-        return SkDEBUGRELEASE(this->globalState()->debugAngle(id), nullptr);
+        return SkDEBUGRELEASE(this->globalState()->debugAngle(id), NULL);
     }
-
-    void debugCheckHealth(const char* id, SkPathOpsDebug::GlitchLog* ) const;
 
     SkOpContour* debugContour(int id) {
-        return SkDEBUGRELEASE(this->globalState()->debugContour(id), nullptr);
+        return SkDEBUGRELEASE(this->globalState()->debugContour(id), NULL);
     }
 
-    void debugMissingCoincidence(const char* id, SkPathOpsDebug::GlitchLog* log,
-                                 const SkOpCoincidence* coincidence) const;
-
     const SkOpPtT* debugPtT(int id) const {
-        return SkDEBUGRELEASE(this->globalState()->debugPtT(id), nullptr);
+        return SkDEBUGRELEASE(this->globalState()->debugPtT(id), NULL);
     }
 
     const SkOpSegment* debugSegment(int id) const {
-        return SkDEBUGRELEASE(this->globalState()->debugSegment(id), nullptr);
+        return SkDEBUGRELEASE(this->globalState()->debugSegment(id), NULL);
     }
 
     const SkOpSpanBase* debugSpan(int id) const {
-        return SkDEBUGRELEASE(this->globalState()->debugSpan(id), nullptr);
+        return SkDEBUGRELEASE(this->globalState()->debugSpan(id), NULL);
     }
 
     SkOpGlobalState* globalState() const {
@@ -160,7 +155,7 @@ public:
     void debugValidate() const {
 #if DEBUG_VALIDATE
         const SkOpSegment* segment = &fHead;
-        const SkOpSegment* prior = nullptr;
+        const SkOpSegment* prior = NULL;
         do {
             segment->debugValidate();
             SkASSERT(segment->prev() == prior);
@@ -186,10 +181,10 @@ public:
     void dumpContoursSpan(int segmentID) const;
     void dumpContoursSpans() const;
     void dumpPt(int ) const;
-    void dumpPts(const char* prefix = "seg") const;
-    void dumpPtsX(const char* prefix) const;
+    void dumpPts() const;
+    void dumpPtsX() const;
     void dumpSegment(int ) const;
-    void dumpSegments(const char* prefix = "seg", SkPathOp op = (SkPathOp) -1) const;
+    void dumpSegments(SkPathOp op) const;
     void dumpSpan(int ) const;
     void dumpSpans() const;
 
@@ -250,9 +245,7 @@ public:
         bool result = false;
         do {
             if (fState->angleCoincidence()) {
-#if DEBUG_ANGLE
-                segment->debugCheckAngleCoin();
-#endif
+                segment->checkAngleCoin(coincidences, allocator);
             } else if (segment->missingCoincidence(coincidences, allocator)) {
                 result = true;
     // FIXME: trying again loops forever in issue3651_6
@@ -309,7 +302,7 @@ public:
             SkASSERT(fCount == 0);
             return;
         }
-        SkASSERT(contour->fNext == nullptr);
+        SkASSERT(contour->fNext == NULL);
         SkOpContour* prev = this;
         SkOpContour* next;
         while ((next = prev->next()) != contour) {
@@ -317,14 +310,15 @@ public:
             prev = next;
         }
         SkASSERT(prev);
-        prev->setNext(nullptr);
+        prev->setNext(NULL);
     }
 
     void reset() {
-        fTail = nullptr;
-        fNext = nullptr;
+        fTail = NULL;
+        fNext = NULL;
         fCount = 0;
         fDone = false;
+        fTopsFound = false;
         SkDEBUGCODE(fBounds.set(SK_ScalarMax, SK_ScalarMax, SK_ScalarMin, SK_ScalarMin));
         SkDEBUGCODE(fFirstSorted = -1);
         SkDEBUGCODE(fDebugIndent = 0);
@@ -422,6 +416,7 @@ private:
     int fCount;
     int fFirstSorted;
     bool fDone;  // set by find top segment
+    bool fTopsFound;
     bool fOperand;  // true for the second argument to a binary operator
     bool fReverse;  // true if contour should be reverse written to path (used only by fix winding)
     bool fXor;  // set if original path had even-odd fill

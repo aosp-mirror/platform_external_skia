@@ -115,6 +115,8 @@ public:
     }
 
     void calcAngles(SkChunkAlloc*);
+    void checkAngleCoin(SkOpCoincidence* coincidences, SkChunkAlloc* allocator);
+    void checkNearCoincidence(SkOpAngle* );
     bool collapsed() const;
     static void ComputeOneSum(const SkOpAngle* baseAngle, SkOpAngle* nextAngle,
                               SkOpAngle::IncludeType );
@@ -131,35 +133,14 @@ public:
     }
 
     void debugAddAngle(double startT, double endT, SkChunkAlloc*);
-    void debugAddAlignIntersection(const char* id, SkPathOpsDebug::GlitchLog* glitches,
-                                   const SkOpPtT& endPtT, const SkPoint& oldPt,
-                                   const SkOpContourHead* ) const;
-
-    void debugAddAlignIntersections(const char* id, SkPathOpsDebug::GlitchLog* glitches,
-                                    SkOpContourHead* contourList) const {
-        this->debugAddAlignIntersection(id, glitches, *fHead.ptT(), fOriginal[0], contourList);
-        this->debugAddAlignIntersection(id, glitches, *fTail.ptT(), fOriginal[1], contourList);
-    }
-
-    bool debugAddMissing(double t, const SkOpSegment* opp) const;
-    void debugAlign(const char* id, SkPathOpsDebug::GlitchLog* glitches) const;
     const SkOpAngle* debugAngle(int id) const;
-#if DEBUG_ANGLE
-    void debugCheckAngleCoin() const;
-#endif
-    void debugCheckHealth(const char* id, SkPathOpsDebug::GlitchLog* ) const;
     SkOpContour* debugContour(int id);
-    void debugFindCollapsed(const char* id, SkPathOpsDebug::GlitchLog* glitches) const;
 
     int debugID() const {
         return SkDEBUGRELEASE(fID, -1);
     }
 
     SkOpAngle* debugLastAngle();
-    void debugMissingCoincidence(const char* id, SkPathOpsDebug::GlitchLog* glitches,
-                                 const SkOpCoincidence* coincidences) const;
-    void debugMoveMultiples(const char* id, SkPathOpsDebug::GlitchLog* glitches) const;
-    void debugMoveNearby(const char* id, SkPathOpsDebug::GlitchLog* glitches) const;
     const SkOpPtT* debugPtT(int id) const;
     void debugReset();
     const SkOpSegment* debugSegment(int id) const;
@@ -175,7 +156,7 @@ public:
     const SkOpSpanBase* debugSpan(int id) const;
     void debugValidate() const;
     void detach(const SkOpSpan* );
-    double distSq(double t, const SkOpAngle* opp) const;
+    double distSq(double t, SkOpAngle* opp);
 
     bool done() const {
         SkASSERT(fDoneCount <= fCount);
@@ -198,8 +179,8 @@ public:
     void dumpAll() const;
     void dumpAngles() const;
     void dumpCoin() const;
-    void dumpPts(const char* prefix = "seg") const;
-    void dumpPtsInner(const char* prefix = "seg") const;
+    void dumpPts() const;
+    void dumpPtsInner() const;
 
     void findCollapsed();
     SkOpSegment* findNextOp(SkTDArray<SkOpSpanBase*>* chase, SkOpSpanBase** nextStart,
@@ -241,7 +222,7 @@ public:
     }
 
     SkOpSegment* isSimple(SkOpSpanBase** end, int* step) {
-        return nextChase(end, step, nullptr, nullptr);
+        return nextChase(end, step, NULL, NULL);
     }
 
     bool isVertical() const {
@@ -321,6 +302,10 @@ public:
 
     void setContour(SkOpContour* contour) {
         fContour = contour;
+    }
+
+    void setCubicType(SkDCubic::CubicType cubicType) {
+        fCubicType = cubicType;
     }
 
     void setNext(SkOpSegment* next) {
@@ -419,6 +404,8 @@ private:
     int fCount;  // number of spans (one for a non-intersecting segment)
     int fDoneCount;  // number of processed spans (zero initially)
     SkPath::Verb fVerb;
+    SkDCubic::CubicType fCubicType;
+    bool fTopsFound;
     bool fVisited;  // used by missing coincidence check
     SkDEBUGCODE(int fID);
 };

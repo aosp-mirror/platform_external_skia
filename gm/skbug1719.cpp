@@ -6,9 +6,10 @@
  */
 
 #include "gm.h"
-#include "SkBlurMaskFilter.h"
 #include "SkColorFilter.h"
-#include "SkPath.h"
+#include "SkBlurMaskFilter.h"
+
+namespace skiagm {
 
 /**
  * This test exercises bug 1719. An anti-aliased blurred path is rendered through a soft clip. On
@@ -18,8 +19,26 @@
  *
  * The correct image should look like a thin stroked round rect.
  */
-DEF_SIMPLE_GM_BG(skbug1719, canvas, 300, 100,
-                 sk_tool_utils::color_to_565(0xFF303030)) {
+class SkBug1719GM : public GM {
+public:
+    SkBug1719GM() {}
+
+protected:
+    SkString onShortName() override {
+        return SkString("skbug1719");
+    }
+
+    SkISize onISize() override {
+        return SkISize::Make(300, 100);
+    }
+
+    void onDrawBackground(SkCanvas* canvas) override {
+        SkPaint bgPaint;
+        bgPaint.setColor(0xFF303030);
+        canvas->drawPaint(bgPaint);
+    }
+
+    void onDraw(SkCanvas* canvas) override {
         canvas->translate(SkIntToScalar(-800), SkIntToScalar(-650));
 
         // The data is lifted from an SKP that exhibited the bug.
@@ -69,4 +88,15 @@ DEF_SIMPLE_GM_BG(skbug1719, canvas, 300, 100,
 
         canvas->clipPath(clipPath, SkRegion::kIntersect_Op, true);
         canvas->drawPath(drawPath, paint);
+    }
+
+private:
+
+    typedef GM INHERITED;
+};
+
+//////////////////////////////////////////////////////////////////////////////
+
+DEF_GM(return new SkBug1719GM;)
+
 }

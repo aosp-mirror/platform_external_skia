@@ -12,7 +12,9 @@
 #include "GrCoordTransform.h"
 #include "GrGLGeometryProcessor.h"
 #include "GrGLGpu.h"
+#include "GrGLPathProcessor.h"
 #include "GrGLPathRendering.h"
+#include "GrGLShaderVar.h"
 #include "GrGLXferProcessor.h"
 #include "GrPathProcessor.h"
 #include "GrPipeline.h"
@@ -29,19 +31,21 @@ GrGLProgram::GrGLProgram(GrGLGpu* gpu,
                          const BuiltinUniformHandles& builtinUniforms,
                          GrGLuint programID,
                          const UniformInfoArray& uniforms,
-                         const SeparableVaryingInfoArray& separableVaryings,
                          GrGLInstalledGeoProc* geometryProcessor,
                          GrGLInstalledXferProc* xferProcessor,
                          GrGLInstalledFragProcs* fragmentProcessors,
                          SkTArray<UniformHandle>* passSamplerUniforms)
-    : fBuiltinUniformHandles(builtinUniforms)
+    : fColor(GrColor_ILLEGAL)
+    , fCoverage(0)
+    , fDstTextureUnit(-1)
+    , fBuiltinUniformHandles(builtinUniforms)
     , fProgramID(programID)
     , fGeometryProcessor(geometryProcessor)
     , fXferProcessor(xferProcessor)
     , fFragmentProcessors(SkRef(fragmentProcessors))
     , fDesc(desc)
     , fGpu(gpu)
-    , fProgramDataManager(gpu, programID, uniforms, separableVaryings) {
+    , fProgramDataManager(gpu, uniforms) {
     fSamplerUniforms.swap(passSamplerUniforms);
     // Assign texture units to sampler uniforms one time up front.
     GL_CALL(UseProgram(fProgramID));
@@ -78,12 +82,13 @@ static void append_texture_bindings(const Proc* ip,
 
 void GrGLProgram::setData(const GrPrimitiveProcessor& primProc,
                           const GrPipeline& pipeline,
+                          const GrBatchTracker& batchTracker,
                           SkTArray<const GrTextureAccess*>* textureBindings) {
     this->setRenderTargetState(primProc, pipeline);
 
     // we set the textures, and uniforms for installed processors in a generic way, but subclasses
     // of GLProgram determine how to set coord transforms
-    fGeometryProcessor->fGLProc->setData(fProgramDataManager, primProc);
+    fGeometryProcessor->fGLProc->setData(fProgramDataManager, primProc, batchTracker);
     append_texture_bindings(fGeometryProcessor.get(), primProc, textureBindings);
 
     this->setFragmentData(primProc, pipeline, textureBindings);
@@ -91,29 +96,34 @@ void GrGLProgram::setData(const GrPrimitiveProcessor& primProc,
     const GrXferProcessor& xp = *pipeline.getXferProcessor();
     fXferProcessor->fGLProc->setData(fProgramDataManager, xp);
     append_texture_bindings(fXferProcessor.get(), xp, textureBindings);
+
+    // Some of GrGLProgram subclasses need to update state here
+    this->didSetData();
 }
 
 void GrGLProgram::setFragmentData(const GrPrimitiveProcessor& primProc,
                                   const GrPipeline& pipeline,
                                   SkTArray<const GrTextureAccess*>* textureBindings) {
     int numProcessors = fFragmentProcessors->fProcs.count();
-    for (int i = 0; i < numProcessors; ++i) {
-        const GrFragmentProcessor& processor = pipeline.getFragmentProcessor(i);
-        fFragmentProcessors->fProcs[i]->fGLProc->setData(fProgramDataManager, processor);
+    for (int e = 0; e < numProcessors; ++e) {
+        const GrPendingFragmentStage& stage = pipeline.getFragmentStage(e);
+        const GrProcessor& processor = *stage.processor();
+        fFragmentProcessors->fProcs[e]->fGLProc->setData(fProgramDataManager, processor);
         this->setTransformData(primProc,
-                               processor,
-                               i,
-                               fFragmentProcessors->fProcs[i]);
-        append_texture_bindings(fFragmentProcessors->fProcs[i], processor, textureBindings);
+                               stage,
+                               e,
+                               fFragmentProcessors->fProcs[e]);
+        append_texture_bindings(fFragmentProcessors->fProcs[e], processor, textureBindings);
     }
 }
 void GrGLProgram::setTransformData(const GrPrimitiveProcessor& primProc,
-                                   const GrFragmentProcessor& processor,
+                                   const GrPendingFragmentStage& processor,
                                    int index,
                                    GrGLInstalledFragProc* ip) {
-    GrGLPrimitiveProcessor* gp = fGeometryProcessor.get()->fGLProc.get();
+    GrGLGeometryProcessor* gp =
+            static_cast<GrGLGeometryProcessor*>(fGeometryProcessor.get()->fGLProc.get());
     gp->setTransformData(primProc, fProgramDataManager, index,
-                         processor.coordTransforms());
+                         processor.processor()->coordTransforms());
 }
 
 void GrGLProgram::setRenderTargetState(const GrPrimitiveProcessor& primProc,
@@ -125,24 +135,23 @@ void GrGLProgram::setRenderTargetState(const GrPrimitiveProcessor& primProc,
                                    SkIntToScalar(pipeline.getRenderTarget()->height()));
     }
 
-    // set RT adjustment
+    // call subclasses to set the actual view matrix
+    this->onSetRenderTargetState(primProc, pipeline);
+}
+
+void GrGLProgram::onSetRenderTargetState(const GrPrimitiveProcessor&,
+                                         const GrPipeline& pipeline) {
     const GrRenderTarget* rt = pipeline.getRenderTarget();
     SkISize size;
     size.set(rt->width(), rt->height());
-    if (!primProc.isPathRendering()) {
-        if (fRenderTargetState.fRenderTargetOrigin != rt->origin() ||
-            fRenderTargetState.fRenderTargetSize != size) {
-            fRenderTargetState.fRenderTargetSize = size;
-            fRenderTargetState.fRenderTargetOrigin = rt->origin();
+    if (fRenderTargetState.fRenderTargetOrigin != rt->origin() ||
+        fRenderTargetState.fRenderTargetSize != size) {
+        fRenderTargetState.fRenderTargetSize = size;
+        fRenderTargetState.fRenderTargetOrigin = rt->origin();
 
-            GrGLfloat rtAdjustmentVec[4];
-            fRenderTargetState.getRTAdjustmentVec(rtAdjustmentVec);
-            fProgramDataManager.set4fv(fBuiltinUniformHandles.fRTAdjustmentUni, 1, rtAdjustmentVec);
-        }
-    } else {
-        SkASSERT(fGpu->glCaps().shaderCaps()->pathRenderingSupport());
-        const GrPathProcessor& pathProc = primProc.cast<GrPathProcessor>();
-        fGpu->glPathRendering()->setProjectionMatrix(pathProc.viewMatrix(),
-                                                     size, rt->origin());
+        GrGLfloat rtAdjustmentVec[4];
+        fRenderTargetState.getRTAdjustmentVec(rtAdjustmentVec);
+        fProgramDataManager.set4fv(fBuiltinUniformHandles.fRTAdjustmentUni, 1, rtAdjustmentVec);
     }
 }
+

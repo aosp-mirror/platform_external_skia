@@ -8,8 +8,6 @@
 #include "SampleCode.h"
 #include "SkCanvas.h"
 #include "SkInterpolator.h"
-#include "SkPath.h"
-#include "SkRRect.h"
 #include "SkTime.h"
 
 // This slide tests out the match up between BW clipping and rendering. It can
@@ -141,17 +139,17 @@ protected:
         SkUnichar uni;
         if (SampleCode::CharQ(*evt, &uni)) {
             switch (uni) {
-                case '1': fGeom = kRect_Geometry; this->inval(nullptr); return true;
-                case '2': fGeom = kRRect_Geometry; this->inval(nullptr); return true;
-                case '3': fGeom = kCircle_Geometry; this->inval(nullptr); return true;
-                case '4': fGeom = kConvexPath_Geometry; this->inval(nullptr); return true;
-                case '5': fGeom = kConcavePath_Geometry; this->inval(nullptr); return true;
-                case '6': fGeom = kRectAndRect_Geometry; this->inval(nullptr); return true;
-                case '7': fGeom = kRectAndRRect_Geometry; this->inval(nullptr); return true;
-                case '8': fGeom = kRectAndConvex_Geometry; this->inval(nullptr); return true;
-                case '9': fGeom = kRectAndConcave_Geometry; this->inval(nullptr); return true;
-                case 'f': fSign = -fSign; this->inval(nullptr); return true;
-                case 't': fClipFirst = !fClipFirst; this->inval(nullptr); return true;
+                case '1': fGeom = kRect_Geometry; this->inval(NULL); return true;
+                case '2': fGeom = kRRect_Geometry; this->inval(NULL); return true;
+                case '3': fGeom = kCircle_Geometry; this->inval(NULL); return true;
+                case '4': fGeom = kConvexPath_Geometry; this->inval(NULL); return true;
+                case '5': fGeom = kConcavePath_Geometry; this->inval(NULL); return true;
+                case '6': fGeom = kRectAndRect_Geometry; this->inval(NULL); return true;
+                case '7': fGeom = kRectAndRRect_Geometry; this->inval(NULL); return true;
+                case '8': fGeom = kRectAndConvex_Geometry; this->inval(NULL); return true;
+                case '9': fGeom = kRectAndConcave_Geometry; this->inval(NULL); return true;
+                case 'f': fSign = -fSign; this->inval(NULL); return true;
+                case 't': fClipFirst = !fClipFirst; this->inval(NULL); return true;
                 default: break;
             }
         }
@@ -240,7 +238,7 @@ protected:
         this->drawGeometry(canvas, offset, false);
         canvas->restoreToCount(saveCount);
 
-        this->inval(nullptr);
+        this->inval(NULL);
     }
 
 private:

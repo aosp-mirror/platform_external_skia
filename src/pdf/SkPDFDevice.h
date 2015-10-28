@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2011 Google Inc.
  *
@@ -5,13 +6,13 @@
  * found in the LICENSE file.
  */
 
+
 #ifndef SkPDFDevice_DEFINED
 #define SkPDFDevice_DEFINED
 
+#include "SkDevice.h"
 #include "SkBitmap.h"
 #include "SkCanvas.h"
-#include "SkClipStack.h"
-#include "SkDevice.h"
 #include "SkPaint.h"
 #include "SkPath.h"
 #include "SkPicture.h"
@@ -38,7 +39,6 @@ class SkRRect;
 struct ContentEntry;
 struct GraphicStateEntry;
 struct NamedDestination;
-struct RectWithData;
 
 /** \class SkPDFDevice
 
@@ -66,14 +66,14 @@ public:
     static SkPDFDevice* Create(SkISize pageSize,
                                SkScalar rasterDpi,
                                SkPDFCanon* canon) {
-        return new SkPDFDevice(pageSize, rasterDpi, canon, true);
+        return SkNEW_ARGS(SkPDFDevice, (pageSize, rasterDpi, canon, true));
     }
 
     /** Create a PDF drawing context without fipping the y-axis. */
     static SkPDFDevice* CreateUnflipped(SkISize pageSize,
                                         SkScalar rasterDpi,
                                         SkPDFCanon* canon) {
-        return new SkPDFDevice(pageSize, rasterDpi, canon, false);
+        return SkNEW_ARGS(SkPDFDevice, (pageSize, rasterDpi, canon, false));
     }
 
     virtual ~SkPDFDevice();
@@ -93,23 +93,14 @@ public:
     void drawPath(const SkDraw&, const SkPath& origpath,
                   const SkPaint& paint, const SkMatrix* prePathMatrix,
                   bool pathIsMutable) override;
-    void drawBitmapRect(const SkDraw& draw, const SkBitmap& bitmap, const SkRect* src,
-                        const SkRect& dst, const SkPaint&, SkCanvas::SrcRectConstraint) override;
+    void drawBitmapRect(const SkDraw& draw, const SkBitmap& bitmap,
+                        const SkRect* src, const SkRect& dst,
+                        const SkPaint& paint,
+                        SK_VIRTUAL_CONSTRAINT_TYPE) override;
     void drawBitmap(const SkDraw&, const SkBitmap& bitmap,
                     const SkMatrix& matrix, const SkPaint&) override;
     void drawSprite(const SkDraw&, const SkBitmap& bitmap, int x, int y,
                     const SkPaint& paint) override;
-    void drawImage(const SkDraw&,
-                   const SkImage*,
-                   SkScalar x,
-                   SkScalar y,
-                   const SkPaint&) override;
-    void drawImageRect(const SkDraw&,
-                       const SkImage*,
-                       const SkRect* src,
-                       const SkRect& dst,
-                       const SkPaint&,
-                       SkCanvas::SrcRectConstraint) override;
     void drawText(const SkDraw&, const void* text, size_t len,
                   SkScalar x, SkScalar y, const SkPaint&) override;
     void drawPosText(const SkDraw&, const void* text, size_t len,
@@ -153,12 +144,6 @@ public:
      */
     const SkTDArray<SkPDFFont*>& getFontResources() const;
 
-    /** Add our annotations (link to urls and destinations) to the supplied
-     *  array.
-     *  @param array Array to add annotations to.
-     */
-    void appendAnnotations(SkPDFArray* array) const;
-
     /** Add our named destinations to the supplied dictionary.
      *  @param dict  Dictionary to add destinations to.
      *  @param page  The PDF object representing the page for this device.
@@ -169,6 +154,10 @@ public:
      *  to unref() this when it is finished.
      */
     SkPDFArray* copyMediaBox() const;
+
+    /** Get the annotations from this page, or NULL if there are none.
+     */
+    SkPDFArray* getAnnotations() const { return fAnnotations; }
 
     /** Returns a SkStream with the page contents.  The caller is responsible
      *  for a deleting the returned value.
@@ -189,7 +178,9 @@ public:
         return *(fFontGlyphUsage.get());
     }
 
+#ifdef SK_DEBUG
     SkPDFCanon* getCanon() const { return fCanon; }
+#endif  // SK_DEBUG
 
 protected:
     const SkBitmap& onAccessBitmap() override {
@@ -208,9 +199,7 @@ private:
     SkMatrix fInitialTransform;
     SkClipStack fExistingClipStack;
     SkRegion fExistingClipRegion;
-
-    SkTDArray<RectWithData*> fLinkToURLs;
-    SkTDArray<RectWithData*> fLinkToDestinations;
+    SkPDFArray* fAnnotations;
     SkTDArray<NamedDestination*> fNamedDestinations;
 
     SkTDArray<SkPDFObject*> fGraphicStateResources;
@@ -261,7 +250,7 @@ private:
                                  bool invertClip);
 
     // If the paint or clip is such that we shouldn't draw anything, this
-    // returns nullptr and does not create a content entry.
+    // returns NULL and does not create a content entry.
     // setUpContentEntry and finishContentEntry can be used directly, but
     // the preferred method is to use the ScopedContentEntry helper class.
     ContentEntry* setUpContentEntry(const SkClipStack* clipStack,
@@ -288,12 +277,12 @@ private:
     int getFontResourceIndex(SkTypeface* typeface, uint16_t glyphID);
 
     void internalDrawPaint(const SkPaint& paint, ContentEntry* contentEntry);
-    void internalDrawImage(const SkMatrix& matrix,
-                           const SkClipStack* clipStack,
-                           const SkRegion& clipRegion,
-                           const SkImage* image,
-                           const SkIRect* srcRect,
-                           const SkPaint& paint);
+    void internalDrawBitmap(const SkMatrix& matrix,
+                            const SkClipStack* clipStack,
+                            const SkRegion& clipRegion,
+                            const SkBitmap& bitmap,
+                            const SkIRect* srcRect,
+                            const SkPaint& paint);
 
     /** Helper method for copyContentToData. It is responsible for copying the
      *  list of content entries |entry| to |data|.
@@ -302,11 +291,10 @@ private:
 
     bool handleInversePath(const SkDraw& d, const SkPath& origPath,
                            const SkPaint& paint, bool pathIsMutable,
-                           const SkMatrix* prePathMatrix = nullptr);
+                           const SkMatrix* prePathMatrix = NULL);
     bool handlePointAnnotation(const SkPoint* points, size_t count,
                                const SkMatrix& matrix, SkAnnotation* annot);
-    bool handlePathAnnotation(const SkPath& path, const SkDraw& d,
-                              SkAnnotation* annot);
+    void addAnnotation(SkPDFDict*);
 
     typedef SkBaseDevice INHERITED;
 

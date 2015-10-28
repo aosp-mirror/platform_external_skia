@@ -10,7 +10,6 @@
 #include "SkDashPathPriv.h"
 #include "SkReadBuffer.h"
 #include "SkWriteBuffer.h"
-#include "SkStrokeRec.h"
 
 SkDashPathEffect::SkDashPathEffect(const SkScalar intervals[], int count, SkScalar phase)
         : fPhase(0)
@@ -59,7 +58,7 @@ static void outset_for_stroke(SkRect* rect, const SkStrokeRec& rec) {
 static bool cull_line(SkPoint* pts, const SkStrokeRec& rec,
                       const SkMatrix& ctm, const SkRect* cullRect,
                       const SkScalar intervalLength) {
-    if (nullptr == cullRect) {
+    if (NULL == cullRect) {
         SkASSERT(false); // Shouldn't ever occur in practice
         return false;
     }
@@ -368,7 +367,7 @@ SkFlattenable* SkDashPathEffect::CreateProc(SkReadBuffer& buffer) {
     if (buffer.readScalarArray(intervals.get(), count)) {
         return Create(intervals.get(), SkToInt(count), phase);
     }
-    return nullptr;
+    return NULL;
 }
 
 #ifndef SK_IGNORE_TO_STRING

@@ -7,7 +7,6 @@
 
 #include "SkDashPathPriv.h"
 #include "SkPathMeasure.h"
-#include "SkStrokeRec.h"
 
 static inline int is_even(int x) {
     return (~x) << 31;
@@ -93,7 +92,7 @@ static void outset_for_stroke(SkRect* rect, const SkStrokeRec& rec) {
 static bool cull_path(const SkPath& srcPath, const SkStrokeRec& rec,
                       const SkRect* cullRect, SkScalar intervalLength,
                       SkPath* dstPath) {
-    if (nullptr == cullRect) {
+    if (NULL == cullRect) {
         return false;
     }
 
@@ -273,7 +272,7 @@ bool SkDashPath::FilterDashPath(SkPath* dst, const SkPath& src, SkStrokeRec* rec
         while (distance < length) {
             SkASSERT(dlen >= 0);
             addedSegment = false;
-            if (is_even(index) && !skipFirstSegment) {
+            if (is_even(index) && dlen > 0 && !skipFirstSegment) {
                 addedSegment = true;
                 ++segCount;
 

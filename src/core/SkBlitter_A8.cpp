@@ -21,7 +21,7 @@ const SkPixmap* SkA8_Blitter::justAnOpaqueColor(uint32_t* value) {
         *value = 255;
         return &fDevice;
     }
-    return nullptr;
+    return NULL;
 }
 
 void SkA8_Blitter::blitH(int x, int y, int width) {
@@ -231,7 +231,7 @@ SkA8_Shader_Blitter::SkA8_Shader_Blitter(const SkPixmap& device, const SkPaint& 
                                          SkShader::Context* shaderContext)
     : INHERITED(device, paint, shaderContext)
 {
-    if ((fXfermode = paint.getXfermode()) != nullptr) {
+    if ((fXfermode = paint.getXfermode()) != NULL) {
         fXfermode->ref();
         SkASSERT(fShaderContext);
     }
@@ -260,7 +260,7 @@ void SkA8_Shader_Blitter::blitH(int x, int y, int width) {
 
         shaderContext->shadeSpan(x, y, span, width);
         if (fXfermode) {
-            fXfermode->xferA8(device, span, width, nullptr);
+            fXfermode->xferA8(device, span, width, NULL);
         } else {
             for (int i = width - 1; i >= 0; --i) {
                 unsigned    srcA = SkGetPackedA32(span[i]);
@@ -298,7 +298,7 @@ void SkA8_Shader_Blitter::blitAntiH(int x, int y, const SkAlpha antialias[],
         }
         int aa = *antialias;
         if (aa) {
-            if (opaque && aa == 255 && mode == nullptr) {
+            if (opaque && aa == 255 && mode == NULL) {
                 memset(device, 0xFF, count);
             } else {
                 shaderContext->shadeSpan(x, y, span, count);
@@ -355,9 +355,9 @@ void SkA8_Shader_Blitter::blitMask(const SkMask& mask, const SkIRect& clip) {
 
 SkA8_Coverage_Blitter::SkA8_Coverage_Blitter(const SkPixmap& device,
                              const SkPaint& paint) : SkRasterBlitter(device) {
-    SkASSERT(nullptr == paint.getShader());
-    SkASSERT(nullptr == paint.getXfermode());
-    SkASSERT(nullptr == paint.getColorFilter());
+    SkASSERT(NULL == paint.getShader());
+    SkASSERT(NULL == paint.getXfermode());
+    SkASSERT(NULL == paint.getColorFilter());
 }
 
 void SkA8_Coverage_Blitter::blitAntiH(int x, int y, const SkAlpha antialias[],
@@ -430,5 +430,5 @@ void SkA8_Coverage_Blitter::blitMask(const SkMask& mask, const SkIRect& clip) {
 }
 
 const SkPixmap* SkA8_Coverage_Blitter::justAnOpaqueColor(uint32_t*) {
-    return nullptr;
+    return NULL;
 }

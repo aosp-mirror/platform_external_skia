@@ -34,8 +34,8 @@ private:
         explicit DataId(DataId& that)
             : fLoader(that.fLoader), fKey(that.fKey), fKeySize(that.fKeySize)
         {
-            that.fLoader = nullptr;
-            that.fKey = nullptr;
+            that.fLoader = NULL;
+            that.fKey = NULL;
             SkDEBUGCODE(that.fKeySize = 0xFFFFFFFF;)
         }
 
@@ -116,7 +116,7 @@ public:
         HRM(font->CreateFontFace(&fontFace), "Could not create font face.");
 
         UINT32 numFiles;
-        HR(fontFace->GetFiles(&numFiles, nullptr));
+        HR(fontFace->GetFiles(&numFiles, NULL));
         if (numFiles > 1) {
             return E_FAIL;
         }
@@ -193,7 +193,7 @@ public:
                    "Could not match font in family.",
                    identity);
 
-        HR_GENERAL(FontToIdentity(font.get(), &identity), nullptr, identity);
+        HR_GENERAL(FontToIdentity(font.get(), &identity), NULL, identity);
 
         return identity;
     }
@@ -218,12 +218,12 @@ public:
 
     SkRemotableFontIdentitySet* matchName(const char familyName[]) const override {
         SkSMallocWCHAR dwFamilyName;
-        if (nullptr == familyName) {
+        if (NULL == familyName) {
             HR_GENERAL(getDefaultFontFamilyName(&dwFamilyName),
-                       nullptr, SkRemotableFontIdentitySet::NewEmpty());
+                       NULL, SkRemotableFontIdentitySet::NewEmpty());
         } else {
             HR_GENERAL(sk_cstring_to_wchar(familyName, &dwFamilyName),
-                       nullptr, SkRemotableFontIdentitySet::NewEmpty());
+                       NULL, SkRemotableFontIdentitySet::NewEmpty());
         }
 
         UINT32 index;
@@ -244,10 +244,10 @@ public:
         SkFontIdentity identity = { SkFontIdentity::kInvalidDataId };
 
         SkSMallocWCHAR dwFamilyName;
-        if (nullptr == familyName) {
-            HR_GENERAL(getDefaultFontFamilyName(&dwFamilyName), nullptr, identity);
+        if (NULL == familyName) {
+            HR_GENERAL(getDefaultFontFamilyName(&dwFamilyName), NULL, identity);
         } else {
-            HR_GENERAL(sk_cstring_to_wchar(familyName, &dwFamilyName), nullptr, identity);
+            HR_GENERAL(sk_cstring_to_wchar(familyName, &dwFamilyName), NULL, identity);
         }
 
         UINT32 index;
@@ -374,7 +374,7 @@ public:
                 this->AddRef();
                 return S_OK;
             }
-            *ppvObject = nullptr;
+            *ppvObject = NULL;
             return E_FAIL;
         }
 
@@ -395,7 +395,7 @@ public:
         SkFontIdentity identity = { SkFontIdentity::kInvalidDataId };
 
         IDWriteFactory* dwFactory = sk_get_dwrite_factory();
-        if (nullptr == dwFactory) {
+        if (NULL == dwFactory) {
             return identity;
         }
 
@@ -404,10 +404,10 @@ public:
         const DWriteStyle dwStyle(pattern);
 
         SkSMallocWCHAR dwFamilyName;
-        if (nullptr == familyName) {
-            HR_GENERAL(getDefaultFontFamilyName(&dwFamilyName), nullptr, identity);
+        if (NULL == familyName) {
+            HR_GENERAL(getDefaultFontFamilyName(&dwFamilyName), NULL, identity);
         } else {
-            HR_GENERAL(sk_cstring_to_wchar(familyName, &dwFamilyName), nullptr, identity);
+            HR_GENERAL(sk_cstring_to_wchar(familyName, &dwFamilyName), NULL, identity);
         }
 
         const SkSMallocWCHAR* dwBcp47;
@@ -416,7 +416,7 @@ public:
             dwBcp47 = &fLocaleName;
         } else {
             //TODO: support fallback stack.
-            HR_GENERAL(sk_cstring_to_wchar(bcp47[bcp47Count-1], &dwBcp47Local), nullptr, identity);
+            HR_GENERAL(sk_cstring_to_wchar(bcp47[bcp47Count-1], &dwBcp47Local), NULL, identity);
             dwBcp47 = &dwBcp47Local;
         }
 
@@ -445,7 +445,7 @@ public:
         SkTScopedComPtr<FontFallbackRenderer> fontFallbackRenderer(
             new FontFallbackRenderer(this, character));
 
-        HR_GENERAL(fallbackLayout->Draw(nullptr, fontFallbackRenderer.get(), 50.0f, 50.0f),
+        HR_GENERAL(fallbackLayout->Draw(NULL, fontFallbackRenderer.get(), 50.0f, 50.0f),
                    "Could not draw layout with renderer.",
                    identity);
 
@@ -455,7 +455,7 @@ public:
     SkStreamAsset* getData(int dataId) const override {
         SkAutoMutexAcquire ama(fDataIdCacheMutex);
         if (dataId >= fDataIdCache.count()) {
-            return nullptr;
+            return NULL;
         }
         const DataId& id = fDataIdCache[dataId];
 
@@ -466,7 +466,7 @@ public:
         HRNM(loader->CreateStreamFromKey(id.fKey, id.fKeySize, &fontFileStream),
              "Could not create font file stream.");
 
-        return new SkDWriteFontFileStream(fontFileStream.get());
+        return SkNEW_ARGS(SkDWriteFontFileStream, (fontFileStream.get()));
     }
 
 private:
@@ -478,8 +478,8 @@ private:
 
 SkRemotableFontMgr* SkRemotableFontMgr_New_DirectWrite() {
     IDWriteFactory* factory = sk_get_dwrite_factory();
-    if (nullptr == factory) {
-        return nullptr;
+    if (NULL == factory) {
+        return NULL;
     }
 
     SkTScopedComPtr<IDWriteFontCollection> sysFontCollection;
@@ -487,13 +487,13 @@ SkRemotableFontMgr* SkRemotableFontMgr_New_DirectWrite() {
          "Could not get system font collection.");
 
     WCHAR localeNameStorage[LOCALE_NAME_MAX_LENGTH];
-    WCHAR* localeName = nullptr;
+    WCHAR* localeName = NULL;
     int localeNameLen = 0;
 
     // Dynamically load GetUserDefaultLocaleName function, as it is not available on XP.
-    SkGetUserDefaultLocaleNameProc getUserDefaultLocaleNameProc = nullptr;
+    SkGetUserDefaultLocaleNameProc getUserDefaultLocaleNameProc = NULL;
     HRESULT hr = SkGetGetUserDefaultLocaleNameProc(&getUserDefaultLocaleNameProc);
-    if (nullptr == getUserDefaultLocaleNameProc) {
+    if (NULL == getUserDefaultLocaleNameProc) {
         SK_TRACEHR(hr, "Could not get GetUserDefaultLocaleName.");
     } else {
         localeNameLen = getUserDefaultLocaleNameProc(localeNameStorage, LOCALE_NAME_MAX_LENGTH);
@@ -502,5 +502,6 @@ SkRemotableFontMgr* SkRemotableFontMgr_New_DirectWrite() {
         };
     }
 
-    return new SkRemotableFontMgr_DirectWrite(sysFontCollection.get(), localeName, localeNameLen);
+    return SkNEW_ARGS(SkRemotableFontMgr_DirectWrite, (sysFontCollection.get(),
+                                                       localeName, localeNameLen));
 }

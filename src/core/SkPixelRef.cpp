@@ -13,19 +13,71 @@
 //#define SK_SUPPORT_LEGACY_UNBALANCED_PIXELREF_LOCKCOUNT
 //#define SK_TRACE_PIXELREF_LIFETIME
 
-#include "SkNextID.h"
+#ifdef SK_BUILD_FOR_WIN32
+    // We don't have SK_BASE_MUTEX_INIT on Windows.
 
-uint32_t SkNextID::ImageID() {
-    static uint32_t gID = 0;
-    uint32_t id;
-    // Loop in case our global wraps around, as we never want to return a 0.
-    do {
-        id = sk_atomic_fetch_add(&gID, 2u) + 2;  // Never set the low bit.
-    } while (0 == id);
-    return id;
+    // must be a power-of-2. undef to just use 1 mutex
+    #define PIXELREF_MUTEX_RING_COUNT       32
+    static SkBaseMutex gPixelRefMutexRing[PIXELREF_MUTEX_RING_COUNT];
+
+#else
+    static SkBaseMutex gPixelRefMutexRing[] = {
+        SK_BASE_MUTEX_INIT, SK_BASE_MUTEX_INIT,
+        SK_BASE_MUTEX_INIT, SK_BASE_MUTEX_INIT,
+        SK_BASE_MUTEX_INIT, SK_BASE_MUTEX_INIT,
+        SK_BASE_MUTEX_INIT, SK_BASE_MUTEX_INIT,
+
+        SK_BASE_MUTEX_INIT, SK_BASE_MUTEX_INIT,
+        SK_BASE_MUTEX_INIT, SK_BASE_MUTEX_INIT,
+        SK_BASE_MUTEX_INIT, SK_BASE_MUTEX_INIT,
+        SK_BASE_MUTEX_INIT, SK_BASE_MUTEX_INIT,
+
+        SK_BASE_MUTEX_INIT, SK_BASE_MUTEX_INIT,
+        SK_BASE_MUTEX_INIT, SK_BASE_MUTEX_INIT,
+        SK_BASE_MUTEX_INIT, SK_BASE_MUTEX_INIT,
+        SK_BASE_MUTEX_INIT, SK_BASE_MUTEX_INIT,
+
+        SK_BASE_MUTEX_INIT, SK_BASE_MUTEX_INIT,
+        SK_BASE_MUTEX_INIT, SK_BASE_MUTEX_INIT,
+        SK_BASE_MUTEX_INIT, SK_BASE_MUTEX_INIT,
+        SK_BASE_MUTEX_INIT, SK_BASE_MUTEX_INIT,
+    };
+    // must be a power-of-2. undef to just use 1 mutex
+    #define PIXELREF_MUTEX_RING_COUNT SK_ARRAY_COUNT(gPixelRefMutexRing)
+
+#endif
+
+static SkBaseMutex* get_default_mutex() {
+    static int32_t gPixelRefMutexRingIndex;
+
+    SkASSERT(SkIsPow2(PIXELREF_MUTEX_RING_COUNT));
+
+    // atomic_inc might be overkill here. It may be fine if once in a while
+    // we hit a race-condition and two subsequent calls get the same index...
+    int index = sk_atomic_inc(&gPixelRefMutexRingIndex);
+    return &gPixelRefMutexRing[index & (PIXELREF_MUTEX_RING_COUNT - 1)];
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+
+static uint32_t next_gen_id() {
+    static uint32_t gNextGenID = 0;
+    uint32_t genID;
+    // Loop in case our global wraps around, as we never want to return a 0.
+    do {
+        genID = sk_atomic_fetch_add(&gNextGenID, 2u) + 2;  // Never set the low bit.
+    } while (0 == genID);
+    return genID;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+void SkPixelRef::setMutex(SkBaseMutex* mutex) {
+    if (NULL == mutex) {
+        mutex = get_default_mutex();
+    }
+    fMutex = mutex;
+}
 
 // just need a > 0 value, so pick a funny one to aid in debugging
 #define SKPIXELREF_PRELOCKED_LOCKCOUNT     123456789
@@ -43,17 +95,37 @@ static SkImageInfo validate_info(const SkImageInfo& info) {
 SkPixelRef::SkPixelRef(const SkImageInfo& info)
     : fInfo(validate_info(info))
 #ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
-    , fStableID(SkNextID::ImageID())
+    , fStableID(next_gen_id())
 #endif
 
 {
 #ifdef SK_TRACE_PIXELREF_LIFETIME
     SkDebugf(" pixelref %d\n", sk_atomic_inc(&gInstCounter));
 #endif
+    this->setMutex(NULL);
     fRec.zero();
     fLockCount = 0;
     this->needsNewGenID();
-    fMutability = kMutable;
+    fIsImmutable = false;
+    fPreLocked = false;
+    fAddedToCache.store(false);
+}
+
+
+SkPixelRef::SkPixelRef(const SkImageInfo& info, SkBaseMutex* mutex)
+    : fInfo(validate_info(info))
+#ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
+    , fStableID(next_gen_id())
+#endif
+{
+#ifdef SK_TRACE_PIXELREF_LIFETIME
+    SkDebugf(" pixelref %d\n", sk_atomic_inc(&gInstCounter));
+#endif
+    this->setMutex(mutex);
+    fRec.zero();
+    fLockCount = 0;
+    this->needsNewGenID();
+    fIsImmutable = false;
     fPreLocked = false;
     fAddedToCache.store(false);
 }
@@ -88,20 +160,22 @@ void SkPixelRef::cloneGenID(const SkPixelRef& that) {
     SkASSERT(!that. genIDIsUnique());
 }
 
-static void validate_pixels_ctable(const SkImageInfo& info, const SkColorTable* ctable) {
+static void validate_pixels_ctable(const SkImageInfo& info, const void* pixels,
+                                   const SkColorTable* ctable) {
     if (info.isEmpty()) {
-        return; // can't require ctable if the dimensions are empty
+        return; // can't require pixels if the dimensions are empty
     }
+    SkASSERT(pixels);
     if (kIndex_8_SkColorType == info.colorType()) {
         SkASSERT(ctable);
     } else {
-        SkASSERT(nullptr == ctable);
+        SkASSERT(NULL == ctable);
     }
 }
 
 void SkPixelRef::setPreLocked(void* pixels, size_t rowBytes, SkColorTable* ctable) {
-    SkASSERT(pixels);
-    validate_pixels_ctable(fInfo, ctable);
+#ifndef SK_IGNORE_PIXELREF_SETPRELOCKED
+    validate_pixels_ctable(fInfo, pixels, ctable);
     // only call me in your constructor, otherwise fLockCount tracking can get
     // out of sync.
     fRec.fPixels = pixels;
@@ -109,11 +183,12 @@ void SkPixelRef::setPreLocked(void* pixels, size_t rowBytes, SkColorTable* ctabl
     fRec.fRowBytes = rowBytes;
     fLockCount = SKPIXELREF_PRELOCKED_LOCKCOUNT;
     fPreLocked = true;
+#endif
 }
 
 // Increments fLockCount only on success
 bool SkPixelRef::lockPixelsInsideMutex() {
-    fMutex.assertHeld();
+    fMutex->assertHeld();
 
     if (1 == ++fLockCount) {
         SkASSERT(fRec.isZero());
@@ -123,13 +198,8 @@ bool SkPixelRef::lockPixelsInsideMutex() {
             return false;
         }
     }
-    if (fRec.fPixels) {
-        validate_pixels_ctable(fInfo, fRec.fColorTable);
-        return true;
-    }
-    // no pixels, so we failed (somehow)
-    --fLockCount;
-    return false;
+    validate_pixels_ctable(fInfo, fRec.fPixels, fRec.fColorTable);
+    return fRec.fPixels != NULL;
 }
 
 // For historical reasons, we always inc fLockCount, even if we return false.
@@ -139,7 +209,7 @@ bool SkPixelRef::lockPixels() {
 
     if (!fPreLocked) {
         TRACE_EVENT_BEGIN0("skia", "SkPixelRef::lockPixelsMutex");
-        SkAutoMutexAcquire  ac(fMutex);
+        SkAutoMutexAcquire  ac(*fMutex);
         TRACE_EVENT_END0("skia", "SkPixelRef::lockPixelsMutex");
         SkDEBUGCODE(int oldCount = fLockCount;)
         bool success = this->lockPixelsInsideMutex();
@@ -153,11 +223,8 @@ bool SkPixelRef::lockPixels() {
             return false;
         }
     }
-    if (fRec.fPixels) {
-        validate_pixels_ctable(fInfo, fRec.fColorTable);
-        return true;
-    }
-    return false;
+    validate_pixels_ctable(fInfo, fRec.fPixels, fRec.fColorTable);
+    return fRec.fPixels != NULL;
 }
 
 bool SkPixelRef::lockPixels(LockRec* rec) {
@@ -172,7 +239,7 @@ void SkPixelRef::unlockPixels() {
     SkASSERT(!fPreLocked || SKPIXELREF_PRELOCKED_LOCKCOUNT == fLockCount);
 
     if (!fPreLocked) {
-        SkAutoMutexAcquire  ac(fMutex);
+        SkAutoMutexAcquire  ac(*fMutex);
 
         SkASSERT(fLockCount > 0);
         if (0 == --fLockCount) {
@@ -198,23 +265,20 @@ bool SkPixelRef::requestLock(const LockRequest& request, LockResult* result) {
     }
 
     if (fPreLocked) {
-        result->fUnlockProc = nullptr;
-        result->fUnlockContext = nullptr;
+        result->fUnlockProc = NULL;
+        result->fUnlockContext = NULL;
         result->fCTable = fRec.fColorTable;
         result->fPixels = fRec.fPixels;
         result->fRowBytes = fRec.fRowBytes;
         result->fSize.set(fInfo.width(), fInfo.height());
     } else {
-        SkAutoMutexAcquire  ac(fMutex);
+        SkAutoMutexAcquire  ac(*fMutex);
         if (!this->onRequestLock(request, result)) {
             return false;
         }
     }
-    if (result->fPixels) {
-        validate_pixels_ctable(fInfo, result->fCTable);
-        return true;
-    }
-    return false;
+    validate_pixels_ctable(fInfo, result->fPixels, result->fCTable);
+    return result->fPixels != NULL;
 }
 
 bool SkPixelRef::lockPixelsAreWritable() const {
@@ -228,7 +292,7 @@ bool SkPixelRef::onLockPixelsAreWritable() const {
 uint32_t SkPixelRef::getGenerationID() const {
     uint32_t id = fTaggedGenID.load();
     if (0 == id) {
-        uint32_t next = SkNextID::ImageID() | 1u;
+        uint32_t next = next_gen_id() | 1u;
         if (fTaggedGenID.compare_exchange(&id, next)) {
             id = next;  // There was no race or we won the race.  fTaggedGenID is next now.
         } else {
@@ -241,9 +305,9 @@ uint32_t SkPixelRef::getGenerationID() const {
 }
 
 void SkPixelRef::addGenIDChangeListener(GenIDChangeListener* listener) {
-    if (nullptr == listener || !this->genIDIsUnique()) {
+    if (NULL == listener || !this->genIDIsUnique()) {
         // No point in tracking this if we're not going to call it.
-        delete listener;
+        SkDELETE(listener);
         return;
     }
     *fGenIDChangeListeners.append() = listener;
@@ -269,7 +333,7 @@ void SkPixelRef::callGenIDChangeListeners() {
 
 void SkPixelRef::notifyPixelsChanged() {
 #ifdef SK_DEBUG
-    if (this->isImmutable()) {
+    if (fIsImmutable) {
         SkDebugf("========== notifyPixelsChanged called on immutable pixelref");
     }
 #endif
@@ -283,28 +347,7 @@ void SkPixelRef::changeAlphaType(SkAlphaType at) {
 }
 
 void SkPixelRef::setImmutable() {
-    fMutability = kImmutable;
-}
-
-void SkPixelRef::setImmutableWithID(uint32_t genID) {
-    /*
-     *  We are forcing the genID to match an external value. The caller must ensure that this
-     *  value does not conflict with other content.
-     *
-     *  One use is to force this pixelref's id to match an SkImage's id
-     */
-    fMutability = kImmutable;
-    fTaggedGenID.store(genID);
-}
-
-void SkPixelRef::setTemporarilyImmutable() {
-    SkASSERT(fMutability != kImmutable);
-    fMutability = kTemporarilyImmutable;
-}
-
-void SkPixelRef::restoreMutability() {
-    SkASSERT(fMutability != kImmutable);
-    fMutability = kMutable;
+    fIsImmutable = true;
 }
 
 bool SkPixelRef::readPixels(SkBitmap* dst, const SkIRect* subset) {
@@ -320,7 +363,7 @@ bool SkPixelRef::onReadPixels(SkBitmap* dst, const SkIRect* subset) {
 void SkPixelRef::onNotifyPixelsChanged() { }
 
 SkData* SkPixelRef::onRefEncodedData() {
-    return nullptr;
+    return NULL;
 }
 
 bool SkPixelRef::onGetYUV8Planes(SkISize sizes[3], void* planes[3], size_t rowBytes[3],

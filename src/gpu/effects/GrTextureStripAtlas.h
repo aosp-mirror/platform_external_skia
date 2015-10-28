@@ -83,7 +83,7 @@ private:
      * together to represent LRU status
      */
     struct AtlasRow : SkNoncopyable {
-        AtlasRow() : fKey(kEmptyAtlasRowKey), fLocks(0), fNext(nullptr), fPrev(nullptr) { }
+        AtlasRow() : fKey(kEmptyAtlasRowKey), fLocks(0), fNext(NULL), fPrev(NULL) { }
         // GenerationID of the bitmap that is represented by this row, 0xffffffff means "empty"
         uint32_t fKey;
         // How many times this has been locked (0 == unlocked)
@@ -107,7 +107,7 @@ private:
     void initLRU();
 
     /**
-     * Grabs the least recently used free row out of the LRU list, returns nullptr if no rows are free.
+     * Grabs the least recently used free row out of the LRU list, returns NULL if no rows are free.
      */
     AtlasRow* getLRU();
 
@@ -145,8 +145,8 @@ private:
         static uint32_t Hash(const Desc& desc) { return SkChecksum::Murmur3(&desc, sizeof(Desc)); }
 
         // AtlasEntry proper
-        AtlasEntry() : fAtlas(nullptr) {}
-        ~AtlasEntry() { delete fAtlas; }
+        AtlasEntry() : fAtlas(NULL) {}
+        ~AtlasEntry() { SkDELETE(fAtlas); }
         Desc fDesc;
         GrTextureStripAtlas* fAtlas;
     };

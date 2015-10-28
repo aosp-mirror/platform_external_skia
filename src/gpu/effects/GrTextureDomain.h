@@ -95,9 +95,7 @@ public:
     class GLDomain {
     public:
         GLDomain() {
-            for (int i = 0; i < kPrevDomainCount; i++) {
-                fPrevDomain[i] = SK_FloatNaN;
-            }
+            fPrevDomain[0] = SK_FloatNaN;
             SkDEBUGCODE(fMode = (Mode) -1;)
         }
 
@@ -108,7 +106,7 @@ public:
          * @param outcolor  name of vec4 variable to hold the sampled color.
          * @param inCoords  name of vec2 variable containing the coords to be used with the domain.
          *                  It is assumed that this is a variable and not an expression.
-         * @param inModulateColor   if non-nullptr the sampled color will be modulated with this
+         * @param inModulateColor   if non-NULL the sampled color will be modulated with this
          *                          expression before being written to outColor.
          */
         void sampleTexture(GrGLShaderBuilder* builder,
@@ -116,7 +114,7 @@ public:
                            const char* outColor,
                            const SkString& inCoords,
                            const GrGLProcessor::TextureSampler sampler,
-                           const char* inModulateColor = nullptr);
+                           const char* inModulateColor = NULL);
 
         /**
          * Call this from GrGLProcessor::setData() to upload uniforms necessary for the texture
@@ -139,11 +137,10 @@ public:
         }
 
     private:
-        static const int kPrevDomainCount = 4;
         SkDEBUGCODE(Mode                      fMode;)
         GrGLProgramDataManager::UniformHandle fDomainUni;
         SkString                              fDomainName;
-        GrGLfloat                             fPrevDomain[kPrevDomainCount];
+        GrGLfloat                             fPrevDomain[4];
     };
 
 protected:
@@ -160,16 +157,21 @@ protected:
 class GrTextureDomainEffect : public GrSingleTextureEffect {
 
 public:
-    static const GrFragmentProcessor* Create(GrTexture*,
-                                             const SkMatrix&,
-                                             const SkRect& domain,
-                                             GrTextureDomain::Mode,
-                                             GrTextureParams::FilterMode filterMode,
-                                             GrCoordSet = kLocal_GrCoordSet);
+    static GrFragmentProcessor* Create(GrProcessorDataManager*,
+                                       GrTexture*,
+                                       const SkMatrix&,
+                                       const SkRect& domain,
+                                       GrTextureDomain::Mode,
+                                       GrTextureParams::FilterMode filterMode,
+                                       GrCoordSet = kLocal_GrCoordSet);
 
     virtual ~GrTextureDomainEffect();
 
     const char* name() const override { return "TextureDomain"; }
+
+    void getGLProcessorKey(const GrGLSLCaps&, GrProcessorKeyBuilder*) const override;
+
+    GrGLFragmentProcessor* createGLInstance() const override;
 
     const GrTextureDomain& textureDomain() const { return fTextureDomain; }
 
@@ -177,16 +179,13 @@ protected:
     GrTextureDomain fTextureDomain;
 
 private:
-    GrTextureDomainEffect(GrTexture*,
+    GrTextureDomainEffect(GrProcessorDataManager*,
+                          GrTexture*,
                           const SkMatrix&,
                           const SkRect& domain,
                           GrTextureDomain::Mode,
                           GrTextureParams::FilterMode,
                           GrCoordSet);
-
-    GrGLFragmentProcessor* onCreateGLInstance() const override;
-
-    void onGetGLProcessorKey(const GrGLSLCaps&, GrProcessorKeyBuilder*) const override;
 
     bool onIsEqual(const GrFragmentProcessor&) const override;
 

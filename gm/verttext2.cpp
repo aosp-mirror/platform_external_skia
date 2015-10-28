@@ -19,8 +19,8 @@ namespace skiagm {
 class VertText2GM : public GM {
 public:
     VertText2GM()
-        : fProp(nullptr)
-        , fMono(nullptr) {
+        : fProp(NULL)
+        , fMono(NULL) {
     }
 
     virtual ~VertText2GM() {
@@ -32,16 +32,12 @@ protected:
     void onOnceBeforeDraw() override {
         const int pointSize = 24;
         textHeight = SkIntToScalar(pointSize);
-        fProp = SkTypeface::CreateFromName(sk_tool_utils::platform_font_name("sans-serif"),
-                SkTypeface::kNormal);
-        fMono = SkTypeface::CreateFromName(sk_tool_utils::platform_font_name("monospace"),
-                SkTypeface::kNormal);
+        fProp = sk_tool_utils::create_portable_typeface("Helvetica", SkTypeface::kNormal);
+        fMono = sk_tool_utils::create_portable_typeface("Courier New", SkTypeface::kNormal);
     }
 
     SkString onShortName() override {
-        SkString name("verttext2");
-        name.append(sk_tool_utils::major_platform_os_name());
-        return name;
+        return SkString("verttext2");
     }
 
     SkISize onISize() override { return SkISize::Make(640, 480); }

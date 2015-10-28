@@ -7,21 +7,17 @@
 
 /* migrated from chrome/src/skia/ext/SkFontHost_fontconfig_direct.cpp */
 
+#include <unistd.h>
+#include <fcntl.h>
+
+#include <fontconfig/fontconfig.h>
+
 #include "SkBuffer.h"
-#include "SkDataTable.h"
 #include "SkFontConfigInterface.h"
-#include "SkFontStyle.h"
+#include "SkLazyPtr.h"
 #include "SkMutex.h"
 #include "SkStream.h"
 #include "SkString.h"
-#include "SkTArray.h"
-#include "SkTDArray.h"
-#include "SkTemplates.h"
-#include "SkTypeface.h"
-#include "SkTypes.h"
-
-#include <fontconfig/fontconfig.h>
-#include <unistd.h>
 
 size_t SkFontConfigInterface::FontIdentity::writeToMemory(void* addr) const {
     size_t size = sizeof(fID) + sizeof(fTTCIndex);
@@ -77,7 +73,7 @@ static void test_writeToMemory(const SkFontConfigInterface::FontIdentity& iden0,
                                int initValue) {
     SkFontConfigInterface::FontIdentity iden1;
 
-    size_t size0 = iden0.writeToMemory(nullptr);
+    size_t size0 = iden0.writeToMemory(NULL);
 
     SkAutoMalloc storage(size0);
     memset(storage.get(), initValue, size0);
@@ -131,22 +127,22 @@ private:
 
 SkFontConfigInterface* SkFontConfigInterface::GetSingletonDirectInterface(SkBaseMutex* mutex) {
     SkAutoMutexAcquire ac(mutex);
-    static SkFontConfigInterfaceDirect* singleton = nullptr;
-    if (singleton == nullptr) {
-        singleton = new SkFontConfigInterfaceDirect;
+    static SkFontConfigInterfaceDirect* singleton = NULL;
+    if (singleton == NULL) {
+        singleton = SkNEW(SkFontConfigInterfaceDirect);
     }
     return singleton;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
-// Returns the string from the pattern, or nullptr
+// Returns the string from the pattern, or NULL
 static const char* get_name(FcPattern* pattern, const char field[],
                             int index = 0) {
     const char* name;
     if (FcPatternGetString(pattern, field, index,
                            (FcChar8**)&name) != FcResultMatch) {
-        name = nullptr;
+        name = NULL;
     }
     return name;
 }
@@ -360,7 +356,7 @@ FcPattern* MatchFont(FcFontSet* font_set,
                      const SkString& family) {
   // Older versions of fontconfig have a bug where they cannot select
   // only scalable fonts so we have to manually filter the results.
-  FcPattern* match = nullptr;
+  FcPattern* match = NULL;
   for (int i = 0; i < font_set->nfont; ++i) {
     FcPattern* current = font_set->fonts[i];
     if (valid_pattern(current)) {
@@ -388,7 +384,7 @@ FcPattern* MatchFont(FcFontSet* font_set,
         break;
     }
     if (!acceptable_substitute)
-      return nullptr;
+      return NULL;
   }
 
   return match;
@@ -469,7 +465,7 @@ bool SkFontConfigInterfaceDirect::matchFamilyName(const char familyName[],
                                                       : FC_SLANT_ROMAN);
     FcPatternAddBool(pattern, FC_SCALABLE, FcTrue);
 
-    FcConfigSubstitute(nullptr, pattern, FcMatchPattern);
+    FcConfigSubstitute(NULL, pattern, FcMatchPattern);
     FcDefaultSubstitute(pattern);
 
     // Font matching:
@@ -477,7 +473,7 @@ bool SkFontConfigInterfaceDirect::matchFamilyName(const char familyName[],
     //    font-family: a, b, c, serif;
     // However, fontconfig will always do its best to find *a* font when asked
     // for something so we need a way to tell if the match which it has found is
-    // "good enough" for us. Otherwise, we can return nullptr which gets piped up
+    // "good enough" for us. Otherwise, we can return NULL which gets piped up
     // and lets WebKit know to try the next CSS family name. However, fontconfig
     // configs allow substitutions (mapping "Arial -> Helvetica" etc) and we
     // wish to support that.
@@ -579,20 +575,20 @@ SkDataTable* SkFontConfigInterfaceDirect::getFamilyNames() {
 
     FcPattern* pat = FcPatternCreate();
     SkAutoTCallVProc<FcPattern, FcPatternDestroy> autoDestroyPat(pat);
-    if (nullptr == pat) {
-        return nullptr;
+    if (NULL == pat) {
+        return NULL;
     }
 
     FcObjectSet* os = FcObjectSetBuild(FC_FAMILY, (char *)0);
     SkAutoTCallVProc<FcObjectSet, FcObjectSetDestroy> autoDestroyOs(os);
-    if (nullptr == os) {
-        return nullptr;
+    if (NULL == os) {
+        return NULL;
     }
 
-    FcFontSet* fs = FcFontList(nullptr, pat, os);
+    FcFontSet* fs = FcFontList(NULL, pat, os);
     SkAutoTCallVProc<FcFontSet, FcFontSetDestroy> autoDestroyFs(fs);
-    if (nullptr == fs) {
-        return nullptr;
+    if (NULL == fs) {
+        return NULL;
     }
 
     SkTDArray<const char*> names;
@@ -630,7 +626,7 @@ bool SkFontConfigInterfaceDirect::matchFamilySet(const char inFamilyName[],
     }
     FcPatternAddBool(pattern, FC_SCALABLE, FcTrue);
 
-    FcConfigSubstitute(nullptr, pattern, FcMatchPattern);
+    FcConfigSubstitute(NULL, pattern, FcMatchPattern);
     FcDefaultSubstitute(pattern);
 
     // Font matching:
@@ -638,7 +634,7 @@ bool SkFontConfigInterfaceDirect::matchFamilySet(const char inFamilyName[],
     //    font-family: a, b, c, serif;
     // However, fontconfig will always do its best to find *a* font when asked
     // for something so we need a way to tell if the match which it has found is
-    // "good enough" for us. Otherwise, we can return nullptr which gets piped up
+    // "good enough" for us. Otherwise, we can return NULL which gets piped up
     // and lets WebKit know to try the next CSS family name. However, fontconfig
     // configs allow substitutions (mapping "Arial -> Helvetica" etc) and we
     // wish to support that.
@@ -720,7 +716,7 @@ bool SkFontConfigInterfaceDirect::matchFamilySet(const char inFamilyName[],
         if (!match) {
             FcPatternDestroy(pattern);
             FcFontSetDestroy(font_set);
-            return nullptr;
+            return NULL;
         }
 
         FcPatternDestroy(pattern);
@@ -733,7 +729,9 @@ bool SkFontConfigInterfaceDirect::matchFamilySet(const char inFamilyName[],
             }
         }
 
-        SkFontStyleSet_FC* sset = new SkFontStyleSet_FC                                               (trimmedMatches.begin(),                                               trimmedMatches.count());
+        SkFontStyleSet_FC* sset = SkNEW_ARGS(SkFontStyleSet_FC,
+                                             (trimmedMatches.begin(),
+                                              trimmedMatches.count()));
 #endif
     return false;
 }

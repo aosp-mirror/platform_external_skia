@@ -1,6 +1,5 @@
 {
   "Perf-Android-GCC-NexusPlayer-GPU-PowerVR-x86-Release": [
-    "--images", 
     "--scales", 
     "1.0", 
     "1.1", 
@@ -15,10 +14,7 @@
     "~blurroundrect", 
     "~patch_grid", 
     "~desk_carsvg", 
-    "~desk_unicodetable", 
-    "~interlaced1.png", 
-    "~interlaced2.png", 
-    "~interlaced3.png"
+    "~desk_unicodetable"
   ], 
   "Perf-Android-Nexus7-Tegra3-Arm7-Release": [
     "--scales", 
@@ -34,30 +30,9 @@
     "msaa4", 
     "nvprmsaa4", 
     "--match", 
-    "~blurroundrect", 
-    "~patch_grid", 
-    "~desk_carsvg"
-  ], 
-  "Test-Android-GCC-GalaxyS4-GPU-SGX544-Arm7-Release": [
-    "--images", 
-    "--scales", 
-    "1.0", 
-    "1.1", 
-    "--config", 
-    "565", 
-    "8888", 
-    "gpu", 
-    "nonrendering", 
-    "angle", 
-    "hwui", 
-    "--match", 
-    "~blurroundrect", 
-    "~patch_grid", 
-    "~desk_carsvg", 
-    "~GLInstancedArraysBench"
+    "skp"
   ], 
   "Test-Ubuntu-GCC-ShuttleA-GPU-GTX550Ti-x86_64-Release-Valgrind": [
-    "--images", 
     "--scales", 
     "1.0", 
     "1.1", 
@@ -73,14 +48,9 @@
     "--loops", 
     "1", 
     "--samples", 
-    "1", 
-    "--match", 
-    "~interlaced1.png", 
-    "~interlaced2.png", 
-    "~interlaced3.png"
+    "1"
   ], 
   "Test-Win7-MSVC-ShuttleA-GPU-HD2000-x86-Debug-ANGLE": [
-    "--images", 
     "--scales", 
     "1.0", 
     "1.1", 
@@ -99,13 +69,9 @@
     "256", 
     "--match", 
     "~gradient", 
-    "~etc1bitmap", 
-    "~interlaced1.png", 
-    "~interlaced2.png", 
-    "~interlaced3.png"
+    "~etc1bitmap"
   ], 
   "Test-iOS-Clang-iPad4-GPU-SGX554-Arm7-Debug": [
-    "--images", 
     "--scales", 
     "1.0", 
     "1.1", 

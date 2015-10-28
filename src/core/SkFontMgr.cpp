@@ -7,7 +7,7 @@
 
 #include "SkFontDescriptor.h"
 #include "SkFontMgr.h"
-#include "SkOncePtr.h"
+#include "SkLazyPtr.h"
 #include "SkStream.h"
 #include "SkTypes.h"
 
@@ -22,14 +22,16 @@ public:
     }
     SkTypeface* createTypeface(int index) override {
         SkDEBUGFAIL("SkFontStyleSet::createTypeface called on empty set");
-        return nullptr;
+        return NULL;
     }
     SkTypeface* matchStyle(const SkFontStyle&) override {
-        return nullptr;
+        return NULL;
     }
 };
 
-SkFontStyleSet* SkFontStyleSet::CreateEmpty() { return new SkEmptyFontStyleSet; }
+SkFontStyleSet* SkFontStyleSet::CreateEmpty() {
+    return SkNEW(SkEmptyFontStyleSet);
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -43,7 +45,7 @@ protected:
     }
     SkFontStyleSet* onCreateStyleSet(int index) const override {
         SkDEBUGFAIL("onCreateStyleSet called with bad index");
-        return nullptr;
+        return NULL;
     }
     SkFontStyleSet* onMatchFamily(const char[]) const override {
         return SkFontStyleSet::CreateEmpty();
@@ -51,36 +53,36 @@ protected:
 
     virtual SkTypeface* onMatchFamilyStyle(const char[],
                                            const SkFontStyle&) const override {
-        return nullptr;
+        return NULL;
     }
     virtual SkTypeface* onMatchFamilyStyleCharacter(const char familyName[],
                                                     const SkFontStyle& style,
                                                     const char* bcp47[],
                                                     int bcp47Count,
                                                     SkUnichar character) const override {
-        return nullptr;
+        return NULL;
     }
     virtual SkTypeface* onMatchFaceStyle(const SkTypeface*,
                                          const SkFontStyle&) const override {
-        return nullptr;
+        return NULL;
     }
     SkTypeface* onCreateFromData(SkData*, int) const override {
-        return nullptr;
+        return NULL;
     }
     SkTypeface* onCreateFromStream(SkStreamAsset* stream, int) const override {
-        delete stream;
-        return nullptr;
+        SkDELETE(stream);
+        return NULL;
     }
     SkTypeface* onCreateFromFile(const char[], int) const override {
-        return nullptr;
+        return NULL;
     }
     SkTypeface* onLegacyCreateTypeface(const char [], unsigned) const override {
-        return nullptr;
+        return NULL;
     }
 };
 
 static SkFontStyleSet* emptyOnNull(SkFontStyleSet* fsset) {
-    if (nullptr == fsset) {
+    if (NULL == fsset) {
         fsset = SkFontStyleSet::CreateEmpty();
     }
     return fsset;
@@ -119,22 +121,22 @@ SkTypeface* SkFontMgr::matchFaceStyle(const SkTypeface* face,
 }
 
 SkTypeface* SkFontMgr::createFromData(SkData* data, int ttcIndex) const {
-    if (nullptr == data) {
-        return nullptr;
+    if (NULL == data) {
+        return NULL;
     }
     return this->onCreateFromData(data, ttcIndex);
 }
 
 SkTypeface* SkFontMgr::createFromStream(SkStreamAsset* stream, int ttcIndex) const {
-    if (nullptr == stream) {
-        return nullptr;
+    if (NULL == stream) {
+        return NULL;
     }
     return this->onCreateFromStream(stream, ttcIndex);
 }
 
 SkTypeface* SkFontMgr::createFromFontData(SkFontData* data) const {
-    if (nullptr == data) {
-        return nullptr;
+    if (NULL == data) {
+        return NULL;
     }
     return this->onCreateFromFontData(data);
 }
@@ -147,8 +149,8 @@ SkTypeface* SkFontMgr::onCreateFromFontData(SkFontData* data) const {
 }
 
 SkTypeface* SkFontMgr::createFromFile(const char path[], int ttcIndex) const {
-    if (nullptr == path) {
-        return nullptr;
+    if (NULL == path) {
+        return NULL;
     }
     return this->onCreateFromFile(path, ttcIndex);
 }
@@ -158,10 +160,14 @@ SkTypeface* SkFontMgr::legacyCreateTypeface(const char familyName[],
     return this->onLegacyCreateTypeface(familyName, styleBits);
 }
 
-SK_DECLARE_STATIC_ONCE_PTR(SkFontMgr, singleton);
+// As a template argument this must have external linkage.
+SkFontMgr* sk_fontmgr_create_default() {
+    SkFontMgr* fm = SkFontMgr::Factory();
+    return fm ? fm : SkNEW(SkEmptyFontMgr);
+}
+
+SK_DECLARE_STATIC_LAZY_PTR(SkFontMgr, singleton, sk_fontmgr_create_default);
+
 SkFontMgr* SkFontMgr::RefDefault() {
-    return SkRef(singleton.get([]{
-        SkFontMgr* fm = SkFontMgr::Factory();
-        return fm ? fm : new SkEmptyFontMgr;
-    }));
+    return SkRef(singleton.get());
 }

@@ -29,7 +29,7 @@ public:
     GrAllocator(size_t itemSize, int itemsPerBlock, void* initialBlock)
         : fItemSize(itemSize)
         , fItemsPerBlock(itemsPerBlock)
-        , fOwnFirstBlock(nullptr == initialBlock)
+        , fOwnFirstBlock(NULL == initialBlock)
         , fCount(0)
         , fInsertionIndexInBlock(0) {
         SkASSERT(itemsPerBlock > 0);
@@ -192,7 +192,7 @@ public:
 protected:
     /**
      * Set first block of memory to write into.  Must be called before any other methods.
-     * This requires that you have passed nullptr in the constructor.
+     * This requires that you have passed NULL in the constructor.
      *
      * @param   initialBlock    optional memory to use for the first block.
      *                          Must be at least itemSize*itemsPerBlock sized.
@@ -237,7 +237,7 @@ public:
      * @param   itemsPerBlock   the number of items to allocate at once
      */
     explicit GrTAllocator(int itemsPerBlock)
-        : fAllocator(sizeof(T), itemsPerBlock, nullptr) {}
+        : fAllocator(sizeof(T), itemsPerBlock, NULL) {}
 
     /**
      * Adds an item and returns it.
@@ -247,14 +247,14 @@ public:
     T& push_back() {
         void* item = fAllocator.push_back();
         SkASSERT(item);
-        new (item) T;
+        SkNEW_PLACEMENT(item, T);
         return *(T*)item;
     }
 
     T& push_back(const T& t) {
         void* item = fAllocator.push_back();
         SkASSERT(item);
-        new (item) T(t);
+        SkNEW_PLACEMENT_ARGS(item, T, (t));
         return *(T*)item;
     }
 

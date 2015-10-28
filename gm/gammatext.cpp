@@ -14,13 +14,13 @@
 static SkShader* make_heatGradient(const SkPoint pts[2]) {
     const SkColor bw[] = { SK_ColorBLACK, SK_ColorWHITE };
 
-    return SkGradientShader::CreateLinear(pts, bw, nullptr,
+    return SkGradientShader::CreateLinear(pts, bw, NULL,
                                           SK_ARRAY_COUNT(bw),
                                           SkShader::kClamp_TileMode);
 }
 
 static bool setFont(SkPaint* paint, const char name[]) {
-    SkTypeface* tf = SkTypeface::CreateFromName(name, SkTypeface::kNormal);
+    SkTypeface* tf = sk_tool_utils::create_portable_typeface(name, SkTypeface::kNormal);
     if (tf) {
         paint->setTypeface(tf)->unref();
         return true;
@@ -40,9 +40,7 @@ static bool setFont(SkPaint* paint, const char name[]) {
 class GammaTextGM : public skiagm::GM {
 protected:
     SkString onShortName() override {
-        SkString name("gammatext");
-        name.append(sk_tool_utils::major_platform_os_name());
-        return name;
+        return SkString("gammatext");
     }
 
     SkISize onISize() override {
@@ -74,7 +72,7 @@ protected:
         size_t len = strlen(text);
 
         SkPaint paint;
-        setFont(&paint, sk_tool_utils::platform_font_name("serif"));
+        setFont(&paint, "Times");
         paint.setTextSize(SkIntToScalar(16));
         paint.setAntiAlias(true);
         paint.setLCDRenderText(true);
@@ -106,7 +104,7 @@ static SkShader* make_gradient(SkColor c) {
     SkColor colors[2];
     colors[0] = c;
     colors[1] = SkColorSetA(c, 0);
-    return SkGradientShader::CreateLinear(pts, colors, nullptr, 2, SkShader::kClamp_TileMode);
+    return SkGradientShader::CreateLinear(pts, colors, NULL, 2, SkShader::kClamp_TileMode);
 }
 
 static void set_face(SkPaint* paint) {
@@ -118,7 +116,7 @@ static void draw_pair(SkCanvas* canvas, SkPaint* paint, SkShader* shader) {
     const char text[] = "Now is the time for all good";
     const size_t len = strlen(text);
     
-    paint->setShader(nullptr);
+    paint->setShader(NULL);
     canvas->drawText(text, len, 10, 20, *paint);
     paint->setShader(SkShader::CreateColorShader(paint->getColor()))->unref();
     canvas->drawText(text, len, 10, 40, *paint);
@@ -134,7 +132,7 @@ public:
     GammaShaderTextGM() {
         const SkColor colors[] = { SK_ColorBLACK, SK_ColorRED, SK_ColorBLUE };
         for (size_t i = 0; i < SK_ARRAY_COUNT(fShaders); ++i) {
-            fShaders[i] = nullptr;
+            fShaders[i] = NULL;
             fColors[i] = colors[i];
         }
     }

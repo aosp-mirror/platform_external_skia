@@ -12,8 +12,6 @@
 {
     'sources': [
         '<(skia_src_path)/doc/SkDocument_PDF.cpp',
-        '<(skia_src_path)/pdf/SkDeflate.cpp',
-        '<(skia_src_path)/pdf/SkDeflate.h',
         '<(skia_src_path)/pdf/SkJpegInfo.cpp',
         '<(skia_src_path)/pdf/SkJpegInfo.h',
         '<(skia_src_path)/pdf/SkPDFBitmap.cpp',
@@ -29,8 +27,6 @@
         '<(skia_src_path)/pdf/SkPDFFormXObject.h',
         '<(skia_src_path)/pdf/SkPDFGraphicState.cpp',
         '<(skia_src_path)/pdf/SkPDFGraphicState.h',
-        '<(skia_src_path)/pdf/SkPDFMetadata.cpp',
-        '<(skia_src_path)/pdf/SkPDFMetadata.h',
         '<(skia_src_path)/pdf/SkPDFResourceDict.cpp',
         '<(skia_src_path)/pdf/SkPDFResourceDict.h',
         '<(skia_src_path)/pdf/SkPDFShader.cpp',

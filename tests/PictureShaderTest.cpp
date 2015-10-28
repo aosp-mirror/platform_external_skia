@@ -11,7 +11,7 @@
 #include "SkShader.h"
 #include "Test.h"
 
-// Test that attempting to create a picture shader with a nullptr picture or
+// Test that attempting to create a picture shader with a NULL picture or
 // empty picture returns a shader that draws nothing.
 DEF_TEST(PictureShader_empty, reporter) {
     SkPaint paint;
@@ -23,7 +23,7 @@ DEF_TEST(PictureShader_empty, reporter) {
     canvas.clear(SK_ColorGREEN);
 
     SkShader* shader = SkShader::CreatePictureShader(
-            nullptr, SkShader::kClamp_TileMode, SkShader::kClamp_TileMode, nullptr, nullptr);
+            NULL, SkShader::kClamp_TileMode, SkShader::kClamp_TileMode, NULL, NULL);
     paint.setShader(shader)->unref();
 
     canvas.drawRect(SkRect::MakeWH(1,1), paint);
@@ -31,10 +31,10 @@ DEF_TEST(PictureShader_empty, reporter) {
 
 
     SkPictureRecorder factory;
-    factory.beginRecording(0, 0, nullptr, 0);
+    factory.beginRecording(0, 0, NULL, 0);
     SkAutoTUnref<SkPicture> picture(factory.endRecording());
     shader = SkShader::CreatePictureShader(
-            picture.get(), SkShader::kClamp_TileMode, SkShader::kClamp_TileMode, nullptr, nullptr);
+            picture.get(), SkShader::kClamp_TileMode, SkShader::kClamp_TileMode, NULL, NULL);
     paint.setShader(shader)->unref();
 
     canvas.drawRect(SkRect::MakeWH(1,1), paint);

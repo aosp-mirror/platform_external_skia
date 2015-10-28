@@ -15,3 +15,4 @@ race:SkGLContextHelper
 # Not threadsafe, should be fixed.
 race:RefFCI
 race:SkString
+race:SkPDF

@@ -150,10 +150,10 @@
                                GetCurrentThread(),
                                &frame,
                                c,
-                               nullptr,
+                               NULL,
                                SymFunctionTableAccess64,
                                SymGetModuleBase64,
-                               nullptr)) {
+                               NULL)) {
                 // Buffer to store symbol name in.
                 static const int kMaxNameLength = 1024;
                 uint8_t buffer[sizeof(IMAGEHLP_SYMBOL64) + kMaxNameLength];

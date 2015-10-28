@@ -273,12 +273,11 @@ public:
     //! Swap contents of this and other. Guaranteed not to throw
     void swap(SkPath& other);
 
-    /**
-     *  Returns the bounds of the path's points. If the path contains zero points/verbs, this
-     *  will return the "empty" rect [0, 0, 0, 0].
-     *  Note: this bounds may be larger than the actual shape, since curves
-     *  do not extend as far as their control points. Additionally this bound encompases all points,
-     *  even isolated moveTos either preceeding or following the last non-degenerate contour.
+    /** Returns the bounds of the path's points. If the path contains 0 or 1
+        points, the bounds is set to (0,0,0,0), and isEmpty() will return true.
+        Note: this bounds may be larger than the actual shape, since curves
+        do not extend as far as their control points. Additionally this bound
+        can contain trailing MoveTo points (cf. isRect).
     */
     const SkRect& getBounds() const {
         return fPathRef->getBounds();
@@ -505,10 +504,10 @@ public:
      *  kInverseEvenOdd_FillType -> true
      */
     static bool IsInverseFillType(FillType fill) {
-        static_assert(0 == kWinding_FillType, "fill_type_mismatch");
-        static_assert(1 == kEvenOdd_FillType, "fill_type_mismatch");
-        static_assert(2 == kInverseWinding_FillType, "fill_type_mismatch");
-        static_assert(3 == kInverseEvenOdd_FillType, "fill_type_mismatch");
+        SK_COMPILE_ASSERT(0 == kWinding_FillType, fill_type_mismatch);
+        SK_COMPILE_ASSERT(1 == kEvenOdd_FillType, fill_type_mismatch);
+        SK_COMPILE_ASSERT(2 == kInverseWinding_FillType, fill_type_mismatch);
+        SK_COMPILE_ASSERT(3 == kInverseEvenOdd_FillType, fill_type_mismatch);
         return (fill & 2) != 0;
     }
 
@@ -521,10 +520,10 @@ public:
      *  kInverseEvenOdd_FillType -> kEvenOdd_FillType
      */
     static FillType ConvertToNonInverseFillType(FillType fill) {
-        static_assert(0 == kWinding_FillType, "fill_type_mismatch");
-        static_assert(1 == kEvenOdd_FillType, "fill_type_mismatch");
-        static_assert(2 == kInverseWinding_FillType, "fill_type_mismatch");
-        static_assert(3 == kInverseEvenOdd_FillType, "fill_type_mismatch");
+        SK_COMPILE_ASSERT(0 == kWinding_FillType, fill_type_mismatch);
+        SK_COMPILE_ASSERT(1 == kEvenOdd_FillType, fill_type_mismatch);
+        SK_COMPILE_ASSERT(2 == kInverseWinding_FillType, fill_type_mismatch);
+        SK_COMPILE_ASSERT(3 == kInverseEvenOdd_FillType, fill_type_mismatch);
         return (FillType)(fill & 1);
     }
 
@@ -938,12 +937,13 @@ private:
         kCurrent_Version = 1
     };
 
-    SkAutoTUnref<SkPathRef>                            fPathRef;
-    int                                                fLastMoveToIndex;
-    uint8_t                                            fFillType;
-    mutable uint8_t                                    fConvexity;
-    mutable SkAtomic<uint8_t, sk_memory_order_relaxed> fFirstDirection;// SkPathPriv::FirstDirection
-    mutable SkBool8                                    fIsVolatile;
+    SkAutoTUnref<SkPathRef> fPathRef;
+
+    int                 fLastMoveToIndex;
+    uint8_t             fFillType;
+    mutable uint8_t     fConvexity;
+    mutable uint8_t     fFirstDirection;    // SkPathPriv::FirstDirection
+    mutable SkBool8     fIsVolatile;
 
     /** Resets all fields other than fPathRef to their initial 'empty' values.
      *  Assumes the caller has already emptied fPathRef.

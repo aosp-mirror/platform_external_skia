@@ -31,14 +31,20 @@ class GrGLArtithmeticFP;
 
 class GrArithmeticFP : public GrFragmentProcessor {
 public:
-    static const GrFragmentProcessor* Create(float k1, float k2, float k3, float k4,
-                                             bool enforcePMColor, const GrFragmentProcessor* dst) {
-        return new GrArithmeticFP(k1, k2, k3, k4, enforcePMColor, dst);
+    static GrFragmentProcessor* Create(GrProcessorDataManager* procDataManager, float k1, float k2,
+                                       float k3, float k4, bool enforcePMColor,
+                                       GrTexture* background) {
+        return SkNEW_ARGS(GrArithmeticFP, (procDataManager, k1, k2, k3, k4, enforcePMColor,
+                                           background));
     }
 
     ~GrArithmeticFP() override {};
 
     const char* name() const override { return "Arithmetic"; }
+
+    void getGLProcessorKey(const GrGLSLCaps& caps, GrProcessorKeyBuilder* b) const override;
+
+    GrGLFragmentProcessor* createGLInstance() const override;
 
     float k1() const { return fK1; }
     float k2() const { return fK2; }
@@ -47,19 +53,17 @@ public:
     bool enforcePMColor() const { return fEnforcePMColor; }
 
 private:
-    GrGLFragmentProcessor* onCreateGLInstance() const override;
-
-    void onGetGLProcessorKey(const GrGLSLCaps& caps, GrProcessorKeyBuilder* b) const override;
-
     bool onIsEqual(const GrFragmentProcessor&) const override;
 
     void onComputeInvariantOutput(GrInvariantOutput* inout) const override;
 
-    GrArithmeticFP(float k1, float k2, float k3, float k4, bool enforcePMColor,
-                   const GrFragmentProcessor* dst);
+    GrArithmeticFP(GrProcessorDataManager*, float k1, float k2, float k3, float k4,
+                   bool enforcePMColor, GrTexture* background);
 
     float                       fK1, fK2, fK3, fK4;
     bool                        fEnforcePMColor;
+    GrCoordTransform            fBackgroundTransform;
+    GrTextureAccess             fBackgroundAccess;
 
     GR_DECLARE_FRAGMENT_PROCESSOR_TEST;
     typedef GrFragmentProcessor INHERITED;
@@ -72,7 +76,7 @@ private:
 class GrArithmeticXPFactory : public GrXPFactory {
 public:
     static GrXPFactory* Create(float k1, float k2, float k3, float k4, bool enforcePMColor) {
-        return new GrArithmeticXPFactory(k1, k2, k3, k4, enforcePMColor);
+        return SkNEW_ARGS(GrArithmeticXPFactory, (k1, k2, k3, k4, enforcePMColor));
     }
 
     bool supportsRGBCoverage(GrColor knownColor, uint32_t knownColorFlags) const override {

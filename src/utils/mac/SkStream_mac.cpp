@@ -20,7 +20,7 @@ static void delete_stream_proc(void* info, const void* addr, size_t size) {
     SkStream* stream = (SkStream*)info;
     SkASSERT(stream->getMemoryBase() == addr);
     SkASSERT(stream->getLength() == size);
-    delete stream;
+    SkDELETE(stream);
 }
 
 // These are used by CGDataProviderSequentialCallbacks
@@ -42,7 +42,7 @@ static void rewind_proc(void* info) {
 // Used when info is an SkStream.
 static void release_info_proc(void* info) {
     SkASSERT(info);
-    delete (SkStream*)info;
+    SkDELETE((SkStream*)info);
 }
 
 CGDataProviderRef SkCreateDataProviderFromStream(SkStream* stream) {

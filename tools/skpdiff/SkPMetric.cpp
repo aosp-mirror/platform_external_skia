@@ -1,9 +1,3 @@
-/*
- * Copyright 2013 Google Inc.
- *
- * Use of this source code is governed by a BSD-style license that can be
- * found in the LICENSE file.
- */
 #include <cmath>
 #include <math.h>
 
@@ -31,10 +25,12 @@ struct Image2D {
           height(h) {
         SkASSERT(w > 0);
         SkASSERT(h > 0);
-        image = new T[w * h];
+        image = SkNEW_ARRAY(T, w * h);
     }
 
-    ~Image2D() { delete[] image; }
+    ~Image2D() {
+        SkDELETE_ARRAY(image);
+    }
 
     void readPixel(int x, int y, T* pixel) const {
         SkASSERT(x >= 0);
@@ -70,17 +66,17 @@ struct ImageArray
     ImageArray(int w, int h, int s)
         : slices(s) {
         SkASSERT(s > 0);
-        image = new Image2D<T>* [s];
+        image = SkNEW_ARRAY(Image2D<T>*, s);
         for (int sliceIndex = 0; sliceIndex < slices; sliceIndex++) {
-            image[sliceIndex] = new Image2D<T>(w, h);
+            image[sliceIndex] = SkNEW_ARGS(Image2D<T>, (w, h));
         }
     }
 
     ~ImageArray() {
         for (int sliceIndex = 0; sliceIndex < slices; sliceIndex++) {
-            delete image[sliceIndex];
+            SkDELETE(image[sliceIndex]);
         }
-        delete[] image;
+        SkDELETE_ARRAY(image);
     }
 
     Image2D<T>* getLayer(int z) const {
@@ -300,9 +296,9 @@ static double pmetric(const ImageLAB* baselineLAB, const ImageLAB* testLAB, int*
     ImageL3D baselineL(width, height, maxLevels);
     ImageL3D testL(width, height, maxLevels);
     ImageL scratchImageL(width, height);
-    float* cyclesPerDegree = new float[maxLevels];
-    float* thresholdFactorFrequency = new float[maxLevels - 2];
-    float* contrast = new float[maxLevels - 2];
+    float* cyclesPerDegree = SkNEW_ARRAY(float, maxLevels);
+    float* thresholdFactorFrequency = SkNEW_ARRAY(float, maxLevels - 2);
+    float* contrast = SkNEW_ARRAY(float, maxLevels - 2);
 
     lab_to_l(baselineLAB, baselineL.getLayer(0));
     lab_to_l(testLAB, testL.getLayer(0));
@@ -315,7 +311,7 @@ static double pmetric(const ImageLAB* baselineLAB, const ImageLAB* testLAB, int*
 
     // Contrast sensitivity is based on image dimensions. Therefore it cannot be statically
     // generated.
-    float* contrastSensitivityTable = new float[maxLevels * 1000];
+    float* contrastSensitivityTable = SkNEW_ARRAY(float, maxLevels * 1000);
     for (int levelIndex = 0; levelIndex < maxLevels; levelIndex++) {
         for (int csLum = 0; csLum < 1000; csLum++) {
            contrastSensitivityTable[levelIndex * 1000 + csLum] =
@@ -439,10 +435,10 @@ static double pmetric(const ImageLAB* baselineLAB, const ImageLAB* testLAB, int*
         }
     }
 
-    delete[] cyclesPerDegree;
-    delete[] contrast;
-    delete[] thresholdFactorFrequency;
-    delete[] contrastSensitivityTable;
+    SkDELETE_ARRAY(cyclesPerDegree);
+    SkDELETE_ARRAY(contrast);
+    SkDELETE_ARRAY(thresholdFactorFrequency);
+    SkDELETE_ARRAY(contrastSensitivityTable);
     return 1.0 - (double)(*poiCount) / (width * height);
 }
 

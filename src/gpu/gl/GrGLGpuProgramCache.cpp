@@ -23,7 +23,7 @@ typedef GrGLProgramDataManager::UniformHandle UniformHandle;
 
 struct GrGLGpu::ProgramCache::Entry {
     
-    Entry() : fProgram(nullptr), fLRUStamp(0) {}
+    Entry() : fProgram(NULL), fLRUStamp(0) {}
 
     SkAutoTUnref<GrGLProgram>   fProgram;
     unsigned int                fLRUStamp;
@@ -52,13 +52,13 @@ GrGLGpu::ProgramCache::ProgramCache(GrGLGpu* gpu)
 #endif
 {
     for (int i = 0; i < 1 << kHashBits; ++i) {
-        fHashTable[i] = nullptr;
+        fHashTable[i] = NULL;
     }
 }
 
 GrGLGpu::ProgramCache::~ProgramCache() {
     for (int i = 0; i < fCount; ++i){
-        delete fEntries[i];
+        SkDELETE(fEntries[i]);
     }
     // dump stats
 #ifdef PROGRAM_CACHE_STATS
@@ -80,7 +80,7 @@ void GrGLGpu::ProgramCache::abandon() {
     for (int i = 0; i < fCount; ++i) {
         SkASSERT(fEntries[i]->fProgram.get());
         fEntries[i]->fProgram->abandon();
-        delete fEntries[i];
+        SkDELETE(fEntries[i]);
     }
     fCount = 0;
 }
@@ -95,7 +95,7 @@ GrGLProgram* GrGLGpu::ProgramCache::refProgram(const DrawArgs& args) {
     ++fTotalRequests;
 #endif
 
-    Entry* entry = nullptr;
+    Entry* entry = NULL;
 
     uint32_t hashIdx = args.fDesc->getChecksum();
     hashIdx ^= hashIdx >> 16;
@@ -110,7 +110,7 @@ GrGLProgram* GrGLGpu::ProgramCache::refProgram(const DrawArgs& args) {
     }
 
     int entryIdx;
-    if (nullptr == entry) {
+    if (NULL == entry) {
         entryIdx = this->search(*args.fDesc);
         if (entryIdx >= 0) {
             entry = fEntries[entryIdx];
@@ -120,18 +120,18 @@ GrGLProgram* GrGLGpu::ProgramCache::refProgram(const DrawArgs& args) {
         }
     }
 
-    if (nullptr == entry) {
+    if (NULL == entry) {
         // We have a cache miss
 #ifdef PROGRAM_CACHE_STATS
         ++fCacheMisses;
 #endif
         GrGLProgram* program = GrGLProgramBuilder::CreateProgram(args, fGpu);
-        if (nullptr == program) {
-            return nullptr;
+        if (NULL == program) {
+            return NULL;
         }
         int purgeIdx = 0;
         if (fCount < kMaxEntries) {
-            entry = new Entry;
+            entry = SkNEW(Entry);
             purgeIdx = fCount++;
             fEntries[purgeIdx] = entry;
         } else {
@@ -145,7 +145,7 @@ GrGLProgram* GrGLGpu::ProgramCache::refProgram(const DrawArgs& args) {
             entry = fEntries[purgeIdx];
             int purgedHashIdx = entry->fProgram->getDesc().getChecksum() & ((1 << kHashBits) - 1);
             if (fHashTable[purgedHashIdx] == entry) {
-                fHashTable[purgedHashIdx] = nullptr;
+                fHashTable[purgedHashIdx] = NULL;
             }
         }
         SkASSERT(fEntries[purgeIdx] == entry);

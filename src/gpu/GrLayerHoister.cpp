@@ -130,7 +130,7 @@ void GrLayerHoister::FindLayersToAtlas(GrContext* context,
     GrLayerCache* layerCache = context->getLayerCache();
     layerCache->processDeletedPictures();
 
-    const SkBigPicture::AccelData* topLevelData = nullptr;
+    const SkBigPicture::AccelData* topLevelData = NULL;
     if (const SkBigPicture* bp = topLevelPicture->asSkBigPicture()) {
         topLevelData = bp->accelData();
     }
@@ -188,7 +188,7 @@ void GrLayerHoister::FindLayersToHoist(GrContext* context,
 
     layerCache->processDeletedPictures();
 
-    const SkBigPicture::AccelData* topLevelData = nullptr;
+    const SkBigPicture::AccelData* topLevelData = NULL;
     if (const SkBigPicture* bp = topLevelPicture->asSkBigPicture()) {
         topLevelData = bp->accelData();
     }
@@ -282,7 +282,7 @@ SkBitmap wrap_texture(GrTexture* texture) {
 
     SkBitmap result;
     result.setInfo(texture->surfacePriv().info(kPremul_SkAlphaType));
-    result.setPixelRef(new SkGrPixelRef(result.info(), texture))->unref();
+    result.setPixelRef(SkNEW_ARGS(SkGrPixelRef, (result.info(), texture)))->unref();
     return result;
 }
 
@@ -311,9 +311,9 @@ void GrLayerHoister::FilterLayer(GrContext* context,
     // This cache is transient, and is freed (along with all its contained
     // textures) when it goes out of scope.
     SkAutoTUnref<SkImageFilter::Cache> cache(SkImageFilter::Cache::Create(kDefaultCacheSize));
-    SkImageFilter::Context filterContext(totMat, clipBounds, cache, SkImageFilter::kApprox_SizeConstraint);
+    SkImageFilter::Context filterContext(totMat, clipBounds, cache);
 
-    SkImageFilter::DeviceProxy proxy(device);
+    SkImageFilter::Proxy proxy(device);
     const SkBitmap src = wrap_texture(layer->texture());
 
     if (!layer->filter()->filterImage(&proxy, src, filterContext, &filteredBitmap, &offset)) {

@@ -11,7 +11,6 @@
 #include "SkReadBuffer.h"
 #include "SkWriteBuffer.h"
 #include "SkPathMeasure.h"
-#include "SkStrokeRec.h"
 
 static void Perterb(SkPoint* p, const SkVector& tangent, SkScalar scale) {
     SkVector normal = tangent;

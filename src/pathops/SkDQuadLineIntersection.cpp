@@ -103,8 +103,8 @@ public:
 
     LineQuadraticIntersections(const SkDQuad& q)
         : fQuad(q) 
-        SkDEBUGPARAMS(fLine(nullptr))
-        SkDEBUGPARAMS(fIntersections(nullptr))
+        SkDEBUGPARAMS(fLine(NULL))
+        SkDEBUGPARAMS(fIntersections(NULL))
         SkDEBUGPARAMS(fAllowNear(false)) {
     }
 
@@ -117,7 +117,7 @@ public:
         for (int index = 0; index < last; ) {
             double quadMidT = ((*fIntersections)[0][index] + (*fIntersections)[0][index + 1]) / 2;
             SkDPoint quadMidPt = fQuad.ptAtT(quadMidT);
-            double t = fLine->nearPoint(quadMidPt, nullptr);
+            double t = fLine->nearPoint(quadMidPt, NULL);
             if (t < 0) {
                 ++index;
                 continue;
@@ -291,7 +291,7 @@ protected:
             if (fIntersections->hasT(quadT)) {
                 continue;
             }
-            double lineT = fLine->nearPoint(fQuad[qIndex], nullptr);
+            double lineT = fLine->nearPoint(fQuad[qIndex], NULL);
             if (lineT < 0) {
                 continue;
             }

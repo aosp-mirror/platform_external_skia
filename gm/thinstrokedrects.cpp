@@ -73,5 +73,6 @@ private:
 
 //////////////////////////////////////////////////////////////////////////////
 
-DEF_GM(return new ThinStrokedRectsGM;)
+DEF_GM( return SkNEW(ThinStrokedRectsGM); )
+
 }

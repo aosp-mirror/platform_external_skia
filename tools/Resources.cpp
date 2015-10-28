@@ -9,7 +9,6 @@
 #include "SkBitmap.h"
 #include "SkCommandLineFlags.h"
 #include "SkData.h"
-#include "SkImage.h"
 #include "SkImageGenerator.h"
 #include "SkOSFile.h"
 #include "SkStream.h"
@@ -28,14 +27,7 @@ void SetResourcePath(const char* resource) {
 bool GetResourceAsBitmap(const char* resource, SkBitmap* dst) {
     SkString resourcePath = GetResourcePath(resource);
     SkAutoTUnref<SkData> resourceData(SkData::NewFromFileName(resourcePath.c_str()));
-    SkAutoTDelete<SkImageGenerator> gen(SkImageGenerator::NewFromEncoded(resourceData));
-    return gen && gen->tryGenerateBitmap(dst);
-}
-
-SkImage* GetResourceAsImage(const char* resource) {
-    SkString path = GetResourcePath(resource);
-    SkAutoTUnref<SkData> resourceData(SkData::NewFromFileName(path.c_str()));
-    return SkImage::NewFromEncoded(resourceData);
+    return resourceData && SkInstallDiscardablePixelRef(resourceData, dst);
 }
 
 SkStreamAsset* GetResourceAsStream(const char* resource) {
@@ -45,14 +37,14 @@ SkStreamAsset* GetResourceAsStream(const char* resource) {
         return stream.detach();
     } else {
         SkDebugf("Resource %s not found.\n", resource);
-        return nullptr;
+        return NULL;
     }
 }
 
 SkTypeface* GetResourceAsTypeface(const char* resource) {
     SkAutoTDelete<SkStreamAsset> stream(GetResourceAsStream(resource));
     if (!stream) {
-        return nullptr;
+        return NULL;
     }
     return SkTypeface::CreateFromStream(stream.detach());
 }

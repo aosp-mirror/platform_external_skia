@@ -17,7 +17,7 @@ static SkShader* make_shader() {
     };
     const SkPoint pts[] = { { 100.f / 4.f, 0.f }, { 3.f * 100.f / 4.f, 100.f } };
     
-    return SkGradientShader::CreateLinear(pts, colors, nullptr, SK_ARRAY_COUNT(colors),
+    return SkGradientShader::CreateLinear(pts, colors, NULL, SK_ARRAY_COUNT(colors),
                                           SkShader::kMirror_TileMode);
 }
 
@@ -64,7 +64,28 @@ static void draw_control_points(SkCanvas* canvas, const SkPoint cubics[12]) {
     canvas->drawPoints(SkCanvas::kPoints_PointMode, 2, right + 1, paint);
 }
 
-DEF_SIMPLE_GM(patch_primitive, canvas, 800, 800) {
+namespace skiagm {
+/**
+ * This GM draws a cubics coons patch using the specialized call SkCanvas::drawPatch.
+ */
+class SkPatchGM : public GM {
+    
+public:
+    SkPatchGM() {
+        this->setBGColor(0xFFFFFFFF);
+    }
+
+protected:
+    SkString onShortName() override {
+        return SkString("patch_primitive");
+    }
+
+    SkISize onISize() override {
+        return SkISize::Make(800, 800);
+    }
+
+    void onDraw(SkCanvas* canvas) override {
+
         SkPaint paint;
         
         // The order of the colors and points is clockwise starting at upper-left corner.
@@ -103,20 +124,20 @@ DEF_SIMPLE_GM(patch_primitive, canvas, 800, 800) {
                 canvas->translate(x * 350.0f, y * 350.0f);
                 switch (x) {
                     case 0:
-                        canvas->drawPatch(cubics, nullptr, nullptr, xfer, paint);
+                        canvas->drawPatch(cubics, NULL, NULL, xfer, paint);
                         break;
                     case 1:
-                        canvas->drawPatch(cubics, colors, nullptr, xfer, paint);
+                        canvas->drawPatch(cubics, colors, NULL, xfer, paint);
                         break;
                     case 2:
                         paint.setShader(shader);
-                        canvas->drawPatch(cubics, nullptr, texCoords, xfer, paint);
-                        paint.setShader(nullptr);
+                        canvas->drawPatch(cubics, NULL, texCoords, xfer, paint);
+                        paint.setShader(NULL);
                         break;
                     case 3:
                         paint.setShader(shader);
                         canvas->drawPatch(cubics, colors, texCoords, xfer, paint);
-                        paint.setShader(nullptr);
+                        paint.setShader(NULL);
                         break;
                     default:
                         break;
@@ -127,4 +148,12 @@ DEF_SIMPLE_GM(patch_primitive, canvas, 800, 800) {
             }
         }
         canvas->restore();
+    }
+
+private:
+    typedef GM INHERITED;
+};
+
+DEF_GM(return SkNEW(SkPatchGM); )
+
 }

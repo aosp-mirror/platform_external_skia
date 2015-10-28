@@ -15,7 +15,6 @@
 #include "SkHRESULT.h"
 #include "SkMaskGamma.h"
 #include "SkMatrix22.h"
-#include "SkMutex.h"
 #include "SkOTTable_EBLC.h"
 #include "SkOTTable_EBSC.h"
 #include "SkOTTable_gasp.h"
@@ -23,7 +22,6 @@
 #include "SkPath.h"
 #include "SkScalerContext.h"
 #include "SkScalerContext_win_dw.h"
-#include "SkSharedMutex.h"
 #include "SkTScopedComPtr.h"
 #include "SkTypeface_win_dw.h"
 
@@ -32,21 +30,11 @@
 #  include <dwrite_1.h>
 #endif
 
-/* Note:
- * In versions 8 and 8.1 of Windows, some calls in DWrite are not thread safe.
- * The DWriteFactoryMutex protects the calls that are problematic.
- */
-static SkSharedMutex DWriteFactoryMutex;
-
-typedef SkAutoTExclusive<SkSharedMutex> Exclusive;
-typedef SkAutoSharedMutexShared Shared;
-
 static bool isLCD(const SkScalerContext::Rec& rec) {
     return SkMask::kLCD16_Format == rec.fMaskFormat;
 }
 
 static bool is_hinted_without_gasp(DWriteFontTypeface* typeface) {
-    Exclusive l(DWriteFactoryMutex);
     AutoTDWriteTable<SkOTTableMaximumProfile> maxp(typeface->fDWriteFontFace.get());
     if (!maxp.fExists) {
         return false;
@@ -116,7 +104,6 @@ static void expand_range_if_gridfit_only(DWriteFontTypeface* typeface, int size,
 }
 
 static bool has_bitmap_strike(DWriteFontTypeface* typeface, PPEMRange range) {
-    Exclusive l(DWriteFactoryMutex);
     {
         AutoTDWriteTable<SkOTTableEmbeddedBitmapLocation> eblc(typeface->fDWriteFontFace.get());
         if (!eblc.fExists) {
@@ -350,7 +337,6 @@ void SkScalerContext_DW::generateAdvance(SkGlyph* glyph) {
     if (DWRITE_MEASURING_MODE_GDI_CLASSIC == fMeasuringMode ||
         DWRITE_MEASURING_MODE_GDI_NATURAL == fMeasuringMode)
     {
-        Exclusive l(DWriteFactoryMutex);
         HRVM(fTypeface->fDWriteFontFace->GetGdiCompatibleGlyphMetrics(
                  fTextSizeMeasure,
                  1.0f, // pixelsPerDip
@@ -360,16 +346,12 @@ void SkScalerContext_DW::generateAdvance(SkGlyph* glyph) {
                  &gm),
              "Could not get gdi compatible glyph metrics.");
     } else {
-        Exclusive l(DWriteFactoryMutex);
         HRVM(fTypeface->fDWriteFontFace->GetDesignGlyphMetrics(&glyphId, 1, &gm),
              "Could not get design metrics.");
     }
 
     DWRITE_FONT_METRICS dwfm;
-    {
-        Shared l(DWriteFactoryMutex);
-        fTypeface->fDWriteFontFace->GetMetrics(&dwfm);
-    }
+    fTypeface->fDWriteFontFace->GetMetrics(&dwfm);
     SkScalar advanceX = SkScalarMulDiv(fTextSizeMeasure,
                                        SkIntToScalar(gm.advanceWidth),
                                        SkIntToScalar(dwfm.designUnitsPerEm));
@@ -418,9 +400,7 @@ HRESULT SkScalerContext_DW::getBoundingBox(SkGlyph* glyph,
     run.glyphOffsets = &offset;
 
     SkTScopedComPtr<IDWriteGlyphRunAnalysis> glyphRunAnalysis;
-    {
-        Exclusive l(DWriteFactoryMutex);
-        HRM(fTypeface->fFactory->CreateGlyphRunAnalysis(
+    HRM(fTypeface->fFactory->CreateGlyphRunAnalysis(
             &run,
             1.0f, // pixelsPerDip,
             &fXform,
@@ -429,13 +409,11 @@ HRESULT SkScalerContext_DW::getBoundingBox(SkGlyph* glyph,
             0.0f, // baselineOriginX,
             0.0f, // baselineOriginY,
             &glyphRunAnalysis),
-            "Could not create glyph run analysis.");
-    }
-    {
-        Shared l(DWriteFactoryMutex);
-        HRM(glyphRunAnalysis->GetAlphaTextureBounds(textureType, bbox),
-            "Could not get texture bounds.");
-    }
+        "Could not create glyph run analysis.");
+
+    HRM(glyphRunAnalysis->GetAlphaTextureBounds(textureType, bbox),
+        "Could not get texture bounds.");
+
     return S_OK;
 }
 
@@ -489,7 +467,7 @@ void SkScalerContext_DW::generateMetrics(SkGlyph* glyph) {
 }
 
 void SkScalerContext_DW::generateFontMetrics(SkPaint::FontMetrics* metrics) {
-    if (nullptr == metrics) {
+    if (NULL == metrics) {
         return;
     }
 
@@ -673,37 +651,30 @@ const void* SkScalerContext_DW::drawDWMask(const SkGlyph& glyph,
     run.glyphIndices = &index;
     run.isSideways = FALSE;
     run.glyphOffsets = &offset;
-    {
 
-        SkTScopedComPtr<IDWriteGlyphRunAnalysis> glyphRunAnalysis;
-        {
-            Exclusive l(DWriteFactoryMutex);
-            HRNM(fTypeface->fFactory->CreateGlyphRunAnalysis(&run,
-                1.0f, // pixelsPerDip,
-                &fXform,
-                renderingMode,
-                fMeasuringMode,
-                0.0f, // baselineOriginX,
-                0.0f, // baselineOriginY,
-                &glyphRunAnalysis),
-                "Could not create glyph run analysis.");
-        }
-        //NOTE: this assumes that the glyph has already been measured
-        //with an exact same glyph run analysis.
-        RECT bbox;
-        bbox.left = glyph.fLeft;
-        bbox.top = glyph.fTop;
-        bbox.right = glyph.fLeft + glyph.fWidth;
-        bbox.bottom = glyph.fTop + glyph.fHeight;
-        {
-            Shared l(DWriteFactoryMutex);
-            HRNM(glyphRunAnalysis->CreateAlphaTexture(textureType,
-                &bbox,
-                fBits.begin(),
-                sizeNeeded),
-                "Could not draw mask.");
-        }
-    }
+    SkTScopedComPtr<IDWriteGlyphRunAnalysis> glyphRunAnalysis;
+    HRNM(fTypeface->fFactory->CreateGlyphRunAnalysis(&run,
+                                          1.0f, // pixelsPerDip,
+                                          &fXform,
+                                          renderingMode,
+                                          fMeasuringMode,
+                                          0.0f, // baselineOriginX,
+                                          0.0f, // baselineOriginY,
+                                          &glyphRunAnalysis),
+         "Could not create glyph run analysis.");
+
+    //NOTE: this assumes that the glyph has already been measured
+    //with an exact same glyph run analysis.
+    RECT bbox;
+    bbox.left = glyph.fLeft;
+    bbox.top = glyph.fTop;
+    bbox.right = glyph.fLeft + glyph.fWidth;
+    bbox.bottom = glyph.fTop + glyph.fHeight;
+    HRNM(glyphRunAnalysis->CreateAlphaTexture(textureType,
+                                              &bbox,
+                                              fBits.begin(),
+                                              sizeNeeded),
+         "Could not draw mask.");
     return fBits.begin();
 }
 
@@ -759,20 +730,17 @@ void SkScalerContext_DW::generatePath(const SkGlyph& glyph, SkPath* path) {
     HRVM(SkDWriteGeometrySink::Create(path, &geometryToPath),
          "Could not create geometry to path converter.");
     uint16_t glyphId = glyph.getGlyphID();
-    {
-        Exclusive l(DWriteFactoryMutex);
-        //TODO: convert to<->from DIUs? This would make a difference if hinting.
-        //It may not be needed, it appears that DirectWrite only hints at em size.
-        HRVM(fTypeface->fDWriteFontFace->GetGlyphRunOutline(SkScalarToFloat(fTextSizeRender),
-            &glyphId,
-            nullptr, //advances
-            nullptr, //offsets
-            1, //num glyphs
-            FALSE, //sideways
-            FALSE, //rtl
-            geometryToPath.get()),
-            "Could not create glyph outline.");
-    }
+    //TODO: convert to<->from DIUs? This would make a difference if hinting.
+    //It may not be needed, it appears that DirectWrite only hints at em size.
+    HRVM(fTypeface->fDWriteFontFace->GetGlyphRunOutline(SkScalarToFloat(fTextSizeRender),
+                                       &glyphId,
+                                       NULL, //advances
+                                       NULL, //offsets
+                                       1, //num glyphs
+                                       FALSE, //sideways
+                                       FALSE, //rtl
+                                       geometryToPath.get()),
+         "Could not create glyph outline.");
 
     path->transform(fSkXform);
 }

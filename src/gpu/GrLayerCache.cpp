@@ -25,7 +25,7 @@ void GrCachedLayer::validate(const GrTexture* backingTexture) const {
         }
     } else {
         SkASSERT(fRect.isEmpty());
-        SkASSERT(nullptr == fPlot);
+        SkASSERT(NULL == fPlot);
         SkASSERT(!fLocked);     // layers without a texture cannot be locked
     }
 
@@ -68,7 +68,7 @@ public:
         }
     }
     void setBackingTexture(GrTexture* backingTexture) {
-        SkASSERT(nullptr == fBackingTexture || fBackingTexture == backingTexture);
+        SkASSERT(NULL == fBackingTexture || fBackingTexture == backingTexture);
         fBackingTexture = backingTexture;
     }
 
@@ -90,7 +90,7 @@ GrLayerCache::~GrLayerCache() {
         GrCachedLayer* layer = &(*iter);
         SkASSERT(0 == layer->uses());
         this->unlock(layer);
-        delete layer;
+        SkDELETE(layer);
     }
 
     SkASSERT(0 == fPictureHash.count());
@@ -100,13 +100,13 @@ GrLayerCache::~GrLayerCache() {
 }
 
 void GrLayerCache::initAtlas() {
-    SkASSERT(nullptr == fAtlas.get());
+    SkASSERT(NULL == fAtlas.get());
     GR_STATIC_ASSERT(kNumPlotsX*kNumPlotsX == GrPictureInfo::kNumPlots);
 
     SkISize textureSize = SkISize::Make(kAtlasTextureWidth, kAtlasTextureHeight);
-    fAtlas.reset(new GrAtlas(fContext->getGpu(), kSkia8888_GrPixelConfig,
-                             kRenderTarget_GrSurfaceFlag, textureSize, kNumPlotsX, kNumPlotsY,
-                             false));
+    fAtlas.reset(SkNEW_ARGS(GrAtlas, (fContext->getGpu(), kSkia8888_GrPixelConfig,
+                                      kRenderTarget_GrSurfaceFlag,
+                                      textureSize, kNumPlotsX, kNumPlotsY, false)));
 }
 
 void GrLayerCache::freeAll() {
@@ -115,7 +115,7 @@ void GrLayerCache::freeAll() {
     for (; !iter.done(); ++iter) {
         GrCachedLayer* layer = &(*iter);
         this->unlock(layer);
-        delete layer;
+        SkDELETE(layer);
     }
     fLayerHash.rewind();
 
@@ -128,19 +128,20 @@ GrCachedLayer* GrLayerCache::createLayer(uint32_t pictureID,
                                          const SkIRect& srcIR,
                                          const SkIRect& dstIR,
                                          const SkMatrix& initialMat,
-                                         const int* key,
+                                         const unsigned* key,
                                          int keySize,
                                          const SkPaint* paint) {
     SkASSERT(pictureID != SK_InvalidGenID && start >= 0 && stop > 0);
 
-    GrCachedLayer* layer = new GrCachedLayer(pictureID, start, stop, srcIR, dstIR, initialMat, key,
-                                             keySize, paint);
+    GrCachedLayer* layer = SkNEW_ARGS(GrCachedLayer, (pictureID, start, stop,
+                                                      srcIR, dstIR, initialMat,
+                                                      key, keySize, paint));
     fLayerHash.add(layer);
     return layer;
 }
 
 GrCachedLayer* GrLayerCache::findLayer(uint32_t pictureID, const SkMatrix& initialMat,
-                                       const int* key, int keySize) {
+                                       const unsigned* key, int keySize) {
     SkASSERT(pictureID != SK_InvalidGenID);
     return fLayerHash.find(GrCachedLayer::Key(pictureID, initialMat, key, keySize));
 }
@@ -150,12 +151,12 @@ GrCachedLayer* GrLayerCache::findLayerOrCreate(uint32_t pictureID,
                                                const SkIRect& srcIR,
                                                const SkIRect& dstIR,
                                                const SkMatrix& initialMat,
-                                               const int* key,
+                                               const unsigned* key,
                                                int keySize,
                                                const SkPaint* paint) {
     SkASSERT(pictureID != SK_InvalidGenID && start >= 0 && stop > 0);
     GrCachedLayer* layer = fLayerHash.find(GrCachedLayer::Key(pictureID, initialMat, key, keySize));
-    if (nullptr == layer) {
+    if (NULL == layer) {
         layer = this->createLayer(pictureID, start, stop,
                                   srcIR, dstIR, initialMat,
                                   key, keySize, paint);
@@ -167,7 +168,7 @@ GrCachedLayer* GrLayerCache::findLayerOrCreate(uint32_t pictureID,
 bool GrLayerCache::tryToAtlas(GrCachedLayer* layer,
                               const GrSurfaceDesc& desc,
                               bool* needsRendering) {
-    SkDEBUGCODE(GrAutoValidateLayer avl(fAtlas ? fAtlas->getTexture() : nullptr, layer);)
+    SkDEBUGCODE(GrAutoValidateLayer avl(fAtlas ? fAtlas->getTexture() : NULL, layer);)
 
     SkASSERT(PlausiblyAtlasable(desc.fWidth, desc.fHeight));
     SkASSERT(0 == desc.fSampleCnt);
@@ -198,8 +199,8 @@ bool GrLayerCache::tryToAtlas(GrCachedLayer* layer,
         }
         // Not in the atlas - will it fit?
         GrPictureInfo* pictInfo = fPictureHash.find(layer->pictureID());
-        if (nullptr == pictInfo) {
-            pictInfo = new GrPictureInfo(layer->pictureID());
+        if (NULL == pictInfo) {
+            pictInfo = SkNEW_ARGS(GrPictureInfo, (layer->pictureID()));
             fPictureHash.add(pictInfo);
         }
 
@@ -207,7 +208,7 @@ bool GrLayerCache::tryToAtlas(GrCachedLayer* layer,
         for (int i = 0; i < 2; ++i) { // extra pass in case we fail to add but are able to purge
             GrPlot* plot = fAtlas->addToAtlas(&pictInfo->fPlotUsage,
                                               desc.fWidth, desc.fHeight,
-                                              nullptr, &loc);
+                                              NULL, &loc);
             // addToAtlas can allocate the backing texture
             SkDEBUGCODE(avl.setBackingTexture(fAtlas->getTexture()));
             if (plot) {
@@ -215,7 +216,7 @@ bool GrLayerCache::tryToAtlas(GrCachedLayer* layer,
                 pictInfo->incPlotUsage(plot->id());
 #endif
                 // The layer was successfully added to the atlas
-                const SkIRect bounds = SkIRect::MakeXYWH(loc.fX, loc.fY,
+                const SkIRect bounds = SkIRect::MakeXYWH(loc.fX, loc.fY, 
                                                          desc.fWidth, desc.fHeight);
                 layer->setTexture(fAtlas->getTexture(), bounds);
                 layer->setPlot(plot);
@@ -234,7 +235,7 @@ bool GrLayerCache::tryToAtlas(GrCachedLayer* layer,
 
         if (pictInfo->fPlotUsage.isEmpty()) {
             fPictureHash.remove(pictInfo->fPictureID);
-            delete pictInfo;
+            SkDELETE(pictInfo);
         }
     }
 
@@ -249,13 +250,12 @@ bool GrLayerCache::lock(GrCachedLayer* layer, const GrSurfaceDesc& desc, bool* n
     }
 
     // TODO: make the test for exact match depend on the image filters themselves
-    SkAutoTUnref<GrTexture> tex;
+    GrTextureProvider::ScratchTexMatch usage = GrTextureProvider::kApprox_ScratchTexMatch;
     if (layer->fFilter) {
-        tex.reset(fContext->textureProvider()->createTexture(desc, true));
-    } else {
-        tex.reset(fContext->textureProvider()->createApproxTexture(desc));
+        usage = GrTextureProvider::kExact_ScratchTexMatch;
     }
 
+    SkAutoTUnref<GrTexture> tex(fContext->textureProvider()->refScratchTexture(desc, usage));
     if (!tex) {
         return false;
     }
@@ -267,9 +267,9 @@ bool GrLayerCache::lock(GrCachedLayer* layer, const GrSurfaceDesc& desc, bool* n
 }
 
 void GrLayerCache::unlock(GrCachedLayer* layer) {
-    SkDEBUGCODE(GrAutoValidateLayer avl(fAtlas ? fAtlas->getTexture() : nullptr, layer);)
+    SkDEBUGCODE(GrAutoValidateLayer avl(fAtlas ? fAtlas->getTexture() : NULL, layer);)
 
-    if (nullptr == layer || !layer->locked()) {
+    if (NULL == layer || !layer->locked()) {
         // invalid or not locked
         return;
     }
@@ -294,16 +294,16 @@ void GrLayerCache::unlock(GrCachedLayer* layer) {
 
             if (pictInfo->fPlotUsage.isEmpty()) {
                 fPictureHash.remove(pictInfo->fPictureID);
-                delete pictInfo;
+                SkDELETE(pictInfo);
             }
         }
 
-        layer->setPlot(nullptr);
-        layer->setTexture(nullptr, SkIRect::MakeEmpty());
+        layer->setPlot(NULL);
+        layer->setTexture(NULL, SkIRect::MakeEmpty());
 #endif
 
     } else {
-        layer->setTexture(nullptr, SkIRect::MakeEmpty());
+        layer->setTexture(NULL, SkIRect::MakeEmpty());
     }
 
     layer->setLocked(false);
@@ -318,7 +318,7 @@ void GrLayerCache::validate() const {
     for (; !iter.done(); ++iter) {
         const GrCachedLayer* layer = &(*iter);
 
-        layer->validate(fAtlas.get() ? fAtlas->getTexture() : nullptr);
+        layer->validate(fAtlas.get() ? fAtlas->getTexture() : NULL);
 
         const GrPictureInfo* pictInfo = fPictureHash.find(layer->pictureID());
         if (!pictInfo) {
@@ -379,13 +379,13 @@ void GrLayerCache::purge(uint32_t pictureID) {
         SkASSERT(0 == toBeRemoved[i]->uses());
         this->unlock(toBeRemoved[i]);
         fLayerHash.remove(GrCachedLayer::GetKey(*toBeRemoved[i]));
-        delete toBeRemoved[i];
+        SkDELETE(toBeRemoved[i]);
     }
 
     GrPictureInfo* pictInfo = fPictureHash.find(pictureID);
     if (pictInfo) {
         fPictureHash.remove(pictureID);
-        delete pictInfo;
+        SkDELETE(pictInfo);
     }
 }
 
@@ -430,7 +430,7 @@ void GrLayerCache::purgePlot(GrPlot* plot) {
 
         // Aggressively remove layers and, if it becomes totally uncached, delete the picture info
         fLayerHash.remove(GrCachedLayer::GetKey(*toBeRemoved[i]));
-        delete toBeRemoved[i];
+        SkDELETE(toBeRemoved[i]);
 
         GrPictureInfo* pictInfo = fPictureHash.find(pictureIDToRemove);
         if (pictInfo) {
@@ -441,7 +441,7 @@ void GrLayerCache::purgePlot(GrPlot* plot) {
 
             if (pictInfo->fPlotUsage.isEmpty()) {
                 fPictureHash.remove(pictInfo->fPictureID);
-                delete pictInfo;
+                SkDELETE(pictInfo);
             }
         }
     }
@@ -467,11 +467,10 @@ void GrLayerCache::purgeAll() {
 
     SkASSERT(0 == fPictureHash.count());
 
-    SkAutoTUnref<GrDrawContext> drawContext(
-                                fContext->drawContext(fAtlas->getTexture()->asRenderTarget()));
+    GrDrawContext* drawContext = fContext->drawContext();
 
     if (drawContext) {
-        drawContext->discard();
+        drawContext->discard(fAtlas->getTexture()->asRenderTarget());
     }
 }
 #endif
@@ -490,7 +489,7 @@ void GrLayerCache::writeLayersToDisk(const SkString& dirName) {
 
     if (fAtlas) {
         GrTexture* atlasTexture = fAtlas->getTexture();
-        if (nullptr != atlasTexture) {
+        if (NULL != atlasTexture) {
             SkString fileName(dirName);
             fileName.append("\\atlas.png");
 

@@ -32,9 +32,9 @@ class SkDump : public SkDisplayable {
     SkBool posts;
     SkString script;
 #else
-    bool enable(SkAnimateMaker & ) override;
-    bool hasEnable() const override;
-    bool setProperty(int index, SkScriptValue& ) override;
+    virtual bool enable(SkAnimateMaker & );
+    virtual bool hasEnable() const;
+    virtual bool setProperty(int index, SkScriptValue& );
 #endif
 };
 

@@ -33,10 +33,6 @@ public:
       kNative_GLContextType,
 #if SK_ANGLE
       kANGLE_GLContextType,
-      kANGLE_GL_GLContextType,
-#endif
-#if SK_COMMAND_BUFFER
-      kCommandBuffer_GLContextType,
 #endif
 #if SK_MESA
       kMESA_GLContextType,
@@ -71,12 +67,6 @@ public:
 #if SK_ANGLE
             case kANGLE_GLContextType:
                 return "angle";
-            case kANGLE_GL_GLContextType:
-                return "angle-gl";
-#endif
-#if SK_COMMAND_BUFFER
-            case kCommandBuffer_GLContextType:
-                return "commandbuffer";
 #endif
 #if SK_MESA
             case kMESA_GLContextType:
@@ -126,7 +116,7 @@ public:
 
 
     // Returns the GLContext of the given type. If it has not been created yet,
-    // nullptr is returned instead.
+    // NULL is returned instead.
     SkGLContext* getGLContext(GLContextType type) {
         for (int i = 0; i < fContexts.count(); ++i) {
             if (fContexts[i].fType == type) {
@@ -134,7 +124,7 @@ public:
             }
         }
 
-        return nullptr;
+        return NULL;
     }
 
     const GrContextOptions& getGlobalOptions() const { return fGlobalOptions; }

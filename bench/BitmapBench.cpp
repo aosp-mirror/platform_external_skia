@@ -46,7 +46,7 @@ static void convertToIndex666(const SkBitmap& src, SkBitmap* dst, SkAlphaType aT
     }
     SkColorTable* ctable = new SkColorTable(storage, 216);
     dst->allocPixels(SkImageInfo::Make(src.width(), src.height(), kIndex_8_SkColorType, aType),
-                     nullptr, ctable);
+                     NULL, ctable);
     ctable->unref();
 
     SkAutoLockPixels alps(src);
@@ -110,7 +110,7 @@ protected:
         return fName.c_str();
     }
 
-    void onDelayedSetup() override {
+    void onPreDraw() override {
         SkBitmap bm;
 
         if (kIndex_8_SkColorType == fColorType) {
@@ -131,7 +131,7 @@ protected:
         fBitmap.setIsVolatile(fIsVolatile);
     }
 
-    void onDraw(int loops, SkCanvas* canvas) override {
+    void onDraw(const int loops, SkCanvas* canvas) override {
         if (fDoScale) {
             canvas->scale(.99f, .99f);
         }
@@ -225,7 +225,7 @@ protected:
         return fFullName.c_str();
     }
 
-    void onDraw(int loops, SkCanvas* canvas) override {
+    void onDraw(const int loops, SkCanvas* canvas) override {
         SkISize dim = canvas->getDeviceSize();
         if (fFlags & kScale_Flag) {
             const SkScalar x = SkIntToScalar(dim.fWidth) / 2;

@@ -14,23 +14,23 @@ namespace skiagm {
 
 class MatrixConvolutionGM : public GM {
 public:
-    MatrixConvolutionGM() {
+    MatrixConvolutionGM() : fInitialized(false) {
         this->setBGColor(0x00000000);
     }
 
 protected:
 
-    SkString onShortName() override {
+    virtual SkString onShortName() {
         return SkString("matrixconvolution");
     }
 
-    void makeBitmap() {
+    void make_bitmap() {
         fBitmap.allocN32Pixels(80, 80);
         SkCanvas canvas(fBitmap);
         canvas.clear(0x00000000);
         SkPaint paint;
         paint.setAntiAlias(true);
-        sk_tool_utils::set_portable_typeface(&paint);
+        sk_tool_utils::set_portable_typeface_always(&paint);
         paint.setColor(0xFFFFFFFF);
         paint.setTextSize(SkIntToScalar(180));
         SkPoint pts[2] = { SkPoint::Make(0, 0),
@@ -43,13 +43,13 @@ protected:
         canvas.drawText(str, strlen(str), SkIntToScalar(-10), SkIntToScalar(80), paint);
     }
 
-    SkISize onISize() override {
+    virtual SkISize onISize() {
         return SkISize::Make(500, 300);
     }
 
     void draw(SkCanvas* canvas, int x, int y, const SkIPoint& kernelOffset,
               SkMatrixConvolutionImageFilter::TileMode tileMode, bool convolveAlpha,
-              const SkImageFilter::CropRect* cropRect = nullptr) {
+              const SkImageFilter::CropRect* cropRect = NULL) {
         SkScalar kernel[9] = {
             SkIntToScalar( 1), SkIntToScalar( 1), SkIntToScalar( 1),
             SkIntToScalar( 1), SkIntToScalar(-7), SkIntToScalar( 1),
@@ -66,7 +66,7 @@ protected:
                                                    kernelOffset,
                                                    tileMode,
                                                    convolveAlpha,
-                                                   nullptr,
+                                                   NULL,
                                                    cropRect));
         paint.setImageFilter(filter);
         canvas->save();
@@ -79,11 +79,11 @@ protected:
 
     typedef SkMatrixConvolutionImageFilter MCIF;
 
-    void onOnceBeforeDraw() override {
-        this->makeBitmap();
-    }
-
-    void onDraw(SkCanvas* canvas) override {
+    virtual void onDraw(SkCanvas* canvas) {
+        if (!fInitialized) {
+            make_bitmap();
+            fInitialized = true;
+        }
         canvas->clear(SK_ColorBLACK);
         SkIPoint kernelOffset = SkIPoint::Make(1, 0);
         for (int x = 10; x < 310; x += 100) {
@@ -104,13 +104,14 @@ protected:
     }
 
 private:
-    SkBitmap fBitmap;
-
     typedef GM INHERITED;
+    SkBitmap fBitmap;
+    bool fInitialized;
 };
 
 //////////////////////////////////////////////////////////////////////////////
 
-DEF_GM(return new MatrixConvolutionGM;)
+static GM* MyFactory(void*) { return new MatrixConvolutionGM; }
+static GMRegistry reg(MyFactory);
 
 }

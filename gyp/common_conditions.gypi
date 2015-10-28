@@ -162,10 +162,10 @@
               },
             },
           }],
-          [ 'skia_arch_type == "x86_64"', {
+          [ 'skia_arch_width == 64', {
             'msvs_configuration_platform': 'x64',
           }],
-          [ 'skia_arch_type == "x86"', {
+          [ 'skia_arch_width == 32', {
             'msvs_configuration_platform': 'Win32',
           }],
           [ 'skia_warnings_as_errors', {
@@ -227,8 +227,8 @@
         'cflags_cc': [
           '-std=c++11',
           '-fno-rtti',
-          '-fno-threadsafe-statics',
           '-Wnon-virtual-dtor',
+          '-Wno-invalid-offsetof',  # GCC <4.6 is old-school strict about what is POD.
         ],
         'conditions': [
           [ 'skia_fast', { 'cflags': [ '<@(skia_fast_flags)' ] }],
@@ -295,14 +295,33 @@
               }],
             ],
           }],
-          [ '"mips" in skia_arch_type', {
-            'cflags': [ '-EL' ],
+          [ 'skia_arch_type == "mips"', {
+            'cflags': [
+              '-EL',
+            ],
             'conditions': [
               [ 'mips_arch_variant == "mips32r2"', {
-                'cflags': [ '-march=mips32r2' ],
+                'cflags': [
+                  '-march=mips32r2',
+                ],
                 'conditions': [
-                  [ 'mips_dsp == 1', { 'cflags': [ '-mdsp'   ] }],
-                  [ 'mips_dsp == 2', { 'cflags': [ '-mdspr2' ] }],
+                  [ 'mips_dsp == 1', {
+                    'cflags': [
+                      '-mdsp',
+                    ],
+                    'defines': [
+                      'SK_MIPS_HAS_DSP',
+                    ],
+                  }],
+                  [ 'mips_dsp == 2', {
+                    'cflags': [
+                      '-mdspr2',
+                    ],
+                    'defines': [
+                      'SK_MIPS_HAS_DSP',
+                      'SK_MIPS_HAS_DSPR2',
+                    ],
+                  }],
                 ],
               }],
             ],
@@ -322,7 +341,7 @@
         '-U_FORTIFY_SOURCE',
         '-D_FORTIFY_SOURCE=1',
 
-        # We can't use the skia_shared_lib gyp setting because we need to
+        # We can't use the skia_shared_library gyp setting because we need to
         # isolate this define to Skia sources. CFLAGS are local to Android.mk
         # and ensures that this define is not exported to clients of the library
         '-DSKIA_IMPLEMENTATION=1',
@@ -366,10 +385,11 @@
         'SK_BUILD_FOR_ANDROID_FRAMEWORK',
         # Optimizations for chromium (m30)
         'GR_GL_CUSTOM_SETUP_HEADER "gl/GrGLConfig_chrome.h"',
+        'IGNORE_ROT_AA_RECT_OPT',
         'SK_DEFAULT_FONT_CACHE_LIMIT   (768 * 1024)',
         'SK_DEFAULT_GLOBAL_DISCARDABLE_MEMORY_POOL_SIZE (512 * 1024)',
         'SK_IGNORE_ETC1_SUPPORT',
-        # We can't use the skia_shared_lib gyp setting because we need expose
+        # We can't use the skia_shared_library gyp setting because we need expose
         # this define globally and the the implemention define as a cflag.
         'SKIA_DLL',
         'SK_PRINT_CODEC_MESSAGES',
@@ -484,8 +504,8 @@
           'conditions': [
             [ 'skia_fast', { 'WARNING_CFLAGS': [ '<@(skia_fast_flags)' ] } ],
             [ 'skia_warnings_as_errors', { 'GCC_TREAT_WARNINGS_AS_ERRORS': 'YES' }],
-            [ 'skia_arch_type == "x86"', { 'ARCHS': ['i386']   }],
-            [ 'skia_arch_type == "x86_64"', { 'ARCHS': ['x86_64'] }],
+            [ 'skia_arch_width == 32', { 'ARCHS': ['i386']   }],
+            [ 'skia_arch_width == 64', { 'ARCHS': ['x86_64'] }],
             [ 'skia_osx_deployment_target==""', {
               'MACOSX_DEPLOYMENT_TARGET': '10.6', # -mmacos-version-min, passed in env to ld.
             }, {
@@ -493,14 +513,12 @@
             }],
           ],
           'CLANG_CXX_LANGUAGE_STANDARD':               'c++11',
-          'GCC_ENABLE_CPP_EXCEPTIONS':                 'NO',   # -fno-exceptions
-          'GCC_ENABLE_CPP_RTTI':                       'NO',   # -fno-rtti
-          'GCC_THREADSAFE_STATICS':                    'NO',   # -fno-threadsafe-statics
           'GCC_ENABLE_SUPPLEMENTAL_SSE3_INSTRUCTIONS': 'YES',  # -mssse3
           'GCC_SYMBOLS_PRIVATE_EXTERN':                'NO',   # -fvisibility=hidden
           'GCC_INLINES_ARE_PRIVATE_EXTERN':            'NO',   # -fvisibility-inlines-hidden
           'GCC_CW_ASM_SYNTAX':                         'NO',   # remove -fasm-blocks
           'GCC_ENABLE_PASCAL_STRINGS':                 'NO',   # remove -mpascal-strings
+          'GCC_WARN_ABOUT_INVALID_OFFSETOF_MACRO':     'NO',   # -Wno-invalid-offsetof
           'WARNING_CFLAGS': [
             '-Wall',
             '-Wextra',
@@ -544,9 +562,11 @@
         'xcode_settings': {
           'ARCHS': ['armv7'],
           'CODE_SIGNING_REQUIRED': 'NO',
+          'CODE_SIGN_IDENTITY[sdk=iphoneos*]': 'iPhone Developer: Google Development (3F4Y5873JF)',
           'IPHONEOS_DEPLOYMENT_TARGET': '<(ios_sdk_version)',
           'SDKROOT': 'iphoneos',
           'TARGETED_DEVICE_FAMILY': '1,2',
+          'GCC_WARN_ABOUT_INVALID_OFFSETOF_MACRO': 'NO',   # -Wno-invalid-offsetof
           'OTHER_CPLUSPLUSFLAGS': [
             '-std=c++0x',
             '-fvisibility=hidden',
@@ -617,16 +637,8 @@
       ],
     }],
 
-    [ 'skia_command_buffer and skia_os == "linux"', {
-      'ldflags': [
-          '-Wl,-rpath,\$$ORIGIN/lib',
-      ],
-    }],
-
-    [ 'skia_command_buffer and skia_os == "mac"', {
-      'xcode_settings': {
-          'LD_RUNPATH_SEARCH_PATHS': ['@executable_path/.'],
-      },
+    [ 'sknx_no_simd', {
+      'defines': [ 'SKNX_NO_SIMD' ],
     }],
 
   ], # end 'conditions'

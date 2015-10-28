@@ -37,10 +37,10 @@ protected:
         return fName.c_str();
     }
 
-    virtual void onDraw(int loops, SkCanvas* canvas) {
+    virtual void onDraw(const int loops, SkCanvas* canvas) {
 
         SkPictureRecorder recorder;
-        SkCanvas* pCanvas = recorder.beginRecording(PICTURE_WIDTH, PICTURE_HEIGHT, nullptr, 0);
+        SkCanvas* pCanvas = recorder.beginRecording(PICTURE_WIDTH, PICTURE_HEIGHT, NULL, 0);
         this->recordCanvas(pCanvas);
         SkAutoTUnref<SkPicture> picture(recorder.endRecording());
 
@@ -162,7 +162,7 @@ public:
     const char* onGetName() override { return fName.c_str(); }
     SkIPoint onGetSize() override { return SkIPoint::Make(1024,1024); }
 
-    void onDelayedSetup() override {
+    void onPreDraw() override {
         SkAutoTDelete<SkBBHFactory> factory;
         switch (fBBH) {
             case kNone:                                                 break;
@@ -185,7 +185,7 @@ public:
         fPic.reset(recorder.endRecording());
     }
 
-    void onDraw(int loops, SkCanvas* canvas) override {
+    void onDraw(const int loops, SkCanvas* canvas) override {
         for (int i = 0; i < loops; i++) {
             // This inner loop guarantees we make the same choices for all bench variants.
             SkRandom rand;

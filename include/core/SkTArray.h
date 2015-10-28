@@ -8,10 +8,9 @@
 #ifndef SkTArray_DEFINED
 #define SkTArray_DEFINED
 
-#include "../private/SkTemplates.h"
-#include "SkTypes.h"
-
 #include <new>
+#include "SkTypes.h"
+#include "SkTemplates.h"
 
 template <typename T, bool MEM_COPY = false> class SkTArray;
 
@@ -32,18 +31,18 @@ inline void copyAndDelete(SkTArray<T, true>* self, char* newMemArray) {
 
 template<typename T>
 inline void copy(SkTArray<T, false>* self, int dst, int src) {
-    new (&self->fItemArray[dst]) T(self->fItemArray[src]);
+    SkNEW_PLACEMENT_ARGS(&self->fItemArray[dst], T, (self->fItemArray[src]));
 }
 template<typename T>
 inline void copy(SkTArray<T, false>* self, const T* array) {
     for (int i = 0; i < self->fCount; ++i) {
-        new (self->fItemArray + i) T(array[i]);
+        SkNEW_PLACEMENT_ARGS(self->fItemArray + i, T, (array[i]));
     }
 }
 template<typename T>
 inline void copyAndDelete(SkTArray<T, false>* self, char* newMemArray) {
     for (int i = 0; i < self->fCount; ++i) {
-        new (newMemArray + sizeof(T) * i) T(self->fItemArray[i]);
+        SkNEW_PLACEMENT_ARGS(newMemArray + sizeof(T) * i, T, (self->fItemArray[i]));
         self->fItemArray[i].~T();
     }
 }
@@ -108,7 +107,7 @@ public:
         return *this;
     }
 
-    ~SkTArray() {
+    virtual ~SkTArray() {
         for (int i = 0; i < fCount; ++i) {
             fItemArray[i].~T();
         }
@@ -135,7 +134,7 @@ public:
         this->checkRealloc(n);
         fCount = n;
         for (int i = 0; i < fCount; ++i) {
-            new (fItemArray + i) T;
+            SkNEW_PLACEMENT(fItemArray + i, T);
         }
     }
 
@@ -180,7 +179,7 @@ public:
      */
     T& push_back() {
         T* newT = reinterpret_cast<T*>(this->push_back_raw(1));
-        new (newT) T;
+        SkNEW_PLACEMENT(newT, T);
         return *newT;
     }
 
@@ -189,16 +188,8 @@ public:
      */
     T& push_back(const T& t) {
         T* newT = reinterpret_cast<T*>(this->push_back_raw(1));
-        new (newT) T(t);
+        SkNEW_PLACEMENT_ARGS(newT, T, (t));
         return *newT;
-    }
-
-    /**
-     *  Construct a new T at the back of this array.
-     */
-    template<class... Args> T& emplace_back(Args&&... args) {
-        T* newT = reinterpret_cast<T*>(this->push_back_raw(1));
-        return *new (newT) T(skstd::forward<Args>(args)...);
     }
 
     /**
@@ -210,7 +201,7 @@ public:
         SkASSERT(n >= 0);
         T* newTs = reinterpret_cast<T*>(this->push_back_raw(n));
         for (int i = 0; i < n; ++i) {
-            new (newTs + i) T;
+            SkNEW_PLACEMENT(newTs + i, T);
         }
         return newTs;
     }
@@ -223,7 +214,7 @@ public:
         SkASSERT(n >= 0);
         T* newTs = reinterpret_cast<T*>(this->push_back_raw(n));
         for (int i = 0; i < n; ++i) {
-            new (newTs[i]) T(t);
+            SkNEW_PLACEMENT_ARGS(newTs[i], T, (t));
         }
         return newTs;
     }
@@ -236,7 +227,7 @@ public:
         SkASSERT(n >= 0);
         this->checkRealloc(n);
         for (int i = 0; i < n; ++i) {
-            new (fItemArray + fCount + i) T(t[i]);
+            SkNEW_PLACEMENT_ARGS(fItemArray + fCount + i, T, (t[i]));
         }
         fCount += n;
         return fItemArray + fCount - n;

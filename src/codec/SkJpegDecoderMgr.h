@@ -12,11 +12,13 @@
 #include "SkCodecPriv.h"
 #include "SkJpegUtility_codec.h"
 #include "SkSwizzler.h"
+#include "SkTemplates.h"
 
 // stdio is needed for jpeglib
 #include <stdio.h>
 
 extern "C" {
+    #include "jpeglibmangler.h"
     #include "jpeglib.h"
 }
 

@@ -59,7 +59,8 @@ public:
     static bool Build(GrProgramDesc*,
                       const GrPrimitiveProcessor&,
                       const GrPipeline&,
-                      const GrGLGpu*);
+                      const GrGLGpu*,
+                      const GrBatchTracker&);
 };
 
 #endif

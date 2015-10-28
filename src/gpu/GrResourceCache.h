@@ -20,9 +20,7 @@
 #include "SkTInternalLList.h"
 #include "SkTMultiMap.h"
 
-class GrCaps;
 class SkString;
-class SkTraceMemoryDump;
 
 /**
  * Manages the lifetime of all GrGpuResource instances.
@@ -49,7 +47,7 @@ class SkTraceMemoryDump;
  */
 class GrResourceCache {
 public:
-    GrResourceCache(const GrCaps* caps);
+    GrResourceCache();
     ~GrResourceCache();
 
     // Default maximum number of budgeted resources in the cache.
@@ -128,9 +126,7 @@ public:
     /**
      * Find a resource that matches a scratch key.
      */
-    GrGpuResource* findAndRefScratchResource(const GrScratchKey& scratchKey,
-                                             size_t resourceSize,
-                                             uint32_t flags);
+    GrGpuResource* findAndRefScratchResource(const GrScratchKey& scratchKey, uint32_t flags = 0);
     
 #ifdef SK_DEBUG
     // This is not particularly fast and only used for validation, so debug only.
@@ -179,7 +175,7 @@ public:
         fOverBudgetCB = overBudgetCB;
         fOverBudgetData = data;
     }
-
+    
     void notifyFlushOccurred();
 
 #if GR_GPU_STATS
@@ -188,9 +184,6 @@ public:
 
     // This function is for unit testing and is only defined in test tools.
     void changeTimestamp(uint32_t newTimestamp);
-
-    // Enumerates all cached resources and dumps their details to traceMemoryDump.
-    void dumpMemoryStatistics(SkTraceMemoryDump* traceMemoryDump) const;
 
 private:
     ///////////////////////////////////////////////////////////////////////////
@@ -212,10 +205,6 @@ private:
     void addToNonpurgeableArray(GrGpuResource*);
     void removeFromNonpurgeableArray(GrGpuResource*);
     bool overBudget() const { return fBudgetedBytes > fMaxBytes || fBudgetedCount > fMaxCount; }
-
-    bool wouldFit(size_t bytes) {
-        return fBudgetedBytes+bytes <= fMaxBytes && fBudgetedCount+1 <= fMaxCount;    
-    }
 
     uint32_t getNextTimestamp();
 
@@ -303,8 +292,6 @@ private:
     // This resource is allowed to be in the nonpurgeable array for the sake of validate() because
     // we're in the midst of converting it to purgeable status.
     SkDEBUGCODE(GrGpuResource*          fNewlyPurgeableResourceForValidation;)
-
-    bool                                fPreferVRAMUseOverFlushes;
 };
 
 class GrResourceCache::ResourceAccess {

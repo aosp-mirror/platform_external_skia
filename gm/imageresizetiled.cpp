@@ -14,7 +14,24 @@
 
 #define RESIZE_FACTOR SkIntToScalar(2)
 
-DEF_SIMPLE_GM(imageresizetiled, canvas, WIDTH, HEIGHT) {
+namespace skiagm {
+
+class ImageResizeTiledGM : public GM {
+public:
+    ImageResizeTiledGM() {
+    }
+
+protected:
+
+    SkString onShortName() override {
+        return SkString("imageresizetiled");
+    }
+
+    SkISize onISize() override {
+        return SkISize::Make(WIDTH, HEIGHT);
+    }
+
+    void onDraw(SkCanvas* canvas) override {
         SkPaint paint;
         SkMatrix matrix;
         matrix.setScale(RESIZE_FACTOR, RESIZE_FACTOR);
@@ -30,7 +47,7 @@ DEF_SIMPLE_GM(imageresizetiled, canvas, WIDTH, HEIGHT) {
                 canvas->clipRect(SkRect::MakeXYWH(x, y, tile_size, tile_size));
                 canvas->scale(SkScalarInvert(RESIZE_FACTOR),
                               SkScalarInvert(RESIZE_FACTOR));
-                canvas->saveLayer(nullptr, &paint);
+                canvas->saveLayer(NULL, &paint);
                 const char* str[] = {
                     "The quick",
                     "brown fox",
@@ -39,7 +56,7 @@ DEF_SIMPLE_GM(imageresizetiled, canvas, WIDTH, HEIGHT) {
                 };
                 SkPaint textPaint;
                 textPaint.setAntiAlias(true);
-                sk_tool_utils::set_portable_typeface(&textPaint);
+                sk_tool_utils::set_portable_typeface_always(&textPaint);
                 textPaint.setTextSize(SkIntToScalar(100));
                 int posY = 0;
                 for (unsigned i = 0; i < SK_ARRAY_COUNT(str); i++) {
@@ -51,4 +68,14 @@ DEF_SIMPLE_GM(imageresizetiled, canvas, WIDTH, HEIGHT) {
                 canvas->restore();
             }
         }
+    }
+
+private:
+    typedef GM INHERITED;
+};
+
+//////////////////////////////////////////////////////////////////////////////
+
+DEF_GM(return new ImageResizeTiledGM(); )
+
 }

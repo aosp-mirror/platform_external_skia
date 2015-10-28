@@ -87,7 +87,7 @@ static void compare_unpremul(skiatest::Reporter* reporter, const SkString& filen
     }
 
     SkAutoTDelete<SkImageDecoder> decoder(SkImageDecoder::Factory(&stream));
-    if (nullptr == decoder.get()) {
+    if (NULL == decoder.get()) {
         SkDebugf("couldn't decode %s\n", filename.c_str());
         return;
     }
@@ -176,7 +176,7 @@ static void test_alphaType(skiatest::Reporter* reporter, const SkString& filenam
     SkFILEStream stream(filename.c_str());
 
     SkAutoTDelete<SkImageDecoder> decoder(SkImageDecoder::Factory(&stream));
-    if (nullptr == decoder.get()) {
+    if (NULL == decoder.get()) {
         return;
     }
 
@@ -281,7 +281,7 @@ DEF_TEST(ImageDecoding_unpremul, reporter) {
         // This should never fail since we know the images we're decoding.
         SkAutoTDelete<SkImageDecoder> decoder(SkImageDecoder::Factory(&stream));
         REPORTER_ASSERT(reporter, decoder.get());
-        if (nullptr == decoder.get()) {
+        if (NULL == decoder.get()) {
             continue;
         }
 
@@ -358,21 +358,8 @@ static const SkColor kExpectedPixels[] = {
     0xffb07222, 0xff2e23f8, 0xfff089d9, 0xffb35738,
     0xffa86022, 0xff3340fe, 0xff95fe71, 0xff6a71df
 };
-static_assert((kExpectedWidth * kExpectedHeight) == SK_ARRAY_COUNT(kExpectedPixels),
-              "array_size_mismatch");
-
-static bool decode_into_bitmap(skiatest::Reporter* r, SkBitmap* bm, SkData* encoded) {
-    SkAutoTDelete<SkImageGenerator> gen(SkImageGenerator::NewFromEncoded(encoded));
-    if (!gen) {
-        REPORTER_ASSERT(r, false);
-        return false;
-    }
-    if (!gen->tryGenerateBitmap(bm)) {
-        REPORTER_ASSERT(r, false);
-        return false;
-    }
-    return true;
-}
+SK_COMPILE_ASSERT((kExpectedWidth * kExpectedHeight)
+                  == SK_ARRAY_COUNT(kExpectedPixels), array_size_mismatch);
 
 DEF_TEST(WebP, reporter) {
     const unsigned char encodedWebP[] = {
@@ -403,45 +390,68 @@ DEF_TEST(WebP, reporter) {
         0xe3, 0xfe, 0x66, 0xa4, 0x7c, 0x1b, 0x6c, 0xd1, 0xa9, 0xd8, 0x14, 0xd0,
         0xc5, 0xb5, 0x39, 0x71, 0x97, 0x19, 0x19, 0x1b
     };
-
+    SkAutoDataUnref encoded(SkData::NewWithCopy(encodedWebP,
+                                                sizeof(encodedWebP)));
     SkBitmap bm;
-    SkAutoDataUnref encoded(SkData::NewWithoutCopy(encodedWebP, sizeof(encodedWebP)));
-    if (!decode_into_bitmap(reporter, &bm, encoded)) {
-        return;
-    }
-    if (kExpectedWidth != bm.width() || kExpectedHeight != bm.height()) {
-        REPORTER_ASSERT(reporter, false);
-        return;
-    }
 
-    bool error = false;
-    const SkColor* correctPixel = kExpectedPixels;
-    for (int y = 0; y < bm.height(); ++y) {
-        for (int x = 0; x < bm.width(); ++x) {
-            error |= (*correctPixel != bm.getColor(x, y));
-            ++correctPixel;
-        }
+    bool success = SkInstallDiscardablePixelRef(encoded, &bm);
+
+    REPORTER_ASSERT(reporter, success);
+    if (!success) {
+        return;
     }
-    REPORTER_ASSERT(reporter, !error);
+    SkAutoLockPixels alp(bm);
+
+    bool rightSize = ((kExpectedWidth == bm.width())
+                      && (kExpectedHeight == bm.height()));
+    REPORTER_ASSERT(reporter, rightSize);
+    if (rightSize) {
+        bool error = false;
+        const SkColor* correctPixel = kExpectedPixels;
+        for (int y = 0; y < bm.height(); ++y) {
+            for (int x = 0; x < bm.width(); ++x) {
+                error |= (*correctPixel != bm.getColor(x, y));
+                ++correctPixel;
+            }
+        }
+        REPORTER_ASSERT(reporter, !error);
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// example of how Android will do this inside their BitmapFactory
+static SkPixelRef* install_pixel_ref(SkBitmap* bitmap,
+                                     SkStreamRewindable* stream,
+                                     int sampleSize, bool ditherImage) {
+    SkASSERT(bitmap != NULL);
+    SkASSERT(stream != NULL);
+    SkASSERT(stream->rewind());
+    SkColorType colorType = bitmap->colorType();
+    SkDecodingImageGenerator::Options opts(sampleSize, ditherImage, colorType);
+    if (SkInstallDiscardablePixelRef(
+                SkDecodingImageGenerator::Create(stream, opts), bitmap)) {
+        return bitmap->pixelRef();
+    }
+    return NULL;
+}
 /**
- *  A test for the SkDecodingImageGenerator::Create
+ *  A test for the SkDecodingImageGenerator::Create and
+ *  SkInstallDiscardablePixelRef functions.
  */
 DEF_TEST(ImprovedBitmapFactory, reporter) {
     SkString pngFilename = GetResourcePath("randPixels.png");
     SkAutoTDelete<SkStreamRewindable> stream(SkStream::NewFromFile(pngFilename.c_str()));
     if (sk_exists(pngFilename.c_str())) {
-        // example of how Android will do this inside their BitmapFactory
-        SkDecodingImageGenerator::Options opts(1, true, kN32_SkColorType);
         SkBitmap bm;
-        SkAutoTDelete<SkImageGenerator> gen(SkDecodingImageGenerator::Create(stream.detach(),
-                                                                             opts));
-        REPORTER_ASSERT(reporter, gen->tryGenerateBitmap(&bm));
+        SkAssertResult(bm.setInfo(SkImageInfo::MakeN32Premul(1, 1)));
+        REPORTER_ASSERT(reporter,
+            install_pixel_ref(&bm, stream.detach(), 1, true));
+        SkAutoLockPixels alp(bm);
+        REPORTER_ASSERT(reporter, bm.getPixels());
     }
 }
+
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -503,21 +513,23 @@ static void test_options(skiatest::Reporter* reporter,
                          bool useData,
                          const SkString& path) {
     SkBitmap bm;
-    SkAutoTDelete<SkImageGenerator> gen;
-
+    bool success = false;
     if (useData) {
-        if (nullptr == encodedData) {
+        if (NULL == encodedData) {
             return;
         }
-        gen.reset(SkDecodingImageGenerator::Create(encodedData, opts));
+        success = SkInstallDiscardablePixelRef(
+            SkDecodingImageGenerator::Create(encodedData, opts), &bm);
     } else {
-        if (nullptr == encodedStream) {
+        if (NULL == encodedStream) {
             return;
         }
-        gen.reset(SkDecodingImageGenerator::Create(encodedStream->duplicate(), opts));
+        success = SkInstallDiscardablePixelRef(
+            SkDecodingImageGenerator::Create(encodedStream->duplicate(), opts), &bm);
     }
-    if (!gen) {
-        if (opts.fUseRequestedColorType && (kARGB_4444_SkColorType == opts.fRequestedColorType)) {
+    if (!success) {
+        if (opts.fUseRequestedColorType
+            && (kARGB_4444_SkColorType == opts.fRequestedColorType)) {
             return;  // Ignore known conversion inabilities.
         }
         // If we get here, it's a failure and we will need more
@@ -527,22 +539,27 @@ static void test_options(skiatest::Reporter* reporter,
                options_colorType(opts), path.c_str());
         return;
     }
-    if (!gen->tryGenerateBitmap(&bm)) {
-        return;
-    }
-
     #if defined(SK_BUILD_FOR_ANDROID) || defined(SK_BUILD_FOR_UNIX)
     // Android is the only system that use Skia's image decoders in
     // production.  For now, we'll only verify that samplesize works
     // on systems where it already is known to work.
-    REPORTER_ASSERT(reporter, check_rounding(bm.height(), kExpectedHeight, opts.fSampleSize));
-    REPORTER_ASSERT(reporter, check_rounding(bm.width(), kExpectedWidth, opts.fSampleSize));
+    REPORTER_ASSERT(reporter, check_rounding(bm.height(), kExpectedHeight,
+                                             opts.fSampleSize));
+    REPORTER_ASSERT(reporter, check_rounding(bm.width(), kExpectedWidth,
+                                             opts.fSampleSize));
     // The ImageDecoder API doesn't guarantee that SampleSize does
     // anything at all, but the decoders that this test excercises all
     // produce an output size in the following range:
     //    (((sample_size * out_size) > (in_size - sample_size))
     //     && out_size <= SkNextPow2(((in_size - 1) / sample_size) + 1));
     #endif  // SK_BUILD_FOR_ANDROID || SK_BUILD_FOR_UNIX
+    SkAutoLockPixels alp(bm);
+    if (bm.getPixels() == NULL) {
+        ERRORF(reporter, "Pixel decode failed [sampleSize=%d dither=%s "
+               "colorType=%s %s]", opts.fSampleSize, yn(opts.fDitherImage),
+               options_colorType(opts), path.c_str());
+        return;
+    }
 
     SkColorType requestedColorType = opts.fRequestedColorType;
     REPORTER_ASSERT(reporter,
@@ -618,10 +635,10 @@ DEF_TEST(ImageDecoderOptions, reporter) {
         }
 
         SkAutoDataUnref encodedData(SkData::NewFromFileName(path.c_str()));
-        REPORTER_ASSERT(reporter, encodedData.get() != nullptr);
+        REPORTER_ASSERT(reporter, encodedData.get() != NULL);
         SkAutoTDelete<SkStreamRewindable> encodedStream(
             SkStream::NewFromFile(path.c_str()));
-        REPORTER_ASSERT(reporter, encodedStream.get() != nullptr);
+        REPORTER_ASSERT(reporter, encodedStream.get() != NULL);
 
         for (size_t i = 0; i < SK_ARRAY_COUNT(scaleList); ++i) {
             for (size_t j = 0; j < SK_ARRAY_COUNT(ditherList); ++j) {
@@ -644,7 +661,7 @@ DEF_TEST(ImageDecoderOptions, reporter) {
     }
 }
 
-DEF_TEST(DecodingImageGenerator_ColorTableCheck, r) {
+DEF_TEST(DiscardablePixelRef_SecondLockColorTableCheck, r) {
     SkString resourceDir = GetResourcePath();
     SkString path = SkOSPath::Join(resourceDir.c_str(), "randPixels.gif");
     if (!sk_exists(path.c_str())) {
@@ -652,20 +669,25 @@ DEF_TEST(DecodingImageGenerator_ColorTableCheck, r) {
     }
     SkAutoDataUnref encoded(SkData::NewFromFileName(path.c_str()));
     SkBitmap bitmap;
-    SkAutoTDelete<SkImageGenerator> gen(SkDecodingImageGenerator::Create(encoded,
-                                                             SkDecodingImageGenerator::Options()));
-    if (!gen) {
-        REPORTER_ASSERT(r, false);
-        return;
-    }
-    if (!gen->tryGenerateBitmap(&bitmap)) {
-        REPORTER_ASSERT(r, false);
+    if (!SkInstallDiscardablePixelRef(
+            SkDecodingImageGenerator::Create(
+                    encoded, SkDecodingImageGenerator::Options()), &bitmap)) {
+        #ifndef SK_BUILD_FOR_WIN
+        ERRORF(r, "SkInstallDiscardablePixelRef [randPixels.gif] failed.");
+        #endif
         return;
     }
     if (kIndex_8_SkColorType != bitmap.colorType()) {
         return;
     }
-    REPORTER_ASSERT(r, bitmap.getColorTable());
+    {
+        SkAutoLockPixels alp(bitmap);
+        REPORTER_ASSERT(r, bitmap.getColorTable() && "first pass");
+    }
+    {
+        SkAutoLockPixels alp(bitmap);
+        REPORTER_ASSERT(r, bitmap.getColorTable() && "second pass");
+    }
 }
 
 
@@ -680,13 +702,13 @@ public:
         SkASSERT(bm);
         if (bm->info().getSafeSize(bm->rowBytes()) <= fSize) {
             bm->setPixels(fPixels, ct);
-            fPixels = nullptr;
+            fPixels = NULL;
             fSize = 0;
             return true;
         }
-        return bm->tryAllocPixels(nullptr, ct);
+        return bm->tryAllocPixels(NULL, ct);
     }
-    bool ready() { return fPixels != nullptr; }
+    bool ready() { return fPixels != NULL; }
 private:
     void* fPixels;
     size_t fSize;
@@ -705,7 +727,7 @@ DEF_TEST(ImageDecoding_JpegOverwrite, r) {
         return;
     }
     SkAutoTDelete<SkImageDecoder> decoder(SkImageDecoder::Factory(stream));
-    if (nullptr == decoder.get()) {
+    if (NULL == decoder.get()) {
         ERRORF(r, "\nSkImageDecoder::Factory failed.\n");
         return;
     }
@@ -720,7 +742,8 @@ DEF_TEST(ImageDecoding_JpegOverwrite, r) {
     pixels[pixelCount] = sentinal;  // This value should not be changed.
 
     SkAutoTUnref<SingleAllocator> allocator(
-            new SingleAllocator((void*)pixels.get(), sizeof(uint16_t) * pixelCount));
+            SkNEW_ARGS(SingleAllocator,
+                       ((void*)pixels.get(), sizeof(uint16_t) * pixelCount)));
     decoder->setAllocator(allocator);
     decoder->setSampleSize(2);
     SkBitmap bitmap;

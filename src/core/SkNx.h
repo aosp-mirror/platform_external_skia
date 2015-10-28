@@ -92,12 +92,6 @@ public:
     static SkNf Load(const T vals[N]) {
         return SkNf(SkNf<N/2,T>::Load(vals), SkNf<N/2,T>::Load(vals+N/2));
     }
-    // FromBytes() and toBytes() specializations may assume their argument is N-byte aligned.
-    // E.g. Sk4f::FromBytes() may assume it's reading from a 4-byte-aligned pointer.
-    // Converts [0,255] bytes to [0.0, 255.0] floats.
-    static SkNf FromBytes(const uint8_t bytes[N]) {
-        return SkNf(SkNf<N/2,T>::FromBytes(bytes), SkNf<N/2,T>::FromBytes(bytes+N/2));
-    }
 
     SkNf(T a, T b)                               : fLo(a),       fHi(b)       { REQUIRE(N==2); }
     SkNf(T a, T b, T c, T d)                     : fLo(a,b),     fHi(c,d)     { REQUIRE(N==4); }
@@ -106,12 +100,6 @@ public:
     void store(T vals[N]) const {
         fLo.store(vals);
         fHi.store(vals+N/2);
-    }
-    // Please see note on FromBytes().
-    // Clamps to [0.0,255.0] floats and truncates to [0,255] bytes.
-    void toBytes(uint8_t bytes[N]) const {
-        fLo.toBytes(bytes);
-        fHi.toBytes(bytes+N/2);
     }
 
     SkNi<N,I> castTrunc() const { return SkNi<N,I>(fLo.castTrunc(), fHi.castTrunc()); }
@@ -213,10 +201,8 @@ public:
     SkNf() {}
     explicit SkNf(T val) : fVal(val) {}
     static SkNf Load(const T vals[1]) { return SkNf(vals[0]); }
-    static SkNf FromBytes(const uint8_t bytes[1]) { return SkNf((T)bytes[0]); }
 
     void store(T vals[1]) const { vals[0] = fVal; }
-    void toBytes(uint8_t bytes[1]) const { bytes[0] = (uint8_t)(SkTMin(fVal, (T)255.0)); }
 
     SkNi<1,I> castTrunc() const { return SkNi<1,I>(fVal); }
 
@@ -266,26 +252,7 @@ protected:
     T fVal;
 };
 
-// This default implementation can be specialized by ../opts/SkNx_foo.h
-// if there's a better platform-specific shuffle strategy.
-template <typename SkNx, int... Ix>
-inline SkNx SkNx_shuffle_impl(const SkNx& src) { return SkNx( src.template kth<Ix>()... ); }
-
-// This generic shuffle can be called on either SkNi or SkNf with 1 or N indices:
-//     Sk4f f(a,b,c,d);
-//     SkNx_shuffle<3>(f);        // ~~~> Sk4f(d,d,d,d)
-//     SkNx_shuffle<2,1,0,3>(f);  // ~~~> Sk4f(c,b,a,d)
-template <int... Ix, typename SkNx>
-inline SkNx SkNx_shuffle(const SkNx& src) { return SkNx_shuffle_impl<SkNx, Ix...>(src); }
-
-// A reminder alias that shuffles can be used to duplicate a single index across a vector.
-template <int Ix, typename SkNx>
-inline SkNx SkNx_dup(const SkNx& src) { return SkNx_shuffle<Ix>(src); }
-
 }  // namespace
-
-
-
 
 // Include platform specific specializations if available.
 #ifndef SKNX_NO_SIMD

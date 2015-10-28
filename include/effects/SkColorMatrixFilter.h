@@ -14,10 +14,10 @@
 class SK_API SkColorMatrixFilter : public SkColorFilter {
 public:
     static SkColorMatrixFilter* Create(const SkColorMatrix& cm) {
-        return new SkColorMatrixFilter(cm);
+        return SkNEW_ARGS(SkColorMatrixFilter, (cm));
     }
     static SkColorMatrixFilter* Create(const SkScalar array[20]) {
-        return new SkColorMatrixFilter(array);
+        return SkNEW_ARGS(SkColorMatrixFilter, (array));
     }
 
     void filterSpan(const SkPMColor src[], int count, SkPMColor[]) const override;
@@ -26,7 +26,8 @@ public:
     SkColorFilter* newComposed(const SkColorFilter*) const override;
 
 #if SK_SUPPORT_GPU
-    const GrFragmentProcessor* asFragmentProcessor(GrContext*) const override;
+    bool asFragmentProcessors(GrContext*, GrProcessorDataManager*,
+                              SkTDArray<GrFragmentProcessor*>*) const override;
 #endif
 
     struct State {

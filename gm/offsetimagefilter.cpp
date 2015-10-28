@@ -6,10 +6,8 @@
  */
 
 #include "sk_tool_utils.h"
-#include "SkImage.h"
-#include "SkImageSource.h"
+#include "SkBitmapSource.h"
 #include "SkOffsetImageFilter.h"
-#include "SkSurface.h"
 #include "gm.h"
 
 #define WIDTH 600
@@ -27,57 +25,30 @@ protected:
         return SkString("offsetimagefilter");
     }
 
+    void make_bitmap() {
+        fBitmap.allocN32Pixels(80, 80);
+        SkCanvas canvas(fBitmap);
+        canvas.clear(0);
+        SkPaint paint;
+        paint.setAntiAlias(true);
+        sk_tool_utils::set_portable_typeface_always(&paint);
+        paint.setColor(sk_tool_utils::color_to_565(0xD000D000));
+        paint.setTextSize(96);
+        canvas.drawText("e", 1, 15, 65, paint);
+    }
+
     SkISize onISize() override {
         return SkISize::Make(WIDTH, HEIGHT);
     }
 
-    void onOnceBeforeDraw() override {
-        fBitmap.reset(SkImage::NewFromBitmap(
-            sk_tool_utils::create_string_bitmap(80, 80, 0xD000D000, 15, 65, 96, "e")));
-        
-        fCheckerboard.reset(SkImage::NewFromBitmap(
-            sk_tool_utils::create_checkerboard_bitmap(80, 80,
-                                                      sk_tool_utils::color_to_565(0xFFA0A0A0),
-                                                      sk_tool_utils::color_to_565(0xFF404040),
-                                                      8)));
-    }
-
-    void onDraw(SkCanvas* canvas) override {
-        canvas->clear(SK_ColorBLACK);
-        SkPaint paint;
-
-        for (int i = 0; i < 4; i++) {
-            const SkImage* image = (i & 0x01) ? fCheckerboard : fBitmap;
-            SkIRect cropRect = SkIRect::MakeXYWH(i * 12,
-                                                 i * 8,
-                                                 image->width() - i * 8,
-                                                 image->height() - i * 12);
-            SkImageFilter::CropRect rect(SkRect::Make(cropRect));
-            SkAutoTUnref<SkImageFilter> tileInput(SkImageSource::Create(image));
-            SkScalar dx = SkIntToScalar(i*5);
-            SkScalar dy = SkIntToScalar(i*10);
-            SkAutoTUnref<SkImageFilter> filter(SkOffsetImageFilter::Create(dx, dy, tileInput,
-                                                                           &rect));
-            paint.setImageFilter(filter);
-            DrawClippedImage(canvas, image, paint, 1, cropRect);
-            canvas->translate(SkIntToScalar(image->width() + MARGIN), 0);
-        }
-
-        SkIRect cropRect = SkIRect::MakeXYWH(0, 0, 100, 100);
-        SkImageFilter::CropRect rect(SkRect::Make(cropRect));
-        SkAutoTUnref<SkImageFilter> filter(SkOffsetImageFilter::Create(-5, -10, nullptr, &rect));
-        paint.setImageFilter(filter);
-        DrawClippedImage(canvas, fBitmap, paint, 2, cropRect);
-    }
-private:
-    static void DrawClippedImage(SkCanvas* canvas, const SkImage* image, const SkPaint& paint,
-                          SkScalar scale, const SkIRect& cropRect) {
-        SkRect clipRect = SkRect::MakeIWH(image->width(), image->height());
+    void drawClippedBitmap(SkCanvas* canvas, const SkBitmap& bitmap, const SkPaint& paint,
+                           SkScalar scale, const SkIRect& cropRect) {
+        SkRect clipRect = SkRect::MakeIWH(bitmap.width(), bitmap.height());
 
         canvas->save();
         canvas->clipRect(clipRect);
         canvas->scale(scale, scale);
-        canvas->drawImage(image, 0, 0, &paint);
+        canvas->drawBitmap(bitmap, 0, 0, &paint);
         canvas->restore();
 
         // Draw a boundary rect around the intersection of the clip rect and crop rect.
@@ -92,9 +63,46 @@ private:
         }
     }
 
-    SkAutoTUnref<SkImage> fBitmap, fCheckerboard;
+    void onOnceBeforeDraw() override {
+        make_bitmap();
+        
+        fCheckerboard.allocN32Pixels(80, 80);
+        SkCanvas checkerboardCanvas(fCheckerboard);
+        sk_tool_utils::draw_checkerboard(&checkerboardCanvas,
+                sk_tool_utils::color_to_565(0xFFA0A0A0),
+                sk_tool_utils::color_to_565(0xFF404040), 8);
+    }
 
+    void onDraw(SkCanvas* canvas) override {
+        canvas->clear(SK_ColorBLACK);
+        SkPaint paint;
+
+        for (int i = 0; i < 4; i++) {
+            const SkBitmap* bitmap = (i & 0x01) ? &fCheckerboard : &fBitmap;
+            SkIRect cropRect = SkIRect::MakeXYWH(i * 12,
+                                                 i * 8,
+                                                 bitmap->width() - i * 8,
+                                                 bitmap->height() - i * 12);
+            SkImageFilter::CropRect rect(SkRect::Make(cropRect));
+            SkAutoTUnref<SkImageFilter> tileInput(SkBitmapSource::Create(*bitmap));
+            SkScalar dx = SkIntToScalar(i*5);
+            SkScalar dy = SkIntToScalar(i*10);
+            SkAutoTUnref<SkImageFilter> filter(SkOffsetImageFilter::Create(dx, dy, tileInput,
+                                                                           &rect));
+            paint.setImageFilter(filter);
+            drawClippedBitmap(canvas, *bitmap, paint, 1, cropRect);
+            canvas->translate(SkIntToScalar(bitmap->width() + MARGIN), 0);
+        }
+
+        SkIRect cropRect = SkIRect::MakeXYWH(0, 0, 100, 100);
+        SkImageFilter::CropRect rect(SkRect::Make(cropRect));
+        SkAutoTUnref<SkImageFilter> filter(SkOffsetImageFilter::Create(-5, -10, NULL, &rect));
+        paint.setImageFilter(filter);
+        drawClippedBitmap(canvas, fBitmap, paint, 2, cropRect);
+    }
+private:
     typedef skiagm::GM INHERITED;
+    SkBitmap fBitmap, fCheckerboard;
 };
 DEF_GM( return new OffsetImageFilterGM; )
 
@@ -112,7 +120,7 @@ protected:
     SkISize onISize() override { return SkISize::Make(640, 200); }
     
     void doDraw(SkCanvas* canvas, const SkRect& r, SkImageFilter* imgf,
-                const SkRect* clipR = nullptr) {
+                const SkRect* clipR = NULL) {
         SkPaint p;
 
         if (clipR) {
@@ -159,23 +167,23 @@ protected:
         canvas->translate(40, 40);
         
         canvas->save();
-        this->doDraw(canvas, r, nullptr);
+        this->doDraw(canvas, r, NULL);
         
         canvas->translate(100, 0);
         this->doDraw(canvas, r, SkOffsetImageFilter::Create(20, 20));
         
         canvas->translate(100, 0);
-        this->doDraw(canvas, r, SkOffsetImageFilter::Create(20, 20, nullptr, &cr0));
+        this->doDraw(canvas, r, SkOffsetImageFilter::Create(20, 20, NULL, &cr0));
         
         canvas->translate(100, 0);
         this->doDraw(canvas, r, SkOffsetImageFilter::Create(20, 20), &r);
         
         canvas->translate(100, 0);
-        this->doDraw(canvas, r, SkOffsetImageFilter::Create(20, 20, nullptr, &cr1));
+        this->doDraw(canvas, r, SkOffsetImageFilter::Create(20, 20, NULL, &cr1));
         
         SkRect clipR = SkRect::MakeXYWH(40, 40, 40, 40);
         canvas->translate(100, 0);
-        this->doDraw(canvas, r, SkOffsetImageFilter::Create(20, 20, nullptr, nullptr), &clipR);
+        this->doDraw(canvas, r, SkOffsetImageFilter::Create(20, 20, NULL, NULL), &clipR);
         canvas->restore();
 
         // 2nd row
@@ -186,19 +194,19 @@ protected:
          */
 
         // crop==clip==src
-        this->doDraw(canvas, r, SkOffsetImageFilter::Create(40, 0, nullptr, &cr0), &r);
+        this->doDraw(canvas, r, SkOffsetImageFilter::Create(40, 0, NULL, &cr0), &r);
 
         // crop==src, clip==dst
         canvas->translate(100, 0);
-        this->doDraw(canvas, r, SkOffsetImageFilter::Create(40, 0, nullptr, &cr0), &r2);
+        this->doDraw(canvas, r, SkOffsetImageFilter::Create(40, 0, NULL, &cr0), &r2);
 
         // crop==dst, clip==src
         canvas->translate(100, 0);
-        this->doDraw(canvas, r, SkOffsetImageFilter::Create(40, 0, nullptr, &cr2), &r);
+        this->doDraw(canvas, r, SkOffsetImageFilter::Create(40, 0, NULL, &cr2), &r);
 
         // crop==clip==dst
         canvas->translate(100, 0);
-        this->doDraw(canvas, r, SkOffsetImageFilter::Create(40, 0, nullptr, &cr2), &r2);
+        this->doDraw(canvas, r, SkOffsetImageFilter::Create(40, 0, NULL, &cr2), &r2);
     }
 
 private:

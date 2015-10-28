@@ -297,7 +297,7 @@ static void compute_pos_tan(const SkPoint pts[], int segType,
             }
         } break;
         case kCubic_SegType:
-            SkEvalCubicAt(pts, t, pos, tangent, nullptr);
+            SkEvalCubicAt(pts, t, pos, tangent, NULL);
             if (tangent) {
                 tangent->normalize();
             }
@@ -314,12 +314,7 @@ static void seg_to(const SkPoint pts[], int segType,
     SkASSERT(startT <= stopT);
 
     if (startT == stopT) {
-        /* if the dash as a zero-length on segment, add a corresponding zero-length line.
-           The stroke code will add end caps to zero length lines as appropriate */
-        SkPoint lastPt;
-        SkAssertResult(dst->getLastPt(&lastPt));
-        dst->lineTo(lastPt);
-        return;
+        return; // should we report this, to undo a moveTo?
     }
 
     SkPoint tmp0[7], tmp1[7];
@@ -402,7 +397,7 @@ static void seg_to(const SkPoint pts[], int segType,
 ////////////////////////////////////////////////////////////////////////////////
 
 SkPathMeasure::SkPathMeasure() {
-    fPath = nullptr;
+    fPath = NULL;
     fLength = -1;   // signal we need to compute it
     fForceClosed = false;
     fFirstPtIndex = -1;
@@ -435,7 +430,7 @@ void SkPathMeasure::setPath(const SkPath* path, bool forceClosed) {
 }
 
 SkScalar SkPathMeasure::getLength() {
-    if (fPath == nullptr) {
+    if (fPath == NULL) {
         return 0;
     }
     if (fLength < 0) {
@@ -452,7 +447,7 @@ int SkTKSearch(const T base[], int count, const K& key) {
         return ~0;
     }
     
-    SkASSERT(base != nullptr); // base may be nullptr if count is zero
+    SkASSERT(base != NULL); // base may be NULL if count is zero
     
     int lo = 0;
     int hi = count - 1;
@@ -511,7 +506,7 @@ const SkPathMeasure::Segment* SkPathMeasure::distanceToSegment(
 
 bool SkPathMeasure::getPosTan(SkScalar distance, SkPoint* pos,
                               SkVector* tangent) {
-    if (nullptr == fPath) {
+    if (NULL == fPath) {
         return false;
     }
 
@@ -538,7 +533,7 @@ bool SkPathMeasure::getPosTan(SkScalar distance, SkPoint* pos,
 
 bool SkPathMeasure::getMatrix(SkScalar distance, SkMatrix* matrix,
                               MatrixFlags flags) {
-    if (nullptr == fPath) {
+    if (NULL == fPath) {
         return false;
     }
 
@@ -573,7 +568,7 @@ bool SkPathMeasure::getSegment(SkScalar startD, SkScalar stopD, SkPath* dst,
     if (stopD > length) {
         stopD = length;
     }
-    if (startD > stopD) {
+    if (startD >= stopD) {
         return false;
     }
 
@@ -584,7 +579,7 @@ bool SkPathMeasure::getSegment(SkScalar startD, SkScalar stopD, SkPath* dst,
     SkASSERT(seg <= stopSeg);
 
     if (startWithMoveTo) {
-        compute_pos_tan(&fPts[seg->fPtIndex], seg->fType, startT, &p, nullptr);
+        compute_pos_tan(&fPts[seg->fPtIndex], seg->fType, startT, &p, NULL);
         dst->moveTo(p);
     }
 

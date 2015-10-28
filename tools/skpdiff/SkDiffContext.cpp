@@ -22,13 +22,13 @@
 #include "skpdiff_util.h"
 
 SkDiffContext::SkDiffContext() {
-    fDiffers = nullptr;
+    fDiffers = NULL;
     fDifferCount = 0;
 }
 
 SkDiffContext::~SkDiffContext() {
     if (fDiffers) {
-        delete[] fDiffers;
+        SkDELETE_ARRAY(fDiffers);
     }
 }
 
@@ -57,14 +57,14 @@ void SkDiffContext::setLongNames(const bool useLongNames) {
 void SkDiffContext::setDiffers(const SkTDArray<SkImageDiffer*>& differs) {
     // Delete whatever the last array of differs was
     if (fDiffers) {
-        delete[] fDiffers;
-        fDiffers = nullptr;
+        SkDELETE_ARRAY(fDiffers);
+        fDiffers = NULL;
         fDifferCount = 0;
     }
 
     // Copy over the new differs
     fDifferCount = differs.count();
-    fDiffers = new SkImageDiffer* [fDifferCount];
+    fDiffers = SkNEW_ARRAY(SkImageDiffer*, fDifferCount);
     differs.copy(fDiffers);
 }
 

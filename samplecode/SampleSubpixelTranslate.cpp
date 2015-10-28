@@ -27,7 +27,7 @@ public:
       : fHorizontalVelocity(horizontalVelocity),
         fVerticalVelocity(verticalVelocity) {
       SkString resourcePath = GetResourcePath(imageFilename);
-      SkImageDecoder* codec = nullptr;
+      SkImageDecoder* codec = NULL;
       SkFILEStream stream(resourcePath.c_str());
       if (stream.isValid()) {
           codec = SkImageDecoder::Factory(&stream);
@@ -35,7 +35,7 @@ public:
       if (codec) {
           stream.rewind();
           codec->decode(&stream, &fBM, kN32_SkColorType, SkImageDecoder::kDecodePixels_Mode);
-          delete codec;
+          SkDELETE(codec);
       } else {
           fBM.allocN32Pixels(1, 1);
           *(fBM.getAddr32(0,0)) = 0xFF0000FF; // red == bad
@@ -109,7 +109,7 @@ protected:
 
         fCurPos.fX += fHorizontalVelocity;
         fCurPos.fY += fVerticalVelocity;
-        this->inval(nullptr);
+        this->inval(NULL);
     }
 
 private:

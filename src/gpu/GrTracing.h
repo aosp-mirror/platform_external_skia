@@ -10,8 +10,8 @@
 
 #include "GrDrawTarget.h"
 #include "GrGpu.h"
+#include "GrInOrderDrawBuffer.h"
 #include "GrTraceMarker.h"
-#include "SkTLazy.h"
 #include "SkTraceEvent.h"
 
 /**
@@ -19,39 +19,45 @@
  */
 class GrGpuTraceMarkerGenerator : public ::SkNoncopyable {
 public:
-    GrGpuTraceMarkerGenerator(GrDrawTarget* target) {}
+    GrGpuTraceMarkerGenerator(GrDrawTarget* target) : fTarget(target) {}
 
     ~GrGpuTraceMarkerGenerator() {
         if (fTraceMarker.isValid()) {
-            // TODO remove trace marker
+            fTarget->removeGpuTraceMarker(fTraceMarker.get());
         }
     }
 
     void initialize(const char* marker_str, int* marker_counter) {
-        // GrGpuTraceMarker* traceMarker = fTraceMarker.init(marker_str, *marker_counter);
-        // TODO add trace marker
+        GrGpuTraceMarker* traceMarker = fTraceMarker.init();
+        traceMarker->fMarker = marker_str;
+        traceMarker->fID = *marker_counter;
+        fTarget->addGpuTraceMarker(traceMarker);
     }
 
 private:
+    GrDrawTarget* fTarget;
     SkTLazy<GrGpuTraceMarker> fTraceMarker;
 };
 
 class GrGpuTraceMarkerGeneratorContext : public ::SkNoncopyable {
 public:
-    GrGpuTraceMarkerGeneratorContext(GrContext* context) {}
+    GrGpuTraceMarkerGeneratorContext(GrContext* context) : fContext(context) {}
 
     ~GrGpuTraceMarkerGeneratorContext() {
         if (fTraceMarker.isValid()) {
-            // TODO remove trace marker
+            fContext->removeGpuTraceMarker(fTraceMarker.get());
         }
     }
 
     void initialize(const char* marker_str, int* marker_counter) {
-        // GrGpuTraceMarker* traceMarker = fTraceMarker.init(marker_str, *marker_counter);
-        // TODO add trace marker
+        GrGpuTraceMarker* traceMarker = fTraceMarker.init();
+        traceMarker->fMarker = marker_str;
+        traceMarker->fID = *marker_counter;
+        fContext->addGpuTraceMarker(traceMarker);
     }
 
 private:
+    GrContext* fContext;
     SkTLazy<GrGpuTraceMarker> fTraceMarker;
 };
 

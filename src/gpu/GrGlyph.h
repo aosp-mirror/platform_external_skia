@@ -31,7 +31,9 @@ struct GrGlyph {
     
     typedef uint32_t PackedID;
 
+    // TODO either plot or AtlasID will be valid, not both
     GrBatchAtlas::AtlasID fID;
+    GrPlot*               fPlot;
     SkPath*               fPath;
     PackedID              fPackedID;
     GrMaskFormat          fMaskFormat;
@@ -41,7 +43,8 @@ struct GrGlyph {
 
     void init(GrGlyph::PackedID packed, const SkIRect& bounds, GrMaskFormat format) {
         fID = GrBatchAtlas::kInvalidAtlasID;
-        fPath = nullptr;
+        fPlot = NULL;
+        fPath = NULL;
         fPackedID = packed;
         fBounds.set(bounds);
         fMaskFormat = format;
@@ -52,7 +55,7 @@ struct GrGlyph {
     void free() {
         if (fPath) {
             delete fPath;
-            fPath = nullptr;
+            fPath = NULL;
         }
     }
 

@@ -8,7 +8,6 @@
 #include "SkBitmap.h"
 #include "SkCanvas.h"
 #include "SkDashPathEffect.h"
-#include "SkStrokeRec.h"
 #include "SkSurface.h"
 #include "Test.h"
 
@@ -270,7 +269,7 @@ static void test_crbug_165432(skiatest::Reporter* reporter) {
 
     SkPath filteredPath;
     SkStrokeRec rec(paint);
-    REPORTER_ASSERT(reporter, !dash->filterPath(&filteredPath, path, &rec, nullptr));
+    REPORTER_ASSERT(reporter, !dash->filterPath(&filteredPath, path, &rec, NULL));
     REPORTER_ASSERT(reporter, filteredPath.isEmpty());
 }
 

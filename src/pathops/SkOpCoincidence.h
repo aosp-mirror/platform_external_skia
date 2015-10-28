@@ -20,11 +20,6 @@ struct SkCoincidentSpans {
     SkOpPtT* fOppPtTStart;
     SkOpPtT* fOppPtTEnd;
     bool fFlipped;
-    SkDEBUGCODE(int fID);
-
-    int debugID() const {
-        return SkDEBUGRELEASE(fID, -1);
-    }
 
     void dump() const;
 };
@@ -32,51 +27,45 @@ struct SkCoincidentSpans {
 class SkOpCoincidence {
 public:
     SkOpCoincidence()
-        : fHead(nullptr)
-        , fTop(nullptr)
-        SkDEBUGPARAMS(fDebugState(nullptr))
+        : fHead(NULL)
+        , fTop(NULL)
+        SkDEBUGPARAMS(fDebugState(NULL))
         {
     }
 
     void add(SkOpPtT* coinPtTStart, SkOpPtT* coinPtTEnd, SkOpPtT* oppPtTStart,
              SkOpPtT* oppPtTEnd, SkChunkAlloc* allocator);
-    bool addExpanded(SkChunkAlloc* allocator  PATH_OPS_DEBUG_VALIDATE_PARAMS(SkOpGlobalState* ));
+    void addExpanded(SkChunkAlloc* allocator  PATH_OPS_DEBUG_VALIDATE_PARAMS(SkOpGlobalState* ));
     bool addMissing(SkChunkAlloc* allocator);
+    void addMissing(SkCoincidentSpans* check, SkChunkAlloc* allocator);
     bool apply();
-    bool contains(const SkOpPtT* coinPtTStart, const SkOpPtT* coinPtTEnd,
-                  const SkOpPtT* oppPtTStart, const SkOpPtT* oppPtTEnd, bool flipped) const;
-
-    void debugAddExpanded(const char* id, SkPathOpsDebug::GlitchLog* ) const;
-    void debugAddMissing(const char* id, SkPathOpsDebug::GlitchLog* ) const;
+    bool contains(SkOpPtT* coinPtTStart, SkOpPtT* coinPtTEnd, SkOpPtT* oppPtTStart,
+                  SkOpPtT* oppPtTEnd, bool flipped);
 
     const SkOpAngle* debugAngle(int id) const {
-        return SkDEBUGRELEASE(fDebugState->debugAngle(id), nullptr);
+        return SkDEBUGRELEASE(fDebugState->debugAngle(id), NULL);
     }
 
     SkOpContour* debugContour(int id) {
-        return SkDEBUGRELEASE(fDebugState->debugContour(id), nullptr);
+        return SkDEBUGRELEASE(fDebugState->debugContour(id), NULL);
     }
 
-    bool debugExpand(const char* id, SkPathOpsDebug::GlitchLog* ) const;
-    void debugMark(const char* id, SkPathOpsDebug::GlitchLog* ) const;
-
     const SkOpPtT* debugPtT(int id) const {
-        return SkDEBUGRELEASE(fDebugState->debugPtT(id), nullptr);
+        return SkDEBUGRELEASE(fDebugState->debugPtT(id), NULL);
     }
 
     const SkOpSegment* debugSegment(int id) const {
-        return SkDEBUGRELEASE(fDebugState->debugSegment(id), nullptr);
+        return SkDEBUGRELEASE(fDebugState->debugSegment(id), NULL);
     }
 
     void debugSetGlobalState(SkOpGlobalState* debugState) {
         SkDEBUGCODE(fDebugState = debugState);
     }
 
-    void debugFixAligned(const char* id, SkPathOpsDebug::GlitchLog* ) const;
     void debugShowCoincidence() const;
 
     const SkOpSpanBase* debugSpan(int id) const {
-        return SkDEBUGRELEASE(fDebugState->debugSpan(id), nullptr);
+        return SkDEBUGRELEASE(fDebugState->debugSpan(id), NULL);
     }
 
     void detach(SkCoincidentSpans* );
@@ -95,7 +84,7 @@ public:
     void mark();
 
 private:
-    bool addIfMissing(const SkCoincidentSpans* outer, SkOpPtT* over1s, SkOpPtT* over1e,
+    void addIfMissing(const SkCoincidentSpans* outer, SkOpPtT* over1s, SkOpPtT* over1e,
                       SkChunkAlloc* );
     bool addIfMissing(const SkOpPtT* over1s, const SkOpPtT* over1e,
                       const SkOpPtT* over2s, const SkOpPtT* over2e,
@@ -105,19 +94,11 @@ private:
                       SkChunkAlloc* );
     void addOverlap(SkOpSegment* seg1, SkOpSegment* seg1o, SkOpSegment* seg2, SkOpSegment* seg2o,
                     SkOpPtT* overS, SkOpPtT* overE, SkChunkAlloc* );
-    bool debugAddIfMissing(const SkCoincidentSpans* outer, const SkOpPtT* over1s, 
-                           const SkOpPtT* over1e) const;
-    bool debugAddIfMissing(const SkOpPtT* over1s, const SkOpPtT* over1e,
-                           const SkOpPtT* over2s, const SkOpPtT* over2e,
-                           double tStart, double tEnd,
-                           SkOpPtT* coinPtTStart, const SkOpPtT* coinPtTEnd,
-                           SkOpPtT* oppPtTStart, const SkOpPtT* oppPtTEnd) const;
     bool overlap(const SkOpPtT* coinStart1, const SkOpPtT* coinEnd1,
                  const SkOpPtT* coinStart2, const SkOpPtT* coinEnd2,
                  double* overS, double* overE) const;
 
-    bool testForCoincidence(const SkCoincidentSpans* outer, const SkOpPtT* testS,
-                            const SkOpPtT* testE) const;
+    bool testForCoincidence(const SkCoincidentSpans* outer, SkOpPtT* testS, SkOpPtT* testE) const;
     SkCoincidentSpans* fHead;
     SkCoincidentSpans* fTop;
     SkDEBUGCODE_(SkOpGlobalState* fDebugState);

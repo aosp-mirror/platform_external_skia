@@ -32,7 +32,8 @@ public:
     static SkDiscretePathEffect* Create(SkScalar segLength,
                                         SkScalar deviation,
                                         uint32_t seedAssist=0) {
-        return new SkDiscretePathEffect(segLength, deviation, seedAssist);
+        return SkNEW_ARGS(SkDiscretePathEffect,
+                          (segLength, deviation, seedAssist));
     }
 
     virtual bool filterPath(SkPath* dst, const SkPath& src,

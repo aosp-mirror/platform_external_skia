@@ -48,7 +48,7 @@ public:
      * Note that buffer mapping does not go through GrContext and therefore is
      * not serialized with other operations.
      *
-     * @return a pointer to the data or nullptr if the map fails.
+     * @return a pointer to the data or NULL if the map fails.
      */
      void* map() { return (fMapPtr = this->onMap()); }
 
@@ -60,14 +60,14 @@ public:
      void unmap() {
          SkASSERT(fMapPtr);
          this->onUnmap();
-         fMapPtr = nullptr;
+         fMapPtr = NULL;
      }
 
     /**
-     * Returns the same ptr that map() returned at time of map or nullptr if the
+     * Returns the same ptr that map() returned at time of map or NULL if the
      * is not mapped.
      *
-     * @return ptr to mapped buffer data or nullptr if buffer is not mapped.
+     * @return ptr to mapped buffer data or NULL if buffer is not mapped.
      */
      void* mapPtr() const { return fMapPtr; }
 
@@ -101,7 +101,7 @@ public:
 protected:
     GrGeometryBuffer(GrGpu* gpu, size_t gpuMemorySize, bool dynamic, bool cpuBacked)
         : INHERITED(gpu, kCached_LifeCycle)
-        , fMapPtr(nullptr)
+        , fMapPtr(NULL)
         , fGpuMemorySize(gpuMemorySize)
         , fDynamic(dynamic)
         , fCPUBacked(cpuBacked) {}

@@ -67,4 +67,5 @@ private:
     typedef skiagm::GM INHERITED;
 };
 
-DEF_GM(return new ClipStrokeRectGM;)
+DEF_GM( return SkNEW(ClipStrokeRectGM); )
+

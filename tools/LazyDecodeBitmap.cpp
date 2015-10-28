@@ -24,21 +24,21 @@ DEFINE_bool(useVolatileCache, false, "Use a volatile cache for deferred image de
 //  Used in SkPictureData::CreateFromStream
 bool sk_tools::LazyDecodeBitmap(const void* src, size_t length, SkBitmap* dst) {
     SkAutoDataUnref data(SkData::NewWithCopy(src, length));
-    if (nullptr == data.get()) {
+    if (NULL == data.get()) {
         return false;
     }
 
     SkAutoTDelete<SkImageGenerator> gen(SkImageGenerator::NewFromEncoded(data));
-    if (nullptr == gen.get()) {
+    if (NULL == gen.get()) {
         return false;
     }
     const SkImageInfo info = gen->getInfo();
-    SkDiscardableMemory::Factory* pool = nullptr;
+    SkDiscardableMemory::Factory* pool = NULL;
     if ((!FLAGS_useVolatileCache) || (info.width() * info.height() < 32 * 1024)) {
         // how to do switching with SkDiscardableMemory.
         pool = SkGetGlobalDiscardableMemoryPool();
         // Only meaningful if platform has a default discardable
         // memory implementation that differs from the global DM pool.
     }
-    return SkDEPRECATED_InstallDiscardablePixelRef(gen.detach(), nullptr, dst, pool);
+    return SkInstallDiscardablePixelRef(gen.detach(), NULL, dst, pool);
 }

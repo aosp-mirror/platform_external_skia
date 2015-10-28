@@ -9,8 +9,6 @@
 #include "SkObjectParser.h"
 #include "SkData.h"
 #include "SkFontDescriptor.h"
-#include "SkImage.h"
-#include "SkPath.h"
 #include "SkRRect.h"
 #include "SkShader.h"
 #include "SkStream.h"
@@ -57,29 +55,6 @@ SkString* SkObjectParser::BitmapToString(const SkBitmap& bitmap) {
     mBitmap->appendS32(bitmap.getGenerationID());
 
     return mBitmap;
-}
-
-SkString* SkObjectParser::ImageToString(const SkImage* image) {
-    SkString* str = new SkString("SkImage: ");
-    if (!image) {
-        return str;
-    }
-
-    str->append("W: ");
-    str->appendS32(image->width());
-    str->append(" H: ");
-    str->appendS32(image->height());
-
-    if (image->isOpaque()) {
-        str->append(" opaque");
-    } else {
-        str->append(" not-opaque");
-    }
-
-    str->append(" uniqueID: ");
-    str->appendS32(image->uniqueID());
-
-    return str;
 }
 
 SkString* SkObjectParser::BoolToString(bool doAA) {
@@ -151,7 +126,7 @@ SkString* SkObjectParser::PathToString(const SkPath& path) {
     mPath->append(gConvexityStrings[path.getConvexity()]);
     mPath->append(", ");
 
-    if (path.isRect(nullptr)) {
+    if (path.isRect(NULL)) {
         mPath->append("isRect, ");
     } else {
         mPath->append("isNotRect, ");
@@ -201,7 +176,7 @@ SkString* SkObjectParser::PathToString(const SkPath& path) {
 
     if (boundStr) {
         mPath->append(*boundStr);
-        delete boundStr;
+        SkDELETE(boundStr);
     }
 
     return mPath;
@@ -235,7 +210,7 @@ SkString* SkObjectParser::RectToString(const SkRect& rect, const char* title) {
 
     SkString* mRect = new SkString;
 
-    if (nullptr == title) {
+    if (NULL == title) {
         mRect->append("SkRect: ");
     } else {
         mRect->append(title);
@@ -256,7 +231,7 @@ SkString* SkObjectParser::RRectToString(const SkRRect& rrect, const char* title)
 
     SkString* mRRect = new SkString;
 
-    if (nullptr == title) {
+    if (NULL == title) {
         mRRect->append("SkRRect (");
         if (rrect.isEmpty()) {
             mRRect->append("empty");
@@ -358,7 +333,7 @@ SkString* SkObjectParser::TextToString(const void* text, size_t byteLength,
             decodedText->append("UTF-16: ");
             size_t sizeNeeded = SkUTF16_ToUTF8((uint16_t*)text,
                                                 SkToS32(byteLength / 2),
-                                                nullptr);
+                                                NULL);
             SkAutoSTMalloc<0x100, char> utf8(sizeNeeded);
             SkUTF16_ToUTF8((uint16_t*)text, SkToS32(byteLength / 2), utf8);
             decodedText->append(utf8, sizeNeeded);

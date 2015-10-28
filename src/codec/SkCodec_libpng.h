@@ -18,53 +18,24 @@
 #endif
 #include "png.h"
 
+class SkScanlineDecoder;
 class SkStream;
 
 class SkPngCodec : public SkCodec {
 public:
-    static bool IsPng(SkStream*);
-
-    // Assume IsPng was called and returned true.
+    // Assumes IsPng was called and returned true.
     static SkCodec* NewFromStream(SkStream*);
+    static bool IsPng(SkStream*);
 
     virtual ~SkPngCodec();
 
 protected:
-    Result onGetPixels(const SkImageInfo&, void*, size_t, const Options&, SkPMColor*, int*, int*)
+    Result onGetPixels(const SkImageInfo&, void*, size_t, const Options&, SkPMColor*, int*)
             override;
     SkEncodedFormat onGetEncodedFormat() const override { return kPNG_SkEncodedFormat; }
-    bool onRewind() override;
-    uint32_t onGetFillValue(SkColorType colorType, SkAlphaType alphaType) const override;
-    bool onReallyHasAlpha() const final;
-
-    // Helper to set up swizzler and color table. Also calls png_read_update_info.
-    Result initializeSwizzler(const SkImageInfo& requestedInfo, const Options&,
-                              SkPMColor*, int* ctableCount);
-    SkSampler* getSampler(bool createIfNecessary) override {
-        SkASSERT(fSwizzler);
-        return fSwizzler;
-    }
-
-    SkPngCodec(const SkImageInfo&, SkStream*, png_structp, png_infop, int, int);
-
-    png_structp png_ptr() { return fPng_ptr; }
-    SkSwizzler* swizzler() { return fSwizzler; }
-    SkSwizzler::SrcConfig srcConfig() const { return fSrcConfig; }
-    int numberPasses() const { return fNumberPasses; }
-
-    enum AlphaState {
-        // This class has done no decoding, or threw away its knowledge (in
-        // scanline decodes).
-        kUnknown_AlphaState,
-        // This class found the image (possibly partial, in the case of a
-        // scanline decode) to be opaque.
-        kOpaque_AlphaState,
-        // Ths class found the image to have alpha.
-        kHasAlpha_AlphaState,
-    };
-
-    virtual AlphaState alphaInScanlineDecode() const = 0;
-
+    SkScanlineDecoder* onGetScanlineDecoder(const SkImageInfo& dstInfo, const Options& options,
+                                            SkPMColor ctable[], int* ctableCount) override;
+    bool onReallyHasAlpha() const override { return fReallyHasAlpha; }
 private:
     png_structp                 fPng_ptr;
     png_infop                   fInfo_ptr;
@@ -74,12 +45,24 @@ private:
     SkAutoTDelete<SkSwizzler>   fSwizzler;
 
     SkSwizzler::SrcConfig       fSrcConfig;
-    const int                   fNumberPasses;
+    int                         fNumberPasses;
+    bool                        fReallyHasAlpha;
     int                         fBitDepth;
-    AlphaState                  fAlphaState;
 
+    SkPngCodec(const SkImageInfo&, SkStream*, png_structp, png_infop, int);
+
+
+    // Helper to set up swizzler and color table. Also calls png_read_update_info.
+    Result initializeSwizzler(const SkImageInfo& requestedInfo, void* dst,
+                              size_t rowBytes, const Options&, SkPMColor*, int* ctableCount);
+
+    // Calls rewindIfNeeded and returns true if the decoder can continue.
+    bool handleRewind();
     bool decodePalette(bool premultiply, int* ctableCount);
     void destroyReadStruct();
+
+    friend class SkPngScanlineDecoder;
+    friend class SkPngInterlacedScanlineDecoder;
 
     typedef SkCodec INHERITED;
 };

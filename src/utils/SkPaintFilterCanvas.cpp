@@ -30,18 +30,6 @@ private:
 
 SkPaintFilterCanvas::SkPaintFilterCanvas(int width, int height) : INHERITED(width, height) { }
 
-SkPaintFilterCanvas::SkPaintFilterCanvas(SkCanvas *canvas)
-    : INHERITED(canvas->imageInfo().width(), canvas->imageInfo().height()) {
-
-    // Transfer matrix & clip state before adding the target canvas.
-    SkIRect devClip;
-    canvas->getClipDeviceBounds(&devClip);
-    this->clipRect(SkRect::Make(devClip));
-    this->setMatrix(canvas->getTotalMatrix());
-
-    this->addCanvas(canvas);
-}
-
 void SkPaintFilterCanvas::onDrawPaint(const SkPaint& paint) {
     AutoPaintFilter apf(this, kPaint_Type, paint);
     this->INHERITED::onDrawPaint(*apf.paint());
@@ -86,7 +74,8 @@ void SkPaintFilterCanvas::onDrawBitmap(const SkBitmap& bm, SkScalar left, SkScal
 }
 
 void SkPaintFilterCanvas::onDrawBitmapRect(const SkBitmap& bm, const SkRect* src, const SkRect& dst,
-                                           const SkPaint* paint, SrcRectConstraint constraint) {
+                                           const SkPaint* paint,
+                                           SK_VIRTUAL_CONSTRAINT_TYPE constraint) {
     AutoPaintFilter apf(this, kBitmap_Type, paint);
     this->INHERITED::onDrawBitmapRect(bm, src, dst, apf.paint(), constraint);
 }
@@ -98,10 +87,11 @@ void SkPaintFilterCanvas::onDrawImage(const SkImage* image, SkScalar left, SkSca
 }
 
 void SkPaintFilterCanvas::onDrawImageRect(const SkImage* image, const SkRect* src,
-                                          const SkRect& dst, const SkPaint* paint,
-                                          SrcRectConstraint constraint) {
+                                          const SkRect& dst, const SkPaint* paint
+                                          SRC_RECT_CONSTRAINT_PARAM(constraint)) {
     AutoPaintFilter apf(this, kBitmap_Type, paint);
-    this->INHERITED::onDrawImageRect(image, src, dst, apf.paint(), constraint);
+    this->INHERITED::onDrawImageRect(image, src, dst, apf.paint()
+                                     SRC_RECT_CONSTRAINT_ARG(constraint));
 }
 
 void SkPaintFilterCanvas::onDrawBitmapNine(const SkBitmap& bm, const SkIRect& center,

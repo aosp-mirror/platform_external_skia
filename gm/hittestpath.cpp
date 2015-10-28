@@ -8,7 +8,6 @@
 #include "gm.h"
 #include "SkCanvas.h"
 #include "SkCullPoints.h"
-#include "SkPath.h"
 #include "SkRandom.h"
 
 static void test_hittest(SkCanvas* canvas, const SkPath& path) {
@@ -30,7 +29,19 @@ static void test_hittest(SkCanvas* canvas, const SkPath& path) {
     }
 }
 
-DEF_SIMPLE_GM(hittestpath, canvas, 700, 460) {
+class HitTestPathGM : public skiagm::GM {
+public:
+    HitTestPathGM () {}
+
+protected:
+
+    SkString onShortName() override {
+        return SkString("hittestpath");
+    }
+
+    SkISize onISize() override { return SkISize::Make(700, 460); }
+
+    void onDraw(SkCanvas* canvas) override {
         SkPath path;
         SkRandom rand;
 
@@ -58,4 +69,13 @@ DEF_SIMPLE_GM(hittestpath, canvas, 700, 460) {
         path.setFillType(SkPath::kWinding_FillType);
 
         test_hittest(canvas, path);
-}
+    }
+
+private:
+    typedef GM INHERITED;
+};
+
+//////////////////////////////////////////////////////////////////////////////
+
+static skiagm::GM* MyFactory(void*) { return new HitTestPathGM; }
+static skiagm::GMRegistry reg(MyFactory);

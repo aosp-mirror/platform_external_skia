@@ -130,8 +130,8 @@ const SkMemberInfo SkImageBaseBitmap::fInfo[] = {
 
 DEFINE_GET_MEMBER(SkImageBaseBitmap);
 
-SkImageBaseBitmap::SkImageBaseBitmap() : fDirty(true), fUriBase(nullptr) {
-    base64.fData = nullptr;
+SkImageBaseBitmap::SkImageBaseBitmap() : fDirty(true), fUriBase(NULL) {
+    base64.fData = NULL;
     base64.fLength = 0;
 }
 

@@ -42,12 +42,8 @@ size_t GrTexture::onGpuMemorySize() const {
     if (this->texturePriv().hasMipMaps()) {
         // We don't have to worry about the mipmaps being a different size than
         // we'd expect because we never change fDesc.fWidth/fHeight.
-        textureSize += textureSize/3;
+        textureSize *= 2;
     }
-
-    SkASSERT(!SkToBool(fDesc.fFlags & kRenderTarget_GrSurfaceFlag));
-    SkASSERT(textureSize <= WorseCaseSize(fDesc));
-
     return textureSize;
 }
 
@@ -98,16 +94,18 @@ GrTexture::GrTexture(GrGpu* gpu, LifeCycle lifeCycle, const GrSurfaceDesc& desc)
 void GrTexturePriv::ComputeScratchKey(const GrSurfaceDesc& desc, GrScratchKey* key) {
     static const GrScratchKey::ResourceType kType = GrScratchKey::GenerateResourceType();
 
+    GrScratchKey::Builder builder(key, kType, 2);
+
     GrSurfaceOrigin origin = resolve_origin(desc);
     uint32_t flags = desc.fFlags & ~kCheckAllocation_GrSurfaceFlag;
 
+    SkASSERT(desc.fWidth <= SK_MaxU16);
+    SkASSERT(desc.fHeight <= SK_MaxU16);
     SkASSERT(static_cast<int>(desc.fConfig) < (1 << 6));
     SkASSERT(desc.fSampleCnt < (1 << 8));
     SkASSERT(flags < (1 << 10));
     SkASSERT(static_cast<int>(origin) < (1 << 8));
 
-    GrScratchKey::Builder builder(key, kType, 3);
-    builder[0] = desc.fWidth;
-    builder[1] = desc.fHeight;
-    builder[2] = desc.fConfig | (desc.fSampleCnt << 6) | (flags << 14) | (origin << 24);
+    builder[0] = desc.fWidth | (desc.fHeight << 16);
+    builder[1] = desc.fConfig | (desc.fSampleCnt << 6) | (flags << 14) | (origin << 24);
 }

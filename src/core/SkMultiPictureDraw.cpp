@@ -35,9 +35,9 @@ void SkMultiPictureDraw::DrawData::init(SkCanvas* canvas, const SkPicture* pictu
         fMatrix.setIdentity();
     }
     if (paint) {
-        fPaint = new SkPaint(*paint);
+        fPaint = SkNEW_ARGS(SkPaint, (*paint));
     } else {
-        fPaint = nullptr;
+        fPaint = NULL;
     }
 }
 
@@ -45,7 +45,7 @@ void SkMultiPictureDraw::DrawData::Reset(SkTDArray<DrawData>& data) {
     for (int i = 0; i < data.count(); ++i) {
         data[i].fPicture->unref();
         data[i].fCanvas->unref();
-        delete data[i].fPaint;
+        SkDELETE(data[i].fPaint);
     }
     data.rewind();
 }
@@ -68,8 +68,8 @@ void SkMultiPictureDraw::add(SkCanvas* canvas,
                              const SkPicture* picture,
                              const SkMatrix* matrix,
                              const SkPaint* paint) {
-    if (nullptr == canvas || nullptr == picture) {
-        SkDEBUGFAIL("parameters to SkMultiPictureDraw::add should be non-nullptr");
+    if (NULL == canvas || NULL == picture) {
+        SkDEBUGFAIL("parameters to SkMultiPictureDraw::add should be non-NULL");
         return;
     }
 
@@ -179,7 +179,7 @@ void SkMultiPictureDraw::draw(bool flush) {
 
             // Render the entire picture using new layers
             GrRecordReplaceDraw(picture, canvas, context->getLayerCache(),
-                                initialMatrix, nullptr);
+                                initialMatrix, NULL);
 
             GrLayerHoister::UnlockLayers(context, needRendering);
             GrLayerHoister::UnlockLayers(context, recycled);

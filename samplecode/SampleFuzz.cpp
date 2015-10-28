@@ -383,7 +383,7 @@ protected:
 
     virtual void onDrawContent(SkCanvas* canvas) {
         do_fuzz(canvas);
-        this->inval(nullptr);
+        this->inval(NULL);
     }
 
 private:

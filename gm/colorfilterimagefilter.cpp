@@ -18,11 +18,11 @@
 #define FILTER_HEIGHT   SkIntToScalar(30)
 #define MARGIN          SkIntToScalar(10)
 
-static SkImageFilter* make_blur(float amount, SkImageFilter* input = nullptr) {
+static SkImageFilter* make_blur(float amount, SkImageFilter* input = NULL) {
     return SkBlurImageFilter::Create(amount, amount, input);
 }
 
-static SkImageFilter* make_brightness(float amount, SkImageFilter* input = nullptr) {
+static SkImageFilter* make_brightness(float amount, SkImageFilter* input = NULL) {
     SkScalar amount255 = SkScalarMul(amount, SkIntToScalar(255));
     SkScalar matrix[20] = { 1, 0, 0, 0, amount255,
                             0, 1, 0, 0, amount255,
@@ -32,7 +32,7 @@ static SkImageFilter* make_brightness(float amount, SkImageFilter* input = nullp
     return SkColorFilterImageFilter::Create(filter, input);
 }
 
-static SkImageFilter* make_grayscale(SkImageFilter* input = nullptr) {
+static SkImageFilter* make_grayscale(SkImageFilter* input = NULL) {
     SkScalar matrix[20];
     memset(matrix, 0, 20 * sizeof(SkScalar));
     matrix[0] = matrix[5] = matrix[10] = 0.2126f;
@@ -43,25 +43,35 @@ static SkImageFilter* make_grayscale(SkImageFilter* input = nullptr) {
     return SkColorFilterImageFilter::Create(filter, input);
 }
 
-static SkImageFilter* make_mode_blue(SkImageFilter* input = nullptr) {
+static SkImageFilter* make_mode_blue(SkImageFilter* input = NULL) {
     SkAutoTUnref<SkColorFilter> filter(
-        SkColorFilter::CreateModeFilter(SK_ColorBLUE, SkXfermode::kSrc_Mode));
+        SkColorFilter::CreateModeFilter(SK_ColorBLUE, SkXfermode::kSrcIn_Mode));
     return SkColorFilterImageFilter::Create(filter, input);
 }
 
-static void drawClippedRect(SkCanvas* canvas,
-                            const SkRect& r,
-                            const SkPaint& paint,
-                            float outset = 0.0f) {
+class ColorFilterImageFilterGM : public skiagm::GM {
+public:
+    ColorFilterImageFilterGM () {}
+
+protected:
+
+    virtual SkString onShortName() {
+        return SkString("colorfilterimagefilter");
+    }
+
+    void drawClippedRect(SkCanvas* canvas, const SkRect& r, const SkPaint& paint, float outset = 0.0f) {
         canvas->save();
         SkRect clip(r);
         clip.outset(outset, outset);
         canvas->clipRect(clip);
         canvas->drawRect(r, paint);
         canvas->restore();
-}
+    }
 
-DEF_SIMPLE_GM(colorfilterimagefilter, canvas, 400, 100){
+    virtual SkISize onISize() { return SkISize::Make(400, 100); }
+
+    virtual void onDraw(SkCanvas* canvas) {
+
         SkRect r = SkRect::MakeWH(FILTER_WIDTH, FILTER_HEIGHT);
         SkPaint paint;
         paint.setColor(SK_ColorRED);
@@ -110,22 +120,13 @@ DEF_SIMPLE_GM(colorfilterimagefilter, canvas, 400, 100){
             drawClippedRect(canvas, r, paint, 3);
             canvas->translate(FILTER_WIDTH + MARGIN, 0);
         }
-        {
-            SkAutoTUnref<SkImageFilter> blue(make_mode_blue());
-            paint.setImageFilter(blue.get());
-            drawClippedRect(canvas, r, paint, 5);
-            canvas->translate(FILTER_WIDTH + MARGIN, 0);
-        }
-}
+    }
 
-DEF_SIMPLE_GM(colorfilterimagefilter_layer, canvas, 32, 32) {
-    SkAutoCanvasRestore autoCanvasRestore(canvas, false);
-    SkColorMatrix cm;
-    cm.setSaturation(0.0f);
-    SkAutoTUnref<SkColorFilter> cf(SkColorMatrixFilter::Create(cm));
-    SkAutoTUnref<SkImageFilter> imf(SkColorFilterImageFilter::Create(cf));
-    SkPaint p;
-    p.setImageFilter(imf);
-    canvas->saveLayer(NULL, &p);
-    canvas->clear(SK_ColorRED);
-}
+private:
+    typedef GM INHERITED;
+};
+
+//////////////////////////////////////////////////////////////////////////////
+
+static skiagm::GM* MyFactory(void*) { return new ColorFilterImageFilterGM; }
+static skiagm::GMRegistry reg(MyFactory);

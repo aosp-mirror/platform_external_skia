@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2013 Google Inc.
  *
@@ -8,7 +9,6 @@
 #include "gm.h"
 #include "SkBlurMask.h"
 #include "SkBlurMaskFilter.h"
-#include "SkPath.h"
 
 namespace skiagm {
 
@@ -111,5 +111,6 @@ private:
     typedef GM INHERITED;
 };
 
-DEF_GM(return new BigBlursGM;)
+DEF_GM( return SkNEW(BigBlursGM); )
+
 }

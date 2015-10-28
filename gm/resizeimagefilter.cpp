@@ -6,10 +6,9 @@
  */
 
 #include "gm.h"
+#include "SkBitmapSource.h"
 #include "SkColor.h"
-#include "SkImageSource.h"
 #include "SkRefCnt.h"
-#include "SkSurface.h"
 
 namespace skiagm {
 
@@ -28,7 +27,7 @@ protected:
               const SkRect& rect,
               const SkSize& deviceSize,
               SkFilterQuality filterQuality,
-              SkImageFilter* input = nullptr) {
+              SkImageFilter* input = NULL) {
         SkRect dstRect;
         canvas->getTotalMatrix().mapRect(&dstRect, rect);
         canvas->save();
@@ -87,21 +86,20 @@ protected:
              deviceSize,
              kHigh_SkFilterQuality);
 
-        SkAutoTUnref<SkSurface> surface(SkSurface::NewRasterN32Premul(16, 16));
-        SkCanvas* surfaceCanvas = surface->getCanvas();
-        surfaceCanvas->clear(0x000000);
+        SkBitmap bitmap;
+        bitmap.allocN32Pixels(16, 16);
+        bitmap.eraseARGB(0x00, 0x00, 0x00, 0x00);
         {
+            SkCanvas bitmapCanvas(bitmap);
             SkPaint paint;
             paint.setColor(0xFF00FF00);
             SkRect ovalRect = SkRect::MakeWH(16, 16);
             ovalRect.inset(SkIntToScalar(2)/3, SkIntToScalar(2)/3);
-            surfaceCanvas->drawOval(ovalRect, paint);
+            bitmapCanvas.drawOval(ovalRect, paint);
         }
-        SkAutoTUnref<SkImage> image(surface->newImageSnapshot());
         SkRect inRect = SkRect::MakeXYWH(-4, -4, 20, 20);
         SkRect outRect = SkRect::MakeXYWH(-24, -24, 120, 120);
-        SkAutoTUnref<SkImageFilter> source(
-            SkImageSource::Create(image, inRect, outRect, kHigh_SkFilterQuality));
+        SkAutoTUnref<SkBitmapSource> source(SkBitmapSource::Create(bitmap, inRect, outRect));
         canvas->translate(srcRect.width() + SkIntToScalar(10), 0);
         draw(canvas,
              srcRect,

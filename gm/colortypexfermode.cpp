@@ -20,7 +20,7 @@ public:
     const static int W = 64;
     const static int H = 64;
     ColorTypeXfermodeGM()
-        : fColorType(nullptr) {
+        : fColorType(NULL) {
     }
 
     virtual ~ColorTypeXfermodeGM() {
@@ -35,19 +35,19 @@ protected:
         };
         SkMatrix local;
         local.setRotate(180);
-        SkShader* s = SkGradientShader::CreateSweep(0,0, colors, nullptr,
+        SkShader* s = SkGradientShader::CreateSweep(0,0, colors, NULL,
                                                     SK_ARRAY_COUNT(colors), 0, &local);
 
         SkPaint paint;
         paint.setAntiAlias(true);
         paint.setShader(s)->unref();
 
-        SkTypeface* orig = sk_tool_utils::create_portable_typeface("serif",
+        SkTypeface* orig = sk_tool_utils::create_portable_typeface_always("serif",
                                                             SkTypeface::kBold);
-        if (nullptr == orig) {
+        if (NULL == orig) {
             orig = SkTypeface::RefDefault();
         }
-        fColorType = new SkGTypeface(orig, paint);
+        fColorType = SkNEW_ARGS(SkGTypeface, (orig, paint));
         orig->unref();
 
         fBG.installPixels(SkImageInfo::Make(2, 2, kARGB_4444_SkColorType,
@@ -112,7 +112,7 @@ protected:
 
         SkPaint labelP;
         labelP.setAntiAlias(true);
-        sk_tool_utils::set_portable_typeface(&labelP);
+        sk_tool_utils::set_portable_typeface_always(&labelP);
         labelP.setTextAlign(SkPaint::kCenter_Align);
 
         SkPaint textP;
@@ -138,7 +138,7 @@ protected:
 
             r.inset(-SK_ScalarHalf, -SK_ScalarHalf);
             p.setStyle(SkPaint::kStroke_Style);
-            p.setShader(nullptr);
+            p.setShader(NULL);
             canvas->drawRect(r, p);
 
             textP.setXfermode(mode);

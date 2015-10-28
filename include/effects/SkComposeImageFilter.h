@@ -22,7 +22,7 @@ public:
             return SkRef(outer);
         }
         SkImageFilter* inputs[2] = { outer, inner };
-        return new SkComposeImageFilter(inputs);
+        return SkNEW_ARGS(SkComposeImageFilter, (inputs));
     }
     void computeFastBounds(const SkRect& src, SkRect* dst) const override;
 

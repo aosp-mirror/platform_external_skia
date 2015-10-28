@@ -20,10 +20,10 @@ static const SkColor gColors[] = {
 };
 
 static const GradData gGradData[] = {
-    { 1, gColors, nullptr },
-    { 2, gColors, nullptr },
-    { 3, gColors, nullptr },
-    { 4, gColors, nullptr },
+    { 1, gColors, NULL },
+    { 2, gColors, NULL },
+    { 3, gColors, NULL },
+    { 4, gColors, NULL },
 };
 
 static SkShader* MakeLinear(const SkPoint pts[2], const GradData& data, SkShader::TileMode tm) {
@@ -80,16 +80,13 @@ static const GradMaker gGradMakers[] = {
 
 class GradientsNoTextureGM : public GM {
 public:
-    GradientsNoTextureGM(bool dither) : fDither(dither) {
+    GradientsNoTextureGM() {
         this->setBGColor(sk_tool_utils::color_to_565(0xFFDDDDDD));
     }
 
 protected:
 
-    SkString onShortName() override {
-        return SkString(fDither ? "gradients_no_texture" : "gradients_no_texture_nodither");
-    }
-
+    SkString onShortName() override { return SkString("gradients_no_texture"); }
     SkISize onISize() override { return SkISize::Make(640, 615); }
 
     void onDraw(SkCanvas* canvas) override {
@@ -99,7 +96,6 @@ protected:
         SkRect kRect = { 0, 0, SkIntToScalar(50), SkIntToScalar(50) };
         SkPaint paint;
         paint.setAntiAlias(true);
-        paint.setDither(fDither);
 
         canvas->translate(SkIntToScalar(20), SkIntToScalar(20));
         static const uint8_t kAlphas[] = { 0xff, 0x40 };
@@ -120,8 +116,6 @@ protected:
     }
 
 private:
-    bool fDither;
-
     typedef GM INHERITED;
 };
 
@@ -132,17 +126,17 @@ struct ColorPos {
     SkScalar*   fPos;
     int         fCount;
 
-    ColorPos() : fColors(nullptr), fPos(nullptr), fCount(0) {}
+    ColorPos() : fColors(NULL), fPos(NULL), fCount(0) {}
     ~ColorPos() {
-        delete[] fColors;
-        delete[] fPos;
+        SkDELETE_ARRAY(fColors);
+        SkDELETE_ARRAY(fPos);
     }
 
     void construct(const SkColor colors[], const SkScalar pos[], int count) {
-        fColors = new SkColor[count];
+        fColors = SkNEW_ARRAY(SkColor, count);
         memcpy(fColors, colors, count * sizeof(SkColor));
         if (pos) {
-            fPos = new SkScalar[count];
+            fPos = SkNEW_ARRAY(SkScalar, count);
             memcpy(fPos, pos, count * sizeof(SkScalar));
             fPos[0] = 0;
             fPos[count - 1] = 1;
@@ -186,7 +180,7 @@ static void make1(ColorPos* rec) {
         SK_ColorBLACK, SK_ColorWHITE, SK_ColorBLACK, SK_ColorWHITE,
         SK_ColorBLACK,
     };
-    rec->construct(colors, nullptr, SK_ARRAY_COUNT(colors));
+    rec->construct(colors, NULL, SK_ARRAY_COUNT(colors));
 }
 
 static void make2(ColorPos* rec) {
@@ -211,14 +205,11 @@ class GradientsManyColorsGM : public GM {
 
     typedef void (*Proc)(ColorPos*);
 public:
-    GradientsManyColorsGM(bool dither) : fDither(dither) {}
+    GradientsManyColorsGM() {}
 
 protected:
 
-    SkString onShortName() override {
-        return SkString(fDither ? "gradients_many" : "gradients_many_nodither");
-    }
-
+    SkString onShortName() override { return SkString("gradients_many"); }
     SkISize onISize() override { return SkISize::Make(850, 100); }
 
     void onDraw(SkCanvas* canvas) override {
@@ -232,7 +223,6 @@ protected:
         const SkRect r = SkRect::MakeWH(SkIntToScalar(W), 30);
 
         SkPaint paint;
-        paint.setDither(fDither);
 
         canvas->translate(20, 20);
 
@@ -253,14 +243,10 @@ protected:
     }
 
 private:
-    bool fDither;
-
     typedef GM INHERITED;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
 
-DEF_GM(return new GradientsNoTextureGM(true);)
-DEF_GM(return new GradientsNoTextureGM(false);)
-DEF_GM(return new GradientsManyColorsGM(true);)
-DEF_GM(return new GradientsManyColorsGM(false);)
+DEF_GM( return SkNEW(GradientsNoTextureGM));
+DEF_GM( return SkNEW(GradientsManyColorsGM));

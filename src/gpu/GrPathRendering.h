@@ -11,7 +11,6 @@
 #include "SkPath.h"
 #include "GrGpu.h"
 #include "GrPathRange.h"
-#include "GrPipeline.h"
 
 class SkDescriptor;
 class SkTypeface;
@@ -156,8 +155,9 @@ public:
         DrawPathArgs(const GrPrimitiveProcessor* primProc,
                      const GrPipeline* pipeline,
                      const GrProgramDesc* desc,
+                     const GrBatchTracker* batchTracker,
                      const GrStencilSettings* stencil)
-            : DrawArgs(primProc, pipeline, desc)
+            : DrawArgs(primProc, pipeline, desc, batchTracker)
             , fStencil(stencil) {
         }
 
@@ -166,9 +166,6 @@ public:
 
     void drawPath(const DrawPathArgs& args, const GrPath* path) {
         fGpu->handleDirtyContext();
-        if (GrXferBarrierType barrierType = args.fPipeline->xferBarrierType(*fGpu->caps())) {
-            fGpu->xferBarrier(args.fPipeline->getRenderTarget(), barrierType);
-        }
         this->onDrawPath(args, path);
     }
 
@@ -176,16 +173,10 @@ public:
                    PathIndexType indexType, const float transformValues[],
                    PathTransformType transformType, int count) {
         fGpu->handleDirtyContext();
-        if (GrXferBarrierType barrierType = args.fPipeline->xferBarrierType(*fGpu->caps())) {
-            fGpu->xferBarrier(args.fPipeline->getRenderTarget(), barrierType);
-        }
-#ifdef SK_DEBUG
-        pathRange->assertPathsLoaded(indices, indexType, count);
-#endif
+        pathRange->willDrawPaths(indices, indexType, count);
         this->onDrawPaths(args, pathRange, indices, indexType, transformValues, transformType,
                           count);
     }
-
 protected:
     GrPathRendering(GrGpu* gpu)
         : fGpu(gpu) {

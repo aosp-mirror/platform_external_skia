@@ -24,7 +24,7 @@ class TestFilter : public SkDrawFilter {
 public:
     bool filter(SkPaint* p, Type) override {
         p->setColor(SK_ColorRED);
-        p->setMaskFilter(nullptr);
+        p->setMaskFilter(NULL);
         return true;
     }
 };
@@ -53,7 +53,7 @@ protected:
         p.setColor(SK_ColorBLUE);
         p.setMaskFilter(fBlur.get());
         SkRect r = { 20, 20, 100, 100 };
-        canvas->setDrawFilter(nullptr);
+        canvas->setDrawFilter(NULL);
         canvas->drawRect(r, p);
         TestFilter redNoBlur;
         canvas->setDrawFilter(&redNoBlur);
@@ -61,7 +61,7 @@ protected:
         canvas->drawRect(r, p);
 
         // Must unset if the DrawFilter is from the stack to avoid refcount errors!
-        canvas->setDrawFilter(nullptr);
+        canvas->setDrawFilter(NULL);
     }
 
 private:

@@ -18,7 +18,7 @@ static SkColor  kColor2 = SkColorSetARGB(0xff, 0x82, 0xff, 0);
 static void draw_label(SkCanvas* canvas, const char* label,
                        const SkPoint& offset) {
     SkPaint paint;
-    sk_tool_utils::set_portable_typeface(&paint);
+    sk_tool_utils::set_portable_typeface_always(&paint);
     size_t len = strlen(label);
 
     SkScalar width = paint.measureText(label, len);
@@ -38,7 +38,7 @@ static void draw_scene(SkCanvas* canvas, SkColorFilter* filter,
     paint.setARGB(0x20, 0, 0, 0xff);
     canvas->drawRect(bounds, paint);
 
-    canvas->saveLayer(&bounds, nullptr);
+    canvas->saveLayer(&bounds, NULL);
 
     r = bounds;
     r.inset(kInset, 0);
@@ -119,9 +119,9 @@ protected:
             SkShader*   fShader1;
             SkShader*   fShader2;
         } shaders[] = {
-            { nullptr, nullptr },
-            { nullptr, fGr2 },
-            { fGr1, nullptr },
+            { NULL, NULL },
+            { NULL, fGr2 },
+            { fGr1, NULL },
             { fGr1, fGr2 },
         };
 
@@ -152,4 +152,4 @@ private:
 
 //////////////////////////////////////////////////////////////////////////////
 
-DEF_GM(return new LumaFilterGM;)
+DEF_GM( return SkNEW(LumaFilterGM); )

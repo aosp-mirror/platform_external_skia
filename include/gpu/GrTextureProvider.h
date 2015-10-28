@@ -9,7 +9,6 @@
 #define GrTextureProvider_DEFINED
 
 #include "GrTexture.h"
-#include "SkImageFilter.h"
 
 class SK_API GrTextureProvider {
 public:
@@ -62,51 +61,41 @@ public:
     }
 
     /**
-     * Finds a texture that approximately matches the descriptor. Will be at least as large in width
-     * and height as desc specifies. If desc specifies that the texture should be a render target
-     * then result will be a render target. Format and sample count will always match the request.
-     * The contents of the texture are undefined. The caller owns a ref on the returned texture and
-     * must balance with a call to unref.
+     * Enum that determines how closely a returned scratch texture must match
+     * a provided GrSurfaceDesc. TODO: Remove this. createTexture() should be used
+     * for exact match and refScratchTexture() should be replaced with createApproxTexture().
      */
-    GrTexture* createApproxTexture(const GrSurfaceDesc&);
-
-    enum SizeConstraint {
-        kExact_SizeConstraint,
-        kApprox_SizeConstraint,
-    };
-
-    GrTexture* createTexture(const GrSurfaceDesc& desc, SizeConstraint constraint) {
-        switch (constraint) {
-            case kExact_SizeConstraint:
-                return this->createTexture(desc, true);
-            case kApprox_SizeConstraint:
-                return this->createApproxTexture(desc);
-        }
-        sk_throw();
-        return nullptr;
-    }
-
-    static SizeConstraint FromImageFilter(SkImageFilter::SizeConstraint constraint) {
-        if (SkImageFilter::kExact_SizeConstraint == constraint) {
-            return kExact_SizeConstraint;
-        } else {
-            SkASSERT(SkImageFilter::kApprox_SizeConstraint == constraint);
-            return kApprox_SizeConstraint;
-        }
-    }
-
-    /** Legacy function that no longer should be used. */
     enum ScratchTexMatch {
+        /**
+         * Finds a texture that exactly matches the descriptor.
+         */
         kExact_ScratchTexMatch,
+        /**
+         * Finds a texture that approximately matches the descriptor. Will be
+         * at least as large in width and height as desc specifies. If desc
+         * specifies that texture is a render target then result will be a
+         * render target. If desc specifies a render target and doesn't set the
+         * no stencil flag then result will have a stencil. Format and aa level
+         * will always match.
+         */
         kApprox_ScratchTexMatch
     };
-    GrTexture* refScratchTexture(const GrSurfaceDesc& desc, ScratchTexMatch match) {
-        if (kApprox_ScratchTexMatch == match) {
-            return this->createApproxTexture(desc);
-        } else {
-            return this->createTexture(desc, true);
-        }
-    }
+
+    /**
+     * Returns a texture matching the desc. It's contents are unknown. The caller
+     * owns a ref on the returned texture and must balance with a call to unref.
+     * It is guaranteed that the same texture will not be returned in subsequent
+     * calls until all refs to the texture are dropped.
+     *
+     * internalFlag is a temporary workaround until changes in the internal
+     * architecture are complete. Use the default value.
+     *
+     * TODO: Once internal flag can be removed, this should be replaced with
+     * createApproxTexture() and exact textures should be created with
+     * createTexture().
+     */
+    GrTexture* refScratchTexture(const GrSurfaceDesc&, ScratchTexMatch match,
+                                 bool internalFlag = false);
 
     ///////////////////////////////////////////////////////////////////////////
     // Wrapped Backend Surfaces
@@ -156,16 +145,7 @@ protected:
      */
     bool existsResourceWithUniqueKey(const GrUniqueKey& key) const;
 
-    enum ScratchTextureFlags {
-        kExact_ScratchTextureFlag           = 0x1,
-        kNoPendingIO_ScratchTextureFlag     = 0x2, // (http://skbug.com/4156)
-        kNoCreate_ScratchTextureFlag        = 0x4,
-    };
-
-    /** A common impl for GrTextureProvider and GrResourceProvider variants. */
-    GrTexture* internalCreateApproxTexture(const GrSurfaceDesc& desc, uint32_t scratchTextureFlags);
-
-    GrTexture* refScratchTexture(const GrSurfaceDesc&, uint32_t scratchTextureFlags);
+    GrTexture* internalRefScratchTexture(const GrSurfaceDesc&, uint32_t flags);
 
     void abandon() {
         fCache = NULL;

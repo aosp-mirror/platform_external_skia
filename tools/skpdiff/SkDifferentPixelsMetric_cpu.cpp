@@ -73,14 +73,14 @@ bool SkDifferentPixelsMetric::diff(SkBitmap* baseline, SkBitmap* test,
             if (baselinePixel != testPixel) {
                 result->poiCount++;
 
-                int redDiff = SkTAbs(static_cast<int>(SkColorGetR(baselinePixel) -
-                                                      SkColorGetR(testPixel)));
+                int redDiff = abs(static_cast<int>(SkColorGetR(baselinePixel) -
+                                                   SkColorGetR(testPixel)));
                 if (redDiff > maxRedDiff) {maxRedDiff = redDiff;}
-                int greenDiff = SkTAbs(static_cast<int>(SkColorGetG(baselinePixel) -
-                                                        SkColorGetG(testPixel)));
+                int greenDiff = abs(static_cast<int>(SkColorGetG(baselinePixel) -
+                                                     SkColorGetG(testPixel)));
                 if (greenDiff > maxGreenDiff) {maxGreenDiff = greenDiff;}
-                int blueDiff = SkTAbs(static_cast<int>(SkColorGetB(baselinePixel) -
-                                                       SkColorGetB(testPixel)));
+                int blueDiff = abs(static_cast<int>(SkColorGetB(baselinePixel) -
+                                                    SkColorGetB(testPixel)));
                 if (blueDiff > maxBlueDiff) {maxBlueDiff = blueDiff;}
 
                 if (bitmapsToCreate.alphaMask) {

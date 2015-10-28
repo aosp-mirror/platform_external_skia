@@ -20,8 +20,8 @@
 SkDWriteFontFileStream::SkDWriteFontFileStream(IDWriteFontFileStream* fontFileStream)
     : fFontFileStream(SkRefComPtr(fontFileStream))
     , fPos(0)
-    , fLockedMemory(nullptr)
-    , fFragmentLock(nullptr) {
+    , fLockedMemory(NULL)
+    , fFragmentLock(NULL) {
 }
 
 SkDWriteFontFileStream::~SkDWriteFontFileStream() {
@@ -33,7 +33,7 @@ SkDWriteFontFileStream::~SkDWriteFontFileStream() {
 size_t SkDWriteFontFileStream::read(void* buffer, size_t size) {
     HRESULT hr = S_OK;
 
-    if (nullptr == buffer) {
+    if (NULL == buffer) {
         size_t fileSize = this->getLength();
 
         if (fPos + size > fileSize) {
@@ -85,7 +85,7 @@ bool SkDWriteFontFileStream::rewind() {
 }
 
 SkDWriteFontFileStream* SkDWriteFontFileStream::duplicate() const {
-    return new SkDWriteFontFileStream(fFontFileStream.get());
+    return SkNEW_ARGS(SkDWriteFontFileStream, (fFontFileStream.get()));
 }
 
 size_t SkDWriteFontFileStream::getPosition() const {
@@ -137,7 +137,7 @@ HRESULT SkDWriteFontFileStreamWrapper::Create(SkStreamAsset* stream,
                                               SkDWriteFontFileStreamWrapper** streamFontFileStream)
 {
     *streamFontFileStream = new SkDWriteFontFileStreamWrapper(stream);
-    if (nullptr == streamFontFileStream) {
+    if (NULL == streamFontFileStream) {
         return E_OUTOFMEMORY;
     }
     return S_OK;
@@ -153,7 +153,7 @@ HRESULT STDMETHODCALLTYPE SkDWriteFontFileStreamWrapper::QueryInterface(REFIID i
         AddRef();
         return S_OK;
     } else {
-        *ppvObject = nullptr;
+        *ppvObject = NULL;
         return E_NOINTERFACE;
     }
 }
@@ -180,8 +180,8 @@ HRESULT STDMETHODCALLTYPE SkDWriteFontFileStreamWrapper::ReadFileFragment(
     UINT64 fileSize;
     this->GetFileSize(&fileSize);
     if (fileOffset > fileSize || fragmentSize > fileSize - fileOffset) {
-        *fragmentStart = nullptr;
-        *fragmentContext = nullptr;
+        *fragmentStart = NULL;
+        *fragmentContext = NULL;
         return E_FAIL;
     }
 
@@ -192,14 +192,14 @@ HRESULT STDMETHODCALLTYPE SkDWriteFontFileStreamWrapper::ReadFileFragment(
     const void* data = fStream->getMemoryBase();
     if (data) {
         *fragmentStart = static_cast<BYTE const*>(data) + static_cast<size_t>(fileOffset);
-        *fragmentContext = nullptr;
+        *fragmentContext = NULL;
 
     } else {
         // May be called from multiple threads.
         SkAutoMutexAcquire ama(fStreamMutex);
 
-        *fragmentStart = nullptr;
-        *fragmentContext = nullptr;
+        *fragmentStart = NULL;
+        *fragmentContext = NULL;
 
         if (!fStream->seek(static_cast<size_t>(fileOffset))) {
             return E_FAIL;

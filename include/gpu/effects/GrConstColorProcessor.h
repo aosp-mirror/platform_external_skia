@@ -10,6 +10,8 @@
 
 #include "GrFragmentProcessor.h"
 
+class GrInvariantOutput;
+
 /**
  * This is a simple GrFragmentProcessor that outputs a constant color. It may do one of the
  * following with its input color: ignore it, or multiply it by the constant color, multiply its
@@ -27,10 +29,16 @@ public:
     static const int kInputModeCnt = kLastInputMode + 1;
 
     static GrFragmentProcessor* Create(GrColor color, InputMode mode) {
-        return new GrConstColorProcessor(color, mode);
+        return SkNEW_ARGS(GrConstColorProcessor, (color, mode));
     }
 
+    ~GrConstColorProcessor() override {}
+
     const char* name() const override { return "Color"; }
+
+    void getGLProcessorKey(const GrGLSLCaps&, GrProcessorKeyBuilder*) const override;
+
+    GrGLFragmentProcessor* createGLInstance() const override;
 
     GrColor color() const { return fColor; }
 
@@ -40,10 +48,6 @@ private:
     GrConstColorProcessor(GrColor color, InputMode mode) : fColor(color), fMode(mode) {
         this->initClassID<GrConstColorProcessor>();
     }
-
-    GrGLFragmentProcessor* onCreateGLInstance() const override;
-
-    void onGetGLProcessorKey(const GrGLSLCaps&, GrProcessorKeyBuilder*) const override;
 
     bool onIsEqual(const GrFragmentProcessor&) const override;
 

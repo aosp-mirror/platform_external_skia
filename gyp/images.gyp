@@ -22,7 +22,6 @@
       ],
       'include_dirs': [
         '../include/images',
-        '../include/private',
         '../src/lazy',
         # for access to SkErrorInternals.h
         '../src/core/',
@@ -130,13 +129,6 @@
           ],
           'dependencies': [
              'android_deps.gyp:png',
-          ],
-          'cflags' : [
-            # SkImageDecoder_libpng includes png.h.
-            # In the version of libpng that we use on Android (1.2.46),
-            # there is a missing space between a literal and an identifier
-            # in png.h, triggering a warning in C++11.
-            '-Wno-literal-suffix',
           ],
           'conditions': [
             [ 'skia_android_framework == 0', {

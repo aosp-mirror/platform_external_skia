@@ -57,7 +57,7 @@ SkImageDecoder::Result SkPKMImageDecoder::onDecode(SkStream* stream, SkBitmap* b
         return kSuccess;
     }
 
-    if (!this->allocPixelRef(bm, nullptr)) {
+    if (!this->allocPixelRef(bm, NULL)) {
         return kFailure;
     }
 
@@ -111,9 +111,9 @@ static bool is_pkm(SkStreamRewindable* stream) {
 
 static SkImageDecoder* sk_libpkm_dfactory(SkStreamRewindable* stream) {
     if (is_pkm(stream)) {
-        return new SkPKMImageDecoder;
+        return SkNEW(SkPKMImageDecoder);
     }
-    return nullptr;
+    return NULL;
 }
 
 static SkImageDecoder_DecodeReg gReg(sk_libpkm_dfactory);

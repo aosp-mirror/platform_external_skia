@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2011 Google Inc.
  *
@@ -9,6 +10,7 @@
 #define SkTScopedComPtr_DEFINED
 
 #include "SkTypes.h"
+#include "SkTemplates.h"
 
 template<typename T>
 class SkBlockComRef : public T {

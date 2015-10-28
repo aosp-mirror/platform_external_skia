@@ -63,8 +63,8 @@ void GrGLCheckErr(const GrGLInterface* gl,
 ///////////////////////////////////////////////////////////////////////////////
 
 GrGLStandard GrGLGetStandardInUseFromString(const char* versionString) {
-    if (nullptr == versionString) {
-        SkDebugf("nullptr GL version string.");
+    if (NULL == versionString) {
+        SkDebugf("NULL GL version string.");
         return kNone_GrGLStandard;
     }
 
@@ -147,15 +147,6 @@ void GrGLGetDriverInfo(GrGLStandard standard,
             *outVersion = GR_GL_DRIVER_VER(driverMajor, driverMinor);
             return;
         }
-        if (0 == strncmp("ANGLE", rendererString, 5)) {
-            *outDriver = kANGLE_GrGLDriver;
-            n = sscanf(versionString, "OpenGL ES %d.%d (ANGLE %d.%d", &major, &minor, &driverMajor,
-                                                                      &driverMinor);
-            if (4 == n) {
-                *outVersion = GR_GL_DRIVER_VER(driverMajor, driverMinor);
-            }
-            return;
-        }
     }
 
     if (kIntel_GrGLVendor == vendor) {
@@ -165,8 +156,8 @@ void GrGLGetDriverInfo(GrGLStandard standard,
 }
 
 GrGLVersion GrGLGetVersionFromString(const char* versionString) {
-    if (nullptr == versionString) {
-        SkDebugf("nullptr GL version string.");
+    if (NULL == versionString) {
+        SkDebugf("NULL GL version string.");
         return GR_GL_INVALID_VER;
     }
 
@@ -200,8 +191,8 @@ GrGLVersion GrGLGetVersionFromString(const char* versionString) {
 }
 
 GrGLSLVersion GrGLGetGLSLVersionFromString(const char* versionString) {
-    if (nullptr == versionString) {
-        SkDebugf("nullptr GLSL version string.");
+    if (NULL == versionString) {
+        SkDebugf("NULL GLSL version string.");
         return GR_GLSL_INVALID_VER;
     }
 

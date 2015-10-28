@@ -117,7 +117,7 @@ protected:
         return backend == kNonRendering_Backend;
     }
 
-    void onDraw(int loops, SkCanvas*) override {
+    void onDraw(const int loops, SkCanvas*) override {
         SkIPoint canvasSize = onGetSize();
         SkPictureRecorder recorder;
 
@@ -139,8 +139,8 @@ public:
         : INHERITED("playback", maxLevel, maxPictureLevel) {
     }
 protected:
-    void onDelayedSetup() override {
-        this->INHERITED::onDelayedSetup();
+    void onPreDraw() override {
+        this->INHERITED::onPreDraw();
 
         SkIPoint canvasSize = onGetSize();
         SkPictureRecorder recorder;
@@ -151,7 +151,7 @@ protected:
         fPicture.reset(recorder.endRecording());
     }
 
-    void onDraw(int loops, SkCanvas* canvas) override {
+    void onDraw(const int loops, SkCanvas* canvas) override {
         for (int i = 0; i < loops; i++) {
             canvas->drawPicture(fPicture);
         }

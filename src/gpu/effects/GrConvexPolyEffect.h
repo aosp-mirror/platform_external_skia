@@ -41,18 +41,18 @@ public:
     static GrFragmentProcessor* Create(GrPrimitiveEdgeType edgeType, int n,
                                        const SkScalar edges[]) {
         if (n <= 0 || n > kMaxEdges || kHairlineAA_GrProcessorEdgeType == edgeType) {
-            return nullptr;
+            return NULL;
         }
-        return new GrConvexPolyEffect(edgeType, n, edges);
+        return SkNEW_ARGS(GrConvexPolyEffect, (edgeType, n, edges));
     }
 
     /**
      * Creates an effect that clips against the path. If the path is not a convex polygon, is
-     * inverse filled, or has too many edges, this will return nullptr. If offset is non-nullptr, then
+     * inverse filled, or has too many edges, this will return NULL. If offset is non-NULL, then
      * the path is translated by the vector.
      */
     static GrFragmentProcessor* Create(GrPrimitiveEdgeType, const SkPath&,
-                                       const SkVector* offset = nullptr);
+                                       const SkVector* offset = NULL);
 
     /**
      * Creates an effect that fills inside the rect with AA edges..
@@ -69,12 +69,12 @@ public:
 
     const SkScalar* getEdges() const { return fEdges; }
 
+    void getGLProcessorKey(const GrGLSLCaps&, GrProcessorKeyBuilder*) const override;
+
+    GrGLFragmentProcessor* createGLInstance() const override;
+
 private:
     GrConvexPolyEffect(GrPrimitiveEdgeType edgeType, int n, const SkScalar edges[]);
-
-    GrGLFragmentProcessor* onCreateGLInstance() const override;
-
-    void onGetGLProcessorKey(const GrGLSLCaps&, GrProcessorKeyBuilder*) const override;
 
     bool onIsEqual(const GrFragmentProcessor& other) const override;
 

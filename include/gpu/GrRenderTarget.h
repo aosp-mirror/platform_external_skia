@@ -11,7 +11,6 @@
 #include "GrSurface.h"
 #include "SkRect.h"
 
-class GrDrawTarget;
 class GrStencilAttachment;
 class GrRenderTargetPriv;
 
@@ -145,23 +144,16 @@ public:
      */
     virtual GrBackendObject getRenderTargetHandle() const = 0;
 
-    // Checked when this object is asked to attach a stencil buffer.
-    virtual bool canAttemptStencilAttachment() const = 0;
-
     // Provides access to functions that aren't part of the public API.
     GrRenderTargetPriv renderTargetPriv();
     const GrRenderTargetPriv renderTargetPriv() const;
 
-    void setLastDrawTarget(GrDrawTarget* dt);
-    GrDrawTarget* getLastDrawTarget() { return fLastDrawTarget; }
-
 protected:
     GrRenderTarget(GrGpu* gpu, LifeCycle lifeCycle, const GrSurfaceDesc& desc,
-                   SampleConfig sampleConfig, GrStencilAttachment* stencil = nullptr)
+                   SampleConfig sampleConfig)
         : INHERITED(gpu, lifeCycle, desc)
-        , fStencilAttachment(stencil)
-        , fSampleConfig(sampleConfig)
-        , fLastDrawTarget(nullptr) {
+        , fStencilAttachment(NULL)
+        , fSampleConfig(sampleConfig) {
         fResolveRect.setLargestInverted();
     }
 
@@ -170,11 +162,8 @@ protected:
     void onRelease() override;
 
 private:
-    // Allows the backends to perform any additional work that is required for attaching a
-    // GrStencilAttachment. When this is called, the GrStencilAttachment has already been put onto
-    // the GrRenderTarget. This function must return false if any failures occur when completing the
-    // stencil attachment.
-    virtual bool completeStencilAttachment() = 0;
+    // Checked when this object is asked to attach a stencil buffer.
+    virtual bool canAttemptStencilAttachment() const = 0;
 
     friend class GrRenderTargetPriv;
 
@@ -182,14 +171,6 @@ private:
     SampleConfig          fSampleConfig;
 
     SkIRect               fResolveRect;
-
-    // The last drawTarget that wrote to or is currently going to write to this renderTarget
-    // The drawTarget can be closed (e.g., no draw context is currently bound
-    // to this renderTarget).
-    // This back-pointer is required so that we can add a dependancy between
-    // the drawTarget used to create the current contents of this renderTarget
-    // and the drawTarget of a destination renderTarget to which this one is being drawn.
-    GrDrawTarget* fLastDrawTarget;
 
     typedef GrSurface INHERITED;
 };

@@ -8,9 +8,8 @@
 #ifndef GrGLProgramDataManager_DEFINED
 #define GrGLProgramDataManager_DEFINED
 
+#include "gl/GrGLShaderVar.h"
 #include "GrAllocator.h"
-#include "gl/GrGLTypes.h"
-#include "glsl/GrGLSLShaderVar.h"
 
 #include "SkTArray.h"
 
@@ -25,48 +24,50 @@ class GrGLProgramBuilder;
  */
 class GrGLProgramDataManager : SkNoncopyable {
 public:
-    // Opaque handle to a resource
+    // Opaque handle to a uniform
     class ShaderResourceHandle {
     public:
+        bool isValid() const { return -1 != fValue; }
+        ShaderResourceHandle()
+            : fValue(-1) {
+        }
+    protected:
         ShaderResourceHandle(int value)
             : fValue(value) {
-            SkASSERT(this->isValid());
+            SkASSERT(isValid());
         }
-
-        ShaderResourceHandle()
-            : fValue(kInvalid_ShaderResourceHandle) {
-        }
-
-        bool operator==(const ShaderResourceHandle& other) const { return other.fValue == fValue; }
-        bool isValid() const { return kInvalid_ShaderResourceHandle != fValue; }
-        int toIndex() const { SkASSERT(this->isValid()); return fValue; }
-
-    private:
-        static const int kInvalid_ShaderResourceHandle = -1;
         int fValue;
     };
 
-    typedef ShaderResourceHandle UniformHandle;
+    class UniformHandle : public ShaderResourceHandle {
+    public:
+        /** Creates a reference to an unifrom of a GrGLShaderBuilder.
+         * The ref can be used to set the uniform with corresponding the GrGLProgramDataManager.*/
+        static UniformHandle CreateFromUniformIndex(int i);
+        UniformHandle() { }
+        bool operator==(const UniformHandle& other) const { return other.fValue == fValue; }
+    private:
+        UniformHandle(int value) : ShaderResourceHandle(value) { }
+        int toProgramDataIndex() const { SkASSERT(isValid()); return fValue; }
+        int toShaderBuilderIndex() const { return toProgramDataIndex(); }
+
+        friend class GrGLProgramDataManager; // For accessing toProgramDataIndex().
+        friend class GrGLProgramBuilder; // For accessing toShaderBuilderIndex().
+        friend class GrGLGeometryProcessor;
+    };
 
     struct UniformInfo {
-        GrGLSLShaderVar fVariable;
-        uint32_t        fVisibility;
-        GrGLint         fLocation;
+        GrGLShaderVar fVariable;
+        uint32_t      fVisibility;
+        GrGLint       fLocation;
     };
 
-    struct SeparableVaryingInfo {
-        GrGLSLShaderVar fVariable;
-        GrGLint         fLocation;
-    };
-
-    // This uses an allocator rather than array so that the GrGLSLShaderVars don't move in memory
+    // This uses an allocator rather than array so that the GrGLShaderVars don't move in memory
     // after they are inserted. Users of GrGLShaderBuilder get refs to the vars and ptrs to their
     // name strings. Otherwise, we'd have to hand out copies.
     typedef GrTAllocator<UniformInfo> UniformInfoArray;
-    typedef GrTAllocator<SeparableVaryingInfo> SeparableVaryingInfoArray;
 
-    GrGLProgramDataManager(GrGLGpu*, GrGLuint programID, const UniformInfoArray&,
-                           const SeparableVaryingInfoArray&);
+    GrGLProgramDataManager(GrGLGpu*, const UniformInfoArray&);
 
     /** Functions for uploading uniform values. The varities ending in v can be used to upload to an
      *  array of uniforms. arrayCount must be <= the array count of the uniform.
@@ -90,11 +91,6 @@ public:
     // convenience method for uploading a SkMatrix to a 3x3 matrix uniform
     void setSkMatrix(UniformHandle, const SkMatrix&) const;
 
-    // for nvpr only
-    typedef GrGLProgramDataManager::ShaderResourceHandle SeparableVaryingHandle;
-    void setPathFragmentInputTransform(SeparableVaryingHandle u, int components,
-                                       const SkMatrix& matrix) const;
-
 private:
     enum {
         kUnusedUniform = -1,
@@ -109,23 +105,10 @@ private:
         );
     };
 
-    enum {
-        kUnusedSeparableVarying = -1,
-    };
-    struct SeparableVarying {
-        GrGLint     fLocation;
-        SkDEBUGCODE(
-            GrSLType    fType;
-            int         fArrayCount;
-        );
-    };
-
     SkDEBUGCODE(void printUnused(const Uniform&) const;)
 
     SkTArray<Uniform, true> fUniforms;
-    SkTArray<SeparableVarying, true> fSeparableVaryings;
     GrGLGpu* fGpu;
-    GrGLuint fProgramID;
 
     typedef SkNoncopyable INHERITED;
 };

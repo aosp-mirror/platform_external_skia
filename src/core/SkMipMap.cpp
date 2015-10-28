@@ -206,7 +206,7 @@ SkMipMap* SkMipMap::Build(const SkBitmap& src, SkDiscardableFactoryProc fact) {
             proc_nocheck = downsample8_nocheck;
             break;
         default:
-            return nullptr; // don't build mipmaps for any other colortypes (yet)
+            return NULL; // don't build mipmaps for any other colortypes (yet)
     }
 
     // whip through our loop to compute the exact size needed
@@ -226,33 +226,33 @@ SkMipMap* SkMipMap::Build(const SkBitmap& src, SkDiscardableFactoryProc fact) {
         }
     }
     if (0 == countLevels) {
-        return nullptr;
+        return NULL;
     }
 
     size_t storageSize = SkMipMap::AllocLevelsSize(countLevels, size);
     if (0 == storageSize) {
-        return nullptr;
+        return NULL;
     }
 
     SkAutoPixmapUnlock srcUnlocker;
     if (!src.requestLock(&srcUnlocker)) {
-        return nullptr;
+        return NULL;
     }
     const SkPixmap& srcPixmap = srcUnlocker.pixmap();
-    // Try to catch where we might have returned nullptr for src crbug.com/492818
-    if (nullptr == srcPixmap.addr()) {
+    // Try to catch where we might have returned NULL for src crbug.com/492818
+    if (NULL == srcPixmap.addr()) {
         sk_throw();
     }
 
     SkMipMap* mipmap;
     if (fact) {
         SkDiscardableMemory* dm = fact(storageSize);
-        if (nullptr == dm) {
-            return nullptr;
+        if (NULL == dm) {
+            return NULL;
         }
-        mipmap = new SkMipMap(storageSize, dm);
+        mipmap = SkNEW_ARGS(SkMipMap, (storageSize, dm));
     } else {
-        mipmap = new SkMipMap(sk_malloc_throw(storageSize), storageSize);
+        mipmap = SkNEW_ARGS(SkMipMap, (sk_malloc_throw(storageSize), storageSize));
     }
 
     // init
@@ -321,7 +321,7 @@ SkMipMap* SkMipMap::Build(const SkBitmap& src, SkDiscardableFactoryProc fact) {
 ///////////////////////////////////////////////////////////////////////////////
 
 bool SkMipMap::extractLevel(SkScalar scale, Level* levelPtr) const {
-    if (nullptr == fLevels) {
+    if (NULL == fLevels) {
         return false;
     }
 

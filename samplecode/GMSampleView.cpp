@@ -14,7 +14,7 @@ GMSampleView::~GMSampleView() {
 }
 
 SkEvent* GMSampleView::NewShowSizeEvt(bool doShowSize) {
-    SkEvent* evt = new SkEvent("GMSampleView::showSize");
+    SkEvent* evt = SkNEW_ARGS(SkEvent, ("GMSampleView::showSize"));
     evt->setFast32(doShowSize);
     return evt;
 }

@@ -49,19 +49,19 @@ protected:
 
         SkColor colors1[] = { SK_ColorCYAN, SK_ColorLTGRAY, SK_ColorGRAY };
         paint.setShader(SkGradientShader::CreateSweep(65.f, 75.f, colors1,
-                                                      nullptr, SK_ARRAY_COUNT(colors1)))->unref();
+                                                      NULL, SK_ARRAY_COUNT(colors1)))->unref();
         canvas.drawOval(SkRect::MakeXYWH(-5.f, -5.f,
                                          fBmp.width() + 10.f, fBmp.height() + 10.f), paint);
 
         SkColor colors2[] = { SK_ColorMAGENTA, SK_ColorLTGRAY, SK_ColorYELLOW };
-        paint.setShader(SkGradientShader::CreateSweep(45.f, 55.f, colors2, nullptr,
+        paint.setShader(SkGradientShader::CreateSweep(45.f, 55.f, colors2, NULL,
                                                       SK_ARRAY_COUNT(colors2)))->unref();
         paint.setXfermodeMode(SkXfermode::kDarken_Mode);
         canvas.drawOval(SkRect::MakeXYWH(-5.f, -5.f,
                                          fBmp.width() + 10.f, fBmp.height() + 10.f), paint);
 
         SkColor colors3[] = { SK_ColorBLUE, SK_ColorLTGRAY, SK_ColorGREEN };
-        paint.setShader(SkGradientShader::CreateSweep(25.f, 35.f, colors3, nullptr,
+        paint.setShader(SkGradientShader::CreateSweep(25.f, 35.f, colors3, NULL,
                                                       SK_ARRAY_COUNT(colors3)))->unref();
         paint.setXfermodeMode(SkXfermode::kLighten_Mode);
         canvas.drawOval(SkRect::MakeXYWH(-5.f, -5.f,
@@ -70,24 +70,23 @@ protected:
 
     void onDraw(SkCanvas* canvas) override {
         GrRenderTarget* rt = canvas->internal_private_accessTopLayerRenderTarget();
-        if (nullptr == rt) {
+        if (NULL == rt) {
             return;
         }
         GrContext* context = rt->getContext();
-        if (nullptr == context) {
-            skiagm::GM::DrawGpuOnlyMessage(canvas);
+        if (NULL == context) {
+            this->drawGpuOnlyMessage(canvas);
             return;
         }
 
         GrTestTarget tt;
         context->getTestTarget(&tt);
-        if (nullptr == tt.target()) {
+        if (NULL == tt.target()) {
             SkDEBUGFAIL("Couldn't get Gr test target.");
             return;
         }
 
-        SkAutoTUnref<GrTexture> texture(GrRefCachedBitmapTexture(context, fBmp,
-                                                                 GrTextureParams::ClampNoFilter()));
+        SkAutoTUnref<GrTexture> texture(GrRefCachedBitmapTexture(context, fBmp, NULL));
         if (!texture) {
             return;
         }
@@ -117,8 +116,9 @@ protected:
                 for (int m = 0; m < GrTextureDomain::kModeCount; ++m) {
                     GrTextureDomain::Mode mode = (GrTextureDomain::Mode) m;
                     GrPipelineBuilder pipelineBuilder;
-                    SkAutoTUnref<const GrFragmentProcessor> fp(
-                        GrTextureDomainEffect::Create(texture, textureMatrices[tm],
+                    SkAutoTUnref<GrFragmentProcessor> fp(
+                        GrTextureDomainEffect::Create(pipelineBuilder.getProcessorDataManager(),
+                                                      texture, textureMatrices[tm],
                                                 GrTextureDomain::MakeTexelDomain(texture,
                                                                                 texelDomains[d]),
                                                 mode, GrTextureParams::kNone_FilterMode));
@@ -128,12 +128,12 @@ protected:
                     }
                     const SkMatrix viewMatrix = SkMatrix::MakeTrans(x, y);
                     pipelineBuilder.setRenderTarget(rt);
-                    pipelineBuilder.addColorFragmentProcessor(fp);
+                    pipelineBuilder.addColorProcessor(fp);
 
-                    tt.target()->drawNonAARect(pipelineBuilder,
-                                               GrColor_WHITE,
-                                               viewMatrix,
-                                               renderRect);
+                    tt.target()->drawSimpleRect(pipelineBuilder,
+                                                GrColor_WHITE,
+                                                viewMatrix,
+                                                renderRect);
                     x += renderRect.width() + kTestPad;
                 }
                 y += renderRect.height() + kTestPad;
@@ -155,7 +155,7 @@ private:
 const SkScalar TextureDomainEffect::kDrawPad = 10.f;
 const SkScalar TextureDomainEffect::kTestPad = 10.f;
 
-DEF_GM(return new TextureDomainEffect;)
+DEF_GM( return SkNEW(TextureDomainEffect); )
 }
 
 #endif

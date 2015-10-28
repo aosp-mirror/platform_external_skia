@@ -5,8 +5,6 @@
  * found in the LICENSE file.
  */
 
-#include "SkTypes.h"
-
 #if defined(SK_BUILD_FOR_MAC) || defined(SK_BUILD_FOR_UNIX) || defined(SK_BUILD_FOR_ANDROID)
 #   include <unistd.h>
 #   include <sys/time.h>
@@ -99,7 +97,7 @@ double get_seconds() {
     return currentTime.tv_sec + (double)currentTime.tv_nsec / 1e9;
 #elif defined(SK_BUILD_FOR_MAC) || defined(SK_BUILD_FOR_UNIX) || defined(SK_BUILD_FOR_ANDROID)
     struct timeval currentTime;
-    gettimeofday(&currentTime, nullptr);
+    gettimeofday(&currentTime, NULL);
     return currentTime.tv_sec + (double)currentTime.tv_usec / 1e6;
 #else
     return clock() / (double)CLOCKS_PER_SEC;
@@ -110,11 +108,11 @@ bool get_directory(const char path[], SkTArray<SkString>* entries) {
 #if defined(SK_BUILD_FOR_MAC) || defined(SK_BUILD_FOR_UNIX) || defined(SK_BUILD_FOR_ANDROID)
     // Open the directory and check for success
     DIR* dir = opendir(path);
-    if (nullptr == dir) {
+    if (NULL == dir) {
         return false;
     }
 
-    // Loop through dir entries until there are none left (i.e. readdir returns nullptr)
+    // Loop through dir entries until there are none left (i.e. readdir returns NULL)
     struct dirent* entry;
     while ((entry = readdir(dir))) {
         // dirent only gives relative paths, we need to join them to the base path to check if they
@@ -169,7 +167,7 @@ bool glob_files(const char globPattern[], SkTArray<SkString>* entries) {
 #if defined(SK_BUILD_FOR_MAC) || defined(SK_BUILD_FOR_UNIX)
     // TODO Make sure this works on windows. This may require use of FindNextFile windows function.
     glob_t globBuffer;
-    if (glob(globPattern, 0, nullptr, &globBuffer) != 0) {
+    if (glob(globPattern, 0, NULL, &globBuffer) != 0) {
         return false;
     }
 
@@ -192,13 +190,13 @@ bool glob_files(const char globPattern[], SkTArray<SkString>* entries) {
 SkString get_absolute_path(const SkString& path) {
 #if defined(SK_BUILD_FOR_MAC) || defined(SK_BUILD_FOR_UNIX) || defined(SK_BUILD_FOR_ANDROID)
     SkString fullPath(PATH_MAX + 1);
-    if (realpath(path.c_str(), fullPath.writable_str()) == nullptr) {
+    if (realpath(path.c_str(), fullPath.writable_str()) == NULL) {
         fullPath.reset();
     }
     return fullPath;
 #elif defined(SK_BUILD_FOR_WIN32)
     SkString fullPath(MAX_PATH);
-    if (_fullpath(fullPath.writable_str(), path.c_str(), MAX_PATH) == nullptr) {
+    if (_fullpath(fullPath.writable_str(), path.c_str(), MAX_PATH) == NULL) {
         fullPath.reset();
     }
     return fullPath;

@@ -54,10 +54,6 @@ SK_CONF_DECLARE(bool, c_suppressJPEGImageDecoderErrors,
                 "Suppress most JPG error messages when decode "
                 "function fails.");
 
-#if defined(SK_BUILD_FOR_ANDROID) && !defined(SK_JPEG_NO_INDEX_SUPPORTED)
-#define SK_JPEG_INDEX_SUPPORTED
-#endif
-
 //////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////
 
@@ -69,8 +65,8 @@ static void do_nothing_output_message(j_common_ptr) {
 }
 
 static void initialize_info(jpeg_decompress_struct* cinfo, skjpeg_source_mgr* src_mgr) {
-    SkASSERT(cinfo != nullptr);
-    SkASSERT(src_mgr != nullptr);
+    SkASSERT(cinfo != NULL);
+    SkASSERT(src_mgr != NULL);
     jpeg_create_decompress(cinfo);
     cinfo->src = src_mgr;
     /* To suppress warnings with a SK_DEBUG binary, set the
@@ -89,7 +85,7 @@ static void initialize_info(jpeg_decompress_struct* cinfo, skjpeg_source_mgr* sr
     }
 }
 
-#ifdef SK_JPEG_INDEX_SUPPORTED
+#ifdef SK_BUILD_FOR_ANDROID
 class SkJPEGImageIndex {
 public:
     // Takes ownership of stream.
@@ -207,14 +203,16 @@ private:
 
 class SkJPEGImageDecoder : public SkImageDecoder {
 public:
-#ifdef SK_JPEG_INDEX_SUPPORTED
+#ifdef SK_BUILD_FOR_ANDROID
     SkJPEGImageDecoder() {
-        fImageIndex = nullptr;
+        fImageIndex = NULL;
         fImageWidth = 0;
         fImageHeight = 0;
     }
 
-    virtual ~SkJPEGImageDecoder() { delete fImageIndex; }
+    virtual ~SkJPEGImageDecoder() {
+        SkDELETE(fImageIndex);
+    }
 #endif
 
     Format getFormat() const override {
@@ -222,7 +220,7 @@ public:
     }
 
 protected:
-#ifdef SK_JPEG_INDEX_SUPPORTED
+#ifdef SK_BUILD_FOR_ANDROID
     bool onBuildTileIndex(SkStreamRewindable *stream, int *width, int *height) override;
     bool onDecodeSubset(SkBitmap* bitmap, const SkIRect& rect) override;
 #endif
@@ -232,7 +230,7 @@ protected:
                             SkYUVColorSpace* colorSpace) override;
 
 private:
-#ifdef SK_JPEG_INDEX_SUPPORTED
+#ifdef SK_BUILD_FOR_ANDROID
     SkJPEGImageIndex* fImageIndex;
     int fImageWidth;
     int fImageHeight;
@@ -254,7 +252,7 @@ private:
 /* Automatically clean up after throwing an exception */
 class JPEGAutoClean {
 public:
-    JPEGAutoClean(): cinfo_ptr(nullptr) {}
+    JPEGAutoClean(): cinfo_ptr(NULL) {}
     ~JPEGAutoClean() {
         if (cinfo_ptr) {
             jpeg_destroy_decompress(cinfo_ptr);
@@ -299,7 +297,7 @@ static bool skip_src_rows(jpeg_decompress_struct* cinfo, void* buffer, int count
     return true;
 }
 
-#ifdef SK_JPEG_INDEX_SUPPORTED
+#ifdef SK_BUILD_FOR_ANDROID
 static bool skip_src_rows_tile(jpeg_decompress_struct* cinfo,
                                huffman_index *index, void* buffer, int count) {
     for (int i = 0; i < count; i++) {
@@ -333,7 +331,7 @@ static bool return_false(const jpeg_decompress_struct& cinfo,
     return false;
 }
 
-#ifdef SK_JPEG_INDEX_SUPPORTED
+#ifdef SK_BUILD_FOR_ANDROID
 static bool return_false(const jpeg_decompress_struct& cinfo,
                          const SkBitmap& bm, const char caller[]) {
     print_jpeg_decoder_errors(cinfo, bm.width(), bm.height(), caller);
@@ -376,8 +374,8 @@ static void convert_CMYK_to_RGB(uint8_t* scanline, unsigned int width) {
  *  Common code for setting the error manager.
  */
 static void set_error_mgr(jpeg_decompress_struct* cinfo, skjpeg_error_mgr* errorManager) {
-    SkASSERT(cinfo != nullptr);
-    SkASSERT(errorManager != nullptr);
+    SkASSERT(cinfo != NULL);
+    SkASSERT(errorManager != NULL);
     cinfo->err = jpeg_std_error(errorManager);
     errorManager->error_exit = skjpeg_error_exit;
 }
@@ -388,7 +386,7 @@ static void set_error_mgr(jpeg_decompress_struct* cinfo, skjpeg_error_mgr* error
  *  resulting bitmap.
  */
 static void turn_off_visual_optimizations(jpeg_decompress_struct* cinfo) {
-    SkASSERT(cinfo != nullptr);
+    SkASSERT(cinfo != NULL);
     /* this gives about 30% performance improvement. In theory it may
        reduce the visual quality, in practice I'm not seeing a difference
      */
@@ -402,7 +400,7 @@ static void turn_off_visual_optimizations(jpeg_decompress_struct* cinfo) {
  * Common code for setting the dct method.
  */
 static void set_dct_method(const SkImageDecoder& decoder, jpeg_decompress_struct* cinfo) {
-    SkASSERT(cinfo != nullptr);
+    SkASSERT(cinfo != NULL);
 #ifdef DCT_IFAST_SUPPORTED
     if (decoder.getPreferQualityOverSpeed()) {
         cinfo->dct_method = JDCT_ISLOW;
@@ -415,7 +413,7 @@ static void set_dct_method(const SkImageDecoder& decoder, jpeg_decompress_struct
 }
 
 SkColorType SkJPEGImageDecoder::getBitmapColorType(jpeg_decompress_struct* cinfo) {
-    SkASSERT(cinfo != nullptr);
+    SkASSERT(cinfo != NULL);
 
     SrcDepth srcDepth = k32Bit_SrcDepth;
     if (JCS_GRAYSCALE == cinfo->jpeg_color_space) {
@@ -475,7 +473,7 @@ SkColorType SkJPEGImageDecoder::getBitmapColorType(jpeg_decompress_struct* cinfo
 static void adjust_out_color_space_and_dither(jpeg_decompress_struct* cinfo,
                                               SkColorType colorType,
                                               const SkImageDecoder& decoder) {
-    SkASSERT(cinfo != nullptr);
+    SkASSERT(cinfo != NULL);
 #ifdef ANDROID_RGB
     cinfo->dither_mode = JDITHER_NONE;
     if (JCS_CMYK == cinfo->out_color_space) {
@@ -515,7 +513,7 @@ static void fill_below_level(int y, SkBitmap* bitmap) {
 static bool get_src_config(const jpeg_decompress_struct& cinfo,
                            SkScaledBitmapSampler::SrcConfig* sc,
                            int* srcBytesPerPixel) {
-    SkASSERT(sc != nullptr && srcBytesPerPixel != nullptr);
+    SkASSERT(sc != NULL && srcBytesPerPixel != NULL);
     if (JCS_CMYK == cinfo.out_color_space) {
         // In this case we will manually convert the CMYK values to RGB
         *sc = SkScaledBitmapSampler::kRGBX;
@@ -638,7 +636,7 @@ SkImageDecoder::Result SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* 
     if (SkImageDecoder::kDecodeBounds_Mode == mode) {
         return kSuccess;
     }
-    if (!this->allocPixelRef(bm, nullptr)) {
+    if (!this->allocPixelRef(bm, NULL)) {
         return return_failure(cinfo, *bm, "allocPixelRef");
     }
 
@@ -934,7 +932,7 @@ bool SkJPEGImageDecoder::onDecodeYUV8Planes(SkStream* stream, SkISize componentS
     update_components_sizes(cinfo, componentSizes, kActualSize_SizeType);
     jpeg_finish_decompress(&cinfo);
 
-    if (nullptr != colorSpace) {
+    if (NULL != colorSpace) {
         *colorSpace = kJPEG_SkYUVColorSpace;
     }
 
@@ -943,9 +941,10 @@ bool SkJPEGImageDecoder::onDecodeYUV8Planes(SkStream* stream, SkISize componentS
 
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifdef SK_JPEG_INDEX_SUPPORTED
+#ifdef SK_BUILD_FOR_ANDROID
 bool SkJPEGImageDecoder::onBuildTileIndex(SkStreamRewindable* stream, int *width, int *height) {
-    SkAutoTDelete<SkJPEGImageIndex> imageIndex(new SkJPEGImageIndex(stream, this));
+
+    SkAutoTDelete<SkJPEGImageIndex> imageIndex(SkNEW_ARGS(SkJPEGImageIndex, (stream, this)));
 
     skjpeg_error_mgr sk_err;
     set_error_mgr(imageIndex->cinfo(), &sk_err);
@@ -1001,14 +1000,14 @@ bool SkJPEGImageDecoder::onBuildTileIndex(SkStreamRewindable* stream, int *width
         *height = fImageHeight;
     }
 
-    delete fImageIndex;
+    SkDELETE(fImageIndex);
     fImageIndex = imageIndex.detach();
 
     return true;
 }
 
 bool SkJPEGImageDecoder::onDecodeSubset(SkBitmap* bm, const SkIRect& region) {
-    if (nullptr == fImageIndex) {
+    if (NULL == fImageIndex) {
         return false;
     }
     jpeg_decompress_struct* cinfo = fImageIndex->cinfo();
@@ -1067,7 +1066,7 @@ bool SkJPEGImageDecoder::onDecodeSubset(SkBitmap* bm, const SkIRect& region) {
                     ((startX - rect.x()) / actualSampleSize == 0) &&
                     ((startY - rect.y()) / actualSampleSize == 0);
     if (swapOnly) {
-        if (!this->allocPixelRef(&bitmap, nullptr)) {
+        if (!this->allocPixelRef(&bitmap, NULL)) {
             return return_false(*cinfo, bitmap, "allocPixelRef");
         }
     } else {
@@ -1337,7 +1336,7 @@ static WriteScanline ChooseWriter(const SkBitmap& bm) {
         case kIndex_8_SkColorType:
             return Write_Index_YUV;
         default:
-            return nullptr;
+            return NULL;
     }
 }
 
@@ -1349,7 +1348,7 @@ protected:
 #endif
 
         SkAutoLockPixels alp(bm);
-        if (nullptr == bm.getPixels()) {
+        if (NULL == bm.getPixels()) {
             return false;
         }
 
@@ -1368,7 +1367,7 @@ protected:
 
         // Keep after setjmp or mark volatile.
         const WriteScanline writer = ChooseWriter(bm);
-        if (nullptr == writer) {
+        if (NULL == writer) {
             return false;
         }
 
@@ -1395,7 +1394,7 @@ protected:
         const int       width = bm.width();
         uint8_t*        oneRowP = (uint8_t*)oneRow.reset(width * 3);
 
-        const SkPMColor* colors = bm.getColorTable() ? bm.getColorTable()->readColors() : nullptr;
+        const SkPMColor* colors = bm.getColorTable() ? bm.getColorTable()->readColors() : NULL;
         const void*      srcRow = bm.getPixels();
 
         while (cinfo.next_scanline < cinfo.image_height) {
@@ -1438,9 +1437,9 @@ static bool is_jpeg(SkStreamRewindable* stream) {
 
 static SkImageDecoder* sk_libjpeg_dfactory(SkStreamRewindable* stream) {
     if (is_jpeg(stream)) {
-        return new SkJPEGImageDecoder;
+        return SkNEW(SkJPEGImageDecoder);
     }
-    return nullptr;
+    return NULL;
 }
 
 static SkImageDecoder::Format get_format_jpeg(SkStreamRewindable* stream) {
@@ -1451,7 +1450,7 @@ static SkImageDecoder::Format get_format_jpeg(SkStreamRewindable* stream) {
 }
 
 static SkImageEncoder* sk_libjpeg_efactory(SkImageEncoder::Type t) {
-    return (SkImageEncoder::kJPEG_Type == t) ? new SkJPEGImageEncoder : nullptr;
+    return (SkImageEncoder::kJPEG_Type == t) ? SkNEW(SkJPEGImageEncoder) : NULL;
 }
 
 static SkImageDecoder_DecodeReg gDReg(sk_libjpeg_dfactory);

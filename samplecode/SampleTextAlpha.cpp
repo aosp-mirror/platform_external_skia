@@ -65,7 +65,7 @@ protected:
             paint.setTextSize(SkIntToScalar(ps));
             paint.setTextSize(SkIntToScalar(24));
             canvas->drawText(str, strlen(str), x, y, paint);
-            y += paint.getFontMetrics(nullptr);
+            y += paint.getFontMetrics(NULL);
         }
     }
 
@@ -81,7 +81,7 @@ protected:
             y = 255;
         }
         fByte = y;
-        this->inval(nullptr);
+        this->inval(NULL);
         return true;
     }
 

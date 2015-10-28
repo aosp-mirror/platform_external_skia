@@ -25,6 +25,7 @@
         'tools.gyp:tools',
         'pathops_unittest.gyp:*',
         'pathops_skpclip.gyp:*',
+#       'pdfviewer.gyp:pdfviewer',
         'dm.gyp:dm',
         'visualbench.gyp:visualbench',
       ],

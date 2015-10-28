@@ -8,7 +8,6 @@
 #include "Benchmark.h"
 #include "SkCanvas.h"
 #include "SkPaint.h"
-#include "SkPath.h"
 #include "SkRandom.h"
 #include "SkShader.h"
 #include "SkString.h"
@@ -51,7 +50,7 @@ protected:
         return fName.c_str();
     }
 
-    void onDraw(int loops, SkCanvas* canvas) override {
+    void onDraw(const int loops, SkCanvas* canvas) override {
         SkPaint paint(fPaint);
         this->setupPaint(&paint);
 

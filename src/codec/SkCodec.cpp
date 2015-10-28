@@ -5,15 +5,15 @@
  * found in the LICENSE file.
  */
 
-#include "SkBmpCodec.h"
 #include "SkCodec.h"
 #include "SkData.h"
+#include "SkCodec_libbmp.h"
 #include "SkCodec_libgif.h"
 #include "SkCodec_libico.h"
 #include "SkCodec_libpng.h"
 #include "SkCodec_wbmp.h"
 #include "SkCodecPriv.h"
-#if !defined(SK_BUILD_FOR_ANDROID_FRAMEWORK) && !defined(GOOGLE3)
+#ifndef SK_BUILD_FOR_ANDROID_FRAMEWORK
 #include "SkJpegCodec.h"
 #endif
 #include "SkStream.h"
@@ -26,7 +26,7 @@ struct DecoderProc {
 
 static const DecoderProc gDecoderProcs[] = {
     { SkPngCodec::IsPng, SkPngCodec::NewFromStream },
-#if !defined(SK_BUILD_FOR_ANDROID_FRAMEWORK) && !defined(GOOGLE3)
+#ifndef SK_BUILD_FOR_ANDROID_FRAMEWORK
     { SkJpegCodec::IsJpeg, SkJpegCodec::NewFromStream },
 #endif
     { SkWebpCodec::IsWebp, SkWebpCodec::NewFromStream },
@@ -38,17 +38,17 @@ static const DecoderProc gDecoderProcs[] = {
 
 SkCodec* SkCodec::NewFromStream(SkStream* stream) {
     if (!stream) {
-        return nullptr;
+        return NULL;
     }
 
     SkAutoTDelete<SkStream> streamDeleter(stream);
     
-    SkAutoTDelete<SkCodec> codec(nullptr);
+    SkAutoTDelete<SkCodec> codec(NULL);
     for (uint32_t i = 0; i < SK_ARRAY_COUNT(gDecoderProcs); i++) {
         DecoderProc proc = gDecoderProcs[i];
         const bool correctFormat = proc.IsFormat(stream);
         if (!stream->rewind()) {
-            return nullptr;
+            return NULL;
         }
         if (correctFormat) {
             codec.reset(proc.NewFromStream(streamDeleter.detach()));
@@ -62,7 +62,7 @@ SkCodec* SkCodec::NewFromStream(SkStream* stream) {
     const int32_t maxSize = 1 << 27;
     if (codec && codec->getInfo().width() * codec->getInfo().height() > maxSize) {
         SkCodecPrintf("Error: Image size too large, cannot decode.\n");
-        return nullptr;
+        return NULL;
     } else {
         return codec.detach();
     }
@@ -70,45 +70,29 @@ SkCodec* SkCodec::NewFromStream(SkStream* stream) {
 
 SkCodec* SkCodec::NewFromData(SkData* data) {
     if (!data) {
-        return nullptr;
+        return NULL;
     }
-    return NewFromStream(new SkMemoryStream(data));
+    return NewFromStream(SkNEW_ARGS(SkMemoryStream, (data)));
 }
 
 SkCodec::SkCodec(const SkImageInfo& info, SkStream* stream)
-    : fSrcInfo(info)
+    : fInfo(info)
     , fStream(stream)
     , fNeedsRewind(false)
-    , fDstInfo()
-    , fOptions()
-    , fCurrScanline(-1)
 {}
 
 SkCodec::~SkCodec() {}
 
-bool SkCodec::rewindIfNeeded() {
-    if (!fStream) {
-        // Some codecs do not have a stream, but they hold others that do. They
-        // must handle rewinding themselves.
-        return true;
-    }
-
+SkCodec::RewindState SkCodec::rewindIfNeeded() {
     // Store the value of fNeedsRewind so we can update it. Next read will
     // require a rewind.
     const bool needsRewind = fNeedsRewind;
     fNeedsRewind = true;
     if (!needsRewind) {
-        return true;
+        return kNoRewindNecessary_RewindState;
     }
-
-    // startScanlineDecode will need to be called before decoding scanlines.
-    fCurrScanline = -1;
-
-    if (!fStream->rewind()) {
-        return false;
-    }
-
-    return this->onRewind();
+    return fStream->rewind() ? kRewound_RewindState
+                             : kCouldNotRewind_RewindState;
 }
 
 SkCodec::Result SkCodec::getPixels(const SkImageInfo& info, void* pixels, size_t rowBytes,
@@ -116,7 +100,7 @@ SkCodec::Result SkCodec::getPixels(const SkImageInfo& info, void* pixels, size_t
     if (kUnknown_SkColorType == info.colorType()) {
         return kInvalidConversion;
     }
-    if (nullptr == pixels) {
+    if (NULL == pixels) {
         return kInvalidParameters;
     }
     if (rowBytes < info.minRowBytes()) {
@@ -124,229 +108,54 @@ SkCodec::Result SkCodec::getPixels(const SkImageInfo& info, void* pixels, size_t
     }
 
     if (kIndex_8_SkColorType == info.colorType()) {
-        if (nullptr == ctable || nullptr == ctableCount) {
+        if (NULL == ctable || NULL == ctableCount) {
             return kInvalidParameters;
         }
     } else {
         if (ctableCount) {
             *ctableCount = 0;
         }
-        ctableCount = nullptr;
-        ctable = nullptr;
-    }
-
-    {
-        SkAlphaType canonical;
-        if (!SkColorTypeValidateAlphaType(info.colorType(), info.alphaType(), &canonical)
-            || canonical != info.alphaType())
-        {
-            return kInvalidConversion;
-        }
-    }
-
-    if (!this->rewindIfNeeded()) {
-        return kCouldNotRewind;
+        ctableCount = NULL;
+        ctable = NULL;
     }
 
     // Default options.
     Options optsStorage;
-    if (nullptr == options) {
+    if (NULL == options) {
         options = &optsStorage;
-    } else if (options->fSubset) {
-        SkIRect subset(*options->fSubset);
-        if (!this->onGetValidSubset(&subset) || subset != *options->fSubset) {
-            // FIXME: How to differentiate between not supporting subset at all
-            // and not supporting this particular subset?
-            return kUnimplemented;
-        }
     }
-
-    // FIXME: Support subsets somehow? Note that this works for SkWebpCodec
-    // because it supports arbitrary scaling/subset combinations.
-    if (!this->dimensionsSupported(info.dimensions())) {
-        return kInvalidScale;
-    }
-
-    // On an incomplete decode, the subclass will specify the number of scanlines that it decoded
-    // successfully.
-    int rowsDecoded = 0;
-    const Result result = this->onGetPixels(info, pixels, rowBytes, *options, ctable, ctableCount,
-            &rowsDecoded);
+    const Result result = this->onGetPixels(info, pixels, rowBytes, *options, ctable, ctableCount);
 
     if ((kIncompleteInput == result || kSuccess == result) && ctableCount) {
         SkASSERT(*ctableCount >= 0 && *ctableCount <= 256);
     }
-
-    // A return value of kIncompleteInput indicates a truncated image stream.
-    // In this case, we will fill any uninitialized memory with a default value.
-    // Some subclasses will take care of filling any uninitialized memory on
-    // their own.  They indicate that all of the memory has been filled by
-    // setting rowsDecoded equal to the height.
-    if (kIncompleteInput == result && rowsDecoded != info.height()) {
-        this->fillIncompleteImage(info, pixels, rowBytes, options->fZeroInitialized, info.height(),
-                rowsDecoded);
-    }
-
     return result;
 }
 
 SkCodec::Result SkCodec::getPixels(const SkImageInfo& info, void* pixels, size_t rowBytes) {
-    return this->getPixels(info, pixels, rowBytes, nullptr, nullptr, nullptr);
+    SkASSERT(kIndex_8_SkColorType != info.colorType());
+    if (kIndex_8_SkColorType == info.colorType()) {
+        return kInvalidConversion;
+    }
+    return this->getPixels(info, pixels, rowBytes, NULL, NULL, NULL);
 }
 
-SkCodec::Result SkCodec::startScanlineDecode(const SkImageInfo& dstInfo,
-        const SkCodec::Options* options, SkPMColor ctable[], int* ctableCount) {
-    // Reset fCurrScanline in case of failure.
-    fCurrScanline = -1;
-    // Ensure that valid color ptrs are passed in for kIndex8 color type
-    if (kIndex_8_SkColorType == dstInfo.colorType()) {
-        if (nullptr == ctable || nullptr == ctableCount) {
-            return SkCodec::kInvalidParameters;
-        }
-    } else {
-        if (ctableCount) {
-            *ctableCount = 0;
-        }
-        ctableCount = nullptr;
-        ctable = nullptr;
-    }
-
-    if (!this->rewindIfNeeded()) {
-        return kCouldNotRewind;
-    }
+SkScanlineDecoder* SkCodec::getScanlineDecoder(const SkImageInfo& dstInfo, const Options* options,
+        SkPMColor ctable[], int* ctableCount) {
 
     // Set options.
     Options optsStorage;
-    if (nullptr == options) {
+    if (NULL == options) {
         options = &optsStorage;
-    } else if (options->fSubset) {
-        SkIRect size = SkIRect::MakeSize(dstInfo.dimensions());
-        if (!size.contains(*options->fSubset)) {
-            return kInvalidInput;
-        }
-
-        // We only support subsetting in the x-dimension for scanline decoder.
-        // Subsetting in the y-dimension can be accomplished using skipScanlines().
-        if (options->fSubset->top() != 0 || options->fSubset->height() != dstInfo.height()) {
-            return kInvalidInput;
-        }
     }
 
-    // FIXME: Support subsets somehow?
-    if (!this->dimensionsSupported(dstInfo.dimensions())) {
-        return kInvalidScale;
-    }
-
-    const Result result = this->onStartScanlineDecode(dstInfo, *options, ctable, ctableCount);
-    if (result != SkCodec::kSuccess) {
-        return result;
-    }
-
-    fCurrScanline = 0;
-    fDstInfo = dstInfo;
-    fOptions = *options;
-    return kSuccess;
+    return this->onGetScanlineDecoder(dstInfo, *options, ctable, ctableCount);
 }
 
-SkCodec::Result SkCodec::startScanlineDecode(const SkImageInfo& dstInfo) {
-    return this->startScanlineDecode(dstInfo, nullptr, nullptr, nullptr);
-}
-
-int SkCodec::getScanlines(void* dst, int countLines, size_t rowBytes) {
-    if (fCurrScanline < 0) {
-        return 0;
+SkScanlineDecoder* SkCodec::getScanlineDecoder(const SkImageInfo& dstInfo) {
+    SkASSERT(kIndex_8_SkColorType != dstInfo.colorType());
+    if (kIndex_8_SkColorType == dstInfo.colorType()) {
+        return NULL;
     }
-
-    SkASSERT(!fDstInfo.isEmpty());
-    if (countLines <= 0 || fCurrScanline + countLines > fDstInfo.height()) {
-        return 0;
-    }
-
-    const int linesDecoded = this->onGetScanlines(dst, countLines, rowBytes);
-    if (linesDecoded < countLines) {
-        this->fillIncompleteImage(this->dstInfo(), dst, rowBytes, this->options().fZeroInitialized,
-                countLines, linesDecoded);
-    }
-    fCurrScanline += countLines;
-    return linesDecoded;
-}
-
-bool SkCodec::skipScanlines(int countLines) {
-    if (fCurrScanline < 0) {
-        return false;
-    }
-
-    SkASSERT(!fDstInfo.isEmpty());
-    if (countLines < 0 || fCurrScanline + countLines > fDstInfo.height()) {
-        // Arguably, we could just skip the scanlines which are remaining,
-        // and return true. We choose to return false so the client
-        // can catch their bug.
-        return false;
-    }
-
-    bool result = this->onSkipScanlines(countLines);
-    fCurrScanline += countLines;
-    return result;
-}
-
-int SkCodec::outputScanline(int inputScanline) const {
-    SkASSERT(0 <= inputScanline && inputScanline < this->getInfo().height());
-    return this->onOutputScanline(inputScanline);
-}
-
-int SkCodec::onOutputScanline(int inputScanline) const {
-    switch (this->getScanlineOrder()) {
-        case kTopDown_SkScanlineOrder:
-        case kNone_SkScanlineOrder:
-            return inputScanline;
-        case kBottomUp_SkScanlineOrder:
-            return this->getInfo().height() - inputScanline - 1;
-        default:
-            // This case indicates an interlaced gif and is implemented by SkGifCodec.
-            SkASSERT(false);
-            return 0;
-    }
-}
-
-static void fill_proc(const SkImageInfo& info, void* dst, size_t rowBytes,
-        uint32_t colorOrIndex, SkCodec::ZeroInitialized zeroInit, SkSampler* sampler) {
-    if (sampler) {
-        sampler->fill(info, dst, rowBytes, colorOrIndex, zeroInit);
-    } else {
-        SkSampler::Fill(info, dst, rowBytes, colorOrIndex, zeroInit);
-    }
-}
-
-void SkCodec::fillIncompleteImage(const SkImageInfo& info, void* dst, size_t rowBytes,
-        ZeroInitialized zeroInit, int linesRequested, int linesDecoded) {
-
-    void* fillDst;
-    const uint32_t fillValue = this->getFillValue(info.colorType(), info.alphaType());
-    const int linesRemaining = linesRequested - linesDecoded;
-    SkSampler* sampler = this->getSampler(false);
-
-    switch (this->getScanlineOrder()) {
-        case kTopDown_SkScanlineOrder:
-        case kNone_SkScanlineOrder: {
-            const SkImageInfo fillInfo = info.makeWH(info.width(), linesRemaining);
-            fillDst = SkTAddOffset<void>(dst, linesDecoded * rowBytes);
-            fill_proc(fillInfo, fillDst, rowBytes, fillValue, zeroInit, sampler);
-            break;
-        }
-        case kBottomUp_SkScanlineOrder: {
-            fillDst = dst;
-            const SkImageInfo fillInfo = info.makeWH(info.width(), linesRemaining);
-            fill_proc(fillInfo, fillDst, rowBytes, fillValue, zeroInit, sampler);
-            break;
-        }
-        case kOutOfOrder_SkScanlineOrder: {
-            SkASSERT(1 == linesRequested || this->getInfo().height() == linesRequested);
-            const SkImageInfo fillInfo = info.makeWH(info.width(), 1);
-            for (int srcY = linesDecoded; srcY < linesRequested; srcY++) {
-                fillDst = SkTAddOffset<void>(dst, this->outputScanline(srcY) * rowBytes);
-                fill_proc(fillInfo, fillDst, rowBytes, fillValue, zeroInit, sampler);
-            }
-            break;
-        }
-    }
+    return this->getScanlineDecoder(dstInfo, NULL, NULL, NULL);
 }

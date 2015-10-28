@@ -110,7 +110,7 @@ protected:
         static const int kCols = 4;
         
         canvas->scale(3, 3);
-        SkPatchGrid grid(kRows, kCols, SkPatchGrid::kColors_VertexType, nullptr);
+        SkPatchGrid grid(kRows, kCols, SkPatchGrid::kColors_VertexType, NULL);
         for (int i = 0; i < kRows; i++) {
             for (int j = 0; j < kCols; j++) {
                 SkPoint points[12];
@@ -137,7 +137,7 @@ protected:
                 colors[3] = cornerColors[i + 1][j];
                 colors[2] = cornerColors[i + 1][j + 1];
                 
-                grid.setPatch(j, i, points, colors, nullptr);
+                grid.setPatch(j, i, points, colors, NULL);
             }
         }
         
@@ -146,7 +146,7 @@ protected:
         for (int y = 0; y < dims.height(); y++) {
             for (int x = 0; x < dims.width(); x++) {
                 SkPoint cubics[12];
-                grid.getPatch(x, y, cubics, nullptr, nullptr);
+                grid.getPatch(x, y, cubics, NULL, NULL);
                 draw_control_points(canvas, cubics);
             }
         }
@@ -156,5 +156,6 @@ private:
     typedef GM INHERITED;
 };
 
-DEF_GM(return new SkPatchGridGM;)
+DEF_GM(return SkNEW(SkPatchGridGM); )
+
 }

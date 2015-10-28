@@ -21,7 +21,6 @@
 #include "SkRasterizer.h"
 #include "SkRasterClip.h"
 #include "SkStroke.h"
-#include "SkStrokeRec.h"
 
 #define ComputeBWRowBytes(width)        (((unsigned)(width) + 7) >> 3)
 
@@ -64,7 +63,7 @@ void SkGlyph::zeroMetrics() {
 
 static SkFlattenable* load_flattenable(const SkDescriptor* desc, uint32_t tag,
                                        SkFlattenable::Type ft) {
-    SkFlattenable*  obj = nullptr;
+    SkFlattenable*  obj = NULL;
     uint32_t        len;
     const void*     data = desc->findEntry(tag, &len);
 
@@ -77,7 +76,7 @@ static SkFlattenable* load_flattenable(const SkDescriptor* desc, uint32_t tag,
 }
 
 SkScalerContext::SkScalerContext(SkTypeface* typeface, const SkDescriptor* desc)
-    : fRec(*static_cast<const Rec*>(desc->findEntry(kRec_SkDescriptorTag, nullptr)))
+    : fRec(*static_cast<const Rec*>(desc->findEntry(kRec_SkDescriptorTag, NULL)))
 
     , fTypeface(SkRef(typeface))
     , fPathEffect(static_cast<SkPathEffect*>(load_flattenable(desc, kPathEffect_SkDescriptorTag,
@@ -87,7 +86,7 @@ SkScalerContext::SkScalerContext(SkTypeface* typeface, const SkDescriptor* desc)
     , fRasterizer(static_cast<SkRasterizer*>(load_flattenable(desc, kRasterizer_SkDescriptorTag,
                                              SkFlattenable::kSkRasterizer_Type)))
       // Initialize based on our settings. Subclasses can also force this.
-    , fGenerateImageFromPath(fRec.fFrameWidth > 0 || fPathEffect != nullptr || fRasterizer != nullptr)
+    , fGenerateImageFromPath(fRec.fFrameWidth > 0 || fPathEffect != NULL || fRasterizer != NULL)
 
     , fPreBlend(fMaskFilter ? SkMaskGamma::PreBlend() : SkScalerContext::GetMaskPreBlend(fRec))
     , fPreBlendForFilter(fMaskFilter ? SkScalerContext::GetMaskPreBlend(fRec)
@@ -104,8 +103,8 @@ SkScalerContext::SkScalerContext(SkTypeface* typeface, const SkDescriptor* desc)
         rec->fFrameWidth, rec->fMiterLimit, rec->fHints, rec->fFrameAndFill,
         rec->fMaskFormat, rec->fStrokeJoin);
     SkDebugf("  pathEffect %x maskFilter %x\n",
-             desc->findEntry(kPathEffect_SkDescriptorTag, nullptr),
-        desc->findEntry(kMaskFilter_SkDescriptorTag, nullptr));
+             desc->findEntry(kPathEffect_SkDescriptorTag, NULL),
+        desc->findEntry(kMaskFilter_SkDescriptorTag, NULL));
 #endif
 }
 
@@ -155,7 +154,7 @@ void SkScalerContext::getMetrics(SkGlyph* glyph) {
         if (fRasterizer) {
             SkMask  mask;
 
-            if (fRasterizer->rasterize(fillPath, fillToDevMatrix, nullptr,
+            if (fRasterizer->rasterize(fillPath, fillToDevMatrix, NULL,
                                        fMaskFilter, &mask,
                                        SkMask::kJustComputeBounds_CreateMode)) {
                 glyph->fLeft    = mask.fBounds.fLeft;
@@ -207,12 +206,12 @@ void SkScalerContext::getMetrics(SkGlyph* glyph) {
         glyph->toMask(&src);
         fRec.getMatrixFrom2x2(&matrix);
 
-        src.fImage = nullptr;  // only want the bounds from the filter
-        if (fMaskFilter->filterMask(&dst, src, matrix, nullptr)) {
+        src.fImage = NULL;  // only want the bounds from the filter
+        if (fMaskFilter->filterMask(&dst, src, matrix, NULL)) {
             if (dst.fBounds.isEmpty() || !dst.fBounds.is16Bit()) {
                 goto SK_ERROR;
             }
-            SkASSERT(dst.fImage == nullptr);
+            SkASSERT(dst.fImage == NULL);
             glyph->fLeft    = dst.fBounds.fLeft;
             glyph->fTop     = dst.fBounds.fTop;
             glyph->fWidth   = SkToU16(dst.fBounds.width());
@@ -486,7 +485,7 @@ void SkScalerContext::getImage(const SkGlyph& origGlyph) {
 
         // need the original bounds, sans our maskfilter
         SkMaskFilter* mf = fMaskFilter;
-        fMaskFilter = nullptr;             // temp disable
+        fMaskFilter = NULL;             // temp disable
         this->getMetrics(&tmpGlyph);
         fMaskFilter = mf;               // restore
 
@@ -515,7 +514,7 @@ void SkScalerContext::getImage(const SkGlyph& origGlyph) {
             mask.fFormat = SkMask::kA8_Format;
             sk_bzero(glyph->fImage, mask.computeImageSize());
 
-            if (!fRasterizer->rasterize(fillPath, fillToDevMatrix, nullptr,
+            if (!fRasterizer->rasterize(fillPath, fillToDevMatrix, NULL,
                                         fMaskFilter, &mask,
                                         SkMask::kJustRenderImage_CreateMode)) {
                 return;
@@ -554,7 +553,7 @@ void SkScalerContext::getImage(const SkGlyph& origGlyph) {
 
         fRec.getMatrixFrom2x2(&matrix);
 
-        if (fMaskFilter->filterMask(&dstM, srcM, matrix, nullptr)) {
+        if (fMaskFilter->filterMask(&dstM, srcM, matrix, NULL)) {
             int width = SkFastMin32(origGlyph.fWidth, dstM.fBounds.width());
             int height = SkFastMin32(origGlyph.fHeight, dstM.fBounds.height());
             int dstRB = origGlyph.rowBytes();
@@ -586,7 +585,7 @@ void SkScalerContext::getImage(const SkGlyph& origGlyph) {
 }
 
 void SkScalerContext::getPath(const SkGlyph& glyph, SkPath* path) {
-    this->internalGetPath(glyph, nullptr, path, nullptr);
+    this->internalGetPath(glyph, NULL, path, NULL);
 }
 
 void SkScalerContext::getFontMetrics(SkPaint::FontMetrics* fm) {
@@ -612,7 +611,7 @@ void SkScalerContext::internalGetPath(const SkGlyph& glyph, SkPath* fillPath,
         }
     }
 
-    if (fRec.fFrameWidth > 0 || fPathEffect != nullptr) {
+    if (fRec.fFrameWidth > 0 || fPathEffect != NULL) {
         // need the path in user-space, with only the point-size applied
         // so that our stroking and effects will operate the same way they
         // would if the user had extracted the path themself, and then
@@ -642,7 +641,7 @@ void SkScalerContext::internalGetPath(const SkGlyph& glyph, SkPath* fillPath,
 
         if (fPathEffect) {
             SkPath effectPath;
-            if (fPathEffect->filterPath(&effectPath, localPath, &rec, nullptr)) {
+            if (fPathEffect->filterPath(&effectPath, localPath, &rec, NULL)) {
                 localPath.swap(effectPath);
             }
         }
@@ -669,7 +668,7 @@ void SkScalerContext::internalGetPath(const SkGlyph& glyph, SkPath* fillPath,
             fillToDevMatrix->reset();
         }
         if (devPath) {
-            if (fillPath == nullptr) {
+            if (fillPath == NULL) {
                 devPath->swap(path);
             } else {
                 *devPath = path;
@@ -829,7 +828,7 @@ SkAxisAlignment SkComputeAxisAlignmentForHText(const SkMatrix& matrix) {
     if (0 == matrix[SkMatrix::kMSkewY]) {
         return kX_SkAxisAlignment;
     }
-    if (0 == matrix[SkMatrix::kMSkewX]) {
+    if (0 == matrix[SkMatrix::kMScaleX]) {
         return kY_SkAxisAlignment;
     }
     return kNone_SkAxisAlignment;
@@ -871,7 +870,8 @@ SkScalerContext* SkTypeface::createScalerContext(const SkDescriptor* desc,
     SkScalerContext* c = this->onCreateScalerContext(desc);
 
     if (!c && !allowFailure) {
-        c = new SkScalerContext_Empty(const_cast<SkTypeface*>(this), desc);
+        c = SkNEW_ARGS(SkScalerContext_Empty,
+                       (const_cast<SkTypeface*>(this), desc));
     }
     return c;
 }

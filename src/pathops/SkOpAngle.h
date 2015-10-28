@@ -30,6 +30,7 @@ struct SkOpAngle {
     bool after(SkOpAngle* test);
     int allOnOneSide(const SkOpAngle* test);
     bool checkCrossesZero() const;
+    void checkNearCoincidence();
     bool checkParallel(SkOpAngle* );
     bool computeSector();
     int convexHullOverlaps(const SkOpAngle* ) const;
@@ -46,7 +47,6 @@ struct SkOpAngle {
 #endif
 
 #if DEBUG_ANGLE
-    void debugCheckNearCoincidence() const;
     SkString debugPart() const;
 #endif
     const SkOpPtT* debugPtT(int id) const;

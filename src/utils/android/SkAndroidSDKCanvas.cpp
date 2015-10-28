@@ -8,10 +8,8 @@
 #include "SkAndroidSDKCanvas.h"
 
 #include "SkColorFilter.h"
-#include "SkPaint.h"
 #include "SkPathEffect.h"
 #include "SkShader.h"
-#include "SkTLazy.h"
 
 namespace {
 
@@ -23,19 +21,19 @@ void CheckShader(SkPaint* paint) {
         return;
     }
 
-    if (shader->isABitmap()) {
+    if (shader->asABitmap(NULL, NULL, NULL) == SkShader::kDefault_BitmapType) {
         return;
     }
-    if (shader->asACompose(nullptr)) {
+    if (shader->asACompose(NULL)) {
         return;
     }
-    SkShader::GradientType gtype = shader->asAGradient(nullptr);
+    SkShader::GradientType gtype = shader->asAGradient(NULL);
     if (gtype == SkShader::kLinear_GradientType ||
         gtype == SkShader::kRadial_GradientType ||
         gtype == SkShader::kSweep_GradientType) {
         return;
     }
-    paint->setShader(nullptr);
+    paint->setShader(NULL);
 }
 
 void Filter(SkPaint* paint) {
@@ -48,7 +46,7 @@ void Filter(SkPaint* paint) {
     SkXfermode::Mode mode;
     SkXfermode::AsMode(paint->getXfermode(), &mode);
     if (mode > SkXfermode::kLighten_Mode) {
-        paint->setXfermode(nullptr);
+        paint->setXfermode(NULL);
     }
 
     // Force bilinear scaling or none
@@ -70,22 +68,22 @@ void Filter(SkPaint* paint) {
             paint->setColorFilter(
                 SkColorFilter::CreateModeFilter(color, SkXfermode::kSrcOver_Mode));
         } else if (!isMode && !cf->asColorMatrix(srcColorMatrix)) {
-            paint->setColorFilter(nullptr);
+            paint->setColorFilter(NULL);
         }
     }
 
 #ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
     SkPathEffect* pe = paint->getPathEffect();
     if (pe && !pe->exposedInAndroidJavaAPI()) {
-        paint->setPathEffect(nullptr);
+        paint->setPathEffect(NULL);
     }
 #endif
 
     // TODO: Android doesn't support all the flags that can be passed to
     // blur filters; we need plumbing to get them out.
 
-    paint->setImageFilter(nullptr);
-    paint->setLooper(nullptr);
+    paint->setImageFilter(NULL);
+    paint->setLooper(NULL);
 };
 
 }  // namespace
@@ -103,7 +101,7 @@ void Filter(SkPaint* paint) {
     }
 
 
-SkAndroidSDKCanvas::SkAndroidSDKCanvas() : fProxyTarget(nullptr) { }
+SkAndroidSDKCanvas::SkAndroidSDKCanvas() : fProxyTarget(NULL) { }
 
 void SkAndroidSDKCanvas::reset(SkCanvas* newTarget) { fProxyTarget = newTarget; }
 
@@ -145,9 +143,10 @@ void SkAndroidSDKCanvas::onDrawBitmapRect(const SkBitmap& bitmap,
                                                    const SkRect* src,
                                                    const SkRect& dst,
                                                    const SkPaint* paint,
-                                                   SkCanvas::SrcRectConstraint constraint) {
+                                                   SK_VIRTUAL_CONSTRAINT_TYPE constraint) {
     FILTER_PTR(paint);
-    fProxyTarget->legacy_drawBitmapRect(bitmap, src, dst, filteredPaint, constraint);
+    fProxyTarget->drawBitmapRect(bitmap, src, dst, filteredPaint,
+                                 (SrcRectConstraint)constraint);
 }
 void SkAndroidSDKCanvas::onDrawBitmapNine(const SkBitmap& bitmap,
                                                    const SkIRect& center,
@@ -239,42 +238,19 @@ void SkAndroidSDKCanvas::onDrawImage(const SkImage* image,
 }
 
 void SkAndroidSDKCanvas::onDrawImageRect(const SkImage* image,
-                                         const SkRect* in,
-                                         const SkRect& out,
-                                         const SkPaint* paint,
-                                         SrcRectConstraint constraint) {
+                                                  const SkRect* in,
+                                                  const SkRect& out,
+                                                  const SkPaint* paint) {
     FILTER_PTR(paint);
-    fProxyTarget->legacy_drawImageRect(image, in, out, filteredPaint, constraint);
+    fProxyTarget->drawImageRect(image, in, out, filteredPaint);
 }
 
 void SkAndroidSDKCanvas::onDrawPicture(const SkPicture* picture,
-                                       const SkMatrix* matrix,
-                                       const SkPaint* paint) {
+                                                const SkMatrix* matrix,
+                                                const SkPaint* paint) {
     FILTER_PTR(paint);
     fProxyTarget->drawPicture(picture, matrix, filteredPaint);
 }
-
-void SkAndroidSDKCanvas::onDrawAtlas(const SkImage* atlas,
-                                     const SkRSXform xform[],
-                                     const SkRect tex[],
-                                     const SkColor colors[],
-                                     int count,
-                                     SkXfermode::Mode mode,
-                                     const SkRect* cullRect,
-                                     const SkPaint* paint) {
-    FILTER_PTR(paint);
-    fProxyTarget->drawAtlas(atlas, xform, tex, colors, count, mode, cullRect,
-                            filteredPaint);
-}
-
-void SkAndroidSDKCanvas::onDrawImageNine(const SkImage* image,
-                                         const SkIRect& center,
-                                         const SkRect& dst,
-                                         const SkPaint* paint) {
-    FILTER_PTR(paint);
-    fProxyTarget->drawImageNine(image, center, dst, filteredPaint);
-}
-
 
 void SkAndroidSDKCanvas::onDrawDrawable(SkDrawable* drawable, const SkMatrix* matrix) {
     fProxyTarget->drawDrawable(drawable, matrix);
@@ -314,7 +290,7 @@ bool SkAndroidSDKCanvas::onAccessTopLayerPixels(SkPixmap* pmap) {
     SkASSERT(pmap);
     SkImageInfo info;
     size_t rowBytes; 
-    const void* addr = fProxyTarget->accessTopLayerPixels(&info, &rowBytes, nullptr);
+    const void* addr = fProxyTarget->accessTopLayerPixels(&info, &rowBytes, NULL);
     if (addr) {
         pmap->reset(info, addr, rowBytes);
         return true;

@@ -54,15 +54,15 @@ public:
         fR = SkRect::MakeXYWH(rand.nextRangeF(0, 640), rand.nextRangeF(0, 480),
                               rand.nextRangeF(20, 200), rand.nextRangeF(20, 200));
         fColor = rand_opaque_color(rand.nextU());
-        fInterp = nullptr;
+        fInterp = NULL;
         fTime = 0;
     }
     
     void spawnAnimation(SkMSec now) {
         this->setTime(now);
 
-        delete fInterp;
-        fInterp = new SkInterpolator(5, 3);
+        SkDELETE(fInterp);
+        fInterp = SkNEW_ARGS(SkInterpolator, (5, 3));
         SkScalar values[5];
         color_to_floats(fColor, values); values[4] = 0;
         fInterp->setKeyFrame(0, now, values);
@@ -101,8 +101,8 @@ public:
 
             switch (res) {
                 case SkInterpolator::kFreezeEnd_Result:
-                    delete fInterp;
-                    fInterp = nullptr;
+                    SkDELETE(fInterp);
+                    fInterp = NULL;
                     break;
                 default:
                     break;
@@ -172,8 +172,8 @@ protected:
                 break;
             }
         }
-        this->inval(nullptr);
-        return nullptr;
+        this->inval(NULL);
+        return NULL;
     }
 
 private:

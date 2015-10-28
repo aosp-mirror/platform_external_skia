@@ -27,38 +27,50 @@ class SkPDFStream : public SkPDFDict {
 public:
     /** Create a PDF stream. A Length entry is automatically added to the
      *  stream dictionary.
-     *  @param data   The data part of the stream.  Will not take ownership.
+     *  @param data   The data part of the stream.  Will be ref()ed.
      */
-    explicit SkPDFStream(SkData* data) { this->setData(data); }
+    explicit SkPDFStream(SkData* data);
 
     /** Create a PDF stream. A Length entry is automatically added to the
      *  stream dictionary.
-     *  @param stream The data part of the stream.  Will not take ownership.
+     *  @param stream The data part of the stream.  Will be duplicate()d.
      */
-    explicit SkPDFStream(SkStream* stream) { this->setData(stream); }
+    explicit SkPDFStream(SkStream* stream);
 
     virtual ~SkPDFStream();
 
     // The SkPDFObject interface.
     void emitObject(SkWStream* stream,
                     const SkPDFObjNumMap& objNumMap,
-                    const SkPDFSubstituteMap& substitutes) const override;
+                    const SkPDFSubstituteMap& substitutes) override;
 
 protected:
+    enum State {
+        kUnused_State,         //!< The stream hasn't been requested yet.
+        kNoCompression_State,  //!< The stream's been requested in an
+                               //   uncompressed form.
+        kCompressed_State,     //!< The stream's already been compressed.
+    };
+
     /* Create a PDF stream with no data.  The setData method must be called to
      * set the data.
      */
-    SkPDFStream() {}
+    SkPDFStream();
 
-    /** Only call this function once. */
+    void setData(SkData* data);
     void setData(SkStream* stream);
-    void setData(SkData* data) {
-        SkMemoryStream memoryStream(data);
-        this->setData(&memoryStream);
+
+    size_t dataSize() const;
+
+    void setState(State state) {
+        fState = state;
     }
 
 private:
-    SkAutoTDelete<SkStreamRewindable> fCompressedData;
+    // Indicates what form (or if) the stream has been requested.
+    State fState;
+
+    SkAutoTDelete<SkStreamRewindable> fDataStream;
 
     typedef SkPDFDict INHERITED;
 };

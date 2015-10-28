@@ -46,9 +46,9 @@ GrBufferAllocPool::GrBufferAllocPool(GrGpu* gpu,
     : fBlocks(8) {
 
     fGpu = SkRef(gpu);
-    fCpuData = nullptr;
+
     fBufferType = bufferType;
-    fBufferPtr = nullptr;
+    fBufferPtr = NULL;
     fMinBlockSize = SkTMax(GrBufferAllocPool_MIN_BLOCK_SIZE, blockSize);
 
     fBytesInUse = 0;
@@ -72,7 +72,6 @@ void GrBufferAllocPool::deleteBlocks() {
 GrBufferAllocPool::~GrBufferAllocPool() {
     VALIDATE();
     this->deleteBlocks();
-    sk_free(fCpuData);
     fGpu->unref();
 }
 
@@ -80,10 +79,9 @@ void GrBufferAllocPool::reset() {
     VALIDATE();
     fBytesInUse = 0;
     this->deleteBlocks();
-
-    // we may have created a large cpu mirror of a large VB. Reset the size to match our minimum.
-    this->resetCpuData(fMinBlockSize);
-
+    // we may have created a large cpu mirror of a large VB. Reset the size
+    // to match our minimum.
+    fCpuData.reset(fMinBlockSize);
     VALIDATE();
 }
 
@@ -98,7 +96,7 @@ void GrBufferAllocPool::unmap() {
             size_t flushSize = block.fBuffer->gpuMemorySize() - block.fBytesFree;
             this->flushCpuData(fBlocks.back(), flushSize);
         }
-        fBufferPtr = nullptr;
+        fBufferPtr = NULL;
     }
     VALIDATE();
 }
@@ -112,7 +110,7 @@ void GrBufferAllocPool::validate(bool unusedBlockAllowed) const {
             GrGeometryBuffer* buf = fBlocks.back().fBuffer;
             SkASSERT(buf->mapPtr() == fBufferPtr);
         } else {
-            SkASSERT(fCpuData == fBufferPtr);
+            SkASSERT(fCpuData.get() == fBufferPtr);
         }
     } else {
         SkASSERT(fBlocks.empty() || !fBlocks.back().fBuffer->isMapped());
@@ -177,7 +175,7 @@ void* GrBufferAllocPool::makeSpace(size_t size,
     // size.
 
     if (!this->createBlock(size)) {
-        return nullptr;
+        return NULL;
     }
     SkASSERT(fBufferPtr);
 
@@ -228,7 +226,7 @@ bool GrBufferAllocPool::createBlock(size_t requestSize) {
     BufferBlock& block = fBlocks.push_back();
 
     block.fBuffer = this->getBuffer(size);
-    if (!block.fBuffer) {
+    if (NULL == block.fBuffer) {
         fBlocks.pop_back();
         return false;
     }
@@ -242,10 +240,10 @@ bool GrBufferAllocPool::createBlock(size_t requestSize) {
         } else {
             this->flushCpuData(prev, prev.fBuffer->gpuMemorySize() - prev.fBytesFree);
         }
-        fBufferPtr = nullptr;
+        fBufferPtr = NULL;
     }
 
-    SkASSERT(!fBufferPtr);
+    SkASSERT(NULL == fBufferPtr);
 
     // If the buffer is CPU-backed we map it because it is free to do so and saves a copy.
     // Otherwise when buffer mapping is supported we map if the buffer size is greater than the
@@ -259,8 +257,8 @@ bool GrBufferAllocPool::createBlock(size_t requestSize) {
         fBufferPtr = block.fBuffer->map();
     }
 
-    if (!fBufferPtr) {
-        fBufferPtr = this->resetCpuData(block.fBytesFree);
+    if (NULL == fBufferPtr) {
+        fBufferPtr = fCpuData.reset(block.fBytesFree);
     }
 
     VALIDATE(true);
@@ -276,29 +274,14 @@ void GrBufferAllocPool::destroyBlock() {
     SkASSERT(!block.fBuffer->isMapped());
     block.fBuffer->unref();
     fBlocks.pop_back();
-    fBufferPtr = nullptr;
+    fBufferPtr = NULL;
 }
-
-void* GrBufferAllocPool::resetCpuData(size_t newSize) {
-    sk_free(fCpuData);
-    if (newSize) {
-        if (fGpu->caps()->mustClearUploadedBufferData()) {
-            fCpuData = sk_calloc(newSize);
-        } else {
-            fCpuData = sk_malloc_throw(newSize);
-        }
-    } else {
-        fCpuData = nullptr;
-    }
-    return fCpuData;
-}
-
 
 void GrBufferAllocPool::flushCpuData(const BufferBlock& block, size_t flushSize) {
     GrGeometryBuffer* buffer = block.fBuffer;
     SkASSERT(buffer);
     SkASSERT(!buffer->isMapped());
-    SkASSERT(fCpuData == fBufferPtr);
+    SkASSERT(fCpuData.get() == fBufferPtr);
     SkASSERT(flushSize <= buffer->gpuMemorySize());
     VALIDATE(true);
 
@@ -319,14 +302,11 @@ GrGeometryBuffer* GrBufferAllocPool::getBuffer(size_t size) {
 
     GrResourceProvider* rp = fGpu->getContext()->resourceProvider();
 
-    static const GrResourceProvider::BufferUsage kUsage = GrResourceProvider::kDynamic_BufferUsage;
-    // Shouldn't have to use this flag (http://skbug.com/4156)
-    static const uint32_t kFlags = GrResourceProvider::kNoPendingIO_Flag;
     if (kIndex_BufferType == fBufferType) {
-        return rp->createIndexBuffer(size, kUsage, kFlags);
+        return rp->getIndexBuffer(size, /* dynamic = */ true, /* duringFlush = */ true);
     } else {
         SkASSERT(kVertex_BufferType == fBufferType);
-        return rp->createVertexBuffer(size, kUsage, kFlags);
+        return rp->getVertexBuffer(size, /* dynamic = */ true, /* duringFlush = */ true);
     }
 }
 
@@ -346,7 +326,7 @@ void* GrVertexBufferAllocPool::makeSpace(size_t vertexSize,
     SkASSERT(startVertex);
 
     size_t offset = 0; // assign to suppress warning
-    const GrGeometryBuffer* geomBuffer = nullptr; // assign to suppress warning
+    const GrGeometryBuffer* geomBuffer = NULL; // assign to suppress warning
     void* ptr = INHERITED::makeSpace(vertexSize * vertexCount,
                                      vertexSize,
                                      &geomBuffer,
@@ -373,7 +353,7 @@ void* GrIndexBufferAllocPool::makeSpace(int indexCount,
     SkASSERT(startIndex);
 
     size_t offset = 0; // assign to suppress warning
-    const GrGeometryBuffer* geomBuffer = nullptr; // assign to suppress warning
+    const GrGeometryBuffer* geomBuffer = NULL; // assign to suppress warning
     void* ptr = INHERITED::makeSpace(indexCount * sizeof(uint16_t),
                                      sizeof(uint16_t),
                                      &geomBuffer,
@@ -384,3 +364,5 @@ void* GrIndexBufferAllocPool::makeSpace(int indexCount,
     *startIndex = static_cast<int>(offset / sizeof(uint16_t));
     return ptr;
 }
+
+

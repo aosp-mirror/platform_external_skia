@@ -72,18 +72,18 @@ protected:
         return fName.c_str();
     }
 
-    void onDelayedSetup() override {
-        SkASSERT(nullptr == fRectanizer.get());
+    void onPreDraw() override {
+        SkASSERT(NULL == fRectanizer.get());
 
         if (kPow2_RectanizerType == fRectanizerType) {
-            fRectanizer.reset(new GrRectanizerPow2(kWidth, kHeight));
+            fRectanizer.reset(SkNEW_ARGS(GrRectanizerPow2, (kWidth, kHeight)));
         } else {
             SkASSERT(kSkyline_RectanizerType == fRectanizerType);
-            fRectanizer.reset(new GrRectanizerSkyline(kWidth, kHeight));
+            fRectanizer.reset(SkNEW_ARGS(GrRectanizerSkyline, (kWidth, kHeight)));
         }
     }
 
-    void onDraw(int loops, SkCanvas* canvas) override {
+    void onDraw(const int loops, SkCanvas* canvas) override {
         SkRandom rand;
         SkIPoint16 loc;
         SkISize size;

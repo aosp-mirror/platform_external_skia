@@ -39,9 +39,11 @@ static const char gMissingCode[] = ""
 
 class LuaView : public SampleView {
 public:
-    LuaView() : fLua(nullptr) {}
+    LuaView() : fLua(NULL) {}
 
-    virtual ~LuaView() { delete fLua; }
+    virtual ~LuaView() {
+        SkDELETE(fLua);
+    }
 
     void setImageFilename(lua_State* L) {
         SkString str = GetResourcePath("mandrill_256.png");
@@ -56,8 +58,8 @@ public:
     }
 
     lua_State* ensureLua() {
-        if (nullptr == fLua) {
-            fLua = new SkLua;
+        if (NULL == fLua) {
+            fLua = SkNEW(SkLua);
 
             SkString str = GetResourcePath(LUA_FILENAME);
             SkData* data = SkData::NewFromFileName(str.c_str());
@@ -90,7 +92,7 @@ protected:
                     SkDebugf("lua err: %s\n", lua_tostring(L, -1));
                 } else {
                     if (lua_isboolean(L, -1) && lua_toboolean(L, -1)) {
-                        this->inval(nullptr);
+                        this->inval(NULL);
                         return true;
                     }
                 }
@@ -117,7 +119,7 @@ protected:
                 SkDebugf("lua err: %s\n", lua_tostring(L, -1));
             } else {
                 if (lua_isboolean(L, -1) && lua_toboolean(L, -1)) {
-                    this->inval(nullptr);
+                    this->inval(NULL);
                 }
             }
         }
@@ -135,7 +137,7 @@ protected:
                 SkDebugf("lua err: %s\n", lua_tostring(L, -1));
             } else {
                 if (lua_isboolean(L, -1) && lua_toboolean(L, -1)) {
-                    this->inval(nullptr);
+                    this->inval(NULL);
                     Click* c = new Click(this);
                     c->setType(gLuaClickHandlerName);
                     return c;
@@ -150,7 +152,7 @@ protected:
             return this->INHERITED::onClick(click);
         }
 
-        const char* state = nullptr;
+        const char* state = NULL;
         switch (click->fState) {
             case Click::kMoved_State:
                 state = "moved";
@@ -162,7 +164,7 @@ protected:
                 break;
         }
         if (state) {
-            this->inval(nullptr);
+            this->inval(NULL);
             lua_State* L = fLua->get();
             lua_getglobal(L, gClickName);
             fLua->pushScalar(click->fCurr.x());

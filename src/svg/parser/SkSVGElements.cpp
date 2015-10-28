@@ -21,14 +21,14 @@ void SkSVGBase::addAttribute(SkSVGParser& parser, int attrIndex,
 }
 
 
-SkSVGElement::SkSVGElement() : fParent(nullptr), fIsDef(false), fIsNotDef(true) {
+SkSVGElement::SkSVGElement() : fParent(NULL), fIsDef(false), fIsNotDef(true) {
 }
 
 SkSVGElement::~SkSVGElement() {
 }
 
 SkSVGElement* SkSVGElement::getGradient() {
-    return nullptr;
+    return NULL;
 }
 
 bool SkSVGElement::isGroupParent() {

@@ -11,31 +11,45 @@
 #include "SkTypes.h"
 #include "SkBitmap.h"
 #include "SkDeque.h"
+#include "SkClipStack.h"
 #include "SkPaint.h"
 #include "SkRefCnt.h"
+#include "SkPath.h"
 #include "SkRegion.h"
 #include "SkSurfaceProps.h"
 #include "SkXfermode.h"
 
-class GrContext;
-class GrRenderTarget;
 class SkBaseDevice;
 class SkCanvasClipVisitor;
-class SkClipStack;
 class SkDraw;
 class SkDrawable;
 class SkDrawFilter;
 class SkImage;
-class SkImageFilter;
 class SkMetaData;
-class SkPath;
 class SkPicture;
-class SkPixmap;
 class SkRRect;
 struct SkRSXform;
 class SkSurface;
 class SkSurface_Base;
 class SkTextBlob;
+class GrContext;
+class GrRenderTarget;
+
+//#define SK_SUPPORT_LEGACY_DRAWBITMAPRECTFLAGS_TYPE
+
+class SkCanvasState;
+
+#ifdef SK_SUPPORT_LEGACY_ONDRAWIMAGERECT
+    #define SK_VIRTUAL_CONSTRAINT_TYPE          SkCanvas::DrawBitmapRectFlags
+    #define SRC_RECT_CONSTRAINT_PARAM(param)
+    #define SRC_RECT_CONSTRAINT_ARG(arg)
+    #define SRC_RECT_CONSTRAINT_LOCAL_DEFAULT(var)  SkCanvas::SrcRectConstraint var = SkCanvas::kStrict_SrcRectConstraint;
+#else
+    #define SK_VIRTUAL_CONSTRAINT_TYPE          SkCanvas::SrcRectConstraint
+    #define SRC_RECT_CONSTRAINT_PARAM(param)    , SrcRectConstraint param
+    #define SRC_RECT_CONSTRAINT_ARG(arg)        , arg
+    #define SRC_RECT_CONSTRAINT_LOCAL_DEFAULT(var)
+#endif
 
 /** \class SkCanvas
 
@@ -332,9 +346,6 @@ public:
         @return The value to pass to restoreToCount() to balance this save()
     */
     int saveLayer(const SkRect* bounds, const SkPaint* paint);
-    int saveLayer(const SkRect& bounds, const SkPaint* paint) {
-        return this->saveLayer(&bounds, paint);
-    }
 
     /** DEPRECATED - use saveLayer(const SkRect*, const SkPaint*) instead.
 
@@ -805,7 +816,7 @@ public:
 
         /**
          *  If kFast is specified, the implementation may sample outside of the src-rect
-         *  (if specified) by half the width of filter. This allows greater flexibility
+         *  (if specified) by at most 1 pixel when filtering. This allows greater flexibility
          *  to the implementation and can make the draw much faster.
          */
         kFast_SrcRectConstraint,
@@ -822,15 +833,20 @@ public:
      *  @param paint      The paint used to draw the image, or NULL
      *  @param constraint Control the tradeoff between speed and exactness w.r.t. the src-rect.
      */
-    void drawImageRect(const SkImage* image, const SkRect& src, const SkRect& dst,
-                       const SkPaint* paint,
-                       SrcRectConstraint constraint = kStrict_SrcRectConstraint);
-    // variant that takes src SkIRect
+    void drawImageRect(const SkImage* image, const SkRect* src, const SkRect& dst,
+                       const SkPaint* paint, SrcRectConstraint = kStrict_SrcRectConstraint);
+
+    void drawImageRect(const SkImage* image, const SkRect* src, const SkRect& dst) {
+        this->drawImageRect(image, src, dst, NULL, kStrict_SrcRectConstraint);
+    }
+
+    void drawImageRect(const SkImage* image, const SkRect& dst, const SkPaint* paint = NULL) {
+        // With no src-rect, the constraint value is ignored, so we just use the default.
+        this->drawImageRect(image, NULL, dst, paint, kStrict_SrcRectConstraint);
+    }
+
     void drawImageRect(const SkImage* image, const SkIRect& isrc, const SkRect& dst,
                        const SkPaint* paint, SrcRectConstraint = kStrict_SrcRectConstraint);
-    // variant that assumes src == image-bounds
-    void drawImageRect(const SkImage* image, const SkRect& dst, const SkPaint* paint,
-                       SrcRectConstraint = kStrict_SrcRectConstraint);
 
     /**
      *  Draw the image stretched differentially to fit into dst.
@@ -879,13 +895,57 @@ public:
      *  @param paint      The paint used to draw the bitmap, or NULL
      *  @param constraint Control the tradeoff between speed and exactness w.r.t. the src-rect.
      */
-    void drawBitmapRect(const SkBitmap& bitmap, const SkRect& src, const SkRect& dst,
+#ifdef SK_SUPPORT_LEGACY_DRAWBITMAPRECTFLAGS_TYPE
+    void drawBitmapRect(const SkBitmap& bitmap, const SkRect* src, const SkRect& dst,
+                        const SkPaint* paint, SrcRectConstraint);
+#else
+    void drawBitmapRect(const SkBitmap& bitmap, const SkRect* src, const SkRect& dst,
                         const SkPaint* paint, SrcRectConstraint = kStrict_SrcRectConstraint);
-    // variant where src is SkIRect
+#endif
+
+    void drawBitmapRect(const SkBitmap& bitmap, const SkRect& dst, const SkPaint* paint = NULL) {
+        this->drawBitmapRect(bitmap, NULL, dst, paint, kStrict_SrcRectConstraint);
+    }
+
     void drawBitmapRect(const SkBitmap& bitmap, const SkIRect& isrc, const SkRect& dst,
                         const SkPaint* paint, SrcRectConstraint = kStrict_SrcRectConstraint);
-    void drawBitmapRect(const SkBitmap& bitmap, const SkRect& dst, const SkPaint* paint,
-                        SrcRectConstraint = kStrict_SrcRectConstraint);
+
+#ifdef SK_SUPPORT_LEGACY_DRAWBITMAPRECTFLAGS_TYPE
+    // IMPORTANT that thse be value-equal with SrcRectConstraint (during transition period)
+    enum DrawBitmapRectFlags {
+        kNone_DrawBitmapRectFlag            = 0x0,
+        /**
+         *  When filtering is enabled, allow the color samples outside of
+         *  the src rect (but still in the src bitmap) to bleed into the
+         *  drawn portion
+         */
+        kBleed_DrawBitmapRectFlag           = 0x1,
+    };
+
+    /** Draw the specified bitmap, with the specified matrix applied (before the
+        canvas' matrix is applied).
+        @param bitmap   The bitmap to be drawn
+        @param src      Optional: specify the subset of the bitmap to be drawn
+        @param dst      The destination rectangle where the scaled/translated
+                        image will be drawn
+        @param paint    The paint used to draw the bitmap, or NULL
+    */
+    void drawBitmapRectToRect(const SkBitmap& bitmap, const SkRect* src, const SkRect& dst,
+                              const SkPaint* paint = NULL,
+                              DrawBitmapRectFlags flags = kNone_DrawBitmapRectFlag);
+
+    void drawBitmapRect(const SkBitmap& bitmap, const SkIRect* isrc,
+                        const SkRect& dst, const SkPaint* paint = NULL,
+                        DrawBitmapRectFlags flags = kNone_DrawBitmapRectFlag) {
+        SkRect realSrcStorage;
+        SkRect* realSrcPtr = NULL;
+        if (isrc) {
+            realSrcStorage.set(*isrc);
+            realSrcPtr = &realSrcStorage;
+        }
+        this->drawBitmapRectToRect(bitmap, realSrcPtr, dst, paint, flags);
+    }
+#endif
 
     /**
      *  Draw the bitmap stretched differentially to fit into dst.
@@ -1205,14 +1265,6 @@ public:
     static void Internal_Private_SetTreatSpriteAsBitmap(bool);
     static bool Internal_Private_GetTreatSpriteAsBitmap();
 
-    // TEMP helpers until we switch virtual over to const& for src-rect
-    void legacy_drawImageRect(const SkImage* image, const SkRect* src, const SkRect& dst,
-                              const SkPaint* paint,
-                              SrcRectConstraint constraint = kStrict_SrcRectConstraint);
-    void legacy_drawBitmapRect(const SkBitmap& bitmap, const SkRect* src, const SkRect& dst,
-                               const SkPaint* paint,
-                               SrcRectConstraint constraint = kStrict_SrcRectConstraint);
-
 protected:
     // default impl defers to getDevice()->newSurface(info)
     virtual SkSurface* onNewSurface(const SkImageInfo&, const SkSurfaceProps&);
@@ -1275,14 +1327,14 @@ protected:
                              int count, SkXfermode::Mode, const SkRect* cull, const SkPaint*);
     virtual void onDrawPath(const SkPath&, const SkPaint&);
     virtual void onDrawImage(const SkImage*, SkScalar dx, SkScalar dy, const SkPaint*);
-    virtual void onDrawImageRect(const SkImage*, const SkRect*, const SkRect&, const SkPaint*,
-                                 SrcRectConstraint);
+    virtual void onDrawImageRect(const SkImage*, const SkRect*, const SkRect&, const SkPaint*
+                                 SRC_RECT_CONSTRAINT_PARAM(constraint));
     virtual void onDrawImageNine(const SkImage*, const SkIRect& center, const SkRect& dst,
                                  const SkPaint*);
 
     virtual void onDrawBitmap(const SkBitmap&, SkScalar dx, SkScalar dy, const SkPaint*);
     virtual void onDrawBitmapRect(const SkBitmap&, const SkRect*, const SkRect&, const SkPaint*,
-                                  SrcRectConstraint);
+                                  SK_VIRTUAL_CONSTRAINT_TYPE);
     virtual void onDrawBitmapNine(const SkBitmap&, const SkIRect& center, const SkRect& dst,
                                   const SkPaint*);
     virtual void onDrawSprite(const SkBitmap&, int left, int top, const SkPaint*);
@@ -1370,6 +1422,7 @@ private:
     friend class AutoDrawLooper;
     friend class SkLua;             // needs top layer size and offset
     friend class SkDebugCanvas;     // needs experimental fAllowSimplifyClip
+    friend class SkDeferredDevice;  // needs getTopDevice()
     friend class SkSurface_Raster;  // needs getDevice()
     friend class SkRecorder;        // InitFlags
     friend class SkNoSaveLayerCanvas;   // InitFlags
@@ -1402,6 +1455,9 @@ private:
     SkISize getTopLayerSize() const;
     SkIPoint getTopLayerOrigin() const;
 
+    // internal methods are not virtual, so they can safely be called by other
+    // canvas apis, without confusing subclasses (like SkPictureRecording)
+    void internalDrawBitmap(const SkBitmap&, const SkMatrix& m, const SkPaint* paint);
     void internalDrawBitmapRect(const SkBitmap& bitmap, const SkRect* src,
                                 const SkRect& dst, const SkPaint* paint,
                                 SrcRectConstraint);

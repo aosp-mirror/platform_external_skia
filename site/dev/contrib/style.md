@@ -385,6 +385,23 @@ Method calls within method calls should be prefixed with dereference of the
 <!--?prettify?-->
 ~~~~
 this->method();
+Memory Management
+~~~~
+
+All memory allocation should be routed through SkNEW and its variants. These are
+#defined in SkPostConfig.h, but the correct way to get access to the config
+system is to #include SkTypes.h, which will allow external users of the library
+to provide a custom memory manager or other adaptations.
+
+<!--?prettify?-->
+~~~~
+SkNEW(type_name)
+SkNEW_ARGS(type_name, args)
+SkNEW_ARRAY(type_name, count)
+SkNEW_PLACEMENT(buf, type_name)
+SkNEW_PLACEMENT_ARGS(buf, type_name, args)
+SkDELETE(obj)
+SkDELETE_ARRAY(array)
 ~~~~
 
 Comparisons
@@ -440,25 +457,25 @@ stdint.h types (int32_t, etc). Assert that counts, etc are not negative instead
 of using unsigned. Bitfields use uint32_t unless they have to be made shorter
 for packing or performance reasons.
 
-nullptr, 0
+NULL, 0
 -------
 
-Use nullptr for pointers, 0 for ints. We prefer explicit nullptr comparisons when
-checking for nullptr pointers (as documentation):
+Use NULL for pointers, 0 for ints. We prefer explicit NULL comparisons when
+checking for NULL pointers (as documentation):
 
 <!--?prettify?-->
 ~~~~
-if (nullptr == x) {  // slightly preferred over if (!x)
+if (NULL == x) {  // slightly preferred over if (!x)
    ...
 }
 ~~~~
 
-When checking non-nullptr pointers explicit comparisons are not required because it
+When checking non-NULL pointers explicit comparisons are not required because it
 reads like a double negative:
 
 <!--?prettify?-->
 ~~~~
-if (x) {  // slightly preferred over if (nullptr != x)
+if (x) {  // slightly preferred over if (NULL != x)
    ...
 }
 ~~~~
@@ -514,7 +531,7 @@ Variable (i.e. mutable) object parameters are passed to functions as pointers.
 ~~~~
 // src and paint are optional
 void SkCanvas::drawBitmapRect(const SkBitmap& bitmap, const SkIRect* src, 
-                             const SkRect& dst, const SkPaint* paint = nullptr);
+                             const SkRect& dst, const SkPaint* paint = NULL);
 // metrics is mutable (it is changed by the method)
 SkScalar SkPaint::getFontMetrics(FontMetric* metrics, SkScalar scale) const;
 // A reference to foo is retained by SkContainer
@@ -527,8 +544,8 @@ lined up with the first parameter on the same line
 <!--?prettify?-->
 ~~~~
 void drawBitmapRect(const SkBitmap& bitmap, const SkRect& dst,
-                    const SkPaint* paint = nullptr) {
-    this->drawBitmapRectToRect(bitmap, nullptr, dst, paint,
+                    const SkPaint* paint = NULL) {
+    this->drawBitmapRectToRect(bitmap, NULL, dst, paint,
                                kNone_DrawBitmapRectFlag);
 }
 ~~~~
@@ -539,9 +556,9 @@ or placed on the next line indented eight spaces
 ~~~~
 void drawBitmapRect(
         const SkBitmap& bitmap, const SkRect& dst,
-        const SkPaint* paint = nullptr) {
+        const SkPaint* paint = NULL) {
     this->drawBitmapRectToRect(
-            bitmap, nullptr, dst, paint, kNone_DrawBitmapRectFlag);
+            bitmap, NULL, dst, paint, kNone_DrawBitmapRectFlag);
 }
 ~~~~
 

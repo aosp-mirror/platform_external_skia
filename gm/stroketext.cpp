@@ -59,18 +59,32 @@ static void draw_text_set(SkCanvas* canvas, const SkPaint& paint) {
     draw_text_stroked(canvas, p, 10);
 }
 
-namespace {
+class StrokeTextGM : public skiagm::GM {
+    // Skia has a threshold above which it draws text via paths instead of using scalercontext
+    // and caching the glyph. This GM wants to ensure that we draw stroking correctly on both
+    // sides of this threshold.
     enum {
         kBelowThreshold_TextSize = 255,
         kAboveThreshold_TextSize = 257
     };
-}
+public:
+    StrokeTextGM() {}
 
-DEF_SIMPLE_GM(stroketext, canvas, 1200, 480) {
+protected:
+
+    SkString onShortName() override {
+        return SkString("stroketext");
+    }
+
+    SkISize onISize() override {
+        return SkISize::Make(1200, 480);
+    }
+
+    void onDraw(SkCanvas* canvas) override {
         if (true) { test_nulldev(canvas); }
         SkPaint paint;
         paint.setAntiAlias(true);
-        sk_tool_utils::set_portable_typeface(&paint);
+        sk_tool_utils::set_portable_typeface_always(&paint);
 
         paint.setTextSize(kBelowThreshold_TextSize);
         draw_text_set(canvas, paint);
@@ -78,4 +92,10 @@ DEF_SIMPLE_GM(stroketext, canvas, 1200, 480) {
         canvas->translate(600, 0);
         paint.setTextSize(kAboveThreshold_TextSize);
         draw_text_set(canvas, paint);
-}
+    }
+
+private:
+    typedef skiagm::GM INHERITED;
+};
+
+DEF_GM( return SkNEW(StrokeTextGM); )

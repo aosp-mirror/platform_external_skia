@@ -11,6 +11,7 @@
 #include "SkJpegUtility_codec.h"
 #include "SkCodecPriv.h"
 #include "SkColorPriv.h"
+#include "SkScanlineDecoder.h"
 #include "SkStream.h"
 #include "SkTemplates.h"
 #include "SkTypes.h"
@@ -19,8 +20,73 @@
 #include <stdio.h>
 
 extern "C" {
+    #include "jpeglibmangler.h"
     #include "jerror.h"
+    #include "jpegint.h"
     #include "jpeglib.h"
+}
+
+/*
+ * Convert a row of CMYK samples to RGBA in place.
+ * Note that this method moves the row pointer.
+ * @param width the number of pixels in the row that is being converted
+ *              CMYK is stored as four bytes per pixel
+ */
+static void convert_CMYK_to_RGBA(uint8_t* row, uint32_t width) {
+    // We will implement a crude conversion from CMYK -> RGB using formulas
+    // from easyrgb.com.
+    //
+    // CMYK -> CMY
+    // C = C * (1 - K) + K
+    // M = M * (1 - K) + K
+    // Y = Y * (1 - K) + K
+    //
+    // libjpeg actually gives us inverted CMYK, so we must subtract the
+    // original terms from 1.
+    // CMYK -> CMY
+    // C = (1 - C) * (1 - (1 - K)) + (1 - K)
+    // M = (1 - M) * (1 - (1 - K)) + (1 - K)
+    // Y = (1 - Y) * (1 - (1 - K)) + (1 - K)
+    //
+    // Simplifying the above expression.
+    // CMYK -> CMY
+    // C = 1 - CK
+    // M = 1 - MK
+    // Y = 1 - YK
+    //
+    // CMY -> RGB
+    // R = (1 - C) * 255
+    // G = (1 - M) * 255
+    // B = (1 - Y) * 255
+    //
+    // Therefore the full conversion is below.  This can be verified at
+    // www.rapidtables.com (assuming inverted CMYK).
+    // CMYK -> RGB
+    // R = C * K * 255
+    // G = M * K * 255
+    // B = Y * K * 255
+    //
+    // As a final note, we have treated the CMYK values as if they were on
+    // a scale from 0-1, when in fact they are 8-bit ints scaling from 0-255.
+    // We must divide each CMYK component by 255 to obtain the true conversion
+    // we should perform.
+    // CMYK -> RGB
+    // R = C * K / 255
+    // G = M * K / 255
+    // B = Y * K / 255
+    for (uint32_t x = 0; x < width; x++, row += 4) {
+#if defined(SK_PMCOLOR_IS_RGBA)
+        row[0] = SkMulDiv255Round(row[0], row[3]);
+        row[1] = SkMulDiv255Round(row[1], row[3]);
+        row[2] = SkMulDiv255Round(row[2], row[3]);
+#else
+        uint8_t tmp = row[0];
+        row[0] = SkMulDiv255Round(row[2], row[3]);
+        row[1] = SkMulDiv255Round(row[1], row[3]);
+        row[2] = SkMulDiv255Round(tmp, row[3]);
+#endif
+        row[3] = 0xFF;
+    }
 }
 
 bool SkJpegCodec::IsJpeg(SkStream* stream) {
@@ -34,7 +100,7 @@ bool SkJpegCodec::ReadHeader(SkStream* stream, SkCodec** codecOut,
         JpegDecoderMgr** decoderMgrOut) {
 
     // Create a JpegDecoderMgr to own all of the decompress information
-    SkAutoTDelete<JpegDecoderMgr> decoderMgr(new JpegDecoderMgr(stream));
+    SkAutoTDelete<JpegDecoderMgr> decoderMgr(SkNEW_ARGS(JpegDecoderMgr, (stream)));
 
     // libjpeg errors will be caught and reported here
     if (setjmp(decoderMgr->getJmpBuf())) {
@@ -45,20 +111,20 @@ bool SkJpegCodec::ReadHeader(SkStream* stream, SkCodec** codecOut,
     decoderMgr->init();
 
     // Read the jpeg header
-    if (JPEG_HEADER_OK != jpeg_read_header(decoderMgr->dinfo(), true)) {
+    if (JPEG_HEADER_OK != turbo_jpeg_read_header(decoderMgr->dinfo(), true)) {
         return decoderMgr->returnFalse("read_header");
     }
 
-    if (nullptr != codecOut) {
+    if (NULL != codecOut) {
         // Recommend the color type to decode to
         const SkColorType colorType = decoderMgr->getColorType();
 
         // Create image info object and the codec
         const SkImageInfo& imageInfo = SkImageInfo::Make(decoderMgr->dinfo()->image_width,
                 decoderMgr->dinfo()->image_height, colorType, kOpaque_SkAlphaType);
-        *codecOut = new SkJpegCodec(imageInfo, stream, decoderMgr.detach());
+        *codecOut = SkNEW_ARGS(SkJpegCodec, (imageInfo, stream, decoderMgr.detach()));
     } else {
-        SkASSERT(nullptr != decoderMgrOut);
+        SkASSERT(NULL != decoderMgrOut);
         *decoderMgrOut = decoderMgr.detach();
     }
     return true;
@@ -66,44 +132,21 @@ bool SkJpegCodec::ReadHeader(SkStream* stream, SkCodec** codecOut,
 
 SkCodec* SkJpegCodec::NewFromStream(SkStream* stream) {
     SkAutoTDelete<SkStream> streamDeleter(stream);
-    SkCodec* codec = nullptr;
-    if (ReadHeader(stream,  &codec, nullptr)) {
+    SkCodec* codec = NULL;
+    if (ReadHeader(stream,  &codec, NULL)) {
         // Codec has taken ownership of the stream, we do not need to delete it
         SkASSERT(codec);
         streamDeleter.detach();
         return codec;
     }
-    return nullptr;
+    return NULL;
 }
 
 SkJpegCodec::SkJpegCodec(const SkImageInfo& srcInfo, SkStream* stream,
         JpegDecoderMgr* decoderMgr)
     : INHERITED(srcInfo, stream)
     , fDecoderMgr(decoderMgr)
-    , fReadyState(decoderMgr->dinfo()->global_state)
 {}
-
-/*
- * Return the row bytes of a particular image type and width
- */
-static int get_row_bytes(const j_decompress_ptr dinfo) {
-    int colorBytes = (dinfo->out_color_space == JCS_RGB565) ? 2 : dinfo->out_color_components;
-    return dinfo->output_width * colorBytes;
-
-}
-
-/*
- *  Calculate output dimensions based on the provided factors.
- *
- *  Not to be used on the actual jpeg_decompress_struct used for decoding, since it will
- *  incorrectly modify num_components.
- */
-void calc_output_dimensions(jpeg_decompress_struct* dinfo, unsigned int num, unsigned int denom) {
-    dinfo->num_components = 0;
-    dinfo->scale_num = num;
-    dinfo->scale_denom = denom;
-    jpeg_calc_output_dimensions(dinfo);
-}
 
 /*
  * Return a valid set of output dimensions for this decoder, given an input scale
@@ -111,21 +154,21 @@ void calc_output_dimensions(jpeg_decompress_struct* dinfo, unsigned int num, uns
 SkISize SkJpegCodec::onGetScaledDimensions(float desiredScale) const {
     // libjpeg-turbo supports scaling by 1/8, 1/4, 3/8, 1/2, 5/8, 3/4, 7/8, and 1/1, so we will
     // support these as well
-    unsigned int num;
-    unsigned int denom = 8;
-    if (desiredScale >= 0.9375) {
+    long num;
+    long denom = 8;
+    if (desiredScale > 0.875f) {
         num = 8;
-    } else if (desiredScale >= 0.8125) {
+    } else if (desiredScale > 0.75f) {
         num = 7;
-    } else if (desiredScale >= 0.6875f) {
+    } else if (desiredScale > 0.625f) {
         num = 6;
-    } else if (desiredScale >= 0.5625f) {
+    } else if (desiredScale > 0.5f) {
         num = 5;
-    } else if (desiredScale >= 0.4375f) {
+    } else if (desiredScale > 0.375f) {
         num = 4;
-    } else if (desiredScale >= 0.3125f) {
+    } else if (desiredScale > 0.25f) {
         num = 3;
-    } else if (desiredScale >= 0.1875f) {
+    } else if (desiredScale > 0.125f) {
         num = 2;
     } else {
         num = 1;
@@ -136,21 +179,38 @@ SkISize SkJpegCodec::onGetScaledDimensions(float desiredScale) const {
     sk_bzero(&dinfo, sizeof(dinfo));
     dinfo.image_width = this->getInfo().width();
     dinfo.image_height = this->getInfo().height();
-    dinfo.global_state = fReadyState;
-    calc_output_dimensions(&dinfo, num, denom);
+    dinfo.global_state = DSTATE_READY;
+    dinfo.num_components = 0;
+    dinfo.scale_num = num;
+    dinfo.scale_denom = denom;
+    turbo_jpeg_calc_output_dimensions(&dinfo);
 
     // Return the calculated output dimensions for the given scale
     return SkISize::Make(dinfo.output_width, dinfo.output_height);
 }
 
-bool SkJpegCodec::onRewind() {
-    JpegDecoderMgr* decoderMgr = nullptr;
-    if (!ReadHeader(this->stream(), nullptr, &decoderMgr)) {
-        return fDecoderMgr->returnFalse("could not rewind");
+/*
+ * Handles rewinding the input stream if it is necessary
+ */
+bool SkJpegCodec::handleRewind() {
+    switch(this->rewindIfNeeded()) {
+        case kCouldNotRewind_RewindState:
+            return fDecoderMgr->returnFalse("could not rewind");
+        case kRewound_RewindState: {
+            JpegDecoderMgr* decoderMgr = NULL;
+            if (!ReadHeader(this->stream(), NULL, &decoderMgr)) {
+                return fDecoderMgr->returnFalse("could not rewind");
+            }
+            SkASSERT(NULL != decoderMgr);
+            fDecoderMgr.reset(decoderMgr);
+            return true;
+        }
+        case kNoRewindNecessary_RewindState:
+            return true;
+        default:
+            SkASSERT(false);
+            return false;
     }
-    SkASSERT(nullptr != decoderMgr);
-    fDecoderMgr.reset(decoderMgr);
-    return true;
 }
 
 /*
@@ -192,9 +252,8 @@ bool SkJpegCodec::setOutputColorSpace(const SkImageInfo& dst) {
             return true;
         case kRGB_565_SkColorType:
             if (isCMYK) {
-                fDecoderMgr->dinfo()->out_color_space = JCS_CMYK;
+                return false;
             } else {
-                fDecoderMgr->dinfo()->dither_mode = JDITHER_NONE;
                 fDecoderMgr->dinfo()->out_color_space = JCS_RGB565;
             }
             return true;
@@ -213,43 +272,28 @@ bool SkJpegCodec::setOutputColorSpace(const SkImageInfo& dst) {
 }
 
 /*
- * Checks if we can natively scale to the requested dimensions and natively scales the 
- * dimensions if possible
+ * Checks if we can scale to the requested dimensions and scales the dimensions
+ * if possible
  */
-bool SkJpegCodec::onDimensionsSupported(const SkISize& size) {
-    if (setjmp(fDecoderMgr->getJmpBuf())) {
-        return fDecoderMgr->returnFalse("onDimensionsSupported/setjmp");
-    }
-
-    const unsigned int dstWidth = size.width();
-    const unsigned int dstHeight = size.height();
-
-    // Set up a fake decompress struct in order to use libjpeg to calculate output dimensions
-    // FIXME: Why is this necessary?
-    jpeg_decompress_struct dinfo;
-    sk_bzero(&dinfo, sizeof(dinfo));
-    dinfo.image_width = this->getInfo().width();
-    dinfo.image_height = this->getInfo().height();
-    dinfo.global_state = fReadyState;
-
+bool SkJpegCodec::scaleToDimensions(uint32_t dstWidth, uint32_t dstHeight) {
     // libjpeg-turbo can scale to 1/8, 1/4, 3/8, 1/2, 5/8, 3/4, 7/8, and 1/1
-    unsigned int num = 8;
-    const unsigned int denom = 8;
-    calc_output_dimensions(&dinfo, num, denom);
-    while (dinfo.output_width != dstWidth || dinfo.output_height != dstHeight) {
+    fDecoderMgr->dinfo()->scale_denom = 8;
+    fDecoderMgr->dinfo()->scale_num = 8;
+    turbo_jpeg_calc_output_dimensions(fDecoderMgr->dinfo());
+    while (fDecoderMgr->dinfo()->output_width != dstWidth ||
+            fDecoderMgr->dinfo()->output_height != dstHeight) {
 
         // Return a failure if we have tried all of the possible scales
-        if (1 == num || dstWidth > dinfo.output_width || dstHeight > dinfo.output_height) {
-            return false;
+        if (1 == fDecoderMgr->dinfo()->scale_num ||
+                dstWidth > fDecoderMgr->dinfo()->output_width ||
+                dstHeight > fDecoderMgr->dinfo()->output_height) {
+            return fDecoderMgr->returnFalse("could not scale to requested dimensions");
         }
 
         // Try the next scale
-        num -= 1;
-        calc_output_dimensions(&dinfo, num, denom);
+        fDecoderMgr->dinfo()->scale_num -= 1;
+        turbo_jpeg_calc_output_dimensions(fDecoderMgr->dinfo());
     }
-
-    fDecoderMgr->dinfo()->scale_num = num;
-    fDecoderMgr->dinfo()->scale_denom = denom;
     return true;
 }
 
@@ -258,8 +302,12 @@ bool SkJpegCodec::onDimensionsSupported(const SkISize& size) {
  */
 SkCodec::Result SkJpegCodec::onGetPixels(const SkImageInfo& dstInfo,
                                          void* dst, size_t dstRowBytes,
-                                         const Options& options, SkPMColor*, int*,
-                                         int* rowsDecoded) {
+                                         const Options& options, SkPMColor*, int*) {
+    // Rewind the stream if needed
+    if (!this->handleRewind()) {
+        return fDecoderMgr->returnFailure("could not rewind stream", kCouldNotRewind);
+    }
+
     if (options.fSubset) {
         // Subsets are not supported.
         return kUnimplemented;
@@ -278,8 +326,13 @@ SkCodec::Result SkJpegCodec::onGetPixels(const SkImageInfo& dstInfo,
         return fDecoderMgr->returnFailure("conversion_possible", kInvalidConversion);
     }
 
+    // Perform the necessary scaling
+    if (!this->scaleToDimensions(dstInfo.width(), dstInfo.height())) {
+        return fDecoderMgr->returnFailure("cannot scale to requested dims", kInvalidScale);
+    }
+
     // Now, given valid output dimensions, we can start the decompress
-    if (!jpeg_start_decompress(dinfo)) {
+    if (!turbo_jpeg_start_decompress(dinfo)) {
         return fDecoderMgr->returnFailure("startDecompress", kInvalidInput);
     }
 
@@ -287,170 +340,164 @@ SkCodec::Result SkJpegCodec::onGetPixels(const SkImageInfo& dstInfo,
     // If it's not, we want to know because it means our strategy is not optimal.
     SkASSERT(1 == dinfo->rec_outbuf_height);
 
-    if (JCS_CMYK == dinfo->out_color_space) {
-        this->initializeSwizzler(dstInfo, options);
-    }
-
     // Perform the decode a single row at a time
     uint32_t dstHeight = dstInfo.height();
-
-    JSAMPLE* dstRow;
-    if (fSwizzler) {
-        // write data to storage row, then sample using swizzler
-        dstRow = fSrcRow;
-    } else {
-        // write data directly to dst
-        dstRow = (JSAMPLE*) dst;
-    }
-
+    JSAMPLE* dstRow = (JSAMPLE*) dst;
     for (uint32_t y = 0; y < dstHeight; y++) {
         // Read rows of the image
-        uint32_t lines = jpeg_read_scanlines(dinfo, &dstRow, 1);
+        uint32_t rowsDecoded = turbo_jpeg_read_scanlines(dinfo, &dstRow, 1);
 
         // If we cannot read enough rows, assume the input is incomplete
-        if (lines != 1) {
-            *rowsDecoded = y;
+        if (rowsDecoded != 1) {
+            // Fill the remainder of the image with black. This error handling
+            // behavior is unspecified but SkCodec consistently uses black as
+            // the fill color for opaque images.  If the destination is kGray,
+            // the low 8 bits of SK_ColorBLACK will be used.  Conveniently,
+            // these are zeros, which is the representation for black in kGray.
+            SkSwizzler::Fill(dstRow, dstInfo, dstRowBytes, dstHeight - y, SK_ColorBLACK, NULL);
 
+            // Prevent libjpeg from failing on incomplete decode
+            dinfo->output_scanline = dstHeight;
+
+            // Finish the decode and indicate that the input was incomplete.
+            turbo_jpeg_finish_decompress(dinfo);
             return fDecoderMgr->returnFailure("Incomplete image data", kIncompleteInput);
         }
 
-        if (fSwizzler) {
-            // use swizzler to sample row
-            fSwizzler->swizzle(dst, dstRow);
-            dst = SkTAddOffset<JSAMPLE>(dst, dstRowBytes);
-        } else {
-            dstRow = SkTAddOffset<JSAMPLE>(dstRow, dstRowBytes);
+        // Convert to RGBA if necessary
+        if (JCS_CMYK == dinfo->out_color_space) {
+            convert_CMYK_to_RGBA(dstRow, dstInfo.width());
         }
+
+        // Move to the next row
+        dstRow = SkTAddOffset<JSAMPLE>(dstRow, dstRowBytes);
     }
+    turbo_jpeg_finish_decompress(dinfo);
 
     return kSuccess;
 }
 
-void SkJpegCodec::initializeSwizzler(const SkImageInfo& dstInfo, const Options& options) {
-    SkSwizzler::SrcConfig srcConfig = SkSwizzler::kUnknown;
-    if (JCS_CMYK == fDecoderMgr->dinfo()->out_color_space) {
-        srcConfig = SkSwizzler::kCMYK;
-    } else {
-        switch (dstInfo.colorType()) {
-            case kGray_8_SkColorType:
-                srcConfig = SkSwizzler::kGray;
-                break;
-            case kRGBA_8888_SkColorType:
-                srcConfig = SkSwizzler::kRGBX;
-                break;
-            case kBGRA_8888_SkColorType:
-                srcConfig = SkSwizzler::kBGRX;
-                break;
-            case kRGB_565_SkColorType:
-                srcConfig = SkSwizzler::kRGB_565;
-                break;
-            default:
-                // This function should only be called if the colorType is supported by jpeg
-                SkASSERT(false);
+/*
+ * Enable scanline decoding for jpegs
+ */
+class SkJpegScanlineDecoder : public SkScanlineDecoder {
+public:
+    SkJpegScanlineDecoder(const SkImageInfo& dstInfo, SkJpegCodec* codec)
+        : INHERITED(dstInfo)
+        , fCodec(codec)
+    {}
+
+    virtual ~SkJpegScanlineDecoder() {
+        if (setjmp(fCodec->fDecoderMgr->getJmpBuf())) {
+            SkCodecPrintf("setjmp: Error in libjpeg finish_decompress\n");
+            return;
         }
+
+        // We may not have decoded the entire image.  Prevent libjpeg-turbo from failing on a
+        // partial decode.
+        fCodec->fDecoderMgr->dinfo()->output_scanline = fCodec->getInfo().height();
+        turbo_jpeg_finish_decompress(fCodec->fDecoderMgr->dinfo());
     }
 
-    fSwizzler.reset(SkSwizzler::CreateSwizzler(srcConfig, nullptr, dstInfo, options));
-    fStorage.reset(get_row_bytes(fDecoderMgr->dinfo()));
-    fSrcRow = static_cast<uint8_t*>(fStorage.get());
-}
+    SkCodec::Result onGetScanlines(void* dst, int count, size_t rowBytes) override {
+        // Set the jump location for libjpeg errors
+        if (setjmp(fCodec->fDecoderMgr->getJmpBuf())) {
+            return fCodec->fDecoderMgr->returnFailure("setjmp", SkCodec::kInvalidInput);
+        }
 
-SkSampler* SkJpegCodec::getSampler(bool createIfNecessary) {
-    if (!createIfNecessary || fSwizzler) {
-        SkASSERT(!fSwizzler || (fSrcRow && static_cast<uint8_t*>(fStorage.get()) == fSrcRow));
-        return fSwizzler;
+        // Read rows one at a time
+        JSAMPLE* dstRow = (JSAMPLE*) dst;
+        for (int y = 0; y < count; y++) {
+            // Read row of the image
+            uint32_t rowsDecoded =
+                    turbo_jpeg_read_scanlines(fCodec->fDecoderMgr->dinfo(), &dstRow, 1);
+            if (rowsDecoded != 1) {
+                SkSwizzler::Fill(
+                        dstRow, this->dstInfo(), rowBytes, count - y, SK_ColorBLACK, NULL);
+                fCodec->fDecoderMgr->dinfo()->output_scanline = this->dstInfo().height();
+                return SkCodec::kIncompleteInput;
+            }
+
+            // Convert to RGBA if necessary
+            if (JCS_CMYK == fCodec->fDecoderMgr->dinfo()->out_color_space) {
+                convert_CMYK_to_RGBA(dstRow, this->dstInfo().width());
+            }
+
+            // Move to the next row
+            dstRow = SkTAddOffset<JSAMPLE>(dstRow, rowBytes);
+        }
+
+        return SkCodec::kSuccess;
     }
 
-    this->initializeSwizzler(this->dstInfo(), this->options());
-    return fSwizzler;
-}
+#ifndef TURBO_HAS_SKIP
+#define turbo_jpeg_skip_scanlines(dinfo, count)                              \
+    SkAutoMalloc storage(dinfo->output_width * dinfo->out_color_components); \
+    uint8_t* storagePtr = static_cast<uint8_t*>(storage.get());              \
+    for (int y = 0; y < count; y++) {                                        \
+        turbo_jpeg_read_scanlines(dinfo, &storagePtr, 1);                    \
+    }
+#endif
 
-SkCodec::Result SkJpegCodec::onStartScanlineDecode(const SkImageInfo& dstInfo,
+    SkCodec::Result onSkipScanlines(int count) override {
+        // Set the jump location for libjpeg errors
+        if (setjmp(fCodec->fDecoderMgr->getJmpBuf())) {
+            return fCodec->fDecoderMgr->returnFailure("setjmp", SkCodec::kInvalidInput);
+        }
+
+        turbo_jpeg_skip_scanlines(fCodec->fDecoderMgr->dinfo(), count);
+
+        return SkCodec::kSuccess;
+    }
+
+private:
+    SkAutoTDelete<SkJpegCodec> fCodec;
+
+    typedef SkScanlineDecoder INHERITED;
+};
+
+SkScanlineDecoder* SkJpegCodec::onGetScanlineDecoder(const SkImageInfo& dstInfo,
         const Options& options, SkPMColor ctable[], int* ctableCount) {
+
+    // Rewind the stream if needed
+    if (!this->handleRewind()) {
+        SkCodecPrintf("Could not rewind\n");
+        return NULL;
+    }
+
     // Set the jump location for libjpeg errors
     if (setjmp(fDecoderMgr->getJmpBuf())) {
         SkCodecPrintf("setjmp: Error from libjpeg\n");
-        return kInvalidInput;
+        return NULL;
+    }
+
+    SkStream* stream = this->stream()->duplicate();
+    if (!stream) {
+        return NULL;
+    }
+    SkAutoTDelete<SkJpegCodec> codec(static_cast<SkJpegCodec*>(SkJpegCodec::NewFromStream(stream)));
+    if (!codec) {
+        return NULL;
     }
 
     // Check if we can decode to the requested destination and set the output color space
-    if (!this->setOutputColorSpace(dstInfo)) {
-        return kInvalidConversion;
+    if (!codec->setOutputColorSpace(dstInfo)) {
+        SkCodecPrintf("Cannot convert to output type\n");
+        return NULL;
     }
 
-    // Remove objects used for sampling.
-    fSwizzler.reset(nullptr);
-    fSrcRow = nullptr;
-    fStorage.free();
+    // Perform the necessary scaling
+    if (!codec->scaleToDimensions(dstInfo.width(), dstInfo.height())) {
+        SkCodecPrintf("Cannot scale to output dimensions\n");
+        return NULL;
+    }
 
     // Now, given valid output dimensions, we can start the decompress
-    if (!jpeg_start_decompress(fDecoderMgr->dinfo())) {
+    if (!turbo_jpeg_start_decompress(codec->fDecoderMgr->dinfo())) {
         SkCodecPrintf("start decompress failed\n");
-        return kInvalidInput;
+        return NULL;
     }
 
-    // We will need a swizzler if we are performing a subset decode or
-    // converting from CMYK.
-    if (options.fSubset || JCS_CMYK == fDecoderMgr->dinfo()->out_color_space) {
-        this->initializeSwizzler(dstInfo, options);
-    }
-
-    return kSuccess;
-}
-
-int SkJpegCodec::onGetScanlines(void* dst, int count, size_t rowBytes) {
-    // Set the jump location for libjpeg errors
-    if (setjmp(fDecoderMgr->getJmpBuf())) {
-        return fDecoderMgr->returnFailure("setjmp", kInvalidInput);
-    }
-    // Read rows one at a time
-    JSAMPLE* dstRow;
-    if (fSwizzler) {
-        // write data to storage row, then sample using swizzler
-        dstRow = fSrcRow;
-    } else {
-        // write data directly to dst
-        dstRow = (JSAMPLE*) dst;
-    }
-
-    for (int y = 0; y < count; y++) {
-        // Read row of the image
-        uint32_t rowsDecoded = jpeg_read_scanlines(fDecoderMgr->dinfo(), &dstRow, 1);
-        if (rowsDecoded != 1) {
-            fDecoderMgr->dinfo()->output_scanline = this->dstInfo().height();
-            return y;
-        }
-
-        if (fSwizzler) {
-            // use swizzler to sample row
-            fSwizzler->swizzle(dst, dstRow);
-            dst = SkTAddOffset<JSAMPLE>(dst, rowBytes);
-        } else {
-            dstRow = SkTAddOffset<JSAMPLE>(dstRow, rowBytes);
-        }
-    }
-    return count;
-}
-
-#ifndef TURBO_HAS_SKIP
-// TODO (msarett): Avoid reallocating the memory buffer on each call to skip.
-static uint32_t jpeg_skip_scanlines(jpeg_decompress_struct* dinfo, int count) {
-    SkAutoMalloc storage(get_row_bytes(dinfo));
-    uint8_t* storagePtr = static_cast<uint8_t*>(storage.get());
-    for (int y = 0; y < count; y++) {
-        if (1 != jpeg_read_scanlines(dinfo, &storagePtr, 1)) {
-            return y;
-        }
-    }
-    return count;
-}
-#endif
-
-bool SkJpegCodec::onSkipScanlines(int count) {
-    // Set the jump location for libjpeg errors
-    if (setjmp(fDecoderMgr->getJmpBuf())) {
-        return fDecoderMgr->returnFalse("setjmp");
-    }
-
-    return (uint32_t) count == jpeg_skip_scanlines(fDecoderMgr->dinfo(), count);
+    // Return the new scanline decoder
+    return SkNEW_ARGS(SkJpegScanlineDecoder, (dstInfo, codec.detach()));
 }

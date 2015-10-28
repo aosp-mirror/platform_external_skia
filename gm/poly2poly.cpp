@@ -6,9 +6,6 @@
  */
 
 #include "gm.h"
-#include "Resources.h"
-#include "SkPath.h"
-#include "SkTypeface.h"
 
 class SkJSCanvas {
 public:
@@ -40,7 +37,7 @@ private:
 
 SkJSCanvas::SkJSCanvas(SkCanvas* target) : fTarget(target) {
     fFillPaint.setAntiAlias(true);
-    sk_tool_utils::set_portable_typeface(&fFillPaint);
+    sk_tool_utils::set_portable_typeface_always(&fFillPaint);
     fStrokePaint.setAntiAlias(true);
     fStrokePaint.setStyle(SkPaint::kStroke_Style);
     fStrokePaint.setStrokeWidth(SK_Scalar1);
@@ -218,13 +215,11 @@ protected:
         paint->setStyle(SkPaint::kFill_Style);
         SkScalar x = D/2;
         SkScalar y = D/2 - (fm.fAscent + fm.fDescent)/2;
-        uint16_t glyphID = 3; // X
-        canvas->drawText((void*) &glyphID, sizeof(glyphID), x, y, *paint);
-        canvas->restore();
-    }
+        SkString str;
+        str.appendS32(count);
+        canvas->drawText(str.c_str(), str.size(), x, y, *paint);
 
-    void onOnceBeforeDraw() override {
-        fEmFace.reset(GetResourceAsTypeface("/fonts/Em.ttf"));
+        canvas->restore();
     }
 
     void onDraw(SkCanvas* canvas) override {
@@ -232,8 +227,7 @@ protected:
 
         SkPaint paint;
         paint.setAntiAlias(true);
-        paint.setTypeface(fEmFace);
-        paint.setTextEncoding(SkPaint::kGlyphID_TextEncoding);
+        sk_tool_utils::set_portable_typeface_always(&paint);
         paint.setStrokeWidth(SkIntToScalar(4));
         paint.setTextSize(SkIntToScalar(40));
         paint.setTextAlign(SkPaint::kCenter_Align);
@@ -273,7 +267,6 @@ protected:
 
 private:
     typedef skiagm::GM INHERITED;
-    SkAutoTUnref<SkTypeface> fEmFace;
 };
 
 //////////////////////////////////////////////////////////////////////////////

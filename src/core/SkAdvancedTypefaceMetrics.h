@@ -147,9 +147,9 @@ void finishRange(
     @param num_glyphs    Total number of glyphs in the given font.
     @param glyphIDs      For per-glyph info, specify subset of the font by
                          giving glyph ids.  Each integer represents a glyph
-                         id.  Passing nullptr means all glyphs in the font.
+                         id.  Passing NULL means all glyphs in the font.
     @param glyphIDsCount Number of elements in subsetGlyphIds. Ignored if
-                         glyphIDs is nullptr.
+                         glyphIDs is NULL.
 */
 template <typename Data, typename FontHandle>
 SkAdvancedTypefaceMetrics::AdvanceMetric<Data>* getAdvanceData(

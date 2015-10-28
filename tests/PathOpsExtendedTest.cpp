@@ -16,8 +16,6 @@
 #include "SkRTConf.h"
 #include "SkStream.h"
 
-#include <stdlib.h>
-
 #ifdef SK_BUILD_FOR_MAC
 #include <sys/sysctl.h>
 #endif
@@ -182,15 +180,6 @@ static void scaleMatrix(const SkPath& one, const SkPath& two, SkMatrix& scale) {
     SkScalar vScale = (bitHeight - 2) / largerHeight;
     scale.reset();
     scale.preScale(hScale, vScale);
-    larger.fLeft *= hScale;
-    larger.fRight *= hScale;
-    larger.fTop *= vScale;
-    larger.fBottom *= vScale;
-    SkScalar dx = -16000 > larger.fLeft ? -16000 - larger.fLeft
-            : 16000 < larger.fRight ? 16000 - larger.fRight : 0;
-    SkScalar dy = -16000 > larger.fTop ? -16000 - larger.fTop
-            : 16000 < larger.fBottom ? 16000 - larger.fBottom : 0;
-    scale.postTranslate(dx, dy);
 }
 
 static int pathsDrawTheSame(SkBitmap& bits, const SkPath& scaledOne, const SkPath& scaledTwo,
@@ -319,7 +308,7 @@ static void showPathOpPath(const char* testName, const SkPath& one, const SkPath
     SkPathOpsDebug::ShowOnePath(b, "pathB", false);
     SkDebugf("    testPathOp(reporter, path, pathB, %s, filename);\n", opStrs[shapeOp]);
     SkDebugf("}\n");
-    drawAsciiPaths(scaledOne, scaledTwo, true);
+    drawAsciiPaths(scaledOne, scaledTwo, false);
 }
 
 void ShowTestArray(const char* testName) {
@@ -434,14 +423,14 @@ bool testSimplify(SkPath& path, bool useXor, SkPath& out, PathOpsThreadState& st
     if (!state.fReporter->verbose()) {
         return true;
     }
-    int result = comparePaths(state.fReporter, nullptr, path, out, *state.fBitmap);
+    int result = comparePaths(state.fReporter, NULL, path, out, *state.fBitmap);
     if (result) {
         SkAutoMutexAcquire autoM(simplifyDebugOut);
         char temp[8192];
         sk_bzero(temp, sizeof(temp));
         SkMemoryWStream stream(temp, sizeof(temp));
-        const char* pathPrefix = nullptr;
-        const char* nameSuffix = nullptr;
+        const char* pathPrefix = NULL;
+        const char* nameSuffix = NULL;
         if (fillType == SkPath::kEvenOdd_FillType) {
             pathPrefix = "    path.setFillType(SkPath::kEvenOdd_FillType);\n";
             nameSuffix = "x";
@@ -595,7 +584,7 @@ void initializeTests(skiatest::Reporter* reporter, const char* test) {
             inData.setCount((int) inFile.getLength());
             size_t inLen = inData.count();
             inFile.read(inData.begin(), inLen);
-            inFile.setPath(nullptr);
+            inFile.setPath(NULL);
             char* insert = strstr(inData.begin(), marker);
             if (insert) {
                 insert += sizeof(marker) - 1;
@@ -608,8 +597,8 @@ void initializeTests(skiatest::Reporter* reporter, const char* test) {
 
 void outputProgress(char* ramStr, const char* pathStr, SkPath::FillType pathFillType) {
     const char testFunction[] = "testSimplify(path);";
-    const char* pathPrefix = nullptr;
-    const char* nameSuffix = nullptr;
+    const char* pathPrefix = NULL;
+    const char* nameSuffix = NULL;
     if (pathFillType == SkPath::kEvenOdd_FillType) {
         pathPrefix = "    path.setFillType(SkPath::kEvenOdd_FillType);\n";
         nameSuffix = "x";
@@ -623,7 +612,7 @@ void outputProgress(char* ramStr, const char* pathStr, SkPathOp op) {
     SkASSERT((size_t) op < SK_ARRAY_COUNT(opSuffixes));
     const char* nameSuffix = opSuffixes[op];
     SkMemoryWStream rRamStream(ramStr, PATH_STR_SIZE);
-    outputToStream(pathStr, nullptr, nameSuffix, testFunction, true, rRamStream);
+    outputToStream(pathStr, NULL, nameSuffix, testFunction, true, rRamStream);
 }
 
 void RunTestSet(skiatest::Reporter* reporter, TestDesc tests[], size_t count,

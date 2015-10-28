@@ -31,7 +31,7 @@ protected:
         SkPaint paint;
         paint.setTextSize(256);
         const char* text = "AB";
-        sk_tool_utils::set_portable_typeface(&paint);
+        sk_tool_utils::set_portable_typeface_always(&paint);
 
         SkRect bounds;
         paint.measureText(text, strlen(text), &bounds);
@@ -97,5 +97,5 @@ private:
 
 //////////////////////////////////////////////////////////////////////////////
 
-DEF_GM(return new TextBlobColorTrans;)
+DEF_GM( return SkNEW(TextBlobColorTrans); )
 }

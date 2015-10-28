@@ -36,7 +36,7 @@ void SkBlurDrawLooper::initEffects() {
 
         fBlur = SkBlurMaskFilter::Create(kNormal_SkBlurStyle, fSigma, flags);
     } else {
-        fBlur = nullptr;
+        fBlur = NULL;
     }
 
     if (fBlurFlags & kOverrideColor_BlurFlag) {
@@ -47,7 +47,7 @@ void SkBlurDrawLooper::initEffects() {
         fColorFilter = SkColorFilter::CreateModeFilter(opaqueColor,
                                                        SkXfermode::kSrcIn_Mode);
     } else {
-        fColorFilter = nullptr;
+        fColorFilter = NULL;
     }
 }
 
@@ -103,7 +103,7 @@ bool SkBlurDrawLooper::asABlurShadow(BlurShadowRec* rec) const {
 ////////////////////////////////////////////////////////////////////////////////////////
 
 SkDrawLooper::Context* SkBlurDrawLooper::createContext(SkCanvas*, void* storage) const {
-    return new (storage) BlurDrawLooperContext(this);
+    return SkNEW_PLACEMENT_ARGS(storage, BlurDrawLooperContext, (this));
 }
 
 SkBlurDrawLooper::BlurDrawLooperContext::BlurDrawLooperContext(

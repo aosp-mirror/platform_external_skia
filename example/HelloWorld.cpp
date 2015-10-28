@@ -10,7 +10,6 @@
 #include "HelloWorld.h"
 
 #include "gl/GrGLInterface.h"
-#include "GrContext.h"
 #include "SkApplication.h"
 #include "SkCanvas.h"
 #include "SkGradientShader.h"
@@ -24,6 +23,7 @@ void application_init() {
 
 void application_term() {
     SkEvent::Term();
+    SkGraphics::Term();
 }
 
 HelloWorldWindow::HelloWorldWindow(void* hwnd)

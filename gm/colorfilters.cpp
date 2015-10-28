@@ -20,14 +20,14 @@ static SkShader* make_shader(const SkRect& bounds) {
         SK_ColorCYAN, SK_ColorMAGENTA, SK_ColorYELLOW,
     };
     return SkGradientShader::CreateLinear(pts,
-                                          colors, nullptr, SK_ARRAY_COUNT(colors),
+                                          colors, NULL, SK_ARRAY_COUNT(colors),
                                           SkShader::kClamp_TileMode);
 }
 
 typedef void (*InstallPaint)(SkPaint*, uint32_t, uint32_t);
 
 static void install_nothing(SkPaint* paint, uint32_t, uint32_t) {
-    paint->setColorFilter(nullptr);
+    paint->setColorFilter(NULL);
 }
 
 static void install_lighting(SkPaint* paint, uint32_t mul, uint32_t add) {
@@ -84,4 +84,4 @@ private:
 
 //////////////////////////////////////////////////////////////////////////////
 
-DEF_GM(return new ColorFiltersGM;)
+DEF_GM( return SkNEW(ColorFiltersGM); )

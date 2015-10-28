@@ -7,7 +7,8 @@
 #include "gm.h"
 #include "SkCanvas.h"
 #include "SkGradientShader.h"
-#include "SkPath.h"
+
+namespace skiagm {
 
 static void makebm(SkBitmap* bm, int w, int h) {
     bm->allocN32Pixels(w, h);
@@ -39,8 +40,21 @@ struct LabeledMatrix {
     const char* fLabel;
 };
 
-DEF_SIMPLE_GM_BG(shadertext2, canvas, 1800, 900,
-                 sk_tool_utils::color_to_565(0xFFDDDDDD)) {
+class ShaderText2GM : public GM {
+public:
+    ShaderText2GM() {
+        this->setBGColor(sk_tool_utils::color_to_565(0xFFDDDDDD));
+    }
+
+protected:
+
+    SkString onShortName() override {
+        return SkString("shadertext2");
+    }
+
+    SkISize onISize() override { return SkISize::Make(1800, 900); }
+
+    void onDraw(SkCanvas* canvas) override {
         static const char kText[] = "SKIA";
         static const int kTextLen = SK_ARRAY_COUNT(kText) - 1;
         static const int kPointSize = 55;
@@ -76,13 +90,13 @@ DEF_SIMPLE_GM_BG(shadertext2, canvas, 1800, 900,
 
         SkPaint fillPaint;
         fillPaint.setAntiAlias(true);
-        sk_tool_utils::set_portable_typeface(&fillPaint);
+        sk_tool_utils::set_portable_typeface_always(&fillPaint);
         fillPaint.setTextSize(SkIntToScalar(kPointSize));
         fillPaint.setFilterQuality(kLow_SkFilterQuality);
 
         SkPaint outlinePaint;
         outlinePaint.setAntiAlias(true);
-        sk_tool_utils::set_portable_typeface(&outlinePaint);
+        sk_tool_utils::set_portable_typeface_always(&outlinePaint);
         outlinePaint.setTextSize(SkIntToScalar(kPointSize));
         outlinePaint.setStyle(SkPaint::kStroke_Style);
         outlinePaint.setStrokeWidth(0.f);
@@ -98,7 +112,7 @@ DEF_SIMPLE_GM_BG(shadertext2, canvas, 1800, 900,
         SkPaint labelPaint;
         labelPaint.setColor(0xff000000);
         labelPaint.setAntiAlias(true);
-        sk_tool_utils::set_portable_typeface(&labelPaint);
+        sk_tool_utils::set_portable_typeface_always(&labelPaint);
         labelPaint.setTextSize(12.f);
 
         canvas->translate(15.f, 15.f);
@@ -160,8 +174,8 @@ DEF_SIMPLE_GM_BG(shadertext2, canvas, 1800, 900,
 
                     canvas->save();
                         canvas->concat(matrices[m].fMatrix);
-                        canvas->drawTextOnPath(kText, kTextLen, path, nullptr, paint);
-                        canvas->drawTextOnPath(kText, kTextLen, path, nullptr, outlinePaint);
+                        canvas->drawTextOnPath(kText, kTextLen, path, NULL, paint);
+                        canvas->drawTextOnPath(kText, kTextLen, path, NULL, outlinePaint);
                     canvas->restore();
                     SkPaint stroke;
                     stroke.setStyle(SkPaint::kStroke_Style);
@@ -183,4 +197,14 @@ DEF_SIMPLE_GM_BG(shadertext2, canvas, 1800, 900,
                 canvas->drawText(kStrokeLabel, strlen(kStrokeLabel), strokeX, y, labelPaint);
             }
         }
+    }
+
+private:
+    typedef GM INHERITED;
+};
+
+///////////////////////////////////////////////////////////////////////////////
+
+static GM* MyFactory(void*) { return new ShaderText2GM; }
+static GMRegistry reg(MyFactory);
 }

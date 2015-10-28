@@ -5,7 +5,6 @@
  * found in the LICENSE file.
  */
 
-#include "SkCodecPriv.h"
 #include "SkWebpCodec.h"
 #include "SkTemplates.h"
 
@@ -77,32 +76,28 @@ SkCodec* SkWebpCodec::NewFromStream(SkStream* stream) {
     SkAutoTDelete<SkStream> streamDeleter(stream);
     SkImageInfo info;
     if (webp_parse_header(stream, &info)) {
-        return new SkWebpCodec(info, streamDeleter.detach());
+        return SkNEW_ARGS(SkWebpCodec, (info, streamDeleter.detach()));
     }
-    return nullptr;
+    return NULL;
 }
 
-// This version is slightly different from SkCodecPriv's version of conversion_possible. It
-// supports both byte orders for 8888.
-static bool webp_conversion_possible(const SkImageInfo& dst, const SkImageInfo& src) {
-    if (dst.profileType() != src.profileType()) {
-        return false;
-    }
-
-    if (!valid_alpha(dst.alphaType(), src.alphaType())) {
-        return false;
-    }
-
+static bool conversion_possible(const SkImageInfo& dst, const SkImageInfo& src) {
     switch (dst.colorType()) {
         // Both byte orders are supported.
         case kBGRA_8888_SkColorType:
         case kRGBA_8888_SkColorType:
-            return true;
-        case kRGB_565_SkColorType:
-            return src.alphaType() == kOpaque_SkAlphaType;
+            break;
         default:
             return false;
     }
+    if (dst.profileType() != src.profileType()) {
+        return false;
+    }
+    if (dst.alphaType() == src.alphaType()) {
+        return true;
+    }
+    return kPremul_SkAlphaType == dst.alphaType() &&
+            kUnpremul_SkAlphaType == src.alphaType();
 }
 
 SkISize SkWebpCodec::onGetScaledDimensions(float desiredScale) const {
@@ -114,21 +109,12 @@ SkISize SkWebpCodec::onGetScaledDimensions(float desiredScale) const {
     return dim;
 }
 
-bool SkWebpCodec::onDimensionsSupported(const SkISize& dim) {
-    const SkImageInfo& info = this->getInfo();
-    return dim.width() >= 1 && dim.width() <= info.width()
-            && dim.height() >= 1 && dim.height() <= info.height();
-}
-
-
 static WEBP_CSP_MODE webp_decode_mode(SkColorType ct, bool premultiply) {
     switch (ct) {
         case kBGRA_8888_SkColorType:
             return premultiply ? MODE_bgrA : MODE_BGRA;
         case kRGBA_8888_SkColorType:
             return premultiply ? MODE_rgbA : MODE_RGBA;
-        case kRGB_565_SkColorType:
-            return MODE_RGB_565;
         default:
             return MODE_LAST;
     }
@@ -144,8 +130,8 @@ bool SkWebpCodec::onGetValidSubset(SkIRect* desiredSubset) const {
         return false;
     }
 
-    SkIRect dimensions  = SkIRect::MakeSize(this->getInfo().dimensions());
-    if (!dimensions.contains(*desiredSubset)) {
+    SkIRect bounds = SkIRect::MakeSize(this->getInfo().dimensions());
+    if (!desiredSubset->intersect(bounds)) {
         return false;
     }
 
@@ -158,9 +144,20 @@ bool SkWebpCodec::onGetValidSubset(SkIRect* desiredSubset) const {
 }
 
 SkCodec::Result SkWebpCodec::onGetPixels(const SkImageInfo& dstInfo, void* dst, size_t rowBytes,
-                                         const Options& options, SkPMColor*, int*,
-                                         int* rowsDecoded) {
-    if (!webp_conversion_possible(dstInfo, this->getInfo())) {
+                                         const Options& options, SkPMColor*, int*) {
+    switch (this->rewindIfNeeded()) {
+        case kCouldNotRewind_RewindState:
+            return kCouldNotRewind;
+        case kRewound_RewindState:
+            // Rewound to the beginning. Since creation only does a peek, the stream is at the
+            // correct position.
+            break;
+        case kNoRewindNecessary_RewindState:
+            // Already at the right spot for decoding.
+            break;
+    }
+
+    if (!conversion_possible(dstInfo, this->getInfo())) {
         return kInvalidConversion;
     }
 
@@ -225,7 +222,7 @@ SkCodec::Result SkWebpCodec::onGetPixels(const SkImageInfo& dstInfo, void* dst, 
     config.output.u.RGBA.size = dstInfo.getSafeSize(rowBytes);
     config.output.is_external_memory = 1;
 
-    SkAutoTCallVProc<WebPIDecoder, WebPIDelete> idec(WebPIDecode(nullptr, 0, &config));
+    SkAutoTCallVProc<WebPIDecoder, WebPIDelete> idec(WebPIDecode(NULL, 0, &config));
     if (!idec) {
         return kInvalidInput;
     }
@@ -235,8 +232,10 @@ SkCodec::Result SkWebpCodec::onGetPixels(const SkImageInfo& dstInfo, void* dst, 
     while (true) {
         const size_t bytesRead = stream()->read(buffer, BUFFER_SIZE);
         if (0 == bytesRead) {
-            WebPIDecGetRGB(idec, rowsDecoded, NULL, NULL, NULL);
-            return kIncompleteInput;
+            // FIXME: Maybe this is an incomplete image? How to decide? Based
+            // on the number of rows decoded? We can know the number of rows
+            // decoded using WebPIDecGetRGB.
+            return kInvalidInput;
         }
 
         switch (WebPIAppend(idec, buffer, bytesRead)) {

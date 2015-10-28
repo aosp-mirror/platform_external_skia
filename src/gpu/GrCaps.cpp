@@ -16,7 +16,6 @@ GrShaderCaps::GrShaderCaps() {
     fDstReadInShaderSupport = false;
     fDualSourceBlendingSupport = false;
     fMixedSamplesSupport = false;
-    fProgrammableSampleLocationsSupport = false;
     fShaderPrecisionVaries = false;
 }
 
@@ -47,15 +46,14 @@ static const char* precision_to_string(GrSLPrecision p) {
 SkString GrShaderCaps::dump() const {
     SkString r;
     static const char* gNY[] = { "NO", "YES" };
-    r.appendf("Shader Derivative Support             : %s\n", gNY[fShaderDerivativeSupport]);
-    r.appendf("Geometry Shader Support               : %s\n", gNY[fGeometryShaderSupport]);
-    r.appendf("Path Rendering Support                : %s\n", gNY[fPathRenderingSupport]);
-    r.appendf("Dst Read In Shader Support            : %s\n", gNY[fDstReadInShaderSupport]);
-    r.appendf("Dual Source Blending Support          : %s\n", gNY[fDualSourceBlendingSupport]);
-    r.appendf("Mixed Samples Support                 : %s\n", gNY[fMixedSamplesSupport]);
-    r.appendf("Programmable Sample Locations Support : %s\n", gNY[fProgrammableSampleLocationsSupport]);
+    r.appendf("Shader Derivative Support          : %s\n", gNY[fShaderDerivativeSupport]);
+    r.appendf("Geometry Shader Support            : %s\n", gNY[fGeometryShaderSupport]);
+    r.appendf("Path Rendering Support             : %s\n", gNY[fPathRenderingSupport]);
+    r.appendf("Dst Read In Shader Support         : %s\n", gNY[fDstReadInShaderSupport]);
+    r.appendf("Dual Source Blending Support       : %s\n", gNY[fDualSourceBlendingSupport]);
+    r.appendf("Mixed Samples Support              : %s\n", gNY[fMixedSamplesSupport]);
 
-    r.appendf("Shader Float Precisions (varies: %s)  :\n", gNY[fShaderPrecisionVaries]);
+    r.appendf("Shader Float Precisions (varies: %s):\n", gNY[fShaderPrecisionVaries]);
 
     for (int s = 0; s < kGrShaderTypeCount; ++s) {
         GrShaderType shaderType = static_cast<GrShaderType>(s);
@@ -94,8 +92,6 @@ GrCaps::GrCaps(const GrContextOptions& options) {
     fOversizedStencilSupport = false;
     fTextureBarrierSupport = false;
     fSupportsInstancedDraws = false;
-    fFullClearIsFree = false;
-    fMustClearUploadedBufferData = false;
 
     fUseDrawInsteadOfClear = false;
 
@@ -104,9 +100,9 @@ GrCaps::GrCaps(const GrContextOptions& options) {
 
     fMapBufferFlags = kNone_MapFlags;
 
-    fMaxRenderTargetSize = 1;
-    fMaxTextureSize = 1;
-    fMinTextureSize = 1;
+    fMaxRenderTargetSize = 0;
+    fMaxTextureSize = 0;
+    fMinTextureSize = 0;
     fMaxSampleCount = 0;
 
     memset(fConfigRenderSupport, 0, sizeof(fConfigRenderSupport));
@@ -116,8 +112,6 @@ GrCaps::GrCaps(const GrContextOptions& options) {
     fDrawPathMasksToCompressedTextureSupport = options.fDrawPathToCompressedTexture;
     fGeometryBufferMapThreshold = options.fGeometryBufferMapThreshold;
     fUseDrawInsteadOfPartialRenderTargetWrite = options.fUseDrawInsteadOfPartialRenderTargetWrite;
-
-    fPreferVRAMUseOverFlushes = true;
 }
 
 void GrCaps::applyOptionsOverrides(const GrContextOptions& options) {
@@ -160,13 +154,9 @@ SkString GrCaps::dump() const {
     r.appendf("Oversized Stencil Support          : %s\n", gNY[fOversizedStencilSupport]);
     r.appendf("Texture Barrier Support            : %s\n", gNY[fTextureBarrierSupport]);
     r.appendf("Supports instanced draws           : %s\n", gNY[fSupportsInstancedDraws]);
-    r.appendf("Full screen clear is free          : %s\n", gNY[fFullClearIsFree]);
-    r.appendf("Must clear buffer memory           : %s\n", gNY[fMustClearUploadedBufferData]);
     r.appendf("Draw Instead of Clear [workaround] : %s\n", gNY[fUseDrawInsteadOfClear]);
     r.appendf("Draw Instead of TexSubImage [workaround] : %s\n",
               gNY[fUseDrawInsteadOfPartialRenderTargetWrite]);
-    r.appendf("Prefer VRAM Use over flushes [workaround] : %s\n", gNY[fPreferVRAMUseOverFlushes]);
-
     if (this->advancedBlendEquationSupport()) {
         r.appendf("Advanced Blend Equation Blacklist  : 0x%x\n", fAdvBlendEqBlacklist);
     }

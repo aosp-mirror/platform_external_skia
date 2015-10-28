@@ -118,7 +118,7 @@ public:
 
     SkFlattenable* getFlat(unsigned index) const {
         if (0 == index) {
-            return nullptr;
+            return NULL;
         }
         return fFlatArray[index - 1];
     }
@@ -150,7 +150,7 @@ public:
         SkASSERT(shouldFlattenBitmaps(fFlags));
         SkBitmap* bm;
         if(fBitmaps.count() == index) {
-            bm = new SkBitmap;
+            bm = SkNEW(SkBitmap);
             *fBitmaps.append() = bm;
         } else {
             bm = fBitmaps[index];
@@ -174,7 +174,7 @@ public:
     void releaseRef(int32_t) override {}
 
     void setSharedHeap(SkBitmapHeap* heap) {
-        SkASSERT(!shouldFlattenBitmaps(fFlags) || nullptr == heap);
+        SkASSERT(!shouldFlattenBitmaps(fFlags) || NULL == heap);
         SkRefCnt_SafeAssign(fSharedHeap, heap);
         this->updateReader();
     }
@@ -200,7 +200,7 @@ public:
     }
 
     SkTypeface* getTypeface(unsigned id) const {
-        return id ? fTypefaces[id - 1] : nullptr;
+        return id ? fTypefaces[id - 1] : NULL;
     }
 
     const SkImage* getImage(int32_t slot) const {
@@ -209,7 +209,7 @@ public:
 
 private:
     void updateReader() {
-        if (nullptr == fReader) {
+        if (NULL == fReader) {
             return;
         }
         bool crossProcess = SkToBool(fFlags & SkGPipeWriter::kCrossProcess_Flag);
@@ -218,7 +218,7 @@ private:
         if (crossProcess) {
             fReader->setFactoryArray(&fFactoryArray);
         } else {
-            fReader->setFactoryArray(nullptr);
+            fReader->setFactoryArray(NULL);
         }
 
         if (shouldFlattenBitmaps(fFlags)) {
@@ -337,11 +337,11 @@ static void saveLayer_rp(SkCanvas* canvas, SkReader32* reader, uint32_t op32,
     unsigned flags = DrawOp_unpackFlags(op32);
     SkCanvas::SaveFlags saveFlags = (SkCanvas::SaveFlags)DrawOp_unpackData(op32);
 
-    const SkRect* bounds = nullptr;
+    const SkRect* bounds = NULL;
     if (flags & kSaveLayer_HasBounds_DrawOpFlag) {
         bounds = skip<SkRect>(reader);
     }
-    const SkPaint* paint = nullptr;
+    const SkPaint* paint = NULL;
     if (flags & kSaveLayer_HasPaint_DrawOpFlag) {
         paint = &state->paint();
     }
@@ -414,11 +414,11 @@ static void drawPatch_rp(SkCanvas* canvas, SkReader32* reader, uint32_t op32,
     
     const SkPoint* cubics = skip<SkPoint>(reader, SkPatchUtils::kNumCtrlPts);
     
-    const SkColor* colors = nullptr;
+    const SkColor* colors = NULL;
     if (flags & kDrawVertices_HasColors_DrawOpFlag) {
         colors = skip<SkColor>(reader, SkPatchUtils::kNumCorners);
     }
-    const SkPoint* texCoords = nullptr;
+    const SkPoint* texCoords = NULL;
     if (flags & kDrawVertices_HasTexs_DrawOpFlag) {
         texCoords = skip<SkPoint>(reader, SkPatchUtils::kNumCorners);
     }
@@ -452,12 +452,12 @@ static void drawVertices_rp(SkCanvas* canvas, SkReader32* reader, uint32_t op32,
     int vertexCount = reader->readU32();
     const SkPoint* verts = skip<SkPoint>(reader, vertexCount);
 
-    const SkPoint* texs = nullptr;
+    const SkPoint* texs = NULL;
     if (flags & kDrawVertices_HasTexs_DrawOpFlag) {
         texs = skip<SkPoint>(reader, vertexCount);
     }
 
-    const SkColor* colors = nullptr;
+    const SkColor* colors = NULL;
     if (flags & kDrawVertices_HasColors_DrawOpFlag) {
         colors = skip<SkColor>(reader, vertexCount);
     }
@@ -469,7 +469,7 @@ static void drawVertices_rp(SkCanvas* canvas, SkReader32* reader, uint32_t op32,
     }
 
     int indexCount = 0;
-    const uint16_t* indices = nullptr;
+    const uint16_t* indices = NULL;
     if (flags & kDrawVertices_HasIndices_DrawOpFlag) {
         indexCount = reader->readU32();
         indices = skipAlign<uint16_t>(reader, indexCount);
@@ -483,7 +483,7 @@ static void drawVertices_rp(SkCanvas* canvas, SkReader32* reader, uint32_t op32,
 static void drawAtlas_rp(SkCanvas* canvas, SkReader32* reader, uint32_t op32, SkGPipeState* state) {
     unsigned flags = DrawOp_unpackFlags(op32);
 
-    const SkPaint* paint = nullptr;
+    const SkPaint* paint = NULL;
     if (flags & kDrawAtlas_HasPaint_DrawOpFlag) {
         paint = &state->paint();
     }
@@ -493,11 +493,11 @@ static void drawAtlas_rp(SkCanvas* canvas, SkReader32* reader, uint32_t op32, Sk
     SkXfermode::Mode mode = (SkXfermode::Mode)reader->readU32();
     const SkRSXform* xform = skip<SkRSXform>(reader, count);
     const SkRect* tex = skip<SkRect>(reader, count);
-    const SkColor* colors = nullptr;
+    const SkColor* colors = NULL;
     if (flags & kDrawAtlas_HasColors_DrawOpFlag) {
         colors = skip<SkColor>(reader, count);
     }
-    const SkRect* cull = nullptr;
+    const SkRect* cull = NULL;
     if (flags & kDrawAtlas_HasCull_DrawOpFlag) {
         cull = skip<SkRect>(reader, 1);
     }
@@ -551,7 +551,7 @@ static void drawTextOnPath_rp(SkCanvas* canvas, SkReader32* reader, uint32_t op3
     reader->readPath(&path);
 
     SkMatrix matrixStorage;
-    const SkMatrix* matrix = nullptr;
+    const SkMatrix* matrix = NULL;
     if (DrawOp_unpackFlags(op32) & kDrawTextOnPath_HasMatrix_DrawOpFlag) {
         reader->readMatrix(&matrixStorage);
         matrix = &matrixStorage;
@@ -567,7 +567,7 @@ class BitmapHolder : SkNoncopyable {
 public:
     BitmapHolder(SkReader32* reader, uint32_t op32, SkGPipeState* state);
     ~BitmapHolder() {
-        if (fHeapEntry != nullptr) {
+        if (fHeapEntry != NULL) {
             fHeapEntry->releaseRef();
         }
     }
@@ -585,7 +585,7 @@ BitmapHolder::BitmapHolder(SkReader32* reader, uint32_t op32,
     const unsigned flags = state->getFlags();
     const unsigned index = DrawOp_unpackData(op32);
     if (shouldFlattenBitmaps(flags)) {
-        fHeapEntry = nullptr;
+        fHeapEntry = NULL;
         fBitmap = state->getBitmap(index);
     } else {
         SkBitmapHeapEntry* entry = state->getSharedHeap()->getEntry(index);
@@ -596,7 +596,7 @@ BitmapHolder::BitmapHolder(SkReader32* reader, uint32_t op32,
             fBitmap = &fBitmapStorage;
             // Release the ref on the bitmap now, since we made our own copy.
             entry->releaseRef();
-            fHeapEntry = nullptr;
+            fHeapEntry = NULL;
         } else {
             SkASSERT(!shouldFlattenBitmaps(flags));
             SkASSERT(!SkToBool(flags & SkGPipeWriter::kSimultaneousReaders_Flag));
@@ -614,7 +614,7 @@ static void drawBitmap_rp(SkCanvas* canvas, SkReader32* reader, uint32_t op32,
     SkScalar top = reader->readScalar();
     const SkBitmap* bitmap = holder.getBitmap();
     if (state->shouldDraw()) {
-        canvas->drawBitmap(*bitmap, left, top, hasPaint ? &state->paint() : nullptr);
+        canvas->drawBitmap(*bitmap, left, top, hasPaint ? &state->paint() : NULL);
     }
 }
 
@@ -627,7 +627,7 @@ static void drawBitmapNine_rp(SkCanvas* canvas, SkReader32* reader,
     const SkBitmap* bitmap = holder.getBitmap();
     if (state->shouldDraw()) {
         canvas->drawBitmapNine(*bitmap, *center, *dst,
-                               hasPaint ? &state->paint() : nullptr);
+                               hasPaint ? &state->paint() : NULL);
     }
 }
 
@@ -641,7 +641,7 @@ static void drawBitmapRect_rp(SkCanvas* canvas, SkReader32* reader,
     if (hasSrc) {
         src = skip<SkRect>(reader);
     } else {
-        src = nullptr;
+        src = NULL;
     }
     SkCanvas::SrcRectConstraint constraint = SkCanvas::kStrict_SrcRectConstraint;
     if (flags & kDrawBitmap_Bleed_DrawOpFlag) {
@@ -650,7 +650,7 @@ static void drawBitmapRect_rp(SkCanvas* canvas, SkReader32* reader,
     const SkRect* dst = skip<SkRect>(reader);
     const SkBitmap* bitmap = holder.getBitmap();
     if (state->shouldDraw()) {
-        canvas->legacy_drawBitmapRect(*bitmap, src, *dst, hasPaint ? &state->paint() : nullptr, constraint);
+        canvas->drawBitmapRect(*bitmap, src, *dst, hasPaint ? &state->paint() : NULL, constraint);
     }
 }
 
@@ -661,7 +661,7 @@ static void drawSprite_rp(SkCanvas* canvas, SkReader32* reader, uint32_t op32,
     const SkIPoint* point = skip<SkIPoint>(reader);
     const SkBitmap* bitmap = holder.getBitmap();
     if (state->shouldDraw()) {
-        canvas->drawSprite(*bitmap, point->fX, point->fY, hasPaint ? &state->paint() : nullptr);
+        canvas->drawSprite(*bitmap, point->fX, point->fY, hasPaint ? &state->paint() : NULL);
     }
 }
 
@@ -673,7 +673,7 @@ static void drawImage_rp(SkCanvas* canvas, SkReader32* reader, uint32_t op32, Sk
     SkScalar y = reader->readScalar();
     const SkImage* image = state->getImage(slot);
     if (state->shouldDraw()) {
-        canvas->drawImage(image, x, y, hasPaint ? &state->paint() : nullptr);
+        canvas->drawImage(image, x, y, hasPaint ? &state->paint() : NULL);
     }
 }
 
@@ -683,7 +683,7 @@ static void drawImageRect_rp(SkCanvas* canvas, SkReader32* reader, uint32_t op32
     unsigned flags = DrawOp_unpackFlags(op32);
     bool hasPaint = SkToBool(flags & kDrawBitmap_HasPaint_DrawOpFlag);
     bool hasSrc = SkToBool(flags & kDrawBitmap_HasSrcRect_DrawOpFlag);
-    const SkRect* src = nullptr;
+    const SkRect* src = NULL;
     if (hasSrc) {
         src = skip<SkRect>(reader);
     }
@@ -692,7 +692,7 @@ static void drawImageRect_rp(SkCanvas* canvas, SkReader32* reader, uint32_t op32
 
     const SkImage* image = state->getImage(slot);
     if (state->shouldDraw()) {
-        canvas->legacy_drawImageRect(image, src, *dst, hasPaint ? &state->paint() : nullptr, constraint);
+        canvas->drawImageRect(image, src, *dst, hasPaint ? &state->paint() : NULL, constraint);
     }
 }
 
@@ -705,7 +705,7 @@ static void drawImageNine_rp(SkCanvas* canvas, SkReader32* reader, uint32_t op32
     const SkRect* dst = skip<SkRect>(reader);
     const SkImage* image = state->getImage(slot);
     if (state->shouldDraw()) {
-        canvas->drawImageNine(image, *center, *dst, hasPaint ? &state->paint() : nullptr);
+        canvas->drawImageNine(image, *center, *dst, hasPaint ? &state->paint() : NULL);
     }
 }
 
@@ -812,7 +812,7 @@ static void annotation_rp(SkCanvas*, SkReader32* reader, uint32_t op32,
         p->setAnnotation(SkAnnotation::Create(buffer))->unref();
         SkASSERT(buffer.offset() == size);
     } else {
-        p->setAnnotation(nullptr);
+        p->setAnnotation(NULL);
     }
 }
 
@@ -925,7 +925,7 @@ static const ReadProc gReadTable[] = {
 SkGPipeState::SkGPipeState()
     : fReader(0)
     , fSilent(false)
-    , fSharedHeap(nullptr)
+    , fSharedHeap(NULL)
     , fFlags(0) {
 
 }
@@ -942,16 +942,16 @@ SkGPipeState::~SkGPipeState() {
 #include "SkGPipe.h"
 
 SkGPipeReader::SkGPipeReader() {
-    fCanvas = nullptr;
-    fState = nullptr;
-    fProc = nullptr;
+    fCanvas = NULL;
+    fState = NULL;
+    fProc = NULL;
 }
 
 SkGPipeReader::SkGPipeReader(SkCanvas* target) {
-    fCanvas = nullptr;
+    fCanvas = NULL;
     this->setCanvas(target);
-    fState = nullptr;
-    fProc = nullptr;
+    fState = NULL;
+    fProc = NULL;
 }
 
 void SkGPipeReader::setCanvas(SkCanvas *target) {
@@ -965,11 +965,11 @@ SkGPipeReader::~SkGPipeReader() {
 
 SkGPipeReader::Status SkGPipeReader::playback(const void* data, size_t length,
                                               uint32_t playbackFlags, size_t* bytesRead) {
-    if (nullptr == fCanvas) {
+    if (NULL == fCanvas) {
         return kError_Status;
     }
 
-    if (nullptr == fState) {
+    if (NULL == fState) {
         fState = new SkGPipeState;
     }
 

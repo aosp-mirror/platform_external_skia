@@ -22,9 +22,9 @@ static int g_UploadCount = 0;
 
 GrPlot::GrPlot() 
     : fID(-1)
-    , fTexture(nullptr)
-    , fRects(nullptr)
-    , fAtlas(nullptr)
+    , fTexture(NULL)
+    , fRects(NULL)
+    , fAtlas(NULL)
     , fBytesPerPixel(1)
     , fDirty(false)
     , fBatchUploads(false)
@@ -33,8 +33,8 @@ GrPlot::GrPlot()
 }
 
 GrPlot::~GrPlot() {
-    delete[] fPlotData;
-    fPlotData = nullptr;
+    SkDELETE_ARRAY(fPlotData);
+    fPlotData = NULL;
     delete fRects;
 }
 
@@ -45,7 +45,7 @@ void GrPlot::init(GrAtlas* atlas, int id, int offX, int offY, int width, int hei
     fAtlas = atlas;
     fOffset.set(offX * width, offY * height);
     fBytesPerPixel = bpp;
-    fPlotData = nullptr;
+    fPlotData = NULL;
     fDirtyRect.setEmpty();
     fDirty = false;
     fBatchUploads = batchUploads;
@@ -66,8 +66,8 @@ bool GrPlot::addSubImage(int width, int height, const void* image, SkIPoint16* l
     // once the plot is nearly full we will revert to uploading each subimage individually
     int plotWidth = fRects->width();
     int plotHeight = fRects->height();
-    if (fBatchUploads && nullptr == fPlotData && 0.0f == percentFull) {
-        fPlotData = new unsigned char[fBytesPerPixel * plotWidth * plotHeight];
+    if (fBatchUploads && NULL == fPlotData && 0.0f == percentFull) {
+        fPlotData = SkNEW_ARRAY(unsigned char, fBytesPerPixel*plotWidth*plotHeight);
         memset(fPlotData, 0, fBytesPerPixel*plotWidth*plotHeight);
     }
 
@@ -122,7 +122,7 @@ GrAtlas::GrAtlas(GrGpu* gpu, GrPixelConfig config, GrSurfaceFlags flags,
     fNumPlotsX = numPlotsX;
     fNumPlotsY = numPlotsY;
     fBatchUploads = batchUploads;
-    fTexture = nullptr;
+    fTexture = NULL;
 
     int textureWidth = fBackingTextureSize.width();
     int textureHeight = fBackingTextureSize.height();
@@ -138,7 +138,7 @@ GrAtlas::GrAtlas(GrGpu* gpu, GrPixelConfig config, GrSurfaceFlags flags,
 
     // set up allocated plots
     size_t bpp = GrBytesPerPixel(fPixelConfig);
-    fPlotArray = new GrPlot[(fNumPlotsX * fNumPlotsY)];
+    fPlotArray = SkNEW_ARRAY(GrPlot, (fNumPlotsX*fNumPlotsY));
 
     GrPlot* currPlot = fPlotArray;
     for (int y = numPlotsY-1; y >= 0; --y) {
@@ -154,7 +154,7 @@ GrAtlas::GrAtlas(GrGpu* gpu, GrPixelConfig config, GrSurfaceFlags flags,
 
 GrAtlas::~GrAtlas() {
     SkSafeUnref(fTexture);
-    delete[] fPlotArray;
+    SkDELETE_ARRAY(fPlotArray);
 
     fGpu->unref();
 #if FONT_CACHE_STATS
@@ -186,7 +186,7 @@ GrPlot* GrAtlas::addToAtlas(ClientPlotUsage* usage,
     }
 
     // before we get a new plot, make sure we have a backing texture
-    if (nullptr == fTexture) {
+    if (NULL == fTexture) {
         // TODO: Update this to use the cache rather than directly creating a texture.
         GrSurfaceDesc desc;
         desc.fFlags = fFlags;
@@ -194,9 +194,9 @@ GrPlot* GrAtlas::addToAtlas(ClientPlotUsage* usage,
         desc.fHeight = fBackingTextureSize.height();
         desc.fConfig = fPixelConfig;
 
-        fTexture = fGpu->createTexture(desc, true, nullptr, 0);
-        if (nullptr == fTexture) {
-            return nullptr;
+        fTexture = fGpu->createTexture(desc, true, NULL, 0);
+        if (NULL == fTexture) {
+            return NULL;
         }
     }
 
@@ -218,7 +218,7 @@ GrPlot* GrAtlas::addToAtlas(ClientPlotUsage* usage,
     }
 
     // If the above fails, then the current plot list has no room
-    return nullptr;
+    return NULL;
 }
 
 void GrAtlas::RemovePlot(ClientPlotUsage* usage, const GrPlot* plot) {

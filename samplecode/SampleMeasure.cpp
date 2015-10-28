@@ -35,7 +35,7 @@ static const Setting gSettings[] = {
 };
 
 static void doMeasure(SkCanvas* canvas, const SkPaint& paint, const char text[]) {
-    SkScalar    dy = paint.getFontMetrics(nullptr);
+    SkScalar    dy = paint.getFontMetrics(NULL);
 
     size_t      len = strlen(text);
     SkAutoTMalloc<SkScalar> autoWidths(len);

@@ -49,7 +49,7 @@ bool SkDownSampleImageFilter::onFilterImage(Proxy* proxy, const SkBitmap& src,
     // downsample
     {
         SkBaseDevice* dev = proxy->createDevice(dstW, dstH);
-        if (nullptr == dev) {
+        if (NULL == dev) {
             return false;
         }
         OwnDeviceCanvas canvas(dev);
@@ -64,12 +64,14 @@ bool SkDownSampleImageFilter::onFilterImage(Proxy* proxy, const SkBitmap& src,
     // upscale
     {
         SkBaseDevice* dev = proxy->createDevice(src.width(), src.height());
-        if (nullptr == dev) {
+        if (NULL == dev) {
             return false;
         }
         OwnDeviceCanvas canvas(dev);
 
-        canvas.drawBitmapRect(tmp, SkRect::MakeIWH(src.width(), src.height()), nullptr);
+        SkRect r = SkRect::MakeWH(SkIntToScalar(src.width()),
+                                  SkIntToScalar(src.height()));
+        canvas.drawBitmapRect(tmp, r);
         *result = dev->accessBitmap(false);
     }
     return true;

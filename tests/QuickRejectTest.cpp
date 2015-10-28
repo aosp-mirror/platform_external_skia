@@ -17,7 +17,7 @@ class TestLooper : public SkDrawLooper {
 public:
 
     SkDrawLooper::Context* createContext(SkCanvas*, void* storage) const override {
-        return new (storage) TestDrawLooperContext;
+        return SkNEW_PLACEMENT(storage, TestDrawLooperContext);
     }
 
     size_t contextSize() const override { return sizeof(TestDrawLooperContext); }
@@ -49,7 +49,7 @@ private:
     };
 };
 
-SkFlattenable* TestLooper::CreateProc(SkReadBuffer&) { return new TestLooper; }
+SkFlattenable* TestLooper::CreateProc(SkReadBuffer&) { return SkNEW(TestLooper); }
 
 static void test_drawBitmap(skiatest::Reporter* reporter) {
     SkBitmap src;
@@ -98,7 +98,7 @@ static void test_layers(skiatest::Reporter* reporter) {
 
     // Test that saveLayer updates quickReject
     SkRect bounds = SkRect::MakeLTRB(50, 50, 70, 70);
-    canvas.saveLayer(&bounds, nullptr);
+    canvas.saveLayer(&bounds, NULL);
     REPORTER_ASSERT(reporter, true == canvas.quickReject(SkRect::MakeWH(10, 10)));
     REPORTER_ASSERT(reporter, false == canvas.quickReject(SkRect::MakeWH(60, 60)));
 }

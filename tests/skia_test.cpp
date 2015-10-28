@@ -30,7 +30,6 @@ DEFINE_bool2(extendedTest, x, false, "run extended tests for pathOps.");
 
 // need to explicitly declare this, or we get some weird infinite loop llist
 template TestRegistry* TestRegistry::gHead;
-void (*gVerboseFinalize)() = nullptr;
 
 // The threads report back to this object when they are done.
 class Status {
@@ -77,7 +76,7 @@ class SkTestRunnable : public SkRunnable {
 public:
     SkTestRunnable(const Test& test,
                    Status* status,
-                   GrContextFactory* grContextFactory = nullptr)
+                   GrContextFactory* grContextFactory = NULL)
         : fTest(test), fStatus(status), fGrContextFactory(grContextFactory) {}
 
   virtual void run() {
@@ -105,7 +104,7 @@ public:
       }
       fStatus->endTest(fTest.name, !reporter.fError, elapsed,
                        reporter.fTestCount);
-      delete this;
+      SkDELETE(this);
   }
 
 private:
@@ -154,6 +153,7 @@ int test_main() {
 #else
         header.append(" SK_RELEASE");
 #endif
+        header.appendf(" skia_arch_width=%d", (int)sizeof(void*) * 8);
         if (FLAGS_veryVerbose) {
             header.appendf("\n");
         }
@@ -190,11 +190,11 @@ int test_main() {
         } else if (test.needsGpu) {
             gpuTests.push_back(&test);
         } else {
-            cpuTests.add(new SkTestRunnable(test, &status));
+            cpuTests.add(SkNEW_ARGS(SkTestRunnable, (test, &status)));
         }
     }
 
-    GrContextFactory* grContextFactoryPtr = nullptr;
+    GrContextFactory* grContextFactoryPtr = NULL;
 #if SK_SUPPORT_GPU
     // Give GPU tests a context factory if that makes sense on this machine.
     GrContextFactory grContextFactory;
@@ -204,7 +204,8 @@ int test_main() {
 
     // Run GPU tests on this thread.
     for (int i = 0; i < gpuTests.count(); i++) {
-        (new SkTestRunnable(*gpuTests[i], &status, grContextFactoryPtr))->run();
+        SkNEW_ARGS(SkTestRunnable, (*gpuTests[i], &status, grContextFactoryPtr))
+                ->run();
     }
 
     // Block until threaded tests finish.
@@ -215,9 +216,6 @@ int test_main() {
                 "\nFinished %d tests, %d failures, %d skipped. "
                 "(%d internal tests)",
                 toRun, status.failCount(), skipCount, status.testCount());
-        if (gVerboseFinalize) {
-            (*gVerboseFinalize)();
-        }
     }
 
     SkDebugf("\n");

@@ -21,8 +21,8 @@ static SkScalar draw_string(SkCanvas* canvas, const SkString& text, SkScalar x,
 class FontCacheGM : public skiagm::GM {
 public:
     FontCacheGM() {
-        fTypefaces[0] = nullptr;
-        fTypefaces[1] = nullptr;
+        fTypefaces[0] = NULL;
+        fTypefaces[1] = NULL;
     }
 
     virtual ~FontCacheGM() {
@@ -40,8 +40,8 @@ protected:
     }
 
     void onOnceBeforeDraw() override {
-        fTypefaces[0] = sk_tool_utils::create_portable_typeface("serif", SkTypeface::kItalic);
-        fTypefaces[1] = sk_tool_utils::create_portable_typeface("sans-serif", SkTypeface::kItalic);
+        fTypefaces[0] = sk_tool_utils::create_portable_typeface_always("serif", SkTypeface::kItalic);
+        fTypefaces[1] = sk_tool_utils::create_portable_typeface_always("sans-serif", SkTypeface::kItalic);
     }
 
     void onDraw(SkCanvas* canvas) override {
@@ -83,4 +83,4 @@ private:
 
 //////////////////////////////////////////////////////////////////////////////
 
-DEF_GM(return new FontCacheGM;)
+DEF_GM( return SkNEW(FontCacheGM); )

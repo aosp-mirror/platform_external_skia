@@ -9,10 +9,7 @@
     {
       'target_name': 'flags',
       'type': 'static_library',
-      'include_dirs': [
-          '../include/private',
-          '../src/core',
-      ],
+      'include_dirs': [ '../src/core', ],
       'sources': [
         '../tools/flags/SkCommandLineFlags.cpp',
         '../tools/flags/SkCommandLineFlags.h',

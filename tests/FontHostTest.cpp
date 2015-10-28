@@ -112,7 +112,7 @@ static void test_charsToGlyphs(skiatest::Reporter* reporter, SkTypeface* face) {
 }
 
 static void test_fontstream(skiatest::Reporter* reporter, SkStream* stream, int ttcIndex) {
-    int n = SkFontStream::GetTableTags(stream, ttcIndex, nullptr);
+    int n = SkFontStream::GetTableTags(stream, ttcIndex, NULL);
     SkAutoTArray<SkFontTableTag> array(n);
 
     int n2 = SkFontStream::GetTableTags(stream, ttcIndex, array.get());
@@ -214,7 +214,7 @@ static void test_tables(skiatest::Reporter* reporter, SkTypeface* face) {
 
 static void test_tables(skiatest::Reporter* reporter) {
     static const char* const gNames[] = {
-        nullptr,   // default font
+        NULL,   // default font
         "Helvetica", "Arial",
         "Times", "Times New Roman",
         "Courier", "Courier New",
@@ -242,7 +242,7 @@ static void test_tables(skiatest::Reporter* reporter) {
  */
 static void test_advances(skiatest::Reporter* reporter) {
     static const char* const faces[] = {
-        nullptr,   // default font
+        NULL,   // default font
         "Arial", "Times", "Times New Roman", "Helvetica", "Courier",
         "Courier New", "Verdana", "monospace",
     };

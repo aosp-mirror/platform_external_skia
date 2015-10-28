@@ -13,7 +13,7 @@
 
 PipeController::PipeController(SkCanvas* target, SkPicture::InstallPixelRefProc proc)
 :fReader(target) {
-    fBlock = nullptr;
+    fBlock = NULL;
     fBlockSize = fBytesWritten = 0;
     fReader.setBitmapDecoder(proc);
 }
@@ -42,7 +42,7 @@ void PipeController::notifyWritten(size_t bytes) {
 TiledPipeController::TiledPipeController(const SkBitmap& bitmap,
                                          SkPicture::InstallPixelRefProc proc,
                                          const SkMatrix* initial)
-: INHERITED(nullptr, proc) {
+: INHERITED(NULL, proc) {
     int32_t top = 0;
     int32_t bottom;
     int32_t height = bitmap.height() / NumberOfTiles;
@@ -55,7 +55,7 @@ TiledPipeController::TiledPipeController(const SkBitmap& bitmap,
         SkDEBUGCODE(bool extracted = )bitmap.extractSubset(&fBitmaps[i], rect);
         SkASSERT(extracted);
         SkCanvas* canvas = new SkCanvas(fBitmaps[i]);
-        if (initial != nullptr) {
+        if (initial != NULL) {
             canvas->setMatrix(*initial);
         }
         canvas->translate(SkIntToScalar(-rect.left()),
@@ -82,7 +82,7 @@ void TiledPipeController::notifyWritten(size_t bytes) {
 ThreadSafePipeController::ThreadSafePipeController(int numberOfReaders)
 : fAllocator(kMinBlockSize)
 , fNumberOfReaders(numberOfReaders) {
-    fBlock = nullptr;
+    fBlock = NULL;
     fBytesWritten = 0;
 }
 

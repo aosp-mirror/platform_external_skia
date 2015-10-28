@@ -22,7 +22,7 @@
 
 class BaseImageFilterCollapseBench : public Benchmark {
 public:
-    BaseImageFilterCollapseBench(): fImageFilter(nullptr) {}
+    BaseImageFilterCollapseBench(): fImageFilter(NULL) {}
     ~BaseImageFilterCollapseBench() {
         SkSafeUnref(fImageFilter);
     }
@@ -30,16 +30,16 @@ public:
 protected:
     void doPreDraw(SkColorFilter* colorFilters[], int nFilters) {
         // Create a chain of ImageFilters from colorFilters
-        fImageFilter = nullptr;
+        fImageFilter = NULL;
         for(int i = nFilters; i --> 0;) {
             SkAutoTUnref<SkImageFilter> filter(
-                        SkColorFilterImageFilter::Create(colorFilters[i], fImageFilter, nullptr)
+                        SkColorFilterImageFilter::Create(colorFilters[i], fImageFilter, NULL)
             );
             SkRefCnt_SafeAssign(fImageFilter, filter.get());
         }
     }
 
-    void onDraw(int loops, SkCanvas* canvas) override {
+    void onDraw(const int loops, SkCanvas* canvas) override {
         makeBitmap();
 
         for(int i = 0; i < loops; i++) {
@@ -67,7 +67,7 @@ private:
             SK_ColorRED, 0, SK_ColorBLUE, SK_ColorWHITE
         };
         SkAutoTUnref<SkShader> shader(SkGradientShader::CreateLinear(
-                    pts, colors, nullptr, SK_ARRAY_COUNT(colors), SkShader::kClamp_TileMode
+                    pts, colors, NULL, SK_ARRAY_COUNT(colors), SkShader::kClamp_TileMode
         ));
         paint.setShader(shader);
         canvas.drawPaint(paint);
@@ -83,7 +83,7 @@ protected:
         return "image_filter_collapse_table";
     }
 
-    virtual void onDelayedSetup() override {
+    virtual void onPreDraw() override {
         for (int i = 0; i < 256; ++i) {
             int n = i >> 5;
             table1[i] = (n << 5) | (n << 2) | (n >> 1);
@@ -139,7 +139,7 @@ protected:
         return "image_filter_collapse_matrix";
     }
 
-    virtual void onDelayedSetup() override {
+    virtual void onPreDraw() override {
         SkColorFilter* colorFilters[] = {
             make_brightness(0.1f),
             make_grayscale(),

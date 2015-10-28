@@ -38,7 +38,7 @@ SkSVGAttribute SkSVGPaint::gAttributes[] = {
 
 const int SkSVGPaint::kAttributesSize = SK_ARRAY_COUNT(SkSVGPaint::gAttributes);
 
-SkSVGPaint::SkSVGPaint() : fNext(nullptr) {
+SkSVGPaint::SkSVGPaint() : fNext(NULL) {
 }
 
 SkString* SkSVGPaint::operator[](int index) {
@@ -81,7 +81,7 @@ void SkSVGPaint::addAttribute(SkSVGParser& parser, int attrIndex,
             const char* attrEnd = attrValue + attrLength;
             do {
                 const char* end = strchr(attrValue, ';');
-                if (end == nullptr)
+                if (end == NULL)
                     end = attrEnd;
                 const char* delimiter = strchr(attrValue, ':');
                 SkASSERT(delimiter != 0 && delimiter < end);
@@ -102,7 +102,7 @@ bool SkSVGPaint::flush(SkSVGParser& parser, bool isFlushable, bool isDef) {
     SkSVGPaint current;
     SkSVGPaint* walking = parser.fHead;
     int index;
-    while (walking != nullptr) {
+    while (walking != NULL) {
         for (index = kInitial + 1; index < kTerminal; index++) {
             SkString* lastAttr = (*walking)[index];
             if (lastAttr->size() == 0)
@@ -195,7 +195,7 @@ void SkSVGPaint::setSave(SkSVGParser& parser) {
     int index;
     SkMatrix sum;
     sum.reset();
-    while (walking != nullptr) {
+    while (walking != NULL) {
         for (index = kInitial + 1; index < kTerminal; index++) {
             SkString* lastAttr = (*walking)[index];
             if (lastAttr->size() == 0)
@@ -205,7 +205,7 @@ void SkSVGPaint::setSave(SkSVGParser& parser) {
                 SkASSERT(strncmp(str, "matrix(", 7) == 0);
                 str += 6;
                 const char* strEnd = strrchr(str, ')');
-                SkASSERT(strEnd != nullptr);
+                SkASSERT(strEnd != NULL);
                 SkString mat(str, strEnd - str);
                 SkSVGParser::ConvertToArray(mat);
                 SkScalar values[6];

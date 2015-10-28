@@ -14,11 +14,25 @@
 
 // This test ensures that glyphs whose point size is less than the SkGlyphCache's maxmium, but
 // who have a large blur, are still handled correctly
-DEF_SIMPLE_GM(largeglyphblur, canvas, 1920, 600) {
+namespace skiagm {
+class LargeGlyphBlur : public GM {
+public:
+    LargeGlyphBlur() {}
+
+protected:
+    SkString onShortName() override {
+        return SkString("largeglyphblur");
+    }
+
+    SkISize onISize() override {
+        return SkISize::Make(kWidth, kHeight);
+    }
+
+    void onDraw(SkCanvas* canvas) override {
         const char text[] = "Hamburgefons";
 
         SkPaint paint;
-        sk_tool_utils::set_portable_typeface(&paint);
+        sk_tool_utils::set_portable_typeface_always(&paint);
         paint.setTextSize(256);
         paint.setAntiAlias(true);
 
@@ -40,4 +54,16 @@ DEF_SIMPLE_GM(largeglyphblur, canvas, 1920, 600) {
         size_t len = strlen(text);
         canvas->drawText(text, len, 10, 500, blurPaint);
         canvas->drawText(text, len, 10, 500, paint);
+    }
+
+private:
+    static const int kWidth = 1920;
+    static const int kHeight = 600;
+
+    typedef GM INHERITED;
+};
+
+//////////////////////////////////////////////////////////////////////////////
+
+DEF_GM( return SkNEW(LargeGlyphBlur); )
 }

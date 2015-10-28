@@ -119,7 +119,7 @@ SkImageDecoder::Result SkWBMPImageDecoder::onDecode(SkStream* stream, SkBitmap* 
     }
 
     const SkPMColor colors[] = { SK_ColorBLACK, SK_ColorWHITE };
-    SkColorTable* ct = new SkColorTable(colors, 2);
+    SkColorTable* ct = SkNEW_ARGS(SkColorTable, (colors, 2));
     SkAutoUnref   aur(ct);
 
     if (!this->allocPixelRef(decodedBitmap, ct)) {
@@ -156,9 +156,9 @@ static SkImageDecoder* sk_wbmp_dfactory(SkStreamRewindable* stream) {
     wbmp_head   head;
 
     if (head.init(stream)) {
-        return new SkWBMPImageDecoder;
+        return SkNEW(SkWBMPImageDecoder);
     }
-    return nullptr;
+    return NULL;
 }
 
 static SkImageDecoder::Format get_format_wbmp(SkStreamRewindable* stream) {

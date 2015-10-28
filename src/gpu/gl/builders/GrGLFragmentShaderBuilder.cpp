@@ -8,7 +8,7 @@
 #include "GrGLFragmentShaderBuilder.h"
 #include "GrGLProgramBuilder.h"
 #include "gl/GrGLGpu.h"
-#include "glsl/GrGLSL.h"
+#include "gl/GrGLGLSL.h"
 #include "glsl/GrGLSLCaps.h"
 
 #define GL_CALL(X) GR_GL_CALL(fProgramBuilder->gpu()->glInterface(), X)
@@ -16,7 +16,7 @@
 
 const char* GrGLFragmentShaderBuilder::kDstTextureColorName = "_dstColor";
 static const char* declared_color_output_name() { return "fsColorOut"; }
-static const char* declared_secondary_color_output_name() { return "fsSecondaryColorOut"; }
+static const char* dual_source_output_name() { return "dualSourceOut"; }
 
 static const char* specific_layout_qualifier_name(GrBlendEquation equation) {
     SkASSERT(GrBlendEquationIsAdvanced(equation));
@@ -151,10 +151,10 @@ const char* GrGLFragmentShaderBuilder::fragmentPosition() {
                                  "GL_ARB_fragment_coord_conventions");
             }
             fInputs.push_back().set(kVec4f_GrSLType,
-                                    GrGLSLShaderVar::kIn_TypeModifier,
+                                    GrGLShaderVar::kIn_TypeModifier,
                                     "gl_FragCoord",
                                     kDefault_GrSLPrecision,
-                                    GrGLSLShaderVar::kUpperLeft_Origin);
+                                    GrGLShaderVar::kUpperLeft_Origin);
             fSetupFragPosition = true;
         }
         return "gl_FragCoord";
@@ -192,14 +192,14 @@ const char* GrGLFragmentShaderBuilder::fragmentPosition() {
 const char* GrGLFragmentShaderBuilder::dstColor() {
     fHasReadDstColor = true;
 
-    const GrGLSLCaps* glslCaps = fProgramBuilder->glslCaps();
-    if (glslCaps->fbFetchSupport()) {
+    GrGLGpu* gpu = fProgramBuilder->gpu();
+    if (gpu->glCaps().glslCaps()->fbFetchSupport()) {
         this->addFeature(1 << (GrGLFragmentShaderBuilder::kLastGLSLPrivateFeature + 1),
-                         glslCaps->fbFetchExtensionString());
+                         gpu->glCaps().glslCaps()->fbFetchExtensionString());
 
         // Some versions of this extension string require declaring custom color output on ES 3.0+
-        const char* fbFetchColorName = glslCaps->fbFetchColorName();
-        if (glslCaps->fbFetchNeedsCustomOutput()) {
+        const char* fbFetchColorName = gpu->glCaps().glslCaps()->fbFetchColorName();
+        if (gpu->glCaps().glslCaps()->fbFetchNeedsCustomOutput()) {
             this->enableCustomOutput();
             fOutputs[fCustomColorOutputIndex].setTypeModifier(GrShaderVar::kInOut_TypeModifier);
             fbFetchColorName = declared_color_output_name();
@@ -213,7 +213,7 @@ const char* GrGLFragmentShaderBuilder::dstColor() {
 void GrGLFragmentShaderBuilder::enableAdvancedBlendEquationIfNeeded(GrBlendEquation equation) {
     SkASSERT(GrBlendEquationIsAdvanced(equation));
 
-    const GrGLSLCaps& caps = *fProgramBuilder->glslCaps();
+    const GrGLSLCaps& caps = *fProgramBuilder->gpu()->glCaps().glslCaps();
     if (!caps.mustEnableAdvBlendEqs()) {
         return;
     }
@@ -232,7 +232,7 @@ void GrGLFragmentShaderBuilder::enableCustomOutput() {
         fHasCustomColorOutput = true;
         fCustomColorOutputIndex = fOutputs.count();
         fOutputs.push_back().set(kVec4f_GrSLType,
-                                 GrGLSLShaderVar::kOut_TypeModifier,
+                                 GrGLShaderVar::kOut_TypeModifier,
                                  declared_color_output_name());
     }
 }
@@ -240,19 +240,8 @@ void GrGLFragmentShaderBuilder::enableCustomOutput() {
 void GrGLFragmentShaderBuilder::enableSecondaryOutput() {
     SkASSERT(!fHasSecondaryOutput);
     fHasSecondaryOutput = true;
-    if (kGLES_GrGLStandard == fProgramBuilder->gpu()->ctxInfo().standard()) {
-        this->addFeature(1 << kBlendFuncExtended_GLSLPrivateFeature, "GL_EXT_blend_func_extended");
-    }
-
-    // If the primary output is declared, we must declare also the secondary output
-    // and vice versa, since it is not allowed to use a built-in gl_FragColor and a custom
-    // output. The condition also co-incides with the condition in whici GLES SL 2.0
-    // requires the built-in gl_SecondaryFragColorEXT, where as 3.0 requires a custom output.
-    const GrGLSLCaps& caps = *fProgramBuilder->gpu()->glCaps().glslCaps();
-    if (caps.mustDeclareFragmentShaderOutput()) {
-        fOutputs.push_back().set(kVec4f_GrSLType, GrGLSLShaderVar::kOut_TypeModifier,
-                                 declared_secondary_color_output_name());
-    }
+    fOutputs.push_back().set(kVec4f_GrSLType, GrGLShaderVar::kOut_TypeModifier,
+                             dual_source_output_name());
 }
 
 const char* GrGLFragmentShaderBuilder::getPrimaryColorOutputName() const {
@@ -260,35 +249,32 @@ const char* GrGLFragmentShaderBuilder::getPrimaryColorOutputName() const {
 }
 
 const char* GrGLFragmentShaderBuilder::getSecondaryColorOutputName() const {
-    const GrGLSLCaps& caps = *fProgramBuilder->gpu()->glCaps().glslCaps();
-    return caps.mustDeclareFragmentShaderOutput() ? declared_secondary_color_output_name()
-                                                  : "gl_SecondaryFragColorEXT";
+    return dual_source_output_name();
 }
 
 bool GrGLFragmentShaderBuilder::compileAndAttachShaders(GrGLuint programId,
                                                         SkTDArray<GrGLuint>* shaderIds) {
-    this->versionDecl() = fProgramBuilder->glslCaps()->versionDeclString();
-    GrGLSLAppendDefaultFloatPrecisionDeclaration(kDefault_GrSLPrecision,
-                                                 *fProgramBuilder->glslCaps(),
-                                                 &this->precisionQualifier());
+    GrGLGpu* gpu = fProgramBuilder->gpu();
+    this->versionDecl() = GrGLGetGLSLVersionDecl(gpu->ctxInfo());
+    GrGLAppendGLSLDefaultFloatPrecisionDeclaration(kDefault_GrSLPrecision,
+                                                   gpu->glStandard(),
+                                                   &this->precisionQualifier());
     this->compileAndAppendLayoutQualifiers();
     fProgramBuilder->appendUniformDecls(GrGLProgramBuilder::kFragment_Visibility,
                                         &this->uniforms());
     this->appendDecls(fInputs, &this->inputs());
     // We shouldn't have declared outputs on 1.10
-    SkASSERT(k110_GrGLSLGeneration != fProgramBuilder->gpu()->glslGeneration() || fOutputs.empty());
+    SkASSERT(k110_GrGLSLGeneration != gpu->glslGeneration() || fOutputs.empty());
     this->appendDecls(fOutputs, &this->outputs());
     return this->finalize(programId, GR_GL_FRAGMENT_SHADER, shaderIds);
 }
 
 void GrGLFragmentShaderBuilder::bindFragmentShaderLocations(GrGLuint programID) {
-    const GrGLCaps& caps = fProgramBuilder->gpu()->glCaps();
-    if (fHasCustomColorOutput && caps.bindFragDataLocationSupport()) {
+    if (fHasCustomColorOutput && fProgramBuilder->gpu()->glCaps().bindFragDataLocationSupport()) {
         GL_CALL(BindFragDataLocation(programID, 0, declared_color_output_name()));
     }
-    if (fHasSecondaryOutput && caps.glslCaps()->mustDeclareFragmentShaderOutput()) {
-        GL_CALL(BindFragDataLocationIndexed(programID, 0, 1,
-                                            declared_secondary_color_output_name()));
+    if (fHasSecondaryOutput) {
+        GL_CALL(BindFragDataLocationIndexed(programID, 0, 1, dual_source_output_name()));
     }
 }
 
@@ -297,21 +283,5 @@ void GrGLFragmentShaderBuilder::addVarying(GrGLVarying* v, GrSLPrecision fsPrec)
     if (v->fGsOut) {
         v->fFsIn = v->fGsOut;
     }
-    fInputs.push_back().set(v->fType, GrGLSLShaderVar::kVaryingIn_TypeModifier, v->fFsIn, fsPrec);
-}
-
-void GrGLFragmentBuilder::onBeforeChildProcEmitCode() {
-    SkASSERT(fSubstageIndices.count() >= 1);
-    fSubstageIndices.push_back(0);
-    // second-to-last value in the fSubstageIndices stack is the index of the child proc
-    // at that level which is currently emitting code.
-    fMangleString.appendf("_c%d", fSubstageIndices[fSubstageIndices.count() - 2]);
-}
-
-void GrGLFragmentBuilder::onAfterChildProcEmitCode() {
-    SkASSERT(fSubstageIndices.count() >= 2);
-    fSubstageIndices.pop_back();
-    fSubstageIndices.back()++;
-    int removeAt = fMangleString.findLastOf('_');
-    fMangleString.remove(removeAt, fMangleString.size() - removeAt);
+    fInputs.push_back().set(v->fType, GrGLShaderVar::kVaryingIn_TypeModifier, v->fFsIn, fsPrec);
 }

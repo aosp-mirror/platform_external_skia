@@ -5,11 +5,17 @@
  * found in the LICENSE file.
  */
 
-#include "SkBitmapFilter.h"
+#include "SkErrorInternals.h"
+#include "SkConvolver.h"
+#include "SkBitmapProcState.h"
+#include "SkBitmap.h"
+#include "SkColor.h"
+#include "SkColorPriv.h"
+#include "SkConvolver.h"
+#include "SkUnPreMultiply.h"
+#include "SkShader.h"
 #include "SkRTConf.h"
-#include "SkTypes.h"
-
-#include <string.h>
+#include "SkMath.h"
 
 // These are the per-scanline callbacks that are used when we must resort to
 // resampling an image as it is blitted.  Typically these are used only when
@@ -20,21 +26,21 @@ SK_CONF_DECLARE(const char *, c_bitmapFilter, "bitmap.filter", "mitchell", "Whic
 
 SkBitmapFilter *SkBitmapFilter::Allocate() {
     if (!strcmp(c_bitmapFilter, "mitchell")) {
-        return new SkMitchellFilter(1.f / 3.f, 1.f / 3.f);
+        return SkNEW_ARGS(SkMitchellFilter,(1.f/3.f,1.f/3.f));
     } else if (!strcmp(c_bitmapFilter, "lanczos")) {
-        return new SkLanczosFilter;
+        return SkNEW(SkLanczosFilter);
     } else if (!strcmp(c_bitmapFilter, "hamming")) {
-        return new SkHammingFilter;
+        return SkNEW(SkHammingFilter);
     } else if (!strcmp(c_bitmapFilter, "gaussian")) {
-        return new SkGaussianFilter(2);
+        return SkNEW_ARGS(SkGaussianFilter,(2));
     } else if (!strcmp(c_bitmapFilter, "triangle")) {
-        return new SkTriangleFilter;
+        return SkNEW(SkTriangleFilter);
     } else if (!strcmp(c_bitmapFilter, "box")) {
-        return new SkBoxFilter;
+        return SkNEW(SkBoxFilter);
     } else {
         SkDEBUGFAIL("Unknown filter type");
     }
 
-    return nullptr;
+    return NULL;
 }
 

@@ -13,7 +13,6 @@
 #include "SkCanvas.h"
 #include "SkColorPriv.h"
 #include "SkImageDecoder.h"
-#include "SkPath.h"
 #include "SkRandom.h"
 #include "SkStream.h"
 #include "SkTime.h"
@@ -25,7 +24,7 @@ class IdentityScaleView : public SampleView {
 public:
     IdentityScaleView(const char imageFilename[]) {
       SkString resourcePath = GetResourcePath(imageFilename);
-      SkImageDecoder* codec = nullptr;
+      SkImageDecoder* codec = NULL;
       SkFILEStream stream(resourcePath.c_str());
       if (stream.isValid()) {
           codec = SkImageDecoder::Factory(&stream);
@@ -33,7 +32,7 @@ public:
       if (codec) {
           stream.rewind();
           codec->decode(&stream, &fBM, kN32_SkColorType, SkImageDecoder::kDecodePixels_Mode);
-          delete codec;
+          SkDELETE(codec);
       } else {
           fBM.allocN32Pixels(1, 1);
           *(fBM.getAddr32(0,0)) = 0xFF0000FF; // red == bad
@@ -80,7 +79,7 @@ protected:
         canvas->drawBitmap( fBM, 100, 100, &paint );
         canvas->restore();
         canvas->drawText( text, strlen(text), 100, 400, paint );
-        this->inval(nullptr);
+        this->inval(NULL);
     }
 
 private:

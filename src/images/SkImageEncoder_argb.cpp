@@ -82,23 +82,23 @@ static ScanlineImporter ChooseImporter(SkColorType ct) {
         case kIndex_8_SkColorType:
             return Index8_To_ARGB;
         default:
-            return nullptr;
+            return NULL;
     }
 }
 
 bool SkARGBImageEncoder::onEncode(SkWStream* stream, const SkBitmap& bitmap, int) {
     const ScanlineImporter scanline_import = ChooseImporter(bitmap.colorType());
-    if (nullptr == scanline_import) {
+    if (NULL == scanline_import) {
         return false;
     }
 
     SkAutoLockPixels alp(bitmap);
     const uint8_t* src = (uint8_t*)bitmap.getPixels();
-    if (nullptr == bitmap.getPixels()) {
+    if (NULL == bitmap.getPixels()) {
         return false;
     }
 
-    const SkPMColor* colors = bitmap.getColorTable() ? bitmap.getColorTable()->readColors() : nullptr;
+    const SkPMColor* colors = bitmap.getColorTable() ? bitmap.getColorTable()->readColors() : NULL;
 
     const int argbStride = bitmap.width() * 4;
     SkAutoTDeleteArray<uint8_t> ada(new uint8_t[argbStride]);

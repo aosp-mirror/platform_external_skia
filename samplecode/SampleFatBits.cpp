@@ -41,7 +41,7 @@ public:
     FatBits() {
         fAA = false;
         fStyle = kHair_Style;
-        fGrid = false;
+        fGrid = true;
         fShowSkeleton = true;
         fUseGPU = false;
         fUseClip = false;
@@ -163,7 +163,7 @@ private:
         SkCanvas* canvas = fMaxSurface->getCanvas();
         canvas->save();
         canvas->concat(fMatrix);
-        fMinSurface->draw(canvas, 0, 0, nullptr);
+        fMinSurface->draw(canvas, 0, 0, NULL);
         canvas->restore();
 
         SkPaint paint;
@@ -184,7 +184,7 @@ void FatBits::drawBG(SkCanvas* canvas) {
 
     paint.setShader(fShader);
     canvas->drawRect(fBounds, paint);
-    paint.setShader(nullptr);
+    paint.setShader(NULL);
 }
 
 void FatBits::drawFG(SkCanvas* canvas) {
@@ -288,7 +288,7 @@ void FatBits::drawLine(SkCanvas* canvas, SkPoint pts[]) {
     fMatrix.mapPoints(pts, 2);
     this->drawLineSkeleton(max, pts);
 
-    fMaxSurface->draw(canvas, 0, 0, nullptr);
+    fMaxSurface->draw(canvas, 0, 0, NULL);
 }
 
 void FatBits::drawRect(SkCanvas* canvas, SkPoint pts[2]) {
@@ -318,7 +318,7 @@ void FatBits::drawRect(SkCanvas* canvas, SkPoint pts[2]) {
     r.set(pts, 2);
     this->drawRectSkeleton(max, r);
 
-    fMaxSurface->draw(canvas, 0, 0, nullptr);
+    fMaxSurface->draw(canvas, 0, 0, NULL);
 }
 
 void FatBits::drawTriangleSkeleton(SkCanvas* max, const SkPoint pts[]) {
@@ -360,7 +360,7 @@ void FatBits::drawTriangle(SkCanvas* canvas, SkPoint pts[3]) {
     fMatrix.mapPoints(pts, 3);
     this->drawTriangleSkeleton(max, pts);
 
-    fMaxSurface->draw(canvas, 0, 0, nullptr);
+    fMaxSurface->draw(canvas, 0, 0, NULL);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -376,26 +376,21 @@ public:
 };
 
 class DrawLineView : public SampleView {
-    enum {
-        kZoom = 96
-    };
-
     FatBits fFB;
     SkPoint fPts[3];
     bool    fIsRect;
 public:
     DrawLineView() {
-        fFB.setWHZ(24, 16, kZoom);
-        fPts[0].set(1, 1);
-        fPts[1].set(5, 4);
-        fPts[2].set(2, 6);
-        SkMatrix::MakeScale(kZoom, kZoom).mapPoints(fPts, 3);
+        fFB.setWHZ(24, 16, 48);
+        fPts[0].set(48, 48);
+        fPts[1].set(48 * 5, 48 * 4);
+        fPts[2].set(48 * 2, 48 * 6);
         fIsRect = false;
     }
 
     void setStyle(FatBits::Style s) {
         fFB.setStyle(s);
-        this->inval(nullptr);
+        this->inval(NULL);
     }
 
 protected:
@@ -409,19 +404,19 @@ protected:
             switch (uni) {
                 case 'c':
                     fFB.setUseClip(!fFB.getUseClip());
-                    this->inval(nullptr);
+                    this->inval(NULL);
                     return true;
                 case 'r':
                     fIsRect = !fIsRect;
-                    this->inval(nullptr);
+                    this->inval(NULL);
                     return true;
                 case 'o':
                     fFB.toggleRectAsOval();
-                    this->inval(nullptr);
+                    this->inval(NULL);
                     return true;
                 case 'x':
                     fFB.setGrid(!fFB.getGrid());
-                    this->inval(nullptr);
+                    this->inval(NULL);
                     return true;
                 case 's':
                     if (FatBits::kStroke_Style == fFB.getStyle()) {
@@ -432,19 +427,19 @@ protected:
                     return true;
                 case 'a':
                     fFB.setAA(!fFB.getAA());
-                    this->inval(nullptr);
+                    this->inval(NULL);
                     return true;
                 case 'w':
                     fFB.setShowSkeleton(!fFB.getShowSkeleton());
-                    this->inval(nullptr);
+                    this->inval(NULL);
                     return true;
                 case 'g':
                     fFB.setUseGPU(!fFB.getUseGPU());
-                    this->inval(nullptr);
+                    this->inval(NULL);
                     return true;
                 case 't':
                     fFB.setTriangle(!fFB.getTriangle());
-                    this->inval(nullptr);
+                    this->inval(NULL);
                     return true;
             }
         }
@@ -504,7 +499,7 @@ protected:
             fPts[1].offset(dx, dy);
             fPts[2].offset(dx, dy);
         }
-        this->inval(nullptr);
+        this->inval(NULL);
         return true;
     }
 

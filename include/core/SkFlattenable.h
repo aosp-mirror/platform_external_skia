@@ -13,8 +13,6 @@
 class SkReadBuffer;
 class SkWriteBuffer;
 
-class SkPrivateEffectInitializer;
-
 /*
  *  Flattening is straight-forward:
  *      1. call getFactory() so we have a function-ptr to recreate the subclass
@@ -43,13 +41,13 @@ class SkPrivateEffectInitializer;
     }
 
 #define SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(flattenable) \
-    SkFlattenable::Register(#flattenable, flattenable::CreateProc, \
-                            flattenable::GetFlattenableType());
+    SkFlattenable::Registrar(#flattenable, flattenable::CreateProc, \
+                             flattenable::GetFlattenableType());
 
 #define SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(flattenable)    \
     private:                                                                \
     static SkFlattenable* CreateProc(SkReadBuffer&);                        \
-    friend class ::SkPrivateEffectInitializer;                              \
+    friend class SkPrivateEffectInitializer;                                \
     public:                                                                 \
     Factory getFactory() const override { return CreateProc; }
 
@@ -101,6 +99,13 @@ public:
     static bool NameToType(const char name[], Type* type);
 
     static void Register(const char name[], Factory, Type);
+
+    class Registrar {
+    public:
+        Registrar(const char name[], Factory factory, Type type) {
+            SkFlattenable::Register(name, factory, type);
+        }
+    };
 
     /**
      *  Override this if your subclass needs to record data that it will need to recreate itself

@@ -11,7 +11,6 @@
 #include "SkOSFile.h"
 #include "SkRandom.h"
 #include "SkStream.h"
-#include "SkStreamPriv.h"
 #include "Test.h"
 
 #ifndef SK_BUILD_FOR_WIN
@@ -170,16 +169,16 @@ static void TestPackedUInt(skiatest::Reporter* reporter) {
     }
 }
 
-// Test that setting an SkMemoryStream to a nullptr data does not result in a crash when calling
+// Test that setting an SkMemoryStream to a NULL data does not result in a crash when calling
 // methods that access fData.
 static void TestDereferencingData(SkMemoryStream* memStream) {
-    memStream->read(nullptr, 0);
+    memStream->read(NULL, 0);
     memStream->getMemoryBase();
     SkAutoDataUnref data(memStream->copyToData());
 }
 
 static void TestNullData() {
-    SkData* nullData = nullptr;
+    SkData* nullData = NULL;
     SkMemoryStream memStream(nullData);
     TestDereferencingData(&memStream);
 
@@ -241,9 +240,9 @@ static void test_peeking_front_buffered_stream(skiatest::Reporter* r,
                                                const SkStream& original,
                                                size_t bufferSize) {
     SkStream* dupe = original.duplicate();
-    REPORTER_ASSERT(r, dupe != nullptr);
+    REPORTER_ASSERT(r, dupe != NULL);
     SkAutoTDelete<SkStream> bufferedStream(SkFrontBufferedStream::Create(dupe, bufferSize));
-    REPORTER_ASSERT(r, bufferedStream != nullptr);
+    REPORTER_ASSERT(r, bufferedStream != NULL);
     test_peeking_stream(r, bufferedStream, bufferSize);
 }
 
@@ -336,66 +335,3 @@ DEF_TEST(StreamPeek_BlockMemoryStream, rep) {
     }
     stream_peek_test(rep, asset, expected);
 }
-
-namespace {
-class DumbStream : public SkStream {
-public:
-    DumbStream(const uint8_t* data, size_t n)
-        : fData(data), fCount(n), fIdx(0) {}
-    size_t read(void* buffer, size_t size) override {
-        size_t copyCount = SkTMin(fCount - fIdx, size);
-        if (copyCount) {
-            memcpy(buffer, &fData[fIdx], copyCount);
-            fIdx += copyCount;
-        }
-        return copyCount;
-    }
-    bool isAtEnd() const override {
-        return fCount == fIdx;
-    }
- private:
-    const uint8_t* fData;
-    size_t fCount, fIdx;
-};
-}  // namespace
-
-static void stream_copy_test(skiatest::Reporter* reporter,
-                             const void* srcData,
-                             size_t N,
-                             SkStream* stream) {
-    SkDynamicMemoryWStream tgt;
-    if (!SkStreamCopy(&tgt, stream)) {
-        ERRORF(reporter, "SkStreamCopy failed");
-        return;
-    }
-    SkAutoTUnref<SkData> data(tgt.copyToData());
-    tgt.reset();
-    if (data->size() != N) {
-        ERRORF(reporter, "SkStreamCopy incorrect size");
-        return;
-    }
-    if (0 != memcmp(data->data(), srcData, N)) {
-        ERRORF(reporter, "SkStreamCopy bad copy");
-    }
-}
-
-DEF_TEST(StreamCopy, reporter) {
-    SkRandom random(123456);
-    static const int N = 10000;
-    SkAutoTMalloc<uint8_t> src((size_t)N);
-    for (int j = 0; j < N; ++j) {
-        src[j] = random.nextU() & 0xff;
-    }
-    // SkStreamCopy had two code paths; this test both.
-    DumbStream dumbStream(src.get(), (size_t)N);
-    stream_copy_test(reporter, src, N, &dumbStream);
-    SkMemoryStream smartStream(src.get(), (size_t)N);
-    stream_copy_test(reporter, src, N, &smartStream);
-}
-
-DEF_TEST(StreamEmptyStreamMemoryBase, r) {
-    SkDynamicMemoryWStream tmp;
-    SkAutoTDelete<SkStreamAsset> asset(tmp.detachAsStream());
-    REPORTER_ASSERT(r, nullptr == asset->getMemoryBase());
-}
-

@@ -13,9 +13,10 @@
 #include "SkTDArray.h"
 #include "SkXfermode.h"
 
-class GrContext;
-class GrFragmentProcessor;
 class SkBitmap;
+class GrProcessor;
+class GrContext;
+class GrProcessorDataManager;
 
 /**
  *  ColorFilters are optional objects in the drawing pipeline. When present in
@@ -123,20 +124,20 @@ public:
     static SkColorFilter* CreateComposeFilter(SkColorFilter* outer, SkColorFilter* inner);
 
     /**
-     *  A subclass may implement this factory function to work with the GPU backend. It returns
-     *  a GrFragmentProcessor that implemets the color filter in GPU shader code.
+     *  A subclass may implement this factory function to work with the GPU backend.
+     *  If it returns true, then 1 or more fragment processors will have been appended to the
+     *  array, each of which has been ref'd, so that the caller is responsible for calling unref()
+     *  on them when they are finished. If more than one processor is appended, they will be
+     *  applied in FIFO order.
      *
-     *  The fragment processor receives a premultiplied input color and produces a premultiplied
-     *  output color.
+     *  The fragment processor(s) must each return their color as a premul normalized value
+     *  e.g. each component between [0..1] and each color component <= alpha.
      *
-     *  A null return indicates that the color filter isn't implemented for the GPU backend.
+     *  If the subclass returns false, then it should not modify the array at all.
      */
-    virtual const GrFragmentProcessor* asFragmentProcessor(GrContext*) const {
-        return nullptr;
-    }
-
-    bool affectsTransparentBlack() const {
-        return this->filterColor(0) != 0;
+    virtual bool asFragmentProcessors(GrContext*, GrProcessorDataManager*,
+                                      SkTDArray<GrFragmentProcessor*>*) const {
+        return false;
     }
 
     SK_TO_STRING_PUREVIRT()

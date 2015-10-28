@@ -79,29 +79,29 @@ void sk_fmunmap(const void* addr, size_t) {
 void* sk_fdmmap(int fileno, size_t* length) {
     HANDLE file = (HANDLE)_get_osfhandle(fileno);
     if (INVALID_HANDLE_VALUE == file) {
-        return nullptr;
+        return NULL;
     }
 
     LARGE_INTEGER fileSize;
     if (0 == GetFileSizeEx(file, &fileSize)) {
         //TODO: use SK_TRACEHR(GetLastError(), "Could not get file size.") to report.
-        return nullptr;
+        return NULL;
     }
     if (!SkTFitsIn<size_t>(fileSize.QuadPart)) {
-        return nullptr;
+        return NULL;
     }
 
-    SkAutoWinMMap mmap(CreateFileMapping(file, nullptr, PAGE_READONLY, 0, 0, nullptr));
+    SkAutoWinMMap mmap(CreateFileMapping(file, NULL, PAGE_READONLY, 0, 0, NULL));
     if (!mmap.isValid()) {
         //TODO: use SK_TRACEHR(GetLastError(), "Could not create file mapping.") to report.
-        return nullptr;
+        return NULL;
     }
 
     // Eventually call UnmapViewOfFile
     void* addr = MapViewOfFile(mmap, FILE_MAP_READ, 0, 0, 0);
-    if (nullptr == addr) {
+    if (NULL == addr) {
         //TODO: use SK_TRACEHR(GetLastError(), "Could not map view of file.") to report.
-        return nullptr;
+        return NULL;
     }
 
     *length = static_cast<size_t>(fileSize.QuadPart);
@@ -115,7 +115,7 @@ int sk_fileno(SkFILE* f) {
 void* sk_fmmap(SkFILE* f, size_t* length) {
     int fileno = sk_fileno(f);
     if (fileno < 0) {
-        return nullptr;
+        return NULL;
     }
 
     return sk_fdmmap(fileno, length);
@@ -124,11 +124,11 @@ void* sk_fmmap(SkFILE* f, size_t* length) {
 ////////////////////////////////////////////////////////////////////////////
 
 struct SkOSFileIterData {
-    SkOSFileIterData() : fHandle(0), fPath16(nullptr) { }
+    SkOSFileIterData() : fHandle(0), fPath16(NULL) { }
     HANDLE fHandle;
     uint16_t* fPath16;
 };
-static_assert(sizeof(SkOSFileIterData) <= SkOSFile::Iter::kStorageSize, "not_enough_space");
+SK_COMPILE_ASSERT(sizeof(SkOSFileIterData) <= SkOSFile::Iter::kStorageSize, not_enough_space);
 
 static uint16_t* concat_to_16(const char src[], const char suffix[]) {
     size_t  i, len = strlen(src);
@@ -155,10 +155,12 @@ static uint16_t* concat_to_16(const char src[], const char suffix[]) {
     return dst;
 }
 
-SkOSFile::Iter::Iter() { new (fSelf.get()) SkOSFileIterData; }
+SkOSFile::Iter::Iter() {
+    SkNEW_PLACEMENT(fSelf.get(), SkOSFileIterData);
+}
 
 SkOSFile::Iter::Iter(const char path[], const char suffix[]) {
-    new (fSelf.get()) SkOSFileIterData;
+    SkNEW_PLACEMENT(fSelf.get(), SkOSFileIterData);
     this->reset(path, suffix);
 }
 
@@ -177,7 +179,7 @@ void SkOSFile::Iter::reset(const char path[], const char suffix[]) {
         ::FindClose(self.fHandle);
         self.fHandle = 0;
     }
-    if (nullptr == path) {
+    if (NULL == path) {
         path = "";
     }
 
@@ -193,7 +195,7 @@ static bool is_magic_dir(const uint16_t dir[]) {
 static bool get_the_file(HANDLE handle, SkString* name, WIN32_FIND_DATAW* dataPtr, bool getDir) {
     WIN32_FIND_DATAW    data;
 
-    if (nullptr == dataPtr) {
+    if (NULL == dataPtr) {
         if (::FindNextFileW(handle, &data))
             dataPtr = &data;
         else
@@ -226,10 +228,10 @@ static bool get_the_file(HANDLE handle, SkString* name, WIN32_FIND_DATAW* dataPt
 bool SkOSFile::Iter::next(SkString* name, bool getDir) {
     SkOSFileIterData& self = *static_cast<SkOSFileIterData*>(fSelf.get());
     WIN32_FIND_DATAW    data;
-    WIN32_FIND_DATAW*   dataPtr = nullptr;
+    WIN32_FIND_DATAW*   dataPtr = NULL;
 
     if (self.fHandle == 0) {  // our first time
-        if (self.fPath16 == nullptr || *self.fPath16 == 0) {  // check for no path
+        if (self.fPath16 == NULL || *self.fPath16 == 0) {  // check for no path
             return false;
         }
 

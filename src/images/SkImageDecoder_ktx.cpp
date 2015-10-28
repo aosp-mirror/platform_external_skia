@@ -50,7 +50,7 @@ private:
 SkImageDecoder::Result SkKTXImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
     // TODO: Implement SkStream::copyToData() that's cheap for memory and file streams
     SkAutoDataUnref data(SkCopyStreamToData(stream));
-    if (nullptr == data) {
+    if (NULL == data) {
         return kFailure;
     }
 
@@ -118,7 +118,7 @@ SkImageDecoder::Result SkKTXImageDecoder::onDecode(SkStream* stream, SkBitmap* b
     }
 
     // If we've made it this far, then we know how to grok the data.
-    if (!this->allocPixelRef(bm, nullptr)) {
+    if (!this->allocPixelRef(bm, NULL)) {
         return kFailure;
     }
 
@@ -309,9 +309,9 @@ DEFINE_ENCODER_CREATOR(KTXImageEncoder);
 
 static SkImageDecoder* sk_libktx_dfactory(SkStreamRewindable* stream) {
     if (SkKTXFile::is_ktx(stream)) {
-        return new SkKTXImageDecoder;
+        return SkNEW(SkKTXImageDecoder);
     }
-    return nullptr;
+    return NULL;
 }
 
 static SkImageDecoder::Format get_format_ktx(SkStreamRewindable* stream) {
@@ -322,7 +322,7 @@ static SkImageDecoder::Format get_format_ktx(SkStreamRewindable* stream) {
 }
 
 SkImageEncoder* sk_libktx_efactory(SkImageEncoder::Type t) {
-    return (SkImageEncoder::kKTX_Type == t) ? new SkKTXImageEncoder : nullptr;
+    return (SkImageEncoder::kKTX_Type == t) ? SkNEW(SkKTXImageEncoder) : NULL;
 }
 
 static SkImageDecoder_DecodeReg gReg(sk_libktx_dfactory);

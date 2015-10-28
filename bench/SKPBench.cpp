@@ -10,10 +10,6 @@
 #include "SkMultiPictureDraw.h"
 #include "SkSurface.h"
 
-#if SK_SUPPORT_GPU
-#include "GrContext.h"
-#endif
-
 // These CPU tile sizes are not good per se, but they are similar to what Chrome uses.
 DEFINE_int32(CPUbenchTileW, 256, "Tile width  used for CPU SKP playback.");
 DEFINE_int32(CPUbenchTileH, 256, "Tile height used for CPU SKP playback.");
@@ -108,7 +104,7 @@ SkIPoint SKPBench::onGetSize() {
     return SkIPoint::Make(fClip.width(), fClip.height());
 }
 
-void SKPBench::onDraw(int loops, SkCanvas* canvas) {
+void SKPBench::onDraw(const int loops, SkCanvas* canvas) {
     SkASSERT(fDoLooping || 1 == loops);
     if (fUseMultiPictureDraw) {
         for (int i = 0; i < loops; i++) {
@@ -119,12 +115,6 @@ void SKPBench::onDraw(int loops, SkCanvas* canvas) {
             this->drawPicture();
         }
     }
-#if SK_SUPPORT_GPU
-    // Ensure the GrContext doesn't batch across draw loops.
-    if (GrContext* context = canvas->getGrContext()) {
-        context->flush();
-    }
-#endif
 }
 
 void SKPBench::drawMPDPicture() {
@@ -148,7 +138,7 @@ void SKPBench::drawPicture() {
     for (int j = 0; j < fTileRects.count(); ++j) {
         const SkMatrix trans = SkMatrix::MakeTrans(-fTileRects[j].fLeft / fScale,
                                                    -fTileRects[j].fTop / fScale);
-        fSurfaces[j]->getCanvas()->drawPicture(fPic, &trans, nullptr);
+        fSurfaces[j]->getCanvas()->drawPicture(fPic, &trans, NULL);
     }
 
     for (int j = 0; j < fTileRects.count(); ++j) {

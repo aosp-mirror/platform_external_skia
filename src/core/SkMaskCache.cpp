@@ -53,10 +53,6 @@ struct RRectBlurRec : public SkResourceCache::Rec {
 
     const Key& getKey() const override { return fKey; }
     size_t bytesUsed() const override { return sizeof(*this) + fValue.fData->size(); }
-    const char* getCategory() const override { return "rrect-blur"; }
-    SkDiscardableMemory* diagnostic_only_getDiscardable() const override {
-        return fValue.fData->diagnostic_only_getDiscardable();
-    }
 
     static bool Visitor(const SkResourceCache::Rec& baseRec, void* contextData) {
         const RRectBlurRec& rec = static_cast<const RRectBlurRec&>(baseRec);
@@ -64,7 +60,7 @@ struct RRectBlurRec : public SkResourceCache::Rec {
 
         SkCachedData* tmpData = rec.fValue.fData;
         tmpData->ref();
-        if (nullptr == tmpData->data()) {
+        if (NULL == tmpData->data()) {
             tmpData->unref();
             return false;
         }
@@ -79,7 +75,7 @@ SkCachedData* SkMaskCache::FindAndRef(SkScalar sigma, SkBlurStyle style, SkBlurQ
     MaskValue result;
     RRectBlurKey key(sigma, rrect, style, quality);
     if (!CHECK_LOCAL(localCache, find, Find, key, RRectBlurRec::Visitor, &result)) {
-        return nullptr;
+        return NULL;
     }
 
     *mask = result.fMask;
@@ -91,7 +87,7 @@ void SkMaskCache::Add(SkScalar sigma, SkBlurStyle style, SkBlurQuality quality,
                       const SkRRect& rrect, const SkMask& mask, SkCachedData* data,
                       SkResourceCache* localCache) {
     RRectBlurKey key(sigma, rrect, style, quality);
-    return CHECK_LOCAL(localCache, add, Add, new RRectBlurRec(key, mask, data));
+    return CHECK_LOCAL(localCache, add, Add, SkNEW_ARGS(RRectBlurRec, (key, mask, data)));
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -148,10 +144,6 @@ struct RectsBlurRec : public SkResourceCache::Rec {
 
     const Key& getKey() const override { return fKey; }
     size_t bytesUsed() const override { return sizeof(*this) + fValue.fData->size(); }
-    const char* getCategory() const override { return "rects-blur"; }
-    SkDiscardableMemory* diagnostic_only_getDiscardable() const override {
-        return fValue.fData->diagnostic_only_getDiscardable();
-    }
 
     static bool Visitor(const SkResourceCache::Rec& baseRec, void* contextData) {
         const RectsBlurRec& rec = static_cast<const RectsBlurRec&>(baseRec);
@@ -159,7 +151,7 @@ struct RectsBlurRec : public SkResourceCache::Rec {
 
         SkCachedData* tmpData = rec.fValue.fData;
         tmpData->ref();
-        if (nullptr == tmpData->data()) {
+        if (NULL == tmpData->data()) {
             tmpData->unref();
             return false;
         }
@@ -175,7 +167,7 @@ SkCachedData* SkMaskCache::FindAndRef(SkScalar sigma, SkBlurStyle style, SkBlurQ
     MaskValue result;
     RectsBlurKey key(sigma, style, quality, rects, count);
     if (!CHECK_LOCAL(localCache, find, Find, key, RectsBlurRec::Visitor, &result)) {
-        return nullptr;
+        return NULL;
     }
 
     *mask = result.fMask;
@@ -187,5 +179,5 @@ void SkMaskCache::Add(SkScalar sigma, SkBlurStyle style, SkBlurQuality quality,
                       const SkRect rects[], int count, const SkMask& mask, SkCachedData* data,
                       SkResourceCache* localCache) {
     RectsBlurKey key(sigma, style, quality, rects, count);
-    return CHECK_LOCAL(localCache, add, Add, new RectsBlurRec(key, mask, data));
+    return CHECK_LOCAL(localCache, add, Add, SkNEW_ARGS(RectsBlurRec, (key, mask, data)));
 }

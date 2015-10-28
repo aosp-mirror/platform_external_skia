@@ -90,7 +90,7 @@ bool SkReadPixelsRec::trim(int srcWidth, int srcHeight) {
         default:
             break;
     }
-    if (nullptr == fPixels || fRowBytes < fInfo.minRowBytes()) {
+    if (NULL == fPixels || fRowBytes < fInfo.minRowBytes()) {
         return false;
     }
     if (0 == fInfo.width() || 0 == fInfo.height()) {

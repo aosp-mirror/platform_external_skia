@@ -18,26 +18,22 @@ DECLARE_string(match);
 
 class VisualBenchmarkStream {
 public:
-    VisualBenchmarkStream(const SkSurfaceProps&);
+    VisualBenchmarkStream();
 
     static bool ReadPicture(const char* path, SkAutoTUnref<SkPicture>* pic);
 
     Benchmark* next();
-    Benchmark* current() { return fBenchmark.get(); }
 
 private:
     Benchmark* innerNext();
 
-    SkSurfaceProps fSurfaceProps;
     const BenchRegistry* fBenches;
     const skiagm::GMRegistry* fGMs;
     SkTArray<SkString> fSKPs;
-    SkAutoTUnref<Benchmark> fBenchmark;
 
     const char* fSourceType;  // What we're benching: bench, GM, SKP, ...
     const char* fBenchType;   // How we bench it: micro, playback, ...
     int fCurrentSKP;
-    bool fIsWarmedUp;
 };
 
 #endif

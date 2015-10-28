@@ -24,11 +24,11 @@ protected:
 
     void makePicture() {
         SkPictureRecorder recorder;
-        SkCanvas* canvas = recorder.beginRecording(100, 100, nullptr, 0);
+        SkCanvas* canvas = recorder.beginRecording(100, 100, NULL, 0);
         canvas->clear(SK_ColorBLACK);
         SkPaint paint;
         paint.setAntiAlias(true);
-        sk_tool_utils::set_portable_typeface(&paint);
+        sk_tool_utils::set_portable_typeface_always(&paint);
         paint.setColor(0xFFFFFFFF);
         paint.setTextSize(SkIntToScalar(96));
         const char* str = "e";
@@ -57,16 +57,16 @@ protected:
             SkRect srcRect = SkRect::MakeXYWH(20, 20, 30, 30);
             SkRect emptyRect = SkRect::MakeXYWH(20, 20, 0, 0);
             SkRect bounds = SkRect::MakeXYWH(0, 0, 100, 100);
-            SkAutoTUnref<SkImageFilter> pictureSource(
+            SkAutoTUnref<SkPictureImageFilter> pictureSource(
                 SkPictureImageFilter::Create(fPicture));
-            SkAutoTUnref<SkImageFilter> pictureSourceSrcRect(
+            SkAutoTUnref<SkPictureImageFilter> pictureSourceSrcRect(
                 SkPictureImageFilter::Create(fPicture, srcRect));
-            SkAutoTUnref<SkImageFilter> pictureSourceEmptyRect(
+            SkAutoTUnref<SkPictureImageFilter> pictureSourceEmptyRect(
                 SkPictureImageFilter::Create(fPicture, emptyRect));
-            SkAutoTUnref<SkImageFilter> pictureSourceResampled(
+            SkAutoTUnref<SkPictureImageFilter> pictureSourceResampled(
                 SkPictureImageFilter::CreateForLocalSpace(fPicture, fPicture->cullRect(),
                     kLow_SkFilterQuality));
-            SkAutoTUnref<SkImageFilter> pictureSourcePixelated(
+            SkAutoTUnref<SkPictureImageFilter> pictureSourcePixelated(
                 SkPictureImageFilter::CreateForLocalSpace(fPicture, fPicture->cullRect(),
                     kNone_SkFilterQuality));
 
