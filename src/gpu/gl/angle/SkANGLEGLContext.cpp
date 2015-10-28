@@ -9,48 +9,61 @@
 #include "gl/angle/SkANGLEGLContext.h"
 
 #include <EGL/egl.h>
+#include <EGL/eglext.h>
 
 #define EGL_PLATFORM_ANGLE_ANGLE                0x3202
 #define EGL_PLATFORM_ANGLE_TYPE_ANGLE           0x3203
 #define EGL_PLATFORM_ANGLE_TYPE_D3D9_ANGLE      0x3207
 #define EGL_PLATFORM_ANGLE_TYPE_D3D11_ANGLE     0x3208
+#define EGL_PLATFORM_ANGLE_TYPE_OPENGL_ANGLE    0x320D
 
-void* SkANGLEGLContext::GetD3DEGLDisplay(void* nativeDisplay) {
-
-    typedef EGLDisplay (*EGLGetPlatformDisplayEXT)(EGLenum platform,
-                                                   void *native_display,
-                                                   const EGLint *attrib_list);
-    EGLGetPlatformDisplayEXT eglGetPlatformDisplayEXT;
+void* SkANGLEGLContext::GetD3DEGLDisplay(void* nativeDisplay, bool useGLBackend) {
+    PFNEGLGETPLATFORMDISPLAYEXTPROC eglGetPlatformDisplayEXT;
     eglGetPlatformDisplayEXT =
-        (EGLGetPlatformDisplayEXT) eglGetProcAddress("eglGetPlatformDisplayEXT");
+        (PFNEGLGETPLATFORMDISPLAYEXTPROC)eglGetProcAddress("eglGetPlatformDisplayEXT");
 
     if (!eglGetPlatformDisplayEXT) {
         return eglGetDisplay(static_cast<EGLNativeDisplayType>(nativeDisplay));
     }
 
-    // Try for an ANGLE D3D11 context, fall back to D3D9.
-    EGLint attribs[2][3] = {
-        {
-            EGL_PLATFORM_ANGLE_TYPE_ANGLE,
-            EGL_PLATFORM_ANGLE_TYPE_D3D11_ANGLE,
-            EGL_NONE
-        },
-        {
-            EGL_PLATFORM_ANGLE_TYPE_ANGLE,
-            EGL_PLATFORM_ANGLE_TYPE_D3D9_ANGLE,
-            EGL_NONE
-        }
-    };
-
     EGLDisplay display = EGL_NO_DISPLAY;
-    for (int i = 0; i < 2 && display == EGL_NO_DISPLAY; ++i) {
+    if (useGLBackend) {
+        // Try for an ANGLE D3D11 context, fall back to D3D9.
+        EGLint attribs[3] = {
+              EGL_PLATFORM_ANGLE_TYPE_ANGLE,
+              EGL_PLATFORM_ANGLE_TYPE_OPENGL_ANGLE,
+              EGL_NONE
+        };
         display = eglGetPlatformDisplayEXT(EGL_PLATFORM_ANGLE_ANGLE,
-                                            nativeDisplay, attribs[i]);
+                                            nativeDisplay, attribs);
+    } else {
+        // Try for an ANGLE D3D11 context, fall back to D3D9, and finally GL.
+        EGLint attribs[3][3] = {
+            {
+                EGL_PLATFORM_ANGLE_TYPE_ANGLE,
+                EGL_PLATFORM_ANGLE_TYPE_D3D11_ANGLE,
+                EGL_NONE
+            },
+            {
+                EGL_PLATFORM_ANGLE_TYPE_ANGLE,
+                EGL_PLATFORM_ANGLE_TYPE_D3D9_ANGLE,
+                EGL_NONE
+            },
+            {
+                EGL_PLATFORM_ANGLE_TYPE_ANGLE,
+                EGL_PLATFORM_ANGLE_TYPE_OPENGL_ANGLE,
+                EGL_NONE
+            }
+        };
+        for (int i = 0; i < 3 && display == EGL_NO_DISPLAY; ++i) {
+            display = eglGetPlatformDisplayEXT(EGL_PLATFORM_ANGLE_ANGLE,
+                                                nativeDisplay, attribs[i]);
+        }
     }
     return display;
 }
 
-SkANGLEGLContext::SkANGLEGLContext()
+SkANGLEGLContext::SkANGLEGLContext(bool useGLBackend)
     : fContext(EGL_NO_CONTEXT)
     , fDisplay(EGL_NO_DISPLAY)
     , fSurface(EGL_NO_SURFACE) {
@@ -66,7 +79,7 @@ SkANGLEGLContext::SkANGLEGLContext()
         EGL_NONE
     };
 
-    fDisplay = GetD3DEGLDisplay(EGL_DEFAULT_DISPLAY);
+    fDisplay = GetD3DEGLDisplay(EGL_DEFAULT_DISPLAY, useGLBackend);
     if (EGL_NO_DISPLAY == fDisplay) {
         SkDebugf("Could not create EGL display!");
         return;
@@ -83,7 +96,7 @@ SkANGLEGLContext::SkANGLEGLContext()
         EGL_CONTEXT_CLIENT_VERSION, 2,
         EGL_NONE
     };
-    fContext = eglCreateContext(fDisplay, surfaceConfig, NULL, contextAttribs);
+    fContext = eglCreateContext(fDisplay, surfaceConfig, nullptr, contextAttribs);
 
 
     static const EGLint surfaceAttribs[] = {
@@ -97,7 +110,7 @@ SkANGLEGLContext::SkANGLEGLContext()
     eglMakeCurrent(fDisplay, fSurface, fSurface, fContext);
 
     SkAutoTUnref<const GrGLInterface> gl(GrGLCreateANGLEInterface());
-    if (NULL == gl.get()) {
+    if (nullptr == gl.get()) {
         SkDebugf("Could not create ANGLE GL interface!\n");
         this->destroyGLContext();
         return;

@@ -14,7 +14,7 @@
 
 class SkCachedData;
 class SkDiscardableMemory;
-class SkMipMap;
+class SkTraceMemoryDump;
 
 /**
  *  Cache object for bitmaps (with possible scale in X Y as part of the key).
@@ -78,6 +78,10 @@ public:
         virtual const Key& getKey() const = 0;
         virtual size_t bytesUsed() const = 0;
 
+        // for memory usage diagnostics
+        virtual const char* getCategory() const = 0;
+        virtual SkDiscardableMemory* diagnostic_only_getDiscardable() const { return nullptr; }
+
         // for SkTDynamicHash::Traits
         static uint32_t Hash(const Key& key) { return key.hash(); }
         static const Key& GetKey(const Rec& rec) { return rec.getKey(); }
@@ -112,7 +116,7 @@ public:
 
     /**
      *  Returns a locked/pinned SkDiscardableMemory instance for the specified
-     *  number of bytes, or NULL on failure.
+     *  number of bytes, or nullptr on failure.
      */
     typedef SkDiscardableMemory* (*DiscardableFactory)(size_t bytes);
 
@@ -133,6 +137,10 @@ public:
     static bool Find(const Key& key, FindVisitor, void* context);
     static void Add(Rec*);
 
+    typedef void (*Visitor)(const Rec&, void* context);
+    // Call the visitor for every Rec in the cache.
+    static void VisitAll(Visitor, void* context);
+
     static size_t GetTotalBytesUsed();
     static size_t GetTotalByteLimit();
     static size_t SetTotalByteLimit(size_t newLimit);
@@ -143,14 +151,21 @@ public:
 
     static void PurgeAll();
 
+    static void TestDumpMemoryStatistics();
+
+    /** Dump memory usage statistics of every Rec in the cache using the
+        SkTraceMemoryDump interface.
+     */
+    static void DumpMemoryStatistics(SkTraceMemoryDump* dump);
+
     /**
-     *  Returns the DiscardableFactory used by the global cache, or NULL.
+     *  Returns the DiscardableFactory used by the global cache, or nullptr.
      */
     static DiscardableFactory GetDiscardableFactory();
 
     /**
      * Use this allocator for bitmaps, so they can use ashmem when available.
-     * Returns NULL if the ResourceCache has not been initialized with a DiscardableFactory.
+     * Returns nullptr if the ResourceCache has not been initialized with a DiscardableFactory.
      */
     static SkBitmap::Allocator* GetAllocator();
 
@@ -194,6 +209,7 @@ public:
      */
     bool find(const Key&, FindVisitor, void* context);
     void add(Rec*);
+    void visitAll(Visitor, void* context);
 
     size_t getTotalBytesUsed() const { return fTotalBytesUsed; }
     size_t getTotalByteLimit() const { return fTotalByteLimit; }
@@ -240,7 +256,7 @@ private:
     Hash*   fHash;
 
     DiscardableFactory  fDiscardableFactory;
-    // the allocator is NULL or one that matches discardables
+    // the allocator is nullptr or one that matches discardables
     SkBitmap::Allocator* fAllocator;
 
     size_t  fTotalBytesUsed;

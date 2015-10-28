@@ -16,6 +16,8 @@
 #include "SkScalar.h"
 #include "SkStream.h"
 
+#include <stdlib.h>
+
 // Flags used by this file, alphabetically:
 DEFINE_int32(blue, 128, "Value of blue color channel in image, 0-255.");
 DEFINE_int32(border, 4, "Width of the black border around the image.");
@@ -30,7 +32,7 @@ DEFINE_string(writePath, "", "Filepath to write the SKP into.");
 static void make_skp(SkScalar width, SkScalar height, SkScalar border, SkColor color,
                      const char *writePath) {
     SkPictureRecorder recorder;
-    SkCanvas* canvas = recorder.beginRecording(width, height, NULL, 0);
+    SkCanvas* canvas = recorder.beginRecording(width, height, nullptr, 0);
     SkPaint paint;
     paint.setStyle(SkPaint::kFill_Style);
     paint.setColor(SK_ColorBLACK);

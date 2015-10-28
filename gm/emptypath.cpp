@@ -8,6 +8,7 @@
 #include "gm.h"
 #include "SkCanvas.h"
 #include "SkPaint.h"
+#include "SkPath.h"
 #include "SkRandom.h"
 
 namespace skiagm {
@@ -63,7 +64,7 @@ protected:
         SkPaint titlePaint;
         titlePaint.setColor(SK_ColorBLACK);
         titlePaint.setAntiAlias(true);
-        sk_tool_utils::set_portable_typeface_always(&titlePaint);
+        sk_tool_utils::set_portable_typeface(&titlePaint);
         titlePaint.setTextSize(15 * SK_Scalar1);
         const char title[] = "Empty Paths Drawn Into Rectangle Clips With "
                              "Indicated Style and Fill";
@@ -106,7 +107,7 @@ protected:
                 SkPaint labelPaint;
                 labelPaint.setColor(color);
                 labelPaint.setAntiAlias(true);
-                sk_tool_utils::set_portable_typeface_always(&labelPaint);
+                sk_tool_utils::set_portable_typeface(&labelPaint);
                 labelPaint.setTextSize(12 * SK_Scalar1);
                 canvas->drawText(gStyles[style].fName,
                                  strlen(gStyles[style].fName),
@@ -125,10 +126,85 @@ protected:
 private:
     typedef GM INHERITED;
 };
+DEF_GM( return new EmptyPathGM; )
 
 //////////////////////////////////////////////////////////////////////////////
 
-static GM* MyFactory(void*) { return new EmptyPathGM; }
-static GMRegistry reg(MyFactory);
+static void make_path_move(SkPath* path, const SkPoint pts[3]) {
+    for (int i = 0; i < 3; ++i) {
+        path->moveTo(pts[i]);
+    }
+}
+
+static void make_path_move_close(SkPath* path, const SkPoint pts[3]) {
+    for (int i = 0; i < 3; ++i) {
+        path->moveTo(pts[i]);
+        path->close();
+    }
+}
+
+static void make_path_move_line(SkPath* path, const SkPoint pts[3]) {
+    for (int i = 0; i < 3; ++i) {
+        path->moveTo(pts[i]);
+        path->lineTo(pts[i]);
+    }
+}
+
+typedef void (*MakePathProc)(SkPath*, const SkPoint pts[3]);
+
+static void make_path_move_mix(SkPath* path, const SkPoint pts[3]) {
+    path->moveTo(pts[0]);
+    path->moveTo(pts[1]); path->close();
+    path->moveTo(pts[2]); path->lineTo(pts[2]);
+}
+
+class EmptyStrokeGM : public GM {
+    SkPoint fPts[3];
+
+public:
+    EmptyStrokeGM() {
+        fPts[0].set(40, 40);
+        fPts[1].set(80, 40);
+        fPts[2].set(120, 40);
+    }
+
+protected:
+    SkString onShortName() override {
+        return SkString("emptystroke");
+    }
+
+    SkISize onISize() override { return SkISize::Make(200, 240); }
+
+    void onDraw(SkCanvas* canvas) override {
+        const MakePathProc procs[] = {
+            make_path_move,             // expect red red red
+            make_path_move_close,       // expect black black black
+            make_path_move_line,        // expect black black black
+            make_path_move_mix,         // expect red black black,
+        };
+
+        SkPaint strokePaint;
+        strokePaint.setStyle(SkPaint::kStroke_Style);
+        strokePaint.setStrokeWidth(21);
+        strokePaint.setStrokeCap(SkPaint::kSquare_Cap);
+
+        SkPaint dotPaint;
+        dotPaint.setColor(SK_ColorRED);
+        strokePaint.setStyle(SkPaint::kStroke_Style);
+        dotPaint.setStrokeWidth(7);
+
+        for (size_t i = 0; i < SK_ARRAY_COUNT(procs); ++i) {
+            SkPath path;
+            procs[i](&path, fPts);
+            canvas->drawPoints(SkCanvas::kPoints_PointMode, 3, fPts, dotPaint);
+            canvas->drawPath(path, strokePaint);
+            canvas->translate(0, 40);
+        }
+    }
+    
+private:
+    typedef GM INHERITED;
+};
+DEF_GM( return new EmptyStrokeGM; )
 
 }

@@ -23,38 +23,20 @@ public:
         return fProxyShader->contextSize();
     }
 
-    virtual BitmapType asABitmap(SkBitmap* bitmap, SkMatrix* matrix,
-                                 TileMode* mode) const override {
-        return fProxyShader->asABitmap(bitmap, matrix, mode);
-    }
-
     GradientType asAGradient(GradientInfo* info) const override {
         return fProxyShader->asAGradient(info);
     }
 
 #if SK_SUPPORT_GPU
-
-    virtual bool asFragmentProcessor(GrContext* context, const SkPaint& paint,
-                                     const SkMatrix& viewM, const SkMatrix* localMatrix,
-                                     GrColor* grColor, GrProcessorDataManager* procDataManager,
-                                     GrFragmentProcessor** fp) const override {
+    const GrFragmentProcessor* asFragmentProcessor(GrContext* context, const SkMatrix& viewM,
+                                                   const SkMatrix* localMatrix,
+                                                   SkFilterQuality fq) const override {
         SkMatrix tmp = this->getLocalMatrix();
         if (localMatrix) {
             tmp.preConcat(*localMatrix);
         }
-        return fProxyShader->asFragmentProcessor(context, paint, viewM, &tmp, grColor,
-                                                 procDataManager, fp);
+        return fProxyShader->asFragmentProcessor(context, viewM, &tmp, fq);
     }
-
-#else
-
-    virtual bool asFragmentProcessor(GrContext*, const SkPaint&, const SkMatrix&,
-                                     const SkMatrix*, GrColor*, GrProcessorDataManager*,
-                                     GrFragmentProcessor**) const override {
-        SkDEBUGFAIL("Should not call in GPU-less build");
-        return false;
-    }
-
 #endif
 
     SkShader* refAsALocalMatrixShader(SkMatrix* localMatrix) const override {
@@ -70,6 +52,10 @@ public:
 protected:
     void flatten(SkWriteBuffer&) const override;
     Context* onCreateContext(const ContextRec&, void*) const override;
+
+    bool onIsABitmap(SkBitmap* bitmap, SkMatrix* matrix, TileMode* mode) const override {
+        return fProxyShader->isABitmap(bitmap, matrix, mode);
+    }
 
 private:
     SkAutoTUnref<SkShader> fProxyShader;

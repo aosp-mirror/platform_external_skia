@@ -91,7 +91,7 @@ static void testQuadLineIntersectMain(PathOpsThreadState* data)
         SkDPoint xy = quad.ptAtT(tIndex / 4.0);
         for (int h = -2; h <= 2; ++h) {
             for (int v = -2; v <= 2; ++v) {
-                if (h == v && abs(h) != 1) {
+                if (h == v && SkTAbs(h) != 1) {
                     continue;
                 }
                 double x = xy.fX;
@@ -116,8 +116,8 @@ DEF_TEST(PathOpsQuadLineIntersectionThreaded, reporter) {
     for (int a = 0; a < 16; ++a) {
         for (int b = 0 ; b < 16; ++b) {
             for (int c = 0 ; c < 16; ++c) {
-                    *testRunner.fRunnables.append() = SkNEW_ARGS(PathOpsThreadedRunnable,
-                            (&testQuadLineIntersectMain, a, b, c, 0, &testRunner));
+                *testRunner.fRunnables.append() = new PathOpsThreadedRunnable(
+                        &testQuadLineIntersectMain, a, b, c, 0, &testRunner);
             }
             if (!reporter->allowExtendedTest()) goto finish;
         }

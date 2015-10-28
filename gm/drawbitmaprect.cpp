@@ -10,8 +10,13 @@
 #include "SkBlurMaskFilter.h"
 #include "SkColorPriv.h"
 #include "SkGradientShader.h"
-#include "SkShader.h"
 #include "SkImage.h"
+#include "SkShader.h"
+#include "SkSurface.h"
+
+#if SK_SUPPORT_GPU
+#include "SkGr.h"
+#endif
 
 static SkBitmap make_chessbm(int w, int h) {
     SkBitmap bm;
@@ -27,17 +32,18 @@ static SkBitmap make_chessbm(int w, int h) {
     return bm;
 }
 
-static SkImage* image_from_bitmap(const SkBitmap& bm) {
-    SkBitmap b(bm);
-    b.lockPixels();
-    return SkImage::NewRasterCopy(b.info(), b.getPixels(), b.rowBytes());
-}
+static SkImage* makebm(SkCanvas* origCanvas, SkBitmap* resultBM, int w, int h) {
+    SkImageInfo info = SkImageInfo::MakeN32Premul(w, h);
+    
+    SkAutoTUnref<SkSurface> surface(origCanvas->newSurface(info));
+    if (nullptr == surface) {
+        // picture canvas will return null, so fall-back to raster
+        surface.reset(SkSurface::NewRaster(info));
+    }
 
-static SkImage* makebm(SkBitmap* bm, int w, int h) {
-    bm->allocN32Pixels(w, h);
-    bm->eraseColor(SK_ColorTRANSPARENT);
+    SkCanvas* canvas = surface->getCanvas();
 
-    SkCanvas    canvas(*bm);
+    canvas->clear(SK_ColorTRANSPARENT);
 
     SkScalar wScalar = SkIntToScalar(w);
     SkScalar hScalar = SkIntToScalar(h);
@@ -69,51 +75,40 @@ static SkImage* makebm(SkBitmap* bm, int w, int h) {
                         SK_ARRAY_COUNT(colors),
                         SkShader::kRepeat_TileMode,
                         0, &mat))->unref();
-        canvas.drawRect(rect, paint);
+        canvas->drawRect(rect, paint);
         rect.inset(wScalar / 8, hScalar / 8);
         mat.postScale(SK_Scalar1 / 4, SK_Scalar1 / 4);
     }
-    // Let backends know we won't change this, so they don't have to deep copy it defensively.
-    bm->setImmutable();
 
-    return image_from_bitmap(*bm);
+    SkImage* image = surface->newImageSnapshot();
+
+    SkBitmap tempBM;
+
+#if SK_SUPPORT_GPU
+    if (image->getTexture()) {
+        GrWrapTextureInBitmap(image->getTexture(),
+                              image->width(), image->height(), image->isOpaque(), &tempBM);
+    } else 
+#endif
+    {
+        image->asLegacyBitmap(&tempBM, SkImage::kRO_LegacyBitmapMode);
+    }
+
+    // Let backends know we won't change this, so they don't have to deep copy it defensively.
+    tempBM.setImmutable();
+    *resultBM = tempBM;
+
+    return image;
 }
 
 static void canvasproc(SkCanvas* canvas, SkImage*, const SkBitmap& bm, const SkIRect& srcR,
                        const SkRect& dstR) {
-    canvas->drawBitmapRect(bm, srcR, dstR, NULL);
+    canvas->drawBitmapRect(bm, srcR, dstR, nullptr);
 }
 
 static void imageproc(SkCanvas* canvas, SkImage* image, const SkBitmap&, const SkIRect& srcR,
                       const SkRect& dstR) {
-    canvas->drawImageRect(image, srcR, dstR, NULL);
-}
-
-static void imagescaleproc(SkCanvas* canvas, SkImage* image, const SkBitmap&, const SkIRect& srcIR,
-                           const SkRect& dstR) {
-    const int newW = SkScalarRoundToInt(dstR.width());
-    const int newH = SkScalarRoundToInt(dstR.height());
-    SkAutoTUnref<SkImage> newImage(image->newImage(newW, newH, &srcIR));
-
-#ifdef SK_DEBUG
-    const SkIRect baseR = SkIRect::MakeWH(image->width(), image->height());
-    const bool containsSubset = baseR.contains(srcIR);
-#endif
-
-    if (newImage) {
-        SkASSERT(containsSubset);
-        canvas->drawImage(newImage, dstR.x(), dstR.y());
-    } else {
-        // newImage() does not support subsets that are not contained by the original
-        // but drawImageRect does, so we just draw an X in its place to indicate that we are
-        // deliberately not drawing here.
-        SkASSERT(!containsSubset);
-        SkPaint paint;
-        paint.setStyle(SkPaint::kStroke_Style);
-        paint.setStrokeWidth(4);
-        canvas->drawLine(4, 4, newW - 4.0f, newH - 4.0f, paint);
-        canvas->drawLine(4, newH - 4.0f, newW - 4.0f, 4, paint);
-    }
+    canvas->drawImageRect(image, srcR, dstR, nullptr);
 }
 
 typedef void DrawRectRectProc(SkCanvas*, SkImage*, const SkBitmap&, const SkIRect&, const SkRect&);
@@ -140,11 +135,15 @@ protected:
 
     SkISize onISize() override { return SkISize::Make(gSize, gSize); }
 
-    void onOnceBeforeDraw() override {
-        fImage.reset(makebm(&fLargeBitmap, gBmpSize, gBmpSize));
+    void setupImage(SkCanvas* canvas) {
+        fImage.reset(makebm(canvas, &fLargeBitmap, gBmpSize, gBmpSize));
     }
 
     void onDraw(SkCanvas* canvas) override {
+        if (!fImage) {
+            this->setupImage(canvas);
+        }
+
         SkRect dstRect = { 0, 0, SkIntToScalar(64), SkIntToScalar(64)};
         static const int kMaxSrcRectSize = 1 << (SkNextLog2(gBmpSize) + 2);
 
@@ -152,10 +151,7 @@ protected:
         static const int kPadY = 40;
         SkPaint paint;
         paint.setAlpha(0x20);
-        canvas->drawBitmapRect(fLargeBitmap, NULL,
-                               SkRect::MakeWH(gSize * SK_Scalar1,
-                                              gSize * SK_Scalar1),
-                               &paint);
+        canvas->drawBitmapRect(fLargeBitmap, SkRect::MakeIWH(gSize, gSize), &paint);
         canvas->translate(SK_Scalar1 * kPadX / 2,
                           SK_Scalar1 * kPadY / 2);
         SkPaint blackPaint;
@@ -163,7 +159,7 @@ protected:
         blackPaint.setColor(SK_ColorBLACK);
         blackPaint.setTextSize(titleHeight);
         blackPaint.setAntiAlias(true);
-        sk_tool_utils::set_portable_typeface_always(&blackPaint);
+        sk_tool_utils::set_portable_typeface(&blackPaint);
         SkString title;
         title.printf("Bitmap size: %d x %d", gBmpSize, gBmpSize);
         canvas->drawText(title.c_str(), title.size(), 0,
@@ -229,6 +225,5 @@ private:
     typedef skiagm::GM INHERITED;
 };
 
-DEF_GM( return new DrawBitmapRectGM(canvasproc, NULL); )
+DEF_GM( return new DrawBitmapRectGM(canvasproc, nullptr); )
 DEF_GM( return new DrawBitmapRectGM(imageproc, "-imagerect"); )
-DEF_GM( return new DrawBitmapRectGM(imagescaleproc, "-imagescale"); )

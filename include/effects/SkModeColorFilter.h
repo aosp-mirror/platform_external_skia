@@ -15,11 +15,9 @@
 
 class SkModeColorFilter : public SkColorFilter {
 public:
-    SkModeColorFilter(SkColor color, SkXfermode::Mode mode) {
-        fColor = color;
-        fMode = mode;
-        this->updateCache();
-    };
+    static SkColorFilter* Create(SkColor color, SkXfermode::Mode mode) {
+        return new SkModeColorFilter(color, mode);
+    }
 
     SkColor getColor() const { return fColor; }
     SkXfermode::Mode getMode() const { return fMode; }
@@ -39,12 +37,17 @@ public:
 #endif
 
 #if SK_SUPPORT_GPU
-    bool asFragmentProcessors(GrContext*, GrProcessorDataManager*,
-                              SkTDArray<GrFragmentProcessor*>*) const override;
+    const GrFragmentProcessor* asFragmentProcessor(GrContext*) const override;
 #endif
     SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkModeColorFilter)
 
 protected:
+    SkModeColorFilter(SkColor color, SkXfermode::Mode mode) {
+        fColor = color;
+        fMode = mode;
+        this->updateCache();
+    };
+
     void flatten(SkWriteBuffer&) const override;
 
 private:

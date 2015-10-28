@@ -57,21 +57,21 @@ SkSurfaceProps::SkSurfaceProps(const SkSurfaceProps& other)
 SkSurface_Base::SkSurface_Base(int width, int height, const SkSurfaceProps* props)
     : INHERITED(width, height, props)
 {
-    fCachedCanvas = NULL;
-    fCachedImage = NULL;
+    fCachedCanvas = nullptr;
+    fCachedImage = nullptr;
 }
 
 SkSurface_Base::SkSurface_Base(const SkImageInfo& info, const SkSurfaceProps* props)
     : INHERITED(info, props)
 {
-    fCachedCanvas = NULL;
-    fCachedImage = NULL;
+    fCachedCanvas = nullptr;
+    fCachedImage = nullptr;
 }
 
 SkSurface_Base::~SkSurface_Base() {
     // in case the canvas outsurvives us, we null the callback
     if (fCachedCanvas) {
-        fCachedCanvas->setSurfaceBase(NULL);
+        fCachedCanvas->setSurfaceBase(nullptr);
     }
 
     SkSafeUnref(fCachedImage);
@@ -99,14 +99,22 @@ void SkSurface_Base::aboutToDraw(ContentChangeMode mode) {
         // the surface may need to fork its backend, if its sharing it with
         // the cached image. Note: we only call if there is an outstanding owner
         // on the image (besides us).
-        if (!fCachedImage->unique()) {
+        bool unique = fCachedImage->unique();
+        if (!unique) {
             this->onCopyOnWrite(mode);
         }
 
         // regardless of copy-on-write, we must drop our cached image now, so
         // that the next request will get our new contents.
         fCachedImage->unref();
-        fCachedImage = NULL;
+        fCachedImage = nullptr;
+
+        if (unique) {
+            // Our content isn't held by any image now, so we can consider that content mutable.
+            // Raster surfaces need to be told it's safe to consider its pixels mutable again.
+            // We make this call after the ->unref() so the subclass can assert there are no images.
+            this->onRestoreBackingMutability();
+        }
     } else if (kDiscard_ContentChangeMode == mode) {
         this->onDiscard();
     }
@@ -192,22 +200,22 @@ bool SkSurface::getRenderTargetHandle(GrBackendObject* obj, BackendHandleAccess 
 #if !SK_SUPPORT_GPU
 
 SkSurface* SkSurface::NewRenderTargetDirect(GrRenderTarget*, const SkSurfaceProps*) {
-    return NULL;
+    return nullptr;
 }
 
 SkSurface* SkSurface::NewRenderTarget(GrContext*, Budgeted, const SkImageInfo&, int,
                                       const SkSurfaceProps*) {
-    return NULL;
+    return nullptr;
 }
 
 SkSurface* SkSurface::NewFromBackendTexture(GrContext*, const GrBackendTextureDesc&,
                                              const SkSurfaceProps*) {
-    return NULL;
+    return nullptr;
 }
 
 SkSurface* SkSurface::NewFromBackendRenderTarget(GrContext*, const GrBackendRenderTargetDesc&,
                                                  const SkSurfaceProps*) {
-    return NULL;
+    return nullptr;
 }
 
 #endif

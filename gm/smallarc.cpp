@@ -6,28 +6,12 @@
  */
 
 #include "gm.h"
-
-namespace skiagm {
+#include "SkPath.h"
 
 // this draws a small arc scaled up
 // see https://code.google.com/p/chromium/issues/detail?id=102411
 // and https://code.google.com/p/skia/issues/detail?id=2769
-class SmallArcGM : public GM {
-public:
-    SmallArcGM() {
-    }
-
-protected:
-
-    SkString onShortName() override {
-        return SkString("smallarc");
-    }
-
-    SkISize onISize() override {
-        return SkISize::Make(762, 762);
-    }
-
-    void onDraw(SkCanvas* canvas) override {
+DEF_SIMPLE_GM(smallarc, canvas, 762, 762) {
         SkPaint p;
         p.setColor(SK_ColorRED);
         p.setAntiAlias(true);
@@ -41,14 +25,4 @@ protected:
         canvas->translate(-400, -400);
         canvas->scale(8, 8);
         canvas->drawPath(path, p);
-    }
-
-private:
-    typedef GM INHERITED;
-};
-
-//////////////////////////////////////////////////////////////////////////////
-
-DEF_GM( return SkNEW(SmallArcGM); )
-
 }

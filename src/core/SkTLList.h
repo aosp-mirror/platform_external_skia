@@ -9,7 +9,7 @@
 #define SkTLList_DEFINED
 
 #include "SkTInternalLList.h"
-#include "SkTemplates.h"
+#include "SkTypes.h"
 
 template <typename T> class SkTLList;
 template <typename T>
@@ -70,7 +70,7 @@ public:
         this->validate();
         Node* node = this->createNode();
         fList.addToHead(node);
-        SkNEW_PLACEMENT_ARGS(node->fObj, T, (t));
+        new (node->fObj) T(t);
         this->validate();
         return reinterpret_cast<T*>(node->fObj);
     }
@@ -79,7 +79,7 @@ public:
         this->validate();
         Node* node = this->createNode();
         fList.addToHead(node);
-        SkNEW_PLACEMENT(node->fObj, T);
+        new (node->fObj) T;
         this->validate();
         return reinterpret_cast<T*>(node->fObj);
     }
@@ -88,7 +88,7 @@ public:
         this->validate();
         Node* node = this->createNode();
         fList.addToTail(node);
-        SkNEW_PLACEMENT_ARGS(node->fObj, T, (t));
+        new (node->fObj) T(t);
         this->validate();
         return reinterpret_cast<T*>(node->fObj);
     }
@@ -97,21 +97,21 @@ public:
         this->validate();
         Node* node = this->createNode();
         fList.addToTail(node);
-        SkNEW_PLACEMENT(node->fObj, T);
+        new (node->fObj) T;
         this->validate();
         return reinterpret_cast<T*>(node->fObj);
     }
 
     /** Adds a new element to the list before the location indicated by the iterator. If the
-        iterator refers to a NULL location then the new element is added at the tail */
+        iterator refers to a nullptr location then the new element is added at the tail */
     T* addBefore(const T& t, const Iter& location) {
-        return SkNEW_PLACEMENT_ARGS(this->internalAddBefore(location), T, (t));
+        return new (this->internalAddBefore(location)) T(t);
     }
 
     /** Adds a new element to the list after the location indicated by the iterator. If the
-        iterator refers to a NULL location then the new element is added at the head */
+        iterator refers to a nullptr location then the new element is added at the head */
     T* addAfter(const T& t, const Iter& location) {
-        return SkNEW_PLACEMENT_ARGS(this->internalAddAfter(location), T, (t));
+        return new (this->internalAddAfter(location)) T(t);
     }
 
     /** Convenience methods for getting an iterator initialized to the head/tail of the list. */
@@ -222,7 +222,7 @@ public:
             if (node) {
                 return reinterpret_cast<T*>(node->fObj);
             } else {
-                return NULL;
+                return nullptr;
             }
         }
     };
@@ -247,13 +247,13 @@ private:
             fFreeList.remove(node);
             ++node->fBlock->fNodesInUse;
         } else {
-            Block* block = reinterpret_cast<Block*>(sk_malloc_flags(this->blockSize(), 0));
+            Block* block = reinterpret_cast<Block*>(sk_malloc_throw(this->blockSize()));
             node = &block->fNodes[0];
-            SkNEW_PLACEMENT(node, Node);
+            new (node) Node;
             node->fBlock = block;
             block->fNodesInUse = 1;
             for (int i = 1; i < fAllocCnt; ++i) {
-                SkNEW_PLACEMENT(block->fNodes + i, Node);
+                new (block->fNodes + i) Node;
                 fFreeList.addToHead(block->fNodes + i);
                 block->fNodes[i].fBlock = block;
             }

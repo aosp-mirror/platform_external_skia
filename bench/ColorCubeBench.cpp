@@ -18,7 +18,7 @@ class ColorCubeBench : public Benchmark {
 public:
     ColorCubeBench()
      : fCubeDimension(0)
-     , fCubeData(NULL) {
+     , fCubeData(nullptr) {
         fSize = SkISize::Make(2880, 1800); // 2014 Macbook Pro resolution
     }
 
@@ -31,14 +31,14 @@ protected:
         return "colorcube";
     }
 
-    void onPreDraw() override {
+    void onDelayedSetup() override {
         if (!SkToBool(fCubeData)) {
             this->makeCubeData();
             this->make_bitmap();
         }
     }
 
-    void onDraw(const int loops, SkCanvas* canvas) override {
+    void onDraw(int loops, SkCanvas* canvas) override {
         this->test(loops, canvas);
     }
 
@@ -54,7 +54,7 @@ private:
             };
         static const SkColor colors[] = { SK_ColorYELLOW, SK_ColorBLUE };
         return SkGradientShader::CreateLinear(
-            pts, colors, NULL, 2, SkShader::kRepeat_TileMode, 0, &SkMatrix::I());
+            pts, colors, nullptr, 2, SkShader::kRepeat_TileMode, 0, &SkMatrix::I());
     }
 
     void make_bitmap() {
@@ -93,7 +93,7 @@ private:
         }
     }
 
-    void test(const int loops, SkCanvas* canvas) {
+    void test(int loops, SkCanvas* canvas) {
         SkPaint paint;
         for (int i = 0; i < loops; i++) {
             SkAutoTUnref<SkColorFilter> colorCube(

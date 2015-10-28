@@ -58,11 +58,13 @@ public:
         typedef SkGradientShaderBase::GradientShaderBaseContext INHERITED;
     };
 
-    BitmapType asABitmap(SkBitmap* bitmap, SkMatrix* matrix, TileMode* xy) const override;
     SkShader::GradientType asAGradient(GradientInfo* info) const  override;
-    bool asFragmentProcessor(GrContext*, const SkPaint&, const SkMatrix&, const SkMatrix*,
-                             GrColor*, GrProcessorDataManager*,
-                             GrFragmentProcessor**) const override;
+#if SK_SUPPORT_GPU
+    const GrFragmentProcessor* asFragmentProcessor(GrContext*,
+                                                   const SkMatrix&,
+                                                   const SkMatrix*,
+                                                   SkFilterQuality) const override;
+#endif
     bool isOpaque() const override;
 
     SkScalar getCenterX1() const { return SkPoint::Distance(fCenter1, fCenter2); }

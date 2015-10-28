@@ -16,13 +16,13 @@
 #include "SkTDArray.h"
 #include "SkTouchGesture.h"
 #include "SkWindow.h"
+#include "timer/Timer.h"
 
 class GrContext;
 class GrRenderTarget;
 
 class SkCanvas;
 class SkData;
-class SkDeferredCanvas;
 class SkDocument;
 class SkEvent;
 class SkTypeface;
@@ -39,8 +39,10 @@ public:
 #if SK_ANGLE
         kANGLE_DeviceType,
 #endif // SK_ANGLE
+#if SK_COMMAND_BUFFER
+        kCommandBuffer_DeviceType,
+#endif // SK_COMMAND_BUFFER
 #endif // SK_SUPPORT_GPU
-        kDeferred_DeviceType,
         kDeviceTypeCnt
     };
 
@@ -51,6 +53,9 @@ public:
     #if SK_ANGLE
             case kANGLE_DeviceType:
     #endif // SK_ANGLE
+    #if SK_COMMAND_BUFFER
+            case kCommandBuffer_DeviceType:
+    #endif // SK_COMMAND_BUFFER
                 return true;
             default:
                 return false;
@@ -88,10 +93,10 @@ public:
         // at least once before first draw (after init)
         virtual void windowSizeChanged(SampleWindow* win) = 0;
 
-        // return the GrContext backing gpu devices (NULL if not built with GPU support)
+        // return the GrContext backing gpu devices (nullptr if not built with GPU support)
         virtual GrContext* getGrContext() = 0;
 
-        // return the GrRenderTarget backing gpu devices (NULL if not built with GPU support)
+        // return the GrRenderTarget backing gpu devices (nullptr if not built with GPU support)
         virtual GrRenderTarget* getGrRenderTarget() = 0;
     private:
         typedef SkRefCnt INHERITED;
@@ -101,11 +106,11 @@ public:
     virtual ~SampleWindow();
 
     SkSurface* createSurface() override {
-        SkSurface* surface = NULL;
+        SkSurface* surface = nullptr;
         if (fDevManager) {
             surface = fDevManager->createSurface(fDeviceType, this);
         }
-        if (NULL == surface) {
+        if (nullptr == surface) {
             surface = this->INHERITED::createSurface();
         }
         return surface;
@@ -161,8 +166,6 @@ private:
     int fCurrIndex;
 
     SkPictureRecorder fRecorder;
-    SkAutoTDelete<SkSurface> fDeferredSurface;
-    SkAutoTDelete<SkDeferredCanvas> fDeferredCanvas;
     SkAutoTDelete<SkCanvas> fFlagsFilterCanvas;
     SkPath fClipPath;
 
@@ -174,6 +177,7 @@ private:
     DeviceManager* fDevManager;
 
     bool fSaveToPdf;
+    bool fSaveToSKP;
     SkAutoTUnref<SkDocument> fPDFDocument;
 
     bool fUseClip;
@@ -182,8 +186,8 @@ private:
     bool fPerspAnim;
     bool fRequestGrabImage;
     bool fMeasureFPS;
-    SkMSec fMeasureFPS_Time;
-    SkMSec fMeasureFPS_StartTime;
+    WallTimer fTimer;
+    double fMeasureFPS_Time;
     bool fMagnify;
     int fTilingMode;
 
@@ -217,9 +221,6 @@ private:
     SkOSMenu* fAppMenu; // We pass ownership to SkWindow, when we call addMenu
     //Stores slide specific settings
     SkOSMenu* fSlideMenu; // We pass ownership to SkWindow, when we call addMenu
-
-    int fTransitionNext;
-    int fTransitionPrev;
 
     void loadView(SkView*);
     void updateTitle();

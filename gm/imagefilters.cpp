@@ -16,22 +16,14 @@
  *
  *  see skbug.com/3741
  */
-class ImageFilterXfermodeTestGM : public skiagm::GM {
-protected:
-    SkString onShortName() override {
-        return SkString("imagefilters_xfermodes");
-    }
-
-    SkISize onISize() override { return SkISize::Make(480, 480); }
-
-    void doDraw(SkCanvas* canvas, SkXfermode::Mode mode, SkImageFilter* imf) {
+static void do_draw(SkCanvas* canvas, SkXfermode::Mode mode, SkImageFilter* imf) {
         SkAutoCanvasRestore acr(canvas, true);
         canvas->clipRect(SkRect::MakeWH(220, 220));
         
         // want to force a layer, so modes like DstIn can combine meaningfully, but the final
         // image can still be shown against our default (opaque) background. non-opaque GMs
         // are a lot more trouble to compare/triage.
-        canvas->saveLayer(NULL, NULL);
+        canvas->saveLayer(nullptr, nullptr);
         canvas->drawColor(SK_ColorGREEN);
 
         SkPaint paint;
@@ -47,9 +39,9 @@ protected:
         paint.setImageFilter(imf);
         paint.setXfermodeMode(mode);
         canvas->drawOval(r1, paint);
-    }
+}
 
-    void onDraw(SkCanvas* canvas) override {
+DEF_SIMPLE_GM(imagefilters_xfermodes, canvas, 480, 480) {
         canvas->translate(10, 10);
 
         // just need an imagefilter to trigger the code-path (which creates a tmp layer)
@@ -62,17 +54,11 @@ protected:
         
         for (size_t i = 0; i < SK_ARRAY_COUNT(modes); ++i) {
             canvas->save();
-            this->doDraw(canvas, modes[i], NULL);
+            do_draw(canvas, modes[i], nullptr);
             canvas->translate(240, 0);
-            this->doDraw(canvas, modes[i], imf);
+            do_draw(canvas, modes[i], imf);
             canvas->restore();
             
             canvas->translate(0, 240);
         }
-    }
-
-private:
-    typedef GM INHERITED;
-};
-DEF_GM( return new ImageFilterXfermodeTestGM; )
-
+}

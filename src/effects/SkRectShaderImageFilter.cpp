@@ -13,23 +13,23 @@
 #include "SkWriteBuffer.h"
 #include "SkShader.h"
 
-SkRectShaderImageFilter* SkRectShaderImageFilter::Create(SkShader* s, const SkRect& rect) {
+SkImageFilter* SkRectShaderImageFilter::Create(SkShader* s, const SkRect& rect) {
     SkASSERT(s);
     uint32_t flags = CropRect::kHasAll_CropEdge;
     if (rect.width() == 0 || rect.height() == 0) {
         flags = 0x0;
     }
     CropRect cropRect(rect, flags);
-    return s ? SkNEW_ARGS(SkRectShaderImageFilter, (s, &cropRect)) : NULL;
+    return s ? new SkRectShaderImageFilter(s, &cropRect) : nullptr;
 }
 
-SkRectShaderImageFilter* SkRectShaderImageFilter::Create(SkShader* s, const CropRect* cropRect) {
+SkImageFilter* SkRectShaderImageFilter::Create(SkShader* s, const CropRect* cropRect) {
     SkASSERT(s);
-    return s ? SkNEW_ARGS(SkRectShaderImageFilter, (s, cropRect)) : NULL;
+    return s ? new SkRectShaderImageFilter(s, cropRect) : nullptr;
 }
 
 SkRectShaderImageFilter::SkRectShaderImageFilter(SkShader* s, const CropRect* cropRect)
-  : INHERITED(0, NULL, cropRect)
+  : INHERITED(0, nullptr, cropRect)
   , fShader(SkRef(s)) {
 }
 
@@ -60,7 +60,7 @@ bool SkRectShaderImageFilter::onFilterImage(Proxy* proxy,
 
     SkAutoTUnref<SkBaseDevice> device(proxy->createDevice(bounds.width(),
                                                           bounds.height()));
-    if (NULL == device.get()) {
+    if (nullptr == device.get()) {
         return false;
     }
     SkCanvas canvas(device.get());
@@ -76,6 +76,10 @@ bool SkRectShaderImageFilter::onFilterImage(Proxy* proxy,
     *result = device.get()->accessBitmap(false);
     offset->fX = bounds.fLeft;
     offset->fY = bounds.fTop;
+    return true;
+}
+
+bool SkRectShaderImageFilter::affectsTransparentBlack() const {
     return true;
 }
 

@@ -6,8 +6,9 @@
  */
 
 #include "SkCanvas.h"
-#include "SkLazyPtr.h"
+#include "SkTLazy.h"
 #include "SkMiniRecorder.h"
+#include "SkOncePtr.h"
 #include "SkPicture.h"
 #include "SkPictureCommon.h"
 #include "SkRecordDraw.h"
@@ -26,7 +27,7 @@ public:
     int    numSlowPaths()         const override { return 0; }
     bool   willPlayBackBitmaps()  const override { return false; }
 };
-SK_DECLARE_STATIC_LAZY_PTR(SkEmptyPicture, gEmptyPicture);
+SK_DECLARE_STATIC_ONCE_PTR(SkEmptyPicture, gEmptyPicture);
 
 template <typename T>
 class SkMiniPicture final : public SkPicture {
@@ -61,7 +62,7 @@ SkMiniRecorder::~SkMiniRecorder() {
     if (fState != State::kEmpty) {
         // We have internal state pending.
         // Detaching then deleting a picture is an easy way to clean up.
-        SkDELETE(this->detachAsPicture(SkRect::MakeEmpty()));
+        delete this->detachAsPicture(SkRect::MakeEmpty());
     }
     SkASSERT(fState == State::kEmpty);
 }
@@ -69,7 +70,7 @@ SkMiniRecorder::~SkMiniRecorder() {
 #define TRY_TO_STORE(Type, ...)                    \
     if (fState != State::kEmpty) { return false; } \
     fState = State::k##Type;                       \
-    new (fBuffer.get()) Type(__VA_ARGS__);         \
+    new (fBuffer.get()) Type{__VA_ARGS__};         \
     return true
 
 bool SkMiniRecorder::drawBitmapRect(const SkBitmap& bm, const SkRect* src, const SkRect& dst,
@@ -101,13 +102,13 @@ bool SkMiniRecorder::drawTextBlob(const SkTextBlob* b, SkScalar x, SkScalar y, c
 
 
 SkPicture* SkMiniRecorder::detachAsPicture(const SkRect& cull) {
-#define CASE(Type)               \
-    case State::k##Type:         \
-        fState = State::kEmpty;  \
-        return SkNEW_ARGS(SkMiniPicture<Type>, (cull, reinterpret_cast<Type*>(fBuffer.get())))
+#define CASE(Type)              \
+    case State::k##Type:        \
+        fState = State::kEmpty; \
+        return new SkMiniPicture<Type>(cull, reinterpret_cast<Type*>(fBuffer.get()))
 
     switch (fState) {
-        case State::kEmpty: return SkRef(gEmptyPicture.get());
+        case State::kEmpty: return SkRef(gEmptyPicture.get([]{ return new SkEmptyPicture; }));
         CASE(DrawBitmapRectFixedSize);
         CASE(DrawPath);
         CASE(DrawRect);

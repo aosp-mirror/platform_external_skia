@@ -105,7 +105,7 @@ void GrGLPath::InitPathObject(GrGLGpu* gpu,
 
         if ((skPath.getSegmentMasks() & SkPath::kConic_SegmentMask) == 0) {
             // This branch does type punning, converting SkPoint* to GrGLfloat*.
-            SK_COMPILE_ASSERT(sizeof(SkPoint) == sizeof(GrGLfloat) * 2, sk_point_not_two_floats);
+            static_assert(sizeof(SkPoint) == sizeof(GrGLfloat) * 2, "sk_point_not_two_floats");
             // This branch does not convert with SkScalarToFloat.
 #ifndef SK_SCALAR_IS_FLOAT
 #error Need SK_SCALAR_IS_FLOAT.
@@ -166,7 +166,7 @@ void GrGLPath::InitPathObject(GrGLGpu* gpu,
         GR_GL_CALL(gpu->glInterface(), PathCommands(pathID, pathCommands.count(), &pathCommands[0],
                    pathCoords.count(), GR_GL_FLOAT, &pathCoords[0]));
     } else {
-        GR_GL_CALL(gpu->glInterface(), PathCommands(pathID, 0, NULL, 0, GR_GL_FLOAT, NULL));
+        GR_GL_CALL(gpu->glInterface(), PathCommands(pathID, 0, nullptr, 0, GR_GL_FLOAT, nullptr));
     }
 
     if (stroke.needToApply()) {

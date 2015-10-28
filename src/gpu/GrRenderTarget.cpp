@@ -11,6 +11,7 @@
 
 #include "GrContext.h"
 #include "GrDrawContext.h"
+#include "GrDrawTarget.h"
 #include "GrGpu.h"
 #include "GrRenderTargetPriv.h"
 #include "GrStencilAttachment.h"
@@ -18,12 +19,16 @@
 void GrRenderTarget::discard() {
     // go through context so that all necessary flushing occurs
     GrContext* context = this->getContext();
-    GrDrawContext* drawContext = context ? context->drawContext() : NULL;
+    if (!context) {
+        return;
+    }
+
+    SkAutoTUnref<GrDrawContext> drawContext(context->drawContext(this));
     if (!drawContext) {
         return;
     }
 
-    drawContext->discard(this);
+    drawContext->discard();
 }
 
 void GrRenderTarget::flagAsNeedingResolve(const SkIRect* rect) {
@@ -51,29 +56,39 @@ void GrRenderTarget::overrideResolveRect(const SkIRect rect) {
 }
 
 void GrRenderTarget::onRelease() {
-    this->renderTargetPriv().didAttachStencilAttachment(NULL);
+    SkSafeSetNull(fStencilAttachment);
+    fLastDrawTarget = nullptr;
 
     INHERITED::onRelease();
 }
 
 void GrRenderTarget::onAbandon() {
-    this->renderTargetPriv().didAttachStencilAttachment(NULL);
+    SkSafeSetNull(fStencilAttachment);
+    fLastDrawTarget = nullptr;
 
     INHERITED::onAbandon();
 }
 
-///////////////////////////////////////////////////////////////////////////////
+void GrRenderTarget::setLastDrawTarget(GrDrawTarget* dt) {
+    if (fLastDrawTarget) {
+        SkASSERT(fLastDrawTarget->isClosed());
+    }
 
-void GrRenderTargetPriv::didAttachStencilAttachment(GrStencilAttachment* stencilAttachment) {
-    SkRefCnt_SafeAssign(fRenderTarget->fStencilAttachment, stencilAttachment);
+    fLastDrawTarget = dt;
 }
 
-GrStencilAttachment* GrRenderTargetPriv::attachStencilAttachment() const {
-    if (fRenderTarget->fStencilAttachment) {
-        return fRenderTarget->fStencilAttachment;
+///////////////////////////////////////////////////////////////////////////////
+
+bool GrRenderTargetPriv::attachStencilAttachment(GrStencilAttachment* stencil) {
+    if (!stencil && !fRenderTarget->fStencilAttachment) {
+        // No need to do any work since we currently don't have a stencil attachment and
+        // we're not acctually adding one.
+        return true;
     }
-    if (!fRenderTarget->wasDestroyed() && fRenderTarget->canAttemptStencilAttachment()) {
-        fRenderTarget->getGpu()->attachStencilAttachmentToRenderTarget(fRenderTarget);
-    }
-    return fRenderTarget->fStencilAttachment;
+    fRenderTarget->fStencilAttachment = stencil;
+    if (!fRenderTarget->completeStencilAttachment()) {
+        SkSafeSetNull(fRenderTarget->fStencilAttachment);
+        return false;
+    } 
+    return true;
 }

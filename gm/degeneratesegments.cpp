@@ -7,6 +7,7 @@
 #include "gm.h"
 #include "SkCanvas.h"
 #include "SkPaint.h"
+#include "SkPath.h"
 #include "SkRandom.h"
 
 namespace skiagm {
@@ -287,7 +288,7 @@ protected:
         SkPaint titlePaint;
         titlePaint.setColor(SK_ColorBLACK);
         titlePaint.setAntiAlias(true);
-        sk_tool_utils::set_portable_typeface_always(&titlePaint);
+        sk_tool_utils::set_portable_typeface(&titlePaint);
         titlePaint.setTextSize(15 * SK_Scalar1);
         const char title[] = "Random Paths Drawn Into Rectangle Clips With "
                              "Indicated Style, Fill and Linecaps, "
@@ -347,7 +348,7 @@ protected:
                 SkPaint labelPaint;
                 labelPaint.setColor(color);
                 labelPaint.setAntiAlias(true);
-                sk_tool_utils::set_portable_typeface_always(&labelPaint);
+                sk_tool_utils::set_portable_typeface(&labelPaint);
                 labelPaint.setTextSize(10 * SK_Scalar1);
                 canvas->drawText(style.fName,
                                  strlen(style.fName),

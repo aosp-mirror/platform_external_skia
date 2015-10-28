@@ -25,26 +25,26 @@
 class TextBlobBench : public Benchmark {
 public:
     TextBlobBench()
-        : fTypeface(NULL) {
+        : fTypeface(nullptr) {
     }
 
 protected:
-    void onPreDraw() override {
-        fTypeface.reset(sk_tool_utils::create_portable_typeface("Times", SkTypeface::kNormal));
+    void onDelayedSetup() override {
+        fTypeface.reset(sk_tool_utils::create_portable_typeface("serif", SkTypeface::kNormal));
         // make textblob
         SkPaint paint;
         paint.setTypeface(fTypeface);
         const char* text = "Hello blob!";
         SkTDArray<uint16_t> glyphs;
         size_t len = strlen(text);
-        glyphs.append(paint.textToGlyphs(text, len, NULL));
+        glyphs.append(paint.textToGlyphs(text, len, nullptr));
         paint.textToGlyphs(text, len, glyphs.begin());
 
         SkTextBlobBuilder builder;
 
         paint.setTextEncoding(SkPaint::kGlyphID_TextEncoding);
         const SkTextBlobBuilder::RunBuffer& run = builder.allocRun(paint, glyphs.count(), 10, 10,
-                                                                   NULL);
+                                                                   nullptr);
         memcpy(run.glyphs, glyphs.begin(), glyphs.count() * sizeof(uint16_t));
 
         fBlob.reset(builder.build());
@@ -54,7 +54,7 @@ protected:
         return "TextBlobBench";
     }
 
-    void onDraw(const int loops, SkCanvas* canvas) override {
+    void onDraw(int loops, SkCanvas* canvas) override {
         SkPaint paint;
 
         // To ensure maximum caching, we just redraw the blob at the same place everytime

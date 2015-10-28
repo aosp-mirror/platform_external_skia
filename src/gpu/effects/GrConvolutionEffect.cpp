@@ -19,9 +19,10 @@ public:
 
     virtual void emitCode(EmitArgs&) override;
 
-    void setData(const GrGLProgramDataManager& pdman, const GrProcessor&) override;
-
     static inline void GenKey(const GrProcessor&, const GrGLSLCaps&, GrProcessorKeyBuilder*);
+
+protected:
+    void onSetData(const GrGLProgramDataManager& pdman, const GrProcessor&) override;
 
 private:
     int width() const { return Gr1DKernelEffect::WidthFromRadius(fRadius); }
@@ -64,7 +65,7 @@ void GrGLConvolutionEffect::emitCode(EmitArgs& args) {
     fsBuilder->codeAppendf("\t\t%s = vec4(0, 0, 0, 0);\n", args.fOutputColor);
 
     int width = this->width();
-    const GrGLShaderVar& kernel = args.fBuilder->getUniformVariable(fKernelUni);
+    const GrGLSLShaderVar& kernel = args.fBuilder->getUniformVariable(fKernelUni);
     const char* imgInc = args.fBuilder->getUniformCStr(fImageIncrementUni);
 
     fsBuilder->codeAppendf("\t\tvec2 coord = %s - %d.0 * %s;\n", coords2D.c_str(), fRadius, imgInc);
@@ -99,7 +100,7 @@ void GrGLConvolutionEffect::emitCode(EmitArgs& args) {
     fsBuilder->codeAppend(modulate.c_str());
 }
 
-void GrGLConvolutionEffect::setData(const GrGLProgramDataManager& pdman,
+void GrGLConvolutionEffect::onSetData(const GrGLProgramDataManager& pdman,
                                     const GrProcessor& processor) {
     const GrConvolutionEffect& conv = processor.cast<GrConvolutionEffect>();
     GrTexture& texture = *conv.texture(0);
@@ -144,14 +145,13 @@ void GrGLConvolutionEffect::GenKey(const GrProcessor& processor, const GrGLSLCap
 
 ///////////////////////////////////////////////////////////////////////////////
 
-GrConvolutionEffect::GrConvolutionEffect(GrProcessorDataManager* procDataManager,
-                                         GrTexture* texture,
+GrConvolutionEffect::GrConvolutionEffect(GrTexture* texture,
                                          Direction direction,
                                          int radius,
                                          const float* kernel,
                                          bool useBounds,
                                          float bounds[2])
-    : INHERITED(procDataManager, texture, direction, radius), fUseBounds(useBounds) {
+    : INHERITED(texture, direction, radius), fUseBounds(useBounds) {
     this->initClassID<GrConvolutionEffect>();
     SkASSERT(radius <= kMaxKernelRadius);
     SkASSERT(kernel);
@@ -162,14 +162,13 @@ GrConvolutionEffect::GrConvolutionEffect(GrProcessorDataManager* procDataManager
     memcpy(fBounds, bounds, sizeof(fBounds));
 }
 
-GrConvolutionEffect::GrConvolutionEffect(GrProcessorDataManager* procDataManager,
-                                         GrTexture* texture,
+GrConvolutionEffect::GrConvolutionEffect(GrTexture* texture,
                                          Direction direction,
                                          int radius,
                                          float gaussianSigma,
                                          bool useBounds,
                                          float bounds[2])
-    : INHERITED(procDataManager, texture, direction, radius), fUseBounds(useBounds) {
+    : INHERITED(texture, direction, radius), fUseBounds(useBounds) {
     this->initClassID<GrConvolutionEffect>();
     SkASSERT(radius <= kMaxKernelRadius);
     int width = this->width();
@@ -194,13 +193,13 @@ GrConvolutionEffect::GrConvolutionEffect(GrProcessorDataManager* procDataManager
 GrConvolutionEffect::~GrConvolutionEffect() {
 }
 
-void GrConvolutionEffect::getGLProcessorKey(const GrGLSLCaps& caps,
+void GrConvolutionEffect::onGetGLProcessorKey(const GrGLSLCaps& caps,
                                         GrProcessorKeyBuilder* b) const {
     GrGLConvolutionEffect::GenKey(*this, caps, b);
 }
 
-GrGLFragmentProcessor* GrConvolutionEffect::createGLInstance() const  {
-    return SkNEW_ARGS(GrGLConvolutionEffect, (*this));
+GrGLFragmentProcessor* GrConvolutionEffect::onCreateGLInstance() const  {
+    return new GrGLConvolutionEffect(*this);
 }
 
 bool GrConvolutionEffect::onIsEqual(const GrFragmentProcessor& sBase) const {
@@ -216,7 +215,7 @@ bool GrConvolutionEffect::onIsEqual(const GrFragmentProcessor& sBase) const {
 
 GR_DEFINE_FRAGMENT_PROCESSOR_TEST(GrConvolutionEffect);
 
-GrFragmentProcessor* GrConvolutionEffect::TestCreate(GrProcessorTestData* d) {
+const GrFragmentProcessor* GrConvolutionEffect::TestCreate(GrProcessorTestData* d) {
     int texIdx = d->fRandom->nextBool() ? GrProcessorUnitTest::kSkiaPMTextureIdx :
                                           GrProcessorUnitTest::kAlphaTextureIdx;
     Direction dir = d->fRandom->nextBool() ? kX_Direction : kY_Direction;
@@ -231,8 +230,7 @@ GrFragmentProcessor* GrConvolutionEffect::TestCreate(GrProcessorTestData* d) {
     }
 
     bool useBounds = d->fRandom->nextBool();
-    return GrConvolutionEffect::Create(d->fProcDataManager,
-                                       d->fTextures[texIdx],
+    return GrConvolutionEffect::Create(d->fTextures[texIdx],
                                        dir,
                                        radius,
                                        kernel,

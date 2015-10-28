@@ -9,14 +9,16 @@
 #define SkBlitter_DEFINED
 
 #include "SkBitmapProcShader.h"
-#include "SkMask.h"
-#include "SkMatrix.h"
-#include "SkPaint.h"
-#include "SkPixmap.h"
-#include "SkRefCnt.h"
+#include "SkColor.h"
+#include "SkRect.h"
 #include "SkRegion.h"
 #include "SkShader.h"
-#include "SkSmallAllocator.h"
+#include "SkTypes.h"
+
+class SkMatrix;
+class SkPaint;
+class SkPixmap;
+struct SkMask;
 
 /** SkBlitter and its subclasses are responsible for actually writing pixels
     into memory. Besides efficiency, they handle clipping and antialiasing.
@@ -48,7 +50,7 @@ public:
     virtual void blitMask(const SkMask&, const SkIRect& clip);
 
     /** If the blitter just sets a single value for each pixel, return the
-        bitmap it draws into, and assign value. If not, return NULL and ignore
+        bitmap it draws into, and assign value. If not, return nullptr and ignore
         the value parameter.
     */
     virtual const SkPixmap* justAnOpaqueColor(uint32_t* value);
@@ -107,7 +109,7 @@ public:
      * This function allocates memory for the blitter that the blitter then owns.
      * The memory can be used by the calling function at will, but it will be
      * released when the blitter's destructor is called. This function returns
-     * NULL if no persistent memory is needed by the blitter.
+     * nullptr if no persistent memory is needed by the blitter.
      */
     virtual void* allocBlitMemory(size_t sz) {
         return fBlitMemory.reset(sz, SkAutoMalloc::kReuse_OnShrink);
@@ -227,7 +229,7 @@ private:
 class SkBlitterClipper {
 public:
     SkBlitter*  apply(SkBlitter* blitter, const SkRegion* clip,
-                      const SkIRect* bounds = NULL);
+                      const SkIRect* bounds = nullptr);
 
 private:
     SkNullBlitter       fNullBlitter;

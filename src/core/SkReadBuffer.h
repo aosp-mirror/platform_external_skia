@@ -26,6 +26,7 @@
 #include "SkXfermode.h"
 
 class SkBitmap;
+class SkImage;
 
 #if defined(SK_DEBUG) && defined(SK_BUILD_FOR_MAC)
     #define DEBUG_NON_DETERMINISTIC_ASSERT
@@ -169,6 +170,8 @@ public:
      */
     bool readBitmap(SkBitmap* bitmap);
 
+    SkImage* readImage();
+
     virtual SkTypeface* readTypeface();
 
     void setBitmapStorage(SkBitmapHeapReader* bitmapStorage) {
@@ -185,7 +188,7 @@ public:
      *  were created/written by the writer. SkPicture uses this.
      */
     void setFactoryPlayback(SkFlattenable::Factory array[], int count) {
-        fFactoryTDArray = NULL;
+        fFactoryTDArray = nullptr;
         fFactoryArray = array;
         fFactoryCount = count;
     }
@@ -197,7 +200,7 @@ public:
      */
     void setFactoryArray(SkTDArray<SkFlattenable::Factory>* array) {
         fFactoryTDArray = array;
-        fFactoryArray = NULL;
+        fFactoryArray = nullptr;
         fFactoryCount = 0;
     }
 

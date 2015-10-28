@@ -14,6 +14,7 @@
 #include "SkScalar.h"
 
 class GrGLGpu;
+class GrGLStencilAttachment;
 
 class GrGLRenderTarget : public GrRenderTarget {
 public:
@@ -29,7 +30,10 @@ public:
         GrRenderTarget::SampleConfig fSampleConfig;
     };
 
-    GrGLRenderTarget(GrGLGpu*, const GrSurfaceDesc&, const IDDesc&);
+    static GrGLRenderTarget* CreateWrapped(GrGLGpu*,
+                                           const GrSurfaceDesc&,
+                                           const IDDesc&,
+                                           int stencilBits);
 
     void setViewport(const GrGLIRect& rect) { fViewport = rect; }
     const GrGLIRect& getViewport() const { return fViewport; }
@@ -62,6 +66,25 @@ public:
         return kCached_LifeCycle == fRTLifecycle || kUncached_LifeCycle == fRTLifecycle;
     }
 
+    // GrGLRenderTarget overrides dumpMemoryStatistics so it can log its texture and renderbuffer
+    // components seperately.
+    void dumpMemoryStatistics(SkTraceMemoryDump* traceMemoryDump) const override;
+
+    /**
+     * @return true if sample locations colocated at pixel center have been set for this
+     *         render target.  Requires support for NV_sample_locations.
+     */
+    bool usesColocatedSampleLocations() const {
+        return fUsesColocatedSampleLocations;
+    }
+
+    /**
+     * Flag render target as using or not using sample locations colocated at pixel center.
+     */
+    void flagAsUsingColocatedSampleLocations(bool useColocatedSampleLocations) {
+        fUsesColocatedSampleLocations = useColocatedSampleLocations;
+    }
+
 protected:
     // The public constructor registers this object with the cache. However, only the most derived
     // class should register with the cache. This constructor does not do the registration and
@@ -78,6 +101,19 @@ protected:
     size_t onGpuMemorySize() const override;
 
 private:
+    // This ctor is used only for creating wrapped render targets and is only called for the static
+    // create function CreateWrapped(...).
+    GrGLRenderTarget(GrGLGpu*, const GrSurfaceDesc&, const IDDesc&, GrGLStencilAttachment*);
+
+    GrGLGpu* getGLGpu() const;
+    bool completeStencilAttachment() override;
+
+    // The total size of the resource (including all pixels) for a single sample.
+    size_t totalBytesPerSample() const;
+    int msaaSamples() const;
+    // The number total number of samples, including both MSAA and resolve texture samples.
+    int totalSamples() const;
+
     GrGLuint    fRTFBOID;
     GrGLuint    fTexFBOID;
     GrGLuint    fMSColorRenderbufferID;
@@ -94,6 +130,10 @@ private:
     // onGpuMemorySize() needs to know the VRAM footprint of the FBO(s). However, abandon and
     // release zero out the IDs and the cache needs to know the size even after those actions.
     size_t      fGpuMemorySize;
+
+    // True if sample locations colocated at pixel center are currently in use, false if default
+    // sample locations are currently in use.
+    bool        fUsesColocatedSampleLocations;
 
     typedef GrRenderTarget INHERITED;
 };

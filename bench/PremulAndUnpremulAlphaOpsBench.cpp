@@ -29,7 +29,7 @@ protected:
         return fName.c_str();
     }
 
-    void onPreDraw() override {
+    void onDelayedSetup() override {
         SkImageInfo info = SkImageInfo::Make(W, H, fColorType, kUnpremul_SkAlphaType);
         fBmp1.allocPixels(info);   // used in writePixels
 
@@ -43,7 +43,7 @@ protected:
         fBmp2.allocPixels(info);    // used in readPixels()
     }
 
-    void onDraw(const int loops, SkCanvas* canvas) override {
+    void onDraw(int loops, SkCanvas* canvas) override {
         canvas->clear(SK_ColorBLACK);
 
         for (int loop = 0; loop < loops; ++loop) {

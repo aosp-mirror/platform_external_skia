@@ -45,7 +45,7 @@ static void populate_cache(GrGpu* gpu, int resourceCount, int keyData32Count) {
     for (int i = 0; i < resourceCount; ++i) {
         GrUniqueKey key;
         BenchResource::ComputeKey(i, keyData32Count, &key);
-        GrGpuResource* resource = SkNEW_ARGS(BenchResource, (gpu));
+        GrGpuResource* resource = new BenchResource(gpu);
         resource->resourcePriv().setUniqueKey(key);
         resource->unref();
     }
@@ -69,9 +69,9 @@ protected:
         return fFullName.c_str();
     }
 
-    void onDraw(const int loops, SkCanvas* canvas) override {
+    void onDraw(int loops, SkCanvas* canvas) override {
         SkAutoTUnref<GrContext> context(GrContext::CreateMockContext());
-        if (NULL == context) {
+        if (nullptr == context) {
             return;
         }
         // Set the cache budget to be very large so no purging occurs.
@@ -115,7 +115,7 @@ protected:
         return fFullName.c_str();
     }
 
-    void onPreDraw() override {
+    void onDelayedSetup() override {
         fContext.reset(GrContext::CreateMockContext());
         if (!fContext) {
             return;
@@ -134,7 +134,7 @@ protected:
         populate_cache(gpu, CACHE_SIZE_COUNT, fKeyData32Count);
     }
 
-    void onDraw(const int loops, SkCanvas* canvas) override {
+    void onDraw(int loops, SkCanvas* canvas) override {
         if (!fContext) {
             return;
         }

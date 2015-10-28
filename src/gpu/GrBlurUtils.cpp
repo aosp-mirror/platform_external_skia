@@ -14,7 +14,7 @@
 #include "GrTexture.h"
 #include "GrTextureProvider.h"
 #include "SkDraw.h"
-#include "SkGr.h"
+#include "SkGrPriv.h"
 #include "SkMaskFilter.h"
 #include "SkPaint.h"
 
@@ -26,7 +26,6 @@ static bool clip_bounds_quick_reject(const SkIRect& clipBounds, const SkIRect& r
 // is already burnt into the mask this boils down to a rect draw.
 // Return true if the mask was successfully drawn.
 static bool draw_mask(GrDrawContext* drawContext,
-                      GrRenderTarget* rt,
                       const GrClip& clip,
                       const SkMatrix& viewMatrix,
                       const SkRect& maskRect,
@@ -36,21 +35,19 @@ static bool draw_mask(GrDrawContext* drawContext,
     matrix.setTranslate(-maskRect.fLeft, -maskRect.fTop);
     matrix.postIDiv(mask->width(), mask->height());
 
-    grp->addCoverageProcessor(GrSimpleTextureEffect::Create(grp->getProcessorDataManager(),
-                                                            mask, matrix,
-                                                            kDevice_GrCoordSet))->unref();
+    grp->addCoverageFragmentProcessor(GrSimpleTextureEffect::Create(mask, matrix,
+                                                                    kDevice_GrCoordSet))->unref();
 
     SkMatrix inverse;
     if (!viewMatrix.invert(&inverse)) {
         return false;
     }
-    drawContext->drawNonAARectWithLocalMatrix(rt, clip, *grp, SkMatrix::I(), maskRect, inverse);
+    drawContext->drawNonAARectWithLocalMatrix(clip, *grp, SkMatrix::I(), maskRect, inverse);
     return true;
 }
 
 static bool draw_with_mask_filter(GrDrawContext* drawContext,
                                   GrTextureProvider* textureProvider,
-                                  GrRenderTarget* rt,
                                   const GrClip& clipData,
                                   const SkMatrix& viewMatrix,
                                   const SkPath& devPath,
@@ -66,7 +63,7 @@ static bool draw_with_mask_filter(GrDrawContext* drawContext,
     }
     SkAutoMaskFreeImage autoSrc(srcM.fImage);
 
-    if (!filter->filterMask(&dstM, srcM, viewMatrix, NULL)) {
+    if (!filter->filterMask(&dstM, srcM, viewMatrix, nullptr)) {
         return false;
     }
     // this will free-up dstM when we're done (allocated in filterMask())
@@ -83,8 +80,7 @@ static bool draw_with_mask_filter(GrDrawContext* drawContext,
     desc.fHeight = dstM.fBounds.height();
     desc.fConfig = kAlpha_8_GrPixelConfig;
 
-    SkAutoTUnref<GrTexture> texture(textureProvider->refScratchTexture(
-        desc, GrTextureProvider::kApprox_ScratchTexMatch));
+    SkAutoTUnref<GrTexture> texture(textureProvider->createApproxTexture(desc));
     if (!texture) {
         return false;
     }
@@ -93,20 +89,25 @@ static bool draw_with_mask_filter(GrDrawContext* drawContext,
 
     SkRect maskRect = SkRect::Make(dstM.fBounds);
 
-    return draw_mask(drawContext, rt, clipData, viewMatrix, maskRect, grp, texture);
+    return draw_mask(drawContext, clipData, viewMatrix, maskRect, grp, texture);
 }
 
 // Create a mask of 'devPath' and place the result in 'mask'.
 static GrTexture* create_mask_GPU(GrContext* context,
-                                  const SkRect& maskRect,
+                                  SkRect* maskRect,
                                   const SkPath& devPath,
                                   const GrStrokeInfo& strokeInfo,
                                   bool doAA,
                                   int sampleCnt) {
+    // This mask will ultimately be drawn as a non-AA rect (see draw_mask). 
+    // Non-AA rects have a bad habit of snapping arbitrarily. Integerize here 
+    // so the mask draws in a reproducible manner.
+    *maskRect = SkRect::Make(maskRect->roundOut());
+
     GrSurfaceDesc desc;
     desc.fFlags = kRenderTarget_GrSurfaceFlag;
-    desc.fWidth = SkScalarCeilToInt(maskRect.width());
-    desc.fHeight = SkScalarCeilToInt(maskRect.height());
+    desc.fWidth = SkScalarCeilToInt(maskRect->width());
+    desc.fHeight = SkScalarCeilToInt(maskRect->height());
     desc.fSampleCnt = doAA ? sampleCnt : 0;
     // We actually only need A8, but it often isn't supported as a
     // render target so default to RGBA_8888
@@ -116,20 +117,19 @@ static GrTexture* create_mask_GPU(GrContext* context,
         desc.fConfig = kAlpha_8_GrPixelConfig;
     }
 
-    GrTexture* mask = context->textureProvider()->refScratchTexture(
-        desc, GrTextureProvider::kApprox_ScratchTexMatch);
-    if (NULL == mask) {
-        return NULL;
+    GrTexture* mask = context->textureProvider()->createApproxTexture(desc);
+    if (nullptr == mask) {
+        return nullptr;
     }
 
-    SkRect clipRect = SkRect::MakeWH(maskRect.width(), maskRect.height());
+    SkRect clipRect = SkRect::MakeWH(maskRect->width(), maskRect->height());
 
-    GrDrawContext* drawContext = context->drawContext();
+    SkAutoTUnref<GrDrawContext> drawContext(context->drawContext(mask->asRenderTarget()));
     if (!drawContext) {
-        return NULL;
+        return nullptr;
     }
 
-    drawContext->clear(mask->asRenderTarget(), NULL, 0x0, true);
+    drawContext->clear(nullptr, 0x0, true);
 
     GrPaint tempPaint;
     tempPaint.setAntiAlias(doAA);
@@ -138,10 +138,11 @@ static GrTexture* create_mask_GPU(GrContext* context,
     // setup new clip
     GrClip clip(clipRect);
 
-    // Draw the mask into maskTexture with the path's top-left at the origin using tempPaint.
+    // Draw the mask into maskTexture with the path's integerized top-left at
+    // the origin using tempPaint.
     SkMatrix translate;
-    translate.setTranslate(-maskRect.fLeft, -maskRect.fTop);
-    drawContext->drawPath(mask->asRenderTarget(), clip, tempPaint, translate, devPath, strokeInfo);
+    translate.setTranslate(-maskRect->fLeft, -maskRect->fTop);
+    drawContext->drawPath(clip, tempPaint, translate, devPath, strokeInfo);
     return mask;
 }
 
@@ -172,7 +173,7 @@ void GrBlurUtils::drawPathWithMaskFilter(GrContext* context,
     if (prePathMatrix) {
         // stroking, path effects, and blurs are supposed to be applied *after* the prePathMatrix.
         // The pre-path-matrix also should not affect shading.
-        if (NULL == paint.getMaskFilter() && NULL == pathEffect && NULL == paint.getShader() &&
+        if (nullptr == paint.getMaskFilter() && nullptr == pathEffect && nullptr == paint.getShader() &&
             (strokeInfo.isFillStyle() || strokeInfo.isHairlineStyle())) {
             viewMatrix.preConcat(*prePathMatrix);
         } else {
@@ -193,11 +194,11 @@ void GrBlurUtils::drawPathWithMaskFilter(GrContext* context,
     SkDEBUGCODE(prePathMatrix = (const SkMatrix*)0x50FF8001;)
 
     GrPaint grPaint;
-    if (!SkPaint2GrPaint(context, renderTarget, paint, viewMatrix, true, &grPaint)) {
+    if (!SkPaintToGrPaint(context, paint, viewMatrix, &grPaint)) {
         return;
     }
 
-    const SkRect* cullRect = NULL;  // TODO: what is our bounds?
+    const SkRect* cullRect = nullptr;  // TODO: what is our bounds?
     if (!strokeInfo.isDashed() && pathEffect && pathEffect->filterPath(effectPath.init(), *pathPtr,
                                                                        &strokeInfo, cullRect)) {
         pathPtr = effectPath.get();
@@ -231,7 +232,7 @@ void GrBlurUtils::drawPathWithMaskFilter(GrContext* context,
         pathPtr->transform(viewMatrix, devPathPtr);
 
         SkRect maskRect;
-        if (paint.getMaskFilter()->canFilterMaskGPU(devPathPtr->getBounds(),
+        if (paint.getMaskFilter()->canFilterMaskGPU(SkRRect::MakeRect(devPathPtr->getBounds()),
                                                     clipBounds,
                                                     viewMatrix,
                                                     &maskRect)) {
@@ -244,7 +245,6 @@ void GrBlurUtils::drawPathWithMaskFilter(GrContext* context,
 
             if (paint.getMaskFilter()->directFilterMaskGPU(context->textureProvider(),
                                                            drawContext,
-                                                           renderTarget,
                                                            &grPaint,
                                                            clip,
                                                            viewMatrix,
@@ -256,7 +256,7 @@ void GrBlurUtils::drawPathWithMaskFilter(GrContext* context,
             }
 
             SkAutoTUnref<GrTexture> mask(create_mask_GPU(context,
-                                                         maskRect,
+                                                         &maskRect,
                                                          *devPathPtr,
                                                          strokeInfo,
                                                          grPaint.isAntiAlias(),
@@ -269,7 +269,6 @@ void GrBlurUtils::drawPathWithMaskFilter(GrContext* context,
                     // filterMaskGPU gives us ownership of a ref to the result
                     SkAutoTUnref<GrTexture> atu(filtered);
                     if (draw_mask(drawContext,
-                                  renderTarget,
                                   clip,
                                   viewMatrix,
                                   maskRect,
@@ -286,12 +285,12 @@ void GrBlurUtils::drawPathWithMaskFilter(GrContext* context,
         // GPU path fails
         SkPaint::Style style = strokeInfo.isHairlineStyle() ? SkPaint::kStroke_Style :
                                                               SkPaint::kFill_Style;
-        draw_with_mask_filter(drawContext, context->textureProvider(), renderTarget,
+        draw_with_mask_filter(drawContext, context->textureProvider(),
                               clip, viewMatrix, *devPathPtr,
                               paint.getMaskFilter(), clipBounds, &grPaint, style);
         return;
     }
 
-    drawContext->drawPath(renderTarget, clip, grPaint, viewMatrix, *pathPtr, strokeInfo);
+    drawContext->drawPath(clip, grPaint, viewMatrix, *pathPtr, strokeInfo);
 }
 

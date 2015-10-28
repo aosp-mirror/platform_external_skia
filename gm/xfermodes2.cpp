@@ -34,7 +34,7 @@ protected:
 
         SkPaint labelP;
         labelP.setAntiAlias(true);
-        sk_tool_utils::set_portable_typeface_always(&labelP);
+        sk_tool_utils::set_portable_typeface(&labelP);
         labelP.setTextAlign(SkPaint::kCenter_Align);
 
         const int W = 6;
@@ -55,7 +55,7 @@ protected:
             SkRect r = SkRect::MakeWH(w, h);
             canvas->drawRect(r, p);
 
-            canvas->saveLayer(&r, NULL);
+            canvas->saveLayer(&r, nullptr);
 
             p.setShader(fDst);
             canvas->drawRect(r, p);
@@ -67,8 +67,8 @@ protected:
 
             r.inset(-SK_ScalarHalf, -SK_ScalarHalf);
             p.setStyle(SkPaint::kStroke_Style);
-            p.setShader(NULL);
-            p.setXfermode(NULL);
+            p.setShader(nullptr);
+            p.setXfermode(nullptr);
             canvas->drawRect(r, p);
 
             canvas->restore();

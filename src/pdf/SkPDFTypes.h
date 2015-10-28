@@ -11,6 +11,7 @@
 
 #include "SkRefCnt.h"
 #include "SkScalar.h"
+#include "SkStream.h"
 #include "SkString.h"
 #include "SkTDArray.h"
 #include "SkTHash.h"
@@ -19,7 +20,10 @@
 class SkPDFObjNumMap;
 class SkPDFObject;
 class SkPDFSubstituteMap;
-class SkWStream;
+
+#ifdef SK_PDF_IMAGE_STATS
+#include "SkAtomics.h"
+#endif
 
 /** \class SkPDFObject
 
@@ -30,8 +34,6 @@ class SkWStream;
 */
 class SkPDFObject : public SkRefCnt {
 public:
-    
-
     /** Subclasses must implement this method to print the object to the
      *  PDF file.
      *  @param catalog  The object catalog to use.
@@ -40,7 +42,7 @@ public:
     // TODO(halcanary): make this method const
     virtual void emitObject(SkWStream* stream,
                             const SkPDFObjNumMap& objNumMap,
-                            const SkPDFSubstituteMap& substitutes) = 0;
+                            const SkPDFSubstituteMap& substitutes) const = 0;
 
     /**
      *  Adds all transitive dependencies of this object to the
@@ -77,7 +79,7 @@ public:
 
     static SkPDFUnion Int(int32_t);
 
-    static SkPDFUnion Int(size_t);
+    static SkPDFUnion Int(size_t v) { return SkPDFUnion::Int(SkToS32(v)); }
 
     static SkPDFUnion Bool(bool);
 
@@ -158,7 +160,7 @@ private:
     SkPDFUnion& operator=(const SkPDFUnion&) = delete;
     SkPDFUnion(const SkPDFUnion&) = delete;
 };
-SK_COMPILE_ASSERT(sizeof(SkString) == sizeof(void*), SkString_size);
+static_assert(sizeof(SkString) == sizeof(void*), "SkString_size");
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -188,8 +190,6 @@ private:
 */
 class SkPDFArray : public SkPDFObject {
 public:
-    
-
     static const int kMaxLen = 8191;
 
     /** Create a PDF array. Maximum length is 8191.
@@ -200,7 +200,7 @@ public:
     // The SkPDFObject interface.
     void emitObject(SkWStream* stream,
                     const SkPDFObjNumMap& objNumMap,
-                    const SkPDFSubstituteMap& substitutes) override;
+                    const SkPDFSubstituteMap& substitutes) const override;
     void addResources(SkPDFObjNumMap*,
                       const SkPDFSubstituteMap&) const override;
 
@@ -239,8 +239,6 @@ private:
 */
 class SkPDFDict : public SkPDFObject {
 public:
-    
-
     /** Create a PDF dictionary. Maximum number of entries is 4095.
      */
     SkPDFDict();
@@ -255,7 +253,7 @@ public:
     // The SkPDFObject interface.
     void emitObject(SkWStream* stream,
                     const SkPDFObjNumMap& objNumMap,
-                    const SkPDFSubstituteMap& substitutes) override;
+                    const SkPDFSubstituteMap& substitutes) const override;
     void addResources(SkPDFObjNumMap*,
                       const SkPDFSubstituteMap&) const override;
 
@@ -290,6 +288,12 @@ public:
      */
     void clear();
 
+    /** Emit the dictionary, without the "<<" and ">>".
+     */
+    void emitAll(SkWStream* stream,
+                 const SkPDFObjNumMap& objNumMap,
+                 const SkPDFSubstituteMap& substitutes) const;
+
 private:
     struct Record {
         SkPDFUnion fKey;
@@ -300,6 +304,30 @@ private:
 
     void set(SkPDFUnion&& name, SkPDFUnion&& value);
 
+    typedef SkPDFObject INHERITED;
+};
+
+/** \class SkPDFSharedStream
+
+    This class takes an asset and assumes that it is backed by
+    long-lived shared data (for example, an open file
+    descriptor). That is: no memory savings can be made by holding on
+    to a compressed version instead.
+ */
+class SkPDFSharedStream : public SkPDFObject {
+public:
+    // Takes ownership of asset.
+    SkPDFSharedStream(SkStreamAsset* data) : fAsset(data), fDict(new SkPDFDict) { SkASSERT(data); }
+    SkPDFDict* dict() { return fDict; }
+    void emitObject(SkWStream*,
+                    const SkPDFObjNumMap&,
+                    const SkPDFSubstituteMap&) const override;
+    void addResources(SkPDFObjNumMap*,
+                      const SkPDFSubstituteMap&) const override;
+
+private:
+    SkAutoTDelete<SkStreamAsset> fAsset;
+    SkAutoTUnref<SkPDFDict> fDict;
     typedef SkPDFObject INHERITED;
 };
 
@@ -317,6 +345,12 @@ public:
      *  @return True iff the object was not already added to the catalog.
      */
     bool addObject(SkPDFObject* obj);
+
+    /** Add the passed object to the catalog, as well as all its dependencies.
+     *  @param obj   The object to add.  If nullptr, this is a noop.
+     *  @param subs  Will be passed to obj->addResources().
+     */
+    void addObjectRecursively(SkPDFObject* obj, const SkPDFSubstituteMap& subs);
 
     /** Get the object number for the passed object.
      *  @param obj         The object of interest.
@@ -357,5 +391,12 @@ public:
 private:
     SkTHashMap<SkPDFObject*, SkPDFObject*> fSubstituteMap;
 };
+
+#ifdef SK_PDF_IMAGE_STATS
+extern SkAtomic<int> gDrawImageCalls;
+extern SkAtomic<int> gJpegImageObjects;
+extern SkAtomic<int> gRegularImageObjects;
+extern void SkPDFImageDumpStats();
+#endif // SK_PDF_IMAGE_STATS
 
 #endif

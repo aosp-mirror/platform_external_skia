@@ -43,7 +43,7 @@ protected:
     void onDrawBitmap(const SkBitmap& bitmap, SkScalar left, SkScalar top,
                       const SkPaint* paint) override;
     void onDrawBitmapRect(const SkBitmap& bitmap, const SkRect* src, const SkRect& dst,
-                          const SkPaint* paint, SK_VIRTUAL_CONSTRAINT_TYPE) override;
+                          const SkPaint* paint, SkCanvas::SrcRectConstraint) override;
     void onDrawBitmapNine(const SkBitmap& bitmap, const SkIRect& center,
                           const SkRect& dst, const SkPaint* paint) override;
     void onDrawSprite(const SkBitmap& bitmap, int left, int top,
@@ -72,9 +72,14 @@ protected:
                      const SkPaint& paint) override;
 
     void onDrawImage(const SkImage*, SkScalar, SkScalar, const SkPaint*) override;
-    void onDrawImageRect(const SkImage*, const SkRect*, const SkRect&, const SkPaint*)
-        override;
+    void onDrawImageRect(const SkImage*, const SkRect*, const SkRect&, const SkPaint*,
+                         SrcRectConstraint) override;
     void onDrawPicture(const SkPicture*, const SkMatrix*, const SkPaint*);
+    void onDrawAtlas(const SkImage*, const SkRSXform[], const SkRect[],
+                     const SkColor[], int count, SkXfermode::Mode,
+                     const SkRect* cull, const SkPaint*) override;
+    void onDrawImageNine(const SkImage*, const SkIRect& center,
+                         const SkRect& dst, const SkPaint*) override;
 
     // PASS THROUGH
 

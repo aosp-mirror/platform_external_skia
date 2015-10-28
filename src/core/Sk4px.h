@@ -103,6 +103,7 @@ public:
     // May be incorrect by +-1, but is always exactly correct when *this or o is 0 or 255.
     Sk4px approxMulDiv255(const Sk16b& o) const {
         // (x*y + x) / 256 meets these criteria.  (As of course does (x*y + y) / 256 by symmetry.)
+        // FYI: (x*y + 255) / 256 also meets these criteria.  In my brief testing, it was slower.
         return this->widenLo().addNarrowHi(*this * o);
     }
 
@@ -110,6 +111,8 @@ public:
     // fn should take an Sk4px (4 src pixels) and return an Sk4px (4 dst pixels).
     template <typename Fn, typename Dst>
     static void MapSrc(int n, Dst* dst, const SkPMColor* src, const Fn& fn) {
+        SkASSERT(dst);
+        SkASSERT(src);
         // This looks a bit odd, but it helps loop-invariant hoisting across different calls to fn.
         // Basically, we need to make sure we keep things inside a single loop.
         while (n > 0) {
@@ -140,6 +143,8 @@ public:
     // As above, but with dst4' = fn(dst4, src4).
     template <typename Fn, typename Dst>
     static void MapDstSrc(int n, Dst* dst, const SkPMColor* src, const Fn& fn) {
+        SkASSERT(dst);
+        SkASSERT(src);
         while (n > 0) {
             if (n >= 8) {
                 Sk4px dst0 = fn(Load4(dst+0), Load4(src+0)),
@@ -165,10 +170,43 @@ public:
         }
     }
 
+    // As above, but with dst4' = fn(dst4, alpha4).
+    template <typename Fn, typename Dst>
+    static void MapDstAlpha(int n, Dst* dst, const SkAlpha* a, const Fn& fn) {
+        SkASSERT(dst);
+        SkASSERT(a);
+        while (n > 0) {
+            if (n >= 8) {
+                Sk4px dst0 = fn(Load4(dst+0), Load4Alphas(a+0)),
+                      dst4 = fn(Load4(dst+4), Load4Alphas(a+4));
+                dst0.store4(dst+0);
+                dst4.store4(dst+4);
+                dst += 8; a += 8; n -= 8;
+                continue;  // Keep our stride at 8 pixels as long as possible.
+            }
+            SkASSERT(n <= 7);
+            if (n >= 4) {
+                fn(Load4(dst), Load4Alphas(a)).store4(dst);
+                dst += 4; a += 4; n -= 4;
+            }
+            if (n >= 2) {
+                fn(Load2(dst), Load2Alphas(a)).store2(dst);
+                dst += 2; a += 2; n -= 2;
+            }
+            if (n >= 1) {
+                fn(Load1(dst), DupAlpha(*a)).store1(dst);
+            }
+            break;
+        }
+    }
+
     // As above, but with dst4' = fn(dst4, src4, alpha4).
     template <typename Fn, typename Dst>
     static void MapDstSrcAlpha(int n, Dst* dst, const SkPMColor* src, const SkAlpha* a,
                                const Fn& fn) {
+        SkASSERT(dst);
+        SkASSERT(src);
+        SkASSERT(a);
         while (n > 0) {
             if (n >= 8) {
                 Sk4px dst0 = fn(Load4(dst+0), Load4(src+0), Load4Alphas(a+0)),

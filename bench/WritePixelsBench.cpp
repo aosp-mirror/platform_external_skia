@@ -45,7 +45,7 @@ protected:
         return fName.c_str();
     }
 
-    void onDraw(const int loops, SkCanvas* canvas) override {
+    void onDraw(int loops, SkCanvas* canvas) override {
         SkISize size = canvas->getDeviceSize();
 
         canvas->clear(0xFFFF0000);
@@ -71,5 +71,5 @@ private:
 
 //////////////////////////////////////////////////////////////////////////////
 
-DEF_BENCH( return SkNEW_ARGS(WritePixelsBench, (kRGBA_8888_SkColorType, kPremul_SkAlphaType)); )
-DEF_BENCH( return SkNEW_ARGS(WritePixelsBench, (kRGBA_8888_SkColorType, kUnpremul_SkAlphaType)); )
+DEF_BENCH(return new WritePixelsBench(kRGBA_8888_SkColorType, kPremul_SkAlphaType);)
+DEF_BENCH(return new WritePixelsBench(kRGBA_8888_SkColorType, kUnpremul_SkAlphaType);)

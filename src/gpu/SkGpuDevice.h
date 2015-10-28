@@ -50,7 +50,7 @@ public:
     /**
      * New device that will create an offscreen renderTarget based on the ImageInfo and
      * sampleCount. The Budgeted param controls whether the device's backing store counts against
-     * the resource cache budget. On failure, returns NULL.
+     * the resource cache budget. On failure, returns nullptr.
      */
     static SkGpuDevice* Create(GrContext*, SkSurface::Budgeted, const SkImageInfo&,
                                int sampleCount, const SkSurfaceProps*, InitContents);
@@ -60,7 +60,7 @@ public:
     SkGpuDevice* cloneDevice(const SkSurfaceProps& props) {
         SkBaseDevice* dev = this->onCreateDevice(CreateInfo(this->imageInfo(), kPossible_TileUsage,
                                                             props.pixelGeometry()),
-                                                 NULL);
+                                                 nullptr);
         return static_cast<SkGpuDevice*>(dev);
     }
 
@@ -95,8 +95,7 @@ public:
                             const SkMatrix&, const SkPaint&) override;
     virtual void drawBitmapRect(const SkDraw&, const SkBitmap&,
                                 const SkRect* srcOrNull, const SkRect& dst,
-                                const SkPaint& paint,
-                                SK_VIRTUAL_CONSTRAINT_TYPE) override;
+                                const SkPaint& paint, SkCanvas::SrcRectConstraint) override;
     virtual void drawSprite(const SkDraw&, const SkBitmap& bitmap,
                             int x, int y, const SkPaint& paint) override;
     virtual void drawText(const SkDraw&, const void* text, size_t len,
@@ -135,6 +134,8 @@ public:
     bool filterTexture(GrContext*, GrTexture*, int width, int height, const SkImageFilter*,
                        const SkImageFilter::Context&,
                        SkBitmap* result, SkIPoint* offset);
+
+    static SkImageFilter::Cache* NewImageFilterCache();
 
 protected:
     bool onReadPixels(const SkImageInfo&, void*, size_t, int, int) override;
@@ -185,7 +186,7 @@ private:
     void drawBitmapCommon(const SkDraw&,
                           const SkBitmap& bitmap,
                           const SkRect* srcRectPtr,
-                          const SkSize* dstSizePtr,      // ignored iff srcRectPtr == NULL
+                          const SkSize* dstSizePtr,      // ignored iff srcRectPtr == nullptr
                           const SkPaint&,
                           SkCanvas::SrcRectConstraint);
 
@@ -195,6 +196,13 @@ private:
      */
 
     // The tileSize and clippedSrcRect will be valid only if true is returned.
+    bool shouldTileImageID(uint32_t imageID, const SkIRect& imageRect,
+                           const SkMatrix& viewMatrix,
+                           const GrTextureParams& params,
+                           const SkRect* srcRectPtr,
+                           int maxTileSize,
+                           int* tileSize,
+                           SkIRect* clippedSubset) const;
     bool shouldTileBitmap(const SkBitmap& bitmap,
                           const SkMatrix& viewMatrix,
                           const GrTextureParams& sampler,
@@ -202,6 +210,12 @@ private:
                           int maxTileSize,
                           int* tileSize,
                           SkIRect* clippedSrcRect) const;
+    // Just returns the predicate, not the out-tileSize or out-clippedSubset, as they are not
+    // needed at the moment.
+    bool shouldTileImage(const SkImage* image, const SkRect* srcRectPtr,
+                         SkCanvas::SrcRectConstraint constraint, SkFilterQuality quality,
+                         const SkMatrix& viewMatrix) const;
+
     void internalDrawBitmap(const SkBitmap&,
                             const SkMatrix& viewMatrix,
                             const SkRect&,

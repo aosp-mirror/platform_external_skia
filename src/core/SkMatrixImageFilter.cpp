@@ -26,7 +26,7 @@ SkMatrixImageFilter::SkMatrixImageFilter(const SkMatrix& transform,
 SkMatrixImageFilter* SkMatrixImageFilter::Create(const SkMatrix& transform,
                                                  SkFilterQuality filterQuality,
                                                  SkImageFilter* input) {
-    return SkNEW_ARGS(SkMatrixImageFilter, (transform, filterQuality, input));
+    return new SkMatrixImageFilter(transform, filterQuality, input);
 }
 
 SkFlattenable* SkMatrixImageFilter::CreateProc(SkReadBuffer& buffer) {
@@ -53,7 +53,7 @@ bool SkMatrixImageFilter::onFilterImage(Proxy* proxy,
                                         SkIPoint* offset) const {
     SkBitmap src = source;
     SkIPoint srcOffset = SkIPoint::Make(0, 0);
-    if (getInput(0) && !getInput(0)->filterImage(proxy, source, ctx, &src, &srcOffset)) {
+    if (!this->filterInput(0, proxy, source, ctx, &src, &srcOffset)) {
         return false;
     }
 
@@ -72,7 +72,7 @@ bool SkMatrixImageFilter::onFilterImage(Proxy* proxy,
     dstRect.roundOut(&dstBounds);
 
     SkAutoTUnref<SkBaseDevice> device(proxy->createDevice(dstBounds.width(), dstBounds.height()));
-    if (NULL == device.get()) {
+    if (nullptr == device.get()) {
         return false;
     }
 

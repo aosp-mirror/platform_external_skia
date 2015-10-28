@@ -9,6 +9,15 @@
 #include "GrResourceKey.h"
 #include "SkDashPathPriv.h"
 
+bool all_dash_intervals_zero(const SkScalar* intervals, int count) {
+    for (int i = 0 ; i < count; ++i) {
+        if (intervals[i] != 0) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool GrStrokeInfo::applyDashToPath(SkPath* dst, GrStrokeInfo* dstStrokeInfo,
                                    const SkPath& src) const {
     if (this->isDashed()) {
@@ -17,7 +26,14 @@ bool GrStrokeInfo::applyDashToPath(SkPath* dst, GrStrokeInfo* dstStrokeInfo,
         info.fCount = fIntervals.count();
         info.fPhase = fDashPhase;
         GrStrokeInfo filteredStroke(*this, false);
-        if (SkDashPath::FilterDashPath(dst, src, &filteredStroke, NULL, info)) {
+        // Handle the case where all intervals are 0 and we simply drop the dash effect
+        if (all_dash_intervals_zero(fIntervals.get(), fIntervals.count())) {
+            *dstStrokeInfo = filteredStroke;
+            *dst = src;
+            return true;
+        }
+        // See if we can filter the dash into a path on cpu
+        if (SkDashPath::FilterDashPath(dst, src, &filteredStroke, nullptr, info)) {
             *dstStrokeInfo = filteredStroke;
             return true;
         }
@@ -36,9 +52,9 @@ void GrStrokeInfo::asUniqueKeyFragment(uint32_t* data) const {
         kCapShift = kJoinShift + kJoinBits,
     };
 
-    SK_COMPILE_ASSERT(SkStrokeRec::kStyleCount <= (1 << kStyleBits), style_shift_will_be_wrong);
-    SK_COMPILE_ASSERT(SkPaint::kJoinCount <= (1 << kJoinBits), cap_shift_will_be_wrong);
-    SK_COMPILE_ASSERT(SkPaint::kCapCount <= (1 << kCapBits), cap_does_not_fit);
+    static_assert(SkStrokeRec::kStyleCount <= (1 << kStyleBits), "style_shift_will_be_wrong");
+    static_assert(SkPaint::kJoinCount <= (1 << kJoinBits), "cap_shift_will_be_wrong");
+    static_assert(SkPaint::kCapCount <= (1 << kCapBits), "cap_does_not_fit");
     uint32_t styleKey = this->getStyle();
     if (this->needToApply()) {
         styleKey |= this->getJoin() << kJoinShift;

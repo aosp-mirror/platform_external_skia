@@ -111,7 +111,7 @@ private:
             threads = sk_num_cores();
         }
         for (int i = 0; i < threads; i++) {
-            fThreads.push(SkNEW_ARGS(SkThread, (&ThreadPool::Loop, this)));
+            fThreads.push(new SkThread(&ThreadPool::Loop, this));
             fThreads.top()->start();
         }
     }
@@ -122,7 +122,7 @@ private:
         // Send a poison pill to each thread.
         SkAtomic<int> dummy(0);
         for (int i = 0; i < fThreads.count(); i++) {
-            this->add(NULL, NULL, &dummy);
+            this->add(nullptr, nullptr, &dummy);
         }
         // Wait for them all to swallow the pill and die.
         for (int i = 0; i < fThreads.count(); i++) {
@@ -197,20 +197,18 @@ private:
 
     friend struct SkTaskGroup::Enabler;
 };
-ThreadPool* ThreadPool::gGlobal = NULL;
+ThreadPool* ThreadPool::gGlobal = nullptr;
 
 }  // namespace
 
 SkTaskGroup::Enabler::Enabler(int threads) {
-    SkASSERT(ThreadPool::gGlobal == NULL);
+    SkASSERT(ThreadPool::gGlobal == nullptr);
     if (threads != 0) {
-        ThreadPool::gGlobal = SkNEW_ARGS(ThreadPool, (threads));
+        ThreadPool::gGlobal = new ThreadPool(threads);
     }
 }
 
-SkTaskGroup::Enabler::~Enabler() {
-    SkDELETE(ThreadPool::gGlobal);
-}
+SkTaskGroup::Enabler::~Enabler() { delete ThreadPool::gGlobal; }
 
 SkTaskGroup::SkTaskGroup() : fPending(0) {}
 

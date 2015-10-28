@@ -41,7 +41,7 @@ protected:
             for (SkScalar x = bounds.left(); x < bounds.right(); x += tile_size) {
                 canvas->save();
                 canvas->clipRect(SkRect::MakeXYWH(x, y, tile_size, tile_size));
-                canvas->saveLayer(NULL, &paint);
+                canvas->saveLayer(nullptr, &paint);
                 const char* str[] = {
                     "The quick",
                     "brown fox",
@@ -50,7 +50,7 @@ protected:
                 };
                 SkPaint textPaint;
                 textPaint.setAntiAlias(true);
-                sk_tool_utils::set_portable_typeface_always(&textPaint);
+                sk_tool_utils::set_portable_typeface(&textPaint);
                 textPaint.setTextSize(SkIntToScalar(100));
                 int posY = 0;
                 for (unsigned i = 0; i < SK_ARRAY_COUNT(str); i++) {

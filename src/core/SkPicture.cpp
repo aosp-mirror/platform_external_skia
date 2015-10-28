@@ -139,11 +139,18 @@ SkPicture* SkPicture::Forwardport(const SkPictInfo& info, const SkPictureData* d
 }
 
 SkPicture* SkPicture::CreateFromStream(SkStream* stream, InstallPixelRefProc proc) {
+    return CreateFromStream(stream, proc, nullptr);
+}
+
+SkPicture* SkPicture::CreateFromStream(SkStream* stream,
+                                       InstallPixelRefProc proc,
+                                       SkTypefacePlayback* typefaces) {
     SkPictInfo info;
     if (!InternalOnly_StreamIsSKP(stream, &info) || !stream->readBool()) {
         return nullptr;
     }
-    SkAutoTDelete<SkPictureData> data(SkPictureData::CreateFromStream(stream, info, proc));
+    SkAutoTDelete<SkPictureData> data(
+            SkPictureData::CreateFromStream(stream, info, proc, typefaces));
     return Forwardport(info, data);
 }
 
@@ -162,17 +169,23 @@ SkPictureData* SkPicture::backport() const {
     rec.beginRecording();
         this->playback(&rec);
     rec.endRecording();
-    return SkNEW_ARGS(SkPictureData, (rec, info, false/*deep copy ops?*/));
+    return new SkPictureData(rec, info, false /*deep copy ops?*/);
 }
 
 void SkPicture::serialize(SkWStream* stream, SkPixelSerializer* pixelSerializer) const {
+    this->serialize(stream, pixelSerializer, nullptr);
+}
+
+void SkPicture::serialize(SkWStream* stream,
+                          SkPixelSerializer* pixelSerializer,
+                          SkRefCntSet* typefaceSet) const {
     SkPictInfo info = this->createHeader();
     SkAutoTDelete<SkPictureData> data(this->backport());
 
     stream->write(&info, sizeof(info));
     if (data) {
         stream->writeBool(true);
-        data->serialize(stream, pixelSerializer);
+        data->serialize(stream, pixelSerializer, typefaceSet);
     } else {
         stream->writeBool(false);
     }

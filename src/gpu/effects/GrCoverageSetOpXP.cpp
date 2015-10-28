@@ -18,7 +18,7 @@
 class CoverageSetOpXP : public GrXferProcessor {
 public:
     static GrXferProcessor* Create(SkRegion::Op regionOp, bool invertCoverage) {
-        return SkNEW_ARGS(CoverageSetOpXP, (regionOp, invertCoverage));
+        return new CoverageSetOpXP(regionOp, invertCoverage);
     }
 
     ~CoverageSetOpXP() override;
@@ -102,7 +102,7 @@ void CoverageSetOpXP::onGetGLProcessorKey(const GrGLSLCaps& caps, GrProcessorKey
 }
 
 GrGLXferProcessor* CoverageSetOpXP::createGLInstance() const {
-    return SkNEW_ARGS(GLCoverageSetOpXP, (*this));
+    return new GLCoverageSetOpXP(*this);
 }
 
 GrXferProcessor::OptFlags
@@ -216,7 +216,7 @@ GrXPFactory* GrCoverageSetOpXPFactory::Create(SkRegion::Op regionOp, bool invert
             break;
         }
         default:
-            return NULL;
+            return nullptr;
     }
 }
 
@@ -231,7 +231,7 @@ GrCoverageSetOpXPFactory::onCreateXferProcessor(const GrCaps& caps,
     // modulation table. Note that an inverted table still won't work if there are coverage procs.
     if (fInvertCoverage && hasMixedSamples) {
         SkASSERT(false);
-        return NULL;
+        return nullptr;
     }
 
     return CoverageSetOpXP::Create(fRegionOp, fInvertCoverage);
@@ -245,7 +245,7 @@ void GrCoverageSetOpXPFactory::getInvariantBlendedColor(const GrProcOptInfo& col
 
 GR_DEFINE_XP_FACTORY_TEST(GrCoverageSetOpXPFactory);
 
-GrXPFactory* GrCoverageSetOpXPFactory::TestCreate(GrProcessorTestData* d) {
+const GrXPFactory* GrCoverageSetOpXPFactory::TestCreate(GrProcessorTestData* d) {
     SkRegion::Op regionOp = SkRegion::Op(d->fRandom->nextULessThan(SkRegion::kLastOp + 1));
     bool invertCoverage = d->fRandom->nextBool();
     return GrCoverageSetOpXPFactory::Create(regionOp, invertCoverage);

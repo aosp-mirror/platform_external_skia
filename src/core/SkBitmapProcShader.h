@@ -11,36 +11,35 @@
 #define SkBitmapProcShader_DEFINED
 
 #include "SkShader.h"
-#include "SkBitmapProcState.h"
 #include "SkSmallAllocator.h"
+
+struct SkBitmapProcState;
+class SkBitmapProvider;
 
 class SkBitmapProcShader : public SkShader {
 public:
     SkBitmapProcShader(const SkBitmap& src, TileMode tx, TileMode ty,
-                       const SkMatrix* localMatrix = NULL);
+                       const SkMatrix* localMatrix = nullptr);
 
-    // overrides from SkShader
     bool isOpaque() const override;
-    BitmapType asABitmap(SkBitmap*, SkMatrix*, TileMode*) const override;
 
-    size_t contextSize() const override;
-
-    static bool CanDo(const SkBitmap&, TileMode tx, TileMode ty);
+    size_t contextSize() const override { return ContextSize(); }
 
     SK_TO_STRING_OVERRIDE()
     SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkBitmapProcShader)
 
+#if SK_SUPPORT_GPU
+    const GrFragmentProcessor* asFragmentProcessor(GrContext*, const SkMatrix& viewM,
+                                                   const SkMatrix*, SkFilterQuality) const override;
+#endif
 
-    bool asFragmentProcessor(GrContext*, const SkPaint&, const SkMatrix& viewM, const SkMatrix*,
-                             GrColor*, GrProcessorDataManager*,
-                             GrFragmentProcessor**) const override;
-
+protected:
     class BitmapProcShaderContext : public SkShader::Context {
     public:
         // The context takes ownership of the state. It will call its destructor
         // but will NOT free the memory.
-        BitmapProcShaderContext(const SkBitmapProcShader&, const ContextRec&, SkBitmapProcState*);
-        virtual ~BitmapProcShaderContext();
+        BitmapProcShaderContext(const SkShader&, const ContextRec&, SkBitmapProcState*);
+        ~BitmapProcShaderContext() override;
 
         void shadeSpan(int x, int y, SkPMColor dstC[], int count) override;
         ShadeProc asAShadeProc(void** ctx) override;
@@ -54,15 +53,21 @@ public:
 
         typedef SkShader::Context INHERITED;
     };
-
-protected:
+    
     void flatten(SkWriteBuffer&) const override;
     Context* onCreateContext(const ContextRec&, void* storage) const override;
+    bool onIsABitmap(SkBitmap*, SkMatrix*, TileMode*) const override;
 
     SkBitmap    fRawBitmap;   // experimental for RLE encoding
     uint8_t     fTileModeX, fTileModeY;
 
 private:
+    friend class SkImageShader;
+
+    static size_t ContextSize();
+    static Context* MakeContext(const SkShader&, TileMode tmx, TileMode tmy,
+                                const SkBitmapProvider&, const ContextRec&, void* storage);
+
     typedef SkShader INHERITED;
 };
 
@@ -71,9 +76,9 @@ private:
 // an Sk3DBlitter in SkDraw.cpp
 // Note that some contexts may contain other contexts (e.g. for compose shaders), but we've not
 // yet found a situation where the size below isn't big enough.
-typedef SkSmallAllocator<3, 1024> SkTBlitterAllocator;
+typedef SkSmallAllocator<3, 1160> SkTBlitterAllocator;
 
-// If alloc is non-NULL, it will be used to allocate the returned SkShader, and MUST outlive
+// If alloc is non-nullptr, it will be used to allocate the returned SkShader, and MUST outlive
 // the SkShader.
 SkShader* SkCreateBitmapShader(const SkBitmap& src, SkShader::TileMode, SkShader::TileMode,
                                const SkMatrix* localMatrix, SkTBlitterAllocator* alloc);

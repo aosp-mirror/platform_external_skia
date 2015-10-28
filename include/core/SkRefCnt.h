@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2006 The Android Open Source Project
  *
@@ -6,12 +5,12 @@
  * found in the LICENSE file.
  */
 
-
 #ifndef SkRefCnt_DEFINED
 #define SkRefCnt_DEFINED
 
-#include "SkAtomics.h"
-#include "SkTemplates.h"
+#include "../private/SkAtomics.h"
+#include "../private/SkUniquePtr.h"
+#include "SkTypes.h"
 
 /** \class SkRefCntBase
 
@@ -59,7 +58,15 @@ public:
     /** Increment the reference count. Must be balanced by a call to unref().
     */
     void ref() const {
+#ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
+        // Android employs some special subclasses that enable the fRefCnt to
+        // go to zero, but not below, prior to reusing the object.  This breaks
+        // the use of unique() on such objects and as such should be removed
+        // once the Android code is fixed.
+        SkASSERT(fRefCnt >= 0);
+#else
         SkASSERT(fRefCnt > 0);
+#endif
         (void)sk_atomic_fetch_add(&fRefCnt, +1, sk_memory_order_relaxed);  // No barrier required.
     }
 
@@ -103,7 +110,7 @@ private:
      */
     virtual void internal_dispose() const {
         this->internal_dispose_restore_refcnt_to_1();
-        SkDELETE(this);
+        delete this;
     }
 
     // The following friends are those which override internal_dispose()
@@ -137,7 +144,7 @@ class SK_API SkRefCnt : public SkRefCntBase { };
     } while (0)
 
 
-/** Call obj->ref() and return obj. The obj must not be NULL.
+/** Call obj->ref() and return obj. The obj must not be nullptr.
  */
 template <typename T> static inline T* SkRef(T* obj) {
     SkASSERT(obj);
@@ -165,51 +172,25 @@ template <typename T> static inline void SkSafeUnref(T* obj) {
 template<typename T> static inline void SkSafeSetNull(T*& obj) {
     if (obj) {
         obj->unref();
-        obj = NULL;
+        obj = nullptr;
     }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
+template <typename T> struct SkTUnref {
+    void operator()(T* t) { t->unref(); }
+};
+
 /**
  *  Utility class that simply unref's its argument in the destructor.
  */
-template <typename T> class SkAutoTUnref : SkNoncopyable {
+template <typename T> class SkAutoTUnref : public skstd::unique_ptr<T, SkTUnref<T>> {
 public:
-    explicit SkAutoTUnref(T* obj = NULL) : fObj(obj) {}
-    ~SkAutoTUnref() { SkSafeUnref(fObj); }
+    explicit SkAutoTUnref(T* obj = nullptr) : skstd::unique_ptr<T, SkTUnref<T>>(obj) {}
 
-    T* get() const { return fObj; }
-
-    T* reset(T* obj) {
-        SkSafeUnref(fObj);
-        fObj = obj;
-        return obj;
-    }
-
-    void swap(SkAutoTUnref* other) {
-        T* tmp = fObj;
-        fObj = other->fObj;
-        other->fObj = tmp;
-    }
-
-    /**
-     *  Return the hosted object (which may be null), transferring ownership.
-     *  The reference count is not modified, and the internal ptr is set to NULL
-     *  so unref() will not be called in our destructor. A subsequent call to
-     *  detach() will do nothing and return null.
-     */
-    T* detach() {
-        T* obj = fObj;
-        fObj = NULL;
-        return obj;
-    }
-
-    T* operator->() const { return fObj; }
-    operator T*() const { return fObj; }
-
-private:
-    T*  fObj;
+    T* detach() { return this->release(); }
+    operator T*() const { return this->get(); }
 };
 // Can't use the #define trick below to guard a bare SkAutoTUnref(...) because it's templated. :(
 
@@ -236,8 +217,8 @@ public:
     void    ref() const { (void)sk_atomic_fetch_add(&fRefCnt, +1, sk_memory_order_relaxed); }
     void  unref() const {
         if (1 == sk_atomic_fetch_add(&fRefCnt, -1, sk_memory_order_acq_rel)) {
-            SkDEBUGCODE(fRefCnt = 1;)   // restore the 1 for our destructor's assert
-            SkDELETE((const Derived*)this);
+            SkDEBUGCODE(fRefCnt = 1;)  // restore the 1 for our destructor's assert
+                    delete (const Derived*)this;
         }
     }
     void  deref() const { this->unref(); }

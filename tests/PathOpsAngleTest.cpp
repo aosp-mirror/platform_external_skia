@@ -51,7 +51,7 @@ DEF_TEST(PathOpsAngleFindCrossEpsilon, reporter) {
                     float p2 = SkDoubleToScalar(line[1].fY * test.fX);
                     int p1Bits = SkFloatAs2sCompliment(p1);
                     int p2Bits = SkFloatAs2sCompliment(p2);
-                    int epsilon = abs(p1Bits - p2Bits);
+                    int epsilon = SkTAbs(p1Bits - p2Bits);
                     if (maxEpsilon < epsilon) {
                         SkDebugf("line={{0, 0}, {%1.7g, %1.7g}} t=%1.7g pt={%1.7g, %1.7g}"
                             " epsilon=%d\n",
@@ -104,7 +104,7 @@ DEF_TEST(PathOpsAngleFindQuadEpsilon, reporter) {
         float p2 = SkDoubleToScalar(line[1].fY * last.fX);
         int p1Bits = SkFloatAs2sCompliment(p1);
         int p2Bits = SkFloatAs2sCompliment(p2);
-        int epsilon = abs(p1Bits - p2Bits);
+        int epsilon = SkTAbs(p1Bits - p2Bits);
         if (maxEpsilon < epsilon) {
             SkDebugf("line={{0, 0}, {%1.7g, %1.7g}} t=%1.7g/%1.7g/%1.7g moveT=%1.7g"
                     " pt={%1.7g, %1.7g} epsilon=%d\n",
@@ -235,7 +235,7 @@ static const int circleDataSetSize = (int) SK_ARRAY_COUNT(circleDataSet);
 DEF_TEST(PathOpsAngleCircle, reporter) {
     SkChunkAlloc allocator(4096);
     SkOpContourHead contour;
-    SkOpGlobalState state(NULL, &contour  SkDEBUGPARAMS(NULL));
+    SkOpGlobalState state(nullptr, &contour  SkDEBUGPARAMS(nullptr));
     contour.init(&state, false, false);
     for (int index = 0; index < circleDataSetSize; ++index) {
         CircleData& data = circleDataSet[index];
@@ -427,7 +427,7 @@ struct FourPoints {
 DEF_TEST(PathOpsAngleAfter, reporter) {
     SkChunkAlloc allocator(4096);
     SkOpContourHead contour;
-    SkOpGlobalState state(NULL, &contour  SkDEBUGPARAMS(NULL));
+    SkOpGlobalState state(nullptr, &contour  SkDEBUGPARAMS(nullptr));
     contour.init(&state, false, false);
     for (int index = intersectDataSetsSize - 1; index >= 0; --index) {
         IntersectData* dataArray = intersectDataSets[index];

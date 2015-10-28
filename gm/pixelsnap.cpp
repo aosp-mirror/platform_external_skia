@@ -23,7 +23,7 @@ protected:
     static const int kSubPixelSteps = 8;
     static const int kLabelTextSize = 9;
 
-    SK_COMPILE_ASSERT(kSubPixelSteps < 99, label_offset_too_small);
+    static_assert(kSubPixelSteps < 99, "label_offset_too_small");
     static const int kLabelOffsetX = 2 * kLabelTextSize + kLabelPad;
     static const int kLabelOffsetY = kLabelTextSize + kLabelPad;
 
@@ -35,7 +35,9 @@ protected:
     void onDraw(SkCanvas* canvas) override {
         SkPaint bgPaint;
         bgPaint.setShader(
-            sk_tool_utils::create_checkerboard_shader(0xFFAAAAAA, 0xFF777777, 1))->unref();
+                sk_tool_utils::create_checkerboard_shader(
+                sk_tool_utils::color_to_565(0xFFAAAAAA), 
+                sk_tool_utils::color_to_565(0xFF777777), 1))->unref();
         canvas->drawPaint(bgPaint);
 
         SkString offset;
@@ -43,33 +45,31 @@ protected:
         labelPaint.setAntiAlias(true);
         labelPaint.setColor(SK_ColorWHITE);
         labelPaint.setTextSize(SkIntToScalar(kLabelTextSize));
+        sk_tool_utils::set_portable_typeface(&labelPaint);
         SkPaint linePaint;
         linePaint.setColor(SK_ColorWHITE);
 
-        // Drawing labels is useful for debugging, but bad for baselining (x-platform txt diffs).
-        if (false) {
-            // Draw row labels
-            canvas->save();
-                canvas->translate(0, SkIntToScalar(kLabelOffsetY));
-                for (int i = 0; i <= kSubPixelSteps; ++i) {
-                    offset.printf("%d", i);
-                    canvas->drawText(offset.c_str(), offset.size(),
-                                     0, i * kTrans + labelPaint.getTextSize(),
-                                     labelPaint);
-                }
-            canvas->restore();
+        // Draw row labels
+        canvas->save();
+            canvas->translate(0, SkIntToScalar(kLabelOffsetY));
+            for (int i = 0; i <= kSubPixelSteps; ++i) {
+                offset.printf("%d", i);
+                canvas->drawText(offset.c_str(), offset.size(),
+                                    0, i * kTrans + labelPaint.getTextSize(),
+                                    labelPaint);
+            }
+        canvas->restore();
 
-            // Draw col labels
-            canvas->save();
-                canvas->translate(SkIntToScalar(kLabelOffsetX), 0);
-                for (int i = 0; i <= kSubPixelSteps; ++i) {
-                    offset.printf("%d", i);
-                    canvas->drawText(offset.c_str(), offset.size(),
-                                     i * SkIntToScalar(kTrans), labelPaint.getTextSize(),
-                                     labelPaint);
-                }
-            canvas->restore();
-        }
+        // Draw col labels
+        canvas->save();
+            canvas->translate(SkIntToScalar(kLabelOffsetX), 0);
+            for (int i = 0; i <= kSubPixelSteps; ++i) {
+                offset.printf("%d", i);
+                canvas->drawText(offset.c_str(), offset.size(),
+                                    i * SkIntToScalar(kTrans), labelPaint.getTextSize(),
+                                    labelPaint);
+            }
+        canvas->restore();
 
         canvas->translate(SkIntToScalar(kLabelOffsetX), SkIntToScalar(kLabelOffsetY));
 
@@ -175,7 +175,7 @@ private:
 };
 
 //////////////////////////////////////////////////////////////////////////////
-DEF_GM( return SkNEW(PointSnapGM); )
-DEF_GM( return SkNEW(LineSnapGM); )
-DEF_GM( return SkNEW(RectSnapGM); )
-DEF_GM( return SkNEW(ComboSnapGM); )
+DEF_GM(return new PointSnapGM;)
+DEF_GM(return new LineSnapGM;)
+DEF_GM(return new RectSnapGM;)
+DEF_GM(return new ComboSnapGM;)

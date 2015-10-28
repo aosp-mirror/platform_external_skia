@@ -7,7 +7,6 @@
 
 #include "GrProcessor.h"
 #include "GrContext.h"
-#include "GrCoordTransform.h"
 #include "GrGeometryProcessor.h"
 #include "GrInvariantOutput.h"
 #include "GrMemoryPool.h"
@@ -49,7 +48,7 @@ GrProcessorTestFactory<GrGeometryProcessor>::GetFactories() {
  * we verify the count is as expected.  If a new factory is added, then these numbers must be
  * manually adjusted.
  */
-static const int kFPFactoryCount = 37;
+static const int kFPFactoryCount = 38;
 static const int kGPFactoryCount = 14;
 static const int kXPFactoryCount = 5;
 
@@ -129,42 +128,6 @@ bool GrProcessor::hasSameTextureAccesses(const GrProcessor& that) const {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-void GrFragmentProcessor::addCoordTransform(const GrCoordTransform* transform) {
-    fCoordTransforms.push_back(transform);
-    fUsesLocalCoords = fUsesLocalCoords || transform->sourceCoords() == kLocal_GrCoordSet;
-    SkDEBUGCODE(transform->setInProcessor();)
-}
-
-bool GrFragmentProcessor::hasSameTransforms(const GrFragmentProcessor& that) const {
-    if (fCoordTransforms.count() != that.fCoordTransforms.count()) {
-        return false;
-    }
-    int count = fCoordTransforms.count();
-    for (int i = 0; i < count; ++i) {
-        if (*fCoordTransforms[i] != *that.fCoordTransforms[i]) {
-            return false;
-        }
-    }
-    return true;
-}
-
-void GrFragmentProcessor::computeInvariantOutput(GrInvariantOutput* inout) const {
-    this->onComputeInvariantOutput(inout);
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////////////
-
 // Initial static variable from GrXPFactory
 int32_t GrXPFactory::gCurrXPFClassID =
         GrXPFactory::kIllegalXPFClassID;
-
-///////////////////////////////////////////////////////////////////////////////////////////////////
-
-// GrProcessorDataManager lives in the same pool
-void* GrProcessorDataManager::operator new(size_t size) {
-    return MemoryPoolAccessor().pool()->allocate(size);
-}
-
-void GrProcessorDataManager::operator delete(void* target) {
-    return MemoryPoolAccessor().pool()->release(target);
-}

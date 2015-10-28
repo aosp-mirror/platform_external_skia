@@ -24,7 +24,7 @@ SkTestFont::SkTestFont(const SkTestFontData& fontData)
     , fWidths(fontData.fWidths)
     , fMetrics(fontData.fMetrics)
     , fName(fontData.fName)
-    , fPaths(NULL)
+    , fPaths(nullptr)
 {
     init(fontData.fPoints, fontData.fVerbs);
 #ifdef SK_DEBUG
@@ -35,9 +35,9 @@ SkTestFont::SkTestFont(const SkTestFontData& fontData)
 
 SkTestFont::~SkTestFont() {
     for (unsigned index = 0; index < fCharCodesCount; ++index) {
-        SkDELETE(fPaths[index]);
+        delete fPaths[index];
     }
-    SkDELETE_ARRAY(fPaths);
+    delete[] fPaths;
 }
 
 #ifdef SK_DEBUG
@@ -78,9 +78,9 @@ int SkTestFont::codeToIndex(SkUnichar charCode) const {
 }
 
 void SkTestFont::init(const SkScalar* pts, const unsigned char* verbs) {
-    fPaths = SkNEW_ARRAY(SkPath*, fCharCodesCount);
+    fPaths = new SkPath* [fCharCodesCount];
     for (unsigned index = 0; index < fCharCodesCount; ++index) {
-        SkPath* path = SkNEW(SkPath);
+        SkPath* path = new SkPath;
         SkPath::Verb verb;
         while ((verb = (SkPath::Verb) *verbs++) != SkPath::kDone_Verb) {
             switch (verb) {
@@ -108,6 +108,8 @@ void SkTestFont::init(const SkScalar* pts, const unsigned char* verbs) {
                     return;
             }
         }
+        // This should make SkPath::getBounds() queries threadsafe.
+        path->updateBoundsCache();
         fPaths[index] = path;
     }
 }
@@ -173,7 +175,7 @@ SkTypeface::LocalizedStrings* SkTestTypeface::onCreateFamilyNameIterator() const
     SkString familyName(fTestFont->fName);
     SkString language("und"); //undetermined
 SkASSERT(0);  // incomplete
-    return NULL;
+    return nullptr;
 //     return new SkOTUtils::LocalizedStrings_SingleName(familyName, language);
 }
 
@@ -280,5 +282,5 @@ private:
 };
 
 SkScalerContext* SkTestTypeface::onCreateScalerContext(const SkDescriptor* desc) const {
-    return SkNEW_ARGS(SkTestScalerContext, (const_cast<SkTestTypeface*>(this), desc));
+    return new SkTestScalerContext(const_cast<SkTestTypeface*>(this), desc);
 }

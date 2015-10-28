@@ -8,6 +8,7 @@
 #include "SkMatrixConvolutionImageFilter.h"
 #include "SkBitmap.h"
 #include "SkColorPriv.h"
+#include "SkDevice.h"
 #include "SkReadBuffer.h"
 #include "SkWriteBuffer.h"
 #include "SkRect.h"
@@ -39,7 +40,7 @@ SkMatrixConvolutionImageFilter::SkMatrixConvolutionImageFilter(
     fTileMode(tileMode),
     fConvolveAlpha(convolveAlpha) {
     size_t size = (size_t) sk_64_mul(fKernelSize.width(), fKernelSize.height());
-    fKernel = SkNEW_ARRAY(SkScalar, size);
+    fKernel = new SkScalar[size];
     memcpy(fKernel, kernel, size * sizeof(SkScalar));
     SkASSERT(kernelSize.fWidth >= 1 && kernelSize.fHeight >= 1);
     SkASSERT(kernelOffset.fX >= 0 && kernelOffset.fX < kernelSize.fWidth);
@@ -57,21 +58,20 @@ SkMatrixConvolutionImageFilter* SkMatrixConvolutionImageFilter::Create(
     SkImageFilter* input,
     const CropRect* cropRect) {
     if (kernelSize.width() < 1 || kernelSize.height() < 1) {
-        return NULL;
+        return nullptr;
     }
     if (gMaxKernelSize / kernelSize.fWidth < kernelSize.fHeight) {
-        return NULL;
+        return nullptr;
     }
     if (!kernel) {
-        return NULL;
+        return nullptr;
     }
     if ((kernelOffset.fX < 0) || (kernelOffset.fX >= kernelSize.fWidth) ||
         (kernelOffset.fY < 0) || (kernelOffset.fY >= kernelSize.fHeight)) {
-        return NULL;
+        return nullptr;
     }
-    return SkNEW_ARGS(SkMatrixConvolutionImageFilter, (kernelSize, kernel, gain, bias,
-                                                       kernelOffset, tileMode, convolveAlpha,
-                                                       input, cropRect));
+    return new SkMatrixConvolutionImageFilter(kernelSize, kernel, gain, bias, kernelOffset,
+                                              tileMode, convolveAlpha, input, cropRect);
 }
 
 SkFlattenable* SkMatrixConvolutionImageFilter::CreateProc(SkReadBuffer& buffer) {
@@ -83,11 +83,11 @@ SkFlattenable* SkMatrixConvolutionImageFilter::CreateProc(SkReadBuffer& buffer) 
 
     const int64_t kernelArea = sk_64_mul(kernelSize.width(), kernelSize.height());
     if (!buffer.validate(kernelArea == count)) {
-        return NULL;
+        return nullptr;
     }
     SkAutoSTArray<16, SkScalar> kernel(count);
     if (!buffer.readScalarArray(kernel.get(), count)) {
-        return NULL;
+        return nullptr;
     }
     SkScalar gain = buffer.readScalar();
     SkScalar bias = buffer.readScalar();
@@ -127,8 +127,8 @@ public:
 class ClampPixelFetcher {
 public:
     static inline SkPMColor fetch(const SkBitmap& src, int x, int y, const SkIRect& bounds) {
-        x = SkPin32(x, bounds.fLeft, bounds.fRight - 1);
-        y = SkPin32(y, bounds.fTop, bounds.fBottom - 1);
+        x = SkTPin(x, bounds.fLeft, bounds.fRight - 1);
+        y = SkTPin(y, bounds.fTop, bounds.fBottom - 1);
         return *src.getAddr32(x, y);
     }
 };
@@ -242,16 +242,18 @@ void SkMatrixConvolutionImageFilter::filterBorderPixels(const SkBitmap& src,
 // FIXME:  This should be refactored to SkImageFilterUtils for
 // use by other filters.  For now, we assume the input is always
 // premultiplied and unpremultiply it
-static SkBitmap unpremultiplyBitmap(const SkBitmap& src)
+static SkBitmap unpremultiplyBitmap(SkImageFilter::Proxy* proxy, const SkBitmap& src)
 {
     SkAutoLockPixels alp(src);
     if (!src.getPixels()) {
         return SkBitmap();
     }
-    SkBitmap result;
-    if (!result.tryAllocPixels(src.info())) {
+    SkAutoTUnref<SkBaseDevice> device(proxy->createDevice(src.width(), src.height()));
+    if (!device) {
         return SkBitmap();
     }
+    SkBitmap result = device->accessBitmap(false);
+    SkAutoLockPixels alp_result(result);
     for (int y = 0; y < src.height(); ++y) {
         const uint32_t* srcRow = src.getAddr32(0, y);
         uint32_t* dstRow = result.getAddr32(0, y);
@@ -269,7 +271,7 @@ bool SkMatrixConvolutionImageFilter::onFilterImage(Proxy* proxy,
                                                    SkIPoint* offset) const {
     SkBitmap src = source;
     SkIPoint srcOffset = SkIPoint::Make(0, 0);
-    if (getInput(0) && !getInput(0)->filterImage(proxy, source, ctx, &src, &srcOffset)) {
+    if (!this->filterInput(0, proxy, source, ctx, &src, &srcOffset)) {
         return false;
     }
 
@@ -283,7 +285,7 @@ bool SkMatrixConvolutionImageFilter::onFilterImage(Proxy* proxy,
     }
 
     if (!fConvolveAlpha && !src.isOpaque()) {
-        src = unpremultiplyBitmap(src);
+        src = unpremultiplyBitmap(proxy, src);
     }
 
     SkAutoLockPixels alp(src);
@@ -291,9 +293,12 @@ bool SkMatrixConvolutionImageFilter::onFilterImage(Proxy* proxy,
         return false;
     }
 
-    if (!result->tryAllocPixels(src.info().makeWH(bounds.width(), bounds.height()))) {
+    SkAutoTUnref<SkBaseDevice> device(proxy->createDevice(bounds.width(), bounds.height()));
+    if (!device) {
         return false;
     }
+    *result = device->accessBitmap(false);
+    SkAutoLockPixels alp_result(*result);
 
     offset->fX = bounds.fLeft;
     offset->fY = bounds.fTop;
@@ -348,7 +353,6 @@ static GrTextureDomain::Mode convert_tilemodes(
 }
 
 bool SkMatrixConvolutionImageFilter::asFragmentProcessor(GrFragmentProcessor** fp,
-                                                         GrProcessorDataManager* procDataManager,
                                                          GrTexture* texture,
                                                          const SkMatrix&,
                                                          const SkIRect& bounds) const {
@@ -356,8 +360,7 @@ bool SkMatrixConvolutionImageFilter::asFragmentProcessor(GrFragmentProcessor** f
         return fKernelSize.width() * fKernelSize.height() <= MAX_KERNEL_SIZE;
     }
     SkASSERT(fKernelSize.width() * fKernelSize.height() <= MAX_KERNEL_SIZE);
-    *fp = GrMatrixConvolutionEffect::Create(procDataManager,
-                                            texture,
+    *fp = GrMatrixConvolutionEffect::Create(texture,
                                             bounds,
                                             fKernelSize,
                                             fKernel,

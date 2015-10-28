@@ -92,7 +92,7 @@ public:
 
         fRect.set(0, 0, SkIntToScalar(200), SkIntToScalar(200));
         fRect.offset(SkIntToScalar(20), SkIntToScalar(20));
-        fAnimatingDrawable = SkNEW_ARGS(MyDrawable, (fRect));
+        fAnimatingDrawable = new MyDrawable(fRect);
 
         SkPictureRecorder recorder;
         this->drawRoot(recorder.beginRecording(SkRect::MakeWH(800, 500)));
@@ -204,7 +204,7 @@ protected:
 
     SkView::Click* onFindClickHandler(SkScalar x, SkScalar y, unsigned modi) override {
      //   fSweep += SK_Scalar1;
-        this->inval(NULL);
+        this->inval(nullptr);
         return this->INHERITED::onFindClickHandler(x, y, modi);
     }
 

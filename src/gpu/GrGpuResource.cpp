@@ -11,6 +11,7 @@
 #include "GrResourceCache.h"
 #include "GrGpu.h"
 #include "GrGpuResourcePriv.h"
+#include "SkTraceMemoryDump.h"
 
 static inline GrResourceCache* get_resource_cache(GrGpu* gpu) {
     SkASSERT(gpu);
@@ -40,16 +41,36 @@ void GrGpuResource::release() {
     SkASSERT(fGpu);
     this->onRelease();
     get_resource_cache(fGpu)->resourceAccess().removeResource(this);
-    fGpu = NULL;
+    fGpu = nullptr;
     fGpuMemorySize = 0;
 }
 
 void GrGpuResource::abandon() {
+    if (this->wasDestroyed()) {
+        return;
+    }
     SkASSERT(fGpu);
     this->onAbandon();
     get_resource_cache(fGpu)->resourceAccess().removeResource(this);
-    fGpu = NULL;
+    fGpu = nullptr;
     fGpuMemorySize = 0;
+}
+
+void GrGpuResource::dumpMemoryStatistics(SkTraceMemoryDump* traceMemoryDump) const {
+    // Dump resource as "skia/gpu_resources/resource_#".
+    SkString dumpName("skia/gpu_resources/resource_");
+    dumpName.appendS32(this->getUniqueID());
+
+    traceMemoryDump->dumpNumericValue(dumpName.c_str(), "size", "bytes", this->gpuMemorySize());
+
+    if (this->isPurgeable()) {
+        traceMemoryDump->dumpNumericValue(dumpName.c_str(), "purgeable_size", "bytes",
+                                          this->gpuMemorySize());
+    }
+
+    // Call setMemoryBacking to allow sub-classes with implementation specific backings (such as GL
+    // objects) to provide additional information.
+    this->setMemoryBacking(traceMemoryDump, dumpName);
 }
 
 const SkData* GrGpuResource::setCustomData(const SkData* data) {
@@ -62,7 +83,7 @@ const GrContext* GrGpuResource::getContext() const {
     if (fGpu) {
         return fGpu->getContext();
     } else {
-        return NULL;
+        return nullptr;
     }
 }
 
@@ -70,7 +91,7 @@ GrContext* GrGpuResource::getContext() {
     if (fGpu) {
         return fGpu->getContext();
     } else {
-        return NULL;
+        return nullptr;
     }
 }
 
@@ -86,6 +107,9 @@ void GrGpuResource::didChangeGpuMemorySize() const {
 }
 
 void GrGpuResource::removeUniqueKey() {
+    if (this->wasDestroyed()) {
+        return;
+    }
     SkASSERT(fUniqueKey.isValid());
     get_resource_cache(fGpu)->resourceAccess().removeUniqueKey(this);
 }
@@ -109,7 +133,7 @@ void GrGpuResource::setUniqueKey(const GrUniqueKey& key) {
 void GrGpuResource::notifyAllCntsAreZero(CntType lastCntTypeToReachZero) const {
     if (this->wasDestroyed()) {
         // We've already been removed from the cache. Goodbye cruel world!
-        SkDELETE(this);
+        delete this;
         return;
     }
 
@@ -159,14 +183,15 @@ void GrGpuResource::removeScratchKey() {
 }
 
 void GrGpuResource::makeBudgeted() {
-    if (GrGpuResource::kUncached_LifeCycle == fLifeCycle) {
+    if (!this->wasDestroyed() && GrGpuResource::kUncached_LifeCycle == fLifeCycle) {
         fLifeCycle = kCached_LifeCycle;
         get_resource_cache(fGpu)->resourceAccess().didChangeBudgetStatus(this);
     }
 }
 
 void GrGpuResource::makeUnbudgeted() {
-    if (GrGpuResource::kCached_LifeCycle == fLifeCycle && !fUniqueKey.isValid()) {
+    if (!this->wasDestroyed() && GrGpuResource::kCached_LifeCycle == fLifeCycle &&
+        !fUniqueKey.isValid()) {
         fLifeCycle = kUncached_LifeCycle;
         get_resource_cache(fGpu)->resourceAccess().didChangeBudgetStatus(this);
     }

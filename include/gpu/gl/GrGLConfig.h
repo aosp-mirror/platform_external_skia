@@ -65,15 +65,6 @@
  * The GrGLInterface field fCallback specifies the function ptr and there is an
  * additional field fCallbackData of type intptr_t for client data.
  *
- * GR_GL_RGBA_8888_PIXEL_OPS_SLOW: Set this to 1 if it is known that performing
- * glReadPixels / glTex(Sub)Image with format=GL_RGBA, type=GL_UNISIGNED_BYTE is
- * significantly slower than format=GL_BGRA, type=GL_UNISIGNED_BYTE.
- *
- * GR_GL_FULL_READPIXELS_FASTER_THAN_PARTIAL: Set this to 1 if calling
- * glReadPixels to read the entire framebuffer is faster than calling it with
- * the same sized rectangle but with a framebuffer bound that is larger than
- * the rectangle read.
- *
  * GR_GL_CHECK_ALLOC_WITH_GET_ERROR: If set to 1 this will then glTexImage,
  * glBufferData, glRenderbufferStorage, etc will be checked for errors. This
  * amounts to ensuring the error is GL_NO_ERROR, calling the allocating
@@ -128,14 +119,6 @@
     #define GR_GL_PER_GL_FUNC_CALLBACK                  0
 #endif
 
-#if !defined(GR_GL_RGBA_8888_PIXEL_OPS_SLOW)
-    #define GR_GL_RGBA_8888_PIXEL_OPS_SLOW              0
-#endif
-
-#if !defined(GR_GL_FULL_READPIXELS_FASTER_THAN_PARTIAL)
-    #define GR_GL_FULL_READPIXELS_FASTER_THAN_PARTIAL   0
-#endif
-
 #if !defined(GR_GL_CHECK_ALLOC_WITH_GET_ERROR)
     #define GR_GL_CHECK_ALLOC_WITH_GET_ERROR            1
 #endif
@@ -150,37 +133,6 @@
 
 #if !defined(GR_GL_USE_NEW_SHADER_SOURCE_SIGNATURE)
     #define GR_GL_USE_NEW_SHADER_SOURCE_SIGNATURE       0
-#endif
-
-/**
- * There is a strange bug that occurs on Macs with NVIDIA GPUs. We don't
- * fully understand it. When (element) array buffers are continually
- * respecified using glBufferData performance can fall off of a cliff. The
- * driver winds up performing many DMA mapping / unmappings and chews up ~50% of
- * the core. However, it has been observed that occaisonally respecifiying the
- * buffer using glBufferData and then writing data using glBufferSubData
- * prevents the bad behavior.
- *
- * There is a lot of uncertainty around this issue. In Chrome backgrounding
- * the tab somehow initiates this behavior and we don't know what the connection
- * is. Another observation is that Chrome's cmd buffer server will actually
- * create a buffer full of zeros when it sees a NULL data param (for security
- * reasons). If this is disabled and NULL is actually passed all the way to the
- * driver then the workaround doesn't help.
- *
- * The issue is tracked at:
- * http://code.google.com/p/chromium/issues/detail?id=114865
- *
- * When the workaround is enabled we will use the glBufferData / glBufferSubData
- * trick every 128 array buffer uploads.
- *
- * Hopefully we will understand this better and have a cleaner fix or get a
- * OS/driver level fix.
- */
-#if (defined(SK_BUILD_FOR_MAC) && !GR_GL_USE_BUFFER_DATA_NULL_HINT)
-#       define GR_GL_MAC_BUFFER_OBJECT_PERFOMANCE_WORKAROUND 1
-#else
-#       define GR_GL_MAC_BUFFER_OBJECT_PERFOMANCE_WORKAROUND 0
 #endif
 
 #endif

@@ -52,7 +52,7 @@ public:
 protected:
     const char* onGetName() override { return fName.c_str(); }
 
-    void onDraw(const int loops, SkCanvas*) override {
+    void onDraw(int loops, SkCanvas*) override {
         Proc proc = fProc;
 
         for (int i = 0; i < loops; ++i) {
@@ -64,4 +64,4 @@ private:
     typedef Benchmark INHERITED;
 };
 
-DEF_BENCH( return SkNEW_ARGS(RegionContainBench, (sect_proc, "sect")); )
+DEF_BENCH(return new RegionContainBench(sect_proc, "sect");)

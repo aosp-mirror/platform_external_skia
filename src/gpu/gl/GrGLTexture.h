@@ -28,6 +28,7 @@ public:
     };
 
     struct IDDesc {
+        GrGLenum                    fTarget;
         GrGLuint                    fTextureID;
         GrGpuResource::LifeCycle    fLifeCycle;
     };
@@ -52,6 +53,8 @@ public:
 
     GrGLuint textureID() const { return fTextureID; }
 
+    GrGLenum target() const { return fTarget; }
+
 protected:
     // The public constructor registers this object with the cache. However, only the most derived
     // class should register with the cache. This constructor does not do the registration and
@@ -63,10 +66,13 @@ protected:
 
     void onAbandon() override;
     void onRelease() override;
+    void setMemoryBacking(SkTraceMemoryDump* traceMemoryDump,
+                          const SkString& dumpName) const override;
 
 private:
     TexParams                       fTexParams;
     GrGpu::ResetTimestamp           fTexParamsTimestamp;
+    GrGLenum                        fTarget;
     GrGLuint                        fTextureID;
 
     // We track this separately from GrGpuResource because this may be both a texture and a render

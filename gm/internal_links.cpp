@@ -61,7 +61,7 @@ private:
         canvas->drawRect(rect, paint);
 
         paint.setAntiAlias(true);
-        sk_tool_utils::set_portable_typeface_always(&paint);
+        sk_tool_utils::set_portable_typeface(&paint);
         paint.setTextSize(SkIntToScalar(25));
         paint.setColor(SK_ColorBLACK);
         canvas->drawText(text, strlen(text), x, y, paint);
@@ -72,7 +72,7 @@ private:
 
 //////////////////////////////////////////////////////////////////////////////
 
-static GM* MyFactory(void*) { return SkNEW(InternalLinksGM); }
+static GM* MyFactory(void*) { return new InternalLinksGM; }
 static GMRegistry reg(MyFactory);
 
 }

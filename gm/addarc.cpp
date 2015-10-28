@@ -36,7 +36,7 @@ protected:
 
         SkScalar sign = 1;
         while (r.width() > paint.getStrokeWidth() * 3) {
-            paint.setColor(rand.nextU() | (0xFF << 24));
+            paint.setColor(sk_tool_utils::color_to_565(rand.nextU() | (0xFF << 24)));
             SkScalar startAngle = rand.nextUScalar1() * 360;
 
             SkScalar speed = SkScalarSqrt(16 / r.width()) * 0.5f;
@@ -101,7 +101,7 @@ protected:
             SkPathMeasure meas(path, false);
             SkScalar arcLen = rad * R;
             SkPoint pos;
-            if (meas.getPosTan(arcLen, &pos, NULL)) {
+            if (meas.getPosTan(arcLen, &pos, nullptr)) {
                 canvas->drawLine(0, 0, pos.x(), pos.y(), measPaint);
             }
         }
@@ -144,7 +144,7 @@ protected:
             SkAutoCanvasRestore acr(canvas, true);
             canvas->rotate(fRotate * sign);
 
-            paint.setColor(rand.nextU() | (0xFF << 24));
+            paint.setColor(sk_tool_utils::color_to_565(rand.nextU() | (0xFF << 24)));
             canvas->drawOval(r, paint);
             r.inset(delta, delta);
             sign = -sign;

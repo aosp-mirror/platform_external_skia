@@ -59,12 +59,13 @@ protected:
 
                 SkPaint paint;
                 paint.setImageFilter(SkBlurImageFilter::Create(sigmaX, sigmaY))->unref();
-                canvas->saveLayer(NULL, &paint);
+                canvas->saveLayer(nullptr, &paint);
 
                 SkRandom rand;
                 SkPaint textPaint;
                 textPaint.setAntiAlias(false);
-                textPaint.setColor(rand.nextBits(24) | 0xFF000000);
+                textPaint.setColor(sk_tool_utils::color_to_565(rand.nextBits(24) | 0xFF000000));
+                sk_tool_utils::set_portable_typeface(&textPaint);
                 textPaint.setTextSize(textSize);
 
                 for (int i = 0; i < testStringCount; i++) {

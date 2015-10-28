@@ -23,7 +23,7 @@ static void make_bitmap(SkBitmap* bitmap) {
     paint.setAntiAlias(true);
     const SkPoint pts[] = { { 0, 0 }, { 64, 64 } };
     const SkColor colors[] = { SK_ColorWHITE, SK_ColorBLUE };
-    paint.setShader(SkGradientShader::CreateLinear(pts, colors, NULL, 2,
+    paint.setShader(SkGradientShader::CreateLinear(pts, colors, nullptr, 2,
                                                    SkShader::kClamp_TileMode))->unref();
     canvas.drawCircle(32, 32, 32, paint);
 }
@@ -46,7 +46,7 @@ protected:
     }
 
     void onDraw(SkCanvas* canvas) override {
-        canvas->drawColor(0xFFCCCCCC);
+        canvas->drawColor(sk_tool_utils::color_to_565(0xFFCCCCCC));
 
         const SkIRect src[] = {
             { 0, 0, 32, 32 },
@@ -70,7 +70,7 @@ protected:
 
             canvas->drawBitmap(bitmap, 0, 0, &paint);
             if (!fUseIRect) {
-                canvas->drawBitmapRect(bitmap, &srcR, dstR, &paint,
+                canvas->drawBitmapRect(bitmap, srcR, dstR, &paint,
                                        SkCanvas::kStrict_SrcRectConstraint);
             } else {
                 canvas->drawBitmapRect(bitmap, src[i], dstR, &paint);
@@ -143,7 +143,7 @@ protected:
         SkRect srcR = { 0.5f, 0.5f, 2.5f, 2.5f };
         SkRect dstR = { 100, 100, 300, 200 };
 
-        canvas->drawBitmapRect(bitmap, &srcR, dstR, NULL, SkCanvas::kStrict_SrcRectConstraint);
+        canvas->drawBitmapRect(bitmap, srcR, dstR, nullptr, SkCanvas::kStrict_SrcRectConstraint);
     }
 
 private:
@@ -213,9 +213,9 @@ protected:
         SkRect dstR2 = { 10, 410, 30, 430 };
 
         if (!fUseIRect) {
-            canvas->drawBitmapRect(fBigBitmap, &srcR1, dstR1, &paint,
+            canvas->drawBitmapRect(fBigBitmap, srcR1, dstR1, &paint,
                                    SkCanvas::kStrict_SrcRectConstraint);
-            canvas->drawBitmapRect(fBigBitmap, &srcR2, dstR2, &paint,
+            canvas->drawBitmapRect(fBigBitmap, srcR2, dstR2, &paint,
                                    SkCanvas::kStrict_SrcRectConstraint);
         } else {
             canvas->drawBitmapRect(fBigBitmap, srcR1.roundOut(), dstR1, &paint);
@@ -263,7 +263,7 @@ protected:
 
         // the drawRect shows the same problem as clipRect(r) followed by drawcolor(red)
         canvas->drawRect(r, paint);
-        canvas->drawBitmapRect(fBM, NULL, r, NULL);
+        canvas->drawBitmapRect(fBM, r, nullptr);
     }
 
 private:

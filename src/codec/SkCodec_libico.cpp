@@ -5,7 +5,7 @@
  * found in the LICENSE file.
  */
 
-#include "SkCodec_libbmp.h"
+#include "SkBmpCodec.h"
 #include "SkCodec_libico.h"
 #include "SkCodec_libpng.h"
 #include "SkCodecPriv.h"
@@ -41,28 +41,26 @@ SkCodec* SkIcoCodec::NewFromStream(SkStream* stream) {
     static const uint32_t kIcoDirEntryBytes = 16;
 
     // Read the directory header
-    SkAutoTDeleteArray<uint8_t> dirBuffer(
-            SkNEW_ARRAY(uint8_t, kIcoDirectoryBytes));
+    SkAutoTDeleteArray<uint8_t> dirBuffer(new uint8_t[kIcoDirectoryBytes]);
     if (inputStream.get()->read(dirBuffer.get(), kIcoDirectoryBytes) !=
             kIcoDirectoryBytes) {
         SkCodecPrintf("Error: unable to read ico directory header.\n");
-        return NULL;
+        return nullptr;
     }
 
     // Process the directory header
     const uint16_t numImages = get_short(dirBuffer.get(), 4);
     if (0 == numImages) {
         SkCodecPrintf("Error: No images embedded in ico.\n");
-        return NULL;
+        return nullptr;
     }
 
     // Ensure that we can read all of indicated directory entries
-    SkAutoTDeleteArray<uint8_t> entryBuffer(
-            SkNEW_ARRAY(uint8_t, numImages*kIcoDirEntryBytes));
+    SkAutoTDeleteArray<uint8_t> entryBuffer(new uint8_t[numImages * kIcoDirEntryBytes]);
     if (inputStream.get()->read(entryBuffer.get(), numImages*kIcoDirEntryBytes) !=
             numImages*kIcoDirEntryBytes) {
         SkCodecPrintf("Error: unable to read ico directory entries.\n");
-        return NULL;
+        return nullptr;
     }
 
     // This structure is used to represent the vital information about entries
@@ -72,7 +70,7 @@ SkCodec* SkIcoCodec::NewFromStream(SkStream* stream) {
         uint32_t offset;
         uint32_t size;
     };
-    SkAutoTDeleteArray<Entry> directoryEntries(SkNEW_ARRAY(Entry, numImages));
+    SkAutoTDeleteArray<Entry> directoryEntries(new Entry[numImages]);
 
     // Iterate over directory entries
     for (uint32_t i = 0; i < numImages; i++) {
@@ -111,11 +109,11 @@ SkCodec* SkIcoCodec::NewFromStream(SkStream* stream) {
     // Now will construct a candidate codec for each of the embedded images
     uint32_t bytesRead = kIcoDirectoryBytes + numImages * kIcoDirEntryBytes;
     SkAutoTDelete<SkTArray<SkAutoTDelete<SkCodec>, true>> codecs(
-            SkNEW_ARGS((SkTArray<SkAutoTDelete<SkCodec>, true>), (numImages)));
+            new (SkTArray<SkAutoTDelete<SkCodec>, true>)(numImages));
     for (uint32_t i = 0; i < numImages; i++) {
         uint32_t offset = directoryEntries.get()[i].offset;
         uint32_t size = directoryEntries.get()[i].size;
-        
+
         // Ensure that the offset is valid
         if (offset < bytesRead) {
             SkCodecPrintf("Warning: invalid ico offset.\n");
@@ -133,18 +131,17 @@ SkCodec* SkIcoCodec::NewFromStream(SkStream* stream) {
         // Create a new stream for the embedded codec
         SkAutoTUnref<SkData> data(
                 SkData::NewFromStream(inputStream.get(), size));
-        if (NULL == data.get()) {
+        if (nullptr == data.get()) {
             SkCodecPrintf("Warning: could not create embedded stream.\n");
             break;
         }
-        SkAutoTDelete<SkMemoryStream>
-                embeddedStream(SkNEW_ARGS(SkMemoryStream, (data.get())));
+        SkAutoTDelete<SkMemoryStream> embeddedStream(new SkMemoryStream(data.get()));
         bytesRead += size;
 
         // Check if the embedded codec is bmp or png and create the codec
         const bool isPng = SkPngCodec::IsPng(embeddedStream);
         SkAssertResult(embeddedStream->rewind());
-        SkCodec* codec = NULL;
+        SkCodec* codec = nullptr;
         if (isPng) {
             codec = SkPngCodec::NewFromStream(embeddedStream.detach());
         } else {
@@ -152,7 +149,7 @@ SkCodec* SkIcoCodec::NewFromStream(SkStream* stream) {
         }
 
         // Save a valid codec
-        if (NULL != codec) {
+        if (nullptr != codec) {
             codecs->push_back().reset(codec);
         }
     }
@@ -160,7 +157,7 @@ SkCodec* SkIcoCodec::NewFromStream(SkStream* stream) {
     // Recognize if there are no valid codecs
     if (0 == codecs->count()) {
         SkCodecPrintf("Error: could not find any valid embedded ico codecs.\n");
-        return NULL;
+        return nullptr;
     }
 
     // Use the largest codec as a "suggestion" for image info
@@ -176,9 +173,20 @@ SkCodec* SkIcoCodec::NewFromStream(SkStream* stream) {
     }
     SkImageInfo info = codecs->operator[](maxIndex)->getInfo();
 
+    // ICOs contain an alpha mask after the image which means we cannot
+    // guarantee that an image is opaque, even if the sub-codec thinks it
+    // is.
+    // FIXME (msarett): The BMP decoder depends on the alpha type in order
+    // to decode correctly, otherwise it could report kUnpremul and we would
+    // not have to correct it here. Is there a better way?
+    // FIXME (msarett): This is only true for BMP in ICO - could a PNG in ICO
+    // be opaque? Is it okay that we missed out on the opportunity to mark
+    // such an image as opaque?
+    info = info.makeAlphaType(kUnpremul_SkAlphaType);
+
     // Note that stream is owned by the embedded codec, the ico does not need
     // direct access to the stream.
-    return SkNEW_ARGS(SkIcoCodec, (info, codecs.detach()));
+    return new SkIcoCodec(info, codecs.detach());
 }
 
 /*
@@ -187,7 +195,7 @@ SkCodec* SkIcoCodec::NewFromStream(SkStream* stream) {
  */
 SkIcoCodec::SkIcoCodec(const SkImageInfo& info,
                        SkTArray<SkAutoTDelete<SkCodec>, true>* codecs)
-    : INHERITED(info, NULL)
+    : INHERITED(info, nullptr)
     , fEmbeddedCodecs(codecs)
 {}
 
@@ -198,10 +206,6 @@ SkISize SkIcoCodec::onGetScaledDimensions(float desiredScale) const {
     // We set the dimensions to the largest candidate image by default.
     // Regardless of the scale request, this is the largest image that we
     // will decode.
-    if (desiredScale >= 1.0) {
-        return this->getInfo().dimensions();
-    }
-
     int origWidth = this->getInfo().width();
     int origHeight = this->getInfo().height();
     float desiredSize = desiredScale * origWidth * origHeight;
@@ -222,28 +226,64 @@ SkISize SkIcoCodec::onGetScaledDimensions(float desiredScale) const {
     return fEmbeddedCodecs->operator[](minIndex)->getInfo().dimensions();
 }
 
+bool SkIcoCodec::onDimensionsSupported(const SkISize& dim) {
+    // FIXME: Cache the index from onGetScaledDimensions?
+    for (int32_t i = 0; i < fEmbeddedCodecs->count(); i++) {
+        if (fEmbeddedCodecs->operator[](i)->getInfo().dimensions() == dim) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 /*
  * Initiates the Ico decode
  */
 SkCodec::Result SkIcoCodec::onGetPixels(const SkImageInfo& dstInfo,
                                         void* dst, size_t dstRowBytes,
-                                        const Options& opts, SkPMColor* ct,
-                                        int* ptr) {
+                                        const Options& opts, SkPMColor* colorTable,
+                                        int* colorCount, int* rowsDecoded) {
     if (opts.fSubset) {
         // Subsets are not supported.
         return kUnimplemented;
     }
+
+    if (!valid_alpha(dstInfo.alphaType(), this->getInfo().alphaType())) {
+        return kInvalidConversion;
+    }
+
     // We return invalid scale if there is no candidate image with matching
     // dimensions.
     Result result = kInvalidScale;
     for (int32_t i = 0; i < fEmbeddedCodecs->count(); i++) {
+        SkCodec* embeddedCodec = fEmbeddedCodecs->operator[](i);
         // If the dimensions match, try to decode
-        if (dstInfo.dimensions() ==
-                fEmbeddedCodecs->operator[](i)->getInfo().dimensions()) {
+        if (dstInfo.dimensions() == embeddedCodec->getInfo().dimensions()) {
 
             // Perform the decode
-            result = fEmbeddedCodecs->operator[](i)->getPixels(dstInfo,
-                    dst, dstRowBytes, &opts, ct, ptr);
+            // FIXME (msarett): ICO is considered non-opaque, even if the embedded BMP
+            // incorrectly claims it has no alpha.
+            SkAlphaType embeddedAlpha = embeddedCodec->getInfo().alphaType();
+            switch (embeddedAlpha) {
+                case kPremul_SkAlphaType:
+                case kUnpremul_SkAlphaType:
+                    // Use the requested alpha type if the embedded codec supports alpha.
+                    embeddedAlpha = dstInfo.alphaType();
+                    break;
+                case kOpaque_SkAlphaType:
+                    // If the embedded codec claims it is opaque, decode as if it is opaque.
+                    break;
+                default:
+                    SkASSERT(false);
+                    break;
+            }
+            SkImageInfo info = dstInfo.makeAlphaType(embeddedAlpha);
+            result = embeddedCodec->getPixels(info, dst, dstRowBytes, &opts, colorTable,
+                    colorCount);
+            // The embedded codec will handle filling incomplete images, so we will indicate
+            // that all of the rows are initialized.
+            *rowsDecoded = info.height();
 
             // On a fatal error, keep trying to find an image to decode
             if (kInvalidConversion == result || kInvalidInput == result ||

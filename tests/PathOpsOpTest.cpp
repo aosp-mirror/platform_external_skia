@@ -3845,8 +3845,7 @@ static void cubicOp130(skiatest::Reporter* reporter, const char* filename) {
 
 static void complex_to_quads(const SkPoint pts[], SkPath* path) {
     SkScalar loopT;
-    SkDCubic::CubicType dType;
-    if (SkDCubic::ComplexBreak(pts, &loopT, &dType)) {
+    if (SkDCubic::ComplexBreak(pts, &loopT)) {
         SkPoint cubicPair[7]; 
         SkChopCubicAt(pts, cubicPair, loopT);
         SkDCubic c1, c2;
@@ -5153,13 +5152,54 @@ static void cubics45u(skiatest::Reporter* reporter, const char* filename) {
     testPathOp(reporter, path, pathB, kUnion_SkPathOp, filename);
 }
 
+static void fuzz38(skiatest::Reporter* reporter, const char* filename) {
+    SkPath path, pathB;
+    path.moveTo(100.34f, 303.312f);
+    path.lineTo(-1e+08, 303.312f);
+    path.lineTo(102, 310.156f);
+    path.lineTo(100.34f, 310.156f);
+    path.lineTo(100.34f, 303.312f);
+    path.close();
+    testPathOpCheck(reporter, path, pathB, kUnion_SkPathOp, filename, FLAGS_runFail);
+}
+
+static void crbug_526025(skiatest::Reporter* reporter, const char* filename) {
+    SkPath path;
+    path.setFillType((SkPath::FillType) 1);
+path.moveTo(SkBits2Float(0x43b40000), SkBits2Float(0xcf000000));  // 360, -2.14748e+09f
+path.cubicTo(SkBits2Float(0x4e0d628f), SkBits2Float(0xceffffff), SkBits2Float(0x4e800003), SkBits2Float(0xcec6b143), SkBits2Float(0x4e800002), SkBits2Float(0xce7ffffc));  // 5.93012e+08f, -2.14748e+09f, 1.07374e+09f, -1.66675e+09f, 1.07374e+09f, -1.07374e+09f
+path.cubicTo(SkBits2Float(0x4e800002), SkBits2Float(0xcde53aee), SkBits2Float(0x4e0d6292), SkBits2Float(0xc307820e), SkBits2Float(0x44627d00), SkBits2Float(0x437ffff2));  // 1.07374e+09f, -4.80731e+08f, 5.93012e+08f, -135.508f, 905.953f, 256
+path.lineTo(SkBits2Float(0x444bf3bc), SkBits2Float(0x4460537e));  // 815.808f, 897.305f
+path.lineTo(SkBits2Float(0x43553abd), SkBits2Float(0x440f3cbd));  // 213.229f, 572.949f
+path.lineTo(SkBits2Float(0x42000000), SkBits2Float(0x41800000));  // 32, 16
+path.lineTo(SkBits2Float(0x42c80000), SkBits2Float(0x44000000));  // 100, 512
+path.lineTo(SkBits2Float(0x43553abd), SkBits2Float(0x440f3cbd));  // 213.229f, 572.949f
+path.lineTo(SkBits2Float(0x43b40000), SkBits2Float(0x44800000));  // 360, 1024
+path.lineTo(SkBits2Float(0x43b40000), SkBits2Float(0x45816000));  // 360, 4140
+
+    SkPath path1(path);
+    path.reset();
+    path.setFillType((SkPath::FillType) 0);
+path.moveTo(SkBits2Float(0x42fe0000), SkBits2Float(0x43a08000));  // 127, 321
+path.lineTo(SkBits2Float(0x45d5c000), SkBits2Float(0x43870000));  // 6840, 270
+path.lineTo(SkBits2Float(0xd0a00000), SkBits2Float(0x4cbebc20));  // -2.14748e+10f, 1e+08
+path.lineTo(SkBits2Float(0x451f7000), SkBits2Float(0x42800000));  // 2551, 64
+path.lineTo(SkBits2Float(0x42fe0000), SkBits2Float(0x43a08000));  // 127, 321
+path.close();
+
+    SkPath path2(path);
+    testPathOp(reporter, path1, path2, (SkPathOp) 2, filename);
+}
+
 static void (*skipTest)(skiatest::Reporter* , const char* filename) = 0;
-static void (*firstTest)(skiatest::Reporter* , const char* filename) = loops63i;
+static void (*firstTest)(skiatest::Reporter* , const char* filename) = 0;
 static void (*stopTest)(skiatest::Reporter* , const char* filename) = 0;
 
 #define TEST(name) { name, #name }
 
 static struct TestDesc tests[] = {
+    TEST(crbug_526025),
+    TEST(fuzz38),
     TEST(cubics44d),
     TEST(cubics45u),
     TEST(loops61i),
@@ -5516,11 +5556,11 @@ DEF_TEST(PathOpsOp, reporter) {
     strncpy(DEBUG_FILENAME_STRING, "", DEBUG_FILENAME_STRING_LENGTH);
 #endif
     if (runSubTests && runSubTestsFirst) {
-        RunTestSet(reporter, subTests, subTestCount, firstSubTest, NULL, stopTest, runReverse);
+        RunTestSet(reporter, subTests, subTestCount, firstSubTest, nullptr, stopTest, runReverse);
     }
     RunTestSet(reporter, tests, testCount, firstTest, skipTest, stopTest, runReverse);
     if (runSubTests && !runSubTestsFirst) {
-        RunTestSet(reporter, subTests, subTestCount, firstSubTest, NULL, stopTest, runReverse);
+        RunTestSet(reporter, subTests, subTestCount, firstSubTest, nullptr, stopTest, runReverse);
     }
 }
 
@@ -5618,7 +5658,7 @@ path.lineTo(SkBits2Float(0x432c8000), SkBits2Float(0x42c00000));
 path.close();
 
     SkPath path2(path);
-    testPathOpCheck(reporter, path1, path2, (SkPathOp) 2, filename, FLAGS_runFail);
+    testPathOpFailCheck(reporter, path1, path2, (SkPathOp) 2, filename);
 }
 
 static void fuzz487b(skiatest::Reporter* reporter, const char* filename) {
@@ -5716,10 +5756,10 @@ path.close();
 }
 
 static struct TestDesc failTests[] = {
+    TEST(fuzz714),
     TEST(fuzz487a),
     TEST(fuzz433),
     TEST(fuzz1),
-    TEST(fuzz714),
     TEST(fuzz487b),
     TEST(fuzz433b),
     TEST(bufferOverflow),
@@ -5731,5 +5771,5 @@ DEF_TEST(PathOpsFailOp, reporter) {
 #if DEBUG_SHOW_TEST_NAME
     strncpy(DEBUG_FILENAME_STRING, "", DEBUG_FILENAME_STRING_LENGTH);
 #endif
-    RunTestSet(reporter, failTests, failTestCount, NULL, NULL, NULL, false);
+    RunTestSet(reporter, failTests, failTestCount, nullptr, nullptr, nullptr, false);
 }

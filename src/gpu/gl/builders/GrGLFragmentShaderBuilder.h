@@ -17,7 +17,10 @@ class GrGLVarying;
  */
 class GrGLFragmentBuilder : public GrGLShaderBuilder {
 public:
-    GrGLFragmentBuilder(GrGLProgramBuilder* program) : INHERITED(program) {}
+    GrGLFragmentBuilder(GrGLProgramBuilder* program)
+        : INHERITED(program) {
+        fSubstageIndices.push_back(0);
+    }
     virtual ~GrGLFragmentBuilder() {}
     /**
      * Use of these features may require a GLSL extension to be enabled. Shaders may not compile
@@ -47,7 +50,36 @@ public:
         is in device space (e.g. 0,0 is the top left and pixel centers are at half-integers). */
     virtual const char* fragmentPosition() = 0;
 
+    /**
+     * Fragment procs with child procs should call these functions before/after calling emitCode
+     * on a child proc.
+     */
+    void onBeforeChildProcEmitCode();
+    void onAfterChildProcEmitCode();
+
+    const SkString& getMangleString() const { return fMangleString; }
+
 private:
+    /*
+     * State that tracks which child proc in the proc tree is currently emitting code.  This is
+     * used to update the fMangleString, which is used to mangle the names of uniforms and functions
+     * emitted by the proc.  fSubstageIndices is a stack: its count indicates how many levels deep
+     * we are in the tree, and its second-to-last value is the index of the child proc at that
+     * level which is currently emitting code. For example, if fSubstageIndices = [3, 1, 2, 0], that
+     * means we're currently emitting code for the base proc's 3rd child's 1st child's 2nd child.
+     */
+    SkTArray<int> fSubstageIndices;
+
+    /*
+     * The mangle string is used to mangle the names of uniforms/functions emitted by the child
+     * procs so no duplicate uniforms/functions appear in the generated shader program. The mangle
+     * string is simply based on fSubstageIndices. For example, if fSubstageIndices = [3, 1, 2, 0],
+     * then the manglestring will be "_c3_c1_c2", and any uniform/function emitted by that proc will
+     * have "_c3_c1_c2" appended to its name, which can be interpreted as "base proc's 3rd child's
+     * 1st child's 2nd child".
+     */
+    SkString fMangleString;
+
     friend class GrGLPathProcessor;
 
     typedef GrGLShaderBuilder INHERITED;
@@ -62,7 +94,7 @@ class GrGLXPFragmentBuilder : public GrGLFragmentBuilder {
 public:
     GrGLXPFragmentBuilder(GrGLProgramBuilder* program) : INHERITED(program) {}
 
-    /** Returns the variable name that holds the color of the destination pixel. This may be NULL if
+    /** Returns the variable name that holds the color of the destination pixel. This may be nullptr if
         no effect advertised that it will read the destination. */
     virtual const char* dstColor() = 0;
 
@@ -131,7 +163,8 @@ private:
     enum GLSLPrivateFeature {
         kFragCoordConventions_GLSLPrivateFeature = kLastGLSLFeature + 1,
         kBlendEquationAdvanced_GLSLPrivateFeature,
-        kLastGLSLPrivateFeature = kBlendEquationAdvanced_GLSLPrivateFeature
+        kBlendFuncExtended_GLSLPrivateFeature,
+        kLastGLSLPrivateFeature = kBlendFuncExtended_GLSLPrivateFeature
     };
 
     // Interpretation of DstReadKey when generating code

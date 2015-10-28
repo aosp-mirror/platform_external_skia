@@ -26,15 +26,13 @@ public:
                                     FailImageFilter::GetFlattenableType());
         }
     };
-    static FailImageFilter* Create() {
-        return SkNEW(FailImageFilter);
-    }
+    static FailImageFilter* Create() { return new FailImageFilter; }
 
     SK_TO_STRING_OVERRIDE()
     SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(FailImageFilter)
 
 protected:
-    FailImageFilter() : INHERITED(0, NULL) {}
+    FailImageFilter() : INHERITED(0, nullptr) {}
 
     bool onFilterImage(Proxy*, const SkBitmap& src, const Context&,
                        SkBitmap* result, SkIPoint* offset) const override {
@@ -69,8 +67,8 @@ public:
                                     IdentityImageFilter::GetFlattenableType());
         }
     };
-    static IdentityImageFilter* Create(SkImageFilter* input = NULL) {
-        return SkNEW_ARGS(IdentityImageFilter, (input));
+    static IdentityImageFilter* Create(SkImageFilter* input = nullptr) {
+        return new IdentityImageFilter(input);
     }
 
     SK_TO_STRING_OVERRIDE()
@@ -145,7 +143,7 @@ static void draw_text(SkCanvas* canvas, const SkRect& r, SkImageFilter* imf) {
     paint.setImageFilter(imf);
     paint.setColor(SK_ColorCYAN);
     paint.setAntiAlias(true);
-    sk_tool_utils::set_portable_typeface_always(&paint);
+    sk_tool_utils::set_portable_typeface(&paint);
     paint.setTextSize(r.height()/2);
     paint.setTextAlign(SkPaint::kCenter_Align);
     canvas->drawText("Text", 4, r.centerX(), r.centerY(), paint);
@@ -162,7 +160,7 @@ static void draw_bitmap(SkCanvas* canvas, const SkRect& r, SkImageFilter* imf) {
     bm.allocN32Pixels(bounds.width(), bounds.height());
     bm.eraseColor(SK_ColorTRANSPARENT);
     SkCanvas c(bm);
-    draw_path(&c, r, NULL);
+    draw_path(&c, r, nullptr);
 
     canvas->drawBitmap(bm, 0, 0, &paint);
 }
@@ -178,7 +176,7 @@ static void draw_sprite(SkCanvas* canvas, const SkRect& r, SkImageFilter* imf) {
     bm.allocN32Pixels(bounds.width(), bounds.height());
     bm.eraseColor(SK_ColorTRANSPARENT);
     SkCanvas c(bm);
-    draw_path(&c, r, NULL);
+    draw_path(&c, r, nullptr);
 
     SkPoint loc = { r.fLeft, r.fTop };
     canvas->getTotalMatrix().mapPoints(&loc, 1);
@@ -218,7 +216,7 @@ protected:
         SkColorFilter* cf = SkColorFilter::CreateModeFilter(SK_ColorRED,
                                                      SkXfermode::kSrcIn_Mode);
         SkImageFilter* filters[] = {
-            NULL,
+            nullptr,
             IdentityImageFilter::Create(),
             FailImageFilter::Create(),
             SkColorFilterImageFilter::Create(cf),
@@ -283,7 +281,7 @@ protected:
             SkPaint::kAntiAlias_Flag | SkPaint::kLCDRenderText_Flag,
         };
         SkPaint paint(origPaint);
-        sk_tool_utils::set_portable_typeface_always(&paint);
+        sk_tool_utils::set_portable_typeface(&paint);
         paint.setTextSize(30);
 
         SkAutoCanvasRestore acr(canvas, true);
@@ -311,8 +309,8 @@ protected:
                     this->installFilter(&paint);
                 }
                 if (doSaveLayer) {
-                    canvas->saveLayer(NULL, &paint);
-                    paint.setImageFilter(NULL);
+                    canvas->saveLayer(nullptr, &paint);
+                    paint.setImageFilter(nullptr);
                 }
                 this->drawWaterfall(canvas, paint);
 

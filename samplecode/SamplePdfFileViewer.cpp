@@ -5,6 +5,8 @@
  * found in the LICENSE file.
  */
 
+#include "SkTypes.h"
+
 #ifdef SAMPLE_PDF_FILE_VIEWER
 
 #include "SampleCode.h"
@@ -36,11 +38,11 @@ private:
 
     static SkPicture* LoadPdf(const char path[]) {
         SkAutoTDelete<SkPdfRenderer> renderer(SkPdfRenderer::CreateFromFile(path));
-        if (NULL == renderer.get()) {
-            return NULL;
+        if (nullptr == renderer.get()) {
+            return nullptr;
         }
 
-        SkPicture* pic = SkNEW(SkPicture);
+        SkPicture* pic = new SkPicture;
         SkCanvas* canvas = pic->beginRecording((int) renderer->MediaBox(0).width(),
                                                (int) renderer->MediaBox(0).height());
         renderer->renderPage(0, canvas, renderer->MediaBox(0));
@@ -49,8 +51,8 @@ private:
     }
 
 public:
-    PdfFileViewer(const char name[] = NULL) : fFilename(name) {
-        fPicture = NULL;
+    PdfFileViewer(const char name[] = nullptr) : fFilename(name) {
+        fPicture = nullptr;
     }
 
     virtual ~PdfFileViewer() {

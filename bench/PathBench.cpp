@@ -1,15 +1,16 @@
-
 /*
  * Copyright 2011 Google Inc.
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
+
 #include "Benchmark.h"
 #include "SkBitmap.h"
 #include "SkCanvas.h"
 #include "SkColorPriv.h"
 #include "SkPaint.h"
+#include "SkPath.h"
 #include "SkRandom.h"
 #include "SkShader.h"
 #include "SkString.h"
@@ -50,7 +51,7 @@ protected:
         return fName.c_str();
     }
 
-    void onDraw(const int loops, SkCanvas* canvas) override {
+    void onDraw(int loops, SkCanvas* canvas) override {
         SkPaint paint(fPaint);
         this->setupPaint(&paint);
 
@@ -223,9 +224,9 @@ protected:
     void createData(int minVerbs,
                     int maxVerbs,
                     bool allowMoves = true,
-                    SkRect* bounds = NULL) {
+                    SkRect* bounds = nullptr) {
         SkRect tempBounds;
-        if (NULL == bounds) {
+        if (nullptr == bounds) {
             tempBounds.setXYWH(0, 0, SK_Scalar1, SK_Scalar1);
             bounds = &tempBounds;
         }
@@ -324,11 +325,11 @@ protected:
         return "path_create";
     }
 
-    void onPreDraw() override {
+    void onDelayedSetup() override {
         this->createData(10, 100);
     }
 
-    void onDraw(const int loops, SkCanvas*) override {
+    void onDraw(int loops, SkCanvas*) override {
         for (int i = 0; i < loops; ++i) {
             if (i % 1000 == 0) {
                 fPath.reset();  // PathRef memory can grow without bound otherwise.
@@ -353,7 +354,7 @@ protected:
     const char* onGetName() override {
         return "path_copy";
     }
-    void onPreDraw() override {
+    void onDelayedSetup() override {
         this->createData(10, 100);
         fPaths.reset(kPathCnt);
         fCopies.reset(kPathCnt);
@@ -362,7 +363,7 @@ protected:
         }
         this->finishedMakingPaths();
     }
-    void onDraw(const int loops, SkCanvas*) override {
+    void onDraw(int loops, SkCanvas*) override {
         for (int i = 0; i < loops; ++i) {
             int idx = i & (kPathCnt - 1);
             fCopies[idx] = fPaths[idx];
@@ -389,7 +390,7 @@ protected:
         return fInPlace ? "path_transform_in_place" : "path_transform_copy";
     }
 
-    void onPreDraw() override {
+    void onDelayedSetup() override {
         fMatrix.setScale(5 * SK_Scalar1, 6 * SK_Scalar1);
         this->createData(10, 100);
         fPaths.reset(kPathCnt);
@@ -402,7 +403,7 @@ protected:
         }
     }
 
-    void onDraw(const int loops, SkCanvas*) override {
+    void onDraw(int loops, SkCanvas*) override {
         if (fInPlace) {
             for (int i = 0; i < loops; ++i) {
                 fPaths[i & (kPathCnt - 1)].transform(fMatrix);
@@ -437,7 +438,7 @@ protected:
         return "path_equality_50%";
     }
 
-    void onPreDraw() override {
+    void onDelayedSetup() override {
         fParity = 0;
         this->createData(10, 100);
         fPaths.reset(kPathCnt);
@@ -449,7 +450,7 @@ protected:
         this->finishedMakingPaths();
     }
 
-    void onDraw(const int loops, SkCanvas*) override {
+    void onDraw(int loops, SkCanvas*) override {
         for (int i = 0; i < loops; ++i) {
             int idx = i & (kPathCnt - 1);
             fParity ^= (fPaths[idx] == fCopies[idx & ~0x1]);
@@ -500,7 +501,7 @@ protected:
         }
     }
 
-    void onPreDraw() override {
+    void onDelayedSetup() override {
         // reversePathTo assumes a single contour path.
         bool allowMoves = kReversePathTo_AddType != fType;
         this->createData(10, 100, allowMoves);
@@ -513,7 +514,7 @@ protected:
         this->finishedMakingPaths();
     }
 
-    void onDraw(const int loops, SkCanvas*) override {
+    void onDraw(int loops, SkCanvas*) override {
         switch (fType) {
             case kAdd_AddType:
                 for (int i = 0; i < loops; ++i) {
@@ -581,7 +582,7 @@ protected:
         return fName.c_str();
     }
 
-    void onDraw(const int loops, SkCanvas* canvas) override {
+    void onDraw(int loops, SkCanvas* canvas) override {
         SkPaint paint;
 
         paint.setColor(SK_ColorBLACK);
@@ -687,7 +688,7 @@ protected:
         SkASSERT(path->isConvex());
     }
 
-    void onDraw(const int loops, SkCanvas* canvas) override {
+    void onDraw(int loops, SkCanvas* canvas) override {
         SkRandom rand;
         SkRect r;
 
@@ -710,7 +711,7 @@ protected:
             if (fZeroRad) {
                 make_arb_round_rect(&temp, r, 0, 0);
 
-                SkASSERT(temp.isRect(NULL));
+                SkASSERT(temp.isRect(nullptr));
             } else {
                 make_arb_round_rect(&temp, r, r.width() / 10, r.height() / 15);
             }
@@ -761,14 +762,14 @@ private:
         return fName.c_str();
     }
 
-    void onDraw(const int loops, SkCanvas*) override {
+    void onDraw(int loops, SkCanvas*) override {
         for (int i = 0; i < loops; ++i) {
             const SkRect& rect = fQueryRects[i % kQueryRectCnt];
             fParity = fParity != fPath.conservativelyContainsRect(rect);
         }
     }
 
-    void onPreDraw() override {
+    void onDelayedSetup() override {
         fQueryRects.setCount(kQueryRectCnt);
 
         SkRandom rand;
@@ -824,7 +825,7 @@ public:
 private:
     const char* onGetName() override { return fName.c_str(); }
 
-    void onDraw(const int loops, SkCanvas*) override {
+    void onDraw(int loops, SkCanvas*) override {
         for (int i = 0; i < loops; ++i) {
             fRQ.chop(fDst);
         }
@@ -840,7 +841,7 @@ public:
     ConicBench_EvalPos(bool useV2) : fUseV2(useV2) {
         fName.printf("conic-eval-pos%d", useV2);
     }
-    void onDraw(const int loops, SkCanvas*) override {
+    void onDraw(int loops, SkCanvas*) override {
         if (fUseV2) {
             for (int i = 0; i < loops; ++i) {
                 for (int j = 0; j < 1000; ++j) {
@@ -850,7 +851,7 @@ public:
         } else {
             for (int i = 0; i < loops; ++i) {
                 for (int j = 0; j < 1000; ++j) {
-                    fRQ.evalAt(0.4f, &fDst[0].fPts[0], NULL);
+                    fRQ.evalAt(0.4f, &fDst[0].fPts[0], nullptr);
                 }
             }
         }
@@ -865,7 +866,7 @@ public:
     ConicBench_EvalTan(bool useV2) : fUseV2(useV2) {
         fName.printf("conic-eval-tan%d", useV2);
     }
-    void onDraw(const int loops, SkCanvas*) override {
+    void onDraw(int loops, SkCanvas*) override {
         if (fUseV2) {
             for (int i = 0; i < loops; ++i) {
                 for (int j = 0; j < 1000; ++j) {
@@ -875,7 +876,7 @@ public:
         } else {
             for (int i = 0; i < loops; ++i) {
                 for (int j = 0; j < 1000; ++j) {
-                    fRQ.evalAt(0.4f, NULL, &fDst[0].fPts[0]);
+                    fRQ.evalAt(0.4f, nullptr, &fDst[0].fPts[0]);
                 }
             }
         }
@@ -929,7 +930,7 @@ protected:
         return "conic-compute-error";
     }
 
-    void onDraw(const int loops, SkCanvas*) override {
+    void onDraw(int loops, SkCanvas*) override {
         SkVector err;
         for (int i = 0; i < loops; ++i) {
             for (int j = 0; j < CONICS; ++j) {
@@ -951,7 +952,7 @@ protected:
         return "conic-asQuadTol";
     }
 
-    void onDraw(const int loops, SkCanvas*) override {
+    void onDraw(int loops, SkCanvas*) override {
         for (int i = 0; i < loops; ++i) {
             for (int j = 0; j < CONICS; ++j) {
                 fConics[j].asQuadTol(SK_ScalarHalf);
@@ -972,7 +973,7 @@ protected:
         return "conic-quadPow2";
     }
 
-    void onDraw(const int loops, SkCanvas*) override {
+    void onDraw(int loops, SkCanvas*) override {
         for (int i = 0; i < loops; ++i) {
             for (int j = 0; j < CONICS; ++j) {
                 fConics[j].computeQuadPOW2(SK_ScalarHalf);

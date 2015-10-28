@@ -12,17 +12,19 @@
 #include "SkImageGeneratorPriv.h"
 #include "SkMatrixUtils.h"
 #include "SkPaint.h"
+#include "SkPath.h"
+#include "SkPixelRef.h"
 #include "SkRandom.h"
 #include "SkShader.h"
 #include "SkSurface.h"
 #include "Test.h"
 
-// A BitmapFactory that always fails when asked to return pixels.
-class FailureImageGenerator : public SkImageGenerator {
+class FailurePixelRef : public SkPixelRef {
 public:
-    FailureImageGenerator() : SkImageGenerator(SkImageInfo::MakeN32Premul(100, 100)) {}
+    FailurePixelRef(const SkImageInfo& info) : SkPixelRef(info) {}
 protected:
-    // default onGetPixels() returns kUnimplemented, which is what we want.
+    bool onNewLockPixels(LockRec*) override { return false; }
+    void onUnlockPixels() override {}
 };
 
 // crbug.com/295895
@@ -31,10 +33,12 @@ protected:
 static void test_faulty_pixelref(skiatest::Reporter* reporter) {
     // need a cache, but don't expect to use it, so the budget is not critical
     SkAutoTUnref<SkDiscardableMemoryPool> pool(
-        SkDiscardableMemoryPool::Create(10 * 1000, NULL));
+        SkDiscardableMemoryPool::Create(10 * 1000, nullptr));
+
     SkBitmap bm;
-    bool success = SkInstallDiscardablePixelRef(SkNEW(FailureImageGenerator), NULL, &bm, pool);
-    REPORTER_ASSERT(reporter, success);
+    const SkImageInfo info = SkImageInfo::MakeN32Premul(100, 100);
+    bm.setInfo(info);
+    bm.setPixelRef(new FailurePixelRef(info), 0, 0)->unref();
     // now our bitmap has a pixelref, but we know it will fail to lock
 
     SkAutoTUnref<SkSurface> surface(SkSurface::NewRasterN32Premul(200, 200));
@@ -299,7 +303,7 @@ DEF_TEST(DrawBitmapRect, reporter) {
     SkIRect srcR = { gWidth, 0, gWidth + 16, 16 };
     SkRect  dstR = { 0, 0, SkIntToScalar(16), SkIntToScalar(16) };
 
-    canvas.drawBitmapRect(src, srcR, dstR, NULL);
+    canvas.drawBitmapRect(src, srcR, dstR, nullptr);
 
     // ensure that we draw nothing if srcR does not intersect the bitmap
     REPORTER_ASSERT(reporter, check_for_all_zeros(dst));

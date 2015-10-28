@@ -41,7 +41,7 @@ protected:
         static const SkColor kColors[] =
             { SK_ColorBLUE, SK_ColorYELLOW, SK_ColorGREEN, SK_ColorWHITE };
         paint.setShader(SkGradientShader::CreateRadial(SkPoint::Make(0,0), kBmpSize / 2.f, kColors,
-                                                       NULL, SK_ARRAY_COUNT(kColors),
+                                                       nullptr, SK_ARRAY_COUNT(kColors),
                                                        SkShader::kMirror_TileMode))->unref();
         SkBitmap rgbBmp;
         rgbBmp.allocN32Pixels(kBmpSize, kBmpSize, true);
@@ -127,7 +127,7 @@ protected:
         GrRenderTarget* rt = canvas->internal_private_accessTopLayerRenderTarget();
         GrContext* context;
         if (!rt || !(context = rt->getContext())) {
-            this->drawGpuOnlyMessage(canvas);
+            skiagm::GM::DrawGpuOnlyMessage(canvas);
             return;
         }
 
@@ -156,7 +156,7 @@ protected:
 
             canvas->drawImage(images[i], x, y);
             images[i]->unref();
-            images[i] = NULL;
+            images[i] = nullptr;
         }
      }
 
@@ -169,7 +169,7 @@ private:
     typedef GM INHERITED;
 };
 
-DEF_GM( return SkNEW(ImageFromYUVTextures); )
+DEF_GM(return new ImageFromYUVTextures;)
 }
 
 #endif

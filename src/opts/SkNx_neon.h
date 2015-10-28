@@ -223,9 +223,22 @@ public:
     SkNf() {}
     explicit SkNf(float val)           : fVec(vdupq_n_f32(val)) {}
     static SkNf Load(const float vals[4]) { return vld1q_f32(vals); }
+    static SkNf FromBytes(const uint8_t vals[4]) {
+        uint8x8_t   fix8    = (uint8x8_t)vld1_dup_u32((const uint32_t*)vals);
+        uint16x8_t  fix8_16 = vmovl_u8(fix8);
+        uint32x4_t  fix8_32 = vmovl_u16(vget_low_u16(fix8_16));
+        return SkNf(vcvtq_f32_u32(fix8_32));
+    }
+
     SkNf(float a, float b, float c, float d) { fVec = (float32x4_t) { a, b, c, d }; }
 
     void store(float vals[4]) const { vst1q_f32(vals, fVec); }
+    void toBytes(uint8_t bytes[4]) const {
+        uint32x4_t  fix8_32 = vcvtq_u32_f32(fVec);
+        uint16x4_t  fix8_16 = vqmovn_u32(fix8_32);
+        uint8x8_t   fix8    = vqmovn_u16(vcombine_u16(fix8_16, vdup_n_u16(0)));
+        vst1_lane_u32((uint32_t*)bytes, (uint32x2_t)fix8, 0);
+    }
 
     SkNi<4, int> castTrunc() const { return vcvtq_s32_f32(fVec); }
 
@@ -298,10 +311,7 @@ public:
     }
 
     SkNf thenElse(const SkNf& t, const SkNf& e) const {
-        uint32x4_t ci = vreinterpretq_u32_f32(fVec),
-                   ti = vreinterpretq_u32_f32(t.fVec),
-                   ei = vreinterpretq_u32_f32(e.fVec);
-        return vreinterpretq_f32_u32(vorrq_u32(vandq_u32(ti, ci), vbicq_u32(ei, ci)));
+        return vbslq_f32(vreinterpretq_u32_f32(fVec), t.fVec, e.fVec);
     }
 
     float32x4_t fVec;
@@ -338,8 +348,7 @@ public:
     }
 
     SkNi thenElse(const SkNi& t, const SkNi& e) const {
-        return vorrq_u16(vandq_u16(t.fVec, fVec),
-                         vbicq_u16(e.fVec, fVec));
+        return vbslq_u16(fVec, t.fVec, e.fVec);
     }
 
     uint16x8_t fVec;
@@ -377,8 +386,7 @@ public:
     }
 
     SkNi thenElse(const SkNi& t, const SkNi& e) const {
-        return vorrq_u8(vandq_u8(t.fVec, fVec),
-                        vbicq_u8(e.fVec, fVec));
+        return vbslq_u8(fVec, t.fVec, e.fVec);
     }
 
     uint8x16_t fVec;

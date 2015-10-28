@@ -15,7 +15,6 @@
       'SK_INTERNAL',
       'SK_GAMMA_SRGB',
       'SK_GAMMA_APPLY_TO_A8',
-      'SK_SCALAR_TO_FLOAT_EXCLUDED',  # temporary to allow Chrome to call SkFloatToScalar
       # 'SK_USE_DISCARDABLE_SCALEDIMAGECACHE',  # TODO(reed): Re-enable when tests don't crash with this.
     ],
 
@@ -31,11 +30,8 @@
         [ 'skia_mesa and skia_os not in ["mac", "linux"]', {
           'error': '<!(skia_mesa=1 only supported with skia_os="mac" or "linux".)',
         }],
-        [ 'skia_angle and not skia_os == "win"', {
-          'error': '<!(skia_angle=1 only supported with skia_os="win".)',
-        }],
-        [ 'skia_arch_width != 32 and skia_arch_width != 64', {
-          'error': '<!(skia_arch_width can only be 32 or 64 bits not <(skia_arch_width) bits)',
+        [ 'skia_angle and not (skia_os == "win" or skia_os == "linux")', {
+          'error': '<!(skia_angle=1 only supported with skia_os="win" or skia_os="linux".)',
         }],
         [ 'skia_os == "chromeos" and OS != "linux"', {
           'error': '<!(Skia ChromeOS build is only supported on Linux.)',
@@ -63,6 +59,26 @@
         'direct_dependent_settings': {
           'defines': [
             'SK_ANGLE',
+          ],
+        },
+      }],
+      [ 'skia_vulkan', {
+        'defines': [
+          'SK_VULKAN',
+        ],
+        'direct_dependent_settings': {
+          'defines': [
+            'SK_VULKAN',
+          ],
+        },
+      }],
+      [ 'skia_command_buffer', {
+        'defines': [
+          'SK_COMMAND_BUFFER',
+        ],
+        'direct_dependent_settings': {
+          'defines': [
+            'SK_COMMAND_BUFFER',
           ],
         },
       }],

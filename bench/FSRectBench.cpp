@@ -22,7 +22,7 @@ public:
 protected:
     const char* onGetName() override { return "fullscreen_rects"; }
 
-    void onPreDraw() override {
+    void onDelayedSetup() override {
         if (!fInit) {
             SkRandom rand;
             static const SkScalar kMinOffset = 0;
@@ -39,7 +39,7 @@ protected:
         }
     }
 
-    void onDraw(const int loops, SkCanvas* canvas) override {
+    void onDraw(int loops, SkCanvas* canvas) override {
         SkPaint paint;
         for (int i = 0; i < loops; ++i) {
             paint.setColor(fColors[i % N]);
@@ -60,4 +60,4 @@ private:
     typedef Benchmark INHERITED;
 };
 
-DEF_BENCH( return SkNEW_ARGS(FSRectBench, ()); )
+DEF_BENCH(return new FSRectBench();)

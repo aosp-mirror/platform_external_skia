@@ -63,14 +63,14 @@ GrGLPathRendering::GrGLPathRendering(GrGLGpu* gpu)
     : GrPathRendering(gpu) {
     const GrGLInterface* glInterface = gpu->glInterface();
     fCaps.bindFragmentInputSupport =
-        NULL != glInterface->fFunctions.fBindFragmentInputLocation;
+        nullptr != glInterface->fFunctions.fBindFragmentInputLocation;
 }
 
 GrGLPathRendering::~GrGLPathRendering() {
 }
 
 void GrGLPathRendering::abandonGpuResources() {
-    fPathNameAllocator.reset(NULL);
+    fPathNameAllocator.reset(nullptr);
 }
 
 void GrGLPathRendering::resetContext() {
@@ -82,12 +82,12 @@ void GrGLPathRendering::resetContext() {
 }
 
 GrPath* GrGLPathRendering::createPath(const SkPath& inPath, const GrStrokeInfo& stroke) {
-    return SkNEW_ARGS(GrGLPath, (this->gpu(), inPath, stroke));
+    return new GrGLPath(this->gpu(), inPath, stroke);
 }
 
 GrPathRange* GrGLPathRendering::createPathRange(GrPathRange::PathGenerator* pathGenerator,
                                                 const GrStrokeInfo& stroke) {
-    return SkNEW_ARGS(GrGLPathRange, (this->gpu(), pathGenerator, stroke));
+    return new GrGLPathRange(this->gpu(), pathGenerator, stroke);
 }
 
 void GrGLPathRendering::onStencilPath(const StencilPathArgs& args, const GrPath* path) {
@@ -100,8 +100,8 @@ void GrGLPathRendering::onStencilPath(const StencilPathArgs& args, const GrPath*
     SkISize size = SkISize::Make(rt->width(), rt->height());
     this->setProjectionMatrix(*args.fViewMatrix, size, rt->origin());
     gpu->flushScissor(*args.fScissor, rt->getViewport(), rt->origin());
-    gpu->flushHWAAState(rt, args.fUseHWAA);
-    gpu->flushRenderTarget(rt, NULL);
+    gpu->flushHWAAState(rt, args.fUseHWAA, true);
+    gpu->flushRenderTarget(rt, nullptr);
 
     const GrGLPath* glPath = static_cast<const GrGLPath*>(path);
 
@@ -236,11 +236,11 @@ GrGLuint GrGLPathRendering::genPaths(GrGLsizei range) {
         return name;
     }
 
-    if (NULL == fPathNameAllocator.get()) {
+    if (nullptr == fPathNameAllocator.get()) {
         static const int range = 65536;
         GrGLuint firstName;
         GL_CALL_RET(firstName, GenPaths(range));
-        fPathNameAllocator.reset(SkNEW_ARGS(GrGLNameAllocator, (firstName, firstName + range)));
+        fPathNameAllocator.reset(new GrGLNameAllocator(firstName, firstName + range));
     }
 
     // When allocating names one at a time, pull from a client-side pool of
@@ -259,14 +259,14 @@ void GrGLPathRendering::deletePaths(GrGLuint path, GrGLsizei range) {
     if (range > 1) {
         // It is not supported to delete names in ranges that were allocated
         // individually using GrGLPathNameAllocator.
-        SkASSERT(NULL == fPathNameAllocator.get() ||
+        SkASSERT(nullptr == fPathNameAllocator.get() ||
                  path + range <= fPathNameAllocator->firstName() ||
                  path >= fPathNameAllocator->endName());
         GL_CALL(DeletePaths(path, range));
         return;
     }
 
-    if (NULL == fPathNameAllocator.get() ||
+    if (nullptr == fPathNameAllocator.get() ||
         path < fPathNameAllocator->firstName() ||
         path >= fPathNameAllocator->endName()) {
         // If we aren't inside fPathNameAllocator's range then this name was
@@ -276,7 +276,7 @@ void GrGLPathRendering::deletePaths(GrGLuint path, GrGLsizei range) {
     }
 
     // Make the path empty to save memory, but don't free the name in the driver.
-    GL_CALL(PathCommands(path, 0, NULL, 0, GR_GL_FLOAT, NULL));
+    GL_CALL(PathCommands(path, 0, nullptr, 0, GR_GL_FLOAT, nullptr));
     fPathNameAllocator->free(path);
 }
 

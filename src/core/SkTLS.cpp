@@ -50,14 +50,14 @@ void SkTLS::Destructor(void* ptr) {
     SkTLSRec* rec = (SkTLSRec*)ptr;
     do {
         SkTLSRec* next = rec->fNext;
-        SkDELETE(rec);
+        delete rec;
         rec = next;
     } while (rec);
 }
 
 void* SkTLS::Get(CreateProc createProc, DeleteProc deleteProc) {
-    if (NULL == createProc) {
-        return NULL;
+    if (nullptr == createProc) {
+        return nullptr;
     }
 
     void* ptr = SkTLS::PlatformGetSpecific(true);
@@ -69,7 +69,7 @@ void* SkTLS::Get(CreateProc createProc, DeleteProc deleteProc) {
                 SkASSERT(rec->fDeleteProc == deleteProc);
                 return rec->fData;
             }
-        } while ((rec = rec->fNext) != NULL);
+        } while ((rec = rec->fNext) != nullptr);
         // not found, so create a new one
     }
 
@@ -86,8 +86,8 @@ void* SkTLS::Get(CreateProc createProc, DeleteProc deleteProc) {
 }
 
 void* SkTLS::Find(CreateProc createProc) {
-    if (NULL == createProc) {
-        return NULL;
+    if (nullptr == createProc) {
+        return nullptr;
     }
 
     void* ptr = SkTLS::PlatformGetSpecific(false);
@@ -98,20 +98,20 @@ void* SkTLS::Find(CreateProc createProc) {
             if (rec->fCreateProc == createProc) {
                 return rec->fData;
             }
-        } while ((rec = rec->fNext) != NULL);
+        } while ((rec = rec->fNext) != nullptr);
     }
-    return NULL;
+    return nullptr;
 }
 
 void SkTLS::Delete(CreateProc createProc) {
-    if (NULL == createProc) {
+    if (nullptr == createProc) {
         return;
     }
 
     void* ptr = SkTLS::PlatformGetSpecific(false);
 
     SkTLSRec* curr = (SkTLSRec*)ptr;
-    SkTLSRec* prev = NULL;
+    SkTLSRec* prev = nullptr;
     while (curr) {
         SkTLSRec* next = curr->fNext;
         if (curr->fCreateProc == createProc) {
@@ -121,7 +121,7 @@ void SkTLS::Delete(CreateProc createProc) {
                 // we have a new head of our chain
                 SkTLS::PlatformSetSpecific(next);
             }
-            SkDELETE(curr);
+            delete curr;
             break;
         }
         prev = curr;

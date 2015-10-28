@@ -61,7 +61,12 @@ static void sk_skip_input_data(j_decompress_ptr dinfo, long numBytes) {
  * We do not need to do anything to terminate our stream
  */
 static void sk_term_source(j_decompress_ptr dinfo)
-{}
+{
+    // The current implementation of SkJpegCodec does not call
+    // jpeg_finish_decompress(), so this function is never called.
+    // If we want to modify this function to do something, we also
+    // need to modify SkJpegCodec to call jpeg_finish_decompress().
+}
 
 /*
  * Constructor for the source manager that we provide to libjpeg
@@ -73,7 +78,7 @@ skjpeg_source_mgr::skjpeg_source_mgr(SkStream* stream)
     init_source = sk_init_source;
     fill_input_buffer = sk_fill_input_buffer;
     skip_input_data = sk_skip_input_data;
-    resync_to_restart = turbo_jpeg_resync_to_restart;
+    resync_to_restart = jpeg_resync_to_restart;
     term_source = sk_term_source;
 }
 

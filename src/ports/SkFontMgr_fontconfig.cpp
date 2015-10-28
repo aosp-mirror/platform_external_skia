@@ -6,19 +6,27 @@
  */
 
 #include "SkDataTable.h"
+#include "SkFixed.h"
 #include "SkFontDescriptor.h"
 #include "SkFontHost_FreeType_common.h"
 #include "SkFontMgr.h"
 #include "SkFontStyle.h"
 #include "SkMath.h"
 #include "SkMutex.h"
-#include "SkString.h"
-#include "SkStream.h"
-#include "SkTDArray.h"
-#include "SkTypefaceCache.h"
 #include "SkOSFile.h"
+#include "SkRefCnt.h"
+#include "SkStream.h"
+#include "SkString.h"
+#include "SkTDArray.h"
+#include "SkTemplates.h"
+#include "SkTypeface.h"
+#include "SkTypefaceCache.h"
+#include "SkTypes.h"
 
 #include <fontconfig/fontconfig.h>
+#include <string.h>
+
+class SkData;
 
 // FC_POSTSCRIPT_NAME was added with b561ff20 which ended up in 2.10.92
 // Ubuntu 12.04 is on 2.8.0, 13.10 is on 2.10.93
@@ -57,8 +65,8 @@ namespace {
 SK_DECLARE_STATIC_MUTEX(gFCMutex);
 
 #ifdef SK_DEBUG
-    void *CreateThreadFcLocked() { return SkNEW_ARGS(bool, (false)); }
-    void DeleteThreadFcLocked(void* v) { SkDELETE(static_cast<bool*>(v)); }
+void* CreateThreadFcLocked() { return new bool(false); }
+void DeleteThreadFcLocked(void* v) { delete static_cast<bool*>(v); }
 #   define THREAD_FC_LOCKED \
         static_cast<bool*>(SkTLS::Get(CreateThreadFcLocked, DeleteThreadFcLocked))
 #endif
@@ -105,7 +113,7 @@ template <typename T, T* (*C)(), void (*D)(T*)> class SkAutoFc
 public:
     SkAutoFc() : SkAutoTCallVProc<T, FcTDestroy<T, D> >(C()) {
         T* obj = this->operator T*();
-        SK_ALWAYSBREAK(NULL != obj);
+        SK_ALWAYSBREAK(nullptr != obj);
     }
     explicit SkAutoFc(T* obj) : SkAutoTCallVProc<T, FcTDestroy<T, D> >(obj) {}
 };
@@ -154,7 +162,7 @@ static SkWeakReturn is_weak(FcPattern* pattern, const char object[], int id) {
 
     // Create a copy of the pattern with only the value 'pattern'['object'['id']] in it.
     // Internally, FontConfig pattern objects are linked lists, so faster to remove from head.
-    SkAutoFcObjectSet requestedObjectOnly(FcObjectSetBuild(object, NULL));
+    SkAutoFcObjectSet requestedObjectOnly(FcObjectSetBuild(object, nullptr));
     SkAutoFcPattern minimal(FcPatternFilter(pattern, requestedObjectOnly));
     FcBool hasId = true;
     for (int i = 0; hasId && i < id; ++i) {
@@ -218,7 +226,7 @@ static SkWeakReturn is_weak(FcPattern* pattern, const char object[], int id) {
 static void remove_weak(FcPattern* pattern, const char object[]) {
     FCLocker::AssertHeld();
 
-    SkAutoFcObjectSet requestedObjectOnly(FcObjectSetBuild(object, NULL));
+    SkAutoFcObjectSet requestedObjectOnly(FcObjectSetBuild(object, nullptr));
     SkAutoFcPattern minimal(FcPatternFilter(pattern, requestedObjectOnly));
 
     int lastStrongId = -1;
@@ -293,7 +301,7 @@ static int map_ranges(int val, MapRanges const ranges[], int rangesCount) {
 }
 
 template<int n> struct SkTFixed {
-    SK_COMPILE_ASSERT(-32768 <= n && n <= 32767, SkTFixed_n_not_in_range);
+    static_assert(-32768 <= n && n <= 32767, "SkTFixed_n_not_in_range");
     static const SkFixed value = static_cast<SkFixed>(n << 16);
 };
 
@@ -408,7 +416,7 @@ class SkTypeface_fontconfig : public SkTypeface_FreeType {
 public:
     /** @param pattern takes ownership of the reference. */
     static SkTypeface_fontconfig* Create(FcPattern* pattern) {
-        return SkNEW_ARGS(SkTypeface_fontconfig, (pattern));
+        return new SkTypeface_fontconfig(pattern);
     }
     mutable SkAutoFcPattern fPattern;
 
@@ -504,8 +512,8 @@ class SkFontMgr_fontconfig : public SkFontMgr {
             SkAutoFcPattern match(FcFontSetMatch(fFontMgr->fFC,
                                                  fontSets, SK_ARRAY_COUNT(fontSets),
                                                  pattern, &result));
-            if (NULL == match) {
-                return NULL;
+            if (nullptr == match) {
+                return nullptr;
             }
 
             return fFontMgr->createTypefaceFromFcPattern(match);
@@ -536,7 +544,7 @@ class SkFontMgr_fontconfig : public SkFontMgr {
         for (int setIndex = 0; setIndex < (int)SK_ARRAY_COUNT(fcNameSet); ++setIndex) {
             // Return value of FcConfigGetFonts must not be destroyed.
             FcFontSet* allFonts(FcConfigGetFonts(fcconfig, fcNameSet[setIndex]));
-            if (NULL == allFonts) {
+            if (nullptr == allFonts) {
                 continue;
             }
 
@@ -579,7 +587,7 @@ class SkFontMgr_fontconfig : public SkFontMgr {
         FCLocker::AssertHeld();
         SkAutoMutexAcquire ama(fTFCacheMutex);
         SkTypeface* face = fTFCache.findByProcAndRef(FindByFcPattern, pattern);
-        if (NULL == face) {
+        if (nullptr == face) {
             FcPatternReference(pattern);
             face = SkTypeface_fontconfig::Create(pattern);
             if (face) {
@@ -650,8 +658,8 @@ protected:
 
     static bool FontAccessible(FcPattern* font) {
         // FontConfig can return fonts which are unreadable.
-        const char* filename = get_string(font, FC_FILE, NULL);
-        if (NULL == filename) {
+        const char* filename = get_string(font, FC_FILE, nullptr);
+        if (nullptr == filename) {
             return false;
         }
         return sk_exists(filename, kRead_SkFILE_Flag);
@@ -688,7 +696,7 @@ protected:
         FcDefaultSubstitute(pattern);
 
         FcPattern* matchPattern;
-        SkAutoFcPattern strongPattern(NULL);
+        SkAutoFcPattern strongPattern(nullptr);
         if (familyName) {
             strongPattern.reset(FcPatternDuplicate(pattern));
             remove_weak(strongPattern, FC_FAMILY);
@@ -705,7 +713,7 @@ protected:
         for (int setIndex = 0; setIndex < (int)SK_ARRAY_COUNT(fcNameSet); ++setIndex) {
             // Return value of FcConfigGetFonts must not be destroyed.
             FcFontSet* allFonts(FcConfigGetFonts(fFC, fcNameSet[setIndex]));
-            if (NULL == allFonts) {
+            if (nullptr == allFonts) {
                 continue;
             }
 
@@ -717,7 +725,7 @@ protected:
             }
         }
 
-        return SkNEW_ARGS(StyleSet, (this, matches.detach()));
+        return new StyleSet(this, matches.detach());
     }
 
     virtual SkTypeface* onMatchFamilyStyle(const char familyName[],
@@ -740,7 +748,7 @@ protected:
         // In aliases, bindings are weak by default, so this is easy and common.
         // If no family name was specified, we'll probably only get weak matches, but that's ok.
         FcPattern* matchPattern;
-        SkAutoFcPattern strongPattern(NULL);
+        SkAutoFcPattern strongPattern(nullptr);
         if (familyName) {
             strongPattern.reset(FcPatternDuplicate(pattern));
             remove_weak(strongPattern, FC_FAMILY);
@@ -751,8 +759,8 @@ protected:
 
         FcResult result;
         SkAutoFcPattern font(FcFontMatch(fFC, pattern, &result));
-        if (NULL == font || !FontAccessible(font) || !FontFamilyNameMatches(font, matchPattern)) {
-            return NULL;
+        if (nullptr == font || !FontAccessible(font) || !FontFamilyNameMatches(font, matchPattern)) {
+            return nullptr;
         }
 
         return createTypefaceFromFcPattern(font);
@@ -793,8 +801,8 @@ protected:
 
         FcResult result;
         SkAutoFcPattern font(FcFontMatch(fFC, pattern, &result));
-        if (NULL == font || !FontAccessible(font) || !FontContainsCharacter(font, character)) {
-            return NULL;
+        if (nullptr == font || !FontAccessible(font) || !FontContainsCharacter(font, character)) {
+            return nullptr;
         }
 
         return createTypefaceFromFcPattern(font);
@@ -813,21 +821,21 @@ protected:
         SkAutoTDelete<SkStreamAsset> stream(bareStream);
         const size_t length = stream->getLength();
         if (length <= 0 || (1u << 30) < length) {
-            return NULL;
+            return nullptr;
         }
 
         SkFontStyle style;
         bool isFixedWidth = false;
-        if (!fScanner.scanFont(stream, ttcIndex, NULL, &style, &isFixedWidth, NULL)) {
-            return NULL;
+        if (!fScanner.scanFont(stream, ttcIndex, nullptr, &style, &isFixedWidth, nullptr)) {
+            return nullptr;
         }
 
-        return SkNEW_ARGS(SkTypeface_stream, (new SkFontData(stream.detach(), ttcIndex, NULL, 0),
-                                              style, isFixedWidth));
+        return new SkTypeface_stream(new SkFontData(stream.detach(), ttcIndex, nullptr, 0), style,
+                                     isFixedWidth);
     }
 
     SkTypeface* onCreateFromData(SkData* data, int ttcIndex) const override {
-        return this->createFromStream(SkNEW_ARGS(SkMemoryStream, (data)), ttcIndex);
+        return this->createFromStream(new SkMemoryStream(data), ttcIndex);
     }
 
     SkTypeface* onCreateFromFile(const char path[], int ttcIndex) const override {
@@ -838,17 +846,17 @@ protected:
         SkStreamAsset* stream(fontData->getStream());
         const size_t length = stream->getLength();
         if (length <= 0 || (1u << 30) < length) {
-            return NULL;
+            return nullptr;
         }
 
         const int ttcIndex = fontData->getIndex();
         SkFontStyle style;
         bool isFixedWidth = false;
-        if (!fScanner.scanFont(stream, ttcIndex, NULL, &style, &isFixedWidth, NULL)) {
-            return NULL;
+        if (!fScanner.scanFont(stream, ttcIndex, nullptr, &style, &isFixedWidth, nullptr)) {
+            return nullptr;
         }
 
-        return SkNEW_ARGS(SkTypeface_stream, (fontData, style, isFixedWidth));
+        return new SkTypeface_stream(fontData, style, isFixedWidth);
     }
 
     virtual SkTypeface* onLegacyCreateTypeface(const char familyName[],
@@ -865,7 +873,7 @@ protected:
             return typeface.detach();
         }
 
-        return this->matchFamilyStyle(NULL, style);
+        return this->matchFamilyStyle(nullptr, style);
     }
 };
 

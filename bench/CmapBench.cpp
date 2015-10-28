@@ -58,7 +58,7 @@ static void charsToGlyphsNull_proc(int loops, const SkPaint& paint, const void* 
 
     SkTypeface* face = paint.getTypeface();
     for (int i = 0; i < loops; ++i) {
-        face->charsToGlyphs(text, encoding, NULL, glyphCount);
+        face->charsToGlyphs(text, encoding, nullptr, glyphCount);
     }
 }
 
@@ -85,7 +85,7 @@ protected:
         return fName.c_str();
     }
 
-    void onDraw(const int loops, SkCanvas* canvas) override {
+    void onDraw(int loops, SkCanvas* canvas) override {
         fProc(loops, fPaint, fText, sizeof(fText), NGLYPHS);
     }
 

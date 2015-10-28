@@ -22,26 +22,14 @@ public:
     GrSoftwarePathRenderer(GrContext* context)
         : fContext(context) {
     }
+private:
+    StencilSupport onGetStencilSupport(const SkPath&, const GrStrokeInfo&) const override {
+        return GrPathRenderer::kNoSupport_StencilSupport;
+    }
+    
+    bool onCanDrawPath(const CanDrawPathArgs&) const override;
 
-    virtual bool canDrawPath(const GrDrawTarget*,
-                             const GrPipelineBuilder*,
-                             const SkMatrix& viewMatrix,
-                             const SkPath&,
-                             const GrStrokeInfo&,
-                             bool antiAlias) const override;
-protected:
-    virtual StencilSupport onGetStencilSupport(const GrDrawTarget*,
-                                               const GrPipelineBuilder*,
-                                               const SkPath&,
-                                               const GrStrokeInfo&) const override;
-
-    virtual bool onDrawPath(GrDrawTarget*,
-                            GrPipelineBuilder*,
-                            GrColor,
-                            const SkMatrix& viewMatrix,
-                            const SkPath&,
-                            const GrStrokeInfo&,
-                            bool antiAlias) override;
+    bool onDrawPath(const DrawPathArgs&) override;
 
 private:
     GrContext*     fContext;

@@ -18,7 +18,7 @@
 static SkBitmap bitmap_from_data(SkData* data) {
     SkASSERT(data);
     SkBitmap bm;
-    SkInstallDiscardablePixelRef(data, &bm);
+    SkDEPRECATED_InstallDiscardablePixelRef(data, &bm);
     return bm;
 }
 
@@ -46,7 +46,7 @@ static SkData* load_resource(
         SkDebugf("\n%s: Resource '%s' can not be found.\n",
                  test, filename);
     }
-    return data;  // May return NULL.
+    return data;  // May return nullptr.
 }
 
 /**
@@ -62,7 +62,7 @@ DEF_TEST(PDFJpegEmbedTest, r) {
     if (!mandrillData || !cmykData) {
         return;
     }
-
+    ////////////////////////////////////////////////////////////////////////////
     SkDynamicMemoryWStream pdf;
     SkAutoTUnref<SkDocument> document(SkDocument::CreatePDF(&pdf));
     SkCanvas* canvas = document->beginPage(642, 1028);
@@ -70,14 +70,38 @@ DEF_TEST(PDFJpegEmbedTest, r) {
     canvas->clear(SK_ColorLTGRAY);
 
     SkBitmap bm1(bitmap_from_data(mandrillData));
-    canvas->drawBitmap(bm1, 65.0, 0.0, NULL);
+    canvas->drawBitmap(bm1, 65.0, 0.0, nullptr);
     SkBitmap bm2(bitmap_from_data(cmykData));
-    canvas->drawBitmap(bm2, 0.0, 512.0, NULL);
+    canvas->drawBitmap(bm2, 0.0, 512.0, nullptr);
 
     canvas->flush();
     document->endPage();
     document->close();
     SkAutoTUnref<SkData> pdfData(pdf.copyToData());
+    SkASSERT(pdfData);
+    pdf.reset();
+
+    REPORTER_ASSERT(r, is_subset_of(mandrillData, pdfData));
+
+    // This JPEG uses a nonstandard colorspace - it can not be
+    // embedded into the PDF directly.
+    REPORTER_ASSERT(r, !is_subset_of(cmykData, pdfData));
+    ////////////////////////////////////////////////////////////////////////////
+    pdf.reset();
+    document.reset(SkDocument::CreatePDF(&pdf));
+    canvas = document->beginPage(642, 1028);
+
+    canvas->clear(SK_ColorLTGRAY);
+
+    SkAutoTUnref<SkImage> im1(SkImage::NewFromEncoded(mandrillData));
+    canvas->drawImage(im1, 65.0, 0.0, nullptr);
+    SkAutoTUnref<SkImage> im2(SkImage::NewFromEncoded(cmykData));
+    canvas->drawImage(im2, 0.0, 512.0, nullptr);
+
+    canvas->flush();
+    document->endPage();
+    document->close();
+    pdfData.reset(pdf.copyToData());
     SkASSERT(pdfData);
     pdf.reset();
 
@@ -121,7 +145,7 @@ DEF_TEST(JpegIdentification, r) {
         }
         if (r->verbose()) {
             SkDebugf("\nJpegIdentification: %s [%d x %d]\n", kTests[i].path,
-                     info.fWidth, info.fHeight);
+                     info.fSize.width(), info.fSize.height());
         }
     }
 }

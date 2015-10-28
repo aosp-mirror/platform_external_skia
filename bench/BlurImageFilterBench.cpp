@@ -35,14 +35,14 @@ protected:
         return fName.c_str();
     }
 
-    void onPreDraw() override {
+    void onDelayedSetup() override {
         if (!fInitialized) {
             make_checkerboard();
             fInitialized = true;
         }
     }
 
-    void onDraw(const int loops, SkCanvas* canvas) override {
+    void onDraw(int loops, SkCanvas* canvas) override {
         SkPaint paint;
         static const SkScalar kX = 0;
         static const SkScalar kY = 0;
@@ -51,9 +51,9 @@ protected:
                                                 SkIntToScalar(fCheckerboard.height()));
         const SkImageFilter::CropRect cropRect =
                                         SkImageFilter::CropRect(bmpRect.makeInset(10.f, 10.f));
-        const SkImageFilter::CropRect* crop = fIsCropped ? &cropRect : NULL;
+        const SkImageFilter::CropRect* crop = fIsCropped ? &cropRect : nullptr;
 
-        paint.setImageFilter(SkBlurImageFilter::Create(fSigmaX, fSigmaY, NULL, crop))->unref();
+        paint.setImageFilter(SkBlurImageFilter::Create(fSigmaX, fSigmaY, nullptr, crop))->unref();
 
         for (int i = 0; i < loops; i++) {
             canvas->drawBitmap(fCheckerboard, kX, kY, &paint);

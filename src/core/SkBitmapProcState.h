@@ -11,9 +11,12 @@
 #include "SkBitmap.h"
 #include "SkBitmapController.h"
 #include "SkBitmapFilter.h"
+#include "SkBitmapProvider.h"
 #include "SkMatrix.h"
 #include "SkMipMap.h"
 #include "SkPaint.h"
+#include "SkShader.h"
+#include "SkTemplates.h"
 
 typedef SkFixed3232    SkFractionalInt;
 #define SkScalarToFractionalInt(x)  SkScalarToFixed3232(x)
@@ -24,7 +27,8 @@ typedef SkFixed3232    SkFractionalInt;
 class SkPaint;
 
 struct SkBitmapProcState {
-    SkBitmapProcState();
+    SkBitmapProcState(const SkBitmapProvider&, SkShader::TileMode tmx, SkShader::TileMode tmy);
+    SkBitmapProcState(const SkBitmap&, SkShader::TileMode tmx, SkShader::TileMode tmy);
     ~SkBitmapProcState();
 
     typedef void (*ShaderProc32)(const SkBitmapProcState&, int x, int y,
@@ -118,15 +122,16 @@ struct SkBitmapProcState {
 
 private:
     friend class SkBitmapProcShader;
+    friend class SkLightingShaderImpl;
 
     ShaderProc32        fShaderProc32;      // chooseProcs
     ShaderProc16        fShaderProc16;      // chooseProcs
-    // These are used if the shaderproc is NULL
+    // These are used if the shaderproc is nullptr
     MatrixProc          fMatrixProc;        // chooseProcs
     SampleProc32        fSampleProc32;      // chooseProcs
     SampleProc16        fSampleProc16;      // chooseProcs
 
-    SkBitmap            fOrigBitmap;        // CONSTRUCTOR
+    const SkBitmapProvider fProvider;
 
     enum {
         kBMStateSize = 136  // found by inspection. if too small, we will call new/delete

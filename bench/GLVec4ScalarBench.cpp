@@ -11,11 +11,12 @@
 
 #if SK_SUPPORT_GPU
 #include "GLBench.h"
-#include "gl/GrGLGLSL.h"
+#include "gl/GrGLContext.h"
 #include "gl/GrGLInterface.h"
-#include "gl/GrGLShaderVar.h"
 #include "gl/GrGLUtil.h"
+#include "glsl/GrGLSL.h"
 #include "glsl/GrGLSLCaps.h"
+#include "glsl/GrGLSLShaderVar.h"
 
 #include <stdio.h>
 
@@ -54,7 +55,7 @@ protected:
     }
 
     void setup(const GrGLContext*) override;
-    void glDraw(const int loops, const GrGLContext*) override;
+    void glDraw(int loops, const GrGLContext*) override;
     void teardown(const GrGLInterface*) override;
 
 private:
@@ -92,26 +93,27 @@ private:
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 GrGLuint GLVec4ScalarBench::setupShader(const GrGLContext* ctx) {
-    const char* version = GrGLGetGLSLVersionDecl(*ctx);
+    const GrGLSLCaps* glslCaps = ctx->caps()->glslCaps();
+    const char* version = glslCaps->versionDeclString();
 
     // this shader draws fNumStages overlapping circles of increasing opacity (coverage) and
     // decreasing size, with the center of each subsequent circle closer to the bottom-right
     // corner of the screen than the previous circle.
 
     // set up vertex shader; this is a trivial vertex shader that passes through position and color
-    GrGLShaderVar aPosition("a_position", kVec2f_GrSLType, GrShaderVar::kAttribute_TypeModifier);
-    GrGLShaderVar oPosition("o_position", kVec2f_GrSLType, GrShaderVar::kVaryingOut_TypeModifier);
-    GrGLShaderVar aColor("a_color", kVec3f_GrSLType, GrShaderVar::kAttribute_TypeModifier);
-    GrGLShaderVar oColor("o_color", kVec3f_GrSLType, GrShaderVar::kVaryingOut_TypeModifier);
+    GrGLSLShaderVar aPosition("a_position", kVec2f_GrSLType, GrShaderVar::kAttribute_TypeModifier);
+    GrGLSLShaderVar oPosition("o_position", kVec2f_GrSLType, GrShaderVar::kVaryingOut_TypeModifier);
+    GrGLSLShaderVar aColor("a_color", kVec3f_GrSLType, GrShaderVar::kAttribute_TypeModifier);
+    GrGLSLShaderVar oColor("o_color", kVec3f_GrSLType, GrShaderVar::kVaryingOut_TypeModifier);
 
     SkString vshaderTxt(version);
-    aPosition.appendDecl(*ctx, &vshaderTxt);
+    aPosition.appendDecl(glslCaps, &vshaderTxt);
     vshaderTxt.append(";\n");
-    aColor.appendDecl(*ctx, &vshaderTxt);
+    aColor.appendDecl(glslCaps, &vshaderTxt);
     vshaderTxt.append(";\n");
-    oPosition.appendDecl(*ctx, &vshaderTxt);
+    oPosition.appendDecl(glslCaps, &vshaderTxt);
     vshaderTxt.append(";\n");
-    oColor.appendDecl(*ctx, &vshaderTxt);
+    oColor.appendDecl(glslCaps, &vshaderTxt);
     vshaderTxt.append(";\n");
 
     vshaderTxt.append(
@@ -129,20 +131,19 @@ GrGLuint GLVec4ScalarBench::setupShader(const GrGLContext* ctx) {
     // coded center and compare that to some hard-coded circle radius to compute a coverage.
     // Then, this coverage is mixed with the coverage from the previous stage and passed to the
     // next stage.
-    GrGLShaderVar oFragColor("o_FragColor", kVec4f_GrSLType, GrShaderVar::kOut_TypeModifier);
+    GrGLSLShaderVar oFragColor("o_FragColor", kVec4f_GrSLType, GrShaderVar::kOut_TypeModifier);
     SkString fshaderTxt(version);
-    GrGLAppendGLSLDefaultFloatPrecisionDeclaration(kDefault_GrSLPrecision, gl->fStandard,
-                                                   &fshaderTxt);
+    GrGLSLAppendDefaultFloatPrecisionDeclaration(kDefault_GrSLPrecision, *glslCaps, &fshaderTxt);
     oPosition.setTypeModifier(GrShaderVar::kVaryingIn_TypeModifier);
-    oPosition.appendDecl(*ctx, &fshaderTxt);
+    oPosition.appendDecl(glslCaps, &fshaderTxt);
     fshaderTxt.append(";\n");
     oColor.setTypeModifier(GrShaderVar::kVaryingIn_TypeModifier);
-    oColor.appendDecl(*ctx, &fshaderTxt);
+    oColor.appendDecl(glslCaps, &fshaderTxt);
     fshaderTxt.append(";\n");
 
     const char* fsOutName;
-    if (ctx->caps()->glslCaps()->mustDeclareFragmentShaderOutput()) {
-        oFragColor.appendDecl(*ctx, &fshaderTxt);
+    if (glslCaps->mustDeclareFragmentShaderOutput()) {
+        oFragColor.appendDecl(glslCaps, &fshaderTxt);
         fshaderTxt.append(";\n");
         fsOutName = oFragColor.c_str();
     } else {
@@ -246,7 +247,7 @@ void GLVec4ScalarBench::setupSingleVbo(const GrGLInterface* gl, const SkMatrix* 
 void GLVec4ScalarBench::setup(const GrGLContext* ctx) {
     const GrGLInterface* gl = ctx->interface();
     if (!gl) {
-        SkFAIL("GL interface is NULL in setup()!\n");
+        SkFAIL("GL interface is nullptr in setup()!\n");
     }
     fFboTextureId = SetupFramebuffer(gl, kScreenWidth, kScreenHeight);
 
@@ -262,7 +263,7 @@ void GLVec4ScalarBench::setup(const GrGLContext* ctx) {
     GR_GL_CALL(gl, UseProgram(fProgram));
 }
 
-void GLVec4ScalarBench::glDraw(const int loops, const GrGLContext* ctx) {
+void GLVec4ScalarBench::glDraw(int loops, const GrGLContext* ctx) {
     const GrGLInterface* gl = ctx->interface();
 
     for (int i = 0; i < loops; i++) {

@@ -8,9 +8,11 @@
 #include "GrGLShaderBuilder.h"
 #include "GrGLProgramBuilder.h"
 #include "GrGLShaderStringBuilder.h"
-#include "../GrGLGpu.h"
-#include "../GrGLShaderVar.h"
+#include "gl/GrGLCaps.h"
+#include "gl/GrGLContext.h"
+#include "gl/GrGLGpu.h"
 #include "glsl/GrGLSLCaps.h"
+#include "glsl/GrGLSLShaderVar.h"
 
 namespace {
 void append_texture_lookup(SkString* out,
@@ -58,32 +60,31 @@ GrGLShaderBuilder::GrGLShaderBuilder(GrGLProgramBuilder* program)
     // We push back some dummy pointers which will later become our header
     for (int i = 0; i <= kCode; i++) {
         fShaderStrings.push_back();
-        fCompilerStrings.push_back(NULL);
+        fCompilerStrings.push_back(nullptr);
         fCompilerStringLengths.push_back(0);
     }
 
     this->main() = "void main() {";
 }
 
-void GrGLShaderBuilder::declAppend(const GrGLShaderVar& var) {
+void GrGLShaderBuilder::declAppend(const GrGLSLShaderVar& var) {
     SkString tempDecl;
-    var.appendDecl(fProgramBuilder->ctxInfo(), &tempDecl);
+    var.appendDecl(fProgramBuilder->glslCaps(), &tempDecl);
     this->codeAppendf("%s;", tempDecl.c_str());
 }
 
 void GrGLShaderBuilder::emitFunction(GrSLType returnType,
                                      const char* name,
                                      int argCnt,
-                                     const GrGLShaderVar* args,
+                                     const GrGLSLShaderVar* args,
                                      const char* body,
                                      SkString* outName) {
     this->functions().append(GrGLSLTypeString(returnType));
     fProgramBuilder->nameVariable(outName, '\0', name);
     this->functions().appendf(" %s", outName->c_str());
     this->functions().append("(");
-    const GrGLContextInfo& ctxInfo = fProgramBuilder->gpu()->ctxInfo();
     for (int i = 0; i < argCnt; ++i) {
-        args[i].appendDecl(ctxInfo, &this->functions());
+        args[i].appendDecl(fProgramBuilder->glslCaps(), &this->functions());
         if (i < argCnt - 1) {
             this->functions().append(", ");
         }
@@ -147,7 +148,7 @@ void GrGLShaderBuilder::addFeature(uint32_t featureBit, const char* extensionNam
 
 void GrGLShaderBuilder::appendDecls(const VarArray& vars, SkString* out) const {
     for (int i = 0; i < vars.count(); ++i) {
-        vars[i].appendDecl(fProgramBuilder->ctxInfo(), out);
+        vars[i].appendDecl(fProgramBuilder->glslCaps(), out);
         out->append(";\n");
     }
 }

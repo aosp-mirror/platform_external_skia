@@ -76,7 +76,7 @@ public:
         };
         const SkPoint pts[] = { { 200.f / 4.f, 0.f }, { 3.f * 200.f / 4, 200.f } };
 
-        return SkGradientShader::CreateLinear(pts, colors, NULL,
+        return SkGradientShader::CreateLinear(pts, colors, nullptr,
                                               SK_ARRAY_COUNT(colors),
                                               SkShader::kMirror_TileMode);
     }
@@ -107,7 +107,7 @@ protected:
         return fName.c_str();
     }
 
-    void onPreDraw() override {
+    void onDelayedSetup() override {
         this->setCubics();
         this->setColors();
         this->setTexCoords();
@@ -118,26 +118,26 @@ protected:
                 fPaint.setShader(this->createShader())->unref();
                 break;
             default:
-                fPaint.setShader(NULL);
+                fPaint.setShader(nullptr);
                 break;
         }
     }
 
-    void onDraw(const int loops, SkCanvas* canvas) override {
+    void onDraw(int loops, SkCanvas* canvas) override {
         canvas->scale(fScale.x(), fScale.y());
         for (int i = 0; i < loops; i++) {
             switch (fVertexMode) {
                 case kNone_VertexMode:
-                    canvas->drawPatch(fCubics, NULL, NULL, NULL, fPaint);
+                    canvas->drawPatch(fCubics, nullptr, nullptr, nullptr, fPaint);
                     break;
                 case kColors_VertexMode:
-                    canvas->drawPatch(fCubics, fColors, NULL, NULL, fPaint);
+                    canvas->drawPatch(fCubics, fColors, nullptr, nullptr, fPaint);
                     break;
                 case kTexCoords_VertexMode:
-                    canvas->drawPatch(fCubics, NULL, fTexCoords, NULL, fPaint);
+                    canvas->drawPatch(fCubics, nullptr, fTexCoords, nullptr, fPaint);
                     break;
                 case kBoth_VertexMode:
-                    canvas->drawPatch(fCubics, fColors, fTexCoords, NULL, fPaint);
+                    canvas->drawPatch(fCubics, fColors, fTexCoords, nullptr, fPaint);
                     break;
                 default:
                     break;

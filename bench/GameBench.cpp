@@ -78,7 +78,7 @@ protected:
         return fName.c_str();
     }
 
-    void onPreDraw() override {
+    void onDelayedSetup() override {
         if (!fInitialized) {
             this->makeCheckerboard();
             this->makeAtlas();
@@ -86,7 +86,7 @@ protected:
         }
     }
 
-    void onDraw(const int loops, SkCanvas* canvas) override {
+    void onDraw(int loops, SkCanvas* canvas) override {
         SkRandom scaleRand;
         SkRandom transRand;
         SkRandom rotRand;
@@ -201,7 +201,7 @@ protected:
                         { SkIntToScalar(src.fRight), SkIntToScalar(src.fBottom) },
                     };
                     canvas->drawVertices(SkCanvas::kTriangles_VertexMode,
-                                         4, verts, uvs, NULL, NULL,
+                                         4, verts, uvs, nullptr, nullptr,
                                          indices, 6, p2);
                 } else {
                     canvas->drawBitmapRect(fAtlas, src, dst, &p,
@@ -308,27 +308,18 @@ private:
 };
 
 // Partial clear
-DEF_BENCH( return SkNEW_ARGS(GameBench, (GameBench::kScale_Type,
-                                            GameBench::kPartial_Clear)); )
-DEF_BENCH( return SkNEW_ARGS(GameBench, (GameBench::kTranslate_Type,
-                                            GameBench::kPartial_Clear)); )
-DEF_BENCH( return SkNEW_ARGS(GameBench, (GameBench::kTranslate_Type,
-                                            GameBench::kPartial_Clear, true)); )
-DEF_BENCH( return SkNEW_ARGS(GameBench, (GameBench::kRotate_Type,
-                                            GameBench::kPartial_Clear)); )
+DEF_BENCH(return new GameBench(GameBench::kScale_Type, GameBench::kPartial_Clear);)
+DEF_BENCH(return new GameBench(GameBench::kTranslate_Type, GameBench::kPartial_Clear);)
+DEF_BENCH(return new GameBench(GameBench::kTranslate_Type, GameBench::kPartial_Clear, true);)
+DEF_BENCH(return new GameBench(GameBench::kRotate_Type, GameBench::kPartial_Clear);)
 
 // Full clear
-DEF_BENCH( return SkNEW_ARGS(GameBench, (GameBench::kScale_Type,
-                                            GameBench::kFull_Clear)); )
-DEF_BENCH( return SkNEW_ARGS(GameBench, (GameBench::kTranslate_Type,
-                                            GameBench::kFull_Clear)); )
-DEF_BENCH( return SkNEW_ARGS(GameBench, (GameBench::kTranslate_Type,
-                                            GameBench::kFull_Clear, true)); )
-DEF_BENCH( return SkNEW_ARGS(GameBench, (GameBench::kRotate_Type,
-                                            GameBench::kFull_Clear)); )
+DEF_BENCH(return new GameBench(GameBench::kScale_Type, GameBench::kFull_Clear);)
+DEF_BENCH(return new GameBench(GameBench::kTranslate_Type, GameBench::kFull_Clear);)
+DEF_BENCH(return new GameBench(GameBench::kTranslate_Type, GameBench::kFull_Clear, true);)
+DEF_BENCH(return new GameBench(GameBench::kRotate_Type, GameBench::kFull_Clear);)
 
 // Atlased
-DEF_BENCH( return SkNEW_ARGS(GameBench, (GameBench::kTranslate_Type,
-                                            GameBench::kFull_Clear, false, true)); )
-DEF_BENCH( return SkNEW_ARGS(GameBench, (GameBench::kTranslate_Type,
-                                            GameBench::kFull_Clear, false, true, true)); )
+DEF_BENCH(return new GameBench(GameBench::kTranslate_Type, GameBench::kFull_Clear, false, true);)
+DEF_BENCH(return new GameBench(
+                         GameBench::kTranslate_Type, GameBench::kFull_Clear, false, true, true);)

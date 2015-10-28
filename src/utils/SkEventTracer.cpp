@@ -7,7 +7,9 @@
 
 #include "SkAtomics.h"
 #include "SkEventTracer.h"
-#include "SkLazyPtr.h"
+#include "SkOncePtr.h"
+
+#include <stdlib.h>
 
 class SkDefaultEventTracer : public SkEventTracer {
     SkEventTracer::Handle
@@ -39,18 +41,18 @@ class SkDefaultEventTracer : public SkEventTracer {
 
 // We prefer gUserTracer if it's been set, otherwise we fall back on gDefaultTracer.
 static SkEventTracer* gUserTracer = nullptr;
-SK_DECLARE_STATIC_LAZY_PTR(SkDefaultEventTracer, gDefaultTracer);
+SK_DECLARE_STATIC_ONCE_PTR(SkDefaultEventTracer, gDefaultTracer);
 
 void SkEventTracer::SetInstance(SkEventTracer* tracer) {
     SkASSERT(nullptr == sk_atomic_load(&gUserTracer, sk_memory_order_acquire));
     sk_atomic_store(&gUserTracer, tracer, sk_memory_order_release);
     // An atomic load during process shutdown is probably overkill, but safe overkill.
-    atexit([](){ SkDELETE(sk_atomic_load(&gUserTracer, sk_memory_order_acquire)); });
+    atexit([]() { delete sk_atomic_load(&gUserTracer, sk_memory_order_acquire); });
 }
 
 SkEventTracer* SkEventTracer::GetInstance() {
     if (SkEventTracer* tracer = sk_atomic_load(&gUserTracer, sk_memory_order_acquire)) {
         return tracer;
     }
-    return gDefaultTracer.get();
+    return gDefaultTracer.get([]{ return new SkDefaultEventTracer; });
 }

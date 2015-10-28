@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2012 Google Inc.
  *
@@ -6,7 +5,7 @@
  * found in the LICENSE file.
  */
 
-
+#include "SkClipStack.h"
 #include "SkColorPriv.h"
 #include "SkDebugCanvas.h"
 #include "SkDrawCommand.h"
@@ -51,7 +50,7 @@ public:
         return gTable[idx];
     }
 
-    Factory getFactory() const override { return NULL; }
+    Factory getFactory() const override { return nullptr; }
 #ifndef SK_IGNORE_TO_STRING
     void toString(SkString* str) const override { str->set("OverdrawXfermode"); }
 #endif
@@ -59,16 +58,19 @@ public:
 
 class DebugPaintFilterCanvas : public SkPaintFilterCanvas {
 public:
-    DebugPaintFilterCanvas(int width, int height, bool overdrawViz, bool overrideFilterQuality,
+    DebugPaintFilterCanvas(int width,
+                           int height,
+                           bool overdrawViz,
+                           bool overrideFilterQuality,
                            SkFilterQuality quality)
         : INHERITED(width, height)
-        , fOverdrawXfermode(overdrawViz ? SkNEW(OverdrawXfermode) : NULL)
+        , fOverdrawXfermode(overdrawViz ? new OverdrawXfermode : nullptr)
         , fOverrideFilterQuality(overrideFilterQuality)
-        , fFilterQuality(quality) { }
+        , fFilterQuality(quality) {}
 
 protected:
     void onFilterPaint(SkPaint* paint, Type) const override {
-        if (NULL != fOverdrawXfermode.get()) {
+        if (nullptr != fOverdrawXfermode.get()) {
             paint->setAntiAlias(false);
             paint->setXfermode(fOverdrawXfermode.get());
         }
@@ -98,7 +100,7 @@ private:
 
 SkDebugCanvas::SkDebugCanvas(int width, int height)
         : INHERITED(width, height)
-        , fPicture(NULL)
+        , fPicture(nullptr)
         , fFilter(false)
         , fMegaVizMode(false)
         , fOverdrawViz(false)
@@ -357,16 +359,13 @@ SkTDArray <SkDrawCommand*>& SkDebugCanvas::getDrawCommands() {
 
 void SkDebugCanvas::updatePaintFilterCanvas() {
     if (!fOverdrawViz && !fOverrideFilterQuality) {
-        fPaintFilterCanvas.reset(NULL);
+        fPaintFilterCanvas.reset(nullptr);
         return;
     }
 
     const SkImageInfo info = this->imageInfo();
-    fPaintFilterCanvas.reset(SkNEW_ARGS(DebugPaintFilterCanvas, (info.width(),
-                                                                 info.height(),
-                                                                 fOverdrawViz,
-                                                                 fOverrideFilterQuality,
-                                                                 fFilterQuality)));
+    fPaintFilterCanvas.reset(new DebugPaintFilterCanvas(info.width(), info.height(), fOverdrawViz,
+                                                        fOverrideFilterQuality, fFilterQuality));
 }
 
 void SkDebugCanvas::setOverdrawViz(bool overdrawViz) {
@@ -415,7 +414,7 @@ void SkDebugCanvas::onDrawBitmap(const SkBitmap& bitmap, SkScalar left,
 }
 
 void SkDebugCanvas::onDrawBitmapRect(const SkBitmap& bitmap, const SkRect* src, const SkRect& dst,
-                                     const SkPaint* paint, SK_VIRTUAL_CONSTRAINT_TYPE constraint) {
+                                     const SkPaint* paint, SrcRectConstraint constraint) {
     this->addDrawCommand(new SkDrawBitmapRectCommand(bitmap, src, dst, paint,
                                                      (SrcRectConstraint)constraint));
 }
@@ -431,8 +430,7 @@ void SkDebugCanvas::onDrawImage(const SkImage* image, SkScalar left, SkScalar to
 }
 
 void SkDebugCanvas::onDrawImageRect(const SkImage* image, const SkRect* src, const SkRect& dst,
-                                    const SkPaint* paint SRC_RECT_CONSTRAINT_PARAM(constraint)) {
-    SRC_RECT_CONSTRAINT_LOCAL_DEFAULT(constraint);
+                                    const SkPaint* paint, SrcRectConstraint constraint) {
     this->addDrawCommand(new SkDrawImageRectCommand(image, src, dst, paint, constraint));
 }
 
@@ -517,7 +515,7 @@ void SkDebugCanvas::onDrawVertices(VertexMode vmode, int vertexCount, const SkPo
                                    SkXfermode*, const uint16_t indices[], int indexCount,
                                    const SkPaint& paint) {
     this->addDrawCommand(new SkDrawVerticesCommand(vmode, vertexCount, vertices,
-                         texs, colors, NULL, indices, indexCount, paint));
+                         texs, colors, nullptr, indices, indexCount, paint));
 }
 
 void SkDebugCanvas::willRestore() {

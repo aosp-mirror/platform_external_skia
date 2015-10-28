@@ -32,15 +32,28 @@
 
 #include "SkGlyphCache.h"
 
+#include "SkDrawFilter.h"
+class SkCounterDrawFilter : public SkDrawFilter {
+public:
+    SkCounterDrawFilter(int count) : fCount(count) {}
+
+    bool filter(SkPaint*, Type t) override {
+        return --fCount >= 0;
+    }
+
+    int fCount;
+};
+
 class PictFileView : public SampleView {
 public:
-    PictFileView(const char name[] = NULL)
+    PictFileView(const char name[] = nullptr)
         : fFilename(name)
         , fBBox(kNo_BBoxType)
         , fTileSize(SkSize::Make(0, 0)) {
         for (int i = 0; i < kBBoxTypeCount; ++i) {
-            fPictures[i] = NULL;
+            fPictures[i] = nullptr;
         }
+        fCount = 0;
     }
 
     virtual ~PictFileView() {
@@ -76,6 +89,15 @@ protected:
             SampleCode::TitleR(evt, name.c_str());
             return true;
         }
+        SkUnichar uni;
+        if (SampleCode::CharQ(*evt, &uni)) {
+            switch (uni) {
+                case 'n': fCount += 1; this->inval(nullptr); return true;
+                case 'p': fCount -= 1; this->inval(nullptr); return true;
+                case 's': fCount =  0; this->inval(nullptr); return true;
+                default: break;
+            }
+        }
         return this->INHERITED::onQuery(evt);
     }
 
@@ -99,7 +121,12 @@ protected:
             *picture = LoadPicture(fFilename.c_str(), fBBox);
         }
         if (*picture) {
+            SkCounterDrawFilter filter(fCount);
+            if (fCount > 0) {
+                canvas->setDrawFilter(&filter);
+            }
             canvas->drawPicture(*picture);
+            canvas->setDrawFilter(nullptr);
         }
 
 #ifdef SK_GLYPHCACHE_TRACK_HASH_STATS
@@ -121,6 +148,7 @@ private:
     SkPicture*  fPictures[kBBoxTypeCount];
     BBoxType    fBBox;
     SkSize      fTileSize;
+    int         fCount;
 
     SkPicture* LoadPicture(const char path[], BBoxType bbox) {
         SkAutoTUnref<SkPicture> pic;
@@ -131,8 +159,8 @@ private:
             SkPictureRecorder recorder;
             SkCanvas* can = recorder.beginRecording(SkIntToScalar(bm.width()),
                                                     SkIntToScalar(bm.height()),
-                                                    NULL, 0);
-            can->drawBitmap(bm, 0, 0, NULL);
+                                                    nullptr, 0);
+            can->drawBitmap(bm, 0, 0, nullptr);
             pic.reset(recorder.endRecording());
         } else {
             SkFILEStream stream(path);
@@ -146,7 +174,7 @@ private:
                 SkPictureRecorder recorder;
                 pic->playback(recorder.beginRecording(pic->cullRect().width(),
                                                       pic->cullRect().height(),
-                                                      NULL, 0));
+                                                      nullptr, 0));
                 SkAutoTUnref<SkPicture> p2(recorder.endRecording());
 
                 SkString path2(path);
@@ -156,8 +184,8 @@ private:
             }
         }
 
-        if (NULL == pic) {
-            return NULL;
+        if (nullptr == pic) {
+            return nullptr;
         }
 
         SkAutoTDelete<SkBBHFactory> factory;
@@ -166,7 +194,7 @@ private:
             // no bbox playback necessary
             return pic.detach();
         case kRTree_BBoxType:
-            factory.reset(SkNEW(SkRTreeFactory));
+            factory.reset(new SkRTreeFactory);
             break;
         default:
             SkASSERT(false);

@@ -10,14 +10,14 @@
 
 #include "SkColorFilter.h"
 #include "SkData.h"
-#include "SkMutex.h"
+#include "../private/SkMutex.h"
 
 class SK_API SkColorCubeFilter : public SkColorFilter {
 public:
     /** cubeData must containt a 3D data in the form of cube of the size:
      *  cubeDimension * cubeDimension * cubeDimension * sizeof(SkColor)
      *  This cube contains a transform where (x,y,z) maps to the (r,g,b).
-     *  The alpha components of the colors are ignored (treated as 0xFF).
+     *  The alpha components of the colors must be 0xFF.
      */
     static SkColorFilter* Create(SkData* cubeData, int cubeDimension);
 
@@ -25,8 +25,7 @@ public:
     uint32_t getFlags() const override;
 
 #if SK_SUPPORT_GPU
-   bool asFragmentProcessors(GrContext*, GrProcessorDataManager*,
-                             SkTDArray<GrFragmentProcessor*>*) const override;
+    const GrFragmentProcessor* asFragmentProcessor(GrContext*) const override;
 #endif
 
     SK_TO_STRING_OVERRIDE()

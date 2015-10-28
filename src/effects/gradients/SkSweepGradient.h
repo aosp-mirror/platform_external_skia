@@ -28,13 +28,14 @@ public:
         typedef SkGradientShaderBase::GradientShaderBaseContext INHERITED;
     };
 
-    BitmapType asABitmap(SkBitmap* bitmap, SkMatrix* matrix, TileMode* xy) const override;
-
     GradientType asAGradient(GradientInfo* info) const override;
 
-    bool asFragmentProcessor(GrContext*, const SkPaint&, const SkMatrix& viewM,
-                             const SkMatrix*, GrColor*, GrProcessorDataManager*,
-                             GrFragmentProcessor**) const override;
+#if SK_SUPPORT_GPU
+    const GrFragmentProcessor* asFragmentProcessor(GrContext*,
+                                                   const SkMatrix& viewM,
+                                                   const SkMatrix*,
+                                                   SkFilterQuality) const override;
+#endif
 
     SK_TO_STRING_OVERRIDE()
     SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkSweepGradient)

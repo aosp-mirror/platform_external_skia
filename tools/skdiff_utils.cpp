@@ -11,11 +11,12 @@
 #include "SkImageDecoder.h"
 #include "SkImageEncoder.h"
 #include "SkStream.h"
-#include "SkTemplates.h"
 #include "SkTypes.h"
 
+#include <memory>
+
 bool are_buffers_equal(SkData* skdata1, SkData* skdata2) {
-    if ((NULL == skdata1) || (NULL == skdata2)) {
+    if ((nullptr == skdata1) || (nullptr == skdata2)) {
         return false;
     }
     if (skdata1->size() != skdata2->size()) {
@@ -35,16 +36,14 @@ SkData* read_file(const char* file_path) {
 bool get_bitmap(SkData* fileBits, DiffResource& resource, SkImageDecoder::Mode mode) {
     SkMemoryStream stream(fileBits->data(), fileBits->size());
 
-    SkImageDecoder* codec = SkImageDecoder::Factory(&stream);
-    if (NULL == codec) {
+    // In debug, the DLL will automatically be unloaded when this is deleted,
+    // but that shouldn't be a problem in release mode.
+    std::unique_ptr<SkImageDecoder> codec(SkImageDecoder::Factory(&stream));
+    if (nullptr == codec) {
         SkDebugf("ERROR: no codec found for <%s>\n", resource.fFullPath.c_str());
         resource.fStatus = DiffResource::kCouldNotDecode_Status;
         return false;
     }
-
-    // In debug, the DLL will automatically be unloaded when this is deleted,
-    // but that shouldn't be a problem in release mode.
-    SkAutoTDelete<SkImageDecoder> ad(codec);
 
     stream.rewind();
     if (!codec->decode(&stream, &resource.fBitmap, kN32_SkColorType, mode)) {

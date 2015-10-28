@@ -43,15 +43,13 @@ private:
 
 int DummyRasterizer::gCount;
 
-SkFlattenable* DummyRasterizer::CreateProc(SkReadBuffer&) {
-    return SkNEW(DummyRasterizer);
-}
+SkFlattenable* DummyRasterizer::CreateProc(SkReadBuffer&) { return new DummyRasterizer; }
 
 // Check to make sure that the SkPaint in the layer has its destructor called.
 DEF_TEST(LayerRasterizer_destructor, reporter) {
     {
         SkPaint paint;
-        paint.setRasterizer(SkNEW(DummyRasterizer))->unref();
+        paint.setRasterizer(new DummyRasterizer)->unref();
         REPORTER_ASSERT(reporter, DummyRasterizer::GetCount() == 1);
 
         SkLayerRasterizer::Builder builder;
@@ -83,7 +81,7 @@ static bool equals(const SkLayerRasterizer_Rec& rec1, const SkLayerRasterizer_Re
 
 DEF_TEST(LayerRasterizer_copy, reporter) {
     SkLayerRasterizer::Builder builder;
-    REPORTER_ASSERT(reporter, NULL == builder.snapshotRasterizer());
+    REPORTER_ASSERT(reporter, nullptr == builder.snapshotRasterizer());
     SkPaint paint;
     // Create a bunch of paints with different flags.
     for (uint32_t flags = 0x01; flags < SkPaint::kAllFlags; flags <<= 1) {
@@ -107,9 +105,9 @@ DEF_TEST(LayerRasterizer_copy, reporter) {
     REPORTER_ASSERT(reporter, largerCount == LayerRasterizerTester::CountLayers(*detached.get()));
     REPORTER_ASSERT(reporter, smallerCount == largerCount - 1);
 
-    const SkLayerRasterizer_Rec* recFirstCopy = NULL;
-    const SkLayerRasterizer_Rec* recOneLarger = NULL;
-    const SkLayerRasterizer_Rec* recDetached = NULL;
+    const SkLayerRasterizer_Rec* recFirstCopy = nullptr;
+    const SkLayerRasterizer_Rec* recOneLarger = nullptr;
+    const SkLayerRasterizer_Rec* recDetached = nullptr;
 
     const SkDeque& layersFirstCopy = LayerRasterizerTester::GetLayers(*firstCopy.get());
     const SkDeque& layersOneLarger = LayerRasterizerTester::GetLayers(*oneLarger.get());
@@ -133,7 +131,7 @@ DEF_TEST(LayerRasterizer_copy, reporter) {
 
         REPORTER_ASSERT(reporter, equals(*recOneLarger, *recDetached));
         if (smallerCount == i) {
-            REPORTER_ASSERT(reporter, recFirstCopy == NULL);
+            REPORTER_ASSERT(reporter, recFirstCopy == nullptr);
         } else {
             REPORTER_ASSERT(reporter, equals(*recFirstCopy, *recOneLarger));
         }
@@ -142,5 +140,5 @@ DEF_TEST(LayerRasterizer_copy, reporter) {
 
 DEF_TEST(LayerRasterizer_detachEmpty, reporter) {
     SkLayerRasterizer::Builder builder;
-    REPORTER_ASSERT(reporter, NULL == builder.detachRasterizer());
+    REPORTER_ASSERT(reporter, nullptr == builder.detachRasterizer());
 }

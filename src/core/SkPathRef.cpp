@@ -6,7 +6,7 @@
  */
 
 #include "SkBuffer.h"
-#include "SkLazyPtr.h"
+#include "SkOncePtr.h"
 #include "SkPath.h"
 #include "SkPathRef.h"
 
@@ -18,28 +18,39 @@ SkPathRef::Editor::Editor(SkAutoTUnref<SkPathRef>* pathRef,
     if ((*pathRef)->unique()) {
         (*pathRef)->incReserve(incReserveVerbs, incReservePoints);
     } else {
-        SkPathRef* copy = SkNEW(SkPathRef);
+        SkPathRef* copy = new SkPathRef;
         copy->copy(**pathRef, incReserveVerbs, incReservePoints);
         pathRef->reset(copy);
     }
     fPathRef = *pathRef;
+    fPathRef->callGenIDChangeListeners();
     fPathRef->fGenerationID = 0;
     SkDEBUGCODE(sk_atomic_inc(&fPathRef->fEditorsAttached);)
 }
 
 //////////////////////////////////////////////////////////////////////////////
 
-// As a template argument, this must have external linkage.
-SkPathRef* sk_create_empty_pathref() {
-    SkPathRef* empty = SkNEW(SkPathRef);
-    empty->computeBounds();   // Avoids races later to be the first to do this.
-    return empty;
+SkPathRef::~SkPathRef() {
+    this->callGenIDChangeListeners();
+    SkDEBUGCODE(this->validate();)
+    sk_free(fPoints);
+
+    SkDEBUGCODE(fPoints = nullptr;)
+    SkDEBUGCODE(fVerbs = nullptr;)
+    SkDEBUGCODE(fVerbCnt = 0x9999999;)
+    SkDEBUGCODE(fPointCnt = 0xAAAAAAA;)
+    SkDEBUGCODE(fPointCnt = 0xBBBBBBB;)
+    SkDEBUGCODE(fGenerationID = 0xEEEEEEEE;)
+    SkDEBUGCODE(fEditorsAttached = 0x7777777;)
 }
 
-SK_DECLARE_STATIC_LAZY_PTR(SkPathRef, empty, sk_create_empty_pathref);
-
+SK_DECLARE_STATIC_ONCE_PTR(SkPathRef, empty);
 SkPathRef* SkPathRef::CreateEmpty() {
-    return SkRef(empty.get());
+    return SkRef(empty.get([]{
+        SkPathRef* pr = new SkPathRef;
+        pr->computeBounds();   // Avoids races later to be the first to do this.
+        return pr;
+    }));
 }
 
 void SkPathRef::CreateTransformedCopy(SkAutoTUnref<SkPathRef>* dst,
@@ -56,7 +67,7 @@ void SkPathRef::CreateTransformedCopy(SkAutoTUnref<SkPathRef>* dst,
     }
 
     if (!(*dst)->unique()) {
-        dst->reset(SkNEW(SkPathRef));
+        dst->reset(new SkPathRef);
     }
 
     if (*dst != &src) {
@@ -108,14 +119,14 @@ void SkPathRef::CreateTransformedCopy(SkAutoTUnref<SkPathRef>* dst,
 }
 
 SkPathRef* SkPathRef::CreateFromBuffer(SkRBuffer* buffer) {
-    SkPathRef* ref = SkNEW(SkPathRef);
+    SkPathRef* ref = new SkPathRef;
     bool isOval;
     uint8_t segmentMask;
 
     int32_t packed;
     if (!buffer->readS32(&packed)) {
-        SkDELETE(ref);
-        return NULL;
+        delete ref;
+        return nullptr;
     }
 
     ref->fIsFinite = (packed >> kIsFinite_SerializationShift) & 1;
@@ -127,8 +138,8 @@ SkPathRef* SkPathRef::CreateFromBuffer(SkRBuffer* buffer) {
         !buffer->readS32(&verbCount) ||
         !buffer->readS32(&pointCount) ||
         !buffer->readS32(&conicCount)) {
-        SkDELETE(ref);
-        return NULL;
+        delete ref;
+        return nullptr;
     }
 
     ref->resetToSize(verbCount, pointCount, conicCount);
@@ -140,8 +151,8 @@ SkPathRef* SkPathRef::CreateFromBuffer(SkRBuffer* buffer) {
         !buffer->read(ref->fPoints, pointCount * sizeof(SkPoint)) ||
         !buffer->read(ref->fConicWeights.begin(), conicCount * sizeof(SkScalar)) ||
         !buffer->read(&ref->fBounds, sizeof(SkRect))) {
-        SkDELETE(ref);
-        return NULL;
+        delete ref;
+        return nullptr;
     }
     ref->fBoundsIsDirty = false;
 
@@ -154,6 +165,7 @@ SkPathRef* SkPathRef::CreateFromBuffer(SkRBuffer* buffer) {
 void SkPathRef::Rewind(SkAutoTUnref<SkPathRef>* pathRef) {
     if ((*pathRef)->unique()) {
         SkDEBUGCODE((*pathRef)->validate();)
+        (*pathRef)->callGenIDChangeListeners();
         (*pathRef)->fBoundsIsDirty = true;  // this also invalidates fIsFinite
         (*pathRef)->fVerbCnt = 0;
         (*pathRef)->fPointCnt = 0;
@@ -166,7 +178,7 @@ void SkPathRef::Rewind(SkAutoTUnref<SkPathRef>* pathRef) {
     } else {
         int oldVCnt = (*pathRef)->countVerbs();
         int oldPCnt = (*pathRef)->countPoints();
-        pathRef->reset(SkNEW(SkPathRef));
+        pathRef->reset(new SkPathRef);
         (*pathRef)->resetToSize(0, 0, 0, oldVCnt, oldPCnt);
     }
 }
@@ -215,13 +227,6 @@ bool SkPathRef::operator== (const SkPathRef& ref) const {
         SkASSERT(!genIDMatch);
         return false;
     }
-    // We've done the work to determine that these are equal. If either has a zero genID, copy
-    // the other's. If both are 0 then genID() will compute the next ID.
-    if (0 == fGenerationID) {
-        fGenerationID = ref.genID();
-    } else if (0 == ref.fGenerationID) {
-        ref.fGenerationID = this->genID();
-    }
     return true;
 }
 
@@ -269,9 +274,6 @@ void SkPathRef::copy(const SkPathRef& ref,
     memcpy(this->verbsMemWritable(), ref.verbsMemBegin(), ref.fVerbCnt * sizeof(uint8_t));
     memcpy(this->fPoints, ref.fPoints, ref.fPointCnt * sizeof(SkPoint));
     fConicWeights = ref.fConicWeights;
-    // We could call genID() here to force a real ID (instead of 0). However, if we're making
-    // a copy then presumably we intend to make a modification immediately afterwards.
-    fGenerationID = ref.fGenerationID;
     fBoundsIsDirty = ref.fBoundsIsDirty;
     if (!fBoundsIsDirty) {
         fBounds = ref.fBounds;
@@ -436,16 +438,34 @@ uint32_t SkPathRef::genID() const {
     return fGenerationID;
 }
 
+void SkPathRef::addGenIDChangeListener(GenIDChangeListener* listener) {
+    if (nullptr == listener || this == (SkPathRef*)empty) {
+        delete listener;
+        return;
+    }
+    *fGenIDChangeListeners.append() = listener;
+}
+
+// we need to be called *before* the genID gets changed or zerod
+void SkPathRef::callGenIDChangeListeners() {
+    for (int i = 0; i < fGenIDChangeListeners.count(); i++) {
+        fGenIDChangeListeners[i]->onChange();
+    }
+
+    // Listeners get at most one shot, so whether these triggered or not, blow them away.
+    fGenIDChangeListeners.deleteAll();
+}
+
 #ifdef SK_DEBUG
 void SkPathRef::validate() const {
     this->INHERITED::validate();
     SkASSERT(static_cast<ptrdiff_t>(fFreeSpace) >= 0);
     SkASSERT(reinterpret_cast<intptr_t>(fVerbs) - reinterpret_cast<intptr_t>(fPoints) >= 0);
-    SkASSERT((NULL == fPoints) == (NULL == fVerbs));
-    SkASSERT(!(NULL == fPoints && 0 != fFreeSpace));
-    SkASSERT(!(NULL == fPoints && 0 != fFreeSpace));
-    SkASSERT(!(NULL == fPoints && fPointCnt));
-    SkASSERT(!(NULL == fVerbs && fVerbCnt));
+    SkASSERT((nullptr == fPoints) == (nullptr == fVerbs));
+    SkASSERT(!(nullptr == fPoints && 0 != fFreeSpace));
+    SkASSERT(!(nullptr == fPoints && 0 != fFreeSpace));
+    SkASSERT(!(nullptr == fPoints && fPointCnt));
+    SkASSERT(!(nullptr == fVerbs && fVerbCnt));
     SkASSERT(this->currSize() ==
                 fFreeSpace + sizeof(SkPoint) * fPointCnt + sizeof(uint8_t) * fVerbCnt);
 

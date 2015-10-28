@@ -4,8 +4,11 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
+#ifndef SkMaskSwizzler_DEFINED
+#define SkMaskSwizzler_DEFINED
 
 #include "SkMasks.h"
+#include "SkSampler.h"
 #include "SkSwizzler.h"
 #include "SkTypes.h"
 
@@ -15,50 +18,54 @@
  * Currently only used by bmp
  *
  */
-class SkMaskSwizzler {
+class SkMaskSwizzler : public SkSampler {
 public:
 
     /*
-     *
      * Create a new swizzler
      * @param masks Unowned pointer to helper class
-     *
      */
-    static SkMaskSwizzler* CreateMaskSwizzler(const SkImageInfo& imageInfo,
-                                              void* dst, size_t dstRowBytes,
+    static SkMaskSwizzler* CreateMaskSwizzler(const SkImageInfo& dstInfo,
+                                              const SkImageInfo& srcInfo,
                                               SkMasks* masks,
-                                              uint32_t bitsPerPixel);
+                                              uint32_t bitsPerPixel,
+                                              const SkCodec::Options& options);
 
     /*
-     *
-     * Swizzle the row with the specified y value
-     *
+     * Swizzle a row
      */
-    SkSwizzler::ResultAlpha next(const uint8_t* SK_RESTRICT src, int y);
+    SkSwizzler::ResultAlpha swizzle(void* dst, const uint8_t* SK_RESTRICT src);
+
+    /**
+     * Implement fill using a custom width.
+     */
+    void fill(const SkImageInfo& info, void* dst, size_t rowBytes, uint32_t colorOrIndex,
+            SkCodec::ZeroInitialized zeroInit) override {
+        const SkImageInfo fillInfo = info.makeWH(fDstWidth, info.height());
+        SkSampler::Fill(fillInfo, dst, rowBytes, colorOrIndex, zeroInit);
+    }
 
 private:
 
     /*
-     *
      * Row procedure used for swizzle
-     *
      */
-    typedef SkSwizzler::ResultAlpha (*RowProc)(
-            void* dstRow, const uint8_t* srcRow, int width,
-            SkMasks* masks);
+    typedef SkSwizzler::ResultAlpha (*RowProc)(void* dstRow, const uint8_t* srcRow, int width,
+            SkMasks* masks, uint32_t startX, uint32_t sampleX);
 
-    /*
-     *
-     * Constructor for mask swizzler
-     *
-     */
-    SkMaskSwizzler(const SkImageInfo& info, void* dst, size_t dstRowBytes,
-            SkMasks* masks, RowProc proc);
+    SkMaskSwizzler(SkMasks* masks, RowProc proc, int subsetWidth, int srcOffset);
 
-    // Fields
-    const SkImageInfo& fDstInfo;
-    void*              fDst;
-    size_t             fDstRowBytes;
-    SkMasks*           fMasks;       // unowned
-    const RowProc      fRowProc;
+    int onSetSampleX(int) override;
+
+    SkMasks*        fMasks;           // unowned
+    const RowProc   fRowProc;
+
+    // FIXME: Can this class share more with SkSwizzler? These variables are all the same.
+    const int       fSubsetWidth;     // Width of the subset of source before any sampling.
+    int             fDstWidth;        // Width of dst, which may differ with sampling.
+    int             fSampleX;
+    int             fSrcOffset;
+    int             fX0;
 };
+
+#endif

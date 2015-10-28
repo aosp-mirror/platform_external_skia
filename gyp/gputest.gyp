@@ -14,13 +14,16 @@
       ],
       'include_dirs': [
         '../include/gpu',
+        '../include/private',
         '../include/utils',
         '../src/core',
         '../src/gpu',
+        '../../src/gpu',
       ],
       'direct_dependent_settings': {
         'include_dirs': [
           '../src/gpu',
+          '../../src/gpu',
         ],
       },
       'sources': [

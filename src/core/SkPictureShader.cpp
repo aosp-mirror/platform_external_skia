@@ -10,6 +10,7 @@
 #include "SkBitmap.h"
 #include "SkBitmapProcShader.h"
 #include "SkCanvas.h"
+#include "SkImageGenerator.h"
 #include "SkMatrixUtils.h"
 #include "SkPicture.h"
 #include "SkReadBuffer.h"
@@ -75,6 +76,8 @@ struct BitmapShaderRec : public SkResourceCache::Rec {
     size_t bytesUsed() const override {
         return sizeof(fKey) + sizeof(SkShader) + fBitmapBytes;
     }
+    const char* getCategory() const override { return "bitmap-shader"; }
+    SkDiscardableMemory* diagnostic_only_getDiscardable() const override { return nullptr; }
 
     static bool Visitor(const SkResourceCache::Rec& baseRec, void* contextShader) {
         const BitmapShaderRec& rec = static_cast<const BitmapShaderRec&>(baseRec);
@@ -82,23 +85,11 @@ struct BitmapShaderRec : public SkResourceCache::Rec {
 
         result->reset(SkRef(rec.fShader.get()));
 
-        SkBitmap tile;
-        rec.fShader.get()->asABitmap(&tile, NULL, NULL);
-        // FIXME: this doesn't protect the pixels from being discarded as soon as we unlock.
-        // Should be handled via a pixel ref generator instead
-        // (https://code.google.com/p/skia/issues/detail?id=3220).
-        SkAutoLockPixels alp(tile, true);
-        return tile.getPixels() != NULL;
+        // The bitmap shader is backed by an image generator, thus it can always re-generate its
+        // pixels if discarded.
+        return true;
     }
 };
-
-static bool cache_try_alloc_pixels(SkBitmap* bitmap) {
-    SkBitmap::Allocator* allocator = SkResourceCache::GetAllocator();
-
-    return NULL != allocator
-        ? allocator->allocPixelRef(bitmap, NULL)
-        : bitmap->tryAllocPixels();
-}
 
 } // namespace
 
@@ -111,16 +102,12 @@ SkPictureShader::SkPictureShader(const SkPicture* picture, TileMode tmx, TileMod
     , fTmy(tmy) {
 }
 
-SkPictureShader::~SkPictureShader() {
-    fPicture->unref();
-}
-
 SkShader* SkPictureShader::Create(const SkPicture* picture, TileMode tmx, TileMode tmy,
                                          const SkMatrix* localMatrix, const SkRect* tile) {
     if (!picture || picture->cullRect().isEmpty() || (tile && tile->isEmpty())) {
         return SkShader::CreateEmptyShader();
     }
-    return SkNEW_ARGS(SkPictureShader, (picture, tmx, tmy, localMatrix, tile));
+    return new SkPictureShader(picture, tmx, tmy, localMatrix, tile);
 }
 
 SkFlattenable* SkPictureShader::CreateProc(SkReadBuffer& buffer) {
@@ -137,7 +124,7 @@ SkFlattenable* SkPictureShader::CreateProc(SkReadBuffer& buffer) {
         if (buffer.isVersionLT(SkReadBuffer::kPictureShaderHasPictureBool_Version)) {
             // Older code blindly serialized pictures.  We don't trust them.
             buffer.validate(false);
-            return NULL;
+            return nullptr;
         }
         // Newer code won't serialize pictures in disallow-cross-process-picture mode.
         // Assert that they didn't serialize anything except a false here.
@@ -168,12 +155,12 @@ void SkPictureShader::flatten(SkWriteBuffer& buffer) const {
     }
 }
 
-SkShader* SkPictureShader::refBitmapShader(const SkMatrix& matrix, const SkMatrix* localM,
-                                            const int maxTextureSize) const {
+SkShader* SkPictureShader::refBitmapShader(const SkMatrix& viewMatrix, const SkMatrix* localM,
+                                           const int maxTextureSize) const {
     SkASSERT(fPicture && !fPicture->cullRect().isEmpty());
 
     SkMatrix m;
-    m.setConcat(matrix, this->getLocalMatrix());
+    m.setConcat(viewMatrix, this->getLocalMatrix());
     if (localM) {
         m.preConcat(*localM);
     }
@@ -183,7 +170,7 @@ SkShader* SkPictureShader::refBitmapShader(const SkMatrix& matrix, const SkMatri
     //
     // TODO: replace this with decomposeScale() -- but beware LayoutTest rebaselines!
     //
-    if (!SkDecomposeUpper2x2(m, NULL, &scale, NULL)) {
+    if (!SkDecomposeUpper2x2(m, nullptr, &scale, nullptr)) {
         // Decomposition failed, use an approximation.
         scale.set(SkScalarSqrt(m.getScaleX() * m.getScaleX() + m.getSkewX() * m.getSkewX()),
                   SkScalarSqrt(m.getScaleY() * m.getScaleY() + m.getSkewY() * m.getSkewY()));
@@ -203,7 +190,7 @@ SkShader* SkPictureShader::refBitmapShader(const SkMatrix& matrix, const SkMatri
     // Scale down the tile size if larger than maxTextureSize for GPU Path or it should fail on create texture
     if (maxTextureSize) {
         if (scaledSize.width() > maxTextureSize || scaledSize.height() > maxTextureSize) {
-            SkScalar downScale = maxTextureSize / SkMax32(scaledSize.width(), scaledSize.height());
+            SkScalar downScale = maxTextureSize / SkMaxScalar(scaledSize.width(), scaledSize.height());
             scaledSize.set(SkScalarFloorToScalar(SkScalarMul(scaledSize.width(), downScale)),
                            SkScalarFloorToScalar(SkScalarMul(scaledSize.height(), downScale)));
         }
@@ -228,25 +215,20 @@ SkShader* SkPictureShader::refBitmapShader(const SkMatrix& matrix, const SkMatri
                         this->getLocalMatrix());
 
     if (!SkResourceCache::Find(key, BitmapShaderRec::Visitor, &tileShader)) {
+        SkMatrix tileMatrix;
+        tileMatrix.setRectToRect(fTile, SkRect::MakeIWH(tileSize.width(), tileSize.height()),
+                             SkMatrix::kFill_ScaleToFit);
         SkBitmap bm;
-        bm.setInfo(SkImageInfo::MakeN32Premul(tileSize));
-        if (!cache_try_alloc_pixels(&bm)) {
-            return SkShader::CreateEmptyShader();
+        if (!SkDEPRECATED_InstallDiscardablePixelRef(
+            SkImageGenerator::NewFromPicture(tileSize, fPicture, &tileMatrix, nullptr), &bm)) {
+            return nullptr;
         }
-        bm.eraseColor(SK_ColorTRANSPARENT);
-
-        // Always disable LCD text, since we can't assume our image will be opaque.
-        SkCanvas canvas(bm, SkSurfaceProps(0, kUnknown_SkPixelGeometry));
-
-        canvas.scale(tileScale.width(), tileScale.height());
-        canvas.translate(-fTile.x(), -fTile.y());
-        canvas.drawPicture(fPicture);
 
         SkMatrix shaderMatrix = this->getLocalMatrix();
         shaderMatrix.preScale(1 / tileScale.width(), 1 / tileScale.height());
         tileShader.reset(CreateBitmapShader(bm, fTmx, fTmy, &shaderMatrix));
 
-        SkResourceCache::Add(SkNEW_ARGS(BitmapShaderRec, (key, tileShader.get(), bm.getSize())));
+        SkResourceCache::Add(new BitmapShaderRec(key, tileShader.get(), bm.getSize()));
     }
 
     return tileShader.detach();
@@ -258,8 +240,8 @@ size_t SkPictureShader::contextSize() const {
 
 SkShader::Context* SkPictureShader::onCreateContext(const ContextRec& rec, void* storage) const {
     SkAutoTUnref<SkShader> bitmapShader(this->refBitmapShader(*rec.fMatrix, rec.fLocalMatrix));
-    if (NULL == bitmapShader.get()) {
-        return NULL;
+    if (nullptr == bitmapShader.get()) {
+        return nullptr;
     }
     return PictureShaderContext::Create(storage, *this, rec, bitmapShader);
 }
@@ -268,11 +250,10 @@ SkShader::Context* SkPictureShader::onCreateContext(const ContextRec& rec, void*
 
 SkShader::Context* SkPictureShader::PictureShaderContext::Create(void* storage,
                    const SkPictureShader& shader, const ContextRec& rec, SkShader* bitmapShader) {
-    PictureShaderContext* ctx = SkNEW_PLACEMENT_ARGS(storage, PictureShaderContext,
-                                                     (shader, rec, bitmapShader));
-    if (NULL == ctx->fBitmapShaderContext) {
+    PictureShaderContext* ctx = new (storage) PictureShaderContext(shader, rec, bitmapShader);
+    if (nullptr == ctx->fBitmapShaderContext) {
         ctx->~PictureShaderContext();
-        ctx = NULL;
+        ctx = nullptr;
     }
     return ctx;
 }
@@ -321,10 +302,10 @@ void SkPictureShader::toString(SkString* str) const {
     };
 
     str->appendf("PictureShader: [%f:%f:%f:%f] ",
-                 fPicture ? fPicture->cullRect().fLeft : 0,
-                 fPicture ? fPicture->cullRect().fTop : 0,
-                 fPicture ? fPicture->cullRect().fRight : 0,
-                 fPicture ? fPicture->cullRect().fBottom : 0);
+                 fPicture->cullRect().fLeft,
+                 fPicture->cullRect().fTop,
+                 fPicture->cullRect().fRight,
+                 fPicture->cullRect().fBottom);
 
     str->appendf("(%s, %s)", gTileModeName[fTmx], gTileModeName[fTmy]);
 
@@ -333,27 +314,19 @@ void SkPictureShader::toString(SkString* str) const {
 #endif
 
 #if SK_SUPPORT_GPU
-bool SkPictureShader::asFragmentProcessor(GrContext* context, const SkPaint& paint,
-                                          const SkMatrix& viewM, const SkMatrix* localMatrix,
-                                          GrColor* paintColor,
-                                          GrProcessorDataManager* procDataManager,
-                                          GrFragmentProcessor** fp) const {
+const GrFragmentProcessor* SkPictureShader::asFragmentProcessor(
+                                                    GrContext* context,
+                                                    const SkMatrix& viewM,
+                                                    const SkMatrix* localMatrix,
+                                                    SkFilterQuality fq) const {
     int maxTextureSize = 0;
     if (context) {
         maxTextureSize = context->caps()->maxTextureSize();
     }
     SkAutoTUnref<SkShader> bitmapShader(this->refBitmapShader(viewM, localMatrix, maxTextureSize));
     if (!bitmapShader) {
-        return false;
+        return nullptr;
     }
-    return bitmapShader->asFragmentProcessor(context, paint, viewM, NULL, paintColor,
-                                             procDataManager, fp);
-}
-#else
-bool SkPictureShader::asFragmentProcessor(GrContext*, const SkPaint&, const SkMatrix&,
-                                          const SkMatrix*, GrColor*, GrProcessorDataManager*,
-                                          GrFragmentProcessor**) const {
-    SkDEBUGFAIL("Should not call in GPU-less build");
-    return false;
+    return bitmapShader->asFragmentProcessor(context, viewM, nullptr, fq);
 }
 #endif

@@ -7,11 +7,12 @@
 #ifndef SkJpegInfo_DEFINED
 #define SkJpegInfo_DEFINED
 
+#include "SkSize.h"
+
 class SkData;
 
 struct SkJFIFInfo {
-    int fWidth;
-    int fHeight;
+    SkISize fSize;
     enum Type {
         kGrayscale,
         kYCbCr,
@@ -19,7 +20,7 @@ struct SkJFIFInfo {
 };
 
 /** Returns true iff the data seems to be a valid JFIF JPEG image.  
-    If so and if info is not NULL, populate info.
+    If so and if info is not nullptr, populate info.
 
     JPEG/JFIF References:
         http://www.w3.org/Graphics/JPEG/itu-t81.pdf

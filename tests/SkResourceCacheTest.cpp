@@ -10,74 +10,10 @@
 #include "SkCanvas.h"
 #include "SkDiscardableMemoryPool.h"
 #include "SkGraphics.h"
+#include "SkPicture.h"
+#include "SkPictureRecorder.h"
 #include "SkResourceCache.h"
 #include "SkSurface.h"
-
-static const int kCanvasSize = 1;
-static const int kBitmapSize = 16;
-static const int kScale = 8;
-
-static bool is_in_scaled_image_cache(const SkBitmap& orig,
-                                     SkScalar xScale,
-                                     SkScalar yScale) {
-    SkBitmap scaled;
-    float roundedImageWidth = SkScalarRoundToScalar(orig.width() * xScale);
-    float roundedImageHeight = SkScalarRoundToScalar(orig.height() * yScale);
-    return SkBitmapCache::Find(orig, roundedImageWidth, roundedImageHeight, &scaled);
-}
-
-// Draw a scaled bitmap, then return true if it has been cached.
-static bool test_scaled_image_cache_usage() {
-    SkAutoTUnref<SkSurface> surface(SkSurface::NewRasterN32Premul(kCanvasSize, kCanvasSize));
-    SkCanvas* canvas = surface->getCanvas();
-    SkBitmap bitmap;
-    bitmap.allocN32Pixels(kBitmapSize, kBitmapSize);
-    bitmap.eraseColor(0xFFFFFFFF);
-    SkScalar xScale = SkIntToScalar(kScale);
-    SkScalar yScale = xScale / 2;
-    SkScalar xScaledSize = SkIntToScalar(kBitmapSize) * xScale;
-    SkScalar yScaledSize = SkIntToScalar(kBitmapSize) * yScale;
-    canvas->clipRect(SkRect::MakeLTRB(0, 0, xScaledSize, yScaledSize));
-    SkPaint paint;
-    paint.setFilterQuality(kHigh_SkFilterQuality);
-
-    canvas->drawBitmapRect(bitmap,
-                           SkRect::MakeLTRB(0, 0, xScaledSize, yScaledSize),
-                           &paint);
-
-    return is_in_scaled_image_cache(bitmap, xScale, yScale);
-}
-
-// http://crbug.com/389439
-DEF_TEST(ResourceCache_SingleAllocationByteLimit, reporter) {
-    size_t originalByteLimit = SkGraphics::GetResourceCacheTotalByteLimit();
-    size_t originalAllocationLimit =
-        SkGraphics::GetResourceCacheSingleAllocationByteLimit();
-
-    size_t size = kBitmapSize * kScale * kBitmapSize * kScale
-        * SkColorTypeBytesPerPixel(kN32_SkColorType);
-
-    SkGraphics::SetResourceCacheTotalByteLimit(0);  // clear cache
-    SkGraphics::SetResourceCacheTotalByteLimit(2 * size);
-    SkGraphics::SetResourceCacheSingleAllocationByteLimit(0);  // No limit
-
-    REPORTER_ASSERT(reporter, test_scaled_image_cache_usage());
-
-    SkGraphics::SetResourceCacheTotalByteLimit(0);  // clear cache
-    SkGraphics::SetResourceCacheTotalByteLimit(2 * size);
-    SkGraphics::SetResourceCacheSingleAllocationByteLimit(size * 2);  // big enough
-
-    REPORTER_ASSERT(reporter, test_scaled_image_cache_usage());
-
-    SkGraphics::SetResourceCacheTotalByteLimit(0);  // clear cache
-    SkGraphics::SetResourceCacheTotalByteLimit(2 * size);
-    SkGraphics::SetResourceCacheSingleAllocationByteLimit(size / 2);  // too small
-
-    REPORTER_ASSERT(reporter, !test_scaled_image_cache_usage());
-
-    SkGraphics::SetResourceCacheSingleAllocationByteLimit(originalAllocationLimit);
-    SkGraphics::SetResourceCacheTotalByteLimit(originalByteLimit);
-}
 
 ////////////////////////////////////////////////////////////////////////////////////////
 
@@ -97,10 +33,10 @@ DEF_TEST(BitmapCache_add_rect, reporter) {
 
     SkAutoTDelete<SkResourceCache> cache;
     if (factory) {
-        cache.reset(SkNEW_ARGS(SkResourceCache, (factory)));
+        cache.reset(new SkResourceCache(factory));
     } else {
         const size_t byteLimit = 100 * 1024;
-        cache.reset(SkNEW_ARGS(SkResourceCache, (byteLimit)));
+        cache.reset(new SkResourceCache(byteLimit));
     }
     SkBitmap cachedBitmap;
     make_bitmap(&cachedBitmap, SkImageInfo::MakeN32Premul(5, 5), allocator);
@@ -142,7 +78,7 @@ static void check_data(skiatest::Reporter* reporter, const SkCachedData* data,
                        int refcnt, CachedState cacheState, LockedState lockedState) {
     REPORTER_ASSERT(reporter, data->testing_only_getRefCnt() == refcnt);
     REPORTER_ASSERT(reporter, data->testing_only_isInCache() == (kInCache == cacheState));
-    bool isLocked = (data->data() != NULL);
+    bool isLocked = (data->data() != nullptr);
     REPORTER_ASSERT(reporter, isLocked == (lockedState == kLocked));
 }
 
@@ -153,14 +89,14 @@ static void test_mipmapcache(skiatest::Reporter* reporter, SkResourceCache* cach
     src.allocN32Pixels(5, 5);
     src.setImmutable();
 
-    const SkMipMap* mipmap = SkMipMapCache::FindAndRef(src, cache);
-    REPORTER_ASSERT(reporter, NULL == mipmap);
+    const SkMipMap* mipmap = SkMipMapCache::FindAndRef(SkBitmapCacheDesc::Make(src), cache);
+    REPORTER_ASSERT(reporter, nullptr == mipmap);
 
     mipmap = SkMipMapCache::AddAndRef(src, cache);
     REPORTER_ASSERT(reporter, mipmap);
 
     {
-        const SkMipMap* mm = SkMipMapCache::FindAndRef(src, cache);
+        const SkMipMap* mm = SkMipMapCache::FindAndRef(SkBitmapCacheDesc::Make(src), cache);
         REPORTER_ASSERT(reporter, mm);
         REPORTER_ASSERT(reporter, mm == mipmap);
         mm->unref();
@@ -174,7 +110,7 @@ static void test_mipmapcache(skiatest::Reporter* reporter, SkResourceCache* cach
     check_data(reporter, mipmap, 1, kInCache, kNotLocked);
 
     // find us again
-    mipmap = SkMipMapCache::FindAndRef(src, cache);
+    mipmap = SkMipMapCache::FindAndRef(SkBitmapCacheDesc::Make(src), cache);
     check_data(reporter, mipmap, 2, kInCache, kLocked);
 
     cache->purgeAll();
@@ -193,7 +129,7 @@ static void test_mipmap_notify(skiatest::Reporter* reporter, SkResourceCache* ca
     }
 
     for (int i = 0; i < N; ++i) {
-        const SkMipMap* mipmap = SkMipMapCache::FindAndRef(src[i], cache);
+        const SkMipMap* mipmap = SkMipMapCache::FindAndRef(SkBitmapCacheDesc::Make(src[i]), cache);
         if (cache) {
             // if cache is null, we're working on the global cache, and other threads might purge
             // it, making this check fragile.
@@ -203,7 +139,7 @@ static void test_mipmap_notify(skiatest::Reporter* reporter, SkResourceCache* ca
 
         src[i].reset(); // delete the underlying pixelref, which *should* remove us from the cache
 
-        mipmap = SkMipMapCache::FindAndRef(src[i], cache);
+        mipmap = SkMipMapCache::FindAndRef(SkBitmapCacheDesc::Make(src[i]), cache);
         REPORTER_ASSERT(reporter, !mipmap);
     }
 }
@@ -243,10 +179,10 @@ DEF_TEST(BitmapCache_discarded_bitmap, reporter) {
     
     SkAutoTDelete<SkResourceCache> cache;
     if (factory) {
-        cache.reset(SkNEW_ARGS(SkResourceCache, (factory)));
+        cache.reset(new SkResourceCache(factory));
     } else {
         const size_t byteLimit = 100 * 1024;
-        cache.reset(SkNEW_ARGS(SkResourceCache, (byteLimit)));
+        cache.reset(new SkResourceCache(byteLimit));
     }
     SkBitmap cachedBitmap;
     make_bitmap(&cachedBitmap, SkImageInfo::MakeN32Premul(5, 5), allocator);
@@ -268,7 +204,6 @@ DEF_TEST(BitmapCache_discarded_bitmap, reporter) {
     if (factory) {
         REPORTER_ASSERT(reporter, SkGetGlobalDiscardableMemoryPool()->getRAMUsed() > 0);
         SkGetGlobalDiscardableMemoryPool()->dumpPool();
-        REPORTER_ASSERT(reporter, SkGetGlobalDiscardableMemoryPool()->getRAMUsed() == 0);
 
         // The bitmap is not in the cache since it has been dropped.
         REPORTER_ASSERT(reporter, !SkBitmapCache::Find(cachedBitmap.getGenerationID(), rect, &bm, cache));
@@ -285,4 +220,70 @@ DEF_TEST(BitmapCache_discarded_bitmap, reporter) {
     test_mipmapcache(reporter, cache);
     test_bitmap_notify(reporter, cache);
     test_mipmap_notify(reporter, cache);
+}
+
+static void test_discarded_image(skiatest::Reporter* reporter, const SkMatrix& transform,
+                                 SkImage* (*buildImage)()) {
+    SkAutoTUnref<SkSurface> surface(SkSurface::NewRasterN32Premul(10, 10));
+    SkCanvas* canvas = surface->getCanvas();
+
+    // SkBitmapCache is global, so other threads could be evicting our bitmaps.  Loop a few times
+    // to mitigate this risk.
+    const unsigned kRepeatCount = 42;
+    for (unsigned i = 0; i < kRepeatCount; ++i) {
+        SkAutoCanvasRestore acr(canvas, true);
+
+        SkAutoTUnref<SkImage> image(buildImage());
+
+        // always use high quality to ensure caching when scaled
+        SkPaint paint;
+        paint.setFilterQuality(kHigh_SkFilterQuality);
+
+        // draw the image (with a transform, to tickle different code paths) to ensure
+        // any associated resources get cached
+        canvas->concat(transform);
+        canvas->drawImage(image, 0, 0, &paint);
+
+        auto imageId = image->uniqueID();
+
+        // delete the image
+        image.reset(nullptr);
+
+        // all resources should have been purged
+        SkBitmap result;
+        REPORTER_ASSERT(reporter, !SkBitmapCache::Find(imageId, &result));
+    }
+}
+
+
+// Verify that associated bitmap cache entries are purged on SkImage destruction.
+DEF_TEST(BitmapCache_discarded_image, reporter) {
+    // Cache entries associated with SkImages fall into two categories:
+    //
+    // 1) generated image bitmaps (managed by the image cacherator)
+    // 2) scaled/resampled bitmaps (cached when HQ filters are used)
+    //
+    // To exercise the first cache type, we use generated/picture-backed SkImages.
+    // To exercise the latter, we draw scaled bitmap images using HQ filters.
+
+    const SkMatrix xforms[] = {
+        SkMatrix::MakeScale(1, 1),
+        SkMatrix::MakeScale(1.7f, 0.5f),
+    };
+
+    for (size_t i = 0; i < SK_ARRAY_COUNT(xforms); ++i) {
+        test_discarded_image(reporter, xforms[i], []() {
+            SkAutoTUnref<SkSurface> surface(SkSurface::NewRasterN32Premul(10, 10));
+            surface->getCanvas()->clear(SK_ColorCYAN);
+            return surface->newImageSnapshot();
+        });
+
+        test_discarded_image(reporter, xforms[i], []() {
+            SkPictureRecorder recorder;
+            SkCanvas* canvas = recorder.beginRecording(10, 10);
+            canvas->clear(SK_ColorCYAN);
+            SkAutoTUnref<SkPicture> picture(recorder.endRecording());
+            return SkImage::NewFromPicture(picture, SkISize::Make(10, 10), nullptr, nullptr);
+        });
+    }
 }

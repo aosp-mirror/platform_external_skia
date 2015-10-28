@@ -30,7 +30,7 @@ static void add_to_text_blob(SkTextBlobBuilder* builder, const char* text, const
     SkTDArray<uint16_t> glyphs;
 
     size_t len = strlen(text);
-    glyphs.append(paint.textToGlyphs(text, len, NULL));
+    glyphs.append(paint.textToGlyphs(text, len, nullptr));
     paint.textToGlyphs(text, len, glyphs.begin());
 
     const SkScalar advanceX = paint.getTextSize() * 0.85f;
@@ -90,7 +90,7 @@ static SkShader* make_shader(const SkRect& bounds) {
         SK_ColorCYAN, SK_ColorMAGENTA, SK_ColorYELLOW,
     };
     return SkGradientShader::CreateLinear(pts,
-                                          colors, NULL, SK_ARRAY_COUNT(colors),
+                                          colors, nullptr, SK_ARRAY_COUNT(colors),
                                           SkShader::kClamp_TileMode);
 }
 
@@ -148,6 +148,7 @@ protected:
         paint.setSubpixelText(true);
         paint.setLCDRenderText(true);
         paint.setAntiAlias(true);
+        sk_tool_utils::set_portable_typeface(&paint);
         add_to_text_blob(&builder, text, paint, 0, 0);
         fBlob.reset(builder.build());
 
@@ -201,7 +202,7 @@ protected:
                                                SkLayerDrawLooper::kColorFilter_Bit |
                                                SkLayerDrawLooper::kXfermode_Bit, &color_filter,
                                                xfermode, SK_ARRAY_COUNT(xfermode)));
-        fLoopers.push_back().reset(setupLooper(0, NULL, skew, SK_ARRAY_COUNT(skew)));
+        fLoopers.push_back().reset(setupLooper(0, nullptr, skew, SK_ARRAY_COUNT(skew)));
         fLoopers.push_back().reset(setupLooper(SkLayerDrawLooper::kMaskFilter_Bit |
                                                SkLayerDrawLooper::kShader_Bit |
                                                SkLayerDrawLooper::kColorFilter_Bit |
@@ -225,7 +226,7 @@ protected:
 
     void onDraw(SkCanvas* canvas) override {
 
-        canvas->drawColor(SK_ColorGRAY);
+        canvas->drawColor(sk_tool_utils::color_to_565(SK_ColorGRAY));
 
         SkPaint paint;
         canvas->translate(10, 40);
@@ -254,5 +255,5 @@ private:
 
 //////////////////////////////////////////////////////////////////////////////
 
-DEF_GM( return SkNEW(TextBlobLooperGM); )
+DEF_GM(return new TextBlobLooperGM;)
 }

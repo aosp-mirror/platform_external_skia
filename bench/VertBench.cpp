@@ -77,13 +77,13 @@ public:
 
 protected:
     virtual const char* onGetName() { return fName.c_str(); }
-    virtual void onDraw(const int loops, SkCanvas* canvas) {
+    virtual void onDraw(int loops, SkCanvas* canvas) {
         SkPaint paint;
         this->setupPaint(&paint);
 
         for (int i = 0; i < loops; i++) {
             canvas->drawVertices(SkCanvas::kTriangles_VertexMode, PTS,
-                                 fPts, NULL, fColors, NULL, fIdx, IDX, paint);
+                                 fPts, nullptr, fColors, nullptr, fIdx, IDX, paint);
         }
     }
 private:
@@ -92,4 +92,4 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-DEF_BENCH( return SkNEW_ARGS(VertBench, ()); )
+DEF_BENCH(return new VertBench();)

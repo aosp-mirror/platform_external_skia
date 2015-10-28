@@ -115,19 +115,18 @@ public:
 static SkWStream* open_stream(const SkString& outputDir,
                               const SkString& inputFilename) {
     if (outputDir.isEmpty()) {
-        return SkNEW(NullWStream);
+        return new NullWStream;
     }
 
     SkString outputPath;
     if (!make_output_filepath(&outputPath, outputDir, inputFilename)) {
-        return NULL;
+        return nullptr;
     }
 
-    SkAutoTDelete<SkFILEWStream> stream(
-            SkNEW_ARGS(SkFILEWStream, (outputPath.c_str())));
+    SkAutoTDelete<SkFILEWStream> stream(new SkFILEWStream(outputPath.c_str()));
     if (!stream.get() ||  !stream->isValid()) {
         SkDebugf("Could not write to file %s\n", outputPath.c_str());
-        return NULL;
+        return nullptr;
     }
 
     return stream.detach();
@@ -223,7 +222,7 @@ int tool_main_core(int argc, char** argv) {
 
         SkAutoTUnref<SkPicture> picture(
                 SkPicture::CreateFromStream(&inputStream));
-        if (NULL == picture.get()) {
+        if (nullptr == picture.get()) {
             SkDebugf("Could not read an SkPicture from %s\n",
                      files[i].c_str());
             ++failures;

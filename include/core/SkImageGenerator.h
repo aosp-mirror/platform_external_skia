@@ -8,14 +8,19 @@
 #ifndef SkImageGenerator_DEFINED
 #define SkImageGenerator_DEFINED
 
+#include "SkBitmap.h"
 #include "SkColor.h"
 #include "SkImageInfo.h"
 
+class GrContext;
+class GrTexture;
+class GrTextureParams;
 class SkBitmap;
 class SkData;
 class SkImageGenerator;
-
-//#define SK_LEGACY_IMAGE_GENERATOR_ENUMS_AND_OPTIONS
+class SkMatrix;
+class SkPaint;
+class SkPicture;
 
 /**
  *  Takes ownership of SkImageGenerator.  If this method fails for
@@ -26,22 +31,22 @@ class SkImageGenerator;
  *  If generator is NULL, will safely return false.
  *
  *  If this fails or when the SkDiscardablePixelRef that is
- *  installed into destination is destroyed, it will call
- *  SkDELETE() on the generator.  Therefore, generator should be
- *  allocated with SkNEW() or SkNEW_ARGS().
+ *  installed into destination is destroyed, it will
+ *  delete the generator.  Therefore, generator should be
+ *  allocated with new.
  *
  *  @param destination Upon success, this bitmap will be
  *  configured and have a pixelref installed.
  *
  *  @return true iff successful.
  */
-SK_API bool SkInstallDiscardablePixelRef(SkImageGenerator*, SkBitmap* destination);
+SK_API bool SkDEPRECATED_InstallDiscardablePixelRef(SkImageGenerator*, SkBitmap* destination);
 
 /**
  *  On success, installs a discardable pixelref into destination, based on encoded data.
  *  Regardless of success or failure, the caller must still balance their ownership of encoded.
  */
-SK_API bool SkInstallDiscardablePixelRef(SkData* encoded, SkBitmap* destination);
+SK_API bool SkDEPRECATED_InstallDiscardablePixelRef(SkData* encoded, SkBitmap* destination);
 
 /**
  *  An interface that allows a purgeable PixelRef (such as a
@@ -54,6 +59,8 @@ public:
      *  will call the image generator's destructor.
      */
     virtual ~SkImageGenerator() { }
+
+    uint32_t uniqueID() const { return fUniqueID; }
 
     /**
      *  Return a ref to the encoded (i.e. compressed) representation,
@@ -68,79 +75,6 @@ public:
      *  Return the ImageInfo associated with this generator.
      */
     const SkImageInfo& getInfo() const { return fInfo; }
-
-#ifdef SK_LEGACY_IMAGE_GENERATOR_ENUMS_AND_OPTIONS
-    /**
-     *  Used to describe the result of a call to getPixels().
-     *
-     *  Result is the union of possible results from subclasses.
-     */
-    enum Result {
-        /**
-         *  General return value for success.
-         */
-        kSuccess,
-        /**
-         *  The input is incomplete. A partial image was generated.
-         */
-        kIncompleteInput,
-        /**
-         *  The generator cannot convert to match the request, ignoring
-         *  dimensions.
-         */
-        kInvalidConversion,
-        /**
-         *  The generator cannot scale to requested size.
-         */
-        kInvalidScale,
-        /**
-         *  Parameters (besides info) are invalid. e.g. NULL pixels, rowBytes
-         *  too small, etc.
-         */
-        kInvalidParameters,
-        /**
-         *  The input did not contain a valid image.
-         */
-        kInvalidInput,
-        /**
-         *  Fulfilling this request requires rewinding the input, which is not
-         *  supported for this input.
-         */
-        kCouldNotRewind,
-        /**
-         *  This method is not implemented by this generator.
-         */
-        kUnimplemented,
-    };
-
-    /**
-     *  Whether or not the memory passed to getPixels is zero initialized.
-     */
-    enum ZeroInitialized {
-        /**
-         *  The memory passed to getPixels is zero initialized. The SkCodec
-         *  may take advantage of this by skipping writing zeroes.
-         */
-        kYes_ZeroInitialized,
-        /**
-         *  The memory passed to getPixels has not been initialized to zero,
-         *  so the SkCodec must write all zeroes to memory.
-         *
-         *  This is the default. It will be used if no Options struct is used.
-         */
-        kNo_ZeroInitialized,
-    };
-
-    /**
-     *  Additional options to pass to getPixels.
-     */
-    struct Options {
-        Options()
-            : fZeroInitialized(kNo_ZeroInitialized) {}
-
-        ZeroInitialized fZeroInitialized;
-    };
-#endif
 
     /**
      *  Decode into the given pixels, a block of memory of size at
@@ -195,31 +129,81 @@ public:
                        SkYUVColorSpace* colorSpace);
 
     /**
+     *  If the generator can natively/efficiently return its pixels as a GPU image (backed by a
+     *  texture) this will return that image. If not, this will return NULL.
+     *
+     *  Regarding the GrContext parameter:
+     *
+     *  The caller may pass NULL for the context. In that case the generator may assume that its
+     *  internal context is current. If it has no internal context, then it should just return
+     *  null.
+     *
+     *  If the caller passes a non-null context, then the generator should only succeed if:
+     *  - it has no intrinsic context, and will use the caller's
+     *  - its internal context is the same
+     *  - it can somehow convert its texture into one that is valid for the provided context.
+     *
+     *  Regarding the GrTextureParams parameter:
+     *
+     *  If the context (the provided one or the generator's intrinsic one) determines that to
+     *  support the specified usage, it must return a different sized texture it may,
+     *  so the caller must inspect the texture's width/height and compare them to the generator's
+     *  getInfo() width/height. For readback usage use GrTextureParams::ClampNoFilter()
+     */
+    GrTexture* generateTexture(GrContext*, const SkIRect* subset = nullptr);
+
+    /**
      *  If the default image decoder system can interpret the specified (encoded) data, then
      *  this returns a new ImageGenerator for it. Otherwise this returns NULL. Either way
      *  the caller is still responsible for managing their ownership of the data.
      */
     static SkImageGenerator* NewFromEncoded(SkData*);
 
+    /** Return a new image generator backed by the specified picture.  If the size is empty or
+     *  the picture is NULL, this returns NULL.
+     *  The optional matrix and paint arguments are passed to drawPicture() at rasterization
+     *  time.
+     */
+    static SkImageGenerator* NewFromPicture(const SkISize&, const SkPicture*, const SkMatrix*,
+                                            const SkPaint*);
+
+    bool tryGenerateBitmap(SkBitmap* bm) {
+        return this->tryGenerateBitmap(bm, nullptr, nullptr);
+    }
+    bool tryGenerateBitmap(SkBitmap* bm, const SkImageInfo& info, SkBitmap::Allocator* allocator) {
+        return this->tryGenerateBitmap(bm, &info, allocator);
+    }
+    void generateBitmap(SkBitmap* bm) {
+        if (!this->tryGenerateBitmap(bm, nullptr, nullptr)) {
+            sk_throw();
+        }
+    }
+    void generateBitmap(SkBitmap* bm, const SkImageInfo& info) {
+        if (!this->tryGenerateBitmap(bm, &info, nullptr)) {
+            sk_throw();
+        }
+    }
+
 protected:
-    SkImageGenerator(const SkImageInfo& info) : fInfo(info) {}
+    SkImageGenerator(const SkImageInfo& info);
 
     virtual SkData* onRefEncodedData();
 
-#ifdef SK_LEGACY_IMAGE_GENERATOR_ENUMS_AND_OPTIONS
-    virtual Result onGetPixels(const SkImageInfo& info,
-                               void* pixels, size_t rowBytes, const Options&,
-                               SkPMColor ctable[], int* ctableCount);
-#else
     virtual bool onGetPixels(const SkImageInfo& info, void* pixels, size_t rowBytes,
                              SkPMColor ctable[], int* ctableCount);
-#endif
     virtual bool onGetYUV8Planes(SkISize sizes[3], void* planes[3], size_t rowBytes[3]);
     virtual bool onGetYUV8Planes(SkISize sizes[3], void* planes[3], size_t rowBytes[3],
                                  SkYUVColorSpace* colorSpace);
 
+    virtual GrTexture* onGenerateTexture(GrContext*, const SkIRect*) {
+        return nullptr;
+    }
+
+    bool tryGenerateBitmap(SkBitmap* bm, const SkImageInfo* optionalInfo, SkBitmap::Allocator*);
+
 private:
     const SkImageInfo fInfo;
+    const uint32_t fUniqueID;
 
     // This is our default impl, which may be different on different platforms.
     // It is called from NewFromEncoded() after it has checked for any runtime factory.

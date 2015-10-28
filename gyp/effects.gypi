@@ -11,6 +11,9 @@
 #
 {
   'sources': [
+    '<(skia_src_path)/effects/GrCircleBlurFragmentProcessor.cpp',
+    '<(skia_src_path)/effects/GrCircleBlurFragmentProcessor.h',
+
     '<(skia_src_path)/effects/Sk1DPathEffect.cpp',
     '<(skia_src_path)/effects/Sk2DPathEffect.cpp',
     '<(skia_src_path)/effects/SkAlphaThresholdFilter.cpp',
@@ -18,7 +21,6 @@
     '<(skia_src_path)/effects/SkArithmeticMode.cpp',
     '<(skia_src_path)/effects/SkArithmeticMode_gpu.cpp',
     '<(skia_src_path)/effects/SkArithmeticMode_gpu.h',
-    '<(skia_src_path)/effects/SkBitmapSource.cpp',
     '<(skia_src_path)/effects/SkBlurDrawLooper.cpp',
     '<(skia_src_path)/effects/SkBlurMask.cpp',
     '<(skia_src_path)/effects/SkBlurMask.h',
@@ -39,6 +41,7 @@
     '<(skia_src_path)/effects/SkEmbossMask.h',
     '<(skia_src_path)/effects/SkEmbossMask_Table.h',
     '<(skia_src_path)/effects/SkEmbossMaskFilter.cpp',
+    '<(skia_src_path)/effects/SkImageSource.cpp',
     '<(skia_src_path)/effects/SkGpuBlurUtils.h',
     '<(skia_src_path)/effects/SkGpuBlurUtils.cpp',
     '<(skia_src_path)/effects/SkLayerDrawLooper.cpp',
@@ -55,7 +58,6 @@
     '<(skia_src_path)/effects/SkPerlinNoiseShader.cpp',
     '<(skia_src_path)/effects/SkPictureImageFilter.cpp',
     '<(skia_src_path)/effects/SkPixelXorXfermode.cpp',
-    '<(skia_src_path)/effects/SkPoint3.cpp',
     '<(skia_src_path)/effects/SkRectShaderImageFilter.cpp',
     '<(skia_src_path)/effects/SkTableColorFilter.cpp',
     '<(skia_src_path)/effects/SkTableMaskFilter.cpp',
@@ -85,7 +87,6 @@
     '<(skia_include_path)/effects/Sk2DPathEffect.h',
     '<(skia_include_path)/effects/SkAlphaThresholdFilter.h',
     '<(skia_include_path)/effects/SkArithmeticMode.h',
-    '<(skia_include_path)/effects/SkBitmapSource.h',
     '<(skia_include_path)/effects/SkBlurDrawLooper.h',
     '<(skia_include_path)/effects/SkBlurImageFilter.h',
     '<(skia_include_path)/effects/SkBlurMaskFilter.h',
@@ -101,6 +102,7 @@
     '<(skia_include_path)/effects/SkDropShadowImageFilter.h',
     '<(skia_include_path)/effects/SkEmbossMaskFilter.h',
     '<(skia_include_path)/effects/SkGradientShader.h',
+    '<(skia_include_path)/effects/SkImageSource.h',
     '<(skia_include_path)/effects/SkLayerDrawLooper.h',
     '<(skia_include_path)/effects/SkLayerRasterizer.h',
     '<(skia_include_path)/effects/SkLerpXfermode.h',
@@ -112,7 +114,6 @@
     '<(skia_include_path)/effects/SkPaintFlagsDrawFilter.h',
     '<(skia_include_path)/effects/SkPerlinNoiseShader.h',
     '<(skia_include_path)/effects/SkPixelXorXfermode.h',
-    '<(skia_include_path)/effects/SkPoint3.h',
     '<(skia_include_path)/effects/SkRectShaderImageFilter.h',
     '<(skia_include_path)/effects/SkTableColorFilter.h',
     '<(skia_include_path)/effects/SkTableMaskFilter.h',

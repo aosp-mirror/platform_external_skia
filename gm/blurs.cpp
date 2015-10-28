@@ -8,24 +8,9 @@
 #include "gm.h"
 #include "SkBlurMask.h"
 #include "SkBlurMaskFilter.h"
+#include "SkPath.h"
 
-class BlursGM : public skiagm::GM {
-public:
-    BlursGM() {
-        this->setBGColor(sk_tool_utils::color_to_565(0xFFDDDDDD));
-    }
-
-protected:
-
-    SkString onShortName() override {
-        return SkString("blurs");
-    }
-
-    SkISize onISize() override {
-        return SkISize::Make(700, 500);
-    }
-
-    void onDraw(SkCanvas* canvas) override {
+DEF_SIMPLE_GM_BG(blurs, canvas, 700, 500, sk_tool_utils::color_to_565(0xFFDDDDDD)) {
         SkBlurStyle NONE = SkBlurStyle(-999);
         static const struct {
             SkBlurStyle fStyle;
@@ -40,7 +25,7 @@ protected:
 
         SkPaint paint;
         paint.setAntiAlias(true);
-        sk_tool_utils::set_portable_typeface_always(&paint);
+        sk_tool_utils::set_portable_typeface(&paint);
         paint.setTextSize(SkIntToScalar(25));
         canvas->translate(SkIntToScalar(-40), SkIntToScalar(0));
 
@@ -55,7 +40,7 @@ protected:
                                            flags);
                     paint.setMaskFilter(mf)->unref();
                 } else {
-                    paint.setMaskFilter(NULL);
+                    paint.setMaskFilter(nullptr);
                 }
                 canvas->drawCircle(SkIntToScalar(200 + gRecs[i].fCx*100),
                                    SkIntToScalar(200 + gRecs[i].fCy*100),
@@ -74,7 +59,7 @@ protected:
                 canvas->drawText("Hamburgefons Style", 18, x, y, paint);
                 canvas->drawText("Hamburgefons Style", 18,
                                  x, y + SkIntToScalar(50), paint);
-                paint.setMaskFilter(NULL);
+                paint.setMaskFilter(nullptr);
                 paint.setColor(SK_ColorWHITE);
                 x -= SkIntToScalar(2);
                 y -= SkIntToScalar(2);
@@ -84,12 +69,7 @@ protected:
             flags = SkBlurMaskFilter::kHighQuality_BlurFlag;
             canvas->translate(SkIntToScalar(350), SkIntToScalar(0));
         }
-    }
-
-private:
-    typedef skiagm::GM INHERITED;
-};
-DEF_GM( return new BlursGM; )
+}
 
 //////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -99,17 +79,7 @@ DEF_GM( return new BlursGM; )
 // in particular, we want to notice that the 2nd rect draws slightly differently, since it
 // is translated a fractional amount.
 //
-class Blur2RectsGM : public skiagm::GM {
-public:
-    SkString onShortName() override {
-        return SkString("blur2rects");
-    }
-
-    SkISize onISize() override {
-        return SkISize::Make(700, 500);
-    }
-
-    void onDraw(SkCanvas* canvas) override {
+DEF_SIMPLE_GM(blur2rects, canvas, 700, 500) {
         SkPaint paint;
 
         paint.setMaskFilter(SkBlurMaskFilter::Create(kNormal_SkBlurStyle,
@@ -127,21 +97,9 @@ public:
         SkScalar dx = SkScalarRoundToScalar(path.getBounds().width()) + 14 + 0.25f;
         canvas->translate(dx, 0);
         canvas->drawPath(path, paint);
-    }
-};
-DEF_GM( return new Blur2RectsGM; )
+}
 
-class Blur2RectsNonNinePatchGM : public skiagm::GM {
-public:
-    SkString onShortName() override {
-        return SkString("blur2rectsnonninepatch");
-    }
-
-    SkISize onISize() override {
-        return SkISize::Make(700, 500);
-    }
-
-    void onDraw(SkCanvas* canvas) override {
+DEF_SIMPLE_GM(blur2rectsnonninepatch, canvas, 700, 500) {
         SkPaint paint;
         paint.setMaskFilter(SkBlurMaskFilter::Create(kNormal_SkBlurStyle,
                                                      4.3f))->unref();
@@ -161,6 +119,4 @@ public:
         canvas->translate(-dx, 0);
         canvas->translate(-30, -150);
         canvas->drawPath(path, paint);
-    }
-};
-DEF_GM( return new Blur2RectsNonNinePatchGM; )
+}

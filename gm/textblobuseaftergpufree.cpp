@@ -31,15 +31,15 @@ protected:
 
     void onDraw(SkCanvas* canvas) override {
         // This GM exists to test a specific feature of the GPU backend.
-        if (NULL == canvas->getGrContext()) {
-            this->drawGpuOnlyMessage(canvas);
+        if (nullptr == canvas->getGrContext()) {
+            skiagm::GM::DrawGpuOnlyMessage(canvas);
             return;
         }
 
         const char text[] = "Hamburgefons";
 
         SkPaint paint;
-        sk_tool_utils::set_portable_typeface_always(&paint);
+        sk_tool_utils::set_portable_typeface(&paint);
         paint.setAntiAlias(true);
         paint.setTextSize(20);
 
@@ -70,6 +70,6 @@ private:
 
 //////////////////////////////////////////////////////////////////////////////
 
-DEF_GM( return SkNEW(TextBlobUseAfterGpuFree); )
+DEF_GM(return new TextBlobUseAfterGpuFree;)
 }
 #endif

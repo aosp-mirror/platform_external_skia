@@ -33,7 +33,7 @@ DEF_TEST(KtxReadWrite, reporter) {
     uint8_t *pixels = reinterpret_cast<uint8_t*>(bm8888.getPixels());
     REPORTER_ASSERT(reporter, pixels);
 
-    if (NULL == pixels) {
+    if (nullptr == pixels) {
         return;
     }
     
@@ -55,7 +55,7 @@ DEF_TEST(KtxReadWrite, reporter) {
     SkAutoDataUnref encodedData(SkImageEncoder::EncodeData(bm8888, SkImageEncoder::kKTX_Type, 0));
     REPORTER_ASSERT(reporter, encodedData);
 
-    SkAutoTDelete<SkMemoryStream> stream(SkNEW_ARGS(SkMemoryStream, (encodedData)));
+    SkAutoTDelete<SkMemoryStream> stream(new SkMemoryStream(encodedData));
     REPORTER_ASSERT(reporter, stream);
 
     SkBitmap decodedBitmap;
@@ -72,7 +72,7 @@ DEF_TEST(KtxReadWrite, reporter) {
     REPORTER_ASSERT(reporter, decodedPixels);
     REPORTER_ASSERT(reporter, decodedBitmap.getSize() == bm8888.getSize());
 
-    if (NULL == decodedPixels) {
+    if (nullptr == decodedPixels) {
         return;
     }
 
@@ -107,8 +107,7 @@ DEF_TEST(KtxReadUnpremul, reporter) {
         0xFF, 0xFF, 0xFF, 0x80, // Pixel 3
         0xFF, 0xFF, 0xFF, 0x80};// Pixel 4
 
-    SkAutoTDelete<SkMemoryStream> stream(
-        SkNEW_ARGS(SkMemoryStream, (kHalfWhiteKTX, sizeof(kHalfWhiteKTX))));
+    SkAutoTDelete<SkMemoryStream> stream(new SkMemoryStream(kHalfWhiteKTX, sizeof(kHalfWhiteKTX)));
     REPORTER_ASSERT(reporter, stream);
 
     SkBitmap decodedBitmap;
@@ -145,13 +144,13 @@ DEF_TEST(KtxReexportPKM, reporter) {
     // Load PKM file into a bitmap
     SkBitmap etcBitmap;
     SkAutoTUnref<SkData> fileData(SkData::NewFromFileName(pkmFilename.c_str()));
-    if (NULL == fileData) {
+    if (nullptr == fileData) {
         SkDebugf("KtxReexportPKM: can't load test file %s\n", pkmFilename.c_str());
         return;
     }
 
     bool installDiscardablePixelRefSuccess =
-        SkInstallDiscardablePixelRef(fileData, &etcBitmap);
+        SkDEPRECATED_InstallDiscardablePixelRef(fileData, &etcBitmap);
     REPORTER_ASSERT(reporter, installDiscardablePixelRefSuccess);
 
     // Write the bitmap out to a KTX file.

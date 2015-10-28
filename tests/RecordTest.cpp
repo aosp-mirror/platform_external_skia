@@ -27,7 +27,7 @@ public:
     int area() const { return fArea; }
 
     void apply(const SkRecord& record) {
-        for (unsigned i = 0; i < record.count(); i++) {
+        for (int i = 0; i < record.count(); i++) {
             record.visit<void>(i, *this);
         }
     }
@@ -45,13 +45,13 @@ struct Stretch {
     }
 
     void apply(SkRecord* record) {
-        for (unsigned i = 0; i < record->count(); i++) {
+        for (int i = 0; i < record->count(); i++) {
             record->mutate<void>(i, *this);
         }
     }
 };
 
-#define APPEND(record, type, ...) SkNEW_PLACEMENT_ARGS(record.append<type>(), type, (__VA_ARGS__))
+#define APPEND(record, type, ...) new (record.append<type>()) type{__VA_ARGS__}
 
 // Basic tests for the low-level SkRecord code.
 DEF_TEST(Record, r) {

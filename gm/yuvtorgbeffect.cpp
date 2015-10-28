@@ -68,26 +68,29 @@ protected:
 
     void onDraw(SkCanvas* canvas) override {
         GrRenderTarget* rt = canvas->internal_private_accessTopLayerRenderTarget();
-        if (NULL == rt) {
+        if (nullptr == rt) {
             return;
         }
         GrContext* context = rt->getContext();
-        if (NULL == context) {
-            this->drawGpuOnlyMessage(canvas);
+        if (nullptr == context) {
+            skiagm::GM::DrawGpuOnlyMessage(canvas);
             return;
         }
 
         GrTestTarget tt;
         context->getTestTarget(&tt);
-        if (NULL == tt.target()) {
+        if (nullptr == tt.target()) {
             SkDEBUGFAIL("Couldn't get Gr test target.");
             return;
         }
 
         SkAutoTUnref<GrTexture> texture[3];
-        texture[0].reset(GrRefCachedBitmapTexture(context, fBmp[0], NULL));
-        texture[1].reset(GrRefCachedBitmapTexture(context, fBmp[1], NULL));
-        texture[2].reset(GrRefCachedBitmapTexture(context, fBmp[2], NULL));
+        texture[0].reset(GrRefCachedBitmapTexture(context, fBmp[0],
+                                                  GrTextureParams::ClampBilerp()));
+        texture[1].reset(GrRefCachedBitmapTexture(context, fBmp[1],
+                                                  GrTextureParams::ClampBilerp()));
+        texture[2].reset(GrRefCachedBitmapTexture(context, fBmp[2],
+                                                  GrTextureParams::ClampBilerp()));
 
         if (!texture[0] || !texture[1] || !texture[2]) {
             return;
@@ -113,8 +116,7 @@ protected:
             for (int i = 0; i < 6; ++i) {
                 GrPipelineBuilder pipelineBuilder;
                 SkAutoTUnref<GrFragmentProcessor> fp(
-                            GrYUVtoRGBEffect::Create(pipelineBuilder.getProcessorDataManager(),
-                                                     texture[indices[i][0]],
+                            GrYUVtoRGBEffect::Create(texture[indices[i][0]],
                                                      texture[indices[i][1]],
                                                      texture[indices[i][2]],
                                                      sizes,
@@ -123,11 +125,11 @@ protected:
                     SkMatrix viewMatrix;
                     viewMatrix.setTranslate(x, y);
                     pipelineBuilder.setRenderTarget(rt);
-                    pipelineBuilder.addColorProcessor(fp);
-                    tt.target()->drawSimpleRect(pipelineBuilder,
-                                                GrColor_WHITE,
-                                                viewMatrix,
-                                                renderRect);
+                    pipelineBuilder.addColorFragmentProcessor(fp);
+                    tt.target()->drawNonAARect(pipelineBuilder,
+                                               GrColor_WHITE,
+                                               viewMatrix,
+                                               renderRect);
                 }
                 x += renderRect.width() + kTestPad;
             }
@@ -140,7 +142,7 @@ private:
     typedef GM INHERITED;
 };
 
-DEF_GM( return SkNEW(YUVtoRGBEffect); )
+DEF_GM(return new YUVtoRGBEffect;)
 }
 
 #endif
