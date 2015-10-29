@@ -33,19 +33,27 @@ SkIPoint Benchmark::getSize() {
     return this->onGetSize();
 }
 
-void Benchmark::preDraw() {
-    this->onPreDraw();
+void Benchmark::delayedSetup() {
+    this->onDelayedSetup();
 }
 
 void Benchmark::perCanvasPreDraw(SkCanvas* canvas) {
     this->onPerCanvasPreDraw(canvas);
 }
 
+void Benchmark::preDraw(SkCanvas* canvas) {
+    this->onPreDraw(canvas);
+}
+
+void Benchmark::postDraw(SkCanvas* canvas) {
+    this->onPostDraw(canvas);
+}
+
 void Benchmark::perCanvasPostDraw(SkCanvas* canvas) {
     this->onPerCanvasPostDraw(canvas);
 }
 
-void Benchmark::draw(const int loops, SkCanvas* canvas) {
+void Benchmark::draw(int loops, SkCanvas* canvas) {
     SkAutoCanvasRestore ar(canvas, true/*save now*/);
     this->onDraw(loops, canvas);
 }

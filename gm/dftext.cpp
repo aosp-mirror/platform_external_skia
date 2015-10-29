@@ -49,7 +49,7 @@ protected:
 #if SK_SUPPORT_GPU
         GrContext* ctx = inputCanvas->getGrContext();
         SkImageInfo info = SkImageInfo::MakeN32Premul(onISize());
-        SkSurfaceProps props(SkSurfaceProps::kUseDistanceFieldFonts_Flag,
+        SkSurfaceProps props(SkSurfaceProps::kUseDeviceIndependentFonts_Flag,
                              SkSurfaceProps::kLegacyFontHost_InitType);
         SkAutoTUnref<SkSurface> surface(SkSurface::NewRenderTarget(ctx, SkSurface::kNo_Budgeted,
                                                                    info, 0, &props));
@@ -67,7 +67,7 @@ protected:
         paint.setAntiAlias(true);
         paint.setSubpixelText(true);
 
-        sk_tool_utils::set_portable_typeface_always(&paint, "serif", SkTypeface::kNormal);
+        sk_tool_utils::set_portable_typeface(&paint, "serif", SkTypeface::kNormal);
 
         const char* text = "Hamburgefons";
         const size_t textLen = strlen(text);
@@ -81,7 +81,7 @@ protected:
             canvas->scale(scales[i], scales[i]);
             paint.setTextSize(textSizes[i]);
             canvas->drawText(text, textLen, 0, 0, paint);
-            y += paint.getFontMetrics(NULL)*scales[i];
+            y += paint.getFontMetrics(nullptr)*scales[i];
         }
 
         // check rotation
@@ -95,7 +95,7 @@ protected:
             for (int ps = 6; ps <= 32; ps += 3) {
                 paint.setTextSize(SkIntToScalar(ps));
                 canvas->drawText(text, textLen, rotX, rotY, paint);
-                rotY += paint.getFontMetrics(NULL);
+                rotY += paint.getFontMetrics(nullptr);
             }
         }
 
@@ -111,7 +111,7 @@ protected:
             canvas->scale(scaleFactor, scaleFactor);
             paint.setTextSize(textSizes[i]);
             canvas->drawText(text, textLen, 0, 0, paint);
-            y += paint.getFontMetrics(NULL)*scaleFactor;
+            y += paint.getFontMetrics(nullptr)*scaleFactor;
         }
 
         // check pos text
@@ -156,7 +156,7 @@ protected:
             paint.setColor(fg[i]);
 
             canvas->drawText(text, textLen, x, y, paint);
-            y += paint.getFontMetrics(NULL);
+            y += paint.getFontMetrics(nullptr);
         }
 
         paint.setColor(0xFF181C18);
@@ -170,7 +170,7 @@ protected:
             paint.setColor(fg[i]);
 
             canvas->drawText(text, textLen, x, y, paint);
-            y += paint.getFontMetrics(NULL);
+            y += paint.getFontMetrics(nullptr);
         }
 
         // check skew
@@ -202,7 +202,7 @@ protected:
             // since we prepended this matrix already, we blit using identity
             inputCanvas->resetMatrix();
             SkImage* image = surface->newImageSnapshot();
-            inputCanvas->drawImage(image, 0, 0, NULL);
+            inputCanvas->drawImage(image, 0, 0, nullptr);
             image->unref();
         }
 #endif
@@ -215,4 +215,4 @@ private:
     typedef skiagm::GM INHERITED;
 };
 
-DEF_GM( return SkNEW(DFTextGM); )
+DEF_GM(return new DFTextGM;)

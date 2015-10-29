@@ -61,6 +61,8 @@ static uint32_t gen_texture_key(const GrProcessor& proc, const GrGLCaps& caps) {
  * which must be different for every GrProcessor subclass. It can fail if an effect uses too many
  * textures, transforms, etc, for the space allotted in the meta-key.  NOTE, both FPs and GPs share
  * this function because it is hairy, though FPs do not have attribs, and GPs do not have transforms
+ *
+ * TODO: A better name for this function  would be "compute" instead of "get".
  */
 static bool get_meta_key(const GrProcessor& proc,
                          const GrGLCaps& caps,
@@ -86,11 +88,30 @@ static bool get_meta_key(const GrProcessor& proc,
     return true;
 }
 
+/*
+ * TODO: A better name for this function  would be "compute" instead of "get".
+ */
+static bool get_frag_proc_and_meta_keys(const GrPrimitiveProcessor& primProc,
+                                        const GrFragmentProcessor& fp,
+                                        const GrGLCaps& caps,
+                                        GrProcessorKeyBuilder* b) {
+    for (int i = 0; i < fp.numChildProcessors(); ++i) {
+        if (!get_frag_proc_and_meta_keys(primProc, fp.childProcessor(i), caps, b)) {
+            return false;
+        }
+    }
+
+    fp.getGLProcessorKey(*caps.glslCaps(), b);
+
+    //**** use glslCaps here?
+    return get_meta_key(fp, caps, primProc.getTransformKey(fp.coordTransforms(),
+                                                           fp.numTransformsExclChildren()), b);
+}
+
 bool GrGLProgramDescBuilder::Build(GrProgramDesc* desc,
                                    const GrPrimitiveProcessor& primProc,
                                    const GrPipeline& pipeline,
-                                   const GrGLGpu* gpu,
-                                   const GrBatchTracker& batchTracker) {
+                                   const GrGLGpu* gpu) {
     // The descriptor is used as a cache key. Thus when a field of the
     // descriptor will not affect program generation (because of the attribute
     // bindings in use or other descriptor field settings) it should be set
@@ -105,19 +126,16 @@ bool GrGLProgramDescBuilder::Build(GrProgramDesc* desc,
 
     GrProcessorKeyBuilder b(&glDesc->key());
 
-    primProc.getGLProcessorKey(batchTracker, *gpu->glCaps().glslCaps(), &b);
+    primProc.getGLProcessorKey(*gpu->glCaps().glslCaps(), &b);
     //**** use glslCaps here?
     if (!get_meta_key(primProc, gpu->glCaps(), 0, &b)) {
         glDesc->key().reset();
         return false;
     }
 
-    for (int s = 0; s < pipeline.numFragmentStages(); ++s) {
-        const GrPendingFragmentStage& fps = pipeline.getFragmentStage(s);
-        const GrFragmentProcessor& fp = *fps.processor();
-        fp.getGLProcessorKey(*gpu->glCaps().glslCaps(), &b);
-        //**** use glslCaps here?
-        if (!get_meta_key(fp, gpu->glCaps(), primProc.getTransformKey(fp.coordTransforms()), &b)) {
+    for (int i = 0; i < pipeline.numFragmentProcessors(); ++i) {
+        const GrFragmentProcessor& fp = pipeline.getFragmentProcessor(i);
+        if (!get_frag_proc_and_meta_keys(primProc, fp, gpu->glCaps(), &b)) {
             glDesc->key().reset();
             return false;
         }
@@ -147,8 +165,8 @@ bool GrGLProgramDescBuilder::Build(GrProgramDesc* desc,
         header->fFragPosKey = 0;
     }
     header->fSnapVerticesToPixelCenters = pipeline.snapVerticesToPixelCenters();
-    header->fColorEffectCnt = pipeline.numColorFragmentStages();
-    header->fCoverageEffectCnt = pipeline.numCoverageFragmentStages();
+    header->fColorEffectCnt = pipeline.numColorFragmentProcessors();
+    header->fCoverageEffectCnt = pipeline.numCoverageFragmentProcessors();
     glDesc->finalize();
     return true;
 }

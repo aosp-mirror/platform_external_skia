@@ -6,9 +6,10 @@
  */
 
 #include "SampleCode.h"
-#include "SkView.h"
 #include "SkCanvas.h"
 #include "SkGradientShader.h"
+#include "SkPath.h"
+#include "SkView.h"
 
 static void makebm(SkBitmap* bm, int w, int h) {
     bm->allocN32Pixels(w, h);
@@ -49,8 +50,8 @@ static const SkColor gColors[] = {
 };
 
 static const GradData gGradData[] = {
-    { 2, gColors, NULL },
-    { 5, gColors, NULL },
+    { 2, gColors, nullptr },
+    { 5, gColors, nullptr },
 };
 
 static SkShader* MakeLinear(const SkPoint pts[2], const GradData& data, SkShader::TileMode tm) {
@@ -181,7 +182,7 @@ protected:
             ++i;
             canvas->translate(SkIntToScalar((i / testsPerCol) * colWidth),
                               SkIntToScalar((i % testsPerCol) * rowHeight));
-            canvas->drawTextOnPath(text, textLen, path, NULL, paint);
+            canvas->drawTextOnPath(text, textLen, path, nullptr, paint);
             canvas->restore();
         }
         canvas->restore();

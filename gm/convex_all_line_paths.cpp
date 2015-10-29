@@ -163,9 +163,9 @@ protected:
             SK_ARRAY_COUNT(gPoints9),
             SK_ARRAY_COUNT(gPoints10),
         };
-        SK_COMPILE_ASSERT(SK_ARRAY_COUNT(gSizes) == SK_ARRAY_COUNT(gPoints), array_mismatch);
+        static_assert(SK_ARRAY_COUNT(gSizes) == SK_ARRAY_COUNT(gPoints), "array_mismatch");
 
-        SkAutoTDeleteArray<SkPoint> data(NULL);
+        SkAutoTDeleteArray<SkPoint> data(nullptr);
         const SkPoint* points;
         int numPts;
         if (index < (int) SK_ARRAY_COUNT(gPoints)) {
@@ -211,7 +211,7 @@ protected:
                 break;
             }
 
-            data.reset(SkNEW_ARRAY(SkPoint, numPts));
+            data.reset(new SkPoint[numPts]);
 
             create_ngon(numPts, data.get(), width, height);
             points = data.get();
@@ -317,6 +317,5 @@ private:
 
 //////////////////////////////////////////////////////////////////////////////
 
-DEF_GM( return SkNEW(ConvexLineOnlyPathsGM); )
-
+DEF_GM(return new ConvexLineOnlyPathsGM;)
 }

@@ -50,7 +50,7 @@ protected:
         SkPaint paint;
         paint.setTextSize(385);
         const char* text = "O";
-        sk_tool_utils::set_portable_typeface_always(&paint);
+        sk_tool_utils::set_portable_typeface(&paint);
 
         SkRect bounds;
         paint.measureText(text, strlen(text), &bounds);
@@ -69,6 +69,7 @@ protected:
         // LCD
         paint.setTextSize(32);
         text = "LCD!!!!!";
+        paint.setAntiAlias(true);
         paint.setSubpixelText(true);
         paint.setLCDRenderText(true);
         paint.measureText(text, strlen(text), &bounds);
@@ -78,6 +79,7 @@ protected:
 
         // color emoji
         if (fEmojiTypeface) {
+            paint.setAntiAlias(false);
             paint.setSubpixelText(false);
             paint.setLCDRenderText(false);
             paint.setTypeface(fEmojiTypeface);
@@ -161,5 +163,5 @@ private:
 
 //////////////////////////////////////////////////////////////////////////////
 
-DEF_GM( return SkNEW(MixedTextBlobsGM); )
+DEF_GM(return new MixedTextBlobsGM;)
 }

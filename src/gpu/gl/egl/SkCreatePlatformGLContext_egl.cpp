@@ -93,7 +93,7 @@ EGLGLContext::EGLGLContext(GrGLStandard forcedGpuAPI)
 
     SkAutoTUnref<const GrGLInterface> gl;
 
-    for (; NULL == gl.get() && api < apiLimit; ++api) {
+    for (; nullptr == gl.get() && api < apiLimit; ++api) {
         fDisplay = eglGetDisplay(EGL_DEFAULT_DISPLAY);
 
         EGLint majorVersion;
@@ -133,7 +133,7 @@ EGLGLContext::EGLGLContext(GrGLStandard forcedGpuAPI)
             continue;
         }
 
-        fContext = eglCreateContext(fDisplay, surfaceConfig, NULL, kAPIs[api].fContextAttribs);
+        fContext = eglCreateContext(fDisplay, surfaceConfig, nullptr, kAPIs[api].fContextAttribs);
         if (EGL_NO_CONTEXT == fContext) {
             SkDebugf("eglCreateContext failed.  EGL Error: 0x%08x\n", eglGetError());
             continue;
@@ -159,7 +159,7 @@ EGLGLContext::EGLGLContext(GrGLStandard forcedGpuAPI)
         }
 
         gl.reset(GrGLCreateNativeInterface());
-        if (NULL == gl.get()) {
+        if (nullptr == gl.get()) {
             SkDebugf("Failed to create gl interface.\n");
             this->destroyGLContext();
             continue;
@@ -234,13 +234,13 @@ static bool supports_egl_extension(EGLDisplay display, const char* extension) {
 
 SkEGLFenceSync* SkEGLFenceSync::CreateIfSupported(EGLDisplay display) {
     if (!display || !supports_egl_extension(display, "EGL_KHR_fence_sync")) {
-        return NULL;
+        return nullptr;
     }
-    return SkNEW_ARGS(SkEGLFenceSync, (display));
+    return new SkEGLFenceSync(display);
 }
 
 SkPlatformGpuFence SkEGLFenceSync::insertFence() const {
-    return eglCreateSyncKHR(fDisplay, EGL_SYNC_FENCE_KHR, NULL);
+    return eglCreateSyncKHR(fDisplay, EGL_SYNC_FENCE_KHR, nullptr);
 }
 
 bool SkEGLFenceSync::flushAndWaitFence(SkPlatformGpuFence platformFence) const {
@@ -259,10 +259,10 @@ void SkEGLFenceSync::deleteFence(SkPlatformGpuFence platformFence) const {
 } // anonymous namespace
 
 SkGLContext* SkCreatePlatformGLContext(GrGLStandard forcedGpuAPI) {
-    EGLGLContext* ctx = SkNEW_ARGS(EGLGLContext, (forcedGpuAPI));
+    EGLGLContext* ctx = new EGLGLContext(forcedGpuAPI);
     if (!ctx->isValid()) {
-        SkDELETE(ctx);
-        return NULL;
+        delete ctx;
+        return nullptr;
     }
     return ctx;
 }

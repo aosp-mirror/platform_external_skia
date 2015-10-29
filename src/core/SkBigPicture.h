@@ -8,8 +8,9 @@
 #ifndef SkBigPicture_DEFINED
 #define SkBigPicture_DEFINED
 
+#include "SkOncePtr.h"
 #include "SkPicture.h"
-#include "SkLazyPtr.h"
+#include "SkTemplates.h"
 
 class SkBBoxHierarchy;
 class SkRecord;
@@ -52,8 +53,8 @@ public:
 
 // Used by GrLayerHoister
     void partialPlayback(SkCanvas*,
-                         unsigned start,
-                         unsigned stop,
+                         int start,
+                         int stop,
                          const SkMatrix& initialCTM) const;
 // Used by GrRecordReplaceDraw
     const SkBBoxHierarchy* bbh() const { return fBBH; }
@@ -78,7 +79,7 @@ private:
 
     const SkRect                          fCullRect;
     const size_t                          fApproxBytesUsedBySubPictures;
-    SkLazyPtr<const Analysis>             fAnalysis;
+    SkOncePtr<const Analysis>             fAnalysis;
     SkAutoTUnref<const SkRecord>          fRecord;
     SkAutoTDelete<const SnapshotArray>    fDrawablePicts;
     SkAutoTUnref<const SkBBoxHierarchy>   fBBH;

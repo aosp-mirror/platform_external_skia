@@ -10,8 +10,11 @@
 #include "GrGpu.h"
 #include "GrIndexBuffer.h"
 #include "GrPathRendering.h"
+#include "GrRenderTarget.h"
+#include "GrRenderTargetPriv.h"
 #include "GrResourceCache.h"
 #include "GrResourceKey.h"
+#include "GrStencilAttachment.h"
 #include "GrVertexBuffer.h"
 
 GR_DECLARE_STATIC_UNIQUE_KEY(gQuadIndexBufferKey);
@@ -28,14 +31,16 @@ const GrIndexBuffer* GrResourceProvider::createInstancedIndexBuffer(const uint16
                                                                     const GrUniqueKey& key) {
     size_t bufferSize = patternSize * reps * sizeof(uint16_t);
 
-    GrIndexBuffer* buffer = this->getIndexBuffer(bufferSize, /* dynamic = */ false, true);
+    // This is typically used in GrBatchs, so we assume kNoPendingIO.
+    GrIndexBuffer* buffer = this->createIndexBuffer(bufferSize, kStatic_BufferUsage,
+                                                    kNoPendingIO_Flag);
     if (!buffer) {
-        return NULL;
+        return nullptr;
     }
     uint16_t* data = (uint16_t*) buffer->map();
-    bool useTempData = (NULL == data);
+    bool useTempData = (nullptr == data);
     if (useTempData) {
-        data = SkNEW_ARRAY(uint16_t, reps * patternSize);
+        data = new uint16_t[reps * patternSize];
     }
     for (int i = 0; i < reps; ++i) {
         int baseIdx = i * patternSize;
@@ -47,9 +52,9 @@ const GrIndexBuffer* GrResourceProvider::createInstancedIndexBuffer(const uint16
     if (useTempData) {
         if (!buffer->updateData(data, bufferSize)) {
             buffer->unref();
-            return NULL;
+            return nullptr;
         }
-        SkDELETE_ARRAY(data);
+        delete[] data;
     } else {
         buffer->unmap();
     }
@@ -83,58 +88,130 @@ GrPathRange* GrResourceProvider::createGlyphs(const SkTypeface* tf, const SkDesc
     return this->gpu()->pathRendering()->createGlyphs(tf, desc, stroke);
 }
 
-GrIndexBuffer* GrResourceProvider::getIndexBuffer(size_t size, bool dynamic,
-                                                  bool calledDuringFlush) {
+GrIndexBuffer* GrResourceProvider::createIndexBuffer(size_t size, BufferUsage usage,
+                                                     uint32_t flags) {
     if (this->isAbandoned()) {
-        return NULL;
+        return nullptr;
     }
 
+    bool noPendingIO = SkToBool(flags & kNoPendingIO_Flag);
+    bool dynamic = kDynamic_BufferUsage == usage;
     if (dynamic) {
         // bin by pow2 with a reasonable min
         static const uint32_t MIN_SIZE = 1 << 12;
         size = SkTMax(MIN_SIZE, GrNextPow2(SkToUInt(size)));
 
         GrScratchKey key;
-        GrIndexBuffer::ComputeScratchKey(size, dynamic, &key);
+        GrIndexBuffer::ComputeScratchKey(size, true, &key);
         uint32_t scratchFlags = 0;
-        if (calledDuringFlush) {
+        if (noPendingIO) {
             scratchFlags = GrResourceCache::kRequireNoPendingIO_ScratchFlag;
         } else {
             scratchFlags = GrResourceCache::kPreferNoPendingIO_ScratchFlag;
         }
-        GrGpuResource* resource = this->cache()->findAndRefScratchResource(key, scratchFlags);
+        GrGpuResource* resource = this->cache()->findAndRefScratchResource(key, size, scratchFlags);
         if (resource) {
             return static_cast<GrIndexBuffer*>(resource);
         }
     }
-
-    return this->gpu()->createIndexBuffer(size, dynamic);    
+    return this->gpu()->createIndexBuffer(size, dynamic);
 }
 
-GrVertexBuffer* GrResourceProvider::getVertexBuffer(size_t size, bool dynamic, 
-                                                    bool calledDuringFlush) {
+GrVertexBuffer* GrResourceProvider::createVertexBuffer(size_t size, BufferUsage usage,
+                                                       uint32_t flags) {
     if (this->isAbandoned()) {
-        return NULL;
+        return nullptr;
     }
 
+    bool noPendingIO = SkToBool(flags & kNoPendingIO_Flag);
+    bool dynamic = kDynamic_BufferUsage == usage;
     if (dynamic) {
         // bin by pow2 with a reasonable min
-        static const uint32_t MIN_SIZE = 1 << 15;
+        static const uint32_t MIN_SIZE = 1 << 12;
         size = SkTMax(MIN_SIZE, GrNextPow2(SkToUInt(size)));
 
         GrScratchKey key;
-        GrVertexBuffer::ComputeScratchKey(size, dynamic, &key);
+        GrVertexBuffer::ComputeScratchKey(size, true, &key);
         uint32_t scratchFlags = 0;
-        if (calledDuringFlush) {
+        if (noPendingIO) {
             scratchFlags = GrResourceCache::kRequireNoPendingIO_ScratchFlag;
         } else {
             scratchFlags = GrResourceCache::kPreferNoPendingIO_ScratchFlag;
         }
-        GrGpuResource* resource = this->cache()->findAndRefScratchResource(key, scratchFlags);
+        GrGpuResource* resource = this->cache()->findAndRefScratchResource(key, size, scratchFlags);
         if (resource) {
             return static_cast<GrVertexBuffer*>(resource);
         }
     }
-
     return this->gpu()->createVertexBuffer(size, dynamic);
 }
+
+GrBatchAtlas* GrResourceProvider::createAtlas(GrPixelConfig config,
+                                              int width, int height,
+                                              int numPlotsX, int numPlotsY,
+                                              GrBatchAtlas::EvictionFunc func, void* data) {
+    GrSurfaceDesc desc;
+    desc.fFlags = kNone_GrSurfaceFlags;
+    desc.fWidth = width;
+    desc.fHeight = height;
+    desc.fConfig = config;
+
+    // We don't want to flush the context so we claim we're in the middle of flushing so as to
+    // guarantee we do not recieve a texture with pending IO
+    // TODO: Determine how to avoid having to do this. (http://skbug.com/4156)
+    static const uint32_t kFlags = GrResourceProvider::kNoPendingIO_Flag;
+    GrTexture* texture = this->createApproxTexture(desc, kFlags);
+    if (!texture) {
+        return nullptr;
+    }
+    return new GrBatchAtlas(texture, numPlotsX, numPlotsY);
+}
+
+GrStencilAttachment* GrResourceProvider::attachStencilAttachment(GrRenderTarget* rt) {
+    SkASSERT(rt);
+    if (rt->renderTargetPriv().getStencilAttachment()) {
+        return rt->renderTargetPriv().getStencilAttachment();
+    }
+
+    if (!rt->wasDestroyed() && rt->canAttemptStencilAttachment()) {
+        GrUniqueKey sbKey;
+
+        int width = rt->width();
+        int height = rt->height();
+#if 0
+        if (this->caps()->oversizedStencilSupport()) {
+            width  = SkNextPow2(width);
+            height = SkNextPow2(height);
+        }
+#endif
+        bool newStencil = false;
+        GrStencilAttachment::ComputeSharedStencilAttachmentKey(width, height,
+                                                               rt->numStencilSamples(), &sbKey);
+        GrStencilAttachment* stencil = static_cast<GrStencilAttachment*>(
+            this->findAndRefResourceByUniqueKey(sbKey));
+        if (!stencil) {
+            // Need to try and create a new stencil
+            stencil = this->gpu()->createStencilAttachmentForRenderTarget(rt, width, height);
+            if (stencil) {
+                stencil->resourcePriv().setUniqueKey(sbKey);
+                newStencil = true;
+            }
+        }
+        if (rt->renderTargetPriv().attachStencilAttachment(stencil)) {
+            if (newStencil) {
+                // Right now we're clearing the stencil attachment here after it is
+                // attached to an RT for the first time. When we start matching
+                // stencil buffers with smaller color targets this will no longer
+                // be correct because it won't be guaranteed to clear the entire
+                // sb.
+                // We used to clear down in the GL subclass using a special purpose
+                // FBO. But iOS doesn't allow a stencil-only FBO. It reports unsupported
+                // FBO status.
+                this->gpu()->clearStencil(rt);
+            }
+        }
+    }
+    return rt->renderTargetPriv().getStencilAttachment();
+}
+
+

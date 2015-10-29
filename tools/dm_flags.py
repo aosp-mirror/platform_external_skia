@@ -37,6 +37,7 @@ def get_args(bot):
 
   if '-GCE-' in bot:
     configs.append('sp-8888')
+    configs.extend(['remote-8888', 'remote_cache-8888'])
 
   if 'TegraK1' in bot or 'GTX550Ti' in bot or 'GTX660' in bot or 'GT610' in bot:
     if 'Android' in bot:
@@ -57,6 +58,7 @@ def get_args(bot):
   # Runs out of memory on Android bots and Daisy.  Everyone else seems fine.
   if 'Android' not in bot and 'Daisy' not in bot:
     configs.append('pdf')
+    configs.append('pdf_poppler')
 
   # NP is running out of RAM when we run all these modes.  skia:3255
   if 'NexusPlayer' not in bot:
@@ -80,13 +82,6 @@ def get_args(bot):
     args.extend(('--threads', '0'))
 
   blacklist = []
-
-  # We do not draw image sources on msaa anyway, so avoid the creation of
-  # large canvases. skbug.com/4045
-  blacklist.extend('msaa image _ _'.split(' '))
-
-  # This image is too large to be a texture for many GPUs.
-  blacklist.extend('gpu _ _ PANO_20121023_214540.jpg'.split(' '))
 
   # Several of the newest version bmps fail on SkImageDecoder
   blacklist.extend('_ image decode pal8os2v2.bmp'.split(' '))
@@ -118,6 +113,27 @@ def get_args(bot):
   # New ico files that fail on SkImageDecoder
   blacklist.extend('_ image decode Hopstarter-Mac-Folders-Apple.ico'.split(' '))
 
+  # Incomplete image tests that fail on SkImageDecoder
+  blacklist.extend('_ image decode inc0.gif'.split(' '))
+  blacklist.extend('_ image decode inc1.gif'.split(' '))
+  blacklist.extend('_ image decode incInterlaced.gif'.split(' '))
+  blacklist.extend('_ image decode inc0.jpg'.split(' '))
+  blacklist.extend('_ image decode incGray.jpg'.split(' '))
+  blacklist.extend('_ image decode inc0.wbmp'.split(' '))
+  blacklist.extend('_ image decode inc1.wbmp'.split(' '))
+  blacklist.extend('_ image decode inc0.webp'.split(' '))
+  blacklist.extend('_ image decode inc1.webp'.split(' '))
+  blacklist.extend('_ image decode inc0.ico'.split(' '))
+  blacklist.extend('_ image decode inc1.ico'.split(' '))
+  blacklist.extend('_ image decode inc0.png'.split(' '))
+  blacklist.extend('_ image decode inc1.png'.split(' '))
+  blacklist.extend('_ image decode inc2.png'.split(' '))
+  blacklist.extend('_ image decode inc12.png'.split(' '))
+  blacklist.extend('_ image decode inc13.png'.split(' '))
+  blacklist.extend('_ image decode inc14.png'.split(' '))
+  blacklist.extend('_ image subset inc0.webp'.split(' '))
+  blacklist.extend('_ image subset inc1.webp'.split(' '))
+
   # Leon doesn't care about this, so why run it?
   if 'Win' in bot:
     blacklist.extend('_ image decode _'.split(' '))
@@ -145,6 +161,12 @@ def get_args(bot):
     blacklist.extend('gpu image subset _ msaa image subset _'.split(' '))
     blacklist.extend('msaa16 gm _ tilemodesProcess'.split(' '))
 
+  # the 32-bit GCE bots run out of memory in DM when running these large images
+  if 'x86' in bot and not 'x86-64' in bot:
+    blacklist.extend('_ image _ interlaced1.png'.split(' '))
+    blacklist.extend('_ image _ interlaced2.png'.split(' '))
+    blacklist.extend('_ image _ interlaced3.png'.split(' '))
+
   if blacklist:
     args.append('--blacklist')
     args.extend(blacklist)
@@ -171,6 +193,10 @@ def get_args(bot):
 
   if 'GalaxyS4' in bot:  # skia:4079
     match.append('~imagefiltersclipped')
+    match.append('~imagefilterscropexpand')
+    match.append('~scaled_tilemodes_npot')
+    match.append('~bleed_image')  # skia:4367
+    match.append('~ReadPixels')  # skia:4368
 
   if match:
     args.append('--match')

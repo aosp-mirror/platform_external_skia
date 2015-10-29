@@ -17,6 +17,7 @@
 #include "SkTDArray.h"
 
 class SkPaint;
+class SkTraceMemoryDump;
 
 class SkGlyphCache_Globals;
 
@@ -66,7 +67,10 @@ public:
 
     /** Returns the number of glyphs for this strike.
     */
-    unsigned getGlyphCount();
+    unsigned getGlyphCount() const;
+
+    /** Return the number of glyphs currently cached. */
+    int countCachedGlyphs() const;
 
     /** Return the image associated with the glyph. If it has not been generated this will
         trigger that.
@@ -94,9 +98,12 @@ public:
         return fScalerContext->isSubpixel();
     }
 
+    /** Return the approx RAM usage for this cache. */
+    size_t getMemoryUsed() const { return fMemoryUsed; }
+
     void dump() const;
 
-    /*  AuxProc/Data allow a client to associate data with this cache entry. Multiple clients can
+    /** AuxProc/Data allow a client to associate data with this cache entry. Multiple clients can
         use this, as their data is keyed with a function pointer. In addition to serving as a
         key, the function pointer is called with the data when the glyphcache object is deleted,
         so the client can cleanup their data as well.
@@ -114,7 +121,7 @@ public:
 
     /** Find a matching cache entry, and call proc() with it. If none is found create a new one.
         If the proc() returns true, detach the cache and return it, otherwise leave it and return
-        NULL.
+        nullptr.
     */
     static SkGlyphCache* VisitCache(SkTypeface*, const SkDescriptor* desc,
                                     bool (*proc)(const SkGlyphCache*, void*),
@@ -133,10 +140,18 @@ public:
         win is that different thread will never block each other while a strike is being used.
     */
     static SkGlyphCache* DetachCache(SkTypeface* typeface, const SkDescriptor* desc) {
-        return VisitCache(typeface, desc, DetachProc, NULL);
+        return VisitCache(typeface, desc, DetachProc, nullptr);
     }
 
     static void Dump();
+
+    /** Dump memory usage statistics of all the attaches caches in the process using the
+        SkTraceMemoryDump interface.
+    */
+    static void DumpMemoryStatistics(SkTraceMemoryDump* dump);
+
+    typedef void (*Visitor)(const SkGlyphCache&, void* context);
+    static void VisitAll(Visitor, void* context);
 
 #ifdef SK_DEBUG
     void validate() const;
@@ -157,7 +172,7 @@ public:
             }
         }
         void forget() {
-            fCache = NULL;
+            fCache = nullptr;
         }
     private:
         const SkGlyphCache* fCache;
@@ -243,7 +258,7 @@ public:
     void release() {
         if (fCache) {
             SkGlyphCache::AttachCache(fCache);
-            fCache = NULL;
+            fCache = nullptr;
         }
     }
 
@@ -257,10 +272,10 @@ protected:
     SkAutoGlyphCacheBase(const SkPaint& /*paint*/,
                          const SkSurfaceProps* /*surfaceProps*/,
                          const SkMatrix* /*matrix*/) {
-        fCache = NULL;
+        fCache = nullptr;
     }
     SkAutoGlyphCacheBase() {
-        fCache = NULL;
+        fCache = nullptr;
     }
     ~SkAutoGlyphCacheBase() {
         if (fCache) {

@@ -15,13 +15,14 @@
 
 GrGLVertexBuilder::GrGLVertexBuilder(GrGLProgramBuilder* program)
     : INHERITED(program)
-    , fRtAdjustName(NULL) {
+    , fRtAdjustName(nullptr) {
 }
 
-void GrGLVertexBuilder::addVarying(const char* name, GrGLVarying* v) {
+void GrGLVertexBuilder::addVarying(const char* name, GrSLPrecision precision, GrGLVarying* v) {
     fOutputs.push_back();
     fOutputs.back().setType(v->fType);
-    fOutputs.back().setTypeModifier(GrGLShaderVar::kVaryingOut_TypeModifier);
+    fOutputs.back().setTypeModifier(GrGLSLShaderVar::kVaryingOut_TypeModifier);
+    fOutputs.back().setPrecision(precision);
     fProgramBuilder->nameVariable(fOutputs.back().accessName(), 'v', name);
     v->fVsOut = fOutputs.back().getName().c_str();
 }
@@ -38,7 +39,7 @@ void GrGLVertexBuilder::transformToNormalizedDeviceSpace(const GrShaderVar& posV
     SkASSERT(!fRtAdjustName);
 
     GrSLPrecision precision = kDefault_GrSLPrecision;
-    if (fProgramBuilder->ctxInfo().vendor() == kARM_GrGLVendor) {
+    if (fProgramBuilder->glslCaps()->forceHighPrecisionNDSTransform()) {
         precision = kHigh_GrSLPrecision;
     }
 
@@ -57,12 +58,14 @@ void GrGLVertexBuilder::transformToNormalizedDeviceSpace(const GrShaderVar& posV
             this->codeAppendf("{vec2 _posTmp = %s;", posVar.c_str());
         }
         this->codeAppendf("_posTmp = floor(_posTmp) + vec2(0.5, 0.5);"
-                          "gl_Position = vec4(_posTmp.x * %s.x + %s.y, _posTmp.y * %s.z + %s.w, 0, 1);}",
+                          "gl_Position = vec4(_posTmp.x * %s.x + %s.y,"
+                                             "_posTmp.y * %s.z + %s.w, 0, 1);}",
                           fRtAdjustName, fRtAdjustName, fRtAdjustName, fRtAdjustName);
     } else if (kVec3f_GrSLType == posVar.getType()) {
-        this->codeAppendf("gl_Position = vec4(dot(%s.xz, %s.xy)/%s.z, dot(%s.yz, %s.zw)/%s.z, 0, 1);",
-                          posVar.c_str(), fRtAdjustName, posVar.c_str(),
-                          posVar.c_str(), fRtAdjustName, posVar.c_str());
+        this->codeAppendf("gl_Position = vec4(dot(%s.xz, %s.xy), dot(%s.yz, %s.zw), 0, %s.z);",
+                          posVar.c_str(), fRtAdjustName,
+                          posVar.c_str(), fRtAdjustName,
+                          posVar.c_str());
     } else {
         SkASSERT(kVec2f_GrSLType == posVar.getType());
         this->codeAppendf("gl_Position = vec4(%s.x * %s.x + %s.y, %s.y * %s.z + %s.w, 0, 1);",
@@ -86,7 +89,7 @@ void GrGLVertexBuilder::bindVertexAttributes(GrGLuint programID) {
 
 bool
 GrGLVertexBuilder::compileAndAttachShaders(GrGLuint programId, SkTDArray<GrGLuint>* shaderIds) {
-    this->versionDecl() = GrGLGetGLSLVersionDecl(fProgramBuilder->ctxInfo());
+    this->versionDecl() = fProgramBuilder->glslCaps()->versionDeclString();
     this->compileAndAppendLayoutQualifiers();
     fProgramBuilder->appendUniformDecls(GrGLProgramBuilder::kVertex_Visibility, &this->uniforms());
     this->appendDecls(fInputs, &this->inputs());
@@ -97,7 +100,7 @@ GrGLVertexBuilder::compileAndAttachShaders(GrGLuint programId, SkTDArray<GrGLuin
 bool GrGLVertexBuilder::addAttribute(const GrShaderVar& var) {
     SkASSERT(GrShaderVar::kAttribute_TypeModifier == var.getTypeModifier());
     for (int i = 0; i < fInputs.count(); ++i) {
-        const GrGLShaderVar& attr = fInputs[i];
+        const GrGLSLShaderVar& attr = fInputs[i];
         // if attribute already added, don't add it again
         if (attr.getName().equals(var.getName())) {
             return false;

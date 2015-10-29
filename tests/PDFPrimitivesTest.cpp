@@ -5,15 +5,17 @@
  * found in the LICENSE file.
  */
 
+#include "Resources.h"
 #include "SkBitmap.h"
 #include "SkCanvas.h"
 #include "SkData.h"
 #include "SkDocument.h"
-#include "SkFlate.h"
+#include "SkDeflate.h"
 #include "SkImageEncoder.h"
 #include "SkMatrix.h"
 #include "SkPDFCanon.h"
 #include "SkPDFDevice.h"
+#include "SkPDFFont.h"
 #include "SkPDFStream.h"
 #include "SkPDFTypes.h"
 #include "SkReadBuffer.h"
@@ -21,6 +23,7 @@
 #include "SkStream.h"
 #include "SkTypes.h"
 #include "Test.h"
+#include "sk_tool_utils.h"
 
 #define DUMMY_TEXT "DCT compessed stream."
 
@@ -32,7 +35,7 @@ struct Catalog {
 }  // namespace
 
 template <typename T>
-static SkString emit_to_string(T& obj, Catalog* catPtr = NULL) {
+static SkString emit_to_string(T& obj, Catalog* catPtr = nullptr) {
     Catalog catalog;
     SkDynamicMemoryWStream buffer;
     if (!catPtr) {
@@ -99,12 +102,14 @@ static void TestPDFStream(skiatest::Reporter* reporter) {
         SkAutoTUnref<SkPDFStream> stream(new SkPDFStream(streamData2.get()));
 
         SkDynamicMemoryWStream compressedByteStream;
-        SkFlate::Deflate(streamData2.get(), &compressedByteStream);
-        SkAutoDataUnref compressedData(compressedByteStream.copyToData());
+        SkDeflateWStream deflateWStream(&compressedByteStream);
+        deflateWStream.write(streamBytes2, strlen(streamBytes2));
+        deflateWStream.finalize();
 
         SkDynamicMemoryWStream expected;
         expected.writeText("<</Filter /FlateDecode\n/Length 116>> stream\n");
-        expected.write(compressedData->data(), compressedData->size());
+        compressedByteStream.writeToStream(&expected);
+        compressedByteStream.reset();
         expected.writeText("\nendstream");
         SkAutoDataUnref expectedResultData2(expected.copyToData());
         SkString result = emit_to_string(*stream);
@@ -362,7 +367,7 @@ namespace {
 
 class DummyImageFilter : public SkImageFilter {
 public:
-    DummyImageFilter(bool visited = false) : SkImageFilter(0, NULL), fVisited(visited) {}
+    DummyImageFilter(bool visited = false) : SkImageFilter(0, nullptr), fVisited(visited) {}
     ~DummyImageFilter() override {}
     virtual bool onFilterImage(Proxy*, const SkBitmap& src, const Context&,
                                SkBitmap* result, SkIPoint* offset) const override {
@@ -382,7 +387,7 @@ private:
 SkFlattenable* DummyImageFilter::CreateProc(SkReadBuffer& buffer) {
     SK_IMAGEFILTER_UNFLATTEN_COMMON(common, 0);
     bool visited = buffer.readBool();
-    return SkNEW_ARGS(DummyImageFilter, (visited));
+    return new DummyImageFilter(visited);
 }
 
 #ifndef SK_IGNORE_TO_STRING
@@ -412,4 +417,21 @@ DEF_TEST(PDFImageFilter, reporter) {
 
     // Filter was used in rendering; should be visited.
     REPORTER_ASSERT(reporter, filter->visited());
+}
+
+// Check that PDF rendering of image filters successfully falls back to
+// CPU rasterization.
+DEF_TEST(PDFFontCanEmbedTypeface, reporter) {
+    SkPDFCanon canon;
+
+    const char resource[] = "fonts/Roboto2-Regular_NoEmbed.ttf";
+    SkAutoTUnref<SkTypeface> noEmbedTypeface(GetResourceAsTypeface(resource));
+    if (noEmbedTypeface) {
+        REPORTER_ASSERT(reporter,
+                        !SkPDFFont::CanEmbedTypeface(noEmbedTypeface, &canon));
+    }
+    SkAutoTUnref<SkTypeface> portableTypeface(
+            sk_tool_utils::create_portable_typeface(NULL, SkTypeface::kNormal));
+    REPORTER_ASSERT(reporter,
+                    SkPDFFont::CanEmbedTypeface(portableTypeface, &canon));
 }

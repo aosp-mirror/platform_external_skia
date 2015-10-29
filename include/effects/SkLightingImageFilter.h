@@ -11,14 +11,9 @@
 #include "SkImageFilter.h"
 #include "SkColor.h"
 
-#ifdef SK_LEGACY_SKPOINT3_CTORS
-// TODO: remove this. Chromium relies on having this included here
-#include "SkPoint3.h"
-#else
-struct SkPoint3;
-#endif
 
-class SkLight;
+class SkImageFilterLight;
+struct SkPoint3;
 
 class SK_API SkLightingImageFilter : public SkImageFilter {
 public:
@@ -47,17 +42,18 @@ public:
     SK_DECLARE_FLATTENABLE_REGISTRAR_GROUP()
 
 protected:
-    SkLightingImageFilter(SkLight* light,
+    SkLightingImageFilter(SkImageFilterLight* light,
                           SkScalar surfaceScale,
                           SkImageFilter* input,
                           const CropRect* cropRect);
     void flatten(SkWriteBuffer&) const override;
-    const SkLight* light() const { return fLight.get(); }
+    const SkImageFilterLight* light() const { return fLight.get(); }
     SkScalar surfaceScale() const { return fSurfaceScale; }
+    bool affectsTransparentBlack() const override { return true; }
 
 private:
     typedef SkImageFilter INHERITED;
-    SkAutoTUnref<SkLight> fLight;
+    SkAutoTUnref<SkImageFilterLight> fLight;
     SkScalar fSurfaceScale;
 };
 

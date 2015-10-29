@@ -25,7 +25,7 @@ public:
 
 protected:
     virtual const char* onGetName() { return fName.c_str(); }
-    virtual void onDraw(const int loops, SkCanvas* canvas) {
+    virtual void onDraw(int loops, SkCanvas* canvas) {
         SkPaint paint;
         this->setupPaint(&paint);
         paint.setLCDRenderText(fDoLCD);
@@ -48,5 +48,5 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-DEF_BENCH( return SkNEW_ARGS(FontScalerBench, (false)); )
-DEF_BENCH( return SkNEW_ARGS(FontScalerBench, (true)); )
+DEF_BENCH(return new FontScalerBench(false);)
+DEF_BENCH(return new FontScalerBench(true);)

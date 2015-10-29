@@ -9,6 +9,7 @@
 #include "SkCanvas.h"
 #include "SkGradientShader.h"
 #include "SkPaint.h"
+#include "SkPath.h"
 #include "SkString.h"
 
 enum ColorPattern {
@@ -94,7 +95,7 @@ public:
 
 
     AlternatingColorPatternBench(ColorPattern pattern1, ColorPattern pattern2, DrawType drawType)
-        : fBmShader(NULL) {
+        : fBmShader(nullptr) {
         fPattern1 = gColorPatterns[pattern1];
         fPattern2 = gColorPatterns[pattern2];
         fName.printf("colorPattern_%s_%s_%s",
@@ -112,7 +113,7 @@ protected:
         return fName.c_str();
     }
 
-    void onPreDraw() override {
+    void onDelayedSetup() override {
         int w = 40;
         int h = 40;
         makebm(&fBmp, w, h);
@@ -136,17 +137,17 @@ protected:
                 }
                 if (0 == count % 2) {
                     fColors[count]  = fPattern1.fColor;
-                    fShaders[count] = fPattern1.fIsBitmap ? fBmShader : NULL;
+                    fShaders[count] = fPattern1.fIsBitmap ? fBmShader : nullptr;
                 } else {
                     fColors[count]  = fPattern2.fColor;
-                    fShaders[count] = fPattern2.fIsBitmap ? fBmShader : NULL;
+                    fShaders[count] = fPattern2.fIsBitmap ? fBmShader : nullptr;
                 }
                 ++count;
             }
         }
     }
 
-    void onDraw(const int loops, SkCanvas* canvas) override {
+    void onDraw(int loops, SkCanvas* canvas) override {
         SkPaint paint;
         paint.setAntiAlias(false);
         paint.setFilterQuality(kLow_SkFilterQuality);
@@ -168,33 +169,32 @@ private:
     typedef Benchmark INHERITED;
 };
 
-DEF_BENCH( return SkNEW_ARGS(AlternatingColorPatternBench,
-                             (kWhite_ColorPattern, kWhite_ColorPattern,
-                              kPath_DrawType)); )
-DEF_BENCH( return SkNEW_ARGS(AlternatingColorPatternBench,
-                             (kBlue_ColorPattern, kBlue_ColorPattern,
-                              kPath_DrawType)); )
-DEF_BENCH( return SkNEW_ARGS(AlternatingColorPatternBench,
-                             (kWhite_ColorPattern, kBlue_ColorPattern,
-                              kPath_DrawType)); )
+DEF_BENCH(return new AlternatingColorPatternBench(kWhite_ColorPattern,
+                                                  kWhite_ColorPattern,
+                                                  kPath_DrawType);)
+DEF_BENCH(return new AlternatingColorPatternBench(kBlue_ColorPattern,
+                                                  kBlue_ColorPattern,
+                                                  kPath_DrawType);)
+DEF_BENCH(return new AlternatingColorPatternBench(kWhite_ColorPattern,
+                                                  kBlue_ColorPattern,
+                                                  kPath_DrawType);)
 
-DEF_BENCH( return SkNEW_ARGS(AlternatingColorPatternBench,
-                             (kOpaqueBitmap_ColorPattern, kOpaqueBitmap_ColorPattern,
-                              kPath_DrawType)); )
-DEF_BENCH( return SkNEW_ARGS(AlternatingColorPatternBench,
-                             (kAlphaBitmap_ColorPattern, kAlphaBitmap_ColorPattern,
-                              kPath_DrawType)); )
-DEF_BENCH( return SkNEW_ARGS(AlternatingColorPatternBench,
-                             (kOpaqueBitmap_ColorPattern, kAlphaBitmap_ColorPattern,
-                              kPath_DrawType)); )
+DEF_BENCH(return new AlternatingColorPatternBench(kOpaqueBitmap_ColorPattern,
+                                                  kOpaqueBitmap_ColorPattern,
+                                                  kPath_DrawType);)
+DEF_BENCH(return new AlternatingColorPatternBench(kAlphaBitmap_ColorPattern,
+                                                  kAlphaBitmap_ColorPattern,
+                                                  kPath_DrawType);)
+DEF_BENCH(return new AlternatingColorPatternBench(kOpaqueBitmap_ColorPattern,
+                                                  kAlphaBitmap_ColorPattern,
+                                                  kPath_DrawType);)
 
-DEF_BENCH( return SkNEW_ARGS(AlternatingColorPatternBench,
-                             (kOpaqueBitmap_ColorPattern, kOpaqueBitmap_ColorPattern,
-                              kRect_DrawType)); )
-DEF_BENCH( return SkNEW_ARGS(AlternatingColorPatternBench,
-                             (kAlphaBitmap_ColorPattern, kAlphaBitmap_ColorPattern,
-                              kRect_DrawType)); )
-DEF_BENCH( return SkNEW_ARGS(AlternatingColorPatternBench,
-                             (kOpaqueBitmap_ColorPattern, kAlphaBitmap_ColorPattern,
-                              kRect_DrawType)); )
-
+DEF_BENCH(return new AlternatingColorPatternBench(kOpaqueBitmap_ColorPattern,
+                                                  kOpaqueBitmap_ColorPattern,
+                                                  kRect_DrawType);)
+DEF_BENCH(return new AlternatingColorPatternBench(kAlphaBitmap_ColorPattern,
+                                                  kAlphaBitmap_ColorPattern,
+                                                  kRect_DrawType);)
+DEF_BENCH(return new AlternatingColorPatternBench(kOpaqueBitmap_ColorPattern,
+                                                  kAlphaBitmap_ColorPattern,
+                                                  kRect_DrawType);)

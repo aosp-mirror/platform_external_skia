@@ -21,7 +21,7 @@ class SkArithmeticMode_scalar : public SkXfermode {
 public:
     static SkArithmeticMode_scalar* Create(SkScalar k1, SkScalar k2, SkScalar k3, SkScalar k4,
                                            bool enforcePMColor) {
-        return SkNEW_ARGS(SkArithmeticMode_scalar, (k1, k2, k3, k4, enforcePMColor));
+        return new SkArithmeticMode_scalar(k1, k2, k3, k4, enforcePMColor);
     }
 
     virtual void xfer32(SkPMColor dst[], const SkPMColor src[], int count,
@@ -31,8 +31,8 @@ public:
     SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkArithmeticMode_scalar)
 
 #if SK_SUPPORT_GPU
-    bool asFragmentProcessor(GrFragmentProcessor**, GrProcessorDataManager*,
-                             GrTexture* background) const override;
+    bool asFragmentProcessor(const GrFragmentProcessor**,
+                             const GrFragmentProcessor* dst) const override;
 
     bool asXPFactory(GrXPFactory**) const override;
 #endif
@@ -105,7 +105,7 @@ void SkArithmeticMode_scalar::xfer32(SkPMColor dst[], const SkPMColor src[],
     SkScalar k4 = fK[3] * 255;
 
     for (int i = 0; i < count; ++i) {
-        if ((NULL == aaCoverage) || aaCoverage[i]) {
+        if ((nullptr == aaCoverage) || aaCoverage[i]) {
             SkPMColor sc = src[i];
             SkPMColor dc = dst[i];
 
@@ -217,15 +217,15 @@ SkXfermode* SkArithmeticMode::Create(SkScalar k1, SkScalar k2,
         int32_t i3 = toDot8(k3);
         int32_t i4 = toDot8(k4);
         if (i1) {
-            return SkNEW_ARGS(SkArithmeticMode_quad, (i1, i2, i3, i4));
+            return new SkArithmeticMode_quad  (i1, i2, i3, i4);
         }
         if (0 == i2) {
-            return SkNEW_ARGS(SkArithmeticMode_dst, (i3, i4));
+            return new SkArithmeticMode_dst  (i3, i4);
         }
         if (0 == i3) {
-            return SkNEW_ARGS(SkArithmeticMode_src, (i2, i4));
+            return new SkArithmeticMode_src  (i2, i4);
         }
-        return SkNEW_ARGS(SkArithmeticMode_linear, (i2, i3, i4));
+        return new SkArithmeticMode_linear  (i2, i3, i4);
 #endif
     }
     return SkArithmeticMode_scalar::Create(k1, k2, k3, k4, enforcePMColor);
@@ -235,17 +235,15 @@ SkXfermode* SkArithmeticMode::Create(SkScalar k1, SkScalar k2,
 //////////////////////////////////////////////////////////////////////////////
 
 #if SK_SUPPORT_GPU
-bool SkArithmeticMode_scalar::asFragmentProcessor(GrFragmentProcessor** fp,
-                                                  GrProcessorDataManager* procDataManager,
-                                                  GrTexture* background) const {
+bool SkArithmeticMode_scalar::asFragmentProcessor(const GrFragmentProcessor** fp,
+                                                  const GrFragmentProcessor* dst) const {
     if (fp) {
-        *fp = GrArithmeticFP::Create(procDataManager,
-                                     SkScalarToFloat(fK[0]),
+        *fp = GrArithmeticFP::Create(SkScalarToFloat(fK[0]),
                                      SkScalarToFloat(fK[1]),
                                      SkScalarToFloat(fK[2]),
                                      SkScalarToFloat(fK[3]),
                                      fEnforcePMColor,
-                                     background);
+                                     dst);
     }
     return true;
 }

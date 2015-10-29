@@ -29,16 +29,16 @@ public:
         VertexData()
         : fVertexCount(0)
         , fIndexCount(0)
-        , fPoints(NULL)
-        , fTexCoords(NULL)
-        , fColors(NULL)
-        , fIndices(NULL) { }
+        , fPoints(nullptr)
+        , fTexCoords(nullptr)
+        , fColors(nullptr)
+        , fIndices(nullptr) { }
         
         ~VertexData() {
-            SkDELETE_ARRAY(fPoints);
-            SkDELETE_ARRAY(fTexCoords);
-            SkDELETE_ARRAY(fColors);
-            SkDELETE_ARRAY(fIndices);
+            delete[] fPoints;
+            delete[] fTexCoords;
+            delete[] fColors;
+            delete[] fIndices;
         }
     };
     

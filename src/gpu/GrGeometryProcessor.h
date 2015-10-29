@@ -22,27 +22,16 @@ public:
     GrGeometryProcessor()
         : INHERITED(false)
         , fWillUseGeoShader(false)
-        , fHasLocalCoords(false) {}
+        , fLocalCoordsType(kUnused_LocalCoordsType) {}
 
     bool willUseGeoShader() const override { return fWillUseGeoShader; }
 
-    // TODO delete when paths are in batch
-    void initBatchTracker(GrBatchTracker*, const GrPipelineInfo&) const override {}
-
-    // TODO delete this when paths are in batch
-    bool canMakeEqual(const GrBatchTracker& mine,
-                      const GrPrimitiveProcessor& that,
-                      const GrBatchTracker& theirs) const override {
-        SkFAIL("Unsupported\n");
-        return false;
+    bool hasTransformedLocalCoords() const override {
+        return kHasTransformed_LocalCoordsType == fLocalCoordsType;
     }
 
-    // TODO Delete when paths are in batch
-    void getInvariantOutputColor(GrInitInvariantOutput* out) const override {
-        SkFAIL("Unsupported\n");
-    }
-    void getInvariantOutputCoverage(GrInitInvariantOutput* out) const override {
-        SkFAIL("Unsupported\n");
+    bool hasExplicitLocalCoords() const override {
+        return kHasExplicit_LocalCoordsType == fLocalCoordsType;
     }
 
 protected:
@@ -64,14 +53,32 @@ protected:
 
     void setWillUseGeoShader() { fWillUseGeoShader = true; }
 
-    // TODO hack see above
-    void setHasLocalCoords() { fHasLocalCoords = true; }
+    /**
+     * If a GrFragmentProcessor in the GrPipeline needs localCoods, we will provide them in one of
+     * three ways
+     * 1) LocalCoordTransform * Position - in Shader
+     * 2) LocalCoordTransform * ExplicitLocalCoords- in Shader
+     * 3) A transformation on the CPU uploaded via vertex attribute
+     * TODO make this GrBatches responsibility
+     */
+    enum LocalCoordsType {
+        kUnused_LocalCoordsType,
+        kHasExplicit_LocalCoordsType,
+        kHasTransformed_LocalCoordsType
+    };
+
+    void setHasExplicitLocalCoords() {
+        SkASSERT(kUnused_LocalCoordsType == fLocalCoordsType);
+        fLocalCoordsType = kHasExplicit_LocalCoordsType;
+    }
+    void setHasTransformedLocalCoords() {
+        SkASSERT(kUnused_LocalCoordsType == fLocalCoordsType);
+        fLocalCoordsType = kHasTransformed_LocalCoordsType;
+    }
 
 private:
-    bool hasExplicitLocalCoords() const override { return fHasLocalCoords; }
-
     bool fWillUseGeoShader;
-    bool fHasLocalCoords;
+    LocalCoordsType fLocalCoordsType;
 
     typedef GrPrimitiveProcessor INHERITED;
 };

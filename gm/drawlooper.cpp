@@ -18,7 +18,7 @@
 
 class DrawLooperGM : public skiagm::GM {
 public:
-    DrawLooperGM() : fLooper(NULL) {
+    DrawLooperGM() : fLooper(nullptr) {
         this->setBGColor(sk_tool_utils::color_to_565(0xFFDDDDDD));
     }
 
@@ -40,7 +40,7 @@ protected:
 
         SkPaint  paint;
         paint.setAntiAlias(true);
-        sk_tool_utils::set_portable_typeface_always(&paint);
+        sk_tool_utils::set_portable_typeface(&paint);
         paint.setTextSize(SkIntToScalar(72));
         paint.setLooper(fLooper);
 

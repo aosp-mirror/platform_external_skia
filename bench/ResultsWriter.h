@@ -12,6 +12,7 @@
 
 #include "BenchLogger.h"
 #include "SkJSONCPP.h"
+#include "SkOSFile.h"
 #include "SkStream.h"
 #include "SkString.h"
 #include "SkTArray.h"
@@ -78,8 +79,8 @@ public:
         : fFilename(filename)
         , fRoot()
         , fResults(fRoot["results"])
-        , fBench(NULL)
-        , fConfig(NULL) {}
+        , fBench(nullptr)
+        , fConfig(nullptr) {}
 
     ~NanoJSONResultsWriter() {
         this->flush();
@@ -116,6 +117,12 @@ public:
 
     // Flush to storage now please.
     virtual void flush() {
+        SkString dirname = SkOSPath::Dirname(fFilename.c_str());
+        if (!sk_exists(dirname.c_str(), kWrite_SkFILE_Flag)) {
+            if (!sk_mkdir(dirname.c_str())) {
+                SkDebugf("Failed to create directory.");
+            }
+        }
         SkFILEWStream stream(fFilename.c_str());
         stream.writeText(Json::StyledWriter().write(fRoot).c_str());
         stream.flush();

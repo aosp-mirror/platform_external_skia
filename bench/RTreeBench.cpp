@@ -34,7 +34,7 @@ protected:
     const char* onGetName() override {
         return fName.c_str();
     }
-    void onDraw(const int loops, SkCanvas* canvas) override {
+    void onDraw(int loops, SkCanvas* canvas) override {
         SkRandom rand;
         SkAutoTMalloc<SkRect> rects(NUM_BUILD_RECTS);
         for (int i = 0; i < NUM_BUILD_RECTS; ++i) {
@@ -44,7 +44,7 @@ protected:
         for (int i = 0; i < loops; ++i) {
             SkRTree tree;
             tree.insert(rects.get(), NUM_BUILD_RECTS);
-            SkASSERT(rects != NULL);  // It'd break this bench if the tree took ownership of rects.
+            SkASSERT(rects != nullptr);  // It'd break this bench if the tree took ownership of rects.
         }
     }
 private:
@@ -67,7 +67,7 @@ protected:
     const char* onGetName() override {
         return fName.c_str();
     }
-    void onPreDraw() override {
+    void onDelayedSetup() override {
         SkRandom rand;
         SkAutoTMalloc<SkRect> rects(NUM_QUERY_RECTS);
         for (int i = 0; i < NUM_QUERY_RECTS; ++i) {
@@ -76,10 +76,10 @@ protected:
         fTree.insert(rects.get(), NUM_QUERY_RECTS);
     }
 
-    void onDraw(const int loops, SkCanvas* canvas) override {
+    void onDraw(int loops, SkCanvas* canvas) override {
         SkRandom rand;
         for (int i = 0; i < loops; ++i) {
-            SkTDArray<unsigned> hits;
+            SkTDArray<int> hits;
             SkRect query;
             query.fLeft   = rand.nextRangeF(0, GENERATE_EXTENTS);
             query.fTop    = rand.nextRangeF(0, GENERATE_EXTENTS);
@@ -127,12 +127,12 @@ static inline SkRect make_concentric_rects(SkRandom&, int index, int numRects) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-DEF_BENCH(return SkNEW_ARGS(RTreeBuildBench, ("XY",         &make_XYordered_rects)));
-DEF_BENCH(return SkNEW_ARGS(RTreeBuildBench, ("YX",         &make_YXordered_rects)));
-DEF_BENCH(return SkNEW_ARGS(RTreeBuildBench, ("random",     &make_random_rects)));
-DEF_BENCH(return SkNEW_ARGS(RTreeBuildBench, ("concentric", &make_concentric_rects)));
+DEF_BENCH(return new RTreeBuildBench("XY", &make_XYordered_rects));
+DEF_BENCH(return new RTreeBuildBench("YX", &make_YXordered_rects));
+DEF_BENCH(return new RTreeBuildBench("random", &make_random_rects));
+DEF_BENCH(return new RTreeBuildBench("concentric", &make_concentric_rects));
 
-DEF_BENCH(return SkNEW_ARGS(RTreeQueryBench, ("XY",         &make_XYordered_rects)));
-DEF_BENCH(return SkNEW_ARGS(RTreeQueryBench, ("YX",         &make_YXordered_rects)));
-DEF_BENCH(return SkNEW_ARGS(RTreeQueryBench, ("random",     &make_random_rects)));
-DEF_BENCH(return SkNEW_ARGS(RTreeQueryBench, ("concentric", &make_concentric_rects)));
+DEF_BENCH(return new RTreeQueryBench("XY", &make_XYordered_rects));
+DEF_BENCH(return new RTreeQueryBench("YX", &make_YXordered_rects));
+DEF_BENCH(return new RTreeQueryBench("random", &make_random_rects));
+DEF_BENCH(return new RTreeQueryBench("concentric", &make_concentric_rects));

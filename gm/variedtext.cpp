@@ -58,11 +58,11 @@ protected:
         SkScalar w = SkIntToScalar(size.fWidth);
         SkScalar h = SkIntToScalar(size.fHeight);
 
-        SK_COMPILE_ASSERT(4 == SK_ARRAY_COUNT(fTypefacesToUnref), typeface_cnt);
-        fTypefacesToUnref[0] = sk_tool_utils::create_portable_typeface_always("sans-serif", SkTypeface::kNormal);
-        fTypefacesToUnref[1] = sk_tool_utils::create_portable_typeface_always("sans-serif", SkTypeface::kBold);
-        fTypefacesToUnref[2] = sk_tool_utils::create_portable_typeface_always("serif", SkTypeface::kNormal);
-        fTypefacesToUnref[3] = sk_tool_utils::create_portable_typeface_always("serif", SkTypeface::kBold);
+        static_assert(4 == SK_ARRAY_COUNT(fTypefacesToUnref), "typeface_cnt");
+        fTypefacesToUnref[0] = sk_tool_utils::create_portable_typeface("sans-serif", SkTypeface::kNormal);
+        fTypefacesToUnref[1] = sk_tool_utils::create_portable_typeface("sans-serif", SkTypeface::kBold);
+        fTypefacesToUnref[2] = sk_tool_utils::create_portable_typeface("serif", SkTypeface::kNormal);
+        fTypefacesToUnref[3] = sk_tool_utils::create_portable_typeface("serif", SkTypeface::kBold);
 
         SkRandom random;
         for (int i = 0; i < kCnt; ++i) {
@@ -160,7 +160,7 @@ private:
     typedef skiagm::GM INHERITED;
 };
 
-DEF_GM( return SkNEW(VariedTextGM(false, false)); )
-DEF_GM( return SkNEW(VariedTextGM(true, false)); )
-DEF_GM( return SkNEW(VariedTextGM(false, true)); )
-DEF_GM( return SkNEW(VariedTextGM(true, true)); )
+DEF_GM(return new VariedTextGM(false, false);)
+DEF_GM(return new VariedTextGM(true, false);)
+DEF_GM(return new VariedTextGM(false, true);)
+DEF_GM(return new VariedTextGM(true, true);)

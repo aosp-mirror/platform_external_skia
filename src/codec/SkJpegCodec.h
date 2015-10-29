@@ -50,14 +50,15 @@ protected:
      * Initiates the jpeg decode
      */
     Result onGetPixels(const SkImageInfo& dstInfo, void* dst, size_t dstRowBytes, const Options&,
-            SkPMColor*, int*) override;
+            SkPMColor*, int*, int*) override;
 
     SkEncodedFormat onGetEncodedFormat() const override {
         return kJPEG_SkEncodedFormat;
     }
 
-    SkScanlineDecoder* onGetScanlineDecoder(const SkImageInfo& dstInfo, const Options& options,
-            SkPMColor ctable[], int* ctableCount) override;
+    bool onRewind() override;
+
+    bool onDimensionsSupported(const SkISize&) override;
 
 private:
 
@@ -66,12 +67,12 @@ private:
      * Returns a bool representing success or failure.
      *
      * @param codecOut
-     * If this returns true, and codecOut was not NULL,
+     * If this returns true, and codecOut was not nullptr,
      * codecOut will be set to a new SkJpegCodec.
      *
      * @param decoderMgrOut
-     * If this returns true, and codecOut was NULL,
-     * decoderMgrOut must be non-NULL and decoderMgrOut will be set to a new
+     * If this returns true, and codecOut was nullptr,
+     * decoderMgrOut must be non-nullptr and decoderMgrOut will be set to a new
      * JpegDecoderMgr pointer.
      *
      * @param stream
@@ -95,33 +96,30 @@ private:
     SkJpegCodec(const SkImageInfo& srcInfo, SkStream* stream, JpegDecoderMgr* decoderMgr);
 
     /*
-     * Handles rewinding the input stream if it is necessary
-     */
-    bool handleRewind();
-
-    /*
      * Checks if the conversion between the input image and the requested output
      * image has been implemented
      * Sets the output color space
      */
     bool setOutputColorSpace(const SkImageInfo& dst);
 
-    /*
-     * Checks if we can scale to the requested dimensions and scales the dimensions
-     * if possible
-     */
-    bool scaleToDimensions(uint32_t width, uint32_t height);
-
-    /*
-     * Create the swizzler based on the encoded format
-     */
-    void initializeSwizzler(const SkImageInfo& dstInfo, void* dst, size_t dstRowBytes,
-            const Options& options);
+    // scanline decoding
+    void initializeSwizzler(const SkImageInfo& dstInfo, const Options& options);
+    SkSampler* getSampler(bool createIfNecessary) override;
+    Result onStartScanlineDecode(const SkImageInfo& dstInfo, const Options& options,
+            SkPMColor ctable[], int* ctableCount) override;
+    int onGetScanlines(void* dst, int count, size_t rowBytes) override;
+    bool onSkipScanlines(int count) override;
 
     SkAutoTDelete<JpegDecoderMgr> fDecoderMgr;
+    // We will save the state of the decompress struct after reading the header.
+    // This allows us to safely call onGetScaledDimensions() at any time.
+    const int                     fReadyState;
 
-    friend class SkJpegScanlineDecoder;
-
+    // scanline decoding
+    SkAutoMalloc               fStorage;    // Only used if sampling is needed
+    uint8_t*                   fSrcRow;     // Only used if sampling is needed
+    SkAutoTDelete<SkSwizzler>  fSwizzler;
+    
     typedef SkCodec INHERITED;
 };
 

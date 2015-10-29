@@ -23,21 +23,21 @@ static void test_dont_leak_install(skiatest::Reporter* reporter) {
 
     info = SkImageInfo::MakeN32Premul(0, 0);
     release_counter = 1;
-    success = bm.installPixels(info, NULL, 0, NULL, decrement_counter_proc, &release_counter);
+    success = bm.installPixels(info, nullptr, 0, nullptr, decrement_counter_proc, &release_counter);
     REPORTER_ASSERT(reporter, true == success);
     bm.reset();
     REPORTER_ASSERT(reporter, 0 == release_counter);
 
     info = SkImageInfo::MakeN32Premul(10, 10);
     release_counter = 1;
-    success = bm.installPixels(info, NULL, 0, NULL, decrement_counter_proc, &release_counter);
+    success = bm.installPixels(info, nullptr, 0, nullptr, decrement_counter_proc, &release_counter);
     REPORTER_ASSERT(reporter, true == success);
     bm.reset();
     REPORTER_ASSERT(reporter, 0 == release_counter);
 
     info = SkImageInfo::MakeN32Premul(-10, -10);
     release_counter = 1;
-    success = bm.installPixels(info, NULL, 0, NULL, decrement_counter_proc, &release_counter);
+    success = bm.installPixels(info, nullptr, 0, nullptr, decrement_counter_proc, &release_counter);
     REPORTER_ASSERT(reporter, false == success);
     bm.reset();
     REPORTER_ASSERT(reporter, 0 == release_counter);
@@ -48,12 +48,12 @@ static void test_install(skiatest::Reporter* reporter) {
     SkImageInfo info = SkImageInfo::MakeN32Premul(0, 0);
     SkBitmap bm;
     // make sure we don't assert on an empty install
-    success = bm.installPixels(info, NULL, 0);
+    success = bm.installPixels(info, nullptr, 0);
     REPORTER_ASSERT(reporter, success);
 
     // no pixels should be the same as setInfo()
     info = SkImageInfo::MakeN32Premul(10, 10);
-    success = bm.installPixels(info, NULL, 0);
+    success = bm.installPixels(info, nullptr, 0);
     REPORTER_ASSERT(reporter, success);
 
 }
@@ -69,11 +69,11 @@ private:
 DEF_TEST(PixelRef_GenIDChange, r) {
     SkImageInfo info = SkImageInfo::MakeN32Premul(10, 10);
 
-    SkAutoTUnref<SkPixelRef> pixelRef(SkMallocPixelRef::NewAllocate(info, 0, NULL));
+    SkAutoTUnref<SkPixelRef> pixelRef(SkMallocPixelRef::NewAllocate(info, 0, nullptr));
 
     // Register a listener.
     int count = 0;
-    pixelRef->addGenIDChangeListener(SkNEW_ARGS(TestListener, (&count)));
+    pixelRef->addGenIDChangeListener(new TestListener(&count));
     REPORTER_ASSERT(r, 0 == count);
 
     // No one has looked at our pixelRef's generation ID, so invalidating it doesn't make sense.
@@ -90,13 +90,13 @@ DEF_TEST(PixelRef_GenIDChange, r) {
 
     // Force the generation ID to be recalculated, then add a listener.
     REPORTER_ASSERT(r, 0 != pixelRef->getGenerationID());
-    pixelRef->addGenIDChangeListener(SkNEW_ARGS(TestListener, (&count)));
+    pixelRef->addGenIDChangeListener(new TestListener(&count));
     pixelRef->notifyPixelsChanged();
     REPORTER_ASSERT(r, 1 == count);
 
-    // Quick check that NULL is safe.
+    // Quick check that nullptr is safe.
     REPORTER_ASSERT(r, 0 != pixelRef->getGenerationID());
-    pixelRef->addGenIDChangeListener(NULL);
+    pixelRef->addGenIDChangeListener(nullptr);
     pixelRef->notifyPixelsChanged();
 
     test_install(r);

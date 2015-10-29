@@ -10,7 +10,7 @@
 
 #include "GrTypesPriv.h"
 #include "gl/GrGLDefines.h"
-#include "gl/GrGLFunctions.h"
+#include "gl/GrGLTypes.h"
 #include "SkTArray.h"
 
 class GrGLVertexBuffer;
@@ -137,7 +137,7 @@ public:
     GrGLVertexArray(GrGLint id, int attribCount);
 
     /**
-     * Binds this vertex array. If the ID has been deleted or abandoned then NULL is returned.
+     * Binds this vertex array. If the ID has been deleted or abandoned then nullptr is returned.
      * Otherwise, the GrGLAttribArrayState that is tracking this vertex array's attrib bindings is
      * returned.
      */

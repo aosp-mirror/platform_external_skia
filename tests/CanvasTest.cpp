@@ -46,12 +46,12 @@
 #include "SkBitmap.h"
 #include "SkCanvas.h"
 #include "SkClipStack.h"
-#include "SkDeferredCanvas.h"
 #include "SkDevice.h"
 #include "SkDocument.h"
 #include "SkMatrix.h"
 #include "SkNWayCanvas.h"
 #include "SkPaint.h"
+#include "SkPaintFilterCanvas.h"
 #include "SkPath.h"
 #include "SkPicture.h"
 #include "SkPictureRecord.h"
@@ -69,12 +69,6 @@ static const int kWidth = 2, kHeight = 2;
 static void createBitmap(SkBitmap* bm, SkColor color) {
     bm->allocN32Pixels(kWidth, kHeight);
     bm->eraseColor(color);
-}
-
-static SkSurface* createSurface(SkColor color) {
-    SkSurface* surface = SkSurface::NewRasterN32Premul(kWidth, kHeight);
-    surface->getCanvas()->clear(color);
-    return surface;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -221,7 +215,7 @@ static void test_clipVisitor(skiatest::Reporter* reporter, SkCanvas* canvas) {
 static void test_clipstack(skiatest::Reporter* reporter) {
     // The clipstack is refcounted, and needs to be able to out-live the canvas if a client has
     // ref'd it.
-    const SkClipStack* cs = NULL;
+    const SkClipStack* cs = nullptr;
     {
         SkCanvas canvas(10, 10);
         cs = SkRef(canvas.getClipStack());
@@ -238,16 +232,8 @@ static void test_clipstack(skiatest::Reporter* reporter) {
 static const char* const kDefaultAssertMessageFormat = "%s";
 static const char* const kCanvasDrawAssertMessageFormat =
     "Drawing test step %s with SkCanvas";
-static const char* const kDeferredDrawAssertMessageFormat =
-    "Drawing test step %s with SkDeferredCanvas";
 static const char* const kNWayDrawAssertMessageFormat =
     "Drawing test step %s with SkNWayCanvas";
-static const char* const kDeferredPreFlushAssertMessageFormat =
-    "test step %s, SkDeferredCanvas state consistency before flush";
-static const char* const kDeferredPostFlushPlaybackAssertMessageFormat =
-    "test step %s, SkDeferredCanvas playback canvas state consistency after flush";
-static const char* const kDeferredPostSilentFlushPlaybackAssertMessageFormat =
-    "test step %s, SkDeferredCanvas playback canvas state consistency after silent flush";
 static const char* const kNWayStateAssertMessageFormat =
     "test step %s, SkNWayCanvas state consistency";
 static const char* const kNWayIndirect1StateAssertMessageFormat =
@@ -370,7 +356,7 @@ TEST_STEP(SaveMatrixClip, SaveMatrixClipStep);
 static void SaveLayerStep(SkCanvas* canvas, const TestData& d,
                           skiatest::Reporter* reporter, CanvasTestStep* testStep) {
     int saveCount = canvas->getSaveCount();
-    canvas->saveLayer(NULL, NULL);
+    canvas->saveLayer(nullptr, nullptr);
     canvas->restore();
     REPORTER_ASSERT_MESSAGE(reporter, canvas->getSaveCount() == saveCount,
         testStep->assertMessage());
@@ -380,7 +366,7 @@ TEST_STEP(SaveLayer, SaveLayerStep);
 static void BoundedSaveLayerStep(SkCanvas* canvas, const TestData& d,
                                  skiatest::Reporter* reporter, CanvasTestStep* testStep) {
     int saveCount = canvas->getSaveCount();
-    canvas->saveLayer(&d.fRect, NULL);
+    canvas->saveLayer(&d.fRect, nullptr);
     canvas->restore();
     REPORTER_ASSERT_MESSAGE(reporter, canvas->getSaveCount() == saveCount,
         testStep->assertMessage());
@@ -390,7 +376,7 @@ TEST_STEP(BoundedSaveLayer, BoundedSaveLayerStep);
 static void PaintSaveLayerStep(SkCanvas* canvas, const TestData& d,
                                skiatest::Reporter* reporter, CanvasTestStep* testStep) {
     int saveCount = canvas->getSaveCount();
-    canvas->saveLayer(NULL, &d.fPaint);
+    canvas->saveLayer(nullptr, &d.fPaint);
     canvas->restore();
     REPORTER_ASSERT_MESSAGE(reporter, canvas->getSaveCount() == saveCount,
         testStep->assertMessage());
@@ -432,7 +418,7 @@ static void DrawVerticesShaderTestStep(SkCanvas* canvas, const TestData& d,
         SkShader::kClamp_TileMode, SkShader::kClamp_TileMode);
     paint.setShader(shader)->unref();
     canvas->drawVertices(SkCanvas::kTriangleFan_VertexMode, 4, pts, pts,
-                         NULL, NULL, NULL, 0, paint);
+                         nullptr, nullptr, nullptr, 0, paint);
 }
 // NYI: issue 240.
 TEST_STEP_NO_PDF(DrawVerticesShader, DrawVerticesShaderTestStep);
@@ -441,7 +427,7 @@ static void DrawPictureTestStep(SkCanvas* canvas, const TestData& d,
                                 skiatest::Reporter*, CanvasTestStep*) {
     SkPictureRecorder recorder;
     SkCanvas* testCanvas = recorder.beginRecording(SkIntToScalar(d.fWidth), SkIntToScalar(d.fHeight),
-                                                   NULL, 0);
+                                                   nullptr, 0);
     testCanvas->scale(SkIntToScalar(2), SkIntToScalar(1));
     testCanvas->clipRect(d.fRect);
     testCanvas->drawRect(d.fRect, d.fPaint);
@@ -568,6 +554,14 @@ static void TestPdfDevice(skiatest::Reporter* reporter,
                           CanvasTestStep* testStep) {
     SkDynamicMemoryWStream outStream;
     SkAutoTUnref<SkDocument> doc(SkDocument::CreatePDF(&outStream));
+#if SK_SUPPORT_PDF
+    REPORTER_ASSERT(reporter, doc);
+#else
+    REPORTER_ASSERT(reporter, !doc);
+#endif  // SK_SUPPORT_PDF
+    if (!doc) {
+        return;
+    }
     SkCanvas* canvas = doc->beginPage(SkIntToScalar(d.fWidth),
                                       SkIntToScalar(d.fHeight));
     REPORTER_ASSERT(reporter, canvas);
@@ -576,49 +570,6 @@ static void TestPdfDevice(skiatest::Reporter* reporter,
 
     REPORTER_ASSERT(reporter, doc->close());
 }
-
-// The following class groups static functions that need to access
-// the privates members of SkDeferredCanvas
-class SkDeferredCanvasTester {
-public:
-    static void TestDeferredCanvasStateConsistency(
-        skiatest::Reporter* reporter,
-        const TestData& d,
-        CanvasTestStep* testStep,
-        const SkCanvas& referenceCanvas, bool silent) {
-
-        SkAutoTUnref<SkSurface> surface(createSurface(0xFFFFFFFF));
-        SkAutoTUnref<SkDeferredCanvas> deferredCanvas(SkDeferredCanvas::Create(surface.get()));
-
-        testStep->setAssertMessageFormat(kDeferredDrawAssertMessageFormat);
-        testStep->draw(deferredCanvas, d, reporter);
-        testStep->setAssertMessageFormat(kDeferredPreFlushAssertMessageFormat);
-        AssertCanvasStatesEqual(reporter, d, deferredCanvas, &referenceCanvas, testStep);
-
-        if (silent) {
-            deferredCanvas->silentFlush();
-        } else {
-            deferredCanvas->flush();
-        }
-
-        testStep->setAssertMessageFormat(
-            silent ? kDeferredPostSilentFlushPlaybackAssertMessageFormat :
-            kDeferredPostFlushPlaybackAssertMessageFormat);
-        AssertCanvasStatesEqual(reporter, d, deferredCanvas->immediateCanvas(),
-                                &referenceCanvas, testStep);
-
-        // Verified that deferred canvas state is not affected by flushing
-        // pending draw operations
-
-        // The following test code is commented out because it currently fails.
-        // Issue: http://code.google.com/p/skia/issues/detail?id=496
-        /*
-        testStep->setAssertMessageFormat(kDeferredPostFlushAssertMessageFormat);
-        AssertCanvasStatesEqual(reporter, &deferredCanvas, &referenceCanvas,
-            testStep);
-        */
-    }
-};
 
 // unused
 static void TestNWayCanvasStateConsistency(
@@ -666,10 +617,6 @@ static void TestOverrideStateConsistency(skiatest::Reporter* reporter, const Tes
     testStep->setAssertMessageFormat(kCanvasDrawAssertMessageFormat);
     testStep->draw(&referenceCanvas, d, reporter);
 
-    SkDeferredCanvasTester::TestDeferredCanvasStateConsistency(reporter, d, testStep, referenceCanvas, false);
-
-    SkDeferredCanvasTester::TestDeferredCanvasStateConsistency(reporter, d, testStep, referenceCanvas, true);
-
     // The following test code is disabled because SkNWayCanvas does not
     // report correct clipping and device bounds information
     // Issue: http://code.google.com/p/skia/issues/detail?id=501
@@ -707,25 +654,25 @@ static void test_newraster(skiatest::Reporter* reporter) {
         }
         addr = (const SkPMColor*)((const char*)addr + rowBytes);
     }
-    SkDELETE(canvas);
+    delete canvas;
 
     // now try a deliberately bad info
     info = info.makeWH(-1, info.height());
-    REPORTER_ASSERT(reporter, NULL == SkCanvas::NewRasterDirect(info, baseAddr, minRowBytes));
+    REPORTER_ASSERT(reporter, nullptr == SkCanvas::NewRasterDirect(info, baseAddr, minRowBytes));
 
     // too big
     info = info.makeWH(1 << 30, 1 << 30);
-    REPORTER_ASSERT(reporter, NULL == SkCanvas::NewRasterDirect(info, baseAddr, minRowBytes));
+    REPORTER_ASSERT(reporter, nullptr == SkCanvas::NewRasterDirect(info, baseAddr, minRowBytes));
 
     // not a valid pixel type
     info = SkImageInfo::Make(10, 10, kUnknown_SkColorType, info.alphaType());
-    REPORTER_ASSERT(reporter, NULL == SkCanvas::NewRasterDirect(info, baseAddr, minRowBytes));
+    REPORTER_ASSERT(reporter, nullptr == SkCanvas::NewRasterDirect(info, baseAddr, minRowBytes));
 
     // We should succeed with a zero-sized valid info
     info = SkImageInfo::MakeN32Premul(0, 0);
     canvas = SkCanvas::NewRasterDirect(info, baseAddr, minRowBytes);
     REPORTER_ASSERT(reporter, canvas);
-    SkDELETE(canvas);
+    delete canvas;
 }
 
 DEF_TEST(Canvas, reporter) {
@@ -749,7 +696,7 @@ DEF_TEST(Canvas_SaveState, reporter) {
     REPORTER_ASSERT(reporter, 1 == n);
     REPORTER_ASSERT(reporter, 2 == canvas.getSaveCount());
 
-    n = canvas.saveLayer(NULL, NULL);
+    n = canvas.saveLayer(nullptr, nullptr);
     REPORTER_ASSERT(reporter, 2 == n);
     REPORTER_ASSERT(reporter, 3 == canvas.getSaveCount());
     
@@ -773,4 +720,39 @@ DEF_TEST(Canvas_ClipEmptyPath, reporter) {
     path.moveTo(7, 7);
     canvas.clipPath(path);  // should not assert here
     canvas.restore();
+}
+
+namespace {
+
+class MockFilterCanvas : public SkPaintFilterCanvas {
+public:
+    MockFilterCanvas(SkCanvas* canvas) : INHERITED(canvas) { }
+
+protected:
+    void onFilterPaint(SkPaint *paint, Type type) const override { }
+
+private:
+    typedef SkPaintFilterCanvas INHERITED;
+};
+
+} // anonymous namespace
+
+// SkPaintFilterCanvas should inherit the initial target canvas state.
+DEF_TEST(PaintFilterCanvas_ConsistentState, reporter) {
+    SkCanvas canvas(100, 100);
+    canvas.clipRect(SkRect::MakeXYWH(12.7f, 12.7f, 75, 75));
+    canvas.scale(0.5f, 0.75f);
+
+    SkRect clip1, clip2;
+
+    MockFilterCanvas filterCanvas(&canvas);
+    REPORTER_ASSERT(reporter, canvas.getTotalMatrix() == filterCanvas.getTotalMatrix());
+    REPORTER_ASSERT(reporter, canvas.getClipBounds(&clip1) == filterCanvas.getClipBounds(&clip2));
+    REPORTER_ASSERT(reporter, clip1 == clip2);
+
+    filterCanvas.clipRect(SkRect::MakeXYWH(30.5f, 30.7f, 100, 100));
+    filterCanvas.scale(0.75f, 0.5f);
+    REPORTER_ASSERT(reporter, canvas.getTotalMatrix() == filterCanvas.getTotalMatrix());
+    REPORTER_ASSERT(reporter, canvas.getClipBounds(&clip1) == filterCanvas.getClipBounds(&clip2));
+    REPORTER_ASSERT(reporter, clip1 == clip2);
 }

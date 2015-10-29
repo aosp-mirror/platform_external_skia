@@ -8,6 +8,7 @@
 #include "gm.h"
 #include "SkCanvas.h"
 #include "SkGradientShader.h"
+#include "SkPath.h"
 
 namespace skiagm {
 
@@ -41,8 +42,8 @@ static const SkColor gColors[] = {
 };
 
 static const GradData gGradData[] = {
-    { 2, gColors, NULL },
-    { 5, gColors, NULL },
+    { 2, gColors, nullptr },
+    { 5, gColors, nullptr },
 };
 
 static SkShader* MakeLinear(const SkPoint pts[2], const GradData& data, SkShader::TileMode tm) {
@@ -144,7 +145,7 @@ protected:
         SkPaint paint;
         paint.setDither(true);
         paint.setAntiAlias(true);
-        sk_tool_utils::set_portable_typeface_always(&paint);
+        sk_tool_utils::set_portable_typeface(&paint);
         paint.setTextSize(SkIntToScalar(pointSize));
 
         canvas->save();
@@ -173,7 +174,7 @@ protected:
             ++i;
             canvas->translate(SkIntToScalar((i / testsPerCol) * colWidth),
                               SkIntToScalar((i % testsPerCol) * rowHeight));
-            canvas->drawTextOnPath(text, textLen, path, NULL, paint);
+            canvas->drawTextOnPath(text, textLen, path, nullptr, paint);
             canvas->restore();
         }
         canvas->restore();

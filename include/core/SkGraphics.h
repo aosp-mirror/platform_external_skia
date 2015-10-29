@@ -12,20 +12,19 @@
 
 class SkData;
 class SkImageGenerator;
+class SkTraceMemoryDump;
 
 class SK_API SkGraphics {
 public:
     /**
      *  Call this at process initialization time if your environment does not
-     *  permit static global initializers that execute code. Note that
-     *  Init() is not thread-safe.
+     *  permit static global initializers that execute code.
+     *  Init() is thread-safe and idempotent.
      */
     static void Init();
 
-    /**
-     *  Call this to release any memory held privately, such as the font cache.
-     */
-    static void Term();
+    // We're in the middle of cleaning this up.
+    static void Term() {}
 
     /**
      *  Return the version numbers for the library. If the parameter is not
@@ -115,6 +114,12 @@ public:
     static size_t SetResourceCacheSingleAllocationByteLimit(size_t newLimit);
 
     /**
+     *  Dumps memory usage of caches using the SkTraceMemoryDump interface. See SkTraceMemoryDump
+     *  for usage of this method.
+     */
+    static void DumpMemoryStatistics(SkTraceMemoryDump* dump);
+
+    /**
      *  Applications with command line options may pass optional state, such
      *  as cache sizes, here, for instance:
      *  font-cache-limit=12345678
@@ -161,9 +166,6 @@ class SkAutoGraphics {
 public:
     SkAutoGraphics() {
         SkGraphics::Init();
-    }
-    ~SkAutoGraphics() {
-        SkGraphics::Term();
     }
 };
 

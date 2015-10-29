@@ -164,7 +164,7 @@ public:
 
 SkpSkGrThreadedTestRunner::~SkpSkGrThreadedTestRunner() {
     for (int index = 0; index < fRunnables.count(); index++) {
-        SkDELETE(fRunnables[index]);
+        delete fRunnables[index];
     }
 }
 
@@ -382,7 +382,7 @@ static void writePict(const SkBitmap& bitmap, const char* outDir, const char* pn
 }
 
 void TestResult::testOne() {
-    SkPicture* pic = NULL;
+    SkPicture* pic = nullptr;
     {
         SkString d;
         d.printf("    {%d, \"%s\"},", fDirNo, fFilename);
@@ -417,7 +417,7 @@ void TestResult::testOne() {
 #else
         GrContext* context = contextFactory.get(kNative);
 #endif
-        if (NULL == context) {
+        if (nullptr == context) {
             SkDebugf("unable to allocate context for %s\n", fFilename);
             goto finish;
         }
@@ -450,7 +450,7 @@ void TestResult::testOne() {
         desc.fWidth = dim.fX;
         desc.fHeight = dim.fY;
         desc.fSampleCnt = 0;
-        SkAutoTUnref<GrTexture> texture(context->createUncachedTexture(desc, NULL, 0));
+        SkAutoTUnref<GrTexture> texture(context->createUncachedTexture(desc, nullptr, 0));
         if (!texture) {
             SkDebugf("unable to allocate texture for %s (w=%d h=%d)\n", fFilename,
                 dim.fX, dim.fY);
@@ -477,7 +477,7 @@ void TestResult::testOne() {
         }
     }
 finish:
-    SkDELETE(pic);
+    delete pic;
 }
 
 static SkString makeStatusString(int dirNo) {
@@ -705,8 +705,8 @@ DEF_TEST(SkpSkGrThreaded, reporter) {
                     goto skipOver;
                 }
             }
-            *testRunner.fRunnables.append() = SkNEW_ARGS(SkpSkGrThreadedRunnable,
-                    (&testSkGrMain, dirIndex, filename.c_str(), &testRunner));
+            *testRunner.fRunnables.append() = new SkpSkGrThreadedRunnable(
+                    &testSkGrMain, dirIndex, filename.c_str(), &testRunner);
     skipOver:
             ;
         }

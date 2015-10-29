@@ -20,7 +20,7 @@ template <typename T,
           typename HashTraits=T>
 class SkTMultiMap {
     struct ValueList {
-        explicit ValueList(T* value) : fValue(value), fNext(NULL) {}
+        explicit ValueList(T* value) : fValue(value), fNext(nullptr) {}
 
         static const Key& GetKey(const ValueList& e) { return HashTraits::GetKey(*e.fValue); }
         static uint32_t Hash(const Key& key) { return HashTraits::Hash(key); }
@@ -40,14 +40,14 @@ public:
         if (list) {
             // The new ValueList entry is inserted as the second element in the
             // linked list, and it will contain the value of the first element.
-            ValueList* newEntry = SkNEW_ARGS(ValueList, (list->fValue));
+            ValueList* newEntry = new ValueList(list->fValue);
             newEntry->fNext = list->fNext;
             // The existing first ValueList entry is updated to contain the
             // inserted value.
             list->fNext = newEntry;
             list->fValue = value;
         } else {
-            fHash.add(SkNEW_ARGS(ValueList, (value)));
+            fHash.add(new ValueList(value));
         }
 
         ++fCount;
@@ -58,7 +58,7 @@ public:
         // Since we expect the caller to be fully aware of what is stored, just
         // assert that the caller removes an existing value.
         SkASSERT(list);
-        ValueList* prev = NULL;
+        ValueList* prev = nullptr;
         while (list->fValue != value) {
             prev = list;
             list = list->fNext;
@@ -68,13 +68,13 @@ public:
             ValueList* next = list->fNext;
             list->fValue = next->fValue;
             list->fNext = next->fNext;
-            SkDELETE(next);
+            delete next;
         } else if (prev) {
-            prev->fNext = NULL;
-            SkDELETE(list);
+            prev->fNext = nullptr;
+            delete list;
         } else {
             fHash.remove(key);
-            SkDELETE(list);
+            delete list;
         }
 
         --fCount;
@@ -85,7 +85,7 @@ public:
         if (list) {
             return list->fValue;
         }
-        return NULL;
+        return nullptr;
     }
 
     template<class FindPredicate>
@@ -97,7 +97,7 @@ public:
             }
             list = list->fNext;
         }
-        return NULL;
+        return nullptr;
     }
 
     int count() const { return fCount; }

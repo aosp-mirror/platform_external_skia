@@ -10,6 +10,7 @@
 #if SK_SUPPORT_GPU
 #include "GrFragmentProcessor.h"
 #include "GrCoordTransform.h"
+#include "effects/GrXfermodeFragmentProcessor.h"
 #include "gl/GrGLProcessor.h"
 #include "gl/builders/GrGLProgramBuilder.h"
 #include "Resources.h"
@@ -33,9 +34,10 @@ public:
         buf.writeMatrix(fDeviceMatrix);
     }
 
-    bool asFragmentProcessor(GrContext*, const SkPaint& paint, const SkMatrix& viewM,
-                             const SkMatrix* localMatrix, GrColor* color, GrProcessorDataManager*,
-                             GrFragmentProcessor** fp) const override;
+    const GrFragmentProcessor* asFragmentProcessor(GrContext*,
+                                                   const SkMatrix& viewM,
+                                                   const SkMatrix* localMatrix,
+                                                   SkFilterQuality) const override;
 
 #ifndef SK_IGNORE_TO_STRING
     void toString(SkString* str) const override {
@@ -50,20 +52,17 @@ private:
 SkFlattenable* DCShader::CreateProc(SkReadBuffer& buf) {
     SkMatrix matrix;
     buf.readMatrix(&matrix);
-    return SkNEW_ARGS(DCShader, (matrix));
+    return new DCShader(matrix);
 }
 
 class DCFP : public GrFragmentProcessor {
 public:
-    DCFP(GrProcessorDataManager*, const SkMatrix& m) : fDeviceTransform(kDevice_GrCoordSet, m) {
+    DCFP(const SkMatrix& m) : fDeviceTransform(kDevice_GrCoordSet, m) {
         this->addCoordTransform(&fDeviceTransform);
         this->initClassID<DCFP>();
     }
 
-    void getGLProcessorKey(const GrGLSLCaps& caps,
-                            GrProcessorKeyBuilder* b) const override {}
-
-    GrGLFragmentProcessor* createGLInstance() const override {
+    GrGLFragmentProcessor* onCreateGLInstance() const override {
         class DCGLFP : public GrGLFragmentProcessor {
             void emitCode(EmitArgs& args) override {
                 GrGLFragmentBuilder* fpb = args.fBuilder->getFragmentShaderBuilder();
@@ -77,9 +76,9 @@ public:
                                     "%s = color * %s;",
                                     args.fOutputColor, GrGLSLExpr4(args.fInputColor).c_str());
             }
-            void setData(const GrGLProgramDataManager&, const GrProcessor&) override {}
+            void onSetData(const GrGLProgramDataManager&, const GrProcessor&) override {}
         };
-        return SkNEW(DCGLFP);
+        return new DCGLFP;
     }
 
     const char* name() const override { return "DCFP"; }
@@ -89,18 +88,20 @@ public:
     }
 
 private:
+    void onGetGLProcessorKey(const GrGLSLCaps& caps,
+                             GrProcessorKeyBuilder* b) const override {}
+
     bool onIsEqual(const GrFragmentProcessor&) const override { return true; }
 
     GrCoordTransform fDeviceTransform;
 };
 
-bool DCShader::asFragmentProcessor(GrContext*, const SkPaint& paint, const SkMatrix& viewM,
-                                   const SkMatrix* localMatrix, GrColor* color,
-                                   GrProcessorDataManager* procDataManager,
-                                   GrFragmentProcessor** fp) const {
-    *fp = SkNEW_ARGS(DCFP, (procDataManager, fDeviceMatrix));
-    *color = GrColorPackA4(paint.getAlpha());
-    return true;
+const GrFragmentProcessor* DCShader::asFragmentProcessor(GrContext*,
+                                                         const SkMatrix& viewM,
+                                                         const SkMatrix* localMatrix,
+                                                         SkFilterQuality) const {
+    SkAutoTUnref<const GrFragmentProcessor> inner(new DCFP(fDeviceMatrix));
+    return GrFragmentProcessor::MulOutputByInputAlpha(inner);
 }
 
 class DCShaderGM : public GM {
@@ -111,7 +112,7 @@ public:
 
     ~DCShaderGM() override {
         for (int i = 0; i < fPrims.count(); ++i) {
-            SkDELETE(fPrims[i]);
+            delete fPrims[i];
         }
     }
 
@@ -206,28 +207,28 @@ protected:
             }
 
             virtual void setFont(SkPaint* paint) {
-                sk_tool_utils::set_portable_typeface_always(paint);
+                sk_tool_utils::set_portable_typeface(paint);
             }
 
             virtual const char* text() const { return "Hello, Skia!"; }
         };
 
-        fPrims.push_back(SkNEW(Rect));
-        fPrims.push_back(SkNEW(Circle));
-        fPrims.push_back(SkNEW(RRect));
-        fPrims.push_back(SkNEW(DRRect));
-        fPrims.push_back(SkNEW(Path));
-        fPrims.push_back(SkNEW(Points(SkCanvas::kPoints_PointMode)));
-        fPrims.push_back(SkNEW(Points(SkCanvas::kLines_PointMode)));
-        fPrims.push_back(SkNEW(Points(SkCanvas::kPolygon_PointMode)));
-        fPrims.push_back(SkNEW(Text));
+        fPrims.push_back(new Rect);
+        fPrims.push_back(new Circle);
+        fPrims.push_back(new RRect);
+        fPrims.push_back(new DRRect);
+        fPrims.push_back(new Path);
+        fPrims.push_back(new Points(SkCanvas::kPoints_PointMode));
+        fPrims.push_back(new Points(SkCanvas::kLines_PointMode));
+        fPrims.push_back(new Points(SkCanvas::kPolygon_PointMode));
+        fPrims.push_back(new Text);
     }
 
     void onDraw(SkCanvas* canvas) override {
         // This GM exists to test a specific feature of the GPU backend. It does not work with the
         // sw rasterizer, tile modes, etc.
-        if (NULL == canvas->getGrContext()) {
-            this->drawGpuOnlyMessage(canvas);
+        if (nullptr == canvas->getGrContext()) {
+            skiagm::GM::DrawGpuOnlyMessage(canvas);
             return;
         }
         SkPaint paint;
@@ -253,7 +254,7 @@ protected:
             for (int i = 0; i < fPrims.count(); ++i) {
                 for (int j = 0; j < devMats.count(); ++j) {
                     for (int k = 0; k < viewMats.count(); ++k) {
-                        paint.setShader(SkNEW_ARGS(DCShader, (devMats[j])))->unref();
+                        paint.setShader(new DCShader(devMats[j]))->unref();
                         paint.setAntiAlias(SkToBool(aa));
                         canvas->save();
                         canvas->concat(viewMats[k]);
@@ -291,6 +292,6 @@ private:
     typedef GM INHERITED;
 };
 
-DEF_GM( return SkNEW(DCShaderGM); )
+DEF_GM(return new DCShaderGM;)
 }
 #endif

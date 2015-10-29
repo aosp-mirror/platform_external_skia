@@ -25,7 +25,7 @@ class GiantBitmapGM : public skiagm::GM {
     bool fDoRotate;
 
     const SkBitmap& getBitmap() {
-        if (NULL == fBM) {
+        if (nullptr == fBM) {
             fBM = new SkBitmap;
             fBM->allocN32Pixels(W, H);
             fBM->eraseColor(SK_ColorWHITE);
@@ -60,15 +60,13 @@ class GiantBitmapGM : public skiagm::GM {
     }
 
 public:
-    GiantBitmapGM(SkShader::TileMode mode, bool doFilter, bool doRotate) : fBM(NULL) {
+    GiantBitmapGM(SkShader::TileMode mode, bool doFilter, bool doRotate) : fBM(nullptr) {
         fMode = mode;
         fDoFilter = doFilter;
         fDoRotate = doRotate;
     }
 
-    virtual ~GiantBitmapGM() {
-        SkDELETE(fBM);
-    }
+    virtual ~GiantBitmapGM() { delete fBM; }
 
 protected:
 

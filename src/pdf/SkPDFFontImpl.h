@@ -15,12 +15,12 @@
 class SkPDFType0Font : public SkPDFFont {
 public:
     virtual ~SkPDFType0Font();
-    virtual bool multiByteGlyphs() const { return true; }
-    virtual SkPDFFont* getFontSubset(const SkPDFGlyphSet* usage);
+    bool multiByteGlyphs() const override { return true; }
+    SkPDFFont* getFontSubset(const SkPDFGlyphSet* usage) override;
 #ifdef SK_DEBUG
-    virtual void emitObject(SkWStream*,
-                            const SkPDFObjNumMap&,
-                            const SkPDFSubstituteMap&);
+    void emitObject(SkWStream*,
+                    const SkPDFObjNumMap&,
+                    const SkPDFSubstituteMap&) const override;
 #endif
 
 private:

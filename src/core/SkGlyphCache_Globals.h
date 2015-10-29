@@ -26,7 +26,7 @@
 class SkGlyphCache_Globals {
 public:
     SkGlyphCache_Globals() {
-        fHead = NULL;
+        fHead = nullptr;
         fTotalMemoryUsed = 0;
         fCacheSizeLimit = SK_DEFAULT_FONT_CACHE_LIMIT;
         fCacheCount = 0;
@@ -37,7 +37,7 @@ public:
         SkGlyphCache* cache = fHead;
         while (cache) {
             SkGlyphCache* next = cache->fNext;
-            SkDELETE(cache);
+            delete cache;
             cache = next;
         }
     }

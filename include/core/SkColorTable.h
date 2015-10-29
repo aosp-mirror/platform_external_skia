@@ -10,10 +10,10 @@
 #ifndef SkColorTable_DEFINED
 #define SkColorTable_DEFINED
 
+#include "../private/SkOncePtr.h"
 #include "SkColor.h"
 #include "SkFlattenable.h"
 #include "SkImageInfo.h"
-#include "SkLazyPtr.h"
 
 /** \class SkColorTable
 
@@ -49,17 +49,34 @@ public:
      */
     const uint16_t* read16BitCache() const;
 
-    explicit SkColorTable(SkReadBuffer&);
     void writeToBuffer(SkWriteBuffer&) const;
 
-private:
-    static void Free16BitCache(uint16_t*);
+    // may return null
+    static SkColorTable* Create(SkReadBuffer&);
 
-    SkPMColor*                          fColors;
-    SkLazyPtr<uint16_t, Free16BitCache> f16BitCache;
-    int                                 fCount;
+private:
+    enum AllocatedWithMalloc {
+        kAllocatedWithMalloc
+    };
+    // assumes ownership of colors (assumes it was allocated w/ malloc)
+    SkColorTable(SkPMColor* colors, int count, AllocatedWithMalloc);
+
+    SkPMColor*            fColors;
+    SkOncePtr<uint16_t[]> f16BitCache;
+    int                   fCount;
 
     void init(const SkPMColor* colors, int count);
+
+    friend class SkImageGenerator;
+    // Only call if no other thread or cache has seen this table.
+    void dangerous_overwriteColors(const SkPMColor newColors[], int count) {
+        if (count < 0 || count > fCount) {
+            sk_throw();
+        }
+        // assumes that f16BitCache nas NOT been initialized yet, so we don't try to update it
+        memcpy(fColors, newColors, count * sizeof(SkPMColor));
+        fCount = count; // update fCount, in case count is smaller
+    }
 
     typedef SkRefCnt INHERITED;
 };

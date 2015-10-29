@@ -18,8 +18,7 @@ class GrDrawState;
  * used in the creation of optimized draw states because adding default GPs to the drawstate can
  * interfere with batching due to updating the drawstate.
  */
-class GrDefaultGeoProcFactory {
-public:
+namespace GrDefaultGeoProcFactory {
     // Structs for adding vertex attributes
     struct PositionAttr {
         SkPoint fPosition;
@@ -65,31 +64,75 @@ public:
         GrColor fCoverage;
     };
 
-    enum GPType {
-        kPosition_GPType = 0x0, // we ALWAYS have position
-        kColor_GPType = 0x01,
-        kLocalCoord_GPType = 0x02,
-        kCoverage_GPType= 0x04,
-        kLastGPType = kCoverage_GPType
+    struct Color {
+        enum Type {
+            kNone_Type,
+            kUniform_Type,
+            kAttribute_Type,
+        };
+        Color(GrColor color) : fType(kUniform_Type), fColor(color) {}
+        Color(Type type) : fType(type), fColor(GrColor_ILLEGAL) {
+            SkASSERT(type != kUniform_Type);
+
+            // TODO This is temporary
+            if (kAttribute_Type == type) {
+                fColor = GrColor_WHITE;
+            }
+        }
+
+        Type fType;
+        GrColor fColor;
     };
 
-    /*
-     * The following functions are used to create default GPs. If you just need to create
-     * attributes separately from creating the default GP, use the SetAttribs function followed
-     * by the Create function. Otherwise use CreateAndSetAttribs to do both at once.
-     *
-     * You must unref the return from Create.
-     */
-    // TODO clean this up
-    static const GrGeometryProcessor* Create(uint32_t gpTypeFlags,
-                                             GrColor,
-                                             bool localCoordsWillBeRead,
-                                             bool coverageWillBeIgnored,
-                                             const SkMatrix& viewMatrix = SkMatrix::I(),
-                                             const SkMatrix& localMatrix = SkMatrix::I(),
-                                             uint8_t coverage = 0xff);
+    struct Coverage {
+        enum Type {
+            kNone_Type,
+            kSolid_Type,
+            kUniform_Type,
+            kAttribute_Type,
+        };
+        Coverage(uint8_t coverage) : fType(kUniform_Type), fCoverage(coverage) {}
+        Coverage(Type type) : fType(type), fCoverage(0xff) {
+            SkASSERT(type != kUniform_Type);
+        }
 
-    static size_t DefaultVertexStride() { return sizeof(PositionAttr); }
+        Type fType;
+        uint8_t fCoverage;
+    };
+
+    struct LocalCoords {
+        enum Type {
+            kUnused_Type,
+            kUsePosition_Type,
+            kHasExplicit_Type,
+            kHasTransformed_Type,
+        };
+        LocalCoords(Type type) : fType(type), fMatrix(nullptr) {}
+        LocalCoords(Type type, const SkMatrix* matrix) : fType(type), fMatrix(matrix) {
+            SkASSERT(kUnused_Type != type);
+        }
+        bool hasLocalMatrix() const { return nullptr != fMatrix; }
+
+        Type fType;
+        const SkMatrix* fMatrix;
+    };
+
+    const GrGeometryProcessor* Create(const Color&,
+                                      const Coverage&,
+                                      const LocalCoords&,
+                                      const SkMatrix& viewMatrix);
+
+    /*
+     * Use this factory to create a GrGeometryProcessor that expects a device space vertex position
+     * attribute. The view matrix must still be provided to compute correctly transformed
+     * coordinates for GrFragmentProcessors. It may fail if the view matrix is not invertible.
+     */
+    const GrGeometryProcessor* CreateForDeviceSpace(const Color&,
+                                                    const Coverage&,
+                                                    const LocalCoords&,
+                                                    const SkMatrix& viewMatrix);
+
+    inline size_t DefaultVertexStride() { return sizeof(PositionAttr); }
 };
 
 #endif

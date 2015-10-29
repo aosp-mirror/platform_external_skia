@@ -20,8 +20,9 @@ class TextBlobShaderGM : public skiagm::GM {
 public:
     TextBlobShaderGM(const char* txt) {
         SkPaint p;
+        sk_tool_utils::set_portable_typeface(&p);
         size_t txtLen = strlen(txt);
-        fGlyphs.append(p.textToGlyphs(txt, txtLen, NULL));
+        fGlyphs.append(p.textToGlyphs(txt, txtLen, nullptr));
         p.textToGlyphs(txt, txtLen, fGlyphs.begin());
     }
 
@@ -33,21 +34,22 @@ protected:
         p.setSubpixelText(true);
         p.setTextSize(30);
         p.setTextEncoding(SkPaint::kGlyphID_TextEncoding);
+        sk_tool_utils::set_portable_typeface(&p);
 
         SkTextBlobBuilder builder;
         int glyphCount = fGlyphs.count();
         const SkTextBlobBuilder::RunBuffer* run;
 
-        run = &builder.allocRun(p, glyphCount, 10, 10, NULL);
+        run = &builder.allocRun(p, glyphCount, 10, 10, nullptr);
         memcpy(run->glyphs, fGlyphs.begin(), glyphCount * sizeof(uint16_t));
 
-        run = &builder.allocRunPosH(p, glyphCount,  80, NULL);
+        run = &builder.allocRunPosH(p, glyphCount,  80, nullptr);
         memcpy(run->glyphs, fGlyphs.begin(), glyphCount * sizeof(uint16_t));
         for (int i = 0; i < glyphCount; ++i) {
             run->pos[i] = p.getTextSize() * i * .75f;
         }
 
-        run = &builder.allocRunPos(p, glyphCount, NULL);
+        run = &builder.allocRunPos(p, glyphCount, nullptr);
         memcpy(run->glyphs, fGlyphs.begin(), glyphCount * sizeof(uint16_t));
         for (int i = 0; i < glyphCount; ++i) {
             run->pos[i * 2] = p.getTextSize() * i * .75f;
@@ -107,4 +109,4 @@ private:
     typedef skiagm::GM INHERITED;
 };
 
-DEF_GM( return SkNEW_ARGS(TextBlobShaderGM, ("Blobber")); )
+DEF_GM(return new TextBlobShaderGM("Blobber");)

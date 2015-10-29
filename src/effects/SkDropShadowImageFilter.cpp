@@ -59,7 +59,7 @@ bool SkDropShadowImageFilter::onFilterImage(Proxy* proxy, const SkBitmap& source
 {
     SkBitmap src = source;
     SkIPoint srcOffset = SkIPoint::Make(0, 0);
-    if (getInput(0) && !getInput(0)->filterImage(proxy, source, ctx, &src, &srcOffset))
+    if (!this->filterInput(0, proxy, source, ctx, &src, &srcOffset))
         return false;
 
     SkIRect bounds;
@@ -68,7 +68,7 @@ bool SkDropShadowImageFilter::onFilterImage(Proxy* proxy, const SkBitmap& source
     }
 
     SkAutoTUnref<SkBaseDevice> device(proxy->createDevice(bounds.width(), bounds.height()));
-    if (NULL == device.get()) {
+    if (nullptr == device.get()) {
         return false;
     }
     SkCanvas canvas(device.get());
@@ -153,7 +153,7 @@ void SkDropShadowImageFilter::toString(SkString* str) const {
         "kDrawShadowAndForeground", "kDrawShadowOnly"
     };
 
-    SK_COMPILE_ASSERT(kShadowModeCount == SK_ARRAY_COUNT(gModeStrings), enum_mismatch);
+    static_assert(kShadowModeCount == SK_ARRAY_COUNT(gModeStrings), "enum_mismatch");
 
     str->appendf(" mode: %s", gModeStrings[fShadowMode]);
 

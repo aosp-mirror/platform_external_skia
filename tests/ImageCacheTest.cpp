@@ -26,6 +26,8 @@ struct TestingRec : public SkResourceCache::Rec {
 
     const Key& getKey() const override { return fKey; }
     size_t bytesUsed() const override { return sizeof(fKey) + sizeof(fValue); }
+    const char* getCategory() const override { return "test_cache"; }
+    SkDiscardableMemory* diagnostic_only_getDiscardable() const override { return nullptr; }
 
     static bool Visitor(const SkResourceCache::Rec& baseRec, void* context) {
         const TestingRec& rec = static_cast<const TestingRec&>(baseRec);
@@ -48,7 +50,7 @@ static void test_cache(skiatest::Reporter* reporter, SkResourceCache& cache, boo
         REPORTER_ASSERT(reporter, !cache.find(key, TestingRec::Visitor, &value));
         REPORTER_ASSERT(reporter, -1 == value);
 
-        cache.add(SkNEW_ARGS(TestingRec, (key, i)));
+        cache.add(new TestingRec(key, i));
 
         REPORTER_ASSERT(reporter, cache.find(key, TestingRec::Visitor, &value));
         REPORTER_ASSERT(reporter, i == value);
@@ -58,7 +60,7 @@ static void test_cache(skiatest::Reporter* reporter, SkResourceCache& cache, boo
         // stress test, should trigger purges
         for (int i = 0; i < COUNT * 100; ++i) {
             TestingKey key(i);
-            cache.add(SkNEW_ARGS(TestingRec, (key, i)));
+            cache.add(new TestingRec(key, i));
         }
     }
 
@@ -73,8 +75,8 @@ static void test_cache(skiatest::Reporter* reporter, SkResourceCache& cache, boo
 
 static void test_cache_purge_shared_id(skiatest::Reporter* reporter, SkResourceCache& cache) {
     for (int i = 0; i < COUNT; ++i) {
-        TestingKey key(i, i & 1);   // every other key will have a 1 for its sharedID        
-        cache.add(SkNEW_ARGS(TestingRec, (key, i)));
+        TestingKey key(i, i & 1);   // every other key will have a 1 for its sharedID
+        cache.add(new TestingRec(key, i));
     }
 
     // Ensure that everyone is present
@@ -120,7 +122,7 @@ DEF_TEST(ImageCache, reporter) {
     }
     {
         SkAutoTUnref<SkDiscardableMemoryPool> pool(
-                SkDiscardableMemoryPool::Create(defLimit, NULL));
+                SkDiscardableMemoryPool::Create(defLimit, nullptr));
         gPool = pool.get();
         SkResourceCache cache(pool_factory);
         test_cache(reporter, cache, true);
@@ -141,8 +143,8 @@ DEF_TEST(ImageCache_doubleAdd, r) {
 
     TestingKey key(1);
 
-    cache.add(SkNEW_ARGS(TestingRec, (key, 2)));
-    cache.add(SkNEW_ARGS(TestingRec, (key, 3)));
+    cache.add(new TestingRec(key, 2));
+    cache.add(new TestingRec(key, 3));
 
     // Lookup can return either value.
     intptr_t value = -1;

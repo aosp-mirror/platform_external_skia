@@ -18,13 +18,17 @@ public:
     // Information about a given saveLayer/restore block in an SkPicture
     class BlockInfo {
     public:
-        BlockInfo() : fPicture(NULL), fPaint(NULL), fKey(NULL), fKeySize(0) {}
-        ~BlockInfo() { SkSafeUnref(fPicture); SkDELETE(fPaint); SkDELETE_ARRAY(fKey); }
+        BlockInfo() : fPicture(nullptr), fPaint(nullptr), fKey(nullptr), fKeySize(0) {}
+        ~BlockInfo() {
+            SkSafeUnref(fPicture);
+            delete fPaint;
+            delete[] fKey;
+        }
 
         // The picture owning the layer. If the owning picture is the top-most
         // one (i.e., the picture for which this SkLayerInfo was created) then
-        // this pointer is NULL. If it is a nested picture then the pointer
-        // is non-NULL and owns a ref on the picture.
+        // this pointer is nullptr. If it is a nested picture then the pointer
+        // is non-nullptr and owns a ref on the picture.
         const SkPicture* fPicture;
         // The device space bounds of this layer.
         SkRect fBounds;
@@ -42,7 +46,7 @@ public:
         // layer's top-left point to the origin (which must be part of the
         // initial matrix).
         SkMatrix fLocalMat;
-        // The paint to use on restore. Can be NULL since it is optional.
+        // The paint to use on restore. Can be nullptr since it is optional.
         const SkPaint* fPaint;
         // The index of this saveLayer in the picture.
         size_t  fSaveLayerOpID;
@@ -56,8 +60,8 @@ public:
         // The variable length key for this saveLayer block. It stores the
         // thread of drawPicture and saveLayer operation indices that lead to this
         // saveLayer (including its own op index). The BlockInfo owns this memory.
-        unsigned* fKey;
-        int     fKeySize;  // # of ints
+        int* fKey;
+        int  fKeySize;  // # of ints
     };
 
     SkLayerInfo() {}

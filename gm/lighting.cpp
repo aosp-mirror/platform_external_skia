@@ -17,7 +17,7 @@ namespace skiagm {
 
 class ImageLightingGM : public GM {
 public:
-    ImageLightingGM() : fInitialized(false) {
+    ImageLightingGM() {
         this->setBGColor(0xFF000000);
     }
 
@@ -25,19 +25,6 @@ protected:
 
     SkString onShortName() override {
         return SkString("lighting");
-    }
-
-    void make_bitmap() {
-        fBitmap.allocN32Pixels(100, 100);
-        SkCanvas canvas(fBitmap);
-        canvas.clear(0x00000000);
-        SkPaint paint;
-        paint.setAntiAlias(true);
-        sk_tool_utils::set_portable_typeface_always(&paint);
-        paint.setColor(0xFFFFFFFF);
-        paint.setTextSize(SkIntToScalar(96));
-        const char* str = "e";
-        canvas.drawText(str, strlen(str), SkIntToScalar(20), SkIntToScalar(70), paint);
     }
 
     SkISize onISize() override {
@@ -53,14 +40,14 @@ protected:
         canvas->restore();
     }
 
+    void onOnceBeforeDraw() override {
+        fBitmap = sk_tool_utils::create_string_bitmap(100, 100, 0xFFFFFFFF, 20, 70, 96, "e");
+    }
+
     void onDraw(SkCanvas* canvas) override {
-        if (!fInitialized) {
-            make_bitmap();
-            fInitialized = true;
-        }
-        canvas->clear(0xFF101010);
+        canvas->clear(sk_tool_utils::color_to_565(0xFF101010));
         SkPaint checkPaint;
-        checkPaint.setColor(0xFF202020);
+        checkPaint.setColor(sk_tool_utils::color_to_565(0xFF202020));
         for (int y = 0; y < HEIGHT; y += 16) {
           for (int x = 0; x < WIDTH; x += 16) {
             canvas->save();
@@ -93,12 +80,12 @@ protected:
 
         SkImageFilter::CropRect cropRect(SkRect::MakeXYWH(20, 10, 60, 65));
         SkImageFilter::CropRect fullSizeCropRect(SkRect::MakeXYWH(0, 0, 100, 100));
-        SkAutoTUnref<SkImageFilter> noopCropped(SkOffsetImageFilter::Create(0, 0, NULL, &cropRect));
+        SkAutoTUnref<SkImageFilter> noopCropped(SkOffsetImageFilter::Create(0, 0, nullptr, &cropRect));
 
         int y = 0;
         for (int i = 0; i < 3; i++) {
-            const SkImageFilter::CropRect* cr = (i == 1) ? &cropRect : (i == 2) ? &fullSizeCropRect : NULL;
-            SkImageFilter* input = (i == 2) ? noopCropped.get() : NULL;
+            const SkImageFilter::CropRect* cr = (i == 1) ? &cropRect : (i == 2) ? &fullSizeCropRect : nullptr;
+            SkImageFilter* input = (i == 2) ? noopCropped.get() : nullptr;
             paint.setImageFilter(SkLightingImageFilter::CreatePointLitDiffuse(pointLocation,
                                                                               white,
                                                                               surfaceScale,
@@ -163,14 +150,12 @@ protected:
     }
 
 private:
-    typedef GM INHERITED;
     SkBitmap fBitmap;
-    bool fInitialized;
+
+    typedef GM INHERITED;
 };
 
 //////////////////////////////////////////////////////////////////////////////
 
-static GM* MyFactory(void*) { return new ImageLightingGM; }
-static GMRegistry reg(MyFactory);
-
+DEF_GM(return new ImageLightingGM;)
 }

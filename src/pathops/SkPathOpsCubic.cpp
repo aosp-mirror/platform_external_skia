@@ -229,7 +229,7 @@ bool SkDCubic::isLinear(int startIndex, int endIndex) const {
     return approximately_zero_when_compared_to(distance, largest);
 }
 
-bool SkDCubic::ComplexBreak(const SkPoint pointsPtr[4], SkScalar* t, CubicType* resultType) {
+bool SkDCubic::ComplexBreak(const SkPoint pointsPtr[4], SkScalar* t) {
     SkScalar d[3];
     SkCubicType cubicType = SkClassifyCubic(pointsPtr, d);
     if (cubicType == kLoop_SkCubicType) {
@@ -246,7 +246,6 @@ bool SkDCubic::ComplexBreak(const SkPoint pointsPtr[4], SkScalar* t, CubicType* 
             SkScalar smaller = SkTMax(0.f, SkTMin(ls, ms));
             SkScalar larger = SkTMin(1.f, SkTMax(ls, ms));
             *t = (smaller + larger) / 2;
-            *resultType = kSplitAtLoop_SkDCubicType;
             return *t > 0 && *t < 1;
         }
     } else if (kSerpentine_SkCubicType == cubicType || kCusp_SkCubicType == cubicType) {
@@ -278,13 +277,11 @@ bool SkDCubic::ComplexBreak(const SkPoint pointsPtr[4], SkScalar* t, CubicType* 
             for (int index = 0; index < roots; ++index) {
                 if (between(inflectionTs[0], maxCurvature[index], inflectionTs[1])) {
                     *t = maxCurvature[index];
-                    *resultType = kSplitAtMaxCurvature_SkDCubicType;
                     return true;
                 }
             }
         } else if (infTCount == 1) {
             *t = inflectionTs[0];
-            *resultType = kSplitAtInflection_SkDCubicType;
             return *t > 0 && *t < 1;
         }
     }
@@ -474,6 +471,19 @@ static double derivative_at_t(const double* src, double t) {
 // OPTIMIZE? compute t^2, t(1-t), and (1-t)^2 and pass them to another version of derivative at t?
 SkDVector SkDCubic::dxdyAtT(double t) const {
     SkDVector result = { derivative_at_t(&fPts[0].fX, t), derivative_at_t(&fPts[0].fY, t) };
+    if (result.fX == 0 && result.fY == 0) {
+        if (t == 0) {
+            result = fPts[2] - fPts[0];
+        } else if (t == 1) {
+            result = fPts[3] - fPts[1];
+        } else {
+            // incomplete
+            SkDebugf("!c");
+        }
+        if (result.fX == 0 && result.fY == 0 && zero_or_one(t)) {
+            result = fPts[3] - fPts[0];
+        }
+    }
     return result;
 }
 

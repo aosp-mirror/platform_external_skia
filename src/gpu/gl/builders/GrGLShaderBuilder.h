@@ -12,9 +12,11 @@
 #include "gl/GrGLFragmentProcessor.h"
 #include "gl/GrGLProgramDesc.h"
 #include "gl/GrGLProgramDataManager.h"
+#include "gl/GrGLTypes.h"
 
 #include <stdarg.h>
 
+class GrGLCaps;
 class GrGLContextInfo;
 class GrGLProgramBuilder;
 
@@ -28,8 +30,8 @@ public:
 
     GrGLShaderBuilder(GrGLProgramBuilder* program);
 
-    void addInput(GrGLShaderVar i) { fInputs.push_back(i); }
-    void addOutput(GrGLShaderVar i) { fOutputs.push_back(i); }
+    void addInput(const GrGLSLShaderVar& input) { fInputs.push_back(input); }
+    void addOutput(const GrGLSLShaderVar& output) { fOutputs.push_back(output); }
 
     /*
      * We put texture lookups in the base class because it is TECHNICALLY possible to do texture
@@ -57,7 +59,7 @@ public:
 
     /** Does the work of appendTextureLookup and modulates the result by modulation. The result is
         always a vec4. modulation and the swizzle specified by TextureSampler must both be vec4 or
-        float. If modulation is "" or NULL it this function acts as though appendTextureLookup were
+        float. If modulation is "" or nullptr it this function acts as though appendTextureLookup were
         called. */
     void appendTextureLookupAndModulate(const char* modulation,
                                         const TextureSampler&,
@@ -90,13 +92,13 @@ public:
     /**
      * Appends a variable declaration to one of the shaders
      */
-    void declAppend(const GrGLShaderVar& var);
+    void declAppend(const GrGLSLShaderVar& var);
 
     /** Emits a helper function outside of main() in the fragment shader. */
     void emitFunction(GrSLType returnType,
                       const char* name,
                       int argCnt,
-                      const GrGLShaderVar* args,
+                      const GrGLSLShaderVar* args,
                       const char* body,
                       SkString* outName);
 
@@ -123,7 +125,7 @@ public:
     };
 
 protected:
-    typedef GrTAllocator<GrGLShaderVar> VarArray;
+    typedef GrTAllocator<GrGLSLShaderVar> VarArray;
     void appendDecls(const VarArray& vars, SkString* out) const;
 
     /*

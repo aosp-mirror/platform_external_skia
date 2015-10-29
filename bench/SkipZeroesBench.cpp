@@ -23,7 +23,7 @@ class SkipZeroesBench : public Benchmark {
 public:
     SkipZeroesBench(const char* filename, bool skipZeroes)
     : fName("SkipZeroes_")
-    , fDecoder(NULL)
+    , fDecoder(nullptr)
     , fFilename(filename)
     , fStream()
     , fSkipZeroes(skipZeroes)
@@ -45,7 +45,7 @@ protected:
         return fName.c_str();
     }
 
-    void onPreDraw() override {
+    void onDelayedSetup() override {
         SkString resourcePath = GetResourcePath();
         if (resourcePath.isEmpty()) {
             fValid = false;
@@ -73,7 +73,7 @@ protected:
         }
     }
 
-    void onDraw(const int loops, SkCanvas*) override {
+    void onDraw(int loops, SkCanvas*) override {
         if (!fValid) {
 #ifdef SK_DEBUG
             SkDebugf("stream was invalid: %s\n", fFilename.c_str());
@@ -113,5 +113,5 @@ private:
 };
 
 // Enable the true version once the feature is checked in.
-DEF_BENCH( return SkNEW_ARGS(SkipZeroesBench, ("arrow.png", true)));
-DEF_BENCH( return SkNEW_ARGS(SkipZeroesBench, ("arrow.png", false)));
+DEF_BENCH(return new SkipZeroesBench("arrow.png", true));
+DEF_BENCH(return new SkipZeroesBench("arrow.png", false));

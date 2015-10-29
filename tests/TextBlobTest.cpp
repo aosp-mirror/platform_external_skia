@@ -7,10 +7,9 @@
 
 #include "SkPaint.h"
 #include "SkPoint.h"
-#include "SkTextBlob.h"
+#include "SkTextBlobRunIterator.h"
 
 #include "Test.h"
-
 
 class TextBlobTester {
 public:
@@ -20,7 +19,7 @@ public:
         SkTextBlobBuilder builder;
 
         // empty run set
-        RunBuilderTest(reporter, builder, NULL, 0, NULL, 0);
+        RunBuilderTest(reporter, builder, nullptr, 0, nullptr, 0);
 
         RunDef set1[] = {
             { 128, SkTextBlob::kDefault_Positioning, 100, 100 },
@@ -149,7 +148,28 @@ public:
         }
 
         // Implicit bounds
-        // FIXME: not supported yet.
+
+        {
+            // Exercise the empty bounds path, and ensure that RunRecord-aligned pos buffers
+            // don't trigger asserts (http://crbug.com/542643).
+            SkPaint p;
+            p.setTextSize(0);
+            p.setTextEncoding(SkPaint::kUTF8_TextEncoding);
+
+            const char* txt = "BOOO";
+            const size_t txtLen = strlen(txt);
+            const int glyphCount = p.textToGlyphs(txt, txtLen, nullptr);
+
+            p.setTextEncoding(SkPaint::kGlyphID_TextEncoding);
+            const SkTextBlobBuilder::RunBuffer& buffer = builder.allocRunPos(p, glyphCount);
+
+            p.setTextEncoding(SkPaint::kUTF8_TextEncoding);
+            p.textToGlyphs(txt, txtLen, buffer.glyphs);
+
+            memset(buffer.pos, 0, sizeof(SkScalar) * glyphCount * 2);
+            SkAutoTUnref<const SkTextBlob> blob(builder.build());
+            REPORTER_ASSERT(reporter, blob->bounds().isEmpty());
+        }
     }
 
 private:
@@ -176,7 +196,7 @@ private:
 
         SkAutoTUnref<const SkTextBlob> blob(builder.build());
 
-        SkTextBlob::RunIterator it(blob);
+        SkTextBlobRunIterator it(blob);
         for (unsigned i = 0; i < outCount; ++i) {
             REPORTER_ASSERT(reporter, !it.done());
             REPORTER_ASSERT(reporter, out[i].pos == it.positioning());
@@ -206,7 +226,7 @@ private:
 
     static void AddRun(const SkPaint& font, int count, SkTextBlob::GlyphPositioning pos,
                        const SkPoint& offset, SkTextBlobBuilder& builder,
-                       const SkRect* bounds = NULL) {
+                       const SkRect* bounds = nullptr) {
         switch (pos) {
         case SkTextBlob::kDefault_Positioning: {
             const SkTextBlobBuilder::RunBuffer& rb = builder.allocRun(font, count, offset.x(),

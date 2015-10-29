@@ -1,3 +1,10 @@
+/*
+ * Copyright 2015 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
 #include "Test.h"
 
 #include "SkRecord.h"
@@ -28,9 +35,9 @@ DEF_TEST(RecordPattern_Simple, r) {
 
     recorder.restore();
     REPORTER_ASSERT(r, pattern.match(&record, 0));
-    REPORTER_ASSERT(r, pattern.first<Save>()      != NULL);
-    REPORTER_ASSERT(r, pattern.second<ClipRect>() != NULL);
-    REPORTER_ASSERT(r, pattern.third<Restore>()   != NULL);
+    REPORTER_ASSERT(r, pattern.first<Save>()      != nullptr);
+    REPORTER_ASSERT(r, pattern.second<ClipRect>() != nullptr);
+    REPORTER_ASSERT(r, pattern.third<Restore>()   != nullptr);
 }
 
 DEF_TEST(RecordPattern_StartingIndex, r) {
@@ -47,7 +54,7 @@ DEF_TEST(RecordPattern_StartingIndex, r) {
     }
 
     // We should match only at 0 and 3.  Going over the length should fail gracefully.
-    for (unsigned i = 0; i < 8; i++) {
+    for (int i = 0; i < 8; i++) {
         if (i == 0 || i == 3) {
             REPORTER_ASSERT(r, pattern.match(&record, i) == i + 3);
         } else {
@@ -99,7 +106,7 @@ DEF_TEST(RecordPattern_Complex, r) {
 
     SkRecord record;
     SkRecorder recorder(&record, 1920, 1200);
-    unsigned start, begin, end;
+    int start, begin, end;
 
     start = record.count();
     recorder.save();
@@ -139,7 +146,7 @@ DEF_TEST(RecordPattern_SaveLayerIsNotADraw, r) {
 
     SkRecord record;
     SkRecorder recorder(&record, 1920, 1200);
-    recorder.saveLayer(NULL, NULL);
+    recorder.saveLayer(nullptr, nullptr);
 
     REPORTER_ASSERT(r, !pattern.match(&record, 0));
 }

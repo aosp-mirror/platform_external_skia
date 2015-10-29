@@ -126,7 +126,11 @@ static inline int GrNextPow2(int n) {
  */
 enum GrBackend {
     kOpenGL_GrBackend,
+    kVulkan_GrBackend,
+
+    kLast_GrBackend = kVulkan_GrBackend
 };
+const int kBackendCount = kLast_GrBackend + 1;
 
 /**
  * Backend-specific 3D context handle
@@ -181,10 +185,10 @@ static inline int GrMaskFormatBytesPerPixel(GrMaskFormat format) {
     // kA565 (1) -> 2
     // kARGB (2) -> 4
     static const int sBytesPerPixel[] = { 1, 2, 4 };
-    SK_COMPILE_ASSERT(SK_ARRAY_COUNT(sBytesPerPixel) == kMaskFormatCount, array_size_mismatch);
-    SK_COMPILE_ASSERT(kA8_GrMaskFormat == 0, enum_order_dependency);
-    SK_COMPILE_ASSERT(kA565_GrMaskFormat == 1, enum_order_dependency);
-    SK_COMPILE_ASSERT(kARGB_GrMaskFormat == 2, enum_order_dependency);
+    static_assert(SK_ARRAY_COUNT(sBytesPerPixel) == kMaskFormatCount, "array_size_mismatch");
+    static_assert(kA8_GrMaskFormat == 0, "enum_order_dependency");
+    static_assert(kA565_GrMaskFormat == 1, "enum_order_dependency");
+    static_assert(kARGB_GrMaskFormat == 2, "enum_order_dependency");
 
     return sBytesPerPixel[(int) format];
 }
@@ -313,6 +317,17 @@ static inline bool GrPixelConfigIs8888(GrPixelConfig config) {
     }
 }
 
+// Returns true if the color (non-alpha) components represent sRGB values. It does NOT indicate that
+// all three color components are present in the config or anything about their order.
+static inline bool GrPixelConfigIsSRGB(GrPixelConfig config) {
+    switch (config) {
+        case kSRGBA_8888_GrPixelConfig:
+            return true;
+        default:
+            return false;
+    }
+}
+
 // Takes a config and returns the equivalent config with the R and B order
 // swapped if such a config exists. Otherwise, kUnknown_GrPixelConfig
 static inline GrPixelConfig GrPixelConfigSwapRAndB(GrPixelConfig config) {
@@ -401,6 +416,10 @@ enum GrSurfaceFlags {
      * GrTexture::asRenderTarget() to access.
      */
     kRenderTarget_GrSurfaceFlag     = 0x1,
+    /**
+     * Placeholder for managing zero-copy textures
+     */
+    kZeroCopy_GrSurfaceFlag         = 0x2,
     /**
      * Indicates that all allocations (color buffer, FBO completeness, etc)
      * should be verified.

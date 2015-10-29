@@ -11,10 +11,12 @@
 #include "GrTextContext.h"
 #include "GrDrawTarget.h"
 #include "GrStrokeInfo.h"
+#include "SkTHash.h"
+#include "SkTInternalLList.h"
+#include "SkTLList.h"
 
 class GrTextStrike;
 class GrPath;
-class GrPathRange;
 class SkSurfaceProps;
 
 /*
@@ -24,78 +26,116 @@ class SkSurfaceProps;
  */
 class GrStencilAndCoverTextContext : public GrTextContext {
 public:
-    static GrStencilAndCoverTextContext* Create(GrContext*, GrDrawContext*,
-                                                const SkSurfaceProps&);
+    static GrStencilAndCoverTextContext* Create(GrContext*, const SkSurfaceProps&);
 
     virtual ~GrStencilAndCoverTextContext();
 
 private:
-    static const int kGlyphBufferSize = 1024;
+    GrStencilAndCoverTextContext(GrContext*, const SkSurfaceProps&);
 
-    enum RenderMode {
-        /**
-         * This is the render mode used by drawText(), which is mainly used by
-         * the Skia unit tests. It tries match the other text backends exactly,
-         * with the exception of not implementing LCD text, and doing anti-
-         * aliasing with the built-in MSAA.
-         */
-        kMaxAccuracy_RenderMode,
+    bool canDraw(const GrRenderTarget*, const GrClip&, const GrPaint&, const SkPaint& skPaint,
+                 const SkMatrix&) override { return this->internalCanDraw(skPaint); }
 
-        /**
-         * This is the render mode used by drawPosText(). It ignores hinting and
-         * LCD text, even if the client provided positions for hinted glyphs,
-         * and renders from a canonically-sized, generic set of paths for the
-         * given typeface. In the future we should work out a system for the
-         * client to know it should not provide hinted glyph positions. This
-         * render mode also tries to use GPU stroking for fake bold, even when
-         * SK_USE_FREETYPE_EMBOLDEN is set.
-         */
-        kMaxPerformance_RenderMode,
-    };
+    bool internalCanDraw(const SkPaint&);
 
-    SkScalar                                            fTextRatio;
-    float                                               fTextInverseRatio;
-    SkGlyphCache*                                       fGlyphCache;
-    GrPathRange*                                        fGlyphs;
-    GrStrokeInfo                                        fStroke;
-    uint16_t                                            fGlyphIndices[kGlyphBufferSize];
-    SkPoint                                             fGlyphPositions[kGlyphBufferSize];
-    int                                                 fQueuedGlyphCount;
-    int                                                 fFallbackGlyphsIdx;
-    SkMatrix                                            fContextInitialMatrix;
-    SkMatrix                                            fViewMatrix;
-    SkMatrix                                            fLocalMatrix;
-    bool                                                fUsingDeviceSpaceGlyphs;
-    SkAutoTUnref<GrRenderTarget>                        fRenderTarget;
-    GrClip                                              fClip;
-    SkIRect                                             fClipRect;
-    SkIRect                                             fRegionClipBounds;
-    GrPaint                                             fPaint;
-    SkPaint                                             fSkPaint;
-
-    GrStencilAndCoverTextContext(GrContext*, GrDrawContext*, const SkSurfaceProps&);
-
-    bool canDraw(const GrRenderTarget*, const GrClip&, const GrPaint&,
-                 const SkPaint&, const SkMatrix& viewMatrix) override;
-
-    void onDrawText(GrRenderTarget*, const GrClip&, const GrPaint&, const SkPaint&,
+    void onDrawText(GrDrawContext*, GrRenderTarget*, const GrClip&, const GrPaint&, const SkPaint&,
                     const SkMatrix& viewMatrix,
                     const char text[], size_t byteLength,
-                    SkScalar x, SkScalar y, const SkIRect& regionClipBounds) override;
-    void onDrawPosText(GrRenderTarget*, const GrClip&, const GrPaint&, const SkPaint&,
+                    SkScalar x, SkScalar y, const SkIRect& clipBounds) override;
+    void onDrawPosText(GrDrawContext*, GrRenderTarget*,
+                       const GrClip&, const GrPaint&, const SkPaint&,
                        const SkMatrix& viewMatrix,
                        const char text[], size_t byteLength,
                        const SkScalar pos[], int scalarsPerPosition,
-                       const SkPoint& offset, const SkIRect& regionClipBounds) override;
+                       const SkPoint& offset, const SkIRect& clipBounds) override;
+    void drawTextBlob(GrDrawContext*, GrRenderTarget*, const GrClip&, const SkPaint&,
+                      const SkMatrix& viewMatrix, const SkTextBlob*, SkScalar x, SkScalar y,
+                      SkDrawFilter*, const SkIRect& clipBounds) override;
 
-    void init(GrRenderTarget*, const GrClip&, const GrPaint&, const SkPaint&,
-              size_t textByteLength, RenderMode, const SkMatrix& viewMatrix,
-              const SkIRect& regionClipBounds);
-    bool mapToFallbackContext(SkMatrix* inverse);
-    void appendGlyph(const SkGlyph&, const SkPoint&);
-    void flush();
-    void finish();
+    class FallbackBlobBuilder;
 
+    class TextRun {
+    public:
+        TextRun(const SkPaint& fontAndStroke);
+        ~TextRun();
+
+        void setText(const char text[], size_t byteLength, SkScalar x, SkScalar y);
+
+        void setPosText(const char text[], size_t byteLength, const SkScalar pos[],
+                        int scalarsPerPosition, const SkPoint& offset);
+
+        void draw(GrContext*, GrDrawContext*, GrPipelineBuilder*, GrColor, const SkMatrix&,
+                  SkScalar x, SkScalar y, const SkIRect& clipBounds,
+                  GrTextContext* fallbackTextContext, const SkPaint& originalSkPaint) const;
+
+        void releaseGlyphCache() const;
+
+        size_t computeSizeInCache() const;
+
+    private:
+        SkGlyphCache* getGlyphCache() const;
+        GrPathRange* createGlyphs(GrContext*) const;
+        void appendGlyph(const SkGlyph&, const SkPoint&, FallbackBlobBuilder*);
+
+        GrStrokeInfo                     fStroke;
+        SkPaint                          fFont;
+        SkScalar                         fTextRatio;
+        float                            fTextInverseRatio;
+        bool                             fUsingRawGlyphPaths;
+        GrUniqueKey                      fGlyphPathsKey;
+        int                              fTotalGlyphCount;
+        SkAutoTUnref<GrPathRangeDraw>    fDraw;
+        SkAutoTUnref<const SkTextBlob>   fFallbackTextBlob;
+        mutable SkGlyphCache*            fDetachedGlyphCache;
+        mutable uint32_t                 fLastDrawnGlyphsID;
+        mutable SkMatrix                 fLocalMatrixTemplate;
+    };
+
+    // Text blobs/caches.
+
+    class TextBlob : public SkTLList<TextRun> {
+    public:
+        typedef SkTArray<uint32_t, true> Key;
+
+        static const Key& GetKey(const TextBlob* blob) { return blob->key(); }
+
+        static uint32_t Hash(const Key& key) {
+            SkASSERT(key.count() > 1); // 1-length keys should be using the blob-id hash map.
+            return SkChecksum::Murmur3(key.begin(), sizeof(uint32_t) * key.count());
+        }
+
+        TextBlob(uint32_t blobId, const SkTextBlob* skBlob, const SkPaint& skPaint)
+            : fKey(&blobId, 1) { this->init(skBlob, skPaint); }
+
+        TextBlob(const Key& key, const SkTextBlob* skBlob, const SkPaint& skPaint)
+            : fKey(key) {
+            // 1-length keys are unterstood to be the blob id and must use the other constructor.
+            SkASSERT(fKey.count() > 1);
+            this->init(skBlob, skPaint);
+        }
+
+        const Key& key() const { return fKey; }
+
+        size_t cpuMemorySize() const { return fCpuMemorySize; }
+
+    private:
+        void init(const SkTextBlob*, const SkPaint&);
+
+        const SkSTArray<1, uint32_t, true>   fKey;
+        size_t                               fCpuMemorySize;
+
+        SK_DECLARE_INTERNAL_LLIST_INTERFACE(TextBlob);
+    };
+
+    const TextBlob& findOrCreateTextBlob(const SkTextBlob*, const SkPaint&);
+    void purgeToFit(const TextBlob&);
+
+    SkTHashMap<uint32_t, TextBlob*>                           fBlobIdCache;
+    SkTHashTable<TextBlob*, const TextBlob::Key&, TextBlob>   fBlobKeyCache;
+    SkTInternalLList<TextBlob>                                fLRUList;
+    size_t                                                    fCacheSize;
+
+    typedef GrTextContext INHERITED;
 };
 
 #endif

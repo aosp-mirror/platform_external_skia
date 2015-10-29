@@ -19,14 +19,14 @@
 #include "etc1.h"
 
 // This takes the etc1 data pointed to by orig, and copies it `factor` times in each
-// dimension. The return value is the new data or NULL on error.
+// dimension. The return value is the new data or nullptr on error.
 static etc1_byte* create_expanded_etc1_bitmap(const uint8_t* orig, int factor) {
     SkASSERT(orig);
     SkASSERT(factor > 1);
 
     const etc1_byte* origData = reinterpret_cast<const etc1_byte*>(orig);
     if (!etc1_pkm_is_valid(orig)) {
-        return NULL;
+        return nullptr;
     }
 
     etc1_uint32 origWidth = etc1_pkm_get_width(origData);
@@ -37,12 +37,12 @@ static etc1_byte* create_expanded_etc1_bitmap(const uint8_t* orig, int factor) {
     static const etc1_uint32 kETC1BlockHeight = 4;
     if ((origWidth % kETC1BlockWidth) != 0 ||
         (origHeight % kETC1BlockHeight) != 0) {
-        return NULL;
+        return nullptr;
     }
 
     // The picture must be at least as large as a block.
     if (origWidth <= kETC1BlockWidth || origHeight <= kETC1BlockHeight) {
-        return NULL;
+        return nullptr;
     }
 
     etc1_uint32 newWidth = origWidth * factor;
@@ -80,7 +80,7 @@ static etc1_byte* create_expanded_etc1_bitmap(const uint8_t* orig, int factor) {
 class ETCBitmapBenchBase : public Benchmark {
 public:
     ETCBitmapBenchBase() : fPKMData(loadPKM()) {
-        if (NULL == fPKMData) {
+        if (nullptr == fPKMData) {
             SkDebugf("Could not load PKM data!");
         }
     }
@@ -93,17 +93,17 @@ private:
         SkString pkmFilename = GetResourcePath("mandrill_128.pkm");
         // Expand the data
         SkAutoDataUnref fileData(SkData::NewFromFileName(pkmFilename.c_str()));
-        if (NULL == fileData) {
+        if (nullptr == fileData) {
             SkDebugf("Could not open the file. Did you forget to set the resourcePath?\n");
-            return NULL;
+            return nullptr;
         }
 
         const etc1_uint32 kExpansionFactor = 8;
         etc1_byte* expandedETC1 =
             create_expanded_etc1_bitmap(fileData->bytes(), kExpansionFactor);
-        if (NULL == expandedETC1) {
+        if (nullptr == expandedETC1) {
             SkDebugf("Error expanding ETC1 data by factor of %d\n", kExpansionFactor);
-            return NULL;
+            return nullptr;
         }
 
         etc1_uint32 width = etc1_pkm_get_width(expandedETC1);
@@ -123,7 +123,7 @@ public:
         : fDecompress(decompress), fBackend(backend) { }
 
     bool isSuitableFor(Backend backend) override {
-        return backend == this->fBackend;
+        return SkToBool(fImage) && backend == this->fBackend;
     }
 
 protected:
@@ -144,32 +144,34 @@ protected:
         }
     }
 
-    void onPreDraw() override {
-        if (NULL == fPKMData) {
+    void onDelayedSetup() override {
+        if (nullptr == fPKMData) {
             SkDebugf("Failed to load PKM data!\n");
             return;
         }
 
-        // Install pixel ref
-        if (!SkInstallDiscardablePixelRef(fPKMData, &(this->fBitmap))) {
-            SkDebugf("Could not install discardable pixel ref.\n");
-            return;
-        }
-
-        // Decompress it if necessary
-        if (this->fDecompress) {
-            this->fBitmap.lockPixels();
+        if (fDecompress) {
+            SkAutoTDelete<SkImageGenerator> gen(SkImageGenerator::NewFromEncoded(fPKMData));
+            gen->generateBitmap(&fBitmap);
+        } else {
+            fImage.reset(SkImage::NewFromEncoded(fPKMData));
         }
     }
 
-    void onDraw(const int loops, SkCanvas* canvas) override {
+    void onDraw(int loops, SkCanvas* canvas) override {
         for (int i = 0; i < loops; ++i) {
-            canvas->drawBitmap(this->fBitmap, 0, 0, NULL);
+            if (fDecompress) {
+                canvas->drawBitmap(this->fBitmap, 0, 0, nullptr);
+            } else {
+                canvas->drawImage(fImage, 0, 0, nullptr);
+            }
         }
     }
 
 protected:
     SkBitmap fBitmap;
+    SkAutoTUnref<SkImage> fImage;
+
     bool decompress() const { return fDecompress; }
     Backend backend() const { return fBackend; }
 private:
@@ -204,13 +206,13 @@ protected:
         }
     }
 
-    void onDraw(const int loops, SkCanvas* canvas) override {
+    void onDraw(int loops, SkCanvas* canvas) override {
         SkPixelRef* pr = fBitmap.pixelRef();
         for (int i = 0; i < loops; ++i) {
             if (pr) {
                 pr->notifyPixelsChanged();
             }
-            canvas->drawBitmap(this->fBitmap, 0, 0, NULL);
+            canvas->drawBitmap(this->fBitmap, 0, 0, nullptr);
         }
     }
 

@@ -54,7 +54,7 @@ protected:
         return SkString("dashing");
     }
 
-    SkISize onISize() { return SkISize::Make(640, 300); }
+    SkISize onISize() { return SkISize::Make(640, 340); }
 
     virtual void onDraw(SkCanvas* canvas) {
         static const struct {
@@ -90,6 +90,10 @@ protected:
         show_giant_dash(canvas);
         canvas->translate(0, SkIntToScalar(20));
         show_zero_len_dash(canvas);
+        canvas->translate(0, SkIntToScalar(20));
+        // Draw 0 on, 0 off dashed line
+        paint.setStrokeWidth(SkIntToScalar(8));
+        drawline(canvas, 0, 0, paint);
     }
 };
 
@@ -474,10 +478,9 @@ private:
 
 //////////////////////////////////////////////////////////////////////////////
 
-DEF_GM(return SkNEW(DashingGM);)
-DEF_GM(return SkNEW(Dashing2GM);)
-DEF_GM(return SkNEW(Dashing3GM);)
-DEF_GM(return SkNEW(Dashing4GM);)
-DEF_GM(return SkNEW_ARGS(Dashing5GM, (true));)
-DEF_GM(return SkNEW_ARGS(Dashing5GM, (false));)
-
+DEF_GM(return new DashingGM;)
+DEF_GM(return new Dashing2GM;)
+DEF_GM(return new Dashing3GM;)
+DEF_GM(return new Dashing4GM;)
+DEF_GM(return new Dashing5GM(true);)
+DEF_GM(return new Dashing5GM(false);)

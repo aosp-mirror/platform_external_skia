@@ -21,7 +21,7 @@ public:
         : fDigits(0)
         , fIndent(0)
         , fIndex(0)
-        , fDraw(canvas, NULL, NULL, 0, NULL)
+        , fDraw(canvas, nullptr, nullptr, 0, nullptr)
         , fTimeWithCommand(timeWithCommand) {
         while (count > 0) {
             count /= 10;
@@ -105,7 +105,7 @@ void DumpRecord(const SkRecord& record,
                   SkCanvas* canvas,
                   bool timeWithCommand) {
     Dumper dumper(canvas, record.count(), timeWithCommand);
-    for (unsigned i = 0; i < record.count(); i++) {
+    for (int i = 0; i < record.count(); i++) {
         record.visit<void>(i, dumper);
     }
 }

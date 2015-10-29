@@ -102,7 +102,7 @@ protected:
                 SkPaint p;
                 SkString str;
                 p.setAntiAlias(true);
-                sk_tool_utils::set_portable_typeface_always(&p);
+                sk_tool_utils::set_portable_typeface(&p);
                 str.printf("[%s,%s]", gModeNames[kx], gModeNames[ky]);
 
                 p.setTextAlign(SkPaint::kCenter_Align);
@@ -142,7 +142,7 @@ protected:
                     SkPaint p;
                     SkString str;
                     p.setAntiAlias(true);
-                    sk_tool_utils::set_portable_typeface_always(&p);
+                    sk_tool_utils::set_portable_typeface(&p);
                     str.printf("%s, %s", gColorTypeNames[i], gFilterNames[j]);
                     canvas->drawText(str.c_str(), str.size(), scale*x, scale*(y + r.height() * 2 / 3), p);
                 }
@@ -175,14 +175,14 @@ static SkShader* make_grad(SkShader::TileMode tx, SkShader::TileMode ty) {
     int index = (int)ty;
     switch (index % 3) {
         case 0:
-            return SkGradientShader::CreateLinear(pts, colors, NULL, SK_ARRAY_COUNT(colors), tx);
+            return SkGradientShader::CreateLinear(pts, colors, nullptr, SK_ARRAY_COUNT(colors), tx);
         case 1:
-            return SkGradientShader::CreateRadial(center, rad, colors, NULL, SK_ARRAY_COUNT(colors), tx);
+            return SkGradientShader::CreateRadial(center, rad, colors, nullptr, SK_ARRAY_COUNT(colors), tx);
         case 2:
-            return SkGradientShader::CreateSweep(center.fX, center.fY, colors, NULL, SK_ARRAY_COUNT(colors));
+            return SkGradientShader::CreateSweep(center.fX, center.fY, colors, nullptr, SK_ARRAY_COUNT(colors));
     }
 
-    return NULL;
+    return nullptr;
 }
 
 typedef SkShader* (*ShaderProc)(SkShader::TileMode, SkShader::TileMode);
@@ -222,7 +222,7 @@ protected:
 
         SkPaint p;
         p.setAntiAlias(true);
-        sk_tool_utils::set_portable_typeface_always(&p);
+        sk_tool_utils::set_portable_typeface(&p);
         p.setTextAlign(SkPaint::kCenter_Align);
 
         for (size_t kx = 0; kx < SK_ARRAY_COUNT(gModes); kx++) {

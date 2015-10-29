@@ -42,30 +42,6 @@
  * it emits the appropriate color, or none at all, as directed.
  */
 
-/*
- * A struct for tracking batching decisions.  While this lives on GrOptState, it is managed
- * entirely by the derived classes of the GP.
- * // TODO this was an early attempt at handling out of order batching.  It should be
- * used carefully as it is being replaced by GrBatch
- */
-class GrBatchTracker {
-public:
-    template <typename T> const T& cast() const {
-        SkASSERT(sizeof(T) <= kMaxSize);
-        return *reinterpret_cast<const T*>(fData.get());
-    }
-
-    template <typename T> T* cast() {
-        SkASSERT(sizeof(T) <= kMaxSize);
-        return reinterpret_cast<T*>(fData.get());
-    }
-
-    static const size_t kMaxSize = 32;
-
-private:
-    SkAlignedSStorage<kMaxSize> fData;
-};
-
 class GrGLSLCaps;
 class GrGLPrimitiveProcessor;
 
@@ -73,32 +49,38 @@ struct GrInitInvariantOutput;
 
 /*
  * This class allows the GrPipeline to communicate information about the pipeline to a
- * GrPrimitiveProcessor that will be used in conjunction with the GrPipeline.
+ * GrBatch which should be forwarded to the GrPrimitiveProcessor(s) created by the batch.
+ * These are not properly part of the pipeline because they assume the specific inputs
+ * that the batch provided when it created the pipeline. Identical pipelines may be
+ * created by different batches with different input assumptions and therefore different
+ * computed optimizations. It is the batch-specific optimizations that allow the pipelines
+ * to be equal.
  */
-class GrPipelineInfo {
+class GrPipelineOptimizations {
 public:
     /** Does the pipeline require the GrPrimitiveProcessor's color? */
-    bool readsColor() const { return SkToBool(kReadsColor_GrPipelineInfoFlag & fFlags); }
+    bool readsColor() const { return SkToBool(kReadsColor_Flag & fFlags); }
 
     /** Does the pipeline require the GrPrimitiveProcessor's coverage? */
-    bool readsCoverage() const { return SkToBool(kReadsCoverage_GrPipelineInfoFlag & fFlags); }
+    bool readsCoverage() const { return
+        SkToBool(kReadsCoverage_Flag & fFlags); }
 
     /** Does the pipeline require access to (implicit or explicit) local coordinates? */
     bool readsLocalCoords() const {
-        return SkToBool(kReadsLocalCoords_GrPipelineInfoFlag & fFlags);
+        return SkToBool(kReadsLocalCoords_Flag & fFlags);
     }
 
     /** Does the pipeline allow the GrPrimitiveProcessor to combine color and coverage into one
         color output ? */
     bool canTweakAlphaForCoverage() const {
-        return SkToBool(kCanTweakAlphaForCoverage_GrPipelineInfoFlag & fFlags);
+        return SkToBool(kCanTweakAlphaForCoverage_Flag & fFlags);
     }
 
     /** Does the pipeline require the GrPrimitiveProcessor to specify a specific color (and if
         so get the color)? */
     bool getOverrideColorIfSet(GrColor* overrideColor) const {
-        if (SkToBool(kUseOverrideColor_GrPipelineInfoFlag & fFlags)) {
-            SkASSERT(SkToBool(kReadsColor_GrPipelineInfoFlag & fFlags));
+        if (SkToBool(kUseOverrideColor_Flag & fFlags)) {
+            SkASSERT(SkToBool(kReadsColor_Flag & fFlags));
             if (overrideColor) {
                 *overrideColor = fOverrideColor;
             }
@@ -107,24 +89,39 @@ public:
         return false;
     }
 
+    /**
+     * Returns true if the pipeline's color output will be affected by the existing render target
+     * destination pixel values (meaning we need to be careful with overlapping draws). Note that we
+     * can conflate coverage and color, so the destination color may still bleed into pixels that
+     * have partial coverage, even if this function returns false.
+     *
+     * The above comment seems incorrect for the use case. This funciton is used to turn two
+     * overlapping draws into a single draw (really to stencil multiple paths and do a single
+     * cover). It seems that what really matters is whether the dst is read for color OR for
+     * coverage.
+     */
+    bool willColorBlendWithDst() const { return SkToBool(kWillColorBlendWithDst_Flag & fFlags); }
+
 private:
     enum {
         // If this is not set the primitive processor need not produce a color output
-        kReadsColor_GrPipelineInfoFlag                  = 0x1,
+        kReadsColor_Flag                = 0x1,
 
         // If this is not set the primitive processor need not produce a coverage output
-        kReadsCoverage_GrPipelineInfoFlag               = 0x2,
+        kReadsCoverage_Flag             = 0x2,
 
         // If this is not set the primitive processor need not produce local coordinates
-        kReadsLocalCoords_GrPipelineInfoFlag            = 0x4,
+        kReadsLocalCoords_Flag          = 0x4,
 
         // If this flag is set then the primitive processor may produce color*coverage as
         // its color output (and not output a separate coverage).
-        kCanTweakAlphaForCoverage_GrPipelineInfoFlag    = 0x8,
+        kCanTweakAlphaForCoverage_Flag  = 0x8,
 
         // If this flag is set the GrPrimitiveProcessor must produce fOverrideColor as its
         // output color. If not set fOverrideColor is to be ignored.
-        kUseOverrideColor_GrPipelineInfoFlag            = 0x10,
+        kUseOverrideColor_Flag          = 0x10,
+
+        kWillColorBlendWithDst_Flag     = 0x20,
     };
 
     uint32_t    fFlags;
@@ -134,32 +131,12 @@ private:
 };
 
 /*
- * This enum is shared by GrPrimitiveProcessors and GrGLPrimitiveProcessors to coordinate shaders
- * with vertex attributes / uniforms.
- */
-enum GrGPInput {
-    kAllOnes_GrGPInput,
-    kAttribute_GrGPInput,
-    kUniform_GrGPInput,
-    kIgnored_GrGPInput,
-};
-
-/*
  * GrPrimitiveProcessor defines an interface which all subclasses must implement.  All
  * GrPrimitiveProcessors must proivide seed color and coverage for the Ganesh color / coverage
  * pipelines, and they must provide some notion of equality
  */
 class GrPrimitiveProcessor : public GrProcessor {
 public:
-    virtual void initBatchTracker(GrBatchTracker*, const GrPipelineInfo&) const = 0;
-
-    virtual bool canMakeEqual(const GrBatchTracker& mine,
-                              const GrPrimitiveProcessor& that,
-                              const GrBatchTracker& theirs) const = 0;
-
-    virtual void getInvariantOutputColor(GrInitInvariantOutput* out) const = 0;
-    virtual void getInvariantOutputCoverage(GrInitInvariantOutput* out) const = 0;
-
     // Only the GrGeometryProcessor subclass actually has a geo shader or vertex attributes, but
     // we put these calls on the base class to prevent having to cast
     virtual bool willUseGeoShader() const = 0;
@@ -172,7 +149,7 @@ public:
 
     struct Attribute {
         Attribute()
-            : fName(NULL)
+            : fName(nullptr)
             , fType(kFloat_GrVertexAttribType)
             , fOffset(0) {}
         Attribute(const char* name, GrVertexAttribType type,
@@ -199,26 +176,36 @@ public:
     size_t getVertexStride() const { return fVertexStride; }
 
     /**
-     * Gets a transformKey from an array of coord transforms
+     * Computes a transformKey from an array of coord transforms. Will only look at the first
+     * <numCoords> transforms in the array.
+     *
+     * TODO: A better name for this function  would be "compute" instead of "get".
      */
-    uint32_t getTransformKey(const SkTArray<const GrCoordTransform*, true>&) const;
+    uint32_t getTransformKey(const SkTArray<const GrCoordTransform*, true>& coords,
+                             int numCoords) const;
 
     /**
      * Sets a unique key on the GrProcessorKeyBuilder that is directly associated with this geometry
      * processor's GL backend implementation.
+     *
+     * TODO: A better name for this function  would be "compute" instead of "get".
      */
-    virtual void getGLProcessorKey(const GrBatchTracker& bt,
-                                   const GrGLSLCaps& caps,
+    virtual void getGLProcessorKey(const GrGLSLCaps& caps,
                                    GrProcessorKeyBuilder* b) const = 0;
 
 
     /** Returns a new instance of the appropriate *GL* implementation class
         for the given GrProcessor; caller is responsible for deleting
         the object. */
-    virtual GrGLPrimitiveProcessor* createGLInstance(const GrBatchTracker& bt,
-                                                     const GrGLSLCaps& caps) const = 0;
+    virtual GrGLPrimitiveProcessor* createGLInstance(const GrGLSLCaps& caps) const = 0;
 
     bool isPathRendering() const { return fIsPathRendering; }
+
+    /**
+     * No Local Coord Transformation is needed in the shader, instead transformed local coords will
+     * be provided via vertex attribute.
+     */
+    virtual bool hasTransformedLocalCoords() const = 0;
 
 protected:
     GrPrimitiveProcessor(bool isPathRendering)
@@ -231,6 +218,7 @@ protected:
     size_t fVertexStride;
 
 private:
+    void notifyRefCntIsZero() const final {};
     virtual bool hasExplicitLocalCoords() const = 0;
 
     bool fIsPathRendering;

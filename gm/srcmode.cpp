@@ -8,6 +8,7 @@
 #include "gm.h"
 #include "SkCanvas.h"
 #include "SkGradientShader.h"
+#include "SkPath.h"
 #include "SkSurface.h"
 
 #if SK_SUPPORT_GPU
@@ -20,13 +21,13 @@
 typedef void (*PaintProc)(SkPaint*);
 
 static void identity_paintproc(SkPaint* paint) {
-    paint->setShader(NULL);
+    paint->setShader(nullptr);
 }
 
 static void gradient_paintproc(SkPaint* paint) {
     const SkColor colors[] = { SK_ColorGREEN, SK_ColorBLUE };
     const SkPoint pts[] = { { 0, 0 }, { W, H } };
-    SkShader* s = SkGradientShader::CreateLinear(pts, colors, NULL,
+    SkShader* s = SkGradientShader::CreateLinear(pts, colors, nullptr,
                                                  SK_ARRAY_COUNT(colors),
                                                  SkShader::kClamp_TileMode);
     paint->setShader(s)->unref();
@@ -80,7 +81,7 @@ protected:
         canvas->translate(SkIntToScalar(20), SkIntToScalar(20));
 
         SkPaint paint;
-        sk_tool_utils::set_portable_typeface_always(&paint);
+        sk_tool_utils::set_portable_typeface(&paint);
         paint.setColor(0x80F60000);
 
         const Proc procs[] = {
@@ -125,8 +126,8 @@ protected:
             callNewSurface = false;
         }
 #endif
-        SkSurface* surface = callNewSurface ? canvas->newSurface(info) : NULL;
-        if (NULL == surface) {
+        SkSurface* surface = callNewSurface ? canvas->newSurface(info) : nullptr;
+        if (nullptr == surface) {
             // picture canvas will return null, so fall-back to raster
             surface = SkSurface::NewRaster(info);
         }
@@ -138,7 +139,7 @@ protected:
                                                     this->isCanvasDeferred()));
         surf->getCanvas()->drawColor(SK_ColorWHITE);
         this->drawContent(surf->getCanvas());
-        surf->draw(canvas, 0, 0, NULL);
+        surf->draw(canvas, 0, 0, nullptr);
     }
 
 private:

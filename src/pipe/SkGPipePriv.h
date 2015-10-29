@@ -172,14 +172,14 @@ public:
         : fBitmap(bitmap)
         , fGenID(genID)
         , fBytesAllocated(0)
-        , fMoreRecentlyUsed(NULL)
-        , fLessRecentlyUsed(NULL)
+        , fMoreRecentlyUsed(nullptr)
+        , fLessRecentlyUsed(nullptr)
         , fToBeDrawnCount(toBeDrawnCount)
     {}
 
     ~BitmapInfo() {
         SkASSERT(0 == fToBeDrawnCount);
-        SkDELETE(fBitmap);
+        delete fBitmap;
     }
 
     void addDraws(int drawsToAdd) {

@@ -9,9 +9,9 @@
 
 #if SK_SUPPORT_GPU
 #include "GrContextFactory.h"
-#include "GrTessellatingPathRenderer.h"
 #include "GrTest.h"
 #include "Test.h"
+#include "batches/GrTessellatingPathRenderer.h"
 
 /*
  * These tests pass by not crashing, hanging or asserting in Debug.
@@ -232,17 +232,27 @@ static SkPath create_path_15() {
     return path;
 }
 
-static void test_path(GrDrawTarget* dt, GrRenderTarget* rt, const SkPath& path) {
+static void test_path(GrDrawTarget* dt, GrRenderTarget* rt, GrResourceProvider* rp,
+                      const SkPath& path) {
     GrTessellatingPathRenderer tess;
     GrPipelineBuilder pipelineBuilder;
     pipelineBuilder.setRenderTarget(rt);
     GrStrokeInfo stroke(SkStrokeRec::kFill_InitStyle);
-    tess.drawPath(dt, &pipelineBuilder, SK_ColorWHITE, SkMatrix::I(), path, stroke, false);
+    GrPathRenderer::DrawPathArgs args;
+    args.fTarget = dt;
+    args.fPipelineBuilder = &pipelineBuilder;
+    args.fResourceProvider = rp;
+    args.fColor = GrColor_WHITE;
+    args.fViewMatrix = &SkMatrix::I();
+    args.fPath = &path;
+    args.fStroke = &stroke;
+    args.fAntiAlias = false;
+    tess.drawPath(args);
 }
 
 DEF_GPUTEST(TessellatingPathRendererTests, reporter, factory) {
     GrContext* context = factory->get(static_cast<GrContextFactory::GLContextType>(0));
-    if (NULL == context) {
+    if (nullptr == context) {
         return;
     }
     GrSurfaceDesc desc;
@@ -251,28 +261,28 @@ DEF_GPUTEST(TessellatingPathRendererTests, reporter, factory) {
     desc.fHeight = 800;
     desc.fConfig = kSkia8888_GrPixelConfig;
     desc.fOrigin = kTopLeft_GrSurfaceOrigin;
-    SkAutoTUnref<GrTexture> texture(context->textureProvider()->refScratchTexture(desc,
-        GrTextureProvider::kExact_ScratchTexMatch));
+    SkAutoTUnref<GrTexture> texture(context->textureProvider()->createApproxTexture(desc));
     GrTestTarget tt;
     context->getTestTarget(&tt);
     GrRenderTarget* rt = texture->asRenderTarget();
     GrDrawTarget* dt = tt.target();
+    GrResourceProvider* rp = tt.resourceProvider();
 
-    test_path(dt, rt, create_path_0());
-    test_path(dt, rt, create_path_1());
-    test_path(dt, rt, create_path_2());
-    test_path(dt, rt, create_path_3());
-    test_path(dt, rt, create_path_4());
-    test_path(dt, rt, create_path_5());
-    test_path(dt, rt, create_path_6());
-    test_path(dt, rt, create_path_7());
-    test_path(dt, rt, create_path_8());
-    test_path(dt, rt, create_path_9());
-    test_path(dt, rt, create_path_10());
-    test_path(dt, rt, create_path_11());
-    test_path(dt, rt, create_path_12());
-    test_path(dt, rt, create_path_13());
-    test_path(dt, rt, create_path_14());
-    test_path(dt, rt, create_path_15());
+    test_path(dt, rt, rp, create_path_0());
+    test_path(dt, rt, rp, create_path_1());
+    test_path(dt, rt, rp, create_path_2());
+    test_path(dt, rt, rp, create_path_3());
+    test_path(dt, rt, rp, create_path_4());
+    test_path(dt, rt, rp, create_path_5());
+    test_path(dt, rt, rp, create_path_6());
+    test_path(dt, rt, rp, create_path_7());
+    test_path(dt, rt, rp, create_path_8());
+    test_path(dt, rt, rp, create_path_9());
+    test_path(dt, rt, rp, create_path_10());
+    test_path(dt, rt, rp, create_path_11());
+    test_path(dt, rt, rp, create_path_12());
+    test_path(dt, rt, rp, create_path_13());
+    test_path(dt, rt, rp, create_path_14());
+    test_path(dt, rt, rp, create_path_15());
 }
 #endif

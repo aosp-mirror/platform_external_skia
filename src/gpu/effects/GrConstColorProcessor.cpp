@@ -19,7 +19,11 @@ public:
         fColorUniform = args.fBuilder->addUniform(GrGLProgramBuilder::kFragment_Visibility,
                                             kVec4f_GrSLType, kMedium_GrSLPrecision, "constantColor",
                                             &colorUni);
-        switch (args.fFp.cast<GrConstColorProcessor>().inputMode()) {
+        GrConstColorProcessor::InputMode mode = args.fFp.cast<GrConstColorProcessor>().inputMode();
+        if (!args.fInputColor) {
+            mode = GrConstColorProcessor::kIgnore_InputMode;
+        }
+        switch (mode) {
             case GrConstColorProcessor::kIgnore_InputMode:
                 fsBuilder->codeAppendf("%s = %s;", args.fOutputColor, colorUni);
                 break;
@@ -34,7 +38,8 @@ public:
         }
     }
 
-    void setData(const GrGLProgramDataManager& pdm, const GrProcessor& processor) override {
+protected:
+    void onSetData(const GrGLProgramDataManager& pdm, const GrProcessor& processor) override {
         GrColor color = processor.cast<GrConstColorProcessor>().color();
         // We use the "illegal" color value as an uninit sentinel. However, ut isn't inherently
         // illegal to use this processor with unpremul colors. So we correctly handle the case
@@ -85,12 +90,12 @@ void GrConstColorProcessor::onComputeInvariantOutput(GrInvariantOutput* inout) c
     }
 }
 
-void GrConstColorProcessor::getGLProcessorKey(const GrGLSLCaps&, GrProcessorKeyBuilder* b) const {
+void GrConstColorProcessor::onGetGLProcessorKey(const GrGLSLCaps&, GrProcessorKeyBuilder* b) const {
     b->add32(fMode);
 }
 
-GrGLFragmentProcessor* GrConstColorProcessor::createGLInstance() const  {
-    return SkNEW(GLConstColorProcessor);
+GrGLFragmentProcessor* GrConstColorProcessor::onCreateGLInstance() const  {
+    return new GLConstColorProcessor;
 }
 
 bool GrConstColorProcessor::onIsEqual(const GrFragmentProcessor& other) const {
@@ -102,7 +107,7 @@ bool GrConstColorProcessor::onIsEqual(const GrFragmentProcessor& other) const {
 
 GR_DEFINE_FRAGMENT_PROCESSOR_TEST(GrConstColorProcessor);
 
-GrFragmentProcessor* GrConstColorProcessor::TestCreate(GrProcessorTestData* d) {
+const GrFragmentProcessor* GrConstColorProcessor::TestCreate(GrProcessorTestData* d) {
     GrColor color;
     int colorPicker = d->fRandom->nextULessThan(3);
     switch (colorPicker) {

@@ -14,7 +14,7 @@
 #include "SkTypeface.h"
 
 static void setTypeface(SkPaint* paint, const char name[], SkTypeface::Style style) {
-    sk_tool_utils::set_portable_typeface_always(paint, name, style);
+    sk_tool_utils::set_portable_typeface(paint, name, style);
 }
 
 static SkSize computeSize(const SkBitmap& bm, const SkMatrix& mat) {
@@ -196,7 +196,7 @@ protected:
       }
 
       void makeBitmap() override {
-          SkImageDecoder* codec = NULL;
+          SkImageDecoder* codec = nullptr;
           SkString resourcePath = GetResourcePath(fFilename.c_str());
           SkFILEStream stream(resourcePath.c_str());
           if (stream.isValid()) {
@@ -205,7 +205,7 @@ protected:
           if (codec) {
               stream.rewind();
               codec->decode(&stream, &fBM, kN32_SkColorType, SkImageDecoder::kDecodePixels_Mode);
-              SkDELETE(codec);
+              delete codec;
           } else {
               fBM.allocN32Pixels(1, 1);
               *(fBM.getAddr32(0,0)) = 0xFF0000FF; // red == bad

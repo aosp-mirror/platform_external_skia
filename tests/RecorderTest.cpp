@@ -30,7 +30,7 @@ public:
     int count() const { return fHistogram[T::kType]; }
 
     void apply(const SkRecord& record) {
-        for (unsigned i = 0; i < record.count(); i++) {
+        for (int i = 0; i < record.count(); i++) {
             record.visit<void>(i, *this);
         }
     }
@@ -98,7 +98,7 @@ DEF_TEST(Recorder_drawImage_takeReference, reporter) {
         SkRecorder recorder(&record, 100, 100);
 
         // DrawImageRect is supposed to take a reference
-        recorder.drawImageRect(image.get(), 0, SkRect::MakeWH(100, 100));
+        recorder.drawImageRect(image.get(), SkRect::MakeWH(100, 100), nullptr);
         REPORTER_ASSERT(reporter, !image->unique());
 
         Tally tally;

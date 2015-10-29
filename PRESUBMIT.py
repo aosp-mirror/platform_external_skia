@@ -9,6 +9,7 @@ See http://dev.chromium.org/developers/how-tos/depottools/presubmit-scripts
 for more details about the presubmit API built into gcl.
 """
 
+import collections
 import csv
 import fnmatch
 import os
@@ -21,9 +22,6 @@ import traceback
 REVERT_CL_SUBJECT_PREFIX = 'Revert '
 
 SKIA_TREE_STATUS_URL = 'http://skia-tree-status.appspot.com'
-
-CQ_KEYWORDS_THAT_NEED_APPENDING = ('CQ_INCLUDE_TRYBOTS', 'CQ_EXTRA_TRYBOTS',
-                                   'CQ_EXCLUDE_TRYBOTS', 'CQ_TRYBOTS')
 
 # Please add the complete email address here (and not just 'xyz@' or 'xyz').
 PUBLIC_API_OWNERS = (
@@ -38,6 +36,24 @@ PUBLIC_API_OWNERS = (
 AUTHORS_FILE_NAME = 'AUTHORS'
 
 DOCS_PREVIEW_URL = 'https://skia.org/?cl='
+
+# Path to CQ bots feature is described in skbug.com/4364
+PATH_PREFIX_TO_EXTRA_TRYBOTS = {
+    # pylint: disable=line-too-long
+    'cmake/': 'client.skia.compile:Build-Mac10.9-Clang-x86_64-Release-CMake-Trybot,Build-Ubuntu-GCC-x86_64-Release-CMake-Trybot',
+    # pylint: disable=line-too-long
+    'src/opts/': 'client.skia:Test-Ubuntu-GCC-GCE-CPU-AVX2-x86_64-Release-SKNX_NO_SIMD-Trybot',
+
+    'include/private/SkAtomics.h': ('client.skia:'
+      'Test-Ubuntu-GCC-GCE-CPU-AVX2-x86_64-Release-TSAN-Trybot,'
+      'Test-Ubuntu-GCC-Golo-GPU-GT610-x86_64-Release-TSAN-Trybot'
+    ),
+
+    # Below are examples to show what is possible with this feature.
+    # 'src/svg/': 'master1:abc;master2:def',
+    # 'src/svg/parser/': 'master3:ghi,jkl;master4:mno',
+    # 'src/image/SkImage_Base.h': 'master5:pqr,stu;master1:abc1;master2:def',
+}
 
 
 def _CheckChangeHasEol(input_api, output_api, source_file_filter=None):
@@ -244,20 +260,11 @@ def _CheckOwnerIsInAuthorsFile(input_api, output_api):
           # Found a match, the user is in the AUTHORS file break out of the loop
           break
       else:
-        # TODO(rmistry): Remove the below CLA messaging once a CLA checker has
-        # been added to the CQ.
         results.append(
           output_api.PresubmitError(
             'The email %s is not in Skia\'s AUTHORS file.\n'
             'Issue owner, this CL must include an addition to the Skia AUTHORS '
-            'file.\n'
-            'Googler reviewers, please check that the AUTHORS entry '
-            'corresponds to an email address in http://goto/cla-signers. If it '
-            'does not then ask the issue owner to sign the CLA at '
-            'https://developers.google.com/open-source/cla/individual '
-            '(individual) or '
-            'https://developers.google.com/open-source/cla/corporate '
-            '(corporate).'
+            'file.'
             % owner_email))
     except IOError:
       # Do not fail if authors file cannot be found.
@@ -279,8 +286,10 @@ def _CheckLGTMsForPublicAPI(input_api, output_api):
     affected_file_path = affected_file.LocalPath()
     file_path, file_ext = os.path.splitext(affected_file_path)
     # We only care about files that end in .h and are under the top-level
-    # include dir.
-    if file_ext == '.h' and 'include' == file_path.split(os.path.sep)[0]:
+    # include dir, but not include/private.
+    if (file_ext == '.h' and
+        'include' == file_path.split(os.path.sep)[0] and
+        'private' not in file_path):
       requires_owner_check = True
 
   if not requires_owner_check:
@@ -295,10 +304,7 @@ def _CheckLGTMsForPublicAPI(input_api, output_api):
       # It is a revert CL, ignore the public api owners check.
       return results
 
-    # TODO(rmistry): Stop checking for COMMIT=false once crbug/470609 is
-    # resolved.
-    if issue_properties['cq_dry_run'] or re.search(
-        r'^COMMIT=false$', issue_properties['description'], re.M):
+    if issue_properties['cq_dry_run']:
       # Ignore public api owners check for dry run CLs since they are not
       # going to be committed.
       return results
@@ -328,8 +334,12 @@ def _CheckLGTMsForPublicAPI(input_api, output_api):
   if not lgtm_from_owner:
     results.append(
         output_api.PresubmitError(
-            'Since the CL is editing public API, you must have an LGTM from '
-            'one of: %s' % str(PUBLIC_API_OWNERS)))
+            "If this CL adds to or changes Skia's public API, you need an LGTM "
+            "from any of %s.  If this CL only removes from or doesn't change "
+            "Skia's public API, please add a short note to the CL saying so "
+            "and add one of those reviewers on a TBR= line.  If you don't know "
+            "if this CL affects Skia's public API, treat it like it does."
+            % str(PUBLIC_API_OWNERS)))
   return results
 
 
@@ -345,6 +355,7 @@ def PostUploadHook(cl, change, output_api):
     work on them.
   * Adds 'NOPRESUBMIT=true' for non master branch changes since those don't
     run the presubmit checks.
+  * Adds extra trybots for the paths defined in PATH_TO_EXTRA_TRYBOTS.
   """
 
   results = []
@@ -414,34 +425,22 @@ def PostUploadHook(cl, change, output_api):
             output_api.PresubmitNotifyResult(
                 'Branch changes do not run the presubmit checks.'))
 
-    # Read and process the HASHTAGS file.
-    hashtags_fullpath = os.path.join(change._local_root, 'HASHTAGS')
-    with open(hashtags_fullpath, 'rb') as hashtags_csv:
-      hashtags_reader = csv.reader(hashtags_csv, delimiter=',')
-      for row in hashtags_reader:
-        if not row or row[0].startswith('#'):
-          # Ignore empty lines and comments
-          continue
-        hashtag = row[0]
-        # Search for the hashtag in the description.
-        if re.search('#%s' % hashtag, new_description, re.M | re.I):
-          for mapped_text in row[1:]:
-            # Special case handling for CQ_KEYWORDS_THAT_NEED_APPENDING.
-            appended_description = _HandleAppendingCQKeywords(
-                hashtag, mapped_text, new_description, results, output_api)
-            if appended_description:
-              new_description = appended_description
-              continue
-
-            # Add the mapped text if it does not already exist in the
-            # CL's description.
-            if not re.search(
-                r'^%s$' % mapped_text, new_description, re.M | re.I):
-              new_description += '\n%s' % mapped_text
-              results.append(
-                  output_api.PresubmitNotifyResult(
-                      'Found \'#%s\', automatically added \'%s\' to the CL\'s '
-                      'description' % (hashtag, mapped_text)))
+    # Automatically set CQ_EXTRA_TRYBOTS if any of the changed files here begin
+    # with the paths of interest.
+    cq_master_to_trybots = collections.defaultdict(set)
+    for affected_file in change.AffectedFiles():
+      affected_file_path = affected_file.LocalPath()
+      for path_prefix, extra_bots in PATH_PREFIX_TO_EXTRA_TRYBOTS.iteritems():
+        if affected_file_path.startswith(path_prefix):
+          results.append(
+              output_api.PresubmitNotifyResult(
+                  'Your CL modifies the path %s.\nAutomatically adding %s to '
+                  'the CL description.' % (affected_file_path, extra_bots)))
+          _MergeCQExtraTrybotsMaps(
+              cq_master_to_trybots, _GetCQExtraTrybotsMap(extra_bots))
+    if cq_master_to_trybots:
+      new_description = _AddCQExtraTrybotsToDesc(
+          cq_master_to_trybots, new_description)
 
     # If the description has changed update it.
     if new_description != original_description:
@@ -450,29 +449,49 @@ def PostUploadHook(cl, change, output_api):
     return results
 
 
-def _HandleAppendingCQKeywords(hashtag, keyword_and_value, description,
-                               results, output_api):
-  """Handles the CQ keywords that need appending if specified in hashtags."""
-  keyword = keyword_and_value.split('=')[0]
-  if keyword in CQ_KEYWORDS_THAT_NEED_APPENDING:
-    # If the keyword is already in the description then append to it.
-    match = re.search(
-        r'^%s=(.*)$' % keyword, description, re.M | re.I)
-    if match:
-      old_values = match.group(1).split(';')
-      new_value = keyword_and_value.split('=')[1]
-      if new_value in old_values:
-        # Do not need to do anything here.
-        return description
-      # Update the description with the new values.
-      new_description = description.replace(
-          match.group(0), "%s;%s" % (match.group(0), new_value))
-      results.append(
-          output_api.PresubmitNotifyResult(
-          'Found \'#%s\', automatically appended \'%s\' to %s in '
-          'the CL\'s description' % (hashtag, new_value, keyword)))
-      return new_description
-  return None
+def _AddCQExtraTrybotsToDesc(cq_master_to_trybots, description):
+  """Adds the specified master and trybots to the CQ_EXTRA_TRYBOTS keyword.
+
+  If the keyword already exists in the description then it appends to it only
+  if the specified values do not already exist.
+  If the keyword does not exist then it creates a new section in the
+  description.
+  """
+  match = re.search(r'^CQ_EXTRA_TRYBOTS=(.*)$', description, re.M | re.I)
+  if match:
+    original_trybots_map = _GetCQExtraTrybotsMap(match.group(1))
+    _MergeCQExtraTrybotsMaps(cq_master_to_trybots, original_trybots_map)
+    new_description = description.replace(
+        match.group(0), _GetCQExtraTrybotsStr(cq_master_to_trybots))
+  else:
+    new_description = description + "\n%s" % (
+        _GetCQExtraTrybotsStr(cq_master_to_trybots))
+  return new_description
+
+
+def _MergeCQExtraTrybotsMaps(dest_map, map_to_be_consumed):
+  """Merges two maps of masters to trybots into one."""
+  for master, trybots in map_to_be_consumed.iteritems():
+    dest_map[master].update(trybots)
+  return dest_map
+
+
+def _GetCQExtraTrybotsMap(cq_extra_trybots_str):
+  """Parses the CQ_EXTRA_TRYBOTS str and returns a map of masters to trybots."""
+  cq_master_to_trybots = collections.defaultdict(set)
+  for section in cq_extra_trybots_str.split(';'):
+    if section:
+      master, bots = section.split(':')
+      cq_master_to_trybots[master].update(bots.split(','))
+  return cq_master_to_trybots
+
+
+def _GetCQExtraTrybotsStr(cq_master_to_trybots):
+  """Constructs the CQ_EXTRA_TRYBOTS str from a map of masters to trybots."""
+  sections = []
+  for master, trybots in cq_master_to_trybots.iteritems():
+    sections.append('%s:%s' % (master, ','.join(trybots)))
+  return 'CQ_EXTRA_TRYBOTS=%s' % ';'.join(sections)
 
 
 def CheckChangeOnCommit(input_api, output_api):

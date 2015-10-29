@@ -50,7 +50,7 @@ protected:
         return fName.c_str();
     }
 
-    virtual void onDraw(const int loops, SkCanvas* canvas) {
+    virtual void onDraw(int loops, SkCanvas* canvas) {
         SkPaint paint;
         this->setupPaint(&paint);
 
@@ -63,7 +63,7 @@ protected:
             r.offset(fRadius, fRadius);
 
             if (fRadius > 0) {
-                SkMorphologyImageFilter* mf = NULL;
+                SkImageFilter* mf = nullptr;
                 switch (fStyle) {
                 case kDilate_MT:
                     mf = SkDilateImageFilter::Create(SkScalarFloorToInt(fRadius),

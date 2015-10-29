@@ -16,13 +16,13 @@
 
 const GrGLInterface* GrGLAssembleInterface(void* ctx, GrGLGetProc get) {
     GET_PROC_LOCAL(GetString);
-    if (NULL == GetString) {
-        return NULL;
+    if (nullptr == GetString) {
+        return nullptr;
     }
 
     const char* verStr = reinterpret_cast<const char*>(GetString(GR_GL_VERSION));
-    if (NULL == verStr) {
-        return NULL;
+    if (nullptr == verStr) {
+        return nullptr;
     }
 
     GrGLStandard standard = GrGLGetStandardInUseFromString(verStr);
@@ -32,7 +32,7 @@ const GrGLInterface* GrGLAssembleInterface(void* ctx, GrGLGetProc get) {
     } else if (kGL_GrGLStandard == standard) {
         return GrGLAssembleGLInterface(ctx, get);
     }
-    return NULL;
+    return nullptr;
 }
 
 const GrGLInterface* GrGLAssembleGLInterface(void* ctx, GrGLGetProc get) {
@@ -40,9 +40,9 @@ const GrGLInterface* GrGLAssembleGLInterface(void* ctx, GrGLGetProc get) {
     GET_PROC_LOCAL(GetStringi);
     GET_PROC_LOCAL(GetIntegerv);
 
-    // GetStringi may be NULL depending on the GL version.
-    if (NULL == GetString || NULL == GetIntegerv) {
-        return NULL;
+    // GetStringi may be nullptr depending on the GL version.
+    if (nullptr == GetString || nullptr == GetIntegerv) {
+        return nullptr;
     }
 
     const char* versionString = (const char*) GetString(GR_GL_VERSION);
@@ -50,15 +50,15 @@ const GrGLInterface* GrGLAssembleGLInterface(void* ctx, GrGLGetProc get) {
 
     if (glVer < GR_GL_VER(1,5) || GR_GL_INVALID_VER == glVer) {
         // We must have array and element_array buffer objects.
-        return NULL;
+        return nullptr;
     }
 
     GrGLExtensions extensions;
     if (!extensions.init(kGL_GrGLStandard, GetString, GetStringi, GetIntegerv)) {
-        return NULL;
+        return nullptr;
     }
 
-    GrGLInterface* interface = SkNEW(GrGLInterface());
+    GrGLInterface* interface = new GrGLInterface();
     GrGLInterface::Functions* functions = &interface->fFunctions;
 
     GET_PROC(ActiveTexture);
@@ -266,7 +266,7 @@ const GrGLInterface* GrGLAssembleGLInterface(void* ctx, GrGLGetProc get) {
     } else {
         // we must have FBOs
         delete interface;
-        return NULL;
+        return nullptr;
     }
 
     if (extensions.has("GL_NV_path_rendering")) {
@@ -317,7 +317,8 @@ const GrGLInterface* GrGLAssembleGLInterface(void* ctx, GrGLGetProc get) {
         GET_PROC(GetProgramResourceLocation);
     }
 
-    if (glVer >= GR_GL_VER(3,1) || extensions.has("GL_ARB_draw_instanced")) {
+    if (glVer >= GR_GL_VER(3,1) || extensions.has("GL_ARB_draw_instanced") ||
+        extensions.has("GL_EXT_draw_instanced")) {
         GET_PROC(DrawArraysInstanced);
         GET_PROC(DrawElementsInstanced);
     }
@@ -450,6 +451,10 @@ const GrGLInterface* GrGLAssembleGLInterface(void* ctx, GrGLGetProc get) {
         }
     }
 
+    if (glVer >= GR_GL_VER(4,5)) {
+        GET_PROC(NamedFramebufferParameteri);
+    }
+
     if (glVer >= GR_GL_VER(4,3) || extensions.has("GL_KHR_debug")) {
         // KHR_debug defines these methods to have no suffix in an OpenGL (not ES) context.
         GET_PROC(DebugMessageControl);
@@ -469,25 +474,25 @@ const GrGLInterface* GrGLAssembleGLInterface(void* ctx, GrGLGetProc get) {
 
 const GrGLInterface* GrGLAssembleGLESInterface(void* ctx, GrGLGetProc get) {
     GET_PROC_LOCAL(GetString);
-    if (NULL == GetString) {
-        return NULL;
+    if (nullptr == GetString) {
+        return nullptr;
     }
 
     const char* verStr = reinterpret_cast<const char*>(GetString(GR_GL_VERSION));
     GrGLVersion version = GrGLGetVersionFromString(verStr);
 
     if (version < GR_GL_VER(2,0)) {
-        return NULL;
+        return nullptr;
     }
 
     GET_PROC_LOCAL(GetIntegerv);
     GET_PROC_LOCAL(GetStringi);
     GrGLExtensions extensions;
     if (!extensions.init(kGLES_GrGLStandard, GetString, GetStringi, GetIntegerv)) {
-        return NULL;
+        return nullptr;
     }
 
-    GrGLInterface* interface = SkNEW(GrGLInterface);
+    GrGLInterface* interface = new GrGLInterface;
     GrGLInterface::Functions* functions = &interface->fFunctions;
 
     GET_PROC(ActiveTexture);
@@ -496,6 +501,11 @@ const GrGLInterface* GrGLAssembleGLESInterface(void* ctx, GrGLGetProc get) {
     GET_PROC(BindBuffer);
     GET_PROC(BindTexture);
     GET_PROC_SUFFIX(BindVertexArray, OES);
+
+    if (version >= GR_GL_VER(3,0) && extensions.has("GL_EXT_blend_func_extended")) {
+        GET_PROC_SUFFIX(BindFragDataLocation, EXT);
+        GET_PROC_SUFFIX(BindFragDataLocationIndexed, EXT);
+    }
 
     if (extensions.has("GL_KHR_blend_equation_advanced")) {
         GET_PROC_SUFFIX(BlendBarrier, KHR);
@@ -665,10 +675,10 @@ const GrGLInterface* GrGLAssembleGLESInterface(void* ctx, GrGLGetProc get) {
         GET_PROC(PushGroupMarker);
         GET_PROC(PopGroupMarker);
         // The below check is here because a device has been found that has the extension string but
-        // returns NULL from the eglGetProcAddress for the functions
-        if (NULL == functions->fInsertEventMarker ||
-            NULL == functions->fPushGroupMarker ||
-            NULL == functions->fPopGroupMarker) {
+        // returns nullptr from the eglGetProcAddress for the functions
+        if (nullptr == functions->fInsertEventMarker ||
+            nullptr == functions->fPushGroupMarker ||
+            nullptr == functions->fPopGroupMarker) {
             extensions.remove("GL_EXT_debug_marker");
         }
     }
@@ -746,6 +756,18 @@ const GrGLInterface* GrGLAssembleGLESInterface(void* ctx, GrGLGetProc get) {
         GET_PROC_SUFFIX(PushDebugGroup, KHR);
         GET_PROC_SUFFIX(PopDebugGroup, KHR);
         GET_PROC_SUFFIX(ObjectLabel, KHR);
+        // In general we have a policy against removing extension strings when the driver does
+        // not provide function pointers for an advertised extension. However, because there is a
+        // known device that advertises GL_KHR_debug but fails to provide the functions and this is
+        // a debugging- only extension we've made an exception. This also can happen when using
+        // APITRACE.
+        if (!interface->fFunctions.fDebugMessageControl) {
+            extensions.remove("GL_KHR_debug");
+        }
+    }
+
+    if (extensions.has("GL_CHROMIUM_bind_uniform_location")) {
+        GET_PROC_SUFFIX(BindUniformLocation, CHROMIUM);
     }
 
     interface->fStandard = kGLES_GrGLStandard;

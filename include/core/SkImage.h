@@ -20,9 +20,10 @@ class SkCanvas;
 class SkColorTable;
 class SkImageGenerator;
 class SkPaint;
+class SkPicture;
+class SkPixelSerializer;
 class SkString;
 class SkSurface;
-class SkSurfaceProps;
 class GrContext;
 class GrTexture;
 
@@ -141,8 +142,15 @@ public:
                                            const SkISize yuvSizes[3],
                                            GrSurfaceOrigin);
 
+    static SkImage* NewFromPicture(const SkPicture*, const SkISize& dimensions,
+                                   const SkMatrix*, const SkPaint*);
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////
+
     int width() const { return fWidth; }
     int height() const { return fHeight; }
+    SkISize dimensions() const { return SkISize::Make(fWidth, fHeight); }
+    SkIRect bounds() const { return SkIRect::MakeWH(fWidth, fHeight); }
     uint32_t uniqueID() const { return fUniqueID; }
     virtual bool isOpaque() const { return false; }
 
@@ -169,6 +177,20 @@ public:
      *  On failure, return false and ignore the pixmap parameter.
      */
     bool peekPixels(SkPixmap* pixmap) const;
+
+    /**
+     *  Some images have to perform preliminary work in preparation for drawing. This can be
+     *  decoding, uploading to a GPU, or other tasks. These happen automatically when an image
+     *  is drawn, and often they are cached so that the cost is only paid the first time.
+     *
+     *  Preroll() can be called before drawing to try to perform this prepatory work ahead of time.
+     *  For images that have no such work, this returns instantly. Others may do some thing to
+     *  prepare their cache and then return.
+     *
+     *  If the image will drawn to a GPU-backed canvas or surface, pass the associated GrContext.
+     *  If the image will be drawn to any other type of canvas or surface, pass null.
+     */
+    void preroll(GrContext* = nullptr) const;
 
     // DEPRECATED
     GrTexture* getTexture() const;
@@ -214,12 +236,27 @@ public:
      *
      *  If the image type cannot be encoded, or the requested encoder type is
      *  not supported, this will return NULL.
+     *
+     *  Note: this will attempt to encode the image's pixels in the specified format,
+     *  even if the image returns a data from refEncoded(). That data will be ignored.
      */
     SkData* encode(SkImageEncoder::Type, int quality) const;
 
-    SkData* encode() const {
-        return this->encode(SkImageEncoder::kPNG_Type, 100);
-    }
+    /**
+     *  Encode the image and return the result as a caller-managed SkData.  This will
+     *  attempt to reuse existing encoded data (as returned by refEncoded).
+     *
+     *  We defer to the SkPixelSerializer both for vetting existing encoded data
+     *  (useEncodedData) and for encoding the image (encodePixels) when no such data is
+     *  present or is rejected by the serializer.
+     *
+     *  If not specified, we use a default serializer which 1) always accepts existing data
+     *  (in any format) and 2) encodes to PNG.
+     *
+     *  If no compatible encoded data exists and encoding fails, this method will also
+     *  fail (return NULL).
+     */
+    SkData* encode(SkPixelSerializer* = nullptr) const;
 
     /**
      *  If the image already has its contents in encoded form (e.g. PNG or JPEG), return a ref
@@ -232,37 +269,16 @@ public:
      */
     SkData* refEncoded() const;
 
-    /**
-     *  Return a new surface that is compatible with this image's internal representation
-     *  (e.g. raster or gpu).
-     *
-     *  If no surfaceprops are specified, the image will attempt to match the props of when it
-     *  was created (if it came from a surface).
-     */
-    SkSurface* newSurface(const SkImageInfo&, const SkSurfaceProps* = NULL) const;
-
     const char* toString(SkString*) const;
 
     /**
-     *  Return an image that is a rescale of this image (using newWidth, newHeight).
+     *  Return a new image that is a subset of this image. The underlying implementation may
+     *  share the pixels, or it may make a copy.
      *
-     *  If subset is NULL, then the entire original image is used as the src for the scaling.
-     *  If subset is not NULL, then it specifies subset of src-pixels used for scaling. If
-     *  subset extends beyond the bounds of the original image, then NULL is returned.
-     *
-     *  Notes:
-     *  - newWidth and newHeight must be > 0 or NULL will be returned.
-     *
-     *  - it is legal for the returned image to be the same instance as the src image
-     *    (if the new dimensions == the src dimensions and subset is NULL or == src dimensions).
-     *
-     *  - it is legal for the "scaled" image to have changed its SkAlphaType from unpremul
-     *    to premul (as required by the impl). The image should draw (nearly) identically,
-     *    since during drawing we will "apply the alpha" to the pixels. Future optimizations
-     *    may take away this caveat, preserving unpremul.
+     *  If subset does not intersect the bounds of this image, or the copy/share cannot be made,
+     *  NULL will be returned.
      */
-    SkImage* newImage(int newWidth, int newHeight, const SkIRect* subset = NULL,
-                      SkFilterQuality = kNone_SkFilterQuality) const;
+    SkImage* newSubset(const SkIRect& subset) const;
 
     // Helper functions to convert to SkBitmap
 
@@ -282,22 +298,41 @@ public:
      */
     bool asLegacyBitmap(SkBitmap*, LegacyBitmapMode) const;
     
-protected:
-    SkImage(int width, int height) :
-        fWidth(width),
-        fHeight(height),
-        fUniqueID(NextUniqueID()) {
+    /**
+     *  Returns true if the image is backed by an image-generator or other src that creates
+     *  (and caches) its pixels / texture on-demand.
+     */
+    bool isLazyGenerated() const;
 
-        SkASSERT(width > 0);
-        SkASSERT(height > 0);
-    }
+    /**
+     *  Apply the specified filter to this image, and return the result as a new image.
+     *
+     *  if forceResultToOriginalSize is true, then the resulting image will be the same size as the
+     *  src, regardless of the normal output of the filter.
+     *
+     *  If offset is non-null, it is set to the relative offset needed to draw the resulting image
+     *  in the same logical place as the original.
+     *
+     *  e.g.
+     *      If the filter makes the result larger by a margin of 4 the output would be:
+     *          result->width()  == this->width + 8
+     *          result->height() == this->height + 8
+     *          offset.x()       == -4
+     *          offset.y()       == -4
+     *
+     *  If the filter fails to create a resulting image, null is returned, and the offset parameter
+     *  (if specified) will be undefined.
+     */
+    SkImage* applyFilter(SkImageFilter* filter, SkIPoint* offset,
+                         bool forceResultToOriginalSize) const;
+
+protected:
+    SkImage(int width, int height, uint32_t uniqueID);
 
 private:
     const int       fWidth;
     const int       fHeight;
     const uint32_t  fUniqueID;
-
-    static uint32_t NextUniqueID();
 
     typedef SkRefCnt INHERITED;
 };

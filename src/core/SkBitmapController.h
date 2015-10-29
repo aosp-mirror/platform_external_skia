@@ -9,8 +9,11 @@
 #define SkBitmapController_DEFINED
 
 #include "SkBitmap.h"
+#include "SkBitmapCache.h"
 #include "SkFilterQuality.h"
 #include "SkMatrix.h"
+
+class SkBitmapProvider;
 
 /**
  *  Handles request to scale, filter, and lock a bitmap to be rasterized.
@@ -36,15 +39,15 @@ public:
 
     virtual ~SkBitmapController() {}
 
-    State* requestBitmap(const SkBitmap&, const SkMatrix& inverse, SkFilterQuality,
+    State* requestBitmap(const SkBitmapProvider&, const SkMatrix& inverse, SkFilterQuality,
                          void* storage, size_t storageSize);
 
-    State* requestBitmap(const SkBitmap& bm, const SkMatrix& inverse, SkFilterQuality quality) {
-        return this->requestBitmap(bm, inverse, quality, NULL, 0);
+    State* requestBitmap(const SkBitmapProvider& bp, const SkMatrix& inv, SkFilterQuality quality) {
+        return this->requestBitmap(bp, inv, quality, nullptr, 0);
     }
 
 protected:
-    virtual State* onRequestBitmap(const SkBitmap&, const SkMatrix& inverse, SkFilterQuality,
+    virtual State* onRequestBitmap(const SkBitmapProvider&, const SkMatrix& inv, SkFilterQuality,
                                    void* storage, size_t storageSize) = 0;
 };
 
@@ -55,7 +58,7 @@ public:
     SkDefaultBitmapController() {}
     
 protected:
-    State* onRequestBitmap(const SkBitmap&, const SkMatrix& inverse, SkFilterQuality,
+    State* onRequestBitmap(const SkBitmapProvider&, const SkMatrix& inverse, SkFilterQuality,
                            void* storage, size_t storageSize) override;
 };
 

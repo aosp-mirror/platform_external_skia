@@ -16,21 +16,20 @@
 #include "SkShader.h"
 #include "SkValidationUtils.h"
 
-SkTileImageFilter* SkTileImageFilter::Create(const SkRect& srcRect, const SkRect& dstRect,
-                                             SkImageFilter* input) {
+SkImageFilter* SkTileImageFilter::Create(const SkRect& srcRect, const SkRect& dstRect,
+                                         SkImageFilter* input) {
     if (!SkIsValidRect(srcRect) || !SkIsValidRect(dstRect)) {
-        return NULL;
+        return nullptr;
     }
-    return SkNEW_ARGS(SkTileImageFilter, (srcRect, dstRect, input));
+    return new SkTileImageFilter(srcRect, dstRect, input);
 }
 
 bool SkTileImageFilter::onFilterImage(Proxy* proxy, const SkBitmap& src,
                                       const Context& ctx,
                                       SkBitmap* dst, SkIPoint* offset) const {
     SkBitmap source = src;
-    SkImageFilter* input = getInput(0);
     SkIPoint srcOffset = SkIPoint::Make(0, 0);
-    if (input && !input->filterImage(proxy, src, ctx, &source, &srcOffset)) {
+    if (!this->filterInput(0, proxy, src, ctx, &source, &srcOffset)) {
         return false;
     }
 
@@ -60,7 +59,7 @@ bool SkTileImageFilter::onFilterImage(Proxy* proxy, const SkBitmap& src,
     }
 
     SkAutoTUnref<SkBaseDevice> device(proxy->createDevice(w, h));
-    if (NULL == device.get()) {
+    if (nullptr == device.get()) {
         return false;
     }
     SkCanvas canvas(device);

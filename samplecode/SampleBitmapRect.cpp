@@ -37,7 +37,7 @@ static void make_bitmap(SkBitmap* bitmap) {
     paint.setAntiAlias(true);
     const SkPoint pts[] = { { 0, 0 }, { SCALAR_SIZE, SCALAR_SIZE } };
     const SkColor colors[] = { SK_ColorWHITE, SK_ColorBLUE };
-    paint.setShader(SkGradientShader::CreateLinear(pts, colors, NULL, 2,
+    paint.setShader(SkGradientShader::CreateLinear(pts, colors, nullptr, 2,
                                                    SkShader::kClamp_TileMode))->unref();
     canvas.drawCircle(SCALAR_SIZE/2, SCALAR_SIZE/2, SCALAR_SIZE/2, paint);
 }
@@ -131,7 +131,7 @@ protected:
 
         for (int i = 0; i < 2; ++i) {
             paint.setFilterQuality(1 == i ? kLow_SkFilterQuality : kNone_SkFilterQuality);
-            canvas->drawBitmapRect(bitmap, &srcR, fDstR[i], &paint,
+            canvas->drawBitmapRect(bitmap, srcR, fDstR[i], &paint,
                                    SkCanvas::kStrict_SrcRectConstraint);
             canvas->drawRect(fDstR[i], paint);
         }
@@ -226,7 +226,7 @@ protected:
 
         for (int i = 0; i < 2; ++i) {
             paint.setFilterQuality(1 == i ? kLow_SkFilterQuality : kNone_SkFilterQuality);
-            canvas->drawBitmapRect(fBitmap, &fSrcR, fDstR[i], &paint,
+            canvas->drawBitmapRect(fBitmap, fSrcR, fDstR[i], &paint,
                                    SkCanvas::kStrict_SrcRectConstraint);
             canvas->drawRect(fDstR[i], paint);
         }

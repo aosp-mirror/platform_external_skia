@@ -9,21 +9,8 @@
 #include "SkColor.h"
 #include "SkImageFilter.h"
 
-namespace skiagm {
-
-class MatrixImageFilterGM : public GM {
-public:
-    MatrixImageFilterGM() {
-        this->setBGColor(0x00000000);
-    }
-
-protected:
-    virtual SkString onShortName() {
-        return SkString("matriximagefilter");
-    }
-
-    void draw(SkCanvas* canvas, const SkRect& rect, const SkBitmap& bitmap,
-              const SkMatrix& matrix, SkFilterQuality filter) {
+static void draw(SkCanvas* canvas, const SkRect& rect, const SkBitmap& bitmap,
+                 const SkMatrix& matrix, SkFilterQuality filter) {
         SkAutoTUnref<SkImageFilter> imageFilter(
             SkImageFilter::CreateMatrixFilter(matrix, filter));
         SkPaint paint;
@@ -31,19 +18,15 @@ protected:
         canvas->saveLayer(&rect, &paint);
         canvas->drawBitmap(bitmap, 0, 0);
         canvas->restore();
-    }
+}
 
-    virtual SkISize onISize() {
-        return SkISize::Make(420, 100);
-    }
-
-    void make_checkerboard(SkBitmap* bitmap) {
+static void make_checkerboard(SkBitmap* bitmap) {
         bitmap->allocN32Pixels(64, 64);
         SkCanvas canvas(*bitmap);
         SkPaint darkPaint;
-        darkPaint.setColor(0xFF404040);
+        darkPaint.setColor(sk_tool_utils::color_to_565(0xFF404040));
         SkPaint lightPaint;
-        lightPaint.setColor(0xFFA0A0A0);
+        lightPaint.setColor(sk_tool_utils::color_to_565(0xFFA0A0A0));
         for (int y = 0; y < 64; y += 32) {
             for (int x = 0; x < 64; x += 32) {
                 canvas.save();
@@ -55,10 +38,9 @@ protected:
                 canvas.restore();
             }
         }
-    }
+}
 
-    virtual void onDraw(SkCanvas* canvas) {
-        canvas->clear(SK_ColorBLACK);
+DEF_SIMPLE_GM_BG(matriximagefilter, canvas, 420, 100, SK_ColorBLACK) {
         SkMatrix matrix;
         SkScalar margin = SkIntToScalar(10);
         matrix.setSkew(SkDoubleToScalar(0.5), SkDoubleToScalar(0.2));
@@ -81,15 +63,4 @@ protected:
         canvas->translate(srcRect.width() + margin, 0);
         draw(canvas, srcRect, checkerboard, matrix, kHigh_SkFilterQuality);
 #endif
-    }
-
-private:
-    typedef GM INHERITED;
-};
-
-//////////////////////////////////////////////////////////////////////////////
-
-static GM* MyFactory(void*) { return new MatrixImageFilterGM; }
-static GMRegistry reg(MyFactory);
-
 }

@@ -21,7 +21,7 @@ static SkSurface* new_surface(int width, int height) {
 
 static void draw_pixel_centers(SkCanvas* canvas) {
     SkPaint paint;
-    paint.setColor(0xFF0088FF);
+    paint.setColor(sk_tool_utils::color_to_565(0xFF0088FF));
     paint.setAntiAlias(true);
 
     for (int y = 0; y < SMALL_H; ++y) {
@@ -36,7 +36,7 @@ static void draw_fatpath(SkCanvas* canvas, SkSurface* surface, const SkPath& pat
 
     surface->getCanvas()->clear(SK_ColorTRANSPARENT);
     surface->getCanvas()->drawPath(path, paint);
-    surface->draw(canvas, 0, 0, NULL);
+    surface->draw(canvas, 0, 0, nullptr);
 
     paint.setAntiAlias(true);
     paint.setColor(SK_ColorRED);
@@ -46,21 +46,9 @@ static void draw_fatpath(SkCanvas* canvas, SkSurface* surface, const SkPath& pat
     draw_pixel_centers(canvas);
 }
 
-class FatPathFillGM : public skiagm::GM {
-public:
-    FatPathFillGM() {}
-
-protected:
-
-    SkString onShortName() override {
-        return SkString("fatpathfill");
-    }
-
-    SkISize onISize() override {
-        return SkISize::Make(SMALL_W * ZOOM, SMALL_H * ZOOM * REPEAT_LOOP);
-    }
-
-    void onDraw(SkCanvas* canvas) override {
+DEF_SIMPLE_GM(fatpathfill, canvas,
+              SMALL_W * ZOOM,
+              SMALL_H * ZOOM * REPEAT_LOOP) {
         SkAutoTUnref<SkSurface> surface(new_surface(SMALL_W, SMALL_H));
 
         canvas->scale(ZOOM, ZOOM);
@@ -78,12 +66,4 @@ protected:
 
             canvas->translate(0, SMALL_H);
         }
-    }
-
-private:
-    typedef skiagm::GM INHERITED;
-};
-
-///////////////////////////////////////////////////////////////////////////////
-
-DEF_GM(return new FatPathFillGM;)
+}

@@ -5,19 +5,15 @@
  * found in the LICENSE file.
  */
 
-#include "SkTypes.h"
-
 #include "SkBitmapProcShader.h"
-#include "SkMallocPixelRef.h"
 #include "SkPathEffect.h"
-#include "SkPixelRef.h"
 #include "SkXfermode.h"
 
 #include "Sk1DPathEffect.h"
 #include "Sk2DPathEffect.h"
 #include "SkArithmeticMode.h"
 #include "SkArcToPathEffect.h"
-#include "SkBitmapSource.h"
+#include "SkBitmapSourceDeserializer.h"
 #include "SkBlurDrawLooper.h"
 #include "SkBlurImageFilter.h"
 #include "SkBlurMaskFilter.h"
@@ -37,10 +33,12 @@
 #include "SkEmbossMaskFilter.h"
 #include "SkFlattenable.h"
 #include "SkGradientShader.h"
+#include "SkImageSource.h"
 #include "SkLayerDrawLooper.h"
 #include "SkLayerRasterizer.h"
 #include "SkLerpXfermode.h"
 #include "SkLightingImageFilter.h"
+#include "SkLightingShader.h"
 #include "SkLocalMatrixShader.h"
 #include "SkLumaColorFilter.h"
 #include "SkMagnifierImageFilter.h"
@@ -66,7 +64,7 @@ public:
     static void Init() {
         SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkArcToPathEffect)
         SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkBitmapProcShader)
-        SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkBitmapSource)
+        SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkBitmapSourceDeserializer)
         SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkBlurDrawLooper)
         SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkBlurImageFilter)
         SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkColorCubeFilter)
@@ -83,6 +81,7 @@ public:
         SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkEmbossMaskFilter)
         SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkEmptyShader)
         SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkErodeImageFilter)
+        SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkImageSource)
         SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkLayerDrawLooper)
         SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkLayerRasterizer)
         SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkLerpXfermode)
@@ -115,6 +114,7 @@ public:
         SkColorFilter::InitializeFlattenables();
         SkGradientShader::InitializeFlattenables();
         SkLightingImageFilter::InitializeFlattenables();
+        SkLightingShader::InitializeFlattenables();
         SkTableColorFilter::InitializeFlattenables();
         SkXfermode::InitializeFlattenables();
     }

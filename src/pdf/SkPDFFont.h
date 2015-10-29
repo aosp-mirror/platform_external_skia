@@ -82,7 +82,7 @@ class SkPDFFont : public SkPDFDict {
 public:
     virtual ~SkPDFFont();
 
-    /** Returns the typeface represented by this class. Returns NULL for the
+    /** Returns the typeface represented by this class. Returns nullptr for the
      *  default typeface.
      */
     SkTypeface* typeface();
@@ -133,7 +133,7 @@ public:
     /** Subset the font based on usage set. Returns a SkPDFFont instance with
      *  subset.
      *  @param usage  Glyph subset requested.
-     *  @return       NULL if font does not support subsetting, a new instance
+     *  @return       nullptr if font does not support subsetting, a new instance
      *                of SkPDFFont otherwise.
      */
     virtual SkPDFFont* getFontSubset(const SkPDFGlyphSet* usage);
@@ -148,6 +148,12 @@ public:
                          uint16_t existingGlyphID,
                          uint32_t searchFontID,
                          uint16_t searchGlyphID);
+
+    /**
+     *  Return false iff the typeface has its NotEmbeddable flag set.
+     *  If typeface is NULL, the default typeface is checked.
+     */
+    static bool CanEmbedTypeface(SkTypeface*, SkPDFCanon*);
 
 protected:
     // Common constructor to handle common members.
@@ -175,7 +181,7 @@ protected:
     void adjustGlyphRangeForSingleByteEncoding(uint16_t glyphID);
 
     // Generate ToUnicode table according to glyph usage subset.
-    // If subset is NULL, all available glyph ids will be used.
+    // If subset is nullptr, all available glyph ids will be used.
     void populateToUnicodeTable(const SkPDFGlyphSet* subset);
 
     // Create instances of derived types based on fontInfo.

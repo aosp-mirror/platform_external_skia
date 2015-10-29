@@ -41,20 +41,27 @@ const GrGLInterface* GrGLDefaultInterface();
  * GLX on linux, AGL on Mac). The interface is only valid for the GL context
  * that is current when the interface is created.
  */
-const GrGLInterface* GrGLCreateNativeInterface();
+SK_API const GrGLInterface* GrGLCreateNativeInterface();
 
 #if SK_MESA
 /**
  * Creates a GrGLInterface for an OSMesa context.
  */
-const GrGLInterface* GrGLCreateMesaInterface();
+SK_API const GrGLInterface* GrGLCreateMesaInterface();
 #endif
 
 #if SK_ANGLE
 /**
  * Creates a GrGLInterface for an ANGLE context.
  */
-const GrGLInterface* GrGLCreateANGLEInterface();
+SK_API const GrGLInterface* GrGLCreateANGLEInterface();
+#endif
+
+#if SK_COMMAND_BUFFER
+/**
+ * Creates a GrGLInterface for a Command Buffer context.
+ */
+SK_API const GrGLInterface* GrGLCreateCommandBufferInterface();
 #endif
 
 /**
@@ -174,7 +181,6 @@ public:
         GLPtr<GrGLCompressedTexImage2DProc> fCompressedTexImage2D;
         GLPtr<GrGLCompressedTexSubImage2DProc> fCompressedTexSubImage2D;
         GLPtr<GrGLCopyTexSubImage2DProc> fCopyTexSubImage2D;
-        GLPtr<GrGLCopyTextureCHROMIUMProc> fCopyTextureCHROMIUM;
         GLPtr<GrGLCreateProgramProc> fCreateProgram;
         GLPtr<GrGLCreateShaderProc> fCreateShader;
         GLPtr<GrGLCullFaceProc> fCullFace;
@@ -276,7 +282,7 @@ public:
         GLPtr<GrGLRenderbufferStorageMultisampleProc> fRenderbufferStorageMultisample;
 
         // Pointer to BindUniformLocationCHROMIUM from the GL_CHROMIUM_bind_uniform_location extension.
-        GLPtr<GrGLBindUniformLocation> fBindUniformLocation;
+        GLPtr<GrGLBindUniformLocationProc> fBindUniformLocation;
 
         GLPtr<GrGLResolveMultisampleFramebufferProc> fResolveMultisampleFramebuffer;
         GLPtr<GrGLScissorProc> fScissor;
@@ -483,6 +489,8 @@ public:
         GLPtr<GrGLGetVertexArrayPointeri_vProc> fGetVertexArrayPointeri_v;
         GLPtr<GrGLMapNamedBufferRangeProc> fMapNamedBufferRange;
         GLPtr<GrGLFlushMappedNamedBufferRangeProc> fFlushMappedNamedBufferRange;
+        // OpenGL 4.5
+        GLPtr<GrGLNamedFramebufferParameteriProc> fNamedFramebufferParameteri;
 
         /* KHR_debug */
         GLPtr<GrGLDebugMessageControlProc> fDebugMessageControl;

@@ -32,7 +32,7 @@ static void make_transparency(SkCanvas* canvas,
         shaderColors[0] = SK_AlphaTRANSPARENT;
         shaderColors[1] = kColors[i];
         SkAutoTUnref<SkShader> shader(SkGradientShader::CreateLinear(
-                pts, shaderColors, NULL, 2, SkShader::kClamp_TileMode));
+                pts, shaderColors, nullptr, 2, SkShader::kClamp_TileMode));
         SkRect r = SkRect::MakeXYWH(0, i * kRowHeight, width, kRowHeight);
         SkPaint p;
         p.setShader(shader);
@@ -63,12 +63,13 @@ static void checkerboard(SkCanvas* canvas, SkColor c1, SkColor c2, int size) {
  *  checkerboard pattern looks correct.
  */
 DEF_SIMPLE_GM(transparency_check, canvas, 1792, 1080) {
-    checkerboard(canvas, 0xFF999999, 0xFF666666, 8);
+    checkerboard(canvas, sk_tool_utils::color_to_565(0xFF999999),
+            sk_tool_utils::color_to_565(0xFF666666), 8);
     {
         SkAutoCanvasRestore autoCanvasRestore(canvas, true);
         SkAutoTUnref<SkSurface> surface(SkSurface::NewRasterN32Premul(256, 9));
         make_transparency(surface->getCanvas(), 256.0f, 9.0f);
         canvas->scale(7.0f, 120.0f);
-        surface->draw(canvas, 0, 0, NULL);
+        surface->draw(canvas, 0, 0, nullptr);
     }
 }

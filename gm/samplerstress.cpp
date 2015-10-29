@@ -6,9 +6,10 @@
  */
 
 #include "gm.h"
-#include "SkCanvas.h"
-#include "SkShader.h"
 #include "SkBlurMaskFilter.h"
+#include "SkCanvas.h"
+#include "SkPath.h"
+#include "SkShader.h"
 
 namespace skiagm {
 
@@ -20,8 +21,8 @@ class SamplerStressGM : public GM {
 public:
     SamplerStressGM()
     : fTextureCreated(false)
-    , fShader(NULL)
-    , fMaskFilter(NULL) {
+    , fShader(nullptr)
+    , fMaskFilter(nullptr) {
     }
 
     virtual ~SamplerStressGM() {
@@ -101,6 +102,7 @@ protected:
         paint.setTextSize(72);
         paint.setShader(fShader.get());
         paint.setMaskFilter(fMaskFilter.get());
+        sk_tool_utils::set_portable_typeface(&paint);
 
         SkRect temp;
         temp.set(SkIntToScalar(115),
@@ -127,11 +129,12 @@ protected:
         paint2.setTextSize(72);
         paint2.setStyle(SkPaint::kStroke_Style);
         paint2.setStrokeWidth(1);
+        sk_tool_utils::set_portable_typeface(&paint2);
         canvas->drawText("M", 1,
                          SkIntToScalar(100), SkIntToScalar(100),
                          paint2);
 
-        paint2.setColor(SK_ColorGRAY);
+        paint2.setColor(sk_tool_utils::color_to_565(SK_ColorGRAY));
 
         canvas->drawPath(path, paint2);
     }

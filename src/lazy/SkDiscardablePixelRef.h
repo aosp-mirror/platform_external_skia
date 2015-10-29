@@ -21,6 +21,9 @@
 class SkDiscardablePixelRef : public SkPixelRef {
 public:
     
+    SkDiscardableMemory* diagnostic_only_getDiscardable() const override {
+        return fDiscardableMemory;
+    }
 
 protected:
     ~SkDiscardablePixelRef();
@@ -32,6 +35,8 @@ protected:
     SkData* onRefEncodedData() override {
         return fGenerator->refEncodedData();
     }
+
+    bool onIsLazyGenerated() const override { return true; }
 
 private:
     SkImageGenerator* const fGenerator;
@@ -61,7 +66,7 @@ private:
         return fGenerator->getYUV8Planes(sizes, planes, rowBytes, colorSpace);
     }
 
-    friend bool SkInstallDiscardablePixelRef(SkImageGenerator*, const SkIRect*, SkBitmap*,
+    friend bool SkDEPRECATED_InstallDiscardablePixelRef(SkImageGenerator*, const SkIRect*, SkBitmap*,
                                              SkDiscardableMemory::Factory*);
 
     typedef SkPixelRef INHERITED;

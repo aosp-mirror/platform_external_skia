@@ -6,9 +6,28 @@
  */
 
 #include "SkCodec.h"
+#include "SkCodecPriv.h"
 #include "SkColorPriv.h"
+#include "SkColorTable.h"
 #include "SkStream.h"
 #include "SkCodec_wbmp.h"
+
+// Each bit represents a pixel, so width is actually a number of bits.
+// A row will always be stored in bytes, so we round width up to the
+// nearest multiple of 8 to get the number of bits actually in the row.
+// We then divide by 8 to convert to bytes.
+static inline size_t get_src_row_bytes(int width) {
+    return SkAlign8(width) >> 3;
+}
+
+static inline void setup_color_table(SkColorType colorType,
+        SkPMColor* colorPtr, int* colorCount) {
+    if (kIndex_8_SkColorType == colorType) {
+        colorPtr[0] = SK_ColorBLACK;
+        colorPtr[1] = SK_ColorWHITE;
+        *colorCount = 2;
+    }
+}
 
 // http://en.wikipedia.org/wiki/Variable-length_quantity
 static bool read_mbf(SkStream* stream, uint64_t* value) {
@@ -38,7 +57,7 @@ static bool read_header(SkStream* stream, SkISize* size) {
     if (!read_mbf(stream, &width) || width > 0xFFFF || !width) {
         return false;
     }
-    if (!read_mbf(stream, &height) || width > 0xFFFF || !height) {
+    if (!read_mbf(stream, &height) || height > 0xFFFF || !height) {
         return false;
     }
     if (size) {
@@ -47,124 +66,133 @@ static bool read_header(SkStream* stream, SkISize* size) {
     return true;
 }
 
-#define BLACK SkPackARGB32NoCheck(0xFF, 0, 0, 0)
-#define WHITE SkPackARGB32NoCheck(0xFF, 0xFF, 0xFF, 0xFF)
-
-#define GRAYSCALE_BLACK 0
-#define GRAYSCALE_WHITE 0xFF
-
-#define RGB565_BLACK 0
-#define RGB565_WHITE 0xFFFF
-
-static SkPMColor bit_to_pmcolor(U8CPU bit) { return bit ? WHITE : BLACK; }
-
-static uint8_t bit_to_bit(U8CPU bit) { return bit; }
-
-static uint8_t bit_to_grayscale(U8CPU bit) {
-    return bit ? GRAYSCALE_WHITE : GRAYSCALE_BLACK;
+bool SkWbmpCodec::onRewind() {
+    return read_header(this->stream(), nullptr);
 }
 
-static uint16_t bit_to_rgb565(U8CPU bit) {
-    return bit ? RGB565_WHITE : RGB565_BLACK;
+SkSwizzler* SkWbmpCodec::initializeSwizzler(const SkImageInfo& info, const SkPMColor* ctable,
+        const Options& opts) {
+    // Create the swizzler based on the desired color type
+    switch (info.colorType()) {
+        case kIndex_8_SkColorType:
+        case kN32_SkColorType:
+        case kRGB_565_SkColorType:
+        case kGray_8_SkColorType:
+            break;
+        default:
+            return nullptr;
+    }
+    return SkSwizzler::CreateSwizzler(SkSwizzler::kBit, ctable, info, opts);
 }
 
-typedef void (*ExpandProc)(uint8_t*, const uint8_t*, int);
-
-// TODO(halcanary): Add this functionality (grayscale and indexed output) to
-//                  SkSwizzler and use it here.
-template <typename T, T (*TRANSFORM)(U8CPU)>
-static void expand_bits_to_T(uint8_t* dstptr, const uint8_t* src, int bits) {
-    T* dst = reinterpret_cast<T*>(dstptr);
-    int bytes = bits >> 3;
-    for (int i = 0; i < bytes; i++) {
-        U8CPU mask = *src++;
-        for (int j = 0; j < 8; j++) {
-            dst[j] = TRANSFORM((mask >> (7 - j)) & 1);
-        }
-        dst += 8;
-    }
-    bits &= 7;
-    if (bits > 0) {
-        U8CPU mask = *src;
-        do {
-            *dst++ = TRANSFORM((mask >> 7) & 1);
-            mask <<= 1;
-        } while (--bits != 0);
-    }
+bool SkWbmpCodec::readRow(uint8_t* row) {
+    return this->stream()->read(row, fSrcRowBytes) == fSrcRowBytes;
 }
 
 SkWbmpCodec::SkWbmpCodec(const SkImageInfo& info, SkStream* stream)
-    : INHERITED(info, stream) {}
+    : INHERITED(info, stream)
+    , fSrcRowBytes(get_src_row_bytes(this->getInfo().width()))
+    , fSwizzler(nullptr)
+    , fColorTable(nullptr)
+{}
 
 SkEncodedFormat SkWbmpCodec::onGetEncodedFormat() const {
     return kWBMP_SkEncodedFormat;
 }
 
 SkCodec::Result SkWbmpCodec::onGetPixels(const SkImageInfo& info,
-                                         void* pixels,
+                                         void* dst,
                                          size_t rowBytes,
                                          const Options& options,
                                          SkPMColor ctable[],
-                                         int* ctableCount) {
-    SkCodec::RewindState rewindState = this->rewindIfNeeded();
-    if (rewindState == kCouldNotRewind_RewindState) {
-        return kCouldNotRewind;
-    } else if (rewindState == kRewound_RewindState) {
-        (void)read_header(this->stream(), NULL);
-    }
+                                         int* ctableCount,
+                                         int* rowsDecoded) {
     if (options.fSubset) {
         // Subsets are not supported.
         return kUnimplemented;
     }
-    if (info.dimensions() != this->getInfo().dimensions()) {
-        return kInvalidScale;
+
+    if (!valid_alpha(info.alphaType(), this->getInfo().alphaType())) {
+        return kInvalidConversion;
     }
-    ExpandProc proc = NULL;
-    switch (info.colorType()) {
-        case kGray_8_SkColorType:
-            proc = expand_bits_to_T<uint8_t, bit_to_grayscale>;
-            break;
-        case kN32_SkColorType:
-            proc = expand_bits_to_T<SkPMColor, bit_to_pmcolor>;
-            break;
-        case kIndex_8_SkColorType:
-            ctable[0] = BLACK;
-            ctable[1] = WHITE;
-            *ctableCount = 2;
-            proc = expand_bits_to_T<uint8_t, bit_to_bit>;
-            break;
-        case kRGB_565_SkColorType:
-            proc = expand_bits_to_T<uint16_t, bit_to_rgb565>;
-            break;
-        default:
-            return kInvalidConversion;
+
+    // Prepare a color table if necessary
+    setup_color_table(info.colorType(), ctable, ctableCount);
+
+    // Initialize the swizzler
+    SkAutoTDelete<SkSwizzler> swizzler(this->initializeSwizzler(info, ctable, options));
+    if (nullptr == swizzler.get()) {
+        return kInvalidConversion;
     }
+
+    // Perform the decode
     SkISize size = info.dimensions();
-    uint8_t* dst = static_cast<uint8_t*>(pixels);
-    size_t srcRowBytes = SkAlign8(size.width()) >> 3;
-    SkAutoTMalloc<uint8_t> src(srcRowBytes);
+    SkAutoTMalloc<uint8_t> src(fSrcRowBytes);
+    void* dstRow = dst;
     for (int y = 0; y < size.height(); ++y) {
-        if (this->stream()->read(src.get(), srcRowBytes) != srcRowBytes) {
+        if (!this->readRow(src.get())) {
+            *rowsDecoded = y;
             return kIncompleteInput;
         }
-        proc(dst, src.get(), size.width());
-        dst += rowBytes;
+        swizzler->swizzle(dstRow, src.get());
+        dstRow = SkTAddOffset<void>(dstRow, rowBytes);
     }
     return kSuccess;
 }
 
 bool SkWbmpCodec::IsWbmp(SkStream* stream) {
-    return read_header(stream, NULL);
+    return read_header(stream, nullptr);
 }
 
 SkCodec* SkWbmpCodec::NewFromStream(SkStream* stream) {
     SkAutoTDelete<SkStream> streamDeleter(stream);
     SkISize size;
     if (!read_header(stream, &size)) {
-        return NULL;
+        return nullptr;
     }
-    SkImageInfo info =
-            SkImageInfo::Make(size.width(), size.height(), kGray_8_SkColorType,
-                              kOpaque_SkAlphaType);
-    return SkNEW_ARGS(SkWbmpCodec, (info, streamDeleter.detach()));
+    SkImageInfo info = SkImageInfo::Make(size.width(), size.height(),
+            kGray_8_SkColorType, kOpaque_SkAlphaType);
+    return new SkWbmpCodec(info, streamDeleter.detach());
+}
+
+int SkWbmpCodec::onGetScanlines(void* dst, int count, size_t dstRowBytes) {
+    void* dstRow = dst;
+    for (int y = 0; y < count; ++y) {
+        if (!this->readRow(fSrcBuffer.get())) {
+            return y;
+        }
+        fSwizzler->swizzle(dstRow, fSrcBuffer.get());
+        dstRow = SkTAddOffset<void>(dstRow, dstRowBytes);
+    }
+    return count;
+}
+
+SkCodec::Result SkWbmpCodec::onStartScanlineDecode(const SkImageInfo& dstInfo,
+        const Options& options, SkPMColor inputColorTable[], int* inputColorCount) {
+    if (options.fSubset) {
+        // Subsets are not supported.
+        return kUnimplemented;
+    }
+
+    if (!valid_alpha(dstInfo.alphaType(), this->getInfo().alphaType())) {
+        return kInvalidConversion;
+    }
+
+    // Fill in the color table
+    setup_color_table(dstInfo.colorType(), inputColorTable, inputColorCount);
+
+    // Copy the color table to a pointer that can be owned by the scanline decoder
+    if (kIndex_8_SkColorType == dstInfo.colorType()) {
+        fColorTable.reset(new SkColorTable(inputColorTable, 2));
+    }
+
+    // Initialize the swizzler
+    fSwizzler.reset(this->initializeSwizzler(dstInfo, get_color_ptr(fColorTable.get()), options));
+    if (nullptr == fSwizzler.get()) {
+        return kInvalidConversion;
+    }
+
+    fSrcBuffer.reset(fSrcRowBytes);
+
+    return kSuccess;
 }

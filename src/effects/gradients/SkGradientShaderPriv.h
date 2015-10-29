@@ -16,7 +16,6 @@
 #include "SkWriteBuffer.h"
 #include "SkMallocPixelRef.h"
 #include "SkUtils.h"
-#include "SkTemplates.h"
 #include "SkShader.h"
 #include "SkOnce.h"
 
@@ -127,7 +126,7 @@ public:
     // The cache is initialized on-demand when getCache16/32 is called.
     class GradientShaderCache : public SkRefCnt {
     public:
-        GradientShaderCache(U8CPU alpha, const SkGradientShaderBase& shader);
+        GradientShaderCache(U8CPU alpha, bool dither, const SkGradientShaderBase& shader);
         ~GradientShaderCache();
 
         const uint16_t*     getCache16();
@@ -136,9 +135,10 @@ public:
         SkMallocPixelRef* getCache32PixelRef() const { return fCache32PixelRef; }
 
         unsigned getAlpha() const { return fCacheAlpha; }
+        bool getDither() const { return fCacheDither; }
 
     private:
-        // Working pointers. If either is NULL, we need to recompute the corresponding cache values.
+        // Working pointers. If either is nullptr, we need to recompute the corresponding cache values.
         uint16_t*   fCache16;
         SkPMColor*  fCache32;
 
@@ -147,6 +147,7 @@ public:
         const unsigned    fCacheAlpha;        // The alpha value we used when we computed the cache.
                                               // Larger than 8bits so we can store uninitialized
                                               // value.
+        const bool        fCacheDither;       // The dither flag used when we computed the cache.
 
         const SkGradientShaderBase& fShader;
 
@@ -157,9 +158,9 @@ public:
         static void initCache16(GradientShaderCache* cache);
         static void initCache32(GradientShaderCache* cache);
 
-        static void Build16bitCache(uint16_t[], SkColor c0, SkColor c1, int count);
+        static void Build16bitCache(uint16_t[], SkColor c0, SkColor c1, int count, bool dither);
         static void Build32bitCache(SkPMColor[], SkColor c0, SkColor c1, int count,
-                                    U8CPU alpha, uint32_t gradFlags);
+                                    U8CPU alpha, uint32_t gradFlags, bool dither);
     };
 
     class GradientShaderBaseContext : public SkShader::Context {
@@ -173,6 +174,7 @@ public:
         SkMatrix::MapXYProc fDstToIndexProc;
         uint8_t     fDstToIndexClass;
         uint8_t     fFlags;
+        bool        fDither;
 
         SkAutoTUnref<GradientShaderCache> fCache;
 
@@ -261,7 +263,7 @@ private:
     SkScalar*   fOrigPos;   // original positions
     bool        fColorsAreOpaque;
 
-    GradientShaderCache* refCache(U8CPU alpha) const;
+    GradientShaderCache* refCache(U8CPU alpha, bool dither) const;
     mutable SkMutex                           fCacheMutex;
     mutable SkAutoTUnref<GradientShaderCache> fCache;
 
@@ -328,7 +330,6 @@ class GrGradientEffect : public GrFragmentProcessor {
 public:
 
     GrGradientEffect(GrContext* ctx,
-                     GrProcessorDataManager*,
                      const SkGradientShaderBase& shader,
                      const SkMatrix& matrix,
                      SkShader::TileMode tileMode);
@@ -359,7 +360,7 @@ protected:
         The function decides whether stop values should be used or not. The return value indicates
         the number of colors, which will be capped by kMaxRandomGradientColors. colors should be
         sized to be at least kMaxRandomGradientColors. stops is a pointer to an array of at least
-        size kMaxRandomGradientColors. It may be updated to NULL, indicating that NULL should be
+        size kMaxRandomGradientColors. It may be updated to nullptr, indicating that nullptr should be
         passed to the gradient factory rather than the array.
     */
     static const int kMaxRandomGradientColors = 4;
@@ -399,7 +400,8 @@ public:
     GrGLGradientEffect();
     virtual ~GrGLGradientEffect();
 
-    void setData(const GrGLProgramDataManager&, const GrProcessor&) override;
+protected:
+    void onSetData(const GrGLProgramDataManager&, const GrProcessor&) override;
 
 protected:
     /**

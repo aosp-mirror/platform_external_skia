@@ -6,11 +6,11 @@
  * found in the LICENSE file.
  */
 
-#include "GrTypes.h"
-#include "../../src/utils/SkTLogic.h"
-
 #ifndef GrBlend_DEFINED
 #define GrBlend_DEFINED
+
+#include "GrColor.h"
+#include "../private/SkTLogic.h"
 
 /**
  * Equations for alpha-blending.
@@ -46,7 +46,7 @@ static const int kGrBlendEquationCnt = kLast_GrBlendEquation + 1;
 
 
 /**
- * Coeffecients for alpha-blending.
+ * Coefficients for alpha-blending.
  */
 enum GrBlendCoeff {
     kZero_GrBlendCoeff,    //<! 0
@@ -73,12 +73,25 @@ enum GrBlendCoeff {
 
 static const int kGrBlendCoeffCnt = kLast_GrBlendCoeff + 1;
 
+/**
+ * Given a known blend equation in the form of srcCoeff * srcColor + dstCoeff * dstColor where
+ * there may be partial knowledge of the srcColor and dstColor component values, determine what
+ * components of the blended output color are known. Coeffs must not refer to the constant or
+ * secondary src color.
+ */
+void GrGetCoeffBlendKnownComponents(GrBlendCoeff srcCoeff, GrBlendCoeff dstCoeff,
+                                    GrColor srcColor,
+                                    GrColorComponentFlags srcColorFlags,
+                                    GrColor dstColor,
+                                    GrColorComponentFlags dstColorFlags,
+                                    GrColor* outColor,
+                                    GrColorComponentFlags* outFlags);
 
 template<GrBlendCoeff Coeff>
-struct GrTBlendCoeffRefsSrc : SkTBool<kSC_GrBlendCoeff == Coeff ||
-                                      kISC_GrBlendCoeff == Coeff ||
-                                      kSA_GrBlendCoeff == Coeff ||
-                                      kISA_GrBlendCoeff == Coeff> {};
+struct GrTBlendCoeffRefsSrc : skstd::bool_constant<kSC_GrBlendCoeff == Coeff ||
+                                                   kISC_GrBlendCoeff == Coeff ||
+                                                   kSA_GrBlendCoeff == Coeff ||
+                                                   kISA_GrBlendCoeff == Coeff> {};
 
 #define GR_BLEND_COEFF_REFS_SRC(COEFF) \
     GrTBlendCoeffRefsSrc<COEFF>::value
@@ -95,12 +108,11 @@ inline bool GrBlendCoeffRefsSrc(GrBlendCoeff coeff) {
     }
 }
 
-
 template<GrBlendCoeff Coeff>
-struct GrTBlendCoeffRefsDst : SkTBool<kDC_GrBlendCoeff == Coeff ||
-                                      kIDC_GrBlendCoeff == Coeff ||
-                                      kDA_GrBlendCoeff == Coeff ||
-                                      kIDA_GrBlendCoeff == Coeff> {};
+struct GrTBlendCoeffRefsDst : skstd::bool_constant<kDC_GrBlendCoeff == Coeff ||
+                                                   kIDC_GrBlendCoeff == Coeff ||
+                                                   kDA_GrBlendCoeff == Coeff ||
+                                                   kIDA_GrBlendCoeff == Coeff> {};
 
 #define GR_BLEND_COEFF_REFS_DST(COEFF) \
     GrTBlendCoeffRefsDst<COEFF>::value
@@ -119,10 +131,10 @@ inline bool GrBlendCoeffRefsDst(GrBlendCoeff coeff) {
 
 
 template<GrBlendCoeff Coeff>
-struct GrTBlendCoeffRefsSrc2 : SkTBool<kS2C_GrBlendCoeff == Coeff ||
-                                       kIS2C_GrBlendCoeff == Coeff ||
-                                       kS2A_GrBlendCoeff == Coeff ||
-                                       kIS2A_GrBlendCoeff == Coeff> {};
+struct GrTBlendCoeffRefsSrc2 : skstd::bool_constant<kS2C_GrBlendCoeff == Coeff ||
+                                                    kIS2C_GrBlendCoeff == Coeff ||
+                                                    kS2A_GrBlendCoeff == Coeff ||
+                                                    kIS2A_GrBlendCoeff == Coeff> {};
 
 #define GR_BLEND_COEFF_REFS_SRC2(COEFF) \
     GrTBlendCoeffRefsSrc2<COEFF>::value
@@ -141,23 +153,23 @@ inline bool GrBlendCoeffRefsSrc2(GrBlendCoeff coeff) {
 
 
 template<GrBlendCoeff SrcCoeff, GrBlendCoeff DstCoeff>
-struct GrTBlendCoeffsUseSrcColor : SkTBool<kZero_GrBlendCoeff != SrcCoeff ||
-                                           GR_BLEND_COEFF_REFS_SRC(DstCoeff)> {};
+struct GrTBlendCoeffsUseSrcColor : skstd::bool_constant<kZero_GrBlendCoeff != SrcCoeff ||
+                                                        GR_BLEND_COEFF_REFS_SRC(DstCoeff)> {};
 
 #define GR_BLEND_COEFFS_USE_SRC_COLOR(SRC_COEFF, DST_COEFF) \
     GrTBlendCoeffsUseSrcColor<SRC_COEFF, DST_COEFF>::value
 
 
 template<GrBlendCoeff SrcCoeff, GrBlendCoeff DstCoeff>
-struct GrTBlendCoeffsUseDstColor : SkTBool<GR_BLEND_COEFF_REFS_DST(SrcCoeff) ||
-                                           kZero_GrBlendCoeff != DstCoeff> {};
+struct GrTBlendCoeffsUseDstColor : skstd::bool_constant<GR_BLEND_COEFF_REFS_DST(SrcCoeff) ||
+                                                        kZero_GrBlendCoeff != DstCoeff> {};
 
 #define GR_BLEND_COEFFS_USE_DST_COLOR(SRC_COEFF, DST_COEFF) \
     GrTBlendCoeffsUseDstColor<SRC_COEFF, DST_COEFF>::value
 
 
 template<GrBlendEquation Equation>
-struct GrTBlendEquationIsAdvanced : SkTBool<Equation >= kFirstAdvancedGrBlendEquation> {};
+struct GrTBlendEquationIsAdvanced : skstd::bool_constant<Equation >= kFirstAdvancedGrBlendEquation> {};
 
 #define GR_BLEND_EQUATION_IS_ADVANCED(EQUATION) \
     GrTBlendEquationIsAdvanced<EQUATION>::value
@@ -168,10 +180,10 @@ inline bool GrBlendEquationIsAdvanced(GrBlendEquation equation) {
 
 
 template<GrBlendEquation BlendEquation, GrBlendCoeff SrcCoeff, GrBlendCoeff DstCoeff>
-struct GrTBlendModifiesDst : SkTBool<(kAdd_GrBlendEquation != BlendEquation &&
-                                      kReverseSubtract_GrBlendEquation != BlendEquation) ||
-                                     kZero_GrBlendCoeff != SrcCoeff ||
-                                     kOne_GrBlendCoeff != DstCoeff> {};
+struct GrTBlendModifiesDst : skstd::bool_constant<
+    (kAdd_GrBlendEquation != BlendEquation && kReverseSubtract_GrBlendEquation != BlendEquation) ||
+     kZero_GrBlendCoeff != SrcCoeff ||
+     kOne_GrBlendCoeff != DstCoeff> {};
 
 #define GR_BLEND_MODIFIES_DST(EQUATION, SRC_COEFF, DST_COEFF) \
     GrTBlendModifiesDst<EQUATION, SRC_COEFF, DST_COEFF>::value
@@ -202,13 +214,13 @@ struct GrTBlendModifiesDst : SkTBool<(kAdd_GrBlendEquation != BlendEquation &&
  * dstCoeff references S.
  */
 template<GrBlendEquation Equation, GrBlendCoeff SrcCoeff, GrBlendCoeff DstCoeff>
-struct GrTBlendCanTweakAlphaForCoverage : SkTBool<GR_BLEND_EQUATION_IS_ADVANCED(Equation) ||
-                                                  ((kAdd_GrBlendEquation == Equation ||
-                                                    kReverseSubtract_GrBlendEquation == Equation) &&
-                                                   !GR_BLEND_COEFF_REFS_SRC(SrcCoeff) &&
-                                                   (kOne_GrBlendCoeff == DstCoeff ||
-                                                    kISC_GrBlendCoeff == DstCoeff ||
-                                                    kISA_GrBlendCoeff == DstCoeff))> {};
+struct GrTBlendCanTweakAlphaForCoverage : skstd::bool_constant<
+    GR_BLEND_EQUATION_IS_ADVANCED(Equation) ||
+    ((kAdd_GrBlendEquation == Equation || kReverseSubtract_GrBlendEquation == Equation) &&
+      !GR_BLEND_COEFF_REFS_SRC(SrcCoeff) &&
+      (kOne_GrBlendCoeff == DstCoeff ||
+       kISC_GrBlendCoeff == DstCoeff ||
+       kISA_GrBlendCoeff == DstCoeff))> {};
 
 #define GR_BLEND_CAN_TWEAK_ALPHA_FOR_COVERAGE(EQUATION, SRC_COEFF, DST_COEFF) \
     GrTBlendCanTweakAlphaForCoverage<EQUATION, SRC_COEFF, DST_COEFF>::value

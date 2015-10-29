@@ -24,15 +24,11 @@ public:
     GrGLuint bufferID() const { return fImpl.bufferID(); }
     size_t baseOffset() const { return fImpl.baseOffset(); }
 
-    void bind() const {
-        if (!this->wasDestroyed()) {
-            fImpl.bind(this->getGpuGL());
-        }
-    }
-
 protected:
     void onAbandon() override;
     void onRelease() override;
+    void setMemoryBacking(SkTraceMemoryDump* traceMemoryDump,
+                          const SkString& dumpName) const override;
 
 private:
     void* onMap() override;

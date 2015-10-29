@@ -34,7 +34,7 @@ void SKPAnimationBench::drawPicture() {
         SkMatrix trans = SkMatrix::MakeTrans(-1.f * this->tileRects()[j].fLeft,
                                              -1.f * this->tileRects()[j].fTop);
         fAnimation->preConcatFrameMatrix(fAnimationTimer.fWall, fDevBounds, &trans);
-        this->surfaces()[j]->getCanvas()->drawPicture(this->picture(), &trans, NULL);
+        this->surfaces()[j]->getCanvas()->drawPicture(this->picture(), &trans, nullptr);
     }
 
     for (int j = 0; j < this->tileRects().count(); ++j) {
@@ -71,5 +71,5 @@ private:
 
 SKPAnimationBench::Animation* SKPAnimationBench::CreateZoomAnimation(SkScalar zoomMax,
                                                                      double zoomPeriodMs) {
-    return SkNEW_ARGS(ZoomAnimation, (zoomMax, zoomPeriodMs));
+    return new ZoomAnimation(zoomMax, zoomPeriodMs);
 }

@@ -25,6 +25,9 @@ public:
         sk_bzero(fPt2, sizeof(fPt2));
         sk_bzero(fT, sizeof(fT));
         sk_bzero(fNearlySame, sizeof(fNearlySame));
+#if DEBUG_T_SECT_LOOP_COUNT
+        sk_bzero(fDebugLoopCount, sizeof(fDebugLoopCount));
+#endif
         reset();
         fMax = 0;  // require that the caller set the max
     }
@@ -188,6 +191,7 @@ public:
     }
 
     void setMax(int max) {
+        SkASSERT(max <= (int) SK_ARRAY_COUNT(fPt));
         fMax = max;
     }
 
@@ -276,7 +280,16 @@ public:
 #endif
     }
 
+    enum DebugLoop {
+        kIterations_DebugLoop,
+        kCoinCheck_DebugLoop,
+        kComputePerp_DebugLoop,
+    };
+
+    void debugBumpLoopCount(DebugLoop );
     int debugCoincidentUsed() const;
+    int debugLoopCount(DebugLoop ) const;
+    void debugResetLoopCount();
     void dump() const;  // implemented for testing only
 
 private:
@@ -286,9 +299,9 @@ private:
     void cleanUpParallelLines(bool parallel);
     void computePoints(const SkDLine& line, int used);
 
-    SkDPoint fPt[10];  // FIXME: since scans store points as SkPoint, this should also
+    SkDPoint fPt[12];  // FIXME: since scans store points as SkPoint, this should also
     SkDPoint fPt2[2];  // used by nearly same to store alternate intersection point
-    double fT[2][10];
+    double fT[2][12];
     uint16_t fIsCoincident[2];  // bit set for each curve's coincident T
     bool fNearlySame[2];  // true if end points nearly match
     unsigned char fUsed;
@@ -297,6 +310,9 @@ private:
     bool fSwap;
 #ifdef SK_DEBUG
     int fDepth;
+#endif
+#if DEBUG_T_SECT_LOOP_COUNT
+    int fDebugLoopCount[3];
 #endif
 };
 

@@ -67,7 +67,7 @@ protected:
         return fName.c_str();
     }
 
-    void onPreDraw() override {
+    void onDelayedSetup() override {
         fBitmap.allocPixels();
         fBitmap.setAlphaType(kOpaque_SkAlphaType);
         fBitmap.eraseColor(SK_ColorBLACK);
@@ -87,7 +87,7 @@ protected:
     }
 
 
-    void onDraw(const int loops, SkCanvas* canvas) override {
+    void onDraw(int loops, SkCanvas* canvas) override {
         SkRandom rand;
 
         SkPaint paint;
@@ -96,7 +96,7 @@ protected:
         paint.setAlpha(fAlpha);
 
         for (int i = 0; i < loops; i++) {
-            canvas->drawBitmapRect(fBitmap, &fSrcR, fDstR, &paint,
+            canvas->drawBitmapRect(fBitmap, fSrcR, fDstR, &paint,
                                    SkCanvas::kStrict_SrcRectConstraint);
         }
     }

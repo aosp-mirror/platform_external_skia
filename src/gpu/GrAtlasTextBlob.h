@@ -77,15 +77,32 @@ struct GrAtlasTextBlob : public SkRefCnt {
                 , fVertexEndIndex(0)
                 , fGlyphStartIndex(0)
                 , fGlyphEndIndex(0)
-                , fDrawAsDistanceFields(false) {}
+                , fTextRatio(1.0f)
+                , fMaskFormat(kA8_GrMaskFormat)
+                , fDrawAsDistanceFields(false)
+                , fUseLCDText(false) {}
+            SubRunInfo(const SubRunInfo& that)
+                : fBulkUseToken(that.fBulkUseToken)
+                , fStrike(SkSafeRef(that.fStrike.get()))
+                , fAtlasGeneration(that.fAtlasGeneration)
+                , fVertexStartIndex(that.fVertexStartIndex)
+                , fVertexEndIndex(that.fVertexEndIndex)
+                , fGlyphStartIndex(that.fGlyphStartIndex)
+                , fGlyphEndIndex(that.fGlyphEndIndex)
+                , fTextRatio(that.fTextRatio)
+                , fMaskFormat(that.fMaskFormat)
+                , fDrawAsDistanceFields(that.fDrawAsDistanceFields)
+                , fUseLCDText(that.fUseLCDText) {
+            }
             // Distance field text cannot draw coloremoji, and so has to fall back.  However,
             // though the distance field text and the coloremoji may share the same run, they
-            // will have different descriptors.  If fOverrideDescriptor is non-NULL, then it
+            // will have different descriptors.  If fOverrideDescriptor is non-nullptr, then it
             // will be used in place of the run's descriptor to regen texture coords
             // TODO we could have a descriptor cache, it would reduce the size of these blobs
             // significantly, and then the subrun could just have a refed pointer to the
             // correct descriptor.
             GrBatchAtlas::BulkUseTokenUpdater fBulkUseToken;
+            SkAutoTUnref<GrBatchTextStrike> fStrike;
             uint64_t fAtlasGeneration;
             size_t fVertexStartIndex;
             size_t fVertexEndIndex;
@@ -99,8 +116,9 @@ struct GrAtlasTextBlob : public SkRefCnt {
 
         SubRunInfo& push_back() {
             // Forward glyph / vertex information to seed the new sub run
-            SubRunInfo& prevSubRun = fSubRunInfo.back();
             SubRunInfo& newSubRun = fSubRunInfo.push_back();
+            SubRunInfo& prevSubRun = fSubRunInfo.fromBack(1);
+
             newSubRun.fGlyphStartIndex = prevSubRun.fGlyphEndIndex;
             newSubRun.fGlyphEndIndex = prevSubRun.fGlyphEndIndex;
 
@@ -109,7 +127,6 @@ struct GrAtlasTextBlob : public SkRefCnt {
             return newSubRun;
         }
         static const int kMinSubRuns = 1;
-        SkAutoTUnref<GrBatchTextStrike> fStrike;
         SkAutoTUnref<SkTypeface> fTypeface;
         SkRect fVertexBounds;
         SkSTArray<kMinSubRuns, SubRunInfo> fSubRunInfo;
@@ -121,13 +138,17 @@ struct GrAtlasTextBlob : public SkRefCnt {
     };
 
     struct BigGlyph {
-        BigGlyph(const SkPath& path, SkScalar vx, SkScalar vy)
+        BigGlyph(const SkPath& path, SkScalar vx, SkScalar vy, SkScalar scale, bool applyVM)
             : fPath(path)
             , fVx(vx)
-            , fVy(vy) {}
+            , fVy(vy)
+            , fScale(scale)
+            , fApplyVM(applyVM) {}
         SkPath fPath;
         SkScalar fVx;
         SkScalar fVy;
+        SkScalar fScale;
+        bool fApplyVM;
     };
 
     struct Key {
@@ -170,7 +191,7 @@ struct GrAtlasTextBlob : public SkRefCnt {
     SkTArray<BigGlyph> fBigGlyphs;
     Key fKey;
     SkMatrix fViewMatrix;
-    SkColor fPaintColor;
+    GrColor fPaintColor;
     SkScalar fX;
     SkScalar fY;
 

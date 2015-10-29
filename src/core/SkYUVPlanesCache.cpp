@@ -48,6 +48,10 @@ struct YUVPlanesRec : public SkResourceCache::Rec {
 
     const Key& getKey() const override { return fKey; }
     size_t bytesUsed() const override { return sizeof(*this) + fValue.fData->size(); }
+    const char* getCategory() const override { return "yuv-planes"; }
+    SkDiscardableMemory* diagnostic_only_getDiscardable() const override {
+        return fValue.fData->diagnostic_only_getDiscardable();
+    }
 
     static bool Visitor(const SkResourceCache::Rec& baseRec, void* contextData) {
         const YUVPlanesRec& rec = static_cast<const YUVPlanesRec&>(baseRec);
@@ -55,7 +59,7 @@ struct YUVPlanesRec : public SkResourceCache::Rec {
 
         SkCachedData* tmpData = rec.fValue.fData;
         tmpData->ref();
-        if (NULL == tmpData->data()) {
+        if (nullptr == tmpData->data()) {
             tmpData->unref();
             return false;
         }
@@ -71,7 +75,7 @@ SkCachedData* SkYUVPlanesCache::FindAndRef(uint32_t genID, Info* info,
     YUVValue result;
     YUVPlanesKey key(genID);
     if (!CHECK_LOCAL(localCache, find, Find, key, YUVPlanesRec::Visitor, &result)) {
-        return NULL;
+        return nullptr;
     }
     
     *info = result.fInfo;
@@ -81,5 +85,5 @@ SkCachedData* SkYUVPlanesCache::FindAndRef(uint32_t genID, Info* info,
 void SkYUVPlanesCache::Add(uint32_t genID, SkCachedData* data, Info* info,
                            SkResourceCache* localCache) {
     YUVPlanesKey key(genID);
-    return CHECK_LOCAL(localCache, add, Add, SkNEW_ARGS(YUVPlanesRec, (key, data, info)));
+    return CHECK_LOCAL(localCache, add, Add, new YUVPlanesRec(key, data, info));
 }

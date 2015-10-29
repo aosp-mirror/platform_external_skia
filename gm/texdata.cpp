@@ -17,29 +17,12 @@
 #include "effects/GrPorterDuffXferProcessor.h"
 #include "effects/GrSimpleTextureEffect.h"
 
-namespace skiagm {
-
 static const int S = 200;
 
-class TexDataGM : public GM {
-public:
-    TexDataGM() {
-        this->setBGColor(0xff000000);
-    }
-
-protected:
-    SkString onShortName() override {
-        return SkString("texdata");
-    }
-
-    SkISize onISize() override {
-        return SkISize::Make(2*S, 2*S);
-    }
-
-    void onDraw(SkCanvas* canvas) override {
+DEF_SIMPLE_GM_BG(texdata, canvas, 2 * S, 2 * S, SK_ColorBLACK) {
         GrRenderTarget* target = canvas->internal_private_accessTopLayerRenderTarget();
         GrContext* ctx = canvas->getGrContext();
-        GrDrawContext* drawContext = ctx ? ctx->drawContext() : NULL;
+        SkAutoTUnref<GrDrawContext> drawContext(ctx ? ctx->drawContext(target) : nullptr);
         if (drawContext && target) {
             SkAutoTArray<SkPMColor> gTextureData((2 * S) * (2 * S));
             static const int stride = 2 * S;
@@ -113,7 +96,7 @@ protected:
                 tm.postIDiv(2*S, 2*S);
                 paint.addColorTextureProcessor(texture, tm);
 
-                drawContext->drawRect(target, clip, paint, vm, SkRect::MakeWH(2*S, 2*S));
+                drawContext->drawRect(clip, paint, vm, SkRect::MakeWH(2*S, 2*S));
 
                 // now update the lower right of the texture in first pass
                 // or upper right in second pass
@@ -127,22 +110,10 @@ protected:
                 texture->writePixels(S, (i ? 0 : S), S, S,
                                      texture->config(), gTextureData.get(),
                                      4 * stride);
-                drawContext->drawRect(target, clip, paint, vm, SkRect::MakeWH(2*S, 2*S));
+                drawContext->drawRect(clip, paint, vm, SkRect::MakeWH(2*S, 2*S));
             }
         } else {
-            this->drawGpuOnlyMessage(canvas);
+            skiagm::GM::DrawGpuOnlyMessage(canvas);
         }
-    }
-
-private:
-    typedef GM INHERITED;
-};
-
-//////////////////////////////////////////////////////////////////////////////
-
-static GM* MyFactory(void*) { return new TexDataGM; }
-static GMRegistry reg(MyFactory);
-
 }
-
 #endif

@@ -136,14 +136,17 @@ void SkClipStack::Element::asPath(SkPath* path) const {
     switch (fType) {
         case kEmpty_Type:
             path->reset();
+            path->setIsVolatile(true);
             break;
         case kRect_Type:
             path->reset();
             path->addRect(this->getRect());
+            path->setIsVolatile(true);
             break;
         case kRRect_Type:
             path->reset();
             path->addRRect(fRRect);
+            path->setIsVolatile(true);
             break;
         case kPath_Type:
             *path = *fPath.get();
@@ -395,7 +398,7 @@ void SkClipStack::Element::updateBoundAndGenID(const Element* prior) {
             fFiniteBoundType = kNormal_BoundsType;
 
             if (SkRegion::kReplace_Op == fOp ||
-                (SkRegion::kIntersect_Op == fOp && NULL == prior) ||
+                (SkRegion::kIntersect_Op == fOp && nullptr == prior) ||
                 (SkRegion::kIntersect_Op == fOp && prior->fIsIntersectionOfRects &&
                     prior->rectRectIntersectAllowed(this->getRect(), fDoAA))) {
                 fIsIntersectionOfRects = true;
@@ -431,7 +434,7 @@ void SkClipStack::Element::updateBoundAndGenID(const Element* prior) {
     SkRect prevFinite;
     SkClipStack::BoundsType prevType;
 
-    if (NULL == prior) {
+    if (nullptr == prior) {
         // no prior clip means the entire plane is writable
         prevFinite.setEmpty();   // there are no pixels that cannot be drawn to
         prevType = kInsideOut_BoundsType;
@@ -529,7 +532,7 @@ SkClipStack& SkClipStack::operator=(const SkClipStack& b) {
     fSaveCount = b.fSaveCount;
     SkDeque::F2BIter recIter(b.fDeque);
     for (const Element* element = (const Element*)recIter.next();
-         element != NULL;
+         element != nullptr;
          element = (const Element*)recIter.next()) {
         new (fDeque.push_back()) Element(*element);
     }
@@ -550,14 +553,14 @@ bool SkClipStack::operator==(const SkClipStack& b) const {
     const Element* myElement = (const Element*)myIter.next();
     const Element* bElement = (const Element*)bIter.next();
 
-    while (myElement != NULL && bElement != NULL) {
+    while (myElement != nullptr && bElement != nullptr) {
         if (*myElement != *bElement) {
             return false;
         }
         myElement = (const Element*)myIter.next();
         bElement = (const Element*)bIter.next();
     }
-    return myElement == NULL && bElement == NULL;
+    return myElement == nullptr && bElement == nullptr;
 }
 
 void SkClipStack::reset() {
@@ -599,7 +602,7 @@ void SkClipStack::getBounds(SkRect* canvFiniteBound,
 
     Element* element = (Element*)fDeque.back();
 
-    if (NULL == element) {
+    if (nullptr == element) {
         // the clip is wide open - the infinite plane w/ no pixels un-writeable
         canvFiniteBound->setEmpty();
         *boundType = kInsideOut_BoundsType;
@@ -620,7 +623,7 @@ bool SkClipStack::quickContains(const SkRect& rect) const {
 
     Iter iter(*this, Iter::kTop_IterStart);
     const Element* element = iter.prev();
-    while (element != NULL) {
+    while (element != nullptr) {
         if (SkRegion::kIntersect_Op != element->getOp() && SkRegion::kReplace_Op != element->getOp())
             return false;
         if (element->isInverseFilled()) {
@@ -711,7 +714,7 @@ void SkClipStack::pushElement(const Element& element) {
             prior = (Element*) fDeque.back();
         }
     }
-    Element* newElement = SkNEW_PLACEMENT_ARGS(fDeque.push_back(), Element, (element));
+    Element* newElement = new (fDeque.push_back()) Element(element);
     newElement->updateBoundAndGenID(prior);
 }
 
@@ -747,7 +750,7 @@ bool SkClipStack::isWideOpen() const {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-SkClipStack::Iter::Iter() : fStack(NULL) {
+SkClipStack::Iter::Iter() : fStack(nullptr) {
 }
 
 SkClipStack::Iter::Iter(const SkClipStack& stack, IterStart startLoc)
@@ -765,13 +768,13 @@ const SkClipStack::Element* SkClipStack::Iter::prev() {
 
 const SkClipStack::Element* SkClipStack::Iter::skipToTopmost(SkRegion::Op op) {
 
-    if (NULL == fStack) {
-        return NULL;
+    if (nullptr == fStack) {
+        return nullptr;
     }
 
     fIter.reset(fStack->fDeque, SkDeque::Iter::kBack_IterStart);
 
-    const SkClipStack::Element* element = NULL;
+    const SkClipStack::Element* element = nullptr;
 
     for (element = (const SkClipStack::Element*) fIter.prev();
          element;
@@ -784,7 +787,7 @@ const SkClipStack::Element* SkClipStack::Iter::skipToTopmost(SkRegion::Op op) {
             // return on the next "next" or "prev" call) the element
             // in front of it in the deque. Bump the iterator forward a
             // step so we get the expected result.
-            if (NULL == fIter.next()) {
+            if (nullptr == fIter.next()) {
                 // The reverse iterator has run off the front of the deque
                 // (i.e., the "op" clip is the first clip) and can't
                 // recover. Reset the iterator to start at the front.
@@ -794,7 +797,7 @@ const SkClipStack::Element* SkClipStack::Iter::skipToTopmost(SkRegion::Op op) {
         }
     }
 
-    if (NULL == element) {
+    if (nullptr == element) {
         // There were no "op" clips
         fIter.reset(fStack->fDeque, SkDeque::Iter::kFront_IterStart);
     }
@@ -862,11 +865,11 @@ void SkClipStack::Element::dump() const {
         "rrect",
         "path"
     };
-    SK_COMPILE_ASSERT(0 == kEmpty_Type, type_str);
-    SK_COMPILE_ASSERT(1 == kRect_Type, type_str);
-    SK_COMPILE_ASSERT(2 == kRRect_Type, type_str);
-    SK_COMPILE_ASSERT(3 == kPath_Type, type_str);
-    SK_COMPILE_ASSERT(SK_ARRAY_COUNT(kTypeStrings) == kTypeCnt, type_str);
+    static_assert(0 == kEmpty_Type, "type_str");
+    static_assert(1 == kRect_Type, "type_str");
+    static_assert(2 == kRRect_Type, "type_str");
+    static_assert(3 == kPath_Type, "type_str");
+    static_assert(SK_ARRAY_COUNT(kTypeStrings) == kTypeCnt, "type_str");
 
     static const char* kOpStrings[] = {
         "difference",
@@ -876,13 +879,13 @@ void SkClipStack::Element::dump() const {
         "reverse-difference",
         "replace",
     };
-    SK_COMPILE_ASSERT(0 == SkRegion::kDifference_Op, op_str);
-    SK_COMPILE_ASSERT(1 == SkRegion::kIntersect_Op, op_str);
-    SK_COMPILE_ASSERT(2 == SkRegion::kUnion_Op, op_str);
-    SK_COMPILE_ASSERT(3 == SkRegion::kXOR_Op, op_str);
-    SK_COMPILE_ASSERT(4 == SkRegion::kReverseDifference_Op, op_str);
-    SK_COMPILE_ASSERT(5 == SkRegion::kReplace_Op, op_str);
-    SK_COMPILE_ASSERT(SK_ARRAY_COUNT(kOpStrings) == SkRegion::kOpCnt, op_str);
+    static_assert(0 == SkRegion::kDifference_Op, "op_str");
+    static_assert(1 == SkRegion::kIntersect_Op, "op_str");
+    static_assert(2 == SkRegion::kUnion_Op, "op_str");
+    static_assert(3 == SkRegion::kXOR_Op, "op_str");
+    static_assert(4 == SkRegion::kReverseDifference_Op, "op_str");
+    static_assert(5 == SkRegion::kReplace_Op, "op_str");
+    static_assert(SK_ARRAY_COUNT(kOpStrings) == SkRegion::kOpCnt, "op_str");
 
     SkDebugf("Type: %s, Op: %s, AA: %s, Save Count: %d\n", kTypeStrings[fType],
              kOpStrings[fOp], (fDoAA ? "yes" : "no"), fSaveCount);
@@ -899,7 +902,7 @@ void SkClipStack::Element::dump() const {
             SkDebugf("\n");
             break;
         case kPath_Type:
-            this->getPath().dump(NULL, true, false);
+            this->getPath().dump(nullptr, true, false);
             break;
     }
 }

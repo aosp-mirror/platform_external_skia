@@ -25,6 +25,7 @@
         'effects.gyp:*'
       ],
       'include_dirs': [
+        '../include/private',
         '../src/core',
         '../src/opts',
         '../src/utils',
@@ -33,7 +34,7 @@
       'conditions': [
         [ '"x86" in skia_arch_type and skia_os != "ios"', {
           'cflags': [ '-msse2' ],
-          'dependencies': [ 'opts_ssse3', 'opts_sse41' ],
+          'dependencies': [ 'opts_ssse3', 'opts_sse41', 'opts_sse42', 'opts_avx', 'opts_avx2' ],
           'sources': [ '<@(sse2_sources)' ],
         }],
 
@@ -88,15 +89,15 @@
       'type': 'static_library',
       'standalone_static_library': 1,
       'dependencies': [ 'core.gyp:*' ],
-      'include_dirs': [ '../src/core' ],
+      'include_dirs': [
+          '../include/private',
+          '../src/core',
+          '../src/utils',
+      ],
       'sources': [ '<@(ssse3_sources)' ],
       'conditions': [
-        [ 'skia_os == "win"', {
-            'defines' : [ 'SK_CPU_SSE_LEVEL=31' ],
-        }],
-        [ 'not skia_android_framework', {
-          'cflags': [ '-mssse3' ],
-        }],
+        [ 'skia_os == "win"', { 'defines' : [ 'SK_CPU_SSE_LEVEL=31' ] }],
+        [ 'not skia_android_framework', { 'cflags': [ '-mssse3' ] }],
       ],
     },
     {
@@ -105,17 +106,70 @@
       'type': 'static_library',
       'standalone_static_library': 1,
       'dependencies': [ 'core.gyp:*' ],
+      'include_dirs': [
+          '../include/private',
+          '../src/core',
+          '../src/utils',
+      ],
       'sources': [ '<@(sse41_sources)' ],
+      'xcode_settings': { 'GCC_ENABLE_SSE41_EXTENSIONS': 'YES' },
       'conditions': [
-        [ 'skia_os == "win"', {
-            'defines' : [ 'SK_CPU_SSE_LEVEL=41' ],
-        }],
-        [ 'not skia_android_framework', {
-          'cflags': [ '-msse4.1' ],
-        }],
-        [ 'skia_os == "mac"', {
-          'xcode_settings': { 'GCC_ENABLE_SSE41_EXTENSIONS': 'YES' },
-        }],
+        [ 'skia_os == "win"', { 'defines' : [ 'SK_CPU_SSE_LEVEL=41' ] }],
+        [ 'not skia_android_framework', { 'cflags': [ '-msse4.1' ] }],
+      ],
+    },
+    {
+      'target_name': 'opts_sse42',
+      'product_name': 'skia_opts_sse42',
+      'type': 'static_library',
+      'standalone_static_library': 1,
+      'dependencies': [ 'core.gyp:*' ],
+      'include_dirs': [
+          '../include/private',
+          '../src/core',
+          '../src/utils',
+      ],
+      'sources': [ '<@(sse42_sources)' ],
+      'xcode_settings': { 'GCC_ENABLE_SSE42_EXTENSIONS': 'YES' },
+      'conditions': [
+        [ 'skia_os == "win"', { 'defines' : [ 'SK_CPU_SSE_LEVEL=42' ] }],
+        [ 'not skia_android_framework', { 'cflags': [ '-msse4.2' ] }],
+      ],
+    },
+    {
+      'target_name': 'opts_avx',
+      'product_name': 'skia_opts_avx',
+      'type': 'static_library',
+      'standalone_static_library': 1,
+      'dependencies': [ 'core.gyp:*' ],
+      'include_dirs': [
+          '../include/private',
+          '../src/core',
+          '../src/utils',
+      ],
+      'sources': [ '<@(avx_sources)' ],
+      'msvs_settings': { 'VCCLCompilerTool': { 'EnableEnhancedInstructionSet': '3' } },
+      'xcode_settings': { 'OTHER_CFLAGS': [ '-mavx' ] },
+      'conditions': [
+        [ 'not skia_android_framework', { 'cflags': [ '-mavx' ] }],
+      ],
+    },
+    {
+      'target_name': 'opts_avx2',
+      'product_name': 'skia_opts_avx2',
+      'type': 'static_library',
+      'standalone_static_library': 1,
+      'dependencies': [ 'core.gyp:*' ],
+      'include_dirs': [
+          '../include/private',
+          '../src/core',
+          '../src/utils',
+      ],
+      'sources': [ '<@(avx2_sources)' ],
+      'msvs_settings': { 'VCCLCompilerTool': { 'EnableEnhancedInstructionSet': '5' } },
+      'xcode_settings': { 'OTHER_CFLAGS': [ '-mavx2' ] },
+      'conditions': [
+        [ 'not skia_android_framework', { 'cflags': [ '-mavx2' ] }],
       ],
     },
     {
@@ -128,6 +182,7 @@
         'effects.gyp:*'
       ],
       'include_dirs': [
+        '../include/private',
         '../src/core',
         '../src/opts',
         '../src/utils',

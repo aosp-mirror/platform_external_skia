@@ -256,7 +256,7 @@ SkString::SkString() : fRec(const_cast<Rec*>(&gEmptyRec)) {
 }
 
 SkString::SkString(size_t len) {
-    fRec = AllocRec(NULL, len);
+    fRec = AllocRec(nullptr, len);
 }
 
 SkString::SkString(const char text[]) {
@@ -295,7 +295,7 @@ bool SkString::equals(const char text[]) const {
 }
 
 bool SkString::equals(const char text[], size_t len) const {
-    SkASSERT(len == 0 || text != NULL);
+    SkASSERT(len == 0 || text != nullptr);
 
     return fRec->fLength == len && !memcmp(fRec->data(), text, len);
 }
@@ -509,7 +509,7 @@ void SkString::insertU64(size_t offset, uint64_t dec, int minDigits) {
 }
 
 void SkString::insertHex(size_t offset, uint32_t hex, int minDigits) {
-    minDigits = SkPin32(minDigits, 0, 8);
+    minDigits = SkTPin(minDigits, 0, 8);
 
     static const char gHex[] = "0123456789ABCDEF";
 

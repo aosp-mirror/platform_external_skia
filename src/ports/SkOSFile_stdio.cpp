@@ -6,16 +6,44 @@
  */
 
 #include "SkOSFile.h"
+#include "SkTypes.h"
 
 #include <errno.h>
 #include <stdio.h>
 #include <sys/stat.h>
-#include <sys/types.h>
 
 #ifdef _WIN32
 #include <direct.h>
 #include <io.h>
 #endif
+
+#ifdef SK_BUILD_FOR_IOS
+#import <CoreFoundation/CoreFoundation.h>
+
+static FILE* ios_open_from_bundle(const char path[], const char* perm) {
+    // Get a reference to the main bundle
+    CFBundleRef mainBundle = CFBundleGetMainBundle();
+    
+    // Get a reference to the file's URL
+    CFStringRef pathRef = CFStringCreateWithCString(NULL, path, kCFStringEncodingUTF8);
+    CFURLRef imageURL = CFBundleCopyResourceURL(mainBundle, pathRef, NULL, NULL);
+    if (!imageURL) {
+        return nullptr;
+    }
+    
+    // Convert the URL reference into a string reference
+    CFStringRef imagePath = CFURLCopyFileSystemPath(imageURL, kCFURLPOSIXPathStyle);
+    
+    // Get the system encoding method
+    CFStringEncoding encodingMethod = CFStringGetSystemEncoding();
+    
+    // Convert the string reference into a C string
+    const char *finalPath = CFStringGetCStringPtr(imagePath, encodingMethod);
+   
+    return fopen(finalPath, perm);
+}
+#endif
+
 
 SkFILE* sk_fopen(const char path[], SkFILE_Flags flags) {
     char    perm[4];
@@ -29,10 +57,27 @@ SkFILE* sk_fopen(const char path[], SkFILE_Flags flags) {
     }
     *p++ = 'b';
     *p = 0;
-
+    
     //TODO: on Windows fopen is just ASCII or the current code page,
     //convert to utf16 and use _wfopen
-    return (SkFILE*)::fopen(path, perm);
+    SkFILE* file = nullptr;
+#ifdef SK_BUILD_FOR_IOS
+    // if read-only, try to open from bundle first
+    if (kRead_SkFILE_Flag == flags) {
+        file = (SkFILE*)ios_open_from_bundle(path, perm);
+    }
+    // otherwise just read from the Documents directory (default)
+    if (!file) {
+#endif
+        file = (SkFILE*)::fopen(path, perm);
+#ifdef SK_BUILD_FOR_IOS
+    }
+#endif
+    if (nullptr == file && (flags & kWrite_SkFILE_Flag)) {
+        SkDEBUGF(("sk_fopen: fopen(\"%s\", \"%s\") returned NULL (errno:%d): %s\n",
+                  path, perm, errno, strerror(errno)));
+    }
+    return file;
 }
 
 char* sk_fgets(char* str, int size, SkFILE* f) {
@@ -70,7 +115,7 @@ bool sk_frewind(SkFILE* f) {
 
 size_t sk_fread(void* buffer, size_t byteCount, SkFILE* f) {
     SkASSERT(f);
-    if (buffer == NULL) {
+    if (buffer == nullptr) {
         size_t curr = ::ftell((FILE*)f);
         if ((long)curr == -1) {
             SkDEBUGF(("sk_fread: ftell(%p) returned -1 feof:%d ferror:%d\n", f, feof((FILE*)f), ferror((FILE*)f)));

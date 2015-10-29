@@ -8,6 +8,8 @@
 #include "SkRTConf.h"
 #include "SkOSFile.h"
 
+#include <stdlib.h>
+
 SkRTConfRegistry::SkRTConfRegistry(): fConfs(100) {
 
     SkFILE *fp = sk_fopen(configFileLocation(), kRead_SkFILE_Flag);
@@ -39,13 +41,13 @@ SkRTConfRegistry::SkRTConfRegistry(): fConfs(100) {
             continue;
         }
 
-        char *valptr = strtok(NULL, sep);
+        char *valptr = strtok(nullptr, sep);
         if (!valptr) {
             continue;
         }
 
-        SkString* key = SkNEW_ARGS(SkString,(keyptr));
-        SkString* val = SkNEW_ARGS(SkString,(valptr));
+        SkString *key = new SkString(keyptr);
+        SkString *val = new SkString(valptr);
 
         fConfigFileKeys.append(1, &key);
         fConfigFileValues.append(1, &val);
@@ -62,8 +64,8 @@ SkRTConfRegistry::~SkRTConfRegistry() {
     }
 
     for (int i = 0 ; i < fConfigFileKeys.count() ; i++) {
-        SkDELETE(fConfigFileKeys[i]);
-        SkDELETE(fConfigFileValues[i]);
+        delete fConfigFileKeys[i];
+        delete fConfigFileValues[i];
     }
 }
 
@@ -238,7 +240,7 @@ static inline void str_replace(char *s, char search, char replace) {
 }
 
 template<typename T> bool SkRTConfRegistry::parse(const char *name, T* value) {
-    const char *str = NULL;
+    const char *str = nullptr;
 
     for (int i = fConfigFileKeys.count() - 1 ; i >= 0; i--) {
         if (fConfigFileKeys[i]->equals(name)) {
@@ -299,7 +301,7 @@ template <typename T> void SkRTConfRegistry::set(const char *name,
         }
         return;
     }
-    SkASSERT(confArray != NULL);
+    SkASSERT(confArray != nullptr);
     for (SkRTConfBase **confBase = confArray->begin(); confBase != confArray->end(); confBase++) {
         // static_cast here is okay because there's only one kind of child class.
         SkRTConf<T> *concrete = static_cast<SkRTConf<T> *>(*confBase);

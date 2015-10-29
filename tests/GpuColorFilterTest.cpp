@@ -62,8 +62,8 @@ static void test_getConstantColorComponents(skiatest::Reporter* reporter, GrCont
 
     const SkColor c1 = SkColorSetARGB(200, 200, 200, 200);
     const SkColor c2 = SkColorSetARGB(60, 60, 60, 60);
-    const GrColor gr_c1 = SkColor2GrColor(c1);
-    const GrColor gr_c2 = SkColor2GrColor(c2);
+    const GrColor gr_c1 = SkColorToPremulGrColor(c1);
+    const GrColor gr_c2 = SkColorToPremulGrColor(c2);
 
     const GrColor gr_black = GrColorPackA4(0);
     const GrColor gr_white = GrColorPackA4(255);
@@ -100,19 +100,17 @@ static void test_getConstantColorComponents(skiatest::Reporter* reporter, GrCont
     GrPaint paint;
     for (size_t i = 0; i < SK_ARRAY_COUNT(filterTests); ++i) {
         const GetConstantComponentTestCase& test = filterTests[i];
-        SkAutoTUnref<SkColorFilter> cf(SkColorFilter::CreateModeFilter(test.filterColor, test.filterMode));
-        SkTDArray<GrFragmentProcessor*> array;
-        bool hasFrag = cf->asFragmentProcessors(grContext, paint.getProcessorDataManager(), &array);
-        REPORTER_ASSERT(reporter, hasFrag);
-        REPORTER_ASSERT(reporter, 1 == array.count());
+        SkAutoTUnref<SkColorFilter> cf(
+            SkColorFilter::CreateModeFilter(test.filterColor, test.filterMode));
+        SkAutoTUnref<const GrFragmentProcessor> fp( cf->asFragmentProcessor(grContext));
+        REPORTER_ASSERT(reporter, fp);
         GrInvariantOutput inout(test.inputColor,
                                 static_cast<GrColorComponentFlags>(test.inputComponents),
                                 false);
-        array[0]->computeInvariantOutput(&inout);
-
-        REPORTER_ASSERT(reporter, filterColor(inout.color(), inout.validFlags()) == test.outputColor);
+        fp->computeInvariantOutput(&inout);
+        REPORTER_ASSERT(reporter, filterColor(inout.color(), inout.validFlags()) ==
+                                  test.outputColor);
         REPORTER_ASSERT(reporter, test.outputComponents == inout.validFlags());
-        array[0]->unref();
     }
 }
 
@@ -121,7 +119,7 @@ DEF_GPUTEST(GpuColorFilter, reporter, factory) {
         GrContextFactory::GLContextType glType = static_cast<GrContextFactory::GLContextType>(type);
 
         GrContext* grContext = factory->get(glType);
-        if (NULL == grContext) {
+        if (nullptr == grContext) {
             continue;
         }
 

@@ -38,65 +38,36 @@ static inline const char *get_astc_filename(int idx) {
     if (idx < 0 || kNumASTCFilenames <= idx) {
         return "";
     }
-
     return kASTCFilenames[idx];
 }
 
-namespace skiagm {
+namespace {
+const int kGMDimension = 600;
+const int kBitmapDimension = kGMDimension / 4;
+}  // namespace
 
-/**
- *  Test decoding an image from an ASTC file and then from compressed ASTC data.
- */
-class ASTCBitmapGM : public GM {
-public:
-    ASTCBitmapGM() { }
-    virtual ~ASTCBitmapGM() { }
-
-protected:
-    SkString onShortName() override {
-        return SkString("astcbitmap");
-    }
-
-    SkISize onISize() override {
-        return SkISize::Make(kGMDimension, kGMDimension);
-    }
-
-    void onDraw(SkCanvas* canvas) override {
-        for (int j = 0; j < 4; ++j) {
-            for (int i = 0; i < 4; ++i) {
-                SkString filename = GetResourcePath(get_astc_filename(j*4+i));
-                if (filename == GetResourcePath("")) {
-                    continue;
-                }
-
-                SkAutoTUnref<SkData> fileData(SkData::NewFromFileName(filename.c_str()));
-                if (NULL == fileData) {
-                    SkDebugf("Could not open the file. Did you forget to set the resourcePath?\n");
-                    return;
-                }
-
-                SkBitmap bm;
-                if (!SkInstallDiscardablePixelRef(fileData, &bm)) {
-                    SkDebugf("Could not install discardable pixel ref.\n");
-                    return;
-                }
-
+DEF_SIMPLE_GM(astcbitmap, canvas, kGMDimension, kGMDimension) {
+    for (int j = 0; j < 4; ++j) {
+        for (int i = 0; i < 4; ++i) {
+            SkBitmap bm;
+            if (GetResourceAsBitmap(get_astc_filename(j*4+i), &bm)) {
                 const SkScalar bmX = static_cast<SkScalar>(i*kBitmapDimension);
                 const SkScalar bmY = static_cast<SkScalar>(j*kBitmapDimension);
                 canvas->drawBitmap(bm, bmX, bmY);
             }
         }
     }
+}
 
-private:
-    static const int kGMDimension = 600;
-    static const int kBitmapDimension = kGMDimension/4;
-
-    typedef GM INHERITED;
-};
-
-}  // namespace skiagm
-
-//////////////////////////////////////////////////////////////////////////////
-
-DEF_GM( return SkNEW(skiagm::ASTCBitmapGM); )
+DEF_SIMPLE_GM(astc_image, canvas, kGMDimension, kGMDimension) {
+    for (int j = 0; j < 4; ++j) {
+        for (int i = 0; i < 4; ++i) {
+            SkAutoTUnref<SkImage> image(GetResourceAsImage(get_astc_filename(j*4+i)));
+            if (image) {
+                const SkScalar bmX = static_cast<SkScalar>(i*kBitmapDimension);
+                const SkScalar bmY = static_cast<SkScalar>(j*kBitmapDimension);
+                canvas->drawImage(image, bmX, bmY);
+            }
+        }
+    }
+}

@@ -14,8 +14,7 @@
 #include "SkBitmapProcShader.h"
 #include "SkData.h"
 #include "SkEndian.h"
-
-#include "SkTextureCompression_opts.h"
+#include "SkOpts.h"
 
 #ifndef SK_IGNORE_ETC1_SUPPORT
 #  include "etc1.h"
@@ -36,11 +35,11 @@ static bool compress_etc1_565(uint8_t* dst, const uint8_t* src,
 namespace SkTextureCompressor {
 
 void GetBlockDimensions(Format format, int* dimX, int* dimY, bool matchSpec) {
-    if (NULL == dimX || NULL == dimY) {
+    if (nullptr == dimX || nullptr == dimY) {
         return;
     }
 
-    if (!matchSpec && SkTextureCompressorGetPlatformDims(format, dimX, dimY)) {
+    if (!matchSpec && SkOpts::fill_block_dimensions(format, dimX, dimY)) {
         return;
     }
 
@@ -77,7 +76,7 @@ int GetCompressedDataSize(Format fmt, int width, int height) {
     GetBlockDimensions(fmt, &dimX, &dimY, true);
 
     int encodedBlockSize = 0;
-            
+
     switch (fmt) {
         // These formats are 64 bits per 4x4 block.
         case kLATC_Format:
@@ -120,54 +119,26 @@ int GetCompressedDataSize(Format fmt, int width, int height) {
 }
 
 bool CompressBufferToFormat(uint8_t* dst, const uint8_t* src, SkColorType srcColorType,
-                            int width, int height, size_t rowBytes, Format format, bool opt) {
-    CompressionProc proc = NULL;
-    if (opt) {
-        proc = SkTextureCompressorGetPlatformProc(srcColorType, format);
+                            int width, int height, size_t rowBytes, Format format) {
+    SkOpts::TextureCompressor proc = SkOpts::texture_compressor(srcColorType, format);
+    if (proc && proc(dst, src, width, height, rowBytes)) {
+        return true;
     }
 
-    if (NULL == proc) {
-        switch (srcColorType) {
-            case kAlpha_8_SkColorType:
-            {
-                switch (format) {
-                    case kLATC_Format:
-                        proc = CompressA8ToLATC;
-                        break;
-                    case kR11_EAC_Format:
-                        proc = CompressA8ToR11EAC;
-                        break;
-                    case kASTC_12x12_Format:
-                        proc = CompressA8To12x12ASTC;
-                        break;
-                    default:
-                        // Do nothing...
-                        break;
-                }
-            }
+    switch (srcColorType) {
+        case kAlpha_8_SkColorType:
+            if (format == kLATC_Format)       { proc = CompressA8ToLATC;      }
+            if (format == kR11_EAC_Format)    { proc = CompressA8ToR11EAC;    }
+            if (format == kASTC_12x12_Format) { proc = CompressA8To12x12ASTC; }
             break;
-
-            case kRGB_565_SkColorType:
-            {
-                switch (format) {
-                    case kETC1_Format:
-                        proc = compress_etc1_565;
-                        break;
-                    default:
-                        // Do nothing...
-                        break;
-                }
-            }
+        case kRGB_565_SkColorType:
+            if (format == kETC1_Format) { proc = compress_etc1_565; }
             break;
-
-            default:
-                // Do nothing...
-                break;
-        }
+        default:
+            break;
     }
-
-    if (proc) {
-        return proc(dst, src, width, height, rowBytes);
+    if (proc && proc(dst, src, width, height, rowBytes)) {
+        return true;
     }
 
     return false;
@@ -176,7 +147,7 @@ bool CompressBufferToFormat(uint8_t* dst, const uint8_t* src, SkColorType srcCol
 SkData* CompressBitmapToFormat(const SkPixmap& pixmap, Format format) {
     int compressedDataSize = GetCompressedDataSize(format, pixmap.width(), pixmap.height());
     if (compressedDataSize < 0) {
-        return NULL;
+        return nullptr;
     }
 
     const uint8_t* src = reinterpret_cast<const uint8_t*>(pixmap.addr());
@@ -185,7 +156,7 @@ SkData* CompressBitmapToFormat(const SkPixmap& pixmap, Format format) {
     if (!CompressBufferToFormat((uint8_t*)dst->writable_data(), src, pixmap.colorType(),
                                 pixmap.width(), pixmap.height(), pixmap.rowBytes(), format)) {
         dst->unref();
-        dst = NULL;
+        dst = nullptr;
     }
     return dst;
 }
@@ -203,10 +174,10 @@ SkBlitter* CreateBlitterForFormat(int width, int height, void* compressedBuffer,
             return CreateASTCBlitter(width, height, compressedBuffer, allocator);
 
         default:
-            return NULL;
+            return nullptr;
     }
 
-    return NULL;
+    return nullptr;
 }
 
 bool DecompressBufferFromFormat(uint8_t* dst, int dstRowBytes, const uint8_t* src,

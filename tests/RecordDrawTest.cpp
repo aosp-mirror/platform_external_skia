@@ -67,7 +67,7 @@ DEF_TEST(RecordDraw_Abort, r) {
     SkRecorder canvas(&rerecord, W, H);
 
     JustOneDraw callback;
-    SkRecordDraw(record, &canvas, NULL, NULL, 0, NULL/*bbh*/, &callback);
+    SkRecordDraw(record, &canvas, nullptr, nullptr, 0, nullptr/*bbh*/, &callback);
 
     REPORTER_ASSERT(r, 1 == count_instances_of_type<SkRecords::DrawRect>(rerecord));
     REPORTER_ASSERT(r, 0 == count_instances_of_type<SkRecords::ClipRect>(rerecord));
@@ -81,7 +81,7 @@ DEF_TEST(RecordDraw_Unbalanced, r) {
 
     SkRecord rerecord;
     SkRecorder canvas(&rerecord, W, H);
-    SkRecordDraw(record, &canvas, NULL, NULL, 0, NULL/*bbh*/, NULL/*callback*/);
+    SkRecordDraw(record, &canvas, nullptr, nullptr, 0, nullptr/*bbh*/, nullptr/*callback*/);
 
     int save_count = count_instances_of_type<SkRecords::Save>(rerecord);
     int restore_count = count_instances_of_type<SkRecords::Save>(rerecord);
@@ -103,7 +103,7 @@ DEF_TEST(RecordDraw_SetMatrixClobber, r) {
     translate.setTranslate(20, 20);
     translateCanvas.setMatrix(translate);
 
-    SkRecordDraw(scaleRecord, &translateCanvas, NULL, NULL, 0, NULL/*bbh*/, NULL/*callback*/);
+    SkRecordDraw(scaleRecord, &translateCanvas, nullptr, nullptr, 0, nullptr/*bbh*/, nullptr/*callback*/);
     REPORTER_ASSERT(r, 4 == translateRecord.count());
     assert_type<SkRecords::SetMatrix>(r, translateRecord, 0);
     assert_type<SkRecords::Save>     (r, translateRecord, 1);
@@ -122,26 +122,6 @@ DEF_TEST(RecordDraw_SetMatrixClobber, r) {
     REPORTER_ASSERT(r, setMatrix->matrix == expected);
 }
 
-struct TestBBH : public SkBBoxHierarchy {
-    void insert(const SkRect boundsArray[], int N) override {
-        fEntries.setCount(N);
-        for (int i = 0; i < N; i++) {
-            Entry e = { (unsigned)i, boundsArray[i] };
-            fEntries[i] = e;
-        }
-    }
-
-    void search(const SkRect& query, SkTDArray<unsigned>* results) const override {}
-    size_t bytesUsed() const override { return 0; }
-    SkRect getRootBound() const override { return SkRect::MakeEmpty(); }
-
-    struct Entry {
-        unsigned opIndex;
-        SkRect bounds;
-    };
-    SkTDArray<Entry> fEntries;
-};
-
 // Like a==b, with a little slop recognizing that float equality can be weird.
 static bool sloppy_rect_eq(SkRect a, SkRect b) {
     SkRect inset(a), outset(a);
@@ -150,9 +130,7 @@ static bool sloppy_rect_eq(SkRect a, SkRect b) {
     return outset.contains(b) && !inset.contains(b);
 }
 
-// This test is not meant to make total sense yet.  It's testing the status quo
-// of SkRecordFillBounds(), which itself doesn't make total sense yet.
-DEF_TEST(RecordDraw_BBH, r) {
+DEF_TEST(RecordDraw_BasicBounds, r) {
     SkRecord record;
     SkRecorder recorder(&record, W, H);
     recorder.save();
@@ -161,14 +139,11 @@ DEF_TEST(RecordDraw_BBH, r) {
         recorder.drawRect(SkRect::MakeWH(320, 240), SkPaint());
     recorder.restore();
 
-    TestBBH bbh;
-    SkRecordFillBounds(SkRect::MakeWH(SkIntToScalar(W), SkIntToScalar(H)), record, &bbh);
+    SkAutoTMalloc<SkRect> bounds(record.count());
+    SkRecordFillBounds(SkRect::MakeWH(SkIntToScalar(W), SkIntToScalar(H)), record, bounds);
 
-    REPORTER_ASSERT(r, bbh.fEntries.count() == 5);
-    for (int i = 0; i < bbh.fEntries.count(); i++) {
-        REPORTER_ASSERT(r, bbh.fEntries[i].opIndex == (unsigned)i);
-
-        REPORTER_ASSERT(r, sloppy_rect_eq(SkRect::MakeWH(400, 480), bbh.fEntries[i].bounds));
+    for (int i = 0; i < record.count(); i++) {
+        REPORTER_ASSERT(r, sloppy_rect_eq(SkRect::MakeWH(400, 480), bounds[i]));
     }
 }
 
@@ -187,15 +162,14 @@ DEF_TEST(RecordDraw_TextBounds, r) {
     const SkPoint pos[] = { {40, 50}, {60, 70} };
     recorder.drawPosText(text, bytes, pos, SkPaint());
 
-    TestBBH bbh;
-    SkRecordFillBounds(SkRect::MakeWH(SkIntToScalar(W), SkIntToScalar(H)), record, &bbh);
-    REPORTER_ASSERT(r, bbh.fEntries.count() == 2);
+    SkAutoTMalloc<SkRect> bounds(record.count());
+    SkRecordFillBounds(SkRect::MakeWH(SkIntToScalar(W), SkIntToScalar(H)), record, bounds);
 
     // We can make these next assertions confidently because SkRecordFillBounds
     // builds its bounds by overestimating font metrics in a platform-independent way.
     // If that changes, these tests will need to be more flexible.
-    REPORTER_ASSERT(r, sloppy_rect_eq(bbh.fEntries[0].bounds, SkRect::MakeLTRB(0,  0, 140, 60)));
-    REPORTER_ASSERT(r, sloppy_rect_eq(bbh.fEntries[1].bounds, SkRect::MakeLTRB(0, 20, 180, 100)));
+    REPORTER_ASSERT(r, sloppy_rect_eq(bounds[0], SkRect::MakeLTRB(0,  0, 140, 60)));
+    REPORTER_ASSERT(r, sloppy_rect_eq(bounds[1], SkRect::MakeLTRB(0, 20, 180, 100)));
 }
 
 // Base test to ensure start/stop range is respected
@@ -215,7 +189,7 @@ DEF_TEST(RecordDraw_PartialStartStop, r) {
 
     SkRecord rerecord;
     SkRecorder canvas(&rerecord, kWidth, kHeight);
-    SkRecordPartialDraw(record, &canvas, NULL, 0, 1, 2, SkMatrix::I()); // replay just drawRect of r2
+    SkRecordPartialDraw(record, &canvas, nullptr, 0, 1, 2, SkMatrix::I()); // replay just drawRect of r2
 
     REPORTER_ASSERT(r, 1 == count_instances_of_type<SkRecords::DrawRect>(rerecord));
     int index = find_first_instances_of_type<SkRecords::DrawRect>(rerecord);
@@ -238,7 +212,7 @@ DEF_TEST(RecordDraw_SaveLayerAffectsClipBounds, r) {
     paint.setImageFilter(SkDropShadowImageFilter::Create(20, 0, 0, 0, SK_ColorBLACK,
                          SkDropShadowImageFilter::kDrawShadowAndForeground_ShadowMode))->unref();
 
-    recorder.saveLayer(NULL, &paint);
+    recorder.saveLayer(nullptr, &paint);
         recorder.clipRect(SkRect::MakeWH(20, 40));
         recorder.drawRect(SkRect::MakeWH(20, 40), SkPaint());
     recorder.restore();
@@ -248,13 +222,12 @@ DEF_TEST(RecordDraw_SaveLayerAffectsClipBounds, r) {
     //
     // The second bug showed up as adjusting the picture bounds (0,0,50,50) by the drop shadow too.
     // The saveLayer, clipRect, and restore bounds were incorrectly (0,0,70,50).
-    TestBBH bbh;
-    SkRecordFillBounds(SkRect::MakeWH(50, 50), record, &bbh);
-    REPORTER_ASSERT(r, bbh.fEntries.count() == 4);
-    REPORTER_ASSERT(r, sloppy_rect_eq(bbh.fEntries[0].bounds, SkRect::MakeLTRB(0, 0, 50, 50)));
-    REPORTER_ASSERT(r, sloppy_rect_eq(bbh.fEntries[1].bounds, SkRect::MakeLTRB(0, 0, 50, 50)));
-    REPORTER_ASSERT(r, sloppy_rect_eq(bbh.fEntries[2].bounds, SkRect::MakeLTRB(0, 0, 40, 40)));
-    REPORTER_ASSERT(r, sloppy_rect_eq(bbh.fEntries[3].bounds, SkRect::MakeLTRB(0, 0, 50, 50)));
+    SkAutoTMalloc<SkRect> bounds(record.count());
+    SkRecordFillBounds(SkRect::MakeWH(50, 50), record, bounds);
+    REPORTER_ASSERT(r, sloppy_rect_eq(bounds[0], SkRect::MakeLTRB(0, 0, 50, 50)));
+    REPORTER_ASSERT(r, sloppy_rect_eq(bounds[1], SkRect::MakeLTRB(0, 0, 50, 50)));
+    REPORTER_ASSERT(r, sloppy_rect_eq(bounds[2], SkRect::MakeLTRB(0, 0, 40, 40)));
+    REPORTER_ASSERT(r, sloppy_rect_eq(bounds[3], SkRect::MakeLTRB(0, 0, 50, 50)));
 }
 
 // When a saveLayer provides an explicit bound and has a complex paint (e.g., one that
@@ -267,18 +240,17 @@ DEF_TEST(RecordDraw_SaveLayerBoundsAffectsClipBounds, r) {
     SkPaint p;
     p.setXfermodeMode(SkXfermode::kSrc_Mode);
 
-    SkRect bounds = SkRect::MakeLTRB(10, 10, 40, 40);
-    recorder.saveLayer(&bounds, &p);
+    SkRect layerBounds = SkRect::MakeLTRB(10, 10, 40, 40);
+    recorder.saveLayer(&layerBounds, &p);
     recorder.drawRect(SkRect::MakeLTRB(20, 20, 30, 30), SkPaint());
     recorder.restore();
 
-    TestBBH bbh;
-    SkRecordFillBounds(SkRect::MakeWH(50, 50), record, &bbh);
-    REPORTER_ASSERT(r, bbh.fEntries.count() == 3);
+    SkAutoTMalloc<SkRect> bounds(record.count());
+    SkRecordFillBounds(SkRect::MakeWH(50, 50), record, bounds);
     if (!SkCanvas::Internal_Private_GetIgnoreSaveLayerBounds()) {
-        REPORTER_ASSERT(r, sloppy_rect_eq(bbh.fEntries[0].bounds, SkRect::MakeLTRB(10, 10, 40, 40)));
-        REPORTER_ASSERT(r, sloppy_rect_eq(bbh.fEntries[1].bounds, SkRect::MakeLTRB(20, 20, 30, 30)));
-        REPORTER_ASSERT(r, sloppy_rect_eq(bbh.fEntries[2].bounds, SkRect::MakeLTRB(10, 10, 40, 40)));
+        REPORTER_ASSERT(r, sloppy_rect_eq(bounds[0], SkRect::MakeLTRB(10, 10, 40, 40)));
+        REPORTER_ASSERT(r, sloppy_rect_eq(bounds[1], SkRect::MakeLTRB(20, 20, 30, 30)));
+        REPORTER_ASSERT(r, sloppy_rect_eq(bounds[2], SkRect::MakeLTRB(10, 10, 40, 40)));
     }
 }
 
@@ -295,7 +267,7 @@ DEF_TEST(RecordDraw_drawImage, r){
         }
 
         void onDrawImageRect(const SkImage* image, const SkRect* src, const SkRect& dst,
-                             const SkPaint* paint SRC_RECT_CONSTRAINT_PARAM(constraint)) override {
+                             const SkPaint* paint, SrcRectConstraint) override {
             fDrawImageRectCalled = true;
         }
 
@@ -317,7 +289,7 @@ DEF_TEST(RecordDraw_drawImage, r){
         SkRecord record;
         SkRecorder recorder(&record, 10, 10);
         recorder.drawImage(image, 0, 0);
-        SkRecordDraw(record, &canvas, NULL, NULL, 0, NULL, 0);
+        SkRecordDraw(record, &canvas, nullptr, nullptr, 0, nullptr, 0);
     }
     REPORTER_ASSERT(r, canvas.fDrawImageCalled);
     canvas.resetTestValues();
@@ -325,8 +297,8 @@ DEF_TEST(RecordDraw_drawImage, r){
     {
         SkRecord record;
         SkRecorder recorder(&record, 10, 10);
-        recorder.drawImageRect(image, 0, SkRect::MakeWH(10, 10));
-        SkRecordDraw(record, &canvas, NULL, NULL, 0, NULL, 0);
+        recorder.drawImageRect(image, SkRect::MakeWH(10, 10), nullptr);
+        SkRecordDraw(record, &canvas, nullptr, nullptr, 0, nullptr, 0);
     }
     REPORTER_ASSERT(r, canvas.fDrawImageRectCalled);
 

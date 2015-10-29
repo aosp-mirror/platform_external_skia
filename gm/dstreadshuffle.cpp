@@ -7,6 +7,7 @@
  */
 #include "gm.h"
 #include "SkBitmap.h"
+#include "SkPath.h"
 #include "SkRandom.h"
 #include "SkShader.h"
 #include "SkXfermode.h"
@@ -87,6 +88,7 @@ protected:
             case kText_ShapeType: {
                 const char* text = "Hello!";
                 paint->setTextSize(30);
+                sk_tool_utils::set_portable_typeface(paint);
                 canvas->drawText(text, strlen(text), 0, 0, *paint);
             }
             default:
@@ -96,12 +98,12 @@ protected:
 
     static SkColor GetColor(SkRandom* random, int i, int nextColor) {
         static SkColor colors[] = { SK_ColorRED,
-                                    0xFFFF7F00, // Orange
+                                    sk_tool_utils::color_to_565(0xFFFF7F00), // Orange
                                     SK_ColorYELLOW,
                                     SK_ColorGREEN,
                                     SK_ColorBLUE,
-                                    0xFF4B0082, // indigo
-                                    0xFF7F00FF }; // violet
+                                    sk_tool_utils::color_to_565(0xFF4B0082), // indigo
+                                    sk_tool_utils::color_to_565(0xFF7F00FF) }; // violet
         SkColor color;
         int index = nextColor % SK_ARRAY_COUNT(colors);
         switch (i) {

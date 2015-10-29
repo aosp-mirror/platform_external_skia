@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2011 Google Inc.
  *
@@ -6,10 +5,11 @@
  * found in the LICENSE file.
  */
 
-
-
 #include "gm.h"
+#include "SkPath.h"
 #include "SkRandom.h"
+#include "SkDashPathEffect.h"
+#include "SkParsePath.h"
 
 #define W   400
 #define H   400
@@ -77,6 +77,122 @@ protected:
 private:
     typedef skiagm::GM INHERITED;
 };
+
+/* See
+   https://code.google.com/p/chromium/issues/detail?id=422974          and
+   http://jsfiddle.net/1xnku3sg/2/
+ */
+class ZeroLenStrokesGM : public skiagm::GM {
+    SkPath fMoveHfPath, fMoveZfPath, fDashedfPath, fRefPath[4];
+    SkPath fCubicPath, fQuadPath, fLinePath;
+protected:
+    void onOnceBeforeDraw() override {
+
+        SkAssertResult(SkParsePath::FromSVGString("M0,0h0M10,0h0M20,0h0", &fMoveHfPath));
+        SkAssertResult(SkParsePath::FromSVGString("M0,0zM10,0zM20,0z", &fMoveZfPath));
+        SkAssertResult(SkParsePath::FromSVGString("M0,0h25", &fDashedfPath));
+        SkAssertResult(SkParsePath::FromSVGString("M 0 0 C 0 0 0 0 0 0", &fCubicPath));
+        SkAssertResult(SkParsePath::FromSVGString("M 0 0 Q 0 0 0 0", &fQuadPath));
+        SkAssertResult(SkParsePath::FromSVGString("M 0 0 L 0 0", &fLinePath));
+
+        for (int i = 0; i < 3; ++i) {
+            fRefPath[0].addCircle(i * 10.f, 0, 5);
+            fRefPath[1].addCircle(i * 10.f, 0, 10);
+            fRefPath[2].addRect(i * 10.f - 4, -2, i * 10.f + 4, 6);
+            fRefPath[3].addRect(i * 10.f - 10, -10, i * 10.f + 10, 10);
+        }
+    }
+
+    SkString onShortName() override {
+        return SkString("zeroPath");
+    }
+
+    SkISize onISize() override {
+        return SkISize::Make(W, H*2);
+    }
+
+    void onDraw(SkCanvas* canvas) override {
+        SkPaint fillPaint, strokePaint, dashPaint;
+        fillPaint.setAntiAlias(true);
+        strokePaint = fillPaint;
+        strokePaint.setStyle(SkPaint::kStroke_Style);
+        for (int i = 0; i < 2; ++i) {
+            fillPaint.setAlpha(255);
+            strokePaint.setAlpha(255);
+            strokePaint.setStrokeWidth(i ? 8.f : 10.f);
+            strokePaint.setStrokeCap(i ? SkPaint::kSquare_Cap : SkPaint::kRound_Cap);
+            canvas->save();
+            canvas->translate(10 + i * 100.f, 10);
+            canvas->drawPath(fMoveHfPath, strokePaint);
+            canvas->translate(0, 20);
+            canvas->drawPath(fMoveZfPath, strokePaint);
+            dashPaint = strokePaint;
+            const SkScalar intervals[] = { 0, 10 };
+            dashPaint.setPathEffect(SkDashPathEffect::Create(intervals, 2, 0))->unref();
+            SkPath fillPath;
+            dashPaint.getFillPath(fDashedfPath, &fillPath);
+            canvas->translate(0, 20);
+            canvas->drawPath(fDashedfPath, dashPaint);
+            canvas->translate(0, 20);
+            canvas->drawPath(fRefPath[i * 2], fillPaint);
+            strokePaint.setStrokeWidth(20);
+            strokePaint.setAlpha(127);
+            canvas->translate(0, 50);
+            canvas->drawPath(fMoveHfPath, strokePaint);
+            canvas->translate(0, 30);
+            canvas->drawPath(fMoveZfPath, strokePaint);
+            canvas->translate(0, 30);
+            fillPaint.setAlpha(127);
+            canvas->drawPath(fRefPath[1 + i * 2], fillPaint);
+            canvas->translate(0, 30);
+            canvas->drawPath(fCubicPath, strokePaint);
+            canvas->translate(0, 30);
+            canvas->drawPath(fQuadPath, strokePaint);
+            canvas->translate(0, 30);
+            canvas->drawPath(fLinePath, strokePaint);
+            canvas->restore();
+        }
+    }
+
+private:
+    typedef skiagm::GM INHERITED;
+};
+
+class TeenyStrokesGM : public skiagm::GM {
+
+    SkString onShortName() override {
+        return SkString("teenyStrokes");
+    }
+
+    SkISize onISize() override {
+        return SkISize::Make(W, H*2);
+    }
+
+    static void line(SkScalar scale, SkCanvas* canvas, SkColor color) {
+        SkPaint p;
+        p.setAntiAlias(true);
+        p.setStyle(SkPaint::kStroke_Style);
+        p.setColor(color);
+        canvas->translate(50, 0);
+	    canvas->save();
+        p.setStrokeWidth(scale * 5);
+	    canvas->scale(1 / scale, 1 / scale);
+        canvas->drawLine(20 * scale, 20 * scale, 20 * scale, 100 * scale, p);
+        canvas->drawLine(20 * scale, 20 * scale, 100 * scale, 100 * scale, p);
+        canvas->restore();
+    }
+
+    void onDraw(SkCanvas* canvas) override {
+        line(0.00005f, canvas, SK_ColorBLACK);
+        line(0.000045f, canvas, SK_ColorRED);
+        line(0.0000035f, canvas, SK_ColorGREEN);
+        line(0.000003f, canvas, SK_ColorBLUE);
+        line(0.000002f, canvas, SK_ColorBLACK);
+    }
+private:
+    typedef skiagm::GM INHERITED;
+};
+
 
 class Strokes2GM : public skiagm::GM {
     SkPath fPath;
@@ -205,7 +321,7 @@ protected:
         SkPaint fillPaint(origPaint);
         fillPaint.setColor(SK_ColorRED);
         SkPaint strokePaint(origPaint);
-        strokePaint.setColor(0xFF4444FF);
+        strokePaint.setColor(sk_tool_utils::color_to_565(0xFF4444FF));
 
         void (*procs[])(SkPath*, const SkRect&, SkString*) = {
             make0, make1, make2, make3, make4, make5
@@ -268,6 +384,60 @@ private:
     typedef skiagm::GM INHERITED;
 };
 
+// Test stroking for curves that produce degenerate tangents when t is 0 or 1 (see bug 4191)
+class Strokes5GM : public skiagm::GM {
+public:
+    Strokes5GM() {}
+
+protected:
+
+    SkString onShortName() override {
+        return SkString("zero_control_stroke");
+    }
+
+    SkISize onISize() override {
+        return SkISize::Make(W, H*2);
+    }
+
+    void onDraw(SkCanvas* canvas) override {
+        SkPaint p;
+        p.setColor(SK_ColorRED);
+        p.setAntiAlias(true);
+        p.setStyle(SkPaint::kStroke_Style);
+        p.setStrokeWidth(40);
+        p.setStrokeCap(SkPaint::kButt_Cap);
+
+        SkPath path;
+        path.moveTo(157.474f,111.753f);
+        path.cubicTo(128.5f,111.5f,35.5f,29.5f,35.5f,29.5f);
+        canvas->drawPath(path, p);
+        path.reset();
+        path.moveTo(250, 50);
+        path.quadTo(280, 80, 280, 80);
+        canvas->drawPath(path, p);
+        path.reset();
+        path.moveTo(150, 50);
+        path.conicTo(180, 80, 180, 80, 0.707f);
+        canvas->drawPath(path, p);
+
+        path.reset();
+        path.moveTo(157.474f,311.753f);
+        path.cubicTo(157.474f,311.753f,85.5f,229.5f,35.5f,229.5f);
+        canvas->drawPath(path, p);
+        path.reset();
+        path.moveTo(280, 250);
+        path.quadTo(280, 250, 310, 280);
+        canvas->drawPath(path, p);
+        path.reset();
+        path.moveTo(180, 250);
+        path.conicTo(180, 250, 210, 280, 0.707f);
+        canvas->drawPath(path, p);
+    }
+
+private:
+    typedef skiagm::GM INHERITED;
+};
+
 
 //////////////////////////////////////////////////////////////////////////////
 
@@ -275,8 +445,13 @@ static skiagm::GM* F0(void*) { return new StrokesGM; }
 static skiagm::GM* F1(void*) { return new Strokes2GM; }
 static skiagm::GM* F2(void*) { return new Strokes3GM; }
 static skiagm::GM* F3(void*) { return new Strokes4GM; }
+static skiagm::GM* F4(void*) { return new Strokes5GM; }
 
 static skiagm::GMRegistry R0(F0);
 static skiagm::GMRegistry R1(F1);
 static skiagm::GMRegistry R2(F2);
 static skiagm::GMRegistry R3(F3);
+static skiagm::GMRegistry R4(F4);
+
+DEF_GM( return new ZeroLenStrokesGM; )
+DEF_GM( return new TeenyStrokesGM; )

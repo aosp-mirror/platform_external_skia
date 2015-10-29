@@ -8,6 +8,7 @@
 #include "Benchmark.h"
 #include "SkCanvas.h"
 #include "SkPaint.h"
+#include "SkPath.h"
 #include "SkString.h"
 
 struct BezierRec {
@@ -63,7 +64,7 @@ public:
         fJoin = j;
         fProc = proc;
         fWidth = SkIntToScalar(w);
-        fName.printf("draw_stroke_bezier_%s_%s_%s_%g", proc(NULL, 0), gCapName[c], gJoinName[j], w);
+        fName.printf("draw_stroke_bezier_%s_%s_%s_%g", proc(nullptr, 0), gCapName[c], gJoinName[j], w);
 
         fRec.fQuad.moveTo(20, 20);
         fRec.fQuad.quadTo(60, 20, 60, 60);
@@ -78,7 +79,7 @@ protected:
         return fName.c_str();
     }
 
-    virtual void onDraw(const int loops, SkCanvas* canvas) {
+    virtual void onDraw(int loops, SkCanvas* canvas) {
         fRec.fCanvas = canvas;
         this->setupPaint(&fRec.fPaint);
         fRec.fPaint.setStyle(SkPaint::kStroke_Style);

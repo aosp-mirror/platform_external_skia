@@ -1,33 +1,18 @@
-
 /*
  * Copyright 2012 Google Inc.
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
+
 #include "gm.h"
 
 #include "SkColorPriv.h"
+#include "SkPath.h"
 #include "SkShader.h"
 
-namespace skiagm {
-
-class BigMatrixGM : public GM {
-public:
-    BigMatrixGM() {
-        this->setBGColor(sk_tool_utils::color_to_565(0xFF66AA99));
-    }
-
-protected:
-    virtual SkString onShortName() {
-        return SkString("bigmatrix");
-    }
-
-    virtual SkISize onISize() {
-        return SkISize::Make(50, 50);
-    }
-
-    virtual void onDraw(SkCanvas* canvas) {
+DEF_SIMPLE_GM_BG(bigmatrix, canvas, 50, 50,
+                 sk_tool_utils::color_to_565(0xFF66AA99)) {
         SkMatrix m;
         m.reset();
         m.setRotate(33 * SK_Scalar1);
@@ -81,15 +66,4 @@ protected:
         rect.setLTRB(pt.fX - small, pt.fY - small,
                      pt.fX + small, pt.fY + small);
         canvas->drawRect(rect, paint);
-    }
-
-private:
-    typedef GM INHERITED;
-};
-
-//////////////////////////////////////////////////////////////////////////////
-
-static GM* MyFactory(void*) { return new BigMatrixGM; }
-static GMRegistry reg(MyFactory);
-
 }

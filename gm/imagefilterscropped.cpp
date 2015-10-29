@@ -14,7 +14,6 @@
 #include "SkBlurImageFilter.h"
 #include "SkMorphologyImageFilter.h"
 #include "SkColorFilterImageFilter.h"
-#include "SkBitmapSource.h"
 #include "SkMergeImageFilter.h"
 #include "SkOffsetImageFilter.h"
 #include "SkTestImageFilters.h"
@@ -44,7 +43,7 @@ static void draw_text(SkCanvas* canvas, const SkRect& r, SkImageFilter* imf) {
     paint.setImageFilter(imf);
     paint.setColor(SK_ColorGREEN);
     paint.setAntiAlias(true);
-    sk_tool_utils::set_portable_typeface_always(&paint);
+    sk_tool_utils::set_portable_typeface(&paint);
     paint.setTextSize(r.height()/2);
     paint.setTextAlign(SkPaint::kCenter_Align);
     canvas->drawText("Text", 4, r.centerX(), r.centerY(), paint);
@@ -60,7 +59,7 @@ static void draw_bitmap(SkCanvas* canvas, const SkRect& r, SkImageFilter* imf) {
     bm.allocN32Pixels(bounds.width(), bounds.height());
     bm.eraseColor(SK_ColorTRANSPARENT);
     SkCanvas c(bm);
-    draw_path(&c, r, NULL);
+    draw_path(&c, r, nullptr);
 
     paint.setImageFilter(imf);
     canvas->drawBitmap(bm, 0, 0, &paint);
@@ -107,9 +106,9 @@ protected:
         SkCanvas canvas(fCheckerboard);
         canvas.clear(SK_ColorTRANSPARENT);
         SkPaint darkPaint;
-        darkPaint.setColor(0xFF404040);
+        darkPaint.setColor(sk_tool_utils::color_to_565(0xFF404040));
         SkPaint lightPaint;
-        lightPaint.setColor(0xFFA0A0A0);
+        lightPaint.setColor(sk_tool_utils::color_to_565(0xFFA0A0A0));
         for (int y = 0; y < 80; y += 16) {
             for (int x = 0; x < 80; x += 16) {
                 canvas.save();
@@ -149,23 +148,23 @@ protected:
 
         SkAutoTUnref<SkImageFilter> cfOffset(SkColorFilterImageFilter::Create(cf.get(), offset.get()));
 
-        SkAutoTUnref<SkImageFilter> erodeX(SkErodeImageFilter::Create(8, 0, NULL, &cropRect));
-        SkAutoTUnref<SkImageFilter> erodeY(SkErodeImageFilter::Create(0, 8, NULL, &cropRect));
+        SkAutoTUnref<SkImageFilter> erodeX(SkErodeImageFilter::Create(8, 0, nullptr, &cropRect));
+        SkAutoTUnref<SkImageFilter> erodeY(SkErodeImageFilter::Create(0, 8, nullptr, &cropRect));
 
         SkImageFilter* filters[] = {
-            NULL,
-            SkColorFilterImageFilter::Create(cf.get(), NULL, &cropRect),
-            SkBlurImageFilter::Create(1.0f, 1.0f, NULL, &cropRect),
-            SkBlurImageFilter::Create(8.0f, 0.0f, NULL, &cropRect),
-            SkBlurImageFilter::Create(0.0f, 8.0f, NULL, &cropRect),
-            SkBlurImageFilter::Create(8.0f, 8.0f, NULL, &cropRect),
-            SkErodeImageFilter::Create(1, 1, NULL, &cropRect),
+            nullptr,
+            SkColorFilterImageFilter::Create(cf.get(), nullptr, &cropRect),
+            SkBlurImageFilter::Create(1.0f, 1.0f, nullptr, &cropRect),
+            SkBlurImageFilter::Create(8.0f, 0.0f, nullptr, &cropRect),
+            SkBlurImageFilter::Create(0.0f, 8.0f, nullptr, &cropRect),
+            SkBlurImageFilter::Create(8.0f, 8.0f, nullptr, &cropRect),
+            SkErodeImageFilter::Create(1, 1, nullptr, &cropRect),
             SkErodeImageFilter::Create(8, 0, erodeY, &cropRect),
             SkErodeImageFilter::Create(0, 8, erodeX, &cropRect),
-            SkErodeImageFilter::Create(8, 8, NULL, &cropRect),
-            SkMergeImageFilter::Create(NULL, cfOffset.get(), SkXfermode::kSrcOver_Mode, &cropRect),
-            SkBlurImageFilter::Create(8.0f, 8.0f, NULL, &bogusRect),
-            SkColorFilterImageFilter::Create(cf.get(), NULL, &bogusRect),
+            SkErodeImageFilter::Create(8, 8, nullptr, &cropRect),
+            SkMergeImageFilter::Create(nullptr, cfOffset.get(), SkXfermode::kSrcOver_Mode, &cropRect),
+            SkBlurImageFilter::Create(8.0f, 8.0f, nullptr, &bogusRect),
+            SkColorFilterImageFilter::Create(cf.get(), nullptr, &bogusRect),
         };
 
         SkRect r = SkRect::MakeWH(SkIntToScalar(64), SkIntToScalar(64));

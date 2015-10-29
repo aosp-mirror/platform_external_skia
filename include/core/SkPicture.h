@@ -9,7 +9,6 @@
 #define SkPicture_DEFINED
 
 #include "SkImageDecoder.h"
-#include "SkLazyPtr.h"
 #include "SkRefCnt.h"
 #include "SkTypes.h"
 
@@ -19,7 +18,9 @@ class SkBitmap;
 class SkCanvas;
 class SkPictureData;
 class SkPixelSerializer;
+class SkRefCntSet;
 class SkStream;
+class SkTypefacePlayback;
 class SkWStream;
 struct SkPictInfo;
 
@@ -102,9 +103,7 @@ public:
 
     /**
      *  Serialize to a stream. If non NULL, serializer will be used to serialize
-     *  any bitmaps in the picture.
-     *
-     *  TODO: Use serializer to serialize SkImages as well.
+     *  bitmaps and images in the picture.
      */
     void serialize(SkWStream*, SkPixelSerializer* = NULL) const;
 
@@ -164,6 +163,12 @@ private:
     friend class SkEmptyPicture;
     template <typename> friend class SkMiniPicture;
 
+    void serialize(SkWStream*, SkPixelSerializer*, SkRefCntSet* typefaces) const;
+    static SkPicture* CreateFromStream(SkStream*,
+                                       InstallPixelRefProc proc,
+                                       SkTypefacePlayback*);
+    friend class SkPictureData;
+
     virtual int numSlowPaths() const = 0;
     friend struct SkPathCounter;
 
@@ -186,6 +191,9 @@ private:
 
     static_assert(MIN_PICTURE_VERSION <= 42,
                   "Remove COMMENT API handlers from SkPicturePlayback.cpp");
+
+    static_assert(MIN_PICTURE_VERSION <= 43,
+                  "Remove SkBitmapSourceDeserializer.");
 
     static bool IsValidPictInfo(const SkPictInfo& info);
     static SkPicture* Forwardport(const SkPictInfo&, const SkPictureData*);

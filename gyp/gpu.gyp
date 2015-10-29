@@ -94,6 +94,7 @@
       ],
       'include_dirs': [
         '../include/gpu',
+        '../include/private',
         '../src/core',
         '../src/gpu',
         '../src/image/',
@@ -102,6 +103,7 @@
         '<@(skgpu_sources)',
         '<@(skgpu_native_gl_sources)',
         '<@(skgpu_angle_gl_sources)',
+        '<@(skgpu_command_buffer_gl_sources)',
         '<@(skgpu_mesa_gl_sources)',
         '<@(skgpu_debug_gl_sources)',
         '<@(skgpu_null_gl_sources)',
@@ -111,7 +113,10 @@
         [ 'skia_gpu_extra_dependency_path', {
           'dependencies' : [
               '<(skia_gpu_extra_dependency_path):*',
-          ]
+          ],
+          'export_dependent_settings': [
+            '<(skia_gpu_extra_dependency_path):*',
+          ],
         }],
         [ 'skia_chrome_utils', {
           'sources': [
@@ -205,6 +210,12 @@
         }, { # not skia_angle
           'sources!': [
             '<@(skgpu_angle_gl_sources)',
+          ],
+        }],
+        [ 'skia_command_buffer', {
+        }, { # not skia_command_buffer
+          'sources!': [
+            '<@(skgpu_command_buffer_gl_sources)',
           ],
         }],
         [ 'skia_os == "android"', {

@@ -29,8 +29,8 @@ static inline SkSurface* NewGpuSurface(GrContextFactory* grFactory,
                                        GrGLStandard gpuAPI,
                                        SkImageInfo info,
                                        int samples,
-                                       bool useDFText) {
-    uint32_t flags = useDFText ? SkSurfaceProps::kUseDistanceFieldFonts_Flag : 0;
+                                       bool useDIText) {
+    uint32_t flags = useDIText ? SkSurfaceProps::kUseDeviceIndependentFonts_Flag : 0;
     SkSurfaceProps props(flags, SkSurfaceProps::kLegacyFontHost_InitType);
     return SkSurface::NewRenderTarget(grFactory->get(type, gpuAPI), SkSurface::kNo_Budgeted,
                                       info, samples, &props);
@@ -55,7 +55,9 @@ public:
     void dumpGpuStats(SkString*) const {}
 };
 
-struct GrContextOptions {};
+struct GrContextOptions {
+    bool fImmediateMode;
+};
 
 class GrContextFactory {
 public:
@@ -64,12 +66,14 @@ public:
 
     typedef int GLContextType;
 
-    static const GLContextType kANGLE_GLContextType  = 0,
-                               kDebug_GLContextType  = 0,
-                               kMESA_GLContextType   = 0,
-                               kNVPR_GLContextType   = 0,
-                               kNative_GLContextType = 0,
-                               kNull_GLContextType   = 0;
+    static const GLContextType kANGLE_GLContextType         = 0,
+                               kANGLE_GL_GLContextType      = 0,
+                               kCommandBuffer_GLContextType = 0,
+                               kDebug_GLContextType         = 0,
+                               kMESA_GLContextType          = 0,
+                               kNVPR_GLContextType          = 0,
+                               kNative_GLContextType        = 0,
+                               kNull_GLContextType          = 0;
     static const int kGLContextTypeCnt = 1;
     void destroyContexts() {}
 
@@ -86,7 +90,7 @@ static inline SkSurface* NewGpuSurface(GrContextFactory*,
                                        SkImageInfo,
                                        int,
                                        bool) {
-    return NULL;
+    return nullptr;
 }
 
 }  // namespace DM
