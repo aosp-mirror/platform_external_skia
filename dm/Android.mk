@@ -32,6 +32,7 @@ LOCAL_SRC_FILES := \
 	../tests/Test.cpp \
 	../tests/PathOpsAngleTest.cpp \
 	../tests/PathOpsBoundsTest.cpp \
+	../tests/PathOpsBuilderConicTest.cpp \
 	../tests/PathOpsBuilderTest.cpp \
 	../tests/PathOpsBuildUseTest.cpp \
 	../tests/PathOpsConicIntersectionTest.cpp \
@@ -75,6 +76,7 @@ LOCAL_SRC_FILES := \
 	../tests/PathOpsThreeWayTest.cpp \
 	../tests/PathOpsTightBoundsTest.cpp \
 	../tests/PathOpsTypesTest.cpp \
+	../tests/SubsetPath.cpp \
 	../tests/AAClipTest.cpp \
 	../tests/ARGBImageEncoderTest.cpp \
 	../tests/AnnotationTest.cpp \
