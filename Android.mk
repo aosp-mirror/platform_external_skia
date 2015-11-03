@@ -346,7 +346,6 @@ LOCAL_SRC_FILES := \
 	src/effects/gradients/SkTwoPointConicalGradient.cpp \
 	src/effects/gradients/SkTwoPointConicalGradient_gpu.cpp \
 	src/effects/gradients/SkSweepGradient.cpp \
-	src/gpu/GrAtlas.cpp \
 	src/gpu/GrAtlasTextBlob.cpp \
 	src/gpu/GrAtlasTextContext.cpp \
 	src/gpu/GrBatchAtlas.cpp \
@@ -371,6 +370,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrGpuResource.cpp \
 	src/gpu/GrGpuFactory.cpp \
 	src/gpu/GrInvariantOutput.cpp \
+	src/gpu/GrLayerAtlas.cpp \
 	src/gpu/GrLayerCache.cpp \
 	src/gpu/GrLayerHoister.cpp \
 	src/gpu/GrMemoryPool.cpp \
