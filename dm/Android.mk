@@ -520,14 +520,9 @@ LOCAL_SRC_FILES := \
 	../gm/xfermodes2.cpp \
 	../gm/xfermodes3.cpp \
 	../gm/yuvtorgbeffect.cpp \
-	../tools/AndroidSkDebugToStdOut.cpp \
 	../tools/flags/SkCommandLineFlags.cpp \
 	../src/svg/SkSVGCanvas.cpp \
 	../src/svg/SkSVGDevice.cpp \
-	../tools/SkBitmapRegionCanvas.cpp \
-	../tools/SkBitmapRegionCodec.cpp \
-	../tools/SkBitmapRegionDecoderInterface.cpp \
-	../tools/SkBitmapRegionSampler.cpp \
 	../tools/CrashHandler.cpp \
 	../tools/ProcStats.cpp \
 	../tools/sk_tool_utils.cpp \
@@ -564,6 +559,8 @@ LOCAL_STATIC_LIBRARIES := \
 	libjsoncpp
 
 LOCAL_C_INCLUDES := \
+	$(LOCAL_PATH)/../include/private \
+	$(LOCAL_PATH)/../src/core \
 	$(LOCAL_PATH)/../include/c \
 	$(LOCAL_PATH)/../include/config \
 	$(LOCAL_PATH)/../include/core \
@@ -577,12 +574,9 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../include/utils \
 	$(LOCAL_PATH)/../src/utils \
 	$(LOCAL_PATH)/../include/gpu \
-	$(LOCAL_PATH)/../include/private \
-	$(LOCAL_PATH)/../src/core \
 	external/libpng \
 	$(LOCAL_PATH)/../include/svg \
 	$(LOCAL_PATH)/../include/xml \
-	$(LOCAL_PATH)/../src/codec \
 	$(LOCAL_PATH)/../src/fonts \
 	$(LOCAL_PATH)/../tools \
 	$(LOCAL_PATH)/../tools/flags \
@@ -596,6 +590,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../src/utils/debugger \
 	$(LOCAL_PATH)/../tests \
 	$(LOCAL_PATH)/../src/pathops \
+	$(LOCAL_PATH)/../src/codec \
 	$(LOCAL_PATH)/../src/image \
 	$(LOCAL_PATH)/../src/pdf \
 	$(LOCAL_PATH)/../src/ports \

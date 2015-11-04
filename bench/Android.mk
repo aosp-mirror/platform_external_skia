@@ -377,15 +377,10 @@ LOCAL_SRC_FILES := \
 	../src/utils/debugger/SkDrawCommand.cpp \
 	../src/utils/debugger/SkDebugCanvas.cpp \
 	../src/utils/debugger/SkObjectParser.cpp \
-	../tools/AndroidSkDebugToStdOut.cpp \
 	../tools/flags/SkCommonFlags.cpp \
 	../tools/CrashHandler.cpp \
 	../tools/ProcStats.cpp \
 	../tools/timer/Timer.cpp \
-	../tools/SkBitmapRegionCanvas.cpp \
-	../tools/SkBitmapRegionCodec.cpp \
-	../tools/SkBitmapRegionDecoderInterface.cpp \
-	../tools/SkBitmapRegionSampler.cpp \
 	../tools/Resources.cpp \
 	../tools/sk_tool_utils.cpp \
 	../tools/sk_tool_utils_font.cpp \
@@ -422,7 +417,6 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../include/gpu \
 	$(LOCAL_PATH)/../tools/flags \
 	$(LOCAL_PATH)/../include/private \
-	$(LOCAL_PATH)/../src/codec \
 	$(LOCAL_PATH)/../src/fonts \
 	$(LOCAL_PATH)/../src/core \
 	$(LOCAL_PATH)/../tools \
