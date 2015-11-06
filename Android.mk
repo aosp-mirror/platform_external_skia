@@ -621,7 +621,7 @@ LOCAL_SRC_FILES := \
 	src/fonts/SkTestScalerContext.cpp \
 	tools/SkBitmapRegionCanvas.cpp \
 	tools/SkBitmapRegionCodec.cpp \
-	tools/SkBitmapRegionDecoderInterface.cpp \
+	tools/SkBitmapRegionDecoder.cpp \
 	tools/SkBitmapRegionSampler.cpp \
 	third_party/etc1/etc1.cpp \
 	third_party/ktx/ktx.cpp \
