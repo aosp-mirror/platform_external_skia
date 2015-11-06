@@ -208,5 +208,6 @@
 #define SK_SUPPORT_OPENCL 0
 #define SK_SUPPORT_PDF 1
 #define SK_USE_FREETYPE_EMBOLDEN
+#define TURBO_HAS_SKIP
 
 #endif // SkUserConfig_Android_DEFINED

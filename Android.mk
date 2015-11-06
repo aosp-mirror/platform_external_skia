@@ -73,6 +73,9 @@ LOCAL_SRC_FILES := \
 	src/codec/SkCodec_libico.cpp \
 	src/codec/SkCodec_libpng.cpp \
 	src/codec/SkCodec_wbmp.cpp \
+	src/codec/SkJpegCodec.cpp \
+	src/codec/SkJpegDecoderMgr.cpp \
+	src/codec/SkJpegUtility_codec.cpp \
 	src/codec/SkMaskSwizzler.cpp \
 	src/codec/SkMasks.cpp \
 	src/codec/SkSampler.cpp \
@@ -632,8 +635,8 @@ LOCAL_SHARED_LIBRARIES := \
 	libGLESv2 \
 	libEGL \
 	libz \
+	libjpeg-turbo \
 	libpng \
-	libjpeg \
 	libicuuc \
 	libicui18n \
 	libexpat \
@@ -646,6 +649,7 @@ LOCAL_STATIC_LIBRARIES := \
 	libsfntly
 
 LOCAL_C_INCLUDES := \
+	external/libjpeg-turbo \
 	external/libpng \
 	$(LOCAL_PATH)/include/codec \
 	$(LOCAL_PATH)/include/private \
@@ -671,7 +675,6 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/src/effects \
 	$(LOCAL_PATH)/third_party/etc1 \
 	$(LOCAL_PATH)/third_party/ktx \
-	external/jpeg \
 	$(LOCAL_PATH)/src/lazy \
 	external/expat/lib \
 	external/freetype/include \

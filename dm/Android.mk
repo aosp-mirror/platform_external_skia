@@ -574,7 +574,6 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../include/utils \
 	$(LOCAL_PATH)/../src/utils \
 	$(LOCAL_PATH)/../include/gpu \
-	external/libpng \
 	$(LOCAL_PATH)/../include/svg \
 	$(LOCAL_PATH)/../include/xml \
 	$(LOCAL_PATH)/../src/fonts \
@@ -596,6 +595,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../src/ports \
 	$(LOCAL_PATH)/../../../frameworks/base/libs/hwui \
 	$(LOCAL_PATH)/../third_party/etc1 \
+	external/libpng \
 	$(LOCAL_PATH)/../tools/timer \
 	$(LOCAL_PATH)/../experimental \
 	external/zlib \
