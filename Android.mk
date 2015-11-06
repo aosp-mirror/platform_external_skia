@@ -679,7 +679,8 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/src/ports \
 	$(LOCAL_PATH)/src/pdf \
 	external/sfntly/cpp/src \
-	external/zlib
+	external/zlib \
+	$(LOCAL_PATH)/tools
 
 LOCAL_EXPORT_C_INCLUDE_DIRS := \
 	$(LOCAL_PATH)/include/codec \
@@ -692,6 +693,7 @@ LOCAL_EXPORT_C_INCLUDE_DIRS := \
 	$(LOCAL_PATH)/include/gpu \
 	$(LOCAL_PATH)/include/images \
 	$(LOCAL_PATH)/include/ports \
+	$(LOCAL_PATH)/tools \
 	$(LOCAL_PATH)/include/utils \
 	$(LOCAL_PATH)/src/utils
 
