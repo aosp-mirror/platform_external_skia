@@ -372,6 +372,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrGpu.cpp \
 	src/gpu/GrGpuResource.cpp \
 	src/gpu/GrGpuFactory.cpp \
+	src/gpu/GrImageIDTextureAdjuster.cpp \
 	src/gpu/GrInvariantOutput.cpp \
 	src/gpu/GrLayerAtlas.cpp \
 	src/gpu/GrLayerCache.cpp \
@@ -502,6 +503,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/glsl/GrGLSL.cpp \
 	src/gpu/glsl/GrGLSLCaps.cpp \
 	src/gpu/SkGpuDevice.cpp \
+	src/gpu/SkGpuDevice_drawTexture.cpp \
 	src/gpu/SkGr.cpp \
 	src/gpu/SkGrPixelRef.cpp \
 	src/gpu/SkGrTexturePixelRef.cpp \
