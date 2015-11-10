@@ -627,7 +627,6 @@ LOCAL_SRC_FILES := \
 	tools/SkBitmapRegionCanvas.cpp \
 	tools/SkBitmapRegionCodec.cpp \
 	tools/SkBitmapRegionDecoder.cpp \
-	tools/SkBitmapRegionSampler.cpp \
 	third_party/etc1/etc1.cpp \
 	third_party/ktx/ktx.cpp \
 	tools/AndroidSkDebugToStdOut.cpp
