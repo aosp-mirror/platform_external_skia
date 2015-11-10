@@ -624,9 +624,9 @@ LOCAL_SRC_FILES := \
 	src/fonts/SkGScalerContext.cpp \
 	src/fonts/SkRandomScalerContext.cpp \
 	src/fonts/SkTestScalerContext.cpp \
-	tools/SkBitmapRegionCanvas.cpp \
-	tools/SkBitmapRegionCodec.cpp \
-	tools/SkBitmapRegionDecoder.cpp \
+	tools/android/SkBitmapRegionCanvas.cpp \
+	tools/android/SkBitmapRegionCodec.cpp \
+	tools/android/SkBitmapRegionDecoder.cpp \
 	third_party/etc1/etc1.cpp \
 	third_party/ktx/ktx.cpp \
 	tools/AndroidSkDebugToStdOut.cpp
@@ -684,7 +684,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/src/pdf \
 	external/sfntly/cpp/src \
 	external/zlib \
-	$(LOCAL_PATH)/tools
+	$(LOCAL_PATH)/tools/android
 
 LOCAL_EXPORT_C_INCLUDE_DIRS := \
 	$(LOCAL_PATH)/include/codec \
@@ -697,7 +697,7 @@ LOCAL_EXPORT_C_INCLUDE_DIRS := \
 	$(LOCAL_PATH)/include/gpu \
 	$(LOCAL_PATH)/include/images \
 	$(LOCAL_PATH)/include/ports \
-	$(LOCAL_PATH)/tools \
+	$(LOCAL_PATH)/tools/android \
 	$(LOCAL_PATH)/include/utils \
 	$(LOCAL_PATH)/src/utils
 

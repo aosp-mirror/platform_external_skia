@@ -596,6 +596,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../../../frameworks/base/libs/hwui \
 	$(LOCAL_PATH)/../third_party/etc1 \
 	external/libpng \
+	$(LOCAL_PATH)/../tools/android \
 	$(LOCAL_PATH)/../tools/timer \
 	$(LOCAL_PATH)/../experimental \
 	external/zlib \
