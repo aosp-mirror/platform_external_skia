@@ -502,6 +502,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/builders/GrGLGeometryShaderBuilder.cpp \
 	src/gpu/glsl/GrGLSL.cpp \
 	src/gpu/glsl/GrGLSLCaps.cpp \
+	src/gpu/glsl/GrGLSLProgramBuilder.cpp \
 	src/gpu/SkGpuDevice.cpp \
 	src/gpu/SkGpuDevice_drawTexture.cpp \
 	src/gpu/SkGr.cpp \
