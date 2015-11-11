@@ -736,7 +736,8 @@ LOCAL_SRC_FILES_x86 += \
 	src/opts/SkBitmapProcState_opts_SSSE3.cpp \
 	src/opts/SkOpts_ssse3.cpp \
 	src/opts/SkBlitRow_opts_SSE4.cpp \
-	src/opts/SkOpts_sse41.cpp
+	src/opts/SkOpts_sse41.cpp \
+	src/opts/SkOpts_avx.cpp
 
 LOCAL_SRC_FILES_x86_64 += \
 	src/opts/SkBitmapFilter_opts_SSE2.cpp \
@@ -746,7 +747,8 @@ LOCAL_SRC_FILES_x86_64 += \
 	src/opts/SkBitmapProcState_opts_SSSE3.cpp \
 	src/opts/SkOpts_ssse3.cpp \
 	src/opts/SkBlitRow_opts_SSE4.cpp \
-	src/opts/SkOpts_sse41.cpp
+	src/opts/SkOpts_sse41.cpp \
+	src/opts/SkOpts_avx.cpp
 
 LOCAL_CFLAGS_mips += \
 	-EL
