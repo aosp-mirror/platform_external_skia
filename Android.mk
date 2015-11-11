@@ -494,15 +494,15 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/GrGLVertexBuffer.cpp \
 	src/gpu/gl/GrGLXferProcessor.cpp \
 	src/gpu/gl/builders/GrGLProgramBuilder.cpp \
-	src/gpu/gl/builders/GrGLShaderBuilder.cpp \
 	src/gpu/gl/builders/GrGLShaderStringBuilder.cpp \
 	src/gpu/gl/builders/GrGLSLPrettyPrint.cpp \
-	src/gpu/gl/builders/GrGLVertexShaderBuilder.cpp \
-	src/gpu/gl/builders/GrGLFragmentShaderBuilder.cpp \
-	src/gpu/gl/builders/GrGLGeometryShaderBuilder.cpp \
 	src/gpu/glsl/GrGLSL.cpp \
 	src/gpu/glsl/GrGLSLCaps.cpp \
+	src/gpu/glsl/GrGLSLFragmentShaderBuilder.cpp \
+	src/gpu/glsl/GrGLSLGeometryShaderBuilder.cpp \
 	src/gpu/glsl/GrGLSLProgramBuilder.cpp \
+	src/gpu/glsl/GrGLSLShaderBuilder.cpp \
+	src/gpu/glsl/GrGLSLVertexShaderBuilder.cpp \
 	src/gpu/SkGpuDevice.cpp \
 	src/gpu/SkGpuDevice_drawTexture.cpp \
 	src/gpu/SkGr.cpp \
