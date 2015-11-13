@@ -519,6 +519,7 @@ LOCAL_SRC_FILES := \
 	../gm/xfermodes2.cpp \
 	../gm/xfermodes3.cpp \
 	../gm/yuvtorgbeffect.cpp \
+	../tools/AndroidSkDebugToStdOut.cpp \
 	../tools/flags/SkCommandLineFlags.cpp \
 	../src/svg/SkSVGCanvas.cpp \
 	../src/svg/SkSVGDevice.cpp \
@@ -558,14 +559,13 @@ LOCAL_STATIC_LIBRARIES := \
 	libjsoncpp
 
 LOCAL_C_INCLUDES := \
-	$(LOCAL_PATH)/../include/private \
-	$(LOCAL_PATH)/../src/core \
 	$(LOCAL_PATH)/../include/c \
 	$(LOCAL_PATH)/../include/config \
 	$(LOCAL_PATH)/../include/core \
 	$(LOCAL_PATH)/../include/pathops \
 	$(LOCAL_PATH)/../include/pipe \
 	$(LOCAL_PATH)/../include/codec \
+	$(LOCAL_PATH)/../include/android \
 	$(LOCAL_PATH)/../include/effects \
 	$(LOCAL_PATH)/../include/images \
 	$(LOCAL_PATH)/../include/ports \
@@ -573,6 +573,8 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../include/utils \
 	$(LOCAL_PATH)/../src/utils \
 	$(LOCAL_PATH)/../include/gpu \
+	$(LOCAL_PATH)/../include/private \
+	$(LOCAL_PATH)/../src/core \
 	$(LOCAL_PATH)/../include/svg \
 	$(LOCAL_PATH)/../include/xml \
 	$(LOCAL_PATH)/../src/fonts \
@@ -581,6 +583,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../src/gpu \
 	$(LOCAL_PATH)/../../src/gpu \
 	$(LOCAL_PATH)/../gm \
+	$(LOCAL_PATH)/../src/android \
 	$(LOCAL_PATH)/../src/effects \
 	$(LOCAL_PATH)/../src/images \
 	$(LOCAL_PATH)/../src/lazy \
@@ -595,7 +598,6 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../../../frameworks/base/libs/hwui \
 	$(LOCAL_PATH)/../third_party/etc1 \
 	external/libpng \
-	$(LOCAL_PATH)/../tools/android \
 	$(LOCAL_PATH)/../tools/timer \
 	$(LOCAL_PATH)/../experimental \
 	external/zlib \

@@ -83,6 +83,9 @@ LOCAL_SRC_FILES := \
 	src/codec/SkSwizzler.cpp \
 	src/codec/SkWebpAdapterCodec.cpp \
 	src/codec/SkWebpCodec.cpp \
+	src/android/SkBitmapRegionCanvas.cpp \
+	src/android/SkBitmapRegionCodec.cpp \
+	src/android/SkBitmapRegionDecoder.cpp \
 	src/c/sk_paint.cpp \
 	src/c/sk_surface.cpp \
 	src/core/SkAAClip.cpp \
@@ -625,12 +628,8 @@ LOCAL_SRC_FILES := \
 	src/fonts/SkGScalerContext.cpp \
 	src/fonts/SkRandomScalerContext.cpp \
 	src/fonts/SkTestScalerContext.cpp \
-	tools/android/SkBitmapRegionCanvas.cpp \
-	tools/android/SkBitmapRegionCodec.cpp \
-	tools/android/SkBitmapRegionDecoder.cpp \
 	third_party/etc1/etc1.cpp \
-	third_party/ktx/ktx.cpp \
-	tools/AndroidSkDebugToStdOut.cpp
+	third_party/ktx/ktx.cpp
 
 LOCAL_SHARED_LIBRARIES := \
 	liblog \
@@ -664,6 +663,8 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/include/pipe \
 	external/giflib \
 	external/webp/include \
+	$(LOCAL_PATH)/include/android \
+	$(LOCAL_PATH)/src/android \
 	$(LOCAL_PATH)/include/ports \
 	$(LOCAL_PATH)/include/utils \
 	$(LOCAL_PATH)/include/images \
@@ -684,11 +685,11 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/src/ports \
 	$(LOCAL_PATH)/src/pdf \
 	external/sfntly/cpp/src \
-	external/zlib \
-	$(LOCAL_PATH)/tools/android
+	external/zlib
 
 LOCAL_EXPORT_C_INCLUDE_DIRS := \
 	$(LOCAL_PATH)/include/codec \
+	$(LOCAL_PATH)/include/android \
 	$(LOCAL_PATH)/include/c \
 	$(LOCAL_PATH)/include/config \
 	$(LOCAL_PATH)/include/core \
@@ -698,7 +699,6 @@ LOCAL_EXPORT_C_INCLUDE_DIRS := \
 	$(LOCAL_PATH)/include/gpu \
 	$(LOCAL_PATH)/include/images \
 	$(LOCAL_PATH)/include/ports \
-	$(LOCAL_PATH)/tools/android \
 	$(LOCAL_PATH)/include/utils \
 	$(LOCAL_PATH)/src/utils
 

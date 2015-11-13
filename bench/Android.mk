@@ -377,6 +377,7 @@ LOCAL_SRC_FILES := \
 	../src/utils/debugger/SkDrawCommand.cpp \
 	../src/utils/debugger/SkDebugCanvas.cpp \
 	../src/utils/debugger/SkObjectParser.cpp \
+	../tools/AndroidSkDebugToStdOut.cpp \
 	../tools/flags/SkCommonFlags.cpp \
 	../tools/CrashHandler.cpp \
 	../tools/ProcStats.cpp \
@@ -408,6 +409,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../include/pathops \
 	$(LOCAL_PATH)/../include/pipe \
 	$(LOCAL_PATH)/../include/codec \
+	$(LOCAL_PATH)/../include/android \
 	$(LOCAL_PATH)/../include/effects \
 	$(LOCAL_PATH)/../include/images \
 	$(LOCAL_PATH)/../include/ports \
@@ -423,6 +425,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../src/gpu \
 	$(LOCAL_PATH)/../../src/gpu \
 	$(LOCAL_PATH)/subset \
+	$(LOCAL_PATH)/../src/android \
 	$(LOCAL_PATH)/../src/effects \
 	$(LOCAL_PATH)/../gm \
 	$(LOCAL_PATH)/../src/utils/debugger \
@@ -431,7 +434,6 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../../../frameworks/base/libs/hwui \
 	$(LOCAL_PATH)/../tools/timer \
 	$(LOCAL_PATH)/../third_party/etc1 \
-	$(LOCAL_PATH)/../tools/android \
 	$(LOCAL_PATH)/../src/utils/android
 
 LOCAL_CFLAGS += \
