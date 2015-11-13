@@ -493,7 +493,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/GrGLUtil.cpp \
 	src/gpu/gl/GrGLVertexArray.cpp \
 	src/gpu/gl/GrGLVertexBuffer.cpp \
-	src/gpu/gl/GrGLXferProcessor.cpp \
 	src/gpu/gl/builders/GrGLProgramBuilder.cpp \
 	src/gpu/gl/builders/GrGLShaderStringBuilder.cpp \
 	src/gpu/gl/builders/GrGLSLPrettyPrint.cpp \
@@ -507,6 +506,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/glsl/GrGLSLShaderBuilder.cpp \
 	src/gpu/glsl/GrGLSLUtil.cpp \
 	src/gpu/glsl/GrGLSLVertexShaderBuilder.cpp \
+	src/gpu/glsl/GrGLSLXferProcessor.cpp \
 	src/gpu/SkGpuDevice.cpp \
 	src/gpu/SkGpuDevice_drawTexture.cpp \
 	src/gpu/SkGr.cpp \
