@@ -467,7 +467,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/effects/GrXfermodeFragmentProcessor.cpp \
 	src/gpu/effects/GrYUVtoRGBEffect.cpp \
 	src/gpu/gl/GrGLAssembleInterface.cpp \
-	src/gpu/gl/GrGLSLBlend.cpp \
 	src/gpu/gl/GrGLBufferImpl.cpp \
 	src/gpu/gl/GrGLCaps.cpp \
 	src/gpu/gl/GrGLContext.cpp \
@@ -476,7 +475,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/GrGLGpu.cpp \
 	src/gpu/gl/GrGLGpuProgramCache.cpp \
 	src/gpu/gl/GrGLExtensions.cpp \
-	src/gpu/gl/GrGLFragmentProcessor.cpp \
 	src/gpu/gl/GrGLIndexBuffer.cpp \
 	src/gpu/gl/GrGLInterface.cpp \
 	src/gpu/gl/GrGLNameAllocator.cpp \
@@ -500,11 +498,14 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/builders/GrGLShaderStringBuilder.cpp \
 	src/gpu/gl/builders/GrGLSLPrettyPrint.cpp \
 	src/gpu/glsl/GrGLSL.cpp \
+	src/gpu/glsl/GrGLSLBlend.cpp \
 	src/gpu/glsl/GrGLSLCaps.cpp \
+	src/gpu/glsl/GrGLSLFragmentProcessor.cpp \
 	src/gpu/glsl/GrGLSLFragmentShaderBuilder.cpp \
 	src/gpu/glsl/GrGLSLGeometryShaderBuilder.cpp \
 	src/gpu/glsl/GrGLSLProgramBuilder.cpp \
 	src/gpu/glsl/GrGLSLShaderBuilder.cpp \
+	src/gpu/glsl/GrGLSLUtil.cpp \
 	src/gpu/glsl/GrGLSLVertexShaderBuilder.cpp \
 	src/gpu/SkGpuDevice.cpp \
 	src/gpu/SkGpuDevice_drawTexture.cpp \
