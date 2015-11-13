@@ -470,7 +470,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/GrGLBufferImpl.cpp \
 	src/gpu/gl/GrGLCaps.cpp \
 	src/gpu/gl/GrGLContext.cpp \
-	src/gpu/gl/GrGLGeometryProcessor.cpp \
 	src/gpu/gl/GrGLGLSL.cpp \
 	src/gpu/gl/GrGLGpu.cpp \
 	src/gpu/gl/GrGLGpuProgramCache.cpp \
@@ -482,7 +481,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/GrGLPath.cpp \
 	src/gpu/gl/GrGLPathRange.cpp \
 	src/gpu/gl/GrGLPathRendering.cpp \
-	src/gpu/gl/GrGLPrimitiveProcessor.cpp \
 	src/gpu/gl/GrGLProgram.cpp \
 	src/gpu/gl/GrGLProgramDesc.cpp \
 	src/gpu/gl/GrGLProgramDataManager.cpp \
@@ -501,7 +499,9 @@ LOCAL_SRC_FILES := \
 	src/gpu/glsl/GrGLSLCaps.cpp \
 	src/gpu/glsl/GrGLSLFragmentProcessor.cpp \
 	src/gpu/glsl/GrGLSLFragmentShaderBuilder.cpp \
+	src/gpu/glsl/GrGLSLGeometryProcessor.cpp \
 	src/gpu/glsl/GrGLSLGeometryShaderBuilder.cpp \
+	src/gpu/glsl/GrGLSLPrimitiveProcessor.cpp \
 	src/gpu/glsl/GrGLSLProgramBuilder.cpp \
 	src/gpu/glsl/GrGLSLShaderBuilder.cpp \
 	src/gpu/glsl/GrGLSLUtil.cpp \
