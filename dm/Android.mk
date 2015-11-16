@@ -473,6 +473,7 @@ LOCAL_SRC_FILES := \
 	../gm/shallowgradient.cpp \
 	../gm/simpleaaclip.cpp \
 	../gm/skbug1719.cpp \
+	../gm/skbug_257.cpp \
 	../gm/smallarc.cpp \
 	../gm/smallimage.cpp \
 	../gm/spritebitmap.cpp \
