@@ -90,6 +90,7 @@ LOCAL_SRC_FILES := \
 	../tests/BitmapHeapTest.cpp \
 	../tests/BitmapTest.cpp \
 	../tests/BlendTest.cpp \
+	../tests/BlitMaskClip.cpp \
 	../tests/BlitRowTest.cpp \
 	../tests/BlurTest.cpp \
 	../tests/CPlusPlusEleven.cpp \
