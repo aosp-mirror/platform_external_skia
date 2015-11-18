@@ -434,7 +434,6 @@ LOCAL_SRC_FILES := \
 	../gm/patch.cpp \
 	../gm/patchgrid.cpp \
 	../gm/path_stroke_with_zero_length.cpp \
-	../gm/pathcontourstart.cpp \
 	../gm/patheffects.cpp \
 	../gm/pathfill.cpp \
 	../gm/pathinterior.cpp \
