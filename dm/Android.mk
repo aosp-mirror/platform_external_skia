@@ -477,6 +477,7 @@ LOCAL_SRC_FILES := \
 	../gm/skbug_257.cpp \
 	../gm/smallarc.cpp \
 	../gm/smallimage.cpp \
+	../gm/smallpaths.cpp \
 	../gm/spritebitmap.cpp \
 	../gm/srcmode.cpp \
 	../gm/stlouisarch.cpp \
