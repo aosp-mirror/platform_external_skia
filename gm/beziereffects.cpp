@@ -12,7 +12,6 @@
 
 #if SK_SUPPORT_GPU
 
-#include "GrBatchFlushState.h"
 #include "GrContext.h"
 #include "GrPathUtils.h"
 #include "GrTest.h"
@@ -158,7 +157,7 @@ protected:
                 SkAutoTUnref<GrGeometryProcessor> gp;
                 {   // scope to contain GrTestTarget
                     GrTestTarget tt;
-                    context->getTestTarget(&tt);
+                    context->getTestTarget(&tt, rt);
                     if (nullptr == tt.target()) {
                         continue;
                     }
@@ -218,7 +217,7 @@ protected:
                     canvas->drawRect(bounds, boundsPaint);
 
                     GrTestTarget tt;
-                    context->getTestTarget(&tt);
+                    context->getTestTarget(&tt, rt);
                     SkASSERT(tt.target());
 
                     GrPipelineBuilder pipelineBuilder;
@@ -306,7 +305,7 @@ protected:
                 SkAutoTUnref<GrGeometryProcessor> gp;
                 {   // scope to contain GrTestTarget
                     GrTestTarget tt;
-                    context->getTestTarget(&tt);
+                    context->getTestTarget(&tt, rt);
                     if (nullptr == tt.target()) {
                         continue;
                     }
@@ -363,7 +362,7 @@ protected:
                     canvas->drawRect(bounds, boundsPaint);
 
                     GrTestTarget tt;
-                    context->getTestTarget(&tt);
+                    context->getTestTarget(&tt, rt);
                     SkASSERT(tt.target());
 
                     GrPipelineBuilder pipelineBuilder;
@@ -547,7 +546,7 @@ protected:
                 SkAutoTUnref<GrGeometryProcessor> gp;
                 {   // scope to contain GrTestTarget
                     GrTestTarget tt;
-                    context->getTestTarget(&tt);
+                    context->getTestTarget(&tt, rt);
                     if (nullptr == tt.target()) {
                         continue;
                     }
@@ -601,7 +600,7 @@ protected:
                     canvas->drawRect(bounds, boundsPaint);
 
                     GrTestTarget tt;
-                    context->getTestTarget(&tt);
+                    context->getTestTarget(&tt, rt);
                     SkASSERT(tt.target());
 
                     GrPipelineBuilder pipelineBuilder;

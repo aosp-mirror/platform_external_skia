@@ -27,6 +27,7 @@
 #include "SkDraw.h"
 #include "SkDrawFilter.h"
 #include "SkDrawProcs.h"
+#include "SkFindAndPlaceGlyph.h"
 #include "SkGlyphCache.h"
 #include "SkGpuDevice.h"
 #include "SkGrPriv.h"
@@ -486,7 +487,7 @@ void GrAtlasTextContext::regenerateTextBlob(GrAtlasTextBlob* cacheBlob,
                                             const SkTextBlob* blob, SkScalar x, SkScalar y,
                                             SkDrawFilter* drawFilter, const SkIRect& clipRect,
                                             GrRenderTarget* rt, const GrClip& clip) {
-    // The color here is the GrPaint color, and it is used to determine whether we 
+    // The color here is the GrPaint color, and it is used to determine whether we
     // have to regenerate LCD text blobs.
     // We use this color vs the SkPaint color because it has the colorfilter applied.
     cacheBlob->fPaintColor = color;
@@ -685,8 +686,8 @@ inline void GrAtlasTextContext::fallbackDrawPosText(GrAtlasTextBlob* blob,
 }
 
 inline GrAtlasTextBlob*
-GrAtlasTextContext::setupDFBlob(int glyphCount, const SkPaint& origPaint, 
-                                const SkMatrix& viewMatrix, SkPaint* dfPaint, 
+GrAtlasTextContext::setupDFBlob(int glyphCount, const SkPaint& origPaint,
+                                const SkMatrix& viewMatrix, SkPaint* dfPaint,
                                 SkScalar* textRatio) {
     GrAtlasTextBlob* blob = fCache->createBlob(glyphCount, 1, kGrayTextVASize);
 
@@ -724,7 +725,7 @@ GrAtlasTextContext::createDrawTextBlob(GrRenderTarget* rt, const GrClip& clip,
                                  byteLength, x, y, clipRect, textRatio, &fallbackTxt, &fallbackPos,
                                  &offset, skPaint);
         if (fallbackTxt.count()) {
-            this->fallbackDrawPosText(blob, 0, rt, clip, paint.getColor(), skPaint, viewMatrix, 
+            this->fallbackDrawPosText(blob, 0, rt, clip, paint.getColor(), skPaint, viewMatrix,
                                       fallbackTxt, fallbackPos, 2, offset, clipRect);
         }
     } else {
@@ -763,8 +764,8 @@ GrAtlasTextContext::createDrawPosTextBlob(GrRenderTarget* rt, const GrClip& clip
                                     byteLength, pos, scalarsPerPosition, offset, clipRect,
                                     textRatio, &fallbackTxt, &fallbackPos);
         if (fallbackTxt.count()) {
-            this->fallbackDrawPosText(blob, 0, rt, clip, paint.getColor(), skPaint, viewMatrix, 
-                                      fallbackTxt, fallbackPos, scalarsPerPosition, offset, 
+            this->fallbackDrawPosText(blob, 0, rt, clip, paint.getColor(), skPaint, viewMatrix,
+                                      fallbackTxt, fallbackPos, scalarsPerPosition, offset,
                                       clipRect);
         }
     } else {
@@ -779,7 +780,7 @@ GrAtlasTextContext::createDrawPosTextBlob(GrRenderTarget* rt, const GrClip& clip
 }
 
 void GrAtlasTextContext::onDrawText(GrDrawContext* dc, GrRenderTarget* rt,
-                                    const GrClip& clip, 
+                                    const GrClip& clip,
                                     const GrPaint& paint, const SkPaint& skPaint,
                                     const SkMatrix& viewMatrix,
                                     const char text[], size_t byteLength,
@@ -825,73 +826,16 @@ void GrAtlasTextContext::internalDrawBMPText(GrAtlasTextBlob* blob, int runIndex
     // Get GrFontScaler from cache
     GrFontScaler* fontScaler = GetGrFontScaler(cache);
 
-    // transform our starting point
-    {
-        SkPoint loc;
-        viewMatrix.mapXY(x, y, &loc);
-        x = loc.fX;
-        y = loc.fY;
-    }
-
-    // need to measure first
-    if (skPaint.getTextAlign() != SkPaint::kLeft_Align) {
-        SkVector    stopVector;
-        MeasureText(cache, glyphCacheProc, text, byteLength, &stopVector);
-
-        SkScalar    stopX = stopVector.fX;
-        SkScalar    stopY = stopVector.fY;
-
-        if (skPaint.getTextAlign() == SkPaint::kCenter_Align) {
-            stopX = SkScalarHalf(stopX);
-            stopY = SkScalarHalf(stopY);
+    SkFindAndPlaceGlyph::ProcessText(
+        text, byteLength, {x, y}, viewMatrix, skPaint.getTextAlign(), glyphCacheProc, cache,
+        [&](const SkGlyph& glyph, SkPoint position, SkPoint rounding) {
+            position += rounding;
+            this->bmpAppendGlyph(
+                blob, runIndex, glyph,
+                SkScalarFloorToInt(position.fX), SkScalarFloorToInt(position.fY),
+                color, fontScaler, clipRect);
         }
-        x -= stopX;
-        y -= stopY;
-    }
-
-    const char* stop = text + byteLength;
-
-    SkAutoKern autokern;
-
-    SkFixed fxMask = ~0;
-    SkFixed fyMask = ~0;
-    SkScalar halfSampleX, halfSampleY;
-    if (cache->isSubpixel()) {
-        halfSampleX = halfSampleY = SkFixedToScalar(SkGlyph::kSubpixelRound);
-        SkAxisAlignment baseline = SkComputeAxisAlignmentForHText(viewMatrix);
-        if (kX_SkAxisAlignment == baseline) {
-            fyMask = 0;
-            halfSampleY = SK_ScalarHalf;
-        } else if (kY_SkAxisAlignment == baseline) {
-            fxMask = 0;
-            halfSampleX = SK_ScalarHalf;
-        }
-    } else {
-        halfSampleX = halfSampleY = SK_ScalarHalf;
-    }
-
-    Sk48Dot16 fx = SkScalarTo48Dot16(x + halfSampleX);
-    Sk48Dot16 fy = SkScalarTo48Dot16(y + halfSampleY);
-
-    while (text < stop) {
-        const SkGlyph& glyph = glyphCacheProc(cache, &text, fx & fxMask, fy & fyMask);
-
-        fx += autokern.adjust(glyph);
-
-        if (glyph.fWidth) {
-            this->bmpAppendGlyph(blob,
-                                 runIndex,
-                                 glyph,
-                                 Sk48Dot16FloorToInt(fx),
-                                 Sk48Dot16FloorToInt(fy),
-                                 color,
-                                 fontScaler,
-                                 clipRect);
-        }
-
-        fx += glyph.fAdvanceX;
-        fy += glyph.fAdvanceY;
-    }
+    );
 }
 
 void GrAtlasTextContext::internalDrawBMPPosText(GrAtlasTextBlob* blob, int runIndex,
@@ -915,137 +859,18 @@ void GrAtlasTextContext::internalDrawBMPPosText(GrAtlasTextBlob* blob, int runIn
     // Get GrFontScaler from cache
     GrFontScaler* fontScaler = GetGrFontScaler(cache);
 
-    const char*        stop = text + byteLength;
-    SkTextAlignProc    alignProc(skPaint.getTextAlign());
-    SkTextMapStateProc tmsProc(viewMatrix, offset, scalarsPerPosition);
-
-    if (cache->isSubpixel()) {
-        // maybe we should skip the rounding if linearText is set
-        SkAxisAlignment baseline = SkComputeAxisAlignmentForHText(viewMatrix);
-
-        SkFixed fxMask = ~0;
-        SkFixed fyMask = ~0;
-        SkScalar halfSampleX = SkFixedToScalar(SkGlyph::kSubpixelRound);
-        SkScalar halfSampleY = SkFixedToScalar(SkGlyph::kSubpixelRound);
-        if (kX_SkAxisAlignment == baseline) {
-            fyMask = 0;
-            halfSampleY = SK_ScalarHalf;
-        } else if (kY_SkAxisAlignment == baseline) {
-            fxMask = 0;
-            halfSampleX = SK_ScalarHalf;
+    SkFindAndPlaceGlyph::ProcessPosText(
+        text, byteLength, offset, viewMatrix, pos, scalarsPerPosition,
+        skPaint.getTextAlign(), glyphCacheProc, cache,
+        [&](const SkGlyph& glyph, SkPoint position, SkPoint rounding) {
+            position += rounding;
+            this->bmpAppendGlyph(
+                blob, runIndex, glyph,
+                SkScalarFloorToInt(position.fX), SkScalarFloorToInt(position.fY),
+                color, fontScaler, clipRect);
         }
-
-        if (SkPaint::kLeft_Align == skPaint.getTextAlign()) {
-            while (text < stop) {
-                SkPoint tmsLoc;
-                tmsProc(pos, &tmsLoc);
-                Sk48Dot16 fx = SkScalarTo48Dot16(tmsLoc.fX + halfSampleX);
-                Sk48Dot16 fy = SkScalarTo48Dot16(tmsLoc.fY + halfSampleY);
-
-                const SkGlyph& glyph = glyphCacheProc(cache, &text,
-                                                      fx & fxMask, fy & fyMask);
-
-                if (glyph.fWidth) {
-                    this->bmpAppendGlyph(blob,
-                                         runIndex,
-                                         glyph,
-                                         Sk48Dot16FloorToInt(fx),
-                                         Sk48Dot16FloorToInt(fy),
-                                         color,
-                                         fontScaler,
-                                         clipRect);
-                }
-                pos += scalarsPerPosition;
-            }
-        } else {
-            while (text < stop) {
-                const char* currentText = text;
-                const SkGlyph& metricGlyph = glyphCacheProc(cache, &text, 0, 0);
-
-                if (metricGlyph.fWidth) {
-                    SkDEBUGCODE(SkFixed prevAdvX = metricGlyph.fAdvanceX;)
-                    SkDEBUGCODE(SkFixed prevAdvY = metricGlyph.fAdvanceY;)
-                    SkPoint tmsLoc;
-                    tmsProc(pos, &tmsLoc);
-                    SkPoint alignLoc;
-                    alignProc(tmsLoc, metricGlyph, &alignLoc);
-
-                    Sk48Dot16 fx = SkScalarTo48Dot16(alignLoc.fX + halfSampleX);
-                    Sk48Dot16 fy = SkScalarTo48Dot16(alignLoc.fY + halfSampleY);
-
-                    // have to call again, now that we've been "aligned"
-                    const SkGlyph& glyph = glyphCacheProc(cache, &currentText,
-                                                          fx & fxMask, fy & fyMask);
-                    // the assumption is that the metrics haven't changed
-                    SkASSERT(prevAdvX == glyph.fAdvanceX);
-                    SkASSERT(prevAdvY == glyph.fAdvanceY);
-                    SkASSERT(glyph.fWidth);
-
-                    this->bmpAppendGlyph(blob,
-                                         runIndex,
-                                         glyph,
-                                         Sk48Dot16FloorToInt(fx),
-                                         Sk48Dot16FloorToInt(fy),
-                                         color,
-                                         fontScaler,
-                                         clipRect);
-                }
-                pos += scalarsPerPosition;
-            }
-        }
-    } else {    // not subpixel
-
-        if (SkPaint::kLeft_Align == skPaint.getTextAlign()) {
-            while (text < stop) {
-                // the last 2 parameters are ignored
-                const SkGlyph& glyph = glyphCacheProc(cache, &text, 0, 0);
-
-                if (glyph.fWidth) {
-                    SkPoint tmsLoc;
-                    tmsProc(pos, &tmsLoc);
-
-                    Sk48Dot16 fx = SkScalarTo48Dot16(tmsLoc.fX + SK_ScalarHalf); //halfSampleX;
-                    Sk48Dot16 fy = SkScalarTo48Dot16(tmsLoc.fY + SK_ScalarHalf); //halfSampleY;
-                    this->bmpAppendGlyph(blob,
-                                         runIndex,
-                                         glyph,
-                                         Sk48Dot16FloorToInt(fx),
-                                         Sk48Dot16FloorToInt(fy),
-                                         color,
-                                         fontScaler,
-                                         clipRect);
-                }
-                pos += scalarsPerPosition;
-            }
-        } else {
-            while (text < stop) {
-                // the last 2 parameters are ignored
-                const SkGlyph& glyph = glyphCacheProc(cache, &text, 0, 0);
-
-                if (glyph.fWidth) {
-                    SkPoint tmsLoc;
-                    tmsProc(pos, &tmsLoc);
-
-                    SkPoint alignLoc;
-                    alignProc(tmsLoc, glyph, &alignLoc);
-
-                    Sk48Dot16 fx = SkScalarTo48Dot16(alignLoc.fX + SK_ScalarHalf); //halfSampleX;
-                    Sk48Dot16 fy = SkScalarTo48Dot16(alignLoc.fY + SK_ScalarHalf); //halfSampleY;
-                    this->bmpAppendGlyph(blob,
-                                         runIndex,
-                                         glyph,
-                                         Sk48Dot16FloorToInt(fx),
-                                         Sk48Dot16FloorToInt(fy),
-                                         color,
-                                         fontScaler,
-                                         clipRect);
-                }
-                pos += scalarsPerPosition;
-            }
-        }
-    }
+    );
 }
-
 
 void GrAtlasTextContext::internalDrawDFText(GrAtlasTextBlob* blob, int runIndex,
                                             const SkPaint& skPaint, GrColor color,
@@ -1067,7 +892,7 @@ void GrAtlasTextContext::internalDrawDFText(GrAtlasTextBlob* blob, int runIndex,
     SkDrawCacheProc glyphCacheProc = origPaint.getDrawCacheProc();
     SkAutoDescriptor desc;
     origPaint.getScalerContextDescriptor(&desc, fSurfaceProps, nullptr, true);
-    SkGlyphCache* origPaintCache = SkGlyphCache::DetachCache(origPaint.getTypeface(), 
+    SkGlyphCache* origPaintCache = SkGlyphCache::DetachCache(origPaint.getTypeface(),
                                                              desc.getDesc());
 
     SkTArray<SkScalar> positions;
@@ -2050,7 +1875,7 @@ private:
 };
 
 void GrAtlasTextContext::flushRunAsPaths(GrDrawContext* dc, GrRenderTarget* rt,
-                                         const SkTextBlobRunIterator& it, 
+                                         const SkTextBlobRunIterator& it,
                                          const GrClip& clip, const SkPaint& skPaint,
                                          SkDrawFilter* drawFilter, const SkMatrix& viewMatrix,
                                          const SkIRect& clipBounds, SkScalar x, SkScalar y) {
@@ -2147,7 +1972,7 @@ inline void GrAtlasTextContext::flushRun(GrDrawContext* dc, GrPipelineBuilder* p
     }
 }
 
-inline void GrAtlasTextContext::flushBigGlyphs(GrAtlasTextBlob* cacheBlob, 
+inline void GrAtlasTextContext::flushBigGlyphs(GrAtlasTextBlob* cacheBlob,
                                                GrDrawContext* dc, GrRenderTarget* rt,
                                                const GrClip& clip, const SkPaint& skPaint,
                                                SkScalar transX, SkScalar transY,
@@ -2174,7 +1999,7 @@ inline void GrAtlasTextContext::flushBigGlyphs(GrAtlasTextBlob* cacheBlob,
 
 void GrAtlasTextContext::flush(const SkTextBlob* blob,
                                GrAtlasTextBlob* cacheBlob,
-                               GrDrawContext* dc, 
+                               GrDrawContext* dc,
                                GrRenderTarget* rt,
                                const SkPaint& skPaint,
                                const GrPaint& grPaint,

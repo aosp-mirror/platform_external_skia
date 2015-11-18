@@ -15,8 +15,6 @@ GrShaderCaps::GrShaderCaps() {
     fPathRenderingSupport = false;
     fDstReadInShaderSupport = false;
     fDualSourceBlendingSupport = false;
-    fMixedSamplesSupport = false;
-    fProgrammableSampleLocationsSupport = false;
     fShaderPrecisionVaries = false;
 }
 
@@ -47,15 +45,13 @@ static const char* precision_to_string(GrSLPrecision p) {
 SkString GrShaderCaps::dump() const {
     SkString r;
     static const char* gNY[] = { "NO", "YES" };
-    r.appendf("Shader Derivative Support             : %s\n", gNY[fShaderDerivativeSupport]);
-    r.appendf("Geometry Shader Support               : %s\n", gNY[fGeometryShaderSupport]);
-    r.appendf("Path Rendering Support                : %s\n", gNY[fPathRenderingSupport]);
-    r.appendf("Dst Read In Shader Support            : %s\n", gNY[fDstReadInShaderSupport]);
-    r.appendf("Dual Source Blending Support          : %s\n", gNY[fDualSourceBlendingSupport]);
-    r.appendf("Mixed Samples Support                 : %s\n", gNY[fMixedSamplesSupport]);
-    r.appendf("Programmable Sample Locations Support : %s\n", gNY[fProgrammableSampleLocationsSupport]);
+    r.appendf("Shader Derivative Support          : %s\n", gNY[fShaderDerivativeSupport]);
+    r.appendf("Geometry Shader Support            : %s\n", gNY[fGeometryShaderSupport]);
+    r.appendf("Path Rendering Support             : %s\n", gNY[fPathRenderingSupport]);
+    r.appendf("Dst Read In Shader Support         : %s\n", gNY[fDstReadInShaderSupport]);
+    r.appendf("Dual Source Blending Support       : %s\n", gNY[fDualSourceBlendingSupport]);
 
-    r.appendf("Shader Float Precisions (varies: %s)  :\n", gNY[fShaderPrecisionVaries]);
+    r.appendf("Shader Float Precisions (varies: %s):\n", gNY[fShaderPrecisionVaries]);
 
     for (int s = 0; s < kGrShaderTypeCount; ++s) {
         GrShaderType shaderType = static_cast<GrShaderType>(s);
@@ -77,6 +73,7 @@ SkString GrShaderCaps::dump() const {
 
 void GrShaderCaps::applyOptionsOverrides(const GrContextOptions& options) {
     fDualSourceBlendingSupport = fDualSourceBlendingSupport && !options.fSuppressDualSourceBlending;
+    this->onApplyOptionsOverrides(options);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -93,6 +90,7 @@ GrCaps::GrCaps(const GrContextOptions& options) {
     fCompressedTexSubImageSupport = false;
     fOversizedStencilSupport = false;
     fTextureBarrierSupport = false;
+    fMixedSamplesSupport = false;
     fSupportsInstancedDraws = false;
     fFullClearIsFree = false;
     fMustClearUploadedBufferData = false;
@@ -111,7 +109,8 @@ GrCaps::GrCaps(const GrContextOptions& options) {
     memset(fConfigRenderSupport, 0, sizeof(fConfigRenderSupport));
     memset(fConfigTextureSupport, 0, sizeof(fConfigTextureSupport));
 
-    fSupressPrints = options.fSuppressPrints;
+    fSuppressPrints = options.fSuppressPrints;
+    fImmediateFlush = options.fImmediateMode;
     fDrawPathMasksToCompressedTextureSupport = options.fDrawPathToCompressedTexture;
     fGeometryBufferMapThreshold = options.fGeometryBufferMapThreshold;
     fUseDrawInsteadOfPartialRenderTargetWrite = options.fUseDrawInsteadOfPartialRenderTargetWrite;
@@ -121,6 +120,13 @@ GrCaps::GrCaps(const GrContextOptions& options) {
 
 void GrCaps::applyOptionsOverrides(const GrContextOptions& options) {
     fMaxTextureSize = SkTMin(fMaxTextureSize, options.fMaxTextureSizeOverride);
+    // If the max tile override is zero, it means we should use the max texture size.
+    if (!options.fMaxTileSizeOverride || options.fMaxTileSizeOverride > fMaxTextureSize) {
+        fMaxTileSize = fMaxTextureSize;
+    } else {
+        fMaxTileSize = options.fMaxTileSizeOverride;
+    }
+    this->onApplyOptionsOverrides(options);
 }
 
 static SkString map_flags_to_string(uint32_t flags) {
@@ -157,6 +163,7 @@ SkString GrCaps::dump() const {
     r.appendf("Compressed Update Support          : %s\n", gNY[fCompressedTexSubImageSupport]);
     r.appendf("Oversized Stencil Support          : %s\n", gNY[fOversizedStencilSupport]);
     r.appendf("Texture Barrier Support            : %s\n", gNY[fTextureBarrierSupport]);
+    r.appendf("Mixed Samples Support              : %s\n", gNY[fMixedSamplesSupport]);
     r.appendf("Supports instanced draws           : %s\n", gNY[fSupportsInstancedDraws]);
     r.appendf("Full screen clear is free          : %s\n", gNY[fFullClearIsFree]);
     r.appendf("Must clear buffer memory           : %s\n", gNY[fMustClearUploadedBufferData]);

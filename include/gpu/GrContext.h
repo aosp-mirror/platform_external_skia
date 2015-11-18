@@ -8,10 +8,10 @@
 #ifndef GrContext_DEFINED
 #define GrContext_DEFINED
 
+#include "GrCaps.h"
 #include "GrClip.h"
 #include "GrColor.h"
 #include "GrPaint.h"
-#include "GrPathRendererChain.h"
 #include "GrRenderTarget.h"
 #include "GrTextureProvider.h"
 #include "SkMatrix.h"
@@ -21,7 +21,6 @@
 
 struct GrBatchAtlasConfig;
 class GrBatchFontCache;
-class GrCaps;
 struct GrContextOptions;
 class GrDrawingManager;
 class GrDrawContext;
@@ -32,7 +31,6 @@ class GrIndexBuffer;
 class GrLayerCache;
 class GrOvalRenderer;
 class GrPath;
-class GrPathRenderer;
 class GrPipelineBuilder;
 class GrResourceEntry;
 class GrResourceCache;
@@ -43,7 +41,6 @@ class GrTextContext;
 class GrTextureParams;
 class GrVertexBuffer;
 class GrStrokeInfo;
-class GrSoftwarePathRenderer;
 class SkTraceMemoryDump;
 
 class SK_API GrContext : public SkRefCnt {
@@ -208,7 +205,7 @@ public:
     void flush(int flagsBitfield = 0);
 
     void flushIfNecessary() {
-        if (fFlushToReduceCacheSize) {
+        if (fFlushToReduceCacheSize || this->caps()->immediateFlush()) {
             this->flush();
         }
     }
@@ -331,16 +328,7 @@ public:
     GrResourceCache* getResourceCache() { return fResourceCache; }
 
     // Called by tests that draw directly to the context via GrDrawTarget
-    void getTestTarget(GrTestTarget*);
-
-    GrPathRenderer* getPathRenderer(
-                    const GrPipelineBuilder&,
-                    const SkMatrix& viewMatrix,
-                    const SkPath& path,
-                    const GrStrokeInfo& stroke,
-                    bool allowSW,
-                    GrPathRendererChain::DrawType drawType = GrPathRendererChain::kColor_DrawType,
-                    GrPathRendererChain::StencilSupport* stencilSupport = NULL);
+    void getTestTarget(GrTestTarget*, GrRenderTarget* rt);
 
     /** Prints cache stats to the string if GR_CACHE_STATS == 1. */
     void dumpCacheStats(SkString*) const;
@@ -361,6 +349,10 @@ public:
     /** Enumerates all cached GPU resources and dumps their memory to traceMemoryDump. */
     void dumpMemoryStatistics(SkTraceMemoryDump* traceMemoryDump) const;
 
+    /** Draw font cache texture to render target */
+    void drawFontCache(const SkRect& rect, GrMaskFormat format, const SkPaint& paint,
+                       GrRenderTarget* target);
+
 private:
     GrGpu*                          fGpu;
     const GrCaps*                   fCaps;
@@ -375,9 +367,6 @@ private:
     GrBatchFontCache*               fBatchFontCache;
     SkAutoTDelete<GrLayerCache>     fLayerCache;
     SkAutoTDelete<GrTextBlobCache>  fTextBlobCache;
-
-    GrPathRendererChain*            fPathRendererChain;
-    GrSoftwarePathRenderer*         fSoftwarePathRenderer;
 
     // Set by OverbudgetCB() to request that GrContext flush before exiting a draw.
     bool                            fFlushToReduceCacheSize;
@@ -408,11 +397,16 @@ private:
 
     SkAutoTDelete<GrDrawingManager> fDrawingManager;
 
+    // TODO: have the CMM use drawContexts and rm this friending
+    friend class GrClipMaskManager; // the CMM is friended just so it can call 'drawingManager'
+    friend class GrDrawingManager;  // for access to drawingManager for ProgramUnitTest
+    GrDrawingManager* drawingManager() { return fDrawingManager; }
+
     GrContext(); // init must be called after the constructor.
     bool init(GrBackend, GrBackendContext, const GrContextOptions& options);
 
     void initMockContext();
-    void initCommon(const GrContextOptions& options);
+    void initCommon();
 
     /**
      * These functions create premul <-> unpremul effects if it is possible to generate a pair

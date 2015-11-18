@@ -22,6 +22,7 @@ struct SkDrawProcs;
 struct GrSkDrawProcs;
 
 class GrAccelData;
+class GrTextureProducer;
 struct GrCachedLayer;
 
 /**
@@ -181,16 +182,6 @@ private:
     void prepareDraw(const SkDraw&);
 
     /**
-     * Implementation for both drawBitmap and drawBitmapRect.
-     */
-    void drawBitmapCommon(const SkDraw&,
-                          const SkBitmap& bitmap,
-                          const SkRect* srcRectPtr,
-                          const SkSize* dstSizePtr,      // ignored iff srcRectPtr == nullptr
-                          const SkPaint&,
-                          SkCanvas::SrcRectConstraint);
-
-    /**
      * Helper functions called by drawBitmapCommon. By the time these are called the SkDraw's
      * matrix, clip, and the device's render target has already been set on GrContext.
      */
@@ -224,6 +215,7 @@ private:
                             SkCanvas::SrcRectConstraint,
                             bool bicubic,
                             bool needsTextureDomain);
+
     void drawTiledBitmap(const SkBitmap& bitmap,
                          const SkMatrix& viewMatrix,
                          const SkRect& srcRect,
@@ -233,6 +225,25 @@ private:
                          SkCanvas::SrcRectConstraint,
                          int tileSize,
                          bool bicubic);
+
+    void drawTextureProducer(GrTextureProducer*,
+                             bool alphaOnly,
+                             const SkRect* srcRect,
+                             const SkRect* dstRect,
+                             SkCanvas::SrcRectConstraint,
+                             const SkMatrix& viewMatrix,
+                             const GrClip&,
+                             const SkPaint&);
+
+    void drawTextureProducerImpl(GrTextureProducer*,
+                                 bool alphaOnly,
+                                 const SkRect& clippedSrcRect,
+                                 const SkRect& clippedDstRect,
+                                 SkCanvas::SrcRectConstraint,
+                                 const SkMatrix& viewMatrix,
+                                 const SkMatrix& srcToDstMatrix,
+                                 const GrClip&,
+                                 const SkPaint&);
 
     bool drawDashLine(const SkPoint pts[2], const SkPaint& paint);
 

@@ -196,7 +196,7 @@ static void test_android_codec(skiatest::Reporter* r, SkAndroidCodec* codec, SkB
 }
 
 // FIXME: SkScaledCodec is currently only supported for types used by BRD
-// skbug.com/4428
+// https://bug.skia.org/4428
 static bool supports_scaled_codec(const char path[]) {
     static const char* const exts[] = {
         "jpg", "jpeg", "png", "webp"
@@ -581,7 +581,7 @@ static void test_dimensions(skiatest::Reporter* r, const char path[]) {
     }
 
     // Check that the decode is successful for a variety of scales
-    for (int sampleSize = 1; sampleSize < 10; sampleSize++) {
+    for (int sampleSize = 1; sampleSize < 32; sampleSize++) {
         // Scale the output dimensions
         SkISize scaledDims = codec->getSampledDimensions(sampleSize);
         SkImageInfo scaledInfo = codec->getInfo()

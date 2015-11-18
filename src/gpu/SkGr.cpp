@@ -12,6 +12,7 @@
 #include "GrContext.h"
 #include "GrTextureParamsAdjuster.h"
 #include "GrGpuResourcePriv.h"
+#include "GrImageIDTextureAdjuster.h"
 #include "GrXferProcessor.h"
 #include "GrYUVProvider.h"
 
@@ -271,77 +272,25 @@ GrTexture* GrUploadBitmapToTexture(GrContext* ctx, const SkBitmap& bmp) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class Bitmap_GrTextureParamsAdjuster : public GrTextureParamsAdjuster {
-public:
-    Bitmap_GrTextureParamsAdjuster(const SkBitmap& bitmap)
-        : INHERITED(bitmap.width(), bitmap.height())
-        , fBitmap(bitmap)
-    {
-        if (!bitmap.isVolatile()) {
-            SkIPoint origin = bitmap.pixelRefOrigin();
-            SkIRect subset = SkIRect::MakeXYWH(origin.fX, origin.fY, bitmap.width(),
-                                               bitmap.height());
-            GrMakeKeyFromImageID(&fOriginalKey, bitmap.pixelRef()->getGenerationID(), subset);
-        }
-    }
+void GrInstallBitmapUniqueKeyInvalidator(const GrUniqueKey& key, SkPixelRef* pixelRef) {
+    class Invalidator : public SkPixelRef::GenIDChangeListener {
+    public:
+        explicit Invalidator(const GrUniqueKey& key) : fMsg(key) {}
+    private:
+        GrUniqueKeyInvalidatedMessage fMsg;
 
-protected:
-    GrTexture* refOriginalTexture(GrContext* ctx) override {
-        GrTexture* tex = fBitmap.getTexture();
-        if (tex) {
-            return SkRef(tex);
-        }
+        void onChange() override { SkMessageBus<GrUniqueKeyInvalidatedMessage>::Post(fMsg); }
+    };
 
-        if (fOriginalKey.isValid()) {
-            tex = ctx->textureProvider()->findAndRefTextureByUniqueKey(fOriginalKey);
-            if (tex) {
-                return tex;
-            }
-        }
-
-        tex = GrUploadBitmapToTexture(ctx, fBitmap);
-        if (tex && fOriginalKey.isValid()) {
-            tex->resourcePriv().setUniqueKey(fOriginalKey);
-            InstallInvalidator(fOriginalKey, fBitmap.pixelRef());
-        }
-        return tex;
-    }
-
-    void makeCopyKey(const CopyParams& copyParams, GrUniqueKey* copyKey) override {
-        if (fOriginalKey.isValid()) {
-            MakeCopyKeyFromOrigKey(fOriginalKey, copyParams, copyKey);
-        }
-    }
-
-    void didCacheCopy(const GrUniqueKey& copyKey) override {
-        InstallInvalidator(copyKey, fBitmap.pixelRef());
-    }
-
-private:
-    static void InstallInvalidator(const GrUniqueKey& key, SkPixelRef* pixelRef) {
-        class Invalidator : public SkPixelRef::GenIDChangeListener {
-        public:
-            explicit Invalidator(const GrUniqueKey& key) : fMsg(key) {}
-        private:
-            GrUniqueKeyInvalidatedMessage fMsg;
-
-            void onChange() override {
-                SkMessageBus<GrUniqueKeyInvalidatedMessage>::Post(fMsg);
-            }
-        };
-        Invalidator* listener = new Invalidator(key);
-        pixelRef->addGenIDChangeListener(listener);
-    }
-
-    const SkBitmap  fBitmap;
-    GrUniqueKey     fOriginalKey;
-
-    typedef GrTextureParamsAdjuster INHERITED;
-};
+    pixelRef->addGenIDChangeListener(new Invalidator(key));
+}
 
 GrTexture* GrRefCachedBitmapTexture(GrContext* ctx, const SkBitmap& bitmap,
                                     const GrTextureParams& params) {
-    return Bitmap_GrTextureParamsAdjuster(bitmap).refTextureForParams(ctx, params);
+    if (bitmap.getTexture()) {
+        return GrBitmapTextureAdjuster(&bitmap).refTextureSafeForParams(params, nullptr);
+    }
+    return GrBitmapTextureMaker(ctx, bitmap).refTextureForParams(params);
 }
 
 ///////////////////////////////////////////////////////////////////////////////

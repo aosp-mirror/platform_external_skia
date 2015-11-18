@@ -12,7 +12,7 @@
 #include "SkBBHFactory.h"
 #include "SkBBoxHierarchy.h"
 #include "SkBitmap.h"
-#include "SkBitmapRegionDecoderInterface.h"
+#include "SkBitmapRegionDecoder.h"
 #include "SkCanvas.h"
 #include "SkData.h"
 #include "SkGPipe.h"
@@ -106,7 +106,6 @@ public:
     enum Mode {
         kCodec_Mode,
         kScanline_Mode,
-        kScanline_Subset_Mode,
         kStripe_Mode, // Tests the skipping of scanlines
         kSubset_Mode, // For codecs that support subsets directly.
     };
@@ -163,7 +162,7 @@ public:
         kDivisor_Mode,
     };
 
-    BRDSrc(Path, SkBitmapRegionDecoderInterface::Strategy, Mode, CodecSrc::DstColorType, uint32_t);
+    BRDSrc(Path, SkBitmapRegionDecoder::Strategy, Mode, CodecSrc::DstColorType, uint32_t);
 
     Error draw(SkCanvas*) const override;
     SkISize size() const override;
@@ -171,7 +170,7 @@ public:
     bool veto(SinkFlags) const override;
 private:
     Path                                     fPath;
-    SkBitmapRegionDecoderInterface::Strategy fStrategy;
+    SkBitmapRegionDecoder::Strategy          fStrategy;
     Mode                                     fMode;
     CodecSrc::DstColorType                   fDstColorType;
     uint32_t                                 fSampleSize;
@@ -179,9 +178,7 @@ private:
 
 class ImageSrc : public Src {
 public:
-    // divisor == 0 means decode the whole image
-    // divisor > 0 means decode in subsets, dividing into a divisor x divisor grid.
-    explicit ImageSrc(Path path, int divisor = 0);
+    explicit ImageSrc(Path path);
 
     Error draw(SkCanvas*) const override;
     SkISize size() const override;
@@ -189,7 +186,6 @@ public:
     bool veto(SinkFlags) const override;
 private:
     Path fPath;
-    const int  fDivisor;
 };
 
 class SKPSrc : public Src {

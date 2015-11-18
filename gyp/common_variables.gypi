@@ -125,7 +125,6 @@
       'skia_embedded_fonts%': '0',
 
       'skia_sanitizer%': '',
-      'skia_scalar%': 'float',
       'skia_mesa%': 0,
       'skia_gpu_extra_dependency_path%': '',
       'skia_gpu_extra_tests_path%': '',
@@ -204,7 +203,6 @@
     'skia_no_fontconfig%': '<(skia_no_fontconfig)',
     'skia_embedded_fonts%': '<(skia_embedded_fonts)',
     'skia_sanitizer%': '<(skia_sanitizer)',
-    'skia_scalar%': '<(skia_scalar)',
     'skia_mesa%': '<(skia_mesa)',
     'skia_gpu_extra_dependency_path%': '<(skia_gpu_extra_dependency_path)',
     'skia_gpu_extra_tests_path%': '<(skia_gpu_extra_tests_path)',
@@ -238,6 +236,7 @@
     'skia_moz2d%': 0,
     'skia_is_bot%': '<(skia_is_bot)',
     'skia_egl%': '<(skia_egl)',
+    'skia_use_sdl%': 0,
     'skia_fast%': 0,
     'skia_fast_flags': [
         '-O3',                   # Even for Debug builds.

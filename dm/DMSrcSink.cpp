@@ -9,12 +9,10 @@
 #include "SamplePipeControllers.h"
 #include "SkAndroidCodec.h"
 #include "SkCodec.h"
-#include "SkCodecTools.h"
 #include "SkCommonFlags.h"
 #include "SkData.h"
 #include "SkDocument.h"
 #include "SkError.h"
-#include "SkFunction.h"
 #include "SkImageGenerator.h"
 #include "SkMultiPictureDraw.h"
 #include "SkNullCanvas.h"
@@ -30,6 +28,7 @@
 #include "SkTLogic.h"
 #include "SkXMLWriter.h"
 #include "SkSwizzler.h"
+#include <functional>
 
 DEFINE_bool(multiPage, false, "For document-type backends, render the source"
             " into multiple pages");
@@ -67,7 +66,7 @@ void GMSrc::modifyGrContextOptions(GrContextOptions* options) const {
 
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
-BRDSrc::BRDSrc(Path path, SkBitmapRegionDecoderInterface::Strategy strategy, Mode mode,
+BRDSrc::BRDSrc(Path path, SkBitmapRegionDecoder::Strategy strategy, Mode mode,
         CodecSrc::DstColorType dstColorType, uint32_t sampleSize)
     : fPath(path)
     , fStrategy(strategy)
@@ -82,13 +81,13 @@ bool BRDSrc::veto(SinkFlags flags) const {
         || flags.approach != SinkFlags::kDirect;
 }
 
-static SkBitmapRegionDecoderInterface* create_brd(Path path,
-        SkBitmapRegionDecoderInterface::Strategy strategy) {
+static SkBitmapRegionDecoder* create_brd(Path path,
+        SkBitmapRegionDecoder::Strategy strategy) {
     SkAutoTUnref<SkData> encoded(SkData::NewFromFileName(path.c_str()));
     if (!encoded) {
         return NULL;
     }
-    return SkBitmapRegionDecoderInterface::CreateBitmapRegionDecoder(encoded, strategy);
+    return SkBitmapRegionDecoder::Create(encoded, strategy);
 }
 
 Error BRDSrc::draw(SkCanvas* canvas) const {
@@ -108,7 +107,7 @@ Error BRDSrc::draw(SkCanvas* canvas) const {
             break;
     }
 
-    SkAutoTDelete<SkBitmapRegionDecoderInterface> brd(create_brd(fPath, fStrategy));
+    SkAutoTDelete<SkBitmapRegionDecoder> brd(create_brd(fPath, fStrategy));
     if (nullptr == brd.get()) {
         return Error::Nonfatal(SkStringPrintf("Could not create brd for %s.", fPath.c_str()));
     }
@@ -128,7 +127,7 @@ Error BRDSrc::draw(SkCanvas* canvas) const {
             SkBitmap bitmap;
             if (!brd->decodeRegion(&bitmap, nullptr, SkIRect::MakeXYWH(0, 0, width, height),
                     fSampleSize, colorType, false)) {
-                return "Cannot decode region.\n";
+                return "Cannot decode (full) region.\n";
             }
             if (colorType != bitmap.colorType()) {
                 return Error::Nonfatal("Cannot convert to color type.\n");
@@ -184,7 +183,7 @@ Error BRDSrc::draw(SkCanvas* canvas) const {
                     SkBitmap bitmap;
                     if (!brd->decodeRegion(&bitmap, nullptr, SkIRect::MakeXYWH(decodeLeft,
                             decodeTop, decodeWidth, decodeHeight), fSampleSize, colorType, false)) {
-                        return "Cannot not decode region.\n";
+                        return "Cannot decode region.\n";
                     }
                     if (colorType != bitmap.colorType()) {
                         return Error::Nonfatal("Cannot convert to color type.\n");
@@ -210,7 +209,7 @@ Error BRDSrc::draw(SkCanvas* canvas) const {
 }
 
 SkISize BRDSrc::size() const {
-    SkAutoTDelete<SkBitmapRegionDecoderInterface> brd(create_brd(fPath, fStrategy));
+    SkAutoTDelete<SkBitmapRegionDecoder> brd(create_brd(fPath, fStrategy));
     if (brd) {
         return SkISize::Make(SkTMax(1, brd->width() / (int) fSampleSize),
                 SkTMax(1, brd->height() / (int) fSampleSize));
@@ -228,7 +227,7 @@ Name BRDSrc::name() const {
     if (1 == fSampleSize) {
         return SkOSPath::Basename(fPath.c_str());
     }
-    return get_scaled_name(fPath, get_scale_from_sample_size(fSampleSize));
+    return get_scaled_name(fPath, 1.0f / (float) fSampleSize);
 }
 
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
@@ -371,82 +370,6 @@ Error CodecSrc::draw(SkCanvas* canvas) const {
             }
 
             canvas->drawBitmap(bitmap, 0, 0);
-            break;
-        }
-        case kScanline_Subset_Mode: {
-            //this mode decodes the image in divisor*divisor subsets, using a scanline decoder
-            const int divisor = 2;
-            const int w = decodeInfo.width();
-            const int h = decodeInfo.height();
-            if (divisor > w || divisor > h) {
-                return Error::Nonfatal(SkStringPrintf("Cannot decode subset: divisor %d is too big"
-                        "for %s with dimensions (%d x %d)", divisor, fPath.c_str(), w, h));
-            }
-            const int subsetWidth = w/divisor;
-            const int subsetHeight = h/divisor;
-            // One of our subsets will be larger to contain any pixels that do not divide evenly.
-            const int extraX = w % divisor;
-            const int extraY = h % divisor;
-            /*
-            * if w or h are not evenly divided by divisor need to adjust width and height of end
-            * subsets to cover entire image.
-            * Add extraX and extraY to largestSubsetBm's width and height to adjust width
-            * and height of end subsets.
-            * subsetBm is extracted from largestSubsetBm.
-            * subsetBm's size is determined based on the current subset and may be larger for end
-            * subsets.
-            */
-            SkImageInfo largestSubsetDecodeInfo =
-                    decodeInfo.makeWH(subsetWidth + extraX, subsetHeight + extraY);
-            SkBitmap largestSubsetBm;
-            if (!largestSubsetBm.tryAllocPixels(largestSubsetDecodeInfo, nullptr,
-                    colorTable.get())) {
-                return SkStringPrintf("Image(%s) is too large (%d x %d)\n", fPath.c_str(),
-                        largestSubsetDecodeInfo.width(), largestSubsetDecodeInfo.height());
-            }
-            for (int col = 0; col < divisor; col++) {
-                //currentSubsetWidth may be larger than subsetWidth for rightmost subsets
-                const int currentSubsetWidth = (col + 1 == divisor) ?
-                        subsetWidth + extraX : subsetWidth;
-                const int x = col * subsetWidth;
-                for (int row = 0; row < divisor; row++) {
-                    //currentSubsetHeight may be larger than subsetHeight for bottom subsets
-                    const int currentSubsetHeight = (row + 1 == divisor) ?
-                            subsetHeight + extraY : subsetHeight;
-                    const int y = row * subsetHeight;
-                    //create scanline decoder for each subset
-                    SkCodec::Options options;
-                    SkIRect subset = SkIRect::MakeXYWH(x, 0, currentSubsetWidth, h);
-                    options.fSubset = &subset;
-                    // TODO (msarett): Support this mode for all scanline orderings.
-                    if (SkCodec::kSuccess != codec->startScanlineDecode(decodeInfo, &options,
-                            colorPtr, colorCountPtr) ||
-                            SkCodec::kTopDown_SkScanlineOrder != codec->getScanlineOrder()) {
-                        if (x == 0 && y == 0) {
-                            //first try, image may not be compatible
-                            return Error::Nonfatal("Could not start top-down scanline decoder");
-                        } else {
-                            return "Error scanline decoder is nullptr";
-                        }
-                    }
-                    // Skip to the first line of subset.  We ignore the result value here.
-                    // If the skip value fails, this will indicate an incomplete image.
-                    // This means that the call to getScanlines() will also fail, but it
-                    // will fill the buffer with a default value, so we can still draw the
-                    // image.
-                    codec->skipScanlines(y);
-
-                    //create and set size of subsetBm
-                    SkBitmap subsetBm;
-                    SkIRect bounds = SkIRect::MakeWH(currentSubsetWidth, currentSubsetHeight);
-                    SkAssertResult(largestSubsetBm.extractSubset(&subsetBm, bounds));
-                    SkAutoLockPixels autolock(subsetBm, true);
-                    codec->getScanlines(subsetBm.getAddr(0, 0), currentSubsetHeight,
-                            subsetBm.rowBytes());
-                    subsetBm.notifyPixelsChanged();
-                    canvas->drawBitmap(subsetBm, SkIntToScalar(x), SkIntToScalar(y));
-                }
-            }
             break;
         }
         case kStripe_Mode: {
@@ -761,12 +684,12 @@ Name AndroidCodecSrc::name() const {
     if (1 == fSampleSize) {
         return SkOSPath::Basename(fPath.c_str());
     }
-    return get_scaled_name(fPath, get_scale_from_sample_size(fSampleSize));
+    return get_scaled_name(fPath, 1.0f / (float) fSampleSize);
 }
 
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
-ImageSrc::ImageSrc(Path path, int divisor) : fPath(path), fDivisor(divisor) {}
+ImageSrc::ImageSrc(Path path) : fPath(path) {}
 
 bool ImageSrc::veto(SinkFlags flags) const {
     // No need to test decoding to non-raster or indirect backend.
@@ -781,60 +704,19 @@ Error ImageSrc::draw(SkCanvas* canvas) const {
         return SkStringPrintf("Couldn't read %s.", fPath.c_str());
     }
     const SkColorType dstColorType = canvas->imageInfo().colorType();
-    if (fDivisor == 0) {
-        // Decode the full image.
-        SkBitmap bitmap;
-        if (!SkImageDecoder::DecodeMemory(encoded->data(), encoded->size(), &bitmap,
-                                          dstColorType, SkImageDecoder::kDecodePixels_Mode)) {
-            return SkStringPrintf("Couldn't decode %s.", fPath.c_str());
-        }
-        if (kRGB_565_SkColorType == dstColorType && !bitmap.isOpaque()) {
-            // Do not draw a bitmap with alpha to a destination without alpha.
-            return Error::Nonfatal("Uninteresting to decode image with alpha into 565.");
-        }
-        encoded.reset((SkData*)nullptr);  // Might as well drop this when we're done with it.
-        canvas->drawBitmap(bitmap, 0,0);
-        return "";
-    }
-    // Decode subsets.  This is a little involved.
-    SkAutoTDelete<SkMemoryStream> stream(new SkMemoryStream(encoded));
-    SkAutoTDelete<SkImageDecoder> decoder(SkImageDecoder::Factory(stream.get()));
-    if (!decoder) {
-        return SkStringPrintf("Can't find a good decoder for %s.", fPath.c_str());
-    }
-    stream->rewind();
-    int w,h;
-    if (!decoder->buildTileIndex(stream.detach(), &w, &h)) {
-        return Error::Nonfatal("Subset decoding not supported.");
-    }
 
-    // Divide the image into subsets that cover the entire image.
-    if (fDivisor > w || fDivisor > h) {
-        return Error::Nonfatal(SkStringPrintf("Cannot decode subset: divisor %d is too big"
-                "for %s with dimensions (%d x %d)", fDivisor, fPath.c_str(), w, h));
+    // Decode the full image.
+    SkBitmap bitmap;
+    if (!SkImageDecoder::DecodeMemory(encoded->data(), encoded->size(), &bitmap,
+                                      dstColorType, SkImageDecoder::kDecodePixels_Mode)) {
+        return SkStringPrintf("Couldn't decode %s.", fPath.c_str());
     }
-    const int subsetWidth  = w / fDivisor,
-              subsetHeight = h / fDivisor;
-    for (int y = 0; y < h; y += subsetHeight) {
-        for (int x = 0; x < w; x += subsetWidth) {
-            SkBitmap subset;
-            SkIRect rect = SkIRect::MakeXYWH(x, y, subsetWidth, subsetHeight);
-            if (!decoder->decodeSubset(&subset, rect, dstColorType)) {
-                return SkStringPrintf("Could not decode subset (%d, %d, %d, %d).",
-                                      x, y, x+subsetWidth, y+subsetHeight);
-            }
-            if (kRGB_565_SkColorType == dstColorType && !subset.isOpaque()) {
-                // Do not draw a bitmap with alpha to a destination without alpha.
-                // This is not an error, but there is nothing interesting to show.
-
-                // This should only happen on the first iteration through the loop.
-                SkASSERT(0 == x && 0 == y);
-
-                return Error::Nonfatal("Uninteresting to decode image with alpha into 565.");
-            }
-            canvas->drawBitmap(subset, SkIntToScalar(x), SkIntToScalar(y));
-        }
+    if (kRGB_565_SkColorType == dstColorType && !bitmap.isOpaque()) {
+        // Do not draw a bitmap with alpha to a destination without alpha.
+        return Error::Nonfatal("Uninteresting to decode image with alpha into 565.");
     }
+    encoded.reset((SkData*)nullptr);  // Might as well drop this when we're done with it.
+    canvas->drawBitmap(bitmap, 0,0);
     return "";
 }
 
@@ -1099,16 +981,16 @@ Error RasterSink::draw(const Src& src, SkBitmap* dst, SkWStream*, SkString*) con
 // Several examples below.
 
 static Error draw_to_canvas(Sink* sink, SkBitmap* bitmap, SkWStream* stream, SkString* log,
-                            SkISize size, SkFunction<Error(SkCanvas*)> draw) {
+                            SkISize size, std::function<Error(SkCanvas*)> draw) {
     class ProxySrc : public Src {
     public:
-        ProxySrc(SkISize size, SkFunction<Error(SkCanvas*)> draw) : fSize(size), fDraw(draw) {}
+        ProxySrc(SkISize size, std::function<Error(SkCanvas*)> draw) : fSize(size), fDraw(draw) {}
         Error   draw(SkCanvas* canvas) const override { return fDraw(canvas); }
         Name                    name() const override { sk_throw(); return ""; } // Won't be called.
         SkISize                 size() const override { return fSize; }
     private:
-        SkISize                      fSize;
-        SkFunction<Error(SkCanvas*)> fDraw;
+        SkISize                         fSize;
+        std::function<Error(SkCanvas*)> fDraw;
     };
     return sink->draw(ProxySrc(size, draw), bitmap, stream, log);
 }

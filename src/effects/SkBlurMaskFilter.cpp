@@ -27,9 +27,11 @@
 #include "SkGrPixelRef.h"
 #include "SkDraw.h"
 #include "effects/GrSimpleTextureEffect.h"
-#include "gl/GrGLFragmentProcessor.h"
-#include "gl/builders/GrGLProgramBuilder.h"
+#include "glsl/GrGLSLFragmentProcessor.h"
+#include "glsl/GrGLSLFragmentShaderBuilder.h"
+#include "glsl/GrGLSLProgramBuilder.h"
 #include "glsl/GrGLSLProgramDataManager.h"
+#include "glsl/GrGLSLTextureSampler.h"
 #endif
 
 SkScalar SkBlurMaskFilter::ConvertRadiusToSigma(SkScalar radius) {
@@ -653,9 +655,9 @@ private:
     GrRectBlurEffect(const SkRect& rect, float sigma, GrTexture *blurProfile,
                      GrSLPrecision fPrecision);
 
-    GrGLFragmentProcessor* onCreateGLInstance() const override;
+    GrGLSLFragmentProcessor* onCreateGLSLInstance() const override;
 
-    void onGetGLProcessorKey(const GrGLSLCaps& caps, GrProcessorKeyBuilder* b) const override;
+    void onGetGLSLProcessorKey(const GrGLSLCaps& caps, GrProcessorKeyBuilder* b) const override;
 
     bool onIsEqual(const GrFragmentProcessor&) const override;
 
@@ -673,7 +675,7 @@ private:
     typedef GrFragmentProcessor INHERITED;
 };
 
-class GrGLRectBlurEffect : public GrGLFragmentProcessor {
+class GrGLRectBlurEffect : public GrGLSLFragmentProcessor {
 public:
     GrGLRectBlurEffect(const GrProcessor&, GrSLPrecision precision) 
     : fPrecision(precision) {
@@ -692,23 +694,23 @@ private:
     UniformHandle       fProfileSizeUniform;
     GrSLPrecision       fPrecision;
 
-    typedef GrGLFragmentProcessor INHERITED;
+    typedef GrGLSLFragmentProcessor INHERITED;
 };
 
-void OutputRectBlurProfileLookup(GrGLFragmentBuilder* fsBuilder,
-                                 const GrGLShaderBuilder::TextureSampler& sampler,
+void OutputRectBlurProfileLookup(GrGLSLFragmentBuilder* fragBuilder,
+                                 const GrGLSLTextureSampler& sampler,
                                  const char *output,
                                  const char *profileSize, const char *loc,
                                  const char *blurred_width,
                                  const char *sharp_width) {
-    fsBuilder->codeAppendf("float %s;", output);
-    fsBuilder->codeAppendf("{");
-    fsBuilder->codeAppendf("float coord = ((abs(%s - 0.5 * %s) - 0.5 * %s)) / %s;",
+    fragBuilder->codeAppendf("float %s;", output);
+    fragBuilder->codeAppendf("{");
+    fragBuilder->codeAppendf("float coord = ((abs(%s - 0.5 * %s) - 0.5 * %s)) / %s;",
                            loc, blurred_width, sharp_width, profileSize);
-    fsBuilder->codeAppendf("%s = ", output);
-    fsBuilder->appendTextureLookup(sampler, "vec2(coord,0.5)");
-    fsBuilder->codeAppend(".a;");
-    fsBuilder->codeAppendf("}");
+    fragBuilder->codeAppendf("%s = ", output);
+    fragBuilder->appendTextureLookup(sampler, "vec2(coord,0.5)");
+    fragBuilder->codeAppend(".a;");
+    fragBuilder->codeAppendf("}");
 }
 
 
@@ -724,44 +726,44 @@ void GrGLRectBlurEffect::emitCode(EmitArgs& args) {
 
     const char* precisionString = GrGLSLShaderVar::PrecisionString(args.fBuilder->glslCaps(),
                                                                    fPrecision);
-    fProxyRectUniform = args.fBuilder->addUniform(GrGLProgramBuilder::kFragment_Visibility,
+    fProxyRectUniform = args.fBuilder->addUniform(GrGLSLProgramBuilder::kFragment_Visibility,
                                             kVec4f_GrSLType,
                                             fPrecision,
                                             "proxyRect",
                                             &rectName);
-    fProfileSizeUniform = args.fBuilder->addUniform(GrGLProgramBuilder::kFragment_Visibility,
+    fProfileSizeUniform = args.fBuilder->addUniform(GrGLSLProgramBuilder::kFragment_Visibility,
                                             kFloat_GrSLType,
                                             kDefault_GrSLPrecision,
                                             "profileSize",
                                             &profileSizeName);
 
-    GrGLFragmentBuilder* fsBuilder = args.fBuilder->getFragmentShaderBuilder();
-    const char *fragmentPos = fsBuilder->fragmentPosition();
+    GrGLSLFragmentBuilder* fragBuilder = args.fFragBuilder;
+    const char *fragmentPos = fragBuilder->fragmentPosition();
 
     if (args.fInputColor) {
-        fsBuilder->codeAppendf("vec4 src=%s;", args.fInputColor);
+        fragBuilder->codeAppendf("vec4 src=%s;", args.fInputColor);
     } else {
-        fsBuilder->codeAppendf("vec4 src=vec4(1);");
+        fragBuilder->codeAppendf("vec4 src=vec4(1);");
     }
 
-    fsBuilder->codeAppendf("%s vec2 translatedPos = %s.xy - %s.xy;", precisionString, fragmentPos, 
-                           rectName);
-    fsBuilder->codeAppendf("%s float width = %s.z - %s.x;", precisionString, rectName, rectName);
-    fsBuilder->codeAppendf("%s float height = %s.w - %s.y;", precisionString, rectName, rectName);
+    fragBuilder->codeAppendf("%s vec2 translatedPos = %s.xy - %s.xy;", precisionString, fragmentPos, 
+                             rectName);
+    fragBuilder->codeAppendf("%s float width = %s.z - %s.x;", precisionString, rectName, rectName);
+    fragBuilder->codeAppendf("%s float height = %s.w - %s.y;", precisionString, rectName, rectName);
 
-    fsBuilder->codeAppendf("%s vec2 smallDims = vec2(width - %s, height - %s);", precisionString, 
-                           profileSizeName, profileSizeName);
-    fsBuilder->codeAppendf("%s float center = 2.0 * floor(%s/2.0 + .25) - 1.0;", precisionString,
-                           profileSizeName);
-    fsBuilder->codeAppendf("%s vec2 wh = smallDims - vec2(center,center);", precisionString);
+    fragBuilder->codeAppendf("%s vec2 smallDims = vec2(width - %s, height - %s);", precisionString, 
+                             profileSizeName, profileSizeName);
+    fragBuilder->codeAppendf("%s float center = 2.0 * floor(%s/2.0 + .25) - 1.0;", precisionString,
+                             profileSizeName);
+    fragBuilder->codeAppendf("%s vec2 wh = smallDims - vec2(center,center);", precisionString);
 
-    OutputRectBlurProfileLookup(fsBuilder, args.fSamplers[0], "horiz_lookup", profileSizeName,
+    OutputRectBlurProfileLookup(fragBuilder, args.fSamplers[0], "horiz_lookup", profileSizeName,
                                 "translatedPos.x", "width", "wh.x");
-    OutputRectBlurProfileLookup(fsBuilder, args.fSamplers[0], "vert_lookup", profileSizeName, 
+    OutputRectBlurProfileLookup(fragBuilder, args.fSamplers[0], "vert_lookup", profileSizeName, 
                                 "translatedPos.y", "height", "wh.y");
 
-    fsBuilder->codeAppendf("float final = horiz_lookup * vert_lookup;");
-    fsBuilder->codeAppendf("%s = src * final;", args.fOutputColor);
+    fragBuilder->codeAppendf("float final = horiz_lookup * vert_lookup;");
+    fragBuilder->codeAppendf("%s = src * final;", args.fOutputColor);
 }
 
 void GrGLRectBlurEffect::onSetData(const GrGLSLProgramDataManager& pdman,
@@ -814,12 +816,12 @@ GrRectBlurEffect::GrRectBlurEffect(const SkRect& rect, float sigma, GrTexture *b
     this->setWillReadFragmentPosition();
 }
 
-void GrRectBlurEffect::onGetGLProcessorKey(const GrGLSLCaps& caps,
-                                         GrProcessorKeyBuilder* b) const {
+void GrRectBlurEffect::onGetGLSLProcessorKey(const GrGLSLCaps& caps,
+                                             GrProcessorKeyBuilder* b) const {
     GrGLRectBlurEffect::GenKey(fPrecision, b);
 }
 
-GrGLFragmentProcessor* GrRectBlurEffect::onCreateGLInstance() const {
+GrGLSLFragmentProcessor* GrRectBlurEffect::onCreateGLSLInstance() const {
     return new GrGLRectBlurEffect(*this, fPrecision);
 }
 
@@ -892,7 +894,7 @@ bool SkBlurMaskFilterImpl::directFilterMaskGPU(GrTextureProvider* texProvider,
         return false;
     }
 
-    drawContext->drawNonAARectWithLocalMatrix(clip, *grp, SkMatrix::I(), rect, inverse);
+    drawContext->fillRectWithLocalMatrix(clip, *grp, SkMatrix::I(), rect, inverse);
     return true;
 }
 
@@ -910,12 +912,12 @@ public:
     float getSigma() const { return fSigma; }
 
 private:
-    GrGLFragmentProcessor* onCreateGLInstance() const override;
+    GrGLSLFragmentProcessor* onCreateGLSLInstance() const override;
 
     GrRRectBlurEffect(float sigma, const SkRRect&, GrTexture* profileTexture);
 
-    virtual void onGetGLProcessorKey(const GrGLSLCaps& caps,
-                                     GrProcessorKeyBuilder* b) const override;
+    virtual void onGetGLSLProcessorKey(const GrGLSLCaps& caps,
+                                       GrProcessorKeyBuilder* b) const override;
 
     bool onIsEqual(const GrFragmentProcessor& other) const override;
 
@@ -1041,7 +1043,7 @@ const GrFragmentProcessor* GrRRectBlurEffect::TestCreate(GrProcessorTestData* d)
 
 //////////////////////////////////////////////////////////////////////////////
 
-class GrGLRRectBlurEffect : public GrGLFragmentProcessor {
+class GrGLRRectBlurEffect : public GrGLSLFragmentProcessor {
 public:
     GrGLRRectBlurEffect(const GrProcessor&) {}
 
@@ -1054,7 +1056,7 @@ private:
     GrGLSLProgramDataManager::UniformHandle fProxyRectUniform;
     GrGLSLProgramDataManager::UniformHandle fCornerRadiusUniform;
     GrGLSLProgramDataManager::UniformHandle fBlurRadiusUniform;
-    typedef GrGLFragmentProcessor INHERITED;
+    typedef GrGLSLFragmentProcessor INHERITED;
 };
 
 void GrGLRRectBlurEffect::emitCode(EmitArgs& args) {
@@ -1065,50 +1067,52 @@ void GrGLRRectBlurEffect::emitCode(EmitArgs& args) {
     // The proxy rect has left, top, right, and bottom edges correspond to
     // components x, y, z, and w, respectively.
 
-    fProxyRectUniform = args.fBuilder->addUniform(GrGLProgramBuilder::kFragment_Visibility,
-                                            kVec4f_GrSLType,
-                                            kDefault_GrSLPrecision,
-                                            "proxyRect",
-                                            &rectName);
-    fCornerRadiusUniform = args.fBuilder->addUniform(GrGLProgramBuilder::kFragment_Visibility,
-                                               kFloat_GrSLType,
-                                               kDefault_GrSLPrecision,
-                                               "cornerRadius",
-                                               &cornerRadiusName);
-    fBlurRadiusUniform = args.fBuilder->addUniform(GrGLProgramBuilder::kFragment_Visibility,
-                                             kFloat_GrSLType,
-                                              kDefault_GrSLPrecision,
-                                              "blurRadius",
-                                              &blurRadiusName);
+    fProxyRectUniform = args.fBuilder->addUniform(GrGLSLProgramBuilder::kFragment_Visibility,
+                                                  kVec4f_GrSLType,
+                                                  kDefault_GrSLPrecision,
+                                                  "proxyRect",
+                                                  &rectName);
+    fCornerRadiusUniform = args.fBuilder->addUniform(GrGLSLProgramBuilder::kFragment_Visibility,
+                                                     kFloat_GrSLType,
+                                                     kDefault_GrSLPrecision,
+                                                     "cornerRadius",
+                                                     &cornerRadiusName);
+    fBlurRadiusUniform = args.fBuilder->addUniform(GrGLSLProgramBuilder::kFragment_Visibility,
+                                                   kFloat_GrSLType,
+                                                   kDefault_GrSLPrecision,
+                                                   "blurRadius",
+                                                   &blurRadiusName);
 
-    GrGLFragmentBuilder* fsBuilder = args.fBuilder->getFragmentShaderBuilder();
-    const char* fragmentPos = fsBuilder->fragmentPosition();
+    GrGLSLFragmentBuilder* fragBuilder = args.fFragBuilder;
+    const char* fragmentPos = fragBuilder->fragmentPosition();
 
     // warp the fragment position to the appropriate part of the 9patch blur texture
 
-    fsBuilder->codeAppendf("vec2 rectCenter = (%s.xy + %s.zw)/2.0;", rectName, rectName);
-    fsBuilder->codeAppendf("vec2 translatedFragPos = %s.xy - %s.xy;", fragmentPos, rectName);
-    fsBuilder->codeAppendf("float threshold = %s + 2.0*%s;", cornerRadiusName, blurRadiusName);
-    fsBuilder->codeAppendf("vec2 middle = %s.zw - %s.xy - 2.0*threshold;", rectName, rectName);
+    fragBuilder->codeAppendf("vec2 rectCenter = (%s.xy + %s.zw)/2.0;", rectName, rectName);
+    fragBuilder->codeAppendf("vec2 translatedFragPos = %s.xy - %s.xy;", fragmentPos, rectName);
+    fragBuilder->codeAppendf("float threshold = %s + 2.0*%s;", cornerRadiusName, blurRadiusName);
+    fragBuilder->codeAppendf("vec2 middle = %s.zw - %s.xy - 2.0*threshold;", rectName, rectName);
 
-    fsBuilder->codeAppendf("if (translatedFragPos.x >= threshold && translatedFragPos.x < (middle.x+threshold)) {");
-    fsBuilder->codeAppendf("translatedFragPos.x = threshold;\n");
-    fsBuilder->codeAppendf("} else if (translatedFragPos.x >= (middle.x + threshold)) {");
-    fsBuilder->codeAppendf("translatedFragPos.x -= middle.x - 1.0;");
-    fsBuilder->codeAppendf("}");
+    fragBuilder->codeAppendf(
+           "if (translatedFragPos.x >= threshold && translatedFragPos.x < (middle.x+threshold)) {");
+    fragBuilder->codeAppendf("translatedFragPos.x = threshold;\n");
+    fragBuilder->codeAppendf("} else if (translatedFragPos.x >= (middle.x + threshold)) {");
+    fragBuilder->codeAppendf("translatedFragPos.x -= middle.x - 1.0;");
+    fragBuilder->codeAppendf("}");
 
-    fsBuilder->codeAppendf("if (translatedFragPos.y > threshold && translatedFragPos.y < (middle.y+threshold)) {");
-    fsBuilder->codeAppendf("translatedFragPos.y = threshold;");
-    fsBuilder->codeAppendf("} else if (translatedFragPos.y >= (middle.y + threshold)) {");
-    fsBuilder->codeAppendf("translatedFragPos.y -= middle.y - 1.0;");
-    fsBuilder->codeAppendf("}");
+    fragBuilder->codeAppendf(
+            "if (translatedFragPos.y > threshold && translatedFragPos.y < (middle.y+threshold)) {");
+    fragBuilder->codeAppendf("translatedFragPos.y = threshold;");
+    fragBuilder->codeAppendf("} else if (translatedFragPos.y >= (middle.y + threshold)) {");
+    fragBuilder->codeAppendf("translatedFragPos.y -= middle.y - 1.0;");
+    fragBuilder->codeAppendf("}");
 
-    fsBuilder->codeAppendf("vec2 proxyDims = vec2(2.0*threshold+1.0);");
-    fsBuilder->codeAppendf("vec2 texCoord = translatedFragPos / proxyDims;");
+    fragBuilder->codeAppendf("vec2 proxyDims = vec2(2.0*threshold+1.0);");
+    fragBuilder->codeAppendf("vec2 texCoord = translatedFragPos / proxyDims;");
 
-    fsBuilder->codeAppendf("%s = ", args.fOutputColor);
-    fsBuilder->appendTextureLookupAndModulate(args.fInputColor, args.fSamplers[0], "texCoord");
-    fsBuilder->codeAppend(";");
+    fragBuilder->codeAppendf("%s = ", args.fOutputColor);
+    fragBuilder->appendTextureLookupAndModulate(args.fInputColor, args.fSamplers[0], "texCoord");
+    fragBuilder->codeAppend(";");
 }
 
 void GrGLRRectBlurEffect::onSetData(const GrGLSLProgramDataManager& pdman,
@@ -1129,11 +1133,12 @@ void GrGLRRectBlurEffect::onSetData(const GrGLSLProgramDataManager& pdman,
     pdman.set1f(fCornerRadiusUniform, radius);
 }
 
-void GrRRectBlurEffect::onGetGLProcessorKey(const GrGLSLCaps& caps, GrProcessorKeyBuilder* b) const {
+void GrRRectBlurEffect::onGetGLSLProcessorKey(const GrGLSLCaps& caps,
+                                              GrProcessorKeyBuilder* b) const {
     GrGLRRectBlurEffect::GenKey(*this, caps, b);
 }
 
-GrGLFragmentProcessor* GrRRectBlurEffect::onCreateGLInstance() const {
+GrGLSLFragmentProcessor* GrRRectBlurEffect::onCreateGLSLInstance() const {
     return new GrGLRRectBlurEffect(*this);
 }
 
@@ -1173,7 +1178,7 @@ bool SkBlurMaskFilterImpl::directFilterRRectMaskGPU(GrTextureProvider* texProvid
         return false;
     }
 
-    drawContext->drawNonAARectWithLocalMatrix(clip, *grp, SkMatrix::I(), proxyRect, inverse);
+    drawContext->fillRectWithLocalMatrix(clip, *grp, SkMatrix::I(), proxyRect, inverse);
     return true;
 }
 
@@ -1235,7 +1240,7 @@ bool SkBlurMaskFilterImpl::filterMaskGPU(GrTexture* src,
     // gaussianBlur.  Otherwise, we need to save it for later compositing.
     bool isNormalBlur = (kNormal_SkBlurStyle == fBlurStyle);
     *result = SkGpuBlurUtils::GaussianBlur(context, src, isNormalBlur && canOverwriteSrc,
-                                           clipRect, false, xformedSigma, xformedSigma,
+                                           clipRect, nullptr, xformedSigma, xformedSigma,
                                            GrTextureProvider::kApprox_SizeConstraint);
     if (nullptr == *result) {
         return false;

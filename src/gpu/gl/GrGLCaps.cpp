@@ -8,6 +8,7 @@
 
 #include "GrGLCaps.h"
 
+#include "GrContextOptions.h"
 #include "GrGLContext.h"
 #include "glsl/GrGLSLCaps.h"
 #include "SkTSearch.h"
@@ -27,7 +28,6 @@ GrGLCaps::GrGLCaps(const GrContextOptions& contextOptions,
     fMaxFragmentTextureUnits = 0;
     fRGBA8RenderbufferSupport = false;
     fBGRAIsInternalFormat = false;
-    fTextureSwizzleSupport = false;
     fUnpackRowLengthSupport = false;
     fUnpackFlipYSupport = false;
     fPackRowLengthSupport = false;
@@ -37,7 +37,6 @@ GrGLCaps::GrGLCaps(const GrContextOptions& contextOptions,
     fTextureRedSupport = false;
     fImagingSupport = false;
     fTwoFormatLimit = false;
-    fFragCoordsConventionSupport = false;
     fVertexArrayObjectSupport = false;
     fInstancedDrawingSupport = false;
     fDirectStateAccessSupport = false;
@@ -91,13 +90,6 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
         fRGBA8RenderbufferSupport = version >= GR_GL_VER(3,0) ||
                                     ctxInfo.hasExtension("GL_OES_rgb8_rgba8") ||
                                     ctxInfo.hasExtension("GL_ARM_rgba8");
-    }
-
-    if (kGL_GrGLStandard == standard) {
-        fTextureSwizzleSupport = version >= GR_GL_VER(3,3) ||
-                                 ctxInfo.hasExtension("GL_ARB_texture_swizzle");
-    } else {
-        fTextureSwizzleSupport = version >= GR_GL_VER(3,0);
     }
 
     if (kGL_GrGLStandard == standard) {
@@ -171,20 +163,12 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
         // All the above srgb extensions support toggling srgb writes
         fSRGBWriteControl = srgbSupport;
     } else {
-        // See http://skbug.com/4148 for PowerVR issue.
+        // See https://bug.skia.org/4148 for PowerVR issue.
         srgbSupport = kPowerVRRogue_GrGLRenderer != ctxInfo.renderer() &&
                       (ctxInfo.version() >= GR_GL_VER(3,0) || ctxInfo.hasExtension("GL_EXT_sRGB"));
         // ES through 3.1 requires EXT_srgb_write_control to support toggling
         // sRGB writing for destinations.
         fSRGBWriteControl = ctxInfo.hasExtension("GL_EXT_sRGB_write_control");
-    }
-
-    // Frag Coords Convention support is not part of ES
-    // Known issue on at least some Intel platforms:
-    // http://code.google.com/p/skia/issues/detail?id=946
-    if (kIntel_GrGLVendor != ctxInfo.vendor() && kGLES_GrGLStandard != standard) {
-        fFragCoordsConventionSupport = ctxInfo.glslGeneration() >= k150_GrGLSLGeneration ||
-                                       ctxInfo.hasExtension("GL_ARB_fragment_coord_conventions");
     }
 
     // SGX and Mali GPUs that are based on a tiled-deferred architecture that have trouble with
@@ -269,7 +253,7 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
         }
     }
 
-#if 0 // Disabled due to http://skbug.com/4454
+#if 0 // Disabled due to https://bug.skia.org/4454
     fBindUniformLocationSupport = ctxInfo.hasExtension("GL_CHROMIUM_bind_uniform_location");
 #else
     fBindUniformLocationSupport = false;
@@ -317,30 +301,22 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
             ctxInfo.hasExtension("GL_OES_standard_derivatives");
     }
 
-    // We need dual source blending and the ability to disable multisample in order to support mixed
-    // samples in every corner case.
-    if (fMultisampleDisableSupport && glslCaps->fDualSourceBlendingSupport) {
-        // We understand "mixed samples" to mean the collective capability of 3 different extensions
-        glslCaps->fMixedSamplesSupport =
-            ctxInfo.hasExtension("GL_NV_framebuffer_mixed_samples") &&
-            ctxInfo.hasExtension("GL_NV_sample_mask_override_coverage") &&
-            ctxInfo.hasExtension("GL_EXT_raster_multisample");
-    }
-    // Workaround NVIDIA bug related to glInvalidateFramebuffer and mixed samples.
-    if (kNVIDIA_GrGLDriver == ctxInfo.driver() && fShaderCaps->mixedSamplesSupport()) {
-        fDiscardRenderTargetSupport = false;
-        fInvalidateFBType = kNone_InvalidateFBType;
-    }
-    glslCaps->fProgrammableSampleLocationsSupport =
-        ctxInfo.hasExtension("GL_NV_sample_locations") ||
-        ctxInfo.hasExtension("GL_ARB_sample_locations");
-
     /**************************************************************************
      * GrCaps fields
      **************************************************************************/
 
-    // fPathRenderingSupport and fMixedSampleSupport must be set before calling initFSAASupport.
-    // Both of these are set in the GrShaderCaps.
+    // We need dual source blending and the ability to disable multisample in order to support mixed
+    // samples in every corner case.
+    if (fMultisampleDisableSupport && glslCaps->dualSourceBlendingSupport()) {
+        fMixedSamplesSupport = ctxInfo.hasExtension("GL_NV_framebuffer_mixed_samples");
+        // Workaround NVIDIA bug related to glInvalidateFramebuffer and mixed samples.
+        if (fMixedSamplesSupport && kNVIDIA_GrGLDriver == ctxInfo.driver()) {
+            fDiscardRenderTargetSupport = false;
+            fInvalidateFBType = kNone_InvalidateFBType;
+        }
+    }
+
+    // fPathRenderingSupport and fMixedSamplesSupport must be set before calling initFSAASupport.
     this->initFSAASupport(ctxInfo, gli);
     this->initBlendEqationSupport(ctxInfo);
     this->initStencilFormats(ctxInfo);
@@ -491,6 +467,8 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
     this->initConfigTexturableTable(ctxInfo, gli, srgbSupport);
     this->initConfigRenderableTable(ctxInfo, srgbSupport);
     this->initShaderPrecisionTable(ctxInfo, gli, glslCaps);
+    // Requires fTexutreSwizzleSupport and fTextureRedSupport to be set before this point.
+    this->initConfigSwizzleTable(ctxInfo, glslCaps);
 
     this->applyOptionsOverrides(contextOptions);
     glslCaps->applyOptionsOverrides(contextOptions);
@@ -591,6 +569,36 @@ void GrGLCaps::initGLSL(const GrGLContextInfo& ctxInfo) {
 
     glslCaps->fVersionDeclString = get_glsl_version_decl_string(standard, glslCaps->fGLSLGeneration,
                                                                 fIsCoreProfile);
+
+    if (kGLES_GrGLStandard == standard && k110_GrGLSLGeneration == glslCaps->fGLSLGeneration) {
+        glslCaps->fShaderDerivativeExtensionString = "GL_OES_standard_derivatives";
+    }
+
+    // Frag Coords Convention support is not part of ES
+    // Known issue on at least some Intel platforms:
+    // http://code.google.com/p/skia/issues/detail?id=946
+    if (kIntel_GrGLVendor != ctxInfo.vendor() &&
+        kGLES_GrGLStandard != standard &&
+        (ctxInfo.glslGeneration() >= k150_GrGLSLGeneration ||
+         ctxInfo.hasExtension("GL_ARB_fragment_coord_conventions"))) {
+        glslCaps->fFragCoordConventionsExtensionString = "GL_ARB_fragment_coord_conventions";
+    }
+
+    if (kGLES_GrGLStandard == standard) {
+        glslCaps->fSecondaryOutputExtensionString = "GL_EXT_blend_func_extended";
+    }
+
+    // The Tegra3 compiler will sometimes never return if we have min(abs(x), 1.0), so we must do
+    // the abs first in a separate expression.
+    if (kTegra3_GrGLRenderer == ctxInfo.renderer()) {
+        glslCaps->fCanUseMinAndAbsTogether = false;
+    }
+
+    // On Intel GPU there is an issue where it reads the second arguement to atan "- %s.x" as an int
+    // thus must us -1.0 * %s.x to work correctly
+    if (kIntel_GrGLVendor == ctxInfo.vendor()) {
+        glslCaps->fMustForceNegatedAtanParamToFloat = true;
+    }
 }
 
 bool GrGLCaps::hasPathRenderingSupport(const GrGLContextInfo& ctxInfo, const GrGLInterface* gli) {
@@ -787,7 +795,7 @@ void GrGLCaps::initConfigTexturableTable(const GrGLContextInfo& ctxInfo, const G
     fConfigTextureSupport[kRGBA_4444_GrPixelConfig] = true;
     fConfigTextureSupport[kRGBA_8888_GrPixelConfig] = true;
 
-    // Disable this for now, while we investigate skbug.com/4333
+    // Disable this for now, while we investigate https://bug.skia.org/4333
     if (false) {
         // Check for 8-bit palette..
         GrGLint numFormats;
@@ -976,7 +984,7 @@ void GrGLCaps::initFSAASupport(const GrGLContextInfo& ctxInfo, const GrGLInterfa
             fMSFBOType = kES_EXT_MsToTexture_MSFBOType;
         } else if (ctxInfo.hasExtension("GL_IMG_multisampled_render_to_texture")) {
             fMSFBOType = kES_IMG_MsToTexture_MSFBOType;
-        } else if (fShaderCaps->mixedSamplesSupport() && fShaderCaps->pathRenderingSupport()) {
+        } else if (fMixedSamplesSupport && fShaderCaps->pathRenderingSupport()) {
             fMSFBOType = kMixedSamples_MSFBOType;
         } else if (ctxInfo.version() >= GR_GL_VER(3,0)) {
             fMSFBOType = GrGLCaps::kES_3_0_MSFBOType;
@@ -988,7 +996,7 @@ void GrGLCaps::initFSAASupport(const GrGLContextInfo& ctxInfo, const GrGLInterfa
             fMSFBOType = kES_Apple_MSFBOType;
         }
     } else {
-        if (fShaderCaps->mixedSamplesSupport() && fShaderCaps->pathRenderingSupport()) {
+        if (fMixedSamplesSupport && fShaderCaps->pathRenderingSupport()) {
             fMSFBOType = kMixedSamples_MSFBOType;
         } else if ((ctxInfo.version() >= GR_GL_VER(3,0)) ||
             ctxInfo.hasExtension("GL_ARB_framebuffer_object")) {
@@ -1165,7 +1173,6 @@ SkString GrGLCaps::dump() const {
     r.appendf("Max Vertex Attributes: %d\n", fMaxVertexAttributes);
     r.appendf("Support RGBA8 Render Buffer: %s\n", (fRGBA8RenderbufferSupport ? "YES": "NO"));
     r.appendf("BGRA is an internal format: %s\n", (fBGRAIsInternalFormat ? "YES": "NO"));
-    r.appendf("Support texture swizzle: %s\n", (fTextureSwizzleSupport ? "YES": "NO"));
     r.appendf("Unpack Row length support: %s\n", (fUnpackRowLengthSupport ? "YES": "NO"));
     r.appendf("Unpack Flip Y support: %s\n", (fUnpackFlipYSupport ? "YES": "NO"));
     r.appendf("Pack Row length support: %s\n", (fPackRowLengthSupport ? "YES": "NO"));
@@ -1176,8 +1183,6 @@ SkString GrGLCaps::dump() const {
     r.appendf("GL_R support: %s\n", (fTextureRedSupport ? "YES": "NO"));
     r.appendf("GL_ARB_imaging support: %s\n", (fImagingSupport ? "YES": "NO"));
     r.appendf("Two Format Limit: %s\n", (fTwoFormatLimit ? "YES": "NO"));
-    r.appendf("Fragment coord conventions support: %s\n",
-             (fFragCoordsConventionSupport ? "YES": "NO"));
     r.appendf("Vertex array object support: %s\n", (fVertexArrayObjectSupport ? "YES": "NO"));
     r.appendf("Instanced drawing support: %s\n", (fInstancedDrawingSupport ? "YES": "NO"));
     r.appendf("Direct state access support: %s\n", (fDirectStateAccessSupport ? "YES": "NO"));
@@ -1276,6 +1281,44 @@ void GrGLCaps::initShaderPrecisionTable(const GrGLContextInfo& ctxInfo,
     }
 }
 
+void GrGLCaps::initConfigSwizzleTable(const GrGLContextInfo& ctxInfo, GrGLSLCaps* glslCaps) {
+    GrGLStandard standard = ctxInfo.standard();
+    GrGLVersion version = ctxInfo.version();
 
+    glslCaps->fMustSwizzleInShader = true;
+    if (kGL_GrGLStandard == standard) {
+        if (version >= GR_GL_VER(3,3) || ctxInfo.hasExtension("GL_ARB_texture_swizzle")) {
+            glslCaps->fMustSwizzleInShader = false;
+        }
+    } else {
+        if (version >= GR_GL_VER(3,0)) {
+            glslCaps->fMustSwizzleInShader = false;
+        }
+    }
+
+    glslCaps->fConfigSwizzle[kUnknown_GrPixelConfig] = nullptr;
+    if (fTextureRedSupport) {
+        glslCaps->fConfigSwizzle[kAlpha_8_GrPixelConfig] = "rrrr";
+        glslCaps->fConfigSwizzle[kAlpha_half_GrPixelConfig] = "rrrr";
+    } else {
+        glslCaps->fConfigSwizzle[kAlpha_8_GrPixelConfig] = "aaaa";
+        glslCaps->fConfigSwizzle[kAlpha_half_GrPixelConfig] = "aaaa";
+    }
+    glslCaps->fConfigSwizzle[kIndex_8_GrPixelConfig] = "rgba";
+    glslCaps->fConfigSwizzle[kRGB_565_GrPixelConfig] = "rgba";
+    glslCaps->fConfigSwizzle[kRGBA_4444_GrPixelConfig] = "rgba";
+    glslCaps->fConfigSwizzle[kRGBA_8888_GrPixelConfig] = "rgba";
+    glslCaps->fConfigSwizzle[kBGRA_8888_GrPixelConfig] = "rgba";
+    glslCaps->fConfigSwizzle[kSRGBA_8888_GrPixelConfig] = "rgba";
+    glslCaps->fConfigSwizzle[kETC1_GrPixelConfig] = "rgba";
+    glslCaps->fConfigSwizzle[kLATC_GrPixelConfig] = "rrrr";
+    glslCaps->fConfigSwizzle[kR11_EAC_GrPixelConfig] = "rrrr";
+    glslCaps->fConfigSwizzle[kASTC_12x12_GrPixelConfig] = "rgba";
+    glslCaps->fConfigSwizzle[kRGBA_float_GrPixelConfig] = "rgba";
+    glslCaps->fConfigSwizzle[kRGBA_half_GrPixelConfig] = "rgba";
+
+}
+
+void GrGLCaps::onApplyOptionsOverrides(const GrContextOptions& options) {}
 
 

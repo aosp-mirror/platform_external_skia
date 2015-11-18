@@ -339,8 +339,6 @@ typedef GrGLvoid (GR_GL_FUNCTION_TYPE* GrGLGetVertexArrayIntegeri_vProc)(GrGLuin
 typedef GrGLvoid (GR_GL_FUNCTION_TYPE* GrGLGetVertexArrayPointeri_vProc)(GrGLuint vaobj, GrGLuint index, GrGLenum pname, GrGLvoid **param);
 typedef GrGLvoid* (GR_GL_FUNCTION_TYPE* GrGLMapNamedBufferRangeProc)(GrGLuint buffer, GrGLintptr offset, GrGLsizeiptr length, GrGLbitfield access);
 typedef GrGLvoid (GR_GL_FUNCTION_TYPE* GrGLFlushMappedNamedBufferRangeProc)(GrGLuint buffer, GrGLintptr offset, GrGLsizeiptr length);
-// OpenGL 4.5
-typedef GrGLvoid (GR_GL_FUNCTION_TYPE* GrGLNamedFramebufferParameteriProc)(GrGLuint framebuffer, GrGLenum pname, GrGLint param);
 
 /* KHR_debug */
 typedef GrGLvoid (GR_GL_FUNCTION_TYPE* GrGLDebugMessageControlProc)(GrGLenum source, GrGLenum type, GrGLenum severity, GrGLsizei count, const GrGLuint* ids, GrGLboolean enabled);
@@ -351,6 +349,11 @@ typedef GrGLvoid (GR_GL_FUNCTION_TYPE* GrGLPushDebugGroupProc)(GrGLenum source, 
 typedef GrGLvoid (GR_GL_FUNCTION_TYPE* GrGLPopDebugGroupProc)();
 typedef GrGLvoid (GR_GL_FUNCTION_TYPE* GrGLObjectLabelProc)(GrGLenum identifier, GrGLuint name, GrGLsizei length, const GrGLchar *label);
 
+/** EGL functions */
+typedef const char* (GR_GL_FUNCTION_TYPE* GrEGLQueryStringProc)(GrEGLDisplay dpy, GrEGLint name);
+typedef GrEGLDisplay (GR_GL_FUNCTION_TYPE* GrEGLGetCurrentDisplayProc)();
+typedef GrEGLImageKHR (GR_GL_FUNCTION_TYPE* GrEGLCreateImageProc)(GrEGLDisplay dpy, GrEGLContext ctx, GrEGLenum target, GrEGLClientBuffer buffer, const GrEGLint *attrib_list);
+typedef GrEGLBoolean (GR_GL_FUNCTION_TYPE* GrEGLDestroyImageProc)(GrEGLDisplay dpy, GrEGLImageKHR image);
 }  // extern "C"
 
 #endif

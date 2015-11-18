@@ -9,9 +9,10 @@
 
 #include "SkCanvas.h"
 
-VisualStreamTimingModule::VisualStreamTimingModule(VisualBench* owner, bool preWarmBeforeSample)
+DEFINE_bool(reset, true, "Reset the GL context between samples.");
+
+VisualStreamTimingModule::VisualStreamTimingModule(VisualBench* owner)
     : fInitState(kReset_InitState)
-    , fPreWarmBeforeSample(preWarmBeforeSample)
     , fOwner(owner) {
     fBenchmarkStream.reset(new VisualBenchmarkStream(owner->getSurfaceProps()));
 }
@@ -24,7 +25,7 @@ inline void VisualStreamTimingModule::handleInitState(SkCanvas* canvas) {
         case kReset_InitState:
             // This will flicker unfortunately, but as we are reseting the GLContext each bench,
             // we unfortunately don't have a choice
-            fOwner->clear(canvas, SK_ColorWHITE, 2);
+            fOwner->clear(canvas, SK_ColorWHITE, 3);
             fBenchmarkStream->current()->preTimingHooks(canvas);
             break;
         case kNone_InitState:
@@ -36,18 +37,13 @@ inline void VisualStreamTimingModule::handleInitState(SkCanvas* canvas) {
 inline void VisualStreamTimingModule::handleTimingEvent(SkCanvas* canvas,
                                                         TimingStateMachine::ParentEvents event) {
     switch (event) {
-        case TimingStateMachine::kReset_ParentEvents:
-            fBenchmarkStream->current()->postTimingHooks(canvas);
-            fOwner->reset();
-            fInitState = kReset_InitState;
-            break;
         case TimingStateMachine::kTiming_ParentEvents:
             break;
         case TimingStateMachine::kTimingFinished_ParentEvents:
-            fBenchmarkStream->current()->postTimingHooks(canvas);
-            fOwner->reset();
             if (this->timingFinished(fBenchmarkStream->current(), fTSM.loops(),
                                      fTSM.lastMeasurement())) {
+                fBenchmarkStream->current()->postTimingHooks(canvas);
+                fOwner->reset();
                 fTSM.nextBenchmark();
                 if (!fBenchmarkStream->next()) {
                     SkDebugf("Exiting VisualBench successfully\n");
@@ -55,7 +51,13 @@ inline void VisualStreamTimingModule::handleTimingEvent(SkCanvas* canvas,
                 } else {
                     fInitState = kNewBenchmark_InitState;
                 }
-            } else {
+                break;
+            }
+            // fallthrough
+        case TimingStateMachine::kReset_ParentEvents:
+            if (FLAGS_reset) {
+                fBenchmarkStream->current()->postTimingHooks(canvas);
+                fOwner->reset();
                 fInitState = kReset_InitState;
             }
             break;
@@ -72,6 +74,6 @@ void VisualStreamTimingModule::draw(SkCanvas* canvas) {
     this->handleInitState(canvas);
     this->renderFrame(canvas, fBenchmarkStream->current(), fTSM.loops());
     fOwner->present();
-    TimingStateMachine::ParentEvents event = fTSM.nextFrame(fPreWarmBeforeSample);
+    TimingStateMachine::ParentEvents event = fTSM.nextFrame(FLAGS_reset);
     this->handleTimingEvent(canvas, event);
 }

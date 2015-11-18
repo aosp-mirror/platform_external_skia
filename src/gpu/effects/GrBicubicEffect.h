@@ -10,7 +10,7 @@
 
 #include "GrSingleTextureEffect.h"
 #include "GrTextureDomain.h"
-#include "gl/GrGLFragmentProcessor.h"
+#include "glsl/GrGLSLFragmentProcessor.h"
 
 class GrGLBicubicEffect;
 class GrInvariantOutput;
@@ -32,8 +32,8 @@ public:
     /**
      * Create a simple filter effect with custom bicubic coefficients and optional domain.
      */
-    static GrFragmentProcessor* Create(GrTexture* tex, const SkScalar coefficients[16],
-                                       const SkRect* domain = nullptr) {
+    static const GrFragmentProcessor* Create(GrTexture* tex, const SkScalar coefficients[16],
+                                             const SkRect* domain = nullptr) {
         if (nullptr == domain) {
             static const SkShader::TileMode kTileModes[] = { SkShader::kClamp_TileMode,
                                                              SkShader::kClamp_TileMode };
@@ -48,8 +48,8 @@ public:
     /**
      * Create a Mitchell filter effect with specified texture matrix and x/y tile modes.
      */
-    static GrFragmentProcessor* Create(GrTexture* tex, const SkMatrix& matrix,
-                                       SkShader::TileMode tileModes[2]) {
+    static const GrFragmentProcessor* Create(GrTexture* tex, const SkMatrix& matrix,
+                                             const SkShader::TileMode tileModes[2]) {
         return Create(tex, gMitchellCoefficients, matrix, tileModes);
     }
 
@@ -57,17 +57,17 @@ public:
      * Create a filter effect with custom bicubic coefficients, the texture matrix, and the x/y
      * tilemodes.
      */
-    static GrFragmentProcessor* Create(GrTexture* tex, const SkScalar coefficients[16],
-                                       const SkMatrix& matrix,
-                                       const SkShader::TileMode tileModes[2]) {
+    static const GrFragmentProcessor* Create(GrTexture* tex, const SkScalar coefficients[16],
+                                             const SkMatrix& matrix,
+                                             const SkShader::TileMode tileModes[2]) {
         return new GrBicubicEffect(tex, coefficients, matrix, tileModes);
     }
 
     /**
      * Create a Mitchell filter effect with a texture matrix and a domain.
      */
-    static GrFragmentProcessor* Create(GrTexture* tex, const SkMatrix& matrix,
-                                       const SkRect& domain) {
+    static const GrFragmentProcessor* Create(GrTexture* tex, const SkMatrix& matrix,
+                                             const SkRect& domain) {
         return new GrBicubicEffect(tex, gMitchellCoefficients, matrix, domain);
     }
 
@@ -87,9 +87,9 @@ private:
     GrBicubicEffect(GrTexture*, const SkScalar coefficients[16], const SkMatrix &matrix,
                     const SkRect& domain);
 
-    GrGLFragmentProcessor* onCreateGLInstance() const override;
+    GrGLSLFragmentProcessor* onCreateGLSLInstance() const override;
 
-    void onGetGLProcessorKey(const GrGLSLCaps&, GrProcessorKeyBuilder*) const override;
+    void onGetGLSLProcessorKey(const GrGLSLCaps&, GrProcessorKeyBuilder*) const override;
 
     bool onIsEqual(const GrFragmentProcessor&) const override;
 

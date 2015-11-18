@@ -90,7 +90,6 @@ SRCS_UNIX = glob(
         "src/opts/SkBlitRow_opts_none.cpp",
         "src/ports/*android*",
         "src/ports/*chromium*",
-        "src/ports/*CG*",
         "src/ports/*fontconfig*",
         "src/ports/*FontConfig*",
         "src/ports/*mac*",
@@ -99,6 +98,7 @@ SRCS_UNIX = glob(
         "src/ports/*win*",
         "src/ports/SkFontMgr_custom_embedded_factory.cpp",
         "src/ports/SkFontMgr_empty_factory.cpp",
+        "src/ports/SkImageDecoder_CG.cpp",
         "src/ports/SkImageDecoder_WIC.cpp",
         "src/ports/SkImageDecoder_empty.cpp",
         "src/ports/SkImageGenerator_none.cpp",
@@ -129,7 +129,6 @@ SRCS_ANDROID = glob(
         "src/opts/SkBlitMask_opts_none.cpp",
         "src/opts/SkBlitRow_opts_none.cpp",
         "src/ports/*chromium*",
-        "src/ports/*CG*",
         "src/ports/*fontconfig*",
         "src/ports/*FontConfig*",
         "src/ports/*mac*",
@@ -140,6 +139,50 @@ SRCS_ANDROID = glob(
         "src/ports/SkFontMgr_custom_directory_factory.cpp",
         "src/ports/SkFontMgr_custom_embedded_factory.cpp",
         "src/ports/SkFontMgr_empty_factory.cpp",
+        "src/ports/SkImageDecoder_CG.cpp",
+        "src/ports/SkImageDecoder_WIC.cpp",
+        "src/ports/SkImageDecoder_empty.cpp",
+        "src/ports/SkImageGenerator_none.cpp",
+        "src/ports/SkTLS_none.cpp",
+    ],
+)
+
+# Platform-dependent SRCS for google3-default iOS.
+SRCS_IOS = glob(
+    [
+        "src/gpu/gl/iOS/GrGLCreateNativeInterface_iOS.cpp",
+        "src/opts/**/*.cpp",
+        "src/opts/**/*.h",
+        "src/ports/**/*.cpp",
+        "src/ports/**/*.h",
+    ],
+    exclude = [
+        "src/opts/*mips*",
+        "src/opts/*NEON*",
+        "src/opts/*neon*",
+        "src/opts/*SSE2*",
+        "src/opts/*SSSE3*",
+        "src/opts/*ssse3*",
+        "src/opts/*SSE4*",
+        "src/opts/*sse4*",
+        "src/opts/*x86*",
+        "src/opts/SkBitmapProcState_opts_none.cpp",
+        "src/opts/SkBlitMask_opts_none.cpp",
+        "src/opts/SkBlitRow_opts_none.cpp",
+        "src/ports/*android*",
+        "src/ports/*chromium*",
+        "src/ports/*fontconfig*",
+        "src/ports/*FontConfig*",
+        "src/ports/*FreeType*",
+        "src/ports/*mozalloc*",
+        "src/ports/*nacl*",
+        "src/ports/*win*",
+        "src/ports/SkDebug_stdio.cpp",
+        "src/ports/SkFontMgr_custom.cpp",
+        "src/ports/SkFontMgr_custom_directory_factory.cpp",
+        "src/ports/SkFontMgr_custom_embedded_factory.cpp",
+        "src/ports/SkFontMgr_empty_factory.cpp",
+        "src/ports/SkImageDecoder_CG.cpp",
         "src/ports/SkImageDecoder_WIC.cpp",
         "src/ports/SkImageDecoder_empty.cpp",
         "src/ports/SkImageGenerator_none.cpp",
@@ -149,6 +192,7 @@ SRCS_ANDROID = glob(
 
 PLATFORM_SRCS = select({
     CONDITION_ANDROID: SRCS_ANDROID,
+    CONDITION_IOS: SRCS_IOS,
     "//conditions:default": SRCS_UNIX,
 })
 
@@ -183,6 +227,7 @@ HDRS = glob(
 
 # Includes needed by Skia implementation.  Not public includes.
 INCLUDES = [
+    "include/android",
     "include/c",
     "include/codec",
     "include/config",
@@ -195,8 +240,11 @@ INCLUDES = [
     "include/ports",
     "include/private",
     "include/utils",
+    "include/utils/mac",
+    "include/utils/win",
     "include/svg",
     "include/xml",
+    "src/codec",
     "src/core",
     "src/gpu",
     "src/image",
@@ -209,6 +257,7 @@ INCLUDES = [
     "third_party/ktx",
 ]
 
+# Dependencies.
 DEPS_UNIX = [
     ":opts_sse4",
     ":opts_ssse3",
@@ -216,10 +265,13 @@ DEPS_UNIX = [
 
 DEPS_ANDROID = []
 
+DEPS_IOS = []
+
 DEPS = select({
     CONDITION_ANDROID: DEPS_ANDROID + EXTERNAL_DEPS_ANDROID,
+    CONDITION_IOS: DEPS_IOS + EXTERNAL_DEPS_IOS,
     "//conditions:default": DEPS_UNIX + EXTERNAL_DEPS_UNIX,
-})
+}) + EXTERNAL_DEPS_ALL
 
 # Platform-independent SRCS for DM.
 DM_SRCS = glob(
@@ -243,8 +295,8 @@ DM_SRCS = glob(
         "tools/SkBitmapRegionCanvas.h",
         "tools/SkBitmapRegionCodec.cpp",
         "tools/SkBitmapRegionCodec.h",
-        "tools/SkBitmapRegionDecoderInterface.cpp",
-        "tools/SkBitmapRegionDecoderInterface.h",
+        "tools/SkBitmapRegionDecoder.cpp",
+        "tools/SkBitmapRegionDecoder.h",
         "tools/SkBitmapRegionSampler.cpp",
         "tools/SkBitmapRegionSampler.h",
         "tools/flags/*.cpp",
@@ -300,6 +352,9 @@ COPTS_ANDROID = [
     "-mfpu=neon",
 ]
 
+COPTS_IOS = [
+]
+
 COPTS_UNIX = [
     "-Wno-implicit-fallthrough",  # Some intentional fallthrough.
     "-Wno-deprecated-declarations",  # Internal use of deprecated methods. :(
@@ -307,6 +362,7 @@ COPTS_UNIX = [
 
 COPTS = select({
     CONDITION_ANDROID: COPTS_ANDROID,
+    CONDITION_IOS: COPTS_IOS,
     "//conditions:default": COPTS_UNIX,
 })
 
@@ -316,14 +372,17 @@ DEFINES_ANDROID = [
     "SK_PNG_NO_INDEX_SUPPORTED",
 ]
 
+DEFINES_IOS = [
+    "SK_BUILD_FOR_IOS",
+    "SK_IGNORE_ETC1_SUPPORT",
+]
+
 DEFINES_UNIX = [
     "SK_BUILD_FOR_UNIX",
     "SK_SAMPLES_FOR_X",
 ]
 
 DEFINES_ALL = [
-    # It'd be nice for fastbuild, dbg -> SK_DEBUG, opt -> SK_RELEASE.
-    "SK_RELEASE",
     # Chrome DEFINES.
     "SK_USE_FLOATBITS",
     "SK_USE_FREETYPE_EMBOLDEN",
@@ -333,6 +392,7 @@ DEFINES_ALL = [
 
 DEFINES = select({
     CONDITION_ANDROID: DEFINES_ANDROID,
+    CONDITION_IOS: DEFINES_IOS,
     "//conditions:default": DEFINES_UNIX,
 }) + DEFINES_ALL
 
@@ -350,6 +410,7 @@ cc_library(
     copts = COPTS + ["-mssse3"],
     defines = DEFINES,
     includes = INCLUDES,
+    deps = EXTERNAL_DEPS_ALL,
 )
 
 cc_library(
@@ -358,6 +419,7 @@ cc_library(
     copts = COPTS + ["-msse4"],
     defines = DEFINES,
     includes = INCLUDES,
+    deps = EXTERNAL_DEPS_ALL,
 )
 
 cc_library(
@@ -370,6 +432,7 @@ cc_library(
     linkopts = LINKOPTS,
     visibility = [":skia_clients"],
     deps = DEPS,
+    alwayslink = 1,
 )
 
 cc_test(
@@ -380,7 +443,7 @@ cc_test(
         "--nogpu",
         "--verbose",
         # TODO(mtklein): maybe investigate why these fail?
-        "--match ~FontMgr ~Scalar ~Canvas ~Codec_stripes ~Codec_Dimensions ~Codec ~Stream ~skps ~Math",
+        "--match ~FontMgr ~Scalar ~Canvas ~Codec_stripes ~Codec_Dimensions ~Codec ~Stream ~skps ~RecordDraw_TextBounds",
         "--resourcePath %s/resources" % BASE_DIR,
         "--images %s/resources" % BASE_DIR,
     ],
@@ -390,5 +453,5 @@ cc_test(
     includes = DM_INCLUDES,
     deps = DM_EXTERNAL_DEPS + [
         ":skia",
-    ],
+    ] + EXTERNAL_DEPS_ALL,
 )

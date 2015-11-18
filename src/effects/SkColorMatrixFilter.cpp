@@ -385,8 +385,9 @@ SkColorFilter* SkColorMatrixFilter::newComposed(const SkColorFilter* innerFilter
 #if SK_SUPPORT_GPU
 #include "GrFragmentProcessor.h"
 #include "GrInvariantOutput.h"
-#include "gl/GrGLFragmentProcessor.h"
-#include "gl/builders/GrGLProgramBuilder.h"
+#include "glsl/GrGLSLFragmentProcessor.h"
+#include "glsl/GrGLSLFragmentShaderBuilder.h"
+#include "glsl/GrGLSLProgramBuilder.h"
 #include "glsl/GrGLSLProgramDataManager.h"
 
 class ColorMatrixEffect : public GrFragmentProcessor {
@@ -399,18 +400,18 @@ public:
 
     GR_DECLARE_FRAGMENT_PROCESSOR_TEST;
 
-    class GLProcessor : public GrGLFragmentProcessor {
+    class GLSLProcessor : public GrGLSLFragmentProcessor {
     public:
         // this class always generates the same code.
         static void GenKey(const GrProcessor&, const GrGLSLCaps&, GrProcessorKeyBuilder* b) {}
 
-        GLProcessor(const GrProcessor&) {}
+        GLSLProcessor(const GrProcessor&) {}
 
         virtual void emitCode(EmitArgs& args) override {
-            fMatrixHandle = args.fBuilder->addUniform(GrGLProgramBuilder::kFragment_Visibility,
+            fMatrixHandle = args.fBuilder->addUniform(GrGLSLProgramBuilder::kFragment_Visibility,
                                                 kMat44f_GrSLType, kDefault_GrSLPrecision,
                                                 "ColorMatrix");
-            fVectorHandle = args.fBuilder->addUniform(GrGLProgramBuilder::kFragment_Visibility,
+            fVectorHandle = args.fBuilder->addUniform(GrGLSLProgramBuilder::kFragment_Visibility,
                                                 kVec4f_GrSLType, kDefault_GrSLPrecision,
                                                 "ColorMatrixVector");
 
@@ -418,19 +419,19 @@ public:
                 // could optimize this case, but we aren't for now.
                 args.fInputColor = "vec4(1)";
             }
-            GrGLFragmentBuilder* fsBuilder = args.fBuilder->getFragmentShaderBuilder();
+            GrGLSLFragmentBuilder* fragBuilder = args.fFragBuilder;
             // The max() is to guard against 0 / 0 during unpremul when the incoming color is
             // transparent black.
-            fsBuilder->codeAppendf("\tfloat nonZeroAlpha = max(%s.a, 0.00001);\n",
-                                   args.fInputColor);
-            fsBuilder->codeAppendf("\t%s = %s * vec4(%s.rgb / nonZeroAlpha, nonZeroAlpha) + %s;\n",
-                                   args.fOutputColor,
-                                   args.fBuilder->getUniformCStr(fMatrixHandle),
-                                   args.fInputColor,
-                                   args.fBuilder->getUniformCStr(fVectorHandle));
-            fsBuilder->codeAppendf("\t%s = clamp(%s, 0.0, 1.0);\n",
-                                   args.fOutputColor, args.fOutputColor);
-            fsBuilder->codeAppendf("\t%s.rgb *= %s.a;\n", args.fOutputColor, args.fOutputColor);
+            fragBuilder->codeAppendf("\tfloat nonZeroAlpha = max(%s.a, 0.00001);\n",
+                                     args.fInputColor);
+            fragBuilder->codeAppendf("\t%s = %s * vec4(%s.rgb / nonZeroAlpha, nonZeroAlpha) + %s;\n",
+                                     args.fOutputColor,
+                                     args.fBuilder->getUniformCStr(fMatrixHandle),
+                                     args.fInputColor,
+                                     args.fBuilder->getUniformCStr(fVectorHandle));
+            fragBuilder->codeAppendf("\t%s = clamp(%s, 0.0, 1.0);\n",
+                                     args.fOutputColor, args.fOutputColor);
+            fragBuilder->codeAppendf("\t%s.rgb *= %s.a;\n", args.fOutputColor, args.fOutputColor);
         }
 
     protected:
@@ -457,7 +458,7 @@ public:
         GrGLSLProgramDataManager::UniformHandle fMatrixHandle;
         GrGLSLProgramDataManager::UniformHandle fVectorHandle;
 
-        typedef GrGLFragmentProcessor INHERITED;
+        typedef GrGLSLFragmentProcessor INHERITED;
     };
 
 private:
@@ -465,11 +466,13 @@ private:
         this->initClassID<ColorMatrixEffect>();
     }
 
-    GrGLFragmentProcessor* onCreateGLInstance() const override { return new GLProcessor(*this); }
+    GrGLSLFragmentProcessor* onCreateGLSLInstance() const override {
+        return new GLSLProcessor(*this);
+    }
 
-    virtual void onGetGLProcessorKey(const GrGLSLCaps& caps,
-                                     GrProcessorKeyBuilder* b) const override {
-        GLProcessor::GenKey(*this, caps, b);
+    virtual void onGetGLSLProcessorKey(const GrGLSLCaps& caps,
+                                       GrProcessorKeyBuilder* b) const override {
+        GLSLProcessor::GenKey(*this, caps, b);
     }
 
     bool onIsEqual(const GrFragmentProcessor& s) const override {

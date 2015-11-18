@@ -128,8 +128,6 @@ private:
     typedef SkRefCnt INHERITED;
 
 public:
-    
-
     GrGLInterface();
 
     static GrGLInterface* NewClone(const GrGLInterface*);
@@ -489,8 +487,6 @@ public:
         GLPtr<GrGLGetVertexArrayPointeri_vProc> fGetVertexArrayPointeri_v;
         GLPtr<GrGLMapNamedBufferRangeProc> fMapNamedBufferRange;
         GLPtr<GrGLFlushMappedNamedBufferRangeProc> fFlushMappedNamedBufferRange;
-        // OpenGL 4.5
-        GLPtr<GrGLNamedFramebufferParameteriProc> fNamedFramebufferParameteri;
 
         /* KHR_debug */
         GLPtr<GrGLDebugMessageControlProc> fDebugMessageControl;
@@ -500,6 +496,10 @@ public:
         GLPtr<GrGLPushDebugGroupProc> fPushDebugGroup;
         GLPtr<GrGLPopDebugGroupProc> fPopDebugGroup;
         GLPtr<GrGLObjectLabelProc> fObjectLabel;
+
+        /* EGL functions */
+        GLPtr<GrEGLCreateImageProc> fCreateImage;
+        GLPtr<GrEGLDestroyImageProc> fDestroyImage;
     } fFunctions;
 
     // Per-GL func callback

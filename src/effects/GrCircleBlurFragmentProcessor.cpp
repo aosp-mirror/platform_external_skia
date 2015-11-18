@@ -13,11 +13,12 @@
 #include "GrContext.h"
 #include "GrTextureProvider.h"
 
-#include "gl/GrGLFragmentProcessor.h"
-#include "gl/builders/GrGLProgramBuilder.h"
+#include "glsl/GrGLSLFragmentProcessor.h"
+#include "glsl/GrGLSLFragmentShaderBuilder.h"
+#include "glsl/GrGLSLProgramBuilder.h"
 #include "glsl/GrGLSLProgramDataManager.h"
 
-class GrGLCircleBlurFragmentProcessor : public GrGLFragmentProcessor {
+class GrGLCircleBlurFragmentProcessor : public GrGLSLFragmentProcessor {
 public:
     GrGLCircleBlurFragmentProcessor(const GrProcessor&) {}
     void emitCode(EmitArgs&) override;
@@ -28,7 +29,7 @@ protected:
 private:
     GrGLSLProgramDataManager::UniformHandle fDataUniform;
 
-    typedef GrGLFragmentProcessor INHERITED;
+    typedef GrGLSLFragmentProcessor INHERITED;
 };
 
 void GrGLCircleBlurFragmentProcessor::emitCode(EmitArgs& args) {
@@ -39,29 +40,29 @@ void GrGLCircleBlurFragmentProcessor::emitCode(EmitArgs& args) {
     // x,y  - the center of the circle
     // z    - the distance at which the intensity starts falling off (e.g., the start of the table)
     // w    - the size of the profile texture
-    fDataUniform = args.fBuilder->addUniform(GrGLProgramBuilder::kFragment_Visibility,
+    fDataUniform = args.fBuilder->addUniform(GrGLSLProgramBuilder::kFragment_Visibility,
                                              kVec4f_GrSLType,
                                              kDefault_GrSLPrecision,
                                              "data",
                                              &dataName);
 
-    GrGLFragmentBuilder* fsBuilder = args.fBuilder->getFragmentShaderBuilder();
-    const char *fragmentPos = fsBuilder->fragmentPosition();
+    GrGLSLFragmentBuilder* fragBuilder = args.fFragBuilder;
+    const char *fragmentPos = fragBuilder->fragmentPosition();
 
     if (args.fInputColor) {
-        fsBuilder->codeAppendf("vec4 src=%s;", args.fInputColor);
+        fragBuilder->codeAppendf("vec4 src=%s;", args.fInputColor);
     } else {
-        fsBuilder->codeAppendf("vec4 src=vec4(1);");
+        fragBuilder->codeAppendf("vec4 src=vec4(1);");
     }
 
-    fsBuilder->codeAppendf("vec2 vec = %s.xy - %s.xy;", fragmentPos, dataName);
-    fsBuilder->codeAppendf("float dist = (length(vec) - %s.z + 0.5) / %s.w;", dataName, dataName);
+    fragBuilder->codeAppendf("vec2 vec = %s.xy - %s.xy;", fragmentPos, dataName);
+    fragBuilder->codeAppendf("float dist = (length(vec) - %s.z + 0.5) / %s.w;", dataName, dataName);
 
-    fsBuilder->codeAppendf("float intensity = ");
-    fsBuilder->appendTextureLookup(args.fSamplers[0], "vec2(dist, 0.5)");
-    fsBuilder->codeAppend(".a;");
+    fragBuilder->codeAppendf("float intensity = ");
+    fragBuilder->appendTextureLookup(args.fSamplers[0], "vec2(dist, 0.5)");
+    fragBuilder->codeAppend(".a;");
 
-    fsBuilder->codeAppendf("%s = src * intensity;\n", args.fOutputColor );
+    fragBuilder->codeAppendf("%s = src * intensity;\n", args.fOutputColor );
 }
 
 void GrGLCircleBlurFragmentProcessor::onSetData(const GrGLSLProgramDataManager& pdman,
@@ -92,12 +93,12 @@ GrCircleBlurFragmentProcessor::GrCircleBlurFragmentProcessor(const SkRect& circl
     this->setWillReadFragmentPosition();
 }
 
-GrGLFragmentProcessor* GrCircleBlurFragmentProcessor::onCreateGLInstance() const {
+GrGLSLFragmentProcessor* GrCircleBlurFragmentProcessor::onCreateGLSLInstance() const {
     return new GrGLCircleBlurFragmentProcessor(*this);
 }
 
-void GrCircleBlurFragmentProcessor::onGetGLProcessorKey(const GrGLSLCaps& caps,
-                                                        GrProcessorKeyBuilder* b) const {
+void GrCircleBlurFragmentProcessor::onGetGLSLProcessorKey(const GrGLSLCaps& caps,
+                                                          GrProcessorKeyBuilder* b) const {
     GrGLCircleBlurFragmentProcessor::GenKey(*this, caps, b);
 }
 

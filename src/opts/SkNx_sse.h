@@ -14,12 +14,12 @@ namespace {  // See SkNx.h
 
 
 template <>
-class SkNf<2, float> {
+class SkNf<2> {
 public:
     SkNf(const __m128& vec) : fVec(vec) {}
 
     SkNf() {}
-    explicit SkNf(float val) : fVec(_mm_set1_ps(val)) {}
+    SkNf(float val) : fVec(_mm_set1_ps(val)) {}
     static SkNf Load(const float vals[2]) {
         return _mm_castsi128_ps(_mm_loadl_epi64((const __m128i*)vals));
     }
@@ -63,59 +63,12 @@ public:
 };
 
 template <>
-class SkNf<2, double> {
-public:
-    SkNf(const __m128d& vec) : fVec(vec) {}
-
-    SkNf() {}
-    explicit SkNf(double val)           : fVec( _mm_set1_pd(val) ) {}
-    static SkNf Load(const double vals[2]) { return _mm_loadu_pd(vals); }
-    SkNf(double a, double b) : fVec(_mm_setr_pd(a,b)) {}
-
-    void store(double vals[2]) const { _mm_storeu_pd(vals, fVec); }
-
-    SkNf operator + (const SkNf& o) const { return _mm_add_pd(fVec, o.fVec); }
-    SkNf operator - (const SkNf& o) const { return _mm_sub_pd(fVec, o.fVec); }
-    SkNf operator * (const SkNf& o) const { return _mm_mul_pd(fVec, o.fVec); }
-    SkNf operator / (const SkNf& o) const { return _mm_div_pd(fVec, o.fVec); }
-
-    SkNf operator == (const SkNf& o) const { return _mm_cmpeq_pd (fVec, o.fVec); }
-    SkNf operator != (const SkNf& o) const { return _mm_cmpneq_pd(fVec, o.fVec); }
-    SkNf operator  < (const SkNf& o) const { return _mm_cmplt_pd (fVec, o.fVec); }
-    SkNf operator  > (const SkNf& o) const { return _mm_cmpgt_pd (fVec, o.fVec); }
-    SkNf operator <= (const SkNf& o) const { return _mm_cmple_pd (fVec, o.fVec); }
-    SkNf operator >= (const SkNf& o) const { return _mm_cmpge_pd (fVec, o.fVec); }
-
-    static SkNf Min(const SkNf& l, const SkNf& r) { return _mm_min_pd(l.fVec, r.fVec); }
-    static SkNf Max(const SkNf& l, const SkNf& r) { return _mm_max_pd(l.fVec, r.fVec); }
-
-    SkNf  sqrt() const { return _mm_sqrt_pd(fVec);  }
-    SkNf rsqrt0() const { return _mm_cvtps_pd(_mm_rsqrt_ps(_mm_cvtpd_ps(fVec))); }
-    SkNf rsqrt1() const { return this->rsqrt0(); }
-    SkNf rsqrt2() const { return this->rsqrt1(); }
-
-    SkNf       invert() const { return SkNf(1) / *this; }
-    SkNf approxInvert() const { return _mm_cvtps_pd(_mm_rcp_ps(_mm_cvtpd_ps(fVec))); }
-
-    template <int k> double kth() const {
-        SkASSERT(0 <= k && k < 2);
-        union { __m128d v; double ds[2]; } pun = {fVec};
-        return pun.ds[k&1];
-    }
-
-    bool allTrue() const { return 0xffff == _mm_movemask_epi8(_mm_castpd_si128(fVec)); }
-    bool anyTrue() const { return 0x0000 != _mm_movemask_epi8(_mm_castpd_si128(fVec)); }
-
-    __m128d fVec;
-};
-
-template <>
 class SkNi<4, int> {
 public:
     SkNi(const __m128i& vec) : fVec(vec) {}
 
     SkNi() {}
-    explicit SkNi(int val) : fVec(_mm_set1_epi32(val)) {}
+    SkNi(int val) : fVec(_mm_set1_epi32(val)) {}
     static SkNi Load(const int vals[4]) { return _mm_loadu_si128((const __m128i*)vals); }
     SkNi(int a, int b, int c, int d) : fVec(_mm_setr_epi32(a,b,c,d)) {}
 
@@ -148,12 +101,12 @@ public:
 };
 
 template <>
-class SkNf<4, float> {
+class SkNf<4> {
 public:
     SkNf(const __m128& vec) : fVec(vec) {}
 
     SkNf() {}
-    explicit SkNf(float val)           : fVec( _mm_set1_ps(val) ) {}
+    SkNf(float val)           : fVec( _mm_set1_ps(val) ) {}
     static SkNf Load(const float vals[4]) { return _mm_loadu_ps(vals); }
 
     static SkNf FromBytes(const uint8_t bytes[4]) {
@@ -178,8 +131,6 @@ public:
                 fix8    = _mm_packus_epi16(fix8_16, fix8_16);
         *(int*)bytes = _mm_cvtsi128_si32(fix8);
     }
-
-    SkNi<4, int> castTrunc() const { return _mm_cvttps_epi32(fVec); }
 
     SkNf operator + (const SkNf& o) const { return _mm_add_ps(fVec, o.fVec); }
     SkNf operator - (const SkNf& o) const { return _mm_sub_ps(fVec, o.fVec); }
@@ -227,7 +178,7 @@ public:
     SkNi(const __m128i& vec) : fVec(vec) {}
 
     SkNi() {}
-    explicit SkNi(uint16_t val) : fVec(_mm_set1_epi16(val)) {}
+    SkNi(uint16_t val) : fVec(_mm_set1_epi16(val)) {}
     static SkNi Load(const uint16_t vals[4]) { return _mm_loadl_epi64((const __m128i*)vals); }
     SkNi(uint16_t a, uint16_t b, uint16_t c, uint16_t d) : fVec(_mm_setr_epi16(a,b,c,d,0,0,0,0)) {}
 
@@ -254,7 +205,7 @@ public:
     SkNi(const __m128i& vec) : fVec(vec) {}
 
     SkNi() {}
-    explicit SkNi(uint16_t val) : fVec(_mm_set1_epi16(val)) {}
+    SkNi(uint16_t val) : fVec(_mm_set1_epi16(val)) {}
     static SkNi Load(const uint16_t vals[8]) { return _mm_loadu_si128((const __m128i*)vals); }
     SkNi(uint16_t a, uint16_t b, uint16_t c, uint16_t d,
          uint16_t e, uint16_t f, uint16_t g, uint16_t h) : fVec(_mm_setr_epi16(a,b,c,d,e,f,g,h)) {}
@@ -296,7 +247,7 @@ public:
     SkNi(const __m128i& vec) : fVec(vec) {}
 
     SkNi() {}
-    explicit SkNi(uint8_t val) : fVec(_mm_set1_epi8(val)) {}
+    SkNi(uint8_t val) : fVec(_mm_set1_epi8(val)) {}
     static SkNi Load(const uint8_t vals[16]) { return _mm_loadu_si128((const __m128i*)vals); }
     SkNi(uint8_t a, uint8_t b, uint8_t c, uint8_t d,
          uint8_t e, uint8_t f, uint8_t g, uint8_t h,

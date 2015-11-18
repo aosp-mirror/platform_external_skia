@@ -32,18 +32,17 @@
 
 ////////////////////////////////////////////////////////////////////////////////
 
-GrDrawTarget::GrDrawTarget(GrGpu* gpu, GrResourceProvider* resourceProvider,
-                           const Options& options)
+GrDrawTarget::GrDrawTarget(GrRenderTarget* rt, GrGpu* gpu, GrResourceProvider* resourceProvider)
     : fGpu(SkRef(gpu))
     , fResourceProvider(resourceProvider)
-    , fFlushState(fGpu, fResourceProvider, 0)
     , fFlushing(false)
-    , fFirstUnpreparedBatch(0)
     , fFlags(0)
-    , fOptions(options) {
+    , fRenderTarget(rt) {
     // TODO: Stop extracting the context (currently needed by GrClipMaskManager)
     fContext = fGpu->getContext();
     fClipMaskManager.reset(new GrClipMaskManager(this));
+
+    rt->setLastDrawTarget(this);
 
 #ifdef SK_DEBUG
     static int debugID = 0;
@@ -52,6 +51,10 @@ GrDrawTarget::GrDrawTarget(GrGpu* gpu, GrResourceProvider* resourceProvider,
 }
 
 GrDrawTarget::~GrDrawTarget() {
+    if (fRenderTarget && this == fRenderTarget->getLastDrawTarget()) {
+        fRenderTarget->setLastDrawTarget(nullptr);
+    }
+
     fGpu->unref();
 }
 
@@ -89,7 +92,7 @@ void GrDrawTarget::addDependency(GrSurface* dependedOn) {
 #ifdef SK_DEBUG
 void GrDrawTarget::dump() const {
     SkDebugf("--------------------------------------------------------------\n");
-    SkDebugf("node: %d\n");
+    SkDebugf("node: %d -> RT: %d\n", fDebugID, fRenderTarget ? fRenderTarget->getUniqueID() : -1);
     SkDebugf("relies On (%d): ", fDependencies.count());
     for (int i = 0; i < fDependencies.count(); ++i) {
         SkDebugf("%d, ", fDependencies[i]->fDebugID);
@@ -172,7 +175,7 @@ bool GrDrawTarget::setupDstReadIfNecessary(const GrPipelineBuilder& pipelineBuil
     return true;
 }
 
-void GrDrawTarget::flush() {
+void GrDrawTarget::prepareBatches(GrBatchFlushState* flushState) {
     if (fFlushing) {
         return;
     }
@@ -184,29 +187,23 @@ void GrDrawTarget::flush() {
     // drawTargets will be created to replace them if the SkGpuDevice(s) write to them again.
     this->makeClosed();
 
-    // Loop over all batches and generate geometry
-    for (; fFirstUnpreparedBatch < fBatches.count(); ++fFirstUnpreparedBatch) {
-        fBatches[fFirstUnpreparedBatch]->prepare(&fFlushState);
+    // Loop over the batches that haven't yet generated their geometry
+    for (int i = 0; i < fBatches.count(); ++i) {
+        fBatches[i]->prepare(flushState);
     }
+}
 
-    // Upload all data to the GPU
-    fFlushState.preIssueDraws();
-
+void GrDrawTarget::drawBatches(GrBatchFlushState* flushState) {
     // Draw all the generated geometry.
     for (int i = 0; i < fBatches.count(); ++i) {
-        fBatches[i]->draw(&fFlushState);
+        fBatches[i]->draw(flushState);
     }
-
-    SkASSERT(fFlushState.lastFlushedToken() == fFlushState.currentToken());
-    this->reset();
 
     fFlushing = false;
 }
 
 void GrDrawTarget::reset() {
-    fFirstUnpreparedBatch = 0;
     fBatches.reset();
-    fFlushState.reset();
 }
 
 void GrDrawTarget::drawBatch(const GrPipelineBuilder& pipelineBuilder, GrDrawBatch* batch) {
@@ -226,6 +223,11 @@ void GrDrawTarget::drawBatch(const GrPipelineBuilder& pipelineBuilder, GrDrawBat
     if (!this->installPipelineInDrawBatch(&pipelineBuilder, &clip.scissorState(), batch)) {
         return;
     }
+
+#ifdef ENABLE_MDB
+    SkASSERT(fRenderTarget);
+    batch->pipeline()->addDependenciesTo(fRenderTarget);
+#endif
 
     this->recordBatch(batch);
 }
@@ -455,6 +457,10 @@ void GrDrawTarget::copySurface(GrSurface* dst,
                                const SkIPoint& dstPoint) {
     GrBatch* batch = GrCopySurfaceBatch::Create(dst, src, srcRect, dstPoint);
     if (batch) {
+#ifdef ENABLE_MDB
+        this->addDependency(src);
+#endif
+
         this->recordBatch(batch);
         batch->unref();
     }
@@ -469,8 +475,6 @@ template <class Left, class Right> static bool intersect(const Left& a, const Ri
 void GrDrawTarget::recordBatch(GrBatch* batch) {
     // A closed drawTarget should never receive new/more batches
     SkASSERT(!this->isClosed());
-    // Should never have batches queued up when in immediate mode.
-    SkASSERT(!fOptions.fImmediateMode || !fBatches.count());
 
     // Check if there is a Batch Draw we can batch with by linearly searching back until we either
     // 1) check every draw
@@ -519,13 +523,6 @@ void GrDrawTarget::recordBatch(GrBatch* batch) {
         GrBATCH_INFO("\t\tFirstBatch\n");
     }
     fBatches.push_back().reset(SkRef(batch));
-    if (fBatches.count() > kMaxLookback) {
-        SkASSERT(fBatches.count() - kMaxLookback - fFirstUnpreparedBatch == 1);
-        fBatches[fFirstUnpreparedBatch++]->prepare(&fFlushState);
-    }
-    if (fOptions.fImmediateMode) {
-        this->flush();
-    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////

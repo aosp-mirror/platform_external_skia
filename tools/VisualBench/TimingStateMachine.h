@@ -60,14 +60,10 @@ private:
         kTiming_InnerState,
     };
 
-    inline double elapsed();
-    void resetTimingState();
-    void recordMeasurement();
-
     int fCurrentFrame;
     int fLoops;
     double fLastMeasurement;
-    WallTimer fTimer;
+    double fStartTime;
     State fState;
     InnerState fInnerState;
 };

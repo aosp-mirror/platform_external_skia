@@ -11,10 +11,11 @@
 #include "GrInvariantOutput.h"
 #include "GrSimpleTextureEffect.h"
 #include "SkMatrix.h"
-#include "gl/GrGLFragmentProcessor.h"
-#include "gl/builders/GrGLProgramBuilder.h"
+#include "glsl/GrGLSLFragmentProcessor.h"
+#include "glsl/GrGLSLFragmentShaderBuilder.h"
+#include "glsl/GrGLSLProgramBuilder.h"
 
-class GrGLConfigConversionEffect : public GrGLFragmentProcessor {
+class GrGLConfigConversionEffect : public GrGLSLFragmentProcessor {
 public:
     GrGLConfigConversionEffect(const GrProcessor& processor) {
         const GrConfigConversionEffect& configConversionEffect =
@@ -29,23 +30,23 @@ public:
         SkString tmpDecl;
         tmpVar.appendDecl(args.fBuilder->glslCaps(), &tmpDecl);
 
-        GrGLFragmentBuilder* fsBuilder = args.fBuilder->getFragmentShaderBuilder();
+        GrGLSLFragmentBuilder* fragBuilder = args.fFragBuilder;
 
-        fsBuilder->codeAppendf("%s;", tmpDecl.c_str());
+        fragBuilder->codeAppendf("%s;", tmpDecl.c_str());
 
-        fsBuilder->codeAppendf("%s = ", tmpVar.c_str());
-        fsBuilder->appendTextureLookup(args.fSamplers[0], args.fCoords[0].c_str(),
+        fragBuilder->codeAppendf("%s = ", tmpVar.c_str());
+        fragBuilder->appendTextureLookup(args.fSamplers[0], args.fCoords[0].c_str(),
                                        args.fCoords[0].getType());
-        fsBuilder->codeAppend(";");
+        fragBuilder->codeAppend(";");
 
         if (GrConfigConversionEffect::kNone_PMConversion == fPMConversion) {
             SkASSERT(fSwapRedAndBlue);
-            fsBuilder->codeAppendf("%s = %s.bgra;", args.fOutputColor, tmpVar.c_str());
+            fragBuilder->codeAppendf("%s = %s.bgra;", args.fOutputColor, tmpVar.c_str());
         } else {
             const char* swiz = fSwapRedAndBlue ? "bgr" : "rgb";
             switch (fPMConversion) {
                 case GrConfigConversionEffect::kMulByAlpha_RoundUp_PMConversion:
-                    fsBuilder->codeAppendf(
+                    fragBuilder->codeAppendf(
                         "%s = vec4(ceil(%s.%s * %s.a * 255.0) / 255.0, %s.a);",
                         tmpVar.c_str(), tmpVar.c_str(), swiz, tmpVar.c_str(), tmpVar.c_str());
                     break;
@@ -54,17 +55,17 @@ public:
                     // In Intel GPUs, the integer value converted from floor(%s.r * 255.0) / 255.0
                     // is less than the integer value converted from  %s.r by 1 when the %s.r is
                     // converted from the integer value 2^n, such as 1, 2, 4, 8, etc.
-                    fsBuilder->codeAppendf(
+                    fragBuilder->codeAppendf(
                         "%s = vec4(floor(%s.%s * %s.a * 255.0 + 0.001) / 255.0, %s.a);",
                         tmpVar.c_str(), tmpVar.c_str(), swiz, tmpVar.c_str(), tmpVar.c_str());
                     break;
                 case GrConfigConversionEffect::kDivByAlpha_RoundUp_PMConversion:
-                    fsBuilder->codeAppendf(
+                    fragBuilder->codeAppendf(
                         "%s = %s.a <= 0.0 ? vec4(0,0,0,0) : vec4(ceil(%s.%s / %s.a * 255.0) / 255.0, %s.a);",
                         tmpVar.c_str(), tmpVar.c_str(), tmpVar.c_str(), swiz, tmpVar.c_str(), tmpVar.c_str());
                     break;
                 case GrConfigConversionEffect::kDivByAlpha_RoundDown_PMConversion:
-                    fsBuilder->codeAppendf(
+                    fragBuilder->codeAppendf(
                         "%s = %s.a <= 0.0 ? vec4(0,0,0,0) : vec4(floor(%s.%s / %s.a * 255.0) / 255.0, %s.a);",
                         tmpVar.c_str(), tmpVar.c_str(), tmpVar.c_str(), swiz, tmpVar.c_str(), tmpVar.c_str());
                     break;
@@ -72,11 +73,11 @@ public:
                     SkFAIL("Unknown conversion op.");
                     break;
             }
-            fsBuilder->codeAppendf("%s = %s;", args.fOutputColor, tmpVar.c_str());
+            fragBuilder->codeAppendf("%s = %s;", args.fOutputColor, tmpVar.c_str());
         }
         SkString modulate;
         GrGLSLMulVarBy4f(&modulate, args.fOutputColor, args.fInputColor);
-        fsBuilder->codeAppend(modulate.c_str());
+        fragBuilder->codeAppend(modulate.c_str());
     }
 
     static inline void GenKey(const GrProcessor& processor, const GrGLSLCaps&,
@@ -90,7 +91,7 @@ private:
     bool                                    fSwapRedAndBlue;
     GrConfigConversionEffect::PMConversion  fPMConversion;
 
-    typedef GrGLFragmentProcessor INHERITED;
+    typedef GrGLSLFragmentProcessor INHERITED;
 
 };
 
@@ -141,12 +142,12 @@ const GrFragmentProcessor* GrConfigConversionEffect::TestCreate(GrProcessorTestD
 
 ///////////////////////////////////////////////////////////////////////////////
 
-void GrConfigConversionEffect::onGetGLProcessorKey(const GrGLSLCaps& caps,
-                                                 GrProcessorKeyBuilder* b) const {
+void GrConfigConversionEffect::onGetGLSLProcessorKey(const GrGLSLCaps& caps,
+                                                     GrProcessorKeyBuilder* b) const {
     GrGLConfigConversionEffect::GenKey(*this, caps, b);
 }
 
-GrGLFragmentProcessor* GrConfigConversionEffect::onCreateGLInstance() const {
+GrGLSLFragmentProcessor* GrConfigConversionEffect::onCreateGLSLInstance() const {
     return new GrGLConfigConversionEffect(*this);
 }
 
@@ -231,11 +232,11 @@ void GrConfigConversionEffect::TestForPreservingPMConversions(GrContext* context
             break;
         }
 
-        readDrawContext->drawNonAARectToRect(GrClip::WideOpen(),
-                                             paint1,
-                                             SkMatrix::I(),
-                                             kDstRect,
-                                             kSrcRect);
+        readDrawContext->fillRectToRect(GrClip::WideOpen(),
+                                        paint1,
+                                        SkMatrix::I(),
+                                        kDstRect,
+                                        kSrcRect);
 
         readTex->readPixels(0, 0, 256, 256, kRGBA_8888_GrPixelConfig, firstRead);
 
@@ -247,11 +248,11 @@ void GrConfigConversionEffect::TestForPreservingPMConversions(GrContext* context
             failed = true;
             break;
         }
-        tempDrawContext->drawNonAARectToRect(GrClip::WideOpen(),
-                                             paint2,
-                                             SkMatrix::I(),
-                                             kDstRect,
-                                             kSrcRect);
+        tempDrawContext->fillRectToRect(GrClip::WideOpen(),
+                                        paint2,
+                                        SkMatrix::I(),
+                                        kDstRect,
+                                        kSrcRect);
 
         paint3.addColorFragmentProcessor(pmToUPM2);
 
@@ -261,11 +262,11 @@ void GrConfigConversionEffect::TestForPreservingPMConversions(GrContext* context
             break;
         }
 
-        readDrawContext->drawNonAARectToRect(GrClip::WideOpen(),
-                                             paint3,
-                                             SkMatrix::I(),
-                                             kDstRect,
-                                             kSrcRect);
+        readDrawContext->fillRectToRect(GrClip::WideOpen(),
+                                        paint3,
+                                        SkMatrix::I(),
+                                        kDstRect,
+                                        kSrcRect);
 
         readTex->readPixels(0, 0, 256, 256, kRGBA_8888_GrPixelConfig, secondRead);
 

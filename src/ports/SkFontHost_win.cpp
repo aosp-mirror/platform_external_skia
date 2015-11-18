@@ -5,6 +5,9 @@
  * found in the LICENSE file.
  */
 
+#include "SkTypes.h"
+#if defined(SK_BUILD_FOR_WIN32)
+
 #include "SkAdvancedTypefaceMetrics.h"
 #include "SkBase64.h"
 #include "SkColorPriv.h"
@@ -2409,8 +2412,7 @@ public:
     }
 
     SkTypeface* matchStyle(const SkFontStyle& pattern) override {
-        // todo:
-        return SkCreateTypefaceFromLOGFONT(fArray[0].elfLogFont);
+        return this->matchStyleCSS3(pattern);
     }
 
 private:
@@ -2511,3 +2513,5 @@ private:
 ///////////////////////////////////////////////////////////////////////////////
 
 SkFontMgr* SkFontMgr_New_GDI() { return new SkFontMgrGDI; }
+
+#endif//defined(SK_BUILD_FOR_WIN32)

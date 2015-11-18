@@ -259,8 +259,13 @@ private:
         kStorageSize = kColorStorageCount * (sizeof(SkColor) + sizeof(SkScalar) + sizeof(Rec))
     };
     SkColor     fStorage[(kStorageSize + 3) >> 2];
+public:
     SkColor*    fOrigColors; // original colors, before modulation by paint in context.
     SkScalar*   fOrigPos;   // original positions
+
+    bool colorsAreOpaque() const { return fColorsAreOpaque; }
+
+private:
     bool        fColorsAreOpaque;
 
     GradientShaderCache* refCache(U8CPU alpha, bool dither) const;
@@ -296,7 +301,7 @@ static inline int next_dither_toggle16(int toggle) {
 
 #include "GrCoordTransform.h"
 #include "GrFragmentProcessor.h"
-#include "gl/GrGLFragmentProcessor.h"
+#include "glsl/GrGLSLFragmentProcessor.h"
 #include "glsl/GrGLSLProgramDataManager.h"
 
 class GrInvariantOutput;
@@ -396,7 +401,7 @@ private:
 ///////////////////////////////////////////////////////////////////////////////
 
 // Base class for GL gradient effects
-class GrGLGradientEffect : public GrGLFragmentProcessor {
+class GrGLGradientEffect : public GrGLSLFragmentProcessor {
 public:
     GrGLGradientEffect();
     virtual ~GrGLGradientEffect();
@@ -414,13 +419,14 @@ protected:
 
     // Emits the uniform used as the y-coord to texture samples in derived classes. Subclasses
     // should call this method from their emitCode().
-    void emitUniforms(GrGLFPBuilder* builder, const GrGradientEffect&);
+    void emitUniforms(GrGLSLFPBuilder* builder, const GrGradientEffect&);
 
 
     // emit code that gets a fragment's color from an expression for t; Has branches for 3 separate
     // control flows inside -- 2 color gradients, 3 color symmetric gradients (both using
     // native GLSL mix), and 4+ color gradients that use the traditional texture lookup.
-    void emitColor(GrGLFPBuilder* builder,
+    void emitColor(GrGLSLFPBuilder* builder,
+                   GrGLSLFragmentBuilder* fragBuilder,
                    const GrGradientEffect&,
                    const char* gradientTValue,
                    const char* outputColor,
@@ -450,7 +456,7 @@ private:
     GrGLSLProgramDataManager::UniformHandle fColorMidUni;
     GrGLSLProgramDataManager::UniformHandle fColorEndUni;
 
-    typedef GrGLFragmentProcessor INHERITED;
+    typedef GrGLSLFragmentProcessor INHERITED;
 };
 
 #endif

@@ -94,7 +94,7 @@ bool SkImageCacherator::generateBitmap(SkBitmap* bitmap) {
         return generator->tryGenerateBitmap(bitmap, fInfo, allocator);
     } else {
         // need to handle subsetting, so we first generate the full size version, and then
-        // "read" from it to get our subset. See skbug.com/4213
+        // "read" from it to get our subset. See https://bug.skia.org/4213
 
         SkBitmap full;
         if (!generator->tryGenerateBitmap(&full, genInfo, allocator)) {
@@ -273,13 +273,12 @@ GrTexture* SkImageCacherator::lockTexture(GrContext* ctx, const GrUniqueKey& key
 
 #include "GrTextureParamsAdjuster.h"
 
-class Cacherator_GrTextureParamsAdjuster : public GrTextureParamsAdjuster {
+class Cacherator_GrTextureMaker : public GrTextureMaker {
 public:
-    Cacherator_GrTextureParamsAdjuster(SkImageCacherator* cacher, const SkImage* client)
-        : INHERITED(cacher->info().width(), cacher->info().height())
+    Cacherator_GrTextureMaker(GrContext* context, SkImageCacherator* cacher, const SkImage* client)
+        : INHERITED(context, cacher->info().width(), cacher->info().height())
         , fCacher(cacher)
-        , fClient(client)
-    {
+        , fClient(client) {
         if (client) {
             GrMakeKeyFromImageID(&fOriginalKey, client->uniqueID(),
                                  SkIRect::MakeWH(this->width(), this->height()));
@@ -289,10 +288,10 @@ public:
 protected:
     // TODO: consider overriding this, for the case where the underlying generator might be
     //       able to efficiently produce a "stretched" texture natively (e.g. picture-backed)
-    //    GrTexture* generateTextureForParams(GrContext*, const SkGrStretch&) override;
+    //          GrTexture* generateTextureForParams(const CopyParams&) override;
 
-    GrTexture* refOriginalTexture(GrContext* ctx) override {
-        return fCacher->lockTexture(ctx, fOriginalKey, fClient);
+    GrTexture* refOriginalTexture() override {
+        return fCacher->lockTexture(this->context(), fOriginalKey, fClient);
     }
 
     void makeCopyKey(const CopyParams& stretch, GrUniqueKey* paramsCopyKey) override {
@@ -312,7 +311,7 @@ private:
     const SkImage*          fClient;
     GrUniqueKey             fOriginalKey;
 
-    typedef GrTextureParamsAdjuster INHERITED;
+    typedef GrTextureMaker INHERITED;
 };
 
 GrTexture* SkImageCacherator::lockAsTexture(GrContext* ctx, const GrTextureParams& params,
@@ -321,7 +320,7 @@ GrTexture* SkImageCacherator::lockAsTexture(GrContext* ctx, const GrTextureParam
         return nullptr;
     }
 
-    return Cacherator_GrTextureParamsAdjuster(this, client).refTextureForParams(ctx, params);
+    return Cacherator_GrTextureMaker(ctx, this, client).refTextureForParams(params);
 }
 
 #else

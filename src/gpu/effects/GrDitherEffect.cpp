@@ -9,8 +9,9 @@
 #include "GrFragmentProcessor.h"
 #include "GrInvariantOutput.h"
 #include "SkRect.h"
-#include "gl/GrGLFragmentProcessor.h"
-#include "gl/builders/GrGLProgramBuilder.h"
+#include "glsl/GrGLSLFragmentProcessor.h"
+#include "glsl/GrGLSLFragmentShaderBuilder.h"
+#include "glsl/GrGLSLProgramBuilder.h"
 
 //////////////////////////////////////////////////////////////////////////////
 
@@ -30,9 +31,9 @@ private:
         this->setWillReadFragmentPosition();
     }
 
-    GrGLFragmentProcessor* onCreateGLInstance() const override;
+    GrGLSLFragmentProcessor* onCreateGLSLInstance() const override;
 
-    void onGetGLProcessorKey(const GrGLSLCaps&, GrProcessorKeyBuilder*) const override;
+    void onGetGLSLProcessorKey(const GrGLSLCaps&, GrProcessorKeyBuilder*) const override;
 
     // All dither effects are equal
     bool onIsEqual(const GrFragmentProcessor&) const override { return true; }
@@ -58,21 +59,21 @@ const GrFragmentProcessor* DitherEffect::TestCreate(GrProcessorTestData*) {
 
 //////////////////////////////////////////////////////////////////////////////
 
-class GLDitherEffect : public GrGLFragmentProcessor {
+class GLDitherEffect : public GrGLSLFragmentProcessor {
 public:
     GLDitherEffect(const GrProcessor&);
 
     virtual void emitCode(EmitArgs& args) override;
 
 private:
-    typedef GrGLFragmentProcessor INHERITED;
+    typedef GrGLSLFragmentProcessor INHERITED;
 };
 
 GLDitherEffect::GLDitherEffect(const GrProcessor&) {
 }
 
 void GLDitherEffect::emitCode(EmitArgs& args) {
-    GrGLFragmentBuilder* fsBuilder = args.fBuilder->getFragmentShaderBuilder();
+    GrGLSLFragmentBuilder* fragBuilder = args.fFragBuilder;
     // Generate a random number based on the fragment position. For this
     // random number generator, we use the "GLSL rand" function
     // that seems to be floating around on the internet. It works under
@@ -82,21 +83,21 @@ void GLDitherEffect::emitCode(EmitArgs& args) {
 
     // For each channel c, add the random offset to the pixel to either bump
     // it up or let it remain constant during quantization.
-    fsBuilder->codeAppendf("\t\tfloat r = "
-                           "fract(sin(dot(%s.xy ,vec2(12.9898,78.233))) * 43758.5453);\n",
-                           fsBuilder->fragmentPosition());
-    fsBuilder->codeAppendf("\t\t%s = (1.0/255.0) * vec4(r, r, r, r) + %s;\n",
-                           args.fOutputColor, GrGLSLExpr4(args.fInputColor).c_str());
+    fragBuilder->codeAppendf("\t\tfloat r = "
+                             "fract(sin(dot(%s.xy ,vec2(12.9898,78.233))) * 43758.5453);\n",
+                             fragBuilder->fragmentPosition());
+    fragBuilder->codeAppendf("\t\t%s = (1.0/255.0) * vec4(r, r, r, r) + %s;\n",
+                             args.fOutputColor, GrGLSLExpr4(args.fInputColor).c_str());
 }
 
 //////////////////////////////////////////////////////////////////////////////
 
-void DitherEffect::onGetGLProcessorKey(const GrGLSLCaps& caps,
-                                     GrProcessorKeyBuilder* b) const {
+void DitherEffect::onGetGLSLProcessorKey(const GrGLSLCaps& caps,
+                                         GrProcessorKeyBuilder* b) const {
     GLDitherEffect::GenKey(*this, caps, b);
 }
 
-GrGLFragmentProcessor* DitherEffect::onCreateGLInstance() const  {
+GrGLSLFragmentProcessor* DitherEffect::onCreateGLSLInstance() const  {
     return new GLDitherEffect(*this);
 }
 

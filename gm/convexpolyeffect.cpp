@@ -12,7 +12,6 @@
 
 #if SK_SUPPORT_GPU
 
-#include "GrBatchFlushState.h"
 #include "GrContext.h"
 #include "GrDefaultGeoProcFactory.h"
 #include "GrPathUtils.h"
@@ -175,7 +174,7 @@ protected:
 
             for (int et = 0; et < kGrProcessorEdgeTypeCnt; ++et) {
                 GrTestTarget tt;
-                context->getTestTarget(&tt);
+                context->getTestTarget(&tt, rt);
                 if (nullptr == tt.target()) {
                     SkDEBUGFAIL("Couldn't get Gr test target.");
                     return;
@@ -226,7 +225,7 @@ protected:
 
             for (int et = 0; et < kGrProcessorEdgeTypeCnt; ++et) {
                 GrTestTarget tt;
-                context->getTestTarget(&tt);
+                context->getTestTarget(&tt, rt);
                 if (nullptr == tt.target()) {
                     SkDEBUGFAIL("Couldn't get Gr test target.");
                     return;

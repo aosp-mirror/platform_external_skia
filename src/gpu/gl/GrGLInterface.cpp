@@ -713,12 +713,6 @@ bool GrGLInterface::validate() const {
         }
     }
 
-    if (kGL_GrGLStandard == fStandard && glVer >= GR_GL_VER(4,5)) {
-        if (nullptr == fFunctions.fNamedFramebufferParameteri) {
-            RETURN_FALSE_INTERFACE
-        }
-    }
-
     if ((kGL_GrGLStandard == fStandard && glVer >= GR_GL_VER(4,3)) ||
         fExtensions.has("GL_KHR_debug")) {
         if (nullptr == fFunctions.fDebugMessageControl ||
@@ -728,6 +722,13 @@ bool GrGLInterface::validate() const {
             nullptr == fFunctions.fPushDebugGroup ||
             nullptr == fFunctions.fPopDebugGroup ||
             nullptr == fFunctions.fObjectLabel) {
+            RETURN_FALSE_INTERFACE
+        }
+    }
+
+    if (fExtensions.has("EGL_KHR_image") || fExtensions.has("EGL_KHR_image_base")) {
+        if (nullptr == fFunctions.fCreateImage ||
+            nullptr == fFunctions.fDestroyImage) {
             RETURN_FALSE_INTERFACE
         }
     }

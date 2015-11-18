@@ -328,6 +328,7 @@ LOCAL_SRC_FILES := \
 	../gm/shallowgradient.cpp \
 	../gm/simpleaaclip.cpp \
 	../gm/skbug1719.cpp \
+	../gm/skbug_257.cpp \
 	../gm/smallarc.cpp \
 	../gm/smallimage.cpp \
 	../gm/spritebitmap.cpp \
@@ -382,10 +383,6 @@ LOCAL_SRC_FILES := \
 	../tools/CrashHandler.cpp \
 	../tools/ProcStats.cpp \
 	../tools/timer/Timer.cpp \
-	../tools/SkBitmapRegionCanvas.cpp \
-	../tools/SkBitmapRegionCodec.cpp \
-	../tools/SkBitmapRegionDecoderInterface.cpp \
-	../tools/SkBitmapRegionSampler.cpp \
 	../tools/Resources.cpp \
 	../tools/sk_tool_utils.cpp \
 	../tools/sk_tool_utils_font.cpp \
@@ -413,6 +410,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../include/pathops \
 	$(LOCAL_PATH)/../include/pipe \
 	$(LOCAL_PATH)/../include/codec \
+	$(LOCAL_PATH)/../include/android \
 	$(LOCAL_PATH)/../include/effects \
 	$(LOCAL_PATH)/../include/images \
 	$(LOCAL_PATH)/../include/ports \
@@ -422,7 +420,6 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../include/gpu \
 	$(LOCAL_PATH)/../tools/flags \
 	$(LOCAL_PATH)/../include/private \
-	$(LOCAL_PATH)/../src/codec \
 	$(LOCAL_PATH)/../src/fonts \
 	$(LOCAL_PATH)/../src/core \
 	$(LOCAL_PATH)/../tools \

@@ -130,8 +130,9 @@ private:
 #include "GrCoordTransform.h"
 #include "GrFragmentProcessor.h"
 #include "GrTextureAccess.h"
-#include "gl/GrGLProcessor.h"
-#include "gl/builders/GrGLProgramBuilder.h"
+#include "glsl/GrGLSLFragmentProcessor.h"
+#include "glsl/GrGLSLFragmentShaderBuilder.h"
+#include "glsl/GrGLSLProgramBuilder.h"
 #include "glsl/GrGLSLProgramDataManager.h"
 #include "SkGr.h"
 #include "SkGrPriv.h"
@@ -167,7 +168,7 @@ public:
         this->initClassID<LightingFP>();
     }
 
-    class LightingGLFP : public GrGLFragmentProcessor {
+    class LightingGLFP : public GrGLSLFragmentProcessor {
     public:
         LightingGLFP() {
             fLightDir.fX = 10000.0f;
@@ -178,56 +179,58 @@ public:
 
         void emitCode(EmitArgs& args) override {
 
-            GrGLFragmentBuilder* fpb = args.fBuilder->getFragmentShaderBuilder();
+            GrGLSLFragmentBuilder* fragBuilder = args.fFragBuilder;
 
             // add uniforms
             const char* lightDirUniName = nullptr;
-            fLightDirUni = args.fBuilder->addUniform(GrGLProgramBuilder::kFragment_Visibility,
+            fLightDirUni = args.fBuilder->addUniform(GrGLSLProgramBuilder::kFragment_Visibility,
                                                      kVec3f_GrSLType, kDefault_GrSLPrecision,
                                                      "LightDir", &lightDirUniName);
 
             const char* lightColorUniName = nullptr;
-            fLightColorUni = args.fBuilder->addUniform(GrGLProgramBuilder::kFragment_Visibility,
+            fLightColorUni = args.fBuilder->addUniform(GrGLSLProgramBuilder::kFragment_Visibility,
                                                        kVec3f_GrSLType, kDefault_GrSLPrecision,
                                                        "LightColor", &lightColorUniName);
 
             const char* ambientColorUniName = nullptr;
-            fAmbientColorUni = args.fBuilder->addUniform(GrGLProgramBuilder::kFragment_Visibility,
+            fAmbientColorUni = args.fBuilder->addUniform(GrGLSLProgramBuilder::kFragment_Visibility,
                                                          kVec3f_GrSLType, kDefault_GrSLPrecision,
                                                          "AmbientColor", &ambientColorUniName);
 
             const char* xformUniName = nullptr;
-            fXformUni = args.fBuilder->addUniform(GrGLProgramBuilder::kFragment_Visibility,
+            fXformUni = args.fBuilder->addUniform(GrGLSLProgramBuilder::kFragment_Visibility,
                                                   kVec2f_GrSLType, kDefault_GrSLPrecision,
                                                   "Xform", &xformUniName);
 
-            fpb->codeAppend("vec4 diffuseColor = ");
-            fpb->appendTextureLookupAndModulate(args.fInputColor, args.fSamplers[0], 
+            fragBuilder->codeAppend("vec4 diffuseColor = ");
+            fragBuilder->appendTextureLookupAndModulate(args.fInputColor, args.fSamplers[0], 
                                                 args.fCoords[0].c_str(), 
                                                 args.fCoords[0].getType());
-            fpb->codeAppend(";");
+            fragBuilder->codeAppend(";");
 
-            fpb->codeAppend("vec4 normalColor = ");
-            fpb->appendTextureLookup(args.fSamplers[1],
+            fragBuilder->codeAppend("vec4 normalColor = ");
+            fragBuilder->appendTextureLookup(args.fSamplers[1],
                                      args.fCoords[1].c_str(), 
                                      args.fCoords[1].getType());
-            fpb->codeAppend(";");
+            fragBuilder->codeAppend(";");
 
-            fpb->codeAppend("vec3 normal = normalColor.rgb - vec3(0.5);");
+            fragBuilder->codeAppend("vec3 normal = normalColor.rgb - vec3(0.5);");
 
-            fpb->codeAppendf("mat3 m = mat3(%s.x, -%s.y, 0.0, %s.y, %s.x, 0.0, 0.0, 0.0, 1.0);",
-                             xformUniName, xformUniName, xformUniName, xformUniName);
+            fragBuilder->codeAppendf(
+                                 "mat3 m = mat3(%s.x, -%s.y, 0.0, %s.y, %s.x, 0.0, 0.0, 0.0, 1.0);",
+                                 xformUniName, xformUniName, xformUniName, xformUniName);
             
             // TODO: inverse map the light direction vectors in the vertex shader rather than
             // transforming all the normals here!
-            fpb->codeAppend("normal = normalize(m*normal);");
+            fragBuilder->codeAppend("normal = normalize(m*normal);");
 
-            fpb->codeAppendf("float NdotL = clamp(dot(normal, %s), 0.0, 1.0);", lightDirUniName);
+            fragBuilder->codeAppendf("float NdotL = clamp(dot(normal, %s), 0.0, 1.0);",
+                                     lightDirUniName);
             // diffuse light
-            fpb->codeAppendf("vec3 result = %s*diffuseColor.rgb*NdotL;", lightColorUniName);
+            fragBuilder->codeAppendf("vec3 result = %s*diffuseColor.rgb*NdotL;", lightColorUniName);
             // ambient light
-            fpb->codeAppendf("result += %s;", ambientColorUniName);
-            fpb->codeAppendf("%s = vec4(result.rgb, diffuseColor.a);", args.fOutputColor);
+            fragBuilder->codeAppendf("result += %s;", ambientColorUniName);
+            fragBuilder->codeAppendf("%s = vec4(result.rgb, diffuseColor.a);", args.fOutputColor);
         }
 
         static void GenKey(const GrProcessor& proc, const GrGLSLCaps&,
@@ -280,7 +283,7 @@ public:
         GrGLSLProgramDataManager::UniformHandle fXformUni;
     };
 
-    void onGetGLProcessorKey(const GrGLSLCaps& caps, GrProcessorKeyBuilder* b) const override {
+    void onGetGLSLProcessorKey(const GrGLSLCaps& caps, GrProcessorKeyBuilder* b) const override {
         LightingGLFP::GenKey(*this, caps, b);
     }
 
@@ -296,7 +299,7 @@ public:
     const SkVector& invNormRotation() const { return fInvNormRotation; }
 
 private:
-    GrGLFragmentProcessor* onCreateGLInstance() const override { return new LightingGLFP; }
+    GrGLSLFragmentProcessor* onCreateGLSLInstance() const override { return new LightingGLFP; }
 
     bool onIsEqual(const GrFragmentProcessor& proc) const override { 
         const LightingFP& lightingFP = proc.cast<LightingFP>();

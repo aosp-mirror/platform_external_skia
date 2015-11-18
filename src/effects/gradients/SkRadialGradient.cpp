@@ -306,8 +306,8 @@ void shadeSpan_radial_clamp2(SkScalar sfx, SkScalar sdx, SkScalar sfy, SkScalar 
             R = R + dR;
             dR = dR + ddR;
 
-            int fi[4];
-            dist.castTrunc().store(fi);
+            uint8_t fi[4];
+            dist.toBytes(fi);
 
             for (int i = 0; i < 4; i++) {
                 *dstC++ = cache[toggle + fi[i]];
@@ -318,8 +318,8 @@ void shadeSpan_radial_clamp2(SkScalar sfx, SkScalar sdx, SkScalar sfy, SkScalar 
         if (count) {
             Sk4f dist = Sk4f::Min(fast_sqrt(R), max);
 
-            int fi[4];
-            dist.castTrunc().store(fi);
+            uint8_t fi[4];
+            dist.toBytes(fi);
             for (int i = 0; i < count; i++) {
                 *dstC++ = cache[toggle + fi[i]];
                 toggle = next_dither_toggle(toggle);
@@ -459,12 +459,12 @@ private:
         this->initClassID<GrRadialGradient>();
     }
 
-    GrGLFragmentProcessor* onCreateGLInstance() const override {
+    GrGLSLFragmentProcessor* onCreateGLSLInstance() const override {
         return new GrGLRadialGradient(*this);
     }
 
-    virtual void onGetGLProcessorKey(const GrGLSLCaps& caps,
-                                     GrProcessorKeyBuilder* b) const override {
+    virtual void onGetGLSLProcessorKey(const GrGLSLCaps& caps,
+                                       GrProcessorKeyBuilder* b) const override {
         GrGLRadialGradient::GenKey(*this, caps, b);
     }
 
@@ -501,9 +501,13 @@ void GrGLRadialGradient::emitCode(EmitArgs& args) {
     const GrRadialGradient& ge = args.fFp.cast<GrRadialGradient>();
     this->emitUniforms(args.fBuilder, ge);
     SkString t("length(");
-    t.append(args.fBuilder->getFragmentShaderBuilder()->ensureFSCoords2D(args.fCoords, 0));
+    t.append(args.fFragBuilder->ensureFSCoords2D(args.fCoords, 0));
     t.append(")");
-    this->emitColor(args.fBuilder, ge, t.c_str(), args.fOutputColor, args.fInputColor,
+    this->emitColor(args.fBuilder,
+                    args.fFragBuilder,
+                    ge, t.c_str(),
+                    args.fOutputColor,
+                    args.fInputColor,
                     args.fSamplers);
 }
 

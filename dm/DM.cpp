@@ -16,7 +16,6 @@
 #include "SkBBHFactory.h"
 #include "SkChecksum.h"
 #include "SkCodec.h"
-#include "SkCodecTools.h"
 #include "SkCommonFlags.h"
 #include "SkFontMgr.h"
 #include "SkForceLinking.h"
@@ -35,10 +34,6 @@
 extern void SkPDFImageDumpStats();
 #endif
 
-#ifdef SKIA_PNG_PREFIXED
-    // this must proceed png.h
-    #include "pngprefix.h"
-#endif
 #include "png.h"
 
 #include <stdlib.h>
@@ -76,6 +71,8 @@ __SK_FORCE_IMAGE_DECODER_LINKING;
 using namespace DM;
 
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
+
+static double now_ms() { return SkTime::GetNSecs() * 1e-6; }
 
 SK_DECLARE_STATIC_MUTEX(gFailuresMutex);
 static SkTArray<SkString> gFailures;
@@ -235,9 +232,6 @@ static void push_codec_src(Path path, CodecSrc::Mode mode, CodecSrc::DstColorTyp
         case CodecSrc::kScanline_Mode:
             folder.append("scanline");
             break;
-        case CodecSrc::kScanline_Subset_Mode:
-            folder.append("scanline_subset");
-            break;
         case CodecSrc::kStripe_Mode:
             folder.append("stripe");
             break;
@@ -289,7 +283,7 @@ static void push_android_codec_src(Path path, AndroidCodecSrc::Mode mode,
     }
 
     if (1 != sampleSize) {
-        folder.appendf("_%.3f", get_scale_from_sample_size(sampleSize));
+        folder.appendf("_%.3f", 1.0f / (float) sampleSize);
     }
 
     AndroidCodecSrc* src = new AndroidCodecSrc(path, mode, dstColorType, sampleSize);
@@ -315,14 +309,14 @@ static void push_codec_srcs(Path path) {
     const float nativeScales[] = { 0.125f, 0.25f, 0.375f, 0.5f, 0.625f, 0.750f, 0.875f, 1.0f };
 
     const CodecSrc::Mode nativeModes[] = { CodecSrc::kCodec_Mode, CodecSrc::kScanline_Mode,
-            CodecSrc::kScanline_Subset_Mode, CodecSrc::kStripe_Mode, CodecSrc::kSubset_Mode };
+            CodecSrc::kStripe_Mode, CodecSrc::kSubset_Mode };
 
     CodecSrc::DstColorType colorTypes[3];
     uint32_t numColorTypes;
     switch (codec->getInfo().colorType()) {
         case kGray_8_SkColorType:
             // FIXME: Is this a long term solution for testing wbmps decodes to kIndex8?
-            // Further discussion on this topic is at skbug.com/3683.
+            // Further discussion on this topic is at https://bug.skia.org/3683 .
             // This causes us to try to convert grayscale jpegs to kIndex8.  We currently
             // fail non-fatally in this case.
             colorTypes[0] = CodecSrc::kGetFromCanvas_DstColorType;
@@ -349,56 +343,62 @@ static void push_codec_srcs(Path path) {
         }
     }
 
-    // skbug.com/4428
-    static const char* const exts[] = {
+    // https://bug.skia.org/4428
+    bool subset = false;
+    // The following image types are supported by BitmapRegionDecoder,
+    // so we will test full image decodes and subset decodes.
+    static const char* const subsetExts[] = {
         "jpg", "jpeg", "png", "webp",
         "JPG", "JPEG", "PNG", "WEBP",
     };
-    bool supported = false;
-    for (const char* ext : exts) {
+    for (const char* ext : subsetExts) {
         if (path.endsWith(ext)) {
-            supported = true;
+            subset = true;
             break;
         }
     }
-    if (!supported) {
+
+    bool full = false;
+    // The following image types are only supported by BitmapFactory,
+    // so we only need to test full image decodes.
+    static const char* fullExts[] = {
+        "wbmp", "bmp", "gif",
+        "WBMP", "BMP", "GIF",
+    };
+    for (const char* ext : fullExts) {
+        if (path.endsWith(ext)) {
+            full = true;
+            break;
+        }
+    }
+
+    if (!full && !subset) {
         return;
     }
 
     const int sampleSizes[] = { 1, 2, 3, 4, 5, 6, 7, 8 };
 
-    const AndroidCodecSrc::Mode androidModes[] = {
-            AndroidCodecSrc::kFullImage_Mode,
-            AndroidCodecSrc::kDivisor_Mode,
-    };
-
     for (int sampleSize : sampleSizes) {
-        for (AndroidCodecSrc::Mode mode : androidModes) {
-            for (uint32_t i = 0; i < numColorTypes; i++) {
-                push_android_codec_src(path, mode, colorTypes[i], sampleSize);
+        for (uint32_t i = 0; i < numColorTypes; i++) {
+            push_android_codec_src(path, AndroidCodecSrc::kFullImage_Mode, colorTypes[i],
+                    sampleSize);
+            if (subset) {
+                push_android_codec_src(path, AndroidCodecSrc::kDivisor_Mode, colorTypes[i],
+                        sampleSize);
             }
         }
     }
 }
 
-static bool brd_color_type_supported(SkBitmapRegionDecoderInterface::Strategy strategy,
+static bool brd_color_type_supported(SkBitmapRegionDecoder::Strategy strategy,
         CodecSrc::DstColorType dstColorType) {
     switch (strategy) {
-        case SkBitmapRegionDecoderInterface::kCanvas_Strategy:
+        case SkBitmapRegionDecoder::kCanvas_Strategy:
             if (CodecSrc::kGetFromCanvas_DstColorType == dstColorType) {
                 return true;
             }
             return false;
-        case SkBitmapRegionDecoderInterface::kOriginal_Strategy:
-            switch (dstColorType) {
-                case CodecSrc::kGetFromCanvas_DstColorType:
-                case CodecSrc::kIndex8_Always_DstColorType:
-                case CodecSrc::kGrayscale_Always_DstColorType:
-                    return true;
-                default:
-                    return false;
-            }
-        case SkBitmapRegionDecoderInterface::kAndroidCodec_Strategy:
+        case SkBitmapRegionDecoder::kAndroidCodec_Strategy:
             switch (dstColorType) {
                 case CodecSrc::kGetFromCanvas_DstColorType:
                 case CodecSrc::kIndex8_Always_DstColorType:
@@ -413,17 +413,14 @@ static bool brd_color_type_supported(SkBitmapRegionDecoderInterface::Strategy st
     }
 }
 
-static void push_brd_src(Path path, SkBitmapRegionDecoderInterface::Strategy strategy,
+static void push_brd_src(Path path, SkBitmapRegionDecoder::Strategy strategy,
         CodecSrc::DstColorType dstColorType, BRDSrc::Mode mode, uint32_t sampleSize) {
     SkString folder;
     switch (strategy) {
-        case SkBitmapRegionDecoderInterface::kCanvas_Strategy:
+        case SkBitmapRegionDecoder::kCanvas_Strategy:
             folder.append("brd_canvas");
             break;
-        case SkBitmapRegionDecoderInterface::kOriginal_Strategy:
-            folder.append("brd_sample");
-            break;
-        case SkBitmapRegionDecoderInterface::kAndroidCodec_Strategy:
+        case SkBitmapRegionDecoder::kAndroidCodec_Strategy:
             folder.append("brd_android_codec");
             break;
         default:
@@ -457,7 +454,7 @@ static void push_brd_src(Path path, SkBitmapRegionDecoderInterface::Strategy str
     }
 
     if (1 != sampleSize) {
-        folder.appendf("_%.3f", get_scale_from_sample_size(sampleSize));
+        folder.appendf("_%.3f", 1.0f / (float) sampleSize);
     }
 
     BRDSrc* src = new BRDSrc(path, strategy, mode, dstColorType, sampleSize);
@@ -466,13 +463,17 @@ static void push_brd_src(Path path, SkBitmapRegionDecoderInterface::Strategy str
 
 static void push_brd_srcs(Path path) {
 
-    const SkBitmapRegionDecoderInterface::Strategy strategies[] = {
-            SkBitmapRegionDecoderInterface::kCanvas_Strategy,
-            SkBitmapRegionDecoderInterface::kOriginal_Strategy,
-            SkBitmapRegionDecoderInterface::kAndroidCodec_Strategy,
+    const SkBitmapRegionDecoder::Strategy strategies[] = {
+            SkBitmapRegionDecoder::kCanvas_Strategy,
+            SkBitmapRegionDecoder::kAndroidCodec_Strategy,
     };
 
-    const uint32_t sampleSizes[] = { 1, 2, 3, 4, 5, 6, 7, 8 };
+    // Test on a variety of sampleSizes, making sure to include:
+    // - 2, 4, and 8, which are natively supported by jpeg
+    // - multiples of 2 which are not divisible by 4 (analogous for 4)
+    // - larger powers of two, since BRD clients generally use powers of 2
+    // We will only produce output for the larger sizes on large images.
+    const uint32_t sampleSizes[] = { 1, 2, 3, 4, 5, 6, 7, 8, 12, 16, 24, 32, 64 };
 
     // We will only test to one backend (8888), but we will test all of the
     // color types that we need to decode to on this backend.
@@ -487,25 +488,8 @@ static void push_brd_srcs(Path path) {
             BRDSrc::kDivisor_Mode,
     };
 
-    for (SkBitmapRegionDecoderInterface::Strategy strategy : strategies) {
-
-        // We disable png testing for kOriginal_Strategy because the implementation leaks
-        // memory in our forked libpng.
-        // TODO (msarett): Decide if we want to test pngs in this mode and how we might do this.
-        if (SkBitmapRegionDecoderInterface::kOriginal_Strategy == strategy &&
-                (path.endsWith(".png") || path.endsWith(".PNG"))) {
-            continue;
-        }
+    for (SkBitmapRegionDecoder::Strategy strategy : strategies) {
         for (uint32_t sampleSize : sampleSizes) {
-
-            // kOriginal_Strategy does not work for jpegs that are scaled to non-powers of two.
-            // We don't need to test this.  We know it doesn't work, and it causes images with
-            // uninitialized memory to show up on Gold.
-            if (SkBitmapRegionDecoderInterface::kOriginal_Strategy == strategy &&
-                    (path.endsWith(".jpg") || path.endsWith(".JPG") ||
-                    path.endsWith(".jpeg") || path.endsWith(".JPEG")) && !SkIsPow2(sampleSize)) {
-                continue;
-            }
             for (CodecSrc::DstColorType dstColorType : dstColorTypes) {
                 if (brd_color_type_supported(strategy, dstColorType)) {
                     for (BRDSrc::Mode mode : modes) {
@@ -558,7 +542,6 @@ static void gather_srcs() {
                 for (SkString file; it.next(&file); ) {
                     SkString path = SkOSPath::Join(flag, file.c_str());
                     push_src("image", "decode", new ImageSrc(path)); // Decode entire image
-                    push_src("image", "subset", new ImageSrc(path, 2)); // Decode into 2x2 subsets
                     push_codec_srcs(path);
                     if (brd_supported(exts[j])) {
                         push_brd_srcs(path);
@@ -568,7 +551,6 @@ static void gather_srcs() {
         } else if (sk_exists(flag)) {
             // assume that FLAGS_images[i] is a valid image if it is a file.
             push_src("image", "decode", new ImageSrc(flag)); // Decode entire image.
-            push_src("image", "subset", new ImageSrc(flag, 2)); // Decode into 2 x 2 subsets
             push_codec_srcs(flag);
             push_brd_srcs(flag);
         }
@@ -832,8 +814,7 @@ struct Task {
         }
 
         SkString log;
-        WallTimer timer;
-        timer.start();
+        auto timerStart = now_ms();
         if (!FLAGS_dryRun && note.isEmpty()) {
             SkBitmap bitmap;
             SkDynamicMemoryWStream stream;
@@ -843,7 +824,7 @@ struct Task {
             start(task->sink.tag, task->src.tag, task->src.options, name.c_str());
             Error err = task->sink->draw(*task->src, &bitmap, &stream, &log);
             if (!err.isEmpty()) {
-                timer.end();
+                auto elapsed = now_ms() - timerStart;
                 if (err.isFatal()) {
                     fail(SkStringPrintf("%s %s %s %s: %s",
                                         task->sink.tag,
@@ -854,7 +835,7 @@ struct Task {
                 } else {
                     note.appendf(" (skipped: %s)", err.c_str());
                 }
-                done(timer.fWall, task->sink.tag, task->src.tag, task->src.options,
+                done(elapsed, task->sink.tag, task->src.tag, task->src.options,
                      name, note, log);
                 return;
             }
@@ -908,9 +889,8 @@ struct Task {
                 }
             }
         }
-        timer.end();
-        done(timer.fWall, task->sink.tag, task->src.tag.c_str(), task->src.options.c_str(), name,
-                note, log);
+        done(now_ms()-timerStart, task->sink.tag, task->src.tag.c_str(), task->src.options.c_str(),
+             name, note, log);
     }
 
     static void WriteToDisk(const Task& task,
@@ -1034,8 +1014,7 @@ static void run_test(skiatest::Test* test) {
         note.appendf(" (--blacklist %s)", whyBlacklisted.c_str());
     }
 
-    WallTimer timer;
-    timer.start();
+    auto timerStart = now_ms();
     if (!FLAGS_dryRun && whyBlacklisted.isEmpty()) {
         start("unit", "test", "", test->name);
         GrContextFactory factory;
@@ -1044,8 +1023,7 @@ static void run_test(skiatest::Test* test) {
         }
         test->proc(&reporter, &factory);
     }
-    timer.end();
-    done(timer.fWall, "unit", "test", "", test->name, note, "");
+    done(now_ms()-timerStart, "unit", "test", "", test->name, note, "");
 }
 
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/

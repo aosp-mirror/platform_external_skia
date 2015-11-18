@@ -32,6 +32,7 @@ LOCAL_SRC_FILES := \
 	../tests/Test.cpp \
 	../tests/PathOpsAngleTest.cpp \
 	../tests/PathOpsBoundsTest.cpp \
+	../tests/PathOpsBuilderConicTest.cpp \
 	../tests/PathOpsBuilderTest.cpp \
 	../tests/PathOpsBuildUseTest.cpp \
 	../tests/PathOpsConicIntersectionTest.cpp \
@@ -75,6 +76,7 @@ LOCAL_SRC_FILES := \
 	../tests/PathOpsThreeWayTest.cpp \
 	../tests/PathOpsTightBoundsTest.cpp \
 	../tests/PathOpsTypesTest.cpp \
+	../tests/SubsetPath.cpp \
 	../tests/AAClipTest.cpp \
 	../tests/ARGBImageEncoderTest.cpp \
 	../tests/AnnotationTest.cpp \
@@ -88,6 +90,7 @@ LOCAL_SRC_FILES := \
 	../tests/BitmapHeapTest.cpp \
 	../tests/BitmapTest.cpp \
 	../tests/BlendTest.cpp \
+	../tests/BlitMaskClip.cpp \
 	../tests/BlitRowTest.cpp \
 	../tests/BlurTest.cpp \
 	../tests/CPlusPlusEleven.cpp \
@@ -131,7 +134,6 @@ LOCAL_SRC_FILES := \
 	../tests/FontNamesTest.cpp \
 	../tests/FontObjTest.cpp \
 	../tests/FrontBufferedStreamTest.cpp \
-	../tests/FunctionTest.cpp \
 	../tests/GLInterfaceValidationTest.cpp \
 	../tests/GLProgramsTest.cpp \
 	../tests/GeometryTest.cpp \
@@ -472,6 +474,7 @@ LOCAL_SRC_FILES := \
 	../gm/shallowgradient.cpp \
 	../gm/simpleaaclip.cpp \
 	../gm/skbug1719.cpp \
+	../gm/skbug_257.cpp \
 	../gm/smallarc.cpp \
 	../gm/smallimage.cpp \
 	../gm/spritebitmap.cpp \
@@ -522,10 +525,6 @@ LOCAL_SRC_FILES := \
 	../tools/flags/SkCommandLineFlags.cpp \
 	../src/svg/SkSVGCanvas.cpp \
 	../src/svg/SkSVGDevice.cpp \
-	../tools/SkBitmapRegionCanvas.cpp \
-	../tools/SkBitmapRegionCodec.cpp \
-	../tools/SkBitmapRegionDecoderInterface.cpp \
-	../tools/SkBitmapRegionSampler.cpp \
 	../tools/CrashHandler.cpp \
 	../tools/ProcStats.cpp \
 	../tools/sk_tool_utils.cpp \
@@ -568,6 +567,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../include/pathops \
 	$(LOCAL_PATH)/../include/pipe \
 	$(LOCAL_PATH)/../include/codec \
+	$(LOCAL_PATH)/../include/android \
 	$(LOCAL_PATH)/../include/effects \
 	$(LOCAL_PATH)/../include/images \
 	$(LOCAL_PATH)/../include/ports \
@@ -577,10 +577,8 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../include/gpu \
 	$(LOCAL_PATH)/../include/private \
 	$(LOCAL_PATH)/../src/core \
-	external/libpng \
 	$(LOCAL_PATH)/../include/svg \
 	$(LOCAL_PATH)/../include/xml \
-	$(LOCAL_PATH)/../src/codec \
 	$(LOCAL_PATH)/../src/fonts \
 	$(LOCAL_PATH)/../tools \
 	$(LOCAL_PATH)/../tools/flags \
@@ -594,11 +592,13 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../src/utils/debugger \
 	$(LOCAL_PATH)/../tests \
 	$(LOCAL_PATH)/../src/pathops \
+	$(LOCAL_PATH)/../src/codec \
 	$(LOCAL_PATH)/../src/image \
 	$(LOCAL_PATH)/../src/pdf \
 	$(LOCAL_PATH)/../src/ports \
 	$(LOCAL_PATH)/../../../frameworks/base/libs/hwui \
 	$(LOCAL_PATH)/../third_party/etc1 \
+	external/libpng \
 	$(LOCAL_PATH)/../tools/timer \
 	$(LOCAL_PATH)/../experimental \
 	external/zlib \

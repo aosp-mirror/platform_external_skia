@@ -17,9 +17,9 @@
 #if SK_SUPPORT_GPU
 #include "GrInvariantOutput.h"
 #include "effects/GrSingleTextureEffect.h"
-#include "gl/GrGLFragmentProcessor.h"
-#include "gl/GrGLTexture.h"
-#include "gl/builders/GrGLProgramBuilder.h"
+#include "glsl/GrGLSLFragmentProcessor.h"
+#include "glsl/GrGLSLFragmentShaderBuilder.h"
+#include "glsl/GrGLSLProgramBuilder.h"
 #include "glsl/GrGLSLProgramDataManager.h"
 
 class GrMagnifierEffect : public GrSingleTextureEffect {
@@ -74,9 +74,9 @@ private:
         this->initClassID<GrMagnifierEffect>();
     }
 
-    GrGLFragmentProcessor* onCreateGLInstance() const override;
+    GrGLSLFragmentProcessor* onCreateGLSLInstance() const override;
 
-    void onGetGLProcessorKey(const GrGLSLCaps&, GrProcessorKeyBuilder*) const override;
+    void onGetGLSLProcessorKey(const GrGLSLCaps&, GrProcessorKeyBuilder*) const override;
 
     bool onIsEqual(const GrFragmentProcessor&) const override;
 
@@ -98,7 +98,7 @@ private:
 // For brevity
 typedef GrGLSLProgramDataManager::UniformHandle UniformHandle;
 
-class GrGLMagnifierEffect : public GrGLFragmentProcessor {
+class GrGLMagnifierEffect : public GrGLSLFragmentProcessor {
 public:
     GrGLMagnifierEffect(const GrProcessor&);
 
@@ -113,7 +113,7 @@ private:
     UniformHandle       fInvInsetVar;
     UniformHandle       fBoundsVar;
 
-    typedef GrGLFragmentProcessor INHERITED;
+    typedef GrGLSLFragmentProcessor INHERITED;
 };
 
 GrGLMagnifierEffect::GrGLMagnifierEffect(const GrProcessor&) {
@@ -121,55 +121,51 @@ GrGLMagnifierEffect::GrGLMagnifierEffect(const GrProcessor&) {
 
 void GrGLMagnifierEffect::emitCode(EmitArgs& args) {
     fOffsetVar = args.fBuilder->addUniform(
-        GrGLProgramBuilder::kFragment_Visibility |
-        GrGLProgramBuilder::kVertex_Visibility,
+        GrGLSLProgramBuilder::kFragment_Visibility,
         kVec2f_GrSLType, kDefault_GrSLPrecision, "Offset");
     fInvZoomVar = args.fBuilder->addUniform(
-        GrGLProgramBuilder::kFragment_Visibility |
-        GrGLProgramBuilder::kVertex_Visibility,
+        GrGLSLProgramBuilder::kFragment_Visibility,
         kVec2f_GrSLType, kDefault_GrSLPrecision, "InvZoom");
     fInvInsetVar = args.fBuilder->addUniform(
-        GrGLProgramBuilder::kFragment_Visibility |
-        GrGLProgramBuilder::kVertex_Visibility,
+        GrGLSLProgramBuilder::kFragment_Visibility,
         kVec2f_GrSLType, kDefault_GrSLPrecision, "InvInset");
     fBoundsVar = args.fBuilder->addUniform(
-        GrGLProgramBuilder::kFragment_Visibility |
-        GrGLProgramBuilder::kVertex_Visibility,
+        GrGLSLProgramBuilder::kFragment_Visibility,
         kVec4f_GrSLType, kDefault_GrSLPrecision, "Bounds");
 
-    GrGLFragmentBuilder* fsBuilder = args.fBuilder->getFragmentShaderBuilder();
-    SkString coords2D = fsBuilder->ensureFSCoords2D(args.fCoords, 0);
-    fsBuilder->codeAppendf("\t\tvec2 coord = %s;\n", coords2D.c_str());
-    fsBuilder->codeAppendf("\t\tvec2 zoom_coord = %s + %s * %s;\n",
-                           args.fBuilder->getUniformCStr(fOffsetVar),
-                           coords2D.c_str(),
-                           args.fBuilder->getUniformCStr(fInvZoomVar));
+    GrGLSLFragmentBuilder* fragBuilder = args.fFragBuilder;
+    SkString coords2D = fragBuilder->ensureFSCoords2D(args.fCoords, 0);
+    fragBuilder->codeAppendf("\t\tvec2 coord = %s;\n", coords2D.c_str());
+    fragBuilder->codeAppendf("\t\tvec2 zoom_coord = %s + %s * %s;\n",
+                             args.fBuilder->getUniformCStr(fOffsetVar),
+                             coords2D.c_str(),
+                             args.fBuilder->getUniformCStr(fInvZoomVar));
     const char* bounds = args.fBuilder->getUniformCStr(fBoundsVar);
-    fsBuilder->codeAppendf("\t\tvec2 delta = (coord - %s.xy) * %s.zw;\n", bounds, bounds);
-    fsBuilder->codeAppendf("\t\tdelta = min(delta, vec2(1.0, 1.0) - delta);\n");
-    fsBuilder->codeAppendf("\t\tdelta = delta * %s;\n",
-                           args.fBuilder->getUniformCStr(fInvInsetVar));
+    fragBuilder->codeAppendf("\t\tvec2 delta = (coord - %s.xy) * %s.zw;\n", bounds, bounds);
+    fragBuilder->codeAppendf("\t\tdelta = min(delta, vec2(1.0, 1.0) - delta);\n");
+    fragBuilder->codeAppendf("\t\tdelta = delta * %s;\n",
+                             args.fBuilder->getUniformCStr(fInvInsetVar));
 
-    fsBuilder->codeAppend("\t\tfloat weight = 0.0;\n");
-    fsBuilder->codeAppend("\t\tif (delta.s < 2.0 && delta.t < 2.0) {\n");
-    fsBuilder->codeAppend("\t\t\tdelta = vec2(2.0, 2.0) - delta;\n");
-    fsBuilder->codeAppend("\t\t\tfloat dist = length(delta);\n");
-    fsBuilder->codeAppend("\t\t\tdist = max(2.0 - dist, 0.0);\n");
-    fsBuilder->codeAppend("\t\t\tweight = min(dist * dist, 1.0);\n");
-    fsBuilder->codeAppend("\t\t} else {\n");
-    fsBuilder->codeAppend("\t\t\tvec2 delta_squared = delta * delta;\n");
-    fsBuilder->codeAppend("\t\t\tweight = min(min(delta_squared.x, delta_squared.y), 1.0);\n");
-    fsBuilder->codeAppend("\t\t}\n");
+    fragBuilder->codeAppend("\t\tfloat weight = 0.0;\n");
+    fragBuilder->codeAppend("\t\tif (delta.s < 2.0 && delta.t < 2.0) {\n");
+    fragBuilder->codeAppend("\t\t\tdelta = vec2(2.0, 2.0) - delta;\n");
+    fragBuilder->codeAppend("\t\t\tfloat dist = length(delta);\n");
+    fragBuilder->codeAppend("\t\t\tdist = max(2.0 - dist, 0.0);\n");
+    fragBuilder->codeAppend("\t\t\tweight = min(dist * dist, 1.0);\n");
+    fragBuilder->codeAppend("\t\t} else {\n");
+    fragBuilder->codeAppend("\t\t\tvec2 delta_squared = delta * delta;\n");
+    fragBuilder->codeAppend("\t\t\tweight = min(min(delta_squared.x, delta_squared.y), 1.0);\n");
+    fragBuilder->codeAppend("\t\t}\n");
 
-    fsBuilder->codeAppend("\t\tvec2 mix_coord = mix(coord, zoom_coord, weight);\n");
-    fsBuilder->codeAppend("\t\tvec4 output_color = ");
-    fsBuilder->appendTextureLookup(args.fSamplers[0], "mix_coord");
-    fsBuilder->codeAppend(";\n");
+    fragBuilder->codeAppend("\t\tvec2 mix_coord = mix(coord, zoom_coord, weight);\n");
+    fragBuilder->codeAppend("\t\tvec4 output_color = ");
+    fragBuilder->appendTextureLookup(args.fSamplers[0], "mix_coord");
+    fragBuilder->codeAppend(";\n");
 
-    fsBuilder->codeAppendf("\t\t%s = output_color;", args.fOutputColor);
+    fragBuilder->codeAppendf("\t\t%s = output_color;", args.fOutputColor);
     SkString modulate;
     GrGLSLMulVarBy4f(&modulate, args.fOutputColor, args.fInputColor);
-    fsBuilder->codeAppend(modulate.c_str());
+    fragBuilder->codeAppend(modulate.c_str());
 }
 
 void GrGLMagnifierEffect::onSetData(const GrGLSLProgramDataManager& pdman,
@@ -184,12 +180,12 @@ void GrGLMagnifierEffect::onSetData(const GrGLSLProgramDataManager& pdman,
 
 /////////////////////////////////////////////////////////////////////
 
-void GrMagnifierEffect::onGetGLProcessorKey(const GrGLSLCaps& caps,
-                                          GrProcessorKeyBuilder* b) const {
+void GrMagnifierEffect::onGetGLSLProcessorKey(const GrGLSLCaps& caps,
+                                              GrProcessorKeyBuilder* b) const {
     GrGLMagnifierEffect::GenKey(*this, caps, b);
 }
 
-GrGLFragmentProcessor* GrMagnifierEffect::onCreateGLInstance() const {
+GrGLSLFragmentProcessor* GrMagnifierEffect::onCreateGLSLInstance() const {
     return new GrGLMagnifierEffect(*this);
 }
 

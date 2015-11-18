@@ -15,6 +15,7 @@
 #include "GrAutoLocaleSetter.h"
 #include "GrBatchTest.h"
 #include "GrContextFactory.h"
+#include "GrDrawingManager.h"
 #include "GrInvariantOutput.h"
 #include "GrPipeline.h"
 #include "GrResourceProvider.h"
@@ -31,8 +32,9 @@
 #include "effects/GrXfermodeFragmentProcessor.h"
 
 #include "gl/GrGLGpu.h"
-#include "gl/GrGLPathRendering.h"
-#include "gl/builders/GrGLProgramBuilder.h"
+#include "glsl/GrGLSLFragmentProcessor.h"
+#include "glsl/GrGLSLFragmentShaderBuilder.h"
+#include "glsl/GrGLSLProgramBuilder.h"
 
 /*
  * A dummy processor which just tries to insert a massive key and verify that it can retrieve the
@@ -40,17 +42,17 @@
  */
 static const uint32_t kMaxKeySize = 1024;
 
-class GLBigKeyProcessor : public GrGLFragmentProcessor {
+class GLBigKeyProcessor : public GrGLSLFragmentProcessor {
 public:
     GLBigKeyProcessor(const GrProcessor&) {}
 
     virtual void emitCode(EmitArgs& args) override {
         // pass through
-        GrGLFragmentBuilder* fsBuilder = args.fBuilder->getFragmentShaderBuilder();
+        GrGLSLFragmentBuilder* fragBuilder = args.fFragBuilder;
         if (args.fInputColor) {
-            fsBuilder->codeAppendf("%s = %s;\n", args.fOutputColor, args.fInputColor);
+            fragBuilder->codeAppendf("%s = %s;\n", args.fOutputColor, args.fInputColor);
         } else {
-            fsBuilder->codeAppendf("%s = vec4(1.0);\n", args.fOutputColor);
+            fragBuilder->codeAppendf("%s = vec4(1.0);\n", args.fOutputColor);
         }
     }
 
@@ -61,7 +63,7 @@ public:
     }
 
 private:
-    typedef GrGLFragmentProcessor INHERITED;
+    typedef GrGLSLFragmentProcessor INHERITED;
 };
 
 class BigKeyProcessor : public GrFragmentProcessor {
@@ -72,7 +74,7 @@ public:
 
     const char* name() const override { return "Big Ole Key"; }
 
-    GrGLFragmentProcessor* onCreateGLInstance() const override {
+    GrGLSLFragmentProcessor* onCreateGLSLInstance() const override {
         return new GLBigKeyProcessor(*this);
     }
 
@@ -80,8 +82,8 @@ private:
     BigKeyProcessor() {
         this->initClassID<BigKeyProcessor>();
     }
-    virtual void onGetGLProcessorKey(const GrGLSLCaps& caps,
-                                     GrProcessorKeyBuilder* b) const override {
+    virtual void onGetGLSLProcessorKey(const GrGLSLCaps& caps,
+                                       GrProcessorKeyBuilder* b) const override {
         GLBigKeyProcessor::GenKey(*this, caps, b);
     }
     bool onIsEqual(const GrFragmentProcessor&) const override { return true; }
@@ -108,17 +110,17 @@ public:
 
     const char* name() const override { return "Block Input"; }
 
-    GrGLFragmentProcessor* onCreateGLInstance() const override { return new GLFP; }
+    GrGLSLFragmentProcessor* onCreateGLSLInstance() const override { return new GLFP; }
 
 private:
-    class GLFP : public GrGLFragmentProcessor {
+    class GLFP : public GrGLSLFragmentProcessor {
     public:
         void emitCode(EmitArgs& args) override {
             this->emitChild(0, nullptr, args);
         }
 
     private:
-        typedef GrGLFragmentProcessor INHERITED;
+        typedef GrGLSLFragmentProcessor INHERITED;
     };
 
     BlockInputFragmentProcessor(const GrFragmentProcessor* child) {
@@ -126,7 +128,7 @@ private:
         this->registerChildProcessor(child);
     }
 
-    void onGetGLProcessorKey(const GrGLSLCaps& caps, GrProcessorKeyBuilder* b) const override {}
+    void onGetGLSLProcessorKey(const GrGLSLCaps& caps, GrProcessorKeyBuilder* b) const override {}
 
     bool onIsEqual(const GrFragmentProcessor&) const override { return true; }
 
@@ -299,7 +301,9 @@ static void set_random_stencil(GrPipelineBuilder* pipelineBuilder, SkRandom* ran
     }
 }
 
-bool GrDrawTarget::programUnitTest(GrContext* context, int maxStages) {
+bool GrDrawingManager::ProgramUnitTest(GrContext* context, int maxStages) {
+    GrDrawingManager* drawingManager = context->drawingManager();
+
     // setup dummy textures
     GrSurfaceDesc dummyDesc;
     dummyDesc.fFlags = kRenderTarget_GrSurfaceFlag;
@@ -333,7 +337,7 @@ bool GrDrawTarget::programUnitTest(GrContext* context, int maxStages) {
     for (int t = 0; t < NUM_TESTS; t++) {
         // setup random render target(can fail)
         SkAutoTUnref<GrRenderTarget> rt(random_render_target(
-            context->textureProvider(), &random, this->caps()));
+            context->textureProvider(), &random, context->caps()));
         if (!rt.get()) {
             SkDebugf("Could not allocate render target");
             return false;
@@ -346,16 +350,19 @@ bool GrDrawTarget::programUnitTest(GrContext* context, int maxStages) {
         SkAutoTUnref<GrDrawBatch> batch(GrRandomDrawBatch(&random, context));
         SkASSERT(batch);
 
-        GrProcessorTestData ptd(&random, context, fGpu->caps(), dummyTextures);
+        GrProcessorTestData ptd(&random, context, context->caps(), rt, dummyTextures);
         set_random_color_coverage_stages(&pipelineBuilder, &ptd, maxStages);
         set_random_xpf(&pipelineBuilder, &ptd);
         set_random_state(&pipelineBuilder, &random);
         set_random_stencil(&pipelineBuilder, &random);
 
-        this->drawBatch(pipelineBuilder, batch);
+        GrTestTarget tt;
+        context->getTestTarget(&tt, rt);
+
+        tt.target()->drawBatch(pipelineBuilder, batch);
     }
     // Flush everything, test passes if flush is successful(ie, no asserts are hit, no crashes)
-    this->flush();
+    drawingManager->flush();
 
     // Validate that GrFPs work correctly without an input.
     GrSurfaceDesc rtDesc;
@@ -364,14 +371,14 @@ bool GrDrawTarget::programUnitTest(GrContext* context, int maxStages) {
     rtDesc.fFlags = kRenderTarget_GrSurfaceFlag;
     rtDesc.fConfig = kRGBA_8888_GrPixelConfig;
     SkAutoTUnref<GrRenderTarget> rt(
-        fContext->textureProvider()->createTexture(rtDesc, false)->asRenderTarget());
+        context->textureProvider()->createTexture(rtDesc, false)->asRenderTarget());
     int fpFactoryCnt = GrProcessorTestFactory<GrFragmentProcessor>::Count();
     for (int i = 0; i < fpFactoryCnt; ++i) {
         // Since FP factories internally randomize, call each 10 times.
         for (int j = 0; j < 10; ++j) {
             SkAutoTUnref<GrDrawBatch> batch(GrRandomDrawBatch(&random, context));
             SkASSERT(batch);
-            GrProcessorTestData ptd(&random, context, this->caps(), dummyTextures);
+            GrProcessorTestData ptd(&random, context, context->caps(), rt, dummyTextures);
             GrPipelineBuilder builder;
             builder.setXPFactory(GrPorterDuffXPFactory::Create(SkXfermode::kSrc_Mode))->unref();
             builder.setRenderTarget(rt);
@@ -383,8 +390,11 @@ bool GrDrawTarget::programUnitTest(GrContext* context, int maxStages) {
                 BlockInputFragmentProcessor::Create(fp));
             builder.addColorFragmentProcessor(blockFP);
 
-            this->drawBatch(builder, batch);
-            this->flush();
+            GrTestTarget tt;
+            context->getTestTarget(&tt, rt);
+
+            tt.target()->drawBatch(builder, batch);
+            drawingManager->flush();
         }
     }
 
@@ -437,9 +447,7 @@ DEF_GPUTEST(GLPrograms, reporter, factory) {
                 maxStages = 2;
             }
 #endif
-            GrTestTarget target;
-            context->getTestTarget(&target);
-            REPORTER_ASSERT(reporter, target.target()->programUnitTest(context, maxStages));
+            REPORTER_ASSERT(reporter, GrDrawingManager::ProgramUnitTest(context, maxStages));
         }
     }
 }

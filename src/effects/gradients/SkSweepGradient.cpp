@@ -208,12 +208,12 @@ private:
         this->initClassID<GrSweepGradient>();
     }
 
-    GrGLFragmentProcessor* onCreateGLInstance() const override {
+    GrGLSLFragmentProcessor* onCreateGLSLInstance() const override {
         return new GrGLSweepGradient(*this);
     }
 
-    virtual void onGetGLProcessorKey(const GrGLSLCaps& caps,
-                                     GrProcessorKeyBuilder* b) const override {
+    virtual void onGetGLSLProcessorKey(const GrGLSLCaps& caps,
+                                       GrProcessorKeyBuilder* b) const override {
         GrGLSweepGradient::GenKey(*this, caps, b);
     }
 
@@ -248,21 +248,23 @@ const GrFragmentProcessor* GrSweepGradient::TestCreate(GrProcessorTestData* d) {
 void GrGLSweepGradient::emitCode(EmitArgs& args) {
     const GrSweepGradient& ge = args.fFp.cast<GrSweepGradient>();
     this->emitUniforms(args.fBuilder, ge);
-    SkString coords2D = args.fBuilder->getFragmentShaderBuilder()
-                                        ->ensureFSCoords2D(args.fCoords, 0);
-    const GrGLContextInfo& ctxInfo = args.fBuilder->ctxInfo();
+    SkString coords2D = args.fFragBuilder->ensureFSCoords2D(args.fCoords, 0);
     SkString t;
     // 0.1591549430918 is 1/(2*pi), used since atan returns values [-pi, pi]
     // On Intel GPU there is an issue where it reads the second arguement to atan "- %s.x" as an int
     // thus must us -1.0 * %s.x to work correctly
-    if (kIntel_GrGLVendor != ctxInfo.vendor()){
-        t.printf("atan(- %s.y, - %s.x) * 0.1591549430918 + 0.5",
-                 coords2D.c_str(), coords2D.c_str());
-    } else {
+    if (args.fBuilder->glslCaps()->mustForceNegatedAtanParamToFloat()){
         t.printf("atan(- %s.y, -1.0 * %s.x) * 0.1591549430918 + 0.5",
                  coords2D.c_str(), coords2D.c_str());
+    } else {
+        t.printf("atan(- %s.y, - %s.x) * 0.1591549430918 + 0.5",
+                 coords2D.c_str(), coords2D.c_str());
     }
-    this->emitColor(args.fBuilder, ge, t.c_str(), args.fOutputColor, args.fInputColor,
+    this->emitColor(args.fBuilder,
+                    args.fFragBuilder,
+                    ge, t.c_str(),
+                    args.fOutputColor,
+                    args.fInputColor,
                     args.fSamplers);
 }
 

@@ -49,11 +49,11 @@ bool GrStencilAndCoverPathRenderer::onCanDrawPath(const CanDrawPathArgs& args) c
     if (args.fStroke->isHairlineStyle()) {
         return false;
     }
-    if (!args.fPipelineBuilder->getStencil().isDisabled()) {
+    if (!args.fIsStencilDisabled) {
         return false;
     }
     if (args.fAntiAlias) {
-        return args.fPipelineBuilder->getRenderTarget()->isStencilBufferMultisampled();
+        return args.fIsStencilBufferMSAA;
     } else {
         return true; // doesn't do per-path AA, relies on the target having MSAA
     }
@@ -135,6 +135,9 @@ bool GrStencilAndCoverPathRenderer::onDrawPath(const DrawPathArgs& args) {
             }
         }
         const SkMatrix& viewM = viewMatrix.hasPerspective() ? SkMatrix::I() : viewMatrix;
+        if (pipelineBuilder->getRenderTarget()->hasMixedSamples()) {
+            pipelineBuilder->disableState(GrPipelineBuilder::kHWAntialias_Flag);
+        }
         args.fTarget->drawNonAARect(*pipelineBuilder, args.fColor, viewM, bounds, invert);
     } else {
         GR_STATIC_CONST_SAME_STENCIL(kStencilPass,

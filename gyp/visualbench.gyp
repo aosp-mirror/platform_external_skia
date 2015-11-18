@@ -38,14 +38,13 @@
         'jsoncpp.gyp:jsoncpp',
         'gputest.gyp:skgputest',
         'skia_lib.gyp:skia_lib',
-        'tools.gyp:bitmap_region_decoder',
         'tools.gyp:proc_stats',
         'tools.gyp:sk_tool_utils',
         'tools.gyp:timer',
         'views.gyp:views',
       ],
       'conditions' : [
-        [ 'skia_os == "android"', {
+        [ 'skia_os == "android" and skia_use_sdl == 0', {
           'dependencies': [
             'android_deps.gyp:Android_VisualBench',
             'android_deps.gyp:native_app_glue',
@@ -57,6 +56,11 @@
               '-lEGL',
             ],
           },
+        }],
+        [ 'skia_os == "android" and skia_use_sdl == 1', {
+          'dependencies': [
+            'android_deps.gyp:Android_VisualBenchSDL',
+          ],
         }],
       ],
     },

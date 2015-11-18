@@ -74,6 +74,43 @@ public:
 
     bool forceHighPrecisionNDSTransform() const { return fForceHighPrecisionNDSTransform; }
 
+    bool canUseMinAndAbsTogether() const { return fCanUseMinAndAbsTogether; }
+
+    bool mustForceNegatedAtanParamToFloat() const { return fMustForceNegatedAtanParamToFloat; }
+
+    // Returns the string of an extension that must be enabled in the shader to support
+    // derivatives. If nullptr is returned then no extension needs to be enabled. Before calling
+    // this function, the caller should check that shaderDerivativeSupport exists.
+    const char* shaderDerivativeExtensionString() const {
+        SkASSERT(this->shaderDerivativeSupport());
+        return fShaderDerivativeExtensionString;
+    }
+    
+    // Returns the string of an extension that will do all necessary coord transfomations needed
+    // when reading the fragment position. If such an extension does not exisits, this function
+    // returns a nullptr, and all transforms of the frag position must be done manually in the
+    // shader.
+    const char* fragCoordConventionsExtensionString() const {
+        return fFragCoordConventionsExtensionString;
+    }
+
+    // This returns the name of an extension that must be enabled in the shader, if such a thing is
+    // required in order to use a secondary output in the shader. This returns a nullptr if no such
+    // extension is required. However, the return value of this function does not say whether dual
+    // source blending is supported.
+    const char* secondaryOutputExtensionString() const {
+        return fSecondaryOutputExtensionString;
+    }
+
+    bool mustSwizzleInShader() const { return fMustSwizzleInShader; }
+
+    /**
+     * Returns a string which represents how to map from an internal GLFormat to a given
+     * GrPixelConfig. The function mustSwizzleInShader determines whether this swizzle is applied
+     * in the generated shader code or using sample state in the 3D API.
+     */
+    const char* getSwizzleMap(GrPixelConfig config) const { return fConfigSwizzle[config]; }
+
     GrGLSLGeneration generation() const { return fGLSLGeneration; }
 
     /**
@@ -82,6 +119,8 @@ public:
     SkString dump() const override;
 
 private:
+    void onApplyOptionsOverrides(const GrContextOptions& options) override;
+
     GrGLSLGeneration fGLSLGeneration;
     
     bool fDropsTileOnZeroDivide : 1;
@@ -92,12 +131,23 @@ private:
     bool fCanUseAnyFunctionInShader : 1;
     bool fForceHighPrecisionNDSTransform : 1;
 
+    // Used for specific driver bug work arounds
+    bool fCanUseMinAndAbsTogether : 1;
+    bool fMustForceNegatedAtanParamToFloat : 1;
+
     const char* fVersionDeclString;
+
+    const char* fShaderDerivativeExtensionString;
+    const char* fFragCoordConventionsExtensionString;
+    const char* fSecondaryOutputExtensionString;
 
     const char* fFBFetchColorName;
     const char* fFBFetchExtensionString;
 
     AdvBlendEqInteraction fAdvBlendEqInteraction;
+
+    bool        fMustSwizzleInShader;
+    const char* fConfigSwizzle[kGrPixelConfigCnt];
 
     friend class GrGLCaps;  // For initialization.
 

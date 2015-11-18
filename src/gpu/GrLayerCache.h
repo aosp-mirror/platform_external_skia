@@ -8,7 +8,9 @@
 #ifndef GrLayerCache_DEFINED
 #define GrLayerCache_DEFINED
 
-#include "GrAtlas.h"
+
+#include "GrLayerAtlas.h"
+#include "GrTexture.h"
 #include "GrRect.h"
 
 #include "SkChecksum.h"
@@ -31,7 +33,9 @@ public:
     static uint32_t Hash(const uint32_t& key) { return SkChecksum::Mix(key); }
 
     // GrPictureInfo proper
-    GrPictureInfo(uint32_t pictureID) : fPictureID(pictureID) {
+    GrPictureInfo(uint32_t pictureID) 
+        : fPictureID(pictureID)
+        , fPlotUsage(kNumPlots) {
 #if !GR_CACHE_HOISTED_LAYERS
         memset(fPlotUses, 0, sizeof(fPlotUses));
 #endif
@@ -56,7 +60,7 @@ public:
 #endif
 
     const uint32_t fPictureID;
-    GrAtlas::ClientPlotUsage  fPlotUsage;
+    GrLayerAtlas::ClientPlotUsage  fPlotUsage;
 
 #if !GR_CACHE_HOISTED_LAYERS
 private:
@@ -161,6 +165,7 @@ public:
         , fPaint(paint ? new SkPaint(*paint) : nullptr)
         , fFilter(nullptr)
         , fTexture(nullptr)
+        , fAtlased(false)
         , fRect(SkIRect::MakeEmpty())
         , fPlot(nullptr)
         , fUses(0)
@@ -176,7 +181,9 @@ public:
     }
 
     ~GrCachedLayer() {
-        SkSafeUnref(fTexture);
+        if (!fAtlased) {
+            SkSafeUnref(fTexture);
+        }
         SkSafeUnref(fFilter);
         delete fPaint;
     }
@@ -191,8 +198,15 @@ public:
     const SkIRect& srcIR() const { return fSrcIR; }
     const SkIRect& dstIR() const { return fDstIR; }
     int stop() const { return fStop; }
-    void setTexture(GrTexture* texture, const SkIRect& rect) {
-        SkRefCnt_SafeAssign(fTexture, texture);
+    void setTexture(GrTexture* texture, const SkIRect& rect, bool atlased) {
+        if (texture && !atlased) {
+            texture->ref();  // non-atlased textures carry a ref
+        }
+        if (fTexture && !fAtlased) {
+            fTexture->unref();  // non-atlased textures carry a ref
+        }
+        fTexture = texture;
+        fAtlased = atlased;
         fRect = rect;
         if (!fTexture) {
             fLocked = false;
@@ -206,18 +220,18 @@ public:
     void setOffset(const SkIPoint& offset) { fOffset = offset; }
     const SkIPoint& offset() const { return fOffset; }
 
-    void setPlot(GrPlot* plot) {
+    void setPlot(GrLayerAtlas::Plot* plot) {
         SkASSERT(nullptr == plot || nullptr == fPlot);
         fPlot = plot;
     }
-    GrPlot* plot() { return fPlot; }
+    GrLayerAtlas::Plot* plot() { return fPlot; }
 
-    bool isAtlased() const { return SkToBool(fPlot); }
+    bool isAtlased() const { SkASSERT(fAtlased == SkToBool(fPlot)); return fAtlased; }
 
     void setLocked(bool locked) { fLocked = locked; }
     bool locked() const { return fLocked; }
 
-    SkDEBUGCODE(const GrPlot* plot() const { return fPlot; })
+    SkDEBUGCODE(const GrLayerAtlas::Plot* plot() const { return fPlot; })
     SkDEBUGCODE(void validate(const GrTexture* backingTexture) const;)
 
 private:
@@ -248,6 +262,10 @@ private:
     // ref on a GrTexture for non-atlased textures.
     GrTexture*      fTexture;
 
+    // true if this layer is in the atlas (and 'fTexture' doesn't carry a ref)
+    // and false if the layer is a free floater (and carries a ref).
+    bool            fAtlased;
+
     // For both atlased and non-atlased layers 'fRect' contains the  bound of
     // the layer in whichever texture it resides. It is empty when 'fTexture'
     // is nullptr.
@@ -255,7 +273,7 @@ private:
 
     // For atlased layers, fPlot stores the atlas plot in which the layer rests.
     // It is always nullptr for non-atlased layers.
-    GrPlot*         fPlot;
+    GrLayerAtlas::Plot* fPlot;
 
     // The number of actively hoisted layers using this cached image (e.g.,
     // extant GrHoistedLayers pointing at this object). This object will
@@ -281,10 +299,9 @@ private:
 // The GrLayerCache caches pre-computed saveLayers for later rendering.
 // Non-atlased layers are stored in their own GrTexture while the atlased
 // layers share a single GrTexture.
-// Unlike the GrFontCache, the GrTexture atlas only has one GrAtlas (for 8888)
-// and one GrPlot (for the entire atlas). As such, the GrLayerCache
-// roughly combines the functionality of the GrFontCache and GrTextStrike
-// classes.
+// Unlike the GrFontCache, the GrLayerCache only has one atlas (for 8888).
+// As such, the GrLayerCache roughly combines the functionality of the
+// GrFontCache and GrTextStrike classes.
 class GrLayerCache {
 public:
     GrLayerCache(GrContext*);
@@ -342,6 +359,9 @@ public:
         return width <= kPlotWidth && height <= kPlotHeight;
     }
 
+    void begin();
+    void end();
+
 #if !GR_CACHE_HOISTED_LAYERS
     void purgeAll();
 #endif
@@ -356,8 +376,8 @@ private:
     static const int kPlotWidth = kAtlasTextureWidth / kNumPlotsX;
     static const int kPlotHeight = kAtlasTextureHeight / kNumPlotsY;
 
-    GrContext*                fContext;  // pointer back to owning context
-    SkAutoTDelete<GrAtlas>    fAtlas;    // TODO: could lazily allocate
+    GrContext*                  fContext;  // pointer back to owning context
+    SkAutoTDelete<GrLayerAtlas> fAtlas;    // lazily allocated
 
     // We cache this information here (rather then, say, on the owning picture)
     // because we want to be able to clean it up as needed (e.g., if a picture
@@ -391,11 +411,11 @@ private:
     // Remove all the layers (and unlock any resources) associated with 'pictureID'
     void purge(uint32_t pictureID);
 
-    void purgePlot(GrPlot* plot);
+    void purgePlot(GrLayerAtlas::Plot* plot);
 
-    // Try to find a purgeable plot and clear it out. Return true if a plot
+    // Either purge all un-locked plots or just one. Return true if >= 1 plot
     // was purged; false otherwise.
-    bool purgePlot();
+    bool purgePlots(bool justOne);
 
     void incPlotLock(int plotIdx) { ++fPlotLocks[plotIdx]; }
     void decPlotLock(int plotIdx) {

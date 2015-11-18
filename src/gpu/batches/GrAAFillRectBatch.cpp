@@ -217,6 +217,14 @@ public:
 
     static const char* Name() { return "AAFillRectBatchNoLocalMatrix"; }
 
+    static SkString DumpInfo(const Geometry& geo) {
+        SkString str;
+        str.appendf("Color: 0x%08x, Rect [L: %.2f, T: %.2f, R: %.2f, B: %.2f]\n",
+                    geo.fColor,
+                    geo.fRect.fLeft, geo.fRect.fTop, geo.fRect.fRight, geo.fRect.fBottom);
+        return str;
+    }
+
     static bool CanCombine(const Geometry& mine, const Geometry& theirs,
                            const GrPipelineOptimizations& opts) {
         // We apply the viewmatrix to the rect points on the cpu.  However, if the pipeline uses
@@ -257,6 +265,14 @@ public:
     };
 
     static const char* Name() { return "AAFillRectBatchLocalMatrix"; }
+
+    static SkString DumpInfo(const Geometry& geo) {
+        SkString str;
+        str.appendf("Color: 0x%08x, Rect [L: %.2f, T: %.2f, R: %.2f, B: %.2f]\n",
+                    geo.fColor,
+                    geo.fRect.fLeft, geo.fRect.fTop, geo.fRect.fRight, geo.fRect.fBottom);
+        return str;
+    }
 
     static bool CanCombine(const Geometry& mine, const Geometry& theirs,
                            const GrPipelineOptimizations&) {
@@ -330,6 +346,28 @@ GrDrawBatch* Create(GrColor color,
     append_to_batch(batch, color, viewMatrix, localMatrix, rect, devRect);
     batch->init();
     return batch;
+}
+
+GrDrawBatch* Create(GrColor color,
+                    const SkMatrix& viewMatrix,
+                    const SkMatrix& localMatrix,
+                    const SkRect& rect) {
+    SkRect devRect;
+    viewMatrix.mapRect(&devRect, rect);
+    return Create(color, viewMatrix, localMatrix, rect, devRect);
+}
+
+GrDrawBatch* CreateWithLocalRect(GrColor color,
+                                 const SkMatrix& viewMatrix,
+                                 const SkRect& rect,
+                                 const SkRect& localRect) {
+    SkRect devRect;
+    viewMatrix.mapRect(&devRect, rect);
+    SkMatrix localMatrix;
+    if (!localMatrix.setRectToRect(rect, localRect, SkMatrix::kFill_ScaleToFit)) {
+        return nullptr;
+    }
+    return Create(color, viewMatrix, localMatrix, rect, devRect);
 }
 
 void Append(GrBatch* origBatch,

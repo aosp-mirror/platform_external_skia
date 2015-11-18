@@ -17,9 +17,8 @@
       'target_name': 'tools',
       'type': 'none',
       'dependencies': [
-        'bitmap_region_decoder',
         'chrome_fuzz',
-        'filter',
+        'dump_record',
         'gpuveto',
         'imgblur',
         'imgconv',
@@ -27,7 +26,6 @@
         'lua_app',
         'lua_pictures',
         'pinspect',
-        'render_pdfs',
         'skdiff',
         'skhello',
         'skpdiff',
@@ -48,21 +46,21 @@
       ],
     },
     {
-      'target_name': 'bitmap_region_decoder',
-      'type': 'static_library',
-      'sources': [
-        '../tools/SkBitmapRegionCanvas.cpp',
-        '../tools/SkBitmapRegionCodec.cpp',
-        '../tools/SkBitmapRegionDecoderInterface.cpp',
-        '../tools/SkBitmapRegionSampler.cpp',
-      ],
-      'include_dirs': [
-        '../include/private',
-        '../src/codec',
-      ],
-      'dependencies': [
-        'skia_lib.gyp:skia_lib',
-      ],
+        'target_name': 'dump_record',
+        'type': 'executable',
+        'sources': [
+            '../tools/dump_record.cpp',
+            '../tools/DumpRecord.cpp',
+         ],
+         'include_dirs': [
+            '../include/private',
+            '../src/core',
+         ],
+         'dependencies': [
+            'flags.gyp:flags',
+            'lazy_decode_bitmap',
+            'skia_lib.gyp:skia_lib',
+         ],
     },
     {
       'target_name': 'chrome_fuzz',
@@ -153,16 +151,6 @@
       'dependencies': [
         'skia_lib.gyp:skia_lib',
       ],
-      'xcode_settings': {
-        'conditions': [
-          [ 'skia_osx_deployment_target==""', {
-            'MACOSX_DEPLOYMENT_TARGET': '10.7', # -mmacos-version-min, passed in env to ld.
-          }, {
-            'MACOSX_DEPLOYMENT_TARGET': '<(skia_osx_deployment_target)',
-          }],
-        ],
-        'CLANG_CXX_LIBRARY': 'libc++',
-      },
     },
     {
       'target_name': 'skpdiff',
@@ -391,99 +379,6 @@
       ],
     },
     {
-      'target_name': 'picture_renderer',
-      'type': 'static_library',
-      'sources': [
-        '../tools/PictureRenderer.h',
-        '../tools/PictureRenderer.cpp',
-      ],
-      'include_dirs': [
-        '../include/private',
-        '../src/core',
-        '../src/images',
-        '../src/lazy',
-        '../src/pipe/utils/',
-        '../src/utils/',
-      ],
-      'dependencies': [
-        'lazy_decode_bitmap',
-        'flags.gyp:flags',
-        'jsoncpp.gyp:jsoncpp',
-        'skia_lib.gyp:skia_lib',
-        'tools.gyp:picture_utils',
-      ],
-      'conditions': [
-        ['skia_gpu == 1',
-          {
-            'include_dirs' : [
-              '../src/gpu',
-            ],
-            'dependencies': [
-              'gputest.gyp:skgputest',
-            ],
-            'export_dependent_settings': [
-                'gputest.gyp:skgputest',
-            ],
-          },
-        ],
-      ],
-    },
-    {
-      'target_name': 'render_pdfs',
-      'type': 'executable',
-      'sources': [
-        '../tools/render_pdfs_main.cpp',
-      ],
-      'include_dirs': [
-        '../include/private',
-        '../src/core',
-        '../src/pipe/utils/',
-        '../src/utils/',
-      ],
-      'dependencies': [
-        'flags.gyp:flags',
-        'pdf.gyp:pdf',
-        'skia_lib.gyp:skia_lib',
-        'tools.gyp:picture_utils',
-        'tools.gyp:proc_stats',
-      ],
-      'conditions': [
-        ['skia_win_debuggers_path and skia_os == "win"',
-          {
-            'dependencies': [
-              'tools.gyp:win_dbghelp',
-            ],
-          },
-        ],
-        # VS static libraries don't have a linker option. We must set a global
-        # project linker option, or add it to each executable.
-        ['skia_win_debuggers_path and skia_os == "win" and '
-         'skia_arch_type == "x86_64"',
-          {
-            'msvs_settings': {
-              'VCLinkerTool': {
-                'AdditionalDependencies': [
-                  '<(skia_win_debuggers_path)/x64/DbgHelp.lib',
-                ],
-              },
-            },
-          },
-        ],
-        ['skia_win_debuggers_path and skia_os == "win" and '
-         'skia_arch_type == "x86"',
-          {
-            'msvs_settings': {
-              'VCLinkerTool': {
-                'AdditionalDependencies': [
-                  '<(skia_win_debuggers_path)/DbgHelp.lib',
-                ],
-              },
-            },
-          },
-        ],
-      ],
-    },
-    {
       'target_name': 'picture_utils',
       'type': 'static_library',
       'sources': [
@@ -520,28 +415,6 @@
       'dependencies': [
         'flags.gyp:flags',
         'skia_lib.gyp:skia_lib',
-      ],
-    },
-    {
-      'target_name': 'filter',
-      'type': 'executable',
-      'include_dirs' : [
-        '../include/private',
-        '../src/core',
-        '../src/utils/debugger',
-      ],
-      'sources': [
-        '../tools/filtermain.cpp',
-        '../src/utils/debugger/SkDrawCommand.h',
-        '../src/utils/debugger/SkDrawCommand.cpp',
-        '../src/utils/debugger/SkDebugCanvas.h',
-        '../src/utils/debugger/SkDebugCanvas.cpp',
-        '../src/utils/debugger/SkObjectParser.h',
-        '../src/utils/debugger/SkObjectParser.cpp',
-      ],
-      'dependencies': [
-        'skia_lib.gyp:skia_lib',
-        'tools.gyp:picture_utils',
       ],
     },
     {
@@ -583,8 +456,10 @@
       'cflags!': [ '-Wno-unused-parameter' ],
       'variables': {
         'includes_to_test': [
+          '<(skia_include_path)/android',
           '<(skia_include_path)/animator',
           '<(skia_include_path)/c',
+          '<(skia_include_path)/codec',
           '<(skia_include_path)/config',
           '<(skia_include_path)/core',
           '<(skia_include_path)/effects',
@@ -600,9 +475,6 @@
         ],
         'paths_to_ignore': [
           '<(skia_include_path)/gpu/gl/GrGLConfig_chrome.h',
-          '<(skia_include_path)/ports/SkAtomics_std.h',
-          '<(skia_include_path)/ports/SkAtomics_atomic.h',
-          '<(skia_include_path)/ports/SkAtomics_sync.h',
           '<(skia_include_path)/ports/SkFontMgr_fontconfig.h',
           '<(skia_include_path)/ports/SkTypeface_mac.h',
           '<(skia_include_path)/ports/SkTypeface_win.h',

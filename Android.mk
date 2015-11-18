@@ -73,6 +73,9 @@ LOCAL_SRC_FILES := \
 	src/codec/SkCodec_libico.cpp \
 	src/codec/SkCodec_libpng.cpp \
 	src/codec/SkCodec_wbmp.cpp \
+	src/codec/SkJpegCodec.cpp \
+	src/codec/SkJpegDecoderMgr.cpp \
+	src/codec/SkJpegUtility_codec.cpp \
 	src/codec/SkMaskSwizzler.cpp \
 	src/codec/SkMasks.cpp \
 	src/codec/SkSampler.cpp \
@@ -80,6 +83,9 @@ LOCAL_SRC_FILES := \
 	src/codec/SkSwizzler.cpp \
 	src/codec/SkWebpAdapterCodec.cpp \
 	src/codec/SkWebpCodec.cpp \
+	src/android/SkBitmapRegionCanvas.cpp \
+	src/android/SkBitmapRegionCodec.cpp \
+	src/android/SkBitmapRegionDecoder.cpp \
 	src/c/sk_paint.cpp \
 	src/c/sk_surface.cpp \
 	src/core/SkAAClip.cpp \
@@ -346,7 +352,6 @@ LOCAL_SRC_FILES := \
 	src/effects/gradients/SkTwoPointConicalGradient.cpp \
 	src/effects/gradients/SkTwoPointConicalGradient_gpu.cpp \
 	src/effects/gradients/SkSweepGradient.cpp \
-	src/gpu/GrAtlas.cpp \
 	src/gpu/GrAtlasTextBlob.cpp \
 	src/gpu/GrAtlasTextContext.cpp \
 	src/gpu/GrBatchAtlas.cpp \
@@ -370,7 +375,9 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrGpu.cpp \
 	src/gpu/GrGpuResource.cpp \
 	src/gpu/GrGpuFactory.cpp \
+	src/gpu/GrImageIDTextureAdjuster.cpp \
 	src/gpu/GrInvariantOutput.cpp \
+	src/gpu/GrLayerAtlas.cpp \
 	src/gpu/GrLayerCache.cpp \
 	src/gpu/GrLayerHoister.cpp \
 	src/gpu/GrMemoryPool.cpp \
@@ -460,16 +467,13 @@ LOCAL_SRC_FILES := \
 	src/gpu/effects/GrXfermodeFragmentProcessor.cpp \
 	src/gpu/effects/GrYUVtoRGBEffect.cpp \
 	src/gpu/gl/GrGLAssembleInterface.cpp \
-	src/gpu/gl/GrGLSLBlend.cpp \
 	src/gpu/gl/GrGLBufferImpl.cpp \
 	src/gpu/gl/GrGLCaps.cpp \
 	src/gpu/gl/GrGLContext.cpp \
-	src/gpu/gl/GrGLGeometryProcessor.cpp \
 	src/gpu/gl/GrGLGLSL.cpp \
 	src/gpu/gl/GrGLGpu.cpp \
 	src/gpu/gl/GrGLGpuProgramCache.cpp \
 	src/gpu/gl/GrGLExtensions.cpp \
-	src/gpu/gl/GrGLFragmentProcessor.cpp \
 	src/gpu/gl/GrGLIndexBuffer.cpp \
 	src/gpu/gl/GrGLInterface.cpp \
 	src/gpu/gl/GrGLNameAllocator.cpp \
@@ -477,7 +481,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/GrGLPath.cpp \
 	src/gpu/gl/GrGLPathRange.cpp \
 	src/gpu/gl/GrGLPathRendering.cpp \
-	src/gpu/gl/GrGLPrimitiveProcessor.cpp \
 	src/gpu/gl/GrGLProgram.cpp \
 	src/gpu/gl/GrGLProgramDesc.cpp \
 	src/gpu/gl/GrGLProgramDataManager.cpp \
@@ -488,17 +491,24 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/GrGLUtil.cpp \
 	src/gpu/gl/GrGLVertexArray.cpp \
 	src/gpu/gl/GrGLVertexBuffer.cpp \
-	src/gpu/gl/GrGLXferProcessor.cpp \
 	src/gpu/gl/builders/GrGLProgramBuilder.cpp \
-	src/gpu/gl/builders/GrGLShaderBuilder.cpp \
 	src/gpu/gl/builders/GrGLShaderStringBuilder.cpp \
 	src/gpu/gl/builders/GrGLSLPrettyPrint.cpp \
-	src/gpu/gl/builders/GrGLVertexShaderBuilder.cpp \
-	src/gpu/gl/builders/GrGLFragmentShaderBuilder.cpp \
-	src/gpu/gl/builders/GrGLGeometryShaderBuilder.cpp \
 	src/gpu/glsl/GrGLSL.cpp \
+	src/gpu/glsl/GrGLSLBlend.cpp \
 	src/gpu/glsl/GrGLSLCaps.cpp \
+	src/gpu/glsl/GrGLSLFragmentProcessor.cpp \
+	src/gpu/glsl/GrGLSLFragmentShaderBuilder.cpp \
+	src/gpu/glsl/GrGLSLGeometryProcessor.cpp \
+	src/gpu/glsl/GrGLSLGeometryShaderBuilder.cpp \
+	src/gpu/glsl/GrGLSLPrimitiveProcessor.cpp \
+	src/gpu/glsl/GrGLSLProgramBuilder.cpp \
+	src/gpu/glsl/GrGLSLShaderBuilder.cpp \
+	src/gpu/glsl/GrGLSLUtil.cpp \
+	src/gpu/glsl/GrGLSLVertexShaderBuilder.cpp \
+	src/gpu/glsl/GrGLSLXferProcessor.cpp \
 	src/gpu/SkGpuDevice.cpp \
+	src/gpu/SkGpuDevice_drawTexture.cpp \
 	src/gpu/SkGr.cpp \
 	src/gpu/SkGrPixelRef.cpp \
 	src/gpu/SkGrTexturePixelRef.cpp \
@@ -627,8 +637,8 @@ LOCAL_SHARED_LIBRARIES := \
 	libGLESv2 \
 	libEGL \
 	libz \
+	libjpeg-turbo \
 	libpng \
-	libjpeg \
 	libicuuc \
 	libicui18n \
 	libexpat \
@@ -641,6 +651,7 @@ LOCAL_STATIC_LIBRARIES := \
 	libsfntly
 
 LOCAL_C_INCLUDES := \
+	external/libjpeg-turbo \
 	external/libpng \
 	$(LOCAL_PATH)/include/codec \
 	$(LOCAL_PATH)/include/private \
@@ -653,6 +664,8 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/include/pipe \
 	external/giflib \
 	external/webp/include \
+	$(LOCAL_PATH)/include/android \
+	$(LOCAL_PATH)/src/android \
 	$(LOCAL_PATH)/include/ports \
 	$(LOCAL_PATH)/include/utils \
 	$(LOCAL_PATH)/include/images \
@@ -666,7 +679,6 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/src/effects \
 	$(LOCAL_PATH)/third_party/etc1 \
 	$(LOCAL_PATH)/third_party/ktx \
-	external/jpeg \
 	$(LOCAL_PATH)/src/lazy \
 	external/expat/lib \
 	external/freetype/include \
@@ -678,6 +690,7 @@ LOCAL_C_INCLUDES := \
 
 LOCAL_EXPORT_C_INCLUDE_DIRS := \
 	$(LOCAL_PATH)/include/codec \
+	$(LOCAL_PATH)/include/android \
 	$(LOCAL_PATH)/include/c \
 	$(LOCAL_PATH)/include/config \
 	$(LOCAL_PATH)/include/core \
@@ -724,7 +737,8 @@ LOCAL_SRC_FILES_x86 += \
 	src/opts/SkBitmapProcState_opts_SSSE3.cpp \
 	src/opts/SkOpts_ssse3.cpp \
 	src/opts/SkBlitRow_opts_SSE4.cpp \
-	src/opts/SkOpts_sse41.cpp
+	src/opts/SkOpts_sse41.cpp \
+	src/opts/SkOpts_avx.cpp
 
 LOCAL_SRC_FILES_x86_64 += \
 	src/opts/SkBitmapFilter_opts_SSE2.cpp \
@@ -734,7 +748,8 @@ LOCAL_SRC_FILES_x86_64 += \
 	src/opts/SkBitmapProcState_opts_SSSE3.cpp \
 	src/opts/SkOpts_ssse3.cpp \
 	src/opts/SkBlitRow_opts_SSE4.cpp \
-	src/opts/SkOpts_sse41.cpp
+	src/opts/SkOpts_sse41.cpp \
+	src/opts/SkOpts_avx.cpp
 
 LOCAL_CFLAGS_mips += \
 	-EL

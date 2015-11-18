@@ -125,8 +125,8 @@ public:
 
     GrBackendObject createTestingOnlyBackendTexture(void* pixels, int w, int h,
                                                     GrPixelConfig config) const override;
-    bool isTestingOnlyBackendTexture(GrBackendObject id) const override;
-    void deleteTestingOnlyBackendTexture(GrBackendObject id) const override;
+    bool isTestingOnlyBackendTexture(GrBackendObject) const override;
+    void deleteTestingOnlyBackendTexture(GrBackendObject, bool abandonTexture) const override;
 
 private:
     GrGLGpu(GrGLContext* ctx, GrContext* context);
@@ -269,16 +269,12 @@ private:
     // ensures that such operations don't negatively interact with tracking bound textures.
     void setScratchTextureUnit();
 
-    // colocates all samples at pixel center for render target, if MSAA.
-    // allows drawing coverage based AA shapes in MSAA mode.
-    void setColocatedSampleLocations(GrRenderTarget* rt, bool useColocatedSampleLocations);
-
     // bounds is region that may be modified and therefore has to be resolved.
     // nullptr means whole target. Can be an empty rect.
     void flushRenderTarget(GrGLRenderTarget*, const SkIRect* bounds);
 
     void flushStencil(const GrStencilSettings&);
-    void flushHWAAState(GrRenderTarget* rt, bool useHWAA, bool stencilEnabled);
+    void flushHWAAState(GrRenderTarget* rt, bool useHWAA);
 
     bool configToGLFormats(GrPixelConfig config,
                            bool getSizedInternal,
@@ -308,8 +304,7 @@ private:
                                  int width = -1, int height = -1);
 
     bool createRenderTargetObjects(const GrSurfaceDesc&, GrGpuResource::LifeCycle lifeCycle,
-                                   GrGLenum textureTarget, GrGLuint texID,
-                                   GrGLRenderTarget::IDDesc*);
+                                   const GrGLTextureInfo& texInfo, GrGLRenderTarget::IDDesc*);
 
     enum TempFBOTarget {
         kSrc_TempFBOTarget,

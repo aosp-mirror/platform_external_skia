@@ -9,10 +9,10 @@
 #include "GrInvariantOutput.h"
 #include "GrSimpleTextureEffect.h"
 #include "SkFloatingPoint.h"
-#include "gl/GrGLContext.h"
-#include "gl/GrGLFragmentProcessor.h"
-#include "gl/builders/GrGLProgramBuilder.h"
+#include "glsl/GrGLSLFragmentProcessor.h"
+#include "glsl/GrGLSLProgramBuilder.h"
 #include "glsl/GrGLSLProgramDataManager.h"
+#include "glsl/GrGLSLTextureSampler.h"
 
 GrTextureDomain::GrTextureDomain(const SkRect& domain, Mode mode, int index)
     : fIndex(index) {
@@ -41,16 +41,16 @@ GrTextureDomain::GrTextureDomain(const SkRect& domain, Mode mode, int index)
 
 //////////////////////////////////////////////////////////////////////////////
 
-void GrTextureDomain::GLDomain::sampleTexture(GrGLShaderBuilder* builder,
+void GrTextureDomain::GLDomain::sampleTexture(GrGLSLShaderBuilder* builder,
                                               const GrTextureDomain& textureDomain,
                                               const char* outColor,
                                               const SkString& inCoords,
-                                              const GrGLProcessor::TextureSampler sampler,
+                                              const GrGLSLTextureSampler& sampler,
                                               const char* inModulateColor) {
     SkASSERT((Mode)-1 == fMode || textureDomain.mode() == fMode);
     SkDEBUGCODE(fMode = textureDomain.mode();)
 
-    GrGLProgramBuilder* program = builder->getProgramBuilder();
+    GrGLSLProgramBuilder* program = builder->getProgramBuilder();
 
     if (textureDomain.mode() != kIgnore_Mode && !fDomainUni.isValid()) {
         const char* name;
@@ -58,7 +58,7 @@ void GrTextureDomain::GLDomain::sampleTexture(GrGLShaderBuilder* builder,
         if (textureDomain.fIndex >= 0) {
             uniName.appendS32(textureDomain.fIndex);
         }
-        fDomainUni = program->addUniform(GrGLProgramBuilder::kFragment_Visibility,
+        fDomainUni = program->addUniform(GrGLSLProgramBuilder::kFragment_Visibility,
                                          kVec4f_GrSLType, kDefault_GrSLPrecision,
                                          uniName.c_str(), &name);
         fDomainName = name;
@@ -85,7 +85,7 @@ void GrTextureDomain::GLDomain::sampleTexture(GrGLShaderBuilder* builder,
         }
         case kDecal_Mode: {
             // Add a block since we're going to declare variables.
-            GrGLShaderBuilder::ShaderBlock block(builder);
+            GrGLSLShaderBuilder::ShaderBlock block(builder);
 
             const char* domain = fDomainName.c_str();
             if (!program->glslCaps()->canUseAnyFunctionInShader()) {
@@ -172,7 +172,7 @@ void GrTextureDomain::GLDomain::setData(const GrGLSLProgramDataManager& pdman,
 
 //////////////////////////////////////////////////////////////////////////////
 
-class GrGLTextureDomainEffect : public GrGLFragmentProcessor {
+class GrGLTextureDomainEffect : public GrGLSLFragmentProcessor {
 public:
     GrGLTextureDomainEffect(const GrProcessor&);
 
@@ -185,7 +185,7 @@ protected:
 
 private:
     GrTextureDomain::GLDomain         fGLDomain;
-    typedef GrGLFragmentProcessor INHERITED;
+    typedef GrGLSLFragmentProcessor INHERITED;
 };
 
 GrGLTextureDomainEffect::GrGLTextureDomainEffect(const GrProcessor&) {
@@ -195,9 +195,9 @@ void GrGLTextureDomainEffect::emitCode(EmitArgs& args) {
     const GrTextureDomainEffect& textureDomainEffect = args.fFp.cast<GrTextureDomainEffect>();
     const GrTextureDomain& domain = textureDomainEffect.textureDomain();
 
-    GrGLFragmentBuilder* fsBuilder = args.fBuilder->getFragmentShaderBuilder();
-    SkString coords2D = fsBuilder->ensureFSCoords2D(args.fCoords, 0);
-    fGLDomain.sampleTexture(fsBuilder, domain, args.fOutputColor, coords2D, args.fSamplers[0],
+    GrGLSLFragmentBuilder* fragBuilder = args.fFragBuilder;
+    SkString coords2D = fragBuilder->ensureFSCoords2D(args.fCoords, 0);
+    fGLDomain.sampleTexture(fragBuilder, domain, args.fOutputColor, coords2D, args.fSamplers[0],
                             args.fInputColor);
 }
 
@@ -247,12 +247,12 @@ GrTextureDomainEffect::GrTextureDomainEffect(GrTexture* texture,
 
 GrTextureDomainEffect::~GrTextureDomainEffect() {}
 
-void GrTextureDomainEffect::onGetGLProcessorKey(const GrGLSLCaps& caps,
-                                                GrProcessorKeyBuilder* b) const {
+void GrTextureDomainEffect::onGetGLSLProcessorKey(const GrGLSLCaps& caps,
+                                                  GrProcessorKeyBuilder* b) const {
     GrGLTextureDomainEffect::GenKey(*this, caps, b);
 }
 
-GrGLFragmentProcessor* GrTextureDomainEffect::onCreateGLInstance() const  {
+GrGLSLFragmentProcessor* GrTextureDomainEffect::onCreateGLSLInstance() const  {
     return new GrGLTextureDomainEffect(*this);
 }
 

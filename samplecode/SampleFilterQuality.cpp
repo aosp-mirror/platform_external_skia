@@ -12,6 +12,8 @@
 #include "SkAnimTimer.h"
 #include "SkCanvas.h"
 #include "SkInterpolator.h"
+#include "SkGradientShader.h"
+#include "SkData.h"
 #include "SkPath.h"
 #include "SkSurface.h"
 #include "SkRandom.h"
@@ -23,6 +25,28 @@ static SkSurface* make_surface(SkCanvas* canvas, const SkImageInfo& info) {
         surface = SkSurface::NewRaster(info);
     }
     return surface;
+}
+
+static SkShader* make_shader(const SkRect& bounds) {
+#if 0
+    const SkPoint pts[] = {
+        { bounds.left(), bounds.top() },
+        { bounds.right(), bounds.bottom() },
+    };
+    const SkColor colors[] = {
+        SK_ColorRED, SK_ColorGREEN, SK_ColorBLUE, SK_ColorBLACK,
+        SK_ColorCYAN, SK_ColorMAGENTA, SK_ColorYELLOW,
+    };
+    return SkGradientShader::CreateLinear(pts,
+                                          colors, nullptr, SK_ARRAY_COUNT(colors),
+                                          SkShader::kClamp_TileMode);
+#else
+    SkAutoTUnref<SkImage> image(GetResourceAsImage("mandrill_128.png"));
+    if (nullptr == image) {
+        return nullptr;
+    }
+    return image->newShader(SkShader::kClamp_TileMode, SkShader::kClamp_TileMode);
+#endif
 }
 
 #define N   128
@@ -42,12 +66,15 @@ static SkImage* make_image() {
     path.addRect(SkRect::MakeWH(N, N/2));
     path.moveTo(0, 0); path.lineTo(N, 0); path.lineTo(0, N); path.close();
 
-    canvas->drawPath(path, SkPaint());
+    SkPaint paint;
+    SkSafeUnref(paint.setShader(make_shader(SkRect::MakeWH(N, N))));
+    
+    canvas->drawPath(path, paint);
     return surface->newImageSnapshot();
 }
 
 static SkImage* zoom_up(SkSurface* origSurf, SkImage* orig) {
-    const SkScalar S = 8;    // amount to scale up
+    const SkScalar S = 16;    // amount to scale up
     const int D = 2;    // dimension scaling for the offscreen
     // since we only view the center, don't need to produce the entire thing
     

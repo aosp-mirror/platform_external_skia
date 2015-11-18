@@ -9,10 +9,14 @@
 #define GrDrawingManager_DEFINED
 
 #include "GrDrawTarget.h"
+#include "GrBatchFlushState.h"
+#include "GrPathRendererChain.h"
+#include "GrPathRenderer.h"
 #include "SkTDArray.h"
 
 class GrContext;
 class GrDrawContext;
+class GrSoftwarePathRenderer;
 class GrTextContext;
 
 // Currently the DrawingManager creates a separate GrTextContext for each
@@ -29,6 +33,7 @@ public:
     ~GrDrawingManager();
 
     bool abandoned() const { return fAbandoned; }
+    void freeGpuResources();
 
     GrDrawContext* drawContext(GrRenderTarget* rt, const SkSurfaceProps* surfaceProps);
 
@@ -40,12 +45,21 @@ public:
 
     GrContext* getContext() { return fContext; }
 
+    GrPathRenderer* getPathRenderer(const GrPathRenderer::CanDrawPathArgs& args,
+                                    bool allowSW,
+                                    GrPathRendererChain::DrawType drawType,
+                                    GrPathRenderer::StencilSupport* stencilSupport = NULL);
+
+    static bool ProgramUnitTest(GrContext* context, int maxStages);
+
 private:
-    GrDrawingManager(GrContext* context, GrDrawTarget::Options options)
+    GrDrawingManager(GrContext* context)
         : fContext(context)
         , fAbandoned(false)
-        , fOptions(options)
-        , fNVPRTextContext(nullptr) {
+        , fNVPRTextContext(nullptr)
+        , fPathRendererChain(nullptr)
+        , fSoftwarePathRenderer(nullptr)
+        , fFlushState(context->getGpu(), context->resourceProvider()) {
         sk_bzero(fTextContexts, sizeof(fTextContexts));
     }
 
@@ -63,10 +77,14 @@ private:
 
     bool                        fAbandoned;
     SkTDArray<GrDrawTarget*>    fDrawTargets;
-    GrDrawTarget::Options       fOptions;
 
     GrTextContext*              fNVPRTextContext;
     GrTextContext*              fTextContexts[kNumPixelGeometries][kNumDFTOptions];
+
+    GrPathRendererChain*        fPathRendererChain;
+    GrSoftwarePathRenderer*     fSoftwarePathRenderer;
+
+    GrBatchFlushState           fFlushState;
 };
 
 #endif

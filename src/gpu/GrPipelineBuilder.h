@@ -209,7 +209,8 @@ public:
      * than the color buffer. In is scenario, the higher sample rate is resolved during blending.
      */
     bool hasMixedSamples() const {
-        return this->isHWAntialias() && !fRenderTarget->isUnifiedMultisampled();
+        return fRenderTarget->hasMixedSamples() &&
+               (this->isHWAntialias() || !fStencilSettings.isDisabled());
     }
 
     /// @}
@@ -228,11 +229,6 @@ public:
      * @param settings  the stencil settings to use.
      */
     void setStencil(const GrStencilSettings& settings) { fStencilSettings = settings; }
-
-    /**
-     * Shortcut to disable stencil testing and ops.
-     */
-    void disableStencil() { fStencilSettings.setDisabled(); }
 
     GrStencilSettings* stencil() { return &fStencilSettings; }
 

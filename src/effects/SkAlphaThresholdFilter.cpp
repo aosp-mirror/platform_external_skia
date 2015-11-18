@@ -57,8 +57,9 @@ SkImageFilter* SkAlphaThresholdFilter::Create(const SkRegion& region,
 
 #include "SkGr.h"
 
-#include "gl/GrGLFragmentProcessor.h"
-#include "gl/builders/GrGLProgramBuilder.h"
+#include "glsl/GrGLSLFragmentProcessor.h"
+#include "glsl/GrGLSLFragmentShaderBuilder.h"
+#include "glsl/GrGLSLProgramBuilder.h"
 #include "glsl/GrGLSLProgramDataManager.h"
 
 class AlphaThresholdEffect : public GrFragmentProcessor {
@@ -100,9 +101,9 @@ private:
         this->addTextureAccess(&fMaskTextureAccess);
     }
 
-    GrGLFragmentProcessor* onCreateGLInstance() const override;
+    GrGLSLFragmentProcessor* onCreateGLSLInstance() const override;
 
-    void onGetGLProcessorKey(const GrGLSLCaps&, GrProcessorKeyBuilder*) const override;
+    void onGetGLSLProcessorKey(const GrGLSLCaps&, GrProcessorKeyBuilder*) const override;
 
     bool onIsEqual(const GrFragmentProcessor&) const override;
 
@@ -120,7 +121,7 @@ private:
     typedef GrFragmentProcessor INHERITED;
 };
 
-class GrGLAlphaThresholdEffect : public GrGLFragmentProcessor {
+class GrGLAlphaThresholdEffect : public GrGLSLFragmentProcessor {
 public:
     GrGLAlphaThresholdEffect(const GrFragmentProcessor&) {}
 
@@ -134,53 +135,51 @@ private:
     GrGLSLProgramDataManager::UniformHandle fInnerThresholdVar;
     GrGLSLProgramDataManager::UniformHandle fOuterThresholdVar;
 
-    typedef GrGLFragmentProcessor INHERITED;
+    typedef GrGLSLFragmentProcessor INHERITED;
 };
 
 void GrGLAlphaThresholdEffect::emitCode(EmitArgs& args) {
-    fInnerThresholdVar = args.fBuilder->addUniform(
-        GrGLProgramBuilder::kFragment_Visibility,
-        kFloat_GrSLType, kDefault_GrSLPrecision,
-        "inner_threshold");
-    fOuterThresholdVar = args.fBuilder->addUniform(
-        GrGLProgramBuilder::kFragment_Visibility,
-        kFloat_GrSLType, kDefault_GrSLPrecision,
-        "outer_threshold");
+    fInnerThresholdVar = args.fBuilder->addUniform(GrGLSLProgramBuilder::kFragment_Visibility,
+                                                   kFloat_GrSLType, kDefault_GrSLPrecision,
+                                                   "inner_threshold");
+    fOuterThresholdVar = args.fBuilder->addUniform(GrGLSLProgramBuilder::kFragment_Visibility,
+                                                   kFloat_GrSLType, kDefault_GrSLPrecision,
+                                                   "outer_threshold");
 
-    GrGLFragmentBuilder* fsBuilder = args.fBuilder->getFragmentShaderBuilder();
-    SkString coords2D = fsBuilder->ensureFSCoords2D(args.fCoords, 0);
-    SkString maskCoords2D = fsBuilder->ensureFSCoords2D(args.fCoords, 1);
+    GrGLSLFragmentBuilder* fragBuilder = args.fFragBuilder;
+    SkString coords2D = fragBuilder->ensureFSCoords2D(args.fCoords, 0);
+    SkString maskCoords2D = fragBuilder->ensureFSCoords2D(args.fCoords, 1);
 
-    fsBuilder->codeAppendf("\t\tvec2 coord = %s;\n", coords2D.c_str());
-    fsBuilder->codeAppendf("\t\tvec2 mask_coord = %s;\n", maskCoords2D.c_str());
-    fsBuilder->codeAppend("\t\tvec4 input_color = ");
-    fsBuilder->appendTextureLookup(args.fSamplers[0], "coord");
-    fsBuilder->codeAppend(";\n");
-    fsBuilder->codeAppend("\t\tvec4 mask_color = ");
-    fsBuilder->appendTextureLookup(args.fSamplers[1], "mask_coord");
-    fsBuilder->codeAppend(";\n");
+    fragBuilder->codeAppendf("\t\tvec2 coord = %s;\n", coords2D.c_str());
+    fragBuilder->codeAppendf("\t\tvec2 mask_coord = %s;\n", maskCoords2D.c_str());
+    fragBuilder->codeAppend("\t\tvec4 input_color = ");
+    fragBuilder->appendTextureLookup(args.fSamplers[0], "coord");
+    fragBuilder->codeAppend(";\n");
+    fragBuilder->codeAppend("\t\tvec4 mask_color = ");
+    fragBuilder->appendTextureLookup(args.fSamplers[1], "mask_coord");
+    fragBuilder->codeAppend(";\n");
 
-    fsBuilder->codeAppendf("\t\tfloat inner_thresh = %s;\n",
-                           args.fBuilder->getUniformCStr(fInnerThresholdVar));
-    fsBuilder->codeAppendf("\t\tfloat outer_thresh = %s;\n",
-                           args.fBuilder->getUniformCStr(fOuterThresholdVar));
-    fsBuilder->codeAppend("\t\tfloat mask = mask_color.a;\n");
+    fragBuilder->codeAppendf("\t\tfloat inner_thresh = %s;\n",
+                             args.fBuilder->getUniformCStr(fInnerThresholdVar));
+    fragBuilder->codeAppendf("\t\tfloat outer_thresh = %s;\n",
+                             args.fBuilder->getUniformCStr(fOuterThresholdVar));
+    fragBuilder->codeAppend("\t\tfloat mask = mask_color.a;\n");
 
-    fsBuilder->codeAppend("vec4 color = input_color;\n");
-    fsBuilder->codeAppend("\t\tif (mask < 0.5) {\n"
-                          "\t\t\tif (color.a > outer_thresh) {\n"
-                          "\t\t\t\tfloat scale = outer_thresh / color.a;\n"
-                          "\t\t\t\tcolor.rgb *= scale;\n"
-                          "\t\t\t\tcolor.a = outer_thresh;\n"
-                          "\t\t\t}\n"
-                          "\t\t} else if (color.a < inner_thresh) {\n"
-                          "\t\t\tfloat scale = inner_thresh / max(0.001, color.a);\n"
-                          "\t\t\tcolor.rgb *= scale;\n"
-                          "\t\t\tcolor.a = inner_thresh;\n"
-                          "\t\t}\n");
+    fragBuilder->codeAppend("vec4 color = input_color;\n");
+    fragBuilder->codeAppend("\t\tif (mask < 0.5) {\n"
+                            "\t\t\tif (color.a > outer_thresh) {\n"
+                            "\t\t\t\tfloat scale = outer_thresh / color.a;\n"
+                            "\t\t\t\tcolor.rgb *= scale;\n"
+                            "\t\t\t\tcolor.a = outer_thresh;\n"
+                            "\t\t\t}\n"
+                            "\t\t} else if (color.a < inner_thresh) {\n"
+                            "\t\t\tfloat scale = inner_thresh / max(0.001, color.a);\n"
+                            "\t\t\tcolor.rgb *= scale;\n"
+                            "\t\t\tcolor.a = inner_thresh;\n"
+                            "\t\t}\n");
 
-    fsBuilder->codeAppendf("%s = %s;\n", args.fOutputColor,
-                           (GrGLSLExpr4(args.fInputColor) * GrGLSLExpr4("color")).c_str());
+    fragBuilder->codeAppendf("%s = %s;\n", args.fOutputColor,
+                             (GrGLSLExpr4(args.fInputColor) * GrGLSLExpr4("color")).c_str());
 }
 
 void GrGLAlphaThresholdEffect::onSetData(const GrGLSLProgramDataManager& pdman,
@@ -204,12 +203,12 @@ const GrFragmentProcessor* AlphaThresholdEffect::TestCreate(GrProcessorTestData*
 
 ///////////////////////////////////////////////////////////////////////////////
 
-void AlphaThresholdEffect::onGetGLProcessorKey(const GrGLSLCaps& caps,
-                                             GrProcessorKeyBuilder* b) const {
+void AlphaThresholdEffect::onGetGLSLProcessorKey(const GrGLSLCaps& caps,
+                                                 GrProcessorKeyBuilder* b) const {
     GrGLAlphaThresholdEffect::GenKey(*this, caps, b);
 }
 
-GrGLFragmentProcessor* AlphaThresholdEffect::onCreateGLInstance() const {
+GrGLSLFragmentProcessor* AlphaThresholdEffect::onCreateGLSLInstance() const {
     return new GrGLAlphaThresholdEffect(*this);
 }
 

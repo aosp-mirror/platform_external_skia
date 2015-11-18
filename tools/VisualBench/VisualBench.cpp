@@ -30,6 +30,11 @@ VisualBench::VisualBench(void* hwnd, int argc, char** argv)
     : INHERITED(hwnd) {
     SkCommandLineFlags::Parse(argc, argv);
 
+    SkDebugf("Command line arguments:");
+    for (int i = 0; i < argc; ++i) {
+        SkDebugf("%s\n", argv[i]);
+    }
+
     // these have to happen after commandline parsing
     if (FLAGS_dif) {
         const SkSurfaceProps& props(INHERITED::getSurfaceProps());
@@ -98,7 +103,7 @@ void VisualBench::setupContext() {
     fInterface.reset(GrGLCreateNativeInterface());
 
     // TODO use the GLContext creation factories and also set this all up in configs
-    if (!FLAGS_nvpr) {
+    if (0 == FLAGS_nvpr) {
         fInterface.reset(GrGLInterfaceRemoveNVPR(fInterface));
     }
     SkASSERT(fInterface);

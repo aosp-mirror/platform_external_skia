@@ -10,8 +10,9 @@
 #include "GrCoordTransform.h"
 #include "GrInvariantOutput.h"
 #include "GrProcessor.h"
-#include "gl/GrGLFragmentProcessor.h"
-#include "gl/builders/GrGLProgramBuilder.h"
+#include "glsl/GrGLSLFragmentProcessor.h"
+#include "glsl/GrGLSLFragmentShaderBuilder.h"
+#include "glsl/GrGLSLProgramBuilder.h"
 #include "glsl/GrGLSLProgramDataManager.h"
 
 namespace {
@@ -51,7 +52,7 @@ public:
         return fColorSpace;
     }
 
-    class GLProcessor : public GrGLFragmentProcessor {
+    class GLSLProcessor : public GrGLSLFragmentProcessor {
     public:
         static const float kJPEGConversionMatrix[16];
         static const float kRec601ConversionMatrix[16];
@@ -60,25 +61,25 @@ public:
         // this class always generates the same code.
         static void GenKey(const GrProcessor&, const GrGLSLCaps&, GrProcessorKeyBuilder*) {}
 
-        GLProcessor(const GrProcessor&) {}
+        GLSLProcessor(const GrProcessor&) {}
 
         virtual void emitCode(EmitArgs& args) override {
-            GrGLFragmentBuilder* fsBuilder = args.fBuilder->getFragmentShaderBuilder();
+            GrGLSLFragmentBuilder* fragBuilder = args.fFragBuilder;
 
             const char* yuvMatrix   = nullptr;
-            fMatrixUni = args.fBuilder->addUniform(GrGLProgramBuilder::kFragment_Visibility,
-                                             kMat44f_GrSLType, kDefault_GrSLPrecision,
-                                             "YUVMatrix", &yuvMatrix);
-            fsBuilder->codeAppendf("\t%s = vec4(\n\t\t", args.fOutputColor);
-            fsBuilder->appendTextureLookup(args.fSamplers[0], args.fCoords[0].c_str(),
-                                           args.fCoords[0].getType());
-            fsBuilder->codeAppend(".r,\n\t\t");
-            fsBuilder->appendTextureLookup(args.fSamplers[1], args.fCoords[1].c_str(),
-                                           args.fCoords[1].getType());
-            fsBuilder->codeAppend(".r,\n\t\t");
-            fsBuilder->appendTextureLookup(args.fSamplers[2], args.fCoords[2].c_str(),
-                                           args.fCoords[2].getType());
-            fsBuilder->codeAppendf(".r,\n\t\t1.0) * %s;\n", yuvMatrix);
+            fMatrixUni = args.fBuilder->addUniform(GrGLSLProgramBuilder::kFragment_Visibility,
+                                                   kMat44f_GrSLType, kDefault_GrSLPrecision,
+                                                   "YUVMatrix", &yuvMatrix);
+            fragBuilder->codeAppendf("\t%s = vec4(\n\t\t", args.fOutputColor);
+            fragBuilder->appendTextureLookup(args.fSamplers[0], args.fCoords[0].c_str(),
+                                             args.fCoords[0].getType());
+            fragBuilder->codeAppend(".r,\n\t\t");
+            fragBuilder->appendTextureLookup(args.fSamplers[1], args.fCoords[1].c_str(),
+                                             args.fCoords[1].getType());
+            fragBuilder->codeAppend(".r,\n\t\t");
+            fragBuilder->appendTextureLookup(args.fSamplers[2], args.fCoords[2].c_str(),
+                                             args.fCoords[2].getType());
+            fragBuilder->codeAppendf(".r,\n\t\t1.0) * %s;\n", yuvMatrix);
         }
 
     protected:
@@ -101,7 +102,7 @@ public:
     private:
         GrGLSLProgramDataManager::UniformHandle fMatrixUni;
 
-        typedef GrGLFragmentProcessor INHERITED;
+        typedef GrGLSLFragmentProcessor INHERITED;
     };
 
 private:
@@ -124,11 +125,13 @@ private:
         this->addTextureAccess(&fVAccess);
     }
 
-    GrGLFragmentProcessor* onCreateGLInstance() const override { return new GLProcessor(*this); }
+    GrGLSLFragmentProcessor* onCreateGLSLInstance() const override {
+        return new GLSLProcessor(*this);
+    }
 
-    virtual void onGetGLProcessorKey(const GrGLSLCaps& caps,
-                                     GrProcessorKeyBuilder* b) const override {
-        GLProcessor::GenKey(*this, caps, b);
+    virtual void onGetGLSLProcessorKey(const GrGLSLCaps& caps,
+                                       GrProcessorKeyBuilder* b) const override {
+        GLSLProcessor::GenKey(*this, caps, b);
     }
 
     bool onIsEqual(const GrFragmentProcessor& sBase) const override {
@@ -153,17 +156,17 @@ private:
     typedef GrFragmentProcessor INHERITED;
 };
 
-const float YUVtoRGBEffect::GLProcessor::kJPEGConversionMatrix[16] = {
+const float YUVtoRGBEffect::GLSLProcessor::kJPEGConversionMatrix[16] = {
     1.0f,  0.0f,      1.402f,  -0.701f,
     1.0f, -0.34414f, -0.71414f, 0.529f,
     1.0f,  1.772f,    0.0f,    -0.886f,
     0.0f,  0.0f,      0.0f,     1.0};
-const float YUVtoRGBEffect::GLProcessor::kRec601ConversionMatrix[16] = {
+const float YUVtoRGBEffect::GLSLProcessor::kRec601ConversionMatrix[16] = {
     1.164f,  0.0f,    1.596f, -0.87075f,
     1.164f, -0.391f, -0.813f,  0.52925f,
     1.164f,  2.018f,  0.0f,   -1.08175f,
     0.0f,    0.0f,    0.0f,    1.0};
-const float YUVtoRGBEffect::GLProcessor::kRec709ConversionMatrix[16] = {
+const float YUVtoRGBEffect::GLSLProcessor::kRec709ConversionMatrix[16] = {
     1.164f,  0.0f,    1.793f, -0.96925f,
     1.164f, -0.213f, -0.533f,  0.30025f,
     1.164f,  2.112f,  0.0f,   -1.12875f,

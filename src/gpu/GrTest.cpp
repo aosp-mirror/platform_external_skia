@@ -11,10 +11,12 @@
 #include "GrBatchAtlas.h"
 #include "GrBatchFontCache.h"
 #include "GrContextOptions.h"
+#include "GrDrawContext.h"
 #include "GrDrawingManager.h"
 #include "GrGpuResourceCacheAccess.h"
 #include "GrResourceCache.h"
 #include "GrTextBlobCache.h"
+#include "SkGrPriv.h"
 #include "SkString.h"
 
 namespace GrTest {
@@ -42,21 +44,39 @@ void SetupAlwaysEvictAtlas(GrContext* context) {
 }
 };
 
-void GrTestTarget::init(GrContext* ctx, GrDrawTarget* target) {
+void GrTestTarget::init(GrContext* ctx, GrDrawTarget* target, GrRenderTarget* rt) {
     SkASSERT(!fContext);
 
     fContext.reset(SkRef(ctx));
     fDrawTarget.reset(SkRef(target));
+    fRenderTarget.reset(SkRef(rt));
 }
 
-void GrContext::getTestTarget(GrTestTarget* tar) {
+void GrContext::getTestTarget(GrTestTarget* tar, GrRenderTarget* rt) {
     this->flush();
     // We could create a proxy GrDrawTarget that passes through to fGpu until ~GrTextTarget() and
     // then disconnects. This would help prevent test writers from mixing using the returned
     // GrDrawTarget and regular drawing. We could also assert or fail in GrContext drawing methods
     // until ~GrTestTarget().
-    SkAutoTUnref<GrDrawTarget> dt(fDrawingManager->newDrawTarget(nullptr));
-    tar->init(this, dt);
+    if (!rt) {
+        GrSurfaceDesc desc;
+        desc.fFlags = kRenderTarget_GrSurfaceFlag;
+        desc.fWidth = 32;
+        desc.fHeight = 32;
+        desc.fConfig = kRGBA_8888_GrPixelConfig;
+        desc.fSampleCnt = 0;
+
+        SkAutoTUnref<GrTexture> texture(this->textureProvider()->createTexture(desc, false,
+                                                                               nullptr, 0));
+        if (nullptr == texture) {
+            return;
+        }
+        SkASSERT(nullptr != texture->asRenderTarget());
+        rt = texture->asRenderTarget();
+    }
+
+    SkAutoTUnref<GrDrawTarget> dt(fDrawingManager->newDrawTarget(rt));
+    tar->init(this, dt, rt);
 }
 
 void GrContext::setTextBlobCacheLimit_ForTesting(size_t bytes) {
@@ -97,6 +117,35 @@ void GrContext::printGpuStats() const {
     SkDebugf("%s", out.c_str());
 }
 
+void GrContext::drawFontCache(const SkRect& rect, GrMaskFormat format, const SkPaint& paint,
+                              GrRenderTarget* target) {
+    GrBatchFontCache* cache = this->getBatchFontCache();
+
+    GrTexture* atlas = cache->getTexture(format);
+
+    SkAutoTUnref<GrDrawContext> drawContext(this->drawContext(target));
+    // TODO: add drawContext method to encapsulate this.
+
+    GrPaint grPaint;
+    SkMatrix mat;
+    mat.reset();
+    if (!SkPaintToGrPaint(this, paint, mat, &grPaint)) {
+        return;
+    }
+    SkMatrix textureMat;
+    textureMat.reset();
+    // TODO: use setScaleTranslate()
+    textureMat[SkMatrix::kMScaleX] = 1.0f/rect.width();
+    textureMat[SkMatrix::kMScaleY] = 1.0f/rect.height();
+    textureMat[SkMatrix::kMTransX] = -rect.fLeft/rect.width();
+    textureMat[SkMatrix::kMTransY] = -rect.fTop/rect.height();
+
+    grPaint.addColorTextureProcessor(atlas, textureMat);
+
+    GrClip clip;
+    drawContext->drawRect(clip, grPaint, mat, rect);
+}
+
 #if GR_GPU_STATS
 void GrGpu::Stats::dump(SkString* out) {
     out->appendf("Render Target Binds: %d\n", fRenderTargetBinds);
@@ -109,47 +158,27 @@ void GrGpu::Stats::dump(SkString* out) {
 #endif
 
 #if GR_CACHE_STATS
+void GrResourceCache::getStats(Stats* stats) const {
+    stats->reset();
+
+    stats->fTotal = this->getResourceCount();
+    stats->fNumNonPurgeable = fNonpurgeableResources.count();
+    stats->fNumPurgeable = fPurgeableQueue.count();
+
+    for (int i = 0; i < fNonpurgeableResources.count(); ++i) {
+        stats->update(fNonpurgeableResources[i]);
+    }
+    for (int i = 0; i < fPurgeableQueue.count(); ++i) {
+        stats->update(fPurgeableQueue.at(i));
+    }
+}
+
 void GrResourceCache::dumpStats(SkString* out) const {
     this->validate();
 
-    int locked = fNonpurgeableResources.count();
-
-    struct Stats {
-        int fScratch;
-        int fExternal;
-        int fBorrowed;
-        int fAdopted;
-        size_t fUnbudgetedSize;
-
-        Stats() : fScratch(0), fExternal(0), fBorrowed(0), fAdopted(0), fUnbudgetedSize(0) {}
-
-        void update(GrGpuResource* resource) {
-            if (resource->cacheAccess().isScratch()) {
-                ++fScratch;
-            }
-            if (resource->cacheAccess().isExternal()) {
-                ++fExternal;
-            }
-            if (resource->cacheAccess().isBorrowed()) {
-                ++fBorrowed;
-            }
-            if (resource->cacheAccess().isAdopted()) {
-                ++fAdopted;
-            }
-            if (!resource->resourcePriv().isBudgeted()) {
-                fUnbudgetedSize += resource->gpuMemorySize();
-            }
-        }
-    };
-
     Stats stats;
 
-    for (int i = 0; i < fNonpurgeableResources.count(); ++i) {
-        stats.update(fNonpurgeableResources[i]);
-    }
-    for (int i = 0; i < fPurgeableQueue.count(); ++i) {
-        stats.update(fPurgeableQueue.at(i));
-    }
+    this->getStats(&stats);
 
     float countUtilization = (100.f * fBudgetedCount) / fMaxCount;
     float byteUtilization = (100.f * fBudgetedBytes) / fMaxBytes;
@@ -157,8 +186,9 @@ void GrResourceCache::dumpStats(SkString* out) const {
     out->appendf("Budget: %d items %d bytes\n", fMaxCount, (int)fMaxBytes);
     out->appendf("\t\tEntry Count: current %d"
                  " (%d budgeted, %d external(%d borrowed, %d adopted), %d locked, %d scratch %.2g%% full), high %d\n",
-                 this->getResourceCount(), fBudgetedCount, stats.fExternal, stats.fBorrowed,
-                 stats.fAdopted, locked, stats.fScratch, countUtilization, fHighWaterCount);
+                 stats.fTotal, fBudgetedCount, stats.fExternal, stats.fBorrowed,
+                 stats.fAdopted, stats.fNumNonPurgeable, stats.fScratch, countUtilization,
+                 fHighWaterCount);
     out->appendf("\t\tEntry Bytes: current %d (budgeted %d, %.2g%% full, %d unbudgeted) high %d\n",
                  SkToInt(fBytes), SkToInt(fBudgetedBytes), byteUtilization,
                  SkToInt(stats.fUnbudgetedSize), SkToInt(fHighWaterBytes));
@@ -269,8 +299,8 @@ private:
                                                     GrPixelConfig config) const override {
         return 0; 
     }
-    bool isTestingOnlyBackendTexture(GrBackendObject id) const override { return false; }
-    void deleteTestingOnlyBackendTexture(GrBackendObject id) const override {}
+    bool isTestingOnlyBackendTexture(GrBackendObject ) const override { return false; }
+    void deleteTestingOnlyBackendTexture(GrBackendObject, bool abandonTexture) const override {}
 
     typedef GrGpu INHERITED;
 };
@@ -288,7 +318,7 @@ void GrContext::initMockContext() {
     SkASSERT(nullptr == fGpu);
     fGpu = new MockGpu(this, options);
     SkASSERT(fGpu);
-    this->initCommon(options);
+    this->initCommon();
 
     // We delete these because we want to test the cache starting with zero resources. Also, none of
     // these objects are required for any of tests that use this context. TODO: make stop allocating

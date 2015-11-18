@@ -15,14 +15,13 @@
 #include "GrTexture.h"
 #include "GrTextureAccess.h"
 #include "SkXfermode.h"
-#include "gl/GrGLCaps.h"
-#include "gl/GrGLGpu.h"
-#include "gl/GrGLSLBlend.h"
-#include "gl/GrGLFragmentProcessor.h"
-#include "gl/GrGLProgramDataManager.h"
-#include "gl/builders/GrGLProgramBuilder.h"
+#include "glsl/GrGLSLBlend.h"
 #include "glsl/GrGLSLCaps.h"
+#include "glsl/GrGLSLFragmentProcessor.h"
+#include "glsl/GrGLSLFragmentShaderBuilder.h"
+#include "glsl/GrGLSLProgramBuilder.h"
 #include "glsl/GrGLSLProgramDataManager.h"
+#include "glsl/GrGLSLXferProcessor.h"
 
 bool GrCustomXfermode::IsSupportedMode(SkXfermode::Mode mode) {
     return mode > SkXfermode::kLastCoeffMode && mode <= SkXfermode::kLastMode;
@@ -89,7 +88,7 @@ public:
 
     const char* name() const override { return "Custom Xfermode"; }
 
-    GrGLXferProcessor* createGLInstance() const override;
+    GrGLSLXferProcessor* createGLSLInstance() const override;
 
     SkXfermode::Mode mode() const { return fMode; }
     bool hasHWBlendEquation() const { return -1 != static_cast<int>(fHWBlendEquation); }
@@ -106,7 +105,7 @@ private:
                                                  GrColor* overrideColor,
                                                  const GrCaps& caps) override;
 
-    void onGetGLProcessorKey(const GrGLSLCaps& caps, GrProcessorKeyBuilder* b) const override;
+    void onGetGLSLProcessorKey(const GrGLSLCaps& caps, GrProcessorKeyBuilder* b) const override;
 
     GrXferBarrierType onXferBarrier(const GrRenderTarget*, const GrCaps&) const override;
 
@@ -122,7 +121,7 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-class GLCustomXP : public GrGLXferProcessor {
+class GLCustomXP : public GrGLSLXferProcessor {
 public:
     GLCustomXP(const GrXferProcessor&) {}
     ~GLCustomXP() override {}
@@ -147,40 +146,43 @@ private:
         const CustomXP& xp = args.fXP.cast<CustomXP>();
         SkASSERT(xp.hasHWBlendEquation());
 
-        GrGLXPFragmentBuilder* fsBuilder = args.fPB->getFragmentShaderBuilder();
-        fsBuilder->enableAdvancedBlendEquationIfNeeded(xp.hwBlendEquation());
+        GrGLSLXPFragmentBuilder* fragBuilder = args.fXPFragBuilder;
+        fragBuilder->enableAdvancedBlendEquationIfNeeded(xp.hwBlendEquation());
 
         // Apply coverage by multiplying it into the src color before blending. Mixed samples will
         // "just work" automatically. (See onGetOptimizations())
         if (xp.readsCoverage()) {
-            fsBuilder->codeAppendf("%s = %s * %s;",
-                                   args.fOutputPrimary, args.fInputCoverage, args.fInputColor);
+            fragBuilder->codeAppendf("%s = %s * %s;",
+                                     args.fOutputPrimary, args.fInputCoverage, args.fInputColor);
         } else {
-            fsBuilder->codeAppendf("%s = %s;", args.fOutputPrimary, args.fInputColor);
+            fragBuilder->codeAppendf("%s = %s;", args.fOutputPrimary, args.fInputColor);
         }
     }
 
-    void emitBlendCodeForDstRead(GrGLXPBuilder* pb, const char* srcColor, const char* dstColor,
-                                 const char* outColor, const GrXferProcessor& proc) override {
+    void emitBlendCodeForDstRead(GrGLSLXPBuilder* pb,
+                                 GrGLSLXPFragmentBuilder* fragBuilder,
+                                 const char* srcColor,
+                                 const char* dstColor,
+                                 const char* outColor,
+                                 const GrXferProcessor& proc) override {
         const CustomXP& xp = proc.cast<CustomXP>();
         SkASSERT(!xp.hasHWBlendEquation());
 
-        GrGLXPFragmentBuilder* fsBuilder = pb->getFragmentShaderBuilder();
-        GrGLSLBlend::AppendMode(fsBuilder, srcColor, dstColor, outColor, xp.mode());
+        GrGLSLBlend::AppendMode(fragBuilder, srcColor, dstColor, outColor, xp.mode());
     }
 
     void onSetData(const GrGLSLProgramDataManager&, const GrXferProcessor&) override {}
 
-    typedef GrGLXferProcessor INHERITED;
+    typedef GrGLSLXferProcessor INHERITED;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
 
-void CustomXP::onGetGLProcessorKey(const GrGLSLCaps& caps, GrProcessorKeyBuilder* b) const {
+void CustomXP::onGetGLSLProcessorKey(const GrGLSLCaps& caps, GrProcessorKeyBuilder* b) const {
     GLCustomXP::GenKey(*this, caps, b);
 }
 
-GrGLXferProcessor* CustomXP::createGLInstance() const {
+GrGLSLXferProcessor* CustomXP::createGLSLInstance() const {
     SkASSERT(this->willReadDstColor() != this->hasHWBlendEquation());
     return new GLCustomXP(*this);
 }

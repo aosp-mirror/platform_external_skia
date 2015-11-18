@@ -889,9 +889,6 @@
 #define GR_GL_MULTISAMPLE_RASTERIZATION_ALLOWED             0x932B
 #define GR_GL_EFFECTIVE_RASTER_SAMPLES                      0x932C
 
-/* GL_NV_sample_locations and GL_ARB_sample_locations */
-#define GR_GL_FRAMEBUFFER_PROGRAMMABLE_SAMPLE_LOCATIONS     0x9342
-
 /* GL_KHR_debug */
 #define GR_GL_DEBUG_OUTPUT                                  0x92E0
 #define GR_GL_DEBUG_OUTPUT_SYNCHRONOUS                      0x8242
@@ -930,5 +927,9 @@
 #define GR_GL_QUERY                                         0x82E3
 #define GR_GL_PROGRAM_PIPELINE                              0x82E4
 #define GR_GL_SAMPLER                                       0x82E6
+
+/* EGL Defines */
+#define GR_EGL_NO_DISPLAY                                   ((GrEGLDisplay)0)
+#define GR_EGL_EXTENSIONS                                   0x3055
 
 #endif

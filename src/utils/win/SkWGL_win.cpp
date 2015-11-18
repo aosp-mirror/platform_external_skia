@@ -6,6 +6,9 @@
  * found in the LICENSE file.
  */
 
+#include "SkTypes.h"
+#if defined(SK_BUILD_FOR_WIN32)
+
 #include "SkWGL.h"
 
 #include "SkTDArray.h"
@@ -123,6 +126,9 @@ int SkWGLExtensions::selectFormat(const int formats[],
                                   int formatCount,
                                   HDC dc,
                                   int desiredSampleCount) const {
+    if (formatCount <= 0) {
+        return -1;
+    }
     PixelFormat desiredFormat = {
         0,
         desiredSampleCount,
@@ -455,3 +461,5 @@ SkWGLPbufferContext::SkWGLPbufferContext(HPBUFFER pbuffer, HDC dc, HGLRC glrc)
     , fDC(dc)
     , fGLRC(glrc) {
 }
+
+#endif//defined(SK_BUILD_FOR_WIN32)

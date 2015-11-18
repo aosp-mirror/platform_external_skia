@@ -20,6 +20,7 @@
         '../src/pipe/utils', # For TiledPipeController
         '../src/utils/debugger',
         '../tools',
+        '../experimental',
       ],
       'includes': [
         'gmslides.gypi',
@@ -31,11 +32,13 @@
         '../samplecode/ClockFaceView.cpp',
         '../samplecode/OverView.cpp',
         '../samplecode/OverView.h',
+        '../samplecode/PerlinPatch.cpp',
         '../samplecode/Sample2PtRadial.cpp',
         '../samplecode/SampleAAClip.cpp',
         '../samplecode/SampleAARects.cpp',
         '../samplecode/SampleAARectModes.cpp',
         '../samplecode/SampleAll.cpp',
+	'../samplecode/SampleAnimatedText.cpp',
         '../samplecode/SampleAnimator.cpp',
         '../samplecode/SampleAnimBlur.cpp',
         '../samplecode/SampleApp.cpp',
@@ -128,6 +131,10 @@
         #'../experimental/Networking/SampleNetPipeReader.cpp',
         #'../experimental/Networking/SkSockets.cpp',
         #'../experimental/Networking/SkSockets.h',
+
+        # PerlinNoise2
+        '../experimental/SkPerlinNoiseShader2/SkPerlinNoiseShader2.cpp',
+        '../experimental/SkPerlinNoiseShader2/SkPerlinNoiseShader2.h',
 
         # TiledPipeController
         '../src/pipe/utils/SamplePipeControllers.h',
@@ -253,6 +260,9 @@
           'sources!': [
             '../samplecode/SampleLighting.cpp',  #doesn't compile due to gpu dependencies
           ],
+ 	  'include_dirs' : [
+	    '../include/gpu',
+	  ],
         }],
         [ 'skia_gpu == 1', {
           'dependencies': [

@@ -8,10 +8,12 @@
 #include "GrPathProcessor.h"
 
 #include "gl/GrGLGpu.h"
-
 #include "glsl/GrGLSLCaps.h"
+#include "glsl/GrGLSLFragmentShaderBuilder.h"
+#include "glsl/GrGLSLProcessorTypes.h"
+#include "glsl/GrGLSLProgramBuilder.h"
 
-class GrGLPathProcessor : public GrGLPrimitiveProcessor {
+class GrGLPathProcessor : public GrGLSLPrimitiveProcessor {
 public:
     GrGLPathProcessor() : fColor(GrColor_ILLEGAL) {}
 
@@ -23,8 +25,8 @@ public:
     }
 
     void emitCode(EmitArgs& args) override {
-        GrGLGPBuilder* pb = args.fPB;
-        GrGLFragmentBuilder* fs = args.fPB->getFragmentShaderBuilder();
+        GrGLSLGPBuilder* pb = args.fPB;
+        GrGLSLFragmentBuilder* fragBuilder = args.fFragBuilder;
         const GrPathProcessor& pathProc = args.fGP.cast<GrPathProcessor>();
 
         // emit transforms
@@ -33,21 +35,21 @@ public:
         // Setup uniform color
         if (pathProc.opts().readsColor()) {
             const char* stagedLocalVarName;
-            fColorUniform = pb->addUniform(GrGLProgramBuilder::kFragment_Visibility,
+            fColorUniform = pb->addUniform(GrGLSLProgramBuilder::kFragment_Visibility,
                                            kVec4f_GrSLType,
                                            kDefault_GrSLPrecision,
                                            "Color",
                                            &stagedLocalVarName);
-            fs->codeAppendf("%s = %s;", args.fOutputColor, stagedLocalVarName);
+            fragBuilder->codeAppendf("%s = %s;", args.fOutputColor, stagedLocalVarName);
         }
 
         // setup constant solid coverage
         if (pathProc.opts().readsCoverage()) {
-            fs->codeAppendf("%s = vec4(1);", args.fOutputCoverage);
+            fragBuilder->codeAppendf("%s = vec4(1);", args.fOutputCoverage);
         }
     }
 
-    void emitTransforms(GrGLGPBuilder* pb, const TransformsIn& tin, TransformsOut* tout) {
+    void emitTransforms(GrGLSLGPBuilder* pb, const TransformsIn& tin, TransformsOut* tout) {
         tout->push_back_n(tin.count());
         fInstalledTransforms.push_back_n(tin.count());
         for (int i = 0; i < tin.count(); i++) {
@@ -60,12 +62,12 @@ public:
 
                 SkString strVaryingName("MatrixCoord");
                 strVaryingName.appendf("_%i_%i", i, t);
-                GrGLVertToFrag v(varyingType);
+                GrGLSLVertToFrag v(varyingType);
                 fInstalledTransforms[i][t].fHandle =
                         pb->addSeparableVarying(strVaryingName.c_str(), &v).toIndex();
                 fInstalledTransforms[i][t].fType = varyingType;
 
-                SkNEW_APPEND_TO_TARRAY(&(*tout)[i], GrGLProcessor::TransformedCoords,
+                SkNEW_APPEND_TO_TARRAY(&(*tout)[i], GrGLSLTransformedCoords,
                                        (SkString(v.fsIn()), varyingType));
             }
         }
@@ -109,7 +111,7 @@ private:
     UniformHandle fColorUniform;
     GrColor fColor;
 
-    typedef GrGLPrimitiveProcessor INHERITED;
+    typedef GrGLSLPrimitiveProcessor INHERITED;
 };
 
 GrPathProcessor::GrPathProcessor(GrColor color,
@@ -124,12 +126,12 @@ GrPathProcessor::GrPathProcessor(GrColor color,
     this->initClassID<GrPathProcessor>();
 }
 
-void GrPathProcessor::getGLProcessorKey(const GrGLSLCaps& caps,
-                                        GrProcessorKeyBuilder* b) const {
+void GrPathProcessor::getGLSLProcessorKey(const GrGLSLCaps& caps,
+                                          GrProcessorKeyBuilder* b) const {
     GrGLPathProcessor::GenKey(*this, caps, b);
 }
 
-GrGLPrimitiveProcessor* GrPathProcessor::createGLInstance(const GrGLSLCaps& caps) const {
+GrGLSLPrimitiveProcessor* GrPathProcessor::createGLSLInstance(const GrGLSLCaps& caps) const {
     SkASSERT(caps.pathRenderingSupport());
     return new GrGLPathProcessor();
 }
