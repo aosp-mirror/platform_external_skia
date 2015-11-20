@@ -491,6 +491,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/GrGLTexture.cpp \
 	src/gpu/gl/GrGLTextureRenderTarget.cpp \
 	src/gpu/gl/GrGLUtil.cpp \
+	src/gpu/gl/GrGLVaryingHandler.cpp \
 	src/gpu/gl/GrGLVertexArray.cpp \
 	src/gpu/gl/GrGLVertexBuffer.cpp \
 	src/gpu/gl/builders/GrGLProgramBuilder.cpp \
@@ -507,6 +508,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/glsl/GrGLSLProgramBuilder.cpp \
 	src/gpu/glsl/GrGLSLShaderBuilder.cpp \
 	src/gpu/glsl/GrGLSLUtil.cpp \
+	src/gpu/glsl/GrGLSLVarying.cpp \
 	src/gpu/glsl/GrGLSLVertexShaderBuilder.cpp \
 	src/gpu/glsl/GrGLSLXferProcessor.cpp \
 	src/gpu/SkGpuDevice.cpp \
