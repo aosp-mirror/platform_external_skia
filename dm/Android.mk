@@ -257,6 +257,7 @@ LOCAL_SRC_FILES := \
 	../tests/TLSTest.cpp \
 	../tests/TemplatesTest.cpp \
 	../tests/TessellatingPathRendererTests.cpp \
+	../tests/TestTest.cpp \
 	../tests/TextBlobCacheTest.cpp \
 	../tests/TextBlobTest.cpp \
 	../tests/TextureCompressionTest.cpp \
