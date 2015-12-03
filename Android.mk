@@ -492,6 +492,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/GrGLTextureRenderTarget.cpp \
 	src/gpu/gl/GrGLTransferBuffer.cpp \
 	src/gpu/gl/GrGLUtil.cpp \
+	src/gpu/gl/GrGLUniformHandler.cpp \
 	src/gpu/gl/GrGLVaryingHandler.cpp \
 	src/gpu/gl/GrGLVertexArray.cpp \
 	src/gpu/gl/GrGLVertexBuffer.cpp \
