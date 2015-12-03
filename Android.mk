@@ -643,7 +643,7 @@ LOCAL_SHARED_LIBRARIES := \
 	libGLESv2 \
 	libEGL \
 	libz \
-	libjpeg-turbo \
+	libjpeg \
 	libpng \
 	libicuuc \
 	libicui18n \
