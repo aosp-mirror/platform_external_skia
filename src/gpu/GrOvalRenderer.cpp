@@ -23,9 +23,10 @@
 #include "effects/GrRRectEffect.h"
 #include "glsl/GrGLSLFragmentShaderBuilder.h"
 #include "glsl/GrGLSLGeometryProcessor.h"
-#include "glsl/GrGLSLProgramBuilder.h"
 #include "glsl/GrGLSLProgramDataManager.h"
+#include "glsl/GrGLSLVarying.h"
 #include "glsl/GrGLSLVertexShaderBuilder.h"
+#include "glsl/GrGLSLUniformHandler.h"
 #include "glsl/GrGLSLUtil.h"
 
 // TODO(joshualitt) - Break this file up during GrBatch post implementation cleanup
@@ -97,28 +98,31 @@ public:
 
         void onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) override{
             const CircleEdgeEffect& ce = args.fGP.cast<CircleEdgeEffect>();
-            GrGLSLGPBuilder* pb = args.fPB;
             GrGLSLVertexBuilder* vertBuilder = args.fVertBuilder;
+            GrGLSLVaryingHandler* varyingHandler = args.fVaryingHandler;
+            GrGLSLUniformHandler* uniformHandler = args.fUniformHandler;
 
             // emit attributes
-            vertBuilder->emitAttributes(ce);
+            varyingHandler->emitAttributes(ce);
 
             GrGLSLVertToFrag v(kVec4f_GrSLType);
-            args.fPB->addVarying("CircleEdge", &v);
+            varyingHandler->addVarying("CircleEdge", &v);
             vertBuilder->codeAppendf("%s = %s;", v.vsOut(), ce.inCircleEdge()->fName);
 
             GrGLSLFragmentBuilder* fragBuilder = args.fFragBuilder;
             // setup pass through color
             if (!ce.colorIgnored()) {
-                this->setupUniformColor(pb, fragBuilder, args.fOutputColor, &fColorUniform);
+                this->setupUniformColor(fragBuilder, uniformHandler, args.fOutputColor,
+                                        &fColorUniform);
             }
 
             // Setup position
-            this->setupPosition(pb, vertBuilder, gpArgs, ce.inPosition()->fName);
+            this->setupPosition(vertBuilder, gpArgs, ce.inPosition()->fName);
 
             // emit transforms
-            this->emitTransforms(args.fPB,
-                                 vertBuilder,
+            this->emitTransforms(vertBuilder,
+                                 varyingHandler,
+                                 uniformHandler,
                                  gpArgs->fPositionVar,
                                  ce.inPosition()->fName,
                                  ce.localMatrix(),
@@ -251,34 +255,37 @@ public:
 
         void onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) override{
             const EllipseEdgeEffect& ee = args.fGP.cast<EllipseEdgeEffect>();
-            GrGLSLGPBuilder* pb = args.fPB;
             GrGLSLVertexBuilder* vertBuilder = args.fVertBuilder;
+            GrGLSLVaryingHandler* varyingHandler = args.fVaryingHandler;
+            GrGLSLUniformHandler* uniformHandler = args.fUniformHandler;
 
             // emit attributes
-            vertBuilder->emitAttributes(ee);
+            varyingHandler->emitAttributes(ee);
 
             GrGLSLVertToFrag ellipseOffsets(kVec2f_GrSLType);
-            args.fPB->addVarying("EllipseOffsets", &ellipseOffsets);
+            varyingHandler->addVarying("EllipseOffsets", &ellipseOffsets);
             vertBuilder->codeAppendf("%s = %s;", ellipseOffsets.vsOut(),
                                    ee.inEllipseOffset()->fName);
 
             GrGLSLVertToFrag ellipseRadii(kVec4f_GrSLType);
-            args.fPB->addVarying("EllipseRadii", &ellipseRadii);
+            varyingHandler->addVarying("EllipseRadii", &ellipseRadii);
             vertBuilder->codeAppendf("%s = %s;", ellipseRadii.vsOut(),
                                    ee.inEllipseRadii()->fName);
 
             GrGLSLFragmentBuilder* fragBuilder = args.fFragBuilder;
             // setup pass through color
             if (!ee.colorIgnored()) {
-                this->setupUniformColor(pb, fragBuilder, args.fOutputColor, &fColorUniform);
+                this->setupUniformColor(fragBuilder, uniformHandler, args.fOutputColor,
+                                        &fColorUniform);
             }
 
             // Setup position
-            this->setupPosition(pb, vertBuilder, gpArgs, ee.inPosition()->fName);
+            this->setupPosition(vertBuilder, gpArgs, ee.inPosition()->fName);
 
             // emit transforms
-            this->emitTransforms(args.fPB,
-                                 vertBuilder,
+            this->emitTransforms(vertBuilder,
+                                 varyingHandler,
+                                 uniformHandler,
                                  gpArgs->fPositionVar,
                                  ee.inPosition()->fName,
                                  ee.localMatrix(),
@@ -431,39 +438,42 @@ public:
 
         void onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) override {
             const DIEllipseEdgeEffect& ee = args.fGP.cast<DIEllipseEdgeEffect>();
-            GrGLSLGPBuilder* pb = args.fPB;
             GrGLSLVertexBuilder* vertBuilder = args.fVertBuilder;
+            GrGLSLVaryingHandler* varyingHandler = args.fVaryingHandler;
+            GrGLSLUniformHandler* uniformHandler = args.fUniformHandler;
 
             // emit attributes
-            vertBuilder->emitAttributes(ee);
+            varyingHandler->emitAttributes(ee);
 
             GrGLSLVertToFrag offsets0(kVec2f_GrSLType);
-            args.fPB->addVarying("EllipseOffsets0", &offsets0);
+            varyingHandler->addVarying("EllipseOffsets0", &offsets0);
             vertBuilder->codeAppendf("%s = %s;", offsets0.vsOut(),
                                    ee.inEllipseOffsets0()->fName);
 
             GrGLSLVertToFrag offsets1(kVec2f_GrSLType);
-            args.fPB->addVarying("EllipseOffsets1", &offsets1);
+            varyingHandler->addVarying("EllipseOffsets1", &offsets1);
             vertBuilder->codeAppendf("%s = %s;", offsets1.vsOut(),
                                    ee.inEllipseOffsets1()->fName);
 
             GrGLSLFragmentBuilder* fragBuilder = args.fFragBuilder;
             // setup pass through color
             if (!ee.colorIgnored()) {
-                this->setupUniformColor(pb, fragBuilder, args.fOutputColor, &fColorUniform);
+                this->setupUniformColor(fragBuilder, uniformHandler, args.fOutputColor,
+                                        &fColorUniform);
             }
 
             // Setup position
-            this->setupPosition(pb,
-                                vertBuilder,
+            this->setupPosition(vertBuilder,
+                                uniformHandler,
                                 gpArgs,
                                 ee.inPosition()->fName,
                                 ee.viewMatrix(),
                                 &fViewMatrixUniform);
 
             // emit transforms
-            this->emitTransforms(args.fPB,
-                                 vertBuilder,
+            this->emitTransforms(vertBuilder,
+                                 varyingHandler,
+                                 uniformHandler,
                                  gpArgs->fPositionVar,
                                  ee.inPosition()->fName,
                                  args.fTransformsIn,
@@ -660,32 +670,32 @@ public:
         return string;
     }
 
-    void getInvariantOutputColor(GrInitInvariantOutput* out) const override {
+    void computePipelineOptimizations(GrInitInvariantOutput* color, 
+                                      GrInitInvariantOutput* coverage,
+                                      GrBatchToXPOverrides* overrides) const override {
         // When this is called on a batch, there is only one geometry bundle
-        out->setKnownFourComponents(fGeoData[0].fColor);
-    }
-
-    void getInvariantOutputCoverage(GrInitInvariantOutput* out) const override {
-        out->setUnknownSingleComponent();
+        color->setKnownFourComponents(fGeoData[0].fColor);
+        coverage->setUnknownSingleComponent();
+        overrides->fUsePLSDstRead = false;
     }
 
 private:
-    void initBatchTracker(const GrPipelineOptimizations& opt) override {
+    void initBatchTracker(const GrXPOverridesForBatch& overrides) override {
         // Handle any color overrides
-        if (!opt.readsColor()) {
+        if (!overrides.readsColor()) {
             fGeoData[0].fColor = GrColor_ILLEGAL;
         }
-        opt.getOverrideColorIfSet(&fGeoData[0].fColor);
+        overrides.getOverrideColorIfSet(&fGeoData[0].fColor);
 
         // setup batch properties
-        fBatch.fColorIgnored = !opt.readsColor();
+        fBatch.fColorIgnored = !overrides.readsColor();
         fBatch.fColor = fGeoData[0].fColor;
         fBatch.fStroke = fGeoData[0].fStroke;
-        fBatch.fUsesLocalCoords = opt.readsLocalCoords();
-        fBatch.fCoverageIgnored = !opt.readsCoverage();
+        fBatch.fUsesLocalCoords = overrides.readsLocalCoords();
+        fBatch.fCoverageIgnored = !overrides.readsCoverage();
     }
 
-    void onPrepareDraws(Target* target) override {
+    void onPrepareDraws(Target* target) const override {
         SkMatrix invert;
         if (!this->viewMatrix().invert(&invert)) {
             return;
@@ -710,7 +720,7 @@ private:
         }
 
         for (int i = 0; i < instanceCount; i++) {
-            Geometry& geom = fGeoData[i];
+            const Geometry& geom = fGeoData[i];
 
             SkScalar innerRadius = geom.fInnerRadius;
             SkScalar outerRadius = geom.fOuterRadius;
@@ -880,31 +890,32 @@ public:
 
     const char* name() const override { return "EllipseBatch"; }
 
-    void getInvariantOutputColor(GrInitInvariantOutput* out) const override {
+    void computePipelineOptimizations(GrInitInvariantOutput* color, 
+                                      GrInitInvariantOutput* coverage,
+                                      GrBatchToXPOverrides* overrides) const override {
         // When this is called on a batch, there is only one geometry bundle
-        out->setKnownFourComponents(fGeoData[0].fColor);
-    }
-    void getInvariantOutputCoverage(GrInitInvariantOutput* out) const override {
-        out->setUnknownSingleComponent();
+        color->setKnownFourComponents(fGeoData[0].fColor);
+        coverage->setUnknownSingleComponent();
+        overrides->fUsePLSDstRead = false;
     }
 
 private:
-    void initBatchTracker(const GrPipelineOptimizations& opt) override {
+    void initBatchTracker(const GrXPOverridesForBatch& overrides) override {
         // Handle any color overrides
-        if (!opt.readsCoverage()) {
+        if (!overrides.readsCoverage()) {
             fGeoData[0].fColor = GrColor_ILLEGAL;
         }
-        opt.getOverrideColorIfSet(&fGeoData[0].fColor);
+        overrides.getOverrideColorIfSet(&fGeoData[0].fColor);
 
         // setup batch properties
-        fBatch.fColorIgnored = !opt.readsColor();
+        fBatch.fColorIgnored = !overrides.readsColor();
         fBatch.fColor = fGeoData[0].fColor;
         fBatch.fStroke = fGeoData[0].fStroke;
-        fBatch.fUsesLocalCoords = opt.readsLocalCoords();
-        fBatch.fCoverageIgnored = !opt.readsCoverage();
+        fBatch.fUsesLocalCoords = overrides.readsLocalCoords();
+        fBatch.fCoverageIgnored = !overrides.readsCoverage();
     }
 
-    void onPrepareDraws(Target* target) override {
+    void onPrepareDraws(Target* target) const override {
         SkMatrix invert;
         if (!this->viewMatrix().invert(&invert)) {
             return;
@@ -929,7 +940,7 @@ private:
         }
 
         for (int i = 0; i < instanceCount; i++) {
-            Geometry& geom = fGeoData[i];
+            const Geometry& geom = fGeoData[i];
 
             SkScalar xRadius = geom.fXRadius;
             SkScalar yRadius = geom.fYRadius;
@@ -1151,32 +1162,33 @@ public:
 
     const char* name() const override { return "DIEllipseBatch"; }
 
-    void getInvariantOutputColor(GrInitInvariantOutput* out) const override {
+    void computePipelineOptimizations(GrInitInvariantOutput* color, 
+                                      GrInitInvariantOutput* coverage,
+                                      GrBatchToXPOverrides* overrides) const override {
         // When this is called on a batch, there is only one geometry bundle
-        out->setKnownFourComponents(fGeoData[0].fColor);
-    }
-    void getInvariantOutputCoverage(GrInitInvariantOutput* out) const override {
-        out->setUnknownSingleComponent();
+        color->setKnownFourComponents(fGeoData[0].fColor);
+        coverage->setUnknownSingleComponent();
+        overrides->fUsePLSDstRead = false;
     }
 
 private:
 
-    void initBatchTracker(const GrPipelineOptimizations& opt) override {
+    void initBatchTracker(const GrXPOverridesForBatch& overrides) override {
         // Handle any color overrides
-        if (!opt.readsColor()) {
+        if (!overrides.readsColor()) {
             fGeoData[0].fColor = GrColor_ILLEGAL;
         }
-        opt.getOverrideColorIfSet(&fGeoData[0].fColor);
+        overrides.getOverrideColorIfSet(&fGeoData[0].fColor);
 
         // setup batch properties
-        fBatch.fColorIgnored = !opt.readsColor();
+        fBatch.fColorIgnored = !overrides.readsColor();
         fBatch.fColor = fGeoData[0].fColor;
         fBatch.fMode = fGeoData[0].fMode;
-        fBatch.fUsesLocalCoords = opt.readsLocalCoords();
-        fBatch.fCoverageIgnored = !opt.readsCoverage();
+        fBatch.fUsesLocalCoords = overrides.readsLocalCoords();
+        fBatch.fCoverageIgnored = !overrides.readsCoverage();
     }
 
-    void onPrepareDraws(Target* target) override {
+    void onPrepareDraws(Target* target) const override {
         // Setup geometry processor
         SkAutoTUnref<GrGeometryProcessor> gp(DIEllipseEdgeEffect::Create(this->color(),
                                                                          this->viewMatrix(),
@@ -1196,7 +1208,7 @@ private:
         }
 
         for (int i = 0; i < instanceCount; i++) {
-            Geometry& geom = fGeoData[i];
+            const Geometry& geom = fGeoData[i];
 
             SkScalar xRadius = geom.fXRadius;
             SkScalar yRadius = geom.fYRadius;
@@ -1506,31 +1518,32 @@ public:
 
     const char* name() const override { return "RRectCircleBatch"; }
 
-    void getInvariantOutputColor(GrInitInvariantOutput* out) const override {
+    void computePipelineOptimizations(GrInitInvariantOutput* color, 
+                                      GrInitInvariantOutput* coverage,
+                                      GrBatchToXPOverrides* overrides) const override {
         // When this is called on a batch, there is only one geometry bundle
-        out->setKnownFourComponents(fGeoData[0].fColor);
-    }
-    void getInvariantOutputCoverage(GrInitInvariantOutput* out) const override {
-        out->setUnknownSingleComponent();
+        color->setKnownFourComponents(fGeoData[0].fColor);
+        coverage->setUnknownSingleComponent();
+        overrides->fUsePLSDstRead = false;
     }
 
 private:
-    void initBatchTracker(const GrPipelineOptimizations& opt) override {
+    void initBatchTracker(const GrXPOverridesForBatch& overrides) override {
         // Handle any color overrides
-        if (!opt.readsColor()) {
+        if (!overrides.readsColor()) {
             fGeoData[0].fColor = GrColor_ILLEGAL;
         }
-        opt.getOverrideColorIfSet(&fGeoData[0].fColor);
+        overrides.getOverrideColorIfSet(&fGeoData[0].fColor);
 
         // setup batch properties
-        fBatch.fColorIgnored = !opt.readsColor();
+        fBatch.fColorIgnored = !overrides.readsColor();
         fBatch.fColor = fGeoData[0].fColor;
         fBatch.fStroke = fGeoData[0].fStroke;
-        fBatch.fUsesLocalCoords = opt.readsLocalCoords();
-        fBatch.fCoverageIgnored = !opt.readsCoverage();
+        fBatch.fUsesLocalCoords = overrides.readsLocalCoords();
+        fBatch.fCoverageIgnored = !overrides.readsCoverage();
     }
 
-    void onPrepareDraws(Target* target) override {
+    void onPrepareDraws(Target* target) const override {
         // reset to device coordinates
         SkMatrix invert;
         if (!this->viewMatrix().invert(&invert)) {
@@ -1565,7 +1578,7 @@ private:
         }
 
         for (int i = 0; i < instanceCount; i++) {
-            Geometry& args = fGeoData[i];
+            const Geometry& args = fGeoData[i];
 
             SkScalar outerRadius = args.fOuterRadius;
 
@@ -1685,31 +1698,32 @@ public:
 
     const char* name() const override { return "RRectEllipseRendererBatch"; }
 
-    void getInvariantOutputColor(GrInitInvariantOutput* out) const override {
+    void computePipelineOptimizations(GrInitInvariantOutput* color, 
+                                      GrInitInvariantOutput* coverage,
+                                      GrBatchToXPOverrides* overrides) const override {
         // When this is called on a batch, there is only one geometry bundle
-        out->setKnownFourComponents(fGeoData[0].fColor);
-    }
-    void getInvariantOutputCoverage(GrInitInvariantOutput* out) const override {
-        out->setUnknownSingleComponent();
+        color->setKnownFourComponents(fGeoData[0].fColor);
+        coverage->setUnknownSingleComponent();
+        overrides->fUsePLSDstRead = false;
     }
 
 private:
-    void initBatchTracker(const GrPipelineOptimizations& opt) override {
+    void initBatchTracker(const GrXPOverridesForBatch& overrides) override {
         // Handle any color overrides
-        if (!opt.readsColor()) {
+        if (!overrides.readsColor()) {
             fGeoData[0].fColor = GrColor_ILLEGAL;
         }
-        opt.getOverrideColorIfSet(&fGeoData[0].fColor);
+        overrides.getOverrideColorIfSet(&fGeoData[0].fColor);
 
         // setup batch properties
-        fBatch.fColorIgnored = !opt.readsColor();
+        fBatch.fColorIgnored = !overrides.readsColor();
         fBatch.fColor = fGeoData[0].fColor;
         fBatch.fStroke = fGeoData[0].fStroke;
-        fBatch.fUsesLocalCoords = opt.readsLocalCoords();
-        fBatch.fCoverageIgnored = !opt.readsCoverage();
+        fBatch.fUsesLocalCoords = overrides.readsLocalCoords();
+        fBatch.fCoverageIgnored = !overrides.readsCoverage();
     }
 
-    void onPrepareDraws(Target* target) override {
+    void onPrepareDraws(Target* target) const override {
         // reset to device coordinates
         SkMatrix invert;
         if (!this->viewMatrix().invert(&invert)) {
@@ -1744,7 +1758,7 @@ private:
         }
 
         for (int i = 0; i < instanceCount; i++) {
-            Geometry& args = fGeoData[i];
+            const Geometry& args = fGeoData[i];
 
             // Compute the reciprocals of the radii here to save time in the shader
             SkScalar xRadRecip = SkScalarInvert(args.fXRadius);

@@ -21,8 +21,8 @@
 #include "effects/Gr1DKernelEffect.h"
 #include "glsl/GrGLSLFragmentProcessor.h"
 #include "glsl/GrGLSLFragmentShaderBuilder.h"
-#include "glsl/GrGLSLProgramBuilder.h"
 #include "glsl/GrGLSLProgramDataManager.h"
+#include "glsl/GrGLSLUniformHandler.h"
 #endif
 
 SkMorphologyImageFilter::SkMorphologyImageFilter(int radiusX,
@@ -288,14 +288,15 @@ GrGLMorphologyEffect::GrGLMorphologyEffect(const GrProcessor& proc) {
 }
 
 void GrGLMorphologyEffect::emitCode(EmitArgs& args) {
-    fPixelSizeUni = args.fBuilder->addUniform(GrGLSLProgramBuilder::kFragment_Visibility,
-                                            kFloat_GrSLType, kDefault_GrSLPrecision,
-                                            "PixelSize");
-    const char* pixelSizeInc = args.fBuilder->getUniformCStr(fPixelSizeUni);
-    fRangeUni = args.fBuilder->addUniform(GrGLSLProgramBuilder::kFragment_Visibility,
-                                            kVec2f_GrSLType, kDefault_GrSLPrecision,
-                                            "Range");
-    const char* range = args.fBuilder->getUniformCStr(fRangeUni);
+    GrGLSLUniformHandler* uniformHandler = args.fUniformHandler;
+    fPixelSizeUni = uniformHandler->addUniform(GrGLSLUniformHandler::kFragment_Visibility,
+                                               kFloat_GrSLType, kDefault_GrSLPrecision,
+                                               "PixelSize");
+    const char* pixelSizeInc = uniformHandler->getUniformCStr(fPixelSizeUni);
+    fRangeUni = uniformHandler->addUniform(GrGLSLUniformHandler::kFragment_Visibility,
+                                           kVec2f_GrSLType, kDefault_GrSLPrecision,
+                                           "Range");
+    const char* range = uniformHandler->getUniformCStr(fRangeUni);
 
     GrGLSLFragmentBuilder* fragBuilder = args.fFragBuilder;
     SkString coords2D = fragBuilder->ensureFSCoords2D(args.fCoords, 0);
@@ -479,6 +480,7 @@ void apply_morphology_rect(GrDrawContext* drawContext,
                                                                radius,
                                                                morphType,
                                                                bounds))->unref();
+    paint.setPorterDuffXPFactory(SkXfermode::kSrc_Mode);
     drawContext->fillRectToRect(clip, paint, SkMatrix::I(), SkRect::Make(dstRect),
                                      SkRect::Make(srcRect));
 }
@@ -496,6 +498,7 @@ void apply_morphology_rect_no_bounds(GrDrawContext* drawContext,
                                                                direction,
                                                                radius,
                                                                morphType))->unref();
+    paint.setPorterDuffXPFactory(SkXfermode::kSrc_Mode);
     drawContext->fillRectToRect(clip, paint, SkMatrix::I(), SkRect::Make(dstRect),
                                 SkRect::Make(srcRect));
 }

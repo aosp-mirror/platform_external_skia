@@ -122,6 +122,7 @@ LOCAL_SRC_FILES := \
 	../tests/DrawPathTest.cpp \
 	../tests/DrawTextTest.cpp \
 	../tests/DynamicHashTest.cpp \
+	../tests/EGLImageTest.cpp \
 	../tests/EmptyPathTest.cpp \
 	../tests/ErrorTest.cpp \
 	../tests/FillPathTest.cpp \
@@ -209,6 +210,7 @@ LOCAL_SRC_FILES := \
 	../tests/PointTest.cpp \
 	../tests/PremulAlphaRoundTripTest.cpp \
 	../tests/QuickRejectTest.cpp \
+	../tests/RRectInPathTest.cpp \
 	../tests/RTConfRegistryTest.cpp \
 	../tests/RTreeTest.cpp \
 	../tests/RandomTest.cpp \
@@ -256,6 +258,7 @@ LOCAL_SRC_FILES := \
 	../tests/TLSTest.cpp \
 	../tests/TemplatesTest.cpp \
 	../tests/TessellatingPathRendererTests.cpp \
+	../tests/TestTest.cpp \
 	../tests/TextBlobCacheTest.cpp \
 	../tests/TextBlobTest.cpp \
 	../tests/TextureCompressionTest.cpp \
@@ -435,6 +438,7 @@ LOCAL_SRC_FILES := \
 	../gm/patch.cpp \
 	../gm/patchgrid.cpp \
 	../gm/path_stroke_with_zero_length.cpp \
+	../gm/pathcontourstart.cpp \
 	../gm/patheffects.cpp \
 	../gm/pathfill.cpp \
 	../gm/pathinterior.cpp \
@@ -477,6 +481,7 @@ LOCAL_SRC_FILES := \
 	../gm/skbug_257.cpp \
 	../gm/smallarc.cpp \
 	../gm/smallimage.cpp \
+	../gm/smallpaths.cpp \
 	../gm/spritebitmap.cpp \
 	../gm/srcmode.cpp \
 	../gm/stlouisarch.cpp \

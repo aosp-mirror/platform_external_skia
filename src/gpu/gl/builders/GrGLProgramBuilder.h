@@ -10,6 +10,8 @@
 
 #include "GrPipeline.h"
 #include "gl/GrGLProgramDataManager.h"
+#include "gl/GrGLUniformHandler.h"
+#include "gl/GrGLVaryingHandler.h"
 #include "glsl/GrGLSLPrimitiveProcessor.h"
 #include "glsl/GrGLSLProgramBuilder.h"
 #include "glsl/GrGLSLProgramDataManager.h"
@@ -57,46 +59,12 @@ public:
      */
     static GrGLProgram* CreateProgram(const DrawArgs&, GrGLGpu*);
 
-    const GrGLSLShaderVar& getUniformVariable(UniformHandle u) const override {
-        return fUniforms[u.toIndex()].fVariable;
-    }
-
-    const char* getUniformCStr(UniformHandle u) const override {
-        return this->getUniformVariable(u).c_str();
-    }
-
     const GrGLSLCaps* glslCaps() const override;
 
     GrGLGpu* gpu() const { return fGpu; }
 
-    void addVarying(
-            const char* name,
-            GrGLSLVarying*,
-            GrSLPrecision precision = kDefault_GrSLPrecision) override;
-
-    void addPassThroughAttribute(const GrPrimitiveProcessor::Attribute*,
-                                 const char* output) override;
-
-    SeparableVaryingHandle addSeparableVarying(
-        const char* name,
-        GrGLSLVertToFrag*,
-        GrSLPrecision fsPrecision = kDefault_GrSLPrecision) override;
-
 private:
-    typedef GrGLProgramDataManager::UniformInfo UniformInfo;
-    typedef GrGLProgramDataManager::UniformInfoArray UniformInfoArray;
-    typedef GrGLProgramDataManager::SeparableVaryingInfo SeparableVaryingInfo;
-    typedef GrGLProgramDataManager::SeparableVaryingInfoArray SeparableVaryingInfoArray;
-
     GrGLProgramBuilder(GrGLGpu*, const DrawArgs&);
-
-    UniformHandle internalAddUniformArray(uint32_t visibility,
-                                          GrSLType type,
-                                          GrSLPrecision precision,
-                                          const char* name,
-                                          bool mangleName,
-                                          int arrayCount,
-                                          const char** outName) override;
 
     // Generates a possibly mangled name for a stage variable and writes it to the fragment shader.
     // If GrGLSLExpr4 has a valid name then it will use that instead
@@ -122,7 +90,8 @@ private:
                             const char* outCoverage);
     void emitAndInstallXferProc(const GrXferProcessor&,
                                 const GrGLSLExpr4& colorIn,
-                                const GrGLSLExpr4& coverageIn);
+                                const GrGLSLExpr4& coverageIn,
+                                bool ignoresCoverage);
 
     void verify(const GrPrimitiveProcessor&);
     void verify(const GrXferProcessor&);
@@ -146,7 +115,9 @@ private:
     // Subclasses create different programs
     GrGLProgram* createProgram(GrGLuint programID);
 
-    void onAppendUniformDecls(ShaderVisibility visibility, SkString* out) const override;
+    GrGLSLUniformHandler* uniformHandler() override { return &fUniformHandler; }
+    const GrGLSLUniformHandler* uniformHandler() const override { return &fUniformHandler; }
+    GrGLSLVaryingHandler* varyingHandler() override { return &fVaryingHandler; }
 
     // reset is called by program creator between each processor's emit code.  It increments the
     // stage offset for variable name mangling, and also ensures verfication variables in the
@@ -175,17 +146,14 @@ private:
     SkAutoTUnref<GrGLInstalledFragProcs> fFragmentProcessors;
 
     GrGLGpu* fGpu;
-    UniformInfoArray fUniforms;
     GrGLSLPrimitiveProcessor::TransformsIn fCoordTransforms;
     GrGLSLPrimitiveProcessor::TransformsOut fOutCoords;
+    typedef GrGLSLUniformHandler::UniformHandle UniformHandle;
     SkTArray<UniformHandle> fSamplerUniforms;
-    SeparableVaryingInfoArray fSeparableVaryingInfos;
 
-    friend class GrGLSLShaderBuilder;
-    friend class GrGLSLVertexBuilder;
-    friend class GrGLSLFragmentShaderBuilder;
-    friend class GrGLSLGeometryBuilder;
+    GrGLVaryingHandler        fVaryingHandler;
+    GrGLUniformHandler        fUniformHandler;
 
-   typedef GrGLSLProgramBuilder INHERITED; 
+    typedef GrGLSLProgramBuilder INHERITED; 
 };
 #endif

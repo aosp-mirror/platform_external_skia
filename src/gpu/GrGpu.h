@@ -31,6 +31,7 @@ class GrRenderTarget;
 class GrStencilAttachment;
 class GrSurface;
 class GrTexture;
+class GrTransferBuffer;
 class GrVertexBuffer;
 class GrVertices;
 
@@ -128,6 +129,22 @@ public:
      */
     GrIndexBuffer* createIndexBuffer(size_t size, bool dynamic);
 
+    enum TransferType {
+        kCpuToGpu_TransferType,
+        kGpuToCpu_TransferType
+    };
+
+    /**
+     * Creates a transfer buffer.
+     *
+     * @param size      size in bytes of the index buffer
+     * @param toGpu     true if used to transfer from the cpu to the gpu
+     *                  otherwise to be used to transfer from the gpu to the cpu
+     *
+     * @return The transfer buffer if successful, otherwise nullptr.
+     */
+    GrTransferBuffer* createTransferBuffer(size_t size, TransferType type);
+    
     /**
      * Resolves MSAA.
      */
@@ -342,6 +359,7 @@ public:
         void incStencilAttachmentCreates() { fStencilAttachmentCreates++; }
         void incNumDraws() { fNumDraws++; }
         void dump(SkString*);
+        void dumpKeyValuePairs(SkTArray<SkString>* keys, SkTArray<double>* values);
 
     private:
         int fRenderTargetBinds;
@@ -351,7 +369,8 @@ public:
         int fStencilAttachmentCreates;
         int fNumDraws;
 #else
-        void dump(SkString*) {};
+        void dump(SkString*) {}
+        void dumpKeyValuePairs(SkTArray<SkString>*, SkTArray<double>*) {}
         void incRenderTargetBinds() {}
         void incShaderCompilations() {}
         void incTextureCreates() {}
@@ -385,6 +404,8 @@ public:
     // clears target's entire stencil buffer to 0
     virtual void clearStencil(GrRenderTarget* target) = 0;
 
+    // draws an outline rectangle for debugging/visualization purposes.
+    virtual void drawDebugWireRect(GrRenderTarget*, const SkIRect&, GrColor) = 0;
 
     // Determines whether a copy of a texture must be made in order to be compatible with
     // a given GrTextureParams. If so, the width, height and filter used for the copy are
@@ -394,6 +415,9 @@ public:
 
     // This is only to be used in GL-specific tests.
     virtual const GrGLContext* glContextForTesting() const { return nullptr; }
+
+    // This is only to be used by testing code
+    virtual void resetShaderCacheForTesting() const {}
 
 protected:
     // Functions used to map clip-respecting stencil tests into normal
@@ -450,6 +474,7 @@ private:
                                                       GrWrapOwnership) = 0;
     virtual GrVertexBuffer* onCreateVertexBuffer(size_t size, bool dynamic) = 0;
     virtual GrIndexBuffer* onCreateIndexBuffer(size_t size, bool dynamic) = 0;
+    virtual GrTransferBuffer* onCreateTransferBuffer(size_t size, TransferType type) = 0;
 
     // overridden by backend-specific derived class to perform the clear.
     virtual void onClear(GrRenderTarget*, const SkIRect& rect, GrColor color) = 0;

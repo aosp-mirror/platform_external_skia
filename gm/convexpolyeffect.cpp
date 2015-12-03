@@ -45,6 +45,9 @@ private:
     ConvexPolyTestBatch(const GrGeometryProcessor* gp, const Geometry& geo)
         : INHERITED(ClassID(), gp, geo.fBounds)
         , fGeometry(geo) {
+        // Make sure any artifacts around the exterior of path are visible by using overly
+        // conservative bounding geometry.
+        fGeometry.fBounds.outset(5.f, 5.f);
     }
 
     Geometry* geoData(int index) override {
@@ -57,7 +60,7 @@ private:
         return &fGeometry;
     }
 
-    void generateGeometry(Target* target) override {
+    void generateGeometry(Target* target) const override {
         size_t vertexStride = this->geometryProcessor()->getVertexStride();
         SkASSERT(vertexStride == sizeof(SkPoint));
         QuadHelper helper;
@@ -66,9 +69,6 @@ private:
             return;
         }
 
-        // Make sure any artifacts around the exterior of path are visible by using overly
-        // conservative bounding geometry.
-        fGeometry.fBounds.outset(5.f, 5.f);
         fGeometry.fBounds.toQuad(verts);
 
         helper.recordDraw(target);
@@ -166,7 +166,7 @@ protected:
                 GrDefaultGeoProcFactory::Create(color, coverage, localCoords, SkMatrix::I()));
 
         SkScalar y = 0;
-        for (SkTLList<SkPath>::Iter iter(fPaths, SkTLList<SkPath>::Iter::kHead_IterStart);
+        for (PathList::Iter iter(fPaths, PathList::Iter::kHead_IterStart);
              iter.get();
              iter.next()) {
             const SkPath* path = iter.get();
@@ -190,6 +190,8 @@ protected:
                 }
 
                 GrPipelineBuilder pipelineBuilder;
+                pipelineBuilder.setXPFactory(
+                    GrPorterDuffXPFactory::Create(SkXfermode::kSrc_Mode))->unref();
                 pipelineBuilder.addCoverageFragmentProcessor(fp);
                 pipelineBuilder.setRenderTarget(rt);
 
@@ -217,7 +219,7 @@ protected:
             y += SkScalarCeilToScalar(path->getBounds().height() + 20.f);
         }
 
-        for (SkTLList<SkRect>::Iter iter(fRects, SkTLList<SkRect>::Iter::kHead_IterStart);
+        for (RectList::Iter iter(fRects, RectList::Iter::kHead_IterStart);
              iter.get();
              iter.next()) {
 
@@ -239,6 +241,8 @@ protected:
                 }
 
                 GrPipelineBuilder pipelineBuilder;
+                pipelineBuilder.setXPFactory(
+                    GrPorterDuffXPFactory::Create(SkXfermode::kSrc_Mode))->unref();
                 pipelineBuilder.addCoverageFragmentProcessor(fp);
                 pipelineBuilder.setRenderTarget(rt);
 
@@ -268,8 +272,10 @@ protected:
     }
 
 private:
-    SkTLList<SkPath> fPaths;
-    SkTLList<SkRect> fRects;
+    typedef SkTLList<SkPath, 1> PathList;
+    typedef SkTLList<SkRect, 1> RectList;
+    PathList fPaths;
+    RectList fRects;
 
     typedef GM INHERITED;
 };

@@ -110,8 +110,11 @@
 #define GR_GL_ELEMENT_ARRAY_BUFFER           0x8893
 #define GR_GL_ARRAY_BUFFER_BINDING           0x8894
 #define GR_GL_ELEMENT_ARRAY_BUFFER_BINDING   0x8895
+#define GR_GL_PIXEL_PACK_BUFFER              0x88EB
+#define GR_GL_PIXEL_UNPACK_BUFFER            0x88EC
 
 #define GR_GL_STREAM_DRAW                    0x88E0
+#define GR_GL_STREAM_READ                    0x88E1
 #define GR_GL_STATIC_DRAW                    0x88E4
 #define GR_GL_DYNAMIC_DRAW                   0x88E8
 
@@ -928,8 +931,18 @@
 #define GR_GL_PROGRAM_PIPELINE                              0x82E4
 #define GR_GL_SAMPLER                                       0x82E6
 
+/* GL_OES_EGL_image_external */
+#define GR_GL_TEXTURE_EXTERNAL                              0x8D65
+
 /* EGL Defines */
 #define GR_EGL_NO_DISPLAY                                   ((GrEGLDisplay)0)
 #define GR_EGL_EXTENSIONS                                   0x3055
+#define GR_EGL_GL_TEXTURE_2D                                0x30B1
+#define GR_EGL_GL_TEXTURE_LEVEL                             0x30BC
+#define GR_EGL_IMAGE_PRESERVED                              0x30D2
+#define GR_EGL_FALSE                                        0x0
+#define GR_EGL_TRUE                                         0x1
+#define GR_EGL_NONE                                         0x3038
+#define GR_EGL_NO_IMAGE                                    ((GrEGLImage)0)
 
 #endif

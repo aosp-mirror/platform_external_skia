@@ -5,8 +5,8 @@
 
 exports_files(["BUILD.public"])
 
-# Platform-independent SRCS
-SRCS = glob(
+# All platform-independent SRCS.
+BASE_SRCS = glob(
     [
         "include/private/*.h",
         "src/**/*.h",
@@ -22,10 +22,10 @@ SRCS = glob(
         # Exclude platform-dependent files.
         "src/device/xps/*",  # Windows-only. Move to ports?
         "src/doc/*_XPS.cpp",  # Windows-only. Move to ports?
+        "src/fonts/SkFontMgr_fontconfig.cpp",
         "src/gpu/gl/android/*",
         "src/gpu/gl/egl/*",
         "src/gpu/gl/glx/*",
-        "src/gpu/gl/nacl/*",
         "src/gpu/gl/iOS/*",
         "src/gpu/gl/mac/*",
         "src/gpu/gl/win/*",
@@ -42,10 +42,8 @@ SRCS = glob(
         # Exclude multiple definitions.
         # TODO(mtklein): Move to opts?
         "src/doc/SkDocument_PDF_None.cpp",  # We use SkDocument_PDF.cpp.
-        "src/fonts/*fontconfig*",
         "src/gpu/gl/GrGLCreateNativeInterface_none.cpp",
         "src/gpu/gl/GrGLDefaultInterface_native.cpp",
-        "src/gpu/gl/GrGLDefaultInterface_none.cpp",
 
         # Exclude files that don't compile with the current DEFINES.
         "src/codec/SkJpegCodec.cpp",  # libjpeg_turbo version mismatch.
@@ -53,6 +51,9 @@ SRCS = glob(
         "src/gpu/gl/command_buffer/*",  # unknown type name 'HMODULE'
         "src/gpu/gl/mesa/*",  # Requires SK_MESA define.
         "src/svg/parser/*",  # Missing SkSVG.h.
+
+        # Conflicting dependencies among Lua versions. See cl/107087297.
+        "src/utils/SkLua*",
 
         # Not used.
         "src/animator/**/*",
@@ -64,11 +65,9 @@ SRCS = glob(
 )
 
 # Platform-dependent SRCS for google3-default platform.
-SRCS_UNIX = glob(
+BASE_SRCS_UNIX = glob(
     [
-        "src/gpu/gl/GrGLDefaultInterface_native.cpp",
-        "src/gpu/gl/glx/**/*.cpp",
-        "src/gpu/gl/glx/**/*.h",
+        "src/fonts/SkFontMgr_fontconfig.cpp",
         "src/opts/**/*.cpp",
         "src/opts/**/*.h",
         "src/ports/**/*.cpp",
@@ -90,15 +89,17 @@ SRCS_UNIX = glob(
         "src/opts/SkBlitRow_opts_none.cpp",
         "src/ports/*android*",
         "src/ports/*chromium*",
-        "src/ports/*fontconfig*",
-        "src/ports/*FontConfig*",
         "src/ports/*mac*",
         "src/ports/*mozalloc*",
         "src/ports/*nacl*",
         "src/ports/*win*",
+        "src/ports/SkFontConfigInterface_direct_factory.cpp",
+        "src/ports/SkFontMgr_custom_directory_factory.cpp",
         "src/ports/SkFontMgr_custom_embedded_factory.cpp",
         "src/ports/SkFontMgr_empty_factory.cpp",
+        "src/ports/SkFontMgr_fontconfig.cpp",
         "src/ports/SkImageDecoder_CG.cpp",
+        "src/ports/SkFontMgr_fontconfig_factory.cpp",
         "src/ports/SkImageDecoder_WIC.cpp",
         "src/ports/SkImageDecoder_empty.cpp",
         "src/ports/SkImageGenerator_none.cpp",
@@ -107,11 +108,9 @@ SRCS_UNIX = glob(
 )
 
 # Platform-dependent SRCS for google3-default Android.
-SRCS_ANDROID = glob(
+BASE_SRCS_ANDROID = glob(
     [
         # TODO(benjaminwagner): Figure out how to compile with EGL.
-        "src/gpu/gl/GrGLDefaultInterface_none.cpp",
-        "src/gpu/gl/nacl/SkCreatePlatformGLContext_nacl.cpp",
         "src/opts/**/*.cpp",
         "src/opts/**/*.h",
         "src/ports/**/*.cpp",
@@ -136,6 +135,8 @@ SRCS_ANDROID = glob(
         "src/ports/*nacl*",
         "src/ports/*win*",
         "src/ports/SkDebug_stdio.cpp",
+        "src/ports/SkFontConfigInterface_direct_factory.cpp",
+        "src/ports/SkFontConfigInterface_direct_google3_factory.cpp",
         "src/ports/SkFontMgr_custom_directory_factory.cpp",
         "src/ports/SkFontMgr_custom_embedded_factory.cpp",
         "src/ports/SkFontMgr_empty_factory.cpp",
@@ -148,9 +149,8 @@ SRCS_ANDROID = glob(
 )
 
 # Platform-dependent SRCS for google3-default iOS.
-SRCS_IOS = glob(
+BASE_SRCS_IOS = glob(
     [
-        "src/gpu/gl/iOS/GrGLCreateNativeInterface_iOS.cpp",
         "src/opts/**/*.cpp",
         "src/opts/**/*.h",
         "src/ports/**/*.cpp",
@@ -179,6 +179,8 @@ SRCS_IOS = glob(
         "src/ports/*win*",
         "src/ports/SkDebug_stdio.cpp",
         "src/ports/SkFontMgr_custom.cpp",
+        "src/ports/SkFontConfigInterface_direct_factory.cpp",
+        "src/ports/SkFontConfigInterface_direct_google3_factory.cpp",
         "src/ports/SkFontMgr_custom_directory_factory.cpp",
         "src/ports/SkFontMgr_custom_embedded_factory.cpp",
         "src/ports/SkFontMgr_empty_factory.cpp",
@@ -190,27 +192,27 @@ SRCS_IOS = glob(
     ],
 )
 
-PLATFORM_SRCS = select({
-    CONDITION_ANDROID: SRCS_ANDROID,
-    CONDITION_IOS: SRCS_IOS,
-    "//conditions:default": SRCS_UNIX,
+BASE_SRCS_PLATFORM = select({
+    CONDITION_ANDROID: BASE_SRCS_ANDROID,
+    CONDITION_IOS: BASE_SRCS_IOS,
+    "//conditions:default": BASE_SRCS_UNIX,
 })
 
-SRCS_SSSE3 = glob(
+SSSE3_SRCS = glob(
     [
         "src/opts/*SSSE3*.cpp",
         "src/opts/*ssse3*.cpp",
     ],
 )
 
-SRCS_SSE4 = glob(
+SSE4_SRCS = glob(
     [
         "src/opts/*SSE4*.cpp",
         "src/opts/*sse4*.cpp",
     ],
 )
 
-HDRS = glob(
+BASE_HDRS = glob(
     [
         "include/**/*.h",
     ],
@@ -224,6 +226,22 @@ HDRS = glob(
         "include/xml/SkBML_XMLParser.h",
     ],
 )
+
+# Dependencies.
+BASE_DEPS_UNIX = [
+    ":opts_sse4",
+    ":opts_ssse3",
+]
+
+BASE_DEPS_ANDROID = []
+
+BASE_DEPS_IOS = []
+
+BASE_DEPS = select({
+    CONDITION_ANDROID: BASE_DEPS_ANDROID + BASE_EXTERNAL_DEPS_ANDROID,
+    CONDITION_IOS: BASE_DEPS_IOS + BASE_EXTERNAL_DEPS_IOS,
+    "//conditions:default": BASE_DEPS_UNIX + BASE_EXTERNAL_DEPS_UNIX,
+}) + EXTERNAL_DEPS_ALL
 
 # Includes needed by Skia implementation.  Not public includes.
 INCLUDES = [
@@ -250,28 +268,15 @@ INCLUDES = [
     "src/image",
     "src/lazy",
     "src/opts",
+    "src/ports",
     "src/pdf",
     "src/sfnt",
     "src/utils",
     "third_party/etc1",
     "third_party/ktx",
-]
+] + EXTERNAL_INCLUDES
 
-# Dependencies.
-DEPS_UNIX = [
-    ":opts_sse4",
-    ":opts_ssse3",
-]
-
-DEPS_ANDROID = []
-
-DEPS_IOS = []
-
-DEPS = select({
-    CONDITION_ANDROID: DEPS_ANDROID + EXTERNAL_DEPS_ANDROID,
-    CONDITION_IOS: DEPS_IOS + EXTERNAL_DEPS_IOS,
-    "//conditions:default": DEPS_UNIX + EXTERNAL_DEPS_UNIX,
-}) + EXTERNAL_DEPS_ALL
+## :dm
 
 # Platform-independent SRCS for DM.
 DM_SRCS = glob(
@@ -348,12 +353,9 @@ DM_INCLUDES = [
     "tools/timer",
 ]
 
-COPTS_ANDROID = [
-    "-mfpu=neon",
-]
+COPTS_ANDROID = ["-mfpu=neon"]
 
-COPTS_IOS = [
-]
+COPTS_IOS = []
 
 COPTS_UNIX = [
     "-Wno-implicit-fallthrough",  # Some intentional fallthrough.
@@ -406,7 +408,7 @@ LINKOPTS = select({
 
 cc_library(
     name = "opts_ssse3",
-    srcs = SRCS_SSSE3,
+    srcs = SSSE3_SRCS,
     copts = COPTS + ["-mssse3"],
     defines = DEFINES,
     includes = INCLUDES,
@@ -415,23 +417,25 @@ cc_library(
 
 cc_library(
     name = "opts_sse4",
-    srcs = SRCS_SSE4,
+    srcs = SSE4_SRCS,
     copts = COPTS + ["-msse4"],
     defines = DEFINES,
     includes = INCLUDES,
     deps = EXTERNAL_DEPS_ALL,
 )
 
+# If you need Ganesh (GPU) support in Skia, please contact skia-team@google.com
+# for help.
 cc_library(
     name = "skia",
-    srcs = SRCS + PLATFORM_SRCS,
-    hdrs = HDRS,
+    srcs = BASE_SRCS + BASE_SRCS_PLATFORM,
+    hdrs = BASE_HDRS,
     copts = COPTS,
     defines = DEFINES,
     includes = INCLUDES,
     linkopts = LINKOPTS,
     visibility = [":skia_clients"],
-    deps = DEPS,
+    deps = BASE_DEPS,
     alwayslink = 1,
 )
 

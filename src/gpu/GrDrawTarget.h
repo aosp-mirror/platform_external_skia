@@ -43,9 +43,14 @@ class GrPathRangeDraw;
 
 class GrDrawTarget final : public SkRefCnt {
 public:
-    // The context may not be fully constructed and should not be used during GrDrawTarget
-    // construction.
-    GrDrawTarget(GrRenderTarget* rt, GrGpu* gpu, GrResourceProvider*);
+    /** Options for GrDrawTarget behavior. */
+    struct Options {
+        Options () : fClipBatchToBounds(false), fDrawBatchBounds(false) {}
+        bool fClipBatchToBounds;
+        bool fDrawBatchBounds;
+    };
+
+    GrDrawTarget(GrRenderTarget*, GrGpu*, GrResourceProvider*, const Options&);
 
     ~GrDrawTarget() override;
 
@@ -133,7 +138,8 @@ public:
                             GrColor color,
                             GrPathRange* range,
                             GrPathRangeDraw* draw,
-                            GrPathRendering::FillType fill);
+                            GrPathRendering::FillType fill,
+                            const SkRect& bounds);
 
     /**
      * Helper function for drawing rects.
@@ -278,8 +284,7 @@ private:
     // but couldn't be made. Otherwise, returns true.  This method needs to be protected because it
     // needs to be accessed by GLPrograms to setup a correct drawstate
     bool setupDstReadIfNecessary(const GrPipelineBuilder&,
-        const GrProcOptInfo& colorPOI,
-        const GrProcOptInfo& coveragePOI,
+        const GrPipelineOptimizations& optimizations,
         GrXferProcessor::DstTexture*,
         const SkRect& batchBounds);
 
@@ -314,6 +319,8 @@ private:
     // 'this' drawTarget relies on the output of the drawTargets in 'fDependencies'
     SkTDArray<GrDrawTarget*>                    fDependencies;
     GrRenderTarget*                             fRenderTarget;
+
+    bool                                        fDrawBatchBounds;
 
     typedef SkRefCnt INHERITED;
 };

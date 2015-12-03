@@ -72,11 +72,11 @@ bool GrContext::init(GrBackend backend, GrBackendContext backendContext,
     if (!fGpu) {
         return false;
     }
-    this->initCommon();
+    this->initCommon(options);
     return true;
 }
 
-void GrContext::initCommon() {
+void GrContext::initCommon(const GrContextOptions& options) {
     fCaps = SkRef(fGpu->caps());
     fResourceCache = new GrResourceCache(fCaps);
     fResourceCache->setOverBudgetCallback(OverBudgetCB, this);
@@ -86,7 +86,10 @@ void GrContext::initCommon() {
 
     fDidTestPMConversions = false;
 
-    fDrawingManager.reset(new GrDrawingManager(this));
+    GrDrawTarget::Options dtOptions;
+    dtOptions.fClipBatchToBounds = options.fClipBatchToBounds;
+    dtOptions.fDrawBatchBounds = options.fDrawBatchBounds;
+    fDrawingManager.reset(new GrDrawingManager(this, dtOptions));
 
     // GrBatchFontCache will eventually replace GrFontCache
     fBatchFontCache = new GrBatchFontCache(this);
@@ -276,7 +279,6 @@ bool GrContext::writeSurfacePixels(GrSurface* surface,
         SkAutoTUnref<const GrFragmentProcessor> fp;
         SkMatrix textureMatrix;
         textureMatrix.setIDiv(tempTexture->width(), tempTexture->height());
-        GrPaint paint;
         if (applyPremulToSrc) {
             fp.reset(this->createUPMToPMEffect(tempTexture, tempDrawInfo.fSwapRAndB,
                                                textureMatrix));
@@ -324,7 +326,9 @@ bool GrContext::writeSurfacePixels(GrSurface* surface,
             if (!drawContext) {
                 return false;
             }
+            GrPaint paint;
             paint.addColorFragmentProcessor(fp);
+            paint.setPorterDuffXPFactory(SkXfermode::kSrc_Mode);
             SkRect rect = SkRect::MakeWH(SkIntToScalar(width), SkIntToScalar(height));
             drawContext->drawRect(GrClip::WideOpen(), paint, matrix, rect, nullptr);
 
@@ -412,7 +416,6 @@ bool GrContext::readSurfacePixels(GrSurface* src,
             SkMatrix textureMatrix;
             textureMatrix.setTranslate(SkIntToScalar(left), SkIntToScalar(top));
             textureMatrix.postIDiv(src->width(), src->height());
-            GrPaint paint;
             SkAutoTUnref<const GrFragmentProcessor> fp;
             if (unpremul) {
                 fp.reset(this->createPMToUPMEffect(src->asTexture(), tempDrawInfo.fSwapRAndB,
@@ -430,7 +433,9 @@ bool GrContext::readSurfacePixels(GrSurface* src,
                     GrConfigConversionEffect::kNone_PMConversion, textureMatrix));
             }
             if (fp) {
+                GrPaint paint;
                 paint.addColorFragmentProcessor(fp);
+                paint.setPorterDuffXPFactory(SkXfermode::kSrc_Mode);
                 SkRect rect = SkRect::MakeWH(SkIntToScalar(width), SkIntToScalar(height));
                 SkAutoTUnref<GrDrawContext> drawContext(this->drawContext(temp->asRenderTarget()));
                 drawContext->drawRect(GrClip::WideOpen(), paint, SkMatrix::I(), rect, nullptr);

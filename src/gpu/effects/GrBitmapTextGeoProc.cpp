@@ -10,8 +10,9 @@
 #include "GrTexture.h"
 #include "glsl/GrGLSLFragmentShaderBuilder.h"
 #include "glsl/GrGLSLGeometryProcessor.h"
-#include "glsl/GrGLSLProgramBuilder.h"
 #include "glsl/GrGLSLProgramDataManager.h"
+#include "glsl/GrGLSLUniformHandler.h"
+#include "glsl/GrGLSLVarying.h"
 #include "glsl/GrGLSLVertexShaderBuilder.h"
 
 class GrGLBitmapTextGeoProc : public GrGLSLGeometryProcessor {
@@ -21,11 +22,12 @@ public:
     void onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) override {
         const GrBitmapTextGeoProc& cte = args.fGP.cast<GrBitmapTextGeoProc>();
 
-        GrGLSLGPBuilder* pb = args.fPB;
         GrGLSLVertexBuilder* vertBuilder = args.fVertBuilder;
+        GrGLSLVaryingHandler* varyingHandler = args.fVaryingHandler;
+        GrGLSLUniformHandler* uniformHandler = args.fUniformHandler;
 
         // emit attributes
-        vertBuilder->emitAttributes(cte);
+        varyingHandler->emitAttributes(cte);
 
         // compute numbers to be hardcoded to convert texture coordinates from int to float
         SkASSERT(cte.numTextures() == 1);
@@ -35,7 +37,7 @@ public:
         SkScalar recipHeight = 1.0f / atlas->height();
 
         GrGLSLVertToFrag v(kVec2f_GrSLType);
-        pb->addVarying("TextureCoords", &v);
+        varyingHandler->addVarying("TextureCoords", &v);
         vertBuilder->codeAppendf("%s = vec2(%.*f, %.*f) * %s;", v.vsOut(),
                                  GR_SIGNIFICANT_POW2_DECIMAL_DIG, recipWidth,
                                  GR_SIGNIFICANT_POW2_DECIMAL_DIG, recipHeight,
@@ -45,18 +47,20 @@ public:
         // Setup pass through color
         if (!cte.colorIgnored()) {
             if (cte.hasVertexColor()) {
-                pb->addPassThroughAttribute(cte.inColor(), args.fOutputColor);
+                varyingHandler->addPassThroughAttribute(cte.inColor(), args.fOutputColor);
             } else {
-                this->setupUniformColor(pb, fragBuilder, args.fOutputColor, &fColorUniform);
+                this->setupUniformColor(fragBuilder, uniformHandler, args.fOutputColor,
+                                        &fColorUniform);
             }
         }
 
         // Setup position
-        this->setupPosition(pb, vertBuilder, gpArgs, cte.inPosition()->fName);
+        this->setupPosition(vertBuilder, gpArgs, cte.inPosition()->fName);
 
         // emit transforms
-        this->emitTransforms(args.fPB,
-                             vertBuilder,
+        this->emitTransforms(vertBuilder,
+                             varyingHandler,
+                             uniformHandler,
                              gpArgs->fPositionVar,
                              cte.inPosition()->fName,
                              cte.localMatrix(),

@@ -8,11 +8,11 @@
 #include "effects/GrXfermodeFragmentProcessor.h"
 
 #include "GrFragmentProcessor.h"
+#include "GrInvariantOutput.h"
 #include "effects/GrConstColorProcessor.h"
 #include "glsl/GrGLSLFragmentProcessor.h"
 #include "glsl/GrGLSLBlend.h"
 #include "glsl/GrGLSLFragmentShaderBuilder.h"
-#include "glsl/GrGLSLProgramBuilder.h"
 #include "SkGrPriv.h"
 
 class ComposeTwoFragmentProcessor : public GrFragmentProcessor {
@@ -153,6 +153,15 @@ public:
     }
 
     const char* name() const override { return "ComposeOne"; }
+
+    SkString dumpInfo() const override {
+        SkString str;
+
+        for (int i = 0; i < this->numChildProcessors(); ++i) {
+            str.append(this->childProcessor(i).dumpInfo());
+        }
+        return str;
+    }
 
     void onGetGLSLProcessorKey(const GrGLSLCaps& caps, GrProcessorKeyBuilder* b) const override {
         GR_STATIC_ASSERT((SkXfermode::kLastMode & SK_MaxU16) == SkXfermode::kLastMode);

@@ -8,7 +8,6 @@
 #include "effects/GrDisableColorXP.h"
 #include "GrProcessor.h"
 #include "glsl/GrGLSLFragmentShaderBuilder.h"
-#include "glsl/GrGLSLProgramBuilder.h"
 #include "glsl/GrGLSLProgramDataManager.h"
 #include "glsl/GrGLSLXferProcessor.h"
 
@@ -29,11 +28,10 @@ public:
 private:
     DisableColorXP();
 
-    GrXferProcessor::OptFlags onGetOptimizations(const GrProcOptInfo& colorPOI,
-                                                 const GrProcOptInfo& coveragePOI,
+    GrXferProcessor::OptFlags onGetOptimizations(const GrPipelineOptimizations& optimizations,
                                                  bool doesStencilWrite,
                                                  GrColor* color,
-                                                 const GrCaps& caps) override {
+                                                 const GrCaps& caps) const override {
         return GrXferProcessor::kIgnoreColor_OptFlag | GrXferProcessor::kIgnoreCoverage_OptFlag;
     }
 
@@ -96,8 +94,7 @@ GrDisableColorXPFactory::GrDisableColorXPFactory() {
 
 GrXferProcessor*
 GrDisableColorXPFactory::onCreateXferProcessor(const GrCaps& caps,
-                                               const GrProcOptInfo& colorPOI,
-                                               const GrProcOptInfo& covPOI,
+                                               const GrPipelineOptimizations& optimizations,
                                                bool hasMixedSamples,
                                                const DstTexture* dst) const {
     return DisableColorXP::Create();

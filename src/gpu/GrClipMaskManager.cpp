@@ -126,9 +126,10 @@ GrPathRenderer* GrClipMaskManager::GetPathRenderer(GrContext* context,
     return pr;
 }
 
-GrClipMaskManager::GrClipMaskManager(GrDrawTarget* drawTarget)
+GrClipMaskManager::GrClipMaskManager(GrDrawTarget* drawTarget, bool debugClipBatchToBounds)
     : fDrawTarget(drawTarget)
-    , fClipMode(kIgnoreClip_StencilClipMode) {
+    , fClipMode(kIgnoreClip_StencilClipMode)
+    , fDebugClipBatchToBounds(debugClipBatchToBounds) {
 }
 
 GrContext* GrClipMaskManager::getContext() {
@@ -272,6 +273,38 @@ bool GrClipMaskManager::getAnalyticClipProcessor(const GrReducedClip::ElementLis
     return !failed;
 }
 
+static void add_rect_to_clip(const GrClip& clip, const SkRect& devRect, GrClip* out) {
+    switch (clip.clipType()) {
+        case GrClip::kClipStack_ClipType: {
+            SkClipStack* stack = new SkClipStack;
+            *stack = *clip.clipStack();
+            // The stack is actually in clip space not device space.
+            SkRect clipRect = devRect;
+            SkPoint origin = { SkIntToScalar(clip.origin().fX), SkIntToScalar(clip.origin().fY) };
+            clipRect.offset(origin);
+            SkIRect iclipRect;
+            clipRect.roundOut(&iclipRect);
+            clipRect = SkRect::Make(iclipRect);
+            stack->clipDevRect(clipRect, SkRegion::kIntersect_Op, false);
+            out->setClipStack(stack, &clip.origin());
+            break;
+        }
+        case GrClip::kWideOpen_ClipType:
+            *out = GrClip(devRect);
+            break;
+        case GrClip::kIRect_ClipType: {
+            SkIRect intersect;
+            devRect.roundOut(&intersect);
+            if (intersect.intersect(clip.irect())) {
+                *out = GrClip(intersect);
+            } else {
+                *out = clip;
+            }
+            break;
+        }
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // sort out what kind of clip mask needs to be created: alpha, stencil,
 // scissor, or entirely software
@@ -283,7 +316,7 @@ bool GrClipMaskManager::setupClipping(const GrPipelineBuilder& pipelineBuilder,
         fClipMode = kIgnoreClip_StencilClipMode;
     }
 
-    GrReducedClip::ElementList elements(16);
+    GrReducedClip::ElementList elements;
     int32_t genID = 0;
     GrReducedClip::InitialState initialState = GrReducedClip::kAllIn_InitialState;
     SkIRect clipSpaceIBounds;
@@ -294,7 +327,13 @@ bool GrClipMaskManager::setupClipping(const GrPipelineBuilder& pipelineBuilder,
     SkASSERT(rt);
 
     SkIRect clipSpaceRTIBounds = SkIRect::MakeWH(rt->width(), rt->height());
-    const GrClip& clip = pipelineBuilder.clip();
+    GrClip devBoundsClip;
+    bool doDevBoundsClip = fDebugClipBatchToBounds && devBounds;
+    if (doDevBoundsClip) {
+        add_rect_to_clip(pipelineBuilder.clip(), *devBounds, &devBoundsClip);
+    }
+    const GrClip& clip = doDevBoundsClip ? devBoundsClip : pipelineBuilder.clip();
+
     if (clip.isWideOpen(clipSpaceRTIBounds)) {
         this->setPipelineBuilderStencil(pipelineBuilder, ars);
         return true;
@@ -317,8 +356,19 @@ bool GrClipMaskManager::setupClipping(const GrPipelineBuilder& pipelineBuilder,
         }
         case GrClip::kClipStack_ClipType: {
             clipSpaceRTIBounds.offset(clip.origin());
+            SkIRect clipSpaceReduceQueryBounds;
+#define DISABLE_DEV_BOUNDS_FOR_CLIP_REDUCTION 1
+            if (devBounds && !DISABLE_DEV_BOUNDS_FOR_CLIP_REDUCTION) {
+                SkIRect devIBounds = devBounds->roundOut();
+                devIBounds.offset(clip.origin());
+                if (!clipSpaceReduceQueryBounds.intersect(clipSpaceRTIBounds, devIBounds)) {
+                    return false;
+                }
+            } else {
+                clipSpaceReduceQueryBounds = clipSpaceRTIBounds;
+            }
             GrReducedClip::ReduceClipStack(*clip.clipStack(),
-                                            clipSpaceRTIBounds,
+                                            clipSpaceReduceQueryBounds,
                                             &elements,
                                             &genID,
                                             &initialState,

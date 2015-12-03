@@ -52,8 +52,7 @@ protected:
 
     GrTextContext(GrContext*, const SkSurfaceProps&);
 
-    virtual bool canDraw(const GrRenderTarget*, const GrClip&, const GrPaint&,
-                         const SkPaint&, const SkMatrix& viewMatrix) = 0;
+    virtual bool canDraw(const SkPaint&, const SkMatrix& viewMatrix) = 0;
 
     virtual void onDrawText(GrDrawContext*, GrRenderTarget*, const GrClip&,
                             const GrPaint&, const SkPaint&,
@@ -66,11 +65,11 @@ protected:
                                const SkScalar pos[], int scalarsPerPosition,
                                const SkPoint& offset, const SkIRect& clipBounds) = 0;
 
-    void drawTextAsPath(GrDrawContext*, GrRenderTarget*, const GrClip& clip,
+    void drawTextAsPath(GrDrawContext*, const GrClip& clip,
                         const SkPaint& origPaint, const SkMatrix& viewMatrix,
                         const char text[], size_t byteLength, SkScalar x, SkScalar y,
                         const SkIRect& clipBounds);
-    void drawPosTextAsPath(GrDrawContext*, GrRenderTarget*, const GrClip& clip,
+    void drawPosTextAsPath(GrDrawContext*, const GrClip& clip,
                            const SkPaint& origPaint, const SkMatrix& viewMatrix,
                            const char text[], size_t byteLength,
                            const SkScalar pos[], int scalarsPerPosition,
@@ -82,7 +81,7 @@ protected:
                            const char text[], size_t byteLength, SkVector* stopVector);
     static uint32_t FilterTextFlags(const SkSurfaceProps& surfaceProps, const SkPaint& paint);
 
-    friend class TextBatch;
+    friend class GrAtlasTextBatch;
 };
 
 #endif

@@ -93,9 +93,22 @@ void GrContext::purgeAllUnlockedResources() {
     fResourceCache->purgeAllUnlocked();
 }
 
+void GrContext::resetGpuStats() const {
+#if GR_GPU_STATS
+    fGpu->stats()->reset();
+#endif
+}
+
 void GrContext::dumpCacheStats(SkString* out) const {
 #if GR_CACHE_STATS
     fResourceCache->dumpStats(out);
+#endif
+}
+
+void GrContext::dumpCacheStatsKeyValuePairs(SkTArray<SkString>* keys,
+                                            SkTArray<double>* values) const {
+#if GR_CACHE_STATS
+    fResourceCache->dumpStatsKeyValuePairs(keys, values);
 #endif
 }
 
@@ -108,6 +121,13 @@ void GrContext::printCacheStats() const {
 void GrContext::dumpGpuStats(SkString* out) const {
 #if GR_GPU_STATS
     return fGpu->stats()->dump(out);
+#endif
+}
+
+void GrContext::dumpGpuStatsKeyValuePairs(SkTArray<SkString>* keys,
+                                          SkTArray<double>* values) const {
+#if GR_GPU_STATS
+    return fGpu->stats()->dumpKeyValuePairs(keys, values);
 #endif
 }
 
@@ -155,6 +175,16 @@ void GrGpu::Stats::dump(SkString* out) {
     out->appendf("Stencil Buffer Creates: %d\n", fStencilAttachmentCreates);
     out->appendf("Number of draws: %d\n", fNumDraws);
 }
+
+void GrGpu::Stats::dumpKeyValuePairs(SkTArray<SkString>* keys, SkTArray<double>* values) {
+    keys->push_back(SkString("render_target_binds")); values->push_back(fRenderTargetBinds);
+    keys->push_back(SkString("shader_compilations")); values->push_back(fShaderCompilations);
+    keys->push_back(SkString("textures_created")); values->push_back(fTextureCreates);
+    keys->push_back(SkString("texture_uploads")); values->push_back(fTextureUploads);
+    keys->push_back(SkString("stencil_buffer_creates")); values->push_back(fStencilAttachmentCreates);
+    keys->push_back(SkString("number_of_draws")); values->push_back(fNumDraws);
+}
+
 #endif
 
 #if GR_CACHE_STATS
@@ -192,6 +222,23 @@ void GrResourceCache::dumpStats(SkString* out) const {
     out->appendf("\t\tEntry Bytes: current %d (budgeted %d, %.2g%% full, %d unbudgeted) high %d\n",
                  SkToInt(fBytes), SkToInt(fBudgetedBytes), byteUtilization,
                  SkToInt(stats.fUnbudgetedSize), SkToInt(fHighWaterBytes));
+}
+
+void GrResourceCache::dumpStatsKeyValuePairs(SkTArray<SkString>* keys,
+                                             SkTArray<double>* values) const {
+    this->validate();
+
+    Stats stats;
+    this->getStats(&stats);
+
+    keys->push_back(SkString("gpu_cache_total_entries")); values->push_back(stats.fTotal);
+    keys->push_back(SkString("gpu_cache_external_entries")); values->push_back(stats.fExternal);
+    keys->push_back(SkString("gpu_cache_borrowed_entries")); values->push_back(stats.fBorrowed);
+    keys->push_back(SkString("gpu_cache_adopted_entries")); values->push_back(stats.fAdopted);
+    keys->push_back(SkString("gpu_cache_purgable_entries")); values->push_back(stats.fNumPurgeable);
+    keys->push_back(SkString("gpu_cache_non_purgable_entries")); values->push_back(stats.fNumNonPurgeable);
+    keys->push_back(SkString("gpu_cache_scratch_entries")); values->push_back(stats.fScratch);
+    keys->push_back(SkString("gpu_cache_unbudgeted_size")); values->push_back((double)stats.fUnbudgetedSize);
 }
 
 #endif
@@ -237,6 +284,8 @@ public:
         return false;
     }
 
+    void drawDebugWireRect(GrRenderTarget*, const SkIRect&, GrColor) override {};
+
 private:
     void onResetContext(uint32_t resetBits) override {}
 
@@ -263,6 +312,8 @@ private:
     GrVertexBuffer* onCreateVertexBuffer(size_t size, bool dynamic) override { return nullptr; }
 
     GrIndexBuffer* onCreateIndexBuffer(size_t size, bool dynamic) override { return nullptr; }
+
+    GrTransferBuffer* onCreateTransferBuffer(size_t, TransferType) override { return nullptr; }
 
     void onClear(GrRenderTarget*, const SkIRect& rect, GrColor color) override {}
 
@@ -318,7 +369,7 @@ void GrContext::initMockContext() {
     SkASSERT(nullptr == fGpu);
     fGpu = new MockGpu(this, options);
     SkASSERT(fGpu);
-    this->initCommon();
+    this->initCommon(options);
 
     // We delete these because we want to test the cache starting with zero resources. Also, none of
     // these objects are required for any of tests that use this context. TODO: make stop allocating

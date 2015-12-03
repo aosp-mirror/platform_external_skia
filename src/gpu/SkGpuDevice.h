@@ -18,9 +18,6 @@
 #include "GrContext.h"
 #include "GrSurfacePriv.h"
 
-struct SkDrawProcs;
-struct GrSkDrawProcs;
-
 class GrAccelData;
 class GrTextureProducer;
 struct GrCachedLayer;
@@ -119,6 +116,11 @@ public:
     void drawImageRect(const SkDraw&, const SkImage*, const SkRect* src, const SkRect& dst,
                        const SkPaint&, SkCanvas::SrcRectConstraint) override;
 
+    void drawImageNine(const SkDraw& draw, const SkImage* image, const SkIRect& center,
+                       const SkRect& dst, const SkPaint& paint) override;
+    void drawBitmapNine(const SkDraw& draw, const SkBitmap& bitmap, const SkIRect& center,
+                        const SkRect& dst, const SkPaint& paint) override;
+
     void flush() override;
 
     void onAttachToCanvas(SkCanvas* canvas) override;
@@ -149,7 +151,6 @@ protected:
 
 private:
     GrContext*                      fContext;
-    GrSkDrawProcs*                  fDrawProcs;
     SkAutoTUnref<const SkClipStack> fClipStack;
     SkIPoint                        fClipOrigin;
     GrClip                          fClip;

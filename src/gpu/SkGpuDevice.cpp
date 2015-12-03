@@ -9,6 +9,7 @@
 
 #include "GrBlurUtils.h"
 #include "GrContext.h"
+#include "SkDraw.h"
 #include "GrDrawContext.h"
 #include "GrFontScaler.h"
 #include "GrGpu.h"
@@ -20,7 +21,6 @@
 #include "GrTextContext.h"
 #include "GrTracing.h"
 #include "SkCanvasPriv.h"
-#include "SkDrawProcs.h"
 #include "SkErrorInternals.h"
 #include "SkGlyphCache.h"
 #include "SkGrTexturePixelRef.h"
@@ -30,6 +30,7 @@
 #include "SkImageFilter.h"
 #include "SkLayerInfo.h"
 #include "SkMaskFilter.h"
+#include "SkNinePatchIter.h"
 #include "SkPathEffect.h"
 #include "SkPicture.h"
 #include "SkPictureData.h"
@@ -112,15 +113,6 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-struct GrSkDrawProcs : public SkDrawProcs {
-public:
-    GrContext* fContext;
-    GrTextContext* fTextContext;
-    GrFontScaler* fFontScaler;  // cached in the skia glyphcache
-};
-
-///////////////////////////////////////////////////////////////////////////////
-
 /** Checks that the alpha type is legal and gets constructor flags. Returns false if device creation
     should fail. */
 bool SkGpuDevice::CheckAlphaTypeAndGetFlags(
@@ -180,8 +172,6 @@ SkGpuDevice::SkGpuDevice(GrRenderTarget* rt, int width, int height,
                          const SkSurfaceProps* props, unsigned flags)
     : INHERITED(SkSurfacePropsCopyOrDefault(props))
 {
-    fDrawProcs = nullptr;
-
     fContext = SkRef(rt->getContext());
     fNeedClear = SkToBool(flags & kNeedClear_Flag);
     fOpaque = SkToBool(flags & kIsOpaque_Flag);
@@ -237,10 +227,6 @@ GrRenderTarget* SkGpuDevice::CreateRenderTarget(GrContext* context, SkSurface::B
 }
 
 SkGpuDevice::~SkGpuDevice() {
-    if (fDrawProcs) {
-        delete fDrawProcs;
-    }
-
     fRenderTarget->unref();
     fContext->unref();
 }
@@ -403,9 +389,9 @@ static bool needs_antialiasing(SkCanvas::PointMode mode, size_t count, const SkP
     if (count == 2) {
         // We do not antialias as long as the primary axis of the line is integer-aligned, even if
         // the other coordinates are not. This does mean the two end pixels of the line will be
-        // sharp even when they shouldn't be, but turning antialiasing on (as things stand 
+        // sharp even when they shouldn't be, but turning antialiasing on (as things stand
         // currently) means that the line will turn into a two-pixel-wide blur. While obviously a
-        // more complete fix is possible down the road, for the time being we accept the error on 
+        // more complete fix is possible down the road, for the time being we accept the error on
         // the two end pixels as being the lesser of two evils.
         if (pts[0].fX == pts[1].fX) {
             return ((int) pts[0].fX) != pts[0].fX;
@@ -443,7 +429,7 @@ void SkGpuDevice::drawPoints(const SkDraw& draw, SkCanvas::PointMode mode,
 
     // we only handle non-antialiased hairlines and paints without path effects or mask filters,
     // else we let the SkDraw call our drawPath()
-    if (width > 0 || paint.getPathEffect() || paint.getMaskFilter() || 
+    if (width > 0 || paint.getPathEffect() || paint.getMaskFilter() ||
         (paint.isAntiAlias() && needs_antialiasing(mode, count, pts))) {
         draw.drawPoints(mode, count, pts, paint, true);
         return;
@@ -468,10 +454,8 @@ void SkGpuDevice::drawPoints(const SkDraw& draw, SkCanvas::PointMode mode,
 
 ///////////////////////////////////////////////////////////////////////////////
 
-void SkGpuDevice::drawRect(const SkDraw& draw, const SkRect& rect,
-                           const SkPaint& paint) {
+void SkGpuDevice::drawRect(const SkDraw& draw, const SkRect& rect, const SkPaint& paint) {
     GR_CREATE_TRACE_MARKER_CONTEXT("SkGpuDevice::drawRect", fContext);
-
     CHECK_FOR_ANNOTATION(paint);
     CHECK_SHOULD_DRAW(draw);
 
@@ -487,7 +471,7 @@ void SkGpuDevice::drawRect(const SkDraw& draw, const SkRect& rect,
                     (paint.getStrokeJoin() == SkPaint::kBevel_Join && rect.isEmpty()));
 
     // a few other reasons we might need to call drawPath...
-    if (paint.getMaskFilter() ||
+    if (paint.getMaskFilter() || paint.getPathEffect() ||
         paint.getStyle() == SkPaint::kStrokeAndFill_Style) { // we can't both stroke and fill rects
         usePath = true;
     }
@@ -496,18 +480,14 @@ void SkGpuDevice::drawRect(const SkDraw& draw, const SkRect& rect,
         usePath = true;
     }
 
-    GrStrokeInfo strokeInfo(paint);
-
-    const SkPathEffect* pe = paint.getPathEffect();
-    if (!usePath && pe && !strokeInfo.isDashed()) {
-        usePath = true;
-    }
-
     if (usePath) {
         SkPath path;
         path.setIsVolatile(true);
         path.addRect(rect);
-        this->drawPath(draw, path, paint, nullptr, true);
+        GrBlurUtils::drawPathWithMaskFilter(fContext, fDrawContext,
+                                            fClip, path, paint,
+                                            *draw.fMatrix, nullptr,
+                                            draw.fClip->getBounds(), true);
         return;
     }
 
@@ -515,6 +495,8 @@ void SkGpuDevice::drawRect(const SkDraw& draw, const SkRect& rect,
     if (!SkPaintToGrPaint(this->context(), paint, *draw.fMatrix, &grPaint)) {
         return;
     }
+
+    GrStrokeInfo strokeInfo(paint);
 
     fDrawContext->drawRect(fClip, grPaint, *draw.fMatrix, rect, &strokeInfo);
 }
@@ -563,49 +545,43 @@ void SkGpuDevice::drawRRect(const SkDraw& draw, const SkRRect& rect,
 
             }
         }
-
     }
 
-    bool usePath = false;
-
-    if (paint.getMaskFilter()) {
-        usePath = true;
-    } else {
-        const SkPathEffect* pe = paint.getPathEffect();
-        if (pe && !strokeInfo.isDashed()) {
-            usePath = true;
-        }
-    }
-
-
-    if (usePath) {
+    if (paint.getMaskFilter() || paint.getPathEffect()) {
+        // The only mask filter the native rrect drawing code could've handle was taken
+        // care of above.
+        // A path effect will presumably transform this rrect into something else.
         SkPath path;
         path.setIsVolatile(true);
         path.addRRect(rect);
-        this->drawPath(draw, path, paint, nullptr, true);
+        GrBlurUtils::drawPathWithMaskFilter(fContext, fDrawContext,
+                                            fClip, path, paint,
+                                            *draw.fMatrix, nullptr,
+                                            draw.fClip->getBounds(), true);
         return;
     }
+
+    SkASSERT(!strokeInfo.isDashed());
 
     fDrawContext->drawRRect(fClip, grPaint, *draw.fMatrix, rect, strokeInfo);
 }
 
 void SkGpuDevice::drawDRRect(const SkDraw& draw, const SkRRect& outer,
                              const SkRRect& inner, const SkPaint& paint) {
+    GR_CREATE_TRACE_MARKER_CONTEXT("SkGpuDevice::drawDRRect", fContext);
+    CHECK_FOR_ANNOTATION(paint);
+    CHECK_SHOULD_DRAW(draw);
+
     SkStrokeRec stroke(paint);
-    if (stroke.isFillStyle()) {
 
-        CHECK_FOR_ANNOTATION(paint);
-        CHECK_SHOULD_DRAW(draw);
-
+    if (stroke.isFillStyle() && !paint.getMaskFilter() && !paint.getPathEffect()) {
         GrPaint grPaint;
         if (!SkPaintToGrPaint(this->context(), paint, *draw.fMatrix, &grPaint)) {
             return;
         }
 
-        if (nullptr == paint.getMaskFilter() && nullptr == paint.getPathEffect()) {
-            fDrawContext->drawDRRect(fClip, grPaint, *draw.fMatrix, outer, inner);
-            return;
-        }
+        fDrawContext->drawDRRect(fClip, grPaint, *draw.fMatrix, outer, inner);
+        return;
     }
 
     SkPath path;
@@ -614,34 +590,22 @@ void SkGpuDevice::drawDRRect(const SkDraw& draw, const SkRRect& outer,
     path.addRRect(inner);
     path.setFillType(SkPath::kEvenOdd_FillType);
 
-    this->drawPath(draw, path, paint, nullptr, true);
+    GrBlurUtils::drawPathWithMaskFilter(fContext, fDrawContext,
+                                        fClip, path, paint,
+                                        *draw.fMatrix, nullptr,
+                                        draw.fClip->getBounds(), true);
 }
 
 
 /////////////////////////////////////////////////////////////////////////////
 
-void SkGpuDevice::drawOval(const SkDraw& draw, const SkRect& oval,
-                           const SkPaint& paint) {
+void SkGpuDevice::drawOval(const SkDraw& draw, const SkRect& oval, const SkPaint& paint) {
     GR_CREATE_TRACE_MARKER_CONTEXT("SkGpuDevice::drawOval", fContext);
     CHECK_FOR_ANNOTATION(paint);
     CHECK_SHOULD_DRAW(draw);
 
-    GrStrokeInfo strokeInfo(paint);
-
-    bool usePath = false;
-    // some basic reasons we might need to call drawPath...
-    if (paint.getMaskFilter()) {
-        // The RRect path can handle special case blurring
-        SkRRect rr = SkRRect::MakeOval(oval);
-        return this->drawRRect(draw, rr, paint);
-    } else {
-        const SkPathEffect* pe = paint.getPathEffect();
-        if (pe && !strokeInfo.isDashed()) {
-            usePath = true;
-        }
-    }
-
-    if (usePath) {
+    // Presumably the path effect warps this to something other than an oval
+    if (paint.getPathEffect()) {
         SkPath path;
         path.setIsVolatile(true);
         path.addOval(oval);
@@ -649,10 +613,19 @@ void SkGpuDevice::drawOval(const SkDraw& draw, const SkRect& oval,
         return;
     }
 
+    if (paint.getMaskFilter()) {
+        // The RRect path can handle special case blurring
+        SkRRect rr = SkRRect::MakeOval(oval);
+        return this->drawRRect(draw, rr, paint);
+    }
+
     GrPaint grPaint;
     if (!SkPaintToGrPaint(this->context(), paint, *draw.fMatrix, &grPaint)) {
         return;
     }
+
+    GrStrokeInfo strokeInfo(paint);
+    SkASSERT(!strokeInfo.isDashed());
 
     fDrawContext->drawOval(fClip, grPaint, *draw.fMatrix, oval, strokeInfo);
 }
@@ -671,11 +644,29 @@ static SkBitmap wrap_texture(GrTexture* texture, int width, int height) {
 void SkGpuDevice::drawPath(const SkDraw& draw, const SkPath& origSrcPath,
                            const SkPaint& paint, const SkMatrix* prePathMatrix,
                            bool pathIsMutable) {
+    if (!origSrcPath.isInverseFillType() && !paint.getPathEffect() && !prePathMatrix) {
+        bool isClosed;
+        SkRect rect;
+        if (origSrcPath.isRect(&rect, &isClosed) && isClosed) {
+            this->drawRect(draw, rect, paint);
+            return;
+        }
+        if (origSrcPath.isOval(&rect)) {
+            this->drawOval(draw, rect, paint);
+            return;
+        }
+        SkRRect rrect;
+        if (origSrcPath.isRRect(&rrect)) {
+            this->drawRRect(draw, rrect, paint);
+            return;
+        }
+    }
+
     CHECK_FOR_ANNOTATION(paint);
     CHECK_SHOULD_DRAW(draw);
     GR_CREATE_TRACE_MARKER_CONTEXT("SkGpuDevice::drawPath", fContext);
 
-    GrBlurUtils::drawPathWithMaskFilter(fContext, fDrawContext, fRenderTarget,
+    GrBlurUtils::drawPathWithMaskFilter(fContext, fDrawContext,
                                         fClip, origSrcPath, paint,
                                         *draw.fMatrix, prePathMatrix,
                                         draw.fClip->getBounds(), pathIsMutable);
@@ -715,7 +706,7 @@ static void determine_clipped_src_rect(const GrRenderTarget* rt,
                                        const SkISize& imageSize,
                                        const SkRect* srcRectPtr,
                                        SkIRect* clippedSrcIRect) {
-    clip.getConservativeBounds(rt, clippedSrcIRect, nullptr);
+    clip.getConservativeBounds(rt->width(), rt->height(), clippedSrcIRect, nullptr);
     SkMatrix inv;
     if (!viewMatrix.invert(&inv)) {
         clippedSrcIRect->setEmpty();
@@ -1020,7 +1011,6 @@ void SkGpuDevice::drawTiledBitmap(const SkBitmap& bitmap,
     }
 }
 
-
 /*
  *  This is called by drawBitmap(), which has to handle images that may be too
  *  large to be represented by a single texture.
@@ -1074,7 +1064,6 @@ void SkGpuDevice::internalDrawBitmap(const SkBitmap& bitmap,
 
     // Construct a GrPaint by setting the bitmap texture as the first effect and then configuring
     // the rest from the SkPaint.
-    GrPaint grPaint;
     SkAutoTUnref<const GrFragmentProcessor> fp;
 
     if (needsTextureDomain && (SkCanvas::kStrict_SrcRectConstraint == constraint)) {
@@ -1112,27 +1101,9 @@ void SkGpuDevice::internalDrawBitmap(const SkBitmap& bitmap,
         fp.reset(GrSimpleTextureEffect::Create(texture, texMatrix, params));
     }
 
-    SkAutoTUnref<const GrFragmentProcessor> shaderFP;
-
-    if (kAlpha_8_SkColorType == bitmap.colorType()) {
-        if (const SkShader* shader = paint.getShader()) {
-            shaderFP.reset(shader->asFragmentProcessor(this->context(),
-                                                       viewMatrix,
-                                                       nullptr,
-                                                       paint.getFilterQuality()));
-            if (!shaderFP) {
-                return;
-            }
-            const GrFragmentProcessor* fpSeries[] = { shaderFP.get(), fp.get() };
-            fp.reset(GrFragmentProcessor::RunInSeries(fpSeries, 2));
-        } else {
-            fp.reset(GrFragmentProcessor::MulOutputByInputUnpremulColor(fp));
-        }
-    } else {
-        fp.reset(GrFragmentProcessor::MulOutputByInputAlpha(fp));
-    }
-
-    if (!SkPaintToGrPaintReplaceShader(this->context(), paint, fp, &grPaint)) {
+    GrPaint grPaint;
+    if (!SkPaintToGrPaintWithTexture(this->context(), paint, viewMatrix, fp,
+                                     kAlpha_8_SkColorType == bitmap.colorType(), &grPaint)) {
         return;
     }
 
@@ -1495,6 +1466,65 @@ void SkGpuDevice::drawImageRect(const SkDraw& draw, const SkImage* image, const 
     this->drawBitmapRect(draw, bm, src, dst, paint, constraint);
 }
 
+void SkGpuDevice::drawImageNine(const SkDraw& draw, const SkImage* image,
+                                const SkIRect& center, const SkRect& dst, const SkPaint& paint) {
+    // TODO write native implementation
+    SkBitmap bitmap;
+    if (!wrap_as_bm(this->context(), image, &bitmap)) {
+        return;
+    }
+    return this->drawBitmapNine(draw, bitmap, center, dst, paint);
+}
+
+void SkGpuDevice::drawBitmapNine(const SkDraw& draw, const SkBitmap& bitmap, const SkIRect& center,
+                                 const SkRect& dst, const SkPaint& paint) {
+    GR_CREATE_TRACE_MARKER_CONTEXT("SkGpuDevice::drawBitmapNine", fContext);
+
+    CHECK_FOR_ANNOTATION(paint);
+    CHECK_SHOULD_DRAW(draw);
+
+    bool useFallback = paint.getMaskFilter() || paint.isAntiAlias() ||
+                       fRenderTarget->isUnifiedMultisampled();
+    bool doBicubic;
+    GrTextureParams::FilterMode textureFilterMode =
+            GrSkFilterQualityToGrFilterMode(paint.getFilterQuality(), *draw.fMatrix, SkMatrix::I(),
+                                            &doBicubic);
+
+    // TODO handle bilerp(vie texture domains), MSAA(via snapping)
+    if (useFallback || doBicubic || GrTextureParams::kNone_FilterMode != textureFilterMode) {
+        SkNinePatchIter iter(bitmap.width(), bitmap.height(), center, dst);
+
+        SkRect srcR, dstR;
+        while (iter.next(&srcR, &dstR)) {
+            this->drawBitmapRect(draw, bitmap, &srcR, dstR, paint,
+                                 SkCanvas::kStrict_SrcRectConstraint);
+        }
+        return;
+    }
+
+    GrTextureParams params = GrTextureParams::ClampNoFilter();
+
+    SkAutoTUnref<GrTexture> texture(GrRefCachedBitmapTexture(this->context(), bitmap, params));
+    if (nullptr == texture) {
+        return;
+    }
+
+    SkMatrix texMatrix;
+    texMatrix.setIDiv(texture->width(), texture->height());
+
+    SkAutoTUnref<const GrFragmentProcessor> fp(GrSimpleTextureEffect::Create(texture, texMatrix,
+                                                                             params));
+
+    GrPaint grPaint;
+    if (!SkPaintToGrPaintWithTexture(this->context(), paint, *draw.fMatrix, fp,
+                                     kAlpha_8_SkColorType == bitmap.colorType(), &grPaint)) {
+        return;
+    }
+
+    fDrawContext->drawImageNine(fClip, grPaint, *draw.fMatrix, bitmap.width(), bitmap.height(),
+                                center, dst);
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 
 // must be in SkCanvas::VertexMode order
@@ -1644,7 +1674,7 @@ void SkGpuDevice::drawAtlas(const SkDraw& draw, const SkImage* atlas, const SkRS
 
     CHECK_SHOULD_DRAW(draw);
     GR_CREATE_TRACE_MARKER_CONTEXT("SkGpuDevice::drawText", fContext);
-    
+
     SkPaint p(paint);
     p.setShader(atlas->newShader(SkShader::kClamp_TileMode, SkShader::kClamp_TileMode))->unref();
 

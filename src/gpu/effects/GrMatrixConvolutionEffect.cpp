@@ -6,8 +6,9 @@
  */
 #include "GrMatrixConvolutionEffect.h"
 #include "glsl/GrGLSLFragmentProcessor.h"
-#include "glsl/GrGLSLProgramBuilder.h"
+#include "glsl/GrGLSLFragmentShaderBuilder.h"
 #include "glsl/GrGLSLProgramDataManager.h"
+#include "glsl/GrGLSLUniformHandler.h"
 
 class GrGLMatrixConvolutionEffect : public GrGLSLFragmentProcessor {
 public:
@@ -42,25 +43,27 @@ GrGLMatrixConvolutionEffect::GrGLMatrixConvolutionEffect(const GrProcessor& proc
 
 void GrGLMatrixConvolutionEffect::emitCode(EmitArgs& args) {
     const GrTextureDomain& domain = args.fFp.cast<GrMatrixConvolutionEffect>().domain();
-    fImageIncrementUni = args.fBuilder->addUniform(GrGLSLProgramBuilder::kFragment_Visibility,
-                                             kVec2f_GrSLType, kDefault_GrSLPrecision,
-                                             "ImageIncrement");
-    fKernelUni = args.fBuilder->addUniformArray(GrGLSLProgramBuilder::kFragment_Visibility,
-                                          kFloat_GrSLType, kDefault_GrSLPrecision,
-                                          "Kernel",
-                                          fKernelSize.width() * fKernelSize.height());
-    fKernelOffsetUni = args.fBuilder->addUniform(GrGLSLProgramBuilder::kFragment_Visibility,
-                                           kVec2f_GrSLType, kDefault_GrSLPrecision, "KernelOffset");
-    fGainUni = args.fBuilder->addUniform(GrGLSLProgramBuilder::kFragment_Visibility,
-                                   kFloat_GrSLType, kDefault_GrSLPrecision, "Gain");
-    fBiasUni = args.fBuilder->addUniform(GrGLSLProgramBuilder::kFragment_Visibility,
-                                   kFloat_GrSLType, kDefault_GrSLPrecision, "Bias");
+    GrGLSLUniformHandler* uniformHandler = args.fUniformHandler;
+    fImageIncrementUni = uniformHandler->addUniform(GrGLSLUniformHandler::kFragment_Visibility,
+                                                    kVec2f_GrSLType, kDefault_GrSLPrecision,
+                                                    "ImageIncrement");
+    fKernelUni = uniformHandler->addUniformArray(GrGLSLUniformHandler::kFragment_Visibility,
+                                                 kFloat_GrSLType, kDefault_GrSLPrecision,
+                                                 "Kernel",
+                                                 fKernelSize.width() * fKernelSize.height());
+    fKernelOffsetUni = uniformHandler->addUniform(GrGLSLUniformHandler::kFragment_Visibility,
+                                                  kVec2f_GrSLType, kDefault_GrSLPrecision,
+                                                  "KernelOffset");
+    fGainUni = uniformHandler->addUniform(GrGLSLUniformHandler::kFragment_Visibility,
+                                          kFloat_GrSLType, kDefault_GrSLPrecision, "Gain");
+    fBiasUni = uniformHandler->addUniform(GrGLSLUniformHandler::kFragment_Visibility,
+                                          kFloat_GrSLType, kDefault_GrSLPrecision, "Bias");
 
-    const char* kernelOffset = args.fBuilder->getUniformCStr(fKernelOffsetUni);
-    const char* imgInc = args.fBuilder->getUniformCStr(fImageIncrementUni);
-    const char* kernel = args.fBuilder->getUniformCStr(fKernelUni);
-    const char* gain = args.fBuilder->getUniformCStr(fGainUni);
-    const char* bias = args.fBuilder->getUniformCStr(fBiasUni);
+    const char* kernelOffset = uniformHandler->getUniformCStr(fKernelOffsetUni);
+    const char* imgInc = uniformHandler->getUniformCStr(fImageIncrementUni);
+    const char* kernel = uniformHandler->getUniformCStr(fKernelUni);
+    const char* gain = uniformHandler->getUniformCStr(fGainUni);
+    const char* bias = uniformHandler->getUniformCStr(fBiasUni);
     int kWidth = fKernelSize.width();
     int kHeight = fKernelSize.height();
 
@@ -76,7 +79,13 @@ void GrGLMatrixConvolutionEffect::emitCode(EmitArgs& args) {
             fragBuilder->codeAppendf("float k = %s[%d * %d + %d];", kernel, y, kWidth, x);
             SkString coord;
             coord.printf("coord + vec2(%d, %d) * %s", x, y, imgInc);
-            fDomain.sampleTexture(fragBuilder, domain, "c", coord, args.fSamplers[0]);
+            fDomain.sampleTexture(fragBuilder,
+                                  uniformHandler,
+                                  args.fGLSLCaps,
+                                  domain,
+                                  "c",
+                                  coord,
+                                  args.fSamplers[0]);
             if (!fConvolveAlpha) {
                 fragBuilder->codeAppend("c.rgb /= c.a;");
                 fragBuilder->codeAppend("c.rgb = clamp(c.rgb, 0.0, 1.0);");
@@ -89,7 +98,13 @@ void GrGLMatrixConvolutionEffect::emitCode(EmitArgs& args) {
         fragBuilder->codeAppendf("%s.rgb = clamp(%s.rgb, 0.0, %s.a);",
                                  args.fOutputColor, args.fOutputColor, args.fOutputColor);
     } else {
-        fDomain.sampleTexture(fragBuilder, domain, "c", coords2D, args.fSamplers[0]);
+        fDomain.sampleTexture(fragBuilder,
+                              uniformHandler,
+                              args.fGLSLCaps,
+                              domain,
+                              "c",
+                              coords2D,
+                              args.fSamplers[0]);
         fragBuilder->codeAppendf("%s.a = c.a;", args.fOutputColor);
         fragBuilder->codeAppendf("%s.rgb = sum.rgb * %s + %s;", args.fOutputColor, gain, bias);
         fragBuilder->codeAppendf("%s.rgb *= %s.a;", args.fOutputColor, args.fOutputColor);

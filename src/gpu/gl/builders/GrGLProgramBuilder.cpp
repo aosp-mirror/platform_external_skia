@@ -55,96 +55,9 @@ GrGLProgramBuilder::GrGLProgramBuilder(GrGLGpu* gpu, const DrawArgs& args)
     , fGeometryProcessor(nullptr)
     , fXferProcessor(nullptr)
     , fGpu(gpu)
-    , fUniforms(kVarsPerBlock)
     , fSamplerUniforms(4)
-    , fSeparableVaryingInfos(kVarsPerBlock) {
-}
-
-void GrGLProgramBuilder::addVarying(const char* name,
-                                    GrGLSLVarying* varying,
-                                    GrSLPrecision precision) {
-    SkASSERT(varying);
-    if (varying->vsVarying()) {
-        fVS.addVarying(name, precision, varying);
-    }
-    if (this->primitiveProcessor().willUseGeoShader()) {
-        fGS.addVarying(name, precision, varying);
-    }
-    if (varying->fsVarying()) {
-        fFS.addVarying(varying, precision);
-    }
-}
-
-void GrGLProgramBuilder::addPassThroughAttribute(const GrPrimitiveProcessor::Attribute* input,
-                                                 const char* output) {
-    GrSLType type = GrVertexAttribTypeToSLType(input->fType);
-    GrGLSLVertToFrag v(type);
-    this->addVarying(input->fName, &v);
-    fVS.codeAppendf("%s = %s;", v.vsOut(), input->fName);
-    fFS.codeAppendf("%s = %s;", output, v.fsIn());
-}
-
-GrGLProgramBuilder::SeparableVaryingHandle GrGLProgramBuilder::addSeparableVarying(
-                                                                        const char* name,
-                                                                        GrGLSLVertToFrag* v,
-                                                                        GrSLPrecision fsPrecision) {
-    // This call is not used for non-NVPR backends.
-    SkASSERT(fGpu->glCaps().shaderCaps()->pathRenderingSupport() &&
-             fArgs.fPrimitiveProcessor->isPathRendering() &&
-             !fArgs.fPrimitiveProcessor->willUseGeoShader() &&
-             fArgs.fPrimitiveProcessor->numAttribs() == 0);
-    this->addVarying(name, v, fsPrecision);
-    SeparableVaryingInfo& varyingInfo = fSeparableVaryingInfos.push_back();
-    varyingInfo.fVariable = fFS.fInputs.back();
-    varyingInfo.fLocation = fSeparableVaryingInfos.count() - 1;
-    return SeparableVaryingHandle(varyingInfo.fLocation);
-}
-
-GrGLSLProgramDataManager::UniformHandle GrGLProgramBuilder::internalAddUniformArray(
-                                                                uint32_t visibility,
-                                                                GrSLType type,
-                                                                GrSLPrecision precision,
-                                                                const char* name,
-                                                                bool mangleName,
-                                                                int count,
-                                                                const char** outName) {
-    SkASSERT(name && strlen(name));
-    SkDEBUGCODE(static const uint32_t kVisibilityMask = kVertex_Visibility | kFragment_Visibility);
-    SkASSERT(0 == (~kVisibilityMask & visibility));
-    SkASSERT(0 != visibility);
-    SkASSERT(kDefault_GrSLPrecision == precision || GrSLTypeIsFloatType(type));
-
-    UniformInfo& uni = fUniforms.push_back();
-    uni.fVariable.setType(type);
-    uni.fVariable.setTypeModifier(GrGLSLShaderVar::kUniform_TypeModifier);
-    // TODO this is a bit hacky, lets think of a better way.  Basically we need to be able to use
-    // the uniform view matrix name in the GP, and the GP is immutable so it has to tell the PB
-    // exactly what name it wants to use for the uniform view matrix.  If we prefix anythings, then
-    // the names will mismatch.  I think the correct solution is to have all GPs which need the
-    // uniform view matrix, they should upload the view matrix in their setData along with regular
-    // uniforms.
-    char prefix = 'u';
-    if ('u' == name[0]) {
-        prefix = '\0';
-    }
-    this->nameVariable(uni.fVariable.accessName(), prefix, name, mangleName);
-    uni.fVariable.setArrayCount(count);
-    uni.fVisibility = visibility;
-    uni.fVariable.setPrecision(precision);
-
-    if (outName) {
-        *outName = uni.fVariable.c_str();
-    }
-    return GrGLSLProgramDataManager::UniformHandle(fUniforms.count() - 1);
-}
-
-void GrGLProgramBuilder::onAppendUniformDecls(ShaderVisibility visibility, SkString* out) const {
-    for (int i = 0; i < fUniforms.count(); ++i) {
-        if (fUniforms[i].fVisibility & visibility) {
-            fUniforms[i].fVariable.appendDecl(this->glslCaps(), out);
-            out->append(";\n");
-        }
-    }
+    , fVaryingHandler(this)
+    , fUniformHandler(this) {
 }
 
 const GrGLSLCaps* GrGLProgramBuilder::glslCaps() const {
@@ -180,7 +93,8 @@ bool GrGLProgramBuilder::emitAndInstallProcs(GrGLSLExpr4* inputColor, GrGLSLExpr
     this->emitAndInstallFragProcs(0, this->pipeline().numColorFragmentProcessors(), inputColor);
     this->emitAndInstallFragProcs(this->pipeline().numColorFragmentProcessors(), numProcs,
                                   inputCoverage);
-    this->emitAndInstallXferProc(*this->pipeline().getXferProcessor(), *inputColor, *inputCoverage);
+    this->emitAndInstallXferProc(*this->pipeline().getXferProcessor(), *inputColor, *inputCoverage,
+                                 this->pipeline().ignoresCoverage());
     return true;
 }
 
@@ -259,8 +173,9 @@ void GrGLProgramBuilder::emitAndInstallProc(const GrFragmentProcessor& fp,
     SkSTArray<4, GrGLSLTextureSampler> samplers(fp.numTextures());
     this->emitSamplers(fp, &samplers, ifp);
 
-    GrGLSLFragmentProcessor::EmitArgs args(this,
-                                           &fFS,
+    GrGLSLFragmentProcessor::EmitArgs args(&fFS,
+                                           &fUniformHandler,
+                                           this->glslCaps(),
                                            fp,
                                            outColor,
                                            inColor,
@@ -285,8 +200,17 @@ void GrGLProgramBuilder::emitAndInstallProc(const GrPrimitiveProcessor& gp,
     SkSTArray<4, GrGLSLTextureSampler> samplers(gp.numTextures());
     this->emitSamplers(gp, &samplers, fGeometryProcessor);
 
-    GrGLSLGeometryProcessor::EmitArgs args(this, &fVS, &fFS, gp, outColor, outCoverage, samplers,
-                                         fCoordTransforms, &fOutCoords);
+    GrGLSLGeometryProcessor::EmitArgs args(&fVS,
+                                           &fFS,
+                                           &fVaryingHandler,
+                                           &fUniformHandler,
+                                           this->glslCaps(),
+                                           gp,
+                                           outColor,
+                                           outCoverage,
+                                           samplers,
+                                           fCoordTransforms,
+                                           &fOutCoords);
     fGeometryProcessor->fGLProc->emitCode(args);
 
     // We have to check that effects and the code they emit are consistent, ie if an effect
@@ -296,7 +220,8 @@ void GrGLProgramBuilder::emitAndInstallProc(const GrPrimitiveProcessor& gp,
 
 void GrGLProgramBuilder::emitAndInstallXferProc(const GrXferProcessor& xp,
                                                 const GrGLSLExpr4& colorIn,
-                                                const GrGLSLExpr4& coverageIn) {
+                                                const GrGLSLExpr4& coverageIn,
+                                                bool ignoresCoverage) {
     // Program builders have a bit of state we need to clear with each effect
     AutoStageAdvance adv(this);
 
@@ -321,9 +246,14 @@ void GrGLProgramBuilder::emitAndInstallXferProc(const GrXferProcessor& xp,
     SkSTArray<4, GrGLSLTextureSampler> samplers(xp.numTextures());
     this->emitSamplers(xp, &samplers, fXferProcessor);
 
-    GrGLSLXferProcessor::EmitArgs args(this, &fFS, xp, colorIn.c_str(), coverageIn.c_str(),
+    GrGLSLXferProcessor::EmitArgs args(&fFS,
+                                       &fUniformHandler,
+                                       this->glslCaps(),
+                                       xp, colorIn.c_str(),
+                                       ignoresCoverage ? nullptr : coverageIn.c_str(),
                                        fFS.getPrimaryColorOutputName(),
-                                       fFS.getSecondaryColorOutputName(), samplers);
+                                       fFS.getSecondaryColorOutputName(),
+                                       samplers);
     fXferProcessor->fGLProc->emitCode(args);
 
     // We have to check that effects and the code they emit are consistent, ie if an effect
@@ -344,6 +274,16 @@ void GrGLProgramBuilder::verify(const GrFragmentProcessor& fp) {
     SkASSERT(fFS.hasReadFragmentPosition() == fp.willReadFragmentPosition());
 }
 
+static GrSLType get_sampler_type(const GrTextureAccess& access) {
+    GrGLTexture* glTexture = static_cast<GrGLTexture*>(access.getTexture());
+    if (glTexture->target() == GR_GL_TEXTURE_EXTERNAL) {
+        return kSamplerExternal_GrSLType;
+    } else {
+        SkASSERT(glTexture->target() == GR_GL_TEXTURE_2D);
+        return kSampler2D_GrSLType;
+    }
+}
+
 template <class Proc>
 void GrGLProgramBuilder::emitSamplers(const GrProcessor& processor,
                                       GrGLSLTextureSampler::TextureSamplerArray* outSamplers,
@@ -354,11 +294,20 @@ void GrGLProgramBuilder::emitSamplers(const GrProcessor& processor,
     SkString name;
     for (int t = 0; t < numTextures; ++t) {
         name.printf("Sampler%d", t);
-        localSamplerUniforms[t] = this->addUniform(GrGLProgramBuilder::kFragment_Visibility,
-                                                   kSampler2D_GrSLType, kDefault_GrSLPrecision,
-                                                   name.c_str());
+        GrSLType samplerType = get_sampler_type(processor.textureAccess(t));
+        localSamplerUniforms[t] =
+            fUniformHandler.addUniform(GrGLSLUniformHandler::kFragment_Visibility,
+                                       samplerType, kDefault_GrSLPrecision,
+                                       name.c_str());
         SkNEW_APPEND_TO_TARRAY(outSamplers, GrGLSLTextureSampler,
                                (localSamplerUniforms[t], processor.textureAccess(t)));
+        if (kSamplerExternal_GrSLType == samplerType) {
+            const char* externalFeatureString = this->glslCaps()->externalTextureExtensionString();
+            // We shouldn't ever create a GrGLTexture that requires external sampler type 
+            SkASSERT(externalFeatureString);
+            fFS.addFeature(1 << GrGLSLFragmentShaderBuilder::kExternalTexture_GLSLPrivateFeature,
+                           externalFeatureString);
+        }
     }
 }
 
@@ -394,7 +343,7 @@ GrGLProgram* GrGLProgramBuilder::finalize() {
 
     // compile shaders and bind attributes / uniforms
     SkTDArray<GrGLuint> shadersToDelete;
-    fVS.finalize(kVertex_Visibility);
+    fVS.finalize(GrGLSLUniformHandler::kVertex_Visibility);
     if (!this->compileAndAttachShaders(fVS, programID, GR_GL_VERTEX_SHADER, &shadersToDelete)) {
         this->cleanupProgram(programID, shadersToDelete);
         return nullptr;
@@ -411,7 +360,7 @@ GrGLProgram* GrGLProgramBuilder::finalize() {
         }
     }
 
-    fFS.finalize(kFragment_Visibility);
+    fFS.finalize(GrGLSLUniformHandler::kFragment_Visibility);
     if (!this->compileAndAttachShaders(fFS, programID, GR_GL_FRAGMENT_SHADER, &shadersToDelete)) {
         this->cleanupProgram(programID, shadersToDelete);
         return nullptr;
@@ -437,13 +386,7 @@ GrGLProgram* GrGLProgramBuilder::finalize() {
 }
 
 void GrGLProgramBuilder::bindProgramResourceLocations(GrGLuint programID) {
-    if (fGpu->glCaps().bindUniformLocationSupport()) {
-        int count = fUniforms.count();
-        for (int i = 0; i < count; ++i) {
-            GL_CALL(BindUniformLocation(programID, i, fUniforms[i].fVariable.c_str()));
-            fUniforms[i].fLocation = i;
-        }
-    }
+    fUniformHandler.bindUniformLocations(programID, fGpu->glCaps());
 
     const GrGLCaps& caps = this->gpu()->glCaps();
     if (fFS.hasCustomColorOutput() && caps.bindFragDataLocationSupport()) {
@@ -460,12 +403,11 @@ void GrGLProgramBuilder::bindProgramResourceLocations(GrGLuint programID) {
         !fGpu->glPathRendering()->shouldBindFragmentInputs()) {
         return;
     }
-    int count = fSeparableVaryingInfos.count();
+    int count = fVaryingHandler.fPathProcVaryingInfos.count();
     for (int i = 0; i < count; ++i) {
-        GL_CALL(BindFragmentInputLocation(programID,
-                                          i,
-                                          fSeparableVaryingInfos[i].fVariable.c_str()));
-        fSeparableVaryingInfos[i].fLocation = i;
+        GL_CALL(BindFragmentInputLocation(programID, i,
+                                       fVaryingHandler.fPathProcVaryingInfos[i].fVariable.c_str()));
+        fVaryingHandler.fPathProcVaryingInfos[i].fLocation = i;
     }
 }
 
@@ -494,28 +436,21 @@ bool GrGLProgramBuilder::checkLinkStatus(GrGLuint programID) {
 }
 
 void GrGLProgramBuilder::resolveProgramResourceLocations(GrGLuint programID) {
-    if (!fGpu->glCaps().bindUniformLocationSupport()) {
-        int count = fUniforms.count();
-        for (int i = 0; i < count; ++i) {
-            GrGLint location;
-            GL_CALL_RET(location, GetUniformLocation(programID, fUniforms[i].fVariable.c_str()));
-            fUniforms[i].fLocation = location;
-        }
-    }
+    fUniformHandler.getUniformLocations(programID, fGpu->glCaps());
 
     // handle NVPR separable varyings
     if (!fGpu->glCaps().shaderCaps()->pathRenderingSupport() ||
         !fGpu->glPathRendering()->shouldBindFragmentInputs()) {
         return;
     }
-    int count = fSeparableVaryingInfos.count();
+    int count = fVaryingHandler.fPathProcVaryingInfos.count();
     for (int i = 0; i < count; ++i) {
         GrGLint location;
-        GL_CALL_RET(location,
-                    GetProgramResourceLocation(programID,
-                                               GR_GL_FRAGMENT_INPUT,
-                                               fSeparableVaryingInfos[i].fVariable.c_str()));
-        fSeparableVaryingInfos[i].fLocation = location;
+        GL_CALL_RET(location, GetProgramResourceLocation(
+                                       programID,
+                                       GR_GL_FRAGMENT_INPUT,
+                                       fVaryingHandler.fPathProcVaryingInfos[i].fVariable.c_str()));
+        fVaryingHandler.fPathProcVaryingInfos[i].fLocation = location;
     }
 }
 
@@ -530,9 +465,15 @@ void GrGLProgramBuilder::cleanupShaders(const SkTDArray<GrGLuint>& shaderIDs) {
 }
 
 GrGLProgram* GrGLProgramBuilder::createProgram(GrGLuint programID) {
-    return new GrGLProgram(fGpu, this->desc(), fUniformHandles, programID, fUniforms,
-                           fSeparableVaryingInfos,
-                           fGeometryProcessor, fXferProcessor, fFragmentProcessors.get(),
+    return new GrGLProgram(fGpu,
+                           this->desc(),
+                           fUniformHandles,
+                           programID,
+                           fUniformHandler.fUniforms,
+                           fVaryingHandler.fPathProcVaryingInfos,
+                           fGeometryProcessor,
+                           fXferProcessor,
+                           fFragmentProcessors.get(),
                            &fSamplerUniforms);
 }
 

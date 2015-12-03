@@ -32,7 +32,8 @@
 
 ////////////////////////////////////////////////////////////////////////////////
 
-GrDrawTarget::GrDrawTarget(GrRenderTarget* rt, GrGpu* gpu, GrResourceProvider* resourceProvider)
+GrDrawTarget::GrDrawTarget(GrRenderTarget* rt, GrGpu* gpu, GrResourceProvider* resourceProvider,
+                           const Options& options)
     : fGpu(SkRef(gpu))
     , fResourceProvider(resourceProvider)
     , fFlushing(false)
@@ -40,7 +41,9 @@ GrDrawTarget::GrDrawTarget(GrRenderTarget* rt, GrGpu* gpu, GrResourceProvider* r
     , fRenderTarget(rt) {
     // TODO: Stop extracting the context (currently needed by GrClipMaskManager)
     fContext = fGpu->getContext();
-    fClipMaskManager.reset(new GrClipMaskManager(this));
+    fClipMaskManager.reset(new GrClipMaskManager(this, options.fClipBatchToBounds));
+
+    fDrawBatchBounds = options.fDrawBatchBounds;
 
     rt->setLastDrawTarget(this);
 
@@ -113,14 +116,13 @@ void GrDrawTarget::dump() const {
 #endif
 
 bool GrDrawTarget::setupDstReadIfNecessary(const GrPipelineBuilder& pipelineBuilder,
-                                           const GrProcOptInfo& colorPOI,
-                                           const GrProcOptInfo& coveragePOI,
+                                           const GrPipelineOptimizations& optimizations,
                                            GrXferProcessor::DstTexture* dstTexture,
                                            const SkRect& batchBounds) {
     SkRect bounds = batchBounds;
     bounds.outset(0.5f, 0.5f);
 
-    if (!pipelineBuilder.willXPNeedDstTexture(*this->caps(), colorPOI, coveragePOI)) {
+    if (!pipelineBuilder.willXPNeedDstTexture(*this->caps(), optimizations)) {
         return true;
     }
 
@@ -137,7 +139,7 @@ bool GrDrawTarget::setupDstReadIfNecessary(const GrPipelineBuilder& pipelineBuil
     }
 
     SkIRect copyRect;
-    pipelineBuilder.clip().getConservativeBounds(rt, &copyRect);
+    pipelineBuilder.clip().getConservativeBounds(rt->width(), rt->height(), &copyRect);
 
     SkIRect drawIBounds;
     bounds.roundOut(&drawIBounds);
@@ -195,7 +197,18 @@ void GrDrawTarget::prepareBatches(GrBatchFlushState* flushState) {
 
 void GrDrawTarget::drawBatches(GrBatchFlushState* flushState) {
     // Draw all the generated geometry.
+    SkRandom random;
     for (int i = 0; i < fBatches.count(); ++i) {
+        if (fDrawBatchBounds) {
+            const SkRect& bounds = fBatches[i]->bounds();
+            SkIRect ibounds;
+            bounds.roundOut(&ibounds);
+            // In multi-draw buffer all the batches use the same render target and we won't need to
+            // get the batchs bounds.
+            if (GrRenderTarget* rt = fBatches[i]->renderTarget()) {
+                fGpu->drawDebugWireRect(rt, ibounds, 0xFF000000 | random.nextU());
+            }
+        }
         fBatches[i]->draw(flushState);
     }
 
@@ -322,9 +335,10 @@ void GrDrawTarget::drawPathsFromRange(const GrPipelineBuilder& pipelineBuilder,
                                       GrColor color,
                                       GrPathRange* range,
                                       GrPathRangeDraw* draw,
-                                      GrPathRendering::FillType fill) {
+                                      GrPathRendering::FillType fill, 
+                                      const SkRect& bounds) {
     GrDrawPathBatchBase* batch = GrDrawPathRangeBatch::Create(viewMatrix, localMatrix, color,
-                                                              range, draw);
+                                                              range, draw, bounds);
     this->drawPathBatch(pipelineBuilder, batch, fill);
     batch->unref();
 }
@@ -431,6 +445,8 @@ void GrDrawTarget::clear(const SkIRect* rect,
         }
 
         GrPipelineBuilder pipelineBuilder;
+        pipelineBuilder.setXPFactory(
+            GrPorterDuffXPFactory::Create(SkXfermode::kSrc_Mode))->unref();
         pipelineBuilder.setRenderTarget(renderTarget);
 
         this->drawNonAARect(pipelineBuilder, color, SkMatrix::I(), *rect);
@@ -508,6 +524,8 @@ void GrDrawTarget::recordBatch(GrBatch* batch) {
                 return;
             }
             // Stop going backwards if we would cause a painter's order violation.
+            // TODO: The bounds used here do not fully consider the clip. It may be advantageous
+            // to clip each batch's bounds to the clip.
             if (intersect(candidate->bounds(), batch->bounds())) {
                 GrBATCH_INFO("\t\tIntersects with (%s, B%u)\n", candidate->name(),
                     candidate->uniqueID());
@@ -534,10 +552,13 @@ bool GrDrawTarget::installPipelineInDrawBatch(const GrPipelineBuilder* pipelineB
     args.fPipelineBuilder = pipelineBuilder;
     args.fCaps = this->caps();
     args.fScissor = scissor;
-    args.fColorPOI = pipelineBuilder->colorProcInfo(batch);
-    args.fCoveragePOI = pipelineBuilder->coverageProcInfo(batch);
-    if (!this->setupDstReadIfNecessary(*pipelineBuilder, args.fColorPOI,
-                                       args.fCoveragePOI, &args.fDstTexture,
+    batch->getPipelineOptimizations(&args.fOpts);
+    args.fOpts.fColorPOI.completeCalculations(pipelineBuilder->fColorFragmentProcessors.begin(),
+                                              pipelineBuilder->numColorFragmentProcessors());
+    args.fOpts.fCoveragePOI.completeCalculations(
+                                               pipelineBuilder->fCoverageFragmentProcessors.begin(),
+                                               pipelineBuilder->numCoverageFragmentProcessors());
+    if (!this->setupDstReadIfNecessary(*pipelineBuilder, args.fOpts, &args.fDstTexture,
                                        batch->bounds())) {
         return false;
     }

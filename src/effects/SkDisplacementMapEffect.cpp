@@ -19,8 +19,8 @@
 #include "effects/GrTextureDomain.h"
 #include "glsl/GrGLSLFragmentProcessor.h"
 #include "glsl/GrGLSLFragmentShaderBuilder.h"
-#include "glsl/GrGLSLProgramBuilder.h"
 #include "glsl/GrGLSLProgramDataManager.h"
+#include "glsl/GrGLSLUniformHandler.h"
 #endif
 
 namespace {
@@ -445,6 +445,7 @@ bool SkDisplacementMapEffect::filterImageGPU(Proxy* proxy, const SkBitmap& src, 
                                         offsetMatrix,
                                         color,
                                         colorBM.dimensions()))->unref();
+    paint.setPorterDuffXPFactory(SkXfermode::kSrc_Mode);
     SkIRect colorBounds = bounds;
     colorBounds.offset(-colorOffset);
     SkMatrix matrix;
@@ -548,9 +549,9 @@ GrGLDisplacementMapEffect::~GrGLDisplacementMapEffect() {
 void GrGLDisplacementMapEffect::emitCode(EmitArgs& args) {
     const GrTextureDomain& domain = args.fFp.cast<GrDisplacementMapEffect>().domain();
 
-    fScaleUni = args.fBuilder->addUniform(GrGLSLProgramBuilder::kFragment_Visibility,
-                                          kVec2f_GrSLType, kDefault_GrSLPrecision, "Scale");
-    const char* scaleUni = args.fBuilder->getUniformCStr(fScaleUni);
+    fScaleUni = args.fUniformHandler->addUniform(GrGLSLUniformHandler::kFragment_Visibility,
+                                                 kVec2f_GrSLType, kDefault_GrSLPrecision, "Scale");
+    const char* scaleUni = args.fUniformHandler->getUniformCStr(fScaleUni);
     const char* dColor = "dColor";
     const char* cCoords = "cCoords";
     const char* nearZero = "1e-6"; // Since 6.10352e−5 is the smallest half float, use
@@ -608,7 +609,12 @@ void GrGLDisplacementMapEffect::emitCode(EmitArgs& args) {
     }
     fragBuilder->codeAppend("-vec2(0.5));\t\t");
 
-    fGLDomain.sampleTexture(fragBuilder, domain, args.fOutputColor, SkString(cCoords),
+    fGLDomain.sampleTexture(fragBuilder,
+                            args.fUniformHandler,
+                            args.fGLSLCaps,
+                            domain,
+                            args.fOutputColor,
+                            SkString(cCoords),
                             args.fSamplers[1]);
     fragBuilder->codeAppend(";\n");
 }

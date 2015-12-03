@@ -33,8 +33,9 @@ public:
 private:
     GrStencilAndCoverTextContext(GrContext*, const SkSurfaceProps&);
 
-    bool canDraw(const GrRenderTarget*, const GrClip&, const GrPaint&, const SkPaint& skPaint,
-                 const SkMatrix&) override { return this->internalCanDraw(skPaint); }
+    bool canDraw(const SkPaint& skPaint, const SkMatrix&) override {
+        return this->internalCanDraw(skPaint);
+    }
 
     bool internalCanDraw(const SkPaint&);
 
@@ -93,7 +94,7 @@ private:
 
     // Text blobs/caches.
 
-    class TextBlob : public SkTLList<TextRun> {
+    class TextBlob : public SkTLList<TextRun, 1> {
     public:
         typedef SkTArray<uint32_t, true> Key;
 

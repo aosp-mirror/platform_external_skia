@@ -7,9 +7,11 @@
 
 #include "GrGLSLGeometryProcessor.h"
 
+#include "GrCoordTransform.h"
 #include "glsl/GrGLSLFragmentShaderBuilder.h"
 #include "glsl/GrGLSLProcessorTypes.h"
-#include "glsl/GrGLSLProgramBuilder.h"
+#include "glsl/GrGLSLUniformHandler.h"
+#include "glsl/GrGLSLVarying.h"
 #include "glsl/GrGLSLVertexShaderBuilder.h"
 
 void GrGLSLGeometryProcessor::emitCode(EmitArgs& args) {
@@ -19,8 +21,9 @@ void GrGLSLGeometryProcessor::emitCode(EmitArgs& args) {
     vBuilder->transformToNormalizedDeviceSpace(gpArgs.fPositionVar);
 }
 
-void GrGLSLGeometryProcessor::emitTransforms(GrGLSLGPBuilder* pb,
-                                             GrGLSLVertexBuilder* vb,
+void GrGLSLGeometryProcessor::emitTransforms(GrGLSLVertexBuilder* vb,
+                                             GrGLSLVaryingHandler* varyingHandler,
+                                             GrGLSLUniformHandler* uniformHandler,
                                              const GrShaderVar& posVar,
                                              const char* localCoords,
                                              const SkMatrix& localMatrix,
@@ -47,16 +50,16 @@ void GrGLSLGeometryProcessor::emitTransforms(GrGLSLGPBuilder* pb,
 
             const char* uniName;
             fInstalledTransforms[i][t].fHandle =
-                    pb->addUniform(GrGLSLProgramBuilder::kVertex_Visibility,
-                                   kMat33f_GrSLType, precision,
-                                   strUniName.c_str(),
-                                   &uniName).toIndex();
+                    uniformHandler->addUniform(GrGLSLUniformHandler::kVertex_Visibility,
+                                               kMat33f_GrSLType, precision,
+                                               strUniName.c_str(),
+                                               &uniName).toIndex();
 
             SkString strVaryingName("MatrixCoord");
             strVaryingName.appendf("_%i_%i", i, t);
 
             GrGLSLVertToFrag v(varyingType);
-            pb->addVarying(strVaryingName.c_str(), &v, precision);
+            varyingHandler->addVarying(strVaryingName.c_str(), &v, precision);
 
             SkASSERT(kVec2f_GrSLType == varyingType || kVec3f_GrSLType == varyingType);
             SkNEW_APPEND_TO_TARRAY(&(*tout)[i], GrGLSLTransformedCoords,
@@ -92,8 +95,8 @@ void GrGLSLGeometryProcessor::emitTransforms(GrGLSLGPBuilder* pb,
     }
 }
 
-void GrGLSLGeometryProcessor::emitTransforms(GrGLSLGPBuilder* pb,
-                                             GrGLSLVertexBuilder* vb,
+void GrGLSLGeometryProcessor::emitTransforms(GrGLSLVertexBuilder* vb,
+                                             GrGLSLVaryingHandler* varyingHandler,
                                              const char* localCoords,
                                              const TransformsIn& tin,
                                              TransformsOut* tout) {
@@ -111,7 +114,7 @@ void GrGLSLGeometryProcessor::emitTransforms(GrGLSLGPBuilder* pb,
             strVaryingName.appendf("_%i_%i", i, t);
 
             GrGLSLVertToFrag v(varyingType);
-            pb->addVarying(strVaryingName.c_str(), &v, precision);
+            varyingHandler->addVarying(strVaryingName.c_str(), &v, precision);
             vb->codeAppendf("%s = %s;", v.vsOut(), localCoords);
 
             SkNEW_APPEND_TO_TARRAY(&(*tout)[i],
@@ -121,16 +124,15 @@ void GrGLSLGeometryProcessor::emitTransforms(GrGLSLGPBuilder* pb,
     }
 }
 
-void GrGLSLGeometryProcessor::setupPosition(GrGLSLGPBuilder* pb,
-                                            GrGLSLVertexBuilder* vertBuilder,
+void GrGLSLGeometryProcessor::setupPosition(GrGLSLVertexBuilder* vertBuilder,
                                             GrGPArgs* gpArgs,
                                             const char* posName) {
     gpArgs->fPositionVar.set(kVec2f_GrSLType, "pos2");
     vertBuilder->codeAppendf("vec2 %s = %s;", gpArgs->fPositionVar.c_str(), posName);
 }
 
-void GrGLSLGeometryProcessor::setupPosition(GrGLSLGPBuilder* pb,
-                                            GrGLSLVertexBuilder* vertBuilder,
+void GrGLSLGeometryProcessor::setupPosition(GrGLSLVertexBuilder* vertBuilder,
+                                            GrGLSLUniformHandler* uniformHandler,
                                             GrGPArgs* gpArgs,
                                             const char* posName,
                                             const SkMatrix& mat,
@@ -140,10 +142,10 @@ void GrGLSLGeometryProcessor::setupPosition(GrGLSLGPBuilder* pb,
         vertBuilder->codeAppendf("vec2 %s = %s;", gpArgs->fPositionVar.c_str(), posName);
     } else {
         const char* viewMatrixName;
-        *viewMatrixUniform = pb->addUniform(GrGLSLProgramBuilder::kVertex_Visibility,
-                                            kMat33f_GrSLType, kHigh_GrSLPrecision,
-                                            "uViewM",
-                                            &viewMatrixName);
+        *viewMatrixUniform = uniformHandler->addUniform(GrGLSLUniformHandler::kVertex_Visibility,
+                                                        kMat33f_GrSLType, kHigh_GrSLPrecision,
+                                                        "uViewM",
+                                                        &viewMatrixName);
         if (!mat.hasPerspective()) {
             gpArgs->fPositionVar.set(kVec2f_GrSLType, "pos2");
             vertBuilder->codeAppendf("vec2 %s = vec2(%s * vec3(%s, 1));",

@@ -489,13 +489,8 @@ static inline bool skpaint_to_grpaint_impl(GrContext* context,
 
     SkXfermode* mode = skPaint.getXfermode();
     GrXPFactory* xpFactory = nullptr;
-    if (!SkXfermode::AsXPFactory(mode, &xpFactory)) {
-        // Fall back to src-over
-        // return false here?
-        xpFactory = GrPorterDuffXPFactory::Create(SkXfermode::kSrcOver_Mode);
-    }
-    SkASSERT(xpFactory);
-    grPaint->setXPFactory(xpFactory)->unref();
+    SkXfermode::AsXPFactory(mode, &xpFactory);
+    SkSafeUnref(grPaint->setXPFactory(xpFactory));
 
 #ifndef SK_IGNORE_GPU_DITHER
     if (skPaint.isDither() && grPaint->numColorFragmentProcessors() > 0) {
@@ -543,6 +538,34 @@ bool SkPaintToGrPaintWithXfermode(GrContext* context,
                                   GrPaint* grPaint) {
     return skpaint_to_grpaint_impl(context, skPaint, viewM, nullptr, &primColorMode, primitiveIsSrc,
                                    grPaint);
+}
+
+bool SkPaintToGrPaintWithTexture(GrContext* context,
+                                 const SkPaint& paint,
+                                 const SkMatrix& viewM,
+                                 const GrFragmentProcessor* fp,
+                                 bool textureIsAlphaOnly,
+                                 GrPaint* grPaint) {
+    SkAutoTUnref<const GrFragmentProcessor> shaderFP;
+    if (textureIsAlphaOnly) {
+        if (const SkShader* shader = paint.getShader()) {
+            shaderFP.reset(shader->asFragmentProcessor(context,
+                                                       viewM,
+                                                       nullptr,
+                                                       paint.getFilterQuality()));
+            if (!shaderFP) {
+                return false;
+            }
+            const GrFragmentProcessor* fpSeries[] = { shaderFP.get(), fp };
+            shaderFP.reset(GrFragmentProcessor::RunInSeries(fpSeries, 2));
+        } else {
+            shaderFP.reset(GrFragmentProcessor::MulOutputByInputUnpremulColor(fp));
+        }
+    } else {
+        shaderFP.reset(GrFragmentProcessor::MulOutputByInputAlpha(fp));
+    }
+
+    return SkPaintToGrPaintReplaceShader(context, paint, shaderFP.get(), grPaint);
 }
 
 

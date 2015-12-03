@@ -9,6 +9,8 @@
 #include "LazyDecodeBitmap.h"
 #include "SkCommandLineFlags.h"
 #include "SkPicture.h"
+#include "SkPictureRecorder.h"
+#include "SkRecordDraw.h"
 #include "SkRecordOpts.h"
 #include "SkRecorder.h"
 #include "SkStream.h"
@@ -17,8 +19,10 @@
 DEFINE_string2(skps, r, "", ".SKPs to dump.");
 DEFINE_string(match, "", "The usual filters on file names to dump.");
 DEFINE_bool2(optimize, O, false, "Run SkRecordOptimize before dumping.");
+DEFINE_bool(optimize2, false, "Run SkRecordOptimize2 before dumping.");
 DEFINE_int32(tile, 1000000000, "Simulated tile size.");
 DEFINE_bool(timeWithCommand, false, "If true, print time next to command, else in first column.");
+DEFINE_string2(write, w, "", "Write the (optimized) picture to the named file.");
 
 static void dump(const char* name, int w, int h, const SkRecord& record) {
     SkBitmap bitmap;
@@ -31,7 +35,6 @@ static void dump(const char* name, int w, int h, const SkRecord& record) {
 
     DumpRecord(record, &canvas, FLAGS_timeWithCommand);
 }
-
 
 int tool_main(int argc, char** argv);
 int tool_main(int argc, char** argv) {
@@ -63,8 +66,25 @@ int tool_main(int argc, char** argv) {
         if (FLAGS_optimize) {
             SkRecordOptimize(&record);
         }
+        if (FLAGS_optimize2) {
+            SkRecordOptimize2(&record);
+        }
 
         dump(FLAGS_skps[i], w, h, record);
+
+        if (FLAGS_write.count() > 0) {
+            SkPictureRecorder r;
+            SkRecordDraw(record,
+                         r.beginRecording(SkRect::MakeIWH(w, h)),
+                         nullptr,
+                         nullptr,
+                         0,
+                         nullptr,
+                         nullptr);
+            SkAutoTUnref<SkPicture> dst(r.endRecording());
+            SkFILEWStream ostream(FLAGS_write[0]);
+            dst->serialize(&ostream);
+        }
     }
 
     return 0;

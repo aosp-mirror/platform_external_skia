@@ -13,7 +13,6 @@
 #include "SkMatrix.h"
 #include "glsl/GrGLSLFragmentProcessor.h"
 #include "glsl/GrGLSLFragmentShaderBuilder.h"
-#include "glsl/GrGLSLProgramBuilder.h"
 
 class GrGLConfigConversionEffect : public GrGLSLFragmentProcessor {
 public:
@@ -28,7 +27,7 @@ public:
         // Using highp for GLES here in order to avoid some precision issues on specific GPUs.
         GrGLSLShaderVar tmpVar("tmpColor", kVec4f_GrSLType, 0, kHigh_GrSLPrecision);
         SkString tmpDecl;
-        tmpVar.appendDecl(args.fBuilder->glslCaps(), &tmpDecl);
+        tmpVar.appendDecl(args.fGLSLCaps, &tmpDecl);
 
         GrGLSLFragmentBuilder* fragBuilder = args.fFragBuilder;
 
@@ -223,6 +222,7 @@ void GrConfigConversionEffect::TestForPreservingPMConversions(GrContext* context
                 tempTex, false, *pmToUPMRule, SkMatrix::I()));
 
         paint1.addColorFragmentProcessor(pmToUPM1);
+        paint1.setPorterDuffXPFactory(SkXfermode::kSrc_Mode);
 
 
         SkAutoTUnref<GrDrawContext> readDrawContext(
@@ -241,6 +241,7 @@ void GrConfigConversionEffect::TestForPreservingPMConversions(GrContext* context
         readTex->readPixels(0, 0, 256, 256, kRGBA_8888_GrPixelConfig, firstRead);
 
         paint2.addColorFragmentProcessor(upmToPM);
+        paint2.setPorterDuffXPFactory(SkXfermode::kSrc_Mode);
 
         SkAutoTUnref<GrDrawContext> tempDrawContext(
                                     context->drawContext(tempTex->asRenderTarget()));
@@ -255,6 +256,7 @@ void GrConfigConversionEffect::TestForPreservingPMConversions(GrContext* context
                                         kSrcRect);
 
         paint3.addColorFragmentProcessor(pmToUPM2);
+        paint3.setPorterDuffXPFactory(SkXfermode::kSrc_Mode);
 
         readDrawContext.reset(context->drawContext(readTex->asRenderTarget()));
         if (!readDrawContext) {

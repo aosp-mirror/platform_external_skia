@@ -17,7 +17,7 @@ void GrDrawPathBatch::onDraw(GrBatchFlushState* state) {
     GrProgramDesc  desc;
 
     SkAutoTUnref<GrPathProcessor> pathProc(GrPathProcessor::Create(this->color(),
-                                                                   this->opts(),
+                                                                   this->overrides(),
                                                                    this->viewMatrix()));
     state->gpu()->buildProgramDesc(&desc, *pathProc, *this->pipeline());
     GrPathRendering::DrawPathArgs args(pathProc, this->pipeline(),
@@ -56,19 +56,15 @@ bool GrDrawPathRangeBatch::isWinding() const {
 }
 
 GrDrawPathRangeBatch::GrDrawPathRangeBatch(const SkMatrix& viewMatrix, const SkMatrix& localMatrix,
-                                           GrColor color, GrPathRange* range, GrPathRangeDraw* draw)
+                                           GrColor color, GrPathRange* range, GrPathRangeDraw* draw,
+                                           const SkRect& bounds)
     : INHERITED(ClassID(), viewMatrix, color)
     , fPathRange(range)
-    , fDraws(4)
     , fLocalMatrix(localMatrix) {
     SkDEBUGCODE(draw->fUsedInBatch = true;)
     fDraws.addToHead(SkRef(draw));
     fTotalPathCount = draw->count();
-    // Don't compute a bounding box. For dst copy texture, we'll opt instead for it to just copy
-    // the entire dst. Realistically this is a moot point, because any context that supports
-    // NV_path_rendering will also support NV_blend_equation_advanced.
-    // For clipping we'll just skip any optimizations based on the bounds.
-    fBounds.setLargest();
+    fBounds = bounds;
 }
 
 bool GrDrawPathRangeBatch::onCombineIfPossible(GrBatch* t, const GrCaps& caps) {
@@ -96,10 +92,10 @@ bool GrDrawPathRangeBatch::onCombineIfPossible(GrBatch* t, const GrCaps& caps) {
     // combined. (Glyphs in the same font tend to wind the same direction so it works out OK.)
     if (!this->isWinding() ||
         this->stencilSettings() != that->stencilSettings() ||
-        this->opts().willColorBlendWithDst()) {
+        this->overrides().willColorBlendWithDst()) {
         return false;
     }
-    SkASSERT(!that->opts().willColorBlendWithDst());
+    SkASSERT(!that->overrides().willColorBlendWithDst());
     fTotalPathCount += that->fTotalPathCount;
     while (GrPathRangeDraw** head = that->fDraws.head()) {
         fDraws.addToTail(*head);
@@ -112,7 +108,7 @@ bool GrDrawPathRangeBatch::onCombineIfPossible(GrBatch* t, const GrCaps& caps) {
 void GrDrawPathRangeBatch::onDraw(GrBatchFlushState* state) {
     GrProgramDesc  desc;
     SkAutoTUnref<GrPathProcessor> pathProc(GrPathProcessor::Create(this->color(),
-                                                                   this->opts(),
+                                                                   this->overrides(),
                                                                    this->viewMatrix(),
                                                                    fLocalMatrix));
     state->gpu()->buildProgramDesc(&desc, *pathProc, *this->pipeline());

@@ -70,7 +70,7 @@ private:
         return &fGeometry;
     }
 
-    void generateGeometry(Target* target) override {
+    void generateGeometry(Target* target) const override {
         QuadHelper helper;
         size_t vertexStride = this->geometryProcessor()->getVertexStride();
         SkASSERT(vertexStride == sizeof(Vertex));
@@ -221,6 +221,8 @@ protected:
                     SkASSERT(tt.target());
 
                     GrPipelineBuilder pipelineBuilder;
+                    pipelineBuilder.setXPFactory(
+                        GrPorterDuffXPFactory::Create(SkXfermode::kSrc_Mode))->unref();
                     pipelineBuilder.setRenderTarget(rt);
 
                     BezierCubicOrConicTestBatch::Geometry geometry;
@@ -366,6 +368,8 @@ protected:
                     SkASSERT(tt.target());
 
                     GrPipelineBuilder pipelineBuilder;
+                    pipelineBuilder.setXPFactory(
+                        GrPorterDuffXPFactory::Create(SkXfermode::kSrc_Mode))->unref();
                     pipelineBuilder.setRenderTarget(rt);
 
                     BezierCubicOrConicTestBatch::Geometry geometry;
@@ -466,7 +470,7 @@ private:
         return &fGeometry;
     }
 
-    void generateGeometry(Target* target) override {
+    void generateGeometry(Target* target) const override {
         QuadHelper helper;
         size_t vertexStride = this->geometryProcessor()->getVertexStride();
         SkASSERT(vertexStride == sizeof(Vertex));
@@ -604,6 +608,8 @@ protected:
                     SkASSERT(tt.target());
 
                     GrPipelineBuilder pipelineBuilder;
+                    pipelineBuilder.setXPFactory(
+                        GrPorterDuffXPFactory::Create(SkXfermode::kSrc_Mode))->unref();
                     pipelineBuilder.setRenderTarget(rt);
 
                     GrPathUtils::QuadUVMatrix DevToUV(pts);

@@ -9,6 +9,7 @@
 #define GrDrawContext_DEFINED
 
 #include "GrColor.h"
+#include "GrRenderTarget.h"
 #include "SkRefCnt.h"
 #include "SkSurfaceProps.h"
 
@@ -70,7 +71,8 @@ public:
                             GrColor color,
                             GrPathRange* range,
                             GrPathRangeDraw* draw,
-                            int /*GrPathRendering::FillType*/ fill);
+                            int /*GrPathRendering::FillType*/ fill,
+                            const SkRect& bounds);
 
     /**
      * Provides a perfomance hint that the render target's contents are allowed
@@ -242,6 +244,27 @@ public:
                   const SkRect& oval,
                   const GrStrokeInfo& strokeInfo);
 
+    /**
+     *  Draw the image stretched differentially to fit into dst.
+     *  center is a rect within the image, and logically divides the image
+     *  into 9 sections (3x3). For example, if the middle pixel of a [5x5]
+     *  image is the "center", then the center-rect should be [2, 2, 3, 3].
+     *
+     *  If the dst is >= the image size, then...
+     *  - The 4 corners are not stretched at all.
+     *  - The sides are stretched in only one axis.
+     *  - The center is stretched in both axes.
+     * Else, for each axis where dst < image,
+     *  - The corners shrink proportionally
+     *  - The sides (along the shrink axis) and center are not drawn
+     */
+    void drawImageNine(const GrClip&,
+                       const GrPaint& paint,
+                       const SkMatrix& viewMatrix,
+                       int imageWidth,
+                       int imageHeight,
+                       const SkIRect& center,
+                       const SkRect& dst);
 
     /**
      * Draws a batch
@@ -250,6 +273,10 @@ public:
      * @param batch    the batch to draw
      */
     void drawBatch(const GrClip&, const GrPaint&, GrDrawBatch*);
+
+    int width() const { return fRenderTarget->width(); }
+    int height() const { return fRenderTarget->height(); }
+    int numColorSamples() const { return fRenderTarget->numColorSamples(); }
 
 private:
     friend class GrAtlasTextContext; // for access to drawBatch

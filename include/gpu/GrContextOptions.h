@@ -20,6 +20,8 @@ struct GrContextOptions {
         , fGeometryBufferMapThreshold(-1)
         , fUseDrawInsteadOfPartialRenderTargetWrite(false)
         , fImmediateMode(false)
+        , fClipBatchToBounds(false)
+        , fDrawBatchBounds(false)
         , fUseShaderSwizzling(false) {}
 
     // EXPERIMENTAL
@@ -48,9 +50,18 @@ struct GrContextOptions {
     /** some gpus have problems with partial writes of the rendertarget */
     bool fUseDrawInsteadOfPartialRenderTargetWrite;
 
-    /** The GrContext operates in immedidate mode. It will issue all draws to the backend API
+    /** The GrContext operates in immediate mode. It will issue all draws to the backend API
         immediately. Intended to ease debugging. */
     bool fImmediateMode;
+
+    /** For debugging purposes turn each GrBatch's bounds into a clip rect. This is used to
+        verify that the clip bounds are conservative. */
+    bool fClipBatchToBounds;
+
+    /** For debugging purposes draw a wireframe device bounds rect for each GrBatch. The wire
+        frame rect is draw before the GrBatch in order to visualize batches that draw outside
+        of their dev bounds. */
+    bool fDrawBatchBounds;
 
     /** Force us to do all swizzling manually in the shader and don't rely on extensions to do
         swizzling. */

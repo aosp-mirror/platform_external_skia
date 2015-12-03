@@ -207,7 +207,7 @@ void GrStencilAndCoverTextContext::TextBlob::init(const SkTextBlob* skBlob,
     SkPaint runPaint(skPaint);
     for (SkTextBlobRunIterator iter(skBlob); !iter.done(); iter.next()) {
         iter.applyFontToPaint(&runPaint); // No need to re-seed the paint.
-        TextRun* run = SkNEW_INSERT_AT_LLIST_TAIL(this, TextRun, (runPaint));
+        TextRun* run = this->addToTail(runPaint);
 
         const char* text = reinterpret_cast<const char*>(iter.glyphs());
         size_t byteLength = sizeof(uint16_t) * iter.glyphCount();
@@ -516,8 +516,16 @@ void GrStencilAndCoverTextContext::TextRun::draw(GrContext* ctx,
         localMatrix.setTranslateX(x);
         localMatrix.setTranslateY(y);
 
+        // Don't compute a bounding box. For dst copy texture, we'll opt instead for it to just copy
+        // the entire dst. Realistically this is a moot point, because any context that supports
+        // NV_path_rendering will also support NV_blend_equation_advanced.
+        // For clipping we'll just skip any optimizations based on the bounds. This does, however,
+        // hurt batching.
+        SkRect bounds = SkRect::MakeIWH(pipelineBuilder->getRenderTarget()->width(),
+                                        pipelineBuilder->getRenderTarget()->height());
+
         dc->drawPathsFromRange(pipelineBuilder, drawMatrix, localMatrix, color, glyphs, fDraw,
-                               GrPathRendering::kWinding_FillType);
+                               GrPathRendering::kWinding_FillType, bounds);
     }
 
     if (fFallbackTextBlob) {

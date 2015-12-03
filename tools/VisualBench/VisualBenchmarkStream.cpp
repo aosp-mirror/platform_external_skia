@@ -21,7 +21,6 @@
 #include "GrContext.h"
 #endif
 
-DEFINE_bool(cpu, false, "Run in CPU mode?");
 DEFINE_string2(match, m, nullptr,
                "[~][^]substring[$] [...] of bench name to run.\n"
                "Multiple matches may be separated by spaces.\n"
@@ -39,9 +38,15 @@ class WarmupBench : public Benchmark {
 public:
     WarmupBench() {
         sk_tool_utils::make_big_path(fPath);
+        fPerlinRect = SkRect::MakeLTRB(0., 0., 400., 400.);
     }
 private:
     const char* onGetName() override { return "warmupbench"; }
+    SkIPoint onGetSize() override {
+        int w = SkScalarCeilToInt(SkTMax(fPath.getBounds().right(), fPerlinRect.right()));
+        int h = SkScalarCeilToInt(SkTMax(fPath.getBounds().bottom(), fPerlinRect.bottom()));
+        return SkIPoint::Make(w, h);
+    }
     void onDraw(int loops, SkCanvas* canvas) override {
         // We draw a big path to warm up the cpu, and then use perlin noise shader to warm up the
         // gpu
@@ -52,10 +57,9 @@ private:
         SkPaint perlinPaint;
         perlinPaint.setShader(SkPerlinNoiseShader::CreateTurbulence(0.1f, 0.1f, 1, 0,
                                                                     nullptr))->unref();
-        SkRect rect = SkRect::MakeLTRB(0., 0., 400., 400.);
         for (int i = 0; i < loops; i++) {
             canvas->drawPath(fPath, paint);
-            canvas->drawRect(rect, perlinPaint);
+            canvas->drawRect(fPerlinRect, perlinPaint);
 #if SK_SUPPORT_GPU
             // Ensure the GrContext doesn't batch across draw loops.
             if (GrContext* context = canvas->getGrContext()) {
@@ -65,6 +69,7 @@ private:
         }
     }
     SkPath fPath;
+    SkRect fPerlinRect;
 };
 
 VisualBenchmarkStream::VisualBenchmarkStream(const SkSurfaceProps& surfaceProps)
@@ -131,8 +136,8 @@ Benchmark* VisualBenchmarkStream::next() {
     // TODO move this all to --config
     if (bench && FLAGS_cpu) {
         bench = new CpuWrappedBenchmark(fSurfaceProps, bench);
-    } else if (bench && 0 != FLAGS_nvpr) {
-        bench = new NvprWrappedBenchmark(fSurfaceProps, bench, FLAGS_nvpr);
+    } else if (bench && FLAGS_offscreen) {
+        bench = new GpuWrappedBenchmark(fSurfaceProps, bench, FLAGS_msaa);
     }
 
     fBenchmark.reset(bench);

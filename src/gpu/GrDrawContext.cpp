@@ -23,6 +23,7 @@
 #include "batches/GrDrawAtlasBatch.h"
 #include "batches/GrDrawVerticesBatch.h"
 #include "batches/GrRectBatchFactory.h"
+#include "batches/GrNinePatch.h" // TODO Factory
 
 #define ASSERT_OWNED_RESOURCE(R) SkASSERT(!(R) || (R)->getContext() == fDrawingManager->getContext())
 #define RETURN_IF_ABANDONED        if (fDrawingManager->abandoned()) { return; }
@@ -142,12 +143,14 @@ void GrDrawContext::drawPathsFromRange(const GrPipelineBuilder* pipelineBuilder,
                                        GrColor color,
                                        GrPathRange* range,
                                        GrPathRangeDraw* draw,
-                                       int /*GrPathRendering::FillType*/ fill) {
+                                       int /*GrPathRendering::FillType*/ fill,
+                                       const SkRect& bounds) {
     RETURN_IF_ABANDONED
     SkDEBUGCODE(this->validate();)
 
     this->getDrawTarget()->drawPathsFromRange(*pipelineBuilder, viewMatrix, localMatrix, color,
-                                              range, draw, (GrPathRendering::FillType) fill);
+                                              range, draw, (GrPathRendering::FillType) fill,
+                                              bounds);
 }
 
 void GrDrawContext::discard() {
@@ -240,17 +243,10 @@ void GrDrawContext::drawRect(const GrClip& clip,
     RETURN_IF_ABANDONED
     SkDEBUGCODE(this->validate();)
 
-    if (strokeInfo && strokeInfo->isDashed()) {
-        SkPath path;
-        path.setIsVolatile(true);
-        path.addRect(rect);
-        this->drawPath(clip, paint, viewMatrix, path, *strokeInfo);
-        return;
-    }
+    // Dashing should've been devolved to a path in SkGpuDevice
+    SkASSERT(!strokeInfo || !strokeInfo->isDashed());
 
     AutoCheckFlush acf(fDrawingManager);
-
-    GrPipelineBuilder pipelineBuilder(paint, fRenderTarget, clip);
 
     SkScalar width = nullptr == strokeInfo ? -1 : strokeInfo->getWidth();
 
@@ -258,7 +254,7 @@ void GrDrawContext::drawRect(const GrClip& clip,
     // cases where the RT is fully inside a stroke.
     if (width < 0) {
         SkRect rtRect;
-        pipelineBuilder.getRenderTarget()->getBoundsRect(&rtRect);
+        fRenderTarget->getBoundsRect(&rtRect);
         SkRect clipSpaceRTRect = rtRect;
         bool checkClip = GrClip::kWideOpen_ClipType != clip.clipType();
         if (checkClip) {
@@ -289,13 +285,15 @@ void GrDrawContext::drawRect(const GrClip& clip,
     }
 
     GrColor color = paint.getColor();
-    bool needAA = should_apply_coverage_aa(paint, pipelineBuilder.getRenderTarget());
+    bool needAA = should_apply_coverage_aa(paint, fRenderTarget);
 
     // The fill path can handle rotation but not skew
     // The stroke path needs the rect to remain axis aligned (no rotation or skew)
     // None of our AA draw rect calls can handle perspective yet
     bool canApplyAA = width >=0 ? viewMatrix.rectStaysRect() :
                                   view_matrix_ok_for_aa_fill_rect(viewMatrix);
+
+    GrPipelineBuilder pipelineBuilder(paint, fRenderTarget, clip);
 
     if (needAA && canApplyAA) {
         SkASSERT(!viewMatrix.hasPerspective());
@@ -367,7 +365,8 @@ void GrDrawContext::fillRectWithLocalMatrix(const GrClip& clip,
     AutoCheckFlush acf(fDrawingManager);
 
     GrPipelineBuilder pipelineBuilder(paint, fRenderTarget, clip);
-    if (should_apply_coverage_aa(paint, pipelineBuilder.getRenderTarget()) &&
+
+    if (should_apply_coverage_aa(paint, fRenderTarget) &&
         view_matrix_ok_for_aa_fill_rect(viewMatrix)) {
         SkAutoTUnref<GrDrawBatch> batch(GrAAFillRectBatch::Create(
             paint.getColor(), viewMatrix, localMatrix, rectToDraw));
@@ -408,8 +407,10 @@ void GrDrawContext::drawVertices(const GrClip& clip,
     viewMatrix.mapRect(&bounds);
 
     // If we don't have AA then we outset for a half pixel in each direction to account for
-    // snapping
-    if (!paint.isAntiAlias()) {
+    // snapping. We also do this for the "hair" primitive types: lines and points since they have
+    // a 1 pixel thickness in device space.
+    if (!paint.isAntiAlias() || GrIsPrimTypeLines(primitiveType) ||
+        kPoints_GrPrimitiveType == primitiveType) {
         bounds.outset(0.5f, 0.5f);
     }
 
@@ -461,13 +462,7 @@ void GrDrawContext::drawRRect(const GrClip& clip,
        return;
     }
 
-    if (strokeInfo.isDashed()) {
-        SkPath path;
-        path.setIsVolatile(true);
-        path.addRRect(rrect);
-        this->drawPath(clip, paint, viewMatrix, path, strokeInfo);
-        return;
-    }
+    SkASSERT(!strokeInfo.isDashed()); // this should've been devolved to a path in SkGpuDevice
 
     AutoCheckFlush acf(fDrawingManager);
 
@@ -540,13 +535,7 @@ void GrDrawContext::drawOval(const GrClip& clip,
        return;
     }
 
-    if (strokeInfo.isDashed()) {
-        SkPath path;
-        path.setIsVolatile(true);
-        path.addOval(oval);
-        this->drawPath(clip, paint, viewMatrix, path, strokeInfo);
-        return;
-    }
+    SkASSERT(!strokeInfo.isDashed()); // this should've been devolved to a path in SkGpuDevice
 
     AutoCheckFlush acf(fDrawingManager);
 
@@ -568,6 +557,27 @@ void GrDrawContext::drawOval(const GrClip& clip,
     }
 }
 
+void GrDrawContext::drawImageNine(const GrClip& clip,
+                                  const GrPaint& paint,
+                                  const SkMatrix& viewMatrix,
+                                  int imageWidth,
+                                  int imageHeight,
+                                  const SkIRect& center,
+                                  const SkRect& dst) {
+    RETURN_IF_ABANDONED
+    SkDEBUGCODE(this->validate();)
+
+    AutoCheckFlush acf(fDrawingManager);
+
+    SkAutoTUnref<GrDrawBatch> batch(GrNinePatch::CreateNonAA(paint.getColor(), viewMatrix,
+                                                             imageWidth, imageHeight,
+                                                             center, dst));
+
+    GrPipelineBuilder pipelineBuilder(paint, fRenderTarget, clip);
+    this->getDrawTarget()->drawBatch(pipelineBuilder, batch);
+}
+
+
 // Can 'path' be drawn as a pair of filled nested rectangles?
 static bool is_nested_rects(const SkMatrix& viewMatrix,
                             const SkPath& path,
@@ -581,7 +591,7 @@ static bool is_nested_rects(const SkMatrix& viewMatrix,
 
     // TODO: this restriction could be lifted if we were willing to apply
     // the matrix to all the points individually rather than just to the rect
-    if (!viewMatrix.preservesAxisAlignment()) {
+    if (!viewMatrix.rectStaysRect()) {
         return false;
     }
 

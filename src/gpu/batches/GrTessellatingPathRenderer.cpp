@@ -1397,28 +1397,28 @@ public:
 
     const char* name() const override { return "TessellatingPathBatch"; }
 
-    void getInvariantOutputColor(GrInitInvariantOutput* out) const override {
-        out->setKnownFourComponents(fColor);
-    }
-
-    void getInvariantOutputCoverage(GrInitInvariantOutput* out) const override {
-        out->setUnknownSingleComponent();
+    void computePipelineOptimizations(GrInitInvariantOutput* color, 
+                                      GrInitInvariantOutput* coverage,
+                                      GrBatchToXPOverrides* overrides) const override {
+        color->setKnownFourComponents(fColor);
+        coverage->setUnknownSingleComponent();
+        overrides->fUsePLSDstRead = false;
     }
 
 private:
-    void initBatchTracker(const GrPipelineOptimizations& opt) override {
+    void initBatchTracker(const GrXPOverridesForBatch& overrides) override {
         // Handle any color overrides
-        if (!opt.readsColor()) {
+        if (!overrides.readsColor()) {
             fColor = GrColor_ILLEGAL;
         }
-        opt.getOverrideColorIfSet(&fColor);
-        fPipelineInfo = opt;
+        overrides.getOverrideColorIfSet(&fColor);
+        fPipelineInfo = overrides;
     }
 
     int tessellate(GrUniqueKey* key,
                    GrResourceProvider* resourceProvider,
                    SkAutoTUnref<GrVertexBuffer>& vertexBuffer,
-                   bool canMapVB) {
+                   bool canMapVB) const {
         SkPath path;
         GrStrokeInfo stroke(fStroke);
         if (stroke.isDashed()) {
@@ -1521,7 +1521,7 @@ private:
         return actualCount;
     }
 
-    void onPrepareDraws(Target* target) override {
+    void onPrepareDraws(Target* target) const override {
         // construct a cache key from the path's genID and the view matrix
         static const GrUniqueKey::Domain kDomain = GrUniqueKey::GenerateDomain();
         GrUniqueKey key;
@@ -1545,7 +1545,7 @@ private:
             screenSpaceTol, fViewMatrix, fPath.getBounds());
         if (!cache_match(vertexBuffer.get(), tol, &actualCount)) {
             bool canMapVB = GrCaps::kNone_MapFlags != target->caps().mapBufferFlags();
-            actualCount = tessellate(&key, rp, vertexBuffer, canMapVB);
+            actualCount = this->tessellate(&key, rp, vertexBuffer, canMapVB);
         }
 
         if (actualCount == 0) {
@@ -1592,9 +1592,17 @@ private:
       , fColor(color)
       , fPath(path)
       , fStroke(stroke)
-      , fViewMatrix(viewMatrix)
-      , fClipBounds(clipBounds) {
-        fBounds = path.getBounds();
+      , fViewMatrix(viewMatrix) {
+        const SkRect& pathBounds = path.getBounds();
+        fClipBounds = clipBounds;
+        // Because the clip bounds are used to add a contour for inverse fills, they must also
+        // include the path bounds.
+        fClipBounds.join(pathBounds);
+        if (path.isInverseFillType()) {
+            fBounds = fClipBounds;
+        } else {
+            fBounds = path.getBounds();
+        }
         if (!stroke.isFillStyle()) {
             SkScalar radius = SkScalarHalf(stroke.getWidth());
             if (stroke.getJoin() == SkPaint::kMiter_Join) {
@@ -1613,7 +1621,7 @@ private:
     GrStrokeInfo            fStroke;
     SkMatrix                fViewMatrix;
     SkRect                  fClipBounds; // in source space
-    GrPipelineOptimizations fPipelineInfo;
+    GrXPOverridesForBatch   fPipelineInfo;
 
     typedef GrVertexBatch INHERITED;
 };
@@ -1626,7 +1634,7 @@ bool GrTessellatingPathRenderer::onDrawPath(const DrawPathArgs& args) {
     }
 
     SkIRect clipBoundsI;
-    args.fPipelineBuilder->clip().getConservativeBounds(rt, &clipBoundsI);
+    args.fPipelineBuilder->clip().getConservativeBounds(rt->width(), rt->height(), &clipBoundsI);
     SkRect clipBounds = SkRect::Make(clipBoundsI);
     SkMatrix vmi;
     if (!args.fViewMatrix->invert(&vmi)) {

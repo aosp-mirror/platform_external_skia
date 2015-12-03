@@ -16,6 +16,7 @@
 #include "GrGLRenderTarget.h"
 #include "GrGLStencilAttachment.h"
 #include "GrGLTexture.h"
+#include "GrGLTransferBuffer.h"
 #include "GrGLVertexArray.h"
 #include "GrGLVertexBuffer.h"
 #include "GrGpu.h"
@@ -101,12 +102,12 @@ public:
     void releaseBuffer(GrGLuint id, GrGLenum type);
 
     // sizes are in bytes
-    void* mapBuffer(GrGLuint id, GrGLenum type, bool dynamic, size_t currentSize,
+    void* mapBuffer(GrGLuint id, GrGLenum type, GrGLBufferImpl::Usage usage, size_t currentSize,
                     size_t requestedSize);
 
     void unmapBuffer(GrGLuint id, GrGLenum type, void* mapPtr);
 
-    void bufferData(GrGLuint id, GrGLenum type, bool dynamic, size_t currentSize,
+    void bufferData(GrGLuint id, GrGLenum type, GrGLBufferImpl::Usage usage, size_t currentSize,
                     const void* src, size_t srcSizeInBytes);
 
     const GrGLContext* glContextForTesting() const override {
@@ -128,6 +129,10 @@ public:
     bool isTestingOnlyBackendTexture(GrBackendObject) const override;
     void deleteTestingOnlyBackendTexture(GrBackendObject, bool abandonTexture) const override;
 
+    void resetShaderCacheForTesting() const override;
+
+    void drawDebugWireRect(GrRenderTarget*, const SkIRect&, GrColor) override;
+
 private:
     GrGLGpu(GrGLContext* ctx, GrContext* context);
 
@@ -143,6 +148,7 @@ private:
                                          const void* srcData) override;
     GrVertexBuffer* onCreateVertexBuffer(size_t size, bool dynamic) override;
     GrIndexBuffer* onCreateIndexBuffer(size_t size, bool dynamic) override;
+    GrTransferBuffer* onCreateTransferBuffer(size_t size, TransferType type) override;
     GrTexture* onWrapBackendTexture(const GrBackendTextureDesc&, GrWrapOwnership) override;
     GrRenderTarget* onWrapBackendRenderTarget(const GrBackendRenderTargetDesc&,
                                               GrWrapOwnership) override;
@@ -213,6 +219,7 @@ private:
         ProgramCache(GrGLGpu* gpu);
         ~ProgramCache();
 
+        void reset();
         void abandon();
         GrGLProgram* refProgram(const DrawArgs&);
 
@@ -322,7 +329,9 @@ private:
 
     SkAutoTUnref<GrGLContext>  fGLContext;
 
-    void createCopyProgram();
+    void createCopyPrograms();
+    void createWireRectProgram();
+    void createUnitRectBuffer();
 
     // GL program-related state
     ProgramCache*               fProgramCache;
@@ -497,8 +506,24 @@ private:
         GrGLint     fTextureUniform;
         GrGLint     fTexCoordXformUniform;
         GrGLint     fPosXformUniform;
-        GrGLuint    fArrayBuffer;
-    } fCopyProgram;
+    }                           fCopyPrograms[2];
+    GrGLuint                    fCopyProgramArrayBuffer;
+
+    struct {
+        GrGLuint fProgram;
+        GrGLint  fColorUniform;
+        GrGLint  fRectUniform;
+    }                           fWireRectProgram;
+    GrGLuint                    fWireRectArrayBuffer;
+
+    static int TextureTargetToCopyProgramIdx(GrGLenum target) {
+        if (target == GR_GL_TEXTURE_2D) {
+            return 0;
+        } else {
+            SkASSERT(target == GR_GL_TEXTURE_EXTERNAL);
+            return 1;
+        }
+    }
 
     TriState fMSAAEnabled;
 

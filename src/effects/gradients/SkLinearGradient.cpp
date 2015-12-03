@@ -282,7 +282,8 @@ void SkLinearGradient::LinearGradientContext::shadeSpan(int x, int y, SkPMColor*
     SkASSERT(count > 0);
     const SkLinearGradient& linearGradient = static_cast<const SkLinearGradient&>(fShader);
 
-#ifndef SK_SUPPORT_LEGACY_LINEAR_GRADIENT_TABLE
+// Only use the Sk4f impl when known to be fast.
+#if defined(SKNX_IS_FAST)
     if (SkShader::kClamp_TileMode == linearGradient.fTileMode &&
         kLinear_MatrixClass == fDstToIndexClass)
     {
@@ -515,7 +516,8 @@ void SkLinearGradient::LinearGradientContext::shadeSpan16(int x, int y,
 
 #if SK_SUPPORT_GPU
 
-#include "gl/builders/GrGLProgramBuilder.h"
+#include "glsl/GrGLSLCaps.h"
+#include "glsl/GrGLSLFragmentShaderBuilder.h"
 #include "SkGr.h"
 
 /////////////////////////////////////////////////////////////////////
@@ -603,11 +605,12 @@ const GrFragmentProcessor* GrLinearGradient::TestCreate(GrProcessorTestData* d) 
 
 void GrGLLinearGradient::emitCode(EmitArgs& args) {
     const GrLinearGradient& ge = args.fFp.cast<GrLinearGradient>();
-    this->emitUniforms(args.fBuilder, ge);
+    this->emitUniforms(args.fUniformHandler, ge);
     SkString t = args.fFragBuilder->ensureFSCoords2D(args.fCoords, 0);
     t.append(".x");
-    this->emitColor(args.fBuilder,
-                    args.fFragBuilder,
+    this->emitColor(args.fFragBuilder,
+                    args.fUniformHandler,
+                    args.fGLSLCaps,
                     ge, t.c_str(),
                     args.fOutputColor,
                     args.fInputColor,
@@ -726,6 +729,9 @@ template <bool apply_alpha> void fill(SkPMColor dst[], int count, const Sk4f& c4
  */
 
 static Sk4f lerp_color(float fx, const SkLinearGradient::LinearGradientContext::Rec* rec) {
+    SkASSERT(fx >= rec[0].fPos);
+    SkASSERT(fx <= rec[1].fPos);
+
     const float p0 = rec[0].fPos;
     const Sk4f c0 = rec[0].fColor;
     const Sk4f c1 = rec[1].fColor;
@@ -744,10 +750,15 @@ template <bool apply_alpha> void ramp(SkPMColor dstC[], int n, const Sk4f& c, co
     Sk4f cd2 = cd0 + dc2;
     Sk4f cd3 = cd1 + dc2;
     while (n >= 4) {
-        *dstC++ = trunc_from_255<apply_alpha>(cd0);
-        *dstC++ = trunc_from_255<apply_alpha>(cd1);
-        *dstC++ = trunc_from_255<apply_alpha>(cd2);
-        *dstC++ = trunc_from_255<apply_alpha>(cd3);
+        if (!apply_alpha) {
+            Sk4f::ToBytes((uint8_t*)dstC, cd0, cd1, cd2, cd3);
+            dstC += 4;
+        } else {
+            *dstC++ = trunc_from_255<apply_alpha>(cd0);
+            *dstC++ = trunc_from_255<apply_alpha>(cd1);
+            *dstC++ = trunc_from_255<apply_alpha>(cd2);
+            *dstC++ = trunc_from_255<apply_alpha>(cd3);
+        }
         cd0 = cd0 + dc4;
         cd1 = cd1 + dc4;
         cd2 = cd2 + dc4;
@@ -857,7 +868,7 @@ void SkLinearGradient::LinearGradientContext::shade4_dx_clamp(SkPMColor dstC[], 
         ramp<apply_alpha>(dstC, n, c, dc, dither0, dither1);
         dstC += n;
         SkASSERT(dstC <= endDstC);
-        
+
         if (n & 1) {
             SkTSwap(dither0, dither1);
         }
@@ -892,8 +903,9 @@ void SkLinearGradient::LinearGradientContext::shade4_clamp(int x, int y, SkPMCol
     const float dither[2] = { dither0, dither1 };
     const float invDx = 1 / dx;
 
-    if (!SkScalarIsFinite(invDx)) { // dx is effectively zero, gradient is vertical
-        Sk4f c = lerp_color(fx, find_forward(fRecs.begin(), SkTPin(fx, 0.0f, 1.0f)));
+    if (SkScalarNearlyZero(dx * count)) { // gradient is vertical
+        const float pinFx = SkTPin(fx, 0.0f, 1.0f);
+        Sk4f c = lerp_color(pinFx, find_forward(fRecs.begin(), pinFx));
         if (fApplyAlphaAfterInterp) {
             fill<true>(dstC, count, c + dither0, c + dither1);
         } else {

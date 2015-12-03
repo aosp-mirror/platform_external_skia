@@ -627,7 +627,13 @@ void SkCanvas::resetForNextPicture(const SkIRect& bounds) {
 }
 
 SkBaseDevice* SkCanvas::init(SkBaseDevice* device, InitFlags flags) {
-    fConservativeRasterClip = SkToBool(flags & kConservativeRasterClip_InitFlag);
+    if (device && device->forceConservativeRasterClip()) {
+        flags = InitFlags(flags | kConservativeRasterClip_InitFlag);
+    }
+    // Since init() is only called once by our constructors, it is safe to perform this
+    // const-cast.
+    *const_cast<bool*>(&fConservativeRasterClip) = SkToBool(flags & kConservativeRasterClip_InitFlag);
+
     fCachedLocalClipBounds.setEmpty();
     fCachedLocalClipBoundsDirty = true;
     fAllowSoftClip = true;
@@ -652,9 +658,6 @@ SkBaseDevice* SkCanvas::init(SkBaseDevice* device, InitFlags flags) {
     if (device) {
         // The root device and the canvas should always have the same pixel geometry
         SkASSERT(fProps.pixelGeometry() == device->surfaceProps().pixelGeometry());
-        if (device->forceConservativeRasterClip()) {
-            fConservativeRasterClip = true;
-        }
         device->onAttachToCanvas(this);
         fMCRec->fLayer->fDevice = SkRef(device);
         fMCRec->fRasterClip.setRect(device->getGlobalBounds());
@@ -665,6 +668,7 @@ SkBaseDevice* SkCanvas::init(SkBaseDevice* device, InitFlags flags) {
 SkCanvas::SkCanvas()
     : fMCStack(sizeof(MCRec), fMCRecStorage, sizeof(fMCRecStorage))
     , fProps(SkSurfaceProps::kLegacyFontHost_InitType)
+    , fConservativeRasterClip(false)
 {
     inc_canvas();
 
@@ -693,6 +697,7 @@ private:
 SkCanvas::SkCanvas(int width, int height, const SkSurfaceProps* props)
     : fMCStack(sizeof(MCRec), fMCRecStorage, sizeof(fMCRecStorage))
     , fProps(SkSurfacePropsCopyOrDefault(props))
+    , fConservativeRasterClip(false)
 {
     inc_canvas();
 
@@ -703,6 +708,7 @@ SkCanvas::SkCanvas(int width, int height, const SkSurfaceProps* props)
 SkCanvas::SkCanvas(const SkIRect& bounds, InitFlags flags)
     : fMCStack(sizeof(MCRec), fMCRecStorage, sizeof(fMCRecStorage))
     , fProps(SkSurfaceProps::kLegacyFontHost_InitType)
+    , fConservativeRasterClip(false)
 {
     inc_canvas();
 
@@ -712,6 +718,7 @@ SkCanvas::SkCanvas(const SkIRect& bounds, InitFlags flags)
 SkCanvas::SkCanvas(SkBaseDevice* device)
     : fMCStack(sizeof(MCRec), fMCRecStorage, sizeof(fMCRecStorage))
     , fProps(device->surfaceProps())
+    , fConservativeRasterClip(false)
 {
     inc_canvas();
 
@@ -721,6 +728,7 @@ SkCanvas::SkCanvas(SkBaseDevice* device)
 SkCanvas::SkCanvas(SkBaseDevice* device, InitFlags flags)
     : fMCStack(sizeof(MCRec), fMCRecStorage, sizeof(fMCRecStorage))
     , fProps(device->surfaceProps())
+    , fConservativeRasterClip(false)
 {
     inc_canvas();
 
@@ -730,6 +738,7 @@ SkCanvas::SkCanvas(SkBaseDevice* device, InitFlags flags)
 SkCanvas::SkCanvas(const SkBitmap& bitmap, const SkSurfaceProps& props)
     : fMCStack(sizeof(MCRec), fMCRecStorage, sizeof(fMCRecStorage))
     , fProps(props)
+    , fConservativeRasterClip(false)
 {
     inc_canvas();
 
@@ -740,6 +749,7 @@ SkCanvas::SkCanvas(const SkBitmap& bitmap, const SkSurfaceProps& props)
 SkCanvas::SkCanvas(const SkBitmap& bitmap)
     : fMCStack(sizeof(MCRec), fMCRecStorage, sizeof(fMCRecStorage))
     , fProps(SkSurfaceProps::kLegacyFontHost_InitType)
+    , fConservativeRasterClip(false)
 {
     inc_canvas();
 
@@ -1498,24 +1508,44 @@ void SkCanvas::onClipRect(const SkRect& rect, SkRegion::Op op, ClipEdgeStyle edg
     }
 #endif
 
-    AutoValidateClip avc(this);
-
-    fDeviceCMDirty = true;
-    fCachedLocalClipBoundsDirty = true;
     if (!fAllowSoftClip) {
         edgeStyle = kHard_ClipEdgeStyle;
     }
 
-    if (fMCRec->fMatrix.rectStaysRect()) {
-        // for these simpler matrices, we can stay a rect even after applying
-        // the matrix. This means we don't have to a) make a path, and b) tell
-        // the region code to scan-convert the path, only to discover that it
-        // is really just a rect.
-        SkRect      r;
+    const bool rectStaysRect = fMCRec->fMatrix.rectStaysRect();
+    SkRect devR;
+    if (rectStaysRect) {
+        fMCRec->fMatrix.mapRect(&devR, rect);
+    }
 
-        fMCRec->fMatrix.mapRect(&r, rect);
-        fClipStack->clipDevRect(r, op, kSoft_ClipEdgeStyle == edgeStyle);
-        fMCRec->fRasterClip.op(r, this->getBaseLayerSize(), op, kSoft_ClipEdgeStyle == edgeStyle);
+    // Check if we can quick-accept the clip call (and do nothing)
+    //
+    // TODO: investigate if a (conservative) version of this could be done in ::clipRect,
+    //       so that subclasses (like PictureRecording) didn't see unnecessary clips, which in turn
+    //       might allow lazy save/restores to eliminate entire save/restore blocks.
+    //
+    if (SkRegion::kIntersect_Op == op &&
+        kHard_ClipEdgeStyle == edgeStyle
+        && rectStaysRect)
+    {
+        if (devR.round().contains(fMCRec->fRasterClip.getBounds())) {
+#if 0
+            SkDebugf("------- ignored clipRect [%g %g %g %g]\n",
+                     rect.left(), rect.top(), rect.right(), rect.bottom());
+#endif
+            return;
+        }
+    }
+
+    AutoValidateClip avc(this);
+
+    fDeviceCMDirty = true;
+    fCachedLocalClipBoundsDirty = true;
+
+    if (rectStaysRect) {
+        const bool isAA = kSoft_ClipEdgeStyle == edgeStyle;
+        fClipStack->clipDevRect(devR, op, isAA);
+        fMCRec->fRasterClip.op(devR, this->getBaseLayerSize(), op, isAA);
     } else {
         // since we're rotated or some such thing, we convert the rect to a path
         // and clip against that, since it can handle any matrix. However, to
@@ -1556,10 +1586,8 @@ void SkCanvas::onClipRRect(const SkRRect& rrect, SkRegion::Op op, ClipEdgeStyle 
 
         fClipStack->clipDevRRect(transformedRRect, op, kSoft_ClipEdgeStyle == edgeStyle);
 
-        SkPath devPath;
-        devPath.addRRect(transformedRRect);
-
-        rasterclip_path(&fMCRec->fRasterClip, this, devPath, op, kSoft_ClipEdgeStyle == edgeStyle);
+        fMCRec->fRasterClip.op(transformedRRect, this->getBaseLayerSize(), op,
+                               kSoft_ClipEdgeStyle == edgeStyle);
         return;
     }
 
@@ -1572,12 +1600,26 @@ void SkCanvas::onClipRRect(const SkRRect& rrect, SkRegion::Op op, ClipEdgeStyle 
 void SkCanvas::clipPath(const SkPath& path, SkRegion::Op op, bool doAA) {
     this->checkForDeferredSave();
     ClipEdgeStyle edgeStyle = doAA ? kSoft_ClipEdgeStyle : kHard_ClipEdgeStyle;
-    SkRect r;
-    if (!path.isInverseFillType() && path.isRect(&r)) {
-        this->onClipRect(r, op, edgeStyle);
-    } else {
-        this->onClipPath(path, op, edgeStyle);
+
+    if (!path.isInverseFillType() && fMCRec->fMatrix.rectStaysRect()) {
+        SkRect r;
+        if (path.isRect(&r)) {
+            this->onClipRect(r, op, edgeStyle);
+            return;
+        }
+        SkRRect rrect;
+        if (path.isOval(&r)) {
+            rrect.setOval(r);
+            this->onClipRRect(rrect, op, edgeStyle);
+            return;
+        }
+        if (path.isRRect(&rrect)) {
+            this->onClipRRect(rrect, op, edgeStyle);
+            return;
+        }
     }
+
+    this->onClipPath(path, op, edgeStyle);
 }
 
 void SkCanvas::onClipPath(const SkPath& path, SkRegion::Op op, ClipEdgeStyle edgeStyle) {

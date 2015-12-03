@@ -429,6 +429,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/batches/GrAAConvexPathRenderer.cpp \
 	src/gpu/batches/GrAAFillRectBatch.cpp \
 	src/gpu/batches/GrAAStrokeRectBatch.cpp \
+	src/gpu/batches/GrAtlasTextBatch.cpp \
 	src/gpu/batches/GrBatch.cpp \
 	src/gpu/batches/GrCopySurfaceBatch.cpp \
 	src/gpu/batches/GrDashLinePathRenderer.cpp \
@@ -439,6 +440,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/batches/GrDrawVerticesBatch.cpp \
 	src/gpu/batches/GrNonAAFillRectBatch.cpp \
 	src/gpu/batches/GrNonAAStrokeRectBatch.cpp \
+	src/gpu/batches/GrNinePatch.cpp \
 	src/gpu/batches/GrRectBatchFactory.cpp \
 	src/gpu/batches/GrStencilAndCoverPathRenderer.cpp \
 	src/gpu/batches/GrTessellatingPathRenderer.cpp \
@@ -488,7 +490,10 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/GrGLStencilAttachment.cpp \
 	src/gpu/gl/GrGLTexture.cpp \
 	src/gpu/gl/GrGLTextureRenderTarget.cpp \
+	src/gpu/gl/GrGLTransferBuffer.cpp \
 	src/gpu/gl/GrGLUtil.cpp \
+	src/gpu/gl/GrGLUniformHandler.cpp \
+	src/gpu/gl/GrGLVaryingHandler.cpp \
 	src/gpu/gl/GrGLVertexArray.cpp \
 	src/gpu/gl/GrGLVertexBuffer.cpp \
 	src/gpu/gl/builders/GrGLProgramBuilder.cpp \
@@ -505,6 +510,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/glsl/GrGLSLProgramBuilder.cpp \
 	src/gpu/glsl/GrGLSLShaderBuilder.cpp \
 	src/gpu/glsl/GrGLSLUtil.cpp \
+	src/gpu/glsl/GrGLSLVarying.cpp \
 	src/gpu/glsl/GrGLSLVertexShaderBuilder.cpp \
 	src/gpu/glsl/GrGLSLXferProcessor.cpp \
 	src/gpu/SkGpuDevice.cpp \
@@ -637,7 +643,7 @@ LOCAL_SHARED_LIBRARIES := \
 	libGLESv2 \
 	libEGL \
 	libz \
-	libjpeg-turbo \
+	libjpeg \
 	libpng \
 	libicuuc \
 	libicui18n \
