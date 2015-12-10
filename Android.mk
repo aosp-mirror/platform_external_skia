@@ -55,8 +55,7 @@ LOCAL_CFLAGS += \
 	-U_FORTIFY_SOURCE \
 	-D_FORTIFY_SOURCE=1 \
 	-DSKIA_IMPLEMENTATION=1 \
-	-Wno-clobbered -Wno-error \
-	-Wno-literal-suffix
+	-Wno-clobbered -Wno-error
 
 LOCAL_CPPFLAGS := \
 	-std=c++11 \
