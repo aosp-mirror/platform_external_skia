@@ -421,6 +421,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrTextureParamsAdjuster.cpp \
 	src/gpu/GrTextureProvider.cpp \
 	src/gpu/GrTextureAccess.cpp \
+	src/gpu/GrTextUtils.cpp \
 	src/gpu/GrXferProcessor.cpp \
 	src/gpu/GrYUVProvider.cpp \
 	src/gpu/batches/GrAAHairLinePathRenderer.cpp \
