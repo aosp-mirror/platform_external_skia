@@ -409,6 +409,7 @@ LOCAL_SRC_FILES := \
 	../gm/imagefromyuvtextures.cpp \
 	../gm/imagemagnifier.cpp \
 	../gm/imageresizetiled.cpp \
+	../gm/imagescalealigned.cpp \
 	../gm/imagesource.cpp \
 	../gm/imagesource2.cpp \
 	../gm/internal_links.cpp \
