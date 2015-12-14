@@ -11,14 +11,12 @@
 #include "GrContext.h"
 #include "SkDraw.h"
 #include "GrDrawContext.h"
-#include "GrFontScaler.h"
 #include "GrGpu.h"
 #include "GrGpuResourcePriv.h"
 #include "GrImageIDTextureAdjuster.h"
 #include "GrLayerHoister.h"
 #include "GrRecordReplaceDraw.h"
 #include "GrStrokeInfo.h"
-#include "GrTextContext.h"
 #include "GrTracing.h"
 #include "SkCanvasPriv.h"
 #include "SkErrorInternals.h"
@@ -27,6 +25,7 @@
 #include "SkGr.h"
 #include "SkGrPriv.h"
 #include "SkImage_Base.h"
+#include "SkImageCacherator.h"
 #include "SkImageFilter.h"
 #include "SkLayerInfo.h"
 #include "SkMaskFilter.h"
@@ -48,6 +47,7 @@
 #include "effects/GrDashingEffect.h"
 #include "effects/GrSimpleTextureEffect.h"
 #include "effects/GrTextureDomain.h"
+#include "text/GrTextContext.h"
 
 #if SK_SUPPORT_GPU
 
@@ -829,14 +829,13 @@ void SkGpuDevice::drawBitmap(const SkDraw& origDraw,
                              const SkMatrix& m,
                              const SkPaint& paint) {
     CHECK_SHOULD_DRAW(origDraw);
-    bool alphaOnly = kAlpha_8_SkColorType == bitmap.colorType();
     SkMatrix viewMatrix;
     viewMatrix.setConcat(*origDraw.fMatrix, m);
     if (bitmap.getTexture()) {
         GrBitmapTextureAdjuster adjuster(&bitmap);
         // We can use kFast here because we know texture-backed bitmaps don't support extractSubset.
-        this->drawTextureProducer(&adjuster, alphaOnly, nullptr, nullptr,
-                                  SkCanvas::kFast_SrcRectConstraint, viewMatrix, fClip, paint);
+        this->drawTextureProducer(&adjuster, nullptr, nullptr, SkCanvas::kFast_SrcRectConstraint,
+                                  viewMatrix, fClip, paint);
         return;
     }
     int maxTileSize = fContext->caps()->maxTileSize();
@@ -881,8 +880,8 @@ void SkGpuDevice::drawBitmap(const SkDraw& origDraw,
         }
     }
     GrBitmapTextureMaker maker(fContext, bitmap);
-    this->drawTextureProducer(&maker, alphaOnly, nullptr, nullptr,
-                              SkCanvas::kStrict_SrcRectConstraint, viewMatrix, fClip, paint);
+    this->drawTextureProducer(&maker, nullptr, nullptr, SkCanvas::kStrict_SrcRectConstraint,
+                              viewMatrix, fClip, paint);
 }
 
 // This method outsets 'iRect' by 'outset' all around and then clamps its extents to
@@ -1163,7 +1162,11 @@ void SkGpuDevice::drawSprite(const SkDraw& draw, const SkBitmap& bitmap,
         SkIPoint offset = SkIPoint::Make(0, 0);
         SkMatrix matrix(*draw.fMatrix);
         matrix.postTranslate(SkIntToScalar(-left), SkIntToScalar(-top));
+#ifdef SK_SUPPORT_SRC_BOUNDS_BLOAT_FOR_IMAGEFILTERS
         SkIRect clipBounds = SkIRect::MakeWH(bitmap.width(), bitmap.height());
+#else
+        SkIRect clipBounds = draw.fClip->getBounds().makeOffset(-left, -top);
+#endif
         SkAutoTUnref<SkImageFilter::Cache> cache(getImageFilterCache());
         // This cache is transient, and is freed (along with all its contained
         // textures) when it goes out of scope.
@@ -1210,12 +1213,11 @@ void SkGpuDevice::drawSprite(const SkDraw& draw, const SkBitmap& bitmap,
 void SkGpuDevice::drawBitmapRect(const SkDraw& draw, const SkBitmap& bitmap,
                                  const SkRect* src, const SkRect& origDst,
                                  const SkPaint& paint, SkCanvas::SrcRectConstraint constraint) {
-    bool alphaOnly = kAlpha_8_SkColorType == bitmap.colorType();
     if (bitmap.getTexture()) {
         CHECK_SHOULD_DRAW(draw);
         GrBitmapTextureAdjuster adjuster(&bitmap);
-        this->drawTextureProducer(&adjuster, alphaOnly, src, &origDst, constraint, *draw.fMatrix,
-                                  fClip, paint);
+        this->drawTextureProducer(&adjuster, src, &origDst, constraint, *draw.fMatrix, fClip,
+                                  paint);
         return;
     }
     // The src rect is inferred to be the bmp bounds if not provided. Otherwise, the src rect must
@@ -1292,7 +1294,7 @@ void SkGpuDevice::drawBitmapRect(const SkDraw& draw, const SkBitmap& bitmap,
         }
     }
     GrBitmapTextureMaker maker(fContext, bitmap);
-    this->drawTextureProducer(&maker, alphaOnly, src, dst, constraint, *draw.fMatrix, fClip, paint);
+    this->drawTextureProducer(&maker, src, dst, constraint, *draw.fMatrix, fClip, paint);
 }
 
 void SkGpuDevice::drawDevice(const SkDraw& draw, SkBaseDevice* device,
@@ -1326,7 +1328,11 @@ void SkGpuDevice::drawDevice(const SkDraw& draw, SkBaseDevice* device,
         SkIPoint offset = SkIPoint::Make(0, 0);
         SkMatrix matrix(*draw.fMatrix);
         matrix.postTranslate(SkIntToScalar(-x), SkIntToScalar(-y));
+#ifdef SK_SUPPORT_SRC_BOUNDS_BLOAT_FOR_IMAGEFILTERS
         SkIRect clipBounds = SkIRect::MakeWH(devTex->width(), devTex->height());
+#else
+        SkIRect clipBounds = draw.fClip->getBounds().makeOffset(-x, -y);
+#endif
         // This cache is transient, and is freed (along with all its contained
         // textures) when it goes out of scope.
         SkAutoTUnref<SkImageFilter::Cache> cache(getImageFilterCache());
@@ -1399,86 +1405,67 @@ bool SkGpuDevice::filterImage(const SkImageFilter* filter, const SkBitmap& src,
                                filter, ctx, result, offset);
 }
 
-static bool wrap_as_bm(GrContext* ctx, const SkImage* image, SkBitmap* bm) {
-    // TODO: It is wrong to assume these texture params here.
-    SkAutoTUnref<GrTexture> tex(as_IB(image)->asTextureRef(ctx, GrTextureParams::ClampNoFilter()));
-    if (tex) {
-        GrWrapTextureInBitmap(tex, image->width(), image->height(), image->isOpaque(), bm);
-        return true;
-    } else {
-        return as_IB(image)->getROPixels(bm);
-    }
-}
-
 void SkGpuDevice::drawImage(const SkDraw& draw, const SkImage* image, SkScalar x, SkScalar y,
                             const SkPaint& paint) {
-    SkBitmap bm;
-    if (GrTexture* tex = as_IB(image)->peekTexture()) {
+    SkMatrix viewMatrix = *draw.fMatrix;
+    viewMatrix.preTranslate(x, y);
+    if (as_IB(image)->peekTexture()) {
         CHECK_SHOULD_DRAW(draw);
-        SkMatrix viewMatrix = *draw.fMatrix;
-        viewMatrix.preTranslate(x, y);
-        bool alphaOnly = GrPixelConfigIsAlphaOnly(tex->config());
         GrImageTextureAdjuster adjuster(as_IB(image));
-        this->drawTextureProducer(&adjuster, alphaOnly, nullptr, nullptr,
-                                  SkCanvas::kFast_SrcRectConstraint, viewMatrix, fClip, paint);
+        this->drawTextureProducer(&adjuster, nullptr, nullptr, SkCanvas::kFast_SrcRectConstraint,
+                                  viewMatrix, fClip, paint);
         return;
     } else {
+        SkBitmap bm;
         if (this->shouldTileImage(image, nullptr, SkCanvas::kFast_SrcRectConstraint,
                                   paint.getFilterQuality(), *draw.fMatrix)) {
             // only support tiling as bitmap at the moment, so force raster-version
             if (!as_IB(image)->getROPixels(&bm)) {
                 return;
             }
-        } else {
-            if (!wrap_as_bm(this->context(), image, &bm)) {
-                return;
-            }
+            this->drawBitmap(draw, bm, SkMatrix::MakeTrans(x, y), paint);
+        } else if (SkImageCacherator* cacher = as_IB(image)->peekCacherator()) {
+            CHECK_SHOULD_DRAW(draw);
+            GrImageTextureMaker maker(fContext, cacher, image, SkImage::kAllow_CachingHint);
+            this->drawTextureProducer(&maker, nullptr, nullptr, SkCanvas::kFast_SrcRectConstraint,
+                                      viewMatrix, fClip, paint);
+        } else if (as_IB(image)->getROPixels(&bm)) {
+            this->drawBitmap(draw, bm, SkMatrix::MakeTrans(x, y), paint);
         }
     }
-    this->drawBitmap(draw, bm, SkMatrix::MakeTrans(x, y), paint);
 }
 
 void SkGpuDevice::drawImageRect(const SkDraw& draw, const SkImage* image, const SkRect* src,
                                 const SkRect& dst, const SkPaint& paint,
                                 SkCanvas::SrcRectConstraint constraint) {
-    if (GrTexture* tex = as_IB(image)->peekTexture()) {
+    if (as_IB(image)->peekTexture()) {
         CHECK_SHOULD_DRAW(draw);
         GrImageTextureAdjuster adjuster(as_IB(image));
-        bool alphaOnly = GrPixelConfigIsAlphaOnly(tex->config());
-        this->drawTextureProducer(&adjuster, alphaOnly, src, &dst, constraint, *draw.fMatrix,
-                                  fClip, paint);
+        this->drawTextureProducer(&adjuster, src, &dst, constraint, *draw.fMatrix, fClip, paint);
         return;
     }
     SkBitmap bm;
-    SkMatrix viewMatrix = *draw.fMatrix;
-    viewMatrix.preScale(dst.width() / (src ? src->width() : image->width()),
-                        dst.height() / (src ? src->height() : image->height()));
-    if (this->shouldTileImage(image, src, constraint, paint.getFilterQuality(), viewMatrix)) {
+    SkMatrix totalMatrix = *draw.fMatrix;
+    totalMatrix.preScale(dst.width() / (src ? src->width() : image->width()),
+                         dst.height() / (src ? src->height() : image->height()));
+    if (this->shouldTileImage(image, src, constraint, paint.getFilterQuality(), totalMatrix)) {
         // only support tiling as bitmap at the moment, so force raster-version
         if (!as_IB(image)->getROPixels(&bm)) {
             return;
         }
-    } else {
-        if (!wrap_as_bm(this->context(), image, &bm)) {
-            return;
-        }
+        this->drawBitmapRect(draw, bm, src, dst, paint, constraint);
+    } else if (SkImageCacherator* cacher = as_IB(image)->peekCacherator()) {
+        CHECK_SHOULD_DRAW(draw);
+        GrImageTextureMaker maker(fContext, cacher, image, SkImage::kAllow_CachingHint);
+        this->drawTextureProducer(&maker, src, &dst, constraint, *draw.fMatrix, fClip, paint);
+    } else if (as_IB(image)->getROPixels(&bm)) {
+        this->drawBitmapRect(draw, bm, src, dst, paint, constraint);
     }
-    this->drawBitmapRect(draw, bm, src, dst, paint, constraint);
 }
 
-void SkGpuDevice::drawImageNine(const SkDraw& draw, const SkImage* image,
-                                const SkIRect& center, const SkRect& dst, const SkPaint& paint) {
-    // TODO write native implementation
-    SkBitmap bitmap;
-    if (!wrap_as_bm(this->context(), image, &bitmap)) {
-        return;
-    }
-    return this->drawBitmapNine(draw, bitmap, center, dst, paint);
-}
-
-void SkGpuDevice::drawBitmapNine(const SkDraw& draw, const SkBitmap& bitmap, const SkIRect& center,
-                                 const SkRect& dst, const SkPaint& paint) {
-    GR_CREATE_TRACE_MARKER_CONTEXT("SkGpuDevice::drawBitmapNine", fContext);
+void SkGpuDevice::drawProducerNine(const SkDraw& draw, GrTextureProducer* producer,
+                                   const SkIRect& center, const SkRect& dst, const SkPaint& paint) {
+    GR_CREATE_TRACE_MARKER_CONTEXT("SkGpuDevice::drawProducerNine", fContext);
 
     CHECK_FOR_ANNOTATION(paint);
     CHECK_SHOULD_DRAW(draw);
@@ -1487,42 +1474,60 @@ void SkGpuDevice::drawBitmapNine(const SkDraw& draw, const SkBitmap& bitmap, con
                        fRenderTarget->isUnifiedMultisampled();
     bool doBicubic;
     GrTextureParams::FilterMode textureFilterMode =
-            GrSkFilterQualityToGrFilterMode(paint.getFilterQuality(), *draw.fMatrix, SkMatrix::I(),
-                                            &doBicubic);
-
-    // TODO handle bilerp(vie texture domains), MSAA(via snapping)
+        GrSkFilterQualityToGrFilterMode(paint.getFilterQuality(), *draw.fMatrix, SkMatrix::I(),
+                                        &doBicubic);
     if (useFallback || doBicubic || GrTextureParams::kNone_FilterMode != textureFilterMode) {
-        SkNinePatchIter iter(bitmap.width(), bitmap.height(), center, dst);
+        SkNinePatchIter iter(producer->width(), producer->height(), center, dst);
 
         SkRect srcR, dstR;
         while (iter.next(&srcR, &dstR)) {
-            this->drawBitmapRect(draw, bitmap, &srcR, dstR, paint,
-                                 SkCanvas::kStrict_SrcRectConstraint);
+            this->drawTextureProducer(producer, &srcR, &dstR, SkCanvas::kStrict_SrcRectConstraint, 
+                                      *draw.fMatrix, fClip, paint);
         }
         return;
     }
 
-    GrTextureParams params = GrTextureParams::ClampNoFilter();
-
-    SkAutoTUnref<GrTexture> texture(GrRefCachedBitmapTexture(this->context(), bitmap, params));
-    if (nullptr == texture) {
-        return;
-    }
-
-    SkMatrix texMatrix;
-    texMatrix.setIDiv(texture->width(), texture->height());
-
-    SkAutoTUnref<const GrFragmentProcessor> fp(GrSimpleTextureEffect::Create(texture, texMatrix,
-                                                                             params));
-
+    static const GrTextureParams::FilterMode kMode = GrTextureParams::kNone_FilterMode;
+    SkAutoTUnref<const GrFragmentProcessor> fp(
+        producer->createFragmentProcessor(SkMatrix::I(),
+                                          SkRect::MakeIWH(producer->width(), producer->height()),
+                                          GrTextureProducer::kNo_FilterConstraint, true,
+                                          &kMode));
     GrPaint grPaint;
     if (!SkPaintToGrPaintWithTexture(this->context(), paint, *draw.fMatrix, fp,
-                                     kAlpha_8_SkColorType == bitmap.colorType(), &grPaint)) {
+                                     producer->isAlphaOnly(), &grPaint)) {
         return;
     }
 
-    fDrawContext->drawImageNine(fClip, grPaint, *draw.fMatrix, bitmap.width(), bitmap.height(),
-                                center, dst);
+    fDrawContext->drawImageNine(fClip, grPaint, *draw.fMatrix, producer->width(),
+                                producer->height(), center, dst);
+}
+
+void SkGpuDevice::drawImageNine(const SkDraw& draw, const SkImage* image,
+                                const SkIRect& center, const SkRect& dst, const SkPaint& paint) {
+    if (as_IB(image)->peekTexture()) {
+        GrImageTextureAdjuster adjuster(as_IB(image));
+        this->drawProducerNine(draw, &adjuster, center, dst, paint);
+    } else {
+        SkBitmap bm;
+        if (SkImageCacherator* cacher = as_IB(image)->peekCacherator()) {
+            GrImageTextureMaker maker(fContext, cacher, image, SkImage::kAllow_CachingHint);
+            this->drawProducerNine(draw, &maker, center, dst, paint);
+        } else if (as_IB(image)->getROPixels(&bm)) {
+            this->drawBitmapNine(draw, bm, center, dst, paint);
+        }
+    }
+}
+
+void SkGpuDevice::drawBitmapNine(const SkDraw& draw, const SkBitmap& bitmap, const SkIRect& center,
+                                 const SkRect& dst, const SkPaint& paint) {
+    if (bitmap.getTexture()) {
+        GrBitmapTextureAdjuster adjuster(&bitmap);
+        this->drawProducerNine(draw, &adjuster, center, dst, paint);
+    } else {
+        GrBitmapTextureMaker maker(fContext, bitmap);
+        this->drawProducerNine(draw, &maker, center, dst, paint);
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////

@@ -55,8 +55,7 @@ LOCAL_CFLAGS += \
 	-U_FORTIFY_SOURCE \
 	-D_FORTIFY_SOURCE=1 \
 	-DSKIA_IMPLEMENTATION=1 \
-	-Wno-clobbered \
-	-Wno-literal-suffix
+	-Wno-clobbered -Wno-error
 
 LOCAL_CPPFLAGS := \
 	-std=c++11 \
@@ -352,10 +351,7 @@ LOCAL_SRC_FILES := \
 	src/effects/gradients/SkTwoPointConicalGradient.cpp \
 	src/effects/gradients/SkTwoPointConicalGradient_gpu.cpp \
 	src/effects/gradients/SkSweepGradient.cpp \
-	src/gpu/GrAtlasTextBlob.cpp \
-	src/gpu/GrAtlasTextContext.cpp \
 	src/gpu/GrBatchAtlas.cpp \
-	src/gpu/GrBatchFontCache.cpp \
 	src/gpu/GrBatchFlushState.cpp \
 	src/gpu/GrBatchTest.cpp \
 	src/gpu/GrBlend.cpp \
@@ -370,7 +366,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrDrawContext.cpp \
 	src/gpu/GrDrawingManager.cpp \
 	src/gpu/GrDrawTarget.cpp \
-	src/gpu/GrFontScaler.cpp \
 	src/gpu/GrFragmentProcessor.cpp \
 	src/gpu/GrGpu.cpp \
 	src/gpu/GrGpuResource.cpp \
@@ -406,7 +401,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrResourceCache.cpp \
 	src/gpu/GrResourceProvider.cpp \
 	src/gpu/GrStencil.cpp \
-	src/gpu/GrStencilAndCoverTextContext.cpp \
 	src/gpu/GrStencilAttachment.cpp \
 	src/gpu/GrStrokeInfo.cpp \
 	src/gpu/GrTraceMarker.cpp \
@@ -414,8 +408,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrSWMaskHelper.cpp \
 	src/gpu/GrSoftwarePathRenderer.cpp \
 	src/gpu/GrSurface.cpp \
-	src/gpu/GrTextBlobCache.cpp \
-	src/gpu/GrTextContext.cpp \
 	src/gpu/GrTexture.cpp \
 	src/gpu/GrTextureParamsAdjuster.cpp \
 	src/gpu/GrTextureProvider.cpp \
@@ -468,6 +460,15 @@ LOCAL_SRC_FILES := \
 	src/gpu/effects/GrTextureStripAtlas.cpp \
 	src/gpu/effects/GrXfermodeFragmentProcessor.cpp \
 	src/gpu/effects/GrYUVtoRGBEffect.cpp \
+	src/gpu/text/GrAtlasTextBlob.cpp \
+	src/gpu/text/GrAtlasTextContext.cpp \
+	src/gpu/text/GrBatchFontCache.cpp \
+	src/gpu/text/GrDistanceFieldAdjustTable.cpp \
+	src/gpu/text/GrFontScaler.cpp \
+	src/gpu/text/GrStencilAndCoverTextContext.cpp \
+	src/gpu/text/GrTextBlobCache.cpp \
+	src/gpu/text/GrTextContext.cpp \
+	src/gpu/text/GrTextUtils.cpp \
 	src/gpu/gl/GrGLAssembleInterface.cpp \
 	src/gpu/gl/GrGLBufferImpl.cpp \
 	src/gpu/gl/GrGLCaps.cpp \

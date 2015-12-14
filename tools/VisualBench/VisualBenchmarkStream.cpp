@@ -31,6 +31,7 @@ DEFINE_string2(match, m, nullptr,
                "If a bench does not match any list entry,\n"
                "it is skipped unless some list entry starts with ~");
 DEFINE_string(skps, "skps", "Directory to read skps from.");
+DEFINE_bool(warmup, true, "Include a warmup bench? (Excluding the warmup may compromise results)");
 
 // We draw a big nonAA path to warmup the gpu / cpu
 #include "SkPerlinNoiseShader.h"
@@ -72,7 +73,7 @@ private:
     SkRect fPerlinRect;
 };
 
-VisualBenchmarkStream::VisualBenchmarkStream(const SkSurfaceProps& surfaceProps)
+VisualBenchmarkStream::VisualBenchmarkStream(const SkSurfaceProps& surfaceProps, bool justSKP)
     : fSurfaceProps(surfaceProps)
     , fBenches(BenchRegistry::Head())
     , fGMs(skiagm::GMRegistry::Head())
@@ -90,6 +91,11 @@ VisualBenchmarkStream::VisualBenchmarkStream(const SkSurfaceProps& surfaceProps)
                 fSKPs.push_back() = SkOSPath::Join(FLAGS_skps[0], path.c_str());
             }
         }
+    }
+
+    if (justSKP) {
+       fGMs = nullptr;
+       fBenches = nullptr;
     }
 
     // seed with an initial benchmark
@@ -121,7 +127,7 @@ bool VisualBenchmarkStream::ReadPicture(const char* path, SkAutoTUnref<SkPicture
 
 Benchmark* VisualBenchmarkStream::next() {
     Benchmark* bench;
-    if (!fIsWarmedUp) {
+    if (FLAGS_warmup && !fIsWarmedUp) {
         fIsWarmedUp = true;
         bench = new WarmupBench;
     } else {

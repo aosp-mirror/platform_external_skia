@@ -199,12 +199,7 @@ public:
      *  replaced by the returned colorfilter. i.e. the two effects will affect drawing in the
      *  same way.
      */
-    bool asAColorFilter(SkColorFilter** filterPtr) const {
-        return this->countInputs() > 0 &&
-               NULL == this->getInput(0) &&
-               !this->affectsTransparentBlack() &&
-               this->isColorFilterNode(filterPtr);
-    }
+    bool asAColorFilter(SkColorFilter** filterPtr) const;
 
     /**
      *  Returns the number of inputs this filter will accept (some inputs can
@@ -240,7 +235,7 @@ public:
     virtual void computeFastBounds(const SkRect&, SkRect*) const;
 
     // Can this filter DAG compute the resulting bounds of an object-space rectangle?
-    bool canComputeFastBounds() const;
+    virtual bool canComputeFastBounds() const;
 
     /**
      *  If this filter can be represented by another filter + a localMatrix, return that filter,
@@ -351,6 +346,25 @@ protected:
     // implementation recursively unions all input bounds, or returns false if
     // no inputs.
     virtual bool onFilterBounds(const SkIRect&, const SkMatrix&, SkIRect*) const;
+    enum MapDirection {
+        kForward_MapDirection,
+        kReverse_MapDirection
+    };
+
+    /**
+     * Performs a forwards or reverse mapping of the given rect to accommodate
+     * this filter's margin requirements. kForward_MapDirection is used to
+     * determine the destination pixels which would be touched by filtering
+     * the given given source rect (e.g., given source bitmap bounds,
+     * determine the optimal bounds of the filtered offscreen bitmap).
+     * kReverse_MapDirection is used to determine which pixels of the
+     * input(s) would be required to fill the given destination rect
+     * (e.g., clip bounds). NOTE: these operations may not be the
+     * inverse of the other. For example, blurring expands the given rect
+     * in both forward and reverse directions. Unlike
+     * onFilterBounds(), this function is non-recursive.
+     */
+    virtual void onFilterNodeBounds(const SkIRect&, const SkMatrix&, SkIRect*, MapDirection) const;
 
     // Helper function which invokes filter processing on the input at the
     // specified "index". If the input is null, it leaves "result" and
@@ -411,12 +425,12 @@ protected:
                                      const SkIRect& bounds) const;
 
     /**
-     * Returns true if this filter can cause transparent black pixels to become
-     * visible (ie., alpha > 0). The default implementation returns false. This
-     * function is non-recursive, i.e., only queries this filter and not its
-     * inputs.
+     *  Creates a modified Context for use when recursing up the image filter DAG.
+     *  The clip bounds are adjusted to accommodate any margins that this
+     *  filter requires by calling this node's
+     *  onFilterNodeBounds(..., kReverse_MapDirection).
      */
-    virtual bool affectsTransparentBlack() const;
+    Context mapContext(const Context& ctx) const;
 
 private:
     friend class SkGraphics;

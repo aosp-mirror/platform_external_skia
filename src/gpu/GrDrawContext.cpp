@@ -6,7 +6,6 @@
  * found in the LICENSE file.
  */
 
-#include "GrAtlasTextContext.h"
 #include "GrBatchTest.h"
 #include "GrColor.h"
 #include "GrDrawContext.h"
@@ -16,7 +15,6 @@
 #include "GrRenderTarget.h"
 #include "GrRenderTargetPriv.h"
 #include "GrResourceProvider.h"
-#include "GrStencilAndCoverTextContext.h"
 #include "SkSurfacePriv.h"
 
 #include "batches/GrBatch.h"
@@ -24,6 +22,9 @@
 #include "batches/GrDrawVerticesBatch.h"
 #include "batches/GrRectBatchFactory.h"
 #include "batches/GrNinePatch.h" // TODO Factory
+
+#include "text/GrAtlasTextContext.h"
+#include "text/GrStencilAndCoverTextContext.h"
 
 #define ASSERT_OWNED_RESOURCE(R) SkASSERT(!(R) || (R)->getContext() == fDrawingManager->getContext())
 #define RETURN_IF_ABANDONED        if (fDrawingManager->abandoned()) { return; }
@@ -100,7 +101,7 @@ void GrDrawContext::drawText(const GrClip& clip, const GrPaint& grPaint,
         fTextContext = fDrawingManager->textContext(fSurfaceProps, fRenderTarget);
     }
 
-    fTextContext->drawText(this, fRenderTarget, clip, grPaint, skPaint, viewMatrix,
+    fTextContext->drawText(this, clip, grPaint, skPaint, viewMatrix,
                            text, byteLength, x, y, clipBounds);
 }
 
@@ -117,7 +118,7 @@ void GrDrawContext::drawPosText(const GrClip& clip, const GrPaint& grPaint,
         fTextContext = fDrawingManager->textContext(fSurfaceProps, fRenderTarget);
     }
 
-    fTextContext->drawPosText(this, fRenderTarget, clip, grPaint, skPaint, viewMatrix, text, byteLength,
+    fTextContext->drawPosText(this, clip, grPaint, skPaint, viewMatrix, text, byteLength,
                               pos, scalarsPerPosition, offset, clipBounds);
 
 }
@@ -133,24 +134,7 @@ void GrDrawContext::drawTextBlob(const GrClip& clip, const SkPaint& skPaint,
         fTextContext = fDrawingManager->textContext(fSurfaceProps, fRenderTarget);
     }
 
-    fTextContext->drawTextBlob(this, fRenderTarget,
-                               clip, skPaint, viewMatrix, blob, x, y, filter, clipBounds);
-}
-
-void GrDrawContext::drawPathsFromRange(const GrPipelineBuilder* pipelineBuilder,
-                                       const SkMatrix& viewMatrix,
-                                       const SkMatrix& localMatrix,
-                                       GrColor color,
-                                       GrPathRange* range,
-                                       GrPathRangeDraw* draw,
-                                       int /*GrPathRendering::FillType*/ fill,
-                                       const SkRect& bounds) {
-    RETURN_IF_ABANDONED
-    SkDEBUGCODE(this->validate();)
-
-    this->getDrawTarget()->drawPathsFromRange(*pipelineBuilder, viewMatrix, localMatrix, color,
-                                              range, draw, (GrPathRendering::FillType) fill,
-                                              bounds);
+    fTextContext->drawTextBlob(this, clip, skPaint, viewMatrix, blob, x, y, filter, clipBounds);
 }
 
 void GrDrawContext::discard() {
@@ -637,6 +621,16 @@ void GrDrawContext::drawBatch(const GrClip& clip,
 
     GrPipelineBuilder pipelineBuilder(paint, fRenderTarget, clip);
     this->getDrawTarget()->drawBatch(pipelineBuilder, batch);
+}
+
+void GrDrawContext::drawPathBatch(const GrPipelineBuilder& pipelineBuilder,
+                                  GrDrawPathBatchBase* batch) {
+    RETURN_IF_ABANDONED
+    SkDEBUGCODE(this->validate();)
+
+    AutoCheckFlush acf(fDrawingManager);
+
+    this->getDrawTarget()->drawPathBatch(pipelineBuilder, batch);
 }
 
 void GrDrawContext::drawPath(const GrClip& clip,

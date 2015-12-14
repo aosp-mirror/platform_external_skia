@@ -17,6 +17,8 @@
 #include "SkDrawLooper.h"
 #include "SkErrorInternals.h"
 #include "SkImage.h"
+#include "SkImage_Base.h"
+#include "SkMatrixUtils.h"
 #include "SkMetaData.h"
 #include "SkNinePatchIter.h"
 #include "SkPaintPriv.h"
@@ -37,8 +39,6 @@
 #if SK_SUPPORT_GPU
 #include "GrRenderTarget.h"
 #endif
-
-#define SK_SUPPORT_SRC_BOUNDS_BLOAT_FOR_IMAGEFILTERS
 
 /*
  *  Return true if the drawing this rect would hit every pixels in the canvas.
@@ -592,6 +592,13 @@ bool AutoDrawLooper::doNext(SkDrawFilter::Type drawType) {
 
 ////////// macros to place around the internal draw calls //////////////////
 
+#define LOOPER_BEGIN_DRAWBITMAP(paint, skipLayerForFilter, bounds)          \
+    this->predrawNotify();                                                  \
+    AutoDrawLooper looper(this, fProps, paint, skipLayerForFilter, bounds); \
+    while (looper.next(SkDrawFilter::kBitmap_Type)) {                       \
+        SkDrawIter iter(this);
+
+
 #define LOOPER_BEGIN_DRAWDEVICE(paint, type)                        \
     this->predrawNotify();                                          \
     AutoDrawLooper  looper(this, fProps, paint, true);              \
@@ -1075,6 +1082,10 @@ bool SkCanvas::clipRectBounds(const SkRect* bounds, SaveFlags flags,
         } else {
             bounds = nullptr;
         }
+#else
+        if (bounds && !imageFilter->canComputeFastBounds()) {
+            bounds = nullptr;
+        }
 #endif
     }
     SkIRect ir;
@@ -1129,6 +1140,12 @@ int SkCanvas::saveLayer(const SkRect* bounds, const SkPaint* paint, SaveFlags fl
     return this->getSaveCount() - 1;
 }
 
+int SkCanvas::saveLayerPreserveLCDTextRequests(const SkRect* bounds, const SkPaint* paint) {
+    unsigned flags = kARGB_ClipLayer_SaveFlag | kPreserveLCDText_PrivateSaveFlag;
+    return this->saveLayer(bounds, paint, (SaveFlags)flags);
+}
+
+
 void SkCanvas::internalSaveLayer(const SkRect* bounds, const SkPaint* paint, SaveFlags flags,
                                  SaveLayerStrategy strategy) {
 #ifndef SK_SUPPORT_LEGACY_CLIPTOLAYERFLAG
@@ -1172,8 +1189,11 @@ void SkCanvas::internalSaveLayer(const SkRect* bounds, const SkPaint* paint, Sav
 
     bool forceSpriteOnRestore = false;
     {
+        const bool preserveLCDText = kOpaque_SkAlphaType == info.alphaType() ||
+                                     SkToBool(flags & kPreserveLCDText_PrivateSaveFlag);
         const SkBaseDevice::TileUsage usage = SkBaseDevice::kNever_TileUsage;
-        const SkBaseDevice::CreateInfo createInfo = SkBaseDevice::CreateInfo(info, usage, geo);
+        const SkBaseDevice::CreateInfo createInfo = SkBaseDevice::CreateInfo(info, usage, geo,
+                                                                            preserveLCDText, false);
         SkBaseDevice* newDev = device->onCreateDevice(createInfo, paint);
         if (nullptr == newDev) {
             // If onCreateDevice didn't succeed, try raster (e.g. PDF couldn't handle the paint)
@@ -1361,7 +1381,11 @@ void SkCanvas::internalDrawDevice(SkBaseDevice* srcDev, int x, int y,
             const SkBitmap& src = srcDev->accessBitmap(false);
             SkMatrix matrix = *iter.fMatrix;
             matrix.postTranslate(SkIntToScalar(-pos.x()), SkIntToScalar(-pos.y()));
+#ifdef SK_SUPPORT_SRC_BOUNDS_BLOAT_FOR_IMAGEFILTERS
             SkIRect clipBounds = SkIRect::MakeWH(srcDev->width(), srcDev->height());
+#else
+            SkIRect clipBounds = iter.fClip->getBounds().makeOffset(-pos.x(), -pos.y());
+#endif
             SkAutoTUnref<SkImageFilter::Cache> cache(dstDev->getImageFilterCache());
             SkImageFilter::Context ctx(matrix, clipBounds, cache.get(),
                                        SkImageFilter::kApprox_SizeConstraint);
@@ -1404,28 +1428,8 @@ void SkCanvas::onDrawSprite(const SkBitmap& bitmap, int x, int y, const SkPaint*
     LOOPER_BEGIN_DRAWDEVICE(*paint, SkDrawFilter::kBitmap_Type)
 
     while (iter.next()) {
-        paint = &looper.paint();
-        SkImageFilter* filter = paint->getImageFilter();
-        SkIPoint pos = { x - iter.getX(), y - iter.getY() };
-        if (filter && !iter.fDevice->canHandleImageFilter(filter)) {
-            SkImageFilter::DeviceProxy proxy(iter.fDevice);
-            SkBitmap dst;
-            SkIPoint offset = SkIPoint::Make(0, 0);
-            SkMatrix matrix = *iter.fMatrix;
-            matrix.postTranslate(SkIntToScalar(-pos.x()), SkIntToScalar(-pos.y()));
-            const SkIRect clipBounds = bitmap.bounds();
-            SkAutoTUnref<SkImageFilter::Cache> cache(iter.fDevice->getImageFilterCache());
-            SkImageFilter::Context ctx(matrix, clipBounds, cache.get(),
-                                       SkImageFilter::kApprox_SizeConstraint);
-            if (filter->filterImage(&proxy, bitmap, ctx, &dst, &offset)) {
-                SkPaint tmpUnfiltered(*paint);
-                tmpUnfiltered.setImageFilter(nullptr);
-                iter.fDevice->drawSprite(iter, dst, pos.x() + offset.x(), pos.y() + offset.y(),
-                                         tmpUnfiltered);
-            }
-        } else {
-            iter.fDevice->drawSprite(iter, bitmap, pos.x(), pos.y(), *paint);
-        }
+        const SkIPoint pos = {  x - iter.getX(), y - iter.getY() };
+        iter.fDevice->drawBitmapAsSprite(iter, bitmap, pos.x(), pos.y(), looper.paint());
     }
     LOOPER_END
 }
@@ -2197,6 +2201,32 @@ void SkCanvas::onDrawPath(const SkPath& path, const SkPaint& paint) {
     LOOPER_END
 }
 
+bool SkCanvas::canDrawBitmapAsSprite(SkScalar x, SkScalar y, int w, int h, const SkPaint& paint) {
+#ifdef SK_SUPPORT_LEGACY_LAYER_BITMAP_IMAGEFILTERS
+    return false;
+#endif
+
+    if (!paint.getImageFilter()) {
+        return false;
+    }
+
+    const SkMatrix& ctm = this->getTotalMatrix();
+    const unsigned kSubpixelBits = 0;   // matching SkDraw::drawBitmap()
+    if (!SkTreatAsSprite(ctm, w, h, kSubpixelBits)) {
+        return false;
+    }
+
+    // Currently we can only use the filterSprite code if we are clipped to the bitmap's bounds.
+    // Once we can filter and the filter will return a result larger than itself, we should be
+    // able to remove this constraint.
+    // skbug.com/4526
+    //
+    SkPoint pt;
+    ctm.mapXY(x, y, &pt);
+    SkIRect ir = SkIRect::MakeXYWH(SkScalarRoundToInt(pt.x()), SkScalarRoundToInt(pt.y()), w, h);
+    return ir.contains(fMCRec->fRasterClip.getBounds());
+}
+
 void SkCanvas::onDrawImage(const SkImage* image, SkScalar x, SkScalar y, const SkPaint* paint) {
     TRACE_EVENT0("disabled-by-default-skia", "SkCanvas::drawImage()");
     SkRect bounds = SkRect::MakeXYWH(x, y,
@@ -2215,11 +2245,25 @@ void SkCanvas::onDrawImage(const SkImage* image, SkScalar x, SkScalar y, const S
     if (nullptr == paint) {
         paint = lazy.init();
     }
-    
-    LOOPER_BEGIN(*paint, SkDrawFilter::kBitmap_Type, &bounds)
-    
+
+    const bool drawAsSprite = this->canDrawBitmapAsSprite(x, y, image->width(), image->height(),
+                                                          *paint);
+    LOOPER_BEGIN_DRAWBITMAP(*paint, drawAsSprite, &bounds)
+
     while (iter.next()) {
-        iter.fDevice->drawImage(iter, image, x, y, looper.paint());
+        const SkPaint& pnt = looper.paint();
+        if (drawAsSprite && pnt.getImageFilter()) {
+            SkBitmap bitmap;
+            if (as_IB(image)->asBitmapForImageFilters(&bitmap)) {
+                SkPoint pt;
+                iter.fMatrix->mapXY(x, y, &pt);
+                iter.fDevice->drawBitmapAsSprite(iter, bitmap,
+                                                 SkScalarRoundToInt(pt.fX),
+                                                 SkScalarRoundToInt(pt.fY), pnt);
+            }
+        } else {
+            iter.fDevice->drawImage(iter, image, x, y, pnt);
+        }
     }
     
     LOOPER_END
@@ -2228,10 +2272,8 @@ void SkCanvas::onDrawImage(const SkImage* image, SkScalar x, SkScalar y, const S
 void SkCanvas::onDrawImageRect(const SkImage* image, const SkRect* src, const SkRect& dst,
                                const SkPaint* paint, SrcRectConstraint constraint) {
     TRACE_EVENT0("disabled-by-default-skia", "SkCanvas::drawImageRect()");
-    SkRect storage;
-    const SkRect* bounds = &dst;
     if (nullptr == paint || paint->canComputeFastBounds()) {
-        storage = dst;
+        SkRect storage = dst;
         if (paint) {
             paint->computeFastBounds(dst, &storage);
         }
@@ -2244,7 +2286,7 @@ void SkCanvas::onDrawImageRect(const SkImage* image, const SkRect* src, const Sk
         paint = lazy.init();
     }
     
-    LOOPER_BEGIN_CHECK_COMPLETE_OVERWRITE(*paint, SkDrawFilter::kBitmap_Type, bounds,
+    LOOPER_BEGIN_CHECK_COMPLETE_OVERWRITE(*paint, SkDrawFilter::kBitmap_Type, &dst,
                                           image->isOpaque())
     
     while (iter.next()) {
@@ -2281,12 +2323,23 @@ void SkCanvas::onDrawBitmap(const SkBitmap& bitmap, SkScalar x, SkScalar y, cons
         bounds = &storage;
     }
 
-    LOOPER_BEGIN(*paint, SkDrawFilter::kBitmap_Type, bounds)
+    const bool drawAsSprite = bounds && this->canDrawBitmapAsSprite(x, y, bitmap.width(),
+                                                                    bitmap.height(), *paint);
+    LOOPER_BEGIN_DRAWBITMAP(*paint, drawAsSprite, bounds)
 
     while (iter.next()) {
-        iter.fDevice->drawBitmap(iter, bitmap, matrix, looper.paint());
+        const SkPaint& pnt = looper.paint();
+        if (drawAsSprite && pnt.getImageFilter()) {
+            SkPoint pt;
+            iter.fMatrix->mapXY(x, y, &pt);
+            iter.fDevice->drawBitmapAsSprite(iter, bitmap,
+                                             SkScalarRoundToInt(pt.fX),
+                                             SkScalarRoundToInt(pt.fY), pnt);
+        } else {
+            iter.fDevice->drawBitmap(iter, bitmap, matrix, looper.paint());
+        }
     }
-    
+
     LOOPER_END
 }
 
@@ -2298,9 +2351,8 @@ void SkCanvas::internalDrawBitmapRect(const SkBitmap& bitmap, const SkRect* src,
         return;
     }
 
-    SkRect storage;
-    const SkRect* bounds = &dst;
     if (nullptr == paint || paint->canComputeFastBounds()) {
+        SkRect storage;
         if (this->quickReject(paint ? paint->computeFastBounds(dst, &storage) : dst)) {
             return;
         }
@@ -2311,7 +2363,7 @@ void SkCanvas::internalDrawBitmapRect(const SkBitmap& bitmap, const SkRect* src,
         paint = lazy.init();
     }
 
-    LOOPER_BEGIN_CHECK_COMPLETE_OVERWRITE(*paint, SkDrawFilter::kBitmap_Type, bounds,
+    LOOPER_BEGIN_CHECK_COMPLETE_OVERWRITE(*paint, SkDrawFilter::kBitmap_Type, &dst,
                                           bitmap.isOpaque())
 
     while (iter.next()) {
@@ -2332,9 +2384,8 @@ void SkCanvas::onDrawImageNine(const SkImage* image, const SkIRect& center, cons
                                const SkPaint* paint) {
     TRACE_EVENT0("disabled-by-default-skia", "SkCanvas::drawImageNine()");
     
-    SkRect storage;
-    const SkRect* bounds = &dst;
     if (nullptr == paint || paint->canComputeFastBounds()) {
+        SkRect storage;
         if (this->quickReject(paint ? paint->computeFastBounds(dst, &storage) : dst)) {
             return;
         }
@@ -2345,7 +2396,7 @@ void SkCanvas::onDrawImageNine(const SkImage* image, const SkIRect& center, cons
         paint = lazy.init();
     }
     
-    LOOPER_BEGIN(*paint, SkDrawFilter::kBitmap_Type, bounds)
+    LOOPER_BEGIN(*paint, SkDrawFilter::kBitmap_Type, &dst)
     
     while (iter.next()) {
         iter.fDevice->drawImageNine(iter, image, center, dst, looper.paint());
@@ -2359,9 +2410,8 @@ void SkCanvas::onDrawBitmapNine(const SkBitmap& bitmap, const SkIRect& center, c
     TRACE_EVENT0("disabled-by-default-skia", "SkCanvas::drawBitmapNine()");
     SkDEBUGCODE(bitmap.validate();)
 
-    SkRect storage;
-    const SkRect* bounds = &dst;
     if (nullptr == paint || paint->canComputeFastBounds()) {
+        SkRect storage;
         if (this->quickReject(paint ? paint->computeFastBounds(dst, &storage) : dst)) {
             return;
         }
@@ -2372,7 +2422,7 @@ void SkCanvas::onDrawBitmapNine(const SkBitmap& bitmap, const SkIRect& center, c
         paint = lazy.init();
     }
     
-    LOOPER_BEGIN(*paint, SkDrawFilter::kBitmap_Type, bounds)
+    LOOPER_BEGIN(*paint, SkDrawFilter::kBitmap_Type, &dst)
     
     while (iter.next()) {
         iter.fDevice->drawBitmapNine(iter, bitmap, center, dst, looper.paint());

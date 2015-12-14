@@ -170,10 +170,13 @@ struct GPUTarget : public Target {
         uint32_t flags = this->config.useDFText ? SkSurfaceProps::kUseDeviceIndependentFonts_Flag :
                                                   0;
         SkSurfaceProps props(flags, SkSurfaceProps::kLegacyFontHost_InitType);
-        this->surface.reset(SkSurface::NewRenderTarget(gGrFactory->get(this->config.ctxType),
+        this->surface.reset(SkSurface::NewRenderTarget(gGrFactory->get(this->config.ctxType,
+                                                                       kNone_GrGLStandard,
+                                                                       this->config.ctxOptions),
                                                          SkSurface::kNo_Budgeted, info,
                                                          this->config.samples, &props));
-        this->gl = gGrFactory->getContextInfo(this->config.ctxType)->fGLContext;
+        this->gl = gGrFactory->getContextInfo(this->config.ctxType, kNone_GrGLStandard,
+                                              this->config.ctxOptions)->fGLContext;
         if (!this->surface.get()) {
             return false;
         }
@@ -385,11 +388,12 @@ static bool is_cpu_config_allowed(const char* name) {
 
 #if SK_SUPPORT_GPU
 static bool is_gpu_config_allowed(const char* name, GrContextFactory::GLContextType ctxType,
+                                  GrContextFactory::GLContextOptions ctxOptions,
                                   int sampleCnt) {
     if (!is_cpu_config_allowed(name)) {
         return false;
     }
-    if (const GrContext* ctx = gGrFactory->get(ctxType)) {
+    if (const GrContext* ctx = gGrFactory->get(ctxType, kNone_GrGLStandard, ctxOptions)) {
         return sampleCnt <= ctx->caps()->maxSampleCount();
     }
     return false;
@@ -398,17 +402,20 @@ static bool is_gpu_config_allowed(const char* name, GrContextFactory::GLContextT
 
 #if SK_SUPPORT_GPU
 #define kBogusGLContextType GrContextFactory::kNative_GLContextType
+#define kBogusGLContextOptions GrContextFactory::kNone_GLContextOptions
 #else
 #define kBogusGLContextType 0
+#define kBogusGLContextOptions 0
 #endif
 
 // Append all configs that are enabled and supported.
 static void create_configs(SkTDArray<Config>* configs) {
-    #define CPU_CONFIG(name, backend, color, alpha)                       \
-        if (is_cpu_config_allowed(#name)) {                               \
-            Config config = { #name, Benchmark::backend, color, alpha, 0, \
-                              kBogusGLContextType, false };               \
-            configs->push(config);                                        \
+    #define CPU_CONFIG(name, backend, color, alpha)                        \
+        if (is_cpu_config_allowed(#name)) {                                \
+            Config config = { #name, Benchmark::backend, color, alpha, 0,  \
+                              kBogusGLContextType, kBogusGLContextOptions, \
+                              false };                                     \
+            configs->push(config);                                         \
         }
 
     if (FLAGS_cpu) {
@@ -418,8 +425,9 @@ static void create_configs(SkTDArray<Config>* configs) {
     }
 
 #if SK_SUPPORT_GPU
-    #define GPU_CONFIG(name, ctxType, samples, useDFText)                        \
-        if (is_gpu_config_allowed(#name, GrContextFactory::ctxType, samples)) {  \
+    #define GPU_CONFIG(name, ctxType, ctxOptions, samples, useDFText)            \
+        if (is_gpu_config_allowed(#name, GrContextFactory::ctxType,              \
+                                  GrContextFactory::ctxOptions, samples)) {      \
             Config config = {                                                    \
                 #name,                                                           \
                 Benchmark::kGPU_Backend,                                         \
@@ -427,28 +435,29 @@ static void create_configs(SkTDArray<Config>* configs) {
                 kPremul_SkAlphaType,                                             \
                 samples,                                                         \
                 GrContextFactory::ctxType,                                       \
+                GrContextFactory::ctxOptions,                                    \
                 useDFText };                                                     \
             configs->push(config);                                               \
         }
 
     if (FLAGS_gpu) {
-        GPU_CONFIG(gpu, kNative_GLContextType, 0, false)
-        GPU_CONFIG(msaa4, kNative_GLContextType, 4, false)
-        GPU_CONFIG(msaa16, kNative_GLContextType, 16, false)
-        GPU_CONFIG(nvprmsaa4, kNVPR_GLContextType, 4, false)
-        GPU_CONFIG(nvprmsaa16, kNVPR_GLContextType, 16, false)
-        GPU_CONFIG(gpudft, kNative_GLContextType, 0, true)
-        GPU_CONFIG(debug, kDebug_GLContextType, 0, false)
-        GPU_CONFIG(nullgpu, kNull_GLContextType, 0, false)
+        GPU_CONFIG(gpu, kNative_GLContextType, kNone_GLContextOptions, 0, false)
+        GPU_CONFIG(msaa4, kNative_GLContextType, kNone_GLContextOptions, 4, false)
+        GPU_CONFIG(msaa16, kNative_GLContextType, kNone_GLContextOptions, 16, false)
+        GPU_CONFIG(nvprmsaa4, kNative_GLContextType, kEnableNVPR_GLContextOptions, 4, false)
+        GPU_CONFIG(nvprmsaa16, kNative_GLContextType, kEnableNVPR_GLContextOptions, 16, false)
+        GPU_CONFIG(gpudft, kNative_GLContextType, kNone_GLContextOptions, 0, true)
+        GPU_CONFIG(debug, kDebug_GLContextType, kNone_GLContextOptions, 0, false)
+        GPU_CONFIG(nullgpu, kNull_GLContextType, kNone_GLContextOptions, 0, false)
 #ifdef SK_ANGLE
-        GPU_CONFIG(angle, kANGLE_GLContextType, 0, false)
-        GPU_CONFIG(angle-gl, kANGLE_GL_GLContextType, 0, false)
+        GPU_CONFIG(angle, kANGLE_GLContextType, kNone_GLContextOptions, 0, false)
+        GPU_CONFIG(angle-gl, kANGLE_GL_GLContextType, kNone_GLContextOptions, 0, false)
 #endif
 #ifdef SK_COMMAND_BUFFER
-        GPU_CONFIG(commandbuffer, kCommandBuffer_GLContextType, 0, false)
+        GPU_CONFIG(commandbuffer, kCommandBuffer_GLContextType, kNone_GLContextOptions, 0, false)
 #endif
 #if SK_MESA
-        GPU_CONFIG(mesa, kMESA_GLContextType, 0, false)
+        GPU_CONFIG(mesa, kMESA_GLContextType, kNone_GLContextOptions, 0, false)
 #endif
     }
 #endif
@@ -456,7 +465,8 @@ static void create_configs(SkTDArray<Config>* configs) {
 #ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
     if (is_cpu_config_allowed("hwui")) {
         Config config = { "hwui", Benchmark::kHWUI_Backend, kRGBA_8888_SkColorType,
-                          kPremul_SkAlphaType, 0, kBogusGLContextType, false };
+                          kPremul_SkAlphaType, 0, kBogusGLContextType, kBogusGLContextOptions,
+                          false };
         configs->push(config);
     }
 #endif
@@ -1131,7 +1141,8 @@ int nanobench_main() {
     if (kAutoTuneLoops != FLAGS_loops) {
         SkDebugf("Fixed number of loops; times would only be misleading so we won't print them.\n");
     } else if (FLAGS_quiet) {
-        SkDebugf("median\tbench\tconfig\n");
+        SkDebugf("! -> high variance, ? -> moderate variance\n");
+        SkDebugf("    micros   \tbench\n");
     } else if (FLAGS_ms) {
         SkDebugf("curr/maxrss\tloops\tmin\tmedian\tmean\tmax\tstddev\tsamples\tconfig\tbench\n");
     } else {
@@ -1241,10 +1252,13 @@ int nanobench_main() {
                          , bench->getUniqueName()
                          , config);
             } else if (FLAGS_quiet) {
-                if (configs.count() == 1) {
-                    config = ""; // Only print the config if we run the same bench on more than one.
-                }
-                SkDebugf("%s\t%s\t%s\n", HUMANIZE(stats.median), bench->getUniqueName(), config);
+                const char* mark = " ";
+                const double stddev_percent = 100 * sqrt(stats.var) / stats.mean;
+                if (stddev_percent >  5) mark = "?";
+                if (stddev_percent > 10) mark = "!";
+
+                SkDebugf("%10.2f %s\t%s\t%s\n",
+                         stats.median*1e3, mark, bench->getUniqueName(), config);
             } else {
                 const double stddev_percent = 100 * sqrt(stats.var) / stats.mean;
                 SkDebugf("%4d/%-4dMB\t%d\t%s\t%s\t%s\t%s\t%.0f%%\t%s\t%s\t%s\n"
@@ -1264,8 +1278,10 @@ int nanobench_main() {
 
 #if SK_SUPPORT_GPU
             if (FLAGS_gpuStats && Benchmark::kGPU_Backend == configs[i].backend) {
-                gGrFactory->get(configs[i].ctxType)->printCacheStats();
-                gGrFactory->get(configs[i].ctxType)->printGpuStats();
+                GrContext* context = gGrFactory->get(configs[i].ctxType,
+                                                     kNone_GrGLStandard, configs[i].ctxOptions);
+                context->printCacheStats();
+                context->printGpuStats();
             }
 #endif
 

@@ -336,6 +336,13 @@ public:
         return this->saveLayer(&bounds, paint);
     }
 
+    /**
+     *  Temporary name.
+     *  Will allow any requests for LCD text to be respected, so the caller must be careful to
+     *  only draw on top of opaque sections of the layer to get good results.
+     */
+    int saveLayerPreserveLCDTextRequests(const SkRect* bounds, const SkPaint* paint);
+
     /** DEPRECATED - use saveLayer(const SkRect*, const SkPaint*) instead.
 
         This behaves the same as saveLayer(const SkRect*, const SkPaint*),
@@ -606,8 +613,8 @@ public:
      * This makes the contents of the canvas undefined. Subsequent calls that
      * require reading the canvas contents will produce undefined results. Examples
      * include blending and readPixels. The actual implementation is backend-
-     * dependent and one legal implementation is to do nothing. Like clear(), this
-     * ignores the clip.
+     * dependent and one legal implementation is to do nothing. This method
+     * ignores the current clip.
      *
      * This function should only be called if the caller intends to subsequently
      * draw to the canvas. The canvas may do real work at discard() time in order
@@ -617,7 +624,7 @@ public:
     void discard() { this->onDiscard(); }
 
     /**
-     *  Fill the entire canvas' bitmap (restricted to the current clip) with the
+     *  Fill the entire canvas (restricted to the current clip) with the
      *  specified paint.
      *  @param paint    The paint used to fill the canvas
      */
@@ -1316,6 +1323,11 @@ protected:
                         const SkImageFilter* imageFilter = NULL);
 
 private:
+    enum PrivateSaveFlags {
+        // These must not overlap the public flags.
+        kPreserveLCDText_PrivateSaveFlag = 1 << 5,
+    };
+
     enum ShaderOverrideOpacity {
         kNone_ShaderOverrideOpacity,        //!< there is no overriding shader (bitmap or image)
         kOpaque_ShaderOverrideOpacity,      //!< the overriding shader is opaque
@@ -1428,6 +1440,10 @@ private:
      */
     bool wouldOverwriteEntireSurface(const SkRect*, const SkPaint*, ShaderOverrideOpacity) const;
 
+    /**
+     *  Returns true if the paint's imagefilter can be invoked directly, without needed a layer.
+     */
+    bool canDrawBitmapAsSprite(SkScalar x, SkScalar y, int w, int h, const SkPaint&);
 
     /*  These maintain a cache of the clip bounds in local coordinates,
         (converted to 2s-compliment if floats are slow).

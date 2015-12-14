@@ -23,6 +23,7 @@ GrGLCaps::GrGLCaps(const GrContextOptions& contextOptions,
     fInvalidateFBType = kNone_InvalidateFBType;
     fLATCAlias = kLATC_LATCAlias;
     fMapBufferType = kNone_MapBufferType;
+    fTransferBufferType = kNone_TransferBufferType;
     fMaxFragmentUniformVectors = 0;
     fMaxVertexAttributes = 0;
     fMaxFragmentTextureUnits = 0;
@@ -319,7 +320,8 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
     // We need dual source blending and the ability to disable multisample in order to support mixed
     // samples in every corner case.
     if (fMultisampleDisableSupport && glslCaps->dualSourceBlendingSupport()) {
-        fMixedSamplesSupport = ctxInfo.hasExtension("GL_NV_framebuffer_mixed_samples");
+        fMixedSamplesSupport = ctxInfo.hasExtension("GL_NV_framebuffer_mixed_samples") ||
+                ctxInfo.hasExtension("GL_CHROMIUM_framebuffer_mixed_samples");
         // Workaround NVIDIA bug related to glInvalidateFramebuffer and mixed samples.
         if (fMixedSamplesSupport && kNVIDIA_GrGLDriver == ctxInfo.driver()) {
             fDiscardRenderTargetSupport = false;
@@ -367,6 +369,18 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
         } else if (ctxInfo.hasExtension("GL_OES_mapbuffer")) {
             fMapBufferFlags = kCanMap_MapFlag;
             fMapBufferType = kMapBuffer_MapBufferType;
+        }
+    }
+
+    if (kGL_GrGLStandard == standard) {
+        if (version >= GR_GL_VER(3, 0) || ctxInfo.hasExtension("GL_ARB_pixel_buffer_object")) {
+            fTransferBufferType = kPBO_TransferBufferType;
+        } 
+    } else {
+        if (version >= GR_GL_VER(3, 0) || ctxInfo.hasExtension("GL_NV_pixel_buffer_object")) {
+            fTransferBufferType = kPBO_TransferBufferType;
+        } else if (ctxInfo.hasExtension("GL_CHROMIUM_pixel_transfer_buffer_object")) {
+            fTransferBufferType = kChromium_TransferBufferType;
         }
     }
 
@@ -574,9 +588,6 @@ void GrGLCaps::initGLSL(const GrGLContextInfo& ctxInfo) {
     // "result=black; if (any()) result=white;" code fails to compile. This issue comes into play
     // from our GrTextureDomain processor.
     glslCaps->fCanUseAnyFunctionInShader = kImagination_GrGLVendor != ctxInfo.vendor();
-
-    glslCaps->fForceHighPrecisionNDSTransform = kARM_GrGLVendor == ctxInfo.vendor() ||
-                                                kPowerVR54x_GrGLRenderer == ctxInfo.renderer();
 
     glslCaps->fVersionDeclString = get_glsl_version_decl_string(standard, glslCaps->fGLSLGeneration,
                                                                 fIsCoreProfile);
@@ -838,6 +849,9 @@ void GrGLCaps::initConfigTexturableTable(const GrGLContextInfo& ctxInfo, const G
     } else {
         if (ctxInfo.hasExtension("GL_APPLE_texture_format_BGRA8888")) {
             fConfigTextureSupport[kBGRA_8888_GrPixelConfig] = true;
+            if (version >= GR_GL_VER(3,0) || ctxInfo.hasExtension("GL_EXT_texture_storage")) {
+                fBGRAIsInternalFormat = true;
+            }
         } else if (ctxInfo.hasExtension("GL_EXT_texture_format_BGRA8888")) {
             fConfigTextureSupport[kBGRA_8888_GrPixelConfig] = true;
             fBGRAIsInternalFormat = true;

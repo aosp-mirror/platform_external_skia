@@ -17,6 +17,7 @@
 #include "SkReadBuffer.h"
 #include "SkRect.h"
 #include "SkScalar.h"
+#include "SkTemplates.h"
 #include "SkUnPreMultiply.h"
 #include "SkWriteBuffer.h"
 
@@ -372,6 +373,12 @@ bool SkBitmap::installPixels(const SkImageInfo& requestedInfo, void* pixels, siz
     return true;
 }
 
+bool SkBitmap::installPixels(const SkPixmap& pixmap) {
+    return this->installPixels(pixmap.info(), pixmap.writable_addr(),
+                               pixmap.rowBytes(), pixmap.ctable(),
+                               nullptr, nullptr);
+}
+
 bool SkBitmap::installMaskPixels(const SkMask& mask) {
     if (SkMask::kA8_Format != mask.fFormat) {
         this->reset();
@@ -572,10 +579,15 @@ SkColor SkBitmap::getColor(int x, int y) const {
             SkPMColor c = SkPixel4444ToPixel32(addr[0]);
             return SkUnPreMultiply::PMColorToColor(c);
         }
-        case kBGRA_8888_SkColorType:
+        case kBGRA_8888_SkColorType: {
+            uint32_t* addr = this->getAddr32(x, y);
+            SkPMColor c = SkSwizzle_BGRA_to_PMColor(addr[0]);
+            return SkUnPreMultiply::PMColorToColor(c);
+        }
         case kRGBA_8888_SkColorType: {
             uint32_t* addr = this->getAddr32(x, y);
-            return SkUnPreMultiply::PMColorToColor(addr[0]);
+            SkPMColor c = SkSwizzle_RGBA_to_PMColor(addr[0]);
+            return SkUnPreMultiply::PMColorToColor(c);
         }
         default:
             SkASSERT(false);
@@ -1071,8 +1083,8 @@ static void write_raw_pixels(SkWriteBuffer* buffer, const SkPixmap& pmap) {
     info.flatten(*buffer);
 
     const size_t size = snugRB * info.height();
-    SkAutoMalloc storage(size);
-    char* dst = (char*)storage.get();
+    SkAutoTMalloc<char> storage(size);
+    char* dst = storage.get();
     for (int y = 0; y < info.height(); ++y) {
         memcpy(dst, src, snugRB);
         dst += snugRB;

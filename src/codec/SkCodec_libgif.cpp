@@ -16,9 +16,8 @@
 /*
  * Checks the start of the stream to see if the image is a gif
  */
-bool SkGifCodec::IsGif(SkStream* stream) {
-    char buf[GIF_STAMP_LEN];
-    if (stream->read(buf, GIF_STAMP_LEN) == GIF_STAMP_LEN) {
+bool SkGifCodec::IsGif(const void* buf, size_t bytesRead) {
+    if (bytesRead >= GIF_STAMP_LEN) {
         if (memcmp(GIF_STAMP,   buf, GIF_STAMP_LEN) == 0 ||
             memcmp(GIF87_STAMP, buf, GIF_STAMP_LEN) == 0 ||
             memcmp(GIF89_STAMP, buf, GIF_STAMP_LEN) == 0)
@@ -508,7 +507,7 @@ SkCodec::Result SkGifCodec::onStartScanlineDecode(const SkImageInfo& dstInfo,
 
 void SkGifCodec::handleScanlineFrame(int count, int* rowsBeforeFrame, int* rowsInFrame) {
     if (fFrameIsSubset) {
-        const int currRow = this->INHERITED::nextScanline();
+        const int currRow = this->currScanline();
 
         // The number of rows that remain to be skipped before reaching rows that we
         // actually must decode into.

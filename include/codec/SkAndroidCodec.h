@@ -50,7 +50,25 @@ public:
     /**
      *  Format of the encoded data.
      */
-    SkEncodedFormat getEncodedFormat() const { return this->onGetEncodedFormat(); }
+    SkEncodedFormat getEncodedFormat() const { return fCodec->getEncodedFormat(); }
+
+    /**
+     *  @param requestedColorType Color type requested by the client
+     *
+     *  If it is possible to decode to requestedColorType, this returns
+     *  requestedColorType.  Otherwise, this returns whichever color type
+     *  is suggested by the codec as the best match for the encoded data.
+     */
+    SkColorType computeOutputColorType(SkColorType requestedColorType);
+
+    /**
+     *  @param requestedUnpremul  Indicates if the client requested
+     *                            unpremultiplied output
+     *
+     *  Returns the appropriate alpha type to decode to.  If the image
+     *  has alpha, the value of requestedUnpremul will be honored.
+     */
+    SkAlphaType computeOutputAlphaType(bool requestedUnpremul);
 
     /**
      *  Returns the dimensions of the scaled output image, for an input
@@ -208,11 +226,23 @@ public:
      */
     SkCodec::Result getAndroidPixels(const SkImageInfo& info, void* pixels, size_t rowBytes);
 
+    /**
+     *  Some images may initially report that they have alpha due to the format
+     *  of the encoded data, but then never use any colors which have alpha
+     *  less than 100%. This function can be called *after* decoding to
+     *  determine if such an image truly had alpha. Calling it before decoding
+     *  is undefined.
+     *  FIXME: see skbug.com/3582.
+     */
+    bool reallyHasAlpha() const {
+        return fCodec->reallyHasAlpha();
+    }
+
 protected:
 
-    SkAndroidCodec(const SkImageInfo&);
+    SkAndroidCodec(SkCodec*);
 
-    virtual SkEncodedFormat onGetEncodedFormat() const = 0;
+    SkCodec* codec() const { return fCodec.get(); }
 
     virtual SkISize onGetSampledDimensions(int sampleSize) const = 0;
 
@@ -226,5 +256,7 @@ private:
     // This will always be a reference to the info that is contained by the
     // embedded SkCodec.
     const SkImageInfo& fInfo;
+
+    SkAutoTDelete<SkCodec> fCodec;
 };
 #endif // SkAndroidCodec_DEFINED

@@ -140,6 +140,9 @@ public:
 
     static SkImageFilter::Cache* NewImageFilterCache();
 
+    // for debugging purposes only
+    void drawTexture(GrTexture*, const SkRect& dst, const SkPaint&);
+
 protected:
     bool onReadPixels(const SkImageInfo&, void*, size_t, int, int) override;
     bool onWritePixels(const SkImageInfo&, const void*, size_t, int, int) override;
@@ -228,7 +231,6 @@ private:
                          bool bicubic);
 
     void drawTextureProducer(GrTextureProducer*,
-                             bool alphaOnly,
                              const SkRect* srcRect,
                              const SkRect* dstRect,
                              SkCanvas::SrcRectConstraint,
@@ -237,7 +239,6 @@ private:
                              const SkPaint&);
 
     void drawTextureProducerImpl(GrTextureProducer*,
-                                 bool alphaOnly,
                                  const SkRect& clippedSrcRect,
                                  const SkRect& clippedDstRect,
                                  SkCanvas::SrcRectConstraint,
@@ -245,6 +246,9 @@ private:
                                  const SkMatrix& srcToDstMatrix,
                                  const GrClip&,
                                  const SkPaint&);
+
+    void drawProducerNine(const SkDraw&, GrTextureProducer*, const SkIRect& center,
+                          const SkRect& dst, const SkPaint&);
 
     bool drawDashLine(const SkPoint pts[2], const SkPaint& paint);
 

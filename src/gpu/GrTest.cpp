@@ -9,15 +9,18 @@
 #include "GrTest.h"
 
 #include "GrBatchAtlas.h"
-#include "GrBatchFontCache.h"
 #include "GrContextOptions.h"
 #include "GrDrawContext.h"
 #include "GrDrawingManager.h"
 #include "GrGpuResourceCacheAccess.h"
 #include "GrResourceCache.h"
-#include "GrTextBlobCache.h"
+
+#include "SkGpuDevice.h"
 #include "SkGrPriv.h"
 #include "SkString.h"
+
+#include "text/GrBatchFontCache.h"
+#include "text/GrTextBlobCache.h"
 
 namespace GrTest {
 void SetupAlwaysEvictAtlas(GrContext* context) {
@@ -137,34 +140,32 @@ void GrContext::printGpuStats() const {
     SkDebugf("%s", out.c_str());
 }
 
-void GrContext::drawFontCache(const SkRect& rect, GrMaskFormat format, const SkPaint& paint,
-                              GrRenderTarget* target) {
+GrTexture* GrContext::getFontAtlasTexture(GrMaskFormat format) {
     GrBatchFontCache* cache = this->getBatchFontCache();
 
-    GrTexture* atlas = cache->getTexture(format);
+    return cache->getTexture(format);
+}
 
-    SkAutoTUnref<GrDrawContext> drawContext(this->drawContext(target));
-    // TODO: add drawContext method to encapsulate this.
-
+void SkGpuDevice::drawTexture(GrTexture* tex, const SkRect& dst, const SkPaint& paint) {
     GrPaint grPaint;
     SkMatrix mat;
     mat.reset();
-    if (!SkPaintToGrPaint(this, paint, mat, &grPaint)) {
+    if (!SkPaintToGrPaint(this->context(), paint, mat, &grPaint)) {
         return;
     }
     SkMatrix textureMat;
     textureMat.reset();
-    // TODO: use setScaleTranslate()
-    textureMat[SkMatrix::kMScaleX] = 1.0f/rect.width();
-    textureMat[SkMatrix::kMScaleY] = 1.0f/rect.height();
-    textureMat[SkMatrix::kMTransX] = -rect.fLeft/rect.width();
-    textureMat[SkMatrix::kMTransY] = -rect.fTop/rect.height();
+    textureMat[SkMatrix::kMScaleX] = 1.0f/dst.width();
+    textureMat[SkMatrix::kMScaleY] = 1.0f/dst.height();
+    textureMat[SkMatrix::kMTransX] = -dst.fLeft/dst.width();
+    textureMat[SkMatrix::kMTransY] = -dst.fTop/dst.height();
 
-    grPaint.addColorTextureProcessor(atlas, textureMat);
+    grPaint.addColorTextureProcessor(tex, textureMat);
 
     GrClip clip;
-    drawContext->drawRect(clip, grPaint, mat, rect);
+    fDrawContext->drawRect(clip, grPaint, mat, dst);
 }
+
 
 #if GR_GPU_STATS
 void GrGpu::Stats::dump(SkString* out) {

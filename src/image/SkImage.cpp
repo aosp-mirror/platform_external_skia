@@ -9,6 +9,7 @@
 #include "SkBitmapCache.h"
 #include "SkCanvas.h"
 #include "SkData.h"
+#include "SkImageEncoder.h"
 #include "SkImageGenerator.h"
 #include "SkImagePriv.h"
 #include "SkImageShader.h"
@@ -178,25 +179,14 @@ SkData* SkImage::encode(SkImageEncoder::Type type, int quality) const {
     return nullptr;
 }
 
-namespace {
-
-class DefaultSerializer :  public SkPixelSerializer {
-protected:
-    bool onUseEncodedData(const void *data, size_t len) override {
-        return true;
-    }
-
-    SkData* onEncodePixels(const SkImageInfo& info, const void* pixels, size_t rowBytes) override {
-        return SkImageEncoder::EncodeData(info, pixels, rowBytes, SkImageEncoder::kPNG_Type, 100);
-    }
-};
-
-} // anonymous namespace
-
 SkData* SkImage::encode(SkPixelSerializer* serializer) const {
-    DefaultSerializer defaultSerializer;
-    SkPixelSerializer* effectiveSerializer = serializer ? serializer : &defaultSerializer;
-
+    SkAutoTUnref<SkPixelSerializer> defaultSerializer;
+    SkPixelSerializer* effectiveSerializer = serializer;
+    if (!effectiveSerializer) {
+        defaultSerializer.reset(SkImageEncoder::CreatePixelSerializer());
+        SkASSERT(defaultSerializer.get());
+        effectiveSerializer = defaultSerializer.get();
+    }
     SkAutoTUnref<SkData> encoded(this->refEncoded());
     if (encoded && effectiveSerializer->useEncodedData(encoded->data(), encoded->size())) {
         return encoded.detach();
@@ -205,8 +195,7 @@ SkData* SkImage::encode(SkPixelSerializer* serializer) const {
     SkBitmap bm;
     SkAutoPixmapUnlock apu;
     if (as_IB(this)->getROPixels(&bm) && bm.requestLock(&apu)) {
-        const SkPixmap& pmap = apu.pixmap();
-        return effectiveSerializer->encodePixels(pmap.info(), pmap.addr(), pmap.rowBytes());
+        return effectiveSerializer->encode(apu.pixmap());
     }
 
     return nullptr;

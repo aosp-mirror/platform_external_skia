@@ -127,6 +127,7 @@ LOCAL_SRC_FILES := \
 	../tests/ErrorTest.cpp \
 	../tests/FillPathTest.cpp \
 	../tests/FitsInTest.cpp \
+	../tests/FlattenableFactoryToName.cpp \
 	../tests/FloatingPointTextureTest.cpp \
 	../tests/FontHostStreamTest.cpp \
 	../tests/FontHostTest.cpp \
@@ -135,7 +136,6 @@ LOCAL_SRC_FILES := \
 	../tests/FontNamesTest.cpp \
 	../tests/FontObjTest.cpp \
 	../tests/FrontBufferedStreamTest.cpp \
-	../tests/GLInterfaceValidationTest.cpp \
 	../tests/GLProgramsTest.cpp \
 	../tests/GeometryTest.cpp \
 	../tests/GifTest.cpp \
@@ -306,6 +306,7 @@ LOCAL_SRC_FILES := \
 	../gm/blurcircles.cpp \
 	../gm/blurquickreject.cpp \
 	../gm/blurrect.cpp \
+	../gm/blurredclippedcircle.cpp \
 	../gm/blurroundrect.cpp \
 	../gm/blurs.cpp \
 	../gm/bmpfilterqualityrepeat.cpp \
@@ -408,6 +409,7 @@ LOCAL_SRC_FILES := \
 	../gm/imagefromyuvtextures.cpp \
 	../gm/imagemagnifier.cpp \
 	../gm/imageresizetiled.cpp \
+	../gm/imagescalealigned.cpp \
 	../gm/imagesource.cpp \
 	../gm/imagesource2.cpp \
 	../gm/internal_links.cpp \

@@ -157,6 +157,7 @@ LOCAL_SRC_FILES := \
 	../gm/blurcircles.cpp \
 	../gm/blurquickreject.cpp \
 	../gm/blurrect.cpp \
+	../gm/blurredclippedcircle.cpp \
 	../gm/blurroundrect.cpp \
 	../gm/blurs.cpp \
 	../gm/bmpfilterqualityrepeat.cpp \
@@ -259,6 +260,7 @@ LOCAL_SRC_FILES := \
 	../gm/imagefromyuvtextures.cpp \
 	../gm/imagemagnifier.cpp \
 	../gm/imageresizetiled.cpp \
+	../gm/imagescalealigned.cpp \
 	../gm/imagesource.cpp \
 	../gm/imagesource2.cpp \
 	../gm/internal_links.cpp \

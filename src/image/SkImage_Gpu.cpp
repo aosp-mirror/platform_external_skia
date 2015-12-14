@@ -5,16 +5,18 @@
  * found in the LICENSE file.
  */
 
-#include "SkBitmapCache.h"
-#include "SkImage_Gpu.h"
 #include "GrCaps.h"
 #include "GrContext.h"
 #include "GrDrawContext.h"
-#include "GrTextureParamsAdjuster.h"
+#include "GrImageIDTextureAdjuster.h"
 #include "effects/GrYUVtoRGBEffect.h"
 #include "SkCanvas.h"
+#include "SkBitmapCache.h"
 #include "SkGpuDevice.h"
+#include "SkGrPixelRef.h"
 #include "SkGrPriv.h"
+#include "SkImageFilter.h"
+#include "SkImage_Gpu.h"
 #include "SkPixelRef.h"
 
 SkImage_Gpu::SkImage_Gpu(int w, int h, uint32_t uniqueID, SkAlphaType at, GrTexture* tex,
@@ -69,31 +71,15 @@ bool SkImage_Gpu::getROPixels(SkBitmap* dst, CachingHint chint) const {
     return true;
 }
 
-class GpuImage_GrTextureAdjuster : public GrTextureAdjuster {
-public:
-    GpuImage_GrTextureAdjuster(const SkImage_Gpu* image)
-        : INHERITED(image->peekTexture())
-        , fImage(image)
-    {}
-
-protected:
-    void makeCopyKey(const CopyParams& params, GrUniqueKey* copyKey) override {
-        GrUniqueKey baseKey;
-        GrMakeKeyFromImageID(&baseKey, fImage->uniqueID(),
-                             SkIRect::MakeWH(fImage->width(), fImage->height()));
-        MakeCopyKeyFromOrigKey(baseKey, params, copyKey);
-    }
-
-    void didCacheCopy(const GrUniqueKey& copyKey) override { as_IB(fImage)->notifyAddedToCache(); }
-
-private:
-    const SkImage*  fImage;
-
-    typedef GrTextureAdjuster INHERITED;
-};
+bool SkImage_Gpu::asBitmapForImageFilters(SkBitmap* bitmap) const {
+    bitmap->setInfo(make_info(this->width(), this->height(), this->isOpaque()));
+    bitmap->setPixelRef(new SkGrPixelRef(bitmap->info(), fTexture))->unref();
+    bitmap->pixelRef()->setImmutableWithID(this->uniqueID());
+    return true;
+}
 
 GrTexture* SkImage_Gpu::asTextureRef(GrContext* ctx, const GrTextureParams& params) const {
-    return GpuImage_GrTextureAdjuster(this).refTextureSafeForParams(params, nullptr);
+    return GrImageTextureAdjuster(as_IB(this)).refTextureSafeForParams(params, nullptr);
 }
 
 bool SkImage_Gpu::isOpaque() const {
@@ -165,9 +151,6 @@ SkImage* SkImage_Gpu::onNewSubset(const SkIRect& subset) const {
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-
-#include "SkGrPixelRef.h"
-#include "SkImageFilter.h"
 
 class SkGpuImageFilterProxy : public SkImageFilter::Proxy {
     GrContext* fCtx;

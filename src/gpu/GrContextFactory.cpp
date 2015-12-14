@@ -24,13 +24,13 @@
 #include "GrCaps.h"
 
 GrContextFactory::ContextInfo* GrContextFactory::getContextInfo(GLContextType type,
-                                                                GrGLStandard forcedGpuAPI) {
+                                                                GrGLStandard forcedGpuAPI,
+                                                                GLContextOptions options) {
     for (int i = 0; i < fContexts.count(); ++i) {
-        if (forcedGpuAPI != kNone_GrGLStandard &&
-            forcedGpuAPI != fContexts[i]->fGLContext->gl()->fStandard)
-            continue;
-
-        if (fContexts[i]->fType == type) {
+        if (fContexts[i]->fType == type &&
+            fContexts[i]->fOptions == options &&
+            (forcedGpuAPI == kNone_GrGLStandard ||
+             forcedGpuAPI == fContexts[i]->fGLContext->gl()->fStandard)) {
             fContexts[i]->fGLContext->makeCurrent();
             return fContexts[i];
         }
@@ -38,7 +38,6 @@ GrContextFactory::ContextInfo* GrContextFactory::getContextInfo(GLContextType ty
     SkAutoTUnref<SkGLContext> glCtx;
     SkAutoTUnref<GrContext> grCtx;
     switch (type) {
-        case kNVPR_GLContextType: // fallthru
         case kNative_GLContextType:
             glCtx.reset(SkCreatePlatformGLContext(forcedGpuAPI));
             break;
@@ -75,13 +74,9 @@ GrContextFactory::ContextInfo* GrContextFactory::getContextInfo(GLContextType ty
 
     // Block NVPR from non-NVPR types.
     SkAutoTUnref<const GrGLInterface> glInterface(SkRef(glCtx->gl()));
-    if (kNVPR_GLContextType != type) {
+    if (!(kEnableNVPR_GLContextOptions & options)) {
         glInterface.reset(GrGLInterfaceRemoveNVPR(glInterface));
         if (!glInterface) {
-            return nullptr;
-        }
-    } else {
-        if (!glInterface->hasExtension("GL_NV_path_rendering")) {
             return nullptr;
         }
     }
@@ -96,22 +91,9 @@ GrContextFactory::ContextInfo* GrContextFactory::getContextInfo(GLContextType ty
     if (!grCtx.get()) {
         return nullptr;
     }
-    // Warn if path rendering support is not available for the NVPR type.
-    if (kNVPR_GLContextType == type) {
+    if (kEnableNVPR_GLContextOptions & options) {
         if (!grCtx->caps()->shaderCaps()->pathRenderingSupport()) {
-            GrGpu* gpu = grCtx->getGpu();
-            const GrGLContext* ctx = gpu->glContextForTesting();
-            if (ctx) {
-                const GrGLubyte* verUByte;
-                GR_GL_CALL_RET(ctx->interface(), verUByte, GetString(GR_GL_VERSION));
-                const char* ver = reinterpret_cast<const char*>(verUByte);
-                SkDebugf("\nWARNING: nvprmsaa config requested, but driver path rendering "
-                         "support not available. Maybe update the driver? Your driver version "
-                         "string: \"%s\"\n", ver);
-            } else {
-                SkDebugf("\nWARNING: nvprmsaa config requested, but driver path rendering "
-                         "support not available.\n");
-            }
+            return nullptr;
         }
     }
 
@@ -119,5 +101,6 @@ GrContextFactory::ContextInfo* GrContextFactory::getContextInfo(GLContextType ty
     ctx->fGLContext = SkRef(glCtx.get());
     ctx->fGrContext = SkRef(grCtx.get());
     ctx->fType = type;
+    ctx->fOptions = options;
     return ctx;
 }
