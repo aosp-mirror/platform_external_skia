@@ -258,6 +258,7 @@ LOCAL_SRC_FILES := \
 	../tests/TLSTest.cpp \
 	../tests/TemplatesTest.cpp \
 	../tests/TessellatingPathRendererTests.cpp \
+	../tests/TestConfigParsing.cpp \
 	../tests/TestTest.cpp \
 	../tests/TextBlobCacheTest.cpp \
 	../tests/TextBlobTest.cpp \
@@ -547,6 +548,7 @@ LOCAL_SRC_FILES := \
 	../experimental/SkSetPoly3To3_A.cpp \
 	../experimental/SkSetPoly3To3_D.cpp \
 	../tools/flags/SkCommonFlags.cpp \
+	../tools/flags/SkCommonFlagsConfig.cpp \
 	../tools/picture_utils.cpp \
 	../src/utils/android/SkAndroidSDKCanvas.cpp \
 	../src/gpu/GrContextFactory.cpp \
