@@ -166,6 +166,7 @@ LOCAL_SRC_FILES := \
 	../tests/InfRectTest.cpp \
 	../tests/InterpolatorTest.cpp \
 	../tests/InvalidIndexedPngTest.cpp \
+	../tests/IsClosedSingleContourTest.cpp \
 	../tests/JpegTest.cpp \
 	../tests/KtxTest.cpp \
 	../tests/LListTest.cpp \
