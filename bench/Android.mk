@@ -124,9 +124,6 @@ LOCAL_SRC_FILES := \
 	XfermodeBench.cpp \
 	nanobench.cpp \
 	nanobenchAndroid.cpp \
-	subset/SubsetSingleBench.cpp \
-	subset/SubsetTranslateBench.cpp \
-	subset/SubsetZoomBench.cpp \
 	../gm/aaclip.cpp \
 	../gm/aarectmodes.cpp \
 	../gm/aaxfermodes.cpp \
