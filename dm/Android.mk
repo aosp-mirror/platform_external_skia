@@ -550,7 +550,7 @@ LOCAL_SRC_FILES := \
 	../experimental/SkSetPoly3To3_D.cpp \
 	../tools/flags/SkCommonFlags.cpp \
 	../tools/picture_utils.cpp \
-	../src/utils/android/SkAndroidSDKCanvas.cpp \
+	../tools/android/SkAndroidSDKCanvas.cpp \
 	../src/gpu/GrContextFactory.cpp \
 	../src/gpu/GrTest.cpp
 
@@ -611,7 +611,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../tools/timer \
 	$(LOCAL_PATH)/../experimental \
 	external/zlib \
-	$(LOCAL_PATH)/../src/utils/android
+	$(LOCAL_PATH)/../tools/android
 
 LOCAL_CFLAGS += \
 	-DSK_CRASH_HANDLER
