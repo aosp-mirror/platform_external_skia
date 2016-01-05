@@ -381,6 +381,7 @@ LOCAL_SRC_FILES := \
 	../src/utils/debugger/SkObjectParser.cpp \
 	../tools/AndroidSkDebugToStdOut.cpp \
 	../tools/flags/SkCommonFlags.cpp \
+	../tools/flags/SkCommonFlagsConfig.cpp \
 	../tools/CrashHandler.cpp \
 	../tools/ProcStats.cpp \
 	../tools/timer/Timer.cpp \
@@ -419,12 +420,12 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../include/utils \
 	$(LOCAL_PATH)/../src/utils \
 	$(LOCAL_PATH)/../include/gpu \
+	$(LOCAL_PATH)/../src/gpu \
 	$(LOCAL_PATH)/../tools/flags \
 	$(LOCAL_PATH)/../include/private \
 	$(LOCAL_PATH)/../src/fonts \
 	$(LOCAL_PATH)/../src/core \
 	$(LOCAL_PATH)/../tools \
-	$(LOCAL_PATH)/../src/gpu \
 	$(LOCAL_PATH)/../../src/gpu \
 	$(LOCAL_PATH)/subset \
 	$(LOCAL_PATH)/../src/effects \
