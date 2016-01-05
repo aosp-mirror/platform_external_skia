@@ -603,7 +603,6 @@ LOCAL_SRC_FILES := \
 	src/utils/SkCamera.cpp \
 	src/utils/SkCanvasStack.cpp \
 	src/utils/SkCanvasStateUtils.cpp \
-	src/utils/SkCubicInterval.cpp \
 	src/utils/SkDashPath.cpp \
 	src/utils/SkDumpCanvas.cpp \
 	src/utils/SkEventTracer.cpp \
