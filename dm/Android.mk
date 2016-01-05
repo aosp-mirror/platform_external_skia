@@ -451,7 +451,6 @@ LOCAL_SRC_FILES := \
 	../gm/pathopsskpclip.cpp \
 	../gm/pathreverse.cpp \
 	../gm/pdf_never_embed.cpp \
-	../gm/peekpixels.cpp \
 	../gm/perlinnoise.cpp \
 	../gm/perspshaders.cpp \
 	../gm/picture.cpp \
