@@ -2240,10 +2240,6 @@ void SkCanvas::onDrawPath(const SkPath& path, const SkPaint& paint) {
 }
 
 bool SkCanvas::canDrawBitmapAsSprite(SkScalar x, SkScalar y, int w, int h, const SkPaint& paint) {
-#ifdef SK_SUPPORT_LEGACY_LAYER_BITMAP_IMAGEFILTERS
-    return false;
-#endif
-
     if (!paint.getImageFilter()) {
         return false;
     }
