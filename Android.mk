@@ -120,6 +120,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkClipStack.cpp \
 	src/core/SkColor.cpp \
 	src/core/SkColorFilter.cpp \
+	src/core/SkColorFilterShader.cpp \
 	src/core/SkColorTable.cpp \
 	src/core/SkComposeShader.cpp \
 	src/core/SkConfig8888.cpp \
@@ -144,7 +145,6 @@ LOCAL_SRC_FILES := \
 	src/core/SkEdge.cpp \
 	src/core/SkError.cpp \
 	src/core/SkFilterProc.cpp \
-	src/core/SkFilterShader.cpp \
 	src/core/SkFlattenable.cpp \
 	src/core/SkFlattenableSerialization.cpp \
 	src/core/SkFloatBits.cpp \
