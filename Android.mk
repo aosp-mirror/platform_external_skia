@@ -403,7 +403,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrStencil.cpp \
 	src/gpu/GrStencilAttachment.cpp \
 	src/gpu/GrStrokeInfo.cpp \
-	src/gpu/GrTessellator.cpp \
 	src/gpu/GrTraceMarker.cpp \
 	src/gpu/GrTestUtils.cpp \
 	src/gpu/GrSWMaskHelper.cpp \
