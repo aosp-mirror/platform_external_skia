@@ -68,10 +68,9 @@ LOCAL_SRC_FILES := \
 	src/codec/SkBmpRLECodec.cpp \
 	src/codec/SkBmpStandardCodec.cpp \
 	src/codec/SkCodec.cpp \
-	src/codec/SkCodec_libgif.cpp \
-	src/codec/SkCodec_libico.cpp \
 	src/codec/SkCodec_libpng.cpp \
-	src/codec/SkCodec_wbmp.cpp \
+	src/codec/SkGifCodec.cpp \
+	src/codec/SkIcoCodec.cpp \
 	src/codec/SkJpegCodec.cpp \
 	src/codec/SkJpegDecoderMgr.cpp \
 	src/codec/SkJpegUtility_codec.cpp \
@@ -80,6 +79,7 @@ LOCAL_SRC_FILES := \
 	src/codec/SkSampler.cpp \
 	src/codec/SkSampledCodec.cpp \
 	src/codec/SkSwizzler.cpp \
+	src/codec/SkWbmpCodec.cpp \
 	src/codec/SkWebpAdapterCodec.cpp \
 	src/codec/SkWebpCodec.cpp \
 	src/android/SkBitmapRegionCanvas.cpp \
