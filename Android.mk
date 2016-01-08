@@ -349,6 +349,7 @@ LOCAL_SRC_FILES := \
 	src/effects/gradients/SkTwoPointConicalGradient.cpp \
 	src/effects/gradients/SkTwoPointConicalGradient_gpu.cpp \
 	src/effects/gradients/SkSweepGradient.cpp \
+	src/gpu/GrAuditTrail.cpp \
 	src/gpu/GrBatchAtlas.cpp \
 	src/gpu/GrBatchFlushState.cpp \
 	src/gpu/GrBatchTest.cpp \
