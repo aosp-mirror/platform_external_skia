@@ -410,7 +410,6 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../include/config \
 	$(LOCAL_PATH)/../include/core \
 	$(LOCAL_PATH)/../include/pathops \
-	$(LOCAL_PATH)/../include/pipe \
 	$(LOCAL_PATH)/../include/codec \
 	$(LOCAL_PATH)/../include/android \
 	$(LOCAL_PATH)/../include/effects \

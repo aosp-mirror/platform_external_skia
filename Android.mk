@@ -263,8 +263,6 @@ LOCAL_SRC_FILES := \
 	src/image/SkImageShader.cpp \
 	src/image/SkSurface.cpp \
 	src/image/SkSurface_Raster.cpp \
-	src/pipe/SkGPipeRead.cpp \
-	src/pipe/SkGPipeWrite.cpp \
 	src/pathops/SkAddIntersections.cpp \
 	src/pathops/SkDConicLineIntersection.cpp \
 	src/pathops/SkDCubicLineIntersection.cpp \
@@ -668,7 +666,6 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/include/config \
 	$(LOCAL_PATH)/include/core \
 	$(LOCAL_PATH)/include/pathops \
-	$(LOCAL_PATH)/include/pipe \
 	external/giflib \
 	external/webp/include \
 	$(LOCAL_PATH)/include/android \
@@ -702,7 +699,6 @@ LOCAL_EXPORT_C_INCLUDE_DIRS := \
 	$(LOCAL_PATH)/include/config \
 	$(LOCAL_PATH)/include/core \
 	$(LOCAL_PATH)/include/pathops \
-	$(LOCAL_PATH)/include/pipe \
 	$(LOCAL_PATH)/include/effects \
 	$(LOCAL_PATH)/include/gpu \
 	$(LOCAL_PATH)/include/images \
