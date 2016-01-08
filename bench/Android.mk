@@ -113,6 +113,7 @@ LOCAL_SRC_FILES := \
 	SkipZeroesBench.cpp \
 	SortBench.cpp \
 	StrokeBench.cpp \
+	SwizzleBench.cpp \
 	TableBench.cpp \
 	TextBench.cpp \
 	TextBlobBench.cpp \
