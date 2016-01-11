@@ -177,6 +177,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkMetaData.cpp \
 	src/core/SkMipMap.cpp \
 	src/core/SkMiniRecorder.cpp \
+	src/core/SkModeColorFilter.cpp \
 	src/core/SkMultiPictureDraw.cpp \
 	src/core/SkNinePatchIter.cpp \
 	src/core/SkOpts.cpp \
@@ -307,7 +308,6 @@ LOCAL_SRC_FILES := \
 	src/effects/SkBlurImageFilter.cpp \
 	src/effects/SkBlurMaskFilter.cpp \
 	src/effects/SkColorCubeFilter.cpp \
-	src/effects/SkColorFilters.cpp \
 	src/effects/SkColorFilterImageFilter.cpp \
 	src/effects/SkColorMatrix.cpp \
 	src/effects/SkColorMatrixFilter.cpp \
