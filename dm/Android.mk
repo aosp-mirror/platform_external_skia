@@ -236,6 +236,7 @@ LOCAL_SRC_FILES := \
 	../tests/SRGBReadWritePixelsTest.cpp \
 	../tests/SVGDeviceTest.cpp \
 	../tests/ScalarTest.cpp \
+	../tests/ScaleToSidesTest.cpp \
 	../tests/SerializationTest.cpp \
 	../tests/ShaderImageFilterTest.cpp \
 	../tests/ShaderOpacityTest.cpp \
