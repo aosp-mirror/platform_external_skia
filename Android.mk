@@ -664,6 +664,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/include/private \
 	$(LOCAL_PATH)/src/codec \
 	$(LOCAL_PATH)/src/core \
+	$(LOCAL_PATH)/src/utils \
 	$(LOCAL_PATH)/include/c \
 	$(LOCAL_PATH)/include/config \
 	$(LOCAL_PATH)/include/core \
@@ -678,7 +679,6 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/src/sfnt \
 	$(LOCAL_PATH)/src/image \
 	$(LOCAL_PATH)/src/opts \
-	$(LOCAL_PATH)/src/utils \
 	$(LOCAL_PATH)/include/gpu \
 	$(LOCAL_PATH)/src/gpu \
 	$(LOCAL_PATH)/include/effects \
