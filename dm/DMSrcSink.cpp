@@ -6,7 +6,6 @@
  */
 
 #include "DMSrcSink.h"
-#include "SamplePipeControllers.h"
 #include "SkAndroidCodec.h"
 #include "SkCodec.h"
 #include "SkCommonFlags.h"
@@ -14,6 +13,7 @@
 #include "SkDocument.h"
 #include "SkError.h"
 #include "SkImageGenerator.h"
+#include "SkMallocPixelRef.h"
 #include "SkMultiPictureDraw.h"
 #include "SkNullCanvas.h"
 #include "SkOSFile.h"
@@ -790,13 +790,11 @@ DEFINE_bool(gpuStats, false, "Append GPU stats to the log for each GPU task?");
 
 GPUSink::GPUSink(GrContextFactory::GLContextType ct,
                  GrContextFactory::GLContextOptions options,
-                 GrGLStandard gpuAPI,
                  int samples,
                  bool diText,
                  bool threaded)
     : fContextType(ct)
     , fContextOptions(options)
-    , fGpuAPI(gpuAPI)
     , fSampleCount(samples)
     , fUseDIText(diText)
     , fThreaded(threaded) {}
@@ -810,19 +808,15 @@ void PreAbandonGpuContextErrorHandler(SkError, void*) {}
 DEFINE_bool(imm, false, "Run gpu configs in immediate mode.");
 DEFINE_bool(batchClip, false, "Clip each GrBatch to its device bounds for testing.");
 DEFINE_bool(batchBounds, false, "Draw a wireframe bounds of each GrBatch.");
+DEFINE_int32(batchLookback, -1, "Maximum GrBatch lookback for combining, negative means default.");
 
 Error GPUSink::draw(const Src& src, SkBitmap* dst, SkWStream*, SkString* log) const {
     GrContextOptions grOptions;
-    if (FLAGS_imm) {
-        grOptions.fImmediateMode = true;
-    }
-    if (FLAGS_batchClip) {
-        grOptions.fClipBatchToBounds = true;
-    }
+    grOptions.fImmediateMode = FLAGS_imm;
+    grOptions.fClipBatchToBounds = FLAGS_batchClip;
+    grOptions.fDrawBatchBounds = FLAGS_batchBounds;
+    grOptions.fMaxBatchLookback = FLAGS_batchLookback;
 
-    if (FLAGS_batchBounds) {
-        grOptions.fDrawBatchBounds = true;
-    }
     src.modifyGrContextOptions(&grOptions);
 
     GrContextFactory factory(grOptions);
@@ -830,8 +824,7 @@ Error GPUSink::draw(const Src& src, SkBitmap* dst, SkWStream*, SkString* log) co
     const SkImageInfo info =
         SkImageInfo::Make(size.width(), size.height(), kN32_SkColorType, kPremul_SkAlphaType);
     SkAutoTUnref<SkSurface> surface(
-            NewGpuSurface(&factory, fContextType, fContextOptions, fGpuAPI, info, fSampleCount,
-                          fUseDIText));
+            NewGpuSurface(&factory, fContextType, fContextOptions, info, fSampleCount, fUseDIText));
     if (!surface) {
         return "Could not create a surface.";
     }
@@ -980,8 +973,10 @@ Error RasterSink::draw(const Src& src, SkBitmap* dst, SkWStream*, SkString*) con
     SkAlphaType alphaType = kPremul_SkAlphaType;
     (void)SkColorTypeValidateAlphaType(fColorType, alphaType, &alphaType);
 
-    dst->allocPixels(SkImageInfo::Make(size.width(), size.height(), fColorType, alphaType));
-    dst->eraseColor(SK_ColorTRANSPARENT);
+    SkMallocPixelRef::ZeroedPRFactory factory;
+    dst->allocPixels(SkImageInfo::Make(size.width(), size.height(), fColorType, alphaType),
+                     &factory,
+                     nullptr/*colortable*/);
     SkCanvas canvas(*dst);
     return src.draw(&canvas);
 }
@@ -1005,6 +1000,36 @@ static Error draw_to_canvas(Sink* sink, SkBitmap* bitmap, SkWStream* stream, SkS
         std::function<Error(SkCanvas*)> fDraw;
     };
     return sink->draw(ProxySrc(size, draw), bitmap, stream, log);
+}
+
+/*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
+
+DEFINE_bool(check, true, "If true, have most Via- modes fail if they affect the output.");
+
+// Is *bitmap identical to what you get drawing src into sink?
+static Error check_against_reference(const SkBitmap* bitmap, const Src& src, Sink* sink) {
+    // We can only check raster outputs.
+    // (Non-raster outputs like .pdf, .skp, .svg may differ but still draw identically.)
+    if (FLAGS_check && bitmap) {
+        SkBitmap reference;
+        SkString log;
+        Error err = sink->draw(src, &reference, nullptr, &log);
+        // If we can draw into this Sink via some pipeline, we should be able to draw directly.
+        SkASSERT(err.isEmpty());
+        if (!err.isEmpty()) {
+            return err;
+        }
+        // The dimensions are a property of the Src only, and so should be identical.
+        SkASSERT(reference.getSize() == bitmap->getSize());
+        if (reference.getSize() != bitmap->getSize()) {
+            return "Dimensions don't match reference";
+        }
+        // All SkBitmaps in DM are pre-locked and tight, so this comparison is easy.
+        if (0 != memcmp(reference.getPixels(), bitmap->getPixels(), reference.getSize())) {
+            return "Pixels don't match reference";
+        }
+    }
+    return "";
 }
 
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
@@ -1064,16 +1089,6 @@ Error ViaUpright::draw(const Src& src, SkBitmap* bitmap, SkWStream* stream, SkSt
 
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
-Error ViaPipe::draw(const Src& src, SkBitmap* bitmap, SkWStream* stream, SkString* log) const {
-    auto size = src.size();
-    return draw_to_canvas(fSink, bitmap, stream, log, size, [&](SkCanvas* canvas) {
-        PipeController controller(canvas, &SkImageDecoder::DecodeMemory);
-        SkGPipeWriter pipe;
-        const uint32_t kFlags = 0;
-        return src.draw(pipe.startRecording(&controller, kFlags, size.width(), size.height()));
-    });
-}
-
 Error ViaRemote::draw(const Src& src, SkBitmap* bitmap, SkWStream* stream, SkString* log) const {
     return draw_to_canvas(fSink, bitmap, stream, log, src.size(), [&](SkCanvas* target) {
         SkAutoTDelete<SkRemote::Encoder> decoder(SkRemote::NewDecoder(target));
@@ -1106,7 +1121,7 @@ Error ViaSerialization::draw(
 
     return draw_to_canvas(fSink, bitmap, stream, log, size, [&](SkCanvas* canvas) {
         canvas->drawPicture(deserialized);
-        return "";
+        return check_against_reference(bitmap, src, fSink);
     });
 }
 
@@ -1166,6 +1181,24 @@ Error ViaTiles::draw(const Src& src, SkBitmap* bitmap, SkWStream* stream, SkStri
 
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
+Error ViaPicture::draw(const Src& src, SkBitmap* bitmap, SkWStream* stream, SkString* log) const {
+    auto size = src.size();
+    return draw_to_canvas(fSink, bitmap, stream, log, size, [&](SkCanvas* canvas) -> Error {
+        SkPictureRecorder recorder;
+        SkAutoTUnref<SkPicture> pic;
+        Error err = src.draw(recorder.beginRecording(SkIntToScalar(size.width()),
+                                                     SkIntToScalar(size.height())));
+        if (!err.isEmpty()) {
+            return err;
+        }
+        pic.reset(recorder.endRecordingAsPicture());
+        canvas->drawPicture(pic);
+        return check_against_reference(bitmap, src, fSink);
+    });
+}
+
+/*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
+
 // Draw the Src into two pictures, then draw the second picture into the wrapped Sink.
 // This tests that any shortcuts we may take while recording that second picture are legal.
 Error ViaSecondPicture::draw(
@@ -1183,7 +1216,7 @@ Error ViaSecondPicture::draw(
             pic.reset(recorder.endRecordingAsPicture());
         }
         canvas->drawPicture(pic);
-        return "";
+        return check_against_reference(bitmap, src, fSink);
     });
 }
 
@@ -1200,7 +1233,7 @@ Error ViaTwice::draw(const Src& src, SkBitmap* bitmap, SkWStream* stream, SkStri
                 return err;
             }
         }
-        return "";
+        return check_against_reference(bitmap, src, fSink);
     });
 }
 
@@ -1270,7 +1303,7 @@ Error ViaSingletonPictures::draw(
         SkAutoTUnref<SkPicture> macroPic(macroRec.endRecordingAsPicture());
 
         canvas->drawPicture(macroPic);
-        return "";
+        return check_against_reference(bitmap, src, fSink);
     });
 }
 

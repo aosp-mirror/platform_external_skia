@@ -8,6 +8,7 @@
 
 #include "GrDrawTarget.h"
 
+#include "GrAuditTrail.h"
 #include "GrCaps.h"
 #include "GrGpu.h"
 #include "GrPath.h"
@@ -20,6 +21,8 @@
 #include "GrTexture.h"
 #include "GrVertexBuffer.h"
 
+#include "SkStrokeRec.h"
+
 #include "batches/GrClearBatch.h"
 #include "batches/GrCopySurfaceBatch.h"
 #include "batches/GrDiscardBatch.h"
@@ -28,15 +31,16 @@
 #include "batches/GrRectBatchFactory.h"
 #include "batches/GrStencilPathBatch.h"
 
-#include "SkStrokeRec.h"
-
 ////////////////////////////////////////////////////////////////////////////////
 
+// Experimentally we have found that most batching occurs within the first 10 comparisons.
+static const int kDefaultMaxBatchLookback = 10;
+
 GrDrawTarget::GrDrawTarget(GrRenderTarget* rt, GrGpu* gpu, GrResourceProvider* resourceProvider,
-                           const Options& options)
+                           GrAuditTrail* auditTrail, const Options& options)
     : fGpu(SkRef(gpu))
     , fResourceProvider(resourceProvider)
-    , fFlushing(false)
+    , fAuditTrail(auditTrail)
     , fFlags(0)
     , fRenderTarget(rt) {
     // TODO: Stop extracting the context (currently needed by GrClipMaskManager)
@@ -44,6 +48,8 @@ GrDrawTarget::GrDrawTarget(GrRenderTarget* rt, GrGpu* gpu, GrResourceProvider* r
     fClipMaskManager.reset(new GrClipMaskManager(this, options.fClipBatchToBounds));
 
     fDrawBatchBounds = options.fDrawBatchBounds;
+    fMaxBatchLookback = (options.fMaxBatchLookback < 0) ? kDefaultMaxBatchLookback :
+                                                          options.fMaxBatchLookback;
 
     rt->setLastDrawTarget(this);
 
@@ -178,11 +184,6 @@ bool GrDrawTarget::setupDstReadIfNecessary(const GrPipelineBuilder& pipelineBuil
 }
 
 void GrDrawTarget::prepareBatches(GrBatchFlushState* flushState) {
-    if (fFlushing) {
-        return;
-    }
-    fFlushing = true;
-
     // Semi-usually the drawTargets are already closed at this point, but sometimes Ganesh
     // needs to flush mid-draw. In that case, the SkGpuDevice's drawTargets won't be closed
     // but need to be flushed anyway. Closing such drawTargets here will mean new
@@ -211,8 +212,6 @@ void GrDrawTarget::drawBatches(GrBatchFlushState* flushState) {
         }
         fBatches[i]->draw(flushState);
     }
-
-    fFlushing = false;
 }
 
 void GrDrawTarget::reset() {
@@ -469,9 +468,7 @@ void GrDrawTarget::recordBatch(GrBatch* batch) {
     // 1) check every draw
     // 2) intersect with something
     // 3) find a 'blocker'
-    // Experimentally we have found that most batching occurs within the first 10 comparisons.
-    static const int kMaxLookback = 10;
-
+    GR_AUDIT_TRAIL_ADDBATCH(fAuditTrail, batch->name(), batch->bounds());
     GrBATCH_INFO("Re-Recording (%s, B%u)\n"
         "\tBounds LRTB (%f, %f, %f, %f)\n",
         batch->name(),
@@ -480,7 +477,7 @@ void GrDrawTarget::recordBatch(GrBatch* batch) {
         batch->bounds().fTop, batch->bounds().fBottom);
     GrBATCH_INFO(SkTabString(batch->dumpInfo(), 1).c_str());
     GrBATCH_INFO("\tOutcome:\n");    
-    int maxCandidates = SkTMin(kMaxLookback, fBatches.count());
+    int maxCandidates = SkTMin(fMaxBatchLookback, fBatches.count());
     if (maxCandidates) {
         int i = 0;
         while (true) {

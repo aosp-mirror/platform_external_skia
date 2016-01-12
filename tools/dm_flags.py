@@ -37,6 +37,7 @@ def get_args(bot):
 
   if '-GCE-' in bot:
     configs.append('sp-8888')
+    configs.extend(['twice-8888', '2ndpic-8888'])
     configs.extend(['remote-8888', 'remote_cache-8888'])
 
   if '-TSAN' not in bot:
@@ -67,7 +68,7 @@ def get_args(bot):
   # NP is running out of RAM when we run all these modes.  skia:3255
   if 'NexusPlayer' not in bot:
     configs.extend(mode + '-8888' for mode in
-                   ['serialize', 'tiles_rt', 'pipe'])
+                   ['serialize', 'tiles_rt', 'pic'])
 
   if 'ANGLE' in bot:
     configs.append('angle')
@@ -150,8 +151,6 @@ def get_args(bot):
     blacklist.extend('pdf gm _ fontmgr_iter_factory'.split(' '))
 
   if 'Valgrind' in bot:
-    # PDF + .webp -> jumps depending on uninitialized memory.  skia:3505
-    blacklist.extend('pdf _ _ .webp'.split(' '))
     # These take 18+ hours to run.
     blacklist.extend('pdf gm _ fontmgr_iter'.split(' '))
     blacklist.extend('pdf _ _ PANO_20121023_214540.jpg'.split(' '))
@@ -170,6 +169,48 @@ def get_args(bot):
     blacklist.extend('_ image _ interlaced2.png'.split(' '))
     blacklist.extend('_ image _ interlaced3.png'.split(' '))
 
+  # skia:4095
+  for test in ['not_native32_bitmap_config',
+               'bleed_image',
+               'bleed_alpha_image',
+               'bleed_alpha_image_shader',
+               'blend',
+               'c_gms',
+               'colortype',
+               'colortype_xfermodes',
+               'colorwheelnative',
+               'drawfilter',
+               'fontmgr_bounds_0.75_0',
+               'fontmgr_bounds_1_-0.25',
+               'fontmgr_bounds',
+               'fontmgr_match',
+               'fontmgr_iter',
+               'lightingshader',
+               'localmatriximagefilter',
+               'path_stroke_with_zero_length',
+               'textblobgeometrychange',
+               'verylargebitmap',              # Windows only.
+               'verylarge_picture_image']:     # Windows only.
+    blacklist.extend(['serialize-8888', 'gm', '_', test])
+  # skia:4769
+  for test in ['blend',
+               'drawfilter',
+               'path_stroke_with_zero_length',
+               'textblobgeometrychange']:
+    blacklist.extend([    'sp-8888', 'gm', '_', test])
+    blacklist.extend([   'pic-8888', 'gm', '_', test])
+    blacklist.extend(['2ndpic-8888', 'gm', '_', test])
+  for test in ['patch_primitive']:
+    blacklist.extend(['sp-8888', 'gm', '_', test])
+  # skia:4703
+  for test in ['image-cacherator-from-picture',
+               'image-cacherator-from-raster',
+               'image-cacherator-from-ctable']:
+    blacklist.extend([       'sp-8888', 'gm', '_', test])
+    blacklist.extend([      'pic-8888', 'gm', '_', test])
+    blacklist.extend([   '2ndpic-8888', 'gm', '_', test])
+    blacklist.extend(['serialize-8888', 'gm', '_', test])
+
   if blacklist:
     args.append('--blacklist')
     args.extend(blacklist)
@@ -181,11 +222,11 @@ def get_args(bot):
   if 'GalaxyS3' in bot:  # skia:1699
     match.append('~WritePixels')
 
+  if 'AndroidOne' in bot:  # skia:4711
+    match.append('~WritePixels')
+
   if 'NexusPlayer' in bot:
     match.append('~ResourceCache')
-
-  if 'iOS' in bot:
-    match.append('~WritePixels')
 
   if 'GalaxyS4' in bot:  # skia:4079
     match.append('~imagefiltersclipped')
@@ -193,6 +234,9 @@ def get_args(bot):
     match.append('~scaled_tilemodes_npot')
     match.append('~bleed_image')  # skia:4367
     match.append('~ReadPixels')  # skia:4368
+
+  if 'ANGLE' in bot and 'Debug' in bot:
+    match.append('~GLPrograms') # skia:4717
 
   if match:
     args.append('--match')
@@ -207,6 +251,7 @@ def self_test():
   args = {}
   cases = [
     'Pretend-iOS-Bot',
+    'Test-Android-GCC-AndroidOne-GPU-Mali400MP2-Arm7-Release',
     'Test-Android-GCC-Nexus9-GPU-TegraK1-Arm64-Debug',
     'Test-Android-GCC-GalaxyS3-GPU-Mali400-Arm7-Debug',
     'Test-Android-GCC-GalaxyS4-GPU-SGX544-Arm7-Release',

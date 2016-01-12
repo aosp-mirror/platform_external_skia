@@ -18,6 +18,7 @@
 #include "SkReadBuffer.h"
 #include "SkRect.h"
 #include "SkTDynamicHash.h"
+#include "SkTHash.h"
 #include "SkTInternalLList.h"
 #include "SkValidationUtils.h"
 #include "SkWriteBuffer.h"
@@ -201,6 +202,7 @@ SkImageFilter::~SkImageFilter() {
         SkSafeUnref(fInputs[i]);
     }
     delete[] fInputs;
+    Cache::Get()->purgeByImageFilterId(fUniqueID);
 }
 
 SkImageFilter::SkImageFilter(int inputCount, SkReadBuffer& buffer)
@@ -263,25 +265,16 @@ bool SkImageFilter::filterImage(Proxy* proxy, const SkBitmap& src,
 }
 
 bool SkImageFilter::filterInput(int index, Proxy* proxy, const SkBitmap& src,
-                                const Context& origCtx,
-                                SkBitmap* result, SkIPoint* offset,
-                                bool relaxSizeConstraint) const {
+                                const Context& ctx,
+                                SkBitmap* result, SkIPoint* offset) const {
     SkImageFilter* input = this->getInput(index);
     if (!input) {
         return true;
     }
-
-    SizeConstraint constraint = origCtx.sizeConstraint();
-    if (relaxSizeConstraint && (kExact_SizeConstraint == constraint)) {
-        constraint = kApprox_SizeConstraint;
-    }
-    Context ctx(origCtx.ctm(), origCtx.clipBounds(), origCtx.cache(), constraint);
-
     return input->filterImage(proxy, src, this->mapContext(ctx), result, offset);
 }
 
-bool SkImageFilter::filterBounds(const SkIRect& src, const SkMatrix& ctm,
-                                 SkIRect* dst) const {
+bool SkImageFilter::filterBounds(const SkIRect& src, const SkMatrix& ctm, SkIRect* dst) const {
     SkASSERT(dst);
     return this->onFilterBounds(src, ctm, dst);
 }
@@ -351,8 +344,7 @@ bool SkImageFilter::filterImageGPU(Proxy* proxy, const SkBitmap& src, const Cont
     desc.fHeight = bounds.height();
     desc.fConfig = kRGBA_8888_GrPixelConfig;
 
-    SkAutoTUnref<GrTexture> dst(context->textureProvider()->createTexture(desc,
-                                      GrTextureProvider::FromImageFilter(ctx.sizeConstraint())));
+    SkAutoTUnref<GrTexture> dst(context->textureProvider()->createApproxTexture(desc));
     if (!dst) {
         return false;
     }
@@ -486,7 +478,7 @@ SkImageFilter::Context SkImageFilter::mapContext(const Context& ctx) const {
     SkIRect clipBounds;
     this->onFilterNodeBounds(ctx.clipBounds(), ctx.ctm(), &clipBounds,
                              MapDirection::kReverse_MapDirection);
-    return Context(ctx.ctm(), clipBounds, ctx.cache(), ctx.sizeConstraint());
+    return Context(ctx.ctm(), clipBounds, ctx.cache());
 #endif
 }
 
@@ -517,9 +509,8 @@ void SkImageFilter::WrapTexture(GrTexture* texture, int width, int height, SkBit
 }
 
 bool SkImageFilter::filterInputGPU(int index, SkImageFilter::Proxy* proxy,
-                                   const SkBitmap& src, const Context& origCtx,
-                                   SkBitmap* result, SkIPoint* offset,
-                                   bool relaxSizeConstraint) const {
+                                   const SkBitmap& src, const Context& ctx,
+                                   SkBitmap* result, SkIPoint* offset) const {
     SkImageFilter* input = this->getInput(index);
     if (!input) {
         return true;
@@ -528,13 +519,6 @@ bool SkImageFilter::filterInputGPU(int index, SkImageFilter::Proxy* proxy,
     // matrix with no clip and that the matrix, clip, and render target set before this function was
     // called are restored before we return to the caller.
     GrContext* context = src.getTexture()->getContext();
-
-    SizeConstraint constraint = origCtx.sizeConstraint();
-    if (relaxSizeConstraint && (kExact_SizeConstraint == constraint)) {
-        constraint = kApprox_SizeConstraint;
-    }
-    Context ctx(origCtx.ctm(), origCtx.clipBounds(), origCtx.cache(), constraint);
-
     if (input->filterImage(proxy, src, this->mapContext(ctx), result, offset)) {
         if (!result->getTexture()) {
             const SkImageInfo info = result->info();
@@ -542,7 +526,10 @@ bool SkImageFilter::filterInputGPU(int index, SkImageFilter::Proxy* proxy,
                 return false;
             }
             SkAutoTUnref<GrTexture> resultTex(
-                GrRefCachedBitmapTexture(context, *result,GrTextureParams::ClampNoFilter()));
+                GrRefCachedBitmapTexture(context, *result, GrTextureParams::ClampNoFilter()));
+            if (!resultTex) {
+                return false;
+            }
             result->setPixelRef(new SkGrPixelRef(info, resultTex))->unref();
         }
         return true;
@@ -566,6 +553,7 @@ public:
             ++iter;
             delete v;
         }
+        fIdToKeys.foreach([](uint32_t, SkTArray<Key>** array) { delete *array; });
     }
     struct Value {
         Value(const Key& key, const SkBitmap& bitmap, const SkIPoint& offset)
@@ -600,6 +588,13 @@ public:
             removeInternal(v);
         }
         Value* v = new Value(key, result, offset);
+        if (SkTArray<Key>** array = fIdToKeys.find(key.fUniqueID)) {
+            (*array)->push_back(key);
+        } else {
+            SkTArray<Key>* keyArray = new SkTArray<Key>();
+            keyArray->push_back(key);
+            fIdToKeys.set(key.fUniqueID, keyArray);
+        }
         fLookup.add(v);
         fLRU.addToHead(v);
         fCurrentBytes += result.getSize();
@@ -622,6 +617,19 @@ public:
         }
     }
 
+    void purgeByImageFilterId(uint32_t uniqueID) override {
+        SkAutoMutexAcquire mutex(fMutex);
+        if (SkTArray<Key>** array = fIdToKeys.find(uniqueID)) {
+            for (auto& key : **array) {
+                if (Value* v = fLookup.find(key)) {
+                    this->removeInternal(v);
+                }
+            }
+            fIdToKeys.remove(uniqueID);
+            delete *array; // This can be deleted outside the lock
+        }
+    }
+
 private:
     void removeInternal(Value* v) {
         fCurrentBytes -= v->fBitmap.getSize();
@@ -630,11 +638,12 @@ private:
         delete v;
     }
 private:
-    SkTDynamicHash<Value, Key>         fLookup;
-    mutable SkTInternalLList<Value>    fLRU;
-    size_t                             fMaxBytes;
-    size_t                             fCurrentBytes;
-    mutable SkMutex                    fMutex;
+    SkTDynamicHash<Value, Key>            fLookup;
+    SkTHashMap<uint32_t, SkTArray<Key>*>  fIdToKeys;
+    mutable SkTInternalLList<Value>       fLRU;
+    size_t                                fMaxBytes;
+    size_t                                fCurrentBytes;
+    mutable SkMutex                       fMutex;
 };
 
 } // namespace
@@ -654,9 +663,10 @@ void SkImageFilter::PurgeCache() {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-SkBaseDevice* SkImageFilter::DeviceProxy::createDevice(int w, int h) {
+SkBaseDevice* SkImageFilter::DeviceProxy::createDevice(int w, int h, TileUsage usage) {
     SkBaseDevice::CreateInfo cinfo(SkImageInfo::MakeN32Premul(w, h),
-                                   SkBaseDevice::kNever_TileUsage,
+                                   kPossible_TileUsage == usage ? SkBaseDevice::kPossible_TileUsage
+                                                                : SkBaseDevice::kNever_TileUsage,
                                    kUnknown_SkPixelGeometry,
                                    false,   /* preserveLCDText */
                                    true /*forImageFilter*/);

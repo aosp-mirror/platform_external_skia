@@ -39,9 +39,6 @@ public:
     // but only inspect them (or encode them).
     virtual bool getROPixels(SkBitmap*, CachingHint = kAllow_CachingHint) const = 0;
 
-    virtual SkImage* onApplyFilter(SkImageFilter*, SkIPoint* offset,
-                                   bool forceResultToOriginalSize) const;
-
     virtual SkSurface* onNewSurface(const SkImageInfo& info) const {
         return SkSurface::NewRaster(info);
     }
@@ -51,7 +48,8 @@ public:
 
     virtual SkImage* onNewSubset(const SkIRect&) const = 0;
 
-    virtual SkData* onRefEncoded() const { return nullptr; }
+    // If a ctx is specified, then only gpu-specific formats are requested.
+    virtual SkData* onRefEncoded(GrContext*) const { return nullptr; }
 
     virtual bool onAsLegacyBitmap(SkBitmap*, LegacyBitmapMode) const;
 

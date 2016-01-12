@@ -7,16 +7,16 @@
 
 #include "SkBmpCodec.h"
 #include "SkCodec.h"
-#include "SkData.h"
-#include "SkCodec_libgif.h"
-#include "SkCodec_libico.h"
 #include "SkCodec_libpng.h"
-#include "SkCodec_wbmp.h"
 #include "SkCodecPriv.h"
+#include "SkData.h"
+#include "SkGifCodec.h"
+#include "SkIcoCodec.h"
 #if !defined(GOOGLE3)
 #include "SkJpegCodec.h"
 #endif
 #include "SkStream.h"
+#include "SkWbmpCodec.h"
 #include "SkWebpCodec.h"
 
 struct DecoderProc {
@@ -62,13 +62,16 @@ SkCodec* SkCodec::NewFromStream(SkStream* stream,
     // we trust the caller to use a large enough buffer.
 
     if (0 == bytesRead) {
-        SkCodecPrintf("Could not peek!\n");
+        // TODO: After implementing peek in CreateJavaOutputStreamAdaptor.cpp, this
+        // printf could be useful to notice failures.
+        // SkCodecPrintf("Encoded image data failed to peek!\n");
+
         // It is possible the stream does not support peeking, but does support
         // rewinding.
         // Attempt to read() and pass the actual amount read to the decoder.
         bytesRead = stream->read(buffer, bytesToRead);
         if (!stream->rewind()) {
-            SkCodecPrintf("Could not rewind!\n");
+            SkCodecPrintf("Encoded image data could not peek or rewind to determine format!\n");
             return nullptr;
         }
     }

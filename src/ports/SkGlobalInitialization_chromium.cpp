@@ -25,6 +25,7 @@
 #include "SkColorCubeFilter.h"
 #include "SkColorFilter.h"
 #include "SkColorFilterImageFilter.h"
+#include "SkColorFilterShader.h"
 #include "SkColorMatrixFilter.h"
 #include "SkColorShader.h"
 #include "SkComposeImageFilter.h"
@@ -50,10 +51,10 @@
 #include "SkMagnifierImageFilter.h"
 #include "SkMatrixConvolutionImageFilter.h"
 #include "SkMergeImageFilter.h"
-#include "SkModeColorFilter.h"
 #include "SkMorphologyImageFilter.h"
 #include "SkOffsetImageFilter.h"
 #include "SkOnce.h"
+#include "SkPaintImageFilter.h"
 #include "SkPerlinNoiseShader.h"
 #include "SkPictureImageFilter.h"
 #include "SkPictureShader.h"
@@ -91,6 +92,7 @@ public:
         SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkBlurDrawLooper)
         SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkBlurImageFilter)
         SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkColorCubeFilter)
+        SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkColorFilterShader)
         SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkColorMatrixFilter)
         SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkColorShader)
         SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkComposePathEffect)
@@ -113,7 +115,7 @@ public:
         SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkLumaColorFilter)
         SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkPath1DPathEffect)
         SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkLine2DPathEffect)
-        SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkModeColorFilter)
+        SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkPaintImageFilter)
         SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkPath2DPathEffect)
         SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkPerlinNoiseShader)
         SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkPictureImageFilter)

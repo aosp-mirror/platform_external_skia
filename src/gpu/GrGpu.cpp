@@ -160,6 +160,13 @@ GrTexture* GrGpu::createTexture(const GrSurfaceDesc& origDesc, bool budgeted,
 
 GrTexture* GrGpu::wrapBackendTexture(const GrBackendTextureDesc& desc, GrWrapOwnership ownership) {
     this->handleDirtyContext();
+    if (!this->caps()->isConfigTexturable(desc.fConfig)) {
+        return nullptr;
+    }
+    if ((desc.fFlags & kRenderTarget_GrBackendTextureFlag) &&
+        !this->caps()->isConfigRenderable(desc.fConfig, desc.fSampleCnt > 0)) {
+        return nullptr;
+    }
     GrTexture* tex = this->onWrapBackendTexture(desc, ownership);
     if (nullptr == tex) {
         return nullptr;
@@ -176,6 +183,9 @@ GrTexture* GrGpu::wrapBackendTexture(const GrBackendTextureDesc& desc, GrWrapOwn
 
 GrRenderTarget* GrGpu::wrapBackendRenderTarget(const GrBackendRenderTargetDesc& desc,
                                                GrWrapOwnership ownership) {
+    if (!this->caps()->isConfigRenderable(desc.fConfig, desc.fSampleCnt > 0)) {
+        return nullptr;
+    }
     this->handleDirtyContext();
     return this->onWrapBackendRenderTarget(desc, ownership);
 }
@@ -324,13 +334,28 @@ bool GrGpu::writePixels(GrSurface* surface,
                         int left, int top, int width, int height,
                         GrPixelConfig config, const void* buffer,
                         size_t rowBytes) {
-    if (!buffer) {
+    if (!buffer || !surface) {
         return false;
     }
 
     this->handleDirtyContext();
     if (this->onWritePixels(surface, left, top, width, height, config, buffer, rowBytes)) {
         fStats.incTextureUploads();
+        return true;
+    }
+    return false;
+}
+
+bool GrGpu::transferPixels(GrSurface* surface,
+                           int left, int top, int width, int height,
+                           GrPixelConfig config, GrTransferBuffer* buffer,
+                           size_t offset, size_t rowBytes) {
+    SkASSERT(buffer);
+
+    this->handleDirtyContext();
+    if (this->onTransferPixels(surface, left, top, width, height, config, 
+                               buffer, offset, rowBytes)) {
+        fStats.incTransfersToTexture();
         return true;
     }
     return false;

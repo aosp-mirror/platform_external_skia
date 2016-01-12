@@ -56,6 +56,8 @@ def get_args(bot):
     # Don't care about Valgrind performance.
     args.extend(['--loops',   '1'])
     args.extend(['--samples', '1'])
+    # Ensure that the bot framework does not think we have timed out.
+    args.extend(['--keepAlive', 'true'])
 
   if 'HD2000' in bot:
     args.extend(['--GPUbenchTileW', '256'])
@@ -80,6 +82,7 @@ def get_args(bot):
     match.append('~desk_carsvg')
     match.append('~keymobi')
     match.append('~path_hairline')
+    match.append('~GLInstancedArraysBench') # skia:4714
 
   # the 32-bit GCE bots run out of memory in DM when running these large images
   # so defensively disable them in nanobench, too.

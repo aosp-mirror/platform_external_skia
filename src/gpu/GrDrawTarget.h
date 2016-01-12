@@ -34,6 +34,7 @@
 
 //#define ENABLE_MDB 1
 
+class GrAuditTrail;
 class GrBatch;
 class GrClip;
 class GrCaps;
@@ -44,12 +45,13 @@ class GrDrawTarget final : public SkRefCnt {
 public:
     /** Options for GrDrawTarget behavior. */
     struct Options {
-        Options () : fClipBatchToBounds(false), fDrawBatchBounds(false) {}
+        Options () : fClipBatchToBounds(false), fDrawBatchBounds(false), fMaxBatchLookback(-1) {}
         bool fClipBatchToBounds;
         bool fDrawBatchBounds;
+        int  fMaxBatchLookback;
     };
 
-    GrDrawTarget(GrRenderTarget*, GrGpu*, GrResourceProvider*, const Options&);
+    GrDrawTarget(GrRenderTarget*, GrGpu*, GrResourceProvider*, GrAuditTrail*, const Options&);
 
     ~GrDrawTarget() override;
 
@@ -287,7 +289,7 @@ private:
     GrContext*                                  fContext;
     GrGpu*                                      fGpu;
     GrResourceProvider*                         fResourceProvider;
-    bool                                        fFlushing;
+    GrAuditTrail*                               fAuditTrail;
 
     SkDEBUGCODE(int                             fDebugID;)
     uint32_t                                    fFlags;
@@ -297,6 +299,7 @@ private:
     GrRenderTarget*                             fRenderTarget;
 
     bool                                        fDrawBatchBounds;
+    int                                         fMaxBatchLookback;
 
     typedef SkRefCnt INHERITED;
 };

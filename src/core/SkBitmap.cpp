@@ -39,6 +39,8 @@ SkBitmap::SkBitmap(const SkBitmap& src) {
     SkDEBUGCODE(this->validate();)
 }
 
+SkBitmap::SkBitmap(SkBitmap&& other) : SkBitmap() { this->swap(other); }
+
 SkBitmap::~SkBitmap() {
     SkDEBUGCODE(this->validate();)
     this->freePixels();
@@ -69,6 +71,14 @@ SkBitmap& SkBitmap::operator=(const SkBitmap& src) {
     }
 
     SkDEBUGCODE(this->validate();)
+    return *this;
+}
+
+SkBitmap& SkBitmap::operator=(SkBitmap&& other) {
+    if (this != &other) {
+        this->swap(other);
+        other.reset();
+    }
     return *this;
 }
 
@@ -818,7 +828,7 @@ bool SkBitmap::copyTo(SkBitmap* dst, SkColorType dstColorType, Allocator* alloc)
         SkIRect subset;
         subset.setXYWH(fPixelRefOrigin.fX, fPixelRefOrigin.fY,
                        fInfo.width(), fInfo.height());
-        if (fPixelRef->readPixels(&tmpSrc, &subset)) {
+        if (fPixelRef->readPixels(&tmpSrc, dstColorType, &subset)) {
             if (fPixelRef->info().alphaType() == kUnpremul_SkAlphaType) {
                 // FIXME: The only meaningful implementation of readPixels
                 // (GrPixelRef) assumes premultiplied pixels.
@@ -1023,7 +1033,6 @@ bool SkBitmap::extractAlpha(SkBitmap* dst, const SkPaint* paint,
     // compute our (larger?) dst bounds if we have a filter
     if (filter) {
         identity.reset();
-        srcM.fImage = nullptr;
         if (!filter->filterMask(&dstM, srcM, identity, nullptr)) {
             goto NO_FILTER_CASE;
         }

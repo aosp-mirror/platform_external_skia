@@ -68,10 +68,9 @@ LOCAL_SRC_FILES := \
 	src/codec/SkBmpRLECodec.cpp \
 	src/codec/SkBmpStandardCodec.cpp \
 	src/codec/SkCodec.cpp \
-	src/codec/SkCodec_libgif.cpp \
-	src/codec/SkCodec_libico.cpp \
 	src/codec/SkCodec_libpng.cpp \
-	src/codec/SkCodec_wbmp.cpp \
+	src/codec/SkGifCodec.cpp \
+	src/codec/SkIcoCodec.cpp \
 	src/codec/SkJpegCodec.cpp \
 	src/codec/SkJpegDecoderMgr.cpp \
 	src/codec/SkJpegUtility_codec.cpp \
@@ -80,6 +79,7 @@ LOCAL_SRC_FILES := \
 	src/codec/SkSampler.cpp \
 	src/codec/SkSampledCodec.cpp \
 	src/codec/SkSwizzler.cpp \
+	src/codec/SkWbmpCodec.cpp \
 	src/codec/SkWebpAdapterCodec.cpp \
 	src/codec/SkWebpCodec.cpp \
 	src/android/SkBitmapRegionCanvas.cpp \
@@ -120,6 +120,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkClipStack.cpp \
 	src/core/SkColor.cpp \
 	src/core/SkColorFilter.cpp \
+	src/core/SkColorFilterShader.cpp \
 	src/core/SkColorTable.cpp \
 	src/core/SkComposeShader.cpp \
 	src/core/SkConfig8888.cpp \
@@ -144,7 +145,6 @@ LOCAL_SRC_FILES := \
 	src/core/SkEdge.cpp \
 	src/core/SkError.cpp \
 	src/core/SkFilterProc.cpp \
-	src/core/SkFilterShader.cpp \
 	src/core/SkFlattenable.cpp \
 	src/core/SkFlattenableSerialization.cpp \
 	src/core/SkFloatBits.cpp \
@@ -177,6 +177,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkMetaData.cpp \
 	src/core/SkMipMap.cpp \
 	src/core/SkMiniRecorder.cpp \
+	src/core/SkModeColorFilter.cpp \
 	src/core/SkMultiPictureDraw.cpp \
 	src/core/SkNinePatchIter.cpp \
 	src/core/SkOpts.cpp \
@@ -263,8 +264,6 @@ LOCAL_SRC_FILES := \
 	src/image/SkImageShader.cpp \
 	src/image/SkSurface.cpp \
 	src/image/SkSurface_Raster.cpp \
-	src/pipe/SkGPipeRead.cpp \
-	src/pipe/SkGPipeWrite.cpp \
 	src/pathops/SkAddIntersections.cpp \
 	src/pathops/SkDConicLineIntersection.cpp \
 	src/pathops/SkDCubicLineIntersection.cpp \
@@ -309,7 +308,6 @@ LOCAL_SRC_FILES := \
 	src/effects/SkBlurImageFilter.cpp \
 	src/effects/SkBlurMaskFilter.cpp \
 	src/effects/SkColorCubeFilter.cpp \
-	src/effects/SkColorFilters.cpp \
 	src/effects/SkColorFilterImageFilter.cpp \
 	src/effects/SkColorMatrix.cpp \
 	src/effects/SkColorMatrixFilter.cpp \
@@ -334,6 +332,7 @@ LOCAL_SRC_FILES := \
 	src/effects/SkMorphologyImageFilter.cpp \
 	src/effects/SkOffsetImageFilter.cpp \
 	src/effects/SkPaintFlagsDrawFilter.cpp \
+	src/effects/SkPaintImageFilter.cpp \
 	src/effects/SkPerlinNoiseShader.cpp \
 	src/effects/SkPictureImageFilter.cpp \
 	src/effects/SkPixelXorXfermode.cpp \
@@ -351,6 +350,7 @@ LOCAL_SRC_FILES := \
 	src/effects/gradients/SkTwoPointConicalGradient.cpp \
 	src/effects/gradients/SkTwoPointConicalGradient_gpu.cpp \
 	src/effects/gradients/SkSweepGradient.cpp \
+	src/gpu/GrAuditTrail.cpp \
 	src/gpu/GrBatchAtlas.cpp \
 	src/gpu/GrBatchFlushState.cpp \
 	src/gpu/GrBatchTest.cpp \
@@ -403,6 +403,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrStencil.cpp \
 	src/gpu/GrStencilAttachment.cpp \
 	src/gpu/GrStrokeInfo.cpp \
+	src/gpu/GrTessellator.cpp \
 	src/gpu/GrTraceMarker.cpp \
 	src/gpu/GrTestUtils.cpp \
 	src/gpu/GrSWMaskHelper.cpp \
@@ -579,6 +580,7 @@ LOCAL_SRC_FILES := \
 	src/ports/SkFontMgr_android_factory.cpp \
 	src/ports/SkGlobalInitialization_default.cpp \
 	src/ports/SkMemory_malloc.cpp \
+	src/ports/SkOSEnvironment.cpp \
 	src/ports/SkOSFile_posix.cpp \
 	src/ports/SkOSFile_stdio.cpp \
 	src/ports/SkOSLibrary_posix.cpp \
@@ -602,8 +604,6 @@ LOCAL_SRC_FILES := \
 	src/utils/SkCamera.cpp \
 	src/utils/SkCanvasStack.cpp \
 	src/utils/SkCanvasStateUtils.cpp \
-	src/utils/SkCubicInterval.cpp \
-	src/utils/SkCullPoints.cpp \
 	src/utils/SkDashPath.cpp \
 	src/utils/SkDumpCanvas.cpp \
 	src/utils/SkEventTracer.cpp \
@@ -664,11 +664,11 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/include/private \
 	$(LOCAL_PATH)/src/codec \
 	$(LOCAL_PATH)/src/core \
+	$(LOCAL_PATH)/src/utils \
 	$(LOCAL_PATH)/include/c \
 	$(LOCAL_PATH)/include/config \
 	$(LOCAL_PATH)/include/core \
 	$(LOCAL_PATH)/include/pathops \
-	$(LOCAL_PATH)/include/pipe \
 	external/giflib \
 	external/webp/include \
 	$(LOCAL_PATH)/include/android \
@@ -679,7 +679,6 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/src/sfnt \
 	$(LOCAL_PATH)/src/image \
 	$(LOCAL_PATH)/src/opts \
-	$(LOCAL_PATH)/src/utils \
 	$(LOCAL_PATH)/include/gpu \
 	$(LOCAL_PATH)/src/gpu \
 	$(LOCAL_PATH)/include/effects \
@@ -702,7 +701,6 @@ LOCAL_EXPORT_C_INCLUDE_DIRS := \
 	$(LOCAL_PATH)/include/config \
 	$(LOCAL_PATH)/include/core \
 	$(LOCAL_PATH)/include/pathops \
-	$(LOCAL_PATH)/include/pipe \
 	$(LOCAL_PATH)/include/effects \
 	$(LOCAL_PATH)/include/gpu \
 	$(LOCAL_PATH)/include/images \

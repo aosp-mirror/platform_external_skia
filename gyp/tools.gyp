@@ -42,7 +42,32 @@
             ],
           },
         ],
+        [ 'skia_os == "android"',
+          {
+            'dependencies': [
+               # Build this by default to catch compile errors more quickly, since
+               # the only other time this code is exercised in the android framework
+              'android_utils',
+            ],
+          },
+        ],
       ],
+    },
+    {
+      'target_name': 'android_utils',
+      'type': 'static_library',
+      'dependencies': [
+        'core.gyp:core',
+      ],
+      'sources': [
+        '../tools/android/SkAndroidSDKCanvas.h',
+        '../tools/android/SkAndroidSDKCanvas.cpp',
+      ],
+      'direct_dependent_settings': {
+        'include_dirs': [
+          '../tools/android',
+        ],
+      },
     },
     {
         'target_name': 'dump_record',
@@ -406,7 +431,6 @@
           '<(skia_include_path)/gpu',
           '<(skia_include_path)/images',
           '<(skia_include_path)/pathops',
-          '<(skia_include_path)/pipe',
           '<(skia_include_path)/ports',
           '<(skia_include_path)/svg/parser',
           '<(skia_include_path)/utils',

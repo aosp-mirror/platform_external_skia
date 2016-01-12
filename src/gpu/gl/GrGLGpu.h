@@ -153,7 +153,7 @@ private:
     GrRenderTarget* onWrapBackendRenderTarget(const GrBackendRenderTargetDesc&,
                                               GrWrapOwnership) override;
     // Given a GrPixelConfig return the index into the stencil format array on GrGLCaps to a
-    // compatible stencil format.
+    // compatible stencil format, or negative if there is no compatible stencil format.
     int getCompatibleStencilIndex(GrPixelConfig config);
 
     void onClear(GrRenderTarget*, const SkIRect& rect, GrColor color) override;
@@ -171,6 +171,11 @@ private:
                        int left, int top, int width, int height,
                        GrPixelConfig config, const void* buffer,
                        size_t rowBytes) override;
+
+    bool onTransferPixels(GrSurface*,
+                          int left, int top, int width, int height,
+                          GrPixelConfig config, GrTransferBuffer* buffer,
+                          size_t offset, size_t rowBytes) override;
 
     void onResolveRenderTarget(GrRenderTarget* target) override;
 
@@ -283,15 +288,15 @@ private:
     void flushStencil(const GrStencilSettings&);
     void flushHWAAState(GrRenderTarget* rt, bool useHWAA);
 
-    bool configToGLFormats(GrPixelConfig config,
-                           bool getSizedInternal,
-                           GrGLenum* internalFormat,
-                           GrGLenum* externalFormat,
-                           GrGLenum* externalType) const;
     // helper for onCreateTexture and writeTexturePixels
+    enum UploadType {
+        kNewTexture_UploadType,    // we are creating a new texture
+        kWrite_UploadType,         // we are using TexSubImage2D to copy data to an existing texture
+        kTransfer_UploadType,      // we are using a transfer buffer to copy data
+    };
     bool uploadTexData(const GrSurfaceDesc& desc,
                        GrGLenum target,
-                       bool isNewTexture,
+                       UploadType uploadType,
                        int left, int top, int width, int height,
                        GrPixelConfig dataConfig,
                        const void* data,
@@ -306,7 +311,7 @@ private:
     bool uploadCompressedTexData(const GrSurfaceDesc& desc,
                                  GrGLenum target,
                                  const void* data,
-                                 bool isNewTexture = true,
+                                 UploadType uploadType = kNewTexture_UploadType,
                                  int left = 0, int top = 0,
                                  int width = -1, int height = -1);
 
@@ -500,6 +505,19 @@ private:
         }
     } fHWBlendState;
 
+    TriState fMSAAEnabled;
+
+    GrStencilSettings           fHWStencilSettings;
+    TriState                    fHWStencilTestEnabled;
+
+
+    GrPipelineBuilder::DrawFace fHWDrawFace;
+    TriState                    fHWWriteToColor;
+    uint32_t                    fHWBoundRenderTargetUniqueID;
+    TriState                    fHWSRGBFramebuffer;
+    SkTArray<uint32_t, true>    fHWBoundTextureUniqueIDs;
+    ///@}
+
     /** IDs for copy surface program. */
     struct {
         GrGLuint    fProgram;
@@ -524,24 +542,6 @@ private:
             return 1;
         }
     }
-
-    TriState fMSAAEnabled;
-
-    GrStencilSettings           fHWStencilSettings;
-    TriState                    fHWStencilTestEnabled;
-
-
-    GrPipelineBuilder::DrawFace fHWDrawFace;
-    TriState                    fHWWriteToColor;
-    uint32_t                    fHWBoundRenderTargetUniqueID;
-    TriState                    fHWSRGBFramebuffer;
-    SkTArray<uint32_t, true>    fHWBoundTextureUniqueIDs;
-
-    ///@}
-
-    // Mapping of pixel configs to known supported stencil formats to be used
-    // when adding a stencil buffer to a framebuffer.
-    int fPixelConfigToStencilIndex[kGrPixelConfigCnt];
 
     typedef GrGpu INHERITED;
     friend class GrGLPathRendering; // For accessing setTextureUnit.

@@ -164,12 +164,12 @@ bool channel_selector_type_is_valid(SkDisplacementMapEffect::ChannelSelectorType
 
 ///////////////////////////////////////////////////////////////////////////////
 
-SkDisplacementMapEffect* SkDisplacementMapEffect::Create(ChannelSelectorType xChannelSelector,
-                                                         ChannelSelectorType yChannelSelector,
-                                                         SkScalar scale,
-                                                         SkImageFilter* displacement,
-                                                         SkImageFilter* color,
-                                                         const CropRect* cropRect) {
+SkImageFilter* SkDisplacementMapEffect::Create(ChannelSelectorType xChannelSelector,
+                                               ChannelSelectorType yChannelSelector,
+                                               SkScalar scale,
+                                               SkImageFilter* displacement,
+                                               SkImageFilter* color,
+                                               const CropRect* cropRect) {
     if (!channel_selector_type_is_valid(xChannelSelector) ||
         !channel_selector_type_is_valid(yChannelSelector)) {
         return nullptr;
@@ -428,8 +428,7 @@ bool SkDisplacementMapEffect::filterImageGPU(Proxy* proxy, const SkBitmap& src, 
     desc.fHeight = bounds.height();
     desc.fConfig = kSkia8888_GrPixelConfig;
 
-    auto constraint = GrTextureProvider::FromImageFilter(ctx.sizeConstraint());
-    SkAutoTUnref<GrTexture> dst(context->textureProvider()->createTexture(desc, constraint));
+    SkAutoTUnref<GrTexture> dst(context->textureProvider()->createApproxTexture(desc));
 
     if (!dst) {
         return false;

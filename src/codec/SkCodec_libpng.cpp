@@ -154,7 +154,6 @@ bool SkPngCodec::decodePalette(bool premultiply, int* ctableCount) {
     }
 
     int index = 0;
-    int transLessThanFF = 0;
 
     // Choose which function to use to create the color table. If the final destination's
     // colortype is unpremultiplied, the color table will store unpremultiplied colors.
@@ -165,14 +164,8 @@ bool SkPngCodec::decodePalette(bool premultiply, int* ctableCount) {
         proc = &SkPackARGB32NoCheck;
     }
     for (; index < numTrans; index++) {
-        transLessThanFF |= (int)*trans - 0xFF;
         *colorPtr++ = proc(*trans++, palette->red, palette->green, palette->blue);
         palette++;
-    }
-
-    if (transLessThanFF >= 0) {
-        // No transparent colors were found.
-        fAlphaState = kOpaque_AlphaState;
     }
 
     for (; index < numPalette; index++) {
@@ -259,8 +252,9 @@ static bool read_header(SkStream* stream, SkPngChunkReader* chunkReader,
     png_set_read_fn(png_ptr, static_cast<void*>(stream), sk_read_fn);
 
 #ifdef PNG_READ_UNKNOWN_CHUNKS_SUPPORTED
-    // FIXME: Does this need to be installed so early?
-    // hookup our chunkReader so we can see any user-chunks the caller may be interested in
+    // Hookup our chunkReader so we can see any user-chunks the caller may be interested in.
+    // This needs to be installed before we read the png header.  Android may store ninepatch
+    // chunks in the header.
     if (chunkReader) {
         png_set_keep_unknown_chunks(png_ptr, PNG_HANDLE_CHUNK_ALWAYS, (png_byte*)"", 0);
         png_set_read_user_chunk_fn(png_ptr, (png_voidp) chunkReader, sk_read_user_chunk);
@@ -384,13 +378,7 @@ SkPngCodec::SkPngCodec(const SkImageInfo& info, SkStream* stream, SkPngChunkRead
     , fSrcConfig(SkSwizzler::kUnknown)
     , fNumberPasses(numberPasses)
     , fBitDepth(bitDepth)
-{
-    if (info.alphaType() == kOpaque_SkAlphaType) {
-        fAlphaState = kOpaque_AlphaState;
-    } else {
-        fAlphaState = kUnknown_AlphaState;
-    }
-}
+{}
 
 SkPngCodec::~SkPngCodec() {
     this->destroyReadStruct();
@@ -526,7 +514,6 @@ SkCodec::Result SkPngCodec::onGetPixels(const SkImageInfo& requestedInfo, void* 
         return kIncompleteInput;
     }
 
-    bool hasAlpha = false;
     // FIXME: We could split these out based on subclass.
     void* dstRow = dst;
     if (fNumberPasses > 1) {
@@ -550,7 +537,7 @@ SkCodec::Result SkPngCodec::onGetPixels(const SkImageInfo& requestedInfo, void* 
         // Now swizzle it.
         uint8_t* srcRow = base;
         for (int y = 0; y < height; y++) {
-            hasAlpha |= !SkSwizzler::IsOpaque(fSwizzler->swizzle(dstRow, srcRow));
+            fSwizzler->swizzle(dstRow, srcRow);
             dstRow = SkTAddOffset<void>(dstRow, dstRowBytes);
             srcRow += srcRowBytes;
         }
@@ -560,15 +547,9 @@ SkCodec::Result SkPngCodec::onGetPixels(const SkImageInfo& requestedInfo, void* 
         for (; row < requestedInfo.height(); row++) {
             png_read_rows(fPng_ptr, &srcRow, png_bytepp_NULL, 1);
             // FIXME: Only call IsOpaque once, outside the loop. Same for onGetScanlines.
-            hasAlpha |= !SkSwizzler::IsOpaque(fSwizzler->swizzle(dstRow, srcRow));
+            fSwizzler->swizzle(dstRow, srcRow);
             dstRow = SkTAddOffset<void>(dstRow, dstRowBytes);
         }
-    }
-
-    if (hasAlpha) {
-        fAlphaState = kHasAlpha_AlphaState;
-    } else {
-        fAlphaState = kOpaque_AlphaState;
     }
 
     // FIXME: do we need substituteTranspColor? Note that we cannot do it for
@@ -594,38 +575,12 @@ uint32_t SkPngCodec::onGetFillValue(SkColorType colorType, SkAlphaType alphaType
     return INHERITED::onGetFillValue(colorType, alphaType);
 }
 
-bool SkPngCodec::onReallyHasAlpha() const {
-    switch (fAlphaState) {
-        case kOpaque_AlphaState:
-            return false;
-        case kUnknown_AlphaState:
-            // Maybe the subclass knows?
-            return this->alphaInScanlineDecode() == kHasAlpha_AlphaState;
-        case kHasAlpha_AlphaState:
-            switch (this->alphaInScanlineDecode()) {
-                case kUnknown_AlphaState:
-                    // Scanline decoder must not have been used. Return our knowledge.
-                    return true;
-                case kOpaque_AlphaState:
-                    // Scanline decoder was used, and did not find alpha in its subset.
-                    return false;
-                case kHasAlpha_AlphaState:
-                    return true;
-            }
-    }
-
-    // All valid AlphaStates have been covered, so this should not be reached.
-    SkASSERT(false);
-    return true;
-}
-
 // Subclass of SkPngCodec which supports scanline decoding
 class SkPngScanlineDecoder : public SkPngCodec {
 public:
     SkPngScanlineDecoder(const SkImageInfo& srcInfo, SkStream* stream,
             SkPngChunkReader* chunkReader, png_structp png_ptr, png_infop info_ptr, int bitDepth)
         : INHERITED(srcInfo, stream, chunkReader, png_ptr, info_ptr, bitDepth, 1)
-        , fAlphaState(kUnknown_AlphaState)
         , fSrcRow(nullptr)
     {}
 
@@ -641,7 +596,6 @@ public:
             return result;
         }
 
-        fAlphaState = kUnknown_AlphaState;
         fStorage.reset(this->getInfo().width() * SkSwizzler::BytesPerPixel(this->srcConfig()));
         fSrcRow = fStorage.get();
 
@@ -657,20 +611,10 @@ public:
         }
 
         void* dstRow = dst;
-        bool hasAlpha = false;
         for (; row < count; row++) {
             png_read_rows(this->png_ptr(), &fSrcRow, png_bytepp_NULL, 1);
-            hasAlpha |= !SkSwizzler::IsOpaque(this->swizzler()->swizzle(dstRow, fSrcRow));
+            this->swizzler()->swizzle(dstRow, fSrcRow);
             dstRow = SkTAddOffset<void>(dstRow, rowBytes);
-        }
-
-        if (hasAlpha) {
-            fAlphaState = kHasAlpha_AlphaState;
-        } else {
-            if (kUnknown_AlphaState == fAlphaState) {
-                fAlphaState = kOpaque_AlphaState;
-            }
-            // Otherwise, the AlphaState is unchanged.
         }
 
         return row;
@@ -691,12 +635,7 @@ public:
         return true;
     }
 
-    AlphaState alphaInScanlineDecode() const override {
-        return fAlphaState;
-    }
-
 private:
-    AlphaState                  fAlphaState;
     SkAutoTMalloc<uint8_t>      fStorage;
     uint8_t*                    fSrcRow;
 
@@ -710,7 +649,6 @@ public:
             SkPngChunkReader* chunkReader, png_structp png_ptr, png_infop info_ptr,
             int bitDepth, int numberPasses)
         : INHERITED(srcInfo, stream, chunkReader, png_ptr, info_ptr, bitDepth, numberPasses)
-        , fAlphaState(kUnknown_AlphaState)
         , fHeight(-1)
         , fCanSkipRewind(false)
     {
@@ -729,7 +667,6 @@ public:
             return result;
         }
 
-        fAlphaState = kUnknown_AlphaState;
         fHeight = dstInfo.height();
         // FIXME: This need not be called on a second call to onStartScanlineDecode.
         fSrcRowBytes = this->getInfo().width() * SkSwizzler::BytesPerPixel(this->srcConfig());
@@ -793,20 +730,10 @@ public:
         //swizzle the rows we care about
         srcRow = storagePtr;
         void* dstRow = dst;
-        bool hasAlpha = false;
         for (int y = 0; y < count; y++) {
-            hasAlpha |= !SkSwizzler::IsOpaque(this->swizzler()->swizzle(dstRow, srcRow));
+            this->swizzler()->swizzle(dstRow, srcRow);
             dstRow = SkTAddOffset<void>(dstRow, dstRowBytes);
             srcRow += fSrcRowBytes;
-        }
-
-        if (hasAlpha) {
-            fAlphaState = kHasAlpha_AlphaState;
-        } else {
-            if (kUnknown_AlphaState == fAlphaState) {
-                fAlphaState = kOpaque_AlphaState;
-            }
-            // Otherwise, the AlphaState is unchanged.
         }
 
         return count;
@@ -817,16 +744,11 @@ public:
         return true;
     }
 
-    AlphaState alphaInScanlineDecode() const override {
-        return fAlphaState;
-    }
-
     SkScanlineOrder onGetScanlineOrder() const override {
         return kNone_SkScanlineOrder;
     }
 
 private:
-    AlphaState                  fAlphaState;
     int                         fHeight;
     size_t                      fSrcRowBytes;
     SkAutoMalloc                fGarbageRow;

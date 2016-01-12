@@ -23,6 +23,8 @@
 #include "text/GrTextBlobCache.h"
 
 #define ASSERT_OWNED_RESOURCE(R) SkASSERT(!(R) || (R)->getContext() == this)
+#define ASSERT_SINGLE_OWNER \
+    SkDEBUGCODE(GrSingleOwner::AutoEnforce debug_SingleOwner(&fSingleOwner);)
 #define RETURN_IF_ABANDONED if (fDrawingManager->abandoned()) { return; }
 #define RETURN_FALSE_IF_ABANDONED if (fDrawingManager->abandoned()) { return false; }
 #define RETURN_NULL_IF_ABANDONED if (fDrawingManager->abandoned()) { return nullptr; }
@@ -66,6 +68,7 @@ GrContext::GrContext() : fUniqueID(next_id()) {
 
 bool GrContext::init(GrBackend backend, GrBackendContext backendContext,
                      const GrContextOptions& options) {
+    ASSERT_SINGLE_OWNER
     SkASSERT(!fGpu);
 
     fGpu = GrGpu::Create(backend, backendContext, options, this);
@@ -77,10 +80,12 @@ bool GrContext::init(GrBackend backend, GrBackendContext backendContext,
 }
 
 void GrContext::initCommon(const GrContextOptions& options) {
+    ASSERT_SINGLE_OWNER
+
     fCaps = SkRef(fGpu->caps());
     fResourceCache = new GrResourceCache(fCaps);
     fResourceCache->setOverBudgetCallback(OverBudgetCB, this);
-    fResourceProvider = new GrResourceProvider(fGpu, fResourceCache);
+    fResourceProvider = new GrResourceProvider(fGpu, fResourceCache, &fSingleOwner);
 
     fLayerCache.reset(new GrLayerCache(this));
 
@@ -89,7 +94,8 @@ void GrContext::initCommon(const GrContextOptions& options) {
     GrDrawTarget::Options dtOptions;
     dtOptions.fClipBatchToBounds = options.fClipBatchToBounds;
     dtOptions.fDrawBatchBounds = options.fDrawBatchBounds;
-    fDrawingManager.reset(new GrDrawingManager(this, dtOptions));
+    dtOptions.fMaxBatchLookback = options.fMaxBatchLookback;
+    fDrawingManager.reset(new GrDrawingManager(this, dtOptions, &fSingleOwner));
 
     // GrBatchFontCache will eventually replace GrFontCache
     fBatchFontCache = new GrBatchFontCache(this);
@@ -98,6 +104,8 @@ void GrContext::initCommon(const GrContextOptions& options) {
 }
 
 GrContext::~GrContext() {
+    ASSERT_SINGLE_OWNER
+
     if (!fGpu) {
         SkASSERT(!fCaps);
         return;
@@ -120,6 +128,8 @@ GrContext::~GrContext() {
 }
 
 void GrContext::abandonContext() {
+    ASSERT_SINGLE_OWNER
+
     fResourceProvider->abandon();
 
     // Need to abandon the drawing manager first so all the render targets
@@ -138,10 +148,13 @@ void GrContext::abandonContext() {
 }
 
 void GrContext::resetContext(uint32_t state) {
+    ASSERT_SINGLE_OWNER
     fGpu->markContextDirty(state);
 }
 
 void GrContext::freeGpuResources() {
+    ASSERT_SINGLE_OWNER
+
     this->flush();
 
     fBatchFontCache->freeAll();
@@ -153,6 +166,8 @@ void GrContext::freeGpuResources() {
 }
 
 void GrContext::getResourceCacheUsage(int* resourceCount, size_t* resourceBytes) const {
+    ASSERT_SINGLE_OWNER
+
     if (resourceCount) {
         *resourceCount = fResourceCache->getBudgetedResourceCount();
     }
@@ -186,6 +201,7 @@ void GrContext::TextBlobCacheOverBudgetCB(void* data) {
 ////////////////////////////////////////////////////////////////////////////////
 
 void GrContext::flush(int flagsBitfield) {
+    ASSERT_SINGLE_OWNER
     RETURN_IF_ABANDONED
 
     if (kDiscard_FlushBit & flagsBitfield) {
@@ -220,6 +236,7 @@ bool GrContext::writeSurfacePixels(GrSurface* surface,
                                    int left, int top, int width, int height,
                                    GrPixelConfig srcConfig, const void* buffer, size_t rowBytes,
                                    uint32_t pixelOpsFlags) {
+    ASSERT_SINGLE_OWNER
     RETURN_FALSE_IF_ABANDONED
     ASSERT_OWNED_RESOURCE(surface);
     SkASSERT(surface);
@@ -358,6 +375,7 @@ bool GrContext::readSurfacePixels(GrSurface* src,
                                   int left, int top, int width, int height,
                                   GrPixelConfig dstConfig, void* buffer, size_t rowBytes,
                                   uint32_t flags) {
+    ASSERT_SINGLE_OWNER
     RETURN_FALSE_IF_ABANDONED
     ASSERT_OWNED_RESOURCE(src);
     SkASSERT(src);
@@ -485,6 +503,7 @@ bool GrContext::readSurfacePixels(GrSurface* src,
 }
 
 void GrContext::prepareSurfaceForExternalIO(GrSurface* surface) {
+    ASSERT_SINGLE_OWNER
     RETURN_IF_ABANDONED
     SkASSERT(surface);
     ASSERT_OWNED_RESOURCE(surface);
@@ -499,6 +518,7 @@ void GrContext::prepareSurfaceForExternalIO(GrSurface* surface) {
 
 void GrContext::copySurface(GrSurface* dst, GrSurface* src, const SkIRect& srcRect,
                             const SkIPoint& dstPoint, uint32_t pixelOpsFlags) {
+    ASSERT_SINGLE_OWNER
     RETURN_IF_ABANDONED
     if (!src || !dst) {
         return;
@@ -525,6 +545,7 @@ void GrContext::copySurface(GrSurface* dst, GrSurface* src, const SkIRect& srcRe
 }
 
 void GrContext::flushSurfaceWrites(GrSurface* surface) {
+    ASSERT_SINGLE_OWNER
     RETURN_IF_ABANDONED
     if (surface->surfacePriv().hasPendingWrite()) {
         this->flush();
@@ -534,6 +555,8 @@ void GrContext::flushSurfaceWrites(GrSurface* surface) {
 ////////////////////////////////////////////////////////////////////////////////
 int GrContext::getRecommendedSampleCount(GrPixelConfig config,
                                          SkScalar dpi) const {
+    ASSERT_SINGLE_OWNER
+
     if (!this->caps()->isConfigRenderable(config, true)) {
         return 0;
     }
@@ -551,10 +574,12 @@ int GrContext::getRecommendedSampleCount(GrPixelConfig config,
 
 
 GrDrawContext* GrContext::drawContext(GrRenderTarget* rt, const SkSurfaceProps* surfaceProps) {
+    ASSERT_SINGLE_OWNER
     return fDrawingManager->drawContext(rt, surfaceProps);
 }
 
-bool GrContext::abandoned() const { 
+bool GrContext::abandoned() const {
+    ASSERT_SINGLE_OWNER
     return fDrawingManager->abandoned();
 }
 
@@ -569,6 +594,7 @@ void test_pm_conversions(GrContext* ctx, int* pmToUPMValue, int* upmToPMValue) {
 }
 
 void GrContext::testPMConversionsIfNecessary(uint32_t flags) {
+    ASSERT_SINGLE_OWNER
     if (SkToBool(kUnpremul_PixelOpsFlag & flags)) {
         SkAutoMutexAcquire ama(fTestPMConversionsMutex);
         if (!fDidTestPMConversions) {
@@ -581,6 +607,7 @@ void GrContext::testPMConversionsIfNecessary(uint32_t flags) {
 const GrFragmentProcessor* GrContext::createPMToUPMEffect(GrTexture* texture,
                                                           bool swapRAndB,
                                                           const SkMatrix& matrix) const {
+    ASSERT_SINGLE_OWNER
     // We should have already called this->testPMConversionsIfNecessary().
     SkASSERT(fDidTestPMConversions);
     GrConfigConversionEffect::PMConversion pmToUPM =
@@ -595,6 +622,7 @@ const GrFragmentProcessor* GrContext::createPMToUPMEffect(GrTexture* texture,
 const GrFragmentProcessor* GrContext::createUPMToPMEffect(GrTexture* texture,
                                                           bool swapRAndB,
                                                           const SkMatrix& matrix) const {
+    ASSERT_SINGLE_OWNER
     // We should have already called this->testPMConversionsIfNecessary().
     SkASSERT(fDidTestPMConversions);
     GrConfigConversionEffect::PMConversion upmToPM =
@@ -607,6 +635,7 @@ const GrFragmentProcessor* GrContext::createUPMToPMEffect(GrTexture* texture,
 }
 
 bool GrContext::didFailPMUPMConversionTest() const {
+    ASSERT_SINGLE_OWNER
     // We should have already called this->testPMConversionsIfNecessary().
     SkASSERT(fDidTestPMConversions);
     // The PM<->UPM tests fail or succeed together so we only need to check one.
@@ -616,6 +645,7 @@ bool GrContext::didFailPMUPMConversionTest() const {
 //////////////////////////////////////////////////////////////////////////////
 
 void GrContext::getResourceCacheLimits(int* maxTextures, size_t* maxTextureBytes) const {
+    ASSERT_SINGLE_OWNER
     if (maxTextures) {
         *maxTextures = fResourceCache->getMaxResourceCount();
     }
@@ -625,11 +655,13 @@ void GrContext::getResourceCacheLimits(int* maxTextures, size_t* maxTextureBytes
 }
 
 void GrContext::setResourceCacheLimits(int maxTextures, size_t maxTextureBytes) {
+    ASSERT_SINGLE_OWNER
     fResourceCache->setLimits(maxTextures, maxTextureBytes);
 }
 
 //////////////////////////////////////////////////////////////////////////////
 
 void GrContext::dumpMemoryStatistics(SkTraceMemoryDump* traceMemoryDump) const {
+    ASSERT_SINGLE_OWNER
     fResourceCache->dumpMemoryStatistics(traceMemoryDump);
 }

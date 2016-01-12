@@ -20,6 +20,7 @@ BASE_SRCS = glob(
     ],
     exclude = [
         # Exclude platform-dependent files.
+        "src/codec/*",
         "src/device/xps/*",  # Windows-only. Move to ports?
         "src/doc/*_XPS.cpp",  # Windows-only. Move to ports?
         "src/fonts/SkFontMgr_fontconfig.cpp",
@@ -29,6 +30,7 @@ BASE_SRCS = glob(
         "src/gpu/gl/iOS/*",
         "src/gpu/gl/mac/*",
         "src/gpu/gl/win/*",
+        "src/images/*",
         "src/opts/**/*",
         "src/ports/**/*",
         "src/utils/android/**/*",
@@ -46,7 +48,6 @@ BASE_SRCS = glob(
         "src/gpu/gl/GrGLDefaultInterface_native.cpp",
 
         # Exclude files that don't compile with the current DEFINES.
-        "src/codec/SkJpegCodec.cpp",  # libjpeg_turbo version mismatch.
         "src/gpu/gl/angle/*",  # Requires SK_ANGLE define.
         "src/gpu/gl/command_buffer/*",  # unknown type name 'HMODULE'
         "src/gpu/gl/mesa/*",  # Requires SK_MESA define.
@@ -67,13 +68,16 @@ BASE_SRCS = glob(
 # Platform-dependent SRCS for google3-default platform.
 BASE_SRCS_UNIX = glob(
     [
+        "src/codec/*",
         "src/fonts/SkFontMgr_fontconfig.cpp",
+        "src/images/*",
         "src/opts/**/*.cpp",
         "src/opts/**/*.h",
         "src/ports/**/*.cpp",
         "src/ports/**/*.h",
     ],
     exclude = [
+        "src/codec/SkJpegCodec.cpp",  # libjpeg_turbo version mismatch.
         "src/opts/*arm*",
         "src/opts/*mips*",
         "src/opts/*NEON*",
@@ -84,6 +88,8 @@ BASE_SRCS_UNIX = glob(
         # Included in :opts_sse4 library.
         "src/opts/*SSE4*",
         "src/opts/*sse4*",
+        # Included in :opts_avx or :opts_avx2
+        "src/opts/*avx*",
         "src/opts/SkBitmapProcState_opts_none.cpp",
         "src/opts/SkBlitMask_opts_none.cpp",
         "src/opts/SkBlitRow_opts_none.cpp",
@@ -110,6 +116,8 @@ BASE_SRCS_UNIX = glob(
 # Platform-dependent SRCS for google3-default Android.
 BASE_SRCS_ANDROID = glob(
     [
+        "src/codec/*",
+        "src/images/*",
         # TODO(benjaminwagner): Figure out how to compile with EGL.
         "src/opts/**/*.cpp",
         "src/opts/**/*.h",
@@ -117,12 +125,14 @@ BASE_SRCS_ANDROID = glob(
         "src/ports/**/*.h",
     ],
     exclude = [
+        "src/codec/SkJpegCodec.cpp",  # libjpeg_turbo version mismatch.
         "src/opts/*mips*",
         "src/opts/*SSE2*",
         "src/opts/*SSSE3*",
         "src/opts/*ssse3*",
         "src/opts/*SSE4*",
         "src/opts/*sse4*",
+        "src/opts/*avx*",
         "src/opts/*x86*",
         "src/opts/SkBitmapProcState_opts_none.cpp",
         "src/opts/SkBlitMask_opts_none.cpp",
@@ -165,6 +175,7 @@ BASE_SRCS_IOS = glob(
         "src/opts/*ssse3*",
         "src/opts/*SSE4*",
         "src/opts/*sse4*",
+        "src/opts/*avx*",
         "src/opts/*x86*",
         "src/opts/SkBitmapProcState_opts_none.cpp",
         "src/opts/SkBlitMask_opts_none.cpp",
@@ -212,6 +223,18 @@ SSE4_SRCS = glob(
     ],
 )
 
+AVX_SRCS = glob(
+    [
+        "src/opts/*_avx.cpp",
+    ],
+)
+
+AVX2_SRCS = glob(
+    [
+        "src/opts/*_avx2.cpp",
+    ],
+)
+
 BASE_HDRS = glob(
     [
         "include/**/*.h",
@@ -229,6 +252,8 @@ BASE_HDRS = glob(
 
 # Dependencies.
 BASE_DEPS_UNIX = [
+    ":opts_avx2",
+    ":opts_avx",
     ":opts_sse4",
     ":opts_ssse3",
 ]
@@ -382,11 +407,10 @@ DEFINES_IOS = [
 DEFINES_UNIX = [
     "SK_BUILD_FOR_UNIX",
     "SK_SAMPLES_FOR_X",
+    "SK_SFNTLY_SUBSETTER",
 ]
 
 DEFINES_ALL = [
-    # https://codereview.chromium.org/1491843006 somehow breaks fills.
-    "SK_SUPPORT_LEGACY_HAIR_IGNORES_CAPS",
     # Chrome DEFINES.
     "SK_USE_FLOATBITS",
     "SK_USE_FREETYPE_EMBOLDEN",
@@ -421,6 +445,24 @@ cc_library(
     name = "opts_sse4",
     srcs = SSE4_SRCS,
     copts = COPTS + ["-msse4"],
+    defines = DEFINES,
+    includes = INCLUDES,
+    deps = EXTERNAL_DEPS_ALL,
+)
+
+cc_library(
+    name = "opts_avx",
+    srcs = AVX_SRCS,
+    copts = COPTS + ["-mavx"],
+    defines = DEFINES,
+    includes = INCLUDES,
+    deps = EXTERNAL_DEPS_ALL,
+)
+
+cc_library(
+    name = "opts_avx2",
+    srcs = AVX2_SRCS,
+    copts = COPTS + ["-mavx2"],
     defines = DEFINES,
     includes = INCLUDES,
     deps = EXTERNAL_DEPS_ALL,

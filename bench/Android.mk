@@ -113,10 +113,12 @@ LOCAL_SRC_FILES := \
 	SkipZeroesBench.cpp \
 	SortBench.cpp \
 	StrokeBench.cpp \
+	SwizzleBench.cpp \
 	TableBench.cpp \
 	TextBench.cpp \
 	TextBlobBench.cpp \
 	TileBench.cpp \
+	TileImageFilterBench.cpp \
 	TopoSortBench.cpp \
 	VertBench.cpp \
 	WritePixelsBench.cpp \
@@ -124,9 +126,6 @@ LOCAL_SRC_FILES := \
 	XfermodeBench.cpp \
 	nanobench.cpp \
 	nanobenchAndroid.cpp \
-	subset/SubsetSingleBench.cpp \
-	subset/SubsetTranslateBench.cpp \
-	subset/SubsetZoomBench.cpp \
 	../gm/aaclip.cpp \
 	../gm/aarectmodes.cpp \
 	../gm/aaxfermodes.cpp \
@@ -299,7 +298,6 @@ LOCAL_SRC_FILES := \
 	../gm/pathopsskpclip.cpp \
 	../gm/pathreverse.cpp \
 	../gm/pdf_never_embed.cpp \
-	../gm/peekpixels.cpp \
 	../gm/perlinnoise.cpp \
 	../gm/perspshaders.cpp \
 	../gm/picture.cpp \
@@ -384,13 +382,14 @@ LOCAL_SRC_FILES := \
 	../src/utils/debugger/SkObjectParser.cpp \
 	../tools/AndroidSkDebugToStdOut.cpp \
 	../tools/flags/SkCommonFlags.cpp \
+	../tools/flags/SkCommonFlagsConfig.cpp \
 	../tools/CrashHandler.cpp \
 	../tools/ProcStats.cpp \
 	../tools/timer/Timer.cpp \
 	../tools/Resources.cpp \
 	../tools/sk_tool_utils.cpp \
 	../tools/sk_tool_utils_font.cpp \
-	../src/utils/android/SkAndroidSDKCanvas.cpp \
+	../tools/android/SkAndroidSDKCanvas.cpp \
 	../src/gpu/GrContextFactory.cpp \
 	../src/gpu/GrTest.cpp \
 	../tools/flags/SkCommandLineFlags.cpp
@@ -412,7 +411,6 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../include/config \
 	$(LOCAL_PATH)/../include/core \
 	$(LOCAL_PATH)/../include/pathops \
-	$(LOCAL_PATH)/../include/pipe \
 	$(LOCAL_PATH)/../include/codec \
 	$(LOCAL_PATH)/../include/android \
 	$(LOCAL_PATH)/../include/effects \
@@ -422,12 +420,12 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../include/utils \
 	$(LOCAL_PATH)/../src/utils \
 	$(LOCAL_PATH)/../include/gpu \
+	$(LOCAL_PATH)/../src/gpu \
 	$(LOCAL_PATH)/../tools/flags \
 	$(LOCAL_PATH)/../include/private \
 	$(LOCAL_PATH)/../src/fonts \
 	$(LOCAL_PATH)/../src/core \
 	$(LOCAL_PATH)/../tools \
-	$(LOCAL_PATH)/../src/gpu \
 	$(LOCAL_PATH)/../../src/gpu \
 	$(LOCAL_PATH)/subset \
 	$(LOCAL_PATH)/../src/effects \
@@ -438,7 +436,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../../../frameworks/base/libs/hwui \
 	$(LOCAL_PATH)/../tools/timer \
 	$(LOCAL_PATH)/../third_party/etc1 \
-	$(LOCAL_PATH)/../src/utils/android
+	$(LOCAL_PATH)/../tools/android
 
 LOCAL_CFLAGS += \
 	-DSK_CRASH_HANDLER

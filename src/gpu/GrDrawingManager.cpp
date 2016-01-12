@@ -20,6 +20,9 @@ void GrDrawingManager::cleanup() {
         fDrawTargets[i]->makeClosed();  // no drawTarget should receive a new command after this
         fDrawTargets[i]->clearRT();
 
+        // We shouldn't need to do this, but it turns out some clients still hold onto drawtargets
+        // after a cleanup
+        fDrawTargets[i]->reset();
         fDrawTargets[i]->unref();
     }
 
@@ -64,6 +67,11 @@ void GrDrawingManager::reset() {
 }
 
 void GrDrawingManager::flush() {
+    if (fFlushing) {
+        return;
+    }
+    fFlushing = true;
+
     SkDEBUGCODE(bool result =) 
                         SkTTopoSort<GrDrawTarget, GrDrawTarget::TopoSortTraits>(&fDrawTargets);
     SkASSERT(result);
@@ -106,7 +114,15 @@ void GrDrawingManager::flush() {
     fDrawTargets.reset();
 #endif
 
+    // Clear batch debugging output
+    if (GR_BATCH_DEBUGGING_OUTPUT) {
+        SkDebugf("%s\n", fContext->getAuditTrail()->toJson().c_str());
+        // TODO This currently crashes because not all ops are accounted for
+        //GR_AUDIT_TRAIL_RESET(fContext->getAuditTrail());
+    }
+
     fFlushState.reset();
+    fFlushing = false;
 }
 
 GrTextContext* GrDrawingManager::textContext(const SkSurfaceProps& props,
@@ -153,7 +169,7 @@ GrDrawTarget* GrDrawingManager::newDrawTarget(GrRenderTarget* rt) {
 #endif
 
     GrDrawTarget* dt = new GrDrawTarget(rt, fContext->getGpu(), fContext->resourceProvider(),
-                                        fOptionsForDrawTargets);
+                                        fContext->getAuditTrail(), fOptionsForDrawTargets);
 
     *fDrawTargets.append() = dt;
 
@@ -193,5 +209,5 @@ GrDrawContext* GrDrawingManager::drawContext(GrRenderTarget* rt,
         return nullptr;
     }
 
-    return new GrDrawContext(this, rt, surfaceProps);
+    return new GrDrawContext(this, rt, surfaceProps, fSingleOwner);
 }

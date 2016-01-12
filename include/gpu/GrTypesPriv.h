@@ -12,10 +12,10 @@
 #include "SkTArray.h"
 #include "SkRect.h"
 
-/**
- * Types of shader-language-specific boxed variables we can create. (Currently only GrGLShaderVars,
- * but should be applicable to other shader languages.)
- */
+ /**
+  * Types of shader-language-specific boxed variables we can create. (Currently only GrGLShaderVars,
+  * but should be applicable to other shader languages.)
+  */
 enum GrSLType {
     kVoid_GrSLType,
     kFloat_GrSLType,
@@ -178,6 +178,7 @@ static inline GrSLType GrVertexAttribTypeToSLType(GrVertexAttribType type) {
     switch (type) {
         default:
             SkFAIL("Unsupported type conversion");
+            return kVoid_GrSLType;
         case kUByte_GrVertexAttribType:
         case kFloat_GrVertexAttribType:
             return kFloat_GrSLType;
@@ -266,6 +267,17 @@ private:
     bool    fEnabled;
     SkIRect fRect;
 };
+
+/**
+ * Indicates the transfer direction for a transfer buffer
+ */
+enum TransferType {
+    /** Caller intends to use the buffer to transfer data to the GPU */
+    kCpuToGpu_TransferType,
+    /** Caller intends to use the buffer to transfer data from the GPU */
+    kGpuToCpu_TransferType
+};
+
 
 #ifdef SK_DEBUG
 // Takes a pointer to a GrCaps, and will suppress prints if required

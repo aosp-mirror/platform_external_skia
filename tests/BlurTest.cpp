@@ -170,8 +170,9 @@ static void ground_truth_2d(int width, int height,
 
     memset(src.fImage, 0xff, src.computeTotalImageSize());
 
-    dst.fImage = nullptr;
-    SkBlurMask::BlurGroundTruth(sigma, &dst, src, kNormal_SkBlurStyle);
+    if (!SkBlurMask::BlurGroundTruth(sigma, &dst, src, kNormal_SkBlurStyle)) {
+        return;
+    }
 
     int midX = dst.fBounds.centerX();
     int midY = dst.fBounds.centerY();
@@ -556,5 +557,26 @@ DEF_TEST(BlurAsABlur, reporter) {
         }
     }
 }
+
+#if SK_SUPPORT_GPU
+
+// This exercises the problem discovered in crbug.com/570232. The return value from 
+// SkBlurMask::BoxBlur wasn't being checked in SkBlurMaskFilter.cpp::GrRRectBlurEffect::Create
+DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SmallBoxBlurBug, reporter, ctx) {
+
+    SkImageInfo info = SkImageInfo::MakeN32Premul(128, 128);
+    SkAutoTUnref<SkSurface> surface(SkSurface::NewRenderTarget(ctx, SkSurface::kNo_Budgeted, info));
+    SkCanvas* canvas = surface->getCanvas();
+
+    SkRect r = SkRect::MakeXYWH(10, 10, 100, 100);
+    SkRRect rr = SkRRect::MakeRectXY(r, 10, 10);
+
+    SkPaint p;
+    p.setMaskFilter(SkBlurMaskFilter::Create(kNormal_SkBlurStyle, 0.01f))->unref();
+
+    canvas->drawRRect(rr, p);
+}
+
+#endif
 
 ///////////////////////////////////////////////////////////////////////////////////////////

@@ -29,7 +29,6 @@
       '<(skia_include_path)/gpu/GrProcessorUnitTest.h',
       '<(skia_include_path)/gpu/GrProgramElement.h',
       '<(skia_include_path)/gpu/GrGpuResourceRef.h',
-      '<(skia_include_path)/gpu/GrRect.h',
       '<(skia_include_path)/gpu/GrRenderTarget.h',
       '<(skia_include_path)/gpu/GrResourceKey.h',
       '<(skia_include_path)/gpu/GrShaderVar.h',
@@ -55,6 +54,11 @@
       '<(skia_include_path)/gpu/gl/GrGLSLPrettyPrint.h',
       '<(skia_include_path)/gpu/gl/GrGLTypes.h',
 
+      # Private includes
+      '<(skia_include_path)/private/GrAuditTrail.h',
+      '<(skia_include_path)/private/GrSingleOwner.h',
+
+      '<(skia_src_path)/gpu/GrAuditTrail.cpp',
       '<(skia_src_path)/gpu/GrAutoLocaleSetter.h',
       '<(skia_src_path)/gpu/GrAllocator.h',
       '<(skia_src_path)/gpu/GrBatchAtlas.cpp',
@@ -139,6 +143,7 @@
       '<(skia_src_path)/gpu/GrQuad.h',
       '<(skia_src_path)/gpu/GrRecordReplaceDraw.cpp',
       '<(skia_src_path)/gpu/GrRecordReplaceDraw.h',
+      '<(skia_src_path)/gpu/GrRect.h',
       '<(skia_src_path)/gpu/GrRectanizer.h',
       '<(skia_src_path)/gpu/GrRectanizer_pow2.cpp',
       '<(skia_src_path)/gpu/GrRectanizer_pow2.h',
@@ -158,6 +163,8 @@
       '<(skia_src_path)/gpu/GrStencilAttachment.h',
       '<(skia_src_path)/gpu/GrStrokeInfo.cpp',
       '<(skia_src_path)/gpu/GrStrokeInfo.h',
+      '<(skia_src_path)/gpu/GrTessellator.cpp',
+      '<(skia_src_path)/gpu/GrTessellator.h',
       '<(skia_src_path)/gpu/GrTraceMarker.cpp',
       '<(skia_src_path)/gpu/GrTraceMarker.h',
       '<(skia_src_path)/gpu/GrTracing.h',

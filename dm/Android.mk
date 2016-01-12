@@ -25,7 +25,6 @@ LOCAL_SRC_FILES := \
 	DMSrcSink.cpp \
 	DMJsonWriter.cpp \
 	../gm/gm.cpp \
-	../src/pipe/utils/SamplePipeControllers.cpp \
 	../src/utils/debugger/SkDebugCanvas.cpp \
 	../src/utils/debugger/SkDrawCommand.cpp \
 	../src/utils/debugger/SkObjectParser.cpp \
@@ -158,6 +157,7 @@ LOCAL_SRC_FILES := \
 	../tests/ImageCacheTest.cpp \
 	../tests/ImageDecodingTest.cpp \
 	../tests/ImageFilterTest.cpp \
+	../tests/ImageFrom565Bitmap.cpp \
 	../tests/ImageGeneratorTest.cpp \
 	../tests/ImageIsOpaqueTest.cpp \
 	../tests/ImageNewShaderTest.cpp \
@@ -166,6 +166,7 @@ LOCAL_SRC_FILES := \
 	../tests/InfRectTest.cpp \
 	../tests/InterpolatorTest.cpp \
 	../tests/InvalidIndexedPngTest.cpp \
+	../tests/IsClosedSingleContourTest.cpp \
 	../tests/JpegTest.cpp \
 	../tests/KtxTest.cpp \
 	../tests/LListTest.cpp \
@@ -196,6 +197,7 @@ LOCAL_SRC_FILES := \
 	../tests/PDFOpaqueSrcModeToSrcOverTest.cpp \
 	../tests/PDFPrimitivesTest.cpp \
 	../tests/PackBitsTest.cpp \
+	../tests/PaintImageFilterTest.cpp \
 	../tests/PaintTest.cpp \
 	../tests/ParsePathTest.cpp \
 	../tests/PathCoverageTest.cpp \
@@ -204,7 +206,6 @@ LOCAL_SRC_FILES := \
 	../tests/PictureBBHTest.cpp \
 	../tests/PictureShaderTest.cpp \
 	../tests/PictureTest.cpp \
-	../tests/PipeTest.cpp \
 	../tests/PixelRefTest.cpp \
 	../tests/Point3Test.cpp \
 	../tests/PointTest.cpp \
@@ -235,6 +236,7 @@ LOCAL_SRC_FILES := \
 	../tests/SRGBReadWritePixelsTest.cpp \
 	../tests/SVGDeviceTest.cpp \
 	../tests/ScalarTest.cpp \
+	../tests/ScaleToSidesTest.cpp \
 	../tests/SerializationTest.cpp \
 	../tests/ShaderImageFilterTest.cpp \
 	../tests/ShaderOpacityTest.cpp \
@@ -258,6 +260,7 @@ LOCAL_SRC_FILES := \
 	../tests/TLSTest.cpp \
 	../tests/TemplatesTest.cpp \
 	../tests/TessellatingPathRendererTests.cpp \
+	../tests/TestConfigParsing.cpp \
 	../tests/TestTest.cpp \
 	../tests/TextBlobCacheTest.cpp \
 	../tests/TextBlobTest.cpp \
@@ -448,7 +451,6 @@ LOCAL_SRC_FILES := \
 	../gm/pathopsskpclip.cpp \
 	../gm/pathreverse.cpp \
 	../gm/pdf_never_embed.cpp \
-	../gm/peekpixels.cpp \
 	../gm/perlinnoise.cpp \
 	../gm/perspshaders.cpp \
 	../gm/picture.cpp \
@@ -547,8 +549,9 @@ LOCAL_SRC_FILES := \
 	../experimental/SkSetPoly3To3_A.cpp \
 	../experimental/SkSetPoly3To3_D.cpp \
 	../tools/flags/SkCommonFlags.cpp \
+	../tools/flags/SkCommonFlagsConfig.cpp \
 	../tools/picture_utils.cpp \
-	../src/utils/android/SkAndroidSDKCanvas.cpp \
+	../tools/android/SkAndroidSDKCanvas.cpp \
 	../src/gpu/GrContextFactory.cpp \
 	../src/gpu/GrTest.cpp
 
@@ -572,7 +575,6 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../include/config \
 	$(LOCAL_PATH)/../include/core \
 	$(LOCAL_PATH)/../include/pathops \
-	$(LOCAL_PATH)/../include/pipe \
 	$(LOCAL_PATH)/../include/codec \
 	$(LOCAL_PATH)/../include/android \
 	$(LOCAL_PATH)/../include/effects \
@@ -595,10 +597,10 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../src/effects \
 	$(LOCAL_PATH)/../src/images \
 	$(LOCAL_PATH)/../src/lazy \
-	$(LOCAL_PATH)/../src/pipe/utils \
 	$(LOCAL_PATH)/../src/utils/debugger \
 	$(LOCAL_PATH)/../tests \
 	$(LOCAL_PATH)/../src/pathops \
+	$(LOCAL_PATH)/../src/pipe/utils \
 	$(LOCAL_PATH)/../src/codec \
 	$(LOCAL_PATH)/../src/image \
 	$(LOCAL_PATH)/../src/pdf \
@@ -609,7 +611,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../tools/timer \
 	$(LOCAL_PATH)/../experimental \
 	external/zlib \
-	$(LOCAL_PATH)/../src/utils/android
+	$(LOCAL_PATH)/../tools/android
 
 LOCAL_CFLAGS += \
 	-DSK_CRASH_HANDLER
