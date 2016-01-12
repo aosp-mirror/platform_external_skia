@@ -238,7 +238,6 @@ LOCAL_SRC_FILES := \
 	../tests/ScalarTest.cpp \
 	../tests/ScaleToSidesTest.cpp \
 	../tests/SerializationTest.cpp \
-	../tests/ShaderImageFilterTest.cpp \
 	../tests/ShaderOpacityTest.cpp \
 	../tests/SizeTest.cpp \
 	../tests/SkBase64Test.cpp \
