@@ -155,6 +155,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkFontDescriptor.cpp \
 	src/core/SkFontStream.cpp \
 	src/core/SkGeometry.cpp \
+	src/core/SkGlobalInitialization_core.cpp \
 	src/core/SkGlyphCache.cpp \
 	src/core/SkGraphics.cpp \
 	src/core/SkHalf.cpp \
