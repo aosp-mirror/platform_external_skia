@@ -271,6 +271,7 @@ LOCAL_SRC_FILES := \
 	../tests/TypefaceTest.cpp \
 	../tests/UnicodeTest.cpp \
 	../tests/UtilsTest.cpp \
+	../tests/ValueTest.cpp \
 	../tests/VarAllocTest.cpp \
 	../tests/WArrayTest.cpp \
 	../tests/WritePixelsTest.cpp \
