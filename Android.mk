@@ -117,6 +117,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkChecksum.cpp \
 	src/core/SkChunkAlloc.cpp \
 	src/core/SkClipStack.cpp \
+	src/core/SkCodecImageGenerator.cpp \
 	src/core/SkColor.cpp \
 	src/core/SkColorFilter.cpp \
 	src/core/SkColorFilterShader.cpp \
