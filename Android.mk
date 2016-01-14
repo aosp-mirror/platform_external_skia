@@ -82,6 +82,7 @@ LOCAL_SRC_FILES := \
 	src/codec/SkWbmpCodec.cpp \
 	src/codec/SkWebpAdapterCodec.cpp \
 	src/codec/SkWebpCodec.cpp \
+	src/codec/SkCodecImageGenerator.cpp \
 	src/android/SkBitmapRegionCanvas.cpp \
 	src/android/SkBitmapRegionCodec.cpp \
 	src/android/SkBitmapRegionDecoder.cpp \
