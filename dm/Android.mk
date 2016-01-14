@@ -225,6 +225,7 @@ LOCAL_SRC_FILES := \
 	../tests/RecorderTest.cpp \
 	../tests/RecordingXfermodeTest.cpp \
 	../tests/RectTest.cpp \
+	../tests/RectangleTextureTest.cpp \
 	../tests/RefCntTest.cpp \
 	../tests/RefDictTest.cpp \
 	../tests/RegionTest.cpp \
