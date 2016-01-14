@@ -184,7 +184,6 @@ LOCAL_SRC_FILES := \
 	../tests/MessageBusTest.cpp \
 	../tests/MetaDataTest.cpp \
 	../tests/MipMapTest.cpp \
-	../tests/NameAllocatorTest.cpp \
 	../tests/OSPathTest.cpp \
 	../tests/OncePtrTest.cpp \
 	../tests/OnceTest.cpp \
