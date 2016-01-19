@@ -342,6 +342,7 @@ LOCAL_SRC_FILES := \
 	../gm/convexpolyeffect.cpp \
 	../gm/copyTo4444.cpp \
 	../gm/cubicpaths.cpp \
+	../gm/dashcircle.cpp \
 	../gm/dashcubics.cpp \
 	../gm/dashing.cpp \
 	../gm/dcshader.cpp \
