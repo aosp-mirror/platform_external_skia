@@ -466,6 +466,7 @@ LOCAL_SRC_FILES := \
 	../gm/polygons.cpp \
 	../gm/quadpaths.cpp \
 	../gm/recordopts.cpp \
+	../gm/rectangletexture.cpp \
 	../gm/rects.cpp \
 	../gm/repeated_bitmap.cpp \
 	../gm/resizeimagefilter.cpp \
