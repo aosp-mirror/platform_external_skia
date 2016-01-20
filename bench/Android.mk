@@ -383,6 +383,7 @@ LOCAL_SRC_FILES := \
 	../src/utils/debugger/SkDrawCommand.cpp \
 	../src/utils/debugger/SkDebugCanvas.cpp \
 	../src/utils/debugger/SkObjectParser.cpp \
+	../src/utils/debugger/SkOverdrawMode.cpp \
 	../tools/AndroidSkDebugToStdOut.cpp \
 	../tools/flags/SkCommonFlags.cpp \
 	../tools/flags/SkCommonFlagsConfig.cpp \
