@@ -68,7 +68,6 @@ LOCAL_SRC_FILES := \
 	src/codec/SkBmpRLECodec.cpp \
 	src/codec/SkBmpStandardCodec.cpp \
 	src/codec/SkCodec.cpp \
-	src/codec/SkCodec_libpng.cpp \
 	src/codec/SkGifCodec.cpp \
 	src/codec/SkIcoCodec.cpp \
 	src/codec/SkJpegCodec.cpp \
@@ -76,6 +75,7 @@ LOCAL_SRC_FILES := \
 	src/codec/SkJpegUtility_codec.cpp \
 	src/codec/SkMaskSwizzler.cpp \
 	src/codec/SkMasks.cpp \
+	src/codec/SkPngCodec.cpp \
 	src/codec/SkSampler.cpp \
 	src/codec/SkSampledCodec.cpp \
 	src/codec/SkSwizzler.cpp \
