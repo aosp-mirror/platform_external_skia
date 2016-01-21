@@ -342,6 +342,7 @@ LOCAL_SRC_FILES := \
 	src/effects/SkTableMaskFilter.cpp \
 	src/effects/SkTestImageFilters.cpp \
 	src/effects/SkTileImageFilter.cpp \
+	src/effects/SkToFromValue.cpp \
 	src/effects/SkXfermodeImageFilter.cpp \
 	src/effects/gradients/SkClampRange.cpp \
 	src/effects/gradients/SkGradientBitmapCache.cpp \
