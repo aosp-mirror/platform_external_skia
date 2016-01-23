@@ -289,6 +289,7 @@ LOCAL_SRC_FILES := \
 	../gm/anisotropic.cpp \
 	../gm/annotated_text.cpp \
 	../gm/arcofzorro.cpp \
+	../gm/arcto.cpp \
 	../gm/arithmode.cpp \
 	../gm/astcbitmap.cpp \
 	../gm/badpaint.cpp \
