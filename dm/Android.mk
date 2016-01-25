@@ -92,6 +92,7 @@ LOCAL_SRC_FILES := \
 	../tests/BlitMaskClip.cpp \
 	../tests/BlitRowTest.cpp \
 	../tests/BlurTest.cpp \
+	../tests/CPlusPlusEleven.cpp \
 	../tests/CTest.cpp \
 	../tests/CachedDataTest.cpp \
 	../tests/CachedDecodingPixelRefTest.cpp \
