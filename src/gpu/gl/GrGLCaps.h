@@ -9,6 +9,8 @@
 #ifndef GrGLCaps_DEFINED
 #define GrGLCaps_DEFINED
 
+#include <functional>
+
 #include "glsl/GrGLSL.h"
 #include "GrCaps.h"
 #include "GrGLStencilAttachment.h"
@@ -19,6 +21,7 @@
 
 class GrGLContextInfo;
 class GrGLSLCaps;
+class GrGLRenderTarget;
 
 /**
  * Stores some capabilities of a GL context. Most are determined by the GL
@@ -28,24 +31,6 @@ class GrGLSLCaps;
 class GrGLCaps : public GrCaps {
 public:
     typedef GrGLStencilAttachment::Format StencilFormat;
-
-    /** Provides information about the mappiing from GrPixelConfig to GL formats. */
-    struct ConfigFormats {
-        ConfigFormats() {
-            // Inits to known bad GL enum values.
-            memset(this, 0xAB, sizeof(ConfigFormats));
-        }
-        GrGLenum fBaseInternalFormat;
-        GrGLenum fSizedInternalFormat;
-        GrGLenum fExternalFormat;
-        GrGLenum fExternalType;
-
-        // The <format> parameter to use for glTexImage and glTexSubImage.
-        // This is usually the same as fExternalFormat except for kSRGBA on some GL contexts.
-        GrGLenum fExternalFormatForTexImage;
-        // Either the base or sized internal format depending on the GL and config.
-        GrGLenum fInternalFormatTexImage;
-    };
 
     /**
      * The type of MSAA for FBOs supported. Different extensions have different
@@ -138,15 +123,21 @@ public:
         }
     }
 
-    /** Returns conversions to various GL format parameters for a GrPixelCfonig. */
-    const ConfigFormats& configGLFormats(GrPixelConfig config) const {
-        return fConfigTable[config].fFormats;
-    }
-
     /** Returns the mapping between GrPixelConfig components and GL internal format components. */
     const GrSwizzle& configSwizzle(GrPixelConfig config) const {
         return fConfigTable[config].fSwizzle;
     }
+
+    bool getTexImageFormats(GrPixelConfig surfaceConfig, GrPixelConfig externalConfig,
+                            GrGLenum* internalFormat, GrGLenum* externalFormat,
+                            GrGLenum* externalType) const;
+
+    bool getCompressedTexImageFormats(GrPixelConfig surfaceConfig, GrGLenum* internalFormat) const;
+
+    bool getReadPixelsFormat(GrPixelConfig surfaceConfig, GrPixelConfig externalConfig,
+                             GrGLenum* externalFormat, GrGLenum* externalType) const;
+
+    bool getRenderbufferFormat(GrPixelConfig config, GrGLenum* internalFormat) const;
 
     /**
     * Gets an array of legal stencil formats. These formats are not guaranteed
@@ -290,19 +281,16 @@ public:
     bool ES2CompatibilitySupport() const { return fES2CompatibilitySupport; }
 
     /// Can we call glDisable(GL_MULTISAMPLE)?
-    bool multisampleDisableSupport() const {
-        return fMultisampleDisableSupport;
-    }
+    bool multisampleDisableSupport() const { return fMultisampleDisableSupport; }
 
     /// Use indices or vertices in CPU arrays rather than VBOs for dynamic content.
-    bool useNonVBOVertexAndIndexDynamicData() const {
-        return fUseNonVBOVertexAndIndexDynamicData;
-    }
+    bool useNonVBOVertexAndIndexDynamicData() const { return fUseNonVBOVertexAndIndexDynamicData; }
 
-    /// Does ReadPixels support the provided format/type combo?
-    bool readPixelsSupported(const GrGLInterface* intf,
+    /// Does ReadPixels support reading readConfig pixels from a FBO that is renderTargetConfig?
+    bool readPixelsSupported(GrPixelConfig renderTargetConfig,
                              GrPixelConfig readConfig,
-                             GrPixelConfig currFBOConfig) const;
+                             std::function<void (GrGLenum, GrGLint*)> getIntegerv,
+                             std::function<bool ()> bindRenderTarget) const;
 
     bool isCoreProfile() const { return fIsCoreProfile; }
 
@@ -312,6 +300,9 @@ public:
 
     /// Are textures with GL_TEXTURE_EXTERNAL_OES type supported.
     bool externalTextureSupport() const { return fExternalTextureSupport; }
+
+    /// Are textures with GL_TEXTURE_RECTANGLE type supported.
+    bool rectangleTextureSupport() const { return fRectangleTextureSupport; }
 
     /// GL_ARB_texture_swizzle
     bool textureSwizzleSupport() const { return fTextureSwizzleSupport; }
@@ -334,6 +325,17 @@ public:
     const GrGLSLCaps* glslCaps() const { return reinterpret_cast<GrGLSLCaps*>(fShaderCaps.get()); }
 
 private:
+    enum ExternalFormatUsage {
+        kTexImage_ExternalFormatUsage,
+        kOther_ExternalFormatUsage,
+
+        kLast_ExternalFormatUsage = kOther_ExternalFormatUsage
+    };
+    static const int kExternalFormatUsageCnt = kLast_ExternalFormatUsage + 1;
+    bool getExternalFormat(GrPixelConfig surfaceConfig, GrPixelConfig memoryConfig,
+                           ExternalFormatUsage usage, GrGLenum* externalFormat,
+                           GrGLenum* externalType) const;
+
     void init(const GrContextOptions&, const GrGLContextInfo&, const GrGLInterface*);
     void initGLSL(const GrGLContextInfo&);
     bool hasPathRenderingSupport(const GrGLContextInfo&, const GrGLInterface*);
@@ -349,6 +351,8 @@ private:
     void initShaderPrecisionTable(const GrGLContextInfo& ctxInfo,
                                   const GrGLInterface* intf,
                                   GrGLSLCaps* glslCaps);
+
+    GrGLStandard fStandard;
 
     SkTArray<StencilFormat, true> fStencilFormats;
 
@@ -382,6 +386,7 @@ private:
     bool fPartialFBOReadIsSlow : 1;
     bool fBindUniformLocationSupport : 1;
     bool fExternalTextureSupport : 1;
+    bool fRectangleTextureSupport : 1;
     bool fTextureSwizzleSupport : 1;
 
     /** Number type of the components (with out considering number of bits.) */
@@ -394,6 +399,29 @@ private:
         ReadPixelsFormat() : fFormat(0), fType(0) {}
         GrGLenum fFormat;
         GrGLenum fType;
+    };
+
+    struct ConfigFormats {
+        ConfigFormats() {
+            // Inits to known bad GL enum values.
+            memset(this, 0xAB, sizeof(ConfigFormats));
+        }
+        GrGLenum fBaseInternalFormat;
+        GrGLenum fSizedInternalFormat;
+
+        /** The external format and type are to be used when uploading/downloading data using this
+            config where both the CPU data and GrSurface are the same config. To get the external
+            format and type when converting between configs while copying to/from memory use
+            getExternalFormat(). 
+            The kTexImage external format is usually the same as kOther except for kSRGBA on some
+            GL contexts. */
+        GrGLenum fExternalFormat[kExternalFormatUsageCnt];
+        GrGLenum fExternalType;
+
+
+        // Either the base or sized internal format depending on the GL and config.
+        GrGLenum fInternalFormatTexImage;
+        GrGLenum fInternalFormatRenderbuffer;
     };
 
     struct ConfigInfo {

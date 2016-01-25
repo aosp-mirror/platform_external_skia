@@ -9,18 +9,6 @@
 #include "SkMatrix.h"
 #include "SkNx.h"
 
-#if 0
-static Sk2s from_point(const SkPoint& point) {
-    return Sk2s::Load(&point.fX);
-}
-
-static SkPoint to_point(const Sk2s& x) {
-    SkPoint point;
-    x.store(&point.fX);
-    return point;
-}
-#endif
-
 static SkVector to_vector(const Sk2s& x) {
     SkVector vector;
     x.store(&vector.fX);
@@ -220,7 +208,7 @@ void SkChopQuadAt(const SkPoint src[3], SkPoint dst[5], SkScalar t) {
 }
 
 void SkChopQuadAtHalf(const SkPoint src[3], SkPoint dst[5]) {
-    SkChopQuadAt(src, dst, 0.5f); return;
+    SkChopQuadAt(src, dst, 0.5f);
 }
 
 /** Quad'(t) = At + B, where
@@ -962,179 +950,6 @@ bool SkChopMonoCubicAtX(SkPoint src[4], SkScalar x, SkPoint dst[7]) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-
-/*  Find t value for quadratic [a, b, c] = d.
-    Return 0 if there is no solution within [0, 1)
-*/
-static SkScalar quad_solve(SkScalar a, SkScalar b, SkScalar c, SkScalar d) {
-    // At^2 + Bt + C = d
-    SkScalar A = a - 2 * b + c;
-    SkScalar B = 2 * (b - a);
-    SkScalar C = a - d;
-
-    SkScalar    roots[2];
-    int         count = SkFindUnitQuadRoots(A, B, C, roots);
-
-    SkASSERT(count <= 1);
-    return count == 1 ? roots[0] : 0;
-}
-
-/*  given a quad-curve and a point (x,y), chop the quad at that point and place
-    the new off-curve point and endpoint into 'dest'.
-    Should only return false if the computed pos is the start of the curve
-    (i.e. root == 0)
-*/
-static bool truncate_last_curve(const SkPoint quad[3], SkScalar x, SkScalar y,
-                                SkPoint* dest) {
-    const SkScalar* base;
-    SkScalar        value;
-
-    if (SkScalarAbs(x) < SkScalarAbs(y)) {
-        base = &quad[0].fX;
-        value = x;
-    } else {
-        base = &quad[0].fY;
-        value = y;
-    }
-
-    // note: this returns 0 if it thinks value is out of range, meaning the
-    // root might return something outside of [0, 1)
-    SkScalar t = quad_solve(base[0], base[2], base[4], value);
-
-    if (t > 0) {
-        SkPoint tmp[5];
-        SkChopQuadAt(quad, tmp, t);
-        dest[0] = tmp[1];
-        dest[1].set(x, y);
-        return true;
-    } else {
-        /*  t == 0 means either the value triggered a root outside of [0, 1)
-            For our purposes, we can ignore the <= 0 roots, but we want to
-            catch the >= 1 roots (which given our caller, will basically mean
-            a root of 1, give-or-take numerical instability). If we are in the
-            >= 1 case, return the existing offCurve point.
-
-            The test below checks to see if we are close to the "end" of the
-            curve (near base[4]). Rather than specifying a tolerance, I just
-            check to see if value is on to the right/left of the middle point
-            (depending on the direction/sign of the end points).
-        */
-        if ((base[0] < base[4] && value > base[2]) ||
-            (base[0] > base[4] && value < base[2]))   // should root have been 1
-        {
-            dest[0] = quad[1];
-            dest[1].set(x, y);
-            return true;
-        }
-    }
-    return false;
-}
-
-static const SkPoint gQuadCirclePts[kSkBuildQuadArcStorage] = {
-// The mid point of the quadratic arc approximation is half way between the two
-// control points. The float epsilon adjustment moves the on curve point out by
-// two bits, distributing the convex test error between the round rect
-// approximation and the convex cross product sign equality test.
-#define SK_MID_RRECT_OFFSET \
-    (SK_Scalar1 + SK_ScalarTanPIOver8 + FLT_EPSILON * 4) / 2
-    { SK_Scalar1,            0                      },
-    { SK_Scalar1,            SK_ScalarTanPIOver8    },
-    { SK_MID_RRECT_OFFSET,   SK_MID_RRECT_OFFSET    },
-    { SK_ScalarTanPIOver8,   SK_Scalar1             },
-
-    { 0,                     SK_Scalar1             },
-    { -SK_ScalarTanPIOver8,  SK_Scalar1             },
-    { -SK_MID_RRECT_OFFSET,  SK_MID_RRECT_OFFSET    },
-    { -SK_Scalar1,           SK_ScalarTanPIOver8    },
-
-    { -SK_Scalar1,           0                      },
-    { -SK_Scalar1,           -SK_ScalarTanPIOver8   },
-    { -SK_MID_RRECT_OFFSET,  -SK_MID_RRECT_OFFSET   },
-    { -SK_ScalarTanPIOver8,  -SK_Scalar1            },
-
-    { 0,                     -SK_Scalar1            },
-    { SK_ScalarTanPIOver8,   -SK_Scalar1            },
-    { SK_MID_RRECT_OFFSET,   -SK_MID_RRECT_OFFSET   },
-    { SK_Scalar1,            -SK_ScalarTanPIOver8   },
-
-    { SK_Scalar1,            0                      }
-#undef SK_MID_RRECT_OFFSET
-};
-
-int SkBuildQuadArc(const SkVector& uStart, const SkVector& uStop,
-                   SkRotationDirection dir, const SkMatrix* userMatrix,
-                   SkPoint quadPoints[]) {
-    // rotate by x,y so that uStart is (1.0)
-    SkScalar x = SkPoint::DotProduct(uStart, uStop);
-    SkScalar y = SkPoint::CrossProduct(uStart, uStop);
-
-    SkScalar absX = SkScalarAbs(x);
-    SkScalar absY = SkScalarAbs(y);
-
-    int pointCount;
-
-    // check for (effectively) coincident vectors
-    // this can happen if our angle is nearly 0 or nearly 180 (y == 0)
-    // ... we use the dot-prod to distinguish between 0 and 180 (x > 0)
-    if (absY <= SK_ScalarNearlyZero && x > 0 &&
-        ((y >= 0 && kCW_SkRotationDirection == dir) ||
-         (y <= 0 && kCCW_SkRotationDirection == dir))) {
-
-        // just return the start-point
-        quadPoints[0].set(SK_Scalar1, 0);
-        pointCount = 1;
-    } else {
-        if (dir == kCCW_SkRotationDirection) {
-            y = -y;
-        }
-        // what octant (quadratic curve) is [xy] in?
-        int oct = 0;
-        bool sameSign = true;
-
-        if (0 == y) {
-            oct = 4;        // 180
-            SkASSERT(SkScalarAbs(x + SK_Scalar1) <= SK_ScalarNearlyZero);
-        } else if (0 == x) {
-            SkASSERT(absY - SK_Scalar1 <= SK_ScalarNearlyZero);
-            oct = y > 0 ? 2 : 6; // 90 : 270
-        } else {
-            if (y < 0) {
-                oct += 4;
-            }
-            if ((x < 0) != (y < 0)) {
-                oct += 2;
-                sameSign = false;
-            }
-            if ((absX < absY) == sameSign) {
-                oct += 1;
-            }
-        }
-
-        int wholeCount = oct << 1;
-        memcpy(quadPoints, gQuadCirclePts, (wholeCount + 1) * sizeof(SkPoint));
-
-        const SkPoint* arc = &gQuadCirclePts[wholeCount];
-        if (truncate_last_curve(arc, x, y, &quadPoints[wholeCount + 1])) {
-            wholeCount += 2;
-        }
-        pointCount = wholeCount + 1;
-    }
-
-    // now handle counter-clockwise and the initial unitStart rotation
-    SkMatrix    matrix;
-    matrix.setSinCos(uStart.fY, uStart.fX);
-    if (dir == kCCW_SkRotationDirection) {
-        matrix.preScale(SK_Scalar1, -SK_Scalar1);
-    }
-    if (userMatrix) {
-        matrix.postConcat(*userMatrix);
-    }
-    matrix.mapPoints(quadPoints, pointCount);
-    return pointCount;
-}
-
-
-///////////////////////////////////////////////////////////////////////////////
 //
 // NURB representation for conics.  Helpful explanations at:
 //
@@ -1246,8 +1061,34 @@ void SkConic::chopAt(SkScalar t, SkConic dst[2]) const {
     dst[1].fW = tmp2[2].fZ / root;
 }
 
-static Sk2s times_2(const Sk2s& value) {
-    return value + value;
+void SkConic::chopAt(SkScalar t1, SkScalar t2, SkConic* dst) const {
+    if (0 == t1 || 1 == t2) {
+        if (0 == t1 && 1 == t2) {
+            *dst = *this;
+        } else {
+            SkConic pair[2];
+            this->chopAt(t1 ? t1 : t2, pair);
+            *dst = pair[SkToBool(t1)];
+        }
+        return;
+    }
+    SkConicCoeff coeff(*this);
+    Sk2s tt1(t1);
+    Sk2s aXY = coeff.fNumer.eval(tt1);
+    Sk2s aZZ = coeff.fDenom.eval(tt1);
+    Sk2s midTT((t1 + t2) / 2);
+    Sk2s dXY = coeff.fNumer.eval(midTT);
+    Sk2s dZZ = coeff.fDenom.eval(midTT);
+    Sk2s tt2(t2);
+    Sk2s cXY = coeff.fNumer.eval(tt2);
+    Sk2s cZZ = coeff.fDenom.eval(tt2);
+    Sk2s bXY = times_2(dXY) - (aXY + cXY) * Sk2s(0.5f);
+    Sk2s bZZ = times_2(dZZ) - (aZZ + cZZ) * Sk2s(0.5f);
+    dst->fPts[0] = to_point(aXY / aZZ);
+    dst->fPts[1] = to_point(bXY / bZZ);
+    dst->fPts[2] = to_point(cXY / cZZ);
+    Sk2s ww = bZZ / (aZZ * cZZ).sqrt();
+    dst->fW = ww.kth<0>();
 }
 
 SkPoint SkConic::evalAt(SkScalar t) const {

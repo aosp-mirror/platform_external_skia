@@ -641,13 +641,6 @@ void SkGpuDevice::drawOval(const SkDraw& draw, const SkRect& oval, const SkPaint
 
 ///////////////////////////////////////////////////////////////////////////////
 
-static SkBitmap wrap_texture(GrTexture* texture, int width, int height) {
-    SkBitmap result;
-    result.setInfo(SkImageInfo::MakeN32Premul(width, height));
-    result.setPixelRef(new SkGrPixelRef(result.info(), texture))->unref();
-    return result;
-}
-
 void SkGpuDevice::drawPath(const SkDraw& draw, const SkPath& origSrcPath,
                            const SkPaint& paint, const SkMatrix* prePathMatrix,
                            bool pathIsMutable) {
@@ -1139,8 +1132,9 @@ bool SkGpuDevice::filterTexture(GrContext* context, GrTexture* texture,
     SkImageFilter::DeviceProxy proxy(this);
 
     if (filter->canFilterImageGPU()) {
-        return filter->filterImageGPU(&proxy, wrap_texture(texture, width, height),
-                                      ctx, result, offset);
+        SkBitmap bm;
+        GrWrapTextureInBitmap(texture, width, height, false, &bm);
+        return filter->filterImageGPU(&proxy, bm, ctx, result, offset);
     } else {
         return false;
     }
@@ -1177,11 +1171,7 @@ void SkGpuDevice::drawSprite(const SkDraw& draw, const SkBitmap& bitmap,
         SkIPoint offset = SkIPoint::Make(0, 0);
         SkMatrix matrix(*draw.fMatrix);
         matrix.postTranslate(SkIntToScalar(-left), SkIntToScalar(-top));
-#ifdef SK_SUPPORT_SRC_BOUNDS_BLOAT_FOR_IMAGEFILTERS
-        SkIRect clipBounds = SkIRect::MakeWH(bitmap.width(), bitmap.height());
-#else
         SkIRect clipBounds = draw.fClip->getBounds().makeOffset(-left, -top);
-#endif
         SkAutoTUnref<SkImageFilter::Cache> cache(getImageFilterCache());
         // This cache is transient, and is freed (along with all its contained
         // textures) when it goes out of scope.
@@ -1229,8 +1219,8 @@ void SkGpuDevice::drawBitmapRect(const SkDraw& draw, const SkBitmap& bitmap,
                                  const SkRect* src, const SkRect& origDst,
                                  const SkPaint& paint, SkCanvas::SrcRectConstraint constraint) {
     ASSERT_SINGLE_OWNER
+    CHECK_SHOULD_DRAW(draw);
     if (bitmap.getTexture()) {
-        CHECK_SHOULD_DRAW(draw);
         GrBitmapTextureAdjuster adjuster(&bitmap);
         this->drawTextureProducer(&adjuster, src, &origDst, constraint, *draw.fMatrix, fClip,
                                   paint);
@@ -1345,11 +1335,7 @@ void SkGpuDevice::drawDevice(const SkDraw& draw, SkBaseDevice* device,
         SkIPoint offset = SkIPoint::Make(0, 0);
         SkMatrix matrix(*draw.fMatrix);
         matrix.postTranslate(SkIntToScalar(-x), SkIntToScalar(-y));
-#ifdef SK_SUPPORT_SRC_BOUNDS_BLOAT_FOR_IMAGEFILTERS
-        SkIRect clipBounds = SkIRect::MakeWH(devTex->width(), devTex->height());
-#else
         SkIRect clipBounds = draw.fClip->getBounds().makeOffset(-x, -y);
-#endif
         // This cache is transient, and is freed (along with all its contained
         // textures) when it goes out of scope.
         SkAutoTUnref<SkImageFilter::Cache> cache(getImageFilterCache());
@@ -1784,6 +1770,14 @@ bool SkGpuDevice::onShouldDisableLCD(const SkPaint& paint) const {
 void SkGpuDevice::flush() {
     ASSERT_SINGLE_OWNER
     DO_DEFERRED_CLEAR();
+
+    // Clear batch debugging output
+    // TODO not exactly sure where this should live
+    if (GR_BATCH_DEBUGGING_OUTPUT) {
+        SkDebugf("%s\n", fContext->getAuditTrail()->toJson().c_str());
+        // TODO This currently crashes because not all ops are accounted for
+        GR_AUDIT_TRAIL_RESET(fContext->getAuditTrail());
+    }
     fRenderTarget->prepareForExternalIO();
 }
 

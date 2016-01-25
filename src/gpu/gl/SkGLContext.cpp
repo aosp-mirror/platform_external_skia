@@ -14,7 +14,7 @@ public:
     static GLFenceSync* CreateIfSupported(const SkGLContext*);
 
     SkPlatformGpuFence SK_WARN_UNUSED_RESULT insertFence() const override;
-    bool flushAndWaitFence(SkPlatformGpuFence fence) const override;
+    bool waitFence(SkPlatformGpuFence fence, bool flush) const override;
     void deleteFence(SkPlatformGpuFence fence) const override;
 
 private:
@@ -78,14 +78,18 @@ void SkGLContext::makeCurrent() const {
 }
 
 void SkGLContext::swapBuffers() {
+    this->onPlatformSwapBuffers();
+}
+
+void SkGLContext::waitOnSyncOrSwap() {
     if (!fFenceSync) {
         // Fallback on the platform SwapBuffers method for synchronization. This may have no effect.
-        this->onPlatformSwapBuffers();
+        this->swapBuffers();
         return;
     }
 
     if (fFrameFences[fCurrentFenceIdx]) {
-        if (!fFenceSync->flushAndWaitFence(fFrameFences[fCurrentFenceIdx])) {
+        if (!fFenceSync->waitFence(fFrameFences[fCurrentFenceIdx], true)) {
             SkDebugf("WARNING: Wait failed for fence sync. Timings might not be accurate.\n");
         }
         fFenceSync->deleteFence(fFrameFences[fCurrentFenceIdx]);
@@ -143,12 +147,40 @@ SkPlatformGpuFence SkGLContext::GLFenceSync::insertFence() const {
     return fGLFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
 }
 
-bool SkGLContext::GLFenceSync::flushAndWaitFence(SkPlatformGpuFence fence) const {
+bool SkGLContext::GLFenceSync::waitFence(SkPlatformGpuFence fence, bool flush) const {
     GLsync glsync = static_cast<GLsync>(fence);
-    return GL_WAIT_FAILED != fGLClientWaitSync(glsync, GL_SYNC_FLUSH_COMMANDS_BIT, -1);
+    return GL_WAIT_FAILED != fGLClientWaitSync(glsync, flush ? GL_SYNC_FLUSH_COMMANDS_BIT : 0, -1);
 }
 
 void SkGLContext::GLFenceSync::deleteFence(SkPlatformGpuFence fence) const {
     GLsync glsync = static_cast<GLsync>(fence);
     fGLDeleteSync(glsync);
+}
+
+GrGLint SkGLContext::createTextureRectangle(int width, int height, GrGLenum internalFormat,
+                                            GrGLenum externalFormat, GrGLenum externalType,
+                                            GrGLvoid* data) {
+    if (!(kGL_GrGLStandard == fGL->fStandard && GrGLGetVersion(fGL) >= GR_GL_VER(3, 1)) &&
+        !fGL->fExtensions.has("GL_ARB_texture_rectangle")) {
+        return 0;
+    }
+
+    if  (GrGLGetGLSLVersion(fGL) < GR_GLSL_VER(1, 40)) {
+        return 0;
+    }
+
+    GrGLuint id;
+    GR_GL_CALL(fGL, GenTextures(1, &id));
+    GR_GL_CALL(fGL, BindTexture(GR_GL_TEXTURE_RECTANGLE, id));
+    GR_GL_CALL(fGL, TexParameteri(GR_GL_TEXTURE_RECTANGLE, GR_GL_TEXTURE_MAG_FILTER,
+                                  GR_GL_NEAREST));
+    GR_GL_CALL(fGL, TexParameteri(GR_GL_TEXTURE_RECTANGLE, GR_GL_TEXTURE_MIN_FILTER,
+                                  GR_GL_NEAREST));
+    GR_GL_CALL(fGL, TexParameteri(GR_GL_TEXTURE_RECTANGLE, GR_GL_TEXTURE_WRAP_S,
+                                  GR_GL_CLAMP_TO_EDGE));    
+    GR_GL_CALL(fGL, TexParameteri(GR_GL_TEXTURE_RECTANGLE, GR_GL_TEXTURE_WRAP_T,
+                                  GR_GL_CLAMP_TO_EDGE));
+    GR_GL_CALL(fGL, TexImage2D(GR_GL_TEXTURE_RECTANGLE, 0, internalFormat, width, height, 0,
+                               externalFormat, externalType, data));
+    return id;
 }

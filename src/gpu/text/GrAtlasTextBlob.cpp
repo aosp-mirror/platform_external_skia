@@ -63,7 +63,7 @@ void GrAtlasTextBlob::appendGlyph(int runIndex,
 
     subRun->setMaskFormat(format);
 
-    run.fVertexBounds.joinNonEmptyArg(positions);
+    subRun->joinGlyphBounds(positions);
     subRun->setColor(color);
 
     intptr_t vertex = reinterpret_cast<intptr_t>(this->fVertices + subRun->vertexEndIndex());
@@ -219,7 +219,6 @@ bool GrAtlasTextBlob::mustRegenerate(SkScalar* outTransX, SkScalar* outTransY,
         (*outTransY) = y - fY;
     }
 
-
     // If we can reuse the blob, then make sure we update the blob's viewmatrix, and x/y
     // offsets.  Note, we offset the vertex bounds right before flushing
     fViewMatrix = viewMatrix;
@@ -232,12 +231,13 @@ bool GrAtlasTextBlob::mustRegenerate(SkScalar* outTransX, SkScalar* outTransY,
     return false;
 }
 
-GrDrawBatch* GrAtlasTextBlob::createBatch(const Run::SubRunInfo& info,
-                                          int glyphCount, int run, int subRun,
-                                          GrColor color, SkScalar transX, SkScalar transY,
-                                          const SkPaint& skPaint, const SkSurfaceProps& props,
-                                          const GrDistanceFieldAdjustTable* distanceAdjustTable,
-                                          GrBatchFontCache* cache) {
+inline GrDrawBatch* GrAtlasTextBlob::createBatch(
+                                              const Run::SubRunInfo& info,
+                                              int glyphCount, int run, int subRun,
+                                              GrColor color, SkScalar transX, SkScalar transY,
+                                              const SkPaint& skPaint, const SkSurfaceProps& props,
+                                              const GrDistanceFieldAdjustTable* distanceAdjustTable,
+                                              GrBatchFontCache* cache) {
     GrMaskFormat format = info.maskFormat();
     GrColor subRunColor;
     if (kARGB_GrMaskFormat == format) {
@@ -382,7 +382,6 @@ void GrAtlasTextBlob::flushCached(GrContext* context,
                                   drawFilter, viewMatrix, clipBounds, x, y);
             continue;
         }
-        fRuns[run].fVertexBounds.offset(transX, transY);
         this->flushRun(dc, &pipelineBuilder, run, color,
                        transX, transY, skPaint, props,
                        distanceAdjustTable, context->getBatchFontCache());
@@ -412,6 +411,16 @@ void GrAtlasTextBlob::flushThrowaway(GrContext* context,
     this->flushBigGlyphs(context, dc, clip, skPaint, 0, 0, clipBounds);
 }
 
+GrDrawBatch* GrAtlasTextBlob::test_createBatch(
+                                              int glyphCount, int run, int subRun,
+                                              GrColor color, SkScalar transX, SkScalar transY,
+                                              const SkPaint& skPaint, const SkSurfaceProps& props,
+                                              const GrDistanceFieldAdjustTable* distanceAdjustTable,
+                                              GrBatchFontCache* cache) {
+    const GrAtlasTextBlob::Run::SubRunInfo& info = fRuns[run].fSubRunInfo[subRun];
+    return this->createBatch(info, glyphCount, run, subRun, color, transX, transY, skPaint,
+                             props, distanceAdjustTable, cache);
+}
 
 // TODO get this code building again
 #ifdef CACHE_SANITY_CHECK

@@ -37,6 +37,11 @@
   #
   'variables': {  # level 1
     'angle_path%': '../',
+
+    # RAW codec needs exceptions. Due to that, it is a separate target. Its usage can be controlled
+    # by this variable.
+    'skia_codec_decodes_raw%': 1,
+
     'variables': {  # level 2
 
       # Variables needed by conditions list within the level-2 variables dict.
@@ -239,6 +244,7 @@
     'skia_use_sdl%': 0,
     'skia_fast%': 0,
     'skia_dump_stats%': 0,
+    'skia_build_server%': 0,
     'skia_fast_flags': [
         '-O3',                   # Even for Debug builds.
         '-march=native',         # Use all features of and optimize for THIS machine.

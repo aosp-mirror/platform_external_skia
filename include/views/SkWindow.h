@@ -43,8 +43,7 @@ public:
 
     const SkBitmap& getBitmap() const { return fBitmap; }
 
-    void    setColorType(SkColorType);
-    void    resize(int width, int height, SkColorType = kUnknown_SkColorType);
+    void    resize(int width, int height);
 
     bool    isDirty() const { return !fDirtyRgn.isEmpty(); }
     bool    update(SkIRect* updateArea);
@@ -72,9 +71,6 @@ public:
 
     virtual SkSurface* createSurface();
 
-    virtual void onPDFSaved(const char title[], const char desc[],
-        const char path[]) {}
-
 protected:
     virtual bool onEvent(const SkEvent&);
     virtual bool onDispatchClick(int x, int y, Click::State, void* owner, unsigned modi);
@@ -99,7 +95,6 @@ protected:
 
 private:
     SkSurfaceProps  fSurfaceProps;
-    SkColorType fColorType;
     SkBitmap    fBitmap;
     SkRegion    fDirtyRgn;
 

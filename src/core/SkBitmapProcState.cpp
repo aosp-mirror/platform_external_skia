@@ -133,6 +133,13 @@ bool SkBitmapProcState::chooseProcs(const SkMatrix& inv, const SkPaint& paint) {
     fInvMatrix = inv;
     fFilterLevel = paint.getFilterQuality();
 
+    const int origW = fProvider.info().width();
+    const int origH = fProvider.info().height();
+    bool allow_ignore_fractional_translate = true;  // historical default
+    if (kMedium_SkFilterQuality == fFilterLevel) {
+        allow_ignore_fractional_translate = false;
+    }
+
     SkDefaultBitmapController controller;
     fBMState = controller.requestBitmap(fProvider, inv, paint.getFilterQuality(),
                                         fBMStateStorage.get(), fBMStateStorage.size());
@@ -171,11 +178,10 @@ bool SkBitmapProcState::chooseProcs(const SkMatrix& inv, const SkPaint& paint) {
     if (matrix_only_scale_translate(fInvMatrix)) {
         SkMatrix forward;
         if (fInvMatrix.invert(&forward)) {
-            if (clampClamp ? just_trans_clamp(forward, fPixmap)
+            if ((clampClamp && allow_ignore_fractional_translate)
+                           ? just_trans_clamp(forward, fPixmap)
                            : just_trans_general(forward)) {
-                SkScalar tx = -SkScalarRoundToScalar(forward.getTranslateX());
-                SkScalar ty = -SkScalarRoundToScalar(forward.getTranslateY());
-                fInvMatrix.setTranslate(tx, ty);
+                fInvMatrix.setTranslate(-forward.getTranslateX(), -forward.getTranslateY());
             }
         }
     }
@@ -198,7 +204,17 @@ bool SkBitmapProcState::chooseProcs(const SkMatrix& inv, const SkPaint& paint) {
 
     trivialMatrix = (fInvMatrix.getType() & ~SkMatrix::kTranslate_Mask) == 0;
 
-    if (kLow_SkFilterQuality == fFilterLevel) {
+    // If our target pixmap is the same as the original, then we revert back to legacy behavior
+    // and allow the code to ignore fractional translate.
+    //
+    // The width/height check allows allow_ignore_fractional_translate to stay false if we
+    // previously set it that way (e.g. we started in kMedium).
+    //
+    if (fPixmap.width() == origW && fPixmap.height() == origH) {
+        allow_ignore_fractional_translate = true;
+    }
+
+    if (kLow_SkFilterQuality == fFilterLevel && allow_ignore_fractional_translate) {
         // Only try bilerp if the matrix is "interesting" and
         // the image has a suitable size.
 
@@ -371,18 +387,6 @@ static void Clamp_S32_D32_nofilter_trans_shaderproc(const void* sIn,
     const int maxY = s.fPixmap.height() - 1;
     int ix = s.fFilterOneX + x;
     int iy = SkClampMax(s.fFilterOneY + y, maxY);
-#ifdef SK_DEBUG
-    {
-        SkPoint pt;
-        s.fInvProc(s.fInvMatrix, SkIntToScalar(x) + SK_ScalarHalf,
-                   SkIntToScalar(y) + SK_ScalarHalf, &pt);
-        int iy2 = SkClampMax(SkScalarFloorToInt(pt.fY), maxY);
-        int ix2 = SkScalarFloorToInt(pt.fX);
-
-        SkASSERT(iy == iy2);
-        SkASSERT(ix == ix2);
-    }
-#endif
     const SkPMColor* row = s.fPixmap.addr32(0, iy);
 
     // clamp to the left
@@ -446,18 +450,6 @@ static void Repeat_S32_D32_nofilter_trans_shaderproc(const void* sIn,
     const int stopY = s.fPixmap.height();
     int ix = s.fFilterOneX + x;
     int iy = sk_int_mod(s.fFilterOneY + y, stopY);
-#ifdef SK_DEBUG
-    {
-        SkPoint pt;
-        s.fInvProc(s.fInvMatrix, SkIntToScalar(x) + SK_ScalarHalf,
-                   SkIntToScalar(y) + SK_ScalarHalf, &pt);
-        int iy2 = sk_int_mod(SkScalarFloorToInt(pt.fY), stopY);
-        int ix2 = SkScalarFloorToInt(pt.fX);
-
-        SkASSERT(iy == iy2);
-        SkASSERT(ix == ix2);
-    }
-#endif
     const SkPMColor* row = s.fPixmap.addr32(0, iy);
 
     ix = sk_int_mod(ix, stopX);

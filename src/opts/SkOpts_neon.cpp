@@ -15,6 +15,7 @@
 #include "SkFloatingPoint_opts.h"
 #include "SkMatrix_opts.h"
 #include "SkMorphologyImageFilter_opts.h"
+#include "SkSwizzler_opts.h"
 #include "SkTextureCompressor_opts.h"
 #include "SkUtils_opts.h"
 #include "SkXfermode_opts.h"
@@ -47,5 +48,11 @@ namespace SkOpts {
         matrix_translate       = sk_neon::matrix_translate;
         matrix_scale_translate = sk_neon::matrix_scale_translate;
         matrix_affine          = sk_neon::matrix_affine;
+
+        RGBA_to_BGRA = sk_neon::RGBA_to_BGRA;
+        RGBA_to_rgbA = sk_neon::RGBA_to_rgbA;
+        RGBA_to_bgrA = sk_neon::RGBA_to_bgrA;
+        RGB_to_RGB1  = sk_neon::RGB_to_RGB1;
+        RGB_to_BGR1  = sk_neon::RGB_to_BGR1;
     }
 }

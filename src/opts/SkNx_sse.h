@@ -176,6 +176,8 @@ public:
     static SkNx Min(const SkNx& l, const SkNx& r) { return _mm_min_ps(l.fVec, r.fVec); }
     static SkNx Max(const SkNx& l, const SkNx& r) { return _mm_max_ps(l.fVec, r.fVec); }
 
+    SkNx abs() const { return _mm_andnot_ps(_mm_set1_ps(-0.0f), fVec); }
+
     SkNx  sqrt() const { return _mm_sqrt_ps (fVec);  }
     SkNx rsqrt0() const { return _mm_rsqrt_ps(fVec); }
     SkNx rsqrt1() const { return this->rsqrt0(); }
@@ -375,6 +377,14 @@ static inline void Sk4f_ToBytes(uint8_t bytes[16],
                                                        _mm_cvttps_epi32(b.fVec)),
                                       _mm_packus_epi16(_mm_cvttps_epi32(c.fVec),
                                                        _mm_cvttps_epi32(d.fVec))));
+}
+
+template<> inline Sk4h SkNx_cast<uint16_t, uint8_t, 4>(const Sk4b& src) {
+    return _mm_unpacklo_epi8(src.fVec, _mm_setzero_si128());
+}
+
+template<> inline Sk4b SkNx_cast<uint8_t, uint16_t, 4>(const Sk4h& src) {
+    return _mm_packus_epi16(src.fVec, src.fVec);
 }
 
 

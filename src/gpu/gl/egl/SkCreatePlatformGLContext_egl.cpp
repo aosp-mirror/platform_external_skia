@@ -24,7 +24,7 @@ public:
     static SkEGLFenceSync* CreateIfSupported(EGLDisplay);
 
     SkPlatformGpuFence SK_WARN_UNUSED_RESULT insertFence() const override;
-    bool flushAndWaitFence(SkPlatformGpuFence fence) const override;
+    bool waitFence(SkPlatformGpuFence fence, bool flush) const override;
     void deleteFence(SkPlatformGpuFence fence) const override;
 
 private:
@@ -302,12 +302,13 @@ SkPlatformGpuFence SkEGLFenceSync::insertFence() const {
     return eglCreateSyncKHR(fDisplay, EGL_SYNC_FENCE_KHR, nullptr);
 }
 
-bool SkEGLFenceSync::flushAndWaitFence(SkPlatformGpuFence platformFence) const {
+bool SkEGLFenceSync::waitFence(SkPlatformGpuFence platformFence, bool flush) const {
     EGLSyncKHR eglsync = static_cast<EGLSyncKHR>(platformFence);
-    return EGL_CONDITION_SATISFIED_KHR == eglClientWaitSyncKHR(fDisplay,
-                                                               eglsync,
-                                                               EGL_SYNC_FLUSH_COMMANDS_BIT_KHR,
-                                                               EGL_FOREVER_KHR);
+    return EGL_CONDITION_SATISFIED_KHR ==
+            eglClientWaitSyncKHR(fDisplay,
+                                 eglsync,
+                                 flush ? EGL_SYNC_FLUSH_COMMANDS_BIT_KHR : 0,
+                                 EGL_FOREVER_KHR);
 }
 
 void SkEGLFenceSync::deleteFence(SkPlatformGpuFence platformFence) const {
@@ -317,7 +318,11 @@ void SkEGLFenceSync::deleteFence(SkPlatformGpuFence platformFence) const {
 
 } // anonymous namespace
 
-SkGLContext* SkCreatePlatformGLContext(GrGLStandard forcedGpuAPI) {
+SkGLContext* SkCreatePlatformGLContext(GrGLStandard forcedGpuAPI, SkGLContext* shareContext) {
+    SkASSERT(!shareContext);
+    if (shareContext) {
+        return nullptr;
+    }
     EGLGLContext* ctx = new EGLGLContext(forcedGpuAPI);
     if (!ctx->isValid()) {
         delete ctx;

@@ -58,10 +58,13 @@ namespace SkOpts {
 
     extern SkMatrix::MapPtsProc matrix_translate, matrix_scale_translate, matrix_affine;
 
-    typedef void (*Swizzle_8888_8888)(uint32_t[], const uint32_t[], int);
-    extern Swizzle_8888_8888 premul_xxxa,  // BGRA -> bgrA or RGBA -> rgbA
-                             swaprb_xxxa,  // BGRA -> RGBA or RGBA -> BGRA
-                      premul_swaprb_xxxa;  // BGRA -> rgbA or RGBA -> bgrA
+    // Swizzle input into some sort of 8888 pixel, {premul,unpremul} x {rgba,bgra}.
+    typedef void (*Swizzle_8888)(uint32_t*, const void*, int);
+    extern Swizzle_8888 RGBA_to_BGRA,  // i.e. just swap RB
+                        RGBA_to_rgbA,  // i.e. just premultiply
+                        RGBA_to_bgrA,  // i.e. swap RB and premultiply
+                        RGB_to_RGB1,   // i.e. insert an opaque alpha
+                        RGB_to_BGR1;   // i.e. swap RB and insert an opaque alpha
 }
 
 #endif//SkOpts_DEFINED

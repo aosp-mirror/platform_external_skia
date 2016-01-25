@@ -234,6 +234,9 @@ static void push_codec_src(Path path, CodecSrc::Mode mode, CodecSrc::DstColorTyp
         case CodecSrc::kCodec_Mode:
             folder.append("codec");
             break;
+        case CodecSrc::kCodecZeroInit_Mode:
+            folder.append("codec_zero_init");
+            break;
         case CodecSrc::kScanline_Mode:
             folder.append("scanline");
             break;
@@ -242,6 +245,9 @@ static void push_codec_src(Path path, CodecSrc::Mode mode, CodecSrc::DstColorTyp
             break;
         case CodecSrc::kSubset_Mode:
             folder.append("codec_subset");
+            break;
+        case CodecSrc::kGen_Mode:
+            folder.append("gen");
             break;
     }
 
@@ -313,8 +319,9 @@ static void push_codec_srcs(Path path) {
     // SkJpegCodec natively supports scaling to: 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875
     const float nativeScales[] = { 0.125f, 0.25f, 0.375f, 0.5f, 0.625f, 0.750f, 0.875f, 1.0f };
 
-    const CodecSrc::Mode nativeModes[] = { CodecSrc::kCodec_Mode, CodecSrc::kScanline_Mode,
-            CodecSrc::kStripe_Mode, CodecSrc::kSubset_Mode };
+    const CodecSrc::Mode nativeModes[] = { CodecSrc::kCodec_Mode, CodecSrc::kCodecZeroInit_Mode,
+            CodecSrc::kScanline_Mode, CodecSrc::kStripe_Mode, CodecSrc::kSubset_Mode,
+            CodecSrc::kGen_Mode };
 
     CodecSrc::DstColorType colorTypes[3];
     uint32_t numColorTypes;
@@ -340,8 +347,21 @@ static void push_codec_srcs(Path path) {
             break;
     }
 
-    for (float scale : nativeScales) {
-        for (CodecSrc::Mode mode : nativeModes) {
+
+    for (CodecSrc::Mode mode : nativeModes) {
+        // SkCodecImageGenerator only runs for the default colorType
+        // recommended by SkCodec.  There is no need to generate multiple
+        // tests for different colorTypes.
+        // TODO (msarett): Add scaling support to SkCodecImageGenerator.
+        if (CodecSrc::kGen_Mode == mode) {
+            // FIXME: The gpu backend does not draw kGray sources correctly. (skbug.com/4822)
+            if (kGray_8_SkColorType != codec->getInfo().colorType()) {
+                push_codec_src(path, mode, CodecSrc::kGetFromCanvas_DstColorType, 1.0f);
+            }
+            continue;
+        }
+
+        for (float scale : nativeScales) {
             for (uint32_t i = 0; i < numColorTypes; i++) {
                 push_codec_src(path, mode, colorTypes[i], scale);
             }
@@ -502,6 +522,20 @@ static bool brd_supported(const char* ext) {
     return false;
 }
 
+static bool is_raw(const SkString& file) {
+    static const char* const exts[] = {
+        "arw", "cr2", "dng", "nef", "nrw", "orf", "raf", "rw2", "pef", "srw",
+        "ARW", "CR2", "DNG", "NEF", "NRW", "ORF", "RAF", "RW2", "PEF", "SRW",
+    };
+
+    for (uint32_t i = 0; i < SK_ARRAY_COUNT(exts); i++) {
+        if (file.endsWith(exts[i])) {
+            return true;
+        }
+    }
+    return false;
+}
+
 static void gather_srcs() {
     for (const skiagm::GMRegistry* r = skiagm::GMRegistry::Head(); r; r = r->next()) {
         push_src("gm", "", new GMSrc(r->factory()));
@@ -520,6 +554,8 @@ static void gather_srcs() {
     static const char* const exts[] = {
         "bmp", "gif", "jpg", "jpeg", "png", "webp", "ktx", "astc", "wbmp", "ico",
         "BMP", "GIF", "JPG", "JPEG", "PNG", "WEBP", "KTX", "ASTC", "WBMP", "ICO",
+        "arw", "cr2", "dng", "nef", "nrw", "orf", "raf", "rw2", "pef", "srw",
+        "ARW", "CR2", "DNG", "NEF", "NRW", "ORF", "RAF", "RW2", "PEF", "SRW",
     };
     for (int i = 0; i < FLAGS_images.count(); i++) {
         const char* flag = FLAGS_images[i];
@@ -528,7 +564,9 @@ static void gather_srcs() {
                 SkOSFile::Iter it(flag, exts[j]);
                 for (SkString file; it.next(&file); ) {
                     SkString path = SkOSPath::Join(flag, file.c_str());
-                    push_src("image", "decode", new ImageSrc(path)); // Decode entire image
+                    if (!is_raw(file)) {
+                        push_src("image", "decode", new ImageSrc(path)); // Decode entire image
+                    }
                     push_codec_srcs(path);
                     if (brd_supported(exts[j])) {
                         push_brd_srcs(path);
@@ -537,7 +575,9 @@ static void gather_srcs() {
             }
         } else if (sk_exists(flag)) {
             // assume that FLAGS_images[i] is a valid image if it is a file.
-            push_src("image", "decode", new ImageSrc(flag)); // Decode entire image.
+            if (!is_raw(SkString(flag))) {
+                push_src("image", "decode", new ImageSrc(flag)); // Decode entire image.
+            }
             push_codec_srcs(flag);
             push_brd_srcs(flag);
         }
@@ -814,7 +854,6 @@ struct Task {
             start(task->sink.tag.c_str(), task->src.tag, task->src.options, name.c_str());
             Error err = task->sink->draw(*task->src, &bitmap, &stream, &log);
             if (!err.isEmpty()) {
-                auto elapsed = now_ms() - timerStart;
                 if (err.isFatal()) {
                     fail(SkStringPrintf("%s %s %s %s: %s",
                                         task->sink.tag.c_str(),
@@ -824,10 +863,11 @@ struct Task {
                                         err.c_str()));
                 } else {
                     note.appendf(" (skipped: %s)", err.c_str());
+                    auto elapsed = now_ms() - timerStart;
+                    done(elapsed, task->sink.tag.c_str(), task->src.tag, task->src.options,
+                         name, note, log);
+                    return;
                 }
-                done(elapsed, task->sink.tag.c_str(), task->src.tag, task->src.options,
-                     name, note, log);
-                return;
             }
 
             // We're likely switching threads here, so we must capture by value, [=] or [foo,bar].
@@ -887,7 +927,8 @@ struct Task {
                 }
             });
         }
-        done(now_ms()-timerStart, task->sink.tag.c_str(), task->src.tag.c_str(), task->src.options.c_str(),
+        auto elapsed = now_ms() - timerStart;
+        done(elapsed, task->sink.tag.c_str(), task->src.tag.c_str(), task->src.options.c_str(),
              name, note, log);
     }
 
@@ -1078,6 +1119,7 @@ extern SkTypeface* (*gCreateTypefaceDelegate)(const char [], SkTypeface::Style )
 int dm_main();
 int dm_main() {
     SetupCrashHandler();
+    JsonWriter::DumpJson();  // It's handy for the bots to assume this is ~never missing.
     SkAutoGraphics ag;
     SkTaskGroup::Enabler enabled(FLAGS_threads);
     gCreateTypefaceDelegate = &create_from_name;

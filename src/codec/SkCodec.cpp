@@ -7,13 +7,16 @@
 
 #include "SkBmpCodec.h"
 #include "SkCodec.h"
-#include "SkCodec_libpng.h"
 #include "SkCodecPriv.h"
 #include "SkData.h"
 #include "SkGifCodec.h"
 #include "SkIcoCodec.h"
 #if !defined(GOOGLE3)
 #include "SkJpegCodec.h"
+#endif
+#include "SkPngCodec.h"
+#ifdef SK_CODEC_DECODES_RAW
+#include "SkRawCodec.h"
 #endif
 #include "SkStream.h"
 #include "SkWbmpCodec.h"
@@ -76,30 +79,24 @@ SkCodec* SkCodec::NewFromStream(SkStream* stream,
         }
     }
 
-    SkAutoTDelete<SkCodec> codec(nullptr);
     // PNG is special, since we want to be able to supply an SkPngChunkReader.
     // But this code follows the same pattern as the loop.
     if (SkPngCodec::IsPng(buffer, bytesRead)) {
-        codec.reset(SkPngCodec::NewFromStream(streamDeleter.detach(), chunkReader));
+        return SkPngCodec::NewFromStream(streamDeleter.detach(), chunkReader);
     } else {
         for (DecoderProc proc : gDecoderProcs) {
             if (proc.IsFormat(buffer, bytesRead)) {
-                codec.reset(proc.NewFromStream(streamDeleter.detach()));
-                break;
+                return proc.NewFromStream(streamDeleter.detach());
             }
         }
+
+#ifdef SK_CODEC_DECODES_RAW
+        // Try to treat the input as RAW if all the other checks failed.
+        return SkRawCodec::NewFromStream(streamDeleter.detach());
+#endif
     }
 
-    // Set the max size at 128 megapixels (512 MB for kN32).
-    // This is about 4x smaller than a test image that takes a few minutes for
-    // dm to decode and draw.
-    const int32_t maxSize = 1 << 27;
-    if (codec && codec->getInfo().width() * codec->getInfo().height() > maxSize) {
-        SkCodecPrintf("Error: Image size too large, cannot decode.\n");
-        return nullptr;
-    } else {
-        return codec.detach();
-    }
+    return nullptr;
 }
 
 SkCodec* SkCodec::NewFromData(SkData* data, SkPngChunkReader* reader) {

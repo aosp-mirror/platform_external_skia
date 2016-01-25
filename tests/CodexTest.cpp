@@ -9,6 +9,7 @@
 #include "SkAndroidCodec.h"
 #include "SkBitmap.h"
 #include "SkCodec.h"
+#include "SkCodecImageGenerator.h"
 #include "SkData.h"
 #include "SkImageDecoder.h"
 #include "SkMD5.h"
@@ -379,6 +380,18 @@ static void check(skiatest::Reporter* r,
                 &scaledCodecDigest, &codecDigest);
     }
 
+    // Test SkCodecImageGenerator
+    if (!isIncomplete) {
+        SkAutoTDelete<SkStream> stream(resource(path));
+        SkAutoTUnref<SkData> fullData(SkData::NewFromStream(stream, stream->getLength()));
+        SkAutoTDelete<SkImageGenerator> gen(SkCodecImageGenerator::NewFromEncodedCodec(fullData));
+        SkBitmap bm;
+        bm.allocPixels(info);
+        SkAutoLockPixels autoLockPixels(bm);
+        REPORTER_ASSERT(r, gen->getPixels(info, bm.getPixels(), bm.rowBytes()));
+        compare_to_good_digest(r, codecDigest, bm);
+    }
+
     // If we've just tested incomplete decodes, let's run the same test again on full decodes.
     if (isIncomplete) {
         check(r, path, size, supportsScanlineDecoding, supportsSubsetDecoding, false);
@@ -437,6 +450,9 @@ DEF_TEST(Codec, r) {
     check(r, "plane_interlaced.png", SkISize::Make(250, 126), true, false, false);
     check(r, "randPixels.png", SkISize::Make(8, 8), true, false, false);
     check(r, "yellow_rose.png", SkISize::Make(400, 301), true, false, false);
+
+    // RAW
+    check(r, "sample_1mp.dng", SkISize::Make(600, 338), false, false, false);
 }
 
 // Test interlaced PNG in stripes, similar to DM's kStripe_Mode
@@ -630,6 +646,8 @@ DEF_TEST(Codec_Dimensions, r) {
     test_dimensions(r, "1x16.png");
     test_dimensions(r, "mandrill_16.png");
 
+    // RAW
+    test_dimensions(r, "sample_1mp.dng");
 }
 
 static void test_invalid(skiatest::Reporter* r, const char path[]) {

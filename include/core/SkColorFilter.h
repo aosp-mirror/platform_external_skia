@@ -68,15 +68,22 @@ public:
     */
     virtual void filterSpan(const SkPMColor src[], int count, SkPMColor result[]) const = 0;
 
+    virtual void filterSpan4f(const SkPM4f src[], int count, SkPM4f result[]) const;
+
     enum Flags {
         /** If set the filter methods will not change the alpha channel of the colors.
         */
-        kAlphaUnchanged_Flag = 0x01,
+        kAlphaUnchanged_Flag = 1 << 0,
+        kSupports4f_Flag     = 1 << 1,
     };
 
     /** Returns the flags for this filter. Override in subclasses to return custom flags.
     */
     virtual uint32_t getFlags() const { return 0; }
+
+    bool supports4f() const {
+        return SkToBool(this->getFlags() & kSupports4f_Flag);
+    }
 
     /**
      *  If this subclass can optimally createa composition with the inner filter, return it as
@@ -105,9 +112,6 @@ public:
                     or NULL if the mode will have no effect.
     */
     static SkColorFilter* CreateModeFilter(SkColor c, SkXfermode::Mode mode);
-
-    // DEPRECATED -- call this from SkColorMatrixFilter instead -- see skbug.com/4791
-    static SkColorFilter* CreateLightingFilter(SkColor mul, SkColor add);
 
     /** Construct a colorfilter whose effect is to first apply the inner filter and then apply
      *  the outer filter to the result of the inner's.

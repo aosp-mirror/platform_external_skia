@@ -318,6 +318,14 @@ void SkPath::rewind() {
     this->resetFields();
 }
 
+bool SkPath::isLastContourClosed() const {
+    int verbCount = fPathRef->countVerbs();
+    if (0 == verbCount) {
+        return false;
+    }
+    return kClose_Verb == fPathRef->atVerb(verbCount - 1);
+}
+
 bool SkPath::isLine(SkPoint line[2]) const {
     int verbCount = fPathRef->countVerbs();
 
@@ -1249,6 +1257,115 @@ void SkPath::arcTo(const SkRect& oval, SkScalar startAngle, SkScalar sweepAngle,
     }
 }
 
+// This converts the SVG arc to conics.
+// Partly adapted from Niko's code in kdelibs/kdecore/svgicons.
+// Then transcribed from webkit/chrome's SVGPathNormalizer::decomposeArcToCubic()
+// See also SVG implementation notes:
+// http://www.w3.org/TR/SVG/implnote.html#ArcConversionEndpointToCenter
+// Note that arcSweep bool value is flipped from the original implementation.
+void SkPath::arcTo(SkScalar rx, SkScalar ry, SkScalar angle, SkPath::ArcSize arcLarge,
+                   SkPath::Direction arcSweep, SkScalar x, SkScalar y) {
+    SkPoint srcPts[2];
+    this->getLastPt(&srcPts[0]);
+    // If rx = 0 or ry = 0 then this arc is treated as a straight line segment (a "lineto")
+    // joining the endpoints.
+    // http://www.w3.org/TR/SVG/implnote.html#ArcOutOfRangeParameters
+    if (!rx || !ry) {
+        this->lineTo(x, y);
+        return;
+    }
+    // If the current point and target point for the arc are identical, it should be treated as a
+    // zero length path. This ensures continuity in animations.
+    srcPts[1].set(x, y);
+    if (srcPts[0] == srcPts[1]) {
+        this->lineTo(x, y);
+        return;
+    }
+    rx = SkScalarAbs(rx);
+    ry = SkScalarAbs(ry);
+    SkVector midPointDistance = srcPts[0] - srcPts[1];
+    midPointDistance *= 0.5f;
+
+    SkMatrix pointTransform;
+    pointTransform.setRotate(-angle);
+
+    SkPoint transformedMidPoint;
+    pointTransform.mapPoints(&transformedMidPoint, &midPointDistance, 1);
+    SkScalar squareRx = rx * rx;
+    SkScalar squareRy = ry * ry;
+    SkScalar squareX = transformedMidPoint.fX * transformedMidPoint.fX;
+    SkScalar squareY = transformedMidPoint.fY * transformedMidPoint.fY;
+
+    // Check if the radii are big enough to draw the arc, scale radii if not.
+    // http://www.w3.org/TR/SVG/implnote.html#ArcCorrectionOutOfRangeRadii
+    SkScalar radiiScale = squareX / squareRx + squareY / squareRy;
+    if (radiiScale > 1) {
+        radiiScale = SkScalarSqrt(radiiScale);
+        rx *= radiiScale;
+        ry *= radiiScale;
+    }
+
+    pointTransform.setScale(1 / rx, 1 / ry);
+    pointTransform.preRotate(-angle);
+
+    SkPoint unitPts[2];
+    pointTransform.mapPoints(unitPts, srcPts, (int) SK_ARRAY_COUNT(unitPts));
+    SkVector delta = unitPts[1] - unitPts[0];
+
+    SkScalar d = delta.fX * delta.fX + delta.fY * delta.fY;
+    SkScalar scaleFactorSquared = SkTMax(1 / d - 0.25f, 0.f);
+
+    SkScalar scaleFactor = SkScalarSqrt(scaleFactorSquared);
+    if (SkToBool(arcSweep) != SkToBool(arcLarge)) {  // flipped from the original implementation
+        scaleFactor = -scaleFactor;
+    }
+    delta.scale(scaleFactor);
+    SkPoint centerPoint = unitPts[0] + unitPts[1];
+    centerPoint *= 0.5f;
+    centerPoint.offset(-delta.fY, delta.fX);
+    unitPts[0] -= centerPoint;
+    unitPts[1] -= centerPoint;
+    SkScalar theta1 = SkScalarATan2(unitPts[0].fY, unitPts[0].fX);
+    SkScalar theta2 = SkScalarATan2(unitPts[1].fY, unitPts[1].fX);
+    SkScalar thetaArc = theta2 - theta1;
+    if (thetaArc < 0 && !arcSweep) {  // arcSweep flipped from the original implementation
+        thetaArc += SK_ScalarPI * 2;
+    } else if (thetaArc > 0 && arcSweep) {  // arcSweep flipped from the original implementation
+        thetaArc -= SK_ScalarPI * 2;
+    }
+    pointTransform.setRotate(angle);
+    pointTransform.preScale(rx, ry);
+
+    int segments = SkScalarCeilToInt(SkScalarAbs(thetaArc / (SK_ScalarPI / 2)));
+    SkScalar thetaWidth = thetaArc / segments;
+    SkScalar t = SkScalarTan(0.5f * thetaWidth);
+    if (!SkScalarIsFinite(t)) {
+        return;
+    }
+    SkScalar startTheta = theta1;
+    SkScalar w = SkScalarSqrt(SK_ScalarHalf + SkScalarCos(thetaWidth) * SK_ScalarHalf);
+    for (int i = 0; i < segments; ++i) {
+        SkScalar endTheta = startTheta + thetaWidth;
+        SkScalar cosEndTheta, sinEndTheta = SkScalarSinCos(endTheta, &cosEndTheta);
+
+        unitPts[1].set(cosEndTheta, sinEndTheta);
+        unitPts[1] += centerPoint;
+        unitPts[0] = unitPts[1];
+        unitPts[0].offset(t * sinEndTheta, -t * cosEndTheta);
+        SkPoint mapped[2];
+        pointTransform.mapPoints(mapped, unitPts, (int) SK_ARRAY_COUNT(unitPts));
+        this->conicTo(mapped[0], mapped[1], w);
+        startTheta = endTheta;
+    }
+}
+
+void SkPath::rArcTo(SkScalar rx, SkScalar ry, SkScalar xAxisRotate, SkPath::ArcSize largeArc,
+                    SkPath::Direction sweep, SkScalar dx, SkScalar dy) {
+    SkPoint currentPoint;
+    this->getLastPt(&currentPoint);
+    this->arcTo(rx, ry, xAxisRotate, largeArc, sweep, currentPoint.fX + dx, currentPoint.fY + dy);
+}
+
 void SkPath::addArc(const SkRect& oval, SkScalar startAngle, SkScalar sweepAngle) {
     if (oval.isEmpty() || 0 == sweepAngle) {
         return;
@@ -1293,41 +1410,14 @@ void SkPath::arcTo(SkScalar x1, SkScalar y1, SkScalar x2, SkScalar y2, SkScalar 
         return;
     }
 
-    SkScalar dist = SkScalarMulDiv(radius, SK_Scalar1 - cosh, sinh);
-    if (dist < 0) {
-        dist = -dist;
-    }
+    SkScalar dist = SkScalarAbs(SkScalarMulDiv(radius, SK_Scalar1 - cosh, sinh));
 
     SkScalar xx = x1 - SkScalarMul(dist, before.fX);
     SkScalar yy = y1 - SkScalarMul(dist, before.fY);
-    SkRotationDirection arcDir;
-
-    // now turn before/after into normals
-    if (sinh > 0) {
-        before.rotateCCW();
-        after.rotateCCW();
-        arcDir = kCW_SkRotationDirection;
-    } else {
-        before.rotateCW();
-        after.rotateCW();
-        arcDir = kCCW_SkRotationDirection;
-    }
-
-    SkMatrix    matrix;
-    SkPoint     pts[kSkBuildQuadArcStorage];
-
-    matrix.setScale(radius, radius);
-    matrix.postTranslate(xx - SkScalarMul(radius, before.fX),
-                         yy - SkScalarMul(radius, before.fY));
-
-    int count = SkBuildQuadArc(before, after, arcDir, &matrix, pts);
-
-    this->incReserve(count);
-    // [xx,yy] == pts[0]
+    after.setLength(dist);
     this->lineTo(xx, yy);
-    for (int i = 1; i < count; i += 2) {
-        this->quadTo(pts[i], pts[i+1]);
-    }
+    SkScalar weight = SkScalarSqrt(SK_ScalarHalf + cosh * SK_ScalarHalf);
+    this->conicTo(x1, y1, x1 + after.fX, y1 + after.fY, weight);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1909,6 +1999,13 @@ size_t SkPath::readFromMemory(const void* storage, size_t length) {
     uint8_t dir = (packed >> kDirection_SerializationShift) & 0x3;
     fIsVolatile = (packed >> kIsVolatile_SerializationShift) & 0x1;
     SkPathRef* pathRef = SkPathRef::CreateFromBuffer(&buffer);
+    if (!pathRef) {
+        return 0;
+    }
+
+    fPathRef.reset(pathRef);
+    SkDEBUGCODE(this->validate();)
+    buffer.skipToAlign4();
 
     // compatibility check
     if (version < kPathPrivFirstDirection_Version) {
@@ -1929,17 +2026,7 @@ size_t SkPath::readFromMemory(const void* storage, size_t length) {
         fFirstDirection = dir;
     }
 
-    size_t sizeRead = 0;
-    if (buffer.isValid()) {
-        fPathRef.reset(pathRef);
-        SkDEBUGCODE(this->validate();)
-        buffer.skipToAlign4();
-        sizeRead = buffer.pos();
-    } else if (pathRef) {
-        // If the buffer is not valid, pathRef should be nullptr
-        sk_throw();
-    }
-    return sizeRead;
+    return buffer.pos();
 }
 
 ///////////////////////////////////////////////////////////////////////////////

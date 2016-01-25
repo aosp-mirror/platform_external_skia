@@ -184,7 +184,6 @@ LOCAL_SRC_FILES := \
 	../tests/MessageBusTest.cpp \
 	../tests/MetaDataTest.cpp \
 	../tests/MipMapTest.cpp \
-	../tests/NameAllocatorTest.cpp \
 	../tests/OSPathTest.cpp \
 	../tests/OncePtrTest.cpp \
 	../tests/OnceTest.cpp \
@@ -226,6 +225,7 @@ LOCAL_SRC_FILES := \
 	../tests/RecorderTest.cpp \
 	../tests/RecordingXfermodeTest.cpp \
 	../tests/RectTest.cpp \
+	../tests/RectangleTextureTest.cpp \
 	../tests/RefCntTest.cpp \
 	../tests/RefDictTest.cpp \
 	../tests/RegionTest.cpp \
@@ -238,10 +238,10 @@ LOCAL_SRC_FILES := \
 	../tests/ScalarTest.cpp \
 	../tests/ScaleToSidesTest.cpp \
 	../tests/SerializationTest.cpp \
-	../tests/ShaderImageFilterTest.cpp \
 	../tests/ShaderOpacityTest.cpp \
 	../tests/SizeTest.cpp \
 	../tests/SkBase64Test.cpp \
+	../tests/SkColor4fTest.cpp \
 	../tests/SkImageTest.cpp \
 	../tests/SkNxTest.cpp \
 	../tests/SkResourceCacheTest.cpp \
@@ -272,6 +272,7 @@ LOCAL_SRC_FILES := \
 	../tests/TypefaceTest.cpp \
 	../tests/UnicodeTest.cpp \
 	../tests/UtilsTest.cpp \
+	../tests/ValueTest.cpp \
 	../tests/VarAllocTest.cpp \
 	../tests/WArrayTest.cpp \
 	../tests/WritePixelsTest.cpp \
@@ -288,6 +289,7 @@ LOCAL_SRC_FILES := \
 	../gm/anisotropic.cpp \
 	../gm/annotated_text.cpp \
 	../gm/arcofzorro.cpp \
+	../gm/arcto.cpp \
 	../gm/arithmode.cpp \
 	../gm/astcbitmap.cpp \
 	../gm/badpaint.cpp \
@@ -313,6 +315,7 @@ LOCAL_SRC_FILES := \
 	../gm/blurroundrect.cpp \
 	../gm/blurs.cpp \
 	../gm/bmpfilterqualityrepeat.cpp \
+	../gm/bug530095.cpp \
 	../gm/cgm.c \
 	../gm/cgms.cpp \
 	../gm/circles.cpp \
@@ -342,6 +345,7 @@ LOCAL_SRC_FILES := \
 	../gm/convexpolyeffect.cpp \
 	../gm/copyTo4444.cpp \
 	../gm/cubicpaths.cpp \
+	../gm/dashcircle.cpp \
 	../gm/dashcubics.cpp \
 	../gm/dashing.cpp \
 	../gm/dcshader.cpp \
@@ -465,6 +469,7 @@ LOCAL_SRC_FILES := \
 	../gm/polygons.cpp \
 	../gm/quadpaths.cpp \
 	../gm/recordopts.cpp \
+	../gm/rectangletexture.cpp \
 	../gm/rects.cpp \
 	../gm/repeated_bitmap.cpp \
 	../gm/resizeimagefilter.cpp \
@@ -480,6 +485,7 @@ LOCAL_SRC_FILES := \
 	../gm/shadertext3.cpp \
 	../gm/shadows.cpp \
 	../gm/shallowgradient.cpp \
+	../gm/showmiplevels.cpp \
 	../gm/simpleaaclip.cpp \
 	../gm/skbug1719.cpp \
 	../gm/skbug_257.cpp \

@@ -68,7 +68,6 @@ LOCAL_SRC_FILES := \
 	src/codec/SkBmpRLECodec.cpp \
 	src/codec/SkBmpStandardCodec.cpp \
 	src/codec/SkCodec.cpp \
-	src/codec/SkCodec_libpng.cpp \
 	src/codec/SkGifCodec.cpp \
 	src/codec/SkIcoCodec.cpp \
 	src/codec/SkJpegCodec.cpp \
@@ -76,12 +75,14 @@ LOCAL_SRC_FILES := \
 	src/codec/SkJpegUtility_codec.cpp \
 	src/codec/SkMaskSwizzler.cpp \
 	src/codec/SkMasks.cpp \
+	src/codec/SkPngCodec.cpp \
 	src/codec/SkSampler.cpp \
 	src/codec/SkSampledCodec.cpp \
 	src/codec/SkSwizzler.cpp \
 	src/codec/SkWbmpCodec.cpp \
 	src/codec/SkWebpAdapterCodec.cpp \
 	src/codec/SkWebpCodec.cpp \
+	src/codec/SkCodecImageGenerator.cpp \
 	src/android/SkBitmapRegionCanvas.cpp \
 	src/android/SkBitmapRegionCodec.cpp \
 	src/android/SkBitmapRegionDecoder.cpp \
@@ -97,7 +98,6 @@ LOCAL_SRC_FILES := \
 	src/core/SkBitmapCache.cpp \
 	src/core/SkBitmapController.cpp \
 	src/core/SkBitmapDevice.cpp \
-	src/core/SkBitmapFilter.cpp \
 	src/core/SkBitmapHeap.cpp \
 	src/core/SkBitmapProcShader.cpp \
 	src/core/SkBitmapProcState.cpp \
@@ -155,6 +155,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkFontDescriptor.cpp \
 	src/core/SkFontStream.cpp \
 	src/core/SkGeometry.cpp \
+	src/core/SkGlobalInitialization_core.cpp \
 	src/core/SkGlyphCache.cpp \
 	src/core/SkGraphics.cpp \
 	src/core/SkHalf.cpp \
@@ -250,6 +251,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkUnPreMultiply.cpp \
 	src/core/SkUtils.cpp \
 	src/core/SkValidatingReadBuffer.cpp \
+	src/core/SkValue.cpp \
 	src/core/SkVarAlloc.cpp \
 	src/core/SkVertState.cpp \
 	src/core/SkWriteBuffer.cpp \
@@ -336,11 +338,11 @@ LOCAL_SRC_FILES := \
 	src/effects/SkPerlinNoiseShader.cpp \
 	src/effects/SkPictureImageFilter.cpp \
 	src/effects/SkPixelXorXfermode.cpp \
-	src/effects/SkRectShaderImageFilter.cpp \
 	src/effects/SkTableColorFilter.cpp \
 	src/effects/SkTableMaskFilter.cpp \
 	src/effects/SkTestImageFilters.cpp \
 	src/effects/SkTileImageFilter.cpp \
+	src/effects/SkToFromValue.cpp \
 	src/effects/SkXfermodeImageFilter.cpp \
 	src/effects/gradients/SkClampRange.cpp \
 	src/effects/gradients/SkGradientBitmapCache.cpp \
@@ -480,7 +482,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/GrGLExtensions.cpp \
 	src/gpu/gl/GrGLIndexBuffer.cpp \
 	src/gpu/gl/GrGLInterface.cpp \
-	src/gpu/gl/GrGLNameAllocator.cpp \
 	src/gpu/gl/GrGLNoOpInterface.cpp \
 	src/gpu/gl/GrGLPath.cpp \
 	src/gpu/gl/GrGLPathRange.cpp \

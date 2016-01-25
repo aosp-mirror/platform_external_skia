@@ -444,7 +444,11 @@ public:
                    bool skipLayerForImageFilter = false,
                    const SkRect* rawBounds = nullptr) : fOrigPaint(paint) {
         fCanvas = canvas;
+#ifdef SK_SUPPORT_LEGACY_DRAWFILTER
         fFilter = canvas->getDrawFilter();
+#else
+        fFilter = nullptr;
+#endif
         fPaint = &fOrigPaint;
         fSaveCount = canvas->getSaveCount();
         fTempLayerForImageFilter = false;
@@ -778,6 +782,7 @@ SkCanvas::~SkCanvas() {
     dec_canvas();
 }
 
+#ifdef SK_SUPPORT_LEGACY_DRAWFILTER
 SkDrawFilter* SkCanvas::getDrawFilter() const {
     return fMCRec->fFilter;
 }
@@ -787,6 +792,7 @@ SkDrawFilter* SkCanvas::setDrawFilter(SkDrawFilter* filter) {
     SkRefCnt_SafeAssign(fMCRec->fFilter, filter);
     return filter;
 }
+#endif
 
 SkMetaData& SkCanvas::getMetaData() {
     // metadata users are rare, so we lazily allocate it. If that changes we
@@ -1071,25 +1077,11 @@ bool SkCanvas::clipRectBounds(const SkRect* bounds, SaveLayerFlags saveLayerFlag
 
     const SkMatrix& ctm = fMCRec->fMatrix;  // this->getTotalMatrix()
 
-// This is a temporary hack, until individual filters can do their own
-// bloating, when this will be removed.
-#ifdef SK_SUPPORT_SRC_BOUNDS_BLOAT_FOR_IMAGEFILTERS
-    SkRect storage;
-#endif
     if (imageFilter) {
         imageFilter->filterBounds(clipBounds, ctm, &clipBounds);
-#ifdef SK_SUPPORT_SRC_BOUNDS_BLOAT_FOR_IMAGEFILTERS
-        if (bounds && imageFilter->canComputeFastBounds()) {
-            imageFilter->computeFastBounds(*bounds, &storage);
-            bounds = &storage;
-        } else {
-            bounds = nullptr;
-        }
-#else
         if (bounds && !imageFilter->canComputeFastBounds()) {
             bounds = nullptr;
         }
-#endif
     }
     SkIRect ir;
     if (bounds) {
@@ -1433,11 +1425,7 @@ void SkCanvas::internalDrawDevice(SkBaseDevice* srcDev, int x, int y,
             const SkBitmap& src = srcDev->accessBitmap(false);
             SkMatrix matrix = *iter.fMatrix;
             matrix.postTranslate(SkIntToScalar(-pos.x()), SkIntToScalar(-pos.y()));
-#ifdef SK_SUPPORT_SRC_BOUNDS_BLOAT_FOR_IMAGEFILTERS
-            SkIRect clipBounds = SkIRect::MakeWH(srcDev->width(), srcDev->height());
-#else
             SkIRect clipBounds = iter.fClip->getBounds().makeOffset(-pos.x(), -pos.y());
-#endif
             SkAutoTUnref<SkImageFilter::Cache> cache(dstDev->getImageFilterCache());
             SkImageFilter::Context ctx(matrix, clipBounds, cache.get());
             if (filter->filterImage(&proxy, src, ctx, &dst, &offset)) {

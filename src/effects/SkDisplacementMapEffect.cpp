@@ -16,6 +16,7 @@
 #include "GrDrawContext.h"
 #include "GrCoordTransform.h"
 #include "GrInvariantOutput.h"
+#include "SkGr.h"
 #include "effects/GrTextureDomain.h"
 #include "glsl/GrGLSLFragmentProcessor.h"
 #include "glsl/GrGLSLFragmentShaderBuilder.h"
@@ -268,7 +269,7 @@ void SkDisplacementMapEffect::computeFastBounds(const SkRect& src, SkRect* dst) 
     } else {
         *dst = src;
     }
-    dst->outset(fScale * SK_ScalarHalf, fScale * SK_ScalarHalf);
+    dst->outset(SkScalarAbs(fScale) * SK_ScalarHalf, SkScalarAbs(fScale) * SK_ScalarHalf);
 }
 
 void SkDisplacementMapEffect::onFilterNodeBounds(const SkIRect& src, const SkMatrix& ctm,
@@ -276,8 +277,8 @@ void SkDisplacementMapEffect::onFilterNodeBounds(const SkIRect& src, const SkMat
     *dst = src;
     SkVector scale = SkVector::Make(fScale, fScale);
     ctm.mapVectors(&scale, 1);
-    dst->outset(SkScalarCeilToInt(scale.fX * SK_ScalarHalf),
-                SkScalarCeilToInt(scale.fY * SK_ScalarHalf));
+    dst->outset(SkScalarCeilToInt(SkScalarAbs(scale.fX) * SK_ScalarHalf),
+                SkScalarCeilToInt(SkScalarAbs(scale.fY) * SK_ScalarHalf));
 }
 
 bool SkDisplacementMapEffect::onFilterBounds(const SkIRect& src, const SkMatrix& ctm,
@@ -465,7 +466,7 @@ bool SkDisplacementMapEffect::filterImageGPU(Proxy* proxy, const SkBitmap& src, 
     drawContext->drawRect(GrClip::WideOpen(), paint, matrix, SkRect::Make(colorBounds));
     offset->fX = bounds.left();
     offset->fY = bounds.top();
-    WrapTexture(dst, bounds.width(), bounds.height(), result);
+    GrWrapTextureInBitmap(dst, bounds.width(), bounds.height(), false, result);
     return true;
 }
 

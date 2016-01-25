@@ -14,13 +14,15 @@ deps = {
   "third_party/externals/gyp"     : "https://chromium.googlesource.com/external/gyp.git@08429da7955a98ef764fafa223dd7de73f654b2d",
   "third_party/externals/harfbuzz": "https://skia.googlesource.com/third_party/harfbuzz.git@0.9.35",
   "third_party/externals/jsoncpp" : "https://chromium.googlesource.com/external/github.com/open-source-parsers/jsoncpp.git@1.0.0",
-  # Slightly ahead of v 0.4.3, to include the fix for https://bug.skia.org/4038
-  "third_party/externals/libwebp" : "https://chromium.googlesource.com/webm/libwebp.git@5ff0079ece626f122bfb8e33a5f92b5a68484176",
+  "third_party/externals/libwebp" : "https://chromium.googlesource.com/webm/libwebp.git@v0.5.0",
   "third_party/externals/nanomsg" : "https://skia.googlesource.com/third_party/nanomsg.git@0.4-beta",
   "third_party/externals/zlib"    : "https://chromium.googlesource.com/chromium/src/third_party/zlib@c4e33043fb071b6ea0a153845da625d7ed633d3d",
   # NOTE: If we update libpng, we may need to update the generated file at third_party/libpng/pnglibconf.h
   "third_party/externals/libpng"  : "https://skia.googlesource.com/third_party/libpng.git@070a616b8275277e18ef8ee91e2ca23f7bdc67d5",
   "third_party/externals/giflib"  : "https://android.googlesource.com/platform/external/giflib.git@ab10e256df4f684260ca239905b1cec727181f6c",
+
+  "third_party/externals/dng_sdk" : "https://android.googlesource.com/platform/external/dng_sdk.git@671e9caebb6a6d5580ae9bd7676c09501715b6f8",
+  "third_party/externals/piex"    : "https://android.googlesource.com/platform/external/piex.git@afc6ebdcba72e4eeeaafab1547c19025fcec5d1f",
 
   "third_party/externals/libjpeg-turbo"             : "https://skia.googlesource.com/third_party/libjpeg-turbo.git@36422d9e165a33914436068536772cc6ed1e7886",
   # libjpeg-turbo depends on yasm to compile .asm files
@@ -42,6 +44,9 @@ deps = {
 
   # sdl will be needed for native windows
   "third_party/externals/sdl" : "https://skia.googlesource.com/third_party/sdl@9b526d28cb2d7f0ccff0613c94bb52abc8f53b6f",
+
+  # microhttpd for skiaserve
+  "third_party/externals/microhttpd" : "https://android.googlesource.com/platform/external/libmicrohttpd@748945ec6f1c67b7efc934ab0808e1d32f2fb98d",
 }
 
 recursedeps = [ "common" ]
