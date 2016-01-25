@@ -55,7 +55,8 @@ LOCAL_CFLAGS += \
 	-U_FORTIFY_SOURCE \
 	-D_FORTIFY_SOURCE=1 \
 	-DSKIA_IMPLEMENTATION=1 \
-	-Wno-clobbered -Wno-error
+	-Wno-clobbered -Wno-error \
+	-fexceptions
 
 LOCAL_CPPFLAGS := \
 	-std=c++11 \
@@ -637,6 +638,8 @@ LOCAL_SRC_FILES := \
 	src/fonts/SkGScalerContext.cpp \
 	src/fonts/SkRandomScalerContext.cpp \
 	src/fonts/SkTestScalerContext.cpp \
+	src/codec/SkRawAdapterCodec.cpp \
+	src/codec/SkRawCodec.cpp \
 	third_party/etc1/etc1.cpp \
 	third_party/ktx/ktx.cpp
 
@@ -650,7 +653,9 @@ LOCAL_SHARED_LIBRARIES := \
 	libicuuc \
 	libicui18n \
 	libexpat \
-	libft2
+	libft2 \
+	libdng_sdk \
+	libpiex
 
 LOCAL_STATIC_LIBRARIES := \
 	libgif \
@@ -693,7 +698,9 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/src/ports \
 	$(LOCAL_PATH)/src/pdf \
 	external/sfntly/cpp/src \
-	external/zlib
+	external/zlib \
+	external/dng_sdk \
+	external/piex
 
 LOCAL_EXPORT_C_INCLUDE_DIRS := \
 	$(LOCAL_PATH)/include/codec \
@@ -717,6 +724,9 @@ LOCAL_SRC_FILES_arm += \
 	src/opts/SkBitmapProcState_opts_arm.cpp \
 	src/opts/SkBlitMask_opts_arm.cpp \
 	src/opts/SkBlitRow_opts_arm.cpp
+
+LOCAL_CFLAGS_arm += \
+	-DqDNGBigEndian=0
 
 ifeq ($(ARCH_ARM_HAVE_NEON), true)
 LOCAL_SRC_FILES_arm += \
@@ -745,6 +755,9 @@ LOCAL_SRC_FILES_x86 += \
 	src/opts/SkBlitRow_opts_SSE4.cpp \
 	src/opts/SkOpts_sse41.cpp \
 	src/opts/SkOpts_avx.cpp
+
+LOCAL_CFLAGS_x86 += \
+	-DqDNGBigEndian=0
 
 LOCAL_SRC_FILES_x86_64 += \
 	src/opts/SkBitmapFilter_opts_SSE2.cpp \
