@@ -425,7 +425,6 @@ LOCAL_SRC_FILES := \
 	../gm/lcdblendmodes.cpp \
 	../gm/lcdoverlap.cpp \
 	../gm/lcdtext.cpp \
-	../gm/lerpmode.cpp \
 	../gm/lighting.cpp \
 	../gm/lightingshader.cpp \
 	../gm/linepaths.cpp \
