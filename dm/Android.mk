@@ -28,6 +28,7 @@ LOCAL_SRC_FILES := \
 	../src/utils/debugger/SkDebugCanvas.cpp \
 	../src/utils/debugger/SkDrawCommand.cpp \
 	../src/utils/debugger/SkObjectParser.cpp \
+	../src/utils/debugger/SkOverdrawMode.cpp \
 	../tests/Test.cpp \
 	../tests/PathOpsAngleTest.cpp \
 	../tests/PathOpsBoundsTest.cpp \
@@ -425,7 +426,6 @@ LOCAL_SRC_FILES := \
 	../gm/lcdblendmodes.cpp \
 	../gm/lcdoverlap.cpp \
 	../gm/lcdtext.cpp \
-	../gm/lerpmode.cpp \
 	../gm/lighting.cpp \
 	../gm/lightingshader.cpp \
 	../gm/linepaths.cpp \

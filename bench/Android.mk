@@ -48,7 +48,6 @@ LOCAL_SRC_FILES := \
 	ControlBench.cpp \
 	CoverageBench.cpp \
 	DashBench.cpp \
-	DecodingBench.cpp \
 	DisplacementBench.cpp \
 	DrawBitmapAABench.cpp \
 	ETCBitmapBench.cpp \
@@ -271,7 +270,6 @@ LOCAL_SRC_FILES := \
 	../gm/lcdblendmodes.cpp \
 	../gm/lcdoverlap.cpp \
 	../gm/lcdtext.cpp \
-	../gm/lerpmode.cpp \
 	../gm/lighting.cpp \
 	../gm/lightingshader.cpp \
 	../gm/linepaths.cpp \
@@ -386,6 +384,7 @@ LOCAL_SRC_FILES := \
 	../src/utils/debugger/SkDrawCommand.cpp \
 	../src/utils/debugger/SkDebugCanvas.cpp \
 	../src/utils/debugger/SkObjectParser.cpp \
+	../src/utils/debugger/SkOverdrawMode.cpp \
 	../tools/AndroidSkDebugToStdOut.cpp \
 	../tools/flags/SkCommonFlags.cpp \
 	../tools/flags/SkCommonFlagsConfig.cpp \

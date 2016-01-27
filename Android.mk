@@ -326,7 +326,6 @@ LOCAL_SRC_FILES := \
 	src/effects/SkGpuBlurUtils.cpp \
 	src/effects/SkLayerDrawLooper.cpp \
 	src/effects/SkLayerRasterizer.cpp \
-	src/effects/SkLerpXfermode.cpp \
 	src/effects/SkLightingImageFilter.cpp \
 	src/effects/SkLumaColorFilter.cpp \
 	src/effects/SkMagnifierImageFilter.cpp \

@@ -9,20 +9,11 @@
 #include "GrContextFactory.h"
 #include "SkCanvas.h"
 #include "SkCommandLineFlags.h"
-#include "SkOSFile.h"
-#include <SkPicture.h>
+#include "SkPicture.h"
 #include "SkStream.h"
 #include "SkSurface.h"
 
-// temporary junk
-#include "SkGradientShader.h"
-
-#include <stdio.h>
-#include <sys/types.h>
-#include <sys/select.h>
-#include <sys/stat.h>
 #include <sys/socket.h>
-#include <fcntl.h>
 #include <microhttpd.h>
 
 // To get image decoders linked in we have to do the below magic
@@ -42,7 +33,7 @@ static const int kImageWidth = 1920;
 static const int kImageHeight = 1080;
 
 // TODO factor this out into functions, also handle CPU path
-SkData* setupAndDrawToCanvas(const char* path, SkString* error) {
+SkData* setupAndDrawToCanvas(SkStream* stream, SkString* error) {
     GrContextOptions grContextOpts;
     SkAutoTDelete<GrContextFactory> factory(new GrContextFactory(grContextOpts));
 
@@ -64,15 +55,9 @@ SkData* setupAndDrawToCanvas(const char* path, SkString* error) {
     gl->makeCurrent();
 
     // draw
-    SkAutoTDelete<SkStream> stream(SkStream::NewFromFile(path));
-    if (stream.get() == nullptr) {
-        error->appendf("Could not read %s.\n", path);
-        return nullptr;
-    }
-
-    SkAutoTUnref<SkPicture> pic(SkPicture::CreateFromStream(stream.get()));
+    SkAutoTUnref<SkPicture> pic(SkPicture::CreateFromStream(stream));
     if (pic.get() == nullptr) {
-        error->appendf("Could not read %s as an SkPicture.\n", path);
+        error->appendf("Could not create picture from stream.\n");
         return nullptr;
     }
 
@@ -95,7 +80,6 @@ SkData* setupAndDrawToCanvas(const char* path, SkString* error) {
     }
     return data;
 }
-
 // TODO move to template file
 SkString generateTemplate(SkString source) {
     SkString debuggerTemplate;
@@ -119,53 +103,163 @@ SkString generateTemplate(SkString source) {
 
 }
 
-int answer_to_connection(void* cls, struct MHD_Connection* connection,
-                         const char* url, const char* method, const char* version,
-                         const char* upload_data, size_t* upload_data_size,
-                         void** con_cls) {
-    printf ("New %s request for %s using version %s\n", method, url, version);
+struct UploadContext {
+    SkDynamicMemoryWStream stream;
+    MHD_PostProcessor* pp;
+    MHD_Connection* connection;
+};
 
-    struct MHD_Response* response;
+struct Request {
+    Request() : fUploadContext(nullptr) {}
+    UploadContext* fUploadContext;
+    SkAutoTUnref<SkData> fPNG;
+};
 
-    // serve html to root
-    // TODO better url handling
-    int ret;
-    if (0 == strcmp("/", url)) {
-        SkString debuggerTemplate = generateTemplate(SkString("http://debugger.skia.org"));
+static const size_t kBufferSize = 1024;
 
-        response = MHD_create_response_from_buffer(debuggerTemplate.size(),
-                                                   (void*)const_cast<char*>(debuggerTemplate.c_str()),
-                                                   MHD_RESPMEM_MUST_COPY);
-        ret = MHD_queue_response(connection, MHD_HTTP_OK, response);
-        MHD_destroy_response(response);
+static int process_upload_data(void* cls, enum MHD_ValueKind kind,
+                               const char* key, const char* filename,
+                               const char* content_type, const char* transfer_encoding,
+                               const char* data, uint64_t off, size_t size) {
+    struct UploadContext* uc = reinterpret_cast<UploadContext*>(cls);
+
+    if (0 != size) {
+        uc->stream.write(data, size);
+    }
+    return MHD_YES;
+}
+
+static int SendImage(MHD_Connection* connection, const SkData* data) {
+    MHD_Response* response = MHD_create_response_from_buffer(data->size(),
+                                                             const_cast<void*>(data->data()),
+                                                             MHD_RESPMEM_MUST_COPY);
+    MHD_add_response_header(response, "Content-Type", "image/png");
+
+    int ret = MHD_queue_response(connection, MHD_HTTP_OK, response);
+    MHD_destroy_response(response);
+    return ret;
+}
+
+static int SendTemplate(MHD_Connection* connection) {
+    SkString debuggerTemplate = generateTemplate(SkString("http://debugger.skia.org"));
+
+    MHD_Response* response = MHD_create_response_from_buffer(
+        debuggerTemplate.size(),
+        (void*) const_cast<char*>(debuggerTemplate.c_str()),
+        MHD_RESPMEM_MUST_COPY);
+
+    int ret = MHD_queue_response(connection, MHD_HTTP_OK, response);
+    MHD_destroy_response(response);
+    return ret;
+}
+
+typedef int (*UrlHandler)(Request* request, MHD_Connection* connection,
+                          const char* upload_data, size_t* upload_data_size);
+
+int rootHandler(Request* request, MHD_Connection* connection,
+                const char* upload_data, size_t* upload_data_size) {
+    return SendTemplate(connection);
+}
+
+int postHandler(Request* request, MHD_Connection* connection,
+                const char* upload_data, size_t* upload_data_size) {
+    UploadContext* uc =  request->fUploadContext;
+
+    // New connection
+    if (!uc) {
+        // TODO make this a method on request
+        uc = new UploadContext;
+        uc->connection = connection;
+        uc->pp = MHD_create_post_processor(connection, kBufferSize, &process_upload_data, uc);
+        SkASSERT(uc->pp);
+
+        request->fUploadContext = uc;
         return MHD_YES;
     }
 
-    // otherwise serve an image
-    // TODO take from post
-    SkString resourceName;
-    resourceName.appendf("%s/%s.skp", FLAGS_dir[0], FLAGS_name[0]);
-    SkDebugf("Loading skp: %s\n", resourceName.c_str());
+    // in process upload
+    if (0 != *upload_data_size) {
+        SkASSERT(uc->pp);
+        MHD_post_process(uc->pp, upload_data, *upload_data_size);
+        *upload_data_size = 0;
+        return MHD_YES;
+    }
 
+    // end of upload
+    MHD_destroy_post_processor(uc->pp);
+    uc->pp = nullptr;
+
+    // TODO response
     SkString error;
-    SkAutoTUnref<SkData> data(setupAndDrawToCanvas(resourceName.c_str(), &error));
+    SkData* data = setupAndDrawToCanvas(uc->stream.detachAsStream(), &error);
     if (!data) {
         // TODO send error
         return MHD_YES;
     }
 
-    response = MHD_create_response_from_buffer(data->size(), const_cast<void*>(data->data()),
-                                               MHD_RESPMEM_MUST_COPY);
-    MHD_add_response_header(response, "Content-Type", "image/png");
-    ret = MHD_queue_response(connection, MHD_HTTP_OK, response);
-    MHD_destroy_response(response);
-    return ret;
+    request->fPNG.reset(data);
+    return SendTemplate(connection);
+}
+
+int imgHandler(Request* request, MHD_Connection* connection,
+               const char* upload_data, size_t* upload_data_size) {
+    if (request->fPNG.get()) {
+        SkData* data = request->fPNG.get();
+        return SendImage(connection, data);
+    }
+    return MHD_NO;
+}
+
+class UrlManager {
+public:
+    UrlManager() {
+        // Register handlers
+        fHandlers.push_back({MHD_HTTP_METHOD_GET, "/", rootHandler});
+        fHandlers.push_back({MHD_HTTP_METHOD_POST, "/new", postHandler});
+        fHandlers.push_back({MHD_HTTP_METHOD_GET, "/img", imgHandler});
+    }
+
+    // This is clearly not efficient for a large number of urls and handlers
+    int invoke(Request* request, MHD_Connection* connection, const char* url, const char* method,
+               const char* upload_data, size_t* upload_data_size) const {
+        for (int i = 0; i < fHandlers.count(); i++) {
+            const Url& urlHandler = fHandlers[i];
+            if (0 == strcmp(method, urlHandler.fMethod) &&
+                0 == strcmp(url, urlHandler.fPath)) {
+                    return (*urlHandler.fHandler)(request, connection, upload_data,
+                                                  upload_data_size);
+            }
+        }
+        return MHD_NO;
+    }
+
+private:
+    struct Url {
+        const char* fMethod;
+        const char* fPath;
+        UrlHandler fHandler;
+    };
+    SkTArray<Url> fHandlers;
+};
+
+const UrlManager kUrlManager;
+
+int answer_to_connection(void* cls, struct MHD_Connection* connection,
+                         const char* url, const char* method, const char* version,
+                         const char* upload_data, size_t* upload_data_size,
+                         void** con_cls) {
+    SkDebugf("New %s request for %s using version %s\n", method, url, version);
+
+    Request* request = reinterpret_cast<Request*>(cls);
+    return kUrlManager.invoke(request, connection, url, method, upload_data, upload_data_size);
 }
 
 int skiaserve_main() {
+    Request request; // This simple server has one request
     struct MHD_Daemon* daemon;
-    daemon = MHD_start_daemon(MHD_USE_SELECT_INTERNALLY, PORT, NULL, NULL,
-                              &answer_to_connection, NULL, MHD_OPTION_END);
+    daemon = MHD_start_daemon(MHD_USE_SELECT_INTERNALLY, PORT, nullptr, nullptr,
+                              &answer_to_connection, &request,
+                              MHD_OPTION_END);
     if (NULL == daemon) {
         return 1;
     }

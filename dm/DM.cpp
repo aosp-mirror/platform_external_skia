@@ -66,7 +66,6 @@ DEFINE_string(uninterestingHashesFile, "",
 
 DEFINE_int32(shards, 1, "We're splitting source data into this many shards.");
 DEFINE_int32(shard,  0, "Which shard do I run?");
-DEFINE_bool2(pre_log, p, false, "Log before running each test. May be incomprehensible when threading");
 
 __SK_FORCE_IMAGE_DECODER_LINKING;
 using namespace DM;
@@ -522,20 +521,6 @@ static bool brd_supported(const char* ext) {
     return false;
 }
 
-static bool is_raw(const SkString& file) {
-    static const char* const exts[] = {
-        "arw", "cr2", "dng", "nef", "nrw", "orf", "raf", "rw2", "pef", "srw",
-        "ARW", "CR2", "DNG", "NEF", "NRW", "ORF", "RAF", "RW2", "PEF", "SRW",
-    };
-
-    for (uint32_t i = 0; i < SK_ARRAY_COUNT(exts); i++) {
-        if (file.endsWith(exts[i])) {
-            return true;
-        }
-    }
-    return false;
-}
-
 static void gather_srcs() {
     for (const skiagm::GMRegistry* r = skiagm::GMRegistry::Head(); r; r = r->next()) {
         push_src("gm", "", new GMSrc(r->factory()));
@@ -564,9 +549,6 @@ static void gather_srcs() {
                 SkOSFile::Iter it(flag, exts[j]);
                 for (SkString file; it.next(&file); ) {
                     SkString path = SkOSPath::Join(flag, file.c_str());
-                    if (!is_raw(file)) {
-                        push_src("image", "decode", new ImageSrc(path)); // Decode entire image
-                    }
                     push_codec_srcs(path);
                     if (brd_supported(exts[j])) {
                         push_brd_srcs(path);
@@ -575,9 +557,6 @@ static void gather_srcs() {
             }
         } else if (sk_exists(flag)) {
             // assume that FLAGS_images[i] is a valid image if it is a file.
-            if (!is_raw(SkString(flag))) {
-                push_src("image", "decode", new ImageSrc(flag)); // Decode entire image.
-            }
             push_codec_srcs(flag);
             push_brd_srcs(flag);
         }
