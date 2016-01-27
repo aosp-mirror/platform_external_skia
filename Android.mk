@@ -253,7 +253,6 @@ LOCAL_SRC_FILES := \
 	src/core/SkUnPreMultiply.cpp \
 	src/core/SkUtils.cpp \
 	src/core/SkValidatingReadBuffer.cpp \
-	src/core/SkValue.cpp \
 	src/core/SkVarAlloc.cpp \
 	src/core/SkVertState.cpp \
 	src/core/SkWriteBuffer.cpp \
@@ -343,7 +342,6 @@ LOCAL_SRC_FILES := \
 	src/effects/SkTableMaskFilter.cpp \
 	src/effects/SkTestImageFilters.cpp \
 	src/effects/SkTileImageFilter.cpp \
-	src/effects/SkToFromValue.cpp \
 	src/effects/SkXfermodeImageFilter.cpp \
 	src/effects/gradients/SkClampRange.cpp \
 	src/effects/gradients/SkGradientBitmapCache.cpp \
