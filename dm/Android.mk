@@ -292,6 +292,7 @@ LOCAL_SRC_FILES := \
 	../gm/arcto.cpp \
 	../gm/arithmode.cpp \
 	../gm/astcbitmap.cpp \
+	../gm/avoidxfermode.cpp \
 	../gm/badpaint.cpp \
 	../gm/beziereffects.cpp \
 	../gm/beziers.cpp \
