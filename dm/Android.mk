@@ -585,7 +585,6 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../include/codec \
 	$(LOCAL_PATH)/../include/android \
 	$(LOCAL_PATH)/../include/effects \
-	$(LOCAL_PATH)/../include/client/android \
 	$(LOCAL_PATH)/../include/images \
 	$(LOCAL_PATH)/../include/ports \
 	$(LOCAL_PATH)/../src/sfnt \
