@@ -337,7 +337,6 @@ LOCAL_SRC_FILES := \
 	src/effects/SkPaintImageFilter.cpp \
 	src/effects/SkPerlinNoiseShader.cpp \
 	src/effects/SkPictureImageFilter.cpp \
-	src/effects/SkPixelXorXfermode.cpp \
 	src/effects/SkTableColorFilter.cpp \
 	src/effects/SkTableMaskFilter.cpp \
 	src/effects/SkTestImageFilters.cpp \
@@ -351,6 +350,7 @@ LOCAL_SRC_FILES := \
 	src/effects/gradients/SkTwoPointConicalGradient.cpp \
 	src/effects/gradients/SkTwoPointConicalGradient_gpu.cpp \
 	src/effects/gradients/SkSweepGradient.cpp \
+	src/android/effects/SkPixelXorXfermode.cpp \
 	src/gpu/GrAuditTrail.cpp \
 	src/gpu/GrBatchAtlas.cpp \
 	src/gpu/GrBatchFlushState.cpp \
@@ -686,6 +686,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/include/gpu \
 	$(LOCAL_PATH)/src/gpu \
 	$(LOCAL_PATH)/include/effects \
+	$(LOCAL_PATH)/include/client/android \
 	$(LOCAL_PATH)/src/effects \
 	$(LOCAL_PATH)/third_party/etc1 \
 	$(LOCAL_PATH)/third_party/ktx \
@@ -708,6 +709,7 @@ LOCAL_EXPORT_C_INCLUDE_DIRS := \
 	$(LOCAL_PATH)/include/core \
 	$(LOCAL_PATH)/include/pathops \
 	$(LOCAL_PATH)/include/effects \
+	$(LOCAL_PATH)/include/client/android \
 	$(LOCAL_PATH)/include/gpu \
 	$(LOCAL_PATH)/include/images \
 	$(LOCAL_PATH)/include/ports \
