@@ -257,6 +257,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkVertState.cpp \
 	src/core/SkWriteBuffer.cpp \
 	src/core/SkWriter32.cpp \
+	src/core/SkXfer4f.cpp \
 	src/core/SkXfermode.cpp \
 	src/core/SkXfermodeInterpretation.cpp \
 	src/core/SkYUVPlanesCache.cpp \

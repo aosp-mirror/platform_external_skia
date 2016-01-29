@@ -122,6 +122,7 @@ LOCAL_SRC_FILES := \
 	VertBench.cpp \
 	WritePixelsBench.cpp \
 	WriterBench.cpp \
+	Xfer4fBench.cpp \
 	XfermodeBench.cpp \
 	nanobench.cpp \
 	nanobenchAndroid.cpp \
@@ -376,6 +377,7 @@ LOCAL_SRC_FILES := \
 	../gm/verttext.cpp \
 	../gm/verttext2.cpp \
 	../gm/verylargebitmap.cpp \
+	../gm/xfer4f.cpp \
 	../gm/xfermodeimagefilter.cpp \
 	../gm/xfermodes.cpp \
 	../gm/xfermodes2.cpp \
