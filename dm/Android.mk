@@ -325,6 +325,7 @@ LOCAL_SRC_FILES := \
 	../gm/clipdrawdraw.cpp \
 	../gm/clippedbitmapshaders.cpp \
 	../gm/cmykjpeg.cpp \
+	../gm/color4f.cpp \
 	../gm/colorcube.cpp \
 	../gm/coloremoji.cpp \
 	../gm/colorfilterimagefilter.cpp \

@@ -112,6 +112,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkBlitter.cpp \
 	src/core/SkBlitter_A8.cpp \
 	src/core/SkBlitter_ARGB32.cpp \
+	src/core/SkBlitter_PM4f.cpp \
 	src/core/SkBlitter_RGB16.cpp \
 	src/core/SkBlitter_Sprite.cpp \
 	src/core/SkBuffer.cpp \
@@ -257,8 +258,8 @@ LOCAL_SRC_FILES := \
 	src/core/SkVertState.cpp \
 	src/core/SkWriteBuffer.cpp \
 	src/core/SkWriter32.cpp \
-	src/core/SkXfer4f.cpp \
 	src/core/SkXfermode.cpp \
+	src/core/SkXfermode4f.cpp \
 	src/core/SkXfermodeInterpretation.cpp \
 	src/core/SkYUVPlanesCache.cpp \
 	src/doc/SkDocument.cpp \
