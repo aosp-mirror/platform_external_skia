@@ -417,6 +417,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrTexture.cpp \
 	src/gpu/GrTextureParamsAdjuster.cpp \
 	src/gpu/GrTextureProvider.cpp \
+	src/gpu/GrTextureToYUVPlanes.cpp \
 	src/gpu/GrTextureAccess.cpp \
 	src/gpu/GrXferProcessor.cpp \
 	src/gpu/GrYUVProvider.cpp \
@@ -466,7 +467,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/effects/GrTextureDomain.cpp \
 	src/gpu/effects/GrTextureStripAtlas.cpp \
 	src/gpu/effects/GrXfermodeFragmentProcessor.cpp \
-	src/gpu/effects/GrYUVtoRGBEffect.cpp \
+	src/gpu/effects/GrYUVEffect.cpp \
 	src/gpu/text/GrAtlasTextBlob.cpp \
 	src/gpu/text/GrAtlasTextContext.cpp \
 	src/gpu/text/GrBatchFontCache.cpp \
@@ -629,8 +630,9 @@ LOCAL_SRC_FILES := \
 	src/utils/SkParsePath.cpp \
 	src/utils/SkPatchGrid.cpp \
 	src/utils/SkPatchUtils.cpp \
-	src/utils/SkSHA1.cpp \
+	src/utils/SkRGBAToYUV.cpp \
 	src/utils/SkRTConf.cpp \
+	src/utils/SkSHA1.cpp \
 	src/utils/SkTextBox.cpp \
 	src/utils/SkTextureCompressor.cpp \
 	src/utils/SkTextureCompressor_ASTC.cpp \

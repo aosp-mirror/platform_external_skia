@@ -421,6 +421,7 @@ LOCAL_SRC_FILES := \
 	../gm/imagescalealigned.cpp \
 	../gm/imagesource.cpp \
 	../gm/imagesource2.cpp \
+	../gm/imagetoyuvplanes.cpp \
 	../gm/internal_links.cpp \
 	../gm/inversepaths.cpp \
 	../gm/largeglyphblur.cpp \
