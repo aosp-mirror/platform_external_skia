@@ -690,6 +690,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/include/gpu \
 	$(LOCAL_PATH)/src/gpu \
 	$(LOCAL_PATH)/include/effects \
+	$(LOCAL_PATH)/include/client/android \
 	$(LOCAL_PATH)/src/effects \
 	$(LOCAL_PATH)/third_party/etc1 \
 	$(LOCAL_PATH)/third_party/ktx \
@@ -712,6 +713,7 @@ LOCAL_EXPORT_C_INCLUDE_DIRS := \
 	$(LOCAL_PATH)/include/core \
 	$(LOCAL_PATH)/include/pathops \
 	$(LOCAL_PATH)/include/effects \
+	$(LOCAL_PATH)/include/client/android \
 	$(LOCAL_PATH)/include/gpu \
 	$(LOCAL_PATH)/include/images \
 	$(LOCAL_PATH)/include/ports \
