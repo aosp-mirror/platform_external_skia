@@ -516,6 +516,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/glsl/GrGLSLGeometryShaderBuilder.cpp \
 	src/gpu/glsl/GrGLSLPrimitiveProcessor.cpp \
 	src/gpu/glsl/GrGLSLProgramBuilder.cpp \
+	src/gpu/glsl/GrGLSLProgramDataManager.cpp \
 	src/gpu/glsl/GrGLSLShaderBuilder.cpp \
 	src/gpu/glsl/GrGLSLUtil.cpp \
 	src/gpu/glsl/GrGLSLVarying.cpp \
