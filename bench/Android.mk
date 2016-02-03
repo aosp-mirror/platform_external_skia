@@ -140,6 +140,7 @@ LOCAL_SRC_FILES := \
 	../gm/astcbitmap.cpp \
 	../gm/avoidxfermode.cpp \
 	../gm/avoidxfermode2.cpp \
+	../gm/avoidxfermode3.cpp \
 	../gm/badpaint.cpp \
 	../gm/beziereffects.cpp \
 	../gm/beziers.cpp \
