@@ -14,6 +14,9 @@
         'jsoncpp.gyp:jsoncpp',
       ],
       'include_dirs': [
+        '../include/core',
+        '../include/effects',
+        '../include/private',
         '../include/utils',
         '../src/core',
       ],

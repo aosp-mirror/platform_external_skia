@@ -267,10 +267,13 @@ private:
             return false;
         }
 
-        const size_t sizeToRead = newSize - fStreamBuffer.bytesWritten();
-        SkAutoTMalloc<uint8> tempBuffer(sizeToRead);
+        // Try to read at least 8192 bytes to avoid to many small reads.
+        const size_t kMinSizeToRead = 8192;
+        const size_t sizeRequested = newSize - fStreamBuffer.bytesWritten();
+        const size_t sizeToRead = SkTMax(kMinSizeToRead, sizeRequested);
+        SkAutoSTMalloc<kMinSizeToRead, uint8> tempBuffer(sizeToRead);
         const size_t bytesRead = fStream->read(tempBuffer.get(), sizeToRead);
-        if (bytesRead != sizeToRead) {
+        if (bytesRead < sizeRequested) {
             return false;
         }
         return fStreamBuffer.write(tempBuffer.get(), bytesRead);
@@ -438,9 +441,6 @@ private:
 SkCodec* SkRawCodec::NewFromStream(SkStream* stream) {
     SkAutoTDelete<SkRawStream> rawStream(new SkRawStream(stream));
     ::piex::PreviewImageData imageData;
-    // FIXME: ::piex::GetPreviewImageData() calls GetData() frequently with small amounts,
-    // resulting in many calls to bufferMoreData(). Could we make this more efficient by grouping
-    // smaller requests together?
     if (::piex::IsRaw(rawStream.get())) {
         ::piex::Error error = ::piex::GetPreviewImageData(rawStream.get(), &imageData);
 
@@ -508,7 +508,7 @@ SkCodec::Result SkRawCodec::onGetPixels(const SkImageInfo& requestedInfo, void* 
     buffer.fPlaneStep = 1;
     buffer.fPixelType = ttByte;
     buffer.fPixelSize = sizeof(uint8_t);
-    buffer.fRowStep = sizeof(srcRow);
+    buffer.fRowStep = width * 3;
 
     for (int i = 0; i < height; ++i) {
         buffer.fArea = dng_rect(i, 0, i + 1, width);

@@ -10,13 +10,14 @@
 #include "SkAlphaThresholdFilter.h"
 #include "SkArithmeticMode.h"
 #include "SkArcToPathEffect.h"
+#include "SkAvoidXfermode.h"
 #include "SkBitmapSourceDeserializer.h"
 #include "SkBlurDrawLooper.h"
 #include "SkBlurImageFilter.h"
 #include "SkBlurMaskFilter.h"
 #include "SkColorCubeFilter.h"
 #include "SkColorFilterImageFilter.h"
-#include "SkColorMatrixFilter.h"
+#include "SkColorMatrixFilterRowMajor255.h"
 #include "SkComposeImageFilter.h"
 #include "SkCornerPathEffect.h"
 #include "SkDashPathEffect.h"
@@ -45,6 +46,15 @@
 #include "SkTileImageFilter.h"
 #include "SkXfermodeImageFilter.h"
 
+// Security note:
+//
+// As new subclasses are added here, they should be reviewed by chrome security before they
+// support deserializing cross-process: chrome-security@google.com. SampleFilterFuzz.cpp should
+// also be amended to exercise the new subclass.
+//
+// See SkReadBuffer::isCrossProcess() and SkPicture::PictureIOSecurityPrecautionsEnabled()
+//
+
 /*
  *  None of these are strictly "required" for Skia to operate.
  *
@@ -69,7 +79,7 @@ void SkFlattenable::PrivateInitializer::InitEffects() {
 
     // ColorFilter
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkColorCubeFilter)
-    SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkColorMatrixFilter)
+    SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkColorMatrixFilterRowMajor255)
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkLumaColorFilter)
     SkAlphaThresholdFilter::InitializeFlattenables();
     SkArithmeticMode::InitializeFlattenables();
@@ -82,6 +92,7 @@ void SkFlattenable::PrivateInitializer::InitEffects() {
 
     // Xfermode
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkPixelXorXfermode)
+    SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkAvoidXfermode)
 
     // PathEffect
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkArcToPathEffect)

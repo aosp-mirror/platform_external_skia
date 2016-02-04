@@ -154,6 +154,13 @@ public:
     uint32_t uniqueID() const { return fUniqueID; }
     virtual bool isOpaque() const { return false; }
 
+    /**
+     * Extracts YUV planes from the SkImage and stores them in client-provided memory. The sizes
+     * planes and rowBytes arrays are ordered [y, u, v].
+     */
+    bool readYUV8Planes(const SkISize[3], void* const planes[3], const size_t rowBytes[3],
+                        SkYUVColorSpace) const;
+
     virtual SkShader* newShader(SkShader::TileMode,
                                 SkShader::TileMode,
                                 const SkMatrix* localMatrix = NULL) const;
@@ -299,6 +306,13 @@ public:
      *  NULL will be returned.
      */
     SkImage* newSubset(const SkIRect& subset) const;
+
+    /**
+     *  Ensures that an image is backed by a texture (when GrContext is non-null). If no
+     *  transformation is required, the returned image may be the same as this image. If the this
+     *  image is from a different GrContext, this will fail.
+     */
+    SkImage* newTextureImage(GrContext*) const;
 
     // Helper functions to convert to SkBitmap
 

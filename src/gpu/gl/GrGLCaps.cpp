@@ -207,7 +207,11 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
         }
     }
 
+#if 0 // Disabled due to https://bug.skia.org/4454
     fBindUniformLocationSupport = ctxInfo.hasExtension("GL_CHROMIUM_bind_uniform_location");
+#else
+    fBindUniformLocationSupport = false;
+#endif
 
     if (ctxInfo.hasExtension("GL_OES_EGL_image_external")) {
         if (ctxInfo.glslGeneration() == k110_GrGLSLGeneration) {
@@ -278,6 +282,17 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
 
         glslCaps->fShaderDerivativeSupport = ctxInfo.version() >= GR_GL_VER(3, 0) ||
             ctxInfo.hasExtension("GL_OES_standard_derivatives");
+    }
+
+    if (ctxInfo.hasExtension("GL_EXT_shader_pixel_local_storage")) {
+        #define GL_MAX_SHADER_PIXEL_LOCAL_STORAGE_FAST_SIZE_EXT 0x8F63
+        GR_GL_GetIntegerv(gli, GL_MAX_SHADER_PIXEL_LOCAL_STORAGE_FAST_SIZE_EXT, 
+                          &glslCaps->fPixelLocalStorageSize);
+        glslCaps->fPLSPathRenderingSupport = glslCaps->fFBFetchSupport;
+    }
+    else {
+        glslCaps->fPixelLocalStorageSize = 0;
+        glslCaps->fPLSPathRenderingSupport = false;
     }
 
     /**************************************************************************
@@ -527,7 +542,6 @@ void GrGLCaps::initGLSL(const GrGLContextInfo& ctxInfo) {
 
     GrGLSLCaps* glslCaps = static_cast<GrGLSLCaps*>(fShaderCaps.get());
     glslCaps->fGLSLGeneration = ctxInfo.glslGeneration();
-
     if (kGLES_GrGLStandard == standard) {
         if (ctxInfo.hasExtension("GL_EXT_shader_framebuffer_fetch")) {
             glslCaps->fFBFetchNeedsCustomOutput = (version >= GR_GL_VER(3, 0));

@@ -1103,9 +1103,7 @@ static void test_lcd_coverage_fallback_case(skiatest::Reporter* reporter, const 
                                           GrBatchToXPOverrides* overrides) const override {
             color->setKnownFourComponents(GrColorPackRGBA(123, 45, 67, 221));
             coverage->setUnknownFourComponents();
-            coverage->setUsingLCDCoverage();
-            overrides->fUsePLSDstRead = false;
-        }
+            coverage->setUsingLCDCoverage();        }
 
         const char* name() const override { return "Test LCD Text Batch"; }
         void initBatchTracker(const GrXPOverridesForBatch&) override {}

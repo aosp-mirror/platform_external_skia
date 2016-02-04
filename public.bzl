@@ -335,6 +335,7 @@ BASE_DEPS_IOS = []
 INCLUDES = [
     "include/android",
     "include/c",
+    "include/client/android",
     "include/codec",
     "include/config",
     "include/core",
@@ -429,6 +430,7 @@ DM_SRCS_IOS = struct()
 ################################################################################
 
 DM_INCLUDES = [
+    "dm",
     "gm",
     "src/codec",
     "src/effects",

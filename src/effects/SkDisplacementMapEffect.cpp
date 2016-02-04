@@ -282,13 +282,12 @@ void SkDisplacementMapEffect::onFilterNodeBounds(const SkIRect& src, const SkMat
 }
 
 bool SkDisplacementMapEffect::onFilterBounds(const SkIRect& src, const SkMatrix& ctm,
-                                   SkIRect* dst) const {
-    SkIRect bounds;
-    this->onFilterNodeBounds(src, ctm, &bounds, kReverse_MapDirection);
+                                             SkIRect* dst, MapDirection direction) const {
+    // Recurse only into color input.
     if (this->getColorInput()) {
-        return this->getColorInput()->filterBounds(bounds, ctm, dst);
+        return this->getColorInput()->filterBounds(src, ctm, dst, direction);
     }
-    *dst = bounds;
+    *dst = src;
     return true;
 }
 
@@ -314,9 +313,8 @@ void SkDisplacementMapEffect::toString(SkString* str) const {
 class GrGLDisplacementMapEffect : public GrGLSLFragmentProcessor {
 public:
     GrGLDisplacementMapEffect(const GrProcessor&);
-    virtual ~GrGLDisplacementMapEffect();
 
-    virtual void emitCode(EmitArgs&) override;
+    void emitCode(EmitArgs&) override;
 
     static inline void GenKey(const GrProcessor&, const GrGLSLCaps&, GrProcessorKeyBuilder*);
 
@@ -547,9 +545,6 @@ const GrFragmentProcessor* GrDisplacementMapEffect::TestCreate(GrProcessorTestDa
 GrGLDisplacementMapEffect::GrGLDisplacementMapEffect(const GrProcessor& proc)
     : fXChannelSelector(proc.cast<GrDisplacementMapEffect>().xChannelSelector())
     , fYChannelSelector(proc.cast<GrDisplacementMapEffect>().yChannelSelector()) {
-}
-
-GrGLDisplacementMapEffect::~GrGLDisplacementMapEffect() {
 }
 
 void GrGLDisplacementMapEffect::emitCode(EmitArgs& args) {

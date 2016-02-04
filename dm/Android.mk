@@ -273,7 +273,6 @@ LOCAL_SRC_FILES := \
 	../tests/TypefaceTest.cpp \
 	../tests/UnicodeTest.cpp \
 	../tests/UtilsTest.cpp \
-	../tests/ValueTest.cpp \
 	../tests/VarAllocTest.cpp \
 	../tests/WArrayTest.cpp \
 	../tests/WritePixelsTest.cpp \
@@ -293,6 +292,9 @@ LOCAL_SRC_FILES := \
 	../gm/arcto.cpp \
 	../gm/arithmode.cpp \
 	../gm/astcbitmap.cpp \
+	../gm/avoidxfermode.cpp \
+	../gm/avoidxfermode2.cpp \
+	../gm/avoidxfermode3.cpp \
 	../gm/badpaint.cpp \
 	../gm/beziereffects.cpp \
 	../gm/beziers.cpp \
@@ -325,6 +327,7 @@ LOCAL_SRC_FILES := \
 	../gm/clipdrawdraw.cpp \
 	../gm/clippedbitmapshaders.cpp \
 	../gm/cmykjpeg.cpp \
+	../gm/color4f.cpp \
 	../gm/colorcube.cpp \
 	../gm/coloremoji.cpp \
 	../gm/colorfilterimagefilter.cpp \
@@ -336,6 +339,7 @@ LOCAL_SRC_FILES := \
 	../gm/complexclip.cpp \
 	../gm/complexclip2.cpp \
 	../gm/complexclip3.cpp \
+	../gm/complexclip_blur_tiled.cpp \
 	../gm/composeshader.cpp \
 	../gm/concavepaths.cpp \
 	../gm/conicpaths.cpp \
@@ -420,6 +424,7 @@ LOCAL_SRC_FILES := \
 	../gm/imagescalealigned.cpp \
 	../gm/imagesource.cpp \
 	../gm/imagesource2.cpp \
+	../gm/imagetoyuvplanes.cpp \
 	../gm/internal_links.cpp \
 	../gm/inversepaths.cpp \
 	../gm/largeglyphblur.cpp \
@@ -532,6 +537,7 @@ LOCAL_SRC_FILES := \
 	../gm/verttext.cpp \
 	../gm/verttext2.cpp \
 	../gm/verylargebitmap.cpp \
+	../gm/xfer4f.cpp \
 	../gm/xfermodeimagefilter.cpp \
 	../gm/xfermodes.cpp \
 	../gm/xfermodes2.cpp \
@@ -585,6 +591,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../include/codec \
 	$(LOCAL_PATH)/../include/android \
 	$(LOCAL_PATH)/../include/effects \
+	$(LOCAL_PATH)/../include/client/android \
 	$(LOCAL_PATH)/../include/images \
 	$(LOCAL_PATH)/../include/ports \
 	$(LOCAL_PATH)/../src/sfnt \

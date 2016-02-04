@@ -190,6 +190,8 @@ static void gather_uninteresting_hashes() {
         for (const SkString& hash : hashes) {
             gUninterestingHashes.add(hash);
         }
+        SkDebugf("FYI: loaded %d distinct uninteresting hashes from %d lines\n",
+                 gUninterestingHashes.count(), hashes.count());
     }
 }
 
@@ -227,7 +229,7 @@ static void push_src(ImplicitString tag, ImplicitString options, Src* s) {
 }
 
 static void push_codec_src(Path path, CodecSrc::Mode mode, CodecSrc::DstColorType dstColorType,
-        float scale) {
+        SkAlphaType dstAlphaType, float scale) {
     SkString folder;
     switch (mode) {
         case CodecSrc::kCodec_Mode:
@@ -261,16 +263,30 @@ static void push_codec_src(Path path, CodecSrc::Mode mode, CodecSrc::DstColorTyp
             break;
     }
 
+    switch (dstAlphaType) {
+        case kOpaque_SkAlphaType:
+            folder.append("_opaque");
+            break;
+        case kPremul_SkAlphaType:
+            folder.append("_premul");
+            break;
+        case kUnpremul_SkAlphaType:
+            folder.append("_unpremul");
+            break;
+        default:
+            break;
+    }
+
     if (1.0f != scale) {
         folder.appendf("_%.3f", scale);
     }
 
-    CodecSrc* src = new CodecSrc(path, mode, dstColorType, scale);
+    CodecSrc* src = new CodecSrc(path, mode, dstColorType, dstAlphaType, scale);
     push_src("image", folder, src);
 }
 
 static void push_android_codec_src(Path path, AndroidCodecSrc::Mode mode,
-        CodecSrc::DstColorType dstColorType, int sampleSize) {
+        CodecSrc::DstColorType dstColorType, SkAlphaType dstAlphaType, int sampleSize) {
     SkString folder;
     switch (mode) {
         case AndroidCodecSrc::kFullImage_Mode:
@@ -292,11 +308,25 @@ static void push_android_codec_src(Path path, AndroidCodecSrc::Mode mode,
             break;
     }
 
+    switch (dstAlphaType) {
+        case kOpaque_SkAlphaType:
+            folder.append("_opaque");
+            break;
+        case kPremul_SkAlphaType:
+            folder.append("_premul");
+            break;
+        case kUnpremul_SkAlphaType:
+            folder.append("_unpremul");
+            break;
+        default:
+            break;
+    }
+
     if (1 != sampleSize) {
         folder.appendf("_%.3f", 1.0f / (float) sampleSize);
     }
 
-    AndroidCodecSrc* src = new AndroidCodecSrc(path, mode, dstColorType, sampleSize);
+    AndroidCodecSrc* src = new AndroidCodecSrc(path, mode, dstColorType, dstAlphaType, sampleSize);
     push_src("image", folder, src);
 }
 
@@ -346,6 +376,12 @@ static void push_codec_srcs(Path path) {
             break;
     }
 
+    SkTArray<SkAlphaType> alphaModes;
+    alphaModes.push_back(kPremul_SkAlphaType);
+    alphaModes.push_back(kUnpremul_SkAlphaType);
+    if (codec->getInfo().alphaType() == kOpaque_SkAlphaType) {
+        alphaModes.push_back(kOpaque_SkAlphaType);
+    }
 
     for (CodecSrc::Mode mode : nativeModes) {
         // SkCodecImageGenerator only runs for the default colorType
@@ -355,14 +391,17 @@ static void push_codec_srcs(Path path) {
         if (CodecSrc::kGen_Mode == mode) {
             // FIXME: The gpu backend does not draw kGray sources correctly. (skbug.com/4822)
             if (kGray_8_SkColorType != codec->getInfo().colorType()) {
-                push_codec_src(path, mode, CodecSrc::kGetFromCanvas_DstColorType, 1.0f);
+                push_codec_src(path, mode, CodecSrc::kGetFromCanvas_DstColorType,
+                               codec->getInfo().alphaType(), 1.0f);
             }
             continue;
         }
 
         for (float scale : nativeScales) {
             for (uint32_t i = 0; i < numColorTypes; i++) {
-                push_codec_src(path, mode, colorTypes[i], scale);
+                for (SkAlphaType alphaType : alphaModes) {
+                    push_codec_src(path, mode, colorTypes[i], alphaType, scale);
+                }
             }
         }
     }
@@ -386,11 +425,13 @@ static void push_codec_srcs(Path path) {
 
     for (int sampleSize : sampleSizes) {
         for (uint32_t i = 0; i < numColorTypes; i++) {
-            push_android_codec_src(path, AndroidCodecSrc::kFullImage_Mode, colorTypes[i],
-                    sampleSize);
-            if (subset) {
-                push_android_codec_src(path, AndroidCodecSrc::kDivisor_Mode, colorTypes[i],
-                        sampleSize);
+            for (SkAlphaType alphaType : alphaModes) {
+                push_android_codec_src(path, AndroidCodecSrc::kFullImage_Mode, colorTypes[i],
+                        alphaType, sampleSize);
+                if (subset) {
+                    push_android_codec_src(path, AndroidCodecSrc::kDivisor_Mode, colorTypes[i],
+                            alphaType, sampleSize);
+                }
             }
         }
     }
@@ -521,7 +562,7 @@ static bool brd_supported(const char* ext) {
     return false;
 }
 
-static void gather_srcs() {
+static bool gather_srcs() {
     for (const skiagm::GMRegistry* r = skiagm::GMRegistry::Head(); r; r = r->next()) {
         push_src("gm", "", new GMSrc(r->factory()));
     }
@@ -536,31 +577,25 @@ static void gather_srcs() {
             push_src("skp", "", new SKPSrc(path));
         }
     }
-    static const char* const exts[] = {
-        "bmp", "gif", "jpg", "jpeg", "png", "webp", "ktx", "astc", "wbmp", "ico",
-        "BMP", "GIF", "JPG", "JPEG", "PNG", "WEBP", "KTX", "ASTC", "WBMP", "ICO",
-        "arw", "cr2", "dng", "nef", "nrw", "orf", "raf", "rw2", "pef", "srw",
-        "ARW", "CR2", "DNG", "NEF", "NRW", "ORF", "RAF", "RW2", "PEF", "SRW",
-    };
-    for (int i = 0; i < FLAGS_images.count(); i++) {
-        const char* flag = FLAGS_images[i];
-        if (sk_isdir(flag)) {
-            for (size_t j = 0; j < SK_ARRAY_COUNT(exts); j++) {
-                SkOSFile::Iter it(flag, exts[j]);
-                for (SkString file; it.next(&file); ) {
-                    SkString path = SkOSPath::Join(flag, file.c_str());
-                    push_codec_srcs(path);
-                    if (brd_supported(exts[j])) {
-                        push_brd_srcs(path);
-                    }
-                }
-            }
-        } else if (sk_exists(flag)) {
-            // assume that FLAGS_images[i] is a valid image if it is a file.
-            push_codec_srcs(flag);
-            push_brd_srcs(flag);
+
+    SkTArray<SkString> images;
+    if (!CollectImages(&images)) {
+        return false;
+    }
+
+    for (auto image : images) {
+        push_codec_srcs(image);
+        const char* ext = "";
+        int index = image.findLastOf('.');
+        if (index >= 0 && (size_t) ++index < image.size()) {
+            ext = &image.c_str()[index];
+        }
+        if (brd_supported(ext)) {
+            push_brd_srcs(image);
         }
     }
+
+    return true;
 }
 
 static void push_sink(const SkCommandLineConfig& config, Sink* s) {
@@ -652,6 +687,7 @@ static Sink* create_via(const SkString& tag, Sink* wrapped) {
     VIA("tiles_rt",  ViaTiles, 256, 256, new SkRTreeFactory, wrapped);
     VIA("remote",       ViaRemote, false, wrapped);
     VIA("remote_cache", ViaRemote, true,  wrapped);
+    VIA("mojo",      ViaMojo,             wrapped);
 
     if (FLAGS_matrix.count() == 4) {
         SkMatrix m;
@@ -1108,7 +1144,9 @@ int dm_main() {
     gather_gold();
     gather_uninteresting_hashes();
 
-    gather_srcs();
+    if (!gather_srcs()) {
+        return 1;
+    }
     gather_sinks();
     gather_tests();
 
@@ -1173,6 +1211,7 @@ int dm_main() {
     #ifdef SK_PDF_IMAGE_STATS
     SkPDFImageDumpStats();
     #endif  // SK_PDF_IMAGE_STATS
+    SkDebugf("Finished!\n");
     return 0;
 }
 

@@ -67,7 +67,7 @@ SkCodec::Result SkBmpStandardCodec::onGetPixels(const SkImageInfo& dstInfo,
 /*
  * Process the color table for the bmp input
  */
- bool SkBmpStandardCodec::createColorTable(SkAlphaType alphaType, int* numColors) {
+ bool SkBmpStandardCodec::createColorTable(SkAlphaType dstAlphaType, int* numColors) {
     // Allocate memory for color table
     uint32_t colorBytes = 0;
     SkPMColor colorTable[256];
@@ -94,21 +94,11 @@ SkCodec::Result SkBmpStandardCodec::onGetPixels(const SkImageInfo& dstInfo,
 
         // Choose the proper packing function
         SkPMColor (*packARGB) (uint32_t, uint32_t, uint32_t, uint32_t);
-        switch (alphaType) {
-            case kOpaque_SkAlphaType:
-            case kUnpremul_SkAlphaType:
-                packARGB = &SkPackARGB32NoCheck;
-                break;
-            case kPremul_SkAlphaType:
-                packARGB = &SkPreMultiplyARGB;
-                break;
-            default:
-                // This should not be reached because conversion possible
-                // should fail if the alpha type is not one of the above
-                // values.
-                SkASSERT(false);
-                packARGB = nullptr;
-                break;
+        SkAlphaType encodedAlphaType = this->getInfo().alphaType();
+        if (kOpaque_SkAlphaType == encodedAlphaType || kUnpremul_SkAlphaType == dstAlphaType) {
+            packARGB = &SkPackARGB32NoCheck;
+        } else {
+            packARGB = &SkPremultiplyARGBInline;
         }
 
         // Fill in the color table
@@ -118,7 +108,7 @@ SkCodec::Result SkBmpStandardCodec::onGetPixels(const SkImageInfo& dstInfo,
             uint8_t green = get_byte(cBuffer.get(), i*fBytesPerColor + 1);
             uint8_t red = get_byte(cBuffer.get(), i*fBytesPerColor + 2);
             uint8_t alpha;
-            if (kOpaque_SkAlphaType == alphaType) {
+            if (kOpaque_SkAlphaType == encodedAlphaType) {
                 alpha = 0xFF;
             } else {
                 alpha = get_byte(cBuffer.get(), i*fBytesPerColor + 3);
@@ -182,7 +172,7 @@ bool SkBmpStandardCodec::initializeSwizzler(const SkImageInfo& dstInfo, const Op
             config = SkSwizzler::kBGR;
             break;
         case 32:
-            if (kOpaque_SkAlphaType == dstInfo.alphaType()) {
+            if (kOpaque_SkAlphaType == this->getInfo().alphaType()) {
                 config = SkSwizzler::kBGRX;
             } else {
                 config = SkSwizzler::kBGRA;
@@ -337,10 +327,10 @@ void SkBmpStandardCodec::decodeIcoMask(SkStream* stream, const SkImageInfo& dstI
     }
 }
 
-uint32_t SkBmpStandardCodec::onGetFillValue(SkColorType colorType, SkAlphaType alphaType) const {
+uint32_t SkBmpStandardCodec::onGetFillValue(SkColorType colorType) const {
     const SkPMColor* colorPtr = get_color_ptr(fColorTable.get());
     if (colorPtr) {
         return get_color_table_fill_value(colorType, colorPtr, 0);
     }
-    return INHERITED::onGetFillValue(colorType, alphaType);
+    return INHERITED::onGetFillValue(colorType);
 }

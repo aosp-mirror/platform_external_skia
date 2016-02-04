@@ -37,16 +37,6 @@ class SkSurface;
 class SkSurface_Base;
 class SkTextBlob;
 
-/*
- *  If you want the legacy cliptolayer flag (i.e. android), then you must have the new
- *  legacy saveflags.
- */
-#ifdef SK_SUPPORT_LEGACY_CLIPTOLAYERFLAG
-#ifndef SK_SUPPORT_LEGACY_SAVEFLAGS
-    #define SK_SUPPORT_LEGACY_SAVEFLAGS
-#endif
-#endif
-
 /** \class SkCanvas
 
     A Canvas encapsulates all of the state about drawing into a device (bitmap).
@@ -295,35 +285,6 @@ public:
 
     ///////////////////////////////////////////////////////////////////////////
 
-#ifdef SK_SUPPORT_LEGACY_SAVEFLAGS
-    enum SaveFlags {
-        /** save the matrix state, restoring it on restore() */
-        // [deprecated] kMatrix_SaveFlag            = 0x01,
-        kMatrix_SaveFlag            = 0x01,
-        /** save the clip state, restoring it on restore() */
-        // [deprecated] kClip_SaveFlag              = 0x02,
-        kClip_SaveFlag              = 0x02,
-        /** the layer needs to support per-pixel alpha */
-        kHasAlphaLayer_SaveFlag     = 0x04,
-        /** the layer needs to support 8-bits per color component */
-        kFullColorLayer_SaveFlag    = 0x08,
-        /**
-         *  the layer should clip against the bounds argument
-         *
-         *  if SK_SUPPORT_LEGACY_CLIPTOLAYERFLAG is undefined, this is treated as always on.
-         */
-        kClipToLayer_SaveFlag       = 0x10,
-
-        // helper masks for common choices
-        // [deprecated] kMatrixClip_SaveFlag        = 0x03,
-        kMatrixClip_SaveFlag        = 0x03,
-#ifdef SK_SUPPORT_LEGACY_CLIPTOLAYERFLAG
-        kARGB_NoClipLayer_SaveFlag  = 0x0F,
-#endif
-        kARGB_ClipLayer_SaveFlag    = 0x1F
-    };
-#endif
-
     /** This call saves the current matrix, clip, and drawFilter, and pushes a
         copy onto a private stack. Subsequent calls to translate, scale,
         rotate, skew, concat or clipRect, clipPath, and setDrawFilter all
@@ -359,26 +320,6 @@ public:
      */
     int saveLayerPreserveLCDTextRequests(const SkRect* bounds, const SkPaint* paint);
 
-#ifdef SK_SUPPORT_LEGACY_SAVEFLAGS
-    /** DEPRECATED - use saveLayer(const SkRect*, const SkPaint*) instead.
-
-        This behaves the same as saveLayer(const SkRect*, const SkPaint*),
-        but it allows fine-grained control of which state bits to be saved
-        (and subsequently restored).
-
-        @param bounds (may be null) This rect, if non-null, is used as a hint to
-                      limit the size of the offscreen, and thus drawing may be
-                      clipped to it, though that clipping is not guaranteed to
-                      happen. If exact clipping is desired, use clipRect().
-        @param paint (may be null) This is copied, and is applied to the
-                     offscreen when restore() is called
-        @param flags  LayerFlags
-        @return The value to pass to restoreToCount() to balance this save()
-    */
-    SK_ATTR_EXTERNALLY_DEPRECATED("SaveFlags use is deprecated")
-    int saveLayer(const SkRect* bounds, const SkPaint* paint, SaveFlags flags);
-#endif
-
     /** This behaves the same as save(), but in addition it allocates an
         offscreen bitmap. All drawing calls are directed there, and only when
         the balancing call to restore() is made is that offscreen transfered to
@@ -391,25 +332,6 @@ public:
         @return The value to pass to restoreToCount() to balance this save()
     */
     int saveLayerAlpha(const SkRect* bounds, U8CPU alpha);
-
-#ifdef SK_SUPPORT_LEGACY_SAVEFLAGS
-    /** DEPRECATED - use saveLayerAlpha(const SkRect*, U8CPU) instead.
-
-        This behaves the same as saveLayerAlpha(const SkRect*, U8CPU),
-        but it allows fine-grained control of which state bits to be saved
-        (and subsequently restored).
-
-        @param bounds (may be null) This rect, if non-null, is used as a hint to
-                      limit the size of the offscreen, and thus drawing may be
-                      clipped to it, though that clipping is not guaranteed to
-                      happen. If exact clipping is desired, use clipRect().
-        @param alpha  This is applied to the offscreen when restore() is called.
-        @param flags  LayerFlags
-        @return The value to pass to restoreToCount() to balance this save()
-    */
-    SK_ATTR_EXTERNALLY_DEPRECATED("SaveFlags use is deprecated")
-    int saveLayerAlpha(const SkRect* bounds, U8CPU alpha, SaveFlags flags);
-#endif
 
     enum {
         kIsOpaque_SaveLayerFlag         = 1 << 0,
@@ -1372,16 +1294,8 @@ protected:
     bool clipRectBounds(const SkRect* bounds, SaveLayerFlags, SkIRect* intersection,
                         const SkImageFilter* imageFilter = NULL);
 
-#ifdef SK_SUPPORT_LEGACY_SAVEFLAGS
-    // Needed by SkiaCanvasProxy in Android. Make sure that class is updated
-    // before removing this method.
-    static uint32_t SaveLayerFlagsToSaveFlags(SaveLayerFlags);
-#endif
 private:
     static bool BoundsAffectsClip(SaveLayerFlags);
-#ifdef SK_SUPPORT_LEGACY_SAVEFLAGS
-    static uint32_t SaveFlagsToSaveLayerFlags(SaveFlags);
-#endif
     static SaveLayerFlags LegacySaveFlagsToSaveLayerFlags(uint32_t legacySaveFlags);
 
     enum ShaderOverrideOpacity {
@@ -1465,11 +1379,10 @@ private:
     SkBaseDevice* init(SkBaseDevice*, InitFlags);
 
     /**
-     * Gets the size/origin of the top level layer in global canvas coordinates. We don't want this
+     * Gets the bounds of the top level layer in global canvas coordinates. We don't want this
      * to be public because it exposes decisions about layer sizes that are internal to the canvas.
      */
-    SkISize getTopLayerSize() const;
-    SkIPoint getTopLayerOrigin() const;
+    SkIRect getTopLayerBounds() const;
 
     void internalDrawBitmapRect(const SkBitmap& bitmap, const SkRect* src,
                                 const SkRect& dst, const SkPaint* paint,
@@ -1577,19 +1490,6 @@ private:
     int         fSaveCount;
 };
 #define SkAutoCanvasRestore(...) SK_REQUIRE_LOCAL_VAR(SkAutoCanvasRestore)
-
-#ifdef SK_SUPPORT_LEGACY_SAVEFLAGS
-static inline SkCanvas::SaveFlags operator|(const SkCanvas::SaveFlags lhs,
-                                            const SkCanvas::SaveFlags rhs) {
-    return static_cast<SkCanvas::SaveFlags>(static_cast<int>(lhs) | static_cast<int>(rhs));
-}
-
-static inline SkCanvas::SaveFlags& operator|=(SkCanvas::SaveFlags& lhs,
-                                              const SkCanvas::SaveFlags rhs) {
-    lhs = lhs | rhs;
-    return lhs;
-}
-#endif
 
 class SkCanvasClipVisitor {
 public:

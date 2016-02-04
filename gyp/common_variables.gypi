@@ -38,9 +38,7 @@
   'variables': {  # level 1
     'angle_path%': '../',
 
-    # RAW codec needs exceptions. Due to that, it is a separate target. Its usage can be controlled
-    # by this variable.
-    'skia_codec_decodes_raw%': 1,
+    'skia_mojo%': '0',
 
     'variables': {  # level 2
 
@@ -62,6 +60,14 @@
           }, {
             'skia_arch_type%': 'x86',
           }],
+          # RAW codec needs exceptions. Due to that, it is a separate target. Its usage can be
+          # controlled by skia_codec_decodes_raw.
+          ['skia_os == "chromeos" or skia_os == "win"', {
+            # FIXME: fix the support for ChromeOS [DNG SDK issue with clock_gettime()].
+            'skia_codec_decodes_raw%' : 0,
+          }, {
+            'skia_codec_decodes_raw%' : 1,
+          }],
         ],
         'arm_version%': 0,
         'arm_neon%': 0,
@@ -72,6 +78,7 @@
       # so that siblings of the level-2 'variables' dict can see them.
       # (skia_os will depend on skia_android_framework.)
       'skia_android_framework%': '<(skia_android_framework)',
+      'skia_codec_decodes_raw%': '<(skia_codec_decodes_raw)',
       'skia_arch_type%': '<(skia_arch_type)',
       'arm_version%': '<(arm_version)',
       'arm_neon%': '<(arm_neon)',
@@ -214,6 +221,7 @@
     'skia_gpu_extra_tests_path%': '<(skia_gpu_extra_tests_path)',
     'skia_stroke_path_rendering%': '<(skia_stroke_path_rendering)',
     'skia_android_framework%': '<(skia_android_framework)',
+    'skia_codec_decodes_raw%': '<(skia_codec_decodes_raw)',
     'skia_use_android_framework_defines%': '<(skia_use_android_framework_defines)',
     'skia_use_system_json%': '<(skia_use_system_json)',
     'skia_android_path_rendering%': '<(skia_android_path_rendering)',

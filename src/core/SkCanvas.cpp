@@ -812,19 +812,17 @@ void SkCanvas::flush() {
     }
 }
 
-SkISize SkCanvas::getTopLayerSize() const {
-    SkBaseDevice* d = this->getTopDevice();
-    return d ? SkISize::Make(d->width(), d->height()) : SkISize::Make(0, 0);
-}
-
-SkIPoint SkCanvas::getTopLayerOrigin() const {
-    SkBaseDevice* d = this->getTopDevice();
-    return d ? d->getOrigin() : SkIPoint::Make(0, 0);
-}
-
 SkISize SkCanvas::getBaseLayerSize() const {
     SkBaseDevice* d = this->getDevice();
     return d ? SkISize::Make(d->width(), d->height()) : SkISize::Make(0, 0);
+}
+
+SkIRect SkCanvas::getTopLayerBounds() const {
+    SkBaseDevice* d = this->getTopDevice();
+    if (!d) {
+        return SkIRect::MakeEmpty();
+    }
+    return SkIRect::MakeXYWH(d->getOrigin().x(), d->getOrigin().y(), d->width(), d->height());
 }
 
 SkBaseDevice* SkCanvas::getDevice() const {
@@ -1115,41 +1113,10 @@ bool SkCanvas::clipRectBounds(const SkRect* bounds, SaveLayerFlags saveLayerFlag
     return true;
 }
 
-#ifdef SK_SUPPORT_LEGACY_SAVEFLAGS
-uint32_t SkCanvas::SaveFlagsToSaveLayerFlags(SaveFlags flags) {
-    uint32_t layerFlags = 0;
-
-    if (0 == (flags & kClipToLayer_SaveFlag)) {
-        layerFlags |= kDontClipToLayer_PrivateSaveLayerFlag;
-    }
-    if (0 == (flags & kHasAlphaLayer_SaveFlag)) {
-        layerFlags |= kIsOpaque_SaveLayerFlag;
-    }
-    return layerFlags;
-}
-
-uint32_t SkCanvas::SaveLayerFlagsToSaveFlags(SaveLayerFlags layerFlags) {
-    uint32_t saveFlags = 0;
-
-    if (0 == (layerFlags & kDontClipToLayer_PrivateSaveLayerFlag)) {
-        saveFlags |= kClipToLayer_SaveFlag;
-    }
-    if (0 == (layerFlags & kIsOpaque_SaveLayerFlag)) {
-        saveFlags |= kHasAlphaLayer_SaveFlag;
-    }
-    return saveFlags;
-}
-#endif
 
 int SkCanvas::saveLayer(const SkRect* bounds, const SkPaint* paint) {
     return this->saveLayer(SaveLayerRec(bounds, paint, 0));
 }
-
-#ifdef SK_SUPPORT_LEGACY_SAVEFLAGS
-int SkCanvas::saveLayer(const SkRect* bounds, const SkPaint* paint, SaveFlags flags) {
-    return this->saveLayer(SaveLayerRec(bounds, paint, SaveFlagsToSaveLayerFlags(flags)));
-}
-#endif
 
 int SkCanvas::saveLayerPreserveLCDTextRequests(const SkRect* bounds, const SkPaint* paint) {
     return this->saveLayer(SaveLayerRec(bounds, paint, kPreserveLCDText_SaveLayerFlag));
@@ -1289,19 +1256,6 @@ int SkCanvas::saveLayerAlpha(const SkRect* bounds, U8CPU alpha) {
         return this->saveLayer(bounds, &tmpPaint);
     }
 }
-
-#ifdef SK_SUPPORT_LEGACY_SAVEFLAGS
-int SkCanvas::saveLayerAlpha(const SkRect* bounds, U8CPU alpha,
-                             SaveFlags flags) {
-    if (0xFF == alpha) {
-        return this->saveLayer(bounds, nullptr, flags);
-    } else {
-        SkPaint tmpPaint;
-        tmpPaint.setAlpha(alpha);
-        return this->saveLayer(bounds, &tmpPaint, flags);
-    }
-}
-#endif
 
 void SkCanvas::internalRestore() {
     SkASSERT(fMCStack.count() != 0);
@@ -1560,7 +1514,7 @@ void SkCanvas::onClipRect(const SkRect& rect, SkRegion::Op op, ClipEdgeStyle edg
     if (rectStaysRect) {
         const bool isAA = kSoft_ClipEdgeStyle == edgeStyle;
         fClipStack->clipDevRect(devR, op, isAA);
-        fMCRec->fRasterClip.op(devR, this->getBaseLayerSize(), op, isAA);
+        fMCRec->fRasterClip.op(devR, this->getTopLayerBounds(), op, isAA);
     } else {
         // since we're rotated or some such thing, we convert the rect to a path
         // and clip against that, since it can handle any matrix. However, to
@@ -1571,11 +1525,6 @@ void SkCanvas::onClipRect(const SkRect& rect, SkRegion::Op op, ClipEdgeStyle edg
         path.addRect(rect);
         this->SkCanvas::onClipPath(path, op, edgeStyle);
     }
-}
-
-static void rasterclip_path(SkRasterClip* rc, const SkCanvas* canvas, const SkPath& devPath,
-                            SkRegion::Op op, bool doAA) {
-    rc->op(devPath, canvas->getBaseLayerSize(), op, doAA);
 }
 
 void SkCanvas::clipRRect(const SkRRect& rrect, SkRegion::Op op, bool doAA) {
@@ -1601,7 +1550,7 @@ void SkCanvas::onClipRRect(const SkRRect& rrect, SkRegion::Op op, ClipEdgeStyle 
 
         fClipStack->clipDevRRect(transformedRRect, op, kSoft_ClipEdgeStyle == edgeStyle);
 
-        fMCRec->fRasterClip.op(transformedRRect, this->getBaseLayerSize(), op,
+        fMCRec->fRasterClip.op(transformedRRect, this->getTopLayerBounds(), op,
                                kSoft_ClipEdgeStyle == edgeStyle);
         return;
     }
@@ -1687,7 +1636,7 @@ void SkCanvas::onClipPath(const SkPath& path, SkRegion::Op op, ClipEdgeStyle edg
         op = SkRegion::kReplace_Op;
     }
 
-    rasterclip_path(&fMCRec->fRasterClip, this, devPath, op, edgeStyle);
+    fMCRec->fRasterClip.op(devPath, this->getTopLayerBounds(), op, edgeStyle);
 }
 
 void SkCanvas::clipRegion(const SkRegion& rgn, SkRegion::Op op) {
@@ -1735,7 +1684,7 @@ void SkCanvas::validateClip() const {
             default: {
                 SkPath path;
                 element->asPath(&path);
-                rasterclip_path(&tmpClip, this, path, element->getOp(), element->isAA());
+                tmpClip.op(path, this->getTopLayerBounds(), element->getOp(), element->isAA());
                 break;
             }
         }

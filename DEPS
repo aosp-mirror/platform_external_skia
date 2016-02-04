@@ -11,7 +11,7 @@ deps = {
   "third_party/externals/angle2"  : "https://chromium.googlesource.com/angle/angle.git@8182049470aa3ba0c9f7c54ef965bf1877df08cb",
   "third_party/externals/cmake"   : "https://cmake.googlesource.com/cmake.git@v3.3.1",
   "third_party/externals/freetype": "https://skia.googlesource.com/third_party/freetype2.git@6a19a7d332c5446542196e5aeda0ede109ef097b",
-  "third_party/externals/gyp"     : "https://chromium.googlesource.com/external/gyp.git@08429da7955a98ef764fafa223dd7de73f654b2d",
+  "third_party/externals/gyp"     : "https://chromium.googlesource.com/external/gyp.git@87ac4d0e63fc7dd8152a350327fea8dcf031bf56",
   "third_party/externals/harfbuzz": "https://skia.googlesource.com/third_party/harfbuzz.git@0.9.35",
   "third_party/externals/jsoncpp" : "https://chromium.googlesource.com/external/github.com/open-source-parsers/jsoncpp.git@1.0.0",
   "third_party/externals/libwebp" : "https://chromium.googlesource.com/webm/libwebp.git@v0.5.0",
@@ -21,7 +21,7 @@ deps = {
   "third_party/externals/libpng"  : "https://skia.googlesource.com/third_party/libpng.git@070a616b8275277e18ef8ee91e2ca23f7bdc67d5",
   "third_party/externals/giflib"  : "https://android.googlesource.com/platform/external/giflib.git@ab10e256df4f684260ca239905b1cec727181f6c",
 
-  "third_party/externals/dng_sdk" : "https://android.googlesource.com/platform/external/dng_sdk.git@0baf877c64aeb9f5c5d0d3f13c8d2eb25a3c8837",
+  "third_party/externals/dng_sdk" : "https://android.googlesource.com/platform/external/dng_sdk.git@6579353b8ee5d8aa1f1a96ae22798de9b41e19b8",
   "third_party/externals/piex"    : "https://android.googlesource.com/platform/external/piex.git@a9540117cdd785b0dd75f8c4c28b278f86eb485c",
 
   "third_party/externals/libjpeg-turbo"             : "https://skia.googlesource.com/third_party/libjpeg-turbo.git@36422d9e165a33914436068536772cc6ed1e7886",
@@ -47,6 +47,9 @@ deps = {
 
   # microhttpd for skiaserve
   "third_party/externals/microhttpd" : "https://android.googlesource.com/platform/external/libmicrohttpd@748945ec6f1c67b7efc934ab0808e1d32f2fb98d",
+
+  # Mojo SDK for Mojo RPC experiments.
+  "third_party/externals/mojo/public" : "https://chromium.googlesource.com/external/github.com/domokit/mojo_sdk@172be18ea745ab29aea132e6cb952e726dc32543",
 }
 
 recursedeps = [ "common" ]

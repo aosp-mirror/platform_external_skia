@@ -71,6 +71,7 @@ from common.py.utils import shell_utils
 ROOT_PLAYBACK_DIR_NAME = 'playback'
 SKPICTURES_DIR_NAME = 'skps'
 
+PARTNERS_GS_BUCKET = 'gs://chrome-partner-telemetry'
 
 # Local archive and SKP directories.
 LOCAL_PLAYBACK_ROOT_DIR = os.path.join(
@@ -158,6 +159,7 @@ class SkPicturePlayback(object):
       self.gs = GoogleStorageDataStore(data_store_location)
     else:
       self.gs = LocalFileSystemDataStore(data_store_location)
+    self._upload_to_partner_bucket = parse_options.upload_to_partner_bucket
     self._alternate_upload_dir = parse_options.alternate_upload_dir
     self._telemetry_binaries_dir = os.path.join(parse_options.chrome_src_path,
                                                 'tools', 'perf')
@@ -368,6 +370,18 @@ class SkPicturePlayback(object):
       print '\n\n=======New SKPs have been uploaded to %s =======\n\n' % (
           posixpath.join(self.gs.target_name(), dest_dir_name,
                          SKPICTURES_DIR_NAME))
+
+      if self._upload_to_partner_bucket:
+        print '\n\n=======Uploading to Partner bucket %s =======\n\n' % (
+            PARTNERS_GS_BUCKET)
+        partner_gs = GoogleStorageDataStore(PARTNERS_GS_BUCKET)
+        partner_gs.delete_path(SKPICTURES_DIR_NAME)
+        partner_gs.upload_dir_contents(
+            os.path.join(LOCAL_PLAYBACK_ROOT_DIR, SKPICTURES_DIR_NAME),
+            dest_dir=SKPICTURES_DIR_NAME,
+            upload_if=gs_utils.GSUtils.UploadIf.IF_MODIFIED)
+        print '\n\n=======New SKPs have been uploaded to %s =======\n\n' % (
+            posixpath.join(partner_gs.target_name(), SKPICTURES_DIR_NAME))
     else:
       print '\n\n=======Not Uploading to %s=======\n\n' % self.gs.target_type()
       print 'Generated resources are available in %s\n\n' % (
@@ -480,6 +494,10 @@ class GoogleStorageDataStore(DataStore):
     return 'Google Storage'
   def does_storage_object_exist(self, *args):
     return self.gs.does_storage_object_exist(self._bucket, *args)
+  def delete_path(self, path):
+    _, files = self.gs.list_bucket_contents(self._bucket, subdir=path)
+    for f in files:
+      self.gs.delete_file(self._bucket, posixpath.join(path, f))
   def download_file(self, *args):
     self.gs.download_file(self._bucket, *args)
   def upload_dir_contents(self, source_dir, **kwargs):
@@ -494,6 +512,8 @@ class LocalFileSystemDataStore(DataStore):
     return self._base_dir
   def does_storage_object_exist(self, name, *args):
     return os.path.isfile(os.path.join(self._base_dir, name))
+  def delete_path(self, path):
+    shutil.rmtree(path)
   def download_file(self, name, local_path, *args):
     shutil.copyfile(os.path.join(self._base_dir, name), local_path)
   def upload_dir_contents(self, source_dir, dest_dir, **kwargs):
@@ -532,6 +552,11 @@ if '__main__' == __name__:
       '', '--upload', action='store_true',
       help=('Uploads to Google Storage or copies to local filesystem storage '
             ' if this is True.'),
+      default=False)
+  option_parser.add_option(
+      '', '--upload_to_partner_bucket', action='store_true',
+      help=('Uploads SKPs to the chrome-partner-telemetry Google Storage '
+            'bucket if true.'),
       default=False)
   option_parser.add_option(
       '', '--data_store',

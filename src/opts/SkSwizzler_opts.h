@@ -88,6 +88,43 @@ static void RGB_to_BGR1_portable(uint32_t dst[], const void* vsrc, int count) {
     }
 }
 
+static void gray_to_RGB1_portable(uint32_t dst[], const void* vsrc, int count) {
+    const uint8_t* src = (const uint8_t*)vsrc;
+    for (int i = 0; i < count; i++) {
+        dst[i] = (uint32_t)0xFF   << 24
+               | (uint32_t)src[i] << 16
+               | (uint32_t)src[i] <<  8
+               | (uint32_t)src[i] <<  0;
+    }
+}
+
+static void grayA_to_RGBA_portable(uint32_t dst[], const void* vsrc, int count) {
+    const uint8_t* src = (const uint8_t*)vsrc;
+    for (int i = 0; i < count; i++) {
+        uint8_t g = src[0],
+                a = src[1];
+        src += 2;
+        dst[i] = (uint32_t)a << 24
+               | (uint32_t)g << 16
+               | (uint32_t)g <<  8
+               | (uint32_t)g <<  0;
+    }
+}
+
+static void grayA_to_rgbA_portable(uint32_t dst[], const void* vsrc, int count) {
+    const uint8_t* src = (const uint8_t*)vsrc;
+    for (int i = 0; i < count; i++) {
+        uint8_t g = src[0],
+                a = src[1];
+        src += 2;
+        g = (g*a+127)/255;
+        dst[i] = (uint32_t)a << 24
+               | (uint32_t)g << 16
+               | (uint32_t)g <<  8
+               | (uint32_t)g <<  0;
+    }
+}
+
 #if defined(SK_ARM_HAS_NEON)
 
 // Rounded divide by 255, (x + 127) / 255
@@ -260,7 +297,121 @@ static void RGB_to_BGR1(uint32_t dst[], const void* src, int count) {
     insert_alpha_should_swaprb<true>(dst, src, count);
 }
 
+static void gray_to_RGB1(uint32_t dst[], const void* vsrc, int count) {
+    const uint8_t* src = (const uint8_t*) vsrc;
+    while (count >= 16) {
+        // Load 16 pixels.
+        uint8x16_t gray = vld1q_u8(src);
+
+        // Set each of the color channels.
+        uint8x16x4_t rgba;
+        rgba.val[0] = gray;
+        rgba.val[1] = gray;
+        rgba.val[2] = gray;
+        rgba.val[3] = vdupq_n_u8(0xFF);
+
+        // Store 16 pixels.
+        vst4q_u8((uint8_t*) dst, rgba);
+        src += 16;
+        dst += 16;
+        count -= 16;
+    }
+
+    if (count >= 8) {
+        // Load 8 pixels.
+        uint8x8_t gray = vld1_u8(src);
+
+        // Set each of the color channels.
+        uint8x8x4_t rgba;
+        rgba.val[0] = gray;
+        rgba.val[1] = gray;
+        rgba.val[2] = gray;
+        rgba.val[3] = vdup_n_u8(0xFF);
+
+        // Store 8 pixels.
+        vst4_u8((uint8_t*) dst, rgba);
+        src += 8;
+        dst += 8;
+        count -= 8;
+    }
+
+    gray_to_RGB1_portable(dst, src, count);
+}
+
+template <bool kPremul>
+static void expand_grayA(uint32_t dst[], const void* vsrc, int count) {
+    const uint8_t* src = (const uint8_t*) vsrc;
+    while (count >= 16) {
+        // Load 16 pixels.
+        uint8x16x2_t ga = vld2q_u8(src);
+
+        // Premultiply if requested.
+        if (kPremul) {
+            ga.val[0] = vcombine_u8(
+                    scale(vget_low_u8(ga.val[0]),  vget_low_u8(ga.val[1])),
+                    scale(vget_high_u8(ga.val[0]), vget_high_u8(ga.val[1])));
+        }
+
+        // Set each of the color channels.
+        uint8x16x4_t rgba;
+        rgba.val[0] = ga.val[0];
+        rgba.val[1] = ga.val[0];
+        rgba.val[2] = ga.val[0];
+        rgba.val[3] = ga.val[1];
+
+        // Store 16 pixels.
+        vst4q_u8((uint8_t*) dst, rgba);
+        src += 16*2;
+        dst += 16;
+        count -= 16;
+    }
+
+    if (count >= 8) {
+        // Load 8 pixels.
+        uint8x8x2_t ga = vld2_u8(src);
+
+        // Premultiply if requested.
+        if (kPremul) {
+            ga.val[0] = scale(ga.val[0], ga.val[1]);
+        }
+
+        // Set each of the color channels.
+        uint8x8x4_t rgba;
+        rgba.val[0] = ga.val[0];
+        rgba.val[1] = ga.val[0];
+        rgba.val[2] = ga.val[0];
+        rgba.val[3] = ga.val[1];
+
+        // Store 8 pixels.
+        vst4_u8((uint8_t*) dst, rgba);
+        src += 8*2;
+        dst += 8;
+        count -= 8;
+    }
+
+    auto proc = kPremul ? grayA_to_rgbA_portable : grayA_to_RGBA_portable;
+    proc(dst, src, count);
+}
+
+static void grayA_to_RGBA(uint32_t dst[], const void* src, int count) {
+    expand_grayA<false>(dst, src, count);
+}
+
+static void grayA_to_rgbA(uint32_t dst[], const void* src, int count) {
+    expand_grayA<true>(dst, src, count);
+}
+
 #elif SK_CPU_SSE_LEVEL >= SK_CPU_SSE_LEVEL_SSSE3
+
+// Scale a byte by another.
+// Inputs are stored in 16-bit lanes, but are not larger than 8-bits.
+static __m128i scale(__m128i x, __m128i y) {
+    const __m128i _128 = _mm_set1_epi16(128);
+    const __m128i _257 = _mm_set1_epi16(257);
+
+    // (x+127)/255 == ((x+128)*257)>>16 for 0 <= x <= 255*255.
+    return _mm_mulhi_epu16(_mm_add_epi16(_mm_mullo_epi16(x, y), _128), _257);
+}
 
 template <bool kSwapRB>
 static void premul_should_swapRB(uint32_t* dst, const void* vsrc, int count) {
@@ -268,8 +419,6 @@ static void premul_should_swapRB(uint32_t* dst, const void* vsrc, int count) {
 
     auto premul8 = [](__m128i* lo, __m128i* hi) {
         const __m128i zeros = _mm_setzero_si128();
-        const __m128i _128 = _mm_set1_epi16(128);
-        const __m128i _257 = _mm_set1_epi16(257);
         __m128i planar;
         if (kSwapRB) {
             planar = _mm_setr_epi8(2,6,10,14, 1,5,9,13, 0,4,8,12, 3,7,11,15);
@@ -289,10 +438,10 @@ static void premul_should_swapRB(uint32_t* dst, const void* vsrc, int count) {
                 b = _mm_unpacklo_epi8(ba, zeros),                 // b_b_b_b_ B_B_B_B_
                 a = _mm_unpackhi_epi8(ba, zeros);                 // a_a_a_a_ A_A_A_A_
 
-        // Premultiply!  (x+127)/255 == ((x+128)*257)>>16 for 0 <= x <= 255*255.
-        r = _mm_mulhi_epu16(_mm_add_epi16(_mm_mullo_epi16(r, a), _128), _257);
-        g = _mm_mulhi_epu16(_mm_add_epi16(_mm_mullo_epi16(g, a), _128), _257);
-        b = _mm_mulhi_epu16(_mm_add_epi16(_mm_mullo_epi16(b, a), _128), _257);
+        // Premultiply!
+        r = scale(r, a);
+        g = scale(g, a);
+        b = scale(b, a);
 
         // Repack into interlaced pixels.
         rg = _mm_or_si128(r, _mm_slli_epi16(g, 8));               // rgrgrgrg RGRGRGRG
@@ -401,6 +550,87 @@ static void RGB_to_BGR1(uint32_t dst[], const void* src, int count) {
     insert_alpha_should_swaprb<true>(dst, src, count);
 }
 
+static void gray_to_RGB1(uint32_t dst[], const void* vsrc, int count) {
+    const uint8_t* src = (const uint8_t*) vsrc;
+
+    const __m128i alphas = _mm_set1_epi8((uint8_t) 0xFF);
+    while (count >= 16) {
+        __m128i grays = _mm_loadu_si128((const __m128i*) src);
+
+        __m128i gg_lo = _mm_unpacklo_epi8(grays, grays);
+        __m128i gg_hi = _mm_unpackhi_epi8(grays, grays);
+        __m128i ga_lo = _mm_unpacklo_epi8(grays, alphas);
+        __m128i ga_hi = _mm_unpackhi_epi8(grays, alphas);
+
+        __m128i ggga0 = _mm_unpacklo_epi16(gg_lo, ga_lo);
+        __m128i ggga1 = _mm_unpackhi_epi16(gg_lo, ga_lo);
+        __m128i ggga2 = _mm_unpacklo_epi16(gg_hi, ga_hi);
+        __m128i ggga3 = _mm_unpackhi_epi16(gg_hi, ga_hi);
+
+        _mm_storeu_si128((__m128i*) (dst +  0), ggga0);
+        _mm_storeu_si128((__m128i*) (dst +  4), ggga1);
+        _mm_storeu_si128((__m128i*) (dst +  8), ggga2);
+        _mm_storeu_si128((__m128i*) (dst + 12), ggga3);
+
+        src += 16;
+        dst += 16;
+        count -= 16;
+    }
+
+    gray_to_RGB1_portable(dst, src, count);
+}
+
+static void grayA_to_RGBA(uint32_t dst[], const void* vsrc, int count) {
+    const uint8_t* src = (const uint8_t*) vsrc;
+    while (count >= 8) {
+        __m128i ga = _mm_loadu_si128((const __m128i*) src);
+
+        __m128i gg = _mm_or_si128(_mm_and_si128(ga, _mm_set1_epi16(0x00FF)),
+                                  _mm_slli_epi16(ga, 8));
+
+        __m128i ggga_lo = _mm_unpacklo_epi16(gg, ga);
+        __m128i ggga_hi = _mm_unpackhi_epi16(gg, ga);
+
+        _mm_storeu_si128((__m128i*) (dst +  0), ggga_lo);
+        _mm_storeu_si128((__m128i*) (dst +  4), ggga_hi);
+
+        src += 8*2;
+        dst += 8;
+        count -= 8;
+    }
+
+    grayA_to_RGBA_portable(dst, src, count);
+}
+
+static void grayA_to_rgbA(uint32_t dst[], const void* vsrc, int count) {
+    const uint8_t* src = (const uint8_t*) vsrc;
+    while (count >= 8) {
+        __m128i grayA = _mm_loadu_si128((const __m128i*) src);
+
+        __m128i g0 = _mm_and_si128(grayA, _mm_set1_epi16(0x00FF));
+        __m128i a0 = _mm_srli_epi16(grayA, 8);
+
+        // Premultiply
+        g0 = scale(g0, a0);
+
+        __m128i gg = _mm_or_si128(g0, _mm_slli_epi16(g0, 8));
+        __m128i ga = _mm_or_si128(g0, _mm_slli_epi16(a0, 8));
+
+
+        __m128i ggga_lo = _mm_unpacklo_epi16(gg, ga);
+        __m128i ggga_hi = _mm_unpackhi_epi16(gg, ga);
+
+        _mm_storeu_si128((__m128i*) (dst +  0), ggga_lo);
+        _mm_storeu_si128((__m128i*) (dst +  4), ggga_hi);
+
+        src += 8*2;
+        dst += 8;
+        count -= 8;
+    }
+
+    grayA_to_rgbA_portable(dst, src, count);
+}
+
 #else
 
 static void RGBA_to_rgbA(uint32_t* dst, const void* src, int count) {
@@ -421,6 +651,18 @@ static void RGB_to_RGB1(uint32_t dst[], const void* src, int count) {
 
 static void RGB_to_BGR1(uint32_t dst[], const void* src, int count) {
     RGB_to_BGR1_portable(dst, src, count);
+}
+
+static void gray_to_RGB1(uint32_t dst[], const void* src, int count) {
+    gray_to_RGB1_portable(dst, src, count);
+}
+
+static void grayA_to_RGBA(uint32_t dst[], const void* src, int count) {
+    grayA_to_RGBA_portable(dst, src, count);
+}
+
+static void grayA_to_rgbA(uint32_t dst[], const void* src, int count) {
+    grayA_to_rgbA_portable(dst, src, count);
 }
 
 #endif
