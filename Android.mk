@@ -235,6 +235,8 @@ LOCAL_SRC_FILES := \
 	src/core/SkSemaphore.cpp \
 	src/core/SkShader.cpp \
 	src/core/SkSharedMutex.cpp \
+	src/core/SkSpecialImage.cpp \
+	src/core/SkSpecialSurface.cpp \
 	src/core/SkSpinlock.cpp \
 	src/core/SkSpriteBlitter_ARGB32.cpp \
 	src/core/SkSpriteBlitter_RGB16.cpp \

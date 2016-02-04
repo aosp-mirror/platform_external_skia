@@ -249,6 +249,8 @@ LOCAL_SRC_FILES := \
 	../tests/SkSharedMutexTest.cpp \
 	../tests/SmallAllocatorTest.cpp \
 	../tests/SortTest.cpp \
+	../tests/SpecialImageTest.cpp \
+	../tests/SpecialSurfaceTest.cpp \
 	../tests/SrcOverTest.cpp \
 	../tests/StreamTest.cpp \
 	../tests/StringTest.cpp \
