@@ -102,6 +102,7 @@ LOCAL_SRC_FILES := \
 	../tests/CanvasTest.cpp \
 	../tests/ChecksumTest.cpp \
 	../tests/ClampRangeTest.cpp \
+	../tests/ClearTest.cpp \
 	../tests/ClipBoundsTest.cpp \
 	../tests/ClipCubicTest.cpp \
 	../tests/ClipStackTest.cpp \
