@@ -129,6 +129,7 @@ LOCAL_SRC_FILES := \
 	../tests/FillPathTest.cpp \
 	../tests/FitsInTest.cpp \
 	../tests/FlattenableFactoryToName.cpp \
+	../tests/Float16Test.cpp \
 	../tests/FloatingPointTextureTest.cpp \
 	../tests/FontHostStreamTest.cpp \
 	../tests/FontHostTest.cpp \
