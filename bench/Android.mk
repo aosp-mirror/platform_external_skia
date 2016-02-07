@@ -413,6 +413,7 @@ LOCAL_SHARED_LIBRARIES := \
 	libandroid \
 	libhwui \
 	libutils \
+	libexpat \
 	libGLESv2 \
 	libEGL
 

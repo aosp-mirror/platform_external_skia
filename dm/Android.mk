@@ -581,6 +581,7 @@ LOCAL_SHARED_LIBRARIES := \
 	libdl \
 	libpng \
 	libz \
+	libexpat \
 	libGLESv2 \
 	libEGL
 

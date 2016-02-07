@@ -656,11 +656,11 @@ LOCAL_SHARED_LIBRARIES := \
 	libGLESv2 \
 	libEGL \
 	libz \
+	libexpat \
 	libjpeg \
 	libpng \
 	libicuuc \
 	libicui18n \
-	libexpat \
 	libft2 \
 	libdng_sdk \
 	libpiex
