@@ -399,6 +399,7 @@ LOCAL_SRC_FILES := \
 	../tools/CrashHandler.cpp \
 	../tools/ProcStats.cpp \
 	../tools/timer/Timer.cpp \
+	../tools/ThermalManager.cpp \
 	../tools/Resources.cpp \
 	../tools/sk_tool_utils.cpp \
 	../tools/sk_tool_utils_font.cpp \
