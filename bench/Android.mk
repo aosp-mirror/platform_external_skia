@@ -392,10 +392,10 @@ LOCAL_SRC_FILES := \
 	../gm/xfermodes3.cpp \
 	../gm/xferu64.cpp \
 	../gm/yuvtorgbeffect.cpp \
-	../src/utils/debugger/SkDrawCommand.cpp \
-	../src/utils/debugger/SkDebugCanvas.cpp \
-	../src/utils/debugger/SkObjectParser.cpp \
-	../src/utils/debugger/SkOverdrawMode.cpp \
+	../tools/debugger/SkDrawCommand.cpp \
+	../tools/debugger/SkDebugCanvas.cpp \
+	../tools/debugger/SkObjectParser.cpp \
+	../tools/debugger/SkOverdrawMode.cpp \
 	../tools/AndroidSkDebugToStdOut.cpp \
 	../tools/flags/SkCommonFlags.cpp \
 	../tools/flags/SkCommonFlagsConfig.cpp \
@@ -450,7 +450,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/subset \
 	$(LOCAL_PATH)/../src/effects \
 	$(LOCAL_PATH)/../gm \
-	$(LOCAL_PATH)/../src/utils/debugger \
+	$(LOCAL_PATH)/../tools/debugger \
 	$(LOCAL_PATH)/../src/images \
 	$(LOCAL_PATH)/../src/lazy \
 	$(LOCAL_PATH)/../../../frameworks/base/libs/hwui \

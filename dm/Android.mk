@@ -25,10 +25,10 @@ LOCAL_SRC_FILES := \
 	DMSrcSink.cpp \
 	DMJsonWriter.cpp \
 	../gm/gm.cpp \
-	../src/utils/debugger/SkDebugCanvas.cpp \
-	../src/utils/debugger/SkDrawCommand.cpp \
-	../src/utils/debugger/SkObjectParser.cpp \
-	../src/utils/debugger/SkOverdrawMode.cpp \
+	../tools/debugger/SkDebugCanvas.cpp \
+	../tools/debugger/SkDrawCommand.cpp \
+	../tools/debugger/SkObjectParser.cpp \
+	../tools/debugger/SkOverdrawMode.cpp \
 	../tests/Test.cpp \
 	../tests/PathOpsAngleTest.cpp \
 	../tests/PathOpsBoundsTest.cpp \
@@ -618,7 +618,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../src/effects \
 	$(LOCAL_PATH)/../src/images \
 	$(LOCAL_PATH)/../src/lazy \
-	$(LOCAL_PATH)/../src/utils/debugger \
+	$(LOCAL_PATH)/../tools/debugger \
 	$(LOCAL_PATH)/../tests \
 	$(LOCAL_PATH)/../src/pathops \
 	$(LOCAL_PATH)/../src/pipe/utils \
