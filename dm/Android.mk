@@ -556,6 +556,7 @@ LOCAL_SRC_FILES := \
 	../tools/ProcStats.cpp \
 	../tools/sk_tool_utils.cpp \
 	../tools/sk_tool_utils_font.cpp \
+	../tools/random_parse_path.cpp \
 	../tools/timer/Timer.cpp \
 	../src/xml/SkBML_XMLParser.cpp \
 	../src/xml/SkDOM.cpp \
