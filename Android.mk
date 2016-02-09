@@ -263,6 +263,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkWriter32.cpp \
 	src/core/SkXfermode.cpp \
 	src/core/SkXfermode4f.cpp \
+	src/core/SkXfermodeU64.cpp \
 	src/core/SkXfermodeInterpretation.cpp \
 	src/core/SkYUVPlanesCache.cpp \
 	src/doc/SkDocument.cpp \

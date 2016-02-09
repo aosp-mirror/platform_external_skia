@@ -124,6 +124,7 @@ LOCAL_SRC_FILES := \
 	WritePixelsBench.cpp \
 	WriterBench.cpp \
 	Xfer4fBench.cpp \
+	XferU64Bench.cpp \
 	XfermodeBench.cpp \
 	nanobench.cpp \
 	nanobenchAndroid.cpp \
@@ -389,6 +390,7 @@ LOCAL_SRC_FILES := \
 	../gm/xfermodes.cpp \
 	../gm/xfermodes2.cpp \
 	../gm/xfermodes3.cpp \
+	../gm/xferu64.cpp \
 	../gm/yuvtorgbeffect.cpp \
 	../src/utils/debugger/SkDrawCommand.cpp \
 	../src/utils/debugger/SkDebugCanvas.cpp \
