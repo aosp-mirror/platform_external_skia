@@ -41,6 +41,9 @@ GrGLCaps::GrGLCaps(const GrContextOptions& contextOptions,
     fDebugSupport = false;
     fES2CompatibilitySupport = false;
     fMultisampleDisableSupport = false;
+    fDrawIndirectSupport = false;
+    fMultiDrawIndirectSupport = false;
+    fBaseInstanceSupport = false;
     fUseNonVBOVertexAndIndexDynamicData = false;
     fIsCoreProfile = false;
     fBindFragDataLocationSupport = false;
@@ -276,12 +279,17 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
         // we don't support GL_ARB_geometry_shader4, just GL 3.2+ GS
         glslCaps->fGeometryShaderSupport = ctxInfo.version() >= GR_GL_VER(3, 2) &&
             ctxInfo.glslGeneration() >= k150_GrGLSLGeneration;
+        glslCaps->fIntegerSupport = ctxInfo.version() >= GR_GL_VER(3, 0) &&
+            ctxInfo.glslGeneration() >= k130_GrGLSLGeneration;
     }
     else {
         glslCaps->fDualSourceBlendingSupport = ctxInfo.hasExtension("GL_EXT_blend_func_extended");
 
         glslCaps->fShaderDerivativeSupport = ctxInfo.version() >= GR_GL_VER(3, 0) ||
             ctxInfo.hasExtension("GL_OES_standard_derivatives");
+
+        glslCaps->fIntegerSupport = ctxInfo.version() >= GR_GL_VER(3, 0) &&
+            ctxInfo.glslGeneration() >= k330_GrGLSLGeneration; // We use this value for GLSL ES 3.0.
     }
 
     if (ctxInfo.hasExtension("GL_EXT_shader_pixel_local_storage")) {
@@ -423,11 +431,18 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
 
     // initFSAASupport() must have been called before this point
     if (GrGLCaps::kES_IMG_MsToTexture_MSFBOType == fMSFBOType) {
-        GR_GL_GetIntegerv(gli, GR_GL_MAX_SAMPLES_IMG, &fMaxColorSampleCount);
+        GR_GL_GetIntegerv(gli, GR_GL_MAX_SAMPLES_IMG, &fMaxStencilSampleCount);
     } else if (GrGLCaps::kNone_MSFBOType != fMSFBOType) {
-        GR_GL_GetIntegerv(gli, GR_GL_MAX_SAMPLES, &fMaxColorSampleCount);
+        GR_GL_GetIntegerv(gli, GR_GL_MAX_SAMPLES, &fMaxStencilSampleCount);
     }
-    fMaxStencilSampleCount = fMaxColorSampleCount;
+    // We only have a use for raster multisample if there is coverage modulation from mixed samples.
+    if (fUsesMixedSamples && ctxInfo.hasExtension("GL_EXT_raster_multisample")) {
+        GR_GL_GetIntegerv(gli, GR_GL_MAX_RASTER_SAMPLES, &fMaxRasterSamples);
+        // This is to guard against platforms that may not support as many samples for
+        // glRasterSamples as they do for framebuffers.
+        fMaxStencilSampleCount = SkTMin(fMaxStencilSampleCount, fMaxRasterSamples);
+    }
+    fMaxColorSampleCount = fMaxStencilSampleCount;
 
     if (kPowerVR54x_GrGLRenderer == ctxInfo.renderer() ||
         kPowerVRRogue_GrGLRenderer == ctxInfo.renderer() ||
@@ -473,6 +488,17 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
                 version >= GR_GL_VER(3, 0) ||
                 (ctxInfo.hasExtension("GL_EXT_draw_instanced") &&
                  ctxInfo.hasExtension("GL_EXT_instanced_arrays"));
+    }
+
+    if (kGL_GrGLStandard == standard) {
+        // We don't use ARB_draw_indirect because it does not support a base instance.
+        // We don't use ARB_multi_draw_indirect because it does not support GL_DRAW_INDIRECT_BUFFER.
+        fDrawIndirectSupport =
+            fMultiDrawIndirectSupport = fBaseInstanceSupport = version >= GR_GL_VER(4,3);
+    } else {
+        fDrawIndirectSupport = version >= GR_GL_VER(3,1);
+        fMultiDrawIndirectSupport = ctxInfo.hasExtension("GL_EXT_multi_draw_indirect");
+        fBaseInstanceSupport = ctxInfo.hasExtension("GL_EXT_base_instance");
     }
 
     this->initShaderPrecisionTable(ctxInfo, gli, glslCaps);
@@ -643,11 +669,11 @@ bool GrGLCaps::hasPathRenderingSupport(const GrGLContextInfo& ctxInfo, const GrG
     // additions are detected by checking the existence of the function.
     // We also use *Then* functions that not all drivers might have. Check
     // them for consistency.
-    if (nullptr == gli->fFunctions.fStencilThenCoverFillPath ||
-        nullptr == gli->fFunctions.fStencilThenCoverStrokePath ||
-        nullptr == gli->fFunctions.fStencilThenCoverFillPathInstanced ||
-        nullptr == gli->fFunctions.fStencilThenCoverStrokePathInstanced ||
-        nullptr == gli->fFunctions.fProgramPathFragmentInputGen) {
+    if (!gli->fFunctions.fStencilThenCoverFillPath ||
+        !gli->fFunctions.fStencilThenCoverStrokePath ||
+        !gli->fFunctions.fStencilThenCoverFillPathInstanced ||
+        !gli->fFunctions.fStencilThenCoverStrokePathInstanced ||
+        !gli->fFunctions.fProgramPathFragmentInputGen) {
         return false;
     }
     return true;
@@ -929,6 +955,9 @@ SkString GrGLCaps::dump() const {
     r.appendf("Direct state access support: %s\n", (fDirectStateAccessSupport ? "YES": "NO"));
     r.appendf("Debug support: %s\n", (fDebugSupport ? "YES": "NO"));
     r.appendf("Multisample disable support: %s\n", (fMultisampleDisableSupport ? "YES" : "NO"));
+    r.appendf("Draw indirect support: %s\n", (fDrawIndirectSupport ? "YES" : "NO"));
+    r.appendf("Multi draw indirect support: %s\n", (fMultiDrawIndirectSupport ? "YES" : "NO"));
+    r.appendf("Base instance support: %s\n", (fBaseInstanceSupport ? "YES" : "NO"));
     r.appendf("Use non-VBO for dynamic data: %s\n",
              (fUseNonVBOVertexAndIndexDynamicData ? "YES" : "NO"));
     r.appendf("SRGB write contol: %s\n", (fSRGBWriteControl ? "YES" : "NO"));

@@ -17,7 +17,7 @@
         '../src/lazy',
         '../gm',       # needed to pull gm.h
         '../samplecode', # To pull SampleApp.h and SampleCode.h
-        '../src/utils/debugger',
+        '../tools/debugger',
         '../tools',
         '../experimental',
       ],
@@ -157,6 +157,7 @@
         'views.gyp:views',
         'views_animated.gyp:views_animated',
         'xml.gyp:xml',
+        'jsoncpp.gyp:jsoncpp',
       ],
       'msvs_settings': {
         'VCLinkerTool': {

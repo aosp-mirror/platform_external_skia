@@ -136,6 +136,7 @@
       'sources': [
         '../tools/sk_tool_utils.cpp',
         '../tools/sk_tool_utils_font.cpp',
+        '../tools/random_parse_path.cpp',
       ],
       'include_dirs': [
         '../include/private',
@@ -404,6 +405,27 @@
       },
     },
     {
+      'target_name': 'url_data_manager',
+      'type': 'static_library',
+      'sources': [
+        '../tools/UrlDataManager.h',
+        '../tools/UrlDataManager.cpp',
+      ],
+      'dependencies': [
+        'skia_lib.gyp:skia_lib',
+      ],
+      'include_dirs': [
+         '../include/private',
+         '../src/core',
+      ],
+      'direct_dependent_settings': {
+        'include_dirs': [
+          '../include/private',
+          '../tools', 
+        ],
+      },
+    },
+    {
       'target_name': 'whitelist_typefaces',
       'type': 'executable',
       'sources': [
@@ -412,6 +434,19 @@
       'dependencies': [
         'skia_lib.gyp:skia_lib',
       ],
+    },
+    {
+      'target_name': 'thermal_manager',
+      'type': 'static_library',
+      'sources': [
+        '../tools/ThermalManager.cpp',
+      ],
+      'dependencies': [
+        'skia_lib.gyp:skia_lib',
+      ],
+      'direct_dependent_settings': {
+        'include_dirs': [ '../tools', ],
+      },
     },
     {
       'target_name': 'test_public_includes',

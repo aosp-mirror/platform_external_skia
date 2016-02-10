@@ -5,6 +5,7 @@
  * found in the LICENSE file.
  */
 
+#include "SkHalf.h"
 #include "SkOnce.h"
 #include "SkOpts.h"
 
@@ -19,6 +20,19 @@
 #include "SkTextureCompressor_opts.h"
 #include "SkUtils_opts.h"
 #include "SkXfermode_opts.h"
+
+namespace SK_OPTS_NS {
+    static void float_to_half(uint16_t dst[], const float src[], int n) {
+        while (n-->0) {
+            *dst++ = SkFloatToHalf(*src++);
+        }
+    }
+    static void half_to_float(float dst[], const uint16_t src[], int n) {
+        while (n-->0) {
+            *dst++ = SkHalfToFloat(*src++);
+        }
+    }
+}
 
 #if defined(SK_CPU_X86) && !defined(SK_BUILD_FOR_IOS)
     #if defined(SK_BUILD_FOR_WIN32)
@@ -79,20 +93,25 @@ namespace SkOpts {
     decltype(matrix_scale_translate) matrix_scale_translate = sk_default::matrix_scale_translate;
     decltype(matrix_affine)          matrix_affine          = sk_default::matrix_affine;
 
-    decltype(RGBA_to_BGRA)  RGBA_to_BGRA  = sk_default::RGBA_to_BGRA;
-    decltype(RGBA_to_rgbA)  RGBA_to_rgbA  = sk_default::RGBA_to_rgbA;
-    decltype(RGBA_to_bgrA)  RGBA_to_bgrA  = sk_default::RGBA_to_bgrA;
-    decltype(RGB_to_RGB1)   RGB_to_RGB1   = sk_default::RGB_to_RGB1;
-    decltype(RGB_to_BGR1)   RGB_to_BGR1   = sk_default::RGB_to_BGR1;
-    decltype(gray_to_RGB1)  gray_to_RGB1  = sk_default::gray_to_RGB1;
-    decltype(grayA_to_RGBA) grayA_to_RGBA = sk_default::grayA_to_RGBA;
-    decltype(grayA_to_rgbA) grayA_to_rgbA = sk_default::grayA_to_rgbA;
+    decltype(RGBA_to_BGRA)          RGBA_to_BGRA          = sk_default::RGBA_to_BGRA;
+    decltype(RGBA_to_rgbA)          RGBA_to_rgbA          = sk_default::RGBA_to_rgbA;
+    decltype(RGBA_to_bgrA)          RGBA_to_bgrA          = sk_default::RGBA_to_bgrA;
+    decltype(RGB_to_RGB1)           RGB_to_RGB1           = sk_default::RGB_to_RGB1;
+    decltype(RGB_to_BGR1)           RGB_to_BGR1           = sk_default::RGB_to_BGR1;
+    decltype(gray_to_RGB1)          gray_to_RGB1          = sk_default::gray_to_RGB1;
+    decltype(grayA_to_RGBA)         grayA_to_RGBA         = sk_default::grayA_to_RGBA;
+    decltype(grayA_to_rgbA)         grayA_to_rgbA         = sk_default::grayA_to_rgbA;
+    decltype(inverted_CMYK_to_RGB1) inverted_CMYK_to_RGB1 = sk_default::inverted_CMYK_to_RGB1;
+    decltype(inverted_CMYK_to_BGR1) inverted_CMYK_to_BGR1 = sk_default::inverted_CMYK_to_BGR1;
+
+    decltype(half_to_float) half_to_float = sk_default::half_to_float;
+    decltype(float_to_half) float_to_half = sk_default::float_to_half;
 
     // Each Init_foo() is defined in src/opts/SkOpts_foo.cpp.
     void Init_ssse3();
     void Init_sse41();
     void Init_sse42() {}
-    void Init_avx();
+    void Init_avx() {}
     void Init_avx2() {}
     void Init_neon();
 

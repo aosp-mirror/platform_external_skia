@@ -11,11 +11,14 @@
 #include "SkCommandLineFlags.h"
 #include "SkDebugCanvas.h"
 #include "SkJSONCanvas.h"
+#include "SkJSONCPP.h"
 #include "SkPicture.h"
 #include "SkPictureRecorder.h"
 #include "SkPixelSerializer.h"
 #include "SkStream.h"
 #include "SkSurface.h"
+
+#include "UrlDataManager.h"
 
 #include <sys/socket.h>
 #include <microhttpd.h>
@@ -26,6 +29,7 @@
 __SK_FORCE_IMAGE_DECODER_LINKING;
 
 DEFINE_string(source, "https://debugger.skia.org", "Where to load the web UI from.");
+DEFINE_string(faviconDir, "tools/skiaserve", "The directory of the favicon");
 DEFINE_int32(port, 8888, "The port to listen on.");
 
 // TODO probably want to make this configurable
@@ -62,10 +66,11 @@ struct UploadContext {
 };
 
 struct Request {
-    Request() : fUploadContext(nullptr) {}
+    Request(SkString rootUrl) : fUploadContext(nullptr), fUrlDataManager(rootUrl) {}
     UploadContext* fUploadContext;
     SkAutoTUnref<SkPicture> fPicture;
     SkAutoTUnref<SkDebugCanvas> fDebugCanvas;
+    UrlDataManager fUrlDataManager;
 };
 
 // TODO factor this out into functions, also handle CPU path
@@ -98,6 +103,7 @@ SkData* writeCanvasToPng(SkCanvas* canvas) {
     }
 
     // write to png
+    // TODO encoding to png can be quite slow, we should investigate bmp
     SkData* png = SkImageEncoder::EncodeData(bmp, SkImageEncoder::kPNG_Type, 100);
     if (!png) {
         fprintf(stderr, "Can't encode to png\n");
@@ -115,6 +121,12 @@ SkData* setupAndDrawToCanvasReturnPng(SkDebugCanvas* debugCanvas, int n) {
     SkCanvas* canvas = surface->getCanvas();
     debugCanvas->drawTo(canvas, n);
     return writeCanvasToPng(canvas);
+}
+
+SkSurface* setupCpuSurface() {
+    SkImageInfo info = SkImageInfo::Make(kImageWidth, kImageHeight, kN32_SkColorType,
+                                         kPremul_SkAlphaType);
+    return SkSurface::NewRaster(info);
 }
 
 static const size_t kBufferSize = 1024;
@@ -188,7 +200,7 @@ public:
                        const char* upload_data, size_t* upload_data_size) = 0;
 };
 
-class InfoHandler : public UrlHandler {
+class CmdHandler : public UrlHandler {
 public:
     bool canHandle(const char* method, const char* url) override {
         const char* kBasePath = "/cmd";
@@ -356,6 +368,104 @@ public:
     }
 };
 
+class InfoHandler : public UrlHandler {
+public:
+    bool canHandle(const char* method, const char* url) override {
+        const char* kBaseName = "/info";
+        return 0 == strcmp(method, MHD_HTTP_METHOD_GET) &&
+               0 == strncmp(url, kBaseName, strlen(kBaseName));
+    }
+
+    int handle(Request* request, MHD_Connection* connection,
+               const char* url, const char* method,
+               const char* upload_data, size_t* upload_data_size) override {
+        SkTArray<SkString> commands;
+        SkStrSplit(url, "/", &commands);
+
+        if (!request->fPicture.get() || commands.count() > 2) {
+            return MHD_NO;
+        }
+
+        // drawTo
+        SkAutoTUnref<SkSurface> surface(setupCpuSurface());
+        SkCanvas* canvas = surface->getCanvas();
+
+        int n;
+        // /info or /info/N
+        if (commands.count() == 1) {
+            n = request->fDebugCanvas->getSize() - 1;
+        } else {
+            sscanf(commands[1].c_str(), "%d", &n);
+        }
+
+        // TODO this is really slow and we should cache the matrix and clip
+        request->fDebugCanvas->drawTo(canvas, n);
+
+        // make some json
+        SkMatrix vm = request->fDebugCanvas->getCurrentMatrix();
+        SkIRect clip = request->fDebugCanvas->getCurrentClip();
+        Json::Value info(Json::objectValue);
+        info["ViewMatrix"] = SkJSONCanvas::MakeMatrix(vm);
+        info["ClipRect"] = SkJSONCanvas::MakeIRect(clip);
+
+        std::string json = Json::FastWriter().write(info);
+
+        // We don't want the null terminator so strlen is correct
+        SkAutoTUnref<SkData> data(SkData::NewWithCopy(json.c_str(), strlen(json.c_str())));
+        return SendData(connection, data, "application/json");
+    }
+};
+
+class DataHandler : public UrlHandler {
+public:
+    bool canHandle(const char* method, const char* url) override {
+        static const char* kBaseUrl = "/data";
+        return 0 == strcmp(method, MHD_HTTP_METHOD_GET) &&
+               0 == strncmp(url, kBaseUrl, strlen(kBaseUrl));
+    }
+
+    int handle(Request* request, MHD_Connection* connection,
+               const char* url, const char* method,
+               const char* upload_data, size_t* upload_data_size) override {
+        SkTArray<SkString> commands;
+        SkStrSplit(url, "/", &commands);
+
+        if (!request->fPicture.get() || commands.count() != 2) {
+            return MHD_NO;
+        }
+
+        SkAutoTUnref<UrlDataManager::UrlData> urlData(
+            SkRef(request->fUrlDataManager.getDataFromUrl(SkString(url))));
+
+        if (urlData) {
+            return SendData(connection, urlData->fData.get(), urlData->fContentType.c_str());
+        }
+        return MHD_NO;
+    }
+};
+
+class FaviconHandler : public UrlHandler {
+public:
+    bool canHandle(const char* method, const char* url) override {
+        return 0 == strcmp(method, MHD_HTTP_METHOD_GET) &&
+               0 == strcmp(url, "/favicon.ico");
+    }
+
+    int handle(Request* request, MHD_Connection* connection,
+               const char* url, const char* method,
+               const char* upload_data, size_t* upload_data_size) override {
+        SkString dir(FLAGS_faviconDir[0]);
+        dir.append("/favicon.ico");
+        FILE* ico = fopen(dir.c_str(), "r");
+
+        SkAutoTUnref<SkData> data(SkData::NewFromFILE(ico));
+        int ret = SendData(connection, data, "image/vnd.microsoft.icon");
+        fclose(ico);
+        return ret;
+    }
+};
+
+
 class RootHandler : public UrlHandler {
 public:
     bool canHandle(const char* method, const char* url) override {
@@ -377,8 +487,11 @@ public:
         fHandlers.push_back(new RootHandler);
         fHandlers.push_back(new PostHandler);
         fHandlers.push_back(new ImgHandler);
+        fHandlers.push_back(new CmdHandler);
         fHandlers.push_back(new InfoHandler);
         fHandlers.push_back(new DownloadHandler);
+        fHandlers.push_back(new DataHandler);
+        fHandlers.push_back(new FaviconHandler);
     }
 
     ~UrlManager() {
@@ -413,13 +526,13 @@ int answer_to_connection(void* cls, struct MHD_Connection* connection,
     int result = kUrlManager.invoke(request, connection, url, method, upload_data,
                                     upload_data_size);
     if (MHD_NO == result) {
-        fprintf(stderr, "Invalid method and / or url: %s %s)\n", method, url);
+        fprintf(stderr, "Invalid method and / or url: %s %s\n", method, url);
     }
     return result;
 }
 
 int skiaserve_main() {
-    Request request; // This simple server has one request
+    Request request(SkString("/data")); // This simple server has one request
     struct MHD_Daemon* daemon;
     // TODO Add option to bind this strictly to an address, e.g. localhost, for security.
     daemon = MHD_start_daemon(MHD_USE_SELECT_INTERNALLY, FLAGS_port, nullptr, nullptr,

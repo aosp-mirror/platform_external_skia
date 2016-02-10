@@ -38,6 +38,7 @@
 
 DEFINE_bool(multiPage, false, "For document-type backends, render the source"
             " into multiple pages");
+DEFINE_bool(RAW_threading, true, "Allow RAW decodes to run on multiple threads?");
 
 static bool lazy_decode_bitmap(const void* src, size_t size, SkBitmap* dst) {
     SkAutoTUnref<SkData> encoded(SkData::NewWithCopy(src, size));
@@ -238,6 +239,25 @@ Name BRDSrc::name() const {
 
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
+static bool serial_from_path_name(const SkString& path) {
+    if (!FLAGS_RAW_threading) {
+        static const char* const exts[] = {
+            "arw", "cr2", "dng", "nef", "nrw", "orf", "raf", "rw2", "pef", "srw",
+            "ARW", "CR2", "DNG", "NEF", "NRW", "ORF", "RAF", "RW2", "PEF", "SRW",
+        };
+        const char* actualExt = strrchr(path.c_str(), '.');
+        if (actualExt) {
+            actualExt++;
+            for (auto* ext : exts) {
+                if (0 == strcmp(ext, actualExt)) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
 CodecSrc::CodecSrc(Path path, Mode mode, DstColorType dstColorType, SkAlphaType dstAlphaType,
                    float scale)
     : fPath(path)
@@ -245,13 +265,16 @@ CodecSrc::CodecSrc(Path path, Mode mode, DstColorType dstColorType, SkAlphaType 
     , fDstColorType(dstColorType)
     , fDstAlphaType(dstAlphaType)
     , fScale(scale)
+    , fRunSerially(serial_from_path_name(path))
 {}
 
 bool CodecSrc::veto(SinkFlags flags) const {
     // Test CodecImageGenerator on 8888, 565, and gpu
     if (kGen_Mode == fMode) {
-        return (flags.type != SinkFlags::kRaster || flags.approach != SinkFlags::kDirect) &&
-                flags.type != SinkFlags::kGPU;
+        // For image generator, we want to test kDirect approaches for kRaster and kGPU,
+        // while skipping everything else.
+        return (flags.type != SinkFlags::kRaster && flags.type != SinkFlags::kGPU) ||
+                flags.approach != SinkFlags::kDirect;
     }
 
     // Test all other modes to direct raster backends (8888 and 565).
@@ -612,6 +635,7 @@ AndroidCodecSrc::AndroidCodecSrc(Path path, Mode mode, CodecSrc::DstColorType ds
     , fDstColorType(dstColorType)
     , fDstAlphaType(dstAlphaType)
     , fSampleSize(sampleSize)
+    , fRunSerially(serial_from_path_name(path))
 {}
 
 bool AndroidCodecSrc::veto(SinkFlags flags) const {
@@ -831,10 +855,6 @@ GPUSink::GPUSink(GrContextFactory::GLContextType ct,
     , fUseDIText(diText)
     , fThreaded(threaded) {}
 
-int GPUSink::enclave() const {
-    return fThreaded ? kAnyThread_Enclave : kGPU_Enclave;
-}
-
 void PreAbandonGpuContextErrorHandler(SkError, void*) {}
 
 DEFINE_bool(imm, false, "Run gpu configs in immediate mode.");
@@ -855,6 +875,14 @@ Error GPUSink::draw(const Src& src, SkBitmap* dst, SkWStream*, SkString* log) co
     const SkISize size = src.size();
     const SkImageInfo info =
         SkImageInfo::Make(size.width(), size.height(), kN32_SkColorType, kPremul_SkAlphaType);
+#if SK_SUPPORT_GPU
+    const int maxDimension = factory.getContextInfo(fContextType, fContextOptions).
+            fGrContext->caps()->maxTextureSize();
+    if (maxDimension < SkTMax(size.width(), size.height())) {
+        return Error::Nonfatal("Src too large to create a texture.\n");
+    }
+#endif
+
     SkAutoTUnref<SkSurface> surface(
             NewGpuSurface(&factory, fContextType, fContextOptions, info, fSampleCount, fUseDIText));
     if (!surface) {

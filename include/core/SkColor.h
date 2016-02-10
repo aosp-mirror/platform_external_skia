@@ -160,6 +160,8 @@ typedef SkPMColor (*SkXfermodeProc)(SkPMColor src, SkPMColor dst);
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
+struct SkColor4f;
+
 /*
  *  The float values are 0...1 premultiplied
  */
@@ -174,7 +176,14 @@ struct SkPM4f {
 
     float a() const { return fVec[A]; }
 
+    SkColor4f unpremul() const;
+
     static SkPM4f FromPMColor(SkPMColor);
+
+    // half-float routines
+    void toF16(uint16_t[4]) const;
+    uint64_t toF16() const; // 4 float16 values packed into uint64_t
+    static SkPM4f FromF16(const uint16_t[4]);
 
 #ifdef SK_DEBUG
     void assertIsUnit() const;
@@ -182,6 +191,8 @@ struct SkPM4f {
     void assertIsUnit() const {}
 #endif
 };
+
+typedef SkPM4f (*SkXfermodeProc4f)(const SkPM4f& src, const SkPM4f& dst);
 
 /*
  *  The float values are 0...1 unpremultiplied

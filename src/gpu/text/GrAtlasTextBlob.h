@@ -18,6 +18,7 @@
 #include "SkTInternalLList.h"
 
 struct GrDistanceFieldAdjustTable;
+class GrMemoryPool;
 class GrTextContext;
 class SkDrawFilter;
 class SkTextBlob;
@@ -25,7 +26,7 @@ class SkTextBlobRunIterator;
 
 // With this flag enabled, the GrAtlasTextContext will, as a sanity check, regenerate every blob
 // that comes in to verify the integrity of its cache
-//#define CACHE_SANITY_CHECK // VERY SLOW
+#define CACHE_SANITY_CHECK 0
 
 /*
  * A GrAtlasTextBlob contains a fully processed SkTextBlob, suitable for nearly immediate drawing
@@ -45,16 +46,7 @@ class GrAtlasTextBlob : public SkNVRefCnt<GrAtlasTextBlob> {
 public:
     SK_DECLARE_INTERNAL_LLIST_INTERFACE(GrAtlasTextBlob);
 
-    GrAtlasTextBlob()
-        : fMaxMinScale(-SK_ScalarMax)
-        , fMinMaxScale(SK_ScalarMax)
-        , fTextType(0) {}
-
-    ~GrAtlasTextBlob() {
-        for (int i = 0; i < fRunCount; i++) {
-            fRuns[i].~Run();
-        }
-    }
+    static GrAtlasTextBlob* Create(GrMemoryPool* pool, int glyphCount, int runCount);
 
     struct Key {
         Key() {
@@ -74,6 +66,20 @@ public:
             return 0 == memcmp(this, &other, sizeof(Key));
         }
     };
+
+    void setupKey(const GrAtlasTextBlob::Key& key,
+                  const SkMaskFilter::BlurRec& blurRec,
+                  const SkPaint& paint) {
+        fKey = key;
+        if (key.fHasBlur) {
+            fBlurRec = blurRec;
+        }
+        if (key.fStyle != SkPaint::kFill_Style) {
+            fStrokeInfo.fFrameWidth = paint.getStrokeWidth();
+            fStrokeInfo.fMiterLimit = paint.getStrokeMiter();
+            fStrokeInfo.fJoin = paint.getStrokeJoin();
+        }
+    }
 
     static const Key& GetKey(const GrAtlasTextBlob& blob) {
         return blob.fKey;
@@ -198,12 +204,10 @@ public:
     static const size_t kColorTextVASize = sizeof(SkPoint) + sizeof(SkIPoint16);
     static const size_t kGrayTextVASize = sizeof(SkPoint) + sizeof(GrColor) + sizeof(SkIPoint16);
     static const size_t kLCDTextVASize = kGrayTextVASize;
+    static const size_t kMaxVASize = kGrayTextVASize;
     static const int kVerticesPerGlyph = 4;
 
-#ifdef CACHE_SANITY_CHECK
     static void AssertEqual(const GrAtlasTextBlob&, const GrAtlasTextBlob&);
-    size_t fSize;
-#endif
 
     // The color here is the GrPaint color, and it is used to determine whether we
     // have to regenerate LCD text blobs.
@@ -223,7 +227,20 @@ public:
                                   const GrDistanceFieldAdjustTable* distanceAdjustTable,
                                   GrBatchFontCache* cache);
 
+    const Key& key() const { return fKey; }
+
+    ~GrAtlasTextBlob() {
+        for (int i = 0; i < fRunCount; i++) {
+            fRuns[i].~Run();
+        }
+    }
+
 private:
+    GrAtlasTextBlob()
+        : fMaxMinScale(-SK_ScalarMax)
+        , fMinMaxScale(SK_ScalarMax)
+        , fTextType(0) {}
+
     void appendLargeGlyph(GrGlyph* glyph, GrFontScaler* scaler, const SkGlyph& skGlyph,
                           SkScalar x, SkScalar y, SkScalar scale, bool applyVM);
 
@@ -443,6 +460,7 @@ private:
     Key fKey;
     SkMatrix fViewMatrix;
     SkMatrix fInitialViewMatrixInverse;
+    size_t fSize;
     GrColor fPaintColor;
     SkScalar fInitialX;
     SkScalar fInitialY;
@@ -458,7 +476,6 @@ private:
     uint8_t fTextType;
 
     friend class GrAtlasTextBatch; // We might be able to get rid of this friending
-    friend class GrTextBlobCache; // Needs to access the key
 };
 
 #endif

@@ -65,6 +65,7 @@ LOCAL_SRC_FILES := \
 	GrResourceCacheBench.cpp \
 	GradientBench.cpp \
 	HairlinePathBench.cpp \
+	HalfBench.cpp \
 	ImageBench.cpp \
 	ImageCacheBench.cpp \
 	ImageFilterCollapse.cpp \
@@ -123,6 +124,7 @@ LOCAL_SRC_FILES := \
 	WritePixelsBench.cpp \
 	WriterBench.cpp \
 	Xfer4fBench.cpp \
+	XferU64Bench.cpp \
 	XfermodeBench.cpp \
 	nanobench.cpp \
 	nanobenchAndroid.cpp \
@@ -388,20 +390,23 @@ LOCAL_SRC_FILES := \
 	../gm/xfermodes.cpp \
 	../gm/xfermodes2.cpp \
 	../gm/xfermodes3.cpp \
+	../gm/xferu64.cpp \
 	../gm/yuvtorgbeffect.cpp \
-	../src/utils/debugger/SkDrawCommand.cpp \
-	../src/utils/debugger/SkDebugCanvas.cpp \
-	../src/utils/debugger/SkObjectParser.cpp \
-	../src/utils/debugger/SkOverdrawMode.cpp \
+	../tools/debugger/SkDrawCommand.cpp \
+	../tools/debugger/SkDebugCanvas.cpp \
+	../tools/debugger/SkObjectParser.cpp \
+	../tools/debugger/SkOverdrawMode.cpp \
 	../tools/AndroidSkDebugToStdOut.cpp \
 	../tools/flags/SkCommonFlags.cpp \
 	../tools/flags/SkCommonFlagsConfig.cpp \
 	../tools/CrashHandler.cpp \
 	../tools/ProcStats.cpp \
 	../tools/timer/Timer.cpp \
+	../tools/ThermalManager.cpp \
 	../tools/Resources.cpp \
 	../tools/sk_tool_utils.cpp \
 	../tools/sk_tool_utils_font.cpp \
+	../tools/random_parse_path.cpp \
 	../tools/android/SkAndroidSDKCanvas.cpp \
 	../src/gpu/GrContextFactory.cpp \
 	../src/gpu/GrTest.cpp \
@@ -413,6 +418,7 @@ LOCAL_SHARED_LIBRARIES := \
 	libandroid \
 	libhwui \
 	libutils \
+	libexpat \
 	libGLESv2 \
 	libEGL
 
@@ -444,7 +450,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/subset \
 	$(LOCAL_PATH)/../src/effects \
 	$(LOCAL_PATH)/../gm \
-	$(LOCAL_PATH)/../src/utils/debugger \
+	$(LOCAL_PATH)/../tools/debugger \
 	$(LOCAL_PATH)/../src/images \
 	$(LOCAL_PATH)/../src/lazy \
 	$(LOCAL_PATH)/../../../frameworks/base/libs/hwui \

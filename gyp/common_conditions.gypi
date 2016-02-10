@@ -178,6 +178,8 @@
                 'WarnAsError': 'true',
                 'AdditionalOptions': [
                   '/we4189', # initialized but unused var warning
+                  '/we4238', # taking address of rvalue
+                  '/we4239', # assigning rvalues to non-const lvalues
                 ],
               },
             },
@@ -450,6 +452,12 @@
             'conditions' : [
               [ 'skia_sanitizer == "thread"', {
                 'defines': [ 'THREAD_SANITIZER' ],
+              }],
+              [ 'skia_sanitizer == "memory"', {
+                'cflags': [
+                    '-O1',
+                    '-fsanitize-memory-track-origins',
+                ],
               }],
             ],
           }],

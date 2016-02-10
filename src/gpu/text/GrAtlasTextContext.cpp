@@ -42,7 +42,6 @@ GrAtlasTextContext::GrAtlasTextContext(GrContext* context, const SkSurfaceProps&
     static_assert(GrAtlasTextBlob::kGrayTextVASize >= GrAtlasTextBlob::kColorTextVASize &&
                   GrAtlasTextBlob::kGrayTextVASize >= GrAtlasTextBlob::kLCDTextVASize,
                   "vertex_attribute_changed");
-    fCurrStrike = nullptr;
     fCache = context->getTextBlobCache();
 }
 
@@ -150,33 +149,28 @@ void GrAtlasTextContext::drawTextBlob(GrDrawContext* dc,
             // TODO we could probably get away reuse most of the time if the pointer is unique,
             // but we'd have to clear the subrun information
             fCache->remove(cacheBlob);
-            cacheBlob.reset(SkRef(fCache->createCachedBlob(blob, key, blurRec, skPaint,
-                                                           GrAtlasTextBlob::kGrayTextVASize)));
+            cacheBlob.reset(SkRef(fCache->createCachedBlob(blob, key, blurRec, skPaint)));
             this->regenerateTextBlob(cacheBlob, skPaint, grPaint.getColor(), viewMatrix,
                                      blob, x, y, drawFilter);
         } else {
             fCache->makeMRU(cacheBlob);
-#ifdef CACHE_SANITY_CHECK
-            {
+
+            if (CACHE_SANITY_CHECK) {
                 int glyphCount = 0;
                 int runCount = 0;
                 GrTextBlobCache::BlobGlyphCount(&glyphCount, &runCount, blob);
-                SkAutoTUnref<GrAtlasTextBlob> sanityBlob(fCache->createBlob(glyphCount, runCount,
-                                                                            kGrayTextVASize));
-                GrTextBlobCache::SetupCacheBlobKey(sanityBlob, key, blurRec, skPaint);
+                SkAutoTUnref<GrAtlasTextBlob> sanityBlob(fCache->createBlob(glyphCount, runCount));
+                sanityBlob->setupKey(key, blurRec, skPaint);
                 this->regenerateTextBlob(sanityBlob, skPaint, grPaint.getColor(), viewMatrix,
                                          blob, x, y, drawFilter);
                 GrAtlasTextBlob::AssertEqual(*sanityBlob, *cacheBlob);
             }
-
-#endif
         }
     } else {
         if (canCache) {
-            cacheBlob.reset(SkRef(fCache->createCachedBlob(blob, key, blurRec, skPaint,
-                                                           GrAtlasTextBlob::kGrayTextVASize)));
+            cacheBlob.reset(SkRef(fCache->createCachedBlob(blob, key, blurRec, skPaint)));
         } else {
-            cacheBlob.reset(fCache->createBlob(blob, GrAtlasTextBlob::kGrayTextVASize));
+            cacheBlob.reset(fCache->createBlob(blob));
         }
         this->regenerateTextBlob(cacheBlob, skPaint, grPaint.getColor(), viewMatrix,
                                  blob, x, y, drawFilter);
@@ -280,7 +274,7 @@ GrAtlasTextContext::createDrawTextBlob(const GrPaint& paint, const SkPaint& skPa
                                        SkScalar x, SkScalar y) {
     int glyphCount = skPaint.countText(text, byteLength);
 
-    GrAtlasTextBlob* blob = fCache->createBlob(glyphCount, 1, GrAtlasTextBlob::kGrayTextVASize);
+    GrAtlasTextBlob* blob = fCache->createBlob(glyphCount, 1);
     blob->initThrowawayBlob(viewMatrix, x, y);
 
     if (GrTextUtils::CanDrawAsDistanceFields(skPaint, viewMatrix, fSurfaceProps,
@@ -303,7 +297,7 @@ GrAtlasTextContext::createDrawPosTextBlob(const GrPaint& paint, const SkPaint& s
                                           const SkPoint& offset) {
     int glyphCount = skPaint.countText(text, byteLength);
 
-    GrAtlasTextBlob* blob = fCache->createBlob(glyphCount, 1, GrAtlasTextBlob::kGrayTextVASize);
+    GrAtlasTextBlob* blob = fCache->createBlob(glyphCount, 1);
     blob->initThrowawayBlob(viewMatrix, offset.x(), offset.y());
 
     if (GrTextUtils::CanDrawAsDistanceFields(skPaint, viewMatrix, fSurfaceProps,
@@ -319,33 +313,50 @@ GrAtlasTextContext::createDrawPosTextBlob(const GrPaint& paint, const SkPaint& s
     return blob;
 }
 
-void GrAtlasTextContext::onDrawText(GrDrawContext* dc,
-                                    const GrClip& clip,
-                                    const GrPaint& paint, const SkPaint& skPaint,
-                                    const SkMatrix& viewMatrix,
-                                    const char text[], size_t byteLength,
-                                    SkScalar x, SkScalar y, const SkIRect& regionClipBounds) {
-    SkAutoTUnref<GrAtlasTextBlob> blob(
-        this->createDrawTextBlob(paint, skPaint, viewMatrix, text, byteLength, x, y));
-    blob->flushThrowaway(fContext, dc, fSurfaceProps, fDistanceAdjustTable, skPaint, paint,
-                         clip, regionClipBounds);
+void GrAtlasTextContext::drawText(GrDrawContext* dc,
+                                  const GrClip& clip,
+                                  const GrPaint& paint, const SkPaint& skPaint,
+                                  const SkMatrix& viewMatrix,
+                                  const char text[], size_t byteLength,
+                                  SkScalar x, SkScalar y, const SkIRect& regionClipBounds) {
+    if (fContext->abandoned()) {
+        return;
+    } else if (this->canDraw(skPaint, viewMatrix)) {
+        SkAutoTUnref<GrAtlasTextBlob> blob(
+            this->createDrawTextBlob(paint, skPaint, viewMatrix, text, byteLength, x, y));
+        blob->flushThrowaway(fContext, dc, fSurfaceProps, fDistanceAdjustTable, skPaint, paint,
+                             clip, regionClipBounds);
+        return;
+    }
+
+    // fall back to drawing as a path
+    GrTextUtils::DrawTextAsPath(fContext, dc, clip, skPaint, viewMatrix, text, byteLength, x, y,
+                                regionClipBounds);
 }
 
-void GrAtlasTextContext::onDrawPosText(GrDrawContext* dc,
-                                       const GrClip& clip,
-                                       const GrPaint& paint, const SkPaint& skPaint,
-                                       const SkMatrix& viewMatrix,
-                                       const char text[], size_t byteLength,
-                                       const SkScalar pos[], int scalarsPerPosition,
-                                       const SkPoint& offset, const SkIRect& regionClipBounds) {
-    SkAutoTUnref<GrAtlasTextBlob> blob(
-        this->createDrawPosTextBlob(paint, skPaint, viewMatrix,
-                                    text, byteLength,
-                                    pos, scalarsPerPosition,
-                                    offset));
+void GrAtlasTextContext::drawPosText(GrDrawContext* dc,
+                                     const GrClip& clip,
+                                     const GrPaint& paint, const SkPaint& skPaint,
+                                     const SkMatrix& viewMatrix,
+                                     const char text[], size_t byteLength,
+                                     const SkScalar pos[], int scalarsPerPosition,
+                                     const SkPoint& offset, const SkIRect& regionClipBounds) {
+    if (fContext->abandoned()) {
+        return;
+    } else if (this->canDraw(skPaint, viewMatrix)) {
+        SkAutoTUnref<GrAtlasTextBlob> blob(
+            this->createDrawPosTextBlob(paint, skPaint, viewMatrix,
+                                        text, byteLength,
+                                        pos, scalarsPerPosition,
+                                        offset));
+        blob->flushThrowaway(fContext, dc, fSurfaceProps, fDistanceAdjustTable, skPaint, paint,
+                             clip, regionClipBounds);
+        return;
+    }
 
-    blob->flushThrowaway(fContext, dc, fSurfaceProps, fDistanceAdjustTable, skPaint, paint, clip,
-                         regionClipBounds);
+    // fall back to drawing as a path
+    GrTextUtils::DrawPosTextAsPath(fContext, dc, fSurfaceProps, clip, skPaint, viewMatrix, text,
+                                   byteLength, pos, scalarsPerPosition, offset, regionClipBounds);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

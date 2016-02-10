@@ -235,6 +235,8 @@ LOCAL_SRC_FILES := \
 	src/core/SkSemaphore.cpp \
 	src/core/SkShader.cpp \
 	src/core/SkSharedMutex.cpp \
+	src/core/SkSpecialImage.cpp \
+	src/core/SkSpecialSurface.cpp \
 	src/core/SkSpinlock.cpp \
 	src/core/SkSpriteBlitter_ARGB32.cpp \
 	src/core/SkSpriteBlitter_RGB16.cpp \
@@ -261,6 +263,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkWriter32.cpp \
 	src/core/SkXfermode.cpp \
 	src/core/SkXfermode4f.cpp \
+	src/core/SkXfermodeU64.cpp \
 	src/core/SkXfermodeInterpretation.cpp \
 	src/core/SkYUVPlanesCache.cpp \
 	src/doc/SkDocument.cpp \
@@ -654,11 +657,11 @@ LOCAL_SHARED_LIBRARIES := \
 	libGLESv2 \
 	libEGL \
 	libz \
+	libexpat \
 	libjpeg \
 	libpng \
 	libicuuc \
 	libicui18n \
-	libexpat \
 	libft2 \
 	libdng_sdk \
 	libpiex
@@ -761,8 +764,7 @@ LOCAL_SRC_FILES_x86 += \
 	src/opts/SkBitmapProcState_opts_SSSE3.cpp \
 	src/opts/SkOpts_ssse3.cpp \
 	src/opts/SkBlitRow_opts_SSE4.cpp \
-	src/opts/SkOpts_sse41.cpp \
-	src/opts/SkOpts_avx.cpp
+	src/opts/SkOpts_sse41.cpp
 
 LOCAL_CFLAGS_x86 += \
 	-DqDNGBigEndian=0
@@ -775,8 +777,7 @@ LOCAL_SRC_FILES_x86_64 += \
 	src/opts/SkBitmapProcState_opts_SSSE3.cpp \
 	src/opts/SkOpts_ssse3.cpp \
 	src/opts/SkBlitRow_opts_SSE4.cpp \
-	src/opts/SkOpts_sse41.cpp \
-	src/opts/SkOpts_avx.cpp
+	src/opts/SkOpts_sse41.cpp
 
 LOCAL_CFLAGS_mips += \
 	-EL

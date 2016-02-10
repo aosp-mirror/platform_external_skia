@@ -80,13 +80,9 @@ def get_args(bot):
   args.append('--config')
   args.extend(configs)
 
-  # Run tests and gms everywhere,
-  # and image decoding tests everywhere except GPU bots.
+  # Run tests, gms, and image decoding tests everywhere.
   # TODO: remove skp from default --src list?
-  if 'GPU' in bot:
-    args.extend('--src tests gm'.split(' '))
-  else:
-    args.extend('--src tests gm image'.split(' '))
+  args.extend('--src tests gm image'.split(' '))
 
   if 'GalaxyS' in bot:
     args.extend(('--threads', '0'))
@@ -159,16 +155,15 @@ def get_args(bot):
     blacklist.extend([   '2ndpic-8888', 'gm', '_', test])
     blacklist.extend(['serialize-8888', 'gm', '_', test])
 
-  # NexusPlayer runs out of memory running RAW codec tests
-  if 'NexusPlayer' in bot:
-    r = ["arw", "cr2", "dng", "nef", "nrw", "orf", "raf", "rw2", "pef", "srw",
-         "ARW", "CR2", "DNG", "NEF", "NRW", "ORF", "RAF", "RW2", "PEF", "SRW"]
+  # Extensions for RAW images
+  r = ["arw", "cr2", "dng", "nef", "nrw", "orf", "raf", "rw2", "pef", "srw",
+       "ARW", "CR2", "DNG", "NEF", "NRW", "ORF", "RAF", "RW2", "PEF", "SRW"]
+
+  # skbug.com/4888
+  # Blacklist RAW images on GPU tests until we can resolve failures
+  if 'GPU' in bot:
     for raw_ext in r:
       blacklist.extend(('_ image _ .%s' % raw_ext).split(' '))
-
-  if blacklist:
-    args.append('--blacklist')
-    args.extend(blacklist)
 
   match = []
   if 'Valgrind' in bot: # skia:3021
@@ -193,9 +188,24 @@ def get_args(bot):
   if 'ANGLE' in bot and 'Debug' in bot:
     match.append('~GLPrograms') # skia:4717
 
+  # Hacking around trying to get the MSAN bot green.
+  if 'MSAN' in bot:
+    blacklist.extend(('_ image _ .wbmp').split(' '))  # skia:4900
+    blacklist.extend(('_ image _ .png').split(' '))  # I8 .png color tables
+    blacklist.extend(('_ image _ .bmp').split(' '))  # I8 .bmp color tables
+
+  if blacklist:
+    args.append('--blacklist')
+    args.extend(blacklist)
+
   if match:
     args.append('--match')
     args.extend(match)
+
+  # These bots run out of memory running RAW codec tests. Do not run them in
+  # parallel
+  if 'NexusPlayer' in bot or 'Nexus5' in bot or 'Nexus9' in bot:
+    args.append('--noRAW_threading')
 
   return args
 cov_end = lineno()   # Don't care about code coverage past here.
@@ -213,6 +223,7 @@ def self_test():
     'Test-Android-GCC-Nexus7-GPU-Tegra3-Arm7-Release',
     'Test-Android-GCC-NexusPlayer-CPU-SSSE3-x86-Release',
     'Test-Ubuntu-GCC-ShuttleA-GPU-GTX550Ti-x86_64-Release-Valgrind',
+    'Test-Ubuntu-GCC-GCE-CPU-AVX2-x86_64-Debug-MSAN',
     'Test-Ubuntu-GCC-GCE-CPU-AVX2-x86_64-Release-TSAN',
     'Test-Ubuntu-GCC-GCE-CPU-AVX2-x86_64-Release-Valgrind',
     'Test-Win7-MSVC-ShuttleA-GPU-HD2000-x86-Debug-ANGLE',

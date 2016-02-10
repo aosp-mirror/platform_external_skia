@@ -92,8 +92,7 @@ void GrGLProgramBuilder::emitSamplers(const GrProcessor& processor,
             fUniformHandler.addUniform(GrGLSLUniformHandler::kFragment_Visibility,
                                        samplerType, kDefault_GrSLPrecision,
                                        name.c_str());
-        SkNEW_APPEND_TO_TARRAY(outSamplers, GrGLSLTextureSampler,
-                               (localSamplerUniforms[t], processor.textureAccess(t)));
+        outSamplers->emplace_back(localSamplerUniforms[t], processor.textureAccess(t));
         if (kSamplerExternal_GrSLType == samplerType) {
             const char* externalFeatureString = this->glslCaps()->externalTextureExtensionString();
             // We shouldn't ever create a GrGLTexture that requires external sampler type 
@@ -135,9 +134,10 @@ GrGLProgram* GrGLProgramBuilder::finalize() {
         return nullptr;
     }
 
+    this->finalizeShaders();
+
     // compile shaders and bind attributes / uniforms
     SkTDArray<GrGLuint> shadersToDelete;
-    fVS.finalize(GrGLSLUniformHandler::kVertex_Visibility);
     if (!this->compileAndAttachShaders(fVS, programID, GR_GL_VERTEX_SHADER, &shadersToDelete)) {
         this->cleanupProgram(programID, shadersToDelete);
         return nullptr;
@@ -154,7 +154,6 @@ GrGLProgram* GrGLProgramBuilder::finalize() {
         }
     }
 
-    fFS.finalize(GrGLSLUniformHandler::kFragment_Visibility);
     if (!this->compileAndAttachShaders(fFS, programID, GR_GL_FRAGMENT_SHADER, &shadersToDelete)) {
         this->cleanupProgram(programID, shadersToDelete);
         return nullptr;

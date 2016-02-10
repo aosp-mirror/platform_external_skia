@@ -318,6 +318,8 @@ GrPixelConfig SkImageInfo2GrPixelConfig(SkColorType ct, SkAlphaType, SkColorProf
             return kIndex_8_GrPixelConfig;
         case kGray_8_SkColorType:
             return kAlpha_8_GrPixelConfig; // TODO: gray8 support on gpu
+        case kRGBA_F16_SkColorType:
+            return kRGBA_half_GrPixelConfig;
     }
     SkASSERT(0);    // shouldn't get here
     return kUnknown_GrPixelConfig;
@@ -487,10 +489,15 @@ static inline bool skpaint_to_grpaint_impl(GrContext* context,
         }
     }
 
-    SkXfermode* mode = skPaint.getXfermode();
-    GrXPFactory* xpFactory = nullptr;
-    SkXfermode::AsXPFactory(mode, &xpFactory);
-    SkSafeUnref(grPaint->setXPFactory(xpFactory));
+    // When the xfermode is null on the SkPaint (meaning kSrcOver) we need the XPFactory field on
+    // the GrPaint to also be null (also kSrcOver).
+    SkASSERT(!grPaint->getXPFactory());
+    SkXfermode* xfermode = skPaint.getXfermode();
+    if (xfermode) {
+        // SafeUnref in case a new xfermode is added that returns null. 
+        // In such cases we will fall back to kSrcOver_Mode.
+        SkSafeUnref(grPaint->setXPFactory(xfermode->asXPFactory()));
+    }
 
 #ifndef SK_IGNORE_GPU_DITHER
     if (skPaint.isDither() && grPaint->numColorFragmentProcessors() > 0) {

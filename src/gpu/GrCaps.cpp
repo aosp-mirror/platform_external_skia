@@ -15,6 +15,7 @@ GrShaderCaps::GrShaderCaps() {
     fPathRenderingSupport = false;
     fDstReadInShaderSupport = false;
     fDualSourceBlendingSupport = false;
+    fIntegerSupport = false;
     fShaderPrecisionVaries = false;
 }
 
@@ -50,6 +51,7 @@ SkString GrShaderCaps::dump() const {
     r.appendf("Path Rendering Support             : %s\n", gNY[fPathRenderingSupport]);
     r.appendf("Dst Read In Shader Support         : %s\n", gNY[fDstReadInShaderSupport]);
     r.appendf("Dual Source Blending Support       : %s\n", gNY[fDualSourceBlendingSupport]);
+    r.appendf("Integer Support                    : %s\n", gNY[fIntegerSupport]);
 
     r.appendf("Shader Float Precisions (varies: %s):\n", gNY[fShaderPrecisionVaries]);
 
@@ -106,6 +108,7 @@ GrCaps::GrCaps(const GrContextOptions& options) {
     fMaxTextureSize = 1;
     fMaxColorSampleCount = 0;
     fMaxStencilSampleCount = 0;
+    fMaxRasterSamples = 0;
 
     fSuppressPrints = options.fSuppressPrints;
     fImmediateFlush = options.fImmediateMode;
@@ -178,6 +181,7 @@ SkString GrCaps::dump() const {
     r.appendf("Max Render Target Size             : %d\n", fMaxRenderTargetSize);
     r.appendf("Max Color Sample Count             : %d\n", fMaxColorSampleCount);
     r.appendf("Max Stencil Sample Count           : %d\n", fMaxStencilSampleCount);
+    r.appendf("Max Raster Samples                 : %d\n", fMaxRasterSamples);
 
     static const char* kBlendEquationSupportNames[] = {
         "Basic",

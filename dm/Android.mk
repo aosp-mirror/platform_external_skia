@@ -25,10 +25,10 @@ LOCAL_SRC_FILES := \
 	DMSrcSink.cpp \
 	DMJsonWriter.cpp \
 	../gm/gm.cpp \
-	../src/utils/debugger/SkDebugCanvas.cpp \
-	../src/utils/debugger/SkDrawCommand.cpp \
-	../src/utils/debugger/SkObjectParser.cpp \
-	../src/utils/debugger/SkOverdrawMode.cpp \
+	../tools/debugger/SkDebugCanvas.cpp \
+	../tools/debugger/SkDrawCommand.cpp \
+	../tools/debugger/SkObjectParser.cpp \
+	../tools/debugger/SkOverdrawMode.cpp \
 	../tests/Test.cpp \
 	../tests/PathOpsAngleTest.cpp \
 	../tests/PathOpsBoundsTest.cpp \
@@ -102,6 +102,7 @@ LOCAL_SRC_FILES := \
 	../tests/CanvasTest.cpp \
 	../tests/ChecksumTest.cpp \
 	../tests/ClampRangeTest.cpp \
+	../tests/ClearTest.cpp \
 	../tests/ClipBoundsTest.cpp \
 	../tests/ClipCubicTest.cpp \
 	../tests/ClipStackTest.cpp \
@@ -128,6 +129,7 @@ LOCAL_SRC_FILES := \
 	../tests/FillPathTest.cpp \
 	../tests/FitsInTest.cpp \
 	../tests/FlattenableFactoryToName.cpp \
+	../tests/Float16Test.cpp \
 	../tests/FloatingPointTextureTest.cpp \
 	../tests/FontHostStreamTest.cpp \
 	../tests/FontHostTest.cpp \
@@ -249,6 +251,8 @@ LOCAL_SRC_FILES := \
 	../tests/SkSharedMutexTest.cpp \
 	../tests/SmallAllocatorTest.cpp \
 	../tests/SortTest.cpp \
+	../tests/SpecialImageTest.cpp \
+	../tests/SpecialSurfaceTest.cpp \
 	../tests/SrcOverTest.cpp \
 	../tests/StreamTest.cpp \
 	../tests/StringTest.cpp \
@@ -542,6 +546,7 @@ LOCAL_SRC_FILES := \
 	../gm/xfermodes.cpp \
 	../gm/xfermodes2.cpp \
 	../gm/xfermodes3.cpp \
+	../gm/xferu64.cpp \
 	../gm/yuvtorgbeffect.cpp \
 	../tools/AndroidSkDebugToStdOut.cpp \
 	../tools/flags/SkCommandLineFlags.cpp \
@@ -551,6 +556,7 @@ LOCAL_SRC_FILES := \
 	../tools/ProcStats.cpp \
 	../tools/sk_tool_utils.cpp \
 	../tools/sk_tool_utils_font.cpp \
+	../tools/random_parse_path.cpp \
 	../tools/timer/Timer.cpp \
 	../src/xml/SkBML_XMLParser.cpp \
 	../src/xml/SkDOM.cpp \
@@ -577,6 +583,7 @@ LOCAL_SHARED_LIBRARIES := \
 	libdl \
 	libpng \
 	libz \
+	libexpat \
 	libGLESv2 \
 	libEGL
 
@@ -611,7 +618,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../src/effects \
 	$(LOCAL_PATH)/../src/images \
 	$(LOCAL_PATH)/../src/lazy \
-	$(LOCAL_PATH)/../src/utils/debugger \
+	$(LOCAL_PATH)/../tools/debugger \
 	$(LOCAL_PATH)/../tests \
 	$(LOCAL_PATH)/../src/pathops \
 	$(LOCAL_PATH)/../src/pipe/utils \

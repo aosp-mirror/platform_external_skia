@@ -62,6 +62,7 @@ public:
     bool pathRenderingSupport() const { return fPathRenderingSupport; }
     bool dstReadInShaderSupport() const { return fDstReadInShaderSupport; }
     bool dualSourceBlendingSupport() const { return fDualSourceBlendingSupport; }
+    bool integerSupport() const { return fIntegerSupport; }
 
     /**
     * Get the precision info for a variable of type kFloat_GrSLType, kVec2f_GrSLType, etc in a
@@ -109,6 +110,7 @@ protected:
     bool fPathRenderingSupport : 1;
     bool fDstReadInShaderSupport : 1;
     bool fDualSourceBlendingSupport : 1;
+    bool fIntegerSupport : 1;
 
     bool fShaderPrecisionVaries;
     PrecisionInfo fFloatPrecisions[kGrShaderTypeCount][kGrSLPrecisionCount];
@@ -211,6 +213,9 @@ public:
     int maxColorSampleCount() const { return fMaxColorSampleCount; }
     // Will be 0 if MSAA is not supported
     int maxStencilSampleCount() const { return fMaxStencilSampleCount; }
+    // Will be 0 if raster multisample is not supported. Raster multisample is a special HW mode
+    // where the rasterizer runs with more samples than are in the target framebuffer.
+    int maxRasterSamples() const { return fMaxRasterSamples; }
     // We require the sample count to be less than maxColorSampleCount and maxStencilSampleCount.
     // If we are using mixed samples, we only care about stencil.
     int maxSampleCount() const {
@@ -291,6 +296,7 @@ protected:
     int fMaxTileSize;
     int fMaxColorSampleCount;
     int fMaxStencilSampleCount;
+    int fMaxRasterSamples;
 
 private:
     virtual void onApplyOptionsOverrides(const GrContextOptions&) {};

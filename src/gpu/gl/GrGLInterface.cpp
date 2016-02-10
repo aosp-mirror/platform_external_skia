@@ -416,6 +416,13 @@ bool GrGLInterface::validate() const {
         }
     }
 
+    // glVertexAttribIPointer was added in version 3.0 of both desktop and ES.
+    if (glVer >= GR_GL_VER(3, 0)) {
+        if (NULL == fFunctions.fVertexAttribIPointer) {
+            RETURN_FALSE_INTERFACE
+        }
+    }
+
     if (kGL_GrGLStandard == fStandard) {
         if (glVer >= GR_GL_VER(3, 0) || fExtensions.has("GL_ARB_vertex_array_object")) {
             if (nullptr == fFunctions.fBindVertexArray ||
@@ -577,6 +584,22 @@ bool GrGLInterface::validate() const {
                 RETURN_FALSE_INTERFACE
             }
         }    
+    }
+
+    if ((kGL_GrGLStandard == fStandard && glVer >= GR_GL_VER(4,3)) ||
+        (kGLES_GrGLStandard == fStandard && glVer >= GR_GL_VER(3,1))) {
+        if (NULL == fFunctions.fDrawArraysIndirect ||
+            NULL == fFunctions.fDrawElementsIndirect) {
+            RETURN_FALSE_INTERFACE
+        }
+    }
+
+    if ((kGL_GrGLStandard == fStandard && glVer >= GR_GL_VER(4,3)) ||
+        (kGLES_GrGLStandard == fStandard && fExtensions.has("GL_EXT_multi_draw_indirect"))) {
+        if (NULL == fFunctions.fMultiDrawArraysIndirect ||
+            NULL == fFunctions.fMultiDrawElementsIndirect) {
+            RETURN_FALSE_INTERFACE
+        }
     }
 
     if (fExtensions.has("GL_NV_bindless_texture")) {

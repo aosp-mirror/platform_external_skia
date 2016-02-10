@@ -66,10 +66,7 @@ static inline bool cache_size_okay(const SkBitmapProvider& provider, const SkMat
     // Skip the division step:
     const size_t size = provider.info().getSafeSize(provider.info().minRowBytes());
     SkScalar invScaleSqr = invMat.getScaleX() * invMat.getScaleY();
-#ifndef SK_SUPPORT_LEGACY_NEG_SCALE_HQ
-    invScaleSqr = SkScalarAbs(invScaleSqr);
-#endif
-    return size < (maximumAllocation * invScaleSqr);
+    return size < (maximumAllocation * SkScalarAbs(invScaleSqr));
 }
 
 /*
@@ -101,10 +98,8 @@ bool SkDefaultBitmapControllerState::processHQRequest(const SkBitmapProvider& pr
         invScaleX = scale.width();
         invScaleY = scale.height();
     }
-#ifndef SK_SUPPORT_LEGACY_NEG_SCALE_HQ
     invScaleX = SkScalarAbs(invScaleX);
     invScaleY = SkScalarAbs(invScaleY);
-#endif
 
     if (SkScalarNearlyEqual(invScaleX, 1) && SkScalarNearlyEqual(invScaleY, 1)) {
         return false; // no need for HQ
@@ -170,11 +165,7 @@ bool SkDefaultBitmapControllerState::processMediumRequest(const SkBitmapProvider
         return false;
     }
 
-    // Use the largest (non-inverse) scale, to ensure anisotropic consistency.
-    SkASSERT(invScaleSize.width() >= 0 && invScaleSize.height() >= 0);
-    const SkScalar invScale = SkTMin(invScaleSize.width(), invScaleSize.height());
-
-    if (invScale > SK_Scalar1) {
+    if (invScaleSize.width() > SK_Scalar1 || invScaleSize.height() > SK_Scalar1) {
         fCurrMip.reset(SkMipMapCache::FindAndRef(provider.makeCacheDesc()));
         if (nullptr == fCurrMip.get()) {
             SkBitmap orig;
@@ -191,9 +182,10 @@ bool SkDefaultBitmapControllerState::processMediumRequest(const SkBitmapProvider
             sk_throw();
         }
         
-        SkScalar levelScale = SkScalarInvert(invScale);
+        const SkSize scale = SkSize::Make(SkScalarInvert(invScaleSize.width()),
+                                          SkScalarInvert(invScaleSize.height()));
         SkMipMap::Level level;
-        if (fCurrMip->extractLevel(levelScale, &level)) {
+        if (fCurrMip->extractLevel(scale, &level)) {
             const SkSize& invScaleFixup = level.fScale;
             fInvMatrix.postScale(invScaleFixup.width(), invScaleFixup.height());
 
