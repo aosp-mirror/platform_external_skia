@@ -410,6 +410,7 @@ LOCAL_SRC_FILES := \
 	../tools/sk_tool_utils.cpp \
 	../tools/sk_tool_utils_font.cpp \
 	../tools/random_parse_path.cpp \
+	../tools/UrlDataManager.cpp \
 	../tools/android/SkAndroidSDKCanvas.cpp \
 	../src/gpu/GrContextFactory.cpp \
 	../src/gpu/GrTest.cpp \
