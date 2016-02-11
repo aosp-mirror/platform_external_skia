@@ -495,6 +495,7 @@ LOCAL_SRC_FILES := \
 	../gm/shadertext3.cpp \
 	../gm/shadows.cpp \
 	../gm/shallowgradient.cpp \
+	../gm/shapes.cpp \
 	../gm/showmiplevels.cpp \
 	../gm/simpleaaclip.cpp \
 	../gm/skbug1719.cpp \
