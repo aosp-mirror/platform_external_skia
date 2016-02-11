@@ -24,6 +24,7 @@ LOCAL_SRC_FILES := \
 	../gm/gm.cpp \
 	AAClipBench.cpp \
 	AlternatingColorPatternBench.cpp \
+	AndroidCodecBench.cpp \
 	BenchLogger.cpp \
 	Benchmark.cpp \
 	BezierBench.cpp \
