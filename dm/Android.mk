@@ -158,7 +158,6 @@ LOCAL_SRC_FILES := \
 	../tests/GradientTest.cpp \
 	../tests/HashTest.cpp \
 	../tests/ImageCacheTest.cpp \
-	../tests/ImageDecodingTest.cpp \
 	../tests/ImageFilterTest.cpp \
 	../tests/ImageFrom565Bitmap.cpp \
 	../tests/ImageGeneratorTest.cpp \
@@ -170,7 +169,6 @@ LOCAL_SRC_FILES := \
 	../tests/InterpolatorTest.cpp \
 	../tests/InvalidIndexedPngTest.cpp \
 	../tests/IsClosedSingleContourTest.cpp \
-	../tests/JpegTest.cpp \
 	../tests/KtxTest.cpp \
 	../tests/LListTest.cpp \
 	../tests/LayerDrawLooperTest.cpp \
@@ -284,6 +282,7 @@ LOCAL_SRC_FILES := \
 	../tests/Writer32Test.cpp \
 	../tests/XfermodeTest.cpp \
 	../tests/YUVCacheTest.cpp \
+	../tests/YUVTest.cpp \
 	DMSrcSinkAndroid.cpp \
 	../gm/aaclip.cpp \
 	../gm/aarectmodes.cpp \

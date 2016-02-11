@@ -548,7 +548,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/GrGLCreateNullInterface.cpp \
 	src/gpu/gl/SkNullGLContext.cpp \
 	src/images/bmpdecoderhelper.cpp \
-	src/images/SkDecodingImageGenerator.cpp \
 	src/images/SkForceLinking.cpp \
 	src/images/SkImageDecoder.cpp \
 	src/images/SkImageDecoder_FactoryDefault.cpp \
