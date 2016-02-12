@@ -34,6 +34,14 @@ LOCAL_PATH:= $(call my-dir)
 #       determine which build type to use.
 ###############################################################################
 
+###############################################################################
+# STATIC LIBRARY
+#
+# This target is only to be used internally for only one of two purposes...
+#  (1) statically linking into testing frameworks
+#  (2) as an inclusion target for the libskia.so shared library
+###############################################################################
+
 include $(CLEAR_VARS)
 LOCAL_FDO_SUPPORT := true
 ifneq ($(strip $(TARGET_FDO_CFLAGS)),)
@@ -44,10 +52,6 @@ endif
 LOCAL_ARM_MODE := thumb
 # used for testing
 #LOCAL_CFLAGS += -g -O0
-
-ifeq ($(NO_FALLBACK_FONT),true)
-	LOCAL_CFLAGS += -DNO_FALLBACK_FONT
-endif
 
 LOCAL_CFLAGS += \
 	-fPIC \
@@ -727,7 +731,7 @@ LOCAL_EXPORT_C_INCLUDE_DIRS := \
 	$(LOCAL_PATH)/src/utils
 
 LOCAL_MODULE := \
-	libskia
+	libskia_static
 
 LOCAL_SRC_FILES_arm += \
 	src/core/SkUtilsArm.cpp \
@@ -804,6 +808,34 @@ LOCAL_SRC_FILES_arm64 += \
 	src/opts/SkBlitRow_opts_arm_neon.cpp \
 	src/opts/SkOpts_neon.cpp
 
+LOCAL_MODULE_CLASS := STATIC_LIBRARIES
+include $(BUILD_STATIC_LIBRARY)
+
+
+###############################################################################
+# SHARED LIBRARY
+###############################################################################
+
+include $(CLEAR_VARS)
+LOCAL_MODULE_CLASS := SHARED_LIBRARIES
+LOCAL_MODULE := libskia
+LOCAL_WHOLE_STATIC_LIBRARIES := libskia_static
+LOCAL_EXPORT_C_INCLUDE_DIRS := \
+	$(LOCAL_PATH)/include/codec \
+	$(LOCAL_PATH)/include/android \
+	$(LOCAL_PATH)/include/c \
+	$(LOCAL_PATH)/include/config \
+	$(LOCAL_PATH)/include/core \
+	$(LOCAL_PATH)/include/pathops \
+	$(LOCAL_PATH)/include/effects \
+	$(LOCAL_PATH)/include/client/android \
+	$(LOCAL_PATH)/include/gpu \
+	$(LOCAL_PATH)/include/images \
+	$(LOCAL_PATH)/include/ports \
+	$(LOCAL_PATH)/include/utils \
+	$(LOCAL_PATH)/src/utils
+
+include $(BASE_PATH)/skia_static_deps.mk
 include $(BUILD_SHARED_LIBRARY)
 
 #############################################################

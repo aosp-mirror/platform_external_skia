@@ -418,15 +418,13 @@ LOCAL_SRC_FILES := \
 
 LOCAL_SHARED_LIBRARIES := \
 	liblog \
-	libskia \
-	libandroid \
 	libhwui \
-	libutils \
 	libexpat \
 	libGLESv2 \
 	libEGL
 
 LOCAL_STATIC_LIBRARIES := \
+	libskia_static \
 	libjsoncpp
 
 LOCAL_C_INCLUDES := \
@@ -477,4 +475,5 @@ LOCAL_MODULE := \
 # subdirectory in the DATA folder that points to the top level skia resources...
 #  i.e. external/skia/DATA/skia_resources --> ../resources
 LOCAL_PICKUP_FILES := $(LOCAL_PATH)/../DATA
+include $(LOCAL_PATH)/../skia_static_deps.mk
 include $(BUILD_NATIVE_TEST)
