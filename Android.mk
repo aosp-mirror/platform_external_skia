@@ -129,6 +129,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkColorFilter.cpp \
 	src/core/SkColorFilterShader.cpp \
 	src/core/SkColorMatrixFilterRowMajor255.cpp \
+	src/core/SkColorSpace.cpp \
 	src/core/SkColorTable.cpp \
 	src/core/SkComposeShader.cpp \
 	src/core/SkConfig8888.cpp \
