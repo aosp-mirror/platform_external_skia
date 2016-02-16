@@ -377,6 +377,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrCoordTransform.cpp \
 	src/gpu/GrDefaultGeoProcFactory.cpp \
 	src/gpu/GrDrawContext.cpp \
+	src/gpu/GrPathRenderingDrawContext.cpp \
 	src/gpu/GrDrawingManager.cpp \
 	src/gpu/GrDrawTarget.cpp \
 	src/gpu/GrFragmentProcessor.cpp \
