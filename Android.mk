@@ -485,7 +485,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/text/GrFontScaler.cpp \
 	src/gpu/text/GrStencilAndCoverTextContext.cpp \
 	src/gpu/text/GrTextBlobCache.cpp \
-	src/gpu/text/GrTextContext.cpp \
 	src/gpu/text/GrTextUtils.cpp \
 	src/gpu/gl/GrGLAssembleInterface.cpp \
 	src/gpu/gl/GrGLBufferImpl.cpp \
