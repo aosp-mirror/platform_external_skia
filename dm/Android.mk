@@ -579,8 +579,6 @@ LOCAL_SRC_FILES := \
 
 LOCAL_SHARED_LIBRARIES := \
 	liblog \
-	libhwui \
-	libdl \
 	libpng \
 	libz \
 	libexpat \
@@ -589,6 +587,7 @@ LOCAL_SHARED_LIBRARIES := \
 
 LOCAL_STATIC_LIBRARIES := \
 	libskia_static \
+	libhwui_static \
 	libjsoncpp
 
 LOCAL_C_INCLUDES := \
@@ -627,7 +626,6 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../src/image \
 	$(LOCAL_PATH)/../src/pdf \
 	$(LOCAL_PATH)/../src/ports \
-	$(LOCAL_PATH)/../../../frameworks/base/libs/hwui \
 	$(LOCAL_PATH)/../third_party/etc1 \
 	external/libpng \
 	$(LOCAL_PATH)/../tools/timer \
@@ -651,4 +649,5 @@ LOCAL_MODULE := \
 #  i.e. external/skia/DATA/skia_resources --> ../resources
 LOCAL_PICKUP_FILES := $(LOCAL_PATH)/../DATA
 include $(LOCAL_PATH)/../skia_static_deps.mk
+include frameworks/base/libs/hwui/hwui_static_deps.mk
 include $(BUILD_NATIVE_TEST)
