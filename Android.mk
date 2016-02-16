@@ -477,6 +477,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/effects/GrXfermodeFragmentProcessor.cpp \
 	src/gpu/effects/GrYUVEffect.cpp \
 	src/gpu/text/GrAtlasTextBlob.cpp \
+	src/gpu/text/GrAtlasTextBlob_regenInBatch.cpp \
 	src/gpu/text/GrAtlasTextContext.cpp \
 	src/gpu/text/GrBatchFontCache.cpp \
 	src/gpu/text/GrDistanceFieldAdjustTable.cpp \
