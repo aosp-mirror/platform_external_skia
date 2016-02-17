@@ -443,9 +443,9 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../include/utils \
 	$(LOCAL_PATH)/../src/utils \
 	$(LOCAL_PATH)/../include/gpu \
+	$(LOCAL_PATH)/../include/private \
 	$(LOCAL_PATH)/../src/gpu \
 	$(LOCAL_PATH)/../tools/flags \
-	$(LOCAL_PATH)/../include/private \
 	$(LOCAL_PATH)/../src/fonts \
 	$(LOCAL_PATH)/../src/core \
 	$(LOCAL_PATH)/../tools \
