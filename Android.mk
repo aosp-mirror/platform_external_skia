@@ -611,7 +611,6 @@ LOCAL_SRC_FILES := \
 	src/sfnt/SkOTTable_name.cpp \
 	src/sfnt/SkOTUtils.cpp \
 	src/utils/SkBase64.cpp \
-	src/utils/SkBitmapHasher.cpp \
 	src/utils/SkBitmapSourceDeserializer.cpp \
 	src/utils/SkBitSet.cpp \
 	src/utils/SkBoundaryPatch.cpp \

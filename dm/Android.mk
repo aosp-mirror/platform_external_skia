@@ -86,7 +86,6 @@ LOCAL_SRC_FILES := \
 	../tests/BitSetTest.cpp \
 	../tests/BitmapCopyTest.cpp \
 	../tests/BitmapGetColorTest.cpp \
-	../tests/BitmapHasherTest.cpp \
 	../tests/BitmapHeapTest.cpp \
 	../tests/BitmapTest.cpp \
 	../tests/BlendTest.cpp \
