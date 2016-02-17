@@ -51,7 +51,6 @@ LOCAL_SRC_FILES := \
 	DashBench.cpp \
 	DisplacementBench.cpp \
 	DrawBitmapAABench.cpp \
-	ETCBitmapBench.cpp \
 	FSRectBench.cpp \
 	FontCacheBench.cpp \
 	FontScalerBench.cpp \
