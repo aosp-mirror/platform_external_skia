@@ -112,6 +112,7 @@ LOCAL_SRC_FILES := \
 	ShapesBench.cpp \
 	Sk4fBench.cpp \
 	SkGlyphCacheBench.cpp \
+	SkLinearBitmapPipelineBench.cpp \
 	SkipZeroesBench.cpp \
 	SortBench.cpp \
 	StrokeBench.cpp \
@@ -130,6 +131,7 @@ LOCAL_SRC_FILES := \
 	XfermodeBench.cpp \
 	nanobench.cpp \
 	nanobenchAndroid.cpp \
+	../gm/SkLinearBitmapPipelineGM.cpp \
 	../gm/aaclip.cpp \
 	../gm/aarectmodes.cpp \
 	../gm/aaxfermodes.cpp \

@@ -243,6 +243,7 @@ LOCAL_SRC_FILES := \
 	../tests/SkBase64Test.cpp \
 	../tests/SkColor4fTest.cpp \
 	../tests/SkImageTest.cpp \
+	../tests/SkLinearBitmapPipelineTest.cpp \
 	../tests/SkNxTest.cpp \
 	../tests/SkResourceCacheTest.cpp \
 	../tests/SkSharedMutexTest.cpp \
@@ -283,6 +284,7 @@ LOCAL_SRC_FILES := \
 	../tests/YUVCacheTest.cpp \
 	../tests/YUVTest.cpp \
 	DMSrcSinkAndroid.cpp \
+	../gm/SkLinearBitmapPipelineGM.cpp \
 	../gm/aaclip.cpp \
 	../gm/aarectmodes.cpp \
 	../gm/aaxfermodes.cpp \
