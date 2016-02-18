@@ -114,7 +114,7 @@
 #    define SK_CRASH() __debugbreak()
 #  else
 #    if 1   // set to 0 for infinite loop, which can help connecting gdb
-#      define SK_CRASH() do { SkNO_RETURN_HINT(); *(int *)(uintptr_t)0xbbadbeef = 0; } while (false)
+#      define SK_CRASH() do { SkNO_RETURN_HINT(); abort(); } while (false)
 #    else
 #      define SK_CRASH() do { SkNO_RETURN_HINT(); } while (true)
 #    endif
