@@ -158,6 +158,7 @@ LOCAL_SRC_FILES := \
 	../tests/GradientTest.cpp \
 	../tests/HashTest.cpp \
 	../tests/ImageCacheTest.cpp \
+	../tests/ImageFilterCacheTest.cpp \
 	../tests/ImageFilterTest.cpp \
 	../tests/ImageFrom565Bitmap.cpp \
 	../tests/ImageGeneratorTest.cpp \
