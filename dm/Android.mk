@@ -548,7 +548,6 @@ LOCAL_SRC_FILES := \
 	../gm/xfermodes.cpp \
 	../gm/xfermodes2.cpp \
 	../gm/xfermodes3.cpp \
-	../gm/xferu64.cpp \
 	../gm/yuvtorgbeffect.cpp \
 	../tools/AndroidSkDebugToStdOut.cpp \
 	../tools/flags/SkCommandLineFlags.cpp \
