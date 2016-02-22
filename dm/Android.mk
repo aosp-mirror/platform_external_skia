@@ -278,6 +278,8 @@ LOCAL_SRC_FILES := \
 	../tests/UnicodeTest.cpp \
 	../tests/UtilsTest.cpp \
 	../tests/VarAllocTest.cpp \
+	../tests/VkClearTests.cpp \
+	../tests/VkUploadPixelsTests.cpp \
 	../tests/WArrayTest.cpp \
 	../tests/WritePixelsTest.cpp \
 	../tests/Writer32Test.cpp \
