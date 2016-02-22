@@ -453,6 +453,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../src/effects \
 	$(LOCAL_PATH)/../gm \
 	$(LOCAL_PATH)/../tools/debugger \
+	$(LOCAL_PATH)/../src/effects/gradients \
 	$(LOCAL_PATH)/../src/images \
 	$(LOCAL_PATH)/../src/lazy \
 	$(LOCAL_PATH)/../../../frameworks/base/libs/hwui \

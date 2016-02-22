@@ -622,6 +622,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../src/lazy \
 	$(LOCAL_PATH)/../tools/debugger \
 	$(LOCAL_PATH)/../tests \
+	$(LOCAL_PATH)/../src/effects/gradients \
 	$(LOCAL_PATH)/../src/pathops \
 	$(LOCAL_PATH)/../src/pipe/utils \
 	$(LOCAL_PATH)/../src/codec \

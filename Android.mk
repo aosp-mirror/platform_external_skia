@@ -358,6 +358,8 @@ LOCAL_SRC_FILES := \
 	src/effects/SkTestImageFilters.cpp \
 	src/effects/SkTileImageFilter.cpp \
 	src/effects/SkXfermodeImageFilter.cpp \
+	src/effects/gradients/Sk4fGradientBase.cpp \
+	src/effects/gradients/Sk4fLinearGradient.cpp \
 	src/effects/gradients/SkClampRange.cpp \
 	src/effects/gradients/SkGradientBitmapCache.cpp \
 	src/effects/gradients/SkGradientShader.cpp \
