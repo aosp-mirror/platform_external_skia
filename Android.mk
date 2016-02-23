@@ -192,7 +192,6 @@ LOCAL_SRC_FILES := \
 	src/core/SkMultiPictureDraw.cpp \
 	src/core/SkNinePatchIter.cpp \
 	src/core/SkOpts.cpp \
-	src/core/SkPackBits.cpp \
 	src/core/SkPaint.cpp \
 	src/core/SkPaintPriv.cpp \
 	src/core/SkPath.cpp \
@@ -348,6 +347,7 @@ LOCAL_SRC_FILES := \
 	src/effects/SkMergeImageFilter.cpp \
 	src/effects/SkMorphologyImageFilter.cpp \
 	src/effects/SkOffsetImageFilter.cpp \
+	src/effects/SkPackBits.cpp \
 	src/effects/SkPaintFlagsDrawFilter.cpp \
 	src/effects/SkPaintImageFilter.cpp \
 	src/effects/SkPerlinNoiseShader.cpp \
