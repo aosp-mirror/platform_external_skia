@@ -215,6 +215,7 @@
 #define SK_SUPPORT_PDF 1
 #define SK_USE_FREETYPE_EMBOLDEN
 #define TURBO_HAS_565
+#define TURBO_HAS_CROP
 #define TURBO_HAS_SKIP
 
 #endif // SkUserConfig_Android_DEFINED
