@@ -84,6 +84,7 @@ LOCAL_SRC_FILES := \
 	MipMapBench.cpp \
 	MorphologyBench.cpp \
 	MutexBench.cpp \
+	PDFBench.cpp \
 	PatchBench.cpp \
 	PatchGridBench.cpp \
 	PathBench.cpp \
@@ -421,7 +422,8 @@ LOCAL_SHARED_LIBRARIES := \
 	libhwui \
 	libexpat \
 	libGLESv2 \
-	libEGL
+	libEGL \
+	libz
 
 LOCAL_STATIC_LIBRARIES := \
 	libskia_static \
@@ -457,6 +459,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../src/images \
 	$(LOCAL_PATH)/../src/lazy \
 	$(LOCAL_PATH)/../../../frameworks/base/libs/hwui \
+	$(LOCAL_PATH)/../src/pdf \
 	$(LOCAL_PATH)/../tools/timer \
 	$(LOCAL_PATH)/../third_party/etc1 \
 	$(LOCAL_PATH)/../tools/android
