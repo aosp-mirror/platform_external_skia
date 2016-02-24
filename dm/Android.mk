@@ -504,6 +504,7 @@ LOCAL_SRC_FILES := \
 	../gm/simpleaaclip.cpp \
 	../gm/skbug1719.cpp \
 	../gm/skbug_257.cpp \
+	../gm/skbug_4868.cpp \
 	../gm/smallarc.cpp \
 	../gm/smallimage.cpp \
 	../gm/smallpaths.cpp \
