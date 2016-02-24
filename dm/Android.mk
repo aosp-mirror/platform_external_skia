@@ -522,6 +522,7 @@ LOCAL_SRC_FILES := \
 	../gm/testimagefilters.cpp \
 	../gm/texdata.cpp \
 	../gm/textblob.cpp \
+	../gm/textblobblockreordering.cpp \
 	../gm/textblobcolortrans.cpp \
 	../gm/textblobgeometrychange.cpp \
 	../gm/textbloblooper.cpp \
