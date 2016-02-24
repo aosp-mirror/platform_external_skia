@@ -24,6 +24,7 @@
 #include "SkMD5.h"
 #include "SkMutex.h"
 #include "SkOSFile.h"
+#include "SkSpinlock.h"
 #include "SkTHash.h"
 #include "SkTaskGroup.h"
 #include "SkThreadUtils.h"
@@ -85,7 +86,8 @@ static void fail(ImplicitString err) {
 
 static int32_t gPending = 0;  // Atomic.  Total number of running and queued tasks.
 
-SK_DECLARE_STATIC_MUTEX(gRunningAndTallyMutex);
+// We use a spinlock to make locking this in a signal handler _somewhat_ safe.
+SK_DECLARE_STATIC_SPINLOCK(gRunningAndTallyMutex);
 static SkTArray<SkString>        gRunning;
 static SkTHashMap<SkString, int> gNoteTally;
 
@@ -95,7 +97,7 @@ static void done(double ms,
     SkString id = SkStringPrintf("%s %s %s %s", config.c_str(), src.c_str(),
                                                 srcOptions.c_str(), name.c_str());
     {
-        SkAutoMutexAcquire lock(gRunningAndTallyMutex);
+        SkAutoTAcquire<SkPODSpinlock> lock(gRunningAndTallyMutex);
         for (int i = 0; i < gRunning.count(); i++) {
             if (gRunning[i] == id) {
                 gRunning.removeShuffle(i);
@@ -134,9 +136,32 @@ static void start(ImplicitString config, ImplicitString src,
                   ImplicitString srcOptions, ImplicitString name) {
     SkString id = SkStringPrintf("%s %s %s %s", config.c_str(), src.c_str(),
                                                 srcOptions.c_str(), name.c_str());
-    SkAutoMutexAcquire lock(gRunningAndTallyMutex);
+    SkAutoTAcquire<SkPODSpinlock> lock(gRunningAndTallyMutex);
     gRunning.push_back(id);
 }
+
+#if defined(SK_BUILD_FOR_WIN32)
+    static void setup_crash_handler() {
+        // TODO: custom crash handler like below to print out what was running
+        SetupCrashHandler();
+    }
+
+#else
+    #include <signal.h>
+    static void setup_crash_handler() {
+        const int kSignals[] = { SIGABRT, SIGBUS, SIGFPE, SIGILL, SIGSEGV };
+        for (int sig : kSignals) {
+            signal(sig, [](int sig) {
+                SkAutoTAcquire<SkPODSpinlock> lock(gRunningAndTallyMutex);
+                SkDebugf("\nCaught signal %d [%s] while running %d tasks:\n",
+                         sig, strsignal(sig), gRunning.count());
+                for (auto& task : gRunning) {
+                    SkDebugf("\t%s\n", task.c_str());
+                }
+            });
+        }
+    }
+#endif
 
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
@@ -244,6 +269,9 @@ static void push_codec_src(Path path, CodecSrc::Mode mode, CodecSrc::DstColorTyp
         case CodecSrc::kStripe_Mode:
             folder.append("stripe");
             break;
+        case CodecSrc::kCroppedScanline_Mode:
+            folder.append("crop");
+            break;
         case CodecSrc::kSubset_Mode:
             folder.append("codec_subset");
             break;
@@ -348,31 +376,40 @@ static void push_codec_srcs(Path path) {
     // SkJpegCodec natively supports scaling to: 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875
     const float nativeScales[] = { 0.125f, 0.25f, 0.375f, 0.5f, 0.625f, 0.750f, 0.875f, 1.0f };
 
-    const CodecSrc::Mode nativeModes[] = { CodecSrc::kCodec_Mode, CodecSrc::kCodecZeroInit_Mode,
-            CodecSrc::kScanline_Mode, CodecSrc::kStripe_Mode, CodecSrc::kSubset_Mode,
-            CodecSrc::kGen_Mode };
-
-    CodecSrc::DstColorType colorTypes[3];
-    uint32_t numColorTypes;
-    switch (codec->getInfo().colorType()) {
-        case kGray_8_SkColorType:
-            // FIXME: Is this a long term solution for testing wbmps decodes to kIndex8?
-            // Further discussion on this topic is at https://bug.skia.org/3683 .
-            // This causes us to try to convert grayscale jpegs to kIndex8.  We currently
-            // fail non-fatally in this case.
-            colorTypes[0] = CodecSrc::kGetFromCanvas_DstColorType;
-            colorTypes[1] = CodecSrc::kGrayscale_Always_DstColorType;
-            colorTypes[2] = CodecSrc::kIndex8_Always_DstColorType;
-            numColorTypes = 3;
+    SkTArray<CodecSrc::Mode> nativeModes;
+    nativeModes.push_back(CodecSrc::kCodec_Mode);
+    nativeModes.push_back(CodecSrc::kCodecZeroInit_Mode);
+    nativeModes.push_back(CodecSrc::kGen_Mode);
+    switch (codec->getEncodedFormat()) {
+        case SkEncodedFormat::kJPEG_SkEncodedFormat:
+            nativeModes.push_back(CodecSrc::kScanline_Mode);
+            nativeModes.push_back(CodecSrc::kStripe_Mode);
+            nativeModes.push_back(CodecSrc::kCroppedScanline_Mode);
             break;
-        case kIndex_8_SkColorType:
-            colorTypes[0] = CodecSrc::kGetFromCanvas_DstColorType;
-            colorTypes[1] = CodecSrc::kIndex8_Always_DstColorType;
-            numColorTypes = 2;
+        case SkEncodedFormat::kWEBP_SkEncodedFormat:
+            nativeModes.push_back(CodecSrc::kSubset_Mode);
+            break;
+        case SkEncodedFormat::kRAW_SkEncodedFormat:
             break;
         default:
-            colorTypes[0] = CodecSrc::kGetFromCanvas_DstColorType;
-            numColorTypes = 1;
+            nativeModes.push_back(CodecSrc::kScanline_Mode);
+            nativeModes.push_back(CodecSrc::kStripe_Mode);
+            break;
+    }
+
+    SkTArray<CodecSrc::DstColorType> colorTypes;
+    colorTypes.push_back(CodecSrc::kGetFromCanvas_DstColorType);
+    switch (codec->getInfo().colorType()) {
+        case kGray_8_SkColorType:
+            colorTypes.push_back(CodecSrc::kGrayscale_Always_DstColorType);
+            if (kWBMP_SkEncodedFormat == codec->getEncodedFormat()) {
+                colorTypes.push_back(CodecSrc::kIndex8_Always_DstColorType);
+            }
+            break;
+        case kIndex_8_SkColorType:
+            colorTypes.push_back(CodecSrc::kIndex8_Always_DstColorType);
+            break;
+        default:
             break;
     }
 
@@ -398,9 +435,16 @@ static void push_codec_srcs(Path path) {
         }
 
         for (float scale : nativeScales) {
-            for (uint32_t i = 0; i < numColorTypes; i++) {
+            for (CodecSrc::DstColorType colorType : colorTypes) {
                 for (SkAlphaType alphaType : alphaModes) {
-                    push_codec_src(path, mode, colorTypes[i], alphaType, scale);
+                    // Only test kCroppedScanline_Mode when the alpha type is opaque.  The test is
+                    // slow and won't be interestingly different with different alpha types.
+                    if (CodecSrc::kCroppedScanline_Mode == mode &&
+                            kOpaque_SkAlphaType != alphaType) {
+                        continue;
+                    }
+
+                    push_codec_src(path, mode, colorType, alphaType, scale);
                 }
             }
         }
@@ -424,12 +468,12 @@ static void push_codec_srcs(Path path) {
     const int sampleSizes[] = { 1, 2, 3, 4, 5, 6, 7, 8 };
 
     for (int sampleSize : sampleSizes) {
-        for (uint32_t i = 0; i < numColorTypes; i++) {
+        for (CodecSrc::DstColorType colorType : colorTypes) {
             for (SkAlphaType alphaType : alphaModes) {
-                push_android_codec_src(path, AndroidCodecSrc::kFullImage_Mode, colorTypes[i],
+                push_android_codec_src(path, AndroidCodecSrc::kFullImage_Mode, colorType,
                         alphaType, sampleSize);
                 if (subset) {
-                    push_android_codec_src(path, AndroidCodecSrc::kDivisor_Mode, colorTypes[i],
+                    push_android_codec_src(path, AndroidCodecSrc::kDivisor_Mode, colorType,
                             alphaType, sampleSize);
                 }
             }
@@ -1084,7 +1128,7 @@ static void start_keepalive() {
             #endif
                 SkString running;
                 {
-                    SkAutoMutexAcquire lock(gRunningAndTallyMutex);
+                    SkAutoTAcquire<SkPODSpinlock> lock(gRunningAndTallyMutex);
                     for (int i = 0; i < gRunning.count(); i++) {
                         running.appendf("\n\t%s", gRunning[i].c_str());
                     }
@@ -1113,7 +1157,7 @@ extern SkTypeface* (*gCreateTypefaceDelegate)(const char [], SkTypeface::Style )
 
 int dm_main();
 int dm_main() {
-    SetupCrashHandler();
+    setup_crash_handler();
     JsonWriter::DumpJson();  // It's handy for the bots to assume this is ~never missing.
     SkAutoGraphics ag;
     SkTaskGroup::Enabler enabled(FLAGS_threads);

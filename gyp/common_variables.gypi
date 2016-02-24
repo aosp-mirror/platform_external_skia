@@ -41,7 +41,6 @@
     'skia_mojo%': '0',
 
     'variables': {  # level 2
-
       # Variables needed by conditions list within the level-2 variables dict.
       'variables': {  # level 3
         'variables': { # level 4
@@ -52,7 +51,7 @@
           'skia_os%': '<(OS)',
         },
         'skia_os%': '<(skia_os)',
-
+        'vulkan_merged_into_skia': '1',
         'skia_android_framework%': 0,
         'conditions' : [
           [ 'skia_os in ["linux", "freebsd", "openbsd", "solaris", "mac"]', {
@@ -83,7 +82,7 @@
       'arm_version%': '<(arm_version)',
       'arm_neon%': '<(arm_neon)',
       'skia_egl%': '<(skia_egl)',
-
+      'vulkan_merged_into_skia%': '<(vulkan_merged_into_skia)',
       'conditions': [
         [ 'skia_android_framework == 1', {
           'skia_os%': 'android',
@@ -253,11 +252,12 @@
     'skia_fast%': 0,
     'skia_dump_stats%': 0,
     'skia_build_server%': 0,
+    'vulkan_merged_into_skia%': '<(vulkan_merged_into_skia)',
     'skia_fast_flags': [
         '-O3',                   # Even for Debug builds.
         '-march=native',         # Use all features of and optimize for THIS machine.
         '-fomit-frame-pointer',  # Sometimes an extra register is nice, and cuts a push/pop.
-        '-ffast-math',           # Optimize float math even when it breaks IEEE compliance.
+        #'-ffast-math',           # Optimize float math even when it breaks IEEE compliance.
         #'-flto'                  # Enable link-time optimization.
     ],
 

@@ -53,17 +53,18 @@ void SkDropShadowImageFilter::flatten(SkWriteBuffer& buffer) const {
     buffer.writeInt(static_cast<int>(fShadowMode));
 }
 
-bool SkDropShadowImageFilter::onFilterImage(Proxy* proxy, const SkBitmap& source,
-                                            const Context& ctx,
-                                            SkBitmap* result, SkIPoint* offset) const
-{
+bool SkDropShadowImageFilter::onFilterImageDeprecated(Proxy* proxy, const SkBitmap& source,
+                                                      const Context& ctx,
+                                                      SkBitmap* result, SkIPoint* offset) const {
     SkBitmap src = source;
     SkIPoint srcOffset = SkIPoint::Make(0, 0);
-    if (!this->filterInput(0, proxy, source, ctx, &src, &srcOffset))
+    if (!this->filterInputDeprecated(0, proxy, source, ctx, &src, &srcOffset))
         return false;
 
+    SkIRect srcBounds = src.bounds();
+    srcBounds.offset(srcOffset);
     SkIRect bounds;
-    if (!this->applyCropRect(ctx, src, srcOffset, &bounds)) {
+    if (!this->applyCropRect(ctx, srcBounds, &bounds)) {
         return false;
     }
 

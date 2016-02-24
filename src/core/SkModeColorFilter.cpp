@@ -14,6 +14,7 @@
 #include "SkUtils.h"
 #include "SkString.h"
 #include "SkValidationUtils.h"
+#include "SkPM4f.h"
 
 //////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -37,7 +38,7 @@ bool SkModeColorFilter::asColorMode(SkColor* color, SkXfermode::Mode* mode) cons
 }
 
 uint32_t SkModeColorFilter::getFlags() const {
-    uint32_t flags = kSupports4f_Flag;
+    uint32_t flags = 0;
     switch (fMode) {
         case SkXfermode::kDst_Mode:      //!< [Da, Dc]
         case SkXfermode::kSrcATop_Mode:  //!< [Da, Sc * Da + (1 - Sa) * Dc]

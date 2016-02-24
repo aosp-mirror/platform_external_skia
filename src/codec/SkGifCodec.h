@@ -10,7 +10,8 @@
 #include "SkImageInfo.h"
 #include "SkSwizzler.h"
 
-#include "gif_lib.h"
+struct GifFileType;
+struct SavedImage;
 
 /*
  *
@@ -128,7 +129,7 @@ private:
      * @param options  Informs the swizzler if destination memory is zero initialized.
      *                 Contains subset information.
      */
-    Result initializeSwizzler(const SkImageInfo& dstInfo,
+    void initializeSwizzler(const SkImageInfo& dstInfo,
             const Options& options);
 
     SkSampler* getSampler(bool createIfNecessary) override {

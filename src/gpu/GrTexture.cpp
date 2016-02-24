@@ -85,14 +85,12 @@ GrTexture::GrTexture(GrGpu* gpu, LifeCycle lifeCycle, const GrSurfaceDesc& desc)
     : INHERITED(gpu, lifeCycle, desc)
     , fMipMapsStatus(kNotAllocated_MipMapsStatus) {
 
-    if (!this->isExternal() && !GrPixelConfigIsCompressed(desc.fConfig)) {
+    if (!this->isExternal() && !GrPixelConfigIsCompressed(desc.fConfig) &&
+        !desc.fTextureStorageAllocator.fAllocateTextureStorage) {
         GrScratchKey key;
         GrTexturePriv::ComputeScratchKey(desc, &key);
         this->setScratchKey(key);
     }
-    // only make sense if alloc size is pow2
-    fShiftFixedX = 31 - SkCLZ(fDesc.fWidth);
-    fShiftFixedY = 31 - SkCLZ(fDesc.fHeight);
 }
 
 void GrTexturePriv::ComputeScratchKey(const GrSurfaceDesc& desc, GrScratchKey* key) {

@@ -50,7 +50,8 @@ private:
 // drawTargets to be picked up and added to by drawContexts lower in the call
 // stack. When this occurs with a closed drawTarget, a new one will be allocated
 // when the drawContext attempts to use it (via getDrawTarget).
-GrDrawContext::GrDrawContext(GrDrawingManager* drawingMgr,
+GrDrawContext::GrDrawContext(GrContext* context,
+                             GrDrawingManager* drawingMgr,
                              GrRenderTarget* rt,
                              const SkSurfaceProps* surfaceProps,
                              GrAuditTrail* auditTrail,
@@ -58,7 +59,7 @@ GrDrawContext::GrDrawContext(GrDrawingManager* drawingMgr,
     : fDrawingManager(drawingMgr)
     , fRenderTarget(rt)
     , fDrawTarget(SkSafeRef(rt->getLastDrawTarget()))
-    , fTextContext(nullptr)
+    , fContext(context)
     , fSurfaceProps(SkSurfacePropsCopyOrDefault(surfaceProps))
     , fAuditTrail(auditTrail)
 #ifdef SK_DEBUG
@@ -95,13 +96,13 @@ GrDrawTarget* GrDrawContext::getDrawTarget() {
     return fDrawTarget;
 }
 
-void GrDrawContext::copySurface(GrSurface* src, const SkIRect& srcRect, const SkIPoint& dstPoint) {
+bool GrDrawContext::copySurface(GrSurface* src, const SkIRect& srcRect, const SkIPoint& dstPoint) {
     ASSERT_SINGLE_OWNER
-    RETURN_IF_ABANDONED
+    RETURN_FALSE_IF_ABANDONED
     SkDEBUGCODE(this->validate();)
     GR_AUDIT_TRAIL_AUTO_FRAME(fAuditTrail, "GrDrawContext::copySurface");
 
-    this->getDrawTarget()->copySurface(fRenderTarget, src, srcRect, dstPoint);
+    return this->getDrawTarget()->copySurface(fRenderTarget, src, srcRect, dstPoint);
 }
 
 void GrDrawContext::drawText(const GrClip& clip, const GrPaint& grPaint,
@@ -114,12 +115,12 @@ void GrDrawContext::drawText(const GrClip& clip, const GrPaint& grPaint,
     SkDEBUGCODE(this->validate();)
     GR_AUDIT_TRAIL_AUTO_FRAME(fAuditTrail, "GrDrawContext::drawText");
 
-    if (!fTextContext) {
-        fTextContext = fDrawingManager->textContext(fSurfaceProps, fRenderTarget);
+    if (!fAtlasTextContext) {
+        fAtlasTextContext.reset(GrAtlasTextContext::Create());
     }
 
-    fTextContext->drawText(this, clip, grPaint, skPaint, viewMatrix,
-                           text, byteLength, x, y, clipBounds);
+    fAtlasTextContext->drawText(fContext, this, clip, grPaint, skPaint, viewMatrix, fSurfaceProps,
+                                text, byteLength, x, y, clipBounds);
 }
 
 void GrDrawContext::drawPosText(const GrClip& clip, const GrPaint& grPaint,
@@ -133,12 +134,13 @@ void GrDrawContext::drawPosText(const GrClip& clip, const GrPaint& grPaint,
     SkDEBUGCODE(this->validate();)
     GR_AUDIT_TRAIL_AUTO_FRAME(fAuditTrail, "GrDrawContext::drawPosText");
 
-    if (!fTextContext) {
-        fTextContext = fDrawingManager->textContext(fSurfaceProps, fRenderTarget);
+    if (!fAtlasTextContext) {
+        fAtlasTextContext.reset(GrAtlasTextContext::Create());
     }
 
-    fTextContext->drawPosText(this, clip, grPaint, skPaint, viewMatrix, text, byteLength,
-                              pos, scalarsPerPosition, offset, clipBounds);
+    fAtlasTextContext->drawPosText(fContext, this, clip, grPaint, skPaint, viewMatrix,
+                                   fSurfaceProps, text, byteLength, pos, scalarsPerPosition,
+                                   offset, clipBounds);
 
 }
 
@@ -151,11 +153,12 @@ void GrDrawContext::drawTextBlob(const GrClip& clip, const SkPaint& skPaint,
     SkDEBUGCODE(this->validate();)
     GR_AUDIT_TRAIL_AUTO_FRAME(fAuditTrail, "GrDrawContext::drawTextBlob");
 
-    if (!fTextContext) {
-        fTextContext = fDrawingManager->textContext(fSurfaceProps, fRenderTarget);
+    if (!fAtlasTextContext) {
+        fAtlasTextContext.reset(GrAtlasTextContext::Create());
     }
 
-    fTextContext->drawTextBlob(this, clip, skPaint, viewMatrix, blob, x, y, filter, clipBounds);
+    fAtlasTextContext->drawTextBlob(fContext, this, clip, skPaint, viewMatrix, fSurfaceProps, blob,
+                                    x, y, filter, clipBounds);
 }
 
 void GrDrawContext::discard() {

@@ -23,11 +23,17 @@ GrGLSLCaps::GrGLSLCaps(const GrContextOptions& options) {
     fCanUseAnyFunctionInShader = true;
     fCanUseMinAndAbsTogether = true;
     fMustForceNegatedAtanParamToFloat = false;
+    fFlatInterpolationSupport = false;
+    fNoPerspectiveInterpolationSupport = false;
+    fSampleVariablesSupport = false;
+    fSampleMaskOverrideCoverageSupport = false;
     fVersionDeclString = nullptr;
     fShaderDerivativeExtensionString = nullptr;
     fFragCoordConventionsExtensionString = nullptr;
     fSecondaryOutputExtensionString = nullptr;
     fExternalTextureExtensionString = nullptr;
+    fNoPerspectiveInterpolationExtensionString = nullptr;
+    fSampleVariablesExtensionString = nullptr;
     fFBFetchColorName = nullptr;
     fFBFetchExtensionString = nullptr;
     fAdvBlendEqInteraction = kNotSupported_AdvBlendEqInteraction;
@@ -58,6 +64,12 @@ SkString GrGLSLCaps::dump() const {
     r.appendf("Can use min() and abs() together: %s\n", (fCanUseMinAndAbsTogether ? "YES" : "NO"));
     r.appendf("Must force negated atan param to float: %s\n", (fMustForceNegatedAtanParamToFloat ?
                                                                "YES" : "NO"));
+    r.appendf("Flat interpolation support: %s\n", (fFlatInterpolationSupport ?  "YES" : "NO"));
+    r.appendf("No perspective interpolation support: %s\n", (fNoPerspectiveInterpolationSupport ?
+                                                             "YES" : "NO"));
+    r.appendf("Sample variables support: %s\n", (fSampleVariablesSupport ? "YES" : "NO"));
+    r.appendf("Sample mask override coverage support: %s\n", (fSampleMaskOverrideCoverageSupport ?
+                                                              "YES" : "NO"));
     r.appendf("Advanced blend equation interaction: %s\n",
               kAdvBlendEqInteractionStr[fAdvBlendEqInteraction]);
     return r;

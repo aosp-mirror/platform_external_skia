@@ -46,7 +46,7 @@
 #include "effects/GrDashingEffect.h"
 #include "effects/GrSimpleTextureEffect.h"
 #include "effects/GrTextureDomain.h"
-#include "text/GrTextContext.h"
+#include "text/GrTextUtils.h"
 
 #if SK_SUPPORT_GPU
 
@@ -149,13 +149,15 @@ SkGpuDevice* SkGpuDevice::Create(GrRenderTarget* rt, int width, int height,
 
 SkGpuDevice* SkGpuDevice::Create(GrContext* context, SkSurface::Budgeted budgeted,
                                  const SkImageInfo& info, int sampleCount,
-                                 const SkSurfaceProps* props, InitContents init) {
+                                 const SkSurfaceProps* props, InitContents init,
+                                 GrTextureStorageAllocator customAllocator) {
     unsigned flags;
     if (!CheckAlphaTypeAndGetFlags(&info, init, &flags)) {
         return nullptr;
     }
 
-    SkAutoTUnref<GrRenderTarget> rt(CreateRenderTarget(context, budgeted, info,  sampleCount));
+    SkAutoTUnref<GrRenderTarget> rt(CreateRenderTarget(
+            context, budgeted, info, sampleCount, customAllocator));
     if (nullptr == rt) {
         return nullptr;
     }
@@ -182,8 +184,9 @@ SkGpuDevice::SkGpuDevice(GrRenderTarget* rt, int width, int height,
     }
 }
 
-GrRenderTarget* SkGpuDevice::CreateRenderTarget(GrContext* context, SkSurface::Budgeted budgeted,
-                                                const SkImageInfo& origInfo, int sampleCount) {
+GrRenderTarget* SkGpuDevice::CreateRenderTarget(
+        GrContext* context, SkSurface::Budgeted budgeted, const SkImageInfo& origInfo,
+        int sampleCount, GrTextureStorageAllocator textureStorageAllocator) {
     if (kUnknown_SkColorType == origInfo.colorType() ||
         origInfo.width() < 0 || origInfo.height() < 0) {
         return nullptr;
@@ -212,6 +215,7 @@ GrRenderTarget* SkGpuDevice::CreateRenderTarget(GrContext* context, SkSurface::B
     desc.fHeight = info.height();
     desc.fConfig = SkImageInfo2GrPixelConfig(info);
     desc.fSampleCnt = sampleCount;
+    desc.fTextureStorageAllocator = textureStorageAllocator;
     GrTexture* texture = context->textureProvider()->createTexture(
         desc, SkToBool(budgeted), nullptr, 0);
     if (nullptr == texture) {
@@ -322,7 +326,8 @@ void SkGpuDevice::replaceRenderTarget(bool shouldRetainContent) {
                                                        : SkSurface::kNo_Budgeted;
 
     SkAutoTUnref<GrRenderTarget> newRT(CreateRenderTarget(
-        this->context(), budgeted, this->imageInfo(), fRenderTarget->desc().fSampleCnt));
+        this->context(), budgeted, this->imageInfo(), fRenderTarget->desc().fSampleCnt,
+        fRenderTarget->desc().fTextureStorageAllocator));
 
     if (nullptr == newRT) {
         return;
@@ -1124,7 +1129,7 @@ bool SkGpuDevice::filterTexture(GrContext* context, GrTexture* texture,
     if (filter->canFilterImageGPU()) {
         SkBitmap bm;
         GrWrapTextureInBitmap(texture, width, height, false, &bm);
-        return filter->filterImageGPU(&proxy, bm, ctx, result, offset);
+        return filter->filterImageGPUDeprecated(&proxy, bm, ctx, result, offset);
     } else {
         return false;
     }
@@ -1474,7 +1479,7 @@ void SkGpuDevice::drawProducerNine(const SkDraw& draw, GrTextureProducer* produc
 
         SkRect srcR, dstR;
         while (iter.next(&srcR, &dstR)) {
-            this->drawTextureProducer(producer, &srcR, &dstR, SkCanvas::kStrict_SrcRectConstraint, 
+            this->drawTextureProducer(producer, &srcR, &dstR, SkCanvas::kStrict_SrcRectConstraint,
                                       *draw.fMatrix, fClip, paint);
         }
         return;
@@ -1750,19 +1755,12 @@ void SkGpuDevice::drawTextBlob(const SkDraw& draw, const SkTextBlob* blob, SkSca
 ///////////////////////////////////////////////////////////////////////////////
 
 bool SkGpuDevice::onShouldDisableLCD(const SkPaint& paint) const {
-    return GrTextContext::ShouldDisableLCD(paint);
+    return GrTextUtils::ShouldDisableLCD(paint);
 }
 
 void SkGpuDevice::flush() {
     ASSERT_SINGLE_OWNER
 
-    // Clear batch debugging output
-    // TODO not exactly sure where this should live
-    if (GR_BATCH_DEBUGGING_OUTPUT) {
-        SkDebugf("%s\n", fContext->getAuditTrail()->toJson().c_str());
-        // TODO This currently crashes because not all ops are accounted for
-        GR_AUDIT_TRAIL_RESET(fContext->getAuditTrail());
-    }
     fRenderTarget->prepareForExternalIO();
 }
 

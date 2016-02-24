@@ -10,6 +10,7 @@
 
 #include "SkBitmap.h"
 #include "SkFlattenable.h"
+#include "SkImageInfo.h"
 #include "SkMask.h"
 #include "SkMatrix.h"
 #include "SkPaint.h"
@@ -81,7 +82,10 @@ public:
             shadeSpan().
          */
         kConstInY32_Flag = 1 << 1,
-        kSupports4f_Flag = 1 << 2,
+
+        /** hint for the blitter that 4f is the preferred shading mode.
+         */
+        kPrefers4f_Flag  = 1 << 2,
     };
 
     /**
@@ -96,14 +100,22 @@ public:
      *  ContextRec acts as a parameter bundle for creating Contexts.
      */
     struct ContextRec {
-        ContextRec(const SkPaint& paint, const SkMatrix& matrix, const SkMatrix* localM)
+        enum DstType {
+            kPMColor_DstType, // clients prefer shading into PMColor dest
+            kPM4f_DstType,    // clients prefer shading into PM4f dest
+        };
+
+        ContextRec(const SkPaint& paint, const SkMatrix& matrix, const SkMatrix* localM,
+                   DstType dstType)
             : fPaint(&paint)
             , fMatrix(&matrix)
-            , fLocalMatrix(localM) {}
+            , fLocalMatrix(localM)
+            , fPreferredDstType(dstType) {}
 
-        const SkPaint*  fPaint;         // the current paint associated with the draw
-        const SkMatrix* fMatrix;        // the current matrix in the canvas
-        const SkMatrix* fLocalMatrix;   // optional local matrix
+        const SkPaint*  fPaint;            // the current paint associated with the draw
+        const SkMatrix* fMatrix;           // the current matrix in the canvas
+        const SkMatrix* fLocalMatrix;      // optional local matrix
+        const DstType   fPreferredDstType; // the "natural" client dest type
     };
 
     class Context : public ::SkNoncopyable {
@@ -120,10 +132,6 @@ public:
          *  faster.
          */
         virtual uint32_t getFlags() const { return 0; }
-
-        bool supports4f() const {
-            return SkToBool(this->getFlags() & kSupports4f_Flag);
-        }
 
         /**
          *  Called for each span of the object being drawn. Your subclass should
@@ -188,7 +196,7 @@ public:
      *  Override this if your subclass overrides createContext, to return the correct size of
      *  your subclass' context.
      */
-    virtual size_t contextSize() const;
+    virtual size_t contextSize(const ContextRec&) const;
 
     /**
      *  Returns true if this shader is just a bitmap, and if not null, returns the bitmap,

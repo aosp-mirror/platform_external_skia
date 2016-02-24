@@ -80,13 +80,19 @@ SkJpegCodec::SkJpegCodec(const SkImageInfo& srcInfo, SkStream* stream,
     : INHERITED(srcInfo, stream)
     , fDecoderMgr(decoderMgr)
     , fReadyState(decoderMgr->dinfo()->global_state)
+    , fSwizzlerSubset(SkIRect::MakeEmpty())
 {}
 
 /*
  * Return the row bytes of a particular image type and width
  */
 static size_t get_row_bytes(const j_decompress_ptr dinfo) {
-    size_t colorBytes = (dinfo->out_color_space == JCS_RGB565) ? 2 : dinfo->out_color_components;
+#ifdef TURBO_HAS_565
+    const size_t colorBytes = (dinfo->out_color_space == JCS_RGB565) ? 2 :
+            dinfo->out_color_components;
+#else
+    const size_t colorBytes = dinfo->out_color_components;
+#endif
     return dinfo->output_width * colorBytes;
 
 }
@@ -184,12 +190,16 @@ bool SkJpegCodec::setOutputColorSpace(const SkImageInfo& dst) {
             if (isCMYK) {
                 fDecoderMgr->dinfo()->out_color_space = JCS_CMYK;
             } else {
-                // Check the byte ordering of the RGBA color space for the
-                // current platform
-#if defined(SK_PMCOLOR_IS_RGBA)
-                fDecoderMgr->dinfo()->out_color_space = JCS_EXT_RGBA;
+#ifdef LIBJPEG_TURBO_VERSION
+            // Check the byte ordering of the RGBA color space for the
+            // current platform
+    #ifdef SK_PMCOLOR_IS_RGBA
+            fDecoderMgr->dinfo()->out_color_space = JCS_EXT_RGBA;
+    #else
+            fDecoderMgr->dinfo()->out_color_space = JCS_EXT_BGRA;
+    #endif
 #else
-                fDecoderMgr->dinfo()->out_color_space = JCS_EXT_BGRA;
+            fDecoderMgr->dinfo()->out_color_space = JCS_RGB;
 #endif
             }
             return true;
@@ -197,8 +207,12 @@ bool SkJpegCodec::setOutputColorSpace(const SkImageInfo& dst) {
             if (isCMYK) {
                 fDecoderMgr->dinfo()->out_color_space = JCS_CMYK;
             } else {
+#ifdef TURBO_HAS_565
                 fDecoderMgr->dinfo()->dither_mode = JDITHER_NONE;
                 fDecoderMgr->dinfo()->out_color_space = JCS_RGB565;
+#else
+                fDecoderMgr->dinfo()->out_color_space = JCS_RGB;
+#endif
             }
             return true;
         case kGray_8_SkColorType:
@@ -290,7 +304,8 @@ SkCodec::Result SkJpegCodec::onGetPixels(const SkImageInfo& dstInfo,
     // If it's not, we want to know because it means our strategy is not optimal.
     SkASSERT(1 == dinfo->rec_outbuf_height);
 
-    if (JCS_CMYK == dinfo->out_color_space) {
+    J_COLOR_SPACE colorSpace = dinfo->out_color_space;
+    if (JCS_CMYK == colorSpace || JCS_RGB == colorSpace) {
         this->initializeSwizzler(dstInfo, options);
     }
 
@@ -353,7 +368,21 @@ void SkJpegCodec::initializeSwizzler(const SkImageInfo& dstInfo, const Options& 
         }
     }
 
-    fSwizzler.reset(SkSwizzler::CreateSwizzler(srcConfig, nullptr, dstInfo, options));
+    if (JCS_RGB == fDecoderMgr->dinfo()->out_color_space) {
+        srcConfig = SkSwizzler::kRGB;
+    }
+
+    Options swizzlerOptions = options;
+    if (options.fSubset) {
+        // Use fSwizzlerSubset if this is a subset decode.  This is necessary in the case
+        // where libjpeg-turbo provides a subset and then we need to subset it further.
+        // Also, verify that fSwizzlerSubset is initialized and valid.
+        SkASSERT(!fSwizzlerSubset.isEmpty() && fSwizzlerSubset.x() <= options.fSubset->x() &&
+                fSwizzlerSubset.width() == options.fSubset->width());
+        swizzlerOptions.fSubset = &fSwizzlerSubset;
+    }
+    fSwizzler.reset(SkSwizzler::CreateSwizzler(srcConfig, nullptr, dstInfo, swizzlerOptions));
+    SkASSERT(fSwizzler);
     fStorage.reset(get_row_bytes(fDecoderMgr->dinfo()));
     fSrcRow = fStorage.get();
 }
@@ -392,11 +421,60 @@ SkCodec::Result SkJpegCodec::onStartScanlineDecode(const SkImageInfo& dstInfo,
         return kInvalidInput;
     }
 
-    // We will need a swizzler if we are performing a subset decode or
-    // converting from CMYK.
-    if (options.fSubset || JCS_CMYK == fDecoderMgr->dinfo()->out_color_space) {
+    if (options.fSubset) {
+        fSwizzlerSubset = *options.fSubset;
+    }
+
+#ifdef TURBO_HAS_CROP
+    if (options.fSubset) {
+        uint32_t startX = options.fSubset->x();
+        uint32_t width = options.fSubset->width();
+
+        // libjpeg-turbo may need to align startX to a multiple of the IDCT
+        // block size.  If this is the case, it will decrease the value of
+        // startX to the appropriate alignment and also increase the value
+        // of width so that the right edge of the requested subset remains
+        // the same.
+        jpeg_crop_scanline(fDecoderMgr->dinfo(), &startX, &width);
+
+        SkASSERT(startX <= (uint32_t) options.fSubset->x());
+        SkASSERT(width >= (uint32_t) options.fSubset->width());
+        SkASSERT(startX + width >= (uint32_t) options.fSubset->right());
+
+        // Instruct the swizzler (if it is necessary) to further subset the
+        // output provided by libjpeg-turbo.
+        //
+        // We set this here (rather than in the if statement below), so that
+        // if (1) we don't need a swizzler for the subset, and (2) we need a
+        // swizzler for CMYK, the swizzler will still use the proper subset
+        // dimensions.
+        //
+        // Note that the swizzler will ignore the y and height parameters of
+        // the subset.  Since the scanline decoder (and the swizzler) handle
+        // one row at a time, only the subsetting in the x-dimension matters.
+        fSwizzlerSubset.setXYWH(options.fSubset->x() - startX, 0,
+                options.fSubset->width(), options.fSubset->height());
+
+        // We will need a swizzler if libjpeg-turbo cannot provide the exact
+        // subset that we request.
+        if (startX != (uint32_t) options.fSubset->x() ||
+                width != (uint32_t) options.fSubset->width()) {
+            this->initializeSwizzler(dstInfo, options);
+        }
+    }
+
+    // Make sure we have a swizzler if we are converting from CMYK.
+    if (!fSwizzler && JCS_CMYK == fDecoderMgr->dinfo()->out_color_space) {
         this->initializeSwizzler(dstInfo, options);
     }
+#else
+    // We will need a swizzler if we are performing a subset decode or
+    // converting from CMYK.
+    J_COLOR_SPACE colorSpace = fDecoderMgr->dinfo()->out_color_space;
+    if (options.fSubset || JCS_CMYK == colorSpace || JCS_RGB == colorSpace) {
+        this->initializeSwizzler(dstInfo, options);
+    }
+#endif
 
     return kSuccess;
 }
@@ -438,27 +516,27 @@ int SkJpegCodec::onGetScanlines(void* dst, int count, size_t dstRowBytes) {
     return count;
 }
 
-#ifndef TURBO_HAS_SKIP
-// TODO (msarett): Avoid reallocating the memory buffer on each call to skip.
-static uint32_t jpeg_skip_scanlines(jpeg_decompress_struct* dinfo, int count) {
-    SkAutoTMalloc<uint8_t> storage(get_row_bytes(dinfo));
-    uint8_t* storagePtr = storage.get();
-    for (int y = 0; y < count; y++) {
-        if (1 != jpeg_read_scanlines(dinfo, &storagePtr, 1)) {
-            return y;
-        }
-    }
-    return count;
-}
-#endif
-
 bool SkJpegCodec::onSkipScanlines(int count) {
     // Set the jump location for libjpeg errors
     if (setjmp(fDecoderMgr->getJmpBuf())) {
         return fDecoderMgr->returnFalse("setjmp");
     }
 
+#ifdef TURBO_HAS_SKIP
     return (uint32_t) count == jpeg_skip_scanlines(fDecoderMgr->dinfo(), count);
+#else
+    if (!fSrcRow) {
+        fStorage.reset(get_row_bytes(fDecoderMgr->dinfo()));
+        fSrcRow = fStorage.get();
+    }
+
+    for (int y = 0; y < count; y++) {
+        if (1 != jpeg_read_scanlines(fDecoderMgr->dinfo(), &fSrcRow, 1)) {
+            return false;
+        }
+    }
+    return true;
+#endif
 }
 
 static bool is_yuv_supported(jpeg_decompress_struct* dinfo) {

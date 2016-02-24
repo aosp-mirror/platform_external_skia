@@ -8,9 +8,10 @@
 #ifndef GrStencilAndCoverTextContext_DEFINED
 #define GrStencilAndCoverTextContext_DEFINED
 
-#include "GrTextContext.h"
 #include "GrDrawTarget.h"
 #include "GrStrokeInfo.h"
+#include "SkDrawFilter.h"
+#include "SkTextBlob.h"
 #include "SkTHash.h"
 #include "SkTInternalLList.h"
 #include "SkTLList.h"
@@ -24,30 +25,31 @@ class SkSurfaceProps;
 /*
  * This class implements text rendering using stencil and cover path rendering
  * (by the means of GrDrawTarget::drawPath).
- * This class exposes the functionality through GrTextContext interface.
  */
-class GrStencilAndCoverTextContext : public GrTextContext {
+class GrStencilAndCoverTextContext {
 public:
-    static GrStencilAndCoverTextContext* Create(GrContext*, const SkSurfaceProps&);
+    static GrStencilAndCoverTextContext* Create();
 
-    void drawText(GrDrawContext* dc,
+    void drawText(GrContext*, GrDrawContext* dc,
                   const GrClip&,  const GrPaint&, const SkPaint&,
-                  const SkMatrix& viewMatrix, const char text[], size_t byteLength, SkScalar x,
-                  SkScalar y, const SkIRect& clipBounds) override;
-    void drawPosText(GrDrawContext*,
+                  const SkMatrix& viewMatrix, const SkSurfaceProps&, const char text[],
+                  size_t byteLength, SkScalar x,
+                  SkScalar y, const SkIRect& clipBounds);
+    void drawPosText(GrContext*, GrDrawContext*,
                      const GrClip&, const GrPaint&, const SkPaint&,
-                     const SkMatrix& viewMatrix,
+                     const SkMatrix& viewMatrix, const SkSurfaceProps&,
                      const char text[], size_t byteLength,
                      const SkScalar pos[], int scalarsPerPosition,
-                     const SkPoint& offset, const SkIRect& clipBounds) override;
-    void drawTextBlob(GrDrawContext*, const GrClip&, const SkPaint&,
-                      const SkMatrix& viewMatrix, const SkTextBlob*, SkScalar x, SkScalar y,
-                      SkDrawFilter*, const SkIRect& clipBounds) override;
+                     const SkPoint& offset, const SkIRect& clipBounds);
+    void drawTextBlob(GrContext*, GrDrawContext*, const GrClip&, const SkPaint&,
+                      const SkMatrix& viewMatrix, const SkSurfaceProps&, const SkTextBlob*,
+                      SkScalar x, SkScalar y,
+                      SkDrawFilter*, const SkIRect& clipBounds);
 
     virtual ~GrStencilAndCoverTextContext();
 
 private:
-    GrStencilAndCoverTextContext(GrContext*, const SkSurfaceProps&);
+    GrStencilAndCoverTextContext();
 
     bool canDraw(const SkPaint& skPaint, const SkMatrix&) {
         return this->internalCanDraw(skPaint);
@@ -55,9 +57,10 @@ private:
 
     bool internalCanDraw(const SkPaint&);
 
-    void uncachedDrawTextBlob(GrDrawContext* dc,
+    void uncachedDrawTextBlob(GrContext*, GrDrawContext* dc,
                               const GrClip& clip, const SkPaint& skPaint,
                               const SkMatrix& viewMatrix,
+                              const SkSurfaceProps&,
                               const SkTextBlob* blob,
                               SkScalar x, SkScalar y,
                               SkDrawFilter* drawFilter,
@@ -76,8 +79,9 @@ private:
                         int scalarsPerPosition, const SkPoint& offset);
 
         void draw(GrContext*, GrDrawContext*, GrPipelineBuilder*, GrColor, const SkMatrix&,
+                  const SkSurfaceProps&,
                   SkScalar x, SkScalar y, const SkIRect& clipBounds,
-                  GrTextContext* fallbackTextContext, const SkPaint& originalSkPaint) const;
+                  GrAtlasTextContext* fallbackTextContext, const SkPaint& originalSkPaint) const;
 
         void releaseGlyphCache() const;
 
@@ -148,8 +152,6 @@ private:
     SkTHashTable<TextBlob*, const TextBlob::Key&, TextBlob>   fBlobKeyCache;
     SkTInternalLList<TextBlob>                                fLRUList;
     size_t                                                    fCacheSize;
-
-    typedef GrTextContext INHERITED;
 };
 
 #endif

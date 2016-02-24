@@ -60,7 +60,7 @@ void GrTextureDomain::GLDomain::sampleTexture(GrGLSLShaderBuilder* builder,
         if (textureDomain.fIndex >= 0) {
             uniName.appendS32(textureDomain.fIndex);
         }
-        fDomainUni = uniformHandler->addUniform(GrGLSLUniformHandler::kFragment_Visibility,
+        fDomainUni = uniformHandler->addUniform(kFragment_GrShaderFlag,
                                                 kVec4f_GrSLType, kDefault_GrSLPrecision,
                                                 uniName.c_str(), &name);
         fDomainName = name;
@@ -192,7 +192,7 @@ void GrGLTextureDomainEffect::emitCode(EmitArgs& args) {
     const GrTextureDomainEffect& textureDomainEffect = args.fFp.cast<GrTextureDomainEffect>();
     const GrTextureDomain& domain = textureDomainEffect.textureDomain();
 
-    GrGLSLFragmentBuilder* fragBuilder = args.fFragBuilder;
+    GrGLSLFPFragmentBuilder* fragBuilder = args.fFragBuilder;
     SkString coords2D = fragBuilder->ensureFSCoords2D(args.fCoords, 0);
     fGLDomain.sampleTexture(fragBuilder,
                             args.fUniformHandler,

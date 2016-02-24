@@ -33,13 +33,13 @@ void SkPaintImageFilter::flatten(SkWriteBuffer& buffer) const {
     buffer.writePaint(fPaint);
 }
 
-bool SkPaintImageFilter::onFilterImage(Proxy* proxy,
-                                            const SkBitmap& source,
-                                            const Context& ctx,
-                                            SkBitmap* result,
-                                            SkIPoint* offset) const {
+bool SkPaintImageFilter::onFilterImageDeprecated(Proxy* proxy,
+                                                 const SkBitmap& source,
+                                                 const Context& ctx,
+                                                 SkBitmap* result,
+                                                 SkIPoint* offset) const {
     SkIRect bounds;
-    if (!this->applyCropRect(ctx, source, SkIPoint::Make(0, 0), &bounds)) {
+    if (!this->applyCropRect(ctx, source.bounds(), &bounds)) {
         return false;
     }
 

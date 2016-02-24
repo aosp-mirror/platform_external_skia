@@ -12,6 +12,7 @@
 #include "SkWriteBuffer.h"
 #include "SkUnPreMultiply.h"
 #include "SkString.h"
+#include "SkPM4f.h"
 
 #define SK_PMORDER_INDEX_A  (SK_A32_SHIFT / 8)
 #define SK_PMORDER_INDEX_R  (SK_R32_SHIFT / 8)
@@ -46,7 +47,6 @@ void SkColorMatrixFilterRowMajor255::initState() {
     } else {
         fFlags = kAlphaUnchanged_Flag;
     }
-    fFlags |= kSupports4f_Flag;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -66,11 +66,11 @@ static Sk4f scale_rgb(float scale) {
 }
 
 static Sk4f premul(const Sk4f& x) {
-    return x * scale_rgb(x.kth<SkPM4f::A>());
+    return x * scale_rgb(x[SkPM4f::A]);
 }
 
 static Sk4f unpremul(const Sk4f& x) {
-    return x * scale_rgb(1 / x.kth<SkPM4f::A>());  // TODO: fast/approx invert?
+    return x * scale_rgb(1 / x[SkPM4f::A]);  // TODO: fast/approx invert?
 }
 
 static Sk4f clamp_0_1(const Sk4f& x) {
@@ -98,7 +98,7 @@ void filter_span(const float array[], const T src[], int count, T dst[]) {
 
     for (int i = 0; i < count; i++) {
         Sk4f srcf = Adaptor::To4f(src[i]);
-        float srcA = srcf.kth<SkPM4f::A>();
+        float srcA = srcf[SkPM4f::A];
 
         if (0 == srcA) {
             dst[i] = matrix_translate_pmcolor;
@@ -108,10 +108,10 @@ void filter_span(const float array[], const T src[], int count, T dst[]) {
             srcf = unpremul(srcf);
         }
 
-        Sk4f r4 = srcf.kth<SK_R32_SHIFT/8>();
-        Sk4f g4 = srcf.kth<SK_G32_SHIFT/8>();
-        Sk4f b4 = srcf.kth<SK_B32_SHIFT/8>();
-        Sk4f a4 = srcf.kth<SK_A32_SHIFT/8>();
+        Sk4f r4 = srcf[SK_R32_SHIFT/8];
+        Sk4f g4 = srcf[SK_G32_SHIFT/8];
+        Sk4f b4 = srcf[SK_B32_SHIFT/8];
+        Sk4f a4 = srcf[SK_A32_SHIFT/8];
 
         // apply matrix
         Sk4f dst4 = c0 * r4 + c1 * g4 + c2 * b4 + c3 * a4 + c4;
@@ -257,10 +257,10 @@ public:
 
         void emitCode(EmitArgs& args) override {
             GrGLSLUniformHandler* uniformHandler = args.fUniformHandler;
-            fMatrixHandle = uniformHandler->addUniform(GrGLSLUniformHandler::kFragment_Visibility,
+            fMatrixHandle = uniformHandler->addUniform(kFragment_GrShaderFlag,
                                                        kMat44f_GrSLType, kDefault_GrSLPrecision,
                                                        "ColorMatrix");
-            fVectorHandle = uniformHandler->addUniform(GrGLSLUniformHandler::kFragment_Visibility,
+            fVectorHandle = uniformHandler->addUniform(kFragment_GrShaderFlag,
                                                        kVec4f_GrSLType, kDefault_GrSLPrecision,
                                                        "ColorMatrixVector");
 

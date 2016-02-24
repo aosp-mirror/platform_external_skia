@@ -21,15 +21,14 @@ public:
     static const int kIndicesPerGlyph = 6;
 
     typedef GrAtlasTextBlob Blob;
-    typedef Blob::Run Run;
-    typedef Run::SubRunInfo TextInfo;
     struct Geometry {
+        SkMatrix fViewMatrix;
         Blob* fBlob;
+        SkScalar fX;
+        SkScalar fY;
         int fRun;
         int fSubRun;
         GrColor fColor;
-        SkScalar fTransX;
-        SkScalar fTransY;
     };
 
     static GrAtlasTextBatch* CreateBitmap(GrMaskFormat maskFormat, int glyphCount,
@@ -81,39 +80,9 @@ public:
     void init() {
         const Geometry& geo = fGeoData[0];
         fBatch.fColor = geo.fColor;
-        fBatch.fViewMatrix = geo.fBlob->fViewMatrix;
 
-        // We don't yet position distance field text on the cpu, so we have to map the vertex bounds
-        // into device space.
-        // We handle vertex bounds differently for distance field text and bitmap text because
-        // the vertex bounds of bitmap text are in device space.  If we are flushing multiple runs
-        // from one blob then we are going to pay the price here of mapping the rect for each run.
-        const Run& run = geo.fBlob->fRuns[geo.fRun];
-        SkRect bounds = run.fSubRunInfo[geo.fSubRun].vertexBounds();
-        if (run.fSubRunInfo[geo.fSubRun].drawAsDistanceFields()) {
-            // Distance field text is positioned with the (X,Y) as part of the glyph position,
-            // and currently the view matrix is applied on the GPU
-            bounds.offset(geo.fBlob->fX - geo.fBlob->fInitialX,
-                          geo.fBlob->fY - geo.fBlob->fInitialY);
-            fBatch.fViewMatrix.mapRect(&bounds);
-            this->setBounds(bounds);
-        } else {
-            // Bitmap text is fully positioned on the CPU, and offset by an (X,Y) translate in
-            // device space.
-            SkMatrix boundsMatrix = geo.fBlob->fInitialViewMatrixInverse;
-
-            boundsMatrix.postTranslate(-geo.fBlob->fInitialX, -geo.fBlob->fInitialY);
-
-            boundsMatrix.postTranslate(geo.fBlob->fX, geo.fBlob->fY);
-
-            boundsMatrix.postConcat(geo.fBlob->fViewMatrix);
-            boundsMatrix.mapRect(&bounds);
-
-            // Due to floating point numerical inaccuracies, we have to round out here
-            SkRect roundedOutBounds;
-            bounds.roundOut(&roundedOutBounds);
-            this->setBounds(roundedOutBounds);
-        }
+        geo.fBlob->computeSubRunBounds(&fBounds, geo.fRun, geo.fSubRun, geo.fViewMatrix, geo.fX,
+                                       geo.fY);
     }
 
     const char* name() const override { return "TextBatch"; }
@@ -170,17 +139,10 @@ private:
                kLCDDistanceField_MaskType == fMaskType;
     }
 
-    template <bool regenTexCoords, bool regenPos, bool regenCol, bool regenGlyphs>
-    inline void regenBlob(Target* target, FlushInfo* flushInfo, Blob* blob, Run* run,
-                          TextInfo* info, SkGlyphCache** cache,
-                          SkTypeface** typeface, GrFontScaler** scaler, const SkDescriptor** desc,
-                          const GrGeometryProcessor* gp, int glyphCount, size_t vertexStride,
-                          GrColor color, SkScalar transX, SkScalar transY) const;
-
     inline void flush(GrVertexBatch::Target* target, FlushInfo* flushInfo) const;
 
     GrColor color() const { return fBatch.fColor; }
-    const SkMatrix& viewMatrix() const { return fBatch.fViewMatrix; }
+    const SkMatrix& viewMatrix() const { return fGeoData[0].fViewMatrix; }
     bool usesLocalCoords() const { return fBatch.fUsesLocalCoords; }
     int numGlyphs() const { return fBatch.fNumGlyphs; }
 
@@ -193,7 +155,6 @@ private:
 
     struct BatchTracker {
         GrColor fColor;
-        SkMatrix fViewMatrix;
         bool fUsesLocalCoords;
         bool fColorIgnored;
         bool fCoverageIgnored;
@@ -221,7 +182,37 @@ private:
     SkAutoTUnref<const GrDistanceFieldAdjustTable> fDistanceAdjustTable;
     SkColor fFilteredColor;
 
+    friend class GrBlobRegenHelper; // Needs to trigger flushes
+
     typedef GrVertexBatch INHERITED;
+};
+
+/*
+ * A simple helper class to abstract the interface GrAtlasTextBlob needs to regenerate itself.
+ * It'd be nicer if this was nested, but we need to forward declare it in GrAtlasTextBlob.h
+ */
+class GrBlobRegenHelper {
+public:
+    GrBlobRegenHelper(const GrAtlasTextBatch* batch,
+                      GrVertexBatch::Target* target,
+                      GrAtlasTextBatch::FlushInfo* flushInfo,
+                      const GrGeometryProcessor* gp)
+        : fBatch(batch)
+        , fTarget(target)
+        , fFlushInfo(flushInfo)
+        , fGP(gp) {}
+
+    void flush();
+
+    void incGlyphCount(int glyphCount = 1) {
+        fFlushInfo->fGlyphsToFlush += glyphCount;
+    }
+
+private:
+    const GrAtlasTextBatch* fBatch;
+    GrVertexBatch::Target* fTarget;
+    GrAtlasTextBatch::FlushInfo* fFlushInfo;
+    const GrGeometryProcessor* fGP;
 };
 
 #endif

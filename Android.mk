@@ -34,6 +34,14 @@ LOCAL_PATH:= $(call my-dir)
 #       determine which build type to use.
 ###############################################################################
 
+###############################################################################
+# STATIC LIBRARY
+#
+# This target is only to be used internally for only one of two purposes...
+#  (1) statically linking into testing frameworks
+#  (2) as an inclusion target for the libskia.so shared library
+###############################################################################
+
 include $(CLEAR_VARS)
 LOCAL_FDO_SUPPORT := true
 ifneq ($(strip $(TARGET_FDO_CFLAGS)),)
@@ -44,10 +52,6 @@ endif
 LOCAL_ARM_MODE := thumb
 # used for testing
 #LOCAL_CFLAGS += -g -O0
-
-ifeq ($(NO_FALLBACK_FONT),true)
-	LOCAL_CFLAGS += -DNO_FALLBACK_FONT
-endif
 
 LOCAL_CFLAGS += \
 	-fPIC \
@@ -77,7 +81,6 @@ LOCAL_SRC_FILES := \
 	src/codec/SkMaskSwizzler.cpp \
 	src/codec/SkMasks.cpp \
 	src/codec/SkPngCodec.cpp \
-	src/codec/SkPngFilters.cpp \
 	src/codec/SkSampler.cpp \
 	src/codec/SkSampledCodec.cpp \
 	src/codec/SkSwizzler.cpp \
@@ -85,6 +88,7 @@ LOCAL_SRC_FILES := \
 	src/codec/SkWebpAdapterCodec.cpp \
 	src/codec/SkWebpCodec.cpp \
 	src/codec/SkCodecImageGenerator.cpp \
+	src/ports/SkImageGenerator_skia.cpp \
 	src/android/SkBitmapRegionCanvas.cpp \
 	src/android/SkBitmapRegionCodec.cpp \
 	src/android/SkBitmapRegionDecoder.cpp \
@@ -125,6 +129,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkColorFilter.cpp \
 	src/core/SkColorFilterShader.cpp \
 	src/core/SkColorMatrixFilterRowMajor255.cpp \
+	src/core/SkColorSpace.cpp \
 	src/core/SkColorTable.cpp \
 	src/core/SkComposeShader.cpp \
 	src/core/SkConfig8888.cpp \
@@ -168,6 +173,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkImageCacherator.cpp \
 	src/core/SkImageGenerator.cpp \
 	src/core/SkLightingShader.cpp \
+	src/core/SkLinearBitmapPipeline.cpp \
 	src/core/SkLineClipper.cpp \
 	src/core/SkLocalMatrixImageFilter.cpp \
 	src/core/SkLocalMatrixShader.cpp \
@@ -186,7 +192,6 @@ LOCAL_SRC_FILES := \
 	src/core/SkMultiPictureDraw.cpp \
 	src/core/SkNinePatchIter.cpp \
 	src/core/SkOpts.cpp \
-	src/core/SkPackBits.cpp \
 	src/core/SkPaint.cpp \
 	src/core/SkPaintPriv.cpp \
 	src/core/SkPath.cpp \
@@ -235,11 +240,13 @@ LOCAL_SRC_FILES := \
 	src/core/SkSemaphore.cpp \
 	src/core/SkShader.cpp \
 	src/core/SkSharedMutex.cpp \
+	src/core/SkSpanProcs.cpp \
 	src/core/SkSpecialImage.cpp \
 	src/core/SkSpecialSurface.cpp \
 	src/core/SkSpinlock.cpp \
 	src/core/SkSpriteBlitter_ARGB32.cpp \
 	src/core/SkSpriteBlitter_RGB16.cpp \
+	src/core/SkSpriteBlitter4f.cpp \
 	src/core/SkStream.cpp \
 	src/core/SkString.cpp \
 	src/core/SkStringUtils.cpp \
@@ -340,6 +347,7 @@ LOCAL_SRC_FILES := \
 	src/effects/SkMergeImageFilter.cpp \
 	src/effects/SkMorphologyImageFilter.cpp \
 	src/effects/SkOffsetImageFilter.cpp \
+	src/effects/SkPackBits.cpp \
 	src/effects/SkPaintFlagsDrawFilter.cpp \
 	src/effects/SkPaintImageFilter.cpp \
 	src/effects/SkPerlinNoiseShader.cpp \
@@ -350,6 +358,8 @@ LOCAL_SRC_FILES := \
 	src/effects/SkTestImageFilters.cpp \
 	src/effects/SkTileImageFilter.cpp \
 	src/effects/SkXfermodeImageFilter.cpp \
+	src/effects/gradients/Sk4fGradientBase.cpp \
+	src/effects/gradients/Sk4fLinearGradient.cpp \
 	src/effects/gradients/SkClampRange.cpp \
 	src/effects/gradients/SkGradientBitmapCache.cpp \
 	src/effects/gradients/SkGradientShader.cpp \
@@ -372,6 +382,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrCoordTransform.cpp \
 	src/gpu/GrDefaultGeoProcFactory.cpp \
 	src/gpu/GrDrawContext.cpp \
+	src/gpu/GrPathRenderingDrawContext.cpp \
 	src/gpu/GrDrawingManager.cpp \
 	src/gpu/GrDrawTarget.cpp \
 	src/gpu/GrFragmentProcessor.cpp \
@@ -472,13 +483,13 @@ LOCAL_SRC_FILES := \
 	src/gpu/effects/GrXfermodeFragmentProcessor.cpp \
 	src/gpu/effects/GrYUVEffect.cpp \
 	src/gpu/text/GrAtlasTextBlob.cpp \
+	src/gpu/text/GrAtlasTextBlob_regenInBatch.cpp \
 	src/gpu/text/GrAtlasTextContext.cpp \
 	src/gpu/text/GrBatchFontCache.cpp \
 	src/gpu/text/GrDistanceFieldAdjustTable.cpp \
 	src/gpu/text/GrFontScaler.cpp \
 	src/gpu/text/GrStencilAndCoverTextContext.cpp \
 	src/gpu/text/GrTextBlobCache.cpp \
-	src/gpu/text/GrTextContext.cpp \
 	src/gpu/text/GrTextUtils.cpp \
 	src/gpu/gl/GrGLAssembleInterface.cpp \
 	src/gpu/gl/GrGLBufferImpl.cpp \
@@ -548,7 +559,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/GrGLCreateNullInterface.cpp \
 	src/gpu/gl/SkNullGLContext.cpp \
 	src/images/bmpdecoderhelper.cpp \
-	src/images/SkDecodingImageGenerator.cpp \
 	src/images/SkForceLinking.cpp \
 	src/images/SkImageDecoder.cpp \
 	src/images/SkImageDecoder_FactoryDefault.cpp \
@@ -568,7 +578,6 @@ LOCAL_SRC_FILES := \
 	src/images/SkMovie_gif.cpp \
 	src/images/SkPageFlipper.cpp \
 	src/images/SkScaledBitmapSampler.cpp \
-	src/ports/SkImageGenerator_skia.cpp \
 	src/doc/SkDocument_PDF.cpp \
 	src/pdf/SkDeflate.cpp \
 	src/pdf/SkJpegInfo.cpp \
@@ -606,7 +615,6 @@ LOCAL_SRC_FILES := \
 	src/sfnt/SkOTTable_name.cpp \
 	src/sfnt/SkOTUtils.cpp \
 	src/utils/SkBase64.cpp \
-	src/utils/SkBitmapHasher.cpp \
 	src/utils/SkBitmapSourceDeserializer.cpp \
 	src/utils/SkBitSet.cpp \
 	src/utils/SkBoundaryPatch.cpp \
@@ -636,7 +644,6 @@ LOCAL_SRC_FILES := \
 	src/utils/SkPatchUtils.cpp \
 	src/utils/SkRGBAToYUV.cpp \
 	src/utils/SkRTConf.cpp \
-	src/utils/SkSHA1.cpp \
 	src/utils/SkTextBox.cpp \
 	src/utils/SkTextureCompressor.cpp \
 	src/utils/SkTextureCompressor_ASTC.cpp \
@@ -728,7 +735,7 @@ LOCAL_EXPORT_C_INCLUDE_DIRS := \
 	$(LOCAL_PATH)/src/utils
 
 LOCAL_MODULE := \
-	libskia
+	libskia_static
 
 LOCAL_SRC_FILES_arm += \
 	src/core/SkUtilsArm.cpp \
@@ -805,6 +812,34 @@ LOCAL_SRC_FILES_arm64 += \
 	src/opts/SkBlitRow_opts_arm_neon.cpp \
 	src/opts/SkOpts_neon.cpp
 
+LOCAL_MODULE_CLASS := STATIC_LIBRARIES
+include $(BUILD_STATIC_LIBRARY)
+
+
+###############################################################################
+# SHARED LIBRARY
+###############################################################################
+
+include $(CLEAR_VARS)
+LOCAL_MODULE_CLASS := SHARED_LIBRARIES
+LOCAL_MODULE := libskia
+LOCAL_WHOLE_STATIC_LIBRARIES := libskia_static
+LOCAL_EXPORT_C_INCLUDE_DIRS := \
+	$(LOCAL_PATH)/include/codec \
+	$(LOCAL_PATH)/include/android \
+	$(LOCAL_PATH)/include/c \
+	$(LOCAL_PATH)/include/config \
+	$(LOCAL_PATH)/include/core \
+	$(LOCAL_PATH)/include/pathops \
+	$(LOCAL_PATH)/include/effects \
+	$(LOCAL_PATH)/include/client/android \
+	$(LOCAL_PATH)/include/gpu \
+	$(LOCAL_PATH)/include/images \
+	$(LOCAL_PATH)/include/ports \
+	$(LOCAL_PATH)/include/utils \
+	$(LOCAL_PATH)/src/utils
+
+include $(BASE_PATH)/skia_static_deps.mk
 include $(BUILD_SHARED_LIBRARY)
 
 #############################################################

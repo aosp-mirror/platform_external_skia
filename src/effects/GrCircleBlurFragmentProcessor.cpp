@@ -40,13 +40,13 @@ void GrGLCircleBlurFragmentProcessor::emitCode(EmitArgs& args) {
     // x,y  - the center of the circle
     // z    - the distance at which the intensity starts falling off (e.g., the start of the table)
     // w    - the inverse of the profile texture size
-    fDataUniform = args.fUniformHandler->addUniform(GrGLSLUniformHandler::kFragment_Visibility,
+    fDataUniform = args.fUniformHandler->addUniform(kFragment_GrShaderFlag,
                                                     kVec4f_GrSLType,
                                                     kDefault_GrSLPrecision,
                                                     "data",
                                                     &dataName);
 
-    GrGLSLFragmentBuilder* fragBuilder = args.fFragBuilder;
+    GrGLSLFPFragmentBuilder* fragBuilder = args.fFragBuilder;
     const char *fragmentPos = fragBuilder->fragmentPosition();
 
     if (args.fInputColor) {
@@ -209,9 +209,11 @@ static uint8_t* create_profile(float halfWH, float sigma) {
     compute_profile_offset_and_size(halfWH, sigma, &offset, &numSteps);
 
     uint8_t* weights = new uint8_t[numSteps];
-    for (int i = 0; i < numSteps; ++i) {
+    for (int i = 0; i < numSteps - 1; ++i) {
         weights[i] = eval_at(offset+i, halfWH, halfKernel.get(), kernelWH);
     }
+    // Ensure the tail of the Gaussian goes to zero.
+    weights[numSteps-1] = 0;
 
     return weights;
 }

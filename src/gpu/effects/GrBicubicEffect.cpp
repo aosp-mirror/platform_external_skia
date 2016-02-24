@@ -48,10 +48,10 @@ void GrGLBicubicEffect::emitCode(EmitArgs& args) {
     const GrTextureDomain& domain = args.fFp.cast<GrBicubicEffect>().domain();
 
     GrGLSLUniformHandler* uniformHandler = args.fUniformHandler;
-    fCoefficientsUni = uniformHandler->addUniform(GrGLSLUniformHandler::kFragment_Visibility,
+    fCoefficientsUni = uniformHandler->addUniform(kFragment_GrShaderFlag,
                                                   kMat44f_GrSLType, kDefault_GrSLPrecision,
                                                   "Coefficients");
-    fImageIncrementUni = uniformHandler->addUniform(GrGLSLUniformHandler::kFragment_Visibility,
+    fImageIncrementUni = uniformHandler->addUniform(kFragment_GrShaderFlag,
                                                     kVec2f_GrSLType, kDefault_GrSLPrecision,
                                                     "ImageIncrement");
 
@@ -68,7 +68,7 @@ void GrGLBicubicEffect::emitCode(EmitArgs& args) {
         GrGLSLShaderVar("c2",            kVec4f_GrSLType),
         GrGLSLShaderVar("c3",            kVec4f_GrSLType),
     };
-    GrGLSLFragmentBuilder* fragBuilder = args.fFragBuilder;
+    GrGLSLFPFragmentBuilder* fragBuilder = args.fFragBuilder;
     SkString coords2D = fragBuilder->ensureFSCoords2D(args.fCoords, 0);
     fragBuilder->emitFunction(kVec4f_GrSLType,
                               "cubicBlend",

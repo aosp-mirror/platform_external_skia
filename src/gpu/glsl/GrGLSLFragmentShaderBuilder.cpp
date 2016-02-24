@@ -68,12 +68,16 @@ GrGLSLFragmentShaderBuilder::KeyForFragmentPosition(const GrRenderTarget* dst) {
 
 GrGLSLFragmentShaderBuilder::GrGLSLFragmentShaderBuilder(GrGLSLProgramBuilder* program,
                                                          uint8_t fragPosKey)
-    : INHERITED(program)
+    : GrGLSLFragmentBuilder(program)
     , fSetupFragPosition(false)
     , fTopLeftFragPosRead(kTopLeftFragPosRead_FragPosKey == fragPosKey)
+    , fHasCustomColorOutput(false)
     , fCustomColorOutputIndex(-1)
+    , fHasSecondaryOutput(false)
+    , fHasInitializedSampleMask(false)
     , fHasReadDstColor(false)
     , fHasReadFragmentPosition(false) {
+    fSubstageIndices.push_back(0);
 }
 
 bool GrGLSLFragmentShaderBuilder::enableFeature(GLSLFeature feature) {
@@ -166,6 +170,47 @@ const char* GrGLSLFragmentShaderBuilder::fragmentPosition() {
     }
 }
 
+void GrGLSLFragmentShaderBuilder::maskSampleCoverage(const char* mask, bool invert) {
+    const GrGLSLCaps& glslCaps = *fProgramBuilder->glslCaps();
+    if (!glslCaps.sampleVariablesSupport()) {
+        SkDEBUGFAIL("Attempted to mask sample coverage without support.");
+        return;
+    }
+    if (const char* extension = glslCaps.sampleVariablesExtensionString()) {
+        this->addFeature(1 << kSampleVariables_GLSLPrivateFeature, extension);
+    }
+    if (!fHasInitializedSampleMask) {
+        this->codePrependf("gl_SampleMask[0] = -1;");
+        fHasInitializedSampleMask = true;
+    }
+    if (invert) {
+        this->codeAppendf("gl_SampleMask[0] &= ~(%s);", mask);
+    } else {
+        this->codeAppendf("gl_SampleMask[0] &= %s;", mask);
+    }
+}
+
+void GrGLSLFragmentShaderBuilder::overrideSampleCoverage(const char* mask) {
+    const GrGLSLCaps& glslCaps = *fProgramBuilder->glslCaps();
+    if (!glslCaps.sampleMaskOverrideCoverageSupport()) {
+        SkDEBUGFAIL("Attempted to override sample coverage without support.");
+        return;
+    }
+    SkASSERT(glslCaps.sampleVariablesSupport());
+    if (const char* extension = glslCaps.sampleVariablesExtensionString()) {
+        this->addFeature(1 << kSampleVariables_GLSLPrivateFeature, extension);
+    }
+    if (this->addFeature(1 << kSampleMaskOverrideCoverage_GLSLPrivateFeature,
+                         "GL_NV_sample_mask_override_coverage")) {
+        // Redeclare gl_SampleMask with layout(override_coverage) if we haven't already.
+        fOutputs.push_back().set(kInt_GrSLType, GrShaderVar::kOut_TypeModifier,
+                                 "gl_SampleMask", 1, kHigh_GrSLPrecision,
+                                 "override_coverage");
+    }
+    this->codeAppendf("gl_SampleMask[0] = %s;", mask);
+    fHasInitializedSampleMask = true;
+}
+
 const char* GrGLSLFragmentShaderBuilder::dstColor() {
     fHasReadDstColor = true;
 
@@ -176,7 +221,7 @@ const char* GrGLSLFragmentShaderBuilder::dstColor() {
 
     const GrGLSLCaps* glslCaps = fProgramBuilder->glslCaps();
     if (glslCaps->fbFetchSupport()) {
-        this->addFeature(1 << (GrGLSLFragmentShaderBuilder::kLastGLSLPrivateFeature + 1),
+        this->addFeature(1 << kFramebufferFetch_GLSLPrivateFeature,
                          glslCaps->fbFetchExtensionString());
 
         // Some versions of this extension string require declaring custom color output on ES 3.0+
@@ -263,7 +308,7 @@ void GrGLSLFragmentShaderBuilder::onFinalize() {
                                                  &this->precisionQualifier());
 }
 
-void GrGLSLFragmentBuilder::onBeforeChildProcEmitCode() {
+void GrGLSLFragmentShaderBuilder::onBeforeChildProcEmitCode() {
     SkASSERT(fSubstageIndices.count() >= 1);
     fSubstageIndices.push_back(0);
     // second-to-last value in the fSubstageIndices stack is the index of the child proc
@@ -271,7 +316,7 @@ void GrGLSLFragmentBuilder::onBeforeChildProcEmitCode() {
     fMangleString.appendf("_c%d", fSubstageIndices[fSubstageIndices.count() - 2]);
 }
 
-void GrGLSLFragmentBuilder::onAfterChildProcEmitCode() {
+void GrGLSLFragmentShaderBuilder::onAfterChildProcEmitCode() {
     SkASSERT(fSubstageIndices.count() >= 2);
     fSubstageIndices.pop_back();
     fSubstageIndices.back()++;

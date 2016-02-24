@@ -9,10 +9,11 @@
 #define GrBatchAtlas_DEFINED
 
 #include "GrTexture.h"
-#include "batches/GrDrawBatch.h"
 #include "SkPoint.h"
 #include "SkTDArray.h"
 #include "SkTInternalLList.h"
+
+#include "batches/GrDrawBatch.h"
 
 class GrRectanizer;
 
@@ -21,6 +22,8 @@ struct GrBatchAtlasConfig {
     int numPlotsY() const { return fHeight / fPlotWidth; }
     int fWidth;
     int fHeight;
+    int fLog2Width;
+    int fLog2Height;
     int fPlotWidth;
     int fPlotHeight;
 };

@@ -40,19 +40,19 @@ void GrGLMatrixConvolutionEffect::emitCode(EmitArgs& args) {
     int kHeight = mce.kernelSize().height();
 
     GrGLSLUniformHandler* uniformHandler = args.fUniformHandler;
-    fImageIncrementUni = uniformHandler->addUniform(GrGLSLUniformHandler::kFragment_Visibility,
+    fImageIncrementUni = uniformHandler->addUniform(kFragment_GrShaderFlag,
                                                     kVec2f_GrSLType, kDefault_GrSLPrecision,
                                                     "ImageIncrement");
-    fKernelUni = uniformHandler->addUniformArray(GrGLSLUniformHandler::kFragment_Visibility,
+    fKernelUni = uniformHandler->addUniformArray(kFragment_GrShaderFlag,
                                                  kFloat_GrSLType, kDefault_GrSLPrecision,
                                                  "Kernel",
                                                  kWidth * kHeight);
-    fKernelOffsetUni = uniformHandler->addUniform(GrGLSLUniformHandler::kFragment_Visibility,
+    fKernelOffsetUni = uniformHandler->addUniform(kFragment_GrShaderFlag,
                                                   kVec2f_GrSLType, kDefault_GrSLPrecision,
                                                   "KernelOffset");
-    fGainUni = uniformHandler->addUniform(GrGLSLUniformHandler::kFragment_Visibility,
+    fGainUni = uniformHandler->addUniform(kFragment_GrShaderFlag,
                                           kFloat_GrSLType, kDefault_GrSLPrecision, "Gain");
-    fBiasUni = uniformHandler->addUniform(GrGLSLUniformHandler::kFragment_Visibility,
+    fBiasUni = uniformHandler->addUniform(kFragment_GrShaderFlag,
                                           kFloat_GrSLType, kDefault_GrSLPrecision, "Bias");
 
     const char* kernelOffset = uniformHandler->getUniformCStr(fKernelOffsetUni);
@@ -61,7 +61,7 @@ void GrGLMatrixConvolutionEffect::emitCode(EmitArgs& args) {
     const char* gain = uniformHandler->getUniformCStr(fGainUni);
     const char* bias = uniformHandler->getUniformCStr(fBiasUni);
 
-    GrGLSLFragmentBuilder* fragBuilder = args.fFragBuilder;
+    GrGLSLFPFragmentBuilder* fragBuilder = args.fFragBuilder;
     SkString coords2D = fragBuilder->ensureFSCoords2D(args.fCoords, 0);
     fragBuilder->codeAppend("vec4 sum = vec4(0, 0, 0, 0);");
     fragBuilder->codeAppendf("vec2 coord = %s - %s * %s;", coords2D.c_str(), kernelOffset, imgInc);

@@ -29,16 +29,22 @@ void SetupAlwaysEvictAtlas(GrContext* context) {
     GrBatchAtlasConfig configs[3];
     configs[kA8_GrMaskFormat].fWidth = dim;
     configs[kA8_GrMaskFormat].fHeight = dim;
+    configs[kA8_GrMaskFormat].fLog2Width = SkNextLog2(dim);
+    configs[kA8_GrMaskFormat].fLog2Height = SkNextLog2(dim);
     configs[kA8_GrMaskFormat].fPlotWidth = dim;
     configs[kA8_GrMaskFormat].fPlotHeight = dim;
 
     configs[kA565_GrMaskFormat].fWidth = dim;
     configs[kA565_GrMaskFormat].fHeight = dim;
+    configs[kA565_GrMaskFormat].fLog2Width = SkNextLog2(dim);
+    configs[kA565_GrMaskFormat].fLog2Height = SkNextLog2(dim);
     configs[kA565_GrMaskFormat].fPlotWidth = dim;
     configs[kA565_GrMaskFormat].fPlotHeight = dim;
 
     configs[kARGB_GrMaskFormat].fWidth = dim;
     configs[kARGB_GrMaskFormat].fHeight = dim;
+    configs[kARGB_GrMaskFormat].fLog2Width = SkNextLog2(dim);
+    configs[kARGB_GrMaskFormat].fLog2Height = SkNextLog2(dim);
     configs[kARGB_GrMaskFormat].fPlotWidth = dim;
     configs[kARGB_GrMaskFormat].fPlotHeight = dim;
 
@@ -296,7 +302,7 @@ public:
                              GrPixelConfig readConfig, DrawPreference*,
                              ReadPixelTempDrawInfo*) override { return false; }
 
-    bool onGetWritePixelsInfo(GrSurface* dstSurface, int width, int height, size_t rowBytes,
+    bool onGetWritePixelsInfo(GrSurface* dstSurface, int width, int height,
                               GrPixelConfig srcConfig, DrawPreference*,
                               WritePixelTempDrawInfo*) override { return false; }
 

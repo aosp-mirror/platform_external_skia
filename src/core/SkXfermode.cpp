@@ -14,6 +14,7 @@
 #include "SkReadBuffer.h"
 #include "SkString.h"
 #include "SkWriteBuffer.h"
+#include "SkPM4f.h"
 
 #define SkAlphaMulAlpha(a, b)   SkMulDiv255Round(a, b)
 
@@ -49,15 +50,15 @@ static inline int clamp_div255round(int prod) {
 ///////////////////////////////////////////////////////////////////////////////
 #include "SkNx.h"
 
-static Sk4f     alpha(const Sk4f& color) { return Sk4f(color.kth<3>()); }
-static Sk4f inv_alpha(const Sk4f& color) { return Sk4f(1 - color.kth<3>()); }
+static Sk4f     alpha(const Sk4f& color) { return Sk4f(color[3]); }
+static Sk4f inv_alpha(const Sk4f& color) { return Sk4f(1 - color[3]); }
 static Sk4f     pin_1(const Sk4f& value) { return Sk4f::Min(value, Sk4f(1)); }
 
 static Sk4f color_alpha(const Sk4f& color, float newAlpha) {
-    return Sk4f(color.kth<0>(), color.kth<1>(), color.kth<2>(), newAlpha);
+    return Sk4f(color[0], color[1], color[2], newAlpha);
 }
 static Sk4f color_alpha(const Sk4f& color, const Sk4f& newAlpha) {
-    return color_alpha(color, newAlpha.kth<3>());
+    return color_alpha(color, newAlpha[3]);
 }
 
 static Sk4f set_argb(float a, float r, float g, float b) {
@@ -94,7 +95,7 @@ static Sk4f overlay_4f(const Sk4f& s, const Sk4f& d) {
     Sk4f two = Sk4f(2);
     Sk4f rc = (two * d <= da).thenElse(two * s * d,
                                        sa * da - two * (da - d) * (sa - s));
-    return s + d - s * da + color_alpha(rc - d * sa, 0);
+    return pin_1(s + d - s * da + color_alpha(rc - d * sa, 0));
 }
 
 static Sk4f hardlight_4f(const Sk4f& s, const Sk4f& d) {
@@ -263,15 +264,15 @@ static inline void SetLum(float* r, float* g, float* b, float a, float l) {
 }
 
 static Sk4f hue_4f(const Sk4f& s, const Sk4f& d) {
-    float sa = s.kth<SkPM4f::A>();
-    float sr = s.kth<SkPM4f::R>();
-    float sg = s.kth<SkPM4f::G>();
-    float sb = s.kth<SkPM4f::B>();
+    float sa = s[SkPM4f::A];
+    float sr = s[SkPM4f::R];
+    float sg = s[SkPM4f::G];
+    float sb = s[SkPM4f::B];
     
-    float da = d.kth<SkPM4f::A>();
-    float dr = d.kth<SkPM4f::R>();
-    float dg = d.kth<SkPM4f::G>();
-    float db = d.kth<SkPM4f::B>();
+    float da = d[SkPM4f::A];
+    float dr = d[SkPM4f::R];
+    float dg = d[SkPM4f::G];
+    float db = d[SkPM4f::B];
 
     float Sr = sr;
     float Sg = sg;
@@ -284,15 +285,15 @@ static Sk4f hue_4f(const Sk4f& s, const Sk4f& d) {
 }
 
 static Sk4f saturation_4f(const Sk4f& s, const Sk4f& d) {
-    float sa = s.kth<SkPM4f::A>();
-    float sr = s.kth<SkPM4f::R>();
-    float sg = s.kth<SkPM4f::G>();
-    float sb = s.kth<SkPM4f::B>();
+    float sa = s[SkPM4f::A];
+    float sr = s[SkPM4f::R];
+    float sg = s[SkPM4f::G];
+    float sb = s[SkPM4f::B];
     
-    float da = d.kth<SkPM4f::A>();
-    float dr = d.kth<SkPM4f::R>();
-    float dg = d.kth<SkPM4f::G>();
-    float db = d.kth<SkPM4f::B>();
+    float da = d[SkPM4f::A];
+    float dr = d[SkPM4f::R];
+    float dg = d[SkPM4f::G];
+    float db = d[SkPM4f::B];
     
     float Dr = dr;
     float Dg = dg;
@@ -305,43 +306,47 @@ static Sk4f saturation_4f(const Sk4f& s, const Sk4f& d) {
 }
 
 static Sk4f color_4f(const Sk4f& s, const Sk4f& d) {
-    float sa = s.kth<SkPM4f::A>();
-    float sr = s.kth<SkPM4f::R>();
-    float sg = s.kth<SkPM4f::G>();
-    float sb = s.kth<SkPM4f::B>();
+    float sa = s[SkPM4f::A];
+    float sr = s[SkPM4f::R];
+    float sg = s[SkPM4f::G];
+    float sb = s[SkPM4f::B];
     
-    float da = d.kth<SkPM4f::A>();
-    float dr = d.kth<SkPM4f::R>();
-    float dg = d.kth<SkPM4f::G>();
-    float db = d.kth<SkPM4f::B>();
+    float da = d[SkPM4f::A];
+    float dr = d[SkPM4f::R];
+    float dg = d[SkPM4f::G];
+    float db = d[SkPM4f::B];
 
     float Sr = sr;
     float Sg = sg;
     float Sb = sb;
     SetLum(&Sr, &Sg, &Sb, sa * da, Lum(dr, dg, db) * sa);
     
-    return color_alpha(s * inv_alpha(d) + d * inv_alpha(s) + set_argb(0, Sr, Sg, Sb),
-                       sa + da - sa * da);
+    Sk4f res = color_alpha(s * inv_alpha(d) + d * inv_alpha(s) + set_argb(0, Sr, Sg, Sb),
+                           sa + da - sa * da);
+    // Can return tiny negative values ...
+    return Sk4f::Max(res, Sk4f(0));
 }
 
 static Sk4f luminosity_4f(const Sk4f& s, const Sk4f& d) {
-    float sa = s.kth<SkPM4f::A>();
-    float sr = s.kth<SkPM4f::R>();
-    float sg = s.kth<SkPM4f::G>();
-    float sb = s.kth<SkPM4f::B>();
+    float sa = s[SkPM4f::A];
+    float sr = s[SkPM4f::R];
+    float sg = s[SkPM4f::G];
+    float sb = s[SkPM4f::B];
     
-    float da = d.kth<SkPM4f::A>();
-    float dr = d.kth<SkPM4f::R>();
-    float dg = d.kth<SkPM4f::G>();
-    float db = d.kth<SkPM4f::B>();
+    float da = d[SkPM4f::A];
+    float dr = d[SkPM4f::R];
+    float dg = d[SkPM4f::G];
+    float db = d[SkPM4f::B];
     
     float Dr = dr;
     float Dg = dg;
     float Db = db;
     SetLum(&Dr, &Dg, &Db, sa * da, Lum(sr, sg, sb) * da);
     
-    return color_alpha(s * inv_alpha(d) + d * inv_alpha(s) + set_argb(0, Dr, Dg, Db),
-                       sa + da - sa * da);
+    Sk4f res = color_alpha(s * inv_alpha(d) + d * inv_alpha(s) + set_argb(0, Dr, Dg, Db),
+                           sa + da - sa * da);
+    // Can return tiny negative values ...
+    return Sk4f::Max(res, Sk4f(0));
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -921,15 +926,22 @@ static Sk4f as_4f(const SkPM4f& pm4) {
     return Sk4f::Load(pm4.fVec);
 }
 
-template <Sk4f (blend)(const Sk4f&, const Sk4f&)> SkPM4f proc_4f(const SkPM4f& s, const SkPM4f& d) {
-    SkPM4f r = as_pm4f(blend(as_4f(s), as_4f(d)));
+static void assert_unit(const SkPM4f& r) {
 #ifdef SK_DEBUG
-    const float min = 0;
-    const float max = 1;
+    const float eps = 0.00001f;
+    const float min = 0 - eps;
+    const float max = 1 + eps;
     for (int i = 0; i < 4; ++i) {
         SkASSERT(r.fVec[i] >= min && r.fVec[i] <= max);
     }
 #endif
+}
+
+template <Sk4f (blend)(const Sk4f&, const Sk4f&)> SkPM4f proc_4f(const SkPM4f& s, const SkPM4f& d) {
+    assert_unit(s);
+    assert_unit(d);
+    SkPM4f r = as_pm4f(blend(as_4f(s), as_4f(d)));
+    assert_unit(r);
     return r;
 }
 
@@ -1330,6 +1342,15 @@ SkXfermodeProc4f SkXfermode::GetProc4f(Mode mode) {
         proc = gProcCoeffs[mode].fProc4f;
     }
     return proc;
+}
+
+static SkPM4f missing_proc4f(const SkPM4f& src, const SkPM4f& dst) {
+    return src;
+}
+
+SkXfermodeProc4f SkXfermode::getProc4f() const {
+    Mode mode;
+    return this->asMode(&mode) ? GetProc4f(mode) : missing_proc4f;
 }
 
 bool SkXfermode::ModeAsCoeff(Mode mode, Coeff* src, Coeff* dst) {

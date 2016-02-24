@@ -5,7 +5,11 @@
  * found in the LICENSE file.
  */
 
+#include "Sk4fLinearGradient.h"
 #include "SkLinearGradient.h"
+
+// define to test the 4f gradient path
+// #define FORCE_4F_CONTEXT
 
 static const float kInv255Float = 1.0f / 255;
 
@@ -43,6 +47,21 @@ static SkMatrix pts_to_unit_matrix(const SkPoint pts[2]) {
     return matrix;
 }
 
+static bool use_4f_context(const SkShader::ContextRec& rec, uint32_t flags) {
+#ifdef FORCE_4F_CONTEXT
+    return true;
+#else
+    // Perspective not supported in 4f yet.
+    if (rec.fMatrix->hasPerspective()
+        || (rec.fLocalMatrix && rec.fLocalMatrix->hasPerspective())) {
+        return false;
+    }
+
+    return rec.fPreferredDstType == SkShader::ContextRec::kPM4f_DstType
+        || SkToBool(flags & SkLinearGradient::kForce4fContext_PrivateFlag);
+#endif
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 
 SkLinearGradient::SkLinearGradient(const SkPoint pts[2], const Descriptor& desc)
@@ -69,12 +88,16 @@ void SkLinearGradient::flatten(SkWriteBuffer& buffer) const {
     buffer.writePoint(fEnd);
 }
 
-size_t SkLinearGradient::contextSize() const {
-    return sizeof(LinearGradientContext);
+size_t SkLinearGradient::contextSize(const ContextRec& rec) const {
+    return use_4f_context(rec, fGradFlags)
+        ? sizeof(LinearGradient4fContext)
+        : sizeof(LinearGradientContext);
 }
 
 SkShader::Context* SkLinearGradient::onCreateContext(const ContextRec& rec, void* storage) const {
-    return new (storage) LinearGradientContext(*this, rec);
+    return use_4f_context(rec, fGradFlags)
+        ? static_cast<SkShader::Context*>(new (storage) LinearGradient4fContext(*this, rec))
+        : static_cast<SkShader::Context*>(new (storage) LinearGradientContext(*this, rec));
 }
 
 // This swizzles SkColor into the same component order as SkPMColor, but does not actually
@@ -287,10 +310,9 @@ void SkLinearGradient::LinearGradientContext::shadeSpan(int x, int y, SkPMColor*
         SkGradFixed dx, fx = SkScalarToGradFixed(srcPt.fX);
 
         if (fDstToIndexClass == kFixedStepInX_MatrixClass) {
-            SkFixed dxStorage[1];
-            (void)fDstToIndex.fixedStepInX(SkIntToScalar(y), dxStorage, nullptr);
+            const auto step = fDstToIndex.fixedStepInX(SkIntToScalar(y));
             // todo: do we need a real/high-precision value for dx here?
-            dx = SkFixedToGradFixed(dxStorage[0]);
+            dx = SkScalarToGradFixed(step.fX);
         } else {
             SkASSERT(fDstToIndexClass == kLinear_MatrixClass);
             dx = SkScalarToGradFixed(fDstToIndex.getScaleX());
@@ -747,4 +769,3 @@ void SkLinearGradient::LinearGradientContext::shade4_clamp(int x, int y, SkPMCol
         }
     }
 }
-

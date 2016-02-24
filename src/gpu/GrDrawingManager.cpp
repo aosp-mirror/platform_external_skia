@@ -8,6 +8,7 @@
 #include "GrDrawContext.h"
 #include "GrDrawingManager.h"
 #include "GrDrawTarget.h"
+#include "GrPathRenderingDrawContext.h"
 #include "GrResourceProvider.h"
 #include "GrSoftwarePathRenderer.h"
 #include "SkTTopoSort.h"
@@ -27,16 +28,6 @@ void GrDrawingManager::cleanup() {
     }
 
     fDrawTargets.reset();
-
-    delete fNVPRTextContext;
-    fNVPRTextContext = nullptr;
-
-    for (int i = 0; i < kNumPixelGeometries; ++i) {
-        delete fTextContexts[i][0];
-        fTextContexts[i][0] = nullptr;
-        delete fTextContexts[i][1];
-        fTextContexts[i][1] = nullptr;
-    }
 
     delete fPathRendererChain;
     fPathRendererChain = nullptr;
@@ -118,34 +109,6 @@ void GrDrawingManager::flush() {
     fFlushing = false;
 }
 
-GrTextContext* GrDrawingManager::textContext(const SkSurfaceProps& props,
-                                             GrRenderTarget* rt) {
-    if (this->abandoned()) {
-        return nullptr;
-    }
-
-    SkASSERT(props.pixelGeometry() < kNumPixelGeometries);
-    bool useDIF = props.isUseDeviceIndependentFonts();
-
-    if (useDIF && fContext->caps()->shaderCaps()->pathRenderingSupport() &&
-        rt->isStencilBufferMultisampled()) {
-        GrStencilAttachment* sb = fContext->resourceProvider()->attachStencilAttachment(rt);
-        if (sb) {
-            if (!fNVPRTextContext) {
-                fNVPRTextContext = GrStencilAndCoverTextContext::Create(fContext, props);
-            }
-
-            return fNVPRTextContext;
-        }
-    }
-
-    if (!fTextContexts[props.pixelGeometry()][useDIF]) {
-        fTextContexts[props.pixelGeometry()][useDIF] = GrAtlasTextContext::Create(fContext, props);
-    }
-
-    return fTextContexts[props.pixelGeometry()][useDIF];
-}
-
 GrDrawTarget* GrDrawingManager::newDrawTarget(GrRenderTarget* rt) {
     SkASSERT(fContext);
 
@@ -202,5 +165,21 @@ GrDrawContext* GrDrawingManager::drawContext(GrRenderTarget* rt,
         return nullptr;
     }
 
-    return new GrDrawContext(this, rt, surfaceProps, fContext->getAuditTrail(), fSingleOwner);
+
+    bool useDIF = false;
+    if (surfaceProps) {
+        useDIF = surfaceProps->isUseDeviceIndependentFonts();
+    }
+
+    if (useDIF && fContext->caps()->shaderCaps()->pathRenderingSupport() &&
+        rt->isStencilBufferMultisampled()) {
+        GrStencilAttachment* sb = fContext->resourceProvider()->attachStencilAttachment(rt);
+        if (sb) {
+            return new GrPathRenderingDrawContext(fContext, this, rt, surfaceProps,
+                                                  fContext->getAuditTrail(), fSingleOwner);
+        }
+    }
+
+    return new GrDrawContext(fContext, this, rt, surfaceProps, fContext->getAuditTrail(),
+                             fSingleOwner);
 }

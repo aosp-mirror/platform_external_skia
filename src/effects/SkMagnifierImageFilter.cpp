@@ -116,20 +116,20 @@ private:
 
 void GrGLMagnifierEffect::emitCode(EmitArgs& args) {
     GrGLSLUniformHandler* uniformHandler = args.fUniformHandler;
-    fOffsetVar = uniformHandler->addUniform(GrGLSLUniformHandler::kFragment_Visibility,
+    fOffsetVar = uniformHandler->addUniform(kFragment_GrShaderFlag,
                                             kVec2f_GrSLType, kDefault_GrSLPrecision,
                                             "Offset");
-    fInvZoomVar = uniformHandler->addUniform(GrGLSLUniformHandler::kFragment_Visibility,
+    fInvZoomVar = uniformHandler->addUniform(kFragment_GrShaderFlag,
                                              kVec2f_GrSLType, kDefault_GrSLPrecision,
                                              "InvZoom");
-    fInvInsetVar = uniformHandler->addUniform(GrGLSLUniformHandler::kFragment_Visibility,
+    fInvInsetVar = uniformHandler->addUniform(kFragment_GrShaderFlag,
                                               kVec2f_GrSLType, kDefault_GrSLPrecision,
                                               "InvInset");
-    fBoundsVar = uniformHandler->addUniform(GrGLSLUniformHandler::kFragment_Visibility,
+    fBoundsVar = uniformHandler->addUniform(kFragment_GrShaderFlag,
                                             kVec4f_GrSLType, kDefault_GrSLPrecision,
                                             "Bounds");
 
-    GrGLSLFragmentBuilder* fragBuilder = args.fFragBuilder;
+    GrGLSLFPFragmentBuilder* fragBuilder = args.fFragBuilder;
     SkString coords2D = fragBuilder->ensureFSCoords2D(args.fCoords, 0);
     fragBuilder->codeAppendf("\t\tvec2 coord = %s;\n", coords2D.c_str());
     fragBuilder->codeAppendf("\t\tvec2 zoom_coord = %s + %s * %s;\n",
@@ -294,9 +294,9 @@ void SkMagnifierImageFilter::flatten(SkWriteBuffer& buffer) const {
     buffer.writeScalar(fInset);
 }
 
-bool SkMagnifierImageFilter::onFilterImage(Proxy* proxy, const SkBitmap& src,
-                                           const Context&, SkBitmap* dst,
-                                           SkIPoint* offset) const {
+bool SkMagnifierImageFilter::onFilterImageDeprecated(Proxy* proxy, const SkBitmap& src,
+                                                     const Context&, SkBitmap* dst,
+                                                     SkIPoint* offset) const {
     if ((src.colorType() != kN32_SkColorType) ||
         (fSrcRect.width() >= src.width()) ||
         (fSrcRect.height() >= src.height())) {

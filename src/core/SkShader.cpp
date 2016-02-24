@@ -96,7 +96,7 @@ SkShader::Context* SkShader::onCreateContext(const ContextRec& rec, void*) const
     return nullptr;
 }
 
-size_t SkShader::contextSize() const {
+size_t SkShader::contextSize(const ContextRec&) const {
     return 0;
 }
 
@@ -117,8 +117,19 @@ SkShader::Context::ShadeProc SkShader::Context::asAShadeProc(void** ctx) {
     return nullptr;
 }
 
-void SkShader::Context::shadeSpan4f(int x, int y, SkPM4f[], int count) {
-    SkASSERT(false && "shadeSpan4f called but not implemented");
+void SkShader::Context::shadeSpan4f(int x, int y, SkPM4f dst[], int count) {
+    const int N = 128;
+    SkPMColor tmp[N];
+    while (count > 0) {
+        int n = SkTMin(count, N);
+        this->shadeSpan(x, y, tmp, n);
+        for (int i = 0; i < n; ++i) {
+            dst[i] = SkPM4f::FromPMColor(tmp[i]);
+        }
+        dst += n;
+        x += n;
+        count -= n;
+    }
 }
 
 #include "SkColorPriv.h"
@@ -190,7 +201,7 @@ SkShader::Context::MatrixClass SkShader::Context::ComputeMatrixClass(const SkMat
     MatrixClass mc = kLinear_MatrixClass;
 
     if (mat.hasPerspective()) {
-        if (mat.fixedStepInX(0, nullptr, nullptr)) {
+        if (mat.isFixedStepInX()) {
             mc = kFixedStepInX_MatrixClass;
         } else {
             mc = kPerspective_MatrixClass;
@@ -287,7 +298,7 @@ SkColorShader::ColorShaderContext::ColorShaderContext(const SkColorShader& shade
     c4.fA *= rec.fPaint->getAlpha() / 255.0f;
     fPM4f = c4.premul();
 
-    fFlags = kConstInY32_Flag | kSupports4f_Flag;
+    fFlags = kConstInY32_Flag;
     if (255 == a) {
         fFlags |= kOpaqueAlpha_Flag;
     }

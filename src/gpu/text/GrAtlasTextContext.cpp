@@ -8,52 +8,27 @@
 
 #include "GrDrawContext.h"
 #include "GrDrawTarget.h"
-#include "GrFontScaler.h"
-#include "GrStrokeInfo.h"
 #include "GrTextBlobCache.h"
-#include "GrTexturePriv.h"
 #include "GrTextUtils.h"
-#include "GrVertexBuffer.h"
 
-#include "SkAutoKern.h"
-#include "SkColorPriv.h"
-#include "SkColorFilter.h"
-#include "SkDistanceFieldGen.h"
 #include "SkDraw.h"
 #include "SkDrawFilter.h"
-#include "SkDrawProcs.h"
-#include "SkFindAndPlaceGlyph.h"
-#include "SkGlyphCache.h"
-#include "SkGpuDevice.h"
 #include "SkGrPriv.h"
-#include "SkPath.h"
-#include "SkRTConf.h"
-#include "SkStrokeRec.h"
-#include "SkTextBlob.h"
-#include "SkTextMapStateProc.h"
 
-#include "batches/GrAtlasTextBatch.h"
-
-GrAtlasTextContext::GrAtlasTextContext(GrContext* context, const SkSurfaceProps& surfaceProps)
-    : INHERITED(context, surfaceProps)
-    , fDistanceAdjustTable(new GrDistanceFieldAdjustTable) {
-    // We overallocate vertices in our textblobs based on the assumption that A8 has the greatest
-    // vertexStride
-    static_assert(GrAtlasTextBlob::kGrayTextVASize >= GrAtlasTextBlob::kColorTextVASize &&
-                  GrAtlasTextBlob::kGrayTextVASize >= GrAtlasTextBlob::kLCDTextVASize,
-                  "vertex_attribute_changed");
-    fCache = context->getTextBlobCache();
+GrAtlasTextContext::GrAtlasTextContext()
+    : fDistanceAdjustTable(new GrDistanceFieldAdjustTable) {
 }
 
 
-GrAtlasTextContext* GrAtlasTextContext::Create(GrContext* context,
-                                               const SkSurfaceProps& surfaceProps) {
-    return new GrAtlasTextContext(context, surfaceProps);
+GrAtlasTextContext* GrAtlasTextContext::Create() {
+    return new GrAtlasTextContext();
 }
 
-bool GrAtlasTextContext::canDraw(const SkPaint& skPaint, const SkMatrix& viewMatrix) {
-    return GrTextUtils::CanDrawAsDistanceFields(skPaint, viewMatrix, fSurfaceProps,
-                                                *fContext->caps()->shaderCaps()) ||
+bool GrAtlasTextContext::canDraw(const SkPaint& skPaint,
+                                 const SkMatrix& viewMatrix,
+                                 const SkSurfaceProps& props,
+                                 const GrShaderCaps& shaderCaps) {
+    return GrTextUtils::CanDrawAsDistanceFields(skPaint, viewMatrix, props, shaderCaps) ||
            !SkDraw::ShouldDrawTextAsPaths(skPaint, viewMatrix);
 }
 
@@ -91,13 +66,14 @@ bool GrAtlasTextContext::HasLCD(const SkTextBlob* blob) {
     return false;
 }
 
-void GrAtlasTextContext::drawTextBlob(GrDrawContext* dc,
+void GrAtlasTextContext::drawTextBlob(GrContext* context, GrDrawContext* dc,
                                       const GrClip& clip, const SkPaint& skPaint,
-                                      const SkMatrix& viewMatrix, const SkTextBlob* blob,
+                                      const SkMatrix& viewMatrix,
+                                      const SkSurfaceProps& props, const SkTextBlob* blob,
                                       SkScalar x, SkScalar y,
                                       SkDrawFilter* drawFilter, const SkIRect& clipBounds) {
     // If we have been abandoned, then don't draw
-    if (fContext->abandoned()) {
+    if (context->abandoned()) {
         return;
     }
 
@@ -111,11 +87,12 @@ void GrAtlasTextContext::drawTextBlob(GrDrawContext* dc,
                       (mf && !mf->asABlur(&blurRec)) ||
                       drawFilter);
 
+    GrTextBlobCache* cache = context->getTextBlobCache();
     if (canCache) {
         bool hasLCD = HasLCD(blob);
 
         // We canonicalize all non-lcd draws to use kUnknown_SkPixelGeometry
-        SkPixelGeometry pixelGeometry = hasLCD ? fSurfaceProps.pixelGeometry() :
+        SkPixelGeometry pixelGeometry = hasLCD ? props.pixelGeometry() :
                                                  kUnknown_SkPixelGeometry;
 
         // TODO we want to figure out a way to be able to use the canonical color on LCD text,
@@ -129,60 +106,65 @@ void GrAtlasTextContext::drawTextBlob(GrDrawContext* dc,
         key.fStyle = skPaint.getStyle();
         key.fHasBlur = SkToBool(mf);
         key.fCanonicalColor = canonicalColor;
-        cacheBlob.reset(SkSafeRef(fCache->find(key)));
+        cacheBlob.reset(SkSafeRef(cache->find(key)));
     }
-
-    SkScalar transX = 0.f;
-    SkScalar transY = 0.f;
 
     // Though for the time being runs in the textblob can override the paint, they only touch font
     // info.
     GrPaint grPaint;
-    if (!SkPaintToGrPaint(fContext, skPaint, viewMatrix, &grPaint)) {
+    if (!SkPaintToGrPaint(context, skPaint, viewMatrix, &grPaint)) {
         return;
     }
 
     if (cacheBlob) {
-        if (cacheBlob->mustRegenerate(&transX, &transY, skPaint, grPaint.getColor(), blurRec,
-                                      viewMatrix, x, y)) {
+        if (cacheBlob->mustRegenerate(skPaint, grPaint.getColor(), blurRec, viewMatrix, x, y)) {
             // We have to remake the blob because changes may invalidate our masks.
             // TODO we could probably get away reuse most of the time if the pointer is unique,
             // but we'd have to clear the subrun information
-            fCache->remove(cacheBlob);
-            cacheBlob.reset(SkRef(fCache->createCachedBlob(blob, key, blurRec, skPaint)));
-            this->regenerateTextBlob(cacheBlob, skPaint, grPaint.getColor(), viewMatrix,
-                                     blob, x, y, drawFilter);
+            cache->remove(cacheBlob);
+            cacheBlob.reset(SkRef(cache->createCachedBlob(blob, key, blurRec, skPaint)));
+            RegenerateTextBlob(cacheBlob, context->getBatchFontCache(),
+                               *context->caps()->shaderCaps(), skPaint, grPaint.getColor(),
+                               viewMatrix, props,
+                               blob, x, y, drawFilter);
         } else {
-            fCache->makeMRU(cacheBlob);
+            cache->makeMRU(cacheBlob);
 
             if (CACHE_SANITY_CHECK) {
                 int glyphCount = 0;
                 int runCount = 0;
                 GrTextBlobCache::BlobGlyphCount(&glyphCount, &runCount, blob);
-                SkAutoTUnref<GrAtlasTextBlob> sanityBlob(fCache->createBlob(glyphCount, runCount));
+                SkAutoTUnref<GrAtlasTextBlob> sanityBlob(cache->createBlob(glyphCount, runCount));
                 sanityBlob->setupKey(key, blurRec, skPaint);
-                this->regenerateTextBlob(sanityBlob, skPaint, grPaint.getColor(), viewMatrix,
-                                         blob, x, y, drawFilter);
+                RegenerateTextBlob(sanityBlob, context->getBatchFontCache(),
+                                   *context->caps()->shaderCaps(), skPaint,
+                                   grPaint.getColor(), viewMatrix, props,
+                                   blob, x, y, drawFilter);
                 GrAtlasTextBlob::AssertEqual(*sanityBlob, *cacheBlob);
             }
         }
     } else {
         if (canCache) {
-            cacheBlob.reset(SkRef(fCache->createCachedBlob(blob, key, blurRec, skPaint)));
+            cacheBlob.reset(SkRef(cache->createCachedBlob(blob, key, blurRec, skPaint)));
         } else {
-            cacheBlob.reset(fCache->createBlob(blob));
+            cacheBlob.reset(cache->createBlob(blob));
         }
-        this->regenerateTextBlob(cacheBlob, skPaint, grPaint.getColor(), viewMatrix,
-                                 blob, x, y, drawFilter);
+        RegenerateTextBlob(cacheBlob, context->getBatchFontCache(),
+                           *context->caps()->shaderCaps(), skPaint, grPaint.getColor(),
+                           viewMatrix, props,
+                           blob, x, y, drawFilter);
     }
 
-    cacheBlob->flushCached(fContext, dc, blob, fSurfaceProps, fDistanceAdjustTable, skPaint,
-                           grPaint, drawFilter, clip, viewMatrix, clipBounds, x, y, transX, transY);
+    cacheBlob->flushCached(context, dc, blob, props, fDistanceAdjustTable, skPaint,
+                           grPaint, drawFilter, clip, viewMatrix, clipBounds, x, y);
 }
 
-void GrAtlasTextContext::regenerateTextBlob(GrAtlasTextBlob* cacheBlob,
+void GrAtlasTextContext::RegenerateTextBlob(GrAtlasTextBlob* cacheBlob,
+                                            GrBatchFontCache* fontCache,
+                                            const GrShaderCaps& shaderCaps,
                                             const SkPaint& skPaint, GrColor color,
                                             const SkMatrix& viewMatrix,
+                                            const SkSurfaceProps& props,
                                             const SkTextBlob* blob, SkScalar x, SkScalar y,
                                             SkDrawFilter* drawFilter) {
     cacheBlob->initReusableBlob(color, viewMatrix, x, y);
@@ -204,32 +186,31 @@ void GrAtlasTextContext::regenerateTextBlob(GrAtlasTextBlob* cacheBlob,
             continue;
         }
 
-        runPaint.setFlags(FilterTextFlags(fSurfaceProps, runPaint));
+        runPaint.setFlags(GrTextUtils::FilterTextFlags(props, runPaint));
 
         cacheBlob->push_back_run(run);
 
-        if (GrTextUtils::CanDrawAsDistanceFields(runPaint, viewMatrix, fSurfaceProps,
-                                                 *fContext->caps()->shaderCaps())) {
+        if (GrTextUtils::CanDrawAsDistanceFields(runPaint, viewMatrix, props, shaderCaps)) {
             switch (it.positioning()) {
                 case SkTextBlob::kDefault_Positioning: {
-                    GrTextUtils::DrawDFText(cacheBlob, run, fContext->getBatchFontCache(),
-                                            fSurfaceProps, runPaint, color, viewMatrix,
+                    GrTextUtils::DrawDFText(cacheBlob, run, fontCache,
+                                            props, runPaint, color, viewMatrix,
                                             (const char *)it.glyphs(), textLen,
                                             x + offset.x(), y + offset.y());
                     break;
                 }
                 case SkTextBlob::kHorizontal_Positioning: {
                     SkPoint dfOffset = SkPoint::Make(x, y + offset.y());
-                    GrTextUtils::DrawDFPosText(cacheBlob, run, fContext->getBatchFontCache(),
-                                               fSurfaceProps, runPaint, color, viewMatrix,
+                    GrTextUtils::DrawDFPosText(cacheBlob, run, fontCache,
+                                               props, runPaint, color, viewMatrix,
                                                (const char*)it.glyphs(), textLen, it.pos(),
                                                1, dfOffset);
                     break;
                 }
                 case SkTextBlob::kFull_Positioning: {
                     SkPoint dfOffset = SkPoint::Make(x, y);
-                    GrTextUtils::DrawDFPosText(cacheBlob, run,  fContext->getBatchFontCache(),
-                                               fSurfaceProps, runPaint, color, viewMatrix,
+                    GrTextUtils::DrawDFPosText(cacheBlob, run,  fontCache,
+                                               props, runPaint, color, viewMatrix,
                                                (const char*)it.glyphs(), textLen, it.pos(),
                                                2, dfOffset);
                     break;
@@ -240,20 +221,20 @@ void GrAtlasTextContext::regenerateTextBlob(GrAtlasTextBlob* cacheBlob,
         } else {
             switch (it.positioning()) {
                 case SkTextBlob::kDefault_Positioning:
-                    GrTextUtils::DrawBmpText(cacheBlob, run, fContext->getBatchFontCache(),
-                                             fSurfaceProps, runPaint, color, viewMatrix,
+                    GrTextUtils::DrawBmpText(cacheBlob, run, fontCache,
+                                             props, runPaint, color, viewMatrix,
                                              (const char *)it.glyphs(), textLen,
                                              x + offset.x(), y + offset.y());
                     break;
                 case SkTextBlob::kHorizontal_Positioning:
-                    GrTextUtils::DrawBmpPosText(cacheBlob, run, fContext->getBatchFontCache(),
-                                                fSurfaceProps, runPaint, color, viewMatrix,
+                    GrTextUtils::DrawBmpPosText(cacheBlob, run, fontCache,
+                                                props, runPaint, color, viewMatrix,
                                                 (const char*)it.glyphs(), textLen, it.pos(), 1,
                                                 SkPoint::Make(x, y + offset.y()));
                     break;
                 case SkTextBlob::kFull_Positioning:
-                    GrTextUtils::DrawBmpPosText(cacheBlob, run, fContext->getBatchFontCache(),
-                                                fSurfaceProps, runPaint, color, viewMatrix,
+                    GrTextUtils::DrawBmpPosText(cacheBlob, run, fontCache,
+                                                props, runPaint, color, viewMatrix,
                                                 (const char*)it.glyphs(), textLen, it.pos(), 2,
                                                 SkPoint::Make(x, y));
                     break;
@@ -268,94 +249,110 @@ void GrAtlasTextContext::regenerateTextBlob(GrAtlasTextBlob* cacheBlob,
 }
 
 inline GrAtlasTextBlob*
-GrAtlasTextContext::createDrawTextBlob(const GrPaint& paint, const SkPaint& skPaint,
+GrAtlasTextContext::CreateDrawTextBlob(GrTextBlobCache* blobCache,
+                                       GrBatchFontCache* fontCache,
+                                       const GrShaderCaps& shaderCaps,
+                                       const GrPaint& paint,
+                                       const SkPaint& skPaint,
                                        const SkMatrix& viewMatrix,
+                                       const SkSurfaceProps& props,
                                        const char text[], size_t byteLength,
                                        SkScalar x, SkScalar y) {
     int glyphCount = skPaint.countText(text, byteLength);
 
-    GrAtlasTextBlob* blob = fCache->createBlob(glyphCount, 1);
+    GrAtlasTextBlob* blob = blobCache->createBlob(glyphCount, 1);
     blob->initThrowawayBlob(viewMatrix, x, y);
 
-    if (GrTextUtils::CanDrawAsDistanceFields(skPaint, viewMatrix, fSurfaceProps,
-                                             *fContext->caps()->shaderCaps())) {
-        GrTextUtils::DrawDFText(blob, 0, fContext->getBatchFontCache(), fSurfaceProps,
+    if (GrTextUtils::CanDrawAsDistanceFields(skPaint, viewMatrix, props, shaderCaps)) {
+        GrTextUtils::DrawDFText(blob, 0, fontCache, props,
                                 skPaint, paint.getColor(), viewMatrix, text,
                                 byteLength, x, y);
     } else {
-        GrTextUtils::DrawBmpText(blob, 0, fContext->getBatchFontCache(), fSurfaceProps, skPaint,
+        GrTextUtils::DrawBmpText(blob, 0, fontCache, props, skPaint,
                                  paint.getColor(), viewMatrix, text, byteLength, x, y);
     }
     return blob;
 }
 
 inline GrAtlasTextBlob*
-GrAtlasTextContext::createDrawPosTextBlob(const GrPaint& paint, const SkPaint& skPaint,
-                                          const SkMatrix& viewMatrix,
+GrAtlasTextContext::CreateDrawPosTextBlob(GrTextBlobCache* blobCache, GrBatchFontCache* fontCache,
+                                          const GrShaderCaps& shaderCaps, const GrPaint& paint,
+                                          const SkPaint& skPaint,
+                                          const SkMatrix& viewMatrix, const SkSurfaceProps& props,
                                           const char text[], size_t byteLength,
                                           const SkScalar pos[], int scalarsPerPosition,
                                           const SkPoint& offset) {
     int glyphCount = skPaint.countText(text, byteLength);
 
-    GrAtlasTextBlob* blob = fCache->createBlob(glyphCount, 1);
+    GrAtlasTextBlob* blob = blobCache->createBlob(glyphCount, 1);
     blob->initThrowawayBlob(viewMatrix, offset.x(), offset.y());
 
-    if (GrTextUtils::CanDrawAsDistanceFields(skPaint, viewMatrix, fSurfaceProps,
-                                             *fContext->caps()->shaderCaps())) {
-        GrTextUtils::DrawDFPosText(blob, 0, fContext->getBatchFontCache(), fSurfaceProps,
+    if (GrTextUtils::CanDrawAsDistanceFields(skPaint, viewMatrix, props, shaderCaps)) {
+        GrTextUtils::DrawDFPosText(blob, 0, fontCache, props,
                                    skPaint, paint.getColor(), viewMatrix, text,
                                    byteLength, pos, scalarsPerPosition, offset);
     } else {
-        GrTextUtils::DrawBmpPosText(blob, 0, fContext->getBatchFontCache(), fSurfaceProps, skPaint,
+        GrTextUtils::DrawBmpPosText(blob, 0, fontCache, props, skPaint,
                                     paint.getColor(), viewMatrix, text,
                                     byteLength, pos, scalarsPerPosition, offset);
     }
     return blob;
 }
 
-void GrAtlasTextContext::drawText(GrDrawContext* dc,
+void GrAtlasTextContext::drawText(GrContext* context,
+                                  GrDrawContext* dc,
                                   const GrClip& clip,
                                   const GrPaint& paint, const SkPaint& skPaint,
                                   const SkMatrix& viewMatrix,
+                                  const SkSurfaceProps& props,
                                   const char text[], size_t byteLength,
                                   SkScalar x, SkScalar y, const SkIRect& regionClipBounds) {
-    if (fContext->abandoned()) {
+    if (context->abandoned()) {
         return;
-    } else if (this->canDraw(skPaint, viewMatrix)) {
+    } else if (this->canDraw(skPaint, viewMatrix, props, *context->caps()->shaderCaps())) {
         SkAutoTUnref<GrAtlasTextBlob> blob(
-            this->createDrawTextBlob(paint, skPaint, viewMatrix, text, byteLength, x, y));
-        blob->flushThrowaway(fContext, dc, fSurfaceProps, fDistanceAdjustTable, skPaint, paint,
-                             clip, regionClipBounds);
+            CreateDrawTextBlob(context->getTextBlobCache(), context->getBatchFontCache(),
+                               *context->caps()->shaderCaps(),
+                               paint, skPaint,
+                               viewMatrix, props,
+                               text, byteLength, x, y));
+        blob->flushThrowaway(context, dc, props, fDistanceAdjustTable, skPaint, paint,
+                             clip, viewMatrix, regionClipBounds, x, y);
         return;
     }
 
     // fall back to drawing as a path
-    GrTextUtils::DrawTextAsPath(fContext, dc, clip, skPaint, viewMatrix, text, byteLength, x, y,
+    GrTextUtils::DrawTextAsPath(context, dc, clip, skPaint, viewMatrix, text, byteLength, x, y,
                                 regionClipBounds);
 }
 
-void GrAtlasTextContext::drawPosText(GrDrawContext* dc,
+void GrAtlasTextContext::drawPosText(GrContext* context,
+                                     GrDrawContext* dc,
                                      const GrClip& clip,
                                      const GrPaint& paint, const SkPaint& skPaint,
                                      const SkMatrix& viewMatrix,
+                                     const SkSurfaceProps& props,
                                      const char text[], size_t byteLength,
                                      const SkScalar pos[], int scalarsPerPosition,
                                      const SkPoint& offset, const SkIRect& regionClipBounds) {
-    if (fContext->abandoned()) {
+    if (context->abandoned()) {
         return;
-    } else if (this->canDraw(skPaint, viewMatrix)) {
+    } else if (this->canDraw(skPaint, viewMatrix, props, *context->caps()->shaderCaps())) {
         SkAutoTUnref<GrAtlasTextBlob> blob(
-            this->createDrawPosTextBlob(paint, skPaint, viewMatrix,
-                                        text, byteLength,
-                                        pos, scalarsPerPosition,
-                                        offset));
-        blob->flushThrowaway(fContext, dc, fSurfaceProps, fDistanceAdjustTable, skPaint, paint,
-                             clip, regionClipBounds);
+            CreateDrawPosTextBlob(context->getTextBlobCache(),
+                                  context->getBatchFontCache(),
+                                  *context->caps()->shaderCaps(),
+                                  paint, skPaint, viewMatrix, props,
+                                  text, byteLength,
+                                  pos, scalarsPerPosition,
+                                  offset));
+        blob->flushThrowaway(context, dc, props, fDistanceAdjustTable, skPaint, paint,
+                             clip, viewMatrix, regionClipBounds, offset.fX, offset.fY);
         return;
     }
 
     // fall back to drawing as a path
-    GrTextUtils::DrawPosTextAsPath(fContext, dc, fSurfaceProps, clip, skPaint, viewMatrix, text,
+    GrTextUtils::DrawPosTextAsPath(context, dc, props, clip, skPaint, viewMatrix, text,
                                    byteLength, pos, scalarsPerPosition, offset, regionClipBounds);
 }
 
@@ -372,10 +369,7 @@ DRAW_BATCH_TEST_DEFINE(TextBlobBatch) {
         gContextID = context->uniqueID();
         delete gTextContext;
 
-        // We don't yet test the fall back to paths in the GrTextContext base class.  This is mostly
-        // because we don't really want to have a gpu device here.
-        // We enable distance fields by twiddling a knob on the paint
-        gTextContext = GrAtlasTextContext::Create(context, gSurfaceProps);
+        gTextContext = GrAtlasTextContext::Create();
     }
 
     // Setup dummy SkPaint / GrPaint
@@ -395,20 +389,26 @@ DRAW_BATCH_TEST_DEFINE(TextBlobBatch) {
     const char* text = "The quick brown fox jumps over the lazy dog.";
     int textLen = (int)strlen(text);
 
-    // Setup clip
-    GrClip clip;
-
+    // create some random x/y offsets, including negative offsets
+    static const int kMaxTrans = 1024;
+    int xPos = (random->nextU() % 2) * 2 - 1;
+    int yPos = (random->nextU() % 2) * 2 - 1;
+    int xInt = (random->nextU() % kMaxTrans) * xPos;
+    int yInt = (random->nextU() % kMaxTrans) * yPos;
+    SkScalar x = SkIntToScalar(xInt);
+    SkScalar y = SkIntToScalar(yInt);
+    
     // right now we don't handle textblobs, nor do we handle drawPosText.  Since we only
     // intend to test the batch with this unit test, that is okay.
     SkAutoTUnref<GrAtlasTextBlob> blob(
-            gTextContext->createDrawTextBlob(grPaint, skPaint, viewMatrix, text,
-                                             static_cast<size_t>(textLen), 0, 0));
+        GrAtlasTextContext::CreateDrawTextBlob(context->getTextBlobCache(),
+                                               context->getBatchFontCache(),
+                                               *context->caps()->shaderCaps(), grPaint, skPaint,
+                                               viewMatrix,
+                                               gSurfaceProps, text,
+                                               static_cast<size_t>(textLen), x, y));
 
-    // We'd like to be able to test this with random translations, but currently the vertex
-    // bounds and vertices will get out of sync
-    SkScalar transX = 0.f;//SkIntToScalar(random->nextU());
-    SkScalar transY = 0.f;//SkIntToScalar(random->nextU());
-    return blob->test_createBatch(textLen, 0, 0, color, transX, transY, skPaint,
+    return blob->test_createBatch(textLen, 0, 0, viewMatrix, x, y, color, skPaint,
                                   gSurfaceProps, gTextContext->dfAdjustTable(),
                                   context->getBatchFontCache());
 }

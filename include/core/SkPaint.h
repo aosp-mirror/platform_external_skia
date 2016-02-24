@@ -35,11 +35,6 @@ class SkShader;
 class SkSurfaceProps;
 class SkTypeface;
 
-typedef const SkGlyph& (*SkDrawCacheProc)(SkGlyphCache*, const char**,
-                                           SkFixed x, SkFixed y);
-
-typedef const SkGlyph& (*SkMeasureCacheProc)(SkGlyphCache*, const char**);
-
 #define kBicubicFilterBitmap_Flag kHighQualityFilterBitmap_Flag
 
 /** \class SkPaint
@@ -1030,6 +1025,8 @@ public:
         return SetTextMatrix(matrix, fTextSize, fTextScaleX, fTextSkewX);
     }
 
+    typedef const SkGlyph& (*GlyphCacheProc)(SkGlyphCache*, const char**);
+
     SK_TO_STRING_NONVIRT()
 
 private:
@@ -1066,25 +1063,29 @@ private:
         uint32_t fBitfieldsUInt;
     };
 
-    SkDrawCacheProc    getDrawCacheProc() const;
-    SkMeasureCacheProc getMeasureCacheProc(bool needFullMetrics) const;
+    GlyphCacheProc getGlyphCacheProc(bool needFullMetrics) const;
 
     SkScalar measure_text(SkGlyphCache*, const char* text, size_t length,
                           int* count, SkRect* bounds) const;
+
+    enum class FakeGamma {
+        Off = 0, On
+    };
 
     /*
      * Allocs an SkDescriptor on the heap and return it to the caller as a refcnted
      * SkData.  Caller is responsible for managing the lifetime of this object.
      */
     void getScalerContextDescriptor(SkAutoDescriptor*, const SkSurfaceProps& surfaceProps,
-                                    const SkMatrix*, bool ignoreGamma) const;
+                                    FakeGamma fakeGamma, const SkMatrix*) const;
 
-    SkGlyphCache* detachCache(const SkSurfaceProps* surfaceProps, const SkMatrix*,
-                              bool ignoreGamma) const;
+    SkGlyphCache* detachCache(const SkSurfaceProps* surfaceProps, FakeGamma fakeGamma,
+                              const SkMatrix*) const;
 
-    void descriptorProc(const SkSurfaceProps* surfaceProps, const SkMatrix* deviceMatrix,
+    void descriptorProc(const SkSurfaceProps* surfaceProps, FakeGamma fakeGamma,
+                        const SkMatrix* deviceMatrix,
                         void (*proc)(SkTypeface*, const SkDescriptor*, void*),
-                        void* context, bool ignoreGamma) const;
+                        void* context) const;
 
     /*
      * The luminance color is used to determine which Gamma Canonical color to map to.  This is

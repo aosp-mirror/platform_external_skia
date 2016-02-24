@@ -22,12 +22,17 @@ public:
                        const GrGLSLCaps&,
                        GrProcessorKeyBuilder* b) {
         b->add32(SkToInt(pathProc.overrides().readsColor()) |
-                 SkToInt(pathProc.overrides().readsCoverage()) << 16);
+                 (SkToInt(pathProc.overrides().readsCoverage()) << 1) |
+                 (SkToInt(pathProc.viewMatrix().hasPerspective()) << 2));
     }
 
     void emitCode(EmitArgs& args) override {
-        GrGLSLFragmentBuilder* fragBuilder = args.fFragBuilder;
+        GrGLSLPPFragmentBuilder* fragBuilder = args.fFragBuilder;
         const GrPathProcessor& pathProc = args.fGP.cast<GrPathProcessor>();
+
+        if (!pathProc.viewMatrix().hasPerspective()) {
+            args.fVaryingHandler->setNoPerspective();
+        }
 
         // emit transforms
         this->emitTransforms(args.fVaryingHandler, args.fTransformsIn, args.fTransformsOut);
@@ -35,12 +40,11 @@ public:
         // Setup uniform color
         if (pathProc.overrides().readsColor()) {
             const char* stagedLocalVarName;
-            fColorUniform = args.fUniformHandler->addUniform(
-                                                         GrGLSLUniformHandler::kFragment_Visibility,
-                                                         kVec4f_GrSLType,
-                                                         kDefault_GrSLPrecision,
-                                                         "Color",
-                                                         &stagedLocalVarName);
+            fColorUniform = args.fUniformHandler->addUniform(kFragment_GrShaderFlag,
+                                                             kVec4f_GrSLType,
+                                                             kDefault_GrSLPrecision,
+                                                             "Color",
+                                                             &stagedLocalVarName);
             fragBuilder->codeAppendf("%s = %s;", args.fOutputColor, stagedLocalVarName);
         }
 

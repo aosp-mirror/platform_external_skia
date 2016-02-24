@@ -14,14 +14,14 @@
 #include "SkMatrix.h"
 #include "SkPaint.h"
 
-bool SkOffsetImageFilter::onFilterImage(Proxy* proxy, const SkBitmap& source,
-                                        const Context& ctx,
-                                        SkBitmap* result,
-                                        SkIPoint* offset) const {
+bool SkOffsetImageFilter::onFilterImageDeprecated(Proxy* proxy, const SkBitmap& source,
+                                                  const Context& ctx,
+                                                  SkBitmap* result,
+                                                  SkIPoint* offset) const {
     SkBitmap src = source;
     SkIPoint srcOffset = SkIPoint::Make(0, 0);
     if (!cropRectIsSet()) {
-        if (!this->filterInput(0, proxy, source, ctx, &src, &srcOffset)) {
+        if (!this->filterInputDeprecated(0, proxy, source, ctx, &src, &srcOffset)) {
             return false;
         }
 
@@ -32,12 +32,14 @@ bool SkOffsetImageFilter::onFilterImage(Proxy* proxy, const SkBitmap& source,
         offset->fY = srcOffset.fY + SkScalarRoundToInt(vec.fY);
         *result = src;
     } else {
-        if (!this->filterInput(0, proxy, source, ctx, &src, &srcOffset)) {
+        if (!this->filterInputDeprecated(0, proxy, source, ctx, &src, &srcOffset)) {
             return false;
         }
 
         SkIRect bounds;
-        if (!this->applyCropRect(ctx, src, srcOffset, &bounds)) {
+        SkIRect srcBounds = src.bounds();
+        srcBounds.offset(srcOffset);
+        if (!this->applyCropRect(ctx, srcBounds, &bounds)) {
             return false;
         }
 

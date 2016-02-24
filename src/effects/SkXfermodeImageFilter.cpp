@@ -41,27 +41,31 @@ void SkXfermodeImageFilter::flatten(SkWriteBuffer& buffer) const {
     buffer.writeFlattenable(fMode);
 }
 
-bool SkXfermodeImageFilter::onFilterImage(Proxy* proxy,
-                                          const SkBitmap& src,
-                                          const Context& ctx,
-                                          SkBitmap* dst,
-                                          SkIPoint* offset) const {
+bool SkXfermodeImageFilter::onFilterImageDeprecated(Proxy* proxy,
+                                                    const SkBitmap& src,
+                                                    const Context& ctx,
+                                                    SkBitmap* dst,
+                                                    SkIPoint* offset) const {
     SkBitmap background = src, foreground = src;
     SkIPoint backgroundOffset = SkIPoint::Make(0, 0);
-    if (!this->filterInput(0, proxy, src, ctx, &background, &backgroundOffset)) {
+    if (!this->filterInputDeprecated(0, proxy, src, ctx, &background, &backgroundOffset)) {
         background.reset();
     }
     SkIPoint foregroundOffset = SkIPoint::Make(0, 0);
-    if (!this->filterInput(1, proxy, src, ctx, &foreground, &foregroundOffset)) {
+    if (!this->filterInputDeprecated(1, proxy, src, ctx, &foreground, &foregroundOffset)) {
         foreground.reset();
     }
 
     SkIRect bounds, foregroundBounds;
-    if (!applyCropRect(ctx, foreground, foregroundOffset, &foregroundBounds)) {
+    SkIRect foregroundSrcBounds = foreground.bounds();
+    foregroundSrcBounds.offset(foregroundOffset);
+    if (!applyCropRect(ctx, foregroundSrcBounds, &foregroundBounds)) {
         foregroundBounds.setEmpty();
         foreground.reset();
     }
-    if (!applyCropRect(ctx, background, backgroundOffset, &bounds)) {
+    SkIRect backgroundSrcBounds = background.bounds();
+    backgroundSrcBounds.offset(backgroundOffset);
+    if (!applyCropRect(ctx, backgroundSrcBounds, &bounds)) {
         bounds.setEmpty();
         background.reset();
     }
@@ -122,15 +126,15 @@ bool SkXfermodeImageFilter::canFilterImageGPU() const {
 
 #include "SkXfermode_proccoeff.h"
 
-bool SkXfermodeImageFilter::filterImageGPU(Proxy* proxy,
-                                           const SkBitmap& src,
-                                           const Context& ctx,
-                                           SkBitmap* result,
-                                           SkIPoint* offset) const {
+bool SkXfermodeImageFilter::filterImageGPUDeprecated(Proxy* proxy,
+                                                     const SkBitmap& src,
+                                                     const Context& ctx,
+                                                     SkBitmap* result,
+                                                     SkIPoint* offset) const {
     GrContext* context = nullptr;
     SkBitmap background = src;
     SkIPoint backgroundOffset = SkIPoint::Make(0, 0);
-    if (!this->filterInputGPU(0, proxy, src, ctx, &background, &backgroundOffset)) {
+    if (!this->filterInputGPUDeprecated(0, proxy, src, ctx, &background, &backgroundOffset)) {
         background.reset();
     }
     GrTexture* backgroundTex = background.getTexture();
@@ -140,7 +144,7 @@ bool SkXfermodeImageFilter::filterImageGPU(Proxy* proxy,
 
     SkBitmap foreground = src;
     SkIPoint foregroundOffset = SkIPoint::Make(0, 0);
-    if (!this->filterInputGPU(1, proxy, src, ctx, &foreground, &foregroundOffset)) {
+    if (!this->filterInputGPUDeprecated(1, proxy, src, ctx, &foreground, &foregroundOffset)) {
         foreground.reset();
     }
     GrTexture* foregroundTex = foreground.getTexture();

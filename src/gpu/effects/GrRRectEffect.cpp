@@ -156,12 +156,12 @@ void GLCircularRRectEffect::emitCode(EmitArgs& args) {
     // edges correspond to components x, y, z, and w, respectively. When a side of the rrect has
     // only rectangular corners, that side's value corresponds to the rect edge's value outset by
     // half a pixel.
-    fInnerRectUniform = uniformHandler->addUniform(GrGLSLUniformHandler::kFragment_Visibility,
+    fInnerRectUniform = uniformHandler->addUniform(kFragment_GrShaderFlag,
                                                    kVec4f_GrSLType, kDefault_GrSLPrecision,
                                                    "innerRect",
                                                    &rectName);
     // x is (r + .5) and y is 1/(r + .5)
-    fRadiusPlusHalfUniform = uniformHandler->addUniform(GrGLSLUniformHandler::kFragment_Visibility,
+    fRadiusPlusHalfUniform = uniformHandler->addUniform(kFragment_GrShaderFlag,
                                                         kVec2f_GrSLType, kDefault_GrSLPrecision,
                                                         "radiusPlusHalf",
                                                         &radiusPlusHalfName);
@@ -175,7 +175,7 @@ void GLCircularRRectEffect::emitCode(EmitArgs& args) {
         clampedCircleDistance.printf("clamp(%s.x - length(dxy), 0.0, 1.0);", radiusPlusHalfName);
     }
 
-    GrGLSLFragmentBuilder* fragBuilder = args.fFragBuilder;
+    GrGLSLFPFragmentBuilder* fragBuilder = args.fFragBuilder;
     const char* fragmentPos = fragBuilder->fragmentPosition();
     // At each quarter-circle corner we compute a vector that is the offset of the fragment position
     // from the circle center. The vector is pinned in x and y to be in the quarter-plane relevant
@@ -508,12 +508,12 @@ void GLEllipticalRRectEffect::emitCode(EmitArgs& args) {
     GrGLSLUniformHandler* uniformHandler = args.fUniformHandler;
     const char *rectName;
     // The inner rect is the rrect bounds inset by the x/y radii
-    fInnerRectUniform = uniformHandler->addUniform(GrGLSLUniformHandler::kFragment_Visibility,
+    fInnerRectUniform = uniformHandler->addUniform(kFragment_GrShaderFlag,
                                                    kVec4f_GrSLType, kDefault_GrSLPrecision,
                                                    "innerRect",
                                                    &rectName);
 
-    GrGLSLFragmentBuilder* fragBuilder = args.fFragBuilder;
+    GrGLSLFPFragmentBuilder* fragBuilder = args.fFragBuilder;
     const char* fragmentPos = fragBuilder->fragmentPosition();
     // At each quarter-ellipse corner we compute a vector that is the offset of the fragment pos
     // to the ellipse center. The vector is pinned in x and y to be in the quarter-plane relevant
@@ -535,7 +535,7 @@ void GLEllipticalRRectEffect::emitCode(EmitArgs& args) {
     // radii uniform values are already in this normalized space.
     const char* scaleName = nullptr;
     if (args.fGLSLCaps->floatPrecisionVaries()) {
-        fScaleUniform = uniformHandler->addUniform(GrGLSLUniformHandler::kFragment_Visibility,
+        fScaleUniform = uniformHandler->addUniform(kFragment_GrShaderFlag,
                                                    kVec2f_GrSLType, kDefault_GrSLPrecision,
                                                    "scale", &scaleName);
     }
@@ -544,11 +544,11 @@ void GLEllipticalRRectEffect::emitCode(EmitArgs& args) {
     switch (erre.getRRect().getType()) {
         case SkRRect::kSimple_Type: {
             const char *invRadiiXYSqdName;
-            fInvRadiiSqdUniform = uniformHandler->addUniform(
-                                                         GrGLSLUniformHandler::kFragment_Visibility,
-                                                         kVec2f_GrSLType, kDefault_GrSLPrecision,
-                                                         "invRadiiXY",
-                                                         &invRadiiXYSqdName);
+            fInvRadiiSqdUniform = uniformHandler->addUniform(kFragment_GrShaderFlag,
+                                                             kVec2f_GrSLType,
+                                                             kDefault_GrSLPrecision,
+                                                             "invRadiiXY",
+                                                             &invRadiiXYSqdName);
             fragBuilder->codeAppend("vec2 dxy = max(max(dxy0, dxy1), 0.0);");
             if (scaleName) {
                 fragBuilder->codeAppendf("dxy *= %s.y;", scaleName);
@@ -559,11 +559,11 @@ void GLEllipticalRRectEffect::emitCode(EmitArgs& args) {
         }
         case SkRRect::kNinePatch_Type: {
             const char *invRadiiLTRBSqdName;
-            fInvRadiiSqdUniform = uniformHandler->addUniform(
-                                                         GrGLSLUniformHandler::kFragment_Visibility,
-                                                         kVec4f_GrSLType, kDefault_GrSLPrecision,
-                                                         "invRadiiLTRB",
-                                                         &invRadiiLTRBSqdName);
+            fInvRadiiSqdUniform = uniformHandler->addUniform(kFragment_GrShaderFlag,
+                                                             kVec4f_GrSLType,
+                                                             kDefault_GrSLPrecision,
+                                                             "invRadiiLTRB",
+                                                             &invRadiiLTRBSqdName);
             if (scaleName) {
                 fragBuilder->codeAppendf("dxy0 *= %s.y;", scaleName);
                 fragBuilder->codeAppendf("dxy1 *= %s.y;", scaleName);

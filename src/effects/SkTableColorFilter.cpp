@@ -410,12 +410,12 @@ void GLColorTableEffect::onSetData(const GrGLSLProgramDataManager& pdm, const Gr
 
 void GLColorTableEffect::emitCode(EmitArgs& args) {
     const char* yoffsets;
-    fRGBAYValuesUni = args.fUniformHandler->addUniform(GrGLSLUniformHandler::kFragment_Visibility,
+    fRGBAYValuesUni = args.fUniformHandler->addUniform(kFragment_GrShaderFlag,
                                                        kVec4f_GrSLType, kDefault_GrSLPrecision,
                                                        "yoffsets", &yoffsets);
     static const float kColorScaleFactor = 255.0f / 256.0f;
     static const float kColorOffsetFactor = 1.0f / 512.0f;
-    GrGLSLFragmentBuilder* fragBuilder = args.fFragBuilder;
+    GrGLSLFPFragmentBuilder* fragBuilder = args.fFragBuilder;
     if (nullptr == args.fInputColor) {
         // the input color is solid white (all ones).
         static const float kMaxValue = kColorScaleFactor + kColorOffsetFactor;

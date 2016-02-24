@@ -31,10 +31,8 @@
       'conditions': [
         ['skia_android_framework', {
           'libraries': [
-            '-lskia',
-            '-landroid',
+            'skia_static.a',
             '-lhwui',
-            '-lutils',
           ],
           'include_dirs': [
             '../../../frameworks/base/libs/hwui/',
@@ -43,6 +41,11 @@
             'tools.gyp:android_utils',
           ],
         }],
+        [ 'skia_pdf',
+          { 'dependencies': [ 'pdf.gyp:pdf' ],
+            'include_dirs': [ '../src/pdf' ], },
+          { 'dependencies': [ 'pdf.gyp:nopdf' ], }
+        ],
       ],
     },
   ],

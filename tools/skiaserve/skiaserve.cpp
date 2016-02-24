@@ -22,6 +22,7 @@
 
 #include <sys/socket.h>
 #include <microhttpd.h>
+#include "png.h"
 
 // To get image decoders linked in we have to do the below magic
 #include "SkForceLinking.h"
@@ -66,17 +67,108 @@ struct UploadContext {
 };
 
 struct Request {
-    Request(SkString rootUrl) : fUploadContext(nullptr), fUrlDataManager(rootUrl) {}
+    Request(SkString rootUrl) 
+    : fUploadContext(nullptr)
+    , fUrlDataManager(rootUrl)
+    , fGPUEnabled(false) {}
+
     UploadContext* fUploadContext;
     SkAutoTUnref<SkPicture> fPicture;
     SkAutoTUnref<SkDebugCanvas> fDebugCanvas;
+    SkAutoTDelete<GrContextFactory> fContextFactory;
+    SkAutoTUnref<SkSurface> fSurface;
     UrlDataManager fUrlDataManager;
+    bool fGPUEnabled;
 };
 
-// TODO factor this out into functions, also handle CPU path
-SkSurface* setupSurface(GrContextFactory* factory) {
-    GrContext* context = factory->get(GrContextFactory::kNative_GLContextType,
-                                      GrContextFactory::kNone_GLContextOptions);
+static void write_png_callback(png_structp png_ptr, png_bytep data, png_size_t length) {
+    SkWStream* out = (SkWStream*) png_get_io_ptr(png_ptr);
+    out->write(data, length);
+}
+
+static void write_png(const png_bytep rgba, png_uint_32 width, png_uint_32 height, SkWStream& out) {
+    png_structp png = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+    SkASSERT(png != nullptr);
+    png_infop info_ptr = png_create_info_struct(png);
+    SkASSERT(info_ptr != nullptr);
+    if (setjmp(png_jmpbuf(png))) {
+        SkFAIL("png encode error");
+    }
+    png_set_IHDR(png, info_ptr, width, height, 8, PNG_COLOR_TYPE_RGB, PNG_INTERLACE_NONE,
+                 PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
+    png_set_compression_level(png, 1);
+    png_bytepp rows = (png_bytepp) sk_malloc_throw(height * sizeof(png_byte*));
+    png_bytep pixels = (png_bytep) sk_malloc_throw(width * height * 3);
+    for (png_size_t y = 0; y < height; ++y) {
+        const png_bytep src = rgba + y * width * 4;
+        rows[y] = pixels + y * width * 3;
+        // convert from RGBA to RGB
+        for (png_size_t x = 0; x < width; ++x) {
+            rows[y][x * 3] = src[x * 4];
+            rows[y][x * 3 + 1] = src[x * 4 + 1];
+            rows[y][x * 3 + 2] = src[x * 4 + 2];
+        }
+    }
+    png_set_filter(png, 0, PNG_NO_FILTERS);
+    png_set_rows(png, info_ptr, &rows[0]);
+    png_set_write_fn(png, &out, write_png_callback, NULL);
+    png_write_png(png, info_ptr, PNG_TRANSFORM_IDENTITY, NULL);
+    png_destroy_write_struct(&png, NULL);
+    sk_free(rows);
+}
+
+SkBitmap* getBitmapFromCanvas(SkCanvas* canvas) {
+    SkBitmap* bmp = new SkBitmap();
+    SkImageInfo info = SkImageInfo::Make(kImageWidth, kImageHeight, kRGBA_8888_SkColorType,
+                kOpaque_SkAlphaType);
+    bmp->setInfo(info);
+    if (!canvas->readPixels(bmp, 0, 0)) {
+        fprintf(stderr, "Can't read pixels\n");
+        return nullptr;
+    }
+    return bmp;
+}
+
+SkData* writeCanvasToPng(SkCanvas* canvas) {
+    // capture pixels
+    SkAutoTDelete<SkBitmap> bmp(getBitmapFromCanvas(canvas));
+    SkASSERT(bmp);
+
+    // write to png
+    SkDynamicMemoryWStream buffer;
+    write_png((const png_bytep) bmp->getPixels(), bmp->width(), bmp->height(), buffer);
+    return buffer.copyToData();
+}
+
+SkCanvas* getCanvasFromRequest(Request* request) {
+    GrContextFactory* factory = request->fContextFactory;
+    SkGLContext* gl = factory->getContextInfo(GrContextFactory::kNative_GLContextType,
+                                              GrContextFactory::kNone_GLContextOptions).fGLContext;
+    gl->makeCurrent();
+    SkASSERT(request->fDebugCanvas);
+    SkCanvas* target = request->fSurface->getCanvas();
+    return target;
+}
+
+void drawToCanvas(Request* request, int n) {
+    SkCanvas* target = getCanvasFromRequest(request);
+    request->fDebugCanvas->drawTo(target, n);
+}
+
+SkData* drawToPng(Request* request, int n) {
+    drawToCanvas(request, n);
+    return writeCanvasToPng(getCanvasFromRequest(request));
+}
+
+SkSurface* createCPUSurface() {
+    SkImageInfo info = SkImageInfo::Make(kImageWidth, kImageHeight, kN32_SkColorType,
+                                         kPremul_SkAlphaType);
+    return SkSurface::NewRaster(info);
+}
+
+SkSurface* createGPUSurface(Request* request) {
+    GrContext* context = request->fContextFactory->get(GrContextFactory::kNative_GLContextType,
+                                                       GrContextFactory::kNone_GLContextOptions);
     int maxRTSize = context->caps()->maxRenderTargetSize();
     SkImageInfo info = SkImageInfo::Make(SkTMin(kImageWidth, maxRTSize),
                                          SkTMin(kImageHeight, maxRTSize),
@@ -85,48 +177,7 @@ SkSurface* setupSurface(GrContextFactory* factory) {
     SkSurfaceProps props(flags, SkSurfaceProps::kLegacyFontHost_InitType);
     SkSurface* surface = SkSurface::NewRenderTarget(context, SkSurface::kNo_Budgeted, info, 0,
                                                     &props);
-    SkASSERT(surface);
-
-    SkGLContext* gl = factory->getContextInfo(GrContextFactory::kNative_GLContextType,
-                                              GrContextFactory::kNone_GLContextOptions).fGLContext;
-    gl->makeCurrent();
     return surface;
-}
-
-SkData* writeCanvasToPng(SkCanvas* canvas) {
-    // capture pixels
-    SkBitmap bmp;
-    bmp.setInfo(canvas->imageInfo());
-    if (!canvas->readPixels(&bmp, 0, 0)) {
-        fprintf(stderr, "Can't read pixels\n");
-        return nullptr;
-    }
-
-    // write to png
-    // TODO encoding to png can be quite slow, we should investigate bmp
-    SkData* png = SkImageEncoder::EncodeData(bmp, SkImageEncoder::kPNG_Type, 100);
-    if (!png) {
-        fprintf(stderr, "Can't encode to png\n");
-        return nullptr;
-    }
-    return png;
-}
-
-SkData* setupAndDrawToCanvasReturnPng(SkDebugCanvas* debugCanvas, int n) {
-    GrContextOptions grContextOpts;
-    SkAutoTDelete<GrContextFactory> factory(new GrContextFactory(grContextOpts));
-    SkAutoTUnref<SkSurface> surface(setupSurface(factory.get()));
-
-    SkASSERT(debugCanvas);
-    SkCanvas* canvas = surface->getCanvas();
-    debugCanvas->drawTo(canvas, n);
-    return writeCanvasToPng(canvas);
-}
-
-SkSurface* setupCpuSurface() {
-    SkImageInfo info = SkImageInfo::Make(kImageWidth, kImageHeight, kN32_SkColorType,
-                                         kPremul_SkAlphaType);
-    return SkSurface::NewRaster(info);
 }
 
 static const size_t kBufferSize = 1024;
@@ -141,6 +192,27 @@ static int process_upload_data(void* cls, enum MHD_ValueKind kind,
         uc->fStream.write(data, size);
     }
     return MHD_YES;
+}
+
+// SendOK just sends an empty response with a 200 OK status code.
+static int SendOK(MHD_Connection* connection) {
+    const char* data = "";
+
+    MHD_Response* response = MHD_create_response_from_buffer(strlen(data),
+                                                             (void*)data,
+                                                             MHD_RESPMEM_PERSISTENT);
+    int ret = MHD_queue_response(connection, 200, response);
+    MHD_destroy_response(response);
+    return ret;
+}
+
+static int SendError(MHD_Connection* connection, const char* msg) {
+    MHD_Response* response = MHD_create_response_from_buffer(strlen(msg),
+                                                             (void*) msg,
+                                                             MHD_RESPMEM_PERSISTENT);
+    int ret = MHD_queue_response(connection, 500, response);
+    MHD_destroy_response(response);
+    return ret;
 }
 
 static int SendData(MHD_Connection* connection, const SkData* data, const char* type,
@@ -159,11 +231,14 @@ static int SendData(MHD_Connection* connection, const SkData* data, const char* 
     return ret;
 }
 
-static int SendJSON(MHD_Connection* connection, SkDebugCanvas* debugCanvas, int n) {
+static int SendJSON(MHD_Connection* connection, Request* request, int n) {
+    SkCanvas* canvas = getCanvasFromRequest(request);
+    SkDebugCanvas* debugCanvas = request->fDebugCanvas;
+    UrlDataManager* urlDataManager = &request->fUrlDataManager;
+    Json::Value root = debugCanvas->toJSON(*urlDataManager, n, canvas);
+    root["mode"] = Json::Value(request->fGPUEnabled ? "gpu" : "cpu");
     SkDynamicMemoryWStream stream;
-    SkAutoTUnref<SkJSONCanvas> jsonCanvas(new SkJSONCanvas(kImageWidth, kImageHeight, stream));
-    debugCanvas->drawTo(jsonCanvas, n);
-    jsonCanvas->finish();
+    stream.writeText(Json::FastWriter().write(root).c_str());
 
     SkAutoTUnref<SkData> data(stream.copyToData());
     return SendData(connection, data, "application/json");
@@ -217,10 +292,15 @@ public:
             return MHD_NO;
         }
 
-        // /cmd or /cmd/N or /cmd/N/[0|1]
-        if (commands.count() == 1 && 0 == strcmp(method, MHD_HTTP_METHOD_GET)) {
-            int n = request->fDebugCanvas->getSize() - 1;
-            return SendJSON(connection, request->fDebugCanvas, n);
+        // /cmd or /cmd/N
+        if (0 == strcmp(method, MHD_HTTP_METHOD_GET)) {
+            int n;
+            if (commands.count() == 1) {
+                n = request->fDebugCanvas->getSize() - 1;
+            } else {
+                sscanf(commands[1].c_str(), "%d", &n);
+            }
+            return SendJSON(connection, request, n);
         }
 
         // /cmd/N, for now only delete supported
@@ -228,7 +308,7 @@ public:
             int n;
             sscanf(commands[1].c_str(), "%d", &n);
             request->fDebugCanvas->deleteDrawCommandAt(n);
-            return MHD_YES;
+            return SendOK(connection);
         }
 
         // /cmd/N/[0|1]
@@ -237,7 +317,7 @@ public:
             sscanf(commands[1].c_str(), "%d", &n);
             sscanf(commands[2].c_str(), "%d", &toggle);
             request->fDebugCanvas->toggleCommand(n, toggle);
-            return MHD_YES;
+            return SendOK(connection);
         }
 
         return MHD_NO;
@@ -270,8 +350,164 @@ public:
             sscanf(commands[1].c_str(), "%d", &n);
         }
 
-        SkAutoTUnref<SkData> data(setupAndDrawToCanvasReturnPng(request->fDebugCanvas, n));
+        SkAutoTUnref<SkData> data(drawToPng(request, n));
         return SendData(connection, data, "image/png");
+    }
+};
+
+class BreakHandler : public UrlHandler {
+public:
+    bool canHandle(const char* method, const char* url) override {
+        static const char* kBasePath = "/break";
+        return 0 == strcmp(method, MHD_HTTP_METHOD_GET) &&
+               0 == strncmp(url, kBasePath, strlen(kBasePath));
+    }
+
+    static SkColor GetPixel(Request* request, int x, int y) {
+        SkCanvas* canvas = getCanvasFromRequest(request);
+        canvas->flush();
+        SkAutoTDelete<SkBitmap> bitmap(getBitmapFromCanvas(canvas));
+        SkASSERT(bitmap);
+        bitmap->lockPixels();
+        uint8_t* start = ((uint8_t*) bitmap->getPixels()) + (y * kImageWidth + x) * 4;
+        SkColor result = SkColorSetARGB(start[3], start[0], start[1], start[2]);
+        bitmap->unlockPixels();
+        return result;
+    }
+
+    int handle(Request* request, MHD_Connection* connection,
+               const char* url, const char* method,
+               const char* upload_data, size_t* upload_data_size) override {
+        SkTArray<SkString> commands;
+        SkStrSplit(url, "/", &commands);
+
+        if (!request->fPicture.get() || commands.count() != 4) {
+            return MHD_NO;
+        }
+
+        // /break/<n>/<x>/<y>
+        int n;
+        sscanf(commands[1].c_str(), "%d", &n);
+        int x;
+        sscanf(commands[2].c_str(), "%d", &x);
+        int y;
+        sscanf(commands[3].c_str(), "%d", &y);
+
+        int count = request->fDebugCanvas->getSize();
+        SkASSERT(n < count);
+
+        SkCanvas* canvas = getCanvasFromRequest(request);
+        canvas->clear(SK_ColorWHITE);
+        int saveCount = canvas->save();
+        for (int i = 0; i <= n; ++i) {
+            request->fDebugCanvas->getDrawCommandAt(i)->execute(canvas);
+        }
+        SkColor target = GetPixel(request, x, y);
+        Json::Value response(Json::objectValue);
+        Json::Value startColor(Json::arrayValue);
+        startColor.append(Json::Value(SkColorGetR(target)));
+        startColor.append(Json::Value(SkColorGetG(target)));
+        startColor.append(Json::Value(SkColorGetB(target)));
+        startColor.append(Json::Value(SkColorGetA(target)));
+        response["startColor"] = startColor;
+        response["endColor"] = startColor;
+        response["endOp"] = Json::Value(n);
+        for (int i = n + 1; i < n + count; ++i) {
+            int index = i % count;
+            if (index == 0) {
+                // reset canvas for wraparound
+                canvas->restoreToCount(saveCount);
+                canvas->clear(SK_ColorWHITE);
+                saveCount = canvas->save();
+            }
+            request->fDebugCanvas->getDrawCommandAt(index)->execute(canvas);
+            SkColor current = GetPixel(request, x, y);
+            if (current != target) {
+                Json::Value endColor(Json::arrayValue);
+                endColor.append(Json::Value(SkColorGetR(current)));
+                endColor.append(Json::Value(SkColorGetG(current)));
+                endColor.append(Json::Value(SkColorGetB(current)));
+                endColor.append(Json::Value(SkColorGetA(current)));
+                response["endColor"] = endColor;
+                response["endOp"] = Json::Value(index);
+                break;
+            }
+        }
+        canvas->restoreToCount(saveCount);
+        SkDynamicMemoryWStream stream;
+        stream.writeText(Json::FastWriter().write(response).c_str());
+        SkAutoTUnref<SkData> data(stream.copyToData());
+        return SendData(connection, data, "application/json");
+    }
+};
+
+/**
+   Updates the clip visualization alpha. On all subsequent /img requests, the clip will be drawn in
+   black with the specified alpha. 0 = no visible clip, 255 = fully opaque clip.
+ */
+class ClipAlphaHandler : public UrlHandler {
+public:
+    bool canHandle(const char* method, const char* url) override {
+        static const char* kBasePath = "/clipAlpha/";
+        return 0 == strcmp(method, MHD_HTTP_METHOD_POST) &&
+               0 == strncmp(url, kBasePath, strlen(kBasePath));
+    }
+
+    int handle(Request* request, MHD_Connection* connection,
+               const char* url, const char* method,
+               const char* upload_data, size_t* upload_data_size) override {
+        SkTArray<SkString> commands;
+        SkStrSplit(url, "/", &commands);
+
+        if (!request->fPicture.get() || commands.count() != 2) {
+            return MHD_NO;
+        }
+
+        int alpha;
+        sscanf(commands[1].c_str(), "%d", &alpha);
+
+        request->fDebugCanvas->setClipVizColor(SkColorSetARGB(alpha, 0, 0, 0));
+        return SendOK(connection);
+    }
+};
+
+/**
+   Controls whether GPU rendering is enabled. Posting to /enableGPU/1 turns GPU on, /enableGPU/0 
+   disables it.
+ */
+class EnableGPUHandler : public UrlHandler {
+public:
+    bool canHandle(const char* method, const char* url) override {
+        static const char* kBasePath = "/enableGPU/";
+        return 0 == strcmp(method, MHD_HTTP_METHOD_POST) &&
+               0 == strncmp(url, kBasePath, strlen(kBasePath));
+    }
+
+    int handle(Request* request, MHD_Connection* connection,
+               const char* url, const char* method,
+               const char* upload_data, size_t* upload_data_size) override {
+        SkTArray<SkString> commands;
+        SkStrSplit(url, "/", &commands);
+
+        if (commands.count() != 2) {
+            return MHD_NO;
+        }
+
+        int enable;
+        sscanf(commands[1].c_str(), "%d", &enable);
+
+        if (enable) {
+            SkSurface* surface = createGPUSurface(request);
+            if (surface) {
+                request->fSurface.reset(surface);
+                request->fGPUEnabled = true;
+                return SendOK(connection);
+            }
+            return SendError(connection, "Unable to create GPU surface");
+        }
+        request->fSurface.reset(createCPUSurface());
+        request->fGPUEnabled = false;
+        return SendOK(connection);
     }
 };
 
@@ -387,7 +623,7 @@ public:
         }
 
         // drawTo
-        SkAutoTUnref<SkSurface> surface(setupCpuSurface());
+        SkAutoTUnref<SkSurface> surface(createCPUSurface());
         SkCanvas* canvas = surface->getCanvas();
 
         int n;
@@ -487,11 +723,14 @@ public:
         fHandlers.push_back(new RootHandler);
         fHandlers.push_back(new PostHandler);
         fHandlers.push_back(new ImgHandler);
+        fHandlers.push_back(new ClipAlphaHandler);
+        fHandlers.push_back(new EnableGPUHandler);
         fHandlers.push_back(new CmdHandler);
         fHandlers.push_back(new InfoHandler);
         fHandlers.push_back(new DownloadHandler);
         fHandlers.push_back(new DataHandler);
         fHandlers.push_back(new FaviconHandler);
+        fHandlers.push_back(new BreakHandler);
     }
 
     ~UrlManager() {
@@ -533,6 +772,12 @@ int answer_to_connection(void* cls, struct MHD_Connection* connection,
 
 int skiaserve_main() {
     Request request(SkString("/data")); // This simple server has one request
+
+    // create surface
+    GrContextOptions grContextOpts;
+    request.fContextFactory.reset(new GrContextFactory(grContextOpts));
+    request.fSurface.reset(createCPUSurface());
+
     struct MHD_Daemon* daemon;
     // TODO Add option to bind this strictly to an address, e.g. localhost, for security.
     daemon = MHD_start_daemon(MHD_USE_SELECT_INTERNALLY, FLAGS_port, nullptr, nullptr,

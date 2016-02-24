@@ -24,6 +24,7 @@ LOCAL_SRC_FILES := \
 	../gm/gm.cpp \
 	AAClipBench.cpp \
 	AlternatingColorPatternBench.cpp \
+	AndroidCodecBench.cpp \
 	BenchLogger.cpp \
 	Benchmark.cpp \
 	BezierBench.cpp \
@@ -50,7 +51,6 @@ LOCAL_SRC_FILES := \
 	DashBench.cpp \
 	DisplacementBench.cpp \
 	DrawBitmapAABench.cpp \
-	ETCBitmapBench.cpp \
 	FSRectBench.cpp \
 	FontCacheBench.cpp \
 	FontScalerBench.cpp \
@@ -84,6 +84,7 @@ LOCAL_SRC_FILES := \
 	MipMapBench.cpp \
 	MorphologyBench.cpp \
 	MutexBench.cpp \
+	PDFBench.cpp \
 	PatchBench.cpp \
 	PatchGridBench.cpp \
 	PathBench.cpp \
@@ -108,8 +109,10 @@ LOCAL_SRC_FILES := \
 	SKPBench.cpp \
 	ScalarBench.cpp \
 	ShaderMaskBench.cpp \
+	ShapesBench.cpp \
 	Sk4fBench.cpp \
 	SkGlyphCacheBench.cpp \
+	SkLinearBitmapPipelineBench.cpp \
 	SkipZeroesBench.cpp \
 	SortBench.cpp \
 	StrokeBench.cpp \
@@ -128,6 +131,7 @@ LOCAL_SRC_FILES := \
 	XfermodeBench.cpp \
 	nanobench.cpp \
 	nanobenchAndroid.cpp \
+	../gm/SkLinearBitmapPipelineGM.cpp \
 	../gm/aaclip.cpp \
 	../gm/aarectmodes.cpp \
 	../gm/aaxfermodes.cpp \
@@ -339,6 +343,7 @@ LOCAL_SRC_FILES := \
 	../gm/shadertext3.cpp \
 	../gm/shadows.cpp \
 	../gm/shallowgradient.cpp \
+	../gm/shapes.cpp \
 	../gm/showmiplevels.cpp \
 	../gm/simpleaaclip.cpp \
 	../gm/skbug1719.cpp \
@@ -361,6 +366,7 @@ LOCAL_SRC_FILES := \
 	../gm/testimagefilters.cpp \
 	../gm/texdata.cpp \
 	../gm/textblob.cpp \
+	../gm/textblobblockreordering.cpp \
 	../gm/textblobcolortrans.cpp \
 	../gm/textblobgeometrychange.cpp \
 	../gm/textbloblooper.cpp \
@@ -385,12 +391,10 @@ LOCAL_SRC_FILES := \
 	../gm/verttext.cpp \
 	../gm/verttext2.cpp \
 	../gm/verylargebitmap.cpp \
-	../gm/xfer4f.cpp \
 	../gm/xfermodeimagefilter.cpp \
 	../gm/xfermodes.cpp \
 	../gm/xfermodes2.cpp \
 	../gm/xfermodes3.cpp \
-	../gm/xferu64.cpp \
 	../gm/yuvtorgbeffect.cpp \
 	../tools/debugger/SkDrawCommand.cpp \
 	../tools/debugger/SkDebugCanvas.cpp \
@@ -407,6 +411,7 @@ LOCAL_SRC_FILES := \
 	../tools/sk_tool_utils.cpp \
 	../tools/sk_tool_utils_font.cpp \
 	../tools/random_parse_path.cpp \
+	../tools/UrlDataManager.cpp \
 	../tools/android/SkAndroidSDKCanvas.cpp \
 	../src/gpu/GrContextFactory.cpp \
 	../src/gpu/GrTest.cpp \
@@ -414,15 +419,14 @@ LOCAL_SRC_FILES := \
 
 LOCAL_SHARED_LIBRARIES := \
 	liblog \
-	libskia \
-	libandroid \
 	libhwui \
-	libutils \
 	libexpat \
 	libGLESv2 \
-	libEGL
+	libEGL \
+	libz
 
 LOCAL_STATIC_LIBRARIES := \
+	libskia_static \
 	libjsoncpp
 
 LOCAL_C_INCLUDES := \
@@ -440,9 +444,9 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../include/utils \
 	$(LOCAL_PATH)/../src/utils \
 	$(LOCAL_PATH)/../include/gpu \
+	$(LOCAL_PATH)/../include/private \
 	$(LOCAL_PATH)/../src/gpu \
 	$(LOCAL_PATH)/../tools/flags \
-	$(LOCAL_PATH)/../include/private \
 	$(LOCAL_PATH)/../src/fonts \
 	$(LOCAL_PATH)/../src/core \
 	$(LOCAL_PATH)/../tools \
@@ -451,9 +455,11 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../src/effects \
 	$(LOCAL_PATH)/../gm \
 	$(LOCAL_PATH)/../tools/debugger \
+	$(LOCAL_PATH)/../src/effects/gradients \
 	$(LOCAL_PATH)/../src/images \
 	$(LOCAL_PATH)/../src/lazy \
 	$(LOCAL_PATH)/../../../frameworks/base/libs/hwui \
+	$(LOCAL_PATH)/../src/pdf \
 	$(LOCAL_PATH)/../tools/timer \
 	$(LOCAL_PATH)/../third_party/etc1 \
 	$(LOCAL_PATH)/../tools/android
@@ -472,4 +478,5 @@ LOCAL_MODULE := \
 # subdirectory in the DATA folder that points to the top level skia resources...
 #  i.e. external/skia/DATA/skia_resources --> ../resources
 LOCAL_PICKUP_FILES := $(LOCAL_PATH)/../DATA
+include $(LOCAL_PATH)/../skia_static_deps.mk
 include $(BUILD_NATIVE_TEST)

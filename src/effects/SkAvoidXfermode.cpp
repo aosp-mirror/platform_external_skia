@@ -272,12 +272,12 @@ public:
     void emitCode(EmitArgs& args) override {
         const AvoidFP& avoid = args.fFp.cast<AvoidFP>();
 
-        GrGLSLFragmentBuilder* fragBuilder = args.fFragBuilder;
+        GrGLSLFPFragmentBuilder* fragBuilder = args.fFragBuilder;
         SkString dstColor("dstColor");
         this->emitChild(0, nullptr, &dstColor, args);
 
         fColorAndTolUni = args.fUniformHandler->addUniform(
-                                                 GrGLSLUniformHandler::kFragment_Visibility,
+                                                 kFragment_GrShaderFlag,
                                                  kVec4f_GrSLType, kDefault_GrSLPrecision,
                                                  "colorAndTol");
         const char* kColorAndTolUni = args.fUniformHandler->getUniformCStr(fColorAndTolUni);
@@ -413,7 +413,7 @@ private:
                                  const GrXferProcessor& proc) override {
         const AvoidXP& avoid = proc.cast<AvoidXP>();
 
-        fColorAndTolUni = uniformHandler->addUniform(GrGLSLUniformHandler::kFragment_Visibility,
+        fColorAndTolUni = uniformHandler->addUniform(kFragment_GrShaderFlag,
                                                      kVec4f_GrSLType, kDefault_GrSLPrecision,
                                                      "colorAndTol");
         const char* kColorandTolUni = uniformHandler->getUniformCStr(fColorAndTolUni);

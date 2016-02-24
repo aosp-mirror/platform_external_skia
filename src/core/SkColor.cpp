@@ -102,6 +102,7 @@ SkColor SkHSVToColor(U8CPU a, const SkScalar hsv[3]) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+#include "SkPM4f.h"
 #include "SkNx.h"
 #include "SkHalf.h"
 
@@ -167,7 +168,7 @@ SkColor4f SkColor4f::Pin(float a, float r, float g, float b) {
 
 SkPM4f SkColor4f::premul() const {
     auto src = Sk4f::Load(this->pin().vec());
-    float srcAlpha = src.kth<0>();  // need the pinned version of our alpha
+    float srcAlpha = src[0];  // need the pinned version of our alpha
     src = src * Sk4f(1, srcAlpha, srcAlpha, srcAlpha);
 
 #ifdef SK_PMCOLOR_IS_BGRA

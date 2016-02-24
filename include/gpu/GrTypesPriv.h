@@ -9,7 +9,6 @@
 #define GrTypesPriv_DEFINED
 
 #include "GrTypes.h"
-#include "SkTArray.h"
 #include "SkRect.h"
 
  /**
@@ -43,6 +42,14 @@ enum GrShaderType {
     kLastkFragment_GrShaderType = kFragment_GrShaderType
 };
 static const int kGrShaderTypeCount = kLastkFragment_GrShaderType + 1;
+
+enum GrShaderFlags {
+    kNone_GrShaderFlags = 0,
+    kVertex_GrShaderFlag = 1 << kVertex_GrShaderType,
+    kGeometry_GrShaderFlag = 1 << kGeometry_GrShaderType,
+    kFragment_GrShaderFlag = 1 << kFragment_GrShaderType
+};
+GR_MAKE_BITFIELD_OPS(GrShaderFlags);
 
 /**
  * Precisions of shader language variables. Not all shading languages support precisions or actually
@@ -205,7 +212,7 @@ enum GrVertexAttribType {
     kUByte_GrVertexAttribType,   // unsigned byte, e.g. coverage
     kVec4ub_GrVertexAttribType,  // vector of 4 unsigned bytes, e.g. colors
 
-    kVec2s_GrVertexAttribType,   // vector of 2 shorts, e.g. texture coordinates
+    kVec2us_GrVertexAttribType,   // vector of 2 shorts, e.g. texture coordinates
 
     kInt_GrVertexAttribType,
     kUint_GrVertexAttribType,
@@ -228,7 +235,7 @@ static inline int GrVertexAttribTypeVectorCount(GrVertexAttribType type) {
     GR_STATIC_ASSERT(3 == kVec4f_GrVertexAttribType);
     GR_STATIC_ASSERT(4 == kUByte_GrVertexAttribType);
     GR_STATIC_ASSERT(5 == kVec4ub_GrVertexAttribType);
-    GR_STATIC_ASSERT(6 == kVec2s_GrVertexAttribType);
+    GR_STATIC_ASSERT(6 == kVec2us_GrVertexAttribType);
     GR_STATIC_ASSERT(7 == kInt_GrVertexAttribType);
     GR_STATIC_ASSERT(8 == kUint_GrVertexAttribType);
     GR_STATIC_ASSERT(SK_ARRAY_COUNT(kCounts) == kGrVertexAttribTypeCount);
@@ -245,7 +252,7 @@ static inline size_t GrVertexAttribTypeSize(GrVertexAttribType type) {
         4*sizeof(float),        // kVec4f_GrVertexAttribType
         1*sizeof(char),         // kUByte_GrVertexAttribType
         4*sizeof(char),         // kVec4ub_GrVertexAttribType
-        2*sizeof(int16_t),      // kVec2s_GrVertexAttribType
+        2*sizeof(int16_t),      // kVec2us_GrVertexAttribType
         sizeof(int32_t),        // kInt_GrVertexAttribType
         sizeof(uint32_t)        // kUint_GrVertexAttribType
     };
@@ -257,7 +264,7 @@ static inline size_t GrVertexAttribTypeSize(GrVertexAttribType type) {
     GR_STATIC_ASSERT(3 == kVec4f_GrVertexAttribType);
     GR_STATIC_ASSERT(4 == kUByte_GrVertexAttribType);
     GR_STATIC_ASSERT(5 == kVec4ub_GrVertexAttribType);
-    GR_STATIC_ASSERT(6 == kVec2s_GrVertexAttribType);
+    GR_STATIC_ASSERT(6 == kVec2us_GrVertexAttribType);
     GR_STATIC_ASSERT(7 == kInt_GrVertexAttribType);
     GR_STATIC_ASSERT(8 == kUint_GrVertexAttribType);
     GR_STATIC_ASSERT(SK_ARRAY_COUNT(kSizes) == kGrVertexAttribTypeCount);
@@ -276,7 +283,7 @@ static inline bool GrVertexAttribTypeIsIntType(GrVertexAttribType type) {
     GR_STATIC_ASSERT(3 == kVec4f_GrVertexAttribType);
     GR_STATIC_ASSERT(4 == kUByte_GrVertexAttribType);
     GR_STATIC_ASSERT(5 == kVec4ub_GrVertexAttribType);
-    GR_STATIC_ASSERT(6 == kVec2s_GrVertexAttribType);
+    GR_STATIC_ASSERT(6 == kVec2us_GrVertexAttribType);
     GR_STATIC_ASSERT(7 == kInt_GrVertexAttribType);
     GR_STATIC_ASSERT(8 == kUint_GrVertexAttribType);
     GR_STATIC_ASSERT(9 == kGrVertexAttribTypeCount);
@@ -293,7 +300,7 @@ static inline GrSLType GrVertexAttribTypeToSLType(GrVertexAttribType type) {
         case kUByte_GrVertexAttribType:
         case kFloat_GrVertexAttribType:
             return kFloat_GrSLType;
-        case kVec2s_GrVertexAttribType:
+        case kVec2us_GrVertexAttribType:
         case kVec2f_GrVertexAttribType:
             return kVec2f_GrSLType;
         case kVec3f_GrVertexAttribType:
