@@ -193,6 +193,37 @@ void SkPath::swap(SkPath& that) {
     }
 }
 
+bool SkPath::isInterpolatable(const SkPath& compare) const {
+    int count = fPathRef->countVerbs();
+    if (count != compare.fPathRef->countVerbs()) {
+        return false;
+    }
+    if (!count) {
+        return true;
+    }
+    if (memcmp(fPathRef->verbsMemBegin(), compare.fPathRef->verbsMemBegin(),
+               count)) {
+        return false;
+    }
+    return !fPathRef->countWeights() ||
+            !SkToBool(memcmp(fPathRef->conicWeights(), compare.fPathRef->conicWeights(),
+            fPathRef->countWeights() * sizeof(*fPathRef->conicWeights())));
+}
+
+bool SkPath::interpolate(const SkPath& ending, SkScalar weight, SkPath* out) const {
+    int verbCount = fPathRef->countVerbs();
+    if (verbCount != ending.fPathRef->countVerbs()) {
+        return false;
+    }
+    if (!verbCount) {
+        return true;
+    }
+    out->reset();
+    out->addPath(*this);
+    fPathRef->interpolate(*ending.fPathRef, weight, out->fPathRef);
+    return true;
+}
+
 static inline bool check_edge_against_rect(const SkPoint& p0,
                                            const SkPoint& p1,
                                            const SkRect& rect,
@@ -1153,6 +1184,21 @@ bool SkPath::hasOnlyMoveTos() const {
     return true;
 }
 
+bool SkPath::isZeroLength() const {
+    int count = fPathRef->countPoints();
+    if (count < 2) {
+        return true;
+    }
+    const SkPoint* pts = fPathRef.get()->points();
+    const SkPoint& first = *pts;
+    for (int index = 1; index < count; ++index) {
+        if (first != pts[index]) {
+            return false;
+        }
+    }
+    return true;
+}
+
 void SkPath::addRoundRect(const SkRect& rect, SkScalar rx, SkScalar ry,
                           Direction dir) {
     assert_known_direction(dir);
@@ -1965,7 +2011,7 @@ size_t SkPath::writeToMemory(void* storage) const {
     SkDEBUGCODE(this->validate();)
 
     if (nullptr == storage) {
-        const int byteCount = sizeof(int32_t) + fPathRef->writeSize();
+        const int byteCount = sizeof(int32_t) * 2 + fPathRef->writeSize();
         return SkAlign4(byteCount);
     }
 
@@ -1978,6 +2024,7 @@ size_t SkPath::writeToMemory(void* storage) const {
                      kCurrent_Version;
 
     buffer.write32(packed);
+    buffer.write32(fLastMoveToIndex);
 
     fPathRef->writeToBuffer(&buffer);
 
@@ -1994,6 +2041,9 @@ size_t SkPath::readFromMemory(const void* storage, size_t length) {
     }
 
     unsigned version = packed & 0xFF;
+    if (version >= kPathPrivLastMoveToIndex_Version && !buffer.readS32(&fLastMoveToIndex)) {
+        return 0;
+    }
 
     fConvexity = (packed >> kConvexity_SerializationShift) & 0xFF;
     fFillType = (packed >> kFillType_SerializationShift) & 0xFF;

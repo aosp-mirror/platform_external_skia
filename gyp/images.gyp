@@ -30,7 +30,6 @@
         '../src/image/',
       ],
       'sources': [
-        '../include/images/SkDecodingImageGenerator.h',
         '../include/images/SkForceLinking.h',
         '../src/images/SkJpegUtility.h',
         '../include/images/SkMovie.h',
@@ -39,7 +38,6 @@
         '../src/images/bmpdecoderhelper.cpp',
         '../src/images/bmpdecoderhelper.h',
 
-        '../src/images/SkDecodingImageGenerator.cpp',
         '../src/images/SkForceLinking.cpp',
         '../src/images/SkImageDecoder.cpp',
         '../src/images/SkImageDecoder_FactoryDefault.cpp',
@@ -76,8 +74,6 @@
         '../src/images/SkPageFlipper.cpp',
         '../src/images/SkScaledBitmapSampler.cpp',
         '../src/images/SkScaledBitmapSampler.h',
-
-        '../src/ports/SkImageGenerator_skia.cpp',
 
         '../src/ports/SkImageDecoder_CG.cpp',
         '../src/ports/SkImageDecoder_WIC.cpp',

@@ -1,14 +1,48 @@
-
 /*
  * Copyright 2011 Google Inc.
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
+
 #include "gm.h"
 #include "SkBitmap.h"
 #include "SkShader.h"
 #include "SkXfermode.h"
+#include "SkPM4f.h"
+
+#include "SkArithmeticMode.h"
+#include "SkPixelXorXfermode.h"
+#include "SkAvoidXfermode.h"
+
+#define kCustomShift    16
+#define kCustomMask     (~0xFFFF)
+
+enum CustomModes {
+    kArithmetic_CustomMode  = 1 << kCustomShift,
+    kPixelXor_CustomMode    = 2 << kCustomShift,
+    kAvoid_CustomMode       = 3 << kCustomShift,
+};
+
+static SkXfermode* make_custom(int customMode) {
+    switch (customMode) {
+        case kArithmetic_CustomMode: {
+            const SkScalar k1 = 0.25;
+            const SkScalar k2 = 0.75;
+            const SkScalar k3 = 0.75;
+            const SkScalar k4 = -0.25;
+            return SkArithmeticMode::Create(k1, k2, k3, k4);
+        }
+        case kPixelXor_CustomMode:
+            return SkPixelXorXfermode::Create(0xFF88CC44);
+        case kAvoid_CustomMode:
+            return SkAvoidXfermode::Create(0xFFFF0000, 0x44, SkAvoidXfermode::kAvoidColor_Mode);
+        default:
+            break;
+    }
+    SkASSERT(false);
+    return nullptr;
+}
 
 enum SrcType {
     //! A WxH image with a rectangle in the lower right.
@@ -72,6 +106,10 @@ const struct {
     { SkXfermode::kSaturation_Mode,   "Saturation",   kBasic_SrcType },
     { SkXfermode::kColor_Mode,        "Color",        kBasic_SrcType },
     { SkXfermode::kLuminosity_Mode,   "Luminosity",   kBasic_SrcType },
+
+    { SkXfermode::Mode(0xFFFF),       "Arithmetic",   kBasic_SrcType + kArithmetic_CustomMode   },
+    { SkXfermode::Mode(0xFFFF),       "PixelXor",     kBasic_SrcType + kPixelXor_CustomMode     },
+    { SkXfermode::Mode(0xFFFF),       "Avoid",        kBasic_SrcType + kAvoid_CustomMode        },
 };
 
 static void make_bitmaps(int w, int h, SkBitmap* src, SkBitmap* dst,
@@ -213,7 +251,7 @@ protected:
     }
 
     SkISize onISize() override {
-        return SkISize::Make(1990, 640);
+        return SkISize::Make(1990, 660);
     }
 
     void onDraw(SkCanvas* canvas) override {
@@ -243,8 +281,12 @@ protected:
                 if ((gModes[i].fSourceTypeMask & sourceType) == 0) {
                     continue;
                 }
-                SkXfermode* mode = SkXfermode::Create(gModes[i].fMode);
-                SkAutoUnref aur(mode);
+                SkAutoTUnref<SkXfermode> mode;
+                if (gModes[i].fSourceTypeMask & kCustomMask) {
+                    mode.reset(make_custom(gModes[i].fSourceTypeMask & kCustomMask));
+                } else {
+                    mode.reset(SkXfermode::Create(gModes[i].fMode));
+                }
                 SkRect r;
                 r.set(x, y, x+w, y+h);
 
@@ -290,128 +332,3 @@ private:
     typedef GM INHERITED;
 };
 DEF_GM( return new XfermodesGM; )
-
-///////////////////////////////////////////////////////////////////////////////////////////////////
-#include "SkNx.h"
-
-static SkPMColor apply_proc(SkPMColor src, SkPMColor dst, SkXfermodeProc4f proc, float src_alpha) {
-    SkPM4f src4 = SkPM4f::FromPMColor(src);
-    for (int i = 0; i < 4; ++i) {
-        src4.fVec[i] *= src_alpha;
-    }
-    SkPM4f dst4 = SkPM4f::FromPMColor(dst);
-    SkPM4f res4 = proc(src4, dst4);
-    SkPMColor res;
-    SkNx_cast<uint8_t>(Sk4f::Load(res4.fVec) * Sk4f(255) + Sk4f(0.5f)).store(&res);
-    return res;
-}
-
-static bool apply_mode(const SkPixmap& res, const SkPixmap& src, const SkPixmap& dst,
-                       SkXfermode* xfer, float src_alpha) {
-    SkXfermode::Mode mode;
-    if (!xfer) {
-        mode = SkXfermode::kSrcOver_Mode;
-    } else if (!xfer->asMode(&mode)) {
-        return false;
-    }
-    SkXfermodeProc4f proc = SkXfermode::GetProc4f(mode);
-    if (!proc) {
-        return false;
-    }
-
-    for (int y = 0; y < res.height(); ++y) {
-        for (int x = 0; x < res.width(); ++x) {
-            *res.writable_addr32(x, y) = apply_proc(*src.addr32(x, y), *dst.addr32(x, y),
-                                                    proc, src_alpha);
-        }
-    }
-    return true;
-}
-
-void draw_mode(const SkBitmap& srcB, const SkBitmap& dstB,
-               SkCanvas* canvas, SkXfermode* mode, SkScalar x, SkScalar y, float src_alpha) {
-    SkBitmap resB;
-    resB.allocN32Pixels(64, 64);
-
-    SkPixmap srcPM, dstPM, resPM;
-    srcB.peekPixels(&srcPM);
-    dstB.peekPixels(&dstPM);
-    resB.peekPixels(&resPM);
-
-    if (apply_mode(resPM, srcPM, dstPM, mode, src_alpha)) {
-        canvas->drawBitmap(resB, x, y, nullptr);
-    }
-}
-
-DEF_SIMPLE_GM(xfermodes_proc4f, canvas, 1000, 1000) {
-    SkBitmap bg, srcB, dstB, transparent;
-
-    bg.installPixels(SkImageInfo::Make(2, 2, kARGB_4444_SkColorType, kOpaque_SkAlphaType),
-                     gData, 4);
-    make_bitmaps(64, 64, &dstB, &srcB, &transparent);
-
-    canvas->translate(10, 20);
-    
-    const SkScalar w = 64;
-    const SkScalar h = 64;
-    SkMatrix m = SkMatrix::MakeScale(6, 6);
-    SkShader* s = SkShader::CreateBitmapShader(bg,
-                                               SkShader::kRepeat_TileMode,
-                                               SkShader::kRepeat_TileMode,
-                                               &m);
-    
-    SkPaint labelP;
-    labelP.setAntiAlias(true);
-    sk_tool_utils::set_portable_typeface(&labelP);
-    labelP.setTextAlign(SkPaint::kCenter_Align);
-    
-    const int W = 5;
-
-    const float alphas[] = { 1.0f, 0.5f };
-    
-    for (auto alpha : alphas) {
-        SkScalar x0 = 0;
-        SkScalar y0 = 0;
-        SkScalar x = x0, y = y0;
-        for (size_t i = 0; i < SK_ARRAY_COUNT(gModes); i++) {
-            SkXfermode* mode = SkXfermode::Create(gModes[i].fMode);
-            SkAutoUnref aur(mode);
-            SkRect r;
-            r.set(x, y, x+w, y+h);
-            
-            SkPaint p;
-            p.setStyle(SkPaint::kFill_Style);
-            p.setShader(s);
-            canvas->drawRect(r, p);
-
-            draw_mode(srcB, dstB, canvas, mode, r.fLeft, r.fTop, alpha);
-            
-            r.inset(-SK_ScalarHalf, -SK_ScalarHalf);
-            p.setStyle(SkPaint::kStroke_Style);
-            p.setShader(nullptr);
-            canvas->drawRect(r, p);
-            
-    #if 1
-            canvas->drawText(gModes[i].fLabel, strlen(gModes[i].fLabel),
-                             x + w/2, y - labelP.getTextSize()/2, labelP);
-    #endif
-            x += w + SkIntToScalar(10);
-            if ((i % W) == W - 1) {
-                x = x0;
-                y += h + SkIntToScalar(30);
-            }
-        }
-        if (y < 320) {
-            if (x > x0) {
-                y += h + SkIntToScalar(30);
-            }
-            y0 = y;
-        } else {
-            x0 += SkIntToScalar(400);
-            y0 = 0;
-        }
-        
-        canvas->translate(400, 0);
-    }
-    s->unref();
-}

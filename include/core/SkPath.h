@@ -10,7 +10,6 @@
 
 #include "SkMatrix.h"
 #include "SkPathRef.h"
-#include "SkTDArray.h"
 #include "SkRefCnt.h"
 
 class SkReader32;
@@ -36,6 +35,27 @@ public:
     friend bool operator!=(const SkPath& a, const SkPath& b) {
         return !(a == b);
     }
+
+    /** Return true if the paths contain an equal array of verbs and weights. Paths
+     *  with equal verb counts can be readily interpolated. If the paths contain one
+     *  or more conics, the conics' weights must also match.
+     *
+     *  @param compare  The path to compare.
+     *
+     *  @return true if the paths have the same verbs and weights.
+     */
+    bool isInterpolatable(const SkPath& compare) const;
+
+    /** Interpolate between two paths with same-sized point arrays.
+     *  The out path contains the verbs and weights of this path.
+     *  The out points are a weighted average of this path and the ending path. 
+     *
+     *  @param ending  The path to interpolate between.
+     *  @param weight  The weight, from 0 to 1. The output points are set to
+     *                 (this->points * weight) + ending->points * (1 - weight).
+     *  @return true if the paths could be interpolated.
+     */
+    bool interpolate(const SkPath& ending, SkScalar weight, SkPath* out) const;
 
 #ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
     /** Returns true if the caller is the only owner of the underlying path data */
@@ -902,7 +922,7 @@ public:
         kQuad_Verb,     //!< iter.next returns 3 points
         kConic_Verb,    //!< iter.next returns 3 points + iter.conicWeight()
         kCubic_Verb,    //!< iter.next returns 4 points
-        kClose_Verb,    //!< iter.next returns 1 point (contour's moveTo pt)
+        kClose_Verb,    //!< iter.next returns 0 points
         kDone_Verb,     //!< iter.next returns 0 points
     };
 
@@ -1075,8 +1095,8 @@ private:
 
     enum SerializationVersions {
         kPathPrivFirstDirection_Version = 1,
-
-        kCurrent_Version = 1
+        kPathPrivLastMoveToIndex_Version = 2,
+        kCurrent_Version = 2
     };
 
     SkAutoTUnref<SkPathRef>                            fPathRef;
@@ -1122,6 +1142,10 @@ private:
 
     bool isRectContour(bool allowPartial, int* currVerb, const SkPoint** pts,
                        bool* isClosed, Direction* direction) const;
+
+    // called by stroker to see if all points are equal and worthy of a cap
+    // equivalent to a short-circuit version of getBounds().isEmpty() 
+    bool isZeroLength() const;
 
     /** Returns if the path can return a bound at no cost (true) or will have to
         perform some computation (false).

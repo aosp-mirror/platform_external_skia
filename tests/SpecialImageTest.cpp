@@ -88,7 +88,7 @@ static void test_image(SkSpecialImage* img, skiatest::Reporter* reporter,
     SkCanvas* canvas = surf->getCanvas();
 
     canvas->clear(SK_ColorBLUE);
-    img->draw(canvas, kPad, kPad, nullptr);
+    img->draw(canvas, SkIntToScalar(kPad), SkIntToScalar(kPad), nullptr);
 
     SkBitmap bm;
     bm.allocN32Pixels(kFullSize, kFullSize, true);
@@ -110,7 +110,7 @@ DEF_TEST(SpecialImage_Raster, reporter) {
 
     const SkIRect& subset = SkIRect::MakeXYWH(kPad, kPad, kSmallerSize, kSmallerSize);
 
-    SkAutoTUnref<SkSpecialImage> img(SkSpecialImage::NewFromRaster(subset, bm));
+    SkAutoTUnref<SkSpecialImage> img(SkSpecialImage::NewFromRaster(nullptr, subset, bm));
     test_image(img, reporter, true, false);
 }
 
@@ -143,7 +143,9 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SpecialImage_Gpu, reporter, context) {
 
     const SkIRect& subset = SkIRect::MakeXYWH(kPad, kPad, kSmallerSize, kSmallerSize);
 
-    SkAutoTUnref<SkSpecialImage> img(SkSpecialImage::NewFromGpu(subset, texture));
+    SkAutoTUnref<SkSpecialImage> img(SkSpecialImage::NewFromGpu(nullptr, subset, 
+                                                                kNeedNewImageUniqueID_SpecialImage,
+                                                                texture));
     test_image(img, reporter, false, true);
 }
 

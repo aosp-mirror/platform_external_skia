@@ -27,7 +27,7 @@ def lineno():
 
 cov_start = lineno()+1   # We care about coverage starting just past this def.
 def get_args(bot):
-  args = ['--pre_log']
+  args = []
 
   configs = ['565', '8888', 'gpu']
 
@@ -188,11 +188,8 @@ def get_args(bot):
   if 'ANGLE' in bot and 'Debug' in bot:
     match.append('~GLPrograms') # skia:4717
 
-  # Hacking around trying to get the MSAN bot green.
   if 'MSAN' in bot:
-    blacklist.extend(('_ image _ .wbmp').split(' '))  # skia:4900
-    blacklist.extend(('_ image _ .png').split(' '))  # I8 .png color tables
-    blacklist.extend(('_ image _ .bmp').split(' '))  # I8 .bmp color tables
+    match.extend(['~Once', '~Shared'])  # Not sure what's up with these tests.
 
   if blacklist:
     args.append('--blacklist')

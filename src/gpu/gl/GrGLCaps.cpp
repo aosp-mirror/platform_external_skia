@@ -54,6 +54,8 @@ GrGLCaps::GrGLCaps(const GrContextOptions& contextOptions,
     fRGBA8888PixelsOpsAreSlow = false;
     fPartialFBOReadIsSlow = false;
 
+    fBlitFramebufferSupport = kNone_BlitFramebufferSupport;
+
     fShaderCaps.reset(new GrGLSLCaps(contextOptions));
 
     this->init(contextOptions, ctxInfo, glInterface);
@@ -226,13 +228,18 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
         }
     }
 
-    if ((kGL_GrGLStandard == standard && version >= GR_GL_VER(3, 1)) ||
-        ctxInfo.hasExtension("GL_ARB_texture_rectangle")) {
-        // We also require textureSize() support for rectangle 2D samplers which was added in GLSL
-        // 1.40.
-        if (ctxInfo.glslGeneration() >= k140_GrGLSLGeneration) {
-            fRectangleTextureSupport = true;
+    if (kGL_GrGLStandard == standard) {
+        if (version >= GR_GL_VER(3, 1) || ctxInfo.hasExtension("GL_ARB_texture_rectangle")) {
+            // We also require textureSize() support for rectangle 2D samplers which was added in
+            // GLSL 1.40.
+            if (ctxInfo.glslGeneration() >= k140_GrGLSLGeneration) {
+                fRectangleTextureSupport = true;
+            }
         }
+    } else {
+        // Command buffer exposes this in GL ES context for Chromium reasons,
+        // but it should not be used. Also, at the time of writing command buffer
+        // lacks TexImage2D support and ANGLE lacks GL ES 3.0 support.
     }
 
     if (kGL_GrGLStandard == standard) {
@@ -454,6 +461,12 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
         fUseDrawInsteadOfPartialRenderTargetWrite = true;
     }
 
+    // Texture uploads sometimes seem to be ignored to textures bound to FBOS on Tegra3.
+    if (kTegra3_GrGLRenderer == ctxInfo.renderer()) {
+        fUseDrawInsteadOfPartialRenderTargetWrite = true;
+        fUseDrawInsteadOfAllRenderTargetWrites = true;
+    }
+
 #ifdef SK_BUILD_FOR_WIN
     // On ANGLE deferring flushes can lead to GPU starvation
     fPreferVRAMUseOverFlushes = !isANGLE;
@@ -551,9 +564,19 @@ const char* get_glsl_version_decl_string(GrGLStandard standard, GrGLSLGeneration
                     return "#version 330 compatibility\n";
                 }
             }
+        case k400_GrGLSLGeneration:
+            SkASSERT(kGL_GrGLStandard == standard);
+            if (isCoreProfile) {
+                return "#version 400\n";
+            } else {
+                return "#version 400 compatibility\n";
+            }
         case k310es_GrGLSLGeneration:
             SkASSERT(kGLES_GrGLStandard == standard);
             return "#version 310 es\n";
+        case k320es_GrGLSLGeneration:
+            SkASSERT(kGLES_GrGLStandard == standard);
+            return "#version 320 es\n";
     }
     return "<no version>";
 }
@@ -593,6 +616,40 @@ void GrGLCaps::initGLSL(const GrGLContextInfo& ctxInfo) {
     }
 
     glslCaps->fBindlessTextureSupport = ctxInfo.hasExtension("GL_NV_bindless_texture");
+
+    if (kGL_GrGLStandard == standard) {
+        glslCaps->fFlatInterpolationSupport = ctxInfo.glslGeneration() >= k130_GrGLSLGeneration;
+    } else {
+        glslCaps->fFlatInterpolationSupport =
+            ctxInfo.glslGeneration() >= k330_GrGLSLGeneration; // This is the value for GLSL ES 3.0.
+    }
+
+    if (kGL_GrGLStandard == standard) {
+        glslCaps->fNoPerspectiveInterpolationSupport =
+            ctxInfo.glslGeneration() >= k130_GrGLSLGeneration;
+    } else {
+        if (ctxInfo.hasExtension("GL_NV_shader_noperspective_interpolation")) {
+            glslCaps->fNoPerspectiveInterpolationSupport = true;
+            glslCaps->fNoPerspectiveInterpolationExtensionString =
+                "GL_NV_shader_noperspective_interpolation";
+        }
+    }
+
+    if (kGL_GrGLStandard == standard) {
+        glslCaps->fSampleVariablesSupport = ctxInfo.glslGeneration() >= k400_GrGLSLGeneration;
+    } else {
+        if (ctxInfo.glslGeneration() >= k320es_GrGLSLGeneration) {
+            glslCaps->fSampleVariablesSupport = true;
+        } else if (ctxInfo.hasExtension("GL_OES_sample_variables")) {
+            glslCaps->fSampleVariablesSupport = true;
+            glslCaps->fSampleVariablesExtensionString = "GL_OES_sample_variables";
+        }
+    }
+
+    if (glslCaps->fSampleVariablesSupport) {
+        glslCaps->fSampleMaskOverrideCoverageSupport =
+            ctxInfo.hasExtension("GL_NV_sample_mask_override_coverage");
+    }
 
     // Adreno GPUs have a tendency to drop tiles when there is a divide-by-zero in a shader
     glslCaps->fDropsTileOnZeroDivide = kQualcomm_GrGLVendor == ctxInfo.vendor();
@@ -766,15 +823,28 @@ void GrGLCaps::initFSAASupport(const GrGLContextInfo& ctxInfo, const GrGLInterfa
         } else if (ctxInfo.hasExtension("GL_APPLE_framebuffer_multisample")) {
             fMSFBOType = kES_Apple_MSFBOType;
         }
+
+        // Above determined the preferred MSAA approach, now decide whether glBlitFramebuffer
+        // is available.
+        if (ctxInfo.version() >= GR_GL_VER(3, 0)) {
+            fBlitFramebufferSupport = kFull_BlitFramebufferSupport;
+        } else if (ctxInfo.hasExtension("GL_CHROMIUM_framebuffer_multisample")) {
+            // The CHROMIUM extension uses the ANGLE version of glBlitFramebuffer and includes its
+            // limitations.
+            fBlitFramebufferSupport = kNoScalingNoMirroring_BlitFramebufferSupport;
+        }
     } else {
         if (fUsesMixedSamples) {
             fMSFBOType = kMixedSamples_MSFBOType;
+            fBlitFramebufferSupport = kFull_BlitFramebufferSupport;
         } else if ((ctxInfo.version() >= GR_GL_VER(3,0)) ||
             ctxInfo.hasExtension("GL_ARB_framebuffer_object")) {
             fMSFBOType = GrGLCaps::kDesktop_ARB_MSFBOType;
+            fBlitFramebufferSupport = kFull_BlitFramebufferSupport;
         } else if (ctxInfo.hasExtension("GL_EXT_framebuffer_multisample") &&
                    ctxInfo.hasExtension("GL_EXT_framebuffer_blit")) {
             fMSFBOType = GrGLCaps::kDesktop_EXT_MSFBOType;
+            fBlitFramebufferSupport = kFull_BlitFramebufferSupport;
         }
     }
 }

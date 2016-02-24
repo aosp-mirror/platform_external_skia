@@ -20,13 +20,7 @@
 #include "SkXfermodeInterpretation.h"
 
 // define this for testing srgb blits
-//#define SK_SUPPORT_SRGB_RASTER
-
-#ifdef SK_SUPPORT_SRGB_RASTER
-    #define ALLOW_SRGB  true
-#else
-    #define ALLOW_SRGB  false
-#endif
+//#define SK_FORCE_PM4f_FOR_L32_BLITS
 
 SkBlitter::~SkBlitter() {}
 
@@ -132,6 +126,10 @@ static uint8_t generate_right_mask(int maskBitCount) {
 
 void SkBlitter::blitMask(const SkMask& mask, const SkIRect& clip) {
     SkASSERT(mask.fBounds.contains(clip));
+
+    if (mask.fFormat == SkMask::kLCD16_Format) {
+        return; // needs to be handled by subclass
+    }
 
     if (mask.fFormat == SkMask::kBW_Format) {
         int cx = clip.fLeft;
@@ -594,10 +592,10 @@ public:
         SkSafeUnref(fProxy);
     }
 
-    size_t contextSize() const override {
+    size_t contextSize(const ContextRec& rec) const override {
         size_t size = sizeof(Sk3DShaderContext);
         if (fProxy) {
-            size += fProxy->contextSize();
+            size += fProxy->contextSize(rec);
         }
         return size;
     }
@@ -791,6 +789,16 @@ private:
 
 #include "SkCoreBlitters.h"
 
+SkShader::ContextRec::DstType SkBlitter::PreferredShaderDest(const SkImageInfo& dstInfo) {
+#ifdef SK_FORCE_PM4f_FOR_L32_BLITS
+    return SkShader::ContextRec::kPM4f_DstType;
+#else
+    return (dstInfo.isSRGB() || dstInfo.colorType() == kRGBA_F16_SkColorType)
+            ? SkShader::ContextRec::kPM4f_DstType
+            : SkShader::ContextRec::kPMColor_DstType;
+#endif
+}
+
 SkBlitter* SkBlitter::Choose(const SkPixmap& device,
                              const SkMatrix& matrix,
                              const SkPaint& origPaint,
@@ -877,8 +885,9 @@ SkBlitter* SkBlitter::Choose(const SkPixmap& device,
      */
     SkShader::Context* shaderContext = nullptr;
     if (shader) {
-        SkShader::ContextRec rec(*paint, matrix, nullptr);
-        size_t contextSize = shader->contextSize();
+        const SkShader::ContextRec rec(*paint, matrix, nullptr,
+                                       PreferredShaderDest(device.info()));
+        size_t contextSize = shader->contextSize(rec);
         if (contextSize) {
             // Try to create the ShaderContext
             void* storage = allocator->reserveT<SkShader::Context>(contextSize);
@@ -913,27 +922,38 @@ SkBlitter* SkBlitter::Choose(const SkPixmap& device,
             break;
 
         case kN32_SkColorType:
-            if (shader) {
-                if (shaderContext->supports4f() && ALLOW_SRGB) {
-                    blitter = allocator->createT<SkARGB32_Shader4f_Blitter>(
-                                                                  device, *paint, shaderContext);
-                } else {
-                    blitter = allocator->createT<SkARGB32_Shader_Blitter>(
-                            device, *paint, shaderContext);
-                }
-            } else if (paint->getColor() == SK_ColorBLACK) {
-                blitter = allocator->createT<SkARGB32_Black_Blitter>(device, *paint);
-            } else if (paint->getAlpha() == 0xFF) {
-                blitter = allocator->createT<SkARGB32_Opaque_Blitter>(device, *paint);
+#ifdef SK_FORCE_PM4f_FOR_L32_BLITS
+            if (true)
+#else
+            if (device.info().isSRGB())
+#endif
+            {
+                blitter = SkBlitter_ARGB32_Create(device, *paint, shaderContext, allocator);
             } else {
-                blitter = allocator->createT<SkARGB32_Blitter>(device, *paint);
+                if (shader) {
+                        blitter = allocator->createT<SkARGB32_Shader_Blitter>(
+                                device, *paint, shaderContext);
+                } else if (paint->getColor() == SK_ColorBLACK) {
+                    blitter = allocator->createT<SkARGB32_Black_Blitter>(device, *paint);
+                } else if (paint->getAlpha() == 0xFF) {
+                    blitter = allocator->createT<SkARGB32_Opaque_Blitter>(device, *paint);
+                } else {
+                    blitter = allocator->createT<SkARGB32_Blitter>(device, *paint);
+                }
             }
             break;
 
-        default:
-            SkDEBUGFAIL("unsupported device config");
-            blitter = allocator->createT<SkNullBlitter>();
+        case kRGBA_F16_SkColorType:
+        // kU16_SkColorType:
+            blitter = SkBlitter_ARGB64_Create(device, *paint, shaderContext, allocator);
             break;
+
+        default:
+            break;
+    }
+
+    if (!blitter) {
+        blitter = allocator->createT<SkNullBlitter>();
     }
 
     if (shader3D) {
@@ -952,7 +972,8 @@ class SkZeroShaderContext : public SkShader::Context {
 public:
     SkZeroShaderContext(const SkShader& shader, const SkShader::ContextRec& rec)
         // Override rec with the identity matrix, so it is guaranteed to be invertible.
-        : INHERITED(shader, SkShader::ContextRec(*rec.fPaint, SkMatrix::I(), nullptr)) {}
+        : INHERITED(shader, SkShader::ContextRec(*rec.fPaint, SkMatrix::I(), nullptr,
+                                                 rec.fPreferredDstType)) {}
 
     void shadeSpan(int x, int y, SkPMColor colors[], int count) override {
         sk_bzero(colors, count * sizeof(SkPMColor));
@@ -972,6 +993,7 @@ SkShaderBlitter::SkShaderBlitter(const SkPixmap& device, const SkPaint& paint,
 
     fShader->ref();
     fShaderFlags = fShaderContext->getFlags();
+    fConstInY = SkToBool(fShaderFlags & SkShader::kConstInY32_Flag);
 }
 
 SkShaderBlitter::~SkShaderBlitter() {

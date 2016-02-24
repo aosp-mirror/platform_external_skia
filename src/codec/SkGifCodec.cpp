@@ -13,6 +13,8 @@
 #include "SkSwizzler.h"
 #include "SkUtils.h"
 
+#include "gif_lib.h"
+
 /*
  * Checks the start of the stream to see if the image is a gif
  */
@@ -49,7 +51,11 @@ static int32_t read_bytes_callback(GifFileType* fileType, GifByteType* out, int3
  * Open the gif file
  */
 static GifFileType* open_gif(SkStream* stream) {
+#if GIFLIB_MAJOR < 5
+    return DGifOpen(stream, read_bytes_callback);
+#else
     return DGifOpen(stream, read_bytes_callback, nullptr);
+#endif
 }
 
 /*
@@ -117,7 +123,11 @@ inline uint32_t get_output_row_interlaced(uint32_t encodedRow, uint32_t height) 
  * It is used in a SkAutoTCallIProc template
  */
 void SkGifCodec::CloseGif(GifFileType* gif) {
-    DGifCloseFile(gif, NULL);
+#if GIFLIB_MAJOR < 5 || (GIFLIB_MAJOR == 5 && GIFLIB_MINOR == 0)
+    DGifCloseFile(gif);
+#else
+    DGifCloseFile(gif, nullptr);
+#endif
 }
 
 /*
@@ -126,7 +136,11 @@ void SkGifCodec::CloseGif(GifFileType* gif) {
  */
 void SkGifCodec::FreeExtension(SavedImage* image) {
     if (NULL != image->ExtensionBlocks) {
+#if GIFLIB_MAJOR < 5
+        FreeExtension(image);
+#else
         GifFreeExtensions(&image->ExtensionBlockCount, &image->ExtensionBlocks);
+#endif
     }
 }
 
@@ -311,10 +325,15 @@ SkCodec::Result SkGifCodec::ReadUpToFirstImage(GifFileType* gif, uint32_t* trans
                 // Create an extension block with our data
                 while (nullptr != extData) {
                     // Add a single block
+
+#if GIFLIB_MAJOR < 5
+                    if (AddExtensionBlock(&saveExt, extData[0],
+                                          &extData[1]) == GIF_ERROR) {
+#else
                     if (GIF_ERROR == GifAddExtensionBlock(&saveExt.ExtensionBlockCount,
                                                           &saveExt.ExtensionBlocks,
-                                                          extFunction, extData[0], &extData[1]))
-                    {
+                                                          extFunction, extData[0], &extData[1])) {
+#endif
                         return gif_error("Could not add extension block.\n", kIncompleteInput);
                     }
                     // Move to the next block
@@ -436,19 +455,16 @@ SkCodec::Result SkGifCodec::prepareToDecode(const SkImageInfo& dstInfo, SkPMColo
     // Initialize color table and copy to the client if necessary
     this->initializeColorTable(dstInfo, inputColorPtr, inputColorCount);
 
-    return this->initializeSwizzler(dstInfo, opts);
+    this->initializeSwizzler(dstInfo, opts);
+    return kSuccess;
 }
 
-SkCodec::Result SkGifCodec::initializeSwizzler(const SkImageInfo& dstInfo, const Options& opts) {
+void SkGifCodec::initializeSwizzler(const SkImageInfo& dstInfo, const Options& opts) {
     const SkPMColor* colorPtr = get_color_ptr(fColorTable.get());
     const SkIRect* frameRect = fFrameIsSubset ? &fFrameRect : nullptr;
     fSwizzler.reset(SkSwizzler::CreateSwizzler(SkSwizzler::kIndex, colorPtr, dstInfo, opts,
             frameRect));
-
-    if (nullptr != fSwizzler.get()) {
-        return kSuccess;
-    }
-    return kUnimplemented;
+    SkASSERT(fSwizzler);
 }
 
 bool SkGifCodec::readRow() {

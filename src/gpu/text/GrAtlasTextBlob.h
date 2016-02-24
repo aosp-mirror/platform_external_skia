@@ -17,9 +17,9 @@
 #include "SkSurfaceProps.h"
 #include "SkTInternalLList.h"
 
+class GrBlobRegenHelper;
 struct GrDistanceFieldAdjustTable;
 class GrMemoryPool;
-class GrTextContext;
 class SkDrawFilter;
 class SkTextBlob;
 class SkTextBlobRunIterator;
@@ -108,6 +108,8 @@ public:
     void setHasDistanceField() { fTextType |= kHasDistanceField_TextType; }
     void setHasBitmap() { fTextType |= kHasBitmap_TextType; }
 
+    int runCount() const { return fRunCount; }
+
     void push_back_run(int currRun) {
         SkASSERT(currRun < fRunCount);
         if (currRun > 0) {
@@ -146,9 +148,9 @@ public:
 
     SkGlyphCache* setupCache(int runIndex,
                              const SkSurfaceProps& props,
+                             SkPaint::FakeGamma fakeGamma,
                              const SkPaint& skPaint,
-                             const SkMatrix* viewMatrix,
-                             bool noGamma);
+                             const SkMatrix* viewMatrix);
 
     // Appends a glyph to the blob.  If the glyph is too large, the glyph will be appended
     // as a path.
@@ -171,8 +173,7 @@ public:
         }
     }
 
-    bool mustRegenerate(SkScalar* outTransX, SkScalar* outTransY, const SkPaint& paint,
-                        GrColor color, const SkMaskFilter::BlurRec& blurRec,
+    bool mustRegenerate(const SkPaint& paint, GrColor color, const SkMaskFilter::BlurRec& blurRec,
                         const SkMatrix& viewMatrix, SkScalar x, SkScalar y);
 
     // flush a GrAtlasTextBlob associated with a SkTextBlob
@@ -187,8 +188,7 @@ public:
                      const GrClip& clip,
                      const SkMatrix& viewMatrix,
                      const SkIRect& clipBounds,
-                     SkScalar x, SkScalar y,
-                     SkScalar transX, SkScalar transY);
+                     SkScalar x, SkScalar y);
 
     // flush a throwaway GrAtlasTextBlob *not* associated with an SkTextBlob
     void flushThrowaway(GrContext* context,
@@ -198,7 +198,41 @@ public:
                         const SkPaint& skPaint,
                         const GrPaint& grPaint,
                         const GrClip& clip,
-                        const SkIRect& clipBounds);
+                        const SkMatrix& viewMatrix,
+                        const SkIRect& clipBounds,
+                        SkScalar x, SkScalar y);
+
+    void computeSubRunBounds(SkRect* outBounds, int runIndex, int subRunIndex,
+                             const SkMatrix& viewMatrix, SkScalar x, SkScalar y) {
+        // We don't yet position distance field text on the cpu, so we have to map the vertex bounds
+        // into device space.
+        // We handle vertex bounds differently for distance field text and bitmap text because
+        // the vertex bounds of bitmap text are in device space.  If we are flushing multiple runs
+        // from one blob then we are going to pay the price here of mapping the rect for each run.
+        const Run& run = fRuns[runIndex];
+        const Run::SubRunInfo& subRun = run.fSubRunInfo[subRunIndex];
+        *outBounds = subRun.vertexBounds();
+        if (subRun.drawAsDistanceFields()) {
+            // Distance field text is positioned with the (X,Y) as part of the glyph position,
+            // and currently the view matrix is applied on the GPU
+            outBounds->offset(x - fInitialX, y - fInitialY);
+            viewMatrix.mapRect(outBounds);
+        } else {
+            // Bitmap text is fully positioned on the CPU, and offset by an (X,Y) translate in
+            // device space.
+            SkMatrix boundsMatrix = fInitialViewMatrixInverse;
+
+            boundsMatrix.postTranslate(-fInitialX, -fInitialY);
+
+            boundsMatrix.postTranslate(x, y);
+
+            boundsMatrix.postConcat(viewMatrix);
+            boundsMatrix.mapRect(outBounds);
+
+            // Due to floating point numerical inaccuracies, we have to round out here
+            outBounds->roundOut(outBounds);
+        }
+    }
 
     // position + local coord
     static const size_t kColorTextVASize = sizeof(SkPoint) + sizeof(SkIPoint16);
@@ -221,11 +255,13 @@ public:
         this->setupViewMatrix(viewMatrix, x, y);
     }
 
-    GrDrawBatch* test_createBatch(int glyphCount, int run, int subRun,
-                                  GrColor color, SkScalar transX, SkScalar transY,
-                                  const SkPaint& skPaint, const SkSurfaceProps& props,
-                                  const GrDistanceFieldAdjustTable* distanceAdjustTable,
-                                  GrBatchFontCache* cache);
+    void regenInBatch(GrDrawBatch::Target* target, GrBatchFontCache* fontCache,
+                      GrBlobRegenHelper *helper, int run, int subRun, SkGlyphCache** cache,
+                      SkTypeface** typeface, GrFontScaler** scaler,
+                      const SkDescriptor** desc, size_t vertexStride,
+                      const SkMatrix& viewMatrix, SkScalar x, SkScalar y,
+                      GrColor color,
+                      void** vertices, size_t* byteCount, int* glyphCount);
 
     const Key& key() const { return fKey; }
 
@@ -234,6 +270,14 @@ public:
             fRuns[i].~Run();
         }
     }
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+    // Internal test methods
+    GrDrawBatch* test_createBatch(int glyphCount, int run, int subRun,
+                                  const SkMatrix& viewMatrix, SkScalar x, SkScalar y, GrColor color,
+                                  const SkPaint& skPaint, const SkSurfaceProps& props,
+                                  const GrDistanceFieldAdjustTable* distanceAdjustTable,
+                                  GrBatchFontCache* cache);
 
 private:
     GrAtlasTextBlob()
@@ -245,15 +289,14 @@ private:
                           SkScalar x, SkScalar y, SkScalar scale, bool applyVM);
 
     inline void flushRun(GrDrawContext* dc, GrPipelineBuilder* pipelineBuilder,
-                         int run, GrColor color,
-                         SkScalar transX, SkScalar transY,
+                         int run, const SkMatrix& viewMatrix, SkScalar x, SkScalar y, GrColor color,
                          const SkPaint& skPaint, const SkSurfaceProps& props,
                          const GrDistanceFieldAdjustTable* distanceAdjustTable,
                          GrBatchFontCache* cache);
 
     void flushBigGlyphs(GrContext* context, GrDrawContext* dc,
                         const GrClip& clip, const SkPaint& skPaint,
-                        SkScalar transX, SkScalar transY,
+                        const SkMatrix& viewMatrix, SkScalar x, SkScalar y,
                         const SkIRect& clipBounds);
 
     void flushRunAsPaths(GrContext* context,
@@ -264,18 +307,23 @@ private:
                          SkDrawFilter* drawFilter, const SkMatrix& viewMatrix,
                          const SkIRect& clipBounds, SkScalar x, SkScalar y);
 
-    // This function will only be called when we are regenerating a blob from scratch. We record the
+    // This function will only be called when we are generating a blob from scratch. We record the
     // initial view matrix and initial offsets(x,y), because we record vertex bounds relative to
     // these numbers.  When blobs are reused with new matrices, we need to return to model space so
     // we can update the vertex bounds appropriately.
     void setupViewMatrix(const SkMatrix& viewMatrix, SkScalar x, SkScalar y) {
-        fViewMatrix = viewMatrix;
+        fInitialViewMatrix = viewMatrix;
         if (!viewMatrix.invert(&fInitialViewMatrixInverse)) {
             fInitialViewMatrixInverse = SkMatrix::I();
             SkDebugf("Could not invert viewmatrix\n");
         }
-        fX = fInitialX = x;
-        fY = fInitialY = y;
+        fInitialX = x;
+        fInitialY = y;
+
+        // make sure all initial subruns have the correct VM and X/Y applied
+        for (int i = 0; i < fRunCount; i++) {
+            fRuns[i].fSubRunInfo[0].init(fInitialViewMatrix, x, y);
+        }
     }
 
     /*
@@ -324,12 +372,15 @@ private:
             SubRunInfo(const SubRunInfo& that)
                 : fBulkUseToken(that.fBulkUseToken)
                 , fStrike(SkSafeRef(that.fStrike.get()))
+                , fCurrentViewMatrix(that.fCurrentViewMatrix)
                 , fVertexBounds(that.fVertexBounds)
                 , fAtlasGeneration(that.fAtlasGeneration)
                 , fVertexStartIndex(that.fVertexStartIndex)
                 , fVertexEndIndex(that.fVertexEndIndex)
                 , fGlyphStartIndex(that.fGlyphStartIndex)
                 , fGlyphEndIndex(that.fGlyphEndIndex)
+                , fX(that.fX)
+                , fY(that.fY)
                 , fColor(that.fColor)
                 , fMaskFormat(that.fMaskFormat)
                 , fDrawAsDistanceFields(that.fDrawAsDistanceFields)
@@ -367,12 +418,25 @@ private:
 
                 fVertexStartIndex = prev.vertexEndIndex();
                 fVertexEndIndex = prev.vertexEndIndex();
+
+                // copy over viewmatrix settings
+                this->init(prev.fCurrentViewMatrix, prev.fX, prev.fY);
             }
 
             const SkRect& vertexBounds() const { return fVertexBounds; }
             void joinGlyphBounds(const SkRect& glyphBounds) {
                 fVertexBounds.joinNonEmptyArg(glyphBounds);
             }
+
+            void init(const SkMatrix& viewMatrix, SkScalar x, SkScalar y) {
+                fCurrentViewMatrix = viewMatrix;
+                fX = x;
+                fY = y;
+            }
+
+            // This function assumes the translation will be applied before it is called again
+            void computeTranslation(const SkMatrix& viewMatrix, SkScalar x, SkScalar y,
+                                    SkScalar*transX, SkScalar* transY);
 
             // df properties
             void setUseLCDText(bool useLCDText) { fUseLCDText = useLCDText; }
@@ -383,12 +447,15 @@ private:
         private:
             GrBatchAtlas::BulkUseTokenUpdater fBulkUseToken;
             SkAutoTUnref<GrBatchTextStrike> fStrike;
+            SkMatrix fCurrentViewMatrix;
             SkRect fVertexBounds;
             uint64_t fAtlasGeneration;
             size_t fVertexStartIndex;
             size_t fVertexEndIndex;
             uint32_t fGlyphStartIndex;
             uint32_t fGlyphEndIndex;
+            SkScalar fX;
+            SkScalar fY;
             GrColor fColor;
             GrMaskFormat fMaskFormat;
             bool fDrawAsDistanceFields; // df property
@@ -417,9 +484,21 @@ private:
         bool fDrawAsPaths;
     };
 
+    template <bool regenPos, bool regenCol, bool regenTexCoords, bool regenGlyphs>
+    void regenInBatch(GrDrawBatch::Target* target,
+                      GrBatchFontCache* fontCache,
+                      GrBlobRegenHelper* helper,
+                      Run* run, Run::SubRunInfo* info, SkGlyphCache** cache,
+                      SkTypeface** typeface, GrFontScaler** scaler,
+                      const SkDescriptor** desc,
+                      int glyphCount, size_t vertexStride,
+                      GrColor color, SkScalar transX,
+                      SkScalar transY) const;
+
     inline GrDrawBatch* createBatch(const Run::SubRunInfo& info,
                                     int glyphCount, int run, int subRun,
-                                    GrColor color, SkScalar transX, SkScalar transY,
+                                    const SkMatrix& viewMatrix, SkScalar x, SkScalar y,
+                                    GrColor color,
                                     const SkPaint& skPaint, const SkSurfaceProps& props,
                                     const GrDistanceFieldAdjustTable* distanceAdjustTable,
                                     GrBatchFontCache* cache);
@@ -427,14 +506,14 @@ private:
     struct BigGlyph {
         BigGlyph(const SkPath& path, SkScalar vx, SkScalar vy, SkScalar scale, bool applyVM)
             : fPath(path)
-            , fVx(vx)
-            , fVy(vy)
             , fScale(scale)
+            , fX(vx)
+            , fY(vy)
             , fApplyVM(applyVM) {}
         SkPath fPath;
-        SkScalar fVx;
-        SkScalar fVy;
         SkScalar fScale;
+        SkScalar fX;
+        SkScalar fY;
         bool fApplyVM;
     };
 
@@ -458,14 +537,12 @@ private:
     StrokeInfo fStrokeInfo;
     SkTArray<BigGlyph> fBigGlyphs;
     Key fKey;
-    SkMatrix fViewMatrix;
+    SkMatrix fInitialViewMatrix;
     SkMatrix fInitialViewMatrixInverse;
     size_t fSize;
     GrColor fPaintColor;
     SkScalar fInitialX;
     SkScalar fInitialY;
-    SkScalar fX;
-    SkScalar fY;
 
     // We can reuse distance field text, but only if the new viewmatrix would not result in
     // a mip change.  Because there can be multiple runs in a blob, we track the overall
@@ -474,8 +551,6 @@ private:
     SkScalar fMinMaxScale;
     int fRunCount;
     uint8_t fTextType;
-
-    friend class GrAtlasTextBatch; // We might be able to get rid of this friending
 };
 
 #endif

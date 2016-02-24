@@ -74,8 +74,6 @@ public:
         return k < N/2 ? fLo[k] : fHi[k-N/2];
     }
 
-    template <int k> T kth() const { return (*this)[k]; }
-
     bool allTrue() const { return fLo.allTrue() && fHi.allTrue(); }
     bool anyTrue() const { return fLo.anyTrue() || fHi.anyTrue(); }
     SkNx thenElse(const SkNx& t, const SkNx& e) const {
@@ -139,8 +137,6 @@ public:
         return fVal;
     }
 
-    template <int k> T kth() const { return (*this)[k]; }
-
     bool allTrue() const { return fVal != 0; }
     bool anyTrue() const { return fVal != 0; }
     SkNx thenElse(const SkNx& t, const SkNx& e) const { return fVal != 0 ? t : e; }
@@ -198,6 +194,9 @@ typedef SkNx<4,   uint8_t> Sk4b;
 typedef SkNx<16,  uint8_t> Sk16b;
 typedef SkNx<4,  uint16_t> Sk4h;
 typedef SkNx<16, uint16_t> Sk16h;
+typedef SkNx<4,       int> Sk4i;
+
+typedef SkNx<4, int> Sk4i;
 
 // Include platform specific specializations if available.
 #if !defined(SKNX_NO_SIMD) && SK_CPU_SSE_LEVEL >= SK_CPU_SSE_LEVEL_SSE2

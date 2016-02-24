@@ -5,12 +5,17 @@
  * found in the LICENSE file.
  */
 
+#include "SkCanvasPriv.h"
 #include "SkClipStack.h"
 #include "SkDebugCanvas.h"
 #include "SkDrawCommand.h"
 #include "SkDevice.h"
 #include "SkPaintFilterCanvas.h"
 #include "SkOverdrawMode.h"
+
+#define SKDEBUGCANVAS_VERSION            1
+#define SKDEBUGCANVAS_ATTRIBUTE_VERSION  "version"
+#define SKDEBUGCANVAS_ATTRIBUTE_COMMANDS "commands"
 
 class DebugPaintFilterCanvas : public SkPaintFilterCanvas {
 public:
@@ -62,7 +67,8 @@ SkDebugCanvas::SkDebugCanvas(int width, int height)
         , fMegaVizMode(false)
         , fOverdrawViz(false)
         , fOverrideFilterQuality(false)
-        , fFilterQuality(kNone_SkFilterQuality) {
+        , fFilterQuality(kNone_SkFilterQuality)
+        , fClipVizColor(SK_ColorTRANSPARENT) {
     fUserMatrix.reset();
 
     // SkPicturePlayback uses the base-class' quickReject calls to cull clipped
@@ -193,7 +199,7 @@ void SkDebugCanvas::drawTo(SkCanvas* canvas, int index) {
 
     bool pathOpsMode = getAllowSimplifyClip();
     canvas->setAllowSimplifyClip(pathOpsMode);
-    canvas->clear(SK_ColorTRANSPARENT);
+    canvas->clear(SK_ColorWHITE);
     canvas->resetMatrix();
     if (!windowRect.isEmpty()) {
         canvas->clipRect(windowRect, SkRegion::kReplace_Op);
@@ -226,6 +232,17 @@ void SkDebugCanvas::drawTo(SkCanvas* canvas, int index) {
                 fCommandVector[i]->execute(canvas);
             }
         }
+    }
+
+    if (SkColorGetA(fClipVizColor) != 0) {
+        canvas->save();
+        #define LARGE_COORD 1000000000
+        canvas->clipRect(SkRect::MakeLTRB(-LARGE_COORD, -LARGE_COORD, LARGE_COORD, LARGE_COORD),
+                       SkRegion::kReverseDifference_Op);
+        SkPaint clipPaint;
+        clipPaint.setColor(fClipVizColor);
+        canvas->drawPaint(clipPaint);
+        canvas->restore();
     }
 
     if (fMegaVizMode) {
@@ -312,6 +329,17 @@ const SkTDArray <SkDrawCommand*>& SkDebugCanvas::getDrawCommands() const {
 
 SkTDArray <SkDrawCommand*>& SkDebugCanvas::getDrawCommands() {
     return fCommandVector;
+}
+
+Json::Value SkDebugCanvas::toJSON(UrlDataManager& urlDataManager, int n, SkCanvas* canvas) {
+    Json::Value result = Json::Value(Json::objectValue);
+    result[SKDEBUGCANVAS_ATTRIBUTE_VERSION] = Json::Value(SKDEBUGCANVAS_VERSION);
+    Json::Value commands = Json::Value(Json::arrayValue);
+    for (int i = 0; i < this->getSize() && i <= n; i++) {
+        commands[i] = this->getDrawCommandAt(i)->drawToAndCollectJSON(canvas, urlDataManager);
+    }
+    result[SKDEBUGCANVAS_ATTRIBUTE_COMMANDS] = commands;
+    return result;
 }
 
 void SkDebugCanvas::updatePaintFilterCanvas() {
@@ -407,7 +435,8 @@ void SkDebugCanvas::onDrawPicture(const SkPicture* picture,
                                   const SkMatrix* matrix,
                                   const SkPaint* paint) {
     this->addDrawCommand(new SkBeginDrawPictureCommand(picture, matrix, paint));
-    this->INHERITED::onDrawPicture(picture, matrix, paint);
+    SkAutoCanvasMatrixPaint acmp(this, matrix, paint, picture->cullRect());
+    picture->playback(this);
     this->addDrawCommand(new SkEndDrawPictureCommand(SkToBool(matrix) || SkToBool(paint)));
 }
 

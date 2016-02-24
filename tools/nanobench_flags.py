@@ -33,6 +33,9 @@ def get_args(bot):
     args.append('--images')
     args.extend(['--gpuStatsDump', 'true'])
 
+  if 'Android' in bot and 'GPU' in bot:
+    args.extend(['--useThermalManager', '1,1,10,1000'])
+
   if 'Appurify' not in bot:
     args.extend(['--scales', '1.0', '1.1'])
 
@@ -117,6 +120,10 @@ def get_args(bot):
   match.append('~inc0.webp')
   match.append('~inc1.webp')
 
+  # As an experiment, skip nanobench on Debug trybots.
+  if 'Debug' in bot and 'CPU' in bot and 'Trybot' in bot:
+    match = ['nothing_will_match_this']
+
   if match:
     args.append('--match')
     args.extend(match)
@@ -129,12 +136,14 @@ def self_test():
   import coverage  # This way the bots don't need coverage.py to be installed.
   args = {}
   cases = [
+    'Perf-Android-GCC-Nexus6-GPU-Adreno420-Arm7-Release',
     'Perf-Android-Nexus7-Tegra3-Arm7-Release',
     'Perf-Android-GCC-NexusPlayer-GPU-PowerVR-x86-Release',
     'Test-Ubuntu-GCC-ShuttleA-GPU-GTX550Ti-x86_64-Release-Valgrind',
     'Test-Win7-MSVC-ShuttleA-GPU-HD2000-x86-Debug-ANGLE',
     'Test-iOS-Clang-iPad4-GPU-SGX554-Arm7-Debug',
     'Test-Android-GCC-GalaxyS4-GPU-SGX544-Arm7-Release',
+    'Test-Ubuntu-GCC-GCE-CPU-AVX2-x86_64-Debug-Trybot',
   ]
 
   cov = coverage.coverage()

@@ -40,11 +40,6 @@ DEFINE_bool(multiPage, false, "For document-type backends, render the source"
             " into multiple pages");
 DEFINE_bool(RAW_threading, true, "Allow RAW decodes to run on multiple threads?");
 
-static bool lazy_decode_bitmap(const void* src, size_t size, SkBitmap* dst) {
-    SkAutoTUnref<SkData> encoded(SkData::NewWithCopy(src, size));
-    return encoded && SkDEPRECATED_InstallDiscardablePixelRef(encoded, dst);
-}
-
 namespace DM {
 
 GMSrc::GMSrc(skiagm::GMRegistry::Factory factory) : fFactory(factory) {}
@@ -321,12 +316,17 @@ bool get_decode_info(SkImageInfo* decodeInfo, SkColorType canvasColorType,
             *decodeInfo = decodeInfo->makeColorType(kIndex_8_SkColorType);
             break;
         case CodecSrc::kGrayscale_Always_DstColorType:
-            if (kRGB_565_SkColorType == canvasColorType) {
+            if (kRGB_565_SkColorType == canvasColorType ||
+                    kOpaque_SkAlphaType != decodeInfo->alphaType()) {
                 return false;
             }
             *decodeInfo = decodeInfo->makeColorType(kGray_8_SkColorType);
             break;
         default:
+            if (kRGB_565_SkColorType == canvasColorType &&
+                    kOpaque_SkAlphaType != decodeInfo->alphaType()) {
+                return false;
+            }
             *decodeInfo = decodeInfo->makeColorType(canvasColorType);
             break;
     }
@@ -428,8 +428,6 @@ Error CodecSrc::draw(SkCanvas* canvas) const {
                     // available.
                 case SkCodec::kIncompleteInput:
                     break;
-                case SkCodec::kInvalidConversion:
-                    return Error::Nonfatal("Incompatible colortype conversion");
                 default:
                     // Everything else is considered a failure.
                     return SkStringPrintf("Couldn't getPixels %s.", fPath.c_str());
@@ -441,7 +439,7 @@ Error CodecSrc::draw(SkCanvas* canvas) const {
         case kScanline_Mode: {
             if (SkCodec::kSuccess != codec->startScanlineDecode(decodeInfo, NULL, colorPtr,
                                                                 colorCountPtr)) {
-                return Error::Nonfatal("Could not start scanline decoder");
+                return "Could not start scanline decoder";
             }
 
             void* dst = bitmap.getAddr(0, 0);
@@ -481,12 +479,15 @@ Error CodecSrc::draw(SkCanvas* canvas) const {
 
             // Decode odd stripes
             if (SkCodec::kSuccess != codec->startScanlineDecode(decodeInfo, NULL, colorPtr,
-                                                                colorCountPtr)
-                    || SkCodec::kTopDown_SkScanlineOrder != codec->getScanlineOrder()) {
-                // This mode was designed to test the new skip scanlines API in libjpeg-turbo.
-                // Jpegs have kTopDown_SkScanlineOrder, and at this time, it is not interesting
-                // to run this test for image types that do not have this scanline ordering.
-                return Error::Nonfatal("Could not start top-down scanline decoder");
+                                                                colorCountPtr)) {
+                return "Could not start scanline decoder";
+            }
+
+            // This mode was designed to test the new skip scanlines API in libjpeg-turbo.
+            // Jpegs have kTopDown_SkScanlineOrder, and at this time, it is not interesting
+            // to run this test for image types that do not have this scanline ordering.
+            if (SkCodec::kTopDown_SkScanlineOrder != codec->getScanlineOrder()) {
+                return Error::Nonfatal("kStripe test is only interesting for kTopDown codecs.");
             }
 
             for (int i = 0; i < numStripes; i += 2) {
@@ -520,6 +521,31 @@ Error CodecSrc::draw(SkCanvas* canvas) const {
                     codec->skipScanlines(linesToSkip);
                 }
             }
+            premultiply_if_necessary(bitmap);
+            canvas->drawBitmap(bitmap, 0, 0);
+            break;
+        }
+        case kCroppedScanline_Mode: {
+            const int width = decodeInfo.width();
+            const int height = decodeInfo.height();
+            // This value is chosen because, as we move across the image, it will sometimes
+            // align with the jpeg block sizes and it will sometimes not.  This allows us
+            // to test interestingly different code paths in the implementation.
+            const int tileSize = 36;
+
+            SkCodec::Options opts;
+            SkIRect subset;
+            for (int x = 0; x < width; x += tileSize) {
+                subset = SkIRect::MakeXYWH(x, 0, SkTMin(tileSize, width - x), height);
+                opts.fSubset = &subset;
+                if (SkCodec::kSuccess != codec->startScanlineDecode(decodeInfo, &opts,
+                        colorPtr, colorCountPtr)) {
+                    return "Could not start scanline decoder.";
+                }
+
+                codec->getScanlines(bitmap.getAddr(x, 0), height, bitmap.rowBytes());
+            }
+
             premultiply_if_necessary(bitmap);
             canvas->drawBitmap(bitmap, 0, 0);
             break;
@@ -573,20 +599,6 @@ Error CodecSrc::draw(SkCanvas* canvas) const {
                         case SkCodec::kSuccess:
                         case SkCodec::kIncompleteInput:
                             break;
-                        case SkCodec::kInvalidConversion:
-                            if (0 == (x|y)) {
-                                // First subset is okay to return unimplemented.
-                                return Error::Nonfatal("Incompatible colortype conversion");
-                            }
-                            // If the first subset succeeded, a later one should not fail.
-                            // fall through to failure
-                        case SkCodec::kUnimplemented:
-                            if (0 == (x|y)) {
-                                // First subset is okay to return unimplemented.
-                                return Error::Nonfatal("subset codec not supported");
-                            }
-                            // If the first subset succeeded, why would a later one fail?
-                            // fall through to failure
                         default:
                             return SkStringPrintf("subset codec failed to decode (%d, %d, %d, %d) "
                                                   "from %s with dimensions (%d x %d)\t error %d",
@@ -700,8 +712,6 @@ Error AndroidCodecSrc::draw(SkCanvas* canvas) const {
                 case SkCodec::kSuccess:
                 case SkCodec::kIncompleteInput:
                     break;
-                case SkCodec::kInvalidConversion:
-                    return Error::Nonfatal("Cannot convert to requested color type.");
                 default:
                     return SkStringPrintf("Couldn't getPixels %s.", fPath.c_str());
             }
@@ -755,8 +765,6 @@ Error AndroidCodecSrc::draw(SkCanvas* canvas) const {
                         case SkCodec::kSuccess:
                         case SkCodec::kIncompleteInput:
                             break;
-                        case SkCodec::kInvalidConversion:
-                            return Error::Nonfatal("Cannot convert to requested color type.");
                         default:
                             return SkStringPrintf("Couldn't getPixels %s.", fPath.c_str());
                     }
@@ -804,7 +812,7 @@ Error SKPSrc::draw(SkCanvas* canvas) const {
     if (!stream) {
         return SkStringPrintf("Couldn't read %s.", fPath.c_str());
     }
-    SkAutoTUnref<SkPicture> pic(SkPicture::CreateFromStream(stream, &lazy_decode_bitmap));
+    SkAutoTUnref<SkPicture> pic(SkPicture::CreateFromStream(stream));
     if (!pic) {
         return SkStringPrintf("Couldn't decode %s as a picture.", fPath.c_str());
     }
@@ -979,7 +987,7 @@ Error PDFSink::draw(const Src& src, SkBitmap*, SkWStream* dst, SkString*) const 
 
     info.emplace_back(SkString("Keywords"),
                       SkStringPrintf("Rasterizer:%s;", fRasterizer));
-    doc->setMetadata(info, nullptr, nullptr);
+    doc->setMetadata(&info[0], info.count(), nullptr, nullptr);
     return draw_skdocument(src, doc.get(), dst);
 }
 
@@ -1047,17 +1055,18 @@ Error RasterSink::draw(const Src& src, SkBitmap* dst, SkWStream*, SkString*) con
 // passing the Sink draw() arguments, a size, and a function draws into an SkCanvas.
 // Several examples below.
 
+template <typename Fn>
 static Error draw_to_canvas(Sink* sink, SkBitmap* bitmap, SkWStream* stream, SkString* log,
-                            SkISize size, std::function<Error(SkCanvas*)> draw) {
+                            SkISize size, const Fn& draw) {
     class ProxySrc : public Src {
     public:
-        ProxySrc(SkISize size, std::function<Error(SkCanvas*)> draw) : fSize(size), fDraw(draw) {}
+        ProxySrc(SkISize size, const Fn& draw) : fSize(size), fDraw(draw) {}
         Error   draw(SkCanvas* canvas) const override { return fDraw(canvas); }
         Name                    name() const override { sk_throw(); return ""; } // Won't be called.
         SkISize                 size() const override { return fSize; }
     private:
-        SkISize                         fSize;
-        std::function<Error(SkCanvas*)> fDraw;
+        SkISize   fSize;
+        const Fn& fDraw;
     };
     return sink->draw(ProxySrc(size, draw), bitmap, stream, log);
 }
@@ -1177,7 +1186,7 @@ Error ViaSerialization::draw(
     SkDynamicMemoryWStream wStream;
     pic->serialize(&wStream);
     SkAutoTDelete<SkStream> rStream(wStream.detachAsStream());
-    SkAutoTUnref<SkPicture> deserialized(SkPicture::CreateFromStream(rStream, &lazy_decode_bitmap));
+    SkAutoTUnref<SkPicture> deserialized(SkPicture::CreateFromStream(rStream));
 
     return draw_to_canvas(fSink, bitmap, stream, log, size, [&](SkCanvas* canvas) {
         canvas->drawPicture(deserialized);

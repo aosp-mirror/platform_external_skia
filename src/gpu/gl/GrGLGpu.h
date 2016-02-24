@@ -64,7 +64,7 @@ public:
                              ReadPixelTempDrawInfo*) override;
 
     bool onGetWritePixelsInfo(GrSurface* dstSurface, int width, int height,
-                              size_t rowBytes, GrPixelConfig srcConfig, DrawPreference*,
+                              GrPixelConfig srcConfig, DrawPreference*,
                               WritePixelTempDrawInfo*) override;
 
     bool initCopySurfaceDstDesc(const GrSurface* src, GrSurfaceDesc* desc) const override;
@@ -134,7 +134,7 @@ public:
 
     void drawDebugWireRect(GrRenderTarget*, const SkIRect&, GrColor) override;
 
-    void performFlushWorkaround() override;
+    void finishDrawTarget() override;
 
 private:
     GrGLGpu(GrGLContext* ctx, GrContext* context);
@@ -158,6 +158,18 @@ private:
     // Given a GrPixelConfig return the index into the stencil format array on GrGLCaps to a
     // compatible stencil format, or negative if there is no compatible stencil format.
     int getCompatibleStencilIndex(GrPixelConfig config);
+
+    // If |desc.fTextureStorageAllocator| exists, use that to create the
+    // texture. Otherwise, create the texture directly.
+    // Returns whether the texture is successfully created. On success, the
+    // result is stored in |info|.
+    // The texture is populated with |srcData|, if it exists.
+    // The texture parameters are cached in |initialTexParams|.
+    bool createTextureImpl(const GrSurfaceDesc& desc, GrGLTextureInfo* info,
+                           bool renderTarget, const void* srcData,
+                           GrGLTexture::TexParams* initialTexParams, size_t rowBytes);
+    bool createTextureExternalAllocatorImpl(const GrSurfaceDesc& desc, GrGLTextureInfo* info,
+                                            const void* srcData, size_t rowBytes);
 
     void onClear(GrRenderTarget*, const SkIRect& rect, GrColor color) override;
 
@@ -305,11 +317,18 @@ private:
     // ensures that such operations don't negatively interact with tracking bound textures.
     void setScratchTextureUnit();
 
-    // bounds is region that may be modified and therefore has to be resolved.
+    // bounds is region that may be modified.
     // nullptr means whole target. Can be an empty rect.
     void flushRenderTarget(GrGLRenderTarget*, const SkIRect* bounds);
+    // Handles cases where a surface will be updated without a call to flushRenderTarget
+    void didWriteToSurface(GrSurface*, const SkIRect* bounds) const;
+
+    // Need not be called if flushRenderTarget is used.
+    void flushViewport(const GrGLIRect&);
 
     void flushStencil(const GrStencilSettings&);
+
+    // rt is used only if useHWAA is true.
     void flushHWAAState(GrRenderTarget* rt, bool useHWAA, bool stencilEnabled);
 
     // helper for onCreateTexture and writeTexturePixels

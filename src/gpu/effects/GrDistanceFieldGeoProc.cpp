@@ -34,7 +34,7 @@ public:
     void onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) override{
         const GrDistanceFieldA8TextGeoProc& dfTexEffect =
                 args.fGP.cast<GrDistanceFieldA8TextGeoProc>();
-        GrGLSLFragmentBuilder* fragBuilder = args.fFragBuilder;
+        GrGLSLPPFragmentBuilder* fragBuilder = args.fFragBuilder;
         SkAssertResult(fragBuilder->enableFeature(
                 GrGLSLFragmentShaderBuilder::kStandardDerivatives_GLSLFeature));
 
@@ -49,7 +49,7 @@ public:
         // adjust based on gamma
         const char* distanceAdjustUniName = nullptr;
         // width, height, 1/(3*width)
-        fDistanceAdjustUni = uniformHandler->addUniform(GrGLSLUniformHandler::kFragment_Visibility,
+        fDistanceAdjustUni = uniformHandler->addUniform(kFragment_GrShaderFlag,
                                                         kFloat_GrSLType, kDefault_GrSLPrecision,
                                                         "DistanceAdjust", &distanceAdjustUniName);
 #endif
@@ -78,23 +78,20 @@ public:
 
         // add varyings
         GrGLSLVertToFrag recipScale(kFloat_GrSLType);
-        GrGLSLVertToFrag st(kVec2f_GrSLType);
+        GrGLSLVertToFrag uv(kVec2f_GrSLType);
         bool isSimilarity = SkToBool(dfTexEffect.getFlags() & kSimilarity_DistanceFieldEffectFlag);
-        varyingHandler->addVarying("IntTextureCoords", &st, kHigh_GrSLPrecision);
-        vertBuilder->codeAppendf("%s = %s;", st.vsOut(), dfTexEffect.inTextureCoords()->fName);
+        varyingHandler->addVarying("TextureCoords", &uv, kHigh_GrSLPrecision);
+        vertBuilder->codeAppendf("%s = %s;", uv.vsOut(), dfTexEffect.inTextureCoords()->fName);
 
         // compute numbers to be hardcoded to convert texture coordinates from int to float
         SkASSERT(dfTexEffect.numTextures() == 1);
         GrTexture* atlas = dfTexEffect.textureAccess(0).getTexture();
         SkASSERT(atlas && SkIsPow2(atlas->width()) && SkIsPow2(atlas->height()));
-        SkScalar recipWidth = 1.0f / atlas->width();
-        SkScalar recipHeight = 1.0f / atlas->height();
 
-        GrGLSLVertToFrag uv(kVec2f_GrSLType);
-        varyingHandler->addVarying("TextureCoords", &uv, kHigh_GrSLPrecision);
-        vertBuilder->codeAppendf("%s = vec2(%.*f, %.*f) * %s;", uv.vsOut(),
-                                 GR_SIGNIFICANT_POW2_DECIMAL_DIG, recipWidth,
-                                 GR_SIGNIFICANT_POW2_DECIMAL_DIG, recipHeight,
+        GrGLSLVertToFrag st(kVec2f_GrSLType);
+        varyingHandler->addVarying("IntTextureCoords", &st, kHigh_GrSLPrecision);
+        vertBuilder->codeAppendf("%s = vec2(%d, %d) * %s;", st.vsOut(),
+                                 atlas->width(), atlas->height(),
                                  dfTexEffect.inTextureCoords()->fName);
         
         // Use highp to work around aliasing issues
@@ -224,7 +221,8 @@ GrDistanceFieldA8TextGeoProc::GrDistanceFieldA8TextGeoProc(GrColor color,
                                                    kHigh_GrSLPrecision));
     fInColor = &this->addVertexAttrib(Attribute("inColor", kVec4ub_GrVertexAttribType));
     fInTextureCoords = &this->addVertexAttrib(Attribute("inTextureCoords",
-                                                          kVec2s_GrVertexAttribType));
+                                                        kVec2us_GrVertexAttribType,
+                                                        kHigh_GrSLPrecision));
     this->addTextureAccess(&fTextureAccess);
 }
 
@@ -278,7 +276,7 @@ public:
     void onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) override{
         const GrDistanceFieldPathGeoProc& dfTexEffect = args.fGP.cast<GrDistanceFieldPathGeoProc>();
 
-        GrGLSLFragmentBuilder* fragBuilder = args.fFragBuilder;
+        GrGLSLPPFragmentBuilder* fragBuilder = args.fFragBuilder;
         SkAssertResult(fragBuilder->enableFeature(
                                      GrGLSLFragmentShaderBuilder::kStandardDerivatives_GLSLFeature));
 
@@ -316,7 +314,7 @@ public:
                              args.fTransformsOut);
 
         const char* textureSizeUniName = nullptr;
-        fTextureSizeUni = uniformHandler->addUniform(GrGLSLUniformHandler::kFragment_Visibility,
+        fTextureSizeUni = uniformHandler->addUniform(kFragment_GrShaderFlag,
                                                      kVec2f_GrSLType, kDefault_GrSLPrecision,
                                                      "TextureSize", &textureSizeUniName);
 
@@ -495,7 +493,7 @@ public:
         // emit attributes
         varyingHandler->emitAttributes(dfTexEffect);
 
-        GrGLSLFragmentBuilder* fragBuilder = args.fFragBuilder;
+        GrGLSLPPFragmentBuilder* fragBuilder = args.fFragBuilder;
 
         // setup pass through color
         if (!dfTexEffect.colorIgnored()) {
@@ -522,22 +520,19 @@ public:
         // set up varyings
         bool isUniformScale = SkToBool(dfTexEffect.getFlags() & kUniformScale_DistanceFieldEffectMask);
         GrGLSLVertToFrag recipScale(kFloat_GrSLType);
-        GrGLSLVertToFrag st(kVec2f_GrSLType);
-        varyingHandler->addVarying("IntTextureCoords", &st, kHigh_GrSLPrecision);
-        vertBuilder->codeAppendf("%s = %s;", st.vsOut(), dfTexEffect.inTextureCoords()->fName);
+        GrGLSLVertToFrag uv(kVec2f_GrSLType);
+        varyingHandler->addVarying("TextureCoords", &uv, kHigh_GrSLPrecision);
+        vertBuilder->codeAppendf("%s = %s;", uv.vsOut(), dfTexEffect.inTextureCoords()->fName);
 
         // compute numbers to be hardcoded to convert texture coordinates from int to float
         SkASSERT(dfTexEffect.numTextures() == 1);
         GrTexture* atlas = dfTexEffect.textureAccess(0).getTexture();
         SkASSERT(atlas && SkIsPow2(atlas->width()) && SkIsPow2(atlas->height()));
-        SkScalar recipWidth = 1.0f / atlas->width();
-        SkScalar recipHeight = 1.0f / atlas->height();
 
-        GrGLSLVertToFrag uv(kVec2f_GrSLType);
-        varyingHandler->addVarying("TextureCoords", &uv, kHigh_GrSLPrecision);
-        vertBuilder->codeAppendf("%s = vec2(%.*f, %.*f) * %s;", uv.vsOut(),
-                                 GR_SIGNIFICANT_POW2_DECIMAL_DIG, recipWidth,
-                                 GR_SIGNIFICANT_POW2_DECIMAL_DIG, recipHeight,
+        GrGLSLVertToFrag st(kVec2f_GrSLType);
+        varyingHandler->addVarying("IntTextureCoords", &st, kHigh_GrSLPrecision);
+        vertBuilder->codeAppendf("%s = vec2(%d, %d) * %s;", st.vsOut(),
+                                 atlas->width(), atlas->height(),
                                  dfTexEffect.inTextureCoords()->fName);
 
         // add frag shader code
@@ -594,7 +589,7 @@ public:
 
         // adjust width based on gamma
         const char* distanceAdjustUniName = nullptr;
-        fDistanceAdjustUni = uniformHandler->addUniform(GrGLSLUniformHandler::kFragment_Visibility,
+        fDistanceAdjustUni = uniformHandler->addUniform(kFragment_GrShaderFlag,
                                                         kVec3f_GrSLType, kDefault_GrSLPrecision,
                                                         "DistanceAdjust", &distanceAdjustUniName);
         fragBuilder->codeAppendf("distance -= %s;", distanceAdjustUniName);
@@ -708,7 +703,8 @@ GrDistanceFieldLCDTextGeoProc::GrDistanceFieldLCDTextGeoProc(
                                                    kHigh_GrSLPrecision));
     fInColor = &this->addVertexAttrib(Attribute("inColor", kVec4ub_GrVertexAttribType));
     fInTextureCoords = &this->addVertexAttrib(Attribute("inTextureCoords",
-                                                        kVec2s_GrVertexAttribType));
+                                                        kVec2us_GrVertexAttribType,
+                                                        kHigh_GrSLPrecision));
     this->addTextureAccess(&fTextureAccess);
 }
 

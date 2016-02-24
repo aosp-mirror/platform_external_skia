@@ -40,7 +40,7 @@ SkRadialGradient::SkRadialGradient(const SkPoint& center, SkScalar radius, const
     , fRadius(radius) {
 }
 
-size_t SkRadialGradient::contextSize() const {
+size_t SkRadialGradient::contextSize(const ContextRec&) const {
     return sizeof(RadialGradientContext);
 }
 
@@ -206,11 +206,9 @@ void SkRadialGradient::RadialGradientContext::shadeSpan(int x, int y,
         SkScalar sdy = fDstToIndex.getSkewY();
 
         if (fDstToIndexClass == kFixedStepInX_MatrixClass) {
-            SkFixed storage[2];
-            (void)fDstToIndex.fixedStepInX(SkIntToScalar(y),
-                                           &storage[0], &storage[1]);
-            sdx = SkFixedToScalar(storage[0]);
-            sdy = SkFixedToScalar(storage[1]);
+            const auto step = fDstToIndex.fixedStepInX(SkIntToScalar(y));
+            sdx = step.fX;
+            sdy = step.fY;
         } else {
             SkASSERT(fDstToIndexClass == kLinear_MatrixClass);
         }

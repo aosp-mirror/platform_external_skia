@@ -60,6 +60,26 @@ public:
                                         GrSLType coordType = kVec2f_GrSLType);
 
     /**
+    * Adds a #define directive to the top of the shader.
+    */
+    void define(const char* macro, const char* replacement) {
+        this->definitions().appendf("#define %s %s\n", macro, replacement);
+    }
+
+    void define(const char* macro, int replacement) {
+        this->definitions().appendf("#define %s %i\n", macro, replacement);
+    }
+
+    void definef(const char* macro, const char* replacement, ...) {
+       this->definitions().appendf("#define %s ", macro);
+       va_list args;
+       va_start(args, replacement);
+       this->definitions().appendVAList(replacement, args);
+       va_end(args);
+       this->definitions().append("\n");
+    }
+
+    /**
     * Called by GrGLSLProcessors to add code to one of the shaders.
     */
     void codeAppendf(const char format[], ...) SK_PRINTF_LIKE(2, 3) {
@@ -122,10 +142,27 @@ protected:
     typedef GrTAllocator<GrGLSLShaderVar> VarArray;
     void appendDecls(const VarArray& vars, SkString* out) const;
 
+    /**
+     * Features that should only be enabled internally by the builders.
+     */
+    enum GLSLPrivateFeature {
+        kFragCoordConventions_GLSLPrivateFeature,
+        kBlendEquationAdvanced_GLSLPrivateFeature,
+        kBlendFuncExtended_GLSLPrivateFeature,
+        kExternalTexture_GLSLPrivateFeature,
+        kFramebufferFetch_GLSLPrivateFeature,
+        kNoPerspectiveInterpolation_GLSLPrivateFeature,
+        kSampleVariables_GLSLPrivateFeature,
+        kSampleMaskOverrideCoverage_GLSLPrivateFeature,
+        kLastGLSLPrivateFeature = kSampleMaskOverrideCoverage_GLSLPrivateFeature
+    };
+
     /*
      * A general function which enables an extension in a shader if the feature bit is not present
+     *
+     * @return true if the feature bit was not yet present, false otherwise.
      */
-    void addFeature(uint32_t featureBit, const char* extensionName);
+    bool addFeature(uint32_t featureBit, const char* extensionName);
 
     enum InterfaceQualifier {
         kOut_InterfaceQualifier,
@@ -152,6 +189,7 @@ protected:
 
     SkString& versionDecl() { return fShaderStrings[kVersionDecl]; }
     SkString& extensions() { return fShaderStrings[kExtensions]; }
+    SkString& definitions() { return fShaderStrings[kDefinitions]; }
     SkString& precisionQualifier() { return fShaderStrings[kPrecisionQualifier]; }
     SkString& layoutQualifiers() { return fShaderStrings[kLayoutQualifiers]; }
     SkString& uniforms() { return fShaderStrings[kUniforms]; }
@@ -166,6 +204,7 @@ protected:
     enum {
         kVersionDecl,
         kExtensions,
+        kDefinitions,
         kPrecisionQualifier,
         kLayoutQualifiers,
         kUniforms,
@@ -193,6 +232,7 @@ protected:
 
     friend class GrGLSLProgramBuilder;
     friend class GrGLProgramBuilder;
+    friend class GrGLSLVaryingHandler; // to access noperspective interpolation feature.
     friend class GrGLPathProgramBuilder; // to access fInputs.
     friend class GrVkProgramBuilder;
 };

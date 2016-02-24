@@ -268,7 +268,7 @@ bool GrGpu::getReadPixelsInfo(GrSurface* srcSurface, int width, int height, size
 
     return true;
 }
-bool GrGpu::getWritePixelsInfo(GrSurface* dstSurface, int width, int height, size_t rowBytes,
+bool GrGpu::getWritePixelsInfo(GrSurface* dstSurface, int width, int height,
                                GrPixelConfig srcConfig, DrawPreference* drawPreference,
                                WritePixelTempDrawInfo* tempDrawInfo) {
     SkASSERT(drawPreference);
@@ -280,13 +280,16 @@ bool GrGpu::getWritePixelsInfo(GrSurface* dstSurface, int width, int height, siz
         return false;
     }
 
-    if (this->caps()->useDrawInsteadOfPartialRenderTargetWrite() &&
-        SkToBool(dstSurface->asRenderTarget()) &&
-        (width < dstSurface->width() || height < dstSurface->height())) {
-        ElevateDrawPreference(drawPreference, kRequireDraw_DrawPreference);
+    if (SkToBool(dstSurface->asRenderTarget())) {
+        if (this->caps()->useDrawInsteadOfAllRenderTargetWrites()) {
+            ElevateDrawPreference(drawPreference, kRequireDraw_DrawPreference);
+        } else if (this->caps()->useDrawInsteadOfPartialRenderTargetWrite() &&
+                   (width < dstSurface->width() || height < dstSurface->height())) {
+            ElevateDrawPreference(drawPreference, kRequireDraw_DrawPreference);
+        }
     }
 
-    if (!this->onGetWritePixelsInfo(dstSurface, width, height, rowBytes, srcConfig, drawPreference,
+    if (!this->onGetWritePixelsInfo(dstSurface, width, height, srcConfig, drawPreference,
                                     tempDrawInfo)) {
         return false;
     }
@@ -364,9 +367,6 @@ void GrGpu::resolveRenderTarget(GrRenderTarget* target) {
     SkASSERT(target);
     this->handleDirtyContext();
     this->onResolveRenderTarget(target);
-}
-
-void GrGpu::performFlushWorkaround() {
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -14,6 +14,7 @@
 #include "SkSurfaceProps.h"
 #include "../private/GrSingleOwner.h"
 
+class GrAtlasTextContext;
 class GrAuditTrail;
 class GrClip;
 class GrContext;
@@ -27,7 +28,6 @@ class GrPipelineBuilder;
 class GrRenderTarget;
 class GrStrokeInfo;
 class GrSurface;
-class GrTextContext;
 class SkDrawFilter;
 struct SkIPoint;
 struct SkIRect;
@@ -47,22 +47,22 @@ class SK_API GrDrawContext : public SkRefCnt {
 public:
     ~GrDrawContext() override;
 
-    void copySurface(GrSurface* src, const SkIRect& srcRect, const SkIPoint& dstPoint);
+    bool copySurface(GrSurface* src, const SkIRect& srcRect, const SkIPoint& dstPoint);
 
     // TODO: it is odd that we need both the SkPaint in the following 3 methods.
     // We should extract the text parameters from SkPaint and pass them separately
     // akin to GrStrokeInfo (GrTextInfo?)
-    void drawText(const GrClip&,  const GrPaint&, const SkPaint&,
-                  const SkMatrix& viewMatrix, const char text[], size_t byteLength,
-                  SkScalar x, SkScalar y, const SkIRect& clipBounds);
-    void drawPosText(const GrClip&, const GrPaint&, const SkPaint&,
-                     const SkMatrix& viewMatrix, const char text[], size_t byteLength,
-                     const SkScalar pos[], int scalarsPerPosition,
-                     const SkPoint& offset, const SkIRect& clipBounds);
-    void drawTextBlob(const GrClip&, const SkPaint&,
-                      const SkMatrix& viewMatrix, const SkTextBlob*,
-                      SkScalar x, SkScalar y,
-                      SkDrawFilter*, const SkIRect& clipBounds);
+    virtual void drawText(const GrClip&,  const GrPaint&, const SkPaint&,
+                          const SkMatrix& viewMatrix, const char text[], size_t byteLength,
+                          SkScalar x, SkScalar y, const SkIRect& clipBounds);
+    virtual void drawPosText(const GrClip&, const GrPaint&, const SkPaint&,
+                             const SkMatrix& viewMatrix, const char text[], size_t byteLength,
+                             const SkScalar pos[], int scalarsPerPosition,
+                             const SkPoint& offset, const SkIRect& clipBounds);
+    virtual void drawTextBlob(const GrClip&, const SkPaint&,
+                              const SkMatrix& viewMatrix, const SkTextBlob*,
+                              SkScalar x, SkScalar y,
+                              SkDrawFilter*, const SkIRect& clipBounds);
 
     /**
      * Provides a perfomance hint that the render target's contents are allowed
@@ -282,14 +282,20 @@ public:
     // Functions intended for internal use only.
     void internal_drawBatch(const GrPipelineBuilder& pipelineBuilder, GrDrawBatch* batch);
 
+protected:
+    GrDrawContext(GrContext*, GrDrawingManager*, GrRenderTarget*,
+                  const SkSurfaceProps* surfaceProps, GrAuditTrail*, GrSingleOwner*);
+
+    GrDrawingManager* drawingManager() { return fDrawingManager; }
+    GrAuditTrail* auditTrail() { return fAuditTrail; }
+    const SkSurfaceProps& surfaceProps() const { return fSurfaceProps; }
+    
+    SkDEBUGCODE(GrSingleOwner* singleOwner() { return fSingleOwner; })
+    SkDEBUGCODE(void validate() const;)
+
 private:
     friend class GrAtlasTextBlob; // for access to drawBatch
     friend class GrDrawingManager; // for ctor
-
-    SkDEBUGCODE(void validate() const;)
-
-    GrDrawContext(GrDrawingManager*, GrRenderTarget*, const SkSurfaceProps* surfaceProps,
-                  GrAuditTrail*, GrSingleOwner*);
 
     void internalDrawPath(GrPipelineBuilder*,
                           const SkMatrix& viewMatrix,
@@ -304,16 +310,17 @@ private:
 
     GrDrawTarget* getDrawTarget();
 
-    GrDrawingManager* fDrawingManager;
-    GrRenderTarget*   fRenderTarget;
+    GrDrawingManager*                 fDrawingManager;
+    GrRenderTarget*                   fRenderTarget;
 
     // In MDB-mode the drawTarget can be closed by some other drawContext that has picked
     // it up. For this reason, the drawTarget should only ever be accessed via 'getDrawTarget'.
-    GrDrawTarget*     fDrawTarget;
-    GrTextContext*    fTextContext; // lazily gotten from GrContext::DrawingManager
+    GrDrawTarget*                     fDrawTarget;
+    SkAutoTDelete<GrAtlasTextContext> fAtlasTextContext;
+    GrContext*                        fContext;
 
-    SkSurfaceProps    fSurfaceProps;
-    GrAuditTrail*     fAuditTrail;
+    SkSurfaceProps                    fSurfaceProps;
+    GrAuditTrail*                     fAuditTrail;
 
     // In debug builds we guard against improper thread handling
     SkDEBUGCODE(mutable GrSingleOwner* fSingleOwner;)

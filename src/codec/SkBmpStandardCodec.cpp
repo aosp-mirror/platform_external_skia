@@ -17,15 +17,16 @@
 SkBmpStandardCodec::SkBmpStandardCodec(const SkImageInfo& info, SkStream* stream,
                                        uint16_t bitsPerPixel, uint32_t numColors,
                                        uint32_t bytesPerColor, uint32_t offset,
-                                       SkCodec::SkScanlineOrder rowOrder, bool inIco)
+                                       SkCodec::SkScanlineOrder rowOrder,
+                                       bool isOpaque, bool inIco)
     : INHERITED(info, stream, bitsPerPixel, rowOrder)
     , fColorTable(nullptr)
     , fNumColors(numColors)
     , fBytesPerColor(bytesPerColor)
     , fOffset(offset)
     , fSwizzler(nullptr)
-    , fSrcRowBytes(SkAlign4(compute_row_bytes(this->getInfo().width(), this->bitsPerPixel())))
-    , fSrcBuffer(new uint8_t [fSrcRowBytes])
+    , fSrcBuffer(new uint8_t [this->srcRowBytes()])
+    , fIsOpaque(isOpaque)
     , fInIco(inIco)
     , fAndMaskRowBytes(fInIco ? SkAlign4(compute_row_bytes(this->getInfo().width(), 1)) : 0)
 {}
@@ -94,8 +95,7 @@ SkCodec::Result SkBmpStandardCodec::onGetPixels(const SkImageInfo& dstInfo,
 
         // Choose the proper packing function
         SkPMColor (*packARGB) (uint32_t, uint32_t, uint32_t, uint32_t);
-        SkAlphaType encodedAlphaType = this->getInfo().alphaType();
-        if (kOpaque_SkAlphaType == encodedAlphaType || kUnpremul_SkAlphaType == dstAlphaType) {
+        if (fIsOpaque || kUnpremul_SkAlphaType == dstAlphaType) {
             packARGB = &SkPackARGB32NoCheck;
         } else {
             packARGB = &SkPremultiplyARGBInline;
@@ -108,7 +108,7 @@ SkCodec::Result SkBmpStandardCodec::onGetPixels(const SkImageInfo& dstInfo,
             uint8_t green = get_byte(cBuffer.get(), i*fBytesPerColor + 1);
             uint8_t red = get_byte(cBuffer.get(), i*fBytesPerColor + 2);
             uint8_t alpha;
-            if (kOpaque_SkAlphaType == encodedAlphaType) {
+            if (fIsOpaque) {
                 alpha = 0xFF;
             } else {
                 alpha = get_byte(cBuffer.get(), i*fBytesPerColor + 3);
@@ -152,9 +152,9 @@ SkCodec::Result SkBmpStandardCodec::onGetPixels(const SkImageInfo& dstInfo,
     return true;
 }
 
-bool SkBmpStandardCodec::initializeSwizzler(const SkImageInfo& dstInfo, const Options& opts) {
+void SkBmpStandardCodec::initializeSwizzler(const SkImageInfo& dstInfo, const Options& opts) {
     // Get swizzler configuration
-    SkSwizzler::SrcConfig config;
+    SkSwizzler::SrcConfig config = SkSwizzler::kUnknown;
     switch (this->bitsPerPixel()) {
         case 1:
             config = SkSwizzler::kIndex1;
@@ -172,7 +172,7 @@ bool SkBmpStandardCodec::initializeSwizzler(const SkImageInfo& dstInfo, const Op
             config = SkSwizzler::kBGR;
             break;
         case 32:
-            if (kOpaque_SkAlphaType == this->getInfo().alphaType()) {
+            if (fIsOpaque) {
                 config = SkSwizzler::kBGRX;
             } else {
                 config = SkSwizzler::kBGRA;
@@ -180,7 +180,6 @@ bool SkBmpStandardCodec::initializeSwizzler(const SkImageInfo& dstInfo, const Op
             break;
         default:
             SkASSERT(false);
-            return false;
     }
 
     // Get a pointer to the color table if it exists
@@ -188,11 +187,7 @@ bool SkBmpStandardCodec::initializeSwizzler(const SkImageInfo& dstInfo, const Op
 
     // Create swizzler
     fSwizzler.reset(SkSwizzler::CreateSwizzler(config, colorPtr, dstInfo, opts));
-
-    if (nullptr == fSwizzler.get()) {
-        return false;
-    }
-    return true;
+    SkASSERT(fSwizzler);
 }
 
 SkCodec::Result SkBmpStandardCodec::prepareToDecode(const SkImageInfo& dstInfo,
@@ -207,11 +202,8 @@ SkCodec::Result SkBmpStandardCodec::prepareToDecode(const SkImageInfo& dstInfo,
     // Copy the color table to the client if necessary
     copy_color_table(dstInfo, this->fColorTable, inputColorPtr, inputColorCount);
 
-    // Initialize a swizzler if necessary
-    if (!this->initializeSwizzler(dstInfo, options)) {
-        SkCodecPrintf("Error: cannot initialize swizzler.\n");
-        return SkCodec::kInvalidConversion;
-    }
+    // Initialize a swizzler
+    this->initializeSwizzler(dstInfo, options);
     return SkCodec::kSuccess;
 }
 
@@ -224,7 +216,7 @@ int SkBmpStandardCodec::decodeRows(const SkImageInfo& dstInfo, void* dst, size_t
     const int height = dstInfo.height();
     for (int y = 0; y < height; y++) {
         // Read a row of the input
-        if (this->stream()->read(fSrcBuffer.get(), fSrcRowBytes) != fSrcRowBytes) {
+        if (this->stream()->read(fSrcBuffer.get(), this->srcRowBytes()) != this->srcRowBytes()) {
             SkCodecPrintf("Warning: incomplete input stream.\n");
             return y;
         }
@@ -261,7 +253,7 @@ int SkBmpStandardCodec::decodeRows(const SkImageInfo& dstInfo, void* dst, size_t
 
         // Calculate how many bytes we must skip to reach the AND mask.
         const int remainingScanlines = this->getInfo().height() - startScanline - height;
-        const size_t bytesToSkip = remainingScanlines * fSrcRowBytes +
+        const size_t bytesToSkip = remainingScanlines * this->srcRowBytes() +
                 startScanline * fAndMaskRowBytes;
         const size_t subStreamStartPosition = currPosition + bytesToSkip;
         if (subStreamStartPosition >= length) {

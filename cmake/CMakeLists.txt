@@ -95,6 +95,7 @@ remove_srcs(
     ../src/gpu/gl/command_buffer/*
     ../src/gpu/gl/egl/*
     ../src/gpu/gl/iOS/*
+    ../src/gpu/vk/*
     ../src/opts/SkBitmapProcState_opts_none.cpp
     ../src/opts/SkBlitMask_opts_none.cpp
     ../src/opts/SkBlitRow_opts_none.cpp
@@ -113,7 +114,6 @@ if (WIN32)
 endif()
 
 remove_srcs(../src/gpu/gl/angle/*)  # TODO
-remove_srcs(../src/codec/* ../src/android/*)  # TODO: Requires Chromium's libjpeg-turbo, and incompatible giflib.
 
 # Certain files must be compiled with support for SSSE3, SSE4.1, AVX, or AVX2 intrinsics.
 file (GLOB_RECURSE ssse3_srcs ../src/*ssse3*.cpp ../src/*SSSE3*.cpp)
@@ -146,6 +146,9 @@ if (UNIX AND NOT APPLE)
     find_package (PNG)
 endif()
 
+# Do not compile SkRawCodec.
+remove_srcs(../src/codec/*Raw*.cpp)
+
 # TODO: macro away this if (found) ... else() ... endif() stuff.
 
 if (EXPAT_FOUND)
@@ -158,15 +161,20 @@ endif()
 if (GIF_FOUND)
     list (APPEND private_includes ${GIF_INCLUDE_DIRS})
     list (APPEND libs             ${GIF_LIBRARIES})
+    add_definitions(-DSK_CODEC_DECODES_GIF)
 else()
     remove_srcs(../src/images/*gif*)
+    remove_srcs(../src/codec/*Gif*)
 endif()
 
 if (JPEG_FOUND)
     list (APPEND private_includes ${JPEG_INCLUDE_DIRS})
     list (APPEND libs             ${JPEG_LIBRARIES})
+    add_definitions(-DSK_CODEC_DECODES_JPEG)
 else()
     remove_srcs(../src/images/*jpeg*)
+    remove_srcs(../src/images/*Jpeg*)
+    remove_srcs(../src/codec/*Jpeg*)
 endif()
 
 if (LUA_FOUND)
@@ -179,8 +187,14 @@ endif()
 if (PNG_FOUND)
     list (APPEND private_includes ${PNG_INCLUDE_DIRS})
     list (APPEND libs             ${PNG_LIBRARIES})
+    add_definitions(-DPNG_SKIP_SETJMP_CHECK)
+    add_definitions(-DPNG_SKIP_SKIA_OPTS)
+    add_definitions(-DSK_CODEC_DECODES_PNG)
 else()
     remove_srcs(../src/images/*png*)
+    remove_srcs(../src/images/*ico*)
+    remove_srcs(../src/codec/*Png*)
+    remove_srcs(../src/codec/*Ico*)
 endif()
 
 if (ZLIB_FOUND)
@@ -194,8 +208,10 @@ endif()
 if (WEBP_INCLUDE_DIRS AND WEBP_LIBRARIES)
     list (APPEND private_includes ${WEBP_INCLUDE_DIRS})
     list (APPEND libs             ${WEBP_LIBRARIES})
+    add_definitions(-DSK_CODEC_DECODES_WEBP)
 else()
     remove_srcs(../src/images/*webp*)
+    remove_srcs(../src/codec/*Webp*)
 endif()
 
 if (FREETYPE_FOUND)

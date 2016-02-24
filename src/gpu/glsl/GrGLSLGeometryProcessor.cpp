@@ -19,6 +19,9 @@ void GrGLSLGeometryProcessor::emitCode(EmitArgs& args) {
     GrGPArgs gpArgs;
     this->onEmitCode(args, &gpArgs);
     vBuilder->transformToNormalizedDeviceSpace(gpArgs.fPositionVar);
+    if (kVec2f_GrSLType == gpArgs.fPositionVar.getType()) {
+        args.fVaryingHandler->setNoPerspective();
+    }
 }
 
 void GrGLSLGeometryProcessor::emitTransforms(GrGLSLVertexBuilder* vb,
@@ -50,7 +53,7 @@ void GrGLSLGeometryProcessor::emitTransforms(GrGLSLVertexBuilder* vb,
 
             const char* uniName;
             fInstalledTransforms[i][t].fHandle =
-                    uniformHandler->addUniform(GrGLSLUniformHandler::kVertex_Visibility,
+                    uniformHandler->addUniform(kVertex_GrShaderFlag,
                                                kMat33f_GrSLType, precision,
                                                strUniName.c_str(),
                                                &uniName).toIndex();
@@ -139,7 +142,7 @@ void GrGLSLGeometryProcessor::setupPosition(GrGLSLVertexBuilder* vertBuilder,
         vertBuilder->codeAppendf("vec2 %s = %s;", gpArgs->fPositionVar.c_str(), posName);
     } else {
         const char* viewMatrixName;
-        *viewMatrixUniform = uniformHandler->addUniform(GrGLSLUniformHandler::kVertex_Visibility,
+        *viewMatrixUniform = uniformHandler->addUniform(kVertex_GrShaderFlag,
                                                         kMat33f_GrSLType, kHigh_GrSLPrecision,
                                                         "uViewM",
                                                         &viewMatrixName);

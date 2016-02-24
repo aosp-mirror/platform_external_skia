@@ -18,13 +18,13 @@ deps = {
   "third_party/externals/nanomsg" : "https://skia.googlesource.com/third_party/nanomsg.git@0.4-beta",
   "third_party/externals/zlib"    : "https://chromium.googlesource.com/chromium/src/third_party/zlib@c4e33043fb071b6ea0a153845da625d7ed633d3d",
   # NOTE: If we update libpng, we may need to update the generated file at third_party/libpng/pnglibconf.h
-  "third_party/externals/libpng"  : "https://skia.googlesource.com/third_party/libpng.git@070a616b8275277e18ef8ee91e2ca23f7bdc67d5",
+  "third_party/externals/libpng"  : "https://skia.googlesource.com/third_party/libpng.git@52846504da1f519cf1bb89636caf9110e8677443",
   "third_party/externals/giflib"  : "https://android.googlesource.com/platform/external/giflib.git@ab10e256df4f684260ca239905b1cec727181f6c",
 
   "third_party/externals/dng_sdk" : "https://android.googlesource.com/platform/external/dng_sdk.git@6579353b8ee5d8aa1f1a96ae22798de9b41e19b8",
-  "third_party/externals/piex"    : "https://android.googlesource.com/platform/external/piex.git@a9540117cdd785b0dd75f8c4c28b278f86eb485c",
+  "third_party/externals/piex"    : "https://android.googlesource.com/platform/external/piex.git@883a1e5419990f51b8e928969e9c5a09869bce0e",
 
-  "third_party/externals/libjpeg-turbo"             : "https://skia.googlesource.com/third_party/libjpeg-turbo.git@36422d9e165a33914436068536772cc6ed1e7886",
+  "third_party/externals/libjpeg-turbo"             : "https://skia.googlesource.com/third_party/libjpeg-turbo.git@7bf1a3c9b06bede89cec37cec0b5085c0d6d6c13",
   # libjpeg-turbo depends on yasm to compile .asm files
   "third_party/externals/yasm/source/patched-yasm/" : "https://chromium.googlesource.com/chromium/deps/yasm/patched-yasm.git@4671120cd8558ce62ee8672ebf3eb6f5216f909b",
   "third_party/externals/yasm/binaries"             : "https://chromium.googlesource.com/chromium/deps/yasm/binaries.git@52f9b3f4b0aa06da24ef8b123058bb61ee468881",
@@ -50,6 +50,13 @@ deps = {
 
   # Mojo SDK for Mojo RPC experiments.
   "third_party/externals/mojo/public" : "https://chromium.googlesource.com/external/github.com/domokit/mojo_sdk@172be18ea745ab29aea132e6cb952e726dc32543",
+
+  # xSAN bots build Clang from scratch.
+  "third_party/externals/llvm": "https://llvm.googlesource.com/llvm@release_38",
+  "third_party/externals/llvm/tools/clang": "https://llvm.googlesource.com/clang@release_38",
+  "third_party/externals/llvm/projects/compiler-rt": "https://llvm.googlesource.com/compiler-rt@release_38",
+  "third_party/externals/llvm/projects/libcxx": "https://llvm.googlesource.com/libcxx@release_38",
+  "third_party/externals/llvm/projects/libcxxabi": "https://llvm.googlesource.com/libcxxabi@release_38",
 }
 
 recursedeps = [ "common" ]

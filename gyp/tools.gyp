@@ -19,6 +19,7 @@
       'dependencies': [
         'chrome_fuzz',
         'dump_record',
+        'get_images_from_skps',
         'gpuveto',
         'imgblur',
         'imgconv',
@@ -82,7 +83,6 @@
          ],
          'dependencies': [
             'flags.gyp:flags',
-            'lazy_decode_bitmap',
             'skia_lib.gyp:skia_lib',
          ],
     },
@@ -266,18 +266,15 @@
       ],
     },
     {
-        'target_name': 'lazy_decode_bitmap',
-        'type': 'static_library',
-        'sources': [ '../tools/LazyDecodeBitmap.cpp' ],
-        'include_dirs': [
-            '../include/private',
-            '../src/core',
-            '../src/lazy',
-        ],
-        'dependencies': [
+        'target_name': 'get_images_from_skps',
+        'type': 'executable',
+        'sources': [
+            '../tools/get_images_from_skps.cpp',
+         ],
+         'dependencies': [
             'flags.gyp:flags',
-            'skia_lib.gyp:skia_lib'
-        ],
+            'skia_lib.gyp:skia_lib',
+         ],
     },
     {
       'target_name': 'gpuveto',
@@ -291,7 +288,6 @@
         '../src/images',
       ],
       'dependencies': [
-        'lazy_decode_bitmap',
         'flags.gyp:flags',
         'skia_lib.gyp:skia_lib',
       ],
@@ -333,7 +329,6 @@
         '../src/core/',
       ],
       'dependencies': [
-        'lazy_decode_bitmap',
         'effects.gyp:effects',
         'flags.gyp:flags',
         'images.gyp:images',
@@ -367,7 +362,6 @@
         '../tools/pinspect.cpp',
       ],
       'dependencies': [
-        'lazy_decode_bitmap',
         'flags.gyp:flags',
         'skia_lib.gyp:skia_lib',
       ],
@@ -490,6 +484,7 @@
           '<(skia_include_path)/views/SkOSWindow_Unix.h',
           '<(skia_include_path)/views/SkOSWindow_Win.h',
           '<(skia_include_path)/views/SkWindow.h',
+          '<(skia_include_path)/gpu/vk',
         ],
       },
       'include_dirs': [

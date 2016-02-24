@@ -5,6 +5,7 @@
  * found in the LICENSE file.
  */
 
+#include "Sk4fLinearGradient.h"
 #include "SkGradientShaderPriv.h"
 #include "SkLinearGradient.h"
 #include "SkRadialGradient.h"
@@ -917,26 +918,26 @@ void GrGLGradientEffect::emitUniforms(GrGLSLUniformHandler* uniformHandler,
                                       const GrGradientEffect& ge) {
 
     if (SkGradientShaderBase::kTwo_GpuColorType == ge.getColorType()) { // 2 Color case
-        fColorStartUni = uniformHandler->addUniform(GrGLSLUniformHandler::kFragment_Visibility,
+        fColorStartUni = uniformHandler->addUniform(kFragment_GrShaderFlag,
                                                     kVec4f_GrSLType, kDefault_GrSLPrecision,
                                                     "GradientStartColor");
-        fColorEndUni = uniformHandler->addUniform(GrGLSLUniformHandler::kFragment_Visibility,
+        fColorEndUni = uniformHandler->addUniform(kFragment_GrShaderFlag,
                                                   kVec4f_GrSLType, kDefault_GrSLPrecision,
                                                   "GradientEndColor");
 
     } else if (SkGradientShaderBase::kThree_GpuColorType == ge.getColorType()) { // 3 Color Case
-        fColorStartUni = uniformHandler->addUniform(GrGLSLUniformHandler::kFragment_Visibility,
+        fColorStartUni = uniformHandler->addUniform(kFragment_GrShaderFlag,
                                                     kVec4f_GrSLType,  kDefault_GrSLPrecision,
                                                     "GradientStartColor");
-        fColorMidUni = uniformHandler->addUniform(GrGLSLUniformHandler::kFragment_Visibility,
+        fColorMidUni = uniformHandler->addUniform(kFragment_GrShaderFlag,
                                                   kVec4f_GrSLType, kDefault_GrSLPrecision,
                                                   "GradientMidColor");
-        fColorEndUni = uniformHandler->addUniform(GrGLSLUniformHandler::kFragment_Visibility,
+        fColorEndUni = uniformHandler->addUniform(kFragment_GrShaderFlag,
                                                   kVec4f_GrSLType, kDefault_GrSLPrecision,
                                                   "GradientEndColor");
 
     } else { // if not a fast case
-        fFSYUni = uniformHandler->addUniform(GrGLSLUniformHandler::kFragment_Visibility,
+        fFSYUni = uniformHandler->addUniform(kFragment_GrShaderFlag,
                                              kFloat_GrSLType, kDefault_GrSLPrecision,
                                              "GradientYCoordFS");
     }
@@ -1020,7 +1021,7 @@ uint32_t GrGLGradientEffect::GenBaseGradientKey(const GrProcessor& processor) {
     return key;
 }
 
-void GrGLGradientEffect::emitColor(GrGLSLFragmentBuilder* fragBuilder,
+void GrGLGradientEffect::emitColor(GrGLSLFPFragmentBuilder* fragBuilder,
                                    GrGLSLUniformHandler* uniformHandler,
                                    const GrGLSLCaps* glslCaps,
                                    const GrGradientEffect& ge,

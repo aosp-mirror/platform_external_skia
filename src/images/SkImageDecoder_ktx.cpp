@@ -7,6 +7,7 @@
 
 #include "SkColorPriv.h"
 #include "SkImageDecoder.h"
+#include "SkImageGenerator.h"
 #include "SkPixelRef.h"
 #include "SkScaledBitmapSampler.h"
 #include "SkStream.h"

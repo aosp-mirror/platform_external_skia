@@ -210,15 +210,15 @@ void SkDisplacementMapEffect::flatten(SkWriteBuffer& buffer) const {
     buffer.writeScalar(fScale);
 }
 
-bool SkDisplacementMapEffect::onFilterImage(Proxy* proxy,
-                                            const SkBitmap& src,
-                                            const Context& ctx,
-                                            SkBitmap* dst,
-                                            SkIPoint* offset) const {
+bool SkDisplacementMapEffect::onFilterImageDeprecated(Proxy* proxy,
+                                                      const SkBitmap& src,
+                                                      const Context& ctx,
+                                                      SkBitmap* dst,
+                                                      SkIPoint* offset) const {
     SkBitmap displ = src, color = src;
     SkIPoint colorOffset = SkIPoint::Make(0, 0), displOffset = SkIPoint::Make(0, 0);
-    if (!this->filterInput(1, proxy, src, ctx, &color, &colorOffset) ||
-        !this->filterInput(0, proxy, src, ctx, &displ, &displOffset)) {
+    if (!this->filterInputDeprecated(1, proxy, src, ctx, &color, &colorOffset) ||
+        !this->filterInputDeprecated(0, proxy, src, ctx, &displ, &displOffset)) {
         return false;
     }
     if ((displ.colorType() != kN32_SkColorType) ||
@@ -228,11 +228,13 @@ bool SkDisplacementMapEffect::onFilterImage(Proxy* proxy,
     SkIRect bounds;
     // Since computeDisplacement does bounds checking on color pixel access, we don't need to pad
     // the color bitmap to bounds here.
-    if (!this->applyCropRect(ctx, color, colorOffset, &bounds)) {
+    SkIRect srcBounds = color.bounds();
+    srcBounds.offset(colorOffset);
+    if (!this->applyCropRect(ctx, srcBounds, &bounds)) {
         return false;
     }
     SkIRect displBounds;
-    if (!this->applyCropRect(ctx, proxy, displ, &displOffset, &displBounds, &displ)) {
+    if (!this->applyCropRectDeprecated(ctx, proxy, displ, &displOffset, &displBounds, &displ)) {
         return false;
     }
     if (!bounds.intersect(displBounds)) {
@@ -384,27 +386,30 @@ private:
     typedef GrFragmentProcessor INHERITED;
 };
 
-bool SkDisplacementMapEffect::filterImageGPU(Proxy* proxy, const SkBitmap& src, const Context& ctx,
-                                             SkBitmap* result, SkIPoint* offset) const {
+bool SkDisplacementMapEffect::filterImageGPUDeprecated(Proxy* proxy, const SkBitmap& src,
+                                                       const Context& ctx,
+                                                       SkBitmap* result, SkIPoint* offset) const {
     SkBitmap colorBM = src;
     SkIPoint colorOffset = SkIPoint::Make(0, 0);
-    if (!this->filterInputGPU(1, proxy, src, ctx, &colorBM, &colorOffset)) {
+    if (!this->filterInputGPUDeprecated(1, proxy, src, ctx, &colorBM, &colorOffset)) {
         return false;
     }
     SkBitmap displacementBM = src;
     SkIPoint displacementOffset = SkIPoint::Make(0, 0);
-    if (!this->filterInputGPU(0, proxy, src, ctx, &displacementBM, &displacementOffset)) {
+    if (!this->filterInputGPUDeprecated(0, proxy, src, ctx, &displacementBM, &displacementOffset)) {
         return false;
     }
+    SkIRect srcBounds = colorBM.bounds();
+    srcBounds.offset(colorOffset);
     SkIRect bounds;
     // Since GrDisplacementMapEffect does bounds checking on color pixel access, we don't need to
     // pad the color bitmap to bounds here.
-    if (!this->applyCropRect(ctx, colorBM, colorOffset, &bounds)) {
+    if (!this->applyCropRect(ctx, srcBounds, &bounds)) {
         return false;
     }
     SkIRect displBounds;
-    if (!this->applyCropRect(ctx, proxy, displacementBM,
-                             &displacementOffset, &displBounds, &displacementBM)) {
+    if (!this->applyCropRectDeprecated(ctx, proxy, displacementBM,
+                                       &displacementOffset, &displBounds, &displacementBM)) {
         return false;
     }
     if (!bounds.intersect(displBounds)) {
@@ -539,7 +544,7 @@ void GrGLDisplacementMapEffect::emitCode(EmitArgs& args) {
     const GrDisplacementMapEffect& displacementMap = args.fFp.cast<GrDisplacementMapEffect>();
     const GrTextureDomain& domain = displacementMap.domain();
 
-    fScaleUni = args.fUniformHandler->addUniform(GrGLSLUniformHandler::kFragment_Visibility,
+    fScaleUni = args.fUniformHandler->addUniform(kFragment_GrShaderFlag,
                                                  kVec2f_GrSLType, kDefault_GrSLPrecision, "Scale");
     const char* scaleUni = args.fUniformHandler->getUniformCStr(fScaleUni);
     const char* dColor = "dColor";
@@ -548,7 +553,7 @@ void GrGLDisplacementMapEffect::emitCode(EmitArgs& args) {
                                    // a number smaller than that to approximate 0, but
                                    // leave room for 32-bit float GPU rounding errors.
 
-    GrGLSLFragmentBuilder* fragBuilder = args.fFragBuilder;
+    GrGLSLFPFragmentBuilder* fragBuilder = args.fFragBuilder;
     fragBuilder->codeAppendf("\t\tvec4 %s = ", dColor);
     fragBuilder->appendTextureLookup(args.fSamplers[0], args.fCoords[0].c_str(),
                                    args.fCoords[0].getType());

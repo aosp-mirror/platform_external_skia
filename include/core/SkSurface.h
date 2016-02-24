@@ -120,12 +120,16 @@ public:
     /**
      *  Return a new surface whose contents will be drawn to an offscreen
      *  render target, allocated by the surface.
+     *
+     *  The GrTextureStorageAllocator will be reused if SkImage snapshots create
+     *  additional textures.
      */
-    static SkSurface* NewRenderTarget(GrContext*, Budgeted, const SkImageInfo&, int sampleCount,
-                                      const SkSurfaceProps* = NULL);
+    static SkSurface* NewRenderTarget(
+            GrContext*, Budgeted, const SkImageInfo&, int sampleCount, const SkSurfaceProps* = NULL,
+            GrTextureStorageAllocator = GrTextureStorageAllocator());
 
     static SkSurface* NewRenderTarget(GrContext* gr, Budgeted b, const SkImageInfo& info) {
-        return NewRenderTarget(gr, b, info, 0, NULL);
+        return NewRenderTarget(gr, b, info, 0);
     }
 
     int width() const { return fWidth; }
@@ -231,6 +235,18 @@ public:
      *  (currently for the gpu backend only).
      */
     SkImage* newImageSnapshot(Budgeted = kYes_Budgeted);
+
+    /**
+     * In rare instances a client may want a unique copy of the SkSurface's contents in an image
+     * snapshot. This enum can be used to enforce that the image snapshot's backing store is not
+     * shared with another image snapshot or the surface's backing store. This is generally more
+     * expensive. This was added for Chromium bug 585250.
+     */
+    enum ForceUnique {
+        kNo_ForceUnique,
+        kYes_ForceUnique
+    };
+    SkImage* newImageSnapshot(Budgeted, ForceUnique);
 
     /**
      *  Though the caller could get a snapshot image explicitly, and draw that,

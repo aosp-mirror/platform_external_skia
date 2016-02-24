@@ -1,11 +1,9 @@
-
 /*
  * Copyright 2006 The Android Open Source Project
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-
 
 #include "SkComposeShader.h"
 #include "SkColorFilter.h"
@@ -32,8 +30,10 @@ SkComposeShader::~SkComposeShader() {
     fShaderA->unref();
 }
 
-size_t SkComposeShader::contextSize() const {
-    return sizeof(ComposeShaderContext) + fShaderA->contextSize() + fShaderB->contextSize();
+size_t SkComposeShader::contextSize(const ContextRec& rec) const {
+    return sizeof(ComposeShaderContext)
+        + fShaderA->contextSize(rec)
+        + fShaderB->contextSize(rec);
 }
 
 class SkAutoAlphaRestore {
@@ -77,7 +77,7 @@ template <typename T> void safe_call_destructor(T* obj) {
 
 SkShader::Context* SkComposeShader::onCreateContext(const ContextRec& rec, void* storage) const {
     char* aStorage = (char*) storage + sizeof(ComposeShaderContext);
-    char* bStorage = aStorage + fShaderA->contextSize();
+    char* bStorage = aStorage + fShaderA->contextSize(rec);
 
     // we preconcat our localMatrix (if any) with the device matrix
     // before calling our sub-shaders

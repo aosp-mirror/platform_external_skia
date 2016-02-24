@@ -145,7 +145,6 @@ static bool get_geometry(const SkPath& path, const SkMatrix& m, PLSVertices& tri
     SkPath linesOnlyPath;
     linesOnlyPath.setFillType(path.getFillType());
     SkSTArray<15, SkPoint, true> quadPoints;
-    SkPathPriv::FirstDirection dir = SkPathPriv::FirstDirection::kUnknown_FirstDirection;
     SkPath::Iter iter(path, true);
     bool done = false;
     while (!done) {
@@ -175,7 +174,7 @@ static bool get_geometry(const SkPath& path, const SkMatrix& m, PLSVertices& tri
             case SkPath::kCubic_Verb: {
                 m.mapPoints(pts, 4);
                 SkSTArray<15, SkPoint, true> quads;
-                GrPathUtils::convertCubicToQuads(pts, kCubicTolerance, false, dir, &quads);
+                GrPathUtils::convertCubicToQuads(pts, kCubicTolerance, &quads);
                 int count = quads.count();
                 for (int q = 0; q < count; q += 3) {
                     linesOnlyPath.lineTo(quads[q + 2]);
@@ -328,7 +327,7 @@ public:
                                    delta3.vsOut(), v3.vsOut(), v1.vsOut(), v1.vsOut(), v3.vsOut());
 
             GrGLSLVertToFrag windings(kInt_GrSLType);
-            varyingHandler->addVarying("windings", &windings, kLow_GrSLPrecision);
+            varyingHandler->addFlatVarying("windings", &windings, kLow_GrSLPrecision);
             vsBuilder->codeAppendf("%s = %s;", 
                                    windings.vsOut(), te.inWindings()->fName);
 
@@ -337,7 +336,7 @@ public:
                                  te.inPosition()->fName, te.localMatrix(), args.fTransformsIn, 
                                  args.fTransformsOut);
 
-            GrGLSLFragmentBuilder* fsBuilder = args.fFragBuilder;
+            GrGLSLPPFragmentBuilder* fsBuilder = args.fFragBuilder;
             SkAssertResult(fsBuilder->enableFeature(
                            GrGLSLFragmentShaderBuilder::kPixelLocalStorage_GLSLFeature));
             SkAssertResult(fsBuilder->enableFeature(
@@ -513,7 +512,7 @@ public:
                                    ep1.vsOut());
 
             GrGLSLVertToFrag windings(kInt_GrSLType);
-            varyingHandler->addVarying("windings", &windings, kLow_GrSLPrecision);
+            varyingHandler->addFlatVarying("windings", &windings, kLow_GrSLPrecision);
             vsBuilder->codeAppendf("%s = %s;", 
                                    windings.vsOut(), qe.inWindings()->fName);
 
@@ -525,7 +524,7 @@ public:
                                  qe.inPosition()->fName, qe.localMatrix(), args.fTransformsIn, 
                                  args.fTransformsOut);
 
-            GrGLSLFragmentBuilder* fsBuilder = args.fFragBuilder;
+            GrGLSLPPFragmentBuilder* fsBuilder = args.fFragBuilder;
             SkAssertResult(fsBuilder->enableFeature(
                            GrGLSLFragmentShaderBuilder::kPixelLocalStorage_GLSLFeature));
             SkAssertResult(fsBuilder->enableFeature(
@@ -672,7 +671,7 @@ public:
             GrGLSLVaryingHandler* varyingHandler = args.fVaryingHandler;
             GrGLSLUniformHandler* uniformHandler = args.fUniformHandler;
 
-            fUseEvenOdd = uniformHandler->addUniform(GrGLUniformHandler::kFragment_Visibility,
+            fUseEvenOdd = uniformHandler->addUniform(kFragment_GrShaderFlag,
                                                     kFloat_GrSLType, kLow_GrSLPrecision, 
                                                     "useEvenOdd");
             const char* useEvenOdd = uniformHandler->getUniformCStr(fUseEvenOdd);
@@ -683,7 +682,7 @@ public:
                                  fe.inPosition()->fName, fe.localMatrix(), args.fTransformsIn, 
                                  args.fTransformsOut);
 
-            GrGLSLFragmentBuilder* fsBuilder = args.fFragBuilder;
+            GrGLSLPPFragmentBuilder* fsBuilder = args.fFragBuilder;
             SkAssertResult(fsBuilder->enableFeature(
                            GrGLSLFragmentShaderBuilder::kPixelLocalStorage_GLSLFeature));
             fsBuilder->declAppendf(GR_GL_PLS_PATH_DATA_DECL);

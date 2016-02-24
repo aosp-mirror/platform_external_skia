@@ -220,7 +220,7 @@ public:
      * that would allow a successful transfer of the src pixels to the dst. The passed width,
      * height, and rowBytes, must be non-zero and already reflect clipping to the dst bounds.
      */
-    bool getWritePixelsInfo(GrSurface* dstSurface, int width, int height, size_t rowBytes,
+    bool getWritePixelsInfo(GrSurface* dstSurface, int width, int height,
                             GrPixelConfig srcConfig, DrawPreference*, WritePixelTempDrawInfo*);
 
     /**
@@ -349,8 +349,9 @@ public:
 
     void draw(const DrawArgs&, const GrVertices&);
 
-    // Called by drawtarget when flushing. Provides a hook for working around an ARM PLS driver bug.
-    virtual void performFlushWorkaround();
+    // Called by drawtarget when flushing. 
+    // Provides a hook for post-flush actions (e.g. PLS reset and Vulkan command buffer submits).
+    virtual void finishDrawTarget() {}
 
     ///////////////////////////////////////////////////////////////////////////
     // Debugging and Stats
@@ -532,7 +533,7 @@ private:
     virtual bool onGetReadPixelsInfo(GrSurface* srcSurface, int readWidth, int readHeight,
                                      size_t rowBytes, GrPixelConfig readConfig, DrawPreference*,
                                      ReadPixelTempDrawInfo*) = 0;
-    virtual bool onGetWritePixelsInfo(GrSurface* dstSurface, int width, int height, size_t rowBytes,
+    virtual bool onGetWritePixelsInfo(GrSurface* dstSurface, int width, int height,
                                       GrPixelConfig srcConfig, DrawPreference*,
                                       WritePixelTempDrawInfo*) = 0;
 

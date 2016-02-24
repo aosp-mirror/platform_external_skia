@@ -86,7 +86,6 @@ LOCAL_SRC_FILES := \
 	../tests/BitSetTest.cpp \
 	../tests/BitmapCopyTest.cpp \
 	../tests/BitmapGetColorTest.cpp \
-	../tests/BitmapHasherTest.cpp \
 	../tests/BitmapHeapTest.cpp \
 	../tests/BitmapTest.cpp \
 	../tests/BlendTest.cpp \
@@ -112,6 +111,7 @@ LOCAL_SRC_FILES := \
 	../tests/ColorMatrixTest.cpp \
 	../tests/ColorPrivTest.cpp \
 	../tests/ColorTest.cpp \
+	../tests/CopySurfaceTest.cpp \
 	../tests/DashPathEffectTest.cpp \
 	../tests/DataRefTest.cpp \
 	../tests/DequeTest.cpp \
@@ -158,7 +158,7 @@ LOCAL_SRC_FILES := \
 	../tests/GradientTest.cpp \
 	../tests/HashTest.cpp \
 	../tests/ImageCacheTest.cpp \
-	../tests/ImageDecodingTest.cpp \
+	../tests/ImageFilterCacheTest.cpp \
 	../tests/ImageFilterTest.cpp \
 	../tests/ImageFrom565Bitmap.cpp \
 	../tests/ImageGeneratorTest.cpp \
@@ -170,7 +170,6 @@ LOCAL_SRC_FILES := \
 	../tests/InterpolatorTest.cpp \
 	../tests/InvalidIndexedPngTest.cpp \
 	../tests/IsClosedSingleContourTest.cpp \
-	../tests/JpegTest.cpp \
 	../tests/KtxTest.cpp \
 	../tests/LListTest.cpp \
 	../tests/LayerDrawLooperTest.cpp \
@@ -235,7 +234,6 @@ LOCAL_SRC_FILES := \
 	../tests/ResourceCacheTest.cpp \
 	../tests/RoundRectTest.cpp \
 	../tests/RuntimeConfigTest.cpp \
-	../tests/SHA1Test.cpp \
 	../tests/SRGBReadWritePixelsTest.cpp \
 	../tests/SVGDeviceTest.cpp \
 	../tests/ScalarTest.cpp \
@@ -246,6 +244,7 @@ LOCAL_SRC_FILES := \
 	../tests/SkBase64Test.cpp \
 	../tests/SkColor4fTest.cpp \
 	../tests/SkImageTest.cpp \
+	../tests/SkLinearBitmapPipelineTest.cpp \
 	../tests/SkNxTest.cpp \
 	../tests/SkResourceCacheTest.cpp \
 	../tests/SkSharedMutexTest.cpp \
@@ -270,6 +269,7 @@ LOCAL_SRC_FILES := \
 	../tests/TextBlobCacheTest.cpp \
 	../tests/TextBlobTest.cpp \
 	../tests/TextureCompressionTest.cpp \
+	../tests/TextureStorageAllocator.cpp \
 	../tests/Time.cpp \
 	../tests/TopoSortTest.cpp \
 	../tests/TraceMemoryDumpTest.cpp \
@@ -278,12 +278,16 @@ LOCAL_SRC_FILES := \
 	../tests/UnicodeTest.cpp \
 	../tests/UtilsTest.cpp \
 	../tests/VarAllocTest.cpp \
+	../tests/VkClearTests.cpp \
+	../tests/VkUploadPixelsTests.cpp \
 	../tests/WArrayTest.cpp \
 	../tests/WritePixelsTest.cpp \
 	../tests/Writer32Test.cpp \
 	../tests/XfermodeTest.cpp \
 	../tests/YUVCacheTest.cpp \
+	../tests/YUVTest.cpp \
 	DMSrcSinkAndroid.cpp \
+	../gm/SkLinearBitmapPipelineGM.cpp \
 	../gm/aaclip.cpp \
 	../gm/aarectmodes.cpp \
 	../gm/aaxfermodes.cpp \
@@ -495,6 +499,7 @@ LOCAL_SRC_FILES := \
 	../gm/shadertext3.cpp \
 	../gm/shadows.cpp \
 	../gm/shallowgradient.cpp \
+	../gm/shapes.cpp \
 	../gm/showmiplevels.cpp \
 	../gm/simpleaaclip.cpp \
 	../gm/skbug1719.cpp \
@@ -517,6 +522,7 @@ LOCAL_SRC_FILES := \
 	../gm/testimagefilters.cpp \
 	../gm/texdata.cpp \
 	../gm/textblob.cpp \
+	../gm/textblobblockreordering.cpp \
 	../gm/textblobcolortrans.cpp \
 	../gm/textblobgeometrychange.cpp \
 	../gm/textbloblooper.cpp \
@@ -541,12 +547,10 @@ LOCAL_SRC_FILES := \
 	../gm/verttext.cpp \
 	../gm/verttext2.cpp \
 	../gm/verylargebitmap.cpp \
-	../gm/xfer4f.cpp \
 	../gm/xfermodeimagefilter.cpp \
 	../gm/xfermodes.cpp \
 	../gm/xfermodes2.cpp \
 	../gm/xfermodes3.cpp \
-	../gm/xferu64.cpp \
 	../gm/yuvtorgbeffect.cpp \
 	../tools/AndroidSkDebugToStdOut.cpp \
 	../tools/flags/SkCommandLineFlags.cpp \
@@ -557,6 +561,7 @@ LOCAL_SRC_FILES := \
 	../tools/sk_tool_utils.cpp \
 	../tools/sk_tool_utils_font.cpp \
 	../tools/random_parse_path.cpp \
+	../tools/UrlDataManager.cpp \
 	../tools/timer/Timer.cpp \
 	../src/xml/SkBML_XMLParser.cpp \
 	../src/xml/SkDOM.cpp \
@@ -576,11 +581,6 @@ LOCAL_SRC_FILES := \
 
 LOCAL_SHARED_LIBRARIES := \
 	liblog \
-	libskia \
-	libandroid \
-	libhwui \
-	libutils \
-	libdl \
 	libpng \
 	libz \
 	libexpat \
@@ -588,6 +588,8 @@ LOCAL_SHARED_LIBRARIES := \
 	libEGL
 
 LOCAL_STATIC_LIBRARIES := \
+	libskia_static \
+	libhwui_static \
 	libjsoncpp
 
 LOCAL_C_INCLUDES := \
@@ -620,13 +622,13 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../src/lazy \
 	$(LOCAL_PATH)/../tools/debugger \
 	$(LOCAL_PATH)/../tests \
+	$(LOCAL_PATH)/../src/effects/gradients \
 	$(LOCAL_PATH)/../src/pathops \
 	$(LOCAL_PATH)/../src/pipe/utils \
 	$(LOCAL_PATH)/../src/codec \
 	$(LOCAL_PATH)/../src/image \
 	$(LOCAL_PATH)/../src/pdf \
 	$(LOCAL_PATH)/../src/ports \
-	$(LOCAL_PATH)/../../../frameworks/base/libs/hwui \
 	$(LOCAL_PATH)/../third_party/etc1 \
 	external/libpng \
 	$(LOCAL_PATH)/../tools/timer \
@@ -648,4 +650,6 @@ LOCAL_MODULE := \
 # subdirectory in the DATA folder that points to the top level skia resources...
 #  i.e. external/skia/DATA/skia_resources --> ../resources
 LOCAL_PICKUP_FILES := $(LOCAL_PATH)/../DATA
+include $(LOCAL_PATH)/../skia_static_deps.mk
+include frameworks/base/libs/hwui/hwui_static_deps.mk
 include $(BUILD_NATIVE_TEST)
