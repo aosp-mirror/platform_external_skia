@@ -396,6 +396,7 @@ LOCAL_SRC_FILES := \
 	../gm/fontmgr.cpp \
 	../gm/fontscaler.cpp \
 	../gm/fontscalerdistortable.cpp \
+	../gm/gamma.cpp \
 	../gm/gammatext.cpp \
 	../gm/getpostextpath.cpp \
 	../gm/giantbitmap.cpp \
