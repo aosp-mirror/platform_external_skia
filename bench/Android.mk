@@ -453,6 +453,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../src/core \
 	$(LOCAL_PATH)/../tools \
 	$(LOCAL_PATH)/../../src/gpu \
+	$(LOCAL_PATH)/../src/image \
 	$(LOCAL_PATH)/subset \
 	$(LOCAL_PATH)/../src/effects \
 	$(LOCAL_PATH)/../src/pdf \
