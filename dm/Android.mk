@@ -170,7 +170,6 @@ LOCAL_SRC_FILES := \
 	../tests/InterpolatorTest.cpp \
 	../tests/InvalidIndexedPngTest.cpp \
 	../tests/IsClosedSingleContourTest.cpp \
-	../tests/KtxTest.cpp \
 	../tests/LListTest.cpp \
 	../tests/LayerDrawLooperTest.cpp \
 	../tests/LayerRasterizerTest.cpp \
