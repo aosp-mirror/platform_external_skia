@@ -206,6 +206,7 @@
 #define SK_IGNORE_ETC1_SUPPORT
 #define SK_IGNORE_LINEONLY_AA_CONVEX_PATH_OPTS
 #define SK_INTERNAL
+#define SK_IS_BOT
 #define SK_PRINT_CODEC_MESSAGES
 #define SK_SFNTLY_SUBSETTER "sample/chromium/font_subsetter.h"
 #define SK_SUPPORT_GPU 1
