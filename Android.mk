@@ -853,4 +853,4 @@ include $(BASE_PATH)/bench/Android.mk
 ifneq ($(TARGET_BUILD_PDK),true)
 # diamond-master (one test to rule them all)
 include $(BASE_PATH)/dm/Android.mk
-#endif
+endif
