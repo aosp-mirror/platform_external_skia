@@ -88,7 +88,7 @@ static GrSurfaceOrigin resolve_origin(GrSurfaceOrigin origin, bool renderTarget)
     }
 }
 
-GrTexture* GrGpu::createTexture(const GrSurfaceDesc& origDesc, bool budgeted,
+GrTexture* GrGpu::createTexture(const GrSurfaceDesc& origDesc, SkBudgeted budgeted,
                                 const void* srcData, size_t rowBytes) {
     GrSurfaceDesc desc = origDesc;
 
@@ -120,8 +120,9 @@ GrTexture* GrGpu::createTexture(const GrSurfaceDesc& origDesc, bool budgeted,
         }
     }
 
-    GrGpuResource::LifeCycle lifeCycle = budgeted ? GrGpuResource::kCached_LifeCycle :
-                                                    GrGpuResource::kUncached_LifeCycle;
+    GrGpuResource::LifeCycle lifeCycle = SkBudgeted::kYes == budgeted ?
+                                            GrGpuResource::kCached_LifeCycle :
+                                            GrGpuResource::kUncached_LifeCycle;
 
     desc.fSampleCnt = SkTMin(desc.fSampleCnt, this->caps()->maxSampleCount());
     // Attempt to catch un- or wrongly initialized sample counts;
@@ -166,6 +167,10 @@ GrTexture* GrGpu::wrapBackendTexture(const GrBackendTextureDesc& desc, GrWrapOwn
         !this->caps()->isConfigRenderable(desc.fConfig, desc.fSampleCnt > 0)) {
         return nullptr;
     }
+    int maxSize = this->caps()->maxTextureSize();
+    if (desc.fWidth > maxSize || desc.fHeight > maxSize) {
+        return nullptr;
+    }
     GrTexture* tex = this->onWrapBackendTexture(desc, ownership);
     if (nullptr == tex) {
         return nullptr;
@@ -187,6 +192,22 @@ GrRenderTarget* GrGpu::wrapBackendRenderTarget(const GrBackendRenderTargetDesc& 
     }
     this->handleDirtyContext();
     return this->onWrapBackendRenderTarget(desc, ownership);
+}
+
+GrRenderTarget* GrGpu::wrapBackendTextureAsRenderTarget(const GrBackendTextureDesc& desc,
+                                                        GrWrapOwnership ownership) {
+    this->handleDirtyContext();
+    if (!(desc.fFlags & kRenderTarget_GrBackendTextureFlag)) {
+      return nullptr;
+    }
+    if (!this->caps()->isConfigRenderable(desc.fConfig, desc.fSampleCnt > 0)) {
+        return nullptr;
+    }
+    int maxSize = this->caps()->maxTextureSize();
+    if (desc.fWidth > maxSize || desc.fHeight > maxSize) {
+        return nullptr;
+    }
+    return this->onWrapBackendTextureAsRenderTarget(desc, ownership);
 }
 
 GrVertexBuffer* GrGpu::createVertexBuffer(size_t size, bool dynamic) {

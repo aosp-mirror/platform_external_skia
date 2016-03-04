@@ -170,7 +170,6 @@ LOCAL_SRC_FILES := \
 	../tests/InterpolatorTest.cpp \
 	../tests/InvalidIndexedPngTest.cpp \
 	../tests/IsClosedSingleContourTest.cpp \
-	../tests/KtxTest.cpp \
 	../tests/LListTest.cpp \
 	../tests/LayerDrawLooperTest.cpp \
 	../tests/LayerRasterizerTest.cpp \
@@ -198,6 +197,7 @@ LOCAL_SRC_FILES := \
 	../tests/PDFOpaqueSrcModeToSrcOverTest.cpp \
 	../tests/PDFPrimitivesTest.cpp \
 	../tests/PackBitsTest.cpp \
+	../tests/PaintBreakTextTest.cpp \
 	../tests/PaintImageFilterTest.cpp \
 	../tests/PaintTest.cpp \
 	../tests/ParsePathTest.cpp \
@@ -504,6 +504,7 @@ LOCAL_SRC_FILES := \
 	../gm/simpleaaclip.cpp \
 	../gm/skbug1719.cpp \
 	../gm/skbug_257.cpp \
+	../gm/skbug_4868.cpp \
 	../gm/smallarc.cpp \
 	../gm/smallimage.cpp \
 	../gm/smallpaths.cpp \
@@ -636,14 +637,12 @@ LOCAL_C_INCLUDES := \
 	external/zlib \
 	$(LOCAL_PATH)/../tools/android
 
-LOCAL_CFLAGS += \
-	-DSK_CRASH_HANDLER
-
 LOCAL_MODULE_TAGS := \
 	tests
 
 LOCAL_MODULE := \
 	skia_dm
+
 
 # Store skia's resources in the directory structure that the Android testing
 # infrastructure expects.  This requires that Skia maintain a symlinked

@@ -36,7 +36,7 @@ static inline SkSurface* NewGpuSurface(GrContextFactory* grFactory,
                                        bool useDIText) {
     uint32_t flags = useDIText ? SkSurfaceProps::kUseDeviceIndependentFonts_Flag : 0;
     SkSurfaceProps props(flags, SkSurfaceProps::kLegacyFontHost_InitType);
-    return SkSurface::NewRenderTarget(grFactory->get(type, options), SkSurface::kNo_Budgeted,
+    return SkSurface::NewRenderTarget(grFactory->get(type, options), SkBudgeted::kNo,
                                       info, samples, &props);
 }
 
@@ -68,7 +68,8 @@ public:
 
     static const GLContextType kANGLE_GLContextType         = 0,
                                kANGLE_GL_GLContextType      = 0,
-                               kCommandBuffer_GLContextType = 0,
+                               kCommandBufferES2_GLContextType = 0,
+                               kCommandBufferES3_GLContextType = 0,
                                kDebug_GLContextType         = 0,
                                kMESA_GLContextType          = 0,
                                kNVPR_GLContextType          = 0,

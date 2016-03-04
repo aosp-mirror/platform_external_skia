@@ -206,9 +206,9 @@ public:
                 break;
 #endif // SK_ANGLE
 #if SK_COMMAND_BUFFER
-            case kCommandBuffer_DeviceType:
+            case kCommandBufferES2_DeviceType:
                 // Command buffer is really the only other odd man out :D
-                fBackend = kCommandBuffer_BackEndType;
+                fBackend = kCommandBufferES2_BackEndType;
                 break;
 #endif // SK_COMMAND_BUFFER
             default:
@@ -237,7 +237,7 @@ public:
                 break;
 #endif // SK_ANGLE
 #if SK_COMMAND_BUFFER
-            case kCommandBuffer_DeviceType:
+            case kCommandBufferES2_DeviceType:
                 glInterface.reset(GrGLCreateCommandBufferInterface());
                 break;
 #endif // SK_COMMAND_BUFFER
@@ -692,7 +692,7 @@ static inline SampleWindow::DeviceType cycle_devicetype(SampleWindow::DeviceType
         , SampleWindow::kANGLE_DeviceType
 #endif // SK_ANGLE
 #if SK_COMMAND_BUFFER
-        , SampleWindow::kCommandBuffer_DeviceType
+        , SampleWindow::kCommandBufferES2_DeviceType
 #endif // SK_COMMAND_BUFFER
 #endif // SK_SUPPORT_GPU
     };
@@ -744,6 +744,7 @@ DEFINE_string(sequence, "", "Path to file containing the desired samples/gms to 
 DEFINE_bool(sort, false, "Sort samples by title.");
 DEFINE_bool(list, false, "List samples?");
 DEFINE_bool(gpu, false, "Start up with gpu?");
+DEFINE_bool(redraw, false, "Force continuous redrawing, for profiling or debugging tools.");
 DEFINE_string(key, "", "");  // dummy to enable gm tests that have platform-specific names
 #ifdef SAMPLE_PDF_FILE_VIEWER
 DEFINE_string(pdfPath, "", "Path to direcotry of pdf files.");
@@ -858,7 +859,7 @@ SampleWindow::SampleWindow(void* hwnd, int argc, char** argv, DeviceManager* dev
     fDeviceType = kANGLE_DeviceType;
 #endif
 #if SK_COMMAND_BUFFER && DEFAULT_TO_COMMAND_BUFFER
-    fDeviceType = kCommandBuffer_DeviceType;
+    fDeviceType = kCommandBufferES2_DeviceType;
 #endif
 
     fUseClip = false;
@@ -1101,7 +1102,7 @@ void SampleWindow::draw(SkCanvas* canvas) {
         this->postInvalDelay();
     }
 
-    if (this->sendAnimatePulse()) {
+    if (this->sendAnimatePulse() || FLAGS_redraw) {
         this->inval(nullptr);
     }
 
