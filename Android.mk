@@ -624,7 +624,6 @@ LOCAL_SRC_FILES := \
 	src/utils/SkDashPath.cpp \
 	src/utils/SkDumpCanvas.cpp \
 	src/utils/SkEventTracer.cpp \
-	src/utils/SkImageGeneratorUtils.cpp \
 	src/utils/SkInterpolator.cpp \
 	src/utils/SkLayer.cpp \
 	src/utils/SkMatrix22.cpp \
