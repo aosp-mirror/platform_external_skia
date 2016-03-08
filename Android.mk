@@ -225,7 +225,6 @@ LOCAL_SRC_FILES := \
 	src/core/SkRefDict.cpp \
 	src/core/SkRegion.cpp \
 	src/core/SkRegion_path.cpp \
-	src/core/SkRemote.cpp \
 	src/core/SkResourceCache.cpp \
 	src/core/SkRRect.cpp \
 	src/core/SkRTree.cpp \
