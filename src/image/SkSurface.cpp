@@ -79,7 +79,7 @@ SkSurface_Base::~SkSurface_Base() {
 }
 
 void SkSurface_Base::onDraw(SkCanvas* canvas, SkScalar x, SkScalar y, const SkPaint* paint) {
-    SkImage* image = this->newImageSnapshot(kYes_Budgeted);
+    SkImage* image = this->newImageSnapshot(SkBudgeted::kYes);
     if (image) {
         canvas->drawImage(image, x, y, paint);
         image->unref();
@@ -163,12 +163,12 @@ SkCanvas* SkSurface::getCanvas() {
     return asSB(this)->getCachedCanvas();
 }
 
-SkImage* SkSurface::newImageSnapshot(Budgeted budgeted) {
+SkImage* SkSurface::newImageSnapshot(SkBudgeted budgeted) {
     // the caller will call unref() to balance this
     return asSB(this)->refCachedImage(budgeted, kNo_ForceUnique);
 }
 
-SkImage* SkSurface::newImageSnapshot(Budgeted budgeted, ForceUnique unique) {
+SkImage* SkSurface::newImageSnapshot(SkBudgeted budgeted, ForceUnique unique) {
     // the caller will call unref() to balance this
     return asSB(this)->refCachedImage(budgeted, unique);
 }
@@ -199,6 +199,10 @@ bool SkSurface::getRenderTargetHandle(GrBackendObject* obj, BackendHandleAccess 
     return asSB(this)->onGetRenderTargetHandle(obj, access);
 }
 
+void SkSurface::prepareForExternalIO() {
+  asSB(this)->onPrepareForExternalIO();
+}
+
 //////////////////////////////////////////////////////////////////////////////////////
 
 #if !SK_SUPPORT_GPU
@@ -207,7 +211,7 @@ SkSurface* SkSurface::NewRenderTargetDirect(GrRenderTarget*, const SkSurfaceProp
     return nullptr;
 }
 
-SkSurface* SkSurface::NewRenderTarget(GrContext*, Budgeted, const SkImageInfo&, int,
+SkSurface* SkSurface::NewRenderTarget(GrContext*, SkBudgeted, const SkImageInfo&, int,
                                       const SkSurfaceProps*, GrTextureStorageAllocator) {
     return nullptr;
 }
@@ -219,6 +223,11 @@ SkSurface* SkSurface::NewFromBackendTexture(GrContext*, const GrBackendTextureDe
 
 SkSurface* SkSurface::NewFromBackendRenderTarget(GrContext*, const GrBackendRenderTargetDesc&,
                                                  const SkSurfaceProps*) {
+    return nullptr;
+}
+
+SkSurface* NewFromBackendTextureAsRenderTarget(GrContext*, const GrBackendTextureDesc&,
+                                               const SkSurfaceProps*) {
     return nullptr;
 }
 

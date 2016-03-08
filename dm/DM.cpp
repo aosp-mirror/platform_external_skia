@@ -11,15 +11,14 @@
 #include "DMJsonWriter.h"
 #include "DMSrcSink.h"
 #include "DMSrcSinkAndroid.h"
-#include "OverwriteLine.h"
 #include "ProcStats.h"
+#include "Resources.h"
 #include "SkBBHFactory.h"
 #include "SkChecksum.h"
 #include "SkCodec.h"
 #include "SkCommonFlags.h"
 #include "SkCommonFlagsConfig.h"
 #include "SkFontMgr.h"
-#include "SkForceLinking.h"
 #include "SkGraphics.h"
 #include "SkMD5.h"
 #include "SkMutex.h"
@@ -67,63 +66,39 @@ DEFINE_string(uninterestingHashesFile, "",
 
 DEFINE_int32(shards, 1, "We're splitting source data into this many shards.");
 DEFINE_int32(shard,  0, "Which shard do I run?");
+DEFINE_bool(simpleCodec, false, "Only decode images to native scale");
 
-__SK_FORCE_IMAGE_DECODER_LINKING;
 using namespace DM;
 
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
-static double now_ms() { return SkTime::GetNSecs() * 1e-6; }
-
 SK_DECLARE_STATIC_MUTEX(gFailuresMutex);
 static SkTArray<SkString> gFailures;
 
-static void fail(ImplicitString err) {
+static void fail(const SkString& err) {
     SkAutoMutexAcquire lock(gFailuresMutex);
     SkDebugf("\n\nFAILURE: %s\n\n", err.c_str());
     gFailures.push_back(err);
 }
 
-static int32_t gPending = 0;  // Atomic.  Total number of running and queued tasks.
 
 // We use a spinlock to make locking this in a signal handler _somewhat_ safe.
-SK_DECLARE_STATIC_SPINLOCK(gRunningAndTallyMutex);
-static SkTArray<SkString>        gRunning;
-static SkTHashMap<SkString, int> gNoteTally;
+SK_DECLARE_STATIC_SPINLOCK(gMutex);
+static int32_t            gPending;
+static SkTArray<SkString> gRunning;
 
-static void done(double ms,
-                 ImplicitString config, ImplicitString src, ImplicitString srcOptions,
-                 ImplicitString name, ImplicitString note, ImplicitString log) {
-    SkString id = SkStringPrintf("%s %s %s %s", config.c_str(), src.c_str(),
-                                                srcOptions.c_str(), name.c_str());
+static void done(const char* config, const char* src, const char* srcOptions, const char* name) {
+    SkString id = SkStringPrintf("%s %s %s %s", config, src, srcOptions, name);
+    int pending;
     {
-        SkAutoTAcquire<SkPODSpinlock> lock(gRunningAndTallyMutex);
+        SkAutoTAcquire<SkPODSpinlock> lock(gMutex);
         for (int i = 0; i < gRunning.count(); i++) {
             if (gRunning[i] == id) {
                 gRunning.removeShuffle(i);
                 break;
             }
         }
-        if (!note.isEmpty()) {
-            if (int* tally = gNoteTally.find(note)) {
-                *tally += 1;
-            } else {
-                gNoteTally.set(note, 1);
-            }
-        }
-    }
-    if (!log.isEmpty()) {
-        log.prepend("\n");
-    }
-    auto pending = sk_atomic_dec(&gPending)-1;
-    if (!FLAGS_quiet && note.isEmpty()) {
-        SkDebugf("%s(%4d/%-4dMB %6d) %s\t%s%s", FLAGS_verbose ? "\n" : kSkOverwriteLine
-                                           , sk_tools::getCurrResidentSetSizeMB()
-                                           , sk_tools::getMaxResidentSetSizeMB()
-                                           , pending
-                                           , HumanizeMs(ms).c_str()
-                                           , id.c_str()
-                                           , log.c_str());
+        pending = --gPending;
     }
     // We write our dm.json file every once in a while in case we crash.
     // Notice this also handles the final dm.json when pending == 0.
@@ -132,12 +107,25 @@ static void done(double ms,
     }
 }
 
-static void start(ImplicitString config, ImplicitString src,
-                  ImplicitString srcOptions, ImplicitString name) {
-    SkString id = SkStringPrintf("%s %s %s %s", config.c_str(), src.c_str(),
-                                                srcOptions.c_str(), name.c_str());
-    SkAutoTAcquire<SkPODSpinlock> lock(gRunningAndTallyMutex);
+static void start(const char* config, const char* src, const char* srcOptions, const char* name) {
+    SkString id = SkStringPrintf("%s %s %s %s", config, src, srcOptions, name);
+    SkAutoTAcquire<SkPODSpinlock> lock(gMutex);
     gRunning.push_back(id);
+}
+
+static void print_status() {
+    static SkMSec start_ms = SkTime::GetMSecs();
+
+    int curr = sk_tools::getCurrResidentSetSizeMB(),
+        peak = sk_tools::getMaxResidentSetSizeMB();
+    SkString elapsed = HumanizeMs(SkTime::GetMSecs() - start_ms);
+
+    SkAutoTAcquire<SkPODSpinlock> lock(gMutex);
+    SkDebugf("\n%s elapsed, %d active, %d queued, %dMB RAM, %dMB peak\n",
+             elapsed.c_str(), gRunning.count(), gPending - gRunning.count(), curr, peak);
+    for (auto& task : gRunning) {
+        SkDebugf("\t%s\n", task.c_str());
+    }
 }
 
 #if defined(SK_BUILD_FOR_WIN32)
@@ -152,12 +140,8 @@ static void start(ImplicitString config, ImplicitString src,
         const int kSignals[] = { SIGABRT, SIGBUS, SIGFPE, SIGILL, SIGSEGV };
         for (int sig : kSignals) {
             signal(sig, [](int sig) {
-                SkAutoTAcquire<SkPODSpinlock> lock(gRunningAndTallyMutex);
-                SkDebugf("\nCaught signal %d [%s] while running %d tasks:\n",
-                         sig, strsignal(sig), gRunning.count());
-                for (auto& task : gRunning) {
-                    SkDebugf("\t%s\n", task.c_str());
-                }
+                SkDebugf("\nCaught signal %d [%s].\n", sig, strsignal(sig));
+                print_status();
             });
         }
     }
@@ -167,8 +151,9 @@ static void start(ImplicitString config, ImplicitString src,
 
 struct Gold : public SkString {
     Gold() : SkString("") {}
-    Gold(ImplicitString sink, ImplicitString src, ImplicitString srcOptions,
-         ImplicitString name, ImplicitString md5)
+    Gold(const SkString& sink, const SkString& src,
+         const SkString& srcOptions, const SkString& name,
+         const SkString& md5)
         : SkString("") {
         this->append(sink);
         this->append(src);
@@ -223,8 +208,8 @@ static void gather_uninteresting_hashes() {
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
 struct TaggedSrc : public SkAutoTDelete<Src> {
-    ImplicitString tag;
-    ImplicitString options;
+    SkString tag;
+    SkString options;
 };
 
 struct TaggedSink : public SkAutoTDelete<Sink> {
@@ -241,10 +226,10 @@ static bool in_shard() {
     return N++ % FLAGS_shards == FLAGS_shard;
 }
 
-static void push_src(ImplicitString tag, ImplicitString options, Src* s) {
+static void push_src(const char* tag, ImplicitString options, Src* s) {
     SkAutoTDelete<Src> src(s);
     if (in_shard() &&
-        FLAGS_src.contains(tag.c_str()) &&
+        FLAGS_src.contains(tag) &&
         !SkCommandLineFlags::ShouldSkip(FLAGS_match, src->name().c_str())) {
         TaggedSrc& s = gSrcs.push_back();
         s.reset(src.detach());
@@ -255,6 +240,12 @@ static void push_src(ImplicitString tag, ImplicitString options, Src* s) {
 
 static void push_codec_src(Path path, CodecSrc::Mode mode, CodecSrc::DstColorType dstColorType,
         SkAlphaType dstAlphaType, float scale) {
+    if (FLAGS_simpleCodec) {
+        if (mode != CodecSrc::kCodec_Mode || dstColorType != CodecSrc::kGetFromCanvas_DstColorType
+                || scale != 1.0f)
+            // Only decode in the simple case.
+            return;
+    }
     SkString folder;
     switch (mode) {
         case CodecSrc::kCodec_Mode:
@@ -371,8 +362,6 @@ static void push_codec_srcs(Path path) {
     }
 
     // Native Scales
-    // TODO (msarett): Implement scaling tests for SkImageDecoder in order to compare with these
-    //                 tests.  SkImageDecoder supports downscales by integer factors.
     // SkJpegCodec natively supports scaling to: 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875
     const float nativeScales[] = { 0.125f, 0.25f, 0.375f, 0.5f, 0.625f, 0.750f, 0.875f, 1.0f };
 
@@ -448,6 +437,10 @@ static void push_codec_srcs(Path path) {
                 }
             }
         }
+    }
+
+    if (FLAGS_simpleCodec) {
+        return;
     }
 
     // https://bug.skia.org/4428
@@ -629,6 +622,10 @@ static bool gather_srcs() {
 
     for (auto image : images) {
         push_codec_srcs(image);
+        if (FLAGS_simpleCodec) {
+            continue;
+        }
+
         const char* ext = strrchr(image.c_str(), '.');
         if (ext && brd_supported(ext+1)) {
             push_brd_srcs(image);
@@ -858,19 +855,17 @@ static bool match(const char* needle, const char* haystack) {
     return 0 == strcmp("_", needle) || nullptr != strstr(haystack, needle);
 }
 
-static ImplicitString is_blacklisted(const char* sink, const char* src,
-                                     const char* srcOptions, const char* name) {
+static bool is_blacklisted(const char* sink, const char* src,
+                           const char* srcOptions, const char* name) {
     for (int i = 0; i < FLAGS_blacklist.count() - 3; i += 4) {
         if (match(FLAGS_blacklist[i+0], sink) &&
             match(FLAGS_blacklist[i+1], src) &&
             match(FLAGS_blacklist[i+2], srcOptions) &&
             match(FLAGS_blacklist[i+3], name)) {
-            return SkStringPrintf("%s %s %s %s",
-                                  FLAGS_blacklist[i+0], FLAGS_blacklist[i+1],
-                                  FLAGS_blacklist[i+2], FLAGS_blacklist[i+3]);
+            return true;
         }
     }
-    return "";
+    return false;
 }
 
 // Even when a Task Sink reports to be non-threadsafe (e.g. GPU), we know things like
@@ -887,26 +882,12 @@ struct Task {
     static void Run(const Task& task) {
         SkString name = task.src->name();
 
-        // We'll skip drawing this Src/Sink pair if:
-        //   - the Src vetoes the Sink;
-        //   - this Src / Sink combination is on the blacklist;
-        //   - it's a dry run.
-        SkString note(task.src->veto(task.sink->flags()) ? " (veto)" : "");
-        SkString whyBlacklisted = is_blacklisted(task.sink.tag.c_str(), task.src.tag.c_str(),
-                                                 task.src.options.c_str(), name.c_str());
-        if (!whyBlacklisted.isEmpty()) {
-            note.appendf(" (--blacklist %s)", whyBlacklisted.c_str());
-        }
-
         SkString log;
-        auto timerStart = now_ms();
-        if (!FLAGS_dryRun && note.isEmpty()) {
+        if (!FLAGS_dryRun) {
             SkBitmap bitmap;
             SkDynamicMemoryWStream stream;
-            if (FLAGS_pre_log) {
-                SkDebugf("\nRunning %s->%s", name.c_str(), task.sink.tag.c_str());
-            }
-            start(task.sink.tag.c_str(), task.src.tag, task.src.options, name.c_str());
+            start(task.sink.tag.c_str(), task.src.tag.c_str(),
+                  task.src.options.c_str(), name.c_str());
             Error err = task.sink->draw(*task.src, &bitmap, &stream, &log);
             if (!err.isEmpty()) {
                 if (err.isFatal()) {
@@ -917,10 +898,8 @@ struct Task {
                                         name.c_str(),
                                         err.c_str()));
                 } else {
-                    note.appendf(" (skipped: %s)", err.c_str());
-                    auto elapsed = now_ms() - timerStart;
-                    done(elapsed, task.sink.tag.c_str(), task.src.tag, task.src.options,
-                         name, note, log);
+                    done(task.sink.tag.c_str(), task.src.tag.c_str(),
+                         task.src.options.c_str(), name.c_str());
                     return;
                 }
             }
@@ -960,8 +939,8 @@ struct Task {
                 }
 
                 if (!FLAGS_readPath.isEmpty() &&
-                    !gGold.contains(Gold(task.sink.tag.c_str(), task.src.tag.c_str(),
-                                         task.src.options.c_str(), name, md5))) {
+                    !gGold.contains(Gold(task.sink.tag, task.src.tag,
+                                         task.src.options, name, md5))) {
                     fail(SkStringPrintf("%s not found for %s %s %s %s in %s",
                                         md5.c_str(),
                                         task.sink.tag.c_str(),
@@ -982,9 +961,7 @@ struct Task {
                 }
             });
         }
-        auto elapsed = now_ms() - timerStart;
-        done(elapsed, task.sink.tag.c_str(), task.src.tag.c_str(), task.src.options.c_str(),
-             name, note, log);
+        done(task.sink.tag.c_str(), task.src.tag.c_str(), task.src.options.c_str(), name.c_str());
     }
 
     static void WriteToDisk(const Task& task,
@@ -994,7 +971,7 @@ struct Task {
                             const SkBitmap* bitmap) {
         JsonWriter::BitmapResult result;
         result.name          = task.src->name();
-        result.config        = task.sink.tag.c_str();
+        result.config        = task.sink.tag;
         result.sourceType    = task.src.tag;
         result.sourceOptions = task.src.options;
         result.ext           = ext;
@@ -1094,51 +1071,31 @@ static void run_test(skiatest::Test test) {
         bool verbose() const override { return FLAGS_veryVerbose; }
     } reporter;
 
-    SkString note;
-    SkString whyBlacklisted = is_blacklisted("_", "tests", "_", test.name);
-    if (!whyBlacklisted.isEmpty()) {
-        note.appendf(" (--blacklist %s)", whyBlacklisted.c_str());
-    }
-
-    auto timerStart = now_ms();
-    if (!FLAGS_dryRun && whyBlacklisted.isEmpty()) {
+    if (!FLAGS_dryRun && !is_blacklisted("_", "tests", "_", test.name)) {
         start("unit", "test", "", test.name);
         GrContextFactory factory;
-        if (FLAGS_pre_log) {
-            SkDebugf("\nRunning test %s", test.name);
-        }
         test.proc(&reporter, &factory);
     }
-    done(now_ms()-timerStart, "unit", "test", "", test.name, note, "");
+    done("unit", "test", "", test.name);
 }
 
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
-// Some runs (mostly, Valgrind) are so slow that the bot framework thinks we've hung.
-// This prints something every once in a while so that it knows we're still working.
-static void start_keepalive() {
-    struct Loop {
-        static void forever(void*) {
-            for (;;) {
-                static const int kSec = 300;
-            #if defined(SK_BUILD_FOR_WIN)
-                Sleep(kSec * 1000);
-            #else
-                sleep(kSec);
-            #endif
-                SkString running;
-                {
-                    SkAutoTAcquire<SkPODSpinlock> lock(gRunningAndTallyMutex);
-                    for (int i = 0; i < gRunning.count(); i++) {
-                        running.appendf("\n\t%s", gRunning[i].c_str());
-                    }
-                }
-                SkDebugf("\nCurrently running:%s\n", running.c_str());
-            }
+DEFINE_int32(status_sec, 15, "Print status this often (and if we crash).");
+
+SkThread* start_status_thread() {
+    auto thread = new SkThread([] (void*) {
+        for (;;) {
+            print_status();
+        #if defined(SK_BUILD_FOR_WIN)
+            Sleep(FLAGS_status_sec * 1000);
+        #else
+            sleep(FLAGS_status_sec);
+        #endif
         }
-    };
-    static SkThread* intentionallyLeaked = new SkThread(Loop::forever);
-    intentionallyLeaked->start();
+    });
+    thread->start();
+    return thread;
 }
 
 #define PORTABLE_FONT_PREFIX "Toy Liberation "
@@ -1158,13 +1115,19 @@ extern SkTypeface* (*gCreateTypefaceDelegate)(const char [], SkTypeface::Style )
 int dm_main();
 int dm_main() {
     setup_crash_handler();
+
     JsonWriter::DumpJson();  // It's handy for the bots to assume this is ~never missing.
     SkAutoGraphics ag;
     SkTaskGroup::Enabler enabled(FLAGS_threads);
     gCreateTypefaceDelegate = &create_from_name;
 
-    start_keepalive();
-
+    {
+        SkString testResourcePath = GetResourcePath("color_wheel.png");
+        SkFILEStream testResource(testResourcePath.c_str());
+        if (!testResource.isValid()) {
+            SkDebugf("Some resources are missing.  Do you need to set --resourcePath?\n");
+        }
+    }
     gather_gold();
     gather_uninteresting_hashes();
 
@@ -1175,8 +1138,9 @@ int dm_main() {
     gather_tests();
 
     gPending = gSrcs.count() * gSinks.count() + gParallelTests.count() + gSerialTests.count();
-    SkDebugf("%d srcs * %d sinks + %d tests == %d tasks\n",
+    SkDebugf("%d srcs * %d sinks + %d tests == %d tasks",
              gSrcs.count(), gSinks.count(), gParallelTests.count() + gSerialTests.count(), gPending);
+    SkAutoTDelete<SkThread> statusThread(start_status_thread());
 
     // Kick off as much parallel work as we can, making note of any serial work we'll need to do.
     SkTaskGroup parallel;
@@ -1184,6 +1148,14 @@ int dm_main() {
 
     for (auto& sink : gSinks)
     for (auto&  src : gSrcs) {
+        if (src->veto(sink->flags()) ||
+            is_blacklisted(sink.tag.c_str(), src.tag.c_str(),
+                           src.options.c_str(), src->name().c_str())) {
+            SkAutoTAcquire<SkPODSpinlock> lock(gMutex);
+            gPending--;
+            continue;
+        }
+
         Task task(src, sink);
         if (src->serial() || sink->serial()) {
             serial.push_back(task);
@@ -1203,17 +1175,12 @@ int dm_main() {
     parallel.wait();
     gDefinitelyThreadSafeWork.wait();
 
+    // We'd better have run everything.
+    SkASSERT(gPending == 0);
+
     // At this point we're back in single-threaded land.
     sk_tool_utils::release_portable_typefaces();
 
-    if (FLAGS_verbose && gNoteTally.count() > 0) {
-        SkDebugf("\nNote tally:\n");
-        gNoteTally.foreach([](const SkString& note, int* tally) {
-            SkDebugf("%dx\t%s\n", *tally, note.c_str());
-        });
-    }
-
-    SkDebugf("\n");
     if (gFailures.count() > 0) {
         SkDebugf("Failures:\n");
         for (int i = 0; i < gFailures.count(); i++) {
@@ -1222,13 +1189,12 @@ int dm_main() {
         SkDebugf("%d failures\n", gFailures.count());
         return 1;
     }
-    if (gPending > 0) {
-        SkDebugf("Hrm, we didn't seem to run everything we intended to!  Please file a bug.\n");
-        return 1;
-    }
-    #ifdef SK_PDF_IMAGE_STATS
+
+#ifdef SK_PDF_IMAGE_STATS
     SkPDFImageDumpStats();
-    #endif  // SK_PDF_IMAGE_STATS
+#endif  // SK_PDF_IMAGE_STATS
+
+    print_status();
     SkDebugf("Finished!\n");
     return 0;
 }
@@ -1271,7 +1237,8 @@ void RunWithGPUTestContexts(T test, GPUTestContexts testContexts, Reporter* repo
         GrContextFactory::kANGLE_GL_GLContextType,
 #endif
 #if SK_COMMAND_BUFFER
-        GrContextFactory::kCommandBuffer_GLContextType,
+        GrContextFactory::kCommandBufferES2_GLContextType,
+        GrContextFactory::kCommandBufferES3_GLContextType,
 #endif
 #if SK_MESA
         GrContextFactory::kMESA_GLContextType,

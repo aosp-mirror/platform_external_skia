@@ -11,7 +11,7 @@
 #include "SkCodec.h"
 #include "SkCodecImageGenerator.h"
 #include "SkData.h"
-#include "SkImageDecoder.h"
+#include "SkFrontBufferedStream.h"
 #include "SkMD5.h"
 #include "SkRandom.h"
 #include "SkStream.h"
@@ -386,7 +386,8 @@ DEF_TEST(Codec, r) {
     check(r, "yellow_rose.png", SkISize::Make(400, 301), true, false, false);
 
     // RAW
-#if defined(SK_CODEC_DECODES_RAW)
+// Disable RAW tests for Win32.
+#if defined(SK_CODEC_DECODES_RAW) && (!defined(_WIN32))
     check(r, "sample_1mp.dng", SkISize::Make(600, 338), false, false, false);
     check(r, "sample_1mp_rotated.dng", SkISize::Make(600, 338), false, false, false);
     check(r, "dng_with_preview.dng", SkISize::Make(600, 338), true, false, false);
@@ -585,7 +586,8 @@ DEF_TEST(Codec_Dimensions, r) {
     test_dimensions(r, "mandrill_16.png");
 
     // RAW
-#if defined(SK_CODEC_DECODES_RAW)
+// Disable RAW tests for Win32.
+#if defined(SK_CODEC_DECODES_RAW) && (!defined(_WIN32))
     test_dimensions(r, "sample_1mp.dng");
     test_dimensions(r, "sample_1mp_rotated.dng");
     test_dimensions(r, "dng_with_preview.dng");
@@ -861,9 +863,10 @@ private:
     SkMemoryStream fStream;
 };
 
+// Disable RAW tests for Win32.
+#if defined(SK_CODEC_DECODES_RAW) && (!defined(_WIN32))
 // Test that the RawCodec works also for not asset stream. This will test the code path using
 // SkRawBufferedStream instead of SkRawAssetStream.
-#if defined(SK_CODEC_DECODES_RAW)
 DEF_TEST(Codec_raw_notseekable, r) {
     const char* path = "dng_with_preview.dng";
     SkString fullPath(GetResourcePath(path));
@@ -904,10 +907,10 @@ DEF_TEST(Codec_webp_peek, r) {
     test_info(r, codec.get(), codec->getInfo(), SkCodec::kSuccess, nullptr);
 }
 
-// SkCodec's wbmp decoder was initially more restrictive than SkImageDecoder.
-// It required the second byte to be zero. But SkImageDecoder allowed a couple
-// of bits to be 1 (so long as they do not overlap with 0x9F). Test that
-// SkCodec now supports an image with these bits set.
+// SkCodec's wbmp decoder was initially unnecessarily restrictive.
+// It required the second byte to be zero. The wbmp specification allows
+// a couple of bits to be 1 (so long as they do not overlap with 0x9F).
+// Test that SkCodec now supports an image with these bits set.
 DEF_TEST(Codec_wbmp, r) {
     const char* path = "mandrill.wbmp";
     SkAutoTDelete<SkStream> stream(resource(path));
@@ -921,11 +924,7 @@ DEF_TEST(Codec_wbmp, r) {
     uint8_t* writeableData = static_cast<uint8_t*>(data->writable_data());
     writeableData[1] = static_cast<uint8_t>(~0x9F);
 
-    // SkImageDecoder supports this.
-    SkBitmap bitmap;
-    REPORTER_ASSERT(r, SkImageDecoder::DecodeMemory(data->data(), data->size(), &bitmap));
-
-    // So SkCodec should, too.
+    // SkCodec should support this.
     SkAutoTDelete<SkCodec> codec(SkCodec::NewFromData(data));
     REPORTER_ASSERT(r, codec);
     if (!codec) {

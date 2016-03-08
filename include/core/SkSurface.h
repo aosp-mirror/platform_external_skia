@@ -30,18 +30,10 @@ class GrRenderTarget;
  */
 class SK_API SkSurface : public SkRefCnt {
 public:
-    /**
-     *  Indicates whether a new surface or image should count against a cache budget. Currently this
-     *  is only used by the GPU backend (sw-raster surfaces and images are never counted against the
-     *  resource cache budget.)
-     */
-    enum Budgeted {
-        /** The surface or image does not count against the cache budget. */
-        kNo_Budgeted,
-        /** The surface or image counts against the cache budget. */
-        kYes_Budgeted
-    };
-
+    static const SkBudgeted kYes_Budgeted = SkBudgeted::kYes;
+    static const SkBudgeted kNo_Budgeted = SkBudgeted::kNo;
+    using Budgeted = SkBudgeted;
+    
     /**
      *  Create a new surface, using the specified pixels/rowbytes as its
      *  backend.
@@ -108,7 +100,6 @@ public:
         return NewFromBackendTexture(ctx, desc, props);
     }
 
-
     /**
      *  Used to wrap a pre-existing 3D API rendering target as a SkSurface. Skia will not assume
      *  ownership of the render target and the client must ensure the render target is valid for the
@@ -118,6 +109,17 @@ public:
                                                  const SkSurfaceProps*);
 
     /**
+     *  Used to wrap a pre-existing 3D API texture as a SkSurface. Skia will treat the texture as
+     *  a rendering target only, but unlike NewFromBackendRenderTarget, Skia will manage and own
+     *  the associated render target objects (but not the provided texture). The kRenderTarget flag
+     *  must be set on GrBackendTextureDesc for this to succeed. Skia will not assume ownership
+     *  of the texture and the client must ensure the texture is valid for the lifetime of the
+     *  SkSurface.
+     */
+    static SkSurface* NewFromBackendTextureAsRenderTarget(
+            GrContext*, const GrBackendTextureDesc&, const SkSurfaceProps*);
+
+    /**
      *  Return a new surface whose contents will be drawn to an offscreen
      *  render target, allocated by the surface.
      *
@@ -125,10 +127,10 @@ public:
      *  additional textures.
      */
     static SkSurface* NewRenderTarget(
-            GrContext*, Budgeted, const SkImageInfo&, int sampleCount, const SkSurfaceProps* = NULL,
-            GrTextureStorageAllocator = GrTextureStorageAllocator());
+            GrContext*, SkBudgeted, const SkImageInfo&, int sampleCount,
+            const SkSurfaceProps* = NULL, GrTextureStorageAllocator = GrTextureStorageAllocator());
 
-    static SkSurface* NewRenderTarget(GrContext* gr, Budgeted b, const SkImageInfo& info) {
+    static SkSurface* NewRenderTarget(GrContext* gr, SkBudgeted b, const SkImageInfo& info) {
         return NewRenderTarget(gr, b, info, 0);
     }
 
@@ -234,7 +236,7 @@ public:
      *  parameter controls whether it counts against the resource budget
      *  (currently for the gpu backend only).
      */
-    SkImage* newImageSnapshot(Budgeted = kYes_Budgeted);
+    SkImage* newImageSnapshot(SkBudgeted = SkBudgeted::kYes);
 
     /**
      * In rare instances a client may want a unique copy of the SkSurface's contents in an image
@@ -246,7 +248,7 @@ public:
         kNo_ForceUnique,
         kYes_ForceUnique
     };
-    SkImage* newImageSnapshot(Budgeted, ForceUnique);
+    SkImage* newImageSnapshot(SkBudgeted, ForceUnique);
 
     /**
      *  Though the caller could get a snapshot image explicitly, and draw that,
@@ -291,6 +293,11 @@ public:
                     int srcX, int srcY);
 
     const SkSurfaceProps& props() const { return fProps; }
+
+    /**
+     * Issue any pending surface IO to the current backend 3D API and resolve any surface MSAA.
+     */
+    void prepareForExternalIO();
 
 protected:
     SkSurface(int width, int height, const SkSurfaceProps*);

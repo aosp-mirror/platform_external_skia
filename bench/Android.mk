@@ -348,6 +348,7 @@ LOCAL_SRC_FILES := \
 	../gm/simpleaaclip.cpp \
 	../gm/skbug1719.cpp \
 	../gm/skbug_257.cpp \
+	../gm/skbug_4868.cpp \
 	../gm/smallarc.cpp \
 	../gm/smallimage.cpp \
 	../gm/smallpaths.cpp \
@@ -405,8 +406,8 @@ LOCAL_SRC_FILES := \
 	../tools/flags/SkCommonFlagsConfig.cpp \
 	../tools/CrashHandler.cpp \
 	../tools/ProcStats.cpp \
-	../tools/timer/Timer.cpp \
 	../tools/ThermalManager.cpp \
+	../tools/timer/Timer.cpp \
 	../tools/Resources.cpp \
 	../tools/sk_tool_utils.cpp \
 	../tools/sk_tool_utils_font.cpp \
@@ -453,25 +454,23 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../../src/gpu \
 	$(LOCAL_PATH)/subset \
 	$(LOCAL_PATH)/../src/effects \
+	$(LOCAL_PATH)/../src/pdf \
 	$(LOCAL_PATH)/../gm \
 	$(LOCAL_PATH)/../tools/debugger \
 	$(LOCAL_PATH)/../src/effects/gradients \
 	$(LOCAL_PATH)/../src/images \
 	$(LOCAL_PATH)/../src/lazy \
 	$(LOCAL_PATH)/../../../frameworks/base/libs/hwui \
-	$(LOCAL_PATH)/../src/pdf \
 	$(LOCAL_PATH)/../tools/timer \
 	$(LOCAL_PATH)/../third_party/etc1 \
 	$(LOCAL_PATH)/../tools/android
-
-LOCAL_CFLAGS += \
-	-DSK_CRASH_HANDLER
 
 LOCAL_MODULE_TAGS := \
 	tests
 
 LOCAL_MODULE := \
 	skia_nanobench
+
 
 # Store skia's resources in the directory structure that the Android testing
 # infrastructure expects.  This requires that Skia maintain a symlinked

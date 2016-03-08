@@ -52,7 +52,7 @@ public:
      * sampleCount. The Budgeted param controls whether the device's backing store counts against
      * the resource cache budget. On failure, returns nullptr.
      */
-    static SkGpuDevice* Create(GrContext*, SkSurface::Budgeted, const SkImageInfo&,
+    static SkGpuDevice* Create(GrContext*, SkBudgeted, const SkImageInfo&,
                                int sampleCount, const SkSurfaceProps*,
                                InitContents, GrTextureStorageAllocator = GrTextureStorageAllocator());
 
@@ -251,12 +251,15 @@ private:
                                  const GrClip&,
                                  const SkPaint&);
 
+    bool drawFilledDRRect(const SkMatrix& viewMatrix, const SkRRect& outer,
+                          const SkRRect& inner, const SkPaint& paint);
+
     void drawProducerNine(const SkDraw&, GrTextureProducer*, const SkIRect& center,
                           const SkRect& dst, const SkPaint&);
 
     bool drawDashLine(const SkPoint pts[2], const SkPaint& paint);
 
-    static GrRenderTarget* CreateRenderTarget(GrContext*, SkSurface::Budgeted, const SkImageInfo&,
+    static GrRenderTarget* CreateRenderTarget(GrContext*, SkBudgeted, const SkImageInfo&,
                                               int sampleCount, GrTextureStorageAllocator);
 
     friend class GrAtlasTextContext;

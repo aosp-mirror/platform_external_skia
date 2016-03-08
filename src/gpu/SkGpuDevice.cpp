@@ -44,6 +44,7 @@
 #include "batches/GrRectBatchFactory.h"
 #include "effects/GrBicubicEffect.h"
 #include "effects/GrDashingEffect.h"
+#include "effects/GrRRectEffect.h"
 #include "effects/GrSimpleTextureEffect.h"
 #include "effects/GrTextureDomain.h"
 #include "text/GrTextUtils.h"
@@ -147,7 +148,7 @@ SkGpuDevice* SkGpuDevice::Create(GrRenderTarget* rt, int width, int height,
     return new SkGpuDevice(rt, width, height, props, flags);
 }
 
-SkGpuDevice* SkGpuDevice::Create(GrContext* context, SkSurface::Budgeted budgeted,
+SkGpuDevice* SkGpuDevice::Create(GrContext* context, SkBudgeted budgeted,
                                  const SkImageInfo& info, int sampleCount,
                                  const SkSurfaceProps* props, InitContents init,
                                  GrTextureStorageAllocator customAllocator) {
@@ -185,7 +186,7 @@ SkGpuDevice::SkGpuDevice(GrRenderTarget* rt, int width, int height,
 }
 
 GrRenderTarget* SkGpuDevice::CreateRenderTarget(
-        GrContext* context, SkSurface::Budgeted budgeted, const SkImageInfo& origInfo,
+        GrContext* context, SkBudgeted budgeted, const SkImageInfo& origInfo,
         int sampleCount, GrTextureStorageAllocator textureStorageAllocator) {
     if (kUnknown_SkColorType == origInfo.colorType() ||
         origInfo.width() < 0 || origInfo.height() < 0) {
@@ -216,8 +217,7 @@ GrRenderTarget* SkGpuDevice::CreateRenderTarget(
     desc.fConfig = SkImageInfo2GrPixelConfig(info);
     desc.fSampleCnt = sampleCount;
     desc.fTextureStorageAllocator = textureStorageAllocator;
-    GrTexture* texture = context->textureProvider()->createTexture(
-        desc, SkToBool(budgeted), nullptr, 0);
+    GrTexture* texture = context->textureProvider()->createTexture(desc, budgeted, nullptr, 0);
     if (nullptr == texture) {
         return nullptr;
     }
@@ -321,9 +321,7 @@ void SkGpuDevice::clearAll() {
 void SkGpuDevice::replaceRenderTarget(bool shouldRetainContent) {
     ASSERT_SINGLE_OWNER
 
-    SkSurface::Budgeted budgeted =
-            fRenderTarget->resourcePriv().isBudgeted() ? SkSurface::kYes_Budgeted
-                                                       : SkSurface::kNo_Budgeted;
+    SkBudgeted budgeted = fRenderTarget->resourcePriv().isBudgeted();
 
     SkAutoTUnref<GrRenderTarget> newRT(CreateRenderTarget(
         this->context(), budgeted, this->imageInfo(), fRenderTarget->desc().fSampleCnt,
@@ -562,6 +560,66 @@ void SkGpuDevice::drawRRect(const SkDraw& draw, const SkRRect& rect,
     fDrawContext->drawRRect(fClip, grPaint, *draw.fMatrix, rect, strokeInfo);
 }
 
+bool SkGpuDevice::drawFilledDRRect(const SkMatrix& viewMatrix, const SkRRect& origOuter,
+                                   const SkRRect& origInner, const SkPaint& paint) {
+    SkASSERT(!origInner.isEmpty());
+    SkASSERT(!origOuter.isEmpty());
+
+    bool applyAA = paint.isAntiAlias() && !fRenderTarget->isUnifiedMultisampled();
+
+    GrPrimitiveEdgeType innerEdgeType = applyAA ? kInverseFillAA_GrProcessorEdgeType :
+                                                  kInverseFillBW_GrProcessorEdgeType;
+    GrPrimitiveEdgeType outerEdgeType = applyAA ? kFillAA_GrProcessorEdgeType :
+                                                  kFillBW_GrProcessorEdgeType;
+
+    SkTCopyOnFirstWrite<SkRRect> inner(origInner), outer(origOuter);
+    SkMatrix inverseVM;
+    if (!viewMatrix.isIdentity()) {
+        if (!origInner.transform(viewMatrix, inner.writable())) {
+            return false;
+        }
+        if (!origOuter.transform(viewMatrix, outer.writable())) {
+            return false;
+        }
+        if (!viewMatrix.invert(&inverseVM)) {
+            return false;
+        }
+    } else {
+        inverseVM.reset();
+    }         
+
+    GrPaint grPaint;
+
+    if (!SkPaintToGrPaint(this->context(), paint, viewMatrix, &grPaint)) {
+        return false;
+    }
+
+    grPaint.setAntiAlias(false);
+
+    // TODO these need to be a geometry processors
+    SkAutoTUnref<GrFragmentProcessor> innerEffect(GrRRectEffect::Create(innerEdgeType, *inner));
+    if (!innerEffect) {
+        return false;
+    }
+
+    SkAutoTUnref<GrFragmentProcessor> outerEffect(GrRRectEffect::Create(outerEdgeType, *outer));
+    if (!outerEffect) {
+        return false;
+    }
+
+    grPaint.addCoverageFragmentProcessor(innerEffect);
+    grPaint.addCoverageFragmentProcessor(outerEffect);
+
+    SkRect bounds = outer->getBounds();
+    if (applyAA) {
+        bounds.outset(SK_ScalarHalf, SK_ScalarHalf);
+    }
+  
+    fDrawContext->fillRectWithLocalMatrix(fClip, grPaint, SkMatrix::I(), bounds, inverseVM);
+    return true;
+}
+
+
 void SkGpuDevice::drawDRRect(const SkDraw& draw, const SkRRect& outer,
                              const SkRRect& inner, const SkPaint& paint) {
     ASSERT_SINGLE_OWNER
@@ -569,16 +627,20 @@ void SkGpuDevice::drawDRRect(const SkDraw& draw, const SkRRect& outer,
     CHECK_FOR_ANNOTATION(paint);
     CHECK_SHOULD_DRAW(draw);
 
+    if (outer.isEmpty()) {
+       return;
+    }
+
+    if (inner.isEmpty()) {
+        return this->drawRRect(draw, outer, paint);
+    }
+
     SkStrokeRec stroke(paint);
 
     if (stroke.isFillStyle() && !paint.getMaskFilter() && !paint.getPathEffect()) {
-        GrPaint grPaint;
-        if (!SkPaintToGrPaint(this->context(), paint, *draw.fMatrix, &grPaint)) {
+        if (this->drawFilledDRRect(*draw.fMatrix, outer, inner, paint)) {
             return;
         }
-
-        fDrawContext->drawDRRect(fClip, grPaint, *draw.fMatrix, outer, inner);
-        return;
     }
 
     SkPath path;
@@ -1784,7 +1846,7 @@ SkBaseDevice* SkGpuDevice::onCreateDevice(const CreateInfo& cinfo, const SkPaint
     if (kNever_TileUsage == cinfo.fTileUsage) {
         texture.reset(fContext->textureProvider()->createApproxTexture(desc));
     } else {
-        texture.reset(fContext->textureProvider()->createTexture(desc, true));
+        texture.reset(fContext->textureProvider()->createTexture(desc, SkBudgeted::kYes));
     }
 
     if (texture) {
@@ -1802,7 +1864,7 @@ SkBaseDevice* SkGpuDevice::onCreateDevice(const CreateInfo& cinfo, const SkPaint
 SkSurface* SkGpuDevice::newSurface(const SkImageInfo& info, const SkSurfaceProps& props) {
     ASSERT_SINGLE_OWNER
     // TODO: Change the signature of newSurface to take a budgeted parameter.
-    static const SkSurface::Budgeted kBudgeted = SkSurface::kNo_Budgeted;
+    static const SkBudgeted kBudgeted = SkBudgeted::kNo;
     return SkSurface::NewRenderTarget(fContext, kBudgeted, info, fRenderTarget->desc().fSampleCnt,
                                       &props);
 }
