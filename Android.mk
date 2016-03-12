@@ -146,6 +146,7 @@ LOCAL_SRC_FILES := \
 	src/lazy/SkDiscardablePixelRef.cpp \
 	src/core/SkDistanceFieldGen.cpp \
 	src/core/SkDither.cpp \
+	src/core/SkDocument.cpp \
 	src/core/SkDraw.cpp \
 	src/core/SkDrawable.cpp \
 	src/core/SkDrawLooper.cpp \
@@ -272,7 +273,6 @@ LOCAL_SRC_FILES := \
 	src/core/SkXfermodeU64.cpp \
 	src/core/SkXfermodeInterpretation.cpp \
 	src/core/SkYUVPlanesCache.cpp \
-	src/doc/SkDocument.cpp \
 	src/image/SkImage.cpp \
 	src/image/SkImage_Generator.cpp \
 	src/image/SkImage_Raster.cpp \
@@ -577,12 +577,12 @@ LOCAL_SRC_FILES := \
 	src/images/SkMovie_gif.cpp \
 	src/images/SkPageFlipper.cpp \
 	src/images/SkScaledBitmapSampler.cpp \
-	src/doc/SkDocument_PDF.cpp \
 	src/pdf/SkDeflate.cpp \
 	src/pdf/SkJpegInfo.cpp \
 	src/pdf/SkPDFBitmap.cpp \
 	src/pdf/SkPDFCanon.cpp \
 	src/pdf/SkPDFDevice.cpp \
+	src/pdf/SkPDFDocument.cpp \
 	src/pdf/SkPDFFont.cpp \
 	src/pdf/SkPDFFormXObject.cpp \
 	src/pdf/SkPDFGraphicState.cpp \
@@ -711,7 +711,6 @@ LOCAL_C_INCLUDES := \
 	external/freetype/include \
 	$(LOCAL_PATH)/include/utils/win \
 	$(LOCAL_PATH)/src/ports \
-	$(LOCAL_PATH)/src/pdf \
 	external/sfntly/cpp/src \
 	external/zlib \
 	external/dng_sdk \

@@ -570,7 +570,7 @@ LOCAL_SRC_FILES := \
 	../src/xml/SkDOM.cpp \
 	../src/xml/SkXMLParser.cpp \
 	../src/xml/SkXMLWriter.cpp \
-	../src/doc/SkDocument_XPS_None.cpp \
+	../src/xps/SkDocument_XPS_None.cpp \
 	../tools/Resources.cpp \
 	../experimental/SkSetPoly3To3.cpp \
 	../experimental/SkSetPoly3To3_A.cpp \
