@@ -113,7 +113,6 @@ LOCAL_SRC_FILES := \
 	Sk4fBench.cpp \
 	SkGlyphCacheBench.cpp \
 	SkLinearBitmapPipelineBench.cpp \
-	SkipZeroesBench.cpp \
 	SortBench.cpp \
 	StrokeBench.cpp \
 	SwizzleBench.cpp \
