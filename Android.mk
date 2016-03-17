@@ -694,13 +694,13 @@ LOCAL_C_INCLUDES := \
 	external/webp/include \
 	$(LOCAL_PATH)/include/android \
 	$(LOCAL_PATH)/src/android \
-	$(LOCAL_PATH)/include/gpu \
 	$(LOCAL_PATH)/include/ports \
 	$(LOCAL_PATH)/include/utils \
 	$(LOCAL_PATH)/include/images \
 	$(LOCAL_PATH)/src/sfnt \
 	$(LOCAL_PATH)/src/image \
 	$(LOCAL_PATH)/src/opts \
+	$(LOCAL_PATH)/include/gpu \
 	$(LOCAL_PATH)/src/gpu \
 	$(LOCAL_PATH)/include/effects \
 	$(LOCAL_PATH)/include/client/android \
