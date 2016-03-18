@@ -510,6 +510,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/GrGLProgramDataManager.cpp \
 	src/gpu/gl/GrGLRenderTarget.cpp \
 	src/gpu/gl/GrGLStencilAttachment.cpp \
+	src/gpu/gl/GrGLTestInterface.cpp \
 	src/gpu/gl/GrGLTexture.cpp \
 	src/gpu/gl/GrGLTextureRenderTarget.cpp \
 	src/gpu/gl/GrGLTransferBuffer.cpp \
