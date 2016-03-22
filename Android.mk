@@ -581,6 +581,7 @@ LOCAL_SRC_FILES := \
 	src/pdf/SkJpegInfo.cpp \
 	src/pdf/SkPDFBitmap.cpp \
 	src/pdf/SkPDFCanon.cpp \
+	src/pdf/SkPDFCanvas.cpp \
 	src/pdf/SkPDFDevice.cpp \
 	src/pdf/SkPDFDocument.cpp \
 	src/pdf/SkPDFFont.cpp \
