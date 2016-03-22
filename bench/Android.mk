@@ -420,6 +420,7 @@ LOCAL_SRC_FILES := \
 LOCAL_SHARED_LIBRARIES := \
 	liblog \
 	libhwui \
+	libpng \
 	libexpat \
 	libGLESv2 \
 	libEGL \
@@ -463,7 +464,8 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../../../frameworks/base/libs/hwui \
 	$(LOCAL_PATH)/../tools/timer \
 	$(LOCAL_PATH)/../third_party/etc1 \
-	$(LOCAL_PATH)/../tools/android
+	$(LOCAL_PATH)/../tools/android \
+	external/libpng
 
 LOCAL_CFLAGS += \
 	-DSK_CRASH_HANDLER
