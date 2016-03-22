@@ -501,7 +501,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/GrGLExtensions.cpp \
 	src/gpu/gl/GrGLIndexBuffer.cpp \
 	src/gpu/gl/GrGLInterface.cpp \
-	src/gpu/gl/GrGLNoOpInterface.cpp \
 	src/gpu/gl/GrGLPath.cpp \
 	src/gpu/gl/GrGLPathRange.cpp \
 	src/gpu/gl/GrGLPathRendering.cpp \
@@ -555,7 +554,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/debug/GrFrameBufferObj.cpp \
 	src/gpu/gl/debug/GrShaderObj.cpp \
 	src/gpu/gl/debug/GrProgramObj.cpp \
-	src/gpu/gl/debug/GrDebugGL.cpp \
 	src/gpu/gl/debug/SkDebugGLContext.cpp \
 	src/gpu/gl/GrGLCreateNullInterface.cpp \
 	src/gpu/gl/SkNullGLContext.cpp \
