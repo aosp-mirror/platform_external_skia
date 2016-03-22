@@ -127,6 +127,7 @@ LOCAL_SRC_FILES := \
 	../tests/EGLImageTest.cpp \
 	../tests/EmptyPathTest.cpp \
 	../tests/ErrorTest.cpp \
+	../tests/ExifTest.cpp \
 	../tests/FillPathTest.cpp \
 	../tests/FitsInTest.cpp \
 	../tests/FlattenableFactoryToName.cpp \
