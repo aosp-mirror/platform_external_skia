@@ -243,6 +243,7 @@ LOCAL_SRC_FILES := \
 	../tests/SerializationTest.cpp \
 	../tests/ShaderOpacityTest.cpp \
 	../tests/SizeTest.cpp \
+	../tests/Sk4x4fTest.cpp \
 	../tests/SkBase64Test.cpp \
 	../tests/SkColor4fTest.cpp \
 	../tests/SkImageTest.cpp \
