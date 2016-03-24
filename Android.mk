@@ -558,8 +558,15 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/debug/SkDebugGLContext.cpp \
 	src/gpu/gl/GrGLCreateNullInterface.cpp \
 	src/gpu/gl/SkNullGLContext.cpp \
+	src/images/bmpdecoderhelper.cpp \
 	src/images/SkForceLinking.cpp \
+	src/images/SkImageDecoder.cpp \
 	src/images/SkImageDecoder_FactoryDefault.cpp \
+	src/images/SkImageDecoder_FactoryRegistrar.cpp \
+	src/images/SkImageDecoder_wbmp.cpp \
+	src/images/SkImageDecoder_libbmp.cpp \
+	src/images/SkImageDecoder_libgif.cpp \
+	src/images/SkImageDecoder_libico.cpp \
 	src/images/SkImageDecoder_libwebp.cpp \
 	src/images/SkImageDecoder_libjpeg.cpp \
 	src/images/SkImageDecoder_libpng.cpp \
@@ -570,6 +577,7 @@ LOCAL_SRC_FILES := \
 	src/images/SkMovie.cpp \
 	src/images/SkMovie_gif.cpp \
 	src/images/SkPageFlipper.cpp \
+	src/images/SkScaledBitmapSampler.cpp \
 	src/pdf/SkDeflate.cpp \
 	src/pdf/SkJpegInfo.cpp \
 	src/pdf/SkPDFBitmap.cpp \
