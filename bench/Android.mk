@@ -223,7 +223,6 @@ LOCAL_SRC_FILES := \
 	../gm/dstreadshuffle.cpp \
 	../gm/emboss.cpp \
 	../gm/emptypath.cpp \
-	../gm/etc1bitmap.cpp \
 	../gm/extractbitmap.cpp \
 	../gm/factory.cpp \
 	../gm/fadefilter.cpp \
