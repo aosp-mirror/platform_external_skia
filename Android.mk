@@ -77,7 +77,7 @@ LOCAL_SRC_FILES := \
 	src/codec/SkIcoCodec.cpp \
 	src/codec/SkJpegCodec.cpp \
 	src/codec/SkJpegDecoderMgr.cpp \
-	src/codec/SkJpegUtility_codec.cpp \
+	src/codec/SkJpegUtility.cpp \
 	src/codec/SkMaskSwizzler.cpp \
 	src/codec/SkMasks.cpp \
 	src/codec/SkPngCodec.cpp \
@@ -559,16 +559,16 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/GrGLCreateNullInterface.cpp \
 	src/gpu/gl/SkNullGLContext.cpp \
 	src/images/SkForceLinking.cpp \
-	src/images/SkImageDecoder_FactoryDefault.cpp \
-	src/images/SkImageDecoder_libwebp.cpp \
-	src/images/SkImageDecoder_libjpeg.cpp \
-	src/images/SkImageDecoder_libpng.cpp \
+	src/images/SkMovie_FactoryDefault.cpp \
+	src/images/SkWEBPImageEncoder.cpp \
+	src/images/SkJPEGImageEncoder.cpp \
+	src/images/SkPNGImageEncoder.cpp \
 	src/images/SkImageEncoder.cpp \
 	src/images/SkImageEncoder_Factory.cpp \
-	src/images/SkImageEncoder_argb.cpp \
-	src/images/SkJpegUtility.cpp \
+	src/images/SkARGBImageEncoder.cpp \
+	src/images/SkJPEGWriteUtility.cpp \
 	src/images/SkMovie.cpp \
-	src/images/SkMovie_gif.cpp \
+	src/images/SkGIFMovie.cpp \
 	src/images/SkPageFlipper.cpp \
 	src/pdf/SkDeflate.cpp \
 	src/pdf/SkJpegInfo.cpp \
