@@ -493,14 +493,13 @@ LOCAL_SRC_FILES := \
 	src/gpu/text/GrTextBlobCache.cpp \
 	src/gpu/text/GrTextUtils.cpp \
 	src/gpu/gl/GrGLAssembleInterface.cpp \
-	src/gpu/gl/GrGLBufferImpl.cpp \
+	src/gpu/gl/GrGLBuffer.cpp \
 	src/gpu/gl/GrGLCaps.cpp \
 	src/gpu/gl/GrGLContext.cpp \
 	src/gpu/gl/GrGLGLSL.cpp \
 	src/gpu/gl/GrGLGpu.cpp \
 	src/gpu/gl/GrGLGpuProgramCache.cpp \
 	src/gpu/gl/GrGLExtensions.cpp \
-	src/gpu/gl/GrGLIndexBuffer.cpp \
 	src/gpu/gl/GrGLInterface.cpp \
 	src/gpu/gl/GrGLPath.cpp \
 	src/gpu/gl/GrGLPathRange.cpp \
@@ -513,12 +512,10 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/GrGLTestInterface.cpp \
 	src/gpu/gl/GrGLTexture.cpp \
 	src/gpu/gl/GrGLTextureRenderTarget.cpp \
-	src/gpu/gl/GrGLTransferBuffer.cpp \
 	src/gpu/gl/GrGLUtil.cpp \
 	src/gpu/gl/GrGLUniformHandler.cpp \
 	src/gpu/gl/GrGLVaryingHandler.cpp \
 	src/gpu/gl/GrGLVertexArray.cpp \
-	src/gpu/gl/GrGLVertexBuffer.cpp \
 	src/gpu/gl/builders/GrGLProgramBuilder.cpp \
 	src/gpu/gl/builders/GrGLShaderStringBuilder.cpp \
 	src/gpu/gl/builders/GrGLSLPrettyPrint.cpp \
