@@ -569,7 +569,6 @@ LOCAL_SRC_FILES := \
 	src/images/SkJPEGWriteUtility.cpp \
 	src/images/SkMovie.cpp \
 	src/images/SkGIFMovie.cpp \
-	src/images/SkPageFlipper.cpp \
 	src/pdf/SkDeflate.cpp \
 	src/pdf/SkJpegInfo.cpp \
 	src/pdf/SkPDFBitmap.cpp \
