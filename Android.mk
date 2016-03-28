@@ -593,7 +593,6 @@ LOCAL_SRC_FILES := \
 	src/ports/SkOSFile_stdio.cpp \
 	src/ports/SkOSLibrary_posix.cpp \
 	src/ports/SkDiscardableMemory_none.cpp \
-	src/ports/SkTime_Unix.cpp \
 	src/ports/SkTLS_pthread.cpp \
 	src/ports/SkFontHost_FreeType.cpp \
 	src/ports/SkFontHost_FreeType_common.cpp \
