@@ -584,16 +584,16 @@ LOCAL_SRC_FILES := \
 	../tools/android/SkAndroidSDKCanvas.cpp \
 	../tools/gpu/GrContextFactory.cpp \
 	../tools/gpu/GrTest.cpp \
-	../tools/gpu/gl/GLTestContext.cpp \
-	../tools/gpu/gl/debug/DebugGLTestContext.cpp \
+	../tools/gpu/gl/GLContext.cpp \
+	../tools/gpu/gl/debug/DebugGLContext.cpp \
 	../tools/gpu/gl/debug/GrBufferObj.cpp \
 	../tools/gpu/gl/debug/GrFrameBufferObj.cpp \
 	../tools/gpu/gl/debug/GrProgramObj.cpp \
 	../tools/gpu/gl/debug/GrShaderObj.cpp \
 	../tools/gpu/gl/debug/GrTextureObj.cpp \
 	../tools/gpu/gl/debug/GrTextureUnitObj.cpp \
-	../tools/gpu/gl/null/NullGLTestContext.cpp \
-	../tools/gpu/gl/egl/CreatePlatformGLTestContext_egl.cpp
+	../tools/gpu/gl/null/NullGLContext.cpp \
+	../tools/gpu/gl/egl/CreatePlatformGLContext_egl.cpp
 
 LOCAL_SHARED_LIBRARIES := \
 	liblog \
