@@ -359,6 +359,7 @@ LOCAL_SRC_FILES := \
 	../gm/strokerects.cpp \
 	../gm/strokes.cpp \
 	../gm/stroketext.cpp \
+	../gm/subsetshader.cpp \
 	../gm/surface.cpp \
 	../gm/tablecolorfilter.cpp \
 	../gm/tallstretchedbitmaps.cpp \
