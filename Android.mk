@@ -496,7 +496,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/GrGLBuffer.cpp \
 	src/gpu/gl/GrGLCaps.cpp \
 	src/gpu/gl/GrGLContext.cpp \
-	src/gpu/gl/GrGLCreateNullInterface.cpp \
 	src/gpu/gl/GrGLGLSL.cpp \
 	src/gpu/gl/GrGLGpu.cpp \
 	src/gpu/gl/GrGLGpuProgramCache.cpp \
@@ -542,8 +541,20 @@ LOCAL_SRC_FILES := \
 	src/gpu/SkGrTexturePixelRef.cpp \
 	src/image/SkImage_Gpu.cpp \
 	src/image/SkSurface_Gpu.cpp \
+	src/gpu/gl/SkGLContext.cpp \
 	src/gpu/gl/GrGLDefaultInterface_native.cpp \
 	src/gpu/gl/android/GrGLCreateNativeInterface_android.cpp \
+	src/gpu/gl/egl/SkCreatePlatformGLContext_egl.cpp \
+	src/gpu/gl/debug/GrGLCreateDebugInterface.cpp \
+	src/gpu/gl/debug/GrBufferObj.cpp \
+	src/gpu/gl/debug/GrTextureObj.cpp \
+	src/gpu/gl/debug/GrTextureUnitObj.cpp \
+	src/gpu/gl/debug/GrFrameBufferObj.cpp \
+	src/gpu/gl/debug/GrShaderObj.cpp \
+	src/gpu/gl/debug/GrProgramObj.cpp \
+	src/gpu/gl/debug/SkDebugGLContext.cpp \
+	src/gpu/gl/GrGLCreateNullInterface.cpp \
+	src/gpu/gl/SkNullGLContext.cpp \
 	src/images/SkForceLinking.cpp \
 	src/images/SkMovie_FactoryDefault.cpp \
 	src/images/SkWEBPImageEncoder.cpp \
