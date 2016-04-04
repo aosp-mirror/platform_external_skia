@@ -582,8 +582,18 @@ LOCAL_SRC_FILES := \
 	../tools/flags/SkCommonFlagsConfig.cpp \
 	../tools/picture_utils.cpp \
 	../tools/android/SkAndroidSDKCanvas.cpp \
-	../src/gpu/GrContextFactory.cpp \
-	../src/gpu/GrTest.cpp
+	../tools/gpu/GrContextFactory.cpp \
+	../tools/gpu/GrTest.cpp \
+	../tools/gpu/gl/GLContext.cpp \
+	../tools/gpu/gl/debug/DebugGLContext.cpp \
+	../tools/gpu/gl/debug/GrBufferObj.cpp \
+	../tools/gpu/gl/debug/GrFrameBufferObj.cpp \
+	../tools/gpu/gl/debug/GrProgramObj.cpp \
+	../tools/gpu/gl/debug/GrShaderObj.cpp \
+	../tools/gpu/gl/debug/GrTextureObj.cpp \
+	../tools/gpu/gl/debug/GrTextureUnitObj.cpp \
+	../tools/gpu/gl/null/NullGLContext.cpp \
+	../tools/gpu/gl/egl/CreatePlatformGLContext_egl.cpp
 
 LOCAL_SHARED_LIBRARIES := \
 	liblog \
@@ -615,13 +625,13 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../include/gpu \
 	$(LOCAL_PATH)/../include/private \
 	$(LOCAL_PATH)/../src/core \
+	$(LOCAL_PATH)/../tools/gpu \
 	$(LOCAL_PATH)/../include/svg \
 	$(LOCAL_PATH)/../include/xml \
 	$(LOCAL_PATH)/../src/fonts \
 	$(LOCAL_PATH)/../tools \
 	$(LOCAL_PATH)/../tools/flags \
 	$(LOCAL_PATH)/../src/gpu \
-	$(LOCAL_PATH)/../../src/gpu \
 	$(LOCAL_PATH)/../gm \
 	$(LOCAL_PATH)/../src/effects \
 	$(LOCAL_PATH)/../src/images \
