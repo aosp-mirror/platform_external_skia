@@ -148,6 +148,7 @@ LOCAL_SRC_FILES := \
 	../tests/GpuLayerCacheTest.cpp \
 	../tests/GpuRectanizerTest.cpp \
 	../tests/GrAllocatorTest.cpp \
+	../tests/GrContextAbandonTest.cpp \
 	../tests/GrContextFactoryTest.cpp \
 	../tests/GrDrawTargetTest.cpp \
 	../tests/GrGLSLPrettyPrintTest.cpp \
