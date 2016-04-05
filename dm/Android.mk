@@ -307,9 +307,6 @@ LOCAL_SRC_FILES := \
 	../gm/arcto.cpp \
 	../gm/arithmode.cpp \
 	../gm/astcbitmap.cpp \
-	../gm/avoidxfermode.cpp \
-	../gm/avoidxfermode2.cpp \
-	../gm/avoidxfermode3.cpp \
 	../gm/badpaint.cpp \
 	../gm/beziereffects.cpp \
 	../gm/beziers.cpp \
@@ -482,7 +479,6 @@ LOCAL_SRC_FILES := \
 	../gm/pictureshader.cpp \
 	../gm/pictureshadertile.cpp \
 	../gm/pixelsnap.cpp \
-	../gm/pixelxorxfermode.cpp \
 	../gm/plus.cpp \
 	../gm/points.cpp \
 	../gm/poly2poly.cpp \
