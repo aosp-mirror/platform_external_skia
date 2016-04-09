@@ -569,7 +569,6 @@ LOCAL_SRC_FILES := \
 	../tools/random_parse_path.cpp \
 	../tools/UrlDataManager.cpp \
 	../tools/timer/Timer.cpp \
-	../src/xml/SkBML_XMLParser.cpp \
 	../src/xml/SkDOM.cpp \
 	../src/xml/SkXMLParser.cpp \
 	../src/xml/SkXMLWriter.cpp \
