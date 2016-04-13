@@ -276,7 +276,6 @@ LOCAL_SRC_FILES := \
 	../tests/TextBlobCacheTest.cpp \
 	../tests/TextBlobTest.cpp \
 	../tests/TextureCompressionTest.cpp \
-	../tests/TextureStorageAllocator.cpp \
 	../tests/Time.cpp \
 	../tests/TopoSortTest.cpp \
 	../tests/TraceMemoryDumpTest.cpp \
