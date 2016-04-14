@@ -126,7 +126,7 @@ LOCAL_SRC_FILES := \
 	WritePixelsBench.cpp \
 	WriterBench.cpp \
 	Xfer4fBench.cpp \
-	XferU64Bench.cpp \
+	XferF16Bench.cpp \
 	XfermodeBench.cpp \
 	nanobench.cpp \
 	nanobenchAndroid.cpp \
