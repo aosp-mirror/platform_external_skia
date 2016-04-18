@@ -314,6 +314,7 @@ LOCAL_SRC_FILES := \
 	src/pathops/SkPathWriter.cpp \
 	src/pathops/SkReduceOrder.cpp \
 	src/effects/GrCircleBlurFragmentProcessor.cpp \
+	src/effects/GrAlphaThresholdFragmentProcessor.cpp \
 	src/effects/Sk1DPathEffect.cpp \
 	src/effects/Sk2DPathEffect.cpp \
 	src/effects/SkAlphaThresholdFilter.cpp \
