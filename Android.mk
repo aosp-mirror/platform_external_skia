@@ -135,6 +135,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkComposeShader.cpp \
 	src/core/SkConfig8888.cpp \
 	src/core/SkConvolver.cpp \
+	src/core/SkCpu.cpp \
 	src/core/SkCubicClipper.cpp \
 	src/core/SkData.cpp \
 	src/core/SkDataTable.cpp \
@@ -712,7 +713,6 @@ LOCAL_MODULE := \
 	libskia_static
 
 LOCAL_SRC_FILES_arm += \
-	src/core/SkUtilsArm.cpp \
 	src/opts/SkBitmapProcState_opts_arm.cpp \
 	src/opts/SkBlitMask_opts_arm.cpp \
 	src/opts/SkBlitRow_opts_arm.cpp
