@@ -163,8 +163,6 @@ LOCAL_SRC_FILES := \
 	../tests/ImageCacheTest.cpp \
 	../tests/ImageFilterCacheTest.cpp \
 	../tests/ImageFilterTest.cpp \
-	../tests/ImageFilterTest.cpp.orig \
-	../tests/ImageFilterTest.cpp.rej \
 	../tests/ImageFrom565Bitmap.cpp \
 	../tests/ImageGeneratorTest.cpp \
 	../tests/ImageIsOpaqueTest.cpp \
