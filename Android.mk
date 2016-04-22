@@ -607,7 +607,6 @@ LOCAL_SRC_FILES := \
 	src/utils/SkLayer.cpp \
 	src/utils/SkMatrix22.cpp \
 	src/utils/SkMatrix44.cpp \
-	src/utils/SkMD5.cpp \
 	src/utils/SkMeshUtils.cpp \
 	src/utils/SkNinePatch.cpp \
 	src/utils/SkNWayCanvas.cpp \
