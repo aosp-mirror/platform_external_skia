@@ -180,6 +180,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkLineClipper.cpp \
 	src/core/SkLocalMatrixImageFilter.cpp \
 	src/core/SkLocalMatrixShader.cpp \
+	src/core/SkMD5.cpp \
 	src/core/SkMallocPixelRef.cpp \
 	src/core/SkMask.cpp \
 	src/core/SkMaskCache.cpp \
