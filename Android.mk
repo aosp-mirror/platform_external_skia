@@ -59,6 +59,7 @@ LOCAL_CFLAGS += \
 	-U_FORTIFY_SOURCE \
 	-D_FORTIFY_SOURCE=1 \
 	-DSKIA_IMPLEMENTATION=1 \
+	-O2 \
 	-Wno-clobbered -Wno-error \
 	-fexceptions
 
