@@ -158,6 +158,7 @@ LOCAL_SRC_FILES := \
 	../tests/GrGetCoeffBlendKnownComponentsTest.cpp \
 	../tests/GrMemoryPoolTest.cpp \
 	../tests/GrPorterDuffTest.cpp \
+	../tests/GrShapeTest.cpp \
 	../tests/GrSurfaceTest.cpp \
 	../tests/GrTRecorderTest.cpp \
 	../tests/GrTextureMipMapInvalidationTest.cpp \
