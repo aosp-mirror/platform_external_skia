@@ -130,6 +130,7 @@ LOCAL_SRC_FILES := \
 	../tests/ExifTest.cpp \
 	../tests/FillPathTest.cpp \
 	../tests/FitsInTest.cpp \
+	../tests/FlattenDrawableTest.cpp \
 	../tests/FlattenableCustomFactory.cpp \
 	../tests/FlattenableFactoryToName.cpp \
 	../tests/Float16Test.cpp \
