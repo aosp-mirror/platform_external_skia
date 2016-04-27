@@ -225,6 +225,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkRecords.cpp \
 	src/core/SkRecordDraw.cpp \
 	src/core/SkRecordOpts.cpp \
+	src/core/SkRecordedDrawable.cpp \
 	src/core/SkRecorder.cpp \
 	src/core/SkRect.cpp \
 	src/core/SkRefDict.cpp \
