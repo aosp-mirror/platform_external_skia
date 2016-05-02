@@ -295,6 +295,7 @@ LOCAL_SRC_FILES := \
 	../tests/YUVCacheTest.cpp \
 	../tests/YUVTest.cpp \
 	../tests/image-bitmap.cpp \
+	../tests/skbug5221.cpp \
 	DMSrcSinkAndroid.cpp \
 	../gm/SkLinearBitmapPipelineGM.cpp \
 	../gm/aaclip.cpp \
