@@ -189,6 +189,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkMaskGamma.cpp \
 	src/core/SkMath.cpp \
 	src/core/SkMatrix.cpp \
+	src/core/SkMatrix44.cpp \
 	src/core/SkMatrixImageFilter.cpp \
 	src/core/SkMetaData.cpp \
 	src/core/SkMipMap.cpp \
@@ -614,7 +615,6 @@ LOCAL_SRC_FILES := \
 	src/utils/SkInterpolator.cpp \
 	src/utils/SkLayer.cpp \
 	src/utils/SkMatrix22.cpp \
-	src/utils/SkMatrix44.cpp \
 	src/utils/SkMeshUtils.cpp \
 	src/utils/SkNinePatch.cpp \
 	src/utils/SkNWayCanvas.cpp \
