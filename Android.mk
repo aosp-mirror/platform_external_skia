@@ -106,7 +106,6 @@ LOCAL_SRC_FILES := \
 	src/core/SkBitmapCache.cpp \
 	src/core/SkBitmapController.cpp \
 	src/core/SkBitmapDevice.cpp \
-	src/core/SkBitmapHeap.cpp \
 	src/core/SkBitmapProcShader.cpp \
 	src/core/SkBitmapProcState.cpp \
 	src/core/SkBitmapProcState_matrixProcs.cpp \
