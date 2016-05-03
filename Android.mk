@@ -420,6 +420,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrRectanizer_pow2.cpp \
 	src/gpu/GrRectanizer_skyline.cpp \
 	src/gpu/GrRenderTarget.cpp \
+	src/gpu/GrRenderTargetProxy.cpp \
 	src/gpu/GrReducedClip.cpp \
 	src/gpu/GrResourceCache.cpp \
 	src/gpu/GrResourceProvider.cpp \
@@ -434,9 +435,11 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrSWMaskHelper.cpp \
 	src/gpu/GrSoftwarePathRenderer.cpp \
 	src/gpu/GrSurface.cpp \
+	src/gpu/GrSurfaceProxy.cpp \
 	src/gpu/GrTexture.cpp \
 	src/gpu/GrTextureParamsAdjuster.cpp \
 	src/gpu/GrTextureProvider.cpp \
+	src/gpu/GrTextureProxy.cpp \
 	src/gpu/GrTextureToYUVPlanes.cpp \
 	src/gpu/GrTextureAccess.cpp \
 	src/gpu/GrXferProcessor.cpp \
