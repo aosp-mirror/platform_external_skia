@@ -17,6 +17,10 @@ static SkScalar byte_to_scale(U8CPU byte) {
 }
 
 SkColorFilter* SkColorMatrixFilter::CreateLightingFilter(SkColor mul, SkColor add) {
+    if (0 == add) {
+        return SkColorFilter::CreateModeFilter(mul | SK_ColorBLACK,
+                                               SkXfermode::Mode::kModulate_Mode);
+    }
     SkColorMatrix matrix;
     matrix.setScale(byte_to_scale(SkColorGetR(mul)),
                     byte_to_scale(SkColorGetG(mul)),
