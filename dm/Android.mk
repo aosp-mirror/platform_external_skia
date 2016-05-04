@@ -219,6 +219,7 @@ LOCAL_SRC_FILES := \
 	../tests/PointTest.cpp \
 	../tests/PremulAlphaRoundTripTest.cpp \
 	../tests/PrimitiveProcessorTest.cpp \
+	../tests/ProxyTest.cpp \
 	../tests/QuickRejectTest.cpp \
 	../tests/RRectInPathTest.cpp \
 	../tests/RTConfRegistryTest.cpp \
