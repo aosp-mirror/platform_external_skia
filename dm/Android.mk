@@ -193,7 +193,6 @@ LOCAL_SRC_FILES := \
 	../tests/MetaDataTest.cpp \
 	../tests/MipMapTest.cpp \
 	../tests/OSPathTest.cpp \
-	../tests/OncePtrTest.cpp \
 	../tests/OnceTest.cpp \
 	../tests/PDFDeflateWStreamTest.cpp \
 	../tests/PDFDocumentTest.cpp \
