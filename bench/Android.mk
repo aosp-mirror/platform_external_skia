@@ -396,6 +396,7 @@ LOCAL_SRC_FILES := \
 	../gm/yuvtorgbeffect.cpp \
 	../tools/debugger/SkDrawCommand.cpp \
 	../tools/debugger/SkDebugCanvas.cpp \
+	../tools/debugger/SkJsonWriteBuffer.cpp \
 	../tools/debugger/SkObjectParser.cpp \
 	../tools/debugger/SkOverdrawMode.cpp \
 	../tools/AndroidSkDebugToStdOut.cpp \

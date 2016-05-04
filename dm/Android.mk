@@ -28,6 +28,7 @@ LOCAL_SRC_FILES := \
 	../gm/gm.cpp \
 	../tools/debugger/SkDebugCanvas.cpp \
 	../tools/debugger/SkDrawCommand.cpp \
+	../tools/debugger/SkJsonWriteBuffer.cpp \
 	../tools/debugger/SkObjectParser.cpp \
 	../tools/debugger/SkOverdrawMode.cpp \
 	../tests/Test.cpp \
