@@ -82,6 +82,7 @@ LOCAL_SRC_FILES := \
 	../tests/AAClipTest.cpp \
 	../tests/ARGBImageEncoderTest.cpp \
 	../tests/AnnotationTest.cpp \
+	../tests/ApplyGammaTest.cpp \
 	../tests/AsADashTest.cpp \
 	../tests/AtomicTest.cpp \
 	../tests/BadIcoTest.cpp \

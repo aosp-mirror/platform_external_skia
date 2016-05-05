@@ -484,6 +484,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/effects/GrDisableColorXP.cpp \
 	src/gpu/effects/GrDistanceFieldGeoProc.cpp \
 	src/gpu/effects/GrDitherEffect.cpp \
+	src/gpu/effects/GrGammaEffect.cpp \
 	src/gpu/effects/GrMatrixConvolutionEffect.cpp \
 	src/gpu/effects/GrOvalEffect.cpp \
 	src/gpu/effects/GrPorterDuffXferProcessor.cpp \
