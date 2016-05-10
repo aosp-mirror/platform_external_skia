@@ -113,6 +113,7 @@ LOCAL_SRC_FILES := \
 	ShaderMaskBench.cpp \
 	ShapesBench.cpp \
 	Sk4fBench.cpp \
+	SkBlend_optsBench.cpp \
 	SkGlyphCacheBench.cpp \
 	SkLinearBitmapPipelineBench.cpp \
 	SortBench.cpp \
