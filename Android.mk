@@ -162,7 +162,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkFlattenableSerialization.cpp \
 	src/core/SkFloatBits.cpp \
 	src/core/SkFont.cpp \
-	src/core/SkFontHost.cpp \
+	src/core/SkFontLCDConfig.cpp \
 	src/core/SkFontMgr.cpp \
 	src/core/SkFontStyle.cpp \
 	src/core/SkFontDescriptor.cpp \
