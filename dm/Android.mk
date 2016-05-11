@@ -252,7 +252,6 @@ LOCAL_SRC_FILES := \
 	../tests/SizeTest.cpp \
 	../tests/Sk4x4fTest.cpp \
 	../tests/SkBase64Test.cpp \
-	../tests/SkBlend_optsTest.cpp \
 	../tests/SkColor4fTest.cpp \
 	../tests/SkImageTest.cpp \
 	../tests/SkLinearBitmapPipelineTest.cpp \
