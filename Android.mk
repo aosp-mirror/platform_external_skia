@@ -427,8 +427,8 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrResourceCache.cpp \
 	src/gpu/GrResourceProvider.cpp \
 	src/gpu/GrShape.cpp \
+	src/gpu/GrStencil.cpp \
 	src/gpu/GrStencilAttachment.cpp \
-	src/gpu/GrStencilSettings.cpp \
 	src/gpu/GrStyle.cpp \
 	src/gpu/GrTessellator.cpp \
 	src/gpu/GrTraceMarker.cpp \
