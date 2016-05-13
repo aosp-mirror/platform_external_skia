@@ -328,6 +328,7 @@ LOCAL_SRC_FILES := \
 	../gm/bleed.cpp \
 	../gm/blend.cpp \
 	../gm/blurcircles.cpp \
+	../gm/blurcircles2.cpp \
 	../gm/blurquickreject.cpp \
 	../gm/blurrect.cpp \
 	../gm/blurredclippedcircle.cpp \
