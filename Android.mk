@@ -500,7 +500,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/text/GrAtlasTextContext.cpp \
 	src/gpu/text/GrBatchFontCache.cpp \
 	src/gpu/text/GrDistanceFieldAdjustTable.cpp \
-	src/gpu/text/GrFontScaler.cpp \
 	src/gpu/text/GrStencilAndCoverTextContext.cpp \
 	src/gpu/text/GrTextBlobCache.cpp \
 	src/gpu/text/GrTextUtils.cpp \
