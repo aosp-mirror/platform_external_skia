@@ -336,6 +336,7 @@ LOCAL_SRC_FILES := \
 	../gm/blurroundrect.cpp \
 	../gm/blurs.cpp \
 	../gm/bmpfilterqualityrepeat.cpp \
+	../gm/bubbles.cpp \
 	../gm/bug5252.cpp \
 	../gm/bug530095.cpp \
 	../gm/cgm.c \
