@@ -60,7 +60,8 @@ LOCAL_CFLAGS += \
 	-D_FORTIFY_SOURCE=1 \
 	-DSKIA_IMPLEMENTATION=1 \
 	-O2 \
-	-Wno-clobbered -Wno-error \
+	-Wno-clobbered \
+	-Wno-unknown-warning-option \
 	-fexceptions
 
 LOCAL_CPPFLAGS := \
