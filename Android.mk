@@ -62,7 +62,8 @@ LOCAL_CFLAGS += \
 	-O2 \
 	-Wno-clobbered \
 	-Wno-unknown-warning-option \
-	-fexceptions
+	-fexceptions \
+	-w
 
 LOCAL_CPPFLAGS := \
 	-std=c++11 \
@@ -642,7 +643,13 @@ LOCAL_SRC_FILES := \
 	src/codec/SkRawAdapterCodec.cpp \
 	src/codec/SkRawCodec.cpp \
 	third_party/etc1/etc1.cpp \
-	third_party/ktx/ktx.cpp
+	third_party/ktx/ktx.cpp \
+	third_party/qcms/src/chain.c \
+	third_party/qcms/src/iccread.c \
+	third_party/qcms/src/matrix.c \
+	third_party/qcms/src/qcms_util.c \
+	third_party/qcms/src/transform.c \
+	third_party/qcms/src/transform_util.c
 
 LOCAL_SHARED_LIBRARIES := \
 	liblog \
@@ -698,6 +705,7 @@ LOCAL_C_INCLUDES := \
 	external/freetype/include \
 	$(LOCAL_PATH)/include/utils/win \
 	$(LOCAL_PATH)/src/ports \
+	$(LOCAL_PATH)/skia/src \
 	external/sfntly/cpp/src \
 	external/zlib \
 	external/dng_sdk \
@@ -752,10 +760,12 @@ LOCAL_SRC_FILES_x86 += \
 	src/opts/opts_check_x86.cpp \
 	src/opts/SkBitmapProcState_opts_SSSE3.cpp \
 	src/opts/SkOpts_ssse3.cpp \
-	src/opts/SkOpts_sse41.cpp
+	src/opts/SkOpts_sse41.cpp \
+	third_party/qcms/src/transform-sse2.c
 
 LOCAL_CFLAGS_x86 += \
-	-DqDNGBigEndian=0
+	-DqDNGBigEndian=0 \
+	-DSSE2_ENABLE
 
 LOCAL_SRC_FILES_x86_64 += \
 	src/opts/SkBitmapFilter_opts_SSE2.cpp \
@@ -764,7 +774,11 @@ LOCAL_SRC_FILES_x86_64 += \
 	src/opts/opts_check_x86.cpp \
 	src/opts/SkBitmapProcState_opts_SSSE3.cpp \
 	src/opts/SkOpts_ssse3.cpp \
-	src/opts/SkOpts_sse41.cpp
+	src/opts/SkOpts_sse41.cpp \
+	third_party/qcms/src/transform-sse2.c
+
+LOCAL_CFLAGS_x86_64 += \
+	-DSSE2_ENABLE
 
 LOCAL_CFLAGS_mips += \
 	-EL
