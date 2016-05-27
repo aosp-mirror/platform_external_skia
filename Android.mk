@@ -161,7 +161,6 @@ LOCAL_SRC_FILES := \
 	src/core/SkFilterProc.cpp \
 	src/core/SkFlattenable.cpp \
 	src/core/SkFlattenableSerialization.cpp \
-	src/core/SkFloatBits.cpp \
 	src/core/SkFont.cpp \
 	src/core/SkFontLCDConfig.cpp \
 	src/core/SkFontMgr.cpp \
