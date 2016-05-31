@@ -356,6 +356,7 @@ LOCAL_SRC_FILES := \
 	../gm/srcmode.cpp \
 	../gm/stlouisarch.cpp \
 	../gm/stringart.cpp \
+	../gm/strokedlines.cpp \
 	../gm/strokefill.cpp \
 	../gm/strokerect.cpp \
 	../gm/strokerects.cpp \
