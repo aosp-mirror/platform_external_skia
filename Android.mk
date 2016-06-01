@@ -133,7 +133,6 @@ LOCAL_SRC_FILES := \
 	src/core/SkColorMatrixFilterRowMajor255.cpp \
 	src/core/SkColorShader.cpp \
 	src/core/SkColorSpace.cpp \
-	src/core/SkColorSpaceXform.cpp \
 	src/core/SkColorTable.cpp \
 	src/core/SkComposeShader.cpp \
 	src/core/SkConfig8888.cpp \
@@ -705,7 +704,7 @@ LOCAL_C_INCLUDES := \
 	external/freetype/include \
 	$(LOCAL_PATH)/include/utils/win \
 	$(LOCAL_PATH)/src/ports \
-	$(LOCAL_PATH)/third_party/qcms/src \
+	$(LOCAL_PATH)/skia/src \
 	external/sfntly/cpp/src \
 	external/zlib \
 	external/dng_sdk \
@@ -723,7 +722,6 @@ LOCAL_EXPORT_C_INCLUDE_DIRS := \
 	$(LOCAL_PATH)/include/gpu \
 	$(LOCAL_PATH)/include/images \
 	$(LOCAL_PATH)/include/ports \
-	$(LOCAL_PATH)/third_party/qcms/src \
 	$(LOCAL_PATH)/include/utils \
 	$(LOCAL_PATH)/src/utils
 
@@ -830,7 +828,6 @@ LOCAL_EXPORT_C_INCLUDE_DIRS := \
 	$(LOCAL_PATH)/include/gpu \
 	$(LOCAL_PATH)/include/images \
 	$(LOCAL_PATH)/include/ports \
-	$(LOCAL_PATH)/third_party/qcms/src \
 	$(LOCAL_PATH)/include/utils \
 	$(LOCAL_PATH)/src/utils
 
