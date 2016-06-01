@@ -172,6 +172,7 @@ LOCAL_SRC_FILES := \
 	../gm/bubbles.cpp \
 	../gm/bug5252.cpp \
 	../gm/bug530095.cpp \
+	../gm/bug615686.cpp \
 	../gm/cgm.c \
 	../gm/cgms.cpp \
 	../gm/circles.cpp \
