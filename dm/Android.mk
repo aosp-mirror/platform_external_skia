@@ -243,6 +243,7 @@ LOCAL_SRC_FILES := \
 	../tests/ResourceCacheTest.cpp \
 	../tests/RoundRectTest.cpp \
 	../tests/RuntimeConfigTest.cpp \
+	../tests/SRGBMipMapTest.cpp \
 	../tests/SRGBReadWritePixelsTest.cpp \
 	../tests/SVGDeviceTest.cpp \
 	../tests/ScalarTest.cpp \
