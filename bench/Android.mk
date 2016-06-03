@@ -44,6 +44,7 @@ LOCAL_SRC_FILES := \
 	ChromeBench.cpp \
 	CmapBench.cpp \
 	CodecBench.cpp \
+	ColorCodecBench.cpp \
 	ColorCubeBench.cpp \
 	ColorFilterBench.cpp \
 	ColorPrivBench.cpp \
