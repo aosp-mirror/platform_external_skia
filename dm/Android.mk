@@ -377,6 +377,7 @@ LOCAL_SRC_FILES := \
 	../gm/dashcubics.cpp \
 	../gm/dashing.cpp \
 	../gm/dcshader.cpp \
+	../gm/deferredtextureimagedata.cpp \
 	../gm/degeneratesegments.cpp \
 	../gm/dftext.cpp \
 	../gm/discard.cpp \
