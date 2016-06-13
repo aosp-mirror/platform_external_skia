@@ -325,6 +325,7 @@ LOCAL_SRC_FILES := \
 	../gm/bigtileimagefilter.cpp \
 	../gm/bitmapcopy.cpp \
 	../gm/bitmapfilters.cpp \
+	../gm/bitmapimage.cpp \
 	../gm/bitmappremul.cpp \
 	../gm/bitmaprect.cpp \
 	../gm/bitmaprecttest.cpp \
