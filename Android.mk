@@ -179,6 +179,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkImageCacherator.cpp \
 	src/core/SkImageGenerator.cpp \
 	src/core/SkLightingShader.cpp \
+	src/core/SkLightingShader_NormalSource.cpp \
 	src/core/SkLinearBitmapPipeline.cpp \
 	src/core/SkLineClipper.cpp \
 	src/core/SkLocalMatrixImageFilter.cpp \
