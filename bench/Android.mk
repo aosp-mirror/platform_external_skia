@@ -11,6 +11,7 @@ LOCAL_PATH:= $(call my-dir)
 include $(CLEAR_VARS)
 LOCAL_CFLAGS += \
 	-fPIC \
+	-Wvla \
 	-Wno-unused-parameter \
 	-U_FORTIFY_SOURCE \
 	-D_FORTIFY_SOURCE=1 \
