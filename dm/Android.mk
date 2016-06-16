@@ -293,6 +293,7 @@ LOCAL_SRC_FILES := \
 	../tests/UtilsTest.cpp \
 	../tests/VarAllocTest.cpp \
 	../tests/VkClearTests.cpp \
+	../tests/VkHeapTests.cpp \
 	../tests/VkUploadPixelsTests.cpp \
 	../tests/VkWrapTests.cpp \
 	../tests/WArrayTest.cpp \
