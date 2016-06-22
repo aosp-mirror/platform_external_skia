@@ -258,6 +258,7 @@ LOCAL_SRC_FILES := \
 	../gm/grayscalejpg.cpp \
 	../gm/hairlines.cpp \
 	../gm/hairmodes.cpp \
+	../gm/hardstop_gradients.cpp \
 	../gm/hittestpath.cpp \
 	../gm/image.cpp \
 	../gm/image_pict.cpp \
