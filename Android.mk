@@ -766,6 +766,7 @@ LOCAL_SRC_FILES_x86 += \
 	src/opts/SkBitmapProcState_opts_SSSE3.cpp \
 	src/opts/SkOpts_ssse3.cpp \
 	src/opts/SkOpts_sse41.cpp \
+	src/opts/SkOpts_avx.cpp \
 	third_party/qcms/src/transform-sse2.c
 
 LOCAL_CFLAGS_x86 += \
@@ -780,6 +781,7 @@ LOCAL_SRC_FILES_x86_64 += \
 	src/opts/SkBitmapProcState_opts_SSSE3.cpp \
 	src/opts/SkOpts_ssse3.cpp \
 	src/opts/SkOpts_sse41.cpp \
+	src/opts/SkOpts_avx.cpp \
 	third_party/qcms/src/transform-sse2.c
 
 LOCAL_CFLAGS_x86_64 += \
