@@ -397,6 +397,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrDrawTarget.cpp \
 	src/gpu/GrFragmentProcessor.cpp \
 	src/gpu/GrGpu.cpp \
+	src/gpu/GrGpuCommandBuffer.cpp \
 	src/gpu/GrGpuResource.cpp \
 	src/gpu/GrGpuFactory.cpp \
 	src/gpu/GrImageIDTextureAdjuster.cpp \
