@@ -365,7 +365,6 @@ LOCAL_SRC_FILES := \
 	src/effects/SkPictureImageFilter.cpp \
 	src/effects/SkTableColorFilter.cpp \
 	src/effects/SkTableMaskFilter.cpp \
-	src/effects/SkTestImageFilters.cpp \
 	src/effects/SkTileImageFilter.cpp \
 	src/effects/SkXfermodeImageFilter.cpp \
 	src/effects/gradients/Sk4fGradientBase.cpp \

@@ -541,7 +541,6 @@ LOCAL_SRC_FILES := \
 	../gm/surface.cpp \
 	../gm/tablecolorfilter.cpp \
 	../gm/tallstretchedbitmaps.cpp \
-	../gm/testimagefilters.cpp \
 	../gm/texdata.cpp \
 	../gm/textblob.cpp \
 	../gm/textblobblockreordering.cpp \
