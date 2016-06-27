@@ -180,7 +180,6 @@ LOCAL_SRC_FILES := \
 	src/core/SkImageCacherator.cpp \
 	src/core/SkImageGenerator.cpp \
 	src/core/SkLightingShader.cpp \
-	src/core/SkLightingShader_NormalSource.cpp \
 	src/core/SkLinearBitmapPipeline.cpp \
 	src/core/SkLineClipper.cpp \
 	src/core/SkLocalMatrixImageFilter.cpp \
@@ -201,6 +200,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkModeColorFilter.cpp \
 	src/core/SkMultiPictureDraw.cpp \
 	src/core/SkNinePatchIter.cpp \
+	src/core/SkNormalSource.cpp \
 	src/core/SkOpts.cpp \
 	src/core/SkPaint.cpp \
 	src/core/SkPaintPriv.cpp \
