@@ -436,6 +436,7 @@ LOCAL_SRC_FILES := \
 	../tools/gpu/gl/null/NullGLTestContext.cpp \
 	../tools/gpu/gl/egl/CreatePlatformGLTestContext_egl.cpp \
 	../tools/gpu/vk/VkTestContext.cpp \
+	../tools/picture_utils.cpp \
 	../tools/flags/SkCommandLineFlags.cpp
 
 LOCAL_SHARED_LIBRARIES := \
