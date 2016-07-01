@@ -262,6 +262,7 @@ LOCAL_SRC_FILES := \
 	../tests/SkLinearBitmapPipelineTest.cpp \
 	../tests/SkNxTest.cpp \
 	../tests/SkResourceCacheTest.cpp \
+	../tests/SkSLErrorTest.cpp \
 	../tests/SkSharedMutexTest.cpp \
 	../tests/SmallAllocatorTest.cpp \
 	../tests/SortTest.cpp \
@@ -625,6 +626,7 @@ LOCAL_STATIC_LIBRARIES := \
 	libjsoncpp
 
 LOCAL_C_INCLUDES := \
+	$(LOCAL_PATH)/../src/sksl \
 	$(LOCAL_PATH)/../include/c \
 	$(LOCAL_PATH)/../include/config \
 	$(LOCAL_PATH)/../include/core \

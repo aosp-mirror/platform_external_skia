@@ -651,6 +651,13 @@ LOCAL_SRC_FILES := \
 	src/codec/SkRawCodec.cpp \
 	third_party/etc1/etc1.cpp \
 	third_party/ktx/ktx.cpp \
+	src/sksl/SkSLCompiler.cpp \
+	src/sksl/SkSLIRGenerator.cpp \
+	src/sksl/SkSLParser.cpp \
+	src/sksl/SkSLSPIRVCodeGenerator.cpp \
+	src/sksl/SkSLUtil.cpp \
+	src/sksl/ir/SkSLSymbolTable.cpp \
+	src/sksl/ir/SkSLType.cpp \
 	third_party/qcms/src/chain.c \
 	third_party/qcms/src/iccread.c \
 	third_party/qcms/src/matrix.c \
@@ -705,6 +712,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/include/effects \
 	$(LOCAL_PATH)/include/client/android \
 	$(LOCAL_PATH)/src/effects \
+	$(LOCAL_PATH)/src/sksl \
 	$(LOCAL_PATH)/third_party/etc1 \
 	$(LOCAL_PATH)/third_party/ktx \
 	$(LOCAL_PATH)/src/lazy \
@@ -716,9 +724,11 @@ LOCAL_C_INCLUDES := \
 	external/sfntly/cpp/src \
 	external/zlib \
 	external/dng_sdk \
-	external/piex
+	external/piex \
+	$(LOCAL_PATH)/include
 
 LOCAL_EXPORT_C_INCLUDE_DIRS := \
+	$(LOCAL_PATH)/src/sksl \
 	$(LOCAL_PATH)/include/codec \
 	$(LOCAL_PATH)/include/android \
 	$(LOCAL_PATH)/include/c \
@@ -828,6 +838,7 @@ LOCAL_MODULE_CLASS := SHARED_LIBRARIES
 LOCAL_MODULE := libskia
 LOCAL_WHOLE_STATIC_LIBRARIES := libskia_static
 LOCAL_EXPORT_C_INCLUDE_DIRS := \
+	$(LOCAL_PATH)/src/sksl \
 	$(LOCAL_PATH)/include/codec \
 	$(LOCAL_PATH)/include/android \
 	$(LOCAL_PATH)/include/c \
