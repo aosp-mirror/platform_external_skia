@@ -154,6 +154,7 @@ LOCAL_SRC_FILES := \
 	../tests/GpuDrawPathTest.cpp \
 	../tests/GpuLayerCacheTest.cpp \
 	../tests/GpuRectanizerTest.cpp \
+	../tests/GpuSampleLocationsTest.cpp \
 	../tests/GrAllocatorTest.cpp \
 	../tests/GrContextAbandonTest.cpp \
 	../tests/GrContextFactoryTest.cpp \
