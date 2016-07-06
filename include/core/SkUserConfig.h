@@ -213,6 +213,7 @@
 #define SK_SUPPORT_PDF 1
 #define SK_TEST_QCMS
 #define SK_USE_FREETYPE_EMBOLDEN
+#define SK_VULKAN
 #define TURBO_HAS_565
 #define TURBO_HAS_CROP
 #define TURBO_HAS_SKIP

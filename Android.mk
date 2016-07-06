@@ -559,6 +559,42 @@ LOCAL_SRC_FILES := \
 	src/image/SkSurface_Gpu.cpp \
 	src/gpu/gl/GrGLDefaultInterface_native.cpp \
 	src/gpu/gl/android/GrGLCreateNativeInterface_android.cpp \
+	src/gpu/vk/GrVkBackendContext.cpp \
+	src/gpu/vk/GrVkBuffer.cpp \
+	src/gpu/vk/GrVkCaps.cpp \
+	src/gpu/vk/GrVkCommandBuffer.cpp \
+	src/gpu/vk/GrVkDescriptorPool.cpp \
+	src/gpu/vk/GrVkExtensions.cpp \
+	src/gpu/vk/GrVkFramebuffer.cpp \
+	src/gpu/vk/GrVkGpu.cpp \
+	src/gpu/vk/GrVkGpuCommandBuffer.cpp \
+	src/gpu/vk/GrVkImage.cpp \
+	src/gpu/vk/GrVkImageView.cpp \
+	src/gpu/vk/GrVkIndexBuffer.cpp \
+	src/gpu/vk/GrVkInterface.cpp \
+	src/gpu/vk/GrVkMemory.cpp \
+	src/gpu/vk/GrVkPipeline.cpp \
+	src/gpu/vk/GrVkPipelineState.cpp \
+	src/gpu/vk/GrVkPipelineStateBuilder.cpp \
+	src/gpu/vk/GrVkPipelineStateCache.cpp \
+	src/gpu/vk/GrVkPipelineStateDataManager.cpp \
+	src/gpu/vk/GrVkProgramDesc.cpp \
+	src/gpu/vk/GrVkRenderPass.cpp \
+	src/gpu/vk/GrVkRenderTarget.cpp \
+	src/gpu/vk/GrVkResourceProvider.cpp \
+	src/gpu/vk/GrVkSampler.cpp \
+	src/gpu/vk/GrVkStencilAttachment.cpp \
+	src/gpu/vk/GrVkTexture.cpp \
+	src/gpu/vk/GrVkTextureRenderTarget.cpp \
+	src/gpu/vk/GrVkTransferBuffer.cpp \
+	src/gpu/vk/GrVkUniformBuffer.cpp \
+	src/gpu/vk/GrVkUniformHandler.cpp \
+	src/gpu/vk/GrVkUtil.cpp \
+	src/gpu/vk/GrVkVaryingHandler.cpp \
+	src/gpu/vk/GrVkVertexBuffer.cpp \
+	tools/viewer/sk_app/WindowContext.cpp \
+	tools/viewer/sk_app/VulkanWindowContext.cpp \
+	tools/viewer/sk_app/android/VulkanWindowContext_android.cpp \
 	src/images/SkForceLinking.cpp \
 	src/images/SkMovie_FactoryDefault.cpp \
 	src/images/SkWEBPImageEncoder.cpp \
@@ -666,6 +702,7 @@ LOCAL_SHARED_LIBRARIES := \
 	liblog \
 	libGLESv2 \
 	libEGL \
+	libvulkan \
 	libz \
 	libexpat \
 	libjpeg \
@@ -710,6 +747,9 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/include/client/android \
 	$(LOCAL_PATH)/src/effects \
 	$(LOCAL_PATH)/src/sksl \
+	frameworks/native/vulkan/include \
+	$(LOCAL_PATH)/tools/viewer/sk_app \
+	$(LOCAL_PATH)/tools/viewer/sk_app/android \
 	$(LOCAL_PATH)/third_party/etc1 \
 	$(LOCAL_PATH)/third_party/ktx \
 	$(LOCAL_PATH)/src/lazy \
@@ -735,6 +775,9 @@ LOCAL_EXPORT_C_INCLUDE_DIRS := \
 	$(LOCAL_PATH)/include/effects \
 	$(LOCAL_PATH)/include/client/android \
 	$(LOCAL_PATH)/include/gpu \
+	frameworks/native/vulkan/include \
+	$(LOCAL_PATH)/tools/viewer/sk_app \
+	$(LOCAL_PATH)/tools/viewer/sk_app/android \
 	$(LOCAL_PATH)/include/images \
 	$(LOCAL_PATH)/include/ports \
 	$(LOCAL_PATH)/third_party/qcms/src \
@@ -845,6 +888,9 @@ LOCAL_EXPORT_C_INCLUDE_DIRS := \
 	$(LOCAL_PATH)/include/effects \
 	$(LOCAL_PATH)/include/client/android \
 	$(LOCAL_PATH)/include/gpu \
+	frameworks/native/vulkan/include \
+	$(LOCAL_PATH)/tools/viewer/sk_app \
+	$(LOCAL_PATH)/tools/viewer/sk_app/android \
 	$(LOCAL_PATH)/include/images \
 	$(LOCAL_PATH)/include/ports \
 	$(LOCAL_PATH)/third_party/qcms/src \

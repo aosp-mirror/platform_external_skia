@@ -618,7 +618,8 @@ LOCAL_SHARED_LIBRARIES := \
 	libz \
 	libexpat \
 	libGLESv2 \
-	libEGL
+	libEGL \
+	libvulkan
 
 LOCAL_STATIC_LIBRARIES := \
 	libskia_static \
@@ -642,6 +643,9 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../include/utils \
 	$(LOCAL_PATH)/../src/utils \
 	$(LOCAL_PATH)/../include/gpu \
+	frameworks/native/vulkan/include \
+	$(LOCAL_PATH)/../tools/viewer/sk_app \
+	$(LOCAL_PATH)/../tools/viewer/sk_app/android \
 	$(LOCAL_PATH)/../include/private \
 	$(LOCAL_PATH)/../src/core \
 	$(LOCAL_PATH)/../tools/gpu \
