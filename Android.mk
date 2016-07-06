@@ -468,6 +468,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/batches/GrDrawVerticesBatch.cpp \
 	src/gpu/batches/GrMSAAPathRenderer.cpp \
 	src/gpu/batches/GrNonAAFillRectBatch.cpp \
+	src/gpu/batches/GrNonAAFillRectPerspectiveBatch.cpp \
 	src/gpu/batches/GrNonAAStrokeRectBatch.cpp \
 	src/gpu/batches/GrNinePatch.cpp \
 	src/gpu/batches/GrPLSPathRenderer.cpp \
