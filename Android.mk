@@ -266,7 +266,6 @@ LOCAL_SRC_FILES := \
 	src/core/SkStrokeRec.cpp \
 	src/core/SkStrokerPriv.cpp \
 	src/core/SkSwizzle.cpp \
-	src/core/SkSRGB.cpp \
 	src/core/SkTaskGroup.cpp \
 	src/core/SkTextBlob.cpp \
 	src/core/SkTime.cpp \
