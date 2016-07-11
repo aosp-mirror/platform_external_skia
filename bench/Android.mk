@@ -71,7 +71,6 @@ LOCAL_SRC_FILES := \
 	GradientBench.cpp \
 	HairlinePathBench.cpp \
 	HalfBench.cpp \
-	HardStopGradientBench.cpp \
 	ImageBench.cpp \
 	ImageCacheBench.cpp \
 	ImageFilterCollapse.cpp \
