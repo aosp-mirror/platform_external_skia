@@ -377,7 +377,6 @@ LOCAL_SRC_FILES := \
 	../gm/convexpolyclip.cpp \
 	../gm/convexpolyeffect.cpp \
 	../gm/copyTo4444.cpp \
-	../gm/croppedrects.cpp \
 	../gm/cubicpaths.cpp \
 	../gm/dashcircle.cpp \
 	../gm/dashcubics.cpp \
