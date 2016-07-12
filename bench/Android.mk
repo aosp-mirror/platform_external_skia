@@ -120,6 +120,7 @@ LOCAL_SRC_FILES := \
 	SkBlend_optsBench.cpp \
 	SkGlyphCacheBench.cpp \
 	SkLinearBitmapPipelineBench.cpp \
+	SkRasterPipelineBench.cpp \
 	SortBench.cpp \
 	StrokeBench.cpp \
 	SwizzleBench.cpp \

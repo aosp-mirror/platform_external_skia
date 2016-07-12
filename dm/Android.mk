@@ -263,6 +263,7 @@ LOCAL_SRC_FILES := \
 	../tests/SkImageTest.cpp \
 	../tests/SkLinearBitmapPipelineTest.cpp \
 	../tests/SkNxTest.cpp \
+	../tests/SkRasterPipelineTest.cpp \
 	../tests/SkResourceCacheTest.cpp \
 	../tests/SkSLErrorTest.cpp \
 	../tests/SkSharedMutexTest.cpp \
