@@ -405,9 +405,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrGpuFactory.cpp \
 	src/gpu/GrImageIDTextureAdjuster.cpp \
 	src/gpu/GrInvariantOutput.cpp \
-	src/gpu/GrLayerAtlas.cpp \
-	src/gpu/GrLayerCache.cpp \
-	src/gpu/GrLayerHoister.cpp \
 	src/gpu/GrMemoryPool.cpp \
 	src/gpu/GrOvalRenderer.cpp \
 	src/gpu/GrPaint.cpp \
@@ -426,7 +423,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrProcessorUnitTest.cpp \
 	src/gpu/GrProcOptInfo.cpp \
 	src/gpu/GrGpuResourceRef.cpp \
-	src/gpu/GrRecordReplaceDraw.cpp \
 	src/gpu/GrRectanizer_pow2.cpp \
 	src/gpu/GrRectanizer_skyline.cpp \
 	src/gpu/GrRenderTarget.cpp \

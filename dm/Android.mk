@@ -235,7 +235,6 @@ LOCAL_SRC_FILES := \
 	../tests/RecordDrawTest.cpp \
 	../tests/RecordOptsTest.cpp \
 	../tests/RecordPatternTest.cpp \
-	../tests/RecordReplaceDrawTest.cpp \
 	../tests/RecordTest.cpp \
 	../tests/RecorderTest.cpp \
 	../tests/RecordingXfermodeTest.cpp \
