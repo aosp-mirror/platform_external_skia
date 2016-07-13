@@ -118,6 +118,7 @@ LOCAL_SRC_FILES := \
 	../tests/ColorSpaceXformTest.cpp \
 	../tests/ColorTest.cpp \
 	../tests/CopySurfaceTest.cpp \
+	../tests/DFPathRendererTest.cpp \
 	../tests/DashPathEffectTest.cpp \
 	../tests/DataRefTest.cpp \
 	../tests/DequeTest.cpp \
