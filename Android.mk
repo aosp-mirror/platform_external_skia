@@ -557,7 +557,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/SkGpuDevice_drawTexture.cpp \
 	src/gpu/SkGr.cpp \
 	src/gpu/SkGrPixelRef.cpp \
-	src/gpu/SkGrTexturePixelRef.cpp \
 	src/image/SkImage_Gpu.cpp \
 	src/image/SkSurface_Gpu.cpp \
 	src/gpu/gl/GrGLDefaultInterface_native.cpp \
