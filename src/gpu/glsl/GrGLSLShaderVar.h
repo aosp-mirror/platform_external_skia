@@ -76,7 +76,7 @@ public:
              const char* extraModifiers = nullptr,
              bool useUniformFloatArrays = USE_UNIFORM_FLOAT_ARRAYS) {
         SkASSERT(kVoid_GrSLType != type);
-        SkASSERT(kDefault_GrSLPrecision == precision || GrSLTypeIsNumeric(type));
+        SkASSERT(kDefault_GrSLPrecision == precision || GrSLTypeAcceptsPrecision(type));
         INHERITED::set(type, name, typeModifier, precision);
         fLayoutQualifier = layoutQualifier;
         if (extraModifiers) {
@@ -96,7 +96,7 @@ public:
              const char* extraModifiers = nullptr,
              bool useUniformFloatArrays = USE_UNIFORM_FLOAT_ARRAYS) {
         SkASSERT(kVoid_GrSLType != type);
-        SkASSERT(kDefault_GrSLPrecision == precision || GrSLTypeIsNumeric(type));
+        SkASSERT(kDefault_GrSLPrecision == precision || GrSLTypeAcceptsPrecision(type));
         INHERITED::set(type, name, typeModifier, precision);
         fLayoutQualifier = layoutQualifier;
         if (extraModifiers) {
@@ -117,7 +117,7 @@ public:
              const char* extraModifiers = nullptr,
              bool useUniformFloatArrays = USE_UNIFORM_FLOAT_ARRAYS) {
         SkASSERT(kVoid_GrSLType != type);
-        SkASSERT(kDefault_GrSLPrecision == precision || GrSLTypeIsNumeric(type));
+        SkASSERT(kDefault_GrSLPrecision == precision || GrSLTypeAcceptsPrecision(type));
         INHERITED::set(type, name, typeModifier, precision, count);
         fLayoutQualifier = layoutQualifier;
         if (extraModifiers) {
@@ -138,7 +138,7 @@ public:
              const char* extraModifiers = nullptr,
              bool useUniformFloatArrays = USE_UNIFORM_FLOAT_ARRAYS) {
         SkASSERT(kVoid_GrSLType != type);
-        SkASSERT(kDefault_GrSLPrecision == precision || GrSLTypeIsNumeric(type));
+        SkASSERT(kDefault_GrSLPrecision == precision || GrSLTypeAcceptsPrecision(type));
         INHERITED::set(type, name, typeModifier, precision, count);
         fLayoutQualifier = layoutQualifier;
         if (extraModifiers) {
@@ -164,7 +164,7 @@ public:
      * Write a declaration of this variable to out.
      */
     void appendDecl(const GrGLSLCaps* glslCaps, SkString* out) const {
-        SkASSERT(kDefault_GrSLPrecision == fPrecision || GrSLTypeIsNumeric(fType));
+        SkASSERT(kDefault_GrSLPrecision == fPrecision || GrSLTypeAcceptsPrecision(fType));
         if (!fLayoutQualifier.isEmpty()) {
             out->appendf("layout(%s) ", fLayoutQualifier.c_str());
         }
@@ -174,8 +174,9 @@ public:
             out->append(" ");
         }
         GrSLType effectiveType = this->getType();
-        if (effectiveType != kBool_GrSLType) {
-            out->append(PrecisionString(glslCaps, fPrecision));
+        if (glslCaps->usesPrecisionModifiers() && GrSLTypeAcceptsPrecision(effectiveType)) {
+            // Desktop GLSL has added precision qualifiers but they don't do anything.
+            out->appendf("%s ", GrGLSLPrecisionString(fPrecision));
         }
         if (this->isArray()) {
             if (this->isUnsizedArray()) {
@@ -208,23 +209,6 @@ public:
                      this->getName().c_str(),
                      indexName,
                      fUseUniformFloatArrays ? "" : ".x");
-    }
-
-    static const char* PrecisionString(const GrGLSLCaps* glslCaps, GrSLPrecision p) {
-        // Desktop GLSL has added precision qualifiers but they don't do anything.
-        if (glslCaps->usesPrecisionModifiers()) {
-            switch (p) {
-                case kLow_GrSLPrecision:
-                    return "lowp ";
-                case kMedium_GrSLPrecision:
-                    return "mediump ";
-                case kHigh_GrSLPrecision:
-                    return "highp ";
-                default:
-                    SkFAIL("Unexpected precision type.");
-            }
-        }
-        return "";
     }
 
 private:

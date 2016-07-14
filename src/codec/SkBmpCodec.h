@@ -8,6 +8,7 @@
 #define SkBmpCodec_DEFINED
 
 #include "SkCodec.h"
+#include "SkColorSpace.h"
 #include "SkColorTable.h"
 #include "SkImageInfo.h"
 #include "SkStream.h"
@@ -37,8 +38,8 @@ public:
 
 protected:
 
-    SkBmpCodec(const SkImageInfo& info, SkStream* stream, uint16_t bitsPerPixel,
-            SkCodec::SkScanlineOrder rowOrder);
+    SkBmpCodec(int width, int height, const SkEncodedInfo& info, SkStream* stream,
+            uint16_t bitsPerPixel, SkCodec::SkScanlineOrder rowOrder);
 
     SkEncodedFormat onGetEncodedFormat() const override { return kBMP_SkEncodedFormat; }
 

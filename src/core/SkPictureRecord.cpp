@@ -6,7 +6,6 @@
  */
 
 #include "SkPictureRecord.h"
-#include "SkDevice.h"
 #include "SkImage_Base.h"
 #include "SkPatchUtils.h"
 #include "SkPixelRef.h"
@@ -34,6 +33,7 @@ SkPictureRecord::SkPictureRecord(const SkISize& dimensions, uint32_t flags)
 SkPictureRecord::~SkPictureRecord() {
     fImageRefs.unrefAll();
     fPictureRefs.unrefAll();
+    fDrawableRefs.unrefAll();
     fTextBlobRefs.unrefAll();
 }
 
@@ -216,6 +216,16 @@ void SkPictureRecord::didSetMatrix(const SkMatrix& matrix) {
     this->addMatrix(matrix);
     this->validate(initialOffset, size);
     this->INHERITED::didSetMatrix(matrix);
+}
+
+void SkPictureRecord::didTranslateZ(SkScalar z) {
+    this->validate(fWriter.bytesWritten(), 0);
+    // op + scalar
+    size_t size = 1 * kUInt32Size + 1 * sizeof(SkScalar);
+    size_t initialOffset = this->addDraw(TRANSLATE_Z, &size);
+    this->addScalar(z);
+    this->validate(initialOffset, size);
+    this->INHERITED::didTranslateZ(z);
 }
 
 static bool regionOpExpands(SkRegion::Op op) {
@@ -603,6 +613,30 @@ void SkPictureRecord::onDrawTextOnPath(const void* text, size_t byteLength, cons
     this->validate(initialOffset, size);
 }
 
+void SkPictureRecord::onDrawTextRSXform(const void* text, size_t byteLength,
+                                        const SkRSXform xform[], const SkRect* cull,
+                                        const SkPaint& paint) {
+    const int count = paint.countText(text, byteLength);
+    // [op + paint-index + count + flags + length] + [text] + [xform] + cull
+    size_t size = 5 * kUInt32Size + SkAlign4(byteLength) + count * sizeof(SkRSXform);
+    uint32_t flags = 0;
+    if (cull) {
+        flags |= DRAW_TEXT_RSXFORM_HAS_CULL;
+        size += sizeof(SkRect);
+    }
+
+    size_t initialOffset = this->addDraw(DRAW_TEXT_RSXFORM, &size);
+    this->addPaint(paint);
+    this->addInt(count);
+    this->addInt(flags);
+    this->addText(text, byteLength);
+    fWriter.write(xform, count * sizeof(SkRSXform));
+    if (cull) {
+        fWriter.write(cull, sizeof(SkRect));
+    }
+    this->validate(initialOffset, size);
+}
+
 void SkPictureRecord::onDrawTextBlob(const SkTextBlob* blob, SkScalar x, SkScalar y,
                                      const SkPaint& paint) {
 
@@ -634,6 +668,23 @@ void SkPictureRecord::onDrawPicture(const SkPicture* picture, const SkMatrix* ma
         this->addPaintPtr(paint);
         this->addMatrix(m);
         this->addPicture(picture);
+    }
+    this->validate(initialOffset, size);
+}
+
+void SkPictureRecord::onDrawDrawable(SkDrawable* drawable, const SkMatrix* matrix) {
+    // op + drawable index
+    size_t size = 2 * kUInt32Size;
+    size_t initialOffset;
+
+    if (nullptr == matrix) {
+        initialOffset = this->addDraw(DRAW_DRAWABLE, &size);
+        this->addDrawable(drawable);
+    } else {
+        size += matrix->writeToMemory(nullptr);    // matrix
+        initialOffset = this->addDraw(DRAW_DRAWABLE_MATRIX, &size);
+        this->addMatrix(*matrix);
+        this->addDrawable(drawable);
     }
     this->validate(initialOffset, size);
 }
@@ -777,9 +828,21 @@ void SkPictureRecord::onDrawAtlas(const SkImage* atlas, const SkRSXform xform[],
     this->validate(initialOffset, size);
 }
 
+void SkPictureRecord::onDrawAnnotation(const SkRect& rect, const char key[], SkData* value) {
+    size_t keyLen = fWriter.WriteStringSize(key);
+    size_t valueLen = fWriter.WriteDataSize(value);
+    size_t size = 4 + sizeof(SkRect) + keyLen + valueLen;
+
+    size_t initialOffset = this->addDraw(DRAW_ANNOTATION, &size);
+    this->addRect(rect);
+    fWriter.writeString(key);
+    fWriter.writeData(value);
+    this->validate(initialOffset, size);
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 
-SkSurface* SkPictureRecord::onNewSurface(const SkImageInfo& info, const SkSurfaceProps&) {
+sk_sp<SkSurface> SkPictureRecord::onNewSurface(const SkImageInfo& info, const SkSurfaceProps&) {
     return nullptr;
 }
 
@@ -907,6 +970,17 @@ void SkPictureRecord::addPicture(const SkPicture* picture) {
     this->addInt(index + 1);
 }
 
+void SkPictureRecord::addDrawable(SkDrawable* drawable) {
+    int index = fDrawableRefs.find(drawable);
+    if (index < 0) {    // not found
+        index = fDrawableRefs.count();
+        *fDrawableRefs.append() = drawable;
+        drawable->ref();
+    }
+    // follow the convention of recording a 1-based index
+    this->addInt(index + 1);
+}
+
 void SkPictureRecord::addPoint(const SkPoint& point) {
     fWriter.writePoint(point);
 }
@@ -963,4 +1037,3 @@ void SkPictureRecord::addTextBlob(const SkTextBlob *blob) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-

@@ -41,11 +41,11 @@ protected:
         return fSwizzler;
     }
 
-    SkPngCodec(const SkImageInfo&, SkStream*, SkPngChunkReader*, png_structp, png_infop, int, int);
+    SkPngCodec(int width, int height, const SkEncodedInfo&, SkStream*, SkPngChunkReader*,
+            png_structp, png_infop, int, int, sk_sp<SkColorSpace>);
 
     png_structp png_ptr() { return fPng_ptr; }
     SkSwizzler* swizzler() { return fSwizzler; }
-    SkSwizzler::SrcConfig srcConfig() const { return fSrcConfig; }
     int numberPasses() const { return fNumberPasses; }
 
 private:
@@ -57,11 +57,10 @@ private:
     SkAutoTUnref<SkColorTable>      fColorTable;    // May be unpremul.
     SkAutoTDelete<SkSwizzler>       fSwizzler;
 
-    SkSwizzler::SrcConfig           fSrcConfig;
     const int                       fNumberPasses;
     int                             fBitDepth;
 
-    bool decodePalette(bool premultiply, int* ctableCount);
+    bool createColorTable(SkColorType dstColorType, bool premultiply, int* ctableCount);
     void destroyReadStruct();
 
     typedef SkCodec INHERITED;

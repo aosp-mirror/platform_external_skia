@@ -13,7 +13,7 @@
 #include "SkRefCnt.h"
 #include "SkTypeface.h"
 
-struct SkBaseMutex;
+class SkFontMgr;
 
 /**
  *  \class SkFontConfigInterface
@@ -23,7 +23,6 @@ struct SkBaseMutex;
  */
 class SK_API SkFontConfigInterface : public SkRefCnt {
 public:
-    
 
     /**
      *  Returns the global SkFontConfigInterface instance, and if it is not
@@ -81,10 +80,10 @@ public:
      *  If a match is not found, return false, and ignore all out parameters.
      */
     virtual bool matchFamilyName(const char familyName[],
-                                 SkTypeface::Style requested,
+                                 SkFontStyle requested,
                                  FontIdentity* outFontIdentifier,
                                  SkString* outFamilyName,
-                                 SkTypeface::Style* outStyle) = 0;
+                                 SkFontStyle* outStyle) = 0;
 
     /**
      *  Given a FontRef, open a stream to access its data, or return null
@@ -98,11 +97,9 @@ public:
      *
      *  The default implementation simply returns a new typeface built using data obtained from
      *  openStream(), but derived classes may implement more complex caching schemes.
-     *
-     *  Callers are responsible for unref-ing the result.
      */
-    virtual SkTypeface* createTypeface(const FontIdentity& identity) {
-        return SkTypeface::CreateFromStream(this->openStream(identity), identity.fTTCIndex);
+    virtual sk_sp<SkTypeface> makeTypeface(const FontIdentity& identity) {
+        return SkTypeface::MakeFromStream(this->openStream(identity), identity.fTTCIndex);
     }
 
     /**
@@ -110,12 +107,15 @@ public:
      *  libfontconfig. This does not affect the refcnt of the returned instance.
      *  The mutex may be used to guarantee the singleton is only constructed once.
      */
-    static SkFontConfigInterface* GetSingletonDirectInterface(SkBaseMutex* mutex = NULL);
+    static SkFontConfigInterface* GetSingletonDirectInterface();
 
     // New APIS, which have default impls for now (which do nothing)
 
     virtual SkDataTable* getFamilyNames() { return SkDataTable::NewEmpty(); }
     typedef SkRefCnt INHERITED;
 };
+
+/** Creates a SkFontMgr which wraps a SkFontConfigInterface. */
+SK_API SkFontMgr* SkFontMgr_New_FCI(SkFontConfigInterface* fci);
 
 #endif

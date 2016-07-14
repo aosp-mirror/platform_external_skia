@@ -44,6 +44,9 @@ public:
         this->reset(info, NULL, 0, NULL);
     }
 
+    // overrides the colorspace in the SkImageInfo of the pixmap
+    void setColorSpace(sk_sp<SkColorSpace>);
+
     /**
      *  If supported, set this pixmap to point to the pixels in the specified mask and return true.
      *  On failure, return false and set this pixmap to empty.
@@ -70,6 +73,17 @@ public:
     bool isOpaque() const { return fInfo.isOpaque(); }
 
     SkIRect bounds() const { return SkIRect::MakeWH(this->width(), this->height()); }
+
+    /**
+     *  Return the rowbytes expressed as a number of pixels (like width and height).
+     */
+    int rowBytesAsPixels() const { return int(fRowBytes >> this->shiftPerPixel()); }
+
+    /**
+     *  Return the shift amount per pixel (i.e. 0 for 1-byte per pixel, 1 for 2-bytes per pixel
+     *  colortypes, 2 for 4-bytes per pixel colortypes). Return 0 for kUnknown_SkColorType.
+     */
+    int shiftPerPixel() const { return fInfo.shiftPerPixel(); }
 
     uint64_t getSize64() const { return sk_64_mul(fInfo.height(), fRowBytes); }
     uint64_t getSafeSize64() const { return fInfo.getSafeSize64(fRowBytes); }
@@ -130,6 +144,9 @@ public:
     // Writable versions
 
     void* writable_addr() const { return const_cast<void*>(fPixels); }
+    void* writable_addr(int x, int y) const {
+        return const_cast<void*>(this->addr(x, y));
+    }
     uint8_t* writable_addr8(int x, int y) const {
         return const_cast<uint8_t*>(this->addr8(x, y));
     }
@@ -186,65 +203,6 @@ private:
 };
 
 /////////////////////////////////////////////////////////////////////////////////////////////
-
-class SK_API SkAutoPixmapStorage : public SkPixmap {
-public:
-    SkAutoPixmapStorage();
-    ~SkAutoPixmapStorage();
-
-    /**
-     *  Try to allocate memory for the pixels needed to match the specified Info. On success
-     *  return true and fill out the pixmap to point to that memory. The storage will be freed
-     *  when this object is destroyed, or if another call to tryAlloc() or alloc() is made.
-     *
-     *  On failure, return false and reset() the pixmap to empty.
-     */
-    bool tryAlloc(const SkImageInfo&);
-
-    /**
-     *  Allocate memory for the pixels needed to match the specified Info and fill out the pixmap
-     *  to point to that memory. The storage will be freed when this object is destroyed,
-     *  or if another call to tryAlloc() or alloc() is made.
-     *
-     *  If the memory cannot be allocated, calls sk_throw().
-     */
-    void alloc(const SkImageInfo&);
-
-    /**
-     *  Returns an SkData object wrapping the allocated pixels memory, and resets the pixmap.
-     *  If the storage hasn't been allocated, the result is NULL.
-     */
-    const SkData* SK_WARN_UNUSED_RESULT detachPixelsAsData();
-
-    // We wrap these so we can clear our internal storage
-
-    void reset() {
-        this->freeStorage();
-        this->INHERITED::reset();
-    }
-    void reset(const SkImageInfo& info, const void* addr, size_t rb, SkColorTable* ctable = NULL) {
-        this->freeStorage();
-        this->INHERITED::reset(info, addr, rb, ctable);
-    }
-    void reset(const SkImageInfo& info) {
-        this->freeStorage();
-        this->INHERITED::reset(info);
-    }
-    bool SK_WARN_UNUSED_RESULT reset(const SkMask& mask) {
-        this->freeStorage();
-        return this->INHERITED::reset(mask);
-    }
-
-private:
-    void*   fStorage;
-
-    void freeStorage() {
-        sk_free(fStorage);
-        fStorage = nullptr;
-    }
-
-    typedef SkPixmap INHERITED;
-};
 
 /////////////////////////////////////////////////////////////////////////////////////////////
 

@@ -60,9 +60,9 @@ const SkScalar TexWidth = 100.0f;
 const SkScalar TexHeight = 100.0f;
 
 class PerlinPatchView : public SampleView {
-    SkShader* fShader0;    
-    SkShader* fShader1;    
-    SkShader* fShaderCompose;    
+    sk_sp<SkShader> fShader0;
+    sk_sp<SkShader> fShader1;
+    sk_sp<SkShader> fShaderCompose;
     SkScalar fXFreq;
     SkScalar fYFreq;
     SkScalar fSeed;
@@ -98,7 +98,7 @@ public:
         };
         const SkPoint points[2] = { SkPoint::Make(0.0f, 0.0f),
                                     SkPoint::Make(100.0f, 100.0f) };
-        fShader0 = SkGradientShader::CreateLinear(points,
+        fShader0 = SkGradientShader::MakeLinear(points,
                                                   colors,
                                                   NULL,
                                                   3,
@@ -107,9 +107,6 @@ public:
                                                   NULL);
     }
 
-    virtual ~PerlinPatchView() {
-        SkSafeUnref(fShader0);
-    }
 protected:
     // overrides from SkEventSink
     bool onQuery(SkEvent* evt)  override {
@@ -132,7 +129,7 @@ protected:
         }
 
         SkPaint paint;
-        
+
         SkScalar texWidth = fTexScale * TexWidth;
         SkScalar texHeight = fTexScale * TexHeight;
         const SkPoint texCoords[SkPatchUtils::kNumCorners] = {
@@ -142,19 +139,17 @@ protected:
             { fTexX - texWidth, fTexY + texHeight}}
         ;
         
-        SkAutoTUnref<SkXfermode> xfer(SkXfermode::Create(SkXfermode::kSrc_Mode));
+        sk_sp<SkXfermode> xfer(SkXfermode::Make(SkXfermode::kSrc_Mode));
 
         SkScalar scaleFreq = 2.0;
-        fShader1 = SkPerlinNoiseShader2::CreateImprovedNoise(fXFreq/scaleFreq, fYFreq/scaleFreq, 4,
+        fShader1 = SkPerlinNoiseShader2::MakeImprovedNoise(fXFreq/scaleFreq, fYFreq/scaleFreq, 4,
                                                              fSeed);
-        fShaderCompose = SkShader::CreateComposeShader(fShader0, fShader1, nullptr);
+        fShaderCompose = SkShader::MakeComposeShader(fShader0, fShader1, nullptr);
 
         paint.setShader(fShaderCompose);
         canvas->drawPatch(fPts, nullptr, texCoords, xfer, paint);
 
         draw_control_points(canvas, fPts);
-        SkSafeUnref(fShader1);
-        SkSafeUnref(fShaderCompose);
     }
 
     class PtClick : public Click {
@@ -209,4 +204,3 @@ private:
 };
 
 DEF_SAMPLE( return new PerlinPatchView(); )
-

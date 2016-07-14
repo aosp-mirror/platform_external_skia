@@ -11,7 +11,8 @@
 #if SK_SUPPORT_GPU
 
 #include "GrContext.h"
-#include "SkGpuDevice.h"
+#include "SkCanvas.h"
+#include "SkSurface.h"
 
 // This was made indivisible by 4 to ensure we test setting GL_PACK_ALIGNMENT properly.
 static const int X_SIZE = 13;
@@ -33,8 +34,10 @@ static void validate_alpha_data(skiatest::Reporter* reporter, int w, int h, cons
     }
 }
 
-DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ReadWriteAlpha, reporter, context) {
+DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ReadWriteAlpha, reporter, ctxInfo) {
     unsigned char alphaData[X_SIZE * Y_SIZE];
+
+    static const int kClearValue = 0x2;
 
     bool match;
     static const size_t kRowBytes[] = {0, X_SIZE, X_SIZE + 1, 2 * X_SIZE - 1};
@@ -50,7 +53,8 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ReadWriteAlpha, reporter, context) {
         // We are initializing the texture with zeros here
         memset(alphaData, 0, X_SIZE * Y_SIZE);
         SkAutoTUnref<GrTexture> texture(
-            context->textureProvider()->createTexture(desc, SkBudgeted::kNo , alphaData, 0));
+            ctxInfo.grContext()->textureProvider()->createTexture(desc, SkBudgeted::kNo, alphaData,
+                                                                 0));
         if (!texture) {
             if (!rt) {
                 ERRORF(reporter, "Could not create alpha texture.");
@@ -67,30 +71,30 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ReadWriteAlpha, reporter, context) {
 
         for (auto rowBytes : kRowBytes) {
             // upload the texture (do per-rowbytes iteration because we may overwrite below).
-            texture->writePixels(0, 0, desc.fWidth, desc.fHeight, desc.fConfig,
-                                 alphaData, 0);
+            bool result = texture->writePixels(0, 0, desc.fWidth, desc.fHeight, desc.fConfig,
+                                               alphaData, 0);
+            REPORTER_ASSERT_MESSAGE(reporter, result, "Initial A8 writePixels failed");
 
             size_t nonZeroRowBytes = rowBytes ? rowBytes : X_SIZE;
             SkAutoTDeleteArray<uint8_t> readback(new uint8_t[nonZeroRowBytes * Y_SIZE]);
             // clear readback to something non-zero so we can detect readback failures
-            memset(readback.get(), 0x1, nonZeroRowBytes * Y_SIZE);
+            memset(readback.get(), kClearValue, nonZeroRowBytes * Y_SIZE);
 
             // read the texture back
-            texture->readPixels(0, 0, desc.fWidth, desc.fHeight, desc.fConfig,
-                                readback.get(), rowBytes);
+            result = texture->readPixels(0, 0, desc.fWidth, desc.fHeight, desc.fConfig,
+                                         readback.get(), rowBytes);
+            REPORTER_ASSERT_MESSAGE(reporter, result, "Initial A8 readPixels failed");
 
             // make sure the original & read back versions match
             SkString msg;
-            msg.printf("rt:%d, rb:%d", rt, SkToU32(rowBytes));
+            msg.printf("rt:%d, rb:%d A8", rt, SkToU32(rowBytes));
             validate_alpha_data(reporter, X_SIZE, Y_SIZE, readback.get(), nonZeroRowBytes,
                                 alphaData, msg);
 
             // Now try writing on the single channel texture (if we could create as a RT).
             if (texture->asRenderTarget()) {
-                SkSurfaceProps props(SkSurfaceProps::kLegacyFontHost_InitType);
-                SkAutoTUnref<SkBaseDevice> device(SkGpuDevice::Create(
-                    texture->asRenderTarget(), &props, SkGpuDevice::kUninit_InitContents));
-                SkCanvas canvas(device);
+                sk_sp<SkSurface> surf(SkSurface::MakeRenderTargetDirect(texture->asRenderTarget()));
+                SkCanvas* canvas = surf->getCanvas();
 
                 SkPaint paint;
 
@@ -98,11 +102,12 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ReadWriteAlpha, reporter, context) {
 
                 paint.setColor(SK_ColorWHITE);
 
-                canvas.drawRect(rect, paint);
+                canvas->drawRect(rect, paint);
 
-                memset(readback.get(), 0x1, nonZeroRowBytes * Y_SIZE);
-                texture->readPixels(0, 0, desc.fWidth, desc.fHeight, desc.fConfig, readback.get(),
-                                    rowBytes);
+                memset(readback.get(), kClearValue, nonZeroRowBytes * Y_SIZE);
+                result = texture->readPixels(0, 0, desc.fWidth, desc.fHeight, 
+                                             desc.fConfig, readback.get(), rowBytes);
+                REPORTER_ASSERT_MESSAGE(reporter, result, "A8 readPixels after clear failed");
 
                 match = true;
                 for (int y = 0; y < Y_SIZE && match; ++y) {
@@ -150,7 +155,8 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ReadWriteAlpha, reporter, context) {
                 }
             }
             SkAutoTUnref<GrTexture> texture(
-                context->textureProvider()->createTexture(desc, SkBudgeted::kNo, rgbaData, 0));
+                ctxInfo.grContext()->textureProvider()->createTexture(desc, SkBudgeted::kNo,
+                                                                      rgbaData, 0));
             if (!texture) {
                 // We always expect to be able to create a RGBA texture
                 if (!rt  && kRGBA_8888_GrPixelConfig == desc.fConfig) {
@@ -164,15 +170,17 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ReadWriteAlpha, reporter, context) {
 
                 SkAutoTDeleteArray<uint8_t> readback(new uint8_t[nonZeroRowBytes * Y_SIZE]);
                 // Clear so we don't accidentally see values from previous iteration.
-                memset(readback.get(), 0x0, nonZeroRowBytes * Y_SIZE);
+                memset(readback.get(), kClearValue, nonZeroRowBytes * Y_SIZE);
 
                 // read the texture back
-                texture->readPixels(0, 0, desc.fWidth, desc.fHeight, kAlpha_8_GrPixelConfig,
-                                    readback.get(), rowBytes);
+                bool result = texture->readPixels(0, 0, desc.fWidth, desc.fHeight,
+                                                  kAlpha_8_GrPixelConfig,
+                                                  readback.get(), rowBytes);
+                REPORTER_ASSERT_MESSAGE(reporter, result, "8888 readPixels failed");
 
                 // make sure the original & read back versions match
                 SkString msg;
-                msg.printf("rt:%d, rb:%d", rt, SkToU32(rowBytes));
+                msg.printf("rt:%d, rb:%d 8888", rt, SkToU32(rowBytes));
                 validate_alpha_data(reporter, X_SIZE, Y_SIZE, readback.get(), nonZeroRowBytes,
                                     alphaData, msg);
             }

@@ -76,7 +76,7 @@ static void getContourCounts(const SkPath& path, SkTArray<int>* contourCounts) {
     }
 }
 
-static void erase(SkSurface* surface) {
+static void erase(const sk_sp<SkSurface>& surface) {
     SkCanvas* canvas = surface->getCanvas();
     if (canvas) {
         canvas->clear(SK_ColorTRANSPARENT);
@@ -109,9 +109,9 @@ class QuadStrokerView : public SampleView {
     SkRect fWidthControl;
     SkRect fBounds;
     SkMatrix fMatrix, fInverse;
-    SkAutoTUnref<SkShader> fShader;
-    SkAutoTUnref<SkSurface> fMinSurface;
-    SkAutoTUnref<SkSurface> fMaxSurface;
+    sk_sp<SkShader> fShader;
+    sk_sp<SkSurface> fMinSurface;
+    sk_sp<SkSurface> fMaxSurface;
     StrokeTypeButton fCubicButton;
     StrokeTypeButton fConicButton;
     StrokeTypeButton fQuadButton;
@@ -264,13 +264,12 @@ protected:
         fBounds.set(0, 0, SkIntToScalar(width * zoom), SkIntToScalar(height * zoom));
         fMatrix.setScale(SkIntToScalar(zoom), SkIntToScalar(zoom));
         fInverse.setScale(SK_Scalar1 / zoom, SK_Scalar1 / zoom);
-        fShader.reset(sk_tool_utils::create_checkerboard_shader(
-                              0xFFCCCCCC, 0xFFFFFFFF, zoom));
+        fShader = sk_tool_utils::create_checkerboard_shader(0xFFCCCCCC, 0xFFFFFFFF, zoom);
 
         SkImageInfo info = SkImageInfo::MakeN32Premul(width, height);
-        fMinSurface.reset(SkSurface::NewRaster(info));
+        fMinSurface = SkSurface::MakeRaster(info);
         info = info.makeWH(width * zoom, height * zoom);
-        fMaxSurface.reset(SkSurface::NewRaster(info));
+        fMaxSurface = SkSurface::MakeRaster(info);
     }
 
     void draw_points(SkCanvas* canvas, const SkPath& path, SkColor color,
@@ -394,7 +393,7 @@ protected:
             return;
         }
         SkRect bounds = path.getBounds();
-        this->setWHZ(SkScalarCeilToInt(bounds.right()), drawText 
+        this->setWHZ(SkScalarCeilToInt(bounds.right()), drawText
                 ? SkScalarRoundToInt(scale * 3 / 2) : SkScalarRoundToInt(scale),
                 SkScalarRoundToInt(950.0f / scale));
         erase(fMinSurface);
@@ -475,7 +474,7 @@ protected:
         path.reset();
         path.setFillType(SkPath::kEvenOdd_FillType);
         path.addCircle(center.fX, center.fY, maxSide + width / 2);
-        SkRect outside = SkRect::MakeXYWH(center.fX - maxSide - width, center.fY - maxSide - width, 
+        SkRect outside = SkRect::MakeXYWH(center.fX - maxSide - width, center.fY - maxSide - width,
                 (maxSide + width) * 2, (maxSide + width) * 2);
         path.addRect(outside);
         canvas->drawPath(path, paint);
@@ -649,7 +648,7 @@ protected:
                 if (fArcButton.fEnabled) {
                     SkPoint center;
                     if (arcCenter(&center)) {
-                        r.set(center.fX - fRadius, center.fY - fRadius, center.fX + fRadius, 
+                        r.set(center.fX - fRadius, center.fY - fRadius, center.fX + fRadius,
                                 center.fY + fRadius);
                     }
                 }

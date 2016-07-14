@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2016 Google Inc.
  *
@@ -13,7 +12,9 @@
 #if SK_SUPPORT_GPU
 
 #include "GrContext.h"
+#include "GrGpu.h"
 #include "GrTest.h"
+#include "gl/GrGLContext.h"
 #include "SkBitmap.h"
 #include "SkGradientShader.h"
 #include "SkImage.h"
@@ -42,19 +43,20 @@ protected:
         SkCanvas canvas(bmp);
         SkPoint pts[] = { {0, 0}, {0, SkIntToScalar(height)} };
         SkColor colors0[] = { 0xFF1060B0 , 0xFF102030 };
-        paint.setShader(SkGradientShader::CreateLinear(pts, colors0, nullptr, 2,
-                                                       SkShader::kClamp_TileMode))->unref();
+        paint.setShader(SkGradientShader::MakeLinear(pts, colors0, nullptr, 2,
+                                                     SkShader::kClamp_TileMode));
         canvas.drawPaint(paint);
 
         SkColor colors1[] = { 0xFFA07010 , 0xFFA02080 };
         paint.setAntiAlias(true);
-        paint.setShader(SkGradientShader::CreateLinear(pts, colors1, nullptr, 2,
-                                                       SkShader::kClamp_TileMode))->unref();
+        paint.setShader(SkGradientShader::MakeLinear(pts, colors1, nullptr, 2,
+                                                     SkShader::kClamp_TileMode));
         canvas.drawCircle(SkIntToScalar(width) / 2, SkIntToScalar(height) / 2,
                           SkIntToScalar(width + height) / 5, paint);
     }
 
-    SkImage* createRectangleTextureImg(GrContext* context, int width, int height, void* pixels) {
+    sk_sp<SkImage> createRectangleTextureImg(GrContext* context, int width, int height,
+                                             void* pixels) {
         if (!context) {
             return nullptr;
         }
@@ -86,7 +88,7 @@ protected:
 // Useful for debugging whether errors result from use of RECTANGLE
 // #define TARGET GR_GL_TEXTURE_2D
 #define TARGET GR_GL_TEXTURE_RECTANGLE
-        GrGLuint id;
+        GrGLuint id = 0;
         GR_GL_CALL(gl, GenTextures(1, &id));
         GR_GL_CALL(gl, BindTexture(TARGET, id));
         GR_GL_CALL(gl, TexParameteri(TARGET, GR_GL_TEXTURE_MAG_FILTER,
@@ -94,7 +96,7 @@ protected:
         GR_GL_CALL(gl, TexParameteri(TARGET, GR_GL_TEXTURE_MIN_FILTER,
                                      GR_GL_NEAREST));
         GR_GL_CALL(gl, TexParameteri(TARGET, GR_GL_TEXTURE_WRAP_S,
-                                     GR_GL_CLAMP_TO_EDGE));    
+                                     GR_GL_CLAMP_TO_EDGE));
         GR_GL_CALL(gl, TexParameteri(TARGET, GR_GL_TEXTURE_WRAP_T,
                                      GR_GL_CLAMP_TO_EDGE));
         GR_GL_CALL(gl, TexImage2D(TARGET, 0, GR_GL_RGBA, width, height, 0,
@@ -111,7 +113,7 @@ protected:
         desc.fHeight = height;
         desc.fOrigin = kTopLeft_GrSurfaceOrigin;
         desc.fTextureHandle = reinterpret_cast<GrBackendObject>(&info);
-        if (SkImage* image = SkImage::NewFromAdoptedTexture(context, desc)) {
+        if (sk_sp<SkImage> image = SkImage::MakeFromAdoptedTexture(context, desc)) {
             return image;
         }
         GR_GL_CALL(gl, DeleteTextures(1, &id));
@@ -119,9 +121,8 @@ protected:
     }
 
     void onDraw(SkCanvas* canvas) override {
-        GrRenderTarget* rt = canvas->internal_private_accessTopLayerRenderTarget();
-        GrContext* context;
-        if (!rt || !(context = rt->getContext())) {
+        GrContext *context = canvas->getGrContext();
+        if (!context) {
             skiagm::GM::DrawGpuOnlyMessage(canvas);
             return;
         }
@@ -132,8 +133,7 @@ protected:
 
         SkPMColor pixels[kWidth * kHeight];
         this->fillPixels(kWidth, kHeight, pixels);
-        SkAutoTUnref<SkImage> rectImg(this->createRectangleTextureImg(context, kWidth, kHeight,
-                                                                      pixels));
+        sk_sp<SkImage> rectImg(this->createRectangleTextureImg(context, kWidth, kHeight, pixels));
 
         if (!rectImg) {
             SkPaint paint;
@@ -157,24 +157,24 @@ protected:
             canvas->save();
             canvas->scale(s, s);
             for (auto q : kQualities) {
-                    SkPaint plainPaint;
-                    plainPaint.setFilterQuality(q);
-                    canvas->drawImage(rectImg, 0, 0, &plainPaint);
-                    canvas->translate(kWidth + kPad, 0);
+                SkPaint plainPaint;
+                plainPaint.setFilterQuality(q);
+                canvas->drawImage(rectImg.get(), 0, 0, &plainPaint);
+                canvas->translate(kWidth + kPad, 0);
 
-                    SkPaint clampPaint;
-                    clampPaint.setFilterQuality(q);
-                    clampPaint.setShader(rectImg->newShader(SkShader::kClamp_TileMode,
-                                                            SkShader::kClamp_TileMode))->unref();
-                    canvas->drawRect(SkRect::MakeWH(1.5f * kWidth, 1.5f * kHeight), clampPaint);
-                    canvas->translate(kWidth * 1.5f + kPad, 0);
+                SkPaint clampPaint;
+                clampPaint.setFilterQuality(q);
+                clampPaint.setShader(rectImg->makeShader(SkShader::kClamp_TileMode,
+                                                         SkShader::kClamp_TileMode));
+                canvas->drawRect(SkRect::MakeWH(1.5f * kWidth, 1.5f * kHeight), clampPaint);
+                canvas->translate(kWidth * 1.5f + kPad, 0);
 
-                    SkPaint repeatPaint;
-                    repeatPaint.setFilterQuality(q);
-                    repeatPaint.setShader(rectImg->newShader(SkShader::kRepeat_TileMode,
-                                                             SkShader::kMirror_TileMode))->unref();
-                    canvas->drawRect(SkRect::MakeWH(1.5f * kWidth, 1.5f * kHeight), repeatPaint);
-                    canvas->translate(1.5f * kWidth + kPad, 0);
+                SkPaint repeatPaint;
+                repeatPaint.setFilterQuality(q);
+                repeatPaint.setShader(rectImg->makeShader(SkShader::kRepeat_TileMode,
+                                                          SkShader::kMirror_TileMode));
+                canvas->drawRect(SkRect::MakeWH(1.5f * kWidth, 1.5f * kHeight), repeatPaint);
+                canvas->translate(1.5f * kWidth + kPad, 0);
             }
             canvas->restore();
             canvas->translate(0, kPad + 1.5f * kHeight * s);

@@ -22,6 +22,7 @@ LOCAL_SHARED_LIBRARIES += \
 	liblog \
 	libGLESv2 \
 	libEGL \
+	libvulkan \
 	libz \
 	libexpat \
 	libjpeg \

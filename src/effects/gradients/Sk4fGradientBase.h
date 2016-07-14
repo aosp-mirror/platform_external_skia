@@ -8,6 +8,7 @@
 #ifndef Sk4fGradientBase_DEFINED
 #define Sk4fGradientBase_DEFINED
 
+#include "Sk4fGradientPriv.h"
 #include "SkColor.h"
 #include "SkGradientShaderPriv.h"
 #include "SkMatrix.h"
@@ -24,25 +25,24 @@ public:
 
     uint32_t getFlags() const override { return fFlags; }
 
+    void shadeSpan(int x, int y, SkPMColor dst[], int count) override;
+    void shadeSpan4f(int x, int y, SkPM4f dst[], int count) override;
+
 protected:
     struct Interval {
-        Interval(SkPMColor c0, SkScalar p0,
-                 SkPMColor c1, SkScalar p1,
-                 const Sk4f& componentScale);
-        Interval(const Sk4f& c0, const Sk4f& dc,
-                 SkScalar p0, SkScalar p1);
+        Interval(const Sk4f& c0, SkScalar p0,
+                 const Sk4f& c1, SkScalar p1);
 
         bool isZeroRamp() const { return fZeroRamp; }
-
-        // true when fx is in [p0,p1)
-        bool contains(SkScalar fx) const;
 
         SkPM4f   fC0, fDc;
         SkScalar fP0, fP1;
         bool     fZeroRamp;
     };
 
-    const Interval* findInterval(SkScalar fx) const;
+    virtual void mapTs(int x, int y, SkScalar ts[], int count) const = 0;
+
+    void buildIntervals(const SkGradientShaderBase&, const ContextRec&, bool reverse);
 
     SkSTArray<8, Interval, true> fIntervals;
     SkMatrix                     fDstToPos;
@@ -55,7 +55,19 @@ protected:
 private:
     using INHERITED = SkShader::Context;
 
-    mutable const Interval*      fCachedInterval;
+    void addMirrorIntervals(const SkGradientShaderBase&,
+                            const Sk4f& componentScale, bool reverse);
+
+    template<DstType, SkShader::TileMode tileMode>
+    class TSampler;
+
+    template <DstType dstType, ApplyPremul premul>
+    void shadePremulSpan(int x, int y, typename DstTraits<dstType, premul>::Type[],
+                         int count) const;
+
+    template <DstType dstType, ApplyPremul premul, SkShader::TileMode tileMode>
+    void shadeSpanInternal(int x, int y, typename DstTraits<dstType, premul>::Type[],
+                           int count) const;
 };
 
 #endif // Sk4fGradientBase_DEFINED

@@ -20,12 +20,10 @@ DEF_TEST(MipMap, reporter) {
     SkRandom rand;
 
     for (int i = 0; i < 500; ++i) {
-        // for now, Build needs a min size of 2, otherwise it will return nullptr.
-        // should fix that to support 1 X N, where N > 1 to return non-null.
-        int width = 2 + rand.nextU() % 1000;
-        int height = 2 + rand.nextU() % 1000;
+        int width = 1 + rand.nextU() % 1000;
+        int height = 1 + rand.nextU() % 1000;
         make_bitmap(&bm, width, height);
-        SkAutoTUnref<SkMipMap> mm(SkMipMap::Build(bm, nullptr));
+        SkAutoTUnref<SkMipMap> mm(SkMipMap::Build(bm, SkSourceGammaTreatment::kIgnore, nullptr));
 
         REPORTER_ASSERT(reporter, mm->countLevels() == SkMipMap::ComputeLevelCount(width, height));
         REPORTER_ASSERT(reporter, !mm->extractLevel(SkSize::Make(SK_Scalar1, SK_Scalar1),
@@ -62,15 +60,19 @@ static void test_mipmap_generation(int width, int height, int expectedMipLevelCo
     SkBitmap bm;
     bm.allocN32Pixels(width, height);
     bm.eraseColor(SK_ColorWHITE);
-    SkAutoTUnref<SkMipMap> mm(SkMipMap::Build(bm, nullptr));
+    SkAutoTUnref<SkMipMap> mm(SkMipMap::Build(bm, SkSourceGammaTreatment::kIgnore, nullptr));
 
     const int mipLevelCount = mm->countLevels();
     REPORTER_ASSERT(reporter, mipLevelCount == expectedMipLevelCount);
+    REPORTER_ASSERT(reporter, mipLevelCount == SkMipMap::ComputeLevelCount(width, height));
     for (int i = 0; i < mipLevelCount; ++i) {
         SkMipMap::Level level;
         REPORTER_ASSERT(reporter, mm->getLevel(i, &level));
         // Make sure the mipmaps contain valid data and that the sizes are correct
         REPORTER_ASSERT(reporter, level.fPixmap.addr());
+        SkISize size = SkMipMap::ComputeLevelSize(width, height, i);
+        REPORTER_ASSERT(reporter, level.fPixmap.width() == size.width());
+        REPORTER_ASSERT(reporter, level.fPixmap.height() == size.height());
 
         // + 1 because SkMipMap does not include the base mipmap level.
         int twoToTheMipLevel = 1 << (i + 1);
@@ -88,7 +90,7 @@ DEF_TEST(MipMap_DirectLevelAccess, reporter) {
         SkBitmap bm;
         bm.allocN32Pixels(1, 1);
         bm.eraseColor(SK_ColorWHITE);
-        SkAutoTUnref<SkMipMap> mm(SkMipMap::Build(bm, nullptr));
+        SkAutoTUnref<SkMipMap> mm(SkMipMap::Build(bm, SkSourceGammaTreatment::kIgnore, nullptr));
 
         REPORTER_ASSERT(reporter, mm == nullptr);
     }
@@ -118,19 +120,19 @@ DEF_TEST(MipMap_ComputeLevelCount, reporter) {
         {-100, -100, 0},
 
         // Test mipmaps with 0, 1, 2 as dimensions
-        // (SkMipMap::Build requires a min size of 2)
+        // (SkMipMap::Build requires a min size of 1)
         //
         // 0
         {0, 100, 0},
         {100, 0, 0},
         {0, 0, 0},
         // 1
-        {1, 100, 0},
-        {100, 1, 0},
+        {1, 100, 6},
+        {100, 1, 6},
         {1, 1, 0},
         // 2
-        {2, 100, 1},
-        {100, 2, 1},
+        {2, 100, 6},
+        {100, 2, 6},
         {2, 2, 1},
 
         // Test a handful of boundaries such as 63x63 and 64x64
@@ -142,13 +144,61 @@ DEF_TEST(MipMap_ComputeLevelCount, reporter) {
         {256, 256, 8},
 
         // Test different dimensions, such as 256x64
-        {64, 129, 6},
-        {255, 32, 5},
-        {500, 1000, 8}
+        {64, 129, 7},
+        {255, 32, 7},
+        {500, 1000, 9}
     };
 
     for (auto& currentTest : tests) {
         int levelCount = SkMipMap::ComputeLevelCount(currentTest.fWidth, currentTest.fHeight);
         REPORTER_ASSERT(reporter, currentTest.fExpectedLevelCount == levelCount);
+    }
+}
+
+struct LevelSizeScenario {
+    int fBaseWidth;
+    int fBaseHeight;
+    int fLevel;
+    SkISize fExpectedMipMapLevelSize;
+};
+
+DEF_TEST(MipMap_ComputeLevelSize, reporter) {
+    const LevelSizeScenario tests[] = {
+        // Test mipmaps with negative sizes
+        {-100, 100, 0, SkISize::Make(0, 0)},
+        {100, -100, 0, SkISize::Make(0, 0)},
+        {-100, -100, 0, SkISize::Make(0, 0)},
+
+        // Test mipmaps with 0, 1, 2 as dimensions
+        // (SkMipMap::Build requires a min size of 1)
+        //
+        // 0
+        {0, 100, 0, SkISize::Make(0, 0)},
+        {100, 0, 0, SkISize::Make(0, 0)},
+        {0, 0, 0, SkISize::Make(0, 0)},
+        // 1
+
+        {1, 100, 0, SkISize::Make(1, 50)},
+        {100, 1, 0, SkISize::Make(50, 1)},
+        {1, 1, 0, SkISize::Make(0, 0)},
+        // 2
+        {2, 100, 0, SkISize::Make(1, 50)},
+        {100, 2, 1, SkISize::Make(25, 1)},
+        {2, 2, 0, SkISize::Make(1, 1)},
+
+        // Test a handful of cases
+        {63, 63, 2, SkISize::Make(7, 7)},
+        {64, 64, 2, SkISize::Make(8, 8)},
+        {127, 127, 2, SkISize::Make(15, 15)},
+        {64, 129, 3, SkISize::Make(4, 8)},
+        {255, 32, 6, SkISize::Make(1, 1)},
+        {500, 1000, 1, SkISize::Make(125, 250)},
+    };
+
+    for (auto& currentTest : tests) {
+        SkISize levelSize = SkMipMap::ComputeLevelSize(currentTest.fBaseWidth,
+                                                       currentTest.fBaseHeight,
+                                                       currentTest.fLevel);
+        REPORTER_ASSERT(reporter, currentTest.fExpectedMipMapLevelSize == levelSize);
     }
 }

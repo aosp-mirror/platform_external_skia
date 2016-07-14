@@ -48,27 +48,26 @@ static bool is_valid_3D_lut(SkData* cubeData, int cubeDimension) {
            (nullptr != cubeData) && (cubeData->size() >= minMemorySize);
 }
 
-SkColorFilter* SkColorCubeFilter::Create(SkData* cubeData, int cubeDimension) {
-    if (!is_valid_3D_lut(cubeData, cubeDimension)) {
+sk_sp<SkColorFilter> SkColorCubeFilter::Make(sk_sp<SkData> cubeData, int cubeDimension) {
+    if (!is_valid_3D_lut(cubeData.get(), cubeDimension)) {
         return nullptr;
     }
 
-    return new SkColorCubeFilter(cubeData, cubeDimension);
+    return sk_sp<SkColorFilter>(new SkColorCubeFilter(std::move(cubeData), cubeDimension));
 }
 
-SkColorCubeFilter::SkColorCubeFilter(SkData* cubeData, int cubeDimension)
-  : fCubeData(SkRef(cubeData))
-  , fUniqueID(SkNextColorCubeUniqueID())
-  , fCache(cubeDimension) {
-}
+SkColorCubeFilter::SkColorCubeFilter(sk_sp<SkData> cubeData, int cubeDimension)
+    : fCubeData(std::move(cubeData))
+    , fUniqueID(SkNextColorCubeUniqueID())
+    , fCache(cubeDimension)
+{}
 
 uint32_t SkColorCubeFilter::getFlags() const {
     return this->INHERITED::getFlags() | kAlphaUnchanged_Flag;
 }
 
 SkColorCubeFilter::ColorCubeProcesingCache::ColorCubeProcesingCache(int cubeDimension)
-  : fCubeDimension(cubeDimension)
-  , fLutsInited(false) {
+  : fCubeDimension(cubeDimension) {
     fColorToIndex[0] = fColorToIndex[1] = nullptr;
     fColorToFactors[0] = fColorToFactors[1] = nullptr;
     fColorToScalar = nullptr;
@@ -77,8 +76,8 @@ SkColorCubeFilter::ColorCubeProcesingCache::ColorCubeProcesingCache(int cubeDime
 void SkColorCubeFilter::ColorCubeProcesingCache::getProcessingLuts(
     const int* (*colorToIndex)[2], const SkScalar* (*colorToFactors)[2],
     const SkScalar** colorToScalar) {
-    SkOnce(&fLutsInited, &fLutsMutex,
-           SkColorCubeFilter::ColorCubeProcesingCache::initProcessingLuts, this);
+    fLutsInitOnce(SkColorCubeFilter::ColorCubeProcesingCache::initProcessingLuts, this);
+
     SkASSERT((fColorToIndex[0] != nullptr) &&
              (fColorToIndex[1] != nullptr) &&
              (fColorToFactors[0] != nullptr) &&
@@ -136,19 +135,19 @@ void SkColorCubeFilter::filterSpan(const SkPMColor src[], int count, SkPMColor d
                                    (const SkColor*)fCubeData->data());
 }
 
-SkFlattenable* SkColorCubeFilter::CreateProc(SkReadBuffer& buffer) {
+sk_sp<SkFlattenable> SkColorCubeFilter::CreateProc(SkReadBuffer& buffer) {
     int cubeDimension = buffer.readInt();
-    SkAutoDataUnref cubeData(buffer.readByteArrayAsData());
-    if (!buffer.validate(is_valid_3D_lut(cubeData, cubeDimension))) {
+    auto cubeData(buffer.readByteArrayAsData());
+    if (!buffer.validate(is_valid_3D_lut(cubeData.get(), cubeDimension))) {
         return nullptr;
     }
-    return Create(cubeData, cubeDimension);
+    return Make(std::move(cubeData), cubeDimension);
 }
 
 void SkColorCubeFilter::flatten(SkWriteBuffer& buffer) const {
     this->INHERITED::flatten(buffer);
     buffer.writeInt(fCache.cubeDimension());
-    buffer.writeDataAsByteArray(fCubeData);
+    buffer.writeDataAsByteArray(fCubeData.get());
 }
 
 #ifndef SK_IGNORE_TO_STRING
@@ -162,8 +161,9 @@ void SkColorCubeFilter::toString(SkString* str) const {
 
 class GrColorCubeEffect : public GrFragmentProcessor {
 public:
-    static const GrFragmentProcessor* Create(GrTexture* colorCube) {
-        return (nullptr != colorCube) ? new GrColorCubeEffect(colorCube) : nullptr;
+    static sk_sp<GrFragmentProcessor> Make(GrTexture* colorCube) {
+        return (nullptr != colorCube) ? sk_sp<GrFragmentProcessor>(new GrColorCubeEffect(colorCube))
+                                      : nullptr;
     }
 
     virtual ~GrColorCubeEffect();
@@ -277,9 +277,9 @@ void GrColorCubeEffect::GLSLProcessor::emitCode(EmitArgs& args) {
 
     // Apply the cube.
     fragBuilder->codeAppendf("%s = vec4(mix(", args.fOutputColor);
-    fragBuilder->appendTextureLookup(args.fSamplers[0], cCoords1);
+    fragBuilder->appendTextureLookup(args.fTexSamplers[0], cCoords1);
     fragBuilder->codeAppend(".bgr, ");
-    fragBuilder->appendTextureLookup(args.fSamplers[0], cCoords2);
+    fragBuilder->appendTextureLookup(args.fTexSamplers[0], cCoords2);
 
     // Premultiply color by alpha. Note that the input alpha is not modified by this shader.
     fragBuilder->codeAppendf(".bgr, fract(%s.b)) * vec3(%s), %s.a);\n",
@@ -298,7 +298,7 @@ void GrColorCubeEffect::GLSLProcessor::GenKey(const GrProcessor& proc,
                                               const GrGLSLCaps&, GrProcessorKeyBuilder* b) {
 }
 
-const GrFragmentProcessor* SkColorCubeFilter::asFragmentProcessor(GrContext* context) const {
+sk_sp<GrFragmentProcessor> SkColorCubeFilter::asFragmentProcessor(GrContext* context) const {
     static const GrUniqueKey::Domain kDomain = GrUniqueKey::GenerateDomain();
     GrUniqueKey key;
     GrUniqueKey::Builder builder(&key, kDomain, 2);
@@ -310,6 +310,7 @@ const GrFragmentProcessor* SkColorCubeFilter::asFragmentProcessor(GrContext* con
     desc.fWidth = fCache.cubeDimension();
     desc.fHeight = fCache.cubeDimension() * fCache.cubeDimension();
     desc.fConfig = kRGBA_8888_GrPixelConfig;
+    desc.fIsMipMapped = false;
 
     SkAutoTUnref<GrTexture> textureCube(
         context->textureProvider()->findAndRefTextureByUniqueKey(key));
@@ -323,6 +324,6 @@ const GrFragmentProcessor* SkColorCubeFilter::asFragmentProcessor(GrContext* con
         }
     }
 
-    return GrColorCubeEffect::Create(textureCube);
+    return sk_sp<GrFragmentProcessor>(GrColorCubeEffect::Make(textureCube));
 }
 #endif

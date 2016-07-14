@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2010 The Android Open Source Project
  *
@@ -9,7 +8,6 @@
 
 #include "SkData.h"
 #include "SkDeflate.h"
-#include "SkStream.h"
 
 #ifdef ZLIB_INCLUDE
     #include ZLIB_INCLUDE

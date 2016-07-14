@@ -33,8 +33,6 @@ public:
 
     SkLinearGradient(const SkPoint pts[2], const Descriptor&);
 
-    size_t contextSize(const ContextRec&) const override;
-
     class LinearGradientContext : public SkGradientShaderBase::GradientShaderBaseContext {
     public:
         LinearGradientContext(const SkLinearGradient&, const ContextRec&);
@@ -59,10 +57,11 @@ public:
 
     GradientType asAGradient(GradientInfo* info) const override;
 #if SK_SUPPORT_GPU
-    const GrFragmentProcessor* asFragmentProcessor(GrContext*,
+    sk_sp<GrFragmentProcessor> asFragmentProcessor(GrContext*,
                                                    const SkMatrix& viewM,
                                                    const SkMatrix*,
-                                                   SkFilterQuality) const override;
+                                                   SkFilterQuality,
+                                                   SkSourceGammaTreatment) const override;
 #endif
 
     SK_TO_STRING_OVERRIDE()
@@ -71,6 +70,7 @@ public:
 protected:
     SkLinearGradient(SkReadBuffer& buffer);
     void flatten(SkWriteBuffer& buffer) const override;
+    size_t onContextSize(const ContextRec&) const override;
     Context* onCreateContext(const ContextRec&, void* storage) const override;
 
 private:

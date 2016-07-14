@@ -1,16 +1,14 @@
-
 /*
  * Copyright 2011 Google Inc.
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
+
 #ifndef SkDumpCanvas_DEFINED
 #define SkDumpCanvas_DEFINED
 
 #include "SkCanvas.h"
-
-#ifdef SK_DEVELOPER
 
 /** This class overrides all the draw methods on SkCanvas, and formats them
     as text, and then sends that to a Dumper helper object.
@@ -48,6 +46,7 @@ public:
         kDrawVertices_Verb,
         kDrawPatch_Verb,
         kDrawData_Verb, // obsolete
+        kDrawAnnotation_Verb,
 
         kCull_Verb
     };
@@ -88,6 +87,8 @@ protected:
                                 SkScalar constY, const SkPaint&) override;
     virtual void onDrawTextOnPath(const void* text, size_t byteLength, const SkPath& path,
                                   const SkMatrix* matrix, const SkPaint&) override;
+    void onDrawTextRSXform(const void* text, size_t byteLength, const SkRSXform xform[],
+                           const SkRect* cull, const SkPaint& paint) override;
     virtual void onDrawTextBlob(const SkTextBlob* blob, SkScalar x, SkScalar y,
                                 const SkPaint& paint) override;
     virtual void onDrawPatch(const SkPoint cubics[12], const SkColor colors[4],
@@ -120,6 +121,7 @@ protected:
     void onClipRegion(const SkRegion&, SkRegion::Op) override;
 
     void onDrawPicture(const SkPicture*, const SkMatrix*, const SkPaint*) override;
+    void onDrawAnnotation(const SkRect&, const char key[], SkData* value) override;
 
     static const char* EdgeStyleToAAString(ClipEdgeStyle edgeStyle);
 
@@ -160,7 +162,5 @@ public:
 private:
     typedef SkFormatDumper INHERITED;
 };
-
-#endif
 
 #endif

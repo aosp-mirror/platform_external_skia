@@ -9,12 +9,19 @@
 #include "SkXfermode_proccoeff.h"
 #include "SkColorPriv.h"
 #include "SkMathPriv.h"
-#include "SkOncePtr.h"
+#include "SkOnce.h"
 #include "SkOpts.h"
 #include "SkReadBuffer.h"
 #include "SkString.h"
 #include "SkWriteBuffer.h"
 #include "SkPM4f.h"
+
+#if SK_SUPPORT_GPU
+#include "GrFragmentProcessor.h"
+#include "effects/GrCustomXfermode.h"
+#include "effects/GrPorterDuffXferProcessor.h"
+#include "effects/GrXfermodeFragmentProcessor.h"
+#endif
 
 #define SkAlphaMulAlpha(a, b)   SkMulDiv255Round(a, b)
 
@@ -246,7 +253,7 @@ static inline void clipColor(float* r, float* g, float* b, float a) {
         *g = L + (*g - L) * scale;
         *b = L + (*b - L) * scale;
     }
-    
+
     if ((x > a) && (denom = x - L)) { // Compute denom and make sure it's non zero
         float scale = (a - L) / denom;
         *r = L + (*r - L) * scale;
@@ -268,7 +275,7 @@ static Sk4f hue_4f(const Sk4f& s, const Sk4f& d) {
     float sr = s[SkPM4f::R];
     float sg = s[SkPM4f::G];
     float sb = s[SkPM4f::B];
-    
+
     float da = d[SkPM4f::A];
     float dr = d[SkPM4f::R];
     float dg = d[SkPM4f::G];
@@ -289,18 +296,18 @@ static Sk4f saturation_4f(const Sk4f& s, const Sk4f& d) {
     float sr = s[SkPM4f::R];
     float sg = s[SkPM4f::G];
     float sb = s[SkPM4f::B];
-    
+
     float da = d[SkPM4f::A];
     float dr = d[SkPM4f::R];
     float dg = d[SkPM4f::G];
     float db = d[SkPM4f::B];
-    
+
     float Dr = dr;
     float Dg = dg;
     float Db = db;
     SetSat(&Dr, &Dg, &Db, Sat(sr, sg, sb) * da);
     SetLum(&Dr, &Dg, &Db, sa * da, Lum(dr, dg, db) * sa);
-    
+
     return color_alpha(s * inv_alpha(d) + d * inv_alpha(s) + set_argb(0, Dr, Dg, Db),
                        sa + da - sa * da);
 }
@@ -310,7 +317,7 @@ static Sk4f color_4f(const Sk4f& s, const Sk4f& d) {
     float sr = s[SkPM4f::R];
     float sg = s[SkPM4f::G];
     float sb = s[SkPM4f::B];
-    
+
     float da = d[SkPM4f::A];
     float dr = d[SkPM4f::R];
     float dg = d[SkPM4f::G];
@@ -320,7 +327,7 @@ static Sk4f color_4f(const Sk4f& s, const Sk4f& d) {
     float Sg = sg;
     float Sb = sb;
     SetLum(&Sr, &Sg, &Sb, sa * da, Lum(dr, dg, db) * sa);
-    
+
     Sk4f res = color_alpha(s * inv_alpha(d) + d * inv_alpha(s) + set_argb(0, Sr, Sg, Sb),
                            sa + da - sa * da);
     // Can return tiny negative values ...
@@ -332,17 +339,17 @@ static Sk4f luminosity_4f(const Sk4f& s, const Sk4f& d) {
     float sr = s[SkPM4f::R];
     float sg = s[SkPM4f::G];
     float sb = s[SkPM4f::B];
-    
+
     float da = d[SkPM4f::A];
     float dr = d[SkPM4f::R];
     float dg = d[SkPM4f::G];
     float db = d[SkPM4f::B];
-    
+
     float Dr = dr;
     float Dg = dg;
     float Db = db;
     SetLum(&Dr, &Dg, &Db, sa * da, Lum(sr, sg, sb) * da);
-    
+
     Sk4f res = color_alpha(s * inv_alpha(d) + d * inv_alpha(s) + set_argb(0, Dr, Dg, Db),
                            sa + da - sa * da);
     // Can return tiny negative values ...
@@ -985,15 +992,15 @@ bool SkXfermode::asMode(Mode* mode) const {
 }
 
 #if SK_SUPPORT_GPU
-const GrFragmentProcessor* SkXfermode::getFragmentProcessorForImageFilter(
-                                                                const GrFragmentProcessor*) const {
+sk_sp<GrFragmentProcessor> SkXfermode::makeFragmentProcessorForImageFilter(
+                                                                sk_sp<GrFragmentProcessor>) const {
     // This should never be called.
     // TODO: make pure virtual in SkXfermode once Android update lands
     SkASSERT(0);
     return nullptr;
 }
 
-GrXPFactory* SkXfermode::asXPFactory() const {
+sk_sp<GrXPFactory> SkXfermode::asXPFactory() const {
     // This should never be called.
     // TODO: make pure virtual in SkXfermode once Android update lands
     SkASSERT(0);
@@ -1092,12 +1099,12 @@ bool SkXfermode::isOpaque(SkXfermode::SrcColorOpacity opacityType) const {
 ///////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 
-SkFlattenable* SkProcCoeffXfermode::CreateProc(SkReadBuffer& buffer) {
+sk_sp<SkFlattenable> SkProcCoeffXfermode::CreateProc(SkReadBuffer& buffer) {
     uint32_t mode32 = buffer.read32();
     if (!buffer.validate(mode32 < SK_ARRAY_COUNT(gProcCoeffs))) {
         return nullptr;
     }
-    return SkXfermode::Create((SkXfermode::Mode)mode32);
+    return SkXfermode::Make((SkXfermode::Mode)mode32);
 }
 
 void SkProcCoeffXfermode::flatten(SkWriteBuffer& buffer) const {
@@ -1240,25 +1247,21 @@ void SkProcCoeffXfermode::xferA8(SkAlpha* SK_RESTRICT dst,
 }
 
 #if SK_SUPPORT_GPU
-#include "effects/GrCustomXfermode.h"
-#include "effects/GrPorterDuffXferProcessor.h"
-#include "effects/GrXfermodeFragmentProcessor.h"
-
-const GrFragmentProcessor* SkProcCoeffXfermode::getFragmentProcessorForImageFilter(
-                                                            const GrFragmentProcessor* dst) const {
+sk_sp<GrFragmentProcessor> SkProcCoeffXfermode::makeFragmentProcessorForImageFilter(
+                                                            sk_sp<GrFragmentProcessor> dst) const {
     SkASSERT(dst);
-    return GrXfermodeFragmentProcessor::CreateFromDstProcessor(dst, fMode);
+    return GrXfermodeFragmentProcessor::MakeFromDstProcessor(std::move(dst), fMode);
 }
 
-GrXPFactory* SkProcCoeffXfermode::asXPFactory() const {
+sk_sp<GrXPFactory> SkProcCoeffXfermode::asXPFactory() const {
     if (CANNOT_USE_COEFF != fSrcCoeff) {
-        GrXPFactory* result = GrPorterDuffXPFactory::Create(fMode);
+        sk_sp<GrXPFactory> result(GrPorterDuffXPFactory::Make(fMode));
         SkASSERT(result);
         return result;
     }
 
     SkASSERT(GrCustomXfermode::IsSupportedMode(fMode));
-    return GrCustomXfermode::CreateXPFactory(fMode);
+    return GrCustomXfermode::MakeXPFactory(fMode);
 }
 #endif
 
@@ -1303,11 +1306,7 @@ void SkProcCoeffXfermode::toString(SkString* str) const {
 #endif
 
 
-SK_DECLARE_STATIC_ONCE_PTR(SkXfermode, cached[SkXfermode::kLastMode + 1]);
-
-SkXfermode* SkXfermode::Create(Mode mode) {
-    SkASSERT(SK_ARRAY_COUNT(gProcCoeffs) == kModeCount);
-
+sk_sp<SkXfermode> SkXfermode::Make(Mode mode) {
     if ((unsigned)mode >= kModeCount) {
         // report error
         return nullptr;
@@ -1319,13 +1318,20 @@ SkXfermode* SkXfermode::Create(Mode mode) {
         return nullptr;
     }
 
-    return SkSafeRef(cached[mode].get([=]{
+    SkASSERT(SK_ARRAY_COUNT(gProcCoeffs) == kModeCount);
+
+    static SkOnce        once[SkXfermode::kLastMode+1];
+    static SkXfermode* cached[SkXfermode::kLastMode+1];
+
+    once[mode]([mode] {
         ProcCoeff rec = gProcCoeffs[mode];
         if (auto xfermode = SkOpts::create_xfermode(rec, mode)) {
-            return xfermode;
+            cached[mode] = xfermode;
+        } else {
+            cached[mode] = new SkProcCoeffXfermode(rec, mode);
         }
-        return (SkXfermode*) new SkProcCoeffXfermode(rec, mode);
-    }));
+    });
+    return sk_ref_sp(cached[mode]);
 }
 
 SkXfermodeProc SkXfermode::GetProc(Mode mode) {

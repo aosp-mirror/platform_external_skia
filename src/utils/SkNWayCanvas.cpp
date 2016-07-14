@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2011 Google Inc.
  *
@@ -255,6 +254,14 @@ void SkNWayCanvas::onDrawTextOnPath(const void* text, size_t byteLength, const S
     }
 }
 
+void SkNWayCanvas::onDrawTextRSXform(const void* text, size_t byteLength, const SkRSXform xform[],
+                                     const SkRect* cull, const SkPaint& paint) {
+    Iter iter(fList);
+    while (iter.next()) {
+        iter->drawTextRSXform(text, byteLength, xform, cull, paint);
+    }
+}
+
 void SkNWayCanvas::onDrawTextBlob(const SkTextBlob* blob, SkScalar x, SkScalar y,
                                   const SkPaint &paint) {
     Iter iter(fList);
@@ -289,6 +296,13 @@ void SkNWayCanvas::onDrawPatch(const SkPoint cubics[12], const SkColor colors[4]
     Iter iter(fList);
     while (iter.next()) {
         iter->drawPatch(cubics, colors, texCoords, xmode, paint);
+    }
+}
+
+void SkNWayCanvas::onDrawAnnotation(const SkRect& rect, const char key[], SkData* data) {
+    Iter iter(fList);
+    while (iter.next()) {
+        iter->drawAnnotation(rect, key, data);
     }
 }
 

@@ -10,12 +10,12 @@
 
 #include "GrStencilAttachment.h"
 #include "GrVkImage.h"
-#include "vulkan/vulkan.h"
+#include "vk/GrVkDefines.h"
 
 class GrVkImageView;
 class GrVkGpu;
 
-class GrVkStencilAttachment : public GrStencilAttachment {
+class GrVkStencilAttachment : public GrStencilAttachment, public GrVkImage {
 public:
     struct Format {
         VkFormat  fInternalFormat;
@@ -24,13 +24,12 @@ public:
         bool fPacked;
     };
 
-    static GrVkStencilAttachment* Create(GrVkGpu* gpu, GrGpuResource::LifeCycle lifeCycle,
-                                         int width, int height,
+    static GrVkStencilAttachment* Create(GrVkGpu* gpu, int width, int height,
                                          int sampleCnt, const Format& format);
 
     ~GrVkStencilAttachment() override;
 
-    const GrVkImage::Resource* imageResource() const { return fImageResource;  }
+    const GrVkResource* imageResource() const { return this->resource(); }
     const GrVkImageView* stencilView() const { return fStencilView; }
 
     VkFormat vkFormat() const { return fFormat.fInternalFormat; }
@@ -43,20 +42,16 @@ private:
     size_t onGpuMemorySize() const override;
 
     GrVkStencilAttachment(GrVkGpu* gpu,
-                          GrGpuResource::LifeCycle lifeCycle,
                           const Format& format,
                           const GrVkImage::ImageDesc&,
-                          const GrVkImage::Resource*,
+                          const GrVkImageInfo&,
                           const GrVkImageView* stencilView);
 
     GrVkGpu* getVkGpu() const;
 
     Format fFormat;
 
-    const GrVkImage::Resource* fImageResource;
     const GrVkImageView*       fStencilView;
-
-    typedef GrStencilAttachment INHERITED;
 };
 
 #endif

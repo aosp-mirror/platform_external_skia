@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2011 Google Inc.
  *
@@ -19,6 +18,7 @@ public:
      */
     explicit SkBitSet(int numberOfBits);
     explicit SkBitSet(const SkBitSet& source);
+    explicit SkBitSet(SkBitSet&&);
 
     SkBitSet& operator=(const SkBitSet& rhs);
     bool operator==(const SkBitSet& rhs);

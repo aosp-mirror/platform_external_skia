@@ -8,33 +8,29 @@
 #include "SkColorMatrixFilterRowMajor255.h"
 #include "SkColorPriv.h"
 #include "SkNx.h"
+#include "SkPM4fPriv.h"
 #include "SkReadBuffer.h"
-#include "SkWriteBuffer.h"
-#include "SkUnPreMultiply.h"
+#include "SkRefCnt.h"
 #include "SkString.h"
-#include "SkPM4f.h"
+#include "SkUnPreMultiply.h"
+#include "SkWriteBuffer.h"
 
-#define SK_PMORDER_INDEX_A  (SK_A32_SHIFT / 8)
-#define SK_PMORDER_INDEX_R  (SK_R32_SHIFT / 8)
-#define SK_PMORDER_INDEX_G  (SK_G32_SHIFT / 8)
-#define SK_PMORDER_INDEX_B  (SK_B32_SHIFT / 8)
-
-static void transpose_to_pmorder(float dst[20], const float src[20]) {
+static void transpose(float dst[20], const float src[20]) {
     const float* srcR = src + 0;
     const float* srcG = src + 5;
     const float* srcB = src + 10;
     const float* srcA = src + 15;
 
     for (int i = 0; i < 20; i += 4) {
-        dst[i + SK_PMORDER_INDEX_A] = *srcA++;
-        dst[i + SK_PMORDER_INDEX_R] = *srcR++;
-        dst[i + SK_PMORDER_INDEX_G] = *srcG++;
-        dst[i + SK_PMORDER_INDEX_B] = *srcB++;
+        dst[i + 0] = *srcR++;
+        dst[i + 1] = *srcG++;
+        dst[i + 2] = *srcB++;
+        dst[i + 3] = *srcA++;
     }
 }
 
 void SkColorMatrixFilterRowMajor255::initState() {
-    transpose_to_pmorder(fTranspose, fMatrix);
+    transpose(fTranspose, fMatrix);
 
     const float* array = fMatrix;
 
@@ -108,11 +104,10 @@ void filter_span(const float array[], const T src[], int count, T dst[]) {
             srcf = unpremul(srcf);
         }
 
-        Sk4f r4 = srcf[SK_R32_SHIFT/8];
-        Sk4f g4 = srcf[SK_G32_SHIFT/8];
-        Sk4f b4 = srcf[SK_B32_SHIFT/8];
-        Sk4f a4 = srcf[SK_A32_SHIFT/8];
-
+        Sk4f r4 = srcf[Adaptor::R];
+        Sk4f g4 = srcf[Adaptor::G];
+        Sk4f b4 = srcf[Adaptor::B];
+        Sk4f a4 = srcf[Adaptor::A];
         // apply matrix
         Sk4f dst4 = c0 * r4 + c1 * g4 + c2 * b4 + c3 * a4 + c4;
 
@@ -121,11 +116,17 @@ void filter_span(const float array[], const T src[], int count, T dst[]) {
 }
 
 struct SkPMColorAdaptor {
+    enum {
+        R = SK_R_INDEX,
+        G = SK_G_INDEX,
+        B = SK_B_INDEX,
+        A = SK_A_INDEX,
+    };
     static SkPMColor From4f(const Sk4f& c4) {
-        return round(c4);
+        return round(swizzle_rb_if_bgra(c4));
     }
     static Sk4f To4f(SkPMColor c) {
-        return SkNx_cast<float>(Sk4b::Load(&c)) * Sk4f(1.0f/255);
+        return to_4f(c) * Sk4f(1.0f/255);
     }
 };
 void SkColorMatrixFilterRowMajor255::filterSpan(const SkPMColor src[], int count, SkPMColor dst[]) const {
@@ -133,13 +134,17 @@ void SkColorMatrixFilterRowMajor255::filterSpan(const SkPMColor src[], int count
 }
 
 struct SkPM4fAdaptor {
+    enum {
+        R = SkPM4f::R,
+        G = SkPM4f::G,
+        B = SkPM4f::B,
+        A = SkPM4f::A,
+    };
     static SkPM4f From4f(const Sk4f& c4) {
-        SkPM4f c;
-        c4.store(&c);
-        return c;
+        return SkPM4f::From4f(c4);
     }
     static Sk4f To4f(const SkPM4f& c) {
-        return Sk4f::Load(&c);
+        return c.to4f();
     }
 };
 void SkColorMatrixFilterRowMajor255::filterSpan4f(const SkPM4f src[], int count, SkPM4f dst[]) const {
@@ -153,10 +158,10 @@ void SkColorMatrixFilterRowMajor255::flatten(SkWriteBuffer& buffer) const {
     buffer.writeScalarArray(fMatrix, 20);
 }
 
-SkFlattenable* SkColorMatrixFilterRowMajor255::CreateProc(SkReadBuffer& buffer) {
+sk_sp<SkFlattenable> SkColorMatrixFilterRowMajor255::CreateProc(SkReadBuffer& buffer) {
     SkScalar matrix[20];
     if (buffer.readScalarArray(matrix, 20)) {
-        return new SkColorMatrixFilterRowMajor255(matrix);
+        return sk_make_sp<SkColorMatrixFilterRowMajor255>(matrix);
     }
     return nullptr;
 }
@@ -222,12 +227,13 @@ static void set_concat(SkScalar result[20], const SkScalar outer[20], const SkSc
 //  End duplication
 //////
 
-SkColorFilter* SkColorMatrixFilterRowMajor255::newComposed(const SkColorFilter* innerFilter) const {
+sk_sp<SkColorFilter>
+SkColorMatrixFilterRowMajor255::makeComposed(sk_sp<SkColorFilter> innerFilter) const {
     SkScalar innerMatrix[20];
     if (innerFilter->asColorMatrix(innerMatrix) && !needs_clamping(innerMatrix)) {
         SkScalar concat[20];
         set_concat(concat, fMatrix, innerMatrix);
-        return new SkColorMatrixFilterRowMajor255(concat);
+        return sk_make_sp<SkColorMatrixFilterRowMajor255>(concat);
     }
     return nullptr;
 }
@@ -242,8 +248,8 @@ SkColorFilter* SkColorMatrixFilterRowMajor255::newComposed(const SkColorFilter* 
 
 class ColorMatrixEffect : public GrFragmentProcessor {
 public:
-    static const GrFragmentProcessor* Create(const SkScalar matrix[20]) {
-        return new ColorMatrixEffect(matrix);
+    static sk_sp<GrFragmentProcessor> Make(const SkScalar matrix[20]) {
+        return sk_sp<GrFragmentProcessor>(new ColorMatrixEffect(matrix));
     }
 
     const char* name() const override { return "Color Matrix"; }
@@ -382,16 +388,16 @@ private:
 
 GR_DEFINE_FRAGMENT_PROCESSOR_TEST(ColorMatrixEffect);
 
-const GrFragmentProcessor* ColorMatrixEffect::TestCreate(GrProcessorTestData* d) {
+sk_sp<GrFragmentProcessor> ColorMatrixEffect::TestCreate(GrProcessorTestData* d) {
     SkScalar colorMatrix[20];
     for (size_t i = 0; i < SK_ARRAY_COUNT(colorMatrix); ++i) {
         colorMatrix[i] = d->fRandom->nextSScalar1();
     }
-    return ColorMatrixEffect::Create(colorMatrix);
+    return ColorMatrixEffect::Make(colorMatrix);
 }
 
-const GrFragmentProcessor* SkColorMatrixFilterRowMajor255::asFragmentProcessor(GrContext*) const {
-    return ColorMatrixEffect::Create(fMatrix);
+sk_sp<GrFragmentProcessor> SkColorMatrixFilterRowMajor255::asFragmentProcessor(GrContext*) const {
+    return ColorMatrixEffect::Make(fMatrix);
 }
 
 #endif
@@ -413,15 +419,16 @@ void SkColorMatrixFilterRowMajor255::toString(SkString* str) const {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-SkColorFilter* SkColorFilter::CreateMatrixFilterRowMajor255(const SkScalar array[20]) {
-    return new SkColorMatrixFilterRowMajor255(array);
+sk_sp<SkColorFilter> SkColorFilter::MakeMatrixFilterRowMajor255(const SkScalar array[20]) {
+    return sk_sp<SkColorFilter>(new SkColorMatrixFilterRowMajor255(array));
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
-SkColorFilter* SkColorMatrixFilterRowMajor255::CreateSingleChannelOutput(const SkScalar row[5]) {
+sk_sp<SkColorFilter>
+SkColorMatrixFilterRowMajor255::MakeSingleChannelOutput(const SkScalar row[5]) {
     SkASSERT(row);
-    SkColorMatrixFilterRowMajor255* cf = new SkColorMatrixFilterRowMajor255();
+    auto cf = sk_make_sp<SkColorMatrixFilterRowMajor255>();
     static_assert(sizeof(SkScalar) * 5 * 4 == sizeof(cf->fMatrix), "sizes don't match");
     for (int i = 0; i < 4; ++i) {
         memcpy(cf->fMatrix + 5 * i, row, sizeof(SkScalar) * 5);

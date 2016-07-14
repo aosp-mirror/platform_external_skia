@@ -119,7 +119,7 @@ static void validate_edges_for_y(const SkEdge* edge, int curr_y) {
     #define validate_edges_for_y(edge, curr_y)
 #endif
 
-#if defined _WIN32 && _MSC_VER >= 1300  // disable warning : local variable used without having been initialized
+#if defined _WIN32  // disable warning : local variable used without having been initialized
 #pragma warning ( push )
 #pragma warning ( disable : 4701 )
 #endif
@@ -392,7 +392,7 @@ static void PrePostInverseBlitterProc(SkBlitter* blitter, int y, bool isStart) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-#if defined _WIN32 && _MSC_VER >= 1300
+#if defined _WIN32
 #pragma warning ( pop )
 #endif
 
@@ -510,7 +510,7 @@ void sk_fill_path(const SkPath& path, const SkIRect* clipRect, SkBlitter* blitte
         } else {
             rightEdge = SkScalarRoundToInt(path.getBounds().right()) << shiftEdgesUp;
         }
-        
+
         walk_edges(&headEdge, path.getFillType(), blitter, start_y, stop_y, proc, rightEdge);
     }
 }

@@ -571,7 +571,7 @@ int SkOpSegment::computeSum(SkOpSpanBase* start, SkOpSpanBase* end,
     return start->starter(end)->windSum();
 }
 
-void SkOpSegment::detach(const SkOpSpan* span) {
+void SkOpSegment::release(const SkOpSpan* span) {
     if (span->done()) {
         --fDoneCount;
     }
@@ -1130,7 +1130,9 @@ SkOpSegment* SkOpSegment::nextChase(SkOpSpanBase** startPtr, int* stepPtr, SkOpS
         SkOpPtT* otherPtT = endSpan->ptT()->next();
         other = otherPtT->segment();
         foundSpan = otherPtT->span();
-        otherEnd = step > 0 ? foundSpan->upCast()->next() : foundSpan->prev();
+        otherEnd = step > 0
+                ? foundSpan->upCastable() ? foundSpan->upCast()->next() : nullptr
+                : foundSpan->prev();
     } else {
         int loopCount = angle->loopCount();
         if (loopCount > 2) {
@@ -1149,6 +1151,9 @@ SkOpSegment* SkOpSegment::nextChase(SkOpSpanBase** startPtr, int* stepPtr, SkOpS
         other = next->segment();
         foundSpan = endSpan = next->start();
         otherEnd = next->end();
+    }
+    if (!otherEnd) {
+        return nullptr;
     }
     int foundStep = foundSpan->step(otherEnd);
     if (*stepPtr != foundStep) {
@@ -1407,10 +1412,10 @@ void SkOpSegment::moveNearby() {
         SkOpSpanBase* next;
         if (spanS->contains(test)) {
             if (!test->final()) {
-                test->upCast()->detach(spanS->ptT());
+                test->upCast()->release(spanS->ptT());
                 continue;
             } else if (spanS != &fHead) {
-                spanS->upCast()->detach(test->ptT());
+                spanS->upCast()->release(test->ptT());
                 spanS = test;
                 continue;
             }

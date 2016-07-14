@@ -111,32 +111,31 @@ def main():
     try:
       subprocess.check_call(['git', 'fetch'], cwd=chrome_src_dir)
     except subprocess.CalledProcessError as error:
-      sys.exit('Error (ret code: %s) calling "%s" in %s' % error.returncode,
-          error.cmd, chrome_src_dir)
+      sys.exit('Error (ret code: %s) calling "%s" in %s' % (error.returncode,
+          error.cmd, chrome_src_dir))
 
-  try:
-    subprocess.check_call(['git', 'checkout', args.chrome_revision],
-        cwd=chrome_src_dir)
-  except subprocess.CalledProcessError as error:
-    sys.exit('Error (ret code: %s) calling "%s" in %s' % error.returncode,
-        error.cmd, chrome_src_dir)
+    try:
+      subprocess.check_call(['git', 'checkout', args.chrome_revision],
+          cwd=chrome_src_dir)
+    except subprocess.CalledProcessError as error:
+      sys.exit('Error (ret code: %s) calling "%s" in %s' % (error.returncode,
+          error.cmd, chrome_src_dir))
 
-  if not args.no_sync:
     try:
       os.environ['GYP_GENERATORS'] = 'ninja'
       subprocess.check_call([gclient, 'sync', '--reset', '--force'],
           cwd=chrome_src_dir)
     except subprocess.CalledProcessError as error:
-      sys.exit('Error (ret code: %s) calling "%s" in %s' % error.returncode,
-          error.cmd, chrome_src_dir)
+      sys.exit('Error (ret code: %s) calling "%s" in %s' % (error.returncode,
+          error.cmd, chrome_src_dir))
 
   try:
     subprocess.check_call(['ninja'] + shlex.split(args.extra_ninja_args) +
         ['-C', chrome_target_dir_rel, 'command_buffer_gles2'],
         cwd=chrome_src_dir)
   except subprocess.CalledProcessError as error:
-    sys.exit('Error (ret code: %s) calling "%s" in %s' % error.returncode,
-        error.cmd, chrome_src_dir)
+    sys.exit('Error (ret code: %s) calling "%s" in %s' % (error.returncode,
+        error.cmd, chrome_src_dir))
 
   shared_lib_src_dir = os.path.join(chrome_src_dir, chrome_target_dir_rel,
                                     shared_lib_subdir)

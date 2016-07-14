@@ -5,8 +5,6 @@
  * found in the LICENSE file.
  */
 
-#include <unistd.h>
-
 #include "CrashHandler.h"
 #include "DMJsonWriter.h"
 #include "DMSrcSink.h"
@@ -16,19 +14,26 @@
 #include "SkBBHFactory.h"
 #include "SkChecksum.h"
 #include "SkCodec.h"
+#include "SkColorPriv.h"
+#include "SkColorSpace.h"
 #include "SkCommonFlags.h"
 #include "SkCommonFlagsConfig.h"
+#include "SkData.h"
 #include "SkFontMgr.h"
 #include "SkGraphics.h"
+#include "SkHalf.h"
+#include "SkLeanWindows.h"
 #include "SkMD5.h"
 #include "SkMutex.h"
 #include "SkOSFile.h"
+#include "SkPM4fPriv.h"
 #include "SkSpinlock.h"
 #include "SkTHash.h"
 #include "SkTaskGroup.h"
 #include "SkThreadUtils.h"
 #include "Test.h"
 #include "Timer.h"
+#include "picture_utils.h"
 #include "sk_tool_utils.h"
 
 #ifdef SK_PDF_IMAGE_STATS
@@ -66,11 +71,41 @@ DEFINE_string(uninterestingHashesFile, "",
 
 DEFINE_int32(shards, 1, "We're splitting source data into this many shards.");
 DEFINE_int32(shard,  0, "Which shard do I run?");
-DEFINE_bool(simpleCodec, false, "Only decode images to native scale");
+
+DEFINE_string(mskps, "", "Directory to read mskps from, or a single mskp file.");
 
 using namespace DM;
+using sk_gpu_test::GrContextFactory;
+using sk_gpu_test::GLTestContext;
+using sk_gpu_test::ContextInfo;
 
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
+
+static const double kStartMs = SkTime::GetMSecs();
+
+static FILE* gVLog;
+
+template <typename... Args>
+static void vlog(const char* fmt, Args&&... args) {
+    if (gVLog) {
+        fprintf(gVLog, "%s\t", HumanizeMs(SkTime::GetMSecs() - kStartMs).c_str());
+        fprintf(gVLog, fmt, args...);
+        fflush(gVLog);
+    }
+}
+
+template <typename... Args>
+static void info(const char* fmt, Args&&... args) {
+    vlog(fmt, args...);
+    if (!FLAGS_quiet) {
+        printf(fmt, args...);
+    }
+}
+static void info(const char* fmt) {
+    if (!FLAGS_quiet) {
+        printf("%s", fmt);  // Clang warns printf(fmt) is insecure.
+    }
+}
 
 SK_DECLARE_STATIC_MUTEX(gFailuresMutex);
 static SkTArray<SkString> gFailures;
@@ -83,15 +118,16 @@ static void fail(const SkString& err) {
 
 
 // We use a spinlock to make locking this in a signal handler _somewhat_ safe.
-SK_DECLARE_STATIC_SPINLOCK(gMutex);
+static SkSpinlock gMutex;
 static int32_t            gPending;
 static SkTArray<SkString> gRunning;
 
 static void done(const char* config, const char* src, const char* srcOptions, const char* name) {
     SkString id = SkStringPrintf("%s %s %s %s", config, src, srcOptions, name);
+    vlog("done  %s\n", id.c_str());
     int pending;
     {
-        SkAutoTAcquire<SkPODSpinlock> lock(gMutex);
+        SkAutoMutexAcquire lock(gMutex);
         for (int i = 0; i < gRunning.count(); i++) {
             if (gRunning[i] == id) {
                 gRunning.removeShuffle(i);
@@ -109,42 +145,93 @@ static void done(const char* config, const char* src, const char* srcOptions, co
 
 static void start(const char* config, const char* src, const char* srcOptions, const char* name) {
     SkString id = SkStringPrintf("%s %s %s %s", config, src, srcOptions, name);
-    SkAutoTAcquire<SkPODSpinlock> lock(gMutex);
+    vlog("start %s\n", id.c_str());
+    SkAutoMutexAcquire lock(gMutex);
     gRunning.push_back(id);
 }
 
 static void print_status() {
-    static SkMSec start_ms = SkTime::GetMSecs();
-
     int curr = sk_tools::getCurrResidentSetSizeMB(),
         peak = sk_tools::getMaxResidentSetSizeMB();
-    SkString elapsed = HumanizeMs(SkTime::GetMSecs() - start_ms);
+    SkString elapsed = HumanizeMs(SkTime::GetMSecs() - kStartMs);
 
-    SkAutoTAcquire<SkPODSpinlock> lock(gMutex);
-    SkDebugf("\n%s elapsed, %d active, %d queued, %dMB RAM, %dMB peak\n",
-             elapsed.c_str(), gRunning.count(), gPending - gRunning.count(), curr, peak);
+    SkAutoMutexAcquire lock(gMutex);
+    info("\n%s elapsed, %d active, %d queued, %dMB RAM, %dMB peak\n",
+         elapsed.c_str(), gRunning.count(), gPending - gRunning.count(), curr, peak);
     for (auto& task : gRunning) {
-        SkDebugf("\t%s\n", task.c_str());
+        info("\t%s\n", task.c_str());
     }
 }
 
 #if defined(SK_BUILD_FOR_WIN32)
-    static void setup_crash_handler() {
-        // TODO: custom crash handler like below to print out what was running
-        SetupCrashHandler();
+    static LONG WINAPI crash_handler(EXCEPTION_POINTERS* e) {
+        static const struct {
+            const char* name;
+            DWORD code;
+        } kExceptions[] = {
+        #define _(E) {#E, E}
+            _(EXCEPTION_ACCESS_VIOLATION),
+            _(EXCEPTION_BREAKPOINT),
+            _(EXCEPTION_INT_DIVIDE_BY_ZERO),
+            _(EXCEPTION_STACK_OVERFLOW),
+            // TODO: more?
+        #undef _
+        };
+
+        SkAutoMutexAcquire lock(gMutex);
+
+        const DWORD code = e->ExceptionRecord->ExceptionCode;
+        info("\nCaught exception %u", code);
+        for (const auto& exception : kExceptions) {
+            if (exception.code == code) {
+                info(" %s", exception.name);
+            }
+        }
+        info(", was running:\n");
+        for (auto& task : gRunning) {
+            info("\t%s\n", task.c_str());
+        }
+        fflush(stdout);
+
+        // Execute default exception handler... hopefully, exit.
+        return EXCEPTION_EXECUTE_HANDLER;
+    }
+    static void setup_crash_handler() { SetUnhandledExceptionFilter(crash_handler); }
+
+#elif !defined(SK_BUILD_FOR_ANDROID)
+    #include <execinfo.h>
+    #include <signal.h>
+    #include <stdlib.h>
+
+    static void crash_handler(int sig) {
+        SkAutoMutexAcquire lock(gMutex);
+
+        info("\nCaught signal %d [%s], was running:\n", sig, strsignal(sig));
+        for (auto& task : gRunning) {
+            info("\t%s\n", task.c_str());
+        }
+
+        void* stack[64];
+        int count = backtrace(stack, SK_ARRAY_COUNT(stack));
+        char** symbols = backtrace_symbols(stack, count);
+        info("\nStack trace:\n");
+        for (int i = 0; i < count; i++) {
+            info("    %s\n", symbols[i]);
+        }
+        fflush(stdout);
+
+        _Exit(sig);
     }
 
-#else
-    #include <signal.h>
     static void setup_crash_handler() {
         const int kSignals[] = { SIGABRT, SIGBUS, SIGFPE, SIGILL, SIGSEGV };
         for (int sig : kSignals) {
-            signal(sig, [](int sig) {
-                SkDebugf("\nCaught signal %d [%s].\n", sig, strsignal(sig));
-                print_status();
-            });
+            signal(sig, crash_handler);
         }
     }
+
+#else  // Android
+    static void setup_crash_handler() {}
 #endif
 
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
@@ -185,23 +272,29 @@ static void gather_gold() {
 
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
+#if defined(SK_BUILD_FOR_WIN32)
+    static const char* kNewline = "\r\n";
+#else
+    static const char* kNewline = "\n";
+#endif
+
 static SkTHashSet<SkString> gUninterestingHashes;
 
 static void gather_uninteresting_hashes() {
     if (!FLAGS_uninterestingHashesFile.isEmpty()) {
         SkAutoTUnref<SkData> data(SkData::NewFromFileName(FLAGS_uninterestingHashesFile[0]));
         if (!data) {
-            SkDebugf("WARNING: unable to read uninteresting hashes from %s\n",
-                     FLAGS_uninterestingHashesFile[0]);
+            info("WARNING: unable to read uninteresting hashes from %s\n",
+                 FLAGS_uninterestingHashesFile[0]);
             return;
         }
         SkTArray<SkString> hashes;
-        SkStrSplit((const char*)data->data(), "\n", &hashes);
+        SkStrSplit((const char*)data->data(), kNewline, &hashes);
         for (const SkString& hash : hashes) {
             gUninterestingHashes.add(hash);
         }
-        SkDebugf("FYI: loaded %d distinct uninteresting hashes from %d lines\n",
-                 gUninterestingHashes.count(), hashes.count());
+        info("FYI: loaded %d distinct uninteresting hashes from %d lines\n",
+             gUninterestingHashes.count(), hashes.count());
     }
 }
 
@@ -232,7 +325,7 @@ static void push_src(const char* tag, ImplicitString options, Src* s) {
         FLAGS_src.contains(tag) &&
         !SkCommandLineFlags::ShouldSkip(FLAGS_match, src->name().c_str())) {
         TaggedSrc& s = gSrcs.push_back();
-        s.reset(src.detach());
+        s.reset(src.release());
         s.tag = tag;
         s.options = options;
     }
@@ -266,9 +359,6 @@ static void push_codec_src(Path path, CodecSrc::Mode mode, CodecSrc::DstColorTyp
         case CodecSrc::kSubset_Mode:
             folder.append("codec_subset");
             break;
-        case CodecSrc::kGen_Mode:
-            folder.append("gen");
-            break;
     }
 
     switch (dstColorType) {
@@ -278,14 +368,14 @@ static void push_codec_src(Path path, CodecSrc::Mode mode, CodecSrc::DstColorTyp
         case CodecSrc::kIndex8_Always_DstColorType:
             folder.append("_kIndex8");
             break;
+        case CodecSrc::kNonNative8888_Always_DstColorType:
+            folder.append("_kNonNative");
+            break;
         default:
             break;
     }
 
     switch (dstAlphaType) {
-        case kOpaque_SkAlphaType:
-            folder.append("_opaque");
-            break;
         case kPremul_SkAlphaType:
             folder.append("_premul");
             break;
@@ -304,17 +394,10 @@ static void push_codec_src(Path path, CodecSrc::Mode mode, CodecSrc::DstColorTyp
     push_src("image", folder, src);
 }
 
-static void push_android_codec_src(Path path, AndroidCodecSrc::Mode mode,
-        CodecSrc::DstColorType dstColorType, SkAlphaType dstAlphaType, int sampleSize) {
+static void push_android_codec_src(Path path, CodecSrc::DstColorType dstColorType,
+        SkAlphaType dstAlphaType, int sampleSize) {
     SkString folder;
-    switch (mode) {
-        case AndroidCodecSrc::kFullImage_Mode:
-            folder.append("scaled_codec");
-            break;
-        case AndroidCodecSrc::kDivisor_Mode:
-            folder.append("scaled_codec_divisor");
-            break;
-    }
+    folder.append("scaled_codec");
 
     switch (dstColorType) {
         case CodecSrc::kGrayscale_Always_DstColorType:
@@ -323,14 +406,14 @@ static void push_android_codec_src(Path path, AndroidCodecSrc::Mode mode,
         case CodecSrc::kIndex8_Always_DstColorType:
             folder.append("_kIndex8");
             break;
+        case CodecSrc::kNonNative8888_Always_DstColorType:
+            folder.append("_kNonNative");
+            break;
         default:
             break;
     }
 
     switch (dstAlphaType) {
-        case kOpaque_SkAlphaType:
-            folder.append("_opaque");
-            break;
         case kPremul_SkAlphaType:
             folder.append("_premul");
             break;
@@ -345,49 +428,83 @@ static void push_android_codec_src(Path path, AndroidCodecSrc::Mode mode,
         folder.appendf("_%.3f", 1.0f / (float) sampleSize);
     }
 
-    AndroidCodecSrc* src = new AndroidCodecSrc(path, mode, dstColorType, dstAlphaType, sampleSize);
+    AndroidCodecSrc* src = new AndroidCodecSrc(path, dstColorType, dstAlphaType, sampleSize);
+    push_src("image", folder, src);
+}
+
+static void push_image_gen_src(Path path, ImageGenSrc::Mode mode, SkAlphaType alphaType, bool isGpu)
+{
+    SkString folder;
+    switch (mode) {
+        case ImageGenSrc::kCodec_Mode:
+            folder.append("gen_codec");
+            break;
+        case ImageGenSrc::kPlatform_Mode:
+            folder.append("gen_platform");
+            break;
+    }
+
+    if (isGpu) {
+        folder.append("_gpu");
+    } else {
+        switch (alphaType) {
+            case kOpaque_SkAlphaType:
+                folder.append("_opaque");
+                break;
+            case kPremul_SkAlphaType:
+                folder.append("_premul");
+                break;
+            case kUnpremul_SkAlphaType:
+                folder.append("_unpremul");
+                break;
+            default:
+                break;
+        }
+    }
+
+    ImageGenSrc* src = new ImageGenSrc(path, mode, alphaType, isGpu);
     push_src("image", folder, src);
 }
 
 static void push_codec_srcs(Path path) {
     SkAutoTUnref<SkData> encoded(SkData::NewFromFileName(path.c_str()));
     if (!encoded) {
-        SkDebugf("Couldn't read %s.", path.c_str());
+        info("Couldn't read %s.", path.c_str());
         return;
     }
     SkAutoTDelete<SkCodec> codec(SkCodec::NewFromData(encoded));
     if (nullptr == codec.get()) {
-        SkDebugf("Couldn't create codec for %s.", path.c_str());
+        info("Couldn't create codec for %s.", path.c_str());
         return;
     }
 
-    // Native Scales
-    // SkJpegCodec natively supports scaling to: 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875
-    const float nativeScales[] = { 0.125f, 0.25f, 0.375f, 0.5f, 0.625f, 0.750f, 0.875f, 1.0f };
+    // native scaling is only supported by WEBP and JPEG
+    bool supportsNativeScaling = false;
 
     SkTArray<CodecSrc::Mode> nativeModes;
     nativeModes.push_back(CodecSrc::kCodec_Mode);
     nativeModes.push_back(CodecSrc::kCodecZeroInit_Mode);
-    nativeModes.push_back(CodecSrc::kGen_Mode);
     switch (codec->getEncodedFormat()) {
         case SkEncodedFormat::kJPEG_SkEncodedFormat:
             nativeModes.push_back(CodecSrc::kScanline_Mode);
             nativeModes.push_back(CodecSrc::kStripe_Mode);
             nativeModes.push_back(CodecSrc::kCroppedScanline_Mode);
+            supportsNativeScaling = true;
             break;
         case SkEncodedFormat::kWEBP_SkEncodedFormat:
             nativeModes.push_back(CodecSrc::kSubset_Mode);
+            supportsNativeScaling = true;
             break;
-        case SkEncodedFormat::kRAW_SkEncodedFormat:
+        case SkEncodedFormat::kDNG_SkEncodedFormat:
             break;
         default:
             nativeModes.push_back(CodecSrc::kScanline_Mode);
-            nativeModes.push_back(CodecSrc::kStripe_Mode);
             break;
     }
 
     SkTArray<CodecSrc::DstColorType> colorTypes;
     colorTypes.push_back(CodecSrc::kGetFromCanvas_DstColorType);
+    colorTypes.push_back(CodecSrc::kNonNative8888_Always_DstColorType);
     switch (codec->getInfo().colorType()) {
         case kGray_8_SkColorType:
             colorTypes.push_back(CodecSrc::kGrayscale_Always_DstColorType);
@@ -404,36 +521,31 @@ static void push_codec_srcs(Path path) {
 
     SkTArray<SkAlphaType> alphaModes;
     alphaModes.push_back(kPremul_SkAlphaType);
-    alphaModes.push_back(kUnpremul_SkAlphaType);
-    if (codec->getInfo().alphaType() == kOpaque_SkAlphaType) {
-        alphaModes.push_back(kOpaque_SkAlphaType);
+    if (codec->getInfo().alphaType() != kOpaque_SkAlphaType) {
+        alphaModes.push_back(kUnpremul_SkAlphaType);
     }
 
     for (CodecSrc::Mode mode : nativeModes) {
-        // SkCodecImageGenerator only runs for the default colorType
-        // recommended by SkCodec.  There is no need to generate multiple
-        // tests for different colorTypes.
-        // TODO (msarett): Add scaling support to SkCodecImageGenerator.
-        if (CodecSrc::kGen_Mode == mode) {
-            // FIXME: The gpu backend does not draw kGray sources correctly. (skbug.com/4822)
-            if (kGray_8_SkColorType != codec->getInfo().colorType()) {
-                push_codec_src(path, mode, CodecSrc::kGetFromCanvas_DstColorType,
-                               codec->getInfo().alphaType(), 1.0f);
-            }
-            continue;
-        }
+        for (CodecSrc::DstColorType colorType : colorTypes) {
+            for (SkAlphaType alphaType : alphaModes) {
+                // Only test kCroppedScanline_Mode when the alpha type is premul.  The test is
+                // slow and won't be interestingly different with different alpha types.
+                if (CodecSrc::kCroppedScanline_Mode == mode &&
+                        kPremul_SkAlphaType != alphaType) {
+                    continue;
+                }
 
-        for (float scale : nativeScales) {
-            for (CodecSrc::DstColorType colorType : colorTypes) {
-                for (SkAlphaType alphaType : alphaModes) {
-                    // Only test kCroppedScanline_Mode when the alpha type is opaque.  The test is
-                    // slow and won't be interestingly different with different alpha types.
-                    if (CodecSrc::kCroppedScanline_Mode == mode &&
-                            kOpaque_SkAlphaType != alphaType) {
-                        continue;
+                push_codec_src(path, mode, colorType, alphaType, 1.0f);
+
+                // Skip kNonNative on different native scales.  It won't be interestingly
+                // different.
+                if (supportsNativeScaling &&
+                        CodecSrc::kNonNative8888_Always_DstColorType == colorType) {
+                    // Native Scales
+                    // SkJpegCodec natively supports scaling to the following:
+                    for (auto scale : { 0.125f, 0.25f, 0.375f, 0.5f, 0.625f, 0.750f, 0.875f }) {
+                        push_codec_src(path, mode, colorType, alphaType, scale);
                     }
-
-                    push_codec_src(path, mode, colorType, alphaType, scale);
                 }
             }
         }
@@ -443,75 +555,62 @@ static void push_codec_srcs(Path path) {
         return;
     }
 
-    // https://bug.skia.org/4428
-    bool subset = false;
-    // The following image types are supported by BitmapRegionDecoder,
-    // so we will test full image decodes and subset decodes.
-    static const char* const exts[] = {
-        "jpg", "jpeg", "png", "webp",
-        "JPG", "JPEG", "PNG", "WEBP",
-    };
-    for (const char* ext : exts) {
-        if (path.endsWith(ext)) {
-            subset = true;
-            break;
-        }
-    }
-
     const int sampleSizes[] = { 1, 2, 3, 4, 5, 6, 7, 8 };
 
     for (int sampleSize : sampleSizes) {
         for (CodecSrc::DstColorType colorType : colorTypes) {
             for (SkAlphaType alphaType : alphaModes) {
-                push_android_codec_src(path, AndroidCodecSrc::kFullImage_Mode, colorType,
-                        alphaType, sampleSize);
-                if (subset) {
-                    push_android_codec_src(path, AndroidCodecSrc::kDivisor_Mode, colorType,
-                            alphaType, sampleSize);
+                // We can exercise all of the kNonNative support code in the swizzler with just a
+                // few sample sizes.  Skip the rest.
+                if (CodecSrc::kNonNative8888_Always_DstColorType == colorType && sampleSize > 3) {
+                    continue;
                 }
+
+                push_android_codec_src(path, colorType, alphaType, sampleSize);
             }
         }
     }
-}
 
-static bool brd_color_type_supported(SkBitmapRegionDecoder::Strategy strategy,
-        CodecSrc::DstColorType dstColorType) {
-    switch (strategy) {
-        case SkBitmapRegionDecoder::kCanvas_Strategy:
-            if (CodecSrc::kGetFromCanvas_DstColorType == dstColorType) {
-                return true;
-            }
-            return false;
-        case SkBitmapRegionDecoder::kAndroidCodec_Strategy:
-            switch (dstColorType) {
-                case CodecSrc::kGetFromCanvas_DstColorType:
-                case CodecSrc::kIndex8_Always_DstColorType:
-                case CodecSrc::kGrayscale_Always_DstColorType:
-                    return true;
-                default:
-                    return false;
-            }
-        default:
-            SkASSERT(false);
-            return false;
-    }
-}
+    static const char* const rawExts[] = {
+        "arw", "cr2", "dng", "nef", "nrw", "orf", "raf", "rw2", "pef", "srw",
+        "ARW", "CR2", "DNG", "NEF", "NRW", "ORF", "RAF", "RW2", "PEF", "SRW",
+    };
 
-static void push_brd_src(Path path, SkBitmapRegionDecoder::Strategy strategy,
-        CodecSrc::DstColorType dstColorType, BRDSrc::Mode mode, uint32_t sampleSize) {
-    SkString folder;
-    switch (strategy) {
-        case SkBitmapRegionDecoder::kCanvas_Strategy:
-            folder.append("brd_canvas");
-            break;
-        case SkBitmapRegionDecoder::kAndroidCodec_Strategy:
-            folder.append("brd_android_codec");
-            break;
-        default:
-            SkASSERT(false);
+    // There is not currently a reason to test RAW images on image generator.
+    // If we want to enable these tests, we will need to fix skbug.com/5079.
+    for (const char* ext : rawExts) {
+        if (path.endsWith(ext)) {
             return;
+        }
     }
 
+    // Push image generator GPU test.
+    push_image_gen_src(path, ImageGenSrc::kCodec_Mode, codec->getInfo().alphaType(), true);
+
+    // Push image generator CPU tests.
+    for (SkAlphaType alphaType : alphaModes) {
+        push_image_gen_src(path, ImageGenSrc::kCodec_Mode, alphaType, false);
+
+#if defined(SK_BUILD_FOR_MAC) || defined(SK_BUILD_FOR_IOS)
+        if (kWEBP_SkEncodedFormat != codec->getEncodedFormat() &&
+            kWBMP_SkEncodedFormat != codec->getEncodedFormat() &&
+            kUnpremul_SkAlphaType != alphaType)
+        {
+            push_image_gen_src(path, ImageGenSrc::kPlatform_Mode, alphaType, false);
+        }
+#elif defined(SK_BUILD_FOR_WIN)
+        if (kWEBP_SkEncodedFormat != codec->getEncodedFormat() &&
+            kWBMP_SkEncodedFormat != codec->getEncodedFormat())
+        {
+            push_image_gen_src(path, ImageGenSrc::kPlatform_Mode, alphaType, false);
+        }
+#endif
+    }
+}
+
+static void push_brd_src(Path path, CodecSrc::DstColorType dstColorType, BRDSrc::Mode mode,
+        uint32_t sampleSize) {
+    SkString folder("brd_android_codec");
     switch (mode) {
         case BRDSrc::kFullImage_Mode:
             break;
@@ -541,16 +640,20 @@ static void push_brd_src(Path path, SkBitmapRegionDecoder::Strategy strategy,
         folder.appendf("_%.3f", 1.0f / (float) sampleSize);
     }
 
-    BRDSrc* src = new BRDSrc(path, strategy, mode, dstColorType, sampleSize);
+    BRDSrc* src = new BRDSrc(path, mode, dstColorType, sampleSize);
     push_src("image", folder, src);
 }
 
 static void push_brd_srcs(Path path) {
+    // Only run Index8 and grayscale to one sampleSize and Mode. Though interesting
+    // to test these color types, they should not reveal anything across various
+    // sampleSizes and Modes
+    for (auto type : { CodecSrc::kIndex8_Always_DstColorType,
+                       CodecSrc::kGrayscale_Always_DstColorType }) {
+        // Arbitrarily choose Mode and sampleSize.
+        push_brd_src(path, type, BRDSrc::kFullImage_Mode, 2);
+    }
 
-    const SkBitmapRegionDecoder::Strategy strategies[] = {
-            SkBitmapRegionDecoder::kCanvas_Strategy,
-            SkBitmapRegionDecoder::kAndroidCodec_Strategy,
-    };
 
     // Test on a variety of sampleSizes, making sure to include:
     // - 2, 4, and 8, which are natively supported by jpeg
@@ -559,28 +662,14 @@ static void push_brd_srcs(Path path) {
     // We will only produce output for the larger sizes on large images.
     const uint32_t sampleSizes[] = { 1, 2, 3, 4, 5, 6, 7, 8, 12, 16, 24, 32, 64 };
 
-    // We will only test to one backend (8888), but we will test all of the
-    // color types that we need to decode to on this backend.
-    const CodecSrc::DstColorType dstColorTypes[] = {
-            CodecSrc::kGetFromCanvas_DstColorType,
-            CodecSrc::kIndex8_Always_DstColorType,
-            CodecSrc::kGrayscale_Always_DstColorType,
-    };
-
     const BRDSrc::Mode modes[] = {
             BRDSrc::kFullImage_Mode,
             BRDSrc::kDivisor_Mode,
     };
 
-    for (SkBitmapRegionDecoder::Strategy strategy : strategies) {
-        for (uint32_t sampleSize : sampleSizes) {
-            for (CodecSrc::DstColorType dstColorType : dstColorTypes) {
-                if (brd_color_type_supported(strategy, dstColorType)) {
-                    for (BRDSrc::Mode mode : modes) {
-                        push_brd_src(path, strategy, dstColorType, mode, sampleSize);
-                    }
-                }
-            }
+    for (uint32_t sampleSize : sampleSizes) {
+        for (BRDSrc::Mode mode : modes) {
+            push_brd_src(path, CodecSrc::kGetFromCanvas_DstColorType, mode, sampleSize);
         }
     }
 }
@@ -615,8 +704,21 @@ static bool gather_srcs() {
         }
     }
 
+    for (int i = 0; i < FLAGS_mskps.count(); i++) {
+        const char* path = FLAGS_mskps[i];
+        if (sk_isdir(path)) {
+            SkOSFile::Iter it(path, "mskp");
+            for (SkString file; it.next(&file);) {
+                push_src("mskp", "",
+                         new MSKPSrc(SkOSPath::Join(path, file.c_str())));
+            }
+        } else {
+            push_src("mskp", "", new MSKPSrc(path));
+        }
+    }
+
     SkTArray<SkString> images;
-    if (!CollectImages(&images)) {
+    if (!CollectImages(FLAGS_images, &images)) {
         return false;
     }
 
@@ -630,6 +732,27 @@ static bool gather_srcs() {
         if (ext && brd_supported(ext+1)) {
             push_brd_srcs(image);
         }
+    }
+
+    SkTArray<SkString> colorImages;
+    if (!CollectImages(FLAGS_colorImages, &colorImages)) {
+        return false;
+    }
+
+    for (auto colorImage : colorImages) {
+        ColorCodecSrc* src = new ColorCodecSrc(colorImage, ColorCodecSrc::kBaseline_Mode);
+        push_src("image", "color_codec_baseline", src);
+
+        src = new ColorCodecSrc(colorImage, ColorCodecSrc::kDst_HPZR30w_Mode);
+        push_src("image", "color_codec_HPZR30w", src);
+
+        src = new ColorCodecSrc(colorImage, ColorCodecSrc::kDst_sRGB_Mode);
+        push_src("image", "color_codec_sRGB", src);
+
+#if defined(SK_TEST_QCMS)
+        src = new ColorCodecSrc(colorImage, ColorCodecSrc::kQCMS_HPZR30w_Mode);
+        push_src("image", "color_codec_QCMS_HPZR30w", src);
+#endif
     }
 
     return true;
@@ -653,12 +776,12 @@ static void push_sink(const SkCommandLineConfig& config, Sink* s) {
     SkString log;
     Error err = sink->draw(justOneRect, &bitmap, &stream, &log);
     if (err.isFatal()) {
-        SkDebugf("Could not run %s: %s\n", config.getTag().c_str(), err.c_str());
+        info("Could not run %s: %s\n", config.getTag().c_str(), err.c_str());
         exit(1);
     }
 
     TaggedSink& ts = gSinks.push_back();
-    ts.reset(sink.detach());
+    ts.reset(sink.release());
     ts.tag = config.getTag();
 }
 
@@ -674,21 +797,27 @@ static Sink* create_sink(const SkCommandLineConfig* config) {
 #if SK_SUPPORT_GPU
     if (gpu_supported()) {
         if (const SkCommandLineConfigGpu* gpuConfig = config->asConfigGpu()) {
-            GrContextFactory::GLContextType contextType = gpuConfig->getContextType();
-            GrContextFactory::GLContextOptions contextOptions =
-                    GrContextFactory::kNone_GLContextOptions;
+            GrContextFactory::ContextType contextType = gpuConfig->getContextType();
+            GrContextFactory::ContextOptions contextOptions =
+                    GrContextFactory::kNone_ContextOptions;
             if (gpuConfig->getUseNVPR()) {
-                contextOptions = static_cast<GrContextFactory::GLContextOptions>(
-                    contextOptions | GrContextFactory::kEnableNVPR_GLContextOptions);
+                contextOptions = static_cast<GrContextFactory::ContextOptions>(
+                    contextOptions | GrContextFactory::kEnableNVPR_ContextOptions);
+            }
+            if (SkColorAndColorSpaceAreGammaCorrect(gpuConfig->getColorType(),
+                                                    gpuConfig->getColorSpace())) {
+                contextOptions = static_cast<GrContextFactory::ContextOptions>(
+                    contextOptions | GrContextFactory::kRequireSRGBSupport_ContextOptions);
             }
             GrContextFactory testFactory;
             if (!testFactory.get(contextType, contextOptions)) {
-                SkDebugf("WARNING: can not create GPU context for config '%s'. "
-                         "GM tests will be skipped.\n", gpuConfig->getTag().c_str());
+                info("WARNING: can not create GPU context for config '%s'. "
+                     "GM tests will be skipped.\n", gpuConfig->getTag().c_str());
                 return nullptr;
             }
             return new GPUSink(contextType, contextOptions, gpuConfig->getSamples(),
-                               gpuConfig->getUseDIText(), FLAGS_gpu_threading);
+                               gpuConfig->getUseDIText(), gpuConfig->getColorType(),
+                               sk_ref_sp(gpuConfig->getColorSpace()), FLAGS_gpu_threading);
         }
     }
 #endif
@@ -700,14 +829,18 @@ static Sink* create_sink(const SkCommandLineConfig* config) {
 #endif
 
     if (FLAGS_cpu) {
+        auto srgbColorSpace = SkColorSpace::NewNamed(SkColorSpace::kSRGB_Named);
+
         SINK("565",  RasterSink, kRGB_565_SkColorType);
         SINK("8888", RasterSink, kN32_SkColorType);
-        SINK("pdf",  PDFSink, "Pdfium");
-        SINK("pdf_poppler",  PDFSink, "Poppler");
+        SINK("srgb", RasterSink, kN32_SkColorType, srgbColorSpace);
+        SINK("f16",  RasterSink, kRGBA_F16_SkColorType);
+        SINK("pdf",  PDFSink);
         SINK("skp",  SKPSink);
         SINK("svg",  SVGSink);
         SINK("null", NullSink);
         SINK("xps",  XPSSink);
+        SINK("pdfa", PDFSink, true);
     }
 #undef SINK
     return nullptr;
@@ -720,11 +853,9 @@ static Sink* create_via(const SkString& tag, Sink* wrapped) {
     VIA("pic",       ViaPicture,           wrapped);
     VIA("2ndpic",    ViaSecondPicture,     wrapped);
     VIA("sp",        ViaSingletonPictures, wrapped);
+    VIA("defer",     ViaDefer,             wrapped);
     VIA("tiles",     ViaTiles, 256, 256, nullptr,            wrapped);
     VIA("tiles_rt",  ViaTiles, 256, 256, new SkRTreeFactory, wrapped);
-    VIA("remote",       ViaRemote, false, wrapped);
-    VIA("remote_cache", ViaRemote, true,  wrapped);
-    VIA("mojo",      ViaMojo,             wrapped);
 
     if (FLAGS_matrix.count() == 4) {
         SkMatrix m;
@@ -745,15 +876,15 @@ static Sink* create_via(const SkString& tag, Sink* wrapped) {
     return nullptr;
 }
 
-static void gather_sinks() {
+static bool gather_sinks() {
     SkCommandLineConfigArray configs;
     ParseConfigs(FLAGS_config, &configs);
     for (int i = 0; i < configs.count(); i++) {
         const SkCommandLineConfig& config = *configs[i];
         Sink* sink = create_sink(&config);
         if (sink == nullptr) {
-            SkDebugf("Skipping config %s: Don't understand '%s'.\n", config.getTag().c_str(),
-                     config.getTag().c_str());
+            info("Skipping config %s: Don't understand '%s'.\n", config.getTag().c_str(),
+                 config.getTag().c_str());
             continue;
         }
 
@@ -762,8 +893,8 @@ static void gather_sinks() {
             const SkString& part = parts[j];
             Sink* next = create_via(part, sink);
             if (next == nullptr) {
-                SkDebugf("Skipping config %s: Don't understand '%s'.\n", config.getTag().c_str(),
-                         part.c_str());
+                info("Skipping config %s: Don't understand '%s'.\n", config.getTag().c_str(),
+                     part.c_str());
                 delete sink;
                 sink = nullptr;
                 break;
@@ -774,27 +905,22 @@ static void gather_sinks() {
             push_sink(config, sink);
         }
     }
+
+    // If no configs were requested (just running tests, perhaps?), then we're okay.
+    // Otherwise, make sure that at least one sink was constructed correctly. This catches
+    // the case of bots without a GPU being assigned GPU configs.
+    return (configs.count() == 0) || (gSinks.count() > 0);
 }
 
 static bool dump_png(SkBitmap bitmap, const char* path, const char* md5) {
     const int w = bitmap.width(),
               h = bitmap.height();
 
-    // First get the bitmap into N32 color format.  The next step will work only there.
-    if (bitmap.colorType() != kN32_SkColorType) {
-        SkBitmap n32;
-        if (!bitmap.copyTo(&n32, kN32_SkColorType)) {
-            return false;
-        }
-        bitmap = n32;
-    }
-
-    // Convert our N32 bitmap into unpremul RGBA for libpng.
-    SkAutoTMalloc<uint32_t> rgba(w*h);
-    if (!bitmap.readPixels(SkImageInfo::Make(w,h, kRGBA_8888_SkColorType, kUnpremul_SkAlphaType),
-                           rgba, 4*w, 0,0)) {
+    sk_sp<SkData> encodedBitmap = sk_tools::encode_bitmap_for_png(bitmap);
+    if (encodedBitmap.get() == nullptr) {
         return false;
     }
+    uint32_t* rgba = static_cast<uint32_t*>(encodedBitmap.get()->writable_data());
 
     // We don't need bitmap anymore.  Might as well drop our ref.
     bitmap.reset();
@@ -841,7 +967,7 @@ static bool dump_png(SkBitmap bitmap, const char* path, const char* md5) {
                  PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
     png_write_info(png, info);
     for (int j = 0; j < h; j++) {
-        png_bytep row = (png_bytep)(rgba.get() + w*j);
+        png_bytep row = (png_bytep)(rgba + w*j);
         png_write_rows(png, &row, 1);
     }
     png_write_end(png, info);
@@ -889,6 +1015,13 @@ struct Task {
             start(task.sink.tag.c_str(), task.src.tag.c_str(),
                   task.src.options.c_str(), name.c_str());
             Error err = task.sink->draw(*task.src, &bitmap, &stream, &log);
+            if (!log.isEmpty()) {
+                info("%s %s %s %s:\n%s\n", task.sink.tag.c_str()
+                                         , task.src.tag.c_str()
+                                         , task.src.options.c_str()
+                                         , name.c_str()
+                                         , log.c_str());
+            }
             if (!err.isEmpty()) {
                 if (err.isFatal()) {
                     fail(SkStringPrintf("%s %s %s %s: %s",
@@ -969,12 +1102,18 @@ struct Task {
                             const char* ext,
                             SkStream* data, size_t len,
                             const SkBitmap* bitmap) {
+        bool gammaCorrect = false;
+        if (bitmap) {
+            gammaCorrect = SkImageInfoIsGammaCorrect(bitmap->info());
+        }
+
         JsonWriter::BitmapResult result;
         result.name          = task.src->name();
         result.config        = task.sink.tag;
         result.sourceType    = task.src.tag;
         result.sourceOptions = task.src.options;
         result.ext           = ext;
+        result.gammaCorrect  = gammaCorrect;
         result.md5           = md5;
         JsonWriter::AddBitmapResult(result);
 
@@ -1100,7 +1239,7 @@ SkThread* start_status_thread() {
 
 #define PORTABLE_FONT_PREFIX "Toy Liberation "
 
-static SkTypeface* create_from_name(const char familyName[], SkTypeface::Style style) {
+static sk_sp<SkTypeface> create_from_name(const char familyName[], SkFontStyle style) {
     if (familyName && strlen(familyName) > sizeof(PORTABLE_FONT_PREFIX)
             && !strncmp(familyName, PORTABLE_FONT_PREFIX, sizeof(PORTABLE_FONT_PREFIX) - 1)) {
         return sk_tool_utils::create_portable_typeface(familyName, style);
@@ -1110,11 +1249,19 @@ static SkTypeface* create_from_name(const char familyName[], SkTypeface::Style s
 
 #undef PORTABLE_FONT_PREFIX
 
-extern SkTypeface* (*gCreateTypefaceDelegate)(const char [], SkTypeface::Style );
+extern sk_sp<SkTypeface> (*gCreateTypefaceDelegate)(const char [], SkFontStyle );
 
 int dm_main();
 int dm_main() {
+    setbuf(stdout, nullptr);
     setup_crash_handler();
+
+    if (FLAGS_verbose) {
+        gVLog = stderr;
+    } else if (!FLAGS_writePath.isEmpty()) {
+        sk_mkdir(FLAGS_writePath[0]);
+        gVLog = freopen(SkOSPath::Join(FLAGS_writePath[0], "verbose.log").c_str(), "w", stderr);
+    }
 
     JsonWriter::DumpJson();  // It's handy for the bots to assume this is ~never missing.
     SkAutoGraphics ag;
@@ -1125,7 +1272,7 @@ int dm_main() {
         SkString testResourcePath = GetResourcePath("color_wheel.png");
         SkFILEStream testResource(testResourcePath.c_str());
         if (!testResource.isValid()) {
-            SkDebugf("Some resources are missing.  Do you need to set --resourcePath?\n");
+            info("Some resources are missing.  Do you need to set --resourcePath?\n");
         }
     }
     gather_gold();
@@ -1134,12 +1281,13 @@ int dm_main() {
     if (!gather_srcs()) {
         return 1;
     }
-    gather_sinks();
+    if (!gather_sinks()) {
+        return 1;
+    }
     gather_tests();
-
     gPending = gSrcs.count() * gSinks.count() + gParallelTests.count() + gSerialTests.count();
-    SkDebugf("%d srcs * %d sinks + %d tests == %d tasks",
-             gSrcs.count(), gSinks.count(), gParallelTests.count() + gSerialTests.count(), gPending);
+    info("%d srcs * %d sinks + %d tests == %d tasks",
+         gSrcs.count(), gSinks.count(), gParallelTests.count() + gSerialTests.count(), gPending);
     SkAutoTDelete<SkThread> statusThread(start_status_thread());
 
     // Kick off as much parallel work as we can, making note of any serial work we'll need to do.
@@ -1151,7 +1299,7 @@ int dm_main() {
         if (src->veto(sink->flags()) ||
             is_blacklisted(sink.tag.c_str(), src.tag.c_str(),
                            src.options.c_str(), src->name().c_str())) {
-            SkAutoTAcquire<SkPODSpinlock> lock(gMutex);
+            SkAutoMutexAcquire lock(gMutex);
             gPending--;
             continue;
         }
@@ -1177,16 +1325,18 @@ int dm_main() {
 
     // We'd better have run everything.
     SkASSERT(gPending == 0);
+    // Make sure we've flushed all our results to disk.
+    JsonWriter::DumpJson();
 
     // At this point we're back in single-threaded land.
     sk_tool_utils::release_portable_typefaces();
 
     if (gFailures.count() > 0) {
-        SkDebugf("Failures:\n");
+        info("Failures:\n");
         for (int i = 0; i < gFailures.count(); i++) {
-            SkDebugf("\t%s\n", gFailures[i].c_str());
+            info("\t%s\n", gFailures[i].c_str());
         }
-        SkDebugf("%d failures\n", gFailures.count());
+        info("%d failures\n", gFailures.count());
         return 1;
     }
 
@@ -1195,97 +1345,63 @@ int dm_main() {
 #endif  // SK_PDF_IMAGE_STATS
 
     print_status();
-    SkDebugf("Finished!\n");
+    info("Finished!\n");
     return 0;
 }
 
 // TODO: currently many GPU tests are declared outside SK_SUPPORT_GPU guards.
 // Thus we export the empty RunWithGPUTestContexts when SK_SUPPORT_GPU=0.
 namespace skiatest {
-namespace {
-typedef void(*TestWithGrContext)(skiatest::Reporter*, GrContext*);
-typedef void(*TestWithGrContextAndGLContext)(skiatest::Reporter*, GrContext*, SkGLContext*);
-#if SK_SUPPORT_GPU
-template<typename T>
-void call_test(T test, skiatest::Reporter* reporter, const GrContextFactory::ContextInfo& context);
-template<>
-void call_test(TestWithGrContext test, skiatest::Reporter* reporter,
-               const GrContextFactory::ContextInfo& context) {
-    test(reporter, context.fGrContext);
-}
-template<>
-void call_test(TestWithGrContextAndGLContext test, skiatest::Reporter* reporter,
-               const GrContextFactory::ContextInfo& context) {
-    test(reporter, context.fGrContext, context.fGLContext);
-}
-#endif
-} // namespace
 
-template<typename T>
-void RunWithGPUTestContexts(T test, GPUTestContexts testContexts, Reporter* reporter,
-                            GrContextFactory* factory) {
 #if SK_SUPPORT_GPU
-    // Iterate over context types, except use "native" instead of explicitly trying OpenGL and
-    // OpenGL ES. Do not use GLES on desktop, since tests do not account for not fixing
-    // http://skbug.com/2809
-    GrContextFactory::GLContextType contextTypes[] = {
-        GrContextFactory::kNative_GLContextType,
-#if SK_ANGLE
-#ifdef SK_BUILD_FOR_WIN
-        GrContextFactory::kANGLE_GLContextType,
+bool IsGLContextType(sk_gpu_test::GrContextFactory::ContextType type) {
+    return kOpenGL_GrBackend == GrContextFactory::ContextTypeBackend(type);
+}
+bool IsVulkanContextType(sk_gpu_test::GrContextFactory::ContextType type) {
+    return kVulkan_GrBackend == GrContextFactory::ContextTypeBackend(type);
+}
+bool IsRenderingGLContextType(sk_gpu_test::GrContextFactory::ContextType type) {
+    return IsGLContextType(type) && GrContextFactory::IsRenderingContext(type);
+}
+bool IsNullGLContextType(sk_gpu_test::GrContextFactory::ContextType type) {
+    return type == GrContextFactory::kNullGL_ContextType;
+}
+#else
+bool IsGLContextType(int) { return false; }
+bool IsVulkanContextType(int) { return false; }
+bool IsRenderingGLContextType(int) { return false; }
+bool IsNullGLContextType(int) { return false; }
 #endif
-        GrContextFactory::kANGLE_GL_GLContextType,
-#endif
-#if SK_COMMAND_BUFFER
-        GrContextFactory::kCommandBufferES2_GLContextType,
-        GrContextFactory::kCommandBufferES3_GLContextType,
-#endif
-#if SK_MESA
-        GrContextFactory::kMESA_GLContextType,
-#endif
-        GrContextFactory::kNull_GLContextType,
-        GrContextFactory::kDebug_GLContextType,
-    };
-    static_assert(SK_ARRAY_COUNT(contextTypes) == GrContextFactory::kGLContextTypeCnt - 2,
-                  "Skipping unexpected GLContextType for GPU tests");
 
-    for (auto& contextType : contextTypes) {
-        int contextSelector = kNone_GPUTestContexts;
-        if (GrContextFactory::IsRenderingGLContext(contextType)) {
-            contextSelector |= kAllRendering_GPUTestContexts;
-        } else if (contextType == GrContextFactory::kNative_GLContextType) {
-            contextSelector |= kNative_GPUTestContexts;
-        } else if (contextType == GrContextFactory::kNull_GLContextType) {
-            contextSelector |= kNull_GPUTestContexts;
-        } else if (contextType == GrContextFactory::kDebug_GLContextType) {
-            contextSelector |= kDebug_GPUTestContexts;
-        }
-        if ((testContexts & contextSelector) == 0) {
+void RunWithGPUTestContexts(GrContextTestFn* test, GrContextTypeFilterFn* contextTypeFilter,
+                            Reporter* reporter, GrContextFactory* factory) {
+#if SK_SUPPORT_GPU
+
+    for (int typeInt = 0; typeInt < GrContextFactory::kContextTypeCnt; ++typeInt) {
+        GrContextFactory::ContextType contextType = (GrContextFactory::ContextType) typeInt;
+        ContextInfo ctxInfo = factory->getContextInfo(contextType);
+        if (contextTypeFilter && !(*contextTypeFilter)(contextType)) {
             continue;
         }
-        GrContextFactory::ContextInfo context = factory->getContextInfo(contextType);
-        if (context.fGrContext) {
-            call_test(test, reporter, context);
+        // Use "native" instead of explicitly trying OpenGL and OpenGL ES. Do not use GLES on,
+        // desktop since tests do not account for not fixing http://skbug.com/2809
+        if (contextType == GrContextFactory::kGL_ContextType ||
+            contextType == GrContextFactory::kGLES_ContextType) {
+            if (contextType != GrContextFactory::kNativeGL_ContextType) {
+                continue;
+            }
         }
-        context = factory->getContextInfo(contextType,
-                                          GrContextFactory::kEnableNVPR_GLContextOptions);
-        if (context.fGrContext) {
-            call_test(test, reporter, context);
+        if (ctxInfo.grContext()) {
+            (*test)(reporter, ctxInfo);
+        }
+        ctxInfo = factory->getContextInfo(contextType,
+                                          GrContextFactory::kEnableNVPR_ContextOptions);
+        if (ctxInfo.grContext()) {
+            (*test)(reporter, ctxInfo);
         }
     }
 #endif
 }
-
-template
-void RunWithGPUTestContexts<TestWithGrContext>(TestWithGrContext test,
-                                               GPUTestContexts testContexts,
-                                               Reporter* reporter,
-                                               GrContextFactory* factory);
-template
-void RunWithGPUTestContexts<TestWithGrContextAndGLContext>(TestWithGrContextAndGLContext test,
-                                                           GPUTestContexts testContexts,
-                                                           Reporter* reporter,
-                                                           GrContextFactory* factory);
 } // namespace skiatest
 
 #if !defined(SK_BUILD_FOR_IOS)

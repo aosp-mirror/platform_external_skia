@@ -47,7 +47,7 @@ class GrGLSLPrimitiveProcessor;
 
 struct GrInitInvariantOutput;
 
-// Describes the state of pixel local storage with respect to the current draw. 
+// Describes the state of pixel local storage with respect to the current draw.
 enum GrPixelLocalStorageState {
     // The draw is actively updating PLS.
     kDraw_GrPixelLocalStorageState,
@@ -151,12 +151,6 @@ public:
     // we put these calls on the base class to prevent having to cast
     virtual bool willUseGeoShader() const = 0;
 
-    /*
-     * This is a safeguard to prevent GrPrimitiveProcessor's from going beyond platform specific
-     * attribute limits. This number can almost certainly be raised if required.
-     */
-    static const int kMaxVertexAttribs = 8;
-
     struct Attribute {
         Attribute()
             : fName(nullptr)
@@ -174,11 +168,8 @@ public:
         GrSLPrecision fPrecision;
     };
 
-    int numAttribs() const { return fNumAttribs; }
-    const Attribute& getAttrib(int index) const {
-        SkASSERT(index < fNumAttribs);
-        return fAttribs[index];
-    }
+    int numAttribs() const { return fAttribs.count(); }
+    const Attribute& getAttrib(int index) const { return fAttribs[index]; }
 
     // Returns the vertex stride of the GP.  A common use case is to request geometry from a
     // drawtarget based off of the stride, and to populate this memory using an implicit array of
@@ -217,7 +208,7 @@ public:
      */
     virtual bool hasTransformedLocalCoords() const = 0;
 
-    virtual GrPixelLocalStorageState getPixelLocalStorageState() const { 
+    virtual GrPixelLocalStorageState getPixelLocalStorageState() const {
         return kDisabled_GrPixelLocalStorageState;
     }
 
@@ -225,14 +216,16 @@ public:
      * If non-null, overrides the dest color returned by GrGLSLFragmentShaderBuilder::dstColor().
      */
     virtual const char* getDestColorOverride() const { return nullptr; }
-    
-protected:
-    GrPrimitiveProcessor()
-        : fNumAttribs(0)
-        , fVertexStride(0) {}
 
-    Attribute fAttribs[kMaxVertexAttribs];
-    int fNumAttribs;
+    virtual float getSampleShading() const {
+        return 0.0;
+    }
+
+protected:
+    GrPrimitiveProcessor() : fVertexStride(0) {}
+
+    enum { kPreallocAttribCnt = 8 };
+    SkSTArray<kPreallocAttribCnt, Attribute> fAttribs;
     size_t fVertexStride;
 
 private:

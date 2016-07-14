@@ -11,7 +11,6 @@
 #include "SkBitmapScaler.h"
 #include "SkGradientShader.h"
 #include "SkTypeface.h"
-#include "SkImageDecoder.h"
 #include "SkStream.h"
 #include "SkPaint.h"
 #include "SkMipMap.h"
@@ -145,7 +144,8 @@ protected:
         baseBM.lockPixels();
         baseBM.peekPixels(&prevPM);
 
-        SkAutoTUnref<SkMipMap> mm(SkMipMap::Build(baseBM, nullptr));
+        SkSourceGammaTreatment treatment = SkSourceGammaTreatment::kIgnore;
+        SkAutoTUnref<SkMipMap> mm(SkMipMap::Build(baseBM, treatment, nullptr));
 
         int index = 0;
         SkMipMap::Level level;
@@ -205,7 +205,7 @@ protected:
             canvas->translate(0, bm.height() * 0.85f);
         }
     }
-    
+
 private:
     typedef skiagm::GM INHERITED;
 };
@@ -253,7 +253,8 @@ protected:
         SkScalar x = 4;
         SkScalar y = 4;
 
-        SkAutoTUnref<SkMipMap> mm(SkMipMap::Build(baseBM, nullptr));
+        SkSourceGammaTreatment treatment = SkSourceGammaTreatment::kIgnore;
+        SkAutoTUnref<SkMipMap> mm(SkMipMap::Build(baseBM, treatment, nullptr));
 
         int index = 0;
         SkMipMap::Level level;
@@ -301,7 +302,7 @@ protected:
             canvas->translate(0, SkScalarRoundToScalar(bm.height() * 0.85f));
         }
     }
-    
+
 private:
     typedef skiagm::GM INHERITED;
 };

@@ -5,9 +5,11 @@
  * found in the LICENSE file.
  */
 
-#include "SkPM4f.h"
+#ifndef SkPM4fPriv_DEFINED
+#define SkPM4fPriv_DEFINED
+
 #include "SkColorPriv.h"
-#include "SkNx.h"
+#include "SkPM4f.h"
 
 static inline float get_alpha(const Sk4f& f4) {
     return f4[SkPM4f::A];
@@ -28,12 +30,66 @@ static inline Sk4f to_4f(uint32_t b4) {
     return SkNx_cast<float>(Sk4b::Load((const uint8_t*)&b4));
 }
 
+static inline Sk4f to_4f_rgba(uint32_t b4) {
+    return swizzle_rb_if_bgra(to_4f(b4));
+}
+
 static inline Sk4f srgb_to_linear(const Sk4f& s4) {
     return set_alpha(s4 * s4, get_alpha(s4));
 }
 
 static inline Sk4f linear_to_srgb(const Sk4f& l4) {
-    return set_alpha(l4.sqrt(), get_alpha(l4));
+    return set_alpha(l4.rsqrt().invert(), get_alpha(l4));
+}
+
+static inline float srgb_to_linear(float x) {
+    return x * x;
+}
+
+static inline float linear_to_srgb(float x) {
+    return sqrtf(x);
+}
+
+static void assert_unit(float x) {
+    SkASSERT(x >= 0 && x <= 1);
+}
+
+static inline float exact_srgb_to_linear(float x) {
+    assert_unit(x);
+    float linear;
+    if (x <= 0.04045) {
+        linear = x / 12.92f;
+    } else {
+        linear = powf((x + 0.055f) / 1.055f, 2.4f);
+    }
+    assert_unit(linear);
+    return linear;
+}
+
+static inline float exact_linear_to_srgb(float x) {
+    assert_unit(x);
+    float srgb;
+    if (x <= 0.0031308f) {
+        srgb = x * 12.92f;
+    } else {
+        srgb = 1.055f * powf(x, 0.41666667f) - 0.055f;
+    }
+    assert_unit(srgb);
+    return srgb;
+}
+
+static inline Sk4f exact_srgb_to_linear(const Sk4f& x) {
+    Sk4f linear(exact_srgb_to_linear(x[0]),
+                exact_srgb_to_linear(x[1]),
+                exact_srgb_to_linear(x[2]), 1);
+    return set_alpha(linear, get_alpha(x));
+}
+
+static inline Sk4f exact_linear_to_srgb(const Sk4f& x) {
+    Sk4f srgb(exact_linear_to_srgb(x[0]),
+              exact_linear_to_srgb(x[1]),
+              exact_linear_to_srgb(x[2]), 1);
+    return set_alpha(srgb, get_alpha(x));
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -46,6 +102,13 @@ static inline Sk4f Sk4f_fromS32(uint32_t src) {
     return srgb_to_linear(to_4f(src) * Sk4f(1.0f/255));
 }
 
+// Color handling:
+//   SkColor has an ordering of (b, g, r, a) if cast to an Sk4f, so the code swizzles r and b to
+// produce the needed (r, g, b, a) ordering.
+static inline Sk4f Sk4f_from_SkColor(SkColor color) {
+    return swizzle_rb(Sk4f_fromS32(color));
+}
+
 static inline uint32_t Sk4f_toL32(const Sk4f& x4) {
     return to_4b(x4 * Sk4f(255) + Sk4f(0.5f));
 }
@@ -53,3 +116,36 @@ static inline uint32_t Sk4f_toL32(const Sk4f& x4) {
 static inline uint32_t Sk4f_toS32(const Sk4f& x4) {
     return to_4b(linear_to_srgb(x4) * Sk4f(255) + Sk4f(0.5f));
 }
+
+static inline Sk4f exact_Sk4f_fromS32(uint32_t src) {
+    return exact_srgb_to_linear(to_4f(src) * Sk4f(1.0f/255));
+}
+static inline uint32_t exact_Sk4f_toS32(const Sk4f& x4) {
+    return to_4b(exact_linear_to_srgb(x4) * Sk4f(255) + Sk4f(0.5f));
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// An implementation of SrcOver from bytes to bytes in linear space that takes advantage of the
+// observation that the 255's cancel.
+//    invA = 1 - (As / 255);
+//
+//    R = 255 * sqrt((Rs/255)^2 + (Rd/255)^2 * invA)
+// => R = 255 * sqrt((Rs^2 + Rd^2 * invA)/255^2)
+// => R = sqrt(Rs^2 + Rd^2 * invA)
+// Note: src is assumed to be linear.
+static inline void srcover_blend_srgb8888_srgb_1(uint32_t* dst, const Sk4f& src) {
+    Sk4f d = srgb_to_linear(to_4f(*dst));
+    Sk4f invAlpha = 1.0f - Sk4f{src[SkPM4f::A]} * (1.0f / 255.0f);
+    Sk4f r = linear_to_srgb(src + d * invAlpha) + 0.5f;
+    *dst = to_4b(r);
+}
+
+static inline void srcover_srgb8888_srgb_1(uint32_t* dst, const uint32_t pixel) {
+    if ((~pixel & 0xFF000000) == 0) {
+        *dst = pixel;
+    } else if ((pixel & 0xFF000000) != 0) {
+        srcover_blend_srgb8888_srgb_1(dst, srgb_to_linear(to_4f(pixel)));
+    }
+}
+
+#endif

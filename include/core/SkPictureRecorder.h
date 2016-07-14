@@ -31,13 +31,17 @@ public:
     ~SkPictureRecorder();
 
     enum RecordFlags {
-        // This flag indicates that, if some BHH is being computed, saveLayer
-        // information should also be extracted at the same time.
-        kComputeSaveLayerInfo_RecordFlag = 0x01,
+#ifdef SK_SUPPORT_LEGACY_COMPUTESAVELAYER_FLAG
+        kComputeSaveLayerInfo_RecordFlag    = 1 << 0,
+#endif
 
         // If you call drawPicture() or drawDrawable() on the recording canvas, this flag forces
         // that object to playback its contents immediately rather than reffing the object.
-        kPlaybackDrawPicture_RecordFlag  = 0x02,
+        kPlaybackDrawPicture_RecordFlag     = 1 << 1,
+    };
+
+    enum FinishFlags {
+        kReturnNullForEmpty_FinishFlag  = 1 << 0,   // no draw-ops will return nullptr
     };
 
     /** Returns the canvas that records the drawing commands.
@@ -72,7 +76,7 @@ public:
      *  reflect their current state, but will not contain a live reference to the drawables
      *  themselves.
      */
-    SkPicture* SK_WARN_UNUSED_RESULT endRecordingAsPicture();
+    sk_sp<SkPicture> finishRecordingAsPicture(uint32_t endFlags = 0);
 
     /**
      *  Signal that the caller is done recording, and update the cull rect to use for bounding
@@ -83,7 +87,8 @@ public:
      *                  and subsequent culling operations.
      *  @return the picture containing the recorded content.
      */
-    SkPicture* SK_WARN_UNUSED_RESULT endRecordingAsPicture(const SkRect& cullRect);
+    sk_sp<SkPicture> finishRecordingAsPictureWithCull(const SkRect& cullRect,
+                                                      uint32_t endFlags = 0);
 
     /**
      *  Signal that the caller is done recording. This invalidates the canvas returned by
@@ -95,10 +100,20 @@ public:
      *  and therefore this drawable will reflect the current state of those nested drawables anytime
      *  it is drawn or a new picture is snapped from it (by calling drawable->newPictureSnapshot()).
      */
-    SkDrawable* SK_WARN_UNUSED_RESULT endRecordingAsDrawable();
+    sk_sp<SkDrawable> finishRecordingAsDrawable(uint32_t endFlags = 0);
 
-    // Legacy API -- use endRecordingAsPicture instead.
+#ifdef SK_SUPPORT_LEGACY_PICTURE_PTR
+    SkPicture* SK_WARN_UNUSED_RESULT endRecordingAsPicture() {
+        return this->finishRecordingAsPicture().release();
+    }
+    SkPicture* SK_WARN_UNUSED_RESULT endRecordingAsPicture(const SkRect& cullRect) {
+        return this->finishRecordingAsPictureWithCull(cullRect).release();
+    }
+    SkDrawable* SK_WARN_UNUSED_RESULT endRecordingAsDrawable() {
+        return this->finishRecordingAsDrawable().release();
+    }
     SkPicture* SK_WARN_UNUSED_RESULT endRecording() { return this->endRecordingAsPicture(); }
+#endif
 
 private:
     void reset();

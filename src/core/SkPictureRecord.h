@@ -35,6 +35,10 @@ public:
         return fPictureRefs;
     }
 
+    const SkTDArray<SkDrawable* >& getDrawableRefs() const {
+        return fDrawableRefs;
+    }
+
     const SkTDArray<const SkTextBlob* >& getTextBlobRefs() const {
         return fTextBlobRefs;
     }
@@ -43,17 +47,12 @@ public:
         return fImageRefs;
     }
 
-    SkData* opData(bool deepCopy) const {
+    sk_sp<SkData> opData() const {
         this->validate(fWriter.bytesWritten(), 0);
 
         if (fWriter.bytesWritten() == 0) {
-            return SkData::NewEmpty();
+            return SkData::MakeEmpty();
         }
-
-        if (deepCopy) {
-            return SkData::NewWithCopy(fWriter.contiguousArray(), fWriter.bytesWritten());
-        }
-
         return fWriter.snapshotAsData();
     }
 
@@ -131,6 +130,7 @@ private:
     void addPatch(const SkPoint cubics[12]);
     void addPath(const SkPath& path);
     void addPicture(const SkPicture* picture);
+    void addDrawable(SkDrawable* picture);
     void addPoint(const SkPoint& point);
     void addPoints(const SkPoint pts[], int count);
     void addRect(const SkRect& rect);
@@ -149,7 +149,7 @@ protected:
         SkASSERT(fWriter.bytesWritten() == initialOffset + size);
     }
 
-    SkSurface* onNewSurface(const SkImageInfo&, const SkSurfaceProps&) override;
+    sk_sp<SkSurface> onNewSurface(const SkImageInfo&, const SkSurfaceProps&) override;
     bool onPeekPixels(SkPixmap*) override { return false; }
 
     void willSave() override;
@@ -159,6 +159,8 @@ protected:
     void didConcat(const SkMatrix&) override;
     void didSetMatrix(const SkMatrix&) override;
 
+    void didTranslateZ(SkScalar) override;
+
     void onDrawDRRect(const SkRRect&, const SkRRect&, const SkPaint&) override;
 
     void onDrawText(const void* text, size_t, SkScalar x, SkScalar y, const SkPaint&) override;
@@ -167,6 +169,8 @@ protected:
                         const SkPaint&) override;
     void onDrawTextOnPath(const void* text, size_t byteLength, const SkPath& path,
                                   const SkMatrix* matrix, const SkPaint&) override;
+    void onDrawTextRSXform(const void* text, size_t byteLength, const SkRSXform xform[],
+                           const SkRect* cull, const SkPaint&) override;
     void onDrawTextBlob(const SkTextBlob* blob, SkScalar x, SkScalar y,
                                 const SkPaint& paint) override;
 
@@ -204,6 +208,8 @@ protected:
     void onClipRegion(const SkRegion&, SkRegion::Op) override;
 
     void onDrawPicture(const SkPicture*, const SkMatrix*, const SkPaint*) override;
+    void onDrawDrawable(SkDrawable*, const SkMatrix*) override;
+    void onDrawAnnotation(const SkRect&, const char[], SkData*) override;
 
     int addPathToHeap(const SkPath& path);  // does not write to ops stream
 
@@ -237,6 +243,7 @@ private:
     // we ref each item in these arrays
     SkTDArray<const SkImage*>    fImageRefs;
     SkTDArray<const SkPicture*>  fPictureRefs;
+    SkTDArray<SkDrawable*>       fDrawableRefs;
     SkTDArray<const SkTextBlob*> fTextBlobRefs;
 
     uint32_t fRecordFlags;

@@ -199,29 +199,27 @@ bool SkGifCodec::ReadHeader(SkStream* stream, SkCodec** codecOut, GifFileType** 
         }
         bool frameIsSubset = (size != frameRect.size());
 
-        // Determine the recommended alpha type.  The transIndex might be valid if it less
+        // Determine the encoded alpha type.  The transIndex might be valid if it less
         // than 256.  We are not certain that the index is valid until we process the color
         // table, since some gifs have color tables with less than 256 colors.  If
         // there might be a valid transparent index, we must indicate that the image has
         // alpha.
-        // In the case where we must support alpha, we have the option to set the
-        // suggested alpha type to kPremul or kUnpremul.  Both are valid since the alpha
-        // component will always be 0xFF or the entire 32-bit pixel will be set to zero.
-        // We prefer kPremul because we support kPremul, and it is more efficient to use
-        // kPremul directly even when kUnpremul is supported.
-        SkAlphaType alphaType = (transIndex < 256) ? kPremul_SkAlphaType : kOpaque_SkAlphaType;
+        // In the case where we must support alpha, we indicate kBinary, since every
+        // pixel will either be fully opaque or fully transparent.
+        SkEncodedInfo::Alpha alpha = (transIndex < 256) ? SkEncodedInfo::kBinary_Alpha :
+                SkEncodedInfo::kOpaque_Alpha;
 
         // Return the codec
-        // kIndex is the most natural color type for gifs, so we set this as
-        // the default.
-        SkImageInfo imageInfo = SkImageInfo::Make(size.width(), size.height(), kIndex_8_SkColorType,
-                alphaType);
-        *codecOut = new SkGifCodec(imageInfo, streamDeleter.detach(), gif.detach(), transIndex,
-                frameRect, frameIsSubset);
+        // Use kPalette since Gifs are encoded with a color table.
+        // Use 8-bits per component, since this is the output we get from giflib.
+        // FIXME: Gifs can actually be encoded with 4-bits per pixel.  Can we support this?
+        SkEncodedInfo info = SkEncodedInfo::Make(SkEncodedInfo::kPalette_Color, alpha, 8);
+        *codecOut = new SkGifCodec(size.width(), size.height(), info, streamDeleter.release(),
+                gif.release(), transIndex, frameRect, frameIsSubset);
     } else {
         SkASSERT(nullptr != gifOut);
-        streamDeleter.detach();
-        *gifOut = gif.detach();
+        streamDeleter.release();
+        *gifOut = gif.release();
     }
     return true;
 }
@@ -239,9 +237,9 @@ SkCodec* SkGifCodec::NewFromStream(SkStream* stream) {
     return nullptr;
 }
 
-SkGifCodec::SkGifCodec(const SkImageInfo& srcInfo, SkStream* stream, GifFileType* gif,
-        uint32_t transIndex, const SkIRect& frameRect, bool frameIsSubset)
-    : INHERITED(srcInfo, stream)
+SkGifCodec::SkGifCodec(int width, int height, const SkEncodedInfo& info, SkStream* stream,
+        GifFileType* gif, uint32_t transIndex, const SkIRect& frameRect, bool frameIsSubset)
+    : INHERITED(width, height, info, stream)
     , fGif(gif)
     , fSrcBuffer(new uint8_t[this->getInfo().width()])
     , fFrameRect(frameRect)
@@ -412,8 +410,9 @@ void SkGifCodec::initializeColorTable(const SkImageInfo& dstInfo, SkPMColor* inp
         // giflib guarantees these properties
         SkASSERT(colorCount == (unsigned) (1 << (colorMap->BitsPerPixel)));
         SkASSERT(colorCount <= 256);
+        PackColorProc proc = choose_pack_color_proc(false, dstInfo.colorType());
         for (uint32_t i = 0; i < colorCount; i++) {
-            colorPtr[i] = SkPackARGB32(0xFF, colorMap->Colors[i].Red,
+            colorPtr[i] = proc(0xFF, colorMap->Colors[i].Red,
                     colorMap->Colors[i].Green, colorMap->Colors[i].Blue);
         }
     }
@@ -466,7 +465,7 @@ SkCodec::Result SkGifCodec::prepareToDecode(const SkImageInfo& dstInfo, SkPMColo
 void SkGifCodec::initializeSwizzler(const SkImageInfo& dstInfo, const Options& opts) {
     const SkPMColor* colorPtr = get_color_ptr(fColorTable.get());
     const SkIRect* frameRect = fFrameIsSubset ? &fFrameRect : nullptr;
-    fSwizzler.reset(SkSwizzler::CreateSwizzler(SkSwizzler::kIndex, colorPtr, dstInfo, opts,
+    fSwizzler.reset(SkSwizzler::CreateSwizzler(this->getEncodedInfo(), colorPtr, dstInfo, opts,
             frameRect));
     SkASSERT(fSwizzler);
 }
@@ -521,7 +520,7 @@ uint32_t SkGifCodec::onGetFillValue(SkColorType colorType) const {
 
 SkCodec::Result SkGifCodec::onStartScanlineDecode(const SkImageInfo& dstInfo,
         const SkCodec::Options& opts, SkPMColor inputColorPtr[], int* inputColorCount) {
-    return this->prepareToDecode(dstInfo, inputColorPtr, inputColorCount, this->options());
+    return this->prepareToDecode(dstInfo, inputColorPtr, inputColorCount, opts);
 }
 
 void SkGifCodec::handleScanlineFrame(int count, int* rowsBeforeFrame, int* rowsInFrame) {

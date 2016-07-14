@@ -66,14 +66,14 @@ public:
         if (cte.maskFormat() == kARGB_GrMaskFormat) {
             fragBuilder->codeAppendf("%s = ", args.fOutputColor);
             fragBuilder->appendTextureLookupAndModulate(args.fOutputColor,
-                                                        args.fSamplers[0],
+                                                        args.fTexSamplers[0],
                                                         v.fsIn(),
                                                         kVec2f_GrSLType);
             fragBuilder->codeAppend(";");
             fragBuilder->codeAppendf("%s = vec4(1);", args.fOutputCoverage);
         } else {
             fragBuilder->codeAppendf("%s = ", args.fOutputCoverage);
-            fragBuilder->appendTextureLookup(args.fSamplers[0], v.fsIn(), kVec2f_GrSLType);
+            fragBuilder->appendTextureLookup(args.fTexSamplers[0], v.fsIn(), kVec2f_GrSLType);
             fragBuilder->codeAppend(";");
             if (cte.maskFormat() == kA565_GrMaskFormat) {
                 // set alpha to be max of rgb coverage
@@ -164,7 +164,7 @@ GrGLSLPrimitiveProcessor* GrBitmapTextGeoProc::createGLSLInstance(const GrGLSLCa
 
 GR_DEFINE_GEOMETRY_PROCESSOR_TEST(GrBitmapTextGeoProc);
 
-const GrGeometryProcessor* GrBitmapTextGeoProc::TestCreate(GrProcessorTestData* d) {
+sk_sp<GrGeometryProcessor> GrBitmapTextGeoProc::TestCreate(GrProcessorTestData* d) {
     int texIdx = d->fRandom->nextBool() ? GrProcessorUnitTest::kSkiaPMTextureIdx :
                                           GrProcessorUnitTest::kAlphaTextureIdx;
     static const SkShader::TileMode kTileModes[] = {
@@ -177,9 +177,9 @@ const GrGeometryProcessor* GrBitmapTextGeoProc::TestCreate(GrProcessorTestData* 
         kTileModes[d->fRandom->nextULessThan(SK_ARRAY_COUNT(kTileModes))],
     };
     GrTextureParams params(tileModes, d->fRandom->nextBool() ? GrTextureParams::kBilerp_FilterMode :
-                                                           GrTextureParams::kNone_FilterMode);
+                                                               GrTextureParams::kNone_FilterMode);
 
-    GrMaskFormat format;
+    GrMaskFormat format = kARGB_GrMaskFormat; // init to avoid warning
     switch (d->fRandom->nextULessThan(3)) {
         case 0:
             format = kA8_GrMaskFormat;
@@ -192,7 +192,7 @@ const GrGeometryProcessor* GrBitmapTextGeoProc::TestCreate(GrProcessorTestData* 
             break;
     }
 
-    return GrBitmapTextGeoProc::Create(GrRandomColor(d->fRandom), d->fTextures[texIdx], params,
-                                       format, GrTest::TestMatrix(d->fRandom),
-                                       d->fRandom->nextBool());
+    return GrBitmapTextGeoProc::Make(GrRandomColor(d->fRandom), d->fTextures[texIdx], params,
+                                     format, GrTest::TestMatrix(d->fRandom),
+                                     d->fRandom->nextBool());
 }

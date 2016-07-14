@@ -9,6 +9,7 @@
 #define SkCodec_wbmp_DEFINED
 
 #include "SkCodec.h"
+#include "SkColorSpace.h"
 #include "SkSwizzler.h"
 
 class SkWbmpCodec final : public SkCodec {
@@ -43,7 +44,7 @@ private:
      */
     bool readRow(uint8_t* row);
 
-    SkWbmpCodec(const SkImageInfo&, SkStream*);
+    SkWbmpCodec(int width, int height, const SkEncodedInfo&, SkStream*);
 
     const size_t                 fSrcRowBytes;
 

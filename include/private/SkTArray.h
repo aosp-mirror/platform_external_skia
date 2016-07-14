@@ -38,14 +38,20 @@ public:
      * elements.
      */
     explicit SkTArray(int reserveCount) {
-        this->init(NULL, 0, NULL, reserveCount);
+        this->init(0, NULL, reserveCount);
     }
 
     /**
      * Copies one array to another. The new array will be heap allocated.
      */
-    explicit SkTArray(const SkTArray& array) {
-        this->init(array.fItemArray, array.fCount, NULL, 0);
+    explicit SkTArray(const SkTArray& that) {
+        this->init(that.fCount, NULL, 0);
+        this->copy(that.fItemArray);
+    }
+    explicit SkTArray(SkTArray&& that) {
+        this->init(that.fCount, NULL, 0);
+        that.move(fMemArray);
+        that.fCount = 0;
     }
 
     /**
@@ -54,20 +60,32 @@ public:
      * when you really want the (void*, int) version.
      */
     SkTArray(const T* array, int count) {
-        this->init(array, count, NULL, 0);
+        this->init(count, NULL, 0);
+        this->copy(array);
     }
 
     /**
      * assign copy of array to this
      */
-    SkTArray& operator =(const SkTArray& array) {
+    SkTArray& operator =(const SkTArray& that) {
         for (int i = 0; i < fCount; ++i) {
             fItemArray[i].~T();
         }
         fCount = 0;
-        this->checkRealloc((int)array.count());
-        fCount = array.count();
-        this->copy(static_cast<const T*>(array.fMemArray));
+        this->checkRealloc(that.count());
+        fCount = that.count();
+        this->copy(that.fItemArray);
+        return *this;
+    }
+    SkTArray& operator =(SkTArray&& that) {
+        for (int i = 0; i < fCount; ++i) {
+            fItemArray[i].~T();
+        }
+        fCount = 0;
+        this->checkRealloc(that.count());
+        fCount = that.count();
+        that.move(fMemArray);
+        that.fCount = 0;
         return *this;
     }
 
@@ -93,12 +111,21 @@ public:
         for (int i = 0; i < fCount; ++i) {
             fItemArray[i].~T();
         }
-        // set fCount to 0 before calling checkRealloc so that no copy cons. are called.
+        // Set fCount to 0 before calling checkRealloc so that no elements are moved.
         fCount = 0;
         this->checkRealloc(n);
         fCount = n;
         for (int i = 0; i < fCount; ++i) {
             new (fItemArray + i) T;
+        }
+    }
+
+    /**
+     * Ensures there is enough reserved space for n elements.
+     */
+    void reserve(int n) {
+        if (fCount < n) {
+            this->checkRealloc(n - fCount);
         }
     }
 
@@ -109,8 +136,8 @@ public:
         for (int i = 0; i < fCount; ++i) {
             fItemArray[i].~T();
         }
-        int delta = count - fCount;
-        this->checkRealloc(delta);
+        fCount = 0;
+        this->checkRealloc(count);
         fCount = count;
         this->copy(array);
     }
@@ -141,25 +168,31 @@ public:
      * elements.
      */
     T& push_back() {
-        T* newT = reinterpret_cast<T*>(this->push_back_raw(1));
-        new (newT) T;
-        return *newT;
+        void* newT = this->push_back_raw(1);
+        return *new (newT) T;
     }
 
     /**
      * Version of above that uses a copy constructor to initialize the new item
      */
     T& push_back(const T& t) {
-        T* newT = reinterpret_cast<T*>(this->push_back_raw(1));
-        new (newT) T(t);
-        return *newT;
+        void* newT = this->push_back_raw(1);
+        return *new (newT) T(t);
+    }
+
+    /**
+     * Version of above that uses a move constructor to initialize the new item
+     */
+    T& push_back(T&& t) {
+        void* newT = this->push_back_raw(1);
+        return *new (newT) T(std::move(t));
     }
 
     /**
      *  Construct a new T at the back of this array.
      */
     template<class... Args> T& emplace_back(Args&&... args) {
-        T* newT = reinterpret_cast<T*>(this->push_back_raw(1));
+        void* newT = this->push_back_raw(1);
         return *new (newT) T(std::forward<Args>(args)...);
     }
 
@@ -170,11 +203,11 @@ public:
      */
     T* push_back_n(int n) {
         SkASSERT(n >= 0);
-        T* newTs = reinterpret_cast<T*>(this->push_back_raw(n));
+        void* newTs = this->push_back_raw(n);
         for (int i = 0; i < n; ++i) {
-            new (newTs + i) T;
+            new (static_cast<char*>(newTs) + i * sizeof(T)) T;
         }
-        return newTs;
+        return static_cast<T*>(newTs);
     }
 
     /**
@@ -183,11 +216,11 @@ public:
      */
     T* push_back_n(int n, const T& t) {
         SkASSERT(n >= 0);
-        T* newTs = reinterpret_cast<T*>(this->push_back_raw(n));
+        void* newTs = this->push_back_raw(n);
         for (int i = 0; i < n; ++i) {
-            new (newTs[i]) T(t);
+            new (static_cast<char*>(newTs) + i * sizeof(T)) T(t);
         }
-        return newTs;
+        return static_cast<T*>(newTs);
     }
 
     /**
@@ -255,9 +288,9 @@ public:
             SkTSwap(fAllocCount, that->fAllocCount);
         } else {
             // This could be more optimal...
-            SkTArray copy(*that);
-            *that = *this;
-            *this = copy;
+            SkTArray copy(std::move(*that));
+            *that = std::move(*this);
+            *this = std::move(copy);
         }
     }
 
@@ -342,7 +375,7 @@ protected:
      */
     template <int N>
     SkTArray(SkAlignedSTStorage<N,T>* storage) {
-        this->init(NULL, 0, storage->get(), N);
+        this->init(0, storage->get(), N);
     }
 
     /**
@@ -352,7 +385,8 @@ protected:
      */
     template <int N>
     SkTArray(const SkTArray& array, SkAlignedSTStorage<N,T>* storage) {
-        this->init(array.fItemArray, array.fCount, storage->get(), N);
+        this->init(array.fCount, storage->get(), N);
+        this->copy(array.fItemArray);
     }
 
     /**
@@ -362,11 +396,11 @@ protected:
      */
     template <int N>
     SkTArray(const T* array, int count, SkAlignedSTStorage<N,T>* storage) {
-        this->init(array, count, storage->get(), N);
+        this->init(count, storage->get(), N);
+        this->copy(array);
     }
 
-    void init(const T* array, int count,
-              void* preAllocStorage, int preAllocOrReserveCount) {
+    void init(int count, void* preAllocStorage, int preAllocOrReserveCount) {
         SkASSERT(count >= 0);
         SkASSERT(preAllocOrReserveCount >= 0);
         fCount              = count;
@@ -382,8 +416,6 @@ protected:
             fAllocCount = SkMax32(fCount, fReserveCount);
             fMemArray = sk_malloc_throw(fAllocCount * sizeof(T));
         }
-
-        this->copy(array);
     }
 
 private:
@@ -396,7 +428,7 @@ private:
     template <bool E = MEM_COPY> SK_WHEN(E, void) move(int dst, int src) {
         memcpy(&fItemArray[dst], &fItemArray[src], sizeof(T));
     }
-    template <bool E = MEM_COPY> SK_WHEN(E, void) move(char* dst) {
+    template <bool E = MEM_COPY> SK_WHEN(E, void) move(void* dst) {
         sk_careful_memcpy(dst, fMemArray, fCount * sizeof(T));
     }
 
@@ -409,9 +441,9 @@ private:
         new (&fItemArray[dst]) T(std::move(fItemArray[src]));
         fItemArray[src].~T();
     }
-    template <bool E = MEM_COPY> SK_WHEN(!E, void) move(char* dst) {
+    template <bool E = MEM_COPY> SK_WHEN(!E, void) move(void* dst) {
         for (int i = 0; i < fCount; ++i) {
-            new (dst + sizeof(T) * i) T(std::move(fItemArray[i]));
+            new (static_cast<char*>(dst) + sizeof(T) * i) T(std::move(fItemArray[i]));
             fItemArray[i].~T();
         }
     }
@@ -444,12 +476,12 @@ private:
         if (newAllocCount != fAllocCount) {
 
             fAllocCount = newAllocCount;
-            char* newMemArray;
+            void* newMemArray;
 
             if (fAllocCount == fReserveCount && fPreAllocMemArray) {
-                newMemArray = (char*) fPreAllocMemArray;
+                newMemArray = fPreAllocMemArray;
             } else {
-                newMemArray = (char*) sk_malloc_throw(fAllocCount*sizeof(T));
+                newMemArray = sk_malloc_throw(fAllocCount*sizeof(T));
             }
 
             this->move(newMemArray);

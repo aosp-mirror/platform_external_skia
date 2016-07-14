@@ -9,17 +9,28 @@
 #define SkTypes_DEFINED
 
 // IWYU pragma: begin_exports
+
+// In at least two known scenarios when using GCC with libc++:
+//  * GCC 4.8 targeting ARMv7 with NEON
+//  * GCC 4.9 targeting ARMv8 64 bit
+// we need to typedef float float32_t (or include <arm_neon.h> which does that)
+// before #including <memory>. This makes no sense.  I'm not very interested in
+// understanding why... these are old, bizarre platform configuration that we
+// should just let die.
+// See https://llvm.org/bugs/show_bug.cgi?id=25608 .
+#include <ciso646>  // Include something innocuous to define _LIBCPP_VERISON if it's libc++.
+#if defined(__GNUC__) && __GNUC__ == 4 \
+ && ((defined(__arm__) && (defined(__ARM_NEON__) || defined(__ARM_NEON))) || defined(__aarch64__)) \
+ && defined(_LIBCPP_VERSION)
+    typedef float float32_t;
+    #include <memory>
+#endif
+
 #include "SkPreConfig.h"
 #include "SkUserConfig.h"
 #include "SkPostConfig.h"
 #include <stddef.h>
 #include <stdint.h>
-
-#if defined(SK_ARM_HAS_NEON)
-    #include <arm_neon.h>
-#elif SK_CPU_SSE_LEVEL >= SK_CPU_SSE_LEVEL_SSE2
-    #include <immintrin.h>
-#endif
 // IWYU pragma: end_exports
 
 #include <string.h>
@@ -131,7 +142,11 @@ inline void operator delete(void* p) {
 #define SkASSERT_RELEASE(cond)          if(!(cond)) { SK_ABORT(#cond); }
 
 #ifdef SK_DEBUG
-    #define SkASSERT(cond)              SkASSERT_RELEASE(cond)
+    #if defined SK_BUILD_FOR_WIN
+        #define SkASSERT(cond)          if(!(cond)) { __debugbreak(); }
+    #else
+        #define SkASSERT(cond)          SkASSERT_RELEASE(cond)
+    #endif
     #define SkDEBUGFAIL(message)        SkASSERT(false && message)
     #define SkDEBUGFAILF(fmt, ...)      SkASSERTF(false, fmt, ##__VA_ARGS__)
     #define SkDEBUGCODE(code)           code
@@ -148,8 +163,9 @@ inline void operator delete(void* p) {
     #define SkDECLAREPARAM(type, var)
     #define SkPARAM(var)
 
-    // unlike SkASSERT, this guy executes its condition in the non-debug build
-    #define SkAssertResult(cond)        cond
+    // unlike SkASSERT, this guy executes its condition in the non-debug build.
+    // The if is present so that this can be used with functions marked SK_WARN_UNUSED_RESULT.
+    #define SkAssertResult(cond)         if (cond) {} do {} while(false)
 #endif
 
 // Legacy macro names for SK_ABORT
@@ -160,12 +176,6 @@ inline void operator delete(void* p) {
 // So we use the comma operator to make an SkDebugf that always returns false: we'll evaluate cond,
 // and if it's true the assert passes; if it's false, we'll print the message and the assert fails.
 #define SkASSERTF(cond, fmt, ...)       SkASSERT((cond) || (SkDebugf(fmt"\n", __VA_ARGS__), false))
-
-#ifdef SK_DEVELOPER
-    #define SkDEVCODE(code)             code
-#else
-    #define SkDEVCODE(code)
-#endif
 
 #ifdef SK_IGNORE_TO_STRING
     #define SK_TO_STRING_NONVIRT()
@@ -256,27 +266,20 @@ typedef unsigned U16CPU;
  */
 typedef uint8_t SkBool8;
 
-#ifdef SK_DEBUG
-    SK_API int8_t      SkToS8(intmax_t);
-    SK_API uint8_t     SkToU8(uintmax_t);
-    SK_API int16_t     SkToS16(intmax_t);
-    SK_API uint16_t    SkToU16(uintmax_t);
-    SK_API int32_t     SkToS32(intmax_t);
-    SK_API uint32_t    SkToU32(uintmax_t);
-    SK_API int         SkToInt(intmax_t);
-    SK_API unsigned    SkToUInt(uintmax_t);
-    SK_API size_t      SkToSizeT(uintmax_t);
-#else
-    #define SkToS8(x)   ((int8_t)(x))
-    #define SkToU8(x)   ((uint8_t)(x))
-    #define SkToS16(x)  ((int16_t)(x))
-    #define SkToU16(x)  ((uint16_t)(x))
-    #define SkToS32(x)  ((int32_t)(x))
-    #define SkToU32(x)  ((uint32_t)(x))
-    #define SkToInt(x)  ((int)(x))
-    #define SkToUInt(x) ((unsigned)(x))
-    #define SkToSizeT(x) ((size_t)(x))
-#endif
+#include "../private/SkTFitsIn.h"
+template <typename D, typename S> D SkTo(S s) {
+    SkASSERT(SkTFitsIn<D>(s));
+    return static_cast<D>(s);
+}
+#define SkToS8(x)    SkTo<int8_t>(x)
+#define SkToU8(x)    SkTo<uint8_t>(x)
+#define SkToS16(x)   SkTo<int16_t>(x)
+#define SkToU16(x)   SkTo<uint16_t>(x)
+#define SkToS32(x)   SkTo<int32_t>(x)
+#define SkToU32(x)   SkTo<uint32_t>(x)
+#define SkToInt(x)   SkTo<int>(x)
+#define SkToUInt(x)  SkTo<unsigned>(x)
+#define SkToSizeT(x) SkTo<size_t>(x)
 
 /** Returns 0 or 1 based on the condition
 */
@@ -290,7 +293,7 @@ typedef uint8_t SkBool8;
 #define SK_MinS32   -SK_MaxS32
 #define SK_MaxU32   0xFFFFFFFF
 #define SK_MinU32   0
-#define SK_NaN32    (1 << 31)
+#define SK_NaN32    ((int) (1U << 31))
 
 /** Returns true if the value can be represented with signed 16bits
  */
@@ -337,6 +340,9 @@ template <typename T, size_t N> char (&SkArrayCountHelper(T (&array)[N]))[N];
 #define SkAlign8(x)     (((x) + 7) >> 3 << 3)
 #define SkIsAlign8(x)   (0 == ((x) & 7))
 
+#define SkAlign16(x)     (((x) + 15) >> 4 << 4)
+#define SkIsAlign16(x)   (0 == ((x) & 15))
+
 #define SkAlignPtr(x)   (sizeof(void*) == 8 ?   SkAlign8(x) :   SkAlign4(x))
 #define SkIsAlignPtr(x) (sizeof(void*) == 8 ? SkIsAlign8(x) : SkIsAlign4(x))
 
@@ -346,13 +352,15 @@ typedef uint32_t SkFourByteTag;
 /** 32 bit integer to hold a unicode value
 */
 typedef int32_t SkUnichar;
-/** 32 bit value to hold a millisecond count
-*/
+
+/** 32 bit value to hold a millisecond duration
+ *  Note that SK_MSecMax is about 25 days.
+ */
 typedef uint32_t SkMSec;
 /** 1 second measured in milliseconds
 */
 #define SK_MSec1 1000
-/** maximum representable milliseconds
+/** maximum representable milliseconds; 24d 20h 31m 23.647s.
 */
 #define SK_MSecMax 0x7FFFFFFF
 /** Returns a < b for milliseconds, correctly handling wrap-around from 0xFFFFFFFF to 0
@@ -376,7 +384,7 @@ typedef uint32_t SkMSec;
 
 /** Faster than SkToBool for integral conditions. Returns 0 or 1
 */
-static inline int Sk32ToBool(uint32_t n) {
+static inline constexpr int Sk32ToBool(uint32_t n) {
     return (n | (0-n)) >> 31;
 }
 
@@ -415,11 +423,11 @@ static inline int32_t SkMin32(int32_t a, int32_t b) {
     return a;
 }
 
-template <typename T> const T& SkTMin(const T& a, const T& b) {
+template <typename T> constexpr const T& SkTMin(const T& a, const T& b) {
     return (a < b) ? a : b;
 }
 
-template <typename T> const T& SkTMax(const T& a, const T& b) {
+template <typename T> constexpr const T& SkTMax(const T& a, const T& b) {
     return (b < a) ? a : b;
 }
 
@@ -435,7 +443,7 @@ static inline int32_t SkFastMin32(int32_t value, int32_t max) {
 }
 
 /** Returns value pinned between min and max, inclusively. */
-template <typename T> static inline const T& SkTPin(const T& value, const T& min, const T& max) {
+template <typename T> static constexpr const T& SkTPin(const T& value, const T& min, const T& max) {
     return SkTMax(SkTMin(value, max), min);
 }
 
@@ -448,6 +456,15 @@ template <typename T> static inline const T& SkTPin(const T& value, const T& min
 enum class SkBudgeted : bool {
     kNo  = false,
     kYes = true
+};
+
+/**
+ * Indicates whether a backing store needs to be an exact match or can be larger
+ * than is strictly necessary
+ */
+enum class SkBackingFit {
+    kApprox,
+    kExact
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -511,12 +528,12 @@ public:
         internal reference to null. Note the caller is reponsible for calling
         sk_free on the returned address.
     */
-    void* detach() { return this->set(NULL); }
+    void* release() { return this->set(NULL); }
 
     /** Free the current buffer, and set the internal reference to NULL. Same
-        as calling sk_free(detach())
+        as calling sk_free(release())
     */
-    void free() {
+    void reset() {
         sk_free(fPtr);
         fPtr = NULL;
     }
@@ -532,7 +549,7 @@ private:
 /**
  *  Manage an allocated block of heap memory. This object is the sole manager of
  *  the lifetime of the block, so the caller must not call sk_free() or delete
- *  on the block, unless detach() was called.
+ *  on the block, unless release() was called.
  */
 class SkAutoMalloc : SkNoncopyable {
 public:
@@ -568,7 +585,7 @@ public:
     /**
      *  Reallocates the block to a new size. The ptr may or may not change.
      */
-    void* reset(size_t size, OnShrink shrink = kAlloc_OnShrink,  bool* didChangeAlloc = NULL) {
+    void* reset(size_t size = 0, OnShrink shrink = kAlloc_OnShrink,  bool* didChangeAlloc = NULL) {
         if (size == fSize || (kReuse_OnShrink == shrink && size < fSize)) {
             if (didChangeAlloc) {
                 *didChangeAlloc = false;
@@ -587,13 +604,6 @@ public:
     }
 
     /**
-     *  Releases the block back to the heap
-     */
-    void free() {
-        this->reset(0);
-    }
-
-    /**
      *  Return the allocated block.
      */
     void* get() { return fPtr; }
@@ -603,7 +613,7 @@ public:
        internal reference to null. Note the caller is reponsible for calling
        sk_free on the returned address.
     */
-    void* detach() {
+    void* release() {
         void* ptr = fPtr;
         fPtr = NULL;
         fSize = 0;

@@ -16,33 +16,35 @@
 #include "SkTraceEvent.h"
 #include "gl/GrGLGpu.h"
 #include "gl/GrGLProgram.h"
+#include "gl/GrGLProgramDesc.h"
 #include "gl/GrGLSLPrettyPrint.h"
 #include "gl/builders/GrGLShaderStringBuilder.h"
 #include "glsl/GrGLSLCaps.h"
 #include "glsl/GrGLSLFragmentProcessor.h"
 #include "glsl/GrGLSLGeometryProcessor.h"
 #include "glsl/GrGLSLProgramDataManager.h"
-#include "glsl/GrGLSLTextureSampler.h"
+#include "glsl/GrGLSLSampler.h"
 #include "glsl/GrGLSLXferProcessor.h"
 
 #define GL_CALL(X) GR_GL_CALL(this->gpu()->glInterface(), X)
 #define GL_CALL_RET(R, X) GR_GL_CALL_RET(this->gpu()->glInterface(), R, X)
 
-GrGLProgram* GrGLProgramBuilder::CreateProgram(const DrawArgs& args, GrGLGpu* gpu) {
+GrGLProgram* GrGLProgramBuilder::CreateProgram(const GrPipeline& pipeline,
+                                               const GrPrimitiveProcessor& primProc,
+                                               const GrGLProgramDesc& desc,
+                                               GrGLGpu* gpu) {
     GrAutoLocaleSetter als("C");
 
     // create a builder.  This will be handed off to effects so they can use it to add
     // uniforms, varyings, textures, etc
-    GrGLProgramBuilder builder(gpu, args);
+    GrGLProgramBuilder builder(gpu, pipeline, primProc, desc);
 
     // TODO: Once all stages can handle taking a float or vec4 and correctly handling them we can
     // seed correctly here
     GrGLSLExpr4 inputColor;
     GrGLSLExpr4 inputCoverage;
 
-    if (!builder.emitAndInstallProcs(&inputColor,
-                                     &inputCoverage,
-                                     gpu->glCaps().maxFragmentTextureUnits())) {
+    if (!builder.emitAndInstallProcs(&inputColor, &inputCoverage)) {
         builder.cleanupFragmentProcessors();
         return nullptr;
     }
@@ -52,10 +54,12 @@ GrGLProgram* GrGLProgramBuilder::CreateProgram(const DrawArgs& args, GrGLGpu* gp
 
 /////////////////////////////////////////////////////////////////////////////
 
-GrGLProgramBuilder::GrGLProgramBuilder(GrGLGpu* gpu, const DrawArgs& args)
-    : INHERITED(args)
+GrGLProgramBuilder::GrGLProgramBuilder(GrGLGpu* gpu,
+                                       const GrPipeline& pipeline,
+                                       const GrPrimitiveProcessor& primProc,
+                                       const GrGLProgramDesc& desc)
+    : INHERITED(pipeline, primProc, desc)
     , fGpu(gpu)
-    , fSamplerUniforms(4)
     , fVaryingHandler(this)
     , fUniformHandler(this) {
 }
@@ -66,39 +70,6 @@ const GrCaps* GrGLProgramBuilder::caps() const {
 
 const GrGLSLCaps* GrGLProgramBuilder::glslCaps() const {
     return fGpu->ctxInfo().caps()->glslCaps();
-}
-
-static GrSLType get_sampler_type(const GrTextureAccess& access) {
-    GrGLTexture* glTexture = static_cast<GrGLTexture*>(access.getTexture());
-    if (glTexture->target() == GR_GL_TEXTURE_EXTERNAL) {
-        return kSamplerExternal_GrSLType;
-    } else if (glTexture->target() == GR_GL_TEXTURE_RECTANGLE) {
-        return kSampler2DRect_GrSLType;
-    } else {
-        SkASSERT(glTexture->target() == GR_GL_TEXTURE_2D);
-        return kSampler2D_GrSLType;
-    }
-}
-
-void GrGLProgramBuilder::emitSamplers(const GrProcessor& processor,
-                                      GrGLSLTextureSampler::TextureSamplerArray* outSamplers) {
-    int numTextures = processor.numTextures();
-    UniformHandle* localSamplerUniforms = fSamplerUniforms.push_back_n(numTextures);
-    SkString name;
-    for (int t = 0; t < numTextures; ++t) {
-        name.printf("Sampler%d", t);
-        GrSLType samplerType = get_sampler_type(processor.textureAccess(t));
-        localSamplerUniforms[t] = fUniformHandler.addUniform(kFragment_GrShaderFlag, samplerType,
-                                                             kDefault_GrSLPrecision, name.c_str());
-        outSamplers->emplace_back(localSamplerUniforms[t], processor.textureAccess(t));
-        if (kSamplerExternal_GrSLType == samplerType) {
-            const char* externalFeatureString = this->glslCaps()->externalTextureExtensionString();
-            // We shouldn't ever create a GrGLTexture that requires external sampler type 
-            SkASSERT(externalFeatureString);
-            fFS.addFeature(1 << GrGLSLFragmentShaderBuilder::kExternalTexture_GLSLPrivateFeature,
-                           externalFeatureString);
-        }
-    }
 }
 
 bool GrGLProgramBuilder::compileAndAttachShaders(GrGLSLShaderBuilder& shader,
@@ -262,10 +233,9 @@ GrGLProgram* GrGLProgramBuilder::createProgram(GrGLuint programID) {
                            fUniformHandles,
                            programID,
                            fUniformHandler.fUniforms,
+                           fUniformHandler.fSamplers,
                            fVaryingHandler.fPathProcVaryingInfos,
                            fGeometryProcessor,
                            fXferProcessor,
-                           fFragmentProcessors,
-                           &fSamplerUniforms);
+                           fFragmentProcessors);
 }
-

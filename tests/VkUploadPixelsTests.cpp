@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2015 Google Inc.
  *
@@ -17,6 +16,7 @@
 #include "Test.h"
 #include "vk/GrVkGpu.h"
 
+using sk_gpu_test::GrContextFactory;
 
 void fill_pixel_data(int width, int height, GrColor* data) {
 
@@ -52,7 +52,6 @@ bool does_full_buffer_contain_correct_color(GrColor* srcBuffer,
 void basic_texture_test(skiatest::Reporter* reporter, GrContext* context, GrPixelConfig config,
                         bool renderTarget, bool linearTiling) {
     GrVkGpu* gpu = static_cast<GrVkGpu*>(context->getGpu());
-    gpu->discard(NULL);
 
     const int kWidth = 16;
     const int kHeight = 16;
@@ -133,28 +132,15 @@ void basic_texture_test(skiatest::Reporter* reporter, GrContext* context, GrPixe
     }
 }
 
-DEF_GPUTEST(VkUploadPixelsTests, reporter, factory) {
-    GrContextOptions opts;
-    opts.fSuppressPrints = true;
-    GrContextFactory debugFactory(opts);
-    for (int type = 0; type < GrContextFactory::kLastGLContextType; ++type) {
-        if (static_cast<GrContextFactory::GLContextType>(type) !=
-            GrContextFactory::kNative_GLContextType) {
-            continue;
-        }
-        GrContext* context = debugFactory.get(static_cast<GrContextFactory::GLContextType>(type));
-        if (context) {
-            basic_texture_test(reporter, context, kRGBA_8888_GrPixelConfig, false, false);
-            basic_texture_test(reporter, context, kRGBA_8888_GrPixelConfig, true, false);
-            basic_texture_test(reporter, context, kRGBA_8888_GrPixelConfig, false, true);
-            basic_texture_test(reporter, context, kRGBA_8888_GrPixelConfig, true, true);
-            basic_texture_test(reporter, context, kBGRA_8888_GrPixelConfig, false, false);
-            basic_texture_test(reporter, context, kBGRA_8888_GrPixelConfig, true, false);
-            basic_texture_test(reporter, context, kBGRA_8888_GrPixelConfig, false, true);
-            basic_texture_test(reporter, context, kBGRA_8888_GrPixelConfig, true, true);
-        }
-
-    }
+DEF_GPUTEST_FOR_VULKAN_CONTEXT(VkUploadPixelsTests, reporter, ctxInfo) {
+    basic_texture_test(reporter, ctxInfo.grContext(), kRGBA_8888_GrPixelConfig, false, false);
+    basic_texture_test(reporter, ctxInfo.grContext(), kRGBA_8888_GrPixelConfig, true, false);
+    basic_texture_test(reporter, ctxInfo.grContext(), kRGBA_8888_GrPixelConfig, false, true);
+    basic_texture_test(reporter, ctxInfo.grContext(), kRGBA_8888_GrPixelConfig, true, true);
+    basic_texture_test(reporter, ctxInfo.grContext(), kBGRA_8888_GrPixelConfig, false, false);
+    basic_texture_test(reporter, ctxInfo.grContext(), kBGRA_8888_GrPixelConfig, true, false);
+    basic_texture_test(reporter, ctxInfo.grContext(), kBGRA_8888_GrPixelConfig, false, true);
+    basic_texture_test(reporter, ctxInfo.grContext(), kBGRA_8888_GrPixelConfig, true, true);
 }
 
 #endif

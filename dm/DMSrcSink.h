@@ -15,6 +15,7 @@
 #include "SkBitmapRegionDecoder.h"
 #include "SkCanvas.h"
 #include "SkData.h"
+#include "SkMultiPictureDocumentReader.h"
 #include "SkPicture.h"
 #include "gm.h"
 
@@ -66,6 +67,11 @@ struct Src {
     virtual void modifyGrContextOptions(GrContextOptions* options) const {}
     virtual bool veto(SinkFlags) const { return false; }
 
+    virtual int pageCount() const { return 1; }
+    virtual Error SK_WARN_UNUSED_RESULT draw(int, SkCanvas* canvas) const {
+        return this->draw(canvas);
+    }
+    virtual SkISize size(int) const { return this->size(); }
     // Force Tasks using this Src to run on the main thread?
     virtual bool serial() const { return false; }
 };
@@ -112,12 +118,12 @@ public:
         kStripe_Mode, // Tests the skipping of scanlines
         kCroppedScanline_Mode, // Tests (jpeg) cropped scanline optimization
         kSubset_Mode, // For codecs that support subsets directly.
-        kGen_Mode,    // Test SkCodecImageGenerator (includes YUV)
     };
     enum DstColorType {
         kGetFromCanvas_DstColorType,
         kIndex8_Always_DstColorType,
         kGrayscale_Always_DstColorType,
+        kNonNative8888_Always_DstColorType,
     };
     CodecSrc(Path, Mode, DstColorType, SkAlphaType, float);
 
@@ -137,14 +143,7 @@ private:
 
 class AndroidCodecSrc : public Src {
 public:
-    enum Mode {
-        kFullImage_Mode,
-        // Splits the image into multiple subsets using a divisor and decodes the subsets
-        // separately.
-        kDivisor_Mode,
-    };
-
-    AndroidCodecSrc(Path, Mode, CodecSrc::DstColorType, SkAlphaType, int sampleSize);
+    AndroidCodecSrc(Path, CodecSrc::DstColorType, SkAlphaType, int sampleSize);
 
     Error draw(SkCanvas*) const override;
     SkISize size() const override;
@@ -153,7 +152,6 @@ public:
     bool serial() const override { return fRunSerially; }
 private:
     Path                    fPath;
-    Mode                    fMode;
     CodecSrc::DstColorType  fDstColorType;
     SkAlphaType             fDstAlphaType;
     int                     fSampleSize;
@@ -173,7 +171,7 @@ public:
         kDivisor_Mode,
     };
 
-    BRDSrc(Path, SkBitmapRegionDecoder::Strategy, Mode, CodecSrc::DstColorType, uint32_t);
+    BRDSrc(Path, Mode, CodecSrc::DstColorType, uint32_t);
 
     Error draw(SkCanvas*) const override;
     SkISize size() const override;
@@ -181,10 +179,61 @@ public:
     bool veto(SinkFlags) const override;
 private:
     Path                                     fPath;
-    SkBitmapRegionDecoder::Strategy          fStrategy;
     Mode                                     fMode;
     CodecSrc::DstColorType                   fDstColorType;
     uint32_t                                 fSampleSize;
+};
+
+class ImageGenSrc : public Src {
+public:
+    enum Mode {
+        kCodec_Mode,    // Use CodecImageGenerator
+        kPlatform_Mode, // Uses CG or WIC
+    };
+    ImageGenSrc(Path, Mode, SkAlphaType, bool);
+
+    Error draw(SkCanvas*) const override;
+    SkISize size() const override;
+    Name name() const override;
+    bool veto(SinkFlags) const override;
+    bool serial() const override { return fRunSerially; }
+private:
+    Path        fPath;
+    Mode        fMode;
+    SkAlphaType fDstAlphaType;
+    bool        fIsGpu;
+    bool        fRunSerially;
+};
+
+class ColorCodecSrc : public Src {
+public:
+    enum Mode {
+        // Mimic legacy behavior and apply no color correction.
+        kBaseline_Mode,
+
+        // Color correct images into a specific dst color space.  If you happen to have this
+        // monitor, you're in luck!  The unmarked outputs of this test should display
+        // correctly on this monitor in the Chrome browser.  If not, it's useful to know
+        // that this monitor has a profile that is fairly similar to Adobe RGB.
+        kDst_HPZR30w_Mode,
+
+        kDst_sRGB_Mode,
+
+#if defined(SK_TEST_QCMS)
+        // Use QCMS for color correction.
+        kQCMS_HPZR30w_Mode,
+#endif
+    };
+
+    ColorCodecSrc(Path, Mode);
+
+    Error draw(SkCanvas*) const override;
+    SkISize size() const override;
+    Name name() const override;
+    bool veto(SinkFlags) const override;
+private:
+    Path                    fPath;
+    Mode                    fMode;
 };
 
 class SKPSrc : public Src {
@@ -196,6 +245,24 @@ public:
     Name name() const override;
 private:
     Path fPath;
+};
+
+/*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
+
+class MSKPSrc : public Src {
+public:
+    explicit MSKPSrc(Path path);
+
+    int pageCount() const override;
+    Error draw(SkCanvas* c) const override;
+    Error draw(int, SkCanvas*) const override;
+    SkISize size() const override;
+    SkISize size(int) const override;
+    Name name() const override;
+
+private:
+    Path fPath;
+    SkMultiPictureDocumentReader fReader;
 };
 
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
@@ -212,30 +279,32 @@ public:
 
 class GPUSink : public Sink {
 public:
-    GPUSink(GrContextFactory::GLContextType, GrContextFactory::GLContextOptions,
-            int samples, bool diText, bool threaded);
+    GPUSink(sk_gpu_test::GrContextFactory::ContextType,
+            sk_gpu_test::GrContextFactory::ContextOptions,
+            int samples, bool diText, SkColorType colorType, sk_sp<SkColorSpace> colorSpace,
+            bool threaded);
 
     Error draw(const Src&, SkBitmap*, SkWStream*, SkString*) const override;
     bool serial() const override { return !fThreaded; }
     const char* fileExtension() const override { return "png"; }
     SinkFlags flags() const override { return SinkFlags{ SinkFlags::kGPU, SinkFlags::kDirect }; }
 private:
-    GrContextFactory::GLContextType    fContextType;
-    GrContextFactory::GLContextOptions fContextOptions;
-    int                                fSampleCount;
-    bool                               fUseDIText;
-    bool                               fThreaded;
+    sk_gpu_test::GrContextFactory::ContextType      fContextType;
+    sk_gpu_test::GrContextFactory::ContextOptions   fContextOptions;
+    int                                             fSampleCount;
+    bool                                            fUseDIText;
+    SkColorType                                     fColorType;
+    sk_sp<SkColorSpace>                             fColorSpace;
+    bool                                            fThreaded;
 };
 
 class PDFSink : public Sink {
 public:
-    PDFSink(const char* rasterizer);
-
+    PDFSink(bool pdfa = false) : fPDFA(pdfa) {}
     Error draw(const Src&, SkBitmap*, SkWStream*, SkString*) const override;
     const char* fileExtension() const override { return "pdf"; }
     SinkFlags flags() const override { return SinkFlags{ SinkFlags::kVector, SinkFlags::kDirect }; }
-private:
-    const char* fRasterizer;
+    bool fPDFA;
 };
 
 class XPSSink : public Sink {
@@ -249,13 +318,14 @@ public:
 
 class RasterSink : public Sink {
 public:
-    explicit RasterSink(SkColorType);
+    explicit RasterSink(SkColorType, sk_sp<SkColorSpace> = nullptr);
 
     Error draw(const Src&, SkBitmap*, SkWStream*, SkString*) const override;
     const char* fileExtension() const override { return "png"; }
     SinkFlags flags() const override { return SinkFlags{ SinkFlags::kRaster, SinkFlags::kDirect }; }
 private:
-    SkColorType    fColorType;
+    SkColorType         fColorType;
+    sk_sp<SkColorSpace> fColorSpace;
 };
 
 class SKPSink : public Sink {
@@ -309,14 +379,6 @@ private:
     const SkMatrix fMatrix;
 };
 
-class ViaRemote : public Via {
-public:
-    ViaRemote(bool cache, Sink* sink) : Via(sink), fCache(cache) {}
-    Error draw(const Src&, SkBitmap*, SkWStream*, SkString*) const override;
-private:
-    bool fCache;
-};
-
 class ViaSerialization : public Via {
 public:
     explicit ViaSerialization(Sink* sink) : Via(sink) {}
@@ -326,6 +388,12 @@ public:
 class ViaPicture : public Via {
 public:
     explicit ViaPicture(Sink* sink) : Via(sink) {}
+    Error draw(const Src&, SkBitmap*, SkWStream*, SkString*) const override;
+};
+
+class ViaDefer : public Via {
+public:
+    explicit ViaDefer(Sink* sink) : Via(sink) {}
     Error draw(const Src&, SkBitmap*, SkWStream*, SkString*) const override;
 };
 

@@ -15,9 +15,9 @@
 class GrVkGpu;
 
 // uncomment to enable tracing of resource refs
-//#ifdef SK_DEBUG
-//#define SK_TRACE_VK_RESOURCES
-//#endif
+#ifdef SK_DEBUG
+#define SK_TRACE_VK_RESOURCES
+#endif
 
 /** \class GrVkResource
 
@@ -40,15 +40,34 @@ public:
 #ifdef SK_TRACE_VK_RESOURCES
     static const uint32_t& GetKey(const GrVkResource& r) { return r.fKey; }
     static uint32_t Hash(const uint32_t& k) { return k; }
-    static SkTDynamicHash<GrVkResource, uint32_t> fTrace;
-    static SkRandom fRandom;
+
+    class Trace {
+    public:
+        ~Trace() {
+            if (fHash.count()) {
+                SkTDynamicHash<GrVkResource, uint32_t>::Iter iter(&fHash);
+                for (; !iter.done(); ++iter) {
+                    (*iter).dumpInfo();
+                }
+            }
+            SkASSERT(0 == fHash.count());
+        }
+        void add(GrVkResource* r) { fHash.add(r); }
+        void remove(const GrVkResource* r) { fHash.remove(GetKey(*r)); }
+
+    private:
+        SkTDynamicHash<GrVkResource, uint32_t> fHash;
+    };
+    static Trace  fTrace;
+
+    static uint32_t fKeyCounter;
 #endif
 
     /** Default construct, initializing the reference count to 1.
      */
     GrVkResource() : fRefCnt(1) {
 #ifdef SK_TRACE_VK_RESOURCES
-        fKey = fRandom.nextU();
+        fKey = sk_atomic_fetch_add(&fKeyCounter, 1u, sk_memory_order_relaxed);
         fTrace.add(this);
 #endif
     }
@@ -80,7 +99,7 @@ public:
         return false;
     }
 
-    /** Increment the reference count. 
+    /** Increment the reference count.
         Must be balanced by a call to unref() or unrefAndFreeResources().
      */
     void ref() const {
@@ -121,14 +140,20 @@ public:
     }
 #endif
 
+#ifdef SK_TRACE_VK_RESOURCES
+    /** Output a human-readable dump of this resource's information
+     */
+    virtual void dumpInfo() const = 0;
+#endif
+
 private:
-    /** Must be implemented by any subclasses. 
-     *  Deletes any Vk data associated with this resource 
+    /** Must be implemented by any subclasses.
+     *  Deletes any Vk data associated with this resource
      */
     virtual void freeGPUData(const GrVkGpu* gpu) const = 0;
 
-    /** Must be overridden by subclasses that themselves store GrVkResources. 
-     *  Will unrefAndAbandon those resources without deleting the underlying Vk data 
+    /** Must be overridden by subclasses that themselves store GrVkResources.
+     *  Will unrefAndAbandon those resources without deleting the underlying Vk data
      */
     virtual void abandonSubResources() const {}
 
@@ -138,7 +163,7 @@ private:
     void internal_dispose(const GrVkGpu* gpu) const {
         this->freeGPUData(gpu);
 #ifdef SK_TRACE_VK_RESOURCES
-        fTrace.remove(GetKey(*this));
+        fTrace.remove(this);
 #endif
         SkASSERT(0 == fRefCnt);
         fRefCnt = 1;
@@ -151,7 +176,7 @@ private:
     void internal_dispose() const {
         this->abandonSubResources();
 #ifdef SK_TRACE_VK_RESOURCES
-        fTrace.remove(GetKey(*this));
+        fTrace.remove(this);
 #endif
         SkASSERT(0 == fRefCnt);
         fRefCnt = 1;

@@ -35,7 +35,7 @@ public:
      */
     virtual SkCanvas* onNewCanvas() = 0;
 
-    virtual SkSurface* onNewSurface(const SkImageInfo&) = 0;
+    virtual sk_sp<SkSurface> onNewSurface(const SkImageInfo&) = 0;
 
     /**
      *  Allocate an SkImage that represents the current contents of the surface.
@@ -43,7 +43,7 @@ public:
      *  must faithfully represent the current contents, even if the surface
      *  is changed after this called (e.g. it is drawn to via its canvas).
      */
-    virtual SkImage* onNewImageSnapshot(SkBudgeted, ForceCopyMode) = 0;
+    virtual sk_sp<SkImage> onNewImageSnapshot(SkBudgeted, ForceCopyMode) = 0;
 
     /**
      *  Default implementation:
@@ -81,7 +81,7 @@ public:
     virtual void onPrepareForExternalIO() {}
 
     inline SkCanvas* getCachedCanvas();
-    inline SkImage* refCachedImage(SkBudgeted, ForceUnique);
+    inline sk_sp<SkImage> refCachedImage(SkBudgeted, ForceUnique);
 
     bool hasCachedImage() const { return fCachedImage != nullptr; }
 
@@ -114,23 +114,23 @@ SkCanvas* SkSurface_Base::getCachedCanvas() {
     return fCachedCanvas;
 }
 
-SkImage* SkSurface_Base::refCachedImage(SkBudgeted budgeted, ForceUnique unique) {
+sk_sp<SkImage> SkSurface_Base::refCachedImage(SkBudgeted budgeted, ForceUnique unique) {
     SkImage* snap = fCachedImage;
     if (kYes_ForceUnique == unique && snap && !snap->unique()) {
         snap = nullptr;
     }
     if (snap) {
-        return SkRef(snap);
+        return sk_ref_sp(snap);
     }
     ForceCopyMode fcm = (kYes_ForceUnique == unique) ? kYes_ForceCopyMode :
                                                        kNo_ForceCopyMode;
-    snap = this->onNewImageSnapshot(budgeted, fcm);
+    snap = this->onNewImageSnapshot(budgeted, fcm).release();
     if (kNo_ForceUnique == unique) {
         SkASSERT(!fCachedImage);
         fCachedImage = SkSafeRef(snap);
     }
     SkASSERT(!fCachedCanvas || fCachedCanvas->getSurfaceBase() == this);
-    return snap;
+    return sk_sp<SkImage>(snap);
 }
 
 #endif

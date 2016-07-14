@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2011 Google Inc.
  *
@@ -6,9 +5,8 @@
  * found in the LICENSE file.
  */
 
+#include "SkData.h"
 #include "SkDumpCanvas.h"
-
-#ifdef SK_DEVELOPER
 #include "SkPatchUtils.h"
 #include "SkPicture.h"
 #include "SkPixelRef.h"
@@ -392,7 +390,7 @@ void SkDumpCanvas::onDrawImageRect(const SkImage* image, const SkRect* src, cons
         toString(*src, &ss);
         rs.prependf("%s ", ss.c_str());
     }
-    
+
     this->dump(kDrawBitmap_Verb, paint, "drawImageRectToRect(%s %s)",
                bs.c_str(), rs.c_str());
 }
@@ -428,6 +426,14 @@ void SkDumpCanvas::onDrawTextOnPath(const void* text, size_t byteLength, const S
     SkString str;
     toString(text, byteLength, paint.getTextEncoding(), &str);
     this->dump(kDrawText_Verb, &paint, "drawTextOnPath(%s [%d])",
+               str.c_str(), byteLength);
+}
+
+void SkDumpCanvas::onDrawTextRSXform(const void* text, size_t byteLength, const SkRSXform xform[],
+                                     const SkRect* cull, const SkPaint& paint) {
+    SkString str;
+    toString(text, byteLength, paint.getTextEncoding(), &str);
+    this->dump(kDrawText_Verb, &paint, "drawTextRSXform(%s [%d])",
                str.c_str(), byteLength);
 }
 
@@ -480,6 +486,13 @@ void SkDumpCanvas::onDrawPatch(const SkPoint cubics[12], const SkColor colors[4]
               colors[0], colors[1], colors[2], colors[3],
               texCoords[0].x(), texCoords[0].y(), texCoords[1].x(), texCoords[1].y(),
               texCoords[2].x(), texCoords[2].y(), texCoords[3].x(), texCoords[3].y());
+}
+
+void SkDumpCanvas::onDrawAnnotation(const SkRect& rect, const char key[], SkData* value) {
+    SkString str;
+    toString(rect, &str);
+    this->dump(kDrawAnnotation_Verb, nullptr, "drawAnnotation(%s \"%s\" (%zu))",
+               str.c_str(), key, value ? value->size() : 0);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -546,5 +559,3 @@ static void dumpToDebugf(const char text[], void*) {
 }
 
 SkDebugfDumper::SkDebugfDumper() : INHERITED(dumpToDebugf, nullptr) {}
-
-#endif

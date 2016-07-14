@@ -12,12 +12,6 @@
 
 #include <stdio.h>
 
-#if GR_GL_PER_GL_FUNC_CALLBACK
-namespace {
-void GrGLDefaultInterfaceCallback(const GrGLInterface*) {}
-}
-#endif
-
 const GrGLInterface* GrGLInterfaceAddTestDebugMarker(const GrGLInterface* interface,
                                                      GrGLInsertEventMarkerProc insertEventMarkerFn,
                                                      GrGLPushGroupMarkerProc pushGroupMarkerFn,
@@ -68,11 +62,6 @@ const GrGLInterface* GrGLInterfaceRemoveNVPR(const GrGLInterface* interface) {
 
 GrGLInterface::GrGLInterface() {
     fStandard = kNone_GrGLStandard;
-
-#if GR_GL_PER_GL_FUNC_CALLBACK
-    fCallback = GrGLDefaultInterfaceCallback;
-    fCallbackData = 0;
-#endif
 }
 
 GrGLInterface* GrGLInterface::NewClone(const GrGLInterface* interface) {
@@ -82,10 +71,6 @@ GrGLInterface* GrGLInterface::NewClone(const GrGLInterface* interface) {
     clone->fStandard = interface->fStandard;
     clone->fExtensions = interface->fExtensions;
     clone->fFunctions = interface->fFunctions;
-#if GR_GL_PER_GL_FUNC_CALLBACK
-    clone->fCallback = interface->fCallback;
-    clone->fCallbackData = interface->fCallbackData;
-#endif
     return clone;
 }
 
@@ -216,15 +201,6 @@ bool GrGLInterface::validate() const {
     if (GR_GL_INVALID_VER == glVer) {
         RETURN_FALSE_INTERFACE
     }
-    // TODO: Remove this once command buffer implements full ES3.
-    bool ALLOW_MISSING_FUNCTIONS_FOR_INCOMPLETE_COMMAND_BUFFER_ES3 = false;
-    if (kGLES_GrGLStandard == fStandard && glVer >= GR_GL_VER(3,0)) {
-        const GrGLubyte* rendererUByte;
-        GR_GL_CALL_RET(this, rendererUByte, GetString(GR_GL_RENDERER));
-        const char* renderer = reinterpret_cast<const char*>(rendererUByte);
-        ALLOW_MISSING_FUNCTIONS_FOR_INCOMPLETE_COMMAND_BUFFER_ES3 =
-                0 == strcmp(renderer, "Chromium");
-    }
 
     // Now check that baseline ES/Desktop fns not covered above are present
     // and that we have fn pointers for any advertised fExtensions that we will
@@ -315,10 +291,8 @@ bool GrGLInterface::validate() const {
             }
         }
     } else if (glVer >= GR_GL_VER(3,0) || fExtensions.has("GL_EXT_texture_storage")) {
-        if (!ALLOW_MISSING_FUNCTIONS_FOR_INCOMPLETE_COMMAND_BUFFER_ES3) {
-            if (nullptr == fFunctions.fTexStorage2D) {
-                RETURN_FALSE_INTERFACE
-            }
+        if (nullptr == fFunctions.fTexStorage2D) {
+            RETURN_FALSE_INTERFACE
         }
     }
 
@@ -435,6 +409,27 @@ bool GrGLInterface::validate() const {
     }
 
     if (kGL_GrGLStandard == fStandard) {
+        if (glVer >= GR_GL_VER(3,1)) {
+            if (nullptr == fFunctions.fTexBuffer) {
+                RETURN_FALSE_INTERFACE;
+            }
+        }
+        if (glVer >= GR_GL_VER(4,3)) {
+            if (nullptr == fFunctions.fTexBufferRange) {
+                RETURN_FALSE_INTERFACE;
+            }
+        }
+    } else {
+        if (glVer >= GR_GL_VER(3,2) || fExtensions.has("GL_OES_texture_buffer") ||
+            fExtensions.has("GL_EXT_texture_buffer")) {
+            if (nullptr == fFunctions.fTexBuffer ||
+                nullptr == fFunctions.fTexBufferRange) {
+                RETURN_FALSE_INTERFACE;
+            }
+        }
+    }
+
+    if (kGL_GrGLStandard == fStandard) {
         if (glVer >= GR_GL_VER(3, 0) || fExtensions.has("GL_ARB_vertex_array_object")) {
             if (nullptr == fFunctions.fBindVertexArray ||
                 nullptr == fFunctions.fDeleteVertexArrays ||
@@ -491,11 +486,17 @@ bool GrGLInterface::validate() const {
     if (glVer >= GR_GL_VER(3,0) ||
         (kGLES_GrGLStandard == fStandard && fExtensions.has("GL_EXT_map_buffer_range")) ||
         (kGL_GrGLStandard == fStandard && fExtensions.has("GL_ARB_map_buffer_range"))) {
-        if (!ALLOW_MISSING_FUNCTIONS_FOR_INCOMPLETE_COMMAND_BUFFER_ES3) {
-            if (nullptr == fFunctions.fMapBufferRange ||
-                nullptr == fFunctions.fFlushMappedBufferRange) {
-                RETURN_FALSE_INTERFACE;
-            }
+        if (nullptr == fFunctions.fMapBufferRange ||
+            nullptr == fFunctions.fFlushMappedBufferRange) {
+            RETURN_FALSE_INTERFACE;
+        }
+    }
+
+    if ((kGL_GrGLStandard == fStandard &&
+         (glVer >= GR_GL_VER(3,2) || fExtensions.has("GL_ARB_texture_multisample"))) ||
+        (kGLES_GrGLStandard == fStandard && glVer >= GR_GL_VER(3,1))) {
+        if (NULL == fFunctions.fGetMultisamplefv) {
+            RETURN_FALSE_INTERFACE
         }
     }
 
@@ -577,12 +578,10 @@ bool GrGLInterface::validate() const {
             }
         }
     } else if (kGLES_GrGLStandard == fStandard) {
-        if (!ALLOW_MISSING_FUNCTIONS_FOR_INCOMPLETE_COMMAND_BUFFER_ES3) {
-            if (glVer >= GR_GL_VER(3,0) || fExtensions.has("GL_EXT_draw_instanced")) {
-                if (nullptr == fFunctions.fDrawArraysInstanced ||
-                    nullptr == fFunctions.fDrawElementsInstanced) {
-                    RETURN_FALSE_INTERFACE
-                }
+        if (glVer >= GR_GL_VER(3,0) || fExtensions.has("GL_EXT_draw_instanced")) {
+            if (nullptr == fFunctions.fDrawArraysInstanced ||
+                nullptr == fFunctions.fDrawElementsInstanced) {
+                RETURN_FALSE_INTERFACE
             }
         }
     }
@@ -594,16 +593,15 @@ bool GrGLInterface::validate() const {
             }
         }
     } else if (kGLES_GrGLStandard == fStandard) {
-        if (!ALLOW_MISSING_FUNCTIONS_FOR_INCOMPLETE_COMMAND_BUFFER_ES3) {
-            if (glVer >= GR_GL_VER(3,0) || fExtensions.has("GL_EXT_instanced_arrays")) {
-                if (nullptr == fFunctions.fVertexAttribDivisor) {
-                    RETURN_FALSE_INTERFACE
-                }
+        if (glVer >= GR_GL_VER(3,0) || fExtensions.has("GL_EXT_instanced_arrays")) {
+            if (nullptr == fFunctions.fVertexAttribDivisor) {
+                RETURN_FALSE_INTERFACE
             }
         }
     }
 
-    if ((kGL_GrGLStandard == fStandard && glVer >= GR_GL_VER(4,3)) ||
+    if ((kGL_GrGLStandard == fStandard &&
+         (glVer >= GR_GL_VER(4,0) || fExtensions.has("GL_ARB_draw_indirect"))) ||
         (kGLES_GrGLStandard == fStandard && glVer >= GR_GL_VER(3,1))) {
         if (NULL == fFunctions.fDrawArraysIndirect ||
             NULL == fFunctions.fDrawElementsIndirect) {
@@ -611,7 +609,8 @@ bool GrGLInterface::validate() const {
         }
     }
 
-    if ((kGL_GrGLStandard == fStandard && glVer >= GR_GL_VER(4,3)) ||
+    if ((kGL_GrGLStandard == fStandard &&
+         (glVer >= GR_GL_VER(4,3) || fExtensions.has("GL_ARB_multi_draw_indirect"))) ||
         (kGLES_GrGLStandard == fStandard && fExtensions.has("GL_EXT_multi_draw_indirect"))) {
         if (NULL == fFunctions.fMultiDrawArraysIndirect ||
             NULL == fFunctions.fMultiDrawElementsIndirect) {
@@ -755,6 +754,11 @@ bool GrGLInterface::validate() const {
                 RETURN_FALSE_INTERFACE
             }
         }
+        if (glVer >= GR_GL_VER(3,1)) {
+            if (nullptr == fFunctions.fTextureBuffer) {
+                RETURN_FALSE_INTERFACE;
+            }
+        }
     }
 
     if ((kGL_GrGLStandard == fStandard && glVer >= GR_GL_VER(4,3)) ||
@@ -766,6 +770,17 @@ bool GrGLInterface::validate() const {
             nullptr == fFunctions.fPushDebugGroup ||
             nullptr == fFunctions.fPopDebugGroup ||
             nullptr == fFunctions.fObjectLabel) {
+            RETURN_FALSE_INTERFACE
+        }
+    }
+
+    if ((kGL_GrGLStandard == fStandard && glVer >= GR_GL_VER(4,0)) ||
+        fExtensions.has("GL_ARB_sample_shading")) {
+        if (nullptr == fFunctions.fMinSampleShading) {
+            RETURN_FALSE_INTERFACE
+        }
+    } else if (kGL_GrGLStandard == fStandard && fExtensions.has("GL_OES_sample_shading")) {
+        if (nullptr == fFunctions.fMinSampleShading) {
             RETURN_FALSE_INTERFACE
         }
     }

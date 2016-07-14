@@ -5,6 +5,7 @@
  * found in the LICENSE file.
  */
 
+#include "SkBitmapProcShader.h"
 #include "SkColor.h"
 #include "SkColorMatrixFilter.h"
 #include "SkGradientShader.h"
@@ -36,13 +37,12 @@ DEF_TEST(SkColor4f_FromColor, reporter) {
         SkColor     fC;
         SkColor4f   fC4;
     } recs[] = {
-        { SK_ColorBLACK, { 1, 0, 0, 0 } },
+        { SK_ColorBLACK, { 0, 0, 0, 1 } },
         { SK_ColorWHITE, { 1, 1, 1, 1 } },
-        { SK_ColorRED,   { 1, 1, 0, 0 } },
-        { SK_ColorGREEN, { 1, 0, 1, 0 } },
-        { SK_ColorBLUE,  { 1, 0, 0, 1 } },
+        { SK_ColorRED,   { 1, 0, 0, 1 } },
+        { SK_ColorGREEN, { 0, 1, 0, 1 } },
+        { SK_ColorBLUE,  { 0, 0, 1, 1 } },
         { 0,             { 0, 0, 0, 0 } },
-        { 0x55AAFF00,    { 1/3.0f, 2/3.0f, 1, 0 } },
     };
 
     for (const auto& r : recs) {
@@ -57,126 +57,66 @@ DEF_TEST(Color4f_premul, reporter) {
     for (int i = 0; i < 1000000; ++i) {
         // First just test opaque colors, so that the premul should be exact
         SkColor4f c4 {
-            1, rand.nextUScalar1(), rand.nextUScalar1(), rand.nextUScalar1()
+            rand.nextUScalar1(), rand.nextUScalar1(), rand.nextUScalar1(), 1
         };
         SkPM4f pm4 = c4.premul();
-        REPORTER_ASSERT(reporter, pm4.fVec[SK_A_INDEX] == c4.fA);
-        REPORTER_ASSERT(reporter, pm4.fVec[SK_R_INDEX] == c4.fA * c4.fR);
-        REPORTER_ASSERT(reporter, pm4.fVec[SK_G_INDEX] == c4.fA * c4.fG);
-        REPORTER_ASSERT(reporter, pm4.fVec[SK_B_INDEX] == c4.fA * c4.fB);
+        REPORTER_ASSERT(reporter, pm4.a() == c4.fA);
+        REPORTER_ASSERT(reporter, pm4.r() == c4.fA * c4.fR);
+        REPORTER_ASSERT(reporter, pm4.g() == c4.fA * c4.fG);
+        REPORTER_ASSERT(reporter, pm4.b() == c4.fA * c4.fB);
 
         // We compare with a tolerance, in case our premul multiply is implemented at slightly
         // different precision than the test code.
         c4.fA = rand.nextUScalar1();
         pm4 = c4.premul();
         REPORTER_ASSERT(reporter, pm4.fVec[SK_A_INDEX] == c4.fA);
-        REPORTER_ASSERT(reporter, nearly_equal(pm4.fVec[SK_R_INDEX], c4.fA * c4.fR));
-        REPORTER_ASSERT(reporter, nearly_equal(pm4.fVec[SK_G_INDEX], c4.fA * c4.fG));
-        REPORTER_ASSERT(reporter, nearly_equal(pm4.fVec[SK_B_INDEX], c4.fA * c4.fB));
+        REPORTER_ASSERT(reporter, nearly_equal(pm4.r(), c4.fA * c4.fR));
+        REPORTER_ASSERT(reporter, nearly_equal(pm4.g(), c4.fA * c4.fG));
+        REPORTER_ASSERT(reporter, nearly_equal(pm4.b(), c4.fA * c4.fB));
     }
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////
 
-static SkColorFilter* make_mode_cf() {
-    return SkColorFilter::CreateModeFilter(0xFFBB8855, SkXfermode::kPlus_Mode);
+static sk_sp<SkColorFilter> make_mode_cf() {
+    return SkColorFilter::MakeModeFilter(0xFFBB8855, SkXfermode::kPlus_Mode);
 }
 
-static SkColorFilter* make_mx_cf() {
+static sk_sp<SkColorFilter> make_mx_cf() {
     const float mx[] = {
         0.5f, 0,    0, 0, 0.1f,
         0,    0.5f, 0, 0, 0.2f,
         0,    0,    1, 0, -0.1f,
         0,    0,    0, 1, 0,
     };
-    return SkColorMatrixFilter::Create(mx);
+    return SkColorFilter::MakeMatrixFilterRowMajor255(mx);
 }
 
-static SkColorFilter* make_compose_cf() {
-    SkAutoTUnref<SkColorFilter> cf0(make_mode_cf());
-    SkAutoTUnref<SkColorFilter> cf1(make_mx_cf());
-    return SkColorFilter::CreateComposeFilter(cf0, cf1);
+static sk_sp<SkColorFilter> make_compose_cf() {
+    return SkColorFilter::MakeComposeFilter(make_mode_cf(), make_mx_cf());
 }
 
-static SkShader* make_color_sh() { return SkShader::CreateColorShader(0xFFBB8855); }
-
-static SkShader* make_image_sh() {
-    const SkImageInfo info = SkImageInfo::MakeN32Premul(2, 2);
-    const SkPMColor pixels[] {
-        SkPackARGB32(0xFF, 0xBB, 0x88, 0x55),
-        SkPackARGB32(0xFF, 0xBB, 0x88, 0x55),
-        SkPackARGB32(0xFF, 0xBB, 0x88, 0x55),
-        SkPackARGB32(0xFF, 0xBB, 0x88, 0x55),
-    };
-    SkAutoTUnref<SkImage> image(SkImage::NewRasterCopy(info, pixels, sizeof(SkPMColor) * 2));
-    return image->newShader(SkShader::kClamp_TileMode, SkShader::kClamp_TileMode);
-}
-
-static SkShader* make_grad_sh() {
-    const SkPoint pts[] {{ 0, 0 }, { 100, 100 }};
-    const SkColor colors[] { SK_ColorRED, SK_ColorBLUE };
-    return SkGradientShader::CreateLinear(pts, colors, nullptr, 2, SkShader::kClamp_TileMode);
-}
-
-static SkShader* make_cf_sh() {
-    SkAutoTUnref<SkColorFilter> filter(make_mx_cf());
-    SkAutoTUnref<SkShader> shader(make_color_sh());
-    return shader->newWithColorFilter(filter);
-}
-
-static void compare_spans(const SkPM4f span4f[], const SkPMColor span4b[], int count,
-                          skiatest::Reporter* reporter, float tolerance = 1.0f/255) {
+static bool compare_spans(const SkPM4f span4f[], const SkPMColor span4b[], int count,
+                          float tolerance = 1.0f/255) {
     for (int i = 0; i < count; ++i) {
         SkPM4f c0 = SkPM4f::FromPMColor(span4b[i]);
         SkPM4f c1 = span4f[i];
-        REPORTER_ASSERT(reporter, nearly_equal(c0, c1, tolerance));
-    }
-}
-
-DEF_TEST(Color4f_shader, reporter) {
-    struct {
-        SkShader* (*fFact)();
-        bool      fSupports4f;
-        float     fTolerance;
-    } recs[] = {
-        { make_color_sh, true,  1.0f/255   },
-        // PMColor 4f gradients are interpolated in 255-multiplied values, so we need a
-        // slightly relaxed tolerance to accommodate the cumulative precision deviation.
-        { make_grad_sh,  true,  1.001f/255 },
-        { make_image_sh, false, 1.0f/255   },
-        { make_cf_sh,    true,  1.0f/255   },
-    };
-
-    SkPaint paint;
-    for (const auto& rec : recs) {
-        uint32_t storage[200];
-        paint.setShader(rec.fFact())->unref();
-        // Encourage 4f context selection. At some point we may need
-        // to instantiate two separate contexts for optimal 4b/4f selection.
-        const SkShader::ContextRec contextRec(paint, SkMatrix::I(), nullptr,
-                                              SkShader::ContextRec::kPM4f_DstType);
-        SkASSERT(paint.getShader()->contextSize(contextRec) <= sizeof(storage));
-        SkShader::Context* ctx = paint.getShader()->createContext(contextRec, storage);
-        if (rec.fSupports4f) {
-            const int N = 100;
-            SkPM4f buffer4f[N];
-            ctx->shadeSpan4f(0, 0, buffer4f, N);
-            SkPMColor buffer4b[N];
-            ctx->shadeSpan(0, 0, buffer4b, N);
-            compare_spans(buffer4f, buffer4b, N, reporter, rec.fTolerance);
+        if (!nearly_equal(c0, c1, tolerance)) {
+            return false;
         }
-        ctx->~Context();
     }
+    return true;
 }
 
 DEF_TEST(Color4f_colorfilter, reporter) {
     struct {
-        SkColorFilter* (*fFact)();
-        bool           fSupports4f;
+        sk_sp<SkColorFilter>    (*fFact)();
+        bool                    fSupports4f;
+        const char*             fName;
     } recs[] = {
-        { make_mode_cf,     true },
-        { make_mx_cf,       true },
-        { make_compose_cf,  true },
+        { make_mode_cf,     true, "mode" },
+        { make_mx_cf,       true, "matrix" },
+        { make_compose_cf,  true, "compose" },
     };
 
     // prepare the src
@@ -189,15 +129,15 @@ DEF_TEST(Color4f_colorfilter, reporter) {
         src4f[i] = SkPM4f::FromPMColor(src4b[i]);
     }
     // confirm that our srcs are (nearly) equal
-    compare_spans(src4f, src4b, N, reporter);
+    REPORTER_ASSERT(reporter, compare_spans(src4f, src4b, N));
 
     for (const auto& rec : recs) {
-        SkAutoTUnref<SkColorFilter> filter(rec.fFact());
+        auto filter(rec.fFact());
         SkPMColor dst4b[N];
         filter->filterSpan(src4b, N, dst4b);
         SkPM4f dst4f[N];
         filter->filterSpan4f(src4f, N, dst4f);
-        compare_spans(dst4f, dst4b, N, reporter);
+        REPORTER_ASSERT(reporter, compare_spans(dst4f, dst4b, N));
     }
 }
 

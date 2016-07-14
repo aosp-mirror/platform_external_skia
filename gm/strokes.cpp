@@ -128,7 +128,7 @@ protected:
             canvas->drawPath(fMoveZfPath, strokePaint);
             dashPaint = strokePaint;
             const SkScalar intervals[] = { 0, 10 };
-            dashPaint.setPathEffect(SkDashPathEffect::Create(intervals, 2, 0))->unref();
+            dashPaint.setPathEffect(SkDashPathEffect::Make(intervals, 2, 0));
             SkPath fillPath;
             dashPaint.getFillPath(fDashedfPath, &fillPath);
             canvas->translate(0, 20);
@@ -243,7 +243,7 @@ DEF_SIMPLE_GM(quadcap, canvas, 200, 200) {
     p.setStrokeWidth(0);
     SkPath path;
     SkPoint pts[] = {{105.738571f,13.126318f},
-            {105.738571f,13.126318f}, 
+            {105.738571f,13.126318f},
             {123.753784f,1.f}};
     SkVector tangent = pts[1] - pts[2];
     tangent.normalize();
@@ -290,12 +290,6 @@ protected:
         return SkISize::Make(W, H*2);
     }
 
-    static void rotate(SkScalar angle, SkScalar px, SkScalar py, SkCanvas* canvas) {
-        SkMatrix matrix;
-        matrix.setRotate(angle, px, py);
-        canvas->concat(matrix);
-    }
-
     void onDraw(SkCanvas* canvas) override {
         canvas->drawColor(SK_ColorWHITE);
 
@@ -316,7 +310,7 @@ protected:
             for (int i = 0; i < N/2; i++) {
                 SkRect r;
                 rnd_rect(&r, &paint, rand);
-                rotate(SkIntToScalar(15), SW/2, SH/2, canvas);
+                canvas->rotate(SkIntToScalar(15), SW/2, SH/2);
                 canvas->drawPath(fPath, paint);
             }
         }
@@ -449,7 +443,7 @@ protected:
         SkPaint paint;
         paint.setStyle(SkPaint::kStroke_Style);
         paint.setStrokeWidth(0.055f);
-    
+
         canvas->scale(1000, 1000);
         canvas->drawCircle(0, 2, 1.97f, paint);
     }

@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2012 Google Inc.
  *
@@ -19,6 +18,7 @@
 #include "SkTArray.h"
 #include "UrlDataManager.h"
 
+class GrAuditTrail;
 class SkNWayCanvas;
 
 class SK_API SkDebugCanvas : public SkCanvas {
@@ -43,6 +43,12 @@ public:
     void setClipVizColor(SkColor clipVizColor) { this->fClipVizColor = clipVizColor; }
     SkColor getClipVizColor() const { return fClipVizColor; }
 
+    void setDrawGpuBatchBounds(bool drawGpuBatchBounds) {
+        fDrawGpuBatchBounds = drawGpuBatchBounds;
+    }
+
+    bool getDrawGpuBatchBounds() const { return fDrawGpuBatchBounds; }
+
     bool getAllowSimplifyClip() const { return fAllowSimplifyClip; }
 
     void setPicture(SkPicture* picture) { fPicture = picture; }
@@ -62,8 +68,9 @@ public:
         Executes the draw calls up to the specified index.
         @param canvas  The canvas being drawn to
         @param index  The index of the final command being executed
+        @param m an optional Mth gpu batch to highlight, or -1
      */
-    void drawTo(SkCanvas* canvas, int index);
+    void drawTo(SkCanvas* canvas, int index, int m = -1);
 
     /**
         Returns the most recently calculated transformation matrix
@@ -148,10 +155,12 @@ public:
 
     /**
         Returns a JSON object representing up to the Nth draw, where N is less than
-        SkDebugCanvas::getSize(). The encoder may use the UrlDataManager to store binary data such 
+        SkDebugCanvas::getSize(). The encoder may use the UrlDataManager to store binary data such
         as images, referring to them via URLs embedded in the JSON.
      */
     Json::Value toJSON(UrlDataManager& urlDataManager, int n, SkCanvas*);
+
+    Json::Value toJSONBatchList(int n, SkCanvas*);
 
 ////////////////////////////////////////////////////////////////////////////////
 // Inherited from SkCanvas
@@ -185,6 +194,9 @@ protected:
     void didConcat(const SkMatrix&) override;
     void didSetMatrix(const SkMatrix&) override;
 
+    void didTranslateZ(SkScalar) override;
+
+    void onDrawAnnotation(const SkRect&, const char[], SkData*) override;
     void onDrawDRRect(const SkRRect&, const SkRRect&, const SkPaint&) override;
     void onDrawText(const void* text, size_t byteLength, SkScalar x, SkScalar y,
                     const SkPaint&) override;
@@ -194,6 +206,8 @@ protected:
                         SkScalar constY, const SkPaint&) override;
     void onDrawTextOnPath(const void* text, size_t byteLength, const SkPath& path,
                           const SkMatrix* matrix, const SkPaint&) override;
+    void onDrawTextRSXform(const void* text, size_t byteLength, const SkRSXform[], const SkRect*,
+                           const SkPaint&) override;
     void onDrawTextBlob(const SkTextBlob* blob, SkScalar x, SkScalar y,
                         const SkPaint& paint) override;
 
@@ -245,6 +259,7 @@ private:
     bool fOverrideFilterQuality;
     SkFilterQuality fFilterQuality;
     SkColor fClipVizColor;
+    bool fDrawGpuBatchBounds;
 
     SkAutoTUnref<SkNWayCanvas> fPaintFilterCanvas;
 
@@ -276,7 +291,11 @@ private:
     void outputPointsCommon(const SkPoint* pts, int count);
     void outputScalar(SkScalar num);
 
+    GrAuditTrail* getAuditTrail(SkCanvas*);
+
     void updatePaintFilterCanvas();
+    void drawAndCollectBatches(int n, SkCanvas*);
+    void cleanupAuditTrail(SkCanvas*);
 
     typedef SkCanvas INHERITED;
 };

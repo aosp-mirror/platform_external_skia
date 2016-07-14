@@ -171,27 +171,25 @@ public:
     void blitRect(int x, int y, int width, int height) override;
     void blitAntiH(int x, int y, const SkAlpha[], const int16_t[]) override;
     void blitMask(const SkMask&, const SkIRect&) override;
-    
+
 private:
     SkXfermode*         fXfermode;
     SkPMColor*          fBuffer;
     SkBlitRow::Proc32   fProc32;
     SkBlitRow::Proc32   fProc32Blend;
     bool                fShadeDirectlyIntoDevice;
-    
+
     // illegal
     SkARGB32_Shader_Blitter& operator=(const SkARGB32_Shader_Blitter&);
-    
+
     typedef SkShaderBlitter INHERITED;
 };
 
-SkBlitter* SkBlitter_ARGB32_Create(const SkPixmap& device, const SkPaint& paint,
-                                   SkShader::Context* shaderContext,
-                                   SkTBlitterAllocator* allocator);
+SkBlitter* SkBlitter_ARGB32_Create(const SkPixmap& device, const SkPaint&, SkShader::Context*,
+                                   SkTBlitterAllocator*);
 
-SkBlitter* SkBlitter_ARGB64_Create(const SkPixmap& device, const SkPaint& paint,
-                                   SkShader::Context* shaderContext,
-                                   SkTBlitterAllocator* allocator);
+SkBlitter* SkBlitter_F16_Create(const SkPixmap& device, const SkPaint&, SkShader::Context*,
+                                SkTBlitterAllocator*);
 
 ///////////////////////////////////////////////////////////////////////////////
 

@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2006 The Android Open Source Project
  *
@@ -146,14 +145,14 @@ SkScalar SkPath1DPathEffect::begin(SkScalar contourLength) const {
     return fInitialOffset;
 }
 
-SkFlattenable* SkPath1DPathEffect::CreateProc(SkReadBuffer& buffer) {
+sk_sp<SkFlattenable> SkPath1DPathEffect::CreateProc(SkReadBuffer& buffer) {
     SkScalar advance = buffer.readScalar();
     if (advance > 0) {
         SkPath path;
         buffer.readPath(&path);
         SkScalar phase = buffer.readScalar();
         Style style = (Style)buffer.readUInt();
-        return SkPath1DPathEffect::Create(path, advance, phase, style);
+        return SkPath1DPathEffect::Make(path, advance, phase, style);
     }
     return nullptr;
 }
@@ -204,10 +203,10 @@ void SkPath1DPathEffect::toString(SkString* str) const {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-SkPathEffect* SkPath1DPathEffect::Create(const SkPath& path, SkScalar advance, SkScalar phase,
-                                         Style style) {
+sk_sp<SkPathEffect> SkPath1DPathEffect::Make(const SkPath& path, SkScalar advance, SkScalar phase,
+                                             Style style) {
     if (advance <= 0 || path.isEmpty()) {
         return nullptr;
     }
-    return new SkPath1DPathEffect(path, advance, phase, style);
+    return sk_sp<SkPathEffect>(new SkPath1DPathEffect(path, advance, phase, style));
 }

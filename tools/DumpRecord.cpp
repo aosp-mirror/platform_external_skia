@@ -68,12 +68,31 @@ public:
 
             const SkRecord& record = *bp->record();
             for (int i = 0; i < record.count(); i++) {
-                record.visit<void>(i, *this);
+                record.visit(i, *this);
             }
 
             --fIndent;
         }
     }
+
+#if 0
+    void print(const SkRecords::DrawAnnotation& command, double ns) {
+        int us = (int)(ns * 1e-3);
+        if (!fTimeWithCommand) {
+            printf("%6dus  ", us);
+        }
+        printf("%*d ", fDigits, fIndex++);
+        for (int i = 0; i < fIndent; i++) {
+            printf("    ");
+        }
+        if (fTimeWithCommand) {
+            printf("%6dus  ", us);
+        }
+        printf("DrawAnnotation [%g %g %g %g] %s\n",
+               command.rect.left(), command.rect.top(), command.rect.right(), command.rect.bottom(),
+               command.key.c_str());
+    }
+#endif
 
 private:
     template <typename T>
@@ -119,6 +138,6 @@ void DumpRecord(const SkRecord& record,
                   bool timeWithCommand) {
     Dumper dumper(canvas, record.count(), timeWithCommand);
     for (int i = 0; i < record.count(); i++) {
-        record.visit<void>(i, dumper);
+        record.visit(i, dumper);
     }
 }

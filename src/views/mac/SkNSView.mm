@@ -337,13 +337,14 @@ static CGLContextObj createGLContext(int msaaSampleCount) {
         kCGLPFAStencilSize, (CGLPixelFormatAttribute) 8,
         kCGLPFAAccelerated,
         kCGLPFADoubleBuffer,
+        kCGLPFAOpenGLProfile, (CGLPixelFormatAttribute) kCGLOGLPVersion_3_2_Core,
         (CGLPixelFormatAttribute)0
     };
     
     CGLPixelFormatObj format;
     GLint npix = 0;
     if (msaaSampleCount > 0) {
-        static int kAttributeCount = SK_ARRAY_COUNT(attributes);
+        static const int kAttributeCount = SK_ARRAY_COUNT(attributes);
         CGLPixelFormatAttribute msaaAttributes[kAttributeCount + 5];
         memcpy(msaaAttributes, attributes, sizeof(attributes));
         SkASSERT(0 == msaaAttributes[kAttributeCount - 1]);

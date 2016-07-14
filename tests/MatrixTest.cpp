@@ -42,7 +42,7 @@ static bool are_equal(skiatest::Reporter* reporter,
                 if (0 == aVal && 0 == bVal && aValI != bValI) {
                     foundZeroSignDiff = true;
                 } else {
-                    REPORTER_ASSERT(reporter, aVal == bVal && aValI == aValI);
+                    REPORTER_ASSERT(reporter, aVal == bVal && aValI == bValI);
                 }
             }
             REPORTER_ASSERT(reporter, foundZeroSignDiff);
@@ -93,10 +93,10 @@ static void test_set9(skiatest::Reporter* reporter) {
     SkMatrix m;
     m.reset();
     assert9(reporter, m, 1, 0, 0, 0, 1, 0, 0, 0, 1);
-    
+
     m.setScale(2, 3);
     assert9(reporter, m, 2, 0, 0, 0, 3, 0, 0, 0, 1);
-    
+
     m.postTranslate(4, 5);
     assert9(reporter, m, 2, 0, 4, 0, 3, 5, 0, 0, 1);
 
@@ -939,6 +939,11 @@ DEF_TEST(Matrix, reporter) {
     test_set9(reporter);
 
     test_decompScale(reporter);
+
+    mat.setScaleTranslate(2, 3, 1, 4);
+    mat2.setScale(2, 3);
+    mat2.postTranslate(1, 4);
+    REPORTER_ASSERT(reporter, mat == mat2);
 }
 
 DEF_TEST(Matrix_Concat, r) {
@@ -952,4 +957,30 @@ DEF_TEST(Matrix_Concat, r) {
     expected.setConcat(a,b);
 
     REPORTER_ASSERT(r, expected == SkMatrix::Concat(a, b));
+}
+
+// Test that all variants of maprect are correct.
+DEF_TEST(Matrix_maprects, r) {
+    const SkScalar scale = 1000;
+    
+    SkMatrix mat;
+    mat.setScale(2, 3);
+    mat.postTranslate(1, 4);
+
+    SkRandom rand;
+    for (int i = 0; i < 10000; ++i) {
+        SkRect src = SkRect::MakeLTRB(rand.nextSScalar1() * scale,
+                                      rand.nextSScalar1() * scale,
+                                      rand.nextSScalar1() * scale,
+                                      rand.nextSScalar1() * scale);
+        SkRect dst[3];
+        
+        mat.mapPoints((SkPoint*)&dst[0].fLeft, (SkPoint*)&src.fLeft, 2);
+        dst[0].sort();
+        mat.mapRect(&dst[1], src);
+        mat.mapRectScaleTranslate(&dst[2], src);
+
+        REPORTER_ASSERT(r, dst[0] == dst[1]);
+        REPORTER_ASSERT(r, dst[0] == dst[2]);
+    }
 }

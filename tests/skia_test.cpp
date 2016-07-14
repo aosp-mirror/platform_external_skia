@@ -24,6 +24,7 @@
 #endif
 
 using namespace skiatest;
+using namespace sk_gpu_test;
 
 DEFINE_bool2(extendedTest, x, false, "run extended tests for pathOps.");
 
@@ -95,9 +96,9 @@ public:
           int fTestCount;
       } reporter;
 
-      const SkMSec start = SkTime::GetMSecs();
+      const Timer timer;
       fTest.proc(&reporter, fGrContextFactory);
-      SkMSec elapsed = SkTime::GetMSecs() - start;
+      SkMSec elapsed = timer.elapsedMsInt();
       if (reporter.fError) {
           fStatus->reportFailure();
       }

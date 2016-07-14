@@ -8,9 +8,11 @@
 #include "SkAndroidSDKCanvas.h"
 
 #include "SkColorFilter.h"
+#include "SkDrawLooper.h"
 #include "SkPaint.h"
 #include "SkPathEffect.h"
 #include "SkShader.h"
+#include "SkSurface.h"
 #include "SkTLazy.h"
 
 namespace {
@@ -68,7 +70,7 @@ void Filter(SkPaint* paint) {
         bool isMode = cf->asColorMode(&color, &mode);
         if (isMode && mode > SkXfermode::kLighten_Mode) {
             paint->setColorFilter(
-                SkColorFilter::CreateModeFilter(color, SkXfermode::kSrcOver_Mode));
+                SkColorFilter::MakeModeFilter(color, SkXfermode::kSrcOver_Mode));
         } else if (!isMode && !cf->asColorMatrix(srcColorMatrix)) {
             paint->setColorFilter(nullptr);
         }
@@ -198,12 +200,18 @@ void SkAndroidSDKCanvas::onDrawPosTextH(const void* text,
     fProxyTarget->drawPosTextH(text, byteLength, xpos, constY, filteredPaint);
 }
 void SkAndroidSDKCanvas::onDrawTextOnPath(const void* text,
-                                                   size_t byteLength,
-                                                   const SkPath& path,
-                                                   const SkMatrix* matrix,
-                                                   const SkPaint& paint) {
+                                          size_t byteLength,
+                                          const SkPath& path,
+                                          const SkMatrix* matrix,
+                                          const SkPaint& paint) {
     FILTER(paint);
     fProxyTarget->drawTextOnPath(text, byteLength, path, matrix, filteredPaint);
+}
+void SkAndroidSDKCanvas::onDrawTextRSXform(const void* text, size_t byteLength,
+                                           const SkRSXform xform[], const SkRect* cull,
+                                           const SkPaint& paint) {
+    FILTER(paint);
+    fProxyTarget->drawTextRSXform(text, byteLength, xform, cull, filteredPaint);
 }
 void SkAndroidSDKCanvas::onDrawTextBlob(const SkTextBlob* blob,
                                                  SkScalar x,
@@ -286,27 +294,19 @@ bool SkAndroidSDKCanvas::getClipDeviceBounds(SkIRect* rect) const {
 bool SkAndroidSDKCanvas::isClipEmpty() const { return fProxyTarget->isClipEmpty(); }
 bool SkAndroidSDKCanvas::isClipRect() const { return fProxyTarget->isClipRect(); }
 
-SkSurface* SkAndroidSDKCanvas::onNewSurface(const SkImageInfo& info,
-                                                     const SkSurfaceProps& props) {
-    return fProxyTarget->newSurface(info, &props);
+sk_sp<SkSurface> SkAndroidSDKCanvas::onNewSurface(const SkImageInfo& info,
+                                                  const SkSurfaceProps& props) {
+    return fProxyTarget->makeSurface(info, &props);
 }
 
 bool SkAndroidSDKCanvas::onPeekPixels(SkPixmap* pmap) {
-    SkASSERT(pmap);
-    SkImageInfo info;
-    size_t rowBytes;
-    const void* addr = fProxyTarget->peekPixels(&info, &rowBytes);
-    if (addr) {
-        pmap->reset(info, addr, rowBytes);
-        return true;
-    }
-    return false;
+    return fProxyTarget->peekPixels(pmap);
 }
 
 bool SkAndroidSDKCanvas::onAccessTopLayerPixels(SkPixmap* pmap) {
     SkASSERT(pmap);
     SkImageInfo info;
-    size_t rowBytes; 
+    size_t rowBytes;
     const void* addr = fProxyTarget->accessTopLayerPixels(&info, &rowBytes, nullptr);
     if (addr) {
         pmap->reset(info, addr, rowBytes);
@@ -361,5 +361,3 @@ void SkAndroidSDKCanvas::onClipRegion(const SkRegion& region, SkRegion::Op op) {
 }
 
 void SkAndroidSDKCanvas::onDiscard() { fProxyTarget->discard(); }
-
-

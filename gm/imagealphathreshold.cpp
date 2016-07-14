@@ -27,7 +27,7 @@ void draw_rects(SkCanvas* canvas) {
     canvas->drawRect(SkRect::MakeXYWH(WIDTH / 2, HEIGHT / 2, WIDTH / 2, HEIGHT / 2), rectPaint);
 }
 
-SkPaint create_filter_paint() {
+SkPaint create_filter_paint(SkImageFilter::CropRect* cropRect = nullptr) {
     SkIRect rects[2];
     rects[0] = SkIRect::MakeXYWH(0, 150, WIDTH, HEIGHT - 300);
     rects[1] = SkIRect::MakeXYWH(150, 0, WIDTH - 300, HEIGHT);
@@ -35,7 +35,7 @@ SkPaint create_filter_paint() {
     region.setRects(rects, 2);
 
     SkPaint paint;
-    paint.setImageFilter(SkAlphaThresholdFilter::Create(region, 0.2f, 0.7f))->unref();
+    paint.setImageFilter(SkAlphaThresholdFilter::Make(region, 0.2f, 0.7f, nullptr, cropRect));
     return paint;
 }
 
@@ -45,13 +45,17 @@ namespace skiagm {
 
 class ImageAlphaThresholdGM : public GM {
 public:
-    ImageAlphaThresholdGM() {
+    ImageAlphaThresholdGM(bool useCropRect) : fUseCropRect(true) { 
         this->setBGColor(0xFFFFFFFF);
     }
 
 protected:
 
     SkString onShortName() override {
+        if (fUseCropRect) {
+            return SkString("imagealphathreshold_crop");
+        }
+
         return SkString("imagealphathreshold");
     }
 
@@ -67,7 +71,10 @@ protected:
 
         canvas->concat(matrix);
 
-        SkPaint paint = create_filter_paint();
+        SkRect r = SkRect::MakeLTRB(100, 100, WIDTH - 100, HEIGHT - 100);
+        SkImageFilter::CropRect cropRect(r);
+
+        SkPaint paint = create_filter_paint(fUseCropRect ? &cropRect : nullptr);
         canvas->saveLayer(nullptr, &paint);
         draw_rects(canvas);
 
@@ -75,8 +82,11 @@ protected:
     }
 
 private:
+    bool fUseCropRect;
+
     typedef GM INHERITED;
 };
+
 
 class ImageAlphaThresholdSurfaceGM : public GM {
 public:
@@ -95,17 +105,16 @@ protected:
 
     void onDraw(SkCanvas* canvas) override {
         SkImageInfo info = SkImageInfo::MakeN32(WIDTH, HEIGHT, kOpaque_SkAlphaType);
-        SkAutoTUnref<SkSurface> surface(canvas->newSurface(info));
+        auto surface(canvas->makeSurface(info));
         if (nullptr == surface) {
-            surface.reset(SkSurface::NewRaster(info));
+            surface = SkSurface::MakeRaster(info);
         }
         surface->getCanvas()->clear(SK_ColorWHITE);
         draw_rects(surface->getCanvas());
 
-        SkAutoTUnref<SkImage> image(surface->newImageSnapshot());
         SkPaint paint = create_filter_paint();
         canvas->clipRect(SkRect::MakeLTRB(100, 100, WIDTH - 100, HEIGHT - 100));
-        canvas->drawImage(image, 0, 0, &paint);
+        canvas->drawImage(surface->makeImageSnapshot().get(), 0, 0, &paint);
     }
 
 private:
@@ -114,7 +123,8 @@ private:
 
 //////////////////////////////////////////////////////////////////////////////
 
-DEF_GM(return new ImageAlphaThresholdGM();)
+DEF_GM(return new ImageAlphaThresholdGM(true);)
+DEF_GM(return new ImageAlphaThresholdGM(false);)
 DEF_GM(return new ImageAlphaThresholdSurfaceGM();)
 
 }

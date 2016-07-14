@@ -37,41 +37,28 @@ static bool check_rect(GrDrawContext* dc, const SkIRect& rect, uint32_t expected
     return true;
 }
 
-// We only really need the DC, but currently the DC doesn't own the RT so we also ref it, but that
-// could be dropped when DC is a proper owner of its RT.
-static bool reset_dc(SkAutoTUnref<GrDrawContext>* dc, SkAutoTUnref<GrSurface>* rtKeepAlive,
-                     GrContext* context, int w, int h) {
+static bool reset_dc(sk_sp<GrDrawContext>* dc, GrContext* context, int w, int h) {
     SkDEBUGCODE(uint32_t oldID = 0;)
     if (*dc) {
         SkDEBUGCODE(oldID = (*dc)->accessRenderTarget()->getUniqueID();)
-        rtKeepAlive->reset(nullptr);
         dc->reset(nullptr);
     }
     context->freeGpuResources();
 
-    GrTextureDesc desc;
-    desc.fWidth = w;
-    desc.fHeight = h;
-    desc.fConfig = kRGBA_8888_GrPixelConfig;
-    desc.fFlags = kRenderTarget_GrSurfaceFlag;
+    *dc = context->newDrawContext(SkBackingFit::kExact, w, h, kRGBA_8888_GrPixelConfig);
 
-    rtKeepAlive->reset(context->textureProvider()->createTexture(desc, SkBudgeted::kYes));
-    if (!(*rtKeepAlive)) {
-        return false;
-    }
-    GrRenderTarget* rt = (*rtKeepAlive)->asRenderTarget();
-    SkASSERT(rt->getUniqueID() != oldID);
-    dc->reset(context->drawContext(rt));
-    return SkToBool(*dc);
+    SkASSERT((*dc)->accessRenderTarget()->getUniqueID() != oldID);
+
+    return *dc != nullptr;
 }
 
-DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ClearBatch, reporter, context) {
+DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ClearBatch, reporter, ctxInfo) {
+    GrContext* context = ctxInfo.grContext();
     static const int kW = 10;
     static const int kH = 10;
 
     SkIRect fullRect = SkIRect::MakeWH(kW, kH);
-    SkAutoTUnref<GrDrawContext> drawContext;
-    SkAutoTUnref<GrSurface> rtKeepAlive;
+    sk_sp<GrDrawContext> drawContext;
 
     // A rectangle that is inset by one on all sides and the 1-pixel wide rectangles that surround
     // it.
@@ -95,97 +82,97 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ClearBatch, reporter, context) {
     static const GrColor kColor1 = 0xABCDEF01;
     static const GrColor kColor2 = ~kColor1;
 
-    if (!reset_dc(&drawContext, &rtKeepAlive, context, kW, kH)) {
+    if (!reset_dc(&drawContext, context, kW, kH)) {
         ERRORF(reporter, "Could not create draw context.");
         return;
     }
     // Check a full clear
     drawContext->clear(&fullRect, kColor1, false);
-    if (!check_rect(drawContext, fullRect, kColor1, &actualValue, &failX, &failY)) {
+    if (!check_rect(drawContext.get(), fullRect, kColor1, &actualValue, &failX, &failY)) {
         ERRORF(reporter, "Expected 0x%08x but got 0x%08x at (%d, %d).", kColor1, actualValue,
                failX, failY);
     }
 
-    if (!reset_dc(&drawContext, &rtKeepAlive, context, kW, kH)) {
+    if (!reset_dc(&drawContext, context, kW, kH)) {
         ERRORF(reporter, "Could not create draw context.");
         return;
     }
     // Check two full clears, same color
     drawContext->clear(&fullRect, kColor1, false);
     drawContext->clear(&fullRect, kColor1, false);
-    if (!check_rect(drawContext, fullRect, kColor1, &actualValue, &failX, &failY)) {
+    if (!check_rect(drawContext.get(), fullRect, kColor1, &actualValue, &failX, &failY)) {
         ERRORF(reporter, "Expected 0x%08x but got 0x%08x at (%d, %d).", kColor1, actualValue,
                failX, failY);
     }
 
-    if (!reset_dc(&drawContext, &rtKeepAlive, context, kW, kH)) {
+    if (!reset_dc(&drawContext, context, kW, kH)) {
         ERRORF(reporter, "Could not create draw context.");
         return;
     }
     // Check two full clears, different colors
     drawContext->clear(&fullRect, kColor1, false);
     drawContext->clear(&fullRect, kColor2, false);
-    if (!check_rect(drawContext, fullRect, kColor2, &actualValue, &failX, &failY)) {
+    if (!check_rect(drawContext.get(), fullRect, kColor2, &actualValue, &failX, &failY)) {
         ERRORF(reporter, "Expected 0x%08x but got 0x%08x at (%d, %d).", kColor2, actualValue,
                failX, failY);
     }
 
-    if (!reset_dc(&drawContext, &rtKeepAlive, context, kW, kH)) {
+    if (!reset_dc(&drawContext, context, kW, kH)) {
         ERRORF(reporter, "Could not create draw context.");
         return;
     }
     // Test a full clear followed by a same color inset clear
     drawContext->clear(&fullRect, kColor1, false);
     drawContext->clear(&mid1Rect, kColor1, false);
-    if (!check_rect(drawContext, fullRect, kColor1, &actualValue, &failX, &failY)) {
+    if (!check_rect(drawContext.get(), fullRect, kColor1, &actualValue, &failX, &failY)) {
         ERRORF(reporter, "Expected 0x%08x but got 0x%08x at (%d, %d).", kColor1, actualValue,
                failX, failY);
     }
 
-    if (!reset_dc(&drawContext, &rtKeepAlive, context, kW, kH)) {
+    if (!reset_dc(&drawContext, context, kW, kH)) {
         ERRORF(reporter, "Could not create draw context.");
         return;
     }
     // Test a inset clear followed by same color full clear
     drawContext->clear(&mid1Rect, kColor1, false);
     drawContext->clear(&fullRect, kColor1, false);
-    if (!check_rect(drawContext, fullRect, kColor1, &actualValue, &failX, &failY)) {
+    if (!check_rect(drawContext.get(), fullRect, kColor1, &actualValue, &failX, &failY)) {
         ERRORF(reporter, "Expected 0x%08x but got 0x%08x at (%d, %d).", kColor1, actualValue,
                failX, failY);
     }
 
-    if (!reset_dc(&drawContext, &rtKeepAlive, context, kW, kH)) {
+    if (!reset_dc(&drawContext, context, kW, kH)) {
         ERRORF(reporter, "Could not create draw context.");
         return;
     }
     // Test a full clear followed by a different color inset clear
     drawContext->clear(&fullRect, kColor1, false);
     drawContext->clear(&mid1Rect, kColor2, false);
-    if (!check_rect(drawContext, mid1Rect, kColor2, &actualValue, &failX, &failY)) {
+    if (!check_rect(drawContext.get(), mid1Rect, kColor2, &actualValue, &failX, &failY)) {
         ERRORF(reporter, "Expected 0x%08x but got 0x%08x at (%d, %d).", kColor2, actualValue,
                failX, failY);
     }
-    if (!check_rect(drawContext, outerLeftEdge, kColor1, &actualValue, &failX, &failY) ||
-        !check_rect(drawContext, outerTopEdge, kColor1, &actualValue, &failX, &failY) ||
-        !check_rect(drawContext, outerRightEdge, kColor1, &actualValue, &failX, &failY) ||
-        !check_rect(drawContext, outerBottomEdge, kColor1, &actualValue, &failX, &failY)) {
+    if (!check_rect(drawContext.get(), outerLeftEdge, kColor1, &actualValue, &failX, &failY) ||
+        !check_rect(drawContext.get(), outerTopEdge, kColor1, &actualValue, &failX, &failY) ||
+        !check_rect(drawContext.get(), outerRightEdge, kColor1, &actualValue, &failX, &failY) ||
+        !check_rect(drawContext.get(), outerBottomEdge, kColor1, &actualValue, &failX, &failY)) {
         ERRORF(reporter, "Expected 0x%08x but got 0x%08x at (%d, %d).", kColor1, actualValue,
                failX, failY);
     }
 
-    if (!reset_dc(&drawContext, &rtKeepAlive, context, kW, kH)) {
+    if (!reset_dc(&drawContext, context, kW, kH)) {
         ERRORF(reporter, "Could not create draw context.");
         return;
     }
     // Test a inset clear followed by a different full clear
     drawContext->clear(&mid1Rect, kColor2, false);
     drawContext->clear(&fullRect, kColor1, false);
-    if (!check_rect(drawContext, fullRect, kColor1, &actualValue, &failX, &failY)) {
+    if (!check_rect(drawContext.get(), fullRect, kColor1, &actualValue, &failX, &failY)) {
         ERRORF(reporter, "Expected 0x%08x but got 0x%08x at (%d, %d).", kColor1, actualValue,
                failX, failY);
     }
 
-    if (!reset_dc(&drawContext, &rtKeepAlive, context, kW, kH)) {
+    if (!reset_dc(&drawContext, context, kW, kH)) {
         ERRORF(reporter, "Could not create draw context.");
         return;
     }
@@ -194,26 +181,26 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ClearBatch, reporter, context) {
     drawContext->clear(&fullRect, kColor1, false);
     drawContext->clear(&mid1Rect, kColor2, false);
     drawContext->clear(&mid2Rect, kColor1, false);
-    if (!check_rect(drawContext, mid2Rect, kColor1, &actualValue, &failX, &failY)) {
+    if (!check_rect(drawContext.get(), mid2Rect, kColor1, &actualValue, &failX, &failY)) {
         ERRORF(reporter, "Expected 0x%08x but got 0x%08x at (%d, %d).", kColor1, actualValue,
                failX, failY);
     }
-    if (!check_rect(drawContext, innerLeftEdge, kColor2, &actualValue, &failX, &failY) ||
-        !check_rect(drawContext, innerTopEdge, kColor2, &actualValue, &failX, &failY) ||
-        !check_rect(drawContext, innerRightEdge, kColor2, &actualValue, &failX, &failY) ||
-        !check_rect(drawContext, innerBottomEdge, kColor2, &actualValue, &failX, &failY)) {
+    if (!check_rect(drawContext.get(), innerLeftEdge, kColor2, &actualValue, &failX, &failY) ||
+        !check_rect(drawContext.get(), innerTopEdge, kColor2, &actualValue, &failX, &failY) ||
+        !check_rect(drawContext.get(), innerRightEdge, kColor2, &actualValue, &failX, &failY) ||
+        !check_rect(drawContext.get(), innerBottomEdge, kColor2, &actualValue, &failX, &failY)) {
         ERRORF(reporter, "Expected 0x%08x but got 0x%08x at (%d, %d).", kColor2, actualValue,
                failX, failY);
     }
-    if (!check_rect(drawContext, outerLeftEdge, kColor1, &actualValue, &failX, &failY) ||
-        !check_rect(drawContext, outerTopEdge, kColor1, &actualValue, &failX, &failY) ||
-        !check_rect(drawContext, outerRightEdge, kColor1, &actualValue, &failX, &failY) ||
-        !check_rect(drawContext, outerBottomEdge, kColor1, &actualValue, &failX, &failY)) {
+    if (!check_rect(drawContext.get(), outerLeftEdge, kColor1, &actualValue, &failX, &failY) ||
+        !check_rect(drawContext.get(), outerTopEdge, kColor1, &actualValue, &failX, &failY) ||
+        !check_rect(drawContext.get(), outerRightEdge, kColor1, &actualValue, &failX, &failY) ||
+        !check_rect(drawContext.get(), outerBottomEdge, kColor1, &actualValue, &failX, &failY)) {
         ERRORF(reporter, "Expected 0x%08x but got 0x%08x at (%d, %d).", kColor1, actualValue,
                failX, failY);
     }
 
-    if (!reset_dc(&drawContext, &rtKeepAlive, context, kW, kH)) {
+    if (!reset_dc(&drawContext, context, kW, kH)) {
         ERRORF(reporter, "Could not create draw context.");
         return;
     }
@@ -221,14 +208,14 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ClearBatch, reporter, context) {
     drawContext->clear(&fullRect, kColor1, false);
     drawContext->clear(&mid2Rect, kColor1, false);
     drawContext->clear(&mid1Rect, kColor2, false);
-    if (!check_rect(drawContext, mid1Rect, kColor2, &actualValue, &failX, &failY)) {
+    if (!check_rect(drawContext.get(), mid1Rect, kColor2, &actualValue, &failX, &failY)) {
         ERRORF(reporter, "Expected 0x%08x but got 0x%08x at (%d, %d).", kColor2, actualValue,
                failX, failY);
     }
-    if (!check_rect(drawContext, outerLeftEdge, kColor1, &actualValue, &failX, &failY) ||
-        !check_rect(drawContext, outerTopEdge, kColor1, &actualValue, &failX, &failY) ||
-        !check_rect(drawContext, outerRightEdge, kColor1, &actualValue, &failX, &failY) ||
-        !check_rect(drawContext, outerBottomEdge, kColor1, &actualValue, &failX, &failY)) {
+    if (!check_rect(drawContext.get(), outerLeftEdge, kColor1, &actualValue, &failX, &failY) ||
+        !check_rect(drawContext.get(), outerTopEdge, kColor1, &actualValue, &failX, &failY) ||
+        !check_rect(drawContext.get(), outerRightEdge, kColor1, &actualValue, &failX, &failY) ||
+        !check_rect(drawContext.get(), outerBottomEdge, kColor1, &actualValue, &failX, &failY)) {
         ERRORF(reporter, "Expected 0x%08x but got 0x%08x at (%d, %d).", kColor1, actualValue,
                failX, failY);
     }

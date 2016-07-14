@@ -24,7 +24,8 @@
       ],
       'cflags':[   
         # FIXME: This gets around a warning: "Argument might be clobbered by longjmp". 
-        '-Wno-clobbered -Wno-error',   
+        '-Wno-clobbered',
+        '-Wno-unknown-warning-option',
       ],
       'include_dirs': [
         '../include/codec',
@@ -44,7 +45,7 @@
         '../src/codec/SkIcoCodec.cpp',
         '../src/codec/SkJpegCodec.cpp',
         '../src/codec/SkJpegDecoderMgr.cpp',
-        '../src/codec/SkJpegUtility_codec.cpp',
+        '../src/codec/SkJpegUtility.cpp',
         '../src/codec/SkMaskSwizzler.cpp',
         '../src/codec/SkMasks.cpp',
         '../src/codec/SkPngCodec.cpp',
@@ -64,15 +65,6 @@
         ],
       },
       'defines': [
-        # Turn on all of the codecs, since we know that we have all of the
-        # necessary dependencies.  Clients that are missing some of the
-        # required decoding libraries may choose to turn the codecs on or
-        # off individually.
-        'SK_CODEC_DECODES_GIF',
-        'SK_CODEC_DECODES_JPEG',
-        'SK_CODEC_DECODES_PNG',
-        'SK_CODEC_DECODES_WEBP',
-
         # Turn on libjpeg-turbo optimizations since we know that the
         # appropriate version of libjpeg-turbo is present.
         'TURBO_HAS_CROP',
@@ -133,11 +125,6 @@
           'xcode_settings': {
             'OTHER_CFLAGS': ['-fexceptions'],
             'OTHER_CPLUSPLUSFLAGS': ['-fexceptions'],
-          },
-        }],
-        ['skia_os == "chromeos"', {
-          'link_settings': {
-            'libraries': ['-lrt', ],
           },
         }],
       ],

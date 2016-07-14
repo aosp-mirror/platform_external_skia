@@ -20,7 +20,8 @@ public:
     GrDiscardBatch(GrRenderTarget* rt)
         : INHERITED(ClassID())
         , fRenderTarget(rt) {
-        fBounds = SkRect::MakeWH(SkIntToScalar(rt->width()), SkIntToScalar(rt->height()));
+        this->setBounds(SkRect::MakeIWH(rt->width(), rt->height()), HasAABloat::kNo,
+                        IsZeroArea::kNo);
     }
 
     const char* name() const override { return "Discard"; }
@@ -31,6 +32,7 @@ public:
     SkString dumpInfo() const override {
         SkString string;
         string.printf("RT: %d", fRenderTarget.get()->getUniqueID());
+        string.append(INHERITED::dumpInfo());
         return string;
     }
 
@@ -42,7 +44,7 @@ private:
     void onPrepare(GrBatchFlushState*) override {}
 
     void onDraw(GrBatchFlushState* state) override {
-        state->gpu()->discard(fRenderTarget.get());
+        state->commandBuffer()->discard(fRenderTarget.get());
     }
 
     GrPendingIOResource<GrRenderTarget, kWrite_GrIOType> fRenderTarget;

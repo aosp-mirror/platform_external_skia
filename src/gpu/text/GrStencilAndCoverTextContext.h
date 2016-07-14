@@ -8,8 +8,8 @@
 #ifndef GrStencilAndCoverTextContext_DEFINED
 #define GrStencilAndCoverTextContext_DEFINED
 
-#include "GrDrawTarget.h"
-#include "GrStrokeInfo.h"
+#include "GrDrawContext.h"
+#include "GrStyle.h"
 #include "SkDrawFilter.h"
 #include "SkTextBlob.h"
 #include "SkTHash.h"
@@ -78,8 +78,8 @@ private:
         void setPosText(const char text[], size_t byteLength, const SkScalar pos[],
                         int scalarsPerPosition, const SkPoint& offset);
 
-        void draw(GrContext*, GrDrawContext*, GrPipelineBuilder*, GrColor, const SkMatrix&,
-                  const SkSurfaceProps&,
+        void draw(GrContext*, GrDrawContext*, GrPipelineBuilder*, const GrClip&, GrColor,
+                  const SkMatrix&, const SkSurfaceProps&,
                   SkScalar x, SkScalar y, const SkIRect& clipBounds,
                   GrAtlasTextContext* fallbackTextContext, const SkPaint& originalSkPaint) const;
 
@@ -94,7 +94,7 @@ private:
         GrPathRange* createGlyphs(GrContext*) const;
         void appendGlyph(const SkGlyph&, const SkPoint&, FallbackBlobBuilder*);
 
-        GrStrokeInfo                     fStroke;
+        GrStyle                          fStyle;
         SkPaint                          fFont;
         SkScalar                         fTextRatio;
         float                            fTextInverseRatio;

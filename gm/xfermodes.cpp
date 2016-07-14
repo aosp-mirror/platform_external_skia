@@ -12,31 +12,23 @@
 #include "SkPM4f.h"
 
 #include "SkArithmeticMode.h"
-#include "SkPixelXorXfermode.h"
-#include "SkAvoidXfermode.h"
 
 #define kCustomShift    16
 #define kCustomMask     (~0xFFFF)
 
 enum CustomModes {
     kArithmetic_CustomMode  = 1 << kCustomShift,
-    kPixelXor_CustomMode    = 2 << kCustomShift,
-    kAvoid_CustomMode       = 3 << kCustomShift,
 };
 
-static SkXfermode* make_custom(int customMode) {
+static sk_sp<SkXfermode> make_custom(int customMode) {
     switch (customMode) {
         case kArithmetic_CustomMode: {
             const SkScalar k1 = 0.25;
             const SkScalar k2 = 0.75;
             const SkScalar k3 = 0.75;
             const SkScalar k4 = -0.25;
-            return SkArithmeticMode::Create(k1, k2, k3, k4);
+            return SkArithmeticMode::Make(k1, k2, k3, k4);
         }
-        case kPixelXor_CustomMode:
-            return SkPixelXorXfermode::Create(0xFF88CC44);
-        case kAvoid_CustomMode:
-            return SkAvoidXfermode::Create(0xFFFF0000, 0x44, SkAvoidXfermode::kAvoidColor_Mode);
         default:
             break;
     }
@@ -61,7 +53,7 @@ enum SrcType {
     kSmallTransparentImage_SrcType        = 0x40,
     //! kRectangleImage_SrcType drawn directly with a mask.
     kRectangleWithMask_SrcType            = 0x80,
-    
+
     kAll_SrcType                          = 0xFF, //!< All the source types.
     kBasic_SrcType                        = 0x03, //!< Just basic source types.
 };
@@ -87,7 +79,7 @@ const struct {
     { SkXfermode::kDstOut_Mode,       "DstOut",       kAll_SrcType   },
     { SkXfermode::kSrcATop_Mode,      "SrcATop",      kAll_SrcType   },
     { SkXfermode::kDstATop_Mode,      "DstATop",      kAll_SrcType   },
-    
+
     { SkXfermode::kXor_Mode,          "Xor",          kBasic_SrcType },
     { SkXfermode::kPlus_Mode,         "Plus",         kBasic_SrcType },
     { SkXfermode::kModulate_Mode,     "Modulate",     kAll_SrcType   },
@@ -108,8 +100,6 @@ const struct {
     { SkXfermode::kLuminosity_Mode,   "Luminosity",   kBasic_SrcType },
 
     { SkXfermode::Mode(0xFFFF),       "Arithmetic",   kBasic_SrcType + kArithmetic_CustomMode   },
-    { SkXfermode::Mode(0xFFFF),       "PixelXor",     kBasic_SrcType + kPixelXor_CustomMode     },
-    { SkXfermode::Mode(0xFFFF),       "Avoid",        kBasic_SrcType + kAvoid_CustomMode        },
 };
 
 static void make_bitmaps(int w, int h, SkBitmap* src, SkBitmap* dst,
@@ -155,7 +145,7 @@ class XfermodesGM : public skiagm::GM {
      * uses the implied shape of the drawing command and these modes
      * demonstrate that.
      */
-    void draw_mode(SkCanvas* canvas, SkXfermode* mode, SrcType srcType,
+    void draw_mode(SkCanvas* canvas, sk_sp<SkXfermode> mode, SrcType srcType,
                    SkScalar x, SkScalar y) {
         SkPaint p;
         SkMatrix m;
@@ -163,7 +153,7 @@ class XfermodesGM : public skiagm::GM {
         m.setTranslate(x, y);
 
         canvas->drawBitmap(fSrcB, x, y, &p);
-        p.setXfermode(mode);
+        p.setXfermode(std::move(mode));
         switch (srcType) {
             case kSmallTransparentImage_SrcType: {
                 m.postScale(SK_ScalarHalf, SK_ScalarHalf, x, y);
@@ -261,10 +251,8 @@ protected:
         const SkScalar h = SkIntToScalar(H);
         SkMatrix m;
         m.setScale(SkIntToScalar(6), SkIntToScalar(6));
-        SkShader* s = SkShader::CreateBitmapShader(fBG,
-                                                   SkShader::kRepeat_TileMode,
-                                                   SkShader::kRepeat_TileMode,
-                                                   &m);
+        auto s = SkShader::MakeBitmapShader(fBG, SkShader::kRepeat_TileMode,
+                                            SkShader::kRepeat_TileMode, &m);
 
         SkPaint labelP;
         labelP.setAntiAlias(true);
@@ -281,11 +269,11 @@ protected:
                 if ((gModes[i].fSourceTypeMask & sourceType) == 0) {
                     continue;
                 }
-                SkAutoTUnref<SkXfermode> mode;
+                sk_sp<SkXfermode> mode;
                 if (gModes[i].fSourceTypeMask & kCustomMask) {
-                    mode.reset(make_custom(gModes[i].fSourceTypeMask & kCustomMask));
+                    mode = make_custom(gModes[i].fSourceTypeMask & kCustomMask);
                 } else {
-                    mode.reset(SkXfermode::Create(gModes[i].fMode));
+                    mode = SkXfermode::Make(gModes[i].fMode);
                 }
                 SkRect r;
                 r.set(x, y, x+w, y+h);
@@ -296,7 +284,7 @@ protected:
                 canvas->drawRect(r, p);
 
                 canvas->saveLayer(&r, nullptr);
-                draw_mode(canvas, mode, static_cast<SrcType>(sourceType),
+                draw_mode(canvas, std::move(mode), static_cast<SrcType>(sourceType),
                           r.fLeft, r.fTop);
                 canvas->restore();
 
@@ -325,7 +313,6 @@ protected:
                 y0 = 0;
             }
         }
-        s->unref();
     }
 
 private:

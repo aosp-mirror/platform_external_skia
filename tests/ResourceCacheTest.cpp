@@ -30,15 +30,15 @@ static const int gWidth = 640;
 static const int gHeight = 480;
 
 ////////////////////////////////////////////////////////////////////////////////
-DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ResourceCacheCache, reporter, context) {
+DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ResourceCacheCache, reporter, ctxInfo) {
+    GrContext* context = ctxInfo.grContext();
     GrSurfaceDesc desc;
     desc.fConfig = kSkia8888_GrPixelConfig;
     desc.fFlags = kRenderTarget_GrSurfaceFlag;
     desc.fWidth = gWidth;
     desc.fHeight = gHeight;
     SkImageInfo info = SkImageInfo::MakeN32Premul(gWidth, gHeight);
-    SkAutoTUnref<SkSurface> surface(SkSurface::NewRenderTarget(context,
-                                                               SkBudgeted::kNo, info));
+    auto surface(SkSurface::MakeRenderTarget(context, SkBudgeted::kNo, info));
     SkCanvas* canvas = surface->getCanvas();
 
     const SkIRect size = SkIRect::MakeWH(gWidth, gHeight);
@@ -80,7 +80,8 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ResourceCacheCache, reporter, context) {
     context->setResourceCacheLimits(oldMaxNum, oldMaxBytes);
 }
 
-DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ResourceCacheStencilBuffers, reporter, context) {
+DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ResourceCacheStencilBuffers, reporter, ctxInfo) {
+    GrContext* context = ctxInfo.grContext();
     GrSurfaceDesc smallDesc;
     smallDesc.fFlags = kRenderTarget_GrSurfaceFlag;
     smallDesc.fConfig = kSkia8888_GrPixelConfig;
@@ -136,7 +137,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ResourceCacheStencilBuffers, reporter, contex
                     resourceProvider->attachStencilAttachment(bigRT->asRenderTarget()));
 
     if (context->caps()->maxSampleCount() >= 4) {
-        // An RT with a different sample count should not share. 
+        // An RT with a different sample count should not share.
         GrSurfaceDesc smallMSAADesc = smallDesc;
         smallMSAADesc.fSampleCnt = 4;
         SkAutoTUnref<GrTexture> smallMSAART0(cache->createTexture(smallMSAADesc, SkBudgeted::kNo));
@@ -187,7 +188,8 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ResourceCacheStencilBuffers, reporter, contex
     }
 }
 
-DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ResourceCacheWrappedResources, reporter, context) {
+DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ResourceCacheWrappedResources, reporter, ctxInfo) {
+    GrContext* context = ctxInfo.grContext();
     GrGpu* gpu = context->getGpu();
     // this test is only valid for GL
     if (!gpu || !gpu->glContextForTesting()) {
@@ -216,8 +218,8 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ResourceCacheWrappedResources, reporter, cont
     SkAutoTUnref<GrTexture> adopted(context->textureProvider()->wrapBackendTexture(
                                     desc, kAdopt_GrWrapOwnership));
 
-    REPORTER_ASSERT(reporter, SkToBool(borrowed) && SkToBool(adopted));
-    if (!SkToBool(borrowed) || !SkToBool(adopted)) {
+    REPORTER_ASSERT(reporter, borrowed != nullptr && adopted != nullptr);
+    if (!borrowed || !adopted) {
         return;
     }
 
@@ -242,40 +244,27 @@ class TestResource : public GrGpuResource {
     enum ScratchConstructor { kScratchConstructor };
 public:
     static const size_t kDefaultSize = 100;
-    
+
     /** Property that distinctly categorizes the resource.
      * For example, textures have width, height, ... */
     enum SimulatedProperty { kA_SimulatedProperty, kB_SimulatedProperty };
 
-    TestResource(GrGpu* gpu, size_t size, GrGpuResource::LifeCycle lifeCycle)
-        : INHERITED(gpu, lifeCycle)
+    TestResource(GrGpu* gpu, SkBudgeted budgeted = SkBudgeted::kYes, size_t size = kDefaultSize)
+        : INHERITED(gpu)
         , fToDelete(nullptr)
         , fSize(size)
-        , fProperty(kA_SimulatedProperty) {
+        , fProperty(kA_SimulatedProperty)
+        , fIsScratch(false) {
         ++fNumAlive;
-        this->registerWithCache();
+        this->registerWithCache(budgeted);
     }
 
-    TestResource(GrGpu* gpu, GrGpuResource::LifeCycle lifeCycle)
-        : INHERITED(gpu, lifeCycle)
-        , fToDelete(nullptr)
-        , fSize(kDefaultSize)
-        , fProperty(kA_SimulatedProperty) {
-        ++fNumAlive;
-        this->registerWithCache();
+    static TestResource* CreateScratch(GrGpu* gpu, SkBudgeted budgeted,
+                                       SimulatedProperty property) {
+        return new TestResource(gpu, budgeted, property, kScratchConstructor);
     }
-
-    TestResource(GrGpu* gpu)
-        : INHERITED(gpu, kCached_LifeCycle)
-        , fToDelete(nullptr)
-        , fSize(kDefaultSize)
-        , fProperty(kA_SimulatedProperty) {
-        ++fNumAlive;
-        this->registerWithCache();
-    }
-
-    static TestResource* CreateScratch(GrGpu* gpu, SimulatedProperty property, bool cached = true) {
-        return new TestResource(gpu, property, cached, kScratchConstructor);
+    static TestResource* CreateWrapped(GrGpu* gpu, size_t size = kDefaultSize) {
+        return new TestResource(gpu, size);
     }
 
     ~TestResource() {
@@ -305,20 +294,34 @@ public:
     static size_t ExpectedScratchKeySize() {
         return sizeof(uint32_t) * (kScratchKeyFieldCnt + GrScratchKey::kMetaDataCnt);
     }
-
 private:
     static const int kScratchKeyFieldCnt = 6;
 
-    TestResource(GrGpu* gpu, SimulatedProperty property, bool cached, ScratchConstructor)
-        : INHERITED(gpu, cached ? kCached_LifeCycle : kUncached_LifeCycle)
+    TestResource(GrGpu* gpu, SkBudgeted budgeted, SimulatedProperty property, ScratchConstructor)
+        : INHERITED(gpu)
         , fToDelete(nullptr)
         , fSize(kDefaultSize)
-        , fProperty(property) {
-        GrScratchKey scratchKey;
-        ComputeScratchKey(fProperty, &scratchKey);
-        this->setScratchKey(scratchKey);
+        , fProperty(property)
+        , fIsScratch(true) {
         ++fNumAlive;
-        this->registerWithCache();
+        this->registerWithCache(budgeted);
+    }
+
+    // Constructor for simulating resources that wrap backend objects.
+    TestResource(GrGpu* gpu, size_t size)
+        : INHERITED(gpu)
+        , fToDelete(nullptr)
+        , fSize(size)
+        , fProperty(kA_SimulatedProperty)
+        , fIsScratch(false) {
+        ++fNumAlive;
+        this->registerWithCacheWrapped();
+    }
+
+    void computeScratchKey(GrScratchKey* key) const override {
+        if (fIsScratch) {
+            ComputeScratchKey(fProperty, key);
+        }
     }
 
     size_t onGpuMemorySize() const override { return fSize; }
@@ -327,6 +330,7 @@ private:
     size_t fSize;
     static int fNumAlive;
     SimulatedProperty fProperty;
+    bool fIsScratch;
     typedef GrGpuResource INHERITED;
 };
 int TestResource::fNumAlive = 0;
@@ -416,15 +420,15 @@ static void test_budgeting(skiatest::Reporter* reporter) {
 
     // Create a scratch, a unique, and a wrapped resource
     TestResource* scratch =
-            TestResource::CreateScratch(context->getGpu(), TestResource::kB_SimulatedProperty);
+            TestResource::CreateScratch(context->getGpu(), SkBudgeted::kYes, TestResource::kB_SimulatedProperty);
     scratch->setSize(10);
     TestResource* unique = new TestResource(context->getGpu());
     unique->setSize(11);
     unique->resourcePriv().setUniqueKey(uniqueKey);
-    TestResource* wrapped = new TestResource(context->getGpu(), GrGpuResource::kBorrowed_LifeCycle);
+    TestResource* wrapped = TestResource::CreateWrapped(context->getGpu());
     wrapped->setSize(12);
     TestResource* unbudgeted =
-            new TestResource(context->getGpu(), GrGpuResource::kUncached_LifeCycle);
+            new TestResource(context->getGpu(), SkBudgeted::kNo);
     unbudgeted->setSize(13);
 
     // Make sure we can't add a unique key to the wrapped resource
@@ -459,7 +463,7 @@ static void test_budgeting(skiatest::Reporter* reporter) {
                               unbudgeted->gpuMemorySize() == cache->getResourceBytes());
 
     // Now try freeing the budgeted resources first
-    wrapped = new TestResource(context->getGpu(), GrGpuResource::kBorrowed_LifeCycle);
+    wrapped = TestResource::CreateWrapped(context->getGpu());
     scratch->setSize(12);
     unique->unref();
     cache->purgeAllUnlocked();
@@ -504,7 +508,9 @@ static void test_unbudgeted(skiatest::Reporter* reporter) {
     TestResource* unbudgeted;
 
     // A large uncached or wrapped resource shouldn't evict anything.
-    scratch = TestResource::CreateScratch(context->getGpu(), TestResource::kB_SimulatedProperty);
+    scratch = TestResource::CreateScratch(context->getGpu(), SkBudgeted::kYes,
+                                          TestResource::kB_SimulatedProperty);
+
     scratch->setSize(10);
     scratch->unref();
     REPORTER_ASSERT(reporter, 1 == cache->getResourceCount());
@@ -522,7 +528,7 @@ static void test_unbudgeted(skiatest::Reporter* reporter) {
     REPORTER_ASSERT(reporter, 21 == cache->getBudgetedResourceBytes());
 
     size_t large = 2 * cache->getResourceBytes();
-    unbudgeted = new TestResource(context->getGpu(), large, GrGpuResource::kUncached_LifeCycle);
+    unbudgeted = new TestResource(context->getGpu(), SkBudgeted::kNo, large);
     REPORTER_ASSERT(reporter, 3 == cache->getResourceCount());
     REPORTER_ASSERT(reporter, 21 + large == cache->getResourceBytes());
     REPORTER_ASSERT(reporter, 2 == cache->getBudgetedResourceCount());
@@ -534,7 +540,7 @@ static void test_unbudgeted(skiatest::Reporter* reporter) {
     REPORTER_ASSERT(reporter, 2 == cache->getBudgetedResourceCount());
     REPORTER_ASSERT(reporter, 21 == cache->getBudgetedResourceBytes());
 
-    wrapped = new TestResource(context->getGpu(), large, GrGpuResource::kBorrowed_LifeCycle);
+    wrapped = TestResource::CreateWrapped(context->getGpu(), large);
     REPORTER_ASSERT(reporter, 3 == cache->getResourceCount());
     REPORTER_ASSERT(reporter, 21 + large == cache->getResourceBytes());
     REPORTER_ASSERT(reporter, 2 == cache->getBudgetedResourceCount());
@@ -561,7 +567,8 @@ void test_unbudgeted_to_scratch(skiatest::Reporter* reporter);
     GrResourceCache* cache = mock.cache();
 
     TestResource* resource =
-        TestResource::CreateScratch(context->getGpu(), TestResource::kA_SimulatedProperty, false);
+        TestResource::CreateScratch(context->getGpu(), SkBudgeted::kNo,
+                                    TestResource::kA_SimulatedProperty);
     GrScratchKey key;
     TestResource::ComputeScratchKey(TestResource::kA_SimulatedProperty, &key);
 
@@ -590,7 +597,7 @@ void test_unbudgeted_to_scratch(skiatest::Reporter* reporter);
         REPORTER_ASSERT(reporter, SkBudgeted::kYes == resource->resourcePriv().isBudgeted());
 
         if (0 == i) {
-            // If made unbudgeted, it should return to original state: ref'ed and unbudgeted. Try 
+            // If made unbudgeted, it should return to original state: ref'ed and unbudgeted. Try
             // the above tests again.
             resource->resourcePriv().makeUnbudgeted();
         } else {
@@ -621,8 +628,10 @@ static void test_duplicate_scratch_key(skiatest::Reporter* reporter) {
 
     // Create two resources that have the same scratch key.
     TestResource* a = TestResource::CreateScratch(context->getGpu(),
+                                                  SkBudgeted::kYes,
                                                   TestResource::kB_SimulatedProperty);
     TestResource* b = TestResource::CreateScratch(context->getGpu(),
+                                                  SkBudgeted::kYes,
                                                   TestResource::kB_SimulatedProperty);
     a->setSize(11);
     b->setSize(12);
@@ -665,9 +674,9 @@ static void test_remove_scratch_key(skiatest::Reporter* reporter) {
     GrResourceCache* cache = mock.cache();
 
     // Create two resources that have the same scratch key.
-    TestResource* a = TestResource::CreateScratch(context->getGpu(),
+    TestResource* a = TestResource::CreateScratch(context->getGpu(), SkBudgeted::kYes,
                                                   TestResource::kB_SimulatedProperty);
-    TestResource* b = TestResource::CreateScratch(context->getGpu(),
+    TestResource* b = TestResource::CreateScratch(context->getGpu(), SkBudgeted::kYes,
                                                   TestResource::kB_SimulatedProperty);
     a->unref();
     b->unref();
@@ -724,9 +733,9 @@ static void test_scratch_key_consistency(skiatest::Reporter* reporter) {
     GrResourceCache* cache = mock.cache();
 
     // Create two resources that have the same scratch key.
-    TestResource* a = TestResource::CreateScratch(context->getGpu(),
+    TestResource* a = TestResource::CreateScratch(context->getGpu(), SkBudgeted::kYes,
                                                   TestResource::kB_SimulatedProperty);
-    TestResource* b = TestResource::CreateScratch(context->getGpu(),
+    TestResource* b = TestResource::CreateScratch(context->getGpu(), SkBudgeted::kYes,
                                                   TestResource::kB_SimulatedProperty);
     a->unref();
     b->unref();
@@ -784,11 +793,11 @@ static void test_duplicate_unique_key(skiatest::Reporter* reporter) {
 
     GrUniqueKey key;
     make_unique_key<0>(&key, 0);
-    
+
     // Create two resources that we will attempt to register with the same unique key.
     TestResource* a = new TestResource(context->getGpu());
     a->setSize(11);
-    
+
     // Set key on resource a.
     a->resourcePriv().setUniqueKey(key);
     REPORTER_ASSERT(reporter, a == cache->findAndRefUniqueResource(key));
@@ -882,11 +891,11 @@ static void test_purge_invalidated(skiatest::Reporter* reporter) {
     make_unique_key<0>(&key1, 1);
     make_unique_key<0>(&key2, 2);
     make_unique_key<0>(&key3, 3);
-    
+
     // Add three resources to the cache. Only c is usable as scratch.
     TestResource* a = new TestResource(context->getGpu());
     TestResource* b = new TestResource(context->getGpu());
-    TestResource* c = TestResource::CreateScratch(context->getGpu(),
+    TestResource* c = TestResource::CreateScratch(context->getGpu(), SkBudgeted::kYes,
                                                   TestResource::kA_SimulatedProperty);
     a->resourcePriv().setUniqueKey(key1);
     b->resourcePriv().setUniqueKey(key2);

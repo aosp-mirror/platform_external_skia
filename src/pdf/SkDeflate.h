@@ -9,8 +9,6 @@
 #ifndef SkFlate_DEFINED
 #define SkFlate_DEFINED
 
-#include "SkTypes.h"
-
 #include "SkStream.h"
 
 /**
@@ -49,7 +47,7 @@ public:
 
 private:
     struct Impl;
-    SkAutoTDelete<Impl> fImpl;
+    std::unique_ptr<Impl> fImpl;
 };
 
 #endif  // SkFlate_DEFINED

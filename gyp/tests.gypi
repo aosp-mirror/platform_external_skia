@@ -29,7 +29,7 @@
     'zlib.gyp:zlib',
   ],
   'conditions': [
-    [ 'skia_os not in ["linux", "freebsd", "openbsd", "solaris", "chromeos", "android"]', {
+    [ 'skia_os not in ["linux", "freebsd", "openbsd", "solaris", "android"]', {
         'sources!': [ '../tests/FontMgrAndroidParserTest.cpp', ],
     }],
     [ 'not skia_pdf', {
@@ -50,6 +50,8 @@
     '../tools/debugger/SkDrawCommand.cpp',
     '../tools/debugger/SkDebugCanvas.h',
     '../tools/debugger/SkDebugCanvas.cpp',
+    '../tools/debugger/SkJsonWriteBuffer.h',
+    '../tools/debugger/SkJsonWriteBuffer.cpp',
     '../tools/debugger/SkObjectParser.h',
     '../tools/debugger/SkObjectParser.cpp',
     '../tools/debugger/SkOverdrawMode.h',

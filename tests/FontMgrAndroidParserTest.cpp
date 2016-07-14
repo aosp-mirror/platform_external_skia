@@ -7,6 +7,7 @@
 
 #include "Resources.h"
 #include "SkCommandLineFlags.h"
+#include "SkFixed.h"
 #include "SkFontMgr_android_parser.h"
 #include "Test.h"
 
@@ -213,4 +214,3 @@ DEF_TEST(FontMgrAndroidParser, reporter) {
         SkDebugf("---- Resource files missing for FontConfigParser test\n");
     }
 }
-

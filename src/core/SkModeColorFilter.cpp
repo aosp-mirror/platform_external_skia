@@ -52,7 +52,7 @@ uint32_t SkModeColorFilter::getFlags() const {
 void SkModeColorFilter::filterSpan(const SkPMColor shader[], int count, SkPMColor result[]) const {
     SkPMColor       color = fPMColor;
     SkXfermodeProc  proc = fProc;
-    
+
     for (int i = 0; i < count; i++) {
         result[i] = proc(color, shader[i]);
     }
@@ -61,7 +61,7 @@ void SkModeColorFilter::filterSpan(const SkPMColor shader[], int count, SkPMColo
 void SkModeColorFilter::filterSpan4f(const SkPM4f shader[], int count, SkPM4f result[]) const {
     SkPM4f            color = SkPM4f::FromPMColor(fPMColor);
     SkXfermodeProc4f  proc = SkXfermode::GetProc4f(fMode);
-    
+
     for (int i = 0; i < count; i++) {
         result[i] = proc(color, shader[i]);
     }
@@ -77,10 +77,10 @@ void SkModeColorFilter::updateCache() {
     fProc = SkXfermode::GetProc(fMode);
 }
 
-SkFlattenable* SkModeColorFilter::CreateProc(SkReadBuffer& buffer) {
+sk_sp<SkFlattenable> SkModeColorFilter::CreateProc(SkReadBuffer& buffer) {
     SkColor color = buffer.readColor();
     SkXfermode::Mode mode = (SkXfermode::Mode)buffer.readUInt();
-    return SkColorFilter::CreateModeFilter(color, mode);
+    return SkColorFilter::MakeModeFilter(color, mode);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -91,16 +91,16 @@ SkFlattenable* SkModeColorFilter::CreateProc(SkReadBuffer& buffer) {
 #include "effects/GrConstColorProcessor.h"
 #include "SkGr.h"
 
-const GrFragmentProcessor* SkModeColorFilter::asFragmentProcessor(GrContext*) const {
+sk_sp<GrFragmentProcessor> SkModeColorFilter::asFragmentProcessor(GrContext*) const {
     if (SkXfermode::kDst_Mode == fMode) {
         return nullptr;
     }
 
-    SkAutoTUnref<const GrFragmentProcessor> constFP(
-        GrConstColorProcessor::Create(SkColorToPremulGrColor(fColor),
-                                        GrConstColorProcessor::kIgnore_InputMode));
-    const GrFragmentProcessor* fp =
-        GrXfermodeFragmentProcessor::CreateFromSrcProcessor(constFP, fMode);
+    sk_sp<GrFragmentProcessor> constFP(
+        GrConstColorProcessor::Make(SkColorToPremulGrColor(fColor),
+                                    GrConstColorProcessor::kIgnore_InputMode));
+    sk_sp<GrFragmentProcessor> fp(
+        GrXfermodeFragmentProcessor::MakeFromSrcProcessor(std::move(constFP), fMode));
     if (!fp) {
         return nullptr;
     }
@@ -148,7 +148,7 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-SkColorFilter* SkColorFilter::CreateModeFilter(SkColor color, SkXfermode::Mode mode) {
+sk_sp<SkColorFilter> SkColorFilter::MakeModeFilter(SkColor color, SkXfermode::Mode mode) {
     if (!SkIsValidMode(mode)) {
         return nullptr;
     }
@@ -183,10 +183,10 @@ SkColorFilter* SkColorFilter::CreateModeFilter(SkColor color, SkXfermode::Mode m
 
     switch (mode) {
         case SkXfermode::kSrc_Mode:
-            return new Src_SkModeColorFilter(color);
+            return sk_make_sp<Src_SkModeColorFilter>(color);
         case SkXfermode::kSrcOver_Mode:
-            return new SrcOver_SkModeColorFilter(color);
+            return sk_make_sp<SrcOver_SkModeColorFilter>(color);
         default:
-            return SkModeColorFilter::Create(color, mode);
+            return SkModeColorFilter::Make(color, mode);
     }
 }

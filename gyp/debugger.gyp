@@ -6,7 +6,7 @@
   'variables': {
     'skia_warnings_as_errors': 0,
     'conditions': [
-      [ 'skia_os in ["linux", "freebsd", "openbsd", "solaris", "chromeos"]', {
+      [ 'skia_os in ["linux", "freebsd", "openbsd", "solaris"]', {
         # Use the systemwide Qt libs by default
         'variables': {
           'qt_sdk%': '/usr',
@@ -53,7 +53,7 @@
       [ 'skia_os == "win"', {
         'variables': {
           # This is the default location for the version of Qt current on 10/11/12
-          'qt_sdk%': 'C:/Qt/4.8.3/',
+          'qt_sdk%': 'C:/Qt/4.8.6/',
         },
         'qt_sdk': '<(qt_sdk)',
         'qt_moc%': '<(qt_sdk)/bin/moc',
@@ -99,6 +99,8 @@
         '../tools/debugger/SkDebugCanvas.cpp',
         '../tools/debugger/SkDrawCommand.h',
         '../tools/debugger/SkDrawCommand.cpp',
+        '../tools/debugger/SkJsonWriteBuffer.h',
+        '../tools/debugger/SkJsonWriteBuffer.cpp',
         '../tools/debugger/SkObjectParser.h',
         '../tools/debugger/SkObjectParser.cpp',
         '../tools/debugger/SkOverdrawMode.h',
@@ -137,6 +139,8 @@
         'debugger_qt_mocs',
         'skia_lib.gyp:skia_lib',
         'jsoncpp.gyp:jsoncpp',
+        'libpng.gyp:libpng',
+        'tools.gyp:picture_utils',
         'tools.gyp:url_data_manager',
       ],
       'cflags': [

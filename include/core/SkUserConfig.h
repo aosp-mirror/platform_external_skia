@@ -103,11 +103,6 @@
  */
 //#define SK_DEFAULT_IMAGE_CACHE_LIMIT (1024 * 1024)
 
-/*  Define this to allow PDF scalars above 32k.  The PDF/A spec doesn't allow
-    them, but modern PDF interpreters should handle them just fine.
- */
-//#define SK_ALLOW_LARGE_PDF_SCALARS
-
 /*  Define this to provide font subsetter in PDF generation.
  */
 //#define SK_SFNTLY_SUBSETTER "sfntly/subsetter/font_subsetter.h"
@@ -146,16 +141,6 @@
  */
 //#define SK_SUPPORT_GPU 1
 
-
-/* The PDF generation code uses Path Ops to handle complex clipping paths,
- * but at this time, Path Ops is not release ready yet. So, the code is
- * hidden behind this #define guard. If you are feeling adventurous and
- * want the latest and greatest PDF generation code, uncomment the #define.
- * When Path Ops is release ready, the define guards and this user config
- * define should be removed entirely.
- */
-//#define SK_PDF_USE_PATHOPS_CLIPPING
-
 /* Skia makes use of histogram logging macros to trace the frequency of
  * events. By default, Skia provides no-op versions of these macros.
  * Skia consumers can provide their own definitions of these macros to
@@ -184,36 +169,51 @@
 #define DCT_IFAST_SUPPORTED
 #define GR_GL_CUSTOM_SETUP_HEADER "gl/GrGLConfig_chrome.h"
 #define GR_GL_USE_NEW_SHADER_SOURCE_SIGNATURE 1
+#define QT_NO_KEYWORDS
+#define SKIA
 #define SKIA_DLL
 #define SK_ALLOW_STATIC_GLOBAL_INITIALIZERS 0
 #define SK_BUILD_FOR_ANDROID
 #define SK_BUILD_FOR_ANDROID_FRAMEWORK
 #define SK_CAN_USE_DLOPEN 0
-#define SK_CODEC_DECODES_GIF
-#define SK_CODEC_DECODES_JPEG
-#define SK_CODEC_DECODES_PNG
 #define SK_CODEC_DECODES_RAW
-#define SK_CODEC_DECODES_WEBP
 #define SK_DEFAULT_FONT_CACHE_LIMIT   (768 * 1024)
 #define SK_DEFAULT_GLOBAL_DISCARDABLE_MEMORY_POOL_SIZE (512 * 1024)
-#define SK_EGL 1
 #define SK_FONTHOST_FREETYPE_RUNTIME_VERSION 0x020400
 #define SK_FORCE_DISTANCE_FIELD_TEXT 0
 #define SK_GAMMA_APPLY_TO_A8
 #define SK_GAMMA_CONTRAST 0.0
 #define SK_GAMMA_EXPONENT 1.4
+#define SK_HAS_GIF_LIBRARY
+#define SK_HAS_JPEG_LIBRARY
+#define SK_HAS_PNG_LIBRARY
+#define SK_HAS_WEBP_LIBRARY
 #define SK_IGNORE_ETC1_SUPPORT
+#define SK_IGNORE_GPU_DITHER
 #define SK_IGNORE_LINEONLY_AA_CONVEX_PATH_OPTS
 #define SK_INTERNAL
+#define SK_IS_BOT
 #define SK_PRINT_CODEC_MESSAGES
 #define SK_SFNTLY_SUBSETTER "sample/chromium/font_subsetter.h"
 #define SK_SUPPORT_GPU 1
 #define SK_SUPPORT_LEGACY_CLIPTOLAYERFLAG
+#define SK_SUPPORT_LEGACY_COLORFILTER_PTR
+#define SK_SUPPORT_LEGACY_CREATESHADER_PTR
 #define SK_SUPPORT_LEGACY_DRAWFILTER
 #define SK_SUPPORT_LEGACY_GRADIENT_DITHERING
+#define SK_SUPPORT_LEGACY_IMAGEFACTORY
+#define SK_SUPPORT_LEGACY_MASKFILTER_PTR
+#define SK_SUPPORT_LEGACY_MINOR_EFFECT_PTR
+#define SK_SUPPORT_LEGACY_NEW_SURFACE_API
+#define SK_SUPPORT_LEGACY_PATHEFFECT_PTR
+#define SK_SUPPORT_LEGACY_PICTURE_PTR
+#define SK_SUPPORT_LEGACY_TYPEFACE_PTR
 #define SK_SUPPORT_LEGACY_UNBALANCED_PIXELREF_LOCKCOUNT
+#define SK_SUPPORT_LEGACY_XFERMODE_PTR
 #define SK_SUPPORT_PDF 1
+#define SK_TEST_QCMS
 #define SK_USE_FREETYPE_EMBOLDEN
+#define SK_VULKAN
 #define TURBO_HAS_565
 #define TURBO_HAS_CROP
 #define TURBO_HAS_SKIP

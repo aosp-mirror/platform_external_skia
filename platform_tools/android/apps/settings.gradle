@@ -1,4 +1,2 @@
-include ':sample_app'
-include ':visualbench'
-include ':visualbenchsdl'
 include ':canvasproof'
+include ':viewer'

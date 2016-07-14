@@ -10,7 +10,6 @@
 #include "SkCodec.h"
 #include "SkCommandLineFlags.h"
 #include "SkData.h"
-#include "SkForceLinking.h"
 #include "SkImage.h"
 #include "SkImageEncoder.h"
 #include "SkMallocPixelRef.h"
@@ -21,13 +20,10 @@
 #include <signal.h>
 #include <stdlib.h>
 
-// TODO(kjlubick): Remove once http://crrev.com/1671193002 lands
-__SK_FORCE_IMAGE_DECODER_LINKING;
-
 DEFINE_string2(bytes, b, "", "A path to a file.  This can be the fuzz bytes or a binary to parse.");
 DEFINE_string2(name, n, "", "If --type is 'api', fuzz the API with this name.");
 
-DEFINE_string2(type, t, "api", "How to interpret --bytes, either 'image_scale', 'image_mode', 'skp', or 'api'.");
+DEFINE_string2(type, t, "api", "How to interpret --bytes, either 'image_scale', 'image_mode', 'skp', 'icc', or 'api'.");
 DEFINE_string2(dump, d, "", "If not empty, dump 'image*' or 'skp' types as a PNG with this name.");
 
 static int printUsage(const char* name) {
@@ -39,6 +35,8 @@ static uint8_t calculate_option(SkData*);
 static int fuzz_api(SkData*);
 static int fuzz_img(SkData*, uint8_t, uint8_t);
 static int fuzz_skp(SkData*);
+static int fuzz_icc(SkData*);
+static int fuzz_color_deserialize(SkData*);
 
 int main(int argc, char** argv) {
     SkCommandLineFlags::Parse(argc, argv);
@@ -56,7 +54,12 @@ int main(int argc, char** argv) {
         switch (FLAGS_type[0][0]) {
             case 'a': return fuzz_api(bytes);
 
+            case 'c': return fuzz_color_deserialize(bytes);
+
             case 'i':
+                if (FLAGS_type[0][1] == 'c') { //icc
+                    return fuzz_icc(bytes);
+                }
                 // We only allow one degree of freedom to avoid a search space explosion for afl-fuzz.
                 if (FLAGS_type[0][6] == 's') { // image_scale
                     return fuzz_img(bytes, option, 0);
@@ -358,7 +361,7 @@ int fuzz_img(SkData* bytes, uint8_t scale, uint8_t mode) {
 int fuzz_skp(SkData* bytes) {
     SkMemoryStream stream(bytes);
     SkDebugf("Decoding\n");
-    SkAutoTUnref<SkPicture> pic(SkPicture::CreateFromStream(&stream));
+    sk_sp<SkPicture> pic(SkPicture::MakeFromStream(&stream));
     if (!pic) {
         SkDebugf("[terminated] Couldn't decode as a picture.\n");
         return 3;
@@ -376,10 +379,30 @@ int fuzz_skp(SkData* bytes) {
     return 0;
 }
 
+int fuzz_icc(SkData* bytes) {
+    sk_sp<SkColorSpace> space(SkColorSpace::NewICC(bytes->data(), bytes->size()));
+    if (!space) {
+        SkDebugf("[terminated] Couldn't decode ICC.\n");
+        return 1;
+    }
+    SkDebugf("[terminated] Success! Decoded ICC.\n");
+    return 0;
+}
+
+int fuzz_color_deserialize(SkData* bytes) {
+    sk_sp<SkColorSpace> space(SkColorSpace::Deserialize(bytes->data(), bytes->size()));
+    if (!space) {
+        SkDebugf("[terminated] Couldn't deserialize Colorspace.\n");
+        return 1;
+    }
+    SkDebugf("[terminated] Success! deserialized Colorspace.\n");
+    return 0;
+}
+
 Fuzz::Fuzz(SkData* bytes) : fBytes(SkSafeRef(bytes)), fNextByte(0) {}
 
-void Fuzz::signalBug   () { raise(SIGSEGV); }
-void Fuzz::signalBoring() { exit(0); }
+void Fuzz::signalBug   () { SkDebugf("Signal bug\n"); raise(SIGSEGV); }
+void Fuzz::signalBoring() { SkDebugf("Signal boring\n"); exit(0); }
 
 template <typename T>
 T Fuzz::nextT() {
@@ -398,6 +421,12 @@ bool  Fuzz::nextBool() { return nextB()&1; }
 uint32_t Fuzz::nextU() { return this->nextT<uint32_t>(); }
 float    Fuzz::nextF() { return this->nextT<float   >(); }
 
+float    Fuzz::nextF1() {
+    // This is the same code as is in SkRandom's nextF()
+    unsigned int floatint = 0x3f800000 | (this->nextU() >> 9);
+    float f = SkBits2Float(floatint) - 1.0f;
+    return f;
+}
 
 uint32_t Fuzz::nextRangeU(uint32_t min, uint32_t max) {
     if (min > max) {

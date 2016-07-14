@@ -13,8 +13,8 @@
 #include "SkLayerRasterizer.h"
 
 static void r0(SkLayerRasterizer::Builder* rastBuilder, SkPaint& p) {
-    p.setMaskFilter(SkBlurMaskFilter::Create(kNormal_SkBlurStyle,
-                              SkBlurMask::ConvertRadiusToSigma(SkIntToScalar(3))))->unref();
+    p.setMaskFilter(SkBlurMaskFilter::Make(kNormal_SkBlurStyle,
+                                           SkBlurMask::ConvertRadiusToSigma(SkIntToScalar(3))));
     rastBuilder->addLayer(p, SkIntToScalar(3), SkIntToScalar(3));
 
     p.setMaskFilter(nullptr);
@@ -77,7 +77,7 @@ static void r4(SkLayerRasterizer::Builder* rastBuilder, SkPaint& p) {
 static void r5(SkLayerRasterizer::Builder* rastBuilder, SkPaint& p) {
     rastBuilder->addLayer(p);
 
-    p.setPathEffect(SkDiscretePathEffect::Create(SK_Scalar1*4, SK_Scalar1*3))->unref();
+    p.setPathEffect(SkDiscretePathEffect::Make(SK_Scalar1*4, SK_Scalar1*3));
     p.setXfermodeMode(SkXfermode::kSrcOut_Mode);
     rastBuilder->addLayer(p);
 }
@@ -88,24 +88,24 @@ static void r6(SkLayerRasterizer::Builder* rastBuilder, SkPaint& p) {
     p.setAntiAlias(false);
     SkLayerRasterizer::Builder rastBuilder2;
     r5(&rastBuilder2, p);
-    p.setRasterizer(rastBuilder2.detachRasterizer())->unref();
+    p.setRasterizer(rastBuilder2.detach());
     p.setXfermodeMode(SkXfermode::kClear_Mode);
     rastBuilder->addLayer(p);
 }
 
 #include "Sk2DPathEffect.h"
 
-static SkPathEffect* MakeDotEffect(SkScalar radius, const SkMatrix& matrix) {
+static sk_sp<SkPathEffect> MakeDotEffect(SkScalar radius, const SkMatrix& matrix) {
     SkPath path;
     path.addCircle(0, 0, radius);
-    return SkPath2DPathEffect::Create(matrix, path);
+    return SkPath2DPathEffect::Make(matrix, path);
 }
 
 static void r7(SkLayerRasterizer::Builder* rastBuilder, SkPaint& p) {
     SkMatrix    lattice;
     lattice.setScale(SK_Scalar1*6, SK_Scalar1*6, 0, 0);
     lattice.postSkew(SK_Scalar1/3, 0, 0, 0);
-    p.setPathEffect(MakeDotEffect(SK_Scalar1*4, lattice))->unref();
+    p.setPathEffect(MakeDotEffect(SK_Scalar1*4, lattice));
     rastBuilder->addLayer(p);
 }
 
@@ -115,7 +115,7 @@ static void r8(SkLayerRasterizer::Builder* rastBuilder, SkPaint& p) {
     SkMatrix    lattice;
     lattice.setScale(SK_Scalar1*6, SK_Scalar1*6, 0, 0);
     lattice.postSkew(SK_Scalar1/3, 0, 0, 0);
-    p.setPathEffect(MakeDotEffect(SK_Scalar1*2, lattice))->unref();
+    p.setPathEffect(MakeDotEffect(SK_Scalar1*2, lattice));
     p.setXfermodeMode(SkXfermode::kClear_Mode);
     rastBuilder->addLayer(p);
 
@@ -132,7 +132,7 @@ static void r9(SkLayerRasterizer::Builder* rastBuilder, SkPaint& p) {
     SkMatrix    lattice;
     lattice.setScale(SK_Scalar1, SK_Scalar1*6, 0, 0);
     lattice.postRotate(SkIntToScalar(30), 0, 0);
-    p.setPathEffect(SkLine2DPathEffect::Create(SK_Scalar1*2, lattice))->unref();
+    p.setPathEffect(SkLine2DPathEffect::Make(SK_Scalar1*2, lattice));
     p.setXfermodeMode(SkXfermode::kClear_Mode);
     rastBuilder->addLayer(p);
 
@@ -153,14 +153,13 @@ static const raster_proc gRastProcs[] = {
 
 static void apply_shader(SkPaint* paint, int index) {
     raster_proc proc = gRastProcs[index];
-    if (proc)
-    {
+    if (proc) {
         SkPaint p;
         SkLayerRasterizer::Builder rastBuilder;
 
         p.setAntiAlias(true);
         proc(&rastBuilder, p);
-        paint->setRasterizer(rastBuilder.detachRasterizer())->unref();
+        paint->setRasterizer(rastBuilder.detach());
     }
 
 #if 0
@@ -269,7 +268,7 @@ DEF_SIMPLE_GM(fancyunderline, canvas, 900, 1350) {
     const char test[] = "aAjJgGyY_|{-(~[,]qQ}pP}zZ";
     SkPoint textPt = { 10, 80 };
     for (int font = 0; font < 3; ++font) {
-        sk_tool_utils::set_portable_typeface(&paint, fam[font], SkTypeface::kNormal);
+        sk_tool_utils::set_portable_typeface(&paint, fam[font]);
         for (SkScalar textSize = 100; textSize > 10; textSize -= 20) {
             paint.setTextSize(textSize);
             const SkScalar uWidth = textSize / 15;
@@ -313,7 +312,7 @@ DEF_SIMPLE_GM(fancyposunderline, canvas, 900, 1350) {
     const char test[] = "aAjJgGyY_|{-(~[,]qQ}pP}zZ";
     SkPoint textPt = { 10, 80 };
     for (int font = 0; font < 3; ++font) {
-        sk_tool_utils::set_portable_typeface(&paint, fam[font], SkTypeface::kNormal);
+        sk_tool_utils::set_portable_typeface(&paint, fam[font]);
         for (SkScalar textSize = 100; textSize > 10; textSize -= 20) {
             paint.setTextSize(textSize);
             const SkScalar uWidth = textSize / 15;

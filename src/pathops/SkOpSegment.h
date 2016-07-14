@@ -173,7 +173,7 @@ public:
 
     const SkOpSpanBase* debugSpan(int id) const;
     void debugValidate() const;
-    void detach(const SkOpSpan* );
+    void release(const SkOpSpan* );
     double distSq(double t, const SkOpAngle* opp) const;
 
     bool done() const {
@@ -337,6 +337,9 @@ public:
     void setUpWinding(SkOpSpanBase* start, SkOpSpanBase* end, int* maxWinding, int* sumWinding) {
         int deltaSum = SpanSign(start, end);
         *maxWinding = *sumWinding;
+        if (*sumWinding == SK_MinS32) {
+          return;
+        }
         *sumWinding -= deltaSum;
     }
 

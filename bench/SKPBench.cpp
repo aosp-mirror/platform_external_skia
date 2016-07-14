@@ -72,7 +72,7 @@ void SKPBench::onPerCanvasPreDraw(SkCanvas* canvas) {
         for (int x = bounds.fLeft; x < bounds.fRight; x += tileW) {
             const SkIRect tileRect = SkIRect::MakeXYWH(x, y, tileW, tileH);
             *fTileRects.append() = tileRect;
-            *fSurfaces.push() = canvas->newSurface(ii);
+            *fSurfaces.push() = canvas->makeSurface(ii).release();
 
             // Never want the contents of a tile to include stuff the parent
             // canvas clips out
@@ -90,7 +90,7 @@ void SKPBench::onPerCanvasPostDraw(SkCanvas* canvas) {
     // Draw the last set of tiles into the master canvas in case we're
     // saving the images
     for (int i = 0; i < fTileRects.count(); ++i) {
-        SkAutoTUnref<SkImage> image(fSurfaces[i]->newImageSnapshot());
+        sk_sp<SkImage> image(fSurfaces[i]->makeImageSnapshot());
         canvas->drawImage(image,
                           SkIntToScalar(fTileRects[i].fLeft), SkIntToScalar(fTileRects[i].fTop));
         SkSafeSetNull(fSurfaces[i]);

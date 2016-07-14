@@ -8,10 +8,13 @@
 #ifndef SKDRAWCOMMAND_H_
 #define SKDRAWCOMMAND_H_
 
+#include "png.h"
+
 #include "SkCanvas.h"
 #include "SkTLazy.h"
 #include "SkPath.h"
 #include "SkRRect.h"
+#include "SkRSXform.h"
 #include "SkString.h"
 #include "SkTDArray.h"
 #include "SkJSONCPP.h"
@@ -26,6 +29,7 @@ public:
         kClipRect_OpType,
         kClipRRect_OpType,
         kConcat_OpType,
+        kDrawAnnotation_OpType,
         kDrawBitmap_OpType,
         kDrawBitmapNine_OpType,
         kDrawBitmapRect_OpType,
@@ -45,17 +49,22 @@ public:
         kDrawText_OpType,
         kDrawTextBlob_OpType,
         kDrawTextOnPath_OpType,
+        kDrawTextRSXform_OpType,
         kDrawVertices_OpType,
         kEndDrawPicture_OpType,
         kRestore_OpType,
         kSave_OpType,
         kSaveLayer_OpType,
         kSetMatrix_OpType,
+        kTranslateZ_OpType,
 
-        kLast_OpType = kSetMatrix_OpType
+        kLast_OpType = kTranslateZ_OpType
     };
 
     static const int kOpTypeCount = kLast_OpType + 1;
+
+    static void WritePNG(const png_bytep rgba, png_uint_32 width, png_uint_32 height,
+                         SkWStream& out, bool isOpaque);
 
     SkDrawCommand(OpType opType);
 
@@ -102,8 +111,6 @@ public:
 
     virtual Json::Value toJSON(UrlDataManager& urlDataManager) const;
 
-    Json::Value drawToAndCollectJSON(SkCanvas*, UrlDataManager& urlDataManager) const;
-
     /* Converts a JSON representation of a command into a newly-allocated SkDrawCommand object. It
      * is the caller's responsibility to delete this object. This method may return null if an error
      * occurs.
@@ -111,6 +118,25 @@ public:
     static SkDrawCommand* fromJSON(Json::Value& command, UrlDataManager& urlDataManager);
 
     static const char* GetCommandString(OpType type);
+
+    // Helper methods for converting things to JSON
+    static Json::Value MakeJsonColor(const SkColor color);
+    static Json::Value MakeJsonPoint(const SkPoint& point);
+    static Json::Value MakeJsonPoint(SkScalar x, SkScalar y);
+    static Json::Value MakeJsonRect(const SkRect& rect);
+    static Json::Value MakeJsonIRect(const SkIRect&);
+    static Json::Value MakeJsonMatrix(const SkMatrix&);
+    static Json::Value MakeJsonScalar(SkScalar);
+    static Json::Value MakeJsonPath(const SkPath& path);
+    static Json::Value MakeJsonRegion(const SkRegion& region);
+    static Json::Value MakeJsonPaint(const SkPaint& paint, UrlDataManager& urlDataManager);
+
+    static void flatten(const SkFlattenable* flattenable, Json::Value* target,
+                        UrlDataManager& urlDataManager);
+    static bool flatten(const SkImage& image, Json::Value* target,
+                        UrlDataManager& urlDataManager);
+    static bool flatten(const SkBitmap& bitmap, Json::Value* target,
+                        UrlDataManager& urlDataManager);
 
 protected:
     SkTDArray<SkString*> fInfo;
@@ -222,6 +248,21 @@ public:
 
 private:
     SkMatrix fMatrix;
+
+    typedef SkDrawCommand INHERITED;
+};
+
+class SkDrawAnnotationCommand : public SkDrawCommand {
+public:
+    SkDrawAnnotationCommand(const SkRect&, const char key[], sk_sp<SkData> value);
+    void execute(SkCanvas* canvas) const override;
+    Json::Value toJSON(UrlDataManager& urlDataManager) const override;
+    static SkDrawAnnotationCommand* fromJSON(Json::Value& command, UrlDataManager& urlDataManager);
+
+private:
+    SkRect          fRect;
+    SkString        fKey;
+    sk_sp<SkData>   fValue;
 
     typedef SkDrawCommand INHERITED;
 };
@@ -489,12 +530,34 @@ private:
     typedef SkDrawCommand INHERITED;
 };
 
+class SkDrawTextRSXformCommand : public SkDrawCommand {
+public:
+    SkDrawTextRSXformCommand(const void* text, size_t byteLength, const SkRSXform[],
+                             const SkRect*, const SkPaint& paint);
+    ~SkDrawTextRSXformCommand() override { delete[] fText; delete[] fXform; }
+    void execute(SkCanvas* canvas) const override;
+    Json::Value toJSON(UrlDataManager& urlDataManager) const override;
+    static SkDrawTextRSXformCommand* fromJSON(Json::Value& command, UrlDataManager& urlDataManager);
+
+private:
+    char*       fText;
+    size_t      fByteLength;
+    SkRSXform*  fXform;
+    SkRect*     fCull;
+    SkRect      fCullStorage;
+    SkPaint     fPaint;
+
+    typedef SkDrawCommand INHERITED;
+};
+
 class SkDrawPosTextHCommand : public SkDrawCommand {
 public:
     SkDrawPosTextHCommand(const void* text, size_t byteLength, const SkScalar xpos[],
                           SkScalar constY, const SkPaint& paint);
     virtual ~SkDrawPosTextHCommand() { delete [] fXpos; delete [] fText; }
     void execute(SkCanvas* canvas) const override;
+    Json::Value toJSON(UrlDataManager& urlDataManager) const override;
+    static SkDrawPosTextHCommand* fromJSON(Json::Value& command, UrlDataManager& urlDataManager);
 
 private:
     SkScalar* fXpos;
@@ -670,4 +733,16 @@ private:
     typedef SkDrawCommand INHERITED;
 };
 
+class SkTranslateZCommand : public SkDrawCommand {
+public:
+    SkTranslateZCommand(SkScalar);
+    void execute(SkCanvas* canvas) const override;
+    Json::Value toJSON(UrlDataManager& urlDataManager) const override;
+    static SkTranslateZCommand* fromJSON(Json::Value& command, UrlDataManager& urlDataManager);
+
+private:
+    SkScalar fZTranslate;
+
+    typedef SkDrawCommand INHERITED;
+};
 #endif

@@ -8,6 +8,7 @@
 #ifndef SkRecords_DEFINED
 #define SkRecords_DEFINED
 
+#include "SkData.h"
 #include "SkCanvas.h"
 #include "SkDrawable.h"
 #include "SkImageFilter.h"
@@ -17,7 +18,16 @@
 #include "SkRect.h"
 #include "SkRRect.h"
 #include "SkRSXform.h"
+#include "SkString.h"
 #include "SkTextBlob.h"
+
+// Windows.h, will pull in all of the GDI defines.  GDI #defines
+// DrawText to DrawTextA or DrawTextW, but SkRecord has a struct
+// called DrawText. Since this file does not use GDI, undefing
+// DrawText makes things less confusing.
+#ifdef DrawText
+#undef DrawText
+#endif
 
 namespace SkRecords {
 
@@ -37,6 +47,7 @@ namespace SkRecords {
     M(Save)                                                         \
     M(SaveLayer)                                                    \
     M(SetMatrix)                                                    \
+    M(TranslateZ)                                                   \
     M(Concat)                                                       \
     M(ClipPath)                                                     \
     M(ClipRRect)                                                    \
@@ -62,11 +73,13 @@ namespace SkRecords {
     M(DrawPosTextH)                                                 \
     M(DrawText)                                                     \
     M(DrawTextOnPath)                                               \
+    M(DrawTextRSXform)                                              \
     M(DrawRRect)                                                    \
     M(DrawRect)                                                     \
     M(DrawTextBlob)                                                 \
     M(DrawAtlas)                                                    \
-    M(DrawVertices)
+    M(DrawVertices)                                                 \
+    M(DrawAnnotation)
 
 // Defines SkRecords::Type, an enum of all record types.
 #define ENUM(T) T##_Type,
@@ -206,6 +219,8 @@ RECORD(SetMatrix, 0,
 RECORD(Concat, 0,
         TypedMatrix matrix);
 
+RECORD(TranslateZ, 0, SkScalar z);
+
 struct RegionOpAndAA {
     RegionOpAndAA() {}
     RegionOpAndAA(SkRegion::Op op, bool aa) : op(op), aa(aa) {}
@@ -333,6 +348,12 @@ RECORD(DrawTextOnPath, kDraw_Tag|kHasText_Tag,
         size_t byteLength;
         PreCachedPath path;
         TypedMatrix matrix);
+RECORD(DrawTextRSXform, kDraw_Tag|kHasText_Tag,
+        SkPaint paint;
+        PODArray<char> text;
+        size_t byteLength;
+        PODArray<SkRSXform> xforms;
+        Optional<SkRect> cull);
 RECORD(DrawPatch, kDraw_Tag,
         SkPaint paint;
         PODArray<SkPoint> cubics;
@@ -358,7 +379,10 @@ RECORD(DrawVertices, kDraw_Tag,
         RefBox<SkXfermode> xmode;
         PODArray<uint16_t> indices;
         int indexCount);
-
+RECORD(DrawAnnotation, 0,
+       SkRect rect;
+       SkString key;
+       RefBox<SkData> value);
 #undef RECORD
 
 }  // namespace SkRecords

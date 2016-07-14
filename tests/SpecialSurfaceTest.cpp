@@ -20,10 +20,6 @@ public:
     static const SkIRect& Subset(const SkSpecialSurface* surf) {
         return surf->subset();
     }
-
-    static const SkIRect& Subset(const SkSpecialImage* img) {
-        return img->subset();
-    }
 };
 
 // Both 'kSmallerSize' and 'kFullSize' need to be a non-power-of-2 to exercise
@@ -33,9 +29,11 @@ static const int kPad = 5;
 static const int kFullSize = kSmallerSize + 2 * kPad;
 
 // Exercise the public API of SkSpecialSurface (e.g., getCanvas, newImageSnapshot)
-static void test_surface(SkSpecialSurface* surf, skiatest::Reporter* reporter, int offset) {
+static void test_surface(const sk_sp<SkSpecialSurface>& surf,
+                         skiatest::Reporter* reporter,
+                         int offset) {
 
-    const SkIRect surfSubset = TestingSpecialSurfaceAccess::Subset(surf);
+    const SkIRect surfSubset = TestingSpecialSurfaceAccess::Subset(surf.get());
     REPORTER_ASSERT(reporter, offset == surfSubset.fLeft);
     REPORTER_ASSERT(reporter, offset == surfSubset.fTop);
     REPORTER_ASSERT(reporter, kSmallerSize == surfSubset.width());
@@ -46,10 +44,10 @@ static void test_surface(SkSpecialSurface* surf, skiatest::Reporter* reporter, i
 
     canvas->clear(SK_ColorRED);
 
-    SkAutoTUnref<SkSpecialImage> img(surf->newImageSnapshot());
+    sk_sp<SkSpecialImage> img(surf->makeImageSnapshot());
     REPORTER_ASSERT(reporter, img);
 
-    const SkIRect imgSubset = TestingSpecialSurfaceAccess::Subset(img);
+    const SkIRect imgSubset = img->subset();
     REPORTER_ASSERT(reporter, surfSubset == imgSubset);
 
     // the canvas was invalidated by the newImageSnapshot call
@@ -59,7 +57,7 @@ static void test_surface(SkSpecialSurface* surf, skiatest::Reporter* reporter, i
 DEF_TEST(SpecialSurface_Raster, reporter) {
 
     SkImageInfo info = SkImageInfo::MakeN32(kSmallerSize, kSmallerSize, kOpaque_SkAlphaType);
-    SkAutoTUnref<SkSpecialSurface> surf(SkSpecialSurface::NewRaster(nullptr, info));
+    sk_sp<SkSpecialSurface> surf(SkSpecialSurface::MakeRaster(info));
 
     test_surface(surf, reporter, 0);
 }
@@ -71,7 +69,7 @@ DEF_TEST(SpecialSurface_Raster2, reporter) {
 
     const SkIRect subset = SkIRect::MakeXYWH(kPad, kPad, kSmallerSize, kSmallerSize);
 
-    SkAutoTUnref<SkSpecialSurface> surf(SkSpecialSurface::NewFromBitmap(nullptr, subset, bm));
+    sk_sp<SkSpecialSurface> surf(SkSpecialSurface::MakeFromBitmap(subset, bm));
 
     test_surface(surf, reporter, kPad);
 
@@ -80,36 +78,12 @@ DEF_TEST(SpecialSurface_Raster2, reporter) {
 
 #if SK_SUPPORT_GPU
 
-DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SpecialSurface_Gpu1, reporter, context) {
-    GrSurfaceDesc desc;
-    desc.fConfig = kSkia8888_GrPixelConfig;
-    desc.fFlags  = kRenderTarget_GrSurfaceFlag;
-    desc.fWidth  = kSmallerSize;
-    desc.fHeight = kSmallerSize;
-
-    SkAutoTUnref<SkSpecialSurface> surf(SkSpecialSurface::NewRenderTarget(nullptr, context, desc));
+DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SpecialSurface_Gpu1, reporter, ctxInfo) {
+    sk_sp<SkSpecialSurface> surf(SkSpecialSurface::MakeRenderTarget(ctxInfo.grContext(),
+                                                                    kSmallerSize, kSmallerSize,
+                                                                    kSkia8888_GrPixelConfig));
 
     test_surface(surf, reporter, 0);
-}
-
-// test the more flexible factory
-DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SpecialSurface_Gpu2, reporter, context) {
-    GrSurfaceDesc desc;
-    desc.fConfig = kSkia8888_GrPixelConfig;
-    desc.fFlags = kRenderTarget_GrSurfaceFlag;
-    desc.fWidth = kFullSize;
-    desc.fHeight = kFullSize;
-
-    SkAutoTUnref<GrTexture> temp(context->textureProvider()->createApproxTexture(desc));
-    SkASSERT_RELEASE(temp);
-
-    const SkIRect subset = SkIRect::MakeXYWH(kPad, kPad, kSmallerSize, kSmallerSize);
-
-    SkAutoTUnref<SkSpecialSurface> surf(SkSpecialSurface::NewFromTexture(nullptr, subset, temp));
-
-    test_surface(surf, reporter, kPad);
-
-    // TODO: check that the clear didn't escape the active region
 }
 
 #endif

@@ -28,12 +28,12 @@ class GrDrawingManager {
 public:
     ~GrDrawingManager();
 
-    bool abandoned() const { return fAbandoned; }
+    bool wasAbandoned() const { return fAbandoned; }
     void freeGpuResources();
 
-    GrDrawContext* drawContext(GrRenderTarget* rt, const SkSurfaceProps*);
+    sk_sp<GrDrawContext> drawContext(sk_sp<GrRenderTarget> rt, const SkSurfaceProps*);
 
-    // The caller automatically gets a ref on the returned drawTarget. It must 
+    // The caller automatically gets a ref on the returned drawTarget. It must
     // be balanced by an unref call.
     GrDrawTarget* newDrawTarget(GrRenderTarget* rt);
 

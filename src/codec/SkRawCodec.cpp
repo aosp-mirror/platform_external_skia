@@ -381,7 +381,7 @@ public:
         if (fStream->getMemoryBase()) {  // directly copy if getMemoryBase() is available.
             SkAutoTUnref<SkData> data(SkData::NewWithCopy(
                 static_cast<const uint8_t*>(fStream->getMemoryBase()) + offset, bytesToRead));
-            fStream.free();
+            fStream.reset();
             return new SkMemoryStream(data);
         } else {
             SkAutoTUnref<SkData> data(SkData::NewUninitialized(bytesToRead));
@@ -515,8 +515,16 @@ public:
         }
     }
 
-    const SkImageInfo& getImageInfo() const {
-        return fImageInfo;
+    const SkEncodedInfo& getEncodedInfo() const {
+        return fEncodedInfo;
+    }
+
+    int width() const {
+        return fWidth;
+    }
+
+    int height() const {
+        return fHeight;
     }
 
     bool isScalable() const {
@@ -537,13 +545,17 @@ private:
         }
 
         // Check if the header is valid (endian info and magic number "42").
-        return
-            (header[0] == 0x49 && header[1] == 0x49 && header[2] == 0x2A && header[3] == 0x00) ||
-            (header[0] == 0x4D && header[1] == 0x4D && header[2] == 0x00 && header[3] == 0x2A);
+        bool littleEndian;
+        if (!is_valid_endian_marker(header, &littleEndian)) {
+            return false;
+        }
+
+        return 0x2A == get_endian_short(header + 2, littleEndian);
     }
 
-    void init(const int width, const int height, const dng_point& cfaPatternSize) {
-        fImageInfo = SkImageInfo::Make(width, height, kN32_SkColorType, kOpaque_SkAlphaType);
+    void init(int width, int height, const dng_point& cfaPatternSize) {
+        fWidth = width;
+        fHeight = height;
 
         // The DNG SDK scales only during demosaicing, so scaling is only possible when
         // a mosaic info is available.
@@ -604,7 +616,10 @@ private:
     }
 
     SkDngImage(SkRawStream* stream)
-        : fStream(stream) {}
+        : fStream(stream)
+        , fEncodedInfo(SkEncodedInfo::Make(SkEncodedInfo::kRGB_Color,
+                                           SkEncodedInfo::kOpaque_Alpha, 8))
+    {}
 
     SkDngMemoryAllocator fAllocator;
     SkAutoTDelete<SkRawStream> fStream;
@@ -613,7 +628,9 @@ private:
     SkAutoTDelete<dng_negative> fNegative;
     SkAutoTDelete<dng_stream> fDngStream;
 
-    SkImageInfo fImageInfo;
+    int fWidth;
+    int fHeight;
+    SkEncodedInfo fEncodedInfo;
     bool fIsScalable;
     bool fIsXtransImage;
 };
@@ -672,7 +689,7 @@ SkCodec::Result SkRawCodec::onGetPixels(const SkImageInfo& requestedInfo, void* 
     }
 
     SkAutoTDelete<SkSwizzler> swizzler(SkSwizzler::CreateSwizzler(
-            SkSwizzler::kRGB, nullptr, requestedInfo, options));
+            this->getEncodedInfo(), nullptr, requestedInfo, options));
     SkASSERT(swizzler);
 
     const int width = requestedInfo.width();
@@ -761,5 +778,5 @@ bool SkRawCodec::onDimensionsSupported(const SkISize& dim) {
 SkRawCodec::~SkRawCodec() {}
 
 SkRawCodec::SkRawCodec(SkDngImage* dngImage)
-    : INHERITED(dngImage->getImageInfo(), nullptr)
+    : INHERITED(dngImage->width(), dngImage->height(), dngImage->getEncodedInfo(), nullptr)
     , fDngImage(dngImage) {}

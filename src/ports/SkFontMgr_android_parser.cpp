@@ -7,6 +7,7 @@
 
 // Despite the name and location, this is portable code.
 
+#include "SkFixed.h"
 #include "SkFontMgr.h"
 #include "SkFontMgr_android_parser.h"
 #include "SkStream.h"
@@ -273,7 +274,7 @@ static const TagHandler familyHandler = {
         }
     },
     /*end*/[](FamilyData* self, const char* tag) {
-        *self->fFamilies.append() = self->fCurrentFamily.detach();
+        *self->fFamilies.append() = self->fCurrentFamily.release();
     },
     /*tag*/[](FamilyData* self, const char* tag, const char** attributes) -> const TagHandler* {
         size_t len = strlen(tag);
@@ -473,7 +474,7 @@ static const TagHandler familyHandler = {
         }
     },
     /*end*/[](FamilyData* self, const char* tag) {
-        *self->fFamilies.append() = self->fCurrentFamily.detach();
+        *self->fFamilies.append() = self->fCurrentFamily.release();
     },
     /*tag*/[](FamilyData* self, const char* tag, const char** attributes) -> const TagHandler* {
         size_t len = strlen(tag);

@@ -140,9 +140,9 @@ SkCodec* SkIcoCodec::NewFromStream(SkStream* stream) {
         // Check if the embedded codec is bmp or png and create the codec
         SkCodec* codec = nullptr;
         if (SkPngCodec::IsPng((const char*) data->bytes(), data->size())) {
-            codec = SkPngCodec::NewFromStream(embeddedStream.detach());
+            codec = SkPngCodec::NewFromStream(embeddedStream.release());
         } else {
-            codec = SkBmpCodec::NewFromIco(embeddedStream.detach());
+            codec = SkBmpCodec::NewFromIco(embeddedStream.release());
         }
 
         // Save a valid codec
@@ -168,20 +168,22 @@ SkCodec* SkIcoCodec::NewFromStream(SkStream* stream) {
             maxIndex = i;
         }
     }
-    SkImageInfo info = codecs->operator[](maxIndex)->getInfo();
+    int width = codecs->operator[](maxIndex)->getInfo().width();
+    int height = codecs->operator[](maxIndex)->getInfo().height();
+    SkEncodedInfo info = codecs->operator[](maxIndex)->getEncodedInfo();
 
     // Note that stream is owned by the embedded codec, the ico does not need
     // direct access to the stream.
-    return new SkIcoCodec(info, codecs.detach());
+    return new SkIcoCodec(width, height, info, codecs.release());
 }
 
 /*
  * Creates an instance of the decoder
  * Called only by NewFromStream
  */
-SkIcoCodec::SkIcoCodec(const SkImageInfo& info,
+SkIcoCodec::SkIcoCodec(int width, int height, const SkEncodedInfo& info,
                        SkTArray<SkAutoTDelete<SkCodec>, true>* codecs)
-    : INHERITED(info, nullptr)
+    : INHERITED(width, height, info, nullptr)
     , fEmbeddedCodecs(codecs)
     , fCurrScanlineCodec(nullptr)
 {}

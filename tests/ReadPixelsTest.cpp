@@ -52,7 +52,7 @@ static SkPMColor get_src_color(int x, int y) {
     }
     return SkPremultiplyARGBInline(a, r, g, b);
 }
-    
+
 static SkPMColor get_dst_bmp_init_color(int x, int y, int w) {
     int n = y * w + x;
 
@@ -200,8 +200,8 @@ static bool check_read(skiatest::Reporter* reporter,
                     bool didPremul;
                     SkPMColor pmPixel = convert_to_pmcolor(ct, at, pixel, &didPremul);
                     if (!check_read_pixel(pmPixel, canvasPixel, didPremul)) {
-                        ERRORF(reporter, "Expected readback pixel value 0x%08x, got 0x%08x. "
-                               "Readback was unpremul: %d", canvasPixel, pmPixel, didPremul);
+                        ERRORF(reporter, "Expected readback pixel (%d, %d) value 0x%08x, got 0x%08x. "
+                               "Readback was unpremul: %d", bx, by, canvasPixel, pmPixel, didPremul);
                         return false;
                     }
                 }
@@ -324,7 +324,7 @@ const SkIRect gReadPixelsTestRects[] = {
     SkIRect::MakeLTRB(3 * DEV_W / 4, -10, DEV_W + 10, DEV_H + 10),
 };
 
-static void test_readpixels(skiatest::Reporter* reporter, SkSurface* surface,
+static void test_readpixels(skiatest::Reporter* reporter, const sk_sp<SkSurface>& surface,
                             BitmapInit lastBitmapInit) {
     SkCanvas* canvas = surface->getCanvas();
     fill_src_canvas(canvas);
@@ -382,12 +382,12 @@ static void test_readpixels(skiatest::Reporter* reporter, SkSurface* surface,
 }
 DEF_TEST(ReadPixels, reporter) {
     const SkImageInfo info = SkImageInfo::MakeN32Premul(DEV_W, DEV_H);
-    SkAutoTUnref<SkSurface> surface(SkSurface::NewRaster(info));
+    auto surface(SkSurface::MakeRaster(info));
     // SW readback fails a premul check when reading back to an unaligned rowbytes.
     test_readpixels(reporter, surface, kLastAligned_BitmapInit);
 }
 #if SK_SUPPORT_GPU
-DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ReadPixels_Gpu, reporter, context) {
+DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ReadPixels_Gpu, reporter, ctxInfo) {
     for (auto& origin : {kBottomLeft_GrSurfaceOrigin, kTopLeft_GrSurfaceOrigin}) {
         GrSurfaceDesc desc;
         desc.fFlags = kRenderTarget_GrSurfaceFlag;
@@ -396,8 +396,8 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ReadPixels_Gpu, reporter, context) {
         desc.fConfig = kSkia8888_GrPixelConfig;
         desc.fOrigin = origin;
         SkAutoTUnref<GrTexture> surfaceTexture(
-            context->textureProvider()->createTexture(desc, SkBudgeted::kNo));
-        SkAutoTUnref<SkSurface> surface(SkSurface::NewRenderTargetDirect(surfaceTexture->asRenderTarget()));
+            ctxInfo.grContext()->textureProvider()->createTexture(desc, SkBudgeted::kNo));
+        auto surface(SkSurface::MakeRenderTargetDirect(surfaceTexture->asRenderTarget()));
         desc.fFlags = kNone_GrSurfaceFlags;
         test_readpixels(reporter, surface, kLast_BitmapInit);
     }
@@ -424,7 +424,8 @@ static void test_readpixels_texture(skiatest::Reporter* reporter, GrTexture* tex
                     GrPixelConfig dstConfig =
                             SkImageInfo2GrPixelConfig(gReadPixelsConfigs[c].fColorType,
                                                       gReadPixelsConfigs[c].fAlphaType,
-                                                      kLinear_SkColorProfileType);
+                                                      nullptr,
+                                                      *texture->getContext()->caps());
                     uint32_t flags = 0;
                     if (gReadPixelsConfigs[c].fAlphaType == kUnpremul_SkAlphaType) {
                         flags = GrContext::kUnpremul_PixelOpsFlag;
@@ -441,7 +442,7 @@ static void test_readpixels_texture(skiatest::Reporter* reporter, GrTexture* tex
         }
     }
 }
-DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ReadPixels_Texture, reporter, context) {
+DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ReadPixels_Texture, reporter, ctxInfo) {
     // On the GPU we will also try reading back from a non-renderable texture.
     for (auto& origin : {kBottomLeft_GrSurfaceOrigin, kTopLeft_GrSurfaceOrigin}) {
         SkAutoTUnref<GrTexture> texture;
@@ -452,175 +453,9 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ReadPixels_Texture, reporter, context) {
         desc.fConfig = kSkia8888_GrPixelConfig;
         desc.fOrigin = origin;
         desc.fFlags = kNone_GrSurfaceFlags;
-        texture.reset(context->textureProvider()->createTexture(desc, SkBudgeted::kNo));
+        texture.reset(ctxInfo.grContext()->textureProvider()->createTexture(desc,
+                                                                            SkBudgeted::kNo));
         test_readpixels_texture(reporter, texture);
-    }
-}
-#endif
-/////////////////////
-#if SK_SUPPORT_GPU
-
-// make_ringed_bitmap was lifted from gm/bleed.cpp, as that GM was what showed the following
-// bug when a change was made to SkImage_Raster.cpp. It is possible that other test bitmaps
-// would also tickle https://bug.skia.org/4351 but this one is know to do it, so I've pasted the code
-// here so we have a dependable repro case.
-
-// Create a black&white checked texture with 2 1-pixel rings
-// around the outside edge. The inner ring is red and the outer ring is blue.
-static void make_ringed_bitmap(SkBitmap* result, int width, int height) {
-    SkASSERT(0 == width % 2 && 0 == height % 2);
-
-    static const SkPMColor kRed = SkPreMultiplyColor(SK_ColorRED);
-    static const SkPMColor kBlue = SkPreMultiplyColor(SK_ColorBLUE);
-    static const SkPMColor kBlack = SkPreMultiplyColor(SK_ColorBLACK);
-    static const SkPMColor kWhite = SkPreMultiplyColor(SK_ColorWHITE);
-
-    result->allocN32Pixels(width, height, true);
-
-    SkPMColor* scanline = result->getAddr32(0, 0);
-    for (int x = 0; x < width; ++x) {
-        scanline[x] = kBlue;
-    }
-    scanline = result->getAddr32(0, 1);
-    scanline[0] = kBlue;
-    for (int x = 1; x < width - 1; ++x) {
-        scanline[x] = kRed;
-    }
-    scanline[width-1] = kBlue;
-
-    for (int y = 2; y < height/2; ++y) {
-        scanline = result->getAddr32(0, y);
-        scanline[0] = kBlue;
-        scanline[1] = kRed;
-        for (int x = 2; x < width/2; ++x) {
-            scanline[x] = kBlack;
-        }
-        for (int x = width/2; x < width-2; ++x) {
-            scanline[x] = kWhite;
-        }
-        scanline[width-2] = kRed;
-        scanline[width-1] = kBlue;
-    }
-
-    for (int y = height/2; y < height-2; ++y) {
-        scanline = result->getAddr32(0, y);
-        scanline[0] = kBlue;
-        scanline[1] = kRed;
-        for (int x = 2; x < width/2; ++x) {
-            scanline[x] = kWhite;
-        }
-        for (int x = width/2; x < width-2; ++x) {
-            scanline[x] = kBlack;
-        }
-        scanline[width-2] = kRed;
-        scanline[width-1] = kBlue;
-    }
-
-    scanline = result->getAddr32(0, height-2);
-    scanline[0] = kBlue;
-    for (int x = 1; x < width - 1; ++x) {
-        scanline[x] = kRed;
-    }
-    scanline[width-1] = kBlue;
-
-    scanline = result->getAddr32(0, height-1);
-    for (int x = 0; x < width; ++x) {
-        scanline[x] = kBlue;
-    }
-    result->setImmutable();
-}
-
-static void compare_textures(skiatest::Reporter* reporter, GrTexture* txa, GrTexture* txb) {
-    REPORTER_ASSERT(reporter, txa->width() == 2);
-    REPORTER_ASSERT(reporter, txa->height() == 2);
-    REPORTER_ASSERT(reporter, txb->width() == 2);
-    REPORTER_ASSERT(reporter, txb->height() == 2);
-    REPORTER_ASSERT(reporter, txa->config() == txb->config());
-
-    SkPMColor pixelsA[4], pixelsB[4];
-    REPORTER_ASSERT(reporter, txa->readPixels(0, 0, 2, 2, txa->config(), pixelsA));
-    REPORTER_ASSERT(reporter, txb->readPixels(0, 0, 2, 2, txa->config(), pixelsB));
-    REPORTER_ASSERT(reporter, 0 == memcmp(pixelsA, pixelsB, sizeof(pixelsA)));
-}
-
-static SkData* draw_into_surface(SkSurface* surf, const SkBitmap& bm, SkFilterQuality quality) {
-    SkCanvas* canvas = surf->getCanvas();
-    canvas->clear(SK_ColorBLUE);
-
-    SkPaint paint;
-    paint.setFilterQuality(quality);
-
-    canvas->translate(40, 100);
-    canvas->rotate(30);
-    canvas->scale(20, 30);
-    canvas->translate(-SkScalarHalf(bm.width()), -SkScalarHalf(bm.height()));
-    canvas->drawBitmap(bm, 0, 0, &paint);
-
-    SkAutoTUnref<SkImage> image(surf->newImageSnapshot());
-    return image->encode();
-}
-
-#include "SkStream.h"
-static void dump_to_file(const char name[], SkData* data) {
-    SkFILEWStream file(name);
-    file.write(data->data(), data->size());
-}
-
-/*
- *  Test two different ways to turn a subset of a bitmap into a texture
- *  - subset and then upload to a texture
- *  - upload to a texture and then subset
- *
- *  These two techniques result in the same pixels (ala readPixels)
- *  but when we draw them (rotated+scaled) we don't always get the same results.
- *
- *  https://bug.skia.org/4351
- */
-DEF_GPUTEST_FOR_NATIVE_CONTEXT(ReadPixels_Subset_Gpu, reporter, context) {
-    SkBitmap bitmap;
-    make_ringed_bitmap(&bitmap, 6, 6);
-    const SkIRect subset = SkIRect::MakeLTRB(2, 2, 4, 4);
-
-    // make two textures...
-    SkBitmap bm_subset, tx_subset;
-
-    // ... one from a texture-subset
-    SkAutoTUnref<GrTexture> fullTx(GrRefCachedBitmapTexture(context, bitmap,
-                                                            GrTextureParams::ClampNoFilter()));
-    SkBitmap tx_full;
-    GrWrapTextureInBitmap(fullTx, bitmap.width(), bitmap.height(), true, &tx_full);
-    tx_full.extractSubset(&tx_subset, subset);
-
-    // ... one from a bitmap-subset
-    SkBitmap tmp_subset;
-    bitmap.extractSubset(&tmp_subset, subset);
-    SkAutoTUnref<GrTexture> subsetTx(GrRefCachedBitmapTexture(context, tmp_subset,
-                                                              GrTextureParams::ClampNoFilter()));
-    GrWrapTextureInBitmap(subsetTx, tmp_subset.width(), tmp_subset.height(), true, &bm_subset);
-
-    // did we get the same subset?
-    compare_textures(reporter, bm_subset.getTexture(), tx_subset.getTexture());
-
-    // do they draw the same?
-    const SkImageInfo info = SkImageInfo::MakeN32Premul(128, 128);
-    SkAutoTUnref<SkSurface> surfA(SkSurface::NewRenderTarget(context, SkBudgeted::kNo, info, 0));
-    SkAutoTUnref<SkSurface> surfB(SkSurface::NewRenderTarget(context, SkBudgeted::kNo, info, 0));
-
-    if (false) {
-        //
-        //  BUG: depending on the driver, if we calls this with various quality settings, it
-        //       may fail.
-        //
-        SkFilterQuality quality = kLow_SkFilterQuality;
-
-        SkAutoTUnref<SkData> dataA(draw_into_surface(surfA, bm_subset, quality));
-        SkAutoTUnref<SkData> dataB(draw_into_surface(surfB, tx_subset, quality));
-
-        REPORTER_ASSERT(reporter, dataA->equals(dataB));
-        if (false) {
-            dump_to_file("test_image_A.png", dataA);
-            dump_to_file("test_image_B.png", dataB);
-        }
     }
 }
 #endif

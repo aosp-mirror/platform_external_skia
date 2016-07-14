@@ -35,7 +35,7 @@ public:
     /**
     *  Return a canvas that will draw into this surface. This will always
     *  return the same canvas for a given surface, and is managed/owned by the
-    *  surface. 
+    *  surface.
     *
     *  The canvas will be invalid after 'newImageSnapshot' is called.
     */
@@ -48,29 +48,23 @@ public:
     *
     *  Note: the caller inherits a ref from this call that must be balanced
     */
-    SkSpecialImage* newImageSnapshot();
+    sk_sp<SkSpecialImage> makeImageSnapshot();
 
-    /**
-     *  Use an existing (renderTarget-capable) GrTexture as the backing store.
-     */
-    static SkSpecialSurface* NewFromTexture(SkImageFilter::Proxy* proxy,
-                                            const SkIRect& subset, GrTexture*,
-                                            const SkSurfaceProps* = nullptr);
-
+#if SK_SUPPORT_GPU
     /**
      *  Allocate a new GPU-backed SkSpecialSurface. If the requested surface cannot
      *  be created, nullptr will be returned.
      */
-    static SkSpecialSurface* NewRenderTarget(SkImageFilter::Proxy* proxy,
-                                             GrContext*, const GrSurfaceDesc&,
-                                             const SkSurfaceProps* = nullptr);
+    static sk_sp<SkSpecialSurface> MakeRenderTarget(GrContext*,
+                                                    int width, int height,
+                                                    GrPixelConfig config);
+#endif
 
     /**
      * Use and existing SkBitmap as the backing store.
      */
-    static SkSpecialSurface* NewFromBitmap(SkImageFilter::Proxy* proxy,
-                                           const SkIRect& subset, SkBitmap& bm,
-                                           const SkSurfaceProps* = nullptr);
+    static sk_sp<SkSpecialSurface> MakeFromBitmap(const SkIRect& subset, SkBitmap& bm,
+                                                  const SkSurfaceProps* = nullptr);
 
     /**
      *  Return a new CPU-backed surface, with the memory for the pixels automatically
@@ -79,25 +73,19 @@ public:
      *  If the requested surface cannot be created, or the request is not a
      *  supported configuration, nullptr will be returned.
      */
-    static SkSpecialSurface* NewRaster(SkImageFilter::Proxy* proxy,
-                                       const SkImageInfo&, const SkSurfaceProps* = nullptr);
+    static sk_sp<SkSpecialSurface> MakeRaster(const SkImageInfo&,
+                                              const SkSurfaceProps* = nullptr);
 
 protected:
-    SkSpecialSurface(SkImageFilter::Proxy*, const SkIRect& subset, const SkSurfaceProps*);
+    SkSpecialSurface(const SkIRect& subset, const SkSurfaceProps*);
 
     // For testing only
     friend class TestingSpecialSurfaceAccess;
     const SkIRect& subset() const { return fSubset; }
 
-    // TODO: remove this ASAP (see skbug.com/4965)
-    SkImageFilter::Proxy* proxy() const { return fProxy; }
-
 private:
     const SkSurfaceProps fProps;
     const SkIRect        fSubset;
-
-    // TODO: remove this ASAP (see skbug.com/4965)
-    SkImageFilter::Proxy* fProxy;
 
     typedef SkRefCnt INHERITED;
 };

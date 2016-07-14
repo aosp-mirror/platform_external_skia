@@ -38,8 +38,6 @@
   'variables': {  # level 1
     'angle_path%': '../',
 
-    'skia_mojo%': '0',
-
     'variables': {  # level 2
       # Variables needed by conditions list within the level-2 variables dict.
       'variables': {  # level 3
@@ -53,18 +51,14 @@
         'skia_os%': '<(skia_os)',
         'vulkan_merged_into_skia': '1',
         'skia_android_framework%': 0,
+        # RAW codec needs exceptions. Due to that, it is a separate target. Its usage can be
+        # controlled by skia_codec_decodes_raw.
+        'skia_codec_decodes_raw%' : 1,
         'conditions' : [
           [ 'skia_os in ["linux", "freebsd", "openbsd", "solaris", "mac"]', {
             'skia_arch_type%': 'x86_64',
           }, {
             'skia_arch_type%': 'x86',
-          }],
-          # RAW codec needs exceptions. Due to that, it is a separate target. Its usage can be
-          # controlled by skia_codec_decodes_raw.
-          ['skia_os == "win"', {
-            'skia_codec_decodes_raw%' : 0,
-          }, {
-            'skia_codec_decodes_raw%' : 1,
           }],
         ],
         'arm_version%': 0,
@@ -88,6 +82,7 @@
           'skia_chrome_utils%': 0,
           'skia_use_android_framework_defines%': 1,
           'skia_use_system_json%': 1,
+          'skia_vulkan%': 1,
         }, {
           'skia_os%': '<(skia_os)',
           'skia_chrome_utils%': 1,
@@ -202,7 +197,6 @@
     # so that siblings of the level-1 'variables' dict can see them.
     'arm_version%': '<(arm_version)',
     'arm_neon%': '<(arm_neon)',
-    'arm_neon_optional%': 0,
     'mips_arch_variant%': 'mips32',
     'mips_dsp%': 0,
     'skia_os%': '<(skia_os)',
@@ -236,7 +230,6 @@
     'skia_win_ltcg%': '<(skia_is_bot)',
     'skia_osx_deployment_target%': '<(skia_osx_deployment_target)',
     'skia_pdf%': '<(skia_pdf)',
-    'skia_pdf_generate_pdfa%': 0,  # emit larger PDF/A-2b file
     'skia_profile_enabled%': '<(skia_profile_enabled)',
     'skia_shared_lib%': '<(skia_shared_lib)',
     'skia_force_distance_field_text%': '<(skia_force_distance_field_text)',
@@ -250,7 +243,6 @@
     'skia_use_sdl%': 0,
     'skia_fast%': 0,
     'skia_dump_stats%': 0,
-    'skia_build_server%': 0,
     'vulkan_merged_into_skia%': '<(vulkan_merged_into_skia)',
     'skia_fast_flags': [
         '-O3',                   # Even for Debug builds.

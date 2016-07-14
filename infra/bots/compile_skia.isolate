@@ -1,10 +1,7 @@
 {
-  'includes': [
-    'skia_repo.isolate',
-  ],
   'variables': {
-    'command': [
-      'python', 'compile_skia.py', '<(BUILDER_NAME)', '${ISOLATED_OUTDIR}/out',
+    'files': [
+      '../../../.gclient',
     ],
   },
 }

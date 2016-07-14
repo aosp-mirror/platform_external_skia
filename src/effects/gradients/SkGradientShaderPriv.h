@@ -51,20 +51,10 @@ static inline SkFixed repeat_tileproc(SkFixed x) {
 
 // Mirror
 
-// Visual Studio 2010 (MSC_VER=1600) optimizes bit-shift code incorrectly.
-// See http://code.google.com/p/skia/issues/detail?id=472
-#if defined(_MSC_VER) && (_MSC_VER >= 1600)
-#pragma optimize("", off)
-#endif
-
 static inline SkFixed mirror_tileproc(SkFixed x) {
     int s = SkLeftShift(x, 15) >> 31;
     return (x ^ s) & 0xFFFF;
 }
-
-#if defined(_MSC_VER) && (_MSC_VER >= 1600)
-#pragma optimize("", on)
-#endif
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -152,8 +142,8 @@ public:
         const SkGradientShaderBase& fShader;
 
         // Make sure we only initialize the caches once.
-        bool    fCache16Inited, fCache32Inited;
-        SkMutex fCache16Mutex, fCache32Mutex;
+        SkOnce fCache16InitOnce,
+               fCache32InitOnce;
 
         static void initCache16(GradientShaderCache* cache);
         static void initCache32(GradientShaderCache* cache);
@@ -433,7 +423,7 @@ protected:
                    const char* gradientTValue,
                    const char* outputColor,
                    const char* inputColor,
-                   const TextureSamplerArray& samplers);
+                   const SamplerHandle* texSamplers);
 
 private:
     enum {

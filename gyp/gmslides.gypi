@@ -27,11 +27,17 @@
         '../tools/debugger/SkDrawCommand.cpp',
         '../tools/debugger/SkDebugCanvas.h',
         '../tools/debugger/SkDebugCanvas.cpp',
+        '../tools/debugger/SkJsonWriteBuffer.h',
+        '../tools/debugger/SkJsonWriteBuffer.cpp',
         '../tools/debugger/SkObjectParser.h',
         '../tools/debugger/SkObjectParser.cpp',
         '../tools/debugger/SkOverdrawMode.h',
         '../tools/debugger/SkOverdrawMode.cpp',
       ],
+      'dependencies': [
+        'libpng.gyp:libpng',
+        'tools.gyp:picture_utils',
+      ]
     }],
   ],
 }

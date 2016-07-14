@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2011 Google Inc.
  *
@@ -22,12 +21,20 @@ SkBitSet::SkBitSet(const SkBitSet& source)
     *this = source;
 }
 
+SkBitSet::SkBitSet(SkBitSet&& source)
+    : fBitData(source.fBitData.release())
+    , fDwordCount(source.fDwordCount)
+    , fBitCount(source.fBitCount) {
+    source.fDwordCount = 0;
+    source.fBitCount = 0;
+}
+
 SkBitSet& SkBitSet::operator=(const SkBitSet& rhs) {
     if (this == &rhs) {
         return *this;
     }
     fBitCount = rhs.fBitCount;
-    fBitData.free();
+    fBitData.reset();
     fDwordCount = rhs.fDwordCount;
     fBitData.set(sk_malloc_throw(fDwordCount * sizeof(uint32_t)));
     memcpy(fBitData.get(), rhs.fBitData.get(), fDwordCount * sizeof(uint32_t));

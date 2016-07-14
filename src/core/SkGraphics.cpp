@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2006 The Android Open Source Project
  *
@@ -11,6 +10,7 @@
 
 #include "SkBlitter.h"
 #include "SkCanvas.h"
+#include "SkCpu.h"
 #include "SkGeometry.h"
 #include "SkGlyphCache.h"
 #include "SkImageFilter.h"
@@ -47,9 +47,10 @@ void SkGraphics::GetVersion(int32_t* major, int32_t* minor, int32_t* patch) {
 
 void SkGraphics::Init() {
     // SkGraphics::Init() must be thread-safe and idempotent.
+    SkCpu::CacheRuntimeFeatures();
     SkOpts::Init();
 
-#ifdef SK_DEVELOPER
+#ifdef SK_DEBUG
     skRTConfRegistry().possiblyDumpFile();
     skRTConfRegistry().validate();
     if (skRTConfRegistry().hasNonDefault()) {

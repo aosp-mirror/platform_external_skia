@@ -8,9 +8,10 @@
 #ifndef GrGLSLFragmentProcessor_DEFINED
 #define GrGLSLFragmentProcessor_DEFINED
 
+#include "GrFragmentProcessor.h"
 #include "glsl/GrGLSLProcessorTypes.h"
 #include "glsl/GrGLSLProgramDataManager.h"
-#include "glsl/GrGLSLTextureSampler.h"
+#include "glsl/GrGLSLSampler.h"
 
 class GrProcessor;
 class GrProcessorKeyBuilder;
@@ -30,7 +31,7 @@ public:
     }
 
     typedef GrGLSLProgramDataManager::UniformHandle UniformHandle;
-    typedef GrGLSLTextureSampler::TextureSamplerArray TextureSamplerArray;
+    typedef GrGLSLProgramDataManager::UniformHandle SamplerHandle;
 
     /** Called when the program stage should insert its code into the shaders. The code in each
         shader will be in its own block ({}) and so locally scoped names will not collide across
@@ -59,7 +60,8 @@ public:
                  const char* outputColor,
                  const char* inputColor,
                  const GrGLSLTransformedCoordsArray& coords,
-                 const TextureSamplerArray& samplers)
+                 const SamplerHandle* texSamplers,
+                 const SamplerHandle* bufferSamplers)
             : fFragBuilder(fragBuilder)
             , fUniformHandler(uniformHandler)
             , fGLSLCaps(caps)
@@ -67,7 +69,8 @@ public:
             , fOutputColor(outputColor)
             , fInputColor(inputColor)
             , fCoords(coords)
-            , fSamplers(samplers) {}
+            , fTexSamplers(texSamplers)
+            , fBufferSamplers(bufferSamplers) {}
         GrGLSLFPFragmentBuilder* fFragBuilder;
         GrGLSLUniformHandler* fUniformHandler;
         const GrGLSLCaps* fGLSLCaps;
@@ -75,7 +78,8 @@ public:
         const char* fOutputColor;
         const char* fInputColor;
         const GrGLSLTransformedCoordsArray& fCoords;
-        const TextureSamplerArray& fSamplers;
+        const SamplerHandle* fTexSamplers;
+        const SamplerHandle* fBufferSamplers;
     };
 
     virtual void emitCode(EmitArgs&) = 0;

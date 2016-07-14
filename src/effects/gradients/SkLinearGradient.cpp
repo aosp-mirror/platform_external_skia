@@ -7,6 +7,7 @@
 
 #include "Sk4fLinearGradient.h"
 #include "SkLinearGradient.h"
+#include "SkRefCnt.h"
 
 // define to test the 4f gradient path
 // #define FORCE_4F_CONTEXT
@@ -17,22 +18,12 @@ static inline int repeat_8bits(int x) {
     return x & 0xFF;
 }
 
-// Visual Studio 2010 (MSC_VER=1600) optimizes bit-shift code incorrectly.
-// See http://code.google.com/p/skia/issues/detail?id=472
-#if defined(_MSC_VER) && (_MSC_VER >= 1600)
-#pragma optimize("", off)
-#endif
-
 static inline int mirror_8bits(int x) {
     if (x & 256) {
         x = ~x;
     }
     return x & 255;
 }
-
-#if defined(_MSC_VER) && (_MSC_VER >= 1600)
-#pragma optimize("", on)
-#endif
 
 static SkMatrix pts_to_unit_matrix(const SkPoint pts[2]) {
     SkVector    vec = pts[1] - pts[0];
@@ -51,12 +42,6 @@ static bool use_4f_context(const SkShader::ContextRec& rec, uint32_t flags) {
 #ifdef FORCE_4F_CONTEXT
     return true;
 #else
-    // Perspective not supported in 4f yet.
-    if (rec.fMatrix->hasPerspective()
-        || (rec.fLocalMatrix && rec.fLocalMatrix->hasPerspective())) {
-        return false;
-    }
-
     return rec.fPreferredDstType == SkShader::ContextRec::kPM4f_DstType
         || SkToBool(flags & SkLinearGradient::kForce4fContext_PrivateFlag);
 #endif
@@ -70,7 +55,7 @@ SkLinearGradient::SkLinearGradient(const SkPoint pts[2], const Descriptor& desc)
     , fEnd(pts[1]) {
 }
 
-SkFlattenable* SkLinearGradient::CreateProc(SkReadBuffer& buffer) {
+sk_sp<SkFlattenable> SkLinearGradient::CreateProc(SkReadBuffer& buffer) {
     DescriptorScope desc;
     if (!desc.unflatten(buffer)) {
         return nullptr;
@@ -78,8 +63,8 @@ SkFlattenable* SkLinearGradient::CreateProc(SkReadBuffer& buffer) {
     SkPoint pts[2];
     pts[0] = buffer.readPoint();
     pts[1] = buffer.readPoint();
-    return SkGradientShader::CreateLinear(pts, desc.fColors, desc.fPos, desc.fCount,
-                                          desc.fTileMode, desc.fGradFlags, desc.fLocalMatrix);
+    return SkGradientShader::MakeLinear(pts, desc.fColors, desc.fPos, desc.fCount, desc.fTileMode,
+                                        desc.fGradFlags, desc.fLocalMatrix);
 }
 
 void SkLinearGradient::flatten(SkWriteBuffer& buffer) const {
@@ -88,7 +73,7 @@ void SkLinearGradient::flatten(SkWriteBuffer& buffer) const {
     buffer.writePoint(fEnd);
 }
 
-size_t SkLinearGradient::contextSize(const ContextRec& rec) const {
+size_t SkLinearGradient::onContextSize(const ContextRec& rec) const {
     return use_4f_context(rec, fGradFlags)
         ? sizeof(LinearGradient4fContext)
         : sizeof(LinearGradientContext);
@@ -115,7 +100,9 @@ SkLinearGradient::LinearGradientContext::LinearGradientContext(
     : INHERITED(shader, ctx)
 {
     // setup for Sk4f
-    int count = shader.fColorCount;
+    const int count = shader.fColorCount;
+    SkASSERT(count > 1);
+
     fRecs.setCount(count);
     Rec* rec = fRecs.begin();
     if (shader.fOrigPos) {
@@ -130,16 +117,16 @@ SkLinearGradient::LinearGradientContext::LinearGradientContext(
                 rec[i].fPosScale = 0;
             }
         }
-        rec[count - 1].fPos = 1;    // overwrite the last value just to be sure we end at 1.0
     } else {
         // no pos specified, so we compute evenly spaced values
         const float scale = float(count - 1);
-        float invScale = 1.0f / scale;
+        const float invScale = 1.0f / scale;
         for (int i = 0; i < count; ++i) {
             rec[i].fPos = i * invScale;
             rec[i].fPosScale = scale;
         }
     }
+    rec[count - 1].fPos = 1;    // overwrite the last value just to be sure we end at 1.0
 
     fApplyAlphaAfterInterp = true;
     if ((shader.getGradFlags() & SkGradientShader::kInterpolateColorsInPremul_Flag) ||
@@ -383,11 +370,11 @@ private:
 class GrLinearGradient : public GrGradientEffect {
 public:
 
-    static GrFragmentProcessor* Create(GrContext* ctx,
-                                       const SkLinearGradient& shader,
-                                       const SkMatrix& matrix,
-                                       SkShader::TileMode tm) {
-        return new GrLinearGradient(ctx, shader, matrix, tm);
+    static sk_sp<GrFragmentProcessor> Make(GrContext* ctx,
+                                           const SkLinearGradient& shader,
+                                           const SkMatrix& matrix,
+                                           SkShader::TileMode tm) {
+        return sk_sp<GrFragmentProcessor>(new GrLinearGradient(ctx, shader, matrix, tm));
     }
 
     virtual ~GrLinearGradient() { }
@@ -421,7 +408,7 @@ private:
 
 GR_DEFINE_FRAGMENT_PROCESSOR_TEST(GrLinearGradient);
 
-const GrFragmentProcessor* GrLinearGradient::TestCreate(GrProcessorTestData* d) {
+sk_sp<GrFragmentProcessor> GrLinearGradient::TestCreate(GrProcessorTestData* d) {
     SkPoint points[] = {{d->fRandom->nextUScalar1(), d->fRandom->nextUScalar1()},
                         {d->fRandom->nextUScalar1(), d->fRandom->nextUScalar1()}};
 
@@ -430,11 +417,10 @@ const GrFragmentProcessor* GrLinearGradient::TestCreate(GrProcessorTestData* d) 
     SkScalar* stops = stopsArray;
     SkShader::TileMode tm;
     int colorCount = RandomGradientParams(d->fRandom, colors, &stops, &tm);
-    SkAutoTUnref<SkShader> shader(SkGradientShader::CreateLinear(points,
-                                                                 colors, stops, colorCount,
-                                                                 tm));
-    const GrFragmentProcessor* fp = shader->asFragmentProcessor(d->fContext,
-        GrTest::TestMatrix(d->fRandom), NULL, kNone_SkFilterQuality);
+    auto shader = SkGradientShader::MakeLinear(points, colors, stops, colorCount, tm);
+    sk_sp<GrFragmentProcessor> fp = shader->asFragmentProcessor(d->fContext,
+        GrTest::TestMatrix(d->fRandom), NULL, kNone_SkFilterQuality,
+        SkSourceGammaTreatment::kRespect);
     GrAlwaysAssert(fp);
     return fp;
 }
@@ -452,16 +438,17 @@ void GrGLLinearGradient::emitCode(EmitArgs& args) {
                     ge, t.c_str(),
                     args.fOutputColor,
                     args.fInputColor,
-                    args.fSamplers);
+                    args.fTexSamplers);
 }
 
 /////////////////////////////////////////////////////////////////////
 
-const GrFragmentProcessor* SkLinearGradient::asFragmentProcessor(
+sk_sp<GrFragmentProcessor> SkLinearGradient::asFragmentProcessor(
                                                  GrContext* context,
                                                  const SkMatrix& viewm,
                                                  const SkMatrix* localMatrix,
-                                                 SkFilterQuality) const {
+                                                 SkFilterQuality,
+                                                 SkSourceGammaTreatment) const {
     SkASSERT(context);
 
     SkMatrix matrix;
@@ -477,9 +464,8 @@ const GrFragmentProcessor* SkLinearGradient::asFragmentProcessor(
     }
     matrix.postConcat(fPtsToUnit);
 
-    SkAutoTUnref<const GrFragmentProcessor> inner(
-        GrLinearGradient::Create(context, *this, matrix, fTileMode));
-    return GrFragmentProcessor::MulOutputByInputAlpha(inner);
+    sk_sp<GrFragmentProcessor> inner(GrLinearGradient::Make(context, *this, matrix, fTileMode));
+    return GrFragmentProcessor::MulOutputByInputAlpha(std::move(inner));
 }
 
 
@@ -626,7 +612,11 @@ void SkLinearGradient::LinearGradientContext::shade4_dx_clamp(SkPMColor dstC[], 
 
     if (dx_is_pos) {
         if (fx < 0) {
-            int n = SkTMin(SkFloatToIntFloor(-fx * invDx) + 1, count);
+            // count is guaranteed to be positive, but the first arg may overflow int32 after
+            // increment => casting to uint32 ensures correct clamping.
+            int n = SkTMin<uint32_t>(static_cast<uint32_t>(SkFloatToIntFloor(-fx * invDx)) + 1,
+                                     count);
+            SkASSERT(n > 0);
             fill<apply_alpha>(dstC, n, rec[0].fColor);
             count -= n;
             dstC += n;
@@ -638,7 +628,11 @@ void SkLinearGradient::LinearGradientContext::shade4_dx_clamp(SkPMColor dstC[], 
         }
     } else { // dx < 0
         if (fx > 1) {
-            int n = SkTMin(SkFloatToIntFloor((1 - fx) * invDx) + 1, count);
+            // count is guaranteed to be positive, but the first arg may overflow int32 after
+            // increment => casting to uint32 ensures correct clamping.
+            int n = SkTMin<uint32_t>(static_cast<uint32_t>(SkFloatToIntFloor((1 - fx) * invDx)) + 1,
+                                     count);
+            SkASSERT(n > 0);
             fill<apply_alpha>(dstC, n, rec[fRecs.count() - 1].fColor);
             count -= n;
             dstC += n;

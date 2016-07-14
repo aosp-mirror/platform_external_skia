@@ -167,7 +167,10 @@ void SkResizeFilter::computeFilters(int srcSize,
     // is at (2.5, 2.5).
     float destFilterDist = (srcBegin + 0.5f - srcPixel) * clampedScale;
     int filterCount = SkScalarTruncToInt(srcEnd - srcBegin) + 1;
-    SkASSERT(filterCount > 0);
+    if (filterCount <= 0) {
+        // true when srcSize is equal to srcPixel - srcSupport; this may be a bug
+        return;
+    }
     filterValuesArray.reset(filterCount);
     float filterSum = fBitmapFilter->evaluate_n(destFilterDist, clampedScale, filterCount,
                                                 filterValuesArray.begin());
@@ -247,7 +250,10 @@ bool SkBitmapScaler::Resize(SkBitmap* resultPtr, const SkPixmap& source, ResizeM
     }
 
     SkBitmap result;
-    result.setInfo(SkImageInfo::MakeN32(destWidth, destHeight, source.alphaType()));
+    // Note: pass along the profile information even thought this is no the right answer because
+    // this could be scaling in sRGB.
+    result.setInfo(SkImageInfo::MakeN32(destWidth, destHeight, source.alphaType(),
+                                        sk_ref_sp(source.info().colorSpace())));
     result.allocPixels(allocator, nullptr);
 
     SkPixmap resultPM;
@@ -260,4 +266,3 @@ bool SkBitmapScaler::Resize(SkBitmap* resultPtr, const SkPixmap& source, ResizeM
     SkASSERT(resultPtr->getPixels());
     return true;
 }
-

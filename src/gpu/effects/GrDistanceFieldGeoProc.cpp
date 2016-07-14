@@ -79,11 +79,15 @@ public:
         // add varyings
         GrGLSLVertToFrag recipScale(kFloat_GrSLType);
         GrGLSLVertToFrag uv(kVec2f_GrSLType);
+        bool isUniformScale = (dfTexEffect.getFlags() & kUniformScale_DistanceFieldEffectMask) ==
+                              kUniformScale_DistanceFieldEffectMask;
         bool isSimilarity = SkToBool(dfTexEffect.getFlags() & kSimilarity_DistanceFieldEffectFlag);
+        bool isGammaCorrect =
+            SkToBool(dfTexEffect.getFlags() & kGammaCorrect_DistanceFieldEffectFlag);
         varyingHandler->addVarying("TextureCoords", &uv, kHigh_GrSLPrecision);
         vertBuilder->codeAppendf("%s = %s;", uv.vsOut(), dfTexEffect.inTextureCoords()->fName);
 
-        // compute numbers to be hardcoded to convert texture coordinates from int to float
+        // compute numbers to be hardcoded to convert texture coordinates from float to int
         SkASSERT(dfTexEffect.numTextures() == 1);
         GrTexture* atlas = dfTexEffect.textureAccess(0).getTexture();
         SkASSERT(atlas && SkIsPow2(atlas->width()) && SkIsPow2(atlas->height()));
@@ -93,14 +97,13 @@ public:
         vertBuilder->codeAppendf("%s = vec2(%d, %d) * %s;", st.vsOut(),
                                  atlas->width(), atlas->height(),
                                  dfTexEffect.inTextureCoords()->fName);
-        
+
         // Use highp to work around aliasing issues
-        fragBuilder->codeAppend(GrGLSLShaderVar::PrecisionString(args.fGLSLCaps,
-                                                                 kHigh_GrSLPrecision));
+        fragBuilder->appendPrecisionModifier(kHigh_GrSLPrecision);
         fragBuilder->codeAppendf("vec2 uv = %s;\n", uv.fsIn());
 
         fragBuilder->codeAppend("\tfloat texColor = ");
-        fragBuilder->appendTextureLookup(args.fSamplers[0],
+        fragBuilder->appendTextureLookup(args.fTexSamplers[0],
                                          "uv",
                                          kVec2f_GrSLType);
         fragBuilder->codeAppend(".r;\n");
@@ -112,15 +115,24 @@ public:
 #endif
 
         fragBuilder->codeAppend("float afwidth;");
-        if (isSimilarity) {
+        if (isUniformScale) {
             // For uniform scale, we adjust for the effect of the transformation on the distance
-            // by using the length of the gradient of the texture coordinates. We use st coordinates
-            // to ensure we're mapping 1:1 from texel space to pixel space.
+            // by using the length of the gradient of the t coordinate in the y direction.
+            // We use st coordinates to ensure we're mapping 1:1 from texel space to pixel space.
+            // We use the y gradient because there is a bug in the Mali 400 in the x direction.
 
             // this gives us a smooth step across approximately one fragment
-            // we use y to work around a Mali400 bug in the x direction
             fragBuilder->codeAppendf("afwidth = abs(" SK_DistanceFieldAAFactor "*dFdy(%s.y));",
                                      st.fsIn());
+        } else if (isSimilarity) {
+            // For similarity transform, we adjust the effect of the transformation on the distance
+            // by using the length of the gradient of the texture coordinates. We use st coordinates
+            // to ensure we're mapping 1:1 from texel space to pixel space.
+            // We use the y gradient because there is a bug in the Mali 400 in the x direction.
+
+            // this gives us a smooth step across approximately one fragment
+            fragBuilder->codeAppendf("float st_grad_len = length(dFdy(%s));", st.fsIn());
+            fragBuilder->codeAppend("afwidth = abs(" SK_DistanceFieldAAFactor "*st_grad_len);");
         } else {
             // For general transforms, to determine the amount of correction we multiply a unit
             // vector pointing along the SDF gradient direction by the Jacobian of the st coords
@@ -143,7 +155,16 @@ public:
             // this gives us a smooth step across approximately one fragment
             fragBuilder->codeAppend("afwidth = " SK_DistanceFieldAAFactor "*length(grad);");
         }
-        fragBuilder->codeAppend("float val = smoothstep(-afwidth, afwidth, distance);");
+
+        // The smoothstep falloff compensates for the non-linear sRGB response curve. If we are
+        // doing gamma-correct rendering (to an sRGB or F16 buffer), then we actually want distance
+        // mapped linearly to coverage, so use a linear step:
+        if (isGammaCorrect) {
+            fragBuilder->codeAppend(
+                "float val = clamp(distance + afwidth / (2.0 * afwidth), 0.0, 1.0);");
+        } else {
+            fragBuilder->codeAppend("float val = smoothstep(-afwidth, afwidth, distance);");
+        }
 
         fragBuilder->codeAppendf("%s = vec4(val);", args.fOutputCoverage);
     }
@@ -239,7 +260,7 @@ GrGLSLPrimitiveProcessor* GrDistanceFieldA8TextGeoProc::createGLSLInstance(const
 
 GR_DEFINE_GEOMETRY_PROCESSOR_TEST(GrDistanceFieldA8TextGeoProc);
 
-const GrGeometryProcessor* GrDistanceFieldA8TextGeoProc::TestCreate(GrProcessorTestData* d) {
+sk_sp<GrGeometryProcessor> GrDistanceFieldA8TextGeoProc::TestCreate(GrProcessorTestData* d) {
     int texIdx = d->fRandom->nextBool() ? GrProcessorUnitTest::kSkiaPMTextureIdx :
                                           GrProcessorUnitTest::kAlphaTextureIdx;
     static const SkShader::TileMode kTileModes[] = {
@@ -254,15 +275,20 @@ const GrGeometryProcessor* GrDistanceFieldA8TextGeoProc::TestCreate(GrProcessorT
     GrTextureParams params(tileModes, d->fRandom->nextBool() ? GrTextureParams::kBilerp_FilterMode :
                                                            GrTextureParams::kNone_FilterMode);
 
-    return GrDistanceFieldA8TextGeoProc::Create(GrRandomColor(d->fRandom),
-                                                GrTest::TestMatrix(d->fRandom),
-                                                d->fTextures[texIdx], params,
+    uint32_t flags = 0;
+    flags |= d->fRandom->nextBool() ? kSimilarity_DistanceFieldEffectFlag : 0;
+    if (flags & kSimilarity_DistanceFieldEffectFlag) {
+        flags |= d->fRandom->nextBool() ? kScaleOnly_DistanceFieldEffectFlag : 0;
+    }
+
+    return GrDistanceFieldA8TextGeoProc::Make(GrRandomColor(d->fRandom),
+                                              GrTest::TestMatrix(d->fRandom),
+                                              d->fTextures[texIdx], params,
 #ifdef SK_GAMMA_APPLY_TO_A8
-                                                d->fRandom->nextF(),
+                                              d->fRandom->nextF(),
 #endif
-                                                d->fRandom->nextBool() ?
-                                                    kSimilarity_DistanceFieldEffectFlag : 0,
-                                                    d->fRandom->nextBool());
+                                              flags,
+                                              d->fRandom->nextBool());
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -319,29 +345,43 @@ public:
                                                      "TextureSize", &textureSizeUniName);
 
         // Use highp to work around aliasing issues
-        fragBuilder->codeAppend(GrGLSLShaderVar::PrecisionString(args.fGLSLCaps,
-                                                                 kHigh_GrSLPrecision));
+        fragBuilder->appendPrecisionModifier(kHigh_GrSLPrecision);
         fragBuilder->codeAppendf("vec2 uv = %s;", v.fsIn());
 
         fragBuilder->codeAppend("float texColor = ");
-        fragBuilder->appendTextureLookup(args.fSamplers[0],
+        fragBuilder->appendTextureLookup(args.fTexSamplers[0],
                                          "uv",
                                          kVec2f_GrSLType);
         fragBuilder->codeAppend(".r;");
         fragBuilder->codeAppend("float distance = "
             SK_DistanceFieldMultiplier "*(texColor - " SK_DistanceFieldThreshold ");");
 
-        fragBuilder->codeAppend(GrGLSLShaderVar::PrecisionString(args.fGLSLCaps,
-                                                                 kHigh_GrSLPrecision));
+        fragBuilder->appendPrecisionModifier(kHigh_GrSLPrecision);
         fragBuilder->codeAppendf("vec2 st = uv*%s;", textureSizeUniName);
         fragBuilder->codeAppend("float afwidth;");
-        if (dfTexEffect.getFlags() & kSimilarity_DistanceFieldEffectFlag) {
+        bool isUniformScale = (dfTexEffect.getFlags() & kUniformScale_DistanceFieldEffectMask) ==
+                               kUniformScale_DistanceFieldEffectMask;
+        bool isSimilarity = SkToBool(dfTexEffect.getFlags() & kSimilarity_DistanceFieldEffectFlag);
+        bool isGammaCorrect =
+            SkToBool(dfTexEffect.getFlags() & kGammaCorrect_DistanceFieldEffectFlag);
+        if (isUniformScale) {
             // For uniform scale, we adjust for the effect of the transformation on the distance
-            // by using the length of the gradient of the texture coordinates. We use st coordinates
-            // to ensure we're mapping 1:1 from texel space to pixel space.
+            // by using the length of the gradient of the t coordinate in the y direction.
+            // We use st coordinates to ensure we're mapping 1:1 from texel space to pixel space.
+            // We use the y gradient because there is a bug in the Mali 400 in the x direction.
 
             // this gives us a smooth step across approximately one fragment
             fragBuilder->codeAppend("afwidth = abs(" SK_DistanceFieldAAFactor "*dFdy(st.y));");
+
+        } else if (isSimilarity) {
+            // For similarity transform, we adjust the effect of the transformation on the distance
+            // by using the length of the gradient of the texture coordinates. We use st coordinates
+            // to ensure we're mapping 1:1 from texel space to pixel space.
+            // We use the y gradient because there is a bug in the Mali 400 in the x direction.
+
+            // this gives us a smooth step across approximately one fragment
+            fragBuilder->codeAppend("float st_grad_len = length(dFdy(st));");
+            fragBuilder->codeAppend("afwidth = abs(" SK_DistanceFieldAAFactor "*st_grad_len);");
         } else {
             // For general transforms, to determine the amount of correction we multiply a unit
             // vector pointing along the SDF gradient direction by the Jacobian of the st coords
@@ -364,7 +404,15 @@ public:
             // this gives us a smooth step across approximately one fragment
             fragBuilder->codeAppend("afwidth = " SK_DistanceFieldAAFactor "*length(grad);");
         }
-        fragBuilder->codeAppend("float val = smoothstep(-afwidth, afwidth, distance);");
+        // The smoothstep falloff compensates for the non-linear sRGB response curve. If we are
+        // doing gamma-correct rendering (to an sRGB or F16 buffer), then we actually want distance
+        // mapped linearly to coverage, so use a linear step:
+        if (isGammaCorrect) {
+            fragBuilder->codeAppend(
+                "float val = clamp(distance + afwidth / (2.0 * afwidth), 0.0, 1.0);");
+        } else {
+            fragBuilder->codeAppend("float val = smoothstep(-afwidth, afwidth, distance);");
+        }
 
         fragBuilder->codeAppendf("%s = vec4(val);", args.fOutputCoverage);
     }
@@ -373,7 +421,7 @@ public:
         SkASSERT(fTextureSizeUni.isValid());
 
         GrTexture* texture = proc.texture(0);
-        if (texture->width() != fTextureSize.width() || 
+        if (texture->width() != fTextureSize.width() ||
             texture->height() != fTextureSize.height()) {
             fTextureSize = SkISize::Make(texture->width(), texture->height());
             pdman.set2f(fTextureSizeUni,
@@ -449,7 +497,7 @@ GrGLSLPrimitiveProcessor* GrDistanceFieldPathGeoProc::createGLSLInstance(const G
 
 GR_DEFINE_GEOMETRY_PROCESSOR_TEST(GrDistanceFieldPathGeoProc);
 
-const GrGeometryProcessor* GrDistanceFieldPathGeoProc::TestCreate(GrProcessorTestData* d) {
+sk_sp<GrGeometryProcessor> GrDistanceFieldPathGeoProc::TestCreate(GrProcessorTestData* d) {
     int texIdx = d->fRandom->nextBool() ? GrProcessorUnitTest::kSkiaPMTextureIdx
                                         : GrProcessorUnitTest::kAlphaTextureIdx;
     static const SkShader::TileMode kTileModes[] = {
@@ -464,13 +512,18 @@ const GrGeometryProcessor* GrDistanceFieldPathGeoProc::TestCreate(GrProcessorTes
     GrTextureParams params(tileModes, d->fRandom->nextBool() ? GrTextureParams::kBilerp_FilterMode
                                                              : GrTextureParams::kNone_FilterMode);
 
-    return GrDistanceFieldPathGeoProc::Create(GrRandomColor(d->fRandom),
-                                              GrTest::TestMatrix(d->fRandom),
-                                              d->fTextures[texIdx],
-                                              params,
-                                              d->fRandom->nextBool() ?
-                                                      kSimilarity_DistanceFieldEffectFlag : 0,
-                                                      d->fRandom->nextBool());
+    uint32_t flags = 0;
+    flags |= d->fRandom->nextBool() ? kSimilarity_DistanceFieldEffectFlag : 0;
+    if (flags & kSimilarity_DistanceFieldEffectFlag) {
+        flags |= d->fRandom->nextBool() ? kScaleOnly_DistanceFieldEffectFlag : 0;
+    }
+
+    return GrDistanceFieldPathGeoProc::Make(GrRandomColor(d->fRandom),
+                                            GrTest::TestMatrix(d->fRandom),
+                                            d->fTextures[texIdx],
+                                            params,
+                                            flags,
+                                            d->fRandom->nextBool());
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -518,13 +571,17 @@ public:
                              args.fTransformsOut);
 
         // set up varyings
-        bool isUniformScale = SkToBool(dfTexEffect.getFlags() & kUniformScale_DistanceFieldEffectMask);
+        bool isUniformScale = (dfTexEffect.getFlags() & kUniformScale_DistanceFieldEffectMask) ==
+                              kUniformScale_DistanceFieldEffectMask;
+        bool isSimilarity = SkToBool(dfTexEffect.getFlags() & kSimilarity_DistanceFieldEffectFlag);
+        bool isGammaCorrect =
+            SkToBool(dfTexEffect.getFlags() & kGammaCorrect_DistanceFieldEffectFlag);
         GrGLSLVertToFrag recipScale(kFloat_GrSLType);
         GrGLSLVertToFrag uv(kVec2f_GrSLType);
         varyingHandler->addVarying("TextureCoords", &uv, kHigh_GrSLPrecision);
         vertBuilder->codeAppendf("%s = %s;", uv.vsOut(), dfTexEffect.inTextureCoords()->fName);
 
-        // compute numbers to be hardcoded to convert texture coordinates from int to float
+        // compute numbers to be hardcoded to convert texture coordinates from float to int
         SkASSERT(dfTexEffect.numTextures() == 1);
         GrTexture* atlas = dfTexEffect.textureAccess(0).getTexture();
         SkASSERT(atlas && SkIsPow2(atlas->width()) && SkIsPow2(atlas->height()));
@@ -542,11 +599,9 @@ public:
 
         // create LCD offset adjusted by inverse of transform
         // Use highp to work around aliasing issues
-        fragBuilder->codeAppend(GrGLSLShaderVar::PrecisionString(args.fGLSLCaps,
-                                                                 kHigh_GrSLPrecision));
+        fragBuilder->appendPrecisionModifier(kHigh_GrSLPrecision);
         fragBuilder->codeAppendf("vec2 uv = %s;\n", uv.fsIn());
-        fragBuilder->codeAppend(GrGLSLShaderVar::PrecisionString(args.fGLSLCaps,
-                                                                 kHigh_GrSLPrecision));
+        fragBuilder->appendPrecisionModifier(kHigh_GrSLPrecision);
 
         SkScalar lcdDelta = 1.0f / (3.0f * atlas->width());
         if (dfTexEffect.getFlags() & kBGR_DistanceFieldEffectFlag) {
@@ -555,8 +610,16 @@ public:
             fragBuilder->codeAppendf("float delta = %.*f;\n", SK_FLT_DECIMAL_DIG, lcdDelta);
         }
         if (isUniformScale) {
-            fragBuilder->codeAppendf("float dy = abs(dFdy(%s.y));", st.fsIn());
-            fragBuilder->codeAppend("vec2 offset = vec2(dy*delta, 0.0);");
+            fragBuilder->codeAppendf("float st_grad_len = abs(dFdy(%s.y));", st.fsIn());
+            fragBuilder->codeAppend("vec2 offset = vec2(st_grad_len*delta, 0.0);");
+        } else if (isSimilarity) {
+            // For a similarity matrix with rotation, the gradient will not be aligned
+            // with the texel coordinate axes, so we need to calculate it.
+            // We use dFdy because of a Mali 400 bug, and rotate -90 degrees to
+            // get the gradient in the x direction.
+            fragBuilder->codeAppendf("vec2 st_grad = dFdy(%s);", st.fsIn());
+            fragBuilder->codeAppend("float st_grad_len = length(st_grad);");
+            fragBuilder->codeAppend("vec2 offset = delta*vec2(st_grad.y, -st_grad.x);");
         } else {
             fragBuilder->codeAppendf("vec2 st = %s;\n", st.fsIn());
 
@@ -567,20 +630,20 @@ public:
 
         // green is distance to uv center
         fragBuilder->codeAppend("\tvec4 texColor = ");
-        fragBuilder->appendTextureLookup(args.fSamplers[0], "uv", kVec2f_GrSLType);
+        fragBuilder->appendTextureLookup(args.fTexSamplers[0], "uv", kVec2f_GrSLType);
         fragBuilder->codeAppend(";\n");
         fragBuilder->codeAppend("\tvec3 distance;\n");
         fragBuilder->codeAppend("\tdistance.y = texColor.r;\n");
         // red is distance to left offset
         fragBuilder->codeAppend("\tvec2 uv_adjusted = uv - offset;\n");
         fragBuilder->codeAppend("\ttexColor = ");
-        fragBuilder->appendTextureLookup(args.fSamplers[0], "uv_adjusted", kVec2f_GrSLType);
+        fragBuilder->appendTextureLookup(args.fTexSamplers[0], "uv_adjusted", kVec2f_GrSLType);
         fragBuilder->codeAppend(";\n");
         fragBuilder->codeAppend("\tdistance.x = texColor.r;\n");
         // blue is distance to right offset
         fragBuilder->codeAppend("\tuv_adjusted = uv + offset;\n");
         fragBuilder->codeAppend("\ttexColor = ");
-        fragBuilder->appendTextureLookup(args.fSamplers[0], "uv_adjusted", kVec2f_GrSLType);
+        fragBuilder->appendTextureLookup(args.fTexSamplers[0], "uv_adjusted", kVec2f_GrSLType);
         fragBuilder->codeAppend(";\n");
         fragBuilder->codeAppend("\tdistance.z = texColor.r;\n");
 
@@ -599,13 +662,14 @@ public:
         // transformations, and even then using a single factor seems like a reasonable
         // trade-off between quality and speed.
         fragBuilder->codeAppend("float afwidth;");
-        if (isUniformScale) {
-            // For uniform scale, we adjust for the effect of the transformation on the distance
-            // by using the length of the gradient of the texture coordinates. We use st coordinates
-            // to ensure we're mapping 1:1 from texel space to pixel space.
+        if (isSimilarity) {
+            // For similarity transform (uniform scale-only is a subset of this), we adjust for the
+            // effect of the transformation on the distance by using the length of the gradient of
+            // the texture coordinates. We use st coordinates to ensure we're mapping 1:1 from texel
+            // space to pixel space.
 
             // this gives us a smooth step across approximately one fragment
-            fragBuilder->codeAppend("afwidth = " SK_DistanceFieldAAFactor "*dy;");
+            fragBuilder->codeAppend("afwidth = " SK_DistanceFieldAAFactor "*st_grad_len;");
         } else {
             // For general transforms, to determine the amount of correction we multiply a unit
             // vector pointing along the SDF gradient direction by the Jacobian of the st coords
@@ -626,8 +690,17 @@ public:
             fragBuilder->codeAppend("afwidth = " SK_DistanceFieldAAFactor "*length(grad);");
         }
 
-        fragBuilder->codeAppend(
-                      "vec4 val = vec4(smoothstep(vec3(-afwidth), vec3(afwidth), distance), 1.0);");
+        // The smoothstep falloff compensates for the non-linear sRGB response curve. If we are
+        // doing gamma-correct rendering (to an sRGB or F16 buffer), then we actually want distance
+        // mapped linearly to coverage, so use a linear step:
+        if (isGammaCorrect) {
+            fragBuilder->codeAppend("vec4 val = "
+                "vec4(clamp(distance + vec3(afwidth) / vec3(2.0 * afwidth), 0.0, 1.0), 1.0f);");
+        } else {
+            fragBuilder->codeAppend(
+                "vec4 val = vec4(smoothstep(vec3(-afwidth), vec3(afwidth), distance), 1.0);");
+        }
+
         // set alpha to be max of rgb coverage
         fragBuilder->codeAppend("val.a = max(max(val.r, val.g), val.b);");
 
@@ -721,7 +794,7 @@ GrGLSLPrimitiveProcessor* GrDistanceFieldLCDTextGeoProc::createGLSLInstance(cons
 
 GR_DEFINE_GEOMETRY_PROCESSOR_TEST(GrDistanceFieldLCDTextGeoProc);
 
-const GrGeometryProcessor* GrDistanceFieldLCDTextGeoProc::TestCreate(GrProcessorTestData* d) {
+sk_sp<GrGeometryProcessor> GrDistanceFieldLCDTextGeoProc::TestCreate(GrProcessorTestData* d) {
     int texIdx = d->fRandom->nextBool() ? GrProcessorUnitTest::kSkiaPMTextureIdx :
                                           GrProcessorUnitTest::kAlphaTextureIdx;
     static const SkShader::TileMode kTileModes[] = {
@@ -737,12 +810,15 @@ const GrGeometryProcessor* GrDistanceFieldLCDTextGeoProc::TestCreate(GrProcessor
                            GrTextureParams::kNone_FilterMode);
     DistanceAdjust wa = { 0.0f, 0.1f, -0.1f };
     uint32_t flags = kUseLCD_DistanceFieldEffectFlag;
-    flags |= d->fRandom->nextBool() ? kUniformScale_DistanceFieldEffectMask : 0;
+    flags |= d->fRandom->nextBool() ? kSimilarity_DistanceFieldEffectFlag : 0;
+    if (flags & kSimilarity_DistanceFieldEffectFlag) {
+        flags |= d->fRandom->nextBool() ? kScaleOnly_DistanceFieldEffectFlag : 0;
+    }
     flags |= d->fRandom->nextBool() ? kBGR_DistanceFieldEffectFlag : 0;
-    return GrDistanceFieldLCDTextGeoProc::Create(GrRandomColor(d->fRandom),
-                                                 GrTest::TestMatrix(d->fRandom),
-                                                 d->fTextures[texIdx], params,
-                                                 wa,
-                                                 flags,
-                                                 d->fRandom->nextBool());
+    return GrDistanceFieldLCDTextGeoProc::Make(GrRandomColor(d->fRandom),
+                                               GrTest::TestMatrix(d->fRandom),
+                                               d->fTextures[texIdx], params,
+                                               wa,
+                                               flags,
+                                               d->fRandom->nextBool());
 }

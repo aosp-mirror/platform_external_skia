@@ -62,6 +62,8 @@ protected:
                         SkScalar constY, const SkPaint& paint) override;
     void onDrawTextOnPath(const void* text, size_t byteLength, const SkPath& path,
                           const SkMatrix* matrix, const SkPaint& paint) override;
+    void onDrawTextRSXform(const void* text, size_t byteLength, const SkRSXform xform[],
+                           const SkRect* cull, const SkPaint& paint) override;
     void onDrawTextBlob(const SkTextBlob* blob, SkScalar x, SkScalar y,
                         const SkPaint& paint) override;
 
@@ -72,7 +74,7 @@ protected:
     void onDrawImage(const SkImage*, SkScalar, SkScalar, const SkPaint*) override;
     void onDrawImageRect(const SkImage*, const SkRect*, const SkRect&, const SkPaint*,
                          SrcRectConstraint) override;
-    void onDrawPicture(const SkPicture*, const SkMatrix*, const SkPaint*);
+    void onDrawPicture(const SkPicture*, const SkMatrix*, const SkPaint*) override;
     void onDrawAtlas(const SkImage*, const SkRSXform[], const SkRect[],
                      const SkColor[], int count, SkXfermode::Mode,
                      const SkRect* cull, const SkPaint*) override;
@@ -87,7 +89,7 @@ protected:
     bool getClipDeviceBounds(SkIRect*) const override;
     bool isClipEmpty() const override;
     bool isClipRect() const override;
-    SkSurface* onNewSurface(const SkImageInfo&, const SkSurfaceProps&) override;
+    sk_sp<SkSurface> onNewSurface(const SkImageInfo&, const SkSurfaceProps&) override;
     bool onPeekPixels(SkPixmap*) override;
     bool onAccessTopLayerPixels(SkPixmap*) override;
     void willSave() override;
@@ -107,4 +109,3 @@ protected:
 };
 
 #endif  // SkAndroidSDKCanvas_DEFINED
-

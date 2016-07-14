@@ -10,7 +10,7 @@
 #include "GrBlurUtils.h"
 #include "GrCaps.h"
 #include "GrDrawContext.h"
-#include "GrStrokeInfo.h"
+#include "GrStyle.h"
 #include "GrTextureParamsAdjuster.h"
 #include "SkDraw.h"
 #include "SkGrPriv.h"
@@ -137,6 +137,9 @@ void SkGpuDevice::drawTextureProducer(GrTextureProducer* producer,
         }
     }
 
+    // Now that we have both the view and srcToDst matrices, log our scale factor.
+    LogDrawScaleFactor(SkMatrix::Concat(viewMatrix, srcToDstMatrix), paint.getFilterQuality());
+
     this->drawTextureProducerImpl(producer, clippedSrcRect, clippedDstRect, constraint, viewMatrix,
                                   srcToDstMatrix, clip, paint);
 }
@@ -171,7 +174,7 @@ void SkGpuDevice::drawTextureProducerImpl(GrTextureProducer* producer,
     } else {
         constraintMode = GrTextureAdjuster::kYes_FilterConstraint;
     }
-    
+
     // If we have to outset for AA then we will generate texture coords outside the src rect. The
     // same happens for any mask filter that extends the bounds rendered in the dst.
     // This is conservative as a mask filter does not have to expand the bounds rendered.
@@ -183,7 +186,7 @@ void SkGpuDevice::drawTextureProducerImpl(GrTextureProducer* producer,
         SkMatrix combinedMatrix;
         combinedMatrix.setConcat(viewMatrix, srcToDstMatrix);
         if (can_ignore_bilerp_constraint(*producer, clippedSrcRect, combinedMatrix,
-                                         fRenderTarget->isUnifiedMultisampled())) {
+                                         fDrawContext->isUnifiedMultisampled())) {
             constraintMode = GrTextureAdjuster::kNo_FilterConstraint;
         }
     }
@@ -198,15 +201,19 @@ void SkGpuDevice::drawTextureProducerImpl(GrTextureProducer* producer,
         }
         textureMatrix = &tempMatrix;
     }
-    SkAutoTUnref<const GrFragmentProcessor> fp(producer->createFragmentProcessor(
-        *textureMatrix, clippedSrcRect, constraintMode, coordsAllInsideSrcRect, filterMode));
+    bool gammaCorrect = this->surfaceProps().isGammaCorrect();
+    SkSourceGammaTreatment gammaTreatment = gammaCorrect
+        ? SkSourceGammaTreatment::kRespect : SkSourceGammaTreatment::kIgnore;
+    sk_sp<GrFragmentProcessor> fp(producer->createFragmentProcessor(
+        *textureMatrix, clippedSrcRect, constraintMode, coordsAllInsideSrcRect, filterMode,
+        gammaTreatment));
     if (!fp) {
         return;
     }
 
     GrPaint grPaint;
     if (!SkPaintToGrPaintWithTexture(fContext, paint, viewMatrix, fp, producer->isAlphaOnly(),
-                                     &grPaint)) {
+                                     gammaCorrect, &grPaint)) {
         return;
     }
 
@@ -225,7 +232,7 @@ void SkGpuDevice::drawTextureProducerImpl(GrTextureProducer* producer,
     SkRRect rrect;
     rrect.setRect(clippedDstRect);
     if (mf->directFilterRRectMaskGPU(fContext->textureProvider(),
-                                      fDrawContext,
+                                      fDrawContext.get(),
                                       &grPaint,
                                       clip,
                                       viewMatrix,
@@ -236,7 +243,7 @@ void SkGpuDevice::drawTextureProducerImpl(GrTextureProducer* producer,
     SkPath rectPath;
     rectPath.addRect(clippedDstRect);
     rectPath.setIsVolatile(true);
-    GrBlurUtils::drawPathWithMaskFilter(this->context(), fDrawContext, fClip,
-                                        rectPath, &grPaint, viewMatrix, mf, paint.getPathEffect(),
-                                        GrStrokeInfo::FillInfo(), true);
+    GrBlurUtils::drawPathWithMaskFilter(this->context(), fDrawContext.get(), fClip,
+                                        rectPath, &grPaint, viewMatrix, mf, GrStyle::SimpleFill(),
+                                        true);
 }

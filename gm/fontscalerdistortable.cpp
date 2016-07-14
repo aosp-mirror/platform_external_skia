@@ -19,8 +19,6 @@ public:
         this->setBGColor(0xFFFFFFFF);
     }
 
-    virtual ~FontScalerDistortableGM() { }
-
 protected:
 
     SkString onShortName() override {
@@ -29,12 +27,6 @@ protected:
 
     SkISize onISize() override {
         return SkISize::Make(550, 700);
-    }
-
-    static void rotate_about(SkCanvas* canvas, SkScalar degrees, SkScalar px, SkScalar py) {
-        canvas->translate(px, py);
-        canvas->rotate(degrees);
-        canvas->translate(-px, -py);
     }
 
     void onDraw(SkCanvas* canvas) override {
@@ -58,13 +50,12 @@ protected:
                 SkFourByteTag tag = SkSetFourByteTag('w','g','h','t');
                 SkScalar styleValue = SkDoubleToScalar(0.5 + (5*j + i) * ((2.0 - 0.5) / (2 * 5)));
                 SkFontMgr::FontParameters::Axis axes[] = { { tag, styleValue } };
-                SkAutoTUnref<SkTypeface> typeface(fontMgr->createFromStream(
-                    distortable->duplicate(), SkFontMgr::FontParameters().setAxes(axes, 1)));
-                paint.setTypeface(typeface);
+                paint.setTypeface(sk_sp<SkTypeface>(fontMgr->createFromStream(
+                        distortable->duplicate(), SkFontMgr::FontParameters().setAxes(axes, 1))));
 
                 SkAutoCanvasRestore acr(canvas, true);
                 canvas->translate(SkIntToScalar(30 + i * 100), SkIntToScalar(20));
-                rotate_about(canvas, SkIntToScalar(i * 5), x, y * 10);
+                canvas->rotate(SkIntToScalar(i * 5), x, y * 10);
 
                 {
                     SkPaint p;

@@ -8,7 +8,6 @@
 #ifndef SkOpts_DEFINED
 #define SkOpts_DEFINED
 
-#include "SkMatrix.h"
 #include "SkTextureCompressor.h"
 #include "SkTypes.h"
 #include "SkXfermode.h"
@@ -18,7 +17,7 @@ struct ProcCoeff;
 namespace SkOpts {
     // Call to replace pointers to portable functions with pointers to CPU-specific functions.
     // Thread-safe and idempotent.
-    // Called by SkGraphics::Init(), and automatically #if SK_ALLOW_STATIC_GLOBAL_INITIALIZERS.
+    // Called by SkGraphics::Init().
     void Init();
 
     // Declare function pointers here...
@@ -39,6 +38,7 @@ namespace SkOpts {
 
     extern void (*blit_mask_d32_a8)(SkPMColor*, size_t, const SkAlpha*, size_t, SkColor, int, int);
     extern void (*blit_row_color32)(SkPMColor*, const SkPMColor*, int, SkPMColor);
+    extern void (*blit_row_s32a_opaque)(SkPMColor*, const SkPMColor*, int, U8CPU);
 
     // This function is an optimized version of SkColorCubeFilter::filterSpan
     extern void (*color_cube_filter_span)(const SkPMColor[],
@@ -48,8 +48,6 @@ namespace SkOpts {
                                           const SkScalar * [2],
                                           int,
                                           const SkColor*);
-
-    extern SkMatrix::MapPtsProc matrix_translate, matrix_scale_translate, matrix_affine;
 
     // Swizzle input into some sort of 8888 pixel, {premul,unpremul} x {rgba,bgra}.
     typedef void (*Swizzle_8888)(uint32_t*, const void*, int);
@@ -64,8 +62,22 @@ namespace SkOpts {
                         inverted_CMYK_to_RGB1, // i.e. convert color space
                         inverted_CMYK_to_BGR1; // i.e. convert color space
 
-    extern void (*half_to_float)(float[], const uint16_t[], int);
-    extern void (*float_to_half)(uint16_t[], const float[], int);
+    // Blend ndst src pixels over dst, where both src and dst point to sRGB pixels (RGBA or BGRA).
+    // If nsrc < ndst, we loop over src to create a pattern.
+    extern void (*srcover_srgb_srgb)(uint32_t* dst, const uint32_t* src, int ndst, int nsrc);
+
+    // Color xform RGB1 pixels into SkPMColor order.
+    extern void (*color_xform_RGB1_to_2dot2) (uint32_t* dst, const uint32_t* src, int len,
+                                              const float* const srcTables[3],
+                                              const float srcToDstMatrix[12]);
+    extern void (*color_xform_RGB1_to_srgb)(uint32_t* dst, const uint32_t* src, int len,
+                                            const float* const srcTables[3],
+                                            const float srcToDstMatrix[12]);
+    extern void (*color_xform_RGB1_to_table)(uint32_t* dst, const uint32_t* src, int len,
+                                             const float* const srcTables[3],
+                                             const float srcToDstMatrix[12],
+                                             const uint8_t* const dstTables[3]);
+
 }
 
 #endif//SkOpts_DEFINED

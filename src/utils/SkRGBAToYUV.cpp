@@ -38,7 +38,7 @@ bool SkRGBAToYUV(const SkImage* image, const SkISize sizes[3], void* const plane
 
     for (int i = 0; i < 3; ++i) {
         size_t rb = rowBytes[i] ? rowBytes[i] : sizes[i].fWidth;
-        SkAutoTUnref<SkSurface> surface(SkSurface::NewRasterDirect(
+        auto surface(SkSurface::MakeRasterDirect(
                 SkImageInfo::MakeA8(sizes[i].fWidth, sizes[i].fHeight), planes[i], rb));
         if (!surface) {
             return false;
@@ -49,7 +49,7 @@ bool SkRGBAToYUV(const SkImage* image, const SkISize sizes[3], void* const plane
         int rowStartIdx = 5 * i;
         const SkScalar* row = kYUVColorSpaceInvMatrices[colorSpace] + rowStartIdx;
         paint.setColorFilter(
-                SkColorMatrixFilterRowMajor255::CreateSingleChannelOutput(row))->unref();
+                SkColorMatrixFilterRowMajor255::MakeSingleChannelOutput(row));
         surface->getCanvas()->drawImageRect(image, SkIRect::MakeWH(image->width(), image->height()),
                                             SkRect::MakeIWH(surface->width(), surface->height()),
                                             &paint);

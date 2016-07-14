@@ -12,13 +12,13 @@
 #include "SkGradientShader.h"
 #include "SkImage.h"
 
-static SkImage* create_image(GrContext* context, int width, int height) {
-    SkAutoTUnref<SkSurface> surface;
+static sk_sp<SkImage> create_image(GrContext* context, int width, int height) {
+    sk_sp<SkSurface> surface;
     SkImageInfo info = SkImageInfo::MakeN32Premul(width, height);
     if (context) {
-        surface.reset(SkSurface::NewRenderTarget(context,  SkBudgeted::kYes, info, 0));
+        surface = SkSurface::MakeRenderTarget(context,  SkBudgeted::kYes, info);
     } else {
-        surface.reset(SkSurface::NewRaster(info));
+        surface = SkSurface::MakeRaster(info);
     }
     if (!surface) {
         return nullptr;
@@ -28,12 +28,12 @@ static SkImage* create_image(GrContext* context, int width, int height) {
     static const SkColor kColors[] =
             { SK_ColorBLUE, SK_ColorYELLOW, SK_ColorGREEN, SK_ColorWHITE };
     SkScalar r = (width + height) / 4.f;
-    paint.setShader(SkGradientShader::CreateRadial(SkPoint::Make(0,0), r, kColors,
-                                                   nullptr, SK_ARRAY_COUNT(kColors),
-                                                   SkShader::kMirror_TileMode))->unref();
+    paint.setShader(SkGradientShader::MakeRadial(SkPoint::Make(0,0), r, kColors,
+                                                 nullptr, SK_ARRAY_COUNT(kColors),
+                                                 SkShader::kMirror_TileMode));
 
     surface->getCanvas()->drawPaint(paint);
-    return surface->newImageSnapshot();
+    return surface->makeImageSnapshot();
 }
 
 DEF_SIMPLE_GM(image_to_yuv_planes, canvas, 120, 525) {
@@ -41,12 +41,12 @@ DEF_SIMPLE_GM(image_to_yuv_planes, canvas, 120, 525) {
     static const int kImageSize = 32;
 
     GrContext *context = canvas->getGrContext();
-    SkAutoTUnref<SkImage> rgbImage(create_image(context, kImageSize, kImageSize));
+    sk_sp<SkImage> rgbImage(create_image(context, kImageSize, kImageSize));
     if (!rgbImage) {
         return;
     }
 
-    canvas->drawImage(rgbImage, kPad, kPad);
+    canvas->drawImage(rgbImage.get(), kPad, kPad);
     // Test cases where all three planes are the same size, where just u and v are the same size,
     // and where all differ.
     static const SkISize kSizes[][3] = {

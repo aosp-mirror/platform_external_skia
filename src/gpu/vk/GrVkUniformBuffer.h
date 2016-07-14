@@ -9,7 +9,6 @@
 #define GrVkUniformBuffer_DEFINED
 
 #include "GrVkBuffer.h"
-#include "vk/GrVkInterface.h"
 
 class GrVkGpu;
 
@@ -21,11 +20,14 @@ public:
     void* map(const GrVkGpu* gpu) {
         return this->vkMap(gpu);
     }
-    void unmap(const GrVkGpu* gpu) {
+    void unmap(GrVkGpu* gpu) {
         this->vkUnmap(gpu);
     }
-    bool updateData(const GrVkGpu* gpu, const void* src, size_t srcSizeInBytes) {
-        return this->vkUpdateData(gpu, src, srcSizeInBytes);
+    // The output variable createdNewBuffer must be set to true if a new VkBuffer is created in
+    // order to upload the data
+    bool updateData(GrVkGpu* gpu, const void* src, size_t srcSizeInBytes,
+                    bool* createdNewBuffer) {
+        return this->vkUpdateData(gpu, src, srcSizeInBytes, createdNewBuffer);
     }
     void release(const GrVkGpu* gpu) {
         this->vkRelease(gpu);

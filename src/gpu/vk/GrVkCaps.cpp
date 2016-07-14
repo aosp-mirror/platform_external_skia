@@ -10,68 +10,65 @@
 #include "GrVkUtil.h"
 #include "glsl/GrGLSLCaps.h"
 #include "vk/GrVkInterface.h"
+#include "vk/GrVkBackendContext.h"
 
 GrVkCaps::GrVkCaps(const GrContextOptions& contextOptions, const GrVkInterface* vkInterface,
-                   VkPhysicalDevice physDev) : INHERITED(contextOptions) {
+                   VkPhysicalDevice physDev, uint32_t featureFlags, uint32_t extensionFlags)
+    : INHERITED(contextOptions) {
+    fCanUseGLSLForShaderModule = false;
+
     /**************************************************************************
     * GrDrawTargetCaps fields
     **************************************************************************/
-    fMipMapSupport = false; //TODO: figure this out
-    fNPOTTextureTileSupport = false; //TODO: figure this out
-    fTwoSidedStencilSupport = false; //TODO: figure this out
-    fStencilWrapOpsSupport = false; //TODO: figure this out
-    fDiscardRenderTargetSupport = false; //TODO: figure this out
+    fMipMapSupport = true;   // always available in Vulkan
+    fSRGBSupport = true;   // always available in Vulkan
+    fNPOTTextureTileSupport = true;  // always available in Vulkan
+    fTwoSidedStencilSupport = true;  // always available in Vulkan
+    fStencilWrapOpsSupport = true; // always available in Vulkan
+    fDiscardRenderTargetSupport = true;
     fReuseScratchTextures = true; //TODO: figure this out
     fGpuTracingSupport = false; //TODO: figure this out
     fCompressedTexSubImageSupport = false; //TODO: figure this out
     fOversizedStencilSupport = false; //TODO: figure this out
 
-    fUseDrawInsteadOfClear = false; //TODO: figure this out
+    fUseDrawInsteadOfClear = false;
 
     fMapBufferFlags = kNone_MapFlags; //TODO: figure this out
-    fGeometryBufferMapThreshold = SK_MaxS32;  //TODO: figure this out
+    fBufferMapThreshold = SK_MaxS32;  //TODO: figure this out
 
     fMaxRenderTargetSize = 4096; // minimum required by spec
     fMaxTextureSize = 4096; // minimum required by spec
     fMaxColorSampleCount = 4; // minimum required by spec
     fMaxStencilSampleCount = 4; // minimum required by spec
 
-
     fShaderCaps.reset(new GrGLSLCaps(contextOptions));
 
-    /**************************************************************************
-    * GrVkCaps fields
-    **************************************************************************/
-    fMaxSampledTextures = 16; // Spec requires a minimum of 16 sampled textures per stage
-
-    this->init(contextOptions, vkInterface, physDev);
+    this->init(contextOptions, vkInterface, physDev, featureFlags, extensionFlags);
 }
 
 void GrVkCaps::init(const GrContextOptions& contextOptions, const GrVkInterface* vkInterface,
-                    VkPhysicalDevice physDev) {
-
-    this->initGLSLCaps(vkInterface, physDev);
-    this->initConfigTexturableTable(vkInterface, physDev);
-    this->initConfigRenderableTable(vkInterface, physDev);
-    this->initStencilFormats(vkInterface, physDev);
+                    VkPhysicalDevice physDev, uint32_t featureFlags, uint32_t extensionFlags) {
 
     VkPhysicalDeviceProperties properties;
     GR_VK_CALL(vkInterface, GetPhysicalDeviceProperties(physDev, &properties));
 
-    // We could actually querey and get a max size for each config, however maxImageDimension2D will
-    // give the minimum max size across all configs. So for simplicity we will use that for now.
-    fMaxRenderTargetSize = properties.limits.maxImageDimension2D;
-    fMaxTextureSize = properties.limits.maxImageDimension2D;
+    VkPhysicalDeviceMemoryProperties memoryProperties;
+    GR_VK_CALL(vkInterface, GetPhysicalDeviceMemoryProperties(physDev, &memoryProperties));
 
-    this->initSampleCount(properties);
+    this->initGrCaps(properties, memoryProperties, featureFlags);
+    this->initGLSLCaps(properties, featureFlags);
+    this->initConfigTable(vkInterface, physDev);
+    this->initStencilFormat(vkInterface, physDev);
 
-    fMaxSampledTextures = SkTMin(properties.limits.maxPerStageDescriptorSampledImages,
-                                 properties.limits.maxPerStageDescriptorSamplers);
+    if (SkToBool(extensionFlags & kNV_glsl_shader_GrVkExtensionFlag)) {
+        // Currently disabling this feature since it does not play well with validation layers which
+        // expect a SPIR-V shader
+        // fCanUseGLSLForShaderModule = true;
+    }
 
     this->applyOptionsOverrides(contextOptions);
-    // need to friend GrVkCaps in GrGLSLCaps.h
-    // GrGLSLCaps* glslCaps = static_cast<GrGLSLCaps*>(fShaderCaps.get());
-    // glslCaps->applyOptionsOverrides(contextOptions);
+    GrGLSLCaps* glslCaps = static_cast<GrGLSLCaps*>(fShaderCaps.get());
+    glslCaps->applyOptionsOverrides(contextOptions);
 }
 
 int get_max_sample_count(VkSampleCountFlags flags) {
@@ -105,10 +102,33 @@ void GrVkCaps::initSampleCount(const VkPhysicalDeviceProperties& properties) {
     fMaxStencilSampleCount = get_max_sample_count(stencilSamples);
 }
 
-void GrVkCaps::initGLSLCaps(const GrVkInterface* interface, VkPhysicalDevice physDev) {
+void GrVkCaps::initGrCaps(const VkPhysicalDeviceProperties& properties,
+                          const VkPhysicalDeviceMemoryProperties& memoryProperties,
+                          uint32_t featureFlags) {
+    fMaxVertexAttributes = properties.limits.maxVertexInputAttributes;
+    // We could actually query and get a max size for each config, however maxImageDimension2D will
+    // give the minimum max size across all configs. So for simplicity we will use that for now.
+    fMaxRenderTargetSize = properties.limits.maxImageDimension2D;
+    fMaxTextureSize = properties.limits.maxImageDimension2D;
+
+    this->initSampleCount(properties);
+
+    // Assuming since we will always map in the end to upload the data we might as well just map
+    // from the get go. There is no hard data to suggest this is faster or slower.
+    fBufferMapThreshold = 0;
+
+    fMapBufferFlags = kCanMap_MapFlag | kSubset_MapFlag;
+
+    fStencilWrapOpsSupport = true;
+    fOversizedStencilSupport = true;
+    fSampleShadingSupport = SkToBool(featureFlags & kSampleRateShading_GrVkFeatureFlag);
+}
+
+void GrVkCaps::initGLSLCaps(const VkPhysicalDeviceProperties& properties,
+                            uint32_t featureFlags) {
     GrGLSLCaps* glslCaps = static_cast<GrGLSLCaps*>(fShaderCaps.get());
-    // TODO: actually figure out a correct version here
-    glslCaps->fVersionDeclString = "#version 140\n";
+    glslCaps->fVersionDeclString = "#version 330\n";
+
 
     // fConfigOutputSwizzle will default to RGBA so we only need to set it for alpha only config.
     for (int i = 0; i < kGrPixelConfigCnt; ++i) {
@@ -120,125 +140,107 @@ void GrVkCaps::initGLSLCaps(const GrVkInterface* interface, VkPhysicalDevice phy
             glslCaps->fConfigTextureSwizzle[i] = GrSwizzle::RGBA();
         }
     }
+
+    // Vulkan is based off ES 3.0 so the following should all be supported
+    glslCaps->fUsesPrecisionModifiers = true;
+    glslCaps->fFlatInterpolationSupport = true;
+
+    // GrShaderCaps
+
+    glslCaps->fShaderDerivativeSupport = true;
+    glslCaps->fGeometryShaderSupport = SkToBool(featureFlags & kGeometryShader_GrVkFeatureFlag);
+
+    glslCaps->fDualSourceBlendingSupport = SkToBool(featureFlags & kDualSrcBlend_GrVkFeatureFlag);
+
+    glslCaps->fIntegerSupport = true;
+
+    // Assume the minimum precisions mandated by the SPIR-V spec.
+    glslCaps->fShaderPrecisionVaries = true;
+    for (int s = 0; s < kGrShaderTypeCount; ++s) {
+        auto& highp = glslCaps->fFloatPrecisions[s][kHigh_GrSLPrecision];
+        highp.fLogRangeLow = highp.fLogRangeHigh = 127;
+        highp.fBits = 23;
+
+        auto& mediump = glslCaps->fFloatPrecisions[s][kMedium_GrSLPrecision];
+        mediump.fLogRangeLow = mediump.fLogRangeHigh = 14;
+        mediump.fBits = 10;
+
+        glslCaps->fFloatPrecisions[s][kLow_GrSLPrecision] = mediump;
+    }
+    glslCaps->initSamplerPrecisionTable();
+
+    glslCaps->fMaxVertexSamplers =
+    glslCaps->fMaxGeometrySamplers =
+    glslCaps->fMaxFragmentSamplers = SkTMin(properties.limits.maxPerStageDescriptorSampledImages,
+                                            properties.limits.maxPerStageDescriptorSamplers);
+    glslCaps->fMaxCombinedSamplers = SkTMin(properties.limits.maxDescriptorSetSampledImages,
+                                            properties.limits.maxDescriptorSetSamplers);
 }
 
-static void format_supported_for_feature(const GrVkInterface* interface,
-                                         VkPhysicalDevice physDev,
-                                         VkFormat format,
-                                         VkFormatFeatureFlagBits featureBit,
-                                         bool* linearSupport,
-                                         bool* optimalSupport) {
+bool stencil_format_supported(const GrVkInterface* interface,
+                              VkPhysicalDevice physDev,
+                              VkFormat format) {
     VkFormatProperties props;
     memset(&props, 0, sizeof(VkFormatProperties));
     GR_VK_CALL(interface, GetPhysicalDeviceFormatProperties(physDev, format, &props));
-    *linearSupport = SkToBool(props.linearTilingFeatures & featureBit);
-    *optimalSupport = SkToBool(props.optimalTilingFeatures & featureBit);
+    return SkToBool(VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT & props.optimalTilingFeatures);
 }
 
-static void config_supported_for_feature(const GrVkInterface* interface,
-                                         VkPhysicalDevice physDev,
-                                         GrPixelConfig config,
-                                         VkFormatFeatureFlagBits featureBit,
-                                         bool* linearSupport,
-                                         bool* optimalSupport) {
-    VkFormat format;
-    if (!GrPixelConfigToVkFormat(config, &format)) {
-        *linearSupport = false;
-        *optimalSupport = false;
-        return;
-    }
-    format_supported_for_feature(interface, physDev, format, featureBit,
-                                 linearSupport, optimalSupport);
-}
-
-// Currently just assumeing if something can be rendered to without MSAA it also works for MSAAA
-#define SET_CONFIG_IS_RENDERABLE(config)                                                          \
-    config_supported_for_feature(interface,                                                       \
-                                 physDev,                                                         \
-                                 config,                                    \
-                                 VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT,                    \
-                                 &fConfigLinearRenderSupport[config][kNo_MSAA],                   \
-                                 &fConfigRenderSupport[config][kNo_MSAA] );                       \
-    fConfigRenderSupport[config][kYes_MSAA] = fConfigRenderSupport[config][kNo_MSAA];             \
-    fConfigLinearRenderSupport[config][kYes_MSAA] = fConfigLinearRenderSupport[config][kNo_MSAA];
-
-
-void GrVkCaps::initConfigRenderableTable(const GrVkInterface* interface, VkPhysicalDevice physDev) {
-    enum {
-        kNo_MSAA = 0,
-        kYes_MSAA = 1,
-    };
-
-    // Base render support
-    SET_CONFIG_IS_RENDERABLE(kAlpha_8_GrPixelConfig);
-    SET_CONFIG_IS_RENDERABLE(kRGB_565_GrPixelConfig);
-    SET_CONFIG_IS_RENDERABLE(kRGBA_4444_GrPixelConfig);
-    SET_CONFIG_IS_RENDERABLE(kRGBA_8888_GrPixelConfig);
-    SET_CONFIG_IS_RENDERABLE(kBGRA_8888_GrPixelConfig);
-
-    SET_CONFIG_IS_RENDERABLE(kSRGBA_8888_GrPixelConfig);
-
-    // Float render support
-    SET_CONFIG_IS_RENDERABLE(kRGBA_float_GrPixelConfig);
-    SET_CONFIG_IS_RENDERABLE(kRGBA_half_GrPixelConfig);
-    SET_CONFIG_IS_RENDERABLE(kAlpha_half_GrPixelConfig);
-}
-
-#define SET_CONFIG_IS_TEXTURABLE(config)                                 \
-    config_supported_for_feature(interface,                              \
-                                 physDev,                                \
-                                 config,                                 \
-                                 VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT,    \
-                                 &fConfigLinearTextureSupport[config],   \
-                                 &fConfigTextureSupport[config]);
-
-void GrVkCaps::initConfigTexturableTable(const GrVkInterface* interface, VkPhysicalDevice physDev) {
-    // Base texture support
-    SET_CONFIG_IS_TEXTURABLE(kAlpha_8_GrPixelConfig);
-    SET_CONFIG_IS_TEXTURABLE(kRGB_565_GrPixelConfig);
-    SET_CONFIG_IS_TEXTURABLE(kRGBA_4444_GrPixelConfig);
-    SET_CONFIG_IS_TEXTURABLE(kRGBA_8888_GrPixelConfig);
-    SET_CONFIG_IS_TEXTURABLE(kBGRA_8888_GrPixelConfig);
-
-    SET_CONFIG_IS_TEXTURABLE(kIndex_8_GrPixelConfig);
-    SET_CONFIG_IS_TEXTURABLE(kSRGBA_8888_GrPixelConfig);
-
-    // Compressed texture support
-    SET_CONFIG_IS_TEXTURABLE(kETC1_GrPixelConfig);
-    SET_CONFIG_IS_TEXTURABLE(kLATC_GrPixelConfig);
-    SET_CONFIG_IS_TEXTURABLE(kR11_EAC_GrPixelConfig);
-    SET_CONFIG_IS_TEXTURABLE(kASTC_12x12_GrPixelConfig);
-
-    // Float texture support
-    SET_CONFIG_IS_TEXTURABLE(kRGBA_float_GrPixelConfig);
-    SET_CONFIG_IS_TEXTURABLE(kRGBA_half_GrPixelConfig);
-    SET_CONFIG_IS_TEXTURABLE(kAlpha_half_GrPixelConfig);
-}
-
-#define SET_CONFIG_CAN_STENCIL(config)                                                    \
-    bool SK_MACRO_APPEND_LINE(linearSupported);                                           \
-    bool SK_MACRO_APPEND_LINE(optimalSupported);                                          \
-    format_supported_for_feature(interface,                                               \
-                                 physDev,                                                 \
-                                 config.fInternalFormat,                                  \
-                                 VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT,          \
-                                 &SK_MACRO_APPEND_LINE(linearSupported),                  \
-                                 &SK_MACRO_APPEND_LINE(optimalSupported));                \
-    if (SK_MACRO_APPEND_LINE(linearSupported)) fLinearStencilFormats.push_back(config);   \
-    if (SK_MACRO_APPEND_LINE(optimalSupported)) fStencilFormats.push_back(config);
-
-void GrVkCaps::initStencilFormats(const GrVkInterface* interface, VkPhysicalDevice physDev) {
-    // Build up list of legal stencil formats (though perhaps not supported on
-    // the particular gpu/driver) from most preferred to least.
-
+void GrVkCaps::initStencilFormat(const GrVkInterface* interface, VkPhysicalDevice physDev) {
+    // List of legal stencil formats (though perhaps not supported on
+    // the particular gpu/driver) from most preferred to least. We are guaranteed to have either
+    // VK_FORMAT_D24_UNORM_S8_UINT or VK_FORMAT_D32_SFLOAT_S8_UINT. VK_FORMAT_D32_SFLOAT_S8_UINT
+    // can optionally have 24 unused bits at the end so we assume the total bits is 64.
     static const StencilFormat
                   // internal Format             stencil bits      total bits        packed?
         gS8    = { VK_FORMAT_S8_UINT,            8,                 8,               false },
-        gD24S8 = { VK_FORMAT_D24_UNORM_S8_UINT,  8,                32,               true };
+        gD24S8 = { VK_FORMAT_D24_UNORM_S8_UINT,  8,                32,               true },
+        gD32S8 = { VK_FORMAT_D32_SFLOAT_S8_UINT, 8,                64,               true };
 
-    // I'm simply assuming that these two will be supported since they are used in example code.
-    // TODO: Actaully figure this out
-    SET_CONFIG_CAN_STENCIL(gS8);
-    SET_CONFIG_CAN_STENCIL(gD24S8);
+    if (stencil_format_supported(interface, physDev, VK_FORMAT_S8_UINT)) {
+        fPreferedStencilFormat = gS8;
+    } else if (stencil_format_supported(interface, physDev, VK_FORMAT_D24_UNORM_S8_UINT)) {
+        fPreferedStencilFormat = gD24S8;
+    } else {
+        SkASSERT(stencil_format_supported(interface, physDev, VK_FORMAT_D32_SFLOAT_S8_UINT));
+        fPreferedStencilFormat = gD32S8;
+    }
 }
 
+void GrVkCaps::initConfigTable(const GrVkInterface* interface, VkPhysicalDevice physDev) {
+    for (int i = 0; i < kGrPixelConfigCnt; ++i) {
+        VkFormat format;
+        if (GrPixelConfigToVkFormat(static_cast<GrPixelConfig>(i), &format)) {
+            fConfigTable[i].init(interface, physDev, format);
+        }
+    }
+}
+
+void GrVkCaps::ConfigInfo::InitConfigFlags(VkFormatFeatureFlags vkFlags, uint16_t* flags) {
+    if (SkToBool(VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT & vkFlags) &&
+        SkToBool(VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT & vkFlags)) {
+        *flags = *flags | kTextureable_Flag;
+    }
+
+    if (SkToBool(VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT & vkFlags)) {
+        *flags = *flags | kRenderable_Flag;
+    }
+
+    if (SkToBool(VK_FORMAT_FEATURE_BLIT_SRC_BIT & vkFlags)) {
+        *flags = *flags | kBlitSrc_Flag;
+    }
+
+    if (SkToBool(VK_FORMAT_FEATURE_BLIT_DST_BIT & vkFlags)) {
+        *flags = *flags | kBlitDst_Flag;
+    }
+}
+
+void GrVkCaps::ConfigInfo::init(const GrVkInterface* interface,
+                                VkPhysicalDevice physDev,
+                                VkFormat format) {
+    VkFormatProperties props;
+    memset(&props, 0, sizeof(VkFormatProperties));
+    GR_VK_CALL(interface, GetPhysicalDeviceFormatProperties(physDev, format, &props));
+    InitConfigFlags(props.linearTilingFeatures, &fLinearFlags);
+    InitConfigFlags(props.optimalTilingFeatures, &fOptimalFlags);
+}

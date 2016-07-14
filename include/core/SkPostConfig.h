@@ -78,6 +78,14 @@
     #endif
 #endif
 
+#if defined(_MSC_VER) && SK_CPU_SSE_LEVEL >= SK_CPU_SSE_LEVEL_SSE2
+    #define SK_VECTORCALL __vectorcall
+#elif defined(SK_CPU_ARM32) && defined(SK_ARM_HAS_NEON)
+    #define SK_VECTORCALL __attribute__((pcs("aapcs-vfp")))
+#else
+    #define SK_VECTORCALL
+#endif
+
 #if !defined(SK_SUPPORT_GPU)
 #  define SK_SUPPORT_GPU 1
 #endif
@@ -107,26 +115,6 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 #ifdef SK_BUILD_FOR_WIN
-#  ifndef WIN32_LEAN_AND_MEAN
-#    define WIN32_LEAN_AND_MEAN
-#    define WIN32_IS_MEAN_WAS_LOCALLY_DEFINED
-#  endif
-#  ifndef NOMINMAX
-#    define NOMINMAX
-#    define NOMINMAX_WAS_LOCALLY_DEFINED
-#  endif
-#
-#  include <windows.h>
-#
-#  ifdef WIN32_IS_MEAN_WAS_LOCALLY_DEFINED
-#    undef WIN32_IS_MEAN_WAS_LOCALLY_DEFINED
-#    undef WIN32_LEAN_AND_MEAN
-#  endif
-#  ifdef NOMINMAX_WAS_LOCALLY_DEFINED
-#    undef NOMINMAX_WAS_LOCALLY_DEFINED
-#    undef NOMINMAX
-#  endif
-#
 #  ifndef SK_A32_SHIFT
 #    define SK_A32_SHIFT 24
 #    define SK_R32_SHIFT 16
@@ -345,6 +333,12 @@
 #endif
 
 //////////////////////////////////////////////////////////////////////
+
+#if defined(SK_HISTOGRAM_ENUMERATION) && defined(SK_HISTOGRAM_BOOLEAN)
+#  define SK_HISTOGRAMS_ENABLED 1
+#else
+#  define SK_HISTOGRAMS_ENABLED 0
+#endif
 
 #ifndef SK_HISTOGRAM_BOOLEAN
 #  define SK_HISTOGRAM_BOOLEAN(name, value)

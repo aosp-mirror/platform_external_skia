@@ -8,6 +8,15 @@
 #include "SkPM4fPriv.h"
 #include "SkUtils.h"
 #include "SkXfermode.h"
+#include "Sk4x4f.h"
+
+static SkPM4f rgba_to_pmcolor_order(const SkPM4f& x) {
+#ifdef SK_PMCOLOR_IS_BGRA
+    return {{ x.fVec[2], x.fVec[1], x.fVec[0], x.fVec[3] }};
+#else
+    return x;
+#endif
+}
 
 enum DstType {
     kLinear_Dst,
@@ -38,23 +47,52 @@ static Sk4f linear_unit_to_srgb_255f(const Sk4f& l4) {
     return linear_to_srgb(l4) * Sk4f(255) + Sk4f(0.5f);
 }
 
+// Load 4 interlaced 8888 sRGB pixels as an Sk4x4f, transposed and converted to float.
+static Sk4x4f load_4_srgb(const void* ptr) {
+    auto p = Sk4x4f::Transpose((const uint8_t*)ptr);
+
+    // Scale to [0,1].
+    p.r *= 1/255.0f;
+    p.g *= 1/255.0f;
+    p.b *= 1/255.0f;
+    p.a *= 1/255.0f;
+
+    // Apply approximate sRGB gamma correction to convert to linear (as if gamma were 2).
+    p.r *= p.r;
+    p.g *= p.g;
+    p.b *= p.b;
+
+    return p;
+}
+
+// Store an Sk4x4f back to 4 interlaced 8888 sRGB pixels.
+static void store_4_srgb(void* ptr, const Sk4x4f& p) {
+    // Convert back to sRGB and [0,255], again approximating sRGB as gamma == 2.
+    auto r = p.r.rsqrt().invert() * 255.0f + 0.5f,
+         g = p.g.rsqrt().invert() * 255.0f + 0.5f,
+         b = p.b.rsqrt().invert() * 255.0f + 0.5f,
+         a = p.a                  * 255.0f + 0.5f;
+    Sk4x4f{r,g,b,a}.transpose((uint8_t*)ptr);
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <DstType D> void general_1(const SkXfermode* xfer, uint32_t dst[],
                                     const SkPM4f* src, int count, const SkAlpha aa[]) {
+    const SkPM4f s = rgba_to_pmcolor_order(*src);
     SkXfermodeProc4f proc = xfer->getProc4f();
     SkPM4f d;
     if (aa) {
         for (int i = 0; i < count; ++i) {
             Sk4f d4 = load_dst<D>(dst[i]);
             d4.store(d.fVec);
-            Sk4f r4 = Sk4f::Load(proc(*src, d).fVec);
+            Sk4f r4 = Sk4f::Load(proc(s, d).fVec);
             dst[i] = store_dst<D>(lerp(r4, d4, aa[i]));
         }
     } else {
         for (int i = 0; i < count; ++i) {
             load_dst<D>(dst[i]).store(d.fVec);
-            Sk4f r4 = Sk4f::Load(proc(*src, d).fVec);
+            Sk4f r4 = Sk4f::Load(proc(s, d).fVec);
             dst[i] = store_dst<D>(r4);
         }
     }
@@ -68,13 +106,13 @@ template <DstType D> void general_n(const SkXfermode* xfer, uint32_t dst[],
         for (int i = 0; i < count; ++i) {
             Sk4f d4 = load_dst<D>(dst[i]);
             d4.store(d.fVec);
-            Sk4f r4 = Sk4f::Load(proc(src[i], d).fVec);
+            Sk4f r4 = Sk4f::Load(proc(rgba_to_pmcolor_order(src[i]), d).fVec);
             dst[i] = store_dst<D>(lerp(r4, d4, aa[i]));
         }
     } else {
         for (int i = 0; i < count; ++i) {
             load_dst<D>(dst[i]).store(d.fVec);
-            Sk4f r4 = Sk4f::Load(proc(src[i], d).fVec);
+            Sk4f r4 = Sk4f::Load(proc(rgba_to_pmcolor_order(src[i]), d).fVec);
             dst[i] = store_dst<D>(r4);
         }
     }
@@ -141,7 +179,7 @@ template <DstType D> void src_n(const SkXfermode*, uint32_t dst[],
                 continue;
             }
         }
-        Sk4f r4 = Sk4f::Load(src[i].fVec);   // src always overrides dst
+        Sk4f r4 = src[i].to4f_pmorder();
         if (a != 0xFF) {
             Sk4f d4 = load_dst<D>(dst[i]);
             r4 = lerp(r4, d4, a);
@@ -156,7 +194,7 @@ static Sk4f lerp(const Sk4f& src, const Sk4f& dst, const Sk4f& src_scale) {
 
 template <DstType D> void src_1(const SkXfermode*, uint32_t dst[],
                                 const SkPM4f* src, int count, const SkAlpha aa[]) {
-    const Sk4f s4 = Sk4f::Load(src->fVec);
+    const Sk4f s4 = src->to4f_pmorder();
 
     if (aa) {
         if (D == kLinear_Dst) {
@@ -169,39 +207,31 @@ template <DstType D> void src_1(const SkXfermode*, uint32_t dst[],
                 Sk4f r2 = lerp(s4_255, to_4f(dst[2]), Sk4f(aa4[2])) + Sk4f(0.5f);
                 Sk4f r3 = lerp(s4_255, to_4f(dst[3]), Sk4f(aa4[3])) + Sk4f(0.5f);
                 Sk4f_ToBytes((uint8_t*)dst, r0, r1, r2, r3);
-                
+
                 dst += 4;
                 aa += 4;
                 count -= 4;
             }
         } else {    // kSRGB
-            while (count >= 4) {
-                Sk4f aa4 = SkNx_cast<float>(Sk4b::Load(aa)) * Sk4f(1/255.0f);
-
-                /*  If we ever natively support convert 255_linear -> 255_srgb, then perhaps
-                 *  it would be faster (and possibly allow more code sharing with kLinear) to
-                 *  stay in that space.
-                 */
-                Sk4f r0 = lerp(s4, load_dst<D>(dst[0]), Sk4f(aa4[0]));
-                Sk4f r1 = lerp(s4, load_dst<D>(dst[1]), Sk4f(aa4[1]));
-                Sk4f r2 = lerp(s4, load_dst<D>(dst[2]), Sk4f(aa4[2]));
-                Sk4f r3 = lerp(s4, load_dst<D>(dst[3]), Sk4f(aa4[3]));
-                Sk4f_ToBytes((uint8_t*)dst,
-                             linear_unit_to_srgb_255f(r0),
-                             linear_unit_to_srgb_255f(r1),
-                             linear_unit_to_srgb_255f(r2),
-                             linear_unit_to_srgb_255f(r3));
-                
-                dst += 4;
-                aa += 4;
-                count -= 4;
+            SkPMColor srcColor = store_dst<D>(s4);
+            while (count-- > 0) {
+                SkAlpha cover = *aa++;
+                switch (cover) {
+                    case 0xFF: {
+                        *dst++ = srcColor;
+                        break;
+                    }
+                    case 0x00: {
+                        dst++;
+                        break;
+                    }
+                    default: {
+                        Sk4f d4 = load_dst<D>(*dst);
+                        *dst++ = store_dst<D>(lerp(s4, d4, cover));
+                    }
+                }
             }
-        }
-        for (int i = 0; i < count; ++i) {
-            unsigned a = aa[i];
-            Sk4f d4 = load_dst<D>(dst[i]);
-            dst[i] = store_dst<D>(lerp(s4, d4, a));
-        }
+        }          // kSRGB
     } else {
         sk_memset32(dst, store_dst<D>(s4), count);
     }
@@ -224,6 +254,7 @@ const SkXfermode::D32Proc gProcs_Dst[] = {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
+
 template <DstType D> void srcover_n(const SkXfermode*, uint32_t dst[],
                                     const SkPM4f src[], int count, const SkAlpha aa[]) {
     if (aa) {
@@ -232,7 +263,7 @@ template <DstType D> void srcover_n(const SkXfermode*, uint32_t dst[],
             if (0 == a) {
                 continue;
             }
-            Sk4f s4 = Sk4f::Load(src[i].fVec);
+            Sk4f s4 = src[i].to4f_pmorder();
             Sk4f d4 = load_dst<D>(dst[i]);
             if (a != 0xFF) {
                 s4 = scale_by_coverage(s4, a);
@@ -241,8 +272,27 @@ template <DstType D> void srcover_n(const SkXfermode*, uint32_t dst[],
             dst[i] = store_dst<D>(r4);
         }
     } else {
+        while (count >= 4 && D == kSRGB_Dst) {
+            auto d = load_4_srgb(dst);
+
+            auto s = Sk4x4f::Transpose(src->fVec);
+        #if defined(SK_PMCOLOR_IS_BGRA)
+            SkTSwap(s.r, s.b);
+        #endif
+
+            auto invSA = 1.0f - s.a;
+            auto r = s.r + d.r * invSA,
+                 g = s.g + d.g * invSA,
+                 b = s.b + d.b * invSA,
+                 a = s.a + d.a * invSA;
+
+            store_4_srgb(dst, Sk4x4f{r,g,b,a});
+            count -= 4;
+            dst += 4;
+            src += 4;
+        }
         for (int i = 0; i < count; ++i) {
-            Sk4f s4 = Sk4f::Load(src[i].fVec);
+            Sk4f s4 = src[i].to4f_pmorder();
             Sk4f d4 = load_dst<D>(dst[i]);
             Sk4f r4 = s4 + d4 * Sk4f(1 - get_alpha(s4));
             dst[i] = store_dst<D>(r4);
@@ -252,9 +302,9 @@ template <DstType D> void srcover_n(const SkXfermode*, uint32_t dst[],
 
 static void srcover_linear_dst_1(const SkXfermode*, uint32_t dst[],
                                  const SkPM4f* src, int count, const SkAlpha aa[]) {
-    const Sk4f s4 = Sk4f::Load(src->fVec);
+    const Sk4f s4 = src->to4f_pmorder();
     const Sk4f dst_scale = Sk4f(1 - get_alpha(s4));
-    
+
     if (aa) {
         for (int i = 0; i < count; ++i) {
             unsigned a = aa[i];
@@ -295,7 +345,7 @@ static void srcover_linear_dst_1(const SkXfermode*, uint32_t dst[],
 
 static void srcover_srgb_dst_1(const SkXfermode*, uint32_t dst[],
                                const SkPM4f* src, int count, const SkAlpha aa[]) {
-    Sk4f s4 = Sk4f::Load(src->fVec);
+    Sk4f s4 = src->to4f_pmorder();
     Sk4f dst_scale = Sk4f(1 - get_alpha(s4));
 
     if (aa) {
@@ -316,17 +366,22 @@ static void srcover_srgb_dst_1(const SkXfermode*, uint32_t dst[],
         }
     } else {
         while (count >= 4) {
-            Sk4f d0 = srgb_4b_to_linear_unit(dst[0]);
-            Sk4f d1 = srgb_4b_to_linear_unit(dst[1]);
-            Sk4f d2 = srgb_4b_to_linear_unit(dst[2]);
-            Sk4f d3 = srgb_4b_to_linear_unit(dst[3]);
-            Sk4f_ToBytes((uint8_t*)dst,
-                         linear_unit_to_srgb_255f(s4 + d0 * dst_scale),
-                         linear_unit_to_srgb_255f(s4 + d1 * dst_scale),
-                         linear_unit_to_srgb_255f(s4 + d2 * dst_scale),
-                         linear_unit_to_srgb_255f(s4 + d3 * dst_scale));
-            dst += 4;
+            auto d = load_4_srgb(dst);
+
+            auto s = Sk4x4f{{ src->r() }, { src->g() }, { src->b() }, { src->a() }};
+        #if defined(SK_PMCOLOR_IS_BGRA)
+            SkTSwap(s.r, s.b);
+        #endif
+
+            auto invSA = 1.0f - s.a;
+            auto r = s.r + d.r * invSA,
+                 g = s.g + d.g * invSA,
+                 b = s.b + d.b * invSA,
+                 a = s.a + d.a * invSA;
+
+            store_4_srgb(dst, Sk4x4f{r,g,b,a});
             count -= 4;
+            dst += 4;
         }
         for (int i = 0; i < count; ++i) {
             Sk4f d4 = srgb_4b_to_linear_unit(dst[i]);
@@ -387,7 +442,7 @@ static Sk4f lcd16_to_unit_4f(uint16_t rgb) {
 template <DstType D>
 void src_1_lcd(uint32_t dst[], const SkPM4f* src, int count, const uint16_t lcd[]) {
     const Sk4f s4 = Sk4f::Load(src->fVec);
-    
+
     if (D == kLinear_Dst) {
         // operate in bias-255 space for src and dst
         const Sk4f s4bias = s4 * Sk4f(255);

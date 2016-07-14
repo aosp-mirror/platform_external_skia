@@ -743,7 +743,8 @@ static int solve_cubic_poly(const SkScalar coeff[4], SkScalar tValues[3]) {
     SkScalar    r;
 
     if (R2MinusQ3 < 0) { // we have 3 real roots
-        SkScalar theta = SkScalarACos(R / SkScalarSqrt(Q3));
+        // the divide/root can, due to finite precisions, be slightly outside of -1...1
+        SkScalar theta = SkScalarACos(SkScalarPin(R / SkScalarSqrt(Q3), -1, 1));
         SkScalar neg2RootQ = -2 * SkScalarSqrt(Q);
 
         r = neg2RootQ * SkScalarCos(theta/3) - adiv3;
@@ -1169,9 +1170,18 @@ static SkPoint* subdivide(const SkConic& src, SkPoint pts[], int level) {
 
 int SkConic::chopIntoQuadsPOW2(SkPoint pts[], int pow2) const {
     SkASSERT(pow2 >= 0);
+    const int quadCount = 1 << pow2;
+    const int ptCount = 2 * quadCount + 1;
     *pts = fPts[0];
     SkDEBUGCODE(SkPoint* endPts =) subdivide(*this, pts + 1, pow2);
-    SkASSERT(endPts - pts == (2 * (1 << pow2) + 1));
+    SkASSERT(endPts - pts == ptCount);
+    if (!SkPointsAreFinite(pts, ptCount)) {
+        // if we generated a non-finite, pin ourselves to the middle of the hull,
+        // as our first and last are already on the first/last pts of the hull.
+        for (int i = 1; i < ptCount - 1; ++i) {
+            pts[i] = fPts[1];
+        }
+    }
     return 1 << pow2;
 }
 

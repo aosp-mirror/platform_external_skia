@@ -9,7 +9,7 @@
 #include "glsl/GrGLSLShaderBuilder.h"
 #include "glsl/GrGLSLCaps.h"
 #include "glsl/GrGLSLShaderVar.h"
-#include "glsl/GrGLSLTextureSampler.h"
+#include "glsl/GrGLSLSampler.h"
 #include "glsl/GrGLSLProgramBuilder.h"
 
 GrGLSLShaderBuilder::GrGLSLShaderBuilder(GrGLSLProgramBuilder* program)
@@ -35,6 +35,12 @@ void GrGLSLShaderBuilder::declAppend(const GrGLSLShaderVar& var) {
     this->codeAppendf("%s;", tempDecl.c_str());
 }
 
+void GrGLSLShaderBuilder::appendPrecisionModifier(GrSLPrecision precision) {
+    if (fProgramBuilder->glslCaps()->usesPrecisionModifiers()) {
+        this->codeAppendf("%s ", GrGLSLPrecisionString(precision));
+    }
+}
+
 void GrGLSLShaderBuilder::emitFunction(GrSLType returnType,
                                        const char* name,
                                        int argCnt,
@@ -57,59 +63,76 @@ void GrGLSLShaderBuilder::emitFunction(GrSLType returnType,
 }
 
 void GrGLSLShaderBuilder::appendTextureLookup(SkString* out,
-                                              const GrGLSLTextureSampler& sampler,
+                                              SamplerHandle samplerHandle,
                                               const char* coordName,
                                               GrSLType varyingType) const {
     const GrGLSLCaps* glslCaps = fProgramBuilder->glslCaps();
-    GrGLSLUniformHandler* uniformHandler = fProgramBuilder->uniformHandler();
-    GrSLType samplerType = uniformHandler->getUniformVariable(sampler.fSamplerUniform).getType();
-    if (samplerType == kSampler2DRect_GrSLType) {
+    const GrGLSLSampler& sampler = fProgramBuilder->getSampler(samplerHandle);
+    GrSLType samplerType = sampler.type();
+    if (samplerType == kTexture2DRectSampler_GrSLType) {
         if (varyingType == kVec2f_GrSLType) {
             out->appendf("%s(%s, textureSize(%s) * %s)",
                          GrGLSLTexture2DFunctionName(varyingType, samplerType,
                                                      glslCaps->generation()),
-                         uniformHandler->getUniformCStr(sampler.fSamplerUniform),
-                         uniformHandler->getUniformCStr(sampler.fSamplerUniform),
+                         sampler.getSamplerNameForTexture2D(),
+                         sampler.getSamplerNameForTexture2D(),
                          coordName);
         } else {
             out->appendf("%s(%s, vec3(textureSize(%s) * %s.xy, %s.z))",
                          GrGLSLTexture2DFunctionName(varyingType, samplerType,
                                                      glslCaps->generation()),
-                         uniformHandler->getUniformCStr(sampler.fSamplerUniform),
-                         uniformHandler->getUniformCStr(sampler.fSamplerUniform),
+                         sampler.getSamplerNameForTexture2D(),
+                         sampler.getSamplerNameForTexture2D(),
                          coordName,
                          coordName);
         }
     } else {
         out->appendf("%s(%s, %s)",
                      GrGLSLTexture2DFunctionName(varyingType, samplerType, glslCaps->generation()),
-                     uniformHandler->getUniformCStr(sampler.fSamplerUniform),
+                     sampler.getSamplerNameForTexture2D(),
                      coordName);
     }
 
-    // This refers to any swizzling we may need to get from some backend internal format to the
-    // format used in GrPixelConfig. If this is implemented by the GrGpu object, then swizzle will
-    // be rgba. For shader prettiness we omit the swizzle rather than appending ".rgba".
-    const GrSwizzle& configSwizzle = glslCaps->configTextureSwizzle(sampler.config());
+    this->appendTextureSwizzle(out, sampler.config());
+}
+
+void GrGLSLShaderBuilder::appendTextureLookup(SamplerHandle samplerHandle,
+                                              const char* coordName,
+                                              GrSLType varyingType) {
+    this->appendTextureLookup(&this->code(), samplerHandle, coordName, varyingType);
+}
+
+void GrGLSLShaderBuilder::appendTextureLookupAndModulate(const char* modulation,
+                                                         SamplerHandle samplerHandle,
+                                                         const char* coordName,
+                                                         GrSLType varyingType) {
+    SkString lookup;
+    this->appendTextureLookup(&lookup, samplerHandle, coordName, varyingType);
+    this->codeAppend((GrGLSLExpr4(modulation) * GrGLSLExpr4(lookup)).c_str());
+}
+
+void GrGLSLShaderBuilder::appendTexelFetch(SkString* out,
+                                           SamplerHandle samplerHandle,
+                                           const char* coordExpr) const {
+    const GrGLSLSampler& sampler = fProgramBuilder->getSampler(samplerHandle);
+    SkASSERT(fProgramBuilder->glslCaps()->texelFetchSupport());
+    SkASSERT(GrSLTypeIsCombinedSamplerType(sampler.type()));
+
+    out->appendf("texelFetch(%s, %s)", sampler.getSamplerNameForTexelFetch(), coordExpr);
+
+    this->appendTextureSwizzle(out, sampler.config());
+}
+
+void GrGLSLShaderBuilder::appendTexelFetch(SamplerHandle samplerHandle, const char* coordExpr) {
+    this->appendTexelFetch(&this->code(), samplerHandle, coordExpr);
+}
+
+void GrGLSLShaderBuilder::appendTextureSwizzle(SkString* out, GrPixelConfig config) const {
+    const GrSwizzle& configSwizzle = fProgramBuilder->glslCaps()->configTextureSwizzle(config);
 
     if (configSwizzle != GrSwizzle::RGBA()) {
         out->appendf(".%s", configSwizzle.c_str());
     }
-}
-
-void GrGLSLShaderBuilder::appendTextureLookup(const GrGLSLTextureSampler& sampler,
-                                              const char* coordName,
-                                              GrSLType varyingType) {
-    this->appendTextureLookup(&this->code(), sampler, coordName, varyingType);
-}
-
-void GrGLSLShaderBuilder::appendTextureLookupAndModulate(const char* modulation,
-                                                         const GrGLSLTextureSampler& sampler,
-                                                         const char* coordName,
-                                                         GrSLType varyingType) {
-    SkString lookup;
-    this->appendTextureLookup(&lookup, sampler, coordName, varyingType);
-    this->codeAppend((GrGLSLExpr4(modulation) * GrGLSLExpr4(lookup)).c_str());
 }
 
 bool GrGLSLShaderBuilder::addFeature(uint32_t featureBit, const char* extensionName) {
@@ -174,4 +197,3 @@ void GrGLSLShaderBuilder::finalize(uint32_t visibility) {
 
     fFinalized = true;
 }
-

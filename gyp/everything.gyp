@@ -18,14 +18,21 @@
       'type': 'none',
       'dependencies': [
         'most.gyp:most',
+        'skiaserve.gyp:skiaserve',
+        'tools.gyp:monobench',
       ],
       'conditions': [
-        ['skia_os in ("ios", "android", "chromeos")', {
+        ['skia_os in ("ios", "android")', {
           # debugger is not supported on this platform
         }, {
           'dependencies': [
             'debugger.gyp:debugger',
             #'v8.gyp:SkV8Example',
+          ],
+        }],
+        ['skia_os == "android"', {
+          'dependencies': [
+            'android_system.gyp:Viewer_APK',
           ],
         }],
       ],

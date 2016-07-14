@@ -276,7 +276,7 @@ void SkRecordOptimize(SkRecord* record) {
     // out junk for other optimization passes.  Right now, nothing needs it,
     // and the bounding box hierarchy will do the work of skipping no-op
     // Save-NoDraw-Restore sequences better than we can here.
-    //SkRecordNoopSaveRestores(record);
+    SkRecordNoopSaveRestores(record);
 
     SkRecordNoopSaveLayerDrawRestores(record);
     SkRecordMergeSvgOpacityAndFilterLayers(record);
@@ -292,4 +292,3 @@ void SkRecordOptimize2(SkRecord* record) {
 
     record->defrag();
 }
-

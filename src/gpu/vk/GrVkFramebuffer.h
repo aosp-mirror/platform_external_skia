@@ -12,7 +12,7 @@
 
 #include "GrVkResource.h"
 
-#include "vulkan/vulkan.h"
+#include "vk/GrVkDefines.h"
 
 class GrVkGpu;
 class GrVkImageView;
@@ -28,6 +28,12 @@ public:
                                    const GrVkImageView* stencilAttachment);
 
     VkFramebuffer framebuffer() const { return fFramebuffer; }
+
+#ifdef SK_TRACE_VK_RESOURCES
+    void dumpInfo() const override {
+        SkDebugf("GrVkFramebuffer: %d (%d refs)\n", fFramebuffer, this->getRefCnt());
+    }
+#endif
 
 private:
     GrVkFramebuffer(VkFramebuffer framebuffer) : INHERITED(), fFramebuffer(framebuffer) {}

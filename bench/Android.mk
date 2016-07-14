@@ -11,10 +11,12 @@ LOCAL_PATH:= $(call my-dir)
 include $(CLEAR_VARS)
 LOCAL_CFLAGS += \
 	-fPIC \
+	-Wvla \
 	-Wno-unused-parameter \
 	-U_FORTIFY_SOURCE \
 	-D_FORTIFY_SOURCE=1 \
-	-DSKIA_IMPLEMENTATION=1
+	-DSKIA_IMPLEMENTATION=1 \
+	-O2
 
 LOCAL_CPPFLAGS := \
 	-std=c++11 \
@@ -43,6 +45,7 @@ LOCAL_SRC_FILES := \
 	ChromeBench.cpp \
 	CmapBench.cpp \
 	CodecBench.cpp \
+	ColorCodecBench.cpp \
 	ColorCubeBench.cpp \
 	ColorFilterBench.cpp \
 	ColorPrivBench.cpp \
@@ -51,6 +54,7 @@ LOCAL_SRC_FILES := \
 	DashBench.cpp \
 	DisplacementBench.cpp \
 	DrawBitmapAABench.cpp \
+	EncoderBench.cpp \
 	FSRectBench.cpp \
 	FontCacheBench.cpp \
 	FontScalerBench.cpp \
@@ -62,10 +66,11 @@ LOCAL_SRC_FILES := \
 	GameBench.cpp \
 	GeometryBench.cpp \
 	GrMemoryPoolBench.cpp \
+	GrMipMapBench.cpp \
 	GrResourceCacheBench.cpp \
 	GradientBench.cpp \
 	HairlinePathBench.cpp \
-	HalfBench.cpp \
+	HardStopGradientBench.cpp \
 	ImageBench.cpp \
 	ImageCacheBench.cpp \
 	ImageFilterCollapse.cpp \
@@ -111,9 +116,10 @@ LOCAL_SRC_FILES := \
 	ShaderMaskBench.cpp \
 	ShapesBench.cpp \
 	Sk4fBench.cpp \
+	SkBlend_optsBench.cpp \
 	SkGlyphCacheBench.cpp \
 	SkLinearBitmapPipelineBench.cpp \
-	SkipZeroesBench.cpp \
+	SkRasterPipelineBench.cpp \
 	SortBench.cpp \
 	StrokeBench.cpp \
 	SwizzleBench.cpp \
@@ -127,7 +133,7 @@ LOCAL_SRC_FILES := \
 	WritePixelsBench.cpp \
 	WriterBench.cpp \
 	Xfer4fBench.cpp \
-	XferU64Bench.cpp \
+	XferF16Bench.cpp \
 	XfermodeBench.cpp \
 	nanobench.cpp \
 	nanobenchAndroid.cpp \
@@ -143,10 +149,6 @@ LOCAL_SRC_FILES := \
 	../gm/arcofzorro.cpp \
 	../gm/arcto.cpp \
 	../gm/arithmode.cpp \
-	../gm/astcbitmap.cpp \
-	../gm/avoidxfermode.cpp \
-	../gm/avoidxfermode2.cpp \
-	../gm/avoidxfermode3.cpp \
 	../gm/badpaint.cpp \
 	../gm/beziereffects.cpp \
 	../gm/beziers.cpp \
@@ -157,6 +159,7 @@ LOCAL_SRC_FILES := \
 	../gm/bigtileimagefilter.cpp \
 	../gm/bitmapcopy.cpp \
 	../gm/bitmapfilters.cpp \
+	../gm/bitmapimage.cpp \
 	../gm/bitmappremul.cpp \
 	../gm/bitmaprect.cpp \
 	../gm/bitmaprecttest.cpp \
@@ -164,13 +167,16 @@ LOCAL_SRC_FILES := \
 	../gm/bleed.cpp \
 	../gm/blend.cpp \
 	../gm/blurcircles.cpp \
+	../gm/blurcircles2.cpp \
 	../gm/blurquickreject.cpp \
 	../gm/blurrect.cpp \
 	../gm/blurredclippedcircle.cpp \
 	../gm/blurroundrect.cpp \
 	../gm/blurs.cpp \
 	../gm/bmpfilterqualityrepeat.cpp \
+	../gm/bug5252.cpp \
 	../gm/bug530095.cpp \
+	../gm/bug615686.cpp \
 	../gm/cgm.c \
 	../gm/cgms.cpp \
 	../gm/circles.cpp \
@@ -178,7 +184,6 @@ LOCAL_SRC_FILES := \
 	../gm/clip_strokerect.cpp \
 	../gm/clipdrawdraw.cpp \
 	../gm/clippedbitmapshaders.cpp \
-	../gm/cmykjpeg.cpp \
 	../gm/color4f.cpp \
 	../gm/colorcube.cpp \
 	../gm/coloremoji.cpp \
@@ -201,11 +206,13 @@ LOCAL_SRC_FILES := \
 	../gm/convexpolyclip.cpp \
 	../gm/convexpolyeffect.cpp \
 	../gm/copyTo4444.cpp \
+	../gm/croppedrects.cpp \
 	../gm/cubicpaths.cpp \
 	../gm/dashcircle.cpp \
 	../gm/dashcubics.cpp \
 	../gm/dashing.cpp \
 	../gm/dcshader.cpp \
+	../gm/deferredtextureimagedata.cpp \
 	../gm/degeneratesegments.cpp \
 	../gm/dftext.cpp \
 	../gm/discard.cpp \
@@ -225,7 +232,6 @@ LOCAL_SRC_FILES := \
 	../gm/dstreadshuffle.cpp \
 	../gm/emboss.cpp \
 	../gm/emptypath.cpp \
-	../gm/etc1bitmap.cpp \
 	../gm/extractbitmap.cpp \
 	../gm/factory.cpp \
 	../gm/fadefilter.cpp \
@@ -239,6 +245,7 @@ LOCAL_SRC_FILES := \
 	../gm/fontmgr.cpp \
 	../gm/fontscaler.cpp \
 	../gm/fontscalerdistortable.cpp \
+	../gm/gamma.cpp \
 	../gm/gammatext.cpp \
 	../gm/getpostextpath.cpp \
 	../gm/giantbitmap.cpp \
@@ -253,6 +260,7 @@ LOCAL_SRC_FILES := \
 	../gm/grayscalejpg.cpp \
 	../gm/hairlines.cpp \
 	../gm/hairmodes.cpp \
+	../gm/hardstop_gradients.cpp \
 	../gm/hittestpath.cpp \
 	../gm/image.cpp \
 	../gm/image_pict.cpp \
@@ -272,6 +280,7 @@ LOCAL_SRC_FILES := \
 	../gm/imagefilterstransformed.cpp \
 	../gm/imagefromyuvtextures.cpp \
 	../gm/imagemagnifier.cpp \
+	../gm/imagemakewithfilter.cpp \
 	../gm/imageresizetiled.cpp \
 	../gm/imagescalealigned.cpp \
 	../gm/imagesource.cpp \
@@ -320,7 +329,6 @@ LOCAL_SRC_FILES := \
 	../gm/pictureshader.cpp \
 	../gm/pictureshadertile.cpp \
 	../gm/pixelsnap.cpp \
-	../gm/pixelxorxfermode.cpp \
 	../gm/plus.cpp \
 	../gm/points.cpp \
 	../gm/poly2poly.cpp \
@@ -356,15 +364,17 @@ LOCAL_SRC_FILES := \
 	../gm/srcmode.cpp \
 	../gm/stlouisarch.cpp \
 	../gm/stringart.cpp \
+	../gm/stroke_rect_shader.cpp \
+	../gm/strokedlines.cpp \
 	../gm/strokefill.cpp \
 	../gm/strokerect.cpp \
 	../gm/strokerects.cpp \
 	../gm/strokes.cpp \
 	../gm/stroketext.cpp \
+	../gm/subsetshader.cpp \
 	../gm/surface.cpp \
 	../gm/tablecolorfilter.cpp \
 	../gm/tallstretchedbitmaps.cpp \
-	../gm/testimagefilters.cpp \
 	../gm/texdata.cpp \
 	../gm/textblob.cpp \
 	../gm/textblobblockreordering.cpp \
@@ -399,6 +409,7 @@ LOCAL_SRC_FILES := \
 	../gm/yuvtorgbeffect.cpp \
 	../tools/debugger/SkDrawCommand.cpp \
 	../tools/debugger/SkDebugCanvas.cpp \
+	../tools/debugger/SkJsonWriteBuffer.cpp \
 	../tools/debugger/SkObjectParser.cpp \
 	../tools/debugger/SkOverdrawMode.cpp \
 	../tools/AndroidSkDebugToStdOut.cpp \
@@ -414,16 +425,31 @@ LOCAL_SRC_FILES := \
 	../tools/random_parse_path.cpp \
 	../tools/UrlDataManager.cpp \
 	../tools/android/SkAndroidSDKCanvas.cpp \
-	../src/gpu/GrContextFactory.cpp \
-	../src/gpu/GrTest.cpp \
+	../tools/gpu/GrContextFactory.cpp \
+	../tools/gpu/GrTest.cpp \
+	../tools/gpu/TestContext.cpp \
+	../tools/gpu/gl/GLTestContext.cpp \
+	../tools/gpu/gl/debug/DebugGLTestContext.cpp \
+	../tools/gpu/gl/debug/GrBufferObj.cpp \
+	../tools/gpu/gl/debug/GrFrameBufferObj.cpp \
+	../tools/gpu/gl/debug/GrProgramObj.cpp \
+	../tools/gpu/gl/debug/GrShaderObj.cpp \
+	../tools/gpu/gl/debug/GrTextureObj.cpp \
+	../tools/gpu/gl/debug/GrTextureUnitObj.cpp \
+	../tools/gpu/gl/null/NullGLTestContext.cpp \
+	../tools/gpu/gl/egl/CreatePlatformGLTestContext_egl.cpp \
+	../tools/gpu/vk/VkTestContext.cpp \
+	../tools/picture_utils.cpp \
 	../tools/flags/SkCommandLineFlags.cpp
 
 LOCAL_SHARED_LIBRARIES := \
 	liblog \
 	libhwui \
+	libpng \
 	libexpat \
 	libGLESv2 \
 	libEGL \
+	libvulkan \
 	libz
 
 LOCAL_STATIC_LIBRARIES := \
@@ -431,6 +457,7 @@ LOCAL_STATIC_LIBRARIES := \
 	libjsoncpp
 
 LOCAL_C_INCLUDES := \
+	$(LOCAL_PATH)/../src/sksl \
 	$(LOCAL_PATH)/../include/c \
 	$(LOCAL_PATH)/../include/config \
 	$(LOCAL_PATH)/../include/core \
@@ -441,17 +468,22 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../include/client/android \
 	$(LOCAL_PATH)/../include/images \
 	$(LOCAL_PATH)/../include/ports \
+	$(LOCAL_PATH)/../third_party/qcms/src \
 	$(LOCAL_PATH)/../src/sfnt \
 	$(LOCAL_PATH)/../include/utils \
 	$(LOCAL_PATH)/../src/utils \
 	$(LOCAL_PATH)/../include/gpu \
+	frameworks/native/vulkan/include \
+	$(LOCAL_PATH)/../tools/viewer/sk_app \
+	$(LOCAL_PATH)/../tools/viewer/sk_app/android \
 	$(LOCAL_PATH)/../include/private \
 	$(LOCAL_PATH)/../src/gpu \
+	$(LOCAL_PATH)/../tools/gpu \
 	$(LOCAL_PATH)/../tools/flags \
 	$(LOCAL_PATH)/../src/fonts \
 	$(LOCAL_PATH)/../src/core \
 	$(LOCAL_PATH)/../tools \
-	$(LOCAL_PATH)/../../src/gpu \
+	$(LOCAL_PATH)/../src/image \
 	$(LOCAL_PATH)/subset \
 	$(LOCAL_PATH)/../src/effects \
 	$(LOCAL_PATH)/../src/pdf \
@@ -463,7 +495,11 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../../../frameworks/base/libs/hwui \
 	$(LOCAL_PATH)/../tools/timer \
 	$(LOCAL_PATH)/../third_party/etc1 \
-	$(LOCAL_PATH)/../tools/android
+	$(LOCAL_PATH)/../tools/android \
+	external/libpng
+
+LOCAL_CFLAGS += \
+	-DSK_CRASH_HANDLER
 
 LOCAL_MODULE_TAGS := \
 	tests
