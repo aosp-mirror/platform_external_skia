@@ -682,7 +682,8 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../tools/android
 
 LOCAL_CFLAGS += \
-	-DSK_XML
+	-DSK_XML \
+	-DSK_CRASH_HANDLER
 
 LOCAL_MODULE_TAGS := \
 	tests

@@ -498,6 +498,9 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../tools/android \
 	external/libpng
 
+LOCAL_CFLAGS += \
+	-DSK_CRASH_HANDLER
+
 LOCAL_MODULE_TAGS := \
 	tests
 
