@@ -137,6 +137,7 @@ LOCAL_SRC_FILES := \
 	XfermodeBench.cpp \
 	nanobench.cpp \
 	nanobenchAndroid.cpp \
+	pack_int_uint16_t_Bench.cpp \
 	../gm/SkLinearBitmapPipelineGM.cpp \
 	../gm/aaclip.cpp \
 	../gm/aarectmodes.cpp \
@@ -344,7 +345,6 @@ LOCAL_SRC_FILES := \
 	../gm/rrects.cpp \
 	../gm/samplerstress.cpp \
 	../gm/scaledstrokes.cpp \
-	../gm/selftest.cpp \
 	../gm/shaderbounds.cpp \
 	../gm/shadertext.cpp \
 	../gm/shadertext2.cpp \
@@ -357,6 +357,7 @@ LOCAL_SRC_FILES := \
 	../gm/skbug1719.cpp \
 	../gm/skbug_257.cpp \
 	../gm/skbug_4868.cpp \
+	../gm/skbug_5321.cpp \
 	../gm/smallarc.cpp \
 	../gm/smallimage.cpp \
 	../gm/smallpaths.cpp \
@@ -446,7 +447,6 @@ LOCAL_SHARED_LIBRARIES := \
 	liblog \
 	libhwui \
 	libpng \
-	libexpat \
 	libGLESv2 \
 	libEGL \
 	libvulkan \
@@ -497,9 +497,6 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../third_party/etc1 \
 	$(LOCAL_PATH)/../tools/android \
 	external/libpng
-
-LOCAL_CFLAGS += \
-	-DSK_CRASH_HANDLER
 
 LOCAL_MODULE_TAGS := \
 	tests

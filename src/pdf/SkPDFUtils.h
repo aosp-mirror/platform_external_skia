@@ -57,6 +57,15 @@ void DrawFormXObject(int objectIndex, SkWStream* content);
 void ApplyGraphicState(int objectIndex, SkWStream* content);
 void ApplyPattern(int objectIndex, SkWStream* content);
 
+// Converts (value / 255.0) with three significant digits of accuracy.
+// Writes value as string into result.  Returns strlen() of result.
+size_t ColorToDecimal(uint8_t value, char result[5]);
+inline void AppendColorComponent(uint8_t value, SkWStream* wStream) {
+    char buffer[5];
+    size_t len = SkPDFUtils::ColorToDecimal(value, buffer);
+    wStream->write(buffer, len);
+}
+
 // 3 = '-', '.', and '\0' characters.
 // 9 = number of significant digits
 // abs(FLT_MIN_10_EXP) = number of zeros in FLT_MIN
@@ -75,6 +84,13 @@ inline void WriteUInt16BE(SkDynamicMemoryWStream* wStream, uint16_t value) {
     result[2] = gHex[0xF & (value >> 4 )];
     result[3] = gHex[0xF & (value      )];
     wStream->write(result, 4);
+}
+inline void WriteUInt8(SkDynamicMemoryWStream* wStream, uint8_t value) {
+    static const char gHex[] = "0123456789ABCDEF";
+    char result[2];
+    result[0] = gHex[value >> 4 ];
+    result[1] = gHex[0xF & value];
+    wStream->write(result, 2);
 }
 
 }  // namespace SkPDFUtils
