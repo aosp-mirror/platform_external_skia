@@ -391,6 +391,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrCaps.cpp \
 	src/gpu/GrClip.cpp \
 	src/gpu/GrClipMaskManager.cpp \
+	src/gpu/GrColorSpaceXform.cpp \
 	src/gpu/GrContext.cpp \
 	src/gpu/GrCoordTransform.cpp \
 	src/gpu/GrDefaultGeoProcFactory.cpp \
