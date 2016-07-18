@@ -123,6 +123,7 @@ LOCAL_SRC_FILES := \
 	../tests/DataRefTest.cpp \
 	../tests/DequeTest.cpp \
 	../tests/DeviceLooperTest.cpp \
+	../tests/DeviceTest.cpp \
 	../tests/DiscardableMemoryPoolTest.cpp \
 	../tests/DiscardableMemoryTest.cpp \
 	../tests/DrawBitmapRectTest.cpp \
