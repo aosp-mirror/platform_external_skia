@@ -645,7 +645,6 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../include/client/android \
 	$(LOCAL_PATH)/../include/images \
 	$(LOCAL_PATH)/../include/ports \
-	$(LOCAL_PATH)/../third_party/qcms/src \
 	$(LOCAL_PATH)/../src/sfnt \
 	$(LOCAL_PATH)/../include/utils \
 	$(LOCAL_PATH)/../src/utils \

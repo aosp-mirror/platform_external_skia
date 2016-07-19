@@ -63,8 +63,7 @@ LOCAL_CFLAGS += \
 	-O2 \
 	-Wno-clobbered \
 	-Wno-unknown-warning-option \
-	-fexceptions \
-	-w
+	-fexceptions
 
 LOCAL_CPPFLAGS := \
 	-std=c++11 \
@@ -694,13 +693,7 @@ LOCAL_SRC_FILES := \
 	src/sksl/SkSLSPIRVCodeGenerator.cpp \
 	src/sksl/SkSLUtil.cpp \
 	src/sksl/ir/SkSLSymbolTable.cpp \
-	src/sksl/ir/SkSLType.cpp \
-	third_party/qcms/src/chain.c \
-	third_party/qcms/src/iccread.c \
-	third_party/qcms/src/matrix.c \
-	third_party/qcms/src/qcms_util.c \
-	third_party/qcms/src/transform.c \
-	third_party/qcms/src/transform_util.c
+	src/sksl/ir/SkSLType.cpp
 
 LOCAL_SHARED_LIBRARIES := \
 	liblog \
@@ -761,7 +754,6 @@ LOCAL_C_INCLUDES := \
 	external/freetype/include \
 	$(LOCAL_PATH)/include/utils/win \
 	$(LOCAL_PATH)/src/ports \
-	$(LOCAL_PATH)/third_party/qcms/src \
 	external/sfntly/cpp/src \
 	external/zlib \
 	external/dng_sdk \
@@ -784,7 +776,6 @@ LOCAL_EXPORT_C_INCLUDE_DIRS := \
 	$(LOCAL_PATH)/tools/viewer/sk_app/android \
 	$(LOCAL_PATH)/include/images \
 	$(LOCAL_PATH)/include/ports \
-	$(LOCAL_PATH)/third_party/qcms/src \
 	$(LOCAL_PATH)/include/utils \
 	$(LOCAL_PATH)/src/utils
 
@@ -823,12 +814,10 @@ LOCAL_SRC_FILES_x86 += \
 	src/opts/SkBitmapProcState_opts_SSSE3.cpp \
 	src/opts/SkOpts_ssse3.cpp \
 	src/opts/SkOpts_sse41.cpp \
-	src/opts/SkOpts_avx.cpp \
-	third_party/qcms/src/transform-sse2.c
+	src/opts/SkOpts_avx.cpp
 
 LOCAL_CFLAGS_x86 += \
-	-DqDNGBigEndian=0 \
-	-DSSE2_ENABLE
+	-DqDNGBigEndian=0
 
 LOCAL_SRC_FILES_x86_64 += \
 	src/opts/SkBitmapFilter_opts_SSE2.cpp \
@@ -838,11 +827,7 @@ LOCAL_SRC_FILES_x86_64 += \
 	src/opts/SkBitmapProcState_opts_SSSE3.cpp \
 	src/opts/SkOpts_ssse3.cpp \
 	src/opts/SkOpts_sse41.cpp \
-	src/opts/SkOpts_avx.cpp \
-	third_party/qcms/src/transform-sse2.c
-
-LOCAL_CFLAGS_x86_64 += \
-	-DSSE2_ENABLE
+	src/opts/SkOpts_avx.cpp
 
 LOCAL_CFLAGS_mips += \
 	-EL
@@ -897,7 +882,6 @@ LOCAL_EXPORT_C_INCLUDE_DIRS := \
 	$(LOCAL_PATH)/tools/viewer/sk_app/android \
 	$(LOCAL_PATH)/include/images \
 	$(LOCAL_PATH)/include/ports \
-	$(LOCAL_PATH)/third_party/qcms/src \
 	$(LOCAL_PATH)/include/utils \
 	$(LOCAL_PATH)/src/utils
 
