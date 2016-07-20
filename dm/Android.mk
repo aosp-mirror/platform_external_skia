@@ -468,6 +468,7 @@ LOCAL_SRC_FILES := \
 	../gm/lcdtext.cpp \
 	../gm/lighting.cpp \
 	../gm/lightingshader.cpp \
+	../gm/lightingshader2.cpp \
 	../gm/linepaths.cpp \
 	../gm/localmatriximagefilter.cpp \
 	../gm/lumafilter.cpp \
