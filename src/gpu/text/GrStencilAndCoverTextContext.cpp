@@ -82,9 +82,8 @@ void GrStencilAndCoverTextContext::drawText(GrContext* context, GrDrawContext* d
     } else if (this->canDraw(skPaint, viewMatrix)) {
         if (skPaint.getTextSize() > 0) {
             TextRun run(skPaint);
-            GrPipelineBuilder pipelineBuilder(paint);
             run.setText(text, byteLength, x, y);
-            run.draw(context, dc, &pipelineBuilder, clip, paint.getColor(), viewMatrix, props, 0, 0,
+            run.draw(context, dc, paint, clip, viewMatrix, props, 0, 0,
                      clipBounds, fFallbackTextContext, skPaint);
         }
         return;
@@ -117,9 +116,8 @@ void GrStencilAndCoverTextContext::drawPosText(GrContext* context, GrDrawContext
     } else if (this->canDraw(skPaint, viewMatrix)) {
         if (skPaint.getTextSize() > 0) {
             TextRun run(skPaint);
-            GrPipelineBuilder pipelineBuilder(paint);
             run.setPosText(text, byteLength, pos, scalarsPerPosition, offset);
-            run.draw(context, dc, &pipelineBuilder, clip, paint.getColor(), viewMatrix, props, 0, 0,
+            run.draw(context, dc, paint, clip, viewMatrix, props, 0, 0,
                      clipBounds, fFallbackTextContext, skPaint);
         }
         return;
@@ -225,11 +223,12 @@ void GrStencilAndCoverTextContext::drawTextBlob(GrContext* context, GrDrawContex
     }
 
     const TextBlob& blob = this->findOrCreateTextBlob(skBlob, skPaint);
-    GrPipelineBuilder pipelineBuilder(paint);
 
     TextBlob::Iter iter(blob);
     for (TextRun* run = iter.get(); run; run = iter.next()) {
-        run->draw(context, dc, &pipelineBuilder, clip, paint.getColor(), viewMatrix, props,  x, y,
+        // The run's "font" overrides the anti-aliasing of the passed in paint!
+        paint.setAntiAlias(run->isAntiAlias());
+        run->draw(context, dc, paint, clip, viewMatrix, props,  x, y,
                   clipBounds, fFallbackTextContext, skPaint);
         run->releaseGlyphCache();
     }
@@ -365,12 +364,12 @@ private:
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 GrStencilAndCoverTextContext::TextRun::TextRun(const SkPaint& fontAndStroke)
-    : fStyle(fontAndStroke),
-      fFont(fontAndStroke),
-      fTotalGlyphCount(0),
-      fFallbackGlyphCount(0),
-      fDetachedGlyphCache(nullptr),
-      fLastDrawnGlyphsID(SK_InvalidUniqueID) {
+    : fStyle(fontAndStroke)
+    , fFont(fontAndStroke)
+    , fTotalGlyphCount(0)
+    , fFallbackGlyphCount(0)
+    , fDetachedGlyphCache(nullptr)
+    , fLastDrawnGlyphsID(SK_InvalidUniqueID) {
     SkASSERT(fFont.getTextSize() > 0);
     SkASSERT(!fStyle.hasNonDashPathEffect()); // Arbitrary path effects not supported.
     SkASSERT(!fStyle.isSimpleHairline()); // Hairlines are not supported.
@@ -472,7 +471,9 @@ void GrStencilAndCoverTextContext::TextRun::setText(const char text[], size_t by
     SkASSERT(byteLength == 0 || text != nullptr);
 
     SkGlyphCache* glyphCache = this->getGlyphCache();
-    SkPaint::GlyphCacheProc glyphCacheProc = fFont.getGlyphCacheProc(true);
+    SkPaint::GlyphCacheProc glyphCacheProc = SkPaint::GetGlyphCacheProc(fFont.getTextEncoding(),
+                                                                        fFont.isDevKernText(),
+                                                                        true);
 
     fTotalGlyphCount = fFont.countText(text, byteLength);
     fInstanceData.reset(InstanceData::Alloc(GrPathRendering::kTranslate_PathTransformType,
@@ -532,7 +533,9 @@ void GrStencilAndCoverTextContext::TextRun::setPosText(const char text[], size_t
     SkASSERT(1 == scalarsPerPosition || 2 == scalarsPerPosition);
 
     SkGlyphCache* glyphCache = this->getGlyphCache();
-    SkPaint::GlyphCacheProc glyphCacheProc = fFont.getGlyphCacheProc(true);
+    SkPaint::GlyphCacheProc glyphCacheProc = SkPaint::GetGlyphCacheProc(fFont.getTextEncoding(),
+                                                                        fFont.isDevKernText(),
+                                                                        true);
 
     fTotalGlyphCount = fFont.countText(text, byteLength);
     fInstanceData.reset(InstanceData::Alloc(GrPathRendering::kTranslate_PathTransformType,
@@ -596,9 +599,8 @@ inline void GrStencilAndCoverTextContext::TextRun::appendGlyph(const SkGlyph& gl
 
 void GrStencilAndCoverTextContext::TextRun::draw(GrContext* ctx,
                                                  GrDrawContext* drawContext,
-                                                 GrPipelineBuilder* pipelineBuilder,
+                                                 const GrPaint& grPaint,
                                                  const GrClip& clip,
-                                                 GrColor color,
                                                  const SkMatrix& viewMatrix,
                                                  const SkSurfaceProps& props,
                                                  SkScalar x, SkScalar y,
@@ -606,11 +608,9 @@ void GrStencilAndCoverTextContext::TextRun::draw(GrContext* ctx,
                                                  GrAtlasTextContext* fallbackTextContext,
                                                  const SkPaint& originalSkPaint) const {
     SkASSERT(fInstanceData);
-    SkASSERT(drawContext->isStencilBufferMultisampled() || !fFont.isAntiAlias());
+    SkASSERT(drawContext->isStencilBufferMultisampled() || !grPaint.isAntiAlias());
 
     if (fInstanceData->count()) {
-        pipelineBuilder->setState(GrPipelineBuilder::kHWAntialias_Flag, fFont.isAntiAlias());
-
         static constexpr GrUserStencilSettings kCoverPass(
             GrUserStencilSettings::StaticInit<
                 0x0000,
@@ -620,8 +620,6 @@ void GrStencilAndCoverTextContext::TextRun::draw(GrContext* ctx,
                 GrUserStencilOp::kKeep,
                 0xffff>()
         );
-
-        pipelineBuilder->setUserStencil(&kCoverPass);
 
         SkAutoTUnref<GrPathRange> glyphs(this->createGlyphs(ctx));
         if (fLastDrawnGlyphsID != glyphs->getUniqueID()) {
@@ -639,11 +637,15 @@ void GrStencilAndCoverTextContext::TextRun::draw(GrContext* ctx,
 
         SkAutoTUnref<GrDrawBatch> batch(
             GrDrawPathRangeBatch::Create(viewMatrix, fTextRatio, fTextInverseRatio * x,
-                                         fTextInverseRatio * y, color,
+                                         fTextInverseRatio * y, grPaint.getColor(),
                                          GrPathRendering::kWinding_FillType, glyphs, fInstanceData,
                                          bounds));
 
-        drawContext->drawBatch(*pipelineBuilder, clip, batch);
+        GrPipelineBuilder pipelineBuilder(grPaint);
+        pipelineBuilder.setState(GrPipelineBuilder::kHWAntialias_Flag, grPaint.isAntiAlias());
+        pipelineBuilder.setUserStencil(&kCoverPass);
+
+        drawContext->drawBatch(pipelineBuilder, clip, batch);
     }
 
     if (fFallbackTextBlob) {

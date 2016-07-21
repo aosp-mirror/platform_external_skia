@@ -123,6 +123,7 @@ LOCAL_SRC_FILES := \
 	../tests/DataRefTest.cpp \
 	../tests/DequeTest.cpp \
 	../tests/DeviceLooperTest.cpp \
+	../tests/DeviceTest.cpp \
 	../tests/DiscardableMemoryPoolTest.cpp \
 	../tests/DiscardableMemoryTest.cpp \
 	../tests/DrawBitmapRectTest.cpp \
@@ -260,6 +261,7 @@ LOCAL_SRC_FILES := \
 	../tests/SkBase64Test.cpp \
 	../tests/SkBlend_optsTest.cpp \
 	../tests/SkColor4fTest.cpp \
+	../tests/SkDOMTest.cpp \
 	../tests/SkImageTest.cpp \
 	../tests/SkLinearBitmapPipelineTest.cpp \
 	../tests/SkNxTest.cpp \
@@ -466,6 +468,7 @@ LOCAL_SRC_FILES := \
 	../gm/lcdtext.cpp \
 	../gm/lighting.cpp \
 	../gm/lightingshader.cpp \
+	../gm/lightingshader2.cpp \
 	../gm/linepaths.cpp \
 	../gm/localmatriximagefilter.cpp \
 	../gm/lumafilter.cpp \
@@ -516,7 +519,6 @@ LOCAL_SRC_FILES := \
 	../gm/rrects.cpp \
 	../gm/samplerstress.cpp \
 	../gm/scaledstrokes.cpp \
-	../gm/selftest.cpp \
 	../gm/shaderbounds.cpp \
 	../gm/shadertext.cpp \
 	../gm/shadertext2.cpp \
@@ -529,6 +531,7 @@ LOCAL_SRC_FILES := \
 	../gm/skbug1719.cpp \
 	../gm/skbug_257.cpp \
 	../gm/skbug_4868.cpp \
+	../gm/skbug_5321.cpp \
 	../gm/smallarc.cpp \
 	../gm/smallimage.cpp \
 	../gm/smallpaths.cpp \
@@ -621,10 +624,10 @@ LOCAL_SHARED_LIBRARIES := \
 	liblog \
 	libpng \
 	libz \
-	libexpat \
 	libGLESv2 \
 	libEGL \
-	libvulkan
+	libvulkan \
+	libexpat
 
 LOCAL_STATIC_LIBRARIES := \
 	libskia_static \
@@ -643,7 +646,6 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../include/client/android \
 	$(LOCAL_PATH)/../include/images \
 	$(LOCAL_PATH)/../include/ports \
-	$(LOCAL_PATH)/../third_party/qcms/src \
 	$(LOCAL_PATH)/../src/sfnt \
 	$(LOCAL_PATH)/../include/utils \
 	$(LOCAL_PATH)/../src/utils \
@@ -681,6 +683,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../tools/android
 
 LOCAL_CFLAGS += \
+	-DSK_XML \
 	-DSK_CRASH_HANDLER
 
 LOCAL_MODULE_TAGS := \

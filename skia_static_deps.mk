@@ -24,11 +24,11 @@ LOCAL_SHARED_LIBRARIES += \
 	libEGL \
 	libvulkan \
 	libz \
-	libexpat \
 	libjpeg \
 	libpng \
 	libicuuc \
 	libicui18n \
+	libexpat \
 	libft2 \
 	libdng_sdk \
 	libpiex

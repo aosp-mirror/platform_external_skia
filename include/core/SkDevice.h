@@ -22,6 +22,7 @@ struct SkIRect;
 class SkMatrix;
 class SkMetaData;
 class SkRegion;
+class SkSpecialImage;
 class GrRenderTarget;
 
 class SK_API SkBaseDevice : public SkRefCnt {
@@ -102,16 +103,6 @@ public:
      *  On failure, returns false and ignores the pixmap parameter.
      */
     bool peekPixels(SkPixmap*);
-
-    /**
-     * Return the device's associated gpu render target, or NULL.
-     */
-    virtual GrRenderTarget* accessRenderTarget() { return nullptr; }
-
-    /**
-     * Don't call this!
-     */
-    virtual GrDrawContext* accessDrawContext() { return nullptr; }
 
     /**
      *  Return the device's origin: its offset in device coordinates from
@@ -276,6 +267,11 @@ protected:
     virtual void drawTextRSXform(const SkDraw&, const void* text, size_t len, const SkRSXform[],
                                  const SkPaint&);
 
+    virtual void drawSpecial(const SkDraw&, SkSpecialImage*, int x, int y, const SkPaint&);
+    virtual sk_sp<SkSpecialImage> makeSpecial(const SkBitmap&);
+    virtual sk_sp<SkSpecialImage> makeSpecial(const SkImage*);
+    virtual sk_sp<SkSpecialImage> snapSpecial();
+
     bool readPixels(const SkImageInfo&, void* dst, size_t rowBytes, int x, int y);
 
     ///////////////////////////////////////////////////////////////////////////
@@ -321,22 +317,20 @@ protected:
             : fInfo(info)
             , fTileUsage(tileUsage)
             , fPixelGeometry(AdjustGeometry(info, tileUsage, geo, false))
-            , fForImageFilter(false) {}
+        {}
 
         CreateInfo(const SkImageInfo& info,
                    TileUsage tileUsage,
                    SkPixelGeometry geo,
-                   bool preserveLCDText,
-                   bool forImageFilter)
+                   bool preserveLCDText)
             : fInfo(info)
             , fTileUsage(tileUsage)
             , fPixelGeometry(AdjustGeometry(info, tileUsage, geo, preserveLCDText))
-            , fForImageFilter(forImageFilter) {}
+        {}
 
         const SkImageInfo       fInfo;
         const TileUsage         fTileUsage;
         const SkPixelGeometry   fPixelGeometry;
-        const bool              fForImageFilter;
     };
 
     /**
@@ -354,12 +348,6 @@ protected:
         return NULL;
     }
 
-    /**
-     *  Calls through to drawSprite, processing the imagefilter.
-     */
-    virtual void drawSpriteWithFilter(const SkDraw&, const SkBitmap&,
-                                      int x, int y, const SkPaint&);
-
     // A helper function used by derived classes to log the scale factor of a bitmap or image draw.
     static void LogDrawScaleFactor(const SkMatrix&, SkFilterQuality);
 
@@ -371,6 +359,7 @@ private:
     friend class SkDeviceFilteredPaint;
     friend class SkNoPixelsBitmapDevice;
     friend class SkSurface_Raster;
+    friend class DeviceTestingAccess;
 
     // used to change the backend's pixels (and possibly config/rowbytes)
     // but cannot change the width/height, so there should be no change to
@@ -379,6 +368,11 @@ private:
     virtual void replaceBitmapBackendForRasterSurface(const SkBitmap&) {}
 
     virtual bool forceConservativeRasterClip() const { return false; }
+
+    /**
+     * Don't call this!
+     */
+    virtual GrDrawContext* accessDrawContext() { return nullptr; }
 
     // just called by SkCanvas when built as a layer
     void setOrigin(int x, int y) { fOrigin.set(x, y); }

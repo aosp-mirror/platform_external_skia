@@ -72,6 +72,7 @@ public:
     int width() const { return fWidth; }
     int height() const { return fHeight; }
     bool isAlphaOnly() const { return fIsAlphaOnly; }
+    virtual SkColorSpace* getColorSpace() = 0;
 
 protected:
     GrTextureProducer(int width, int height, bool isAlphaOnly)

@@ -200,14 +200,12 @@ struct DeviceCM {
     const SkMatrix*     fMatrix;
     SkMatrix            fMatrixStorage;
     SkMatrix            fStashedMatrix; // original CTM; used by imagefilter in saveLayer
-    const bool          fDeviceIsBitmapDevice;
 
     DeviceCM(SkBaseDevice* device, const SkPaint* paint, SkCanvas* canvas,
-             bool conservativeRasterClip, bool deviceIsBitmapDevice, const SkMatrix& stashed)
+             bool conservativeRasterClip, const SkMatrix& stashed)
         : fNext(nullptr)
         , fClip(conservativeRasterClip)
         , fStashedMatrix(stashed)
-        , fDeviceIsBitmapDevice(deviceIsBitmapDevice)
     {
         if (nullptr != device) {
             device->ref();
@@ -673,7 +671,7 @@ SkBaseDevice* SkCanvas::init(SkBaseDevice* device, InitFlags flags) {
 
     SkASSERT(sizeof(DeviceCM) <= sizeof(fDeviceCMStorage));
     fMCRec->fLayer = (DeviceCM*)fDeviceCMStorage;
-    new (fDeviceCMStorage) DeviceCM(nullptr, nullptr, nullptr, fConservativeRasterClip, false,
+    new (fDeviceCMStorage) DeviceCM(nullptr, nullptr, nullptr, fConservativeRasterClip,
                                     fMCRec->fMatrix);
 
     fMCRec->fTopLayer = fMCRec->fLayer;
@@ -1148,40 +1146,29 @@ int SkCanvas::saveLayer(const SaveLayerRec& origRec) {
     return this->getSaveCount() - 1;
 }
 
-static void draw_filter_into_device(SkBaseDevice* src, const SkImageFilter* filter,
-                                    SkBaseDevice* dst, const SkMatrix& ctm) {
-
-    SkBitmap srcBM;
-
-#if SK_SUPPORT_GPU
-    // TODO: remove this virtual usage of accessRenderTarget! It is preventing
-    // removal of the virtual on SkBaseDevice.
-    GrRenderTarget* srcRT = src->accessRenderTarget();
-    if (srcRT && !srcRT->asTexture() && dst->accessRenderTarget()) {
-        // When both the src & the dst are on the gpu but the src doesn't have a texture,
-        // we create a temporary texture for the draw.
-        // TODO: we should actually only copy the portion of the source needed to apply the image
-        // filter
-        GrContext* context = srcRT->getContext();
-        SkAutoTUnref<GrTexture> tex(context->textureProvider()->createTexture(srcRT->desc(),
-                                                                              SkBudgeted::kYes));
-
-        context->copySurface(tex, srcRT);
-
-        GrWrapTextureInBitmap(tex, src->width(), src->height(), src->isOpaque(), &srcBM);
-    } else
-#endif
-    {
-        srcBM = src->accessBitmap(false);
+void SkCanvas::DrawDeviceWithFilter(SkBaseDevice* src, const SkImageFilter* filter,
+                                    SkBaseDevice* dst, const SkMatrix& ctm,
+                                    const SkClipStack* clipStack) {
+    SkDraw draw;
+    SkRasterClip rc;
+    rc.setRect(SkIRect::MakeWH(dst->width(), dst->height()));
+    if (!dst->accessPixels(&draw.fDst)) {
+        draw.fDst.reset(dst->imageInfo(), nullptr, 0);
     }
-
-    SkCanvas c(dst);
+    draw.fMatrix = &SkMatrix::I();
+    draw.fRC = &rc;
+    draw.fClipStack = clipStack;
+    draw.fDevice = dst;
 
     SkPaint p;
     p.setImageFilter(filter->makeWithLocalMatrix(ctm));
-    const SkScalar x = SkIntToScalar(src->getOrigin().x());
-    const SkScalar y = SkIntToScalar(src->getOrigin().y());
-    c.drawBitmap(srcBM, x, y, &p);
+
+    int x = src->getOrigin().x() - dst->getOrigin().x();
+    int y = src->getOrigin().y() - dst->getOrigin().y();
+    auto special = src->snapSpecial();
+    if (special) {
+        dst->drawSpecial(draw, special.get(), x, y, p);
+    }
 }
 
 static SkImageInfo make_layer_info(const SkImageInfo& prev, int w, int h, bool isOpaque,
@@ -1271,49 +1258,41 @@ void SkCanvas::internalSaveLayer(const SaveLayerRec& rec, SaveLayerStrategy stra
         }
     }
 
-    SkBaseDevice* device = this->getTopDevice();
-    if (nullptr == device) {
+    SkBaseDevice* priorDevice = this->getTopDevice();
+    if (nullptr == priorDevice) {
         SkDebugf("Unable to find device for layer.");
         return;
     }
 
-    SkImageInfo info = make_layer_info(device->imageInfo(), ir.width(), ir.height(), isOpaque,
+    SkImageInfo info = make_layer_info(priorDevice->imageInfo(), ir.width(), ir.height(), isOpaque,
                                        paint);
 
-    bool forceSpriteOnRestore = false;
+    SkAutoTUnref<SkBaseDevice> newDevice;
     {
         const bool preserveLCDText = kOpaque_SkAlphaType == info.alphaType() ||
                                      (saveLayerFlags & kPreserveLCDText_SaveLayerFlag);
         const SkBaseDevice::TileUsage usage = SkBaseDevice::kNever_TileUsage;
         const SkBaseDevice::CreateInfo createInfo = SkBaseDevice::CreateInfo(info, usage, geo,
-                                                                            preserveLCDText, false);
-        SkBaseDevice* newDev = device->onCreateDevice(createInfo, paint);
-        if (nullptr == newDev) {
-            // If onCreateDevice didn't succeed, try raster (e.g. PDF couldn't handle the paint)
-            const SkSurfaceProps surfaceProps(fProps.flags(), createInfo.fPixelGeometry);
-            newDev = SkBitmapDevice::Create(createInfo.fInfo, surfaceProps);
-            if (nullptr == newDev) {
-                SkErrorInternals::SetError(kInternalError_SkError,
-                                           "Unable to create device for layer.");
-                return;
-            }
-            forceSpriteOnRestore = true;
+                                                                             preserveLCDText);
+        newDevice.reset(priorDevice->onCreateDevice(createInfo, paint));
+        if (!newDevice) {
+            SkErrorInternals::SetError(kInternalError_SkError,
+                                       "Unable to create device for layer.");
+            return;
         }
-        device = newDev;
     }
-    device->setOrigin(ir.fLeft, ir.fTop);
+    newDevice->setOrigin(ir.fLeft, ir.fTop);
 
-    if (rec.fBackdrop) {
-        draw_filter_into_device(fMCRec->fTopLayer->fDevice, rec.fBackdrop, device, fMCRec->fMatrix);
-    }
-
-    DeviceCM* layer = new DeviceCM(device, paint, this, fConservativeRasterClip,
-                                   forceSpriteOnRestore, stashedMatrix);
-    device->unref();
+    DeviceCM* layer = new DeviceCM(newDevice, paint, this, fConservativeRasterClip, stashedMatrix);
 
     layer->fNext = fMCRec->fTopLayer;
     fMCRec->fLayer = layer;
     fMCRec->fTopLayer = layer;    // this field is NOT an owner of layer
+
+    if (rec.fBackdrop) {
+        DrawDeviceWithFilter(priorDevice, rec.fBackdrop, newDevice,
+                             fMCRec->fMatrix, this->getClipStack());
+    }
 }
 
 int SkCanvas::saveLayerAlpha(const SkRect* bounds, U8CPU alpha) {
@@ -1351,8 +1330,7 @@ void SkCanvas::internalRestore() {
     if (layer) {
         if (layer->fNext) {
             const SkIPoint& origin = layer->fDevice->getOrigin();
-            this->internalDrawDevice(layer->fDevice, origin.x(), origin.y(),
-                                     layer->fPaint, layer->fDeviceIsBitmapDevice);
+            this->internalDrawDevice(layer->fDevice, origin.x(), origin.y(), layer->fPaint);
             // restore what we smashed in internalSaveLayer
             fMCRec->fMatrix = layer->fStashedMatrix;
             // reset this, since internalDrawDevice will have set it to true
@@ -1457,29 +1435,26 @@ bool SkCanvas::onAccessTopLayerPixels(SkPixmap* pmap) {
 
 /////////////////////////////////////////////////////////////////////////////
 
-void SkCanvas::internalDrawDevice(SkBaseDevice* srcDev, int x, int y,
-                                  const SkPaint* paint, bool deviceIsBitmapDevice) {
+void SkCanvas::internalDrawDevice(SkBaseDevice* srcDev, int x, int y, const SkPaint* paint) {
     SkPaint tmp;
     if (nullptr == paint) {
         paint = &tmp;
     }
 
     LOOPER_BEGIN_DRAWDEVICE(*paint, SkDrawFilter::kBitmap_Type)
+
     while (iter.next()) {
         SkBaseDevice* dstDev = iter.fDevice;
         paint = &looper.paint();
         SkImageFilter* filter = paint->getImageFilter();
         SkIPoint pos = { x - iter.getX(), y - iter.getY() };
         if (filter) {
-            const SkBitmap& srcBM = srcDev->accessBitmap(false);
-            dstDev->drawSpriteWithFilter(iter, srcBM, pos.x(), pos.y(), *paint);
-        } else if (deviceIsBitmapDevice) {
-            const SkBitmap& src = static_cast<SkBitmapDevice*>(srcDev)->fBitmap;
-            dstDev->drawSprite(iter, src, pos.x(), pos.y(), *paint);
+            dstDev->drawSpecial(iter, srcDev->snapSpecial().get(), pos.x(), pos.y(), *paint);
         } else {
             dstDev->drawDevice(iter, srcDev, pos.x(), pos.y(), *paint);
         }
     }
+
     LOOPER_END
 }
 
@@ -2327,17 +2302,13 @@ void SkCanvas::onDrawImage(const SkImage* image, SkScalar x, SkScalar y, const S
         paint = lazy.init();
     }
 
+    sk_sp<SkSpecialImage> special;
     bool drawAsSprite = this->canDrawBitmapAsSprite(x, y, image->width(), image->height(),
                                                     *paint);
     if (drawAsSprite && paint->getImageFilter()) {
-        SkBitmap bitmap;
-        if (!as_IB(image)->asBitmapForImageFilters(&bitmap)) {
+        special = this->getDevice()->makeSpecial(image);
+        if (!special) {
             drawAsSprite = false;
-        } else{
-            // Until imagefilters are updated, they cannot handle any src type but N32...
-            if (bitmap.info().colorType() != kN32_SkColorType || bitmap.info().gammaCloseToSRGB()) {
-                drawAsSprite = false;
-            }
         }
     }
 
@@ -2345,15 +2316,12 @@ void SkCanvas::onDrawImage(const SkImage* image, SkScalar x, SkScalar y, const S
 
     while (iter.next()) {
         const SkPaint& pnt = looper.paint();
-        if (drawAsSprite && pnt.getImageFilter()) {
-            SkBitmap bitmap;
-            if (as_IB(image)->asBitmapForImageFilters(&bitmap)) {
-                SkPoint pt;
-                iter.fMatrix->mapXY(x, y, &pt);
-                iter.fDevice->drawSpriteWithFilter(iter, bitmap,
-                                                   SkScalarRoundToInt(pt.fX),
-                                                   SkScalarRoundToInt(pt.fY), pnt);
-            }
+        if (special) {
+            SkPoint pt;
+            iter.fMatrix->mapXY(x, y, &pt);
+            iter.fDevice->drawSpecial(iter, special.get(),
+                                      SkScalarRoundToInt(pt.fX),
+                                      SkScalarRoundToInt(pt.fY), pnt);
         } else {
             iter.fDevice->drawImage(iter, image, x, y, pnt);
         }
@@ -2416,11 +2384,12 @@ void SkCanvas::onDrawBitmap(const SkBitmap& bitmap, SkScalar x, SkScalar y, cons
         bounds = &storage;
     }
 
+    sk_sp<SkSpecialImage> special;
     bool drawAsSprite = bounds && this->canDrawBitmapAsSprite(x, y, bitmap.width(), bitmap.height(),
                                                               *paint);
     if (drawAsSprite && paint->getImageFilter()) {
-        // Until imagefilters are updated, they cannot handle any src type but N32...
-        if (bitmap.info().colorType() != kN32_SkColorType || bitmap.info().gammaCloseToSRGB()) {
+        special = this->getDevice()->makeSpecial(bitmap);
+        if (!special) {
             drawAsSprite = false;
         }
     }
@@ -2429,17 +2398,17 @@ void SkCanvas::onDrawBitmap(const SkBitmap& bitmap, SkScalar x, SkScalar y, cons
 
     while (iter.next()) {
         const SkPaint& pnt = looper.paint();
-        if (drawAsSprite && pnt.getImageFilter()) {
+        if (special) {
             SkPoint pt;
             iter.fMatrix->mapXY(x, y, &pt);
-            iter.fDevice->drawSpriteWithFilter(iter, bitmap,
-                                               SkScalarRoundToInt(pt.fX),
-                                               SkScalarRoundToInt(pt.fY), pnt);
+            iter.fDevice->drawSpecial(iter, special.get(),
+                                      SkScalarRoundToInt(pt.fX),
+                                      SkScalarRoundToInt(pt.fY), pnt);
         } else {
             iter.fDevice->drawBitmap(iter, bitmap, matrix, looper.paint());
         }
     }
-
+    
     LOOPER_END
 }
 

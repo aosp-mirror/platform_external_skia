@@ -23,6 +23,8 @@ class GrAccelData;
 class GrTextureProducer;
 struct GrCachedLayer;
 
+class SkSpecialImage;
+
 /**
  *  Subclass of SkBaseDevice, which directs all drawing to the GrGpu owned by the
  *  canvas.
@@ -76,7 +78,6 @@ public:
 
     void replaceDrawContext(bool shouldRetainContent);
 
-    GrRenderTarget* accessRenderTarget() override;
     GrDrawContext* accessDrawContext() override;
 
     SkImageInfo imageInfo() const override {
@@ -118,8 +119,8 @@ public:
                               const SkPaint&) override;
     void drawAtlas(const SkDraw&, const SkImage* atlas, const SkRSXform[], const SkRect[],
                        const SkColor[], int count, SkXfermode::Mode, const SkPaint&) override;
-    virtual void drawDevice(const SkDraw&, SkBaseDevice*, int x, int y,
-                            const SkPaint&) override;
+    void drawDevice(const SkDraw&, SkBaseDevice*, int x, int y, const SkPaint&) override;
+
     void drawImage(const SkDraw&, const SkImage*, SkScalar x, SkScalar y, const SkPaint&) override;
     void drawImageRect(const SkDraw&, const SkImage*, const SkRect* src, const SkRect& dst,
                        const SkPaint&, SkCanvas::SrcRectConstraint) override;
@@ -128,6 +129,12 @@ public:
                        const SkRect& dst, const SkPaint& paint) override;
     void drawBitmapNine(const SkDraw& draw, const SkBitmap& bitmap, const SkIRect& center,
                         const SkRect& dst, const SkPaint& paint) override;
+
+    void drawSpecial(const SkDraw&, SkSpecialImage*,
+                     int left, int top, const SkPaint& paint) override;
+    sk_sp<SkSpecialImage> makeSpecial(const SkBitmap&) override;
+    sk_sp<SkSpecialImage> makeSpecial(const SkImage*) override;
+    sk_sp<SkSpecialImage> snapSpecial() override;
 
     void flush() override;
 
@@ -214,6 +221,12 @@ private:
                             bool bicubic,
                             bool needsTextureDomain);
 
+    sk_sp<SkSpecialImage> filterTexture(const SkDraw&,
+                                        SkSpecialImage*,
+                                        int left, int top,
+                                        SkIPoint* offset,
+                                        const SkImageFilter* filter);
+
     void drawTiledBitmap(const SkBitmap& bitmap,
                          const SkMatrix& viewMatrix,
                          const SkRect& srcRect,
@@ -255,9 +268,6 @@ private:
                                                   const SkImageInfo&,
                                                   int sampleCount,
                                                   const SkSurfaceProps*);
-
-    void drawSpriteWithFilter(const SkDraw&, const SkBitmap&, int x, int y,
-                              const SkPaint&) override;
 
     friend class GrAtlasTextContext;
     friend class SkSurface_Gpu;      // for access to surfaceProps

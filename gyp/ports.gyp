@@ -12,9 +12,7 @@
       'standalone_static_library': 1,
       'dependencies': [
         'core.gyp:*',
-        'qcms.gyp:qcms',
       ],
-      'export_dependent_settings': [ 'qcms.gyp:qcms', ],
       'include_dirs': [
         '../include/effects',
         '../include/client/android',
@@ -76,6 +74,10 @@
         ['exclude', 'SkFontMgr_.+_factory\\.cpp$'],
       ],
       'conditions': [
+        [ 'skia_android_framework == 0', {
+          'dependencies': [ 'qcms.gyp:qcms', ],
+          'export_dependent_settings': [ 'qcms.gyp:qcms', ],
+        }],
         [ 'skia_os in ["linux", "freebsd", "openbsd", "solaris", "android"]', {
           'sources': [
             '../src/ports/SkFontHost_FreeType.cpp',
@@ -86,13 +88,11 @@
           ],
           'dependencies': [
             'freetype.gyp:freetype',
+            'expat.gyp:expat',
           ],
           'conditions': [
-            [ 'skia_android_framework', {
-              'link_settings': { 'libraries': [ '-lexpat' ] },
-            }, {
+            [ 'skia_android_framework == 0', {
               'link_settings': { 'libraries': [ '-ldl' ] },
-              'dependencies': [ 'expat.gyp:expat' ],
             }],
             [ 'skia_embedded_fonts', {
               'variables': {

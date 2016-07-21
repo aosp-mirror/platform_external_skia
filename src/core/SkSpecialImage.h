@@ -80,11 +80,6 @@ public:
                                              const SkSurfaceProps* = nullptr,
                                              SkAlphaType at = kPremul_SkAlphaType);
 #endif
-    static sk_sp<SkSpecialImage> MakeFromPixmap(const SkIRect& subset,
-                                                const SkPixmap&,
-                                                RasterReleaseProc,
-                                                ReleaseContext,
-                                                const SkSurfaceProps* = nullptr);
 
     /**
      *  Create a new special surface with a backend that is compatible with this special image.
@@ -109,10 +104,6 @@ public:
      * TODO: switch this to makeSurface once we resolved the naming issue
      */
     sk_sp<SkImage> makeTightSubset(const SkIRect& subset) const;
-
-    // These three internal methods will go away (see skbug.com/4965)
-    bool internal_getBM(SkBitmap* result);
-    static sk_sp<SkSpecialImage> internal_fromBM(const SkBitmap&, const SkSurfaceProps*);
 
     // TODO: hide this when GrLayerHoister uses SkSpecialImages more fully (see skbug.com/5063)
     /**

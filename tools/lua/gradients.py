@@ -12,12 +12,15 @@ def create_database(inpath, outpath):
     with sqlite3.connect(outpath) as conn:
         c = conn.cursor();
         c.execute('''CREATE TABLE IF NOT EXISTS gradients (
+                        FileName      TEXT,
                         ColorCount    INTEGER,
                         GradientType  TEXT,
                         TileMode      TEXT,
                         EvenlySpaced  INTEGER,
                         HardStopCount INTEGER,
                         Verb          TEXT,
+                        BoundsWidth   INTEGER,
+                        BoundsHeight  INTEGER,
                         Positions     TEXT
                      )''');
         c.execute("DELETE FROM gradients");
@@ -27,8 +30,9 @@ def create_database(inpath, outpath):
             for line in [line.strip() for line in results]:
                 gradients.append(line.split());
 
-            c.executemany("INSERT INTO gradients VALUES (?, ?, ?, ?, ?, ?, ?)",
-                          gradients);
+            c.executemany(
+                "INSERT INTO gradients VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                gradients);
 
             conn.commit();
 
