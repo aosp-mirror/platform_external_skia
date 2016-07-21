@@ -565,6 +565,8 @@ LOCAL_SRC_FILES := \
 	src/gpu/vk/GrVkCaps.cpp \
 	src/gpu/vk/GrVkCommandBuffer.cpp \
 	src/gpu/vk/GrVkDescriptorPool.cpp \
+	src/gpu/vk/GrVkDescriptorSet.cpp \
+	src/gpu/vk/GrVkDescriptorSetManager.cpp \
 	src/gpu/vk/GrVkExtensions.cpp \
 	src/gpu/vk/GrVkFramebuffer.cpp \
 	src/gpu/vk/GrVkGpu.cpp \
