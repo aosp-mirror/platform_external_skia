@@ -226,7 +226,6 @@ LOCAL_SRC_FILES := \
 	src/core/SkQuadClipper.cpp \
 	src/core/SkRasterClip.cpp \
 	src/core/SkRasterPipeline.cpp \
-	src/core/SkRasterPipelineBlitter.cpp \
 	src/core/SkRasterizer.cpp \
 	src/core/SkReadBuffer.cpp \
 	src/core/SkRecord.cpp \
