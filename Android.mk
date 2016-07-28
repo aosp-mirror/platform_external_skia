@@ -354,6 +354,7 @@ LOCAL_SRC_FILES := \
 	src/effects/SkEmbossMask.cpp \
 	src/effects/SkEmbossMaskFilter.cpp \
 	src/effects/SkImageSource.cpp \
+	src/effects/SkGammaColorFilter.cpp \
 	src/effects/SkGpuBlurUtils.cpp \
 	src/effects/SkLayerDrawLooper.cpp \
 	src/effects/SkLayerRasterizer.cpp \
@@ -748,6 +749,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/include/effects \
 	$(LOCAL_PATH)/include/client/android \
 	$(LOCAL_PATH)/src/effects \
+	$(LOCAL_PATH)/src/gpu/effects \
 	$(LOCAL_PATH)/src/sksl \
 	frameworks/native/vulkan/include \
 	$(LOCAL_PATH)/tools/viewer/sk_app \
