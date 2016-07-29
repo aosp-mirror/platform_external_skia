@@ -624,7 +624,6 @@ LOCAL_SRC_FILES := \
 	src/pdf/SkPDFMetadata.cpp \
 	src/pdf/SkPDFResourceDict.cpp \
 	src/pdf/SkPDFShader.cpp \
-	src/pdf/SkPDFStream.cpp \
 	src/pdf/SkPDFTypes.cpp \
 	src/pdf/SkPDFUtils.cpp \
 	src/core/SkForceCPlusPlusLinking.cpp \
