@@ -527,7 +527,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/GrGLPathRange.cpp \
 	src/gpu/gl/GrGLPathRendering.cpp \
 	src/gpu/gl/GrGLProgram.cpp \
-	src/gpu/gl/GrGLProgramDesc.cpp \
 	src/gpu/gl/GrGLProgramDataManager.cpp \
 	src/gpu/gl/GrGLRenderTarget.cpp \
 	src/gpu/gl/GrGLStencilAttachment.cpp \
@@ -551,6 +550,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/glsl/GrGLSLPrimitiveProcessor.cpp \
 	src/gpu/glsl/GrGLSLProgramBuilder.cpp \
 	src/gpu/glsl/GrGLSLProgramDataManager.cpp \
+	src/gpu/glsl/GrGLSLProgramDesc.cpp \
 	src/gpu/glsl/GrGLSLShaderBuilder.cpp \
 	src/gpu/glsl/GrGLSLUtil.cpp \
 	src/gpu/glsl/GrGLSLVarying.cpp \
@@ -584,7 +584,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/vk/GrVkPipelineStateBuilder.cpp \
 	src/gpu/vk/GrVkPipelineStateCache.cpp \
 	src/gpu/vk/GrVkPipelineStateDataManager.cpp \
-	src/gpu/vk/GrVkProgramDesc.cpp \
 	src/gpu/vk/GrVkRenderPass.cpp \
 	src/gpu/vk/GrVkRenderTarget.cpp \
 	src/gpu/vk/GrVkResourceProvider.cpp \
