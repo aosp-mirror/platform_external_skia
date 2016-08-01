@@ -353,6 +353,7 @@ LOCAL_SRC_FILES := \
 	../gm/shadertext.cpp \
 	../gm/shadertext2.cpp \
 	../gm/shadertext3.cpp \
+	../gm/shadowmaps.cpp \
 	../gm/shadows.cpp \
 	../gm/shallowgradient.cpp \
 	../gm/shapes.cpp \

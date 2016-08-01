@@ -289,6 +289,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkXfermodeF16.cpp \
 	src/core/SkXfermodeInterpretation.cpp \
 	src/core/SkYUVPlanesCache.cpp \
+	src/core/SkShadowShader.cpp \
 	src/image/SkImage.cpp \
 	src/image/SkImage_Generator.cpp \
 	src/image/SkImage_Raster.cpp \
