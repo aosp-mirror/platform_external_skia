@@ -82,7 +82,6 @@ LOCAL_SRC_FILES := \
 	../tests/PathOpsTypesTest.cpp \
 	../tests/SubsetPath.cpp \
 	../tests/AAClipTest.cpp \
-	../tests/ARGBImageEncoderTest.cpp \
 	../tests/AnnotationTest.cpp \
 	../tests/ApplyGammaTest.cpp \
 	../tests/AsADashTest.cpp \
