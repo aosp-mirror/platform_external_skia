@@ -644,6 +644,7 @@ LOCAL_SRC_FILES := \
 	src/ports/SkFontMgr_android.cpp \
 	src/ports/SkFontMgr_android_parser.cpp \
 	src/ports/SkFontMgr_custom.cpp \
+	src/ports/SkFontMgr_FontConfigInterface.cpp \
 	src/ports/SkDebug_android.cpp \
 	src/sfnt/SkOTTable_name.cpp \
 	src/sfnt/SkOTUtils.cpp \
