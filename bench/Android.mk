@@ -54,6 +54,7 @@ LOCAL_SRC_FILES := \
 	DashBench.cpp \
 	DisplacementBench.cpp \
 	DrawBitmapAABench.cpp \
+	DrawLatticeBench.cpp \
 	EncoderBench.cpp \
 	FSRectBench.cpp \
 	FontCacheBench.cpp \
@@ -292,6 +293,7 @@ LOCAL_SRC_FILES := \
 	../gm/internal_links.cpp \
 	../gm/inversepaths.cpp \
 	../gm/largeglyphblur.cpp \
+	../gm/lattice.cpp \
 	../gm/lcdblendmodes.cpp \
 	../gm/lcdoverlap.cpp \
 	../gm/lcdtext.cpp \

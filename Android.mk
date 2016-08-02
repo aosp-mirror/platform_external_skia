@@ -197,7 +197,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkMiniRecorder.cpp \
 	src/core/SkModeColorFilter.cpp \
 	src/core/SkMultiPictureDraw.cpp \
-	src/core/SkNinePatchIter.cpp \
+	src/core/SkLatticeIter.cpp \
 	src/core/SkNormalBevelSource.cpp \
 	src/core/SkNormalMapSource.cpp \
 	src/core/SkNormalFlatSource.cpp \
