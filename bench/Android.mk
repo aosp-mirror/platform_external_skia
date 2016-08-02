@@ -140,6 +140,7 @@ LOCAL_SRC_FILES := \
 	nanobench.cpp \
 	nanobenchAndroid.cpp \
 	pack_int_uint16_t_Bench.cpp \
+	../gm/OverStroke.cpp \
 	../gm/SkLinearBitmapPipelineGM.cpp \
 	../gm/aaclip.cpp \
 	../gm/aarectmodes.cpp \

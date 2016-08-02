@@ -311,6 +311,7 @@ LOCAL_SRC_FILES := \
 	../tests/image-bitmap.cpp \
 	../tests/skbug5221.cpp \
 	DMSrcSinkAndroid.cpp \
+	../gm/OverStroke.cpp \
 	../gm/SkLinearBitmapPipelineGM.cpp \
 	../gm/aaclip.cpp \
 	../gm/aarectmodes.cpp \
