@@ -692,6 +692,7 @@ LOCAL_SRC_FILES := \
 	src/sksl/SkSLCompiler.cpp \
 	src/sksl/SkSLIRGenerator.cpp \
 	src/sksl/SkSLParser.cpp \
+	src/sksl/SkSLGLSLCodeGenerator.cpp \
 	src/sksl/SkSLSPIRVCodeGenerator.cpp \
 	src/sksl/SkSLUtil.cpp \
 	src/sksl/ir/SkSLSymbolTable.cpp \

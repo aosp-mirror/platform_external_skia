@@ -267,6 +267,7 @@ LOCAL_SRC_FILES := \
 	../tests/SkRasterPipelineTest.cpp \
 	../tests/SkResourceCacheTest.cpp \
 	../tests/SkSLErrorTest.cpp \
+	../tests/SkSLGLSLTest.cpp \
 	../tests/SkSharedMutexTest.cpp \
 	../tests/SmallAllocatorTest.cpp \
 	../tests/SortTest.cpp \
