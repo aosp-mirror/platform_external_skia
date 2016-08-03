@@ -73,6 +73,7 @@ LOCAL_SRC_FILES := \
 	HairlinePathBench.cpp \
 	HardStopGradientBench_ScaleNumColors.cpp \
 	HardStopGradientBench_ScaleNumHardStops.cpp \
+	HardStopGradientBench_SpecialHardStops.cpp \
 	ImageBench.cpp \
 	ImageCacheBench.cpp \
 	ImageFilterCollapse.cpp \
