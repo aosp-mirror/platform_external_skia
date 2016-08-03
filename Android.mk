@@ -664,7 +664,6 @@ LOCAL_SRC_FILES := \
 	src/utils/SkMatrix22.cpp \
 	src/utils/SkMeshUtils.cpp \
 	src/utils/SkMultiPictureDocument.cpp \
-	src/utils/SkNinePatch.cpp \
 	src/utils/SkNWayCanvas.cpp \
 	src/utils/SkNullCanvas.cpp \
 	src/utils/SkOSFile.cpp \
