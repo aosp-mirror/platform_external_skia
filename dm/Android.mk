@@ -226,6 +226,7 @@ LOCAL_SRC_FILES := \
 	../tests/ProxyTest.cpp \
 	../tests/QuickRejectTest.cpp \
 	../tests/RRectInPathTest.cpp \
+	../tests/RTConfRegistryTest.cpp \
 	../tests/RTreeTest.cpp \
 	../tests/RandomTest.cpp \
 	../tests/ReadPixelsTest.cpp \
@@ -244,6 +245,7 @@ LOCAL_SRC_FILES := \
 	../tests/RegionTest.cpp \
 	../tests/ResourceCacheTest.cpp \
 	../tests/RoundRectTest.cpp \
+	../tests/RuntimeConfigTest.cpp \
 	../tests/SRGBMipMapTest.cpp \
 	../tests/SRGBReadWritePixelsTest.cpp \
 	../tests/SRGBTest.cpp \
