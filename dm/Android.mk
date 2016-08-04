@@ -485,6 +485,7 @@ LOCAL_SRC_FILES := \
 	../gm/nested.cpp \
 	../gm/ninepatchstretch.cpp \
 	../gm/nonclosedpaths.cpp \
+	../gm/occludedrrectblur.cpp \
 	../gm/offsetimagefilter.cpp \
 	../gm/ovals.cpp \
 	../gm/patch.cpp \
