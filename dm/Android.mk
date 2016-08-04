@@ -591,6 +591,18 @@ LOCAL_SRC_FILES := \
 	../tools/flags/SkCommandLineFlags.cpp \
 	../src/svg/SkSVGCanvas.cpp \
 	../src/svg/SkSVGDevice.cpp \
+	../experimental/svg/model/SkSVGAttribute.cpp \
+	../experimental/svg/model/SkSVGAttributeParser.cpp \
+	../experimental/svg/model/SkSVGContainer.cpp \
+	../experimental/svg/model/SkSVGDOM.cpp \
+	../experimental/svg/model/SkSVGNode.cpp \
+	../experimental/svg/model/SkSVGPath.cpp \
+	../experimental/svg/model/SkSVGRect.cpp \
+	../experimental/svg/model/SkSVGRenderContext.cpp \
+	../experimental/svg/model/SkSVGShape.cpp \
+	../experimental/svg/model/SkSVGSVG.cpp \
+	../experimental/svg/model/SkSVGTransformableNode.cpp \
+	../experimental/svg/model/SkSVGValue.cpp \
 	../tools/CrashHandler.cpp \
 	../tools/picture_utils.cpp \
 	../tools/ProcStats.cpp \
@@ -663,6 +675,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../tools/gpu \
 	$(LOCAL_PATH)/../include/svg \
 	$(LOCAL_PATH)/../include/xml \
+	$(LOCAL_PATH)/../experimental/svg/model \
 	$(LOCAL_PATH)/../src/fonts \
 	$(LOCAL_PATH)/../tools \
 	$(LOCAL_PATH)/../tools/flags \
