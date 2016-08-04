@@ -37,6 +37,7 @@ LOCAL_SRC_FILES := \
 	BitmapScaleBench.cpp \
 	BlurBench.cpp \
 	BlurImageFilterBench.cpp \
+	BlurOccludedRRectBench.cpp \
 	BlurRectBench.cpp \
 	BlurRectsBench.cpp \
 	BlurRoundRectBench.cpp \
