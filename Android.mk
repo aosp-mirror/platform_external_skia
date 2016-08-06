@@ -393,7 +393,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrBufferAllocPool.cpp \
 	src/gpu/GrCaps.cpp \
 	src/gpu/GrClip.cpp \
-	src/gpu/GrClipMaskManager.cpp \
+	src/gpu/GrClipStackClip.cpp \
 	src/gpu/GrColorSpaceXform.cpp \
 	src/gpu/GrContext.cpp \
 	src/gpu/GrCoordTransform.cpp \
