@@ -261,6 +261,7 @@ LOCAL_SRC_FILES := \
 	../tests/SkDOMTest.cpp \
 	../tests/SkImageTest.cpp \
 	../tests/SkLinearBitmapPipelineTest.cpp \
+	../tests/SkLiteDLTest.cpp \
 	../tests/SkNxTest.cpp \
 	../tests/SkRasterPipelineTest.cpp \
 	../tests/SkResourceCacheTest.cpp \

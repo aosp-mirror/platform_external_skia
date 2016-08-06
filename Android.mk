@@ -180,6 +180,8 @@ LOCAL_SRC_FILES := \
 	src/core/SkLightingShader.cpp \
 	src/core/SkLinearBitmapPipeline.cpp \
 	src/core/SkLineClipper.cpp \
+	src/core/SkLiteDL.cpp \
+	src/core/SkLiteRecorder.cpp \
 	src/core/SkLocalMatrixImageFilter.cpp \
 	src/core/SkLocalMatrixShader.cpp \
 	src/core/SkMD5.cpp \
