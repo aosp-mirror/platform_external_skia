@@ -655,6 +655,7 @@ LOCAL_SRC_FILES := \
 	src/utils/SkCamera.cpp \
 	src/utils/SkCanvasStack.cpp \
 	src/utils/SkCanvasStateUtils.cpp \
+	src/utils/SkCurveMeasure.cpp \
 	src/utils/SkDashPath.cpp \
 	src/utils/SkDeferredCanvas.cpp \
 	src/utils/SkDumpCanvas.cpp \

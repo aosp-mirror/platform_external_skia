@@ -87,6 +87,7 @@ LOCAL_SRC_FILES := \
 	Matrix44Bench.cpp \
 	MatrixBench.cpp \
 	MatrixConvolutionBench.cpp \
+	MeasureBench.cpp \
 	MemoryBench.cpp \
 	MemsetBench.cpp \
 	MergeBench.cpp \
