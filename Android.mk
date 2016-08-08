@@ -122,7 +122,6 @@ LOCAL_SRC_FILES := \
 	src/core/SkBuffer.cpp \
 	src/core/SkCachedData.cpp \
 	src/core/SkCanvas.cpp \
-	src/core/SkChecksum.cpp \
 	src/core/SkChunkAlloc.cpp \
 	src/core/SkClipStack.cpp \
 	src/core/SkColor.cpp \
@@ -820,6 +819,7 @@ LOCAL_SRC_FILES_x86 += \
 	src/opts/SkBitmapProcState_opts_SSSE3.cpp \
 	src/opts/SkOpts_ssse3.cpp \
 	src/opts/SkOpts_sse41.cpp \
+	src/opts/SkOpts_sse42.cpp \
 	src/opts/SkOpts_avx.cpp
 
 LOCAL_CFLAGS_x86 += \
@@ -833,6 +833,7 @@ LOCAL_SRC_FILES_x86_64 += \
 	src/opts/SkBitmapProcState_opts_SSSE3.cpp \
 	src/opts/SkOpts_ssse3.cpp \
 	src/opts/SkOpts_sse41.cpp \
+	src/opts/SkOpts_sse42.cpp \
 	src/opts/SkOpts_avx.cpp
 
 LOCAL_CFLAGS_mips += \
