@@ -96,7 +96,6 @@ LOCAL_SRC_FILES := \
 	src/c/sk_surface.cpp \
 	src/core/SkAAClip.cpp \
 	src/core/SkAnnotation.cpp \
-	src/core/SkAdvancedTypefaceMetrics.cpp \
 	src/core/SkAlphaRuns.cpp \
 	src/core/SkAutoPixmapStorage.cpp \
 	src/core/SkBBHFactory.cpp \
