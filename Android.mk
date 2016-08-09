@@ -616,11 +616,13 @@ LOCAL_SRC_FILES := \
 	src/pdf/SkPDFBitmap.cpp \
 	src/pdf/SkPDFCanon.cpp \
 	src/pdf/SkPDFCanvas.cpp \
+	src/pdf/SkPDFConvertType1FontStream.cpp \
 	src/pdf/SkPDFDevice.cpp \
 	src/pdf/SkPDFDocument.cpp \
 	src/pdf/SkPDFFont.cpp \
 	src/pdf/SkPDFFormXObject.cpp \
 	src/pdf/SkPDFGraphicState.cpp \
+	src/pdf/SkPDFMakeToUnicodeCmap.cpp \
 	src/pdf/SkPDFMetadata.cpp \
 	src/pdf/SkPDFResourceDict.cpp \
 	src/pdf/SkPDFShader.cpp \
