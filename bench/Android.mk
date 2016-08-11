@@ -104,6 +104,7 @@ LOCAL_SRC_FILES := \
 	PictureOverheadBench.cpp \
 	PicturePlaybackBench.cpp \
 	PremulAndUnpremulAlphaOpsBench.cpp \
+	QuickRejectBench.cpp \
 	RTreeBench.cpp \
 	ReadPixBench.cpp \
 	RecordingBench.cpp \
