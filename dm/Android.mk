@@ -596,6 +596,7 @@ LOCAL_SRC_FILES := \
 	../experimental/svg/model/SkSVGDOM.cpp \
 	../experimental/svg/model/SkSVGNode.cpp \
 	../experimental/svg/model/SkSVGPath.cpp \
+	../experimental/svg/model/SkSVGPoly.cpp \
 	../experimental/svg/model/SkSVGRect.cpp \
 	../experimental/svg/model/SkSVGRenderContext.cpp \
 	../experimental/svg/model/SkSVGShape.cpp \
