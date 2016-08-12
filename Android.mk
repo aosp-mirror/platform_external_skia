@@ -461,6 +461,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/batches/GrAAConvexPathRenderer.cpp \
 	src/gpu/batches/GrAAFillRectBatch.cpp \
 	src/gpu/batches/GrAAStrokeRectBatch.cpp \
+	src/gpu/batches/GrAnalyticRectBatch.cpp \
 	src/gpu/batches/GrAtlasTextBatch.cpp \
 	src/gpu/batches/GrBatch.cpp \
 	src/gpu/batches/GrCopySurfaceBatch.cpp \
