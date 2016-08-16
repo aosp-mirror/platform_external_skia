@@ -240,6 +240,7 @@ LOCAL_SRC_FILES := \
 	../gm/dstreadshuffle.cpp \
 	../gm/emboss.cpp \
 	../gm/emptypath.cpp \
+	../gm/encode-platform.cpp \
 	../gm/encode.cpp \
 	../gm/extractbitmap.cpp \
 	../gm/factory.cpp \
