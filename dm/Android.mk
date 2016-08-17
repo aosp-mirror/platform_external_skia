@@ -302,6 +302,7 @@ LOCAL_SRC_FILES := \
 	../tests/VkHeapTests.cpp \
 	../tests/VkUploadPixelsTests.cpp \
 	../tests/VkWrapTests.cpp \
+	../tests/WindowRectanglesTest.cpp \
 	../tests/WritePixelsTest.cpp \
 	../tests/Writer32Test.cpp \
 	../tests/XfermodeTest.cpp \
