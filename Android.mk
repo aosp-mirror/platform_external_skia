@@ -355,6 +355,7 @@ LOCAL_SRC_FILES := \
 	src/effects/SkEmbossMaskFilter.cpp \
 	src/effects/SkImageSource.cpp \
 	src/effects/SkGammaColorFilter.cpp \
+	src/effects/SkGaussianEdgeShader.cpp \
 	src/effects/SkGpuBlurUtils.cpp \
 	src/effects/SkLayerDrawLooper.cpp \
 	src/effects/SkLayerRasterizer.cpp \
