@@ -536,6 +536,7 @@ LOCAL_SRC_FILES := \
 	../gm/shapes.cpp \
 	../gm/showmiplevels.cpp \
 	../gm/simpleaaclip.cpp \
+	../gm/simplerect.cpp \
 	../gm/skbug1719.cpp \
 	../gm/skbug_257.cpp \
 	../gm/skbug_4868.cpp \
