@@ -394,7 +394,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrBuffer.cpp \
 	src/gpu/GrBufferAllocPool.cpp \
 	src/gpu/GrCaps.cpp \
-	src/gpu/GrClip.cpp \
 	src/gpu/GrClipStackClip.cpp \
 	src/gpu/GrColorSpaceXform.cpp \
 	src/gpu/GrContext.cpp \
@@ -404,6 +403,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrPathRenderingDrawContext.cpp \
 	src/gpu/GrDrawingManager.cpp \
 	src/gpu/GrDrawTarget.cpp \
+	src/gpu/GrFixedClip.cpp \
 	src/gpu/GrFragmentProcessor.cpp \
 	src/gpu/GrGpu.cpp \
 	src/gpu/GrGpuCommandBuffer.cpp \
