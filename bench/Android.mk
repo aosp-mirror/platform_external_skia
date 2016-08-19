@@ -188,6 +188,7 @@ LOCAL_SRC_FILES := \
 	../gm/cgm.c \
 	../gm/cgms.cpp \
 	../gm/circles.cpp \
+	../gm/circulararcs.cpp \
 	../gm/circularclips.cpp \
 	../gm/clip_strokerect.cpp \
 	../gm/clipdrawdraw.cpp \
