@@ -864,7 +864,8 @@ LOCAL_SRC_FILES_arm64 += \
 	src/opts/SkBlitMask_opts_arm.cpp \
 	src/opts/SkBlitMask_opts_arm_neon.cpp \
 	src/opts/SkBlitRow_opts_arm.cpp \
-	src/opts/SkBlitRow_opts_arm_neon.cpp
+	src/opts/SkBlitRow_opts_arm_neon.cpp \
+	src/opts/SkOpts_crc32.cpp
 
 LOCAL_MODULE_CLASS := STATIC_LIBRARIES
 include $(BUILD_STATIC_LIBRARY)
