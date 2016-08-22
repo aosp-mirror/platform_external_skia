@@ -118,6 +118,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkBlitter_PM4f.cpp \
 	src/core/SkBlitter_RGB16.cpp \
 	src/core/SkBlitter_Sprite.cpp \
+	src/core/SkBlurImageFilter.cpp \
 	src/core/SkBuffer.cpp \
 	src/core/SkCachedData.cpp \
 	src/core/SkCanvas.cpp \
@@ -168,6 +169,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkGeometry.cpp \
 	src/core/SkGlobalInitialization_core.cpp \
 	src/core/SkGlyphCache.cpp \
+	src/core/SkGpuBlurUtils.cpp \
 	src/core/SkGraphics.cpp \
 	src/core/SkHalf.cpp \
 	src/core/SkImageFilter.cpp \
@@ -339,7 +341,6 @@ LOCAL_SRC_FILES := \
 	src/effects/SkArithmeticMode_gpu.cpp \
 	src/effects/SkBlurDrawLooper.cpp \
 	src/effects/SkBlurMask.cpp \
-	src/effects/SkBlurImageFilter.cpp \
 	src/effects/SkBlurMaskFilter.cpp \
 	src/effects/SkColorCubeFilter.cpp \
 	src/effects/SkColorFilterImageFilter.cpp \
@@ -356,7 +357,6 @@ LOCAL_SRC_FILES := \
 	src/effects/SkImageSource.cpp \
 	src/effects/SkGammaColorFilter.cpp \
 	src/effects/SkGaussianEdgeShader.cpp \
-	src/effects/SkGpuBlurUtils.cpp \
 	src/effects/SkLayerDrawLooper.cpp \
 	src/effects/SkLayerRasterizer.cpp \
 	src/effects/SkLightingImageFilter.cpp \
