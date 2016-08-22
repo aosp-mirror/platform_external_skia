@@ -655,7 +655,6 @@ LOCAL_SRC_FILES := \
 	src/sfnt/SkOTUtils.cpp \
 	src/utils/SkBase64.cpp \
 	src/utils/SkBitmapSourceDeserializer.cpp \
-	src/utils/SkBitSet.cpp \
 	src/utils/SkBoundaryPatch.cpp \
 	src/utils/SkFrontBufferedStream.cpp \
 	src/utils/SkCamera.cpp \
