@@ -167,6 +167,7 @@ LOCAL_SRC_FILES := \
 	../tests/GrSurfaceTest.cpp \
 	../tests/GrTRecorderTest.cpp \
 	../tests/GrTextureMipMapInvalidationTest.cpp \
+	../tests/GrTextureStripAtlasTest.cpp \
 	../tests/GradientTest.cpp \
 	../tests/HashTest.cpp \
 	../tests/ImageCacheTest.cpp \
