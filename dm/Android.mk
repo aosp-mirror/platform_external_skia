@@ -405,6 +405,8 @@ LOCAL_SRC_FILES := \
 	../gm/drawfilter.cpp \
 	../gm/drawlooper.cpp \
 	../gm/drawminibitmaprect.cpp \
+	../gm/drawregion.cpp \
+	../gm/drawregionmodes.cpp \
 	../gm/dropshadowimagefilter.cpp \
 	../gm/drrect.cpp \
 	../gm/dstreadshuffle.cpp \
