@@ -529,6 +529,7 @@ LOCAL_SRC_FILES := \
 	../gm/resizeimagefilter.cpp \
 	../gm/roundrects.cpp \
 	../gm/rrect.cpp \
+	../gm/rrectclipdrawpaint.cpp \
 	../gm/rrects.cpp \
 	../gm/samplerstress.cpp \
 	../gm/scaledstrokes.cpp \
