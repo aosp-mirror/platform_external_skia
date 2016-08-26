@@ -464,6 +464,7 @@ LOCAL_SRC_FILES := \
 	../gm/imagefromyuvtextures.cpp \
 	../gm/imagemagnifier.cpp \
 	../gm/imagemakewithfilter.cpp \
+	../gm/imagemasksubset.cpp \
 	../gm/imageresizetiled.cpp \
 	../gm/imagescalealigned.cpp \
 	../gm/imagesource.cpp \
