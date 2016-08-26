@@ -761,8 +761,8 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/third_party/etc1 \
 	$(LOCAL_PATH)/third_party/ktx \
 	$(LOCAL_PATH)/src/lazy \
-	external/expat/lib \
 	external/freetype/include \
+	external/expat/lib \
 	$(LOCAL_PATH)/include/utils/win \
 	$(LOCAL_PATH)/src/ports \
 	external/sfntly/cpp/src \
