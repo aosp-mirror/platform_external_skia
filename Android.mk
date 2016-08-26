@@ -479,6 +479,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/batches/GrNinePatch.cpp \
 	src/gpu/batches/GrPLSPathRenderer.cpp \
 	src/gpu/batches/GrRectBatchFactory.cpp \
+	src/gpu/batches/GrRegionBatch.cpp \
 	src/gpu/batches/GrStencilAndCoverPathRenderer.cpp \
 	src/gpu/batches/GrTessellatingPathRenderer.cpp \
 	src/gpu/batches/GrVertexBatch.cpp \
