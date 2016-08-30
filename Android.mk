@@ -768,8 +768,7 @@ LOCAL_C_INCLUDES := \
 	external/sfntly/cpp/src \
 	external/zlib \
 	external/dng_sdk \
-	external/piex \
-	$(LOCAL_PATH)/include
+	external/piex
 
 LOCAL_EXPORT_C_INCLUDE_DIRS := \
 	$(LOCAL_PATH)/src/sksl \
