@@ -24,6 +24,7 @@ LOCAL_CPPFLAGS := \
 
 LOCAL_SRC_FILES := \
 	../gm/gm.cpp \
+	../tools/LsanSuppressions.cpp \
 	AAClipBench.cpp \
 	AlternatingColorPatternBench.cpp \
 	AndroidCodecBench.cpp \

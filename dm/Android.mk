@@ -28,6 +28,7 @@ LOCAL_SRC_FILES := \
 	DMJsonWriter.cpp \
 	../gm/gm.cpp \
 	../src/utils/SkMultiPictureDocumentReader.cpp \
+	../tools/LsanSuppressions.cpp \
 	../tools/debugger/SkDebugCanvas.cpp \
 	../tools/debugger/SkDrawCommand.cpp \
 	../tools/debugger/SkJsonWriteBuffer.cpp \
