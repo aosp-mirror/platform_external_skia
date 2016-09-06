@@ -594,7 +594,6 @@ LOCAL_SRC_FILES := \
 	../gm/verttext.cpp \
 	../gm/verttext2.cpp \
 	../gm/verylargebitmap.cpp \
-	../gm/windowrectangles.cpp \
 	../gm/xfermodeimagefilter.cpp \
 	../gm/xfermodes.cpp \
 	../gm/xfermodes2.cpp \
