@@ -424,6 +424,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrPipeline.cpp \
 	src/gpu/GrPipelineBuilder.cpp \
 	src/gpu/GrPrimitiveProcessor.cpp \
+	src/gpu/GrProgramDesc.cpp \
 	src/gpu/GrProgramElement.cpp \
 	src/gpu/GrProcessor.cpp \
 	src/gpu/GrProcessorUnitTest.cpp \
@@ -555,7 +556,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/glsl/GrGLSLPrimitiveProcessor.cpp \
 	src/gpu/glsl/GrGLSLProgramBuilder.cpp \
 	src/gpu/glsl/GrGLSLProgramDataManager.cpp \
-	src/gpu/glsl/GrGLSLProgramDesc.cpp \
 	src/gpu/glsl/GrGLSLShaderBuilder.cpp \
 	src/gpu/glsl/GrGLSLUtil.cpp \
 	src/gpu/glsl/GrGLSLVarying.cpp \
