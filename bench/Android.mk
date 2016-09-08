@@ -78,6 +78,7 @@ LOCAL_SRC_FILES := \
 	HardStopGradientBench_SpecialHardStops.cpp \
 	ImageBench.cpp \
 	ImageCacheBench.cpp \
+	ImageCacheBudgetBench.cpp \
 	ImageFilterCollapse.cpp \
 	ImageFilterDAGBench.cpp \
 	InterpBench.cpp \
