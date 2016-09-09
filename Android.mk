@@ -228,6 +228,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkPoint3.cpp \
 	src/core/SkPtrRecorder.cpp \
 	src/core/SkQuadClipper.cpp \
+	src/core/SkRadialShadowMapShader.cpp \
 	src/core/SkRasterClip.cpp \
 	src/core/SkRasterPipeline.cpp \
 	src/core/SkRasterPipelineBlitter.cpp \
