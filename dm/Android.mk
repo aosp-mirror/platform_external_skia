@@ -613,12 +613,14 @@ LOCAL_SRC_FILES := \
 	../experimental/svg/model/SkSVGDOM.cpp \
 	../experimental/svg/model/SkSVGEllipse.cpp \
 	../experimental/svg/model/SkSVGLine.cpp \
+	../experimental/svg/model/SkSVGLinearGradient.cpp \
 	../experimental/svg/model/SkSVGNode.cpp \
 	../experimental/svg/model/SkSVGPath.cpp \
 	../experimental/svg/model/SkSVGPoly.cpp \
 	../experimental/svg/model/SkSVGRect.cpp \
 	../experimental/svg/model/SkSVGRenderContext.cpp \
 	../experimental/svg/model/SkSVGShape.cpp \
+	../experimental/svg/model/SkSVGStop.cpp \
 	../experimental/svg/model/SkSVGSVG.cpp \
 	../experimental/svg/model/SkSVGTransformableNode.cpp \
 	../experimental/svg/model/SkSVGValue.cpp \
