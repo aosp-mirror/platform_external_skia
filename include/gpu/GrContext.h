@@ -24,6 +24,7 @@
 struct GrBatchAtlasConfig;
 class GrBatchFontCache;
 struct GrContextOptions;
+class GrContextPriv;
 class GrContextThreadSafeProxy;
 class GrDrawingManager;
 class GrDrawContext;
@@ -180,59 +181,43 @@ public:
     int getRecommendedSampleCount(GrPixelConfig config, SkScalar dpi) const;
 
     /**
-     * Returns a helper object to orchestrate draws.
-     * Callers assume the creation ref of the drawContext
-     * NULL will be returned if the context has been abandoned.
-     *
-     * @param  rt           the render target receiving the draws
-     * @param  surfaceProps the surface properties (mainly defines text drawing)
-     *
-     * @return a draw context
-     */
-    sk_sp<GrDrawContext> drawContext(sk_sp<GrRenderTarget> rt, const SkSurfaceProps* = nullptr);
-
-    /**
      * Create both a GrRenderTarget and a matching GrDrawContext to wrap it.
      * We guarantee that "asTexture" will succeed for drawContexts created
      * via this entry point.
      */
-    sk_sp<GrDrawContext> newDrawContext(SkBackingFit fit, 
-                                        int width, int height,
-                                        GrPixelConfig config,
-                                        int sampleCnt = 0,
-                                        GrSurfaceOrigin origin = kDefault_GrSurfaceOrigin,
-                                        const SkSurfaceProps* surfaceProps = nullptr,
-                                        SkBudgeted = SkBudgeted::kYes);
+    sk_sp<GrDrawContext> makeDrawContext(SkBackingFit fit, 
+                                         int width, int height,
+                                         GrPixelConfig config,
+                                         sk_sp<SkColorSpace> colorSpace,
+                                         int sampleCnt = 0,
+                                         GrSurfaceOrigin origin = kDefault_GrSurfaceOrigin,
+                                         const SkSurfaceProps* surfaceProps = nullptr,
+                                         SkBudgeted = SkBudgeted::kYes);
+
+    /*
+     * This method will attempt to create a drawContext that has, at least, the number of
+     * channels and precision per channel as requested in 'config' (e.g., A8 and 888 can be
+     * converted to 8888). It may also swizzle the channels (e.g., BGRA -> RGBA).
+     * SRGB-ness will be preserved.
+     */
+    sk_sp<GrDrawContext> makeDrawContextWithFallback(
+                                                 SkBackingFit fit,
+                                                 int width, int height,
+                                                 GrPixelConfig config,
+                                                 sk_sp<SkColorSpace> colorSpace,
+                                                 int sampleCnt = 0,
+                                                 GrSurfaceOrigin origin = kDefault_GrSurfaceOrigin,
+                                                 const SkSurfaceProps* surfaceProps = nullptr,
+                                                 SkBudgeted budgeted = SkBudgeted::kYes);
 
     ///////////////////////////////////////////////////////////////////////////
     // Misc.
 
     /**
-     * Flags that affect flush() behavior.
-     */
-    enum FlushBits {
-        /**
-         * A client may reach a point where it has partially rendered a frame
-         * through a GrContext that it knows the user will never see. This flag
-         * causes the flush to skip submission of deferred content to the 3D API
-         * during the flush.
-         */
-        kDiscard_FlushBit                    = 0x2,
-    };
-
-    /**
      * Call to ensure all drawing to the context has been issued to the
      * underlying 3D API.
-     * @param flagsBitfield     flags that control the flushing behavior. See
-     *                          FlushBits.
      */
-    void flush(int flagsBitfield = 0);
-
-    void flushIfNecessary() {
-        if (fFlushToReduceCacheSize || this->caps()->immediateFlush()) {
-            this->flush();
-        }
-    }
+    void flush();
 
    /**
     * These flags can be used with the read/write pixels functions below.
@@ -293,15 +278,6 @@ public:
                             uint32_t pixelOpsFlags = 0);
 
     /**
-     * Copies contents of src to dst, while applying a gamma curve. Fails if the two surfaces
-     * are not identically sized.
-     * @param dst           the surface to copy to.
-     * @param src           the texture to copy from.
-     * @param gamma         the gamma value to apply.
-     */
-    bool applyGamma(GrRenderTarget* dst, GrTexture* src, SkScalar gamma);
-
-    /**
      * Copies a rectangle of texels from src to dst.
      * @param dst           the surface to copy to.
      * @param src           the surface to copy from.
@@ -324,6 +300,12 @@ public:
      * After this returns any pending writes to the surface will have been issued to the backend 3D API.
      */
     void flushSurfaceWrites(GrSurface* surface);
+
+    /**
+     * After this returns any pending reads or writes to the surface will have been issued to the
+     * backend 3D API.
+     */
+    void flushSurfaceIO(GrSurface* surface);
 
     /**
      * Finalizes all pending reads and writes to the surface and also performs an MSAA resolve
@@ -386,6 +368,10 @@ public:
     /** This is only useful for debug purposes */
     SkDEBUGCODE(GrSingleOwner* debugSingleOwner() const { return &fSingleOwner; } )
 
+    // Provides access to functions that aren't part of the public API.
+    GrContextPriv contextPriv();
+    const GrContextPriv contextPriv() const;
+
 private:
     GrGpu*                                  fGpu;
     const GrCaps*                           fCaps;
@@ -402,8 +388,6 @@ private:
     GrBatchFontCache*                       fBatchFontCache;
     SkAutoTDelete<GrTextBlobCache>          fTextBlobCache;
 
-    // Set by OverbudgetCB() to request that GrContext flush before exiting a draw.
-    bool                                    fFlushToReduceCacheSize;
     bool                                    fDidTestPMConversions;
     int                                     fPMToUPMConversion;
     int                                     fUPMToPMConversion;
@@ -438,10 +422,8 @@ private:
 
     GrAuditTrail                            fAuditTrail;
 
-    // TODO: have the CMM use drawContexts and rm this friending
-    friend class GrClipMaskManager; // the CMM is friended just so it can call 'drawingManager'
-    friend class GrDrawingManager;  // for access to drawingManager for ProgramUnitTest
-    GrDrawingManager* drawingManager() { return fDrawingManager; }
+    // TODO: have the GrClipStackClip use drawContexts and rm this friending
+    friend class GrContextPriv;
 
     GrContext(); // init must be called after the constructor.
     bool init(GrBackend, GrBackendContext, const GrContextOptions& options);
@@ -465,12 +447,6 @@ private:
     /** Returns true if we've already determined that createPMtoUPMEffect and createUPMToPMEffect
         will fail. In such cases fall back to SW conversion. */
     bool didFailPMUPMConversionTest() const;
-
-    /**
-     *  This callback allows the resource cache to callback into the GrContext
-     *  when the cache is still over budget after a purge.
-     */
-    static void OverBudgetCB(void* data);
 
     /**
      * A callback similar to the above for use by the TextBlobCache

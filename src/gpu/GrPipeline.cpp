@@ -27,6 +27,7 @@ GrPipeline* GrPipeline::CreateAt(void* memory, const CreateArgs& args,
     pipeline->fRenderTarget.reset(rt);
     SkASSERT(pipeline->fRenderTarget);
     pipeline->fScissorState = *args.fScissor;
+    pipeline->fWindowRectsState = *args.fWindowRectsState;
     if (builder.hasUserStencilSettings() || args.fHasStencilClip) {
         const GrRenderTargetPriv& rtPriv = rt->renderTargetPriv();
         pipeline->fStencilSettings.reset(*builder.getUserStencil(), args.fHasStencilClip,
@@ -47,6 +48,9 @@ GrPipeline* GrPipeline::CreateAt(void* memory, const CreateArgs& args,
     }
     if (builder.getAllowSRGBInputs()) {
         pipeline->fFlags |= kAllowSRGBInputs_Flag;
+    }
+    if (builder.getUsesDistanceVectorField()) {
+        pipeline->fFlags |= kUsesDistanceVectorField_Flag;
     }
     if (args.fHasStencilClip) {
         pipeline->fFlags |= kHasStencilClip_Flag;
@@ -218,14 +222,14 @@ void GrPipeline::adjustProgramFromOptimizations(const GrPipelineBuilder& pipelin
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool GrPipeline::AreEqual(const GrPipeline& a, const GrPipeline& b,
-                          bool ignoreCoordTransforms) {
+bool GrPipeline::AreEqual(const GrPipeline& a, const GrPipeline& b) {
     SkASSERT(&a != &b);
 
     if (a.getRenderTarget() != b.getRenderTarget() ||
         a.fFragmentProcessors.count() != b.fFragmentProcessors.count() ||
         a.fNumColorProcessors != b.fNumColorProcessors ||
         a.fScissorState != b.fScissorState ||
+        !a.fWindowRectsState.cheapEqualTo(b.fWindowRectsState) ||
         a.fFlags != b.fFlags ||
         a.fStencilSettings != b.fStencilSettings ||
         a.fDrawFace != b.fDrawFace ||
@@ -241,7 +245,7 @@ bool GrPipeline::AreEqual(const GrPipeline& a, const GrPipeline& b,
     }
 
     for (int i = 0; i < a.numFragmentProcessors(); i++) {
-        if (!a.getFragmentProcessor(i).isEqual(b.getFragmentProcessor(i), ignoreCoordTransforms)) {
+        if (!a.getFragmentProcessor(i).isEqual(b.getFragmentProcessor(i))) {
             return false;
         }
     }

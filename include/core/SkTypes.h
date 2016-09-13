@@ -139,17 +139,22 @@ inline void operator delete(void* p) {
     SK_API void SkDebugf(const char format[], ...);
 #endif
 
-#define SkASSERT_RELEASE(cond)          if (!(cond)) { SK_ABORT(#cond); }
+#define SkREQUIRE_SEMICOLON_AFTER(code) do { code } while (false)
+
+#define SkASSERT_RELEASE(cond) \
+    SkREQUIRE_SEMICOLON_AFTER(if (!(cond)) { SK_ABORT(#cond); } )
 
 #ifdef SK_DEBUG
-    #define SkASSERT(cond)              if (!(cond)) { SK_ABORT("assert(" #cond ")"); }
-    #define SkASSERTF(cond, fmt, ...)   if (!(cond)) { \
-                                            SkDebugf(fmt"\n", __VA_ARGS__); \
-                                            SK_ABORT("assert(" #cond ")"); \
-                                        }
+    #define SkASSERT(cond) \
+        SkREQUIRE_SEMICOLON_AFTER(if (!(cond)) { SK_ABORT("assert(" #cond ")"); })
+    #define SkASSERTF(cond, fmt, ...) \
+        SkREQUIRE_SEMICOLON_AFTER(if (!(cond)) { \
+                                      SkDebugf(fmt"\n", __VA_ARGS__); \
+                                      SK_ABORT("assert(" #cond ")"); \
+                                  })
     #define SkDEBUGFAIL(message)        SK_ABORT(message)
     #define SkDEBUGFAILF(fmt, ...)      SkASSERTF(false, fmt, ##__VA_ARGS__)
-    #define SkDEBUGCODE(code)           code
+    #define SkDEBUGCODE(...)            __VA_ARGS__
     #define SkDECLAREPARAM(type, var)   , type var
     #define SkPARAM(var)                , var
     #define SkDEBUGF(args       )       SkDebugf args
@@ -158,7 +163,8 @@ inline void operator delete(void* p) {
     #define SkASSERT(cond)
     #define SkASSERTF(cond, fmt, ...)
     #define SkDEBUGFAIL(message)
-    #define SkDEBUGCODE(code)
+    #define SkDEBUGFAILF(fmt, ...)
+    #define SkDEBUGCODE(...)
     #define SkDEBUGF(args)
     #define SkDECLAREPARAM(type, var)
     #define SkPARAM(var)
@@ -347,6 +353,10 @@ typedef uint32_t SkFourByteTag;
 /** 32 bit integer to hold a unicode value
 */
 typedef int32_t SkUnichar;
+
+/** 16 bit unsigned integer to hold a glyph index
+*/
+typedef uint16_t SkGlyphID;
 
 /** 32 bit value to hold a millisecond duration
  *  Note that SK_MSecMax is about 25 days.

@@ -20,16 +20,16 @@ class GrVkGpu;
  */
 class GrVkBuffer : public SkNoncopyable {
 public:
-    ~GrVkBuffer() {
+    virtual ~GrVkBuffer() {
         // either release or abandon should have been called by the owner of this object.
         SkASSERT(!fResource);
     }
 
-    VkBuffer            buffer() const { return fResource->fBuffer; }
-    const GrVkAlloc&    alloc() const { return fResource->fAlloc; }
-    const GrVkResource* resource() const { return fResource; }
-    size_t              size() const { return fDesc.fSizeInBytes; }
-    VkDeviceSize        offset() const { return fOffset;  }
+    VkBuffer                    buffer() const { return fResource->fBuffer; }
+    const GrVkAlloc&            alloc() const { return fResource->fAlloc; }
+    const GrVkRecycledResource* resource() const { return fResource; }
+    size_t                      size() const { return fDesc.fSizeInBytes; }
+    VkDeviceSize                offset() const { return fOffset;  }
 
     void addMemoryBarrier(const GrVkGpu* gpu,
                           VkAccessFlags srcAccessMask,
@@ -53,7 +53,7 @@ protected:
         bool        fDynamic;
     };
 
-    class Resource : public GrVkResource {
+    class Resource : public GrVkRecycledResource {
     public:
         Resource(VkBuffer buf, const GrVkAlloc& alloc, Type type)
             : INHERITED(), fBuffer(buf), fAlloc(alloc), fType(type) {}
@@ -70,7 +70,9 @@ protected:
     private:
         void freeGPUData(const GrVkGpu* gpu) const override;
 
-        typedef GrVkResource INHERITED;
+        void onRecycle(GrVkGpu* gpu) const override { this->unref(gpu); }
+
+        typedef GrVkRecycledResource INHERITED;
     };
 
     // convenience routine for raw buffer creation
@@ -92,6 +94,11 @@ protected:
     void vkRelease(const GrVkGpu* gpu);
 
 private:
+    virtual const Resource* createResource(GrVkGpu* gpu,
+                                           const Desc& descriptor) {
+        return Create(gpu, descriptor);
+    }
+
     void validate() const;
     bool vkIsMapped() const;
 

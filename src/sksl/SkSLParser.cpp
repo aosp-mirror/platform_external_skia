@@ -14,10 +14,25 @@
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunneeded-internal-declaration"
 #pragma clang diagnostic ignored "-Wnull-conversion"
+#pragma clang diagnostic ignored "-Wsign-compare"
+#endif
+#ifdef __GNUC__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wsign-compare"
+#endif
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable:4018)
 #endif
 #include "lex.sksl.c"
 #ifdef __clang__
 #pragma clang diagnostic pop
+#endif
+#ifdef __GNUC__
+#pragma GCC diagnostic pop
+#endif
+#ifdef _MSC_VER
+#pragma warning(pop)
 #endif
 #undef register
 
@@ -52,6 +67,7 @@
 #include "ast/SkSLASTVarDeclarationStatement.h"
 #include "ast/SkSLASTWhileStatement.h"
 #include "ir/SkSLSymbolTable.h"
+#include "ir/SkSLType.h"
 
 namespace SkSL {
 
@@ -258,7 +274,7 @@ std::unique_ptr<ASTDeclaration> Parser::declaration() {
 }
 
 /* modifiers type IDENTIFIER varDeclarationEnd */
-std::unique_ptr<ASTVarDeclaration> Parser::varDeclaration() {
+std::unique_ptr<ASTVarDeclarations> Parser::varDeclarations() {
     ASTModifiers modifiers = this->modifiers();
     std::unique_ptr<ASTType> type(this->type());
     if (!type) {
@@ -285,23 +301,23 @@ std::unique_ptr<ASTType> Parser::structDeclaration() {
     }
     std::vector<Type::Field> fields;
     while (this->peek().fKind != Token::RBRACE) {
-        std::unique_ptr<ASTVarDeclaration> decl = this->varDeclaration();
+        std::unique_ptr<ASTVarDeclarations> decl = this->varDeclarations();
         if (!decl) {
             return nullptr;
         }
-        for (size_t i = 0; i < decl->fNames.size(); i++) {
-            auto type = std::static_pointer_cast<Type>(fTypes[decl->fType->fName]);
-            for (int j = (int) decl->fSizes[i].size() - 1; j >= 0; j--) {
-                if (decl->fSizes[i][j]->fKind == ASTExpression::kInt_Kind) {
+        for (const auto& var : decl->fVars) {
+            auto type = (const Type*) fTypes[decl->fType->fName];
+            for (int i = (int) var.fSizes.size() - 1; i >= 0; i--) {
+                if (var.fSizes[i]->fKind != ASTExpression::kInt_Kind) {
                     this->error(decl->fPosition, "array size in struct field must be a constant");
                 }
-                uint64_t columns = ((ASTIntLiteral&) *decl->fSizes[i][j]).fValue;
+                uint64_t columns = ((ASTIntLiteral&) *var.fSizes[i]).fValue;
                 std::string name = type->name() + "[" + to_string(columns) + "]";
-                type = std::shared_ptr<Type>(new Type(name, Type::kArray_Kind, std::move(type), 
-                                                      (int) columns));
+                type = new Type(name, Type::kArray_Kind, *type, (int) columns);
+                fTypes.takeOwnership((Type*) type);
             }
-            fields.push_back(Type::Field(decl->fModifiers, decl->fNames[i], std::move(type)));
-            if (decl->fValues[i]) {
+            fields.push_back(Type::Field(decl->fModifiers, var.fName, type));
+            if (var.fValue) {
                 this->error(decl->fPosition, "initializers are not permitted on struct fields");
             }
         }
@@ -309,27 +325,26 @@ std::unique_ptr<ASTType> Parser::structDeclaration() {
     if (!this->expect(Token::RBRACE, "'}'")) {
         return nullptr;
     }
-    std::shared_ptr<Type> type(new Type(name.fText, fields));
-    fTypes.add(type->fName, type);
-    return std::unique_ptr<ASTType>(new ASTType(name.fPosition, type->fName, 
+    fTypes.add(name.fText, std::unique_ptr<Type>(new Type(name.fText, fields)));
+    return std::unique_ptr<ASTType>(new ASTType(name.fPosition, name.fText, 
                                                 ASTType::kStruct_Kind));
 }
 
 /* structDeclaration ((IDENTIFIER varDeclarationEnd) | SEMICOLON) */
-std::unique_ptr<ASTVarDeclaration> Parser::structVarDeclaration(ASTModifiers modifiers) {
+std::unique_ptr<ASTVarDeclarations> Parser::structVarDeclaration(ASTModifiers modifiers) {
     std::unique_ptr<ASTType> type = this->structDeclaration();
     if (!type) {
         return nullptr;
     }
     if (peek().fKind == Token::IDENTIFIER) {
         Token name = this->nextToken();
-        std::unique_ptr<ASTVarDeclaration> result = this->varDeclarationEnd(modifiers, 
-                                                                            std::move(type), 
-                                                                            std::move(name.fText));
+        std::unique_ptr<ASTVarDeclarations> result = this->varDeclarationEnd(modifiers, 
+                                                                             std::move(type), 
+                                                                             std::move(name.fText));
         if (result) {
-            for (size_t i = 0; i < result->fValues.size(); i++) {
-                if (result->fValues[i]) {
-                    this->error(result->fValues[i]->fPosition, 
+            for (const auto& var : result->fVars) {
+                if (var.fValue) {
+                    this->error(var.fValue->fPosition, 
                                 "struct variables cannot be initialized");
                 }
             }
@@ -342,12 +357,10 @@ std::unique_ptr<ASTVarDeclaration> Parser::structVarDeclaration(ASTModifiers mod
 
 /* (LBRACKET expression? RBRACKET)* (EQ expression)? (COMMA IDENTIFER 
    (LBRACKET expression? RBRACKET)* (EQ expression)?)* SEMICOLON */
-std::unique_ptr<ASTVarDeclaration> Parser::varDeclarationEnd(ASTModifiers mods,
-                                                             std::unique_ptr<ASTType> type,
-                                                             std::string name) {
-    std::vector<std::string> names;
-    std::vector<std::vector<std::unique_ptr<ASTExpression>>> sizes;
-    names.push_back(name);
+std::unique_ptr<ASTVarDeclarations> Parser::varDeclarationEnd(ASTModifiers mods,
+                                                              std::unique_ptr<ASTType> type,
+                                                              std::string name) {
+    std::vector<ASTVarDeclaration> vars;
     std::vector<std::unique_ptr<ASTExpression>> currentVarSizes;
     while (this->peek().fKind == Token::LBRACKET) {
         this->nextToken();
@@ -365,26 +378,23 @@ std::unique_ptr<ASTVarDeclaration> Parser::varDeclarationEnd(ASTModifiers mods,
             }
         }
     }
-    sizes.push_back(std::move(currentVarSizes));
-    std::vector<std::unique_ptr<ASTExpression>> values;
+    std::unique_ptr<ASTExpression> value;
     if (this->peek().fKind == Token::EQ) {
         this->nextToken();
-        std::unique_ptr<ASTExpression> value(this->expression());
+        value = this->expression();
         if (!value) {
             return nullptr;
         }
-        values.push_back(std::move(value));
-    } else {
-        values.push_back(nullptr);
     }
+    vars.emplace_back(std::move(name), std::move(currentVarSizes), std::move(value));
     while (this->peek().fKind == Token::COMMA) {
         this->nextToken();
         Token name;
         if (!this->expect(Token::IDENTIFIER, "an identifier", &name)) {
             return nullptr;
         }
-        names.push_back(name.fText);
         currentVarSizes.clear();
+        value.reset();
         while (this->peek().fKind == Token::LBRACKET) {
             this->nextToken();
             if (this->peek().fKind == Token::RBRACKET) {
@@ -401,26 +411,21 @@ std::unique_ptr<ASTVarDeclaration> Parser::varDeclarationEnd(ASTModifiers mods,
                 }
             }
         }
-        sizes.push_back(std::move(currentVarSizes));
         if (this->peek().fKind == Token::EQ) {
             this->nextToken();
-            std::unique_ptr<ASTExpression> value(this->expression());
+            value = this->expression();
             if (!value) {
                 return nullptr;
             }
-            values.push_back(std::move(value));
-        } else {
-            values.push_back(nullptr);
         }
+        vars.emplace_back(std::move(name.fText), std::move(currentVarSizes), std::move(value));
     }
     if (!this->expect(Token::SEMICOLON, "';'")) {
         return nullptr;
     }
-    return std::unique_ptr<ASTVarDeclaration>(new ASTVarDeclaration(std::move(mods),
-                                                                    std::move(type),
-                                                                    std::move(names),
-                                                                    std::move(sizes),
-                                                                    std::move(values)));
+    return std::unique_ptr<ASTVarDeclarations>(new ASTVarDeclarations(std::move(mods),
+                                                                      std::move(type),
+                                                                      std::move(vars)));
 }
 
 /* modifiers type IDENTIFIER (LBRACKET INT_LITERAL RBRACKET)? */
@@ -471,10 +476,11 @@ ASTLayout Parser::layout() {
     int index = -1;
     int set = -1;
     int builtin = -1;
+    bool originUpperLeft = false;
     if (this->peek().fKind == Token::LAYOUT) {
         this->nextToken();
         if (!this->expect(Token::LPAREN, "'('")) {
-            return ASTLayout(location, binding, index, set, builtin);
+            return ASTLayout(location, binding, index, set, builtin, originUpperLeft);
         }
         for (;;) {
             Token t = this->nextToken();
@@ -488,6 +494,8 @@ ASTLayout Parser::layout() {
                 set = this->layoutInt();
             } else if (t.fText == "builtin") {
                 builtin = this->layoutInt();
+            } else if (t.fText == "origin_upper_left") {
+                originUpperLeft = true;
             } else {
                 this->error(t.fPosition, ("'" + t.fText + 
                                           "' is not a valid layout qualifier").c_str());
@@ -501,11 +509,10 @@ ASTLayout Parser::layout() {
             }
         }
     }
-    return ASTLayout(location, binding, index, set, builtin);
+    return ASTLayout(location, binding, index, set, builtin, originUpperLeft);
 }
 
-/* layout? (UNIFORM | CONST | IN | OUT | INOUT | LOWP | 
-   MEDIUMP | HIGHP)* */
+/* layout? (UNIFORM | CONST | IN | OUT | INOUT | LOWP | MEDIUMP | HIGHP | FLAT | NOPERSPECTIVE)* */
 ASTModifiers Parser::modifiers() {
     ASTLayout layout = this->layout();
     int flags = 0;
@@ -545,6 +552,14 @@ ASTModifiers Parser::modifiers() {
                 this->nextToken();
                 flags |= ASTModifiers::kHighp_Flag;
                 break;
+            case Token::FLAT:
+                this->nextToken();
+                flags |= ASTModifiers::kFlat_Flag;
+                break;
+            case Token::NOPERSPECTIVE:
+                this->nextToken();
+                flags |= ASTModifiers::kNoPerspective_Flag;
+                break;
             default:
                 return ASTModifiers(layout, flags);
         }
@@ -583,12 +598,13 @@ std::unique_ptr<ASTStatement> Parser::statement() {
             return this->block();
         case Token::SEMICOLON:
             this->nextToken(); 
-            return std::unique_ptr<ASTStatement>(new ASTBlock(start.fPosition, {}));
+            return std::unique_ptr<ASTStatement>(new ASTBlock(start.fPosition, 
+                                                     std::vector<std::unique_ptr<ASTStatement>>()));
         case Token::CONST:   // fall through
         case Token::HIGHP:   // fall through
         case Token::MEDIUMP: // fall through
         case Token::LOWP: {
-            auto decl = this->varDeclaration();
+            auto decl = this->varDeclarations();
             if (!decl) {
                 return nullptr;
             }
@@ -596,7 +612,7 @@ std::unique_ptr<ASTStatement> Parser::statement() {
         }
         case Token::IDENTIFIER:
             if (this->isType(start.fText)) {
-                auto decl = this->varDeclaration();
+                auto decl = this->varDeclarations();
                 if (!decl) {
                     return nullptr;
                 }
@@ -637,9 +653,9 @@ std::unique_ptr<ASTDeclaration> Parser::interfaceBlock(ASTModifiers mods) {
         return nullptr;
     }
     this->nextToken();
-    std::vector<std::unique_ptr<ASTVarDeclaration>> decls; 
+    std::vector<std::unique_ptr<ASTVarDeclarations>> decls; 
     while (this->peek().fKind != Token::RBRACE) {
-        std::unique_ptr<ASTVarDeclaration> decl = this->varDeclaration();
+        std::unique_ptr<ASTVarDeclarations> decl = this->varDeclarations();
         if (!decl) {
             return nullptr;
         }
@@ -762,12 +778,12 @@ std::unique_ptr<ASTForStatement> Parser::forStatement() {
             break;
         case Token::CONST:
             initializer = std::unique_ptr<ASTStatement>(new ASTVarDeclarationStatement(
-                                                                           this->varDeclaration()));
+                                                                          this->varDeclarations()));
             break;
         case Token::IDENTIFIER: 
             if (this->isType(nextToken.fText)) {
                 initializer = std::unique_ptr<ASTStatement>(new ASTVarDeclarationStatement(
-                                                                           this->varDeclaration()));
+                                                                          this->varDeclarations()));
                 break;
             }
             // fall through

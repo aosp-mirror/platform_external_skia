@@ -6,12 +6,34 @@
  */
 
 #include "SkBitmap.h"
+#include "SkDeduper.h"
 #include "SkErrorInternals.h"
 #include "SkImage.h"
+#include "SkImageDeserializer.h"
 #include "SkImageGenerator.h"
 #include "SkReadBuffer.h"
 #include "SkStream.h"
 #include "SkTypeface.h"
+
+namespace {
+
+    // This generator intentionally should always fail on all attempts to get its pixels,
+    // simulating a bad or empty codec stream.
+    class EmptyImageGenerator final : public SkImageGenerator {
+    public:
+        EmptyImageGenerator(const SkImageInfo& info) : INHERITED(info) { }
+
+    private:
+        typedef SkImageGenerator INHERITED;
+    };
+
+    static sk_sp<SkImage> MakeEmptyImage(int width, int height) {
+        return SkImage::MakeFromGenerator(
+            new EmptyImageGenerator(SkImageInfo::MakeN32Premul(width, height)));
+    }
+    
+} // anonymous namespace
+
 
 static uint32_t default_flags() {
     uint32_t flags = 0;
@@ -21,6 +43,9 @@ static uint32_t default_flags() {
     }
     return flags;
 }
+
+// This has an empty constructor and destructor, and is thread-safe, so we can use a singleton.
+static SkImageDeserializer gDefaultImageDeserializer;
 
 SkReadBuffer::SkReadBuffer() {
     fFlags = default_flags();
@@ -32,7 +57,7 @@ SkReadBuffer::SkReadBuffer() {
 
     fFactoryArray = nullptr;
     fFactoryCount = 0;
-    fBitmapDecoder = nullptr;
+    fImageDeserializer = &gDefaultImageDeserializer;
 #ifdef DEBUG_NON_DETERMINISTIC_ASSERT
     fDecodedBitmapIndex = -1;
 #endif // DEBUG_NON_DETERMINISTIC_ASSERT
@@ -49,7 +74,7 @@ SkReadBuffer::SkReadBuffer(const void* data, size_t size) {
 
     fFactoryArray = nullptr;
     fFactoryCount = 0;
-    fBitmapDecoder = nullptr;
+    fImageDeserializer = &gDefaultImageDeserializer;
 #ifdef DEBUG_NON_DETERMINISTIC_ASSERT
     fDecodedBitmapIndex = -1;
 #endif // DEBUG_NON_DETERMINISTIC_ASSERT
@@ -68,7 +93,7 @@ SkReadBuffer::SkReadBuffer(SkStream* stream) {
 
     fFactoryArray = nullptr;
     fFactoryCount = 0;
-    fBitmapDecoder = nullptr;
+    fImageDeserializer = &gDefaultImageDeserializer;
 #ifdef DEBUG_NON_DETERMINISTIC_ASSERT
     fDecodedBitmapIndex = -1;
 #endif // DEBUG_NON_DETERMINISTIC_ASSERT
@@ -76,6 +101,10 @@ SkReadBuffer::SkReadBuffer(SkStream* stream) {
 
 SkReadBuffer::~SkReadBuffer() {
     sk_free(fMemoryPtr);
+}
+
+void SkReadBuffer::setImageDeserializer(SkImageDeserializer* deserializer) {
+    fImageDeserializer = deserializer ? deserializer : &gDefaultImageDeserializer;
 }
 
 bool SkReadBuffer::readBool() {
@@ -179,7 +208,7 @@ uint32_t SkReadBuffer::getArrayCount() {
     return *(uint32_t*)fReader.peek();
 }
 
-bool SkReadBuffer::readBitmap(SkBitmap* bitmap) {
+sk_sp<SkImage> SkReadBuffer::readBitmapAsImage() {
     const int width = this->readInt();
     const int height = this->readInt();
 
@@ -203,39 +232,12 @@ bool SkReadBuffer::readBitmap(SkBitmap* bitmap) {
             const void* data = this->skip(length);
             const int32_t xOffset = this->readInt();
             const int32_t yOffset = this->readInt();
-            if (fBitmapDecoder != nullptr && fBitmapDecoder(data, length, bitmap)) {
-                if (bitmap->width() == width && bitmap->height() == height) {
-#ifdef DEBUG_NON_DETERMINISTIC_ASSERT
-                    if (0 != xOffset || 0 != yOffset) {
-                        SkDebugf("SkReadBuffer::readBitmap: heights match,"
-                                 " but offset is not zero. \nInfo about the bitmap:"
-                                 "\n\tIndex: %d\n\tDimensions: [%d %d]\n\tEncoded"
-                                 " data size: %d\n\tOffset: (%d, %d)\n",
-                                 fDecodedBitmapIndex, width, height, length, xOffset,
-                                 yOffset);
-                    }
-#endif // DEBUG_NON_DETERMINISTIC_ASSERT
-                    // If the width and height match, there should be no offset.
-                    SkASSERT(0 == xOffset && 0 == yOffset);
-                    return true;
-                }
-
-                // This case can only be reached if extractSubset was called, so
-                // the recorded width and height must be smaller than or equal to
-                // the encoded width and height.
-                // FIXME (scroggo): This assert assumes that our decoder and the
-                // sources encoder agree on the width and height which may not
-                // always be the case. Removing until it can be investigated
-                // further.
-                //SkASSERT(width <= bitmap->width() && height <= bitmap->height());
-
-                SkBitmap subsetBm;
-                SkIRect subset = SkIRect::MakeXYWH(xOffset, yOffset, width, height);
-                if (bitmap->extractSubset(&subsetBm, subset)) {
-                    bitmap->swap(subsetBm);
-                    return true;
-                }
+            SkIRect subset = SkIRect::MakeXYWH(xOffset, yOffset, width, height);
+            sk_sp<SkImage> image = fImageDeserializer->makeFromMemory(data, length, &subset);
+            if (image) {
+                return image;
             }
+
             // This bitmap was encoded when written, but we are unable to decode, possibly due to
             // not having a decoder.
             SkErrorInternals::SetError(kParseError_SkError,
@@ -243,32 +245,25 @@ bool SkReadBuffer::readBitmap(SkBitmap* bitmap) {
             // Even though we weren't able to decode the pixels, the readbuffer should still be
             // intact, so we return true with an empty bitmap, so we don't force an abort of the
             // larger deserialize.
-            bitmap->setInfo(SkImageInfo::MakeUnknown(width, height));
-            return true;
-        } else if (SkBitmap::ReadRawPixels(this, bitmap)) {
-            return true;
+            return MakeEmptyImage(width, height);
+        } else {
+            SkBitmap bitmap;
+            if (SkBitmap::ReadRawPixels(this, &bitmap)) {
+                bitmap.setImmutable();
+                return SkImage::MakeFromBitmap(bitmap);
+            }
         }
     }
     // Could not read the SkBitmap. Use a placeholder bitmap.
-    bitmap->setInfo(SkImageInfo::MakeUnknown(width, height));
-    return false;
+    return nullptr;
 }
 
-namespace {
+sk_sp<SkImage> SkReadBuffer::readImage() {
+    if (fInflator) {
+        SkImage* img = fInflator->getImage(this->read32());
+        return img ? sk_ref_sp(img) : nullptr;
+    }
 
-// This generator intentionally should always fail on all attempts to get its pixels,
-// simulating a bad or empty codec stream.
-class EmptyImageGenerator final : public SkImageGenerator {
-public:
-    EmptyImageGenerator(const SkImageInfo& info) : INHERITED(info) { }
-
-private:
-    typedef SkImageGenerator INHERITED;
-};
-
-} // anonymous namespace
-
-SkImage* SkReadBuffer::readImage() {
     int width = this->read32();
     int height = this->read32();
     if (width <= 0 || height <= 0) {    // SkImage never has a zero dimension
@@ -276,25 +271,20 @@ SkImage* SkReadBuffer::readImage() {
         return nullptr;
     }
 
-    auto placeholder = [=] {
-        return SkImage::MakeFromGenerator(
-            new EmptyImageGenerator(SkImageInfo::MakeN32Premul(width, height))).release();
-    };
-
     uint32_t encoded_size = this->getArrayCount();
     if (encoded_size == 0) {
         // The image could not be encoded at serialization time - return an empty placeholder.
         (void)this->readUInt();  // Swallow that encoded_size == 0 sentinel.
-        return placeholder();
+        return MakeEmptyImage(width, height);
     }
     if (encoded_size == 1) {
         // We had to encode the image as raw pixels via SkBitmap.
         (void)this->readUInt();  // Swallow that encoded_size == 1 sentinel.
         SkBitmap bm;
         if (SkBitmap::ReadRawPixels(this, &bm)) {
-            return SkImage::MakeFromBitmap(bm).release();
+            return SkImage::MakeFromBitmap(bm);
         }
-        return placeholder();
+        return MakeEmptyImage(width, height);
     }
 
     // The SkImage encoded itself.
@@ -308,23 +298,22 @@ SkImage* SkReadBuffer::readImage() {
     }
 
     const SkIRect subset = SkIRect::MakeXYWH(originX, originY, width, height);
-    SkImage* image = SkImage::MakeFromEncoded(std::move(encoded), &subset).release();
-    if (image) {
-        return image;
-    }
 
-    return SkImage::MakeFromGenerator(
-            new EmptyImageGenerator(SkImageInfo::MakeN32Premul(width, height))).release();
+    sk_sp<SkImage> image = fImageDeserializer->makeFromData(encoded.get(), &subset);
+    return image ? image : MakeEmptyImage(width, height);
 }
 
-SkTypeface* SkReadBuffer::readTypeface() {
-
+sk_sp<SkTypeface> SkReadBuffer::readTypeface() {
+    if (fInflator) {
+        return sk_ref_sp(fInflator->getTypeface(this->read32()));
+    }
+    
     uint32_t index = fReader.readU32();
     if (0 == index || index > (unsigned)fTFCount) {
         return nullptr;
     } else {
         SkASSERT(fTFArray);
-        return fTFArray[index - 1];
+        return sk_ref_sp(fTFArray[index - 1]);
     }
 }
 
@@ -335,7 +324,12 @@ SkFlattenable* SkReadBuffer::readFlattenable(SkFlattenable::Type ft) {
 
     SkFlattenable::Factory factory = nullptr;
 
-    if (fFactoryCount > 0) {
+    if (fInflator) {
+        factory = fInflator->getFactory(this->read32());
+        if (!factory) {
+            return nullptr;
+        }
+    } else if (fFactoryCount > 0) {
         int32_t index = fReader.readU32();
         if (0 == index) {
             return nullptr; // writer failed to give us the flattenable

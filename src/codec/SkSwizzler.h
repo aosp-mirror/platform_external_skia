@@ -56,7 +56,7 @@ public:
     /**
      * Implement fill using a custom width.
      */
-    void fill(const SkImageInfo& info, void* dst, size_t rowBytes, uint32_t colorOrIndex,
+    void fill(const SkImageInfo& info, void* dst, size_t rowBytes, uint64_t colorOrIndex,
             SkCodec::ZeroInitialized zeroInit) override {
         const SkImageInfo fillInfo = info.makeWH(fAllocatedWidth, info.height());
         SkSampler::Fill(fillInfo, dst, rowBytes, colorOrIndex, zeroInit);
@@ -71,6 +71,12 @@ public:
      *  this allows us to apply a transparency mask to pixels after swizzling.
      */
     int sampleX() const { return fSampleX; }
+
+    /**
+     *  Returns the actual number of pixels written to destination memory, taking
+     *  scaling, subsetting, and partial frames into account.
+     */
+    int swizzleWidth() const { return fSwizzleWidth; }
 
 private:
 

@@ -45,6 +45,10 @@ public:
         kMaxWindingTries = 10
     };
 
+    bool allocatedOpSpan() const {
+        return fAllocatedOpSpan;
+    }
+
     SkChunkAlloc* allocator() {
         return fAllocator;
     }
@@ -72,7 +76,7 @@ public:
 #ifdef SK_DEBUG
     const class SkOpAngle* debugAngle(int id) const;
     const SkOpCoincidence* debugCoincidence() const;
-    SkOpContour* debugContour(int id);
+    SkOpContour* debugContour(int id) const;
     const class SkOpPtT* debugPtT(int id) const;
     bool debugRunFail() const;
     const class SkOpSegment* debugSegment(int id) const;
@@ -127,6 +131,14 @@ public:
     Phase phase() const {
         return fPhase;
     }
+    
+    void resetAllocatedOpSpan() {
+        fAllocatedOpSpan = false;
+    }
+
+    void setAllocatedOpSpan() {
+        fAllocatedOpSpan = true;
+    }
 
     void setAngleCoincidence() {
         fAngleCoincidence = true;
@@ -159,6 +171,7 @@ private:
     SkOpCoincidence* fCoincidence;
     SkOpContourHead* fContourHead;
     int fNested;
+    bool fAllocatedOpSpan;
     bool fWindingFailed;
     bool fAngleCoincidence;
     Phase fPhase;
@@ -182,6 +195,22 @@ private:
     bool fDebugCheckHealth;
 #endif
 };
+
+#ifdef SK_DEBUG
+#if DEBUG_COINCIDENCE
+#define SkOPASSERT(cond) SkASSERT((this->globalState() && \
+        (this->globalState()->debugCheckHealth() || \
+        this->globalState()->debugSkipAssert())) || (cond))
+#else
+#define SkOPASSERT(cond) SkASSERT((this->globalState() && \
+        this->globalState()->debugSkipAssert()) || (cond))
+#endif
+#define SkOPOBJASSERT(obj, cond) SkASSERT((obj->debugGlobalState() && \
+        obj->debugGlobalState()->debugSkipAssert()) || (cond))
+#else
+#define SkOPASSERT(cond)
+#define SkOPOBJASSERT(obj, cond)
+#endif
 
 // Use Almost Equal when comparing coordinates. Use epsilon to compare T values.
 bool AlmostEqualUlps(float a, float b);
@@ -504,10 +533,6 @@ inline bool roughly_between(double a, double b, double c) {
 
 inline bool more_roughly_equal(double x, double y) {
     return fabs(x - y) < MORE_ROUGH_EPSILON;
-}
-
-inline bool way_roughly_equal(double x, double y) {
-    return fabs(x - y) < WAY_ROUGH_EPSILON;
 }
 
 struct SkDPoint;

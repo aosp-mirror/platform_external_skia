@@ -8,6 +8,7 @@
 #ifndef GrPathRenderer_DEFINED
 #define GrPathRenderer_DEFINED
 
+#include "GrCaps.h"
 #include "GrDrawContext.h"
 #include "GrPaint.h"
 #include "GrResourceProvider.h"
@@ -184,7 +185,7 @@ public:
     struct StencilPathArgs {
         GrResourceProvider* fResourceProvider;
         GrDrawContext*      fDrawContext;
-        const GrFixedClip*  fClip;
+        const GrClip*       fClip;
         const SkMatrix*     fViewMatrix;
         bool                fIsAA;
         const GrShape*      fShape;
@@ -195,7 +196,7 @@ public:
             SkASSERT(fDrawContext);
             SkASSERT(fViewMatrix);
             SkASSERT(fShape);
-            SkASSERT(fShape->style().isSimpleFill())
+            SkASSERT(fShape->style().isSimpleFill());
             SkPath path;
             fShape->asPath(&path);
             SkASSERT(!path.isInverseFillType());

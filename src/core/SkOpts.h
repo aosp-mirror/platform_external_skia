@@ -66,21 +66,11 @@ namespace SkOpts {
     // If nsrc < ndst, we loop over src to create a pattern.
     extern void (*srcover_srgb_srgb)(uint32_t* dst, const uint32_t* src, int ndst, int nsrc);
 
-    // Color xform RGB1 pixels.
-    extern void (*color_xform_RGB1_to_2dot2) (uint32_t* dst, const uint32_t* src, int len,
-                                              const float* const srcTables[3],
-                                              const float srcToDstMatrix[12]);
-    extern void (*color_xform_RGB1_to_srgb)(uint32_t* dst, const uint32_t* src, int len,
-                                            const float* const srcTables[3],
-                                            const float srcToDstMatrix[12]);
-    extern void (*color_xform_RGB1_to_table)(uint32_t* dst, const uint32_t* src, int len,
-                                             const float* const srcTables[3],
-                                             const float srcToDstMatrix[12],
-                                             const uint8_t* const dstTables[3]);
-    extern void (*color_xform_RGB1_to_linear)(uint64_t* dst, const uint32_t* src, int len,
-                                              const float* const srcTables[3],
-                                              const float srcToDstMatrix[12]);
-
+    // The fastest high quality 32-bit hash we can provide on this platform.
+    extern uint32_t (*hash_fn)(const void*, size_t, uint32_t seed);
+    static inline uint32_t hash(const void* data, size_t bytes, uint32_t seed=0) {
+        return hash_fn(data, bytes, seed);
+    }
 }
 
 #endif//SkOpts_DEFINED

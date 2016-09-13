@@ -130,11 +130,11 @@ protected:
             SkMatrix m;
             m.setRSXform(xforms[i]);
 
-            sk_sp<SkShader> normalMap = SkMakeBitmapShader(fAtlas, SkShader::kClamp_TileMode,
-                    SkShader::kClamp_TileMode, &normalMat, nullptr);
+            sk_sp<SkShader> normalMap = SkShader::MakeBitmapShader(fAtlas, SkShader::kClamp_TileMode,
+                    SkShader::kClamp_TileMode, &normalMat);
             sk_sp<SkNormalSource> normalSource = SkNormalSource::MakeFromNormalMap(
                     std::move(normalMap), m);
-            sk_sp<SkShader> diffuseShader = SkBitmapProcShader::MakeBitmapShader(fAtlas,
+            sk_sp<SkShader> diffuseShader = SkShader::MakeBitmapShader(fAtlas,
                     SkShader::kClamp_TileMode, SkShader::kClamp_TileMode, &diffMat);
             paint.setShader(SkLightingShader::Make(std::move(diffuseShader),
                     std::move(normalSource), fLights));
@@ -182,8 +182,9 @@ private:
     void updateLights() {        
         SkLights::Builder builder;
 
-        builder.add(SkLights::Light(SkColor3f::Make(1.0f, 1.0f, 1.0f), fLightDir));
-        builder.add(SkLights::Light(SkColor3f::Make(0.2f, 0.2f, 0.2f)));
+        builder.add(SkLights::Light::MakeDirectional(
+                SkColor3f::Make(1.0f, 1.0f, 1.0f), fLightDir));
+        builder.setAmbientLightColor(SkColor3f::Make(0.2f, 0.2f, 0.2f));
 
         fLights = builder.finish();
     }

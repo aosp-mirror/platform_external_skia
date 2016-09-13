@@ -26,9 +26,11 @@ public:
 
     SkString dumpInfo() const override {
         SkString str;
-        str.appendf("Texture: %d", fTextureAccess.getTexture()->getUniqueID());
+        str.appendf("Texture: %d", fTextureAccess.getTexture()->uniqueID());
         return str;
     }
+
+    GrColorSpaceXform* colorSpaceXform() const { return fColorSpaceXform.get(); }
 
 protected:
     /** unfiltered, clamp mode */

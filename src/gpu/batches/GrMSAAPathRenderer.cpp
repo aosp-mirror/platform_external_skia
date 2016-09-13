@@ -11,6 +11,7 @@
 #include "GrBatchFlushState.h"
 #include "GrClip.h"
 #include "GrDefaultGeoProcFactory.h"
+#include "GrFixedClip.h"
 #include "GrPathStencilSettings.h"
 #include "GrPathUtils.h"
 #include "GrPipelineBuilder.h"
@@ -122,7 +123,6 @@ public:
     const Attribute* inUV() const { return fInUV; }
     const Attribute* inColor() const { return fInColor; }
     const SkMatrix& viewMatrix() const { return fViewMatrix; }
-    const SkMatrix& localMatrix() const { return SkMatrix::I(); }
 
     class GLSLProcessor : public GrGLSLGeometryProcessor {
     public:
@@ -177,13 +177,6 @@ public:
             }
         }
 
-        void setTransformData(const GrPrimitiveProcessor& primProc,
-                              const GrGLSLProgramDataManager& pdman,
-                              int index,
-                              const SkTArray<const GrCoordTransform*, true>& transforms) override {
-            this->setTransformDataHelper<MSAAQuadProcessor>(primProc, pdman, index, transforms);
-        }
-
     private:
         typedef GrGLSLGeometryProcessor INHERITED;
 
@@ -203,11 +196,10 @@ private:
     MSAAQuadProcessor(const SkMatrix& viewMatrix)
         : fViewMatrix(viewMatrix) {
         this->initClassID<MSAAQuadProcessor>();
-        fInPosition = &this->addVertexAttrib(Attribute("inPosition", kVec2f_GrVertexAttribType,
-                                                       kHigh_GrSLPrecision));
-        fInUV = &this->addVertexAttrib(Attribute("inUV", kVec2f_GrVertexAttribType,
-                                                 kHigh_GrSLPrecision));
-        fInColor = &this->addVertexAttrib(Attribute("inColor", kVec4ub_GrVertexAttribType));
+        fInPosition = &this->addVertexAttrib("inPosition", kVec2f_GrVertexAttribType,
+                                             kHigh_GrSLPrecision);
+        fInUV = &this->addVertexAttrib("inUV", kVec2f_GrVertexAttribType, kHigh_GrSLPrecision);
+        fInColor = &this->addVertexAttrib("inColor", kVec4ub_GrVertexAttribType);
         this->setSampleShading(1.0f);
     }
 
@@ -558,7 +550,7 @@ private:
 
 bool GrMSAAPathRenderer::internalDrawPath(GrDrawContext* drawContext,
                                           const GrPaint& paint,
-                                          const GrUserStencilSettings* userStencilSettings,
+                                          const GrUserStencilSettings& userStencilSettings,
                                           const GrClip& clip,
                                           const SkMatrix& viewMatrix,
                                           const GrShape& shape,
@@ -579,7 +571,7 @@ bool GrMSAAPathRenderer::internalDrawPath(GrDrawContext* drawContext,
         if (stencilOnly) {
             passes[0] = &gDirectToStencil;
         } else {
-            passes[0] = userStencilSettings;
+            passes[0] = &userStencilSettings;
         }
         lastPassIsBounds = false;
     } else {
@@ -699,7 +691,7 @@ bool GrMSAAPathRenderer::onDrawPath(const DrawPathArgs& args) {
     }
     return this->internalDrawPath(args.fDrawContext,
                                   *args.fPaint,
-                                  args.fUserStencilSettings,
+                                  *args.fUserStencilSettings,
                                   *args.fClip,
                                   *args.fViewMatrix,
                                   *shape,
@@ -716,7 +708,7 @@ void GrMSAAPathRenderer::onStencilPath(const StencilPathArgs& args) {
     paint.setXPFactory(GrDisableColorXPFactory::Make());
     paint.setAntiAlias(args.fIsAA);
 
-    this->internalDrawPath(args.fDrawContext, paint, &GrUserStencilSettings::kUnused, *args.fClip,
+    this->internalDrawPath(args.fDrawContext, paint, GrUserStencilSettings::kUnused, *args.fClip,
                            *args.fViewMatrix, *args.fShape, true);
 }
 

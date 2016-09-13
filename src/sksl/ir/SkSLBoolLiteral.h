@@ -8,6 +8,7 @@
 #ifndef SKSL_BOOLLITERAL
 #define SKSL_BOOLLITERAL
 
+#include "SkSLContext.h"
 #include "SkSLExpression.h"
 
 namespace SkSL {
@@ -16,8 +17,8 @@ namespace SkSL {
  * Represents 'true' or 'false'.
  */
 struct BoolLiteral : public Expression {
-    BoolLiteral(Position position, bool value)
-    : INHERITED(position, kBoolLiteral_Kind, kBool_Type)
+    BoolLiteral(const Context& context, Position position, bool value)
+    : INHERITED(position, kBoolLiteral_Kind, *context.fBool_Type)
     , fValue(value) {}
 
     std::string description() const override {
@@ -25,7 +26,7 @@ struct BoolLiteral : public Expression {
     }
 
     bool isConstant() const override {
-    	return true;
+        return true;
     }
 
     const bool fValue;

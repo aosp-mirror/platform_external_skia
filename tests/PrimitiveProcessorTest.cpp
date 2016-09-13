@@ -56,12 +56,7 @@ private:
                     fAttribNames.push_back().printf("attr%d", i);
                 }
                 for (auto i = 0; i < numAttribs; ++i) {
-                    Attribute attribute;
-                    attribute.fType = kVec2f_GrVertexAttribType;
-                    attribute.fName = fAttribNames[i].c_str();
-                    attribute.fOffset = 2 * sizeof(float) * i;
-                    attribute.fPrecision = kDefault_GrSLPrecision;
-                    this->addVertexAttrib(attribute);
+                    this->addVertexAttrib(fAttribNames[i].c_str(), kVec2f_GrVertexAttribType);
                 }
             };
             const char* name() const override { return "Dummy GP"; }
@@ -104,8 +99,9 @@ private:
 DEF_GPUTEST_FOR_ALL_CONTEXTS(VertexAttributeCount, reporter, ctxInfo) {
     GrContext* context = ctxInfo.grContext();
 
-    sk_sp<GrDrawContext> drawContext(context->newDrawContext(SkBackingFit::kApprox,
-                                                             1, 1, kRGBA_8888_GrPixelConfig));
+    sk_sp<GrDrawContext> drawContext(context->makeDrawContext(SkBackingFit::kApprox,
+                                                              1, 1, kRGBA_8888_GrPixelConfig,
+                                                              nullptr));
     if (!drawContext) {
         ERRORF(reporter, "Could not create draw context.");
         return;

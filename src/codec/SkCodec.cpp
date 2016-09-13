@@ -11,6 +11,7 @@
 #include "SkColorSpace.h"
 #include "SkData.h"
 #include "SkGifCodec.h"
+#include "SkHalf.h"
 #include "SkIcoCodec.h"
 #include "SkJpegCodec.h"
 #ifdef SK_HAS_PNG_LIBRARY
@@ -107,7 +108,7 @@ SkCodec* SkCodec::NewFromStream(SkStream* stream,
     return nullptr;
 }
 
-SkCodec* SkCodec::NewFromData(SkData* data, SkPngChunkReader* reader) {
+SkCodec* SkCodec::NewFromData(sk_sp<SkData> data, SkPngChunkReader* reader) {
     if (!data) {
         return nullptr;
     }
@@ -117,10 +118,21 @@ SkCodec* SkCodec::NewFromData(SkData* data, SkPngChunkReader* reader) {
 SkCodec::SkCodec(int width, int height, const SkEncodedInfo& info, SkStream* stream,
         sk_sp<SkColorSpace> colorSpace, Origin origin)
     : fEncodedInfo(info)
-    , fSrcInfo(info.makeImageInfo(width, height, colorSpace))
+    , fSrcInfo(info.makeImageInfo(width, height, std::move(colorSpace)))
     , fStream(stream)
     , fNeedsRewind(false)
-    , fColorSpace(std::move(colorSpace))
+    , fOrigin(origin)
+    , fDstInfo()
+    , fOptions()
+    , fCurrScanline(-1)
+{}
+
+SkCodec::SkCodec(const SkEncodedInfo& info, const SkImageInfo& imageInfo, SkStream* stream,
+        Origin origin)
+    : fEncodedInfo(info)
+    , fSrcInfo(imageInfo)
+    , fStream(stream)
+    , fNeedsRewind(false)
     , fOrigin(origin)
     , fDstInfo()
     , fOptions()
@@ -131,8 +143,8 @@ SkCodec::~SkCodec() {}
 
 bool SkCodec::rewindIfNeeded() {
     if (!fStream) {
-        // Some codecs do not have a stream, but they hold others that do. They
-        // must handle rewinding themselves.
+        // Some codecs do not have a stream.  They may hold onto their own data or another codec.
+        // They must handle rewinding themselves.
         return true;
     }
 
@@ -342,8 +354,24 @@ int SkCodec::onOutputScanline(int inputScanline) const {
     }
 }
 
+uint64_t SkCodec::onGetFillValue(const SkImageInfo& dstInfo) const {
+    switch (dstInfo.colorType()) {
+        case kRGBA_F16_SkColorType: {
+            static constexpr uint64_t transparentColor = 0;
+            static constexpr uint64_t opaqueColor = ((uint64_t) SK_Half1) << 48;
+            return (kOpaque_SkAlphaType == fSrcInfo.alphaType()) ? opaqueColor : transparentColor;
+        }
+        default: {
+            // This not only handles the kN32 case, but also k565, kGray8, kIndex8, since
+            // the low bits are zeros.
+            return (kOpaque_SkAlphaType == fSrcInfo.alphaType()) ?
+                    SK_ColorBLACK : SK_ColorTRANSPARENT;
+        }
+    }
+}
+
 static void fill_proc(const SkImageInfo& info, void* dst, size_t rowBytes,
-        uint32_t colorOrIndex, SkCodec::ZeroInitialized zeroInit, SkSampler* sampler) {
+        uint64_t colorOrIndex, SkCodec::ZeroInitialized zeroInit, SkSampler* sampler) {
     if (sampler) {
         sampler->fill(info, dst, rowBytes, colorOrIndex, zeroInit);
     } else {
@@ -355,7 +383,7 @@ void SkCodec::fillIncompleteImage(const SkImageInfo& info, void* dst, size_t row
         ZeroInitialized zeroInit, int linesRequested, int linesDecoded) {
 
     void* fillDst;
-    const uint32_t fillValue = this->getFillValue(info.colorType());
+    const uint64_t fillValue = this->getFillValue(info);
     const int linesRemaining = linesRequested - linesDecoded;
     SkSampler* sampler = this->getSampler(false);
 

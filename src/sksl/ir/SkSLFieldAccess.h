@@ -17,17 +17,27 @@ namespace SkSL {
  * An expression which extracts a field from a struct, as in 'foo.bar'.
  */
 struct FieldAccess : public Expression {
-    FieldAccess(std::unique_ptr<Expression> base, int fieldIndex)
-    : INHERITED(base->fPosition, kFieldAccess_Kind, base->fType->fields()[fieldIndex].fType)
+    enum OwnerKind {
+        kDefault_OwnerKind,
+        // this field access is to a field of an anonymous interface block (and thus, the field name
+        // is actually in global scope, so only the field name needs to be written in GLSL)
+        kAnonymousInterfaceBlock_OwnerKind
+    };
+
+    FieldAccess(std::unique_ptr<Expression> base, int fieldIndex, 
+                OwnerKind ownerKind = kDefault_OwnerKind)
+    : INHERITED(base->fPosition, kFieldAccess_Kind, *base->fType.fields()[fieldIndex].fType)
     , fBase(std::move(base))
-    , fFieldIndex(fieldIndex) {}
+    , fFieldIndex(fieldIndex)
+    , fOwnerKind(ownerKind) {}
 
     virtual std::string description() const override {
-        return fBase->description() + "." + fBase->fType->fields()[fFieldIndex].fName;
+        return fBase->description() + "." + fBase->fType.fields()[fFieldIndex].fName;
     }
 
     const std::unique_ptr<Expression> fBase;
     const int fFieldIndex;
+    const OwnerKind fOwnerKind;
 
     typedef Expression INHERITED;
 };

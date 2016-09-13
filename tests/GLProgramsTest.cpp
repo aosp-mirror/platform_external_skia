@@ -14,6 +14,7 @@
 #include "GrAutoLocaleSetter.h"
 #include "GrBatchTest.h"
 #include "GrContextFactory.h"
+#include "GrContextPriv.h"
 #include "GrDrawContextPriv.h"
 #include "GrDrawingManager.h"
 #include "GrInvariantOutput.h"
@@ -154,12 +155,13 @@ static sk_sp<GrDrawContext> random_draw_context(GrContext* context,
                                                 : kBottomLeft_GrSurfaceOrigin;
     int sampleCnt = random->nextBool() ? SkTMin(4, caps->maxSampleCount()) : 0;
 
-    sk_sp<GrDrawContext> drawContext(context->newDrawContext(SkBackingFit::kExact,
-                                                             kRenderTargetWidth,
-                                                             kRenderTargetHeight,
-                                                             kRGBA_8888_GrPixelConfig,
-                                                             sampleCnt,
-                                                             origin));
+    sk_sp<GrDrawContext> drawContext(context->makeDrawContext(SkBackingFit::kExact,
+                                                              kRenderTargetWidth,
+                                                              kRenderTargetHeight,
+                                                              kRGBA_8888_GrPixelConfig,
+                                                              nullptr,
+                                                              sampleCnt,
+                                                              origin));
     return drawContext;
 }
 
@@ -287,7 +289,7 @@ static const GrUserStencilSettings* get_random_stencil(SkRandom* random) {
 }
 
 bool GrDrawingManager::ProgramUnitTest(GrContext* context, int maxStages) {
-    GrDrawingManager* drawingManager = context->drawingManager();
+    GrDrawingManager* drawingManager = context->contextPriv().drawingManager();
 
     // setup dummy textures
     GrSurfaceDesc dummyDesc;
@@ -342,10 +344,11 @@ bool GrDrawingManager::ProgramUnitTest(GrContext* context, int maxStages) {
     drawingManager->flush();
 
     // Validate that GrFPs work correctly without an input.
-    sk_sp<GrDrawContext> drawContext(context->newDrawContext(SkBackingFit::kExact,
-                                                             kRenderTargetWidth,
-                                                             kRenderTargetHeight,
-                                                             kRGBA_8888_GrPixelConfig));
+    sk_sp<GrDrawContext> drawContext(context->makeDrawContext(SkBackingFit::kExact,
+                                                              kRenderTargetWidth,
+                                                              kRenderTargetHeight,
+                                                              kRGBA_8888_GrPixelConfig,
+                                                              nullptr));
     if (!drawContext) {
         SkDebugf("Could not allocate a drawContext");
         return false;

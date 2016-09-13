@@ -8,11 +8,13 @@
 #include "SkBitmap.h"
 #include "SkCodec.h"
 #include "SkData.h"
+#include "SkImage.h"
 
-inline bool decode_file(const char* filename, SkBitmap* bitmap,
-        SkColorType colorType = kN32_SkColorType, bool requireUnpremul = false) {
+static inline bool decode_file(const char* filename, SkBitmap* bitmap,
+                               SkColorType colorType = kN32_SkColorType,
+                               bool requireUnpremul = false) {
     SkASSERT(kIndex_8_SkColorType != colorType);
-    SkAutoTUnref<SkData> data(SkData::NewFromFileName(filename));
+    sk_sp<SkData> data(SkData::MakeFromFileName(filename));
     SkAutoTDelete<SkCodec> codec(SkCodec::NewFromData(data));
     if (!codec) {
         return false;
@@ -28,4 +30,9 @@ inline bool decode_file(const char* filename, SkBitmap* bitmap,
     }
 
     return SkCodec::kSuccess == codec->getPixels(info, bitmap->getPixels(), bitmap->rowBytes());
+}
+
+static inline sk_sp<SkImage> decode_file(const char filename[]) {
+    sk_sp<SkData> data(SkData::MakeFromFileName(filename));
+    return data ? SkImage::MakeFromEncoded(data) : nullptr;
 }

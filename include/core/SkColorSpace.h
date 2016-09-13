@@ -19,39 +19,34 @@ public:
     /**
      *  Common, named profiles that we can recognize.
      */
-    enum Named {
-        kUnknown_Named,
+    enum Named : uint8_t {
+        /**
+         *  By far the most common color space.
+         *  This is the default space for images, unmarked content, and monitors.
+         */
         kSRGB_Named,
+
+        /**
+         *  Very common wide gamut color space.
+         *  Often used by images and monitors.
+         */
         kAdobeRGB_Named,
     };
 
-    enum GammaNamed {
-        kLinear_GammaNamed,
+    enum RenderTargetGamma : uint8_t {
+        kLinear_RenderTargetGamma,
 
         /**
-         *  Gamma curve is a close match to the canonical sRGB curve, which has
-         *  a short linear segment followed by a 2.4f exponential.
+         *  Transfer function is the canonical sRGB curve, which has a short linear segment
+         *  followed by a 2.4f exponential.
          */
-        kSRGB_GammaNamed,
-
-        /**
-         *  Gamma curve is a close match to the 2.2f exponential curve.  This is
-         *  used by Adobe RGB profiles and is common on monitors as well.
-         */
-        k2Dot2Curve_GammaNamed,
-
-        /**
-         *  Gamma is represented by a look-up table, a parametric curve, or an uncommon
-         *  exponential curve.  Or there is an additional pre-processing step before the
-         *  applying the gamma.
-         */
-        kNonStandard_GammaNamed,
+        kSRGB_RenderTargetGamma,
     };
 
     /**
-     *  Create an SkColorSpace from the src gamma and a transform from src gamut to D50 XYZ.
+     *  Create an SkColorSpace from a transfer function and a color gamut transform to D50 XYZ.
      */
-    static sk_sp<SkColorSpace> NewRGB(GammaNamed gammaNamed, const SkMatrix44& toXYZD50);
+    static sk_sp<SkColorSpace> NewRGB(RenderTargetGamma gamma, const SkMatrix44& toXYZD50);
 
     /**
      *  Create a common, named SkColorSpace.
@@ -63,19 +58,25 @@ public:
      */
     static sk_sp<SkColorSpace> NewICC(const void*, size_t);
 
-    GammaNamed gammaNamed() const { return fGammaNamed; }
+    /**
+     *  Create an SkColorSpace with the same gamut as this color space, but with linear gamma.
+     */
+    sk_sp<SkColorSpace> makeLinearGamma();
 
     /**
      *  Returns the matrix used to transform src gamut to XYZ D50.
      */
-    const SkMatrix44& xyz() const { return fToXYZD50; }
+    const SkMatrix44& toXYZD50() const { return fToXYZD50; }
 
     /**
      *  Returns true if the color space gamma is near enough to be approximated as sRGB.
      */
-    bool gammaCloseToSRGB() const {
-        return kSRGB_GammaNamed == fGammaNamed || k2Dot2Curve_GammaNamed == fGammaNamed;
-    }
+    bool gammaCloseToSRGB() const;
+
+    /**
+     *  Returns true if the color space gamma is linear.
+     */
+    bool gammaIsLinear() const;
 
     /**
      *  Returns nullptr on failure.  Fails when we fallback to serializing ICC data and
@@ -83,14 +84,24 @@ public:
      */
     sk_sp<SkData> serialize() const;
 
+    /**
+     *  If |memory| is nullptr, returns the size required to serialize.
+     *  Otherwise, serializes into |memory| and returns the size.
+     */
+    size_t writeToMemory(void* memory) const;
+
     static sk_sp<SkColorSpace> Deserialize(const void* data, size_t length);
 
-protected:
-    SkColorSpace(GammaNamed gammaNamed, const SkMatrix44& toXYZD50, Named named);
+    /**
+     *  If both are null, we return true.  If one is null and the other is not, we return false.
+     *  If both are non-null, we do a deeper compare.
+     */
+    static bool Equals(const SkColorSpace* src, const SkColorSpace* dst);
 
-    const GammaNamed fGammaNamed;
+protected:
+    SkColorSpace(const SkMatrix44& toXYZD50);
+
     const SkMatrix44 fToXYZD50;
-    const Named      fNamed;
 };
 
 #endif

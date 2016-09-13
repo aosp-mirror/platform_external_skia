@@ -23,11 +23,6 @@ class SkPathWriter;
 
 class SkOpSegment {
 public:
-    enum AliasMatch {
-        kNoAliasMatch,
-        kAllowAliasMatch,
-    };
-
     bool operator<(const SkOpSegment& rh) const {
         return fBounds.fTop < rh.fBounds.fTop;
     }
@@ -74,6 +69,7 @@ public:
     bool addExpanded(double newT, const SkOpSpanBase* test, bool* startOver);
 
     SkOpSegment* addLine(SkPoint pts[2], SkOpContour* parent) {
+        SkASSERT(pts[0] != pts[1]);
         init(pts, 1, parent, SkPath::kLine_Verb);
         fBounds.set(pts, 2);
         return this;
@@ -96,7 +92,7 @@ public:
         return this;
     }
 
-    SkOpPtT* addT(double t, AliasMatch, bool* allocated);
+    SkOpPtT* addT(double t);
 
     template<typename T> T* allocateArray(int count) {
         return SkOpTAllocator<T>::AllocateArray(this->globalState()->allocator(), count);
@@ -112,6 +108,7 @@ public:
 
     void calcAngles();
     bool collapsed() const;
+    bool collapsed(double startT, double endT) const;
     static void ComputeOneSum(const SkOpAngle* baseAngle, SkOpAngle* nextAngle,
                               SkOpAngle::IncludeType );
     static void ComputeOneSumReverse(SkOpAngle* baseAngle, SkOpAngle* nextAngle,
@@ -132,7 +129,9 @@ public:
     }
 
     void debugAddAngle(double startT, double endT);
-    const SkOpPtT* debugAddT(double t, AliasMatch , bool* allocated) const;
+#if DEBUG_COINCIDENCE_VERBOSE
+    const SkOpPtT* debugAddT(double t, const char* id, SkPathOpsDebug::GlitchLog* ) const;
+#endif
     const SkOpAngle* debugAngle(int id) const;
 #if DEBUG_ANGLE
     void debugCheckAngleCoin() const;
@@ -143,7 +142,7 @@ public:
     void debugClearOne(const SkOpSpan* span, const char* id, SkPathOpsDebug::GlitchLog* glitches) const;
 #endif
     const SkOpCoincidence* debugCoincidence() const;
-    SkOpContour* debugContour(int id);
+    SkOpContour* debugContour(int id) const;
 
     int debugID() const {
         return SkDEBUGRELEASE(fID, -1);
@@ -170,8 +169,13 @@ public:
     const SkOpSpanBase* debugSpan(int id) const;
     void debugValidate() const;
 
+#if DEBUG_COINCIDENCE_ORDER
+    void debugResetCoinT() const; 
+    void debugSetCoinT(int, SkScalar ) const; 
+#endif
+
 #if DEBUG_COINCIDENCE
-    static void SkOpSegment::DebugClearVisited(const SkOpSpanBase* span);
+    static void DebugClearVisited(const SkOpSpanBase* span);
 
     bool debugVisited() const {
         if (!fDebugVisited) {
@@ -186,7 +190,7 @@ public:
     double distSq(double t, const SkOpAngle* opp) const;
 
     bool done() const {
-        SkASSERT(this->globalState()->debugSkipAssert() || fDoneCount <= fCount);
+        SkOPASSERT(fDoneCount <= fCount);
         return fDoneCount == fCount;
     }
 
@@ -230,7 +234,9 @@ public:
     void init(SkPoint pts[], SkScalar weight, SkOpContour* parent, SkPath::Verb verb);
 
     SkOpSpan* insert(SkOpSpan* prev) {
-        SkOpSpan* result = SkOpTAllocator<SkOpSpan>::Allocate(this->globalState()->allocator());
+        SkOpGlobalState* globalState = this->globalState();
+        globalState->setAllocatedOpSpan();
+        SkOpSpan* result = SkOpTAllocator<SkOpSpan>::Allocate(globalState->allocator());
         SkOpSpanBase* next = prev->next();
         result->setPrev(prev);
         prev->setNext(result);
@@ -278,8 +284,7 @@ public:
     void markDone(SkOpSpan* );
     bool markWinding(SkOpSpan* , int winding);
     bool markWinding(SkOpSpan* , int winding, int oppWinding);
-    bool match(const SkOpPtT* span, const SkOpSegment* parent, double t, const SkPoint& pt,
-               AliasMatch ) const;
+    bool match(const SkOpPtT* span, const SkOpSegment* parent, double t, const SkPoint& pt) const;
     bool missingCoincidence();
     bool moveMultiples();
     void moveNearby();
@@ -396,7 +401,6 @@ public:
             const SkOpSpanBase* spanBase, const SkOpSegment* opp) const;
 
     void undoneSpan(SkOpSpanBase** start, SkOpSpanBase** end);
-    bool uniqueT(double t, AliasMatch allowAlias) const;
     int updateOppWinding(const SkOpSpanBase* start, const SkOpSpanBase* end) const;
     int updateOppWinding(const SkOpAngle* angle) const;
     int updateOppWindingReverse(const SkOpAngle* angle) const;
@@ -441,6 +445,14 @@ private:
     bool fVisited;  // used by missing coincidence check
 #if DEBUG_COINCIDENCE
     mutable bool fDebugVisited;  // used by debug missing coincidence check
+#endif
+#if DEBUG_COINCIDENCE_ORDER
+    mutable int fDebugBaseIndex;
+    mutable SkScalar fDebugBaseMin;  // if > 0, the 1st t value in this seg vis-a-vis the ref seg
+    mutable SkScalar fDebugBaseMax;
+    mutable int fDebugLastIndex;
+    mutable SkScalar fDebugLastMin;  // if > 0, the last t -- next t val - base has same sign
+    mutable SkScalar fDebugLastMax;
 #endif
     SkDEBUGCODE(int fID);
 };

@@ -7,6 +7,7 @@
 
 #include "GrDrawTarget.h"
 
+#include "GrAppliedClip.h"
 #include "GrAuditTrail.h"
 #include "GrCaps.h"
 #include "GrDrawContext.h"
@@ -15,6 +16,7 @@
 #include "GrPath.h"
 #include "GrPipeline.h"
 #include "GrMemoryPool.h"
+#include "GrPipelineBuilder.h"
 #include "GrRenderTarget.h"
 #include "GrResourceProvider.h"
 #include "GrRenderTargetPriv.h"
@@ -25,6 +27,7 @@
 
 #include "SkStrokeRec.h"
 
+#include "batches/GrClearBatch.h"
 #include "batches/GrClearStencilClipBatch.h"
 #include "batches/GrCopySurfaceBatch.h"
 #include "batches/GrDiscardBatch.h"
@@ -43,13 +46,13 @@ static const int kDefaultMaxBatchLookahead = 10;
 
 GrDrawTarget::GrDrawTarget(GrRenderTarget* rt, GrGpu* gpu, GrResourceProvider* resourceProvider,
                            GrAuditTrail* auditTrail, const Options& options)
-    : fGpu(SkRef(gpu))
+    : fLastFullClearBatch(nullptr)
+    , fGpu(SkRef(gpu))
     , fResourceProvider(resourceProvider)
     , fAuditTrail(auditTrail)
     , fFlags(0)
-    , fRenderTarget(rt)
-    , fInstancedRendering(fGpu->createInstancedRenderingIfSupported()) {
-    // TODO: Stop extracting the context (currently needed by GrClipMaskManager)
+    , fRenderTarget(rt) {
+    // TODO: Stop extracting the context (currently needed by GrClip)
     fContext = fGpu->getContext();
 
     fClipBatchToBounds = options.fClipBatchToBounds;
@@ -58,6 +61,10 @@ GrDrawTarget::GrDrawTarget(GrRenderTarget* rt, GrGpu* gpu, GrResourceProvider* r
                                                           options.fMaxBatchLookback;
     fMaxBatchLookahead = (options.fMaxBatchLookahead < 0) ? kDefaultMaxBatchLookahead :
                                                            options.fMaxBatchLookahead;
+
+    if (GrCaps::InstancedSupport::kNone != this->caps()->instancedSupport()) {
+        fInstancedRendering.reset(fGpu->createInstancedRendering());
+    }
 
     rt->setLastDrawTarget(this);
 
@@ -109,7 +116,7 @@ void GrDrawTarget::addDependency(GrSurface* dependedOn) {
 #ifdef SK_DEBUG
 void GrDrawTarget::dump() const {
     SkDebugf("--------------------------------------------------------------\n");
-    SkDebugf("node: %d -> RT: %d\n", fDebugID, fRenderTarget ? fRenderTarget->getUniqueID() : -1);
+    SkDebugf("node: %d -> RT: %d\n", fDebugID, fRenderTarget ? fRenderTarget->uniqueID() : -1);
     SkDebugf("relies On (%d): ", fDependencies.count());
     for (int i = 0; i < fDependencies.count(); ++i) {
         SkDebugf("%d, ", fDependencies[i]->fDebugID);
@@ -172,7 +179,7 @@ bool GrDrawTarget::setupDstReadIfNecessary(const GrPipelineBuilder& pipelineBuil
     // MSAA consideration: When there is support for reading MSAA samples in the shader we could
     // have per-sample dst values by making the copy multisampled.
     GrSurfaceDesc desc;
-    if (!fGpu->initCopySurfaceDstDesc(rt, &desc)) {
+    if (!fGpu->initDescForDstCopy(rt, &desc)) {
         desc.fOrigin = kDefault_GrSurfaceOrigin;
         desc.fFlags = kRenderTarget_GrSurfaceFlag;
         desc.fConfig = rt->config();
@@ -214,7 +221,10 @@ void GrDrawTarget::prepareBatches(GrBatchFlushState* flushState) {
     }
 }
 
-void GrDrawTarget::drawBatches(GrBatchFlushState* flushState) {
+bool GrDrawTarget::drawBatches(GrBatchFlushState* flushState) {
+    if (0 == fRecordedBatches.count()) {
+        return false;
+    }
     // Draw all the generated geometry.
     SkRandom random;
     GrRenderTarget* currentRT = nullptr;
@@ -276,9 +286,11 @@ void GrDrawTarget::drawBatches(GrBatchFlushState* flushState) {
     }
 
     fGpu->finishDrawTarget();
+    return true;
 }
 
 void GrDrawTarget::reset() {
+    fLastFullClearBatch = nullptr;
     fRecordedBatches.reset();
     if (fInstancedRendering) {
         fInstancedRendering->endFlush();
@@ -311,51 +323,38 @@ static void batch_bounds(SkRect* bounds, const GrBatch* batch) {
     }
 }
 
-static inline bool intersect(SkRect* out, const SkRect& a, const SkRect& b) {
-    SkASSERT(a.fLeft <= a.fRight && a.fTop <= a.fBottom);
-    SkASSERT(b.fLeft <= b.fRight && b.fTop <= b.fBottom);
-    out->fLeft   = SkTMax(a.fLeft,   b.fLeft);
-    out->fTop    = SkTMax(a.fTop,    b.fTop);
-    out->fRight  = SkTMin(a.fRight,  b.fRight);
-    out->fBottom = SkTMin(a.fBottom, b.fBottom);
-    return (out->fLeft <= out->fRight && out->fTop <= out->fBottom);
-}
-
 void GrDrawTarget::drawBatch(const GrPipelineBuilder& pipelineBuilder,
                              GrDrawContext* drawContext,
                              const GrClip& clip,
                              GrDrawBatch* batch) {
     // Setup clip
-    GrAppliedClip appliedClip;
     SkRect bounds;
     batch_bounds(&bounds, batch);
-    if (!clip.apply(fContext, drawContext, &bounds,
-                    pipelineBuilder.isHWAntialias(), pipelineBuilder.hasUserStencilSettings(),
-                    &appliedClip)) {
+    GrAppliedClip appliedClip(bounds);
+    if (!clip.apply(fContext, drawContext, pipelineBuilder.isHWAntialias(),
+                    pipelineBuilder.hasUserStencilSettings(), &appliedClip)) {
         return;
     }
 
     // TODO: this is the only remaining usage of the AutoRestoreFragmentProcessorState - remove it
     GrPipelineBuilder::AutoRestoreFragmentProcessorState arfps;
-    if (appliedClip.getClipCoverageFragmentProcessor()) {
+    if (appliedClip.clipCoverageFragmentProcessor()) {
         arfps.set(&pipelineBuilder);
-        arfps.addCoverageFragmentProcessor(sk_ref_sp(appliedClip.getClipCoverageFragmentProcessor()));
+        arfps.addCoverageFragmentProcessor(sk_ref_sp(appliedClip.clipCoverageFragmentProcessor()));
     }
 
-    GrPipeline::CreateArgs args;
-    args.fPipelineBuilder = &pipelineBuilder;
-    args.fDrawContext = drawContext;
-    args.fCaps = this->caps();
-    args.fScissor = &appliedClip.scissorState();
-    args.fHasStencilClip = appliedClip.hasStencilClip();
     if (pipelineBuilder.hasUserStencilSettings() || appliedClip.hasStencilClip()) {
         if (!fResourceProvider->attachStencilAttachment(drawContext->accessRenderTarget())) {
             SkDebugf("ERROR creating stencil attachment. Draw skipped.\n");
             return;
         }
     }
+
+    GrPipeline::CreateArgs args;
+    args.fPipelineBuilder = &pipelineBuilder;
+    args.fDrawContext = drawContext;
+    args.fCaps = this->caps();
     batch->getPipelineOptimizations(&args.fOpts);
-    GrScissorState finalScissor;
     if (args.fOpts.fOverrides.fUsePLSDstRead || fClipBatchToBounds) {
         GrGLIRect viewport;
         viewport.fLeft = 0;
@@ -371,14 +370,9 @@ void GrDrawTarget::drawBatch(const GrPipelineBuilder& pipelineBuilder,
                                viewport.fWidth);
         ibounds.fBottom = SkTPin(SkScalarCeilToInt(batch->bounds().fBottom), viewport.fBottom,
                                 viewport.fHeight);
-        if (appliedClip.scissorState().enabled()) {
-            const SkIRect& scissorRect = appliedClip.scissorState().rect();
-            if (!ibounds.intersect(scissorRect)) {
-                return;
-            }
+        if (!appliedClip.addScissor(ibounds)) {
+            return;
         }
-        finalScissor.set(ibounds);
-        args.fScissor = &finalScissor;
     }
     args.fOpts.fColorPOI.completeCalculations(
         sk_sp_address_as_pointer_address(pipelineBuilder.fColorFragmentProcessors.begin()),
@@ -386,6 +380,9 @@ void GrDrawTarget::drawBatch(const GrPipelineBuilder& pipelineBuilder,
     args.fOpts.fCoveragePOI.completeCalculations(
         sk_sp_address_as_pointer_address(pipelineBuilder.fCoverageFragmentProcessors.begin()),
         pipelineBuilder.numCoverageFragmentProcessors());
+    args.fScissor = &appliedClip.scissorState();
+    args.fWindowRectsState = &appliedClip.windowRectsState();
+    args.fHasStencilClip = appliedClip.hasStencilClip();
     if (!this->setupDstReadIfNecessary(pipelineBuilder, drawContext->accessRenderTarget(),
                                        clip, args.fOpts,
                                        &args.fDstTexture, batch->bounds())) {
@@ -400,14 +397,11 @@ void GrDrawTarget::drawBatch(const GrPipelineBuilder& pipelineBuilder,
     SkASSERT(fRenderTarget);
     batch->pipeline()->addDependenciesTo(fRenderTarget);
 #endif
-    SkRect clippedBounds;
-    SkAssertResult(intersect(&clippedBounds, bounds, appliedClip.deviceBounds()));
-    this->recordBatch(batch, clippedBounds);
+    this->recordBatch(batch, appliedClip.clippedDrawBounds());
 }
 
 void GrDrawTarget::stencilPath(GrDrawContext* drawContext,
                                const GrClip& clip,
-                               const GrUserStencilSettings* ss,
                                bool useHWAA,
                                const SkMatrix& viewMatrix,
                                const GrPath* path) {
@@ -415,16 +409,20 @@ void GrDrawTarget::stencilPath(GrDrawContext* drawContext,
     SkASSERT(path);
     SkASSERT(this->caps()->shaderCaps()->pathRenderingSupport());
 
+    // FIXME: Use path bounds instead of this WAR once
+    // https://bugs.chromium.org/p/skia/issues/detail?id=5640 is resolved.
+    SkRect bounds = SkRect::MakeIWH(drawContext->width(), drawContext->height());
+
     // Setup clip
-    GrAppliedClip appliedClip;
-    if (!clip.apply(fContext, drawContext, nullptr, useHWAA, SkToBool(ss), &appliedClip)) {
+    GrAppliedClip appliedClip(bounds);
+    if (!clip.apply(fContext, drawContext, useHWAA, true, &appliedClip)) {
         return;
     }
     // TODO: respect fClipBatchToBounds if we ever start computing bounds here.
 
     // Coverage AA does not make sense when rendering to the stencil buffer. The caller should never
     // attempt this in a situation that would require coverage AA.
-    SkASSERT(!appliedClip.getClipCoverageFragmentProcessor());
+    SkASSERT(!appliedClip.clipCoverageFragmentProcessor());
 
     GrStencilAttachment* stencilAttachment = fResourceProvider->attachStencilAttachment(
                                                 drawContext->accessRenderTarget());
@@ -441,7 +439,7 @@ void GrDrawTarget::stencilPath(GrDrawContext* drawContext,
                                                 appliedClip.scissorState(),
                                                 drawContext->accessRenderTarget(),
                                                 path);
-    this->recordBatch(batch, appliedClip.deviceBounds());
+    this->recordBatch(batch, appliedClip.clippedDrawBounds());
     batch->unref();
 }
 
@@ -449,7 +447,27 @@ void GrDrawTarget::addBatch(sk_sp<GrBatch> batch) {
     this->recordBatch(batch.get(), batch->bounds());
 }
 
+void GrDrawTarget::fullClear(GrRenderTarget* renderTarget, GrColor color) {
+    // Currently this just inserts or updates the last clear batch. However, once in MDB this can
+    // remove all the previously recorded batches and change the load op to clear with supplied
+    // color.
+    if (fLastFullClearBatch &&
+        fLastFullClearBatch->renderTargetUniqueID() == renderTarget->uniqueID()) {
+        // As currently implemented, fLastFullClearBatch should be the last batch because we would
+        // have cleared it when another batch was recorded.
+        SkASSERT(fRecordedBatches.back().fBatch.get() == fLastFullClearBatch);
+        fLastFullClearBatch->setColor(color);
+        return;
+    }
+    sk_sp<GrClearBatch> batch(GrClearBatch::Make(GrFixedClip::Disabled(), color, renderTarget));
+    if (batch.get() == this->recordBatch(batch.get(), batch->bounds())) {
+        fLastFullClearBatch = batch.get();
+    }
+}
+
 void GrDrawTarget::discard(GrRenderTarget* renderTarget) {
+    // Currently this just inserts a discard batch. However, once in MDB this can remove all the
+    // previously recorded batches and change the load op to discard.
     if (this->caps()->discardRenderTargetSupport()) {
         GrBatch* batch = new GrDiscardBatch(renderTarget);
         this->recordBatch(batch, batch->bounds());
@@ -490,7 +508,7 @@ static void join(SkRect* out, const SkRect& a, const SkRect& b) {
     out->fBottom = SkTMax(a.fBottom, b.fBottom);
 }
 
-void GrDrawTarget::recordBatch(GrBatch* batch, const SkRect& clippedBounds) {
+GrBatch* GrDrawTarget::recordBatch(GrBatch* batch, const SkRect& clippedBounds) {
     // A closed drawTarget should never receive new/more batches
     SkASSERT(!this->isClosed());
 
@@ -527,7 +545,7 @@ void GrDrawTarget::recordBatch(GrBatch* batch, const SkRect& clippedBounds) {
                 GR_AUDIT_TRAIL_BATCHING_RESULT_COMBINED(fAuditTrail, candidate, batch);
                 join(&fRecordedBatches.fromBack(i).fClippedBounds,
                      fRecordedBatches.fromBack(i).fClippedBounds, clippedBounds);
-                return;
+                return candidate;
             }
             // Stop going backwards if we would cause a painter's order violation.
             const SkRect& candidateBounds = fRecordedBatches.fromBack(i).fClippedBounds;
@@ -547,9 +565,14 @@ void GrDrawTarget::recordBatch(GrBatch* batch, const SkRect& clippedBounds) {
     }
     GR_AUDIT_TRAIL_BATCHING_RESULT_NEW(fAuditTrail, batch);
     fRecordedBatches.emplace_back(RecordedBatch{sk_ref_sp(batch), clippedBounds});
+    fLastFullClearBatch = nullptr;
+    return batch;
 }
 
 void GrDrawTarget::forwardCombine() {
+    if (fMaxBatchLookahead <= 0) {
+        return;
+    }
     for (int i = 0; i < fRecordedBatches.count() - 2; ++i) {
         GrBatch* batch = fRecordedBatches[i].fBatch.get();
         const SkRect& batchBounds = fRecordedBatches[i].fClippedBounds;
@@ -594,8 +617,10 @@ void GrDrawTarget::forwardCombine() {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-void GrDrawTarget::clearStencilClip(const SkIRect& rect, bool insideClip, GrRenderTarget* rt) {
-    GrBatch* batch = new GrClearStencilClipBatch(rect, insideClip, rt);
+void GrDrawTarget::clearStencilClip(const GrFixedClip& clip,
+                                    bool insideStencilMask,
+                                    GrRenderTarget* rt) {
+    GrBatch* batch = new GrClearStencilClipBatch(clip, insideStencilMask, rt);
     this->recordBatch(batch, batch->bounds());
     batch->unref();
 }

@@ -17,8 +17,8 @@
 #include "GrGLTexture.h"
 #include "GrGLVertexArray.h"
 #include "GrGpu.h"
-#include "GrPipelineBuilder.h"
 #include "GrTypes.h"
+#include "GrWindowRectsState.h"
 #include "GrXferProcessor.h"
 #include "SkTArray.h"
 #include "SkTypes.h"
@@ -56,8 +56,6 @@ public:
         return static_cast<GrGLPathRendering*>(pathRendering());
     }
 
-    gr_instanced::InstancedRendering* createInstancedRenderingIfSupported() override;
-
     // Used by GrGLProgram to configure OpenGL state.
     void bindTexture(int unitIdx, const GrTextureParams& params, bool allowSRGBInputs,
                      GrGLTexture* texture);
@@ -74,7 +72,7 @@ public:
                               GrPixelConfig srcConfig, DrawPreference*,
                               WritePixelTempDrawInfo*) override;
 
-    bool initCopySurfaceDstDesc(const GrSurface* src, GrSurfaceDesc* desc) const override;
+    bool initDescForDstCopy(const GrRenderTarget* src, GrSurfaceDesc* desc) const override;
 
     // These functions should be used to bind GL objects. They track the GL state and skip redundant
     // bindings. Making the equivalent glBind calls directly will confuse the state tracking.
@@ -108,12 +106,12 @@ public:
     // The GrGLGpuCommandBuffer does not buffer up draws before submitting them to the gpu.
     // Thus this is the implementation of the clear call for the corresponding passthrough function
     // on GrGLGpuCommandBuffer.
-    void clear(const SkIRect& rect, GrColor color, GrRenderTarget* renderTarget);
+    void clear(const GrFixedClip&, GrColor, GrRenderTarget*);
 
     // The GrGLGpuCommandBuffer does not buffer up draws before submitting them to the gpu.
     // Thus this is the implementation of the clearStencil call for the corresponding passthrough
     // function on GrGLGpuCommandBuffer.
-    void clearStencilClip(const SkIRect& rect, bool insideClip, GrRenderTarget* renderTarget);
+    void clearStencilClip(const GrFixedClip&, bool insideStencilMask, GrRenderTarget*);
 
     const GrGLContext* glContextForTesting() const override {
         return &this->glContext();
@@ -166,6 +164,9 @@ private:
     GrRenderTarget* onWrapBackendRenderTarget(const GrBackendRenderTargetDesc&,
                                               GrWrapOwnership) override;
     GrRenderTarget* onWrapBackendTextureAsRenderTarget(const GrBackendTextureDesc&) override;
+
+    gr_instanced::InstancedRendering* onCreateInstancedRendering() override;
+
     // Given a GrPixelConfig return the index into the stencil format array on GrGLCaps to a
     // compatible stencil format, or negative if there is no compatible stencil format.
     int getCompatibleStencilIndex(GrPixelConfig config);
@@ -303,7 +304,7 @@ private:
     };
 
     void flushColorWrite(bool writeColor);
-    void flushDrawFace(GrPipelineBuilder::DrawFace face);
+    void flushDrawFace(GrDrawFace face);
 
     // flushes the scissor. see the note on flushBoundTextureAndParams about
     // flushing the scissor after that function is called.
@@ -313,6 +314,9 @@ private:
 
     // disables the scissor
     void disableScissor();
+
+    void flushWindowRectangles(const GrWindowRectsState&, const GrGLRenderTarget*);
+    void disableWindowRectangles();
 
     void initFSAASupport();
 
@@ -419,6 +423,39 @@ private:
         }
     } fHWScissorSettings;
 
+    class {
+    public:
+        bool valid() const { return kInvalidSurfaceOrigin != fRTOrigin; }
+        void invalidate() { fRTOrigin = kInvalidSurfaceOrigin; }
+        bool knownDisabled() const { return this->valid() && !fWindowState.enabled(); }
+        void setDisabled() { fRTOrigin = kDefault_GrSurfaceOrigin, fWindowState.setDisabled(); }
+
+        void set(GrSurfaceOrigin rtOrigin, const GrGLIRect& viewport,
+                 const GrWindowRectsState& windowState) {
+            fRTOrigin = rtOrigin;
+            fViewport = viewport;
+            fWindowState = windowState;
+        }
+
+        bool knownEqualTo(GrSurfaceOrigin rtOrigin, const GrGLIRect& viewport,
+                          const GrWindowRectsState& windowState) const {
+            if (!this->valid()) {
+                return false;
+            }
+            if (fWindowState.numWindows() && (fRTOrigin != rtOrigin || fViewport != viewport)) {
+                return false;
+            }
+            return fWindowState.cheapEqualTo(windowState);
+        }
+
+    private:
+        enum { kInvalidSurfaceOrigin = -1 };
+
+        int                  fRTOrigin;
+        GrGLIRect            fViewport;
+        GrWindowRectsState   fWindowState;
+    } fHWWindowRectsState;
+
     GrGLIRect                   fHWViewport;
 
     /**
@@ -516,7 +553,7 @@ private:
     TriState                    fHWStencilTestEnabled;
 
 
-    GrPipelineBuilder::DrawFace fHWDrawFace;
+    GrDrawFace                  fHWDrawFace;
     TriState                    fHWWriteToColor;
     uint32_t                    fHWBoundRenderTargetUniqueID;
     TriState                    fHWSRGBFramebuffer;

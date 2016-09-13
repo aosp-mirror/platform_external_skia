@@ -58,8 +58,6 @@ public:
 
     static SkBitmapDevice* Create(const SkImageInfo&, const SkSurfaceProps&);
 
-    SkImageInfo imageInfo() const override;
-
 protected:
     bool onShouldDisableLCD(const SkPaint&) const override;
 
@@ -135,7 +133,11 @@ protected:
         altered. The config/width/height/rowbytes must remain unchanged.
         @return the device contents as a bitmap
     */
+#ifdef SK_SUPPORT_LEGACY_ACCESSBITMAP
     const SkBitmap& onAccessBitmap() override;
+#else
+    const SkBitmap& onAccessBitmap();
+#endif
 
     SkPixelRef* getPixelRef() const { return fBitmap.pixelRef(); }
     // just for subclasses, to assign a custom pixelref
@@ -148,8 +150,6 @@ protected:
     bool onWritePixels(const SkImageInfo&, const void*, size_t, int, int) override;
     bool onPeekPixels(SkPixmap*) override;
     bool onAccessPixels(SkPixmap*) override;
-    void onAttachToCanvas(SkCanvas*) override;
-    void onDetachFromCanvas() override;
 
 private:
     friend class SkCanvas;

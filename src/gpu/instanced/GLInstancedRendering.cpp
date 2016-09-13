@@ -31,27 +31,22 @@ private:
     typedef Batch INHERITED;
 };
 
-GLInstancedRendering* GLInstancedRendering::CreateIfSupported(GrGLGpu* gpu) {
-#ifndef SK_BUILD_FOR_MAC
-    // Only whitelisting on Mac for now. Once we've been able to work through the various issues on
-    // other platforms we can enable more generally.
-    return nullptr;
-#endif
-    const GrGLCaps& glCaps = gpu->glCaps();
-    AntialiasMode lastSupportedAAMode;
+GrCaps::InstancedSupport GLInstancedRendering::CheckSupport(const GrGLCaps& glCaps) {
+    // This method is only intended to be used for initializing fInstancedSupport in the caps.
+    SkASSERT(GrCaps::InstancedSupport::kNone == glCaps.instancedSupport());
     if (!glCaps.vertexArrayObjectSupport() ||
-        !glCaps.drawIndirectSupport() ||
-        !InstanceProcessor::IsSupported(*glCaps.glslCaps(), glCaps, &lastSupportedAAMode)) {
-        return nullptr;
+        (!glCaps.drawIndirectSupport() && !glCaps.drawInstancedSupport())) {
+        return GrCaps::InstancedSupport::kNone;
     }
-    return new GLInstancedRendering(gpu, lastSupportedAAMode);
+    return InstanceProcessor::CheckSupport(*glCaps.glslCaps(), glCaps);
 }
 
-GLInstancedRendering::GLInstancedRendering(GrGLGpu* gpu, AntialiasMode lastSupportedAAMode)
-    : INHERITED(gpu, lastSupportedAAMode, gpu->glCaps().canDrawIndirectToFloat()),
+GLInstancedRendering::GLInstancedRendering(GrGLGpu* gpu)
+    : INHERITED(gpu),
       fVertexArrayID(0),
       fGLDrawCmdsInfo(0),
       fInstanceAttribsBufferUniqueId(SK_InvalidUniqueID) {
+    SkASSERT(GrCaps::InstancedSupport::kNone != this->gpu()->caps()->instancedSupport());
 }
 
 GLInstancedRendering::~GLInstancedRendering() {
@@ -124,23 +119,32 @@ void GLInstancedRendering::onBeginFlush(GrResourceProvider* rp) {
     }
 
     SkASSERT(!fDrawIndirectBuffer);
-    fDrawIndirectBuffer.reset(
-        rp->createBuffer(sizeof(GrGLDrawElementsIndirectCommand) * numGLDrawCmds,
-                         kDrawIndirect_GrBufferType, kDynamic_GrAccessPattern,
-                         GrResourceProvider::kNoPendingIO_Flag |
-                         GrResourceProvider::kRequireGpuMemory_Flag));
-    if (!fDrawIndirectBuffer) {
-        return;
+    if (this->glGpu()->glCaps().drawIndirectSupport()) {
+        fDrawIndirectBuffer.reset(
+            rp->createBuffer(sizeof(GrGLDrawElementsIndirectCommand) * numGLDrawCmds,
+                             kDrawIndirect_GrBufferType, kDynamic_GrAccessPattern,
+                             GrResourceProvider::kNoPendingIO_Flag |
+                             GrResourceProvider::kRequireGpuMemory_Flag));
+        if (!fDrawIndirectBuffer) {
+            return;
+        }
     }
 
     Instance* glMappedInstances = static_cast<Instance*>(fInstanceBuffer->map());
+    SkASSERT(glMappedInstances);
     int glInstancesIdx = 0;
 
-    auto* glMappedCmds = static_cast<GrGLDrawElementsIndirectCommand*>(fDrawIndirectBuffer->map());
+    GrGLDrawElementsIndirectCommand* glMappedCmds = nullptr;
     int glDrawCmdsIdx = 0;
+    if (fDrawIndirectBuffer) {
+        glMappedCmds = static_cast<GrGLDrawElementsIndirectCommand*>(fDrawIndirectBuffer->map());
+        SkASSERT(glMappedCmds);
+    }
 
     bool baseInstanceSupport = this->glGpu()->glCaps().baseInstanceSupport();
+    SkASSERT(!baseInstanceSupport || fDrawIndirectBuffer);
 
+    SkASSERT(!fGLDrawCmdsInfo);
     if (GR_GL_LOG_INSTANCED_BATCHES || !baseInstanceSupport) {
         fGLDrawCmdsInfo.reset(numGLDrawCmds);
     }
@@ -166,18 +170,19 @@ void GLInstancedRendering::onBeginFlush(GrResourceProvider* rp) {
                 draw = draw->fNext;
             } while (draw && draw->fGeometry == geometry);
 
-            GrGLDrawElementsIndirectCommand& glCmd = glMappedCmds[glDrawCmdsIdx];
-            glCmd.fCount = geometry.fCount;
-            glCmd.fInstanceCount = instanceCount;
-            glCmd.fFirstIndex = geometry.fStart;
-            glCmd.fBaseVertex = 0;
-            glCmd.fBaseInstance = baseInstanceSupport ? glInstancesIdx : 0;
+            if (fDrawIndirectBuffer) {
+                GrGLDrawElementsIndirectCommand& glCmd = glMappedCmds[glDrawCmdsIdx];
+                glCmd.fCount = geometry.fCount;
+                glCmd.fInstanceCount = instanceCount;
+                glCmd.fFirstIndex = geometry.fStart;
+                glCmd.fBaseVertex = 0;
+                glCmd.fBaseInstance = baseInstanceSupport ? glInstancesIdx : 0;
+            }
 
             if (GR_GL_LOG_INSTANCED_BATCHES || !baseInstanceSupport) {
-                fGLDrawCmdsInfo[glDrawCmdsIdx].fInstanceCount = instanceCount;
-#if GR_GL_LOG_INSTANCED_BATCHES
-                fGLDrawCmdsInfo[glDrawCmdsIdx].fGeometry = geometry;
-#endif
+                GLDrawCmdInfo& cmdInfo = fGLDrawCmdsInfo[glDrawCmdsIdx];
+                cmdInfo.fGeometry = geometry;
+                cmdInfo.fInstanceCount = instanceCount;
             }
 
             glInstancesIdx += instanceCount;
@@ -186,7 +191,9 @@ void GLInstancedRendering::onBeginFlush(GrResourceProvider* rp) {
     }
 
     SkASSERT(glDrawCmdsIdx == numGLDrawCmds);
-    fDrawIndirectBuffer->unmap();
+    if (fDrawIndirectBuffer) {
+        fDrawIndirectBuffer->unmap();
+    }
 
     SkASSERT(glInstancesIdx == numGLInstances);
     fInstanceBuffer->unmap();
@@ -194,14 +201,16 @@ void GLInstancedRendering::onBeginFlush(GrResourceProvider* rp) {
 
 void GLInstancedRendering::onDraw(const GrPipeline& pipeline, const InstanceProcessor& instProc,
                                   const Batch* baseBatch) {
-    if (!fDrawIndirectBuffer) {
+    if (!fDrawIndirectBuffer && !fGLDrawCmdsInfo) {
         return; // beginFlush was not successful.
     }
     if (!this->glGpu()->flushGLState(pipeline, instProc)) {
         return;
     }
 
-    this->glGpu()->bindBuffer(kDrawIndirect_GrBufferType, fDrawIndirectBuffer.get());
+    if (fDrawIndirectBuffer) {
+        this->glGpu()->bindBuffer(kDrawIndirect_GrBufferType, fDrawIndirectBuffer.get());
+    }
 
     const GrGLCaps& glCaps = this->glGpu()->glCaps();
     const GLBatch* batch = static_cast<const GLBatch*>(baseBatch);
@@ -220,23 +229,33 @@ void GLInstancedRendering::onDraw(const GrPipeline& pipeline, const InstanceProc
     SkASSERT(SkToBool(fGLDrawCmdsInfo) == !glCaps.baseInstanceSupport());
 #endif
 
-    if (1 == numCommands || !glCaps.baseInstanceSupport() || !glCaps.multiDrawIndirectSupport()) {
-        int emulatedBaseInstance = batch->fEmulatedBaseInstance;
-        for (int i = 0; i < numCommands; ++i) {
-            int glCmdIdx = batch->fGLDrawCmdsIdx + i;
-            this->flushInstanceAttribs(emulatedBaseInstance);
-            GL_CALL(DrawElementsIndirect(GR_GL_TRIANGLES, GR_GL_UNSIGNED_BYTE,
-                                         (GrGLDrawElementsIndirectCommand*) nullptr + glCmdIdx));
-            if (!glCaps.baseInstanceSupport()) {
-                emulatedBaseInstance += fGLDrawCmdsInfo[glCmdIdx].fInstanceCount;
-            }
-        }
-    } else {
+    if (numCommands > 1 && glCaps.multiDrawIndirectSupport() && glCaps.baseInstanceSupport()) {
+        SkASSERT(fDrawIndirectBuffer);
         int glCmdsIdx = batch->fGLDrawCmdsIdx;
         this->flushInstanceAttribs(batch->fEmulatedBaseInstance);
         GL_CALL(MultiDrawElementsIndirect(GR_GL_TRIANGLES, GR_GL_UNSIGNED_BYTE,
                                           (GrGLDrawElementsIndirectCommand*) nullptr + glCmdsIdx,
                                           numCommands, 0));
+        return;
+    }
+
+    int emulatedBaseInstance = batch->fEmulatedBaseInstance;
+    for (int i = 0; i < numCommands; ++i) {
+        int glCmdIdx = batch->fGLDrawCmdsIdx + i;
+        const GLDrawCmdInfo& cmdInfo = fGLDrawCmdsInfo[glCmdIdx];
+        this->flushInstanceAttribs(emulatedBaseInstance);
+        if (fDrawIndirectBuffer) {
+            GL_CALL(DrawElementsIndirect(GR_GL_TRIANGLES, GR_GL_UNSIGNED_BYTE,
+                                         (GrGLDrawElementsIndirectCommand*) nullptr + glCmdIdx));
+        } else {
+            GL_CALL(DrawElementsInstanced(GR_GL_TRIANGLES, cmdInfo.fGeometry.fCount,
+                                          GR_GL_UNSIGNED_BYTE,
+                                          (GrGLubyte*) nullptr + cmdInfo.fGeometry.fStart,
+                                          cmdInfo.fInstanceCount));
+        }
+        if (!glCaps.baseInstanceSupport()) {
+            emulatedBaseInstance += cmdInfo.fInstanceCount;
+        }
     }
 }
 
@@ -245,7 +264,7 @@ void GLInstancedRendering::flushInstanceAttribs(int baseInstance) {
     this->glGpu()->bindVertexArray(fVertexArrayID);
 
     SkASSERT(fInstanceBuffer);
-    if (fInstanceAttribsBufferUniqueId != fInstanceBuffer->getUniqueID() ||
+    if (fInstanceAttribsBufferUniqueId != fInstanceBuffer->uniqueID() ||
         fInstanceAttribsBaseInstance != baseInstance) {
         Instance* offsetInBuffer = (Instance*) nullptr + baseInstance;
 
@@ -279,7 +298,7 @@ void GLInstancedRendering::flushInstanceAttribs(int baseInstance) {
                                     sizeof(Instance), &offsetInBuffer->fLocalRect));
         GL_CALL(VertexAttribDivisor((int)Attrib::kLocalRect, 1));
 
-        fInstanceAttribsBufferUniqueId = fInstanceBuffer->getUniqueID();
+        fInstanceAttribsBufferUniqueId = fInstanceBuffer->uniqueID();
         fInstanceAttribsBaseInstance = baseInstance;
     }
 }

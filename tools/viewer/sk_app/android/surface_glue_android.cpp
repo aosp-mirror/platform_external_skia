@@ -91,7 +91,6 @@ int SkiaAndroidApp::message_callback(int fd, int events, void* data) {
     auto skiaAndroidApp = (SkiaAndroidApp*)data;
     Message message;
     skiaAndroidApp->readMessage(&message);
-    SkDebugf("message_callback %d", message.fType);
     SkASSERT(message.fType != kUndefined);
 
     switch (message.fType) {
@@ -147,9 +146,12 @@ int SkiaAndroidApp::message_callback(int fd, int events, void* data) {
         }
         case kTouched: {
             auto it = ANDROID_TO_WINDOW_STATEMAP.find(message.fTouchState);
-            SkASSERT(it != ANDROID_TO_WINDOW_STATEMAP.end());
-            skiaAndroidApp->fWindow->onTouch(message.fTouchOwner, it->second, message.fTouchX,
-                                             message.fTouchY);
+            if (it != ANDROID_TO_WINDOW_STATEMAP.end()) {
+                skiaAndroidApp->fWindow->onTouch(message.fTouchOwner, it->second, message.fTouchX,
+                                                 message.fTouchY);
+            } else {
+                SkDebugf("Unknown Touch State: %d\n", message.fTouchState);
+            }
             break;
         }
         case kUIStateChanged: {
@@ -242,7 +244,7 @@ extern "C" JNIEXPORT void JNICALL Java_org_skia_viewer_ViewerActivity_onKeyPress
 }
 
 extern "C" JNIEXPORT void JNICALL Java_org_skia_viewer_ViewerActivity_onTouched(
-    JNIEnv* env, jobject activity, jlong handle, jint owner, jfloat x, jfloat y, jint state) {
+    JNIEnv* env, jobject activity, jlong handle, jint owner, jint state, jfloat x, jfloat y) {
     auto skiaAndroidApp = (SkiaAndroidApp*)handle;
     Message message(kTouched);
     message.fTouchOwner = owner;

@@ -1,0 +1,237 @@
+# Copyright 2016 Google Inc.
+#
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+declare_args() {
+  ar = "ar"
+  cc = "cc"
+  cxx = "c++"
+
+  if (is_android) {
+    ar = "$ndk/toolchains/$ndk_gccdir-4.9/prebuilt/$ndk_host/$ndk_target/bin/ar"
+    cc = "$ndk/toolchains/llvm/prebuilt/$ndk_host/bin/clang"
+    cxx = "$ndk/toolchains/llvm/prebuilt/$ndk_host/bin/clang++"
+  }
+
+  extra_cflags = ""
+  extra_cflags_c = ""
+  extra_cflags_cc = ""
+  extra_ldflags = ""
+
+  compiler_prefix = ""
+}
+
+config("no_rtti") {
+  if (sanitize != "ASAN") {  # -fsanitize=vptr requires RTTI
+    cflags_cc = [ "-fno-rtti" ]
+  }
+}
+
+config("default") {
+  cflags = [
+    "-O1",
+    "-fstrict-aliasing",
+    "-fPIC",
+    "-fvisibility=hidden",
+
+    "-Werror",
+    "-Wall",
+    "-Wextra",
+    "-Winit-self",
+    "-Wpointer-arith",
+    "-Wsign-compare",
+    "-Wvla",
+
+    "-Wno-deprecated-declarations",
+    "-Wno-unused-parameter",
+  ]
+  cflags_cc = [
+    "-std=c++11",
+    "-fno-exceptions",
+    "-fno-threadsafe-statics",
+    "-fvisibility-inlines-hidden",
+
+    "-Wnon-virtual-dtor",
+  ]
+  ldflags = []
+
+  # It's annoying to wait for full debug symbols to push over
+  # to Android devices.  -gline-tables-only is a lot slimmer.
+  if (is_android) {
+    cflags += [ "-gline-tables-only" ]
+  } else {
+    cflags += [ "-g" ]
+  }
+
+  if (current_cpu == "arm") {
+    cflags += [
+      "-march=armv7-a",
+      "-mfpu=neon",
+      "-mthumb",
+    ]
+  } else if (current_cpu == "mipsel") {
+    cflags += [
+      "-march=mips32r2",
+      "-mdspr2",
+    ]
+  }
+
+  if (is_android) {
+    asmflags = [
+      "--target=$ndk_target",
+      "-B$ndk/toolchains/$ndk_gccdir-4.9/prebuilt/$ndk_host/$ndk_target/bin",
+    ]
+    cflags += [
+      "--sysroot=$ndk/platforms/$ndk_platform",
+      "--target=$ndk_target",
+      "-B$ndk/toolchains/$ndk_gccdir-4.9/prebuilt/$ndk_host/$ndk_target/bin",
+    ]
+    cflags_cc += [
+      "-isystem$ndk/sources/android/support/include",
+      "-isystem$ndk/sources/cxx-stl/llvm-libc++/libcxx/include",
+    ]
+    ldflags += [
+      "--sysroot=$ndk/platforms/$ndk_platform",
+      "--target=$ndk_target",
+      "-B$ndk/toolchains/$ndk_gccdir-4.9/prebuilt/$ndk_host/$ndk_target/bin",
+      "-pie",
+    ]
+    lib_dirs = [
+      "$ndk/sources/cxx-stl/llvm-libc++/libs/$ndk_stdlib",
+      "$ndk/toolchains/$ndk_gccdir-4.9/prebuilt/$ndk_host/lib/gcc/$ndk_target/4.9.x",
+    ]
+    libs = [
+      # Order matters here!  Keep these three in exactly this order.
+      "c++_static",
+      "c++abi",
+      "android_support",
+    ]
+    if (target_cpu == "arm") {
+      libs += [ "unwind" ]
+    }
+  }
+
+  if (is_linux) {
+    libs = [ "pthread" ]
+  }
+
+  if (sanitize != "") {
+    # You can either pass the sanitizers directly, e.g. "address,undefined",
+    # or pass one of the couple common aliases used by the bots.
+    sanitizers = sanitize
+    if (sanitize == "ASAN") {
+      sanitizers = "address,bool,function,integer-divide-by-zero,nonnull-attribute,null,object-size,return,returns-nonnull-attribute,shift,signed-integer-overflow,unreachable,vla-bound,vptr"
+    } else if (sanitize == "TSAN") {
+      sanitizers = "thread"
+    } else if (sanitize == "MSAN") {
+      sanitizers = "memory"
+    }
+
+    cflags += [
+      "-fsanitize=$sanitizers",
+      "-fno-sanitize-recover=$sanitizers",
+      "-fsanitize-blacklist=" + rebase_path("../tools/xsan.blacklist"),
+    ]
+    ldflags += [ "-fsanitize=$sanitizers" ]
+    if (sanitizers == "memory") {
+      cflags += [ "-fsanitize-memory-track-origins" ]
+      cflags_cc += [ "-stdlib=libc++" ]
+      ldflags += [ "-stdlib=libc++" ]
+    }
+  }
+}
+
+config("release") {
+  cflags = [ "-O3" ]
+  defines = [ "NDEBUG" ]
+}
+
+config("executable") {
+  if (is_mac) {
+    ldflags = [ "-Wl,-rpath,@loader_path/." ]
+  } else if (is_linux) {
+    ldflags = [ "-Wl,-rpath,\$ORIGIN" ]
+  }
+}
+
+toolchain("gcc_like") {
+  lib_switch = "-l"
+  lib_dir_switch = "-L"
+
+  tool("cc") {
+    depfile = "{{output}}.d"
+    command = "$compiler_prefix $cc -MMD -MF $depfile {{defines}} {{include_dirs}} {{cflags}} {{cflags_c}} $extra_cflags $extra_cflags_c -c {{source}} -o {{output}}"
+    depsformat = "gcc"
+    outputs = [
+      "{{source_out_dir}}/{{target_output_name}}.{{source_name_part}}.o",
+    ]
+    description =
+        "$compiler_prefix $cc ... $extra_cflags $extra_cflags_c -o {{output}}"
+  }
+
+  tool("cxx") {
+    depfile = "{{output}}.d"
+    command = "$compiler_prefix $cxx -MMD -MF $depfile {{defines}} {{include_dirs}} {{cflags}} {{cflags_cc}} $extra_cflags $extra_cflags_cc -c {{source}} -o {{output}}"
+    depsformat = "gcc"
+    outputs = [
+      "{{source_out_dir}}/{{target_output_name}}.{{source_name_part}}.o",
+    ]
+    description =
+        "$compiler_prefix $cxx ... $extra_cflags $extra_cflags_cc -o {{output}}"
+  }
+
+  tool("asm") {
+    depfile = "{{output}}.d"
+    command = "$compiler_prefix $cc -MMD -MF $depfile {{defines}} {{include_dirs}} {{asmflags}} -c {{source}} -o {{output}}"
+    depsformat = "gcc"
+    outputs = [
+      "{{source_out_dir}}/{{target_output_name}}.{{source_name_part}}.o",
+    ]
+    description = "$compiler_prefix $cc ... -o {{output}}"
+  }
+
+  tool("alink") {
+    command = "rm -f {{output}} && $ar rcs {{output}} {{inputs}}"
+    outputs = [
+      "{{root_out_dir}}/{{target_output_name}}{{output_extension}}",
+    ]
+    default_output_extension = ".a"
+    output_prefix = "lib"
+    description = "$ar {{output}} ..."
+  }
+
+  tool("solink") {
+    soname = "{{target_output_name}}{{output_extension}}"
+
+    rpath = "-Wl,-soname,$soname"
+    if (is_mac) {
+      rpath = "-Wl,-install_name,@rpath/$soname"
+    }
+
+    command = "$compiler_prefix $cxx -shared {{ldflags}} {{inputs}} {{solibs}} {{libs}} $rpath $extra_ldflags -o {{output}}"
+    outputs = [
+      "{{root_out_dir}}/$soname",
+    ]
+    output_prefix = "lib"
+    default_output_extension = ".so"
+    description =
+        "$compiler_prefix $cxx -shared ... $extra_ldflags -o {{output}}"
+  }
+
+  tool("link") {
+    command = "$compiler_prefix $cxx {{ldflags}} {{inputs}} {{solibs}} {{libs}} $extra_ldflags -o {{output}}"
+    outputs = [
+      "{{root_out_dir}}/{{target_output_name}}{{output_extension}}",
+    ]
+    description = "$compiler_prefix $cxx ... $extra_ldflags -o {{output}}"
+  }
+
+  tool("stamp") {
+    command = "touch {{output}}"
+  }
+
+  tool("copy") {
+    command = "ln -f {{source}} {{output}} 2>/dev/null || (rm -rf {{output}} && cp -af {{source}} {{output}})"
+  }
+}

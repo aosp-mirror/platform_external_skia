@@ -45,7 +45,7 @@ public:
      *  The parent will ignore its input color and instead feed the passed in color as input to the
      *  child.
      */
-    static sk_sp<GrFragmentProcessor> OverrideInput(sk_sp<GrFragmentProcessor>, GrColor);
+    static sk_sp<GrFragmentProcessor> OverrideInput(sk_sp<GrFragmentProcessor>, GrColor4f);
 
     /**
      *  Returns a fragment processor that premuls the input before calling the passed in fragment
@@ -65,6 +65,7 @@ public:
 
     GrFragmentProcessor()
         : INHERITED()
+        , fUsesDistanceVectorField(false)
         , fUsesLocalCoords(false)
         , fNumTexturesExclChildren(0)
         , fNumBuffersExclChildren(0)
@@ -110,6 +111,9 @@ public:
     /** Do any of the coordtransforms for this processor require local coords? */
     bool usesLocalCoords() const { return fUsesLocalCoords; }
 
+    /** Does this FP need a vector to the nearest edge? */
+    bool usesDistanceVectorField() const { return fUsesDistanceVectorField; }
+
     /** Returns true if this and other processor conservatively draw identically. It can only return
         true when the two processor are of the same subclass (i.e. they return the same object from
         from getFactory()).
@@ -117,7 +121,7 @@ public:
         A return value of true from isEqual() should not be used to test whether the processor would
         generate the same shader code. To test for identical code generation use getGLSLProcessorKey
      */
-    bool isEqual(const GrFragmentProcessor& that, bool ignoreCoordTransforms) const;
+    bool isEqual(const GrFragmentProcessor& that) const;
 
     /**
      * This function is used to perform optimizations. When called the invarientOuput param
@@ -172,6 +176,11 @@ protected:
      * procs' output invariants; computeInvariantOutput will not be recursive.
      */
     virtual void onComputeInvariantOutput(GrInvariantOutput* inout) const = 0;
+
+    /* Sub-classes should set this to true in their constructors if they need access to a distance
+     * vector field to the nearest edge
+     */
+    bool fUsesDistanceVectorField;
 
 private:
     void notifyRefCntIsZero() const final;

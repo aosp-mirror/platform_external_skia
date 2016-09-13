@@ -14,6 +14,14 @@
 #  define SK_BUILD_FOR_WIN
 #endif
 
+#if !defined(SK_DEBUG) && !defined(SK_RELEASE)
+    #ifdef NDEBUG
+        #define SK_RELEASE
+    #else
+        #define SK_DEBUG
+    #endif
+#endif
+
 #if defined(SK_DEBUG) && defined(SK_RELEASE)
 #  error "cannot define both SK_DEBUG and SK_RELEASE"
 #elif !defined(SK_DEBUG) && !defined(SK_RELEASE)
@@ -237,7 +245,11 @@
 //////////////////////////////////////////////////////////////////////
 
 #if !defined(SK_UNUSED)
-#  define SK_UNUSED SK_ATTRIBUTE(unused)
+#  if defined(_MSC_VER)
+#    define SK_UNUSED __pragma(warning(suppress:4189))
+#  else
+#    define SK_UNUSED SK_ATTRIBUTE(unused)
+#  endif
 #endif
 
 #if !defined(SK_ATTR_DEPRECATED)
@@ -264,6 +276,18 @@
 #    define SK_ALWAYS_INLINE __forceinline
 #  else
 #    define SK_ALWAYS_INLINE SK_ATTRIBUTE(always_inline) inline
+#  endif
+#endif
+
+/**
+ * If your judgment is better than the compiler's (i.e. you've profiled it),
+ * you can use SK_NEVER_INLINE to prevent inlining.
+ */
+#if !defined(SK_NEVER_INLINE)
+#  if defined(SK_BUILD_FOR_WIN)
+#    define SK_NEVER_INLINE __declspec(noinline)
+#  else
+#    define SK_NEVER_INLINE SK_ATTRIBUTE(noinline)
 #  endif
 #endif
 
@@ -318,12 +342,8 @@
 
 //////////////////////////////////////////////////////////////////////
 
-#if defined(SK_GAMMA_EXPONENT) && defined(SK_GAMMA_SRGB)
-#  error "cannot define both SK_GAMMA_EXPONENT and SK_GAMMA_SRGB"
-#elif defined(SK_GAMMA_SRGB)
-#  define SK_GAMMA_EXPONENT (0.0f)
-#elif !defined(SK_GAMMA_EXPONENT)
-#  define SK_GAMMA_EXPONENT (2.2f)
+#if !defined(SK_GAMMA_EXPONENT)
+    #define SK_GAMMA_EXPONENT (0.0f)  // SRGB
 #endif
 
 //////////////////////////////////////////////////////////////////////

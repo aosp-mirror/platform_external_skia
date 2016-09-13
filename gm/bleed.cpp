@@ -107,11 +107,11 @@ bool make_ringed_bitmap(TestPixels* result, int width, int height,
 /** Create a black and white checked bitmap with 2 1-pixel rings around the outside edge.
     The inner ring is red and the outer ring is blue. */
 static bool make_ringed_color_bitmap(TestPixels* result, int width, int height) {
-    static const SkPMColor kBlue  = SkPreMultiplyColor(SK_ColorBLUE);
-    static const SkPMColor kRed   = SkPreMultiplyColor(SK_ColorRED);
-    static const SkPMColor kBlack = SkPreMultiplyColor(SK_ColorBLACK);
-    static const SkPMColor kWhite = SkPreMultiplyColor(SK_ColorWHITE);
-    return make_ringed_bitmap<SkPMColor>(result, width, height, kBGRA_8888_SkColorType,
+    const SkPMColor kBlue  = SkPreMultiplyColor(SK_ColorBLUE);
+    const SkPMColor kRed   = SkPreMultiplyColor(SK_ColorRED);
+    const SkPMColor kBlack = SkPreMultiplyColor(SK_ColorBLACK);
+    const SkPMColor kWhite = SkPreMultiplyColor(SK_ColorWHITE);
+    return make_ringed_bitmap<SkPMColor>(result, width, height, kN32_SkColorType,
                                          kPremul_SkAlphaType, kBlue, kRed, kBlack, kWhite);
 }
 
@@ -119,10 +119,10 @@ static bool make_ringed_color_bitmap(TestPixels* result, int width, int height) 
     checker board of 3/4 and 1/2. The inner checkers are large enough to fill the interior with
     the 2x2 checker grid. */
 static bool make_ringed_alpha_bitmap(TestPixels* result, int width, int height) {
-    static const uint8_t kZero = 0x00;
-    static const uint8_t kHalf = 0x80;
-    static const uint8_t k3Q   = 0xC0;
-    static const uint8_t kOne  = 0xFF;
+    constexpr uint8_t kZero = 0x00;
+    constexpr uint8_t kHalf = 0x80;
+    constexpr uint8_t k3Q   = 0xC0;
+    constexpr uint8_t kOne  = 0xFF;
     return make_ringed_bitmap<uint8_t>(result, width, height, kAlpha_8_SkColorType,
                                        kPremul_SkAlphaType, kZero, kOne, k3Q, kHalf);
 }
@@ -155,8 +155,8 @@ bool make_ringed_alpha_image(TestPixels* result, int width, int height) {
 }
 
 static sk_sp<SkShader> make_shader() {
-    static const SkPoint pts[] = { {0, 0}, {20, 20} };
-    static const SkColor colors[] = { SK_ColorGREEN, SK_ColorYELLOW };
+    constexpr SkPoint pts[] = { {0, 0}, {20, 20} };
+    constexpr SkColor colors[] = { SK_ColorGREEN, SK_ColorYELLOW };
     return SkGradientShader::MakeLinear(pts, colors, nullptr, 2, SkShader::kMirror_TileMode);
 }
 
@@ -322,7 +322,7 @@ protected:
 
         // Draw with rotation and scale down in x, up in y.
         SkMatrix m;
-        static const SkScalar kBottom = SkIntToScalar(kRow4Y + kBlockSize + kBlockSpacing);
+        constexpr SkScalar kBottom = SkIntToScalar(kRow4Y + kBlockSize + kBlockSpacing);
         m.setTranslate(0, kBottom);
         m.preRotate(15.f, 0, kBottom + kBlockSpacing);
         m.preScale(0.71f, 1.22f);
@@ -407,25 +407,25 @@ protected:
 #endif
 
 private:
-    static const int kBlockSize = 70;
-    static const int kBlockSpacing = 12;
+    static constexpr int kBlockSize = 70;
+    static constexpr int kBlockSpacing = 12;
 
-    static const int kCol0X = kBlockSpacing;
-    static const int kCol1X = 2*kBlockSpacing + kBlockSize;
-    static const int kCol2X = 3*kBlockSpacing + 2*kBlockSize;
-    static const int kCol3X = 4*kBlockSpacing + 3*kBlockSize;
-    static const int kCol4X = 5*kBlockSpacing + 4*kBlockSize;
-    static const int kCol5X = 6*kBlockSpacing + 5*kBlockSize;
-    static const int kWidth = 7*kBlockSpacing + 6*kBlockSize;
+    static constexpr int kCol0X = kBlockSpacing;
+    static constexpr int kCol1X = 2*kBlockSpacing + kBlockSize;
+    static constexpr int kCol2X = 3*kBlockSpacing + 2*kBlockSize;
+    static constexpr int kCol3X = 4*kBlockSpacing + 3*kBlockSize;
+    static constexpr int kCol4X = 5*kBlockSpacing + 4*kBlockSize;
+    static constexpr int kCol5X = 6*kBlockSpacing + 5*kBlockSize;
+    static constexpr int kWidth = 7*kBlockSpacing + 6*kBlockSize;
 
-    static const int kRow0Y = kBlockSpacing;
-    static const int kRow1Y = 2*kBlockSpacing + kBlockSize;
-    static const int kRow2Y = 3*kBlockSpacing + 2*kBlockSize;
-    static const int kRow3Y = 4*kBlockSpacing + 3*kBlockSize;
-    static const int kRow4Y = 5*kBlockSpacing + 4*kBlockSize;
+    static constexpr int kRow0Y = kBlockSpacing;
+    static constexpr int kRow1Y = 2*kBlockSpacing + kBlockSize;
+    static constexpr int kRow2Y = 3*kBlockSpacing + 2*kBlockSize;
+    static constexpr int kRow3Y = 4*kBlockSpacing + 3*kBlockSize;
+    static constexpr int kRow4Y = 5*kBlockSpacing + 4*kBlockSize;
 
-    static const int kSmallSize = 6;
-    static const int kMaxTileSize = 32;
+    static constexpr int kSmallSize = 6;
+    static constexpr int kMaxTileSize = 32;
 
     TestPixels      fBigTestPixels;
     TestPixels      fSmallTestPixels;
@@ -444,3 +444,70 @@ DEF_GM( return new BleedGM(kUseAlphaBitmap_BleedTest); )
 DEF_GM( return new BleedGM(kUseAlphaImage_BleedTest); )
 DEF_GM( return new BleedGM(kUseAlphaBitmapShader_BleedTest); )
 DEF_GM( return new BleedGM(kUseAlphaImageShader_BleedTest); )
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+#include "SkSurface.h"
+
+sk_sp<SkSurface> make_surface(SkCanvas* canvas, const SkImageInfo& info) {
+    auto surface = canvas->makeSurface(info);
+    if (!surface) {
+        surface = SkSurface::MakeRaster(info);
+    }
+    return surface;
+}
+
+// Construct an image and return the inner "src" rect. Build the image such that the interior is
+// blue, with a margin of blue (2px) but then an outer margin of red.
+//
+// Show that kFast_SrcRectConstraint sees even the red margin (due to mipmapping) when the image
+// is scaled down far enough.
+//
+static sk_sp<SkImage> make_image(SkCanvas* canvas, SkRect* srcR) {
+    // Intentially making the size a power of 2 to avoid the noise from how different GPUs will
+    // produce different mipmap filtering when we have an odd sized texture.
+    const int N = 10 + 2 + 8 + 2 + 10;
+    SkImageInfo info = SkImageInfo::MakeN32Premul(N, N);
+    auto surface = make_surface(canvas, info);
+    SkCanvas* c = surface->getCanvas();
+    SkRect r = SkRect::MakeIWH(info.width(), info.height());
+    SkPaint paint;
+
+    paint.setColor(SK_ColorRED);
+    c->drawRect(r, paint);
+    r.inset(10, 10);
+    paint.setColor(SK_ColorBLUE);
+    c->drawRect(r, paint);
+
+    *srcR = r.makeInset(2, 2);
+    return surface->makeImageSnapshot();
+}
+
+DEF_SIMPLE_GM(bleed_downscale, canvas, 360, 240) {
+    SkRect src;
+    sk_sp<SkImage> img = make_image(canvas, &src);
+    SkPaint paint;
+
+    canvas->translate(10, 10);
+
+    const SkCanvas::SrcRectConstraint constraints[] = {
+        SkCanvas::kStrict_SrcRectConstraint, SkCanvas::kFast_SrcRectConstraint
+    };
+    const SkFilterQuality qualities[] = {
+        kNone_SkFilterQuality, kLow_SkFilterQuality, kMedium_SkFilterQuality
+    };
+    for (auto constraint : constraints) {
+        canvas->save();
+        for (auto quality : qualities) {
+            paint.setFilterQuality(quality);
+            auto surf = make_surface(canvas, SkImageInfo::MakeN32Premul(1, 1));
+            surf->getCanvas()->drawImageRect(img, src, SkRect::MakeWH(1, 1), &paint, constraint);
+            // now blow up the 1 pixel result
+            canvas->drawImageRect(surf->makeImageSnapshot(), SkRect::MakeWH(100, 100), nullptr);
+            canvas->translate(120, 0);
+        }
+        canvas->restore();
+        canvas->translate(0, 120);
+    }
+}
+
+

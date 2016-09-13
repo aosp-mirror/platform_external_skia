@@ -11,6 +11,7 @@
 #include "GrDrawContext.h"
 #include "GrPath.h"
 #include "GrPathRange.h"
+#include "GrPipelineBuilder.h"
 #include "GrResourceProvider.h"
 #include "GrTextUtils.h"
 #include "SkAutoKern.h"
@@ -36,21 +37,17 @@ template<typename T> static void delete_hash_table_entry(T* val) {
     delete *val;
 }
 
-GrStencilAndCoverTextContext::GrStencilAndCoverTextContext()
-    : fFallbackTextContext(nullptr)
+GrStencilAndCoverTextContext::GrStencilAndCoverTextContext(GrAtlasTextContext* fallbackTextContext)
+    : fFallbackTextContext(fallbackTextContext)
     , fCacheSize(0) {
 }
 
 GrStencilAndCoverTextContext*
-GrStencilAndCoverTextContext::Create() {
-    GrStencilAndCoverTextContext* textContext = new GrStencilAndCoverTextContext();
-    textContext->fFallbackTextContext = GrAtlasTextContext::Create();
-
-    return textContext;
+GrStencilAndCoverTextContext::Create(GrAtlasTextContext* fallbackTextContext) {
+    return new GrStencilAndCoverTextContext(fallbackTextContext);;
 }
 
 GrStencilAndCoverTextContext::~GrStencilAndCoverTextContext() {
-    delete fFallbackTextContext;
     fBlobIdCache.foreach(delete_hash_map_entry<uint32_t, TextBlob*>);
     fBlobKeyCache.foreach(delete_hash_table_entry<TextBlob*>);
 }
@@ -136,7 +133,8 @@ void GrStencilAndCoverTextContext::drawPosText(GrContext* context, GrDrawContext
 
 void GrStencilAndCoverTextContext::uncachedDrawTextBlob(GrContext* context,
                                                         GrDrawContext* dc,
-                                                        const GrClip& clip, const SkPaint& skPaint,
+                                                        const GrClip& clip,
+                                                        const SkPaint& skPaint,
                                                         const SkMatrix& viewMatrix,
                                                         const SkSurfaceProps& props,
                                                         const SkTextBlob* blob,
@@ -163,7 +161,7 @@ void GrStencilAndCoverTextContext::uncachedDrawTextBlob(GrContext* context,
         runPaint.setFlags(GrTextUtils::FilterTextFlags(props, runPaint));
 
         GrPaint grPaint;
-        if (!SkPaintToGrPaint(context, runPaint, viewMatrix, dc->isGammaCorrect(), &grPaint)) {
+        if (!SkPaintToGrPaint(context, dc, runPaint, viewMatrix, &grPaint)) {
             return;
         }
 
@@ -218,7 +216,7 @@ void GrStencilAndCoverTextContext::drawTextBlob(GrContext* context, GrDrawContex
     }
 
     GrPaint paint;
-    if (!SkPaintToGrPaint(context, skPaint, viewMatrix, dc->isGammaCorrect(), &paint)) {
+    if (!SkPaintToGrPaint(context, dc, skPaint, viewMatrix, &paint)) {
         return;
     }
 
@@ -622,10 +620,10 @@ void GrStencilAndCoverTextContext::TextRun::draw(GrContext* ctx,
         );
 
         SkAutoTUnref<GrPathRange> glyphs(this->createGlyphs(ctx));
-        if (fLastDrawnGlyphsID != glyphs->getUniqueID()) {
+        if (fLastDrawnGlyphsID != glyphs->uniqueID()) {
             // Either this is the first draw or the glyphs object was purged since last draw.
             glyphs->loadPathsIfNeeded(fInstanceData->indices(), fInstanceData->count());
-            fLastDrawnGlyphsID = glyphs->getUniqueID();
+            fLastDrawnGlyphsID = glyphs->uniqueID();
         }
 
         // Don't compute a bounding box. For dst copy texture, we'll opt instead for it to just copy

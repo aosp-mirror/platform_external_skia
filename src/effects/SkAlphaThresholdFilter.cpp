@@ -17,6 +17,7 @@
 #include "GrAlphaThresholdFragmentProcessor.h"
 #include "GrContext.h"
 #include "GrDrawContext.h"
+#include "GrFixedClip.h"
 #endif
 
 class SK_API SkAlphaThresholdFilterImpl : public SkImageFilter {
@@ -95,16 +96,12 @@ SkAlphaThresholdFilterImpl::SkAlphaThresholdFilterImpl(const SkRegion& region,
 sk_sp<GrTexture> SkAlphaThresholdFilterImpl::createMaskTexture(GrContext* context,
                                                                const SkMatrix& inMatrix,
                                                                const SkIRect& bounds) const {
-    GrPixelConfig config;
-    if (context->caps()->isConfigRenderable(kAlpha_8_GrPixelConfig, false)) {
-        config = kAlpha_8_GrPixelConfig;
-    } else {
-        config = kRGBA_8888_GrPixelConfig;
-    }
 
-    sk_sp<GrDrawContext> drawContext(context->newDrawContext(SkBackingFit::kApprox,
-                                                             bounds.width(), bounds.height(),
-                                                             config));
+    sk_sp<GrDrawContext> drawContext(context->makeDrawContextWithFallback(SkBackingFit::kApprox,
+                                                                          bounds.width(),
+                                                                          bounds.height(),
+                                                                          kAlpha_8_GrPixelConfig,
+                                                                          nullptr));
     if (!drawContext) {
         return nullptr;
     }
@@ -180,7 +177,7 @@ sk_sp<SkSpecialImage> SkAlphaThresholdFilterImpl::onFilterImage(SkSpecialImage* 
             return nullptr;
         }
 
-        return DrawWithFP(context, std::move(fp), bounds);
+        return DrawWithFP(context, std::move(fp), bounds, sk_ref_sp(input->getColorSpace()));
     }
 #endif
 

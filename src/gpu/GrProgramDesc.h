@@ -10,14 +10,36 @@
 
 #include "GrColor.h"
 #include "GrTypesPriv.h"
-#include "SkChecksum.h"
+#include "SkOpts.h"
+#include "SkTArray.h"
 
-/** This class describes a program to generate. It also serves as a program cache key. Very little
-    of this is GL-specific. The GL-specific parts could be factored out into a subclass. */
+class GrGLSLCaps;
+class GrPipeline;
+class GrPrimitiveProcessor;
+
+/** This class describes a program to generate. It also serves as a program cache key */
 class GrProgramDesc {
 public:
     // Creates an uninitialized key that must be populated by GrGpu::buildProgramDesc()
     GrProgramDesc() {}
+
+    /**
+    * Builds a program descriptor. Before the descriptor can be used, the client must call finalize
+    * on the returned GrProgramDesc.
+    *
+    * @param GrPrimitiveProcessor The geometry
+    * @param GrPipeline  The optimized drawstate.  The descriptor will represent a program
+    *                        which this optstate can use to draw with.  The optstate contains
+    *                        general draw information, as well as the specific color, geometry,
+    *                        and coverage stages which will be used to generate the GL Program for
+    *                        this optstate.
+    * @param GrGLSLCaps     Capabilities of the GLSL backend.
+    * @param GrProgramDesc  The built and finalized descriptor
+    **/
+    static bool Build(GrProgramDesc*,
+                      const GrPrimitiveProcessor&,
+                      const GrPipeline&,
+                      const GrGLSLCaps&);
 
     // Returns this as a uint32_t array to be used as a key in the program cache.
     const uint32_t* asKey() const {
@@ -96,6 +118,16 @@ public:
     // This should really only be used internally, base classes should return their own headers
     const KeyHeader& header() const { return *this->atOffset<KeyHeader, kHeaderOffset>(); }
 
+    void finalize() {
+        int keyLength = fKey.count();
+        SkASSERT(0 == (keyLength % 4));
+        *(this->atOffset<uint32_t, GrProgramDesc::kLengthOffset>()) = SkToU32(keyLength);
+
+        uint32_t* checksum = this->atOffset<uint32_t, GrProgramDesc::kChecksumOffset>();
+        *checksum = 0;  // We'll hash through these bytes, so make sure they're initialized.
+        *checksum = SkOpts::hash(fKey.begin(), keyLength);
+    }
+
 protected:
     template<typename T, size_t OFFSET> T* atOffset() {
         return reinterpret_cast<T*>(reinterpret_cast<intptr_t>(fKey.begin()) + OFFSET);
@@ -105,21 +137,11 @@ protected:
         return reinterpret_cast<const T*>(reinterpret_cast<intptr_t>(fKey.begin()) + OFFSET);
     }
 
-    void finalize() {
-        int keyLength = fKey.count();
-        SkASSERT(0 == (keyLength % 4));
-        *(this->atOffset<uint32_t, GrProgramDesc::kLengthOffset>()) = SkToU32(keyLength);
-
-        uint32_t* checksum = this->atOffset<uint32_t, GrProgramDesc::kChecksumOffset>();
-        *checksum = 0;  // We'll hash through these bytes, so make sure they're initialized.
-        *checksum = SkChecksum::Murmur3(fKey.begin(), keyLength);
-    }
-
     // The key, stored in fKey, is composed of four parts:
     // 1. uint32_t for total key length.
     // 2. uint32_t for a checksum.
-    // 3. Header struct defined above.  Also room for extensions to the header
-    // 4. A Backend specific payload.  Room is preallocated for this
+    // 3. Header struct defined above.
+    // 4. A Backend specific payload which includes the per-processor keys.
     enum KeyOffsets {
         // Part 1.
         kLengthOffset = 0,
@@ -127,7 +149,11 @@ protected:
         kChecksumOffset = kLengthOffset + sizeof(uint32_t),
         // Part 3.
         kHeaderOffset = kChecksumOffset + sizeof(uint32_t),
-        kHeaderSize = SkAlign4(2 * sizeof(KeyHeader)),
+        kHeaderSize = SkAlign4(sizeof(KeyHeader)),
+        // Part 4.
+        // This is the offset into the backenend specific part of the key, which includes
+        // per-processor keys.
+        kProcessorKeysOffset = kHeaderOffset + kHeaderSize,
     };
 
     enum {

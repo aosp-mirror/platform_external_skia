@@ -65,13 +65,6 @@
       }],
     ],
     'direct_dependent_settings': {
-      'conditions': [
-        [ 'skia_os == "win"', {
-          'defines': [
-            'GR_GL_FUNCTION_TYPE=__stdcall',
-          ],
-        }],
-      ],
       'include_dirs': [
         '../include/gpu',
       ],
@@ -191,7 +184,7 @@
             [ 'skia_os == "win"', {
              'variables': {
                 'vulkan_lib_name': '-lvulkan-1',
-                'vulkan_sdk_path' : '<!(echo %VK_SDK_PATH%)',
+                'vulkan_sdk_path' : '<!(echo %VULKAN_SDK%)',
               },
               'include_dirs': [
                 '<(vulkan_sdk_path)/Include',
@@ -251,7 +244,7 @@
                 # the gyp -> android.mk generator doesn't seem to like cpp files
                 # in directories outside of src, bench, or dm.  Until this gets fixed
                 # I just start the path in the src directory.
-                '<(skia_src_path)/../tools/viewer/sk_app/WindowContext.cpp', 
+                '<(skia_src_path)/../tools/viewer/sk_app/WindowContext.cpp',
                 '<(skia_src_path)/../tools/viewer/sk_app/VulkanWindowContext.cpp',
                 '<(skia_src_path)/../tools/viewer/sk_app/android/VulkanWindowContext_android.cpp'
               ],

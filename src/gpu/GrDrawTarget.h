@@ -31,6 +31,7 @@
 
 class GrAuditTrail;
 class GrBatch;
+class GrClearBatch;
 class GrClip;
 class GrCaps;
 class GrPath;
@@ -57,6 +58,7 @@ public:
     ~GrDrawTarget() override;
 
     void makeClosed() {
+        fLastFullClearBatch = nullptr;
         // We only close drawTargets When MDB is enabled. When MDB is disabled there is only
         // ever one drawTarget and all calls will be funnelled into it.
 #ifdef ENABLE_MDB
@@ -94,10 +96,11 @@ public:
     void reset();
 
     /**
-     * Together these two functions flush all queued up draws to the Gpu.
+     * Together these two functions flush all queued up draws to GrCommandBuffer. The return value
+     * of drawBatches() indicates whether any commands were actually issued to the GPU.
      */
     void prepareBatches(GrBatchFlushState* flushState);
-    void drawBatches(GrBatchFlushState* flushState);
+    bool drawBatches(GrBatchFlushState* flushState);
 
     /**
      * Gets the capabilities of the draw target.
@@ -109,17 +112,20 @@ public:
     void addBatch(sk_sp<GrBatch>);
 
     /**
-     * Draws path into the stencil buffer. The path's fill must be either even/odd or
-     * winding (not inverse or hairline). It will respect the HW antialias boolean
-     * (if possible in the 3D API).  Note, we will never have an inverse
-     * fill with stencil path
+     * Draws the path into user stencil bits. Upon return, all user stencil values
+     * inside the path will be nonzero. The path's fill must be either even/odd or
+     * winding (notnverse or hairline).It will respect the HW antialias boolean (if
+     * possible in the 3D API).  Note, we will never have an inverse fill with
+     * stencil path.
      */
     void stencilPath(GrDrawContext*,
                      const GrClip&,
-                     const GrUserStencilSettings*,
                      bool useHWAA,
                      const SkMatrix& viewMatrix,
                      const GrPath*);
+
+    /** Clears the entire render target */
+    void fullClear(GrRenderTarget*, GrColor color);
 
     /** Discards the contents render target. */
     void discard(GrRenderTarget*);
@@ -139,10 +145,10 @@ public:
                      const SkIRect& srcRect,
                      const SkIPoint& dstPoint);
 
-    /**
-     * Gets the shape rendering object if it is supported on this platform.
-     */
-    gr_instanced::InstancedRendering* instancedRendering() const { return fInstancedRendering; }
+    gr_instanced::InstancedRendering* instancedRendering() const {
+        SkASSERT(fInstancedRendering);
+        return fInstancedRendering;
+    }
 
 private:
     friend class GrDrawingManager; // for resetFlag & TopoSortTraits
@@ -191,7 +197,9 @@ private:
         }
     };
 
-    void recordBatch(GrBatch*, const SkRect& clippedBounds);
+    // Returns the batch that the input batch was combined with or the input batch if it wasn't
+    // combined.
+    GrBatch* recordBatch(GrBatch*, const SkRect& clippedBounds);
     void forwardCombine();
 
     // Makes a copy of the dst if it is necessary for the draw. Returns false if a copy is required
@@ -207,14 +215,15 @@ private:
     void addDependency(GrDrawTarget* dependedOn);
 
     // Used only by drawContextPriv.
-    void clearStencilClip(const SkIRect&, bool insideClip, GrRenderTarget*);
+    void clearStencilClip(const GrFixedClip&, bool insideStencilMask, GrRenderTarget*);
 
     struct RecordedBatch {
         sk_sp<GrBatch> fBatch;
         SkRect         fClippedBounds;
     };
     SkSTArray<256, RecordedBatch, true>             fRecordedBatches;
-    // The context is only in service of the clip mask manager, remove once CMM doesn't need this.
+    GrClearBatch*                                   fLastFullClearBatch;
+    // The context is only in service of the GrClip, remove once it doesn't need this.
     GrContext*                                      fContext;
     GrGpu*                                          fGpu;
     GrResourceProvider*                             fResourceProvider;

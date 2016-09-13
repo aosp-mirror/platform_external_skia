@@ -769,6 +769,12 @@ bool GrGLInterface::validate() const {
         }
     }
 
+    if (fExtensions.has("GL_EXT_window_rectangles")) {
+        if (nullptr == fFunctions.fWindowRectangles) {
+            RETURN_FALSE_INTERFACE
+        }
+    }
+
     if ((kGL_GrGLStandard == fStandard && glVer >= GR_GL_VER(4,0)) ||
         fExtensions.has("GL_ARB_sample_shading")) {
         if (nullptr == fFunctions.fMinSampleShading) {
@@ -784,6 +790,16 @@ bool GrGLInterface::validate() const {
         if (nullptr == fFunctions.fEGLCreateImage ||
             nullptr == fFunctions.fEGLDestroyImage) {
             RETURN_FALSE_INTERFACE
+        }
+    }
+
+    if (kGL_GrGLStandard == fStandard && glVer >= GR_GL_VER(2,0)) {
+        if (nullptr == fFunctions.fDrawRangeElements) {
+            RETURN_FALSE_INTERFACE;
+        }
+    } else if (kGLES_GrGLStandard == fStandard && glVer >= GR_GL_VER(3,0)) {
+        if (nullptr == fFunctions.fDrawRangeElements) {
+            RETURN_FALSE_INTERFACE;
         }
     }
 

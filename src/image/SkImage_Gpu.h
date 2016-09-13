@@ -27,10 +27,8 @@ public:
                 SkBudgeted);
     ~SkImage_Gpu() override;
 
-    SkImageInfo onImageInfo() const override {
-        return GrMakeInfoFromTexture(fTexture, fTexture->width(), fTexture->height(), isOpaque(),
-                                     fColorSpace);
-    }
+    SkImageInfo onImageInfo() const override;
+    SkAlphaType onAlphaType() const override { return fAlphaType; }
 
     void applyBudgetDecision() const {
         if (SkBudgeted::kYes == fBudgeted) {
@@ -46,15 +44,16 @@ public:
     sk_sp<SkImage> onMakeSubset(const SkIRect&) const override;
 
     GrTexture* peekTexture() const override { return fTexture; }
-    bool isOpaque() const override;
+    sk_sp<GrTexture> refPinnedTexture(uint32_t* uniqueID) const override {
+        *uniqueID = this->uniqueID();
+        return sk_ref_sp(fTexture.get());
+    }
     bool onReadPixels(const SkImageInfo&, void* dstPixels, size_t dstRowBytes,
                       int srcX, int srcY, CachingHint) const override;
 
     sk_sp<SkSurface> onNewSurface(const SkImageInfo& info) const override {
         return SkSurface::MakeRenderTarget(fTexture->getContext(), SkBudgeted::kNo, info);
     }
-
-    bool asBitmapForImageFilters(SkBitmap* bitmap) const override;
 
 private:
     SkAutoTUnref<GrTexture>     fTexture;

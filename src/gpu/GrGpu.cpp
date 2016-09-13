@@ -251,6 +251,11 @@ GrBuffer* GrGpu::createBuffer(size_t size, GrBufferType intendedType,
     return buffer;
 }
 
+gr_instanced::InstancedRendering* GrGpu::createInstancedRendering() {
+    SkASSERT(GrCaps::InstancedSupport::kNone != this->caps()->instancedSupport());
+    return this->onCreateInstancedRendering();
+}
+
 bool GrGpu::copySurface(GrSurface* dst,
                         GrSurface* src,
                         const SkIRect& srcRect,
@@ -269,6 +274,12 @@ bool GrGpu::getReadPixelsInfo(GrSurface* srcSurface, int width, int height, size
 
     // We currently do not support reading into a compressed buffer
     if (GrPixelConfigIsCompressed(readConfig)) {
+        return false;
+    }
+
+    // We currently do not support reading into the packed formats 565 or 4444 as they are not
+    // required to have read back support on all devices and backends.
+    if (kRGB_565_GrPixelConfig == readConfig || kRGBA_4444_GrPixelConfig == readConfig) {
         return false;
     }
 

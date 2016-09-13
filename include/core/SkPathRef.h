@@ -36,7 +36,7 @@ class SkWBuffer;
  * logical verb or the last verb in memory).
  */
 
-class SK_API SkPathRef : public ::SkRefCnt {
+class SK_API SkPathRef final : public SkNVRefCnt<SkPathRef> {
 public:
     class Editor {
     public:
@@ -243,7 +243,7 @@ public:
      */
     static void Rewind(SkAutoTUnref<SkPathRef>* pathRef);
 
-    virtual ~SkPathRef();
+    ~SkPathRef();
     int countPoints() const { SkDEBUGCODE(this->validate();) return fPointCnt; }
     int countVerbs() const { SkDEBUGCODE(this->validate();) return fVerbCnt; }
     int countWeights() const { SkDEBUGCODE(this->validate();) return fConicWeights.count(); }
@@ -335,8 +335,8 @@ private:
         fIsOval = false;
         fIsRRect = false;
         // The next two values don't matter unless fIsOval or fIsRRect are true.
-        SkDEBUGCODE(fRRectOrOvalIsCCW = false);
-        SkDEBUGCODE(fRRectOrOvalStartIdx = 0xAC);
+        fRRectOrOvalIsCCW = false;
+        fRRectOrOvalStartIdx = 0xAC;
         SkDEBUGCODE(fEditorsAttached = 0;)
         SkDEBUGCODE(this->validate();)
     }
@@ -543,7 +543,6 @@ private:
 
     friend class PathRefTest_Private;
     friend class ForceIsRRect_Private; // unit test isRRect
-    typedef SkRefCnt INHERITED;
 };
 
 #endif

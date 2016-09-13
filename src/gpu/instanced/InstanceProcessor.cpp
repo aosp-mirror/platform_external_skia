@@ -18,44 +18,39 @@
 
 namespace gr_instanced {
 
-bool InstanceProcessor::IsSupported(const GrGLSLCaps& glslCaps, const GrCaps& caps,
-                                    AntialiasMode* lastSupportedAAMode) {
+GrCaps::InstancedSupport InstanceProcessor::CheckSupport(const GrGLSLCaps& glslCaps,
+                                                         const GrCaps& caps) {
     if (!glslCaps.canUseAnyFunctionInShader() ||
         !glslCaps.flatInterpolationSupport() ||
         !glslCaps.integerSupport() ||
         0 == glslCaps.maxVertexSamplers() ||
         !caps.shaderCaps()->texelBufferSupport() ||
         caps.maxVertexAttributes() < kNumAttribs) {
-        return false;
+        return GrCaps::InstancedSupport::kNone;
     }
-    if (caps.sampleLocationsSupport() &&
-        glslCaps.sampleVariablesSupport() &&
-        glslCaps.shaderDerivativeSupport()) {
-        if (0 != caps.maxRasterSamples() &&
-            glslCaps.sampleMaskOverrideCoverageSupport()) {
-            *lastSupportedAAMode = AntialiasMode::kMixedSamples;
-        } else {
-            *lastSupportedAAMode = AntialiasMode::kMSAA;
-        }
-    } else {
-        *lastSupportedAAMode = AntialiasMode::kCoverage;
+    if (!caps.sampleLocationsSupport() ||
+        !glslCaps.sampleVariablesSupport() ||
+        !glslCaps.shaderDerivativeSupport()) {
+        return GrCaps::InstancedSupport::kBasic;
     }
-    return true;
+    if (0 == caps.maxRasterSamples() ||
+        !glslCaps.sampleMaskOverrideCoverageSupport()) {
+        return GrCaps::InstancedSupport::kMultisampled;
+    }
+    return GrCaps::InstancedSupport::kMixedSampled;
 }
 
 InstanceProcessor::InstanceProcessor(BatchInfo batchInfo, GrBuffer* paramsBuffer)
     : fBatchInfo(batchInfo) {
     this->initClassID<InstanceProcessor>();
 
-    this->addVertexAttrib(Attribute("shapeCoords", kVec2f_GrVertexAttribType, kHigh_GrSLPrecision));
-    this->addVertexAttrib(Attribute("vertexAttrs", kInt_GrVertexAttribType));
-    this->addVertexAttrib(Attribute("instanceInfo", kUint_GrVertexAttribType));
-    this->addVertexAttrib(Attribute("shapeMatrixX", kVec3f_GrVertexAttribType,
-                                    kHigh_GrSLPrecision));
-    this->addVertexAttrib(Attribute("shapeMatrixY", kVec3f_GrVertexAttribType,
-                                    kHigh_GrSLPrecision));
-    this->addVertexAttrib(Attribute("color", kVec4f_GrVertexAttribType, kLow_GrSLPrecision));
-    this->addVertexAttrib(Attribute("localRect", kVec4f_GrVertexAttribType, kHigh_GrSLPrecision));
+    this->addVertexAttrib("shapeCoords", kVec2f_GrVertexAttribType, kHigh_GrSLPrecision);
+    this->addVertexAttrib("vertexAttrs", kInt_GrVertexAttribType);
+    this->addVertexAttrib("instanceInfo", kUint_GrVertexAttribType);
+    this->addVertexAttrib("shapeMatrixX", kVec3f_GrVertexAttribType, kHigh_GrSLPrecision);
+    this->addVertexAttrib("shapeMatrixY", kVec3f_GrVertexAttribType, kHigh_GrSLPrecision);
+    this->addVertexAttrib("color", kVec4f_GrVertexAttribType, kLow_GrSLPrecision);
+    this->addVertexAttrib("localRect", kVec4f_GrVertexAttribType, kHigh_GrSLPrecision);
 
     GR_STATIC_ASSERT(0 == (int)Attrib::kShapeCoords);
     GR_STATIC_ASSERT(1 == (int)Attrib::kVertexAttrs);
@@ -767,8 +762,8 @@ void GLSLInstanceProcessor::BackendCoverage::onInit(GrGLSLVaryingHandler* varyin
             varyingHandler->addVarying("ellipseCoords", &fEllipseCoords, kMedium_GrSLPrecision);
             varyingHandler->addFlatVarying("ellipseName", &fEllipseName, kHigh_GrSLPrecision);
         } else {
-            varyingHandler->addVarying("circleCoords", &fEllipseCoords, kMedium_GrSLPrecision);
-            varyingHandler->addFlatVarying("bloatedRadius", &fBloatedRadius, kMedium_GrSLPrecision);
+            varyingHandler->addVarying("circleCoords", &fEllipseCoords, kHigh_GrSLPrecision);
+            varyingHandler->addFlatVarying("bloatedRadius", &fBloatedRadius, kHigh_GrSLPrecision);
         }
     }
 }
@@ -1016,7 +1011,7 @@ void GLSLInstanceProcessor::BackendCoverage::emitCircle(GrGLSLPPFragmentBuilder*
                                                         const char* outCoverage) {
     // TODO: circleCoords = max(circleCoords, 0) if we decide to do this optimization on rrects.
     SkASSERT(!(kRRect_ShapesMask & fBatchInfo.fShapeTypes));
-    f->appendPrecisionModifier(kLow_GrSLPrecision);
+    f->appendPrecisionModifier(kMedium_GrSLPrecision);
     f->codeAppendf("float distanceToEdge = %s - length(%s);",
                    fBloatedRadius.fsIn(), fEllipseCoords.fsIn());
     f->codeAppendf("%s = clamp(distanceToEdge, 0.0, 1.0);", outCoverage);
@@ -1407,9 +1402,8 @@ void GLSLInstanceProcessor::BackendMultisample::onEmitCode(GrGLSLVertexBuilder*,
         }
     } else {
         const char* arcTest = fArcTest.fsIn();
-        SkASSERT(arcTest);
-        if (fBatchInfo.fHasPerspective) {
-            // The non-perspective version accounts for fwith() in the vertex shader.
+        if (arcTest && fBatchInfo.fHasPerspective) {
+            // The non-perspective version accounts for fwidth() in the vertex shader.
             // We make sure to take the derivative here, before a neighbor pixel may early accept.
             f->enableFeature(GrGLSLPPFragmentBuilder::kStandardDerivatives_GLSLFeature);
             f->appendPrecisionModifier(kHigh_GrSLPrecision);

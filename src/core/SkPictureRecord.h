@@ -122,7 +122,6 @@ private:
         fWriter.writeScalar(scalar);
     }
 
-    void addBitmap(const SkBitmap& bitmap);
     void addImage(const SkImage*);
     void addMatrix(const SkMatrix& matrix);
     void addPaint(const SkPaint& paint) { this->addPaintPtr(&paint); }
@@ -159,7 +158,11 @@ protected:
     void didConcat(const SkMatrix&) override;
     void didSetMatrix(const SkMatrix&) override;
 
+#ifdef SK_EXPERIMENTAL_SHADOWING
     void didTranslateZ(SkScalar) override;
+#else
+    void didTranslateZ(SkScalar);
+#endif
 
     void onDrawDRRect(const SkRRect&, const SkRRect&, const SkPaint&) override;
 
@@ -183,19 +186,19 @@ protected:
     void onDrawPaint(const SkPaint&) override;
     void onDrawPoints(PointMode, size_t count, const SkPoint pts[], const SkPaint&) override;
     void onDrawRect(const SkRect&, const SkPaint&) override;
+    void onDrawRegion(const SkRegion&, const SkPaint&) override;
     void onDrawOval(const SkRect&, const SkPaint&) override;
+    void onDrawArc(const SkRect&, SkScalar, SkScalar, bool, const SkPaint&) override;
     void onDrawRRect(const SkRRect&, const SkPaint&) override;
     void onDrawPath(const SkPath&, const SkPaint&) override;
-    void onDrawBitmap(const SkBitmap&, SkScalar left, SkScalar top, const SkPaint*) override;
-    void onDrawBitmapRect(const SkBitmap&, const SkRect* src, const SkRect& dst, const SkPaint*,
-                          SrcRectConstraint) override;
     void onDrawImage(const SkImage*, SkScalar left, SkScalar top, const SkPaint*) override;
     void onDrawImageRect(const SkImage*, const SkRect* src, const SkRect& dst,
                          const SkPaint*, SrcRectConstraint) override;
     void onDrawImageNine(const SkImage*, const SkIRect& center, const SkRect& dst,
                          const SkPaint*) override;
-    void onDrawBitmapNine(const SkBitmap&, const SkIRect& center, const SkRect& dst,
-                          const SkPaint*) override;
+    void onDrawImageLattice(const SkImage*, const SkCanvas::Lattice& lattice, const SkRect& dst,
+                            const SkPaint*) override;
+
     void onDrawVertices(VertexMode vmode, int vertexCount,
                         const SkPoint vertices[], const SkPoint texs[],
                         const SkColor colors[], SkXfermode* xmode,
@@ -208,6 +211,15 @@ protected:
     void onClipRegion(const SkRegion&, SkRegion::Op) override;
 
     void onDrawPicture(const SkPicture*, const SkMatrix*, const SkPaint*) override;
+
+#ifdef SK_EXPERIMENTAL_SHADOWING
+    void onDrawShadowedPicture(const SkPicture*, const SkMatrix*,
+                               const SkPaint*, const SkShadowParams& params) override;
+#else
+    void onDrawShadowedPicture(const SkPicture*, const SkMatrix*,
+                               const SkPaint*, const SkShadowParams& params);
+#endif
+
     void onDrawDrawable(SkDrawable*, const SkMatrix*) override;
     void onDrawAnnotation(const SkRect&, const char[], SkData*) override;
 
@@ -227,10 +239,26 @@ protected:
     void recordSaveLayer(const SaveLayerRec&);
     void recordRestore(bool fillInSkips = true);
 
+    // SHOULD NEVER BE CALLED
+    void onDrawBitmap(const SkBitmap&, SkScalar left, SkScalar top, const SkPaint*) override {
+        sk_throw();
+    }
+    void onDrawBitmapRect(const SkBitmap&, const SkRect* src, const SkRect& dst, const SkPaint*,
+                          SrcRectConstraint) override {
+        sk_throw();
+    }
+    void onDrawBitmapNine(const SkBitmap&, const SkIRect& center, const SkRect& dst,
+                          const SkPaint*) override {
+        sk_throw();
+    }
+    void onDrawBitmapLattice(const SkBitmap&, const SkCanvas::Lattice& lattice, const SkRect& dst,
+                             const SkPaint*) override {
+        sk_throw();
+    }
+
 private:
     SkPictureContentInfo fContentInfo;
 
-    SkTArray<SkBitmap> fBitmaps;
     SkTArray<SkPaint>  fPaints;
 
     struct PathHash {

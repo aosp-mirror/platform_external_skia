@@ -61,8 +61,9 @@ public:
         virtual void store(SpvId value, std::ostream& out) = 0;
     };
 
-    SPIRVCodeGenerator()
-    : fCapabilities(1 << SpvCapabilityShader)
+    SPIRVCodeGenerator(const Context* context)
+    : fContext(*context)
+    , fCapabilities(1 << SpvCapabilityShader)
     , fIdCount(1)
     , fBoolTrue(0)
     , fBoolFalse(0)
@@ -70,7 +71,7 @@ public:
         this->setupIntrinsics();
     }
 
-    void generateCode(Program& program, std::ostream& out) override;
+    void generateCode(const Program& program, std::ostream& out) override;
 
 private:
     enum IntrinsicKind {
@@ -92,11 +93,11 @@ private:
 
     SpvId getType(const Type& type);
 
-    SpvId getFunctionType(std::shared_ptr<FunctionDeclaration> function);
+    SpvId getFunctionType(const FunctionDeclaration& function);
 
-    SpvId getPointerType(std::shared_ptr<Type> type, SpvStorageClass_ storageClass);
+    SpvId getPointerType(const Type& type, SpvStorageClass_ storageClass);
 
-    std::vector<SpvId> getAccessChain(Expression& expr, std::ostream& out);
+    std::vector<SpvId> getAccessChain(const Expression& expr, std::ostream& out);
 
     void writeLayout(const Layout& layout, SpvId target);
 
@@ -104,88 +105,88 @@ private:
 
     void writeStruct(const Type& type, SpvId resultId);
 
-    void writeProgramElement(ProgramElement& pe, std::ostream& out);
+    void writeProgramElement(const ProgramElement& pe, std::ostream& out);
 
-    SpvId writeInterfaceBlock(InterfaceBlock& intf);
+    SpvId writeInterfaceBlock(const InterfaceBlock& intf);
 
-    SpvId writeFunctionStart(std::shared_ptr<FunctionDeclaration> f, std::ostream& out);
+    SpvId writeFunctionStart(const FunctionDeclaration& f, std::ostream& out);
     
-    SpvId writeFunctionDeclaration(std::shared_ptr<FunctionDeclaration> f, std::ostream& out);
+    SpvId writeFunctionDeclaration(const FunctionDeclaration& f, std::ostream& out);
 
-    SpvId writeFunction(FunctionDefinition& f, std::ostream& out);
+    SpvId writeFunction(const FunctionDefinition& f, std::ostream& out);
 
-    void writeGlobalVars(VarDeclaration& v, std::ostream& out);
+    void writeGlobalVars(const VarDeclarations& v, std::ostream& out);
 
-    void writeVarDeclaration(VarDeclaration& decl, std::ostream& out);
+    void writeVarDeclarations(const VarDeclarations& decl, std::ostream& out);
 
-    SpvId writeVariableReference(VariableReference& ref, std::ostream& out);
+    SpvId writeVariableReference(const VariableReference& ref, std::ostream& out);
 
-    std::unique_ptr<LValue> getLValue(Expression& value, std::ostream& out);
+    std::unique_ptr<LValue> getLValue(const Expression& value, std::ostream& out);
 
-    SpvId writeExpression(Expression& expr, std::ostream& out);
+    SpvId writeExpression(const Expression& expr, std::ostream& out);
     
-    SpvId writeIntrinsicCall(FunctionCall& c, std::ostream& out);
+    SpvId writeIntrinsicCall(const FunctionCall& c, std::ostream& out);
 
-    SpvId writeFunctionCall(FunctionCall& c, std::ostream& out);
+    SpvId writeFunctionCall(const FunctionCall& c, std::ostream& out);
 
-    SpvId writeSpecialIntrinsic(FunctionCall& c, SpecialIntrinsic kind, std::ostream& out);
+    SpvId writeSpecialIntrinsic(const FunctionCall& c, SpecialIntrinsic kind, std::ostream& out);
 
-    SpvId writeConstantVector(Constructor& c);
+    SpvId writeConstantVector(const Constructor& c);
 
-    SpvId writeFloatConstructor(Constructor& c, std::ostream& out);
+    SpvId writeFloatConstructor(const Constructor& c, std::ostream& out);
 
-    SpvId writeIntConstructor(Constructor& c, std::ostream& out);
+    SpvId writeIntConstructor(const Constructor& c, std::ostream& out);
     
-    SpvId writeMatrixConstructor(Constructor& c, std::ostream& out);
+    SpvId writeMatrixConstructor(const Constructor& c, std::ostream& out);
 
-    SpvId writeVectorConstructor(Constructor& c, std::ostream& out);
+    SpvId writeVectorConstructor(const Constructor& c, std::ostream& out);
 
-    SpvId writeConstructor(Constructor& c, std::ostream& out);
+    SpvId writeConstructor(const Constructor& c, std::ostream& out);
 
-    SpvId writeFieldAccess(FieldAccess& f, std::ostream& out);
+    SpvId writeFieldAccess(const FieldAccess& f, std::ostream& out);
 
-    SpvId writeSwizzle(Swizzle& swizzle, std::ostream& out);
+    SpvId writeSwizzle(const Swizzle& swizzle, std::ostream& out);
 
     SpvId writeBinaryOperation(const Type& resultType, const Type& operandType, SpvId lhs, 
                                SpvId rhs, SpvOp_ ifFloat, SpvOp_ ifInt, SpvOp_ ifUInt, 
                                SpvOp_ ifBool, std::ostream& out);
 
-    SpvId writeBinaryOperation(BinaryExpression& expr, SpvOp_ ifFloat, SpvOp_ ifInt, SpvOp_ ifUInt,
-                               std::ostream& out);
+    SpvId writeBinaryOperation(const BinaryExpression& expr, SpvOp_ ifFloat, SpvOp_ ifInt, 
+                               SpvOp_ ifUInt, std::ostream& out);
 
-    SpvId writeBinaryExpression(BinaryExpression& b, std::ostream& out);
+    SpvId writeBinaryExpression(const BinaryExpression& b, std::ostream& out);
 
-    SpvId writeTernaryExpression(TernaryExpression& t, std::ostream& out);
+    SpvId writeTernaryExpression(const TernaryExpression& t, std::ostream& out);
 
-    SpvId writeIndexExpression(IndexExpression& expr, std::ostream& out);
+    SpvId writeIndexExpression(const IndexExpression& expr, std::ostream& out);
 
-    SpvId writeLogicalAnd(BinaryExpression& b, std::ostream& out);
+    SpvId writeLogicalAnd(const BinaryExpression& b, std::ostream& out);
 
-    SpvId writeLogicalOr(BinaryExpression& o, std::ostream& out);
+    SpvId writeLogicalOr(const BinaryExpression& o, std::ostream& out);
 
-    SpvId writePrefixExpression(PrefixExpression& p, std::ostream& out);
+    SpvId writePrefixExpression(const PrefixExpression& p, std::ostream& out);
 
-    SpvId writePostfixExpression(PostfixExpression& p, std::ostream& out);
+    SpvId writePostfixExpression(const PostfixExpression& p, std::ostream& out);
 
-    SpvId writeBoolLiteral(BoolLiteral& b);
+    SpvId writeBoolLiteral(const BoolLiteral& b);
 
-    SpvId writeIntLiteral(IntLiteral& i);
+    SpvId writeIntLiteral(const IntLiteral& i);
 
-    SpvId writeFloatLiteral(FloatLiteral& f);
+    SpvId writeFloatLiteral(const FloatLiteral& f);
 
-    void writeStatement(Statement& s, std::ostream& out);
+    void writeStatement(const Statement& s, std::ostream& out);
 
-    void writeBlock(Block& b, std::ostream& out);
+    void writeBlock(const Block& b, std::ostream& out);
 
-    void writeIfStatement(IfStatement& stmt, std::ostream& out);
+    void writeIfStatement(const IfStatement& stmt, std::ostream& out);
 
-    void writeForStatement(ForStatement& f, std::ostream& out);
+    void writeForStatement(const ForStatement& f, std::ostream& out);
 
-    void writeReturnStatement(ReturnStatement& r, std::ostream& out);
+    void writeReturnStatement(const ReturnStatement& r, std::ostream& out);
 
     void writeCapabilities(std::ostream& out);
 
-    void writeInstructions(Program& program, std::ostream& out);
+    void writeInstructions(const Program& program, std::ostream& out);
 
     void writeOpCode(SpvOp_ opCode, int length, std::ostream& out);
 
@@ -227,14 +228,16 @@ private:
                           int32_t word5, int32_t word6, int32_t word7, int32_t word8, 
                           std::ostream& out);
 
+    const Context& fContext;
+
     uint64_t fCapabilities;
     SpvId fIdCount;
     SpvId fGLSLExtendedInstructions;
     typedef std::tuple<IntrinsicKind, int32_t, int32_t, int32_t, int32_t> Intrinsic;
     std::unordered_map<std::string, Intrinsic> fIntrinsicMap;
-    std::unordered_map<std::shared_ptr<FunctionDeclaration>, SpvId> fFunctionMap;
-    std::unordered_map<std::shared_ptr<Variable>, SpvId> fVariableMap;
-    std::unordered_map<std::shared_ptr<Variable>, int32_t> fInterfaceBlockMap;
+    std::unordered_map<const FunctionDeclaration*, SpvId> fFunctionMap;
+    std::unordered_map<const Variable*, SpvId> fVariableMap;
+    std::unordered_map<const Variable*, int32_t> fInterfaceBlockMap;
     std::unordered_map<std::string, SpvId> fTypeMap;
     std::stringstream fCapabilitiesBuffer;
     std::stringstream fGlobalInitializersBuffer;

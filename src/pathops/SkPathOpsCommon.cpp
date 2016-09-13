@@ -124,6 +124,9 @@ SkOpSegment* FindChase(SkTDArray<SkOpSpanBase*>* chase, SkOpSpanBase** startPtr,
         int winding;
         bool sortable;
         const SkOpAngle* angle = AngleWinding(*startPtr, *endPtr, &winding, &sortable);
+        if (!angle) {
+            return nullptr;
+        }
         if (winding == SK_MinS32) {
             continue;
         }
@@ -480,15 +483,22 @@ bool HandleCoincidence(SkOpContourHead* contourList, SkOpCoincidence* coincidenc
     const int SAFETY_COUNT = 100;  // FIXME: tune
     int safetyHatch = SAFETY_COUNT;
     // look for coincidence present in A-B and A-C but missing in B-C
-    while (coincidence->addMissing()) {
+    do {
+        bool added;
+        if (!coincidence->addMissing(&added)) {
+            return false;
+        }
+        if (!added) {
+            break;
+        }
         if (!--safetyHatch) {
-            SkASSERT(0);  // FIXME: take this out after verifying std tests don't trigger
+            SkASSERT(globalState->debugSkipAssert());
             return false;
         }
         DEBUG_COINCIDENCE_HEALTH(contourList, "addMissing");
         moveNearby(contourList);
         DEBUG_COINCIDENCE_HEALTH(contourList, "moveNearby");
-    }
+    } while (true);
     DEBUG_COINCIDENCE_HEALTH(contourList, "addMissing2");
     // FIXME: only call this if addMissing modified something when returning false
     moveNearby(contourList);
@@ -496,7 +506,10 @@ bool HandleCoincidence(SkOpContourHead* contourList, SkOpCoincidence* coincidenc
     // check to see if, loosely, coincident ranges may be expanded
     if (coincidence->expand()) {
         DEBUG_COINCIDENCE_HEALTH(contourList, "expand1");
-        coincidence->addMissing();
+        bool added;
+        if (!coincidence->addMissing(&added)) {
+            return false;
+        }
         DEBUG_COINCIDENCE_HEALTH(contourList, "addMissing2");
         if (!coincidence->addExpanded()) {
             return false;
@@ -513,7 +526,9 @@ bool HandleCoincidence(SkOpContourHead* contourList, SkOpCoincidence* coincidenc
 #endif
     DEBUG_COINCIDENCE_HEALTH(contourList, "expand2");
     // the expanded ranges may not align -- add the missing spans
-    SkAssertResult(coincidence->addExpanded());
+    if (!coincidence->addExpanded()) {
+        return false;
+    }
     DEBUG_COINCIDENCE_HEALTH(contourList, "addExpanded3");
     coincidence->correctEnds();
     if (!coincidence->mark()) {  // mark spans of coincident segments as coincident

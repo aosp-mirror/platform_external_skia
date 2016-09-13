@@ -24,9 +24,9 @@
         #include "TargetConditionals.h"
     #endif
 
-    #if defined(WIN32) || defined(__SYMBIAN32__)
+    #if defined(_WIN32) || defined(__SYMBIAN32__)
         #define SK_BUILD_FOR_WIN32
-    #elif defined(ANDROID)
+    #elif defined(ANDROID) || defined(__ANDROID__)
         #define SK_BUILD_FOR_ANDROID
     #elif defined(linux) || defined(__linux) || defined(__FreeBSD__) || \
           defined(__OpenBSD__) || defined(__sun) || defined(__NetBSD__) || \
@@ -52,14 +52,6 @@
 
 //////////////////////////////////////////////////////////////////////
 
-#if !defined(SK_DEBUG) && !defined(SK_RELEASE)
-    #ifdef NDEBUG
-        #define SK_RELEASE
-    #else
-        #define SK_DEBUG
-    #endif
-#endif
-
 #ifdef SK_BUILD_FOR_WIN32
     #if !defined(SK_RESTRICT)
         #define SK_RESTRICT __restrict
@@ -68,8 +60,6 @@
         #define SK_WARN_UNUSED_RESULT
     #endif
 #endif
-
-//////////////////////////////////////////////////////////////////////
 
 #if !defined(SK_RESTRICT)
     #define SK_RESTRICT __restrict__
@@ -203,24 +193,32 @@
     #define SK_ARM_HAS_NEON
 #endif
 
+// Really this __APPLE__ check shouldn't be necessary, but it seems that Apple's Clang defines
+// __ARM_FEATURE_CRC32 for -arch arm64, even though their chips don't support those instructions!
+#if defined(__ARM_FEATURE_CRC32) && !defined(__APPLE__)
+    #define SK_ARM_HAS_CRC32
+#endif
+
 //////////////////////////////////////////////////////////////////////
 
 #if !defined(SKIA_IMPLEMENTATION)
     #define SKIA_IMPLEMENTATION 0
 #endif
 
-#if defined(SKIA_DLL)
-    #if defined(SK_BUILD_FOR_WIN32)
-        #if SKIA_IMPLEMENTATION
-            #define SK_API __declspec(dllexport)
+#if !defined(SK_API)
+    #if defined(SKIA_DLL)
+        #if defined(_MSC_VER)
+            #if SKIA_IMPLEMENTATION
+                #define SK_API __declspec(dllexport)
+            #else
+                #define SK_API __declspec(dllimport)
+            #endif
         #else
-            #define SK_API __declspec(dllimport)
+            #define SK_API __attribute__((visibility("default")))
         #endif
     #else
-        #define SK_API __attribute__((visibility("default")))
+        #define SK_API
     #endif
-#else
-    #define SK_API
 #endif
 
 //////////////////////////////////////////////////////////////////////

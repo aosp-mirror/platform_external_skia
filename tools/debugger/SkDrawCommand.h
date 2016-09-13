@@ -24,6 +24,7 @@ class SK_API SkDrawCommand {
 public:
     enum OpType {
         kBeginDrawPicture_OpType,
+        kBeginDrawShadowedPicture_OpType,
         kClipPath_OpType,
         kClipRegion_OpType,
         kClipRect_OpType,
@@ -52,6 +53,7 @@ public:
         kDrawTextRSXform_OpType,
         kDrawVertices_OpType,
         kEndDrawPicture_OpType,
+        kEndDrawShadowedPicture_OpType,
         kRestore_OpType,
         kSave_OpType,
         kSaveLayer_OpType,
@@ -397,6 +399,25 @@ private:
     typedef SkDrawCommand INHERITED;
 };
 
+class SkDrawArcCommand : public SkDrawCommand {
+public:
+    SkDrawArcCommand(const SkRect& oval, SkScalar startAngle, SkScalar sweepAngle, bool useCenter,
+                     const SkPaint& paint);
+    void execute(SkCanvas* canvas) const override;
+    bool render(SkCanvas* canvas) const override;
+    Json::Value toJSON(UrlDataManager& urlDataManager) const override;
+    static SkDrawArcCommand* fromJSON(Json::Value& command, UrlDataManager& urlDataManager);
+
+private:
+    SkRect   fOval;
+    SkScalar fStartAngle;
+    SkScalar fSweepAngle;
+    bool     fUseCenter;
+    SkPaint  fPaint;
+
+    typedef SkDrawCommand INHERITED;
+};
+
 class SkDrawPaintCommand : public SkDrawCommand {
 public:
     SkDrawPaintCommand(const SkPaint& paint);
@@ -446,6 +467,39 @@ private:
 class SkEndDrawPictureCommand : public SkDrawCommand {
 public:
     SkEndDrawPictureCommand(bool restore);
+
+    void execute(SkCanvas* canvas) const override;
+
+private:
+    bool fRestore;
+
+    typedef SkDrawCommand INHERITED;
+};
+
+class SkBeginDrawShadowedPictureCommand : public SkDrawCommand {
+public:
+    SkBeginDrawShadowedPictureCommand(const SkPicture* picture,
+                                      const SkMatrix* matrix,
+                                      const SkPaint* paint,
+                                      const SkShadowParams& params);
+
+    void execute(SkCanvas* canvas) const override;
+    bool render(SkCanvas* canvas) const override;
+
+private:
+    SkAutoTUnref<const SkPicture> fPicture;
+    SkTLazy<SkMatrix>             fMatrix;
+    SkTLazy<SkPaint>              fPaint;
+#ifdef SK_EXPERIMENTAL_SHADOWING
+    SkShadowParams                fShadowParams;
+#endif
+
+    typedef SkDrawCommand INHERITED;
+};
+
+class SkEndDrawShadowedPictureCommand : public SkDrawCommand {
+public:
+    SkEndDrawShadowedPictureCommand(bool restore);
 
     void execute(SkCanvas* canvas) const override;
 
@@ -746,3 +800,4 @@ private:
     typedef SkDrawCommand INHERITED;
 };
 #endif
+

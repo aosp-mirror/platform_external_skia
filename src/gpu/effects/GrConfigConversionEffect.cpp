@@ -31,8 +31,8 @@ public:
         fragBuilder->codeAppendf("%s;", tmpDecl.c_str());
 
         fragBuilder->codeAppendf("%s = ", tmpVar.c_str());
-        fragBuilder->appendTextureLookup(args.fTexSamplers[0], args.fCoords[0].c_str(),
-                                       args.fCoords[0].getType());
+        fragBuilder->appendTextureLookup(args.fTexSamplers[0], args.fTransformedCoords[0].c_str(),
+                                         args.fTransformedCoords[0].getType());
         fragBuilder->codeAppend(";");
 
         if (GrConfigConversionEffect::kNone_PMConversion == pmConversion) {
@@ -125,6 +125,12 @@ void GrConfigConversionEffect::onComputeInvariantOutput(GrInvariantOutput* inout
 
 GR_DEFINE_FRAGMENT_PROCESSOR_TEST(GrConfigConversionEffect);
 
+#if !defined(__clang__) && _MSC_FULL_VER >= 190024213
+// Work around VS 2015 Update 3 optimizer bug that causes internal compiler error
+//https://connect.microsoft.com/VisualStudio/feedback/details/3100520/internal-compiler-error
+#pragma optimize("t", off)
+#endif
+
 sk_sp<GrFragmentProcessor> GrConfigConversionEffect::TestCreate(GrProcessorTestData* d) {
     PMConversion pmConv = static_cast<PMConversion>(d->fRandom->nextULessThan(kPMConversionCnt));
     GrSwizzle swizzle;
@@ -135,6 +141,11 @@ sk_sp<GrFragmentProcessor> GrConfigConversionEffect::TestCreate(GrProcessorTestD
         new GrConfigConversionEffect(d->fTextures[GrProcessorUnitTest::kSkiaPMTextureIdx],
                                      swizzle, pmConv, GrTest::TestMatrix(d->fRandom)));
 }
+
+#if !defined(__clang__) && _MSC_FULL_VER >= 190024213
+// Restore optimization settings.
+#pragma optimize("", on)
+#endif
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -173,10 +184,10 @@ void GrConfigConversionEffect::TestForPreservingPMConversions(GrContext* context
         }
     }
 
-    sk_sp<GrDrawContext> readDC(context->newDrawContext(SkBackingFit::kExact, kSize, kSize,
-                                                        kConfig));
-    sk_sp<GrDrawContext> tempDC(context->newDrawContext(SkBackingFit::kExact, kSize, kSize,
-                                                        kConfig));
+    sk_sp<GrDrawContext> readDC(context->makeDrawContext(SkBackingFit::kExact, kSize, kSize,
+                                                         kConfig, nullptr));
+    sk_sp<GrDrawContext> tempDC(context->makeDrawContext(SkBackingFit::kExact, kSize, kSize,
+                                                         kConfig, nullptr));
     if (!readDC || !tempDC) {
         return;
     }

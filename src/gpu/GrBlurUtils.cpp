@@ -9,6 +9,7 @@
 #include "GrDrawContext.h"
 #include "GrCaps.h"
 #include "GrContext.h"
+#include "GrFixedClip.h"
 #include "effects/GrSimpleTextureEffect.h"
 #include "GrStyle.h"
 #include "GrTexture.h"
@@ -17,6 +18,7 @@
 #include "SkGrPriv.h"
 #include "SkMaskFilter.h"
 #include "SkPaint.h"
+#include "SkTLazy.h"
 
 static bool clip_bounds_quick_reject(const SkIRect& clipBounds, const SkIRect& rect) {
     return clipBounds.isEmpty() || rect.isEmpty() || !SkIRect::Intersects(clipBounds, rect);
@@ -102,18 +104,12 @@ static sk_sp<GrTexture> create_mask_GPU(GrContext* context,
         sampleCnt = 0;
     }
 
-    // We actually only need A8, but it often isn't supported as a
-    // render target so default to RGBA_8888
-    GrPixelConfig config = kRGBA_8888_GrPixelConfig;
-    if (context->caps()->isConfigRenderable(kAlpha_8_GrPixelConfig, sampleCnt > 0)) {
-        config = kAlpha_8_GrPixelConfig;
-    }
-
-    sk_sp<GrDrawContext> drawContext(context->newDrawContext(SkBackingFit::kApprox,
-                                                             maskRect.width(), 
-                                                             maskRect.height(),
-                                                             config,
-                                                             sampleCnt));
+    sk_sp<GrDrawContext> drawContext(context->makeDrawContextWithFallback(SkBackingFit::kApprox,
+                                                                          maskRect.width(), 
+                                                                          maskRect.height(),
+                                                                          kAlpha_8_GrPixelConfig,
+                                                                          nullptr,
+                                                                          sampleCnt));
     if (!drawContext) {
         return nullptr;
     }
@@ -154,8 +150,8 @@ static void draw_path_with_mask_filter(GrContext* context,
 
     // We just fully apply the style here.
     if (style.applies()) {
-        if (!style.applyToPath(tmpPath.init(), &fillOrHairline, *path,
-                                   GrStyle::MatrixToScaleFactor(viewMatrix))) {
+        SkScalar scale = GrStyle::MatrixToScaleFactor(viewMatrix);
+        if (0 == scale || !style.applyToPath(tmpPath.init(), &fillOrHairline, *path, scale)) {
             return;
         }
         pathIsMutable = true;
@@ -286,8 +282,7 @@ void GrBlurUtils::drawPathWithMaskFilter(GrContext* context,
     SkDEBUGCODE(prePathMatrix = (const SkMatrix*)0x50FF8001;)
 
     GrPaint grPaint;
-    if (!SkPaintToGrPaint(context, paint, viewMatrix, drawContext->isGammaCorrect(),
-                          &grPaint)) {
+    if (!SkPaintToGrPaint(context, drawContext, paint, viewMatrix, &grPaint)) {
         return;
     }
 

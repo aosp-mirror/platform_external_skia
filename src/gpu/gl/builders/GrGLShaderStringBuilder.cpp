@@ -8,14 +8,13 @@
 #include "GrGLShaderStringBuilder.h"
 #include "gl/GrGLGpu.h"
 #include "gl/GrGLSLPrettyPrint.h"
-#include "SkRTConf.h"
 #include "SkTraceEvent.h"
 
 #define GL_CALL(X) GR_GL_CALL(gpu->glInterface(), X)
 #define GL_CALL_RET(R, X) GR_GL_CALL_RET(gpu->glInterface(), R, X)
 
-SK_CONF_DECLARE(bool, c_PrintShaders, "gpu.printShaders", false,
-                "Print the source code for all shaders generated.");
+// Print the source code for all shaders generated.
+static const bool c_PrintShaders{false};
 
 static void print_shader_source(const char** strings, int* lengths, int count);
 
@@ -74,6 +73,7 @@ GrGLuint GrGLCompileAndAttachShader(const GrGLContext& glCtx,
                 GrGLsizei length = GR_GL_INIT_ZERO;
                 GR_GL_CALL(gli, GetShaderInfoLog(shaderId, infoLen+1, &length, (char*)log.get()));
                 print_shader_source(strings, lengths, count);
+                SkDebugf("\n%s", (const char*)log.get());
             }
             SkDEBUGFAIL("Shader compilation failed!");
             GR_GL_CALL(gli, DeleteShader(shaderId));

@@ -50,9 +50,10 @@ public:
     int width() const { return fSubset.width(); }
     int height() const { return fSubset.height(); }
     const SkIRect& subset() const { return fSubset; }
+    SkColorSpace* getColorSpace() const;
 
     uint32_t uniqueID() const { return fUniqueID; }
-    virtual bool isOpaque() const { return false; }
+    virtual SkAlphaType alphaType() const = 0;
     virtual size_t getSize() const = 0;
 
     /**
@@ -77,6 +78,7 @@ public:
     static sk_sp<SkSpecialImage> MakeFromGpu(const SkIRect& subset,
                                              uint32_t uniqueID,
                                              sk_sp<GrTexture>,
+                                             sk_sp<SkColorSpace>,
                                              const SkSurfaceProps* = nullptr,
                                              SkAlphaType at = kPremul_SkAlphaType);
 #endif

@@ -628,7 +628,8 @@ public:
                               const GrGLSLProgramDataManager& pdman,
                               int index,
                               const SkTArray<const GrCoordTransform*, true>& transforms) override {
-            this->setTransformDataHelper<QuadEdgeEffect>(primProc, pdman, index, transforms);
+            this->setTransformDataHelper(primProc.cast<QuadEdgeEffect>().fLocalMatrix, pdman, index,
+                                         transforms);
         }
 
     private:
@@ -652,8 +653,8 @@ private:
         , fLocalMatrix(localMatrix)
         , fUsesLocalCoords(usesLocalCoords) {
         this->initClassID<QuadEdgeEffect>();
-        fInPosition = &this->addVertexAttrib(Attribute("inPosition", kVec2f_GrVertexAttribType));
-        fInQuadEdge = &this->addVertexAttrib(Attribute("inQuadEdge", kVec4f_GrVertexAttribType));
+        fInPosition = &this->addVertexAttrib("inPosition", kVec2f_GrVertexAttribType);
+        fInQuadEdge = &this->addVertexAttrib("inQuadEdge", kVec4f_GrVertexAttribType);
     }
 
     const Attribute* fInPosition;

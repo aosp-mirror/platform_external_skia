@@ -4,18 +4,18 @@
 # found in the LICENSE file.
 
 template("third_party") {
+  config(target_name + "_public") {
+    include_dirs = invoker.public_include_dirs
+  }
   source_set(target_name) {
-    forward_variables_from(invoker, "*")
+    forward_variables_from(invoker, "*", [ "public_include_dirs" ])
+    public_configs = [ ":" + target_name + "_public" ]
 
     # Warnings are just noise if we're not maintaining the code.
     cflags = [ "-w" ]
-
-    # Chrome's GN environment sets up a bunch of default configs we don't need/want here.
-    configs -= [
-      "//build/config/clang:extra_warnings",
-      "//build/config/clang:find_bad_constructs",
-      "//build/config/compiler:chromium_code",
-      "//build/config:feature_flags",
-    ]
   }
+}
+
+set_defaults("third_party") {
+  configs = default_configs
 }

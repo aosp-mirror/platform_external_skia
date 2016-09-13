@@ -36,11 +36,7 @@ public:
         buf.writeMatrix(fDeviceMatrix);
     }
 
-    sk_sp<GrFragmentProcessor> asFragmentProcessor(GrContext*,
-                                                   const SkMatrix& viewM,
-                                                   const SkMatrix* localMatrix,
-                                                   SkFilterQuality,
-                                                   SkSourceGammaTreatment) const override;
+    sk_sp<GrFragmentProcessor> asFragmentProcessor(const AsFPArgs&) const override;
 
 #ifndef SK_IGNORE_TO_STRING
     void toString(SkString* str) const override {
@@ -69,8 +65,8 @@ public:
         class DCGLFP : public GrGLSLFragmentProcessor {
             void emitCode(EmitArgs& args) override {
                 GrGLSLFragmentBuilder* fragBuilder = args.fFragBuilder;
-                fragBuilder->codeAppendf("vec2 c = %s;",
-                                         fragBuilder->ensureFSCoords2D(args.fCoords, 0).c_str());
+                SkString coords2d = fragBuilder->ensureCoords2D(args.fTransformedCoords[0]);
+                fragBuilder->codeAppendf("vec2 c = %s;", coords2d.c_str());
                 fragBuilder->codeAppend("vec2 r = mod(c, vec2(20.0));");
                 fragBuilder->codeAppend("vec4 color = vec4(0.5*sin(c.x / 15.0) + 0.5,"
                                                       "0.5*cos((c.x + c.y) / 15.0) + 0.5,"
@@ -100,11 +96,7 @@ private:
     GrCoordTransform fDeviceTransform;
 };
 
-sk_sp<GrFragmentProcessor> DCShader::asFragmentProcessor(GrContext*,
-                                                         const SkMatrix& viewM,
-                                                         const SkMatrix* localMatrix,
-                                                         SkFilterQuality,
-                                                         SkSourceGammaTreatment) const {
+sk_sp<GrFragmentProcessor> DCShader::asFragmentProcessor(const AsFPArgs&) const {
     sk_sp<GrFragmentProcessor> inner(new DCFP(fDeviceMatrix));
     return GrFragmentProcessor::MulOutputByInputAlpha(std::move(inner));
 }
@@ -140,7 +132,7 @@ protected:
 
         struct Circle : public Prim {
             SkRect draw(SkCanvas* canvas, const SkPaint& paint) override {
-                static const SkScalar radius = 25;
+                constexpr SkScalar radius = 25;
                 canvas->drawCircle(radius, radius, radius, paint);
                 return SkRect::MakeXYWH(0, 0, 2 * radius, 2 * radius);
             }
@@ -203,7 +195,7 @@ protected:
                 paint.setTextSize(30.f);
                 this->setFont(&paint);
                 const char* text = this->text();
-                static const SkVector offset = SkVector::Make(10, 10);
+                const SkVector offset = SkVector::Make(10, 10);
                 canvas->drawText(text, strlen(text), offset.fX, offset.fY, paint);
                 SkRect bounds;
                 paint.measureText(text, strlen(text), &bounds);
@@ -253,7 +245,7 @@ protected:
         canvas->translate(10, 20);
         canvas->save();
         SkScalar tx = 0, maxTy = 0;
-        static const SkScalar kW = 900;
+        constexpr SkScalar kW = 900;
 
         for (int aa = 0; aa < 2; ++aa) {
             for (int i = 0; i < fPrims.count(); ++i) {

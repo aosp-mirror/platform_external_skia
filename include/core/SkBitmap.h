@@ -23,7 +23,6 @@ class SkPixelRef;
 class SkPixelRefFactory;
 class SkRegion;
 class SkString;
-class GrTexture;
 
 /** \class SkBitmap
 
@@ -455,6 +454,7 @@ public:
      *  not be used as targets for a raster device/canvas (since all pixels
      *  modifications will be lost when unlockPixels() is called.)
      */
+    // DEPRECATED
     bool lockPixelsAreWritable() const;
 
     bool requestLock(SkAutoPixmapUnlock* result) const;
@@ -467,10 +467,6 @@ public:
         return this->getPixels() != NULL &&
                (this->colorType() != kIndex_8_SkColorType || fColorTable);
     }
-
-    /** Returns the pixelRef's texture, or NULL
-     */
-    GrTexture* getTexture() const;
 
     /** Return the bitmap's colortable, if it uses one (i.e. colorType is
         Index_8) and the pixels are locked.

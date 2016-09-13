@@ -49,6 +49,27 @@
     \
     template <typename T> \
     friend X operator & (X a, T b); \
+
+/**
+ * Defines bitwise operators that make it possible to use an enum class as a
+ * very basic bitfield.
+ */
+#define GR_MAKE_BITFIELD_CLASS_OPS(X) \
+    inline X operator | (X a, X b) { \
+        return (X) ((int)a | (int)b); \
+    } \
+    inline X& operator |= (X& a, X b) { \
+        return (a = a | b); \
+    } \
+    inline bool operator & (X a, X b) { \
+        return SkToBool((int)a & (int)b); \
+    }
+
+#define GR_DECL_BITFIELD_CLASS_OPS_FRIENDS(X) \
+    friend X operator | (X a, X b); \
+    friend X& operator |= (X& a, X b); \
+    friend bool operator & (X a, X b);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 // compile time versions of min/max
@@ -121,6 +142,7 @@ const int kBackendCount = kLast_GrBackend + 1;
 /**
  * Backend-specific 3D context handle
  *      GrGLInterface* for OpenGL. If NULL will use the default GL interface.
+ *      GrVkBackendContext* for Vulkan.
  */
 typedef intptr_t GrBackendContext;
 
@@ -548,6 +570,7 @@ struct GrBackendTextureDesc {
     /**
      * Handle to the 3D API object.
      * OpenGL: Texture ID.
+     * Vulkan: GrVkImageInfo*
      */
     GrBackendObject                 fTextureHandle;
 };
@@ -582,6 +605,7 @@ struct GrBackendRenderTargetDesc {
     /**
      * Handle to the 3D API object.
      * OpenGL: FBO ID
+     * Vulkan: GrVkImageInfo*
      */
     GrBackendObject                 fRenderTargetHandle;
 };

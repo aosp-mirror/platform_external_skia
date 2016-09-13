@@ -65,6 +65,7 @@ public:
                                     FilterConstraint filterConstraint,
                                     bool coordsLimitedToConstraintRect,
                                     const GrTextureParams::FilterMode* filterOrNullForBicubic,
+                                    SkColorSpace* dstColorSpace,
                                     SkSourceGammaTreatment) = 0;
 
     virtual ~GrTextureProducer() {}
@@ -72,6 +73,7 @@ public:
     int width() const { return fWidth; }
     int height() const { return fHeight; }
     bool isAlphaOnly() const { return fIsAlphaOnly; }
+    virtual SkAlphaType alphaType() const = 0;
     virtual SkColorSpace* getColorSpace() = 0;
 
 protected:
@@ -138,15 +140,19 @@ public:
                                 FilterConstraint,
                                 bool coordsLimitedToConstraintRect,
                                 const GrTextureParams::FilterMode* filterOrNullForBicubic,
+                                SkColorSpace* dstColorSpace,
                                 SkSourceGammaTreatment) override;
 
-protected:
-    /** The whole texture is content. */
-    explicit GrTextureAdjuster(GrTexture* original, bool isAlphaOnly)
-        : INHERITED(original->width(), original->height(), isAlphaOnly)
-        , fOriginal(original) {}
+    // We do not ref the texture nor the colorspace, so the caller must keep them in scope while
+    // this Adjuster is alive.
+    GrTextureAdjuster(GrTexture*, SkAlphaType, const SkIRect& area, uint32_t uniqueID,
+                      SkColorSpace*);
 
-    GrTextureAdjuster(GrTexture* original, const SkIRect& contentArea, bool isAlphaOnly);
+protected:
+    SkAlphaType alphaType() const override { return fAlphaType; }
+    SkColorSpace* getColorSpace() override;
+    void makeCopyKey(const CopyParams& params, GrUniqueKey* copyKey) override;
+    void didCacheCopy(const GrUniqueKey& copyKey) override;
 
     GrTexture* originalTexture() const { return fOriginal; }
 
@@ -156,6 +162,9 @@ protected:
 private:
     SkTLazy<SkIRect>    fContentArea;
     GrTexture*          fOriginal;
+    SkAlphaType         fAlphaType;
+    SkColorSpace*       fColorSpace;
+    uint32_t            fUniqueID;
 
     GrTexture* refCopy(const CopyParams &copyParams);
 
@@ -179,6 +188,7 @@ public:
                                 FilterConstraint filterConstraint,
                                 bool coordsLimitedToConstraintRect,
                                 const GrTextureParams::FilterMode* filterOrNullForBicubic,
+                                SkColorSpace* dstColorSpace,
                                 SkSourceGammaTreatment) override;
 
 protected:

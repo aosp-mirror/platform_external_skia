@@ -77,49 +77,68 @@ template <> void Draw::draw(const NoOp&) {}
 #define DRAW(T, call) template <> void Draw::draw(const T& r) { fCanvas->call; }
 DRAW(Restore, restore());
 DRAW(Save, save());
-DRAW(SaveLayer, saveLayer(SkCanvas::SaveLayerRec(r.bounds, r.paint, r.backdrop, r.saveLayerFlags)));
+DRAW(SaveLayer, saveLayer(SkCanvas::SaveLayerRec(r.bounds,
+                                                 r.paint,
+                                                 r.backdrop.get(),
+                                                 r.saveLayerFlags)));
 DRAW(SetMatrix, setMatrix(SkMatrix::Concat(fInitialCTM, r.matrix)));
 DRAW(Concat, concat(r.matrix));
+DRAW(Translate, translate(r.dx, r.dy));
 
 DRAW(ClipPath, clipPath(r.path, r.opAA.op, r.opAA.aa));
 DRAW(ClipRRect, clipRRect(r.rrect, r.opAA.op, r.opAA.aa));
 DRAW(ClipRect, clipRect(r.rect, r.opAA.op, r.opAA.aa));
 DRAW(ClipRegion, clipRegion(r.region, r.op));
 
+#ifdef SK_EXPERIMENTAL_SHADOWING
 DRAW(TranslateZ, SkCanvas::translateZ(r.z));
+#else
+template <> void Draw::draw(const TranslateZ& r) { }
+#endif
 
-DRAW(DrawBitmap, drawBitmap(r.bitmap.shallowCopy(), r.left, r.top, r.paint));
-DRAW(DrawBitmapNine, drawBitmapNine(r.bitmap.shallowCopy(), r.center, r.dst, r.paint));
-DRAW(DrawBitmapRect,
-        legacy_drawBitmapRect(r.bitmap.shallowCopy(), r.src, r.dst, r.paint,
-                             SkCanvas::kStrict_SrcRectConstraint));
-DRAW(DrawBitmapRectFast,
-        legacy_drawBitmapRect(r.bitmap.shallowCopy(), r.src, r.dst, r.paint,
-                       SkCanvas::kFast_SrcRectConstraint));
-DRAW(DrawBitmapRectFixedSize,
-        legacy_drawBitmapRect(r.bitmap.shallowCopy(), &r.src, r.dst, &r.paint, r.constraint));
+DRAW(DrawArc, drawArc(r.oval, r.startAngle, r.sweepAngle, r.useCenter, r.paint));
 DRAW(DrawDRRect, drawDRRect(r.outer, r.inner, r.paint));
-DRAW(DrawImage, drawImage(r.image, r.left, r.top, r.paint));
-DRAW(DrawImageRect, legacy_drawImageRect(r.image, r.src, r.dst, r.paint, r.constraint));
-DRAW(DrawImageNine, drawImageNine(r.image, r.center, r.dst, r.paint));
+DRAW(DrawImage, drawImage(r.image.get(), r.left, r.top, r.paint));
+
+template <> void Draw::draw(const DrawImageLattice& r) {
+    SkCanvas::Lattice lattice;
+    lattice.fXCount = r.xCount;
+    lattice.fXDivs = r.xDivs;
+    lattice.fYCount = r.yCount;
+    lattice.fYDivs = r.yDivs;
+    lattice.fFlags = (0 == r.flagCount) ? nullptr : r.flags;
+    fCanvas->drawImageLattice(r.image.get(), lattice, r.dst, r.paint);
+}
+
+DRAW(DrawImageRect, legacy_drawImageRect(r.image.get(), r.src, r.dst, r.paint, r.constraint));
+DRAW(DrawImageNine, drawImageNine(r.image.get(), r.center, r.dst, r.paint));
 DRAW(DrawOval, drawOval(r.oval, r.paint));
 DRAW(DrawPaint, drawPaint(r.paint));
 DRAW(DrawPath, drawPath(r.path, r.paint));
 DRAW(DrawPatch, drawPatch(r.cubics, r.colors, r.texCoords, r.xmode, r.paint));
-DRAW(DrawPicture, drawPicture(r.picture, &r.matrix, r.paint));
+DRAW(DrawPicture, drawPicture(r.picture.get(), &r.matrix, r.paint));
+
+#ifdef SK_EXPERIMENTAL_SHADOWING
+DRAW(DrawShadowedPicture, drawShadowedPicture(r.picture.get(), &r.matrix, r.paint, r.params));
+#else
+template <> void Draw::draw(const DrawShadowedPicture& r) { }
+#endif
+
 DRAW(DrawPoints, drawPoints(r.mode, r.count, r.pts, r.paint));
 DRAW(DrawPosText, drawPosText(r.text, r.byteLength, r.pos, r.paint));
 DRAW(DrawPosTextH, drawPosTextH(r.text, r.byteLength, r.xpos, r.y, r.paint));
 DRAW(DrawRRect, drawRRect(r.rrect, r.paint));
 DRAW(DrawRect, drawRect(r.rect, r.paint));
+DRAW(DrawRegion, drawRegion(r.region, r.paint));
 DRAW(DrawText, drawText(r.text, r.byteLength, r.x, r.y, r.paint));
-DRAW(DrawTextBlob, drawTextBlob(r.blob, r.x, r.y, r.paint));
+DRAW(DrawTextBlob, drawTextBlob(r.blob.get(), r.x, r.y, r.paint));
 DRAW(DrawTextOnPath, drawTextOnPath(r.text, r.byteLength, r.path, &r.matrix, r.paint));
 DRAW(DrawTextRSXform, drawTextRSXform(r.text, r.byteLength, r.xforms, r.cull, r.paint));
-DRAW(DrawAtlas, drawAtlas(r.atlas, r.xforms, r.texs, r.colors, r.count, r.mode, r.cull, r.paint));
+DRAW(DrawAtlas, drawAtlas(r.atlas.get(),
+                          r.xforms, r.texs, r.colors, r.count, r.mode, r.cull, r.paint));
 DRAW(DrawVertices, drawVertices(r.vmode, r.vertexCount, r.vertices, r.texs, r.colors,
                                 r.xmode, r.indices, r.indexCount, r.paint));
-DRAW(DrawAnnotation, drawAnnotation(r.rect, r.key.c_str(), r.value));
+DRAW(DrawAnnotation, drawAnnotation(r.rect, r.key.c_str(), r.value.get()));
 #undef DRAW
 
 template <> void Draw::draw(const DrawDrawable& r) {
@@ -226,11 +245,12 @@ private:
         SkMatrix ctm;
     };
 
-    // Only Restore, SetMatrix, and Concat change the CTM.
+    // Only Restore, SetMatrix, Concat, and Translate change the CTM.
     template <typename T> void updateCTM(const T&) {}
     void updateCTM(const Restore& op)   { fCTM = op.matrix; }
     void updateCTM(const SetMatrix& op) { fCTM = op.matrix; }
     void updateCTM(const Concat& op)    { fCTM.preConcat(op.matrix); }
+    void updateCTM(const Translate& op) { fCTM.preTranslate(op.dx, op.dy); }
 
     // Most ops don't change the clip.
     template <typename T> void updateClipBounds(const T&) {}
@@ -284,12 +304,13 @@ private:
 
     void trackBounds(const SetMatrix&)         { this->pushControl(); }
     void trackBounds(const Concat&)            { this->pushControl(); }
+    void trackBounds(const Translate&)         { this->pushControl(); }
+    void trackBounds(const TranslateZ&)        { this->pushControl(); }
     void trackBounds(const ClipRect&)          { this->pushControl(); }
     void trackBounds(const ClipRRect&)         { this->pushControl(); }
     void trackBounds(const ClipPath&)          { this->pushControl(); }
     void trackBounds(const ClipRegion&)        { this->pushControl(); }
 
-    void trackBounds(const TranslateZ&)              { this->pushControl(); }
 
     // For all other ops, we can calculate and store the bounds directly now.
     template <typename T> void trackBounds(const T& op) {
@@ -394,7 +415,13 @@ private:
     Bounds bounds(const NoOp&)  const { return Bounds::MakeEmpty(); }    // NoOps don't draw.
 
     Bounds bounds(const DrawRect& op) const { return this->adjustAndMap(op.rect, &op.paint); }
+    Bounds bounds(const DrawRegion& op) const {
+        SkRect rect = SkRect::Make(op.region.getBounds());
+        return this->adjustAndMap(rect, &op.paint);
+    }
     Bounds bounds(const DrawOval& op) const { return this->adjustAndMap(op.oval, &op.paint); }
+    // Tighter arc bounds?
+    Bounds bounds(const DrawArc& op) const { return this->adjustAndMap(op.oval, &op.paint); }
     Bounds bounds(const DrawRRect& op) const {
         return this->adjustAndMap(op.rrect.rect(), &op.paint);
     }
@@ -402,10 +429,13 @@ private:
         return this->adjustAndMap(op.outer.rect(), &op.paint);
     }
     Bounds bounds(const DrawImage& op) const {
-        const SkImage* image = op.image;
+        const SkImage* image = op.image.get();
         SkRect rect = SkRect::MakeXYWH(op.left, op.top, image->width(), image->height());
 
         return this->adjustAndMap(rect, op.paint);
+    }
+    Bounds bounds(const DrawImageLattice& op) const {
+        return this->adjustAndMap(op.dst, op.paint);
     }
     Bounds bounds(const DrawImageRect& op) const {
         return this->adjustAndMap(op.dst, op.paint);
@@ -413,24 +443,6 @@ private:
     Bounds bounds(const DrawImageNine& op) const {
         return this->adjustAndMap(op.dst, op.paint);
     }
-    Bounds bounds(const DrawBitmapRect& op) const {
-        return this->adjustAndMap(op.dst, op.paint);
-    }
-    Bounds bounds(const DrawBitmapRectFast& op) const {
-        return this->adjustAndMap(op.dst, op.paint);
-    }
-    Bounds bounds(const DrawBitmapRectFixedSize& op) const {
-        return this->adjustAndMap(op.dst, &op.paint);
-    }
-    Bounds bounds(const DrawBitmapNine& op) const {
-        return this->adjustAndMap(op.dst, op.paint);
-    }
-    Bounds bounds(const DrawBitmap& op) const {
-        return this->adjustAndMap(
-                SkRect::MakeXYWH(op.left, op.top, op.bitmap.width(), op.bitmap.height()),
-                op.paint);
-    }
-
     Bounds bounds(const DrawPath& op) const {
         return op.path.isInverseFillType() ? fCurrentClipBounds
                                            : this->adjustAndMap(op.path.getBounds(), &op.paint);
@@ -467,6 +479,12 @@ private:
     }
 
     Bounds bounds(const DrawPicture& op) const {
+        SkRect dst = op.picture->cullRect();
+        op.matrix.mapRect(&dst);
+        return this->adjustAndMap(dst, op.paint);
+    }
+
+    Bounds bounds(const DrawShadowedPicture& op) const {
         SkRect dst = op.picture->cullRect();
         op.matrix.mapRect(&dst);
         return this->adjustAndMap(dst, op.paint);

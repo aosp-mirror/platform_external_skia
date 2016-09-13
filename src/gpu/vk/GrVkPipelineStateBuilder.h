@@ -17,9 +17,9 @@
 
 #include "vk/GrVkDefines.h"
 
+class GrProgramDesc;
 class GrVkGpu;
 class GrVkRenderPass;
-class GrVkProgramDesc;
 
 class GrVkPipelineStateBuilder : public GrGLSLProgramBuilder {
 public:
@@ -48,7 +48,7 @@ private:
     GrVkPipelineStateBuilder(GrVkGpu*,
                              const GrPipeline&,
                              const GrPrimitiveProcessor&,
-                             const GrVkProgramDesc&);
+                             const GrProgramDesc&);
 
     GrVkPipelineState* finalize(GrPrimitiveType primitiveType,
                                 const GrVkRenderPass& renderPass,

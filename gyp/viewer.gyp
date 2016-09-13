@@ -31,7 +31,8 @@
       ],
       'sources': [
         '../gm/gm.cpp',
-        '<!@(python find.py ../tools/viewer "*.cpp")',
+        '<!@(python find.py "*.cpp" ../tools/viewer)',
+        '<!@(python find.py "*.h" ../tools/viewer)',
 
         # views (subset of files for the Android build)
         '../src/views/SkEvent.cpp',
@@ -48,7 +49,7 @@
       'sources!': [
         '../samplecode/SampleSkLayer.cpp', #relies on SkMatrix44 which doesn't compile
         '../samplecode/SampleFontCache.cpp', #relies on pthread.h
-      ],      
+      ],
       'dependencies': [
         'flags.gyp:flags',
         'gputest.gyp:skgputest',
@@ -84,6 +85,11 @@
               '-lX11-xcb',
             ],
           },
+        }],
+        [ 'skia_os == "mac"', {
+          'dependencies': [
+            'sdl.gyp:sdl',
+          ],
         }],
         ['skia_os != "android"', {
           'sources/': [

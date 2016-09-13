@@ -9,7 +9,6 @@
 
 #include "GrCoordTransform.h"
 #include "glsl/GrGLSLFragmentShaderBuilder.h"
-#include "glsl/GrGLSLProcessorTypes.h"
 #include "glsl/GrGLSLUniformHandler.h"
 #include "glsl/GrGLSLVarying.h"
 #include "glsl/GrGLSLVertexShaderBuilder.h"
@@ -93,33 +92,6 @@ void GrGLSLGeometryProcessor::emitTransforms(GrGLSLVertexBuilder* vb,
                     vb->codeAppendf("%s = %s * vec3(%s, 1);", v.vsOut(), uniName, localCoords);
                 }
             }
-        }
-    }
-}
-
-void GrGLSLGeometryProcessor::emitTransforms(GrGLSLVertexBuilder* vb,
-                                             GrGLSLVaryingHandler* varyingHandler,
-                                             const char* localCoords,
-                                             const TransformsIn& tin,
-                                             TransformsOut* tout) {
-    tout->push_back_n(tin.count());
-    for (int i = 0; i < tin.count(); i++) {
-        const ProcCoords& coordTransforms = tin[i];
-        for (int t = 0; t < coordTransforms.count(); t++) {
-            GrSLType varyingType = kVec2f_GrSLType;
-
-            // Device coords aren't supported
-            SkASSERT(kDevice_GrCoordSet != coordTransforms[t]->sourceCoords());
-            GrSLPrecision precision = coordTransforms[t]->precision();
-
-            SkString strVaryingName("MatrixCoord");
-            strVaryingName.appendf("_%i_%i", i, t);
-
-            GrGLSLVertToFrag v(varyingType);
-            varyingHandler->addVarying(strVaryingName.c_str(), &v, precision);
-            vb->codeAppendf("%s = %s;", v.vsOut(), localCoords);
-
-            (*tout)[i].emplace_back(SkString(v.fsIn()), varyingType);
         }
     }
 }

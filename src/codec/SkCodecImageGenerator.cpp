@@ -7,7 +7,7 @@
 
 #include "SkCodecImageGenerator.h"
 
-SkImageGenerator* SkCodecImageGenerator::NewFromEncodedCodec(SkData* data) {
+SkImageGenerator* SkCodecImageGenerator::NewFromEncodedCodec(sk_sp<SkData> data) {
     SkCodec* codec = SkCodec::NewFromData(data);
     if (nullptr == codec) {
         return nullptr;
@@ -24,10 +24,10 @@ static SkImageInfo make_premul(const SkImageInfo& info) {
     return info;
 }
 
-SkCodecImageGenerator::SkCodecImageGenerator(SkCodec* codec, SkData* data)
+SkCodecImageGenerator::SkCodecImageGenerator(SkCodec* codec, sk_sp<SkData> data)
     : INHERITED(make_premul(codec->getInfo()))
     , fCodec(codec)
-    , fData(SkRef(data))
+    , fData(std::move(data))
 {}
 
 SkData* SkCodecImageGenerator::onRefEncodedData(SK_REFENCODEDDATA_CTXPARAM) {
@@ -37,7 +37,12 @@ SkData* SkCodecImageGenerator::onRefEncodedData(SK_REFENCODEDDATA_CTXPARAM) {
 bool SkCodecImageGenerator::onGetPixels(const SkImageInfo& info, void* pixels, size_t rowBytes,
         SkPMColor ctable[], int* ctableCount) {
 
-    SkCodec::Result result = fCodec->getPixels(info, pixels, rowBytes, nullptr, ctable,
+    // FIXME (msarett):
+    // We don't give the client the chance to request an SkColorSpace.  Until we improve
+    // the API, let's assume that they want legacy mode.
+    SkImageInfo decodeInfo = info.makeColorSpace(nullptr);
+
+    SkCodec::Result result = fCodec->getPixels(decodeInfo, pixels, rowBytes, nullptr, ctable,
             ctableCount);
     switch (result) {
         case SkCodec::kSuccess:

@@ -27,6 +27,7 @@
 
 class SkBitmap;
 class SkImage;
+class SkInflator;
 
 #if defined(SK_DEBUG) && defined(SK_BUILD_FOR_MAC)
     #define DEBUG_NON_DETERMINISTIC_ASSERT
@@ -66,6 +67,7 @@ public:
         kHasDrawImageOpCodes_Version       = 43,
         kAnnotationsMovedToCanvas_Version  = 44,
         kLightingShaderWritesInvNormRotation = 45,
+        kBlurMaskFilterWritesOccluder      = 47,
     };
 
     /**
@@ -130,7 +132,7 @@ public:
     virtual void readRegion(SkRegion* region);
 
     virtual void readPath(SkPath* path);
-    void readPaint(SkPaint* paint) { paint->unflatten(*this); }
+    virtual void readPaint(SkPaint* paint) { paint->unflatten(*this); }
 
     virtual SkFlattenable* readFlattenable(SkFlattenable::Type);
     template <typename T> sk_sp<T> readFlattenable() {
@@ -165,15 +167,9 @@ public:
     // helpers to get info about arrays and binary data
     virtual uint32_t getArrayCount();
 
-    /**
-     *  Returns false if the bitmap could not be completely read. In that case, it will be set
-     *  to have width/height, but no pixels.
-     */
-    bool readBitmap(SkBitmap* bitmap);
-
-    SkImage* readImage();
-
-    virtual SkTypeface* readTypeface();
+    sk_sp<SkImage> readBitmapAsImage();
+    sk_sp<SkImage> readImage();
+    virtual sk_sp<SkTypeface> readTypeface();
 
     void setTypefaceArray(SkTypeface* array[], int count) {
         fTFArray = array;
@@ -203,14 +199,9 @@ public:
         fCustomFactory.set(name, factory);
     }
 
-    /**
-     *  Provide a function to decode an SkBitmap from encoded data. Only used if the writer
-     *  encoded the SkBitmap. If the proper decoder cannot be used, a red bitmap with the
-     *  appropriate size will be used.
-     */
-    void setBitmapDecoder(SkPicture::InstallPixelRefProc bitmapDecoder) {
-        fBitmapDecoder = bitmapDecoder;
-    }
+    // If nullptr is passed, then the default deserializer will be used
+    // which calls SkImage::MakeFromEncoded()
+    void setImageDeserializer(SkImageDeserializer* factory);
 
     // Default impelementations don't check anything.
     virtual bool validate(bool isValid) { return isValid; }
@@ -220,13 +211,17 @@ public:
         return this->validate(index >= 0 && index < count);
     }
 
+    SkInflator* getInflator() const { return fInflator; }
+    void setInflator(SkInflator* inf) { fInflator = inf; }
+
+//    sk_sp<SkImage> inflateImage();
+    
 protected:
     /**
      *  Allows subclass to check if we are using factories for expansion
      *  of flattenables.
      */
     int factoryCount() { return fFactoryCount; }
-
 
     /**
      *  Checks if a custom factory has been set for a given flattenable.
@@ -259,13 +254,16 @@ private:
     // Only used if we do not have an fFactoryArray.
     SkTHashMap<SkString, SkFlattenable::Factory> fCustomFactory;
 
-    SkPicture::InstallPixelRefProc fBitmapDecoder;
+    // We do not own this ptr, we just use it (guaranteed to never be null)
+    SkImageDeserializer* fImageDeserializer;
 
 #ifdef DEBUG_NON_DETERMINISTIC_ASSERT
     // Debugging counter to keep track of how many bitmaps we
     // have decoded.
     int fDecodedBitmapIndex;
 #endif // DEBUG_NON_DETERMINISTIC_ASSERT
+
+    SkInflator* fInflator = nullptr;
 };
 
 #endif // SkReadBuffer_DEFINED

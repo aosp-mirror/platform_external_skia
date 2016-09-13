@@ -33,6 +33,7 @@ class SkRasterizer;
 struct SkScalerContextEffects;
 class SkShader;
 class SkSurfaceProps;
+class SkTextBlob;
 class SkTypeface;
 
 #define kBicubicFilterBitmap_Flag kHighQualityFilterBitmap_Flag
@@ -652,19 +653,18 @@ public:
      *  Return the paint's SkDrawLooper (if any). Does not affect the looper's
      *  reference count.
      */
-    SkDrawLooper* getLooper() const { return fLooper.get(); }
-
+    SkDrawLooper* getDrawLooper() const { return fDrawLooper.get(); }
+    SkDrawLooper* getLooper() const { return fDrawLooper.get(); }
     /**
      *  Set or clear the looper object.
      *  <p />
      *  Pass NULL to clear any previous looper.
-     *  As a convenience, the parameter passed is also returned.
      *  If a previous looper exists in the paint, its reference count is
      *  decremented. If looper is not NULL, its reference count is
      *  incremented.
      *  @param looper May be NULL. The new looper to be installed in the paint.
-     *  @return looper
      */
+    void setDrawLooper(sk_sp<SkDrawLooper>);
 #ifdef SK_SUPPORT_LEGACY_MINOR_EFFECT_PTR
     SkDrawLooper* setLooper(SkDrawLooper* looper);
 #endif
@@ -821,7 +821,7 @@ public:
         is returned.
     */
     int textToGlyphs(const void* text, size_t byteLength,
-                     uint16_t glyphs[]) const;
+                     SkGlyphID glyphs[]) const;
 
     /** Return true if all of the specified text has a corresponding non-zero
         glyph ID. If any of the code-points in the text are not supported in
@@ -836,7 +836,7 @@ public:
         to zero. Note: this does not look at the text-encoding setting in the
         paint, only at the typeface.
     */
-    void glyphsToUnichars(const uint16_t glyphs[], int count, SkUnichar text[]) const;
+    void glyphsToUnichars(const SkGlyphID glyphs[], int count, SkUnichar text[]) const;
 
     /** Return the number of drawable units in the specified text buffer.
         This looks at the current TextEncoding field of the paint. If you also
@@ -964,6 +964,40 @@ public:
     int getPosTextIntercepts(const void* text, size_t length, const SkPoint pos[],
                              const SkScalar bounds[2], SkScalar* intervals) const;
 
+    /** Return the number of intervals that intersect the intercept along the axis of the advance.
+     *  The return count is zero or a multiple of two, and is at most the number of glyphs * 2 in
+     *  string. The caller may pass nullptr for intervals to determine the size of the interval
+     *  array, or may conservatively pre-allocate an array with length * 2 entries. The computed
+     *  intervals are cached by glyph to improve performance for multiple calls.
+     *  This permits constructing an underline that skips the descenders.
+     *
+     *  @param text         The text.
+     *  @param length       Number of bytes of text.
+     *  @param xpos         Array of x-positions, used to position each character.
+     *  @param constY       The shared Y coordinate for all of the positions.
+     *  @param bounds       The lower and upper line parallel to the advance.
+     *  @param array        If not null, the glyph bounds contained by the advance parallel lines.
+     *
+     *  @return             The number of intersections, which may be zero.
+     */
+    int getPosTextHIntercepts(const void* text, size_t length, const SkScalar xpos[],
+                              SkScalar constY, const SkScalar bounds[2], SkScalar* intervals) const;
+
+    /** Return the number of intervals that intersect the intercept along the axis of the advance.
+     *  The return count is zero or a multiple of two, and is at most the number of glyphs * 2 in
+     *  text blob. The caller may pass nullptr for intervals to determine the size of the interval
+     *  array. The computed intervals are cached by glyph to improve performance for multiple calls.
+     *  This permits constructing an underline that skips the descenders.
+     *
+     *  @param blob         The text blob.
+     *  @param bounds       The lower and upper line parallel to the advance.
+     *  @param array        If not null, the glyph bounds contained by the advance parallel lines.
+     *
+     *  @return             The number of intersections, which may be zero.
+     */
+    int getTextBlobIntercepts(const SkTextBlob* blob, const SkScalar bounds[2],
+                              SkScalar* intervals) const;
+
     /**
      *  Return a rectangle that represents the union of the bounds of all
      *  of the glyphs, but each one positioned at (0,0). This may be conservatively large, and
@@ -1060,7 +1094,7 @@ private:
     sk_sp<SkMaskFilter>   fMaskFilter;
     sk_sp<SkColorFilter>  fColorFilter;
     sk_sp<SkRasterizer>   fRasterizer;
-    sk_sp<SkDrawLooper>   fLooper;
+    sk_sp<SkDrawLooper>   fDrawLooper;
     sk_sp<SkImageFilter>  fImageFilter;
 
     SkScalar        fTextSize;

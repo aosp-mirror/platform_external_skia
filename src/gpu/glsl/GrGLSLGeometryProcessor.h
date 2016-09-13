@@ -27,18 +27,25 @@ public:
                           const GrGLSLProgramDataManager& pdman,
                           int index,
                           const SkTArray<const GrCoordTransform*, true>& transforms) override {
-        this->setTransformDataMatrix(SkMatrix::I(), pdman, index, transforms);
+        this->setTransformDataHelper(SkMatrix::I(), pdman, index, transforms);
     }
 
 protected:
-    // A helper which subclasses can use if needed
-    template <class GeometryProcessor>
-    void setTransformDataHelper(const GrPrimitiveProcessor& primProc,
+    // A helper which subclasses can use if needed and used above in the default setTransformData().
+    void setTransformDataHelper(const SkMatrix& localMatrix,
                                 const GrGLSLProgramDataManager& pdman,
                                 int index,
                                 const SkTArray<const GrCoordTransform*, true>& transforms) {
-        const GeometryProcessor& gp = primProc.cast<GeometryProcessor>();
-        this->setTransformDataMatrix(gp.localMatrix(), pdman, index, transforms);
+        SkTArray<TransformUniform, true>& procTransforms = fInstalledTransforms[index];
+        int numTransforms = transforms.count();
+        for (int t = 0; t < numTransforms; ++t) {
+            SkASSERT(procTransforms[t].fHandle.isValid());
+            const SkMatrix& transform = GetTransformMatrix(localMatrix, *transforms[t]);
+            if (!procTransforms[t].fCurrentValue.cheapEqualTo(transform)) {
+                pdman.setSkMatrix(procTransforms[t].fHandle.toIndex(), transform);
+                procTransforms[t].fCurrentValue = transform;
+            }
+        }
     }
 
     // Emit a uniform matrix for each coord transform.
@@ -62,13 +69,6 @@ protected:
                         const SkMatrix& localMatrix,
                         const TransformsIn&,
                         TransformsOut*);
-
-    // caller has emitted transforms via attributes
-    void emitTransforms(GrGLSLVertexBuilder*,
-                        GrGLSLVaryingHandler*,
-                        const char* localCoords,
-                        const TransformsIn& tin,
-                        TransformsOut* tout);
 
     struct GrGPArgs {
         // The variable used by a GP to store its position. It can be
@@ -96,30 +96,14 @@ protected:
     }
 
 private:
-    void setTransformDataMatrix(const SkMatrix& localMatrix,
-                                const GrGLSLProgramDataManager& pdman,
-                                int index,
-                                const SkTArray<const GrCoordTransform*, true>& transforms) {
-        SkSTArray<2, UniformTransform, true>& procTransforms = fInstalledTransforms[index];
-        int numTransforms = transforms.count();
-        for (int t = 0; t < numTransforms; ++t) {
-            SkASSERT(procTransforms[t].fHandle.isValid());
-            const SkMatrix& transform = GetTransformMatrix(localMatrix, *transforms[t]);
-            if (!procTransforms[t].fCurrentValue.cheapEqualTo(transform)) {
-                pdman.setSkMatrix(procTransforms[t].fHandle.toIndex(), transform);
-                procTransforms[t].fCurrentValue = transform;
-            }
-        }
-    }
-
     virtual void onEmitCode(EmitArgs&, GrGPArgs*) = 0;
 
-    struct UniformTransform : public Transform {
-        UniformTransform() : Transform() {}
+    struct TransformUniform {
         UniformHandle  fHandle;
+        SkMatrix       fCurrentValue = SkMatrix::InvalidMatrix();
     };
 
-    SkSTArray<8, SkSTArray<2, UniformTransform, true> > fInstalledTransforms;
+    SkSTArray<8, SkSTArray<2, TransformUniform, true> > fInstalledTransforms;
 
     typedef GrGLSLPrimitiveProcessor INHERITED;
 };

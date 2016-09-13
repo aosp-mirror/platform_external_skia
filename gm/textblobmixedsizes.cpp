@@ -106,10 +106,7 @@ protected:
             sk_sp<SkColorSpace> colorSpace = sk_ref_sp(inputCanvas->imageInfo().colorSpace());
             SkImageInfo info = SkImageInfo::MakeN32(size.width(), size.height(),
                                                     kPremul_SkAlphaType, colorSpace);
-            SkSurfaceProps canvasProps(SkSurfaceProps::kLegacyFontHost_InitType);
-            uint32_t gammaCorrect = inputCanvas->getProps(&canvasProps)
-                ? canvasProps.flags() & SkSurfaceProps::kGammaCorrect_Flag : 0;
-            SkSurfaceProps props(SkSurfaceProps::kUseDeviceIndependentFonts_Flag | gammaCorrect,
+            SkSurfaceProps props(SkSurfaceProps::kUseDeviceIndependentFonts_Flag,
                                  SkSurfaceProps::kLegacyFontHost_InitType);
             surface = SkSurface::MakeRenderTarget(ctx, SkBudgeted::kNo, info, 0, &props);
             canvas = surface.get() ? surface->getCanvas() : inputCanvas;
@@ -121,8 +118,8 @@ protected:
 
         SkRect bounds = fBlob->bounds();
 
-        static const int kPadX = SkScalarFloorToInt(bounds.width() / 3);
-        static const int kPadY = SkScalarFloorToInt(bounds.height() / 3);
+        const int kPadX = SkScalarFloorToInt(bounds.width() / 3);
+        const int kPadY = SkScalarFloorToInt(bounds.height() / 3);
 
         int rowCount = 0;
         canvas->translate(SkIntToScalar(kPadX), SkIntToScalar(kPadY));
@@ -135,13 +132,13 @@ protected:
         }
         paint.setAntiAlias(false);
 
-        static const SkScalar kSigma = SkBlurMask::ConvertRadiusToSigma(SkIntToScalar(8));
+        const SkScalar kSigma = SkBlurMask::ConvertRadiusToSigma(SkIntToScalar(8));
 
         // setup blur paint
         SkPaint blurPaint(paint);
         blurPaint.setColor(sk_tool_utils::color_to_565(SK_ColorBLACK));
         blurPaint.setMaskFilter(SkBlurMaskFilter::Make(kNormal_SkBlurStyle, kSigma));
-        
+
         for (int i = 0; i < 4; i++) {
             canvas->save();
             switch (i % 2) {
@@ -182,8 +179,8 @@ protected:
 private:
     SkAutoTUnref<const SkTextBlob> fBlob;
 
-    static const int kWidth = 2100;
-    static const int kHeight = 1900;
+    static constexpr int kWidth = 2100;
+    static constexpr int kHeight = 1900;
 
     bool fUseDFT;
 

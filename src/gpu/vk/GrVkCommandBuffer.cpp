@@ -73,7 +73,6 @@ void GrVkCommandBuffer::reset(GrVkGpu* gpu) {
     }
     fTrackedRecycledResources.reset();
 
-
     this->invalidateState();
 
     // we will retain resources for later use
@@ -567,6 +566,26 @@ void GrVkPrimaryCommandBuffer::clearDepthStencilImage(const GrVkGpu* gpu,
                                                              color,
                                                              subRangeCount,
                                                              subRanges));
+}
+
+void GrVkPrimaryCommandBuffer::resolveImage(GrVkGpu* gpu,
+                                            const GrVkImage& srcImage,
+                                            const GrVkImage& dstImage,
+                                            uint32_t regionCount,
+                                            const VkImageResolve* regions) {
+    SkASSERT(fIsActive);
+    SkASSERT(!fActiveRenderPass);
+
+    this->addResource(srcImage.resource());
+    this->addResource(dstImage.resource());
+
+    GR_VK_CALL(gpu->vkInterface(), CmdResolveImage(fCmdBuffer,
+                                                   srcImage.image(),
+                                                   srcImage.currentLayout(),
+                                                   dstImage.image(),
+                                                   dstImage.currentLayout(),
+                                                   regionCount,
+                                                   regions));
 }
 
 void GrVkPrimaryCommandBuffer::onFreeGPUData(const GrVkGpu* gpu) const {

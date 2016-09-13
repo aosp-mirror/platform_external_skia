@@ -46,7 +46,15 @@ static SkOpSegment* findChaseOp(SkTDArray<SkOpSpanBase*>& chase, SkOpSpanBase** 
         if (sortable) {
             segment = angle->segment();
             sumMiWinding = segment->updateWindingReverse(angle);
+            if (sumMiWinding == SK_MinS32) {
+                SkASSERT(segment->globalState()->debugSkipAssert());
+                return nullptr;
+            }
             sumSuWinding = segment->updateOppWindingReverse(angle);
+            if (sumSuWinding == SK_MinS32) {
+                SkASSERT(segment->globalState()->debugSkipAssert());
+                return nullptr;
+            }
             if (segment->operand()) {
                 SkTSwap<int>(sumMiWinding, sumSuWinding);
             }
@@ -198,7 +206,7 @@ static const bool gOutInverse[kReverseDifference_SkPathOp + 1][2][2] = {
 static void dump_path(FILE* file, const SkPath& path, bool force, bool dumpAsHex) {
     SkDynamicMemoryWStream wStream;
     path.dump(&wStream, force, dumpAsHex);
-    SkAutoDataUnref data(wStream.copyToData());
+    sk_sp<SkData> data(wStream.detachAsData());
     fprintf(file, "%.*s\n", (int) data->size(), data->data());
 }
 
@@ -234,7 +242,7 @@ static void dump_op(const SkPath& one, const SkPath& two, SkPathOp op) {
 
 SK_DECLARE_STATIC_MUTEX(debugWorstLoop);
 
-SkOpGlobalState debugWorstState(nullptr, nullptr  SkDEBUGPARAMS(nullptr));
+SkOpGlobalState debugWorstState(nullptr, nullptr  SkDEBUGPARAMS(false) SkDEBUGPARAMS(nullptr));
 
 void ReportPathOpsDebugging() {
     debugWorstState.debugLoopReport();

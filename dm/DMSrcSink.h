@@ -248,6 +248,22 @@ private:
     Path fPath;
 };
 
+#if defined(SK_XML)
+class SVGSrc : public Src {
+public:
+    explicit SVGSrc(Path path);
+
+    Error draw(SkCanvas*) const override;
+    SkISize size() const override;
+    Name name() const override;
+    bool veto(SinkFlags) const override;
+
+private:
+    Path fPath;
+
+    typedef Src INHERITED;
+};
+#endif // SK_XML
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
 class MSKPSrc : public Src {
@@ -314,6 +330,15 @@ public:
 
     Error draw(const Src&, SkBitmap*, SkWStream*, SkString*) const override;
     const char* fileExtension() const override { return "xps"; }
+    SinkFlags flags() const override { return SinkFlags{ SinkFlags::kVector, SinkFlags::kDirect }; }
+};
+
+class PipeSink : public Sink {
+public:
+    PipeSink();
+    
+    Error draw(const Src&, SkBitmap*, SkWStream*, SkString*) const override;
+    const char* fileExtension() const override { return "skpipe"; }
     SinkFlags flags() const override { return SinkFlags{ SinkFlags::kVector, SinkFlags::kDirect }; }
 };
 
@@ -392,6 +417,12 @@ public:
     Error draw(const Src&, SkBitmap*, SkWStream*, SkString*) const override;
 };
 
+class ViaPipe : public Via {
+public:
+    explicit ViaPipe(Sink* sink) : Via(sink) {}
+    Error draw(const Src&, SkBitmap*, SkWStream*, SkString*) const override;
+};
+
 class ViaDefer : public Via {
 public:
     explicit ViaDefer(Sink* sink) : Via(sink) {}
@@ -428,6 +459,12 @@ public:
 class ViaMojo : public Via {
 public:
     explicit ViaMojo(Sink* sink) : Via(sink) {}
+    Error draw(const Src&, SkBitmap*, SkWStream*, SkString*) const override;
+};
+
+class ViaLite : public Via {
+public:
+    explicit ViaLite(Sink* sink) : Via(sink) {}
     Error draw(const Src&, SkBitmap*, SkWStream*, SkString*) const override;
 };
 

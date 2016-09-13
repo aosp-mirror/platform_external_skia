@@ -12,9 +12,11 @@
 #include "SkImage_Base.h"
 #include "SkImageFilter.h"
 #include "SkImageFilterCache.h"
+#include "SkImagePriv.h"
+#include "SkLatticeIter.h"
 #include "SkMetaData.h"
-#include "SkNinePatchIter.h"
 #include "SkPatchUtils.h"
+#include "SkPathPriv.h"
 #include "SkPathMeasure.h"
 #include "SkRasterClip.h"
 #include "SkRSXform.h"
@@ -23,11 +25,9 @@
 #include "SkTextBlobRunIterator.h"
 #include "SkTextToPathIter.h"
 
-SkBaseDevice::SkBaseDevice(const SkSurfaceProps& surfaceProps)
-    : fSurfaceProps(surfaceProps)
-#ifdef SK_DEBUG
-    , fAttachedToCanvas(false)
-#endif
+SkBaseDevice::SkBaseDevice(const SkImageInfo& info, const SkSurfaceProps& surfaceProps)
+    : fInfo(info)
+    , fSurfaceProps(surfaceProps)
 {
     fOrigin.setZero();
     fMetaData = nullptr;
@@ -44,10 +44,7 @@ SkMetaData& SkBaseDevice::getMetaData() {
     return *fMetaData;
 }
 
-SkImageInfo SkBaseDevice::imageInfo() const {
-    return SkImageInfo::MakeUnknown();
-}
-
+#ifdef SK_SUPPORT_LEGACY_ACCESSBITMAP
 const SkBitmap& SkBaseDevice::accessBitmap(bool changePixels) {
     const SkBitmap& bitmap = this->onAccessBitmap();
     if (changePixels) {
@@ -55,6 +52,7 @@ const SkBitmap& SkBaseDevice::accessBitmap(bool changePixels) {
     }
     return bitmap;
 }
+#endif
 
 SkPixelGeometry SkBaseDevice::CreateInfo::AdjustGeometry(const SkImageInfo& info,
                                                          TileUsage tileUsage,
@@ -75,12 +73,45 @@ SkPixelGeometry SkBaseDevice::CreateInfo::AdjustGeometry(const SkImageInfo& info
     return geo;
 }
 
+static inline bool is_int(float x) {
+    return x == (float) sk_float_round2int(x);
+}
+
+void SkBaseDevice::drawRegion(const SkDraw& draw, const SkRegion& region, const SkPaint& paint) {
+    bool isNonTranslate = draw.fMatrix->getType() & ~(SkMatrix::kTranslate_Mask);
+    bool complexPaint = paint.getStyle() != SkPaint::kFill_Style || paint.getMaskFilter() ||
+                        paint.getPathEffect();
+    bool antiAlias = paint.isAntiAlias() && (!is_int(draw.fMatrix->getTranslateX()) ||
+                                             !is_int(draw.fMatrix->getTranslateY()));
+    if (isNonTranslate || complexPaint || antiAlias) {
+        SkPath path;
+        region.getBoundaryPath(&path);
+        return this->drawPath(draw, path, paint, nullptr, false);
+    }
+
+    SkRegion::Iterator it(region);
+    while (!it.done()) {
+        this->drawRect(draw, SkRect::Make(it.rect()), paint);
+        it.next();
+    }
+}
+
+void SkBaseDevice::drawArc(const SkDraw& draw, const SkRect& oval, SkScalar startAngle,
+                           SkScalar sweepAngle, bool useCenter, const SkPaint& paint) {
+    SkPath path;
+    bool isFillNoPathEffect = SkPaint::kFill_Style == paint.getStyle() && !paint.getPathEffect();
+    SkPathPriv::CreateDrawArcPath(&path, oval, startAngle, sweepAngle, useCenter,
+                                  isFillNoPathEffect);
+    this->drawPath(draw, path, paint);
+}
+
 void SkBaseDevice::drawDRRect(const SkDraw& draw, const SkRRect& outer,
                               const SkRRect& inner, const SkPaint& paint) {
     SkPath path;
     path.addRRect(outer);
     path.addRRect(inner);
     path.setFillType(SkPath::kEvenOdd_FillType);
+    path.setIsVolatile(true);
 
     const SkMatrix* preMatrix = nullptr;
     const bool pathIsMutable = true;
@@ -167,7 +198,7 @@ void SkBaseDevice::drawImageRect(const SkDraw& draw, const SkImage* image, const
 
 void SkBaseDevice::drawImageNine(const SkDraw& draw, const SkImage* image, const SkIRect& center,
                                  const SkRect& dst, const SkPaint& paint) {
-    SkNinePatchIter iter(image->width(), image->height(), center, dst);
+    SkLatticeIter iter(image->width(), image->height(), center, dst);
 
     SkRect srcR, dstR;
     while (iter.next(&srcR, &dstR)) {
@@ -177,7 +208,29 @@ void SkBaseDevice::drawImageNine(const SkDraw& draw, const SkImage* image, const
 
 void SkBaseDevice::drawBitmapNine(const SkDraw& draw, const SkBitmap& bitmap, const SkIRect& center,
                                   const SkRect& dst, const SkPaint& paint) {
-    SkNinePatchIter iter(bitmap.width(), bitmap.height(), center, dst);
+    SkLatticeIter iter(bitmap.width(), bitmap.height(), center, dst);
+
+    SkRect srcR, dstR;
+    while (iter.next(&srcR, &dstR)) {
+        this->drawBitmapRect(draw, bitmap, &srcR, dstR, paint, SkCanvas::kStrict_SrcRectConstraint);
+    }
+}
+
+void SkBaseDevice::drawImageLattice(const SkDraw& draw, const SkImage* image,
+                                    const SkCanvas::Lattice& lattice, const SkRect& dst,
+                                    const SkPaint& paint) {
+    SkLatticeIter iter(image->width(), image->height(), lattice, dst);
+
+    SkRect srcR, dstR;
+    while (iter.next(&srcR, &dstR)) {
+        this->drawImageRect(draw, image, &srcR, dstR, paint, SkCanvas::kStrict_SrcRectConstraint);
+    }
+}
+
+void SkBaseDevice::drawBitmapLattice(const SkDraw& draw, const SkBitmap& bitmap,
+                                     const SkCanvas::Lattice& lattice, const SkRect& dst,
+                                     const SkPaint& paint) {
+    SkLatticeIter iter(bitmap.width(), bitmap.height(), lattice, dst);
 
     SkRect srcR, dstR;
     while (iter.next(&srcR, &dstR)) {

@@ -25,7 +25,6 @@ sk_sp<SkDocument> SkPDFMakeDocument(SkWStream* stream,
 // keep similar functionality together.
 struct SkPDFObjectSerializer : SkNoncopyable {
     SkPDFObjNumMap fObjNumMap;
-    SkPDFSubstituteMap fSubstituteMap;
     SkTDArray<int32_t> fOffsets;
     sk_sp<SkPDFObject> fInfoDict;
     size_t fBaseOffset;
@@ -56,12 +55,7 @@ public:
     void onEndPage() override;
     bool onClose(SkWStream*) override;
     void onAbort() override;
-#ifdef SK_SUPPORT_LEGACY_DOCUMENT_API
-    void setMetadata(const SkDocument::Attribute[],
-                     int,
-                     const SkTime::DateTime*,
-                     const SkTime::DateTime*) override;
-#endif  // SK_SUPPORT_LEGACY_DOCUMENT_API
+
     /**
        Serialize the object, as well as any other objects it
        indirectly refers to.  If any any other objects have been added
@@ -70,18 +64,16 @@ public:
 
        It might go without saying that objects should not be changed
        after calling serialize, since those changes will be too late.
-       The same goes for changes to the SkPDFSubstituteMap that effect
-       the object or its dependencies.
      */
     void serialize(const sk_sp<SkPDFObject>&);
     SkPDFCanon* canon() { return &fCanon; }
-    SkPDFGlyphSetMap* getGlyphUsage() { return &fGlyphUsage; }
+    void registerFont(SkPDFFont* f) { fFonts.add(f); }
 
 private:
     SkPDFObjectSerializer fObjectSerializer;
     SkPDFCanon fCanon;
-    SkPDFGlyphSetMap fGlyphUsage;
     SkTArray<sk_sp<SkPDFDict>> fPages;
+    SkTHashSet<SkPDFFont*> fFonts;
     sk_sp<SkPDFDict> fDests;
     sk_sp<SkPDFDevice> fPageDevice;
     sk_sp<SkCanvas> fCanvas;
@@ -90,6 +82,8 @@ private:
     SkScalar fRasterDpi;
     SkDocument::PDFMetadata fMetadata;
     bool fPDFA;
+
+    void reset();
 };
 
 #endif  // SkPDFDocument_DEFINED

@@ -83,7 +83,9 @@ public:
                               const SkMatrix* localMatrix = nullptr)
             : fPaint(paint) /* makes a copy of the paint */ {
         fPaint.setShader(SkMakeBitmapShader(src, SkShader::kClamp_TileMode,
-                                            SkShader::kClamp_TileMode, localMatrix, &fAllocator));
+                                            SkShader::kClamp_TileMode, localMatrix,
+                                            kNever_SkCopyPixelsMode,
+                                            &fAllocator));
         // we deliberately left the shader with an owner-count of 2
         fPaint.getShader()->ref();
         SkASSERT(2 == fPaint.getShader()->getRefCnt());
@@ -1585,8 +1587,7 @@ private:
 
 uint32_t SkDraw::scalerContextFlags() const {
     uint32_t flags = SkPaint::kBoostContrast_ScalerContextFlag;
-    // TODO: how should we handle non-srgb, non-linear gamma?
-    if (!fDevice->imageInfo().gammaCloseToSRGB()) {
+    if (!SkImageInfoIsGammaCorrect(fDevice->imageInfo())) {
         flags |= SkPaint::kFakeGamma_ScalerContextFlag;
     }
     return flags;
@@ -1932,7 +1933,6 @@ void SkDraw::drawVertices(SkCanvas::VertexMode vmode, int count,
         if (nullptr == textures) {
             // just colors (no texture)
             p.setShader(triShader);
-            shader = p.getShader();
         } else {
             // colors * texture
             SkASSERT(shader);

@@ -30,7 +30,7 @@ public:
     /**
      *  Construct a new device.
     */
-    explicit SkBaseDevice(const SkSurfaceProps&);
+    explicit SkBaseDevice(const SkImageInfo&, const SkSurfaceProps&);
     virtual ~SkBaseDevice();
 
     SkMetaData& getMetaData();
@@ -39,7 +39,7 @@ public:
      *  Return ImageInfo for this device. If the canvas is not backed by pixels
      *  (cpu or gpu), then the info's ColorType will be kUnknown_SkColorType.
      */
-    virtual SkImageInfo imageInfo() const;
+    const SkImageInfo& imageInfo() const { return fInfo; }
 
     /**
      *  Return SurfaceProps for this device.
@@ -77,6 +77,7 @@ public:
         return this->imageInfo().isOpaque();
     }
 
+#ifdef SK_SUPPORT_LEGACY_ACCESSBITMAP
     /** Return the bitmap associated with this device. Call this each time you need
         to access the bitmap, as it notifies the subclass to perform any flushing
         etc. before you examine the pixels.
@@ -84,6 +85,7 @@ public:
         @return the device's bitmap
     */
     const SkBitmap& accessBitmap(bool changePixels);
+#endif
 
     bool writePixels(const SkImageInfo&, const void*, size_t rowBytes, int x, int y);
 
@@ -110,32 +112,6 @@ public:
      */
     const SkIPoint& getOrigin() const { return fOrigin; }
 
-    /**
-     * onAttachToCanvas is invoked whenever a device is installed in a canvas
-     * (i.e., setDevice, saveLayer (for the new device created by the save),
-     * and SkCanvas' SkBaseDevice & SkBitmap -taking ctors). It allows the
-     * devices to prepare for drawing (e.g., locking their pixels, etc.)
-     */
-    virtual void onAttachToCanvas(SkCanvas*) {
-        SkASSERT(!fAttachedToCanvas);
-#ifdef SK_DEBUG
-        fAttachedToCanvas = true;
-#endif
-    };
-
-    /**
-     * onDetachFromCanvas notifies a device that it will no longer be drawn to.
-     * It gives the device a chance to clean up (e.g., unlock its pixels). It
-     * is invoked from setDevice (for the displaced device), restore and
-     * possibly from SkCanvas' dtor.
-     */
-    virtual void onDetachFromCanvas() {
-        SkASSERT(fAttachedToCanvas);
-#ifdef SK_DEBUG
-        fAttachedToCanvas = false;
-#endif
-    };
-
 protected:
     enum TileUsage {
         kPossible_TileUsage,    //!< the created device may be drawn tiled
@@ -154,25 +130,6 @@ protected:
 
     virtual bool onShouldDisableLCD(const SkPaint&) const { return false; }
 
-    /**
-     *
-     *  DEPRECATED: This will be removed in a future change. Device subclasses
-     *  should use the matrix and clip from the SkDraw passed to draw functions.
-     *
-     *  Called with the correct matrix and clip before this device is drawn
-     *  to using those settings. If your subclass overrides this, be sure to
-     *  call through to the base class as well.
-     *
-     *  The clipstack is another view of the clip. It records the actual
-     *  geometry that went into building the region. It is present for devices
-     *  that want to parse it, but is not required: the region is a complete
-     *  picture of the current clip. (i.e. if you regionize all of the geometry
-     *  in the clipstack, you will arrive at an equivalent region to the one
-     *  passed in).
-     */
-     virtual void setMatrixClip(const SkMatrix&, const SkRegion&,
-                                const SkClipStack&) {};
-
     /** These are called inside the per-device-layer loop for each draw call.
      When these are called, we have already applied any saveLayer operations,
      and are handling any looping from the paint, and any effects from the
@@ -183,8 +140,13 @@ protected:
                             const SkPoint[], const SkPaint& paint) = 0;
     virtual void drawRect(const SkDraw&, const SkRect& r,
                           const SkPaint& paint) = 0;
+    virtual void drawRegion(const SkDraw&, const SkRegion& r,
+                            const SkPaint& paint);
     virtual void drawOval(const SkDraw&, const SkRect& oval,
                           const SkPaint& paint) = 0;
+    /** By the time this is called we know that abs(sweepAngle) is in the range [0, 360). */
+    virtual void drawArc(const SkDraw&, const SkRect& oval, SkScalar startAngle,
+                         SkScalar sweepAngle, bool useCenter, const SkPaint& paint);
     virtual void drawRRect(const SkDraw&, const SkRRect& rr,
                            const SkPaint& paint) = 0;
 
@@ -221,13 +183,17 @@ protected:
                                 const SkPaint& paint,
                                 SkCanvas::SrcRectConstraint) = 0;
     virtual void drawBitmapNine(const SkDraw&, const SkBitmap&, const SkIRect& center,
-                               const SkRect& dst, const SkPaint&);
+                                const SkRect& dst, const SkPaint&);
+    virtual void drawBitmapLattice(const SkDraw&, const SkBitmap&, const SkCanvas::Lattice&,
+                                   const SkRect& dst, const SkPaint&);
 
     virtual void drawImage(const SkDraw&, const SkImage*, SkScalar x, SkScalar y, const SkPaint&);
     virtual void drawImageRect(const SkDraw&, const SkImage*, const SkRect* src, const SkRect& dst,
                                const SkPaint&, SkCanvas::SrcRectConstraint);
     virtual void drawImageNine(const SkDraw&, const SkImage*, const SkIRect& center,
                                const SkRect& dst, const SkPaint&);
+    virtual void drawImageLattice(const SkDraw&, const SkImage*, const SkCanvas::Lattice&,
+                                  const SkRect& dst, const SkPaint&);
 
     /**
      *  Does not handle text decoration.
@@ -276,11 +242,16 @@ protected:
 
     ///////////////////////////////////////////////////////////////////////////
 
+#ifdef SK_SUPPORT_LEGACY_ACCESSBITMAP
     /** Update as needed the pixel value in the bitmap, so that the caller can
         access the pixels directly.
         @return The device contents as a bitmap
     */
-    virtual const SkBitmap& onAccessBitmap() = 0;
+    virtual const SkBitmap& onAccessBitmap() {
+        SkASSERT(0);
+        return fLegacyBitmap;
+    }
+#endif
 
     virtual GrContext* context() const { return nullptr; }
 
@@ -383,12 +354,18 @@ private:
 
     virtual SkImageFilterCache* getImageFilterCache() { return NULL; }
 
+    friend class SkBitmapDevice;
+    void privateResize(int w, int h) {
+        *const_cast<SkImageInfo*>(&fInfo) = fInfo.makeWH(w, h);
+    }
+
     SkIPoint    fOrigin;
     SkMetaData* fMetaData;
-    SkSurfaceProps fSurfaceProps;
+    const SkImageInfo    fInfo;
+    const SkSurfaceProps fSurfaceProps;
 
-#ifdef SK_DEBUG
-    bool        fAttachedToCanvas;
+#ifdef SK_SUPPORT_LEGACY_ACCESSBITMAP
+    SkBitmap    fLegacyBitmap;
 #endif
 
     typedef SkRefCnt INHERITED;

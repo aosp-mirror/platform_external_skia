@@ -41,9 +41,10 @@ Compiler::Compiler()
 : fErrorCount(0) {
     auto types = std::shared_ptr<SymbolTable>(new SymbolTable(*this));
     auto symbols = std::shared_ptr<SymbolTable>(new SymbolTable(types, *this));
-    fIRGenerator = new IRGenerator(symbols, *this);
+    fIRGenerator = new IRGenerator(&fContext, symbols, *this);
     fTypes = types;
-    #define ADD_TYPE(t) types->add(k ## t ## _Type->fName, k ## t ## _Type)
+    #define ADD_TYPE(t) types->addWithoutOwnership(fContext.f ## t ## _Type->fName, \
+                                                   fContext.f ## t ## _Type.get())
     ADD_TYPE(Void);
     ADD_TYPE(Float);
     ADD_TYPE(Vec2);
@@ -66,14 +67,17 @@ Compiler::Compiler()
     ADD_TYPE(BVec3);
     ADD_TYPE(BVec4);
     ADD_TYPE(Mat2x2);
+    types->addWithoutOwnership("mat2x2", fContext.fMat2x2_Type.get());
     ADD_TYPE(Mat2x3);
     ADD_TYPE(Mat2x4);
     ADD_TYPE(Mat3x2);
     ADD_TYPE(Mat3x3);
+    types->addWithoutOwnership("mat3x3", fContext.fMat3x3_Type.get());
     ADD_TYPE(Mat3x4);
     ADD_TYPE(Mat4x2);
     ADD_TYPE(Mat4x3);
     ADD_TYPE(Mat4x4);
+    types->addWithoutOwnership("mat4x4", fContext.fMat4x4_Type.get());
     ADD_TYPE(GenType);
     ADD_TYPE(GenDType);
     ADD_TYPE(GenIType);
@@ -144,8 +148,8 @@ void Compiler::internalConvertProgram(std::string text,
         ASTDeclaration& decl = *parsed[i];
         switch (decl.fKind) {
             case ASTDeclaration::kVar_Kind: {
-                std::unique_ptr<VarDeclaration> s = fIRGenerator->convertVarDeclaration(
-                                                                         (ASTVarDeclaration&) decl, 
+                std::unique_ptr<VarDeclarations> s = fIRGenerator->convertVarDeclarations(
+                                                                         (ASTVarDeclarations&) decl, 
                                                                          Variable::kGlobal_Storage);
                 if (s) {
                     result->push_back(std::move(s));
@@ -185,19 +189,21 @@ std::unique_ptr<Program> Compiler::convertProgram(Program::Kind kind, std::strin
     fErrorText = "";
     fErrorCount = 0;
     fIRGenerator->pushSymbolTable();
-    std::vector<std::unique_ptr<ProgramElement>> result;
+    std::vector<std::unique_ptr<ProgramElement>> elements;
     switch (kind) {
         case Program::kVertex_Kind:
-            this->internalConvertProgram(SKSL_VERT_INCLUDE, &result);
+            this->internalConvertProgram(SKSL_VERT_INCLUDE, &elements);
             break;
         case Program::kFragment_Kind:
-            this->internalConvertProgram(SKSL_FRAG_INCLUDE, &result);
+            this->internalConvertProgram(SKSL_FRAG_INCLUDE, &elements);
             break;
     }
-    this->internalConvertProgram(text, &result);
+    this->internalConvertProgram(text, &elements);
+    auto result = std::unique_ptr<Program>(new Program(kind, std::move(elements), 
+                                                       fIRGenerator->fSymbolTable));;
     fIRGenerator->popSymbolTable();
     this->writeErrorCount();
-    return std::unique_ptr<Program>(new Program(kind, std::move(result)));;
+    return result;
 }
 
 void Compiler::error(Position position, std::string msg) {
@@ -220,24 +226,44 @@ void Compiler::writeErrorCount() {
     }
 }
 
-#include <fstream>
-bool Compiler::toSPIRV(Program::Kind kind, std::string text, std::ostream& out) {
+bool Compiler::toSPIRV(Program::Kind kind, const std::string& text, std::ostream& out) {
     auto program = this->convertProgram(kind, text);
     if (fErrorCount == 0) {
-        SkSL::SPIRVCodeGenerator cg;
+        SkSL::SPIRVCodeGenerator cg(&fContext);
         cg.generateCode(*program.get(), out);
         ASSERT(!out.rdstate());
     }
     return fErrorCount == 0;
 }
 
-bool Compiler::toSPIRV(Program::Kind kind, std::string text, std::string* out) {
+bool Compiler::toSPIRV(Program::Kind kind, const std::string& text, std::string* out) {
     std::stringstream buffer;
     bool result = this->toSPIRV(kind, text, buffer);
     if (result) {
         *out = buffer.str();
     }
+    return result;
+}
+
+bool Compiler::toGLSL(Program::Kind kind, const std::string& text, GLCaps caps, 
+                      std::ostream& out) {
+    auto program = this->convertProgram(kind, text);
+    if (fErrorCount == 0) {
+        SkSL::GLSLCodeGenerator cg(&fContext, caps);
+        cg.generateCode(*program.get(), out);
+        ASSERT(!out.rdstate());
+    }
     return fErrorCount == 0;
+}
+
+bool Compiler::toGLSL(Program::Kind kind, const std::string& text, GLCaps caps, 
+                      std::string* out) {
+    std::stringstream buffer;
+    bool result = this->toGLSL(kind, text, caps, buffer);
+    if (result) {
+        *out = buffer.str();
+    }
+    return result;
 }
 
 } // namespace

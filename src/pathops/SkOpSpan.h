@@ -28,25 +28,15 @@ public:
         kIsDuplicate = 1
     };
 
+    const SkOpPtT* active() const;
+
     // please keep in sync with debugAddOpp()
-    bool addOpp(SkOpPtT* opp) {
-        // find the fOpp ptr to opp
-        SkOpPtT* oppPrev = opp->fNext;
-        if (oppPrev == this) {
-            return false;
-        }
-        while (oppPrev->fNext != opp) {
-            oppPrev = oppPrev->fNext;
-            if (oppPrev == this) {
-                return false;
-            }
-        }
+    void addOpp(SkOpPtT* opp, SkOpPtT* oppPrev) {
         SkOpPtT* oldNext = this->fNext;
         SkASSERT(this != opp);
         this->fNext = opp;
         SkASSERT(oppPrev != oldNext);
         oppPrev->fNext = oldNext;
-        return true;
     }
 
     bool alias() const;
@@ -62,16 +52,20 @@ public:
         return SkDEBUGRELEASE(fID, -1);
     }
 
-    bool debugAddOpp(const SkOpPtT* opp) const;
+    void debugAddOpp(const SkOpPtT* opp, const SkOpPtT* oppPrev) const;
     const SkOpAngle* debugAngle(int id) const;
     const SkOpCoincidence* debugCoincidence() const;
     bool debugContains(const SkOpPtT* ) const;
     const SkOpPtT* debugContains(const SkOpSegment* check) const;
-    SkOpContour* debugContour(int id);
+    SkOpContour* debugContour(int id) const;
+    const SkOpPtT* debugEnder(const SkOpPtT* end) const;
     int debugLoopLimit(bool report) const;
     bool debugMatchID(int id) const;
+    const SkOpPtT* debugOppPrev(const SkOpPtT* opp) const;
     const SkOpPtT* debugPtT(int id) const;
+    void debugResetCoinT() const;
     const SkOpSegment* debugSegment(int id) const;
+    void debugSetCoinT(int ) const;
     const SkOpSpanBase* debugSpan(int id) const;
     void debugValidate() const;
 
@@ -107,6 +101,22 @@ public:
 
     bool onEnd() const;
 
+    // returns nullptr if this is already in the opp ptT loop
+    SkOpPtT* oppPrev(const SkOpPtT* opp) const {
+        // find the fOpp ptr to opp
+        SkOpPtT* oppPrev = opp->fNext;
+        if (oppPrev == this) {
+            return nullptr;
+        }
+        while (oppPrev->fNext != opp) {
+            oppPrev = oppPrev->fNext;
+            if (oppPrev == this) {
+                return nullptr;
+            }
+        }
+        return oppPrev;
+    }
+
     static bool Overlaps(const SkOpPtT* s1, const SkOpPtT* e1, const SkOpPtT* s2,
             const SkOpPtT* e2, const SkOpPtT** sOut, const SkOpPtT** eOut) {
         const SkOpPtT* start1 = s1->fT < e1->fT ? s1 : e1;
@@ -134,7 +144,7 @@ public:
     SkOpSegment* segment();
 
     void setCoincident() const {
-        SkASSERT(!fDeleted);
+        SkOPASSERT(!fDeleted);
         fCoincident = true;
     }
 
@@ -170,7 +180,8 @@ protected:
 
 class SkOpSpanBase {
 public:
-    void addOppAndMerge(SkOpSpanBase* );
+    SkOpSpanBase* active();
+    void addOpp(SkOpSpanBase* opp);
 
     void bumpSpanAdds() {
         ++fSpanAdds;
@@ -186,6 +197,7 @@ public:
         return fCoinEnd;
     }
 
+    bool collapsed(double s, double e) const;
     bool contains(const SkOpSpanBase* ) const;
     const SkOpPtT* contains(const SkOpSegment* ) const;
 
@@ -203,11 +215,6 @@ public:
     bool containsCoinEnd(const SkOpSegment* ) const;
     SkOpContour* contour() const;
 
-#if DEBUG_COINCIDENCE_VERBOSE
-    void debugAddOppAndMerge(const char* id, SkPathOpsDebug::GlitchLog* , const SkOpSpanBase* ,
-                             bool* del1, bool* del2) const;
-#endif
-
     int debugBumpCount() {
         return SkDEBUGRELEASE(++fCount, -1);
     }
@@ -216,6 +223,9 @@ public:
         return SkDEBUGRELEASE(fID, -1);
     }
 
+#if DEBUG_COINCIDENCE_VERBOSE
+    void debugAddOpp(const char* id, SkPathOpsDebug::GlitchLog* , const SkOpSpanBase* opp) const;
+#endif
     bool debugAlignedEnd(double t, const SkPoint& pt) const;
     bool debugAlignedInner() const;
     const SkOpAngle* debugAngle(int id) const;
@@ -224,18 +234,25 @@ public:
 #endif
     const SkOpCoincidence* debugCoincidence() const;
     bool debugCoinEndLoopCheck() const;
-    SkOpContour* debugContour(int id);
+    SkOpContour* debugContour(int id) const;
 #ifdef SK_DEBUG
-    bool debugDeleted() const { return fDeleted; }
+    bool debugDeleted() const { return fDebugDeleted; }
 #endif
 #if DEBUG_COINCIDENCE_VERBOSE
     void debugInsertCoinEnd(const char* id, SkPathOpsDebug::GlitchLog* ,
                             const SkOpSpanBase* ) const;
     void debugMergeContained(const char* id, SkPathOpsDebug::GlitchLog* ,
                              const SkPathOpsBounds& bounds, bool* deleted) const;
+    void debugMergeMatches(const char* id, SkPathOpsDebug::GlitchLog* log,
+                           const SkOpSpanBase* opp) const;
 #endif
     const SkOpPtT* debugPtT(int id) const;
+    void debugResetCoinT() const;
     const SkOpSegment* debugSegment(int id) const;
+    void debugSetCoinT(int ) const;
+#ifdef SK_DEBUG
+    void debugSetDeleted() { fDebugDeleted = true; }
+#endif
     const SkOpSpanBase* debugSpan(int id) const;
     const SkOpSpan* debugStarter(SkOpSpanBase const** endPtr) const;
     SkOpGlobalState* globalState() const;
@@ -277,6 +294,7 @@ public:
 
     void merge(SkOpSpan* span);
     void mergeContained(const SkPathOpsBounds& bounds);
+    void mergeMatches(SkOpSpanBase* opp);
 
     const SkOpSpan* prev() const {
         return fPrev;
@@ -369,7 +387,7 @@ public:
     }
 
     const SkOpSpan* upCast() const {
-        SkASSERT(!final());
+        SkOPASSERT(!final());
         return (const SkOpSpan*) this;
     }
 
@@ -395,7 +413,7 @@ protected:  // no direct access to internals to avoid treating a span base as a 
     bool fChased;  // set after span has been added to chase array
     SkDEBUGCODE(int fCount);  // number of pt/t pairs added
     SkDEBUGCODE(int fID);
-    SkDEBUGCODE(bool fDeleted);  // set when span was merged with another span
+    SkDEBUGCODE(bool fDebugDeleted);  // set when span was merged with another span
 };
 
 class SkOpSpan : public SkOpSpanBase {
@@ -406,6 +424,10 @@ public:
         }
         fAlreadyAdded = true;
         return false;
+    }
+
+    bool checkAlreadyAdded() const {
+        return fAlreadyAdded;
     }
 
     bool clearCoincident() {
@@ -437,17 +459,16 @@ public:
     void debugInsertCoincidence(const char* , SkPathOpsDebug::GlitchLog* ,
                                 const SkOpSegment* , bool flipped) const;
 #endif
-    void release(const SkOpPtT* );
+    void dumpCoin() const;
+    bool dumpSpan() const;
 
     bool done() const {
         SkASSERT(!final());
         return fDone;
     }
 
-    void dumpCoin() const;
-    bool dumpSpan() const;
     void init(SkOpSegment* parent, SkOpSpan* prev, double t, const SkPoint& pt);
-    bool insertCoincidence(const SkOpSegment* , bool flipped);
+    bool insertCoincidence(const SkOpSegment* , bool flipped, bool ordered);
 
     // Please keep this in sync with debugInsertCoincidence()
     void insertCoincidence(SkOpSpan* coin) {
@@ -488,6 +509,8 @@ public:
         return fOppValue;
     }
 
+    void release(const SkOpPtT* );
+
     SkOpPtT* setCoinStart(SkOpSpan* oldCoinStart, SkOpSegment* oppSegment);
 
     void setDone(bool done) {
@@ -520,7 +543,7 @@ public:
         SkASSERT(!final());
         SkASSERT(windValue >= 0);
         SkASSERT(fWindSum == SK_MinS32);
-        SkASSERT(!windValue || !fDone);
+        SkOPASSERT(!windValue || !fDone);
         fWindValue = windValue;
     }
 
@@ -537,7 +560,7 @@ public:
     }
 
     int windValue() const {
-        SkASSERT(!final());
+        SkOPASSERT(!final());
         return fWindValue;
     }
 

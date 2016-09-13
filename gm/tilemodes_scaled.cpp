@@ -5,11 +5,12 @@
  * found in the LICENSE file.
  */
 #include "gm.h"
+#include "SkColorFilter.h"
+#include "SkMaskFilter.h"
 #include "SkPath.h"
 #include "SkRegion.h"
 #include "SkShader.h"
 #include "SkUtils.h"
-#include "SkColorFilter.h"
 
 // effects
 #include "SkGradientShader.h"
@@ -37,7 +38,7 @@ static void setup(SkPaint* paint, const SkBitmap& bm, SkFilterQuality filter_lev
     paint->setFilterQuality(filter_level);
 }
 
-static const SkColorType gColorTypes[] = {
+constexpr SkColorType gColorTypes[] = {
     kN32_SkColorType,
     kRGB_565_SkColorType,
 };
@@ -80,17 +81,18 @@ protected:
 
         SkRect r = { 0, 0, SkIntToScalar(size*2), SkIntToScalar(size*2) };
 
-        static const char* gColorTypeNames[] = { "8888" , "565", "4444" };
+        const char* gColorTypeNames[] = { "8888" , "565", "4444" };
 
-        static const SkFilterQuality gFilterQualitys[] =
+        constexpr SkFilterQuality gFilterQualitys[] =
             { kNone_SkFilterQuality,
               kLow_SkFilterQuality,
               kMedium_SkFilterQuality,
               kHigh_SkFilterQuality };
-        static const char* gFilterNames[] = { "None", "Low", "Medium", "High" };
+        const char* gFilterNames[] = { "None", "Low", "Medium", "High" };
 
-        static const SkShader::TileMode gModes[] = { SkShader::kClamp_TileMode, SkShader::kRepeat_TileMode, SkShader::kMirror_TileMode };
-        static const char*          gModeNames[] = {    "C",                    "R",                   "M" };
+        constexpr SkShader::TileMode gModes[] = {
+            SkShader::kClamp_TileMode, SkShader::kRepeat_TileMode, SkShader::kMirror_TileMode };
+        const char* gModeNames[] = { "C", "R", "M" };
 
         SkScalar y = SkIntToScalar(24);
         SkScalar x = SkIntToScalar(10)/scale;
@@ -155,8 +157,8 @@ private:
     typedef skiagm::GM INHERITED;
 };
 
-static const int gWidth = 32;
-static const int gHeight = 32;
+constexpr int gWidth = 32;
+constexpr int gHeight = 32;
 
 static sk_sp<SkShader> make_bm(SkShader::TileMode tx, SkShader::TileMode ty) {
     SkBitmap bm;
@@ -208,10 +210,10 @@ protected:
         const SkScalar h = SkIntToScalar(gHeight);
         SkRect r = { -w, -h, w*2, h*2 };
 
-        static const SkShader::TileMode gModes[] = {
+        constexpr SkShader::TileMode gModes[] = {
             SkShader::kClamp_TileMode, SkShader::kRepeat_TileMode, SkShader::kMirror_TileMode
         };
-        static const char* gModeNames[] = {
+        const char* gModeNames[] = {
             "Clamp", "Repeat", "Mirror"
         };
 

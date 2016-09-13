@@ -198,11 +198,11 @@ class GSStore(object):
     gs_path = GS_SUBDIR_TMPL % (self._gs_bucket, name)
     attempt_delete = True
     try:
-      subprocess.check_call(['gsutil', 'ls', gs_path])
+      subprocess.check_call(self._gsutil + ['ls', gs_path])
     except subprocess.CalledProcessError:
       attempt_delete = False
     if attempt_delete:
-      subprocess.check_call(['gsutil', 'rm', '-rf', gs_path])
+      subprocess.check_call(self._gsutil + ['rm', '-rf', gs_path])
 
 
 class MultiStore(object):
@@ -220,7 +220,7 @@ class MultiStore(object):
     self._gs.upload(name, version, target_dir)
 
   def download(self, name, version, target_dir):
-    self._cipd.download(name, version, target_dir)
+    self._gs.download(name, version, target_dir)
 
   def delete_contents(self, name):
     self._cipd.delete_contents(name)

@@ -11,6 +11,7 @@
 #include "SkCodec.h"
 #include "SkCodecImageGenerator.h"
 #include "SkData.h"
+#include "SkImageEncoder.h"
 #include "SkFrontBufferedStream.h"
 #include "SkMD5.h"
 #include "SkRandom.h"
@@ -208,7 +209,7 @@ static void check(skiatest::Reporter* r,
     bool isIncomplete = supportsIncomplete;
     if (isIncomplete) {
         size_t size = stream->getLength();
-        SkAutoTUnref<SkData> data((SkData::NewFromStream(stream, 2 * size / 3)));
+        sk_sp<SkData> data((SkData::MakeFromStream(stream, 2 * size / 3)));
         codec.reset(SkCodec::NewFromData(data));
     } else {
         codec.reset(SkCodec::NewFromStream(stream.release()));
@@ -337,7 +338,7 @@ static void check(skiatest::Reporter* r,
         SkAutoTDelete<SkAndroidCodec> androidCodec(nullptr);
         if (isIncomplete) {
             size_t size = stream->getLength();
-            SkAutoTUnref<SkData> data((SkData::NewFromStream(stream, 2 * size / 3)));
+            sk_sp<SkData> data((SkData::MakeFromStream(stream, 2 * size / 3)));
             androidCodec.reset(SkAndroidCodec::NewFromData(data));
         } else {
             androidCodec.reset(SkAndroidCodec::NewFromStream(stream.release()));
@@ -356,8 +357,9 @@ static void check(skiatest::Reporter* r,
     if (!isIncomplete) {
         // Test SkCodecImageGenerator
         SkAutoTDelete<SkStream> stream(resource(path));
-        SkAutoTUnref<SkData> fullData(SkData::NewFromStream(stream, stream->getLength()));
-        SkAutoTDelete<SkImageGenerator> gen(SkCodecImageGenerator::NewFromEncodedCodec(fullData));
+        sk_sp<SkData> fullData(SkData::MakeFromStream(stream, stream->getLength()));
+        SkAutoTDelete<SkImageGenerator> gen(
+                SkCodecImageGenerator::NewFromEncodedCodec(fullData.get()));
         SkBitmap bm;
         bm.allocPixels(info);
         SkAutoLockPixels autoLockPixels(bm);
@@ -365,8 +367,8 @@ static void check(skiatest::Reporter* r,
         compare_to_good_digest(r, codecDigest, bm);
 
         // Test using SkFrontBufferedStream, as Android does
-        SkStream* bufferedStream = SkFrontBufferedStream::Create(new SkMemoryStream(fullData),
-                SkCodec::MinBufferedBytesNeeded());
+        SkStream* bufferedStream = SkFrontBufferedStream::Create(
+                new SkMemoryStream(std::move(fullData)), SkCodec::MinBufferedBytesNeeded());
         REPORTER_ASSERT(r, bufferedStream);
         codec.reset(SkCodec::NewFromStream(bufferedStream));
         REPORTER_ASSERT(r, codec);
@@ -822,8 +824,7 @@ DEF_TEST(Codec_pngChunkReader, r) {
     ChunkReader chunkReader(r);
 
     // Now read the file with SkCodec.
-    SkAutoTUnref<SkData> data(wStream.copyToData());
-    SkAutoTDelete<SkCodec> codec(SkCodec::NewFromData(data, &chunkReader));
+    SkAutoTDelete<SkCodec> codec(SkCodec::NewFromData(wStream.detachAsData(), &chunkReader));
     REPORTER_ASSERT(r, codec);
     if (!codec) {
         return;
@@ -863,8 +864,8 @@ DEF_TEST(Codec_pngChunkReader, r) {
 // Stream that can only peek up to a limit
 class LimitedPeekingMemStream : public SkStream {
 public:
-    LimitedPeekingMemStream(SkData* data, size_t limit)
-        : fStream(data)
+    LimitedPeekingMemStream(sk_sp<SkData> data, size_t limit)
+        : fStream(std::move(data))
         , fLimit(limit) {}
 
     size_t peek(void* buf, size_t bytes) const override {
@@ -877,7 +878,7 @@ public:
         return fStream.rewind();
     }
     bool isAtEnd() const override {
-        return false;
+        return fStream.isAtEnd();
     }
 private:
     SkMemoryStream fStream;
@@ -887,7 +888,7 @@ private:
 // Stream that is not an asset stream (!hasPosition() or !hasLength())
 class NotAssetMemStream : public SkStream {
 public:
-    NotAssetMemStream(SkData* data) : fStream(data) {}
+    NotAssetMemStream(sk_sp<SkData> data) : fStream(std::move(data)) {}
 
     bool hasPosition() const override {
         return false;
@@ -920,13 +921,13 @@ private:
 DEF_TEST(Codec_raw_notseekable, r) {
     const char* path = "dng_with_preview.dng";
     SkString fullPath(GetResourcePath(path));
-    SkAutoTUnref<SkData> data(SkData::NewFromFileName(fullPath.c_str()));
+    sk_sp<SkData> data(SkData::MakeFromFileName(fullPath.c_str()));
     if (!data) {
         SkDebugf("Missing resource '%s'\n", path);
         return;
     }
 
-    SkAutoTDelete<SkCodec> codec(SkCodec::NewFromStream(new NotAssetMemStream(data)));
+    SkAutoTDelete<SkCodec> codec(SkCodec::NewFromStream(new NotAssetMemStream(std::move(data))));
     REPORTER_ASSERT(r, codec);
 
     test_info(r, codec.get(), codec->getInfo(), SkCodec::kSuccess, nullptr);
@@ -946,13 +947,13 @@ DEF_TEST(Codec_webp_peek, r) {
 
     // The limit is less than webp needs to peek or read.
     SkAutoTDelete<SkCodec> codec(SkCodec::NewFromStream(
-                                 new LimitedPeekingMemStream(data.get(), 25)));
+                                 new LimitedPeekingMemStream(data, 25)));
     REPORTER_ASSERT(r, codec);
 
     test_info(r, codec.get(), codec->getInfo(), SkCodec::kSuccess, nullptr);
 
     // Similarly, a stream which does not peek should still succeed.
-    codec.reset(SkCodec::NewFromStream(new LimitedPeekingMemStream(data.get(), 0)));
+    codec.reset(SkCodec::NewFromStream(new LimitedPeekingMemStream(data, 0)));
     REPORTER_ASSERT(r, codec);
 
     test_info(r, codec.get(), codec->getInfo(), SkCodec::kSuccess, nullptr);
@@ -976,7 +977,7 @@ DEF_TEST(Codec_wbmp, r) {
     writeableData[1] = static_cast<uint8_t>(~0x9F);
 
     // SkCodec should support this.
-    SkAutoTDelete<SkCodec> codec(SkCodec::NewFromData(data.get()));
+    SkAutoTDelete<SkCodec> codec(SkCodec::NewFromData(data));
     REPORTER_ASSERT(r, codec);
     if (!codec) {
         return;
@@ -1040,4 +1041,168 @@ DEF_TEST(Codec_jpeg_rewind, r) {
     // Rewind the codec and perform a full image decode.
     SkCodec::Result result = codec->getPixels(codec->getInfo(), pixelStorage.get(), rowBytes);
     REPORTER_ASSERT(r, SkCodec::kSuccess == result);
+}
+
+static void check_color_xform(skiatest::Reporter* r, const char* path) {
+    SkAutoTDelete<SkAndroidCodec> codec(SkAndroidCodec::NewFromStream(resource(path)));
+
+    SkAndroidCodec::AndroidOptions opts;
+    opts.fSampleSize = 3;
+    const int subsetWidth = codec->getInfo().width() / 2;
+    const int subsetHeight = codec->getInfo().height() / 2;
+    SkIRect subset = SkIRect::MakeWH(subsetWidth, subsetHeight);
+    opts.fSubset = &subset;
+
+    const int dstWidth = subsetWidth / opts.fSampleSize;
+    const int dstHeight = subsetHeight / opts.fSampleSize;
+    sk_sp<SkData> data = SkData::MakeFromFileName(
+            GetResourcePath("icc_profiles/HP_ZR30w.icc").c_str());
+    sk_sp<SkColorSpace> colorSpace = SkColorSpace::NewICC(data->data(), data->size());
+    SkImageInfo dstInfo = codec->getInfo().makeWH(dstWidth, dstHeight)
+                                          .makeColorType(kN32_SkColorType)
+                                          .makeColorSpace(colorSpace);
+
+    size_t rowBytes = dstInfo.minRowBytes();
+    SkAutoMalloc pixelStorage(dstInfo.getSafeSize(rowBytes));
+    SkCodec::Result result = codec->getAndroidPixels(dstInfo, pixelStorage.get(), rowBytes, &opts);
+    REPORTER_ASSERT(r, SkCodec::kSuccess == result);
+}
+
+DEF_TEST(Codec_ColorXform, r) {
+    check_color_xform(r, "mandrill_512_q075.jpg");
+    check_color_xform(r, "mandrill_512.png");
+}
+
+static bool color_type_match(SkColorType origColorType, SkColorType codecColorType) {
+    switch (origColorType) {
+        case kRGBA_8888_SkColorType:
+        case kBGRA_8888_SkColorType:
+            return kRGBA_8888_SkColorType == codecColorType ||
+                   kBGRA_8888_SkColorType == codecColorType;
+        default:
+            return origColorType == codecColorType;
+    }
+}
+
+static bool alpha_type_match(SkAlphaType origAlphaType, SkAlphaType codecAlphaType) {
+    switch (origAlphaType) {
+        case kUnpremul_SkAlphaType:
+        case kPremul_SkAlphaType:
+            return kUnpremul_SkAlphaType == codecAlphaType ||
+                    kPremul_SkAlphaType == codecAlphaType;
+        default:
+            return origAlphaType == codecAlphaType;
+    }
+}
+
+static void check_round_trip(skiatest::Reporter* r, SkCodec* origCodec, const SkImageInfo& info) {
+    SkBitmap bm1;
+    SkPMColor colors[256];
+    SkAutoTUnref<SkColorTable> colorTable1(new SkColorTable(colors, 256));
+    bm1.allocPixels(info, nullptr, colorTable1.get());
+    int numColors;
+    SkCodec::Result result = origCodec->getPixels(info, bm1.getPixels(), bm1.rowBytes(), nullptr,
+                                                  const_cast<SkPMColor*>(colorTable1->readColors()),
+                                                  &numColors);
+    // This will fail to update colorTable1->count() but is fine for the purpose of this test.
+    REPORTER_ASSERT(r, SkCodec::kSuccess == result);
+
+    // Encode the image to png.
+    sk_sp<SkData> data =
+            sk_sp<SkData>(SkImageEncoder::EncodeData(bm1, SkImageEncoder::kPNG_Type, 100));
+
+    SkAutoTDelete<SkCodec> codec(SkCodec::NewFromData(data));
+    REPORTER_ASSERT(r, color_type_match(info.colorType(), codec->getInfo().colorType()));
+    REPORTER_ASSERT(r, alpha_type_match(info.alphaType(), codec->getInfo().alphaType()));
+
+    SkBitmap bm2;
+    SkAutoTUnref<SkColorTable> colorTable2(new SkColorTable(colors, 256));
+    bm2.allocPixels(info, nullptr, colorTable2.get());
+    result = codec->getPixels(info, bm2.getPixels(), bm2.rowBytes(), nullptr,
+                              const_cast<SkPMColor*>(colorTable2->readColors()), &numColors);
+    REPORTER_ASSERT(r, SkCodec::kSuccess == result);
+
+    SkMD5::Digest d1, d2;
+    md5(bm1, &d1);
+    md5(bm2, &d2);
+    REPORTER_ASSERT(r, d1 == d2);
+}
+
+DEF_TEST(Codec_PngRoundTrip, r) {
+    const char* path = "mandrill_512_q075.jpg";
+    SkAutoTDelete<SkStream> stream(resource(path));
+    SkAutoTDelete<SkCodec> codec(SkCodec::NewFromStream(stream.release()));
+
+    SkColorType colorTypesOpaque[] = {
+            kRGB_565_SkColorType, kRGBA_8888_SkColorType, kBGRA_8888_SkColorType
+    };
+    for (SkColorType colorType : colorTypesOpaque) {
+        SkImageInfo newInfo = codec->getInfo().makeColorType(colorType);
+        check_round_trip(r, codec.get(), newInfo);
+    }
+
+    path = "grayscale.jpg";
+    stream.reset(resource(path));
+    codec.reset(SkCodec::NewFromStream(stream.release()));
+    check_round_trip(r, codec.get(), codec->getInfo());
+
+    path = "yellow_rose.png";
+    stream.reset(resource(path));
+    codec.reset(SkCodec::NewFromStream(stream.release()));
+
+    SkColorType colorTypesWithAlpha[] = {
+            kRGBA_8888_SkColorType, kBGRA_8888_SkColorType
+    };
+    SkAlphaType alphaTypes[] = {
+            kUnpremul_SkAlphaType, kPremul_SkAlphaType
+    };
+    for (SkColorType colorType : colorTypesWithAlpha) {
+        for (SkAlphaType alphaType : alphaTypes) {
+            // Set color space to nullptr because color correct premultiplies do not round trip.
+            SkImageInfo newInfo = codec->getInfo().makeColorType(colorType)
+                                                  .makeAlphaType(alphaType)
+                                                  .makeColorSpace(nullptr);
+            check_round_trip(r, codec.get(), newInfo);
+        }
+    }
+
+    path = "index8.png";
+    stream.reset(resource(path));
+    codec.reset(SkCodec::NewFromStream(stream.release()));
+
+    for (SkAlphaType alphaType : alphaTypes) {
+        SkImageInfo newInfo = codec->getInfo().makeAlphaType(alphaType)
+                                              .makeColorSpace(nullptr);
+        check_round_trip(r, codec.get(), newInfo);
+    }
+}
+
+static void test_conversion_possible(skiatest::Reporter* r, const char* path,
+                                     bool testScanlineDecoder) {
+    SkAutoTDelete<SkStream> stream(resource(path));
+    SkAutoTDelete<SkCodec> codec(SkCodec::NewFromStream(stream.release()));
+    SkImageInfo infoF16 = codec->getInfo().makeColorType(kRGBA_F16_SkColorType);
+
+    SkBitmap bm;
+    bm.allocPixels(infoF16);
+    SkCodec::Result result = codec->getPixels(infoF16, bm.getPixels(), bm.rowBytes());
+    REPORTER_ASSERT(r, SkCodec::kInvalidConversion == result);
+    if (testScanlineDecoder) {
+        result = codec->startScanlineDecode(infoF16);
+        REPORTER_ASSERT(r, SkCodec::kInvalidConversion == result);
+    }
+
+    infoF16 = infoF16.makeColorSpace(infoF16.colorSpace()->makeLinearGamma());
+    result = codec->getPixels(infoF16, bm.getPixels(), bm.rowBytes());
+    REPORTER_ASSERT(r, SkCodec::kSuccess == result);
+    if (testScanlineDecoder) {
+        result = codec->startScanlineDecode(infoF16);
+        REPORTER_ASSERT(r, SkCodec::kSuccess == result);
+    }
+}
+
+DEF_TEST(Codec_F16ConversionPossible, r) {
+    test_conversion_possible(r, "color_wheel.webp", false);
+    test_conversion_possible(r, "mandrill_512_q075.jpg", true);
+    test_conversion_possible(r, "yellow_rose.png", true);
 }

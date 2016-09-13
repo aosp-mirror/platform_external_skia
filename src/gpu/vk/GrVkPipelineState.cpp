@@ -11,6 +11,7 @@
 #include "GrTexturePriv.h"
 #include "GrVkCommandBuffer.h"
 #include "GrVkDescriptorPool.h"
+#include "GrVkDescriptorSet.h"
 #include "GrVkGpu.h"
 #include "GrVkImageView.h"
 #include "GrVkMemory.h"
@@ -28,7 +29,7 @@ GrVkPipelineState::GrVkPipelineState(GrVkGpu* gpu,
                                      const GrVkPipelineState::Desc& desc,
                                      GrVkPipeline* pipeline,
                                      VkPipelineLayout layout,
-                                     VkDescriptorSetLayout dsSamplerLayout,
+                                     const GrVkDescriptorSetManager::Handle& samplerDSHandle,
                                      const BuiltinUniformHandles& builtinUniformHandles,
                                      const UniformInfoArray& uniforms,
                                      uint32_t vertexUniformSize,
@@ -39,6 +40,9 @@ GrVkPipelineState::GrVkPipelineState(GrVkGpu* gpu,
                                      const GrGLSLFragProcs& fragmentProcessors)
     : fPipeline(pipeline)
     , fPipelineLayout(layout)
+    , fUniformDescriptorSet(nullptr)
+    , fSamplerDescriptorSet(nullptr)
+    , fSamplerDSHandle(samplerDSHandle)
     , fStartDS(SK_MaxS32)
     , fDSCount(0)
     , fBuiltinUniformHandles(builtinUniformHandles)
@@ -46,10 +50,7 @@ GrVkPipelineState::GrVkPipelineState(GrVkGpu* gpu,
     , fXferProcessor(xferProcessor)
     , fFragmentProcessors(fragmentProcessors)
     , fDesc(desc)
-    , fDataManager(uniforms, vertexUniformSize, fragmentUniformSize)
-    , fSamplerPoolManager(dsSamplerLayout, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                          numSamplers, gpu)
-    , fCurrentUniformDescPool(nullptr) {
+    , fDataManager(uniforms, vertexUniformSize, fragmentUniformSize) {
     fSamplers.setReserve(numSamplers);
     fTextureViews.setReserve(numSamplers);
     fTextures.setReserve(numSamplers);
@@ -67,8 +68,8 @@ GrVkPipelineState::GrVkPipelineState(GrVkGpu* gpu,
         fStartDS = SkTMin(fStartDS, (int)GrVkUniformHandler::kSamplerDescSet);
     }
 
-    fVertexUniformBuffer.reset(GrVkUniformBuffer::Create(gpu, vertexUniformSize, true));
-    fFragmentUniformBuffer.reset(GrVkUniformBuffer::Create(gpu, fragmentUniformSize, true));
+    fVertexUniformBuffer.reset(GrVkUniformBuffer::Create(gpu, vertexUniformSize));
+    fFragmentUniformBuffer.reset(GrVkUniformBuffer::Create(gpu, fragmentUniformSize));
 
     fNumSamplers = numSamplers;
 }
@@ -123,10 +124,14 @@ void GrVkPipelineState::freeGPUResources(const GrVkGpu* gpu) {
         fFragmentUniformBuffer->release(gpu);
     }
 
-    fSamplerPoolManager.freeGPUResources(gpu);
-    if (fCurrentUniformDescPool) {
-        fCurrentUniformDescPool->unref(gpu);
-        fCurrentUniformDescPool = nullptr;
+    if (fUniformDescriptorSet) {
+        fUniformDescriptorSet->recycle(const_cast<GrVkGpu*>(gpu));
+        fUniformDescriptorSet = nullptr;
+    }
+
+    if (fSamplerDescriptorSet) {
+        fSamplerDescriptorSet->recycle(const_cast<GrVkGpu*>(gpu));
+        fSamplerDescriptorSet = nullptr;
     }
 
     this->freeTempResources(gpu);
@@ -156,10 +161,14 @@ void GrVkPipelineState::abandonGPUResources() {
     }
     fTextures.rewind();
 
-    fSamplerPoolManager.abandonGPUResources();
-    if (fCurrentUniformDescPool) {
-        fCurrentUniformDescPool->unrefAndAbandon();
-        fCurrentUniformDescPool = nullptr;
+    if (fUniformDescriptorSet) {
+        fUniformDescriptorSet->unrefAndAbandon();
+        fUniformDescriptorSet = nullptr;
+    }
+
+    if (fSamplerDescriptorSet) {
+        fSamplerDescriptorSet->unrefAndAbandon();
+        fSamplerDescriptorSet = nullptr;
     }
 }
 
@@ -201,25 +210,24 @@ void GrVkPipelineState::setData(GrVkGpu* gpu,
 
     // Get new descriptor sets
     if (fNumSamplers) {
-        fSamplerPoolManager.getNewDescriptorSet(gpu,
-                                             &fDescriptorSets[GrVkUniformHandler::kSamplerDescSet]);
+        if (fSamplerDescriptorSet) {
+            fSamplerDescriptorSet->recycle(gpu);
+        }
+        fSamplerDescriptorSet = gpu->resourceProvider().getSamplerDescriptorSet(fSamplerDSHandle);
+        int samplerDSIdx = GrVkUniformHandler::kSamplerDescSet;
+        fDescriptorSets[samplerDSIdx] = fSamplerDescriptorSet->descriptorSet();
         this->writeSamplers(gpu, textureBindings, pipeline.getAllowSRGBInputs());
     }
 
     if (fVertexUniformBuffer.get() || fFragmentUniformBuffer.get()) {
         if (fDataManager.uploadUniformBuffers(gpu, fVertexUniformBuffer, fFragmentUniformBuffer) ||
-            VK_NULL_HANDLE == fDescriptorSets[GrVkUniformHandler::kUniformBufferDescSet]) {
-            const GrVkDescriptorPool* pool;
-            int uniformDSIdx = GrVkUniformHandler::kUniformBufferDescSet;
-            gpu->resourceProvider().getUniformDescriptorSet(&fDescriptorSets[uniformDSIdx],
-                                                            &pool);
-            if (pool != fCurrentUniformDescPool) {
-                if (fCurrentUniformDescPool) {
-                    fCurrentUniformDescPool->unref(gpu);
-                }
-                fCurrentUniformDescPool = pool;
-                fCurrentUniformDescPool->ref();
+            !fUniformDescriptorSet) {
+            if (fUniformDescriptorSet) {
+                fUniformDescriptorSet->recycle(gpu);
             }
+            fUniformDescriptorSet = gpu->resourceProvider().getUniformDescriptorSet();
+            int uniformDSIdx = GrVkUniformHandler::kUniformBufferDescSet;
+            fDescriptorSets[uniformDSIdx] = fUniformDescriptorSet->descriptorSet();
             this->writeUniformBuffers(gpu);
         }
     }
@@ -367,19 +375,20 @@ void GrVkPipelineState::bind(const GrVkGpu* gpu, GrVkCommandBuffer* commandBuffe
 }
 
 void GrVkPipelineState::addUniformResources(GrVkCommandBuffer& commandBuffer) {
-    if (fSamplerPoolManager.fPool) {
-        commandBuffer.addResource(fSamplerPoolManager.fPool);
+    if (fUniformDescriptorSet) {
+        commandBuffer.addRecycledResource(fUniformDescriptorSet);
     }
-    if (fCurrentUniformDescPool) {
-        commandBuffer.addResource(fCurrentUniformDescPool);
+    if (fSamplerDescriptorSet) {
+        commandBuffer.addRecycledResource(fSamplerDescriptorSet);
     }
 
     if (fVertexUniformBuffer.get()) {
-        commandBuffer.addResource(fVertexUniformBuffer->resource());
+        commandBuffer.addRecycledResource(fVertexUniformBuffer->resource());
     }
     if (fFragmentUniformBuffer.get()) {
-        commandBuffer.addResource(fFragmentUniformBuffer->resource());
+        commandBuffer.addRecycledResource(fFragmentUniformBuffer->resource());
     }
+
     for (int i = 0; i < fSamplers.count(); ++i) {
         commandBuffer.addResource(fSamplers[i]);
     }
@@ -474,28 +483,27 @@ uint32_t get_blend_info_key(const GrPipeline& pipeline) {
     return key;
 }
 
-void GrVkPipelineState::BuildStateKey(const GrPipeline& pipeline, GrPrimitiveType primitiveType,
-                                      SkTArray<uint8_t, true>* key) {
-    // Save room for the key length and key header
-    key->reset();
-    key->push_back_n(kData_StateKeyOffset);
+bool GrVkPipelineState::Desc::Build(Desc* desc,
+                                    const GrPrimitiveProcessor& primProc,
+                                    const GrPipeline& pipeline,
+                                    GrPrimitiveType primitiveType,
+                                    const GrGLSLCaps& caps) {
+    if (!INHERITED::Build(desc, primProc, pipeline, caps)) {
+        return false;
+    }
 
-    GrProcessorKeyBuilder b(key);
-
+    GrProcessorKeyBuilder b(&desc->key());
     GrVkRenderTarget* vkRT = (GrVkRenderTarget*)pipeline.getRenderTarget();
     vkRT->simpleRenderPass()->genKey(&b);
 
     pipeline.getStencil().genKey(&b);
 
-    SkASSERT(sizeof(GrPipelineBuilder::DrawFace) <= sizeof(uint32_t));
-    b.add32(pipeline.getDrawFace());
+    SkASSERT(sizeof(GrDrawFace) <= sizeof(uint32_t));
+    b.add32((int32_t)pipeline.getDrawFace());
 
     b.add32(get_blend_info_key(pipeline));
 
     b.add32(primitiveType);
 
-    // Set key length
-    int keyLength = key->count();
-    SkASSERT(0 == (keyLength % 4));
-    *reinterpret_cast<uint32_t*>(key->begin()) = SkToU32(keyLength);
+    return true;
 }

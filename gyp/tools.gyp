@@ -116,7 +116,7 @@
         'sources': [
             '../tools/monobench.cpp',
             '../bench/Benchmark.cpp',
-            '<!@(python find.py ../bench "*Bench.cpp")',
+            '<!@(python find.py "*Bench.cpp" ../bench)',
         ],
         'sources!': [
             '../bench/GMBench.cpp',
@@ -435,6 +435,9 @@
       'direct_dependent_settings': {
         'include_dirs': [ '../tools', ],
       },
+      'dependencies': [
+        'skia_lib.gyp:skia_lib',
+      ],
     },
     {
       'target_name': 'url_data_manager',
@@ -460,18 +463,22 @@
     {
       'target_name': 'using_skia_and_harfbuzz',
       'type': 'executable',
-      'sources': [
-        '../tools/using_skia_and_harfbuzz.cpp',
-        '../tools/SkShaper.cpp',
+      'sources': [ '../tools/using_skia_and_harfbuzz.cpp', ],
+      'variables': { 'skia_example_use_harfbuzz%': 1, },
+      'conditions': [
+        [ 'skia_example_use_harfbuzz',
+          {
+            'dependencies': [ 'harfbuzz.gyp:harfbuzz', ],
+            'sources' : [ '../tools/SkShaper_harfbuzz.cpp', ],
+          }, {
+            'sources' : [ '../tools/SkShaper_primitive.cpp', ],
+          },
+        ]
       ],
       'dependencies': [
         'skia_lib.gyp:skia_lib',
         'pdf.gyp:pdf',
-        'harfbuzz.gyp:harfbuzz',
       ],
-      'cflags': [ '-w', ],
-      'msvs_settings': { 'VCCLCompilerTool': { 'WarningLevel': '0', }, },
-      'xcode_settings': { 'WARNING_CFLAGS': [ '-w', ], },
     },
     {
       'target_name': 'visualize_color_gamut',

@@ -56,10 +56,8 @@ bool GrGLSLProgramBuilder::emitAndInstallProcs(GrGLSLExpr4* inputColor,
     for (int i = 0; i < this->pipeline().numFragmentProcessors(); i++) {
         const GrFragmentProcessor& processor = this->pipeline().getFragmentProcessor(i);
 
-        if (!primProc.hasTransformedLocalCoords()) {
-            SkTArray<const GrCoordTransform*, true>& procCoords = fCoordTransforms.push_back();
-            processor.gatherCoordTransforms(&procCoords);
-        }
+        SkTArray<const GrCoordTransform*, true>& procCoords = fCoordTransforms.push_back();
+        processor.gatherCoordTransforms(&procCoords);
     }
 
     this->emitAndInstallPrimProc(primProc, inputColor, inputCoverage);
@@ -87,6 +85,17 @@ void GrGLSLProgramBuilder::emitAndInstallPrimProc(const GrPrimitiveProcessor& pr
     this->nameExpression(outputColor, "outputColor");
     this->nameExpression(outputCoverage, "outputCoverage");
 
+    const char* distanceVectorName = nullptr;
+    if (this->fPipeline.usesDistanceVectorField() && proc.implementsDistanceVector()) {
+        // Each individual user (FP) of the distance vector must be able to handle having this
+        // variable be undeclared. There is no single default value that will yield a reasonable
+        // result for all users.
+        distanceVectorName = fFS.distanceVectorName();
+        fFS.codeAppend( "// Normalized vector to the closest geometric edge (in device space)\n");
+        fFS.codeAppend( "// Distance to the edge encoded in the z-component\n");
+        fFS.codeAppendf("vec4 %s;", distanceVectorName);
+    }
+
     // Enclose custom code in a block to avoid namespace conflicts
     SkString openBrace;
     openBrace.printf("{ // Stage %d, %s\n", fStageIndex, proc.name());
@@ -108,6 +117,7 @@ void GrGLSLProgramBuilder::emitAndInstallPrimProc(const GrPrimitiveProcessor& pr
                                            proc,
                                            outputColor->c_str(),
                                            outputCoverage->c_str(),
+                                           distanceVectorName,
                                            texSamplers.begin(),
                                            bufferSamplers.begin(),
                                            fCoordTransforms,
@@ -161,7 +171,9 @@ void GrGLSLProgramBuilder::emitAndInstallFragProc(const GrFragmentProcessor& fp,
                                            input.isOnes() ? nullptr : input.c_str(),
                                            fOutCoords[index],
                                            texSamplers.begin(),
-                                           bufferSamplers.begin());
+                                           bufferSamplers.begin(),
+                                           this->primitiveProcessor().implementsDistanceVector());
+
     fragProc->emitCode(args);
 
     // We have to check that effects and the code they emit are consistent, ie if an effect

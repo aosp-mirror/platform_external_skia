@@ -24,6 +24,7 @@ LOCAL_CPPFLAGS := \
 
 LOCAL_SRC_FILES := \
 	../gm/gm.cpp \
+	../tools/LsanSuppressions.cpp \
 	AAClipBench.cpp \
 	AlternatingColorPatternBench.cpp \
 	AndroidCodecBench.cpp \
@@ -37,6 +38,7 @@ LOCAL_SRC_FILES := \
 	BitmapScaleBench.cpp \
 	BlurBench.cpp \
 	BlurImageFilterBench.cpp \
+	BlurOccludedRRectBench.cpp \
 	BlurRectBench.cpp \
 	BlurRectsBench.cpp \
 	BlurRoundRectBench.cpp \
@@ -54,6 +56,7 @@ LOCAL_SRC_FILES := \
 	DashBench.cpp \
 	DisplacementBench.cpp \
 	DrawBitmapAABench.cpp \
+	DrawLatticeBench.cpp \
 	EncoderBench.cpp \
 	FSRectBench.cpp \
 	FontCacheBench.cpp \
@@ -70,9 +73,12 @@ LOCAL_SRC_FILES := \
 	GrResourceCacheBench.cpp \
 	GradientBench.cpp \
 	HairlinePathBench.cpp \
-	HardStopGradientBench.cpp \
+	HardStopGradientBench_ScaleNumColors.cpp \
+	HardStopGradientBench_ScaleNumHardStops.cpp \
+	HardStopGradientBench_SpecialHardStops.cpp \
 	ImageBench.cpp \
 	ImageCacheBench.cpp \
+	ImageCacheBudgetBench.cpp \
 	ImageFilterCollapse.cpp \
 	ImageFilterDAGBench.cpp \
 	InterpBench.cpp \
@@ -83,6 +89,7 @@ LOCAL_SRC_FILES := \
 	Matrix44Bench.cpp \
 	MatrixBench.cpp \
 	MatrixConvolutionBench.cpp \
+	MeasureBench.cpp \
 	MemoryBench.cpp \
 	MemsetBench.cpp \
 	MergeBench.cpp \
@@ -99,6 +106,7 @@ LOCAL_SRC_FILES := \
 	PictureOverheadBench.cpp \
 	PicturePlaybackBench.cpp \
 	PremulAndUnpremulAlphaOpsBench.cpp \
+	QuickRejectBench.cpp \
 	RTreeBench.cpp \
 	ReadPixBench.cpp \
 	RecordingBench.cpp \
@@ -138,6 +146,7 @@ LOCAL_SRC_FILES := \
 	nanobench.cpp \
 	nanobenchAndroid.cpp \
 	pack_int_uint16_t_Bench.cpp \
+	../gm/OverStroke.cpp \
 	../gm/SkLinearBitmapPipelineGM.cpp \
 	../gm/aaclip.cpp \
 	../gm/aarectmodes.cpp \
@@ -181,6 +190,7 @@ LOCAL_SRC_FILES := \
 	../gm/cgm.c \
 	../gm/cgms.cpp \
 	../gm/circles.cpp \
+	../gm/circulararcs.cpp \
 	../gm/circularclips.cpp \
 	../gm/clip_strokerect.cpp \
 	../gm/clipdrawdraw.cpp \
@@ -213,7 +223,7 @@ LOCAL_SRC_FILES := \
 	../gm/dashcubics.cpp \
 	../gm/dashing.cpp \
 	../gm/dcshader.cpp \
-	../gm/deferredtextureimagedata.cpp \
+	../gm/deferredtextureimage.cpp \
 	../gm/degeneratesegments.cpp \
 	../gm/dftext.cpp \
 	../gm/discard.cpp \
@@ -228,11 +238,15 @@ LOCAL_SRC_FILES := \
 	../gm/drawfilter.cpp \
 	../gm/drawlooper.cpp \
 	../gm/drawminibitmaprect.cpp \
+	../gm/drawregion.cpp \
+	../gm/drawregionmodes.cpp \
 	../gm/dropshadowimagefilter.cpp \
 	../gm/drrect.cpp \
 	../gm/dstreadshuffle.cpp \
 	../gm/emboss.cpp \
 	../gm/emptypath.cpp \
+	../gm/encode-platform.cpp \
+	../gm/encode.cpp \
 	../gm/extractbitmap.cpp \
 	../gm/factory.cpp \
 	../gm/fadefilter.cpp \
@@ -247,7 +261,9 @@ LOCAL_SRC_FILES := \
 	../gm/fontscaler.cpp \
 	../gm/fontscalerdistortable.cpp \
 	../gm/gamma.cpp \
+	../gm/gammacolorfilter.cpp \
 	../gm/gammatext.cpp \
+	../gm/gamut.cpp \
 	../gm/getpostextpath.cpp \
 	../gm/giantbitmap.cpp \
 	../gm/glyph_pos.cpp \
@@ -282,6 +298,7 @@ LOCAL_SRC_FILES := \
 	../gm/imagefromyuvtextures.cpp \
 	../gm/imagemagnifier.cpp \
 	../gm/imagemakewithfilter.cpp \
+	../gm/imagemasksubset.cpp \
 	../gm/imageresizetiled.cpp \
 	../gm/imagescalealigned.cpp \
 	../gm/imagesource.cpp \
@@ -290,12 +307,14 @@ LOCAL_SRC_FILES := \
 	../gm/internal_links.cpp \
 	../gm/inversepaths.cpp \
 	../gm/largeglyphblur.cpp \
+	../gm/lattice.cpp \
 	../gm/lcdblendmodes.cpp \
 	../gm/lcdoverlap.cpp \
 	../gm/lcdtext.cpp \
 	../gm/lighting.cpp \
 	../gm/lightingshader.cpp \
 	../gm/lightingshader2.cpp \
+	../gm/lightingshaderbevel.cpp \
 	../gm/linepaths.cpp \
 	../gm/localmatriximagefilter.cpp \
 	../gm/lumafilter.cpp \
@@ -310,6 +329,7 @@ LOCAL_SRC_FILES := \
 	../gm/nested.cpp \
 	../gm/ninepatchstretch.cpp \
 	../gm/nonclosedpaths.cpp \
+	../gm/occludedrrectblur.cpp \
 	../gm/offsetimagefilter.cpp \
 	../gm/ovals.cpp \
 	../gm/patch.cpp \
@@ -341,8 +361,10 @@ LOCAL_SRC_FILES := \
 	../gm/rects.cpp \
 	../gm/repeated_bitmap.cpp \
 	../gm/resizeimagefilter.cpp \
+	../gm/reveal.cpp \
 	../gm/roundrects.cpp \
 	../gm/rrect.cpp \
+	../gm/rrectclipdrawpaint.cpp \
 	../gm/rrects.cpp \
 	../gm/samplerstress.cpp \
 	../gm/scaledstrokes.cpp \
@@ -350,11 +372,13 @@ LOCAL_SRC_FILES := \
 	../gm/shadertext.cpp \
 	../gm/shadertext2.cpp \
 	../gm/shadertext3.cpp \
+	../gm/shadowmaps.cpp \
 	../gm/shadows.cpp \
 	../gm/shallowgradient.cpp \
 	../gm/shapes.cpp \
 	../gm/showmiplevels.cpp \
 	../gm/simpleaaclip.cpp \
+	../gm/simplerect.cpp \
 	../gm/skbug1719.cpp \
 	../gm/skbug_257.cpp \
 	../gm/skbug_4868.cpp \
@@ -404,6 +428,7 @@ LOCAL_SRC_FILES := \
 	../gm/verttext.cpp \
 	../gm/verttext2.cpp \
 	../gm/verylargebitmap.cpp \
+	../gm/windowrectangles.cpp \
 	../gm/xfermodeimagefilter.cpp \
 	../gm/xfermodes.cpp \
 	../gm/xfermodes2.cpp \

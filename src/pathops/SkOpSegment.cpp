@@ -9,8 +9,6 @@
 #include "SkOpSegment.h"
 #include "SkPathWriter.h"
 
-#define FAIL_IF(cond) do { if (cond) return false; } while (false)
-
 /*
 After computing raw intersections, post process all segments to:
 - find small collections of points that can be collapsed to a single point
@@ -163,10 +161,7 @@ bool SkOpSegment::activeWinding(SkOpSpanBase* start, SkOpSpanBase* end, int* sum
 
 bool SkOpSegment::addCurveTo(const SkOpSpanBase* start, const SkOpSpanBase* end,
         SkPathWriter* path) const {
-    if (start->starter(end)->alreadyAdded()) {
-        SkDEBUGF(("same curve added twice aborted pathops\n"));
-        return false;
-    }
+    FAIL_IF(start->starter(end)->alreadyAdded());
     SkOpCurve edge;
     const SkPoint* ePtr;
     SkScalar eWeight;
@@ -229,7 +224,7 @@ const SkOpPtT* SkOpSegment::existing(double t, const SkOpSegment* opp) const {
         if (testPtT->fT == t) {
             break;
         }
-        if (!this->match(testPtT, this, t, pt, opp ? kAllowAliasMatch : kNoAliasMatch)) {
+        if (!this->match(testPtT, this, t, pt)) {
             if (t < testPtT->fT) {
                 return nullptr;
             }
@@ -256,69 +251,40 @@ bool SkOpSegment::addExpanded(double newT, const SkOpSpanBase* test, bool* start
     if (this->contains(newT)) {
         return true;
     }
-    SkOpPtT* newPtT = this->addT(newT, kAllowAliasMatch, startOver);
+    this->globalState()->resetAllocatedOpSpan();
+    SkOpPtT* newPtT = this->addT(newT);
+    *startOver |= this->globalState()->allocatedOpSpan();
     if (!newPtT) {
         return false;
     }
     newPtT->fPt = this->ptAtT(newT);
-    // const cast away to change linked list; pt/t values stays unchanged
-    SkOpSpanBase* writableTest = const_cast<SkOpSpanBase*>(test);
-    if (writableTest->ptT()->addOpp(newPtT)) {
+    SkOpPtT* oppPrev = test->ptT()->oppPrev(newPtT);
+    if (oppPrev) {
+        // const cast away to change linked list; pt/t values stays unchanged
+        SkOpSpanBase* writableTest = const_cast<SkOpSpanBase*>(test);
+        writableTest->mergeMatches(newPtT->span());
+        writableTest->ptT()->addOpp(newPtT, oppPrev);
         writableTest->checkForCollapsedCoincidence();
     }
     return true;
 }
 
 // Please keep this in sync with debugAddT()
-SkOpPtT* SkOpSegment::addT(double t, AliasMatch allowAlias, bool* allocated) {
+SkOpPtT* SkOpSegment::addT(double t) {
     debugValidate();
     SkPoint pt = this->ptAtT(t);
-    SkOpSpanBase* span = &fHead;
+    SkOpSpanBase* spanBase = &fHead;
     do {
-        SkOpPtT* result = span->ptT();
-        SkOpPtT* loop;
-        bool duplicatePt;
-        if (t == result->fT) {
-            goto bumpSpan;
-        }
-        if (this->match(result, this, t, pt, allowAlias)) {
-            // see if any existing alias matches segment, pt, and t
-            loop = result->next();
-            duplicatePt = false;
-            while (loop != result) {
-                bool ptMatch = loop->fPt == pt;
-                if (loop->segment() == this && loop->fT == t && ptMatch) {
-                    goto bumpSpan;
-                }
-                duplicatePt |= ptMatch;
-                loop = loop->next();
-            }
-            if (kNoAliasMatch == allowAlias) {
-    bumpSpan:
-                span->bumpSpanAdds();
-                return result;
-            }
-            SkOpPtT* alias = SkOpTAllocator<SkOpPtT>::Allocate(this->globalState()->allocator());
-            alias->init(result->span(), t, pt, duplicatePt);
-            result->insert(alias);
-            result->span()->unaligned();
-            this->debugValidate();
-#if DEBUG_ADD_T
-            SkDebugf("%s alias t=%1.9g segID=%d spanID=%d\n",  __FUNCTION__, t,
-                    alias->segment()->debugID(), alias->span()->debugID());
-#endif
-            span->bumpSpanAdds();
-            if (allocated) {
-                *allocated = true;
-            }
-            return alias;
+        SkOpPtT* result = spanBase->ptT();
+        if (t == result->fT || this->match(result, this, t, pt)) {
+            spanBase->bumpSpanAdds();
+            return result;
         }
         if (t < result->fT) {
             SkOpSpan* prev = result->span()->prev();
-            if (!prev) {
-                return nullptr;
-            }
-            SkOpSpan* span = insert(prev);
+            FAIL_WITH_NULL_IF(!prev);
+            // marks in global state that new op span has been allocated
+            SkOpSpan* span = this->insert(prev);
             span->init(this, prev, t, pt);
             this->debugValidate();
 #if DEBUG_ADD_T
@@ -326,15 +292,12 @@ SkOpPtT* SkOpSegment::addT(double t, AliasMatch allowAlias, bool* allocated) {
                     span->segment()->debugID(), span->debugID());
 #endif
             span->bumpSpanAdds();
-            if (allocated) {
-                *allocated = true;
-            }
             return span->ptT();
         }
-        SkASSERT(span != &fTail);
-    } while ((span = span->upCast()->next()));
+        FAIL_WITH_NULL_IF(spanBase == &fTail);
+    } while ((spanBase = spanBase->upCast()->next()));
     SkASSERT(0);
-    return nullptr;
+    return nullptr;  // we never get here, but need this to satisfy compiler
 }
 
 void SkOpSegment::calcAngles() {
@@ -391,6 +354,16 @@ bool SkOpSegment::collapsed() const {
     // FIXME: cubics can have also collapsed -- need to check if the
     // control points are on a line with the end points
     return fVerb < SkPath::kCubic_Verb && fHead.pt() == fTail.pt();
+}
+
+bool SkOpSegment::collapsed(double s, double e) const {
+    const SkOpSpanBase* span = &fHead;
+    do {
+        if (span->collapsed(s, e)) {
+            return true;
+        }
+    } while (span->upCastable() && (span = span->upCast()->next()));
+    return false;
 }
 
 void SkOpSegment::ComputeOneSum(const SkOpAngle* baseAngle, SkOpAngle* nextAngle,
@@ -541,7 +514,7 @@ void SkOpSegment::release(const SkOpSpan* span) {
         --fDoneCount;
     }
     --fCount;
-    SkASSERT(this->globalState()->debugSkipAssert() || fCount >= fDoneCount);
+    SkOPASSERT(fCount >= fDoneCount);
 }
 
 double SkOpSegment::distSq(double t, const SkOpAngle* oppAngle) const {
@@ -1049,7 +1022,7 @@ bool SkOpSegment::markWinding(SkOpSpan* span, int winding, int oppWinding) {
 }
 
 bool SkOpSegment::match(const SkOpPtT* base, const SkOpSegment* testParent, double testT,
-        const SkPoint& testPt, AliasMatch aliasMatch) const {
+        const SkPoint& testPt) const {
     SkASSERT(this == base->segment());
     if (this == testParent) {
         if (precisely_equal(base->fT, testT)) {
@@ -1165,7 +1138,7 @@ bool SkOpSegment::missingCoincidence() {
     bool result = false;
     do {
         SkOpPtT* ptT = spanBase->ptT(), * spanStopPtT = ptT;
-        SkASSERT(ptT->span() == spanBase);
+        SkOPASSERT(ptT->span() == spanBase);
         while ((ptT = ptT->next()) != spanStopPtT) {
             if (ptT->deleted()) {
                 continue;
@@ -1338,13 +1311,8 @@ bool SkOpSegment::moveMultiples() {
                     goto tryNextSpan;
             foundMatch:  // merge oppTest and oppSpan
                     oppSegment->debugValidate();
-                    if (oppTest == &oppSegment->fTail || oppTest == &oppSegment->fHead) {
-                        SkASSERT(oppSpan != &oppSegment->fHead); // don't expect collapse
-                        SkASSERT(oppSpan != &oppSegment->fTail);
-                        oppTest->merge(oppSpan->upCast());
-                    } else {
-                        oppSpan->merge(oppTest->upCast());
-                    }
+                    oppTest->mergeMatches(oppSpan);
+                    oppTest->addOpp(oppSpan);
                     oppSegment->debugValidate();
                     goto checkNextSpan;
                 }
@@ -1364,14 +1332,14 @@ bool SkOpSegment::spansNearby(const SkOpSpanBase* refSpan, const SkOpSpanBase* c
     const SkOpPtT* refHead = refSpan->ptT();
     const SkOpPtT* checkHead = checkSpan->ptT();
 // if the first pt pair from adjacent spans are far apart, assume that all are far enough apart
-    if (!SkDPoint::RoughlyEqual(refHead->fPt, checkHead->fPt)) {
+    if (!SkDPoint::WayRoughlyEqual(refHead->fPt, checkHead->fPt)) {
 #if DEBUG_COINCIDENCE
         // verify that no combination of points are close
         const SkOpPtT* dBugRef = refHead;
         do {
             const SkOpPtT* dBugCheck = checkHead;
             do {
-                SkASSERT(!SkDPoint::ApproximatelyEqual(dBugRef->fPt, dBugCheck->fPt));
+                SkOPASSERT(!SkDPoint::ApproximatelyEqual(dBugRef->fPt, dBugCheck->fPt));
                 dBugCheck = dBugCheck->next();
             } while (dBugCheck != checkHead);
             dBugRef = dBugRef->next();
@@ -1419,7 +1387,7 @@ nextRef:
    } while ((ref = ref->next()) != refHead);
 doneCheckingDistance:
     return checkBest && refBest->segment()->match(refBest, checkBest->segment(), checkBest->fT,
-            checkBest->fPt, kAllowAliasMatch);
+            checkBest->fPt);
 }
 
 // Please keep this function in sync with debugMoveNearby()
@@ -1722,7 +1690,7 @@ bool SkOpSegment::testForCoincidence(const SkOpPtT* priorPtT, const SkOpPtT* ptT
                 continue;
             }
             SkDPoint oppPt = i.pt(index);
-            if (oppPt.approximatelyEqual(midPt)) {
+            if (oppPt.approximatelyDEqual(midPt)) {
                 // the coincidence can occur at almost any angle
                 coincident = true;
             }

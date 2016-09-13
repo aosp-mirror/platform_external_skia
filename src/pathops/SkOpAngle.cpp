@@ -181,15 +181,15 @@ int SkOpAngle::allOnOneSide(const SkOpAngle* test) {
     SkASSERT(test->fIsCurve);
     SkDPoint origin = fCurvePart[0];
     SkDVector line = fCurvePart[1] - origin;
-    float crosses[3];
+    double crosses[3];
     SkPath::Verb testVerb = test->segment()->verb();
     int iMax = SkPathOpsVerbToPoints(testVerb);
 //    SkASSERT(origin == test.fCurveHalf[0]);
     const SkDCurve& testCurve = test->fCurvePart;
     for (int index = 1; index <= iMax; ++index) {
-        float xy1 = (float) (line.fX * (testCurve[index].fY - origin.fY));
-        float xy2 = (float) (line.fY * (testCurve[index].fX - origin.fX));
-        crosses[index - 1] = AlmostEqualUlps(xy1, xy2) ? 0 : xy1 - xy2;
+        double xy1 = line.fX * (testCurve[index].fY - origin.fY);
+        double xy2 = line.fY * (testCurve[index].fX - origin.fX);
+        crosses[index - 1] = AlmostBequalUlps(xy1, xy2) ? 0 : xy1 - xy2;
     }
     if (crosses[0] * crosses[1] < 0) {
         return -1;
@@ -905,8 +905,10 @@ void SkOpAngle::setSpans() {
     if (verb != SkPath::kLine_Verb
             && !(fIsCurve = fSweep[0].crossCheck(fSweep[1]) != 0)) {
         SkDLine lineHalf;
+        fCurvePart[1] = fCurvePart[SkPathOpsVerbToPoints(verb)];
+        fOriginalCurvePart[1] = fCurvePart[1];
         lineHalf[0].set(fCurvePart[0].asSkPoint());
-        lineHalf[1].set(fCurvePart[SkPathOpsVerbToPoints(verb)].asSkPoint());
+        lineHalf[1].set(fCurvePart[1].asSkPoint());
         fTangentHalf.lineEndPoints(lineHalf);
         fSide = 0;
     }

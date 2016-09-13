@@ -7,7 +7,9 @@
 
 #include "SkColorPriv.h"
 #include "SkColorSpace_Base.h"
+#include "SkColorSpacePriv.h"
 #include "SkColorSpaceXform.h"
+#include "SkHalf.h"
 #include "SkOpts.h"
 #include "SkSRGB.h"
 
@@ -78,6 +80,8 @@ static constexpr float sk_linear_from_2dot2[256] = {
         0.974300202388861000f, 0.982826255053791000f, 0.991392843592940000f, 1.000000000000000000f,
 };
 
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
 static void build_table_linear_from_gamma(float* outTable, float exponent) {
     for (float x = 0.0f; x <= 1.0f; x += (1.0f/255.0f)) {
         *outTable++ = powf(x, exponent);
@@ -118,137 +122,7 @@ static void build_table_linear_from_gamma(float* outTable, float g, float a, flo
     }
 }
 
-static inline bool compute_gamut_xform(SkMatrix44* srcToDst, const SkMatrix44& srcToXYZ,
-                                       const SkMatrix44& dstToXYZ) {
-    if (!dstToXYZ.invert(srcToDst)) {
-        return false;
-    }
-
-    srcToDst->postConcat(srcToXYZ);
-    return true;
-}
-
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-
-static constexpr uint8_t linear_to_srgb[1024] = {
-          0,   3,   6,  10,  13,  15,  18,  20,  22,  23,  25,  27,  28,  30,  31,  32,  34,  35,
-         36,  37,  38,  39,  40,  41,  42,  43,  44,  45,  46,  47,  48,  49,  49,  50,  51,  52,
-         53,  53,  54,  55,  56,  56,  57,  58,  58,  59,  60,  61,  61,  62,  62,  63,  64,  64,
-         65,  66,  66,  67,  67,  68,  68,  69,  70,  70,  71,  71,  72,  72,  73,  73,  74,  74,
-         75,  76,  76,  77,  77,  78,  78,  79,  79,  79,  80,  80,  81,  81,  82,  82,  83,  83,
-         84,  84,  85,  85,  85,  86,  86,  87,  87,  88,  88,  88,  89,  89,  90,  90,  91,  91,
-         91,  92,  92,  93,  93,  93,  94,  94,  95,  95,  95,  96,  96,  97,  97,  97,  98,  98,
-         98,  99,  99,  99, 100, 100, 101, 101, 101, 102, 102, 102, 103, 103, 103, 104, 104, 104,
-        105, 105, 106, 106, 106, 107, 107, 107, 108, 108, 108, 109, 109, 109, 110, 110, 110, 110,
-        111, 111, 111, 112, 112, 112, 113, 113, 113, 114, 114, 114, 115, 115, 115, 115, 116, 116,
-        116, 117, 117, 117, 118, 118, 118, 118, 119, 119, 119, 120, 120, 120, 121, 121, 121, 121,
-        122, 122, 122, 123, 123, 123, 123, 124, 124, 124, 125, 125, 125, 125, 126, 126, 126, 126,
-        127, 127, 127, 128, 128, 128, 128, 129, 129, 129, 129, 130, 130, 130, 130, 131, 131, 131,
-        131, 132, 132, 132, 133, 133, 133, 133, 134, 134, 134, 134, 135, 135, 135, 135, 136, 136,
-        136, 136, 137, 137, 137, 137, 138, 138, 138, 138, 138, 139, 139, 139, 139, 140, 140, 140,
-        140, 141, 141, 141, 141, 142, 142, 142, 142, 143, 143, 143, 143, 143, 144, 144, 144, 144,
-        145, 145, 145, 145, 146, 146, 146, 146, 146, 147, 147, 147, 147, 148, 148, 148, 148, 148,
-        149, 149, 149, 149, 150, 150, 150, 150, 150, 151, 151, 151, 151, 152, 152, 152, 152, 152,
-        153, 153, 153, 153, 153, 154, 154, 154, 154, 155, 155, 155, 155, 155, 156, 156, 156, 156,
-        156, 157, 157, 157, 157, 157, 158, 158, 158, 158, 158, 159, 159, 159, 159, 159, 160, 160,
-        160, 160, 160, 161, 161, 161, 161, 161, 162, 162, 162, 162, 162, 163, 163, 163, 163, 163,
-        164, 164, 164, 164, 164, 165, 165, 165, 165, 165, 166, 166, 166, 166, 166, 167, 167, 167,
-        167, 167, 168, 168, 168, 168, 168, 168, 169, 169, 169, 169, 169, 170, 170, 170, 170, 170,
-        171, 171, 171, 171, 171, 171, 172, 172, 172, 172, 172, 173, 173, 173, 173, 173, 173, 174,
-        174, 174, 174, 174, 175, 175, 175, 175, 175, 175, 176, 176, 176, 176, 176, 177, 177, 177,
-        177, 177, 177, 178, 178, 178, 178, 178, 178, 179, 179, 179, 179, 179, 179, 180, 180, 180,
-        180, 180, 181, 181, 181, 181, 181, 181, 182, 182, 182, 182, 182, 182, 183, 183, 183, 183,
-        183, 183, 184, 184, 184, 184, 184, 184, 185, 185, 185, 185, 185, 185, 186, 186, 186, 186,
-        186, 186, 187, 187, 187, 187, 187, 187, 188, 188, 188, 188, 188, 188, 189, 189, 189, 189,
-        189, 189, 190, 190, 190, 190, 190, 190, 191, 191, 191, 191, 191, 191, 191, 192, 192, 192,
-        192, 192, 192, 193, 193, 193, 193, 193, 193, 194, 194, 194, 194, 194, 194, 194, 195, 195,
-        195, 195, 195, 195, 196, 196, 196, 196, 196, 196, 197, 197, 197, 197, 197, 197, 197, 198,
-        198, 198, 198, 198, 198, 199, 199, 199, 199, 199, 199, 199, 200, 200, 200, 200, 200, 200,
-        200, 201, 201, 201, 201, 201, 201, 202, 202, 202, 202, 202, 202, 202, 203, 203, 203, 203,
-        203, 203, 203, 204, 204, 204, 204, 204, 204, 204, 205, 205, 205, 205, 205, 205, 206, 206,
-        206, 206, 206, 206, 206, 207, 207, 207, 207, 207, 207, 207, 208, 208, 208, 208, 208, 208,
-        208, 209, 209, 209, 209, 209, 209, 209, 210, 210, 210, 210, 210, 210, 210, 211, 211, 211,
-        211, 211, 211, 211, 212, 212, 212, 212, 212, 212, 212, 212, 213, 213, 213, 213, 213, 213,
-        213, 214, 214, 214, 214, 214, 214, 214, 215, 215, 215, 215, 215, 215, 215, 216, 216, 216,
-        216, 216, 216, 216, 216, 217, 217, 217, 217, 217, 217, 217, 218, 218, 218, 218, 218, 218,
-        218, 219, 219, 219, 219, 219, 219, 219, 219, 220, 220, 220, 220, 220, 220, 220, 221, 221,
-        221, 221, 221, 221, 221, 221, 222, 222, 222, 222, 222, 222, 222, 222, 223, 223, 223, 223,
-        223, 223, 223, 224, 224, 224, 224, 224, 224, 224, 224, 225, 225, 225, 225, 225, 225, 225,
-        225, 226, 226, 226, 226, 226, 226, 226, 227, 227, 227, 227, 227, 227, 227, 227, 228, 228,
-        228, 228, 228, 228, 228, 228, 229, 229, 229, 229, 229, 229, 229, 229, 230, 230, 230, 230,
-        230, 230, 230, 230, 231, 231, 231, 231, 231, 231, 231, 231, 232, 232, 232, 232, 232, 232,
-        232, 232, 233, 233, 233, 233, 233, 233, 233, 233, 234, 234, 234, 234, 234, 234, 234, 234,
-        235, 235, 235, 235, 235, 235, 235, 235, 236, 236, 236, 236, 236, 236, 236, 236, 236, 237,
-        237, 237, 237, 237, 237, 237, 237, 238, 238, 238, 238, 238, 238, 238, 238, 239, 239, 239,
-        239, 239, 239, 239, 239, 239, 240, 240, 240, 240, 240, 240, 240, 240, 241, 241, 241, 241,
-        241, 241, 241, 241, 241, 242, 242, 242, 242, 242, 242, 242, 242, 243, 243, 243, 243, 243,
-        243, 243, 243, 243, 244, 244, 244, 244, 244, 244, 244, 244, 245, 245, 245, 245, 245, 245,
-        245, 245, 245, 246, 246, 246, 246, 246, 246, 246, 246, 246, 247, 247, 247, 247, 247, 247,
-        247, 247, 248, 248, 248, 248, 248, 248, 248, 248, 248, 249, 249, 249, 249, 249, 249, 249,
-        249, 249, 250, 250, 250, 250, 250, 250, 250, 250, 250, 251, 251, 251, 251, 251, 251, 251,
-        251, 251, 252, 252, 252, 252, 252, 252, 252, 252, 252, 253, 253, 253, 253, 253, 253, 253,
-        253, 253, 254, 254, 254, 254, 254, 254, 254, 254, 254, 255, 255, 255, 255, 255
-};
-
-static constexpr uint8_t linear_to_2dot2[1024] = {
-          0,  11,  15,  18,  21,  23,  25,  26,  28,  30,  31,  32,  34,  35,  36,  37,  39,  40,
-         41,  42,  43,  44,  45,  45,  46,  47,  48,  49,  50,  50,  51,  52,  53,  54,  54,  55,
-         56,  56,  57,  58,  58,  59,  60,  60,  61,  62,  62,  63,  63,  64,  65,  65,  66,  66,
-         67,  68,  68,  69,  69,  70,  70,  71,  71,  72,  72,  73,  73,  74,  74,  75,  75,  76,
-         76,  77,  77,  78,  78,  79,  79,  80,  80,  81,  81,  81,  82,  82,  83,  83,  84,  84,
-         84,  85,  85,  86,  86,  87,  87,  87,  88,  88,  89,  89,  89,  90,  90,  91,  91,  91,
-         92,  92,  93,  93,  93,  94,  94,  94,  95,  95,  96,  96,  96,  97,  97,  97,  98,  98,
-         98,  99,  99,  99, 100, 100, 101, 101, 101, 102, 102, 102, 103, 103, 103, 104, 104, 104,
-        105, 105, 105, 106, 106, 106, 107, 107, 107, 108, 108, 108, 108, 109, 109, 109, 110, 110,
-        110, 111, 111, 111, 112, 112, 112, 112, 113, 113, 113, 114, 114, 114, 115, 115, 115, 115,
-        116, 116, 116, 117, 117, 117, 117, 118, 118, 118, 119, 119, 119, 119, 120, 120, 120, 121,
-        121, 121, 121, 122, 122, 122, 123, 123, 123, 123, 124, 124, 124, 124, 125, 125, 125, 125,
-        126, 126, 126, 127, 127, 127, 127, 128, 128, 128, 128, 129, 129, 129, 129, 130, 130, 130,
-        130, 131, 131, 131, 131, 132, 132, 132, 132, 133, 133, 133, 133, 134, 134, 134, 134, 135,
-        135, 135, 135, 136, 136, 136, 136, 137, 137, 137, 137, 138, 138, 138, 138, 138, 139, 139,
-        139, 139, 140, 140, 140, 140, 141, 141, 141, 141, 142, 142, 142, 142, 142, 143, 143, 143,
-        143, 144, 144, 144, 144, 144, 145, 145, 145, 145, 146, 146, 146, 146, 146, 147, 147, 147,
-        147, 148, 148, 148, 148, 148, 149, 149, 149, 149, 149, 150, 150, 150, 150, 151, 151, 151,
-        151, 151, 152, 152, 152, 152, 152, 153, 153, 153, 153, 154, 154, 154, 154, 154, 155, 155,
-        155, 155, 155, 156, 156, 156, 156, 156, 157, 157, 157, 157, 157, 158, 158, 158, 158, 158,
-        159, 159, 159, 159, 159, 160, 160, 160, 160, 160, 161, 161, 161, 161, 161, 162, 162, 162,
-        162, 162, 163, 163, 163, 163, 163, 164, 164, 164, 164, 164, 165, 165, 165, 165, 165, 165,
-        166, 166, 166, 166, 166, 167, 167, 167, 167, 167, 168, 168, 168, 168, 168, 168, 169, 169,
-        169, 169, 169, 170, 170, 170, 170, 170, 171, 171, 171, 171, 171, 171, 172, 172, 172, 172,
-        172, 173, 173, 173, 173, 173, 173, 174, 174, 174, 174, 174, 174, 175, 175, 175, 175, 175,
-        176, 176, 176, 176, 176, 176, 177, 177, 177, 177, 177, 177, 178, 178, 178, 178, 178, 179,
-        179, 179, 179, 179, 179, 180, 180, 180, 180, 180, 180, 181, 181, 181, 181, 181, 181, 182,
-        182, 182, 182, 182, 182, 183, 183, 183, 183, 183, 183, 184, 184, 184, 184, 184, 185, 185,
-        185, 185, 185, 185, 186, 186, 186, 186, 186, 186, 186, 187, 187, 187, 187, 187, 187, 188,
-        188, 188, 188, 188, 188, 189, 189, 189, 189, 189, 189, 190, 190, 190, 190, 190, 190, 191,
-        191, 191, 191, 191, 191, 192, 192, 192, 192, 192, 192, 192, 193, 193, 193, 193, 193, 193,
-        194, 194, 194, 194, 194, 194, 195, 195, 195, 195, 195, 195, 195, 196, 196, 196, 196, 196,
-        196, 197, 197, 197, 197, 197, 197, 197, 198, 198, 198, 198, 198, 198, 199, 199, 199, 199,
-        199, 199, 199, 200, 200, 200, 200, 200, 200, 201, 201, 201, 201, 201, 201, 201, 202, 202,
-        202, 202, 202, 202, 202, 203, 203, 203, 203, 203, 203, 204, 204, 204, 204, 204, 204, 204,
-        205, 205, 205, 205, 205, 205, 205, 206, 206, 206, 206, 206, 206, 206, 207, 207, 207, 207,
-        207, 207, 207, 208, 208, 208, 208, 208, 208, 209, 209, 209, 209, 209, 209, 209, 210, 210,
-        210, 210, 210, 210, 210, 211, 211, 211, 211, 211, 211, 211, 212, 212, 212, 212, 212, 212,
-        212, 213, 213, 213, 213, 213, 213, 213, 213, 214, 214, 214, 214, 214, 214, 214, 215, 215,
-        215, 215, 215, 215, 215, 216, 216, 216, 216, 216, 216, 216, 217, 217, 217, 217, 217, 217,
-        217, 218, 218, 218, 218, 218, 218, 218, 218, 219, 219, 219, 219, 219, 219, 219, 220, 220,
-        220, 220, 220, 220, 220, 221, 221, 221, 221, 221, 221, 221, 221, 222, 222, 222, 222, 222,
-        222, 222, 223, 223, 223, 223, 223, 223, 223, 223, 224, 224, 224, 224, 224, 224, 224, 225,
-        225, 225, 225, 225, 225, 225, 225, 226, 226, 226, 226, 226, 226, 226, 226, 227, 227, 227,
-        227, 227, 227, 227, 228, 228, 228, 228, 228, 228, 228, 228, 229, 229, 229, 229, 229, 229,
-        229, 229, 230, 230, 230, 230, 230, 230, 230, 230, 231, 231, 231, 231, 231, 231, 231, 232,
-        232, 232, 232, 232, 232, 232, 232, 233, 233, 233, 233, 233, 233, 233, 233, 234, 234, 234,
-        234, 234, 234, 234, 234, 235, 235, 235, 235, 235, 235, 235, 235, 236, 236, 236, 236, 236,
-        236, 236, 236, 237, 237, 237, 237, 237, 237, 237, 237, 238, 238, 238, 238, 238, 238, 238,
-        238, 238, 239, 239, 239, 239, 239, 239, 239, 239, 240, 240, 240, 240, 240, 240, 240, 240,
-        241, 241, 241, 241, 241, 241, 241, 241, 242, 242, 242, 242, 242, 242, 242, 242, 243, 243,
-        243, 243, 243, 243, 243, 243, 243, 244, 244, 244, 244, 244, 244, 244, 244, 245, 245, 245,
-        245, 245, 245, 245, 245, 245, 246, 246, 246, 246, 246, 246, 246, 246, 247, 247, 247, 247,
-        247, 247, 247, 247, 248, 248, 248, 248, 248, 248, 248, 248, 248, 249, 249, 249, 249, 249,
-        249, 249, 249, 249, 250, 250, 250, 250, 250, 250, 250, 250, 251, 251, 251, 251, 251, 251,
-        251, 251, 251, 252, 252, 252, 252, 252, 252, 252, 252, 252, 253, 253, 253, 253, 253, 253,
-        253, 253, 254, 254, 254, 254, 254, 254, 254, 254, 254, 255, 255, 255, 255, 255,
-};
 
 // Expand range from 0-1 to 0-255, then convert.
 static uint8_t clamp_normalized_float_to_byte(float v) {
@@ -264,11 +138,15 @@ static uint8_t clamp_normalized_float_to_byte(float v) {
     }
 }
 
-static void build_table_linear_to_gamma(uint8_t* outTable, int outTableSize, float exponent) {
+static const int kDstGammaTableSize =
+        SkColorSpaceXform_Base<kNonStandard_SkGammaNamed, kNone_ColorSpaceMatch>
+        ::kDstGammaTableSize;
+
+static void build_table_linear_to_gamma(uint8_t* outTable, float exponent) {
     float toGammaExp = 1.0f / exponent;
 
-    for (int i = 0; i < outTableSize; i++) {
-        float x = ((float) i) * (1.0f / ((float) (outTableSize - 1)));
+    for (int i = 0; i < kDstGammaTableSize; i++) {
+        float x = ((float) i) * (1.0f / ((float) (kDstGammaTableSize - 1)));
         outTable[i] = clamp_normalized_float_to_byte(powf(x, toGammaExp));
     }
 }
@@ -276,7 +154,7 @@ static void build_table_linear_to_gamma(uint8_t* outTable, int outTableSize, flo
 // Inverse table lookup.  Ex: what index corresponds to the input value?  This will
 // have strange results when the table is non-increasing.  But any sane gamma
 // function will be increasing.
-static float inverse_interp_lut(float input, float* table, int tableSize) {
+static float inverse_interp_lut(float input, const float* table, int tableSize) {
     if (input <= table[0]) {
         return table[0];
     } else if (input >= table[tableSize - 1]) {
@@ -299,10 +177,10 @@ static float inverse_interp_lut(float input, float* table, int tableSize) {
     return 0.0f;
 }
 
-static void build_table_linear_to_gamma(uint8_t* outTable, int outTableSize, float* inTable,
+static void build_table_linear_to_gamma(uint8_t* outTable, const float* inTable,
                                         int inTableSize) {
-    for (int i = 0; i < outTableSize; i++) {
-        float x = ((float) i) * (1.0f / ((float) (outTableSize - 1)));
+    for (int i = 0; i < kDstGammaTableSize; i++) {
+        float x = ((float) i) * (1.0f / ((float) (kDstGammaTableSize - 1)));
         float y = inverse_interp_lut(x, inTable, inTableSize);
         outTable[i] = clamp_normalized_float_to_byte(y);
     }
@@ -339,13 +217,127 @@ static float inverse_parametric(float x, float g, float a, float b, float c, flo
     return (powf(x - c, 1.0f / g) - b) / a;
 }
 
-static void build_table_linear_to_gamma(uint8_t* outTable, int outTableSize, float g, float a,
+static void build_table_linear_to_gamma(uint8_t* outTable, float g, float a,
                                         float b, float c, float d, float e, float f) {
-    for (int i = 0; i < outTableSize; i++) {
-        float x = ((float) i) * (1.0f / ((float) (outTableSize - 1)));
+    for (int i = 0; i < kDstGammaTableSize; i++) {
+        float x = ((float) i) * (1.0f / ((float) (kDstGammaTableSize - 1)));
         float y = inverse_parametric(x, g, a, b, c, d, e, f);
         outTable[i] = clamp_normalized_float_to_byte(y);
     }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <typename T>
+struct GammaFns {
+    const T* fSRGBTable;
+    const T* f2Dot2Table;
+
+    void (*fBuildFromValue)(T*, float);
+    void (*fBuildFromTable)(T*, const float*, int);
+    void (*fBuildFromParam)(T*, float, float, float, float, float, float, float);
+};
+
+static const GammaFns<float> kToLinear {
+    sk_linear_from_srgb,
+    sk_linear_from_2dot2,
+    &build_table_linear_from_gamma,
+    &build_table_linear_from_gamma,
+    &build_table_linear_from_gamma,
+};
+
+static const GammaFns<uint8_t> kFromLinear {
+    nullptr,
+    nullptr,
+    &build_table_linear_to_gamma,
+    &build_table_linear_to_gamma,
+    &build_table_linear_to_gamma,
+};
+
+// Build tables to transform src gamma to linear.
+template <typename T>
+static void build_gamma_tables(const T* outGammaTables[3], T* gammaTableStorage, int gammaTableSize,
+                               const sk_sp<SkColorSpace>& space, const GammaFns<T>& fns) {
+    switch (as_CSB(space)->gammaNamed()) {
+        case kSRGB_SkGammaNamed:
+            outGammaTables[0] = outGammaTables[1] = outGammaTables[2] = fns.fSRGBTable;
+            break;
+        case k2Dot2Curve_SkGammaNamed:
+            outGammaTables[0] = outGammaTables[1] = outGammaTables[2] = fns.f2Dot2Table;
+            break;
+        case kLinear_SkGammaNamed:
+            (*fns.fBuildFromValue)(gammaTableStorage, 1.0f);
+            outGammaTables[0] = outGammaTables[1] = outGammaTables[2] = gammaTableStorage;
+            break;
+        default: {
+            const SkGammas* gammas = as_CSB(space)->gammas();
+            SkASSERT(gammas);
+
+            for (int i = 0; i < 3; i++) {
+                if (i > 0) {
+                    // Check if this curve matches the first curve.  In this case, we can
+                    // share the same table pointer.  This should almost always be true.
+                    // I've never seen a profile where all three gamma curves didn't match.
+                    // But it is possible that they won't.
+                    if (gammas->type(0) == gammas->type(i) && gammas->data(0) == gammas->data(i)) {
+                        outGammaTables[i] = outGammaTables[0];
+                        continue;
+                    }
+                }
+
+                if (gammas->isNamed(i)) {
+                    switch (gammas->data(i).fNamed) {
+                        case kSRGB_SkGammaNamed:
+                            (*fns.fBuildFromParam)(&gammaTableStorage[i * gammaTableSize], 2.4f,
+                                                   (1.0f / 1.055f), (0.055f / 1.055f), 0.0f,
+                                                   0.04045f, (1.0f / 12.92f), 0.0f);
+                            outGammaTables[i] = &gammaTableStorage[i * gammaTableSize];
+                            break;
+                        case k2Dot2Curve_SkGammaNamed:
+                            (*fns.fBuildFromValue)(&gammaTableStorage[i * gammaTableSize], 2.2f);
+                            outGammaTables[i] = &gammaTableStorage[i * gammaTableSize];
+                            break;
+                        case kLinear_SkGammaNamed:
+                            (*fns.fBuildFromValue)(&gammaTableStorage[i * gammaTableSize], 1.0f);
+                            outGammaTables[i] = &gammaTableStorage[i * gammaTableSize];
+                            break;
+                        default:
+                            SkASSERT(false);
+                            break;
+                    }
+                } else if (gammas->isValue(i)) {
+                    (*fns.fBuildFromValue)(&gammaTableStorage[i * gammaTableSize],
+                                           gammas->data(i).fValue);
+                    outGammaTables[i] = &gammaTableStorage[i * gammaTableSize];
+                } else if (gammas->isTable(i)) {
+                    (*fns.fBuildFromTable)(&gammaTableStorage[i * gammaTableSize], gammas->table(i),
+                                           gammas->data(i).fTable.fSize);
+                    outGammaTables[i] = &gammaTableStorage[i * gammaTableSize];
+                } else {
+                    SkASSERT(gammas->isParametric(i));
+                    const SkGammas::Params& params = gammas->params(i);
+                    (*fns.fBuildFromParam)(&gammaTableStorage[i * gammaTableSize], params.fG,
+                                           params.fA, params.fB, params.fC, params.fD, params.fE,
+                                           params.fF);
+                    outGammaTables[i] = &gammaTableStorage[i * gammaTableSize];
+                }
+            }
+        }
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+static inline bool is_almost_identity(const SkMatrix44& srcToDst) {
+    for (int i = 0; i < 4; i++) {
+        for (int j = 0; j < 4; j++) {
+            float expected = (i == j) ? 1.0f : 0.0f;
+            if (!color_space_almost_equal(srcToDst.getFloat(i,j), expected)) {
+                return false;
+            }
+        }
+    }
+    return true;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -357,394 +349,73 @@ std::unique_ptr<SkColorSpaceXform> SkColorSpaceXform::New(const sk_sp<SkColorSpa
         return nullptr;
     }
 
-    if (as_CSB(dstSpace)->colorLUT()) {
-        // It would be really weird for a dst profile to have a color LUT.  I don't think
-        // we need to support this.
-        return nullptr;
-    }
-
+    ColorSpaceMatch csm = kNone_ColorSpaceMatch;
     SkMatrix44 srcToDst(SkMatrix44::kUninitialized_Constructor);
-    if (!compute_gamut_xform(&srcToDst, srcSpace->xyz(), dstSpace->xyz())) {
-        return nullptr;
-    }
+    if (SkColorSpace::Equals(srcSpace.get(), dstSpace.get())) {
+        srcToDst.setIdentity();
+        csm = kFull_ColorSpaceMatch;
+    } else {
+        srcToDst.setConcat(as_CSB(dstSpace)->fromXYZD50(), srcSpace->toXYZD50());
 
-    if (0.0f == srcToDst.getFloat(3, 0) &&
-        0.0f == srcToDst.getFloat(3, 1) &&
-        0.0f == srcToDst.getFloat(3, 2) &&
-        !as_CSB(srcSpace)->colorLUT())
-    {
-        switch (dstSpace->gammaNamed()) {
-            case SkColorSpace::kSRGB_GammaNamed:
-                return std::unique_ptr<SkColorSpaceXform>(
-                        new SkFastXform<SkColorSpace::kSRGB_GammaNamed>(srcSpace, srcToDst,
-                                                                        dstSpace));
-            case SkColorSpace::k2Dot2Curve_GammaNamed:
-                return std::unique_ptr<SkColorSpaceXform>(
-                        new SkFastXform<SkColorSpace::k2Dot2Curve_GammaNamed>(srcSpace, srcToDst,
-                                                                              dstSpace));
-            default:
-                return std::unique_ptr<SkColorSpaceXform>(
-                        new SkFastXform<SkColorSpace::kNonStandard_GammaNamed>(srcSpace, srcToDst,
-                                                                               dstSpace));
+        if (is_almost_identity(srcToDst)) {
+            srcToDst.setIdentity();
+            csm = kGamut_ColorSpaceMatch;
         }
     }
 
-    return std::unique_ptr<SkColorSpaceXform>(new SkDefaultXform(srcSpace, srcToDst, dstSpace));
+    switch (csm) {
+        case kNone_ColorSpaceMatch:
+            switch (as_CSB(dstSpace)->gammaNamed()) {
+                case kSRGB_SkGammaNamed:
+                    return std::unique_ptr<SkColorSpaceXform>(new SkColorSpaceXform_Base
+                            <kSRGB_SkGammaNamed, kNone_ColorSpaceMatch>
+                            (srcSpace, srcToDst, dstSpace));
+                case k2Dot2Curve_SkGammaNamed:
+                    return std::unique_ptr<SkColorSpaceXform>(new SkColorSpaceXform_Base
+                            <k2Dot2Curve_SkGammaNamed, kNone_ColorSpaceMatch>
+                            (srcSpace, srcToDst, dstSpace));
+                default:
+                    return std::unique_ptr<SkColorSpaceXform>(new SkColorSpaceXform_Base
+                            <kNonStandard_SkGammaNamed, kNone_ColorSpaceMatch>
+                            (srcSpace, srcToDst, dstSpace));
+            }
+        case kGamut_ColorSpaceMatch:
+            switch (as_CSB(dstSpace)->gammaNamed()) {
+                case kSRGB_SkGammaNamed:
+                    return std::unique_ptr<SkColorSpaceXform>(new SkColorSpaceXform_Base
+                            <kSRGB_SkGammaNamed, kGamut_ColorSpaceMatch>
+                            (srcSpace, srcToDst, dstSpace));
+                case k2Dot2Curve_SkGammaNamed:
+                    return std::unique_ptr<SkColorSpaceXform>(new SkColorSpaceXform_Base
+                            <k2Dot2Curve_SkGammaNamed, kGamut_ColorSpaceMatch>
+                            (srcSpace, srcToDst, dstSpace));
+                default:
+                    return std::unique_ptr<SkColorSpaceXform>(new SkColorSpaceXform_Base
+                            <kNonStandard_SkGammaNamed, kGamut_ColorSpaceMatch>
+                            (srcSpace, srcToDst, dstSpace));
+            }
+        case kFull_ColorSpaceMatch:
+            switch (as_CSB(dstSpace)->gammaNamed()) {
+                case kSRGB_SkGammaNamed:
+                    return std::unique_ptr<SkColorSpaceXform>(new SkColorSpaceXform_Base
+                            <kSRGB_SkGammaNamed, kFull_ColorSpaceMatch>
+                            (srcSpace, srcToDst, dstSpace));
+                case k2Dot2Curve_SkGammaNamed:
+                    return std::unique_ptr<SkColorSpaceXform>(new SkColorSpaceXform_Base
+                            <k2Dot2Curve_SkGammaNamed, kFull_ColorSpaceMatch>
+                            (srcSpace, srcToDst, dstSpace));
+                default:
+                    return std::unique_ptr<SkColorSpaceXform>(new SkColorSpaceXform_Base
+                            <kNonStandard_SkGammaNamed, kFull_ColorSpaceMatch>
+                            (srcSpace, srcToDst, dstSpace));
+            }
+        default:
+            SkASSERT(false);
+            return nullptr;
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-
-// TODO (msarett):
-// Once SkFastXform supports translation, delete this function and use asRowMajorf().
-static void build_src_to_dst(float srcToDstArray[12], const SkMatrix44& srcToDstMatrix) {
-    // Build the following row major matrix:
-    //   rX gX bX 0
-    //   rY gY bY 0
-    //   rZ gZ bZ 0
-    srcToDstArray[0] = srcToDstMatrix.getFloat(0, 0);
-    srcToDstArray[1] = srcToDstMatrix.getFloat(0, 1);
-    srcToDstArray[2] = srcToDstMatrix.getFloat(0, 2);
-    srcToDstArray[3] = 0.0f;
-    srcToDstArray[4] = srcToDstMatrix.getFloat(1, 0);
-    srcToDstArray[5] = srcToDstMatrix.getFloat(1, 1);
-    srcToDstArray[6] = srcToDstMatrix.getFloat(1, 2);
-    srcToDstArray[7] = 0.0f;
-    srcToDstArray[8] = srcToDstMatrix.getFloat(2, 0);
-    srcToDstArray[9] = srcToDstMatrix.getFloat(2, 1);
-    srcToDstArray[10] = srcToDstMatrix.getFloat(2, 2);
-    srcToDstArray[11] = 0.0f;
-}
-
-template <SkColorSpace::GammaNamed Dst>
-SkFastXform<Dst>::SkFastXform(const sk_sp<SkColorSpace>& srcSpace, const SkMatrix44& srcToDst,
-                              const sk_sp<SkColorSpace>& dstSpace)
-{
-    build_src_to_dst(fSrcToDst, srcToDst);
-
-    // Build tables to transform src gamma to linear.
-    switch (srcSpace->gammaNamed()) {
-        case SkColorSpace::kSRGB_GammaNamed:
-            fSrcGammaTables[0] = fSrcGammaTables[1] = fSrcGammaTables[2] = sk_linear_from_srgb;
-            break;
-        case SkColorSpace::k2Dot2Curve_GammaNamed:
-            fSrcGammaTables[0] = fSrcGammaTables[1] = fSrcGammaTables[2] = sk_linear_from_2dot2;
-            break;
-        case SkColorSpace::kLinear_GammaNamed:
-            build_table_linear_from_gamma(fSrcGammaTableStorage, 1.0f);
-            fSrcGammaTables[0] = fSrcGammaTables[1] = fSrcGammaTables[2] = fSrcGammaTableStorage;
-            break;
-        default: {
-            const SkGammas* gammas = as_CSB(srcSpace)->gammas();
-            SkASSERT(gammas);
-
-            for (int i = 0; i < 3; i++) {
-                const SkGammaCurve& curve = (*gammas)[i];
-
-                if (i > 0) {
-                    // Check if this curve matches the first curve.  In this case, we can
-                    // share the same table pointer.  Logically, this should almost always
-                    // be true.  I've never seen a profile where all three gamma curves
-                    // didn't match.  But it is possible that they won't.
-                    // TODO (msarett):
-                    // This comparison won't catch the case where each gamma curve has a
-                    // pointer to its own look-up table, but the tables actually match.
-                    // Should we perform a deep compare of gamma tables here?  Or should
-                    // we catch this when parsing the profile?  Or should we not worry
-                    // about a bit of redundant work?
-                    if (curve.quickEquals((*gammas)[0])) {
-                        fSrcGammaTables[i] = fSrcGammaTables[0];
-                        continue;
-                    }
-                }
-
-                if (curve.isNamed()) {
-                    switch (curve.fNamed) {
-                        case SkColorSpace::kSRGB_GammaNamed:
-                            fSrcGammaTables[i] = sk_linear_from_srgb;
-                            break;
-                        case SkColorSpace::k2Dot2Curve_GammaNamed:
-                            fSrcGammaTables[i] = sk_linear_from_2dot2;
-                            break;
-                        case SkColorSpace::kLinear_GammaNamed:
-                            build_table_linear_from_gamma(&fSrcGammaTableStorage[i * 256], 1.0f);
-                            fSrcGammaTables[i] = &fSrcGammaTableStorage[i * 256];
-                            break;
-                        default:
-                            SkASSERT(false);
-                            break;
-                    }
-                } else if (curve.isValue()) {
-                    build_table_linear_from_gamma(&fSrcGammaTableStorage[i * 256], curve.fValue);
-                    fSrcGammaTables[i] = &fSrcGammaTableStorage[i * 256];
-                } else if (curve.isTable()) {
-                    build_table_linear_from_gamma(&fSrcGammaTableStorage[i * 256],
-                                                  curve.fTable.get(), curve.fTableSize);
-                    fSrcGammaTables[i] = &fSrcGammaTableStorage[i * 256];
-                } else {
-                    SkASSERT(curve.isParametric());
-                    build_table_linear_from_gamma(&fSrcGammaTableStorage[i * 256], curve.fG,
-                                                  curve.fA, curve.fB, curve.fC, curve.fD, curve.fE,
-                                                  curve.fF);
-                    fSrcGammaTables[i] = &fSrcGammaTableStorage[i * 256];
-                }
-            }
-        }
-    }
-
-    // Build tables to transform linear to dst gamma.
-    // FIXME (msarett):
-    // Should we spend all of this time bulding the dst gamma tables when the client only
-    // wants to convert to F16?
-    switch (dstSpace->gammaNamed()) {
-        case SkColorSpace::kSRGB_GammaNamed:
-        case SkColorSpace::k2Dot2Curve_GammaNamed:
-            break;
-        case SkColorSpace::kLinear_GammaNamed:
-            build_table_linear_to_gamma(fDstGammaTableStorage, kDstGammaTableSize, 1.0f);
-            fDstGammaTables[0] = fDstGammaTables[1] = fDstGammaTables[2] = fDstGammaTableStorage;
-            break;
-        default: {
-            const SkGammas* gammas = as_CSB(dstSpace)->gammas();
-            SkASSERT(gammas);
-
-            for (int i = 0; i < 3; i++) {
-                const SkGammaCurve& curve = (*gammas)[i];
-
-                if (i > 0) {
-                    // Check if this curve matches the first curve.  In this case, we can
-                    // share the same table pointer.  Logically, this should almost always
-                    // be true.  I've never seen a profile where all three gamma curves
-                    // didn't match.  But it is possible that they won't.
-                    // TODO (msarett):
-                    // This comparison won't catch the case where each gamma curve has a
-                    // pointer to its own look-up table (but the tables actually match).
-                    // Should we perform a deep compare of gamma tables here?  Or should
-                    // we catch this when parsing the profile?  Or should we not worry
-                    // about a bit of redundant work?
-                    if (curve.quickEquals((*gammas)[0])) {
-                        fDstGammaTables[i] = fDstGammaTables[0];
-                        continue;
-                    }
-                }
-
-                if (curve.isNamed()) {
-                    switch (curve.fNamed) {
-                        case SkColorSpace::kSRGB_GammaNamed:
-                            fDstGammaTables[i] = linear_to_srgb;
-                            break;
-                        case SkColorSpace::k2Dot2Curve_GammaNamed:
-                            fDstGammaTables[i] = linear_to_2dot2;
-                            break;
-                        case SkColorSpace::kLinear_GammaNamed:
-                            build_table_linear_to_gamma(
-                                    &fDstGammaTableStorage[i * kDstGammaTableSize],
-                                    kDstGammaTableSize, 1.0f);
-                            fDstGammaTables[i] = &fDstGammaTableStorage[i * kDstGammaTableSize];
-                            break;
-                        default:
-                            SkASSERT(false);
-                            break;
-                    }
-                } else if (curve.isValue()) {
-                    build_table_linear_to_gamma(&fDstGammaTableStorage[i * kDstGammaTableSize],
-                                                kDstGammaTableSize, curve.fValue);
-                    fDstGammaTables[i] = &fDstGammaTableStorage[i * kDstGammaTableSize];
-                } else if (curve.isTable()) {
-                    build_table_linear_to_gamma(&fDstGammaTableStorage[i * kDstGammaTableSize],
-                                                kDstGammaTableSize, curve.fTable.get(),
-                                                curve.fTableSize);
-                    fDstGammaTables[i] = &fDstGammaTableStorage[i * kDstGammaTableSize];
-                } else {
-                    SkASSERT(curve.isParametric());
-                    build_table_linear_to_gamma(&fDstGammaTableStorage[i * kDstGammaTableSize],
-                                                kDstGammaTableSize, curve.fG, curve.fA, curve.fB,
-                                                curve.fC, curve.fD, curve.fE, curve.fF);
-                    fDstGammaTables[i] = &fDstGammaTableStorage[i * kDstGammaTableSize];
-                }
-            }
-        }
-    }
-}
-
-template <>
-void SkFastXform<SkColorSpace::kSRGB_GammaNamed>
-::applyTo8888(SkPMColor* dst, const RGBA32* src, int len) const
-{
-    SkOpts::color_xform_RGB1_to_srgb(dst, src, len, fSrcGammaTables, fSrcToDst);
-}
-
-template <>
-void SkFastXform<SkColorSpace::k2Dot2Curve_GammaNamed>
-::applyTo8888(SkPMColor* dst, const RGBA32* src, int len) const
-{
-    SkOpts::color_xform_RGB1_to_2dot2(dst, src, len, fSrcGammaTables, fSrcToDst);
-}
-
-template <>
-void SkFastXform<SkColorSpace::kNonStandard_GammaNamed>
-::applyTo8888(SkPMColor* dst, const RGBA32* src, int len) const
-{
-    SkOpts::color_xform_RGB1_to_table(dst, src, len, fSrcGammaTables, fSrcToDst, fDstGammaTables);
-}
-
-template <SkColorSpace::GammaNamed T>
-void SkFastXform<T>
-::applyToF16(RGBAF16* dst, const RGBA32* src, int len) const
-{
-    SkOpts::color_xform_RGB1_to_linear(dst, src, len, fSrcGammaTables, fSrcToDst);
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////////////
-
-SkDefaultXform::SkDefaultXform(const sk_sp<SkColorSpace>& srcSpace, const SkMatrix44& srcToDst,
-                               const sk_sp<SkColorSpace>& dstSpace)
-    : fColorLUT(sk_ref_sp((SkColorLookUpTable*) as_CSB(srcSpace)->colorLUT()))
-    , fSrcToDst(srcToDst)
-{
-    // Build tables to transform src gamma to linear.
-    switch (srcSpace->gammaNamed()) {
-        case SkColorSpace::kSRGB_GammaNamed:
-            fSrcGammaTables[0] = fSrcGammaTables[1] = fSrcGammaTables[2] = sk_linear_from_srgb;
-            break;
-        case SkColorSpace::k2Dot2Curve_GammaNamed:
-            fSrcGammaTables[0] = fSrcGammaTables[1] = fSrcGammaTables[2] = sk_linear_from_2dot2;
-            break;
-        case SkColorSpace::kLinear_GammaNamed:
-            build_table_linear_from_gamma(fSrcGammaTableStorage, 1.0f);
-            fSrcGammaTables[0] = fSrcGammaTables[1] = fSrcGammaTables[2] = fSrcGammaTableStorage;
-            break;
-        default: {
-            const SkGammas* gammas = as_CSB(srcSpace)->gammas();
-            SkASSERT(gammas);
-
-            for (int i = 0; i < 3; i++) {
-                const SkGammaCurve& curve = (*gammas)[i];
-
-                if (i > 0) {
-                    // Check if this curve matches the first curve.  In this case, we can
-                    // share the same table pointer.  Logically, this should almost always
-                    // be true.  I've never seen a profile where all three gamma curves
-                    // didn't match.  But it is possible that they won't.
-                    // TODO (msarett):
-                    // This comparison won't catch the case where each gamma curve has a
-                    // pointer to its own look-up table, but the tables actually match.
-                    // Should we perform a deep compare of gamma tables here?  Or should
-                    // we catch this when parsing the profile?  Or should we not worry
-                    // about a bit of redundant work?
-                    if (curve.quickEquals((*gammas)[0])) {
-                        fSrcGammaTables[i] = fSrcGammaTables[0];
-                        continue;
-                    }
-                }
-
-                if (curve.isNamed()) {
-                    switch (curve.fNamed) {
-                        case SkColorSpace::kSRGB_GammaNamed:
-                            fSrcGammaTables[i] = sk_linear_from_srgb;
-                            break;
-                        case SkColorSpace::k2Dot2Curve_GammaNamed:
-                            fSrcGammaTables[i] = sk_linear_from_2dot2;
-                            break;
-                        case SkColorSpace::kLinear_GammaNamed:
-                            build_table_linear_from_gamma(&fSrcGammaTableStorage[i * 256], 1.0f);
-                            fSrcGammaTables[i] = &fSrcGammaTableStorage[i * 256];
-                            break;
-                        default:
-                            SkASSERT(false);
-                            break;
-                    }
-                } else if (curve.isValue()) {
-                    build_table_linear_from_gamma(&fSrcGammaTableStorage[i * 256], curve.fValue);
-                    fSrcGammaTables[i] = &fSrcGammaTableStorage[i * 256];
-                } else if (curve.isTable()) {
-                    build_table_linear_from_gamma(&fSrcGammaTableStorage[i * 256],
-                                                  curve.fTable.get(), curve.fTableSize);
-                    fSrcGammaTables[i] = &fSrcGammaTableStorage[i * 256];
-                } else {
-                    SkASSERT(curve.isParametric());
-                    build_table_linear_from_gamma(&fSrcGammaTableStorage[i * 256], curve.fG,
-                                                  curve.fA, curve.fB, curve.fC, curve.fD, curve.fE,
-                                                  curve.fF);
-                    fSrcGammaTables[i] = &fSrcGammaTableStorage[i * 256];
-                }
-            }
-        }
-    }
-
-    // Build tables to transform linear to dst gamma.
-    switch (dstSpace->gammaNamed()) {
-        case SkColorSpace::kSRGB_GammaNamed:
-            fDstGammaTables[0] = fDstGammaTables[1] = fDstGammaTables[2] = linear_to_srgb;
-            break;
-        case SkColorSpace::k2Dot2Curve_GammaNamed:
-            fDstGammaTables[0] = fDstGammaTables[1] = fDstGammaTables[2] = linear_to_2dot2;
-            break;
-        case SkColorSpace::kLinear_GammaNamed:
-            build_table_linear_to_gamma(fDstGammaTableStorage, kDstGammaTableSize, 1.0f);
-            fDstGammaTables[0] = fDstGammaTables[1] = fDstGammaTables[2] = fDstGammaTableStorage;
-            break;
-        default: {
-            const SkGammas* gammas = as_CSB(dstSpace)->gammas();
-            SkASSERT(gammas);
-
-            for (int i = 0; i < 3; i++) {
-                const SkGammaCurve& curve = (*gammas)[i];
-
-                if (i > 0) {
-                    // Check if this curve matches the first curve.  In this case, we can
-                    // share the same table pointer.  Logically, this should almost always
-                    // be true.  I've never seen a profile where all three gamma curves
-                    // didn't match.  But it is possible that they won't.
-                    // TODO (msarett):
-                    // This comparison won't catch the case where each gamma curve has a
-                    // pointer to its own look-up table (but the tables actually match).
-                    // Should we perform a deep compare of gamma tables here?  Or should
-                    // we catch this when parsing the profile?  Or should we not worry
-                    // about a bit of redundant work?
-                    if (curve.quickEquals((*gammas)[0])) {
-                        fDstGammaTables[i] = fDstGammaTables[0];
-                        continue;
-                    }
-                }
-
-                if (curve.isNamed()) {
-                    switch (curve.fNamed) {
-                        case SkColorSpace::kSRGB_GammaNamed:
-                            fDstGammaTables[i] = linear_to_srgb;
-                            break;
-                        case SkColorSpace::k2Dot2Curve_GammaNamed:
-                            fDstGammaTables[i] = linear_to_2dot2;
-                            break;
-                        case SkColorSpace::kLinear_GammaNamed:
-                            build_table_linear_to_gamma(
-                                    &fDstGammaTableStorage[i * kDstGammaTableSize],
-                                    kDstGammaTableSize, 1.0f);
-                            fDstGammaTables[i] = &fDstGammaTableStorage[i * kDstGammaTableSize];
-                            break;
-                        default:
-                            SkASSERT(false);
-                            break;
-                    }
-                } else if (curve.isValue()) {
-                    build_table_linear_to_gamma(&fDstGammaTableStorage[i * kDstGammaTableSize],
-                                                kDstGammaTableSize, curve.fValue);
-                    fDstGammaTables[i] = &fDstGammaTableStorage[i * kDstGammaTableSize];
-                } else if (curve.isTable()) {
-                    build_table_linear_to_gamma(&fDstGammaTableStorage[i * kDstGammaTableSize],
-                                                kDstGammaTableSize, curve.fTable.get(),
-                                                curve.fTableSize);
-                    fDstGammaTables[i] = &fDstGammaTableStorage[i * kDstGammaTableSize];
-                } else {
-                    SkASSERT(curve.isParametric());
-                    build_table_linear_to_gamma(&fDstGammaTableStorage[i * kDstGammaTableSize],
-                                                kDstGammaTableSize, curve.fG, curve.fA, curve.fB,
-                                                curve.fC, curve.fD, curve.fE, curve.fF);
-                    fDstGammaTables[i] = &fDstGammaTableStorage[i * kDstGammaTableSize];
-                }
-            }
-        }
-    }
-}
 
 static float byte_to_float(uint8_t byte) {
     return ((float) byte) * (1.0f / 255.0f);
@@ -800,7 +471,7 @@ static void interp_3d_clut(float dst[3], float src[3], const SkColorLookUpTable*
     const int n111 = n110 + n001;
 
     // Base ptr into the table.
-    float* ptr = &colorLUT->fTable[ix*n001 + iy*n010 + iz*n100];
+    const float* ptr = &(colorLUT->table()[ix*n001 + iy*n010 + iz*n100]);
 
     // The code below performs a tetrahedral interpolation for each of the three
     // dst components.  Once the tetrahedron containing the interpolation point is
@@ -853,64 +524,564 @@ static void interp_3d_clut(float dst[3], float src[3], const SkColorLookUpTable*
     }
 }
 
-void SkDefaultXform::applyTo8888(SkPMColor* dst, const RGBA32* src, int len) const {
+static void handle_color_lut(uint32_t* dst, const uint32_t* src, int len,
+                             SkColorLookUpTable* colorLUT) {
     while (len-- > 0) {
         uint8_t r = (*src >>  0) & 0xFF,
                 g = (*src >>  8) & 0xFF,
                 b = (*src >> 16) & 0xFF;
 
-        if (fColorLUT) {
-            float in[3];
-            float out[3];
+        float in[3];
+        float out[3];
+        in[0] = byte_to_float(r);
+        in[1] = byte_to_float(g);
+        in[2] = byte_to_float(b);
+        interp_3d_clut(out, in, colorLUT);
 
-            in[0] = byte_to_float(r);
-            in[1] = byte_to_float(g);
-            in[2] = byte_to_float(b);
+        r = sk_float_round2int(255.0f * clamp_normalized_float(out[0]));
+        g = sk_float_round2int(255.0f * clamp_normalized_float(out[1]));
+        b = sk_float_round2int(255.0f * clamp_normalized_float(out[2]));
+        *dst = SkPackARGB_as_RGBA(0xFF, r, g, b);
 
-            interp_3d_clut(out, in, fColorLUT.get());
-
-            r = sk_float_round2int(255.0f * clamp_normalized_float(out[0]));
-            g = sk_float_round2int(255.0f * clamp_normalized_float(out[1]));
-            b = sk_float_round2int(255.0f * clamp_normalized_float(out[2]));
-        }
-
-        // Convert to linear.
-        float srcFloats[3];
-        srcFloats[0] = fSrcGammaTables[0][r];
-        srcFloats[1] = fSrcGammaTables[1][g];
-        srcFloats[2] = fSrcGammaTables[2][b];
-
-        // Convert to dst gamut.
-        float dstFloats[3];
-        dstFloats[0] = srcFloats[0] * fSrcToDst.getFloat(0, 0) +
-                       srcFloats[1] * fSrcToDst.getFloat(1, 0) +
-                       srcFloats[2] * fSrcToDst.getFloat(2, 0) + fSrcToDst.getFloat(3, 0);
-        dstFloats[1] = srcFloats[0] * fSrcToDst.getFloat(0, 1) +
-                       srcFloats[1] * fSrcToDst.getFloat(1, 1) +
-                       srcFloats[2] * fSrcToDst.getFloat(2, 1) + fSrcToDst.getFloat(3, 1);
-        dstFloats[2] = srcFloats[0] * fSrcToDst.getFloat(0, 2) +
-                       srcFloats[1] * fSrcToDst.getFloat(1, 2) +
-                       srcFloats[2] * fSrcToDst.getFloat(2, 2) + fSrcToDst.getFloat(3, 2);
-
-        // Clamp to 0-1.
-        dstFloats[0] = clamp_normalized_float(dstFloats[0]);
-        dstFloats[1] = clamp_normalized_float(dstFloats[1]);
-        dstFloats[2] = clamp_normalized_float(dstFloats[2]);
-
-        // Convert to dst gamma.
-        r = fDstGammaTables[0][sk_float_round2int((kDstGammaTableSize - 1) * dstFloats[0])];
-        g = fDstGammaTables[1][sk_float_round2int((kDstGammaTableSize - 1) * dstFloats[1])];
-        b = fDstGammaTables[2][sk_float_round2int((kDstGammaTableSize - 1) * dstFloats[2])];
-
-        *dst = SkPackARGB32NoCheck(0xFF, r, g, b);
-
-        dst++;
         src++;
+        dst++;
     }
 }
 
-void SkDefaultXform::applyToF16(RGBAF16* dst, const RGBA32* src, int len) const {
-    // FIXME (msarett):
-    // Planning to delete SkDefaultXform.  Not going to bother to implement this.
-    memset(dst, 0, len * sizeof(RGBAF16));
+enum SwapRB {
+    kNo_SwapRB,
+    kYes_SwapRB,
+};
+
+static inline void load_matrix(const float matrix[16],
+                               Sk4f& rXgXbX, Sk4f& rYgYbY, Sk4f& rZgZbZ, Sk4f& rTgTbT) {
+    rXgXbX = Sk4f::Load(matrix +  0);
+    rYgYbY = Sk4f::Load(matrix +  4);
+    rZgZbZ = Sk4f::Load(matrix +  8);
+    rTgTbT = Sk4f::Load(matrix + 12);
+}
+
+static inline void load_rgb_from_tables(const uint32_t* src,
+                                        Sk4f& r, Sk4f& g, Sk4f& b, Sk4f& a,
+                                        const float* const srcTables[3]) {
+    r = { srcTables[0][(src[0] >>  0) & 0xFF],
+          srcTables[0][(src[1] >>  0) & 0xFF],
+          srcTables[0][(src[2] >>  0) & 0xFF],
+          srcTables[0][(src[3] >>  0) & 0xFF], };
+    g = { srcTables[1][(src[0] >>  8) & 0xFF],
+          srcTables[1][(src[1] >>  8) & 0xFF],
+          srcTables[1][(src[2] >>  8) & 0xFF],
+          srcTables[1][(src[3] >>  8) & 0xFF], };
+    b = { srcTables[2][(src[0] >> 16) & 0xFF],
+          srcTables[2][(src[1] >> 16) & 0xFF],
+          srcTables[2][(src[2] >> 16) & 0xFF],
+          srcTables[2][(src[3] >> 16) & 0xFF], };
+    a = 0.0f; // Don't let the compiler complain that |a| is uninitialized.
+}
+
+static inline void load_rgba_from_tables(const uint32_t* src,
+                                         Sk4f& r, Sk4f& g, Sk4f& b, Sk4f& a,
+                                         const float* const srcTables[3]) {
+    r = { srcTables[0][(src[0] >>  0) & 0xFF],
+          srcTables[0][(src[1] >>  0) & 0xFF],
+          srcTables[0][(src[2] >>  0) & 0xFF],
+          srcTables[0][(src[3] >>  0) & 0xFF], };
+    g = { srcTables[1][(src[0] >>  8) & 0xFF],
+          srcTables[1][(src[1] >>  8) & 0xFF],
+          srcTables[1][(src[2] >>  8) & 0xFF],
+          srcTables[1][(src[3] >>  8) & 0xFF], };
+    b = { srcTables[2][(src[0] >> 16) & 0xFF],
+          srcTables[2][(src[1] >> 16) & 0xFF],
+          srcTables[2][(src[2] >> 16) & 0xFF],
+          srcTables[2][(src[3] >> 16) & 0xFF], };
+    a = (1.0f / 255.0f) * SkNx_cast<float>(Sk4u::Load(src) >> 24);
+}
+
+static inline void load_rgb_from_tables_1(const uint32_t* src,
+                                          Sk4f& r, Sk4f& g, Sk4f& b, Sk4f&,
+                                          const float* const srcTables[3]) {
+    // Splat r,g,b across a register each.
+    r = Sk4f(srcTables[0][(*src >>  0) & 0xFF]);
+    g = Sk4f(srcTables[1][(*src >>  8) & 0xFF]);
+    b = Sk4f(srcTables[2][(*src >> 16) & 0xFF]);
+}
+
+static inline void load_rgba_from_tables_1(const uint32_t* src,
+                                           Sk4f& r, Sk4f& g, Sk4f& b, Sk4f& a,
+                                           const float* const srcTables[3]) {
+    // Splat r,g,b across a register each.
+    r = Sk4f(srcTables[0][(*src >>  0) & 0xFF]);
+    g = Sk4f(srcTables[1][(*src >>  8) & 0xFF]);
+    b = Sk4f(srcTables[2][(*src >> 16) & 0xFF]);
+    a = (1.0f / 255.0f) * Sk4f(*src >> 24);
+}
+
+static inline void transform_gamut(const Sk4f& r, const Sk4f& g, const Sk4f& b, const Sk4f& a,
+                                   const Sk4f& rXgXbX, const Sk4f& rYgYbY, const Sk4f& rZgZbZ,
+                                   Sk4f& dr, Sk4f& dg, Sk4f& db, Sk4f& da) {
+    dr = rXgXbX[0]*r + rYgYbY[0]*g + rZgZbZ[0]*b;
+    dg = rXgXbX[1]*r + rYgYbY[1]*g + rZgZbZ[1]*b;
+    db = rXgXbX[2]*r + rYgYbY[2]*g + rZgZbZ[2]*b;
+    da = a;
+}
+
+static inline void transform_gamut_1(const Sk4f& r, const Sk4f& g, const Sk4f& b,
+                                     const Sk4f& rXgXbX, const Sk4f& rYgYbY, const Sk4f& rZgZbZ,
+                                     Sk4f& rgba) {
+    rgba = rXgXbX*r + rYgYbY*g + rZgZbZ*b;
+}
+
+static inline void translate_gamut(const Sk4f& rTgTbT, Sk4f& dr, Sk4f& dg, Sk4f& db) {
+    dr = dr + rTgTbT[0];
+    dg = dg + rTgTbT[1];
+    db = db + rTgTbT[2];
+}
+
+static inline void translate_gamut_1(const Sk4f& rTgTbT, Sk4f& rgba) {
+    rgba = rgba + rTgTbT;
+}
+
+static inline void premultiply(Sk4f& dr, Sk4f& dg, Sk4f& db, const Sk4f& da) {
+    dr = da * dr;
+    dg = da * dg;
+    db = da * db;
+}
+
+static inline void premultiply_1(const Sk4f& a, Sk4f& rgba) {
+    rgba = a * rgba;
+}
+
+static inline void store_srgb(void* dst, const uint32_t* src,
+                              Sk4f& dr, Sk4f& dg, Sk4f& db, Sk4f&,
+                              const uint8_t* const[3], SwapRB kSwapRB) {
+    int kRShift = 0;
+    int kGShift = 8;
+    int kBShift = 16;
+    if (kYes_SwapRB == kSwapRB) {
+        kBShift = 0;
+        kRShift = 16;
+    }
+
+    dr = sk_linear_to_srgb_needs_trunc(dr);
+    dg = sk_linear_to_srgb_needs_trunc(dg);
+    db = sk_linear_to_srgb_needs_trunc(db);
+
+    dr = sk_clamp_0_255(dr);
+    dg = sk_clamp_0_255(dg);
+    db = sk_clamp_0_255(db);
+
+    Sk4i da = Sk4i::Load(src) & 0xFF000000;
+
+    Sk4i rgba = (SkNx_cast<int>(dr) << kRShift)
+              | (SkNx_cast<int>(dg) << kGShift)
+              | (SkNx_cast<int>(db) << kBShift)
+              | (da                           );
+    rgba.store(dst);
+}
+
+static inline void store_srgb_1(void* dst, const uint32_t* src,
+                                Sk4f& rgba, const Sk4f&,
+                                const uint8_t* const[3], SwapRB kSwapRB) {
+    rgba = sk_clamp_0_255(sk_linear_to_srgb_needs_trunc(rgba));
+
+    uint32_t tmp;
+    SkNx_cast<uint8_t>(SkNx_cast<int32_t>(rgba)).store(&tmp);
+    tmp = (*src & 0xFF000000) | (tmp & 0x00FFFFFF);
+    if (kYes_SwapRB == kSwapRB) {
+        tmp = SkSwizzle_RB(tmp);
+    }
+
+    *(uint32_t*)dst = tmp;
+}
+
+static inline Sk4f linear_to_2dot2(const Sk4f& x) {
+    // x^(29/64) is a very good approximation of the true value, x^(1/2.2).
+    auto x2  = x.rsqrt(),                            // x^(-1/2)
+         x32 = x2.rsqrt().rsqrt().rsqrt().rsqrt(),   // x^(-1/32)
+         x64 = x32.rsqrt();                          // x^(+1/64)
+
+    // 29 = 32 - 2 - 1
+    return 255.0f * x2.invert() * x32 * x64.invert();
+}
+
+static inline void store_2dot2(void* dst, const uint32_t* src,
+                               Sk4f& dr, Sk4f& dg, Sk4f& db, Sk4f&,
+                               const uint8_t* const[3], SwapRB kSwapRB) {
+    int kRShift = 0;
+    int kGShift = 8;
+    int kBShift = 16;
+    if (kYes_SwapRB == kSwapRB) {
+        kBShift = 0;
+        kRShift = 16;
+    }
+
+    dr = linear_to_2dot2(dr);
+    dg = linear_to_2dot2(dg);
+    db = linear_to_2dot2(db);
+
+    dr = sk_clamp_0_255(dr);
+    dg = sk_clamp_0_255(dg);
+    db = sk_clamp_0_255(db);
+
+    Sk4i da = Sk4i::Load(src) & 0xFF000000;
+
+    Sk4i rgba = (Sk4f_round(dr) << kRShift)
+              | (Sk4f_round(dg) << kGShift)
+              | (Sk4f_round(db) << kBShift)
+              | (da                       );
+    rgba.store(dst);
+}
+
+static inline void store_2dot2_1(void* dst, const uint32_t* src,
+                                 Sk4f& rgba, const Sk4f&,
+                                 const uint8_t* const[3], SwapRB kSwapRB) {
+    rgba = sk_clamp_0_255(linear_to_2dot2(rgba));
+
+    uint32_t tmp;
+    SkNx_cast<uint8_t>(Sk4f_round(rgba)).store(&tmp);
+    tmp = (*src & 0xFF000000) | (tmp & 0x00FFFFFF);
+    if (kYes_SwapRB == kSwapRB) {
+        tmp = SkSwizzle_RB(tmp);
+    }
+
+    *(uint32_t*)dst = tmp;
+}
+
+static inline void store_f16(void* dst, const uint32_t* src,
+                             Sk4f& dr, Sk4f& dg, Sk4f& db, Sk4f& da,
+                             const uint8_t* const[3], SwapRB) {
+    Sk4h_store4(dst, SkFloatToHalf_finite_ftz(dr),
+                     SkFloatToHalf_finite_ftz(dg),
+                     SkFloatToHalf_finite_ftz(db),
+                     SkFloatToHalf_finite_ftz(da));
+}
+
+static inline void store_f16_1(void* dst, const uint32_t* src,
+                               Sk4f& rgba, const Sk4f& a,
+                               const uint8_t* const[3], SwapRB kSwapRB) {
+    rgba = Sk4f(rgba[0], rgba[1], rgba[2], a[3]);
+    SkFloatToHalf_finite_ftz(rgba).store((uint64_t*) dst);
+}
+
+static inline void store_f16_opaque(void* dst, const uint32_t* src,
+                                    Sk4f& dr, Sk4f& dg, Sk4f& db, Sk4f& da,
+                                    const uint8_t* const[3], SwapRB) {
+    Sk4h_store4(dst, SkFloatToHalf_finite_ftz(dr),
+                     SkFloatToHalf_finite_ftz(dg),
+                     SkFloatToHalf_finite_ftz(db),
+                     SK_Half1);
+}
+
+static inline void store_f16_1_opaque(void* dst, const uint32_t* src,
+                                      Sk4f& rgba, const Sk4f& a,
+                                      const uint8_t* const[3], SwapRB kSwapRB) {
+    uint64_t tmp;
+    SkFloatToHalf_finite_ftz(rgba).store(&tmp);
+    tmp |= static_cast<uint64_t>(SK_Half1) << 48;
+    *((uint64_t*) dst) = tmp;
+}
+
+static inline void store_generic(void* dst, const uint32_t* src,
+                                 Sk4f& dr, Sk4f& dg, Sk4f& db, Sk4f&,
+                                 const uint8_t* const dstTables[3], SwapRB kSwapRB) {
+    int kRShift = 0;
+    int kGShift = 8;
+    int kBShift = 16;
+    if (kYes_SwapRB == kSwapRB) {
+        kBShift = 0;
+        kRShift = 16;
+    }
+
+    dr = Sk4f::Min(Sk4f::Max(1023.0f * dr, 0.0f), 1023.0f);
+    dg = Sk4f::Min(Sk4f::Max(1023.0f * dg, 0.0f), 1023.0f);
+    db = Sk4f::Min(Sk4f::Max(1023.0f * db, 0.0f), 1023.0f);
+
+    Sk4i ir = Sk4f_round(dr);
+    Sk4i ig = Sk4f_round(dg);
+    Sk4i ib = Sk4f_round(db);
+
+    Sk4i da = Sk4i::Load(src) & 0xFF000000;
+
+    uint32_t* dst32 = (uint32_t*) dst;
+    dst32[0] = dstTables[0][ir[0]] << kRShift
+             | dstTables[1][ig[0]] << kGShift
+             | dstTables[2][ib[0]] << kBShift
+             | da[0];
+    dst32[1] = dstTables[0][ir[1]] << kRShift
+             | dstTables[1][ig[1]] << kGShift
+             | dstTables[2][ib[1]] << kBShift
+             | da[1];
+    dst32[2] = dstTables[0][ir[2]] << kRShift
+             | dstTables[1][ig[2]] << kGShift
+             | dstTables[2][ib[2]] << kBShift
+             | da[2];
+    dst32[3] = dstTables[0][ir[3]] << kRShift
+             | dstTables[1][ig[3]] << kGShift
+             | dstTables[2][ib[3]] << kBShift
+             | da[3];
+}
+
+static inline void store_generic_1(void* dst, const uint32_t* src,
+                                   Sk4f& rgba, const Sk4f&,
+                                   const uint8_t* const dstTables[3], SwapRB kSwapRB) {
+    int kRShift = 0;
+    int kGShift = 8;
+    int kBShift = 16;
+    if (kYes_SwapRB == kSwapRB) {
+        kBShift = 0;
+        kRShift = 16;
+    }
+
+    rgba = Sk4f::Min(Sk4f::Max(1023.0f * rgba, 0.0f), 1023.0f);
+
+    Sk4i indices = Sk4f_round(rgba);
+
+    *((uint32_t*) dst) = dstTables[0][indices[0]] << kRShift
+                       | dstTables[1][indices[1]] << kGShift
+                       | dstTables[2][indices[2]] << kBShift
+                       | (*src & 0xFF000000);
+}
+
+template <SkGammaNamed kDstGamma,
+          ColorSpaceMatch kCSM,
+          SkAlphaType kAlphaType,
+          SwapRB kSwapRB>
+static void color_xform_RGBA(void* dst, const uint32_t* src, int len,
+                             const float* const srcTables[3], const float matrix[16],
+                             const uint8_t* const dstTables[3]) {
+    decltype(store_srgb            )* store;
+    decltype(store_srgb_1          )* store_1;
+    decltype(load_rgb_from_tables  )* load;
+    decltype(load_rgb_from_tables_1)* load_1;
+    size_t sizeOfDstPixel;
+    switch (kDstGamma) {
+        case kSRGB_SkGammaNamed:
+            load    = (kPremul_SkAlphaType == kAlphaType) ? load_rgba_from_tables :
+                                                            load_rgb_from_tables;
+            load_1  = (kPremul_SkAlphaType == kAlphaType) ? load_rgba_from_tables_1 :
+                                                            load_rgb_from_tables_1;
+            store   = store_srgb;
+            store_1 = store_srgb_1;
+            sizeOfDstPixel = 4;
+            break;
+        case k2Dot2Curve_SkGammaNamed:
+            load    = (kPremul_SkAlphaType == kAlphaType) ? load_rgba_from_tables :
+                                                            load_rgb_from_tables;
+            load_1  = (kPremul_SkAlphaType == kAlphaType) ? load_rgba_from_tables_1 :
+                                                            load_rgb_from_tables_1;
+            store   = store_2dot2;
+            store_1 = store_2dot2_1;
+            sizeOfDstPixel = 4;
+            break;
+        case kLinear_SkGammaNamed:
+            load    = load_rgba_from_tables;
+            load_1  = load_rgba_from_tables_1;
+            store   = (kOpaque_SkAlphaType == kAlphaType) ? store_f16_opaque :
+                                                            store_f16;
+            store_1 = (kOpaque_SkAlphaType == kAlphaType) ? store_f16_1_opaque :
+                                                            store_f16_1;
+            sizeOfDstPixel = 8;
+            break;
+        case kNonStandard_SkGammaNamed:
+            load    = (kPremul_SkAlphaType == kAlphaType) ? load_rgba_from_tables :
+                                                            load_rgb_from_tables;
+            load_1  = (kPremul_SkAlphaType == kAlphaType) ? load_rgba_from_tables_1 :
+                                                            load_rgb_from_tables_1;
+            store   = store_generic;
+            store_1 = store_generic_1;
+            sizeOfDstPixel = 4;
+            break;
+    }
+
+    Sk4f rXgXbX, rYgYbY, rZgZbZ, rTgTbT;
+    load_matrix(matrix, rXgXbX, rYgYbY, rZgZbZ, rTgTbT);
+
+    if (len >= 4) {
+        // Naively this would be a loop of load-transform-store, but we found it faster to
+        // move the N+1th load ahead of the Nth store.  We don't bother doing this for N<4.
+        Sk4f r, g, b, a;
+        load(src, r, g, b, a, srcTables);
+        src += 4;
+        len -= 4;
+
+        Sk4f dr, dg, db, da;
+        while (len >= 4) {
+            if (kNone_ColorSpaceMatch == kCSM) {
+                transform_gamut(r, g, b, a, rXgXbX, rYgYbY, rZgZbZ, dr, dg, db, da);
+                translate_gamut(rTgTbT, dr, dg, db);
+            } else {
+                dr = r;
+                dg = g;
+                db = b;
+                da = a;
+            }
+
+            if (kPremul_SkAlphaType == kAlphaType) {
+                premultiply(dr, dg, db, da);
+            }
+
+            load(src, r, g, b, a, srcTables);
+
+            store(dst, src - 4, dr, dg, db, da, dstTables, kSwapRB);
+            dst = SkTAddOffset<void>(dst, 4 * sizeOfDstPixel);
+            src += 4;
+            len -= 4;
+        }
+
+        if (kNone_ColorSpaceMatch == kCSM) {
+            transform_gamut(r, g, b, a, rXgXbX, rYgYbY, rZgZbZ, dr, dg, db, da);
+            translate_gamut(rTgTbT, dr, dg, db);
+        } else {
+            dr = r;
+            dg = g;
+            db = b;
+            da = a;
+        }
+
+        if (kPremul_SkAlphaType == kAlphaType) {
+            premultiply(dr, dg, db, da);
+        }
+
+        store(dst, src - 4, dr, dg, db, da, dstTables, kSwapRB);
+        dst = SkTAddOffset<void>(dst, 4 * sizeOfDstPixel);
+    }
+
+    while (len > 0) {
+        Sk4f r, g, b, a;
+        load_1(src, r, g, b, a, srcTables);
+
+        Sk4f rgba;
+        if (kNone_ColorSpaceMatch == kCSM) {
+            transform_gamut_1(r, g, b, rXgXbX, rYgYbY, rZgZbZ, rgba);
+            translate_gamut_1(rTgTbT, rgba);
+        } else {
+            rgba = Sk4f(r[0], g[0], b[0], a[0]);
+        }
+
+        if (kPremul_SkAlphaType == kAlphaType) {
+            premultiply_1(a, rgba);
+        }
+
+        store_1(dst, src, rgba, a, dstTables, kSwapRB);
+
+        src += 1;
+        len -= 1;
+        dst = SkTAddOffset<void>(dst, sizeOfDstPixel);
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <SkGammaNamed kDst, ColorSpaceMatch kCSM>
+SkColorSpaceXform_Base<kDst, kCSM>::SkColorSpaceXform_Base(const sk_sp<SkColorSpace>& srcSpace,
+                                                           const SkMatrix44& srcToDst,
+                                                           const sk_sp<SkColorSpace>& dstSpace)
+    : fColorLUT(sk_ref_sp((SkColorLookUpTable*) as_CSB(srcSpace)->colorLUT()))
+{
+    srcToDst.asColMajorf(fSrcToDst);
+    build_gamma_tables(fSrcGammaTables, fSrcGammaTableStorage, 256, srcSpace, kToLinear);
+    build_gamma_tables(fDstGammaTables, fDstGammaTableStorage, kDstGammaTableSize, dstSpace,
+                       kFromLinear);
+}
+
+template <SkGammaNamed kDst, ColorSpaceMatch kCSM>
+void SkColorSpaceXform_Base<kDst, kCSM>
+::apply(void* dst, const uint32_t* src, int len, SkColorType dstColorType, SkAlphaType dstAlphaType)
+const
+{
+    if (kFull_ColorSpaceMatch == kCSM) {
+        switch (dstAlphaType) {
+            case kPremul_SkAlphaType:
+                // We can't skip the xform since we need to perform a premultiply in the
+                // linear space.
+                break;
+            default:
+                switch (dstColorType) {
+                    case kRGBA_8888_SkColorType:
+                        return (void) memcpy(dst, src, len * sizeof(uint32_t));
+                    case kBGRA_8888_SkColorType:
+                        return SkOpts::RGBA_to_BGRA((uint32_t*) dst, src, len);
+                    case kRGBA_F16_SkColorType:
+                        // There's still work to do to xform to linear F16.
+                        break;
+                    default:
+                        SkASSERT(false);
+                        return;
+                }
+        }
+    }
+
+    if (fColorLUT) {
+        size_t storageBytes = len * sizeof(uint32_t);
+#if defined(GOOGLE3)
+        // Stack frame size is limited in GOOGLE3.
+        SkAutoSMalloc<256 * sizeof(uint32_t)> storage(storageBytes);
+#else
+        SkAutoSMalloc<1024 * sizeof(uint32_t)> storage(storageBytes);
+#endif
+
+        handle_color_lut((uint32_t*) storage.get(), src, len, fColorLUT.get());
+        src = (const uint32_t*) storage.get();
+    }
+
+    switch (dstAlphaType) {
+        case kPremul_SkAlphaType:
+            switch (dstColorType) {
+                case kRGBA_8888_SkColorType:
+                    return color_xform_RGBA<kDst, kCSM, kPremul_SkAlphaType, kNo_SwapRB>
+                            (dst, src, len, fSrcGammaTables, fSrcToDst, fDstGammaTables);
+                case kBGRA_8888_SkColorType:
+                    return color_xform_RGBA<kDst, kCSM, kPremul_SkAlphaType, kYes_SwapRB>
+                            (dst, src, len, fSrcGammaTables, fSrcToDst, fDstGammaTables);
+                case kRGBA_F16_SkColorType:
+                    return color_xform_RGBA<kLinear_SkGammaNamed, kCSM,
+                                            kPremul_SkAlphaType, kNo_SwapRB>
+                            (dst, src, len, fSrcGammaTables, fSrcToDst, fDstGammaTables);
+                default:
+                    SkASSERT(false);
+                    return;
+            }
+            break;
+        case kUnpremul_SkAlphaType:
+            switch (dstColorType) {
+                case kRGBA_8888_SkColorType:
+                    return color_xform_RGBA<kDst, kCSM, kUnpremul_SkAlphaType, kNo_SwapRB>
+                            (dst, src, len, fSrcGammaTables, fSrcToDst, fDstGammaTables);
+                case kBGRA_8888_SkColorType:
+                    return color_xform_RGBA<kDst, kCSM, kUnpremul_SkAlphaType, kYes_SwapRB>
+                            (dst, src, len, fSrcGammaTables, fSrcToDst, fDstGammaTables);
+                case kRGBA_F16_SkColorType:
+                    return color_xform_RGBA<kLinear_SkGammaNamed, kCSM,
+                                            kUnpremul_SkAlphaType, kNo_SwapRB>
+                            (dst, src, len, fSrcGammaTables, fSrcToDst, fDstGammaTables);
+                default:
+                    SkASSERT(false);
+                    return;
+            }
+        case kOpaque_SkAlphaType:
+            switch (dstColorType) {
+                case kRGBA_8888_SkColorType:
+                    return color_xform_RGBA<kDst, kCSM, kOpaque_SkAlphaType, kNo_SwapRB>
+                            (dst, src, len, fSrcGammaTables, fSrcToDst, fDstGammaTables);
+                case kBGRA_8888_SkColorType:
+                    return color_xform_RGBA<kDst, kCSM, kOpaque_SkAlphaType, kYes_SwapRB>
+                            (dst, src, len, fSrcGammaTables, fSrcToDst, fDstGammaTables);
+                case kRGBA_F16_SkColorType:
+                    return color_xform_RGBA<kLinear_SkGammaNamed, kCSM,
+                                            kOpaque_SkAlphaType, kNo_SwapRB>
+                            (dst, src, len, fSrcGammaTables, fSrcToDst, fDstGammaTables);
+                default:
+                    SkASSERT(false);
+                    return;
+            }
+        default:
+            SkASSERT(false);
+            return;
+    }
+}
+
+std::unique_ptr<SkColorSpaceXform> SlowIdentityXform(const sk_sp<SkColorSpace>& space) {
+        return std::unique_ptr<SkColorSpaceXform>(new SkColorSpaceXform_Base
+                <kNonStandard_SkGammaNamed, kNone_ColorSpaceMatch>
+                (space, SkMatrix::I(), space));
 }

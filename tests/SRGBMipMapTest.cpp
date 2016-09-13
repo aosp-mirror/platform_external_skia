@@ -120,17 +120,13 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(SRGBMipMaps, reporter, ctxInfo) {
     SkAutoTUnref<GrTexture> texture(texProvider->createTexture(desc, SkBudgeted::kNo, texData, 0));
 
     // Create two draw contexts (L32 and S32)
-    SkSurfaceProps l32Props(SkSurfaceProps::kLegacyFontHost_InitType);
-    SkSurfaceProps s32Props(SkSurfaceProps::kGammaCorrect_Flag,
-                            SkSurfaceProps::kLegacyFontHost_InitType);
-    sk_sp<GrDrawContext> l32DrawContext = context->newDrawContext(SkBackingFit::kExact, rtS, rtS,
-                                                                  kSkia8888_GrPixelConfig, 0,
-                                                                  kDefault_GrSurfaceOrigin,
-                                                                  &l32Props);
-    sk_sp<GrDrawContext> s32DrawContext = context->newDrawContext(SkBackingFit::kExact, rtS, rtS,
-                                                                  kSkiaGamma8888_GrPixelConfig, 0,
-                                                                  kDefault_GrSurfaceOrigin,
-                                                                  &s32Props);
+    sk_sp<SkColorSpace> srgbColorSpace = SkColorSpace::NewNamed(SkColorSpace::kSRGB_Named);
+    sk_sp<GrDrawContext> l32DrawContext = context->makeDrawContext(SkBackingFit::kExact, rtS, rtS,
+                                                                   kSkia8888_GrPixelConfig,
+                                                                   nullptr);
+    sk_sp<GrDrawContext> s32DrawContext = context->makeDrawContext(SkBackingFit::kExact, rtS, rtS,
+                                                                   kSkiaGamma8888_GrPixelConfig,
+                                                                   std::move(srgbColorSpace));
 
     SkRect rect = SkRect::MakeWH(SkIntToScalar(rtS), SkIntToScalar(rtS));
     GrNoClip noClip;

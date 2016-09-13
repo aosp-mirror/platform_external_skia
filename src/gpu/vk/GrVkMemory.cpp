@@ -82,7 +82,7 @@ bool GrVkMemory::AllocAndBindBufferMemory(const GrVkGpu* gpu,
     }
 
     // Bind Memory to device
-    VkResult err = GR_VK_CALL(iface, BindBufferMemory(device, buffer, 
+    VkResult err = GR_VK_CALL(iface, BindBufferMemory(device, buffer,
                                                       alloc->fMemory, alloc->fOffset));
     if (err) {
         SkASSERT_RELEASE(heap->free(*alloc));
@@ -223,9 +223,11 @@ VkAccessFlags GrVkMemory::LayoutToSrcAccessMask(const VkImageLayout layout) {
     VkAccessFlags flags = 0;;
     if (VK_IMAGE_LAYOUT_GENERAL == layout) {
         flags = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
-            VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT |
-            VK_ACCESS_TRANSFER_WRITE_BIT |
-            VK_ACCESS_HOST_WRITE_BIT | VK_ACCESS_HOST_READ_BIT;
+                VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT |
+                VK_ACCESS_TRANSFER_WRITE_BIT |
+                VK_ACCESS_TRANSFER_READ_BIT |
+                VK_ACCESS_SHADER_READ_BIT |
+                VK_ACCESS_HOST_WRITE_BIT | VK_ACCESS_HOST_READ_BIT;
     } else if (VK_IMAGE_LAYOUT_PREINITIALIZED == layout) {
         flags = VK_ACCESS_HOST_WRITE_BIT;
     } else if (VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL == layout) {
@@ -297,7 +299,7 @@ bool GrVkFreeListAlloc::alloc(VkDeviceSize requestedSize,
                 }
                 iter.next();
             }
-            SkASSERT(largestSize == fLargestBlockSize)
+            SkASSERT(largestSize == fLargestBlockSize);
 #endif
         } else {
             SkASSERT(bestFit->fSize == alignedSize);
@@ -429,7 +431,7 @@ void GrVkSubHeap::free(const GrVkAlloc& alloc) {
     INHERITED::free(alloc.fOffset, alloc.fSize);
 }
 
-bool GrVkHeap::subAlloc(VkDeviceSize size, VkDeviceSize alignment, 
+bool GrVkHeap::subAlloc(VkDeviceSize size, VkDeviceSize alignment,
                         uint32_t memoryTypeIndex, GrVkAlloc* alloc) {
     VkDeviceSize alignedSize = align_size(size, alignment);
 
@@ -451,7 +453,7 @@ bool GrVkHeap::subAlloc(VkDeviceSize size, VkDeviceSize alignment,
         }
         alloc->fOffset = 0;
         alloc->fSize = 0;    // hint that this is not a subheap allocation
-        
+
         return true;
     }
 
@@ -459,7 +461,8 @@ bool GrVkHeap::subAlloc(VkDeviceSize size, VkDeviceSize alignment,
     int bestFitIndex = -1;
     VkDeviceSize bestFitSize = 0x7FFFFFFF;
     for (auto i = 0; i < fSubHeaps.count(); ++i) {
-        if (fSubHeaps[i]->memoryTypeIndex() == memoryTypeIndex) {
+        if (fSubHeaps[i]->memoryTypeIndex() == memoryTypeIndex &&
+            fSubHeaps[i]->alignment() == alignment) {
             VkDeviceSize heapSize = fSubHeaps[i]->largestBlockSize();
             if (heapSize >= alignedSize && heapSize < bestFitSize) {
                 bestFitIndex = i;
@@ -497,7 +500,7 @@ bool GrVkHeap::subAlloc(VkDeviceSize size, VkDeviceSize alignment,
     return false;
 }
 
-bool GrVkHeap::singleAlloc(VkDeviceSize size, VkDeviceSize alignment, 
+bool GrVkHeap::singleAlloc(VkDeviceSize size, VkDeviceSize alignment,
                            uint32_t memoryTypeIndex, GrVkAlloc* alloc) {
     VkDeviceSize alignedSize = align_size(size, alignment);
 
@@ -505,7 +508,9 @@ bool GrVkHeap::singleAlloc(VkDeviceSize size, VkDeviceSize alignment,
     int bestFitIndex = -1;
     VkDeviceSize bestFitSize = 0x7FFFFFFF;
     for (auto i = 0; i < fSubHeaps.count(); ++i) {
-        if (fSubHeaps[i]->memoryTypeIndex() == memoryTypeIndex && fSubHeaps[i]->unallocated()) {
+        if (fSubHeaps[i]->memoryTypeIndex() == memoryTypeIndex &&
+            fSubHeaps[i]->alignment() == alignment &&
+            fSubHeaps[i]->unallocated()) {
             VkDeviceSize heapSize = fSubHeaps[i]->size();
             if (heapSize >= alignedSize && heapSize < bestFitSize) {
                 bestFitIndex = i;

@@ -42,12 +42,8 @@ protected:
 
         SkAutoTUnref<const SkTextBlob> blob(builder.build());
 
-        SkImageInfo info = SkImageInfo::MakeN32(200, 200, kPremul_SkAlphaType,
-                                                sk_ref_sp(canvas->imageInfo().colorSpace()));
-        SkSurfaceProps canvasProps(SkSurfaceProps::kLegacyFontHost_InitType);
-        uint32_t gammaCorrect = canvas->getProps(&canvasProps)
-            ? canvasProps.flags() & SkSurfaceProps::kGammaCorrect_Flag : 0;
-        SkSurfaceProps props(gammaCorrect, kUnknown_SkPixelGeometry);
+        SkImageInfo info = SkImageInfo::MakeN32Premul(200, 200);
+        SkSurfaceProps props(0, kUnknown_SkPixelGeometry);
         auto surface = canvas->makeSurface(info, &props);
         if (!surface) {
             surface = SkSurface::MakeRaster(info, &props);
@@ -69,8 +65,8 @@ protected:
     }
 
 private:
-    static const int kWidth = 200;
-    static const int kHeight = 200;
+    static constexpr int kWidth = 200;
+    static constexpr int kHeight = 200;
 
     typedef GM INHERITED;
 };

@@ -9,7 +9,6 @@
 #define GrTypesPriv_DEFINED
 
 #include "GrTypes.h"
-#include "SkRect.h"
 #include "SkRefCnt.h"
 
  /**
@@ -55,6 +54,14 @@ enum GrShaderFlags {
     kFragment_GrShaderFlag = 1 << kFragment_GrShaderType
 };
 GR_MAKE_BITFIELD_OPS(GrShaderFlags);
+
+enum class GrDrawFace {
+    kInvalid = -1,
+
+    kBoth,
+    kCCW,
+    kCW,
+};
 
 /**
  * Precisions of shader language variables. Not all shading languages support precisions or actually
@@ -410,25 +417,6 @@ enum GrIOType {
     kRead_GrIOType,
     kWrite_GrIOType,
     kRW_GrIOType
-};
-
-struct GrScissorState {
-    GrScissorState() : fEnabled(false) {}
-    GrScissorState(const SkIRect& rect) : fEnabled(true), fRect(rect) {}
-    void setDisabled() { fEnabled = false; }
-    void set(const SkIRect& rect) { fRect = rect; fEnabled = true; }
-    bool operator==(const GrScissorState& other) const {
-        return fEnabled == other.fEnabled &&
-                (false == fEnabled || fRect == other.fRect);
-    }
-    bool operator!=(const GrScissorState& other) const { return !(*this == other); }
-
-    bool enabled() const { return fEnabled; }
-    const SkIRect& rect() const { return fRect; }
-
-private:
-    bool    fEnabled;
-    SkIRect fRect;
 };
 
 /**

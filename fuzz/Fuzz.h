@@ -14,7 +14,7 @@
 
 class Fuzz : SkNoncopyable {
 public:
-    explicit Fuzz(SkData*);
+    explicit Fuzz(sk_sp<SkData>);
 
     // Returns the total number of "random" bytes available.
     size_t size();
@@ -47,7 +47,7 @@ private:
     template <typename T>
     T nextT();
 
-    SkAutoTUnref<SkData> fBytes;
+    sk_sp<SkData> fBytes;
     int fNextByte;
 };
 

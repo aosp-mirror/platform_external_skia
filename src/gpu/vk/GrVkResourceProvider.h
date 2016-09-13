@@ -11,6 +11,7 @@
 #include "GrGpu.h"
 #include "GrResourceHandle.h"
 #include "GrVkDescriptorPool.h"
+#include "GrVkDescriptorSetManager.h"
 #include "GrVkPipelineState.h"
 #include "GrVkRenderPass.h"
 #include "GrVkResource.h"
@@ -31,6 +32,7 @@ class GrVkPrimaryCommandBuffer;
 class GrVkRenderTarget;
 class GrVkSampler;
 class GrVkSecondaryCommandBuffer;
+class GrVkUniformHandler;
 
 class GrVkResourceProvider {
 public:
@@ -100,17 +102,43 @@ public:
                                                                  GrPrimitiveType,
                                                                  const GrVkRenderPass& renderPass);
 
-    // For all our GrVkPipelineState objects, we require a layout where the first set contains two
-    // uniform buffers, one for the vertex shader and one for the fragment shader. Thus it is
-    // possible for us to use a shadered descriptor pool to allocate all these similar descriptor
-    // sets. The caller is responsible for reffing the outPool for as long as the returned
-    // VkDescriptor set is in use.
-    void getUniformDescriptorSet(VkDescriptorSet*, const GrVkDescriptorPool** outPool);
+    void getSamplerDescriptorSetHandle(const GrVkUniformHandler&,
+                                       GrVkDescriptorSetManager::Handle* handle);
+    void getSamplerDescriptorSetHandle(const SkTArray<uint32_t>& visibilities,
+                                       GrVkDescriptorSetManager::Handle* handle);
 
     // Returns the compatible VkDescriptorSetLayout to use for uniform buffers. The caller does not
     // own the VkDescriptorSetLayout and thus should not delete it. This function should be used
     // when the caller needs the layout to create a VkPipelineLayout.
-    VkDescriptorSetLayout getUniDSLayout() const { return fUniformDescLayout; }
+    VkDescriptorSetLayout getUniformDSLayout() const;
+
+    // Returns the compatible VkDescriptorSetLayout to use for a specific sampler handle. The caller
+    // does not own the VkDescriptorSetLayout and thus should not delete it. This function should be
+    // used when the caller needs the layout to create a VkPipelineLayout.
+    VkDescriptorSetLayout getSamplerDSLayout(const GrVkDescriptorSetManager::Handle&) const;
+
+    // Returns a GrVkDescriptorSet that can be used for uniform buffers. The GrVkDescriptorSet
+    // is already reffed for the caller.
+    const GrVkDescriptorSet* getUniformDescriptorSet();
+
+    // Returns a GrVkDescriptorSet that can be used for sampler descriptors that are compatible with
+    // the GrVkDescriptorSetManager::Handle passed in. The GrVkDescriptorSet is already reffed for
+    // the caller.
+    const GrVkDescriptorSet* getSamplerDescriptorSet(const GrVkDescriptorSetManager::Handle&);
+
+
+    // Signals that the descriptor set passed it, which is compatible with the passed in handle,
+    // can be reused by the next allocation request.
+    void recycleDescriptorSet(const GrVkDescriptorSet* descSet,
+                              const GrVkDescriptorSetManager::Handle&);
+
+    // Creates or finds free uniform buffer resources of size GrVkUniformBuffer::kStandardSize.
+    // Anything larger will need to be created and released by the client.
+    const GrVkResource* findOrCreateStandardUniformBufferResource();
+
+    // Signals that the resource passed to it (which should be a uniform buffer resource)
+    // can be reused by the next uniform buffer resource request.
+    void recycleStandardUniformBufferResource(const GrVkResource*);
 
     // Destroy any cached resources. To be called before destroying the VkDevice.
     // The assumption is that all queues are idle and all command buffers are finished.
@@ -163,7 +191,6 @@ private:
 #endif
     };
 
-
     class CompatibleRenderPassSet {
     public:
         // This will always construct the basic load store render pass (all attachments load and
@@ -182,7 +209,6 @@ private:
 
         GrVkRenderPass* getRenderPass(const GrVkGpu* gpu,
                                       const GrVkRenderPass::LoadStoreOps& colorOps,
-                                      const GrVkRenderPass::LoadStoreOps& resolveOps,
                                       const GrVkRenderPass::LoadStoreOps& stencilOps);
 
         void releaseResources(const GrVkGpu* gpu);
@@ -193,9 +219,6 @@ private:
         int                           fLastReturnedIndex;
     };
 
-    // Initialiaze the vkDescriptorSetLayout used for allocating new uniform buffer descritpor sets.
-    void initUniformDescObjects();
-
     GrVkGpu* fGpu;
 
     // Central cache for creating pipelines
@@ -204,12 +227,15 @@ private:
     SkSTArray<4, CompatibleRenderPassSet> fRenderPassArray;
 
     // Array of PrimaryCommandBuffers that are currently in flight
-    SkSTArray<4, GrVkPrimaryCommandBuffer*> fActiveCommandBuffers;
+    SkSTArray<4, GrVkPrimaryCommandBuffer*, true> fActiveCommandBuffers;
     // Array of available primary command buffers that are not in flight
-    SkSTArray<4, GrVkPrimaryCommandBuffer*> fAvailableCommandBuffers;
+    SkSTArray<4, GrVkPrimaryCommandBuffer*, true> fAvailableCommandBuffers;
 
     // Array of available secondary command buffers
-    SkSTArray<16, GrVkSecondaryCommandBuffer*> fAvailableSecondaryCommandBuffers;
+    SkSTArray<16, GrVkSecondaryCommandBuffer*, true> fAvailableSecondaryCommandBuffers;
+
+    // Array of available uniform buffer resources
+    SkSTArray<16, const GrVkResource*, true> fAvailableUniformBufferResources;
 
     // Stores GrVkSampler objects that we've already created so we can reuse them across multiple
     // GrVkPipelineStates
@@ -218,18 +244,9 @@ private:
     // Cache of GrVkPipelineStates
     PipelineStateCache* fPipelineStateCache;
 
-    // Current pool to allocate uniform descriptor sets from
-    const GrVkDescriptorPool* fUniformDescPool;
-    VkDescriptorSetLayout  fUniformDescLayout;
-    //Curent number of uniform descriptors allocated from the pool
-    int                fCurrentUniformDescCount;
-    int                fCurrMaxUniDescriptors;
+    SkSTArray<4, GrVkDescriptorSetManager, true> fDescriptorSetManagers;
 
-    enum {
-        kMaxUniformDescriptors = 1024,
-        kNumUniformDescPerSet = 2,
-        kStartNumUniformDescriptors = 16, // must be less than kMaxUniformDescriptors
-    };
+    GrVkDescriptorSetManager::Handle fUniformDSHandle;
 };
 
 #endif

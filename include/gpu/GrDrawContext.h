@@ -17,7 +17,6 @@
 #include "../private/GrInstancedPipelineInfo.h"
 #include "../private/GrSingleOwner.h"
 
-class GrAtlasTextContext;
 class GrAuditTrail;
 class GrClip;
 class GrContext;
@@ -26,6 +25,7 @@ class GrDrawContextPriv;
 class GrDrawPathBatchBase;
 class GrDrawingManager;
 class GrDrawTarget;
+class GrFixedClip;
 class GrPaint;
 class GrPathProcessor;
 class GrPipelineBuilder;
@@ -36,6 +36,7 @@ struct GrUserStencilSettings;
 class SkDrawFilter;
 struct SkIPoint;
 struct SkIRect;
+class SkLatticeIter;
 class SkMatrix;
 class SkPaint;
 class SkPath;
@@ -216,7 +217,21 @@ public:
                    const SkRSXform xform[],
                    const SkRect texRect[],
                    const SkColor colors[]);
-    
+
+    /**
+     * Draws a region.
+     *
+     * @param paint         describes how to color pixels
+     * @param viewMatrix    transformation matrix
+     * @param region        the region to be drawn
+     * @param style         style to apply to the region
+     */
+    void drawRegion(const GrClip&,
+                    const GrPaint& paint,
+                    const SkMatrix& viewMatrix,
+                    const SkRegion& region,
+                    const GrStyle& style);
+
     /**
      * Draws an oval.
      *
@@ -230,34 +245,79 @@ public:
                   const SkMatrix& viewMatrix,
                   const SkRect& oval,
                   const GrStyle& style);
+   /**
+    * Draws a partial arc of an oval.
+    *
+    * @param paint         describes how to color pixels.
+    * @param viewMatrix    transformation matrix.
+    * @param oval          the bounding rect of the oval.
+    * @param startAngle    starting angle in degrees.
+    * @param sweepAngle    angle to sweep in degrees. Must be in (-360, 360)
+    * @param useCenter     true means that the implied path begins at the oval center, connects as a
+    *                      line to the point indicated by the start contains the arc indicated by
+    *                      the sweep angle. If false the line beginning at the center point is
+    *                      omitted.
+    * @param style         style to apply to the oval.
+    */
+    void drawArc(const GrClip&,
+                 const GrPaint& paint,
+                 const SkMatrix& viewMatrix,
+                 const SkRect& oval,
+                 SkScalar startAngle,
+                 SkScalar sweepAngle,
+                 bool useCenter,
+                 const GrStyle& style);
 
     /**
-     *  Draw the image stretched differentially to fit into dst.
-     *  center is a rect within the image, and logically divides the image
-     *  into 9 sections (3x3). For example, if the middle pixel of a [5x5]
-     *  image is the "center", then the center-rect should be [2, 2, 3, 3].
-     *
-     *  If the dst is >= the image size, then...
-     *  - The 4 corners are not stretched at all.
-     *  - The sides are stretched in only one axis.
-     *  - The center is stretched in both axes.
-     * Else, for each axis where dst < image,
-     *  - The corners shrink proportionally
-     *  - The sides (along the shrink axis) and center are not drawn
+     * Draw the image as a set of rects, specified by |iter|.
      */
-    void drawImageNine(const GrClip&,
-                       const GrPaint& paint,
-                       const SkMatrix& viewMatrix,
-                       int imageWidth,
-                       int imageHeight,
-                       const SkIRect& center,
-                       const SkRect& dst);
+    void drawImageLattice(const GrClip&,
+                          const GrPaint& paint,
+                          const SkMatrix& viewMatrix,
+                          int imageWidth,
+                          int imageHeight,
+                          std::unique_ptr<SkLatticeIter> iter,
+                          const SkRect& dst);
+
+    /**
+     * After this returns any pending surface IO will be issued to the backend 3D API and
+     * if the surface has MSAA it will be resolved.
+     */
+    void prepareForExternalIO();
+
+    /**
+     * Reads a rectangle of pixels from the draw context.
+     * @param dstInfo       image info for the destination
+     * @param dstBuffer     destination pixels for the read
+     * @param dstRowBytes   bytes in a row of 'dstBuffer'
+     * @param x             x offset w/in the draw context from which to read
+     * @param y             y offset w/in the draw context from which to read
+     *
+     * @return true if the read succeeded, false if not. The read can fail because of an
+     *              unsupported pixel config.
+     */
+    bool readPixels(const SkImageInfo& dstInfo, void* dstBuffer, size_t dstRowBytes, int x, int y);
+
+    /**
+     * Writes a rectangle of pixels [srcInfo, srcBuffer, srcRowbytes] into the 
+     * drawContext at the specified position.
+     * @param srcInfo       image info for the source pixels
+     * @param srcBuffer     source for the write
+     * @param srcRowBytes   bytes in a row of 'srcBuffer'
+     * @param x             x offset w/in the draw context at which to write
+     * @param y             y offset w/in the draw context at which to write
+     *
+     * @return true if the write succeeded, false if not. The write can fail because of an
+     *              unsupported pixel config.
+     */
+    bool writePixels(const SkImageInfo& srcInfo, const void* srcBuffer, size_t srcRowBytes,
+                     int x, int y);
 
     bool isStencilBufferMultisampled() const {
         return fRenderTarget->isStencilBufferMultisampled();
     }
     bool isUnifiedMultisampled() const { return fRenderTarget->isUnifiedMultisampled(); }
-    bool hasMixedSamples() const { return fRenderTarget->hasMixedSamples(); }
+    bool hasMixedSamples() const { return fRenderTarget->isMixedSampled(); }
 
     bool mustUseHWAA(const GrPaint& paint) const {
         return paint.isAntiAlias() && fRenderTarget->isUnifiedMultisampled();
@@ -268,14 +328,19 @@ public:
     int height() const { return fRenderTarget->height(); }
     GrPixelConfig config() const { return fRenderTarget->config(); }
     int numColorSamples() const { return fRenderTarget->numColorSamples(); }
-    bool isGammaCorrect() const { return fSurfaceProps.isGammaCorrect(); }
+    bool isGammaCorrect() const { return SkToBool(fColorSpace.get()); }
+    SkSourceGammaTreatment sourceGammaTreatment() const {
+        return this->isGammaCorrect() ? SkSourceGammaTreatment::kRespect
+                                      : SkSourceGammaTreatment::kIgnore;
+    }
     const SkSurfaceProps& surfaceProps() const { return fSurfaceProps; }
+    SkColorSpace* getColorSpace() const { return fColorSpace.get(); }
+    GrColorSpaceXform* getColorXformFromSRGB() const { return fColorXformFromSRGB.get(); }
+    GrSurfaceOrigin origin() const { return fRenderTarget->origin(); }
 
     bool wasAbandoned() const;
 
     GrRenderTarget* accessRenderTarget() { return fRenderTarget.get(); }
-
-    sk_sp<GrRenderTarget> renderTarget() { return fRenderTarget; }
 
     sk_sp<GrTexture> asTexture() { return sk_ref_sp(fRenderTarget->asTexture()); }
 
@@ -286,7 +351,7 @@ public:
     GrAuditTrail* auditTrail() { return fAuditTrail; }
 
 protected:
-    GrDrawContext(GrContext*, GrDrawingManager*, sk_sp<GrRenderTarget>,
+    GrDrawContext(GrContext*, GrDrawingManager*, sk_sp<GrRenderTarget>, sk_sp<SkColorSpace>,
                   const SkSurfaceProps* surfaceProps, GrAuditTrail*, GrSingleOwner*);
 
     GrDrawingManager* drawingManager() { return fDrawingManager; }
@@ -302,7 +367,6 @@ private:
     friend class GrDrawContextPriv;
     friend class GrTestTarget;  // for access to getDrawTarget
     friend class GrSWMaskHelper;                 // for access to drawBatch
-    friend class GrClipMaskManager;              // for access to drawBatch
 
     // All the path renderers currently make their own batches
     friend class GrSoftwarePathRenderer;         // for access to drawBatch
@@ -316,6 +380,8 @@ private:
     friend class GrMSAAPathRenderer;             // for access to drawBatch
     friend class GrStencilAndCoverPathRenderer;  // for access to drawBatch
     friend class GrTessellatingPathRenderer;     // for access to drawBatch
+
+    void internalClear(const GrFixedClip&, const GrColor, bool canIgnoreClip);
 
     bool drawFilledDRRect(const GrClip& clip,
                           const GrPaint& paint,
@@ -335,7 +401,8 @@ private:
                              const SkRect& rect,
                              const SkRect* localRect,
                              const SkMatrix* localMatrix,
-                             const GrUserStencilSettings* ss);
+                             const GrUserStencilSettings* ss,
+                             bool useHWAA);
 
     void internalDrawPath(const GrClip& clip,
                           const GrPaint& paint,
@@ -355,10 +422,11 @@ private:
     // In MDB-mode the drawTarget can be closed by some other drawContext that has picked
     // it up. For this reason, the drawTarget should only ever be accessed via 'getDrawTarget'.
     GrDrawTarget*                     fDrawTarget;
-    SkAutoTDelete<GrAtlasTextContext> fAtlasTextContext;
     GrContext*                        fContext;
     GrInstancedPipelineInfo           fInstancedPipelineInfo;
 
+    sk_sp<SkColorSpace>               fColorSpace;
+    sk_sp<GrColorSpaceXform>          fColorXformFromSRGB;
     SkSurfaceProps                    fSurfaceProps;
     GrAuditTrail*                     fAuditTrail;
 

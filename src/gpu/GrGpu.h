@@ -152,9 +152,7 @@ public:
     /**
      * Creates an instanced rendering object if it is supported on this platform.
      */
-    virtual gr_instanced::InstancedRendering* createInstancedRenderingIfSupported() {
-        return nullptr;
-    }
+    gr_instanced::InstancedRendering* createInstancedRendering();
 
     /**
      * Resolves MSAA.
@@ -310,12 +308,12 @@ public:
                         size_t offset, size_t rowBytes);
 
     /**
-     * This is can be called before allocating a texture to be a dst for copySurface. It will
+     * This is can be called before allocating a texture to be a dst for copySurface. This is only
+     * used for doing dst copies needed in blends, thus the src is always a GrRenderTarget. It will
      * populate the origin, config, and flags fields of the desc such that copySurface can
-     * efficiently succeed. It should only succeed if it can allow copySurface to perform a copy
-     * that would be more effecient than drawing the src to a dst render target.
+     * efficiently succeed.
      */
-    virtual bool initCopySurfaceDstDesc(const GrSurface* src, GrSurfaceDesc* desc) const = 0;
+    virtual bool initDescForDstCopy(const GrRenderTarget* src, GrSurfaceDesc* desc) const = 0;
 
     // After the client interacts directly with the 3D context state the GrGpu
     // must resync its internal state and assumptions about 3D context state.
@@ -536,6 +534,8 @@ private:
     virtual GrRenderTarget* onWrapBackendTextureAsRenderTarget(const GrBackendTextureDesc&) = 0;
     virtual GrBuffer* onCreateBuffer(size_t size, GrBufferType intendedType, GrAccessPattern,
                                      const void* data) = 0;
+
+    virtual gr_instanced::InstancedRendering* onCreateInstancedRendering() = 0;
 
     virtual bool onMakeCopyForTextureParams(GrTexture* texture, const GrTextureParams&,
                                             GrTextureProducer::CopyParams*) const { return false; }

@@ -23,12 +23,15 @@ public:
     bool onGetRenderTargetHandle(GrBackendObject*, BackendHandleAccess) override;
     SkCanvas* onNewCanvas() override;
     sk_sp<SkSurface> onNewSurface(const SkImageInfo&) override;
-    sk_sp<SkImage> onNewImageSnapshot(SkBudgeted, ForceCopyMode) override;
+    sk_sp<SkImage> onNewImageSnapshot(SkBudgeted, SkCopyPixelsMode) override;
     void onCopyOnWrite(ContentChangeMode) override;
     void onDiscard() override;
     void onPrepareForExternalIO() override;
 
     SkGpuDevice* getDevice() { return fDevice.get(); }
+
+    static bool Valid(const SkImageInfo&);
+    static bool Valid(GrContext*, GrPixelConfig, SkColorSpace*);
 
 private:
     sk_sp<SkGpuDevice> fDevice;

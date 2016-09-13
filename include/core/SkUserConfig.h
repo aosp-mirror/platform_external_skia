@@ -105,7 +105,7 @@
 
 /*  Define this to provide font subsetter in PDF generation.
  */
-//#define SK_SFNTLY_SUBSETTER "sfntly/subsetter/font_subsetter.h"
+//#define SK_SFNTLY_SUBSETTER "sample/chromium/font_subsetter.h"
 
 /*  Define this to set the upper limit for text to support LCD. Values that
     are very large increase the cost in the font cache and draw slower, without
@@ -193,8 +193,8 @@
 #define SK_IGNORE_LINEONLY_AA_CONVEX_PATH_OPTS
 #define SK_INTERNAL
 #define SK_IS_BOT
+#define SK_PDF_USE_SFNTLY
 #define SK_PRINT_CODEC_MESSAGES
-#define SK_SFNTLY_SUBSETTER "sample/chromium/font_subsetter.h"
 #define SK_SUPPORT_GPU 1
 #define SK_SUPPORT_LEGACY_CLIPTOLAYERFLAG
 #define SK_SUPPORT_LEGACY_COLORFILTER_PTR
@@ -206,15 +206,12 @@
 #define SK_SUPPORT_LEGACY_MINOR_EFFECT_PTR
 #define SK_SUPPORT_LEGACY_NEW_SURFACE_API
 #define SK_SUPPORT_LEGACY_PATHEFFECT_PTR
+#define SK_SUPPORT_LEGACY_PICTUREINSTALLPIXELREF
 #define SK_SUPPORT_LEGACY_PICTURE_PTR
-#define SK_SUPPORT_LEGACY_TYPEFACE_PTR
+#define SK_SUPPORT_LEGACY_STREAM_DATA
 #define SK_SUPPORT_LEGACY_UNBALANCED_PIXELREF_LOCKCOUNT
 #define SK_SUPPORT_LEGACY_XFERMODE_PTR
-#define SK_SUPPORT_PDF 1
 #define SK_USE_FREETYPE_EMBOLDEN
 #define SK_VULKAN
-#define TURBO_HAS_565
-#define TURBO_HAS_CROP
-#define TURBO_HAS_SKIP
 
 #endif // SkUserConfig_Android_DEFINED

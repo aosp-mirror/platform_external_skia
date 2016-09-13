@@ -6,8 +6,6 @@
  */
 
 #include "gm.h"
-
-#include "SkBitmapProcShader.h"
 #include "SkLightingShader.h"
 #include "SkNormalSource.h"
 #include "SkPoint3.h"
@@ -50,11 +48,11 @@ public:
 
         SkLights::Builder builder;
 
-        builder.add(SkLights::Light(SkColor3f::Make(1.0f, 1.0f, 1.0f),
-                                    SkVector3::Make(SK_ScalarRoot2Over2,
-                                                    0.0f,
-                                                    SK_ScalarRoot2Over2)));
-        builder.add(SkLights::Light(SkColor3f::Make(0.2f, 0.2f, 0.2f)));
+        builder.add(SkLights::Light::MakeDirectional(SkColor3f::Make(1.0f, 1.0f, 1.0f),
+                                                     SkVector3::Make(SK_ScalarRoot2Over2,
+                                                                     0.0f,
+                                                                     SK_ScalarRoot2Over2)));
+        builder.setAmbientLightColor(SkColor3f::Make(0.2f, 0.2f, 0.2f));
 
         fLights = builder.finish();
     }
@@ -68,7 +66,7 @@ protected:
         kLast_NormalMap = kTetra_NormalMap
     };
 
-    static const int kNormalMapCount = kLast_NormalMap+1;
+    static constexpr int kNormalMapCount = kLast_NormalMap+1;
 
     SkString onShortName() override {
         return SkString("lightingshader");
@@ -100,10 +98,10 @@ protected:
         const SkMatrix& ctm = canvas->getTotalMatrix();
 
         SkPaint paint;
-        sk_sp<SkShader> diffuseShader = SkMakeBitmapShader(fDiffuse,
-                SkShader::kClamp_TileMode, SkShader::kClamp_TileMode, &matrix, nullptr);
-        sk_sp<SkShader> normalMap = SkMakeBitmapShader(fNormalMaps[mapType],
-                SkShader::kClamp_TileMode, SkShader::kClamp_TileMode, &matrix, nullptr);
+        sk_sp<SkShader> diffuseShader = SkShader::MakeBitmapShader(fDiffuse,
+                SkShader::kClamp_TileMode, SkShader::kClamp_TileMode, &matrix);
+        sk_sp<SkShader> normalMap = SkShader::MakeBitmapShader(fNormalMaps[mapType],
+                SkShader::kClamp_TileMode, SkShader::kClamp_TileMode, &matrix);
         sk_sp<SkNormalSource> normalSource = SkNormalSource::MakeFromNormalMap(std::move(normalMap),
                                                                                ctm);
         paint.setShader(SkLightingShader::Make(std::move(diffuseShader), std::move(normalSource),
@@ -166,8 +164,8 @@ protected:
     }
 
 private:
-    static const int kTexSize = 128;
-    static const int kGMSize  = 512;
+    static constexpr int kTexSize = 128;
+    static constexpr int kGMSize  = 512;
 
     SkBitmap        fDiffuse;
     SkBitmap        fNormalMaps[kNormalMapCount];

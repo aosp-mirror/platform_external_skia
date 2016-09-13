@@ -396,15 +396,15 @@ void DontCallDebugSpan(int id) {  // exists to instantiate the templates
     SkDQuad quad;
     SkDConic conic;
     SkDCubic cubic;
-    SkTSect<SkDQuad, SkDQuad> q1q2(quad PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDQuad, SkDConic> q1k2(quad PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDQuad, SkDCubic> q1c2(quad PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDConic, SkDQuad> k1q2(conic PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDConic, SkDConic> k1k2(conic PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDConic, SkDCubic> k1c2(conic PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDCubic, SkDQuad> c1q2(cubic PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDCubic, SkDConic> c1k2(cubic PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDCubic, SkDCubic> c1c2(cubic PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDQuad, SkDQuad> q1q2(quad  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDQuad, SkDConic> q1k2(quad  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDQuad, SkDCubic> q1c2(quad  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDConic, SkDQuad> k1q2(conic  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDConic, SkDConic> k1k2(conic  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDConic, SkDCubic> k1c2(conic  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDCubic, SkDQuad> c1q2(cubic  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDCubic, SkDConic> c1k2(cubic  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDCubic, SkDCubic> c1c2(cubic  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
     DebugSpan(&q1q2, id);
     DebugSpan(&q1k2, id);
     DebugSpan(&q1c2, id);
@@ -426,15 +426,15 @@ void DontCallDebugT(double t) {  // exists to instantiate the templates
     SkDQuad quad;
     SkDConic conic;
     SkDCubic cubic;
-    SkTSect<SkDQuad, SkDQuad> q1q2(quad PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDQuad, SkDConic> q1k2(quad PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDQuad, SkDCubic> q1c2(quad PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDConic, SkDQuad> k1q2(conic PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDConic, SkDConic> k1k2(conic PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDConic, SkDCubic> k1c2(conic PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDCubic, SkDQuad> c1q2(cubic PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDCubic, SkDConic> c1k2(cubic PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDCubic, SkDCubic> c1c2(cubic PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDQuad, SkDQuad> q1q2(quad  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDQuad, SkDConic> q1k2(quad  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDQuad, SkDCubic> q1c2(quad  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDConic, SkDQuad> k1q2(conic  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDConic, SkDConic> k1k2(conic  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDConic, SkDCubic> k1c2(conic  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDCubic, SkDQuad> c1q2(cubic  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDCubic, SkDConic> c1k2(cubic  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDCubic, SkDCubic> c1c2(cubic  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
     DebugT(&q1q2, t);
     DebugT(&q1k2, t);
     DebugT(&q1c2, t);
@@ -456,15 +456,15 @@ void DontCallDumpTSect() {  // exists to instantiate the templates
     SkDQuad quad;
     SkDConic conic;
     SkDCubic cubic;
-    SkTSect<SkDQuad, SkDQuad> q1q2(quad PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDQuad, SkDConic> q1k2(quad PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDQuad, SkDCubic> q1c2(quad PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDConic, SkDQuad> k1q2(conic PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDConic, SkDConic> k1k2(conic PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDConic, SkDCubic> k1c2(conic PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDCubic, SkDQuad> c1q2(cubic PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDCubic, SkDConic> c1k2(cubic PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDCubic, SkDCubic> c1c2(cubic PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDQuad, SkDQuad> q1q2(quad  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDQuad, SkDConic> q1k2(quad  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDQuad, SkDCubic> q1c2(quad  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDConic, SkDQuad> k1q2(conic  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDConic, SkDConic> k1k2(conic  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDConic, SkDCubic> k1c2(conic  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDCubic, SkDQuad> c1q2(cubic  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDCubic, SkDConic> c1k2(cubic  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDCubic, SkDCubic> c1c2(cubic  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
     Dump(&q1q2);
     Dump(&q1k2);
     Dump(&q1c2);
@@ -486,15 +486,15 @@ void DontCallDumpBoth() {  // exists to instantiate the templates
     SkDQuad quad;
     SkDConic conic;
     SkDCubic cubic;
-    SkTSect<SkDQuad, SkDQuad> q1q2(quad PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDQuad, SkDConic> q1k2(quad PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDQuad, SkDCubic> q1c2(quad PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDConic, SkDQuad> k1q2(conic PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDConic, SkDConic> k1k2(conic PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDConic, SkDCubic> k1c2(conic PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDCubic, SkDQuad> c1q2(cubic PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDCubic, SkDConic> c1k2(cubic PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDCubic, SkDCubic> c1c2(cubic PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDQuad, SkDQuad> q1q2(quad  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDQuad, SkDConic> q1k2(quad  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDQuad, SkDCubic> q1c2(quad  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDConic, SkDQuad> k1q2(conic  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDConic, SkDConic> k1k2(conic  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDConic, SkDCubic> k1c2(conic  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDCubic, SkDQuad> c1q2(cubic  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDCubic, SkDConic> c1k2(cubic  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDCubic, SkDCubic> c1c2(cubic  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
     DumpBoth(&q1q2, &q1q2);
     DumpBoth(&q1k2, &k1q2);
     DumpBoth(&q1c2, &c1q2);
@@ -516,15 +516,15 @@ void DontCallDumpBounded() {
     SkDQuad quad;
     SkDConic conic;
     SkDCubic cubic;
-    SkTSect<SkDQuad, SkDQuad> q1q2(quad PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDQuad, SkDConic> q1k2(quad PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDQuad, SkDCubic> q1c2(quad PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDConic, SkDQuad> k1q2(conic PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDConic, SkDConic> k1k2(conic PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDConic, SkDCubic> k1c2(conic PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDCubic, SkDQuad> c1q2(cubic PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDCubic, SkDConic> c1k2(cubic PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDCubic, SkDCubic> c1c2(cubic PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDQuad, SkDQuad> q1q2(quad  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDQuad, SkDConic> q1k2(quad  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDQuad, SkDCubic> q1c2(quad  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDConic, SkDQuad> k1q2(conic  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDConic, SkDConic> k1k2(conic  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDConic, SkDCubic> k1c2(conic  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDCubic, SkDQuad> c1q2(cubic  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDCubic, SkDConic> c1k2(cubic  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDCubic, SkDCubic> c1c2(cubic  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
     DumpBounded(&q1q2, 0);
     DumpBounded(&q1k2, 0);
     DumpBounded(&q1c2, 0);
@@ -546,15 +546,15 @@ void DontCallDumpBounds() {
     SkDQuad quad;
     SkDConic conic;
     SkDCubic cubic;
-    SkTSect<SkDQuad, SkDQuad> q1q2(quad PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDQuad, SkDConic> q1k2(quad PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDQuad, SkDCubic> q1c2(quad PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDConic, SkDQuad> k1q2(conic PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDConic, SkDConic> k1k2(conic PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDConic, SkDCubic> k1c2(conic PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDCubic, SkDQuad> c1q2(cubic PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDCubic, SkDConic> c1k2(cubic PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDCubic, SkDCubic> c1c2(cubic PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDQuad, SkDQuad> q1q2(quad  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDQuad, SkDConic> q1k2(quad  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDQuad, SkDCubic> q1c2(quad  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDConic, SkDQuad> k1q2(conic  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDConic, SkDConic> k1k2(conic  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDConic, SkDCubic> k1c2(conic  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDCubic, SkDQuad> c1q2(cubic  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDCubic, SkDConic> c1k2(cubic  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDCubic, SkDCubic> c1c2(cubic  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
     DumpBounds(&q1q2);
     DumpBounds(&q1k2);
     DumpBounds(&q1c2);
@@ -576,15 +576,15 @@ void DontCallDumpCoin() {  // exists to instantiate the templates
     SkDQuad quad;
     SkDConic conic;
     SkDCubic cubic;
-    SkTSect<SkDQuad, SkDQuad> q1q2(quad PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDQuad, SkDConic> q1k2(quad PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDQuad, SkDCubic> q1c2(quad PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDConic, SkDQuad> k1q2(conic PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDConic, SkDConic> k1k2(conic PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDConic, SkDCubic> k1c2(conic PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDCubic, SkDQuad> c1q2(cubic PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDCubic, SkDConic> c1k2(cubic PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDCubic, SkDCubic> c1c2(cubic PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDQuad, SkDQuad> q1q2(quad  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDQuad, SkDConic> q1k2(quad  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDQuad, SkDCubic> q1c2(quad  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDConic, SkDQuad> k1q2(conic  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDConic, SkDConic> k1k2(conic  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDConic, SkDCubic> k1c2(conic  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDCubic, SkDQuad> c1q2(cubic  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDCubic, SkDConic> c1k2(cubic  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDCubic, SkDCubic> c1c2(cubic  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
     DumpCoin(&q1q2);
     DumpCoin(&q1k2);
     DumpCoin(&q1c2);
@@ -606,15 +606,15 @@ void DontCallDumpCoinCurves() {  // exists to instantiate the templates
     SkDQuad quad;
     SkDConic conic;
     SkDCubic cubic;
-    SkTSect<SkDQuad, SkDQuad> q1q2(quad PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDQuad, SkDConic> q1k2(quad PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDQuad, SkDCubic> q1c2(quad PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDConic, SkDQuad> k1q2(conic PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDConic, SkDConic> k1k2(conic PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDConic, SkDCubic> k1c2(conic PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDCubic, SkDQuad> c1q2(cubic PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDCubic, SkDConic> c1k2(cubic PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDCubic, SkDCubic> c1c2(cubic PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDQuad, SkDQuad> q1q2(quad  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDQuad, SkDConic> q1k2(quad  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDQuad, SkDCubic> q1c2(quad  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDConic, SkDQuad> k1q2(conic  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDConic, SkDConic> k1k2(conic  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDConic, SkDCubic> k1c2(conic  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDCubic, SkDQuad> c1q2(cubic  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDCubic, SkDConic> c1k2(cubic  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDCubic, SkDCubic> c1c2(cubic  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
     DumpCoinCurves(&q1q2);
     DumpCoinCurves(&q1k2);
     DumpCoinCurves(&q1c2);
@@ -636,15 +636,15 @@ void DontCallDumpCurves() {  // exists to instantiate the templates
     SkDQuad quad;
     SkDConic conic;
     SkDCubic cubic;
-    SkTSect<SkDQuad, SkDQuad> q1q2(quad PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDQuad, SkDConic> q1k2(quad PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDQuad, SkDCubic> q1c2(quad PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDConic, SkDQuad> k1q2(conic PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDConic, SkDConic> k1k2(conic PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDConic, SkDCubic> k1c2(conic PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDCubic, SkDQuad> c1q2(cubic PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDCubic, SkDConic> c1k2(cubic PATH_OPS_DEBUG_T_SECT_PARAMS(1));
-    SkTSect<SkDCubic, SkDCubic> c1c2(cubic PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDQuad, SkDQuad> q1q2(quad  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDQuad, SkDConic> q1k2(quad  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDQuad, SkDCubic> q1c2(quad  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDConic, SkDQuad> k1q2(conic  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDConic, SkDConic> k1k2(conic  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDConic, SkDCubic> k1c2(conic  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDCubic, SkDQuad> c1q2(cubic  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDCubic, SkDConic> c1k2(cubic  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
+    SkTSect<SkDCubic, SkDCubic> c1c2(cubic  SkDEBUGPARAMS(nullptr)  PATH_OPS_DEBUG_T_SECT_PARAMS(1));
     DumpCurves(&q1q2);
     DumpCurves(&q1k2);
     DumpCurves(&q1c2);
@@ -806,7 +806,7 @@ const SkOpCoincidence* SkOpAngle::debugCoincidence() const {
     return this->segment()->debugCoincidence();
 }
 
-SkOpContour* SkOpAngle::debugContour(int id) {
+SkOpContour* SkOpAngle::debugContour(int id) const {
     return this->segment()->debugContour(id);
 }
 
@@ -940,7 +940,7 @@ const SkOpAngle* SkOpPtT::debugAngle(int id) const {
     return this->span()->debugAngle(id);
 }
 
-SkOpContour* SkOpPtT::debugContour(int id) {
+SkOpContour* SkOpPtT::debugContour(int id) const {
     return this->span()->debugContour(id);
 }
 
@@ -1000,7 +1000,7 @@ const SkOpCoincidence* SkOpSpanBase::debugCoincidence() const {
     return this->segment()->debugCoincidence();
 }
 
-SkOpContour* SkOpSpanBase::debugContour(int id) {
+SkOpContour* SkOpSpanBase::debugContour(int id) const {
     return this->segment()->debugContour(id);
 }
 
@@ -1041,7 +1041,7 @@ void SkOpSpanBase::dumpBase() const {
         SkDebugf(" chased");
     }
 #ifdef SK_DEBUG
-    if (this->fDeleted) {
+    if (this->fDebugDeleted) {
         SkDebugf(" deleted");
     }
 #endif
@@ -1111,7 +1111,7 @@ const SkOpCoincidence* SkOpSegment::debugCoincidence() const {
     return this->contour()->debugCoincidence();
 }
 
-SkOpContour* SkOpSegment::debugContour(int id) {
+SkOpContour* SkOpSegment::debugContour(int id) const {
     return this->contour()->debugContour(id);
 }
 
@@ -1389,7 +1389,7 @@ const SkOpAngle* SkOpGlobalState::debugAngle(int id) const {
     return nullptr;
 }
 
-SkOpContour* SkOpGlobalState::debugContour(int id) {
+SkOpContour* SkOpGlobalState::debugContour(int id) const {
     SkOpContour* contour = fContourHead;
     do {
         if (contour->debugID() == id) {

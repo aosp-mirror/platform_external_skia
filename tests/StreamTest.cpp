@@ -117,13 +117,13 @@ static void TestWStream(skiatest::Reporter* reporter) {
     REPORTER_ASSERT(reporter, ds.getOffset() == 100 * 26);
 
     {
-        SkAutoTUnref<SkData> data(ds.copyToData());
+        sk_sp<SkData> data = ds.snapshotAsData();
         REPORTER_ASSERT(reporter, 100 * 26 == data->size());
         REPORTER_ASSERT(reporter, memcmp(dst, data->data(), data->size()) == 0);
     }
 
     {
-        // Test that this works after a copyToData.
+        // Test that this works after a snapshot.
         SkAutoTDelete<SkStreamAsset> stream(ds.detachAsStream());
         REPORTER_ASSERT(reporter, ds.getOffset() == 0);
         test_loop_stream(reporter, stream.get(), s, 26, 100);
@@ -174,15 +174,14 @@ static void TestPackedUInt(skiatest::Reporter* reporter) {
 static void TestDereferencingData(SkMemoryStream* memStream) {
     memStream->read(nullptr, 0);
     memStream->getMemoryBase();
-    SkAutoDataUnref data(memStream->copyToData());
+    (void)memStream->asData();
 }
 
 static void TestNullData() {
-    SkData* nullData = nullptr;
-    SkMemoryStream memStream(nullData);
+    SkMemoryStream memStream(nullptr);
     TestDereferencingData(&memStream);
 
-    memStream.setData(nullData);
+    memStream.setData(nullptr);
     TestDereferencingData(&memStream);
 
 }
@@ -361,7 +360,7 @@ DEF_TEST(StreamPeek_BlockMemoryStream, rep) {
         dynamicMemoryWStream.write(buffer, size);
     }
     SkAutoTDelete<SkStreamAsset> asset(dynamicMemoryWStream.detachAsStream());
-    SkAutoTUnref<SkData> expected(SkData::NewUninitialized(asset->getLength()));
+    sk_sp<SkData> expected(SkData::MakeUninitialized(asset->getLength()));
     uint8_t* expectedPtr = static_cast<uint8_t*>(expected->writable_data());
     valueSource.setSeed(kSeed);  // reseed.
     // We want the exact same same "random" string of numbers to put
@@ -370,7 +369,7 @@ DEF_TEST(StreamPeek_BlockMemoryStream, rep) {
     for (size_t i = 0; i < asset->getLength(); ++i) {
         expectedPtr[i] = valueSource.nextU() & 0xFF;
     }
-    stream_peek_test(rep, asset, expected);
+    stream_peek_test(rep, asset, expected.get());
 }
 
 namespace {
@@ -404,8 +403,7 @@ static void stream_copy_test(skiatest::Reporter* reporter,
         ERRORF(reporter, "SkStreamCopy failed");
         return;
     }
-    SkAutoTUnref<SkData> data(tgt.copyToData());
-    tgt.reset();
+    sk_sp<SkData> data(tgt.detachAsData());
     if (data->size() != N) {
         ERRORF(reporter, "SkStreamCopy incorrect size");
         return;

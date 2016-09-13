@@ -46,8 +46,8 @@ PATH_PREFIX_TO_EXTRA_TRYBOTS = {
     'src/opts/': 'master.client.skia:Test-Ubuntu-GCC-GCE-CPU-AVX2-x86_64-Release-SKNX_NO_SIMD-Trybot',
 
     'include/private/SkAtomics.h': ('master.client.skia:'
-      'Test-Ubuntu-GCC-GCE-CPU-AVX2-x86_64-Release-TSAN-Trybot,'
-      'Test-Ubuntu-GCC-Golo-GPU-GT610-x86_64-Release-TSAN-Trybot'
+      'Test-Ubuntu-Clang-GCE-CPU-AVX2-x86_64-Release-TSAN-Trybot,'
+      'Test-Ubuntu-Clang-Golo-GPU-GT610-x86_64-Release-TSAN-Trybot'
     ),
 
     # Below are examples to show what is possible with this feature.
@@ -169,6 +169,39 @@ def _ToolFlags(input_api, output_api):
   return results
 
 
+def _RecipeSimulationTest(input_api, output_api):
+  """Run the recipe simulation test."""
+  results = []
+  if not any(f.LocalPath().startswith('infra')
+             for f in input_api.AffectedFiles()):
+    return results
+
+  recipes_py = os.path.join('infra', 'bots', 'recipes.py')
+  cmd = ['python', recipes_py, 'simulation_test']
+  try:
+    subprocess.check_output(cmd)
+  except subprocess.CalledProcessError as e:
+    results.append(output_api.PresubmitError(
+        '`%s` failed:\n%s' % (' '.join(cmd), e.output)))
+  return results
+
+def _CheckGNFormatted(input_api, output_api):
+  """Make sure any .gn files we're changing have been formatted."""
+  results = []
+  for f in input_api.AffectedFiles():
+    if not f.LocalPath().endswith('.gn'):
+      continue
+
+    cmd = ['gn', 'format', '--dry-run', f.LocalPath()]
+    try:
+      subprocess.check_output(cmd)
+    except subprocess.CalledProcessError:
+      fix = 'gn format ' + f.LocalPath()
+      results.append(output_api.PresubmitError(
+          '`%s` failed, try\n\t%s' % (' '.join(cmd), fix)))
+  return results
+
+
 def _CommonChecks(input_api, output_api):
   """Presubmit checks common to upload and commit."""
   results = []
@@ -202,6 +235,10 @@ def CheckChangeOnUpload(input_api, output_api):
   """
   results = []
   results.extend(_CommonChecks(input_api, output_api))
+  # Run on upload, not commit, since the presubmit bot apparently doesn't have
+  # coverage installed.
+  results.extend(_RecipeSimulationTest(input_api, output_api))
+  results.extend(_CheckGNFormatted(input_api, output_api))
   return results
 
 
@@ -243,14 +280,62 @@ def _CheckTreeStatus(input_api, output_api, json_url):
   return tree_status_results
 
 
+class CodeReview(object):
+  """Abstracts which codereview tool is used for the specified issue."""
+
+  def __init__(self, input_api):
+    self._issue = input_api.change.issue
+    self._gerrit = input_api.gerrit
+    self._rietveld_properties = None
+    if not self._gerrit:
+      self._rietveld_properties = input_api.rietveld.get_issue_properties(
+          issue=int(self._issue), messages=True)
+
+  def GetOwnerEmail(self):
+    if self._gerrit:
+      return self._gerrit.GetChangeOwner(self._issue)
+    else:
+      return self._rietveld_properties['owner_email']
+
+  def GetSubject(self):
+    if self._gerrit:
+      return self._gerrit.GetChangeInfo(self._issue)['subject']
+    else:
+      return self._rietveld_properties['subject']
+
+  def GetDescription(self):
+    if self._gerrit:
+      return self._gerrit.GetChangeDescription(self._issue)
+    else:
+      return self._rietveld_properties['description']
+
+  def IsDryRun(self):
+    if self._gerrit:
+      return self._gerrit.GetChangeInfo(
+          self._issue)['labels']['Commit-Queue'].get('value', 0) == 1
+    else:
+      return self._rietveld_properties['cq_dry_run']
+
+  def GetApprovers(self):
+    approvers = []
+    if self._gerrit:
+      for m in self._gerrit.GetChangeInfo(
+                   self._issue)['labels']['Code-Review']['all']:
+        if m.get("value") == 1:
+          approvers.append(m["email"])
+    else:
+      for m in self._rietveld_properties.get('messages', []):
+        if 'lgtm' in m['text'].lower():
+          approvers.append(m['sender'])
+    return approvers
+
+
 def _CheckOwnerIsInAuthorsFile(input_api, output_api):
   results = []
-  issue = input_api.change.issue
-  if issue and input_api.rietveld:
-    issue_properties = input_api.rietveld.get_issue_properties(
-        issue=int(issue), messages=False)
-    owner_email = issue_properties['owner_email']
+  if input_api.change.issue:
+    cr = CodeReview(input_api)
 
+    owner_email = cr.GetOwnerEmail()
     try:
       authors_content = ''
       for line in open(AUTHORS_FILE_NAME):
@@ -298,20 +383,19 @@ def _CheckLGTMsForPublicAPI(input_api, output_api):
     return results
 
   lgtm_from_owner = False
-  issue = input_api.change.issue
-  if issue and input_api.rietveld:
-    issue_properties = input_api.rietveld.get_issue_properties(
-        issue=int(issue), messages=True)
-    if re.match(REVERT_CL_SUBJECT_PREFIX, issue_properties['subject'], re.I):
+  if input_api.change.issue:
+    cr = CodeReview(input_api)
+
+    if re.match(REVERT_CL_SUBJECT_PREFIX, cr.GetSubject(), re.I):
       # It is a revert CL, ignore the public api owners check.
       return results
 
-    if issue_properties['cq_dry_run']:
+    if cr.IsDryRun():
       # Ignore public api owners check for dry run CLs since they are not
       # going to be committed.
       return results
 
-    match = re.search(r'^TBR=(.*)$', issue_properties['description'], re.M)
+    match = re.search(r'^TBR=(.*)$', cr.GetDescription(), re.M)
     if match:
       tbr_entries = match.group(1).strip().split(',')
       for owner in PUBLIC_API_OWNERS:
@@ -320,18 +404,15 @@ def _CheckLGTMsForPublicAPI(input_api, output_api):
           # api owners check.
           return results
 
-    if issue_properties['owner_email'] in PUBLIC_API_OWNERS:
+    if cr.GetOwnerEmail() in PUBLIC_API_OWNERS:
       # An owner created the CL that is an automatic LGTM.
       lgtm_from_owner = True
 
-    messages = issue_properties.get('messages')
-    if messages:
-      for message in messages:
-        if (message['sender'] in PUBLIC_API_OWNERS and
-            'lgtm' in message['text'].lower()):
-          # Found an lgtm in a message from an owner.
-          lgtm_from_owner = True
-          break
+    for approver in cr.GetApprovers():
+      if approver in PUBLIC_API_OWNERS:
+        # Found an lgtm in a message from an owner.
+        lgtm_from_owner = True
+        break
 
   if not lgtm_from_owner:
     results.append(
@@ -375,9 +456,16 @@ def PostUploadHook(cl, change, output_api):
       break
 
   issue = cl.issue
-  rietveld_obj = cl.RpcServer()
-  if issue and rietveld_obj:
-    original_description = rietveld_obj.get_description(issue)
+  if issue:
+    original_description = cl.GetDescription()
+    changeIdLine = None
+    if cl.IsGerrit():
+      # Remove Change-Id from description and add it back at the end.
+      regex = re.compile(r'^(Change-Id: (\w+))(\n*)\Z', re.M | re.I)
+      changeIdLine = re.search(regex, original_description).group(0)
+      original_description = re.sub(regex, '', original_description)
+      original_description = re.sub('\n+\Z', '\n', original_description)
+
     new_description = original_description
 
     # Add GOLD_TRYBOT_URL if it does not exist yet.
@@ -412,9 +500,8 @@ def PostUploadHook(cl, change, output_api):
 
     # If the target ref is not master then add NOTREECHECKS=true and NOTRY=true
     # to the CL's description if it does not already exist there.
-    target_ref = rietveld_obj.get_issue_properties(issue, False).get(
-        'target_ref', '')
-    if target_ref != 'refs/heads/master':
+    target_ref = cl.GetRemoteBranch()[1]
+    if target_ref != 'refs/remotes/origin/master':
       if not re.search(
           r'^NOTREECHECKS=true$', new_description, re.M | re.I):
         new_description += "\nNOTREECHECKS=true"
@@ -456,7 +543,10 @@ def PostUploadHook(cl, change, output_api):
 
     # If the description has changed update it.
     if new_description != original_description:
-      rietveld_obj.update_description(issue, new_description)
+      if changeIdLine:
+        # The Change-Id line must have two newlines before it.
+        new_description += '\n\n' + changeIdLine
+      cl.UpdateDescription(new_description)
 
     return results
 

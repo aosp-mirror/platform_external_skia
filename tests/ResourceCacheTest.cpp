@@ -871,8 +871,7 @@ static void test_duplicate_unique_key(skiatest::Reporter* reporter) {
         make_unique_key<0>(&key2, 0);
         SkAutoTUnref<TestResource> d(new TestResource(context->getGpu()));
         int foo = 4132;
-        SkAutoTUnref<SkData> data(SkData::NewWithCopy(&foo, sizeof(foo)));
-        key2.setCustomData(data.get());
+        key2.setCustomData(SkData::MakeWithCopy(&foo, sizeof(foo)));
         d->resourcePriv().setUniqueKey(key2);
     }
 
@@ -1134,7 +1133,7 @@ static void test_flush(skiatest::Reporter* reporter) {
             make_unique_key<1>(&k, i);
             r->resourcePriv().setUniqueKey(k);
             r->unref();
-            cache->notifyFlushOccurred();
+            cache->notifyFlushOccurred(GrResourceCache::kExternal);
         }
 
         // Send flush notifications to the cache. Each flush should purge the oldest resource.
@@ -1148,7 +1147,7 @@ static void test_flush(skiatest::Reporter* reporter) {
                 REPORTER_ASSERT(reporter, !SkToBool(r));
                 SkSafeUnref(r);
             }
-            cache->notifyFlushOccurred();
+            cache->notifyFlushOccurred(GrResourceCache::kExternal);
         }
 
         REPORTER_ASSERT(reporter, 0 == cache->getResourceCount());
@@ -1170,13 +1169,13 @@ static void test_flush(skiatest::Reporter* reporter) {
             } else {
                 r->unref();
             }
-            cache->notifyFlushOccurred();
+            cache->notifyFlushOccurred(GrResourceCache::kExternal);
         }
 
         for (int i = 0; i < kFlushCount; ++i) {
             // Should get a resource purged every other flush.
             REPORTER_ASSERT(reporter, kFlushCount - i/2 - 1 == cache->getResourceCount());
-            cache->notifyFlushOccurred();
+            cache->notifyFlushOccurred(GrResourceCache::kExternal);
         }
 
         // Unref all the resources that we kept refs on in the first loop.
@@ -1188,7 +1187,7 @@ static void test_flush(skiatest::Reporter* reporter) {
         // get kFlushCount additional flushes. Then everything should be purged.
         for (int i = 0; i < kFlushCount; ++i) {
             REPORTER_ASSERT(reporter, kFlushCount >> 1 == cache->getResourceCount());
-            cache->notifyFlushOccurred();
+            cache->notifyFlushOccurred(GrResourceCache::kExternal);
         }
         REPORTER_ASSERT(reporter, 0 == cache->getResourceCount());
 
@@ -1196,6 +1195,22 @@ static void test_flush(skiatest::Reporter* reporter) {
     }
 
     REPORTER_ASSERT(reporter, 0 == cache->getResourceCount());
+
+    // Verify that calling flush() on a GrContext with nothing to do will not trigger resource
+    // eviction.
+    context->flush();
+    for (int i = 0; i < 10; ++i) {
+        TestResource* r = new TestResource(context->getGpu());
+        GrUniqueKey k;
+        make_unique_key<1>(&k, i);
+        r->resourcePriv().setUniqueKey(k);
+        r->unref();
+    }
+    REPORTER_ASSERT(reporter, 10 == cache->getResourceCount());
+    for (int i = 0; i < 10 * kFlushCount; ++i) {
+        context->flush();
+    }
+    REPORTER_ASSERT(reporter, 10 == cache->getResourceCount());
 }
 
 static void test_large_resource_count(skiatest::Reporter* reporter) {
@@ -1262,8 +1277,7 @@ static void test_custom_data(skiatest::Reporter* reporter) {
     make_unique_key<0>(&key1, 1);
     make_unique_key<0>(&key2, 2);
     int foo = 4132;
-    SkAutoTUnref<SkData> data(SkData::NewWithCopy(&foo, sizeof(foo)));
-    key1.setCustomData(data.get());
+    key1.setCustomData(SkData::MakeWithCopy(&foo, sizeof(foo)));
     REPORTER_ASSERT(reporter, *(int*) key1.getCustomData()->data() == 4132);
     REPORTER_ASSERT(reporter, key2.getCustomData() == nullptr);
 
@@ -1282,11 +1296,7 @@ static void test_abandoned(skiatest::Reporter* reporter) {
 
     // Call all the public methods on resource in the abandoned state. They shouldn't crash.
 
-    int foo = 4132;
-    SkAutoTUnref<SkData> data(SkData::NewWithCopy(&foo, sizeof(foo)));
-    resource->setCustomData(data.get());
-    resource->getCustomData();
-    resource->getUniqueID();
+    resource->uniqueID();
     resource->getUniqueKey();
     resource->wasDestroyed();
     resource->gpuMemorySize();

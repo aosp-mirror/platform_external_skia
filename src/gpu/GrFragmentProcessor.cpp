@@ -24,17 +24,12 @@ GrFragmentProcessor::~GrFragmentProcessor() {
     }
 }
 
-bool GrFragmentProcessor::isEqual(const GrFragmentProcessor& that,
-                                  bool ignoreCoordTransforms) const {
+bool GrFragmentProcessor::isEqual(const GrFragmentProcessor& that) const {
     if (this->classID() != that.classID() ||
         !this->hasSameSamplers(that)) {
         return false;
     }
-    if (ignoreCoordTransforms) {
-        if (this->numTransforms() != that.numTransforms()) {
-            return false;
-        }
-    } else if (!this->hasSameTransforms(that)) {
+    if (!this->hasSameTransforms(that)) {
         return false;
     }
     if (!this->onIsEqual(that)) {
@@ -44,7 +39,7 @@ bool GrFragmentProcessor::isEqual(const GrFragmentProcessor& that,
         return false;
     }
     for (int i = 0; i < this->numChildProcessors(); ++i) {
-        if (!this->childProcessor(i).isEqual(that.childProcessor(i), ignoreCoordTransforms)) {
+        if (!this->childProcessor(i).isEqual(that.childProcessor(i))) {
             return false;
         }
     }
@@ -105,6 +100,9 @@ int GrFragmentProcessor::registerChildProcessor(sk_sp<GrFragmentProcessor> child
 
     if (child->usesLocalCoords()) {
         fUsesLocalCoords = true;
+    }
+    if (child->usesDistanceVectorField()) {
+        fUsesDistanceVectorField = true;
     }
 
     int index = fChildProcessors.count();
@@ -256,10 +254,10 @@ sk_sp<GrFragmentProcessor> GrFragmentProcessor::MulOutputByInputUnpremulColor(
 //////////////////////////////////////////////////////////////////////////////
 
 sk_sp<GrFragmentProcessor> GrFragmentProcessor::OverrideInput(sk_sp<GrFragmentProcessor> fp,
-                                                              GrColor color) {
+                                                              GrColor4f color) {
     class ReplaceInputFragmentProcessor : public GrFragmentProcessor {
     public:
-        ReplaceInputFragmentProcessor(sk_sp<GrFragmentProcessor> child, GrColor color)
+        ReplaceInputFragmentProcessor(sk_sp<GrFragmentProcessor> child, GrColor4f color)
             : fColor(color) {
             this->initClassID<ReplaceInputFragmentProcessor>();
             this->registerChildProcessor(std::move(child));
@@ -283,24 +281,17 @@ sk_sp<GrFragmentProcessor> GrFragmentProcessor::OverrideInput(sk_sp<GrFragmentPr
             private:
                 void onSetData(const GrGLSLProgramDataManager& pdman,
                                const GrProcessor& fp) override {
-                    GrColor color = fp.cast<ReplaceInputFragmentProcessor>().fColor;
+                    GrColor4f color = fp.cast<ReplaceInputFragmentProcessor>().fColor;
                     if (!fHaveSetColor || color != fPreviousColor) {
-                        static const float scale = 1.f / 255.f;
-                        float floatColor[4] = {
-                            GrColorUnpackR(color) * scale,
-                            GrColorUnpackG(color) * scale,
-                            GrColorUnpackB(color) * scale,
-                            GrColorUnpackA(color) * scale,
-                        };
-                        pdman.set4fv(fColorUni, 1, floatColor);
+                        pdman.set4fv(fColorUni, 1, color.fRGBA);
                         fPreviousColor = color;
                         fHaveSetColor = true;
                     }
                 }
 
                 GrGLSLProgramDataManager::UniformHandle fColorUni;
-                bool    fHaveSetColor;
-                GrColor fPreviousColor;
+                bool      fHaveSetColor;
+                GrColor4f fPreviousColor;
             };
 
             return new GLFP;
@@ -315,12 +306,12 @@ sk_sp<GrFragmentProcessor> GrFragmentProcessor::OverrideInput(sk_sp<GrFragmentPr
         }
 
         void onComputeInvariantOutput(GrInvariantOutput* inout) const override {
-            inout->setToOther(kRGBA_GrColorComponentFlags, fColor,
+            inout->setToOther(kRGBA_GrColorComponentFlags, fColor.toGrColor(),
                               GrInvariantOutput::kWillNot_ReadInput);
             this->childProcessor(0).computeInvariantOutput(inout);
         }
 
-        GrColor fColor;
+        GrColor4f fColor;
     };
 
     GrInvariantOutput childOut(0x0, kNone_GrColorComponentFlags, false);

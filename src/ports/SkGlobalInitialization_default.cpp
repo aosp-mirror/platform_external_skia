@@ -24,6 +24,8 @@
 #include "SkDisplacementMapEffect.h"
 #include "SkDropShadowImageFilter.h"
 #include "SkEmbossMaskFilter.h"
+#include "SkGaussianEdgeShader.h"
+#include "SkRRectsGaussianEdgeShader.h"
 #include "SkGradientShader.h"
 #include "SkImageSource.h"
 #include "SkLayerDrawLooper.h"
@@ -89,7 +91,8 @@ void SkFlattenable::PrivateInitializer::InitEffects() {
     SkGradientShader::InitializeFlattenables();
     SkLightingShader::InitializeFlattenables();
     SkNormalSource::InitializeFlattenables();
-
+    SkGaussianEdgeShader::InitializeFlattenables();
+    SkRRectsGaussianEdgeShader::InitializeFlattenables();
 
     // PathEffect
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkArcToPathEffect)
@@ -102,7 +105,7 @@ void SkFlattenable::PrivateInitializer::InitEffects() {
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkSumPathEffect)
 
     // ImageFilter
-    SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkBlurImageFilter)
+    SkImageFilter::InitializeFlattenables();
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkDilateImageFilter)
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkDisplacementMapEffect)
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkDropShadowImageFilter)

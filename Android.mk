@@ -61,8 +61,6 @@ LOCAL_CFLAGS += \
 	-D_FORTIFY_SOURCE=1 \
 	-DSKIA_IMPLEMENTATION=1 \
 	-O2 \
-	-Wno-clobbered \
-	-Wno-unknown-warning-option \
 	-fexceptions
 
 LOCAL_CPPFLAGS := \
@@ -98,7 +96,6 @@ LOCAL_SRC_FILES := \
 	src/c/sk_surface.cpp \
 	src/core/SkAAClip.cpp \
 	src/core/SkAnnotation.cpp \
-	src/core/SkAdvancedTypefaceMetrics.cpp \
 	src/core/SkAlphaRuns.cpp \
 	src/core/SkAutoPixmapStorage.cpp \
 	src/core/SkBBHFactory.cpp \
@@ -121,10 +118,10 @@ LOCAL_SRC_FILES := \
 	src/core/SkBlitter_PM4f.cpp \
 	src/core/SkBlitter_RGB16.cpp \
 	src/core/SkBlitter_Sprite.cpp \
+	src/core/SkBlurImageFilter.cpp \
 	src/core/SkBuffer.cpp \
 	src/core/SkCachedData.cpp \
 	src/core/SkCanvas.cpp \
-	src/core/SkChecksum.cpp \
 	src/core/SkChunkAlloc.cpp \
 	src/core/SkClipStack.cpp \
 	src/core/SkColor.cpp \
@@ -172,6 +169,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkGeometry.cpp \
 	src/core/SkGlobalInitialization_core.cpp \
 	src/core/SkGlyphCache.cpp \
+	src/core/SkGpuBlurUtils.cpp \
 	src/core/SkGraphics.cpp \
 	src/core/SkHalf.cpp \
 	src/core/SkImageFilter.cpp \
@@ -180,8 +178,11 @@ LOCAL_SRC_FILES := \
 	src/core/SkImageCacherator.cpp \
 	src/core/SkImageGenerator.cpp \
 	src/core/SkLightingShader.cpp \
+	src/core/SkLights.cpp \
 	src/core/SkLinearBitmapPipeline.cpp \
 	src/core/SkLineClipper.cpp \
+	src/core/SkLiteDL.cpp \
+	src/core/SkLiteRecorder.cpp \
 	src/core/SkLocalMatrixImageFilter.cpp \
 	src/core/SkLocalMatrixShader.cpp \
 	src/core/SkMD5.cpp \
@@ -199,7 +200,10 @@ LOCAL_SRC_FILES := \
 	src/core/SkMiniRecorder.cpp \
 	src/core/SkModeColorFilter.cpp \
 	src/core/SkMultiPictureDraw.cpp \
-	src/core/SkNinePatchIter.cpp \
+	src/core/SkLatticeIter.cpp \
+	src/core/SkNormalBevelSource.cpp \
+	src/core/SkNormalMapSource.cpp \
+	src/core/SkNormalFlatSource.cpp \
 	src/core/SkNormalSource.cpp \
 	src/core/SkOpts.cpp \
 	src/core/SkPaint.cpp \
@@ -224,8 +228,10 @@ LOCAL_SRC_FILES := \
 	src/core/SkPoint3.cpp \
 	src/core/SkPtrRecorder.cpp \
 	src/core/SkQuadClipper.cpp \
+	src/core/SkRadialShadowMapShader.cpp \
 	src/core/SkRasterClip.cpp \
 	src/core/SkRasterPipeline.cpp \
+	src/core/SkRasterPipelineBlitter.cpp \
 	src/core/SkRasterizer.cpp \
 	src/core/SkReadBuffer.cpp \
 	src/core/SkRecord.cpp \
@@ -287,12 +293,15 @@ LOCAL_SRC_FILES := \
 	src/core/SkXfermodeF16.cpp \
 	src/core/SkXfermodeInterpretation.cpp \
 	src/core/SkYUVPlanesCache.cpp \
+	src/core/SkShadowShader.cpp \
 	src/image/SkImage.cpp \
 	src/image/SkImage_Generator.cpp \
 	src/image/SkImage_Raster.cpp \
 	src/image/SkImageShader.cpp \
 	src/image/SkSurface.cpp \
 	src/image/SkSurface_Raster.cpp \
+	src/pipe/SkPipeCanvas.cpp \
+	src/pipe/SkPipeReader.cpp \
 	src/pathops/SkAddIntersections.cpp \
 	src/pathops/SkDConicLineIntersection.cpp \
 	src/pathops/SkDCubicLineIntersection.cpp \
@@ -335,7 +344,6 @@ LOCAL_SRC_FILES := \
 	src/effects/SkArithmeticMode_gpu.cpp \
 	src/effects/SkBlurDrawLooper.cpp \
 	src/effects/SkBlurMask.cpp \
-	src/effects/SkBlurImageFilter.cpp \
 	src/effects/SkBlurMaskFilter.cpp \
 	src/effects/SkColorCubeFilter.cpp \
 	src/effects/SkColorFilterImageFilter.cpp \
@@ -350,7 +358,8 @@ LOCAL_SRC_FILES := \
 	src/effects/SkEmbossMask.cpp \
 	src/effects/SkEmbossMaskFilter.cpp \
 	src/effects/SkImageSource.cpp \
-	src/effects/SkGpuBlurUtils.cpp \
+	src/effects/SkGammaColorFilter.cpp \
+	src/effects/SkGaussianEdgeShader.cpp \
 	src/effects/SkLayerDrawLooper.cpp \
 	src/effects/SkLayerRasterizer.cpp \
 	src/effects/SkLightingImageFilter.cpp \
@@ -365,6 +374,7 @@ LOCAL_SRC_FILES := \
 	src/effects/SkPaintImageFilter.cpp \
 	src/effects/SkPerlinNoiseShader.cpp \
 	src/effects/SkPictureImageFilter.cpp \
+	src/effects/SkRRectsGaussianEdgeShader.cpp \
 	src/effects/SkTableColorFilter.cpp \
 	src/effects/SkTableMaskFilter.cpp \
 	src/effects/SkTileImageFilter.cpp \
@@ -388,8 +398,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrBuffer.cpp \
 	src/gpu/GrBufferAllocPool.cpp \
 	src/gpu/GrCaps.cpp \
-	src/gpu/GrClip.cpp \
-	src/gpu/GrClipMaskManager.cpp \
+	src/gpu/GrClipStackClip.cpp \
 	src/gpu/GrColorSpaceXform.cpp \
 	src/gpu/GrContext.cpp \
 	src/gpu/GrCoordTransform.cpp \
@@ -398,6 +407,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrPathRenderingDrawContext.cpp \
 	src/gpu/GrDrawingManager.cpp \
 	src/gpu/GrDrawTarget.cpp \
+	src/gpu/GrFixedClip.cpp \
 	src/gpu/GrFragmentProcessor.cpp \
 	src/gpu/GrGpu.cpp \
 	src/gpu/GrGpuCommandBuffer.cpp \
@@ -418,6 +428,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrPipeline.cpp \
 	src/gpu/GrPipelineBuilder.cpp \
 	src/gpu/GrPrimitiveProcessor.cpp \
+	src/gpu/GrProgramDesc.cpp \
 	src/gpu/GrProgramElement.cpp \
 	src/gpu/GrProcessor.cpp \
 	src/gpu/GrProcessorUnitTest.cpp \
@@ -456,6 +467,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/batches/GrAAConvexPathRenderer.cpp \
 	src/gpu/batches/GrAAFillRectBatch.cpp \
 	src/gpu/batches/GrAAStrokeRectBatch.cpp \
+	src/gpu/batches/GrAnalyticRectBatch.cpp \
 	src/gpu/batches/GrAtlasTextBatch.cpp \
 	src/gpu/batches/GrBatch.cpp \
 	src/gpu/batches/GrCopySurfaceBatch.cpp \
@@ -472,6 +484,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/batches/GrNinePatch.cpp \
 	src/gpu/batches/GrPLSPathRenderer.cpp \
 	src/gpu/batches/GrRectBatchFactory.cpp \
+	src/gpu/batches/GrRegionBatch.cpp \
 	src/gpu/batches/GrStencilAndCoverPathRenderer.cpp \
 	src/gpu/batches/GrTessellatingPathRenderer.cpp \
 	src/gpu/batches/GrVertexBatch.cpp \
@@ -524,7 +537,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/GrGLPathRange.cpp \
 	src/gpu/gl/GrGLPathRendering.cpp \
 	src/gpu/gl/GrGLProgram.cpp \
-	src/gpu/gl/GrGLProgramDesc.cpp \
 	src/gpu/gl/GrGLProgramDataManager.cpp \
 	src/gpu/gl/GrGLRenderTarget.cpp \
 	src/gpu/gl/GrGLStencilAttachment.cpp \
@@ -556,7 +568,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/SkGpuDevice.cpp \
 	src/gpu/SkGpuDevice_drawTexture.cpp \
 	src/gpu/SkGr.cpp \
-	src/gpu/SkGrPixelRef.cpp \
 	src/image/SkImage_Gpu.cpp \
 	src/image/SkSurface_Gpu.cpp \
 	src/gpu/gl/GrGLDefaultInterface_native.cpp \
@@ -566,6 +577,8 @@ LOCAL_SRC_FILES := \
 	src/gpu/vk/GrVkCaps.cpp \
 	src/gpu/vk/GrVkCommandBuffer.cpp \
 	src/gpu/vk/GrVkDescriptorPool.cpp \
+	src/gpu/vk/GrVkDescriptorSet.cpp \
+	src/gpu/vk/GrVkDescriptorSetManager.cpp \
 	src/gpu/vk/GrVkExtensions.cpp \
 	src/gpu/vk/GrVkFramebuffer.cpp \
 	src/gpu/vk/GrVkGpu.cpp \
@@ -580,7 +593,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/vk/GrVkPipelineStateBuilder.cpp \
 	src/gpu/vk/GrVkPipelineStateCache.cpp \
 	src/gpu/vk/GrVkPipelineStateDataManager.cpp \
-	src/gpu/vk/GrVkProgramDesc.cpp \
 	src/gpu/vk/GrVkRenderPass.cpp \
 	src/gpu/vk/GrVkRenderTarget.cpp \
 	src/gpu/vk/GrVkResourceProvider.cpp \
@@ -604,7 +616,6 @@ LOCAL_SRC_FILES := \
 	src/images/SkPNGImageEncoder.cpp \
 	src/images/SkImageEncoder.cpp \
 	src/images/SkImageEncoder_Factory.cpp \
-	src/images/SkARGBImageEncoder.cpp \
 	src/images/SkJPEGWriteUtility.cpp \
 	src/images/SkMovie.cpp \
 	src/images/SkGIFMovie.cpp \
@@ -613,15 +624,17 @@ LOCAL_SRC_FILES := \
 	src/pdf/SkPDFBitmap.cpp \
 	src/pdf/SkPDFCanon.cpp \
 	src/pdf/SkPDFCanvas.cpp \
+	src/pdf/SkPDFConvertType1FontStream.cpp \
 	src/pdf/SkPDFDevice.cpp \
 	src/pdf/SkPDFDocument.cpp \
 	src/pdf/SkPDFFont.cpp \
 	src/pdf/SkPDFFormXObject.cpp \
 	src/pdf/SkPDFGraphicState.cpp \
+	src/pdf/SkPDFMakeCIDGlyphWidthsArray.cpp \
+	src/pdf/SkPDFMakeToUnicodeCmap.cpp \
 	src/pdf/SkPDFMetadata.cpp \
 	src/pdf/SkPDFResourceDict.cpp \
 	src/pdf/SkPDFShader.cpp \
-	src/pdf/SkPDFStream.cpp \
 	src/pdf/SkPDFTypes.cpp \
 	src/pdf/SkPDFUtils.cpp \
 	src/core/SkForceCPlusPlusLinking.cpp \
@@ -641,17 +654,18 @@ LOCAL_SRC_FILES := \
 	src/ports/SkFontMgr_android.cpp \
 	src/ports/SkFontMgr_android_parser.cpp \
 	src/ports/SkFontMgr_custom.cpp \
+	src/ports/SkFontMgr_FontConfigInterface.cpp \
 	src/ports/SkDebug_android.cpp \
 	src/sfnt/SkOTTable_name.cpp \
 	src/sfnt/SkOTUtils.cpp \
 	src/utils/SkBase64.cpp \
 	src/utils/SkBitmapSourceDeserializer.cpp \
-	src/utils/SkBitSet.cpp \
 	src/utils/SkBoundaryPatch.cpp \
 	src/utils/SkFrontBufferedStream.cpp \
 	src/utils/SkCamera.cpp \
 	src/utils/SkCanvasStack.cpp \
 	src/utils/SkCanvasStateUtils.cpp \
+	src/utils/SkCurveMeasure.cpp \
 	src/utils/SkDashPath.cpp \
 	src/utils/SkDeferredCanvas.cpp \
 	src/utils/SkDumpCanvas.cpp \
@@ -661,7 +675,6 @@ LOCAL_SRC_FILES := \
 	src/utils/SkMatrix22.cpp \
 	src/utils/SkMeshUtils.cpp \
 	src/utils/SkMultiPictureDocument.cpp \
-	src/utils/SkNinePatch.cpp \
 	src/utils/SkNWayCanvas.cpp \
 	src/utils/SkNullCanvas.cpp \
 	src/utils/SkOSFile.cpp \
@@ -672,7 +685,7 @@ LOCAL_SRC_FILES := \
 	src/utils/SkPatchGrid.cpp \
 	src/utils/SkPatchUtils.cpp \
 	src/utils/SkRGBAToYUV.cpp \
-	src/utils/SkRTConf.cpp \
+	src/utils/SkShadowPaintFilterCanvas.cpp \
 	src/utils/SkTextBox.cpp \
 	src/utils/SkTextureCompressor.cpp \
 	src/utils/SkTextureCompressor_ASTC.cpp \
@@ -690,6 +703,7 @@ LOCAL_SRC_FILES := \
 	src/sksl/SkSLCompiler.cpp \
 	src/sksl/SkSLIRGenerator.cpp \
 	src/sksl/SkSLParser.cpp \
+	src/sksl/SkSLGLSLCodeGenerator.cpp \
 	src/sksl/SkSLSPIRVCodeGenerator.cpp \
 	src/sksl/SkSLUtil.cpp \
 	src/sksl/ir/SkSLSymbolTable.cpp \
@@ -738,11 +752,13 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/src/sfnt \
 	$(LOCAL_PATH)/src/image \
 	$(LOCAL_PATH)/src/opts \
+	$(LOCAL_PATH)/src/pipe \
 	$(LOCAL_PATH)/include/gpu \
 	$(LOCAL_PATH)/src/gpu \
 	$(LOCAL_PATH)/include/effects \
 	$(LOCAL_PATH)/include/client/android \
 	$(LOCAL_PATH)/src/effects \
+	$(LOCAL_PATH)/src/gpu/effects \
 	$(LOCAL_PATH)/src/sksl \
 	frameworks/native/vulkan/include \
 	$(LOCAL_PATH)/tools/viewer/sk_app \
@@ -750,15 +766,14 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/third_party/etc1 \
 	$(LOCAL_PATH)/third_party/ktx \
 	$(LOCAL_PATH)/src/lazy \
-	external/expat/lib \
 	external/freetype/include \
+	external/expat/lib \
 	$(LOCAL_PATH)/include/utils/win \
 	$(LOCAL_PATH)/src/ports \
 	external/sfntly/cpp/src \
 	external/zlib \
 	external/dng_sdk \
-	external/piex \
-	$(LOCAL_PATH)/include
+	external/piex
 
 LOCAL_EXPORT_C_INCLUDE_DIRS := \
 	$(LOCAL_PATH)/src/sksl \
@@ -814,6 +829,7 @@ LOCAL_SRC_FILES_x86 += \
 	src/opts/SkBitmapProcState_opts_SSSE3.cpp \
 	src/opts/SkOpts_ssse3.cpp \
 	src/opts/SkOpts_sse41.cpp \
+	src/opts/SkOpts_sse42.cpp \
 	src/opts/SkOpts_avx.cpp
 
 LOCAL_CFLAGS_x86 += \
@@ -827,6 +843,7 @@ LOCAL_SRC_FILES_x86_64 += \
 	src/opts/SkBitmapProcState_opts_SSSE3.cpp \
 	src/opts/SkOpts_ssse3.cpp \
 	src/opts/SkOpts_sse41.cpp \
+	src/opts/SkOpts_sse42.cpp \
 	src/opts/SkOpts_avx.cpp
 
 LOCAL_CFLAGS_mips += \
@@ -852,7 +869,8 @@ LOCAL_SRC_FILES_arm64 += \
 	src/opts/SkBlitMask_opts_arm.cpp \
 	src/opts/SkBlitMask_opts_arm_neon.cpp \
 	src/opts/SkBlitRow_opts_arm.cpp \
-	src/opts/SkBlitRow_opts_arm_neon.cpp
+	src/opts/SkBlitRow_opts_arm_neon.cpp \
+	src/opts/SkOpts_crc32.cpp
 
 LOCAL_MODULE_CLASS := STATIC_LIBRARIES
 include $(BUILD_STATIC_LIBRARY)

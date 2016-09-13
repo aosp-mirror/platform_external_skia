@@ -95,10 +95,11 @@ public:
      *      failure to decode the image.
      *      If the PNG does not contain unknown chunks, the SkPngChunkReader
      *      will not be used or modified.
-     *
-     *  Will take a ref if it returns a codec, else will not affect the data.
      */
-    static SkCodec* NewFromData(SkData*, SkPngChunkReader* = NULL);
+    static SkCodec* NewFromData(sk_sp<SkData>, SkPngChunkReader* = NULL);
+    static SkCodec* NewFromData(SkData* data, SkPngChunkReader* reader) {
+        return NewFromData(sk_ref_sp(data), reader);
+    }
 
     virtual ~SkCodec();
 
@@ -108,13 +109,6 @@ public:
     const SkImageInfo& getInfo() const { return fSrcInfo; }
 
     const SkEncodedInfo& getEncodedInfo() const { return fEncodedInfo; }
-
-    /**
-     *  Returns the color space associated with the codec.
-     *  Does not affect ownership.
-     *  Might be NULL.
-     */
-    SkColorSpace* getColorSpace() const { return fColorSpace.get(); }
 
     enum Origin {
         kTopLeft_Origin     = 1, // Default
@@ -292,6 +286,12 @@ public:
      *         A size that does not match getInfo() implies a request
      *         to scale. If the generator cannot perform this scale,
      *         it will return kInvalidScale.
+     *
+     *         If the info contains a non-null SkColorSpace, the codec
+     *         will perform the appropriate color space transformation.
+     *         If the caller passes in the same color space that was
+     *         reported by the codec, the color space transformation is
+     *         a no-op.
      *
      *  If info is kIndex8_SkColorType, then the caller must provide storage for up to 256
      *  SkPMColor values in ctable. On success the generator must copy N colors into that storage,
@@ -527,6 +527,15 @@ protected:
             sk_sp<SkColorSpace> = nullptr,
             Origin = kTopLeft_Origin);
 
+    /**
+     *  Takes ownership of SkStream*
+     *  Allows the subclass to set the recommended SkImageInfo
+     */
+    SkCodec(const SkEncodedInfo&,
+            const SkImageInfo&,
+            SkStream*,
+            Origin = kTopLeft_Origin);
+
     virtual SkISize onGetScaledDimensions(float /*desiredScale*/) const {
         // By default, scaling is not supported.
         return this->getInfo().dimensions();
@@ -592,30 +601,30 @@ protected:
      * On an incomplete input, getPixels() and getScanlines() will fill any uninitialized
      * scanlines.  This allows the subclass to indicate what value to fill with.
      *
-     * @param colorType Destination color type.
+     * @param dstInfo   Describes the destination.
      * @return          The value with which to fill uninitialized pixels.
      *
-     * Note that we can interpret the return value as an SkPMColor, a 16-bit 565 color,
-     * an 8-bit gray color, or an 8-bit index into a color table, depending on the color
-     * type.
+     * Note that we can interpret the return value as a 64-bit Float16 color, a SkPMColor,
+     * a 16-bit 565 color, an 8-bit gray color, or an 8-bit index into a color table,
+     * depending on the color type.
      */
-    uint32_t getFillValue(SkColorType colorType) const {
-        return this->onGetFillValue(colorType);
+    uint64_t getFillValue(const SkImageInfo& dstInfo) const {
+        return this->onGetFillValue(dstInfo);
     }
 
     /**
      * Some subclasses will override this function, but this is a useful default for the color
-     * types that we support.  Note that for color types that do not use the full 32-bits,
+     * types that we support.  Note that for color types that do not use the full 64-bits,
      * we will simply take the low bits of the fill value.
      *
+     * The defaults are:
+     * kRGBA_F16_SkColorType: Transparent or Black, depending on the src alpha type
      * kN32_SkColorType: Transparent or Black, depending on the src alpha type
      * kRGB_565_SkColorType: Black
      * kGray_8_SkColorType: Black
      * kIndex_8_SkColorType: First color in color table
      */
-    virtual uint32_t onGetFillValue(SkColorType /*colorType*/) const {
-        return kOpaque_SkAlphaType == fSrcInfo.alphaType() ? SK_ColorBLACK : SK_ColorTRANSPARENT;
-    }
+    virtual uint64_t onGetFillValue(const SkImageInfo& dstInfo) const;
 
     /**
      * Get method for the input stream
@@ -662,7 +671,6 @@ private:
     const SkImageInfo           fSrcInfo;
     SkAutoTDelete<SkStream>     fStream;
     bool                        fNeedsRewind;
-    sk_sp<SkColorSpace>         fColorSpace;
     const Origin                fOrigin;
 
     // These fields are only meaningful during scanline decodes.

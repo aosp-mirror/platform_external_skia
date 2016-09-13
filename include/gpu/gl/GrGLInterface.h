@@ -155,6 +155,7 @@ public:
         GrGLFunction<GrGLDrawElementsProc> fDrawElements;
         GrGLFunction<GrGLDrawElementsIndirectProc> fDrawElementsIndirect;
         GrGLFunction<GrGLDrawElementsInstancedProc> fDrawElementsInstanced;
+        GrGLFunction<GrGLDrawRangeElementsProc> fDrawRangeElements;
         GrGLFunction<GrGLEnableProc> fEnable;
         GrGLFunction<GrGLEnableVertexAttribArrayProc> fEnableVertexAttribArray;
         GrGLFunction<GrGLEndQueryProc> fEndQuery;
@@ -459,6 +460,9 @@ public:
         GrGLFunction<GrGLPushDebugGroupProc> fPushDebugGroup;
         GrGLFunction<GrGLPopDebugGroupProc> fPopDebugGroup;
         GrGLFunction<GrGLObjectLabelProc> fObjectLabel;
+
+        /* EXT_window_rectangles */
+        GrGLFunction<GrGLWindowRectanglesProc> fWindowRectangles;
 
         /* EGL functions */
         GrGLFunction<GrEGLCreateImageProc> fEGLCreateImage;

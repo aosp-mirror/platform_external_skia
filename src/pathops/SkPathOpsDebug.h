@@ -37,7 +37,7 @@
         if (!SkPathOpsDebug::ValidWind(x)) strcpy(x##Str, "?"); \
         else SK_SNPRINTF(x##Str, sizeof(x##Str), "%d", x)
 
-#define DEBUG_UNDER_DEVELOPMENT 01
+#define DEBUG_UNDER_DEVELOPMENT 1
 
 #if FORCE_RELEASE
 
@@ -49,6 +49,7 @@
 #define DEBUG_ANGLE 0
 #define DEBUG_ASSEMBLE 0
 #define DEBUG_COINCIDENCE 0
+#define DEBUG_COINCIDENCE_ORDER 0
 #define DEBUG_COINCIDENCE_VERBOSE 0
 #define DEBUG_CUBIC_BINARY_SEARCH 0
 #define DEBUG_CUBIC_SPLIT 0
@@ -67,7 +68,6 @@
 #define DEBUG_WINDING 0
 #define DEBUG_WINDING_AT_T 0
 
-
 #else
 
 #define DEBUG_ACTIVE_OP 1
@@ -78,6 +78,7 @@
 #define DEBUG_ANGLE 1
 #define DEBUG_ASSEMBLE 1
 #define DEBUG_COINCIDENCE 01
+#define DEBUG_COINCIDENCE_ORDER 0  // tight arc quads may generate out-of-order coincdence spans
 #define DEBUG_COINCIDENCE_VERBOSE 01
 #define DEBUG_CUBIC_BINARY_SEARCH 0
 #define DEBUG_CUBIC_SPLIT 1
@@ -101,11 +102,9 @@
 #ifdef SK_RELEASE
     #define SkDEBUGRELEASE(a, b) b
     #define SkDEBUGPARAMS(...)
-    #define SkDEBUGCODE_(...)
 #else
     #define SkDEBUGRELEASE(a, b) a
     #define SkDEBUGPARAMS(...) , __VA_ARGS__
-    #define SkDEBUGCODE_(...) __VA_ARGS__  // temporary until SkDEBUGCODE is fixed
 #endif
 
 #if DEBUG_VALIDATE == 0
@@ -156,6 +155,20 @@
 #if DEBUG_SHOW_TEST_NAME
 #include "SkTLS.h"
 #endif
+
+// Tests with extreme numbers may fail, but all other tests should never fail.
+#define FAIL_IF(cond) \
+        do { bool fail = (cond); SkOPASSERT(!fail); if (fail) return false; } while (false)
+
+#define FAIL_WITH_NULL_IF(cond) \
+        do { bool fail = (cond); SkOPASSERT(!fail); if (fail) return nullptr; } while (false)
+
+// Some functions serve two masters: one allows the function to fail, the other expects success
+// always. If abort is true, tests with normal numbers may not fail and assert if they do so.
+// If abort is false, both normal and extreme numbers may return false without asserting.
+#define RETURN_FALSE_IF(abort, cond) \
+        do { bool fail = (cond); SkOPASSERT(!(abort) || !fail); if (fail) return false; \
+        } while (false)
 
 class SkPathOpsDebug {
 public:

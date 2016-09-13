@@ -32,9 +32,12 @@ void GrVkImage::setImageLayout(const GrVkGpu* gpu, VkImageLayout newLayout,
     SkASSERT(VK_IMAGE_LAYOUT_UNDEFINED != newLayout &&
              VK_IMAGE_LAYOUT_PREINITIALIZED != newLayout);
     VkImageLayout currentLayout = this->currentLayout();
-    // Is this reasonable? Could someone want to keep the same layout but use the masks to force
-    // a barrier on certain things?
-    if (newLayout == currentLayout) {
+
+    // If the old and new layout are the same, there is no reason to put in a barrier since the
+    // operations used for each layout are implicitly synchronized with eachother. The one exception
+    // is if the layout is GENERAL. In this case the image could have been used for any operation so
+    // we must respect the barrier.
+    if (newLayout == currentLayout && VK_IMAGE_LAYOUT_GENERAL != currentLayout) {
         return;
     }
 
@@ -44,7 +47,7 @@ void GrVkImage::setImageLayout(const GrVkGpu* gpu, VkImageLayout newLayout,
     VkImageAspectFlags aspectFlags = vk_format_to_aspect_flags(fInfo.fFormat);
     VkImageMemoryBarrier imageMemoryBarrier = {
         VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,          // sType
-        NULL,                                            // pNext
+        nullptr,                                         // pNext
         srcAccessMask,                                   // outputMask
         dstAccessMask,                                   // inputMask
         currentLayout,                                   // oldLayout

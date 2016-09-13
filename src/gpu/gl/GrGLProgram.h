@@ -10,7 +10,7 @@
 #define GrGLProgram_DEFINED
 
 #include "GrGLContext.h"
-#include "GrGLProgramDesc.h"
+#include "GrProgramDesc.h"
 #include "GrGLTexture.h"
 #include "GrGLProgramDataManager.h"
 #include "glsl/GrGLSLProgramDataManager.h"

@@ -1170,10 +1170,25 @@ static SkPoint* subdivide(const SkConic& src, SkPoint pts[], int level) {
 
 int SkConic::chopIntoQuadsPOW2(SkPoint pts[], int pow2) const {
     SkASSERT(pow2 >= 0);
+    *pts = fPts[0];
+    SkDEBUGCODE(SkPoint* endPts);
+    if (pow2 == kMaxConicToQuadPOW2) {  // If an extreme weight generates many quads ...
+        SkConic dst[2];
+        this->chop(dst);
+        // check to see if the first chop generates a pair of lines
+        if (dst[0].fPts[1].equalsWithinTolerance(dst[0].fPts[2])
+                && dst[1].fPts[0].equalsWithinTolerance(dst[1].fPts[1])) {
+            pts[1] = pts[2] = pts[3] = dst[0].fPts[1];  // set ctrl == end to make lines
+            pts[4] = dst[1].fPts[2];
+            pow2 = 1;
+            SkDEBUGCODE(endPts = &pts[5]);
+            goto commonFinitePtCheck;
+        }
+    }
+    SkDEBUGCODE(endPts = ) subdivide(*this, pts + 1, pow2);
+commonFinitePtCheck:
     const int quadCount = 1 << pow2;
     const int ptCount = 2 * quadCount + 1;
-    *pts = fPts[0];
-    SkDEBUGCODE(SkPoint* endPts =) subdivide(*this, pts + 1, pow2);
     SkASSERT(endPts - pts == ptCount);
     if (!SkPointsAreFinite(pts, ptCount)) {
         // if we generated a non-finite, pin ourselves to the middle of the hull,
@@ -1337,8 +1352,10 @@ int SkConic::BuildUnitArc(const SkVector& uStart, const SkVector& uStop, SkRotat
         //
         const SkScalar cosThetaOver2 = SkScalarSqrt((1 + dot) / 2);
         offCurve.setLength(SkScalarInvert(cosThetaOver2));
-        dst[conicCount].set(lastQ, offCurve, finalP, cosThetaOver2);
-        conicCount += 1;
+        if (!lastQ.equalsWithinTolerance(offCurve)) {
+            dst[conicCount].set(lastQ, offCurve, finalP, cosThetaOver2);
+            conicCount += 1;
+        } 
     }
 
     // now handle counter-clockwise and the initial unitStart rotation

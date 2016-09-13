@@ -106,9 +106,13 @@ void SkImage::preroll(GrContext* ctx) const {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
+SkAlphaType SkImage::alphaType() const {
+    return as_IB(this)->onAlphaType();
+}
+
 sk_sp<SkShader> SkImage::makeShader(SkShader::TileMode tileX, SkShader::TileMode tileY,
                                     const SkMatrix* localMatrix) const {
-    return SkImageShader::Make(this, tileX, tileY, localMatrix);
+    return SkImageShader::Make(sk_ref_sp(const_cast<SkImage*>(this)), tileX, tileY, localMatrix);
 }
 
 #ifdef SK_SUPPORT_LEGACY_CREATESHADER_PTR
@@ -134,7 +138,7 @@ SkData* SkImage::encode(SkPixelSerializer* serializer) const {
         SkASSERT(defaultSerializer.get());
         effectiveSerializer = defaultSerializer.get();
     }
-    SkAutoTUnref<SkData> encoded(this->refEncoded());
+    sk_sp<SkData> encoded(this->refEncoded());
     if (encoded && effectiveSerializer->useEncodedData(encoded->data(), encoded->size())) {
         return encoded.release();
     }
@@ -292,25 +296,7 @@ sk_sp<SkImage> SkImage::MakeFromBitmap(const SkBitmap& bm) {
         return nullptr;
     }
 
-#if SK_SUPPORT_GPU
-    if (GrTexture* tex = pr->getTexture()) {
-        SkAutoTUnref<GrTexture> unrefCopy;
-        if (!bm.isImmutable()) {
-            tex = GrDeepCopyTexture(tex, SkBudgeted::kNo);
-            if (nullptr == tex) {
-                return nullptr;
-            }
-            unrefCopy.reset(tex);
-        }
-        const SkImageInfo info = bm.info();
-        return sk_make_sp<SkImage_Gpu>(info.width(), info.height(), bm.getGenerationID(),
-                                       info.alphaType(), tex, sk_ref_sp(info.colorSpace()),
-                                       SkBudgeted::kNo);
-    }
-#endif
-
-    // This will check for immutable (share or copy)
-    return SkMakeImageFromRasterBitmap(bm);
+    return SkMakeImageFromRasterBitmap(bm, kIfMutable_SkCopyPixelsMode);
 }
 
 bool SkImage::asLegacyBitmap(SkBitmap* bitmap, LegacyBitmapMode mode) const {
@@ -321,7 +307,7 @@ bool SkImage_Base::onAsLegacyBitmap(SkBitmap* bitmap, LegacyBitmapMode mode) con
     // As the base-class, all we can do is make a copy (regardless of mode).
     // Subclasses that want to be more optimal should override.
     SkImageInfo info = this->onImageInfo().makeColorType(kN32_SkColorType)
-            .makeAlphaType(this->isOpaque() ? kOpaque_SkAlphaType : kPremul_SkAlphaType);
+            .makeAlphaType(this->alphaType());
     if (!bitmap->tryAllocPixels(info)) {
         return false;
     }
@@ -396,6 +382,11 @@ sk_sp<SkImage> SkImage::MakeTextureFromPixmap(GrContext*, const SkPixmap&, SkBud
     return nullptr;
 }
 
+sk_sp<SkImage> MakeTextureFromMipMap(GrContext*, const SkImageInfo&, const GrMipLevel* texels,
+                                     int mipLevelCount, SkBudgeted, SkSourceGammaTreatment) {
+    return nullptr;
+}
+
 sk_sp<SkImage> SkImage::MakeFromTexture(GrContext*, const GrBackendTextureDesc&, SkAlphaType,
                                         sk_sp<SkColorSpace>, TextureReleaseProc, ReleaseContext) {
     return nullptr;
@@ -403,7 +394,8 @@ sk_sp<SkImage> SkImage::MakeFromTexture(GrContext*, const GrBackendTextureDesc&,
 
 size_t SkImage::getDeferredTextureImageData(const GrContextThreadSafeProxy&,
                                             const DeferredTextureImageUsageParams[],
-                                            int paramCnt, void* buffer) const {
+                                            int paramCnt, void* buffer,
+                                            SkSourceGammaTreatment treatment) const {
     return 0;
 }
 
@@ -500,4 +492,29 @@ SkImage* SkImage::NewFromDeferredTextureImageData(GrContext* ctx, const void* da
 sk_sp<SkImage> MakeTextureFromMipMap(GrContext*, const SkImageInfo&, const GrMipLevel* texels,
                                      int mipLevelCount, SkBudgeted) {
     return nullptr;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+#include "SkImageDeserializer.h"
+
+sk_sp<SkImage> SkImageDeserializer::makeFromData(SkData* data, const SkIRect* subset) {
+    return SkImage::MakeFromEncoded(sk_ref_sp(data), subset);
+}
+sk_sp<SkImage> SkImageDeserializer::makeFromMemory(const void* data, size_t length,
+                                                   const SkIRect* subset) {
+    return SkImage::MakeFromEncoded(SkData::MakeWithCopy(data, length), subset);
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+void SkImage_pinAsTexture(const SkImage* image, GrContext* ctx) {
+    SkASSERT(image);
+    SkASSERT(ctx);
+    as_IB(image)->onPinAsTexture(ctx);
+}
+
+void SkImage_unpinAsTexture(const SkImage* image, GrContext* ctx) {
+    SkASSERT(image);
+    SkASSERT(ctx);
+    as_IB(image)->onUnpinAsTexture(ctx);
 }

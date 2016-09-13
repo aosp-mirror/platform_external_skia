@@ -8,6 +8,8 @@
 #include "gm.h"
 #include "SkBlurDrawLooper.h"
 #include "SkBlurMask.h"
+#include "SkColorFilter.h"
+#include "SkMaskFilter.h"
 #include "SkPath.h"
 
 namespace skiagm {
@@ -85,7 +87,7 @@ protected:
                                      SkBlurDrawLooper::kHighQuality_BlurFlag),
         };
 
-        static const struct {
+        constexpr struct {
             SkColor fColor;
             SkScalar fStrokeWidth;
         } gRec[] = {

@@ -9,8 +9,8 @@
 #define GrVkResource_DEFINED
 
 #include "SkAtomics.h"
-#include "SkTDynamicHash.h"
 #include "SkRandom.h"
+#include "SkTHash.h"
 
 class GrVkGpu;
 
@@ -38,25 +38,26 @@ class GrVkResource : SkNoncopyable {
 public:
     // Simple refCount tracing, to ensure that everything ref'ed is unref'ed.
 #ifdef SK_TRACE_VK_RESOURCES
-    static const uint32_t& GetKey(const GrVkResource& r) { return r.fKey; }
-    static uint32_t Hash(const uint32_t& k) { return k; }
+    struct Hash {
+        uint32_t operator()(const GrVkResource* const& r) const {
+            SkASSERT(r);
+            return r->fKey;
+        }
+    };
 
     class Trace {
     public:
         ~Trace() {
-            if (fHash.count()) {
-                SkTDynamicHash<GrVkResource, uint32_t>::Iter iter(&fHash);
-                for (; !iter.done(); ++iter) {
-                    (*iter).dumpInfo();
-                }
-            }
-            SkASSERT(0 == fHash.count());
+            fHashSet.foreach([](const GrVkResource* r) {
+                r->dumpInfo();
+            });
+            SkASSERT(0 == fHashSet.count());
         }
-        void add(GrVkResource* r) { fHash.add(r); }
-        void remove(const GrVkResource* r) { fHash.remove(GetKey(*r)); }
+        void add(const GrVkResource* r) { fHashSet.add(r); }
+        void remove(const GrVkResource* r) { fHashSet.remove(r); }
 
     private:
-        SkTDynamicHash<GrVkResource, uint32_t> fHash;
+        SkTHashSet<const GrVkResource*, GrVkResource::Hash> fHashSet;
     };
     static Trace  fTrace;
 
@@ -195,13 +196,14 @@ private:
 class GrVkRecycledResource : public GrVkResource {
 public:
     // When recycle is called and there is only one ref left on the resource, we will signal that
-    // the resource can be recycled for reuse. This function will always unref the object. Thus
-    // if the object is recycled it should be ref'd inside the onRecycle call.
+    // the resource can be recycled for reuse. If the sublass (or whoever is managing this resource)
+    // decides not to recycle the objects, it is their responsibility to call unref on the object.
     void recycle(GrVkGpu* gpu) const {
         if (this->unique()) {
             this->onRecycle(gpu);
+        } else {
+            this->unref(gpu);
         }
-        this->unref(gpu);
     }
 
 private:

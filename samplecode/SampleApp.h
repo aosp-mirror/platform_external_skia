@@ -13,10 +13,13 @@
 #include "SkPicture.h"
 #include "SkPictureRecorder.h"
 #include "SkScalar.h"
+#include "SkStream.h"
 #include "SkTDArray.h"
 #include "SkTouchGesture.h"
 #include "SkWindow.h"
 #include "timer/Timer.h"
+
+#include "SkPipe.h"
 
 class GrContext;
 class GrRenderTarget;
@@ -74,7 +77,7 @@ public:
 
         // called before drawing. should install correct device
         // type on the canvas. Will skip drawing if returns false.
-        virtual SkSurface* createSurface(DeviceType dType, SampleWindow* win) = 0;
+        virtual sk_sp<SkSurface> makeSurface(DeviceType dType, SampleWindow* win) = 0;
 
         // called after drawing, should get the results onto the
         // screen.
@@ -90,7 +93,7 @@ public:
         virtual GrContext* getGrContext() = 0;
 
         // return the GrRenderTarget backing gpu devices (nullptr if not built with GPU support)
-        virtual GrRenderTarget* getGrRenderTarget() = 0;
+        virtual int numColorSamples() const = 0;
 
         // return the color depth of the output device
         virtual int getColorBits() = 0;
@@ -102,13 +105,13 @@ public:
     SampleWindow(void* hwnd, int argc, char** argv, DeviceManager*);
     virtual ~SampleWindow();
 
-    SkSurface* createSurface() override {
-        SkSurface* surface = nullptr;
+    sk_sp<SkSurface> makeSurface() override {
+        sk_sp<SkSurface> surface;
         if (fDevManager) {
-            surface = fDevManager->createSurface(fDeviceType, this);
+            surface = fDevManager->makeSurface(fDeviceType, this);
         }
-        if (nullptr == surface) {
-            surface = this->INHERITED::createSurface();
+        if (!surface) {
+            surface = this->INHERITED::makeSurface();
         }
         return surface;
     }
@@ -164,6 +167,10 @@ private:
     class DefaultDeviceManager;
 
     int fCurrIndex;
+
+    std::unique_ptr<SkDynamicMemoryWStream> fPipeStream;
+    SkPipeSerializer        fPipeSerializer;
+    SkPipeDeserializer      fPipeDeserializer;
 
     SkPictureRecorder fRecorder;
     SkAutoTDelete<SkCanvas> fFlagsFilterCanvas;

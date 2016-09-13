@@ -8,6 +8,7 @@
 #ifndef GrColorSpaceXform_DEFINED
 #define GrColorSpaceXform_DEFINED
 
+#include "GrColor.h"
 #include "SkMatrix44.h"
 #include "SkRefCnt.h"
 
@@ -18,11 +19,22 @@ class SkColorSpace;
   */
 class GrColorSpaceXform : public SkRefCnt {
 public:
-    GrColorSpaceXform(const SkMatrix44& srcToDst) : fSrcToDst(srcToDst) {}
+    GrColorSpaceXform(const SkMatrix44& srcToDst);
 
     static sk_sp<GrColorSpaceXform> Make(SkColorSpace* src, SkColorSpace* dst);
 
     const SkMatrix44& srcToDst() { return fSrcToDst; }
+
+    /**
+     * GrGLSLFragmentProcessor::GenKey() must call this and include the returned value in its
+     * computed key.
+     */
+    static uint32_t XformKey(GrColorSpaceXform* xform) {
+        // Code generation changes if there is an xform, but it otherwise constant
+        return SkToBool(xform) ? 1 : 0;
+    }
+
+    GrColor4f apply(const GrColor4f& srcColor);
 
 private:
     SkMatrix44 fSrcToDst;

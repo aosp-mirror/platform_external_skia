@@ -30,7 +30,7 @@ public:
                               GrProcessorKeyBuilder* b) {
         const GrBicubicEffect& bicubicEffect = effect.cast<GrBicubicEffect>();
         b->add32(GrTextureDomain::GLDomain::DomainKey(bicubicEffect.domain()));
-        b->add32(SkToInt(SkToBool(bicubicEffect.colorSpaceXform())));
+        b->add32(GrColorSpaceXform::XformKey(bicubicEffect.colorSpaceXform()));
     }
 
 protected:
@@ -75,7 +75,7 @@ void GrGLBicubicEffect::emitCode(EmitArgs& args) {
         GrGLSLShaderVar("c3",            kVec4f_GrSLType),
     };
     GrGLSLFPFragmentBuilder* fragBuilder = args.fFragBuilder;
-    SkString coords2D = fragBuilder->ensureFSCoords2D(args.fCoords, 0);
+    SkString coords2D = fragBuilder->ensureCoords2D(args.fTransformedCoords[0]);
     fragBuilder->emitFunction(kVec4f_GrSLType,
                               "cubicBlend",
                               SK_ARRAY_COUNT(gCubicBlendArgs),
@@ -114,7 +114,9 @@ void GrGLBicubicEffect::emitCode(EmitArgs& args) {
     SkString bicubicColor;
     bicubicColor.printf("%s(%s, f.y, s0, s1, s2, s3)", cubicBlendName.c_str(), coeff);
     if (colorSpaceHelper.getXformMatrix()) {
-        bicubicColor.appendf(" * %s", colorSpaceHelper.getXformMatrix());
+        SkString xformedColor;
+        fragBuilder->appendColorGamutXform(&xformedColor, bicubicColor.c_str(), &colorSpaceHelper);
+        bicubicColor.swap(xformedColor);
     }
     fragBuilder->codeAppendf("\t%s = %s;\n",
                              args.fOutputColor, (GrGLSLExpr4(bicubicColor.c_str()) *
@@ -132,9 +134,7 @@ void GrGLBicubicEffect::onSetData(const GrGLSLProgramDataManager& pdman,
     pdman.setMatrix4f(fCoefficientsUni, bicubicEffect.coefficients());
     fDomain.setData(pdman, bicubicEffect.domain(), texture.origin());
     if (SkToBool(bicubicEffect.colorSpaceXform())) {
-        float xformMatrix[16];
-        bicubicEffect.colorSpaceXform()->srcToDst().asColMajorf(xformMatrix);
-        pdman.setMatrix4f(fColorSpaceXformUni, xformMatrix);
+        pdman.setSkMatrix44(fColorSpaceXformUni, bicubicEffect.colorSpaceXform()->srcToDst());
     }
 }
 

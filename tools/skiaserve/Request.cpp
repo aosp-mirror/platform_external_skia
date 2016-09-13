@@ -52,7 +52,7 @@ SkBitmap* Request::getBitmapFromCanvas(SkCanvas* canvas) {
     return bmp;
 }
 
-SkData* Request::writeCanvasToPng(SkCanvas* canvas) {
+sk_sp<SkData> Request::writeCanvasToPng(SkCanvas* canvas) {
     // capture pixels
     SkAutoTDelete<SkBitmap> bmp(this->getBitmapFromCanvas(canvas));
     SkASSERT(bmp);
@@ -65,7 +65,7 @@ SkData* Request::writeCanvasToPng(SkCanvas* canvas) {
     SkDynamicMemoryWStream buffer;
     SkDrawCommand::WritePNG((const png_bytep) encodedBitmap->bytes(), bmp->width(), bmp->height(),
                             buffer, true);
-    return buffer.copyToData();
+    return buffer.detachAsData();
 }
 
 SkCanvas* Request::getCanvas() {
@@ -96,12 +96,12 @@ void Request::drawToCanvas(int n, int m) {
     fDebugCanvas->drawTo(target, n, m);
 }
 
-SkData* Request::drawToPng(int n, int m) {
+sk_sp<SkData> Request::drawToPng(int n, int m) {
     this->drawToCanvas(n, m);
     return writeCanvasToPng(this->getCanvas());
 }
 
-SkData* Request::writeOutSkp() {
+sk_sp<SkData> Request::writeOutSkp() {
     // Playback into picture recorder
     SkIRect bounds = this->getBounds();
     SkPictureRecorder recorder;
@@ -117,7 +117,7 @@ SkData* Request::writeOutSkp() {
     SkAutoTUnref<SkPixelSerializer> serializer(SkImageEncoder::CreatePixelSerializer());
     picture->serialize(&outStream, serializer);
 
-    return outStream.copyToData();
+    return outStream.detachAsData();
 }
 
 GrContext* Request::getContext() {
@@ -161,13 +161,12 @@ namespace {
 struct ColorAndProfile {
     SkColorType fColorType;
     bool fSRGB;
-    bool fGammaCorrect;
 };
 
 ColorAndProfile ColorModes[] = {
-    { kN32_SkColorType,      false, false },
-    { kN32_SkColorType,       true, true },
-    { kRGBA_F16_SkColorType, false, true },
+    { kN32_SkColorType,      false },
+    { kN32_SkColorType,       true },
+    { kRGBA_F16_SkColorType,  true },
 };
 
 }
@@ -175,25 +174,26 @@ ColorAndProfile ColorModes[] = {
 SkSurface* Request::createCPUSurface() {
     SkIRect bounds = this->getBounds();
     ColorAndProfile cap = ColorModes[fColorMode];
-    auto srgbColorSpace = SkColorSpace::NewNamed(SkColorSpace::kSRGB_Named);
+    auto colorSpace = SkColorSpace::NewNamed(SkColorSpace::kSRGB_Named);
+    if (kRGBA_F16_SkColorType == cap.fColorType) {
+        colorSpace = colorSpace->makeLinearGamma();
+    }
     SkImageInfo info = SkImageInfo::Make(bounds.width(), bounds.height(), cap.fColorType,
-                                         kPremul_SkAlphaType, cap.fSRGB ? srgbColorSpace : nullptr);
-    uint32_t flags = cap.fGammaCorrect ? SkSurfaceProps::kGammaCorrect_Flag : 0;
-    SkSurfaceProps props(flags, SkSurfaceProps::kLegacyFontHost_InitType);
-    return SkSurface::MakeRaster(info, &props).release();
+                                         kPremul_SkAlphaType, cap.fSRGB ? colorSpace : nullptr);
+    return SkSurface::MakeRaster(info).release();
 }
 
 SkSurface* Request::createGPUSurface() {
     GrContext* context = this->getContext();
     SkIRect bounds = this->getBounds();
     ColorAndProfile cap = ColorModes[fColorMode];
-    auto srgbColorSpace = SkColorSpace::NewNamed(SkColorSpace::kSRGB_Named);
+    auto colorSpace = SkColorSpace::NewNamed(SkColorSpace::kSRGB_Named);
+    if (kRGBA_F16_SkColorType == cap.fColorType) {
+        colorSpace = colorSpace->makeLinearGamma();
+    }
     SkImageInfo info = SkImageInfo::Make(bounds.width(), bounds.height(), cap.fColorType,
-                                         kPremul_SkAlphaType, cap.fSRGB ? srgbColorSpace : nullptr);
-    uint32_t flags = cap.fGammaCorrect ? SkSurfaceProps::kGammaCorrect_Flag : 0;
-    SkSurfaceProps props(flags, SkSurfaceProps::kLegacyFontHost_InitType);
-    SkSurface* surface = SkSurface::MakeRenderTarget(context, SkBudgeted::kNo, info, 0,
-                                                     &props).release();
+                                         kPremul_SkAlphaType, cap.fSRGB ? colorSpace: nullptr);
+    SkSurface* surface = SkSurface::MakeRenderTarget(context, SkBudgeted::kNo, info).release();
     return surface;
 }
 
@@ -248,7 +248,7 @@ bool Request::initPictureFromStream(SkStream* stream) {
     return true;
 }
 
-SkData* Request::getJsonOps(int n) {
+sk_sp<SkData> Request::getJsonOps(int n) {
     SkCanvas* canvas = this->getCanvas();
     Json::Value root = fDebugCanvas->toJSON(fUrlDataManager, n, canvas);
     root["mode"] = Json::Value(fGPUEnabled ? "gpu" : "cpu");
@@ -257,10 +257,10 @@ SkData* Request::getJsonOps(int n) {
     SkDynamicMemoryWStream stream;
     stream.writeText(Json::FastWriter().write(root).c_str());
 
-    return stream.copyToData();
+    return stream.detachAsData();
 }
 
-SkData* Request::getJsonBatchList(int n) {
+sk_sp<SkData> Request::getJsonBatchList(int n) {
     SkCanvas* canvas = this->getCanvas();
     SkASSERT(fGPUEnabled);
 
@@ -269,10 +269,10 @@ SkData* Request::getJsonBatchList(int n) {
     SkDynamicMemoryWStream stream;
     stream.writeText(Json::FastWriter().write(result).c_str());
 
-    return stream.copyToData();
+    return stream.detachAsData();
 }
 
-SkData* Request::getJsonInfo(int n) {
+sk_sp<SkData> Request::getJsonInfo(int n) {
     // drawTo
     SkAutoTUnref<SkSurface> surface(this->createCPUSurface());
     SkCanvas* canvas = surface->getCanvas();
@@ -290,7 +290,7 @@ SkData* Request::getJsonInfo(int n) {
     std::string json = Json::FastWriter().write(info);
 
     // We don't want the null terminator so strlen is correct
-    return SkData::NewWithCopy(json.c_str(), strlen(json.c_str()));
+    return SkData::MakeWithCopy(json.c_str(), strlen(json.c_str()));
 }
 
 SkColor Request::getPixel(int x, int y) {
@@ -301,7 +301,7 @@ SkColor Request::getPixel(int x, int y) {
 
     // Convert to format suitable for inspection
     sk_sp<SkData> encodedBitmap = sk_tools::encode_bitmap_for_png(*bitmap);
-    SkASSERT(encodedBitmap.get());
+    SkASSERT(encodedBitmap);
 
     const uint8_t* start = encodedBitmap->bytes() + ((y * bitmap->width() + x) * 4);
     SkColor result = SkColorSetARGB(start[3], start[0], start[1], start[2]);

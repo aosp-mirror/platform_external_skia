@@ -158,6 +158,23 @@ public:
             }
         }
 
+        bool contains(const SkRRect& rrect) const {
+            switch (fType) {
+                case kRect_Type:
+                    return this->getRect().contains(rrect.getBounds());
+                case kRRect_Type:
+                    // We don't currently have a generalized rrect-rrect containment.
+                    return fRRect.contains(rrect.getBounds()) || rrect == fRRect;
+                case kPath_Type:
+                    return fPath.get()->conservativelyContainsRect(rrect.getBounds());
+                case kEmpty_Type:
+                    return false;
+                default:
+                    SkDEBUGFAIL("Unexpected type.");
+                    return false;
+            }
+        }
+
         /**
          * Is the clip shape inverse filled.
          */
@@ -312,11 +329,17 @@ public:
                    bool* isIntersectionOfRects = NULL) const;
 
     /**
-     * Returns true if the input rect in device space is entirely contained
-     * by the clip. A return value of false does not guarantee that the rect
+     * Returns true if the input (r)rect in device space is entirely contained
+     * by the clip. A return value of false does not guarantee that the (r)rect
      * is not contained by the clip.
      */
-    bool quickContains(const SkRect& devRect) const;
+    bool quickContains(const SkRect& devRect) const {
+        return this->isWideOpen() || this->internalQuickContains(devRect);
+    }
+
+    bool quickContains(const SkRRect& devRRect) const {
+        return this->isWideOpen() || this->internalQuickContains(devRRect);
+    }
 
     /**
      * Flattens the clip stack into a single SkPath. Returns true if any of
@@ -339,7 +362,22 @@ public:
      * isWideOpen returns true if the clip state corresponds to the infinite
      * plane (i.e., draws are not limited at all)
      */
-    bool isWideOpen() const;
+    bool isWideOpen() const { return this->getTopmostGenID() == kWideOpenGenID; }
+
+    /**
+     * This method quickly and conservatively determines whether the entire stack is equivalent to
+     * intersection with a rrect given a bounds, where the rrect must not contain the entire bounds.
+     *
+     * @param bounds   A bounds on what will be drawn through the clip. The clip only need be
+     *                 equivalent to a intersection with a rrect for draws within the bounds. The
+     *                 returned rrect must intersect the bounds but need not be contained by the
+     *                 bounds.
+     * @param rrect    If return is true rrect will contain the rrect equivalent to the stack.
+     * @param aa       If return is true aa will indicate whether the equivalent rrect clip is
+     *                 antialiased.
+     * @return true if the stack is equivalent to a single rrect intersect clip, false otherwise.
+     */
+    bool isRRect(const SkRect& bounds, SkRRect* rrect, bool* aa) const;
 
     /**
      * The generation ID has three reserved values to indicate special
@@ -460,6 +498,9 @@ private:
     // clipDevRect and clipDevPath call. 0 is reserved to indicate an
     // invalid ID.
     static int32_t     gGenID;
+
+    bool internalQuickContains(const SkRect& devRect) const;
+    bool internalQuickContains(const SkRRect& devRRect) const;
 
     /**
      * Helper for clipDevPath, etc.
