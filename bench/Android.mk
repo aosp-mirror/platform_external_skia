@@ -446,6 +446,24 @@ LOCAL_SRC_FILES := \
 	../tools/ProcStats.cpp \
 	../tools/ThermalManager.cpp \
 	../tools/timer/Timer.cpp \
+	../experimental/svg/model/SkSVGAttribute.cpp \
+	../experimental/svg/model/SkSVGAttributeParser.cpp \
+	../experimental/svg/model/SkSVGCircle.cpp \
+	../experimental/svg/model/SkSVGContainer.cpp \
+	../experimental/svg/model/SkSVGDOM.cpp \
+	../experimental/svg/model/SkSVGEllipse.cpp \
+	../experimental/svg/model/SkSVGLine.cpp \
+	../experimental/svg/model/SkSVGLinearGradient.cpp \
+	../experimental/svg/model/SkSVGNode.cpp \
+	../experimental/svg/model/SkSVGPath.cpp \
+	../experimental/svg/model/SkSVGPoly.cpp \
+	../experimental/svg/model/SkSVGRect.cpp \
+	../experimental/svg/model/SkSVGRenderContext.cpp \
+	../experimental/svg/model/SkSVGShape.cpp \
+	../experimental/svg/model/SkSVGStop.cpp \
+	../experimental/svg/model/SkSVGSVG.cpp \
+	../experimental/svg/model/SkSVGTransformableNode.cpp \
+	../experimental/svg/model/SkSVGValue.cpp \
 	../tools/Resources.cpp \
 	../tools/sk_tool_utils.cpp \
 	../tools/sk_tool_utils_font.cpp \
@@ -467,7 +485,10 @@ LOCAL_SRC_FILES := \
 	../tools/gpu/gl/egl/CreatePlatformGLTestContext_egl.cpp \
 	../tools/gpu/vk/VkTestContext.cpp \
 	../tools/picture_utils.cpp \
-	../tools/flags/SkCommandLineFlags.cpp
+	../tools/flags/SkCommandLineFlags.cpp \
+	../src/xml/SkDOM.cpp \
+	../src/xml/SkXMLParser.cpp \
+	../src/xml/SkXMLWriter.cpp
 
 LOCAL_SHARED_LIBRARIES := \
 	liblog \
@@ -476,7 +497,8 @@ LOCAL_SHARED_LIBRARIES := \
 	libGLESv2 \
 	libEGL \
 	libvulkan \
-	libz
+	libz \
+	libexpat
 
 LOCAL_STATIC_LIBRARIES := \
 	libskia_static \
@@ -505,9 +527,12 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../src/gpu \
 	$(LOCAL_PATH)/../tools/gpu \
 	$(LOCAL_PATH)/../tools/flags \
+	$(LOCAL_PATH)/../experimental/svg/model \
+	$(LOCAL_PATH)/../include/xml \
 	$(LOCAL_PATH)/../src/fonts \
 	$(LOCAL_PATH)/../src/core \
 	$(LOCAL_PATH)/../tools \
+	external/expat/lib \
 	$(LOCAL_PATH)/../src/image \
 	$(LOCAL_PATH)/subset \
 	$(LOCAL_PATH)/../src/effects \
@@ -524,7 +549,8 @@ LOCAL_C_INCLUDES := \
 	external/libpng
 
 LOCAL_CFLAGS += \
-	-DSK_CRASH_HANDLER
+	-DSK_CRASH_HANDLER \
+	-DSK_XML
 
 LOCAL_MODULE_TAGS := \
 	tests
