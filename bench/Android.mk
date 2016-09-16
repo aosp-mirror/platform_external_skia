@@ -201,7 +201,6 @@ LOCAL_SRC_FILES := \
 	../gm/colorfilterimagefilter.cpp \
 	../gm/colorfilters.cpp \
 	../gm/colormatrix.cpp \
-	../gm/colorspacexform.cpp \
 	../gm/colortype.cpp \
 	../gm/colortypexfermode.cpp \
 	../gm/colorwheel.cpp \
@@ -534,7 +533,6 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../src/core \
 	$(LOCAL_PATH)/../tools \
 	external/expat/lib \
-	$(LOCAL_PATH)/../src/codec \
 	$(LOCAL_PATH)/../src/image \
 	$(LOCAL_PATH)/subset \
 	$(LOCAL_PATH)/../src/effects \

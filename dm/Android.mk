@@ -371,7 +371,6 @@ LOCAL_SRC_FILES := \
 	../gm/colorfilterimagefilter.cpp \
 	../gm/colorfilters.cpp \
 	../gm/colormatrix.cpp \
-	../gm/colorspacexform.cpp \
 	../gm/colortype.cpp \
 	../gm/colortypexfermode.cpp \
 	../gm/colorwheel.cpp \
