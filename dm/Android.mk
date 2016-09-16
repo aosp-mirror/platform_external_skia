@@ -109,6 +109,7 @@ LOCAL_SRC_FILES := \
 	../tests/ClipCubicTest.cpp \
 	../tests/ClipStackTest.cpp \
 	../tests/ClipperTest.cpp \
+	../tests/CodecPartialTest.cpp \
 	../tests/CodecTest.cpp \
 	../tests/ColorFilterTest.cpp \
 	../tests/ColorMatrixTest.cpp \
