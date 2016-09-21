@@ -510,6 +510,7 @@ LOCAL_SRC_FILES := \
 	../gm/patheffects.cpp \
 	../gm/pathfill.cpp \
 	../gm/pathinterior.cpp \
+	../gm/pathmaskcache.cpp \
 	../gm/pathopsinverse.cpp \
 	../gm/pathopsskpclip.cpp \
 	../gm/pathreverse.cpp \
