@@ -476,6 +476,7 @@ LOCAL_SRC_FILES := \
 	../tools/gpu/GrTest.cpp \
 	../tools/gpu/TestContext.cpp \
 	../tools/gpu/gl/GLTestContext.cpp \
+	../tools/gpu/gl/command_buffer/GLTestContext_command_buffer.cpp \
 	../tools/gpu/gl/debug/DebugGLTestContext.cpp \
 	../tools/gpu/gl/debug/GrBufferObj.cpp \
 	../tools/gpu/gl/debug/GrFrameBufferObj.cpp \
