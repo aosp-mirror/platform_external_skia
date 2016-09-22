@@ -644,7 +644,6 @@ LOCAL_SRC_FILES := \
 	src/ports/SkFontMgr_android_factory.cpp \
 	src/ports/SkGlobalInitialization_default.cpp \
 	src/ports/SkMemory_malloc.cpp \
-	src/ports/SkOSEnvironment.cpp \
 	src/ports/SkOSFile_posix.cpp \
 	src/ports/SkOSFile_stdio.cpp \
 	src/ports/SkOSLibrary_posix.cpp \
