@@ -80,6 +80,7 @@ LOCAL_SRC_FILES := \
 	../tests/PathOpsTestCommon.cpp \
 	../tests/PathOpsThreadedCommon.cpp \
 	../tests/PathOpsThreeWayTest.cpp \
+	../tests/PathOpsTigerTest.cpp \
 	../tests/PathOpsTightBoundsTest.cpp \
 	../tests/PathOpsTypesTest.cpp \
 	../tests/SubsetPath.cpp \
