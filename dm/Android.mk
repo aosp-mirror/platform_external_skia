@@ -42,6 +42,7 @@ LOCAL_SRC_FILES := \
 	../tests/PathOpsBuildUseTest.cpp \
 	../tests/PathOpsConicIntersectionTest.cpp \
 	../tests/PathOpsConicLineIntersectionTest.cpp \
+	../tests/PathOpsConicQuadIntersectionTest.cpp \
 	../tests/PathOpsCubicConicIntersectionTest.cpp \
 	../tests/PathOpsCubicIntersectionTest.cpp \
 	../tests/PathOpsCubicIntersectionTestData.cpp \
