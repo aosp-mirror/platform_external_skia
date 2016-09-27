@@ -144,12 +144,14 @@ class SK_API SkRefCnt : public SkRefCntBase { };
 
 #define SkRefCnt_SafeAssign(dst, src)   \
     do {                                \
-        typedef std::remove_reference<decltype(dst)>::type T;  \
-        T old_dst = *const_cast<T volatile *>(&dst); \
+        typedef typename std::remove_reference<decltype(dst)>::type \
+                SkRefCntPtrT;  \
+        SkRefCntPtrT old_dst = *const_cast<SkRefCntPtrT volatile *>(&dst); \
         if (src) src->ref();            \
         if (old_dst) old_dst->unref();          \
-        if (old_dst != *const_cast<T volatile *>(&dst)) { \
-            SkDebugf("Detected racing Skia calls at %s:%d\n", __FILE__, __LINE__); \
+        if (old_dst != *const_cast<SkRefCntPtrT volatile *>(&dst)) { \
+            SkDebugf("Detected racing Skia calls at %s:%d\n", \
+                    __FILE__, __LINE__); \
         } \
         dst = src;                      \
     } while (0)
