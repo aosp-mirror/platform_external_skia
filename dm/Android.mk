@@ -204,6 +204,7 @@ LOCAL_SRC_FILES := \
 	../tests/MipMapTest.cpp \
 	../tests/OSPathTest.cpp \
 	../tests/OnceTest.cpp \
+	../tests/OverAlignedTest.cpp \
 	../tests/PDFDeflateWStreamTest.cpp \
 	../tests/PDFDocumentTest.cpp \
 	../tests/PDFGlyphsToUnicodeTest.cpp \
