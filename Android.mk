@@ -831,7 +831,8 @@ LOCAL_SRC_FILES_x86 += \
 	src/opts/SkOpts_ssse3.cpp \
 	src/opts/SkOpts_sse41.cpp \
 	src/opts/SkOpts_sse42.cpp \
-	src/opts/SkOpts_avx.cpp
+	src/opts/SkOpts_avx.cpp \
+	src/opts/SkOpts_hsw.cpp
 
 LOCAL_CFLAGS_x86 += \
 	-DqDNGBigEndian=0
@@ -845,7 +846,8 @@ LOCAL_SRC_FILES_x86_64 += \
 	src/opts/SkOpts_ssse3.cpp \
 	src/opts/SkOpts_sse41.cpp \
 	src/opts/SkOpts_sse42.cpp \
-	src/opts/SkOpts_avx.cpp
+	src/opts/SkOpts_avx.cpp \
+	src/opts/SkOpts_hsw.cpp
 
 ifeq ($(TARGET_ARCH_VARIANT), mips32r2dspr2-fp)
 LOCAL_CFLAGS_mips += \
