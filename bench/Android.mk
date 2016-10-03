@@ -148,6 +148,7 @@ LOCAL_SRC_FILES := \
 	pack_int_uint16_t_Bench.cpp \
 	../gm/OverStroke.cpp \
 	../gm/SkLinearBitmapPipelineGM.cpp \
+	../gm/aaa.cpp \
 	../gm/aaclip.cpp \
 	../gm/aarectmodes.cpp \
 	../gm/aaxfermodes.cpp \

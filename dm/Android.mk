@@ -321,6 +321,7 @@ LOCAL_SRC_FILES := \
 	DMSrcSinkAndroid.cpp \
 	../gm/OverStroke.cpp \
 	../gm/SkLinearBitmapPipelineGM.cpp \
+	../gm/aaa.cpp \
 	../gm/aaclip.cpp \
 	../gm/aarectmodes.cpp \
 	../gm/aaxfermodes.cpp \
