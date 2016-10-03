@@ -224,7 +224,6 @@ LOCAL_SRC_FILES := \
 	../gm/dashcircle.cpp \
 	../gm/dashcubics.cpp \
 	../gm/dashing.cpp \
-	../gm/dcshader.cpp \
 	../gm/deferredtextureimage.cpp \
 	../gm/degeneratesegments.cpp \
 	../gm/dftext.cpp \
