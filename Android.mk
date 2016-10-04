@@ -155,7 +155,6 @@ LOCAL_SRC_FILES := \
 	src/core/SkDrawLooper.cpp \
 	src/core/SkEdgeBuilder.cpp \
 	src/core/SkEdgeClipper.cpp \
-	src/core/SkAnalyticEdge.cpp \
 	src/core/SkEdge.cpp \
 	src/core/SkError.cpp \
 	src/core/SkFilterProc.cpp \
@@ -252,7 +251,6 @@ LOCAL_SRC_FILES := \
 	src/core/SkScalar.cpp \
 	src/core/SkScalerContext.cpp \
 	src/core/SkScan.cpp \
-	src/core/SkScan_AAAPath.cpp \
 	src/core/SkScan_AntiPath.cpp \
 	src/core/SkScan_Antihair.cpp \
 	src/core/SkScan_Hairline.cpp \
