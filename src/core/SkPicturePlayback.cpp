@@ -82,7 +82,7 @@ void get_text(SkReadBuffer* reader, TextContainer* text) {
 
 void SkPicturePlayback::draw(SkCanvas* canvas,
                              SkPicture::AbortCallback* callback,
-                             const SkReadBuffer* buffer) {
+                             SkReadBuffer* buffer) {
     AutoResetOpID aroi(this);
     SkASSERT(0 == fCurOffset);
 
@@ -108,8 +108,16 @@ void SkPicturePlayback::draw(SkCanvas* canvas,
         fCurOffset = reader->offset();
         uint32_t size;
         DrawType op = ReadOpAndSize(reader, &size);
+        if (!reader->validate(op > UNUSED && op <= LAST_DRAWTYPE_ENUM)) {
+            return;
+        }
 
         this->handleOp(reader, op, size, canvas, initialMatrix);
+    }
+
+    // need to propagate invalid state to the parent reader
+    if (buffer) {
+        buffer->validate(reader->isValid());
     }
 }
 
@@ -126,11 +134,11 @@ void SkPicturePlayback::handleOp(SkReadBuffer* reader,
         case CLIP_PATH: {
             const SkPath& path = fPictureData->getPath(reader); 
             uint32_t packed = reader->readInt(); 
-            SkRegion::Op regionOp = ClipParams_unpackRegionOp(packed);
+            SkCanvas::ClipOp clipOp = ClipParams_unpackRegionOp(packed);
             bool doAA = ClipParams_unpackDoAA(packed);
             size_t offsetToRestore = reader->readInt();
             SkASSERT(!offsetToRestore || offsetToRestore >= reader->offset());
-            canvas->clipPath(path, regionOp, doAA);
+            canvas->clipPath(path, clipOp, doAA);
             if (canvas->isClipEmpty() && offsetToRestore) {
                 reader->skip(offsetToRestore - reader->offset());
             }
@@ -139,10 +147,10 @@ void SkPicturePlayback::handleOp(SkReadBuffer* reader,
             SkRegion region;
             reader->readRegion(&region);
             uint32_t packed = reader->readInt();
-            SkRegion::Op regionOp = ClipParams_unpackRegionOp(packed);
+            SkCanvas::ClipOp clipOp = ClipParams_unpackRegionOp(packed);
             size_t offsetToRestore = reader->readInt();
             SkASSERT(!offsetToRestore || offsetToRestore >= reader->offset());
-            canvas->clipRegion(region, regionOp);
+            canvas->clipRegion(region, clipOp);
             if (canvas->isClipEmpty() && offsetToRestore) {
                 reader->skip(offsetToRestore - reader->offset());
             }
@@ -151,11 +159,11 @@ void SkPicturePlayback::handleOp(SkReadBuffer* reader,
             SkRect rect;
             reader->readRect(&rect);
             uint32_t packed = reader->readInt();
-            SkRegion::Op regionOp = ClipParams_unpackRegionOp(packed);
+            SkCanvas::ClipOp clipOp = ClipParams_unpackRegionOp(packed);
             bool doAA = ClipParams_unpackDoAA(packed);
             size_t offsetToRestore = reader->readInt();
             SkASSERT(!offsetToRestore || offsetToRestore >= reader->offset());
-            canvas->clipRect(rect, regionOp, doAA);
+            canvas->clipRect(rect, clipOp, doAA);
             if (canvas->isClipEmpty() && offsetToRestore) {
                 reader->skip(offsetToRestore - reader->offset());
             }
@@ -164,11 +172,11 @@ void SkPicturePlayback::handleOp(SkReadBuffer* reader,
             SkRRect rrect;
             reader->readRRect(&rrect);
             uint32_t packed = reader->readInt();
-            SkRegion::Op regionOp = ClipParams_unpackRegionOp(packed);
+            SkCanvas::ClipOp clipOp = ClipParams_unpackRegionOp(packed);
             bool doAA = ClipParams_unpackDoAA(packed);
             size_t offsetToRestore = reader->readInt();
             SkASSERT(!offsetToRestore || offsetToRestore >= reader->offset());
-            canvas->clipRRect(rrect, regionOp, doAA);
+            canvas->clipRRect(rrect, clipOp, doAA);
             if (canvas->isClipEmpty() && offsetToRestore) {
                 reader->skip(offsetToRestore - reader->offset());
             }
@@ -319,6 +327,9 @@ void SkPicturePlayback::handleOp(SkReadBuffer* reader,
             int flagCount = reader->readInt();
             lattice.fFlags = (0 == flagCount) ? nullptr : (const SkCanvas::Lattice::Flags*)
                     reader->skip(SkAlign4(flagCount * sizeof(SkCanvas::Lattice::Flags)));
+            SkIRect src;
+            reader->readIRect(&src);
+            lattice.fBounds = &src;
             SkRect dst;
             reader->readRect(&dst);
             canvas->drawImageLattice(image, lattice, dst, paint);
@@ -420,7 +431,7 @@ void SkPicturePlayback::handleOp(SkReadBuffer* reader,
             get_text(reader, &text);
             size_t points = reader->readInt();
             const SkPoint* pos = (const SkPoint*)reader->skip(points * sizeof(SkPoint));
-            if (paint) {
+            if (paint && text.text()) {
                 canvas->drawPosText(text.text(), text.length(), pos, *paint);
             }
         } break;
@@ -434,7 +445,7 @@ void SkPicturePlayback::handleOp(SkReadBuffer* reader,
             const SkScalar bottom = reader->readScalar();
             SkRect clip;
             canvas->getClipBounds(&clip);
-            if (top < clip.fBottom && bottom > clip.fTop && paint) {
+            if (top < clip.fBottom && bottom > clip.fTop && paint && text.text()) {
                 canvas->drawPosText(text.text(), text.length(), pos, *paint);
             }
         } break;
@@ -445,7 +456,7 @@ void SkPicturePlayback::handleOp(SkReadBuffer* reader,
             size_t xCount = reader->readInt();
             const SkScalar constY = reader->readScalar();
             const SkScalar* xpos = (const SkScalar*)reader->skip(xCount * sizeof(SkScalar));
-            if (paint) {
+            if (paint && text.text()) {
                 canvas->drawPosTextH(text.text(), text.length(), xpos, constY, *paint);
             }
         } break;
@@ -460,7 +471,7 @@ void SkPicturePlayback::handleOp(SkReadBuffer* reader,
             const SkScalar constY = *xpos++;
             SkRect clip;
             canvas->getClipBounds(&clip);
-            if (top < clip.fBottom && bottom > clip.fTop && paint) {
+            if (top < clip.fBottom && bottom > clip.fTop && paint && text.text()) {
                 canvas->drawPosTextH(text.text(), text.length(), xpos, constY, *paint);
             }
         } break;
@@ -501,7 +512,7 @@ void SkPicturePlayback::handleOp(SkReadBuffer* reader,
             get_text(reader, &text);
             SkScalar x = reader->readScalar();
             SkScalar y = reader->readScalar();
-            if (paint) {
+            if (paint && text.text()) {
                 canvas->drawText(text.text(), text.length(), x, y, *paint);
             }
         } break;
@@ -527,7 +538,7 @@ void SkPicturePlayback::handleOp(SkReadBuffer* reader,
             canvas->getClipBounds(&clip);
             float top = ptr[2];
             float bottom = ptr[3];
-            if (top < clip.fBottom && bottom > clip.fTop && paint) {
+            if (top < clip.fBottom && bottom > clip.fTop && paint && text.text()) {
                 canvas->drawText(text.text(), text.length(), ptr[0], ptr[1], *paint);
             }
         } break;
@@ -538,7 +549,7 @@ void SkPicturePlayback::handleOp(SkReadBuffer* reader,
             const SkPath& path = fPictureData->getPath(reader);
             SkMatrix matrix;
             reader->readMatrix(&matrix);
-            if (paint) {
+            if (paint && text.text()) {
                 canvas->drawTextOnPath(text.text(), text.length(), path, &matrix, *paint);
             }
         } break;
@@ -553,7 +564,9 @@ void SkPicturePlayback::handleOp(SkReadBuffer* reader,
             if (flags & DRAW_TEXT_RSXFORM_HAS_CULL) {
                 cull = (const SkRect*)reader->skip(sizeof(SkRect));
             }
-            canvas->drawTextRSXform(text.text(), text.length(), xform, cull, *paint);
+            if (text.text()) {
+                canvas->drawTextRSXform(text.text(), text.length(), xform, cull, *paint);
+            }
         } break;
         case DRAW_VERTICES: {
             sk_sp<SkXfermode> xfer;

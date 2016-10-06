@@ -34,6 +34,7 @@
 #include "Timer.h"
 #include "picture_utils.h"
 #include "sk_tool_utils.h"
+#include "SkScan.h"
 
 #ifdef SK_PDF_IMAGE_STATS
 extern void SkPDFImageDumpStats();
@@ -72,8 +73,6 @@ DEFINE_int32(shards, 1, "We're splitting source data into this many shards.");
 DEFINE_int32(shard,  0, "Which shard do I run?");
 
 DEFINE_string(mskps, "", "Directory to read mskps from, or a single mskp file.");
-
-DEFINE_string(svgs, "", "Directory to read SVGs from, or a single SVG file.");
 
 using namespace DM;
 using sk_gpu_test::GrContextFactory;
@@ -825,21 +824,7 @@ static Sink* create_sink(const SkCommandLineConfig* config) {
     if (gpu_supported()) {
         if (const SkCommandLineConfigGpu* gpuConfig = config->asConfigGpu()) {
             GrContextFactory::ContextType contextType = gpuConfig->getContextType();
-            GrContextFactory::ContextOptions contextOptions =
-                    GrContextFactory::kNone_ContextOptions;
-            if (gpuConfig->getUseNVPR()) {
-                contextOptions = static_cast<GrContextFactory::ContextOptions>(
-                    contextOptions | GrContextFactory::kEnableNVPR_ContextOptions);
-            }
-            if (gpuConfig->getUseInstanced()) {
-                contextOptions = static_cast<GrContextFactory::ContextOptions>(
-                    contextOptions | GrContextFactory::kUseInstanced_ContextOptions);
-            }
-            if (SkColorAndColorSpaceAreGammaCorrect(gpuConfig->getColorType(),
-                                                    gpuConfig->getColorSpace())) {
-                contextOptions = static_cast<GrContextFactory::ContextOptions>(
-                    contextOptions | GrContextFactory::kRequireSRGBSupport_ContextOptions);
-            }
+            GrContextFactory::ContextOptions contextOptions = gpuConfig->getContextOptions();
             GrContextFactory testFactory;
             if (!testFactory.get(contextType, contextOptions)) {
                 info("WARNING: can not create GPU context for config '%s'. "
@@ -1290,6 +1275,10 @@ int dm_main() {
     setbuf(stdout, nullptr);
     setup_crash_handler();
 
+    if (FLAGS_analyticAA) {
+        gSkUseAnalyticAA = true;
+    }
+
     if (FLAGS_verbose) {
         gVLog = stderr;
     } else if (!FLAGS_writePath.isEmpty()) {
@@ -1429,7 +1418,7 @@ void RunWithGPUTestContexts(GrContextTestFn* test, GrContextTypeFilterFn* contex
             (*test)(reporter, ctxInfo);
         }
         ctxInfo = factory->getContextInfo(contextType,
-                                          GrContextFactory::kEnableNVPR_ContextOptions);
+                                          GrContextFactory::ContextOptions::kEnableNVPR);
         if (ctxInfo.grContext()) {
             (*test)(reporter, ctxInfo);
         }

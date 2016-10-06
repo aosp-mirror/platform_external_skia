@@ -42,6 +42,7 @@ LOCAL_SRC_FILES := \
 	../tests/PathOpsBuildUseTest.cpp \
 	../tests/PathOpsConicIntersectionTest.cpp \
 	../tests/PathOpsConicLineIntersectionTest.cpp \
+	../tests/PathOpsConicQuadIntersectionTest.cpp \
 	../tests/PathOpsCubicConicIntersectionTest.cpp \
 	../tests/PathOpsCubicIntersectionTest.cpp \
 	../tests/PathOpsCubicIntersectionTestData.cpp \
@@ -79,6 +80,7 @@ LOCAL_SRC_FILES := \
 	../tests/PathOpsTestCommon.cpp \
 	../tests/PathOpsThreadedCommon.cpp \
 	../tests/PathOpsThreeWayTest.cpp \
+	../tests/PathOpsTigerTest.cpp \
 	../tests/PathOpsTightBoundsTest.cpp \
 	../tests/PathOpsTypesTest.cpp \
 	../tests/SubsetPath.cpp \
@@ -109,6 +111,7 @@ LOCAL_SRC_FILES := \
 	../tests/ClipCubicTest.cpp \
 	../tests/ClipStackTest.cpp \
 	../tests/ClipperTest.cpp \
+	../tests/CodecPartialTest.cpp \
 	../tests/CodecTest.cpp \
 	../tests/ColorFilterTest.cpp \
 	../tests/ColorMatrixTest.cpp \
@@ -201,6 +204,7 @@ LOCAL_SRC_FILES := \
 	../tests/MipMapTest.cpp \
 	../tests/OSPathTest.cpp \
 	../tests/OnceTest.cpp \
+	../tests/OverAlignedTest.cpp \
 	../tests/PDFDeflateWStreamTest.cpp \
 	../tests/PDFDocumentTest.cpp \
 	../tests/PDFGlyphsToUnicodeTest.cpp \
@@ -317,6 +321,7 @@ LOCAL_SRC_FILES := \
 	DMSrcSinkAndroid.cpp \
 	../gm/OverStroke.cpp \
 	../gm/SkLinearBitmapPipelineGM.cpp \
+	../gm/aaa.cpp \
 	../gm/aaclip.cpp \
 	../gm/aarectmodes.cpp \
 	../gm/aaxfermodes.cpp \
@@ -370,6 +375,7 @@ LOCAL_SRC_FILES := \
 	../gm/colorfilterimagefilter.cpp \
 	../gm/colorfilters.cpp \
 	../gm/colormatrix.cpp \
+	../gm/colorspacexform.cpp \
 	../gm/colortype.cpp \
 	../gm/colortypexfermode.cpp \
 	../gm/colorwheel.cpp \
@@ -391,7 +397,6 @@ LOCAL_SRC_FILES := \
 	../gm/dashcircle.cpp \
 	../gm/dashcubics.cpp \
 	../gm/dashing.cpp \
-	../gm/dcshader.cpp \
 	../gm/deferredtextureimage.cpp \
 	../gm/degeneratesegments.cpp \
 	../gm/dftext.cpp \
@@ -508,6 +513,7 @@ LOCAL_SRC_FILES := \
 	../gm/patheffects.cpp \
 	../gm/pathfill.cpp \
 	../gm/pathinterior.cpp \
+	../gm/pathmaskcache.cpp \
 	../gm/pathopsinverse.cpp \
 	../gm/pathopsskpclip.cpp \
 	../gm/pathreverse.cpp \
@@ -648,6 +654,7 @@ LOCAL_SRC_FILES := \
 	../tools/gpu/GrTest.cpp \
 	../tools/gpu/TestContext.cpp \
 	../tools/gpu/gl/GLTestContext.cpp \
+	../tools/gpu/gl/command_buffer/GLTestContext_command_buffer.cpp \
 	../tools/gpu/gl/debug/DebugGLTestContext.cpp \
 	../tools/gpu/gl/debug/GrBufferObj.cpp \
 	../tools/gpu/gl/debug/GrFrameBufferObj.cpp \

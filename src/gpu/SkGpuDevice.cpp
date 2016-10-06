@@ -53,8 +53,6 @@
 #define ASSERT_SINGLE_OWNER \
     SkDEBUGCODE(GrSingleOwner::AutoEnforce debug_SingleOwner(fContext->debugSingleOwner());)
 
-enum { kDefaultImageFilterCacheSize = 32 * 1024 * 1024 };
-
 #if 0
     extern bool (*gShouldDrawProc)();
     #define CHECK_SHOULD_DRAW(draw)                             \
@@ -191,7 +189,8 @@ sk_sp<SkSpecialImage> SkGpuDevice::filterTexture(const SkDraw& draw,
     matrix.postTranslate(SkIntToScalar(-left), SkIntToScalar(-top));
     const SkIRect clipBounds = draw.fRC->getBounds().makeOffset(-left, -top);
     SkAutoTUnref<SkImageFilterCache> cache(this->getImageFilterCache());
-    SkImageFilter::Context ctx(matrix, clipBounds, cache.get());
+    SkImageFilter::OutputProperties outputProperties(fDrawContext->getColorSpace());
+    SkImageFilter::Context ctx(matrix, clipBounds, cache.get(), outputProperties);
 
     return filter->filterImage(srcImg, ctx, offset);
 }
@@ -1502,7 +1501,7 @@ void SkGpuDevice::drawProducerLattice(const SkDraw& draw, GrTextureProducer* pro
     }
 
     std::unique_ptr<SkLatticeIter> iter(
-            new SkLatticeIter(producer->width(), producer->height(), lattice, dst));
+            new SkLatticeIter(lattice, dst));
     fDrawContext->drawImageLattice(fClip, grPaint, *draw.fMatrix, producer->width(),
                                    producer->height(), std::move(iter), dst);
 }
@@ -1818,7 +1817,7 @@ SkImageFilterCache* SkGpuDevice::getImageFilterCache() {
     ASSERT_SINGLE_OWNER
     // We always return a transient cache, so it is freed after each
     // filter traversal.
-    return SkImageFilterCache::Create(kDefaultImageFilterCacheSize);
+    return SkImageFilterCache::Create(SkImageFilterCache::kDefaultTransientSize);
 }
 
 #endif

@@ -50,13 +50,25 @@ sk_sp<GrColorSpaceXform> GrColorSpaceXform::Make(SkColorSpace* src, SkColorSpace
     }
 
     SkMatrix44 srcToDst(SkMatrix44::kUninitialized_Constructor);
-    srcToDst.setConcat(as_CSB(dst)->fromXYZD50(), src->toXYZD50());
+    srcToDst.setConcat(as_CSB(dst)->fromXYZD50(), as_CSB(src)->toXYZD50());
 
     if (matrix_is_almost_identity(srcToDst)) {
         return nullptr;
     }
 
     return sk_make_sp<GrColorSpaceXform>(srcToDst);
+}
+
+bool GrColorSpaceXform::Equals(const GrColorSpaceXform* a, const GrColorSpaceXform* b) {
+    if (a == b) {
+        return true;
+    }
+
+    if (!a || !b) {
+        return false;
+    }
+
+    return a->fSrcToDst == b->fSrcToDst;
 }
 
 GrColor4f GrColorSpaceXform::apply(const GrColor4f& srcColor) {

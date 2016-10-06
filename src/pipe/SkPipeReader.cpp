@@ -149,13 +149,13 @@ static SkMatrix read_sparse_matrix(SkReadBuffer& reader, SkMatrix::TypeMask tm) 
  *      pad zeros       : 8
  */
 static SkPaint read_paint(SkReadBuffer& reader) {
+    SkPaint paint;
+
     uint32_t packedFlags = reader.read32();
     uint32_t extra = reader.read32();
     unsigned nondef = extra >> 16;
-    SkXfermode::Mode mode = (SkXfermode::Mode)((extra >> 8) & 0xFF);
-    SkASSERT((extra & 0xFF) == 0);
-
-    SkPaint paint;
+    paint.setBlendMode(SkBlendMode((extra >> 8) & 0xFF));
+    SkASSERT((extra & 0xFF) == 0);  // zero pad byte
 
     packedFlags >>= 2;  // currently unused
     paint.setTextEncoding((SkPaint::TextEncoding)(packedFlags & 3));    packedFlags >>= 2;
@@ -180,16 +180,11 @@ static SkPaint read_paint(SkReadBuffer& reader) {
     CHECK_SET_FLATTENABLE(Typeface);
     CHECK_SET_FLATTENABLE(PathEffect);
     CHECK_SET_FLATTENABLE(Shader);
-    CHECK_SET_FLATTENABLE(Xfermode);
     CHECK_SET_FLATTENABLE(MaskFilter);
     CHECK_SET_FLATTENABLE(ColorFilter);
     CHECK_SET_FLATTENABLE(Rasterizer);
     CHECK_SET_FLATTENABLE(ImageFilter);
     CHECK_SET_FLATTENABLE(DrawLooper);
-
-    if (!(nondef & kXfermode_NonDef)) {
-        paint.setXfermodeMode(mode);
-    }
 
     return paint;
 }
@@ -268,21 +263,21 @@ static void concat_handler(SkPipeReader& reader, uint32_t packedVerb, SkCanvas* 
 
 static void clipRect_handler(SkPipeReader& reader, uint32_t packedVerb, SkCanvas* canvas) {
     SkASSERT(SkPipeVerb::kClipRect == unpack_verb(packedVerb));
-    SkRegion::Op op = (SkRegion::Op)(unpack_verb_extra(packedVerb) >> 1);
+    SkCanvas::ClipOp op = (SkCanvas::ClipOp)(unpack_verb_extra(packedVerb) >> 1);
     bool isAA = unpack_verb_extra(packedVerb) & 1;
     canvas->clipRect(*skip<SkRect>(reader), op, isAA);
 }
 
 static void clipRRect_handler(SkPipeReader& reader, uint32_t packedVerb, SkCanvas* canvas) {
     SkASSERT(SkPipeVerb::kClipRRect == unpack_verb(packedVerb));
-    SkRegion::Op op = (SkRegion::Op)(unpack_verb_extra(packedVerb) >> 1);
+    SkCanvas::ClipOp op = (SkCanvas::ClipOp)(unpack_verb_extra(packedVerb) >> 1);
     bool isAA = unpack_verb_extra(packedVerb) & 1;
     canvas->clipRRect(read_rrect(reader), op, isAA);
 }
 
 static void clipPath_handler(SkPipeReader& reader, uint32_t packedVerb, SkCanvas* canvas) {
     SkASSERT(SkPipeVerb::kClipPath == unpack_verb(packedVerb));
-    SkRegion::Op op = (SkRegion::Op)(unpack_verb_extra(packedVerb) >> 1);
+    SkCanvas::ClipOp op = (SkCanvas::ClipOp)(unpack_verb_extra(packedVerb) >> 1);
     bool isAA = unpack_verb_extra(packedVerb) & 1;
     SkPath path;
     reader.readPath(&path);
@@ -291,7 +286,7 @@ static void clipPath_handler(SkPipeReader& reader, uint32_t packedVerb, SkCanvas
 
 static void clipRegion_handler(SkPipeReader& reader, uint32_t packedVerb, SkCanvas* canvas) {
     SkASSERT(SkPipeVerb::kClipRegion == unpack_verb(packedVerb));
-    SkRegion::Op op = (SkRegion::Op)(unpack_verb_extra(packedVerb) >> 1);
+    SkCanvas::ClipOp op = (SkCanvas::ClipOp)(unpack_verb_extra(packedVerb) >> 1);
     SkRegion region;
     reader.readRegion(&region);
     canvas->clipRegion(region, op);
@@ -559,6 +554,7 @@ static void drawImageLattice_handler(SkPipeReader& reader, uint32_t packedVerb, 
     } else {
         lattice.fFlags = nullptr;
     }
+    lattice.fBounds = skip<SkIRect>(reader);
     const SkRect* dst = skip<SkRect>(reader);
 
     SkPaint paintStorage, *paint = nullptr;
@@ -689,7 +685,7 @@ static sk_sp<SkImage> make_from_encoded(const sk_sp<SkData>& data) {
     return image;
 }
 
-static void defineImage_handler(SkPipeReader& reader, uint32_t packedVerb, SkCanvas* canvas) {
+static void defineImage_handler(SkPipeReader& reader, uint32_t packedVerb, SkCanvas*) {
     SkASSERT(SkPipeVerb::kDefineImage == unpack_verb(packedVerb));
     SkPipeInflator* inflator = (SkPipeInflator*)reader.getInflator();
     uint32_t extra = unpack_verb_extra(packedVerb);
@@ -846,42 +842,64 @@ void SkPipeDeserializer::setTypefaceDeserializer(SkTypefaceDeserializer* tfd) {
     fImpl->fTFDeserializer = tfd;
 }
 
-sk_sp<SkPicture> SkPipeDeserializer::readPicture(const void* data, size_t size) {
-    if (size < sizeof(uint32_t) + sizeof(SkRect)) {
-        return nullptr;
-    }
-
-    uint32_t header;
-    memcpy(&header, data, 4); size -= 4; data = (const char*)data + 4;
-    if (kDefinePicture_ExtPipeVerb != header) {
-        return nullptr;
-    }
-    SkRect cull;
-    memcpy(&cull, data, sizeof(SkRect));
-    size -= sizeof(SkRect); data = (const char*)data + sizeof(SkRect);
-
-    SkPictureRecorder recorder;
-    this->playback(data, size, recorder.beginRecording(cull));
-    return recorder.finishRecordingAsPicture();
-}
-
 sk_sp<SkImage> SkPipeDeserializer::readImage(const void* data, size_t size) {
     if (size < sizeof(uint32_t)) {
+        SkDebugf("-------- data length too short for readImage %d\n", size);
         return nullptr;
     }
 
-    uint32_t header;
-    memcpy(&header, data, 4); size -= 4; data = (const char*)data + 4;
-    if (kDefineImage_ExtPipeVerb != header) {
+    const uint32_t* ptr = (const uint32_t*)data;
+    uint32_t packedVerb = *ptr++;
+    size -= 4;
+
+    if (SkPipeVerb::kDefineImage == unpack_verb(packedVerb)) {
+        SkPipeInflator inflator(&fImpl->fImages, &fImpl->fPictures,
+                                &fImpl->fTypefaces, &fImpl->fFactories,
+                                fImpl->fTFDeserializer);
+        SkPipeReader reader(this, ptr, size);
+        reader.setInflator(&inflator);
+        defineImage_handler(reader, packedVerb, nullptr);
+        packedVerb = reader.read32();  // read the next verb
+    }
+    if (SkPipeVerb::kWriteImage != unpack_verb(packedVerb)) {
+        SkDebugf("-------- unexpected verb for readImage %d\n", unpack_verb(packedVerb));
+        return nullptr;
+    }
+    int index = unpack_verb_extra(packedVerb);
+    if (0 == index) {
+        return nullptr; // writer failed
+    }
+    return sk_ref_sp(fImpl->fImages.get(index - 1));
+}
+
+sk_sp<SkPicture> SkPipeDeserializer::readPicture(const void* data, size_t size) {
+    if (size < sizeof(uint32_t)) {
+        SkDebugf("-------- data length too short for readPicture %d\n", size);
         return nullptr;
     }
 
-    SkPipeInflator inflator(&fImpl->fImages, &fImpl->fPictures,
-                            &fImpl->fTypefaces, &fImpl->fFactories,
-                            fImpl->fTFDeserializer);
-    SkPipeReader reader(this, data, size);
-    reader.setInflator(&inflator);
-    return sk_sp<SkImage>(reader.readImage());
+    const uint32_t* ptr = (const uint32_t*)data;
+    uint32_t packedVerb = *ptr++;
+    size -= 4;
+
+    if (SkPipeVerb::kDefinePicture == unpack_verb(packedVerb)) {
+        SkPipeInflator inflator(&fImpl->fImages, &fImpl->fPictures,
+                                &fImpl->fTypefaces, &fImpl->fFactories,
+                                fImpl->fTFDeserializer);
+        SkPipeReader reader(this, ptr, size);
+        reader.setInflator(&inflator);
+        definePicture_handler(reader, packedVerb, nullptr);
+        packedVerb = reader.read32();  // read the next verb
+    }
+    if (SkPipeVerb::kWritePicture != unpack_verb(packedVerb)) {
+        SkDebugf("-------- unexpected verb for readPicture %d\n", unpack_verb(packedVerb));
+        return nullptr;
+    }
+    int index = unpack_verb_extra(packedVerb);
+    if (0 == index) {
+        return nullptr; // writer failed
+    }
+    return sk_ref_sp(fImpl->fPictures.get(index - 1));
 }
 
 static bool do_playback(SkPipeReader& reader, SkCanvas* canvas, int* endPictureIndex) {

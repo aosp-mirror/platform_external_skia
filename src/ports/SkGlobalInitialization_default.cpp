@@ -8,7 +8,7 @@
 #include "Sk1DPathEffect.h"
 #include "Sk2DPathEffect.h"
 #include "SkAlphaThresholdFilter.h"
-#include "SkArithmeticMode.h"
+#include "../../src/effects/SkArithmeticModePriv.h"
 #include "SkArcToPathEffect.h"
 #include "SkBitmapSourceDeserializer.h"
 #include "SkBlurDrawLooper.h"
@@ -106,6 +106,7 @@ void SkFlattenable::PrivateInitializer::InitEffects() {
 
     // ImageFilter
     SkImageFilter::InitializeFlattenables();
+    SkXfermodeImageFilter::InitializeFlattenables();
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkDilateImageFilter)
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkDisplacementMapEffect)
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkDropShadowImageFilter)
@@ -115,7 +116,6 @@ void SkFlattenable::PrivateInitializer::InitEffects() {
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkPaintImageFilter)
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkPictureImageFilter)
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkTileImageFilter)
-    SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkXfermodeImageFilter)
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkMagnifierImageFilter)
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkMatrixConvolutionImageFilter)
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkOffsetImageFilter)

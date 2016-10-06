@@ -81,7 +81,6 @@ static uint16_t compute_nondef(const SkPaint& paint, PaintUsage usage) {
         bits |= (paint.getMaskFilter()  ? kMaskFilter_NonDef : 0);
     }
 
-    bits |= (paint.getXfermode()    ? kXfermode_NonDef : 0);
     bits |= (paint.getColorFilter() ? kColorFilter_NonDef : 0);
     bits |= (paint.getImageFilter() ? kImageFilter_NonDef : 0);
     bits |= (paint.getDrawLooper()  ? kDrawLooper_NonDef : 0);
@@ -150,15 +149,8 @@ static void write_paint(SkWriteBuffer& writer, const SkPaint& paint, unsigned us
     writer.write32(packedFlags);
 
     unsigned nondef = compute_nondef(paint, (PaintUsage)usage);
-    SkXfermode::Mode mode;
-    if (SkXfermode::AsMode(paint.getXfermode(), &mode)) {
-        nondef &= ~kXfermode_NonDef;    // don't need to store a pointer since we have an enum
-    } else {
-        SkASSERT(nondef & kXfermode_NonDef);
-        mode = (SkXfermode::Mode)0;
-    }
     const uint8_t pad = 0;
-    writer.write32((nondef << 16) | ((unsigned)mode << 8) | pad);
+    writer.write32((nondef << 16) | ((unsigned)paint.getBlendMode() << 8) | pad);
 
     CHECK_WRITE_SCALAR(writer, nondef, paint, TextSize);
     CHECK_WRITE_SCALAR(writer, nondef, paint, TextScaleX);
@@ -179,7 +171,6 @@ static void write_paint(SkWriteBuffer& writer, const SkPaint& paint, unsigned us
 
     CHECK_WRITE_FLATTENABLE(writer, nondef, paint, PathEffect);
     CHECK_WRITE_FLATTENABLE(writer, nondef, paint, Shader);
-    CHECK_WRITE_FLATTENABLE(writer, nondef, paint, Xfermode);
     CHECK_WRITE_FLATTENABLE(writer, nondef, paint, MaskFilter);
     CHECK_WRITE_FLATTENABLE(writer, nondef, paint, ColorFilter);
     CHECK_WRITE_FLATTENABLE(writer, nondef, paint, Rasterizer);
@@ -318,21 +309,21 @@ void SkPipeCanvas::didSetMatrix(const SkMatrix& matrix) {
     this->INHERITED::didSetMatrix(matrix);
 }
 
-void SkPipeCanvas::onClipRect(const SkRect& rect, SkRegion::Op op, ClipEdgeStyle edgeStyle) {
+void SkPipeCanvas::onClipRect(const SkRect& rect, ClipOp op, ClipEdgeStyle edgeStyle) {
     fStream->write32(pack_verb(SkPipeVerb::kClipRect, ((unsigned)op << 1) | edgeStyle));
     fStream->write(&rect, 4 * sizeof(SkScalar));
 
     this->INHERITED::onClipRect(rect, op, edgeStyle);
 }
 
-void SkPipeCanvas::onClipRRect(const SkRRect& rrect, SkRegion::Op op, ClipEdgeStyle edgeStyle) {
+void SkPipeCanvas::onClipRRect(const SkRRect& rrect, ClipOp op, ClipEdgeStyle edgeStyle) {
     fStream->write32(pack_verb(SkPipeVerb::kClipRRect, ((unsigned)op << 1) | edgeStyle));
     write_rrect(fStream, rrect);
 
     this->INHERITED::onClipRRect(rrect, op, edgeStyle);
 }
 
-void SkPipeCanvas::onClipPath(const SkPath& path, SkRegion::Op op, ClipEdgeStyle edgeStyle) {
+void SkPipeCanvas::onClipPath(const SkPath& path, ClipOp op, ClipEdgeStyle edgeStyle) {
     SkPipeWriter writer(this);
     writer.write32(pack_verb(SkPipeVerb::kClipPath, ((unsigned)op << 1) | edgeStyle));
     writer.writePath(path);
@@ -340,7 +331,7 @@ void SkPipeCanvas::onClipPath(const SkPath& path, SkRegion::Op op, ClipEdgeStyle
     this->INHERITED::onClipPath(path, op, edgeStyle);
 }
 
-void SkPipeCanvas::onClipRegion(const SkRegion& deviceRgn, SkRegion::Op op) {
+void SkPipeCanvas::onClipRegion(const SkRegion& deviceRgn, ClipOp op) {
     SkPipeWriter writer(this);
     writer.write32(pack_verb(SkPipeVerb::kClipRegion, (unsigned)op << 1));
     writer.writeRegion(deviceRgn);
@@ -582,6 +573,8 @@ void SkPipeCanvas::onDrawImageLattice(const SkImage* image, const Lattice& latti
         SkASSERT(count > 0);
         write_pad(&writer, lattice.fFlags, count);
     }
+    SkASSERT(lattice.fBounds);
+    writer.write(&lattice.fBounds, sizeof(*lattice.fBounds));
     writer.write(&dst, sizeof(dst));
     if (paint) {
         write_paint(writer, *paint, kImage_PaintUsage);
@@ -1028,18 +1021,37 @@ void SkPipeSerializer::resetCache() {
     fImpl->fDeduper.resetCaches();
 }
 
-void SkPipeSerializer::write(SkPicture* picture, SkWStream* stream) {
-    stream->write32(kDefinePicture_ExtPipeVerb);
-    SkRect cull = picture->cullRect();
-    stream->write(&cull.fLeft, sizeof(SkRect));
-    picture->playback(this->beginWrite(cull, stream));
-    this->endWrite();
+sk_sp<SkData> SkPipeSerializer::writeImage(SkImage* image) {
+    SkDynamicMemoryWStream stream;
+    this->writeImage(image, &stream);
+    return stream.detachAsData();
 }
 
-void SkPipeSerializer::write(SkImage* image, SkWStream* stream) {
-    stream->write32(kDefineImage_ExtPipeVerb);
-    SkPipeWriter writer(stream, &fImpl->fDeduper);
-    writer.writeImage(image);
+sk_sp<SkData> SkPipeSerializer::writePicture(SkPicture* picture) {
+    SkDynamicMemoryWStream stream;
+    this->writePicture(picture, &stream);
+    return stream.detachAsData();
+}
+
+void SkPipeSerializer::writePicture(SkPicture* picture, SkWStream* stream) {
+    int index = fImpl->fDeduper.findPicture(picture);
+    if (0 == index) {
+        // Try to define the picture
+        this->beginWrite(picture->cullRect(), stream);
+        index = fImpl->fDeduper.findOrDefinePicture(picture);
+        this->endWrite();
+    }
+    stream->write32(pack_verb(SkPipeVerb::kWritePicture, index));
+}
+
+void SkPipeSerializer::writeImage(SkImage* image, SkWStream* stream) {
+    int index = fImpl->fDeduper.findImage(image);
+    if (0 == index) {
+        // Try to define the image
+        fImpl->fDeduper.setStream(stream);
+        index = fImpl->fDeduper.findOrDefineImage(image);
+    }
+    stream->write32(pack_verb(SkPipeVerb::kWriteImage, index));
 }
 
 SkCanvas* SkPipeSerializer::beginWrite(const SkRect& cull, SkWStream* stream) {
@@ -1053,4 +1065,5 @@ SkCanvas* SkPipeSerializer::beginWrite(const SkRect& cull, SkWStream* stream) {
 void SkPipeSerializer::endWrite() {
     fImpl->fCanvas->restoreToCount(1);
     fImpl->fCanvas.reset(nullptr);
+    fImpl->fDeduper.setCanvas(nullptr);
 }

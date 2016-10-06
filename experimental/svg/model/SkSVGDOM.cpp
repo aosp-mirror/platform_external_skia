@@ -149,6 +149,18 @@ bool SetLineJoinAttribute(const sk_sp<SkSVGNode>& node, SkSVGAttribute attr,
     return true;
 }
 
+bool SetSpreadMethodAttribute(const sk_sp<SkSVGNode>& node, SkSVGAttribute attr,
+                             const char* stringValue) {
+    SkSVGSpreadMethod spread;
+    SkSVGAttributeParser parser(stringValue);
+    if (!parser.parseSpreadMethod(&spread)) {
+        return false;
+    }
+
+    node->setAttribute(attr, SkSVGSpreadMethodValue(spread));
+    return true;
+}
+
 bool SetPointsAttribute(const sk_sp<SkSVGNode>& node, SkSVGAttribute attr,
                         const char* stringValue) {
     SkSVGPointsType points;
@@ -239,36 +251,38 @@ struct AttrParseInfo {
 };
 
 SortedDictionaryEntry<AttrParseInfo> gAttributeParseInfo[] = {
-    { "cx"             , { SkSVGAttribute::kCx            , SetLengthAttribute    }},
-    { "cy"             , { SkSVGAttribute::kCy            , SetLengthAttribute    }},
-    { "d"              , { SkSVGAttribute::kD             , SetPathDataAttribute  }},
-    { "fill"           , { SkSVGAttribute::kFill          , SetPaintAttribute     }},
-    { "fill-opacity"   , { SkSVGAttribute::kFillOpacity   , SetNumberAttribute    }},
-    { "height"         , { SkSVGAttribute::kHeight        , SetLengthAttribute    }},
-    { "offset"         , { SkSVGAttribute::kOffset        , SetLengthAttribute    }},
-    { "opacity"        , { SkSVGAttribute::kOpacity       , SetNumberAttribute    }},
-    { "points"         , { SkSVGAttribute::kPoints        , SetPointsAttribute    }},
-    { "r"              , { SkSVGAttribute::kR             , SetLengthAttribute    }},
-    { "rx"             , { SkSVGAttribute::kRx            , SetLengthAttribute    }},
-    { "ry"             , { SkSVGAttribute::kRy            , SetLengthAttribute    }},
-    { "stop-color"     , { SkSVGAttribute::kStopColor     , SetColorAttribute     }},
-    { "stop-opacity"   , { SkSVGAttribute::kStopOpacity   , SetNumberAttribute    }},
-    { "stroke"         , { SkSVGAttribute::kStroke        , SetPaintAttribute     }},
-    { "stroke-linecap" , { SkSVGAttribute::kStrokeLineCap , SetLineCapAttribute   }},
-    { "stroke-linejoin", { SkSVGAttribute::kStrokeLineJoin, SetLineJoinAttribute  }},
-    { "stroke-opacity" , { SkSVGAttribute::kStrokeOpacity , SetNumberAttribute    }},
-    { "stroke-width"   , { SkSVGAttribute::kStrokeWidth   , SetLengthAttribute    }},
-    { "style"          , { SkSVGAttribute::kUnknown       , SetStyleAttributes    }},
-    { "transform"      , { SkSVGAttribute::kTransform     , SetTransformAttribute }},
-    { "viewBox"        , { SkSVGAttribute::kViewBox       , SetViewBoxAttribute   }},
-    { "width"          , { SkSVGAttribute::kWidth         , SetLengthAttribute    }},
-    { "x"              , { SkSVGAttribute::kX             , SetLengthAttribute    }},
-    { "x1"             , { SkSVGAttribute::kX1            , SetLengthAttribute    }},
-    { "x2"             , { SkSVGAttribute::kX2            , SetLengthAttribute    }},
-    { "xlink:href"     , { SkSVGAttribute::kHref          , SetIRIAttribute       }},
-    { "y"              , { SkSVGAttribute::kY             , SetLengthAttribute    }},
-    { "y1"             , { SkSVGAttribute::kY1            , SetLengthAttribute    }},
-    { "y2"             , { SkSVGAttribute::kY2            , SetLengthAttribute    }},
+    { "cx"               , { SkSVGAttribute::kCx               , SetLengthAttribute       }},
+    { "cy"               , { SkSVGAttribute::kCy               , SetLengthAttribute       }},
+    { "d"                , { SkSVGAttribute::kD                , SetPathDataAttribute     }},
+    { "fill"             , { SkSVGAttribute::kFill             , SetPaintAttribute        }},
+    { "fill-opacity"     , { SkSVGAttribute::kFillOpacity      , SetNumberAttribute       }},
+    { "gradientTransform", { SkSVGAttribute::kGradientTransform, SetTransformAttribute    }},
+    { "height"           , { SkSVGAttribute::kHeight           , SetLengthAttribute       }},
+    { "offset"           , { SkSVGAttribute::kOffset           , SetLengthAttribute       }},
+    { "opacity"          , { SkSVGAttribute::kOpacity          , SetNumberAttribute       }},
+    { "points"           , { SkSVGAttribute::kPoints           , SetPointsAttribute       }},
+    { "r"                , { SkSVGAttribute::kR                , SetLengthAttribute       }},
+    { "rx"               , { SkSVGAttribute::kRx               , SetLengthAttribute       }},
+    { "ry"               , { SkSVGAttribute::kRy               , SetLengthAttribute       }},
+    { "spreadMethod"     , { SkSVGAttribute::kSpreadMethod     , SetSpreadMethodAttribute }},
+    { "stop-color"       , { SkSVGAttribute::kStopColor        , SetColorAttribute        }},
+    { "stop-opacity"     , { SkSVGAttribute::kStopOpacity      , SetNumberAttribute       }},
+    { "stroke"           , { SkSVGAttribute::kStroke           , SetPaintAttribute        }},
+    { "stroke-linecap"   , { SkSVGAttribute::kStrokeLineCap    , SetLineCapAttribute      }},
+    { "stroke-linejoin"  , { SkSVGAttribute::kStrokeLineJoin   , SetLineJoinAttribute     }},
+    { "stroke-opacity"   , { SkSVGAttribute::kStrokeOpacity    , SetNumberAttribute       }},
+    { "stroke-width"     , { SkSVGAttribute::kStrokeWidth      , SetLengthAttribute       }},
+    { "style"            , { SkSVGAttribute::kUnknown          , SetStyleAttributes       }},
+    { "transform"        , { SkSVGAttribute::kTransform        , SetTransformAttribute    }},
+    { "viewBox"          , { SkSVGAttribute::kViewBox          , SetViewBoxAttribute      }},
+    { "width"            , { SkSVGAttribute::kWidth            , SetLengthAttribute       }},
+    { "x"                , { SkSVGAttribute::kX                , SetLengthAttribute       }},
+    { "x1"               , { SkSVGAttribute::kX1               , SetLengthAttribute       }},
+    { "x2"               , { SkSVGAttribute::kX2               , SetLengthAttribute       }},
+    { "xlink:href"       , { SkSVGAttribute::kHref             , SetIRIAttribute          }},
+    { "y"                , { SkSVGAttribute::kY                , SetLengthAttribute       }},
+    { "y1"               , { SkSVGAttribute::kY1               , SetLengthAttribute       }},
+    { "y2"               , { SkSVGAttribute::kY2               , SetLengthAttribute       }},
 };
 
 SortedDictionaryEntry<sk_sp<SkSVGNode>(*)()> gTagFactories[] = {
@@ -370,26 +384,29 @@ sk_sp<SkSVGNode> construct_svg_node(const SkDOM& dom, const ConstructionContext&
 
 } // anonymous namespace
 
-SkSVGDOM::SkSVGDOM(const SkSize& containerSize)
-    : fContainerSize(containerSize) {
+SkSVGDOM::SkSVGDOM()
+    : fContainerSize(SkSize::Make(0, 0)) {
 }
 
-sk_sp<SkSVGDOM> SkSVGDOM::MakeFromDOM(const SkDOM& xmlDom, const SkSize& containerSize) {
-    sk_sp<SkSVGDOM> dom = sk_make_sp<SkSVGDOM>(containerSize);
+sk_sp<SkSVGDOM> SkSVGDOM::MakeFromDOM(const SkDOM& xmlDom) {
+    sk_sp<SkSVGDOM> dom = sk_make_sp<SkSVGDOM>();
 
     ConstructionContext ctx(&dom->fIDMapper);
     dom->fRoot = construct_svg_node(xmlDom, ctx, xmlDom.getRootNode());
 
+    // Reset the default container size to match the intrinsic SVG size.
+    dom->setContainerSize(dom->intrinsicSize());
+
     return dom;
 }
 
-sk_sp<SkSVGDOM> SkSVGDOM::MakeFromStream(SkStream& svgStream, const SkSize& containerSize) {
+sk_sp<SkSVGDOM> SkSVGDOM::MakeFromStream(SkStream& svgStream) {
     SkDOM xmlDom;
     if (!xmlDom.build(svgStream)) {
         return nullptr;
     }
 
-    return MakeFromDOM(xmlDom, containerSize);
+    return MakeFromDOM(xmlDom);
 }
 
 void SkSVGDOM::render(SkCanvas* canvas) const {
@@ -400,6 +417,20 @@ void SkSVGDOM::render(SkCanvas* canvas) const {
                                SkSVGPresentationContext());
         fRoot->render(ctx);
     }
+}
+
+SkSize SkSVGDOM::intrinsicSize() const {
+    if (!fRoot || fRoot->tag() != SkSVGTag::kSvg) {
+        return SkSize::Make(0, 0);
+    }
+
+    // Intrinsic sizes are never relative, so the viewport size is irrelevant.
+    const SkSVGLengthContext lctx(SkSize::Make(0, 0));
+    return static_cast<const SkSVGSVG*>(fRoot.get())->intrinsicSize(lctx);
+}
+
+const SkSize& SkSVGDOM::containerSize() const {
+    return fContainerSize;
 }
 
 void SkSVGDOM::setContainerSize(const SkSize& containerSize) {

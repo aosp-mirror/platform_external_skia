@@ -19,6 +19,7 @@
 #include "GrCoordTransform.h"
 #include "GrInvariantOutput.h"
 #include "SkGr.h"
+#include "SkGrPriv.h"
 #include "effects/GrTextureDomain.h"
 #include "glsl/GrGLSLFragmentProcessor.h"
 #include "glsl/GrGLSLFragmentShaderBuilder.h"
@@ -278,7 +279,18 @@ sk_sp<SkSpecialImage> SkDisplacementMapEffect::onFilterImage(SkSpecialImage* sou
     }
 
     SkIPoint displOffset = SkIPoint::Make(0, 0);
-    sk_sp<SkSpecialImage> displ(this->filterInput(0, source, ctx, &displOffset));
+    // Creation of the displacement map should happen in a non-colorspace aware context. This
+    // texture is a purely mathematical construct, so we want to just operate on the stored
+    // values. Consider:
+    // User supplies an sRGB displacement map. If we're rendering to a wider gamut, then we could
+    // end up filtering the displacement map into that gamut, which has the effect of reducing
+    // the amount of displacement that it represents (as encoded values move away from the
+    // primaries).
+    // With a more complex DAG attached to this input, it's not clear that working in ANY specific
+    // color space makes sense, so we ignore color spaces (and gamma) entirely. This may not be
+    // ideal, but it's at least consistent and predictable.
+    Context displContext(ctx.ctm(), ctx.clipBounds(), ctx.cache(), OutputProperties(nullptr));
+    sk_sp<SkSpecialImage> displ(this->filterInput(0, source, displContext, &displOffset));
     if (!displ) {
         return nullptr;
     }
@@ -331,16 +343,19 @@ sk_sp<SkSpecialImage> SkDisplacementMapEffect::onFilterImage(SkSpecialImage* sou
                                           offsetMatrix,
                                           colorTexture.get(),
                                           SkISize::Make(color->width(), color->height())));
-        paint.setPorterDuffXPFactory(SkXfermode::kSrc_Mode);
+        paint.setPorterDuffXPFactory(SkBlendMode::kSrc);
         SkMatrix matrix;
         matrix.setTranslate(-SkIntToScalar(colorBounds.x()), -SkIntToScalar(colorBounds.y()));
 
+        SkColorSpace* colorSpace = ctx.outputProperties().colorSpace();
         sk_sp<GrDrawContext> drawContext(
             context->makeDrawContext(SkBackingFit::kApprox, bounds.width(), bounds.height(),
-                                     kSkia8888_GrPixelConfig, sk_ref_sp(source->getColorSpace())));
+                                     GrRenderableConfigForColorSpace(colorSpace),
+                                     sk_ref_sp(colorSpace)));
         if (!drawContext) {
             return nullptr;
         }
+        paint.setGammaCorrect(drawContext->isGammaCorrect());
 
         drawContext->drawRect(GrNoClip(), paint, matrix, SkRect::Make(colorBounds));
 
@@ -465,10 +480,9 @@ GrDisplacementMapEffect::GrDisplacementMapEffect(
                              const SkMatrix& offsetMatrix,
                              GrTexture* color,
                              const SkISize& colorDimensions)
-    : fDisplacementTransform(kLocal_GrCoordSet, offsetMatrix, displacement,
-                             GrTextureParams::kNone_FilterMode)
+    : fDisplacementTransform(offsetMatrix, displacement, GrTextureParams::kNone_FilterMode)
     , fDisplacementAccess(displacement)
-    , fColorTransform(kLocal_GrCoordSet, color, GrTextureParams::kNone_FilterMode)
+    , fColorTransform(color, GrTextureParams::kNone_FilterMode)
     , fDomain(GrTextureDomain::MakeTexelDomain(color, SkIRect::MakeSize(colorDimensions)),
               GrTextureDomain::kDecal_Mode)
     , fColorAccess(color)

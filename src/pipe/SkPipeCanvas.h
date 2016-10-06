@@ -23,7 +23,7 @@ public:
     void reset() { fArray.reset(); }
 
     // returns the found index or 0
-    int find(const T& key) {
+    int find(const T& key) const {
         const Rec* stop = fArray.end();
         for (const Rec* curr = fArray.begin(); curr < stop; ++curr) {
             if (key == curr->fKey) {
@@ -63,6 +63,10 @@ public:
     void setCanvas(SkPipeCanvas* canvas) { fPipeCanvas = canvas; }
     void setStream(SkWStream* stream) { fStream = stream; }
     void setTypefaceSerializer(SkTypefaceSerializer* tfs) { fTFSerializer = tfs; }
+
+    // returns 0 if not found
+    int findImage(SkImage* image) const { return fImages.find(image->uniqueID()); }
+    int findPicture(SkPicture* picture) const { return fPictures.find(picture->uniqueID()); }
 
     int findOrDefineImage(SkImage*) override;
     int findOrDefinePicture(SkPicture*) override;
@@ -136,10 +140,10 @@ protected:
                               const uint16_t indices[], int indexCount,
                               const SkPaint&) override;
 
-    void onClipRect(const SkRect&, SkRegion::Op, ClipEdgeStyle) override;
-    void onClipRRect(const SkRRect&, SkRegion::Op, ClipEdgeStyle) override;
-    void onClipPath(const SkPath&, SkRegion::Op, ClipEdgeStyle) override;
-    void onClipRegion(const SkRegion&, SkRegion::Op) override;
+    void onClipRect(const SkRect&, ClipOp, ClipEdgeStyle) override;
+    void onClipRRect(const SkRRect&, ClipOp, ClipEdgeStyle) override;
+    void onClipPath(const SkPath&, ClipOp, ClipEdgeStyle) override;
+    void onClipRegion(const SkRegion&, ClipOp) override;
 
     void onDrawPicture(const SkPicture*, const SkMatrix*, const SkPaint*) override;
     void onDrawAnnotation(const SkRect&, const char[], SkData*) override;

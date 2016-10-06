@@ -2054,8 +2054,10 @@ void GrGLGpu::flushMinSampleShading(float minSampleShading) {
     }
 }
 
-bool GrGLGpu::flushGLState(const GrPipeline& pipeline, const GrPrimitiveProcessor& primProc) {
-    SkAutoTUnref<GrGLProgram> program(fProgramCache->refProgram(this, pipeline, primProc));
+bool GrGLGpu::flushGLState(const GrPipeline& pipeline, const GrPrimitiveProcessor& primProc,
+                           bool willDrawPoints) {
+    SkAutoTUnref<GrGLProgram> program(fProgramCache->refProgram(this, pipeline, primProc,
+                                                                willDrawPoints));
     if (!program) {
         GrCapsDebugf(this->caps(), "Failed to create program!\n");
         return false;
@@ -2743,11 +2745,18 @@ GrGLenum gPrimitiveType2GLMode[] = {
 
 void GrGLGpu::draw(const GrPipeline& pipeline,
                    const GrPrimitiveProcessor& primProc,
-                   const GrMesh* meshes,
+                   const GrMesh meshes[],
                    int meshCount) {
     this->handleDirtyContext();
 
-    if (!this->flushGLState(pipeline, primProc)) {
+    bool hasPoints = false;
+    for (int i = 0; i < meshCount; ++i) {
+        if (meshes[i].primitiveType() == kPoints_GrPrimitiveType) {
+            hasPoints = true;
+            break;
+        }
+    }
+    if (!this->flushGLState(pipeline, primProc, hasPoints)) {
         return;
     }
     GrPixelLocalStorageState plsState = primProc.getPixelLocalStorageState();
@@ -4684,4 +4693,20 @@ bool GrGLGpu::onMakeCopyForTextureParams(GrTexture* texture, const GrTexturePara
         }
     }
     return false;
+}
+
+GrFence SK_WARN_UNUSED_RESULT GrGLGpu::insertFence() const {
+    GrGLsync fence;
+    GL_CALL_RET(fence, FenceSync(GR_GL_SYNC_GPU_COMMANDS_COMPLETE, 0));
+    return (GrFence)fence;
+}
+
+bool GrGLGpu::waitFence(GrFence fence, uint64_t timeout) const {
+    GrGLenum result;
+    GL_CALL_RET(result, ClientWaitSync((GrGLsync)fence, GR_GL_SYNC_FLUSH_COMMANDS_BIT, timeout));
+    return (GR_GL_CONDITION_SATISFIED == result);
+}
+
+void GrGLGpu::deleteFence(GrFence fence) const {
+    GL_CALL(DeleteSync((GrGLsync)fence));
 }

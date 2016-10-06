@@ -162,7 +162,8 @@ const SkAdvancedTypefaceMetrics* SkPDFFont::GetMetrics(SkTypeface* typeface,
 }
 
 SkAdvancedTypefaceMetrics::FontType SkPDFFont::FontType(const SkAdvancedTypefaceMetrics& metrics) {
-    if (SkToBool(metrics.fFlags & SkAdvancedTypefaceMetrics::kMultiMaster_FontFlag)) {
+    if (SkToBool(metrics.fFlags & SkAdvancedTypefaceMetrics::kMultiMaster_FontFlag) ||
+        SkToBool(metrics.fFlags & SkAdvancedTypefaceMetrics::kNotEmbeddable_FontFlag)) {
         // force Type3 fallback.
         return SkAdvancedTypefaceMetrics::kOther_Font;
     }
@@ -368,9 +369,11 @@ void SkPDFType0Font::getFontSubset(SkPDFCanon* canon) {
     int ttcIndex;
     std::unique_ptr<SkStreamAsset> fontAsset(face->openStream(&ttcIndex));
     size_t fontSize = fontAsset ? fontAsset->getLength() : 0;
-    SkASSERT(fontAsset);
-    SkASSERT(fontSize > 0);
-    if (fontSize > 0) {
+    if (0 == fontSize) {
+        SkDebugf("Error: (SkTypeface)(%p)::openStream() returned "
+                 "empty stream (%p) when identified as kType1CID_Font "
+                 "or kTrueType_Font.\n", face, fontAsset.get());
+    } else {
         switch (type) {
             case SkAdvancedTypefaceMetrics::kTrueType_Font: {
                 #ifdef SK_PDF_USE_SFNTLY
@@ -727,5 +730,7 @@ bool SkPDFFont::CanEmbedTypeface(SkTypeface* typeface, SkPDFCanon* canon) {
 
 void SkPDFFont::drop() {
     fTypeface = nullptr;
+    fGlyphUsage.~SkBitSet();
+    new (&fGlyphUsage) SkBitSet(0);
     this->SkPDFDict::drop();
 }

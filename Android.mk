@@ -155,6 +155,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkDrawLooper.cpp \
 	src/core/SkEdgeBuilder.cpp \
 	src/core/SkEdgeClipper.cpp \
+	src/core/SkAnalyticEdge.cpp \
 	src/core/SkEdge.cpp \
 	src/core/SkError.cpp \
 	src/core/SkFilterProc.cpp \
@@ -251,6 +252,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkScalar.cpp \
 	src/core/SkScalerContext.cpp \
 	src/core/SkScan.cpp \
+	src/core/SkScan_AAAPath.cpp \
 	src/core/SkScan_AntiPath.cpp \
 	src/core/SkScan_Antihair.cpp \
 	src/core/SkScan_Hairline.cpp \
@@ -576,6 +578,8 @@ LOCAL_SRC_FILES := \
 	src/gpu/vk/GrVkBuffer.cpp \
 	src/gpu/vk/GrVkCaps.cpp \
 	src/gpu/vk/GrVkCommandBuffer.cpp \
+	src/gpu/vk/GrVkCopyManager.cpp \
+	src/gpu/vk/GrVkCopyPipeline.cpp \
 	src/gpu/vk/GrVkDescriptorPool.cpp \
 	src/gpu/vk/GrVkDescriptorSet.cpp \
 	src/gpu/vk/GrVkDescriptorSetManager.cpp \
@@ -643,7 +647,6 @@ LOCAL_SRC_FILES := \
 	src/ports/SkFontMgr_android_factory.cpp \
 	src/ports/SkGlobalInitialization_default.cpp \
 	src/ports/SkMemory_malloc.cpp \
-	src/ports/SkOSEnvironment.cpp \
 	src/ports/SkOSFile_posix.cpp \
 	src/ports/SkOSFile_stdio.cpp \
 	src/ports/SkOSLibrary_posix.cpp \
@@ -830,7 +833,8 @@ LOCAL_SRC_FILES_x86 += \
 	src/opts/SkOpts_ssse3.cpp \
 	src/opts/SkOpts_sse41.cpp \
 	src/opts/SkOpts_sse42.cpp \
-	src/opts/SkOpts_avx.cpp
+	src/opts/SkOpts_avx.cpp \
+	src/opts/SkOpts_hsw.cpp
 
 LOCAL_CFLAGS_x86 += \
 	-DqDNGBigEndian=0
@@ -844,8 +848,32 @@ LOCAL_SRC_FILES_x86_64 += \
 	src/opts/SkOpts_ssse3.cpp \
 	src/opts/SkOpts_sse41.cpp \
 	src/opts/SkOpts_sse42.cpp \
-	src/opts/SkOpts_avx.cpp
+	src/opts/SkOpts_avx.cpp \
+	src/opts/SkOpts_hsw.cpp
 
+ifeq ($(TARGET_ARCH_VARIANT), mips32r2dspr2-fp)
+LOCAL_CFLAGS_mips += \
+	-EL \
+	-march=mips32r2 \
+	-mdspr2
+
+LOCAL_SRC_FILES_mips += \
+	src/opts/SkBitmapProcState_opts_mips_dsp.cpp \
+	src/opts/SkBlitMask_opts_none.cpp \
+	src/opts/SkBlitRow_opts_mips_dsp.cpp
+
+else ifeq ($(TARGET_ARCH_VARIANT), mips32r2dsp-fp)
+LOCAL_CFLAGS_mips += \
+	-EL \
+	-march=mips32r2 \
+	-mdsp
+
+LOCAL_SRC_FILES_mips += \
+	src/opts/SkBitmapProcState_opts_mips_dsp.cpp \
+	src/opts/SkBlitMask_opts_none.cpp \
+	src/opts/SkBlitRow_opts_mips_dsp.cpp
+
+else
 LOCAL_CFLAGS_mips += \
 	-EL
 
@@ -853,6 +881,8 @@ LOCAL_SRC_FILES_mips += \
 	src/opts/SkBitmapProcState_opts_none.cpp \
 	src/opts/SkBlitMask_opts_none.cpp \
 	src/opts/SkBlitRow_opts_none.cpp
+
+endif
 
 LOCAL_CFLAGS_mips64 += \
 	-EL

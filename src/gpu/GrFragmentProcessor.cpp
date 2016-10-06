@@ -8,6 +8,7 @@
 #include "GrFragmentProcessor.h"
 #include "GrCoordTransform.h"
 #include "GrInvariantOutput.h"
+#include "GrPipeline.h"
 #include "GrProcOptInfo.h"
 #include "glsl/GrGLSLFragmentProcessor.h"
 #include "glsl/GrGLSLFragmentShaderBuilder.h"
@@ -56,46 +57,20 @@ GrGLSLFragmentProcessor* GrFragmentProcessor::createGLSLInstance() const {
 }
 
 void GrFragmentProcessor::addTextureAccess(const GrTextureAccess* textureAccess) {
-    // Can't add texture accesses after registering any children since their texture accesses have
-    // already been bubbled up into our fTextureAccesses array
-    SkASSERT(fChildProcessors.empty());
-
     INHERITED::addTextureAccess(textureAccess);
-    fNumTexturesExclChildren++;
 }
 
 void GrFragmentProcessor::addBufferAccess(const GrBufferAccess* bufferAccess) {
-    // Can't add buffer accesses after registering any children since their buffer accesses have
-    // already been bubbled up into our fBufferAccesses array
-    SkASSERT(fChildProcessors.empty());
-
     INHERITED::addBufferAccess(bufferAccess);
-    fNumBuffersExclChildren++;
 }
 
 void GrFragmentProcessor::addCoordTransform(const GrCoordTransform* transform) {
-    // Can't add transforms after registering any children since their transforms have already been
-    // bubbled up into our fCoordTransforms array
-    SkASSERT(fChildProcessors.empty());
-
     fCoordTransforms.push_back(transform);
-    fUsesLocalCoords = fUsesLocalCoords || transform->sourceCoords() == kLocal_GrCoordSet;
+    fUsesLocalCoords = true;
     SkDEBUGCODE(transform->setInProcessor();)
-    fNumTransformsExclChildren++;
 }
 
 int GrFragmentProcessor::registerChildProcessor(sk_sp<GrFragmentProcessor> child) {
-    // Append the child's transforms to our transforms array and the child's textures array to our
-    // textures array
-    if (!child->fCoordTransforms.empty()) {
-        fCoordTransforms.push_back_n(child->fCoordTransforms.count(),
-                                     child->fCoordTransforms.begin());
-    }
-    if (!child->fTextureAccesses.empty()) {
-        fTextureAccesses.push_back_n(child->fTextureAccesses.count(),
-                                     child->fTextureAccesses.begin());
-    }
-
     this->combineRequiredFeatures(*child);
 
     if (child->usesLocalCoords()) {
@@ -120,10 +95,10 @@ void GrFragmentProcessor::notifyRefCntIsZero() const {
 }
 
 bool GrFragmentProcessor::hasSameTransforms(const GrFragmentProcessor& that) const {
-    if (this->numTransforms() != that.numTransforms()) {
+    if (this->numCoordTransforms() != that.numCoordTransforms()) {
         return false;
     }
-    int count = this->numTransforms();
+    int count = this->numCoordTransforms();
     for (int i = 0; i < count; ++i) {
         if (this->coordTransform(i) != that.coordTransform(i)) {
             return false;
@@ -408,3 +383,24 @@ sk_sp<GrFragmentProcessor> GrFragmentProcessor::RunInSeries(sk_sp<GrFragmentProc
     }
     return sk_sp<GrFragmentProcessor>(new SeriesFragmentProcessor(series, cnt));
 }
+
+//////////////////////////////////////////////////////////////////////////////
+
+GrFragmentProcessor::Iter::Iter(const GrPipeline& pipeline) {
+    for (int i = pipeline.numFragmentProcessors() - 1; i >= 0; --i) {
+        fFPStack.push_back(&pipeline.getFragmentProcessor(i));
+    }
+}
+
+const GrFragmentProcessor* GrFragmentProcessor::Iter::next() {
+    if (fFPStack.empty()) {
+        return nullptr;
+    }
+    const GrFragmentProcessor* back = fFPStack.back();
+    fFPStack.pop_back();
+    for (int i = back->numChildProcessors() - 1; i >= 0; --i) {
+        fFPStack.push_back(&back->childProcessor(i));
+    }
+    return back;
+}
+

@@ -11,7 +11,6 @@
 #include "SkTypes.h"
 
 #define kDefinePicture_ExtPipeVerb  SkSetFourByteTag('s', 'k', 'p', 'i')
-#define kDefineImage_ExtPipeVerb    SkSetFourByteTag('s', 'k', 'i', 'm')
 
 enum class SkPipeVerb : uint8_t {
     kSave,              // extra == 0
@@ -57,6 +56,8 @@ enum class SkPipeVerb : uint8_t {
     kDefineFactory,     // extra == factory_index (followed by padded getTypeName string)
     kDefinePicture,     // extra == 0 or forget_index + 1 (0 means we're defining a new picture)
     kEndPicture,        // extra == picture_index
+    kWriteImage,        // extra == image_index
+    kWritePicture,      // extra == picture_index
 };
 
 enum PaintUsage {
@@ -93,12 +94,11 @@ enum {
     kTypeface_NonDef    = 1 << 6,
     kPathEffect_NonDef  = 1 << 7,
     kShader_NonDef      = 1 << 8,
-    kXfermode_NonDef    = 1 << 9,
-    kMaskFilter_NonDef  = 1 << 10,
-    kColorFilter_NonDef = 1 << 11,
-    kRasterizer_NonDef  = 1 << 12,
-    kImageFilter_NonDef = 1 << 13,
-    kDrawLooper_NonDef  = 1 << 14,
+    kMaskFilter_NonDef  = 1 << 9,
+    kColorFilter_NonDef = 1 << 10,
+    kRasterizer_NonDef  = 1 << 11,
+    kImageFilter_NonDef = 1 << 12,
+    kDrawLooper_NonDef  = 1 << 13,
 };
 
 enum {
