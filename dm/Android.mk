@@ -438,6 +438,7 @@ LOCAL_SRC_FILES := \
 	../gm/gammacolorfilter.cpp \
 	../gm/gammatext.cpp \
 	../gm/gamut.cpp \
+	../gm/gaussianedge.cpp \
 	../gm/getpostextpath.cpp \
 	../gm/giantbitmap.cpp \
 	../gm/glyph_pos.cpp \
