@@ -528,13 +528,13 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../tools/viewer/sk_app \
 	$(LOCAL_PATH)/../tools/viewer/sk_app/android \
 	$(LOCAL_PATH)/../include/private \
+	$(LOCAL_PATH)/../src/core \
 	$(LOCAL_PATH)/../src/gpu \
 	$(LOCAL_PATH)/../tools/gpu \
 	$(LOCAL_PATH)/../tools/flags \
 	$(LOCAL_PATH)/../experimental/svg/model \
 	$(LOCAL_PATH)/../include/xml \
 	$(LOCAL_PATH)/../src/fonts \
-	$(LOCAL_PATH)/../src/core \
 	$(LOCAL_PATH)/../tools \
 	external/expat/lib \
 	$(LOCAL_PATH)/../src/codec \
