@@ -702,6 +702,7 @@ LOCAL_SRC_FILES := \
 	src/codec/SkRawCodec.cpp \
 	third_party/etc1/etc1.cpp \
 	third_party/ktx/ktx.cpp \
+	src/sksl/SkSLCFGGenerator.cpp \
 	src/sksl/SkSLCompiler.cpp \
 	src/sksl/SkSLIRGenerator.cpp \
 	src/sksl/SkSLParser.cpp \
