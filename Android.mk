@@ -157,7 +157,6 @@ LOCAL_SRC_FILES := \
 	src/core/SkEdgeClipper.cpp \
 	src/core/SkAnalyticEdge.cpp \
 	src/core/SkEdge.cpp \
-	src/core/SkError.cpp \
 	src/core/SkFilterProc.cpp \
 	src/core/SkFlattenable.cpp \
 	src/core/SkFlattenableSerialization.cpp \
