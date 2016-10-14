@@ -97,6 +97,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkAAClip.cpp \
 	src/core/SkAnnotation.cpp \
 	src/core/SkAlphaRuns.cpp \
+	src/core/SkATrace.cpp \
 	src/core/SkAutoPixmapStorage.cpp \
 	src/core/SkBBHFactory.cpp \
 	src/core/SkBigPicture.cpp \
