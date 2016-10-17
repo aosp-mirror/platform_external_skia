@@ -441,7 +441,6 @@ LOCAL_SRC_FILES := \
 	../tools/debugger/SkDebugCanvas.cpp \
 	../tools/debugger/SkJsonWriteBuffer.cpp \
 	../tools/debugger/SkObjectParser.cpp \
-	../tools/debugger/SkOverdrawMode.cpp \
 	../tools/AndroidSkDebugToStdOut.cpp \
 	../tools/flags/SkCommonFlags.cpp \
 	../tools/flags/SkCommonFlagsConfig.cpp \

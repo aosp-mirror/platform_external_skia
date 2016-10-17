@@ -33,7 +33,6 @@ LOCAL_SRC_FILES := \
 	../tools/debugger/SkDrawCommand.cpp \
 	../tools/debugger/SkJsonWriteBuffer.cpp \
 	../tools/debugger/SkObjectParser.cpp \
-	../tools/debugger/SkOverdrawMode.cpp \
 	../tests/Test.cpp \
 	../tests/PathOpsAngleTest.cpp \
 	../tests/PathOpsBoundsTest.cpp \
