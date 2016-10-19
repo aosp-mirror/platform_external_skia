@@ -12,6 +12,10 @@
 
 #define SKNX_IS_FAST
 
+template <> struct SkNx_abi<4,float> { float32x4_t vec; };
+
+namespace {
+
 // ARMv8 has vrndmq_f32 to floor 4 floats.  Here we emulate it:
 //   - roundtrip through integers via truncation
 //   - subtract 1 if that's too big (possible for negative values).
@@ -108,6 +112,9 @@ public:
     SkNx() {}
     SkNx(float val) : fVec(vdupq_n_f32(val)) {}
     SkNx(float a, float b, float c, float d) { fVec = (float32x4_t) { a, b, c, d }; }
+
+    SkNx(const SkNx_abi<4,float>& a) : fVec(a.vec) {}
+    operator SkNx_abi<4,float>() const { return { fVec }; }
 
     static SkNx Load(const void* ptr) { return vld1q_f32((const float*)ptr); }
     void store(void* ptr) const { vst1q_f32((float*)ptr, fVec); }
@@ -549,5 +556,7 @@ template<> /*static*/ inline Sk4i SkNx_cast<int32_t, uint32_t>(const Sk4u& src) 
 static inline Sk4i Sk4f_round(const Sk4f& x) {
     return vcvtq_s32_f32((x + 0.5f).fVec);
 }
+
+}  // namespace
 
 #endif//SkNx_neon_DEFINED

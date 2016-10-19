@@ -770,7 +770,7 @@ bool SkOpCoincidence::addMissing(bool* added  DEBUG_COIN_DECLARE_PARAMS()) {
             this->debugValidate();
             double overS, overE;
             const SkOpPtT* ics = inner->coinPtTStart();
-            SkASSERT(!ics->deleted());
+            FAIL_IF(ics->deleted());
             const SkOpSegment* innerCoin = ics->segment();
             SkASSERT(!innerCoin->done());
             const SkOpPtT* ios = inner->oppPtTStart();
@@ -842,10 +842,12 @@ bool SkOpCoincidence::addOverlap(const SkOpSegment* seg1, const SkOpSegment* seg
         const SkOpPtT* overS, const SkOpPtT* overE) {
     const SkOpPtT* s1 = overS->find(seg1);
     const SkOpPtT* e1 = overE->find(seg1);
+    FAIL_IF(!s1);
     FAIL_IF(!e1);
     if (!s1->starter(e1)->span()->upCast()->windValue()) {
         s1 = overS->find(seg1o);
         e1 = overE->find(seg1o);
+        FAIL_IF(!s1);
         FAIL_IF(!e1);
         if (!s1->starter(e1)->span()->upCast()->windValue()) {
             return true;
@@ -1260,14 +1262,16 @@ void SkOpCoincidence::fixUp(SkCoincidentSpans* coin, SkOpPtT* deleted, const SkO
 
 // Please keep this in sync with debugMark()
 /* this sets up the coincidence links in the segments when the coincidence crosses multiple spans */
-void SkOpCoincidence::mark(DEBUG_COIN_DECLARE_ONLY_PARAMS()) {
+bool SkOpCoincidence::mark(DEBUG_COIN_DECLARE_ONLY_PARAMS()) {
     DEBUG_SET_PHASE();
     SkCoincidentSpans* coin = fHead;
     if (!coin) {
-        return;
+        return true;
     }
     do {
-        SkOpSpan* start = coin->coinPtTStartWritable()->span()->upCast();
+        SkOpSpanBase* startBase = coin->coinPtTStartWritable()->span();
+        FAIL_IF(!startBase->upCastable());
+        SkOpSpan* start = startBase->upCast();
         SkASSERT(!start->deleted());
         SkOpSpanBase* end = coin->coinPtTEndWritable()->span();
         SkOPASSERT(!end->deleted());
@@ -1289,12 +1293,14 @@ void SkOpCoincidence::mark(DEBUG_COIN_DECLARE_ONLY_PARAMS()) {
         SkOpSpanBase* oNext = oStart;
         bool ordered = coin->ordered();
         while ((next = next->upCast()->next()) != end) {
+            FAIL_IF(!next->upCastable());
             SkAssertResult(next->upCast()->insertCoincidence(oSegment, flipped, ordered));
         }
         while ((oNext = oNext->upCast()->next()) != oEnd) {
-            SkAssertResult(oNext->upCast()->insertCoincidence(segment, flipped, ordered));
+            FAIL_IF(!oNext->upCast()->insertCoincidence(segment, flipped, ordered));
         }
     } while ((coin = coin->next()));
+    return true;
 }
 
 // Please keep in sync with debugMarkCollapsed()

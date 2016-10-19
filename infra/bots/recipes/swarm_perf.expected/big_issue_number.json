@@ -111,10 +111,10 @@
       "[SLAVE_BUILD]\\skia\\resources",
       "--skps",
       "[SLAVE_BUILD]\\skp",
-      "--svgs",
-      "[SLAVE_BUILD]\\svg",
       "--images",
       "[SLAVE_BUILD]\\skimage\\nanobench",
+      "--svgs",
+      "[SLAVE_BUILD]\\svg",
       "--nocpu",
       "--pre_log",
       "--images",
@@ -127,7 +127,6 @@
       "8888",
       "gpu",
       "nonrendering",
-      "angle",
       "hwui",
       "f16",
       "srgb",
@@ -184,11 +183,7 @@
       "os",
       "Win8"
     ],
-    "env": {
-      "BUILDTYPE": "Release_x64",
-      "CHROME_HEADLESS": "1",
-      "SKIA_OUT": "[SLAVE_BUILD]\\out"
-    },
+    "cwd": "[SLAVE_BUILD]\\skia",
     "name": "nanobench"
   },
   {

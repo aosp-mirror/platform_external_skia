@@ -34,10 +34,11 @@ TEST_BUILDERS = {
       'Perf-Mac-Clang-MacMini6.2-GPU-HD4000-x86_64-Debug-CommandBuffer',
       'Perf-Ubuntu-Clang-GCE-CPU-AVX2-x86_64-Release-GN',
       'Perf-Ubuntu-GCC-ShuttleA-GPU-GTX550Ti-x86_64-Release-Valgrind',
-      'Perf-Ubuntu-GCC-ShuttleA-GPU-GTX550Ti-x86_64-Release-VisualBench',
+      'Perf-Ubuntu-GCC-ShuttleA-GPU-GTX550Ti-x86_64-Release-ANGLE',
       'Perf-Win-MSVC-GCE-CPU-AVX2-x86_64-Debug',
       'Perf-Win-MSVC-GCE-CPU-AVX2-x86_64-Release',
       'Perf-Win8-MSVC-ShuttleB-GPU-HD4600-x86_64-Release-Trybot',
+      'Perf-Win8-MSVC-ShuttleB-GPU-GTX960-x86_64-Debug-ANGLE',
       'Perf-iOS-Clang-iPad4-GPU-SGX554-Arm7-Debug',
     ],
   },
@@ -62,7 +63,7 @@ def nanobench_flags(bot):
   if 'iOS' in bot:
     args.extend(['--skps', 'ignore_skps'])
 
-  config = ['8888', 'gpu', 'nonrendering', 'angle', 'hwui' ]
+  config = ['8888', 'gpu', 'nonrendering', 'hwui' ]
   if 'AndroidOne' not in bot:
     config += [ 'f16', 'srgb' ]
   if '-GCE-' in bot:
@@ -94,6 +95,12 @@ def nanobench_flags(bot):
     config = ['commandbuffer']
   if 'Vulkan' in bot:
     config = ['vk']
+
+  if 'ANGLE' in bot:
+    config.extend(['angle_d3d11_es2'])
+    # The GL backend of ANGLE crashes on the perf bot currently.
+    if 'Win' not in bot:
+      config.extend(['angle_gl_es2'])
 
   args.append('--config')
   args.extend(config)
@@ -183,17 +190,18 @@ def perf_steps(api):
     ])
 
   target = 'nanobench'
-  if 'VisualBench' in api.vars.builder_name:
-    target = 'visualbench'
   args = [
       target,
       '--undefok',   # This helps branches that may not know new flags.
       '-i',       api.flavor.device_dirs.resource_dir,
       '--skps',   api.flavor.device_dirs.skp_dir,
-      '--svgs',   api.flavor.device_dirs.svg_dir,
       '--images', api.flavor.device_path_join(
           api.flavor.device_dirs.images_dir, 'nanobench'),
   ]
+
+  # Do not run svgs on Valgrind.
+  if 'Valgrind' not in api.vars.builder_name:
+    args.extend(['--svgs',  api.flavor.device_dirs.svg_dir])
 
   skip_flag = None
   if api.vars.builder_cfg.get('cpu_or_gpu') == 'CPU':

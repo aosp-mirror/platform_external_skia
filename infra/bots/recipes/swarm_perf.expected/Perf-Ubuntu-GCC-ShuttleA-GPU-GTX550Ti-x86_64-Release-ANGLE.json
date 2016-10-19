@@ -64,7 +64,7 @@
       "python",
       "-u",
       "\nimport os, sys\nfrom common import chromium_utils # Error? See https://crbug.com/584783.\n\n\nif os.path.exists(sys.argv[1]):\n  chromium_utils.RemoveDirectory(sys.argv[1])\n",
-      "[CUSTOM_[SWARM_OUT_DIR]]/perfdata/Perf-Ubuntu-GCC-ShuttleA-GPU-GTX550Ti-x86_64-Release-VisualBench/data"
+      "[CUSTOM_[SWARM_OUT_DIR]]/perfdata/Perf-Ubuntu-GCC-ShuttleA-GPU-GTX550Ti-x86_64-Release-ANGLE/data"
     ],
     "env": {
       "PYTHONPATH": "[SLAVE_BUILD]/skia/infra/bots/.recipe_deps/build/scripts"
@@ -86,7 +86,7 @@
       "python",
       "-u",
       "\nimport sys, os\npath = sys.argv[1]\nmode = int(sys.argv[2])\nif not os.path.isdir(path):\n  if os.path.exists(path):\n    print \"%s exists but is not a dir\" % path\n    sys.exit(1)\n  os.makedirs(path, mode)\n",
-      "[CUSTOM_[SWARM_OUT_DIR]]/perfdata/Perf-Ubuntu-GCC-ShuttleA-GPU-GTX550Ti-x86_64-Release-VisualBench/data",
+      "[CUSTOM_[SWARM_OUT_DIR]]/perfdata/Perf-Ubuntu-GCC-ShuttleA-GPU-GTX550Ti-x86_64-Release-ANGLE/data",
       "511"
     ],
     "name": "makedirs data",
@@ -106,16 +106,16 @@
   {
     "cmd": [
       "catchsegv",
-      "[SLAVE_BUILD]/out/Release/visualbench",
+      "[SLAVE_BUILD]/out/Release/nanobench",
       "--undefok",
       "-i",
       "[SLAVE_BUILD]/skia/resources",
       "--skps",
       "[SLAVE_BUILD]/skp",
-      "--svgs",
-      "[SLAVE_BUILD]/svg",
       "--images",
       "[SLAVE_BUILD]/skimage/nanobench",
+      "--svgs",
+      "[SLAVE_BUILD]/svg",
       "--nocpu",
       "--pre_log",
       "--images",
@@ -128,13 +128,14 @@
       "8888",
       "gpu",
       "nonrendering",
-      "angle",
       "hwui",
       "f16",
       "srgb",
       "msaa16",
       "nvpr16",
       "nvprdit16",
+      "angle_d3d11_es2",
+      "angle_gl_es2",
       "--match",
       "~interlaced1.png",
       "~interlaced2.png",
@@ -159,7 +160,7 @@
       "~inc0.webp",
       "~inc1.webp",
       "--outResultsFile",
-      "[CUSTOM_[SWARM_OUT_DIR]]/perfdata/Perf-Ubuntu-GCC-ShuttleA-GPU-GTX550Ti-x86_64-Release-VisualBench/data/nanobench_abc123_1337000001.json",
+      "[CUSTOM_[SWARM_OUT_DIR]]/perfdata/Perf-Ubuntu-GCC-ShuttleA-GPU-GTX550Ti-x86_64-Release-ANGLE/data/nanobench_abc123_1337000001.json",
       "--properties",
       "gitHash",
       "abc123",
@@ -175,25 +176,21 @@
       "cpu_or_gpu_value",
       "GTX550Ti",
       "extra_config",
-      "VisualBench",
+      "ANGLE",
       "model",
       "ShuttleA",
       "os",
       "Ubuntu"
     ],
-    "env": {
-      "BUILDTYPE": "Release",
-      "CHROME_HEADLESS": "1",
-      "SKIA_OUT": "[SLAVE_BUILD]/out"
-    },
-    "name": "visualbench"
+    "cwd": "[SLAVE_BUILD]/skia",
+    "name": "nanobench"
   },
   {
     "cmd": [
       "python",
       "-u",
       "\nimport sys, os\npath = sys.argv[1]\nmode = int(sys.argv[2])\nif not os.path.isdir(path):\n  if os.path.exists(path):\n    print \"%s exists but is not a dir\" % path\n    sys.exit(1)\n  os.makedirs(path, mode)\n",
-      "[CUSTOM_[SWARM_OUT_DIR]]/perfdata/Perf-Ubuntu-GCC-ShuttleA-GPU-GTX550Ti-x86_64-Release-VisualBench/data",
+      "[CUSTOM_[SWARM_OUT_DIR]]/perfdata/Perf-Ubuntu-GCC-ShuttleA-GPU-GTX550Ti-x86_64-Release-ANGLE/data",
       "511"
     ],
     "name": "makedirs perf_dir",

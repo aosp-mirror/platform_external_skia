@@ -25,7 +25,6 @@
 #include "SkConfig8888.h"
 #include "SkCanvas.h"
 #include "SkData.h"
-#include "SkErrorInternals.h"
 #include "SkMessageBus.h"
 #include "SkMipMap.h"
 #include "SkPixelRef.h"
@@ -666,8 +665,15 @@ static inline bool skpaint_to_grpaint_impl(GrContext* context,
     SkColorFilter* colorFilter = skPaint.getColorFilter();
     if (colorFilter) {
         if (applyColorFilterToPaintColor) {
-            grPaint->setColor4f(GrColor4f::FromSkColor4f(
-                colorFilter->filterColor4f(origColor.toSkColor4f())).premul());
+            // If we're in legacy mode, we *must* avoid using the 4f version of the color filter,
+            // because that will combine with the linearized version of the stored color.
+            if (dc->isGammaCorrect()) {
+                grPaint->setColor4f(GrColor4f::FromSkColor4f(
+                    colorFilter->filterColor4f(origColor.toSkColor4f())).premul());
+            } else {
+                grPaint->setColor4f(SkColorToPremulGrColor4f(
+                    colorFilter->filterColor(skPaint.getColor()), false, nullptr));
+            }
         } else {
             sk_sp<GrFragmentProcessor> cfFP(colorFilter->asFragmentProcessor(context));
             if (cfFP) {
@@ -801,10 +807,7 @@ GrTextureParams::FilterMode GrSkFilterQualityToGrFilterMode(SkFilterQuality pain
             break;
         }
         default:
-            SkErrorInternals::SetError( kInvalidPaint_SkError,
-                                        "Sorry, I don't understand the filtering "
-                                        "mode you asked for.  Falling back to "
-                                        "MIPMaps.");
+            // Should be unreachable.  If not, fall back to mipmaps.
             textureFilterMode = GrTextureParams::kMipMap_FilterMode;
             break;
 

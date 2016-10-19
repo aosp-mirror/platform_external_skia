@@ -265,6 +265,7 @@ LOCAL_SRC_FILES := \
 	../gm/gammacolorfilter.cpp \
 	../gm/gammatext.cpp \
 	../gm/gamut.cpp \
+	../gm/gaussianedge.cpp \
 	../gm/getpostextpath.cpp \
 	../gm/giantbitmap.cpp \
 	../gm/glyph_pos.cpp \
@@ -307,6 +308,7 @@ LOCAL_SRC_FILES := \
 	../gm/imagetoyuvplanes.cpp \
 	../gm/internal_links.cpp \
 	../gm/inversepaths.cpp \
+	../gm/labpcsdemo.cpp \
 	../gm/largeglyphblur.cpp \
 	../gm/lattice.cpp \
 	../gm/lcdblendmodes.cpp \
@@ -440,7 +442,6 @@ LOCAL_SRC_FILES := \
 	../tools/debugger/SkDebugCanvas.cpp \
 	../tools/debugger/SkJsonWriteBuffer.cpp \
 	../tools/debugger/SkObjectParser.cpp \
-	../tools/debugger/SkOverdrawMode.cpp \
 	../tools/AndroidSkDebugToStdOut.cpp \
 	../tools/flags/SkCommonFlags.cpp \
 	../tools/flags/SkCommonFlagsConfig.cpp \
@@ -527,13 +528,13 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../tools/viewer/sk_app \
 	$(LOCAL_PATH)/../tools/viewer/sk_app/android \
 	$(LOCAL_PATH)/../include/private \
+	$(LOCAL_PATH)/../src/core \
 	$(LOCAL_PATH)/../src/gpu \
 	$(LOCAL_PATH)/../tools/gpu \
 	$(LOCAL_PATH)/../tools/flags \
 	$(LOCAL_PATH)/../experimental/svg/model \
 	$(LOCAL_PATH)/../include/xml \
 	$(LOCAL_PATH)/../src/fonts \
-	$(LOCAL_PATH)/../src/core \
 	$(LOCAL_PATH)/../tools \
 	external/expat/lib \
 	$(LOCAL_PATH)/../src/codec \

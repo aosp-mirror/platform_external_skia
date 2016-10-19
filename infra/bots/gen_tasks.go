@@ -43,7 +43,9 @@ var (
 	JOBS = []string{
 		"Build-Ubuntu-GCC-x86_64-Release-GN",
 		"Perf-Ubuntu-GCC-GCE-CPU-AVX2-x86_64-Release-GN",
+		"Test-Android-Clang-AndroidOne-GPU-Mali400MP2-arm-Release-GN_Android",
 		"Test-Ubuntu-GCC-GCE-CPU-AVX2-x86_64-Release-GN",
+		"Housekeeper-PerCommit-InfraTests",
 	}
 
 	// UPLOAD_DIMENSIONS are the Swarming dimensions for upload tasks.
@@ -82,7 +84,7 @@ func deriveCompileTaskName(jobName string, parts map[string]string) string {
 			} else if !strings.Contains(ec, "GN_Android") {
 				ec = task_os
 			}
-			task_os = "Android"
+			task_os = "Ubuntu"
 		} else if task_os == "iOS" {
 			ec = task_os
 			task_os = "Mac"
@@ -246,12 +248,18 @@ func compile(cfg *specs.TasksCfg, name string, parts map[string]string) string {
 		Dimensions:   swarmDimensions(parts),
 		ExtraArgs: []string{
 			"--workdir", "../../..", "swarm_compile",
+			"repository=skia",
 			fmt.Sprintf("buildername=%s", name),
 			"mastername=fake-master",
 			"buildnumber=2",
 			"slavename=fake-buildslave",
+			"nobuildbot=True",
 			fmt.Sprintf("swarm_out_dir=%s", specs.PLACEHOLDER_ISOLATED_OUTDIR),
 			fmt.Sprintf("revision=%s", specs.PLACEHOLDER_REVISION),
+			fmt.Sprintf("patch_storage=%s", specs.PLACEHOLDER_PATCH_STORAGE),
+			fmt.Sprintf("rietveld=%s", specs.PLACEHOLDER_CODEREVIEW_SERVER),
+			fmt.Sprintf("issue=%s", specs.PLACEHOLDER_ISSUE),
+			fmt.Sprintf("patchset=%s", specs.PLACEHOLDER_PATCHSET),
 		},
 		Isolate:  "compile_skia.isolate",
 		Priority: 0.8,
@@ -278,6 +286,33 @@ func ctSKPs(cfg *specs.TasksCfg, name string) string {
 // in the generated chain of tasks, which the Job should add as a dependency.
 func housekeeper(cfg *specs.TasksCfg, name, compileTaskName string) string {
 	// TODO
+	return name
+}
+
+// infra generates an infra_tests task. Returns the name of the last task in the
+// generated chain of tasks, which the Job should add as a dependency.
+func infra(cfg *specs.TasksCfg, name string) string {
+	cfg.Tasks[name] = &specs.TaskSpec{
+		CipdPackages: []*specs.CipdPackage{},
+		Dimensions:   UPLOAD_DIMENSIONS,
+		ExtraArgs: []string{
+			"--workdir", "../../..", "swarm_infra",
+			"repository=skia",
+			fmt.Sprintf("buildername=%s", name),
+			"mastername=fake-master",
+			"buildnumber=2",
+			"slavename=fake-buildslave",
+			"nobuildbot=True",
+			fmt.Sprintf("swarm_out_dir=%s", specs.PLACEHOLDER_ISOLATED_OUTDIR),
+			fmt.Sprintf("revision=%s", specs.PLACEHOLDER_REVISION),
+			fmt.Sprintf("patch_storage=%s", specs.PLACEHOLDER_PATCH_STORAGE),
+			fmt.Sprintf("rietveld=%s", specs.PLACEHOLDER_CODEREVIEW_SERVER),
+			fmt.Sprintf("issue=%s", specs.PLACEHOLDER_ISSUE),
+			fmt.Sprintf("patchset=%s", specs.PLACEHOLDER_PATCHSET),
+		},
+		Isolate:  "infra_skia.isolate",
+		Priority: 0.8,
+	}
 	return name
 }
 
@@ -308,12 +343,18 @@ func test(cfg *specs.TasksCfg, name string, parts map[string]string, compileTask
 		Dimensions:   swarmDimensions(parts),
 		ExtraArgs: []string{
 			"--workdir", "../../..", "swarm_test",
+			"repository=skia",
 			fmt.Sprintf("buildername=%s", name),
 			"mastername=fake-master",
 			"buildnumber=2",
 			"slavename=fake-buildslave",
+			"nobuildbot=True",
 			fmt.Sprintf("swarm_out_dir=%s", specs.PLACEHOLDER_ISOLATED_OUTDIR),
 			fmt.Sprintf("revision=%s", specs.PLACEHOLDER_REVISION),
+			fmt.Sprintf("patch_storage=%s", specs.PLACEHOLDER_PATCH_STORAGE),
+			fmt.Sprintf("rietveld=%s", specs.PLACEHOLDER_CODEREVIEW_SERVER),
+			fmt.Sprintf("issue=%s", specs.PLACEHOLDER_ISSUE),
+			fmt.Sprintf("patchset=%s", specs.PLACEHOLDER_PATCHSET),
 		},
 		Isolate:  "test_skia.isolate",
 		Priority: 0.8,
@@ -326,12 +367,18 @@ func test(cfg *specs.TasksCfg, name string, parts map[string]string, compileTask
 			Dimensions:   UPLOAD_DIMENSIONS,
 			ExtraArgs: []string{
 				"--workdir", "../../..", "upload_dm_results",
+				"repository=skia",
 				fmt.Sprintf("buildername=%s", name),
 				"mastername=fake-master",
 				"buildnumber=2",
 				"slavename=fake-buildslave",
+				"nobuildbot=True",
 				fmt.Sprintf("swarm_out_dir=%s", specs.PLACEHOLDER_ISOLATED_OUTDIR),
 				fmt.Sprintf("revision=%s", specs.PLACEHOLDER_REVISION),
+				fmt.Sprintf("patch_storage=%s", specs.PLACEHOLDER_PATCH_STORAGE),
+				fmt.Sprintf("rietveld=%s", specs.PLACEHOLDER_CODEREVIEW_SERVER),
+				fmt.Sprintf("issue=%s", specs.PLACEHOLDER_ISSUE),
+				fmt.Sprintf("patchset=%s", specs.PLACEHOLDER_PATCHSET),
 			},
 			Isolate:  "upload_dm_results.isolate",
 			Priority: 0.8,
@@ -350,12 +397,18 @@ func perf(cfg *specs.TasksCfg, name string, parts map[string]string, compileTask
 		Dimensions:   swarmDimensions(parts),
 		ExtraArgs: []string{
 			"--workdir", "../../..", "swarm_perf",
+			"repository=skia",
 			fmt.Sprintf("buildername=%s", name),
 			"mastername=fake-master",
 			"buildnumber=2",
 			"slavename=fake-buildslave",
+			"nobuildbot=True",
 			fmt.Sprintf("swarm_out_dir=%s", specs.PLACEHOLDER_ISOLATED_OUTDIR),
 			fmt.Sprintf("revision=%s", specs.PLACEHOLDER_REVISION),
+			fmt.Sprintf("patch_storage=%s", specs.PLACEHOLDER_PATCH_STORAGE),
+			fmt.Sprintf("rietveld=%s", specs.PLACEHOLDER_CODEREVIEW_SERVER),
+			fmt.Sprintf("issue=%s", specs.PLACEHOLDER_ISSUE),
+			fmt.Sprintf("patchset=%s", specs.PLACEHOLDER_PATCHSET),
 		},
 		Isolate:  "perf_skia.isolate",
 		Priority: 0.8,
@@ -368,12 +421,18 @@ func perf(cfg *specs.TasksCfg, name string, parts map[string]string, compileTask
 			Dimensions:   UPLOAD_DIMENSIONS,
 			ExtraArgs: []string{
 				"--workdir", "../../..", "upload_nano_results",
+				"repository=skia",
 				fmt.Sprintf("buildername=%s", name),
 				"mastername=fake-master",
 				"buildnumber=2",
 				"slavename=fake-buildslave",
+				"nobuildbot=True",
 				fmt.Sprintf("swarm_out_dir=%s", specs.PLACEHOLDER_ISOLATED_OUTDIR),
 				fmt.Sprintf("revision=%s", specs.PLACEHOLDER_REVISION),
+				fmt.Sprintf("patch_storage=%s", specs.PLACEHOLDER_PATCH_STORAGE),
+				fmt.Sprintf("rietveld=%s", specs.PLACEHOLDER_CODEREVIEW_SERVER),
+				fmt.Sprintf("issue=%s", specs.PLACEHOLDER_ISSUE),
+				fmt.Sprintf("patchset=%s", specs.PLACEHOLDER_PATCHSET),
 			},
 			Isolate:  "upload_nano_results.isolate",
 			Priority: 0.8,
@@ -405,6 +464,11 @@ func process(cfg *specs.TasksCfg, name string) {
 		deps = append(deps, ctSKPs(cfg, name))
 	}
 
+	// Infra tests.
+	if name == "Housekeeper-PerCommit-InfraTests" {
+		deps = append(deps, infra(cfg, name))
+	}
+
 	// Compile bots.
 	if parts["role"] == "Build" {
 		deps = append(deps, compile(cfg, name, parts))
@@ -412,9 +476,18 @@ func process(cfg *specs.TasksCfg, name string) {
 
 	// Any remaining bots need a compile task.
 	compileTaskName := deriveCompileTaskName(name, parts)
+	compileTaskParts, err := jobNameSchema.ParseJobName(compileTaskName)
+	if err != nil {
+		glog.Fatal(err)
+	}
+	// Temporarily disable the Housekeeper's compile Task, since we aren't
+	// yet running that Job.
+	if parts["role"] != "Housekeeper" {
+		compile(cfg, compileTaskName, compileTaskParts)
+	}
 
 	// Housekeeper.
-	if parts["role"] == "Housekeeper" {
+	if parts["role"] == "Housekeeper" && name != "Housekeeper-PerCommit-InfraTests" {
 		deps = append(deps, housekeeper(cfg, name, compileTaskName))
 	}
 

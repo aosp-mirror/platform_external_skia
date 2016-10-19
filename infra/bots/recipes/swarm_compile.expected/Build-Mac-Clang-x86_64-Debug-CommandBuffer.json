@@ -162,6 +162,8 @@
   },
   {
     "cmd": [
+      "python",
+      "-u",
       "[CUSTOM_/_B_WORK]/skia/bin/fetch-gn"
     ],
     "cwd": "[CUSTOM_/_B_WORK]/skia",
@@ -191,6 +193,7 @@
     ],
     "cwd": "[CUSTOM_/_B_WORK]/skia",
     "env": {
+      "NINJA_STATUS": "%%e [%%f/%%t] ",
       "PATH": "%(PATH)s:RECIPE_PACKAGE_REPO[depot_tools]:RECIPE_PACKAGE_REPO[depot_tools]:RECIPE_PACKAGE_REPO[depot_tools]:RECIPE_PACKAGE_REPO[depot_tools]"
     },
     "name": "ninja"

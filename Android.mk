@@ -97,6 +97,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkAAClip.cpp \
 	src/core/SkAnnotation.cpp \
 	src/core/SkAlphaRuns.cpp \
+	src/core/SkATrace.cpp \
 	src/core/SkAutoPixmapStorage.cpp \
 	src/core/SkBBHFactory.cpp \
 	src/core/SkBigPicture.cpp \
@@ -130,6 +131,8 @@ LOCAL_SRC_FILES := \
 	src/core/SkColorMatrixFilterRowMajor255.cpp \
 	src/core/SkColorShader.cpp \
 	src/core/SkColorSpace.cpp \
+	src/core/SkColorSpace_A2B.cpp \
+	src/core/SkColorSpace_XYZ.cpp \
 	src/core/SkColorSpace_ICC.cpp \
 	src/core/SkColorSpaceXform.cpp \
 	src/core/SkColorTable.cpp \
@@ -157,7 +160,6 @@ LOCAL_SRC_FILES := \
 	src/core/SkEdgeClipper.cpp \
 	src/core/SkAnalyticEdge.cpp \
 	src/core/SkEdge.cpp \
-	src/core/SkError.cpp \
 	src/core/SkFilterProc.cpp \
 	src/core/SkFlattenable.cpp \
 	src/core/SkFlattenableSerialization.cpp \
@@ -703,6 +705,7 @@ LOCAL_SRC_FILES := \
 	src/codec/SkRawCodec.cpp \
 	third_party/etc1/etc1.cpp \
 	third_party/ktx/ktx.cpp \
+	src/sksl/SkSLCFGGenerator.cpp \
 	src/sksl/SkSLCompiler.cpp \
 	src/sksl/SkSLIRGenerator.cpp \
 	src/sksl/SkSLParser.cpp \

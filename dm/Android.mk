@@ -33,13 +33,13 @@ LOCAL_SRC_FILES := \
 	../tools/debugger/SkDrawCommand.cpp \
 	../tools/debugger/SkJsonWriteBuffer.cpp \
 	../tools/debugger/SkObjectParser.cpp \
-	../tools/debugger/SkOverdrawMode.cpp \
 	../tests/Test.cpp \
 	../tests/PathOpsAngleTest.cpp \
 	../tests/PathOpsBoundsTest.cpp \
 	../tests/PathOpsBuilderConicTest.cpp \
 	../tests/PathOpsBuilderTest.cpp \
 	../tests/PathOpsBuildUseTest.cpp \
+	../tests/PathOpsChalkboardTest.cpp \
 	../tests/PathOpsConicIntersectionTest.cpp \
 	../tests/PathOpsConicLineIntersectionTest.cpp \
 	../tests/PathOpsConicQuadIntersectionTest.cpp \
@@ -135,7 +135,6 @@ LOCAL_SRC_FILES := \
 	../tests/DynamicHashTest.cpp \
 	../tests/EGLImageTest.cpp \
 	../tests/EmptyPathTest.cpp \
-	../tests/ErrorTest.cpp \
 	../tests/ExifTest.cpp \
 	../tests/FillPathTest.cpp \
 	../tests/FitsInTest.cpp \
@@ -438,6 +437,7 @@ LOCAL_SRC_FILES := \
 	../gm/gammacolorfilter.cpp \
 	../gm/gammatext.cpp \
 	../gm/gamut.cpp \
+	../gm/gaussianedge.cpp \
 	../gm/getpostextpath.cpp \
 	../gm/giantbitmap.cpp \
 	../gm/glyph_pos.cpp \
@@ -480,6 +480,7 @@ LOCAL_SRC_FILES := \
 	../gm/imagetoyuvplanes.cpp \
 	../gm/internal_links.cpp \
 	../gm/inversepaths.cpp \
+	../gm/labpcsdemo.cpp \
 	../gm/largeglyphblur.cpp \
 	../gm/lattice.cpp \
 	../gm/lcdblendmodes.cpp \

@@ -412,7 +412,9 @@ bool SkJpegCodec::setOutputColorSpace(const SkImageInfo& dstInfo) {
             fDecoderMgr->dinfo()->out_color_space = JCS_GRAYSCALE;
             return true;
         case kRGBA_F16_SkColorType:
-            SkASSERT(fColorXform);
+            if (!fColorXform) {
+                return false;
+            }
             if (!dstInfo.colorSpace()->gammaIsLinear()) {
                 return false;
             }
@@ -517,8 +519,9 @@ int SkJpegCodec::readRows(const SkImageInfo& dstInfo, void* dst, size_t rowBytes
         }
 
         if (fColorXform) {
-            fColorXform->apply(dst, swizzleDst, dstWidth, select_xform_format(dstInfo.colorType()),
-                               SkColorSpaceXform::kRGBA_8888_ColorFormat, kOpaque_SkAlphaType);
+            SkAssertResult(fColorXform->apply(select_xform_format(dstInfo.colorType()), dst,
+                                              SkColorSpaceXform::kRGBA_8888_ColorFormat, swizzleDst,
+                                              dstWidth, kOpaque_SkAlphaType));
             dst = SkTAddOffset<void>(dst, rowBytes);
         }
 
@@ -634,7 +637,6 @@ void SkJpegCodec::initializeSwizzler(const SkImageInfo& dstInfo, const Options& 
 void SkJpegCodec::initializeColorXform(const SkImageInfo& dstInfo) {
     if (needs_color_xform(dstInfo, this->getInfo())) {
         fColorXform = SkColorSpaceXform::New(this->getInfo().colorSpace(), dstInfo.colorSpace());
-        SkASSERT(fColorXform);
     }
 }
 
