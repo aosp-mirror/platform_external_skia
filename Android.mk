@@ -378,6 +378,7 @@ LOCAL_SRC_FILES := \
 	src/effects/SkPaintImageFilter.cpp \
 	src/effects/SkPerlinNoiseShader.cpp \
 	src/effects/SkPictureImageFilter.cpp \
+	src/effects/SkRRectsGaussianEdgeMaskFilter.cpp \
 	src/effects/SkRRectsGaussianEdgeShader.cpp \
 	src/effects/SkTableColorFilter.cpp \
 	src/effects/SkTableMaskFilter.cpp \
