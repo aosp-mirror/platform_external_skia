@@ -91,7 +91,7 @@ LOCAL_SRC_FILES := \
 	src/codec/SkWebpCodec.cpp \
 	src/codec/SkCodecImageGenerator.cpp \
 	src/ports/SkImageGenerator_skia.cpp \
-	third_party/gif/GIFImageReader.cpp \
+	third_party/gif/SkGifImageReader.cpp \
 	src/android/SkBitmapRegionCodec.cpp \
 	src/android/SkBitmapRegionDecoder.cpp \
 	src/c/sk_paint.cpp \
