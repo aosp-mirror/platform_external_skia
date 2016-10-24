@@ -155,6 +155,7 @@ LOCAL_SRC_FILES := \
 	../gm/addarc.cpp \
 	../gm/all_bitmap_configs.cpp \
 	../gm/alphagradients.cpp \
+	../gm/animatedGif.cpp \
 	../gm/anisotropic.cpp \
 	../gm/annotated_text.cpp \
 	../gm/arcofzorro.cpp \

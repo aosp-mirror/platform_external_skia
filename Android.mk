@@ -84,12 +84,14 @@ LOCAL_SRC_FILES := \
 	src/codec/SkPngCodec.cpp \
 	src/codec/SkSampler.cpp \
 	src/codec/SkSampledCodec.cpp \
+	src/codec/SkStreamBuffer.cpp \
 	src/codec/SkSwizzler.cpp \
 	src/codec/SkWbmpCodec.cpp \
 	src/codec/SkWebpAdapterCodec.cpp \
 	src/codec/SkWebpCodec.cpp \
 	src/codec/SkCodecImageGenerator.cpp \
 	src/ports/SkImageGenerator_skia.cpp \
+	third_party/gif/GIFImageReader.cpp \
 	src/android/SkBitmapRegionCodec.cpp \
 	src/android/SkBitmapRegionDecoder.cpp \
 	src/c/sk_paint.cpp \
@@ -731,9 +733,9 @@ LOCAL_SHARED_LIBRARIES := \
 	libpiex
 
 LOCAL_STATIC_LIBRARIES := \
-	libgif \
 	libwebp-decode \
 	libwebp-encode \
+	libgif \
 	libsfntly
 
 LOCAL_C_INCLUDES := \
@@ -744,11 +746,11 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/src/codec \
 	$(LOCAL_PATH)/src/core \
 	$(LOCAL_PATH)/src/utils \
+	$(LOCAL_PATH)/third_party/gif \
 	$(LOCAL_PATH)/include/c \
 	$(LOCAL_PATH)/include/config \
 	$(LOCAL_PATH)/include/core \
 	$(LOCAL_PATH)/include/pathops \
-	external/giflib \
 	external/webp/include \
 	$(LOCAL_PATH)/include/android \
 	$(LOCAL_PATH)/src/android \
@@ -772,6 +774,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/third_party/etc1 \
 	$(LOCAL_PATH)/third_party/ktx \
 	$(LOCAL_PATH)/src/lazy \
+	external/giflib \
 	external/freetype/include \
 	external/expat/lib \
 	$(LOCAL_PATH)/include/utils/win \

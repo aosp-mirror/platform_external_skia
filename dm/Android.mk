@@ -111,6 +111,7 @@ LOCAL_SRC_FILES := \
 	../tests/ClipCubicTest.cpp \
 	../tests/ClipStackTest.cpp \
 	../tests/ClipperTest.cpp \
+	../tests/CodecAnimTest.cpp \
 	../tests/CodecPartialTest.cpp \
 	../tests/CodecTest.cpp \
 	../tests/ColorFilterTest.cpp \
@@ -327,6 +328,7 @@ LOCAL_SRC_FILES := \
 	../gm/addarc.cpp \
 	../gm/all_bitmap_configs.cpp \
 	../gm/alphagradients.cpp \
+	../gm/animatedGif.cpp \
 	../gm/anisotropic.cpp \
 	../gm/annotated_text.cpp \
 	../gm/arcofzorro.cpp \
