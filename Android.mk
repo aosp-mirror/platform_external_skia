@@ -151,7 +151,6 @@ LOCAL_SRC_FILES := \
 	src/core/SkDeviceLooper.cpp \
 	src/core/SkDeviceProfile.cpp \
 	src/lazy/SkDiscardableMemoryPool.cpp \
-	src/lazy/SkDiscardablePixelRef.cpp \
 	src/core/SkDistanceFieldGen.cpp \
 	src/core/SkDither.cpp \
 	src/core/SkDocument.cpp \

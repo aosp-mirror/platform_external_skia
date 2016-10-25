@@ -250,7 +250,6 @@ LOCAL_SRC_FILES := \
 	../gm/encode-platform.cpp \
 	../gm/encode.cpp \
 	../gm/extractbitmap.cpp \
-	../gm/factory.cpp \
 	../gm/fadefilter.cpp \
 	../gm/fatpathfill.cpp \
 	../gm/filltypes.cpp \
