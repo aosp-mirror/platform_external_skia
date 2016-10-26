@@ -412,7 +412,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrDrawContext.cpp \
 	src/gpu/GrPathRenderingDrawContext.cpp \
 	src/gpu/GrDrawingManager.cpp \
-	src/gpu/GrDrawTarget.cpp \
 	src/gpu/GrFixedClip.cpp \
 	src/gpu/GrFragmentProcessor.cpp \
 	src/gpu/GrGpu.cpp \
@@ -422,6 +421,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrImageIDTextureAdjuster.cpp \
 	src/gpu/GrInvariantOutput.cpp \
 	src/gpu/GrMemoryPool.cpp \
+	src/gpu/GrOpList.cpp \
 	src/gpu/GrOvalRenderer.cpp \
 	src/gpu/GrPaint.cpp \
 	src/gpu/GrPath.cpp \
@@ -445,6 +445,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrRenderTarget.cpp \
 	src/gpu/GrRenderTargetProxy.cpp \
 	src/gpu/GrReducedClip.cpp \
+	src/gpu/GrRenderTargetOpList.cpp \
 	src/gpu/GrResourceCache.cpp \
 	src/gpu/GrResourceProvider.cpp \
 	src/gpu/GrShape.cpp \
