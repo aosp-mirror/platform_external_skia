@@ -452,6 +452,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrStencilSettings.cpp \
 	src/gpu/GrStyle.cpp \
 	src/gpu/GrTessellator.cpp \
+	src/gpu/GrTextureOpList.cpp \
 	src/gpu/GrTraceMarker.cpp \
 	src/gpu/GrTestUtils.cpp \
 	src/gpu/GrSWMaskHelper.cpp \
