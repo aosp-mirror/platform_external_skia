@@ -408,7 +408,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrContext.cpp \
 	src/gpu/GrCoordTransform.cpp \
 	src/gpu/GrDefaultGeoProcFactory.cpp \
-	src/gpu/GrDistanceFieldGenFromVector.cpp \
 	src/gpu/GrDrawContext.cpp \
 	src/gpu/GrPathRenderingDrawContext.cpp \
 	src/gpu/GrDrawingManager.cpp \
