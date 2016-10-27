@@ -408,8 +408,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrContext.cpp \
 	src/gpu/GrCoordTransform.cpp \
 	src/gpu/GrDefaultGeoProcFactory.cpp \
-	src/gpu/GrDrawContext.cpp \
-	src/gpu/GrPathRenderingDrawContext.cpp \
 	src/gpu/GrDrawingManager.cpp \
 	src/gpu/GrFixedClip.cpp \
 	src/gpu/GrFragmentProcessor.cpp \
@@ -444,6 +442,8 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrRenderTarget.cpp \
 	src/gpu/GrRenderTargetProxy.cpp \
 	src/gpu/GrReducedClip.cpp \
+	src/gpu/GrRenderTargetContext.cpp \
+	src/gpu/GrPathRenderingRenderTargetContext.cpp \
 	src/gpu/GrRenderTargetOpList.cpp \
 	src/gpu/GrResourceCache.cpp \
 	src/gpu/GrResourceProvider.cpp \
