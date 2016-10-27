@@ -619,15 +619,12 @@ LOCAL_SRC_FILES := \
 	tools/viewer/sk_app/VulkanWindowContext.cpp \
 	tools/viewer/sk_app/android/VulkanWindowContext_android.cpp \
 	src/images/SkForceLinking.cpp \
-	src/images/SkMovie_FactoryDefault.cpp \
 	src/images/SkWEBPImageEncoder.cpp \
 	src/images/SkJPEGImageEncoder.cpp \
 	src/images/SkPNGImageEncoder.cpp \
 	src/images/SkImageEncoder.cpp \
 	src/images/SkImageEncoder_Factory.cpp \
 	src/images/SkJPEGWriteUtility.cpp \
-	src/images/SkMovie.cpp \
-	src/images/SkGIFMovie.cpp \
 	src/pdf/SkDeflate.cpp \
 	src/pdf/SkJpegInfo.cpp \
 	src/pdf/SkPDFBitmap.cpp \
@@ -736,7 +733,6 @@ LOCAL_SHARED_LIBRARIES := \
 LOCAL_STATIC_LIBRARIES := \
 	libwebp-decode \
 	libwebp-encode \
-	libgif \
 	libsfntly
 
 LOCAL_C_INCLUDES := \
@@ -775,7 +771,6 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/third_party/etc1 \
 	$(LOCAL_PATH)/third_party/ktx \
 	$(LOCAL_PATH)/src/lazy \
-	external/giflib \
 	external/freetype/include \
 	external/expat/lib \
 	$(LOCAL_PATH)/include/utils/win \

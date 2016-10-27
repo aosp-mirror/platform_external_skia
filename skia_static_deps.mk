@@ -36,6 +36,5 @@ LOCAL_SHARED_LIBRARIES += \
 LOCAL_STATIC_LIBRARIES += \
 	libwebp-decode \
 	libwebp-encode \
-	libgif \
 	libsfntly
 
