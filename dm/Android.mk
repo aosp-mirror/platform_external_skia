@@ -267,6 +267,7 @@ LOCAL_SRC_FILES := \
 	../tests/SkBlend_optsTest.cpp \
 	../tests/SkColor4fTest.cpp \
 	../tests/SkDOMTest.cpp \
+	../tests/SkFixed15Test.cpp \
 	../tests/SkImageTest.cpp \
 	../tests/SkLinearBitmapPipelineTest.cpp \
 	../tests/SkLiteDLTest.cpp \
