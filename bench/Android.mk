@@ -200,6 +200,7 @@ LOCAL_SRC_FILES := \
 	../gm/color4f.cpp \
 	../gm/colorcube.cpp \
 	../gm/coloremoji.cpp \
+	../gm/colorfilteralpha8.cpp \
 	../gm/colorfilterimagefilter.cpp \
 	../gm/colorfilters.cpp \
 	../gm/colormatrix.cpp \
