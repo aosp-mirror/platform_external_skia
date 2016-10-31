@@ -711,8 +711,8 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../src/fonts \
 	$(LOCAL_PATH)/../tools \
 	$(LOCAL_PATH)/../tools/flags \
-	external/expat/lib \
 	$(LOCAL_PATH)/../src/gpu \
+	external/expat/lib \
 	$(LOCAL_PATH)/../gm \
 	$(LOCAL_PATH)/../src/effects \
 	$(LOCAL_PATH)/../src/images \
