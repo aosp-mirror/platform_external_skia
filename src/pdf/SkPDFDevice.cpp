@@ -968,9 +968,14 @@ public:
             fCurrentMatrixOrigin.set(0.0f, 0.0f);
             fInitialized = true;
         }
+#ifdef SK_BUILD_FOR_WIN
+        const bool kAlwaysPosition = true;
+#else
+        const bool kAlwaysPosition = false;
+#endif
         if (!fDefaultPositioning) {
             SkPoint position = xy - fCurrentMatrixOrigin;
-            if (position != SkPoint{fXAdvance, 0}) {
+            if (kAlwaysPosition || position != SkPoint{fXAdvance, 0}) {
                 this->flush();
                 SkPDFUtils::AppendScalar(position.x(), fContent);
                 fContent->writeText(" ");
@@ -1427,7 +1432,7 @@ void SkPDFDevice::drawTextBlob(const SkDraw& draw, const SkTextBlob* blob, SkSca
 void SkPDFDevice::drawVertices(const SkDraw& d, SkCanvas::VertexMode,
                                int vertexCount, const SkPoint verts[],
                                const SkPoint texs[], const SkColor colors[],
-                               SkXfermode* xmode, const uint16_t indices[],
+                               SK_XFERMODE_PARAM xmode, const uint16_t indices[],
                                int indexCount, const SkPaint& paint) {
     if (d.fRC->isEmpty()) {
         return;

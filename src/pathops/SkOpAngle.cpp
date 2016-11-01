@@ -152,7 +152,7 @@ bool SkOpAngle::after(SkOpAngle* test) {
         // FIXME : once this is verified to work, remove one opposite angle call
         SkDEBUGCODE(bool lrOpposite = lh->oppositePlanes(rh));
         bool ltOpposite = lh->oppositePlanes(this);
-        SkASSERT(lrOpposite != ltOpposite);
+        SkOPASSERT(lrOpposite != ltOpposite);
         return COMPARE_RESULT(8, ltOpposite);
     } else if (ltOrder == 1 && trOrder == 0) {
         SkASSERT(lrOrder < 0);
@@ -160,9 +160,9 @@ bool SkOpAngle::after(SkOpAngle* test) {
         return COMPARE_RESULT(9, trOpposite);
     } else if (lrOrder == 1 && trOrder == 1) {
         SkASSERT(ltOrder < 0);
-        SkDEBUGCODE(bool trOpposite = oppositePlanes(rh));
+//        SkDEBUGCODE(bool trOpposite = oppositePlanes(rh));
         bool lrOpposite = lh->oppositePlanes(rh);
-        SkASSERT(lrOpposite != trOpposite);
+//        SkASSERT(lrOpposite != trOpposite);
         return COMPARE_RESULT(10, lrOpposite);
     }
     if (lrOrder < 0) {

@@ -126,11 +126,13 @@ def swarm_dimensions(builder_cfg):
         'Nexus10':       ('manta',      'LMY49J'),
         'Nexus5':        ('hammerhead', 'MOB31E'),
         'Nexus6':        ('shamu',      'M'),
-        'Nexus6p':       ('angler',     'NRD91E'),
+        'Nexus6p':       ('angler',     'NMF26C'),
         'Nexus7':        ('grouper',    'LMY47V'),
         'Nexus7v2':      ('flo',        'M'),
         'Nexus9':        ('flounder',   'NRD91D'),
         'NexusPlayer':   ('fugu',       'NRD90R'),
+        'Pixel':         ('sailfish',   'NMF25'),
+        'PixelXL':       ('marlin',     'NMF25'),
       }[builder_cfg['model']]
       dimensions['device_type'] = device_type
       dimensions['device_os'] = device_os
@@ -212,8 +214,9 @@ def trigger_task(api, task_name, builder, master, slave, buildnumber,
     if api.properties.get('patch_storage') == 'gerrit':
       properties['patch_storage'] = api.properties['patch_storage']
       properties['repository'] = api.properties['repository']
-      properties['event.patchSet.ref'] = api.properties['event.patchSet.ref']
-      properties['event.change.number'] = api.properties['event.change.number']
+      properties['patch_ref'] = api.properties['patch_ref']
+      properties['patch_set'] = api.properties['patch_set']
+      properties['patch_issue'] = api.properties['patch_issue']
     else:
       properties['issue'] = str(api.properties['issue'])
       properties['patchset'] = str(api.properties['patchset'])
@@ -387,13 +390,11 @@ def compile_steps_swarm(api, builder_cfg, got_revision, infrabots_dir):
 
   # Android bots require a toolchain.
   if 'Android' in builder_name:
-    cipd_packages.append(cipd_pkg(api, infrabots_dir, 'android_sdk'))
     if 'Mac' in builder_name:
       cipd_packages.append(cipd_pkg(api, infrabots_dir, 'android_ndk_darwin'))
     else:
       cipd_packages.append(cipd_pkg(api, infrabots_dir, 'android_ndk_linux'))
-
-  if 'Ubuntu' in builder_name and 'Clang' in builder_name:
+  elif 'Ubuntu' in builder_name and 'Clang' in builder_name:
     cipd_packages.append(cipd_pkg(api, infrabots_dir, 'clang_linux'))
 
   # Windows bots require a toolchain.
@@ -701,9 +702,6 @@ def test_for_bot(api, builder, mastername, slavename, testname=None):
     test += api.properties(issue=500,
                            patchset=1,
                            rietveld='https://codereview.chromium.org')
-  if 'Android' in builder:
-    paths.append(api.path['slave_build'].join(
-        'skia', 'infra', 'bots', 'assets', 'android_sdk', 'VERSION'))
   if 'Test' in builder and 'Coverage' not in builder:
     test += api.step_data(
         'upload new .isolated file for test_skia',
@@ -752,8 +750,9 @@ def GenTests(api):
   gerrit_kwargs = {
     'patch_storage': 'gerrit',
     'repository': 'skia',
-    'event.patchSet.ref': 'refs/changes/00/2100/2',
-    'event.change.number': '2100',
+    'patch_ref': 'refs/changes/00/2100/2',
+    'patch_issue': '2100',
+    'patch_set': '2',
   }
   yield (
       api.test('recipe_with_gerrit_patch') +

@@ -111,6 +111,7 @@ LOCAL_SRC_FILES := \
 	../tests/ClipCubicTest.cpp \
 	../tests/ClipStackTest.cpp \
 	../tests/ClipperTest.cpp \
+	../tests/CodecAnimTest.cpp \
 	../tests/CodecPartialTest.cpp \
 	../tests/CodecTest.cpp \
 	../tests/ColorFilterTest.cpp \
@@ -266,6 +267,7 @@ LOCAL_SRC_FILES := \
 	../tests/SkBlend_optsTest.cpp \
 	../tests/SkColor4fTest.cpp \
 	../tests/SkDOMTest.cpp \
+	../tests/SkFixed15Test.cpp \
 	../tests/SkImageTest.cpp \
 	../tests/SkLinearBitmapPipelineTest.cpp \
 	../tests/SkLiteDLTest.cpp \
@@ -327,6 +329,7 @@ LOCAL_SRC_FILES := \
 	../gm/addarc.cpp \
 	../gm/all_bitmap_configs.cpp \
 	../gm/alphagradients.cpp \
+	../gm/animatedGif.cpp \
 	../gm/anisotropic.cpp \
 	../gm/annotated_text.cpp \
 	../gm/arcofzorro.cpp \
@@ -371,6 +374,7 @@ LOCAL_SRC_FILES := \
 	../gm/color4f.cpp \
 	../gm/colorcube.cpp \
 	../gm/coloremoji.cpp \
+	../gm/colorfilteralpha8.cpp \
 	../gm/colorfilterimagefilter.cpp \
 	../gm/colorfilters.cpp \
 	../gm/colormatrix.cpp \
@@ -421,7 +425,6 @@ LOCAL_SRC_FILES := \
 	../gm/encode-platform.cpp \
 	../gm/encode.cpp \
 	../gm/extractbitmap.cpp \
-	../gm/factory.cpp \
 	../gm/fadefilter.cpp \
 	../gm/fatpathfill.cpp \
 	../gm/filltypes.cpp \
@@ -709,8 +712,8 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../src/fonts \
 	$(LOCAL_PATH)/../tools \
 	$(LOCAL_PATH)/../tools/flags \
-	external/expat/lib \
 	$(LOCAL_PATH)/../src/gpu \
+	external/expat/lib \
 	$(LOCAL_PATH)/../gm \
 	$(LOCAL_PATH)/../src/effects \
 	$(LOCAL_PATH)/../src/images \

@@ -371,40 +371,11 @@ std::unique_ptr<Statement> IRGenerator::convertDiscard(const ASTDiscardStatement
     return std::unique_ptr<Statement>(new DiscardStatement(d.fPosition));
 }
 
-static const Type& expand_generics(const Type& type, int i) {
-    if (type.kind() == Type::kGeneric_Kind) {
-        return *type.coercibleTypes()[i];
-    }
-    return type;
-}
-
-static void expand_generics(const FunctionDeclaration& decl, 
-                            std::shared_ptr<SymbolTable> symbolTable) {
-    for (int i = 0; i < 4; i++) {
-        const Type& returnType = expand_generics(decl.fReturnType, i);
-        std::vector<const Variable*> parameters;
-        for (const auto& p : decl.fParameters) {
-            Variable* var = new Variable(p->fPosition, Modifiers(p->fModifiers), p->fName,
-                                         expand_generics(p->fType, i),
-                                         Variable::kParameter_Storage);
-            symbolTable->takeOwnership(var);
-            parameters.push_back(var);
-        }
-        symbolTable->add(decl.fName, std::unique_ptr<FunctionDeclaration>(new FunctionDeclaration(
-                                                                           decl.fPosition,
-                                                                           decl.fName,
-                                                                           std::move(parameters),
-                                                                           std::move(returnType))));
-    }
-}
-
 std::unique_ptr<FunctionDefinition> IRGenerator::convertFunction(const ASTFunction& f) {
-    bool isGeneric;
     const Type* returnType = this->convertType(*f.fReturnType);
     if (!returnType) {
         return nullptr;
     }
-    isGeneric = returnType->kind() == Type::kGeneric_Kind;
     std::vector<const Variable*> parameters;
     for (const auto& param : f.fParameters) {
         const Type* type = this->convertType(*param->fType);
@@ -425,7 +396,6 @@ std::unique_ptr<FunctionDefinition> IRGenerator::convertFunction(const ASTFuncti
                                      Variable::kParameter_Storage);
         fSymbolTable->takeOwnership(var);
         parameters.push_back(var);
-        isGeneric |= type->kind() == Type::kGeneric_Kind;
     }
 
     // find existing declaration
@@ -483,19 +453,12 @@ std::unique_ptr<FunctionDefinition> IRGenerator::convertFunction(const ASTFuncti
     }
     if (!decl) {
         // couldn't find an existing declaration
-        if (isGeneric) {
-            ASSERT(!f.fBody);
-            expand_generics(FunctionDeclaration(f.fPosition, f.fName, parameters, *returnType), 
-                            fSymbolTable);
-        } else {
-            auto newDecl = std::unique_ptr<FunctionDeclaration>(new FunctionDeclaration(
-                                                                                     f.fPosition, 
-                                                                                     f.fName, 
-                                                                                     parameters, 
-                                                                                     *returnType));
-            decl = newDecl.get();
-            fSymbolTable->add(decl->fName, std::move(newDecl));
-        }
+        auto newDecl = std::unique_ptr<FunctionDeclaration>(new FunctionDeclaration(f.fPosition,
+                                                                                    f.fName,
+                                                                                    parameters,
+                                                                                    *returnType));
+        decl = newDecl.get();
+        fSymbolTable->add(decl->fName, std::move(newDecl));
     }
     if (f.fBody) {
         ASSERT(!fCurrentFunction);
@@ -915,8 +878,22 @@ std::unique_ptr<Expression> IRGenerator::call(Position position,
         fErrors.error(position, msg);
         return nullptr;
     }
+    std::vector<const Type*> types;
+    const Type* returnType;
+    if (!function.determineFinalTypes(arguments, &types, &returnType)) {
+        std::string msg = "no match for " + function.fName + "(";
+        std::string separator = "";
+        for (size_t i = 0; i < arguments.size(); i++) {
+            msg += separator;
+            separator = ", ";
+            msg += arguments[i]->fType.description();
+        }
+        msg += ")";
+        fErrors.error(position, msg);
+        return nullptr;
+    }
     for (size_t i = 0; i < arguments.size(); i++) {
-        arguments[i] = this->coerce(std::move(arguments[i]), function.fParameters[i]->fType);
+        arguments[i] = this->coerce(std::move(arguments[i]), *types[i]);
         if (!arguments[i]) {
             return nullptr;
         }
@@ -924,7 +901,7 @@ std::unique_ptr<Expression> IRGenerator::call(Position position,
             this->markWrittenTo(*arguments[i]);
         }
     }
-    return std::unique_ptr<FunctionCall>(new FunctionCall(position, function,
+    return std::unique_ptr<FunctionCall>(new FunctionCall(position, *returnType, function,
                                                           std::move(arguments)));
 }
 
@@ -940,9 +917,14 @@ bool IRGenerator::determineCallCost(const FunctionDeclaration& function,
         return false;
     }
     int total = 0;
+    std::vector<const Type*> types;
+    const Type* ignored;
+    if (!function.determineFinalTypes(arguments, &types, &ignored)) {
+        return false;
+    }
     for (size_t i = 0; i < arguments.size(); i++) {
         int cost;
-        if (arguments[i]->fType.determineCoercionCost(function.fParameters[i]->fType, &cost)) {
+        if (arguments[i]->fType.determineCoercionCost(*types[i], &cost)) {
             total += cost;
         } else {
             return false;
@@ -1051,13 +1033,13 @@ std::unique_ptr<Expression> IRGenerator::convertConstructor(
         ASSERT(kind == Type::kVector_Kind || kind == Type::kMatrix_Kind);
         int actual = 0;
         for (size_t i = 0; i < args.size(); i++) {
-            if (args[i]->fType.kind() == Type::kVector_Kind || 
+            if (args[i]->fType.kind() == Type::kVector_Kind ||
                 args[i]->fType.kind() == Type::kMatrix_Kind) {
-                int columns = args[i]->fType.columns();
-                int rows = args[i]->fType.rows();
-                args[i] = this->coerce(std::move(args[i]), 
-                                       type.componentType().toCompound(fContext, columns, rows));
-                if (!args[i]) {
+                if (type.componentType().isNumber() !=
+                    args[i]->fType.componentType().isNumber()) {
+                    fErrors.error(position, "'" + args[i]->fType.description() + "' is not a valid "
+                                            "parameter to '" + type.description() +
+                                            "' constructor");
                     return nullptr;
                 }
                 actual += args[i]->fType.rows() * args[i]->fType.columns();

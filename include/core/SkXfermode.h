@@ -152,16 +152,8 @@ public:
 
     /** Return an SkXfermode object for the specified mode.
      */
-    static sk_sp<SkXfermode> Make(Mode);
-#ifdef SK_SUPPORT_LEGACY_XFERMODE_PTR
-    static SkXfermode* Create(Mode mode) {
-        return Make(mode).release();
-    }
-    SK_ATTR_DEPRECATED("use AsMode(...)")
-    static bool IsMode(const SkXfermode* xfer, Mode* mode) {
-        return AsMode(xfer, mode);
-    }
-#endif
+    static sk_sp<SkXfermode> Make(SkBlendMode);
+    static sk_sp<SkXfermode> Make(Mode m) { return Make((SkBlendMode)m); }
 
     /**
      *  Skia maintains global xfermode objects corresponding to each BlendMode. This returns a
@@ -178,10 +170,6 @@ public:
         return xfer.get();
     }
 
-    static sk_sp<SkXfermode> Make(SkBlendMode bm) {
-        return Make((Mode)bm);
-    }
-
     SkBlendMode blend() const {
         Mode mode;
         SkAssertResult(this->asMode(&mode));
@@ -196,8 +184,6 @@ public:
 
     virtual SkXfermodeProc4f getProc4f() const;
 
-    bool appendStages(SkRasterPipeline*) const;
-
     /**
      *  If the specified mode can be represented by a pair of Coeff, then return
      *  true and set (if not NULL) the corresponding coeffs. If the mode is
@@ -205,6 +191,9 @@ public:
      *  src and dst parameters.
      */
     static bool ModeAsCoeff(Mode mode, Coeff* src, Coeff* dst);
+    static bool ModeAsCoeff(SkBlendMode mode, Coeff* src, Coeff* dst) {
+        return ModeAsCoeff((Mode)mode, src, dst);
+    }
 
     /**
      * Returns whether or not the xfer mode can support treating coverage as alpha
@@ -318,7 +307,6 @@ protected:
 
     virtual D32Proc onGetD32Proc(uint32_t flags) const;
     virtual F16Proc onGetF16Proc(uint32_t flags) const;
-    virtual bool onAppendStages(SkRasterPipeline*) const;
 
 private:
     enum {

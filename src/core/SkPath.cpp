@@ -220,7 +220,7 @@ bool SkPath::interpolate(const SkPath& ending, SkScalar weight, SkPath* out) con
     }
     out->reset();
     out->addPath(*this);
-    fPathRef->interpolate(*ending.fPathRef, weight, out->fPathRef);
+    fPathRef->interpolate(*ending.fPathRef, weight, out->fPathRef.get());
     return true;
 }
 
@@ -1088,7 +1088,7 @@ static int build_arc_conics(const SkRect& oval, const SkVector& start, const SkV
 
     int count = SkConic::BuildUnitArc(start, stop, dir, &matrix, conics);
     if (0 == count) {
-        matrix.mapXY(start.x(), start.y(), singlePt);
+        matrix.mapXY(stop.x(), stop.y(), singlePt);
     }
     return count;
 }

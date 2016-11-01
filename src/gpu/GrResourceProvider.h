@@ -10,6 +10,7 @@
 
 #include "GrBatchAtlas.h"
 #include "GrBuffer.h"
+#include "GrGpu.h"
 #include "GrTextureProvider.h"
 #include "GrPathRange.h"
 
@@ -95,7 +96,7 @@ public:
 
     enum Flags {
         /** If the caller intends to do direct reads/writes to/from the CPU then this flag must be
-         *  set when accessing resources during a GrDrawTarget flush. This includes the execution of
+         *  set when accessing resources during a GrOpList flush. This includes the execution of
          *  GrBatch objects. The reason is that these memory operations are done immediately and
          *  will occur out of order WRT the operations being flushed.
          *  Make this automatic: https://bug.skia.org/4156
@@ -163,7 +164,7 @@ public:
       *
       * @return GrRenderTarget object or NULL on failure.
       */
-     GrRenderTarget* wrapBackendTextureAsRenderTarget(const GrBackendTextureDesc& desc);
+     sk_sp<GrRenderTarget> wrapBackendTextureAsRenderTarget(const GrBackendTextureDesc& desc);
 
 private:
     const GrBuffer* createInstancedIndexBuffer(const uint16_t* pattern,

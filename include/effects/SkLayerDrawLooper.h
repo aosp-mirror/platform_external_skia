@@ -57,7 +57,7 @@ public:
      */
     struct SK_API LayerInfo {
         BitFlags            fPaintBits;
-        SkXfermode::Mode    fColorMode;
+        SK_XFERMODE_MODE_PARAM fColorMode;
         SkVector            fOffset;
         bool                fPostTranslate; //!< applies to fOffset
 
@@ -143,11 +143,6 @@ public:
           * also reset the builder, so it can be used to build another looper.
           */
         sk_sp<SkDrawLooper> detach();
-#ifdef SK_SUPPORT_LEGACY_MINOR_EFFECT_PTR
-        SkLayerDrawLooper* detachLooper() {
-            return (SkLayerDrawLooper*)this->detach().release();
-        }
-#endif
 
     private:
         Rec* fRecs;

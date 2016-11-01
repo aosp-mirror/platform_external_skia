@@ -15,6 +15,7 @@
 #include "SkColorSpaceXform.h"
 #include "SkCommonFlags.h"
 #include "SkData.h"
+#include "SkDebugCanvas.h"
 #include "SkDeferredCanvas.h"
 #include "SkDocument.h"
 #include "SkImageGenerator.h"
@@ -38,13 +39,10 @@
 #include "SkTLogic.h"
 #include "SkSwizzler.h"
 #include <functional>
+#include <cmath>
 
 #if defined(SK_BUILD_FOR_WIN)
     #include "SkAutoCoInitialize.h"
-#endif
-
-#if defined(SK_TEST_QCMS)
-    #include "qcms.h"
 #endif
 
 #if defined(SK_XML)
@@ -409,7 +407,8 @@ Error CodecSrc::draw(SkCanvas* canvas) const {
 
     const int bpp = SkColorTypeBytesPerPixel(decodeInfo.colorType());
     const size_t rowBytes = size.width() * bpp;
-    SkAutoMalloc pixels(decodeInfo.getSafeSize(rowBytes));
+    const size_t safeSize = decodeInfo.getSafeSize(rowBytes);
+    SkAutoMalloc pixels(safeSize);
     SkPMColor colorPtr[256];
     int colorCount = 256;
 
@@ -426,6 +425,71 @@ Error CodecSrc::draw(SkCanvas* canvas) const {
     }
 
     switch (fMode) {
+        case kAnimated_Mode: {
+            std::vector<SkCodec::FrameInfo> frameInfos = codec->getFrameInfo();
+            if (frameInfos.size() <= 1) {
+                return SkStringPrintf("%s is not an animated image.", fPath.c_str());
+            }
+
+            // As in CodecSrc::size(), compute a roughly square grid to draw the frames
+            // into. "factor" is the number of frames to draw on one row. There will be
+            // up to "factor" rows as well.
+            const float root = sqrt((float) frameInfos.size());
+            const int factor = sk_float_ceil2int(root);
+
+            // Used to cache a frame that future frames will depend on.
+            SkAutoMalloc priorFramePixels;
+            size_t cachedFrame = SkCodec::kNone;
+            for (size_t i = 0; i < frameInfos.size(); i++) {
+                options.fFrameIndex = i;
+                // Check for a prior frame
+                const size_t reqFrame = frameInfos[i].fRequiredFrame;
+                if (reqFrame != SkCodec::kNone && reqFrame == cachedFrame
+                        && priorFramePixels.get()) {
+                    // Copy into pixels
+                    memcpy(pixels.get(), priorFramePixels.get(), safeSize);
+                    options.fHasPriorFrame = true;
+                } else {
+                    options.fHasPriorFrame = false;
+                }
+                const SkCodec::Result result = codec->getPixels(decodeInfo, pixels.get(),
+                                                                rowBytes, &options,
+                                                                colorPtr, &colorCount);
+                switch (result) {
+                    case SkCodec::kSuccess:
+                    case SkCodec::kIncompleteInput: {
+                        SkAutoCanvasRestore acr(canvas, true);
+                        const int xTranslate = (i % factor) * decodeInfo.width();
+                        const int yTranslate = (i / factor) * decodeInfo.height();
+                        canvas->translate(SkIntToScalar(xTranslate), SkIntToScalar(yTranslate));
+                        draw_to_canvas(canvas, bitmapInfo, pixels.get(), rowBytes,
+                                       colorPtr, colorCount, fDstColorType);
+                        if (result == SkCodec::kIncompleteInput) {
+                            return "";
+                        }
+                        break;
+                    }
+                    case SkCodec::kInvalidConversion:
+                        if (i > 0 && (decodeInfo.colorType() == kRGB_565_SkColorType
+                                      || decodeInfo.colorType() == kIndex_8_SkColorType)) {
+                            return Error::Nonfatal(SkStringPrintf(
+                                "Cannot decode frame %i to 565/Index8 (%s).", i, fPath.c_str()));
+                        }
+                        // Fall through.
+                    default:
+                        return SkStringPrintf("Couldn't getPixels for frame %i in %s.",
+                                              i, fPath.c_str());
+                }
+
+                // If a future frame depends on this one, store it in priorFrame.
+                // (Note that if i+1 does *not* depend on i, then no future frame can.)
+                if (i+1 < frameInfos.size() && frameInfos[i+1].fRequiredFrame == i) {
+                    memcpy(priorFramePixels.reset(safeSize), pixels.get(), safeSize);
+                    cachedFrame = i;
+                }
+            }
+            break;
+        }
         case kCodecZeroInit_Mode:
         case kCodec_Mode: {
             switch (codec->getPixels(decodeInfo, pixels.get(), rowBytes, &options,
@@ -447,10 +511,20 @@ Error CodecSrc::draw(SkCanvas* canvas) const {
         case kScanline_Mode: {
             void* dst = pixels.get();
             uint32_t height = decodeInfo.height();
-            const bool png = fPath.endsWith("png");
+            const bool useIncremental = [this]() {
+                auto exts = { "png", "PNG", "gif", "GIF" };
+                for (auto ext : exts) {
+                    if (fPath.endsWith(ext)) {
+                        return true;
+                    }
+                }
+                return false;
+            }();
+            // ico may use the old scanline method or the new one, depending on whether it
+            // internally holds a bmp or a png.
             const bool ico = fPath.endsWith("ico");
-            bool useOldScanlineMethod = !png && !ico;
-            if (png || ico) {
+            bool useOldScanlineMethod = !useIncremental && !ico;
+            if (useIncremental || ico) {
                 if (SkCodec::kSuccess == codec->startIncrementalDecode(decodeInfo, dst,
                         rowBytes, nullptr, colorPtr, &colorCount)) {
                     int rowsDecoded;
@@ -460,8 +534,8 @@ Error CodecSrc::draw(SkCanvas* canvas) const {
                                                    rowsDecoded);
                     }
                 } else {
-                    if (png) {
-                        // Error: PNG should support incremental decode.
+                    if (useIncremental) {
+                        // Error: These should support incremental decode.
                         return "Could not start incremental decode";
                     }
                     // Otherwise, this is an ICO. Since incremental failed, it must contain a BMP,
@@ -483,17 +557,6 @@ Error CodecSrc::draw(SkCanvas* canvas) const {
                         // image, memory will be filled with a default value.
                         codec->getScanlines(dst, height, rowBytes);
                         break;
-                    case SkCodec::kOutOfOrder_SkScanlineOrder: {
-                        for (int y = 0; y < decodeInfo.height(); y++) {
-                            int dstY = codec->outputScanline(y);
-                            void* dstPtr = SkTAddOffset<void>(dst, rowBytes * dstY);
-                            // We complete the loop, even if this call begins to fail
-                            // due to an incomplete image.  This ensures any uninitialized
-                            // memory will be filled with the proper value.
-                            codec->getScanlines(dstPtr, 1, rowBytes);
-                        }
-                        break;
-                    }
                 }
             }
 
@@ -659,13 +722,30 @@ SkISize CodecSrc::size() const {
     if (nullptr == codec) {
         return SkISize::Make(0, 0);
     }
-    return codec->getScaledDimensions(fScale);
+
+    auto imageSize = codec->getScaledDimensions(fScale);
+    if (fMode == kAnimated_Mode) {
+        // We'll draw one of each frame, so make it big enough to hold them all
+        // in a grid. The grid will be roughly square, with "factor" frames per
+        // row and up to "factor" rows.
+        const size_t count = codec->getFrameInfo().size();
+        const float root = sqrt((float) count);
+        const int factor = sk_float_ceil2int(root);
+        imageSize.fWidth  = imageSize.fWidth  * factor;
+        imageSize.fHeight = imageSize.fHeight * sk_float_ceil2int((float) count / (float) factor);
+    }
+    return imageSize;
 }
 
 Name CodecSrc::name() const {
     if (1.0f == fScale) {
-        return SkOSPath::Basename(fPath.c_str());
+        Name name = SkOSPath::Basename(fPath.c_str());
+        if (fMode == kAnimated_Mode) {
+            name.append("_animated");
+        }
+        return name;
     }
+    SkASSERT(fMode != kAnimated_Mode);
     return get_scaled_name(fPath, fScale);
 }
 
@@ -881,10 +961,6 @@ Error ColorCodecSrc::draw(SkCanvas* canvas) const {
     }
 
     bool runInLegacyMode = kBaseline_Mode == fMode;
-#if defined(SK_TEST_QCMS)
-    runInLegacyMode = runInLegacyMode || kQCMS_HPZR30w_Mode == fMode;
-#endif
-
     if (runInLegacyMode && canvas->imageInfo().colorSpace()) {
         return Error::Nonfatal("Skipping tests that are only interesting in legacy mode.");
     } else if (!runInLegacyMode && !canvas->imageInfo().colorSpace()) {
@@ -910,9 +986,9 @@ Error ColorCodecSrc::draw(SkCanvas* canvas) const {
 
     sk_sp<SkColorSpace> dstSpace = nullptr;
     if (kDst_sRGB_Mode == fMode) {
-        dstSpace = SkColorSpace::NewNamed(SkColorSpace::kSRGB_Named);
+        dstSpace = SkColorSpace::MakeNamed(SkColorSpace::kSRGB_Named);
     } else if (kDst_HPZR30w_Mode == fMode) {
-        dstSpace = SkColorSpace::NewICC(dstData->data(), dstData->size());
+        dstSpace = SkColorSpace::MakeICC(dstData->data(), dstData->size());
     }
 
     SkImageInfo decodeInfo = codec->getInfo().makeColorType(fColorType).makeColorSpace(dstSpace);
@@ -941,15 +1017,11 @@ Error ColorCodecSrc::draw(SkCanvas* canvas) const {
     size_t rowBytes = bitmap.rowBytes();
     SkCodec::Result r = codec->getPixels(decodeInfo, bitmap.getPixels(), rowBytes);
     if (SkCodec::kSuccess != r && SkCodec::kIncompleteInput != r) {
-        if (kRGBA_F16_SkColorType == decodeInfo.colorType()) {
-            // FIXME (raftias):
-            // Get the codecs to not fail when there is no color xform,
-            // which currently happens in F16 mode.
-            return Error::Nonfatal(SkStringPrintf("Couldn't getPixels %s in F16. Error code %d",
-                                                  fPath.c_str()));
-        } else {
-            return SkStringPrintf("Couldn't getPixels %s. Error code %d", fPath.c_str(), r);
-        }
+        // FIXME (raftias):
+        // This should be a fatal error.  We need to add support for
+        // A2B images in SkColorSpaceXform.
+        return Error::Nonfatal(SkStringPrintf("Couldn't getPixels %s. Error code %d",
+                                              fPath.c_str(), r));
     }
 
     switch (fMode) {
@@ -958,51 +1030,6 @@ Error ColorCodecSrc::draw(SkCanvas* canvas) const {
         case kDst_HPZR30w_Mode:
             canvas->drawBitmap(bitmap, 0, 0);
             break;
-#if defined(SK_TEST_QCMS)
-        case kQCMS_HPZR30w_Mode: {
-            sk_sp<SkData> srcData = codec->getICCData();
-            if (!srcData) {
-                return Error::Nonfatal("No ICC profile data.  Cannot test with QCMS.\n");
-            }
-
-            SkAutoTCallVProc<qcms_profile, qcms_profile_release>
-                    srcSpace(qcms_profile_from_memory(srcData->data(), srcData->size()));
-            if (!srcSpace) {
-                return Error::Nonfatal(SkStringPrintf("QCMS cannot create profile for %s.\n",
-                                       fPath.c_str()));
-            }
-
-            SkAutoTCallVProc<qcms_profile, qcms_profile_release>
-                    dstSpace(qcms_profile_from_memory(dstData->data(), dstData->size()));
-            SkASSERT(dstSpace);
-
-            // Optimizes conversion by precomputing the inverse transformation to dst.  Also
-            // causes QCMS to use a completely different codepath.  This is how Chrome uses QCMS.
-            qcms_profile_precache_output_transform(dstSpace);
-            SkAutoTCallVProc<qcms_transform, qcms_transform_release>
-                    transform (qcms_transform_create(srcSpace, QCMS_DATA_RGBA_8, dstSpace,
-                                                     QCMS_DATA_RGBA_8, QCMS_INTENT_PERCEPTUAL));
-            if (!transform) {
-                return SkStringPrintf("QCMS cannot create transform for %s.\n", fPath.c_str());
-            }
-
-#ifdef SK_PMCOLOR_IS_RGBA
-            qcms_output_type outType = QCMS_OUTPUT_RGBX;
-#else
-            qcms_output_type outType = QCMS_OUTPUT_BGRX;
-#endif
-
-            // Perform color correction.
-            uint32_t* row = (uint32_t*) bitmap.getPixels();
-            for (int y = 0; y < decodeInfo.height(); y++) {
-                qcms_transform_data_type(transform, row, row, decodeInfo.width(), outType);
-                row = SkTAddOffset<uint32_t>(row, rowBytes);
-            }
-
-            canvas->drawBitmap(bitmap, 0, 0);
-            break;
-        }
-#endif
         default:
             SkASSERT(false);
             return "Invalid fMode";
@@ -1321,6 +1348,22 @@ Error SKPSink::draw(const Src& src, SkBitmap*, SkWStream* dst, SkString*) const 
     }
     recorder.finishRecordingAsPicture()->serialize(dst);
     return "";
+}
+
+/*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
+
+Error DebugSink::draw(const Src& src, SkBitmap*, SkWStream* dst, SkString*) const {
+    SkDebugCanvas debugCanvas(src.size().width(), src.size().height());
+    Error err = src.draw(&debugCanvas);
+    if (!err.isEmpty()) {
+        return err;
+    }
+    sk_sp<SkCanvas> nullCanvas(SkCreateNullCanvas());
+    UrlDataManager dataManager(SkString("data"));
+    Json::Value json = debugCanvas.toJSON(
+            dataManager, debugCanvas.getSize(), nullCanvas.get());
+    std::string value = Json::StyledWriter().write(json);
+    return dst->write(value.c_str(), value.size()) ? "" : "SkWStream Error";
 }
 
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
@@ -1682,7 +1725,7 @@ Error ViaSingletonPictures::draw(
         SkCanvas* macroCanvas = macroRec.beginRecording(SkIntToScalar(size.width()),
                                                         SkIntToScalar(size.height()));
 
-        SkAutoTDelete<SkDrawableList> drawables(recorder.detachDrawableList());
+        std::unique_ptr<SkDrawableList> drawables(recorder.detachDrawableList());
         const SkDrawableList empty;
 
         DrawsAsSingletonPictures drawsAsSingletonPictures = {

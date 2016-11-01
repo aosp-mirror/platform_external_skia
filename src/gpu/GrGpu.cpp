@@ -19,6 +19,7 @@
 #include "GrResourceProvider.h"
 #include "GrRenderTargetPriv.h"
 #include "GrStencilAttachment.h"
+#include "GrStencilSettings.h"
 #include "GrSurfacePriv.h"
 #include "GrTexturePriv.h"
 #include "SkMathPriv.h"
@@ -190,7 +191,8 @@ GrTexture* GrGpu::createTexture(const GrSurfaceDesc& origDesc, SkBudgeted budget
     return tex;
 }
 
-GrTexture* GrGpu::wrapBackendTexture(const GrBackendTextureDesc& desc, GrWrapOwnership ownership) {
+sk_sp<GrTexture> GrGpu::wrapBackendTexture(const GrBackendTextureDesc& desc,
+                                           GrWrapOwnership ownership) {
     this->handleDirtyContext();
     if (!this->caps()->isConfigTexturable(desc.fConfig)) {
         return nullptr;
@@ -203,22 +205,20 @@ GrTexture* GrGpu::wrapBackendTexture(const GrBackendTextureDesc& desc, GrWrapOwn
     if (desc.fWidth > maxSize || desc.fHeight > maxSize) {
         return nullptr;
     }
-    GrTexture* tex = this->onWrapBackendTexture(desc, ownership);
-    if (nullptr == tex) {
+    sk_sp<GrTexture> tex = this->onWrapBackendTexture(desc, ownership);
+    if (!tex) {
         return nullptr;
     }
     // TODO: defer this and attach dynamically
     GrRenderTarget* tgt = tex->asRenderTarget();
     if (tgt && !fContext->resourceProvider()->attachStencilAttachment(tgt)) {
-        tex->unref();
         return nullptr;
-    } else {
-        return tex;
     }
+    return tex;
 }
 
-GrRenderTarget* GrGpu::wrapBackendRenderTarget(const GrBackendRenderTargetDesc& desc,
-                                               GrWrapOwnership ownership) {
+sk_sp<GrRenderTarget> GrGpu::wrapBackendRenderTarget(const GrBackendRenderTargetDesc& desc,
+                                                     GrWrapOwnership ownership) {
     if (!this->caps()->isConfigRenderable(desc.fConfig, desc.fSampleCnt > 0)) {
         return nullptr;
     }
@@ -226,7 +226,7 @@ GrRenderTarget* GrGpu::wrapBackendRenderTarget(const GrBackendRenderTargetDesc& 
     return this->onWrapBackendRenderTarget(desc, ownership);
 }
 
-GrRenderTarget* GrGpu::wrapBackendTextureAsRenderTarget(const GrBackendTextureDesc& desc) {
+sk_sp<GrRenderTarget> GrGpu::wrapBackendTextureAsRenderTarget(const GrBackendTextureDesc& desc) {
     this->handleDirtyContext();
     if (!(desc.fFlags & kRenderTarget_GrBackendTextureFlag)) {
       return nullptr;
@@ -443,21 +443,21 @@ void GrGpu::didWriteToSurface(GrSurface* surface, const SkIRect* bounds, uint32_
     }
 }
 
-const GrGpu::MultisampleSpecs& GrGpu::getMultisampleSpecs(GrRenderTarget* rt,
-                                                          const GrStencilSettings& stencil) {
+const GrGpu::MultisampleSpecs& GrGpu::queryMultisampleSpecs(const GrPipeline& pipeline) {
+    GrRenderTarget* rt = pipeline.getRenderTarget();
     SkASSERT(rt->desc().fSampleCnt > 1);
 
-#ifndef SK_DEBUG
-    // In debug mode we query the multisample info every time to verify the caching is correct.
-    if (uint8_t id = rt->renderTargetPriv().accessMultisampleSpecsID()) {
-        SkASSERT(id > 0 && id < fMultisampleSpecs.count());
-        return fMultisampleSpecs[id];
+    GrStencilSettings stencil;
+    if (pipeline.isStencilEnabled()) {
+        // TODO: attach stencil and create settings during render target flush.
+        SkASSERT(rt->renderTargetPriv().getStencilAttachment());
+        stencil.reset(*pipeline.getUserStencil(), pipeline.hasStencilClip(),
+                      rt->renderTargetPriv().numStencilBits());
     }
-#endif
 
     int effectiveSampleCnt;
     SkSTArray<16, SkPoint, true> pattern;
-    this->onGetMultisampleSpecs(rt, stencil, &effectiveSampleCnt, &pattern);
+    this->onQueryMultisampleSpecs(rt, stencil, &effectiveSampleCnt, &pattern);
     SkASSERT(effectiveSampleCnt >= rt->desc().fSampleCnt);
 
     uint8_t id;
@@ -480,10 +480,7 @@ const GrGpu::MultisampleSpecs& GrGpu::getMultisampleSpecs(GrRenderTarget* rt,
         }
     }
     SkASSERT(id > 0);
-    SkASSERT(!rt->renderTargetPriv().accessMultisampleSpecsID() ||
-             rt->renderTargetPriv().accessMultisampleSpecsID() == id);
 
-    rt->renderTargetPriv().accessMultisampleSpecsID() = id;
     return fMultisampleSpecs[id];
 }
 

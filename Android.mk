@@ -84,12 +84,14 @@ LOCAL_SRC_FILES := \
 	src/codec/SkPngCodec.cpp \
 	src/codec/SkSampler.cpp \
 	src/codec/SkSampledCodec.cpp \
+	src/codec/SkStreamBuffer.cpp \
 	src/codec/SkSwizzler.cpp \
 	src/codec/SkWbmpCodec.cpp \
 	src/codec/SkWebpAdapterCodec.cpp \
 	src/codec/SkWebpCodec.cpp \
 	src/codec/SkCodecImageGenerator.cpp \
 	src/ports/SkImageGenerator_skia.cpp \
+	third_party/gif/SkGifImageReader.cpp \
 	src/android/SkBitmapRegionCodec.cpp \
 	src/android/SkBitmapRegionDecoder.cpp \
 	src/c/sk_paint.cpp \
@@ -149,7 +151,6 @@ LOCAL_SRC_FILES := \
 	src/core/SkDeviceLooper.cpp \
 	src/core/SkDeviceProfile.cpp \
 	src/lazy/SkDiscardableMemoryPool.cpp \
-	src/lazy/SkDiscardablePixelRef.cpp \
 	src/core/SkDistanceFieldGen.cpp \
 	src/core/SkDither.cpp \
 	src/core/SkDocument.cpp \
@@ -378,7 +379,8 @@ LOCAL_SRC_FILES := \
 	src/effects/SkPaintImageFilter.cpp \
 	src/effects/SkPerlinNoiseShader.cpp \
 	src/effects/SkPictureImageFilter.cpp \
-	src/effects/SkRRectsGaussianEdgeShader.cpp \
+	src/effects/SkRRectsGaussianEdgeMaskFilter.cpp \
+	src/effects/SkShadowMaskFilter.cpp \
 	src/effects/SkTableColorFilter.cpp \
 	src/effects/SkTableMaskFilter.cpp \
 	src/effects/SkTileImageFilter.cpp \
@@ -407,10 +409,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrContext.cpp \
 	src/gpu/GrCoordTransform.cpp \
 	src/gpu/GrDefaultGeoProcFactory.cpp \
-	src/gpu/GrDrawContext.cpp \
-	src/gpu/GrPathRenderingDrawContext.cpp \
 	src/gpu/GrDrawingManager.cpp \
-	src/gpu/GrDrawTarget.cpp \
 	src/gpu/GrFixedClip.cpp \
 	src/gpu/GrFragmentProcessor.cpp \
 	src/gpu/GrGpu.cpp \
@@ -420,6 +419,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrImageIDTextureAdjuster.cpp \
 	src/gpu/GrInvariantOutput.cpp \
 	src/gpu/GrMemoryPool.cpp \
+	src/gpu/GrOpList.cpp \
 	src/gpu/GrOvalRenderer.cpp \
 	src/gpu/GrPaint.cpp \
 	src/gpu/GrPath.cpp \
@@ -443,6 +443,9 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrRenderTarget.cpp \
 	src/gpu/GrRenderTargetProxy.cpp \
 	src/gpu/GrReducedClip.cpp \
+	src/gpu/GrRenderTargetContext.cpp \
+	src/gpu/GrPathRenderingRenderTargetContext.cpp \
+	src/gpu/GrRenderTargetOpList.cpp \
 	src/gpu/GrResourceCache.cpp \
 	src/gpu/GrResourceProvider.cpp \
 	src/gpu/GrShape.cpp \
@@ -450,6 +453,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrStencilSettings.cpp \
 	src/gpu/GrStyle.cpp \
 	src/gpu/GrTessellator.cpp \
+	src/gpu/GrTextureOpList.cpp \
 	src/gpu/GrTraceMarker.cpp \
 	src/gpu/GrTestUtils.cpp \
 	src/gpu/GrSWMaskHelper.cpp \
@@ -616,15 +620,12 @@ LOCAL_SRC_FILES := \
 	tools/viewer/sk_app/VulkanWindowContext.cpp \
 	tools/viewer/sk_app/android/VulkanWindowContext_android.cpp \
 	src/images/SkForceLinking.cpp \
-	src/images/SkMovie_FactoryDefault.cpp \
 	src/images/SkWEBPImageEncoder.cpp \
 	src/images/SkJPEGImageEncoder.cpp \
 	src/images/SkPNGImageEncoder.cpp \
 	src/images/SkImageEncoder.cpp \
 	src/images/SkImageEncoder_Factory.cpp \
 	src/images/SkJPEGWriteUtility.cpp \
-	src/images/SkMovie.cpp \
-	src/images/SkGIFMovie.cpp \
 	src/pdf/SkDeflate.cpp \
 	src/pdf/SkJpegInfo.cpp \
 	src/pdf/SkPDFBitmap.cpp \
@@ -731,7 +732,6 @@ LOCAL_SHARED_LIBRARIES := \
 	libpiex
 
 LOCAL_STATIC_LIBRARIES := \
-	libgif \
 	libwebp-decode \
 	libwebp-encode \
 	libsfntly
@@ -744,11 +744,11 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/src/codec \
 	$(LOCAL_PATH)/src/core \
 	$(LOCAL_PATH)/src/utils \
+	$(LOCAL_PATH)/third_party/gif \
 	$(LOCAL_PATH)/include/c \
 	$(LOCAL_PATH)/include/config \
 	$(LOCAL_PATH)/include/core \
 	$(LOCAL_PATH)/include/pathops \
-	external/giflib \
 	external/webp/include \
 	$(LOCAL_PATH)/include/android \
 	$(LOCAL_PATH)/src/android \

@@ -35,6 +35,14 @@
 
 #include <string.h>
 
+#ifdef SK_SUPPORT_LEGACY_XFERMODE_PARAM
+    #define SK_XFERMODE_PARAM       SkXfermode*
+    #define SK_XFERMODE_MODE_PARAM  SkXfermode::Mode
+#else
+    #define SK_XFERMODE_PARAM       SkBlendMode
+    #define SK_XFERMODE_MODE_PARAM  SkBlendMode
+#endif
+
 /**
  *  sk_careful_memcpy() is just like memcpy(), but guards against undefined behavior.
  *
@@ -396,9 +404,9 @@ static inline constexpr int Sk32ToBool(uint32_t n) {
 /** Generic swap function. Classes with efficient swaps should specialize this function to take
     their fast path. This function is used by SkTSort. */
 template <typename T> inline void SkTSwap(T& a, T& b) {
-    T c(a);
-    a = b;
-    b = c;
+    T c(std::move(a));
+    a = std::move(b);
+    b = std::move(c);
 }
 
 static inline int32_t SkAbs32(int32_t value) {

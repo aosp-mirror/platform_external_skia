@@ -73,6 +73,31 @@
 
 namespace SkSL {
 
+#define MAX_PARSE_DEPTH 50
+
+class AutoDepth {
+public:
+    AutoDepth(Parser* p)
+    : fParser(p) {
+        fParser->fDepth++;
+    }
+
+    ~AutoDepth() {
+        fParser->fDepth--;
+    }
+
+    bool checkValid() {
+        if (fParser->fDepth > MAX_PARSE_DEPTH) {
+            fParser->error(fParser->peek().fPosition, "exceeded max parse depth");
+            return false;
+        }
+        return true;
+    }
+
+private:
+    Parser* fParser;
+};
+
 Parser::Parser(std::string text, SymbolTable& types, ErrorReporter& errors) 
 : fPushback(Position(-1, -1), Token::INVALID_TOKEN, "")
 , fTypes(types)
@@ -132,9 +157,18 @@ Token Parser::nextToken() {
         return result;
     }
     int token = sksllex(fScanner);
-    return Token(Position(skslget_lineno(fScanner), -1), (Token::Kind) token, 
-                 token == Token::END_OF_FILE ? "<end of file>" : 
-                                               std::string(skslget_text(fScanner)));
+    std::string text;
+    switch ((Token::Kind) token) {
+        case Token::IDENTIFIER:    // fall through
+        case Token::INT_LITERAL:   // fall through
+        case Token::FLOAT_LITERAL: // fall through
+        case Token::DIRECTIVE:
+            text = std::string(skslget_text(fScanner));
+            break;
+        default:
+            break;
+    }
+    return Token(Position(skslget_lineno(fScanner), -1), (Token::Kind) token, text);
 }
 
 void Parser::pushback(Token t) {
@@ -920,6 +954,10 @@ std::unique_ptr<ASTDiscardStatement> Parser::discardStatement() {
 
 /* LBRACE statement* RBRACE */
 std::unique_ptr<ASTBlock> Parser::block() {
+    AutoDepth depth(this);
+    if (!depth.checkValid()) {
+        return nullptr;
+    }
     Token start;
     if (!this->expect(Token::LBRACE, "'{'", &start)) {
         return nullptr;
@@ -959,6 +997,10 @@ std::unique_ptr<ASTExpressionStatement> Parser::expressionStatement() {
 
 /* assignmentExpression */
 std::unique_ptr<ASTExpression> Parser::expression() {
+    AutoDepth depth(this);
+    if (!depth.checkValid()) {
+        return nullptr;
+    }
     return this->assignmentExpression();
 }
 

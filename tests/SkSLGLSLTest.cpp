@@ -27,15 +27,7 @@ static void test(skiatest::Reporter* r, const char* src, SkSL::GLCaps caps, cons
 }
 
 static SkSL::GLCaps default_caps() {
-    return { 
-             400, 
-             SkSL::GLCaps::kGL_Standard,
-             false, // isCoreProfile
-             false, // usesPrecisionModifiers;
-             false, // mustDeclareFragmentShaderOutput
-             true,  // canUseMinAndAbsTogether
-             false  // mustForceNegatedAtanParamToFloat
-           };
+    return SkSL::GLCaps();
 }
 
 DEF_TEST(SkSLHelloWorld, r) {
@@ -376,6 +368,30 @@ DEF_TEST(SkSLHex, r) {
          "}\n");
 }
 
+DEF_TEST(SkSLVectorConstructors, r) {
+    test(r,
+         "vec2 v1 = vec2(1);"
+         "vec2 v2 = vec2(1, 2);"
+         "vec2 v3 = vec2(vec2(1));"
+         "vec2 v4 = vec2(vec3(1));"
+         "vec3 v5 = vec3(vec2(1), 1.0);"
+         "vec3 v6 = vec3(vec4(1, 2, 3, 4));"
+         "ivec2 v7 = ivec2(1);"
+         "ivec2 v8 = ivec2(vec2(1, 2));"
+         "vec2 v9 = vec2(ivec2(1, 2));",
+         default_caps(),
+         "#version 400\n"
+         "vec2 v1 = vec2(1.0);\n"
+         "vec2 v2 = vec2(1.0, 2.0);\n"
+         "vec2 v3 = vec2(1.0);\n"
+         "vec2 v4 = vec2(vec3(1.0));\n"
+         "vec3 v5 = vec3(vec2(1.0), 1.0);\n"
+         "vec3 v6 = vec3(vec4(1.0, 2.0, 3.0, 4.0));\n"
+         "ivec2 v7 = ivec2(1);\n"
+         "ivec2 v8 = ivec2(vec2(1.0, 2.0));\n"
+         "vec2 v9 = vec2(ivec2(1, 2));\n");
+}
+
 DEF_TEST(SkSLArrayConstructors, r) {
     test(r,
          "float test1[] = float[](1, 2, 3, 4);"
@@ -386,4 +402,31 @@ DEF_TEST(SkSLArrayConstructors, r) {
          "float test1[] = float[](1.0, 2.0, 3.0, 4.0);\n"
          "vec2 test2[] = vec2[](vec2(1.0, 2.0), vec2(3.0, 4.0));\n"
          "mat4 test3[] = mat4[]();\n");
+}
+
+DEF_TEST(SkSLDerivatives, r) {
+    test(r,
+         "void main() { float x = dFdx(1); }",
+         default_caps(),
+         "#version 400\n"
+         "void main() {\n"
+         "    float x = dFdx(1.0);\n"
+         "}\n");
+    SkSL::GLCaps caps = default_caps();
+    caps.fShaderDerivativeExtensionString = "GL_OES_standard_derivatives";
+    test(r,
+         "void main() { float x = 1; }",
+         caps,
+         "#version 400\n"
+         "void main() {\n"
+         "    float x = 1.0;\n"
+         "}\n");
+    test(r,
+         "void main() { float x = dFdx(1); }",
+         caps,
+         "#version 400\n"
+         "#extension GL_OES_standard_derivatives : require\n"
+         "void main() {\n"
+         "    float x = dFdx(1.0);\n"
+         "}\n");
 }

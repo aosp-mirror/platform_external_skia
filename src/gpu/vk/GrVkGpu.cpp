@@ -182,13 +182,7 @@ GrVkGpu::~GrVkGpu() {
 #endif
 
 #ifdef SK_DEBUG
-    if (this->vkCaps().allowInitializationErrorOnTearDown()) {
-        SkASSERT(VK_SUCCESS == res ||
-                 VK_ERROR_DEVICE_LOST == res ||
-                 VK_ERROR_INITIALIZATION_FAILED == res);
-    } else {
-        SkASSERT(VK_SUCCESS == res || VK_ERROR_DEVICE_LOST == res);
-    }
+    SkASSERT(VK_SUCCESS == res || VK_ERROR_DEVICE_LOST == res);
 #endif
 
     fCopyManager.destroyResources(this);
@@ -756,8 +750,8 @@ static GrSurfaceOrigin resolve_origin(GrSurfaceOrigin origin) {
     }
 }
 
-GrTexture* GrVkGpu::onWrapBackendTexture(const GrBackendTextureDesc& desc,
-                                         GrWrapOwnership ownership) {
+sk_sp<GrTexture> GrVkGpu::onWrapBackendTexture(const GrBackendTextureDesc& desc,
+                                               GrWrapOwnership ownership) {
     if (0 == desc.fTextureHandle) {
         return nullptr;
     }
@@ -791,22 +785,14 @@ GrTexture* GrVkGpu::onWrapBackendTexture(const GrBackendTextureDesc& desc,
     // In VK, we don't have this restriction
     surfDesc.fOrigin = resolve_origin(desc.fOrigin);
 
-    GrVkTexture* texture = nullptr;
-    if (renderTarget) {
-        texture = GrVkTextureRenderTarget::CreateWrappedTextureRenderTarget(this, surfDesc,
-                                                                            ownership, info);
-    } else {
-        texture = GrVkTexture::CreateWrappedTexture(this, surfDesc, ownership, info);
+    if (!renderTarget) {
+        return GrVkTexture::MakeWrappedTexture(this, surfDesc, ownership, info);
     }
-    if (!texture) {
-        return nullptr;
-    }
-
-    return texture;
+    return GrVkTextureRenderTarget::MakeWrappedTextureRenderTarget(this, surfDesc, ownership, info);
 }
 
-GrRenderTarget* GrVkGpu::onWrapBackendRenderTarget(const GrBackendRenderTargetDesc& wrapDesc,
-                                                   GrWrapOwnership ownership) {
+sk_sp<GrRenderTarget> GrVkGpu::onWrapBackendRenderTarget(const GrBackendRenderTargetDesc& wrapDesc,
+                                                         GrWrapOwnership ownership) {
 
     const GrVkImageInfo* info =
         reinterpret_cast<const GrVkImageInfo*>(wrapDesc.fRenderTargetHandle);
@@ -824,12 +810,10 @@ GrRenderTarget* GrVkGpu::onWrapBackendRenderTarget(const GrBackendRenderTargetDe
 
     desc.fOrigin = resolve_origin(wrapDesc.fOrigin);
 
-    GrVkRenderTarget* tgt = GrVkRenderTarget::CreateWrappedRenderTarget(this, desc,
-                                                                        ownership,
-                                                                        info);
+    sk_sp<GrVkRenderTarget> tgt = GrVkRenderTarget::MakeWrappedRenderTarget(this, desc,
+                                                                            ownership, info);
     if (tgt && wrapDesc.fStencilBits) {
-        if (!createStencilAttachmentForRenderTarget(tgt, desc.fWidth, desc.fHeight)) {
-            tgt->unref();
+        if (!createStencilAttachmentForRenderTarget(tgt.get(), desc.fWidth, desc.fHeight)) {
             return nullptr;
         }
     }
@@ -1323,7 +1307,7 @@ void GrVkGpu::addImageMemoryBarrier(VkPipelineStageFlags srcStageMask,
                                        barrier);
 }
 
-void GrVkGpu::finishDrawTarget() {
+void GrVkGpu::finishOpList() {
     // Submit the current command buffer to the Queue
     this->submitCommandBuffer(kSkip_SyncQueue);
 }
@@ -1646,8 +1630,8 @@ bool GrVkGpu::initDescForDstCopy(const GrRenderTarget* src, GrSurfaceDesc* desc)
     return true;
 }
 
-void GrVkGpu::onGetMultisampleSpecs(GrRenderTarget* rt, const GrStencilSettings&,
-                                    int* effectiveSampleCnt, SamplePattern*) {
+void GrVkGpu::onQueryMultisampleSpecs(GrRenderTarget* rt, const GrStencilSettings&,
+                                      int* effectiveSampleCnt, SamplePattern*) {
     // TODO: stub.
     SkASSERT(!this->caps()->sampleLocationsSupport());
     *effectiveSampleCnt = rt->desc().fSampleCnt;

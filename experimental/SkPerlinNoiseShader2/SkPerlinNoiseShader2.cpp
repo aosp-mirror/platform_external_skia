@@ -727,12 +727,8 @@ sk_sp<GrFragmentProcessor> GrPerlinNoise2Effect::TestCreate(GrProcessorTestData*
         SkPerlinNoiseShader2::MakeTurbulence(baseFrequencyX, baseFrequencyY, numOctaves, seed,
                                              stitchTiles ? &tileSize : nullptr));
 
-    GrPaint grPaint;
-    SkMatrix viewMatrix = GrTest::TestMatrix(d->fRandom);
-    auto colorSpace = GrTest::TestColorSpace(d->fRandom);
-    return shader->asFragmentProcessor(SkShader::AsFPArgs(d->fContext, &viewMatrix, nullptr,
-                                                          kNone_SkFilterQuality, colorSpace.get(),
-                                                          SkSourceGammaTreatment::kRespect));
+    GrTest::TestAsFPArgs asFPArgs(d);
+    return shader->asFragmentProcessor(asFPArgs.args());
 }
 
 void GrGLPerlinNoise2::emitCode(EmitArgs& args) {
@@ -1136,12 +1132,8 @@ sk_sp<GrFragmentProcessor> GrImprovedPerlinNoiseEffect::TestCreate(GrProcessorTe
                                                                    numOctaves,
                                                                    z));
 
-    GrPaint grPaint;
-    SkMatrix viewMatrix = GrTest::TestMatrix(d->fRandom);
-    auto colorSpace = GrTest::TestColorSpace(d->fRandom);
-    return shader->asFragmentProcessor(SkShader::AsFPArgs(d->fContext, &viewMatrix, nullptr,
-                                                          kNone_SkFilterQuality, colorSpace.get(),
-                                                          SkSourceGammaTreatment::kRespect));
+    GrTest::TestAsFPArgs asFPArgs(d);
+    return shader->asFragmentProcessor(asFPArgs.args());
 }
 
 void GrGLImprovedPerlinNoise::emitCode(EmitArgs& args) {
@@ -1342,13 +1334,17 @@ sk_sp<GrFragmentProcessor> SkPerlinNoiseShader2::asFragmentProcessor(const AsFPA
     if (0 == fNumOctaves) {
         if (kFractalNoise_Type == fType) {
             // Extract the incoming alpha and emit rgba = (a/4, a/4, a/4, a/2)
+            // TODO: Either treat the output of this shader as sRGB or allow client to specify a
+            // color space of the noise. Either way, this case (and the GLSL) need to convert to
+            // the destination.
             sk_sp<GrFragmentProcessor> inner(
-                GrConstColorProcessor::Make(0x80404040,
+                GrConstColorProcessor::Make(GrColor4f::FromGrColor(0x80404040),
                                             GrConstColorProcessor::kModulateRGBA_InputMode));
             return GrFragmentProcessor::MulOutputByInputAlpha(std::move(inner));
         }
         // Emit zero.
-        return GrConstColorProcessor::Make(0x0, GrConstColorProcessor::kIgnore_InputMode);
+        return GrConstColorProcessor::Make(GrColor4f::TransparentBlack(),
+                                           GrConstColorProcessor::kIgnore_InputMode);
     }
 
     SkAutoTUnref<GrTexture> permutationsTexture(

@@ -11,7 +11,7 @@
 
 #if SK_SUPPORT_GPU
 
-#include "GrDrawContextPriv.h"
+#include "GrRenderTargetContextPriv.h"
 #include "GrContext.h"
 #include "SkBitmap.h"
 #include "SkGr.h"
@@ -70,8 +70,9 @@ protected:
     }
 
     void onDraw(SkCanvas* canvas) override {
-        GrDrawContext* drawContext = canvas->internal_private_accessTopLayerDrawContext();
-        if (!drawContext) {
+        GrRenderTargetContext* renderTargetContext =
+            canvas->internal_private_accessTopLayerRenderTargetContext();
+        if (!renderTargetContext) {
             skiagm::GM::DrawGpuOnlyMessage(canvas);
             return;
         }
@@ -113,7 +114,7 @@ protected:
                 for (int m = 0; m < GrTextureDomain::kModeCount; ++m) {
                     GrTextureDomain::Mode mode = (GrTextureDomain::Mode) m;
                     GrPaint grPaint;
-                    grPaint.setXPFactory(GrPorterDuffXPFactory::Make(SkXfermode::kSrc_Mode));
+                    grPaint.setXPFactory(GrPorterDuffXPFactory::Make(SkBlendMode::kSrc));
                     sk_sp<GrFragmentProcessor> fp(
                         GrTextureDomainEffect::Make(texture, nullptr, textureMatrices[tm],
                                                 GrTextureDomain::MakeTexelDomain(texture,
@@ -129,7 +130,7 @@ protected:
                     SkAutoTUnref<GrDrawBatch> batch(
                             GrRectBatchFactory::CreateNonAAFill(GrColor_WHITE, viewMatrix,
                                                                 renderRect, nullptr, nullptr));
-                    drawContext->drawContextPriv().testingOnly_drawBatch(grPaint, batch);
+                    renderTargetContext->priv().testingOnly_drawBatch(grPaint, batch);
                     x += renderRect.width() + kTestPad;
                 }
                 y += renderRect.height() + kTestPad;

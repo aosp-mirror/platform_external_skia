@@ -10,7 +10,7 @@
 #include "GrCaps.h"
 #include "GrColorSpaceXform.h"
 #include "GrContext.h"
-#include "GrDrawContext.h"
+#include "GrRenderTargetContext.h"
 #include "GrGpu.h"
 #include "GrGpuResourcePriv.h"
 #include "GrResourceKey.h"
@@ -36,11 +36,9 @@ static GrTexture* copy_on_gpu(GrTexture* inputTexture, const SkIRect* subset,
 
     GrPixelConfig config = GrMakePixelConfigUncompressed(inputTexture->config());
 
-    sk_sp<GrDrawContext> copyDC = context->makeDrawContextWithFallback(SkBackingFit::kExact,
-                                                                       copyParams.fWidth,
-                                                                       copyParams.fHeight,
-                                                                       config, nullptr);
-    if (!copyDC) {
+    sk_sp<GrRenderTargetContext> copyRTC = context->makeRenderTargetContextWithFallback(
+        SkBackingFit::kExact, copyParams.fWidth, copyParams.fHeight, config, nullptr);
+    if (!copyRTC) {
         return nullptr;
     }
 
@@ -86,8 +84,8 @@ static GrTexture* copy_on_gpu(GrTexture* inputTexture, const SkIRect* subset,
     }
 
     SkRect dstRect = SkRect::MakeIWH(copyParams.fWidth, copyParams.fHeight);
-    copyDC->fillRectToRect(GrNoClip(), paint, SkMatrix::I(), dstRect, localRect);
-    return copyDC->asTexture().release();
+    copyRTC->fillRectToRect(GrNoClip(), paint, SkMatrix::I(), dstRect, localRect);
+    return copyRTC->asTexture().release();
 }
 
 GrTextureAdjuster::GrTextureAdjuster(GrTexture* original, SkAlphaType alphaType,

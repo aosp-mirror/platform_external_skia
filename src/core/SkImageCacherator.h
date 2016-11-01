@@ -9,7 +9,6 @@
 #define SkImageCacherator_DEFINED
 
 #include "SkImageGenerator.h"
-#include "SkMutex.h"
 #include "SkTemplates.h"
 
 class GrContext;
@@ -25,6 +24,8 @@ class SkImageCacherator {
 public:
     // Takes ownership of the generator
     static SkImageCacherator* NewFromGenerator(SkImageGenerator*, const SkIRect* subset = nullptr);
+
+    ~SkImageCacherator();
 
     const SkImageInfo& info() const { return fInfo; }
     uint32_t uniqueID() const { return fUniqueID; }
@@ -68,7 +69,22 @@ public:
                               int srcX, int srcY);
 
 private:
-    SkImageCacherator(SkImageGenerator*, const SkImageInfo&, const SkIPoint&, uint32_t uniqueID);
+    class SharedGenerator;
+    class ScopedGenerator;
+
+    struct Validator {
+        Validator(SkImageGenerator*, const SkIRect* subset);
+        ~Validator();
+
+        operator bool() const { return fSharedGenerator.get(); }
+
+        sk_sp<SharedGenerator> fSharedGenerator;
+        SkImageInfo            fInfo;
+        SkIPoint               fOrigin;
+        uint32_t               fUniqueID;
+    };
+
+    SkImageCacherator(Validator*);
 
     bool generateBitmap(SkBitmap*);
     bool tryLockAsBitmap(SkBitmap*, const SkImage*, SkImage::CachingHint);
@@ -79,27 +95,14 @@ private:
                            SkImage::CachingHint, bool willBeMipped, SkSourceGammaTreatment);
 #endif
 
-    class ScopedGenerator {
-        SkImageCacherator* fCacher;
-    public:
-        ScopedGenerator(SkImageCacherator* cacher) : fCacher(cacher) {
-            fCacher->fMutexForGenerator.acquire();
-        }
-        ~ScopedGenerator() {
-            fCacher->fMutexForGenerator.release();
-        }
-        SkImageGenerator* operator->() const { return fCacher->fNotThreadSafeGenerator; }
-        operator SkImageGenerator*() const { return fCacher->fNotThreadSafeGenerator; }
-    };
-
-    SkMutex                         fMutexForGenerator;
-    SkAutoTDelete<SkImageGenerator> fNotThreadSafeGenerator;
-
-    const SkImageInfo   fInfo;
-    const SkIPoint      fOrigin;
-    const uint32_t      fUniqueID;
+    sk_sp<SharedGenerator> fSharedGenerator;
+    const SkImageInfo      fInfo;
+    const SkIPoint         fOrigin;
+    const uint32_t         fUniqueID;
 
     friend class GrImageTextureMaker;
+    friend class SkImage;
+    friend class SkImage_Generator;
 };
 
 #endif

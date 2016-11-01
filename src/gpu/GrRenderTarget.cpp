@@ -10,29 +10,22 @@
 
 #include "GrContext.h"
 #include "GrContextPriv.h"
-#include "GrDrawContext.h"
-#include "GrDrawTarget.h"
+#include "GrRenderTargetContext.h"
 #include "GrGpu.h"
+#include "GrRenderTargetOpList.h"
 #include "GrRenderTargetPriv.h"
 #include "GrStencilAttachment.h"
+#include "GrStencilSettings.h"
 
 GrRenderTarget::GrRenderTarget(GrGpu* gpu, const GrSurfaceDesc& desc, Flags flags,
                                GrStencilAttachment* stencil)
     : INHERITED(gpu, desc)
     , fStencilAttachment(stencil)
     , fMultisampleSpecsID(0)
-    , fFlags(flags)
-    , fLastDrawTarget(nullptr) {
+    , fFlags(flags) {
     SkASSERT(!(fFlags & Flags::kMixedSampled) || fDesc.fSampleCnt > 0);
     SkASSERT(!(fFlags & Flags::kWindowRectsSupport) || gpu->caps()->maxWindowRectangles() > 0);
     fResolveRect.setLargestInverted();
-}
-
-GrRenderTarget::~GrRenderTarget() {
-    if (fLastDrawTarget) {
-        fLastDrawTarget->clearRT();
-    }
-    SkSafeUnref(fLastDrawTarget);
 }
 
 void GrRenderTarget::discard() {
@@ -42,13 +35,13 @@ void GrRenderTarget::discard() {
         return;
     }
 
-    sk_sp<GrDrawContext> drawContext(context->contextPriv().makeWrappedDrawContext(sk_ref_sp(this),
-                                                                                   nullptr));
-    if (!drawContext) {
+    sk_sp<GrRenderTargetContext> renderTargetContext(
+        context->contextPriv().makeWrappedRenderTargetContext(sk_ref_sp(this), nullptr));
+    if (!renderTargetContext) {
         return;
     }
 
-    drawContext->discard();
+    renderTargetContext->discard();
 }
 
 void GrRenderTarget::flagAsNeedingResolve(const SkIRect* rect) {
@@ -85,22 +78,10 @@ void GrRenderTarget::onAbandon() {
     SkSafeSetNull(fStencilAttachment);
 
     // The contents of this renderTarget are gone/invalid. It isn't useful to point back
-    // the creating drawTarget.
-    this->setLastDrawTarget(nullptr);
+    // the creating opList.
+    this->setLastOpList(nullptr);
 
     INHERITED::onAbandon();
-}
-
-void GrRenderTarget::setLastDrawTarget(GrDrawTarget* dt) {
-    if (fLastDrawTarget) {
-        // The non-MDB world never closes so we can't check this condition
-#ifdef ENABLE_MDB
-        SkASSERT(fLastDrawTarget->isClosed());
-#endif
-        fLastDrawTarget->clearRT();
-    }
-
-    SkRefCnt_SafeAssign(fLastDrawTarget, dt);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -120,12 +101,21 @@ bool GrRenderTargetPriv::attachStencilAttachment(GrStencilAttachment* stencil) {
 }
 
 int GrRenderTargetPriv::numStencilBits() const {
-    return fRenderTarget->fStencilAttachment ? fRenderTarget->fStencilAttachment->bits() : 0;
+    SkASSERT(this->getStencilAttachment());
+    return this->getStencilAttachment()->bits();
 }
 
 const GrGpu::MultisampleSpecs&
-GrRenderTargetPriv::getMultisampleSpecs(const GrStencilSettings& stencil) const {
-    return fRenderTarget->getGpu()->getMultisampleSpecs(fRenderTarget, stencil);
+GrRenderTargetPriv::getMultisampleSpecs(const GrPipeline& pipeline) const {
+    SkASSERT(fRenderTarget == pipeline.getRenderTarget()); // TODO: remove RT from pipeline.
+    GrGpu* gpu = fRenderTarget->getGpu();
+    if (auto id = fRenderTarget->fMultisampleSpecsID) {
+        SkASSERT(gpu->queryMultisampleSpecs(pipeline).fUniqueID == id);
+        return gpu->getMultisampleSpecs(id);
+    }
+    const GrGpu::MultisampleSpecs& specs = gpu->queryMultisampleSpecs(pipeline);
+    fRenderTarget->fMultisampleSpecsID = specs.fUniqueID;
+    return specs;
 }
 
 int GrRenderTargetPriv::maxWindowRectangles() const {

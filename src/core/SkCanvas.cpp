@@ -319,15 +319,14 @@ static SkIRect compute_device_bounds(SkBaseDevice* device) {
 class SkDrawIter : public SkDraw {
 public:
     SkDrawIter(SkCanvas* canvas) {
-        canvas = canvas->canvasForDrawIter();
         canvas->updateDeviceCMCache();
 
-        fClipStack = canvas->fClipStack;
+        fClipStack = canvas->getClipStack();
         fCurrLayer = canvas->fMCRec->fTopLayer;
 
         fMultiDeviceCS = nullptr;
         if (fCurrLayer->fNext) {
-            fMultiDeviceCS = canvas->fClipStack;
+            fMultiDeviceCS = canvas->fClipStack.get();
             fMultiDeviceCS->save();
         }
     }
@@ -482,7 +481,7 @@ public:
              *      draw onto the previous layer using the xfermode from the original paint.
              */
             SkPaint tmp;
-            tmp.setImageFilter(fPaint->getImageFilter());
+            tmp.setImageFilter(sk_ref_sp(fPaint->getImageFilter()));
             tmp.setBlendMode(fPaint->getBlendMode());
             SkRect storage;
             if (rawBounds) {
@@ -966,10 +965,6 @@ bool SkCanvas::writePixels(const SkImageInfo& origInfo, const void* pixels, size
     return device->writePixels(info, pixels, rowBytes, target.x(), target.y());
 }
 
-SkCanvas* SkCanvas::canvasForDrawIter() {
-    return this;
-}
-
 //////////////////////////////////////////////////////////////////////////////
 
 void SkCanvas::updateDeviceCMCache() {
@@ -1373,22 +1368,6 @@ bool SkCanvas::onGetProps(SkSurfaceProps* props) const {
         return false;
     }
 }
-
-#ifdef SK_SUPPORT_LEGACY_PEEKPIXELS_PARMS
-const void* SkCanvas::peekPixels(SkImageInfo* info, size_t* rowBytes) {
-    SkPixmap pmap;
-    if (this->peekPixels(&pmap)) {
-        if (info) {
-            *info = pmap.info();
-        }
-        if (rowBytes) {
-            *rowBytes = pmap.rowBytes();
-        }
-        return pmap.addr();
-    }
-    return nullptr;
-}
-#endif
 
 bool SkCanvas::peekPixels(SkPixmap* pmap) {
     return this->onPeekPixels(pmap);
@@ -1818,9 +1797,9 @@ const SkRegion& SkCanvas::internal_private_getTotalClip() const {
     return fMCRec->fRasterClip.forceGetBW();
 }
 
-GrDrawContext* SkCanvas::internal_private_accessTopLayerDrawContext() {
+GrRenderTargetContext* SkCanvas::internal_private_accessTopLayerRenderTargetContext() {
     SkBaseDevice* dev = this->getTopDevice();
-    return dev ? dev->accessDrawContext() : nullptr;
+    return dev ? dev->accessRenderTargetContext() : nullptr;
 }
 
 GrContext* SkCanvas::getGrContext() {
@@ -1884,8 +1863,13 @@ void SkCanvas::drawPoints(PointMode mode, size_t count, const SkPoint pts[], con
 }
 
 void SkCanvas::drawVertices(VertexMode vmode, int vertexCount, const SkPoint vertices[],
-                            const SkPoint texs[], const SkColor colors[], SkXfermode* xmode,
+                            const SkPoint texs[], const SkColor colors[], SkBlendMode bmode,
                             const uint16_t indices[], int indexCount, const SkPaint& paint) {
+#ifdef SK_SUPPORT_LEGACY_XFERMODE_PARAM
+    SkXfermode* xmode = SkXfermode::Peek(bmode);
+#else
+    SkBlendMode xmode = bmode;
+#endif
     this->onDrawVertices(vmode, vertexCount, vertices, texs, colors, xmode,
                          indices, indexCount, paint);
 }
@@ -2014,16 +1998,15 @@ void SkCanvas::drawBitmapLattice(const SkBitmap& bitmap, const Lattice& lattice,
 }
 
 void SkCanvas::drawAtlas(const SkImage* atlas, const SkRSXform xform[], const SkRect tex[],
-                         const SkColor colors[], int count, SkXfermode::Mode mode,
+                         const SkColor colors[], int count, SkBlendMode mode,
                          const SkRect* cull, const SkPaint* paint) {
     RETURN_ON_NULL(atlas);
     if (count <= 0) {
         return;
     }
     SkASSERT(atlas);
-    SkASSERT(xform);
     SkASSERT(tex);
-    this->onDrawAtlas(atlas, xform, tex, colors, count, mode, cull, paint);
+    this->onDrawAtlas(atlas, xform, tex, colors, count, (SK_XFERMODE_MODE_PARAM)mode, cull, paint);
 }
 
 void SkCanvas::drawAnnotation(const SkRect& rect, const char key[], SkData* value) {
@@ -2832,7 +2815,7 @@ void SkCanvas::drawTextBlob(const SkTextBlob* blob, SkScalar x, SkScalar y,
 
 void SkCanvas::onDrawVertices(VertexMode vmode, int vertexCount,
                               const SkPoint verts[], const SkPoint texs[],
-                              const SkColor colors[], SkXfermode* xmode,
+                              const SkColor colors[], SK_XFERMODE_PARAM xmode,
                               const uint16_t indices[], int indexCount,
                               const SkPaint& paint) {
     TRACE_EVENT0("disabled-by-default-skia", "SkCanvas::drawVertices()");
@@ -2848,17 +2831,24 @@ void SkCanvas::onDrawVertices(VertexMode vmode, int vertexCount,
 }
 
 void SkCanvas::drawPatch(const SkPoint cubics[12], const SkColor colors[4],
-                         const SkPoint texCoords[4], SkXfermode* xmode, const SkPaint& paint) {
+                         const SkPoint texCoords[4], SkBlendMode bmode,
+                         const SkPaint& paint) {
     TRACE_EVENT0("disabled-by-default-skia", "SkCanvas::drawPatch()");
     if (nullptr == cubics) {
         return;
     }
 
+#ifdef SK_SUPPORT_LEGACY_XFERMODE_PARAM
+    SkXfermode* xmode = SkXfermode::Peek(bmode);
+#else
+    SkBlendMode xmode = bmode;
+#endif
     this->onDrawPatch(cubics, colors, texCoords, xmode, paint);
 }
 
 void SkCanvas::onDrawPatch(const SkPoint cubics[12], const SkColor colors[4],
-                           const SkPoint texCoords[4], SkXfermode* xmode, const SkPaint& paint) {
+                           const SkPoint texCoords[4], SK_XFERMODE_PARAM xmode,
+                           const SkPaint& paint) {
     // Since a patch is always within the convex hull of the control points, we discard it when its
     // bounding rectangle is completely outside the current clip.
     SkRect bounds;
@@ -2901,7 +2891,7 @@ void SkCanvas::onDrawDrawable(SkDrawable* dr, const SkMatrix* matrix) {
 }
 
 void SkCanvas::onDrawAtlas(const SkImage* atlas, const SkRSXform xform[], const SkRect tex[],
-                           const SkColor colors[], int count, SkXfermode::Mode mode,
+                           const SkColor colors[], int count, SK_XFERMODE_MODE_PARAM mode,
                            const SkRect* cull, const SkPaint* paint) {
     if (cull && this->quickReject(*cull)) {
         return;
@@ -3378,12 +3368,6 @@ SkAutoCanvasMatrixPaint::SkAutoCanvasMatrixPaint(SkCanvas* canvas, const SkMatri
 SkAutoCanvasMatrixPaint::~SkAutoCanvasMatrixPaint() {
     fCanvas->restoreToCount(fSaveCount);
 }
-
-#ifdef SK_SUPPORT_LEGACY_NEW_SURFACE_API
-SkSurface* SkCanvas::newSurface(const SkImageInfo& info, const SkSurfaceProps* props) {
-    return this->makeSurface(info, props).release();
-}
-#endif
 
 /////////////////////////////////
 

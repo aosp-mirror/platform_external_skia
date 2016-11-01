@@ -9,7 +9,7 @@
 #include "SkAnimTimer.h"
 #include "SkBlurMaskFilter.h"
 #include "SkGaussianEdgeShader.h"
-#include "SkRRectsGaussianEdgeShader.h"
+#include "SkRRectsGaussianEdgeMaskFilter.h"
 #include "SkPath.h"
 #include "SkPathOps.h"
 #include "SkRRect.h"
@@ -28,7 +28,9 @@ constexpr int kClipOffset = 32;
 class Object {
 public:
     virtual ~Object() {}
-    virtual bool asRRect(SkRRect* rr) const = 0;
+    // When it returns true, this call will have placed a device-space _circle, rect or 
+    // simple circular_ RRect in "rr"
+    virtual bool asDevSpaceRRect(const SkMatrix& ctm, SkRRect* rr) const = 0;
     virtual SkPath asPath(SkScalar inset) const = 0;
     virtual void draw(SkCanvas* canvas, const SkPaint& paint) const = 0;
     virtual void clip(SkCanvas* canvas) const = 0;
@@ -44,8 +46,24 @@ public:
         fRRect = SkRRect::MakeRectXY(r, 4*kPad, 4*kPad);
     }
 
-    bool asRRect(SkRRect* rr) const override {
-        *rr = fRRect;
+    bool asDevSpaceRRect(const SkMatrix& ctm, SkRRect* rr) const override {
+        if (!ctm.isSimilarity()) { // the corners have to remain circular
+            return false;
+        }
+
+        SkScalar scales[2];
+        if (!ctm.getMinMaxScales(scales)) {
+            return false;
+        }
+
+        SkASSERT(SkScalarNearlyEqual(scales[0], scales[1]));
+
+        SkRect devRect;
+        ctm.mapRect(&devRect, fRRect.rect());
+
+        SkScalar scaledRad = scales[0] * fRRect.getSimpleRadii().fX;
+
+        *rr = SkRRect::MakeRectXY(devRect, scaledRad, scaledRad);
         return true;
     }
 
@@ -88,7 +106,7 @@ public:
         fStrokedBounds = r.makeOutset(kPad, kPad);
     }
 
-    bool asRRect(SkRRect* rr) const override {
+    bool asDevSpaceRRect(const SkMatrix& ctm, SkRRect* rr) const override {
         return false;
     }
 
@@ -144,8 +162,14 @@ public:
         fRRect = SkRRect::MakeOval(r);
     }
 
-    bool asRRect(SkRRect* rr) const override {
-        *rr = fRRect;
+    bool asDevSpaceRRect(const SkMatrix& ctm, SkRRect* rr) const override {
+        if (!ctm.isSimilarity()) { // circles have to remain circles
+            return false;
+        }
+
+        SkRect devRect;
+        ctm.mapRect(&devRect, fRRect.rect());
+        *rr = SkRRect::MakeOval(devRect);
         return true;
     }
 
@@ -186,8 +210,14 @@ class Rect : public Object {
 public:
     Rect(const SkRect& r) : fRect(r) { }
 
-    bool asRRect(SkRRect* rr) const override {
-        *rr = SkRRect::MakeRect(fRect);
+    bool asDevSpaceRRect(const SkMatrix& ctm, SkRRect* rr) const override {
+        if (!ctm.rectStaysRect()) {
+            return false;
+        }
+
+        SkRect devRect;
+        ctm.mapRect(&devRect, fRect);
+        *rr = SkRRect::MakeRect(devRect);
         return true;
     }
 
@@ -246,7 +276,7 @@ public:
         fPath.close();
     }
 
-    bool asRRect(SkRRect* rr) const override {
+    bool asDevSpaceRRect(const SkMatrix& ctm, SkRRect* rr) const override {
         return false;
     }
 
@@ -289,18 +319,29 @@ public:
 
         kLast_Mode = kRRectsGaussianEdge_Mode
     };
-
     static const int kModeCount = kLast_Mode + 1;
+
+    enum CoverageGeom {
+        kRect_CoverageGeom,
+        kRRect_CoverageGeom,
+        kDRRect_CoverageGeom,
+        kPath_CoverageGeom,
+
+        kLast_CoverageGeom = kPath_CoverageGeom
+    };
+    static const int kCoverageGeomCount = kLast_CoverageGeom + 1;
 
     RevealGM()
         : fFraction(0.5f)
         , fMode(kRRectsGaussianEdge_Mode)
         , fPause(false)
-        , fBlurRadius(kInitialBlurRadius) {
+        , fBlurRadius(kInitialBlurRadius)
+        , fCoverageGeom(kRect_CoverageGeom) {
         this->setBGColor(sk_tool_utils::color_to_565(0xFFCCCCCC));
     }
 
 protected:
+    bool runAsBench() const override { return true; }
 
     SkString onShortName() override {
         return SkString("reveal");
@@ -317,7 +358,6 @@ protected:
         };
 
         SkPaint strokePaint;
-        strokePaint.setColor(SK_ColorGREEN);
         strokePaint.setStyle(SkPaint::kStroke_Style);
         strokePaint.setStrokeWidth(0.0f);
 
@@ -384,20 +424,57 @@ protected:
 
                     SkPaint paint;
 
-                    SkRRect clipRR, drawnRR;
+                    SkRRect devSpaceClipRR, devSpaceDrawnRR;
 
-                    if (clipObj->asRRect(&clipRR) && drawObj->asRRect(&drawnRR)) {
-                        paint.setShader(SkRRectsGaussianEdgeShader::Make(clipRR, drawnRR,
-                                                                         fBlurRadius));
+                    if (clipObj->asDevSpaceRRect(canvas->getTotalMatrix(), &devSpaceClipRR) &&
+                        drawObj->asDevSpaceRRect(canvas->getTotalMatrix(), &devSpaceDrawnRR)) {
+                        paint.setMaskFilter(SkRRectsGaussianEdgeMaskFilter::Make(devSpaceClipRR,
+                                                                                 devSpaceDrawnRR,
+                                                                                 fBlurRadius));
                     }
 
-                    canvas->drawRect(cover, paint);
+                    strokePaint.setColor(SK_ColorBLUE);
+
+                    switch (fCoverageGeom) {
+                        case kRect_CoverageGeom:
+                            canvas->drawRect(cover, paint);
+                            canvas->drawRect(cover, strokePaint);
+                            break;
+                        case kRRect_CoverageGeom: {
+                            const SkRRect rrect = SkRRect::MakeRectXY(
+                                                                    cover.makeOutset(10.0f, 10.0f),
+                                                                    10.0f, 10.0f);
+                            canvas->drawRRect(rrect, paint);
+                            canvas->drawRRect(rrect, strokePaint);
+                            break;
+                        }
+                        case kDRRect_CoverageGeom: {
+                            const SkRRect inner = SkRRect::MakeRectXY(cover.makeInset(10.0f, 10.0f),
+                                                                      10.0f, 10.0f);
+                            const SkRRect outer = SkRRect::MakeRectXY(
+                                                                    cover.makeOutset(10.0f, 10.0f),
+                                                                    10.0f, 10.0f);
+                            canvas->drawDRRect(outer, inner, paint);
+                            canvas->drawDRRect(outer, inner, strokePaint);
+                            break;
+                        }
+                        case kPath_CoverageGeom: {
+                            SkPath path;
+                            path.moveTo(cover.fLeft, cover.fTop);
+                            path.lineTo(cover.centerX(), cover.centerY());
+                            path.lineTo(cover.fRight, cover.fTop);
+                            path.lineTo(cover.fRight, cover.fBottom);
+                            path.lineTo(cover.centerX(), cover.centerY());
+                            path.lineTo(cover.fLeft, cover.fBottom);
+                            path.close();
+                            canvas->drawPath(path, paint);
+                            canvas->drawPath(path, strokePaint);
+                            break;
+                        }
+                    }
                 }
 
                 // Draw the clip and draw objects for reference
-                SkPaint strokePaint;
-                strokePaint.setStyle(SkPaint::kStroke_Style);
-                strokePaint.setStrokeWidth(0);
                 strokePaint.setColor(SK_ColorRED);
                 canvas->drawPath(drawObj->asPath(0.0f), strokePaint);
                 strokePaint.setColor(SK_ColorGREEN);
@@ -422,6 +499,9 @@ protected:
             case 'p':
                 fPause = !fPause;
                 return true;
+            case 'G':
+                fCoverageGeom = (CoverageGeom) ((fCoverageGeom+1) % kCoverageGeomCount);
+                return true;
         }        
     
         return false;
@@ -435,10 +515,11 @@ protected:
     }
 
 private:
-    SkScalar fFraction;
-    Mode     fMode;
-    bool     fPause;
-    float    fBlurRadius;
+    SkScalar     fFraction;
+    Mode         fMode;
+    bool         fPause;
+    float        fBlurRadius;
+    CoverageGeom fCoverageGeom;
 
     typedef GM INHERITED;
 };

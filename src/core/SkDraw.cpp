@@ -1342,7 +1342,8 @@ void SkDraw::drawBitmap(const SkBitmap& bitmap, const SkMatrix& prematrix,
     SkDraw draw(*this);
     draw.fMatrix = &matrix;
 
-    if (bitmap.colorType() == kAlpha_8_SkColorType) {
+    if (bitmap.colorType() == kAlpha_8_SkColorType && !paint->getColorFilter() &&
+            !paint->getShader()) {
         draw.drawBitmapAsMask(bitmap, *paint);
     } else {
         SkAutoBitmapShaderInstall install(bitmap, *paint);
@@ -1888,7 +1889,7 @@ void SkTriColorShader::toString(SkString* str) const {
 
 void SkDraw::drawVertices(SkCanvas::VertexMode vmode, int count,
                           const SkPoint vertices[], const SkPoint textures[],
-                          const SkColor colors[], SkXfermode* xmode,
+                          const SkColor colors[], SkBlendMode bmode,
                           const uint16_t indices[], int indexCount,
                           const SkPaint& paint) const {
     SkASSERT(0 == count || vertices);
@@ -1935,9 +1936,7 @@ void SkDraw::drawVertices(SkCanvas::VertexMode vmode, int count,
         } else {
             // colors * texture
             SkASSERT(shader);
-            sk_sp<SkXfermode> xfer = xmode ? sk_ref_sp(xmode)
-                                           : SkXfermode::Make(SkXfermode::kModulate_Mode);
-            p.setShader(SkShader::MakeComposeShader(triShader, sk_ref_sp(shader), std::move(xfer)));
+            p.setShader(SkShader::MakeComposeShader(triShader, sk_ref_sp(shader), bmode));
         }
     }
 

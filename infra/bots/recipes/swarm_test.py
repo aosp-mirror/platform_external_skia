@@ -134,7 +134,10 @@ def dm_flags(bot):
 
   # ANGLE bot *only* runs the angle configs
   if 'ANGLE' in bot:
-    configs = ['angle_d3d11_es2', 'angle_d3d9_es2', 'angle_d3d11_es2_msaa4']
+    configs = ['angle_d3d11_es2',
+               'angle_d3d9_es2',
+               'angle_d3d11_es2_msaa4',
+               'angle_gl_es2']
 
   # Vulkan bot *only* runs the vk config.
   if 'Vulkan' in bot:
@@ -350,6 +353,8 @@ def dm_flags(bot):
 
   if 'TSAN' in bot:
     match.extend(['~ReadWriteAlpha'])   # Flaky on TSAN-covered on nvidia bots.
+    match.extend(['~RGBA4444TextureTest',  # Flakier than they are important.
+                  '~RGB565TextureTest'])
 
   if 'Vulkan' in bot and 'Adreno' in bot:
     # skia:5777
@@ -473,6 +478,10 @@ def test_steps(api):
       'patchset',      api.vars.patchset,
       'patch_storage', api.vars.patch_storage,
     ])
+  if api.vars.no_buildbot:
+    properties.extend(['no_buildbot', 'True'])
+    properties.extend(['swarming_bot_id', api.vars.swarming_bot_id])
+    properties.extend(['swarming_task_id', api.vars.swarming_task_id])
 
   args = [
     'dm',
@@ -668,12 +677,6 @@ def GenTests(api):
   )
 
   builder = 'Test-Ubuntu-GCC-GCE-CPU-AVX2-x86-Debug-Trybot'
-  gerrit_kwargs = {
-    'patch_storage': 'gerrit',
-    'repository': 'skia',
-    'event.patchSet.ref': 'refs/changes/00/2100/2',
-    'event.change.number': '2100',
-  }
   yield (
       api.test('recipe_with_gerrit_patch') +
       api.properties(
@@ -684,5 +687,33 @@ def GenTests(api):
           path_config='kitchen',
           swarm_out_dir='[SWARM_OUT_DIR]',
           revision='abc123',
-          **gerrit_kwargs)
+          patch_storage='gerrit') +
+      api.properties.tryserver(
+          buildername=builder,
+          gerrit_project='skia',
+          gerrit_url='https://skia-review.googlesource.com/',
+      )
   )
+
+  yield (
+      api.test('nobuildbot') +
+      api.properties(
+          buildername=builder,
+          mastername='client.skia',
+          slavename='skiabot-linux-swarm-000',
+          buildnumber=5,
+          path_config='kitchen',
+          swarm_out_dir='[SWARM_OUT_DIR]',
+          revision='abc123',
+          nobuildbot='True',
+          patch_storage='gerrit') +
+      api.properties.tryserver(
+          buildername=builder,
+          gerrit_project='skia',
+          gerrit_url='https://skia-review.googlesource.com/',
+      ) +
+      api.step_data('get swarming bot id',
+          stdout=api.raw_io.output('skia-bot-123')) +
+      api.step_data('get swarming task id', stdout=api.raw_io.output('123456'))
+  )
+

@@ -1408,7 +1408,6 @@ void GLSLInstanceProcessor::BackendMultisample::onEmitCode(GrGLSLVertexBuilder*,
         if (arcTest && fBatchInfo.fHasPerspective) {
             // The non-perspective version accounts for fwidth() in the vertex shader.
             // We make sure to take the derivative here, before a neighbor pixel may early accept.
-            f->enableFeature(GrGLSLPPFragmentBuilder::kStandardDerivatives_GLSLFeature);
             f->appendPrecisionModifier(kHigh_GrSLPrecision);
             f->codeAppendf("vec2 arcTest = %s - 0.5 * fwidth(%s);",
                            fArcTest.fsIn(), fArcTest.fsIn());
@@ -1702,7 +1701,7 @@ GLSLInstanceProcessor::Backend::Create(const GrPipeline& pipeline, BatchInfo bat
         case AntialiasMode::kMSAA:
         case AntialiasMode::kMixedSamples: {
             const GrRenderTargetPriv& rtp = pipeline.getRenderTarget()->renderTargetPriv();
-            const GrGpu::MultisampleSpecs& specs = rtp.getMultisampleSpecs(pipeline.getStencil());
+            const GrGpu::MultisampleSpecs& specs = rtp.getMultisampleSpecs(pipeline);
             return new BackendMultisample(batchInfo, inputs, specs.fEffectiveSampleCnt);
         }
     }

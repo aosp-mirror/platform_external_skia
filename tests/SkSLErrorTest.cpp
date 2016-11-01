@@ -43,7 +43,12 @@ DEF_TEST(SkSLUndefinedFunction, r) {
 DEF_TEST(SkSLGenericArgumentMismatch, r) {
     test_failure(r,
                  "void main() { float x = sin(1, 2); }", 
-                 "error: 1: no match for sin(int, int)\n1 error\n");
+                 "error: 1: call to 'sin' expected 1 argument, but found 2\n1 error\n");
+    test_failure(r,
+                 "void main() { float x = sin(true); }", 
+                 "error: 1: no match for sin(bool)\n1 error\n");
+    test_success(r,
+                 "void main() { float x = sin(1); }");
 }
 
 DEF_TEST(SkSLArgumentCountMismatch, r) {
@@ -88,6 +93,12 @@ DEF_TEST(SkSLConstructorTypeMismatch, r) {
     test_failure(r,
                  "void main() { vec2 x = vec2(1.0, false); }", 
                  "error: 1: expected 'float', but found 'bool'\n1 error\n");
+    test_failure(r,
+                 "void main() { vec2 x = vec2(bvec2(false)); }",
+                 "error: 1: 'bvec2' is not a valid parameter to 'vec2' constructor\n1 error\n");
+    test_failure(r,
+                 "void main() { bvec2 x = bvec2(vec2(1)); }",
+                 "error: 1: 'vec2' is not a valid parameter to 'bvec2' constructor\n1 error\n");
     test_failure(r,
                  "void main() { bool x = bool(1.0); }",
                  "error: 1: cannot construct 'bool'\n1 error\n");

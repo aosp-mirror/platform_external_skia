@@ -81,11 +81,7 @@ void GrGLTexture::onAbandon() {
 }
 
 GrBackendObject GrGLTexture::getTextureHandle() const {
-#ifdef SK_IGNORE_GL_TEXTURE_TARGET
-    return static_cast<GrBackendObject>(this->textureID());
-#else
     return reinterpret_cast<GrBackendObject>(&fInfo);
-#endif
 }
 
 void GrGLTexture::setMemoryBacking(SkTraceMemoryDump* traceMemoryDump,
@@ -96,8 +92,8 @@ void GrGLTexture::setMemoryBacking(SkTraceMemoryDump* traceMemoryDump,
                                       texture_id.c_str());
 }
 
-GrGLTexture* GrGLTexture::CreateWrapped(GrGLGpu* gpu, const GrSurfaceDesc& desc,
-                                        const IDDesc& idDesc) {
-    return new GrGLTexture(gpu, kWrapped, desc, idDesc);
+sk_sp<GrGLTexture> GrGLTexture::MakeWrapped(GrGLGpu* gpu, const GrSurfaceDesc& desc,
+                                            const IDDesc& idDesc) {
+    return sk_sp<GrGLTexture>(new GrGLTexture(gpu, kWrapped, desc, idDesc));
 }
 

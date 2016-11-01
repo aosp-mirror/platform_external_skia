@@ -12,6 +12,11 @@ declare_args() {
     ar = "$ndk/toolchains/$ndk_gccdir-4.9/prebuilt/$ndk_host/$ndk_target/bin/ar"
     cc = "$ndk/toolchains/llvm/prebuilt/$ndk_host/bin/clang"
     cxx = "$ndk/toolchains/llvm/prebuilt/$ndk_host/bin/clang++"
+    if (host_os == "win") {
+      ar = ar + ".exe"
+      cc = cc + ".exe"
+      cxx = cxx + ".exe"
+    }
   }
 
   windk = "C:/Program Files (x86)/Microsoft Visual Studio 14.0"
@@ -22,6 +27,14 @@ declare_args() {
   extra_ldflags = []
 
   cc_wrapper = ""
+}
+
+if (host_os == "win") {
+  python = "python.bat"
+  stamp = "cmd.exe /c echo >"
+} else {
+  python = "python"
+  stamp = "touch"
 }
 
 if (!is_win) {
@@ -90,7 +103,6 @@ config("default") {
     ]
     cflags_cc += [
       "-std=c++11",
-      "-fno-exceptions",
       "-fno-threadsafe-statics",
       "-fvisibility-inlines-hidden",
     ]
@@ -197,9 +209,17 @@ config("default") {
   }
 }
 
+config("no_exceptions") {
+  # Exceptions are disabled by default on Windows.  (Use /EHsc to enable them.)
+  if (!is_win) {
+    cflags_cc = [ "-fno-exceptions" ]
+  }
+}
+
 config("warnings") {
   cflags = []
   cflags_cc = []
+  cflags_objc = []
   if (is_win) {
     cflags += [
       "/W3",  # Turn on lots of warnings.
@@ -270,7 +290,6 @@ config("warnings") {
       ]
       cflags_cc += [
         "-Wno-abstract-vbase-init",
-        "-Wno-range-loop-analysis",
         "-Wno-weak-vtables",
       ]
 
@@ -287,6 +306,10 @@ config("warnings") {
         "-Wno-c++98-compat",
         "-Wno-c++98-compat-pedantic",
         "-Wno-undefined-func-template",
+      ]
+      cflags_objc += [
+        "-Wno-direct-ivar-access",
+        "-Wno-objc-interface-ivars",
       ]
     }
   }
@@ -324,9 +347,20 @@ config("no_rtti") {
 
 config("release") {
   if (is_win) {
-    cflags = [ "/O2" ]
+    cflags = [
+      "/O2",
+      "/Zc:inline",
+      "/GS-",
+    ]
+    ldflags = [
+      "/OPT:ICF",
+      "/OPT:REF",
+    ]
   } else {
-    cflags = [ "-O3" ]
+    cflags = [
+      "-O3",
+      "-momit-leaf-frame-pointer",
+    ]
   }
   defines = [ "NDEBUG" ]
 }
@@ -449,13 +483,13 @@ toolchain("msvc") {
   }
 
   tool("stamp") {
-    command = "cmd.exe /c echo > {{output}}"
+    command = "$stamp {{output}}"
     description = "stamp {{output}}"
   }
 
   tool("copy") {
     cp_py = rebase_path("cp.py")
-    command = "python.bat $cp_py {{source}} {{output}}"
+    command = "$python $cp_py {{source}} {{output}}"
     description = "copy {{source}} {{output}}"
   }
 }
@@ -484,6 +518,26 @@ toolchain("gcc_like") {
     description = "compile {{source}}"
   }
 
+  tool("objc") {
+    depfile = "{{output}}.d"
+    command = "$cc_wrapper $cc -MMD -MF $depfile {{defines}} {{include_dirs}} {{cflags}} {{cflags_objc}} -c {{source}} -o {{output}}"
+    depsformat = "gcc"
+    outputs = [
+      "{{source_out_dir}}/{{target_output_name}}.{{source_name_part}}.o",
+    ]
+    description = "compile {{source}}"
+  }
+
+  tool("objcxx") {
+    depfile = "{{output}}.d"
+    command = "$cc_wrapper $cxx -MMD -MF $depfile {{defines}} {{include_dirs}} {{cflags}} {{cflags_cc}} {{cflags_objc}} -c {{source}} -o {{output}}"
+    depsformat = "gcc"
+    outputs = [
+      "{{source_out_dir}}/{{target_output_name}}.{{source_name_part}}.o",
+    ]
+    description = "compile {{source}}"
+  }
+
   tool("asm") {
     depfile = "{{output}}.d"
     command = "$cc_wrapper $cc -MMD -MF $depfile {{defines}} {{include_dirs}} {{asmflags}} -c {{source}} -o {{output}}"
@@ -495,7 +549,15 @@ toolchain("gcc_like") {
   }
 
   tool("alink") {
-    command = "rm -f {{output}} && $ar rcs {{output}} {{inputs}}"
+    if (host_os == "win") {
+      rspfile = "{{output}}.rsp"
+      rspfile_content = "{{inputs}}"
+      ar_py = rebase_path("ar.py")
+      command = "$python $ar_py $ar {{output}} $rspfile"
+    } else {
+      # We'd use ar.py all the time, but Mac ar doesn't support @rspfile syntax.  :(
+      command = "rm -f {{output}} && $ar rcs {{output}} {{inputs}}"
+    }
     outputs = [
       "{{root_out_dir}}/{{target_output_name}}{{output_extension}}",
     ]
@@ -530,13 +592,13 @@ toolchain("gcc_like") {
   }
 
   tool("stamp") {
-    command = "touch {{output}}"
+    command = "$stamp {{output}}"
     description = "stamp {{output}}"
   }
 
   tool("copy") {
     cp_py = rebase_path("cp.py")
-    command = "python $cp_py {{source}} {{output}}"
+    command = "$python $cp_py {{source}} {{output}}"
     description = "copy {{source}} {{output}}"
   }
 }

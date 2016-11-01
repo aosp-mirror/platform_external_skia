@@ -8,9 +8,11 @@
 
 DEPS = [
   'core',
+  'infra',
   'recipe_engine/path',
   'recipe_engine/properties',
   'recipe_engine/step',
+  'run',
   'vars',
 ]
 
@@ -18,19 +20,15 @@ DEPS = [
 def RunSteps(api):
   api.vars.setup()
   api.core.checkout_steps()
+  api.infra.update_go_deps()
 
-  gopath = api.vars.checkout_root.join('gopath')
-  env = {'GOPATH': gopath}
-  api.step('update_go_pkgs',
-           cmd=['go', 'get', '-u', 'go.skia.org/infra/...'],
-           env=env)
-
+  # Run the infra tests.
   infra_tests = api.vars.skia_dir.join(
       'infra', 'bots', 'infra_tests.py')
   api.step('infra_tests',
            cmd=['python', infra_tests],
            cwd=api.vars.skia_dir,
-           env=env)
+           env=api.infra.go_env)
 
 
 def GenTests(api):
@@ -43,4 +41,32 @@ def GenTests(api):
                      revision='abc123',
                      path_config='kitchen',
                      swarm_out_dir='[SWARM_OUT_DIR]')
+  )
+
+  yield (
+    api.test('failed_one_update') +
+      api.properties(buildername='Housekeeper-PerCommit-InfraTests',
+                     mastername='client.skia.fyi',
+                     slavename='dummy-slave',
+                     buildnumber=5,
+                     revision='abc123',
+                     path_config='kitchen',
+                     swarm_out_dir='[SWARM_OUT_DIR]') +
+    api.step_data('update go pkgs', retcode=1)
+  )
+
+  yield (
+    api.test('failed_all_updates') +
+      api.properties(buildername='Housekeeper-PerCommit-InfraTests',
+                     mastername='client.skia.fyi',
+                     slavename='dummy-slave',
+                     buildnumber=5,
+                     revision='abc123',
+                     path_config='kitchen',
+                     swarm_out_dir='[SWARM_OUT_DIR]') +
+    api.step_data('update go pkgs', retcode=1) +
+    api.step_data('update go pkgs (attempt 2)', retcode=1) +
+    api.step_data('update go pkgs (attempt 3)', retcode=1) +
+    api.step_data('update go pkgs (attempt 4)', retcode=1) +
+    api.step_data('update go pkgs (attempt 5)', retcode=1)
   )

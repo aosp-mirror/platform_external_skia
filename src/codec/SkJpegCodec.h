@@ -59,8 +59,6 @@ protected:
 
     bool onDimensionsSupported(const SkISize&) override;
 
-    sk_sp<SkData> getICCData() const override { return fICCData; }
-
 private:
 
     /*
@@ -95,8 +93,7 @@ private:
      *                   takes ownership
      */
     SkJpegCodec(int width, int height, const SkEncodedInfo& info, SkStream* stream,
-            JpegDecoderMgr* decoderMgr, sk_sp<SkColorSpace> colorSpace, Origin origin,
-            sk_sp<SkData> iccData);
+            JpegDecoderMgr* decoderMgr, sk_sp<SkColorSpace> colorSpace, Origin origin);
 
     /*
      * Checks if the conversion between the input image and the requested output
@@ -107,7 +104,6 @@ private:
     bool setOutputColorSpace(const SkImageInfo& dst);
 
     void initializeSwizzler(const SkImageInfo& dstInfo, const Options& options);
-    void initializeColorXform(const SkImageInfo& dstInfo);
     void allocateStorage(const SkImageInfo& dstInfo);
     int readRows(const SkImageInfo& dstInfo, void* dst, size_t rowBytes, int count);
 
@@ -137,9 +133,6 @@ private:
     SkIRect                            fSwizzlerSubset;
 
     SkAutoTDelete<SkSwizzler>          fSwizzler;
-    std::unique_ptr<SkColorSpaceXform> fColorXform;
-
-    sk_sp<SkData>                      fICCData;
 
     typedef SkCodec INHERITED;
 };

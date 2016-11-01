@@ -273,6 +273,19 @@ public:
 
     int getWidth() override;
 
+    // This should only be called when forceRLE = true which implies that SkAAClip
+    // is calling us.
+    // SkAAClip requires that we blit in scan-line order so we have to flush
+    // for each row in order. Without this, we may have the first row unflushed,
+    // then blit the 2nd and the 3rd row with full alpha (so we won't flush the first row);
+    // finally when we blit the fourth row, we trigger the first row to flush, and this
+    // would cause SkAAClip to crash.
+    inline void flush_if_y_changed(SkFixed y, SkFixed nextY) {
+        if (SkFixedFloorToInt(y) != SkFixedFloorToInt(nextY)) {
+            this->flush();
+        }
+    }
+
 private:
     SkBlitter* fRealBlitter;
 
@@ -721,10 +734,6 @@ static inline void blit_trapezoid_row(AdditiveBlitter* blitter, int y,
     SkFixed joinLeft = SkFixedCeilToFixed(ll);
     SkFixed joinRite = SkFixedFloorToFixed(ur);
     if (joinLeft <= joinRite) { // There's a rect from joinLeft to joinRite that we can blit
-        if (joinLeft < joinRite) {
-            blit_full_alpha(blitter, y, joinLeft >> 16, (joinRite - joinLeft) >> 16, fullAlpha,
-                            maskRow, isUsingMask);
-        }
         if (ul < joinLeft) {
             int len = SkFixedCeilToInt(joinLeft - ul);
             if (len == 1) {
@@ -740,6 +749,13 @@ static inline void blit_trapezoid_row(AdditiveBlitter* blitter, int y,
                 blit_aaa_trapezoid_row(blitter, y, ul, joinLeft, ll, joinLeft, lDY, SK_MaxS32,
                                        fullAlpha, maskRow, isUsingMask);
             }
+        }
+        // SkAAClip requires that we blit from left to right.
+        // Hence we must blit [ul, joinLeft] before blitting [joinLeft, joinRite]
+        if (joinLeft < joinRite) {
+            blit_full_alpha(blitter, y, SkFixedFloorToInt(joinLeft),
+                            SkFixedFloorToInt(joinRite - joinLeft),
+                            fullAlpha, maskRow, isUsingMask);
         }
         if (lr > joinRite) {
             int len = SkFixedCeilToInt(lr - joinRite);
@@ -880,7 +896,7 @@ static inline bool isSmoothEnough(SkAnalyticEdge* leftE, SkAnalyticEdge* riteE,
 
 static inline void aaa_walk_convex_edges(SkAnalyticEdge* prevHead, AdditiveBlitter* blitter,
                            int start_y, int stop_y, SkFixed leftBound, SkFixed riteBound,
-                           bool isUsingMask) {
+                           bool isUsingMask, bool forceRLE) {
     validate_sort((SkAnalyticEdge*)prevHead->fNext);
 
     SkAnalyticEdge* leftE = (SkAnalyticEdge*) prevHead->fNext;
@@ -936,8 +952,11 @@ static inline void aaa_walk_convex_edges(SkAnalyticEdge* prevHead, AdditiveBlitt
         }
 
         SkFixed local_bot_fixed = SkMin32(leftE->fLowerY, riteE->fLowerY);
-        // Skip the fractional y if edges are changing smoothly
-        if (isSmoothEnough(leftE, riteE, currE, stop_y)) {
+        // Skip the fractional y if edges are changing smoothly.
+        // If forceRLE is true, we won't skip the fractional y because it
+        // implies that SkAAClip is calling us and there are strict
+        // assertions inside SkAAClip.
+        if (isSmoothEnough(leftE, riteE, currE, stop_y) && !forceRLE) {
             local_bot_fixed = SkFixedCeilToFixed(local_bot_fixed);
         }
         local_bot_fixed = SkMin32(local_bot_fixed, SkIntToFixed(stop_y + 1));
@@ -961,6 +980,22 @@ static inline void aaa_walk_convex_edges(SkAnalyticEdge* prevHead, AdditiveBlitt
             }
 
             if (fullRite >= fullLeft) {
+                if (partialTop > 0) { // blit first partial row
+                    if (partialLeft > 0) {
+                        blitter->blitAntiH(fullLeft - 1, fullTop - 1,
+                                f2a(SkFixedMul_lowprec(partialTop, partialLeft)));
+                    }
+                    blitter->blitAntiH(fullLeft, fullTop - 1, fullRite - fullLeft,
+                                       f2a(partialTop));
+                    if (partialRite > 0) {
+                        blitter->blitAntiH(fullRite, fullTop - 1,
+                                f2a(SkFixedMul_lowprec(partialTop, partialRite)));
+                    }
+                    if (forceRLE) {
+                        ((RunBasedAdditiveBlitter*)blitter)->flush_if_y_changed(y, y + partialTop);
+                    }
+                }
+
                 // Blit all full-height rows from fullTop to fullBot
                 if (fullBot > fullTop) {
                     blitter->getRealBlitter()->blitAntiRect(fullLeft - 1, fullTop,
@@ -968,42 +1003,32 @@ static inline void aaa_walk_convex_edges(SkAnalyticEdge* prevHead, AdditiveBlitt
                                                             f2a(partialLeft), f2a(partialRite));
                 }
 
-                if (partialTop > 0) { // blit first partial row
-                    if (partialLeft > 0) {
-                        blitter->blitAntiH(fullLeft - 1, fullTop - 1,
-                                f2a(SkFixedMul_lowprec(partialTop, partialLeft)));
-                    }
-                    if (partialRite > 0) {
-                        blitter->blitAntiH(fullRite, fullTop - 1,
-                                f2a(SkFixedMul_lowprec(partialTop, partialRite)));
-                    }
-                    blitter->blitAntiH(fullLeft, fullTop - 1, fullRite - fullLeft,
-                                       f2a(partialTop));
-                }
-
                 if (partialBot > 0) { // blit last partial row
                     if (partialLeft > 0) {
                         blitter->blitAntiH(fullLeft - 1, fullBot,
                                            f2a(SkFixedMul_lowprec(partialBot, partialLeft)));
                     }
+                    blitter->blitAntiH(fullLeft, fullBot, fullRite - fullLeft, f2a(partialBot));
                     if (partialRite > 0) {
                         blitter->blitAntiH(fullRite, fullBot,
                                            f2a(SkFixedMul_lowprec(partialBot, partialRite)));
                     }
-                    blitter->blitAntiH(fullLeft, fullBot, fullRite - fullLeft, f2a(partialBot));
                 }
             } else { // left and rite are within the same pixel
                 if (partialTop > 0) {
                     blitter->getRealBlitter()->blitV(fullLeft - 1, fullTop - 1, 1,
                             f2a(SkFixedMul_lowprec(partialTop, rite - left)));
-                }
-                if (partialBot > 0) {
-                    blitter->getRealBlitter()->blitV(fullLeft - 1, fullBot, 1,
-                            f2a(SkFixedMul_lowprec(partialBot, rite - left)));
+                    if (forceRLE) {
+                        ((RunBasedAdditiveBlitter*)blitter)->flush_if_y_changed(y, y + partialTop);
+                    }
                 }
                 if (fullBot >= fullTop) {
                     blitter->getRealBlitter()->blitV(fullLeft - 1, fullTop, fullBot - fullTop,
                             f2a(rite - left));
+                }
+                if (partialBot > 0) {
+                    blitter->getRealBlitter()->blitV(fullLeft - 1, fullBot, 1,
+                            f2a(SkFixedMul_lowprec(partialBot, rite - left)));
                 }
             }
 
@@ -1023,7 +1048,7 @@ static inline void aaa_walk_convex_edges(SkAnalyticEdge* prevHead, AdditiveBlitt
             total_y_cnt += count;
             frac_y_cnt += ((int)(y & 0xFFFF0000) != y);
             if ((int)(y & 0xFFFF0000) != y) {
-                SkDebugf("frac_y = %f\n", SkFixedToFloat(y));
+                // SkDebugf("frac_y = %f\n", SkFixedToFloat(y));
             }
             #endif
 
@@ -1048,6 +1073,9 @@ static inline void aaa_walk_convex_edges(SkAnalyticEdge* prevHead, AdditiveBlitt
                     blit_trapezoid_row(blitter, y >> 16, left & kSnapMask, rite & kSnapMask,
                             nextLeft & kSnapMask, nextRite & kSnapMask, leftE->fDY, riteE->fDY,
                             getPartialAlpha(0xFF, dY), maskRow, isUsingMask);
+                    if (forceRLE) {
+                        ((RunBasedAdditiveBlitter*)blitter)->flush_if_y_changed(y, nextY);
+                    }
                     left = nextLeft; rite = nextRite; y = nextY;
                 }
 
@@ -1060,6 +1088,9 @@ static inline void aaa_walk_convex_edges(SkAnalyticEdge* prevHead, AdditiveBlitt
                     blit_trapezoid_row(blitter, y >> 16, left & kSnapMask, rite & kSnapMask,
                             nextLeft & kSnapMask, nextRite & kSnapMask,
                             leftE->fDY, riteE->fDY, 0xFF, maskRow, isUsingMask);
+                    if (forceRLE) {
+                        ((RunBasedAdditiveBlitter*)blitter)->flush_if_y_changed(y, nextY);
+                    }
                     left = nextLeft; rite = nextRite; y = nextY;
                 }
             }
@@ -1072,11 +1103,15 @@ static inline void aaa_walk_convex_edges(SkAnalyticEdge* prevHead, AdditiveBlitt
             SkASSERT(dY <= SK_Fixed1);
             // Smooth jumping to integer y may make the last nextLeft/nextRite out of bound.
             // Take them back into the bound here.
-            SkFixed nextLeft = SkTMax(left + SkFixedMul_lowprec(dLeft, dY), leftBound);
-            SkFixed nextRite = SkTMin(rite + SkFixedMul_lowprec(dRite, dY), riteBound);
+            // Note that we substract kSnapHalf later so we have to add them to leftBound/riteBound
+            SkFixed nextLeft = SkTMax(left + SkFixedMul_lowprec(dLeft, dY), leftBound + kSnapHalf);
+            SkFixed nextRite = SkTMin(rite + SkFixedMul_lowprec(dRite, dY), riteBound + kSnapHalf);
             blit_trapezoid_row(blitter, y >> 16, left & kSnapMask, rite & kSnapMask,
                     nextLeft & kSnapMask, nextRite & kSnapMask, leftE->fDY, riteE->fDY,
                     getPartialAlpha(0xFF, dY), maskRow, isUsingMask);
+            if (forceRLE) {
+                ((RunBasedAdditiveBlitter*)blitter)->flush_if_y_changed(y, local_bot_fixed);
+            }
             left = nextLeft; rite = nextRite; y = local_bot_fixed;
             left -= kSnapHalf; rite -= kSnapHalf;
         }
@@ -1089,19 +1124,17 @@ static inline void aaa_walk_convex_edges(SkAnalyticEdge* prevHead, AdditiveBlitt
 END_WALK:
     ;
     #ifdef SK_DEBUG
-    SkDebugf("frac_y_cnt = %d, total_y_cnt = %d\n", frac_y_cnt, total_y_cnt);
+    // SkDebugf("frac_y_cnt = %d, total_y_cnt = %d\n", frac_y_cnt, total_y_cnt);
     #endif
 }
 
 void SkScan::aaa_fill_path(const SkPath& path, const SkIRect* clipRect, AdditiveBlitter* blitter,
-                   int start_y, int stop_y, const SkRegion& clipRgn, bool isUsingMask) {
+                   int start_y, int stop_y, const SkRegion& clipRgn, bool isUsingMask,
+                   bool forceRLE) { // forceRLE implies that SkAAClip is calling us
     SkASSERT(blitter);
 
-    if (path.isInverseFillType() || !path.isConvex()) {
-        // fall back to supersampling AA
-        SkScan::AntiFillPath(path, clipRgn, blitter->getRealBlitter(true), false);
-        return;
-    }
+    // we only implemented the convex shapes yet
+    SkASSERT(!path.isInverseFillType() && path.isConvex());
 
     SkEdgeBuilder   builder;
 
@@ -1170,7 +1203,8 @@ void SkScan::aaa_fill_path(const SkPath& path, const SkIRect* clipRect, Additive
     if (!path.isInverseFillType() && path.isConvex()) {
         SkASSERT(count >= 2);   // convex walker does not handle missing right edges
         aaa_walk_convex_edges(&headEdge, blitter, start_y, stop_y,
-                              rect.fLeft << 16, rect.fRight << 16, isUsingMask);
+                              rect.fLeft << 16, rect.fRight << 16, isUsingMask,
+                              forceRLE);
     } else {
         SkFAIL("Concave AAA is not yet implemented!");
     }
@@ -1178,8 +1212,37 @@ void SkScan::aaa_fill_path(const SkPath& path, const SkIRect* clipRect, Additive
 
 ///////////////////////////////////////////////////////////////////////////////
 
-void SkScan::AAAFillPath(const SkPath& path, const SkRegion& origClip, SkBlitter* blitter) {
+static int overflows_short_shift(int value, int shift) {
+    const int s = 16 + shift;
+    return (SkLeftShift(value, s) >> s) - value;
+}
+
+/**
+  Would any of the coordinates of this rectangle not fit in a short,
+  when left-shifted by shift?
+*/
+static int rect_overflows_short_shift(SkIRect rect, int shift) {
+    SkASSERT(!overflows_short_shift(8191, 2));
+    SkASSERT(overflows_short_shift(8192, 2));
+    SkASSERT(!overflows_short_shift(32767, 0));
+    SkASSERT(overflows_short_shift(32768, 0));
+
+    // Since we expect these to succeed, we bit-or together
+    // for a tiny extra bit of speed.
+    return overflows_short_shift(rect.fLeft, 2) |
+           overflows_short_shift(rect.fRight, 2) |
+           overflows_short_shift(rect.fTop, 2) |
+           overflows_short_shift(rect.fBottom, 2);
+}
+
+void SkScan::AAAFillPath(const SkPath& path, const SkRegion& origClip, SkBlitter* blitter,
+                         bool forceRLE) {
     if (origClip.isEmpty()) {
+        return;
+    }
+    if (path.isInverseFillType() || !path.isConvex()) {
+        // Fall back as we only implemented the algorithm for convex shapes yet.
+        SkScan::AntiFillPath(path, origClip, blitter, forceRLE);
         return;
     }
 
@@ -1202,6 +1265,13 @@ void SkScan::AAAFillPath(const SkPath& path, const SkRegion& origClip, SkBlitter
        if (!clippedIR.intersect(ir, origClip.getBounds())) {
            return;
        }
+    }
+    // If the intersection of the path bounds and the clip bounds
+    // will overflow 32767 when << by 2, our SkFixed will overflow,
+    // so draw without antialiasing.
+    if (rect_overflows_short_shift(clippedIR, 2)) {
+        SkScan::FillPath(path, origClip, blitter);
+        return;
     }
 
     // Our antialiasing can't handle a clip larger than 32767, so we restrict
@@ -1244,12 +1314,14 @@ void SkScan::AAAFillPath(const SkPath& path, const SkRegion& origClip, SkBlitter
 
     SkASSERT(SkIntToScalar(ir.fTop) <= path.getBounds().fTop);
 
-    if (MaskAdditiveBlitter::canHandleRect(ir) && !isInverse) {
+    if (MaskAdditiveBlitter::canHandleRect(ir) && !isInverse && !forceRLE) {
         MaskAdditiveBlitter additiveBlitter(blitter, ir, *clipRgn, isInverse);
-        aaa_fill_path(path, clipRect, &additiveBlitter, ir.fTop, ir.fBottom, *clipRgn, true);
+        aaa_fill_path(path, clipRect, &additiveBlitter, ir.fTop, ir.fBottom, *clipRgn, true,
+                      forceRLE);
     } else {
         RunBasedAdditiveBlitter additiveBlitter(blitter, ir, *clipRgn, isInverse);
-        aaa_fill_path(path, clipRect, &additiveBlitter, ir.fTop, ir.fBottom, *clipRgn, false);
+        aaa_fill_path(path, clipRect, &additiveBlitter, ir.fTop, ir.fBottom, *clipRgn, false,
+                      forceRLE);
     }
 
     if (isInverse) {
@@ -1273,6 +1345,6 @@ void SkScan::AAAFillPath(const SkPath& path, const SkRasterClip& clip, SkBlitter
 
         tmp.setRect(clip.getBounds());
         aaBlitter.init(blitter, &clip.aaRgn());
-        AAAFillPath(path, tmp, &aaBlitter);
+        AAAFillPath(path, tmp, &aaBlitter, true);
     }
 }

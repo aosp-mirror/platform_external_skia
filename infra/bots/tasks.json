@@ -133,12 +133,12 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:8"
+          "version": "version:9"
         },
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:12"
+          "version": "version:14"
         },
         {
           "name": "skia/bots/svg",
@@ -180,12 +180,12 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:8"
+          "version": "version:9"
         },
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:12"
+          "version": "version:14"
         },
         {
           "name": "skia/bots/svg",
@@ -226,12 +226,12 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:8"
+          "version": "version:9"
         },
         {
           "name": "skia/bots/skp",
           "path": "skp",
-          "version": "version:12"
+          "version": "version:14"
         },
         {
           "name": "skia/bots/svg",

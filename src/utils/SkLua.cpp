@@ -573,7 +573,7 @@ static int lcanvas_drawPatch(lua_State* L) {
         texs = texStorage;
     }
 
-    get_ref<SkCanvas>(L, 1)->drawPatch(cubics, colors, texs, nullptr, *get_obj<SkPaint>(L, 5));
+    get_ref<SkCanvas>(L, 1)->drawPatch(cubics, colors, texs, *get_obj<SkPaint>(L, 5));
     return 0;
 }
 
@@ -1102,7 +1102,7 @@ static int lpaint_getImageFilter(lua_State* L) {
 
 static int lpaint_setImageFilter(lua_State* L) {
     SkPaint* paint = get_obj<SkPaint>(L, 1);
-    paint->setImageFilter(get_ref<SkImageFilter>(L, 2));
+    paint->setImageFilter(sk_ref_sp(get_ref<SkImageFilter>(L, 2)));
     return 0;
 }
 

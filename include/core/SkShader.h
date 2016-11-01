@@ -320,13 +320,17 @@ public:
     struct ComposeRec {
         const SkShader*     fShaderA;
         const SkShader*     fShaderB;
+#ifdef SK_SUPPORT_LEGACY_XFERMODE_PARAM
         const SkXfermode*   fMode;
+#endif
+        SkBlendMode         fBlendMode;
     };
 
     virtual bool asACompose(ComposeRec*) const { return false; }
 
 #if SK_SUPPORT_GPU
     struct AsFPArgs {
+        AsFPArgs() {}
         AsFPArgs(GrContext* context,
                  const SkMatrix* viewMatrix,
                  const SkMatrix* localMatrix,
@@ -419,26 +423,13 @@ public:
      */
     static sk_sp<SkShader> MakeColorShader(const SkColor4f&, sk_sp<SkColorSpace>);
 
+    static sk_sp<SkShader> MakeComposeShader(sk_sp<SkShader> dst, sk_sp<SkShader> src, SkBlendMode);
+
+#ifdef SK_SUPPORT_LEGACY_XFERMODE_PARAM
     static sk_sp<SkShader> MakeComposeShader(sk_sp<SkShader> dst, sk_sp<SkShader> src,
-                                             SkXfermode::Mode);
-
-#ifdef SK_SUPPORT_LEGACY_CREATESHADER_PTR
-    static SkShader* CreateEmptyShader() { return MakeEmptyShader().release(); }
-    static SkShader* CreateColorShader(SkColor c) { return MakeColorShader(c).release(); }
-    static SkShader* CreateBitmapShader(const SkBitmap& src, TileMode tmx, TileMode tmy,
-                                        const SkMatrix* localMatrix = nullptr) {
-        return MakeBitmapShader(src, tmx, tmy, localMatrix).release();
+                                             SkXfermode::Mode mode) {
+        return MakeComposeShader(dst, src, (SkBlendMode)mode);
     }
-    static SkShader* CreateComposeShader(SkShader* dst, SkShader* src, SkXfermode::Mode mode);
-    static SkShader* CreateComposeShader(SkShader* dst, SkShader* src, SkXfermode* xfer);
-    static SkShader* CreatePictureShader(const SkPicture* src, TileMode tmx, TileMode tmy,
-                                         const SkMatrix* localMatrix, const SkRect* tile);
-
-    SkShader* newWithLocalMatrix(const SkMatrix& matrix) const {
-        return this->makeWithLocalMatrix(matrix).release();
-    }
-    SkShader* newWithColorFilter(SkColorFilter* filter) const;
-#endif
 
     /**
      *  Create a new compose shader, given shaders dst, src, and a combining xfermode mode.
@@ -448,10 +439,9 @@ public:
      *  The caller is responsible for managing its reference-count for the xfer (if not null).
      */
     static sk_sp<SkShader> MakeComposeShader(sk_sp<SkShader> dst, sk_sp<SkShader> src,
-                                             sk_sp<SkXfermode> xfer);
-#ifdef SK_SUPPORT_LEGACY_XFERMODE_PTR
-    static sk_sp<SkShader> MakeComposeShader(sk_sp<SkShader> dst, sk_sp<SkShader> src,
-                                             SkXfermode* xfer);
+                                             sk_sp<SkXfermode> xfer) {
+        return MakeComposeShader(dst, src, xfer ? xfer->blend() : SkBlendMode::kSrcOver);
+    }
 #endif
 
     /** Call this to create a new shader that will draw with the specified bitmap.
@@ -490,6 +480,7 @@ public:
     static sk_sp<SkShader> MakePictureShader(sk_sp<SkPicture> src, TileMode tmx, TileMode tmy,
                                              const SkMatrix* localMatrix, const SkRect* tile);
 
+#ifdef SK_SUPPORT_LEGACY_SHADER_ASALOCALMATRIXSHADER
     /**
      *  If this shader can be represented by another shader + a localMatrix, return that shader
      *  and, if not NULL, the localMatrix. If not, return NULL and ignore the localMatrix parameter.
@@ -497,7 +488,15 @@ public:
      *  Note: the returned shader (if not NULL) will have been ref'd, and it is the responsibility
      *  of the caller to balance that with unref() when they are done.
      */
-    virtual SkShader* refAsALocalMatrixShader(SkMatrix* localMatrix) const;
+    SkShader* refAsALocalMatrixShader(SkMatrix* localMatrix) const {
+        return this->makeAsALocalMatrixShader(localMatrix).release();
+    }
+#endif
+    /**
+     *  If this shader can be represented by another shader + a localMatrix, return that shader and
+     *  the localMatrix. If not, return nullptr and ignore the localMatrix parameter.
+     */
+    virtual sk_sp<SkShader> makeAsALocalMatrixShader(SkMatrix* localMatrix) const;
 
     SK_TO_STRING_VIRT()
     SK_DEFINE_FLATTENABLE_TYPE(SkShader)

@@ -142,7 +142,7 @@ public:
 
     void drawDebugWireRect(GrRenderTarget*, const SkIRect&, GrColor) override;
 
-    void finishDrawTarget() override;
+    void finishOpList() override;
 
     GrFence SK_WARN_UNUSED_RESULT insertFence() const override;
     bool waitFence(GrFence, uint64_t timeout) const override;
@@ -164,10 +164,10 @@ private:
 
     GrBuffer* onCreateBuffer(size_t size, GrBufferType intendedType, GrAccessPattern,
                              const void* data) override;
-    GrTexture* onWrapBackendTexture(const GrBackendTextureDesc&, GrWrapOwnership) override;
-    GrRenderTarget* onWrapBackendRenderTarget(const GrBackendRenderTargetDesc&,
-                                              GrWrapOwnership) override;
-    GrRenderTarget* onWrapBackendTextureAsRenderTarget(const GrBackendTextureDesc&) override;
+    sk_sp<GrTexture> onWrapBackendTexture(const GrBackendTextureDesc&, GrWrapOwnership) override;
+    sk_sp<GrRenderTarget> onWrapBackendRenderTarget(const GrBackendRenderTargetDesc&,
+                                                    GrWrapOwnership) override;
+    sk_sp<GrRenderTarget> onWrapBackendTextureAsRenderTarget(const GrBackendTextureDesc&) override;
 
     gr_instanced::InstancedRendering* onCreateInstancedRendering() override;
 
@@ -225,8 +225,8 @@ private:
                        const SkIRect& srcRect,
                        const SkIPoint& dstPoint) override;
 
-    void onGetMultisampleSpecs(GrRenderTarget*, const GrStencilSettings&,
-                               int* effectiveSampleCnt, SamplePattern*) override;
+    void onQueryMultisampleSpecs(GrRenderTarget*, const GrStencilSettings&,
+                                 int* effectiveSampleCnt, SamplePattern*) override;
 
     // binds texture unit in GL
     void setTextureUnit(int unitIdx);
@@ -341,6 +341,7 @@ private:
     void flushViewport(const GrGLIRect&);
 
     void flushStencil(const GrStencilSettings&);
+    void disableStencil();
 
     // rt is used only if useHWAA is true.
     void flushHWAAState(GrRenderTarget* rt, bool useHWAA, bool stencilEnabled);

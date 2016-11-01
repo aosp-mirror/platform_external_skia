@@ -155,6 +155,7 @@ LOCAL_SRC_FILES := \
 	../gm/addarc.cpp \
 	../gm/all_bitmap_configs.cpp \
 	../gm/alphagradients.cpp \
+	../gm/animatedGif.cpp \
 	../gm/anisotropic.cpp \
 	../gm/annotated_text.cpp \
 	../gm/arcofzorro.cpp \
@@ -199,6 +200,7 @@ LOCAL_SRC_FILES := \
 	../gm/color4f.cpp \
 	../gm/colorcube.cpp \
 	../gm/coloremoji.cpp \
+	../gm/colorfilteralpha8.cpp \
 	../gm/colorfilterimagefilter.cpp \
 	../gm/colorfilters.cpp \
 	../gm/colormatrix.cpp \
@@ -249,7 +251,6 @@ LOCAL_SRC_FILES := \
 	../gm/encode-platform.cpp \
 	../gm/encode.cpp \
 	../gm/extractbitmap.cpp \
-	../gm/factory.cpp \
 	../gm/fadefilter.cpp \
 	../gm/fatpathfill.cpp \
 	../gm/filltypes.cpp \

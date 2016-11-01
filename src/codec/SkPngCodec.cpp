@@ -224,14 +224,14 @@ bool SkPngCodec::createColorTable(const SkImageInfo& dstInfo, int* ctableCount) 
     // Contents depend on tableColorType and our choice of if/when to premultiply:
     // { kPremul, kUnpremul, kOpaque } x { RGBA, BGRA }
     SkPMColor colorTable[256];
-    SkColorType tableColorType = fColorXform ? kRGBA_8888_SkColorType : dstInfo.colorType();
+    SkColorType tableColorType = this->colorXform() ? kRGBA_8888_SkColorType : dstInfo.colorType();
 
     png_bytep alphas;
     int numColorsWithAlpha = 0;
     if (png_get_tRNS(fPng_ptr, fInfo_ptr, &alphas, &numColorsWithAlpha, nullptr)) {
         // If we are performing a color xform, it will handle the premultiply.  Otherwise,
         // we'll do it here.
-        bool premultiply =  !fColorXform && needs_premul(dstInfo, this->getInfo());
+        bool premultiply =  !this->colorXform() && needs_premul(dstInfo, this->getInfo());
 
         // Choose which function to use to create the color table. If the final destination's
         // colortype is unpremultiplied, the color table will store unpremultiplied colors.
@@ -266,15 +266,14 @@ bool SkPngCodec::createColorTable(const SkImageInfo& dstInfo, int* ctableCount) 
 
     // If we are not decoding to F16, we can color xform now and store the results
     // in the color table.
-    if (fColorXform && kRGBA_F16_SkColorType != dstInfo.colorType()) {
+    if (this->colorXform() && kRGBA_F16_SkColorType != dstInfo.colorType()) {
         SkColorSpaceXform::ColorFormat xformColorFormat = is_rgba(dstInfo.colorType()) ?
                 SkColorSpaceXform::kRGBA_8888_ColorFormat :
                 SkColorSpaceXform::kBGRA_8888_ColorFormat;
         SkAlphaType xformAlphaType = select_xform_alpha(dstInfo.alphaType(),
                                                         this->getInfo().alphaType());
-        SkAssertResult(fColorXform->apply(xformColorFormat, colorTable,
-                                          SkColorSpaceXform::kRGBA_8888_ColorFormat, colorTable,
-                                          numColors, xformAlphaType));
+        SkAssertResult(this->colorXform()->apply(xformColorFormat, colorTable,
+                SkColorSpaceXform::kRGBA_8888_ColorFormat, colorTable, numColors, xformAlphaType));
     }
 
     // Pad the color table with the last color in the table (or black) in the case that
@@ -345,7 +344,7 @@ sk_sp<SkColorSpace> read_color_space(png_structp png_ptr, png_infop info_ptr) {
     int compression;
     if (PNG_INFO_iCCP == png_get_iCCP(png_ptr, info_ptr, &name, &compression, &profile,
             &length)) {
-        return SkColorSpace::NewICC(profile, length);
+        return SkColorSpace::MakeICC(profile, length);
     }
 
     // Second, check for sRGB.
@@ -356,13 +355,12 @@ sk_sp<SkColorSpace> read_color_space(png_structp png_ptr, png_infop info_ptr) {
         // FIXME (msarett): Extract this information from the sRGB chunk once
         //                  we are able to handle this information in
         //                  SkColorSpace.
-        return SkColorSpace::NewNamed(SkColorSpace::kSRGB_Named);
+        return SkColorSpace::MakeNamed(SkColorSpace::kSRGB_Named);
     }
 
     // Next, check for chromaticities.
     png_fixed_point chrm[8];
     png_fixed_point gamma;
-    float gammas[3];
     if (png_get_cHRM_fixed(png_ptr, info_ptr, &chrm[0], &chrm[1], &chrm[2], &chrm[3], &chrm[4],
                            &chrm[5], &chrm[6], &chrm[7]))
     {
@@ -382,33 +380,31 @@ sk_sp<SkColorSpace> read_color_space(png_structp png_ptr, png_infop info_ptr) {
         }
 
         if (PNG_INFO_gAMA == png_get_gAMA_fixed(png_ptr, info_ptr, &gamma)) {
-            float value = png_inverted_fixed_point_to_float(gamma);
-            gammas[0] = value;
-            gammas[1] = value;
-            gammas[2] = value;
+            SkColorSpaceTransferFn fn;
+            fn.fA = 1.0f;
+            fn.fB = fn.fC = fn.fD = fn.fE = fn.fF = 0.0f;
+            fn.fG = png_inverted_fixed_point_to_float(gamma);
 
-            return SkColorSpace::NewRGB(gammas, toXYZD50);
+            return SkColorSpace::MakeRGB(fn, toXYZD50);
         }
 
         // Default to sRGB gamma if the image has color space information,
         // but does not specify gamma.
-        return SkColorSpace::NewRGB(SkColorSpace::kSRGB_RenderTargetGamma, toXYZD50);
+        return SkColorSpace::MakeRGB(SkColorSpace::kSRGB_RenderTargetGamma, toXYZD50);
     }
 
     // Last, check for gamma.
     if (PNG_INFO_gAMA == png_get_gAMA_fixed(png_ptr, info_ptr, &gamma)) {
-
-        // Set the gammas.
-        float value = png_inverted_fixed_point_to_float(gamma);
-        gammas[0] = value;
-        gammas[1] = value;
-        gammas[2] = value;
+        SkColorSpaceTransferFn fn;
+        fn.fA = 1.0f;
+        fn.fB = fn.fC = fn.fD = fn.fE = fn.fF = 0.0f;
+        fn.fG = png_inverted_fixed_point_to_float(gamma);
 
         // Since there is no cHRM, we will guess sRGB gamut.
         SkMatrix44 toXYZD50(SkMatrix44::kUninitialized_Constructor);
         toXYZD50.set3x3RowMajorf(gSRGB_toXYZD50);
 
-        return SkColorSpace::NewRGB(gammas, toXYZD50);
+        return SkColorSpace::MakeRGB(fn, toXYZD50);
     }
 
 #endif // LIBPNG >= 1.6
@@ -442,13 +438,13 @@ void SkPngCodec::applyXformRow(void* dst, const void* src) {
             fSwizzler->swizzle(dst, (const uint8_t*) src);
             break;
         case kColorOnly_XformMode:
-            SkAssertResult(fColorXform->apply(fXformColorFormat, dst, srcColorFormat, src,
-                                              fXformWidth, fXformAlphaType));
+            SkAssertResult(this->colorXform()->apply(fXformColorFormat, dst, srcColorFormat, src,
+                    fXformWidth, fXformAlphaType));
             break;
         case kSwizzleColor_XformMode:
             fSwizzler->swizzle(fColorXformSrcRow, (const uint8_t*) src);
-            SkAssertResult(fColorXform->apply(fXformColorFormat, dst, srcColorFormat, fColorXformSrcRow,
-                                              fXformWidth, fXformAlphaType));
+            SkAssertResult(this->colorXform()->apply(fXformColorFormat, dst, srcColorFormat,
+                    fColorXformSrcRow, fXformWidth, fXformAlphaType));
             break;
     }
 }
@@ -989,7 +985,7 @@ void AutoCleanPng::infoCallback() {
         sk_sp<SkColorSpace> colorSpace = read_color_space(fPng_ptr, fInfo_ptr);
         if (!colorSpace) {
             // Treat unmarked pngs as sRGB.
-            colorSpace = SkColorSpace::NewNamed(SkColorSpace::kSRGB_Named);
+            colorSpace = SkColorSpace::MakeNamed(SkColorSpace::kSRGB_Named);
         }
 
         SkEncodedInfo encodedInfo = SkEncodedInfo::Make(color, alpha, 8);
@@ -1065,20 +1061,18 @@ bool SkPngCodec::initializeXforms(const SkImageInfo& dstInfo, const Options& opt
     }
     png_read_update_info(fPng_ptr, fInfo_ptr);
 
-    // Reset fSwizzler and fColorXform.  We can't do this in onRewind() because the
+    // Reset fSwizzler and this->colorXform().  We can't do this in onRewind() because the
     // interlaced scanline decoder may need to rewind.
     fSwizzler.reset(nullptr);
-    fColorXform = nullptr;
 
-    if (needs_color_xform(dstInfo, this->getInfo())) {
-        fColorXform = SkColorSpaceXform::New(this->getInfo().colorSpace(), dstInfo.colorSpace());
-        SkASSERT(fColorXform);
+    if (!this->initializeColorXform(dstInfo)) {
+        return false;
     }
 
     // If the image is RGBA and we have a color xform, we can skip the swizzler.
     // FIXME (msarett):
-    // Support more input types to fColorXform (ex: RGB, Gray) and skip the swizzler more often.
-    if (fColorXform && SkEncodedInfo::kRGBA_Color == this->getEncodedInfo().color() &&
+    // Support more input types to this->colorXform() (ex: RGB, Gray) and skip the swizzler more often.
+    if (this->colorXform() && SkEncodedInfo::kRGBA_Color == this->getEncodedInfo().color() &&
         !options.fSubset)
     {
         fXformMode = kColorOnly_XformMode;
@@ -1126,7 +1120,9 @@ void SkPngCodec::initializeSwizzler(const SkImageInfo& dstInfo, const Options& o
     SkImageInfo swizzlerInfo = dstInfo;
     Options swizzlerOptions = options;
     fXformMode = kSwizzleOnly_XformMode;
-    if (fColorXform && apply_xform_on_decode(dstInfo.colorType(), this->getEncodedInfo().color())) {
+    if (this->colorXform() &&
+        apply_xform_on_decode(dstInfo.colorType(), this->getEncodedInfo().color()))
+    {
         swizzlerInfo = swizzlerInfo.makeColorType(kRGBA_8888_SkColorType);
         if (kPremul_SkAlphaType == dstInfo.alphaType()) {
             swizzlerInfo = swizzlerInfo.makeAlphaType(kUnpremul_SkAlphaType);
@@ -1247,7 +1243,7 @@ uint64_t SkPngCodec::onGetFillValue(const SkImageInfo& dstInfo) const {
         SkAlphaType alphaType = select_xform_alpha(dstInfo.alphaType(),
                                                    this->getInfo().alphaType());
         return get_color_table_fill_value(dstInfo.colorType(), alphaType, colorPtr, 0,
-                                          fColorXform.get());
+                                          this->colorXform());
     }
     return INHERITED::onGetFillValue(dstInfo);
 }

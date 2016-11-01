@@ -6,6 +6,7 @@
  */
 
 #include "SkBlitter.h"
+#include "SkBlendModePriv.h"
 #include "SkColor.h"
 #include "SkColorFilter.h"
 #include "SkOpts.h"
@@ -21,13 +22,11 @@ public:
 
     SkRasterPipelineBlitter(SkPixmap dst,
                             SkRasterPipeline shader,
-                            SkRasterPipeline colorFilter,
-                            SkRasterPipeline xfermode,
+                            SkBlendMode blend,
                             SkPM4f paintColor)
         : fDst(dst)
         , fShader(shader)
-        , fColorFilter(colorFilter)
-        , fXfermode(xfermode)
+        , fBlend(blend)
         , fPaintColor(paintColor)
     {}
 
@@ -40,12 +39,27 @@ public:
     // blits using something like a SkRasterPipeline::runFew() method.
 
 private:
-    void append_load_d(SkRasterPipeline*, const void*) const;
-    void append_store (SkRasterPipeline*,       void*) const;
+    void append_load_d(SkRasterPipeline*) const;
+    void append_store (SkRasterPipeline*) const;
+    void append_blend (SkRasterPipeline*) const;
+    void maybe_clamp  (SkRasterPipeline*) const;
 
     SkPixmap         fDst;
-    SkRasterPipeline fShader, fColorFilter, fXfermode;
+    SkRasterPipeline fShader;
+    SkBlendMode      fBlend;
     SkPM4f           fPaintColor;
+
+    // These functions are compiled lazily when first used.
+    std::function<void(size_t, size_t)> fBlitH         = nullptr,
+                                        fBlitAntiH     = nullptr,
+                                        fBlitMaskA8    = nullptr,
+                                        fBlitMaskLCD16 = nullptr;
+
+    // These values are pointed to by the compiled blit functions
+    // above, which allows us to adjust them from call to call.
+    void*       fDstPtr           = nullptr;
+    const void* fMaskPtr          = nullptr;
+    float       fConstantCoverage = 0.0f;
 
     typedef SkBlitter INHERITED;
 };
@@ -80,10 +94,13 @@ SkBlitter* SkRasterPipelineBlitter::Create(const SkPixmap& dst,
     if (paint.getShader()) {
         return nullptr;  // TODO: need to work out how shaders and their contexts work
     }
+    SkBlendMode blend = paint.getBlendMode();
+    if (!SkBlendMode_AppendStages(blend)) {
+        return nullptr;  // TODO
+    }
 
-    SkRasterPipeline shader, colorFilter, xfermode;
-    if (!append_effect_stages(paint.getColorFilter(),                 &colorFilter) ||
-        !append_effect_stages(SkXfermode::Peek(paint.getBlendMode()), &xfermode   )) {
+    SkRasterPipeline shader, colorFilter;
+    if (paint.getColorFilter() && !paint.getColorFilter()->appendStages(&colorFilter)) {
         return nullptr;
     }
 
@@ -96,87 +113,93 @@ SkBlitter* SkRasterPipelineBlitter::Create(const SkPixmap& dst,
         swizzle_rb(SkNx_cast<float>(Sk4b::Load(&paintColor)) * (1/255.0f)).store(&color);
     }
 
-    auto blitter = alloc->createT<SkRasterPipelineBlitter>(
-            dst,
-            shader, colorFilter, xfermode,
-            color.premul());
+    auto blitter = alloc->createT<SkRasterPipelineBlitter>(dst, shader, blend, color.premul());
 
     if (!paint.getShader()) {
         blitter->fShader.append(SkRasterPipeline::constant_color, &blitter->fPaintColor);
     }
-    if (paint.isSrcOver()) {
-        blitter->fXfermode.append(SkRasterPipeline::srcover);
-    }
+    blitter->fShader.extend(colorFilter);
 
     return blitter;
 }
 
-void SkRasterPipelineBlitter::append_load_d(SkRasterPipeline* p, const void* dst) const {
+void SkRasterPipelineBlitter::append_load_d(SkRasterPipeline* p) const {
     SkASSERT(supported(fDst.info()));
 
     switch (fDst.info().colorType()) {
         case kN32_SkColorType:
             if (fDst.info().gammaCloseToSRGB()) {
-                p->append(SkRasterPipeline::load_d_srgb, dst);
+                p->append(SkRasterPipeline::load_d_srgb, &fDstPtr);
             }
             break;
         case kRGBA_F16_SkColorType:
-            p->append(SkRasterPipeline::load_d_f16, dst);
+            p->append(SkRasterPipeline::load_d_f16, &fDstPtr);
             break;
         case kRGB_565_SkColorType:
-            p->append(SkRasterPipeline::load_d_565, dst);
+            p->append(SkRasterPipeline::load_d_565, &fDstPtr);
             break;
         default: break;
     }
 }
 
-void SkRasterPipelineBlitter::append_store(SkRasterPipeline* p, void* dst) const {
+void SkRasterPipelineBlitter::append_store(SkRasterPipeline* p) const {
     SkASSERT(supported(fDst.info()));
 
     switch (fDst.info().colorType()) {
         case kN32_SkColorType:
             if (fDst.info().gammaCloseToSRGB()) {
-                p->append(SkRasterPipeline::store_srgb, dst);
+                p->append(SkRasterPipeline::store_srgb, &fDstPtr);
             }
             break;
         case kRGBA_F16_SkColorType:
-            p->append(SkRasterPipeline::store_f16, dst);
+            p->append(SkRasterPipeline::store_f16, &fDstPtr);
             break;
         case kRGB_565_SkColorType:
-            p->append(SkRasterPipeline::store_565, dst);
+            p->append(SkRasterPipeline::store_565, &fDstPtr);
             break;
         default: break;
     }
+}
+
+void SkRasterPipelineBlitter::append_blend(SkRasterPipeline* p) const {
+    SkAssertResult(SkBlendMode_AppendStages(fBlend, p));
+}
+
+void SkRasterPipelineBlitter::maybe_clamp(SkRasterPipeline* p) const {
+    if (SkBlendMode_CanOverflow(fBlend)) { p->append(SkRasterPipeline::clamp_1); }
 }
 
 void SkRasterPipelineBlitter::blitH(int x, int y, int w) {
-    auto dst = fDst.writable_addr(0,y);
+    if (!fBlitH) {
+        SkRasterPipeline p;
+        p.extend(fShader);
+        this->append_load_d(&p);
+        this->append_blend(&p);
+        this->maybe_clamp(&p);
+        this->append_store(&p);
+        fBlitH = p.compile();
+    }
 
-    SkRasterPipeline p;
-    p.extend(fShader);
-    p.extend(fColorFilter);
-    this->append_load_d(&p, dst);
-    p.extend(fXfermode);
-    this->append_store(&p, dst);
-
-    p.run(x, w);
+    fDstPtr = fDst.writable_addr(0,y);
+    fBlitH(x,w);
 }
 
 void SkRasterPipelineBlitter::blitAntiH(int x, int y, const SkAlpha aa[], const int16_t runs[]) {
-    auto dst = fDst.writable_addr(0,y);
-    float coverage;
+    if (!fBlitAntiH) {
+        SkRasterPipeline p;
+        p.extend(fShader);
+        this->append_load_d(&p);
+        this->append_blend(&p);
+        p.append(SkRasterPipeline::lerp_constant_float, &fConstantCoverage);
+        this->maybe_clamp(&p);
+        this->append_store(&p);
+        fBlitAntiH = p.compile();
+    }
 
-    SkRasterPipeline p;
-    p.extend(fShader);
-    p.extend(fColorFilter);
-    this->append_load_d(&p, dst);
-    p.extend(fXfermode);
-    p.append(SkRasterPipeline::lerp_constant_float, &coverage);
-    this->append_store(&p, dst);
-
+    fDstPtr = fDst.writable_addr(0,y);
     for (int16_t run = *runs; run > 0; run = *runs) {
-        coverage = *aa * (1/255.0f);
-        p.run(x, run);
+        fConstantCoverage = *aa * (1/255.0f);
+        fBlitAntiH(x, run);
 
         x    += run;
         runs += run;
@@ -190,26 +213,44 @@ void SkRasterPipelineBlitter::blitMask(const SkMask& mask, const SkIRect& clip) 
         return INHERITED::blitMask(mask, clip);
     }
 
-    int x = clip.left();
-    for (int y = clip.top(); y < clip.bottom(); y++) {
-        auto dst = fDst.writable_addr(0,y);
-
+    if (mask.fFormat == SkMask::kA8_Format && !fBlitMaskA8) {
         SkRasterPipeline p;
         p.extend(fShader);
-        p.extend(fColorFilter);
-        this->append_load_d(&p, dst);
-        p.extend(fXfermode);
+        this->append_load_d(&p);
+        this->append_blend(&p);
+        p.append(SkRasterPipeline::lerp_u8, &fMaskPtr);
+        this->maybe_clamp(&p);
+        this->append_store(&p);
+        fBlitMaskA8 = p.compile();
+    }
+
+    if (mask.fFormat == SkMask::kLCD16_Format && !fBlitMaskLCD16) {
+        SkRasterPipeline p;
+        p.extend(fShader);
+        this->append_load_d(&p);
+        this->append_blend(&p);
+        p.append(SkRasterPipeline::lerp_565, &fMaskPtr);
+        this->maybe_clamp(&p);
+        this->append_store(&p);
+        fBlitMaskLCD16 = p.compile();
+    }
+
+    int x = clip.left();
+    for (int y = clip.top(); y < clip.bottom(); y++) {
+        fDstPtr = fDst.writable_addr(0,y);
+
         switch (mask.fFormat) {
             case SkMask::kA8_Format:
-                p.append(SkRasterPipeline::lerp_u8, mask.getAddr8(x,y)-x);
+                fMaskPtr = mask.getAddr8(x,y)-x;
+                fBlitMaskA8(x, clip.width());
                 break;
             case SkMask::kLCD16_Format:
-                p.append(SkRasterPipeline::lerp_565, mask.getAddrLCD16(x,y)-x);
+                fMaskPtr = mask.getAddrLCD16(x,y)-x;
+                fBlitMaskLCD16(x, clip.width());
                 break;
-            default: break;
+            default:
+                // TODO
+                break;
         }
-        this->append_store(&p, dst);
-
-        p.run(x, clip.width());
     }
 }

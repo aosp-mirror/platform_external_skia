@@ -9,7 +9,7 @@
 #if SK_SUPPORT_GPU
 #include "GrContext.h"
 #include "GrContextPriv.h"
-#include "GrDrawContext.h"
+#include "GrRenderTargetContext.h"
 #include "gl/GrGLGpu.h"
 #include "gl/GrGLUtil.h"
 #include "gl/GLTestContext.h"
@@ -90,17 +90,17 @@ static void test_copy_surface_dst(skiatest::Reporter* reporter, GrContext* conte
 static void test_clear(skiatest::Reporter* reporter, GrContext* context,
                        GrTexture* rectangleTexture) {
     if (rectangleTexture->asRenderTarget()) {
-        sk_sp<GrDrawContext> dc(context->contextPriv().makeWrappedDrawContext(
+        sk_sp<GrRenderTargetContext> rtc(context->contextPriv().makeWrappedRenderTargetContext(
                                                     sk_ref_sp(rectangleTexture->asRenderTarget()),
                                                     nullptr));
-        if (!dc) {
-            ERRORF(reporter, "Could not get GrDrawContext for rectangle texture.");
+        if (!rtc) {
+            ERRORF(reporter, "Could not get GrRenderTargetContext for rectangle texture.");
             return;
         }
 
         // Clear the whole thing.
         GrColor color0 = GrColorPackRGBA(0xA, 0xB, 0xC, 0xD);
-        dc->clear(nullptr, color0, false);
+        rtc->clear(nullptr, color0, false);
 
         int w = rectangleTexture->width();
         int h = rectangleTexture->height();
@@ -121,7 +121,7 @@ static void test_clear(skiatest::Reporter* reporter, GrContext* context,
         // Clear the the top to a different color.
         GrColor color1 = GrColorPackRGBA(0x1, 0x2, 0x3, 0x4);
         SkIRect rect = SkIRect::MakeWH(w, h/2);
-        dc->clear(&rect, color1, false);
+        rtc->clear(&rect, color1, false);
 
         uint32_t expectedColor1 = 0;
         uint8_t* expectedBytes1 = SkTCast<uint8_t*>(&expectedColor1);
@@ -187,7 +187,7 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(RectangleTexture, reporter, ctxInfo) {
             }
         }
 
-        SkAutoTUnref<GrTexture> rectangleTexture(
+        sk_sp<GrTexture> rectangleTexture(
             context->textureProvider()->wrapBackendTexture(rectangleDesc));
         if (!rectangleTexture) {
             ERRORF(reporter, "Error wrapping rectangle texture in GrTexture.");
@@ -195,15 +195,15 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(RectangleTexture, reporter, ctxInfo) {
             continue;
         }
 
-        test_read_pixels(reporter, context, rectangleTexture, refPixels);
+        test_read_pixels(reporter, context, rectangleTexture.get(), refPixels);
 
-        test_copy_surface_src(reporter, context, rectangleTexture, refPixels);
+        test_copy_surface_src(reporter, context, rectangleTexture.get(), refPixels);
 
-        test_copy_surface_dst(reporter, context, rectangleTexture);
+        test_copy_surface_dst(reporter, context, rectangleTexture.get());
 
-        test_write_pixels(reporter, context, rectangleTexture);
+        test_write_pixels(reporter, context, rectangleTexture.get());
 
-        test_clear(reporter, context, rectangleTexture);
+        test_clear(reporter, context, rectangleTexture.get());
 
         GR_GL_CALL(glContext->gl(), DeleteTextures(1, &rectTexID));
     }

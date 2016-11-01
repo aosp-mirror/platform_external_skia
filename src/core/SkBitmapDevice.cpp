@@ -367,10 +367,16 @@ void SkBitmapDevice::drawPosText(const SkDraw& draw, const void* text, size_t le
 void SkBitmapDevice::drawVertices(const SkDraw& draw, SkCanvas::VertexMode vmode,
                                   int vertexCount,
                                   const SkPoint verts[], const SkPoint textures[],
-                                  const SkColor colors[], SkXfermode* xmode,
+                                  const SkColor colors[], SK_XFERMODE_PARAM xmode,
                                   const uint16_t indices[], int indexCount,
                                   const SkPaint& paint) {
-    draw.drawVertices(vmode, vertexCount, verts, textures, colors, xmode,
+    SkBlendMode bmode;
+#ifdef SK_SUPPORT_LEGACY_XFERMODE_PARAM
+    bmode = xmode ? xmode->blend() : SkBlendMode::kModulate;
+#else
+    bmode = xmode;
+#endif
+    draw.drawVertices(vmode, vertexCount, verts, textures, colors, bmode,
                       indices, indexCount, paint);
 }
 
@@ -397,7 +403,7 @@ void SkBitmapDevice::drawSpecial(const SkDraw& draw, SkSpecialImage* srcImg, int
         SkAutoTUnref<SkImageFilterCache> cache(this->getImageFilterCache());
         SkImageFilter::OutputProperties outputProperties(fBitmap.colorSpace());
         SkImageFilter::Context ctx(matrix, clipBounds, cache.get(), outputProperties);
-        
+
         sk_sp<SkSpecialImage> resultImg(filter->filterImage(srcImg, ctx, &offset));
         if (resultImg) {
             SkPaint tmpUnfiltered(paint);

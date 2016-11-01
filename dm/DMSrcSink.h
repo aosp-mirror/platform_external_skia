@@ -118,6 +118,7 @@ public:
         kStripe_Mode, // Tests the skipping of scanlines
         kCroppedScanline_Mode, // Tests (jpeg) cropped scanline optimization
         kSubset_Mode, // For codecs that support subsets directly.
+        kAnimated_Mode, // For codecs that support animation.
     };
     enum DstColorType {
         kGetFromCanvas_DstColorType,
@@ -218,11 +219,6 @@ public:
         kDst_HPZR30w_Mode,
 
         kDst_sRGB_Mode,
-
-#if defined(SK_TEST_QCMS)
-        // Use QCMS for color correction.
-        kQCMS_HPZR30w_Mode,
-#endif
     };
 
     ColorCodecSrc(Path, Mode, SkColorType);
@@ -370,6 +366,13 @@ public:
 
     Error draw(const Src&, SkBitmap*, SkWStream*, SkString*) const override;
     const char* fileExtension() const override { return "skp"; }
+    SinkFlags flags() const override { return SinkFlags{ SinkFlags::kVector, SinkFlags::kDirect }; }
+};
+
+class DebugSink : public Sink {
+public:
+    Error draw(const Src&, SkBitmap*, SkWStream*, SkString*) const override;
+    const char* fileExtension() const override { return "json"; }
     SinkFlags flags() const override { return SinkFlags{ SinkFlags::kVector, SinkFlags::kDirect }; }
 };
 

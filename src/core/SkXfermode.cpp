@@ -1109,12 +1109,12 @@ sk_sp<SkFlattenable> SkProcCoeffXfermode::CreateProc(SkReadBuffer& buffer) {
 }
 
 void SkProcCoeffXfermode::flatten(SkWriteBuffer& buffer) const {
-    buffer.write32(fMode);
+    buffer.write32((int)fMode);
 }
 
 bool SkProcCoeffXfermode::asMode(Mode* mode) const {
     if (mode) {
-        *mode = fMode;
+        *mode = (Mode)fMode;
     }
     return true;
 }
@@ -1307,32 +1307,33 @@ void SkProcCoeffXfermode::toString(SkString* str) const {
 #endif
 
 
-sk_sp<SkXfermode> SkXfermode::Make(Mode mode) {
-    if ((unsigned)mode >= kModeCount) {
+sk_sp<SkXfermode> SkXfermode::Make(SkBlendMode mode) {
+    if ((unsigned)mode > (unsigned)SkBlendMode::kLastMode) {
         // report error
         return nullptr;
     }
 
     // Skia's "default" mode is srcover. nullptr in SkPaint is interpreted as srcover
     // so we can just return nullptr from the factory.
-    if (kSrcOver_Mode == mode) {
+    if (SkBlendMode::kSrcOver == mode) {
         return nullptr;
     }
 
-    SkASSERT(SK_ARRAY_COUNT(gProcCoeffs) == kModeCount);
+    const int COUNT_BLENDMODES = (int)SkBlendMode::kLastMode + 1;
+    SkASSERT(SK_ARRAY_COUNT(gProcCoeffs) == COUNT_BLENDMODES);
 
-    static SkOnce        once[SkXfermode::kLastMode+1];
-    static SkXfermode* cached[SkXfermode::kLastMode+1];
+    static SkOnce        once[COUNT_BLENDMODES];
+    static SkXfermode* cached[COUNT_BLENDMODES];
 
-    once[mode]([mode] {
-        ProcCoeff rec = gProcCoeffs[mode];
+    once[(int)mode]([mode] {
+        ProcCoeff rec = gProcCoeffs[(int)mode];
         if (auto xfermode = SkOpts::create_xfermode(rec, mode)) {
-            cached[mode] = xfermode;
+            cached[(int)mode] = xfermode;
         } else {
-            cached[mode] = new SkProcCoeffXfermode(rec, mode);
+            cached[(int)mode] = new SkProcCoeffXfermode(rec, mode);
         }
     });
-    return sk_ref_sp(cached[mode]);
+    return sk_ref_sp(cached[(int)mode]);
 }
 
 SkXfermodeProc SkXfermode::GetProc(Mode mode) {
@@ -1421,57 +1422,9 @@ bool SkXfermode::IsOpaque(const SkXfermode* xfer, SrcColorOpacity opacityType) {
     return xfer->isOpaque(opacityType);
 }
 
-bool SkXfermode::appendStages(SkRasterPipeline* pipeline) const {
-    return this->onAppendStages(pipeline);
-}
-
-bool SkXfermode::onAppendStages(SkRasterPipeline*) const {
-    return false;
-}
-
 SK_DEFINE_FLATTENABLE_REGISTRAR_GROUP_START(SkXfermode)
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkProcCoeffXfermode)
 SK_DEFINE_FLATTENABLE_REGISTRAR_GROUP_END
-
-
-bool SkProcCoeffXfermode::onAppendStages(SkRasterPipeline* p) const {
-    switch (fMode) {
-        case kSrc_Mode:    /*This stage is a no-op.*/             return true;
-        case kDst_Mode:     p->append(SkRasterPipeline::dst);     return true;
-        case kSrcATop_Mode: p->append(SkRasterPipeline::srcatop); return true;
-        case kDstATop_Mode: p->append(SkRasterPipeline::dstatop); return true;
-        case kSrcIn_Mode:   p->append(SkRasterPipeline::srcin);   return true;
-        case kDstIn_Mode:   p->append(SkRasterPipeline::dstin);   return true;
-        case kSrcOut_Mode:  p->append(SkRasterPipeline::srcout);  return true;
-        case kDstOut_Mode:  p->append(SkRasterPipeline::dstout);  return true;
-        case kSrcOver_Mode: p->append(SkRasterPipeline::srcover); return true;
-        case kDstOver_Mode: p->append(SkRasterPipeline::dstover); return true;
-
-        case kClear_Mode:    p->append(SkRasterPipeline::clear);    return true;
-        case kModulate_Mode: p->append(SkRasterPipeline::modulate); return true;
-        case kMultiply_Mode: p->append(SkRasterPipeline::multiply); return true;
-        case kPlus_Mode:     p->append(SkRasterPipeline::plus_);    return true;
-        case kScreen_Mode:   p->append(SkRasterPipeline::screen);   return true;
-        case kXor_Mode:      p->append(SkRasterPipeline::xor_);     return true;
-
-        case kColorBurn_Mode:  p->append(SkRasterPipeline::colorburn);  return true;
-        case kColorDodge_Mode: p->append(SkRasterPipeline::colordodge); return true;
-        case kDarken_Mode:     p->append(SkRasterPipeline::darken);     return true;
-        case kDifference_Mode: p->append(SkRasterPipeline::difference); return true;
-        case kExclusion_Mode:  p->append(SkRasterPipeline::exclusion);  return true;
-        case kHardLight_Mode:  p->append(SkRasterPipeline::hardlight);  return true;
-        case kLighten_Mode:    p->append(SkRasterPipeline::lighten);    return true;
-        case kOverlay_Mode:    p->append(SkRasterPipeline::overlay);    return true;
-        case kSoftLight_Mode:  p->append(SkRasterPipeline::softlight);  return true;
-
-        // TODO
-        case kColor_Mode:       return false;
-        case kHue_Mode:         return false;
-        case kLuminosity_Mode:  return false;
-        case kSaturation_Mode:  return false;
-    }
-    return false;
-}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -1529,7 +1482,50 @@ sk_sp<GrXPFactory> SkBlendMode_AsXPFactory(SkBlendMode mode) {
         return result;
     }
 
-    SkASSERT(GrCustomXfermode::IsSupportedMode((SkXfermode::Mode)mode));
-    return GrCustomXfermode::MakeXPFactory((SkXfermode::Mode)mode);
+    SkASSERT(GrCustomXfermode::IsSupportedMode(mode));
+    return GrCustomXfermode::MakeXPFactory(mode);
 }
 #endif
+
+bool SkBlendMode_CanOverflow(SkBlendMode mode) { return mode == SkBlendMode::kPlus; }
+
+bool SkBlendMode_AppendStages(SkBlendMode mode, SkRasterPipeline* p) {
+    auto stage = SkRasterPipeline::srcover;
+    switch (mode) {
+        case SkBlendMode::kClear:    stage = SkRasterPipeline::clear; break;
+        case SkBlendMode::kSrc:      return true;  // This stage is a no-op.
+        case SkBlendMode::kDst:      stage = SkRasterPipeline::dst; break;
+        case SkBlendMode::kSrcOver:  stage = SkRasterPipeline::srcover; break;
+        case SkBlendMode::kDstOver:  stage = SkRasterPipeline::dstover; break;
+        case SkBlendMode::kSrcIn:    stage = SkRasterPipeline::srcin; break;
+        case SkBlendMode::kDstIn:    stage = SkRasterPipeline::dstin; break;
+        case SkBlendMode::kSrcOut:   stage = SkRasterPipeline::srcout; break;
+        case SkBlendMode::kDstOut:   stage = SkRasterPipeline::dstout; break;
+        case SkBlendMode::kSrcATop:  stage = SkRasterPipeline::srcatop; break;
+        case SkBlendMode::kDstATop:  stage = SkRasterPipeline::dstatop; break;
+        case SkBlendMode::kXor:      stage = SkRasterPipeline::xor_; break;
+        case SkBlendMode::kPlus:     stage = SkRasterPipeline::plus_; break;
+        case SkBlendMode::kModulate: stage = SkRasterPipeline::modulate; break;
+
+        case SkBlendMode::kScreen:     stage = SkRasterPipeline::screen; break;
+        case SkBlendMode::kOverlay:    stage = SkRasterPipeline::overlay; break;
+        case SkBlendMode::kDarken:     stage = SkRasterPipeline::darken; break;
+        case SkBlendMode::kLighten:    stage = SkRasterPipeline::lighten; break;
+        case SkBlendMode::kColorDodge: stage = SkRasterPipeline::colordodge; break;
+        case SkBlendMode::kColorBurn:  stage = SkRasterPipeline::colorburn; break;
+        case SkBlendMode::kHardLight:  stage = SkRasterPipeline::hardlight; break;
+        case SkBlendMode::kSoftLight:  stage = SkRasterPipeline::softlight; break;
+        case SkBlendMode::kDifference: stage = SkRasterPipeline::difference; break;
+        case SkBlendMode::kExclusion:  stage = SkRasterPipeline::exclusion; break;
+        case SkBlendMode::kMultiply:   stage = SkRasterPipeline::multiply; break;
+
+        case SkBlendMode::kHue:
+        case SkBlendMode::kSaturation:
+        case SkBlendMode::kColor:
+        case SkBlendMode::kLuminosity: return false;  // TODO
+    }
+    if (p) {
+        p->append(stage);
+    }
+    return true;
+}

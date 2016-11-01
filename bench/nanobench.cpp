@@ -126,7 +126,7 @@ DEFINE_string(useThermalManager, "0,1,10,1000", "enabled,threshold,sleepTimeMs,T
 DEFINE_string(sourceType, "",
         "Apply usual --match rules to source type: bench, gm, skp, image, etc.");
 DEFINE_string(benchType,  "",
-        "Apply usual --match rules to bench type: micro, recording, playback, skcodec, etc.");
+        "Apply usual --match rules to bench type: micro, recording, piping, playback, skcodec, etc.");
 
 static double now_ms() { return SkTime::GetNSecs() * 1e-6; }
 
@@ -456,10 +456,10 @@ static void create_config(const SkCommandLineConfig* config, SkTArray<Config>* c
                    kN32_SkColorType, kPremul_SkAlphaType, nullptr)
         CPU_CONFIG(565,  kRaster_Backend,
                    kRGB_565_SkColorType, kOpaque_SkAlphaType, nullptr)
-        auto srgbColorSpace = SkColorSpace::NewNamed(SkColorSpace::kSRGB_Named);
+        auto srgbColorSpace = SkColorSpace::MakeNamed(SkColorSpace::kSRGB_Named);
         CPU_CONFIG(srgb, kRaster_Backend,
                    kN32_SkColorType,  kPremul_SkAlphaType, srgbColorSpace)
-        auto srgbLinearColorSpace = SkColorSpace::NewNamed(SkColorSpace::kSRGBLinear_Named);
+        auto srgbLinearColorSpace = SkColorSpace::MakeNamed(SkColorSpace::kSRGBLinear_Named);
         CPU_CONFIG(f16,  kRaster_Backend,
                    kRGBA_F16_SkColorType, kPremul_SkAlphaType, srgbLinearColorSpace)
     }
@@ -583,6 +583,7 @@ public:
     BenchmarkStream() : fBenches(BenchRegistry::Head())
                       , fGMs(skiagm::GMRegistry::Head())
                       , fCurrentRecording(0)
+                      , fCurrentPiping(0)
                       , fCurrentScale(0)
                       , fCurrentSKP(0)
                       , fCurrentSVG(0)
@@ -725,6 +726,21 @@ public:
             fSKPBytes = static_cast<double>(SkPictureUtils::ApproximateBytesUsed(pic.get()));
             fSKPOps   = pic->approximateOpCount();
             return new RecordingBench(name.c_str(), pic.get(), FLAGS_bbh, FLAGS_lite);
+        }
+
+        // Add all .skps as PipeBenches.
+        while (fCurrentPiping < fSKPs.count()) {
+            const SkString& path = fSKPs[fCurrentPiping++];
+            sk_sp<SkPicture> pic = ReadPicture(path.c_str());
+            if (!pic) {
+                continue;
+            }
+            SkString name = SkOSPath::Basename(path.c_str());
+            fSourceType = "skp";
+            fBenchType  = "piping";
+            fSKPBytes = static_cast<double>(SkPictureUtils::ApproximateBytesUsed(pic.get()));
+            fSKPOps   = pic->approximateOpCount();
+            return new PipingBench(name.c_str(), pic.get());
         }
 
         // Then once each for each scale as SKPBenches (playback).
@@ -1057,6 +1073,7 @@ private:
     const char* fSourceType;  // What we're benching: bench, GM, SKP, ...
     const char* fBenchType;   // How we bench it: micro, recording, playback, ...
     int fCurrentRecording;
+    int fCurrentPiping;
     int fCurrentScale;
     int fCurrentSKP;
     int fCurrentSVG;
