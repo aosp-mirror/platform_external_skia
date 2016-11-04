@@ -193,20 +193,30 @@ SI SkNh to_565(const SkNf& r, const SkNf& g, const SkNf& b) {
 
 STAGE(just_return, false) { }
 
-/*  We don't seem to have a need for this yet.
 STAGE(clamp_0, true) {
     a = SkNf::Max(a, 0.0f);
     r = SkNf::Max(r, 0.0f);
     g = SkNf::Max(g, 0.0f);
     b = SkNf::Max(b, 0.0f);
 }
-*/
 
-STAGE(clamp_1, true) {
+STAGE(clamp_a, true) {
     a = SkNf::Min(a, 1.0f);
     r = SkNf::Min(r, a);
     g = SkNf::Min(g, a);
     b = SkNf::Min(b, a);
+}
+
+STAGE(unpremul, true) {
+    r *= a.invert();
+    g *= a.invert();
+    b *= a.invert();
+}
+
+STAGE(premul, true) {
+    r *= a;
+    g *= a;
+    b *= a;
 }
 
 STAGE(swap_src_dst, true) {
@@ -223,6 +233,16 @@ STAGE(constant_color, true) {
     g = color->g();
     b = color->b();
     a = color->a();
+}
+
+// s' = sc for a constant c.
+STAGE(scale_constant_float, true) {
+    SkNf c = *(const float*)ctx;
+
+    r *= c;
+    g *= c;
+    b *= c;
+    a *= c;
 }
 
 // s' = d(1-c) + sc, for a constant c.
@@ -385,10 +405,10 @@ STAGE(load_s_srgb, true) {
 
 STAGE(store_srgb, false) {
     auto ptr = *(uint32_t**)ctx + x;
-    store<kIsTail>(tail, (      sk_linear_to_srgb_noclamp(r) << SK_R32_SHIFT
-                         |      sk_linear_to_srgb_noclamp(g) << SK_G32_SHIFT
-                         |      sk_linear_to_srgb_noclamp(b) << SK_B32_SHIFT
-                         | SkNx_cast<int>(255.0f * a + 0.5f) << SK_A32_SHIFT ), (int*)ptr);
+    store<kIsTail>(tail, (              sk_linear_to_srgb(r) << SK_R32_SHIFT
+                         |              sk_linear_to_srgb(g) << SK_G32_SHIFT
+                         |              sk_linear_to_srgb(b) << SK_B32_SHIFT
+                         | SkNx_cast<int>(0.5f + 255.0f * a) << SK_A32_SHIFT), (int*)ptr);
 }
 
 RGBA_XFERMODE(clear)    { return 0.0f; }
@@ -450,6 +470,19 @@ STAGE(luminance_to_alpha, true) {
     r = g = b = 0;
 }
 
+STAGE(matrix_4x5, true) {
+    auto m = (const float*)ctx;
+
+    auto fma = [](const SkNf& f, const SkNf& m, const SkNf& a) { return SkNx_fma(f,m,a); };
+    auto R = fma(r,m[0], fma(g,m[4], fma(b,m[ 8], fma(a,m[12], m[16])))),
+         G = fma(r,m[1], fma(g,m[5], fma(b,m[ 9], fma(a,m[13], m[17])))),
+         B = fma(r,m[2], fma(g,m[6], fma(b,m[10], fma(a,m[14], m[18])))),
+         A = fma(r,m[3], fma(g,m[7], fma(b,m[11], fma(a,m[15], m[19]))));
+    r = R;
+    g = G;
+    b = B;
+    a = A;
+}
 
 template <typename Fn>
 SI Fn enum_to_Fn(SkRasterPipeline::StockStage st) {

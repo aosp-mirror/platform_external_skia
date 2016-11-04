@@ -83,6 +83,8 @@
   },
   {
     "cmd": [
+      "python",
+      "-u",
       "[CUSTOM_/_B_WORK]/skia/bin/fetch-gn"
     ],
     "cwd": "[CUSTOM_/_B_WORK]/skia",
@@ -96,7 +98,7 @@
       "gn",
       "gen",
       "[CUSTOM_/_B_WORK]/skia/out/Build-Ubuntu-Clang-arm64-Debug-GN_Android-Trybot/Debug",
-      "--args=ndk=\"[SLAVE_BUILD]/android_ndk_linux\" target_cpu=\"arm64\""
+      "--args=extra_cflags=[\"-O1\"] ndk=\"[SLAVE_BUILD]/android_ndk_linux\" target_cpu=\"arm64\""
     ],
     "cwd": "[CUSTOM_/_B_WORK]/skia",
     "env": {

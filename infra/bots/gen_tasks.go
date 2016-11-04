@@ -38,6 +38,7 @@ var (
 	// Top-level list of all jobs to run at each commit.
 	JOBS = []string{
 		"Build-Ubuntu-GCC-x86_64-Release-GN",
+		"Build-Win-Clang-arm64-Release-GN_Android",
 		"Perf-Ubuntu-GCC-GCE-CPU-AVX2-x86_64-Release-GN",
 		"Test-Android-Clang-AndroidOne-GPU-Mali400MP2-arm-Release-GN_Android",
 		"Test-Ubuntu-GCC-GCE-CPU-AVX2-x86_64-Release-GN",
@@ -184,9 +185,12 @@ func compile(b *specs.TasksCfgBuilder, name string, parts map[string]string) str
 
 	// Android bots require a toolchain.
 	if strings.Contains(name, "Android") {
-		pkgs = append(pkgs, b.MustGetCipdPackageFromAsset("android_sdk"))
 		if strings.Contains(name, "Mac") {
 			pkgs = append(pkgs, b.MustGetCipdPackageFromAsset("android_ndk_darwin"))
+		} else if strings.Contains(name, "Win") {
+			pkg := b.MustGetCipdPackageFromAsset("android_ndk_windows")
+			pkg.Path = "n"
+			pkgs = append(pkgs, pkg)
 		} else {
 			pkgs = append(pkgs, b.MustGetCipdPackageFromAsset("android_ndk_linux"))
 		}

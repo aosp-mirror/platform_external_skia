@@ -534,6 +534,7 @@
       "--config",
       "8888",
       "gpu",
+      "gpudft",
       "gpusrgb",
       "pdf",
       "serialize-8888",

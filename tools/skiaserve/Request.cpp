@@ -55,7 +55,7 @@ SkBitmap* Request::getBitmapFromCanvas(SkCanvas* canvas) {
 
 sk_sp<SkData> Request::writeCanvasToPng(SkCanvas* canvas) {
     // capture pixels
-    SkAutoTDelete<SkBitmap> bmp(this->getBitmapFromCanvas(canvas));
+    std::unique_ptr<SkBitmap> bmp(this->getBitmapFromCanvas(canvas));
     SkASSERT(bmp);
 
     // Convert to format suitable for PNG output
@@ -117,8 +117,8 @@ sk_sp<SkData> Request::writeOutSkp() {
 
     SkDynamicMemoryWStream outStream;
 
-    SkAutoTUnref<SkPixelSerializer> serializer(SkImageEncoder::CreatePixelSerializer());
-    picture->serialize(&outStream, serializer);
+    sk_sp<SkPixelSerializer> serializer(SkImageEncoder::CreatePixelSerializer());
+    picture->serialize(&outStream, serializer.get());
 
     return outStream.detachAsData();
 }
@@ -280,7 +280,7 @@ sk_sp<SkData> Request::getJsonBatchList(int n) {
 
 sk_sp<SkData> Request::getJsonInfo(int n) {
     // drawTo
-    SkAutoTUnref<SkSurface> surface(this->createCPUSurface());
+    sk_sp<SkSurface> surface(this->createCPUSurface());
     SkCanvas* canvas = surface->getCanvas();
 
     // TODO this is really slow and we should cache the matrix and clip
@@ -302,7 +302,7 @@ sk_sp<SkData> Request::getJsonInfo(int n) {
 SkColor Request::getPixel(int x, int y) {
     SkCanvas* canvas = this->getCanvas();
     canvas->flush();
-    SkAutoTDelete<SkBitmap> bitmap(this->getBitmapFromCanvas(canvas));
+    std::unique_ptr<SkBitmap> bitmap(this->getBitmapFromCanvas(canvas));
     SkASSERT(bitmap);
 
     // Convert to format suitable for inspection

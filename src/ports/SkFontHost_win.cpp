@@ -363,7 +363,7 @@ static void populate_glyph_to_unicode(HDC fontHdc, const unsigned glyphCount,
         return;
     }
 
-    SkAutoTDeleteArray<BYTE> glyphSetBuffer(new BYTE[glyphSetBufferSize]);
+    std::unique_ptr<BYTE[]> glyphSetBuffer(new BYTE[glyphSetBufferSize]);
     GLYPHSET* glyphSet =
         reinterpret_cast<LPGLYPHSET>(glyphSetBuffer.get());
     if (GetFontUnicodeRanges(fontHdc, glyphSet) != glyphSetBufferSize) {
@@ -2454,8 +2454,8 @@ protected:
     }
 
     SkTypeface* onCreateFromStream(SkStreamAsset* bareStream, int ttcIndex) const override {
-        SkAutoTDelete<SkStreamAsset> stream(bareStream);
-        return create_from_stream(stream);
+        std::unique_ptr<SkStreamAsset> stream(bareStream);
+        return create_from_stream(stream.get());
     }
 
     SkTypeface* onCreateFromData(SkData* data, int ttcIndex) const override {

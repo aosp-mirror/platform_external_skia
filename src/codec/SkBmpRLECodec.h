@@ -48,7 +48,7 @@ protected:
                        size_t dstRowBytes, const Options&, SkPMColor*,
                        int*, int*) override;
 
-    SkCodec::Result prepareToDecode(const SkImageInfo& dstInfo,
+    SkCodec::Result onPrepareToDecode(const SkImageInfo& dstInfo,
             const SkCodec::Options& options, SkPMColor inputColorPtr[],
             int* inputColorCount) override;
 
@@ -89,6 +89,7 @@ private:
      */
     int decodeRows(const SkImageInfo& dstInfo, void* dst, size_t dstRowBytes,
             const Options& opts) override;
+    int decodeRLE(const SkImageInfo& dstInfo, void* dst, size_t dstRowBytes);
 
     bool skipRows(int count) override;
 
@@ -99,12 +100,12 @@ private:
     const uint32_t                      fNumColors;
     const uint32_t                      fBytesPerColor;
     const uint32_t                      fOffset;
-    SkAutoTDeleteArray<uint8_t>         fStreamBuffer;
+    std::unique_ptr<uint8_t[]>          fStreamBuffer;
     size_t                              fRLEBytes;
     const size_t                        fOrigRLEBytes;
     uint32_t                            fCurrRLEByte;
     int                                 fSampleX;
-    SkAutoTDelete<SkSampler>            fSampler;
+    std::unique_ptr<SkSampler>          fSampler;
 
     // Scanline decodes allow the client to ask for a single scanline at a time.
     // This can be tricky when the RLE encoding instructs the decoder to jump down

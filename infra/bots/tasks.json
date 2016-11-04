@@ -6,6 +6,12 @@
         "Build-Ubuntu-GCC-x86_64-Release-GN"
       ]
     },
+    "Build-Win-Clang-arm64-Release-GN_Android": {
+      "priority": 0.8,
+      "tasks": [
+        "Build-Win-Clang-arm64-Release-GN_Android"
+      ]
+    },
     "Housekeeper-PerCommit-InfraTests": {
       "priority": 0.8,
       "tasks": [
@@ -34,11 +40,6 @@
   "tasks": {
     "Build-Ubuntu-Clang-arm-Release-GN_Android": {
       "cipd_packages": [
-        {
-          "name": "skia/bots/android_sdk",
-          "path": "android_sdk",
-          "version": "version:0"
-        },
         {
           "name": "skia/bots/android_ndk_linux",
           "path": "android_ndk_linux",
@@ -101,6 +102,44 @@
       "isolate": "compile_skia.isolate",
       "priority": 0.8
     },
+    "Build-Win-Clang-arm64-Release-GN_Android": {
+      "cipd_packages": [
+        {
+          "name": "skia/bots/android_ndk_windows",
+          "path": "n",
+          "version": "version:2"
+        },
+        {
+          "name": "skia/bots/win_toolchain",
+          "path": "t",
+          "version": "version:5"
+        }
+      ],
+      "dimensions": [
+        "gpu:none",
+        "os:Windows",
+        "pool:Skia"
+      ],
+      "extra_args": [
+        "--workdir",
+        "../../..",
+        "swarm_compile",
+        "repository=skia",
+        "buildername=Build-Win-Clang-arm64-Release-GN_Android",
+        "mastername=fake-master",
+        "buildnumber=2",
+        "slavename=fake-buildslave",
+        "nobuildbot=True",
+        "swarm_out_dir=${ISOLATED_OUTDIR}",
+        "revision=<(REVISION)",
+        "patch_storage=<(PATCH_STORAGE)",
+        "rietveld=<(CODEREVIEW_SERVER)",
+        "issue=<(ISSUE)",
+        "patchset=<(PATCHSET)"
+      ],
+      "isolate": "compile_skia.isolate",
+      "priority": 0.8
+    },
     "Housekeeper-PerCommit-InfraTests": {
       "dimensions": [
         "cpu:x86-64-avx2",
@@ -133,7 +172,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:9"
+          "version": "version:10"
         },
         {
           "name": "skia/bots/skp",
@@ -180,7 +219,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:9"
+          "version": "version:10"
         },
         {
           "name": "skia/bots/skp",
@@ -226,7 +265,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:9"
+          "version": "version:10"
         },
         {
           "name": "skia/bots/skp",
