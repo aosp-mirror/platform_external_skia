@@ -251,6 +251,7 @@ LOCAL_SRC_FILES := \
 	../tests/RefCntTest.cpp \
 	../tests/RefDictTest.cpp \
 	../tests/RegionTest.cpp \
+	../tests/RenderTargetContextTest.cpp \
 	../tests/ResourceCacheTest.cpp \
 	../tests/RoundRectTest.cpp \
 	../tests/SRGBMipMapTest.cpp \
