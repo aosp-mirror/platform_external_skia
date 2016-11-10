@@ -184,7 +184,6 @@ LOCAL_SRC_FILES := \
 	../tests/ImageTest.cpp \
 	../tests/IndexedPngOverflowTest.cpp \
 	../tests/InfRectTest.cpp \
-	../tests/IntTextureTest.cpp \
 	../tests/InterpolatorTest.cpp \
 	../tests/InvalidIndexedPngTest.cpp \
 	../tests/IsClosedSingleContourTest.cpp \
