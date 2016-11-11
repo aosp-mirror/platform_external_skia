@@ -8,6 +8,7 @@
 #include "SkData.h"
 #include "SkDataTable.h"
 #include "SkOSFile.h"
+#include "SkOSPath.h"
 #include "SkReadBuffer.h"
 #include "SkWriteBuffer.h"
 #include "SkStream.h"
@@ -339,8 +340,8 @@ DEF_TEST(RWBuffer_size, r) {
     SkRWBuffer buffer;
     buffer.append(gABC, 26);
 
-    SkAutoTUnref<SkROBuffer> roBuffer(buffer.newRBufferSnapshot());
-    SkROBuffer::Iter iter(roBuffer);
+    sk_sp<SkROBuffer> roBuffer(buffer.newRBufferSnapshot());
+    SkROBuffer::Iter iter(roBuffer.get());
     REPORTER_ASSERT(r, iter.data());
     REPORTER_ASSERT(r, iter.size() == 26);
 

@@ -11,8 +11,10 @@
 #include "SkColorPriv.h"
 #include "SkHalf.h"
 #include "SkPM4f.h"
+#include "SkPM4fPriv.h"
 #include "SkRasterPipeline.h"
 #include "SkSRGB.h"
+#include "SkUtils.h"
 #include <utility>
 
 namespace {
@@ -23,9 +25,9 @@ namespace {
     static constexpr int N = 4;
 #endif
 
-using SkNf = SkNx<N, float>;
-using SkNi = SkNx<N, int>;
-using SkNh = SkNx<N, uint16_t>;
+    using SkNf = SkNx<N, float>;
+    using SkNi = SkNx<N, int>;
+    using SkNh = SkNx<N, uint16_t>;
 
     struct BodyStage;
     struct TailStage;
@@ -219,11 +221,11 @@ STAGE(premul, true) {
     b *= a;
 }
 
-STAGE(swap_src_dst, true) {
-    SkTSwap(r,dr);
-    SkTSwap(g,dg);
-    SkTSwap(b,db);
-    SkTSwap(a,da);
+STAGE(move_src_dst, true) {
+    dr = r;
+    dg = g;
+    db = b;
+    da = a;
 }
 
 // The default shader produces a constant color (from the SkPaint).
@@ -379,6 +381,24 @@ STAGE(store_f16, false) {
     }
 }
 
+STAGE(store_f32, false) {
+    auto ptr = *(SkPM4f**)ctx + x;
+
+    SkPM4f buf[8];
+    SkNf::Store4(kIsTail ? buf : ptr, r,g,b,a);
+    if (kIsTail) {
+        switch (tail & (N-1)) {
+            case 7: ptr[6] = buf[6];
+            case 6: ptr[5] = buf[5];
+            case 5: ptr[4] = buf[4];
+            case 4: ptr[3] = buf[3];
+            case 3: ptr[2] = buf[2];
+            case 2: ptr[1] = buf[1];
+        }
+        ptr[0] = buf[0];
+    }
+}
+
 
 // Load 8-bit SkPMColor-order sRGB.
 STAGE(load_d_srgb, true) {
@@ -497,8 +517,44 @@ SI Fn enum_to_Fn(SkRasterPipeline::StockStage st) {
 
 namespace SK_OPTS_NS {
 
+    struct Memset16 {
+        uint16_t** dst;
+        uint16_t val;
+        void operator()(size_t x, size_t n) { sk_memset16(*dst + x, val, n); }
+    };
+
+    struct Memset32 {
+        uint32_t** dst;
+        uint32_t val;
+        void operator()(size_t x, size_t n) { sk_memset32(*dst + x, val, n); }
+    };
+
+    struct Memset64 {
+        uint64_t** dst;
+        uint64_t val;
+        void operator()(size_t x, size_t n) { sk_memset64(*dst + x, val, n); }
+    };
+
     SI std::function<void(size_t, size_t)> compile_pipeline(const SkRasterPipeline::Stage* stages,
                                                             int nstages) {
+        if (nstages == 2 && stages[0].stage == SkRasterPipeline::constant_color) {
+            SkPM4f src = *(const SkPM4f*)stages[0].ctx;
+            void* dst = stages[1].ctx;
+            switch (stages[1].stage) {
+                case SkRasterPipeline::store_565:
+                    return Memset16{(uint16_t**)dst, SkPackRGB16(src.r() * SK_R16_MASK + 0.5f,
+                                                                 src.g() * SK_G16_MASK + 0.5f,
+                                                                 src.b() * SK_B16_MASK + 0.5f)};
+                case SkRasterPipeline::store_srgb:
+                    return Memset32{(uint32_t**)dst, Sk4f_toS32(src.to4f_pmorder())};
+
+                case SkRasterPipeline::store_f16:
+                    return Memset64{(uint64_t**)dst, src.toF16()};
+
+                default: break;
+            }
+        }
+
         struct Compiled {
             Compiled(const SkRasterPipeline::Stage* stages, int nstages) {
                 if (nstages == 0) {

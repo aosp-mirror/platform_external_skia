@@ -83,9 +83,9 @@ number of scan lines in our algorithm is only about 3 + H while the
 
 ///////////////////////////////////////////////////////////////////////////////
 
-inline void addAlpha(SkAlpha& alpha, SkAlpha delta) {
-    SkASSERT(alpha + (int)delta <= 0xFF);
-    alpha += delta;
+static inline void addAlpha(SkAlpha& alpha, SkAlpha delta) {
+    SkASSERT(alpha + (int)delta <= 256);
+    alpha = SkAlphaRuns::CatchOverflow(alpha + (int)delta);
 }
 
 class AdditiveBlitter : public SkBlitter {
@@ -481,7 +481,7 @@ static inline SkAlpha partialTriangleToAlpha(SkFixed a, SkFixed b) {
 }
 
 static inline SkAlpha getPartialAlpha(SkAlpha alpha, SkFixed partialHeight) {
-    return (alpha * partialHeight) >> 16;
+    return (alpha * partialHeight + SK_FixedHalf) >> 16;
 }
 
 static inline SkAlpha getPartialAlpha(SkAlpha alpha, SkAlpha fullAlpha) {
@@ -959,7 +959,7 @@ static inline void aaa_walk_convex_edges(SkAnalyticEdge* prevHead, AdditiveBlitt
         if (isSmoothEnough(leftE, riteE, currE, stop_y) && !forceRLE) {
             local_bot_fixed = SkFixedCeilToFixed(local_bot_fixed);
         }
-        local_bot_fixed = SkMin32(local_bot_fixed, SkIntToFixed(stop_y + 1));
+        local_bot_fixed = SkMin32(local_bot_fixed, SkIntToFixed(stop_y));
 
         SkFixed left = leftE->fX;
         SkFixed dLeft = leftE->fDX;
@@ -997,7 +997,10 @@ static inline void aaa_walk_convex_edges(SkAnalyticEdge* prevHead, AdditiveBlitt
                 }
 
                 // Blit all full-height rows from fullTop to fullBot
-                if (fullBot > fullTop) {
+                if (fullBot > fullTop &&
+                        // SkAAClip cannot handle the empty rect so check the non-emptiness here
+                        // (bug chromium:662800)
+                        (fullRite > fullLeft || f2a(partialLeft) > 0 || f2a(partialRite) > 0)) {
                     blitter->getRealBlitter()->blitAntiRect(fullLeft - 1, fullTop,
                                                             fullRite - fullLeft, fullBot - fullTop,
                                                             f2a(partialLeft), f2a(partialRite));
@@ -1022,7 +1025,7 @@ static inline void aaa_walk_convex_edges(SkAnalyticEdge* prevHead, AdditiveBlitt
                         ((RunBasedAdditiveBlitter*)blitter)->flush_if_y_changed(y, y + partialTop);
                     }
                 }
-                if (fullBot >= fullTop) {
+                if (fullBot > fullTop) {
                     blitter->getRealBlitter()->blitV(fullLeft - 1, fullTop, fullBot - fullTop,
                             f2a(rite - left));
                 }

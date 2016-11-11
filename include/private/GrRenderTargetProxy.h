@@ -18,16 +18,8 @@ class GrTextureProvider;
 // required
 // Beware: the uniqueID of the RenderTargetProxy will usually be different than
 // the uniqueID of the RenderTarget it represents!
-class GrRenderTargetProxy : public GrSurfaceProxy {
+class GrRenderTargetProxy : virtual public GrSurfaceProxy {
 public:
-    /**
-     * The caller gets the creation ref.
-     */
-    static sk_sp<GrRenderTargetProxy> Make(const GrCaps&, const GrSurfaceDesc&,
-                                           SkBackingFit, SkBudgeted);
-    static sk_sp<GrRenderTargetProxy> Make(sk_sp<GrRenderTarget>);
-
-    // TODO: add asTextureProxy variants
     GrRenderTargetProxy* asRenderTargetProxy() override { return this; }
     const GrRenderTargetProxy* asRenderTargetProxy() const override { return this; }
 
@@ -57,6 +49,8 @@ public:
      */
     int numColorSamples() const { return this->isMixedSampled() ? 0 : fDesc.fSampleCnt; }
 
+    int maxWindowRectangles(const GrCaps& caps) const;
+
     GrRenderTarget::Flags testingOnly_getFlags() const;
 
     GrRenderTargetOpList* getLastRenderTargetOpList() {
@@ -65,13 +59,16 @@ public:
 
     SkDEBUGCODE(void validate(GrContext*) const;)
 
-private:
+protected:
+    friend class GrSurfaceProxy;  // for ctors
+
     // Deferred version
     GrRenderTargetProxy(const GrCaps&, const GrSurfaceDesc&, SkBackingFit, SkBudgeted);
 
     // Wrapped version
-    GrRenderTargetProxy(sk_sp<GrRenderTarget> rt);
+    GrRenderTargetProxy(sk_sp<GrSurface>);
 
+private:
     size_t onGpuMemorySize() const override;
 
     // For wrapped render targets the actual GrRenderTarget is stored in the GrIORefProxy class.

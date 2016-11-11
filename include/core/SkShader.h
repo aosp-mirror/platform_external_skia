@@ -21,7 +21,6 @@ class SkColorSpace;
 class SkImage;
 class SkPath;
 class SkPicture;
-class SkXfermode;
 class GrContext;
 class GrFragmentProcessor;
 
@@ -153,7 +152,7 @@ public:
         struct BlitState {
             // inputs
             Context*    fCtx;
-            SkXfermode* fXfer;
+            SkBlendMode fMode;
 
             // outputs
             enum { N = 2 };
@@ -333,20 +332,20 @@ public:
                  const SkMatrix* localMatrix,
                  SkFilterQuality filterQuality,
                  SkColorSpace* dstColorSpace,
-                 SkSourceGammaTreatment gammaTreatment)
+                 SkDestinationSurfaceColorMode colorMode)
             : fContext(context)
             , fViewMatrix(viewMatrix)
             , fLocalMatrix(localMatrix)
             , fFilterQuality(filterQuality)
             , fDstColorSpace(dstColorSpace)
-            , fGammaTreatment(gammaTreatment) {}
+            , fColorMode(colorMode) {}
 
-        GrContext*             fContext;
-        const SkMatrix*        fViewMatrix;
-        const SkMatrix*        fLocalMatrix;
-        SkFilterQuality        fFilterQuality;
-        SkColorSpace*          fDstColorSpace;
-        SkSourceGammaTreatment fGammaTreatment;
+        GrContext*                    fContext;
+        const SkMatrix*               fViewMatrix;
+        const SkMatrix*               fLocalMatrix;
+        SkFilterQuality               fFilterQuality;
+        SkColorSpace*                 fDstColorSpace;
+        SkDestinationSurfaceColorMode fColorMode;
     };
 
     /**

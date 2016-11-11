@@ -368,6 +368,9 @@ bool SkJpegCodec::setOutputColorSpace(const SkImageInfo& dstInfo) {
     // we must do it ourselves.
     J_COLOR_SPACE encodedColorType = fDecoderMgr->dinfo()->jpeg_color_space;
     bool isCMYK = (JCS_CMYK == encodedColorType || JCS_YCCK == encodedColorType);
+    if (isCMYK && this->colorXform()) {
+        return false;
+    }
 
     // Check for valid color types and set the output color space
     switch (dstInfo.colorType()) {
@@ -382,8 +385,8 @@ bool SkJpegCodec::setOutputColorSpace(const SkImageInfo& dstInfo) {
             if (isCMYK) {
                 fDecoderMgr->dinfo()->out_color_space = JCS_CMYK;
             } else if (this->colorXform()) {
-                // Our color transformation code requires RGBA order inputs, but it'll swizzle
-                // to BGRA for us.
+                // Always using RGBA as the input format for color xforms makes the
+                // implementation a little simpler.
                 fDecoderMgr->dinfo()->out_color_space = JCS_EXT_RGBA;
             } else {
                 fDecoderMgr->dinfo()->out_color_space = JCS_EXT_BGRA;

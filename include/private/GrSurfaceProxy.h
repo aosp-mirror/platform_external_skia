@@ -12,9 +12,12 @@
 #include "GrSurface.h"
 #include "SkRect.h"
 
+class GrCaps;
 class GrOpList;
+class GrTextureProvider;
 class GrTextureProxy;
 class GrRenderTargetProxy;
+class GrTextureProvider;
 
 // This class replicates the functionality GrIORef<GrSurface> but tracks the
 // utilitization for later resource allocation (for the deferred case) and
@@ -74,6 +77,17 @@ protected:
 
 class GrSurfaceProxy : public GrIORefProxy {
 public:
+    static sk_sp<GrSurfaceProxy> MakeWrapped(sk_sp<GrSurface>);
+
+    static sk_sp<GrSurfaceProxy> MakeDeferred(const GrCaps&, const GrSurfaceDesc&,
+                                              SkBackingFit, SkBudgeted);
+
+    // TODO: need to refine ownership semantics of 'srcData' if we're in completely
+    // deferred mode
+    static sk_sp<GrSurfaceProxy> MakeDeferred(const GrCaps&, GrTextureProvider*,
+                                              const GrSurfaceDesc&, SkBudgeted,
+                                              const void* srcData, size_t rowBytes);
+
     const GrSurfaceDesc& desc() const { return fDesc; }
 
     GrSurfaceOrigin origin() const {
@@ -86,6 +100,8 @@ public:
     GrPixelConfig config() const { return fDesc.fConfig; }
 
     uint32_t uniqueID() const { return fUniqueID; }
+
+    GrSurface* instantiate(GrTextureProvider* texProvider);
 
     /**
      * Helper that gets the width and height of the surface as a bounding rectangle.
@@ -126,6 +142,8 @@ public:
         }
         return fGpuMemorySize;
     }
+
+    bool isWrapped_ForTesting() const;
 
 protected:
     // Deferred version

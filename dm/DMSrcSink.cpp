@@ -27,6 +27,7 @@
 #include "SkMultiPictureDraw.h"
 #include "SkNullCanvas.h"
 #include "SkOSFile.h"
+#include "SkOSPath.h"
 #include "SkOpts.h"
 #include "SkPictureData.h"
 #include "SkPictureRecorder.h"
@@ -367,7 +368,7 @@ static bool get_decode_info(SkImageInfo* decodeInfo, SkColorType canvasColorType
 static void draw_to_canvas(SkCanvas* canvas, const SkImageInfo& info, void* pixels, size_t rowBytes,
                            SkPMColor* colorPtr, int colorCount, CodecSrc::DstColorType dstColorType,
                            SkScalar left = 0, SkScalar top = 0) {
-    SkAutoTUnref<SkColorTable> colorTable(new SkColorTable(colorPtr, colorCount));
+    sk_sp<SkColorTable> colorTable(new SkColorTable(colorPtr, colorCount));
     SkBitmap bitmap;
     bitmap.installPixels(info, pixels, rowBytes, colorTable.get(), nullptr, nullptr);
     premultiply_if_necessary(bitmap);
@@ -1098,46 +1099,43 @@ static const SkSize kDefaultSVGSize = SkSize::Make(1000, 1000);
 // Used to force-scale tiny fixed-size images.
 static const SkSize kMinimumSVGSize = SkSize::Make(128, 128);
 
-SVGSrc::SVGSrc(Path path) : fPath(path), fScale(1) {}
+SVGSrc::SVGSrc(Path path)
+    : fName(SkOSPath::Basename(path.c_str()))
+    , fScale(1) {
 
-Error SVGSrc::ensureDom() const {
+  SkFILEStream stream(path.c_str());
+  if (!stream.isValid()) {
+      return;
+  }
+  fDom = SkSVGDOM::MakeFromStream(stream);
+  if (!fDom) {
+      return;
+  }
+
+  const SkSize& sz = fDom->containerSize();
+  if (sz.isEmpty()) {
+      // no intrinsic size
+      fDom->setContainerSize(kDefaultSVGSize);
+  } else {
+      fScale = SkTMax(1.f, SkTMax(kMinimumSVGSize.width()  / sz.width(),
+                                  kMinimumSVGSize.height() / sz.height()));
+  }
+}
+
+Error SVGSrc::draw(SkCanvas* canvas) const {
     if (!fDom) {
-        SkFILEStream stream(fPath.c_str());
-        if (!stream.isValid()) {
-            return SkStringPrintf("Unable to open file: %s", fPath.c_str());
-        }
-        fDom = SkSVGDOM::MakeFromStream(stream);
-        if (!fDom) {
-            return SkStringPrintf("Unable to parse file: %s", fPath.c_str());
-        }
-
-        const SkSize& sz = fDom->containerSize();
-        if (sz.isEmpty()) {
-            // no intrinsic size
-            fDom->setContainerSize(kDefaultSVGSize);
-        } else {
-            fScale = SkTMax(1.f, SkTMax(kMinimumSVGSize.width()  / sz.width(),
-                                        kMinimumSVGSize.height() / sz.height()));
-        }
+        return SkStringPrintf("Unable to parse file: %s", fName.c_str());
     }
+
+    SkAutoCanvasRestore acr(canvas, true);
+    canvas->scale(fScale, fScale);
+    fDom->render(canvas);
 
     return "";
 }
 
-Error SVGSrc::draw(SkCanvas* canvas) const {
-    Error err = this->ensureDom();
-    if (err.isEmpty()) {
-        SkAutoCanvasRestore acr(canvas, true);
-        canvas->scale(fScale, fScale);
-        fDom->render(canvas);
-    }
-
-    return err;
-}
-
 SkISize SVGSrc::size() const {
-    Error err = this->ensureDom();
-    if (!err.isEmpty()) {
+    if (!fDom) {
         return SkISize::Make(0, 0);
     }
 
@@ -1145,7 +1143,7 @@ SkISize SVGSrc::size() const {
                         fDom->containerSize().height() * fScale).toRound();
 }
 
-Name SVGSrc::name() const { return SkOSPath::Basename(fPath.c_str()); }
+Name SVGSrc::name() const { return fName; }
 
 bool SVGSrc::veto(SinkFlags flags) const {
     // No need to test to non-(raster||gpu) or indirect backends.
@@ -1373,10 +1371,10 @@ SVGSink::SVGSink() {}
 Error SVGSink::draw(const Src& src, SkBitmap*, SkWStream* dst, SkString*) const {
 #if defined(SK_XML)
     std::unique_ptr<SkXMLWriter> xmlWriter(new SkXMLStreamWriter(dst));
-    SkAutoTUnref<SkCanvas> canvas(SkSVGCanvas::Create(
+    sk_sp<SkCanvas> canvas(SkSVGCanvas::Create(
         SkRect::MakeWH(SkIntToScalar(src.size().width()), SkIntToScalar(src.size().height())),
         xmlWriter.get()));
-    return src.draw(canvas);
+    return src.draw(canvas.get());
 #else
     return Error("SVG sink is disabled.");
 #endif // SK_XML

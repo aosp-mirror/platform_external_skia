@@ -203,14 +203,14 @@ void SkGpuDevice::drawTextureProducerImpl(GrTextureProducer* producer,
     }
     sk_sp<GrFragmentProcessor> fp(producer->createFragmentProcessor(
         *textureMatrix, clippedSrcRect, constraintMode, coordsAllInsideSrcRect, filterMode,
-        fRenderTargetContext->getColorSpace(), fRenderTargetContext->sourceGammaTreatment()));
+        fRenderTargetContext->getColorSpace(), fRenderTargetContext->colorMode()));
     if (!fp) {
         return;
     }
 
     GrPaint grPaint;
-    if (!SkPaintToGrPaintWithTexture(fContext, fRenderTargetContext.get(), paint, viewMatrix, fp,
-                                     producer->isAlphaOnly(), &grPaint)) {
+    if (!SkPaintToGrPaintWithTexture(fContext.get(), fRenderTargetContext.get(), paint, viewMatrix,
+                                     fp, producer->isAlphaOnly(), &grPaint)) {
         return;
     }
 
@@ -231,14 +231,14 @@ void SkGpuDevice::drawTextureProducerImpl(GrTextureProducer* producer,
         viewMatrix.mapRectScaleTranslate(&devClippedDstRect, clippedDstRect);
 
         SkStrokeRec rec(SkStrokeRec::kFill_InitStyle);
-        if (mf->directFilterRRectMaskGPU(fContext,
-                                          fRenderTargetContext.get(),
-                                          &grPaint,
-                                          clip,
-                                          viewMatrix,
-                                          rec,
-                                          SkRRect::MakeRect(clippedDstRect),
-                                          SkRRect::MakeRect(devClippedDstRect))) {
+        if (mf->directFilterRRectMaskGPU(fContext.get(),
+                                         fRenderTargetContext.get(),
+                                         &grPaint,
+                                         clip,
+                                         viewMatrix,
+                                         rec,
+                                         SkRRect::MakeRect(clippedDstRect),
+                                         SkRRect::MakeRect(devClippedDstRect))) {
             return;
         }
     }

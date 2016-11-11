@@ -173,7 +173,7 @@ bool GrGLGpu::BlendCoeffReferencesConstant(GrBlendCoeff coeff) {
 
 GrGpu* GrGLGpu::Create(GrBackendContext backendContext, const GrContextOptions& options,
                        GrContext* context) {
-    SkAutoTUnref<const GrGLInterface> glInterface(
+    sk_sp<const GrGLInterface> glInterface(
         reinterpret_cast<const GrGLInterface*>(backendContext));
     if (!glInterface) {
         glInterface.reset(GrGLDefaultInterface());
@@ -183,7 +183,7 @@ GrGpu* GrGLGpu::Create(GrBackendContext backendContext, const GrContextOptions& 
     if (!glInterface) {
         return nullptr;
     }
-    GrGLContext* glContext = GrGLContext::Create(glInterface, options);
+    GrGLContext* glContext = GrGLContext::Create(glInterface.get(), options);
     if (glContext) {
         return new GrGLGpu(glContext, context);
     }
@@ -1642,6 +1642,11 @@ GrTexture* GrGLGpu::onCreateTexture(const GrSurfaceDesc& desc,
         return return_null_texture();
     }
 
+    bool wasMipMapDataProvided = false;
+    if (texels.count() > 1) {
+        wasMipMapDataProvided = true;
+    }
+
     GrGLTexture* tex;
     if (renderTarget) {
         // unbind the texture from the texture unit before binding it to the frame buffer
@@ -1652,12 +1657,9 @@ GrTexture* GrGLGpu::onCreateTexture(const GrSurfaceDesc& desc,
             GL_CALL(DeleteTextures(1, &idDesc.fInfo.fID));
             return return_null_texture();
         }
-        tex = new GrGLTextureRenderTarget(this, budgeted, desc, idDesc, rtIDDesc);
+        tex = new GrGLTextureRenderTarget(this, budgeted, desc, idDesc, rtIDDesc,
+                                          wasMipMapDataProvided);
     } else {
-        bool wasMipMapDataProvided = false;
-        if (texels.count() > 1) {
-            wasMipMapDataProvided = true;
-        }
         tex = new GrGLTexture(this, budgeted, desc, idDesc, wasMipMapDataProvided);
     }
     tex->setCachedTexParams(initialTexParams, this->getResetTimestamp());
@@ -2020,8 +2022,7 @@ void GrGLGpu::flushMinSampleShading(float minSampleShading) {
 
 bool GrGLGpu::flushGLState(const GrPipeline& pipeline, const GrPrimitiveProcessor& primProc,
                            bool willDrawPoints) {
-    SkAutoTUnref<GrGLProgram> program(fProgramCache->refProgram(this, pipeline, primProc,
-                                                                willDrawPoints));
+    sk_sp<GrGLProgram> program(fProgramCache->refProgram(this, pipeline, primProc, willDrawPoints));
     if (!program) {
         GrCapsDebugf(this->caps(), "Failed to create program!\n");
         return false;
@@ -2292,32 +2293,50 @@ bool GrGLGpu::readPixelsSupported(GrRenderTarget* target, GrPixelConfig readConf
         this->flushRenderTarget(static_cast<GrGLRenderTarget*>(target), &SkIRect::EmptyIRect());
         return true;
     };
+    auto unbindRenderTarget = []{};
     auto getIntegerv = [this](GrGLenum query, GrGLint* value) {
         GR_GL_GetIntegerv(this->glInterface(), query, value);
     };
     GrPixelConfig rtConfig = target->config();
-    return this->glCaps().readPixelsSupported(rtConfig, readConfig, getIntegerv, bindRenderTarget);
+    return this->glCaps().readPixelsSupported(rtConfig, readConfig, getIntegerv, bindRenderTarget,
+                                              unbindRenderTarget);
 }
 
 bool GrGLGpu::readPixelsSupported(GrPixelConfig rtConfig, GrPixelConfig readConfig) {
-    auto bindRenderTarget = [this, rtConfig]() -> bool {
+    sk_sp<GrTexture> temp;
+    auto bindRenderTarget = [this, rtConfig, &temp]() -> bool {
         GrTextureDesc desc;
         desc.fConfig = rtConfig;
         desc.fWidth = desc.fHeight = 16;
-        desc.fFlags = kRenderTarget_GrSurfaceFlag;
-        SkAutoTUnref<GrTexture> temp(this->createTexture(desc,
-                                     SkBudgeted::kNo));
-        if (!temp) {
-            return false;
+        if (this->glCaps().isConfigRenderable(rtConfig, false)) {
+            desc.fFlags = kRenderTarget_GrSurfaceFlag;
+            temp.reset(this->createTexture(desc, SkBudgeted::kNo));
+            if (!temp) {
+                return false;
+            }
+            GrGLRenderTarget* glrt = static_cast<GrGLRenderTarget*>(temp->asRenderTarget());
+            this->flushRenderTarget(glrt, &SkIRect::EmptyIRect());
+            return true;
+        } else if (this->glCaps().canConfigBeFBOColorAttachment(rtConfig)) {
+            temp.reset(this->createTexture(desc, SkBudgeted::kNo));
+            if (!temp) {
+                return false;
+            }
+            GrGLIRect vp;
+            this->bindSurfaceFBOForPixelOps(temp.get(), GR_GL_FRAMEBUFFER, &vp, kDst_TempFBOTarget);
+            fHWBoundRenderTargetUniqueID = 0;
+            return true;
         }
-        GrGLRenderTarget* glrt = static_cast<GrGLRenderTarget*>(temp->asRenderTarget());
-        this->flushRenderTarget(glrt, &SkIRect::EmptyIRect());
-        return true;
+        return false;
+    };
+    auto unbindRenderTarget = [this, &temp]() {
+        this->unbindTextureFBOForPixelOps(GR_GL_FRAMEBUFFER, temp.get());
     };
     auto getIntegerv = [this](GrGLenum query, GrGLint* value) {
         GR_GL_GetIntegerv(this->glInterface(), query, value);
     };
-    return this->glCaps().readPixelsSupported(rtConfig, readConfig, getIntegerv, bindRenderTarget);
+    return this->glCaps().readPixelsSupported(rtConfig, readConfig, getIntegerv, bindRenderTarget,
+                                              unbindRenderTarget);
 }
 
 bool GrGLGpu::readPixelsSupported(GrSurface* surfaceForConfig, GrPixelConfig readConfig) {
@@ -2826,7 +2845,7 @@ void GrGLGpu::stampPLSSetupRect(const SkRect& bounds) {
     this->fHWVertexArrayState.setVertexArrayID(this, 0);
 
     GrGLAttribArrayState* attribs = this->fHWVertexArrayState.bindInternalVertexArray(this);
-    attribs->set(this, 0, fPLSSetupProgram.fArrayBuffer, kVec2f_GrVertexAttribType,
+    attribs->set(this, 0, fPLSSetupProgram.fArrayBuffer.get(), kVec2f_GrVertexAttribType,
                  2 * sizeof(GrGLfloat), 0);
     attribs->disableUnusedArrays(this, 0x1);
 
@@ -3226,9 +3245,10 @@ void GrGLGpu::bindTexture(int unitIdx, const GrTextureParams& params, bool allow
     if (GrTextureParams::kMipMap_FilterMode == filterMode) {
         SkASSERT(!texture->texturePriv().mipMapsAreDirty());
         if (GrPixelConfigIsSRGB(texture->config())) {
-            SkSourceGammaTreatment gammaTreatment = allowSRGBInputs ?
-                SkSourceGammaTreatment::kRespect : SkSourceGammaTreatment::kIgnore;
-            SkASSERT(texture->texturePriv().gammaTreatment() == gammaTreatment);
+            SkDestinationSurfaceColorMode colorMode = allowSRGBInputs
+                ? SkDestinationSurfaceColorMode::kGammaAndColorSpaceAware
+                : SkDestinationSurfaceColorMode::kLegacy;
+            SkASSERT(texture->texturePriv().mipColorMode() == colorMode);
         }
     }
 #endif
@@ -3341,10 +3361,11 @@ void GrGLGpu::generateMipmaps(const GrTextureParams& params, bool allowSRGBInput
     // If this is an sRGB texture and the mips were previously built the "other" way
     // (gamma-correct vs. not), then we need to rebuild them. We don't need to check for
     // srgbSupport - we'll *never* get an sRGB pixel config if we don't support it.
-    SkSourceGammaTreatment gammaTreatment = allowSRGBInputs
-        ? SkSourceGammaTreatment::kRespect : SkSourceGammaTreatment::kIgnore;
+    SkDestinationSurfaceColorMode colorMode = allowSRGBInputs
+        ? SkDestinationSurfaceColorMode::kGammaAndColorSpaceAware
+        : SkDestinationSurfaceColorMode::kLegacy;
     if (GrPixelConfigIsSRGB(texture->config()) &&
-        gammaTreatment != texture->texturePriv().gammaTreatment()) {
+        colorMode != texture->texturePriv().mipColorMode()) {
         texture->texturePriv().dirtyMipMaps(true);
     }
 
@@ -3379,7 +3400,7 @@ void GrGLGpu::generateMipmaps(const GrTextureParams& params, bool allowSRGBInput
     texture->texturePriv().dirtyMipMaps(false);
     texture->texturePriv().setMaxMipMapLevel(SkMipMap::ComputeLevelCount(
         texture->width(), texture->height()));
-    texture->texturePriv().setGammaTreatment(gammaTreatment);
+    texture->texturePriv().setMipColorMode(colorMode);
 
     // We have potentially set lots of state on the texture. Easiest to dirty it all:
     texture->textureParamsModified();
@@ -4123,8 +4144,8 @@ void GrGLGpu::drawDebugWireRect(GrRenderTarget* rt, const SkIRect& rect, GrColor
     fHWVertexArrayState.setVertexArrayID(this, 0);
 
     GrGLAttribArrayState* attribs = fHWVertexArrayState.bindInternalVertexArray(this);
-    attribs->set(this, 0, fWireRectArrayBuffer, kVec2f_GrVertexAttribType, 2 * sizeof(GrGLfloat),
-                 0);
+    attribs->set(this, 0, fWireRectArrayBuffer.get(), kVec2f_GrVertexAttribType,
+                 2 * sizeof(GrGLfloat), 0);
     attribs->disableUnusedArrays(this, 0x1);
 
     GL_CALL(Uniform4fv(fWireRectProgram.fRectUniform, 1, edges));
@@ -4177,8 +4198,8 @@ bool GrGLGpu::copySurfaceAsDraw(GrSurface* dst,
     fHWVertexArrayState.setVertexArrayID(this, 0);
 
     GrGLAttribArrayState* attribs = fHWVertexArrayState.bindInternalVertexArray(this);
-    attribs->set(this, 0, fCopyProgramArrayBuffer, kVec2f_GrVertexAttribType, 2 * sizeof(GrGLfloat),
-                 0);
+    attribs->set(this, 0, fCopyProgramArrayBuffer.get(), kVec2f_GrVertexAttribType,
+                 2 * sizeof(GrGLfloat), 0);
     attribs->disableUnusedArrays(this, 0x1);
 
     // dst rect edges in NDC (-1 to 1)
@@ -4420,7 +4441,7 @@ bool GrGLGpu::generateMipmap(GrGLTexture* texture, bool gammaCorrect) {
     fHWVertexArrayState.setVertexArrayID(this, 0);
 
     GrGLAttribArrayState* attribs = fHWVertexArrayState.bindInternalVertexArray(this);
-    attribs->set(this, 0, fMipmapProgramArrayBuffer, kVec2f_GrVertexAttribType,
+    attribs->set(this, 0, fMipmapProgramArrayBuffer.get(), kVec2f_GrVertexAttribType,
                  2 * sizeof(GrGLfloat), 0);
     attribs->disableUnusedArrays(this, 0x1);
 

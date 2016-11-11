@@ -231,6 +231,7 @@ LOCAL_SRC_FILES := \
 	../tests/PointTest.cpp \
 	../tests/PremulAlphaRoundTripTest.cpp \
 	../tests/PrimitiveProcessorTest.cpp \
+	../tests/ProxyConversionTest.cpp \
 	../tests/ProxyTest.cpp \
 	../tests/QuickRejectTest.cpp \
 	../tests/RRectInPathTest.cpp \
@@ -250,6 +251,7 @@ LOCAL_SRC_FILES := \
 	../tests/RefCntTest.cpp \
 	../tests/RefDictTest.cpp \
 	../tests/RegionTest.cpp \
+	../tests/RenderTargetContextTest.cpp \
 	../tests/ResourceCacheTest.cpp \
 	../tests/RoundRectTest.cpp \
 	../tests/SRGBMipMapTest.cpp \

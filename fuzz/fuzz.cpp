@@ -145,7 +145,7 @@ int fuzz_img(sk_sp<SkData> bytes, uint8_t scale, uint8_t mode) {
     decodeInfo = decodeInfo.makeWH(size.width(), size.height());
 
     // Construct a color table for the decode if necessary
-    SkAutoTUnref<SkColorTable> colorTable(nullptr);
+    sk_sp<SkColorTable> colorTable(nullptr);
     SkPMColor* colorPtr = nullptr;
     int* colorCountPtr = nullptr;
     int maxColors = 256;
@@ -397,7 +397,7 @@ int fuzz_sksl2glsl(sk_sp<SkData> bytes) {
     SkSL::Compiler compiler;
     std::string output;
     bool result = compiler.toGLSL(SkSL::Program::kFragment_Kind,
-        (const char*)bytes->data(), SkSL::GLCaps(), &output);
+        (const char*)bytes->data(), *SkSL::GLSLCapsFactory::Default(), &output);
 
     if (!result) {
         SkDebugf("[terminated] Couldn't compile input.\n");

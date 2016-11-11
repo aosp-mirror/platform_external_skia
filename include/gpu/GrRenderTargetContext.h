@@ -33,6 +33,7 @@ class GrRenderTarget;
 class GrRenderTargetOpList;
 class GrStyle;
 class GrSurface;
+class GrTextureProxy;
 struct GrUserStencilSettings;
 class SkDrawFilter;
 struct SkIPoint;
@@ -331,9 +332,9 @@ public:
     GrPixelConfig config() const { return fRenderTargetProxy->config(); }
     int numColorSamples() const { return fRenderTargetProxy->numColorSamples(); }
     bool isGammaCorrect() const { return SkToBool(fColorSpace.get()); }
-    SkSourceGammaTreatment sourceGammaTreatment() const {
-        return this->isGammaCorrect() ? SkSourceGammaTreatment::kRespect
-                                      : SkSourceGammaTreatment::kIgnore;
+    SkDestinationSurfaceColorMode colorMode() const {
+        return this->isGammaCorrect() ? SkDestinationSurfaceColorMode::kGammaAndColorSpaceAware
+                                      : SkDestinationSurfaceColorMode::kLegacy;
     }
     const SkSurfaceProps& surfaceProps() const { return fSurfaceProps; }
     SkColorSpace* getColorSpace() const { return fColorSpace.get(); }
@@ -342,17 +343,20 @@ public:
 
     bool wasAbandoned() const;
 
+    GrRenderTarget* instantiate();
+
     GrRenderTarget* accessRenderTarget() {
         // TODO: usage of this entry point needs to be reduced and potentially eliminated
         // since it ends the deferral of the GrRenderTarget's allocation
         return fRenderTargetProxy->instantiate(fContext->textureProvider());
     }
 
+    GrTextureProxy* asDeferredTexture();
+
     sk_sp<GrTexture> asTexture() {
         // TODO: usage of this entry point needs to be reduced and potentially eliminated
         // since it ends the deferral of the GrRenderTarget's allocation
-        // It's usage should migrate to the soon-to-be-added asDeferredTexture which
-        // returns a GrTextureProxy
+        // It's usage should migrate to asDeferredTexture
         return sk_ref_sp(this->accessRenderTarget()->asTexture());
     }
 
@@ -361,6 +365,8 @@ public:
     const GrRenderTargetContextPriv priv() const;
 
     GrAuditTrail* auditTrail() { return fAuditTrail; }
+
+    bool isWrapped_ForTesting() const;
 
 protected:
     GrRenderTargetContext(GrContext*, GrDrawingManager*, sk_sp<GrRenderTargetProxy>,

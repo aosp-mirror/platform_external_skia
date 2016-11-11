@@ -289,7 +289,7 @@ bool GrContext::writeSurfacePixels(GrSurface* surface,
         this->flush();
     }
 
-    SkAutoTUnref<GrTexture> tempTexture;
+    sk_sp<GrTexture> tempTexture;
     if (GrGpu::kNoDraw_DrawPreference != drawPreference) {
         tempTexture.reset(
             this->textureProvider()->createApproxTexture(tempDrawInfo.fTempSurfaceDesc));
@@ -305,7 +305,7 @@ bool GrContext::writeSurfacePixels(GrSurface* surface,
         SkMatrix textureMatrix;
         textureMatrix.setIDiv(tempTexture->width(), tempTexture->height());
         if (applyPremulToSrc) {
-            fp = this->createUPMToPMEffect(tempTexture, tempDrawInfo.fSwizzle, textureMatrix);
+            fp = this->createUPMToPMEffect(tempTexture.get(), tempDrawInfo.fSwizzle, textureMatrix);
             // If premultiplying was the only reason for the draw, fall back to a straight write.
             if (!fp) {
                 if (GrGpu::kCallerPrefersDraw_DrawPreference == drawPreference) {
@@ -317,7 +317,7 @@ bool GrContext::writeSurfacePixels(GrSurface* surface,
         }
         if (tempTexture) {
             if (!fp) {
-                fp = GrConfigConversionEffect::Make(tempTexture, tempDrawInfo.fSwizzle,
+                fp = GrConfigConversionEffect::Make(tempTexture.get(), tempDrawInfo.fSwizzle,
                                                     GrConfigConversionEffect::kNone_PMConversion,
                                                     textureMatrix);
                 if (!fp) {
@@ -340,7 +340,7 @@ bool GrContext::writeSurfacePixels(GrSurface* surface,
                 buffer = tmpPixels.get();
                 applyPremulToSrc = false;
             }
-            if (!fGpu->writePixels(tempTexture, 0, 0, width, height,
+            if (!fGpu->writePixels(tempTexture.get(), 0, 0, width, height,
                                    tempDrawInfo.fWriteConfig, buffer,
                                    rowBytes)) {
                 return false;
@@ -429,7 +429,7 @@ bool GrContext::readSurfacePixels(GrSurface* src,
         return false;
     }
 
-    SkAutoTUnref<GrSurface> surfaceToRead(SkRef(src));
+    sk_sp<GrSurface> surfaceToRead(SkRef(src));
     bool didTempDraw = false;
     if (GrGpu::kNoDraw_DrawPreference != drawPreference) {
         if (SkBackingFit::kExact == tempDrawInfo.fTempSurfaceFit) {
@@ -491,11 +491,11 @@ bool GrContext::readSurfacePixels(GrSurface* src,
     }
     GrPixelConfig configToRead = dstConfig;
     if (didTempDraw) {
-        this->flushSurfaceWrites(surfaceToRead);
+        this->flushSurfaceWrites(surfaceToRead.get());
         configToRead = tempDrawInfo.fReadConfig;
     }
-    if (!fGpu->readPixels(surfaceToRead, left, top, width, height, configToRead, buffer,
-                           rowBytes)) {
+    if (!fGpu->readPixels(surfaceToRead.get(), left, top, width, height, configToRead, buffer,
+                          rowBytes)) {
         return false;
     }
 
@@ -609,9 +609,9 @@ sk_sp<GrRenderTargetContext> GrContextPriv::makeWrappedRenderTargetContext(
                                                                const SkSurfaceProps* surfaceProps) {
     ASSERT_SINGLE_OWNER_PRIV
 
-    sk_sp<GrRenderTargetProxy> rtp(GrRenderTargetProxy::Make(std::move(rt)));
+    sk_sp<GrSurfaceProxy> proxy(GrSurfaceProxy::MakeWrapped(std::move(rt)));
 
-    return this->drawingManager()->makeRenderTargetContext(std::move(rtp),
+    return this->drawingManager()->makeRenderTargetContext(std::move(proxy),
                                                            std::move(colorSpace),
                                                            surfaceProps);
 }
@@ -629,10 +629,9 @@ sk_sp<GrRenderTargetContext> GrContextPriv::makeBackendTextureRenderTargetContex
         return nullptr;
     }
 
-    sk_sp<GrRenderTargetProxy> rtp(GrRenderTargetProxy::Make(
-                                                            sk_ref_sp(surface->asRenderTarget())));
+    sk_sp<GrSurfaceProxy> proxy(GrSurfaceProxy::MakeWrapped(std::move(surface)));
 
-    return this->drawingManager()->makeRenderTargetContext(std::move(rtp),
+    return this->drawingManager()->makeRenderTargetContext(std::move(proxy),
                                                            std::move(colorSpace), props);
 }
 
@@ -647,9 +646,9 @@ sk_sp<GrRenderTargetContext> GrContextPriv::makeBackendRenderTargetRenderTargetC
         return nullptr;
     }
 
-    sk_sp<GrRenderTargetProxy> rtp(GrRenderTargetProxy::Make(std::move(rt)));
+    sk_sp<GrSurfaceProxy> proxy(GrSurfaceProxy::MakeWrapped(std::move(rt)));
 
-    return this->drawingManager()->makeRenderTargetContext(std::move(rtp),
+    return this->drawingManager()->makeRenderTargetContext(std::move(proxy),
                                                            std::move(colorSpace),
                                                            surfaceProps);
 }
@@ -666,9 +665,9 @@ sk_sp<GrRenderTargetContext> GrContextPriv::makeBackendTextureAsRenderTargetRend
         return nullptr;
     }
 
-    sk_sp<GrRenderTargetProxy> rtp(GrRenderTargetProxy::Make(sk_ref_sp(surface->asRenderTarget())));
+    sk_sp<GrSurfaceProxy> proxy(GrSurfaceProxy::MakeWrapped(std::move(surface)));
 
-    return this->drawingManager()->makeRenderTargetContext(std::move(rtp),
+    return this->drawingManager()->makeRenderTargetContext(std::move(proxy),
                                                            std::move(colorSpace),
                                                            surfaceProps);
 }
@@ -787,7 +786,7 @@ sk_sp<GrRenderTargetContext> GrContext::makeDeferredRenderTargetContext(
     desc.fConfig = config;
     desc.fSampleCnt = sampleCnt;
 
-    sk_sp<GrRenderTargetProxy> rtp = GrRenderTargetProxy::Make(*this->caps(), desc, fit, budgeted);
+    sk_sp<GrSurfaceProxy> rtp = GrSurfaceProxy::MakeDeferred(*this->caps(), desc, fit, budgeted);
 
     return fDrawingManager->makeRenderTargetContext(std::move(rtp),
                                                     std::move(colorSpace),

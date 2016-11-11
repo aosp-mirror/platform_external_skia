@@ -10,7 +10,6 @@
 #include "SkImage_Base.h"
 #include "SkImageCacherator.h"
 #include "SkMallocPixelRef.h"
-#include "SkMutex.h"
 #include "SkNextID.h"
 #include "SkPixelRef.h"
 #include "SkResourceCache.h"
@@ -32,24 +31,6 @@
 // only interested in GPU datas...
 // see skbug.com/ 4971, 5128, ...
 //#define SK_SUPPORT_COMPRESSED_TEXTURES_IN_CACHERATOR
-
-// Ref-counted tuple(SkImageGenerator, SkMutex) which allows sharing of one generator
-// among several cacherators.
-class SkImageCacherator::SharedGenerator final : public SkNVRefCnt<SharedGenerator> {
-public:
-    static sk_sp<SharedGenerator> Make(SkImageGenerator* gen) {
-        return gen ? sk_sp<SharedGenerator>(new SharedGenerator(gen)) : nullptr;
-    }
-
-private:
-    explicit SharedGenerator(SkImageGenerator* gen) : fGenerator(gen) { SkASSERT(gen); }
-
-    friend class ScopedGenerator;
-
-    std::unique_ptr<SkImageGenerator> fGenerator;
-    SkMutex                           fMutex;
-};
-
 
 // Helper for exclusive access to a shared generator.
 class SkImageCacherator::ScopedGenerator {
@@ -73,22 +54,22 @@ private:
     SkAutoExclusive               fAutoAquire;
 };
 
-SkImageCacherator::Validator::Validator(SkImageGenerator* gen, const SkIRect* subset)
-    // We are required to take ownership of gen, regardless of whether we instantiate a cacherator
-    // or not.  On instantiation, the client is responsible for transferring ownership.
-    : fSharedGenerator(SkImageCacherator::SharedGenerator::Make(gen)) {
+SkImageCacherator::Validator::Validator(sk_sp<SharedGenerator> gen, const SkIRect* subset)
+    : fSharedGenerator(std::move(gen)) {
 
     if (!fSharedGenerator) {
         return;
     }
 
-    const SkImageInfo& info = gen->getInfo();
+    // The following generator accessors are safe without acquiring the mutex (const getters).
+    // TODO: refactor to use a ScopedGenerator instead, for clarity.
+    const SkImageInfo& info = fSharedGenerator->fGenerator->getInfo();
     if (info.isEmpty()) {
         fSharedGenerator.reset();
         return;
     }
 
-    fUniqueID = gen->uniqueID();
+    fUniqueID = fSharedGenerator->fGenerator->uniqueID();
     const SkIRect bounds = SkIRect::MakeWH(info.width(), info.height());
     if (subset) {
         if (!bounds.contains(*subset)) {
@@ -107,11 +88,9 @@ SkImageCacherator::Validator::Validator(SkImageGenerator* gen, const SkIRect* su
     fOrigin = SkIPoint::Make(subset->x(), subset->y());
 }
 
-SkImageCacherator::Validator::~Validator() {}
-
 SkImageCacherator* SkImageCacherator::NewFromGenerator(SkImageGenerator* gen,
                                                        const SkIRect* subset) {
-    Validator validator(gen, subset);
+    Validator validator(SharedGenerator::Make(gen), subset);
 
     return validator ? new SkImageCacherator(&validator) : nullptr;
 }
@@ -211,7 +190,7 @@ bool SkImageCacherator::lockAsBitmap(SkBitmap* bitmap, const SkImage* client,
 
 #if SK_SUPPORT_GPU
     // Try to get a texture and read it back to raster (and then cache that with our ID)
-    SkAutoTUnref<GrTexture> tex;
+    sk_sp<GrTexture> tex;
 
     {
         ScopedGenerator generator(fSharedGenerator);
@@ -301,7 +280,7 @@ static GrTexture* set_key_and_return(GrTexture* tex, const GrUniqueKey& key) {
 GrTexture* SkImageCacherator::lockTexture(GrContext* ctx, const GrUniqueKey& key,
                                           const SkImage* client, SkImage::CachingHint chint,
                                           bool willBeMipped,
-                                          SkSourceGammaTreatment gammaTreatment) {
+                                          SkDestinationSurfaceColorMode colorMode) {
     // Values representing the various texture lock paths we can take. Used for logging the path
     // taken to a histogram.
     enum LockTexturePath {
@@ -367,7 +346,7 @@ GrTexture* SkImageCacherator::lockTexture(GrContext* ctx, const GrUniqueKey& key
     if (this->tryLockAsBitmap(&bitmap, client, chint)) {
         GrTexture* tex = nullptr;
         if (willBeMipped) {
-            tex = GrGenerateMipMapsAndUploadToTexture(ctx, bitmap, gammaTreatment);
+            tex = GrGenerateMipMapsAndUploadToTexture(ctx, bitmap, colorMode);
         }
         if (!tex) {
             tex = GrUploadBitmapToTexture(ctx, bitmap);
@@ -386,20 +365,19 @@ GrTexture* SkImageCacherator::lockTexture(GrContext* ctx, const GrUniqueKey& key
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 GrTexture* SkImageCacherator::lockAsTexture(GrContext* ctx, const GrTextureParams& params,
-                                            SkSourceGammaTreatment gammaTreatment,
+                                            SkDestinationSurfaceColorMode colorMode,
                                             const SkImage* client, SkImage::CachingHint chint) {
     if (!ctx) {
         return nullptr;
     }
 
-    return GrImageTextureMaker(ctx, this, client, chint).refTextureForParams(params,
-                                                                             gammaTreatment);
+    return GrImageTextureMaker(ctx, this, client, chint).refTextureForParams(params, colorMode);
 }
 
 #else
 
 GrTexture* SkImageCacherator::lockAsTexture(GrContext* ctx, const GrTextureParams&,
-                                            SkSourceGammaTreatment gammaTreatment,
+                                            SkDestinationSurfaceColorMode colorMode,
                                             const SkImage* client, SkImage::CachingHint) {
     return nullptr;
 }

@@ -80,16 +80,16 @@ protected:
             return;
         }
 
-        SkAutoTUnref<GrTexture> texture[3];
-        texture[0].reset(GrRefCachedBitmapTexture(context, fBmp[0],
-                                                  GrTextureParams::ClampBilerp(),
-                                                  SkSourceGammaTreatment::kRespect));
-        texture[1].reset(GrRefCachedBitmapTexture(context, fBmp[1],
-                                                  GrTextureParams::ClampBilerp(),
-                                                  SkSourceGammaTreatment::kRespect));
-        texture[2].reset(GrRefCachedBitmapTexture(context, fBmp[2],
-                                                  GrTextureParams::ClampBilerp(),
-                                                  SkSourceGammaTreatment::kRespect));
+        sk_sp<GrTexture> texture[3];
+        texture[0].reset(
+            GrRefCachedBitmapTexture(context, fBmp[0], GrTextureParams::ClampBilerp(),
+                                     SkDestinationSurfaceColorMode::kGammaAndColorSpaceAware));
+        texture[1].reset(
+            GrRefCachedBitmapTexture(context, fBmp[1], GrTextureParams::ClampBilerp(),
+                                     SkDestinationSurfaceColorMode::kGammaAndColorSpaceAware));
+        texture[2].reset(
+            GrRefCachedBitmapTexture(context, fBmp[2], GrTextureParams::ClampBilerp(),
+                                     SkDestinationSurfaceColorMode::kGammaAndColorSpaceAware));
 
         if (!texture[0] || !texture[1] || !texture[2]) {
             return;
@@ -115,17 +115,21 @@ protected:
             for (int i = 0; i < 6; ++i) {
                 GrPaint grPaint;
                 grPaint.setXPFactory(GrPorterDuffXPFactory::Make(SkBlendMode::kSrc));
-                sk_sp<GrFragmentProcessor> fp(GrYUVEffect::MakeYUVToRGB(
-                    texture[indices[i][0]], texture[indices[i][1]], texture[indices[i][2]], sizes,
-                    static_cast<SkYUVColorSpace>(space), false));
+                sk_sp<GrFragmentProcessor> fp(
+                        GrYUVEffect::MakeYUVToRGB(texture[indices[i][0]].get(),
+                                                  texture[indices[i][1]].get(),
+                                                  texture[indices[i][2]].get(),
+                                                  sizes,
+                                                  static_cast<SkYUVColorSpace>(space),
+                                                  false));
                 if (fp) {
                     SkMatrix viewMatrix;
                     viewMatrix.setTranslate(x, y);
                     grPaint.addColorFragmentProcessor(std::move(fp));
-                    SkAutoTUnref<GrDrawBatch> batch(
+                    sk_sp<GrDrawBatch> batch(
                             GrRectBatchFactory::CreateNonAAFill(GrColor_WHITE, viewMatrix,
                                                                 renderRect, nullptr, nullptr));
-                    renderTargetContext->priv().testingOnly_drawBatch(grPaint, batch);
+                    renderTargetContext->priv().testingOnly_drawBatch(grPaint, batch.get());
                 }
                 x += renderRect.width() + kTestPad;
             }
@@ -201,13 +205,16 @@ protected:
             return;
         }
 
-        SkAutoTUnref<GrTexture> texture[3];
-        texture[0].reset(GrRefCachedBitmapTexture(context, fBmp[0], GrTextureParams::ClampBilerp(),
-                                                  SkSourceGammaTreatment::kRespect));
-        texture[1].reset(GrRefCachedBitmapTexture(context, fBmp[1], GrTextureParams::ClampBilerp(),
-                                                  SkSourceGammaTreatment::kRespect));
-        texture[2].reset(GrRefCachedBitmapTexture(context, fBmp[1], GrTextureParams::ClampBilerp(),
-                                                  SkSourceGammaTreatment::kRespect));
+        sk_sp<GrTexture> texture[3];
+        texture[0].reset(
+            GrRefCachedBitmapTexture(context, fBmp[0], GrTextureParams::ClampBilerp(),
+                                     SkDestinationSurfaceColorMode::kGammaAndColorSpaceAware));
+        texture[1].reset(
+            GrRefCachedBitmapTexture(context, fBmp[1], GrTextureParams::ClampBilerp(),
+                                     SkDestinationSurfaceColorMode::kGammaAndColorSpaceAware));
+        texture[2].reset(
+            GrRefCachedBitmapTexture(context, fBmp[1], GrTextureParams::ClampBilerp(),
+                                     SkDestinationSurfaceColorMode::kGammaAndColorSpaceAware));
 
         if (!texture[0] || !texture[1] || !texture[2]) {
             return;
@@ -229,15 +236,15 @@ protected:
             GrPaint grPaint;
             grPaint.setXPFactory(GrPorterDuffXPFactory::Make(SkBlendMode::kSrc));
             sk_sp<GrFragmentProcessor> fp(
-                GrYUVEffect::MakeYUVToRGB(texture[0], texture[1], texture[2], sizes,
-                                          static_cast<SkYUVColorSpace>(space), true));
+                GrYUVEffect::MakeYUVToRGB(texture[0].get(), texture[1].get(), texture[2].get(),
+                                          sizes, static_cast<SkYUVColorSpace>(space), true));
             if (fp) {
                 SkMatrix viewMatrix;
                 viewMatrix.setTranslate(x, y);
                 grPaint.addColorFragmentProcessor(fp);
-                SkAutoTUnref<GrDrawBatch> batch(GrRectBatchFactory::CreateNonAAFill(
+                sk_sp<GrDrawBatch> batch(GrRectBatchFactory::CreateNonAAFill(
                     GrColor_WHITE, viewMatrix, renderRect, nullptr, nullptr));
-                renderTargetContext->priv().testingOnly_drawBatch(grPaint, batch);
+                renderTargetContext->priv().testingOnly_drawBatch(grPaint, batch.get());
             }
         }
     }

@@ -184,13 +184,17 @@ config("default") {
 
   if (is_ios) {
     cflags += [
-      "--sysroot=$ios_sysroot",
-      "--target=$target_cpu-apple-darwin11",
+      "-isysroot",
+      ios_sysroot,
+      "-arch",
+      target_cpu,
     ]
     cflags_cc += [ "-stdlib=libc++" ]
     ldflags += [
-      "--sysroot=$ios_sysroot",
-      "--target=$target_cpu-apple-darwin11",
+      "-isysroot",
+      ios_sysroot,
+      "-arch",
+      target_cpu,
       "-stdlib=libc++",
     ]
     libs = [ "objc" ]
@@ -401,6 +405,11 @@ config("executable") {
       "-rdynamic",
       "-Wl,-rpath,\$ORIGIN",
     ]
+  } else if (is_win) {
+    ldflags = [
+      "/SUBSYSTEM:CONSOLE",  # Quiet "no subsystem specified; CONSOLE assumed".
+      "/INCREMENTAL:NO",  # Quiet warnings about failing to incrementally link by never trying to.
+    ]
   }
 }
 
@@ -577,15 +586,10 @@ toolchain("gcc_like") {
   }
 
   tool("alink") {
-    if (host_os == "win") {
-      rspfile = "{{output}}.rsp"
-      rspfile_content = "{{inputs}}"
-      ar_py = rebase_path("ar.py")
-      command = "$python $ar_py $ar {{output}} $rspfile"
-    } else {
-      # We'd use ar.py all the time, but Mac ar doesn't support @rspfile syntax.  :(
-      command = "rm -f {{output}} && $ar rcs {{output}} {{inputs}}"
-    }
+    rspfile = "{{output}}.rsp"
+    rspfile_content = "{{inputs}}"
+    ar_py = rebase_path("ar.py")
+    command = "$python $ar_py $ar {{output}} $rspfile"
     outputs = [
       "{{root_out_dir}}/{{target_output_name}}{{output_extension}}",
     ]

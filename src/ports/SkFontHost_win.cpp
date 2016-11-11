@@ -2260,7 +2260,7 @@ SkScalerContext* LogFontTypeface::onCreateScalerContext(const SkScalerContextEff
     auto ctx = skstd::make_unique<SkScalerContext_GDI>(
             sk_ref_sp(const_cast<LogFontTypeface*>(this)), effects, desc);
     if (!ctx->isValid()) {
-        ctx = nullptr;
+        return nullptr;
     }
     return ctx.release();
 }
@@ -2435,7 +2435,7 @@ protected:
     virtual SkTypeface* onMatchFamilyStyle(const char familyName[],
                                            const SkFontStyle& fontstyle) const override {
         // could be in base impl
-        SkAutoTUnref<SkFontStyleSet> sset(this->matchFamily(familyName));
+        sk_sp<SkFontStyleSet> sset(this->matchFamily(familyName));
         return sset->matchStyle(fontstyle);
     }
 

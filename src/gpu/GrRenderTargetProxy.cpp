@@ -11,6 +11,7 @@
 #include "GrRenderTargetOpList.h"
 #include "GrRenderTargetPriv.h"
 #include "GrTextureProvider.h"
+#include "GrTextureRenderTargetProxy.h"
 
 // Deferred version
 // TODO: we can probably munge the 'desc' in both the wrapped and deferred
@@ -30,39 +31,27 @@ GrRenderTargetProxy::GrRenderTargetProxy(const GrCaps& caps, const GrSurfaceDesc
 }
 
 // Wrapped version
-GrRenderTargetProxy::GrRenderTargetProxy(sk_sp<GrRenderTarget> rt)
-    : INHERITED(std::move(rt), SkBackingFit::kExact)
+GrRenderTargetProxy::GrRenderTargetProxy(sk_sp<GrSurface> surf)
+    : INHERITED(std::move(surf), SkBackingFit::kExact)
     , fFlags(fTarget->asRenderTarget()->renderTargetPriv().flags()) {
 }
 
+int GrRenderTargetProxy::maxWindowRectangles(const GrCaps& caps) const {
+    return (fFlags & GrRenderTarget::Flags::kWindowRectsSupport) ? caps.maxWindowRectangles() : 0;
+}
+
 GrRenderTarget* GrRenderTargetProxy::instantiate(GrTextureProvider* texProvider) {
-    if (fTarget) {
-        return fTarget->asRenderTarget();
-    }
+    SkASSERT(fDesc.fFlags & GrSurfaceFlags::kRenderTarget_GrSurfaceFlag);
 
-    // TODO: it would be nice to not have to copy the desc here
-    GrSurfaceDesc desc = fDesc;
-    desc.fFlags |= GrSurfaceFlags::kRenderTarget_GrSurfaceFlag;
-
-    if (SkBackingFit::kApprox == fFit) {
-        fTarget = texProvider->createApproxTexture(desc);
-    } else {
-        fTarget = texProvider->createTexture(desc, fBudgeted);
-    }
-    if (!fTarget) {
+    GrSurface* surf = INHERITED::instantiate(texProvider);
+    if (!surf || !surf->asRenderTarget()) {
         return nullptr;
     }
 
-#ifdef SK_DEBUG
-    if (kInvalidGpuMemorySize != this->getRawGpuMemorySize_debugOnly()) {
-        SkASSERT(fTarget->gpuMemorySize() <= this->getRawGpuMemorySize_debugOnly());    
-    }
-#endif
-
     // Check that our a priori computation matched the ultimate reality
-    SkASSERT(fFlags == fTarget->asRenderTarget()->renderTargetPriv().flags());
+    SkASSERT(fFlags == surf->asRenderTarget()->renderTargetPriv().flags());
 
-    return fTarget->asRenderTarget();
+    return surf->asRenderTarget();
 }
 
 
@@ -82,17 +71,6 @@ size_t GrRenderTargetProxy::onGpuMemorySize() const {
     }
 
     // TODO: do we have enough information to improve this worst case estimate?
-    return GrRenderTarget::ComputeSize(fDesc, fDesc.fSampleCnt+1);
-}
-
-sk_sp<GrRenderTargetProxy> GrRenderTargetProxy::Make(const GrCaps& caps,
-                                                     const GrSurfaceDesc& desc,
-                                                     SkBackingFit fit,
-                                                     SkBudgeted budgeted) {
-    return sk_sp<GrRenderTargetProxy>(new GrRenderTargetProxy(caps, desc, fit, budgeted));
-}
-
-sk_sp<GrRenderTargetProxy> GrRenderTargetProxy::Make(sk_sp<GrRenderTarget> rt) {
-    return sk_sp<GrRenderTargetProxy>(new GrRenderTargetProxy(rt));
+    return GrSurface::ComputeSize(fDesc, fDesc.fSampleCnt+1, false);
 }
 

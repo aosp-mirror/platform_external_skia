@@ -35,29 +35,8 @@ void GrTexture::dirtyMipMaps(bool mipMapsDirty) {
     }
 }
 
-size_t GrTexture::ComputeSize(const GrSurfaceDesc& desc, bool hasMipMaps) {
-    size_t textureSize;
-
-    if (GrPixelConfigIsCompressed(desc.fConfig)) {
-        textureSize = GrCompressedFormatDataSize(desc.fConfig, desc.fWidth, desc.fHeight);
-    } else {
-        textureSize = (size_t) desc.fWidth * desc.fHeight * GrBytesPerPixel(desc.fConfig);
-    }
-
-    if (hasMipMaps) {
-        // We don't have to worry about the mipmaps being a different size than
-        // we'd expect because we never change fDesc.fWidth/fHeight.
-        textureSize += textureSize/3;
-    }
-
-    SkASSERT(!SkToBool(desc.fFlags & kRenderTarget_GrSurfaceFlag));
-    SkASSERT(textureSize <= WorstCaseSize(desc));
-
-    return textureSize;
-}
-
 size_t GrTexture::onGpuMemorySize() const {
-    return ComputeSize(fDesc, this->texturePriv().hasMipMaps());
+    return GrSurface::ComputeSize(fDesc, 1, this->texturePriv().hasMipMaps());
 }
 
 void GrTexture::validateDesc() const {
@@ -91,11 +70,12 @@ GrSurfaceOrigin resolve_origin(const GrSurfaceDesc& desc) {
 
 //////////////////////////////////////////////////////////////////////////////
 GrTexture::GrTexture(GrGpu* gpu, const GrSurfaceDesc& desc, GrSLType samplerType,
-                     bool wasMipMapDataProvided)
+                     GrTextureParams::FilterMode highestFilterMode, bool wasMipMapDataProvided)
     : INHERITED(gpu, desc)
     , fSamplerType(samplerType)
-    // Gamma treatment is explicitly set after creation via GrTexturePriv
-    , fGammaTreatment(SkSourceGammaTreatment::kIgnore) {
+    , fHighestFilterMode(highestFilterMode)
+    // Mip color mode is explicitly set after creation via GrTexturePriv
+    , fMipColorMode(SkDestinationSurfaceColorMode::kLegacy) {
     if (wasMipMapDataProvided) {
         fMipMapsStatus = kValid_MipMapsStatus;
         fMaxMipMapLevel = SkMipMap::ComputeLevelCount(fDesc.fWidth, fDesc.fHeight);

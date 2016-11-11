@@ -276,15 +276,22 @@ SkCodec::Result SkBmpRLECodec::onPrepareToDecode(const SkImageInfo& dstInfo,
     fSampleX = 1;
     fLinesToSkip = 0;
 
+    SkColorType colorTableColorType = dstInfo.colorType();
+    if (this->colorXform()) {
+        // Just set a known colorType for the colorTable.  No need to actually transform
+        // the colors in the colorTable since we do not allow decoding RLE to kIndex8.
+        colorTableColorType = kBGRA_8888_SkColorType;
+    }
+
     // Create the color table if necessary and prepare the stream for decode
     // Note that if it is non-NULL, inputColorCount will be modified
-    if (!this->createColorTable(dstInfo.colorType(), inputColorCount)) {
+    if (!this->createColorTable(colorTableColorType, inputColorCount)) {
         SkCodecPrintf("Error: could not create color table.\n");
         return SkCodec::kInvalidInput;
     }
 
     // Copy the color table to the client if necessary
-    copy_color_table(dstInfo, this->fColorTable, inputColorPtr, inputColorCount);
+    copy_color_table(dstInfo, fColorTable.get(), inputColorPtr, inputColorCount);
 
     // Initialize a buffer for encoded RLE data
     fRLEBytes = fOrigRLEBytes;
@@ -334,7 +341,7 @@ int SkBmpRLECodec::decodeRows(const SkImageInfo& info, void* dst, size_t dstRowB
     SkImageInfo decodeInfo = dstInfo;
     if (decodeDst) {
         if (this->colorXform()) {
-            decodeInfo = decodeInfo.makeColorType(kBGRA_8888_SkColorType);
+            decodeInfo = decodeInfo.makeColorType(kXformSrcColorType);
             if (kRGBA_F16_SkColorType == dstInfo.colorType()) {
                 int count = height * dstInfo.width();
                 this->resetXformBuffer(count);
