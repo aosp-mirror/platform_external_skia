@@ -162,6 +162,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkAnalyticEdge.cpp \
 	src/core/SkEdge.cpp \
 	src/core/SkFilterProc.cpp \
+	src/core/SkFixedAlloc.cpp \
 	src/core/SkFlattenable.cpp \
 	src/core/SkFlattenableSerialization.cpp \
 	src/core/SkFont.cpp \
