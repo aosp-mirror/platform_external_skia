@@ -130,6 +130,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkColor.cpp \
 	src/core/SkColorFilter.cpp \
 	src/core/SkColorFilterShader.cpp \
+	src/core/SkColorLookUpTable.cpp \
 	src/core/SkColorMatrixFilterRowMajor255.cpp \
 	src/core/SkColorShader.cpp \
 	src/core/SkColorSpace.cpp \
@@ -137,6 +138,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkColorSpace_XYZ.cpp \
 	src/core/SkColorSpace_ICC.cpp \
 	src/core/SkColorSpaceXform.cpp \
+	src/core/SkColorSpaceXform_A2B.cpp \
 	src/core/SkColorTable.cpp \
 	src/core/SkComposeShader.cpp \
 	src/core/SkConfig8888.cpp \
