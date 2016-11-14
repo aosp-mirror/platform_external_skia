@@ -234,7 +234,6 @@ LOCAL_SRC_FILES := \
 	../tests/PremulAlphaRoundTripTest.cpp \
 	../tests/PrimitiveProcessorTest.cpp \
 	../tests/ProxyConversionTest.cpp \
-	../tests/ProxyRefTest.cpp \
 	../tests/ProxyTest.cpp \
 	../tests/QuickRejectTest.cpp \
 	../tests/RRectInPathTest.cpp \
