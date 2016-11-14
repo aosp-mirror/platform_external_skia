@@ -687,7 +687,6 @@ LOCAL_SRC_FILES := \
 	src/utils/SkMultiPictureDocument.cpp \
 	src/utils/SkNWayCanvas.cpp \
 	src/utils/SkNullCanvas.cpp \
-	src/utils/SkOSFile.cpp \
 	src/utils/SkOSPath.cpp \
 	src/utils/SkPaintFilterCanvas.cpp \
 	src/utils/SkParse.cpp \
