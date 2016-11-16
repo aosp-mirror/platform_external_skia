@@ -194,6 +194,7 @@ LOCAL_SRC_FILES := \
 	../gm/circles.cpp \
 	../gm/circulararcs.cpp \
 	../gm/circularclips.cpp \
+	../gm/clip_error.cpp \
 	../gm/clip_strokerect.cpp \
 	../gm/clipdrawdraw.cpp \
 	../gm/clippedbitmapshaders.cpp \
