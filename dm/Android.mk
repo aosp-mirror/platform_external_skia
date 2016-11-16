@@ -478,6 +478,7 @@ LOCAL_SRC_FILES := \
 	../gm/imagefiltersstroked.cpp \
 	../gm/imagefilterstransformed.cpp \
 	../gm/imagefromyuvtextures.cpp \
+	../gm/imagegeneratorexternal.cpp \
 	../gm/imagemagnifier.cpp \
 	../gm/imagemakewithfilter.cpp \
 	../gm/imagemasksubset.cpp \
