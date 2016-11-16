@@ -281,7 +281,6 @@ LOCAL_SRC_FILES := \
 	../tests/SkResourceCacheTest.cpp \
 	../tests/SkSLErrorTest.cpp \
 	../tests/SkSLGLSLTest.cpp \
-	../tests/SkSLMemoryLayoutTest.cpp \
 	../tests/SkSharedMutexTest.cpp \
 	../tests/SmallAllocatorTest.cpp \
 	../tests/SortTest.cpp \
