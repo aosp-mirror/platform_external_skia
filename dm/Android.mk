@@ -318,7 +318,6 @@ LOCAL_SRC_FILES := \
 	../tests/WindowRectanglesTest.cpp \
 	../tests/WritePixelsTest.cpp \
 	../tests/Writer32Test.cpp \
-	../tests/XfermodeTest.cpp \
 	../tests/YUVCacheTest.cpp \
 	../tests/YUVTest.cpp \
 	../tests/image-bitmap.cpp \
