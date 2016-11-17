@@ -469,7 +469,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrTextureProxy.cpp \
 	src/gpu/GrTextureRenderTargetProxy.cpp \
 	src/gpu/GrTextureToYUVPlanes.cpp \
-	src/gpu/GrTextureAccess.cpp \
 	src/gpu/GrXferProcessor.cpp \
 	src/gpu/GrYUVProvider.cpp \
 	src/gpu/batches/GrAAHairLinePathRenderer.cpp \
