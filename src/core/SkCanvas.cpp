@@ -19,6 +19,7 @@
 #include "SkImageFilter.h"
 #include "SkImageFilterCache.h"
 #include "SkLatticeIter.h"
+#include "SkMakeUnique.h"
 #include "SkMatrixUtils.h"
 #include "SkMetaData.h"
 #include "SkNx.h"
@@ -495,9 +496,11 @@ public:
         }
 
         if (SkDrawLooper* looper = paint.getLooper()) {
-            void* buffer = fLooperContextAllocator.reserveT<SkDrawLooper::Context>(
-                    looper->contextSize());
-            fLooperContext = looper->createContext(canvas, buffer);
+            fLooperContext = fLooperContextAllocator.createWithIniter(
+                looper->contextSize(),
+                [&](void* buffer) {
+                    return looper->createContext(canvas, buffer);
+                });
             fIsSimple = false;
         } else {
             fLooperContext = nullptr;
@@ -3323,7 +3326,8 @@ static bool supported_for_raster_canvas(const SkImageInfo& info) {
     return true;
 }
 
-SkCanvas* SkCanvas::NewRasterDirect(const SkImageInfo& info, void* pixels, size_t rowBytes) {
+std::unique_ptr<SkCanvas> SkCanvas::MakeRasterDirect(const SkImageInfo& info, void* pixels,
+                                                     size_t rowBytes) {
     if (!supported_for_raster_canvas(info)) {
         return nullptr;
     }
@@ -3332,7 +3336,7 @@ SkCanvas* SkCanvas::NewRasterDirect(const SkImageInfo& info, void* pixels, size_
     if (!bitmap.installPixels(info, pixels, rowBytes)) {
         return nullptr;
     }
-    return new SkCanvas(bitmap);
+    return skstd::make_unique<SkCanvas>(bitmap);
 }
 
 ///////////////////////////////////////////////////////////////////////////////

@@ -9,6 +9,7 @@
 #define SkShader_DEFINED
 
 #include "SkBitmap.h"
+#include "SkFilterQuality.h"
 #include "SkFlattenable.h"
 #include "SkImageInfo.h"
 #include "SkMask.h"
@@ -18,9 +19,11 @@
 
 class SkColorFilter;
 class SkColorSpace;
+class SkFallbackAlloc;
 class SkImage;
 class SkPath;
 class SkPicture;
+class SkRasterPipeline;
 class GrContext;
 class GrFragmentProcessor;
 
@@ -96,6 +99,12 @@ public:
      *  optimizations.
      */
     virtual bool isOpaque() const { return false; }
+
+    /**
+     *  Returns true if the shader is guaranteed to produce only a single color.
+     *  Subclasses can override this to allow loop-hoisting optimization.
+     */
+    virtual bool isConstant() const { return false; }
 
     /**
      *  ContextRec acts as a parameter bundle for creating Contexts.
@@ -399,7 +408,7 @@ public:
 
     //////////////////////////////////////////////////////////////////////////
     //  Factory methods for stock shaders
-    
+
     /**
      *  Call this to create a new "empty" shader, that will not draw anything.
      */
@@ -467,6 +476,9 @@ public:
     SK_DEFINE_FLATTENABLE_TYPE(SkShader)
     SK_DECLARE_FLATTENABLE_REGISTRAR_GROUP()
 
+    bool appendStages(SkRasterPipeline*, SkColorSpace*, SkFallbackAlloc*,
+                      const SkMatrix& ctm, SkFilterQuality) const;
+
 protected:
     void flatten(SkWriteBuffer&) const override;
 
@@ -496,6 +508,11 @@ protected:
 
     virtual SkImage* onIsAImage(SkMatrix*, TileMode[2]) const {
         return nullptr;
+    }
+
+    virtual bool onAppendStages(SkRasterPipeline*, SkColorSpace*, SkFallbackAlloc*,
+                                const SkMatrix&, SkFilterQuality) const {
+        return false;
     }
 
 private:

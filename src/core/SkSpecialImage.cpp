@@ -18,7 +18,7 @@
 #if SK_SUPPORT_GPU
 #include "GrContext.h"
 #include "GrTexture.h"
-#include "GrTextureParams.h"
+#include "GrSamplerParams.h"
 #include "GrTextureProxy.h"
 #include "SkGr.h"
 #include "SkGrPriv.h"
@@ -102,7 +102,7 @@ sk_sp<SkSpecialImage> SkSpecialImage::makeTextureImage(GrContext* context) {
     }
 
     sk_sp<GrTexture> resultTex(
-        GrRefCachedBitmapTexture(context, bmp, GrTextureParams::ClampNoFilter(),
+        GrRefCachedBitmapTexture(context, bmp, GrSamplerParams::ClampNoFilter(),
                                  SkDestinationSurfaceColorMode::kGammaAndColorSpaceAware));
     if (!resultTex) {
         return nullptr;
@@ -241,7 +241,7 @@ public:
     sk_sp<GrTexture> onAsTextureRef(GrContext* context) const override {
         if (context) {
             return sk_ref_sp(
-                GrRefCachedBitmapTexture(context, fBitmap, GrTextureParams::ClampNoFilter(),
+                GrRefCachedBitmapTexture(context, fBitmap, GrSamplerParams::ClampNoFilter(),
                                          SkDestinationSurfaceColorMode::kGammaAndColorSpaceAware));
         }
 
@@ -253,7 +253,7 @@ public:
             sk_sp<GrTexture> tex(sk_ref_sp(GrRefCachedBitmapTexture(
                                         context,
                                         fBitmap,
-                                        GrTextureParams::ClampNoFilter(),
+                                        GrSamplerParams::ClampNoFilter(),
                                         SkDestinationSurfaceColorMode::kGammaAndColorSpaceAware)));
             sk_sp<GrSurfaceProxy> sProxy = GrSurfaceProxy::MakeWrapped(std::move(tex));
             return sk_ref_sp(sProxy->asTextureProxy());
@@ -390,14 +390,23 @@ public:
 
         // TODO: add GrTextureProxy-backed SkImage_Gpus
         GrSurface* surf = fSurfaceProxy->instantiate(fContext->textureProvider());
+        if (!surf) {
+            return;
+        }
 
-        auto img = sk_sp<SkImage>(new SkImage_Gpu(fSurfaceProxy->width(), fSurfaceProxy->height(),
+        // TODO: In this instance we know we're going to draw a sub-portion of the backing
+        // texture into the canvas so it is okay to wrap it in an SkImage. This poses
+        // some problems for full deferral however in that when the deferred SkImage_Gpu
+        // instantiates itself it is going to have to either be okay with having a larger
+        // than expected backing texture (unlikely) or the 'fit' of the SurfaceProxy needs 
+        // to be tightened (if it is deferred).
+        auto img = sk_sp<SkImage>(new SkImage_Gpu(surf->width(), surf->height(),
                                                   this->uniqueID(), fAlphaType,
                                                   sk_ref_sp(surf->asTexture()),
                                                   fColorSpace, SkBudgeted::kNo));
 
         canvas->drawImageRect(img, this->subset(),
-                               dst, paint, SkCanvas::kStrict_SrcRectConstraint);
+                              dst, paint, SkCanvas::kStrict_SrcRectConstraint);
     }
 
     GrContext* onGetContext() const override { return fContext; }
@@ -405,7 +414,9 @@ public:
     // This entry point should go away in favor of asTextureProxy
     sk_sp<GrTexture> onAsTextureRef(GrContext* context) const override {
         GrSurface* surf = fSurfaceProxy->instantiate(context->textureProvider());
-
+        if (!surf) {
+            return nullptr;
+        }
         return sk_ref_sp(surf->asTexture());
     }
 
@@ -430,6 +441,9 @@ public:
 
         // Reading back to an SkBitmap ends deferral
         GrSurface* surface = fSurfaceProxy->instantiate(fContext->textureProvider());
+        if (!surface) {
+            return false;
+        }
 
         if (!surface->readPixels(0, 0, dst->width(), dst->height(), kSkia8888_GrPixelConfig,
                                  dst->getPixels(), dst->rowBytes())) {
@@ -471,6 +485,9 @@ public:
     sk_sp<SkImage> onMakeTightSubset(const SkIRect& subset) const override {
         // TODO: add GrTextureProxy-backed SkImage_Gpus
         GrSurface* surf = fSurfaceProxy->instantiate(fContext->textureProvider());
+        if (!surf) {
+            return nullptr;
+        }
 
         if (0 == subset.fLeft && 0 == subset.fTop &&
             fSurfaceProxy->width() == subset.width() &&

@@ -16,11 +16,13 @@
 
 #if SK_SUPPORT_GPU
 #include "GrContext.h"
-#include "GrRenderTargetContext.h"
 #include "GrFixedClip.h"
 #include "GrFragmentProcessor.h"
 #include "GrInvariantOutput.h"
 #include "GrPaint.h"
+#include "GrRenderTargetContext.h"
+#include "GrTextureProxy.h"
+
 #include "SkGr.h"
 #include "SkGrPriv.h"
 #include "effects/GrSingleTextureEffect.h"
@@ -413,10 +415,10 @@ sk_sp<SkSpecialImage> SkLightingImageFilterInternal::filterImageGPU(
     sk_sp<GrTexture> inputTexture(input->asTextureRef(context));
     SkASSERT(inputTexture);
 
-    sk_sp<GrRenderTargetContext> renderTargetContext(context->makeRenderTargetContext(
-        SkBackingFit::kApprox,offsetBounds.width(), offsetBounds.height(),
-        GrRenderableConfigForColorSpace(outputProperties.colorSpace()),
-        sk_ref_sp(outputProperties.colorSpace())));
+    sk_sp<GrRenderTargetContext> renderTargetContext(context->makeDeferredRenderTargetContext(
+                                SkBackingFit::kApprox, offsetBounds.width(), offsetBounds.height(),
+                                GrRenderableConfigForColorSpace(outputProperties.colorSpace()),
+                                sk_ref_sp(outputProperties.colorSpace())));
     if (!renderTargetContext) {
         return nullptr;
     }
@@ -458,9 +460,11 @@ sk_sp<SkSpecialImage> SkLightingImageFilterInternal::filterImageGPU(
     this->drawRect(renderTargetContext.get(), inputTexture.get(), matrix, clip, bottomRight,
                    kBottomRight_BoundaryMode, pSrcBounds, offsetBounds);
 
-    return SkSpecialImage::MakeFromGpu(SkIRect::MakeWH(offsetBounds.width(), offsetBounds.height()),
+    return SkSpecialImage::MakeDeferredFromGpu(
+                                       context,
+                                       SkIRect::MakeWH(offsetBounds.width(), offsetBounds.height()),
                                        kNeedNewImageUniqueID_SpecialImage,
-                                       renderTargetContext->asTexture(),
+                                       sk_ref_sp(renderTargetContext->asDeferredTexture()),
                                        sk_ref_sp(renderTargetContext->getColorSpace()));
 }
 #endif
@@ -1896,7 +1900,7 @@ void GrGLLightingEffect::onSetData(const GrGLSLProgramDataManager& pdman,
         fLight = lighting.light()->createGLLight();
     }
 
-    GrTexture* texture = lighting.texture(0);
+    GrTexture* texture = lighting.textureSampler(0).texture();
     float ySign = texture->origin() == kTopLeft_GrSurfaceOrigin ? -1.0f : 1.0f;
     pdman.set2f(fImageIncrementUni, 1.0f / texture->width(), ySign / texture->height());
     pdman.set1f(fSurfaceScaleUni, lighting.surfaceScale());

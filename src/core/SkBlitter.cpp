@@ -858,7 +858,7 @@ SkBlitter* SkBlitter::Choose(const SkPixmap& device,
         p->setColor(0);
     }
 
-    if (SkBlitter* blitter = SkCreateRasterPipelineBlitter(device, *paint, allocator)) {
+    if (SkBlitter* blitter = SkCreateRasterPipelineBlitter(device, *paint, matrix, allocator)) {
         return blitter;
     }
 
@@ -896,14 +896,15 @@ SkBlitter* SkBlitter::Choose(const SkPixmap& device,
         size_t contextSize = shader->contextSize(rec);
         if (contextSize) {
             // Try to create the ShaderContext
-            void* storage = allocator->reserveT<SkShader::Context>(contextSize);
-            shaderContext = shader->createContext(rec, storage);
+            shaderContext = allocator->createWithIniter(
+                contextSize,
+                [&rec, shader](void* storage) {
+                    return shader->createContext(rec, storage);
+                });
             if (!shaderContext) {
-                allocator->freeLast();
                 return allocator->createT<SkNullBlitter>();
             }
             SkASSERT(shaderContext);
-            SkASSERT((void*) shaderContext == storage);
         } else {
             return allocator->createT<SkNullBlitter>();
         }
@@ -1052,7 +1053,10 @@ void SkRectClipCheckBlitter::blitRect(int x, int y, int width, int height) {
 
 void SkRectClipCheckBlitter::blitAntiRect(int x, int y, int width, int height,
                                      SkAlpha leftAlpha, SkAlpha rightAlpha) {
-    SkASSERT(fClipRect.contains(SkIRect::MakeXYWH(x, y, width + 2, height)));
+    bool skipLeft = !leftAlpha;
+    bool skipRight = !rightAlpha;
+    SkASSERT(fClipRect.contains(SkIRect::MakeXYWH(x + skipLeft, y,
+            width + 2 - skipRight - skipLeft, height)));
     fBlitter->blitAntiRect(x, y, width, height, leftAlpha, rightAlpha);
 }
 

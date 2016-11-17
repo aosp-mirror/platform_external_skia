@@ -55,11 +55,14 @@
 // the Stage*.  This mostly matters on 64-bit Windows where every register is precious.
 
 #define SK_RASTER_PIPELINE_STAGES(M)                             \
-    M(move_src_dst) M(clamp_0) M(clamp_a) M(unpremul) M(premul)  \
+    M(trace) M(registers)                                        \
+    M(move_src_dst) M(swap_src_dst)                              \
+    M(clamp_0) M(clamp_a) M(clamp_1) M(unpremul) M(premul)       \
     M(constant_color) M(store_f32)                               \
     M(load_s_565)  M(load_d_565)  M(store_565)                   \
     M(load_s_srgb) M(load_d_srgb) M(store_srgb)                  \
     M(load_s_f16)  M(load_d_f16)  M(store_f16)                   \
+    M(load_s_8888) M(store_8888)                                 \
     M(scale_u8) M(scale_constant_float)                          \
     M(lerp_u8) M(lerp_565) M(lerp_constant_float)                \
     M(dst)                                                       \
@@ -68,7 +71,14 @@
     M(clear) M(modulate) M(multiply) M(plus_) M(screen) M(xor_)  \
     M(colorburn) M(colordodge) M(darken) M(difference)           \
     M(exclusion) M(hardlight) M(lighten) M(overlay) M(softlight) \
-    M(luminance_to_alpha) M(matrix_4x5)
+    M(luminance_to_alpha)                                        \
+    M(matrix_2x3) M(matrix_3x4) M(matrix_4x5)                    \
+    M(parametric_r) M(parametric_g) M(parametric_b)              \
+    M(table_r) M(table_g) M(table_b)                             \
+    M(color_lookup_table) M(lab_to_xyz) M(swap_rb)               \
+    M(clamp_x) M(mirror_x) M(repeat_x)                           \
+    M(clamp_y) M(mirror_y) M(repeat_y)                           \
+    M(nearest_565) M(nearest_8888) M(nearest_srgb) M(nearest_f16)
 
 class SkRasterPipeline {
 public:
@@ -88,8 +98,10 @@ public:
     // Append all stages to this pipeline.
     void extend(const SkRasterPipeline&);
 
-    // Runs the pipeline walking x through [x,x+n).
-    std::function<void(size_t x, size_t n)> compile() const;
+    // Runs the pipeline walking x through [x,x+n), holding y constant.
+    std::function<void(size_t x, size_t y, size_t n)> compile() const;
+
+    void dump() const;
 
     struct Stage {
         StockStage stage;

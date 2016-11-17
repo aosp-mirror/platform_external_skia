@@ -11,7 +11,7 @@
 #include "SkRasterPipeline.h"
 #include "SkTextureCompressor.h"
 #include "SkTypes.h"
-#include "SkXfermode.h"
+#include "SkXfermodePriv.h"
 #include <functional>
 
 struct ProcCoeff;
@@ -74,8 +74,8 @@ namespace SkOpts {
         return hash_fn(data, bytes, seed);
     }
 
-    extern
-    std::function<void(size_t, size_t)> (*compile_pipeline)(const SkRasterPipeline::Stage*, int);
+    extern std::function<void(size_t, size_t, size_t)>
+    (*compile_pipeline)(const SkRasterPipeline::Stage*, int);
 }
 
 #endif//SkOpts_DEFINED

@@ -12,7 +12,7 @@
 #include "GrBlend.h"
 #include "SkImageInfo.h"
 #include "SkMatrix.h"
-#include "SkXfermode.h"
+#include "SkXfermodePriv.h"
 
 class GrCaps;
 class GrContext;
@@ -20,7 +20,6 @@ class GrRenderTargetContext;
 class GrFragmentProcessor;
 class GrPaint;
 class GrTexture;
-class GrTextureParams;
 class GrUniqueKey;
 class SkData;
 class SkPaint;

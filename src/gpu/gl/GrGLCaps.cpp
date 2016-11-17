@@ -309,6 +309,33 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
     GR_GL_GetIntegerv(gli, GR_GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS, &maxSamplers);
     glslCaps->fMaxCombinedSamplers = SkTMin<GrGLint>(kMaxSaneSamplers, maxSamplers);
 
+    if (kGL_GrGLStandard == standard) {
+        glslCaps->fImageLoadStoreSupport = ctxInfo.version() >= GR_GL_VER(4, 2);
+        if (!glslCaps->fImageLoadStoreSupport &&
+            ctxInfo.hasExtension("GL_ARB_shader_image_load_store")) {
+            glslCaps->fImageLoadStoreSupport = true;
+            glslCaps->fImageLoadStoreExtensionString = "GL_ARB_shader_image_load_store";
+        }
+    } else {
+        glslCaps->fImageLoadStoreSupport = ctxInfo.version() >= GR_GL_VER(3, 1);
+    }
+    if (glslCaps->fImageLoadStoreSupport) {
+        // Protect ourselves against tracking huge amounts of image state.
+        static constexpr int kMaxSaneImages = 4;
+        GrGLint maxUnits;
+        GR_GL_GetIntegerv(gli, GR_GL_MAX_IMAGE_UNITS, &maxUnits);
+        GR_GL_GetIntegerv(gli, GR_GL_MAX_VERTEX_IMAGE_UNIFORMS, &glslCaps->fMaxVertexImages);
+        GR_GL_GetIntegerv(gli, GR_GL_MAX_GEOMETRY_IMAGE_UNIFORMS, &glslCaps->fMaxGeometryImages);
+        GR_GL_GetIntegerv(gli, GR_GL_MAX_FRAGMENT_IMAGE_UNIFORMS, &glslCaps->fMaxFragmentImages);
+        GR_GL_GetIntegerv(gli, GR_GL_MAX_COMBINED_IMAGE_UNIFORMS, &glslCaps->fMaxCombinedImages);
+        // We use one unit for every image uniform
+        glslCaps->fMaxCombinedImages = SkTMin(SkTMin(glslCaps->fMaxCombinedImages, maxUnits),
+                                                     kMaxSaneImages);
+        glslCaps->fMaxVertexImages = SkTMin(maxUnits, glslCaps->fMaxVertexImages);
+        glslCaps->fMaxGeometryImages = SkTMin(maxUnits, glslCaps->fMaxGeometryImages);
+        glslCaps->fMaxFragmentImages =  SkTMin(maxUnits, glslCaps->fMaxFragmentImages);
+    }
+
     /**************************************************************************
      * GrCaps fields
      **************************************************************************/
@@ -622,6 +649,14 @@ const char* get_glsl_version_decl_string(GrGLStandard standard, GrGLSLGeneration
             } else {
                 return "#version 400 compatibility\n";
             }
+        case k420_GrGLSLGeneration:
+            SkASSERT(kGL_GrGLStandard == standard);
+            if (isCoreProfile) {
+                return "#version 420\n";
+            }
+            else {
+                return "#version 420 compatibility\n";
+            }
         case k310es_GrGLSLGeneration:
             SkASSERT(kGLES_GrGLStandard == standard);
             return "#version 310 es\n";
@@ -863,6 +898,10 @@ bool GrGLCaps::readPixelsSupported(GrPixelConfig surfaceConfig,
         return false;
     }
 
+    if (GrPixelConfigIsSint(surfaceConfig) != GrPixelConfigIsSint(readConfig)) {
+        return false;
+    }
+
     GrGLenum readFormat;
     GrGLenum readType;
     if (!this->getReadPixelsFormat(surfaceConfig, readConfig, &readFormat, &readType)) {
@@ -874,8 +913,11 @@ bool GrGLCaps::readPixelsSupported(GrPixelConfig surfaceConfig,
         // the manual (https://www.opengl.org/sdk/docs/man/) says only these formats are allowed:
         // GL_STENCIL_INDEX, GL_DEPTH_COMPONENT, GL_DEPTH_STENCIL, GL_RED, GL_GREEN, GL_BLUE,
         // GL_RGB, GL_BGR, GL_RGBA, and GL_BGRA. We check for the subset that we would use.
+        // The manual does not seem to fully match the spec as the spec allows integer formats
+        // when the bound color buffer is an integer buffer. It doesn't specify which integer
+        // formats are allowed, so perhaps all of them are. We only use GL_RGBA_INTEGER currently.
         if (readFormat != GR_GL_RED && readFormat != GR_GL_RGB && readFormat != GR_GL_RGBA &&
-            readFormat != GR_GL_BGRA) {
+            readFormat != GR_GL_BGRA && readFormat != GR_GL_RGBA_INTEGER) {
             return false;
         }
         // There is also a set of allowed types, but all the types we use are in the set:
@@ -890,16 +932,22 @@ bool GrGLCaps::readPixelsSupported(GrPixelConfig surfaceConfig,
     }
 
     // See Section 16.1.2 in the ES 3.2 specification.
-
-    if (kNormalizedFixedPoint_FormatType == fConfigTable[surfaceConfig].fFormatType) {
-        if (GR_GL_RGBA == readFormat && GR_GL_UNSIGNED_BYTE == readType) {
-            return true;
-        }
-    } else {
-        SkASSERT(kFloat_FormatType == fConfigTable[surfaceConfig].fFormatType);
-        if (GR_GL_RGBA == readFormat && GR_GL_FLOAT == readType) {
-            return true;
-        }
+    switch (fConfigTable[surfaceConfig].fFormatType) {
+        case kNormalizedFixedPoint_FormatType:
+            if (GR_GL_RGBA == readFormat && GR_GL_UNSIGNED_BYTE == readType) {
+                return true;
+            }
+            break;
+        case kInteger_FormatType:
+            if (GR_GL_RGBA_INTEGER == readFormat && GR_GL_INT == readType) {
+                return true;
+            }
+            break;
+        case kFloat_FormatType:
+            if (GR_GL_RGBA == readFormat && GR_GL_FLOAT == readType) {
+                return true;
+            }
+            break;
     }
 
     if (0 == fConfigTable[surfaceConfig].fSecondReadPixelsFormat.fFormat) {
@@ -1569,6 +1617,33 @@ void GrGLCaps::initConfigTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
     }
     fConfigTable[kSBGRA_8888_GrPixelConfig].fSwizzle = GrSwizzle::RGBA();
 
+    bool hasIntegerTextures;
+    if (standard == kGL_GrGLStandard) {
+        hasIntegerTextures = version >= GR_GL_VER(3, 0) ||
+                             ctxInfo.hasExtension("GL_EXT_texture_integer");
+    } else {
+        hasIntegerTextures = (version >= GR_GL_VER(3, 0));
+    }
+    // We may have limited GLSL to an earlier version that doesn't have integer sampler types.
+    if (ctxInfo.glslGeneration() == k110_GrGLSLGeneration) {
+        hasIntegerTextures = false;
+    }
+    fConfigTable[kRGBA_8888_sint_GrPixelConfig].fFormats.fBaseInternalFormat  = GR_GL_RGBA_INTEGER;
+    fConfigTable[kRGBA_8888_sint_GrPixelConfig].fFormats.fSizedInternalFormat = GR_GL_RGBA8I;
+    fConfigTable[kRGBA_8888_sint_GrPixelConfig].fFormats.fExternalFormat[kOther_ExternalFormatUsage] = GR_GL_RGBA_INTEGER;
+    fConfigTable[kRGBA_8888_sint_GrPixelConfig].fFormats.fExternalType = GR_GL_BYTE;
+    fConfigTable[kRGBA_8888_sint_GrPixelConfig].fFormatType = kInteger_FormatType;
+    // We currently only support using integer textures as srcs, not for rendering (even though GL
+    // allows it).
+    if (hasIntegerTextures) {
+        fConfigTable[kRGBA_8888_sint_GrPixelConfig].fFlags = ConfigInfo::kTextureable_Flag |
+                                                             ConfigInfo::kFBOColorAttachment_Flag;
+        if (texStorageSupported) {
+            fConfigTable[kRGBA_8888_sint_GrPixelConfig].fFlags |=
+                ConfigInfo::kCanUseTexStorage_Flag;
+        }
+    }
+
     fConfigTable[kRGB_565_GrPixelConfig].fFormats.fBaseInternalFormat = GR_GL_RGB;
     if (this->ES2CompatibilitySupport()) {
         fConfigTable[kRGB_565_GrPixelConfig].fFormats.fSizedInternalFormat = GR_GL_RGB565;
@@ -1718,7 +1793,11 @@ void GrGLCaps::initConfigTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
             = GR_GL_ALPHA;
         fConfigTable[kAlpha_half_GrPixelConfig].fSwizzle = GrSwizzle::AAAA();
     }
-    if (kGL_GrGLStandard == ctxInfo.standard() || ctxInfo.version() >= GR_GL_VER(3, 0)) {
+    // ANGLE always returns GL_HALF_FLOAT_OES for GL_IMPLEMENTATION_COLOR_READ_TYPE, even though
+    // ES3 would typically return GL_HALF_FLOAT. The correct fix is for us to respect the value
+    // returned when we query, but that turns into a bigger refactor, so just work around it.
+    if (kGL_GrGLStandard == ctxInfo.standard() ||
+        (ctxInfo.version() >= GR_GL_VER(3, 0) && kANGLE_GrGLDriver != ctxInfo.driver())) {
         fConfigTable[kAlpha_half_GrPixelConfig].fFormats.fExternalType = GR_GL_HALF_FLOAT;
     } else {
         fConfigTable[kAlpha_half_GrPixelConfig].fFormats.fExternalType = GR_GL_HALF_FLOAT_OES;
@@ -1742,7 +1821,9 @@ void GrGLCaps::initConfigTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
     fConfigTable[kRGBA_half_GrPixelConfig].fFormats.fSizedInternalFormat = GR_GL_RGBA16F;
     fConfigTable[kRGBA_half_GrPixelConfig].fFormats.fExternalFormat[kOther_ExternalFormatUsage] =
         GR_GL_RGBA;
-    if (kGL_GrGLStandard == ctxInfo.standard() || ctxInfo.version() >= GR_GL_VER(3, 0)) {
+    // See comment above, re: ANGLE and ES3.
+    if (kGL_GrGLStandard == ctxInfo.standard() ||
+        (ctxInfo.version() >= GR_GL_VER(3, 0) && kANGLE_GrGLDriver != ctxInfo.driver())) {
         fConfigTable[kRGBA_half_GrPixelConfig].fFormats.fExternalType = GR_GL_HALF_FLOAT;
     } else {
         fConfigTable[kRGBA_half_GrPixelConfig].fFormats.fExternalType = GR_GL_HALF_FLOAT_OES;

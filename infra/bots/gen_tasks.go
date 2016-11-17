@@ -40,11 +40,37 @@ var (
 		"Build-Mac-Clang-arm64-Debug-GN_iOS",
 		"Build-Ubuntu-GCC-x86_64-Release-GN",
 		"Build-Win-Clang-arm64-Release-GN_Android",
+		"Housekeeper-Nightly-RecreateSKPs_Canary",
 		"Housekeeper-PerCommit-InfraTests",
+		"Housekeeper-Weekly-RecreateSKPs",
 		"Perf-Android-Clang-AndroidOne-CPU-MT6582-arm-Debug-GN_Android",
 		"Perf-Android-Clang-AndroidOne-CPU-MT6582-arm-Release-GN_Android",
 		"Perf-Android-Clang-AndroidOne-GPU-Mali400MP2-arm-Debug-GN_Android",
 		"Perf-Android-Clang-AndroidOne-GPU-Mali400MP2-arm-Release-GN_Android",
+		"Perf-Android-Clang-GalaxyS7-GPU-Adreno530-arm64-Debug-GN_Android",
+		"Perf-Android-Clang-GalaxyS7-GPU-Adreno530-arm64-Debug-GN_Android_Vulkan",
+		"Perf-Android-Clang-GalaxyS7-GPU-Adreno530-arm64-Release-GN_Android",
+		"Perf-Android-Clang-GalaxyS7-GPU-Adreno530-arm64-Release-GN_Android_Vulkan",
+		"Perf-Android-Clang-NVIDIA_Shield-GPU-TegraX1-arm64-Debug-GN_Android",
+		"Perf-Android-Clang-NVIDIA_Shield-GPU-TegraX1-arm64-Debug-GN_Android_Vulkan",
+		"Perf-Android-Clang-NVIDIA_Shield-GPU-TegraX1-arm64-Release-GN_Android",
+		"Perf-Android-Clang-NVIDIA_Shield-GPU-TegraX1-arm64-Release-GN_Android_Vulkan",
+		"Perf-Android-Clang-Nexus10-GPU-MaliT604-arm-Debug-GN_Android",
+		"Perf-Android-Clang-Nexus10-GPU-MaliT604-arm-Release-GN_Android",
+		"Perf-Android-Clang-Nexus5-GPU-Adreno330-arm-Debug-GN_Android",
+		"Perf-Android-Clang-Nexus5-GPU-Adreno330-arm-Release-GN_Android",
+		"Perf-Android-Clang-Nexus6p-CPU-Snapdragon810-arm64-Debug-GN_Android",
+		"Perf-Android-Clang-Nexus6p-CPU-Snapdragon810-arm64-Release-GN_Android",
+		"Perf-Android-Clang-Nexus6p-GPU-Adreno430-arm64-Debug-GN_Android",
+		"Perf-Android-Clang-Nexus6p-GPU-Adreno430-arm64-Debug-GN_Android_Vulkan",
+		"Perf-Android-Clang-Nexus6p-GPU-Adreno430-arm64-Release-GN_Android",
+		"Perf-Android-Clang-Nexus6p-GPU-Adreno430-arm64-Release-GN_Android_Vulkan",
+		"Perf-Android-Clang-Nexus7-GPU-Tegra3-arm-Debug-GN_Android",
+		"Perf-Android-Clang-Nexus7-GPU-Tegra3-arm-Release-GN_Android",
+		"Perf-Android-Clang-Nexus9-GPU-TegraK1-arm64-Debug-GN_Android",
+		"Perf-Android-Clang-Nexus9-GPU-TegraK1-arm64-Release-GN_Android",
+		"Perf-Android-Clang-PixelC-GPU-TegraX1-arm64-Release-GN_Android_Skpbench",
+		"Perf-Android-Clang-PixelC-GPU-TegraX1-arm64-Release-GN_Android_Vulkan_Skpbench",
 		"Perf-Ubuntu-GCC-GCE-CPU-AVX2-x86_64-Release-GN",
 		"Perf-iOS-Clang-iPadMini4-GPU-GX6450-Arm7-Debug",
 		"Perf-iOS-Clang-iPadMini4-GPU-GX6450-Arm7-Release",
@@ -52,6 +78,28 @@ var (
 		"Test-Android-Clang-AndroidOne-CPU-MT6582-arm-Release-GN_Android",
 		"Test-Android-Clang-AndroidOne-GPU-Mali400MP2-arm-Debug-GN_Android",
 		"Test-Android-Clang-AndroidOne-GPU-Mali400MP2-arm-Release-GN_Android",
+		"Test-Android-Clang-GalaxyS7-GPU-Adreno530-arm64-Debug-GN_Android",
+		"Test-Android-Clang-GalaxyS7-GPU-Adreno530-arm64-Debug-GN_Android_Vulkan",
+		"Test-Android-Clang-GalaxyS7-GPU-Adreno530-arm64-Release-GN_Android",
+		"Test-Android-Clang-GalaxyS7-GPU-Adreno530-arm64-Release-GN_Android_Vulkan",
+		"Test-Android-Clang-NVIDIA_Shield-GPU-TegraX1-arm64-Debug-GN_Android",
+		"Test-Android-Clang-NVIDIA_Shield-GPU-TegraX1-arm64-Debug-GN_Android_Vulkan",
+		"Test-Android-Clang-NVIDIA_Shield-GPU-TegraX1-arm64-Release-GN_Android",
+		"Test-Android-Clang-NVIDIA_Shield-GPU-TegraX1-arm64-Release-GN_Android_Vulkan",
+		"Test-Android-Clang-Nexus10-GPU-MaliT604-arm-Debug-GN_Android",
+		"Test-Android-Clang-Nexus10-GPU-MaliT604-arm-Release-GN_Android",
+		"Test-Android-Clang-Nexus5-GPU-Adreno330-arm-Debug-GN_Android",
+		"Test-Android-Clang-Nexus5-GPU-Adreno330-arm-Release-GN_Android",
+		"Test-Android-Clang-Nexus6p-CPU-Snapdragon810-arm64-Debug-GN_Android",
+		"Test-Android-Clang-Nexus6p-CPU-Snapdragon810-arm64-Release-GN_Android",
+		"Test-Android-Clang-Nexus6p-GPU-Adreno430-arm64-Debug-GN_Android",
+		"Test-Android-Clang-Nexus6p-GPU-Adreno430-arm64-Debug-GN_Android_Vulkan",
+		"Test-Android-Clang-Nexus6p-GPU-Adreno430-arm64-Release-GN_Android",
+		"Test-Android-Clang-Nexus6p-GPU-Adreno430-arm64-Release-GN_Android_Vulkan",
+		"Test-Android-Clang-Nexus7-GPU-Tegra3-arm-Debug-GN_Android",
+		"Test-Android-Clang-Nexus7-GPU-Tegra3-arm-Release-GN_Android",
+		"Test-Android-Clang-Nexus9-GPU-TegraK1-arm64-Debug-GN_Android",
+		"Test-Android-Clang-Nexus9-GPU-TegraK1-arm64-Release-GN_Android",
 		"Test-Ubuntu-GCC-GCE-CPU-AVX2-x86_64-Release-GN",
 		"Test-iOS-Clang-iPadMini4-GPU-GX6450-Arm7-Debug",
 		"Test-iOS-Clang-iPadMini4-GPU-GX6450-Arm7-Release",
@@ -78,6 +126,7 @@ func deriveCompileTaskName(jobName string, parts map[string]string) string {
 	} else if parts["role"] == "Test" || parts["role"] == "Perf" {
 		task_os := parts["os"]
 		ec := parts["extra_config"]
+		ec = strings.TrimSuffix(ec, "_Skpbench")
 		if task_os == "Android" {
 			if ec == "Vulkan" {
 				ec = "Android_Vulkan"
@@ -249,8 +298,9 @@ func compile(b *specs.TasksCfgBuilder, name string, parts map[string]string) str
 // dependency.
 func recreateSKPs(b *specs.TasksCfgBuilder, name string) string {
 	b.MustAddTask(name, &specs.TaskSpec{
-		CipdPackages: []*specs.CipdPackage{},
-		Dimensions:   LINUX_GCE_DIMENSIONS,
+		CipdPackages:     []*specs.CipdPackage{},
+		Dimensions:       LINUX_GCE_DIMENSIONS,
+		ExecutionTimeout: 4 * time.Hour,
 		ExtraArgs: []string{
 			"--workdir", "../../..", "swarm_RecreateSKPs",
 			fmt.Sprintf("repository=%s", specs.PLACEHOLDER_REPO),
@@ -265,8 +315,9 @@ func recreateSKPs(b *specs.TasksCfgBuilder, name string) string {
 			fmt.Sprintf("patch_issue=%s", specs.PLACEHOLDER_ISSUE),
 			fmt.Sprintf("patch_set=%s", specs.PLACEHOLDER_PATCHSET),
 		},
-		Isolate:  "compile_skia.isolate",
-		Priority: 0.8,
+		IoTimeout: 40 * time.Minute,
+		Isolate:   "compile_skia.isolate",
+		Priority:  0.8,
 	})
 	return name
 }
@@ -437,6 +488,12 @@ func test(b *specs.TasksCfgBuilder, name string, parts map[string]string, compil
 // perf generates a Perf task. Returns the name of the last task in the
 // generated chain of tasks, which the Job should add as a dependency.
 func perf(b *specs.TasksCfgBuilder, name string, parts map[string]string, compileTaskName string, pkgs []*specs.CipdPackage) string {
+	recipe := "swarm_perf"
+	isolate := "perf_skia.isolate"
+	if strings.Contains(parts["extra_config"], "Skpbench") {
+		recipe = "swarm_skpbench"
+		isolate = "skpbench_skia.isolate"
+	}
 	s := &specs.TaskSpec{
 		CipdPackages:     pkgs,
 		Dependencies:     []string{compileTaskName},
@@ -444,7 +501,7 @@ func perf(b *specs.TasksCfgBuilder, name string, parts map[string]string, compil
 		ExecutionTimeout: 4 * time.Hour,
 		Expiration:       20 * time.Hour,
 		ExtraArgs: []string{
-			"--workdir", "../../..", "swarm_perf",
+			"--workdir", "../../..", recipe,
 			fmt.Sprintf("repository=%s", specs.PLACEHOLDER_REPO),
 			fmt.Sprintf("buildername=%s", name),
 			"mastername=fake-master",
@@ -458,7 +515,7 @@ func perf(b *specs.TasksCfgBuilder, name string, parts map[string]string, compil
 			fmt.Sprintf("patch_set=%s", specs.PLACEHOLDER_PATCHSET),
 		},
 		IoTimeout: 40 * time.Minute,
-		Isolate:   "perf_skia.isolate",
+		Isolate:   isolate,
 		Priority:  0.8,
 	}
 	if strings.Contains(parts["extra_config"], "Valgrind") {
@@ -527,19 +584,21 @@ func process(b *specs.TasksCfgBuilder, name string) {
 		deps = append(deps, compile(b, name, parts))
 	}
 
-	// Any remaining bots need a compile task.
+	// Most remaining bots need a compile task.
 	compileTaskName := deriveCompileTaskName(name, parts)
 	compileTaskParts, err := jobNameSchema.ParseJobName(compileTaskName)
 	if err != nil {
 		glog.Fatal(err)
 	}
-	// The InfraTests bot doesn't need a compile task.
-	if parts["role"] != "Build" && name != "Housekeeper-PerCommit-InfraTests" {
+	// These bots don't need a compile task.
+	if parts["role"] != "Build" &&
+		name != "Housekeeper-PerCommit-InfraTests" &&
+		!strings.Contains(name, "RecreateSKPs") {
 		compile(b, compileTaskName, compileTaskParts)
 	}
 
 	// Housekeeper.
-	if parts["role"] == "Housekeeper" && name != "Housekeeper-PerCommit-InfraTests" {
+	if parts["role"] == "Housekeeper-PerCommit" {
 		deps = append(deps, housekeeper(b, name, compileTaskName))
 	}
 
@@ -551,6 +610,12 @@ func process(b *specs.TasksCfgBuilder, name string) {
 	}
 	if strings.Contains(name, "Ubuntu") && strings.Contains(name, "SAN") {
 		pkgs = append(pkgs, b.MustGetCipdPackageFromAsset("clang_linux"))
+	}
+	// Skpbench only needs skps
+	if strings.Contains(name, "Skpbench") {
+		pkgs = []*specs.CipdPackage{
+			b.MustGetCipdPackageFromAsset("skp"),
+		}
 	}
 
 	// Test bots.
@@ -564,10 +629,17 @@ func process(b *specs.TasksCfgBuilder, name string) {
 	}
 
 	// Add the Job spec.
-	b.AddJob(name, &specs.JobSpec{
+	j := &specs.JobSpec{
 		Priority:  0.8,
 		TaskSpecs: deps,
-	})
+	}
+	if name == "Housekeeper-Nightly-RecreateSKPs_Canary" {
+		j.Trigger = "nightly"
+	}
+	if name == "Housekeeper-Weekly-RecreateSKPs" {
+		j.Trigger = "weekly"
+	}
+	b.AddJob(name, j)
 }
 
 // Regenerate the tasks.json file.

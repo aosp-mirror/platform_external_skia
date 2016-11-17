@@ -13,7 +13,7 @@
 #include "SkTemplates.h"
 
 class GrContext;
-class GrTextureParams;
+class GrSamplerParams;
 class GrUniqueKey;
 class SkBitmap;
 class SkImage;
@@ -50,7 +50,7 @@ public:
      *
      *  The caller is responsible for calling texture->unref() when they are done.
      */
-    GrTexture* lockAsTexture(GrContext*, const GrTextureParams&,
+    GrTexture* lockAsTexture(GrContext*, const GrSamplerParams&,
                              SkDestinationSurfaceColorMode colorMode, const SkImage* client,
                              SkImage::CachingHint = SkImage::kAllow_CachingHint);
 
@@ -68,6 +68,9 @@ public:
     // Call the underlying generator directly
     bool directGeneratePixels(const SkImageInfo& dstInfo, void* dstPixels, size_t dstRB,
                               int srcX, int srcY);
+
+    bool directAccessScaledImage(const SkRect& srcRect, const SkMatrix& totalMatrix,
+                                 SkFilterQuality, SkImageGenerator::ScaledImageRec*);
 
 private:
     // Ref-counted tuple(SkImageGenerator, SkMutex) which allows sharing of one generator

@@ -949,7 +949,8 @@ template <Sk4f (blend)(const Sk4f&, const Sk4f&)> SkPM4f proc_4f(const SkPM4f& s
     assert_unit(s);
     assert_unit(d);
     SkPM4f r = as_pm4f(blend(as_4f(s), as_4f(d)));
-    assert_unit(r);
+    // Turn this assert off for now because srgb conversions may end up in rgb > a
+    // assert_unit(r);
     return r;
 }
 
@@ -1277,6 +1278,10 @@ const char* SkXfermode::ModeName(Mode mode) {
     };
     return gModeStrings[mode];
     static_assert(SK_ARRAY_COUNT(gModeStrings) == kLastMode + 1, "mode_count");
+}
+
+const char* SkBlendMode_Name(SkBlendMode mode) {
+    return SkXfermode::ModeName((SkXfermode::Mode)mode);
 }
 
 #ifndef SK_IGNORE_TO_STRING

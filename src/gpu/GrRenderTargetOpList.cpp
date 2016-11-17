@@ -178,6 +178,9 @@ void GrRenderTargetOpList::prepareBatches(GrBatchFlushState* flushState) {
     }
 }
 
+// TODO: this is where GrBatch::renderTarget is used (which is fine since it
+// is at flush time). However, we need to store the RenderTargetProxy in the
+// Batches and instantiate them here.
 bool GrRenderTargetOpList::drawBatches(GrBatchFlushState* flushState) {
     if (0 == fRecordedBatches.count()) {
         return false;
@@ -298,6 +301,10 @@ void GrRenderTargetOpList::drawBatch(const GrPipelineBuilder& pipelineBuilder,
     }
 
     if (pipelineBuilder.hasUserStencilSettings() || appliedClip.hasStencilClip()) {
+        if (!renderTargetContext->accessRenderTarget()) {
+            return;
+        }
+
         if (!fResourceProvider->attachStencilAttachment(
                 renderTargetContext->accessRenderTarget())) {
             SkDebugf("ERROR creating stencil attachment. Draw skipped.\n");
@@ -338,6 +345,10 @@ void GrRenderTargetOpList::drawBatch(const GrPipelineBuilder& pipelineBuilder,
     args.fScissor = &appliedClip.scissorState();
     args.fWindowRectsState = &appliedClip.windowRectsState();
     args.fHasStencilClip = appliedClip.hasStencilClip();
+    if (!renderTargetContext->accessRenderTarget()) {
+        return;
+    }
+
     if (!this->setupDstReadIfNecessary(pipelineBuilder, renderTargetContext->accessRenderTarget(),
                                        clip, args.fOpts,
                                        &args.fDstTexture, batch->bounds())) {
@@ -379,6 +390,9 @@ void GrRenderTargetOpList::stencilPath(GrRenderTargetContext* renderTargetContex
     // attempt this in a situation that would require coverage AA.
     SkASSERT(!appliedClip.clipCoverageFragmentProcessor());
 
+    if (!renderTargetContext->accessRenderTarget()) {
+        return;
+    }
     GrStencilAttachment* stencilAttachment = fResourceProvider->attachStencilAttachment(
                                                 renderTargetContext->accessRenderTarget());
     if (!stencilAttachment) {
@@ -406,6 +420,7 @@ void GrRenderTargetOpList::fullClear(GrRenderTarget* renderTarget, GrColor color
     // Currently this just inserts or updates the last clear batch. However, once in MDB this can
     // remove all the previously recorded batches and change the load op to clear with supplied
     // color.
+    // TODO: this needs to be updated to use GrSurfaceProxy::UniqueID
     if (fLastFullClearBatch &&
         fLastFullClearBatch->renderTargetUniqueID() == renderTarget->uniqueID()) {
         // As currently implemented, fLastFullClearBatch should be the last batch because we would

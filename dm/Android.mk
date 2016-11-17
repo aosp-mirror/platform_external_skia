@@ -139,6 +139,7 @@ LOCAL_SRC_FILES := \
 	../tests/ExifTest.cpp \
 	../tests/FillPathTest.cpp \
 	../tests/FitsInTest.cpp \
+	../tests/FixedAllocTest.cpp \
 	../tests/FlattenDrawableTest.cpp \
 	../tests/FlattenableCustomFactory.cpp \
 	../tests/FlattenableFactoryToName.cpp \
@@ -184,6 +185,7 @@ LOCAL_SRC_FILES := \
 	../tests/ImageTest.cpp \
 	../tests/IndexedPngOverflowTest.cpp \
 	../tests/InfRectTest.cpp \
+	../tests/IntTextureTest.cpp \
 	../tests/InterpolatorTest.cpp \
 	../tests/InvalidIndexedPngTest.cpp \
 	../tests/IsClosedSingleContourTest.cpp \
@@ -232,6 +234,7 @@ LOCAL_SRC_FILES := \
 	../tests/PremulAlphaRoundTripTest.cpp \
 	../tests/PrimitiveProcessorTest.cpp \
 	../tests/ProxyConversionTest.cpp \
+	../tests/ProxyRefTest.cpp \
 	../tests/ProxyTest.cpp \
 	../tests/QuickRejectTest.cpp \
 	../tests/RRectInPathTest.cpp \
@@ -316,7 +319,6 @@ LOCAL_SRC_FILES := \
 	../tests/WindowRectanglesTest.cpp \
 	../tests/WritePixelsTest.cpp \
 	../tests/Writer32Test.cpp \
-	../tests/XfermodeTest.cpp \
 	../tests/YUVCacheTest.cpp \
 	../tests/YUVTest.cpp \
 	../tests/image-bitmap.cpp \
@@ -370,6 +372,7 @@ LOCAL_SRC_FILES := \
 	../gm/circles.cpp \
 	../gm/circulararcs.cpp \
 	../gm/circularclips.cpp \
+	../gm/clip_error.cpp \
 	../gm/clip_strokerect.cpp \
 	../gm/clipdrawdraw.cpp \
 	../gm/clippedbitmapshaders.cpp \
@@ -475,6 +478,7 @@ LOCAL_SRC_FILES := \
 	../gm/imagefiltersstroked.cpp \
 	../gm/imagefilterstransformed.cpp \
 	../gm/imagefromyuvtextures.cpp \
+	../gm/imagegeneratorexternal.cpp \
 	../gm/imagemagnifier.cpp \
 	../gm/imagemakewithfilter.cpp \
 	../gm/imagemasksubset.cpp \

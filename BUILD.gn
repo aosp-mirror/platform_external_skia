@@ -20,6 +20,7 @@ declare_args() {
   skia_use_libjpeg_turbo = true
   skia_use_libpng = true
   skia_use_libwebp = !is_fuchsia
+  skia_use_lua = false
   skia_use_mesa = false
   skia_use_piex = !is_win
   skia_use_zlib = true
@@ -31,7 +32,8 @@ declare_args() {
   skia_vulkan_sdk = getenv("VULKAN_SDK")
 }
 declare_args() {
-  skia_use_dng_sdk = !is_win && skia_use_libjpeg_turbo && skia_use_zlib
+  skia_use_dng_sdk =
+      !is_fuchsia && !is_win && skia_use_libjpeg_turbo && skia_use_zlib
   skia_use_sfntly = skia_use_icu
 
   if (is_android) {
@@ -543,6 +545,11 @@ component("skia") {
     ":xml",
   ]
 
+  # This file (and all GN files in Skia) are designed to work with an
+  # empty sources assignment filter; we handle all that explicitly.
+  # We clear the filter here for clients who may have set up a global filter.
+  set_sources_assignment_filter([])
+
   sources = []
   sources += skia_core_sources
   sources += skia_effects_sources
@@ -684,7 +691,11 @@ component("skia") {
   }
 }
 
+config("skia.h_config") {
+  include_dirs = [ "$target_gen_dir" ]
+}
 action("skia.h") {
+  public_configs = [ ":skia.h_config" ]
   skia_h = "$target_gen_dir/skia.h"
   script = "gn/find_headers.py"
   args = [ rebase_path(skia_h, root_build_dir) ] +
@@ -699,7 +710,6 @@ if (skia_enable_gpu && target_cpu == "x64") {
   # Our bots only have 64-bit libOSMesa installed.
   # TODO: worth fixing?
   executable("fiddle") {
-    include_dirs = [ "$target_gen_dir" ]
     libs = []
     if (is_linux) {
       libs += [ "OSMesa" ]
@@ -710,6 +720,19 @@ if (skia_enable_gpu && target_cpu == "x64") {
       "tools/fiddle/draw.cpp",
       "tools/fiddle/fiddle_main.cpp",
     ]
+    deps = [
+      ":skia",
+      ":skia.h",
+    ]
+  }
+}
+
+if (is_skia_standalone && skia_enable_gpu) {
+  source_set("public_headers_warnings_check") {
+    sources = [
+      "tools/public_headers_warnings_check.cpp",
+    ]
+    configs -= [ "//gn:warnings_except_public_headers" ]
     deps = [
       ":skia",
       ":skia.h",
@@ -960,6 +983,45 @@ if (skia_enable_tools) {
     }
   }
 
+  if (skia_use_lua) {
+    test_lib("lua") {
+      public_include_dirs = []
+      sources = [
+        "src/utils/SkLua.cpp",
+        "src/utils/SkLuaCanvas.cpp",
+      ]
+      deps = [
+        "//third_party/lua",
+      ]
+    }
+
+    executable("lua_app") {
+      sources = [
+        "tools/lua/lua_app.cpp",
+      ]
+      deps = [
+        ":lua",
+        ":skia",
+        "//third_party/lua",
+      ]
+      testonly = true
+    }
+
+    executable("lua_pictures") {
+      sources = [
+        "tools/lua/lua_pictures.cpp",
+      ]
+      deps = [
+        ":flags",
+        ":lua",
+        ":skia",
+        ":tool_utils",
+        "//third_party/lua",
+      ]
+      testonly = true
+    }
+  }
+
   import("gn/samples.gni")
   test_lib("samples") {
     public_include_dirs = [ "samplecode" ]
@@ -977,6 +1039,14 @@ if (skia_enable_tools) {
       ":views",
       ":xml",
     ]
+
+    if (skia_use_lua) {
+      sources += [ "samplecode/SampleLua.cpp" ]
+      deps += [
+        ":lua",
+        "//third_party/lua",
+      ]
+    }
   }
 
   executable("dm") {
@@ -1109,6 +1179,18 @@ if (skia_enable_tools) {
       ":flags",
       ":skia",
       "//third_party/jsoncpp",
+    ]
+    testonly = true
+  }
+
+  executable("colorspaceinfo") {
+    sources = [
+      "tools/colorspaceinfo.cpp",
+    ]
+    deps = [
+      ":flags",
+      ":skia",
+      ":tool_utils",
     ]
     testonly = true
   }
@@ -1292,6 +1374,19 @@ if (skia_enable_tools) {
       } else if (is_mac) {
         deps += [ "//third_party/libsdl" ]
       }
+      testonly = true
+    }
+  }
+
+  if (skia_enable_gpu) {
+    executable("skslc") {
+      sources = [
+        "src/sksl/SkSLMain.cpp",
+      ]
+      deps = [
+        ":flags",
+        ":skia",
+      ]
       testonly = true
     }
   }

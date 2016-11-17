@@ -15,9 +15,11 @@
 #include "SkColorPriv.h"
 #if SK_SUPPORT_GPU
 #include "GrContext.h"
-#include "GrRenderTargetContext.h"
 #include "GrCoordTransform.h"
 #include "GrInvariantOutput.h"
+#include "GrRenderTargetContext.h"
+#include "GrTextureProxy.h"
+
 #include "SkGr.h"
 #include "SkGrPriv.h"
 #include "effects/GrTextureDomain.h"
@@ -257,10 +259,10 @@ private:
     GR_DECLARE_FRAGMENT_PROCESSOR_TEST;
 
     GrCoordTransform            fDisplacementTransform;
-    GrTextureAccess             fDisplacementAccess;
+    TextureSampler              fDisplacementSampler;
     GrCoordTransform            fColorTransform;
     GrTextureDomain             fDomain;
-    GrTextureAccess             fColorAccess;
+    TextureSampler              fColorSampler;
     SkDisplacementMapEffect::ChannelSelectorType fXChannelSelector;
     SkDisplacementMapEffect::ChannelSelectorType fYChannelSelector;
     SkVector fScale;
@@ -349,9 +351,10 @@ sk_sp<SkSpecialImage> SkDisplacementMapEffect::onFilterImage(SkSpecialImage* sou
 
         SkColorSpace* colorSpace = ctx.outputProperties().colorSpace();
         sk_sp<GrRenderTargetContext> renderTargetContext(
-            context->makeRenderTargetContext(SkBackingFit::kApprox, bounds.width(), bounds.height(),
-                                             GrRenderableConfigForColorSpace(colorSpace),
-                                             sk_ref_sp(colorSpace)));
+            context->makeDeferredRenderTargetContext(SkBackingFit::kApprox,
+                                                     bounds.width(), bounds.height(),
+                                                     GrRenderableConfigForColorSpace(colorSpace),
+                                                     sk_ref_sp(colorSpace)));
         if (!renderTargetContext) {
             return nullptr;
         }
@@ -361,10 +364,12 @@ sk_sp<SkSpecialImage> SkDisplacementMapEffect::onFilterImage(SkSpecialImage* sou
 
         offset->fX = bounds.left();
         offset->fY = bounds.top();
-        return SkSpecialImage::MakeFromGpu(SkIRect::MakeWH(bounds.width(), bounds.height()),
-                                           kNeedNewImageUniqueID_SpecialImage,
-                                           renderTargetContext->asTexture(),
-                                           sk_ref_sp(renderTargetContext->getColorSpace()));
+        return SkSpecialImage::MakeDeferredFromGpu(
+                                            context,
+                                            SkIRect::MakeWH(bounds.width(), bounds.height()),
+                                            kNeedNewImageUniqueID_SpecialImage,
+                                            sk_ref_sp(renderTargetContext->asDeferredTexture()),
+                                            sk_ref_sp(renderTargetContext->getColorSpace()));
     }
 #endif
 
@@ -480,20 +485,20 @@ GrDisplacementMapEffect::GrDisplacementMapEffect(
                              const SkMatrix& offsetMatrix,
                              GrTexture* color,
                              const SkISize& colorDimensions)
-    : fDisplacementTransform(offsetMatrix, displacement, GrTextureParams::kNone_FilterMode)
-    , fDisplacementAccess(displacement)
-    , fColorTransform(color, GrTextureParams::kNone_FilterMode)
+    : fDisplacementTransform(offsetMatrix, displacement, GrSamplerParams::kNone_FilterMode)
+    , fDisplacementSampler(displacement)
+    , fColorTransform(color, GrSamplerParams::kNone_FilterMode)
     , fDomain(GrTextureDomain::MakeTexelDomain(color, SkIRect::MakeSize(colorDimensions)),
               GrTextureDomain::kDecal_Mode)
-    , fColorAccess(color)
+    , fColorSampler(color)
     , fXChannelSelector(xChannelSelector)
     , fYChannelSelector(yChannelSelector)
     , fScale(scale) {
     this->initClassID<GrDisplacementMapEffect>();
     this->addCoordTransform(&fDisplacementTransform);
-    this->addTextureAccess(&fDisplacementAccess);
+    this->addTextureSampler(&fDisplacementSampler);
     this->addCoordTransform(&fColorTransform);
-    this->addTextureAccess(&fColorAccess);
+    this->addTextureSampler(&fColorSampler);
 }
 
 GrDisplacementMapEffect::~GrDisplacementMapEffect() {
@@ -620,7 +625,7 @@ void GrGLDisplacementMapEffect::emitCode(EmitArgs& args) {
 void GrGLDisplacementMapEffect::onSetData(const GrGLSLProgramDataManager& pdman,
                                           const GrProcessor& proc) {
     const GrDisplacementMapEffect& displacementMap = proc.cast<GrDisplacementMapEffect>();
-    GrTexture* colorTex = displacementMap.texture(1);
+    GrTexture* colorTex = displacementMap.textureSampler(1).texture();
     SkScalar scaleX = displacementMap.scale().fX / colorTex->width();
     SkScalar scaleY = displacementMap.scale().fY / colorTex->height();
     pdman.set2f(fScaleUni, SkScalarToFloat(scaleX),

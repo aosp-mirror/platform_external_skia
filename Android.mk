@@ -130,6 +130,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkColor.cpp \
 	src/core/SkColorFilter.cpp \
 	src/core/SkColorFilterShader.cpp \
+	src/core/SkColorLookUpTable.cpp \
 	src/core/SkColorMatrixFilterRowMajor255.cpp \
 	src/core/SkColorShader.cpp \
 	src/core/SkColorSpace.cpp \
@@ -137,6 +138,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkColorSpace_XYZ.cpp \
 	src/core/SkColorSpace_ICC.cpp \
 	src/core/SkColorSpaceXform.cpp \
+	src/core/SkColorSpaceXform_A2B.cpp \
 	src/core/SkColorTable.cpp \
 	src/core/SkComposeShader.cpp \
 	src/core/SkConfig8888.cpp \
@@ -162,6 +164,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkAnalyticEdge.cpp \
 	src/core/SkEdge.cpp \
 	src/core/SkFilterProc.cpp \
+	src/core/SkFixedAlloc.cpp \
 	src/core/SkFlattenable.cpp \
 	src/core/SkFlattenableSerialization.cpp \
 	src/core/SkFont.cpp \
@@ -466,7 +469,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrTextureProxy.cpp \
 	src/gpu/GrTextureRenderTargetProxy.cpp \
 	src/gpu/GrTextureToYUVPlanes.cpp \
-	src/gpu/GrTextureAccess.cpp \
 	src/gpu/GrXferProcessor.cpp \
 	src/gpu/GrYUVProvider.cpp \
 	src/gpu/batches/GrAAHairLinePathRenderer.cpp \
@@ -684,7 +686,6 @@ LOCAL_SRC_FILES := \
 	src/utils/SkMultiPictureDocument.cpp \
 	src/utils/SkNWayCanvas.cpp \
 	src/utils/SkNullCanvas.cpp \
-	src/utils/SkOSFile.cpp \
 	src/utils/SkOSPath.cpp \
 	src/utils/SkPaintFilterCanvas.cpp \
 	src/utils/SkParse.cpp \

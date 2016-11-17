@@ -7,6 +7,9 @@
 
 #include "SkColorShader.h"
 #include "SkColorSpace.h"
+#include "SkFixedAlloc.h"
+#include "SkPM4fPriv.h"
+#include "SkRasterPipeline.h"
 #include "SkReadBuffer.h"
 #include "SkUtils.h"
 
@@ -304,4 +307,25 @@ bool SkColorShader::ColorShaderContext::onChooseBlitProcs(const SkImageInfo& inf
 
 bool SkColor4Shader::Color4Context::onChooseBlitProcs(const SkImageInfo& info, BlitState* state) {
     return choose_blitprocs(&fPM4f, info, state);
+}
+
+bool SkColorShader::onAppendStages(SkRasterPipeline* p,
+                                   SkColorSpace* dst,
+                                   SkFallbackAlloc* scratch,
+                                   const SkMatrix& ctm,
+                                   SkFilterQuality) const {
+    auto color = scratch->make<SkPM4f>(SkPM4f_from_SkColor(fColor, dst));
+    p->append(SkRasterPipeline::constant_color, color);
+    return append_gamut_transform(p, scratch,
+                                  SkColorSpace::MakeNamed(SkColorSpace::kSRGB_Named).get(), dst);
+}
+
+bool SkColor4Shader::onAppendStages(SkRasterPipeline* p,
+                                    SkColorSpace* dst,
+                                    SkFallbackAlloc* scratch,
+                                    const SkMatrix& ctm,
+                                    SkFilterQuality) const {
+    auto color = scratch->make<SkPM4f>(fColor4.premul());
+    p->append(SkRasterPipeline::constant_color, color);
+    return append_gamut_transform(p, scratch, fColorSpace.get(), dst);
 }

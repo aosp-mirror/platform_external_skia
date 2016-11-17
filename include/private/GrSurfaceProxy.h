@@ -50,13 +50,29 @@ public:
 
     void validate() const {
 #ifdef SK_DEBUG    
-        SkASSERT(fRefCnt >= 0);
+        SkASSERT(fRefCnt >= 1);
+        SkASSERT(fPendingReads >= 0);
+        SkASSERT(fPendingWrites >= 0);
+        SkASSERT(fRefCnt + fPendingReads + fPendingWrites >= 1);
+
+        if (fTarget) {
+            SkASSERT(!fPendingReads && !fPendingWrites);
+            // The backing GrSurface can have more refs than the proxy if the proxy
+            // started off wrapping an external resource (that came in with refs).
+            // The GrSurface should never have fewer refs than the proxy however.
+            SkASSERT(fTarget->fRefCnt >= fRefCnt);
+        }
 #endif
     }
 
+    int32_t getProxyRefCnt_TestOnly() const;
+    int32_t getBackingRefCnt_TestOnly() const;
+    int32_t getPendingReadCnt_TestOnly() const;
+    int32_t getPendingWriteCnt_TestOnly() const;
+
 protected:
-    GrIORefProxy() : fRefCnt(1), fTarget(nullptr) {}
-    GrIORefProxy(sk_sp<GrSurface> surface) : fRefCnt(1) {
+    GrIORefProxy() : fTarget(nullptr), fRefCnt(1), fPendingReads(0), fPendingWrites(0) {}
+    GrIORefProxy(sk_sp<GrSurface> surface) : fRefCnt(1), fPendingReads(0), fPendingWrites(0) {
         // Since we're manually forwarding on refs & unrefs we don't want sk_sp doing
         // anything extra.
         fTarget = surface.release();
@@ -66,13 +82,76 @@ protected:
         // have forwarded on the unref call that got use here.
     }
 
-    // TODO: add the IO ref counts. Although if we can delay shader creation to flush time
-    // we may not even need to do that.
-    mutable int32_t fRefCnt;
+    // This GrIORefProxy was deferred before but has just been instantiated. To
+    // make all the reffing & unreffing work out we now need to transfer any deferred
+    // refs & unrefs to the new GrSurface
+    void transferRefs() {
+        SkASSERT(fTarget);
+
+        fTarget->fRefCnt += (fRefCnt-1); // don't xfer the proxy's creation ref
+        fTarget->fPendingReads += fPendingReads;
+        fTarget->fPendingWrites += fPendingWrites;
+
+        fPendingReads = 0;
+        fPendingWrites = 0;
+    }
 
     // For deferred proxies this will be null. For wrapped proxies it will point to the
     // wrapped resource.
     GrSurface* fTarget;
+
+private:
+    // This class is used to manage conversion of refs to pending reads/writes.
+    friend class GrGpuResourceRef;
+    template <typename, GrIOType> friend class GrPendingIOResource;
+
+    void addPendingRead() const {
+        this->validate();
+
+        if (fTarget) {
+            fTarget->addPendingRead();
+            return;
+        }
+
+        ++fPendingReads;
+    }
+
+    void completedRead() const {
+        this->validate();
+
+        if (fTarget) {
+            fTarget->completedRead();
+            return;
+        }
+    
+        SkFAIL("How was the read completed if the Proxy hasn't been instantiated?");
+    }
+
+    void addPendingWrite() const {
+        this->validate();
+
+        if (fTarget) {
+            fTarget->addPendingWrite();
+            return;
+        }
+
+        ++fPendingWrites;
+    }
+
+    void completedWrite() const {
+        this->validate();
+
+        if (fTarget) {
+            fTarget->completedWrite();
+            return;
+        }
+    
+        SkFAIL("How was the write completed if the Proxy hasn't been instantiated?");
+    }
+
+    mutable int32_t fRefCnt;
+    mutable int32_t fPendingReads;
+    mutable int32_t fPendingWrites;
 };
 
 class GrSurfaceProxy : public GrIORefProxy {
@@ -99,7 +178,44 @@ public:
     int height() const { return fDesc.fHeight; }
     GrPixelConfig config() const { return fDesc.fConfig; }
 
-    uint32_t uniqueID() const { return fUniqueID; }
+    class UniqueID {
+    public:
+        // wrapped
+        explicit UniqueID(const GrGpuResource::UniqueID& id) : fID(id.asUInt()) { }
+        // deferred
+        UniqueID() : fID(GrGpuResource::CreateUniqueID()) { }
+
+        uint32_t asUInt() const { return fID; }
+
+        bool operator==(const UniqueID& other) const {
+            return fID == other.fID;
+        }
+        bool operator!=(const UniqueID& other) const {
+            return !(*this == other);
+        }
+
+        bool isInvalid() const { return SK_InvalidUniqueID == fID; }
+
+    private:
+        const uint32_t fID;
+    };
+
+    /*
+     * The contract for the uniqueID is:
+     *   for wrapped resources:
+     *      the uniqueID will match that of the wrapped resource
+     *
+     *   for deferred resources:
+     *      the uniqueID will be different from the real resource, when it is allocated
+     *      the proxy's uniqueID will not change across the instantiate call
+     *
+     *    the uniqueIDs of the proxies and the resources draw from the same pool
+     *
+     * What this boils down to is that the uniqueID of a proxy can be used to consistently
+     * track/identify a proxy but should never be used to distinguish between
+     * resources and proxies - beware!
+     */
+    UniqueID uniqueID() const { return fUniqueID; }
 
     GrSurface* instantiate(GrTextureProvider* texProvider);
 
@@ -151,9 +267,9 @@ protected:
         : fDesc(desc)
         , fFit(fit)
         , fBudgeted(budgeted)
-        , fUniqueID(GrGpuResource::CreateUniqueID())
         , fGpuMemorySize(kInvalidGpuMemorySize)
         , fLastOpList(nullptr) {
+        // Note: this ctor pulls a new uniqueID from the same pool at the GrGpuResources
     }
 
     // Wrapped version
@@ -162,10 +278,10 @@ protected:
     virtual ~GrSurfaceProxy();
 
     // For wrapped resources, 'fDesc' will always be filled in from the wrapped resource.
-    const GrSurfaceDesc fDesc;
-    const SkBackingFit  fFit;      // always exact for wrapped resources
-    const SkBudgeted    fBudgeted; // set from the backing resource for wrapped resources
-    const uint32_t      fUniqueID; // set from the backing resource for wrapped resources
+    const GrSurfaceDesc  fDesc;
+    const SkBackingFit   fFit;      // always exact for wrapped resources
+    const SkBudgeted     fBudgeted; // set from the backing resource for wrapped resources
+    const UniqueID       fUniqueID; // set from the backing resource for wrapped resources
 
     static const size_t kInvalidGpuMemorySize = ~static_cast<size_t>(0);
     SkDEBUGCODE(size_t getRawGpuMemorySize_debugOnly() const { return fGpuMemorySize; })

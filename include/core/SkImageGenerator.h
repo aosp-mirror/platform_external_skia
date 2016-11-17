@@ -16,9 +16,10 @@
 class GrContext;
 class GrContextThreadSafeProxy;
 class GrTexture;
-class GrTextureParams;
+class GrSamplerParams;
 class SkBitmap;
 class SkData;
+class SkImage;
 class SkImageGenerator;
 class SkMatrix;
 class SkPaint;
@@ -145,13 +146,6 @@ public:
      *  - it has no intrinsic context, and will use the caller's
      *  - its internal context is the same
      *  - it can somehow convert its texture into one that is valid for the provided context.
-     *
-     *  Regarding the GrTextureParams parameter:
-     *
-     *  If the context (the provided one or the generator's intrinsic one) determines that to
-     *  support the specified usage, it must return a different sized texture it may,
-     *  so the caller must inspect the texture's width/height and compare them to the generator's
-     *  getInfo() width/height. For readback usage use GrTextureParams::ClampNoFilter()
      */
     GrTexture* generateTexture(GrContext*, const SkIRect* subset = nullptr);
 
@@ -197,6 +191,40 @@ public:
                                                         scaledPixels.height()),
                                           SkIPoint::Make(0, 0), scaledPixels);
     }
+
+    /**
+     *  External generator API: provides efficient access to externally-managed image data.
+     *
+     *  Skia calls accessScaledPixels() during rasterization, to gain temporary access to
+     *  the external pixel data, packaged as a raster SkImage.
+     *
+     *  @param srcRect     the source rect in use for the current draw
+     *  @param totalMatrix full matrix in effect (mapping srcRect -> device space)
+     *  @param quality     the SkFilterQuality requested for rasterization.
+     *  @param rec         out param, expected to be set when the call succeeds:
+     *
+     *                       - fImage wraps the external pixel data
+     *                       - fSrcRect is an adjusted srcRect
+     *                       - fQuality is the adjusted filter quality
+     *
+     *  @return            true on success, false otherwise (error or if this API is not supported;
+     *                     in this case Skia will fall back to its internal scaling and caching
+     *                     heuristics)
+     *
+     *  Implementors can return pixmaps with a different size than requested, by adjusting the
+     *  src rect.  The contract is that Skia will observe the adjusted src rect, and will map it
+     *  to the same dest as the original draw (the impl doesn't get to control the destination).
+     *
+     */
+
+    struct ScaledImageRec {
+        sk_sp<SkImage>  fImage;
+        SkRect          fSrcRect;
+        SkFilterQuality fQuality;
+    };
+
+    bool accessScaledImage(const SkRect& srcRect, const SkMatrix& totalMatrix,
+                           SkFilterQuality quality, ScaledImageRec* rec);
 
     /**
      *  If the default image decoder system can interpret the specified (encoded) data, then
@@ -260,6 +288,11 @@ protected:
         return false;
     }
     virtual bool onGenerateScaledPixels(const SkISize&, const SkIPoint&, const SkPixmap&) {
+        return false;
+    }
+
+    virtual bool onAccessScaledImage(const SkRect&, const SkMatrix&, SkFilterQuality,
+                                     ScaledImageRec*) {
         return false;
     }
 

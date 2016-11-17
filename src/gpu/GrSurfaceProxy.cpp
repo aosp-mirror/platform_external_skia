@@ -17,7 +17,7 @@ GrSurfaceProxy::GrSurfaceProxy(sk_sp<GrSurface> surface, SkBackingFit fit)
     , fDesc(fTarget->desc())
     , fFit(fit)
     , fBudgeted(fTarget->resourcePriv().isBudgeted())
-    , fUniqueID(fTarget->uniqueID())
+    , fUniqueID(fTarget->uniqueID()) // Note: converting from unique resource ID to a proxy ID!
     , fGpuMemorySize(kInvalidGpuMemorySize)
     , fLastOpList(nullptr) {
 }
@@ -42,6 +42,8 @@ GrSurface* GrSurfaceProxy::instantiate(GrTextureProvider* texProvider) {
     if (!fTarget) {
         return nullptr;
     }
+
+    this->INHERITED::transferRefs();
 
 #ifdef SK_DEBUG
     if (kInvalidGpuMemorySize != this->getRawGpuMemorySize_debugOnly()) {

@@ -194,6 +194,7 @@ LOCAL_SRC_FILES := \
 	../gm/circles.cpp \
 	../gm/circulararcs.cpp \
 	../gm/circularclips.cpp \
+	../gm/clip_error.cpp \
 	../gm/clip_strokerect.cpp \
 	../gm/clipdrawdraw.cpp \
 	../gm/clippedbitmapshaders.cpp \
@@ -299,6 +300,7 @@ LOCAL_SRC_FILES := \
 	../gm/imagefiltersstroked.cpp \
 	../gm/imagefilterstransformed.cpp \
 	../gm/imagefromyuvtextures.cpp \
+	../gm/imagegeneratorexternal.cpp \
 	../gm/imagemagnifier.cpp \
 	../gm/imagemakewithfilter.cpp \
 	../gm/imagemasksubset.cpp \
