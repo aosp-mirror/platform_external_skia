@@ -807,7 +807,7 @@ LOCAL_MODULE := \
 	libskia_static
 
 LOCAL_SRC_FILES_arm += \
-	src/opts/SkBitmapProcState_opts_arm.cpp \
+	src/opts/SkBitmapProcState_opts_none.cpp \
 	src/opts/SkBlitMask_opts_arm.cpp \
 	src/opts/SkBlitRow_opts_arm.cpp
 
@@ -831,7 +831,6 @@ LOCAL_CFLAGS_x86 += \
 	-mfpmath=sse
 
 LOCAL_SRC_FILES_x86 += \
-	src/opts/SkBitmapFilter_opts_SSE2.cpp \
 	src/opts/SkBitmapProcState_opts_SSE2.cpp \
 	src/opts/SkBlitRow_opts_SSE2.cpp \
 	src/opts/opts_check_x86.cpp \
@@ -846,7 +845,6 @@ LOCAL_CFLAGS_x86 += \
 	-DqDNGBigEndian=0
 
 LOCAL_SRC_FILES_x86_64 += \
-	src/opts/SkBitmapFilter_opts_SSE2.cpp \
 	src/opts/SkBitmapProcState_opts_SSE2.cpp \
 	src/opts/SkBlitRow_opts_SSE2.cpp \
 	src/opts/opts_check_x86.cpp \
@@ -901,7 +899,7 @@ LOCAL_SRC_FILES_mips64 += \
 LOCAL_SRC_FILES_arm64 += \
 	src/opts/SkBitmapProcState_arm_neon.cpp \
 	src/opts/SkBitmapProcState_matrixProcs_neon.cpp \
-	src/opts/SkBitmapProcState_opts_arm.cpp \
+	src/opts/SkBitmapProcState_opts_none.cpp \
 	src/opts/SkBlitMask_opts_arm.cpp \
 	src/opts/SkBlitMask_opts_arm_neon.cpp \
 	src/opts/SkBlitRow_opts_arm.cpp \
