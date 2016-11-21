@@ -459,6 +459,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrTextureOpList.cpp \
 	src/gpu/GrTraceMarker.cpp \
 	src/gpu/GrTestUtils.cpp \
+	src/gpu/GrShaderVar.cpp \
 	src/gpu/GrSWMaskHelper.cpp \
 	src/gpu/GrSoftwarePathRenderer.cpp \
 	src/gpu/GrSurface.cpp \
