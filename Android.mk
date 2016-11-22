@@ -213,6 +213,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkNormalFlatSource.cpp \
 	src/core/SkNormalSource.cpp \
 	src/core/SkOpts.cpp \
+	src/core/SkOverdrawCanvas.cpp \
 	src/core/SkPaint.cpp \
 	src/core/SkPaintPriv.cpp \
 	src/core/SkPath.cpp \
