@@ -378,6 +378,7 @@ LOCAL_SRC_FILES := \
 	src/effects/SkMergeImageFilter.cpp \
 	src/effects/SkMorphologyImageFilter.cpp \
 	src/effects/SkOffsetImageFilter.cpp \
+	src/effects/SkOverdrawColorFilter.cpp \
 	src/effects/SkPackBits.cpp \
 	src/effects/SkPaintFlagsDrawFilter.cpp \
 	src/effects/SkPaintImageFilter.cpp \
