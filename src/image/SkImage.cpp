@@ -65,8 +65,11 @@ bool SkImage::scalePixels(const SkPixmap& dst, SkFilterQuality quality, CachingH
     // Idea: If/when SkImageGenerator supports a native-scaling API (where the generator itself
     //       can scale more efficiently) we should take advantage of it here.
     //
+    SkDestinationSurfaceColorMode decodeColorMode = dst.info().colorSpace()
+        ? SkDestinationSurfaceColorMode::kGammaAndColorSpaceAware
+        : SkDestinationSurfaceColorMode::kLegacy;
     SkBitmap bm;
-    if (as_IB(this)->getROPixels(&bm, chint)) {
+    if (as_IB(this)->getROPixels(&bm, decodeColorMode, chint)) {
         bm.lockPixels();
         SkPixmap pmap;
         // Note: By calling the pixmap scaler, we never cache the final result, so the chint
@@ -83,7 +86,7 @@ void SkImage::preroll(GrContext* ctx) const {
     // to produce a cached raster-bitmap form, so that drawing to a raster canvas should be fast.
     //
     SkBitmap bm;
-    if (as_IB(this)->getROPixels(&bm)) {
+    if (as_IB(this)->getROPixels(&bm, SkDestinationSurfaceColorMode::kLegacy)) {
         bm.lockPixels();
         bm.unlockPixels();
     }
@@ -100,31 +103,39 @@ sk_sp<SkShader> SkImage::makeShader(SkShader::TileMode tileX, SkShader::TileMode
     return SkImageShader::Make(sk_ref_sp(const_cast<SkImage*>(this)), tileX, tileY, localMatrix);
 }
 
-SkData* SkImage::encode(SkImageEncoder::Type type, int quality) const {
+SkData* SkImage::encode(SkEncodedImageFormat type, int quality) const {
     SkBitmap bm;
-    if (as_IB(this)->getROPixels(&bm)) {
-        return SkImageEncoder::EncodeData(bm, type, quality);
+    // TODO: Right now, the encoders don't handle F16 or linearly premultiplied data. Once they do,
+    // we should decode in "color space aware" mode, then re-encode that. For now, work around this
+    // by asking for a legacy decode (which gives us the raw data in N32).
+    if (as_IB(this)->getROPixels(&bm, SkDestinationSurfaceColorMode::kLegacy)) {
+        SkDynamicMemoryWStream buf;
+        return SkEncodeImage(&buf, bm, type, quality) ? buf.detachAsData().release() : nullptr;
     }
     return nullptr;
 }
 
 SkData* SkImage::encode(SkPixelSerializer* serializer) const {
-    sk_sp<SkPixelSerializer> defaultSerializer;
-    SkPixelSerializer* effectiveSerializer = serializer;
-    if (!effectiveSerializer) {
-        defaultSerializer.reset(SkImageEncoder::CreatePixelSerializer());
-        SkASSERT(defaultSerializer.get());
-        effectiveSerializer = defaultSerializer.get();
-    }
     sk_sp<SkData> encoded(this->refEncoded());
-    if (encoded && effectiveSerializer->useEncodedData(encoded->data(), encoded->size())) {
+    if (encoded &&
+        (!serializer || serializer->useEncodedData(encoded->data(), encoded->size()))) {
         return encoded.release();
     }
 
     SkBitmap bm;
     SkAutoPixmapUnlock apu;
-    if (as_IB(this)->getROPixels(&bm) && bm.requestLock(&apu)) {
-        return effectiveSerializer->encode(apu.pixmap());
+    // TODO: Right now, the encoders don't handle F16 or linearly premultiplied data. Once they do,
+    // we should decode in "color space aware" mode, then re-encode that. For now, work around this
+    // by asking for a legacy decode (which gives us the raw data in N32).
+    if (as_IB(this)->getROPixels(&bm, SkDestinationSurfaceColorMode::kLegacy) &&
+        bm.requestLock(&apu)) {
+        if (serializer) {
+            return serializer->encode(apu.pixmap());
+        } else {
+            SkDynamicMemoryWStream buf;
+            return SkEncodeImage(&buf, apu.pixmap(), SkEncodedImageFormat::kPNG, 100)
+                   ? buf.detachAsData().release() : nullptr;
+        }
     }
 
     return nullptr;
@@ -178,7 +189,7 @@ GrBackendObject SkImage::getTextureHandle(bool flushPendingGrContextIO) const {
     GrTexture* texture = as_IB(this)->peekTexture();
     if (texture) {
         GrContext* context = texture->getContext();
-        if (context) {            
+        if (context) {
             if (flushPendingGrContextIO) {
                 context->prepareSurfaceForExternalIO(texture);
             }
@@ -284,8 +295,7 @@ bool SkImage::asLegacyBitmap(SkBitmap* bitmap, LegacyBitmapMode mode) const {
 bool SkImage_Base::onAsLegacyBitmap(SkBitmap* bitmap, LegacyBitmapMode mode) const {
     // As the base-class, all we can do is make a copy (regardless of mode).
     // Subclasses that want to be more optimal should override.
-    SkImageInfo info = this->onImageInfo().makeColorType(kN32_SkColorType)
-            .makeAlphaType(this->alphaType());
+    SkImageInfo info = this->onImageInfo().makeColorType(kN32_SkColorType).makeColorSpace(nullptr);
     if (!bitmap->tryAllocPixels(info)) {
         return false;
     }
@@ -315,15 +325,19 @@ sk_sp<SkImage> SkImage::makeWithFilter(const SkImageFilter* filter, const SkIRec
     if (!filter || !outSubset || !offset || !this->bounds().contains(subset)) {
         return nullptr;
     }
+    SkColorSpace* colorSpace = as_IB(this)->onImageInfo().colorSpace();
+    SkDestinationSurfaceColorMode decodeColorMode = colorSpace
+        ? SkDestinationSurfaceColorMode::kGammaAndColorSpaceAware
+        : SkDestinationSurfaceColorMode::kLegacy;
     sk_sp<SkSpecialImage> srcSpecialImage = SkSpecialImage::MakeFromImage(
-        subset, sk_ref_sp(const_cast<SkImage*>(this)));
+        subset, sk_ref_sp(const_cast<SkImage*>(this)), decodeColorMode);
     if (!srcSpecialImage) {
         return nullptr;
     }
 
     sk_sp<SkImageFilterCache> cache(
         SkImageFilterCache::Create(SkImageFilterCache::kDefaultTransientSize));
-    SkImageFilter::OutputProperties outputProperties(as_IB(this)->onImageInfo().colorSpace());
+    SkImageFilter::OutputProperties outputProperties(colorSpace);
     SkImageFilter::Context context(SkMatrix::I(), clipBounds, cache.get(), outputProperties);
 
     sk_sp<SkSpecialImage> result =
@@ -338,6 +352,9 @@ sk_sp<SkImage> SkImage::makeWithFilter(const SkImageFilter* filter, const SkIRec
     if (result->isTextureBacked()) {
         GrContext* context = result->getContext();
         sk_sp<GrTexture> texture = result->asTextureRef(context);
+        if (!texture) {
+            return nullptr;
+        }
         fullSize = SkIRect::MakeWH(texture->width(), texture->height());
     }
 #endif

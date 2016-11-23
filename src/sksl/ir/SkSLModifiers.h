@@ -30,6 +30,10 @@ struct Modifiers {
         kNoPerspective_Flag = ASTModifiers::kNoPerspective_Flag
     };
 
+    Modifiers()
+    : fLayout(Layout())
+    , fFlags(0) {}
+
     Modifiers(const ASTModifiers& modifiers)
     : fLayout(modifiers.fLayout)
     , fFlags(modifiers.fFlags) {}
@@ -38,8 +42,8 @@ struct Modifiers {
     : fLayout(layout)
     , fFlags(flags) {}
 
-    std::string description() const {
-        std::string result = fLayout.description();
+    SkString description() const {
+        SkString result = fLayout.description();
         if (fFlags & kUniform_Flag) {
             result += "uniform ";
         }

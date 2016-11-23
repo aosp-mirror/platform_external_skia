@@ -48,7 +48,7 @@ struct ASTLayout : public ASTNode {
         return "";
     }
 
-    static bool ReadFormat(std::string str, Format* format) {
+    static bool ReadFormat(SkString str, Format* format) {
         if (str == "rgba32f") {
             *format = Format::kRGBA32F;
             return true;
@@ -78,21 +78,24 @@ struct ASTLayout : public ASTNode {
     }
 
     // For int parameters, a -1 means no value
-    ASTLayout(int location, int binding, int index, int set, int builtin, bool originUpperLeft,
-              bool overrideCoverage, bool blendSupportAllEquations, Format format)
+    ASTLayout(int location, int binding, int index, int set, int builtin, int inputAttachmentIndex,
+              bool originUpperLeft, bool overrideCoverage, bool blendSupportAllEquations,
+              Format format, bool pushConstant)
     : fLocation(location)
     , fBinding(binding)
     , fIndex(index)
     , fSet(set)
     , fBuiltin(builtin)
+    , fInputAttachmentIndex(inputAttachmentIndex)
     , fOriginUpperLeft(originUpperLeft)
     , fOverrideCoverage(overrideCoverage)
     , fBlendSupportAllEquations(blendSupportAllEquations)
-    , fFormat(format) {}
+    , fFormat(format)
+    , fPushConstant(pushConstant) {}
 
-    std::string description() const {
-        std::string result;
-        std::string separator;
+    SkString description() const {
+        SkString result;
+        SkString separator;
         if (fLocation >= 0) {
             result += separator + "location = " + to_string(fLocation);
             separator = ", ";
@@ -113,6 +116,10 @@ struct ASTLayout : public ASTNode {
             result += separator + "builtin = " + to_string(fBuiltin);
             separator = ", ";
         }
+        if (fInputAttachmentIndex >= 0) {
+            result += separator + "input_attachment_index = " + to_string(fBuiltin);
+            separator = ", ";
+        }
         if (fOriginUpperLeft) {
             result += separator + "origin_upper_left";
             separator = ", ";
@@ -129,7 +136,11 @@ struct ASTLayout : public ASTNode {
             result += separator + FormatToStr(fFormat);
             separator = ", ";
         }
-        if (result.length() > 0) {
+        if (fPushConstant) {
+            result += separator + "push_constant";
+            separator = ", ";
+        }
+        if (result.size() > 0) {
             result = "layout (" + result + ")";
         }
         return result;
@@ -140,10 +151,12 @@ struct ASTLayout : public ASTNode {
     const int fIndex;
     const int fSet;
     const int fBuiltin;
+    const int fInputAttachmentIndex;
     const bool fOriginUpperLeft;
     const bool fOverrideCoverage;
     const bool fBlendSupportAllEquations;
     const Format fFormat;
+    const bool fPushConstant;
 };
 
 } // namespace

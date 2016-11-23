@@ -73,12 +73,19 @@
     M(exclusion) M(hardlight) M(lighten) M(overlay) M(softlight) \
     M(luminance_to_alpha)                                        \
     M(matrix_2x3) M(matrix_3x4) M(matrix_4x5)                    \
+    M(matrix_perspective)                                        \
     M(parametric_r) M(parametric_g) M(parametric_b)              \
     M(table_r) M(table_g) M(table_b)                             \
     M(color_lookup_table) M(lab_to_xyz) M(swap_rb)               \
     M(clamp_x) M(mirror_x) M(repeat_x)                           \
     M(clamp_y) M(mirror_y) M(repeat_y)                           \
-    M(nearest_565) M(nearest_8888) M(nearest_srgb) M(nearest_f16)
+    M(accum_f16) M(accum_a8)                                     \
+    M(accum_g8)   M(accum_g8_srgb)                               \
+    M(accum_i8)   M(accum_i8_srgb)                               \
+    M(accum_565)  M(accum_565_srgb)                              \
+    M(accum_4444) M(accum_4444_srgb)                             \
+    M(accum_8888) M(accum_8888_srgb)                             \
+    M(top_left) M(top_right) M(bottom_left) M(bottom_right)
 
 class SkRasterPipeline {
 public:

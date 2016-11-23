@@ -9,8 +9,8 @@
 #define GrGLSLShaderBuilder_DEFINED
 
 #include "GrAllocator.h"
+#include "GrShaderVar.h"
 #include "glsl/GrGLSLUniformHandler.h"
-#include "glsl/GrGLSLShaderVar.h"
 #include "SkTDArray.h"
 
 #include <stdarg.h>
@@ -29,8 +29,8 @@ public:
 
     /** Appends a 2D texture sample with projection if necessary. coordType must either be Vec2f or
         Vec3f. The latter is interpreted as projective texture coords. The vec length and swizzle
-        order of the result depends on the GrProcessor::TextureSampelr associated with the
-        GrGLSLSampler.
+        order of the result depends on the GrProcessor::TextureSampler associated with the
+        SamplerHandle.
         */
     void appendTextureLookup(SkString* out,
                              SamplerHandle,
@@ -45,7 +45,7 @@ public:
 
 
     /** Does the work of appendTextureLookup and modulates the result by modulation. The result is
-        always a vec4. modulation and the swizzle specified by GrGLSLSampler must both be
+        always a vec4. modulation and the swizzle specified by SamplerHandle must both be
         vec4 or float. If modulation is "" or nullptr it this function acts as though
         appendTextureLookup were called. */
     void appendTextureLookupAndModulate(const char* modulation,
@@ -118,18 +118,13 @@ public:
     /**
      * Appends a variable declaration to one of the shaders
      */
-    void declAppend(const GrGLSLShaderVar& var);
-
-    /**
-     * Appends a precision qualifier followed by a space, if relevant for the GLSL version.
-     */
-    void appendPrecisionModifier(GrSLPrecision);
+    void declAppend(const GrShaderVar& var);
 
     /** Emits a helper function outside of main() in the fragment shader. */
     void emitFunction(GrSLType returnType,
                       const char* name,
                       int argCnt,
-                      const GrGLSLShaderVar* args,
+                      const GrShaderVar* args,
                       const char* body,
                       SkString* outName);
 
@@ -161,7 +156,7 @@ public:
     };
 
 protected:
-    typedef GrTAllocator<GrGLSLShaderVar> VarArray;
+    typedef GrTAllocator<GrShaderVar> VarArray;
     void appendDecls(const VarArray& vars, SkString* out) const;
 
     /**
@@ -188,6 +183,7 @@ protected:
     bool addFeature(uint32_t featureBit, const char* extensionName);
 
     enum InterfaceQualifier {
+        kIn_InterfaceQualifier,
         kOut_InterfaceQualifier,
         kLastInterfaceQualifier = kOut_InterfaceQualifier
     };
@@ -202,12 +198,6 @@ protected:
     void addLayoutQualifier(const char* param, InterfaceQualifier);
 
     void compileAndAppendLayoutQualifiers();
-
-    /* Appends any swizzling we may need to get from some backend internal format to the format used
-     * in GrPixelConfig. If this is implemented by the GrGpu object, then swizzle will be rgba. For
-     * shader prettiness we omit the swizzle rather than appending ".rgba".
-     */
-    void appendTextureSwizzle(SkString* out, GrPixelConfig) const;
 
     void nextStage() {
         fShaderStrings.push_back();

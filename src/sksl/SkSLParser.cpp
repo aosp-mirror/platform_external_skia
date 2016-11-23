@@ -88,7 +88,7 @@ public:
 
     bool checkValid() {
         if (fParser->fDepth > MAX_PARSE_DEPTH) {
-            fParser->error(fParser->peek().fPosition, "exceeded max parse depth");
+            fParser->error(fParser->peek().fPosition, SkString("exceeded max parse depth"));
             return false;
         }
         return true;
@@ -98,8 +98,8 @@ private:
     Parser* fParser;
 };
 
-Parser::Parser(std::string text, SymbolTable& types, ErrorReporter& errors) 
-: fPushback(Position(-1, -1), Token::INVALID_TOKEN, "")
+Parser::Parser(SkString text, SymbolTable& types, ErrorReporter& errors) 
+: fPushback(Position(-1, -1), Token::INVALID_TOKEN, SkString())
 , fTypes(types)
 , fErrors(errors) {
     sksllex_init(&fScanner);
@@ -157,13 +157,13 @@ Token Parser::nextToken() {
         return result;
     }
     int token = sksllex(fScanner);
-    std::string text;
+    SkString text;
     switch ((Token::Kind) token) {
         case Token::IDENTIFIER:    // fall through
         case Token::INT_LITERAL:   // fall through
         case Token::FLOAT_LITERAL: // fall through
         case Token::DIRECTIVE:
-            text = std::string(skslget_text(fScanner));
+            text = SkString(skslget_text(fScanner));
             break;
         default:
             break;
@@ -181,7 +181,12 @@ Token Parser::peek() {
     return fPushback;
 }
 
-bool Parser::expect(Token::Kind kind, std::string expected, Token* result) {
+
+bool Parser::expect(Token::Kind kind, const char* expected, Token* result) {
+    return this->expect(kind, SkString(expected), result);
+}
+
+bool Parser::expect(Token::Kind kind, SkString expected, Token* result) {
     Token next = this->nextToken();
     if (next.fKind == kind) {
         if (result) {
@@ -194,11 +199,15 @@ bool Parser::expect(Token::Kind kind, std::string expected, Token* result) {
     }
 }
 
-void Parser::error(Position p, std::string msg) {
+void Parser::error(Position p, const char* msg) {
+    this->error(p, SkString(msg));
+}
+
+void Parser::error(Position p, SkString msg) {
     fErrors.error(p, msg);
 }
 
-bool Parser::isType(std::string name) {
+bool Parser::isType(SkString name) {
     return nullptr != fTypes[name];
 }
 
@@ -370,7 +379,7 @@ std::unique_ptr<ASTType> Parser::structDeclaration() {
                     return nullptr;
                 }
                 uint64_t columns = ((ASTIntLiteral&) *var.fSizes[i]).fValue;
-                std::string name = type->name() + "[" + to_string(columns) + "]";
+                SkString name = type->name() + "[" + to_string(columns) + "]";
                 type = new Type(name, Type::kArray_Kind, *type, (int) columns);
                 fTypes.takeOwnership((Type*) type);
             }
@@ -417,7 +426,7 @@ std::unique_ptr<ASTVarDeclarations> Parser::structVarDeclaration(ASTModifiers mo
    (LBRACKET expression? RBRACKET)* (EQ expression)?)* SEMICOLON */
 std::unique_ptr<ASTVarDeclarations> Parser::varDeclarationEnd(ASTModifiers mods,
                                                               std::unique_ptr<ASTType> type,
-                                                              std::string name) {
+                                                              SkString name) {
     std::vector<ASTVarDeclaration> vars;
     std::vector<std::unique_ptr<ASTExpression>> currentVarSizes;
     while (this->peek().fKind == Token::LBRACKET) {
@@ -526,23 +535,25 @@ int Parser::layoutInt() {
     return -1;
 }
 
-/* LAYOUT LPAREN IDENTIFIER EQ INT_LITERAL (COMMA IDENTIFIER EQ INT_LITERAL)* 
-   RPAREN */
+/* LAYOUT LPAREN IDENTIFIER (EQ INT_LITERAL)? (COMMA IDENTIFIER (EQ INT_LITERAL)?)* RPAREN */
 ASTLayout Parser::layout() {
     int location = -1;
     int binding = -1;
     int index = -1;
     int set = -1;
     int builtin = -1;
+    int inputAttachmentIndex = -1;
     bool originUpperLeft = false;
     bool overrideCoverage = false;
     bool blendSupportAllEquations = false;
     ASTLayout::Format format = ASTLayout::Format::kUnspecified;
+    bool pushConstant = false;
     if (this->peek().fKind == Token::LAYOUT) {
         this->nextToken();
         if (!this->expect(Token::LPAREN, "'('")) {
-            return ASTLayout(location, binding, index, set, builtin, originUpperLeft,
-                             overrideCoverage, blendSupportAllEquations, format);
+            return ASTLayout(location, binding, index, set, builtin, inputAttachmentIndex,
+                             originUpperLeft, overrideCoverage, blendSupportAllEquations, format,
+                             pushConstant);
         }
         for (;;) {
             Token t = this->nextToken();
@@ -556,6 +567,8 @@ ASTLayout Parser::layout() {
                 set = this->layoutInt();
             } else if (t.fText == "builtin") {
                 builtin = this->layoutInt();
+            } else if (t.fText == "input_attachment_index") {
+                 inputAttachmentIndex = this->layoutInt();
             } else if (t.fText == "origin_upper_left") {
                 originUpperLeft = true;
             } else if (t.fText == "override_coverage") {
@@ -564,8 +577,10 @@ ASTLayout Parser::layout() {
                 blendSupportAllEquations = true;
             } else if (ASTLayout::ReadFormat(t.fText, &format)) {
                // AST::ReadFormat stored the result in 'format'.
+            } else if (t.fText == "push_constant") {
+                pushConstant = true;
             } else {
-                this->error(t.fPosition, ("'" + t.fText + 
+                this->error(t.fPosition, ("'" + t.fText +
                                           "' is not a valid layout qualifier").c_str());
             }
             if (this->peek().fKind == Token::RPAREN) {
@@ -577,8 +592,8 @@ ASTLayout Parser::layout() {
             }
         }
     }
-    return ASTLayout(location, binding, index, set, builtin, originUpperLeft, overrideCoverage,
-                     blendSupportAllEquations, format);
+    return ASTLayout(location, binding, index, set, builtin, inputAttachmentIndex, originUpperLeft,
+                     overrideCoverage, blendSupportAllEquations, format, pushConstant);
 }
 
 /* layout? (UNIFORM | CONST | IN | OUT | INOUT | LOWP | MEDIUMP | HIGHP | FLAT | NOPERSPECTIVE)* */
@@ -731,7 +746,7 @@ std::unique_ptr<ASTDeclaration> Parser::interfaceBlock(ASTModifiers mods) {
         decls.push_back(std::move(decl));
     }
     this->nextToken();
-    std::string valueName;
+    SkString valueName;
     if (this->peek().fKind == Token::IDENTIFIER) {
         valueName = this->nextToken().fText;
     }
@@ -1361,7 +1376,7 @@ std::unique_ptr<ASTSuffix> Parser::suffix() {
         }
         case Token::DOT: {
             Position pos = this->peek().fPosition;
-            std::string text;
+            SkString text;
             if (this->identifier(&text)) {
                 return std::unique_ptr<ASTSuffix>(new ASTFieldSuffix(pos, std::move(text)));
             }
@@ -1406,7 +1421,7 @@ std::unique_ptr<ASTExpression> Parser::term() {
     Token t = this->peek();
     switch (t.fKind) {
         case Token::IDENTIFIER: {
-            std::string text;
+            SkString text;
             if (this->identifier(&text)) {
                 result.reset(new ASTIdentifier(t.fPosition, std::move(text)));
             }
@@ -1487,7 +1502,7 @@ bool Parser::boolLiteral(bool* dest) {
 }
 
 /* IDENTIFIER */
-bool Parser::identifier(std::string* dest) {
+bool Parser::identifier(SkString* dest) {
     Token t;
     if (this->expect(Token::IDENTIFIER, "identifier", &t)) {
         *dest = t.fText; 

@@ -213,7 +213,6 @@ BASE_SRCS_ANDROID = struct(
         "src/opts/*sse4*",
         "src/opts/*avx*",
         "src/opts/*x86*",
-        "src/opts/SkBitmapProcState_opts_none.cpp",
         "src/opts/SkBlitMask_opts_none.cpp",
         "src/opts/SkBlitRow_opts_none.cpp",
         "src/ports/*CG*",
@@ -265,7 +264,6 @@ BASE_SRCS_IOS = struct(
         "src/opts/*sse4*",
         "src/opts/*avx*",
         "src/opts/*x86*",
-        "src/opts/SkBitmapProcState_opts_none.cpp",
         "src/opts/SkBlitMask_opts_arm*.cpp",
         "src/opts/SkBlitRow_opts_arm*.cpp",
         "src/ports/*CG*",
@@ -486,6 +484,7 @@ DM_INCLUDES = [
     "src/effects",
     "src/effects/gradients",
     "src/fonts",
+    "src/images",
     "src/pathops",
     "src/pipe/utils",
     "src/ports",
@@ -602,6 +601,7 @@ DEFINES_ALL = [
     "SK_SUPPORT_LEGACY_ACCESSBITMAP",
     "SK_SUPPORT_LEGACY_CLIP_REGIONOPS",
     "SK_SUPPORT_LEGACY_XFERMODE_IS_PUBLIC",
+    "SK_SUPPORT_LEGACY_IMAGE_ENCODER_CLASS",
     # Temporarily Disable analytic AA for Google3
     "SK_NO_ANALYTIC_AA",
 ]

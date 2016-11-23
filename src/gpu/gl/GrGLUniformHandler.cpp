@@ -30,7 +30,7 @@ GrGLSLUniformHandler::UniformHandle GrGLUniformHandler::internalAddUniformArray(
 
     UniformInfo& uni = fUniforms.push_back();
     uni.fVariable.setType(type);
-    uni.fVariable.setTypeModifier(GrGLSLShaderVar::kUniform_TypeModifier);
+    uni.fVariable.setTypeModifier(GrShaderVar::kUniform_TypeModifier);
     // TODO this is a bit hacky, lets think of a better way.  Basically we need to be able to use
     // the uniform view matrix name in the GP, and the GP is immutable so it has to tell the PB
     // exactly what name it wants to use for the uniform view matrix.  If we prefix anythings, then
@@ -45,6 +45,7 @@ GrGLSLUniformHandler::UniformHandle GrGLUniformHandler::internalAddUniformArray(
     uni.fVariable.setArrayCount(arrayCount);
     uni.fVisibility = visibility;
     uni.fVariable.setPrecision(precision);
+    uni.fLocation = -1;
 
     if (outName) {
         *outName = uni.fVariable.c_str();
@@ -52,19 +53,30 @@ GrGLSLUniformHandler::UniformHandle GrGLUniformHandler::internalAddUniformArray(
     return GrGLSLUniformHandler::UniformHandle(fUniforms.count() - 1);
 }
 
-GrGLSLUniformHandler::SamplerHandle GrGLUniformHandler::internalAddSampler(uint32_t visibility,
-                                                                           GrPixelConfig config,
-                                                                           GrSLType type,
-                                                                           GrSLPrecision precision,
-                                                                           const char* name) {
+GrGLSLUniformHandler::SamplerHandle GrGLUniformHandler::addSampler(uint32_t visibility,
+                                                                   GrSwizzle swizzle,
+                                                                   GrSLType type,
+                                                                   GrSLPrecision precision,
+                                                                   const char* name) {
     SkASSERT(name && strlen(name));
     SkDEBUGCODE(static const uint32_t kVisMask = kVertex_GrShaderFlag | kFragment_GrShaderFlag);
     SkASSERT(0 == (~kVisMask & visibility));
     SkASSERT(0 != visibility);
+
     SkString mangleName;
     char prefix = 'u';
     fProgramBuilder->nameVariable(&mangleName, prefix, name, true);
-    fSamplers.emplace_back(visibility, config, type, precision, mangleName.c_str());
+
+    UniformInfo& sampler = fSamplers.push_back();
+    SkASSERT(GrSLTypeIsCombinedSamplerType(type));
+    sampler.fVariable.setType(type);
+    sampler.fVariable.setTypeModifier(GrShaderVar::kUniform_TypeModifier);
+    sampler.fVariable.setPrecision(precision);
+    sampler.fVariable.setName(mangleName);
+    sampler.fLocation = -1;
+    sampler.fVisibility = visibility;
+    fSamplerSwizzles.push_back(swizzle);
+    SkASSERT(fSamplers.count() == fSamplerSwizzles.count());
     return GrGLSLUniformHandler::SamplerHandle(fSamplers.count() - 1);
 }
 
@@ -76,8 +88,8 @@ void GrGLUniformHandler::appendUniformDecls(GrShaderFlags visibility, SkString* 
         }
     }
     for (int i = 0; i < fSamplers.count(); ++i) {
-        if (fSamplers[i].visibility() & visibility) {
-            fSamplers[i].fShaderVar.appendDecl(fProgramBuilder->glslCaps(), out);
+        if (fSamplers[i].fVisibility & visibility) {
+            fSamplers[i].fVariable.appendDecl(fProgramBuilder->glslCaps(), out);
             out->append(";\n");
         }
     }
@@ -92,7 +104,7 @@ void GrGLUniformHandler::bindUniformLocations(GrGLuint programID, const GrGLCaps
         }
         for (int i = 0; i < fSamplers.count(); ++i) {
             GrGLint location = i + uniformCnt;
-            GL_CALL(BindUniformLocation(programID, location, fSamplers[i].fShaderVar.c_str()));
+            GL_CALL(BindUniformLocation(programID, location, fSamplers[i].fVariable.c_str()));
             fSamplers[i].fLocation = location;
         }
     }
@@ -108,7 +120,7 @@ void GrGLUniformHandler::getUniformLocations(GrGLuint programID, const GrGLCaps&
         }
         for (int i = 0; i < fSamplers.count(); ++i) {
             GrGLint location;
-            GL_CALL_RET(location, GetUniformLocation(programID, fSamplers[i].fShaderVar.c_str()));
+            GL_CALL_RET(location, GetUniformLocation(programID, fSamplers[i].fVariable.c_str()));
             fSamplers[i].fLocation = location;
         }
     }

@@ -7,9 +7,6 @@
 
 #include "SkSLCompiler.h"
 
-#include <fstream>
-#include <streambuf>
-
 #include "ast/SkSLASTPrecision.h"
 #include "SkSLCFGGenerator.h"
 #include "SkSLIRGenerator.h"
@@ -71,17 +68,17 @@ Compiler::Compiler()
     ADD_TYPE(BVec3);
     ADD_TYPE(BVec4);
     ADD_TYPE(Mat2x2);
-    types->addWithoutOwnership("mat2x2", fContext.fMat2x2_Type.get());
+    types->addWithoutOwnership(SkString("mat2x2"), fContext.fMat2x2_Type.get());
     ADD_TYPE(Mat2x3);
     ADD_TYPE(Mat2x4);
     ADD_TYPE(Mat3x2);
     ADD_TYPE(Mat3x3);
-    types->addWithoutOwnership("mat3x3", fContext.fMat3x3_Type.get());
+    types->addWithoutOwnership(SkString("mat3x3"), fContext.fMat3x3_Type.get());
     ADD_TYPE(Mat3x4);
     ADD_TYPE(Mat4x2);
     ADD_TYPE(Mat4x3);
     ADD_TYPE(Mat4x4);
-    types->addWithoutOwnership("mat4x4", fContext.fMat4x4_Type.get());
+    types->addWithoutOwnership(SkString("mat4x4"), fContext.fMat4x4_Type.get());
     ADD_TYPE(GenType);
     ADD_TYPE(GenDType);
     ADD_TYPE(GenIType);
@@ -116,6 +113,9 @@ Compiler::Compiler()
     ADD_TYPE(Image2D);
     ADD_TYPE(IImage2D);
 
+    ADD_TYPE(SubpassInput);
+    ADD_TYPE(SubpassInputMS);
+
     ADD_TYPE(GSampler1D);
     ADD_TYPE(GSampler2D);
     ADD_TYPE(GSampler3D);
@@ -138,9 +138,14 @@ Compiler::Compiler()
     ADD_TYPE(GSampler2DArrayShadow);
     ADD_TYPE(GSamplerCubeArrayShadow);
 
+    SkString skCapsName("sk_Caps");
+    Variable* skCaps = new Variable(Position(), Modifiers(), skCapsName, 
+                                    *fContext.fSkCaps_Type, Variable::kGlobal_Storage);
+    fIRGenerator->fSymbolTable->add(skCapsName, std::unique_ptr<Symbol>(skCaps));
+
     Modifiers::Flag ignored1;
     std::vector<std::unique_ptr<ProgramElement>> ignored2;
-    this->internalConvertProgram(SKSL_INCLUDE, &ignored1, &ignored2);
+    this->internalConvertProgram(SkString(SKSL_INCLUDE), &ignored1, &ignored2);
     fIRGenerator->fSymbolTable->markAllFunctionsBuiltin();
     ASSERT(!fErrorCount);
 }
@@ -289,7 +294,7 @@ void Compiler::scanCFG(const FunctionDefinition& f) {
     for (size_t i = 0; i < cfg.fBlocks.size(); i++) {
         if (i != cfg.fStart && !cfg.fBlocks[i].fEntrances.size() &&
             cfg.fBlocks[i].fNodes.size()) {
-            this->error(cfg.fBlocks[i].fNodes[0].fNode->fPosition, "unreachable");
+            this->error(cfg.fBlocks[i].fNodes[0].fNode->fPosition, SkString("unreachable"));
         }
     }
     if (fErrorCount) {
@@ -318,12 +323,12 @@ void Compiler::scanCFG(const FunctionDefinition& f) {
     // check for missing return
     if (f.fDeclaration.fReturnType != *fContext.fVoid_Type) {
         if (cfg.fBlocks[cfg.fExit].fEntrances.size()) {
-            this->error(f.fPosition, "function can exit without returning a value");
+            this->error(f.fPosition, SkString("function can exit without returning a value"));
         }
     }
 }
 
-void Compiler::internalConvertProgram(std::string text,
+void Compiler::internalConvertProgram(SkString text,
                                       Modifiers::Flag* defaultPrecision,
                                       std::vector<std::unique_ptr<ProgramElement>>* result) {
     Parser parser(text, *fTypes, *this);
@@ -386,18 +391,19 @@ void Compiler::internalConvertProgram(std::string text,
     }
 }
 
-std::unique_ptr<Program> Compiler::convertProgram(Program::Kind kind, std::string text) {
+std::unique_ptr<Program> Compiler::convertProgram(Program::Kind kind, SkString text,
+                                                  std::unordered_map<SkString, CapValue> caps) {
     fErrorText = "";
     fErrorCount = 0;
-    fIRGenerator->pushSymbolTable();
+    fIRGenerator->start(&caps);
     std::vector<std::unique_ptr<ProgramElement>> elements;
     Modifiers::Flag ignored;
     switch (kind) {
         case Program::kVertex_Kind:
-            this->internalConvertProgram(SKSL_VERT_INCLUDE, &ignored, &elements);
+            this->internalConvertProgram(SkString(SKSL_VERT_INCLUDE), &ignored, &elements);
             break;
         case Program::kFragment_Kind:
-            this->internalConvertProgram(SKSL_FRAG_INCLUDE, &ignored, &elements);
+            this->internalConvertProgram(SkString(SKSL_FRAG_INCLUDE), &ignored, &elements);
             break;
     }
     fIRGenerator->fSymbolTable->markAllFunctionsBuiltin();
@@ -405,18 +411,18 @@ std::unique_ptr<Program> Compiler::convertProgram(Program::Kind kind, std::strin
     this->internalConvertProgram(text, &defaultPrecision, &elements);
     auto result = std::unique_ptr<Program>(new Program(kind, defaultPrecision, std::move(elements),
                                                        fIRGenerator->fSymbolTable));
-    fIRGenerator->popSymbolTable();
+    fIRGenerator->finish();
     this->writeErrorCount();
     return result;
 }
 
-void Compiler::error(Position position, std::string msg) {
+void Compiler::error(Position position, SkString msg) {
     fErrorCount++;
     fErrorText += "error: " + position.description() + ": " + msg.c_str() + "\n";
 }
 
-std::string Compiler::errorText() {
-    std::string result = fErrorText;
+SkString Compiler::errorText() {
+    SkString result = fErrorText;
     return result;
 }
 
@@ -430,42 +436,66 @@ void Compiler::writeErrorCount() {
     }
 }
 
-bool Compiler::toSPIRV(Program::Kind kind, const std::string& text, std::ostream& out) {
-    auto program = this->convertProgram(kind, text);
+bool Compiler::toSPIRV(Program::Kind kind, const SkString& text, SkWStream& out) {
+    std::unordered_map<SkString, CapValue> capsMap;
+    auto program = this->convertProgram(kind, text, capsMap);
     if (fErrorCount == 0) {
         SkSL::SPIRVCodeGenerator cg(&fContext);
         cg.generateCode(*program.get(), out);
-        ASSERT(!out.rdstate());
     }
     return fErrorCount == 0;
 }
 
-bool Compiler::toSPIRV(Program::Kind kind, const std::string& text, std::string* out) {
-    std::stringstream buffer;
+bool Compiler::toSPIRV(Program::Kind kind, const SkString& text, SkString* out) {
+    SkDynamicMemoryWStream buffer;
     bool result = this->toSPIRV(kind, text, buffer);
     if (result) {
-        *out = buffer.str();
+        sk_sp<SkData> data(buffer.detachAsData());
+        *out = SkString((const char*) data->data(), data->size());
     }
     return result;
 }
 
-bool Compiler::toGLSL(Program::Kind kind, const std::string& text, const GrGLSLCaps& caps,
-                      std::ostream& out) {
-    auto program = this->convertProgram(kind, text);
+static void fill_caps(const GrGLSLCaps& caps, std::unordered_map<SkString, CapValue>* capsMap) {
+#define CAP(name) capsMap->insert(std::make_pair(SkString(#name), CapValue(caps.name())));
+    CAP(fbFetchSupport);
+    CAP(fbFetchNeedsCustomOutput);
+    CAP(bindlessTextureSupport);
+    CAP(dropsTileOnZeroDivide);
+    CAP(flatInterpolationSupport);
+    CAP(noperspectiveInterpolationSupport);
+    CAP(multisampleInterpolationSupport);
+    CAP(sampleVariablesSupport);
+    CAP(sampleMaskOverrideCoverageSupport);
+    CAP(externalTextureSupport);
+    CAP(texelFetchSupport);
+    CAP(imageLoadStoreSupport);
+    CAP(mustEnableAdvBlendEqs);
+    CAP(mustEnableSpecificAdvBlendEqs);
+    CAP(mustDeclareFragmentShaderOutput);
+    CAP(canUseAnyFunctionInShader);
+#undef CAP
+}
+
+bool Compiler::toGLSL(Program::Kind kind, const SkString& text, const GrGLSLCaps& caps,
+                      SkWStream& out) {
+    std::unordered_map<SkString, CapValue> capsMap;
+    fill_caps(caps, &capsMap);
+    auto program = this->convertProgram(kind, text, capsMap);
     if (fErrorCount == 0) {
         SkSL::GLSLCodeGenerator cg(&fContext, &caps);
         cg.generateCode(*program.get(), out);
-        ASSERT(!out.rdstate());
     }
     return fErrorCount == 0;
 }
 
-bool Compiler::toGLSL(Program::Kind kind, const std::string& text, const GrGLSLCaps& caps,
-                      std::string* out) {
-    std::stringstream buffer;
+bool Compiler::toGLSL(Program::Kind kind, const SkString& text, const GrGLSLCaps& caps,
+                      SkString* out) {
+    SkDynamicMemoryWStream buffer;
     bool result = this->toGLSL(kind, text, caps, buffer);
     if (result) {
-        *out = buffer.str();
+        sk_sp<SkData> data(buffer.detachAsData());
+        *out = SkString((const char*) data->data(), data->size());
     }
     return result;
 }

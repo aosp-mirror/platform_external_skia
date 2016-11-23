@@ -282,6 +282,7 @@ LOCAL_SRC_FILES := \
 	../tests/SkResourceCacheTest.cpp \
 	../tests/SkSLErrorTest.cpp \
 	../tests/SkSLGLSLTest.cpp \
+	../tests/SkSLMemoryLayoutTest.cpp \
 	../tests/SkSharedMutexTest.cpp \
 	../tests/SmallAllocatorTest.cpp \
 	../tests/SortTest.cpp \
@@ -516,6 +517,7 @@ LOCAL_SRC_FILES := \
 	../gm/occludedrrectblur.cpp \
 	../gm/offsetimagefilter.cpp \
 	../gm/ovals.cpp \
+	../gm/overdrawcolorfilter.cpp \
 	../gm/patch.cpp \
 	../gm/patchgrid.cpp \
 	../gm/path_stroke_with_zero_length.cpp \

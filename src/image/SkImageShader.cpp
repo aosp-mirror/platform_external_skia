@@ -13,6 +13,7 @@
 #include "SkFixedAlloc.h"
 #include "SkImage_Base.h"
 #include "SkImageShader.h"
+#include "SkImageShaderContext.h"
 #include "SkPM4fPriv.h"
 #include "SkReadBuffer.h"
 #include "SkWriteBuffer.h"
@@ -52,8 +53,12 @@ size_t SkImageShader::onContextSize(const ContextRec& rec) const {
 }
 
 SkShader::Context* SkImageShader::onCreateContext(const ContextRec& rec, void* storage) const {
+    // TODO: This is wrong. We should be plumbing destination color space to context creation,
+    // and use that to determine the decoding mode of the image.
+    SkDestinationSurfaceColorMode decodeColorMode = SkMipMap::DeduceColorMode(rec);
     return SkBitmapProcLegacyShader::MakeContext(*this, fTileModeX, fTileModeY,
-                                                 SkBitmapProvider(fImage.get()), rec, storage);
+                                                 SkBitmapProvider(fImage.get(), decodeColorMode),
+                                                 rec, storage);
 }
 
 SkImage* SkImageShader::onIsAImage(SkMatrix* texM, TileMode xy[]) const {
@@ -211,13 +216,14 @@ sk_sp<GrFragmentProcessor> SkImageShader::asFragmentProcessor(const AsFPArgs& ar
     GrSkFilterQualityToGrFilterMode(args.fFilterQuality, *args.fViewMatrix, this->getLocalMatrix(),
                                     &doBicubic);
     GrSamplerParams params(tm, textureFilterMode);
-    sk_sp<GrTexture> texture(as_IB(fImage)->asTextureRef(args.fContext, params, args.fColorMode));
+    sk_sp<SkColorSpace> texColorSpace;
+    sk_sp<GrTexture> texture(as_IB(fImage)->asTextureRef(args.fContext, params, args.fColorMode,
+                                                         &texColorSpace));
     if (!texture) {
         return nullptr;
     }
 
-    SkImageInfo info = as_IB(fImage)->onImageInfo();
-    sk_sp<GrColorSpaceXform> colorSpaceXform = GrColorSpaceXform::Make(info.colorSpace(),
+    sk_sp<GrColorSpaceXform> colorSpaceXform = GrColorSpaceXform::Make(texColorSpace.get(),
                                                                        args.fDstColorSpace);
     sk_sp<GrFragmentProcessor> inner;
     if (doBicubic) {
@@ -280,24 +286,12 @@ bool SkImageShader::onAppendStages(SkRasterPipeline* p, SkColorSpace* dst, SkFal
         return false;
     }
 
-    // TODO: perspective
-    if (!matrix.asAffine(nullptr)) {
-        return false;
-    }
-
     // TODO: all formats
     switch (info.colorType()) {
-        case kRGBA_8888_SkColorType:
-        case kBGRA_8888_SkColorType:
-//      case   kRGB_565_SkColorType:
-//      case  kRGBA_F16_SkColorType:
-            break;
-        default: return false;
-    }
-
-    // TODO: all tile modes
-    if (fTileModeX != kClamp_TileMode || fTileModeY != kClamp_TileMode) {
-        return false;
+        case kAlpha_8_SkColorType:
+        case kIndex_8_SkColorType:
+            return false;
+        default: break;
     }
 
     // When the matrix is just an integer translate, bilerp == nearest neighbor.
@@ -307,12 +301,12 @@ bool SkImageShader::onAppendStages(SkRasterPipeline* p, SkColorSpace* dst, SkFal
         quality = kNone_SkFilterQuality;
     }
 
-    // TODO: bilerp
-    if (quality != kNone_SkFilterQuality) {
+    // TODO: front-patch with SkDefaultBitmapControllerState, then assert we're kNone or kLow.
+    if (quality > kLow_SkFilterQuality) {
         return false;
     }
 
-    // TODO: mtklein doesn't understand why we do this.
+    // See skia:4649 and the GM image_scale_aligned.
     if (quality == kNone_SkFilterQuality) {
         if (matrix.getScaleX() >= 0) {
             matrix.setTranslateX(nextafterf(matrix.getTranslateX(),
@@ -324,55 +318,82 @@ bool SkImageShader::onAppendStages(SkRasterPipeline* p, SkColorSpace* dst, SkFal
         }
     }
 
-    struct context {
-        const void* pixels;
-        int         stride;
-        int         width;
-        int         height;
-        float       matrix[6];
-    };
-    auto ctx = scratch->make<context>();
+    auto ctx = scratch->make<SkImageShaderContext>();
 
     ctx->pixels   = pm.addr();
     ctx->stride   = pm.rowBytesAsPixels();
     ctx->width    = pm.width();
     ctx->height   = pm.height();
-    SkAssertResult(matrix.asAffine(ctx->matrix));
-
-    p->append(SkRasterPipeline::matrix_2x3, &ctx->matrix);
-
-    switch (fTileModeX) {
-        case kClamp_TileMode:  p->append(SkRasterPipeline::clamp_x,  &ctx->width); break;
-        case kMirror_TileMode: p->append(SkRasterPipeline::mirror_x, &ctx->width); break;
-        case kRepeat_TileMode: p->append(SkRasterPipeline::repeat_x, &ctx->width); break;
-    }
-    switch (fTileModeY) {
-        case kClamp_TileMode:  p->append(SkRasterPipeline::clamp_y,  &ctx->height); break;
-        case kMirror_TileMode: p->append(SkRasterPipeline::mirror_y, &ctx->height); break;
-        case kRepeat_TileMode: p->append(SkRasterPipeline::repeat_y, &ctx->height); break;
+    if (matrix.asAffine(ctx->matrix)) {
+        p->append(SkRasterPipeline::matrix_2x3, ctx->matrix);
+    } else {
+        matrix.get9(ctx->matrix);
+        p->append(SkRasterPipeline::matrix_perspective, ctx->matrix);
     }
 
-    switch(info.colorType()) {
-        case kRGBA_8888_SkColorType:
-        case kBGRA_8888_SkColorType:
-            if (info.gammaCloseToSRGB() && dst) {
-                p->append(SkRasterPipeline::nearest_srgb, ctx);
-            } else {
-                p->append(SkRasterPipeline::nearest_8888, ctx);
-            }
-            break;
-        case kRGBA_F16_SkColorType:
-            p->append(SkRasterPipeline::nearest_f16, ctx);
-            break;
-        case kRGB_565_SkColorType:
-            p->append(SkRasterPipeline::nearest_565, ctx);
-            break;
+    auto append_tiling_and_accum = [&] {
+        switch (fTileModeX) {
+            case kClamp_TileMode:  p->append(SkRasterPipeline::clamp_x,  &ctx->width); break;
+            case kMirror_TileMode: p->append(SkRasterPipeline::mirror_x, &ctx->width); break;
+            case kRepeat_TileMode: p->append(SkRasterPipeline::repeat_x, &ctx->width); break;
+        }
+        switch (fTileModeY) {
+            case kClamp_TileMode:  p->append(SkRasterPipeline::clamp_y,  &ctx->height); break;
+            case kMirror_TileMode: p->append(SkRasterPipeline::mirror_y, &ctx->height); break;
+            case kRepeat_TileMode: p->append(SkRasterPipeline::repeat_y, &ctx->height); break;
+        }
 
-        default:
-            SkASSERT(false);
-            break;
+        bool srgb = info.gammaCloseToSRGB() && dst != nullptr;
+
+        switch (info.colorType()) {
+            case kGray_8_SkColorType:
+                p->append(srgb ? SkRasterPipeline::accum_g8_srgb
+                               : SkRasterPipeline::accum_g8, ctx);
+                break;
+
+            case kARGB_4444_SkColorType:
+                p->append(srgb ? SkRasterPipeline::accum_4444_srgb
+                               : SkRasterPipeline::accum_4444, ctx);
+                break;
+            case kRGB_565_SkColorType:
+                p->append(srgb ? SkRasterPipeline::accum_565_srgb
+                               : SkRasterPipeline::accum_565, ctx);
+                break;
+
+            case kRGBA_8888_SkColorType:
+            case kBGRA_8888_SkColorType:
+                p->append(srgb ? SkRasterPipeline::accum_8888_srgb
+                               : SkRasterPipeline::accum_8888, ctx);
+                break;
+
+            case kRGBA_F16_SkColorType:
+                p->append(SkRasterPipeline::accum_f16, ctx);
+                break;
+
+            default:
+                SkASSERT(false);
+                break;
+        }
+    };
+
+    if (quality == kNone_SkFilterQuality) {
+        append_tiling_and_accum();
+
+    } else {
+        p->append(SkRasterPipeline::top_left, ctx);
+        append_tiling_and_accum();
+
+        p->append(SkRasterPipeline::top_right, ctx);
+        append_tiling_and_accum();
+
+        p->append(SkRasterPipeline::bottom_left, ctx);
+        append_tiling_and_accum();
+
+        p->append(SkRasterPipeline::bottom_right, ctx);
+        append_tiling_and_accum();
     }
 
+    p->append(SkRasterPipeline::dst);
     if (info.colorType() == kBGRA_8888_SkColorType) {
         p->append(SkRasterPipeline::swap_rb);
     }

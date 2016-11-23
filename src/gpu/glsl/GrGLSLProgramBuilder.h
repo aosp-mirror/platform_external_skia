@@ -16,13 +16,13 @@
 #include "glsl/GrGLSLPrimitiveProcessor.h"
 #include "glsl/GrGLSLProgramDataManager.h"
 #include "glsl/GrGLSLUniformHandler.h"
-#include "glsl/GrGLSLSampler.h"
 #include "glsl/GrGLSLVertexShaderBuilder.h"
 #include "glsl/GrGLSLXferProcessor.h"
 
 class GrGLSLCaps;
-class GrGLSLShaderVar;
+class GrShaderVar;
 class GrGLSLVaryingHandler;
+class GrGLSLExpr4;
 
 typedef SkSTArray<8, GrGLSLFragmentProcessor*, true> GrGLSLFragProcs;
 
@@ -44,7 +44,13 @@ public:
 
     typedef GrGLSLUniformHandler::SamplerHandle SamplerHandle;
 
-    const GrGLSLSampler& getSampler(SamplerHandle handle) const;
+    const GrShaderVar& samplerVariable(SamplerHandle handle) const {
+        return this->uniformHandler()->samplerVariable(handle);
+    }
+
+    GrSwizzle samplerSwizzle(SamplerHandle handle) const {
+        return this->uniformHandler()->samplerSwizzle(handle);
+    }
 
     // Handles for program uniforms (other than per-effect uniforms)
     struct BuiltinUniformHandles {
@@ -74,8 +80,8 @@ public:
 
     // Used for backend customization of the output color and secondary color variables from the
     // fragment processor. Only used if the outputs are explicitly declared in the shaders
-    virtual void finalizeFragmentOutputColor(GrGLSLShaderVar& outputColor) {}
-    virtual void finalizeFragmentSecondaryColor(GrGLSLShaderVar& outputColor) {}
+    virtual void finalizeFragmentOutputColor(GrShaderVar& outputColor) {}
+    virtual void finalizeFragmentSecondaryColor(GrShaderVar& outputColor) {}
 
     // number of each input/output type in a single allocation block, used by many builders
     static const int kVarsPerBlock;

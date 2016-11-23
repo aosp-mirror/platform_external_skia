@@ -24,10 +24,10 @@
 #include "GrInvariantOutput.h"
 #include "GrStyle.h"
 #include "effects/GrSimpleTextureEffect.h"
+#include "glsl/GrGLSLCaps.h"
 #include "glsl/GrGLSLFragmentProcessor.h"
 #include "glsl/GrGLSLFragmentShaderBuilder.h"
 #include "glsl/GrGLSLProgramDataManager.h"
-#include "glsl/GrGLSLSampler.h"
 #include "glsl/GrGLSLUniformHandler.h"
 #endif
 
@@ -1122,7 +1122,7 @@ static sk_sp<GrTexture> find_or_create_rrect_blur_mask(GrContext* context,
     sk_sp<GrTexture> mask(context->textureProvider()->findAndRefTextureByUniqueKey(key));
     if (!mask) {
         // TODO: this could be approx but the texture coords will need to be updated
-        sk_sp<GrRenderTargetContext> rtc(context->makeRenderTargetContextWithFallback(
+        sk_sp<GrRenderTargetContext> rtc(context->makeDeferredRenderTargetContextWithFallback(
             SkBackingFit::kExact, size.fWidth, size.fHeight, kAlpha_8_GrPixelConfig, nullptr));
         if (!rtc) {
             return nullptr;
@@ -1135,12 +1135,15 @@ static sk_sp<GrTexture> find_or_create_rrect_blur_mask(GrContext* context,
         rtc->drawRRect(GrNoClip(), grPaint, SkMatrix::I(), rrectToDraw, GrStyle::SimpleFill());
 
         sk_sp<GrTexture> srcTexture(rtc->asTexture());
+        if (!srcTexture) {
+            return nullptr;
+        }
         sk_sp<GrRenderTargetContext> rtc2(SkGpuBlurUtils::GaussianBlur(context,
                                                                        srcTexture.get(),
                                                                        nullptr,
                                                                        SkIRect::MakeWH(
-                                                                           size.fWidth,
-                                                                           size.fHeight),
+                                                                                    size.fWidth,
+                                                                                    size.fHeight),
                                                                        nullptr,
                                                                        xformedSigma, xformedSigma,
                                                                        SkBackingFit::kExact));
@@ -1149,7 +1152,9 @@ static sk_sp<GrTexture> find_or_create_rrect_blur_mask(GrContext* context,
         }
 
         mask = rtc2->asTexture();
-        SkASSERT(mask);
+        if (!mask) {
+            return nullptr;
+        }
         context->textureProvider()->assignUniqueKeyToTexture(key, mask.get());
     }
 
@@ -1537,7 +1542,7 @@ bool SkBlurMaskFilterImpl::filterMaskGPU(GrTexture* src,
     }
 
     *result = renderTargetContext->asTexture().release();
-    return true;
+    return SkToBool(*result);
 }
 
 #endif // SK_SUPPORT_GPU

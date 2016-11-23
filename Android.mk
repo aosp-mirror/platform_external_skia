@@ -213,6 +213,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkNormalFlatSource.cpp \
 	src/core/SkNormalSource.cpp \
 	src/core/SkOpts.cpp \
+	src/core/SkOverdrawCanvas.cpp \
 	src/core/SkPaint.cpp \
 	src/core/SkPaintPriv.cpp \
 	src/core/SkPath.cpp \
@@ -377,6 +378,7 @@ LOCAL_SRC_FILES := \
 	src/effects/SkMergeImageFilter.cpp \
 	src/effects/SkMorphologyImageFilter.cpp \
 	src/effects/SkOffsetImageFilter.cpp \
+	src/effects/SkOverdrawColorFilter.cpp \
 	src/effects/SkPackBits.cpp \
 	src/effects/SkPaintFlagsDrawFilter.cpp \
 	src/effects/SkPaintImageFilter.cpp \
@@ -459,11 +461,14 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrTextureOpList.cpp \
 	src/gpu/GrTraceMarker.cpp \
 	src/gpu/GrTestUtils.cpp \
+	src/gpu/GrShaderVar.cpp \
 	src/gpu/GrSWMaskHelper.cpp \
 	src/gpu/GrSoftwarePathRenderer.cpp \
 	src/gpu/GrSurface.cpp \
+	src/gpu/GrSurfaceContext.cpp \
 	src/gpu/GrSurfaceProxy.cpp \
 	src/gpu/GrTexture.cpp \
+	src/gpu/GrTextureContext.cpp \
 	src/gpu/GrTextureParamsAdjuster.cpp \
 	src/gpu/GrTextureProvider.cpp \
 	src/gpu/GrTextureProxy.cpp \
@@ -496,6 +501,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/batches/GrPLSPathRenderer.cpp \
 	src/gpu/batches/GrRectBatchFactory.cpp \
 	src/gpu/batches/GrRegionBatch.cpp \
+	src/gpu/batches/GrShadowRRectBatch.cpp \
 	src/gpu/batches/GrStencilAndCoverPathRenderer.cpp \
 	src/gpu/batches/GrTessellatingPathRenderer.cpp \
 	src/gpu/batches/GrVertexBatch.cpp \
@@ -517,6 +523,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/effects/GrOvalEffect.cpp \
 	src/gpu/effects/GrPorterDuffXferProcessor.cpp \
 	src/gpu/effects/GrRRectEffect.cpp \
+	src/gpu/effects/GrShadowGeoProc.cpp \
 	src/gpu/effects/GrSimpleTextureEffect.cpp \
 	src/gpu/effects/GrSingleTextureEffect.cpp \
 	src/gpu/effects/GrTextureDomain.cpp \
@@ -807,7 +814,7 @@ LOCAL_MODULE := \
 	libskia_static
 
 LOCAL_SRC_FILES_arm += \
-	src/opts/SkBitmapProcState_opts_arm.cpp \
+	src/opts/SkBitmapProcState_opts_none.cpp \
 	src/opts/SkBlitMask_opts_arm.cpp \
 	src/opts/SkBlitRow_opts_arm.cpp
 
@@ -831,7 +838,6 @@ LOCAL_CFLAGS_x86 += \
 	-mfpmath=sse
 
 LOCAL_SRC_FILES_x86 += \
-	src/opts/SkBitmapFilter_opts_SSE2.cpp \
 	src/opts/SkBitmapProcState_opts_SSE2.cpp \
 	src/opts/SkBlitRow_opts_SSE2.cpp \
 	src/opts/opts_check_x86.cpp \
@@ -846,7 +852,6 @@ LOCAL_CFLAGS_x86 += \
 	-DqDNGBigEndian=0
 
 LOCAL_SRC_FILES_x86_64 += \
-	src/opts/SkBitmapFilter_opts_SSE2.cpp \
 	src/opts/SkBitmapProcState_opts_SSE2.cpp \
 	src/opts/SkBlitRow_opts_SSE2.cpp \
 	src/opts/opts_check_x86.cpp \
@@ -901,7 +906,7 @@ LOCAL_SRC_FILES_mips64 += \
 LOCAL_SRC_FILES_arm64 += \
 	src/opts/SkBitmapProcState_arm_neon.cpp \
 	src/opts/SkBitmapProcState_matrixProcs_neon.cpp \
-	src/opts/SkBitmapProcState_opts_arm.cpp \
+	src/opts/SkBitmapProcState_opts_none.cpp \
 	src/opts/SkBlitMask_opts_arm.cpp \
 	src/opts/SkBlitMask_opts_arm_neon.cpp \
 	src/opts/SkBlitRow_opts_arm.cpp \

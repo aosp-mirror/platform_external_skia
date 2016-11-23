@@ -9,6 +9,7 @@
 
 #include "GrPipeline.h"
 #include "GrTexturePriv.h"
+#include "glsl/GrGLSLCaps.h"
 #include "glsl/GrGLSLFragmentProcessor.h"
 #include "glsl/GrGLSLGeometryProcessor.h"
 #include "glsl/GrGLSLVarying.h"
@@ -40,7 +41,7 @@ void GrGLSLProgramBuilder::addFeature(GrShaderFlags shaders,
         fVS.addFeature(featureBit, extensionName);
     }
     if (shaders & kGeometry_GrShaderFlag) {
-        SkASSERT(this->glslCaps()->geometryShaderSupport());
+        SkASSERT(this->primitiveProcessor().willUseGeoShader());
         fGS.addFeature(featureBit, extensionName);
     }
     if (shaders & kFragment_GrShaderFlag) {
@@ -103,6 +104,7 @@ void GrGLSLProgramBuilder::emitAndInstallPrimProc(const GrPrimitiveProcessor& pr
     GrGLSLPrimitiveProcessor::FPCoordTransformHandler transformHandler(fPipeline,
                                                                        &fTransformedCoordVars);
     GrGLSLGeometryProcessor::EmitArgs args(&fVS,
+                                           proc.willUseGeoShader() ? &fGS : nullptr,
                                            &fFS,
                                            this->varyingHandler(),
                                            this->uniformHandler(),
@@ -264,7 +266,7 @@ void GrGLSLProgramBuilder::emitSamplers(const GrProcessor& processor,
         GrShaderFlags texelBufferVisibility = kNone_GrShaderFlags;
 
         for (int b = 0; b < numBuffers; ++b) {
-            const GrBufferAccess& access = processor.bufferAccess(b);
+            const GrProcessor::BufferAccess& access = processor.bufferAccess(b);
             name.printf("BufferSampler_%d", outBufferSamplers->count());
             this->emitSampler(kBufferSampler_GrSLType, access.texelConfig(), name.c_str(),
                               access.visibility(), outBufferSamplers);
@@ -295,8 +297,9 @@ void GrGLSLProgramBuilder::emitSampler(GrSLType samplerType,
         ++fNumFragmentSamplers;
     }
     GrSLPrecision precision = this->glslCaps()->samplerPrecision(config, visibility);
+    GrSwizzle swizzle = this->glslCaps()->configTextureSwizzle(config);
     SamplerHandle handle = this->uniformHandler()->addSampler(visibility,
-                                                              config,
+                                                              swizzle,
                                                               samplerType,
                                                               precision,
                                                               name);
@@ -390,9 +393,6 @@ void GrGLSLProgramBuilder::appendUniformDecls(GrShaderFlags visibility, SkString
     this->uniformHandler()->appendUniformDecls(visibility, out);
 }
 
-const GrGLSLSampler& GrGLSLProgramBuilder::getSampler(SamplerHandle handle) const {
-    return this->uniformHandler()->getSampler(handle);
-}
 
 void GrGLSLProgramBuilder::addRTAdjustmentUniform(GrSLPrecision precision,
                                                   const char* name,
@@ -424,5 +424,9 @@ void GrGLSLProgramBuilder::cleanupFragmentProcessors() {
 void GrGLSLProgramBuilder::finalizeShaders() {
     this->varyingHandler()->finalize();
     fVS.finalize(kVertex_GrShaderFlag);
+    if (this->primitiveProcessor().willUseGeoShader()) {
+        SkASSERT(this->glslCaps()->geometryShaderSupport());
+        fGS.finalize(kGeometry_GrShaderFlag);
+    }
     fFS.finalize(kFragment_GrShaderFlag);
 }

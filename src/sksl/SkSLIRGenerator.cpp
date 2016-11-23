@@ -84,6 +84,7 @@ IRGenerator::IRGenerator(const Context* context, std::shared_ptr<SymbolTable> sy
                          ErrorReporter& errorReporter)
 : fContext(*context)
 , fCurrentFunction(nullptr)
+, fCapsMap(nullptr)
 , fSymbolTable(std::move(symbolTable))
 , fLoopLevel(0)
 , fErrors(errorReporter) {}
@@ -94,6 +95,16 @@ void IRGenerator::pushSymbolTable() {
 
 void IRGenerator::popSymbolTable() {
     fSymbolTable = fSymbolTable->fParent;
+}
+
+void IRGenerator::start(std::unordered_map<SkString, CapValue>* caps) {
+    this->fCapsMap = caps;
+    this->pushSymbolTable();
+}
+
+void IRGenerator::finish() {
+    this->popSymbolTable();
+    this->fCapsMap = nullptr;
 }
 
 std::unique_ptr<Extension> IRGenerator::convertExtension(const ASTExtension& extension) {
@@ -173,7 +184,7 @@ std::unique_ptr<VarDeclarations> IRGenerator::convertVarDeclarations(const ASTVa
                 if (!size) {
                     return nullptr;
                 }
-                std::string name = type->fName;
+                SkString name = type->fName;
                 uint64_t count;
                 if (size->fKind == Expression::kIntLiteral_Kind) {
                     count = ((IntLiteral&) *size).fValue;
@@ -204,7 +215,7 @@ std::unique_ptr<VarDeclarations> IRGenerator::convertVarDeclarations(const ASTVa
             }
             value = this->coerce(std::move(value), *type);
         }
-        if (storage == Variable::kGlobal_Storage && "sk_FragColor" == varDecl.fName && 
+        if (storage == Variable::kGlobal_Storage && varDecl.fName == SkString("sk_FragColor") && 
             (*fSymbolTable)[varDecl.fName]) {
             // already defined, ignore
         } else if (storage == Variable::kGlobal_Storage && (*fSymbolTable)[varDecl.fName] &&
@@ -397,12 +408,12 @@ std::unique_ptr<FunctionDefinition> IRGenerator::convertFunction(const ASTFuncti
         }
         for (int j = (int) param->fSizes.size() - 1; j >= 0; j--) {
             int size = param->fSizes[j];
-            std::string name = type->name() + "[" + to_string(size) + "]";
+            SkString name = type->name() + "[" + to_string(size) + "]";
             Type* newType = new Type(std::move(name), Type::kArray_Kind, *type, size);
             fSymbolTable->takeOwnership(newType);
             type = newType;
         }
-        std::string name = param->fName;
+        SkString name = param->fName;
         Modifiers modifiers = this->convertModifiers(param->fModifiers);
         Position pos = param->fPosition;
         Variable* var = new Variable(pos, modifiers, std::move(name), *type,
@@ -523,10 +534,10 @@ std::unique_ptr<InterfaceBlock> IRGenerator::convertInterfaceBlock(const ASTInte
     }
     Type* type = new Type(intf.fInterfaceName, fields);
     fSymbolTable->takeOwnership(type);
-    std::string name = intf.fValueName.length() > 0 ? intf.fValueName : intf.fInterfaceName;
+    SkString name = intf.fValueName.size() > 0 ? intf.fValueName : intf.fInterfaceName;
     Variable* var = new Variable(intf.fPosition, mods, name, *type, Variable::kGlobal_Storage);
     fSymbolTable->takeOwnership(var);
-    if (intf.fValueName.length()) {
+    if (intf.fValueName.size()) {
         old->addWithoutOwnership(intf.fValueName, var);
     } else {
         for (size_t i = 0; i < fields.size(); i++) {
@@ -966,7 +977,7 @@ std::unique_ptr<Expression> IRGenerator::call(Position position,
                                               const FunctionDeclaration& function, 
                                               std::vector<std::unique_ptr<Expression>> arguments) {
     if (function.fParameters.size() != arguments.size()) {
-        std::string msg = "call to '" + function.fName + "' expected " + 
+        SkString msg = "call to '" + function.fName + "' expected " + 
                                  to_string((uint64_t) function.fParameters.size()) + 
                                  " argument";
         if (function.fParameters.size() != 1) {
@@ -979,8 +990,8 @@ std::unique_ptr<Expression> IRGenerator::call(Position position,
     std::vector<const Type*> types;
     const Type* returnType;
     if (!function.determineFinalTypes(arguments, &types, &returnType)) {
-        std::string msg = "no match for " + function.fName + "(";
-        std::string separator = "";
+        SkString msg = "no match for " + function.fName + "(";
+        SkString separator;
         for (size_t i = 0; i < arguments.size(); i++) {
             msg += separator;
             separator = ", ";
@@ -1058,8 +1069,8 @@ std::unique_ptr<Expression> IRGenerator::call(Position position,
         if (best) {
             return this->call(position, *best, std::move(arguments));
         }
-        std::string msg = "no match for " + ref->fFunctions[0]->fName + "(";
-        std::string separator = "";
+        SkString msg = "no match for " + ref->fFunctions[0]->fName + "(";
+        SkString separator;
         for (size_t i = 0; i < arguments.size(); i++) {
             msg += separator;
             separator = ", ";
@@ -1267,7 +1278,7 @@ std::unique_ptr<Expression> IRGenerator::convertIndex(std::unique_ptr<Expression
 }
 
 std::unique_ptr<Expression> IRGenerator::convertField(std::unique_ptr<Expression> base,
-                                                      const std::string& field) {
+                                                      const SkString& field) {
     auto fields = base->fType.fields();
     for (size_t i = 0; i < fields.size(); i++) {
         if (fields[i].fName == field) {
@@ -1280,14 +1291,14 @@ std::unique_ptr<Expression> IRGenerator::convertField(std::unique_ptr<Expression
 }
 
 std::unique_ptr<Expression> IRGenerator::convertSwizzle(std::unique_ptr<Expression> base,
-                                                        const std::string& fields) {
+                                                        const SkString& fields) {
     if (base->fType.kind() != Type::kVector_Kind) {
         fErrors.error(base->fPosition, "cannot swizzle type '" + base->fType.description() + "'");
         return nullptr;
     }
     std::vector<int> swizzleComponents;
-    for (char c : fields) {
-        switch (c) {
+    for (size_t i = 0; i < fields.size(); i++) {
+        switch (fields[i]) {
             case 'x': // fall through
             case 'r': // fall through
             case 's': 
@@ -1318,8 +1329,8 @@ std::unique_ptr<Expression> IRGenerator::convertSwizzle(std::unique_ptr<Expressi
                 }
                 // fall through
             default:
-                fErrors.error(base->fPosition, "invalid swizzle component '" + std::string(1, c) +
-                                               "'");
+                fErrors.error(base->fPosition, SkStringPrintf("invalid swizzle component '%c'",
+                                                              fields[i]));
                 return nullptr;
         }
     }
@@ -1329,6 +1340,25 @@ std::unique_ptr<Expression> IRGenerator::convertSwizzle(std::unique_ptr<Expressi
         return nullptr;
     }
     return std::unique_ptr<Expression>(new Swizzle(fContext, std::move(base), swizzleComponents));
+}
+
+std::unique_ptr<Expression> IRGenerator::getCap(Position position, SkString name) {
+    ASSERT(fCapsMap);
+    auto found = fCapsMap->find(name);
+    if (found == fCapsMap->end()) {
+        fErrors.error(position, "unknown capability flag '" + name + "'");
+        return nullptr;
+    }
+    switch (found->second.fKind) {
+        case CapValue::kBool_Kind:
+            return std::unique_ptr<Expression>(new BoolLiteral(fContext, position,
+                                                               (bool) found->second.fValue));
+        case CapValue::kInt_Kind:
+            return std::unique_ptr<Expression>(new IntLiteral(fContext, position, 
+                                                              found->second.fValue));
+    }
+    ASSERT(false);
+    return nullptr;
 }
 
 std::unique_ptr<Expression> IRGenerator::convertSuffixExpression(
@@ -1368,6 +1398,10 @@ std::unique_ptr<Expression> IRGenerator::convertSuffixExpression(
             return this->call(expression.fPosition, std::move(base), std::move(arguments));
         }
         case ASTSuffix::kField_Kind: {
+            if (base->fType == *fContext.fSkCaps_Type) {
+                return this->getCap(expression.fPosition,
+                                    ((ASTFieldSuffix&) *expression.fSuffix).fField);
+            }
             switch (base->fType.kind()) {
                 case Type::kVector_Kind:
                     return this->convertSwizzle(std::move(base), 

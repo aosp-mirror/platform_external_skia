@@ -23,6 +23,8 @@
 
 #include <signal.h>
 
+#include "sk_tool_utils.h"
+
 DEFINE_string2(bytes, b, "", "A path to a file.  This can be the fuzz bytes or a binary to parse.");
 DEFINE_string2(name, n, "", "If --type is 'api', fuzz the API with this name.");
 
@@ -122,7 +124,7 @@ int fuzz_api(sk_sp<SkData> bytes) {
 
 static void dump_png(SkBitmap bitmap) {
     if (!FLAGS_dump.isEmpty()) {
-        SkImageEncoder::EncodeFile(FLAGS_dump[0], bitmap, SkImageEncoder::kPNG_Type, 100);
+        sk_tool_utils::EncodeImageToFile(FLAGS_dump[0], bitmap, SkEncodedImageFormat::kPNG, 100);
         SkDebugf("Dumped to %s\n", FLAGS_dump[0]);
     }
 }
@@ -402,9 +404,9 @@ int fuzz_color_deserialize(sk_sp<SkData> bytes) {
 #if SK_SUPPORT_GPU
 int fuzz_sksl2glsl(sk_sp<SkData> bytes) {
     SkSL::Compiler compiler;
-    std::string output;
+    SkString output;
     bool result = compiler.toGLSL(SkSL::Program::kFragment_Kind,
-        (const char*)bytes->data(), *SkSL::GLSLCapsFactory::Default(), &output);
+        SkString((const char*)bytes->data()), *SkSL::GLSLCapsFactory::Default(), &output);
 
     if (!result) {
         SkDebugf("[terminated] Couldn't compile input.\n");

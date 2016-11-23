@@ -9,10 +9,10 @@
 #define GrGLSLUniformHandler_DEFINED
 
 #include "GrGLSLProgramDataManager.h"
-#include "GrGLSLShaderVar.h"
+#include "GrShaderVar.h"
+#include "GrSwizzle.h"
 
 class GrGLSLProgramBuilder;
-class GrGLSLSampler;
 
 class GrGLSLUniformHandler {
 public:
@@ -47,7 +47,7 @@ public:
                                              outName);
     }
 
-    virtual const GrGLSLShaderVar& getUniformVariable(UniformHandle u) const = 0;
+    virtual const GrShaderVar& getUniformVariable(UniformHandle u) const = 0;
 
     /**
      * Shortcut for getUniformVariable(u).c_str()
@@ -61,22 +61,11 @@ protected:
     GrGLSLProgramBuilder* fProgramBuilder;
 
 private:
-    virtual int numSamplers() const = 0;
-    virtual const GrGLSLSampler& getSampler(SamplerHandle handle) const = 0;
+    virtual const GrShaderVar& samplerVariable(SamplerHandle) const = 0;
+    virtual GrSwizzle samplerSwizzle(SamplerHandle) const = 0;
 
-    SamplerHandle addSampler(uint32_t visibility,
-                             GrPixelConfig config,
-                             GrSLType type,
-                             GrSLPrecision precision,
-                             const char* name) {
-        return this->internalAddSampler(visibility, config, type, precision, name);
-    }
-
-    virtual SamplerHandle internalAddSampler(uint32_t visibility,
-                                             GrPixelConfig config,
-                                             GrSLType type,
-                                             GrSLPrecision precision,
-                                             const char* name) = 0;
+    virtual SamplerHandle addSampler(uint32_t visibility, GrSwizzle, GrSLType, GrSLPrecision,
+                                     const char* name) = 0;
 
     virtual UniformHandle internalAddUniformArray(uint32_t visibility,
                                                   GrSLType type,
