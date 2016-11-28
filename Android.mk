@@ -404,6 +404,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrBatchAtlas.cpp \
 	src/gpu/GrBatchFlushState.cpp \
 	src/gpu/GrBatchTest.cpp \
+	src/gpu/GrBitmapTextureMaker.cpp \
 	src/gpu/GrBlend.cpp \
 	src/gpu/GrBlurUtils.cpp \
 	src/gpu/GrBuffer.cpp \
@@ -421,7 +422,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrGpuCommandBuffer.cpp \
 	src/gpu/GrGpuResource.cpp \
 	src/gpu/GrGpuFactory.cpp \
-	src/gpu/GrImageIDTextureAdjuster.cpp \
+	src/gpu/GrImageTextureMaker.cpp \
 	src/gpu/GrInvariantOutput.cpp \
 	src/gpu/GrMemoryPool.cpp \
 	src/gpu/GrOpList.cpp \
