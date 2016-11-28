@@ -469,8 +469,10 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrSurfaceContext.cpp \
 	src/gpu/GrSurfaceProxy.cpp \
 	src/gpu/GrTexture.cpp \
+	src/gpu/GrTextureAdjuster.cpp \
 	src/gpu/GrTextureContext.cpp \
-	src/gpu/GrTextureParamsAdjuster.cpp \
+	src/gpu/GrTextureMaker.cpp \
+	src/gpu/GrTextureProducer.cpp \
 	src/gpu/GrTextureProvider.cpp \
 	src/gpu/GrTextureProxy.cpp \
 	src/gpu/GrTextureRenderTargetProxy.cpp \
