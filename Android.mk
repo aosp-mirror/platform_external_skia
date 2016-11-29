@@ -454,6 +454,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrRenderTargetOpList.cpp \
 	src/gpu/GrResourceCache.cpp \
 	src/gpu/GrResourceProvider.cpp \
+	src/gpu/GrShaderCaps.cpp \
 	src/gpu/GrShape.cpp \
 	src/gpu/GrStencilAttachment.cpp \
 	src/gpu/GrStencilSettings.cpp \
@@ -573,7 +574,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/builders/GrGLSLPrettyPrint.cpp \
 	src/gpu/glsl/GrGLSL.cpp \
 	src/gpu/glsl/GrGLSLBlend.cpp \
-	src/gpu/glsl/GrGLSLCaps.cpp \
 	src/gpu/glsl/GrGLSLFragmentProcessor.cpp \
 	src/gpu/glsl/GrGLSLFragmentShaderBuilder.cpp \
 	src/gpu/glsl/GrGLSLGeometryProcessor.cpp \
