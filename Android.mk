@@ -632,12 +632,10 @@ LOCAL_SRC_FILES := \
 	tools/viewer/sk_app/WindowContext.cpp \
 	tools/viewer/sk_app/VulkanWindowContext.cpp \
 	tools/viewer/sk_app/android/VulkanWindowContext_android.cpp \
-	src/images/SkForceLinking.cpp \
 	src/images/SkWEBPImageEncoder.cpp \
 	src/images/SkJPEGImageEncoder.cpp \
 	src/images/SkPNGImageEncoder.cpp \
 	src/images/SkImageEncoder.cpp \
-	src/images/SkImageEncoder_Factory.cpp \
 	src/images/SkJPEGWriteUtility.cpp \
 	src/pdf/SkDeflate.cpp \
 	src/pdf/SkJpegInfo.cpp \
