@@ -489,7 +489,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/batches/GrAAStrokeRectBatch.cpp \
 	src/gpu/batches/GrAnalyticRectBatch.cpp \
 	src/gpu/batches/GrAtlasTextBatch.cpp \
-	src/gpu/batches/GrBatch.cpp \
 	src/gpu/batches/GrCopySurfaceBatch.cpp \
 	src/gpu/batches/GrDashLinePathRenderer.cpp \
 	src/gpu/batches/GrDefaultPathRenderer.cpp \
@@ -502,6 +501,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/batches/GrNonAAFillRectPerspectiveBatch.cpp \
 	src/gpu/batches/GrNonAAStrokeRectBatch.cpp \
 	src/gpu/batches/GrNinePatch.cpp \
+	src/gpu/batches/GrOp.cpp \
 	src/gpu/batches/GrPLSPathRenderer.cpp \
 	src/gpu/batches/GrRectBatchFactory.cpp \
 	src/gpu/batches/GrRegionBatch.cpp \
