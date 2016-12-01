@@ -508,7 +508,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/batches/GrShadowRRectBatch.cpp \
 	src/gpu/batches/GrStencilAndCoverPathRenderer.cpp \
 	src/gpu/batches/GrTessellatingPathRenderer.cpp \
-	src/gpu/batches/GrVertexBatch.cpp \
+	src/gpu/batches/GrMeshDrawOp.cpp \
 	src/gpu/effects/GrConfigConversionEffect.cpp \
 	src/gpu/effects/GrConstColorProcessor.cpp \
 	src/gpu/effects/GrCoverageSetOpXP.cpp \
