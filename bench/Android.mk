@@ -311,7 +311,6 @@ LOCAL_SRC_FILES := \
 	../gm/imagetoyuvplanes.cpp \
 	../gm/internal_links.cpp \
 	../gm/inversepaths.cpp \
-	../gm/labpcsdemo.cpp \
 	../gm/largeglyphblur.cpp \
 	../gm/lattice.cpp \
 	../gm/lcdblendmodes.cpp \
