@@ -665,8 +665,10 @@ LOCAL_SRC_FILES := \
 	../tools/gpu/GrContextFactory.cpp \
 	../tools/gpu/GrTest.cpp \
 	../tools/gpu/TestContext.cpp \
+	../tools/gpu/vk/VkTestContext.cpp \
 	../tools/gpu/gl/GLTestContext.cpp \
 	../tools/gpu/gl/command_buffer/GLTestContext_command_buffer.cpp \
+	../tools/gpu/gl/null/NullGLTestContext.cpp \
 	../tools/gpu/gl/debug/DebugGLTestContext.cpp \
 	../tools/gpu/gl/debug/GrBufferObj.cpp \
 	../tools/gpu/gl/debug/GrFrameBufferObj.cpp \
@@ -674,9 +676,7 @@ LOCAL_SRC_FILES := \
 	../tools/gpu/gl/debug/GrShaderObj.cpp \
 	../tools/gpu/gl/debug/GrTextureObj.cpp \
 	../tools/gpu/gl/debug/GrTextureUnitObj.cpp \
-	../tools/gpu/gl/null/NullGLTestContext.cpp \
-	../tools/gpu/gl/egl/CreatePlatformGLTestContext_egl.cpp \
-	../tools/gpu/vk/VkTestContext.cpp
+	../tools/gpu/gl/egl/CreatePlatformGLTestContext_egl.cpp
 
 LOCAL_SHARED_LIBRARIES := \
 	liblog \
@@ -743,8 +743,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../tools/android
 
 LOCAL_CFLAGS += \
-	-DSK_XML \
-	-DSK_CRASH_HANDLER
+	-DSK_XML
 
 LOCAL_MODULE_TAGS := \
 	tests

@@ -7,12 +7,14 @@
 
 #include "SkGpuDevice.h"
 
+#include "GrBitmapTextureMaker.h"
 #include "GrBlurUtils.h"
 #include "GrContext.h"
-#include "GrRenderTargetContextPriv.h"
 #include "GrGpu.h"
-#include "GrImageIDTextureAdjuster.h"
+#include "GrImageTextureMaker.h"
+#include "GrRenderTargetContextPriv.h"
 #include "GrStyle.h"
+#include "GrTextureAdjuster.h"
 #include "GrTracing.h"
 
 #include "SkCanvasPriv.h"
@@ -39,7 +41,6 @@
 #include "SkTLazy.h"
 #include "SkUtils.h"
 #include "SkVertState.h"
-#include "SkXfermode.h"
 #include "batches/GrRectBatchFactory.h"
 #include "effects/GrBicubicEffect.h"
 #include "effects/GrDashingEffect.h"

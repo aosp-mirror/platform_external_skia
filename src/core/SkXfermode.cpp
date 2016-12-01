@@ -5,7 +5,6 @@
  * found in the LICENSE file.
  */
 
-#include "SkXfermode.h"
 #include "SkXfermode_proccoeff.h"
 #include "SkColorPriv.h"
 #include "SkMathPriv.h"
@@ -1490,7 +1489,7 @@ bool SkBlendMode_AppendStages(SkBlendMode mode, SkRasterPipeline* p) {
     switch (mode) {
         case SkBlendMode::kClear:    stage = SkRasterPipeline::clear; break;
         case SkBlendMode::kSrc:      return true;  // This stage is a no-op.
-        case SkBlendMode::kDst:      stage = SkRasterPipeline::dst; break;
+        case SkBlendMode::kDst:      stage = SkRasterPipeline::move_dst_src; break;
         case SkBlendMode::kSrcOver:  stage = SkRasterPipeline::srcover; break;
         case SkBlendMode::kDstOver:  stage = SkRasterPipeline::dstover; break;
         case SkBlendMode::kSrcIn:    stage = SkRasterPipeline::srcin; break;
