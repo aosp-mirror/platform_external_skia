@@ -542,13 +542,15 @@ private:
             (header[0] == 0x4D && header[1] == 0x4D && header[2] == 0x00 && header[3] == 0x2A);
     }
 
-    void init(const int width, const int height, const dng_point& cfaPatternSize) {
+    bool init(const int width, const int height, const dng_point& cfaPatternSize) {
         fImageInfo = SkImageInfo::Make(width, height, kN32_SkColorType, kOpaque_SkAlphaType);
 
         // The DNG SDK scales only during demosaicing, so scaling is only possible when
         // a mosaic info is available.
         fIsScalable = cfaPatternSize.v != 0 && cfaPatternSize.h != 0;
         fIsXtransImage = fIsScalable ? (cfaPatternSize.v == 6 && cfaPatternSize.h == 6) : false;
+
+        return width > 0 && height > 0;
     }
 
     bool initFromPiex() {
@@ -558,15 +560,9 @@ private:
         if (::piex::IsRaw(&piexStream)
             && ::piex::GetPreviewImageData(&piexStream, &imageData) == ::piex::Error::kOk)
         {
-            // Verify the size information, as it is only optional information for PIEX.
-            if (imageData.full_width == 0 || imageData.full_height == 0) {
-                return false;
-            }
-
             dng_point cfaPatternSize(imageData.cfa_pattern_dim[1], imageData.cfa_pattern_dim[0]);
-            this->init(static_cast<int>(imageData.full_width),
-                       static_cast<int>(imageData.full_height), cfaPatternSize);
-            return true;
+            return this->init(static_cast<int>(imageData.full_width),
+                              static_cast<int>(imageData.full_height), cfaPatternSize);
         }
         return false;
     }
@@ -594,10 +590,9 @@ private:
             if (fNegative->GetMosaicInfo() != nullptr) {
                 cfaPatternSize = fNegative->GetMosaicInfo()->fCFAPatternSize;
             }
-            this->init(static_cast<int>(fNegative->DefaultCropSizeH().As_real64()),
-                       static_cast<int>(fNegative->DefaultCropSizeV().As_real64()),
-                       cfaPatternSize);
-            return true;
+            return this->init(static_cast<int>(fNegative->DefaultCropSizeH().As_real64()),
+                              static_cast<int>(fNegative->DefaultCropSizeV().As_real64()),
+                              cfaPatternSize);
         } catch (...) {
             return false;
         }
