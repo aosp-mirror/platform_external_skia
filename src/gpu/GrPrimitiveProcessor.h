@@ -42,7 +42,6 @@
  * it emits the appropriate color, or none at all, as directed.
  */
 
-class GrGLSLCaps;
 class GrGLSLPrimitiveProcessor;
 
 struct GrInitInvariantOutput;
@@ -59,7 +58,7 @@ enum GrPixelLocalStorageState {
 
 /*
  * This class allows the GrPipeline to communicate information about the pipeline to a
- * GrBatch which should be forwarded to the GrPrimitiveProcessor(s) created by the batch.
+ * GrOp which should be forwarded to the GrPrimitiveProcessor(s) created by the batch.
  * These are not properly part of the pipeline because they assume the specific inputs
  * that the batch provided when it created the pipeline. Identical pipelines may be
  * created by different batches with different input assumptions and therefore different
@@ -190,14 +189,13 @@ public:
      *
      * TODO: A better name for this function  would be "compute" instead of "get".
      */
-    virtual void getGLSLProcessorKey(const GrGLSLCaps& caps,
-                                     GrProcessorKeyBuilder* b) const = 0;
+    virtual void getGLSLProcessorKey(const GrShaderCaps&, GrProcessorKeyBuilder*) const = 0;
 
 
     /** Returns a new instance of the appropriate *GL* implementation class
         for the given GrProcessor; caller is responsible for deleting
         the object. */
-    virtual GrGLSLPrimitiveProcessor* createGLSLInstance(const GrGLSLCaps& caps) const = 0;
+    virtual GrGLSLPrimitiveProcessor* createGLSLInstance(const GrShaderCaps&) const = 0;
 
     virtual bool isPathRendering() const { return false; }
 

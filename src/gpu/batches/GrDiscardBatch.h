@@ -8,14 +8,14 @@
 #ifndef GrDiscardBatch_DEFINED
 #define GrDiscardBatch_DEFINED
 
-#include "GrBatch.h"
 #include "GrBatchFlushState.h"
 #include "GrGpu.h"
+#include "GrOp.h"
 #include "GrRenderTarget.h"
 
-class GrDiscardBatch final : public GrBatch {
+class GrDiscardBatch final : public GrOp {
 public:
-    DEFINE_BATCH_CLASS_ID
+    DEFINE_OP_CLASS_ID
 
     GrDiscardBatch(GrRenderTarget* rt)
         : INHERITED(ClassID())
@@ -30,7 +30,6 @@ public:
     GrGpuResource::UniqueID renderTargetUniqueID() const override {
         return fRenderTarget.get()->uniqueID();
     }
-    GrRenderTarget* renderTarget() const override { return fRenderTarget.get(); }
 
     SkString dumpInfo() const override {
         SkString string;
@@ -40,19 +39,19 @@ public:
     }
 
 private:
-    bool onCombineIfPossible(GrBatch* that, const GrCaps& caps) override {
+    bool onCombineIfPossible(GrOp* that, const GrCaps& caps) override {
         return this->renderTargetUniqueID() == that->renderTargetUniqueID();
     }
 
     void onPrepare(GrBatchFlushState*) override {}
 
     void onDraw(GrBatchFlushState* state, const SkRect& /*bounds*/) override {
-        state->commandBuffer()->discard();
+        state->commandBuffer()->discard(fRenderTarget.get());
     }
 
     GrPendingIOResource<GrRenderTarget, kWrite_GrIOType> fRenderTarget;
 
-    typedef GrBatch INHERITED;
+    typedef GrOp INHERITED;
 };
 
 #endif

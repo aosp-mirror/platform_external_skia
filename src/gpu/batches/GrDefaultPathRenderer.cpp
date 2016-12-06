@@ -96,7 +96,7 @@ static inline void add_quad(SkPoint** vert, const SkPoint* base, const SkPoint p
 
 class DefaultPathBatch : public GrVertexBatch {
 public:
-    DEFINE_BATCH_CLASS_ID
+    DEFINE_OP_CLASS_ID
 
     DefaultPathBatch(GrColor color, const SkPath& path, SkScalar tolerance,
                      uint8_t coverage, const SkMatrix& viewMatrix, bool isHairline,
@@ -112,6 +112,16 @@ public:
     }
 
     const char* name() const override { return "DefaultPathBatch"; }
+
+    SkString dumpInfo() const override {
+        SkString string;
+        for (const auto& geo : fGeoData) {
+            string.appendf("Color: 0x%08x Tolerance: %.2f\n", geo.fColor, geo.fTolerance);
+        }
+        string.append(DumpPipelineInfo(*this->pipeline()));
+        string.append(INHERITED::dumpInfo());
+        return string;
+    }
 
     void computePipelineOptimizations(GrInitInvariantOutput* color,
                                       GrInitInvariantOutput* coverage,
@@ -258,7 +268,7 @@ private:
         target->putBackVertices((size_t)(maxVertices - vertexOffset), (size_t)vertexStride);
     }
 
-    bool onCombineIfPossible(GrBatch* t, const GrCaps& caps) override {
+    bool onCombineIfPossible(GrOp* t, const GrCaps& caps) override {
         DefaultPathBatch* that = t->cast<DefaultPathBatch>();
         if (!GrPipeline::CanCombine(*this->pipeline(), this->bounds(), *that->pipeline(),
                                      that->bounds(), caps)) {

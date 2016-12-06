@@ -210,11 +210,9 @@ GrVkGpu::~GrVkGpu() {
 ///////////////////////////////////////////////////////////////////////////////
 
 GrGpuCommandBuffer* GrVkGpu::createCommandBuffer(
-            GrRenderTarget* target,
             const GrGpuCommandBuffer::LoadAndStoreInfo& colorInfo,
             const GrGpuCommandBuffer::LoadAndStoreInfo& stencilInfo) {
-    GrVkRenderTarget* vkRT = static_cast<GrVkRenderTarget*>(target);
-    return new GrVkGpuCommandBuffer(this, vkRT, colorInfo, stencilInfo);
+    return new GrVkGpuCommandBuffer(this, colorInfo, stencilInfo);
 }
 
 void GrVkGpu::submitCommandBuffer(SyncQueue sync) {
@@ -1545,19 +1543,6 @@ void GrVkGpu::copySurfaceAsResolve(GrSurface* dst,
     GrVkRenderTarget* srcRT = static_cast<GrVkRenderTarget*>(src->asRenderTarget());
     SkASSERT(dstRT && dstRT->numColorSamples() <= 1);
     this->resolveImage(dstRT, srcRT, srcRect, dstPoint);
-}
-
-inline bool can_copy_as_draw(const GrSurface* dst,
-                             const GrSurface* src,
-                             const GrVkGpu* gpu) {
-    return false;
-}
-
-void GrVkGpu::copySurfaceAsDraw(GrSurface* dst,
-                                GrSurface* src,
-                                const SkIRect& srcRect,
-                                const SkIPoint& dstPoint) {
-    SkASSERT(false);
 }
 
 bool GrVkGpu::onCopySurface(GrSurface* dst,

@@ -118,7 +118,7 @@ static sk_sp<GrGeometryProcessor> create_stroke_rect_gp(bool tweakAlphaForCovera
 
 class AAStrokeRectBatch : public GrVertexBatch {
 public:
-    DEFINE_BATCH_CLASS_ID
+    DEFINE_OP_CLASS_ID
 
     AAStrokeRectBatch(GrColor color, const SkMatrix& viewMatrix,
                       const SkRect& devOutside, const SkRect& devInside)
@@ -152,6 +152,26 @@ public:
 
     const char* name() const override { return "AAStrokeRect"; }
 
+    SkString dumpInfo() const override {
+        SkString string;
+        for (const auto& geo : fGeoData) {
+            string.appendf("Color: 0x%08x, ORect [L: %.2f, T: %.2f, R: %.2f, B: %.2f], "
+                           "AssistORect [L: %.2f, T: %.2f, R: %.2f, B: %.2f], "
+                           "IRect [L: %.2f, T: %.2f, R: %.2f, B: %.2f], Degen: %d",
+                           geo.fColor,
+                           geo.fDevOutside.fLeft, geo.fDevOutside.fTop,
+                           geo.fDevOutside.fRight, geo.fDevOutside.fBottom,
+                           geo.fDevOutsideAssist.fLeft, geo.fDevOutsideAssist.fTop,
+                           geo.fDevOutsideAssist.fRight, geo.fDevOutsideAssist.fBottom,
+                           geo.fDevInside.fLeft, geo.fDevInside.fTop,
+                           geo.fDevInside.fRight, geo.fDevInside.fBottom,
+                           geo.fDegenerate);
+        }
+        string.append(DumpPipelineInfo(*this->pipeline()));
+        string.append(INHERITED::dumpInfo());
+        return string;
+    }
+
     void computePipelineOptimizations(GrInitInvariantOutput* color,
                                       GrInitInvariantOutput* coverage,
                                       GrBatchToXPOverrides* overrides) const override {
@@ -184,7 +204,7 @@ private:
     const SkMatrix& viewMatrix() const { return fViewMatrix; }
     bool miterStroke() const { return fMiterStroke; }
 
-    bool onCombineIfPossible(GrBatch* t, const GrCaps&) override;
+    bool onCombineIfPossible(GrOp* t, const GrCaps&) override;
 
     void generateAAStrokeRectGeometry(void* vertices,
                                       size_t offset,
@@ -382,7 +402,7 @@ const GrBuffer* AAStrokeRectBatch::GetIndexBuffer(GrResourceProvider* resourcePr
     }
 }
 
-bool AAStrokeRectBatch::onCombineIfPossible(GrBatch* t, const GrCaps& caps) {
+bool AAStrokeRectBatch::onCombineIfPossible(GrOp* t, const GrCaps& caps) {
     AAStrokeRectBatch* that = t->cast<AAStrokeRectBatch>();
 
     if (!GrPipeline::CanCombine(*this->pipeline(), this->bounds(), *that->pipeline(),

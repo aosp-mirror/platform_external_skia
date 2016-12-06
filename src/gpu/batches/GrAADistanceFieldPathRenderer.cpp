@@ -120,7 +120,7 @@ static const SkScalar kAntiAliasPad = 1.0f;
 
 class AADistanceFieldPathBatch : public GrVertexBatch {
 public:
-    DEFINE_BATCH_CLASS_ID
+    DEFINE_OP_CLASS_ID
 
     typedef GrAADistanceFieldPathRenderer::ShapeData ShapeData;
     typedef SkTDynamicHash<ShapeData, ShapeData::Key> ShapeCache;
@@ -153,6 +153,16 @@ public:
     }
 
     const char* name() const override { return "AADistanceFieldPathBatch"; }
+
+    SkString dumpInfo() const override {
+        SkString string;
+        for (const auto& geo : fGeoData) {
+            string.appendf("Color: 0x%08x AA:%d\n", geo.fColor, geo.fAntiAlias);
+        }
+        string.append(DumpPipelineInfo(*this->pipeline()));
+        string.append(INHERITED::dumpInfo());
+        return string;
+    }
 
     void computePipelineOptimizations(GrInitInvariantOutput* color,
                                       GrInitInvariantOutput* coverage,
@@ -470,7 +480,7 @@ private:
     const SkMatrix& viewMatrix() const { return fBatch.fViewMatrix; }
     bool usesLocalCoords() const { return fBatch.fUsesLocalCoords; }
 
-    bool onCombineIfPossible(GrBatch* t, const GrCaps& caps) override {
+    bool onCombineIfPossible(GrOp* t, const GrCaps& caps) override {
         AADistanceFieldPathBatch* that = t->cast<AADistanceFieldPathBatch>();
         if (!GrPipeline::CanCombine(*this->pipeline(), this->bounds(), *that->pipeline(),
                                     that->bounds(), caps)) {

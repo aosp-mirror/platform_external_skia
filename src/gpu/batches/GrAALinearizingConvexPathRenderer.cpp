@@ -125,7 +125,7 @@ static sk_sp<GrGeometryProcessor> create_fill_gp(bool tweakAlphaForCoverage,
 
 class AAFlatteningConvexPathBatch : public GrVertexBatch {
 public:
-    DEFINE_BATCH_CLASS_ID
+    DEFINE_OP_CLASS_ID
 
     AAFlatteningConvexPathBatch(GrColor color,
                                 const SkMatrix& viewMatrix,
@@ -151,7 +151,19 @@ public:
         this->setTransformedBounds(bounds, viewMatrix, HasAABloat::kYes, IsZeroArea::kNo);
     }
 
-    const char* name() const override { return "AAConvexBatch"; }
+    const char* name() const override { return "AAFlatteningConvexBatch"; }
+
+    SkString dumpInfo() const override {
+        SkString string;
+        for (const auto& geo : fGeoData) {
+            string.appendf("Color: 0x%08x, StrokeWidth: %.2f, Style: %d, Join: %d, "
+                           "MiterLimit: %.2f\n",
+                           geo.fColor, geo.fStrokeWidth, geo.fStyle, geo.fJoin, geo.fMiterLimit);
+        }
+        string.append(DumpPipelineInfo(*this->pipeline()));
+        string.append(INHERITED::dumpInfo());
+        return string;
+    }
 
     void computePipelineOptimizations(GrInitInvariantOutput* color,
                                       GrInitInvariantOutput* coverage,
@@ -273,7 +285,7 @@ private:
         sk_free(indices);
     }
 
-    bool onCombineIfPossible(GrBatch* t, const GrCaps& caps) override {
+    bool onCombineIfPossible(GrOp* t, const GrCaps& caps) override {
         AAFlatteningConvexPathBatch* that = t->cast<AAFlatteningConvexPathBatch>();
         if (!GrPipeline::CanCombine(*this->pipeline(), this->bounds(), *that->pipeline(),
                                     that->bounds(), caps)) {

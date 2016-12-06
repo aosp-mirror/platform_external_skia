@@ -162,7 +162,7 @@ bool GrTessellatingPathRenderer::onCanDrawPath(const CanDrawPathArgs& args) cons
 
 class TessellatingPathBatch : public GrVertexBatch {
 public:
-    DEFINE_BATCH_CLASS_ID
+    DEFINE_OP_CLASS_ID
 
     static GrDrawBatch* Create(const GrColor& color,
                                const GrShape& shape,
@@ -173,6 +173,14 @@ public:
     }
 
     const char* name() const override { return "TessellatingPathBatch"; }
+
+    SkString dumpInfo() const override {
+        SkString string;
+        string.appendf("Color 0x%08x, aa: %d\n", fColor, fAntiAlias);
+        string.append(DumpPipelineInfo(*this->pipeline()));
+        string.append(INHERITED::dumpInfo());
+        return string;
+    }
 
     void computePipelineOptimizations(GrInitInvariantOutput* color,
                                       GrInitInvariantOutput* coverage,
@@ -316,7 +324,7 @@ private:
         target->draw(gp, mesh);
     }
 
-    bool onCombineIfPossible(GrBatch*, const GrCaps&) override { return false; }
+    bool onCombineIfPossible(GrOp*, const GrCaps&) override { return false; }
 
     TessellatingPathBatch(const GrColor& color,
                           const GrShape& shape,

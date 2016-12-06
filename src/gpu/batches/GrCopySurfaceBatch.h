@@ -8,14 +8,14 @@
 #ifndef GrCopySurfaceBatch_DEFINED
 #define GrCopySurfaceBatch_DEFINED
 
-#include "GrBatch.h"
 #include "GrBatchFlushState.h"
 #include "GrGpu.h"
+#include "GrOp.h"
 #include "GrRenderTarget.h"
 
-class GrCopySurfaceBatch final : public GrBatch {
+class GrCopySurfaceBatch final : public GrOp {
 public:
-    DEFINE_BATCH_CLASS_ID
+    DEFINE_OP_CLASS_ID
 
     /** This should not really be exposed as Create() will apply this clipping, but there is
      *  currently a workaround in GrContext::copySurface() for non-render target dsts that relies
@@ -27,20 +27,18 @@ public:
                                        SkIRect* clippedSrcRect,
                                        SkIPoint* clippedDstPoint);
 
-    static GrBatch* Create(GrSurface* dst, GrSurface* src, const SkIRect& srcRect,
+    static GrOp* Create(GrSurface* dst, GrSurface* src, const SkIRect& srcRect,
                            const SkIPoint& dstPoint);
 
     const char* name() const override { return "CopySurface"; }
 
     // TODO: this needs to be updated to return GrSurfaceProxy::UniqueID
     GrGpuResource::UniqueID renderTargetUniqueID() const override {
-        // TODO: When we have CopyContexts it seems that this should return the ID
-        // of the SurfaceProxy underlying the CopyContext.
-        GrRenderTarget* rt = fDst.get()->asRenderTarget();
-        return rt ? rt->uniqueID() : GrGpuResource::UniqueID::InvalidID();
+        // Copy surface doesn't work through a GrGpuCommandBuffer. By returning an invalid RT ID we
+        // force the caller to end the previous command buffer and execute this copy before
+        // beginning a new one.
+        return GrGpuResource::UniqueID::InvalidID();
     }
-    // TODO: this seems odd - figure it out and add a comment!
-    GrRenderTarget* renderTarget() const override { return nullptr; }
 
     SkString dumpInfo() const override {
         SkString string;
@@ -66,7 +64,7 @@ private:
         this->setBounds(bounds, HasAABloat::kNo, IsZeroArea::kNo);
     }
 
-    bool onCombineIfPossible(GrBatch* that, const GrCaps& caps) override { return false; }
+    bool onCombineIfPossible(GrOp* that, const GrCaps& caps) override { return false; }
 
     void onPrepare(GrBatchFlushState*) override {}
 
@@ -74,7 +72,8 @@ private:
         if (!state->commandBuffer()) {
             state->gpu()->copySurface(fDst.get(), fSrc.get(), fSrcRect, fDstPoint);
         } else {
-            // currently we are not sending copies through the GrGpuCommandBuffer
+            // Currently we are not sending copies through the GrGpuCommandBuffer. See comment in
+            // renderTargetUniqueID().
             SkASSERT(false);
         }
     }
@@ -84,7 +83,7 @@ private:
     SkIRect                                         fSrcRect;
     SkIPoint                                        fDstPoint;
 
-    typedef GrBatch INHERITED;
+    typedef GrOp INHERITED;
 };
 
 #endif

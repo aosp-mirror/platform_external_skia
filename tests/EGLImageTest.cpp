@@ -9,10 +9,10 @@
 #if SK_SUPPORT_GPU
 #include "GrContext.h"
 #include "GrContextFactory.h"
+#include "GrShaderCaps.h"
 #include "gl/GrGLGpu.h"
 #include "gl/GrGLUtil.h"
 #include "gl/GLTestContext.h"
-#include "glsl/GrGLSLCaps.h"
 
 using sk_gpu_test::GLTestContext;
 
@@ -92,7 +92,7 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(EGLImageTest, reporter, ctxInfo) {
         return;
     }
     GrGLGpu* gpu0 = static_cast<GrGLGpu*>(context0->getGpu());
-    if (!gpu0->glCaps().glslCaps()->externalTextureSupport()) {
+    if (!gpu0->glCaps().shaderCaps()->externalTextureSupport()) {
         return;
     }
 

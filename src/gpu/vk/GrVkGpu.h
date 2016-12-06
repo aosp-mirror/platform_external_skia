@@ -102,7 +102,6 @@ public:
     void clearStencil(GrRenderTarget* target) override;
 
     GrGpuCommandBuffer* createCommandBuffer(
-            GrRenderTarget* target,
             const GrGpuCommandBuffer::LoadAndStoreInfo& colorInfo,
             const GrGpuCommandBuffer::LoadAndStoreInfo& stencilInfo) override;
 
@@ -233,11 +232,6 @@ private:
                               GrSurface* src,
                               const SkIRect& srcRect,
                               const SkIPoint& dstPoint);
-
-    void copySurfaceAsDraw(GrSurface* dst,
-                           GrSurface* src,
-                           const SkIRect& srcRect,
-                           const SkIPoint& dstPoint);
 
     // helpers for onCreateTexture and writeTexturePixels
     bool uploadTexDataLinear(GrVkTexture* tex,

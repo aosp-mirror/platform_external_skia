@@ -22,6 +22,7 @@ void GrDrawPathBatchBase::onPrepare(GrBatchFlushState*) {
 SkString GrDrawPathBatch::dumpInfo() const {
     SkString string;
     string.printf("PATH: 0x%p", fPath.get());
+    string.append(DumpPipelineInfo(*this->pipeline()));
     string.append(INHERITED::dumpInfo());
     return string;
 }
@@ -44,6 +45,7 @@ SkString GrDrawPathRangeBatch::dumpInfo() const {
     }
     string.remove(string.size() - 2, 2);
     string.append("]");
+    string.append(DumpPipelineInfo(*this->pipeline()));
     string.append(INHERITED::dumpInfo());
     return string;
 }
@@ -60,7 +62,7 @@ GrDrawPathRangeBatch::GrDrawPathRangeBatch(const SkMatrix& viewMatrix, SkScalar 
     this->setBounds(bounds, HasAABloat::kNo, IsZeroArea::kNo);
 }
 
-bool GrDrawPathRangeBatch::onCombineIfPossible(GrBatch* t, const GrCaps& caps) {
+bool GrDrawPathRangeBatch::onCombineIfPossible(GrOp* t, const GrCaps& caps) {
     GrDrawPathRangeBatch* that = t->cast<GrDrawPathRangeBatch>();
     if (this->fPathRange.get() != that->fPathRange.get() ||
         this->transformType() != that->transformType() ||

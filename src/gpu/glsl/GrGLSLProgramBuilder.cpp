@@ -7,9 +7,10 @@
 
 #include "glsl/GrGLSLProgramBuilder.h"
 
+#include "GrCaps.h"
 #include "GrPipeline.h"
+#include "GrShaderCaps.h"
 #include "GrTexturePriv.h"
-#include "glsl/GrGLSLCaps.h"
 #include "glsl/GrGLSLFragmentProcessor.h"
 #include "glsl/GrGLSLGeometryProcessor.h"
 #include "glsl/GrGLSLVarying.h"
@@ -98,7 +99,7 @@ void GrGLSLProgramBuilder::emitAndInstallPrimProc(const GrPrimitiveProcessor& pr
     fVS.codeAppendf("// Primitive Processor %s\n", proc.name());
 
     SkASSERT(!fGeometryProcessor);
-    fGeometryProcessor = proc.createGLSLInstance(*this->glslCaps());
+    fGeometryProcessor = proc.createGLSLInstance(*this->shaderCaps());
 
     SkSTArray<4, SamplerHandle>      texSamplers(proc.numTextureSamplers());
     SkSTArray<2, SamplerHandle>      bufferSamplers(proc.numBuffers());
@@ -112,7 +113,7 @@ void GrGLSLProgramBuilder::emitAndInstallPrimProc(const GrPrimitiveProcessor& pr
                                            &fFS,
                                            this->varyingHandler(),
                                            this->uniformHandler(),
-                                           this->glslCaps(),
+                                           this->shaderCaps(),
                                            proc,
                                            outputColor->c_str(),
                                            outputCoverage->c_str(),
@@ -182,7 +183,7 @@ void GrGLSLProgramBuilder::emitAndInstallFragProc(const GrFragmentProcessor& fp,
     GrGLSLFragmentProcessor::ImageStorages imageStorages(&fp, imageStorageArray.begin());
     GrGLSLFragmentProcessor::EmitArgs args(&fFS,
                                            this->uniformHandler(),
-                                           this->glslCaps(),
+                                           this->shaderCaps(),
                                            fp,
                                            output->c_str(),
                                            input.isOnes() ? nullptr : input.c_str(),
@@ -218,7 +219,7 @@ void GrGLSLProgramBuilder::emitAndInstallXferProc(const GrXferProcessor& xp,
         fFS.enableSecondaryOutput();
     }
 
-    if (this->glslCaps()->mustDeclareFragmentShaderOutput()) {
+    if (this->shaderCaps()->mustDeclareFragmentShaderOutput()) {
         fFS.enableCustomOutput();
     }
 
@@ -234,7 +235,7 @@ void GrGLSLProgramBuilder::emitAndInstallXferProc(const GrXferProcessor& xp,
     bool usePLSDstRead = (plsState == GrPixelLocalStorageState::kFinish_GrPixelLocalStorageState);
     GrGLSLXferProcessor::EmitArgs args(&fFS,
                                        this->uniformHandler(),
-                                       this->glslCaps(),
+                                       this->shaderCaps(),
                                        xp, colorIn.c_str(),
                                        ignoresCoverage ? nullptr : coverageIn.c_str(),
                                        fFS.getPrimaryColorOutputName(),
@@ -263,7 +264,8 @@ void GrGLSLProgramBuilder::emitSamplersAndImageStorages(
         name.printf("TextureSampler_%d", outTexSamplerHandles->count());
         GrSLType samplerType = sampler.texture()->texturePriv().samplerType();
         if (kTextureExternalSampler_GrSLType == samplerType) {
-            const char* externalFeatureString = this->glslCaps()->externalTextureExtensionString();
+            const char* externalFeatureString =
+                    this->shaderCaps()->externalTextureExtensionString();
             // We shouldn't ever create a GrGLTexture that requires external sampler type
             SkASSERT(externalFeatureString);
             this->addFeature(sampler.visibility(),
@@ -276,7 +278,7 @@ void GrGLSLProgramBuilder::emitSamplersAndImageStorages(
     }
 
     if (int numBuffers = processor.numBuffers()) {
-        SkASSERT(this->glslCaps()->texelBufferSupport());
+        SkASSERT(this->shaderCaps()->texelBufferSupport());
         GrShaderFlags texelBufferVisibility = kNone_GrShaderFlags;
 
         for (int b = 0; b < numBuffers; ++b) {
@@ -287,7 +289,7 @@ void GrGLSLProgramBuilder::emitSamplersAndImageStorages(
             texelBufferVisibility |= access.visibility();
         }
 
-        if (const char* extension = this->glslCaps()->texelBufferExtensionString()) {
+        if (const char* extension = this->shaderCaps()->texelBufferExtensionString()) {
             this->addFeature(texelBufferVisibility,
                              1 << GrGLSLShaderBuilder::kTexelBuffer_GLSLPrivateFeature,
                              extension);
@@ -316,8 +318,8 @@ void GrGLSLProgramBuilder::emitSampler(GrSLType samplerType,
     if (visibility & kFragment_GrShaderFlag) {
         ++fNumFragmentSamplers;
     }
-    GrSLPrecision precision = this->glslCaps()->samplerPrecision(config, visibility);
-    GrSwizzle swizzle = this->glslCaps()->configTextureSwizzle(config);
+    GrSLPrecision precision = this->shaderCaps()->samplerPrecision(config, visibility);
+    GrSwizzle swizzle = this->shaderCaps()->configTextureSwizzle(config);
     outSamplerHandles->emplace_back(this->uniformHandler()->addSampler(visibility,
                                                                        swizzle,
                                                                        samplerType,
@@ -362,22 +364,22 @@ void GrGLSLProgramBuilder::emitFSOutputSwizzle(bool hasSecondaryOutput) {
 }
 
 bool GrGLSLProgramBuilder::checkSamplerCounts() {
-    const GrGLSLCaps& glslCaps = *this->glslCaps();
-    if (fNumVertexSamplers > glslCaps.maxVertexSamplers()) {
+    const GrShaderCaps& shaderCaps = *this->shaderCaps();
+    if (fNumVertexSamplers > shaderCaps.maxVertexSamplers()) {
         GrCapsDebugf(this->caps(), "Program would use too many vertex samplers\n");
         return false;
     }
-    if (fNumGeometrySamplers > glslCaps.maxGeometrySamplers()) {
+    if (fNumGeometrySamplers > shaderCaps.maxGeometrySamplers()) {
         GrCapsDebugf(this->caps(), "Program would use too many geometry samplers\n");
         return false;
     }
-    if (fNumFragmentSamplers > glslCaps.maxFragmentSamplers()) {
+    if (fNumFragmentSamplers > shaderCaps.maxFragmentSamplers()) {
         GrCapsDebugf(this->caps(), "Program would use too many fragment samplers\n");
         return false;
     }
     // If the same sampler is used in two different shaders, it counts as two combined samplers.
     int numCombinedSamplers = fNumVertexSamplers + fNumGeometrySamplers + fNumFragmentSamplers;
-    if (numCombinedSamplers > glslCaps.maxCombinedSamplers()) {
+    if (numCombinedSamplers > shaderCaps.maxCombinedSamplers()) {
         GrCapsDebugf(this->caps(), "Program would use too many combined samplers\n");
         return false;
     }
@@ -385,23 +387,23 @@ bool GrGLSLProgramBuilder::checkSamplerCounts() {
 }
 
 bool GrGLSLProgramBuilder::checkImageStorageCounts() {
-    const GrGLSLCaps& glslCaps = *this->glslCaps();
-    if (fNumVertexImageStorages > glslCaps.maxVertexImageStorages()) {
+    const GrShaderCaps& shaderCaps = *this->shaderCaps();
+    if (fNumVertexImageStorages > shaderCaps.maxVertexImageStorages()) {
         GrCapsDebugf(this->caps(), "Program would use too many vertex images\n");
         return false;
     }
-    if (fNumGeometryImageStorages > glslCaps.maxGeometryImageStorages()) {
+    if (fNumGeometryImageStorages > shaderCaps.maxGeometryImageStorages()) {
         GrCapsDebugf(this->caps(), "Program would use too many geometry images\n");
         return false;
     }
-    if (fNumFragmentImageStorages > glslCaps.maxFragmentImageStorages()) {
+    if (fNumFragmentImageStorages > shaderCaps.maxFragmentImageStorages()) {
         GrCapsDebugf(this->caps(), "Program would use too many fragment images\n");
         return false;
     }
     // If the same image is used in two different shaders, it counts as two combined images.
     int numCombinedImages = fNumVertexImageStorages + fNumGeometryImageStorages +
         fNumFragmentImageStorages;
-    if (numCombinedImages > glslCaps.maxCombinedImageStorages()) {
+    if (numCombinedImages > shaderCaps.maxCombinedImageStorages()) {
         GrCapsDebugf(this->caps(), "Program would use too many combined images\n");
         return false;
     }
@@ -487,7 +489,7 @@ void GrGLSLProgramBuilder::finalizeShaders() {
     this->varyingHandler()->finalize();
     fVS.finalize(kVertex_GrShaderFlag);
     if (this->primitiveProcessor().willUseGeoShader()) {
-        SkASSERT(this->glslCaps()->geometryShaderSupport());
+        SkASSERT(this->shaderCaps()->geometryShaderSupport());
         fGS.finalize(kGeometry_GrShaderFlag);
     }
     fFS.finalize(kFragment_GrShaderFlag);

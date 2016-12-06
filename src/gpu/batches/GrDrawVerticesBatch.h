@@ -20,7 +20,7 @@ struct GrInitInvariantOutput;
 
 class GrDrawVerticesBatch : public GrVertexBatch {
 public:
-    DEFINE_BATCH_CLASS_ID
+    DEFINE_OP_CLASS_ID
 
 
     GrDrawVerticesBatch(GrColor color, GrPrimitiveType primitiveType,
@@ -30,6 +30,15 @@ public:
                         const GrColor* colors, const SkPoint* localCoords, const SkRect& bounds);
 
     const char* name() const override { return "DrawVerticesBatch"; }
+
+    SkString dumpInfo() const override {
+        SkString string;
+        string.appendf("PrimType: %d, VarColor: %d, VCount: %d, ICount: %d\n",
+                       fPrimitiveType, fVariableColor, fVertexCount, fIndexCount);
+        string.append(DumpPipelineInfo(*this->pipeline()));
+        string.append(INHERITED::dumpInfo());
+        return string;
+    }
 
     void computePipelineOptimizations(GrInitInvariantOutput* color,
                                       GrInitInvariantOutput* coverage,
@@ -46,7 +55,7 @@ private:
                kPoints_GrPrimitiveType == fPrimitiveType;
     }
 
-    bool onCombineIfPossible(GrBatch* t, const GrCaps&) override;
+    bool onCombineIfPossible(GrOp* t, const GrCaps&) override;
 
     struct Mesh {
         GrColor fColor; // Only used if there are no per-vertex colors

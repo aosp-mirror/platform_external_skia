@@ -27,7 +27,7 @@
 namespace {
 class Batch : public GrVertexBatch {
 public:
-    DEFINE_BATCH_CLASS_ID
+    DEFINE_OP_CLASS_ID
 
     const char* name() const override { return "Dummy Batch"; }
     void computePipelineOptimizations(GrInitInvariantOutput* color,
@@ -46,7 +46,7 @@ public:
     }
 
 private:
-    bool onCombineIfPossible(GrBatch*, const GrCaps&) override { return false; }
+    bool onCombineIfPossible(GrOp*, const GrCaps&) override { return false; }
     void onPrepareDraws(Target* target) const override {
         class GP : public GrGeometryProcessor {
         public:
@@ -62,7 +62,7 @@ private:
             }
             const char* name() const override { return "Dummy GP"; }
 
-            GrGLSLPrimitiveProcessor* createGLSLInstance(const GrGLSLCaps&) const override {
+            GrGLSLPrimitiveProcessor* createGLSLInstance(const GrShaderCaps&) const override {
                 class GLSLGP : public GrGLSLGeometryProcessor {
                 public:
                     void onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) override {
@@ -79,7 +79,7 @@ private:
                 };
                 return new GLSLGP();
             }
-            void getGLSLProcessorKey(const GrGLSLCaps&,
+            void getGLSLProcessorKey(const GrShaderCaps&,
                                      GrProcessorKeyBuilder* builder) const override {
                 builder->add32(this->numAttribs());
             }

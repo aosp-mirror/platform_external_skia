@@ -8,16 +8,16 @@
 #ifndef GrClearStencilClipBatch_DEFINED
 #define GrClearStencilClipBatch_DEFINED
 
-#include "GrBatch.h"
 #include "GrBatchFlushState.h"
 #include "GrFixedClip.h"
 #include "GrGpu.h"
 #include "GrGpuCommandBuffer.h"
+#include "GrOp.h"
 #include "GrRenderTarget.h"
 
-class GrClearStencilClipBatch final : public GrBatch {
+class GrClearStencilClipBatch final : public GrOp {
 public:
-    DEFINE_BATCH_CLASS_ID
+    DEFINE_OP_CLASS_ID
 
     GrClearStencilClipBatch(const GrFixedClip& clip, bool insideStencilMask, GrRenderTarget* rt)
         : INHERITED(ClassID())
@@ -35,7 +35,6 @@ public:
     GrGpuResource::UniqueID renderTargetUniqueID() const override {
         return fRenderTarget.get()->uniqueID();
     }
-    GrRenderTarget* renderTarget() const override { return fRenderTarget.get(); }
 
     SkString dumpInfo() const override {
         SkString string("Scissor [");
@@ -50,19 +49,19 @@ public:
     }
 
 private:
-    bool onCombineIfPossible(GrBatch* t, const GrCaps& caps) override { return false; }
+    bool onCombineIfPossible(GrOp* t, const GrCaps& caps) override { return false; }
 
     void onPrepare(GrBatchFlushState*) override {}
 
     void onDraw(GrBatchFlushState* state, const SkRect& /*bounds*/) override {
-        state->commandBuffer()->clearStencilClip(fClip, fInsideStencilMask);
+        state->commandBuffer()->clearStencilClip(fRenderTarget.get(), fClip, fInsideStencilMask);
     }
 
     const GrFixedClip                                       fClip;
     const bool                                              fInsideStencilMask;
     GrPendingIOResource<GrRenderTarget, kWrite_GrIOType>    fRenderTarget;
 
-    typedef GrBatch INHERITED;
+    typedef GrOp INHERITED;
 };
 
 #endif

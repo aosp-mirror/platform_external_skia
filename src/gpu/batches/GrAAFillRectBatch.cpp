@@ -159,7 +159,7 @@ static void generate_aa_fill_rect_geometry(intptr_t verts,
 }
 class AAFillRectBatch : public GrVertexBatch {
 public:
-    DEFINE_BATCH_CLASS_ID
+    DEFINE_OP_CLASS_ID
 
     AAFillRectBatch(GrColor color,
                     const SkMatrix& viewMatrix,
@@ -191,6 +191,7 @@ public:
                         i, info->color(), rect.fLeft, rect.fTop, rect.fRight, rect.fBottom);
             info = this->next(info);
         }
+        str.append(DumpPipelineInfo(*this->pipeline()));
         str.append(INHERITED::dumpInfo());
         return str;
     }
@@ -265,7 +266,7 @@ private:
         helper.recordDraw(target, gp.get());
     }
 
-    bool onCombineIfPossible(GrBatch* t, const GrCaps& caps) override {
+    bool onCombineIfPossible(GrOp* t, const GrCaps& caps) override {
         AAFillRectBatch* that = t->cast<AAFillRectBatch>();
         if (!GrPipeline::CanCombine(*this->pipeline(), this->bounds(), *that->pipeline(),
                                     that->bounds(), caps)) {

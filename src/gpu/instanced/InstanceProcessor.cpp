@@ -11,7 +11,7 @@
 #include "GrRenderTargetPriv.h"
 #include "GrResourceCache.h"
 #include "GrResourceProvider.h"
-#include "glsl/GrGLSLCaps.h"
+#include "GrShaderCaps.h"
 #include "glsl/GrGLSLGeometryProcessor.h"
 #include "glsl/GrGLSLFragmentShaderBuilder.h"
 #include "glsl/GrGLSLProgramBuilder.h"
@@ -19,23 +19,23 @@
 
 namespace gr_instanced {
 
-GrCaps::InstancedSupport InstanceProcessor::CheckSupport(const GrGLSLCaps& glslCaps,
+GrCaps::InstancedSupport InstanceProcessor::CheckSupport(const GrShaderCaps& shaderCaps,
                                                          const GrCaps& caps) {
-    if (!glslCaps.canUseAnyFunctionInShader() ||
-        !glslCaps.flatInterpolationSupport() ||
-        !glslCaps.integerSupport() ||
-        0 == glslCaps.maxVertexSamplers() ||
+    if (!shaderCaps.canUseAnyFunctionInShader() ||
+        !shaderCaps.flatInterpolationSupport() ||
+        !shaderCaps.integerSupport() ||
+        0 == shaderCaps.maxVertexSamplers() ||
         !caps.shaderCaps()->texelBufferSupport() ||
         caps.maxVertexAttributes() < kNumAttribs) {
         return GrCaps::InstancedSupport::kNone;
     }
     if (!caps.sampleLocationsSupport() ||
-        !glslCaps.sampleVariablesSupport() ||
-        !glslCaps.shaderDerivativeSupport()) {
+        !shaderCaps.sampleVariablesSupport() ||
+        !shaderCaps.shaderDerivativeSupport()) {
         return GrCaps::InstancedSupport::kBasic;
     }
     if (0 == caps.maxRasterSamples() ||
-        !glslCaps.sampleMaskOverrideCoverageSupport()) {
+        !shaderCaps.sampleMaskOverrideCoverageSupport()) {
         return GrCaps::InstancedSupport::kMultisampled;
     }
     return GrCaps::InstancedSupport::kMixedSampled;
@@ -95,7 +95,7 @@ private:
     typedef GrGLSLGeometryProcessor INHERITED;
 };
 
-GrGLSLPrimitiveProcessor* InstanceProcessor::createGLSLInstance(const GrGLSLCaps&) const {
+GrGLSLPrimitiveProcessor* InstanceProcessor::createGLSLInstance(const GrShaderCaps&) const {
     return new GLSLInstanceProcessor();
 }
 

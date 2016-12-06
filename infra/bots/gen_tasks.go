@@ -141,7 +141,9 @@ var (
 		"Perf-Ubuntu-GCC-GCE-CPU-AVX2-x86-Debug",
 		"Perf-Ubuntu-GCC-GCE-CPU-AVX2-x86_64-Debug-GN",
 		"Perf-Ubuntu-GCC-GCE-CPU-AVX2-x86_64-Debug-SK_USE_DISCARDABLE_SCALEDIMAGECACHE",
+		"Perf-Ubuntu-GCC-GCE-CPU-AVX2-x86_64-Release-CT_BENCH_1k_SKPs",
 		"Perf-Ubuntu-GCC-GCE-CPU-AVX2-x86_64-Release-GN",
+		"Perf-Ubuntu-GCC-Golo-GPU-GT610-x86_64-Release-CT_BENCH_1k_SKPs",
 		"Perf-Ubuntu-GCC-ShuttleA-GPU-GTX550Ti-x86_64-Release-Valgrind",
 		"Perf-Ubuntu-GCC-ShuttleA-GPU-GTX660-x86_64-Debug-GN",
 		"Perf-Ubuntu-GCC-ShuttleA-GPU-GTX660-x86_64-Release-GN",
@@ -149,6 +151,23 @@ var (
 		"Perf-Win-MSVC-GCE-CPU-AVX2-x86_64-Debug",
 		"Perf-Win-MSVC-GCE-CPU-AVX2-x86_64-Debug-GDI",
 		"Perf-Win-MSVC-GCE-CPU-AVX2-x86_64-Release",
+		"Perf-Win-MSVC-Golo-GPU-GT610-x86_64-Release",
+		"Perf-Win-MSVC-NUC-GPU-IntelIris6100-x86_64-Debug",
+		"Perf-Win-MSVC-NUC-GPU-IntelIris6100-x86_64-Release",
+		"Perf-Win-MSVC-ShuttleC-GPU-GTX960-x86_64-Debug",
+		"Perf-Win-MSVC-ShuttleC-GPU-GTX960-x86_64-Debug-ANGLE",
+		"Perf-Win-MSVC-ShuttleC-GPU-GTX960-x86_64-Release",
+		"Perf-Win-MSVC-ShuttleC-GPU-GTX960-x86_64-Release-ANGLE",
+		"Perf-Win-MSVC-ShuttleC-GPU-iHD530-x86_64-Debug",
+		"Perf-Win-MSVC-ShuttleC-GPU-iHD530-x86_64-Release",
+		"Perf-Win10-MSVC-ShuttleA-GPU-GTX660-x86_64-Debug",
+		"Perf-Win10-MSVC-ShuttleA-GPU-GTX660-x86_64-Debug-Vulkan",
+		"Perf-Win10-MSVC-ShuttleA-GPU-GTX660-x86_64-Release",
+		"Perf-Win10-MSVC-ShuttleA-GPU-GTX660-x86_64-Release-Vulkan",
+		"Perf-Win8-MSVC-ShuttleA-GPU-HD7770-x86_64-Debug",
+		"Perf-Win8-MSVC-ShuttleA-GPU-HD7770-x86_64-Release",
+		"Perf-Win8-MSVC-ShuttleB-GPU-HD4600-x86_64-Debug",
+		"Perf-Win8-MSVC-ShuttleB-GPU-HD4600-x86_64-Release",
 		"Perf-iOS-Clang-iPadMini4-GPU-GX6450-Arm7-Debug",
 		"Perf-iOS-Clang-iPadMini4-GPU-GX6450-Arm7-Release",
 		"Test-Android-Clang-AndroidOne-CPU-MT6582-arm-Debug-GN_Android",
@@ -202,6 +221,9 @@ var (
 		"Test-Ubuntu-Clang-Golo-GPU-GT610-x86_64-Debug-ASAN",
 		"Test-Ubuntu-Clang-Golo-GPU-GT610-x86_64-Release-TSAN",
 		"Test-Ubuntu-GCC-GCE-CPU-AVX2-x86-Debug",
+		"Test-Ubuntu-GCC-GCE-CPU-AVX2-x86_64-Debug-CT_DM_100k_SKPs",
+		"Test-Ubuntu-GCC-GCE-CPU-AVX2-x86_64-Debug-CT_DM_1m_SKPs",
+		"Test-Ubuntu-GCC-GCE-CPU-AVX2-x86_64-Debug-CT_IMG_DECODE_100k_SKPs",
 		"Test-Ubuntu-GCC-GCE-CPU-AVX2-x86_64-Debug-GN",
 		"Test-Ubuntu-GCC-GCE-CPU-AVX2-x86_64-Debug-SK_USE_DISCARDABLE_SCALEDIMAGECACHE",
 		"Test-Ubuntu-GCC-GCE-CPU-AVX2-x86_64-Release-Fast",
@@ -216,6 +238,22 @@ var (
 		"Test-Win-MSVC-GCE-CPU-AVX2-x86_64-Debug-GDI",
 		"Test-Win-MSVC-GCE-CPU-AVX2-x86_64-Release",
 		"Test-Win-MSVC-GCE-CPU-AVX2-x86_64-Release-GDI",
+		"Test-Win-MSVC-Golo-GPU-GT610-x86_64-Release",
+		"Test-Win-MSVC-NUC-GPU-IntelIris6100-x86_64-Debug",
+		"Test-Win-MSVC-NUC-GPU-IntelIris6100-x86_64-Release",
+		"Test-Win-MSVC-ShuttleC-GPU-GTX960-x86_64-Debug",
+		"Test-Win-MSVC-ShuttleC-GPU-GTX960-x86_64-Debug-ANGLE",
+		"Test-Win-MSVC-ShuttleC-GPU-GTX960-x86_64-Release",
+		"Test-Win-MSVC-ShuttleC-GPU-GTX960-x86_64-Release-ANGLE",
+		"Test-Win-MSVC-ShuttleC-GPU-iHD530-x86_64-Debug",
+		"Test-Win-MSVC-ShuttleC-GPU-iHD530-x86_64-Release",
+		"Test-Win10-MSVC-ShuttleA-GPU-GTX660-x86_64-Debug",
+		"Test-Win10-MSVC-ShuttleA-GPU-GTX660-x86_64-Debug-Vulkan",
+		"Test-Win10-MSVC-ShuttleA-GPU-GTX660-x86_64-Release",
+		"Test-Win8-MSVC-ShuttleA-GPU-HD7770-x86_64-Debug",
+		"Test-Win8-MSVC-ShuttleA-GPU-HD7770-x86_64-Release",
+		"Test-Win8-MSVC-ShuttleB-GPU-HD4600-x86_64-Debug",
+		"Test-Win8-MSVC-ShuttleB-GPU-HD4600-x86_64-Release",
 		"Test-iOS-Clang-iPadMini4-GPU-GX6450-Arm7-Debug",
 		"Test-iOS-Clang-iPadMini4-GPU-GX6450-Arm7-Release",
 	}
@@ -711,7 +749,8 @@ func process(b *specs.TasksCfgBuilder, name string) {
 	// These bots do not need a compile task.
 	if parts["role"] != "Build" &&
 		name != "Housekeeper-PerCommit-InfraTests" &&
-		!strings.Contains(name, "RecreateSKPs") {
+		!strings.Contains(name, "RecreateSKPs") &&
+		!strings.Contains(name, "-CT_") {
 		compile(b, compileTaskName, compileTaskParts)
 	}
 
@@ -737,12 +776,12 @@ func process(b *specs.TasksCfgBuilder, name string) {
 	}
 
 	// Test bots.
-	if parts["role"] == "Test" {
+	if parts["role"] == "Test" && !strings.Contains(name, "-CT_") {
 		deps = append(deps, test(b, name, parts, compileTaskName, pkgs))
 	}
 
 	// Perf bots.
-	if parts["role"] == "Perf" {
+	if parts["role"] == "Perf" && !strings.Contains(name, "-CT_") {
 		deps = append(deps, perf(b, name, parts, compileTaskName, pkgs))
 	}
 
@@ -755,6 +794,9 @@ func process(b *specs.TasksCfgBuilder, name string) {
 		j.Trigger = "nightly"
 	}
 	if name == "Housekeeper-Weekly-RecreateSKPs" {
+		j.Trigger = "weekly"
+	}
+	if name == "Test-Ubuntu-GCC-GCE-CPU-AVX2-x86_64-Debug-CT_DM_1m_SKPs" {
 		j.Trigger = "weekly"
 	}
 	b.AddJob(name, j)

@@ -17,7 +17,7 @@ namespace gr_instanced {
 
 class GLInstancedRendering::GLBatch : public InstancedRendering::Batch {
 public:
-    DEFINE_BATCH_CLASS_ID
+    DEFINE_OP_CLASS_ID
 
     GLBatch(GLInstancedRendering* instRendering) : INHERITED(ClassID(), instRendering) {}
     int numGLCommands() const { return 1 + fNumChangesInGeometry; }
@@ -38,7 +38,7 @@ GrCaps::InstancedSupport GLInstancedRendering::CheckSupport(const GrGLCaps& glCa
         (!glCaps.drawIndirectSupport() && !glCaps.drawInstancedSupport())) {
         return GrCaps::InstancedSupport::kNone;
     }
-    return InstanceProcessor::CheckSupport(*glCaps.glslCaps(), glCaps);
+    return InstanceProcessor::CheckSupport(*glCaps.shaderCaps(), glCaps);
 }
 
 GLInstancedRendering::GLInstancedRendering(GrGLGpu* gpu)

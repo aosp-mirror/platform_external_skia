@@ -14,11 +14,11 @@
 #include "SkColorSpaceXformPriv.h"
 #include "SkHalf.h"
 #include "SkImageShaderContext.h"
+#include "SkMSAN.h"
 #include "SkPM4f.h"
 #include "SkPM4fPriv.h"
 #include "SkRasterPipeline.h"
 #include "SkSRGB.h"
-#include "SkUtils.h"
 #include <utility>
 
 namespace {
@@ -193,13 +193,22 @@ SI void store(size_t tail, const SkNx<N,T>& v, T* dst) {
         return _mm256_mask_i32gather_epi32(SkNi(0).fVec,
                                            (const int*)src, offset.fVec, mask(tail), 4);
     }
+
+    static const char* bug = "I don't think MSAN understands maskstore.";
+
     SI void store(size_t tail, const SkNi& v,  int32_t* dst) {
-        tail ? _mm256_maskstore_epi32((int*)dst, mask(tail), v.fVec)
-             : v.store(dst);
+        if (tail) {
+            _mm256_maskstore_epi32((int*)dst, mask(tail), v.fVec);
+            return sk_msan_mark_initialized(dst, dst+tail, bug);
+        }
+        v.store(dst);
     }
     SI void store(size_t tail, const SkNu& v, uint32_t* dst) {
-        tail ? _mm256_maskstore_epi32((int*)dst, mask(tail), v.fVec)
-             : v.store(dst);
+        if (tail) {
+            _mm256_maskstore_epi32((int*)dst, mask(tail), v.fVec);
+            return sk_msan_mark_initialized(dst, dst+tail, bug);
+        }
+        v.store(dst);
     }
 #endif
 
@@ -278,6 +287,13 @@ STAGE(premul) {
     b *= a;
 }
 
+STAGE(set_rgb) {
+    auto rgb = (const float*)ctx;
+    r = rgb[0];
+    g = rgb[1];
+    b = rgb[2];
+}
+
 STAGE(move_src_dst) {
     dr = r;
     dg = g;
@@ -319,8 +335,8 @@ STAGE(constant_color) {
     a = color->a();
 }
 
-// s' = sc for a constant c.
-STAGE(scale_constant_float) {
+// s' = sc for a scalar c.
+STAGE(scale_1_float) {
     SkNf c = *(const float*)ctx;
 
     r *= c;
@@ -343,8 +359,8 @@ SI SkNf lerp(const SkNf& from, const SkNf& to, const SkNf& cov) {
     return SkNx_fma(to-from, cov, from);
 }
 
-// s' = d(1-c) + sc, for a constant c.
-STAGE(lerp_constant_float) {
+// s' = d(1-c) + sc, for a scalar c.
+STAGE(lerp_1_float) {
     SkNf c = *(const float*)ctx;
 
     r = lerp(dr, r, c);
@@ -767,8 +783,21 @@ SI SkNi offset_and_ptr(T** ptr, const void* ctx, const SkNf& x, const SkNf& y) {
     return offset;
 }
 
-STAGE(gather_a8) {}  // TODO
-STAGE(gather_i8) {}  // TODO
+STAGE(gather_a8) {
+    const uint8_t* p;
+    SkNi offset = offset_and_ptr(&p, ctx, r, g);
+
+    r = g = b = 0.0f;
+    a = SkNx_cast<float>(gather(tail, p, offset)) * (1/255.0f);
+}
+STAGE(gather_i8) {
+    auto sc = (const SkImageShaderContext*)ctx;
+    const uint8_t* p;
+    SkNi offset = offset_and_ptr(&p, sc, r, g);
+
+    SkNi ix = SkNx_cast<int>(gather(tail, p, offset));
+    from_8888(gather(tail, sc->ctable->readColors(), ix), &r, &g, &b, &a);
+}
 STAGE(gather_g8) {
     const uint8_t* p;
     SkNi offset = offset_and_ptr(&p, ctx, r, g);
@@ -832,42 +861,8 @@ SI Fn enum_to_Fn(SkRasterPipeline::StockStage st) {
 
 namespace SK_OPTS_NS {
 
-    struct Memset16 {
-        uint16_t** dst;
-        uint16_t val;
-        void operator()(size_t x, size_t, size_t n) { sk_memset16(*dst + x, val, n); }
-    };
-    struct Memset32 {
-        uint32_t** dst;
-        uint32_t val;
-        void operator()(size_t x, size_t, size_t n) { sk_memset32(*dst + x, val, n); }
-    };
-    struct Memset64 {
-        uint64_t** dst;
-        uint64_t val;
-        void operator()(size_t x, size_t, size_t n) { sk_memset64(*dst + x, val, n); }
-    };
-
     SI std::function<void(size_t, size_t, size_t)>
     compile_pipeline(const SkRasterPipeline::Stage* stages, int nstages) {
-        if (nstages == 2 && stages[0].stage == SkRasterPipeline::constant_color) {
-            SkPM4f src = *(const SkPM4f*)stages[0].ctx;
-            void* dst = stages[1].ctx;
-            switch (stages[1].stage) {
-                case SkRasterPipeline::store_565:
-                    return Memset16{(uint16_t**)dst, SkPackRGB16(src.r() * SK_R16_MASK + 0.5f,
-                                                                 src.g() * SK_G16_MASK + 0.5f,
-                                                                 src.b() * SK_B16_MASK + 0.5f)};
-                case SkRasterPipeline::store_8888:
-                    return Memset32{(uint32_t**)dst, Sk4f_toL32(src.to4f())};
-
-                case SkRasterPipeline::store_f16:
-                    return Memset64{(uint64_t**)dst, src.toF16()};
-
-                default: break;
-            }
-        }
-
         struct Compiled {
             Compiled(const SkRasterPipeline::Stage* stages, int nstages) {
                 if (nstages == 0) {
@@ -905,6 +900,11 @@ namespace SK_OPTS_NS {
 
         } fn { stages, nstages };
         return fn;
+    }
+
+    SI void run_pipeline(size_t x, size_t y, size_t n,
+                         const SkRasterPipeline::Stage* stages, int nstages) {
+        compile_pipeline(stages, nstages)(x,y,n);
     }
 
 }  // namespace SK_OPTS_NS

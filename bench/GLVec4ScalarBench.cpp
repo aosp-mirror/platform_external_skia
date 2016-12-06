@@ -11,12 +11,12 @@
 
 #if SK_SUPPORT_GPU
 #include "GLBench.h"
+#include "GrShaderCaps.h"
 #include "GrShaderVar.h"
 #include "gl/GrGLContext.h"
 #include "gl/GrGLInterface.h"
 #include "gl/GrGLUtil.h"
-#include "glsl/GrGLSL.h"
-#include "glsl/GrGLSLCaps.h"
+#include "../private/GrGLSL.h"
 
 #include <stdio.h>
 
@@ -93,8 +93,8 @@ private:
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 GrGLuint GLVec4ScalarBench::setupShader(const GrGLContext* ctx) {
-    const GrGLSLCaps* glslCaps = ctx->caps()->glslCaps();
-    const char* version = glslCaps->versionDeclString();
+    const GrShaderCaps* shaderCaps = ctx->caps()->shaderCaps();
+    const char* version = shaderCaps->versionDeclString();
 
     // this shader draws fNumStages overlapping circles of increasing opacity (coverage) and
     // decreasing size, with the center of each subsequent circle closer to the bottom-right
@@ -107,13 +107,13 @@ GrGLuint GLVec4ScalarBench::setupShader(const GrGLContext* ctx) {
     GrShaderVar oColor("o_color", kVec3f_GrSLType, GrShaderVar::kOut_TypeModifier);
 
     SkString vshaderTxt(version);
-    aPosition.appendDecl(glslCaps, &vshaderTxt);
+    aPosition.appendDecl(shaderCaps, &vshaderTxt);
     vshaderTxt.append(";\n");
-    aColor.appendDecl(glslCaps, &vshaderTxt);
+    aColor.appendDecl(shaderCaps, &vshaderTxt);
     vshaderTxt.append(";\n");
-    oPosition.appendDecl(glslCaps, &vshaderTxt);
+    oPosition.appendDecl(shaderCaps, &vshaderTxt);
     vshaderTxt.append(";\n");
-    oColor.appendDecl(glslCaps, &vshaderTxt);
+    oColor.appendDecl(shaderCaps, &vshaderTxt);
     vshaderTxt.append(";\n");
 
     vshaderTxt.append(
@@ -131,17 +131,17 @@ GrGLuint GLVec4ScalarBench::setupShader(const GrGLContext* ctx) {
     // next stage.
     GrShaderVar oFragColor("o_FragColor", kVec4f_GrSLType, GrShaderVar::kOut_TypeModifier);
     SkString fshaderTxt(version);
-    GrGLSLAppendDefaultFloatPrecisionDeclaration(kDefault_GrSLPrecision, *glslCaps, &fshaderTxt);
+    GrGLSLAppendDefaultFloatPrecisionDeclaration(kDefault_GrSLPrecision, *shaderCaps, &fshaderTxt);
     oPosition.setTypeModifier(GrShaderVar::kIn_TypeModifier);
-    oPosition.appendDecl(glslCaps, &fshaderTxt);
+    oPosition.appendDecl(shaderCaps, &fshaderTxt);
     fshaderTxt.append(";\n");
     oColor.setTypeModifier(GrShaderVar::kIn_TypeModifier);
-    oColor.appendDecl(glslCaps, &fshaderTxt);
+    oColor.appendDecl(shaderCaps, &fshaderTxt);
     fshaderTxt.append(";\n");
 
     const char* fsOutName;
-    if (glslCaps->mustDeclareFragmentShaderOutput()) {
-        oFragColor.appendDecl(glslCaps, &fshaderTxt);
+    if (shaderCaps->mustDeclareFragmentShaderOutput()) {
+        oFragColor.appendDecl(shaderCaps, &fshaderTxt);
         fshaderTxt.append(";\n");
         fsOutName = oFragColor.c_str();
     } else {

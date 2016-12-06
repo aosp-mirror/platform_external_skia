@@ -47,9 +47,20 @@ inline static bool allowed_stroke(const SkStrokeRec& stroke) {
 
 class NonAAStrokeRectBatch : public GrVertexBatch {
 public:
-    DEFINE_BATCH_CLASS_ID
+    DEFINE_OP_CLASS_ID
 
     const char* name() const override { return "NonAAStrokeRectBatch"; }
+
+    SkString dumpInfo() const override {
+        SkString string;
+        string.appendf("Color: 0x%08x, Rect [L: %.2f, T: %.2f, R: %.2f, B: %.2f], "
+                       "StrokeWidth: %.2f\n",
+                       fColor, fRect.fLeft, fRect.fTop, fRect.fRight, fRect.fBottom,
+                       fStrokeWidth);
+        string.append(DumpPipelineInfo(*this->pipeline()));
+        string.append(INHERITED::dumpInfo());
+        return string;
+    }
 
     void computePipelineOptimizations(GrInitInvariantOutput* color,
                                       GrInitInvariantOutput* coverage,
@@ -156,7 +167,7 @@ private:
         fOverrides = overrides;
     }
 
-    bool onCombineIfPossible(GrBatch* t, const GrCaps&) override {
+    bool onCombineIfPossible(GrOp* t, const GrCaps&) override {
         // NonAA stroke rects cannot batch right now
         // TODO make these batchable
         return false;

@@ -34,7 +34,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ImageStorageLoad, reporter, ctxInfo) {
             this->addImageStorageAccess(&fImageStorageAccess);
         }
 
-        void onGetGLSLProcessorKey(const GrGLSLCaps&, GrProcessorKeyBuilder*) const override {}
+        void onGetGLSLProcessorKey(const GrShaderCaps&, GrProcessorKeyBuilder*) const override {}
 
         void onComputeInvariantOutput(GrInvariantOutput* inout) const override {
             inout->setToUnknown(GrInvariantOutput::kWillNot_ReadInput);
@@ -79,7 +79,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ImageStorageLoad, reporter, ctxInfo) {
 
     static constexpr int kS = 256;
     GrContext* context = ctxInfo.grContext();
-    if (!context->caps()->shaderCaps()->imageLoadStoreSupport()) {
+    if (context->caps()->shaderCaps()->maxFragmentImageStorages() < 1) {
         return;
     }
 

@@ -100,6 +100,25 @@ protected:
         ~Batch() override;
         const char* name() const override { return "Instanced Batch"; }
 
+        SkString dumpInfo() const override {
+            SkString string;
+            string.printf("AA: %d, ShapeTypes: 0x%02x, IShapeTypes: 0x%02x, Persp %d, "
+                          "NonSquare: %d, PLoad: %0.2f, Tracked: %d, NumDraws: %d, "
+                          "GeomChanges: %d\n",
+                          (int)fInfo.fAntialiasMode,
+                          fInfo.fShapeTypes,
+                          fInfo.fInnerShapeTypes,
+                          fInfo.fHasPerspective,
+                          fInfo.fNonSquare,
+                          fPixelLoad,
+                          fIsTracked,
+                          fNumDraws,
+                          fNumChangesInGeometry);
+            string.append(DumpPipelineInfo(*this->pipeline()));
+            string.append(INHERITED::dumpInfo());
+            return string;
+        }
+
         struct Draw {
             Instance     fInstance;
             IndexRange   fGeometry;
@@ -118,7 +137,7 @@ protected:
         Batch(uint32_t classID, InstancedRendering* ir);
 
         void initBatchTracker(const GrXPOverridesForBatch&) override;
-        bool onCombineIfPossible(GrBatch* other, const GrCaps& caps) override;
+        bool onCombineIfPossible(GrOp* other, const GrCaps& caps) override;
 
         void computePipelineOptimizations(GrInitInvariantOutput* color,
                                           GrInitInvariantOutput* coverage,

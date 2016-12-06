@@ -7,8 +7,9 @@
 
 #include "GrVkCopyManager.h"
 
-#include "GrSurface.h"
 #include "GrSamplerParams.h"
+#include "GrShaderCaps.h"
+#include "GrSurface.h"
 #include "GrTexturePriv.h"
 #include "GrVkCommandBuffer.h"
 #include "GrVkCopyPipeline.h"
@@ -21,13 +22,12 @@
 #include "GrVkTexture.h"
 #include "GrVkUniformBuffer.h"
 #include "GrVkVertexBuffer.h"
-#include "glsl/GrGLSLCaps.h"
 #include "SkPoint.h"
 #include "SkRect.h"
 
 bool GrVkCopyManager::createCopyProgram(GrVkGpu* gpu) {
-    const GrGLSLCaps* glslCaps = gpu->vkCaps().glslCaps();
-    const char* version = glslCaps->versionDeclString();
+    const GrShaderCaps* shaderCaps = gpu->caps()->shaderCaps();
+    const char* version = shaderCaps->versionDeclString();
     SkString vertShaderText(version);
     vertShaderText.append(
         "#extension GL_ARB_separate_shader_objects : enable\n"

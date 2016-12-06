@@ -189,7 +189,7 @@ public:
         }
 
         static void GenKey(const GrGeometryProcessor& gp,
-                           const GrGLSLCaps&,
+                           const GrShaderCaps&,
                            GrProcessorKeyBuilder* b) {
             b->add32(0x0);
         }
@@ -204,11 +204,11 @@ public:
         typedef GrGLSLGeometryProcessor INHERITED;
     };
 
-    void getGLSLProcessorKey(const GrGLSLCaps& caps, GrProcessorKeyBuilder* b) const override {
+    void getGLSLProcessorKey(const GrShaderCaps& caps, GrProcessorKeyBuilder* b) const override {
         GLSLProcessor::GenKey(*this, caps, b);
     }
 
-    GrGLSLPrimitiveProcessor* createGLSLInstance(const GrGLSLCaps&) const override {
+    GrGLSLPrimitiveProcessor* createGLSLInstance(const GrShaderCaps&) const override {
         return new GLSLProcessor();
     }
 
@@ -236,7 +236,7 @@ sk_sp<GrGeometryProcessor> RectGeometryProcessor::TestCreate(GrProcessorTestData
 
 class AnalyticRectBatch : public GrVertexBatch {
 public:
-    DEFINE_BATCH_CLASS_ID
+    DEFINE_OP_CLASS_ID
 
     AnalyticRectBatch(GrColor color, const SkMatrix& viewMatrix, const SkRect& rect,
                       const SkRect& croppedRect, const SkRect& bounds)
@@ -270,6 +270,7 @@ public:
                            fGeoData[i].fHalfWidth,
                            fGeoData[i].fHalfHeight);
         }
+        string.append(DumpPipelineInfo(*this->pipeline()));
         string.append(INHERITED::dumpInfo());
         return string;
     }
@@ -356,7 +357,7 @@ private:
         helper.recordDraw(target, gp.get());
     }
 
-    bool onCombineIfPossible(GrBatch* t, const GrCaps& caps) override {
+    bool onCombineIfPossible(GrOp* t, const GrCaps& caps) override {
         AnalyticRectBatch* that = t->cast<AnalyticRectBatch>();
         if (!GrPipeline::CanCombine(*this->pipeline(), this->bounds(), *that->pipeline(),
                                     that->bounds(), caps)) {

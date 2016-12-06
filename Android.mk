@@ -454,6 +454,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrRenderTargetOpList.cpp \
 	src/gpu/GrResourceCache.cpp \
 	src/gpu/GrResourceProvider.cpp \
+	src/gpu/GrShaderCaps.cpp \
 	src/gpu/GrShape.cpp \
 	src/gpu/GrStencilAttachment.cpp \
 	src/gpu/GrStencilSettings.cpp \
@@ -488,7 +489,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/batches/GrAAStrokeRectBatch.cpp \
 	src/gpu/batches/GrAnalyticRectBatch.cpp \
 	src/gpu/batches/GrAtlasTextBatch.cpp \
-	src/gpu/batches/GrBatch.cpp \
 	src/gpu/batches/GrCopySurfaceBatch.cpp \
 	src/gpu/batches/GrDashLinePathRenderer.cpp \
 	src/gpu/batches/GrDefaultPathRenderer.cpp \
@@ -501,6 +501,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/batches/GrNonAAFillRectPerspectiveBatch.cpp \
 	src/gpu/batches/GrNonAAStrokeRectBatch.cpp \
 	src/gpu/batches/GrNinePatch.cpp \
+	src/gpu/batches/GrOp.cpp \
 	src/gpu/batches/GrPLSPathRenderer.cpp \
 	src/gpu/batches/GrRectBatchFactory.cpp \
 	src/gpu/batches/GrRegionBatch.cpp \
@@ -573,7 +574,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/builders/GrGLSLPrettyPrint.cpp \
 	src/gpu/glsl/GrGLSL.cpp \
 	src/gpu/glsl/GrGLSLBlend.cpp \
-	src/gpu/glsl/GrGLSLCaps.cpp \
 	src/gpu/glsl/GrGLSLFragmentProcessor.cpp \
 	src/gpu/glsl/GrGLSLFragmentShaderBuilder.cpp \
 	src/gpu/glsl/GrGLSLGeometryProcessor.cpp \
@@ -632,12 +632,10 @@ LOCAL_SRC_FILES := \
 	tools/viewer/sk_app/WindowContext.cpp \
 	tools/viewer/sk_app/VulkanWindowContext.cpp \
 	tools/viewer/sk_app/android/VulkanWindowContext_android.cpp \
-	src/images/SkForceLinking.cpp \
 	src/images/SkWEBPImageEncoder.cpp \
 	src/images/SkJPEGImageEncoder.cpp \
 	src/images/SkPNGImageEncoder.cpp \
 	src/images/SkImageEncoder.cpp \
-	src/images/SkImageEncoder_Factory.cpp \
 	src/images/SkJPEGWriteUtility.cpp \
 	src/pdf/SkDeflate.cpp \
 	src/pdf/SkJpegInfo.cpp \

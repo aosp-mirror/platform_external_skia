@@ -13,11 +13,11 @@
 #include "GrInvariantOutput.h"
 #include "GrProcessor.h"
 #include "GrResourceProvider.h"
+#include "GrShaderCaps.h"
 #include "GrStyle.h"
 #include "SkRRect.h"
 #include "SkStrokeRec.h"
 #include "batches/GrVertexBatch.h"
-#include "glsl/GrGLSLCaps.h"
 #include "glsl/GrGLSLFragmentShaderBuilder.h"
 #include "glsl/GrGLSLGeometryProcessor.h"
 #include "glsl/GrGLSLProgramDataManager.h"
@@ -26,7 +26,7 @@
 #include "glsl/GrGLSLUniformHandler.h"
 #include "glsl/GrGLSLUtil.h"
 
-// TODO(joshualitt) - Break this file up during GrBatch post implementation cleanup
+// TODO(joshualitt) - Break this file up during GrOp post implementation cleanup
 
 namespace {
 
@@ -110,11 +110,11 @@ public:
 
     const char* name() const override { return "CircleEdge"; }
 
-    void getGLSLProcessorKey(const GrGLSLCaps& caps, GrProcessorKeyBuilder* b) const override {
+    void getGLSLProcessorKey(const GrShaderCaps& caps, GrProcessorKeyBuilder* b) const override {
         GLSLProcessor::GenKey(*this, caps, b);
     }
 
-    GrGLSLPrimitiveProcessor* createGLSLInstance(const GrGLSLCaps&) const override {
+    GrGLSLPrimitiveProcessor* createGLSLInstance(const GrShaderCaps&) const override {
         return new GLSLProcessor();
     }
 
@@ -198,7 +198,7 @@ private:
         }
 
         static void GenKey(const GrGeometryProcessor& gp,
-                           const GrGLSLCaps&,
+                           const GrShaderCaps&,
                            GrProcessorKeyBuilder* b) {
             const CircleGeometryProcessor& cgp = gp.cast<CircleGeometryProcessor>();
             uint16_t key;
@@ -269,11 +269,11 @@ public:
 
     const char* name() const override { return "EllipseEdge"; }
 
-    void getGLSLProcessorKey(const GrGLSLCaps& caps, GrProcessorKeyBuilder* b) const override {
+    void getGLSLProcessorKey(const GrShaderCaps& caps, GrProcessorKeyBuilder* b) const override {
         GLSLProcessor::GenKey(*this, caps, b);
     }
 
-    GrGLSLPrimitiveProcessor* createGLSLInstance(const GrGLSLCaps&) const override {
+    GrGLSLPrimitiveProcessor* createGLSLInstance(const GrShaderCaps&) const override {
         return new GLSLProcessor();
     }
 
@@ -344,7 +344,7 @@ private:
         }
 
         static void GenKey(const GrGeometryProcessor& gp,
-                           const GrGLSLCaps&,
+                           const GrShaderCaps&,
                            GrProcessorKeyBuilder* b) {
             const EllipseGeometryProcessor& egp = gp.cast<EllipseGeometryProcessor>();
             uint16_t key = egp.fStroke ? 0x1 : 0x0;
@@ -412,11 +412,11 @@ public:
 
     const char* name() const override { return "DIEllipseEdge"; }
 
-    void getGLSLProcessorKey(const GrGLSLCaps& caps, GrProcessorKeyBuilder* b) const override {
+    void getGLSLProcessorKey(const GrShaderCaps& caps, GrProcessorKeyBuilder* b) const override {
         GLSLProcessor::GenKey(*this, caps, b);
     }
 
-    GrGLSLPrimitiveProcessor* createGLSLInstance(const GrGLSLCaps&) const override {
+    GrGLSLPrimitiveProcessor* createGLSLInstance(const GrShaderCaps&) const override {
         return new GLSLProcessor();
     }
 
@@ -504,7 +504,7 @@ private:
         }
 
         static void GenKey(const GrGeometryProcessor& gp,
-                           const GrGLSLCaps&,
+                           const GrShaderCaps&,
                            GrProcessorKeyBuilder* b) {
             const DIEllipseGeometryProcessor& diegp = gp.cast<DIEllipseGeometryProcessor>();
             uint16_t key = static_cast<uint16_t>(diegp.fStyle);
@@ -599,7 +599,7 @@ static const uint16_t* circle_type_to_indices(bool stroked) {
 
 class CircleBatch : public GrVertexBatch {
 public:
-    DEFINE_BATCH_CLASS_ID
+    DEFINE_OP_CLASS_ID
 
     /** Optional extra params to render a partial arc rather than a full circle. */
     struct ArcParams {
@@ -791,6 +791,7 @@ public:
                            fGeoData[i].fInnerRadius,
                            fGeoData[i].fOuterRadius);
         }
+        string.append(DumpPipelineInfo(*this->pipeline()));
         string.append(INHERITED::dumpInfo());
         return string;
     }
@@ -1097,7 +1098,7 @@ private:
         target->draw(gp.get(), mesh);
     }
 
-    bool onCombineIfPossible(GrBatch* t, const GrCaps& caps) override {
+    bool onCombineIfPossible(GrOp* t, const GrCaps& caps) override {
         CircleBatch* that = t->cast<CircleBatch>();
         if (!GrPipeline::CanCombine(*this->pipeline(), this->bounds(), *that->pipeline(),
                                     that->bounds(), caps)) {
@@ -1149,7 +1150,7 @@ private:
 
 class EllipseBatch : public GrVertexBatch {
 public:
-    DEFINE_BATCH_CLASS_ID
+    DEFINE_OP_CLASS_ID
     static GrDrawBatch* Create(GrColor color, const SkMatrix& viewMatrix, const SkRect& ellipse,
                                const SkStrokeRec& stroke) {
         SkASSERT(viewMatrix.rectStaysRect());
@@ -1230,6 +1231,25 @@ public:
     }
 
     const char* name() const override { return "EllipseBatch"; }
+
+    SkString dumpInfo() const override {
+        SkString string;
+        string.appendf("Stroked: %d\n", fStroked);
+        for (const auto& geo : fGeoData) {
+            string.appendf("Color: 0x%08x Rect [L: %.2f, T: %.2f, R: %.2f, B: %.2f], "
+                           "XRad: %.2f, YRad: %.2f, InnerXRad: %.2f, InnerYRad: %.2f\n",
+                           geo.fColor,
+                           geo.fDevBounds.fLeft, geo.fDevBounds.fTop,
+                           geo.fDevBounds.fRight, geo.fDevBounds.fBottom,
+                           geo.fXRadius,
+                           geo.fYRadius,
+                           geo.fInnerXRadius,
+                           geo.fInnerYRadius);
+        }
+        string.append(DumpPipelineInfo(*this->pipeline()));
+        string.append(INHERITED::dumpInfo());
+        return string;
+    }
 
     void computePipelineOptimizations(GrInitInvariantOutput* color,
                                       GrInitInvariantOutput* coverage,
@@ -1320,7 +1340,7 @@ private:
         helper.recordDraw(target, gp.get());
     }
 
-    bool onCombineIfPossible(GrBatch* t, const GrCaps& caps) override {
+    bool onCombineIfPossible(GrOp* t, const GrCaps& caps) override {
         EllipseBatch* that = t->cast<EllipseBatch>();
 
         if (!GrPipeline::CanCombine(*this->pipeline(), this->bounds(), *that->pipeline(),
@@ -1361,7 +1381,7 @@ private:
 
 class DIEllipseBatch : public GrVertexBatch {
 public:
-    DEFINE_BATCH_CLASS_ID
+    DEFINE_OP_CLASS_ID
 
     static GrDrawBatch* Create(GrColor color,
                                const SkMatrix& viewMatrix,
@@ -1443,6 +1463,27 @@ public:
 
     const char* name() const override { return "DIEllipseBatch"; }
 
+    SkString dumpInfo() const override {
+        SkString string;
+        for (const auto& geo : fGeoData) {
+            string.appendf("Color: 0x%08x Rect [L: %.2f, T: %.2f, R: %.2f, B: %.2f], XRad: %.2f, "
+                           "YRad: %.2f, InnerXRad: %.2f, InnerYRad: %.2f, GeoDX: %.2f, "
+                           "GeoDY: %.2f\n",
+                           geo.fColor,
+                           geo.fBounds.fLeft, geo.fBounds.fTop,
+                           geo.fBounds.fRight, geo.fBounds.fBottom,
+                           geo.fXRadius,
+                           geo.fYRadius,
+                           geo.fInnerXRadius,
+                           geo.fInnerYRadius,
+                           geo.fGeoDx,
+                           geo.fGeoDy);
+        }
+        string.append(DumpPipelineInfo(*this->pipeline()));
+        string.append(INHERITED::dumpInfo());
+        return string;
+    }
+
     void computePipelineOptimizations(GrInitInvariantOutput* color,
                                       GrInitInvariantOutput* coverage,
                                       GrBatchToXPOverrides* overrides) const override {
@@ -1517,7 +1558,7 @@ private:
         helper.recordDraw(target, gp.get());
     }
 
-    bool onCombineIfPossible(GrBatch* t, const GrCaps& caps) override {
+    bool onCombineIfPossible(GrOp* t, const GrCaps& caps) override {
         DIEllipseBatch* that = t->cast<DIEllipseBatch>();
         if (!GrPipeline::CanCombine(*this->pipeline(), this->bounds(), *that->pipeline(),
                                     that->bounds(), caps)) {
@@ -1682,7 +1723,7 @@ static const uint16_t* rrect_type_to_indices(RRectType type) {
 
 class RRectCircleRendererBatch : public GrVertexBatch {
 public:
-    DEFINE_BATCH_CLASS_ID
+    DEFINE_OP_CLASS_ID
 
     // A devStrokeWidth <= 0 indicates a fill only. If devStrokeWidth > 0 then strokeOnly indicates
     // whether the rrect is only stroked or stroked and filled.
@@ -1754,6 +1795,7 @@ public:
                            fGeoData[i].fInnerRadius,
                            fGeoData[i].fOuterRadius);
         }
+        string.append(DumpPipelineInfo(*this->pipeline()));
         string.append(INHERITED::dumpInfo());
         return string;
     }
@@ -1980,7 +2022,7 @@ private:
         target->draw(gp.get(), mesh);
     }
 
-    bool onCombineIfPossible(GrBatch* t, const GrCaps& caps) override {
+    bool onCombineIfPossible(GrOp* t, const GrCaps& caps) override {
         RRectCircleRendererBatch* that = t->cast<RRectCircleRendererBatch>();
         if (!GrPipeline::CanCombine(*this->pipeline(), this->bounds(), *that->pipeline(),
                                     that->bounds(), caps)) {
@@ -2041,7 +2083,7 @@ static const GrBuffer* ref_rrect_index_buffer(RRectType type,
 
 class RRectEllipseRendererBatch : public GrVertexBatch {
 public:
-    DEFINE_BATCH_CLASS_ID
+    DEFINE_OP_CLASS_ID
 
     // If devStrokeWidths values are <= 0 indicates then fill only. Otherwise, strokeOnly indicates
     // whether the rrect is only stroked or stroked and filled.
@@ -2103,6 +2145,25 @@ public:
     }
 
     const char* name() const override { return "RRectEllipseRendererBatch"; }
+
+    SkString dumpInfo() const override {
+        SkString string;
+        string.appendf("Stroked: %d\n", fStroked);
+        for (const auto& geo : fGeoData) {
+            string.appendf("Color: 0x%08x Rect [L: %.2f, T: %.2f, R: %.2f, B: %.2f], "
+                           "XRad: %.2f, YRad: %.2f, InnerXRad: %.2f, InnerYRad: %.2f\n",
+                           geo.fColor,
+                           geo.fDevBounds.fLeft, geo.fDevBounds.fTop,
+                           geo.fDevBounds.fRight, geo.fDevBounds.fBottom,
+                           geo.fXRadius,
+                           geo.fYRadius,
+                           geo.fInnerXRadius,
+                           geo.fInnerYRadius);
+        }
+        string.append(DumpPipelineInfo(*this->pipeline()));
+        string.append(INHERITED::dumpInfo());
+        return string;
+    }
 
     void computePipelineOptimizations(GrInitInvariantOutput* color,
                                       GrInitInvariantOutput* coverage,
@@ -2214,7 +2275,7 @@ private:
         helper.recordDraw(target, gp.get());
     }
 
-    bool onCombineIfPossible(GrBatch* t, const GrCaps& caps) override {
+    bool onCombineIfPossible(GrOp* t, const GrCaps& caps) override {
         RRectEllipseRendererBatch* that = t->cast<RRectEllipseRendererBatch>();
 
         if (!GrPipeline::CanCombine(*this->pipeline(), this->bounds(), *that->pipeline(),

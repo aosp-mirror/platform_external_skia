@@ -20,7 +20,7 @@
 #include "GrResourceProvider.h"
 #include "SkSurfacePriv.h"
 
-#include "batches/GrBatch.h"
+#include "batches/GrOp.h"
 #include "batches/GrClearBatch.h"
 #include "batches/GrDrawAtlasBatch.h"
 #include "batches/GrDrawVerticesBatch.h"
@@ -274,7 +274,7 @@ void GrRenderTargetContext::internalClear(const GrFixedClip& clip,
         if (!this->accessRenderTarget()) {
             return;
         }
-        sk_sp<GrBatch> batch(GrClearBatch::Make(clip, color, this->accessRenderTarget()));
+        sk_sp<GrOp> batch(GrClearBatch::Make(clip, color, this->accessRenderTarget()));
         if (!batch) {
             return;
         }
@@ -891,7 +891,7 @@ void GrRenderTargetContext::drawRRect(const GrClip& origClip,
     }
 
     if (should_apply_coverage_aa(paint, fRenderTargetProxy.get(), &useHWAA)) {
-        GrShaderCaps* shaderCaps = fContext->caps()->shaderCaps();
+        const GrShaderCaps* shaderCaps = fContext->caps()->shaderCaps();
         sk_sp<GrDrawBatch> batch(GrOvalRenderer::CreateRRectBatch(paint.getColor(),
                                                                   paint.usesDistanceVectorField(),
                                                                   viewMatrix,
@@ -948,7 +948,7 @@ void GrRenderTargetContext::drawShadowRRect(const GrClip& clip,
     //}
 
     if (should_apply_coverage_aa(paint, fRenderTargetProxy.get(), &useHWAA)) {
-        GrShaderCaps* shaderCaps = fContext->caps()->shaderCaps();
+        const GrShaderCaps* shaderCaps = fContext->caps()->shaderCaps();
         sk_sp<GrDrawBatch> batch(CreateShadowRRectBatch(
                                         paint.getColor(),
                                         viewMatrix,
@@ -1134,7 +1134,7 @@ void GrRenderTargetContext::drawOval(const GrClip& clip,
     }
 
     if (should_apply_coverage_aa(paint, fRenderTargetProxy.get(), &useHWAA)) {
-        GrShaderCaps* shaderCaps = fContext->caps()->shaderCaps();
+        const GrShaderCaps* shaderCaps = fContext->caps()->shaderCaps();
         sk_sp<GrDrawBatch> batch(GrOvalRenderer::CreateOvalBatch(paint.getColor(),
                                                                  viewMatrix,
                                                                  oval,
@@ -1163,7 +1163,7 @@ void GrRenderTargetContext::drawArc(const GrClip& clip,
                                     const GrStyle& style) {
     bool useHWAA;
     if (should_apply_coverage_aa(paint, fRenderTargetProxy.get(), &useHWAA)) {
-        GrShaderCaps* shaderCaps = fContext->caps()->shaderCaps();
+        const GrShaderCaps* shaderCaps = fContext->caps()->shaderCaps();
         sk_sp<GrDrawBatch> batch(GrOvalRenderer::CreateArcBatch(paint.getColor(),
                                                                 viewMatrix,
                                                                 oval,
@@ -1377,7 +1377,7 @@ void GrRenderTargetContext::drawPath(const GrClip& clip,
         bool isOval = path.isOval(&ovalRect);
 
         if (isOval && !path.isInverseFillType()) {
-            GrShaderCaps* shaderCaps = fContext->caps()->shaderCaps();
+            const GrShaderCaps* shaderCaps = fContext->caps()->shaderCaps();
             sk_sp<GrDrawBatch> batch(GrOvalRenderer::CreateOvalBatch(paint.getColor(),
                                                                      viewMatrix,
                                                                      ovalRect,

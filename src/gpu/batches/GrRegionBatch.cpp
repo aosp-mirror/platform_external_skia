@@ -52,7 +52,7 @@ static void tesselate_region(intptr_t vertices,
 
 class RegionBatch : public GrVertexBatch {
 public:
-    DEFINE_BATCH_CLASS_ID
+    DEFINE_OP_CLASS_ID
 
     RegionBatch(GrColor color, const SkMatrix& viewMatrix, const SkRegion& region)
             : INHERITED(ClassID())
@@ -76,6 +76,7 @@ public:
             str.appendf("%d: Color: 0x%08x, Region with %d rects\n",
                         i, info.fColor, info.fRegion.computeRegionComplexity());
         }
+        str.append(DumpPipelineInfo(*this->pipeline()));
         str.append(INHERITED::dumpInfo());
         return str;
     }
@@ -129,7 +130,7 @@ private:
         helper.recordDraw(target, gp.get());
     }
 
-    bool onCombineIfPossible(GrBatch* t, const GrCaps& caps) override {
+    bool onCombineIfPossible(GrOp* t, const GrCaps& caps) override {
         RegionBatch* that = t->cast<RegionBatch>();
         if (!GrPipeline::CanCombine(*this->pipeline(), this->bounds(), *that->pipeline(),
                                     that->bounds(), caps)) {

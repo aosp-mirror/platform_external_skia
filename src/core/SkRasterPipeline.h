@@ -59,13 +59,14 @@
     M(move_src_dst) M(move_dst_src) M(swap_rb) M(swap_rb_d)      \
     M(clamp_0) M(clamp_a) M(clamp_1)                             \
     M(unpremul) M(premul)                                        \
+    M(set_rgb)                                                   \
     M(from_srgb) M(from_srgb_d) M(to_srgb)                       \
     M(constant_color) M(store_f32)                               \
     M(load_565)  M(load_565_d)  M(store_565)                     \
     M(load_f16)  M(load_f16_d)  M(store_f16)                     \
     M(load_8888) M(load_8888_d) M(store_8888)                    \
-    M(scale_u8) M(scale_constant_float)                          \
-    M(lerp_u8) M(lerp_565) M(lerp_constant_float)                \
+    M(scale_u8) M(scale_1_float)                                 \
+    M(lerp_u8) M(lerp_565) M(lerp_1_float)                       \
     M(dstatop) M(dstin) M(dstout) M(dstover)                     \
     M(srcatop) M(srcin) M(srcout) M(srcover)                     \
     M(clear) M(modulate) M(multiply) M(plus_) M(screen) M(xor_)  \
@@ -103,6 +104,9 @@ public:
     void extend(const SkRasterPipeline&);
 
     // Runs the pipeline walking x through [x,x+n), holding y constant.
+    void run(size_t x, size_t y, size_t n) const;
+
+    // If you're going to run() the pipeline more than once, it's best to compile it.
     std::function<void(size_t x, size_t y, size_t n)> compile() const;
 
     void dump() const;

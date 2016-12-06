@@ -381,7 +381,7 @@ public:
         }
 
         static inline void GenKey(const GrGeometryProcessor& gp,
-                                  const GrGLSLCaps&,
+                                  const GrShaderCaps&,
                                   GrProcessorKeyBuilder* b) {
             const PLSAATriangleEffect& te = gp.cast<PLSAATriangleEffect>();
             uint32_t key = 0;
@@ -399,12 +399,12 @@ public:
         typedef GrGLSLGeometryProcessor INHERITED;
     };
 
-    virtual void getGLSLProcessorKey(const GrGLSLCaps& caps,
+    virtual void getGLSLProcessorKey(const GrShaderCaps& caps,
                                    GrProcessorKeyBuilder* b) const override {
         GLSLProcessor::GenKey(*this, caps, b);
     }
 
-    virtual GrGLSLPrimitiveProcessor* createGLSLInstance(const GrGLSLCaps&) const override {
+    virtual GrGLSLPrimitiveProcessor* createGLSLInstance(const GrShaderCaps&) const override {
         return new GLSLProcessor(*this);
     }
 
@@ -563,7 +563,7 @@ public:
         }
 
         static inline void GenKey(const GrGeometryProcessor& gp,
-                                  const GrGLSLCaps&,
+                                  const GrShaderCaps&,
                                   GrProcessorKeyBuilder* b) {
             const PLSQuadEdgeEffect& qee = gp.cast<PLSQuadEdgeEffect>();
             uint32_t key = 0;
@@ -581,12 +581,12 @@ public:
         typedef GrGLSLGeometryProcessor INHERITED;
     };
 
-    virtual void getGLSLProcessorKey(const GrGLSLCaps& caps,
+    virtual void getGLSLProcessorKey(const GrShaderCaps& caps,
                                    GrProcessorKeyBuilder* b) const override {
         GLSLProcessor::GenKey(*this, caps, b);
     }
 
-    virtual GrGLSLPrimitiveProcessor* createGLSLInstance(const GrGLSLCaps&) const override {
+    virtual GrGLSLPrimitiveProcessor* createGLSLInstance(const GrShaderCaps&) const override {
         return new GLSLProcessor(*this);
     }
 
@@ -692,7 +692,7 @@ public:
         }
 
         static inline void GenKey(const GrGeometryProcessor& gp,
-                                  const GrGLSLCaps&,
+                                  const GrShaderCaps&,
                                   GrProcessorKeyBuilder* b) {
             const PLSFinishEffect& fe = gp.cast<PLSFinishEffect>();
             uint32_t key = 0;
@@ -721,12 +721,12 @@ public:
         typedef GrGLSLGeometryProcessor INHERITED;
     };
 
-    virtual void getGLSLProcessorKey(const GrGLSLCaps& caps,
+    virtual void getGLSLProcessorKey(const GrShaderCaps& caps,
                                    GrProcessorKeyBuilder* b) const override {
         GLSLProcessor::GenKey(*this, caps, b);
     }
 
-    virtual GrGLSLPrimitiveProcessor* createGLSLInstance(const GrGLSLCaps&) const override {
+    virtual GrGLSLPrimitiveProcessor* createGLSLInstance(const GrShaderCaps&) const override {
         return new GLSLProcessor(*this);
     }
 
@@ -765,7 +765,7 @@ bool GrPLSPathRenderer::onCanDrawPath(const CanDrawPathArgs& args) const {
 
 class PLSPathBatch : public GrVertexBatch {
 public:
-    DEFINE_BATCH_CLASS_ID
+    DEFINE_OP_CLASS_ID
     PLSPathBatch(GrColor color, const SkPath& path, const SkMatrix& viewMatrix)
             : INHERITED(ClassID())
             , fColor(color)
@@ -777,6 +777,14 @@ public:
     }
 
     const char* name() const override { return "PLSBatch"; }
+
+    SkString dumpInfo() const override {
+        SkString string;
+        string.printf("Color 0x%08x, UsesLocalCoords: %d\n", fColor, fUsesLocalCoords);
+        string.append(DumpPipelineInfo(*this->pipeline()));
+        string.append(INHERITED::dumpInfo());
+        return string;
+    }
 
     void computePipelineOptimizations(GrInitInvariantOutput* color,
                                       GrInitInvariantOutput* coverage,
@@ -907,7 +915,7 @@ public:
     }
 
 private:
-    bool onCombineIfPossible(GrBatch* t, const GrCaps& caps) override {
+    bool onCombineIfPossible(GrOp* t, const GrCaps& caps) override {
         return false;
     }
 
@@ -927,8 +935,7 @@ bool GrPLSPathRenderer::onDrawPath(const DrawPathArgs& args) {
     SkPath path;
     args.fShape->asPath(&path);
 
-    sk_sp<GrDrawBatch> batch(new PLSPathBatch(args.fPaint->getColor(),
-                                              path, *args.fViewMatrix));
+    sk_sp<GrDrawBatch> batch(new PLSPathBatch(args.fPaint->getColor(), path, *args.fViewMatrix));
 
     GrPipelineBuilder pipelineBuilder(*args.fPaint,
                                       args.fRenderTargetContext->mustUseHWAA(*args.fPaint));

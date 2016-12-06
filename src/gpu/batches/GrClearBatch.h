@@ -8,20 +8,20 @@
 #ifndef GrClearBatch_DEFINED
 #define GrClearBatch_DEFINED
 
-#include "GrBatch.h"
 #include "GrBatchFlushState.h"
 #include "GrFixedClip.h"
 #include "GrGpu.h"
 #include "GrGpuCommandBuffer.h"
+#include "GrOp.h"
 #include "GrRenderTarget.h"
 
-class GrClearBatch final : public GrBatch {
+class GrClearBatch final : public GrOp {
 public:
-    DEFINE_BATCH_CLASS_ID
+    DEFINE_OP_CLASS_ID
 
     static sk_sp<GrClearBatch> Make(const GrFixedClip& clip, GrColor color, GrRenderTarget* rt) {
         sk_sp<GrClearBatch> batch(new GrClearBatch(clip, color, rt));
-        if (!batch->renderTarget()) {
+        if (!batch->fRenderTarget) {
             return nullptr; // The clip did not contain any pixels within the render target.
         }
         return batch;
@@ -33,8 +33,6 @@ public:
     GrGpuResource::UniqueID renderTargetUniqueID() const override {
         return fRenderTarget.get()->uniqueID();
     }
-    // TODO: store a GrRenderTargetContext instead
-    GrRenderTarget* renderTarget() const override { return fRenderTarget.get(); }
 
     SkString dumpInfo() const override {
         SkString string("Scissor [");
@@ -70,7 +68,7 @@ private:
         fRenderTarget.reset(rt);
     }
 
-    bool onCombineIfPossible(GrBatch* t, const GrCaps& caps) override {
+    bool onCombineIfPossible(GrOp* t, const GrCaps& caps) override {
         // This could be much more complicated. Currently we look at cases where the new clear
         // contains the old clear, or when the new clear is a subset of the old clear and is the
         // same color.
@@ -100,14 +98,14 @@ private:
     void onPrepare(GrBatchFlushState*) override {}
 
     void onDraw(GrBatchFlushState* state, const SkRect& /*bounds*/) override {
-        state->commandBuffer()->clear(fClip, fColor);
+        state->commandBuffer()->clear(fRenderTarget.get(), fClip, fColor);
     }
 
     GrFixedClip                                             fClip;
     GrColor                                                 fColor;
     GrPendingIOResource<GrRenderTarget, kWrite_GrIOType>    fRenderTarget;
 
-    typedef GrBatch INHERITED;
+    typedef GrOp INHERITED;
 };
 
 #endif
