@@ -216,20 +216,6 @@ static void test_mask_overflow() {
     canvas->drawPath(path, paint);
 }
 
-static void test_fuzz_crbug_668907() {
-    auto surface(SkSurface::MakeRasterN32Premul(400, 500));
-    SkCanvas* canvas = surface->getCanvas();
-    SkPaint paint;
-    paint.setAntiAlias(true);
-    SkPath path;
-    path.moveTo(SkBits2Float(0x46313741), SkBits2Float(0x3b00e540));  // 11341.8f, 0.00196679f
-    path.quadTo(SkBits2Float(0x41410041), SkBits2Float(0xc1414141), SkBits2Float(0x41414141),
-            SkBits2Float(0x414100ff));  // 12.0626f, -12.0784f, 12.0784f, 12.0627f
-    path.lineTo(SkBits2Float(0x46313741), SkBits2Float(0x3b00e540));  // 11341.8f, 0.00196679f
-    path.close();
-    canvas->drawPath(path, paint);
-}
-
 /**
  * In debug mode, this path was causing an assertion to fail in
  * SkPathStroker::preJoinTo() and, in Release, the use of an unitialized value.
@@ -254,6 +240,19 @@ static void test_path_crbugskia2820(skiatest::Reporter* reporter) {//GrContext* 
     SkStrokeRec stroke(SkStrokeRec::kFill_InitStyle);
     stroke.setStrokeStyle(2 * SK_Scalar1);
     stroke.applyToPath(&path, path);
+}
+
+static void test_path_crbugskia5995() {
+    auto surface(SkSurface::MakeRasterN32Premul(500, 500));
+    SkCanvas* canvas = surface->getCanvas();
+    SkPaint paint;
+    paint.setAntiAlias(true);
+    SkPath path;
+    path.moveTo(SkBits2Float(0x40303030), SkBits2Float(0x3e303030));  // 2.75294f, 0.172059f
+    path.quadTo(SkBits2Float(0x41d63030), SkBits2Float(0x30303030), SkBits2Float(0x41013030),
+            SkBits2Float(0x00000000));  // 26.7735f, 6.40969e-10f, 8.07426f, 0
+    path.moveTo(SkBits2Float(0x00000000), SkBits2Float(0x00000000));  // 0, 0
+    canvas->drawPath(path, paint);
 }
 
 static void make_path0(SkPath* path) {
@@ -4320,6 +4319,29 @@ static void test_fuzz_crbug_662952(skiatest::Reporter* reporter) {
     surface->getCanvas()->drawRectCoords(0, 0, 100, 100, paint);
 }
 
+static void test_path_crbugskia6003() {
+    auto surface(SkSurface::MakeRasterN32Premul(500, 500));
+    SkCanvas* canvas = surface->getCanvas();
+    SkPaint paint;
+    paint.setAntiAlias(true);
+    SkPath path;
+    path.moveTo(SkBits2Float(0x4325e666), SkBits2Float(0x42a1999a));  // 165.9f, 80.8f
+    path.lineTo(SkBits2Float(0x4325e666), SkBits2Float(0x42a2999a));  // 165.9f, 81.3f
+    path.lineTo(SkBits2Float(0x4325b333), SkBits2Float(0x42a2999a));  // 165.7f, 81.3f
+    path.lineTo(SkBits2Float(0x4325b333), SkBits2Float(0x42a16666));  // 165.7f, 80.7f
+    path.lineTo(SkBits2Float(0x4325b333), SkBits2Float(0x429f6666));  // 165.7f, 79.7f
+    // 165.7f, 79.7f, 165.8f, 79.7f, 165.8f, 79.7f
+    path.cubicTo(SkBits2Float(0x4325b333), SkBits2Float(0x429f6666), SkBits2Float(0x4325cccc),
+            SkBits2Float(0x429f6666), SkBits2Float(0x4325cccc), SkBits2Float(0x429f6666));
+    // 165.8f, 79.7f, 165.8f, 79.7f, 165.9f, 79.7f
+    path.cubicTo(SkBits2Float(0x4325cccc), SkBits2Float(0x429f6666), SkBits2Float(0x4325cccc),
+            SkBits2Float(0x429f6666), SkBits2Float(0x4325e666), SkBits2Float(0x429f6666));
+    path.lineTo(SkBits2Float(0x4325e666), SkBits2Float(0x42a1999a));  // 165.9f, 80.8f
+    path.close();
+    canvas->clipPath(path, true);
+    canvas->drawRectCoords(0, 0, 500, 500, paint);
+}
+
 static void test_fuzz_crbug_662730(skiatest::Reporter* reporter) {
     SkPath path;
     path.moveTo(SkBits2Float(0x00000000), SkBits2Float(0x00000000));  // 0, 0
@@ -4392,7 +4414,7 @@ DEF_TEST(Paths, reporter) {
     test_fuzz_crbug_662730(reporter);
     test_fuzz_crbug_662780();
     test_mask_overflow();
-    test_fuzz_crbug_668907();
+    test_path_crbugskia6003();
 
     SkTSize<SkScalar>::Make(3,4);
 
@@ -4543,6 +4565,7 @@ DEF_TEST(Paths, reporter) {
     test_dump(reporter);
     test_path_crbug389050(reporter);
     test_path_crbugskia2820(reporter);
+    test_path_crbugskia5995();
     test_skbug_3469(reporter);
     test_skbug_3239(reporter);
     test_bounds_crbug_513799(reporter);

@@ -182,6 +182,7 @@ LOCAL_SRC_FILES := \
 	../tests/ImageGeneratorTest.cpp \
 	../tests/ImageIsOpaqueTest.cpp \
 	../tests/ImageNewShaderTest.cpp \
+	../tests/ImageStorageTest.cpp \
 	../tests/ImageTest.cpp \
 	../tests/IndexedPngOverflowTest.cpp \
 	../tests/InfRectTest.cpp \

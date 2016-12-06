@@ -47,6 +47,8 @@
     #define CHECK_ALLOC_ERROR(iface)          GR_GL_NO_ERROR
 #endif
 
+//#define USE_NSIGHT
+
 ///////////////////////////////////////////////////////////////////////////////
 
 using gr_instanced::InstancedRendering;
@@ -217,6 +219,7 @@ GrGLGpu::GrGLGpu(GrGLContext* ctx, GrContext* context)
     fCaps.reset(SkRef(ctx->caps()));
 
     fHWBoundTextureUniqueIDs.reset(this->glCaps().glslCaps()->maxCombinedSamplers());
+    fHWBoundImageStorages.reset(this->glCaps().glslCaps()->maxCombinedImageStorages());
 
     fHWBufferState[kVertex_GrBufferType].fGLTarget = GR_GL_ARRAY_BUFFER;
     fHWBufferState[kIndex_GrBufferType].fGLTarget = GR_GL_ELEMENT_ARRAY_BUFFER;
@@ -493,8 +496,8 @@ void GrGLGpu::onResetContext(uint32_t resetBits) {
         fHWBufferState[kXferGpuToCpu_GrBufferType].invalidate();
 
         fHWDrawFace = GrDrawFace::kInvalid;
-
         if (kGL_GrGLStandard == this->glStandard()) {
+#ifndef USE_NSIGHT
             // Desktop-only state that we never change
             if (!this->glCaps().isCoreProfile()) {
                 GL_CALL(Disable(GR_GL_POINT_SMOOTH));
@@ -511,6 +514,7 @@ void GrGLGpu::onResetContext(uint32_t resetBits) {
                 GL_CALL(Disable(GR_GL_COLOR_TABLE));
             }
             GL_CALL(Disable(GR_GL_POLYGON_OFFSET_FILL));
+#endif
             // Since ES doesn't support glPointSize at all we always use the VS to
             // set the point size
             GL_CALL(Enable(GR_GL_VERTEX_PROGRAM_POINT_SIZE));
@@ -556,6 +560,9 @@ void GrGLGpu::onResetContext(uint32_t resetBits) {
         for (int b = 0; b < fHWBufferTextures.count(); ++b) {
             SkASSERT(this->caps()->shaderCaps()->texelBufferSupport());
             fHWBufferTextures[b].fKnownBound = false;
+        }
+        for (int i = 0; i < fHWBoundImageStorages.count(); ++i) {
+            fHWBoundImageStorages[i].fTextureUniqueID.makeInvalid();
         }
     }
 
@@ -1972,6 +1979,7 @@ void GrGLGpu::flushScissor(const GrScissorState& scissorState,
 
 void GrGLGpu::flushWindowRectangles(const GrWindowRectsState& windowState,
                                     const GrGLRenderTarget* rt) {
+#ifndef USE_NSIGHT
     typedef GrWindowRectsState::Mode Mode;
     SkASSERT(!windowState.enabled() || rt->renderFBOID()); // Window rects can't be used on-screen.
     SkASSERT(windowState.numWindows() <= this->caps()->maxWindowRectangles());
@@ -1998,14 +2006,17 @@ void GrGLGpu::flushWindowRectangles(const GrWindowRectsState& windowState,
     GL_CALL(WindowRectangles(glmode, numWindows, glwindows->asInts()));
 
     fHWWindowRectsState.set(rt->origin(), rt->getViewport(), windowState);
+#endif
 }
 
 void GrGLGpu::disableWindowRectangles() {
+#ifndef USE_NSIGHT
     if (!this->caps()->maxWindowRectangles() || fHWWindowRectsState.knownDisabled()) {
         return;
     }
     GL_CALL(WindowRectangles(GR_GL_EXCLUSIVE, 0, nullptr));
     fHWWindowRectsState.setDisabled();
+#endif
 }
 
 void GrGLGpu::flushMinSampleShading(float minSampleShading) {
@@ -3339,6 +3350,27 @@ void GrGLGpu::bindTexelBuffer(int unitIdx, GrPixelConfig texelConfig, GrGLBuffer
 
         buffer->setHasAttachedToTexture();
         fHWMaxUsedBufferTextureUnit = SkTMax(unitIdx, fHWMaxUsedBufferTextureUnit);
+    }
+}
+
+void GrGLGpu::bindImageStorage(int unitIdx, GrIOType ioType, GrGLTexture *texture) {
+    SkASSERT(texture);
+    if (texture->uniqueID() != fHWBoundImageStorages[unitIdx].fTextureUniqueID ||
+        ioType != fHWBoundImageStorages[unitIdx].fIOType) {
+        GrGLenum access;
+        switch (ioType) {
+            case kRead_GrIOType:
+                access = GR_GL_READ_ONLY;
+                break;
+            case kWrite_GrIOType:
+                access = GR_GL_WRITE_ONLY;
+                break;
+            case kRW_GrIOType:
+                access = GR_GL_READ_WRITE;
+                break;
+        }
+        GrGLenum format = this->glCaps().getImageFormat(texture->config());
+        GL_CALL(BindImageTexture(unitIdx, texture->textureID(), 0, GR_GL_FALSE, 0, access, format));
     }
 }
 
