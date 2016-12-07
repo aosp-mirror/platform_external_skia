@@ -12,6 +12,7 @@
 #include "SkTArray.h"
 #include "SkTypes.h"
 #include <functional>
+#include <vector>
 
 /**
  * SkRasterPipeline provides a cheap way to chain together a pixel processing pipeline.
@@ -61,10 +62,12 @@
     M(unpremul) M(premul)                                        \
     M(set_rgb)                                                   \
     M(from_srgb) M(from_srgb_d) M(to_srgb)                       \
+    M(to_2dot2)                                                  \
     M(constant_color) M(store_f32)                               \
     M(load_565)  M(load_565_d)  M(store_565)                     \
     M(load_f16)  M(load_f16_d)  M(store_f16)                     \
     M(load_8888) M(load_8888_d) M(store_8888)                    \
+    M(load_tables) M(store_tables)                               \
     M(scale_u8) M(scale_1_float)                                 \
     M(lerp_u8) M(lerp_565) M(lerp_1_float)                       \
     M(dstatop) M(dstin) M(dstout) M(dstover)                     \
@@ -76,20 +79,18 @@
     M(matrix_2x3) M(matrix_3x4) M(matrix_4x5)                    \
     M(matrix_perspective)                                        \
     M(parametric_r) M(parametric_g) M(parametric_b)              \
-    M(table_r) M(table_g) M(table_b)                             \
+    M(parametric_a)                                              \
+    M(table_r) M(table_g) M(table_b) M(table_a)                  \
     M(color_lookup_table) M(lab_to_xyz)                          \
     M(clamp_x) M(mirror_x) M(repeat_x)                           \
     M(clamp_y) M(mirror_y) M(repeat_y)                           \
     M(gather_a8) M(gather_g8) M(gather_i8)                       \
     M(gather_565) M(gather_4444) M(gather_8888) M(gather_f16)    \
-    M(top_left) M(top_right) M(bottom_left) M(bottom_right)      \
-    M(accumulate)
+    M(bilinear_nn) M(bilinear_pn) M(bilinear_np) M(bilinear_pp)  \
+    M(save_xy) M(accumulate)
 
 class SkRasterPipeline {
 public:
-    // No pipeline may be more than kMaxStages long.
-    static const int kMaxStages = 48;
-
     SkRasterPipeline();
 
     enum StockStage {
@@ -117,8 +118,7 @@ public:
     };
 
 private:
-    int   fNum   = 0;
-    Stage fStages[kMaxStages];
+    std::vector<Stage> fStages;
 };
 
 #endif//SkRasterPipeline_DEFINED

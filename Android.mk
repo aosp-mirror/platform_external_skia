@@ -492,8 +492,8 @@ LOCAL_SRC_FILES := \
 	src/gpu/batches/GrCopySurfaceBatch.cpp \
 	src/gpu/batches/GrDashLinePathRenderer.cpp \
 	src/gpu/batches/GrDefaultPathRenderer.cpp \
-	src/gpu/batches/GrDrawBatch.cpp \
 	src/gpu/batches/GrDrawAtlasBatch.cpp \
+	src/gpu/batches/GrDrawOp.cpp \
 	src/gpu/batches/GrDrawPathBatch.cpp \
 	src/gpu/batches/GrDrawVerticesBatch.cpp \
 	src/gpu/batches/GrMSAAPathRenderer.cpp \
@@ -508,7 +508,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/batches/GrShadowRRectBatch.cpp \
 	src/gpu/batches/GrStencilAndCoverPathRenderer.cpp \
 	src/gpu/batches/GrTessellatingPathRenderer.cpp \
-	src/gpu/batches/GrVertexBatch.cpp \
+	src/gpu/batches/GrMeshDrawOp.cpp \
 	src/gpu/effects/GrConfigConversionEffect.cpp \
 	src/gpu/effects/GrConstColorProcessor.cpp \
 	src/gpu/effects/GrCoverageSetOpXP.cpp \

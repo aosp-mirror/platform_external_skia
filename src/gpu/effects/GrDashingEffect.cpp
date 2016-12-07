@@ -10,15 +10,15 @@
 #include "GrBatchFlushState.h"
 #include "GrBatchTest.h"
 #include "GrCaps.h"
-#include "GrGeometryProcessor.h"
 #include "GrContext.h"
 #include "GrCoordTransform.h"
 #include "GrDefaultGeoProcFactory.h"
+#include "GrGeometryProcessor.h"
 #include "GrInvariantOutput.h"
 #include "GrProcessor.h"
 #include "GrStyle.h"
 #include "SkGr.h"
-#include "batches/GrVertexBatch.h"
+#include "batches/GrMeshDrawOp.h"
 #include "glsl/GrGLSLFragmentShaderBuilder.h"
 #include "glsl/GrGLSLGeometryProcessor.h"
 #include "glsl/GrGLSLProgramDataManager.h"
@@ -238,7 +238,7 @@ static sk_sp<GrGeometryProcessor> make_dash_gp(GrColor,
                                                const SkMatrix& localMatrix,
                                                bool usesLocalCoords);
 
-class DashBatch : public GrVertexBatch {
+class DashBatch : public GrMeshDrawOp {
 public:
     DEFINE_OP_CLASS_ID
     struct Geometry {
@@ -253,8 +253,8 @@ public:
         GrColor fColor;
     };
 
-    static GrDrawBatch* Create(const Geometry& geometry, SkPaint::Cap cap, AAMode aaMode,
-                               bool fullDash) {
+    static GrDrawOp* Create(const Geometry& geometry, SkPaint::Cap cap, AAMode aaMode,
+                            bool fullDash) {
         return new DashBatch(geometry, cap, aaMode, fullDash);
     }
 
@@ -704,14 +704,14 @@ private:
     BatchTracker fBatch;
     SkSTArray<1, Geometry, true> fGeoData;
 
-    typedef GrVertexBatch INHERITED;
+    typedef GrMeshDrawOp INHERITED;
 };
 
-GrDrawBatch* GrDashingEffect::CreateDashLineBatch(GrColor color,
-                                                  const SkMatrix& viewMatrix,
-                                                  const SkPoint pts[2],
-                                                  AAMode aaMode,
-                                                  const GrStyle& style) {
+GrDrawOp* GrDashingEffect::CreateDashLineBatch(GrColor color,
+                                               const SkMatrix& viewMatrix,
+                                               const SkPoint pts[2],
+                                               AAMode aaMode,
+                                               const GrStyle& style) {
     SkASSERT(GrDashingEffect::CanDrawDashLine(pts, style, viewMatrix));
     const SkScalar* intervals = style.dashIntervals();
     SkScalar phase = style.dashPhase();

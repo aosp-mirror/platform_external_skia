@@ -21,7 +21,7 @@
 #include "SkStroke.h"
 #include "SkTemplates.h"
 
-#include "batches/GrVertexBatch.h"
+#include "batches/GrMeshDrawOp.h"
 
 #include "effects/GrBezierEffect.h"
 
@@ -675,7 +675,7 @@ bool check_bounds(const SkMatrix& viewMatrix, const SkRect& devBounds, void* ver
     return true;
 }
 
-class AAHairlineBatch : public GrVertexBatch {
+class AAHairlineBatch : public GrMeshDrawOp {
 public:
     DEFINE_OP_CLASS_ID
 
@@ -798,7 +798,7 @@ private:
     BatchTracker fBatch;
     SkSTArray<1, Geometry, true> fGeoData;
 
-    typedef GrVertexBatch INHERITED;
+    typedef GrMeshDrawOp INHERITED;
 };
 
 void AAHairlineBatch::onPrepareDraws(Target* target) const {
@@ -951,11 +951,11 @@ void AAHairlineBatch::onPrepareDraws(Target* target) const {
     }
 }
 
-static GrDrawBatch* create_hairline_batch(GrColor color,
-                                          const SkMatrix& viewMatrix,
-                                          const SkPath& path,
-                                          const GrStyle& style,
-                                          const SkIRect& devClipBounds) {
+static GrDrawOp* create_hairline_batch(GrColor color,
+                                       const SkMatrix& viewMatrix,
+                                       const SkPath& path,
+                                       const GrStyle& style,
+                                       const SkIRect& devClipBounds) {
     SkScalar hairlineCoverage;
     uint8_t newCoverage = 0xff;
     if (GrPathRenderer::IsStrokeHairlineOrEquivalent(style, viewMatrix, &hairlineCoverage)) {
@@ -977,9 +977,9 @@ bool GrAAHairLinePathRenderer::onDrawPath(const DrawPathArgs& args) {
 
     SkPath path;
     args.fShape->asPath(&path);
-    sk_sp<GrDrawBatch> batch(create_hairline_batch(args.fPaint->getColor(),
-                                                   *args.fViewMatrix, path,
-                                                   args.fShape->style(), devClipBounds));
+    sk_sp<GrDrawOp> batch(create_hairline_batch(args.fPaint->getColor(),
+                                                *args.fViewMatrix, path,
+                                                args.fShape->style(), devClipBounds));
 
     GrPipelineBuilder pipelineBuilder(*args.fPaint);
     pipelineBuilder.setUserStencil(args.fUserStencilSettings);

@@ -10,10 +10,10 @@
 #include "GrBatchFlushState.h"
 #include "GrColor.h"
 #include "GrDefaultGeoProcFactory.h"
+#include "GrMeshDrawOp.h"
 #include "GrPrimitiveProcessor.h"
-#include "GrResourceProvider.h"
 #include "GrQuad.h"
-#include "GrVertexBatch.h"
+#include "GrResourceProvider.h"
 
 #include "SkMatrixPriv.h"
 
@@ -71,7 +71,7 @@ static void tesselate(intptr_t vertices,
     }
 }
 
-class NonAAFillRectBatch : public GrVertexBatch {
+class NonAAFillRectBatch : public GrMeshDrawOp {
 public:
     DEFINE_OP_CLASS_ID
 
@@ -187,16 +187,16 @@ private:
     GrXPOverridesForBatch fOverrides;
     SkSTArray<1, RectInfo, true> fRects;
 
-    typedef GrVertexBatch INHERITED;
+    typedef GrMeshDrawOp INHERITED;
 };
 
 namespace GrNonAAFillRectBatch {
 
-GrDrawBatch* Create(GrColor color,
-                    const SkMatrix& viewMatrix,
-                    const SkRect& rect,
-                    const SkRect* localRect,
-                    const SkMatrix* localMatrix) {
+GrDrawOp* Create(GrColor color,
+                 const SkMatrix& viewMatrix,
+                 const SkRect& rect,
+                 const SkRect* localRect,
+                 const SkMatrix* localMatrix) {
     return new NonAAFillRectBatch(color, viewMatrix, rect, localRect, localMatrix);
 }
 

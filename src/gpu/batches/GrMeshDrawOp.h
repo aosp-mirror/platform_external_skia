@@ -8,7 +8,7 @@
 #ifndef GrVertexBatch_DEFINED
 #define GrVertexBatch_DEFINED
 
-#include "GrDrawBatch.h"
+#include "GrDrawOp.h"
 #include "GrGeometryProcessor.h"
 #include "GrMesh.h"
 #include "GrPendingProgramElement.h"
@@ -18,28 +18,28 @@
 class GrBatchFlushState;
 
 /**
- * Base class for vertex-based GrBatches.
+ * Base class for mesh-drawing GrDrawOps.
  */
-class GrVertexBatch : public GrDrawBatch {
+class GrMeshDrawOp : public GrDrawOp {
 public:
     class Target;
 
-    GrVertexBatch(uint32_t classID);
+    GrMeshDrawOp(uint32_t classID);
 
 protected:
     /** Helper for rendering instances using an instanced index index buffer. This class creates the
         space for the vertices and flushes the draws to the batch target. */
-   class InstancedHelper {
-   public:
+    class InstancedHelper {
+    public:
         InstancedHelper() {}
         /** Returns the allocated storage for the vertices. The caller should populate the vertices
             before calling recordDraws(). */
-        void* init(Target*, GrPrimitiveType, size_t vertexStride,
-                   const GrBuffer*, int verticesPerInstance, int indicesPerInstance,
-                   int instancesToDraw);
+        void* init(Target*, GrPrimitiveType, size_t vertexStride, const GrBuffer*,
+                   int verticesPerInstance, int indicesPerInstance, int instancesToDraw);
 
         /** Call after init() to issue draws to the batch target.*/
         void recordDraw(Target*, const GrGeometryProcessor*);
+
     private:
         GrMesh fMesh;
     };
@@ -57,6 +57,7 @@ protected:
         void* init(Target*, size_t vertexStride, int quadsToDraw);
 
         using InstancedHelper::recordDraw;
+
     private:
         typedef InstancedHelper INHERITED;
     };
@@ -80,12 +81,12 @@ private:
     // All draws in all the vertex batches have implicit tokens based on the order they are
     // enqueued globally across all batches. This is the offset of the first entry in fQueuedDraws.
     // fQueuedDraws[i]'s token is fBaseDrawToken + i.
-    GrBatchDrawToken fBaseDrawToken;
+    GrDrawOpUploadToken fBaseDrawToken;
 
-    SkSTArray<4, GrMesh>           fMeshes;
+    SkSTArray<4, GrMesh> fMeshes;
     SkSTArray<4, QueuedDraw, true> fQueuedDraws;
 
-    typedef GrDrawBatch INHERITED;
+    typedef GrDrawOp INHERITED;
 };
 
 #endif

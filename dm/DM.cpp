@@ -1410,6 +1410,36 @@ bool IsRenderingGLContextType(sk_gpu_test::GrContextFactory::ContextType type) {
 bool IsNullGLContextType(sk_gpu_test::GrContextFactory::ContextType type) {
     return type == GrContextFactory::kNullGL_ContextType;
 }
+const char* ContextTypeName(GrContextFactory::ContextType contextType) {
+    switch (contextType) {
+        case GrContextFactory::kGL_ContextType:
+            return "OpenGL";
+        case GrContextFactory::kGLES_ContextType:
+            return "OpenGLES";
+        case GrContextFactory::kANGLE_D3D9_ES2_ContextType:
+            return "ANGLE D3D9 ES2";
+        case GrContextFactory::kANGLE_D3D11_ES2_ContextType:
+            return "ANGLE D3D11 ES2";
+        case GrContextFactory::kANGLE_D3D11_ES3_ContextType:
+            return "ANGLE D3D11 ES3";
+        case GrContextFactory::kANGLE_GL_ES2_ContextType:
+            return "ANGLE GL ES2";
+        case GrContextFactory::kANGLE_GL_ES3_ContextType:
+            return "ANGLE GL ES3";
+        case GrContextFactory::kCommandBuffer_ContextType:
+            return "Command Buffer";
+        case GrContextFactory::kMESA_ContextType:
+            return "Mesa";
+        case GrContextFactory::kNullGL_ContextType:
+            return "Null GL";
+        case GrContextFactory::kDebugGL_ContextType:
+            return "Debug GL";
+        case GrContextFactory::kVulkan_ContextType:
+            return "Vulkan";
+    }
+    SkDEBUGFAIL("Unreachable");
+    return "Unknown";
+}
 #else
 bool IsGLContextType(int) { return false; }
 bool IsVulkanContextType(int) { return false; }
@@ -1423,11 +1453,7 @@ void RunWithGPUTestContexts(GrContextTestFn* test, GrContextTypeFilterFn* contex
 
     for (int typeInt = 0; typeInt < GrContextFactory::kContextTypeCnt; ++typeInt) {
         GrContextFactory::ContextType contextType = (GrContextFactory::ContextType) typeInt;
-        ContextInfo ctxInfo = factory->getContextInfo(contextType);
-        if (contextTypeFilter && !(*contextTypeFilter)(contextType)) {
-            continue;
-        }
-        // Use "native" instead of explicitly trying OpenGL and OpenGL ES. Do not use GLES on,
+        // Use "native" instead of explicitly trying OpenGL and OpenGL ES. Do not use GLES on
         // desktop since tests do not account for not fixing http://skbug.com/2809
         if (contextType == GrContextFactory::kGL_ContextType ||
             contextType == GrContextFactory::kGLES_ContextType) {
@@ -1435,6 +1461,11 @@ void RunWithGPUTestContexts(GrContextTestFn* test, GrContextTypeFilterFn* contex
                 continue;
             }
         }
+        ContextInfo ctxInfo = factory->getContextInfo(contextType);
+        if (contextTypeFilter && !(*contextTypeFilter)(contextType)) {
+            continue;
+        }
+        ReporterContext ctx(reporter, SkString(ContextTypeName(contextType)));
         if (ctxInfo.grContext()) {
             (*test)(reporter, ctxInfo);
         }

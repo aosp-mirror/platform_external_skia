@@ -15,15 +15,14 @@
 #include "GrResourceProvider.h"
 #include "SkRRect.h"
 #include "SkStrokeRec.h"
-#include "batches/GrVertexBatch.h"
+#include "batches/GrMeshDrawOp.h"
 #include "glsl/GrGLSLFragmentShaderBuilder.h"
 #include "glsl/GrGLSLGeometryProcessor.h"
-#include "glsl/GrGLSLGeometryProcessor.h"
 #include "glsl/GrGLSLProgramDataManager.h"
-#include "glsl/GrGLSLVarying.h"
-#include "glsl/GrGLSLVertexShaderBuilder.h"
 #include "glsl/GrGLSLUniformHandler.h"
 #include "glsl/GrGLSLUtil.h"
+#include "glsl/GrGLSLVarying.h"
+#include "glsl/GrGLSLVertexShaderBuilder.h"
 
 namespace {
 
@@ -234,7 +233,7 @@ sk_sp<GrGeometryProcessor> RectGeometryProcessor::TestCreate(GrProcessorTestData
 
 ///////////////////////////////////////////////////////////////////////////////
 
-class AnalyticRectBatch : public GrVertexBatch {
+class AnalyticRectBatch : public GrMeshDrawOp {
 public:
     DEFINE_OP_CLASS_ID
 
@@ -385,14 +384,14 @@ private:
     SkMatrix                     fViewMatrixIfUsingLocalCoords;
     SkSTArray<1, Geometry, true> fGeoData;
 
-    typedef GrVertexBatch INHERITED;
+    typedef GrMeshDrawOp INHERITED;
 };
 
-GrDrawBatch* GrAnalyticRectBatch::CreateAnalyticRectBatch(GrColor color,
-                                                          const SkMatrix& viewMatrix,
-                                                          const SkRect& rect,
-                                                          const SkRect& croppedRect,
-                                                          const SkRect& bounds) {
+GrDrawOp* GrAnalyticRectBatch::CreateAnalyticRectBatch(GrColor color,
+                                                       const SkMatrix& viewMatrix,
+                                                       const SkRect& rect,
+                                                       const SkRect& croppedRect,
+                                                       const SkRect& bounds) {
     return new AnalyticRectBatch(color, viewMatrix, rect, croppedRect, bounds);
 }
 

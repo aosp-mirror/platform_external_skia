@@ -21,8 +21,8 @@
 #include "SkTLazy.h"
 #include "SkTraceEvent.h"
 
+#include "batches/GrMeshDrawOp.h"
 #include "batches/GrRectBatchFactory.h"
-#include "batches/GrVertexBatch.h"
 
 GrDefaultPathRenderer::GrDefaultPathRenderer(bool separateStencilSupport,
                                              bool stencilWrapOpsSupport)
@@ -94,7 +94,7 @@ static inline void add_quad(SkPoint** vert, const SkPoint* base, const SkPoint p
     }
 }
 
-class DefaultPathBatch : public GrVertexBatch {
+class DefaultPathBatch : public GrMeshDrawOp {
 public:
     DEFINE_OP_CLASS_ID
 
@@ -419,7 +419,7 @@ private:
     BatchTracker fBatch;
     SkSTArray<1, Geometry, true> fGeoData;
 
-    typedef GrVertexBatch INHERITED;
+    typedef GrMeshDrawOp INHERITED;
 };
 
 bool GrDefaultPathRenderer::internalDrawPath(GrRenderTargetContext* renderTargetContext,
@@ -562,7 +562,7 @@ bool GrDefaultPathRenderer::internalDrawPath(GrRenderTargetContext* renderTarget
             }
             const SkMatrix& viewM = (reverse && viewMatrix.hasPerspective()) ? SkMatrix::I() :
                                                                                viewMatrix;
-            sk_sp<GrDrawBatch> batch(
+            sk_sp<GrDrawOp> batch(
                     GrRectBatchFactory::CreateNonAAFill(paint.getColor(), viewM, bounds, nullptr,
                                                         &localMatrix));
 
@@ -573,10 +573,9 @@ bool GrDefaultPathRenderer::internalDrawPath(GrRenderTargetContext* renderTarget
 
             renderTargetContext->drawBatch(pipelineBuilder, clip, batch.get());
         } else {
-            sk_sp<GrDrawBatch> batch(new DefaultPathBatch(paint.getColor(), path,
-                                                          srcSpaceTol,
-                                                          newCoverage, viewMatrix,
-                                                          isHairline, devBounds));
+            sk_sp<GrDrawOp> batch(new DefaultPathBatch(paint.getColor(), path, srcSpaceTol,
+                                                       newCoverage, viewMatrix, isHairline,
+                                                       devBounds));
 
             GrPipelineBuilder pipelineBuilder(paint, renderTargetContext->mustUseHWAA(paint));
             pipelineBuilder.setDrawFace(drawFace[p]);

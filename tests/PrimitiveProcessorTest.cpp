@@ -12,20 +12,20 @@
 
 #if SK_SUPPORT_GPU
 #include "GrBatchFlushState.h"
-#include "GrRenderTargetContext.h"
-#include "GrRenderTargetContextPriv.h"
 #include "GrContext.h"
 #include "GrGeometryProcessor.h"
 #include "GrGpu.h"
+#include "GrRenderTargetContext.h"
+#include "GrRenderTargetContextPriv.h"
 #include "GrTextureProvider.h"
-#include "glsl/GrGLSLGeometryProcessor.h"
-#include "glsl/GrGLSLFragmentShaderBuilder.h"
-#include "glsl/GrGLSLVarying.h"
-#include "batches/GrVertexBatch.h"
 #include "SkString.h"
+#include "batches/GrMeshDrawOp.h"
+#include "glsl/GrGLSLFragmentShaderBuilder.h"
+#include "glsl/GrGLSLGeometryProcessor.h"
+#include "glsl/GrGLSLVarying.h"
 
 namespace {
-class Batch : public GrVertexBatch {
+class Batch : public GrMeshDrawOp {
 public:
     DEFINE_OP_CLASS_ID
 
@@ -97,7 +97,7 @@ private:
 
     int fNumAttribs;
 
-    typedef GrVertexBatch INHERITED;
+    typedef GrMeshDrawOp INHERITED;
 };
 }
 
@@ -123,7 +123,7 @@ DEF_GPUTEST_FOR_ALL_CONTEXTS(VertexAttributeCount, reporter, ctxInfo) {
     REPORTER_ASSERT(reporter, context->getGpu()->stats()->numDraws() == 0);
     REPORTER_ASSERT(reporter, context->getGpu()->stats()->numFailedDraws() == 0);
 #endif
-    sk_sp<GrDrawBatch> batch;
+    sk_sp<GrDrawOp> batch;
     GrPaint grPaint;
     // This one should succeed.
     batch.reset(new Batch(attribCnt));

@@ -17,14 +17,14 @@
 #include "GrStyle.h"
 #include "SkRRect.h"
 #include "SkStrokeRec.h"
-#include "batches/GrVertexBatch.h"
+#include "batches/GrMeshDrawOp.h"
 #include "glsl/GrGLSLFragmentShaderBuilder.h"
 #include "glsl/GrGLSLGeometryProcessor.h"
 #include "glsl/GrGLSLProgramDataManager.h"
-#include "glsl/GrGLSLVarying.h"
-#include "glsl/GrGLSLVertexShaderBuilder.h"
 #include "glsl/GrGLSLUniformHandler.h"
 #include "glsl/GrGLSLUtil.h"
+#include "glsl/GrGLSLVarying.h"
+#include "glsl/GrGLSLVertexShaderBuilder.h"
 
 // TODO(joshualitt) - Break this file up during GrOp post implementation cleanup
 
@@ -597,7 +597,7 @@ static const uint16_t* circle_type_to_indices(bool stroked) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-class CircleBatch : public GrVertexBatch {
+class CircleBatch : public GrMeshDrawOp {
 public:
     DEFINE_OP_CLASS_ID
 
@@ -607,9 +607,9 @@ public:
         SkScalar fSweepAngleRadians;
         bool fUseCenter;
     };
-    static GrDrawBatch* Create(GrColor color, const SkMatrix& viewMatrix, SkPoint center,
-                               SkScalar radius, const GrStyle& style,
-                               const ArcParams* arcParams = nullptr) {
+    static GrDrawOp* Create(GrColor color, const SkMatrix& viewMatrix, SkPoint center,
+                            SkScalar radius, const GrStyle& style,
+                            const ArcParams* arcParams = nullptr) {
         SkASSERT(circle_stays_circle(viewMatrix));
         const SkStrokeRec& stroke = style.strokeRec();
         if (style.hasPathEffect()) {
@@ -1143,16 +1143,16 @@ private:
     bool                         fClipPlaneIsect;
     bool                         fClipPlaneUnion;
 
-    typedef GrVertexBatch INHERITED;
+    typedef GrMeshDrawOp INHERITED;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
 
-class EllipseBatch : public GrVertexBatch {
+class EllipseBatch : public GrMeshDrawOp {
 public:
     DEFINE_OP_CLASS_ID
-    static GrDrawBatch* Create(GrColor color, const SkMatrix& viewMatrix, const SkRect& ellipse,
-                               const SkStrokeRec& stroke) {
+    static GrDrawOp* Create(GrColor color, const SkMatrix& viewMatrix, const SkRect& ellipse,
+                            const SkStrokeRec& stroke) {
         SkASSERT(viewMatrix.rectStaysRect());
 
         // do any matrix crunching before we reset the draw state for device coords
@@ -1374,19 +1374,19 @@ private:
     SkMatrix                     fViewMatrixIfUsingLocalCoords;
     SkSTArray<1, Geometry, true> fGeoData;
 
-    typedef GrVertexBatch INHERITED;
+    typedef GrMeshDrawOp INHERITED;
 };
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
-class DIEllipseBatch : public GrVertexBatch {
+class DIEllipseBatch : public GrMeshDrawOp {
 public:
     DEFINE_OP_CLASS_ID
 
-    static GrDrawBatch* Create(GrColor color,
-                               const SkMatrix& viewMatrix,
-                               const SkRect& ellipse,
-                               const SkStrokeRec& stroke) {
+    static GrDrawOp* Create(GrColor color,
+                            const SkMatrix& viewMatrix,
+                            const SkRect& ellipse,
+                            const SkStrokeRec& stroke) {
         SkPoint center = SkPoint::Make(ellipse.centerX(), ellipse.centerY());
         SkScalar xRadius = SkScalarHalf(ellipse.width());
         SkScalar yRadius = SkScalarHalf(ellipse.height());
@@ -1598,7 +1598,7 @@ private:
     bool                         fUsesLocalCoords;
     SkSTArray<1, Geometry, true> fGeoData;
 
-    typedef GrVertexBatch INHERITED;
+    typedef GrMeshDrawOp INHERITED;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1721,7 +1721,7 @@ static const uint16_t* rrect_type_to_indices(RRectType type) {
 //   each vertex is also given the normalized x & y distance from the interior rect's edge
 //      the GP takes the min of those depths +1 to get the normalized distance to the outer edge
 
-class RRectCircleRendererBatch : public GrVertexBatch {
+class RRectCircleRendererBatch : public GrMeshDrawOp {
 public:
     DEFINE_OP_CLASS_ID
 
@@ -2055,7 +2055,7 @@ private:
     int                          fIndexCount;
     bool                         fAllFill;
 
-    typedef GrVertexBatch INHERITED;
+    typedef GrMeshDrawOp INHERITED;
 };
 
 static const int kNumRRectsInIndexBuffer = 256;
@@ -2081,15 +2081,15 @@ static const GrBuffer* ref_rrect_index_buffer(RRectType type,
     };
 }
 
-class RRectEllipseRendererBatch : public GrVertexBatch {
+class RRectEllipseRendererBatch : public GrMeshDrawOp {
 public:
     DEFINE_OP_CLASS_ID
 
     // If devStrokeWidths values are <= 0 indicates then fill only. Otherwise, strokeOnly indicates
     // whether the rrect is only stroked or stroked and filled.
-    static GrDrawBatch* Create(GrColor color, const SkMatrix& viewMatrix, const SkRect& devRect,
-                               float devXRadius, float devYRadius, SkVector devStrokeWidths,
-                               bool strokeOnly) {
+    static GrDrawOp* Create(GrColor color, const SkMatrix& viewMatrix, const SkRect& devRect,
+                            float devXRadius, float devYRadius, SkVector devStrokeWidths,
+                            bool strokeOnly) {
         SkASSERT(devXRadius > 0.5);
         SkASSERT(devYRadius > 0.5);
         SkASSERT((devStrokeWidths.fX > 0) == (devStrokeWidths.fY > 0));
@@ -2309,14 +2309,14 @@ private:
     SkMatrix                        fViewMatrixIfUsingLocalCoords;
     SkSTArray<1, Geometry, true>    fGeoData;
 
-    typedef GrVertexBatch INHERITED;
+    typedef GrMeshDrawOp INHERITED;
 };
 
-static GrDrawBatch* create_rrect_batch(GrColor color,
-                                       bool needsDistance,
-                                       const SkMatrix& viewMatrix,
-                                       const SkRRect& rrect,
-                                       const SkStrokeRec& stroke) {
+static GrDrawOp* create_rrect_batch(GrColor color,
+                                    bool needsDistance,
+                                    const SkMatrix& viewMatrix,
+                                    const SkRRect& rrect,
+                                    const SkStrokeRec& stroke) {
     SkASSERT(viewMatrix.rectStaysRect());
     SkASSERT(rrect.isSimple());
     SkASSERT(!rrect.isOval());
@@ -2384,12 +2384,12 @@ static GrDrawBatch* create_rrect_batch(GrColor color,
     }
 }
 
-GrDrawBatch* GrOvalRenderer::CreateRRectBatch(GrColor color,
-                                              bool needsDistance,
-                                              const SkMatrix& viewMatrix,
-                                              const SkRRect& rrect,
-                                              const SkStrokeRec& stroke,
-                                              const GrShaderCaps* shaderCaps) {
+GrDrawOp* GrOvalRenderer::CreateRRectBatch(GrColor color,
+                                           bool needsDistance,
+                                           const SkMatrix& viewMatrix,
+                                           const SkRRect& rrect,
+                                           const SkStrokeRec& stroke,
+                                           const GrShaderCaps* shaderCaps) {
     if (rrect.isOval()) {
         return CreateOvalBatch(color, viewMatrix, rrect.getBounds(), stroke, shaderCaps);
     }
@@ -2403,11 +2403,11 @@ GrDrawBatch* GrOvalRenderer::CreateRRectBatch(GrColor color,
 
 ///////////////////////////////////////////////////////////////////////////////
 
-GrDrawBatch* GrOvalRenderer::CreateOvalBatch(GrColor color,
-                                             const SkMatrix& viewMatrix,
-                                             const SkRect& oval,
-                                             const SkStrokeRec& stroke,
-                                             const GrShaderCaps* shaderCaps) {
+GrDrawOp* GrOvalRenderer::CreateOvalBatch(GrColor color,
+                                          const SkMatrix& viewMatrix,
+                                          const SkRect& oval,
+                                          const SkStrokeRec& stroke,
+                                          const GrShaderCaps* shaderCaps) {
     // we can draw circles
     SkScalar width = oval.width();
     if (SkScalarNearlyEqual(width, oval.height()) && circle_stays_circle(viewMatrix)) {
@@ -2431,13 +2431,13 @@ GrDrawBatch* GrOvalRenderer::CreateOvalBatch(GrColor color,
 
 ///////////////////////////////////////////////////////////////////////////////
 
-GrDrawBatch* GrOvalRenderer::CreateArcBatch(GrColor color,
-                                            const SkMatrix& viewMatrix,
-                                            const SkRect& oval,
-                                            SkScalar startAngle, SkScalar sweepAngle,
-                                            bool useCenter,
-                                            const GrStyle& style,
-                                            const GrShaderCaps* shaderCaps) {
+GrDrawOp* GrOvalRenderer::CreateArcBatch(GrColor color,
+                                         const SkMatrix& viewMatrix,
+                                         const SkRect& oval,
+                                         SkScalar startAngle, SkScalar sweepAngle,
+                                         bool useCenter,
+                                         const GrStyle& style,
+                                         const GrShaderCaps* shaderCaps) {
     SkASSERT(!oval.isEmpty());
     SkASSERT(sweepAngle);
     SkScalar width = oval.width();
@@ -2483,8 +2483,8 @@ DRAW_BATCH_TEST_DEFINE(CircleBatch) {
             arcParamsTmp.fUseCenter = random->nextBool();
             arcParams = &arcParamsTmp;
         }
-        GrDrawBatch* batch = CircleBatch::Create(color, viewMatrix, center, radius,
-                                                 GrStyle(stroke, nullptr), arcParams);
+        GrDrawOp* batch = CircleBatch::Create(color, viewMatrix, center, radius,
+                                              GrStyle(stroke, nullptr), arcParams);
         if (batch) {
             return batch;
         }

@@ -16,13 +16,13 @@
 #include "GrGeometryProcessor.h"
 #include "GrInvariantOutput.h"
 #include "GrPathUtils.h"
-#include "GrProcessor.h"
 #include "GrPipelineBuilder.h"
+#include "GrProcessor.h"
 #include "SkGeometry.h"
 #include "SkPathPriv.h"
 #include "SkString.h"
 #include "SkTraceEvent.h"
-#include "batches/GrVertexBatch.h"
+#include "batches/GrMeshDrawOp.h"
 #include "glsl/GrGLSLFragmentShaderBuilder.h"
 #include "glsl/GrGLSLGeometryProcessor.h"
 #include "glsl/GrGLSLProgramDataManager.h"
@@ -732,7 +732,7 @@ static sk_sp<GrGeometryProcessor> create_fill_gp(bool tweakAlphaForCoverage,
     return MakeForDeviceSpace(color, coverage, localCoords, viewMatrix);
 }
 
-class AAConvexPathBatch : public GrVertexBatch {
+class AAConvexPathBatch : public GrMeshDrawOp {
 public:
     DEFINE_OP_CLASS_ID
     AAConvexPathBatch(GrColor color, const SkMatrix& viewMatrix, const SkPath& path)
@@ -988,7 +988,7 @@ private:
     BatchTracker fBatch;
     SkSTArray<1, Geometry, true> fGeoData;
 
-    typedef GrVertexBatch INHERITED;
+    typedef GrMeshDrawOp INHERITED;
 };
 
 bool GrAAConvexPathRenderer::onDrawPath(const DrawPathArgs& args) {
@@ -1000,8 +1000,7 @@ bool GrAAConvexPathRenderer::onDrawPath(const DrawPathArgs& args) {
     SkPath path;
     args.fShape->asPath(&path);
 
-    sk_sp<GrDrawBatch> batch(new AAConvexPathBatch(args.fPaint->getColor(),
-                                                          *args.fViewMatrix, path));
+    sk_sp<GrDrawOp> batch(new AAConvexPathBatch(args.fPaint->getColor(), *args.fViewMatrix, path));
 
     GrPipelineBuilder pipelineBuilder(*args.fPaint);
     pipelineBuilder.setUserStencil(args.fUserStencilSettings);

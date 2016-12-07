@@ -20,7 +20,7 @@
 #include "GrTessellator.h"
 #include "SkGeometry.h"
 
-#include "batches/GrVertexBatch.h"
+#include "batches/GrMeshDrawOp.h"
 
 #include <stdio.h>
 
@@ -103,12 +103,8 @@ private:
 
 class DynamicVertexAllocator : public GrTessellator::VertexAllocator {
 public:
-    DynamicVertexAllocator(size_t stride, GrVertexBatch::Target* target)
-      : VertexAllocator(stride)
-      , fTarget(target)
-      , fVertexBuffer(nullptr)
-      , fVertices(nullptr) {
-    }
+    DynamicVertexAllocator(size_t stride, GrMeshDrawOp::Target* target)
+        : VertexAllocator(stride), fTarget(target), fVertexBuffer(nullptr), fVertices(nullptr) {}
     void* lock(int vertexCount) override {
         fVertexCount = vertexCount;
         fVertices = fTarget->makeVertexSpace(stride(), vertexCount, &fVertexBuffer, &fFirstVertex);
@@ -121,7 +117,7 @@ public:
     const GrBuffer* vertexBuffer() const { return fVertexBuffer; }
     int firstVertex() const { return fFirstVertex; }
 private:
-    GrVertexBatch::Target* fTarget;
+    GrMeshDrawOp::Target* fTarget;
     const GrBuffer* fVertexBuffer;
     int fVertexCount;
     int fFirstVertex;
@@ -160,15 +156,15 @@ bool GrTessellatingPathRenderer::onCanDrawPath(const CanDrawPathArgs& args) cons
     return true;
 }
 
-class TessellatingPathBatch : public GrVertexBatch {
+class TessellatingPathBatch : public GrMeshDrawOp {
 public:
     DEFINE_OP_CLASS_ID
 
-    static GrDrawBatch* Create(const GrColor& color,
-                               const GrShape& shape,
-                               const SkMatrix& viewMatrix,
-                               SkIRect devClipBounds,
-                               bool antiAlias) {
+    static GrDrawOp* Create(const GrColor& color,
+                            const GrShape& shape,
+                            const SkMatrix& viewMatrix,
+                            SkIRect devClipBounds,
+                            bool antiAlias) {
         return new TessellatingPathBatch(color, shape, viewMatrix, devClipBounds, antiAlias);
     }
 
@@ -354,7 +350,7 @@ private:
     bool                    fAntiAlias;
     GrXPOverridesForBatch   fPipelineInfo;
 
-    typedef GrVertexBatch INHERITED;
+    typedef GrMeshDrawOp INHERITED;
 };
 
 bool GrTessellatingPathRenderer::onDrawPath(const DrawPathArgs& args) {
@@ -364,11 +360,11 @@ bool GrTessellatingPathRenderer::onDrawPath(const DrawPathArgs& args) {
     args.fClip->getConservativeBounds(args.fRenderTargetContext->worstCaseWidth(),
                                       args.fRenderTargetContext->worstCaseHeight(),
                                       &clipBoundsI);
-    sk_sp<GrDrawBatch> batch(TessellatingPathBatch::Create(args.fPaint->getColor(),
-                                                           *args.fShape,
-                                                           *args.fViewMatrix,
-                                                           clipBoundsI,
-                                                           args.fAntiAlias));
+    sk_sp<GrDrawOp> batch(TessellatingPathBatch::Create(args.fPaint->getColor(),
+                                                        *args.fShape,
+                                                        *args.fViewMatrix,
+                                                        clipBoundsI,
+                                                        args.fAntiAlias));
 
     GrPipelineBuilder pipelineBuilder(*args.fPaint,
                                       args.fRenderTargetContext->mustUseHWAA(*args.fPaint));

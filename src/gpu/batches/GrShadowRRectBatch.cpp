@@ -59,12 +59,12 @@ static const uint16_t* circle_type_to_indices(bool stroked) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-class ShadowCircleBatch : public GrVertexBatch {
+class ShadowCircleBatch : public GrMeshDrawOp {
 public:
     DEFINE_OP_CLASS_ID
 
-    static GrDrawBatch* Create(GrColor color, const SkMatrix& viewMatrix, SkPoint center,
-                               SkScalar radius, SkScalar blurRadius, const GrStyle& style) {
+    static GrDrawOp* Create(GrColor color, const SkMatrix& viewMatrix, SkPoint center,
+                            SkScalar radius, SkScalar blurRadius, const GrStyle& style) {
         SkASSERT(viewMatrix.isSimilarity());
         const SkStrokeRec& stroke = style.strokeRec();
         if (style.hasPathEffect()) {
@@ -399,7 +399,7 @@ private:
     int                          fVertCount;
     int                          fIndexCount;
 
-    typedef GrVertexBatch INHERITED;
+    typedef GrMeshDrawOp INHERITED;
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -504,7 +504,7 @@ static const uint16_t* rrect_type_to_indices(RRectType type) {
 //   each vertex is also given the normalized x & y distance from the interior rect's edge
 //      the GP takes the min of those depths +1 to get the normalized distance to the outer edge
 
-class ShadowCircularRRectBatch : public GrVertexBatch {
+class ShadowCircularRRectBatch : public GrMeshDrawOp {
 public:
     DEFINE_OP_CLASS_ID
 
@@ -828,17 +828,17 @@ private:
     int                          fVertCount;
     int                          fIndexCount;
 
-    typedef GrVertexBatch INHERITED;
+    typedef GrMeshDrawOp INHERITED;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
 
-static GrDrawBatch* create_shadow_circle_batch(GrColor color,
-                                               const SkMatrix& viewMatrix,
-                                               const SkRect& oval,
-                                               SkScalar blurRadius,
-                                               const SkStrokeRec& stroke,
-                                               const GrShaderCaps* shaderCaps) {
+static GrDrawOp* create_shadow_circle_batch(GrColor color,
+                                            const SkMatrix& viewMatrix,
+                                            const SkRect& oval,
+                                            SkScalar blurRadius,
+                                            const SkStrokeRec& stroke,
+                                            const GrShaderCaps* shaderCaps) {
     // we can only draw circles
     SkScalar width = oval.width();
     SkASSERT(SkScalarNearlyEqual(width, oval.height()) && viewMatrix.isSimilarity());
@@ -847,11 +847,11 @@ static GrDrawBatch* create_shadow_circle_batch(GrColor color,
                                      blurRadius, GrStyle(stroke, nullptr));
 }
 
-static GrDrawBatch* create_shadow_rrect_batch(GrColor color,
-                                              const SkMatrix& viewMatrix,
-                                              const SkRRect& rrect,
-                                              SkScalar blurRadius,
-                                              const SkStrokeRec& stroke) {
+static GrDrawOp* create_shadow_rrect_batch(GrColor color,
+                                           const SkMatrix& viewMatrix,
+                                           const SkRRect& rrect,
+                                           SkScalar blurRadius,
+                                           const SkStrokeRec& stroke) {
     SkASSERT(viewMatrix.rectStaysRect());
     SkASSERT(rrect.isSimple());
     SkASSERT(!rrect.isOval());
@@ -908,12 +908,12 @@ static GrDrawBatch* create_shadow_rrect_batch(GrColor color,
                                         blurRadius, scaledStroke.fX, isStrokeOnly);
 }
 
-GrDrawBatch* CreateShadowRRectBatch(GrColor color,
-                                    const SkMatrix& viewMatrix,
-                                    const SkRRect& rrect,
-                                    const SkScalar blurRadius,
-                                    const SkStrokeRec& stroke,
-                                    const GrShaderCaps* shaderCaps) {
+GrDrawOp* CreateShadowRRectBatch(GrColor color,
+                                 const SkMatrix& viewMatrix,
+                                 const SkRRect& rrect,
+                                 const SkScalar blurRadius,
+                                 const SkStrokeRec& stroke,
+                                 const GrShaderCaps* shaderCaps) {
     if (rrect.isOval()) {
         return create_shadow_circle_batch(color, viewMatrix, rrect.getBounds(),
                                           blurRadius, stroke, shaderCaps);
@@ -946,8 +946,8 @@ DRAW_BATCH_TEST_DEFINE(ShadowCircleBatch) {
         SkScalar radius = circle.width() / 2.f;
         SkStrokeRec stroke = GrTest::TestStrokeRec(random);
         SkScalar blurRadius = random->nextSScalar1() * 72.f;
-        GrDrawBatch* batch = ShadowCircleBatch::Create(color, viewMatrix, center, radius,
-                                                       blurRadius, GrStyle(stroke, nullptr));
+        GrDrawOp* batch = ShadowCircleBatch::Create(color, viewMatrix, center, radius,
+                                                    blurRadius, GrStyle(stroke, nullptr));
         if (batch) {
             return batch;
         }
