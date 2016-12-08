@@ -456,6 +456,7 @@ LOCAL_SRC_FILES := \
 	../experimental/svg/model/SkSVGAttribute.cpp \
 	../experimental/svg/model/SkSVGAttributeParser.cpp \
 	../experimental/svg/model/SkSVGCircle.cpp \
+	../experimental/svg/model/SkSVGClipPath.cpp \
 	../experimental/svg/model/SkSVGContainer.cpp \
 	../experimental/svg/model/SkSVGDOM.cpp \
 	../experimental/svg/model/SkSVGEllipse.cpp \
