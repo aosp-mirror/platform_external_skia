@@ -393,6 +393,7 @@ LOCAL_SRC_FILES := \
 	../gm/complexclip.cpp \
 	../gm/complexclip2.cpp \
 	../gm/complexclip3.cpp \
+	../gm/complexclip4.cpp \
 	../gm/complexclip_blur_tiled.cpp \
 	../gm/composeshader.cpp \
 	../gm/concavepaths.cpp \
