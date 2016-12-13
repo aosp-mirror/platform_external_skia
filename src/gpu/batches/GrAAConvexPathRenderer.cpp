@@ -8,13 +8,13 @@
 #include "GrAAConvexPathRenderer.h"
 
 #include "GrAAConvexTessellator.h"
-#include "GrBatchFlushState.h"
 #include "GrBatchTest.h"
 #include "GrCaps.h"
 #include "GrContext.h"
 #include "GrDefaultGeoProcFactory.h"
 #include "GrGeometryProcessor.h"
 #include "GrInvariantOutput.h"
+#include "GrOpFlushState.h"
 #include "GrPathUtils.h"
 #include "GrPipelineBuilder.h"
 #include "GrProcessor.h"
@@ -672,7 +672,7 @@ sk_sp<GrGeometryProcessor> QuadEdgeEffect::TestCreate(GrProcessorTestData* d) {
 ///////////////////////////////////////////////////////////////////////////////
 
 bool GrAAConvexPathRenderer::onCanDrawPath(const CanDrawPathArgs& args) const {
-    return (args.fShaderCaps->shaderDerivativeSupport() && args.fAntiAlias &&
+    return (args.fShaderCaps->shaderDerivativeSupport() && (GrAAType::kCoverage == args.fAAType) &&
             args.fShape->style().isSimpleFill() && !args.fShape->inverseFilled() &&
             args.fShape->knownToBeConvex());
 }
@@ -1002,10 +1002,10 @@ bool GrAAConvexPathRenderer::onDrawPath(const DrawPathArgs& args) {
 
     sk_sp<GrDrawOp> batch(new AAConvexPathBatch(args.fPaint->getColor(), *args.fViewMatrix, path));
 
-    GrPipelineBuilder pipelineBuilder(*args.fPaint);
+    GrPipelineBuilder pipelineBuilder(*args.fPaint, args.fAAType);
     pipelineBuilder.setUserStencil(args.fUserStencilSettings);
 
-    args.fRenderTargetContext->drawBatch(pipelineBuilder, *args.fClip, batch.get());
+    args.fRenderTargetContext->addDrawOp(pipelineBuilder, *args.fClip, batch.get());
 
     return true;
 

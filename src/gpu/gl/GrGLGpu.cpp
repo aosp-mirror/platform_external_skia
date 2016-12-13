@@ -27,6 +27,7 @@
 #include "SkMipMap.h"
 #include "SkPixmap.h"
 #include "SkStrokeRec.h"
+#include "SkSLCompiler.h"
 #include "SkTemplates.h"
 #include "SkTypes.h"
 #include "../private/GrGLSL.h"
@@ -399,13 +400,20 @@ bool GrGLGpu::createPLSSetupProgram() {
 
     str = vshaderTxt.c_str();
     length = SkToInt(vshaderTxt.size());
+    SkSL::Program::Settings settings;
+    settings.fCaps = shaderCaps;
+    SkSL::Program::Inputs inputs;
     GrGLuint vshader = GrGLCompileAndAttachShader(*fGLContext, fPLSSetupProgram.fProgram,
-                                                  GR_GL_VERTEX_SHADER, &str, &length, 1, &fStats);
+                                                  GR_GL_VERTEX_SHADER, &str, &length, 1, &fStats,
+                                                  settings, &inputs);
+    SkASSERT(inputs.isEmpty());
 
     str = fshaderTxt.c_str();
     length = SkToInt(fshaderTxt.size());
     GrGLuint fshader = GrGLCompileAndAttachShader(*fGLContext, fPLSSetupProgram.fProgram,
-                                                  GR_GL_FRAGMENT_SHADER, &str, &length, 1, &fStats);
+                                                  GR_GL_FRAGMENT_SHADER, &str, &length, 1, &fStats,
+                                                  settings, &inputs);
+    SkASSERT(inputs.isEmpty());
 
     GL_CALL(LinkProgram(fPLSSetupProgram.fProgram));
 
@@ -3420,8 +3428,16 @@ void GrGLGpu::generateMipmaps(const GrSamplerParams& params, bool allowSRGBInput
     // Configure sRGB decode, if necessary. This state is the only thing needed for the driver
     // call (glGenerateMipmap) to work correctly. Our manual method dirties other state, too.
     if (this->glCaps().srgbDecodeDisableSupport() && GrPixelConfigIsSRGB(texture->config())) {
-        GL_CALL(TexParameteri(target, GR_GL_TEXTURE_SRGB_DECODE_EXT,
-                              allowSRGBInputs ? GR_GL_DECODE_EXT : GR_GL_SKIP_DECODE_EXT));
+        GrGLenum srgbDecode = allowSRGBInputs ? GR_GL_DECODE_EXT : GR_GL_SKIP_DECODE_EXT;
+        // Command buffer's sRGB decode extension doesn't influence mipmap generation correctly.
+        // If we set this to skip_decode, it appears to suppress sRGB -> Linear for each downsample,
+        // but not the Linear -> sRGB when writing the next level. The result is that mip-chains
+        // get progressively brighter as you go down. Forcing this to 'decode' gives predictable
+        // (and only slightly incorrect) results. See crbug.com/655247 (~comment 28)
+        if (!this->glCaps().srgbDecodeDisableAffectsMipmaps()) {
+            srgbDecode = GR_GL_DECODE_EXT;
+        }
+        GL_CALL(TexParameteri(target, GR_GL_TEXTURE_SRGB_DECODE_EXT, srgbDecode));
     }
 
     // Either do manual mipmap generation or (if that fails), just rely on the driver:
@@ -3847,15 +3863,20 @@ bool GrGLGpu::createCopyProgram(GrTexture* srcTex) {
 
     str = vshaderTxt.c_str();
     length = SkToInt(vshaderTxt.size());
+    SkSL::Program::Settings settings;
+    settings.fCaps = shaderCaps;
+    SkSL::Program::Inputs inputs;
     GrGLuint vshader = GrGLCompileAndAttachShader(*fGLContext, fCopyPrograms[progIdx].fProgram,
                                                   GR_GL_VERTEX_SHADER, &str, &length, 1,
-                                                  &fStats);
+                                                  &fStats, settings, &inputs);
+    SkASSERT(inputs.isEmpty());
 
     str = fshaderTxt.c_str();
     length = SkToInt(fshaderTxt.size());
     GrGLuint fshader = GrGLCompileAndAttachShader(*fGLContext, fCopyPrograms[progIdx].fProgram,
                                                   GR_GL_FRAGMENT_SHADER, &str, &length, 1,
-                                                  &fStats);
+                                                  &fStats, settings, &inputs);
+    SkASSERT(inputs.isEmpty());
 
     GL_CALL(LinkProgram(fCopyPrograms[progIdx].fProgram));
 
@@ -4000,15 +4021,20 @@ bool GrGLGpu::createMipmapProgram(int progIdx) {
 
     str = vshaderTxt.c_str();
     length = SkToInt(vshaderTxt.size());
+    SkSL::Program::Settings settings;
+    settings.fCaps = shaderCaps;
+    SkSL::Program::Inputs inputs;
     GrGLuint vshader = GrGLCompileAndAttachShader(*fGLContext, fMipmapPrograms[progIdx].fProgram,
                                                   GR_GL_VERTEX_SHADER, &str, &length, 1,
-                                                  &fStats);
+                                                  &fStats, settings, &inputs);
+    SkASSERT(inputs.isEmpty());
 
     str = fshaderTxt.c_str();
     length = SkToInt(fshaderTxt.size());
     GrGLuint fshader = GrGLCompileAndAttachShader(*fGLContext, fMipmapPrograms[progIdx].fProgram,
                                                   GR_GL_FRAGMENT_SHADER, &str, &length, 1,
-                                                  &fStats);
+                                                  &fStats, settings, &inputs);
+    SkASSERT(inputs.isEmpty());
 
     GL_CALL(LinkProgram(fMipmapPrograms[progIdx].fProgram));
 
@@ -4089,15 +4115,20 @@ bool GrGLGpu::createWireRectProgram() {
 
     str = vshaderTxt.c_str();
     length = SkToInt(vshaderTxt.size());
+    SkSL::Program::Settings settings;
+    settings.fCaps = this->caps()->shaderCaps();
+    SkSL::Program::Inputs inputs;
     GrGLuint vshader = GrGLCompileAndAttachShader(*fGLContext, fWireRectProgram.fProgram,
                                                   GR_GL_VERTEX_SHADER, &str, &length, 1,
-                                                  &fStats);
+                                                  &fStats, settings, &inputs);
+    SkASSERT(inputs.isEmpty());
 
     str = fshaderTxt.c_str();
     length = SkToInt(fshaderTxt.size());
     GrGLuint fshader = GrGLCompileAndAttachShader(*fGLContext, fWireRectProgram.fProgram,
                                                   GR_GL_FRAGMENT_SHADER, &str, &length, 1,
-                                                  &fStats);
+                                                  &fStats, settings, &inputs);
+    SkASSERT(inputs.isEmpty());
 
     GL_CALL(LinkProgram(fWireRectProgram.fProgram));
 

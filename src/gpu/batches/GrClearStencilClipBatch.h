@@ -8,25 +8,19 @@
 #ifndef GrClearStencilClipBatch_DEFINED
 #define GrClearStencilClipBatch_DEFINED
 
-#include "GrBatchFlushState.h"
 #include "GrFixedClip.h"
 #include "GrGpu.h"
 #include "GrGpuCommandBuffer.h"
 #include "GrOp.h"
+#include "GrOpFlushState.h"
 #include "GrRenderTarget.h"
 
 class GrClearStencilClipBatch final : public GrOp {
 public:
     DEFINE_OP_CLASS_ID
 
-    GrClearStencilClipBatch(const GrFixedClip& clip, bool insideStencilMask, GrRenderTarget* rt)
-        : INHERITED(ClassID())
-        , fClip(clip)
-        , fInsideStencilMask(insideStencilMask)
-        , fRenderTarget(rt) {
-        const SkRect& bounds = fClip.scissorEnabled() ? SkRect::Make(fClip.scissorRect())
-                                                      : SkRect::MakeIWH(rt->width(), rt->height());
-        this->setBounds(bounds, HasAABloat::kNo, IsZeroArea::kNo);
+    static sk_sp<GrOp> Make(const GrFixedClip& clip, bool insideStencilMask, GrRenderTarget* rt) {
+        return sk_sp<GrOp>(new GrClearStencilClipBatch(clip, insideStencilMask, rt));
     }
 
     const char* name() const override { return "ClearStencilClip"; }
@@ -49,11 +43,21 @@ public:
     }
 
 private:
+    GrClearStencilClipBatch(const GrFixedClip& clip, bool insideStencilMask, GrRenderTarget* rt)
+        : INHERITED(ClassID())
+        , fClip(clip)
+        , fInsideStencilMask(insideStencilMask)
+        , fRenderTarget(rt) {
+        const SkRect& bounds = fClip.scissorEnabled() ? SkRect::Make(fClip.scissorRect())
+                                                      : SkRect::MakeIWH(rt->width(), rt->height());
+        this->setBounds(bounds, HasAABloat::kNo, IsZeroArea::kNo);
+    }
+
     bool onCombineIfPossible(GrOp* t, const GrCaps& caps) override { return false; }
 
-    void onPrepare(GrBatchFlushState*) override {}
+    void onPrepare(GrOpFlushState*) override {}
 
-    void onDraw(GrBatchFlushState* state, const SkRect& /*bounds*/) override {
+    void onDraw(GrOpFlushState* state, const SkRect& /*bounds*/) override {
         state->commandBuffer()->clearStencilClip(fRenderTarget.get(), fClip, fInsideStencilMask);
     }
 

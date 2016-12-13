@@ -8,12 +8,12 @@
 #include "GrAALinearizingConvexPathRenderer.h"
 
 #include "GrAAConvexTessellator.h"
-#include "GrBatchFlushState.h"
 #include "GrBatchTest.h"
 #include "GrContext.h"
 #include "GrDefaultGeoProcFactory.h"
 #include "GrGeometryProcessor.h"
 #include "GrInvariantOutput.h"
+#include "GrOpFlushState.h"
 #include "GrPathUtils.h"
 #include "GrPipelineBuilder.h"
 #include "GrProcessor.h"
@@ -37,7 +37,7 @@ GrAALinearizingConvexPathRenderer::GrAALinearizingConvexPathRenderer() {
 ///////////////////////////////////////////////////////////////////////////////
 
 bool GrAALinearizingConvexPathRenderer::onCanDrawPath(const CanDrawPathArgs& args) const {
-    if (!args.fAntiAlias) {
+    if (GrAAType::kCoverage != args.fAAType) {
         return false;
     }
     if (!args.fShape->knownToBeConvex()) {
@@ -361,10 +361,10 @@ bool GrAALinearizingConvexPathRenderer::onDrawPath(const DrawPathArgs& args) {
                                                           stroke.getStyle(),
                                                           join, miterLimit));
 
-    GrPipelineBuilder pipelineBuilder(*args.fPaint);
+    GrPipelineBuilder pipelineBuilder(*args.fPaint, args.fAAType);
     pipelineBuilder.setUserStencil(args.fUserStencilSettings);
 
-    args.fRenderTargetContext->drawBatch(pipelineBuilder, *args.fClip, batch.get());
+    args.fRenderTargetContext->addDrawOp(pipelineBuilder, *args.fClip, batch.get());
 
     return true;
 }

@@ -22,6 +22,7 @@
 #include "SkTypeface.h"
 #include "SkUtils.h"
 #include "SkXMLWriter.h"
+#include "SkClipOpPriv.h"
 
 namespace {
 
@@ -731,7 +732,7 @@ void SkSVGDevice::drawBitmapRect(const SkDraw& draw, const SkBitmap& bm, const S
     SkClipStack adjustedClipStack;
     if (srcOrNull && *srcOrNull != SkRect::Make(bm.bounds())) {
         adjustedClipStack = *draw.fClipStack;
-        adjustedClipStack.clipRect(dst, *draw.fMatrix, SkCanvas::kIntersect_Op,
+        adjustedClipStack.clipRect(dst, *draw.fMatrix, kIntersect_SkClipOp,
                                    paint.isAntiAlias());
         adjustedDraw.fClipStack = &adjustedClipStack;
     }

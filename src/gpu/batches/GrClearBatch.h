@@ -8,11 +8,11 @@
 #ifndef GrClearBatch_DEFINED
 #define GrClearBatch_DEFINED
 
-#include "GrBatchFlushState.h"
 #include "GrFixedClip.h"
 #include "GrGpu.h"
 #include "GrGpuCommandBuffer.h"
 #include "GrOp.h"
+#include "GrOpFlushState.h"
 #include "GrRenderTarget.h"
 
 class GrClearBatch final : public GrOp {
@@ -24,6 +24,12 @@ public:
         if (!batch->fRenderTarget) {
             return nullptr; // The clip did not contain any pixels within the render target.
         }
+        return batch;
+    }
+
+    static sk_sp<GrClearBatch> Make(const SkIRect& rect, GrColor color, GrRenderTarget* rt,
+                                    bool fullScreen) {
+        sk_sp<GrClearBatch> batch(new GrClearBatch(rect, color, rt, fullScreen));
         return batch;
     }
 
@@ -68,6 +74,17 @@ private:
         fRenderTarget.reset(rt);
     }
 
+    GrClearBatch(const SkIRect& rect, GrColor color, GrRenderTarget* rt, bool fullScreen)
+        : INHERITED(ClassID())
+        , fClip(GrFixedClip(rect))
+        , fColor(color)
+        , fRenderTarget(rt) {
+        if (fullScreen) {
+            fClip.disableScissor();
+        }
+        this->setBounds(SkRect::Make(rect), HasAABloat::kNo, IsZeroArea::kNo);
+    }
+
     bool onCombineIfPossible(GrOp* t, const GrCaps& caps) override {
         // This could be much more complicated. Currently we look at cases where the new clear
         // contains the old clear, or when the new clear is a subset of the old clear and is the
@@ -95,9 +112,9 @@ private:
                 fClip.scissorRect().contains(that->fClip.scissorRect()));
     }
 
-    void onPrepare(GrBatchFlushState*) override {}
+    void onPrepare(GrOpFlushState*) override {}
 
-    void onDraw(GrBatchFlushState* state, const SkRect& /*bounds*/) override {
+    void onDraw(GrOpFlushState* state, const SkRect& /*bounds*/) override {
         state->commandBuffer()->clear(fRenderTarget.get(), fClip, fColor);
     }
 

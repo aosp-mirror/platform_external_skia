@@ -83,8 +83,7 @@ protected:
         }
 
         sk_sp<GrTexture> texture(
-            GrRefCachedBitmapTexture(context, fBmp, GrSamplerParams::ClampNoFilter(),
-                                     SkDestinationSurfaceColorMode::kGammaAndColorSpaceAware));
+            GrRefCachedBitmapTexture(context, fBmp, GrSamplerParams::ClampNoFilter()));
         if (!texture) {
             return;
         }
@@ -127,10 +126,11 @@ protected:
                     const SkMatrix viewMatrix = SkMatrix::MakeTrans(x, y);
                     grPaint.addColorFragmentProcessor(std::move(fp));
 
-                    sk_sp<GrDrawOp> batch(
+                    sk_sp<GrDrawOp> op(
                             GrRectBatchFactory::CreateNonAAFill(GrColor_WHITE, viewMatrix,
                                                                 renderRect, nullptr, nullptr));
-                    renderTargetContext->priv().testingOnly_drawBatch(grPaint, batch.get());
+                    renderTargetContext->priv().testingOnly_addDrawOp(grPaint, GrAAType::kNone,
+                                                                      std::move(op));
                     x += renderRect.width() + kTestPad;
                 }
                 y += renderRect.height() + kTestPad;

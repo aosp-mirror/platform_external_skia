@@ -8,11 +8,11 @@
 #include "GrTessellatingPathRenderer.h"
 
 #include "GrAuditTrail.h"
-#include "GrBatchFlushState.h"
 #include "GrBatchTest.h"
 #include "GrClip.h"
 #include "GrDefaultGeoProcFactory.h"
 #include "GrMesh.h"
+#include "GrOpFlushState.h"
 #include "GrPathUtils.h"
 #include "GrPipelineBuilder.h"
 #include "GrResourceCache.h"
@@ -140,7 +140,7 @@ bool GrTessellatingPathRenderer::onCanDrawPath(const CanDrawPathArgs& args) cons
     if (!args.fShape->style().isSimpleFill() || args.fShape->knownToBeConvex()) {
         return false;
     }
-    if (args.fAntiAlias) {
+    if (GrAAType::kCoverage == args.fAAType) {
 #ifdef SK_DISABLE_SCREENSPACE_TESS_AA_PATH_RENDERER
         return false;
 #else
@@ -357,21 +357,17 @@ bool GrTessellatingPathRenderer::onDrawPath(const DrawPathArgs& args) {
     GR_AUDIT_TRAIL_AUTO_FRAME(args.fRenderTargetContext->auditTrail(),
                               "GrTessellatingPathRenderer::onDrawPath");
     SkIRect clipBoundsI;
-    args.fClip->getConservativeBounds(args.fRenderTargetContext->worstCaseWidth(),
-                                      args.fRenderTargetContext->worstCaseHeight(),
+    args.fClip->getConservativeBounds(args.fRenderTargetContext->width(),
+                                      args.fRenderTargetContext->height(),
                                       &clipBoundsI);
     sk_sp<GrDrawOp> batch(TessellatingPathBatch::Create(args.fPaint->getColor(),
                                                         *args.fShape,
                                                         *args.fViewMatrix,
                                                         clipBoundsI,
-                                                        args.fAntiAlias));
-
-    GrPipelineBuilder pipelineBuilder(*args.fPaint,
-                                      args.fRenderTargetContext->mustUseHWAA(*args.fPaint));
+                                                        GrAAType::kCoverage == args.fAAType));
+    GrPipelineBuilder pipelineBuilder(*args.fPaint, args.fAAType);
     pipelineBuilder.setUserStencil(args.fUserStencilSettings);
-
-    args.fRenderTargetContext->drawBatch(pipelineBuilder, *args.fClip, batch.get());
-
+    args.fRenderTargetContext->addDrawOp(pipelineBuilder, *args.fClip, batch.get());
     return true;
 }
 

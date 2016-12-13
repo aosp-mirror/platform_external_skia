@@ -402,7 +402,6 @@ LOCAL_SRC_FILES := \
 	src/effects/gradients/SkSweepGradient.cpp \
 	src/gpu/GrAuditTrail.cpp \
 	src/gpu/GrBatchAtlas.cpp \
-	src/gpu/GrBatchFlushState.cpp \
 	src/gpu/GrBatchTest.cpp \
 	src/gpu/GrBitmapTextureMaker.cpp \
 	src/gpu/GrBlend.cpp \
@@ -425,6 +424,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrImageTextureMaker.cpp \
 	src/gpu/GrInvariantOutput.cpp \
 	src/gpu/GrMemoryPool.cpp \
+	src/gpu/GrOpFlushState.cpp \
 	src/gpu/GrOpList.cpp \
 	src/gpu/GrOvalRenderer.cpp \
 	src/gpu/GrPaint.cpp \
@@ -949,14 +949,14 @@ include $(BASE_PATH)/skia_static_deps.mk
 include $(BUILD_SHARED_LIBRARY)
 
 #############################################################
-# Build the skia tools
+# Build the skia tools (except in the PDK build)
 #
+ifneq ($(TARGET_BUILD_PDK),true)
 
 # benchmark (timings)
 include $(BASE_PATH)/bench/Android.mk
 
-#disable build in PDK
-ifneq ($(TARGET_BUILD_PDK),true)
 # diamond-master (one test to rule them all)
 include $(BASE_PATH)/dm/Android.mk
-endif
+
+endif # disable for PDK

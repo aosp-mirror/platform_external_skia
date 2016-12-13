@@ -15,6 +15,7 @@
 #include "GrContext.h"
 #include "GrCaps.h"
 #include "GrRenderTargetContext.h"
+#include "GrRenderTargetContextPriv.h"
 #include "GrFixedClip.h"
 
 #define MAX_BLUR_SIGMA 4.0f
@@ -83,7 +84,7 @@ static void convolve_gaussian_1d(GrRenderTargetContext* renderTargetContext,
     paint.setPorterDuffXPFactory(SkBlendMode::kSrc);
     SkMatrix localMatrix = SkMatrix::MakeTrans(-SkIntToScalar(srcOffset.x()),
                                                -SkIntToScalar(srcOffset.y()));
-    renderTargetContext->fillRectWithLocalMatrix(clip, paint, SkMatrix::I(),
+    renderTargetContext->fillRectWithLocalMatrix(clip, paint, GrAA::kNo, SkMatrix::I(),
                                                  SkRect::Make(dstRect), localMatrix);
 }
 
@@ -111,7 +112,7 @@ static void convolve_gaussian_2d(GrRenderTargetContext* renderTargetContext,
             true, sigmaX, sigmaY));
     paint.addColorFragmentProcessor(std::move(conv));
     paint.setPorterDuffXPFactory(SkBlendMode::kSrc);
-    renderTargetContext->fillRectWithLocalMatrix(clip, paint, SkMatrix::I(),
+    renderTargetContext->fillRectWithLocalMatrix(clip, paint, GrAA::kNo, SkMatrix::I(),
                                                  SkRect::Make(dstRect), localMatrix);
 }
 
@@ -288,7 +289,7 @@ sk_sp<GrRenderTargetContext> GaussianBlur(GrContext* context,
         paint.setPorterDuffXPFactory(SkBlendMode::kSrc);
         shrink_irect_by_2(&dstRect, i < scaleFactorX, i < scaleFactorY);
 
-        dstRenderTargetContext->fillRectToRect(clip, paint, SkMatrix::I(),
+        dstRenderTargetContext->fillRectToRect(clip, paint, GrAA::kNo, SkMatrix::I(),
                                                SkRect::Make(dstRect), SkRect::Make(srcRect));
 
         srcRenderTargetContext = dstRenderTargetContext;
@@ -311,7 +312,7 @@ sk_sp<GrRenderTargetContext> GaussianBlur(GrContext* context,
             // X convolution from reading garbage.
             clearRect = SkIRect::MakeXYWH(srcRect.fRight, srcRect.fTop,
                                           radiusX, srcRect.height());
-            srcRenderTargetContext->clear(&clearRect, 0x0, false);
+            srcRenderTargetContext->priv().absClear(&clearRect, 0x0);
         }
 
         convolve_gaussian(dstRenderTargetContext.get(), clip, srcRect,
@@ -336,7 +337,7 @@ sk_sp<GrRenderTargetContext> GaussianBlur(GrContext* context,
             // convolution from reading garbage.
             clearRect = SkIRect::MakeXYWH(srcRect.fLeft, srcRect.fBottom,
                                           srcRect.width(), radiusY);
-            srcRenderTargetContext->clear(&clearRect, 0x0, false);
+            srcRenderTargetContext->priv().absClear(&clearRect, 0x0);
         }
 
         convolve_gaussian(dstRenderTargetContext.get(), clip, srcRect,
@@ -353,10 +354,12 @@ sk_sp<GrRenderTargetContext> GaussianBlur(GrContext* context,
 
     if (scaleFactorX > 1 || scaleFactorY > 1) {
         // Clear one pixel to the right and below, to accommodate bilinear upsampling.
+        // TODO: it seems like we should actually be clamping here rather than darkening
+        // the bottom right edges.
         clearRect = SkIRect::MakeXYWH(srcRect.fLeft, srcRect.fBottom, srcRect.width() + 1, 1);
-        srcRenderTargetContext->clear(&clearRect, 0x0, false);
+        srcRenderTargetContext->priv().absClear(&clearRect, 0x0);
         clearRect = SkIRect::MakeXYWH(srcRect.fRight, srcRect.fTop, 1, srcRect.height());
-        srcRenderTargetContext->clear(&clearRect, 0x0, false);
+        srcRenderTargetContext->priv().absClear(&clearRect, 0x0);
 
         GrPaint paint;
         paint.setGammaCorrect(dstRenderTargetContext->isGammaCorrect());
@@ -378,7 +381,7 @@ sk_sp<GrRenderTargetContext> GaussianBlur(GrContext* context,
         SkIRect dstRect(srcRect);
         scale_irect(&dstRect, scaleFactorX, scaleFactorY);
 
-        dstRenderTargetContext->fillRectToRect(clip, paint, SkMatrix::I(),
+        dstRenderTargetContext->fillRectToRect(clip, paint, GrAA::kNo, SkMatrix::I(),
                                                SkRect::Make(dstRect), SkRect::Make(srcRect));
 
         srcRenderTargetContext = dstRenderTargetContext;

@@ -7,12 +7,12 @@
 
 #include "GrPLSPathRenderer.h"
 
-#include "GrBatchFlushState.h"
 #include "GrBatchTest.h"
 #include "GrCaps.h"
 #include "GrContext.h"
 #include "GrDefaultGeoProcFactory.h"
 #include "GrInvariantOutput.h"
+#include "GrOpFlushState.h"
 #include "GrPLSGeometryProcessor.h"
 #include "GrPathUtils.h"
 #include "GrPipelineBuilder.h"
@@ -758,7 +758,7 @@ bool GrPLSPathRenderer::onCanDrawPath(const CanDrawPathArgs& args) const {
     // seams. Disable in the presence of even-odd for now.
     SkPath path;
     args.fShape->asPath(&path);
-    return args.fShaderCaps->shaderDerivativeSupport() && args.fAntiAlias &&
+    return args.fShaderCaps->shaderDerivativeSupport() && GrAAType::kCoverage == args.fAAType &&
             args.fShape->style().isSimpleFill() && !path.isInverseFillType() &&
             path.getFillType() == SkPath::FillType::kWinding_FillType;
 }
@@ -936,13 +936,10 @@ bool GrPLSPathRenderer::onDrawPath(const DrawPathArgs& args) {
     args.fShape->asPath(&path);
 
     sk_sp<GrDrawOp> batch(new PLSPathBatch(args.fPaint->getColor(), path, *args.fViewMatrix));
-
-    GrPipelineBuilder pipelineBuilder(*args.fPaint,
-                                      args.fRenderTargetContext->mustUseHWAA(*args.fPaint));
+    GrPipelineBuilder pipelineBuilder(*args.fPaint, args.fAAType);
     pipelineBuilder.setUserStencil(args.fUserStencilSettings);
 
-    args.fRenderTargetContext->drawBatch(pipelineBuilder, *args.fClip, batch.get());
-
+    args.fRenderTargetContext->addDrawOp(pipelineBuilder, *args.fClip, batch.get());
     SkDEBUGCODE(inPLSDraw = false;)
     return true;
 

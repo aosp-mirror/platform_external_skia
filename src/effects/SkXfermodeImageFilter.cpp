@@ -26,6 +26,7 @@
 #include "SkGr.h"
 #include "SkGrPriv.h"
 #endif
+#include "SkClipOpPriv.h"
 
 class SkXfermodeImageFilter_Base : public SkImageFilter {
 public:
@@ -195,7 +196,7 @@ void SkXfermodeImageFilter_Base::drawForeground(SkCanvas* canvas, SkSpecialImage
     }
 
     SkAutoCanvasRestore acr(canvas, true);
-    canvas->clipRect(SkRect::Make(fgBounds), SkCanvas::kDifference_Op);
+    canvas->clipRect(SkRect::Make(fgBounds), kDifference_SkClipOp);
     paint.setColor(0);
     canvas->drawPaint(paint);
 }
@@ -303,7 +304,7 @@ sk_sp<SkSpecialImage> SkXfermodeImageFilter_Base::filterImageGPU(
 
     SkMatrix matrix;
     matrix.setTranslate(SkIntToScalar(-bounds.left()), SkIntToScalar(-bounds.top()));
-    renderTargetContext->drawRect(GrNoClip(), paint, matrix, SkRect::Make(bounds));
+    renderTargetContext->drawRect(GrNoClip(), paint, GrAA::kNo, matrix, SkRect::Make(bounds));
 
     return SkSpecialImage::MakeDeferredFromGpu(context,
                                                SkIRect::MakeWH(bounds.width(), bounds.height()),

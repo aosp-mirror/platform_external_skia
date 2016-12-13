@@ -87,9 +87,9 @@ public:
     bool onPeekPixels(SkPixmap*) const override;
     const SkBitmap* onPeekBitmap() const override { return &fBitmap; }
 
-    bool getROPixels(SkBitmap*, SkDestinationSurfaceColorMode, CachingHint) const override;
-    GrTexture* asTextureRef(GrContext*, const GrSamplerParams&,
-                            SkDestinationSurfaceColorMode, sk_sp<SkColorSpace>*) const override;
+    bool getROPixels(SkBitmap*, SkColorSpace* dstColorSpace, CachingHint) const override;
+    GrTexture* asTextureRef(GrContext*, const GrSamplerParams&, SkColorSpace*,
+                            sk_sp<SkColorSpace>*) const override;
     sk_sp<SkImage> onMakeSubset(const SkIRect&) const override;
 
     // exposed for SkSurface_Raster via SkNewImageFromPixelRef
@@ -158,7 +158,7 @@ SkImage_Raster::SkImage_Raster(const Info& info, SkPixelRef* pr, const SkIPoint&
     : INHERITED(info.width(), info.height(), pr->getGenerationID())
 {
     fBitmap.setInfo(info, rowBytes);
-    fBitmap.setPixelRef(pr, pixelRefOrigin);
+    fBitmap.setPixelRef(sk_ref_sp(pr), pixelRefOrigin.x(), pixelRefOrigin.y());
     fBitmap.lockPixels();
     SkASSERT(fBitmap.isImmutable());
 }
@@ -179,13 +179,13 @@ bool SkImage_Raster::onPeekPixels(SkPixmap* pm) const {
     return fBitmap.peekPixels(pm);
 }
 
-bool SkImage_Raster::getROPixels(SkBitmap* dst, SkDestinationSurfaceColorMode, CachingHint) const {
+bool SkImage_Raster::getROPixels(SkBitmap* dst, SkColorSpace* dstColorSpace, CachingHint) const {
     *dst = fBitmap;
     return true;
 }
 
 GrTexture* SkImage_Raster::asTextureRef(GrContext* ctx, const GrSamplerParams& params,
-                                        SkDestinationSurfaceColorMode colorMode,
+                                        SkColorSpace* dstColorSpace,
                                         sk_sp<SkColorSpace>* texColorSpace) const {
 #if SK_SUPPORT_GPU
     if (!ctx) {
@@ -201,10 +201,10 @@ GrTexture* SkImage_Raster::asTextureRef(GrContext* ctx, const GrSamplerParams& p
     if (tex) {
         GrTextureAdjuster adjuster(fPinnedTexture.get(), fBitmap.alphaType(), fBitmap.bounds(),
                                    fPinnedUniqueID, fBitmap.colorSpace());
-        return adjuster.refTextureSafeForParams(params, colorMode, nullptr);
+        return adjuster.refTextureSafeForParams(params, nullptr);
     }
 
-    return GrRefCachedBitmapTexture(ctx, fBitmap, params, colorMode);
+    return GrRefCachedBitmapTexture(ctx, fBitmap, params);
 #endif
 
     return nullptr;
@@ -231,8 +231,7 @@ bool SkImage_Raster::onPinAsTexture(GrContext* ctx) const {
         SkASSERT(fPinnedCount == 0);
         SkASSERT(fPinnedUniqueID == 0);
         fPinnedTexture.reset(
-            GrRefCachedBitmapTexture(ctx, fBitmap, GrSamplerParams::ClampNoFilter(),
-                                     SkDestinationSurfaceColorMode::kGammaAndColorSpaceAware));
+            GrRefCachedBitmapTexture(ctx, fBitmap, GrSamplerParams::ClampNoFilter()));
         if (!fPinnedTexture) {
             return false;
         }
@@ -365,7 +364,9 @@ bool SkImage_Raster::onAsLegacyBitmap(SkBitmap* bitmap, LegacyBitmapMode mode) c
         // (thus changing our state).
         if (fBitmap.isImmutable()) {
             bitmap->setInfo(fBitmap.info(), fBitmap.rowBytes());
-            bitmap->setPixelRef(fBitmap.pixelRef(), fBitmap.pixelRefOrigin());
+            bitmap->setPixelRef(sk_ref_sp(fBitmap.pixelRef()),
+                                fBitmap.pixelRefOrigin().x(),
+                                fBitmap.pixelRefOrigin().y());
             return true;
         }
     }

@@ -9,13 +9,14 @@ declare_args() {
   cxx = "c++"
 
   if (is_android) {
-    ar = "$ndk/toolchains/$ndk_gccdir-4.9/prebuilt/$ndk_host/$ndk_target/bin/ar"
-    cc = "$ndk/toolchains/llvm/prebuilt/$ndk_host/bin/clang"
-    cxx = "$ndk/toolchains/llvm/prebuilt/$ndk_host/bin/clang++"
     if (host_os == "win") {
-      ar = ar + ".exe"
-      cc = cc + ".exe"
-      cxx = cxx + ".exe"
+      ar = "$ndk/toolchains/$ndk_gccdir-4.9/prebuilt/$ndk_host/$ndk_target/bin/ar.exe"
+      cc = "$ndk/toolchains/llvm/prebuilt/$ndk_host/bin/clang.exe"
+      cxx = "$ndk/toolchains/llvm/prebuilt/$ndk_host/bin/clang++.exe"
+    } else {
+      ar = "$ndk/toolchains/$ndk_gccdir-4.9/prebuilt/$ndk_host/$ndk_target/bin/ar"
+      cc = "$ndk/toolchains/llvm/prebuilt/$ndk_host/bin/clang"
+      cxx = "$ndk/toolchains/llvm/prebuilt/$ndk_host/bin/clang++"
     }
   }
 
@@ -27,6 +28,7 @@ declare_args() {
   extra_ldflags = []
 
   cc_wrapper = ""
+  malloc = ""
 }
 
 if (host_os == "win") {
@@ -58,6 +60,7 @@ config("default") {
   cflags_cc = []
   defines = []
   ldflags = []
+  libs = []
 
   if (is_win) {
     cflags += [
@@ -133,6 +136,16 @@ config("default") {
     ldflags += [ "-m32" ]
   }
 
+  if (malloc != "" && !is_win) {
+    cflags += [
+      "-fno-builtin-malloc",
+      "-fno-builtin-calloc",
+      "-fno-builtin-realloc",
+      "-fno-builtin-free",
+    ]
+    libs += [ malloc ]
+  }
+
   if (is_android) {
     asmflags += [
       "--target=$ndk_target",
@@ -163,15 +176,10 @@ config("default") {
       # for /usr/lib64 as $PATH_TO_USR_LIB/../lib64.  If there's no /usr/lib,
       # it can't find /usr/lib64.  We must point Clang at /usr/lib64 manually.
       lib_dirs += [ "$ndk/platforms/$ndk_platform/usr/lib64" ]
-      ldflags += [
-        # Clang will try to link these two files, but not find them.  Again, do it manually.
-        "-nostartfiles",
-        "$ndk/platforms/$ndk_platform/usr/lib64/crtbegin_dynamic.o",
-        "$ndk/platforms/$ndk_platform/usr/lib64/crtend_android.o",
-      ]
+      ldflags += [ "-B$ndk/platforms/$ndk_platform/usr/lib64" ]
     }
 
-    libs = [
+    libs += [
       # Order matters here!  Keep these three in exactly this order.
       "c++_static",
       "c++abi",
@@ -197,7 +205,7 @@ config("default") {
       target_cpu,
       "-stdlib=libc++",
     ]
-    libs = [ "objc" ]
+    libs += [ "objc" ]
 
     # We used to link all our iOS tools together, so none actually defines main().
     # Instead they each define their own entry point, which our iOS mega-app called.
@@ -212,7 +220,7 @@ config("default") {
   }
 
   if (is_linux) {
-    libs = [ "pthread" ]
+    libs += [ "pthread" ]
   }
 
   if (sanitize != "") {

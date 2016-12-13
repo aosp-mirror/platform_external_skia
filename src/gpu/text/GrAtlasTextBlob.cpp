@@ -323,10 +323,9 @@ void GrAtlasTextBlob::flushRun(GrRenderTargetContext* rtc, const GrPaint& grPain
                                                 distanceAdjustTable,
                                                 rtc->isGammaCorrect(),
                                                 cache));
+        GrPipelineBuilder pipelineBuilder(grPaint, GrAAType::kNone);
 
-        GrPipelineBuilder pipelineBuilder(grPaint, rtc->mustUseHWAA(grPaint));
-
-        rtc->drawBatch(pipelineBuilder, clip, batch.get());
+        rtc->addDrawOp(pipelineBuilder, clip, batch.get());
     }
 }
 

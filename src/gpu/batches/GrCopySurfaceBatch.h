@@ -8,9 +8,9 @@
 #ifndef GrCopySurfaceBatch_DEFINED
 #define GrCopySurfaceBatch_DEFINED
 
-#include "GrBatchFlushState.h"
 #include "GrGpu.h"
 #include "GrOp.h"
+#include "GrOpFlushState.h"
 #include "GrRenderTarget.h"
 
 class GrCopySurfaceBatch final : public GrOp {
@@ -27,8 +27,8 @@ public:
                                        SkIRect* clippedSrcRect,
                                        SkIPoint* clippedDstPoint);
 
-    static GrOp* Create(GrSurface* dst, GrSurface* src, const SkIRect& srcRect,
-                           const SkIPoint& dstPoint);
+    static sk_sp<GrOp> Make(GrSurface* dst, GrSurface* src, const SkIRect& srcRect,
+                            const SkIPoint& dstPoint);
 
     const char* name() const override { return "CopySurface"; }
 
@@ -66,9 +66,9 @@ private:
 
     bool onCombineIfPossible(GrOp* that, const GrCaps& caps) override { return false; }
 
-    void onPrepare(GrBatchFlushState*) override {}
+    void onPrepare(GrOpFlushState*) override {}
 
-    void onDraw(GrBatchFlushState* state, const SkRect& /*bounds*/) override {
+    void onDraw(GrOpFlushState* state, const SkRect& /*bounds*/) override {
         if (!state->commandBuffer()) {
             state->gpu()->copySurface(fDst.get(), fSrc.get(), fSrcRect, fDstPoint);
         } else {

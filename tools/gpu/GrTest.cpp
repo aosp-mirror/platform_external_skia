@@ -160,7 +160,7 @@ void SkGpuDevice::drawTexture(GrTexture* tex, const SkRect& dst, const SkPaint& 
 
     grPaint.addColorTextureProcessor(tex, nullptr, textureMat);
 
-    fRenderTargetContext->drawRect(GrNoClip(), grPaint, mat, dst);
+    fRenderTargetContext->drawRect(GrNoClip(), grPaint, GrAA::kNo, mat, dst);
 }
 
 
@@ -243,17 +243,18 @@ void GrResourceCache::changeTimestamp(uint32_t newTimestamp) { fTimestamp = newT
     SkDEBUGCODE(GrSingleOwner::AutoEnforce debug_SingleOwner(fRenderTargetContext->fSingleOwner);)
 #define RETURN_IF_ABANDONED        if (fRenderTargetContext->fDrawingManager->wasAbandoned()) { return; }
 
-void GrRenderTargetContextPriv::testingOnly_drawBatch(const GrPaint& paint,
-                                                      GrDrawOp* batch,
+void GrRenderTargetContextPriv::testingOnly_addDrawOp(const GrPaint& paint,
+                                                      GrAAType aaType,
+                                                      sk_sp<GrDrawOp> op,
                                                       const GrUserStencilSettings* uss,
                                                       bool snapToCenters) {
     ASSERT_SINGLE_OWNER
     RETURN_IF_ABANDONED
     SkDEBUGCODE(fRenderTargetContext->validate();)
     GR_AUDIT_TRAIL_AUTO_FRAME(fRenderTargetContext->fAuditTrail,
-                              "GrRenderTargetContext::testingOnly_drawBatch");
+                              "GrRenderTargetContext::testingOnly_addDrawOp");
 
-    GrPipelineBuilder pipelineBuilder(paint, fRenderTargetContext->mustUseHWAA(paint));
+    GrPipelineBuilder pipelineBuilder(paint, aaType);
     if (uss) {
         pipelineBuilder.setUserStencil(uss);
     }
@@ -262,7 +263,7 @@ void GrRenderTargetContextPriv::testingOnly_drawBatch(const GrPaint& paint,
     }
 
     fRenderTargetContext->getOpList()->addDrawOp(pipelineBuilder, fRenderTargetContext, GrNoClip(),
-                                                 batch);
+                                                 op);
 }
 
 #undef ASSERT_SINGLE_OWNER

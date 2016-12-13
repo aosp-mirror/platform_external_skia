@@ -63,7 +63,7 @@ static SkImageInfo make_info(int w, int h, SkAlphaType at, sk_sp<SkColorSpace> c
     return SkImageInfo::MakeN32(w, h, at, std::move(colorSpace));
 }
 
-bool SkImage_Gpu::getROPixels(SkBitmap* dst, SkDestinationSurfaceColorMode,
+bool SkImage_Gpu::getROPixels(SkBitmap* dst, SkColorSpace* dstColorSpace,
                               CachingHint chint) const {
     if (SkBitmapCache::Find(this->uniqueID(), dst)) {
         SkASSERT(dst->getGenerationID() == this->uniqueID());
@@ -90,14 +90,14 @@ bool SkImage_Gpu::getROPixels(SkBitmap* dst, SkDestinationSurfaceColorMode,
 }
 
 GrTexture* SkImage_Gpu::asTextureRef(GrContext* ctx, const GrSamplerParams& params,
-                                     SkDestinationSurfaceColorMode colorMode,
+                                     SkColorSpace* dstColorSpace,
                                      sk_sp<SkColorSpace>* texColorSpace) const {
     if (texColorSpace) {
         *texColorSpace = this->fColorSpace;
     }
     GrTextureAdjuster adjuster(this->peekTexture(), this->alphaType(), this->bounds(),
                                this->uniqueID(), this->fColorSpace.get());
-    return adjuster.refTextureSafeForParams(params, colorMode, nullptr);
+    return adjuster.refTextureSafeForParams(params, nullptr);
 }
 
 static void apply_premul(const SkImageInfo& info, void* pixels, size_t rowBytes) {
@@ -277,7 +277,7 @@ static sk_sp<SkImage> make_from_yuv_textures_copy(GrContext* ctx, SkYUVColorSpac
 
     const SkRect rect = SkRect::MakeWH(SkIntToScalar(width), SkIntToScalar(height));
 
-    renderTargetContext->drawRect(GrNoClip(), paint, SkMatrix::I(), rect);
+    renderTargetContext->drawRect(GrNoClip(), paint, GrAA::kNo, SkMatrix::I(), rect);
 
     if (!renderTargetContext->accessRenderTarget()) {
         return nullptr;
@@ -303,39 +303,6 @@ sk_sp<SkImage> SkImage::MakeFromNV12TexturesCopy(GrContext* ctx, SkYUVColorSpace
                                                  sk_sp<SkColorSpace> imageColorSpace) {
     return make_from_yuv_textures_copy(ctx, colorSpace, true, yuvTextureHandles, yuvSizes, origin,
                                        std::move(imageColorSpace));
-}
-
-static sk_sp<SkImage> create_image_from_maker(GrTextureMaker* maker, SkAlphaType at, uint32_t id) {
-    sk_sp<SkColorSpace> texColorSpace;
-    sk_sp<GrTexture> texture(
-        maker->refTextureForParams(GrSamplerParams::ClampNoFilter(),
-                                   SkDestinationSurfaceColorMode::kGammaAndColorSpaceAware,
-                                   &texColorSpace));
-    if (!texture) {
-        return nullptr;
-    }
-    return sk_make_sp<SkImage_Gpu>(texture->width(), texture->height(), id, at, std::move(texture),
-                                   std::move(texColorSpace), SkBudgeted::kNo);
-}
-
-sk_sp<SkImage> SkImage::makeTextureImage(GrContext *context) const {
-    if (!context) {
-        return nullptr;
-    }
-    if (GrTexture* peek = as_IB(this)->peekTexture()) {
-        return peek->getContext() == context ? sk_ref_sp(const_cast<SkImage*>(this)) : nullptr;
-    }
-
-    if (SkImageCacherator* cacher = as_IB(this)->peekCacherator()) {
-        GrImageTextureMaker maker(context, cacher, this, kDisallow_CachingHint);
-        return create_image_from_maker(&maker, this->alphaType(), this->uniqueID());
-    }
-
-    if (const SkBitmap* bmp = as_IB(this)->onPeekBitmap()) {
-        GrBitmapTextureMaker maker(context, *bmp);
-        return create_image_from_maker(&maker, this->alphaType(), this->uniqueID());
-    }
-    return nullptr;
 }
 
 sk_sp<SkImage> SkImage::makeNonTextureImage() const {
@@ -496,11 +463,8 @@ size_t SkImage::getDeferredTextureImageData(const GrContextThreadSafeProxy& prox
         }
         if (SkImageCacherator* cacher = as_IB(this)->peekCacherator()) {
             // Generator backed image. Tweak info to trigger correct kind of decode.
-            SkDestinationSurfaceColorMode decodeColorMode = dstColorSpace
-                ? SkDestinationSurfaceColorMode::kGammaAndColorSpaceAware
-                : SkDestinationSurfaceColorMode::kLegacy;
             SkImageCacherator::CachedFormat cacheFormat = cacher->chooseCacheFormat(
-                decodeColorMode, proxy.fCaps.get());
+                dstColorSpace, proxy.fCaps.get());
             info = cacher->buildCacheInfo(cacheFormat).makeWH(scaledSize.width(),
                                                               scaledSize.height());
 

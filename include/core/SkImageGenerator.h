@@ -25,12 +25,6 @@ class SkMatrix;
 class SkPaint;
 class SkPicture;
 
-#ifdef SK_SUPPORT_LEGACY_REFENCODEDDATA_NOCTX
-    #define SK_REFENCODEDDATA_CTXPARAM
-#else
-    #define SK_REFENCODEDDATA_CTXPARAM  GrContext* ctx
-#endif
-
 class SK_API SkImageGenerator : public SkNoncopyable {
 public:
     /**
@@ -51,11 +45,7 @@ public:
      *  unref() on the data when it is finished.
      */
     SkData* refEncodedData(GrContext* ctx = nullptr) {
-#ifdef SK_SUPPORT_LEGACY_REFENCODEDDATA_NOCTX
-        return this->onRefEncodedData();
-#else
         return this->onRefEncodedData(ctx);
-#endif
     }
 
     /**
@@ -138,7 +128,7 @@ public:
      *  - its internal context is the same
      *  - it can somehow convert its texture into one that is valid for the provided context.
      */
-    GrTexture* generateTexture(GrContext*, const SkIRect* subset = nullptr);
+    GrTexture* generateTexture(GrContext*, const SkIRect& subset);
 
     struct SupportedSizes {
         SkISize fSizes[2];
@@ -257,7 +247,7 @@ protected:
 
     SkImageGenerator(const SkImageInfo& info, uint32_t uniqueId = kNeedNewImageUniqueID);
 
-    virtual SkData* onRefEncodedData(SK_REFENCODEDDATA_CTXPARAM);
+    virtual SkData* onRefEncodedData(GrContext* ctx);
 
     virtual bool onGetPixels(const SkImageInfo& info, void* pixels, size_t rowBytes,
                              SkPMColor ctable[], int* ctableCount);
@@ -269,7 +259,7 @@ protected:
         return false;
     }
 
-    virtual GrTexture* onGenerateTexture(GrContext*, const SkIRect*) {
+    virtual GrTexture* onGenerateTexture(GrContext*, const SkIRect&) {
         return nullptr;
     }
 

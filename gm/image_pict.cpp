@@ -221,7 +221,7 @@ public:
         }
     }
 protected:
-    GrTexture* onGenerateTexture(GrContext* ctx, const SkIRect* subset) override {
+    GrTexture* onGenerateTexture(GrContext* ctx, const SkIRect& subset) override {
         if (ctx) {
             SkASSERT(ctx == fCtx.get());
         }
@@ -230,16 +230,13 @@ protected:
             return nullptr;
         }
 
-        if (!subset) {
-            return SkRef(fTexture.get());
-        }
         // need to copy the subset into a new texture
         GrSurfaceDesc desc = fTexture->desc();
-        desc.fWidth = subset->width();
-        desc.fHeight = subset->height();
+        desc.fWidth = subset.width();
+        desc.fHeight = subset.height();
 
         GrTexture* dst = fCtx->textureProvider()->createTexture(desc, SkBudgeted::kNo);
-        fCtx->copySurface(dst, fTexture.get(), *subset, SkIPoint::Make(0, 0));
+        fCtx->copySurface(dst, fTexture.get(), subset, SkIPoint::Make(0, 0));
         return dst;
     }
 private:
@@ -308,8 +305,7 @@ protected:
 
     static void draw_as_bitmap(SkCanvas* canvas, SkImageCacherator* cache, SkScalar x, SkScalar y) {
         SkBitmap bitmap;
-        cache->lockAsBitmap(&bitmap, nullptr,
-                            SkDestinationSurfaceColorMode::kGammaAndColorSpaceAware);
+        cache->lockAsBitmap(&bitmap, nullptr, canvas->imageInfo().colorSpace());
         canvas->drawBitmap(bitmap, x, y);
     }
 
@@ -318,8 +314,7 @@ protected:
         sk_sp<SkColorSpace> texColorSpace;
         sk_sp<GrTexture> texture(
             cache->lockAsTexture(canvas->getGrContext(), GrSamplerParams::ClampBilerp(),
-                                 SkDestinationSurfaceColorMode::kGammaAndColorSpaceAware,
-                                 &texColorSpace, nullptr));
+                                 canvas->imageInfo().colorSpace(), &texColorSpace, nullptr));
         if (!texture) {
             // show placeholder if we have no texture
             SkPaint paint;

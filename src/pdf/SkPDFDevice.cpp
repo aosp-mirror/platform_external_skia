@@ -42,6 +42,7 @@
 #include "SkTextFormatParams.h"
 #include "SkUtils.h"
 #include "SkXfermodeInterpretation.h"
+#include "SkClipOpPriv.h"
 
 #define DPI_FOR_RASTER_SCALE_ONE 72
 
@@ -90,7 +91,7 @@ static SkImageSubset make_image_subset(const SkBitmap& bitmap) {
     SkASSERT(bitmap.pixelRef());
     SkBitmap tmp;
     tmp.setInfo(bitmap.pixelRef()->info(), bitmap.rowBytes());
-    tmp.setPixelRef(bitmap.pixelRef());
+    tmp.setPixelRef(sk_ref_sp(bitmap.pixelRef()), 0, 0);
     tmp.lockPixels();
     auto img = SkImage::MakeFromBitmap(tmp);
     if (img) {
@@ -198,9 +199,9 @@ static_assert(SkRegion::kXOR_Op == (int)kXOR_SkPathOp, "region_pathop_mismatch")
 static_assert(SkRegion::kReverseDifference_Op == (int)kReverseDifference_SkPathOp,
               "region_pathop_mismatch");
 
-static SkPathOp region_op_to_pathops_op(SkCanvas::ClipOp op) {
-    SkASSERT(op >= 0);
-    SkASSERT(op <= SkCanvas::kReverseDifference_Op);
+static SkPathOp region_op_to_pathops_op(SkClipOp op) {
+    SkASSERT(static_cast<int>(op) >= 0);
+    SkASSERT(static_cast<int>(op) <= static_cast<int>(kReverseDifference_SkClipOp));
     return (SkPathOp)op;
 }
 
@@ -231,7 +232,7 @@ static bool get_clip_stack_path(const SkMatrix& transform,
         }
         entryPath.transform(transform);
 
-        if (SkCanvas::kReplace_Op == clipEntry->getOp()) {
+        if (kReplace_SkClipOp == clipEntry->getOp()) {
             *outClipPath = entryPath;
         } else {
             SkPathOp op = region_op_to_pathops_op(clipEntry->getOp());
@@ -1762,7 +1763,7 @@ SkPDFDevice::ContentEntry* SkPDFDevice::setUpContentEntry(const SkClipStack* cli
             synthesizedClipStack = fExistingClipStack;
             SkPath clipPath;
             clipRegion.getBoundaryPath(&clipPath);
-            synthesizedClipStack.clipPath(clipPath, SkMatrix::I(), SkCanvas::kReplace_Op, false);
+            synthesizedClipStack.clipPath(clipPath, SkMatrix::I(), kReplace_SkClipOp, false);
             clipStack = &synthesizedClipStack;
         }
     }
@@ -2318,9 +2319,9 @@ sk_sp<SkSpecialImage> SkPDFDevice::makeSpecial(const SkImage* image) {
     // TODO: See comment above in drawSpecial. The color mode we use for decode should be driven
     // by the destination where we're going to draw thing thing (ie this device). But we don't have
     // a color space, so we always decode in legacy mode for now.
+    SkColorSpace* legacyColorSpace = nullptr;
     return SkSpecialImage::MakeFromImage(SkIRect::MakeWH(image->width(), image->height()),
-                                         image->makeNonTextureImage(),
-                                         SkDestinationSurfaceColorMode::kLegacy);
+                                         image->makeNonTextureImage(), legacyColorSpace);
 }
 
 sk_sp<SkSpecialImage> SkPDFDevice::snapSpecial() {

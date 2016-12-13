@@ -213,6 +213,7 @@ LOCAL_SRC_FILES := \
 	../gm/complexclip.cpp \
 	../gm/complexclip2.cpp \
 	../gm/complexclip3.cpp \
+	../gm/complexclip4.cpp \
 	../gm/complexclip_blur_tiled.cpp \
 	../gm/composeshader.cpp \
 	../gm/concavepaths.cpp \
@@ -456,6 +457,7 @@ LOCAL_SRC_FILES := \
 	../experimental/svg/model/SkSVGAttribute.cpp \
 	../experimental/svg/model/SkSVGAttributeParser.cpp \
 	../experimental/svg/model/SkSVGCircle.cpp \
+	../experimental/svg/model/SkSVGClipPath.cpp \
 	../experimental/svg/model/SkSVGContainer.cpp \
 	../experimental/svg/model/SkSVGDOM.cpp \
 	../experimental/svg/model/SkSVGEllipse.cpp \

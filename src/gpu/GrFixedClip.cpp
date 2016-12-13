@@ -29,7 +29,7 @@ void GrFixedClip::getConservativeBounds(int w, int h, SkIRect* devResult, bool* 
     }
 }
 
-bool GrFixedClip::isRRect(const SkRect& rtBounds, SkRRect* rr, bool* aa) const {
+bool GrFixedClip::isRRect(const SkRect& rtBounds, SkRRect* rr, GrAA* aa) const {
     if (fWindowRectsState.enabled()) {
         return false;
     }
@@ -39,7 +39,7 @@ bool GrFixedClip::isRRect(const SkRect& rtBounds, SkRRect* rr, bool* aa) const {
             return false;
         }
         rr->setRect(rect);
-        *aa = false;
+        *aa = GrAA::kNo;
         return true;
     }
     return false;
@@ -48,7 +48,7 @@ bool GrFixedClip::isRRect(const SkRect& rtBounds, SkRRect* rr, bool* aa) const {
 bool GrFixedClip::apply(GrContext*, GrRenderTargetContext* rtc,
                         bool, bool, GrAppliedClip* out) const {
     if (fScissorState.enabled()) {
-        SkIRect tightScissor = SkIRect::MakeWH(rtc->worstCaseWidth(), rtc->worstCaseHeight());
+        SkIRect tightScissor = SkIRect::MakeWH(rtc->width(), rtc->height());
         if (!tightScissor.intersect(fScissorState.rect())) {
             return false;
         }

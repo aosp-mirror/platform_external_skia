@@ -8,11 +8,11 @@
 #include "GrMSAAPathRenderer.h"
 
 #include "GrAuditTrail.h"
-#include "GrBatchFlushState.h"
 #include "GrClip.h"
 #include "GrDefaultGeoProcFactory.h"
 #include "GrFixedClip.h"
 #include "GrMesh.h"
+#include "GrOpFlushState.h"
 #include "GrPathStencilSettings.h"
 #include "GrPathUtils.h"
 #include "GrPipelineBuilder.h"
@@ -562,6 +562,7 @@ private:
 
 bool GrMSAAPathRenderer::internalDrawPath(GrRenderTargetContext* renderTargetContext,
                                           const GrPaint& paint,
+                                          GrAAType aaType,
                                           const GrUserStencilSettings& userStencilSettings,
                                           const GrClip& clip,
                                           const SkMatrix& viewMatrix,
@@ -662,10 +663,10 @@ bool GrMSAAPathRenderer::internalDrawPath(GrRenderTargetContext* renderTargetCon
                     GrRectBatchFactory::CreateNonAAFill(paint.getColor(), viewM, bounds, nullptr,
                                                         &localMatrix));
 
-            GrPipelineBuilder pipelineBuilder(paint, renderTargetContext->mustUseHWAA(paint));
+            GrPipelineBuilder pipelineBuilder(paint, aaType);
             pipelineBuilder.setUserStencil(passes[p]);
 
-            renderTargetContext->drawBatch(pipelineBuilder, clip, batch.get());
+            renderTargetContext->addDrawOp(pipelineBuilder, clip, batch.get());
         } else {
             sk_sp<MSAAPathBatch> batch(new MSAAPathBatch(paint.getColor(), path,
                                                          viewMatrix, devBounds));
@@ -673,13 +674,12 @@ bool GrMSAAPathRenderer::internalDrawPath(GrRenderTargetContext* renderTargetCon
                 return false;
             }
 
-            GrPipelineBuilder pipelineBuilder(paint, renderTargetContext->mustUseHWAA(paint));
+            GrPipelineBuilder pipelineBuilder(paint, aaType);
             pipelineBuilder.setUserStencil(passes[p]);
             if (passCount > 1) {
                 pipelineBuilder.setDisableColorXPFactory();
             }
-
-            renderTargetContext->drawBatch(pipelineBuilder, clip, batch.get());
+            renderTargetContext->addDrawOp(pipelineBuilder, clip, batch.get());
         }
     }
     return true;
@@ -689,7 +689,7 @@ bool GrMSAAPathRenderer::onCanDrawPath(const CanDrawPathArgs& args) const {
     // This path renderer only fills and relies on MSAA for antialiasing. Stroked shapes are
     // handled by passing on the original shape and letting the caller compute the stroked shape
     // which will have a fill style.
-    return args.fShape->style().isSimpleFill() && !args.fAntiAlias;
+    return args.fShape->style().isSimpleFill() && (GrAAType::kCoverage != args.fAAType);
 }
 
 bool GrMSAAPathRenderer::onDrawPath(const DrawPathArgs& args) {
@@ -704,6 +704,7 @@ bool GrMSAAPathRenderer::onDrawPath(const DrawPathArgs& args) {
     }
     return this->internalDrawPath(args.fRenderTargetContext,
                                   *args.fPaint,
+                                  args.fAAType,
                                   *args.fUserStencilSettings,
                                   *args.fClip,
                                   *args.fViewMatrix,
@@ -719,10 +720,10 @@ void GrMSAAPathRenderer::onStencilPath(const StencilPathArgs& args) {
 
     GrPaint paint;
     paint.setXPFactory(GrDisableColorXPFactory::Make());
-    paint.setAntiAlias(args.fIsAA);
 
-    this->internalDrawPath(args.fRenderTargetContext, paint, GrUserStencilSettings::kUnused,
-                           *args.fClip, *args.fViewMatrix, *args.fShape, true);
+    this->internalDrawPath(args.fRenderTargetContext, paint, args.fAAType,
+                           GrUserStencilSettings::kUnused, *args.fClip, *args.fViewMatrix,
+                           *args.fShape, true);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

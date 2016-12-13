@@ -92,7 +92,6 @@ config("skia_private") {
     "include/private",
     "src/c",
     "src/codec",
-    "src/config",
     "src/core",
     "src/effects",
     "src/effects/gradients",
@@ -640,10 +639,7 @@ component("skia") {
   }
 
   if (is_android) {
-    deps += [
-      "//third_party/cpu-features",
-      "//third_party/expat",
-    ]
+    deps += [ "//third_party/expat" ]
     sources += [ "src/ports/SkDebug_android.cpp" ]
     libs += [
       "EGL",
@@ -930,6 +926,7 @@ if (skia_enable_tools) {
       "experimental/svg/model/SkSVGAttribute.cpp",
       "experimental/svg/model/SkSVGAttributeParser.cpp",
       "experimental/svg/model/SkSVGCircle.cpp",
+      "experimental/svg/model/SkSVGClipPath.cpp",
       "experimental/svg/model/SkSVGContainer.cpp",
       "experimental/svg/model/SkSVGDOM.cpp",
       "experimental/svg/model/SkSVGEllipse.cpp",
@@ -1310,8 +1307,8 @@ if (skia_enable_tools) {
     testonly = true
   }
 
-  if (skia_enable_gpu && (is_linux || is_win || is_mac)) {
-    executable("viewer") {
+  if (skia_enable_gpu && (is_android || is_linux || is_win || is_mac)) {
+    source_set("viewer_sources") {
       sources = [
         "tools/viewer/GMSlide.cpp",
         "tools/viewer/ImageSlide.cpp",
@@ -1387,6 +1384,22 @@ if (skia_enable_tools) {
         deps += [ "//third_party/libsdl" ]
       }
       testonly = true
+    }
+
+    if (is_android) {
+      shared_library("libviewer") {
+        deps = [
+          ":viewer_sources",
+        ]
+        testonly = true
+      }
+    } else {
+      executable("viewer") {
+        deps = [
+          ":viewer_sources",
+        ]
+        testonly = true
+      }
     }
   }
 

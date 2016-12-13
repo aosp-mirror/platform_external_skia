@@ -8,9 +8,9 @@
 #ifndef GrStencilPathBatch_DEFINED
 #define GrStencilPathBatch_DEFINED
 
-#include "GrBatchFlushState.h"
 #include "GrGpu.h"
 #include "GrOp.h"
+#include "GrOpFlushState.h"
 #include "GrPath.h"
 #include "GrPathRendering.h"
 #include "GrRenderTarget.h"
@@ -19,16 +19,16 @@ class GrStencilPathBatch final : public GrOp {
 public:
     DEFINE_OP_CLASS_ID
 
-    static GrOp* Create(const SkMatrix& viewMatrix,
-                           bool useHWAA,
-                           GrPathRendering::FillType fillType,
-                           bool hasStencilClip,
-                           int numStencilBits,
-                           const GrScissorState& scissor,
-                           GrRenderTarget* renderTarget,
-                           const GrPath* path) {
-        return new GrStencilPathBatch(viewMatrix, useHWAA, fillType, hasStencilClip,
-                                      numStencilBits, scissor, renderTarget, path);
+    static sk_sp<GrOp> Make(const SkMatrix& viewMatrix,
+                            bool useHWAA,
+                            GrPathRendering::FillType fillType,
+                            bool hasStencilClip,
+                            int numStencilBits,
+                            const GrScissorState& scissor,
+                            GrRenderTarget* renderTarget,
+                            const GrPath* path) {
+        return sk_sp<GrOp>(new GrStencilPathBatch(viewMatrix, useHWAA, fillType, hasStencilClip,
+                                                  numStencilBits, scissor, renderTarget, path));
     }
 
     const char* name() const override { return "StencilPath"; }
@@ -66,9 +66,9 @@ private:
 
     bool onCombineIfPossible(GrOp* t, const GrCaps& caps) override { return false; }
 
-    void onPrepare(GrBatchFlushState*) override {}
+    void onPrepare(GrOpFlushState*) override {}
 
-    void onDraw(GrBatchFlushState* state, const SkRect& bounds) override {
+    void onDraw(GrOpFlushState* state, const SkRect& bounds) override {
         GrPathRendering::StencilPathArgs args(fUseHWAA, fRenderTarget.get(), &fViewMatrix,
                                               &fScissor, &fStencil);
         state->gpu()->pathRendering()->stencilPath(args, fPath.get());

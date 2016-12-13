@@ -7,12 +7,12 @@
 
 #include "GrAAHairLinePathRenderer.h"
 
-#include "GrBatchFlushState.h"
 #include "GrBatchTest.h"
 #include "GrBuffer.h"
 #include "GrCaps.h"
 #include "GrContext.h"
 #include "GrDefaultGeoProcFactory.h"
+#include "GrOpFlushState.h"
 #include "GrPathUtils.h"
 #include "GrPipelineBuilder.h"
 #include "GrProcessor.h"
@@ -617,7 +617,7 @@ static void add_line(const SkPoint p[2],
 ///////////////////////////////////////////////////////////////////////////////
 
 bool GrAAHairLinePathRenderer::onCanDrawPath(const CanDrawPathArgs& args) const {
-    if (!args.fAntiAlias) {
+    if (GrAAType::kCoverage != args.fAAType) {
         return false;
     }
 
@@ -971,8 +971,8 @@ bool GrAAHairLinePathRenderer::onDrawPath(const DrawPathArgs& args) {
     SkASSERT(!args.fRenderTargetContext->isUnifiedMultisampled());
 
     SkIRect devClipBounds;
-    args.fClip->getConservativeBounds(args.fRenderTargetContext->worstCaseWidth(),
-                                      args.fRenderTargetContext->worstCaseHeight(),
+    args.fClip->getConservativeBounds(args.fRenderTargetContext->width(),
+                                      args.fRenderTargetContext->height(),
                                       &devClipBounds);
 
     SkPath path;
@@ -981,9 +981,9 @@ bool GrAAHairLinePathRenderer::onDrawPath(const DrawPathArgs& args) {
                                                 *args.fViewMatrix, path,
                                                 args.fShape->style(), devClipBounds));
 
-    GrPipelineBuilder pipelineBuilder(*args.fPaint);
+    GrPipelineBuilder pipelineBuilder(*args.fPaint, args.fAAType);
     pipelineBuilder.setUserStencil(args.fUserStencilSettings);
-    args.fRenderTargetContext->drawBatch(pipelineBuilder, *args.fClip, batch.get());
+    args.fRenderTargetContext->addDrawOp(pipelineBuilder, *args.fClip, batch.get());
 
     return true;
 }
