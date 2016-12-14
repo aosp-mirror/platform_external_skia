@@ -94,7 +94,7 @@ static inline void add_quad(SkPoint** vert, const SkPoint* base, const SkPoint p
     }
 }
 
-class DefaultPathBatch : public GrMeshDrawOp {
+class DefaultPathBatch final : public GrMeshDrawOp {
 public:
     DEFINE_OP_CLASS_ID
 
@@ -564,26 +564,25 @@ bool GrDefaultPathRenderer::internalDrawPath(GrRenderTargetContext* renderTarget
             }
             const SkMatrix& viewM = (reverse && viewMatrix.hasPerspective()) ? SkMatrix::I() :
                                                                                viewMatrix;
-            sk_sp<GrDrawOp> batch(
-                    GrRectBatchFactory::CreateNonAAFill(paint.getColor(), viewM, bounds, nullptr,
-                                                        &localMatrix));
+            sk_sp<GrDrawOp> op(GrRectBatchFactory::CreateNonAAFill(paint.getColor(), viewM, bounds,
+                                                                   nullptr, &localMatrix));
 
             SkASSERT(GrDrawFace::kBoth == drawFace[p]);
             GrPipelineBuilder pipelineBuilder(paint, aaType);
             pipelineBuilder.setDrawFace(drawFace[p]);
             pipelineBuilder.setUserStencil(passes[p]);
-            renderTargetContext->addDrawOp(pipelineBuilder, clip, batch.get());
+            renderTargetContext->addDrawOp(pipelineBuilder, clip, std::move(op));
         } else {
-            sk_sp<GrDrawOp> batch(new DefaultPathBatch(paint.getColor(), path, srcSpaceTol,
-                                                       newCoverage, viewMatrix, isHairline,
-                                                       devBounds));
+            sk_sp<GrDrawOp> op(new DefaultPathBatch(paint.getColor(), path, srcSpaceTol,
+                                                    newCoverage, viewMatrix, isHairline,
+                                                    devBounds));
             GrPipelineBuilder pipelineBuilder(paint, aaType);
             pipelineBuilder.setDrawFace(drawFace[p]);
             pipelineBuilder.setUserStencil(passes[p]);
             if (passCount > 1) {
                 pipelineBuilder.setDisableColorXPFactory();
             }
-            renderTargetContext->addDrawOp(pipelineBuilder, clip, batch.get());
+            renderTargetContext->addDrawOp(pipelineBuilder, clip, std::move(op));
         }
     }
     return true;

@@ -763,7 +763,7 @@ bool GrPLSPathRenderer::onCanDrawPath(const CanDrawPathArgs& args) const {
             path.getFillType() == SkPath::FillType::kWinding_FillType;
 }
 
-class PLSPathBatch : public GrMeshDrawOp {
+class PLSPathBatch final : public GrMeshDrawOp {
 public:
     DEFINE_OP_CLASS_ID
     PLSPathBatch(GrColor color, const SkPath& path, const SkMatrix& viewMatrix)
@@ -935,11 +935,11 @@ bool GrPLSPathRenderer::onDrawPath(const DrawPathArgs& args) {
     SkPath path;
     args.fShape->asPath(&path);
 
-    sk_sp<GrDrawOp> batch(new PLSPathBatch(args.fPaint->getColor(), path, *args.fViewMatrix));
+    sk_sp<GrDrawOp> op(new PLSPathBatch(args.fPaint->getColor(), path, *args.fViewMatrix));
     GrPipelineBuilder pipelineBuilder(*args.fPaint, args.fAAType);
     pipelineBuilder.setUserStencil(args.fUserStencilSettings);
 
-    args.fRenderTargetContext->addDrawOp(pipelineBuilder, *args.fClip, batch.get());
+    args.fRenderTargetContext->addDrawOp(pipelineBuilder, *args.fClip, std::move(op));
     SkDEBUGCODE(inPLSDraw = false;)
     return true;
 

@@ -276,15 +276,12 @@ void SkLinearGradient::LinearGradientContext::shadeSpan(int x, int y, SkPMColor*
     SkASSERT(count > 0);
     const SkLinearGradient& linearGradient = static_cast<const SkLinearGradient&>(fShader);
 
-// Only use the Sk4f impl when known to be fast.
-#if defined(SKNX_IS_FAST)
     if (SkShader::kClamp_TileMode == linearGradient.fTileMode &&
         kLinear_MatrixClass == fDstToIndexClass)
     {
         this->shade4_clamp(x, y, dstC, count);
         return;
     }
-#endif
 
     SkPoint             srcPt;
     SkMatrix::MapXYProc dstProc = fDstToIndexProc;
@@ -532,39 +529,23 @@ find_backward(const SkLinearGradient::LinearGradientContext::Rec rec[], float ti
 
 template <bool apply_alpha>
 Sk4f pre_bias(const Sk4f& x, const Sk4f& bias) {
-#ifdef SK_SUPPORT_LEGACY_GRADIENT_PREMUL
-    return x + bias;
-#else
     return apply_alpha ? x : x + bias;
-#endif
 }
 
 template <bool apply_alpha>
 Sk4f post_bias(const Sk4f& x, const Sk4f& bias) {
-#ifdef SK_SUPPORT_LEGACY_GRADIENT_PREMUL
-    return x;
-#else
     return apply_alpha ? x + bias : x;
-#endif
 }
 
 template <bool apply_alpha> SkPMColor trunc_from_255(const Sk4f& x, const Sk4f& bias) {
     SkPMColor c;
-
-#ifdef SK_SUPPORT_LEGACY_GRADIENT_PREMUL
-    SkNx_cast<uint8_t>(x).store(&c);
-    if (apply_alpha) {
-        c = SkPreMultiplyARGB(SkGetPackedA32(c), SkGetPackedR32(c),
-                              SkGetPackedG32(c), SkGetPackedB32(c));
-    }
-#else
     Sk4f c4f255 = x;
     if (apply_alpha) {
         const float scale = x[SkPM4f::A] * (1 / 255.f);
         c4f255 *= Sk4f(scale, scale, scale, 1);
     }
     SkNx_cast<uint8_t>(post_bias<apply_alpha>(c4f255, bias)).store(&c);
-#endif
+
     return c;
 }
 
