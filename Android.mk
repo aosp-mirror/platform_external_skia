@@ -426,7 +426,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrMemoryPool.cpp \
 	src/gpu/GrOpFlushState.cpp \
 	src/gpu/GrOpList.cpp \
-	src/gpu/GrOvalRenderer.cpp \
 	src/gpu/GrPaint.cpp \
 	src/gpu/GrPath.cpp \
 	src/gpu/GrPathProcessor.cpp \
@@ -485,11 +484,11 @@ LOCAL_SRC_FILES := \
 	src/gpu/batches/GrAAConvexTessellator.cpp \
 	src/gpu/batches/GrAADistanceFieldPathRenderer.cpp \
 	src/gpu/batches/GrAAConvexPathRenderer.cpp \
-	src/gpu/batches/GrAAFillRectBatch.cpp \
-	src/gpu/batches/GrAAStrokeRectBatch.cpp \
-	src/gpu/batches/GrAnalyticRectBatch.cpp \
+	src/gpu/batches/GrAAFillRectOp.cpp \
+	src/gpu/batches/GrAAStrokeRectOp.cpp \
+	src/gpu/batches/GrAnalyticRectOp.cpp \
 	src/gpu/batches/GrAtlasTextBatch.cpp \
-	src/gpu/batches/GrCopySurfaceBatch.cpp \
+	src/gpu/batches/GrCopySurfaceOp.cpp \
 	src/gpu/batches/GrDashLinePathRenderer.cpp \
 	src/gpu/batches/GrDefaultPathRenderer.cpp \
 	src/gpu/batches/GrDrawAtlasBatch.cpp \
@@ -497,13 +496,14 @@ LOCAL_SRC_FILES := \
 	src/gpu/batches/GrDrawPathBatch.cpp \
 	src/gpu/batches/GrDrawVerticesBatch.cpp \
 	src/gpu/batches/GrMSAAPathRenderer.cpp \
-	src/gpu/batches/GrNonAAFillRectBatch.cpp \
-	src/gpu/batches/GrNonAAFillRectPerspectiveBatch.cpp \
-	src/gpu/batches/GrNonAAStrokeRectBatch.cpp \
+	src/gpu/batches/GrNonAAFillRectOp.cpp \
+	src/gpu/batches/GrNonAAFillRectPerspectiveOp.cpp \
+	src/gpu/batches/GrNonAAStrokeRectOp.cpp \
 	src/gpu/batches/GrNinePatch.cpp \
 	src/gpu/batches/GrOp.cpp \
+	src/gpu/batches/GrOvalOpFactory.cpp \
 	src/gpu/batches/GrPLSPathRenderer.cpp \
-	src/gpu/batches/GrRectBatchFactory.cpp \
+	src/gpu/batches/GrRectOpFactory.cpp \
 	src/gpu/batches/GrRegionBatch.cpp \
 	src/gpu/batches/GrShadowRRectBatch.cpp \
 	src/gpu/batches/GrStencilAndCoverPathRenderer.cpp \

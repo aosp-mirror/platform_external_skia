@@ -8,11 +8,12 @@
 #include "GrSoftwarePathRenderer.h"
 #include "GrAuditTrail.h"
 #include "GrClip.h"
-#include "GrPipelineBuilder.h"
 #include "GrGpuResourcePriv.h"
+#include "GrPipelineBuilder.h"
 #include "GrSWMaskHelper.h"
+#include "GrSurfaceContextPriv.h"
 #include "GrTextureProvider.h"
-#include "batches/GrRectBatchFactory.h"
+#include "batches/GrRectOpFactory.h"
 
 ////////////////////////////////////////////////////////////////////////////////
 bool GrSoftwarePathRenderer::onCanDrawPath(const CanDrawPathArgs& args) const {
@@ -68,8 +69,8 @@ void GrSoftwarePathRenderer::DrawNonAARect(GrRenderTargetContext* renderTargetCo
                                            const SkMatrix& viewMatrix,
                                            const SkRect& rect,
                                            const SkMatrix& localMatrix) {
-    sk_sp<GrDrawOp> op(GrRectBatchFactory::CreateNonAAFill(paint.getColor(), viewMatrix, rect,
-                                                           nullptr, &localMatrix));
+    sk_sp<GrDrawOp> op(GrRectOpFactory::MakeNonAAFill(paint.getColor(), viewMatrix, rect, nullptr,
+                                                      &localMatrix));
 
     GrPipelineBuilder pipelineBuilder(paint, GrAAType::kNone);
     pipelineBuilder.setUserStencil(&userStencilSettings);
@@ -203,9 +204,10 @@ bool GrSoftwarePathRenderer::onDrawPath(const DrawPathArgs& args) {
     if (!texture) {
         SkBackingFit fit = useCache ? SkBackingFit::kExact : SkBackingFit::kApprox;
         GrAA aa = GrAAType::kCoverage == args.fAAType ? GrAA::kYes : GrAA::kNo;
-        texture.reset(GrSWMaskHelper::DrawShapeMaskToTexture(fTexProvider, *args.fShape,
-                                                             *boundsForMask, aa,
-                                                             fit, args.fViewMatrix));
+        GrContext* context = args.fRenderTargetContext->surfPriv().getContext();
+        texture = GrSWMaskHelper::DrawShapeMaskToTexture(context, *args.fShape,
+                                                         *boundsForMask, aa,
+                                                         fit, args.fViewMatrix);
         if (!texture) {
             return false;
         }
