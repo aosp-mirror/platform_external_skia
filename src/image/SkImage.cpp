@@ -79,6 +79,7 @@ bool SkImage::scalePixels(const SkPixmap& dst, SkFilterQuality quality, CachingH
     return false;
 }
 
+#ifdef SK_SUPPORT_LEGACY_PREROLL
 void SkImage::preroll(GrContext* ctx) const {
     // For now, and to maintain parity w/ previous pixelref behavior, we just force the image
     // to produce a cached raster-bitmap form, so that drawing to a raster canvas should be fast.
@@ -90,6 +91,7 @@ void SkImage::preroll(GrContext* ctx) const {
         bm.unlockPixels();
     }
 }
+#endif
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -312,12 +314,18 @@ bool SkImage_Base::onAsLegacyBitmap(SkBitmap* bitmap, LegacyBitmapMode mode) con
 }
 
 sk_sp<SkImage> SkImage::MakeFromPicture(sk_sp<SkPicture> picture, const SkISize& dimensions,
-                                        const SkMatrix* matrix, const SkPaint* paint) {
+                                        const SkMatrix* matrix, const SkPaint* paint,
+                                        sk_sp<SkColorSpace> colorSpace) {
     if (!picture) {
         return nullptr;
     }
-    return MakeFromGenerator(SkImageGenerator::NewFromPicture(dimensions, picture.get(),
-                                                              matrix, paint));
+    return MakeFromGenerator(SkImageGenerator::NewFromPicture(dimensions, picture.get(), matrix,
+                                                              paint, std::move(colorSpace)));
+}
+
+sk_sp<SkImage> SkImage::MakeFromPicture(sk_sp<SkPicture> picture, const SkISize& dimensions,
+                                        const SkMatrix* matrix, const SkPaint* paint) {
+    return MakeFromPicture(std::move(picture), dimensions, matrix, paint, nullptr);
 }
 
 sk_sp<SkImage> SkImage::makeWithFilter(const SkImageFilter* filter, const SkIRect& subset,

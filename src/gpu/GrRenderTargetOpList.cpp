@@ -27,14 +27,14 @@
 
 #include "SkStrokeRec.h"
 
-#include "batches/GrClearOp.h"
-#include "batches/GrClearStencilClipOp.h"
-#include "batches/GrCopySurfaceOp.h"
-#include "batches/GrDiscardOp.h"
-#include "batches/GrDrawOp.h"
-#include "batches/GrDrawPathBatch.h"
-#include "batches/GrRectOpFactory.h"
-#include "batches/GrStencilPathBatch.h"
+#include "ops/GrClearOp.h"
+#include "ops/GrClearStencilClipOp.h"
+#include "ops/GrCopySurfaceOp.h"
+#include "ops/GrDiscardOp.h"
+#include "ops/GrDrawOp.h"
+#include "ops/GrDrawPathOp.h"
+#include "ops/GrRectOpFactory.h"
+#include "ops/GrStencilPathOp.h"
 
 #include "instanced/InstancedRendering.h"
 
@@ -384,14 +384,14 @@ void GrRenderTargetOpList::stencilPath(GrRenderTargetContext* renderTargetContex
         return;
     }
 
-    sk_sp<GrOp> op = GrStencilPathBatch::Make(viewMatrix,
-                                              useHWAA,
-                                              path->getFillType(),
-                                              appliedClip.hasStencilClip(),
-                                              stencilAttachment->bits(),
-                                              appliedClip.scissorState(),
-                                              renderTargetContext->accessRenderTarget(),
-                                              path);
+    sk_sp<GrOp> op = GrStencilPathOp::Make(viewMatrix,
+                                           useHWAA,
+                                           path->getFillType(),
+                                           appliedClip.hasStencilClip(),
+                                           stencilAttachment->bits(),
+                                           appliedClip.scissorState(),
+                                           renderTargetContext->accessRenderTarget(),
+                                           path);
     this->recordOp(std::move(op), appliedClip.clippedDrawBounds());
 }
 

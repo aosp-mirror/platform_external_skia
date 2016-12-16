@@ -11,44 +11,49 @@
 
 #ifdef GR_TEST_UTILS
 
-DRAW_BATCH_TEST_EXTERN(AAConvexPathBatch);
-DRAW_BATCH_TEST_EXTERN(AADistanceFieldPathBatch);
+DRAW_BATCH_TEST_EXTERN(AAConvexPathOp);
+DRAW_BATCH_TEST_EXTERN(AADistanceFieldPathOp);
 DRAW_BATCH_TEST_EXTERN(AAFillRectOp);
 DRAW_BATCH_TEST_EXTERN(AAFillRectOpLocalMatrix);
-DRAW_BATCH_TEST_EXTERN(AAHairlineBatch);
+DRAW_BATCH_TEST_EXTERN(AAFlatteningConvexPathOp)
+DRAW_BATCH_TEST_EXTERN(AAHairlineOp);
 DRAW_BATCH_TEST_EXTERN(AAStrokeRectOp);
 DRAW_BATCH_TEST_EXTERN(AnalyticRectOp);
-DRAW_BATCH_TEST_EXTERN(DashBatch);
-DRAW_BATCH_TEST_EXTERN(DefaultPathBatch);
+DRAW_BATCH_TEST_EXTERN(DashOp);
+DRAW_BATCH_TEST_EXTERN(DefaultPathOp);
 DRAW_BATCH_TEST_EXTERN(CircleOp);
 DRAW_BATCH_TEST_EXTERN(DIEllipseOp);
 DRAW_BATCH_TEST_EXTERN(EllipseOp);
-DRAW_BATCH_TEST_EXTERN(GrDrawAtlasBatch);
+DRAW_BATCH_TEST_EXTERN(GrDrawAtlasOp);
 DRAW_BATCH_TEST_EXTERN(NonAAStrokeRectOp);
+DRAW_BATCH_TEST_EXTERN(PLSPathOp);
 DRAW_BATCH_TEST_EXTERN(RRectOp);
-DRAW_BATCH_TEST_EXTERN(TesselatingPathBatch);
+DRAW_BATCH_TEST_EXTERN(TesselatingPathOp);
 DRAW_BATCH_TEST_EXTERN(TextBlobBatch);
-DRAW_BATCH_TEST_EXTERN(VerticesBatch);
+DRAW_BATCH_TEST_EXTERN(VerticesOp);
 
 static BatchTestFunc gTestBatches[] = {
-    DRAW_BATCH_TEST_ENTRY(AAConvexPathBatch),
-    DRAW_BATCH_TEST_ENTRY(AADistanceFieldPathBatch),
+    DRAW_BATCH_TEST_ENTRY(AAConvexPathOp),
+    DRAW_BATCH_TEST_ENTRY(AADistanceFieldPathOp),
     DRAW_BATCH_TEST_ENTRY(AAFillRectOp),
     DRAW_BATCH_TEST_ENTRY(AAFillRectOpLocalMatrix),
-    DRAW_BATCH_TEST_ENTRY(AAHairlineBatch),
+    DRAW_BATCH_TEST_ENTRY(AAFlatteningConvexPathOp),
+    DRAW_BATCH_TEST_ENTRY(AAHairlineOp),
     DRAW_BATCH_TEST_ENTRY(AAStrokeRectOp),
     DRAW_BATCH_TEST_ENTRY(AnalyticRectOp),
-    DRAW_BATCH_TEST_ENTRY(DashBatch),
-    DRAW_BATCH_TEST_ENTRY(DefaultPathBatch),
+    DRAW_BATCH_TEST_ENTRY(DashOp),
+    DRAW_BATCH_TEST_ENTRY(DefaultPathOp),
     DRAW_BATCH_TEST_ENTRY(CircleOp),
     DRAW_BATCH_TEST_ENTRY(DIEllipseOp),
     DRAW_BATCH_TEST_ENTRY(EllipseOp),
-    DRAW_BATCH_TEST_ENTRY(GrDrawAtlasBatch),
+    DRAW_BATCH_TEST_ENTRY(GrDrawAtlasOp),
     DRAW_BATCH_TEST_ENTRY(NonAAStrokeRectOp),
+    // This currently hits an assert when the GrDisableColorXPFactory is randomly selected.
+    // DRAW_BATCH_TEST_ENTRY(PLSPathOp),
     DRAW_BATCH_TEST_ENTRY(RRectOp),
-    DRAW_BATCH_TEST_ENTRY(TesselatingPathBatch),
+    DRAW_BATCH_TEST_ENTRY(TesselatingPathOp),
     DRAW_BATCH_TEST_ENTRY(TextBlobBatch),
-    DRAW_BATCH_TEST_ENTRY(VerticesBatch)
+    DRAW_BATCH_TEST_ENTRY(VerticesOp)
 };
 
 GrDrawOp* GrRandomDrawBatch(SkRandom* random, GrContext* context) {

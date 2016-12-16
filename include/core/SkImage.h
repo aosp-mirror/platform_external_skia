@@ -154,8 +154,15 @@ public:
                                                    const SkISize nv12Sizes[2], GrSurfaceOrigin,
                                                    sk_sp<SkColorSpace> = nullptr);
 
+    /**
+     *  Create a new image from the specified picture. The color space becomes a preferred
+     *  color space for playback of the picture when retrieving the rasterized image contents.
+     */
     static sk_sp<SkImage> MakeFromPicture(sk_sp<SkPicture>, const SkISize& dimensions,
-                                          const SkMatrix*, const SkPaint*);
+                                          const SkMatrix*, const SkPaint*, sk_sp<SkColorSpace>);
+
+    static sk_sp<SkImage> MakeFromPicture(sk_sp<SkPicture> picture, const SkISize& dimensions,
+                                          const SkMatrix* matrix, const SkPaint* paint);
 
     static sk_sp<SkImage> MakeTextureFromPixmap(GrContext*, const SkPixmap&, SkBudgeted budgeted);
 
@@ -193,6 +200,7 @@ public:
      */
     bool peekPixels(SkPixmap* pixmap) const;
 
+#ifdef SK_SUPPORT_LEGACY_PREROLL
     /**
      *  Some images have to perform preliminary work in preparation for drawing. This can be
      *  decoding, uploading to a GPU, or other tasks. These happen automatically when an image
@@ -206,6 +214,7 @@ public:
      *  If the image will be drawn to any other type of canvas or surface, pass null.
      */
     void preroll(GrContext* = nullptr) const;
+#endif
 
     // DEPRECATED - currently used by Canvas2DLayerBridge in Chromium.
     GrTexture* getTexture() const;

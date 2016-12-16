@@ -15,14 +15,19 @@ static const int kMaximumGlyphCount = SK_MaxU16 + 1;
 
 static bool stream_equals(const SkDynamicMemoryWStream& stream, size_t offset,
                           const char* buffer, size_t len) {
-    sk_sp<SkData> data = stream.snapshotAsData();
-    if (offset + len > data->size()) {
-        return false;
-    }
     if (len != strlen(buffer)) {
         return false;
     }
-    return memcmp(data->bytes() + offset, buffer, len) == 0;
+
+    const size_t streamSize = stream.bytesWritten();
+
+    if (offset + len > streamSize) {
+        return false;
+    }
+
+    SkAutoTMalloc<char> data(streamSize);
+    stream.copyTo(data.get());
+    return memcmp(data.get() + offset, buffer, len) == 0;
 }
 
 DEF_TEST(SkPDF_ToUnicode, reporter) {
@@ -85,7 +90,7 @@ endbfchar\n\
 endbfrange\n";
 
     REPORTER_ASSERT(reporter, stream_equals(buffer, 0, expectedResult,
-                                            buffer.getOffset()));
+                                            buffer.bytesWritten()));
 
     // Remove characters and ranges.
     buffer.reset();
@@ -103,7 +108,7 @@ endbfchar\n\
 endbfrange\n";
 
     REPORTER_ASSERT(reporter, stream_equals(buffer, 0, expectedResultChop1,
-                                            buffer.getOffset()));
+                                            buffer.bytesWritten()));
 
     // Remove characters from range to downdrade it to one char.
     buffer.reset();
@@ -117,7 +122,7 @@ endbfrange\n";
 endbfchar\n";
 
     REPORTER_ASSERT(reporter, stream_equals(buffer, 0, expectedResultChop2,
-                                            buffer.getOffset()));
+                                            buffer.bytesWritten()));
 
     buffer.reset();
 
@@ -134,7 +139,7 @@ endbfrange\n";
 
     REPORTER_ASSERT(reporter, stream_equals(buffer, 0,
                                             expectedResultSingleBytes,
-                                            buffer.getOffset()));
+                                            buffer.bytesWritten()));
 
     glyphToUnicode.reset();
     glyphsInSubset.reset();
@@ -171,5 +176,5 @@ endbfchar\n\
 endbfrange\n";
 
     REPORTER_ASSERT(reporter, stream_equals(buffer2, 0, expectedResult2,
-                                            buffer2.getOffset()));
+                                            buffer2.bytesWritten()));
 }

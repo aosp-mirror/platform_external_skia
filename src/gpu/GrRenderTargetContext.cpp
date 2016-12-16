@@ -19,15 +19,15 @@
 #include "GrResourceProvider.h"
 #include "SkSurfacePriv.h"
 
-#include "batches/GrClearOp.h"
-#include "batches/GrDrawAtlasBatch.h"
-#include "batches/GrDrawVerticesBatch.h"
-#include "batches/GrNinePatch.h"  // TODO Factory
-#include "batches/GrOp.h"
-#include "batches/GrOvalOpFactory.h"
-#include "batches/GrRectOpFactory.h"
-#include "batches/GrRegionBatch.h"
-#include "batches/GrShadowRRectBatch.h"
+#include "ops/GrClearOp.h"
+#include "ops/GrDrawAtlasOp.h"
+#include "ops/GrDrawVerticesOp.h"
+#include "ops/GrLatticeOp.h"
+#include "ops/GrOp.h"
+#include "ops/GrOvalOpFactory.h"
+#include "ops/GrRectOpFactory.h"
+#include "ops/GrRegionOp.h"
+#include "ops/GrShadowRRectOp.h"
 
 #include "effects/GrRRectEffect.h"
 
@@ -133,12 +133,20 @@ GrRenderTargetOpList* GrRenderTargetContext::getOpList() {
     return fOpList;
 }
 
-bool GrRenderTargetContext::copySurface(GrSurface* src, const SkIRect& srcRect,
-                                        const SkIPoint& dstPoint) {
+// TODO: move this (and GrTextContext::copy) to GrSurfaceContext?
+bool GrRenderTargetContext::onCopy(GrSurfaceProxy* srcProxy,
+                                   const SkIRect& srcRect,
+                                   const SkIPoint& dstPoint) {
     ASSERT_SINGLE_OWNER
     RETURN_FALSE_IF_ABANDONED
     SkDEBUGCODE(this->validate();)
-    GR_AUDIT_TRAIL_AUTO_FRAME(fAuditTrail, "GrRenderTargetContext::copySurface");
+    GR_AUDIT_TRAIL_AUTO_FRAME(fAuditTrail, "GrRenderTargetContext::copy");
+
+    // TODO: defer instantiation until flush time
+    sk_sp<GrSurface> src(sk_ref_sp(srcProxy->instantiate(fContext->textureProvider())));
+    if (!src) {
+        return false;
+    }
 
     // TODO: this needs to be fixed up since it ends the deferrable of the GrRenderTarget
     sk_sp<GrRenderTarget> rt(
@@ -147,7 +155,7 @@ bool GrRenderTargetContext::copySurface(GrSurface* src, const SkIRect& srcRect,
         return false;
     }
 
-    return this->getOpList()->copySurface(rt.get(), src, srcRect, dstPoint);
+    return this->getOpList()->copySurface(rt.get(), src.get(), srcRect, dstPoint);
 }
 
 void GrRenderTargetContext::drawText(const GrClip& clip, const GrPaint& grPaint,
@@ -276,13 +284,12 @@ void GrRenderTargetContextPriv::absClear(const SkIRect* clearRect, const GrColor
         // This path doesn't handle coalescing of full screen clears b.c. it
         // has to clear the entire render target - not just the content area.
         // It could be done but will take more finagling.
-        sk_sp<GrOp> batch(GrClearOp::Make(rtRect, color,
-                                             fRenderTargetContext->accessRenderTarget(),
-                                             !clearRect));
-        if (!batch) {
+        sk_sp<GrOp> op(GrClearOp::Make(rtRect, color, fRenderTargetContext->accessRenderTarget(),
+                                       !clearRect));
+        if (!op) {
             return;
         }
-        fRenderTargetContext->getOpList()->addOp(std::move(batch));
+        fRenderTargetContext->getOpList()->addOp(std::move(op));
     }
 }
 
@@ -462,8 +469,8 @@ bool GrRenderTargetContext::drawFilledRect(const GrClip& clip,
 
     if (GrCaps::InstancedSupport::kNone != fContext->caps()->instancedSupport()) {
         InstancedRendering* ir = this->getOpList()->instancedRendering();
-        op.reset(ir->recordRect(croppedRect, viewMatrix, paint.getColor(), aa,
-                                fInstancedPipelineInfo, &aaType));
+        op = ir->recordRect(croppedRect, viewMatrix, paint.getColor(), aa, fInstancedPipelineInfo,
+                            &aaType);
         if (op) {
             GrPipelineBuilder pipelineBuilder(paint, aaType);
             if (ss) {
@@ -845,9 +852,9 @@ void GrRenderTargetContext::drawVertices(const GrClip& clip,
 
     viewMatrix.mapRect(&bounds);
 
-    sk_sp<GrDrawOp> op(new GrDrawVerticesBatch(paint.getColor(), primitiveType, viewMatrix,
-                                               positions, vertexCount, indices, indexCount, colors,
-                                               texCoords, bounds));
+    sk_sp<GrDrawOp> op =
+            GrDrawVerticesOp::Make(paint.getColor(), primitiveType, viewMatrix, positions,
+                                   vertexCount, indices, indexCount, colors, texCoords, bounds);
 
     GrPipelineBuilder pipelineBuilder(paint, GrAAType::kNone);
     this->getOpList()->addDrawOp(pipelineBuilder, this, clip, std::move(op));
@@ -869,9 +876,8 @@ void GrRenderTargetContext::drawAtlas(const GrClip& clip,
 
     AutoCheckFlush acf(fDrawingManager);
 
-    sk_sp<GrDrawOp> op(new GrDrawAtlasBatch(paint.getColor(), viewMatrix, spriteCount, xform,
-                                            texRect, colors));
-
+    sk_sp<GrDrawOp> op =
+            GrDrawAtlasOp::Make(paint.getColor(), viewMatrix, spriteCount, xform, texRect, colors);
     GrPipelineBuilder pipelineBuilder(paint, GrAAType::kNone);
     this->getOpList()->addDrawOp(pipelineBuilder, this, clip, std::move(op));
 }
@@ -968,12 +974,8 @@ void GrRenderTargetContext::drawShadowRRect(const GrClip& clip,
     // TODO: add instancing support?
 
     const GrShaderCaps* shaderCaps = fContext->caps()->shaderCaps();
-    sk_sp<GrDrawOp> op(CreateShadowRRectBatch(paint.getColor(),
-                                              viewMatrix,
-                                              rrect,
-                                              blurRadius,
-                                              stroke,
-                                              shaderCaps));
+    sk_sp<GrDrawOp> op = GrShadowRRectOp::Make(paint.getColor(), viewMatrix, rrect, blurRadius,
+                                               stroke, shaderCaps);
     if (op) {
         GrPipelineBuilder pipelineBuilder(paint, GrAAType::kNone);
         this->getOpList()->addDrawOp(pipelineBuilder, this, clip, std::move(op));
@@ -1103,7 +1105,7 @@ void GrRenderTargetContext::drawRegion(const GrClip& clip,
     GR_AUDIT_TRAIL_AUTO_FRAME(fAuditTrail, "GrRenderTargetContext::drawRegion");
 
     if (GrAA::kYes == aa) {
-        // GrRegionBatch performs no antialiasing but is much faster, so here we check the matrix
+        // GrRegionOp performs no antialiasing but is much faster, so here we check the matrix
         // to see whether aa is really required.
         if (!SkToBool(viewMatrix.getType() & ~(SkMatrix::kTranslate_Mask)) &&
             is_int(viewMatrix.getTranslateX()) &&
@@ -1118,7 +1120,7 @@ void GrRenderTargetContext::drawRegion(const GrClip& clip,
         return this->drawPath(clip, paint, aa, viewMatrix, path, style);
     }
 
-    sk_sp<GrDrawOp> op(GrRegionBatch::Create(paint.getColor(), viewMatrix, region));
+    sk_sp<GrDrawOp> op = GrRegionOp::Make(paint.getColor(), viewMatrix, region);
     GrPipelineBuilder pipelineBuilder(paint, GrAAType::kNone);
     this->getOpList()->addDrawOp(pipelineBuilder, this, clip, std::move(op));
 }
@@ -1220,8 +1222,8 @@ void GrRenderTargetContext::drawImageLattice(const GrClip& clip,
 
     AutoCheckFlush acf(fDrawingManager);
 
-    sk_sp<GrDrawOp> op(GrNinePatch::CreateNonAA(paint.getColor(), viewMatrix, imageWidth,
-                                                imageHeight, std::move(iter), dst));
+    sk_sp<GrDrawOp> op = GrLatticeOp::MakeNonAA(paint.getColor(), viewMatrix, imageWidth,
+                                                imageHeight, std::move(iter), dst);
 
     GrPipelineBuilder pipelineBuilder(paint, GrAAType::kNone);
     this->getOpList()->addDrawOp(pipelineBuilder, this, clip, std::move(op));

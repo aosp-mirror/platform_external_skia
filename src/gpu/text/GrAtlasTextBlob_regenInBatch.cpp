@@ -13,7 +13,7 @@
 #include "SkDistanceFieldGen.h"
 #include "SkGlyphCache.h"
 
-#include "batches/GrAtlasTextBatch.h"
+#include "ops/GrAtlasTextOp.h"
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // A large template to handle regenerating the vertices of a textblob with as few branches as
@@ -138,18 +138,13 @@ inline void regen_vertices(intptr_t vertex, const GrGlyph* glyph, size_t vertexS
 }
 
 template <bool regenPos, bool regenCol, bool regenTexCoords, bool regenGlyphs>
-void GrAtlasTextBlob::regenInBatch(GrDrawOp::Target* target,
-                                   GrBatchFontCache* fontCache,
-                                   GrBlobRegenHelper *helper,
-                                   Run* run,
-                                   Run::SubRunInfo* info,
-                                   SkAutoGlyphCache* lazyCache,
-                                   int glyphCount, size_t vertexStride,
-                                   GrColor color, SkScalar transX,
-                                   SkScalar transY) const {
+void GrAtlasTextBlob::regenInOp(GrDrawOp::Target* target, GrAtlasGlyphCache* fontCache,
+                                GrBlobRegenHelper* helper, Run* run, Run::SubRunInfo* info,
+                                SkAutoGlyphCache* lazyCache, int glyphCount, size_t vertexStride,
+                                GrColor color, SkScalar transX, SkScalar transY) const {
     SkASSERT(lazyCache);
     static_assert(!regenGlyphs || regenTexCoords, "must regenTexCoords along regenGlyphs");
-    GrBatchTextStrike* strike = nullptr;
+    GrAtlasTextStrike* strike = nullptr;
     if (regenTexCoords) {
         info->resetBulkUseToken();
 
@@ -208,7 +203,7 @@ void GrAtlasTextBlob::regenInBatch(GrDrawOp::Target* target,
 
         intptr_t vertex = reinterpret_cast<intptr_t>(fVertices);
         vertex += info->vertexStartIndex();
-        vertex += vertexStride * glyphIdx * GrAtlasTextBatch::kVerticesPerGlyph;
+        vertex += vertexStride * glyphIdx * GrAtlasTextOp::kVerticesPerGlyph;
         regen_vertices<regenPos, regenCol, regenTexCoords>(vertex, glyph, vertexStride,
                                                            info->drawAsDistanceFields(), transX,
                                                            transY, log2Width, log2Height, color);
@@ -247,7 +242,7 @@ enum RegenMask {
                    *glyphCount, vertexStride, color, transX, transY
 
 void GrAtlasTextBlob::regenInBatch(GrDrawOp::Target* target,
-                                   GrBatchFontCache* fontCache,
+                                   GrAtlasGlyphCache* fontCache,
                                    GrBlobRegenHelper *helper,
                                    int runIndex, int subRunIndex, SkAutoGlyphCache* lazyCache,
                                    size_t vertexStride, const SkMatrix& viewMatrix,
@@ -262,7 +257,7 @@ void GrAtlasTextBlob::regenInBatch(GrDrawOp::Target* target,
     SkScalar transX, transY;
     info.computeTranslation(viewMatrix, x, y, &transX, &transY);
 
-    // Because the GrBatchFontCache may evict the strike a blob depends on using for
+    // Because the GrAtlasGlyphCache may evict the strike a blob depends on using for
     // generating its texture coords, we have to track whether or not the strike has
     // been abandoned.  If it hasn't been abandoned, then we can use the GrGlyph*s as is
     // otherwise we have to get the new strike, and use that to get the correct glyphs.
@@ -286,19 +281,41 @@ void GrAtlasTextBlob::regenInBatch(GrDrawOp::Target* target,
     RegenMask regenMask = (RegenMask)regenMaskBits;
 
     switch (regenMask) {
-        case kRegenPos: this->regenInBatch<true, false, false, false>(REGEN_ARGS); break;
-        case kRegenCol: this->regenInBatch<false, true, false, false>(REGEN_ARGS); break;
-        case kRegenTex: this->regenInBatch<false, false, true, false>(REGEN_ARGS); break;
-        case kRegenGlyph: this->regenInBatch<false, false, true, true>(REGEN_ARGS); break;
+        case kRegenPos:
+            this->regenInOp<true, false, false, false>(REGEN_ARGS);
+            break;
+        case kRegenCol:
+            this->regenInOp<false, true, false, false>(REGEN_ARGS);
+            break;
+        case kRegenTex:
+            this->regenInOp<false, false, true, false>(REGEN_ARGS);
+            break;
+        case kRegenGlyph:
+            this->regenInOp<false, false, true, true>(REGEN_ARGS);
+            break;
 
-            // combinations
-        case kRegenPosCol: this->regenInBatch<true, true, false, false>(REGEN_ARGS); break;
-        case kRegenPosTex: this->regenInBatch<true, false, true, false>(REGEN_ARGS); break;
-        case kRegenPosTexGlyph: this->regenInBatch<true, false, true, true>(REGEN_ARGS); break;
-        case kRegenPosColTex: this->regenInBatch<true, true, true, false>(REGEN_ARGS); break;
-        case kRegenPosColTexGlyph: this->regenInBatch<true, true, true, true>(REGEN_ARGS); break;
-        case kRegenColTex: this->regenInBatch<false, true, true, false>(REGEN_ARGS); break;
-        case kRegenColTexGlyph: this->regenInBatch<false, true, true, true>(REGEN_ARGS); break;
+        // combinations
+        case kRegenPosCol:
+            this->regenInOp<true, true, false, false>(REGEN_ARGS);
+            break;
+        case kRegenPosTex:
+            this->regenInOp<true, false, true, false>(REGEN_ARGS);
+            break;
+        case kRegenPosTexGlyph:
+            this->regenInOp<true, false, true, true>(REGEN_ARGS);
+            break;
+        case kRegenPosColTex:
+            this->regenInOp<true, true, true, false>(REGEN_ARGS);
+            break;
+        case kRegenPosColTexGlyph:
+            this->regenInOp<true, true, true, true>(REGEN_ARGS);
+            break;
+        case kRegenColTex:
+            this->regenInOp<false, true, true, false>(REGEN_ARGS);
+            break;
+        case kRegenColTexGlyph:
+            this->regenInOp<false, true, true, true>(REGEN_ARGS);
+            break;
         case kNoRegen:
             helper->incGlyphCount(*glyphCount);
 

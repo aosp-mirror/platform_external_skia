@@ -479,36 +479,37 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrTextureToYUVPlanes.cpp \
 	src/gpu/GrXferProcessor.cpp \
 	src/gpu/GrYUVProvider.cpp \
-	src/gpu/batches/GrAAHairLinePathRenderer.cpp \
-	src/gpu/batches/GrAALinearizingConvexPathRenderer.cpp \
-	src/gpu/batches/GrAAConvexTessellator.cpp \
-	src/gpu/batches/GrAADistanceFieldPathRenderer.cpp \
-	src/gpu/batches/GrAAConvexPathRenderer.cpp \
-	src/gpu/batches/GrAAFillRectOp.cpp \
-	src/gpu/batches/GrAAStrokeRectOp.cpp \
-	src/gpu/batches/GrAnalyticRectOp.cpp \
-	src/gpu/batches/GrAtlasTextBatch.cpp \
-	src/gpu/batches/GrCopySurfaceOp.cpp \
-	src/gpu/batches/GrDashLinePathRenderer.cpp \
-	src/gpu/batches/GrDefaultPathRenderer.cpp \
-	src/gpu/batches/GrDrawAtlasBatch.cpp \
-	src/gpu/batches/GrDrawOp.cpp \
-	src/gpu/batches/GrDrawPathBatch.cpp \
-	src/gpu/batches/GrDrawVerticesBatch.cpp \
-	src/gpu/batches/GrMSAAPathRenderer.cpp \
-	src/gpu/batches/GrNonAAFillRectOp.cpp \
-	src/gpu/batches/GrNonAAFillRectPerspectiveOp.cpp \
-	src/gpu/batches/GrNonAAStrokeRectOp.cpp \
-	src/gpu/batches/GrNinePatch.cpp \
-	src/gpu/batches/GrOp.cpp \
-	src/gpu/batches/GrOvalOpFactory.cpp \
-	src/gpu/batches/GrPLSPathRenderer.cpp \
-	src/gpu/batches/GrRectOpFactory.cpp \
-	src/gpu/batches/GrRegionBatch.cpp \
-	src/gpu/batches/GrShadowRRectBatch.cpp \
-	src/gpu/batches/GrStencilAndCoverPathRenderer.cpp \
-	src/gpu/batches/GrTessellatingPathRenderer.cpp \
-	src/gpu/batches/GrMeshDrawOp.cpp \
+	src/gpu/ops/GrAAHairLinePathRenderer.cpp \
+	src/gpu/ops/GrAALinearizingConvexPathRenderer.cpp \
+	src/gpu/ops/GrAAConvexTessellator.cpp \
+	src/gpu/ops/GrAADistanceFieldPathRenderer.cpp \
+	src/gpu/ops/GrAAConvexPathRenderer.cpp \
+	src/gpu/ops/GrAAFillRectOp.cpp \
+	src/gpu/ops/GrAAStrokeRectOp.cpp \
+	src/gpu/ops/GrAnalyticRectOp.cpp \
+	src/gpu/ops/GrAtlasTextOp.cpp \
+	src/gpu/ops/GrCopySurfaceOp.cpp \
+	src/gpu/ops/GrDashLinePathRenderer.cpp \
+	src/gpu/ops/GrDashOp.cpp \
+	src/gpu/ops/GrDefaultPathRenderer.cpp \
+	src/gpu/ops/GrDrawAtlasOp.cpp \
+	src/gpu/ops/GrDrawOp.cpp \
+	src/gpu/ops/GrDrawPathOp.cpp \
+	src/gpu/ops/GrDrawVerticesOp.cpp \
+	src/gpu/ops/GrMeshDrawOp.cpp \
+	src/gpu/ops/GrMSAAPathRenderer.cpp \
+	src/gpu/ops/GrNonAAFillRectOp.cpp \
+	src/gpu/ops/GrNonAAFillRectPerspectiveOp.cpp \
+	src/gpu/ops/GrNonAAStrokeRectOp.cpp \
+	src/gpu/ops/GrLatticeOp.cpp \
+	src/gpu/ops/GrOp.cpp \
+	src/gpu/ops/GrOvalOpFactory.cpp \
+	src/gpu/ops/GrPLSPathRenderer.cpp \
+	src/gpu/ops/GrRectOpFactory.cpp \
+	src/gpu/ops/GrRegionOp.cpp \
+	src/gpu/ops/GrShadowRRectOp.cpp \
+	src/gpu/ops/GrStencilAndCoverPathRenderer.cpp \
+	src/gpu/ops/GrTessellatingPathRenderer.cpp \
 	src/gpu/effects/GrConfigConversionEffect.cpp \
 	src/gpu/effects/GrConstColorProcessor.cpp \
 	src/gpu/effects/GrCoverageSetOpXP.cpp \
@@ -518,7 +519,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/effects/GrConvexPolyEffect.cpp \
 	src/gpu/effects/GrBicubicEffect.cpp \
 	src/gpu/effects/GrBitmapTextGeoProc.cpp \
-	src/gpu/effects/GrDashingEffect.cpp \
 	src/gpu/effects/GrDisableColorXP.cpp \
 	src/gpu/effects/GrDistanceFieldGeoProc.cpp \
 	src/gpu/effects/GrDitherEffect.cpp \
@@ -537,10 +537,10 @@ LOCAL_SRC_FILES := \
 	src/gpu/instanced/InstancedRendering.cpp \
 	src/gpu/instanced/InstanceProcessor.cpp \
 	src/gpu/instanced/GLInstancedRendering.cpp \
+	src/gpu/text/GrAtlasGlyphCache.cpp \
 	src/gpu/text/GrAtlasTextBlob.cpp \
 	src/gpu/text/GrAtlasTextBlob_regenInBatch.cpp \
 	src/gpu/text/GrAtlasTextContext.cpp \
-	src/gpu/text/GrBatchFontCache.cpp \
 	src/gpu/text/GrDistanceFieldAdjustTable.cpp \
 	src/gpu/text/GrStencilAndCoverTextContext.cpp \
 	src/gpu/text/GrTextBlobCache.cpp \

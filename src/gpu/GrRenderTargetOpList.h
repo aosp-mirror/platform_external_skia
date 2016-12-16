@@ -16,7 +16,7 @@
 #include "GrPathRendering.h"
 #include "GrXferProcessor.h"
 
-#include "batches/GrDrawOp.h"
+#include "ops/GrDrawOp.h"
 
 #include "SkClipStack.h"
 #include "SkMatrix.h"
@@ -32,7 +32,7 @@ class GrClearOp;
 class GrClip;
 class GrCaps;
 class GrPath;
-class GrDrawPathBatchBase;
+class GrDrawPathOpBase;
 class GrOp;
 class GrPipelineBuilder;
 class GrRenderTargetProxy;
