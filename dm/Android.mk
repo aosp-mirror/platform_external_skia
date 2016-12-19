@@ -693,7 +693,7 @@ LOCAL_SHARED_LIBRARIES := \
 	libexpat
 
 LOCAL_STATIC_LIBRARIES := \
-	libskia_static \
+	libskia \
 	libhwui_static \
 	libjsoncpp
 
