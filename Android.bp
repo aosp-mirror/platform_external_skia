@@ -771,10 +771,30 @@ cc_library {
 
         mips: {
             srcs: [
-                "src/opts/SkBitmapProcState_opts_mips_dsp.cpp",
+                "src/opts/SkBitmapProcState_opts_none.cpp",
                 "src/opts/SkBlitMask_opts_none.cpp",
-                "src/opts/SkBlitRow_opts_mips_dsp.cpp",
+                "src/opts/SkBlitRow_opts_none.cpp",
             ],
+            mips32r2dsp_fp: {
+                exclude_srcs: [
+                    "src/opts/SkBitmapProcState_opts_none.cpp",
+                    "src/opts/SkBlitRow_opts_none.cpp",
+                ],
+                srcs: [
+                    "src/opts/SkBitmapProcState_opts_mips_dsp.cpp",
+                    "src/opts/SkBlitRow_opts_mips_dsp.cpp",
+                ],
+            },
+            mips32r2dspr2_fp: {
+                exclude_srcs: [
+                    "src/opts/SkBitmapProcState_opts_none.cpp",
+                    "src/opts/SkBlitRow_opts_none.cpp",
+                ],
+                srcs: [
+                    "src/opts/SkBitmapProcState_opts_mips_dsp.cpp",
+                    "src/opts/SkBlitRow_opts_mips_dsp.cpp",
+                ],
+            },
         },
 
         mips64: {
