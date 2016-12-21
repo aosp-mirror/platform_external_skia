@@ -7,9 +7,9 @@
 
 #include "GrAADistanceFieldPathRenderer.h"
 
-#include "GrBatchTest.h"
 #include "GrBuffer.h"
 #include "GrContext.h"
+#include "GrDrawOpTest.h"
 #include "GrOpFlushState.h"
 #include "GrPipelineBuilder.h"
 #include "GrResourceProvider.h"
@@ -145,13 +145,6 @@ public:
         return string;
     }
 
-    void computePipelineOptimizations(GrInitInvariantOutput* color,
-                                      GrInitInvariantOutput* coverage,
-                                      GrBatchToXPOverrides* overrides) const override {
-        color->setKnownFourComponents(fShapes[0].fColor);
-        coverage->setUnknownSingleComponent();
-    }
-
 private:
     AADistanceFieldPathOp(GrColor color, const GrShape& shape, const SkMatrix& viewMatrix,
                           GrDrawOpAtlas* atlas, ShapeCache* shapeCache, ShapeDataList* shapeList,
@@ -170,16 +163,20 @@ private:
         this->setTransformedBounds(shape.bounds(), viewMatrix, HasAABloat::kYes, IsZeroArea::kNo);
     }
 
-    void initBatchTracker(const GrXPOverridesForBatch& overrides) override {
-        // Handle any color overrides
-        if (!overrides.readsColor()) {
+    void getPipelineAnalysisInput(GrPipelineAnalysisDrawOpInput* input) const override {
+        input->pipelineColorInput()->setKnownFourComponents(fShapes[0].fColor);
+        input->pipelineCoverageInput()->setUnknownSingleComponent();
+    }
+
+    void applyPipelineOptimizations(const GrPipelineOptimizations& optimizations) override {
+        if (!optimizations.readsColor()) {
             fShapes[0].fColor = GrColor_ILLEGAL;
         }
-        overrides.getOverrideColorIfSet(&fShapes[0].fColor);
+        optimizations.getOverrideColorIfSet(&fShapes[0].fColor);
 
-        fColorIgnored = !overrides.readsColor();
-        fUsesLocalCoords = overrides.readsLocalCoords();
-        fCoverageIgnored = !overrides.readsCoverage();
+        fColorIgnored = !optimizations.readsColor();
+        fUsesLocalCoords = optimizations.readsLocalCoords();
+        fCoverageIgnored = !optimizations.readsCoverage();
     }
 
     struct FlushInfo {
@@ -317,8 +314,8 @@ private:
         scaledBounds.fBottom *= scale;
         // subtract out integer portion of origin
         // (SDF created will be placed with fractional offset burnt in)
-        SkScalar dx = SkScalarFloorToInt(scaledBounds.fLeft);
-        SkScalar dy = SkScalarFloorToInt(scaledBounds.fTop);
+        SkScalar dx = SkScalarFloorToScalar(scaledBounds.fLeft);
+        SkScalar dy = SkScalarFloorToScalar(scaledBounds.fTop);
         scaledBounds.offset(-dx, -dy);
         // get integer boundary
         SkIRect devPathBounds;
@@ -581,7 +578,7 @@ struct PathTestStruct {
     ShapeDataList fShapeList;
 };
 
-DRAW_BATCH_TEST_DEFINE(AADistanceFieldPathOp) {
+DRAW_OP_TEST_DEFINE(AADistanceFieldPathOp) {
     static PathTestStruct gTestStruct;
 
     if (context->uniqueID() != gTestStruct.fContextID) {
@@ -608,8 +605,7 @@ DRAW_BATCH_TEST_DEFINE(AADistanceFieldPathOp) {
                                        gTestStruct.fAtlas.get(),
                                        &gTestStruct.fShapeCache,
                                        &gTestStruct.fShapeList,
-                                       gammaCorrect)
-            .release();
+                                       gammaCorrect);
 }
 
 #endif

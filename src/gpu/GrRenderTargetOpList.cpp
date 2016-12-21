@@ -297,8 +297,8 @@ void GrRenderTargetOpList::addDrawOp(const GrPipelineBuilder& pipelineBuilder,
     args.fPipelineBuilder = &pipelineBuilder;
     args.fRenderTargetContext = renderTargetContext;
     args.fCaps = this->caps();
-    op->getPipelineOptimizations(&args.fOpts);
-    if (args.fOpts.fOverrides.fUsePLSDstRead || fClipOpToBounds) {
+    op->initPipelineAnalysis(&args.fAnalysis);
+    if (args.fAnalysis.fUsesPLSDstRead || fClipOpToBounds) {
         GrGLIRect viewport;
         viewport.fLeft = 0;
         viewport.fBottom = 0;
@@ -317,12 +317,12 @@ void GrRenderTargetOpList::addDrawOp(const GrPipelineBuilder& pipelineBuilder,
             return;
         }
     }
-    args.fOpts.fColorPOI.completeCalculations(
-        sk_sp_address_as_pointer_address(pipelineBuilder.fColorFragmentProcessors.begin()),
-        pipelineBuilder.numColorFragmentProcessors());
-    args.fOpts.fCoveragePOI.completeCalculations(
-        sk_sp_address_as_pointer_address(pipelineBuilder.fCoverageFragmentProcessors.begin()),
-        pipelineBuilder.numCoverageFragmentProcessors());
+    args.fAnalysis.fColorPOI.completeCalculations(
+            sk_sp_address_as_pointer_address(pipelineBuilder.fColorFragmentProcessors.begin()),
+            pipelineBuilder.numColorFragmentProcessors());
+    args.fAnalysis.fCoveragePOI.completeCalculations(
+            sk_sp_address_as_pointer_address(pipelineBuilder.fCoverageFragmentProcessors.begin()),
+            pipelineBuilder.numCoverageFragmentProcessors());
     args.fScissor = &appliedClip.scissorState();
     args.fWindowRectsState = &appliedClip.windowRectsState();
     args.fHasStencilClip = appliedClip.hasStencilClip();
@@ -330,7 +330,7 @@ void GrRenderTargetOpList::addDrawOp(const GrPipelineBuilder& pipelineBuilder,
         return;
     }
 
-    if (pipelineBuilder.willXPNeedDstTexture(*this->caps(), args.fOpts)) {
+    if (pipelineBuilder.willXPNeedDstTexture(*this->caps(), args.fAnalysis)) {
         this->setupDstTexture(renderTargetContext->accessRenderTarget(), clip, op->bounds(),
                               &args.fDstTexture);
         if (!args.fDstTexture.texture()) {
@@ -463,7 +463,7 @@ GrOp* GrRenderTargetOpList::recordOp(sk_sp<GrOp> op, const SkRect& clippedBounds
     // 1) check every op
     // 2) intersect with something
     // 3) find a 'blocker'
-    GR_AUDIT_TRAIL_ADDBATCH(fAuditTrail, op.get());
+    GR_AUDIT_TRAIL_ADD_OP(fAuditTrail, op.get());
     GrOP_INFO("Re-Recording (%s, B%u)\n"
               "\tBounds LRTB (%f, %f, %f, %f)\n",
                op->name(),
@@ -489,7 +489,7 @@ GrOp* GrRenderTargetOpList::recordOp(sk_sp<GrOp> op, const SkRect& clippedBounds
             if (candidate->combineIfPossible(op.get(), *this->caps())) {
                 GrOP_INFO("\t\tCombining with (%s, B%u)\n", candidate->name(),
                           candidate->uniqueID());
-                GR_AUDIT_TRAIL_BATCHING_RESULT_COMBINED(fAuditTrail, candidate, op.get());
+                GR_AUDIT_TRAIL_OPS_RESULT_COMBINED(fAuditTrail, candidate, op.get());
                 join(&fRecordedOps.fromBack(i).fClippedBounds,
                      fRecordedOps.fromBack(i).fClippedBounds, clippedBounds);
                 return candidate;
@@ -510,7 +510,7 @@ GrOp* GrRenderTargetOpList::recordOp(sk_sp<GrOp> op, const SkRect& clippedBounds
     } else {
         GrOP_INFO("\t\tFirstOp\n");
     }
-    GR_AUDIT_TRAIL_BATCHING_RESULT_NEW(fAuditTrail, op);
+    GR_AUDIT_TRAIL_OP_RESULT_NEW(fAuditTrail, op);
     fRecordedOps.emplace_back(RecordedOp{std::move(op), clippedBounds});
     fLastFullClearOp = nullptr;
     return fRecordedOps.back().fOp.get();
@@ -540,7 +540,7 @@ void GrRenderTargetOpList::forwardCombine() {
             } else if (op->combineIfPossible(candidate, *this->caps())) {
                 GrOP_INFO("\t\tCombining with (%s, B%u)\n", candidate->name(),
                           candidate->uniqueID());
-                GR_AUDIT_TRAIL_BATCHING_RESULT_COMBINED(fAuditTrail, op, candidate);
+                GR_AUDIT_TRAIL_OPS_RESULT_COMBINED(fAuditTrail, op, candidate);
                 fRecordedOps[j].fOp = std::move(fRecordedOps[i].fOp);
                 join(&fRecordedOps[j].fClippedBounds, fRecordedOps[j].fClippedBounds, opBounds);
                 break;

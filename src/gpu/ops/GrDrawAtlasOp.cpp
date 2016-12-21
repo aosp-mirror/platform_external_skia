@@ -6,19 +6,18 @@
  */
 
 #include "GrDrawAtlasOp.h"
-#include "GrBatchTest.h"
+#include "GrDrawOpTest.h"
 #include "GrOpFlushState.h"
 #include "SkGr.h"
 #include "SkRSXform.h"
 #include "SkRandom.h"
 
-void GrDrawAtlasOp::initBatchTracker(const GrXPOverridesForBatch& overrides) {
+void GrDrawAtlasOp::applyPipelineOptimizations(const GrPipelineOptimizations& optimizations) {
     SkASSERT(fGeoData.count() == 1);
-    // Handle any color overrides
-    if (!overrides.readsColor()) {
+    if (!optimizations.readsColor()) {
         fGeoData[0].fColor = GrColor_ILLEGAL;
     }
-    if (overrides.getOverrideColorIfSet(&fGeoData[0].fColor) && fHasColors) {
+    if (optimizations.getOverrideColorIfSet(&fGeoData[0].fColor) && fHasColors) {
         size_t vertexStride =
                 sizeof(SkPoint) + sizeof(SkPoint) + (this->hasColors() ? sizeof(GrColor) : 0);
         uint8_t* currVertex = fGeoData[0].fVerts.begin();
@@ -29,11 +28,11 @@ void GrDrawAtlasOp::initBatchTracker(const GrXPOverridesForBatch& overrides) {
     }
 
     // setup batch properties
-    fColorIgnored = !overrides.readsColor();
+    fColorIgnored = !optimizations.readsColor();
     fColor = fGeoData[0].fColor;
     // We'd like to assert this, but we can't because of GLPrograms test
     // SkASSERT(init.readsLocalCoords());
-    fCoverageIgnored = !overrides.readsCoverage();
+    fCoverageIgnored = !optimizations.readsCoverage();
 }
 
 static sk_sp<GrGeometryProcessor> set_vertex_attributes(bool hasColors,
@@ -235,7 +234,7 @@ static void randomize_params(uint32_t count, SkRandom* random, SkTArray<SkRSXfor
     }
 }
 
-DRAW_BATCH_TEST_DEFINE(GrDrawAtlasOp) {
+DRAW_OP_TEST_DEFINE(GrDrawAtlasOp) {
     uint32_t spriteCount = random->nextRangeU(1, 100);
 
     SkTArray<SkRSXform> xforms(spriteCount);
@@ -250,8 +249,7 @@ DRAW_BATCH_TEST_DEFINE(GrDrawAtlasOp) {
 
     GrColor color = GrRandomColor(random);
     return GrDrawAtlasOp::Make(color, viewMatrix, spriteCount, xforms.begin(), texRects.begin(),
-                               hasColors ? colors.begin() : nullptr)
-            .release();
+                               hasColors ? colors.begin() : nullptr);
 }
 
 #endif

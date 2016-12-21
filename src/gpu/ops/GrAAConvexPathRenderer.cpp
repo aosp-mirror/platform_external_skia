@@ -8,10 +8,10 @@
 #include "GrAAConvexPathRenderer.h"
 
 #include "GrAAConvexTessellator.h"
-#include "GrBatchTest.h"
 #include "GrCaps.h"
 #include "GrContext.h"
 #include "GrDefaultGeoProcFactory.h"
+#include "GrDrawOpTest.h"
 #include "GrGeometryProcessor.h"
 #include "GrInvariantOutput.h"
 #include "GrOpFlushState.h"
@@ -749,13 +749,6 @@ public:
         return string;
     }
 
-    void computePipelineOptimizations(GrInitInvariantOutput* color,
-                                      GrInitInvariantOutput* coverage,
-                                      GrBatchToXPOverrides* overrides) const override {
-        color->setKnownFourComponents(fColor);
-        coverage->setUnknownSingleComponent();
-    }
-
 private:
     AAConvexPathOp(GrColor color, const SkMatrix& viewMatrix, const SkPath& path)
             : INHERITED(ClassID()), fColor(color) {
@@ -763,17 +756,21 @@ private:
         this->setTransformedBounds(path.getBounds(), viewMatrix, HasAABloat::kYes, IsZeroArea::kNo);
     }
 
-    void initBatchTracker(const GrXPOverridesForBatch& overrides) override {
-        // Handle any color overrides
-        if (!overrides.readsColor()) {
+    void getPipelineAnalysisInput(GrPipelineAnalysisDrawOpInput* input) const override {
+        input->pipelineColorInput()->setKnownFourComponents(fColor);
+        input->pipelineCoverageInput()->setUnknownSingleComponent();
+    }
+
+    void applyPipelineOptimizations(const GrPipelineOptimizations& optimizations) override {
+        if (!optimizations.readsColor()) {
             fColor = GrColor_ILLEGAL;
         }
-        overrides.getOverrideColorIfSet(&fColor);
+        optimizations.getOverrideColorIfSet(&fColor);
 
-        fUsesLocalCoords = overrides.readsLocalCoords();
-        fCoverageIgnored = !overrides.readsCoverage();
+        fUsesLocalCoords = optimizations.readsLocalCoords();
+        fCoverageIgnored = !optimizations.readsCoverage();
         fLinesOnly = SkPath::kLine_SegmentMask == fPaths[0].fPath.getSegmentMasks();
-        fCanTweakAlphaForCoverage = overrides.canTweakAlphaForCoverage();
+        fCanTweakAlphaForCoverage = optimizations.canTweakAlphaForCoverage();
     }
 
     void prepareLinesOnlyDraws(Target* target) const {
@@ -1007,12 +1004,12 @@ bool GrAAConvexPathRenderer::onDrawPath(const DrawPathArgs& args) {
 
 #ifdef GR_TEST_UTILS
 
-DRAW_BATCH_TEST_DEFINE(AAConvexPathOp) {
+DRAW_OP_TEST_DEFINE(AAConvexPathOp) {
     GrColor color = GrRandomColor(random);
     SkMatrix viewMatrix = GrTest::TestMatrixInvertible(random);
     SkPath path = GrTest::TestPathConvex(random);
 
-    return AAConvexPathOp::Make(color, viewMatrix, path).release();
+    return AAConvexPathOp::Make(color, viewMatrix, path);
 }
 
 #endif

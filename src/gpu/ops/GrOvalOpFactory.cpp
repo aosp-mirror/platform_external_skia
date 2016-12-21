@@ -7,7 +7,7 @@
 
 #include "GrOvalOpFactory.h"
 
-#include "GrBatchTest.h"
+#include "GrDrawOpTest.h"
 #include "GrGeometryProcessor.h"
 #include "GrInvariantOutput.h"
 #include "GrOpFlushState.h"
@@ -797,20 +797,17 @@ public:
         return string;
     }
 
-    void computePipelineOptimizations(GrInitInvariantOutput* color,
-                                      GrInitInvariantOutput* coverage,
-                                      GrBatchToXPOverrides* overrides) const override {
-        // When this is called there is only one circle.
-        color->setKnownFourComponents(fGeoData[0].fColor);
-        coverage->setUnknownSingleComponent();
-    }
-
 private:
     CircleOp() : INHERITED(ClassID()) {}
-    void initBatchTracker(const GrXPOverridesForBatch& overrides) override {
-        // Handle any overrides that affect our GP.
-        overrides.getOverrideColorIfSet(&fGeoData[0].fColor);
-        if (!overrides.readsLocalCoords()) {
+
+    void getPipelineAnalysisInput(GrPipelineAnalysisDrawOpInput* input) const override {
+        input->pipelineColorInput()->setKnownFourComponents(fGeoData[0].fColor);
+        input->pipelineCoverageInput()->setUnknownSingleComponent();
+    }
+
+    void applyPipelineOptimizations(const GrPipelineOptimizations& optimizations) override {
+        optimizations.getOverrideColorIfSet(&fGeoData[0].fColor);
+        if (!optimizations.readsLocalCoords()) {
             fViewMatrixIfUsingLocalCoords.reset();
         }
     }
@@ -1245,23 +1242,19 @@ public:
         return string;
     }
 
-    void computePipelineOptimizations(GrInitInvariantOutput* color,
-                                      GrInitInvariantOutput* coverage,
-                                      GrBatchToXPOverrides* overrides) const override {
-        // When this is called, there is only one ellipse.
-        color->setKnownFourComponents(fGeoData[0].fColor);
-        coverage->setUnknownSingleComponent();
-    }
-
 private:
     EllipseOp() : INHERITED(ClassID()) {}
 
-    void initBatchTracker(const GrXPOverridesForBatch& overrides) override {
-        // Handle any overrides that affect our GP.
-        if (!overrides.readsCoverage()) {
+    void getPipelineAnalysisInput(GrPipelineAnalysisDrawOpInput* input) const override {
+        input->pipelineColorInput()->setKnownFourComponents(fGeoData[0].fColor);
+        input->pipelineCoverageInput()->setUnknownSingleComponent();
+    }
+
+    void applyPipelineOptimizations(const GrPipelineOptimizations& optimizations) override {
+        if (!optimizations.readsCoverage()) {
             fGeoData[0].fColor = GrColor_ILLEGAL;
         }
-        if (!overrides.readsLocalCoords()) {
+        if (!optimizations.readsLocalCoords()) {
             fViewMatrixIfUsingLocalCoords.reset();
         }
     }
@@ -1466,21 +1459,17 @@ public:
         return string;
     }
 
-    void computePipelineOptimizations(GrInitInvariantOutput* color,
-                                      GrInitInvariantOutput* coverage,
-                                      GrBatchToXPOverrides* overrides) const override {
-        // When this is called there is only one ellipse.
-        color->setKnownFourComponents(fGeoData[0].fColor);
-        coverage->setUnknownSingleComponent();
-    }
-
 private:
     DIEllipseOp() : INHERITED(ClassID()) {}
 
-    void initBatchTracker(const GrXPOverridesForBatch& overrides) override {
-        // Handle any overrides that affect our GP.
-        overrides.getOverrideColorIfSet(&fGeoData[0].fColor);
-        fUsesLocalCoords = overrides.readsLocalCoords();
+    void getPipelineAnalysisInput(GrPipelineAnalysisDrawOpInput* input) const override {
+        input->pipelineColorInput()->setKnownFourComponents(fGeoData[0].fColor);
+        input->pipelineCoverageInput()->setUnknownSingleComponent();
+    }
+
+    void applyPipelineOptimizations(const GrPipelineOptimizations& optimizations) override {
+        optimizations.getOverrideColorIfSet(&fGeoData[0].fColor);
+        fUsesLocalCoords = optimizations.readsLocalCoords();
     }
 
     void onPrepareDraws(Target* target) const override {
@@ -1787,19 +1776,15 @@ public:
         return string;
     }
 
-    void computePipelineOptimizations(GrInitInvariantOutput* color,
-                                      GrInitInvariantOutput* coverage,
-                                      GrBatchToXPOverrides* overrides) const override {
-        // When this is called there is only one rrect.
-        color->setKnownFourComponents(fGeoData[0].fColor);
-        coverage->setUnknownSingleComponent();
+private:
+    void getPipelineAnalysisInput(GrPipelineAnalysisDrawOpInput* input) const override {
+        input->pipelineColorInput()->setKnownFourComponents(fGeoData[0].fColor);
+        input->pipelineCoverageInput()->setUnknownSingleComponent();
     }
 
-private:
-    void initBatchTracker(const GrXPOverridesForBatch& overrides) override {
-        // Handle any overrides that affect our GP.
-        overrides.getOverrideColorIfSet(&fGeoData[0].fColor);
-        if (!overrides.readsLocalCoords()) {
+    void applyPipelineOptimizations(const GrPipelineOptimizations& optimizations) override {
+        optimizations.getOverrideColorIfSet(&fGeoData[0].fColor);
+        if (!optimizations.readsLocalCoords()) {
             fViewMatrixIfUsingLocalCoords.reset();
         }
     }
@@ -2145,21 +2130,17 @@ public:
         return string;
     }
 
-    void computePipelineOptimizations(GrInitInvariantOutput* color,
-                                      GrInitInvariantOutput* coverage,
-                                      GrBatchToXPOverrides* overrides) const override {
-        // When this is called there is only one rrect.
-        color->setKnownFourComponents(fGeoData[0].fColor);
-        coverage->setUnknownSingleComponent();
-    }
-
 private:
     EllipticalRRectOp() : INHERITED(ClassID()) {}
 
-    void initBatchTracker(const GrXPOverridesForBatch& overrides) override {
-        // Handle overrides that affect our GP.
-        overrides.getOverrideColorIfSet(&fGeoData[0].fColor);
-        if (!overrides.readsLocalCoords()) {
+    void getPipelineAnalysisInput(GrPipelineAnalysisDrawOpInput* input) const override {
+        input->pipelineColorInput()->setKnownFourComponents(fGeoData[0].fColor);
+        input->pipelineCoverageInput()->setUnknownSingleComponent();
+    }
+
+    void applyPipelineOptimizations(const GrPipelineOptimizations& optimizations) override {
+        optimizations.getOverrideColorIfSet(&fGeoData[0].fColor);
+        if (!optimizations.readsLocalCoords()) {
             fViewMatrixIfUsingLocalCoords.reset();
         }
     }
@@ -2425,7 +2406,7 @@ sk_sp<GrDrawOp> GrOvalOpFactory::MakeArcOp(GrColor color, const SkMatrix& viewMa
 
 #ifdef GR_TEST_UTILS
 
-DRAW_BATCH_TEST_DEFINE(CircleOp) {
+DRAW_OP_TEST_DEFINE(CircleOp) {
     do {
         SkScalar rotate = random->nextSScalar1() * 360.f;
         SkScalar translateX = random->nextSScalar1() * 1000.f;
@@ -2451,32 +2432,31 @@ DRAW_BATCH_TEST_DEFINE(CircleOp) {
         sk_sp<GrDrawOp> op = CircleOp::Make(color, viewMatrix, center, radius,
                                             GrStyle(stroke, nullptr), arcParams);
         if (op) {
-            return op.release();
+            return op;
         }
     } while (true);
 }
 
-DRAW_BATCH_TEST_DEFINE(EllipseOp) {
+DRAW_OP_TEST_DEFINE(EllipseOp) {
     SkMatrix viewMatrix = GrTest::TestMatrixRectStaysRect(random);
     GrColor color = GrRandomColor(random);
     SkRect ellipse = GrTest::TestSquare(random);
-    return EllipseOp::Make(color, viewMatrix, ellipse, GrTest::TestStrokeRec(random)).release();
+    return EllipseOp::Make(color, viewMatrix, ellipse, GrTest::TestStrokeRec(random));
 }
 
-DRAW_BATCH_TEST_DEFINE(DIEllipseOp) {
+DRAW_OP_TEST_DEFINE(DIEllipseOp) {
     SkMatrix viewMatrix = GrTest::TestMatrix(random);
     GrColor color = GrRandomColor(random);
     SkRect ellipse = GrTest::TestSquare(random);
-    return DIEllipseOp::Make(color, viewMatrix, ellipse, GrTest::TestStrokeRec(random)).release();
+    return DIEllipseOp::Make(color, viewMatrix, ellipse, GrTest::TestStrokeRec(random));
 }
 
-DRAW_BATCH_TEST_DEFINE(RRectOp) {
+DRAW_OP_TEST_DEFINE(RRectOp) {
     SkMatrix viewMatrix = GrTest::TestMatrixRectStaysRect(random);
     GrColor color = GrRandomColor(random);
     const SkRRect& rrect = GrTest::TestRRectSimple(random);
     bool needsDistance = random->nextBool();
-    return make_rrect_op(color, needsDistance, viewMatrix, rrect, GrTest::TestStrokeRec(random))
-            .release();
+    return make_rrect_op(color, needsDistance, viewMatrix, rrect, GrTest::TestStrokeRec(random));
 }
 
 #endif

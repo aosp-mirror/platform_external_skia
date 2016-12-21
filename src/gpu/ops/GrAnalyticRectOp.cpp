@@ -7,7 +7,7 @@
 
 #include "GrAnalyticRectOp.h"
 
-#include "GrBatchTest.h"
+#include "GrDrawOpTest.h"
 #include "GrGeometryProcessor.h"
 #include "GrInvariantOutput.h"
 #include "GrOpFlushState.h"
@@ -267,19 +267,15 @@ public:
         return string;
     }
 
-    void computePipelineOptimizations(GrInitInvariantOutput* color,
-                                      GrInitInvariantOutput* coverage,
-                                      GrBatchToXPOverrides* overrides) const override {
-        // When this is called there is only one rect.
-        color->setKnownFourComponents(fGeoData[0].fColor);
-        coverage->setUnknownSingleComponent();
+private:
+    void getPipelineAnalysisInput(GrPipelineAnalysisDrawOpInput* input) const override {
+        input->pipelineColorInput()->setKnownFourComponents(fGeoData[0].fColor);
+        input->pipelineCoverageInput()->setUnknownSingleComponent();
     }
 
-private:
-    void initBatchTracker(const GrXPOverridesForBatch& overrides) override {
-        // Handle any overrides that affect our GP.
-        overrides.getOverrideColorIfSet(&fGeoData[0].fColor);
-        if (!overrides.readsLocalCoords()) {
+    void applyPipelineOptimizations(const GrPipelineOptimizations& optimizations) override {
+        optimizations.getOverrideColorIfSet(&fGeoData[0].fColor);
+        if (!optimizations.readsLocalCoords()) {
             fViewMatrixIfUsingLocalCoords.reset();
         }
     }
@@ -390,13 +386,13 @@ sk_sp<GrDrawOp> GrAnalyticRectOp::Make(GrColor color,
 
 #ifdef GR_TEST_UTILS
 
-DRAW_BATCH_TEST_DEFINE(AnalyticRectOp) {
+DRAW_OP_TEST_DEFINE(AnalyticRectOp) {
     SkMatrix viewMatrix = GrTest::TestMatrix(random);
     GrColor color = GrRandomColor(random);
     SkRect rect = GrTest::TestSquare(random);
     SkRect croppedRect = GrTest::TestSquare(random);
     SkRect bounds = GrTest::TestSquare(random);
-    return new AnalyticRectOp(color, viewMatrix, rect, croppedRect, bounds);
+    return sk_sp<GrDrawOp>(new AnalyticRectOp(color, viewMatrix, rect, croppedRect, bounds));
 }
 
 #endif

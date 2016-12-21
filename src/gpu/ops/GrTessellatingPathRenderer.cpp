@@ -8,9 +8,9 @@
 #include "GrTessellatingPathRenderer.h"
 
 #include "GrAuditTrail.h"
-#include "GrBatchTest.h"
 #include "GrClip.h"
 #include "GrDefaultGeoProcFactory.h"
+#include "GrDrawOpTest.h"
 #include "GrMesh.h"
 #include "GrOpFlushState.h"
 #include "GrPathUtils.h"
@@ -179,21 +179,18 @@ public:
         return string;
     }
 
-    void computePipelineOptimizations(GrInitInvariantOutput* color,
-                                      GrInitInvariantOutput* coverage,
-                                      GrBatchToXPOverrides* overrides) const override {
-        color->setKnownFourComponents(fColor);
-        coverage->setUnknownSingleComponent();
+private:
+    void getPipelineAnalysisInput(GrPipelineAnalysisDrawOpInput* input) const override {
+        input->pipelineColorInput()->setKnownFourComponents(fColor);
+        input->pipelineCoverageInput()->setUnknownSingleComponent();
     }
 
-private:
-    void initBatchTracker(const GrXPOverridesForBatch& overrides) override {
-        // Handle any color overrides
-        if (!overrides.readsColor()) {
+    void applyPipelineOptimizations(const GrPipelineOptimizations& optimizations) override {
+        if (!optimizations.readsColor()) {
             fColor = GrColor_ILLEGAL;
         }
-        overrides.getOverrideColorIfSet(&fColor);
-        fPipelineInfo = overrides;
+        optimizations.getOverrideColorIfSet(&fColor);
+        fOptimizations = optimizations;
     }
 
     SkPath getPath() const {
@@ -265,7 +262,7 @@ private:
         SkScalar tol = GrPathUtils::kDefaultTolerance;
         bool isLinear;
         DynamicVertexAllocator allocator(gp->getVertexStride(), target);
-        bool canTweakAlphaForCoverage = fPipelineInfo.canTweakAlphaForCoverage();
+        bool canTweakAlphaForCoverage = fOptimizations.canTweakAlphaForCoverage();
         int count = GrTessellator::PathToTriangles(path, tol, clipBounds, &allocator,
                                                    true, fColor, canTweakAlphaForCoverage,
                                                    &isLinear);
@@ -281,18 +278,18 @@ private:
             using namespace GrDefaultGeoProcFactory;
 
             Color color(fColor);
-            LocalCoords localCoords(fPipelineInfo.readsLocalCoords() ?
-                                    LocalCoords::kUsePosition_Type :
-                                    LocalCoords::kUnused_Type);
+            LocalCoords localCoords(fOptimizations.readsLocalCoords()
+                                            ? LocalCoords::kUsePosition_Type
+                                            : LocalCoords::kUnused_Type);
             Coverage::Type coverageType;
             if (fAntiAlias) {
                 color = Color(Color::kAttribute_Type);
-                if (fPipelineInfo.canTweakAlphaForCoverage()) {
+                if (fOptimizations.canTweakAlphaForCoverage()) {
                     coverageType = Coverage::kSolid_Type;
                 } else {
                     coverageType = Coverage::kAttribute_Type;
                 }
-            } else if (fPipelineInfo.readsCoverage()) {
+            } else if (fOptimizations.readsCoverage()) {
                 coverageType = Coverage::kSolid_Type;
             } else {
                 coverageType = Coverage::kNone_Type;
@@ -349,7 +346,7 @@ private:
     SkMatrix                fViewMatrix;
     SkIRect                 fDevClipBounds;
     bool                    fAntiAlias;
-    GrXPOverridesForBatch   fPipelineInfo;
+    GrPipelineOptimizations fOptimizations;
 
     typedef GrMeshDrawOp INHERITED;
 };
@@ -376,7 +373,7 @@ bool GrTessellatingPathRenderer::onDrawPath(const DrawPathArgs& args) {
 
 #ifdef GR_TEST_UTILS
 
-DRAW_BATCH_TEST_DEFINE(TesselatingPathOp) {
+DRAW_OP_TEST_DEFINE(TesselatingPathOp) {
     GrColor color = GrRandomColor(random);
     SkMatrix viewMatrix = GrTest::TestMatrixInvertible(random);
     SkPath path = GrTest::TestPath(random);
@@ -389,7 +386,7 @@ DRAW_BATCH_TEST_DEFINE(TesselatingPathOp) {
         GrTest::TestStyle(random, &style);
     } while (!style.isSimpleFill());
     GrShape shape(path, style);
-    return TessellatingPathOp::Make(color, shape, viewMatrix, devClipBounds, antiAlias).release();
+    return TessellatingPathOp::Make(color, shape, viewMatrix, devClipBounds, antiAlias);
 }
 
 #endif

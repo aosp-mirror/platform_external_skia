@@ -365,7 +365,6 @@ cc_library {
         "src/fonts/SkRandomScalerContext.cpp",
         "src/fonts/SkTestScalerContext.cpp",
         "src/gpu/GrAuditTrail.cpp",
-        "src/gpu/GrBatchTest.cpp",
         "src/gpu/GrBitmapTextureMaker.cpp",
         "src/gpu/GrBlend.cpp",
         "src/gpu/GrBlurUtils.cpp",
@@ -378,6 +377,7 @@ cc_library {
         "src/gpu/GrCoordTransform.cpp",
         "src/gpu/GrDefaultGeoProcFactory.cpp",
         "src/gpu/GrDrawOpAtlas.cpp",
+        "src/gpu/GrDrawOpTest.cpp",
         "src/gpu/GrDrawingManager.cpp",
         "src/gpu/GrFixedClip.cpp",
         "src/gpu/GrFragmentProcessor.cpp",
@@ -732,7 +732,9 @@ cc_library {
         "src/xml/SkDOM.cpp",
         "src/xml/SkXMLParser.cpp",
         "src/xml/SkXMLWriter.cpp",
+        "src/xps/SkDocument_XPS.cpp",
         "src/xps/SkDocument_XPS_None.cpp",
+        "src/xps/SkXPSDevice.cpp",
         "third_party/etc1/etc1.cpp",
         "third_party/gif/SkGifImageReader.cpp",
         "third_party/ktx/ktx.cpp",
@@ -775,26 +777,6 @@ cc_library {
                 "src/opts/SkBlitMask_opts_none.cpp",
                 "src/opts/SkBlitRow_opts_none.cpp",
             ],
-            mips32r2dsp_fp: {
-                exclude_srcs: [
-                    "src/opts/SkBitmapProcState_opts_none.cpp",
-                    "src/opts/SkBlitRow_opts_none.cpp",
-                ],
-                srcs: [
-                    "src/opts/SkBitmapProcState_opts_mips_dsp.cpp",
-                    "src/opts/SkBlitRow_opts_mips_dsp.cpp",
-                ],
-            },
-            mips32r2dspr2_fp: {
-                exclude_srcs: [
-                    "src/opts/SkBitmapProcState_opts_none.cpp",
-                    "src/opts/SkBlitRow_opts_none.cpp",
-                ],
-                srcs: [
-                    "src/opts/SkBitmapProcState_opts_mips_dsp.cpp",
-                    "src/opts/SkBlitRow_opts_mips_dsp.cpp",
-                ],
-            },
         },
 
         mips64: {

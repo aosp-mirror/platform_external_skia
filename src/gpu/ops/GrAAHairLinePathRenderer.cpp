@@ -7,11 +7,11 @@
 
 #include "GrAAHairLinePathRenderer.h"
 
-#include "GrBatchTest.h"
 #include "GrBuffer.h"
 #include "GrCaps.h"
 #include "GrContext.h"
 #include "GrDefaultGeoProcFactory.h"
+#include "GrDrawOpTest.h"
 #include "GrOpFlushState.h"
 #include "GrPathUtils.h"
 #include "GrPipelineBuilder.h"
@@ -704,13 +704,6 @@ public:
         return string;
     }
 
-    void computePipelineOptimizations(GrInitInvariantOutput* color,
-                                      GrInitInvariantOutput* coverage,
-                                      GrBatchToXPOverrides* overrides) const override {
-        color->setKnownFourComponents(fColor);
-        coverage->setUnknownSingleComponent();
-    }
-
 private:
     AAHairlineOp(GrColor color,
                  uint8_t coverage,
@@ -724,14 +717,17 @@ private:
                                    IsZeroArea::kYes);
     }
 
-    void initBatchTracker(const GrXPOverridesForBatch& overrides) override {
-        // Handle any color overrides
-        if (!overrides.readsColor()) {
+    void getPipelineAnalysisInput(GrPipelineAnalysisDrawOpInput* input) const override {
+        input->pipelineColorInput()->setKnownFourComponents(fColor);
+        input->pipelineCoverageInput()->setUnknownSingleComponent();
+    }
+
+    void applyPipelineOptimizations(const GrPipelineOptimizations& optimizations) override {
+        if (!optimizations.readsColor()) {
             fColor = GrColor_ILLEGAL;
         }
-        overrides.getOverrideColorIfSet(&fColor);
-
-        fUsesLocalCoords = overrides.readsLocalCoords();
+        optimizations.getOverrideColorIfSet(&fColor);
+        fUsesLocalCoords = optimizations.readsLocalCoords();
     }
 
     void onPrepareDraws(Target*) const override;
@@ -972,14 +968,13 @@ bool GrAAHairLinePathRenderer::onDrawPath(const DrawPathArgs& args) {
 
 #ifdef GR_TEST_UTILS
 
-DRAW_BATCH_TEST_DEFINE(AAHairlineOp) {
+DRAW_OP_TEST_DEFINE(AAHairlineOp) {
     GrColor color = GrRandomColor(random);
     SkMatrix viewMatrix = GrTest::TestMatrix(random);
     SkPath path = GrTest::TestPath(random);
     SkIRect devClipBounds;
     devClipBounds.setEmpty();
-    return AAHairlineOp::Make(color, viewMatrix, path, GrStyle::SimpleHairline(), devClipBounds)
-            .release();
+    return AAHairlineOp::Make(color, viewMatrix, path, GrStyle::SimpleHairline(), devClipBounds);
 }
 
 #endif

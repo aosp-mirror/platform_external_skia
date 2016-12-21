@@ -7,10 +7,10 @@
 
 #include "GrPLSPathRenderer.h"
 
-#include "GrBatchTest.h"
 #include "GrCaps.h"
 #include "GrContext.h"
 #include "GrDefaultGeoProcFactory.h"
+#include "GrDrawOpTest.h"
 #include "GrInvariantOutput.h"
 #include "GrOpFlushState.h"
 #include "GrPLSGeometryProcessor.h"
@@ -780,22 +780,27 @@ public:
         return string;
     }
 
-    void computePipelineOptimizations(GrInitInvariantOutput* color,
-                                      GrInitInvariantOutput* coverage,
-                                      GrBatchToXPOverrides* overrides) const override {
-        color->setKnownFourComponents(fColor);
-        coverage->setUnknownSingleComponent();
-        overrides->fUsePLSDstRead = true;
+private:
+    PLSPathOp(GrColor color, const SkPath& path, const SkMatrix& viewMatrix)
+            : INHERITED(ClassID()), fColor(color), fPath(path), fViewMatrix(viewMatrix) {
+        // compute bounds
+        this->setTransformedBounds(path.getBounds(), fViewMatrix, HasAABloat::kYes,
+                                   IsZeroArea::kNo);
     }
 
-    void initBatchTracker(const GrXPOverridesForBatch& overrides) override {
-        // Handle any color overrides
-        if (!overrides.readsColor()) {
+    void getPipelineAnalysisInput(GrPipelineAnalysisDrawOpInput* input) const override {
+        input->pipelineColorInput()->setKnownFourComponents(fColor);
+        input->pipelineCoverageInput()->setUnknownSingleComponent();
+        input->setUsesPLSDstRead();
+    }
+
+    void applyPipelineOptimizations(const GrPipelineOptimizations& optimizations) override {
+        if (!optimizations.readsColor()) {
             fColor = GrColor_ILLEGAL;
         }
-        overrides.getOverrideColorIfSet(&fColor);
+        optimizations.getOverrideColorIfSet(&fColor);
 
-        fUsesLocalCoords = overrides.readsLocalCoords();
+        fUsesLocalCoords = optimizations.readsLocalCoords();
     }
 
     void onPrepareDraws(Target* target) const override {
@@ -906,14 +911,6 @@ public:
         target->draw(finishProcessor.get(), mesh);
     }
 
-private:
-    PLSPathOp(GrColor color, const SkPath& path, const SkMatrix& viewMatrix)
-            : INHERITED(ClassID()), fColor(color), fPath(path), fViewMatrix(viewMatrix) {
-        // compute bounds
-        this->setTransformedBounds(path.getBounds(), fViewMatrix, HasAABloat::kYes,
-                                   IsZeroArea::kNo);
-    }
-
     bool onCombineIfPossible(GrOp* t, const GrCaps& caps) override {
         return false;
     }
@@ -948,12 +945,12 @@ bool GrPLSPathRenderer::onDrawPath(const DrawPathArgs& args) {
 
 #ifdef GR_TEST_UTILS
 
-DRAW_BATCH_TEST_DEFINE(PLSPathOp) {
+DRAW_OP_TEST_DEFINE(PLSPathOp) {
     GrColor color = GrRandomColor(random);
     SkMatrix vm = GrTest::TestMatrixInvertible(random);
     SkPath path = GrTest::TestPathConvex(random);
 
-    return PLSPathOp::Make(color, path, vm).release();
+    return PLSPathOp::Make(color, path, vm);
 }
 
 #endif

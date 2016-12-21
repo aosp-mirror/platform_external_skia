@@ -7,9 +7,9 @@
 
 #include "GrNonAAStrokeRectOp.h"
 
-#include "GrBatchTest.h"
 #include "GrColor.h"
 #include "GrDefaultGeoProcFactory.h"
+#include "GrDrawOpTest.h"
 #include "GrMeshDrawOp.h"
 #include "GrOpFlushState.h"
 #include "SkRandom.h"
@@ -62,14 +62,6 @@ public:
         return string;
     }
 
-    void computePipelineOptimizations(GrInitInvariantOutput* color,
-                                      GrInitInvariantOutput* coverage,
-                                      GrBatchToXPOverrides* overrides) const override {
-        // When this is called on a batch, there is only one geometry bundle
-        color->setKnownFourComponents(fColor);
-        coverage->setKnownSingleComponent(0xff);
-    }
-
     static sk_sp<GrDrawOp> Make(GrColor color, const SkMatrix& viewMatrix, const SkRect& rect,
                                 const SkStrokeRec& stroke, bool snapToPixelCenters) {
         if (!allowed_stroke(stroke)) {
@@ -108,15 +100,21 @@ public:
 private:
     NonAAStrokeRectOp() : INHERITED(ClassID()) {}
 
+    void getPipelineAnalysisInput(GrPipelineAnalysisDrawOpInput* input) const override {
+        input->pipelineColorInput()->setKnownFourComponents(fColor);
+        input->pipelineCoverageInput()->setKnownSingleComponent(0xFF);
+    }
+
     void onPrepareDraws(Target* target) const override {
         sk_sp<GrGeometryProcessor> gp;
         {
             using namespace GrDefaultGeoProcFactory;
             Color color(fColor);
-            Coverage coverage(fOverrides.readsCoverage() ? Coverage::kSolid_Type
-                                                         : Coverage::kNone_Type);
-            LocalCoords localCoords(fOverrides.readsLocalCoords() ? LocalCoords::kUsePosition_Type
-                                                                  : LocalCoords::kUnused_Type);
+            Coverage coverage(fOptimizations.readsCoverage() ? Coverage::kSolid_Type
+                                                             : Coverage::kNone_Type);
+            LocalCoords localCoords(fOptimizations.readsLocalCoords()
+                                            ? LocalCoords::kUsePosition_Type
+                                            : LocalCoords::kUnused_Type);
             gp = GrDefaultGeoProcFactory::Make(color, coverage, localCoords, fViewMatrix);
         }
 
@@ -161,9 +159,9 @@ private:
         target->draw(gp.get(), mesh);
     }
 
-    void initBatchTracker(const GrXPOverridesForBatch& overrides) override {
-        overrides.getOverrideColorIfSet(&fColor);
-        fOverrides = overrides;
+    void applyPipelineOptimizations(const GrPipelineOptimizations& optimizations) override {
+        optimizations.getOverrideColorIfSet(&fColor);
+        fOptimizations = optimizations;
     }
 
     bool onCombineIfPossible(GrOp* t, const GrCaps&) override {
@@ -176,8 +174,7 @@ private:
     SkMatrix fViewMatrix;
     SkRect fRect;
     SkScalar fStrokeWidth;
-
-    GrXPOverridesForBatch fOverrides;
+    GrPipelineOptimizations fOptimizations;
 
     const static int kVertsPerHairlineRect = 5;
     const static int kVertsPerStrokeRect = 10;
@@ -198,7 +195,7 @@ sk_sp<GrDrawOp> Make(GrColor color,
 
 #ifdef GR_TEST_UTILS
 
-DRAW_BATCH_TEST_DEFINE(NonAAStrokeRectOp) {
+DRAW_OP_TEST_DEFINE(NonAAStrokeRectOp) {
     SkMatrix viewMatrix = GrTest::TestMatrix(random);
     GrColor color = GrRandomColor(random);
     SkRect rect = GrTest::TestRect(random);
@@ -208,8 +205,7 @@ DRAW_BATCH_TEST_DEFINE(NonAAStrokeRectOp) {
     paint.setStyle(SkPaint::kStroke_Style);
     paint.setStrokeJoin(SkPaint::kMiter_Join);
     SkStrokeRec strokeRec(paint);
-    return GrNonAAStrokeRectOp::Make(color, viewMatrix, rect, strokeRec, random->nextBool())
-            .release();
+    return GrNonAAStrokeRectOp::Make(color, viewMatrix, rect, strokeRec, random->nextBool());
 }
 
 #endif

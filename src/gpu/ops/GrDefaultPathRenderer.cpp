@@ -7,9 +7,9 @@
 
 #include "GrDefaultPathRenderer.h"
 
-#include "GrBatchTest.h"
 #include "GrContext.h"
 #include "GrDefaultGeoProcFactory.h"
+#include "GrDrawOpTest.h"
 #include "GrFixedClip.h"
 #include "GrMesh.h"
 #include "GrOpFlushState.h"
@@ -118,13 +118,6 @@ public:
         return string;
     }
 
-    void computePipelineOptimizations(GrInitInvariantOutput* color,
-                                      GrInitInvariantOutput* coverage,
-                                      GrBatchToXPOverrides* overrides) const override {
-        color->setKnownFourComponents(fColor);
-        coverage->setKnownSingleComponent(this->coverage());
-    }
-
 private:
     DefaultPathOp(GrColor color, const SkPath& path, SkScalar tolerance, uint8_t coverage,
                   const SkMatrix& viewMatrix, bool isHairline, const SkRect& devBounds)
@@ -139,13 +132,18 @@ private:
                         isHairline ? IsZeroArea::kYes : IsZeroArea::kNo);
     }
 
-    void initBatchTracker(const GrXPOverridesForBatch& overrides) override {
-        if (!overrides.readsColor()) {
+    void getPipelineAnalysisInput(GrPipelineAnalysisDrawOpInput* input) const override {
+        input->pipelineColorInput()->setKnownFourComponents(fColor);
+        input->pipelineCoverageInput()->setKnownSingleComponent(this->coverage());
+    }
+
+    void applyPipelineOptimizations(const GrPipelineOptimizations& optimizations) override {
+        if (!optimizations.readsColor()) {
             fColor = GrColor_ILLEGAL;
         }
-        overrides.getOverrideColorIfSet(&fColor);
-        fUsesLocalCoords = overrides.readsLocalCoords();
-        fCoverageIgnored = !overrides.readsCoverage();
+        optimizations.getOverrideColorIfSet(&fColor);
+        fUsesLocalCoords = optimizations.readsLocalCoords();
+        fCoverageIgnored = !optimizations.readsCoverage();
     }
 
     void onPrepareDraws(Target* target) const override {
@@ -618,7 +616,7 @@ void GrDefaultPathRenderer::onStencilPath(const StencilPathArgs& args) {
 
 #ifdef GR_TEST_UTILS
 
-DRAW_BATCH_TEST_DEFINE(DefaultPathOp) {
+DRAW_OP_TEST_DEFINE(DefaultPathOp) {
     GrColor color = GrRandomColor(random);
     SkMatrix viewMatrix = GrTest::TestMatrix(random);
 
@@ -634,8 +632,7 @@ DRAW_BATCH_TEST_DEFINE(DefaultPathOp) {
 
     viewMatrix.mapRect(&bounds);
     uint8_t coverage = GrRandomCoverage(random);
-    return DefaultPathOp::Make(color, path, srcSpaceTol, coverage, viewMatrix, true, bounds)
-            .release();
+    return DefaultPathOp::Make(color, path, srcSpaceTol, coverage, viewMatrix, true, bounds);
 }
 
 #endif

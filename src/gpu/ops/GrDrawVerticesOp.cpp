@@ -71,28 +71,25 @@ GrDrawVerticesOp::GrDrawVerticesOp(GrColor color, GrPrimitiveType primitiveType,
     this->setBounds(bounds, HasAABloat::kNo, zeroArea);
 }
 
-void GrDrawVerticesOp::computePipelineOptimizations(GrInitInvariantOutput* color,
-                                                    GrInitInvariantOutput* coverage,
-                                                    GrBatchToXPOverrides* overrides) const {
-    // When this is called there is only one mesh.
+void GrDrawVerticesOp::getPipelineAnalysisInput(GrPipelineAnalysisDrawOpInput* input) const {
     if (fVariableColor) {
-        color->setUnknownFourComponents();
+        input->pipelineColorInput()->setUnknownFourComponents();
     } else {
-        color->setKnownFourComponents(fMeshes[0].fColor);
+        input->pipelineColorInput()->setKnownFourComponents(fMeshes[0].fColor);
     }
-    coverage->setKnownSingleComponent(0xff);
+    input->pipelineCoverageInput()->setKnownSingleComponent(0xff);
 }
 
-void GrDrawVerticesOp::initBatchTracker(const GrXPOverridesForBatch& overrides) {
+void GrDrawVerticesOp::applyPipelineOptimizations(const GrPipelineOptimizations& optimizations) {
     SkASSERT(fMeshes.count() == 1);
     GrColor overrideColor;
-    if (overrides.getOverrideColorIfSet(&overrideColor)) {
+    if (optimizations.getOverrideColorIfSet(&overrideColor)) {
         fMeshes[0].fColor = overrideColor;
         fMeshes[0].fColors.reset();
         fVariableColor = false;
     }
-    fCoverageIgnored = !overrides.readsCoverage();
-    if (!overrides.readsLocalCoords()) {
+    fCoverageIgnored = !optimizations.readsCoverage();
+    if (!optimizations.readsLocalCoords()) {
         fMeshes[0].fLocalCoords.reset();
     }
 }
@@ -213,7 +210,7 @@ bool GrDrawVerticesOp::onCombineIfPossible(GrOp* t, const GrCaps& caps) {
 
 #ifdef GR_TEST_UTILS
 
-#include "GrBatchTest.h"
+#include "GrDrawOpTest.h"
 
 static uint32_t seed_vertices(GrPrimitiveType type) {
     switch (type) {
@@ -274,7 +271,7 @@ static void randomize_params(size_t count, size_t maxVertex, SkScalar min, SkSca
     }
 }
 
-DRAW_BATCH_TEST_DEFINE(VerticesOp) {
+DRAW_OP_TEST_DEFINE(VerticesOp) {
     GrPrimitiveType type = GrPrimitiveType(random->nextULessThan(kLast_GrPrimitiveType + 1));
     uint32_t primitiveCount = random->nextRangeU(1, 100);
 
@@ -312,8 +309,7 @@ DRAW_BATCH_TEST_DEFINE(VerticesOp) {
     GrColor color = GrRandomColor(random);
     return GrDrawVerticesOp::Make(color, type, viewMatrix, positions.begin(), vertexCount,
                                   indices.begin(), hasIndices ? vertexCount : 0, colors.begin(),
-                                  texCoords.begin(), bounds)
-            .release();
+                                  texCoords.begin(), bounds);
 }
 
 #endif
