@@ -549,7 +549,7 @@ cc_library {
         "src/gpu/ops/GrTessellatingPathRenderer.cpp",
         "src/gpu/text/GrAtlasGlyphCache.cpp",
         "src/gpu/text/GrAtlasTextBlob.cpp",
-        "src/gpu/text/GrAtlasTextBlob_regenInBatch.cpp",
+        "src/gpu/text/GrAtlasTextBlob_regenInOp.cpp",
         "src/gpu/text/GrAtlasTextContext.cpp",
         "src/gpu/text/GrDistanceFieldAdjustTable.cpp",
         "src/gpu/text/GrStencilAndCoverTextContext.cpp",
