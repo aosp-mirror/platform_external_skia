@@ -562,8 +562,7 @@ LOCAL_C_INCLUDES := \
 	external/libpng
 
 LOCAL_CFLAGS += \
-	-DSK_CRASH_HANDLER \
-	-DSK_XML
+	-DSK_CRASH_HANDLER
 
 LOCAL_MODULE_TAGS := \
 	tests
