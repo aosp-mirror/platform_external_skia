@@ -758,6 +758,8 @@ LOCAL_MODULE := \
 	skia_dm
 
 
+ifneq ($(TARGET_BUILD_PDK),true)
+
 # Store skia's resources in the directory structure that the Android testing
 # infrastructure expects.  This requires that Skia maintain a symlinked
 # subdirectory in the DATA folder that points to the top level skia resources...
@@ -766,3 +768,5 @@ LOCAL_PICKUP_FILES := $(LOCAL_PATH)/../DATA
 include $(LOCAL_PATH)/../skia_static_deps.mk
 include frameworks/base/libs/hwui/hwui_static_deps.mk
 include $(BUILD_NATIVE_TEST)
+
+endif
