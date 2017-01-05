@@ -412,7 +412,6 @@ DM_SRCS_ALL = struct(
         "tools/timer/*.h",
     ],
     exclude = [
-        "dm/DMSrcSinkAndroid.cpp",  # Android-only.
         "tests/FontMgrAndroidParserTest.cpp",  # Android-only.
         "tests/PathOpsSkpClipTest.cpp",  # Alternate main.
         "tests/skia_test.cpp",  # Old main.
@@ -426,8 +425,6 @@ DM_SRCS_UNIX = struct()
 
 DM_SRCS_ANDROID = struct(
     include = [
-        # Depends on Android HWUI library that is not available in google3.
-        #"dm/DMSrcSinkAndroid.cpp",
         "tests/FontMgrAndroidParserTest.cpp",
     ],
 )
