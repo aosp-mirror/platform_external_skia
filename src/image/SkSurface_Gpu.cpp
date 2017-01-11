@@ -82,7 +82,7 @@ sk_sp<SkSurface> SkSurface_Gpu::onNewSurface(const SkImageInfo& info) {
                                        origin, &this->props());
 }
 
-sk_sp<SkImage> SkSurface_Gpu::onNewImageSnapshot(SkBudgeted budgeted, SkCopyPixelsMode cpm) {
+sk_sp<SkImage> SkSurface_Gpu::onNewImageSnapshot(SkBudgeted budgeted) {
     GrRenderTargetContext* rtc = fDevice->accessRenderTargetContext();
     if (!rtc) {
         return nullptr;
@@ -95,7 +95,7 @@ sk_sp<SkImage> SkSurface_Gpu::onNewImageSnapshot(SkBudgeted budgeted, SkCopyPixe
     // If the original render target is a buffer originally created by the client, then we don't
     // want to ever retarget the SkSurface at another buffer we create. Force a copy now to avoid
     // copy-on-write.
-    if (kAlways_SkCopyPixelsMode == cpm || !srcProxy || rtc->priv().refsWrappedObjects()) {
+    if (!srcProxy || rtc->priv().refsWrappedObjects()) {
         GrSurfaceDesc desc = rtc->desc();
         desc.fFlags = desc.fFlags & ~kRenderTarget_GrSurfaceFlag;
 
@@ -136,7 +136,7 @@ void SkSurface_Gpu::onCopyOnWrite(ContentChangeMode mode) {
     }
     // are we sharing our render target with the image? Note this call should never create a new
     // image because onCopyOnWrite is only called when there is a cached image.
-    sk_sp<SkImage> image(this->refCachedImage(SkBudgeted::kNo, kNo_ForceUnique));
+    sk_sp<SkImage> image(this->refCachedImage(SkBudgeted::kNo));
     SkASSERT(image);
     if (rt->asTexture() == as_IB(image)->peekTexture()) {
         this->fDevice->replaceRenderTargetContext(SkSurface::kRetain_ContentChangeMode == mode);

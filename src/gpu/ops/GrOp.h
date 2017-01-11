@@ -56,7 +56,7 @@ class GrOpFlushState;
         return kClassID; \
     }
 
-class GrOp : public GrNonAtomicRef<GrOp> {
+class GrOp : private SkNoncopyable {
 public:
     GrOp(uint32_t classID);
     virtual ~GrOp();
@@ -128,11 +128,6 @@ public:
 
     /** Issues the op's commands to GrGpu. */
     void execute(GrOpFlushState* state, const SkRect& bounds) { this->onExecute(state, bounds); }
-
-    /** Used to block combining across render target changes. Remove this once we store
-        GrOps for different RTs in different targets. */
-    // TODO: this needs to be updated to return GrSurfaceProxy::UniqueID
-    virtual GrGpuResource::UniqueID renderTargetUniqueID() const = 0;
 
     /** Used for spewing information about ops when debugging. */
     virtual SkString dumpInfo() const {
