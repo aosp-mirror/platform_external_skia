@@ -170,14 +170,8 @@ private:
     }
 
     void applyPipelineOptimizations(const GrPipelineOptimizations& optimizations) override {
-        if (!optimizations.readsColor()) {
-            fShapes[0].fColor = GrColor_ILLEGAL;
-        }
         optimizations.getOverrideColorIfSet(&fShapes[0].fColor);
-
-        fColorIgnored = !optimizations.readsColor();
         fUsesLocalCoords = optimizations.readsLocalCoords();
-        fCoverageIgnored = !optimizations.readsCoverage();
     }
 
     struct FlushInfo {
@@ -487,8 +481,6 @@ private:
 
     SkMatrix fViewMatrix;
     bool fUsesLocalCoords;
-    bool fColorIgnored;
-    bool fCoverageIgnored;
 
     struct Entry {
         GrColor fColor;

@@ -307,6 +307,9 @@ DEF_TEST(SkSLTernaryMismatch, r) {
     test_failure(r,
                  "void main() { int x = 5 > 2 ? true : 1.0; }",
                  "error: 1: ternary operator result mismatch: 'bool', 'float'\n1 error\n");
+    test_failure(r,
+                 "void main() { int x = 5 > 2 ? vec3(1) : 1.0; }",
+                 "error: 1: ternary operator result mismatch: 'vec3', 'float'\n1 error\n");
 }
 
 DEF_TEST(SkSLInterfaceBlockStorageModifiers, r) {
@@ -398,6 +401,21 @@ DEF_TEST(SkSLBadOffset, r) {
     test_failure(r,
                  "struct Bad { int x; layout (offset = 0) int y; } bad; void main() { bad.x = 5; }",
                  "error: 1: offset of field 'y' must be at least 4\n1 error\n");
+}
+
+DEF_TEST(SkSLDivByZero, r) {
+    test_failure(r,
+                 "int x = 1 / 0;",
+                 "error: 1: division by zero\n1 error\n");
+    test_failure(r,
+                 "float x = 1 / 0;",
+                 "error: 1: division by zero\n1 error\n");
+    test_failure(r,
+                 "float x = 1.0 / 0.0;",
+                 "error: 1: division by zero\n1 error\n");
+    test_failure(r,
+                 "float x = -67.0 / (3.0 - 3);",
+                 "error: 1: division by zero\n1 error\n");
 }
 
 #endif

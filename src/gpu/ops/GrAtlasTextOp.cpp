@@ -67,15 +67,10 @@ void GrAtlasTextOp::getPipelineAnalysisInput(GrPipelineAnalysisDrawOpInput* inpu
 }
 
 void GrAtlasTextOp::applyPipelineOptimizations(const GrPipelineOptimizations& optimizations) {
-    if (!optimizations.readsColor()) {
-        fGeoData[0].fColor = GrColor_ILLEGAL;
-    }
     optimizations.getOverrideColorIfSet(&fGeoData[0].fColor);
 
-    fColorIgnored = !optimizations.readsColor();
     fColor = fGeoData[0].fColor;
     fUsesLocalCoords = optimizations.readsLocalCoords();
-    fCoverageIgnored = !optimizations.readsCoverage();
 }
 
 void GrAtlasTextOp::onPrepareDraws(Target* target) const {

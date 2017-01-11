@@ -199,22 +199,8 @@ public:
     GrDrawFace getDrawFace() const { return fDrawFace; }
 
 
-    ///////////////////////////////////////////////////////////////////////////
-
-    bool ignoresCoverage() const { return fIgnoresCoverage; }
-
 private:
     GrPipeline() { /** Initialized in factory function*/ }
-
-    /**
-     * Alter the program desc and inputs (attribs and processors) based on the blend optimization.
-     */
-    void adjustProgramFromOptimizations(const GrPipelineBuilder& ds,
-                                        GrXferProcessor::OptFlags,
-                                        const GrProcOptInfo& colorPOI,
-                                        const GrProcOptInfo& coveragePOI,
-                                        int* firstColorProcessorIdx,
-                                        int* firstCoverageProcessorIdx);
 
     /**
      * Calculates the primary and secondary output types of the shader. For certain output types
@@ -246,7 +232,6 @@ private:
     uint32_t                            fFlags;
     ProgramXferProcessor                fXferProcessor;
     FragmentProcessorArray              fFragmentProcessors;
-    bool                                fIgnoresCoverage;
 
     // This value is also the index in fFragmentProcessors where coverage processors begin.
     int                                 fNumColorProcessors;

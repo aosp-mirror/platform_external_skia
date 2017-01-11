@@ -264,9 +264,6 @@ private:
     }
 
     void applyPipelineOptimizations(const GrPipelineOptimizations& optimizations) override {
-        if (!optimizations.readsColor()) {
-            fPaths[0].fColor = GrColor_ILLEGAL;
-        }
         optimizations.getOverrideColorIfSet(&fPaths[0].fColor);
     }
 
@@ -404,7 +401,7 @@ private:
             {
                 using namespace GrDefaultGeoProcFactory;
                 lineGP = GrDefaultGeoProcFactory::Make(Color(Color::kAttribute_Type),
-                                                       Coverage(255),
+                                                       Coverage::kSolid_Type,
                                                        LocalCoords(LocalCoords::kUnused_Type),
                                                        fViewMatrix);
             }

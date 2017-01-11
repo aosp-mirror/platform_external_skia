@@ -303,13 +303,9 @@ private:
     }
 
     void applyPipelineOptimizations(const GrPipelineOptimizations& optimizations) override {
-        if (!optimizations.readsColor()) {
-            fColor = GrColor_ILLEGAL;
-        }
         optimizations.getOverrideColorIfSet(&fColor);
 
         fUsesLocalCoords = optimizations.readsLocalCoords();
-        fCoverageIgnored = !optimizations.readsCoverage();
     }
 
     struct DashDraw {
@@ -346,11 +342,11 @@ private:
             // Set up the vertex data for the line and start/end dashes
             using namespace GrDefaultGeoProcFactory;
             Color color(this->color());
-            Coverage coverage(this->coverageIgnored() ? Coverage::kNone_Type :
-                                                        Coverage::kSolid_Type);
-            LocalCoords localCoords(this->usesLocalCoords() ? LocalCoords::kUsePosition_Type :
-                                                              LocalCoords::kUnused_Type);
-            gp = MakeForDeviceSpace(color, coverage, localCoords, this->viewMatrix());
+            LocalCoords::Type localCoordsType = this->usesLocalCoords()
+                                                        ? LocalCoords::kUsePosition_Type
+                                                        : LocalCoords::kUnused_Type;
+            gp = MakeForDeviceSpace(color, Coverage::kSolid_Type, localCoordsType,
+                                    this->viewMatrix());
         }
 
         if (!gp) {
@@ -672,14 +668,12 @@ private:
     AAMode aaMode() const { return fAAMode; }
     bool fullDash() const { return fFullDash; }
     SkPaint::Cap cap() const { return fCap; }
-    bool coverageIgnored() const { return fCoverageIgnored; }
 
     static const int kVertsPerDash = 4;
     static const int kIndicesPerDash = 6;
 
     GrColor fColor;
     bool fUsesLocalCoords;
-    bool fCoverageIgnored;
     SkPaint::Cap fCap;
     AAMode fAAMode;
     bool fFullDash;
@@ -775,8 +769,6 @@ public:
 
     GrColor color() const { return fColor; }
 
-    bool colorIgnored() const { return GrColor_ILLEGAL == fColor; }
-
     const SkMatrix& localMatrix() const { return fLocalMatrix; }
 
     bool usesLocalCoords() const { return fUsesLocalCoords; }
@@ -854,9 +846,7 @@ void GLDashingCircleEffect::onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) {
 
     GrGLSLPPFragmentBuilder* fragBuilder = args.fFragBuilder;
     // Setup pass through color
-    if (!dce.colorIgnored()) {
-        this->setupUniformColor(fragBuilder, uniformHandler, args.fOutputColor, &fColorUniform);
-    }
+    this->setupUniformColor(fragBuilder, uniformHandler, args.fOutputColor, &fColorUniform);
 
     // Setup position
     this->setupPosition(vertBuilder, gpArgs, dce.inPosition()->fName);
@@ -907,8 +897,7 @@ void GLDashingCircleEffect::GenKey(const GrGeometryProcessor& gp,
     const DashingCircleEffect& dce = gp.cast<DashingCircleEffect>();
     uint32_t key = 0;
     key |= dce.usesLocalCoords() && dce.localMatrix().hasPerspective() ? 0x1 : 0x0;
-    key |= dce.colorIgnored() ? 0x2 : 0x0;
-    key |= static_cast<uint32_t>(dce.aaMode()) << 8;
+    key |= static_cast<uint32_t>(dce.aaMode()) << 1;
     b->add32(key);
 }
 
@@ -988,9 +977,7 @@ public:
 
     GrColor color() const { return fColor; }
 
-    bool colorIgnored() const { return GrColor_ILLEGAL == fColor; }
-
-    const SkMatrix& localMatrix() const { return fLocalMatrix; }
+     const SkMatrix& localMatrix() const { return fLocalMatrix; }
 
     bool usesLocalCoords() const { return fUsesLocalCoords; }
 
@@ -1036,9 +1023,7 @@ private:
     typedef GrGLSLGeometryProcessor INHERITED;
 };
 
-GLDashingLineEffect::GLDashingLineEffect() {
-    fColor = GrColor_ILLEGAL;
-}
+GLDashingLineEffect::GLDashingLineEffect() : fColor(GrColor_ILLEGAL) {}
 
 void GLDashingLineEffect::onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) {
     const DashingLineEffect& de = args.fGP.cast<DashingLineEffect>();
@@ -1063,9 +1048,7 @@ void GLDashingLineEffect::onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) {
 
     GrGLSLPPFragmentBuilder* fragBuilder = args.fFragBuilder;
     // Setup pass through color
-    if (!de.colorIgnored()) {
-        this->setupUniformColor(fragBuilder, uniformHandler, args.fOutputColor, &fColorUniform);
-    }
+    this->setupUniformColor(fragBuilder, uniformHandler, args.fOutputColor, &fColorUniform);
 
     // Setup position
     this->setupPosition(vertBuilder, gpArgs, de.inPosition()->fName);
@@ -1134,7 +1117,6 @@ void GLDashingLineEffect::GenKey(const GrGeometryProcessor& gp,
     const DashingLineEffect& de = gp.cast<DashingLineEffect>();
     uint32_t key = 0;
     key |= de.usesLocalCoords() && de.localMatrix().hasPerspective() ? 0x1 : 0x0;
-    key |= de.colorIgnored() ? 0x2 : 0x0;
     key |= static_cast<int>(de.aaMode()) << 8;
     b->add32(key);
 }

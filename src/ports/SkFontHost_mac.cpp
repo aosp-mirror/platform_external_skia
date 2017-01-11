@@ -780,7 +780,7 @@ CGRGBPixel* Offscreen::getCG(const SkScalerContext_Mac& context, const SkGlyph& 
     // Prior to 10.10, CTFontDrawGlyphs acted like CGContextShowGlyphsAtPositions and took
     // 'positions' which are in text space. The glyph location (in device space) must be
     // mapped into text space, so that CG can convert it back into device space.
-    // In 10.10.1, this is handled directly in CTFontDrawGlyphs.
+    // In 10.10.1, this is handled directly in CTFontDrawGlyphs.
     //
     // However, in 10.10.2 color glyphs no longer rotate based on the font transform.
     // So always make the font transform identity and place the transform on the context.
@@ -2379,6 +2379,10 @@ protected:
 
 ///////////////////////////////////////////////////////////////////////////////
 
+#ifdef SK_LEGACY_FONTMGR_FACTORY
 SkFontMgr* SkFontMgr::Factory() { return new SkFontMgr_Mac; }
+#else
+sk_sp<SkFontMgr> SkFontMgr::Factory() { return sk_make_sp<SkFontMgr_Mac>(); }
+#endif
 
 #endif//defined(SK_BUILD_FOR_MAC) || defined(SK_BUILD_FOR_IOS)
