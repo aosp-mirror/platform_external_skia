@@ -326,7 +326,6 @@ LOCAL_SRC_FILES := \
 	../tests/YUVTest.cpp \
 	../tests/image-bitmap.cpp \
 	../tests/skbug5221.cpp \
-	DMSrcSinkAndroid.cpp \
 	../gm/OverStroke.cpp \
 	../gm/SkLinearBitmapPipelineGM.cpp \
 	../gm/aaa.cpp \
@@ -694,7 +693,6 @@ LOCAL_SHARED_LIBRARIES := \
 
 LOCAL_STATIC_LIBRARIES := \
 	libskia \
-	libhwui_static \
 	libjsoncpp
 
 LOCAL_C_INCLUDES := \
@@ -765,7 +763,6 @@ ifneq ($(TARGET_BUILD_PDK),true)
 #  i.e. external/skia/DATA/skia_resources --> ../resources
 LOCAL_PICKUP_FILES := $(LOCAL_PATH)/../DATA
 include $(LOCAL_PATH)/../skia_static_deps.mk
-include frameworks/base/libs/hwui/hwui_static_deps.mk
 include $(BUILD_NATIVE_TEST)
 
 endif
