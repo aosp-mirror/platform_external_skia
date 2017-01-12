@@ -367,7 +367,8 @@ bool GrContext::writeSurfacePixels(GrSurface* surface, SkColorSpace* dstColorSpa
             paint.setPorterDuffXPFactory(SkBlendMode::kSrc);
             paint.setAllowSRGBInputs(true);
             SkRect rect = SkRect::MakeWH(SkIntToScalar(width), SkIntToScalar(height));
-            renderTargetContext->drawRect(GrNoClip(), paint, GrAA::kNo, matrix, rect, nullptr);
+            renderTargetContext->drawRect(GrNoClip(), std::move(paint), GrAA::kNo, matrix, rect,
+                                          nullptr);
 
             if (kFlushWrites_PixelOp & pixelOpsFlags) {
                 this->flushSurfaceWrites(surface);
@@ -488,7 +489,8 @@ bool GrContext::readSurfacePixels(GrSurface* src, SkColorSpace* srcColorSpace,
                 paint.setPorterDuffXPFactory(SkBlendMode::kSrc);
                 paint.setAllowSRGBInputs(true);
                 SkRect rect = SkRect::MakeWH(SkIntToScalar(width), SkIntToScalar(height));
-                tempRTC->drawRect(GrNoClip(), paint, GrAA::kNo, SkMatrix::I(), rect, nullptr);
+                tempRTC->drawRect(GrNoClip(), std::move(paint), GrAA::kNo, SkMatrix::I(), rect,
+                                  nullptr);
                 surfaceToRead.reset(tempRTC->asTexture().release());
                 left = 0;
                 top = 0;
@@ -680,7 +682,7 @@ static inline GrPixelConfig GrPixelConfigFallback(GrPixelConfig config) {
     static const GrPixelConfig kFallback[] = {
         kUnknown_GrPixelConfig,        // kUnknown_GrPixelConfig
         kRGBA_8888_GrPixelConfig,      // kAlpha_8_GrPixelConfig
-        kUnknown_GrPixelConfig,        // kIndex_8_GrPixelConfig
+        kUnknown_GrPixelConfig,        // kGray_8_GrPixelConfig
         kRGBA_8888_GrPixelConfig,      // kRGB_565_GrPixelConfig
         kRGBA_8888_GrPixelConfig,      // kRGBA_4444_GrPixelConfig
         kUnknown_GrPixelConfig,        // kRGBA_8888_GrPixelConfig
@@ -700,7 +702,7 @@ static inline GrPixelConfig GrPixelConfigFallback(GrPixelConfig config) {
 
     GR_STATIC_ASSERT(0  == kUnknown_GrPixelConfig);
     GR_STATIC_ASSERT(1  == kAlpha_8_GrPixelConfig);
-    GR_STATIC_ASSERT(2  == kIndex_8_GrPixelConfig);
+    GR_STATIC_ASSERT(2  == kGray_8_GrPixelConfig);
     GR_STATIC_ASSERT(3  == kRGB_565_GrPixelConfig);
     GR_STATIC_ASSERT(4  == kRGBA_4444_GrPixelConfig);
     GR_STATIC_ASSERT(5  == kRGBA_8888_GrPixelConfig);

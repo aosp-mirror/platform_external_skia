@@ -170,7 +170,7 @@ SkString GrCaps::dump() const {
     static const char* kConfigNames[] = {
         "Unknown",       // kUnknown_GrPixelConfig
         "Alpha8",        // kAlpha_8_GrPixelConfig,
-        "Index8",        // kIndex_8_GrPixelConfig,
+        "Gray8",         // kGray_8_GrPixelConfig,
         "RGB565",        // kRGB_565_GrPixelConfig,
         "RGBA444",       // kRGBA_4444_GrPixelConfig,
         "RGBA8888",      // kRGBA_8888_GrPixelConfig,
@@ -188,7 +188,7 @@ SkString GrCaps::dump() const {
     };
     GR_STATIC_ASSERT(0  == kUnknown_GrPixelConfig);
     GR_STATIC_ASSERT(1  == kAlpha_8_GrPixelConfig);
-    GR_STATIC_ASSERT(2  == kIndex_8_GrPixelConfig);
+    GR_STATIC_ASSERT(2  == kGray_8_GrPixelConfig);
     GR_STATIC_ASSERT(3  == kRGB_565_GrPixelConfig);
     GR_STATIC_ASSERT(4  == kRGBA_4444_GrPixelConfig);
     GR_STATIC_ASSERT(5  == kRGBA_8888_GrPixelConfig);

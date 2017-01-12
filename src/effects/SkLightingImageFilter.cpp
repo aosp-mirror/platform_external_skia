@@ -400,7 +400,8 @@ void SkLightingImageFilterInternal::drawRect(GrRenderTargetContext* renderTarget
                                                               boundaryMode));
     paint.addColorFragmentProcessor(std::move(fp));
     paint.setPorterDuffXPFactory(SkBlendMode::kSrc);
-    renderTargetContext->fillRectToRect(clip, paint, GrAA::kNo, SkMatrix::I(), dstRect, srcRect);
+    renderTargetContext->fillRectToRect(clip, std::move(paint), GrAA::kNo, SkMatrix::I(), dstRect,
+                                        srcRect);
 }
 
 sk_sp<SkSpecialImage> SkLightingImageFilterInternal::filterImageGPU(
@@ -1690,19 +1691,15 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-namespace {
-
-GrTextureDomain create_domain(GrTexture* texture, const SkIRect* srcBounds,
-                              GrTextureDomain::Mode mode) {
+static GrTextureDomain create_domain(GrTexture* texture, const SkIRect* srcBounds,
+                                     GrTextureDomain::Mode mode) {
     if (srcBounds) {
-        SkRect texelDomain = GrTextureDomain::MakeTexelDomainForMode(texture, *srcBounds, mode);
-        return GrTextureDomain(texelDomain, mode);
+        SkRect texelDomain = GrTextureDomain::MakeTexelDomainForMode(*srcBounds, mode);
+        return GrTextureDomain(texture, texelDomain, mode);
     } else {
-        return GrTextureDomain(SkRect::MakeEmpty(), GrTextureDomain::kIgnore_Mode);
+        return GrTextureDomain::IgnoredDomain();
     }
 }
-
-};
 
 GrLightingEffect::GrLightingEffect(GrTexture* texture,
                                    const SkImageFilterLight* light,
@@ -1907,7 +1904,7 @@ void GrGLLightingEffect::onSetData(const GrGLSLProgramDataManager& pdman,
     pdman.set1f(fSurfaceScaleUni, lighting.surfaceScale());
     sk_sp<SkImageFilterLight> transformedLight(
             lighting.light()->transform(lighting.filterMatrix()));
-    fDomain.setData(pdman, lighting.domain(), texture->origin());
+    fDomain.setData(pdman, lighting.domain(), texture);
     fLight->setData(pdman, transformedLight.get());
 }
 

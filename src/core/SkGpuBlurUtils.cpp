@@ -84,7 +84,7 @@ static void convolve_gaussian_1d(GrRenderTargetContext* renderTargetContext,
     paint.setPorterDuffXPFactory(SkBlendMode::kSrc);
     SkMatrix localMatrix = SkMatrix::MakeTrans(-SkIntToScalar(srcOffset.x()),
                                                -SkIntToScalar(srcOffset.y()));
-    renderTargetContext->fillRectWithLocalMatrix(clip, paint, GrAA::kNo, SkMatrix::I(),
+    renderTargetContext->fillRectWithLocalMatrix(clip, std::move(paint), GrAA::kNo, SkMatrix::I(),
                                                  SkRect::Make(dstRect), localMatrix);
 }
 
@@ -112,7 +112,7 @@ static void convolve_gaussian_2d(GrRenderTargetContext* renderTargetContext,
             true, sigmaX, sigmaY));
     paint.addColorFragmentProcessor(std::move(conv));
     paint.setPorterDuffXPFactory(SkBlendMode::kSrc);
-    renderTargetContext->fillRectWithLocalMatrix(clip, paint, GrAA::kNo, SkMatrix::I(),
+    renderTargetContext->fillRectWithLocalMatrix(clip, std::move(paint), GrAA::kNo, SkMatrix::I(),
                                                  SkRect::Make(dstRect), localMatrix);
 }
 
@@ -268,10 +268,9 @@ sk_sp<GrRenderTargetContext> GaussianBlur(GrContext* context,
         matrix.setIDiv(srcTexture->width(), srcTexture->height());
         SkIRect dstRect(srcRect);
         if (srcBounds && i == 1) {
-            SkRect domain;
-            matrix.mapRect(&domain, SkRect::Make(*srcBounds));
-            domain.inset((i < scaleFactorX) ? SK_ScalarHalf / srcTexture->width() : 0.0f,
-                         (i < scaleFactorY) ? SK_ScalarHalf / srcTexture->height() : 0.0f);
+            SkRect domain = SkRect::Make(*srcBounds);
+            domain.inset((i < scaleFactorX) ? SK_ScalarHalf : 0.0f,
+                         (i < scaleFactorY) ? SK_ScalarHalf : 0.0f);
             sk_sp<GrFragmentProcessor> fp(GrTextureDomainEffect::Make(
                                                         srcTexture.get(),
                                                         nullptr,
@@ -289,7 +288,7 @@ sk_sp<GrRenderTargetContext> GaussianBlur(GrContext* context,
         paint.setPorterDuffXPFactory(SkBlendMode::kSrc);
         shrink_irect_by_2(&dstRect, i < scaleFactorX, i < scaleFactorY);
 
-        dstRenderTargetContext->fillRectToRect(clip, paint, GrAA::kNo, SkMatrix::I(),
+        dstRenderTargetContext->fillRectToRect(clip, std::move(paint), GrAA::kNo, SkMatrix::I(),
                                                SkRect::Make(dstRect), SkRect::Make(srcRect));
 
         srcRenderTargetContext = dstRenderTargetContext;
@@ -381,7 +380,7 @@ sk_sp<GrRenderTargetContext> GaussianBlur(GrContext* context,
         SkIRect dstRect(srcRect);
         scale_irect(&dstRect, scaleFactorX, scaleFactorY);
 
-        dstRenderTargetContext->fillRectToRect(clip, paint, GrAA::kNo, SkMatrix::I(),
+        dstRenderTargetContext->fillRectToRect(clip, std::move(paint), GrAA::kNo, SkMatrix::I(),
                                                SkRect::Make(dstRect), SkRect::Make(srcRect));
 
         srcRenderTargetContext = dstRenderTargetContext;

@@ -191,7 +191,7 @@
       "gitHash",
       "abc123",
       "master",
-      "client.skia",
+      "fake-master",
       "builder",
       "Test-Ubuntu-GCC-GCE-CPU-AVX2-x86-Debug",
       "build_number",

@@ -288,7 +288,7 @@ static inline uint32_t GrPixelConfigComponentMask(GrPixelConfig config) {
     static const uint32_t kFlags[] = {
         0,                              // kUnknown_GrPixelConfig
         kA_GrColorComponentFlag,        // kAlpha_8_GrPixelConfig
-        kRGBA_GrColorComponentFlags,    // kIndex_8_GrPixelConfig
+        kRGB_GrColorComponentFlags,     // kGray_8_GrPixelConfig
         kRGB_GrColorComponentFlags,     // kRGB_565_GrPixelConfig
         kRGBA_GrColorComponentFlags,    // kRGBA_4444_GrPixelConfig
         kRGBA_GrColorComponentFlags,    // kRGBA_8888_GrPixelConfig
@@ -308,7 +308,7 @@ static inline uint32_t GrPixelConfigComponentMask(GrPixelConfig config) {
 
     GR_STATIC_ASSERT(0  == kUnknown_GrPixelConfig);
     GR_STATIC_ASSERT(1  == kAlpha_8_GrPixelConfig);
-    GR_STATIC_ASSERT(2  == kIndex_8_GrPixelConfig);
+    GR_STATIC_ASSERT(2  == kGray_8_GrPixelConfig);
     GR_STATIC_ASSERT(3  == kRGB_565_GrPixelConfig);
     GR_STATIC_ASSERT(4  == kRGBA_4444_GrPixelConfig);
     GR_STATIC_ASSERT(5  == kRGBA_8888_GrPixelConfig);

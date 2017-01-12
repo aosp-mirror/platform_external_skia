@@ -59,7 +59,7 @@ private:
     Dynamically allocated GrProcessors are managed by a per-thread memory pool. The ref count of an
     processor must reach 0 before the thread terminates and the pool is destroyed.
  */
-class GrProcessor : public GrProgramElement {
+class GrProcessor : public GrProgramElement<GrProcessor> {
 public:
     class TextureSampler;
     class BufferAccess;
@@ -171,6 +171,11 @@ private:
         return id;
     }
 
+    friend class GrProgramElement<GrProcessor>;
+    void addPendingIOs() const;
+    void removeRefs() const;
+    void pendingIOComplete() const;
+
     enum {
         kIllegalProcessorClassID = 0,
     };
@@ -247,6 +252,11 @@ private:
  */
 class GrProcessor::BufferAccess : public SkNoncopyable {
 public:
+    BufferAccess() = default;
+    BufferAccess(GrPixelConfig texelConfig, GrBuffer* buffer,
+                 GrShaderFlags visibility = kFragment_GrShaderFlag) {
+        this->reset(texelConfig, buffer, visibility);
+    }
     /**
      * Must be initialized before adding to a GrProcessor's buffer access list.
      */

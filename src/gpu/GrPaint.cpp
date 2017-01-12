@@ -12,14 +12,8 @@
 #include "effects/GrPorterDuffXferProcessor.h"
 #include "effects/GrSimpleTextureEffect.h"
 
-GrPaint::GrPaint()
-    : fDisableOutputConversionToSRGB(false)
-    , fAllowSRGBInputs(false)
-    , fUsesDistanceVectorField(false)
-    , fColor(GrColor4f::OpaqueWhite()) {}
-
 void GrPaint::setCoverageSetOpXPFactory(SkRegion::Op regionOp, bool invertCoverage) {
-    fXPFactory = GrCoverageSetOpXPFactory::Make(regionOp, invertCoverage);
+    fXPFactory = GrCoverageSetOpXPFactory::Get(regionOp, invertCoverage);
 }
 
 void GrPaint::addColorTextureProcessor(GrTexture* texture,

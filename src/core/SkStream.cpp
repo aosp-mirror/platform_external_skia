@@ -70,11 +70,6 @@ SkWStream::~SkWStream()
 {
 }
 
-void SkWStream::newline()
-{
-    this->write("\n", 1);
-}
-
 void SkWStream::flush()
 {
 }
@@ -436,23 +431,6 @@ void SkFILEWStream::fsync()
 
 ////////////////////////////////////////////////////////////////////////
 
-SkMemoryWStream::SkMemoryWStream(void* buffer, size_t size)
-    : fBuffer((char*)buffer), fMaxLength(size), fBytesWritten(0)
-{
-}
-
-bool SkMemoryWStream::write(const void* buffer, size_t size) {
-    size = SkTMin(size, fMaxLength - fBytesWritten);
-    if (size > 0) {
-        memcpy(fBuffer + fBytesWritten, buffer, size);
-        fBytesWritten += size;
-        return true;
-    }
-    return false;
-}
-
-////////////////////////////////////////////////////////////////////////
-
 static inline void sk_memcpy_4bytes(void* dst, const void* src, size_t size) {
     if (size == 4) {
         memcpy(dst, src, 4);
@@ -784,31 +762,7 @@ SkStreamAsset* SkDynamicMemoryWStream::detachAsStream() {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-
-void SkDebugWStream::newline()
-{
-#if defined(SK_DEBUG)
-    SkDebugf("\n");
-    fBytesWritten++;
-#endif
-}
-
-bool SkDebugWStream::write(const void* buffer, size_t size)
-{
-#if defined(SK_DEBUG)
-    char* s = new char[size+1];
-    memcpy(s, buffer, size);
-    s[size] = 0;
-    SkDebugf("%s", s);
-    delete[] s;
-    fBytesWritten += size;
-#endif
-    return true;
-}
-
 ///////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////
-
 
 static sk_sp<SkData> mmap_filename(const char path[]) {
     FILE* file = sk_fopen(path, kRead_SkFILE_Flag);

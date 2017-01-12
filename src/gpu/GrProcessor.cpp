@@ -32,16 +32,14 @@ GrProcessorTestFactory<GrFragmentProcessor>::GetFactories() {
 }
 
 template<>
-SkTArray<GrProcessorTestFactory<GrXPFactory>*, true>*
-GrProcessorTestFactory<GrXPFactory>::GetFactories() {
-    static SkTArray<GrProcessorTestFactory<GrXPFactory>*, true> gFactories;
-    return &gFactories;
-}
-
-template<>
 SkTArray<GrProcessorTestFactory<GrGeometryProcessor>*, true>*
 GrProcessorTestFactory<GrGeometryProcessor>::GetFactories() {
     static SkTArray<GrProcessorTestFactory<GrGeometryProcessor>*, true> gFactories;
+    return &gFactories;
+}
+
+SkTArray<GrXPFactoryTestFactory*, true>* GrXPFactoryTestFactory::GetFactories() {
+    static SkTArray<GrXPFactoryTestFactory*, true> gFactories;
     return &gFactories;
 }
 
@@ -52,7 +50,7 @@ GrProcessorTestFactory<GrGeometryProcessor>::GetFactories() {
  */
 static const int kFPFactoryCount = 40;
 static const int kGPFactoryCount = 14;
-static const int kXPFactoryCount = 5;
+static const int kXPFactoryCount = 4;
 
 template<>
 void GrProcessorTestFactory<GrFragmentProcessor>::VerifyFactoryCount() {
@@ -72,8 +70,7 @@ void GrProcessorTestFactory<GrGeometryProcessor>::VerifyFactoryCount() {
     }
 }
 
-template<>
-void GrProcessorTestFactory<GrXPFactory>::VerifyFactoryCount() {
+void GrXPFactoryTestFactory::VerifyFactoryCount() {
     if (kXPFactoryCount != GetFactories()->count()) {
         SkDebugf("\nExpected %d xp factory factories, found %d.\n",
                  kXPFactoryCount, GetFactories()->count());
@@ -117,17 +114,50 @@ GrProcessor::~GrProcessor() {}
 
 void GrProcessor::addTextureSampler(const TextureSampler* access) {
     fTextureSamplers.push_back(access);
-    this->addGpuResource(access->programTexture());
 }
 
 void GrProcessor::addBufferAccess(const BufferAccess* access) {
     fBufferAccesses.push_back(access);
-    this->addGpuResource(access->programBuffer());
 }
 
 void GrProcessor::addImageStorageAccess(const ImageStorageAccess* access) {
     fImageStorageAccesses.push_back(access);
-    this->addGpuResource(access->programTexture());
+}
+
+void GrProcessor::addPendingIOs() const {
+    for (const auto& sampler : fTextureSamplers) {
+        sampler->programTexture()->markPendingIO();
+    }
+    for (const auto& buffer : fBufferAccesses) {
+        buffer->programBuffer()->markPendingIO();
+    }
+    for (const auto& imageStorage : fImageStorageAccesses) {
+        imageStorage->programTexture()->markPendingIO();
+    }
+}
+
+void GrProcessor::removeRefs() const {
+    for (const auto& sampler : fTextureSamplers) {
+        sampler->programTexture()->removeRef();
+    }
+    for (const auto& buffer : fBufferAccesses) {
+        buffer->programBuffer()->removeRef();
+    }
+    for (const auto& imageStorage : fImageStorageAccesses) {
+        imageStorage->programTexture()->removeRef();
+    }
+}
+
+void GrProcessor::pendingIOComplete() const {
+    for (const auto& sampler : fTextureSamplers) {
+        sampler->programTexture()->pendingIOComplete();
+    }
+    for (const auto& buffer : fBufferAccesses) {
+        buffer->programBuffer()->pendingIOComplete();
+    }
+    for (const auto& imageStorage : fImageStorageAccesses) {
+        imageStorage->programTexture()->pendingIOComplete();
+    }
 }
 
 void* GrProcessor::operator new(size_t size) {
@@ -229,8 +259,3 @@ GrProcessor::ImageStorageAccess::ImageStorageAccess(sk_sp<GrTexture> texture, Gr
             break;
     }
 }
-
-///////////////////////////////////////////////////////////////////////////////////////////////////
-
-// Initial static variable from GrXPFactory
-int32_t GrXPFactory::gCurrXPFClassID = GrXPFactory::kIllegalXPFClassID;

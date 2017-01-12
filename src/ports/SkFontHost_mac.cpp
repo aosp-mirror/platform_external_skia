@@ -20,6 +20,7 @@
 #endif
 
 #include "SkAdvancedTypefaceMetrics.h"
+#include "SkAutoMalloc.h"
 #include "SkCGUtils.h"
 #include "SkColorPriv.h"
 #include "SkDescriptor.h"
@@ -2379,10 +2380,6 @@ protected:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifdef SK_LEGACY_FONTMGR_FACTORY
-SkFontMgr* SkFontMgr::Factory() { return new SkFontMgr_Mac; }
-#else
 sk_sp<SkFontMgr> SkFontMgr::Factory() { return sk_make_sp<SkFontMgr_Mac>(); }
-#endif
 
 #endif//defined(SK_BUILD_FOR_MAC) || defined(SK_BUILD_FOR_IOS)

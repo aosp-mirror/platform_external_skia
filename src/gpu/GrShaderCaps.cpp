@@ -202,7 +202,7 @@ void GrShaderCaps::initSamplerPrecisionTable() {
         uint8_t* table = fSamplerPrecisions[visibility];
         table[kUnknown_GrPixelConfig]        = kDefault_GrSLPrecision;
         table[kAlpha_8_GrPixelConfig]        = lowp;
-        table[kIndex_8_GrPixelConfig]        = lowp;
+        table[kGray_8_GrPixelConfig]         = lowp;
         table[kRGB_565_GrPixelConfig]        = lowp;
         table[kRGBA_4444_GrPixelConfig]      = lowp;
         table[kRGBA_8888_GrPixelConfig]      = lowp;

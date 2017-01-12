@@ -6,6 +6,7 @@
  */
 
 #include "Resources.h"
+#include "SkAutoMalloc.h"
 #include "SkData.h"
 #include "SkFrontBufferedStream.h"
 #include "SkOSFile.h"
@@ -146,18 +147,16 @@ static void TestPackedUInt(skiatest::Reporter* reporter) {
 
 
     size_t i;
-    char buffer[sizeof(sizes) * 4];
+    SkDynamicMemoryWStream wstream;
 
-    SkMemoryWStream wstream(buffer, sizeof(buffer));
     for (i = 0; i < SK_ARRAY_COUNT(sizes); ++i) {
         bool success = wstream.writePackedUInt(sizes[i]);
         REPORTER_ASSERT(reporter, success);
     }
-    wstream.flush();
 
-    SkMemoryStream rstream(buffer, sizeof(buffer));
+    std::unique_ptr<SkStreamAsset> rstream(wstream.detachAsStream());
     for (i = 0; i < SK_ARRAY_COUNT(sizes); ++i) {
-        size_t n = rstream.readPackedUInt();
+        size_t n = rstream->readPackedUInt();
         if (sizes[i] != n) {
             ERRORF(reporter, "sizes:%x != n:%x\n", i, sizes[i], n);
         }
@@ -429,4 +428,19 @@ DEF_TEST(StreamEmptyStreamMemoryBase, r) {
     SkDynamicMemoryWStream tmp;
     std::unique_ptr<SkStreamAsset> asset(tmp.detachAsStream());
     REPORTER_ASSERT(r, nullptr == asset->getMemoryBase());
+}
+
+#include "SkBuffer.h"
+
+DEF_TEST(RBuffer, reporter) {
+    int32_t value = 0;
+    SkRBuffer buffer(&value, 4);
+    REPORTER_ASSERT(reporter, buffer.isValid());
+
+    int32_t tmp;
+    REPORTER_ASSERT(reporter, buffer.read(&tmp, 4));
+    REPORTER_ASSERT(reporter, buffer.isValid());
+
+    REPORTER_ASSERT(reporter, !buffer.read(&tmp, 4));
+    REPORTER_ASSERT(reporter, !buffer.isValid());
 }

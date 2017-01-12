@@ -31,25 +31,26 @@ bool GrCustomXfermode::IsSupportedMode(SkBlendMode mode) {
 // Static helpers
 ///////////////////////////////////////////////////////////////////////////////
 
-static GrBlendEquation hw_blend_equation(SkBlendMode mode) {
-    enum { kOffset = kOverlay_GrBlendEquation - (int)SkBlendMode::kOverlay };
-    return static_cast<GrBlendEquation>((int)mode + kOffset);
-
-    GR_STATIC_ASSERT(kOverlay_GrBlendEquation == (int)SkBlendMode::kOverlay + kOffset);
-    GR_STATIC_ASSERT(kDarken_GrBlendEquation == (int)SkBlendMode::kDarken + kOffset);
-    GR_STATIC_ASSERT(kLighten_GrBlendEquation == (int)SkBlendMode::kLighten + kOffset);
-    GR_STATIC_ASSERT(kColorDodge_GrBlendEquation == (int)SkBlendMode::kColorDodge + kOffset);
-    GR_STATIC_ASSERT(kColorBurn_GrBlendEquation == (int)SkBlendMode::kColorBurn + kOffset);
-    GR_STATIC_ASSERT(kHardLight_GrBlendEquation == (int)SkBlendMode::kHardLight + kOffset);
-    GR_STATIC_ASSERT(kSoftLight_GrBlendEquation == (int)SkBlendMode::kSoftLight + kOffset);
-    GR_STATIC_ASSERT(kDifference_GrBlendEquation == (int)SkBlendMode::kDifference + kOffset);
-    GR_STATIC_ASSERT(kExclusion_GrBlendEquation == (int)SkBlendMode::kExclusion + kOffset);
-    GR_STATIC_ASSERT(kMultiply_GrBlendEquation == (int)SkBlendMode::kMultiply + kOffset);
-    GR_STATIC_ASSERT(kHSLHue_GrBlendEquation == (int)SkBlendMode::kHue + kOffset);
-    GR_STATIC_ASSERT(kHSLSaturation_GrBlendEquation == (int)SkBlendMode::kSaturation + kOffset);
-    GR_STATIC_ASSERT(kHSLColor_GrBlendEquation == (int)SkBlendMode::kColor + kOffset);
-    GR_STATIC_ASSERT(kHSLLuminosity_GrBlendEquation == (int)SkBlendMode::kLuminosity + kOffset);
-    GR_STATIC_ASSERT(kGrBlendEquationCnt == (int)SkBlendMode::kLastMode + 1 + kOffset);
+static constexpr GrBlendEquation hw_blend_equation(SkBlendMode mode) {
+// In C++14 this could be a constexpr int variable.
+#define EQ_OFFSET (kOverlay_GrBlendEquation - (int)SkBlendMode::kOverlay)
+    GR_STATIC_ASSERT(kOverlay_GrBlendEquation == (int)SkBlendMode::kOverlay + EQ_OFFSET);
+    GR_STATIC_ASSERT(kDarken_GrBlendEquation == (int)SkBlendMode::kDarken + EQ_OFFSET);
+    GR_STATIC_ASSERT(kLighten_GrBlendEquation == (int)SkBlendMode::kLighten + EQ_OFFSET);
+    GR_STATIC_ASSERT(kColorDodge_GrBlendEquation == (int)SkBlendMode::kColorDodge + EQ_OFFSET);
+    GR_STATIC_ASSERT(kColorBurn_GrBlendEquation == (int)SkBlendMode::kColorBurn + EQ_OFFSET);
+    GR_STATIC_ASSERT(kHardLight_GrBlendEquation == (int)SkBlendMode::kHardLight + EQ_OFFSET);
+    GR_STATIC_ASSERT(kSoftLight_GrBlendEquation == (int)SkBlendMode::kSoftLight + EQ_OFFSET);
+    GR_STATIC_ASSERT(kDifference_GrBlendEquation == (int)SkBlendMode::kDifference + EQ_OFFSET);
+    GR_STATIC_ASSERT(kExclusion_GrBlendEquation == (int)SkBlendMode::kExclusion + EQ_OFFSET);
+    GR_STATIC_ASSERT(kMultiply_GrBlendEquation == (int)SkBlendMode::kMultiply + EQ_OFFSET);
+    GR_STATIC_ASSERT(kHSLHue_GrBlendEquation == (int)SkBlendMode::kHue + EQ_OFFSET);
+    GR_STATIC_ASSERT(kHSLSaturation_GrBlendEquation == (int)SkBlendMode::kSaturation + EQ_OFFSET);
+    GR_STATIC_ASSERT(kHSLColor_GrBlendEquation == (int)SkBlendMode::kColor + EQ_OFFSET);
+    GR_STATIC_ASSERT(kHSLLuminosity_GrBlendEquation == (int)SkBlendMode::kLuminosity + EQ_OFFSET);
+    GR_STATIC_ASSERT(kGrBlendEquationCnt == (int)SkBlendMode::kLastMode + 1 + EQ_OFFSET);
+    return static_cast<GrBlendEquation>((int)mode + EQ_OFFSET);
+#undef EQ_OFFSET
 }
 
 static bool can_use_hw_blend_equation(GrBlendEquation equation,
@@ -319,9 +320,16 @@ void CustomXP::onGetBlendInfo(BlendInfo* blendInfo) const {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+
+// See the comment above GrXPFactory's definition about this warning suppression.
+#if defined(__GNUC__) || defined(__clang)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wnon-virtual-dtor"
+#endif
 class CustomXPFactory : public GrXPFactory {
 public:
-    CustomXPFactory(SkBlendMode mode);
+    constexpr CustomXPFactory(SkBlendMode mode)
+            : fMode(mode), fHWBlendEquation(hw_blend_equation(mode)) {}
 
     void getInvariantBlendedColor(const GrProcOptInfo& colorPOI,
                                   GrXPFactory::InvariantBlendedColor*) const override;
@@ -334,10 +342,6 @@ private:
 
     bool onWillReadDstColor(const GrCaps&, const GrPipelineAnalysis&) const override;
 
-    bool onIsEqual(const GrXPFactory& xpfBase) const override {
-        const CustomXPFactory& xpf = xpfBase.cast<CustomXPFactory>();
-        return fMode == xpf.fMode;
-    }
 
     GR_DECLARE_XP_FACTORY_TEST;
 
@@ -346,18 +350,15 @@ private:
 
     typedef GrXPFactory INHERITED;
 };
-
-CustomXPFactory::CustomXPFactory(SkBlendMode mode)
-    : fMode(mode),
-      fHWBlendEquation(hw_blend_equation(mode)) {
-    SkASSERT(GrCustomXfermode::IsSupportedMode(fMode));
-    this->initClassID<CustomXPFactory>();
-}
+#if defined(__GNUC__) || defined(__clang)
+#pragma GCC diagnostic pop
+#endif
 
 GrXferProcessor* CustomXPFactory::onCreateXferProcessor(const GrCaps& caps,
                                                         const GrPipelineAnalysis& analysis,
                                                         bool hasMixedSamples,
                                                         const DstTexture* dstTexture) const {
+    SkASSERT(GrCustomXfermode::IsSupportedMode(fMode));
     if (can_use_hw_blend_equation(fHWBlendEquation, analysis, caps)) {
         SkASSERT(!dstTexture || !dstTexture->texture());
         return new CustomXP(fMode, fHWBlendEquation);
@@ -377,19 +378,69 @@ void CustomXPFactory::getInvariantBlendedColor(const GrProcOptInfo& colorPOI,
 }
 
 GR_DEFINE_XP_FACTORY_TEST(CustomXPFactory);
-sk_sp<GrXPFactory> CustomXPFactory::TestCreate(GrProcessorTestData* d) {
+const GrXPFactory* CustomXPFactory::TestGet(GrProcessorTestData* d) {
     int mode = d->fRandom->nextRangeU((int)SkBlendMode::kLastCoeffMode + 1,
                                       (int)SkBlendMode::kLastSeparableMode);
 
-    return sk_sp<GrXPFactory>(new CustomXPFactory(static_cast<SkBlendMode>(mode)));
+    return GrCustomXfermode::Get((SkBlendMode)mode);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
-sk_sp<GrXPFactory> GrCustomXfermode::MakeXPFactory(SkBlendMode mode) {
-    if (!GrCustomXfermode::IsSupportedMode(mode)) {
-        return nullptr;
-    } else {
-        return sk_sp<GrXPFactory>(new CustomXPFactory(mode));
+const GrXPFactory* GrCustomXfermode::Get(SkBlendMode mode) {
+    // If these objects are constructed as static constexpr by cl.exe (2015 SP2) the vtables are
+    // null.
+#ifdef SK_BUILD_FOR_WIN
+#define _CONSTEXPR_
+#else
+#define _CONSTEXPR_ constexpr
+#endif
+    static _CONSTEXPR_ const CustomXPFactory gOverlay(SkBlendMode::kOverlay);
+    static _CONSTEXPR_ const CustomXPFactory gDarken(SkBlendMode::kDarken);
+    static _CONSTEXPR_ const CustomXPFactory gLighten(SkBlendMode::kLighten);
+    static _CONSTEXPR_ const CustomXPFactory gColorDodge(SkBlendMode::kColorDodge);
+    static _CONSTEXPR_ const CustomXPFactory gColorBurn(SkBlendMode::kColorBurn);
+    static _CONSTEXPR_ const CustomXPFactory gHardLight(SkBlendMode::kHardLight);
+    static _CONSTEXPR_ const CustomXPFactory gSoftLight(SkBlendMode::kSoftLight);
+    static _CONSTEXPR_ const CustomXPFactory gDifference(SkBlendMode::kDifference);
+    static _CONSTEXPR_ const CustomXPFactory gExclusion(SkBlendMode::kExclusion);
+    static _CONSTEXPR_ const CustomXPFactory gMultiply(SkBlendMode::kMultiply);
+    static _CONSTEXPR_ const CustomXPFactory gHue(SkBlendMode::kHue);
+    static _CONSTEXPR_ const CustomXPFactory gSaturation(SkBlendMode::kSaturation);
+    static _CONSTEXPR_ const CustomXPFactory gColor(SkBlendMode::kColor);
+    static _CONSTEXPR_ const CustomXPFactory gLuminosity(SkBlendMode::kLuminosity);
+#undef _CONSTEXPR_
+    switch (mode) {
+        case SkBlendMode::kOverlay:
+            return &gOverlay;
+        case SkBlendMode::kDarken:
+            return &gDarken;
+        case SkBlendMode::kLighten:
+            return &gLighten;
+        case SkBlendMode::kColorDodge:
+            return &gColorDodge;
+        case SkBlendMode::kColorBurn:
+            return &gColorBurn;
+        case SkBlendMode::kHardLight:
+            return &gHardLight;
+        case SkBlendMode::kSoftLight:
+            return &gSoftLight;
+        case SkBlendMode::kDifference:
+            return &gDifference;
+        case SkBlendMode::kExclusion:
+            return &gExclusion;
+        case SkBlendMode::kMultiply:
+            return &gMultiply;
+        case SkBlendMode::kHue:
+            return &gHue;
+        case SkBlendMode::kSaturation:
+            return &gSaturation;
+        case SkBlendMode::kColor:
+            return &gColor;
+        case SkBlendMode::kLuminosity:
+            return &gLuminosity;
+        default:
+            SkASSERT(!GrCustomXfermode::IsSupportedMode(mode));
+            return nullptr;
     }
 }

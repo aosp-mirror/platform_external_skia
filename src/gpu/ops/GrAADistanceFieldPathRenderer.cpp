@@ -1,5 +1,6 @@
 /*
  * Copyright 2014 Google Inc.
+ * Copyright 2017 ARM Ltd.
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
@@ -19,7 +20,10 @@
 #include "effects/GrDistanceFieldGeoProc.h"
 #include "ops/GrMeshDrawOp.h"
 
+#include "SkPathOps.h"
+#include "SkAutoMalloc.h"
 #include "SkDistanceFieldGen.h"
+#include "GrDistanceFieldGenFromVector.h"
 
 #define ATLAS_TEXTURE_WIDTH 2048
 #define ATLAS_TEXTURE_HEIGHT 2048
@@ -35,6 +39,7 @@ static int g_NumFreedShapes = 0;
 #endif
 
 // mip levels
+static const int kMinSize = 16;
 static const int kSmallMIP = 32;
 static const int kMediumMIP = 73;
 static const int kLargeMIP = 162;
@@ -103,14 +108,17 @@ bool GrAADistanceFieldPathRenderer::onCanDrawPath(const CanDrawPathArgs& args) c
         return false;
     }
 
-    // only support paths with bounds within kMediumMIP by kMediumMIP,
-    // scaled to have bounds within 2.0f*kLargeMIP by 2.0f*kLargeMIP
-    // the goal is to accelerate rendering of lots of small paths that may be scaling
+    // Only support paths with bounds within kMediumMIP by kMediumMIP,
+    // scaled to have bounds within 2.0f*kLargeMIP by 2.0f*kLargeMIP.
+    // For clarity, the original or scaled path should be at least kMinSize by kMinSize.
+    // TODO: revisit this last criteria with Joel's patch.
+    // The goal is to accelerate rendering of lots of small paths that may be scaling.
     SkScalar maxScale = args.fViewMatrix->getMaxScale();
     SkRect bounds = args.fShape->styledBounds();
     SkScalar maxDim = SkMaxScalar(bounds.width(), bounds.height());
 
-    return maxDim <= kMediumMIP && maxDim * maxScale <= 2.0f*kLargeMIP;
+    return maxDim <= kMediumMIP &&
+           maxDim * maxScale >= kMinSize && maxDim * maxScale <= 2.0f*kLargeMIP;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -327,45 +335,56 @@ private:
         drawMatrix.setScale(scale, scale);
         drawMatrix.postTranslate(intPad - dx, intPad - dy);
 
-        // setup bitmap backing
         SkASSERT(devPathBounds.fLeft == 0);
         SkASSERT(devPathBounds.fTop == 0);
-        SkAutoPixmapStorage dst;
-        if (!dst.tryAlloc(SkImageInfo::MakeA8(devPathBounds.width(),
-                                              devPathBounds.height()))) {
-            return false;
-        }
-        sk_bzero(dst.writable_addr(), dst.getSafeSize());
 
-        // rasterize path
-        SkPaint paint;
-        paint.setStyle(SkPaint::kFill_Style);
-        paint.setAntiAlias(true);
-
-        SkDraw draw;
-        sk_bzero(&draw, sizeof(draw));
-
-        SkRasterClip rasterClip;
-        rasterClip.setRect(devPathBounds);
-        draw.fRC = &rasterClip;
-        draw.fMatrix = &drawMatrix;
-        draw.fDst = dst;
-
-        SkPath path;
-        shape.asPath(&path);
-        draw.drawPathCoverage(path, paint);
-
-        // generate signed distance field
-        devPathBounds.outset(SK_DistanceFieldPad, SK_DistanceFieldPad);
-        width = devPathBounds.width();
-        height = devPathBounds.height();
+        // setup signed distance field storage
+        SkIRect dfBounds = devPathBounds.makeOutset(SK_DistanceFieldPad, SK_DistanceFieldPad);
+        width = dfBounds.width();
+        height = dfBounds.height();
         // TODO We should really generate this directly into the plot somehow
         SkAutoSMalloc<1024> dfStorage(width * height * sizeof(unsigned char));
 
-        // Generate signed distance field
-        SkGenerateDistanceFieldFromA8Image((unsigned char*)dfStorage.get(),
-                                           (const unsigned char*)dst.addr(),
-                                           dst.width(), dst.height(), dst.rowBytes());
+        SkPath path;
+        shape.asPath(&path);
+#ifndef SK_USE_LEGACY_DISTANCE_FIELDS
+        // Generate signed distance field directly from SkPath
+        bool succeed = GrGenerateDistanceFieldFromPath((unsigned char*)dfStorage.get(),
+                                        path, drawMatrix,
+                                        width, height, width * sizeof(unsigned char));
+        if (!succeed) {
+#endif
+            // setup bitmap backing
+            SkAutoPixmapStorage dst;
+            if (!dst.tryAlloc(SkImageInfo::MakeA8(devPathBounds.width(),
+                                                  devPathBounds.height()))) {
+                return false;
+            }
+            sk_bzero(dst.writable_addr(), dst.getSafeSize());
+
+            // rasterize path
+            SkPaint paint;
+            paint.setStyle(SkPaint::kFill_Style);
+            paint.setAntiAlias(true);
+
+            SkDraw draw;
+            sk_bzero(&draw, sizeof(draw));
+
+            SkRasterClip rasterClip;
+            rasterClip.setRect(devPathBounds);
+            draw.fRC = &rasterClip;
+            draw.fMatrix = &drawMatrix;
+            draw.fDst = dst;
+
+            draw.drawPathCoverage(path, paint);
+
+            // Generate signed distance field
+            SkGenerateDistanceFieldFromA8Image((unsigned char*)dfStorage.get(),
+                                               (const unsigned char*)dst.addr(),
+                                               dst.width(), dst.height(), dst.rowBytes());
+#ifndef SK_USE_LEGACY_DISTANCE_FIELDS
+        }
+#endif
 
         // add to atlas
         SkIPoint16 atlasLocation;
@@ -384,29 +403,12 @@ private:
         // set the bounds rect to the original bounds
         shapeData->fBounds = bounds;
 
-        // set up texture coordinates
-        SkScalar texLeft = bounds.fLeft;
-        SkScalar texTop = bounds.fTop;
-        SkScalar texRight = bounds.fRight;
-        SkScalar texBottom = bounds.fBottom;
-
-        // transform original path's bounds to texture space
-        texLeft *= scale;
-        texTop *= scale;
-        texRight *= scale;
-        texBottom *= scale;
+        // set up path to texture coordinate transform
+        shapeData->fScale = scale;
         dx -= SK_DistanceFieldPad + kAntiAliasPad;
         dy -= SK_DistanceFieldPad + kAntiAliasPad;
-        texLeft += atlasLocation.fX - dx;
-        texTop += atlasLocation.fY - dy;
-        texRight += atlasLocation.fX - dx;
-        texBottom += atlasLocation.fY - dy;
-
-        GrTexture* texture = atlas->getTexture();
-        shapeData->fTexCoords.setLTRB(texLeft / texture->width(),
-                                      texTop / texture->height(),
-                                      texRight / texture->width(),
-                                      texBottom / texture->height());
+        shapeData->fTranslate.fX = atlasLocation.fX - dx;
+        shapeData->fTranslate.fY = atlasLocation.fY - dy;
 
         fShapeCache->add(shapeData);
         fShapeList->addToTail(shapeData);
@@ -425,10 +427,15 @@ private:
                            const ShapeData* shapeData) const {
         SkPoint* positions = reinterpret_cast<SkPoint*>(offset);
 
+        // outset bounds to include ~1 pixel of AA in device space
+        SkRect bounds = shapeData->fBounds;
+        SkScalar outset = SkScalarInvert(maxScale);
+        bounds.outset(outset, outset);
+
         // vertex positions
         // TODO make the vertex attributes a struct
-        positions->setRectFan(shapeData->fBounds.left(), shapeData->fBounds.top(),
-                              shapeData->fBounds.right(), shapeData->fBounds.bottom(), vertexStride);
+        positions->setRectFan(bounds.left(), bounds.top(), bounds.right(), bounds.bottom(),
+                              vertexStride);
 
         // colors
         for (int i = 0; i < kVerticesPerQuad; i++) {
@@ -436,11 +443,32 @@ private:
             *colorPtr = color;
         }
 
+        // set up texture coordinates
+        SkScalar texLeft = bounds.fLeft;
+        SkScalar texTop = bounds.fTop;
+        SkScalar texRight = bounds.fRight;
+        SkScalar texBottom = bounds.fBottom;
+
+        // transform original path's bounds to texture space
+        SkScalar scale = shapeData->fScale;
+        const SkVector& translate = shapeData->fTranslate;
+        texLeft *= scale;
+        texTop *= scale;
+        texRight *= scale;
+        texBottom *= scale;
+        texLeft += translate.fX;
+        texTop += translate.fY;
+        texRight += translate.fX;
+        texBottom += translate.fY;
+
         // vertex texture coords
         // TODO make these int16_t
         SkPoint* textureCoords = (SkPoint*)(offset + sizeof(SkPoint) + sizeof(GrColor));
-        textureCoords->setRectFan(shapeData->fTexCoords.left(), shapeData->fTexCoords.top(),
-                                  shapeData->fTexCoords.right(), shapeData->fTexCoords.bottom(),
+        GrTexture* texture = atlas->getTexture();
+        textureCoords->setRectFan(texLeft / texture->width(),
+                                  texTop / texture->height(),
+                                  texRight / texture->width(),
+                                  texBottom / texture->height(),
                                   vertexStride);
     }
 
@@ -515,9 +543,9 @@ bool GrAADistanceFieldPathRenderer::onDrawPath(const DrawPathArgs& args) {
     }
 
     std::unique_ptr<GrDrawOp> op = AADistanceFieldPathOp::Make(
-            args.fPaint->getColor(), *args.fShape, *args.fViewMatrix, fAtlas.get(), &fShapeCache,
+            args.fPaint.getColor(), *args.fShape, *args.fViewMatrix, fAtlas.get(), &fShapeCache,
             &fShapeList, args.fGammaCorrect);
-    GrPipelineBuilder pipelineBuilder(*args.fPaint, args.fAAType);
+    GrPipelineBuilder pipelineBuilder(std::move(args.fPaint), args.fAAType);
     pipelineBuilder.setUserStencil(args.fUserStencilSettings);
 
     args.fRenderTargetContext->addDrawOp(pipelineBuilder, *args.fClip, std::move(op));

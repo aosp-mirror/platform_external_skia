@@ -113,12 +113,12 @@ protected:
                 for (int m = 0; m < GrTextureDomain::kModeCount; ++m) {
                     GrTextureDomain::Mode mode = (GrTextureDomain::Mode) m;
                     GrPaint grPaint;
-                    grPaint.setXPFactory(GrPorterDuffXPFactory::Make(SkBlendMode::kSrc));
+                    grPaint.setXPFactory(GrPorterDuffXPFactory::Get(SkBlendMode::kSrc));
                     sk_sp<GrFragmentProcessor> fp(
-                        GrTextureDomainEffect::Make(texture.get(), nullptr, textureMatrices[tm],
-                                                GrTextureDomain::MakeTexelDomain(texture.get(),
-                                                                                 texelDomains[d]),
-                                                mode, GrSamplerParams::kNone_FilterMode));
+                        GrTextureDomainEffect::Make(
+                                   texture.get(), nullptr, textureMatrices[tm],
+                                   GrTextureDomain::MakeTexelDomainForMode(texelDomains[d], mode),
+                                   mode, GrSamplerParams::kNone_FilterMode));
 
                     if (!fp) {
                         continue;
@@ -128,8 +128,8 @@ protected:
 
                     std::unique_ptr<GrDrawOp> op(GrRectOpFactory::MakeNonAAFill(
                             GrColor_WHITE, viewMatrix, renderRect, nullptr, nullptr));
-                    renderTargetContext->priv().testingOnly_addDrawOp(grPaint, GrAAType::kNone,
-                                                                      std::move(op));
+                    renderTargetContext->priv().testingOnly_addDrawOp(
+                            std::move(grPaint), GrAAType::kNone, std::move(op));
                     x += renderRect.width() + kTestPad;
                 }
                 y += renderRect.height() + kTestPad;

@@ -187,7 +187,6 @@ public:
         @return true on success
     */
     virtual bool write(const void* buffer, size_t size) = 0;
-    virtual void newline();
     virtual void flush();
 
     virtual size_t bytesWritten() const = 0;
@@ -210,6 +209,9 @@ public:
         SkASSERT(text);
         return this->write(text, strlen(text));
     }
+
+    bool newline() { return this->write("\n", strlen("\n")); }
+
     bool    writeDecAsText(int32_t);
     bool    writeBigDecAsText(int64_t, int minDigits = 0);
     bool    writeHexAsText(uint32_t, int minDigits = 0);
@@ -364,20 +366,6 @@ private:
     typedef SkWStream INHERITED;
 };
 
-class SK_API SkMemoryWStream : public SkWStream {
-public:
-    SkMemoryWStream(void* buffer, size_t size);
-    bool write(const void* buffer, size_t size) override;
-    size_t bytesWritten() const override { return fBytesWritten; }
-
-private:
-    char*   fBuffer;
-    size_t  fMaxLength;
-    size_t  fBytesWritten;
-
-    typedef SkWStream INHERITED;
-};
-
 class SK_API SkDynamicMemoryWStream : public SkWStream {
 public:
     SkDynamicMemoryWStream();
@@ -419,23 +407,5 @@ private:
 
     typedef SkWStream INHERITED;
 };
-
-
-class SK_API SkDebugWStream : public SkWStream {
-public:
-    SkDebugWStream() : fBytesWritten(0) {}
-
-    // overrides
-    bool write(const void* buffer, size_t size) override;
-    void newline() override;
-    size_t bytesWritten() const override { return fBytesWritten; }
-
-private:
-    size_t fBytesWritten;
-    typedef SkWStream INHERITED;
-};
-
-// for now
-typedef SkFILEStream SkURLStream;
 
 #endif

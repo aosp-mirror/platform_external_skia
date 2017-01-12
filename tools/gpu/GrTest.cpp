@@ -221,13 +221,27 @@ void GrResourceCache::dumpStatsKeyValuePairs(SkTArray<SkString>* keys,
 
 void GrResourceCache::changeTimestamp(uint32_t newTimestamp) { fTimestamp = newTimestamp; }
 
+#ifdef SK_DEBUG
+int GrResourceCache::countUniqueKeysWithTag(const char* tag) const {
+    int count = 0;
+    UniqueHash::ConstIter iter(&fUniqueHash);
+    while (!iter.done()) {
+        if (0 == strcmp(tag, (*iter).getUniqueKey().tag())) {
+            ++count;
+        }
+        ++iter;
+    }
+    return count;
+}
+#endif
+
 ///////////////////////////////////////////////////////////////////////////////
 
 #define ASSERT_SINGLE_OWNER \
     SkDEBUGCODE(GrSingleOwner::AutoEnforce debug_SingleOwner(fRenderTargetContext->fSingleOwner);)
 #define RETURN_IF_ABANDONED        if (fRenderTargetContext->fDrawingManager->wasAbandoned()) { return; }
 
-void GrRenderTargetContextPriv::testingOnly_addDrawOp(const GrPaint& paint,
+void GrRenderTargetContextPriv::testingOnly_addDrawOp(GrPaint&& paint,
                                                       GrAAType aaType,
                                                       std::unique_ptr<GrDrawOp>
                                                               op,
@@ -239,7 +253,7 @@ void GrRenderTargetContextPriv::testingOnly_addDrawOp(const GrPaint& paint,
     GR_AUDIT_TRAIL_AUTO_FRAME(fRenderTargetContext->fAuditTrail,
                               "GrRenderTargetContext::testingOnly_addDrawOp");
 
-    GrPipelineBuilder pipelineBuilder(paint, aaType);
+    GrPipelineBuilder pipelineBuilder(std::move(paint), aaType);
     if (uss) {
         pipelineBuilder.setUserStencil(uss);
     }
