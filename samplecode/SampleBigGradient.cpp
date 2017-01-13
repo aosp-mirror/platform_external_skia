@@ -67,6 +67,7 @@ public:
 
     void translate(float x, float y) { fCanvas->translate(x, y); }
     void scale(float s) { fCanvas->scale(s, s); }
+    void clip(const SkRect& r) { fCanvas->clipRect(r); }
 
     void drawOval(const SkRect& r, SkColor c) {
         SkPaint p;
@@ -79,6 +80,8 @@ public:
         p.setColor(c);
         fCanvas->drawRect(r, p);
     }
+
+    SkCanvas* peekCanvas() const { return fCanvas; }
 };
 
 #ifdef SK_BUILD_FOR_MAC
@@ -139,7 +142,7 @@ public:
         
         CGContextRestoreGState(cg);
         CGContextSaveGState(cg);
-        CGContextClearRect(cg, CGRectMake(clip.x(), clip.y(), clip.width(), clip.height()));
+        CGContextClipToRect(cg, CGRectMake(clip.x(), clip.y(), clip.width(), clip.height()));
         CGContextConcatCTM(cg, matrix_to_transform(cg, ctm));
     }
 };
@@ -149,6 +152,10 @@ public:
 
 #elif defined(WIN32)
 
+static RECT toRECT(const SkIRect& r) {
+    return { r.left(), r.top(), r.right(), r.bottom() };
+}
+
 class GDIGraphicsPort : public GraphicsPort {
 public:
     GDIGraphicsPort(SkCanvas* canvas) : GraphicsPort(canvas) {}
@@ -157,9 +164,7 @@ public:
         HDC hdc = (HDC)fCanvas->accessTopRasterHandle();
 
         COLORREF cr = RGB(SkColorGetR(c), SkColorGetG(c), SkColorGetB(c));// SkEndian_Swap32(c) >> 8;
-        SkIRect ir = r.round();
-        RECT rect = { ir.left(), ir.top(), ir.right(), ir.bottom() };
-        FillRect(hdc, &rect, CreateSolidBrush(cr));
+        FillRect(hdc, &toRECT(r.round()), CreateSolidBrush(cr));
 
         // Assuming GDI wrote zeros for alpha, this will or-in 0xFF for alpha
         SkPaint paint;
@@ -239,13 +244,11 @@ public:
         xf.eDy = ctm[SkMatrix::kMTransY];
         SetWorldTransform(hdc, &xf);
 
-#if 0
-        HRGN hrgn = CreateRectRgnIndirect(&skia::SkIRectToRECT(clip_bounds));
+        HRGN hrgn = CreateRectRgnIndirect(&toRECT(clip_bounds));
         int result = SelectClipRgn(hdc, hrgn);
         SkASSERT(result != ERROR);
         result = DeleteObject(hrgn);
         SkASSERT(result != 0);
-#endif
     }
 };
 
@@ -269,6 +272,8 @@ protected:
     }
 
     void doDraw(GraphicsPort* port) {
+        SkAutoCanvasRestore acr(port->peekCanvas(), true);
+
         port->drawRect({0, 0, 256, 256}, SK_ColorRED);
         port->save();
         port->translate(30, 30);
@@ -279,6 +284,9 @@ protected:
         port->saveLayer({50, 50, 100, 100}, 0x80);
         port->drawRect({55, 55, 95, 95}, SK_ColorGREEN);
         port->restore();
+
+        port->clip({150, 50, 200, 200});
+        port->drawRect({0, 0, 256, 256}, 0xFFCCCCCC);
     }
 
     void onDrawContent(SkCanvas* canvas) override {
