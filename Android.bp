@@ -710,6 +710,7 @@ cc_library {
         "src/utils/SkPatchUtils.cpp",
         "src/utils/SkRGBAToYUV.cpp",
         "src/utils/SkShadowPaintFilterCanvas.cpp",
+        "src/utils/SkShadowUtils.cpp",
         "src/utils/SkTextBox.cpp",
         "src/utils/SkTextureCompressor.cpp",
         "src/utils/SkTextureCompressor_ASTC.cpp",

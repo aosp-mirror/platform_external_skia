@@ -25,13 +25,36 @@
     using U8  = uint8_t  __attribute__((ext_vector_type(4)));
 
     // We polyfill a few routines that Clang doesn't build into ext_vector_types.
-    AI static U32 round(F v)                           { return vcvtnq_u32_f32(v);       }
     AI static F   min(F a, F b)                        { return vminq_f32(a,b);          }
     AI static F   max(F a, F b)                        { return vmaxq_f32(a,b);          }
     AI static F   fma(F f, F m, F a)                   { return vfmaq_f32(a,f,m);        }
     AI static F   rcp  (F v) { auto e = vrecpeq_f32 (v); return vrecpsq_f32 (v,e  ) * e; }
     AI static F   rsqrt(F v) { auto e = vrsqrteq_f32(v); return vrsqrtsq_f32(v,e*e) * e; }
     AI static F   if_then_else(I32 c, F t, F e)        { return vbslq_f32((U32)c,t,e);   }
+    AI static U32 round(F v, F scale)                  { return vcvtnq_u32_f32(v*scale); }
+
+    AI static F gather(const float* p, U32 ix) { return {p[ix[0]], p[ix[1]], p[ix[2]], p[ix[3]]}; }
+#elif defined(__ARM_NEON__)
+    #if defined(__thumb2__) || !defined(__ARM_ARCH_7A__) || !defined(__ARM_VFPV4__)
+        #error On ARMv7, compile with -march=armv7-a -mfpu=neon-vfp4, without -mthumb.
+    #endif
+    #include <arm_neon.h>
+
+    // We can pass {s0-s15} as arguments under AAPCS-VFP.  We'll slice that as 8 d-registers.
+    using F   = float    __attribute__((ext_vector_type(2)));
+    using I32 =  int32_t __attribute__((ext_vector_type(2)));
+    using U32 = uint32_t __attribute__((ext_vector_type(2)));
+    using U8  = uint8_t  __attribute__((ext_vector_type(2)));
+
+    AI static F   min(F a, F b)                        { return vmin_f32(a,b);          }
+    AI static F   max(F a, F b)                        { return vmax_f32(a,b);          }
+    AI static F   fma(F f, F m, F a)                   { return vfma_f32(a,f,m);        }
+    AI static F   rcp  (F v)  { auto e = vrecpe_f32 (v); return vrecps_f32 (v,e  ) * e; }
+    AI static F   rsqrt(F v)  { auto e = vrsqrte_f32(v); return vrsqrts_f32(v,e*e) * e; }
+    AI static F   if_then_else(I32 c, F t, F e)        { return vbsl_f32((U32)c,t,e);   }
+    AI static U32 round(F v, F scale)                  { return vcvt_u32_f32(fma(v,scale,0.5f)); }
+
+    AI static F gather(const float* p, U32 ix) { return {p[ix[0]], p[ix[1]]}; }
 #else
     #if !defined(__AVX2__) || !defined(__FMA__) || !defined(__F16C__)
         #error On x86, compile with -mavx2 -mfma -mf16c.
@@ -44,21 +67,35 @@
     using U32 = uint32_t __attribute__((ext_vector_type(8)));
     using U8  = uint8_t  __attribute__((ext_vector_type(8)));
 
-    AI static U32 round(F v)                    { return _mm256_cvtps_epi32(v); }
     AI static F   min(F a, F b)                 { return _mm256_min_ps  (a,b);  }
     AI static F   max(F a, F b)                 { return _mm256_max_ps  (a,b);  }
     AI static F   fma(F f, F m, F a)            { return _mm256_fmadd_ps(f,m,a);}
     AI static F   rcp  (F v)                    { return _mm256_rcp_ps     (v); }
     AI static F   rsqrt(F v)                    { return _mm256_rsqrt_ps   (v); }
     AI static F   if_then_else(I32 c, F t, F e) { return _mm256_blendv_ps(e,t,c); }
+    AI static U32 round(F v, F scale)           { return _mm256_cvtps_epi32(v*scale); }
+
+    AI static F gather(const float* p, U32 ix) { return _mm256_i32gather_ps(p, ix, 4); }
 #endif
 
 AI static F   cast  (U32 v) { return __builtin_convertvector((I32)v, F);   }
 AI static U32 expand(U8  v) { return __builtin_convertvector(     v, U32); }
 
+template <typename T, typename P>
+AI static T unaligned_load(const P* p) {
+    T v;
+    memcpy(&v, p, sizeof(v));
+    return v;
+}
+
 // We'll be compiling this file to an object file, then extracting parts of it into
 // SkSplicer_generated.h.  It's easier to do if the function names are not C++ mangled.
-#define C extern "C"
+// On ARMv7, use aapcs-vfp calling convention to pass as much data in registers as possible.
+#if defined(__ARM_NEON__)
+    #define C extern "C" __attribute__((pcs("aapcs-vfp")))
+#else
+    #define C extern "C"
+#endif
 
 // Stages all fit a common interface that allows SkSplicer to splice them together.
 using K = const SkSplicer_constants;
@@ -215,8 +252,7 @@ STAGE(to_srgb) {
 STAGE(scale_u8) {
     auto ptr = *(const uint8_t**)ctx + x;
 
-    U8 scales;
-    memcpy(&scales, ptr, sizeof(scales));
+    auto scales = unaligned_load<U8>(ptr);
     auto c = cast(expand(scales)) * k->_1_255;
 
     r = r * c;
@@ -225,12 +261,24 @@ STAGE(scale_u8) {
     a = a * c;
 }
 
+STAGE(load_tables) {
+    struct Ctx {
+        const uint32_t* src;
+        const float *r, *g, *b;
+    };
+    auto c = (const Ctx*)ctx;
+
+    auto px = unaligned_load<U32>(c->src + x);
+    r = gather(c->r, (px      ) & k->_0x000000ff);
+    g = gather(c->g, (px >>  8) & k->_0x000000ff);
+    b = gather(c->b, (px >> 16) & k->_0x000000ff);
+    a = cast(        (px >> 24)) * k->_1_255;
+}
+
 STAGE(load_8888) {
     auto ptr = *(const uint32_t**)ctx + x;
 
-    U32 px;
-    memcpy(&px, ptr, sizeof(px));
-
+    auto px = unaligned_load<U32>(ptr);
     r = cast((px      ) & k->_0x000000ff) * k->_1_255;
     g = cast((px >>  8) & k->_0x000000ff) * k->_1_255;
     b = cast((px >> 16) & k->_0x000000ff) * k->_1_255;
@@ -240,10 +288,10 @@ STAGE(load_8888) {
 STAGE(store_8888) {
     auto ptr = *(uint32_t**)ctx + x;
 
-    U32 px = round(r * k->_255)
-           | round(g * k->_255) <<  8
-           | round(b * k->_255) << 16
-           | round(a * k->_255) << 24;
+    U32 px = round(r, k->_255)
+           | round(g, k->_255) <<  8
+           | round(b, k->_255) << 16
+           | round(a, k->_255) << 24;
     memcpy(ptr, &px, sizeof(px));
 }
 
@@ -256,6 +304,14 @@ STAGE(load_f16) {
     g = vcvt_f32_f16(halfs.val[1]);
     b = vcvt_f32_f16(halfs.val[2]);
     a = vcvt_f32_f16(halfs.val[3]);
+#elif defined(__ARM_NEON__)
+    auto rb_ga = vld2_f16((const float16_t*)ptr);
+    auto rb = vcvt_f32_f16(rb_ga.val[0]),
+         ga = vcvt_f32_f16(rb_ga.val[1]);
+    r = {rb[0], rb[2]};
+    g = {ga[0], ga[2]};
+    b = {rb[1], rb[3]};
+    a = {ga[1], ga[3]};
 #else
     auto _01 = _mm_loadu_si128(((__m128i*)ptr) + 0),
          _23 = _mm_loadu_si128(((__m128i*)ptr) + 1),
@@ -290,6 +346,12 @@ STAGE(store_f16) {
         vcvt_f16_f32(a),
     }};
     vst4_f16((float16_t*)ptr, halfs);
+#elif defined(__ARM_NEON__)
+    float16x4x2_t rb_ga = {{
+        vcvt_f16_f32(float32x4_t{r[0], b[0], r[1], b[1]}),
+        vcvt_f16_f32(float32x4_t{g[0], a[0], g[1], a[1]}),
+    }};
+    vst2_f16((float16_t*)ptr, rb_ga);
 #else
     auto R = _mm256_cvtps_ph(r, _MM_FROUND_CUR_DIRECTION),
          G = _mm256_cvtps_ph(g, _MM_FROUND_CUR_DIRECTION),
@@ -306,4 +368,15 @@ STAGE(store_f16) {
     _mm_storeu_si128((__m128i*)ptr + 2, _mm_unpacklo_epi32(rg4567, ba4567));
     _mm_storeu_si128((__m128i*)ptr + 3, _mm_unpackhi_epi32(rg4567, ba4567));
 #endif
+}
+
+STAGE(matrix_3x4) {
+    auto m = (const float*)ctx;
+
+    auto R = fma(r,m[0], fma(g,m[3], fma(b,m[6], m[ 9]))),
+         G = fma(r,m[1], fma(g,m[4], fma(b,m[7], m[10]))),
+         B = fma(r,m[2], fma(g,m[5], fma(b,m[8], m[11])));
+    r = R;
+    g = G;
+    b = B;
 }

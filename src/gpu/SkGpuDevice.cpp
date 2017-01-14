@@ -26,6 +26,7 @@
 #include "SkImageCacherator.h"
 #include "SkImageFilter.h"
 #include "SkImageFilterCache.h"
+#include "SkImageInfoPriv.h"
 #include "SkImage_Base.h"
 #include "SkLatticeIter.h"
 #include "SkMaskFilter.h"
@@ -194,12 +195,20 @@ bool SkGpuDevice::onReadPixels(const SkImageInfo& dstInfo, void* dstPixels, size
                                int x, int y) {
     ASSERT_SINGLE_OWNER
 
+    if (!SkImageInfoValidConversion(dstInfo, this->imageInfo())) {
+        return false;
+    }
+
     return fRenderTargetContext->readPixels(dstInfo, dstPixels, dstRowBytes, x, y);
 }
 
 bool SkGpuDevice::onWritePixels(const SkImageInfo& srcInfo, const void* srcPixels,
                                 size_t srcRowBytes, int x, int y) {
     ASSERT_SINGLE_OWNER
+
+    if (!SkImageInfoValidConversion(this->imageInfo(), srcInfo)) {
+        return false;
+    }
 
     return fRenderTargetContext->writePixels(srcInfo, srcPixels, srcRowBytes, x, y);
 }
@@ -1727,16 +1736,9 @@ void SkGpuDevice::drawText(const SkDraw& draw, const void* text,
     ASSERT_SINGLE_OWNER
     CHECK_SHOULD_DRAW(draw);
     GR_CREATE_TRACE_MARKER_CONTEXT("SkGpuDevice", "drawText", fContext.get());
-
-    GrPaint grPaint;
-    if (!SkPaintToGrPaint(this->context(), fRenderTargetContext.get(), paint, *draw.fMatrix,
-                          &grPaint)) {
-        return;
-    }
-
     SkDEBUGCODE(this->validate();)
 
-    fRenderTargetContext->drawText(fClip, std::move(grPaint), paint, *draw.fMatrix,
+    fRenderTargetContext->drawText(fClip, paint, *draw.fMatrix,
                                    (const char*)text, byteLength, x, y, draw.fRC->getBounds());
 }
 
@@ -1746,16 +1748,9 @@ void SkGpuDevice::drawPosText(const SkDraw& draw, const void* text, size_t byteL
     ASSERT_SINGLE_OWNER
     GR_CREATE_TRACE_MARKER_CONTEXT("SkGpuDevice", "drawPosText", fContext.get());
     CHECK_SHOULD_DRAW(draw);
-
-    GrPaint grPaint;
-    if (!SkPaintToGrPaint(this->context(), fRenderTargetContext.get(), paint, *draw.fMatrix,
-                          &grPaint)) {
-        return;
-    }
-
     SkDEBUGCODE(this->validate();)
 
-    fRenderTargetContext->drawPosText(fClip, std::move(grPaint), paint, *draw.fMatrix,
+    fRenderTargetContext->drawPosText(fClip, paint, *draw.fMatrix,
                                       (const char*)text, byteLength, pos, scalarsPerPos, offset,
                                       draw.fRC->getBounds());
 }
