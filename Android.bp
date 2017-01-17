@@ -387,7 +387,6 @@ cc_library {
         "src/gpu/GrGpuResource.cpp",
         "src/gpu/GrGpuResourceRef.cpp",
         "src/gpu/GrImageTextureMaker.cpp",
-        "src/gpu/GrInvariantOutput.cpp",
         "src/gpu/GrMemoryPool.cpp",
         "src/gpu/GrOpFlushState.cpp",
         "src/gpu/GrOpList.cpp",
