@@ -1003,3 +1003,15 @@ DEF_TEST(Codec_jpeg_rewind, r) {
     SkCodec::Result result = codec->getPixels(codec->getInfo(), pixelStorage.get(), rowBytes);
     REPORTER_ASSERT(r, SkCodec::kSuccess == result);
 }
+
+DEF_TEST(Codec_InvalidRLEBmp, r) {
+    auto* stream = GetResourceAsStream("invalid_images/b33251605.bmp");
+    if (!stream) {
+        return;
+    }
+
+    SkAutoTDelete<SkCodec> codec(SkCodec::NewFromStream(stream));
+    REPORTER_ASSERT(r, codec);
+
+    test_info(r, codec.get(), codec->getInfo(), SkCodec::kIncompleteInput, nullptr);
+}
