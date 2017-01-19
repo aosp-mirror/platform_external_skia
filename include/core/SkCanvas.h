@@ -1321,6 +1321,8 @@ public:
      */
     void temporary_internal_describeTopLayer(SkMatrix* matrix, SkIRect* clip_bounds);
 
+    void temporary_internal_getRgnClip(SkRegion*);
+
 protected:
 #ifdef SK_EXPERIMENTAL_SHADOWING
     /** Returns the current (cumulative) draw depth of the canvas.
@@ -1555,7 +1557,6 @@ private:
 
     friend class SkDrawIter;        // needs setupDrawForLayerDevice()
     friend class AutoDrawLooper;
-    friend class SkLua;             // needs top layer size and offset
     friend class SkDebugCanvas;     // needs experimental fAllowSimplifyClip
     friend class SkSurface_Raster;  // needs getDevice()
     friend class SkRecorder;        // resetForNextPicture
@@ -1610,9 +1611,6 @@ private:
     static void DrawTextDecorations(const SkDraw& draw, const SkPaint& paint,
                                     const char text[], size_t byteLength,
                                     SkScalar x, SkScalar y);
-
-    // only for canvasutils
-    const SkRegion& internal_private_getTotalClip() const;
 
     /*
      *  Returns true if drawing the specified rect (or all if it is null) with the specified
