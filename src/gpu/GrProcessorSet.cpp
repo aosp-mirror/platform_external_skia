@@ -18,4 +18,14 @@ GrProcessorSet::GrProcessorSet(GrPaint&& paint) {
     for (auto& fp : paint.fCoverageFragmentProcessors) {
         fFragmentProcessors[i++] = fp.release();
     }
+    fFlags = 0;
+    if (paint.usesDistanceVectorField()) {
+        fFlags |= kUseDistanceVectorField_Flag;
+    }
+    if (paint.getDisableOutputConversionToSRGB()) {
+        fFlags |= kDisableOutputConversionToSRGB_Flag;
+    }
+    if (paint.getAllowSRGBInputs()) {
+        fFlags |= kAllowSRGBInputs_Flag;
+    }
 }
