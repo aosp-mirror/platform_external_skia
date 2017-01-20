@@ -103,10 +103,6 @@ static bool bitmap_is_too_big(int w, int h) {
 sk_sp<SkShader> SkImageShader::Make(sk_sp<SkImage> image, TileMode tx, TileMode ty,
                                     const SkMatrix* localMatrix,
                                     SkTBlitterAllocator* allocator) {
-    if (image && as_IB(image)->onAlphaType() == kUnpremul_SkAlphaType) {
-        return nullptr;
-    }
-
     SkShader* shader;
     if (!image || bitmap_is_too_big(image->width(), image->height())) {
         if (nullptr == allocator) {
@@ -148,8 +144,6 @@ void SkImageShader::toString(SkString* str) const {
 #include "effects/GrSimpleTextureEffect.h"
 
 sk_sp<GrFragmentProcessor> SkImageShader::asFragmentProcessor(const AsFPArgs& args) const {
-    SkMatrix matrix;
-    matrix.setIDiv(fImage->width(), fImage->height());
 
     SkMatrix lmInverse;
     if (!this->getLocalMatrix().invert(&lmInverse)) {
@@ -162,7 +156,6 @@ sk_sp<GrFragmentProcessor> SkImageShader::asFragmentProcessor(const AsFPArgs& ar
         }
         lmInverse.postConcat(inv);
     }
-    matrix.preConcat(lmInverse);
 
     SkShader::TileMode tm[] = { fTileModeX, fTileModeY };
 
@@ -176,20 +169,23 @@ sk_sp<GrFragmentProcessor> SkImageShader::asFragmentProcessor(const AsFPArgs& ar
                                     &doBicubic);
     GrSamplerParams params(tm, textureFilterMode);
     sk_sp<SkColorSpace> texColorSpace;
+    SkScalar scaleAdjust[2] = { 1.0f, 1.0f };
     sk_sp<GrTexture> texture(as_IB(fImage)->asTextureRef(args.fContext, params, args.fDstColorSpace,
-                                                         &texColorSpace));
+                                                         &texColorSpace, scaleAdjust));
     if (!texture) {
         return nullptr;
     }
+
+    lmInverse.postScale(scaleAdjust[0], scaleAdjust[1]);
 
     sk_sp<GrColorSpaceXform> colorSpaceXform = GrColorSpaceXform::Make(texColorSpace.get(),
                                                                        args.fDstColorSpace);
     sk_sp<GrFragmentProcessor> inner;
     if (doBicubic) {
-        inner = GrBicubicEffect::Make(texture.get(), std::move(colorSpaceXform), matrix, tm);
+        inner = GrBicubicEffect::Make(texture.get(), std::move(colorSpaceXform), lmInverse, tm);
     } else {
         inner = GrSimpleTextureEffect::Make(texture.get(), std::move(colorSpaceXform),
-                                            matrix, params);
+                                            lmInverse, params);
     }
 
     if (GrPixelConfigIsAlphaOnly(texture->config())) {

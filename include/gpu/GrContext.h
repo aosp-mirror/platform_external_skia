@@ -36,7 +36,6 @@ class GrPipelineBuilder;
 class GrResourceEntry;
 class GrResourceCache;
 class GrResourceProvider;
-class GrTestTarget;
 class GrTextBlobCache;
 class GrTextContext;
 class GrSamplerParams;
@@ -341,9 +340,6 @@ public:
     const GrResourceProvider* resourceProvider() const { return fResourceProvider; }
     GrResourceCache* getResourceCache() { return fResourceCache; }
 
-    // Called by tests that draw directly to the context via GrRenderTargetContext
-    void getTestTarget(GrTestTarget*, sk_sp<GrRenderTargetContext>);
-
     /** Reset GPU stats */
     void resetGpuStats() const ;
 
@@ -371,7 +367,7 @@ public:
     /** Get pointer to atlas texture for given mask format. Note that this wraps an
         actively mutating texture in an SkImage. This could yield unexpected results
         if it gets cached or used more generally. */
-    sk_sp<SkImage> getFontAtlasImage(GrMaskFormat format);
+    sk_sp<SkImage> getFontAtlasImage_ForTesting(GrMaskFormat format);
 
     GrAuditTrail* getAuditTrail() { return &fAuditTrail; }
 

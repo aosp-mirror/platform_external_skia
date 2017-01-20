@@ -185,6 +185,9 @@ void GrConfigConversionEffect::TestForPreservingPMConversions(GrContext* context
         }
     }
 
+    const SkImageInfo ii = SkImageInfo::Make(kSize, kSize,
+                                             kRGBA_8888_SkColorType, kPremul_SkAlphaType);
+
     sk_sp<GrRenderTargetContext> readRTC(context->makeRenderTargetContext(SkBackingFit::kExact,
                                                                           kSize, kSize,
                                                                           kConfig, nullptr));
@@ -216,7 +219,7 @@ void GrConfigConversionEffect::TestForPreservingPMConversions(GrContext* context
         *upmToPMRule = kConversionRules[i][1];
 
         static const SkRect kDstRect = SkRect::MakeIWH(kSize, kSize);
-        static const SkRect kSrcRect = SkRect::MakeIWH(1, 1);
+        static const SkRect kSrcRect = SkRect::MakeIWH(kSize, kSize);
         // We do a PM->UPM draw from dataTex to readTex and read the data. Then we do a UPM->PM draw
         // from readTex to tempTex followed by a PM->UPM draw to readTex and finally read the data.
         // We then verify that two reads produced the same values.
@@ -240,7 +243,9 @@ void GrConfigConversionEffect::TestForPreservingPMConversions(GrContext* context
         readRTC->fillRectToRect(GrNoClip(), std::move(paint1), GrAA::kNo, SkMatrix::I(), kDstRect,
                                 kSrcRect);
 
-        readRTC->asTexture()->readPixels(0, 0, kSize, kSize, kConfig, firstRead);
+        if (!readRTC->readPixels(ii, firstRead, 0, 0, 0)) {
+            continue;
+        }
 
         paint2.addColorFragmentProcessor(std::move(upmToPM));
         paint2.setPorterDuffXPFactory(SkBlendMode::kSrc);
@@ -254,7 +259,9 @@ void GrConfigConversionEffect::TestForPreservingPMConversions(GrContext* context
         readRTC->fillRectToRect(GrNoClip(), std::move(paint3), GrAA::kNo, SkMatrix::I(), kDstRect,
                                 kSrcRect);
 
-        readRTC->asTexture()->readPixels(0, 0, kSize, kSize, kConfig, secondRead);
+        if (!readRTC->readPixels(ii, secondRead, 0, 0, 0)) {
+            continue;
+        }
 
         failed = false;
         for (int y = 0; y < kSize && !failed; ++y) {
