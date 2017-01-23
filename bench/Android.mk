@@ -48,7 +48,6 @@ LOCAL_SRC_FILES := \
 	CmapBench.cpp \
 	CodecBench.cpp \
 	ColorCodecBench.cpp \
-	ColorCubeBench.cpp \
 	ColorFilterBench.cpp \
 	ColorPrivBench.cpp \
 	ControlBench.cpp \
