@@ -103,7 +103,7 @@ static bool copy_pipeline_pixels(const SkImageInfo& dstInfo, void* dstRow, size_
     auto p = pipeline.compile();
 
     for (int y = 0; y < srcInfo.height(); ++y) {
-        p(0,0, srcInfo.width());
+        p(0,srcInfo.width());
         // The pipeline has pointers to srcRow and dstRow, so we just need to update them in the
         // loop to move between rows of src/dst.
         srcRow = (const char*)srcRow + srcRB;
@@ -371,7 +371,7 @@ bool SkPixelInfo::CopyPixels(const SkImageInfo& dstInfo, void* dstPixels, size_t
     const int height = srcInfo.height();
 
     // Do the easiest one first : both configs are equal
-    if (srcInfo == dstInfo && kIndex_8_SkColorType != srcInfo.colorType()) {
+    if (srcInfo == dstInfo) {
         size_t bytes = width * srcInfo.bytesPerPixel();
         for (int y = 0; y < height; ++y) {
             memcpy(dstPixels, srcPixels, bytes);

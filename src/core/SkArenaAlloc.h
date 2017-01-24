@@ -60,10 +60,15 @@ public:
         : SkArenaAlloc(block, kSize, extraSize)
     {}
 
+    SkArenaAlloc(size_t extraSize)
+        : SkArenaAlloc(nullptr, 0, extraSize)
+    {}
+
     ~SkArenaAlloc();
 
     template <typename T, typename... Args>
     T* make(Args&&... args) {
+        SkASSERT(SkTFitsIn<uint32_t>(sizeof(T)));
         char* objStart;
         if (skstd::is_trivially_destructible<T>::value) {
             objStart = this->allocObject(sizeof(T), alignof(T));
@@ -135,6 +140,7 @@ private:
         SkASSERT(SkTFitsIn<uint32_t>(count));
         char* objStart;
         size_t arraySize = count * sizeof(T);
+        SkASSERT(SkTFitsIn<uint32_t>(arraySize));
 
         if (skstd::is_trivially_destructible<T>::value) {
             objStart = this->allocObject(arraySize, alignof(T));

@@ -526,18 +526,50 @@ public:
     */
     bool quickReject(const SkPath& path) const;
 
-    /** Return the bounds of the current clip (in local coordinates) in the
-        bounds parameter, and return true if it is non-empty. This can be useful
-        in a way similar to quickReject, in that it tells you that drawing
-        outside of these bounds will be clipped out.
-    */
-    virtual bool getClipBounds(SkRect* bounds) const;
+    /**
+     *  Return the bounds of the current clip in local coordinates. If the clip is empty,
+     *  return { 0, 0, 0, 0 }.
+     */
+    SkRect getLocalClipBounds() const { return this->onGetLocalClipBounds(); }
 
-    /** Return the bounds of the current clip, in device coordinates; returns
-        true if non-empty. Maybe faster than getting the clip explicitly and
-        then taking its bounds.
-    */
-    virtual bool getClipDeviceBounds(SkIRect* bounds) const;
+    /**
+     *  Returns true if the clip bounds are non-empty.
+     */
+    bool getLocalClipBounds(SkRect* bounds) const {
+        *bounds = this->onGetLocalClipBounds();
+        return !bounds->isEmpty();
+    }
+
+    /**
+     *  Return the bounds of the current clip in device coordinates. If the clip is empty,
+     *  return { 0, 0, 0, 0 }.
+     */
+    SkIRect getDeviceClipBounds() const { return this->onGetDeviceClipBounds(); }
+
+    /**
+     *  Returns true if the clip bounds are non-empty.
+     */
+    bool getDeviceClipBounds(SkIRect* bounds) const {
+        *bounds = this->onGetDeviceClipBounds();
+        return !bounds->isEmpty();
+    }
+
+#ifdef SK_SUPPORT_LEGACY_GETCLIPBOUNDS
+    bool getClipBounds(SkRect* bounds) const {
+        SkRect r = this->getLocalClipBounds();
+        if (bounds) {
+            *bounds = r;
+        }
+        return !r.isEmpty();
+    }
+    bool getClipDeviceBounds(SkIRect* bounds) const {
+        SkIRect r = this->getDeviceClipBounds();
+        if (bounds) {
+            *bounds = r;
+        }
+        return !r.isEmpty();
+    }
+#endif
 
     /** Fill the entire canvas' bitmap (restricted to the current clip) with the
         specified ARGB color, using the specified mode.
@@ -1367,6 +1399,10 @@ protected:
     virtual void didTranslateZ(SkScalar) {}
 #endif
 
+    virtual SkRect onGetLocalClipBounds() const;
+    virtual SkIRect onGetDeviceClipBounds() const;
+
+
     virtual void onDrawAnnotation(const SkRect&, const char key[], SkData* value);
     virtual void onDrawDRRect(const SkRRect&, const SkRRect&, const SkPaint&);
 
@@ -1624,9 +1660,6 @@ private:
      */
     bool canDrawBitmapAsSprite(SkScalar x, SkScalar y, int w, int h, const SkPaint&);
 
-#ifdef SK_SUPPORT_LEGACY_CANVAS_GETCLIPSTACK
-public:
-#endif
     /** Return the clip stack. The clip stack stores all the individual
      *  clips organized by the save/restore frame in which they were
      *  added.
@@ -1635,7 +1668,6 @@ public:
     const SkClipStack* getClipStack() const {
         return fClipStack.get();
     }
-private:
 
     /**
      *  Keep track of the device clip bounds and if the matrix is scale-translate.  This allows

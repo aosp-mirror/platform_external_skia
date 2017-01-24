@@ -313,7 +313,6 @@ cc_library {
         "src/effects/SkBlurDrawLooper.cpp",
         "src/effects/SkBlurMask.cpp",
         "src/effects/SkBlurMaskFilter.cpp",
-        "src/effects/SkColorCubeFilter.cpp",
         "src/effects/SkColorFilterImageFilter.cpp",
         "src/effects/SkColorMatrix.cpp",
         "src/effects/SkColorMatrixFilter.cpp",
