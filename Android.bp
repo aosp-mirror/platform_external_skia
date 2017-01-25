@@ -358,6 +358,7 @@ cc_library {
         "src/effects/gradients/SkTwoPointConicalGradient.cpp",
         "src/effects/gradients/SkTwoPointConicalGradient_gpu.cpp",
         "src/effects/shadows/SkAmbientShadowMaskFilter.cpp",
+        "src/effects/shadows/SkShadowTessellator.cpp",
         "src/effects/shadows/SkSpotShadowMaskFilter.cpp",
         "src/fonts/SkGScalerContext.cpp",
         "src/fonts/SkRandomScalerContext.cpp",
