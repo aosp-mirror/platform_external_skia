@@ -462,6 +462,7 @@ cc_library {
         "src/gpu/effects/GrPorterDuffXferProcessor.cpp",
         "src/gpu/effects/GrRRectEffect.cpp",
         "src/gpu/effects/GrShadowGeoProc.cpp",
+        "src/gpu/effects/GrShadowTessellator.cpp",
         "src/gpu/effects/GrSimpleTextureEffect.cpp",
         "src/gpu/effects/GrSingleTextureEffect.cpp",
         "src/gpu/effects/GrTextureDomain.cpp",
