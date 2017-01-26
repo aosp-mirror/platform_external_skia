@@ -213,6 +213,7 @@ BASE_SRCS_ANDROID = struct(
         "src/opts/*SSE4*",
         "src/opts/*sse4*",
         "src/opts/*avx*",
+        "src/opts/*hsw*",
         "src/opts/*x86*",
         "src/opts/SkBlitMask_opts_none.cpp",
         "src/opts/SkBlitRow_opts_none.cpp",
@@ -264,6 +265,7 @@ BASE_SRCS_IOS = struct(
         "src/opts/*SSE4*",
         "src/opts/*sse4*",
         "src/opts/*avx*",
+        "src/opts/*hsw*",
         "src/opts/*x86*",
         "src/opts/SkBlitMask_opts_arm*.cpp",
         "src/opts/SkBlitRow_opts_arm*.cpp",
@@ -590,7 +592,6 @@ DEFINES_ALL = [
     "SK_NO_ANALYTIC_AA",
     "SK_SUPPORT_LEGACY_BITMAP_SETPIXELREF",
     "SK_SUPPORT_LEGACY_CLIPOP_EXOTIC_NAMES",
-    "SK_SUPPORT_LEGACY_GETCLIPBOUNDS",
 ]
 
 ################################################################################
