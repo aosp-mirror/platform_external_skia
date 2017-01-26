@@ -28,8 +28,5 @@
       'include_dirs': [ '../src/gpu' ],
       'dependencies': [ 'gputest.gyp:skgputest' ],
     }],
-    ['not skia_android_framework', {
-        'sources!': [ '../bench/nanobenchAndroid.cpp' ],
-    }],
   ],
 }
