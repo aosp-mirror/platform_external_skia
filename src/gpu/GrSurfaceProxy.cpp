@@ -135,6 +135,10 @@ sk_sp<GrSurfaceProxy> GrSurfaceProxy::MakeDeferred(const GrCaps& caps,
                                                    const GrSurfaceDesc& desc,
                                                    SkBackingFit fit,
                                                    SkBudgeted budgeted) {
+    if (desc.fWidth > caps.maxTextureSize() || desc.fHeight > caps.maxTextureSize()) {
+        return nullptr;
+    }
+
     if (kRenderTarget_GrSurfaceFlag & desc.fFlags) {
         // We know anything we instantiate later from this deferred path will be
         // both texturable and renderable
@@ -200,7 +204,7 @@ sk_sp<GrSurfaceProxy> GrSurfaceProxy::Copy(GrContext* context,
         return nullptr;
     }
 
-    return sk_ref_sp(dstContext->asDeferredSurface());
+    return dstContext->asSurfaceProxyRef();
 }
 
 sk_sp<GrSurfaceContext> GrSurfaceProxy::TestCopy(GrContext* context, const GrSurfaceDesc& dstDesc,
