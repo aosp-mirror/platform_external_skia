@@ -109,6 +109,10 @@ static void check_texture(skiatest::Reporter* reporter,
 
 
 DEF_GPUTEST_FOR_RENDERING_CONTEXTS(DeferredProxyTest, reporter, ctxInfo) {
+    if (ctxInfo.backend() == kVulkan_GrBackend) {
+        return;
+    }
+
     GrTextureProvider* provider = ctxInfo.grContext()->textureProvider();
     const GrCaps& caps = *ctxInfo.grContext()->caps();
 
@@ -134,9 +138,9 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(DeferredProxyTest, reporter, ctxInfo) {
                             {
                                 sk_sp<GrTexture> tex;
                                 if (SkBackingFit::kApprox == fit) {
-                                    tex = sk_ref_sp(provider->createApproxTexture(desc));
+                                    tex.reset(provider->createApproxTexture(desc));
                                 } else {
-                                    tex = sk_ref_sp(provider->createTexture(desc, budgeted));
+                                    tex.reset(provider->createTexture(desc, budgeted));
                                 }
 
                                 sk_sp<GrSurfaceProxy> sProxy(GrSurfaceProxy::MakeDeferred(
@@ -167,9 +171,9 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(DeferredProxyTest, reporter, ctxInfo) {
                             {
                                 sk_sp<GrTexture> tex;
                                 if (SkBackingFit::kApprox == fit) {
-                                    tex = sk_ref_sp(provider->createApproxTexture(desc));
+                                    tex.reset(provider->createApproxTexture(desc));
                                 } else {
-                                    tex = sk_ref_sp(provider->createTexture(desc, budgeted));
+                                    tex.reset(provider->createTexture(desc, budgeted));
                                 }
 
                                 sk_sp<GrSurfaceProxy> sProxy(GrSurfaceProxy::MakeDeferred(caps,
