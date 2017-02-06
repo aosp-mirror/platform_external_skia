@@ -731,7 +731,6 @@ cc_library {
         "src/xml/SkDOM.cpp",
         "src/xml/SkXMLParser.cpp",
         "src/xml/SkXMLWriter.cpp",
-        "src/xps/SkDocument_XPS_None.cpp",
         "src/xps/SkXPSDevice.cpp",
         "src/xps/SkXPSDocument.cpp",
         "third_party/etc1/etc1.cpp",
