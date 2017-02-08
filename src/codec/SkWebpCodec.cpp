@@ -86,7 +86,7 @@ SkCodec* SkWebpCodec::NewFromStream(SkStream* stream) {
         }
     }
     if (!colorSpace) {
-        colorSpace = SkColorSpace::MakeNamed(SkColorSpace::kSRGB_Named);
+        colorSpace = SkColorSpace::MakeSRGB();
     }
 
     // Get the first frame and its "features" to determine the color and alpha types.
