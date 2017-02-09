@@ -33,10 +33,11 @@ sk_sp<GrFragmentProcessor> GrAlphaThresholdFragmentProcessor::Make(
 }
 
 inline GrFragmentProcessor::OptimizationFlags GrAlphaThresholdFragmentProcessor::OptFlags(float outerThreshold) {
+    // TODO: Advertise that this processor modulates.
     if (outerThreshold >= 1.f) {
-        return kPreservesOpaqueInput_OptimizationFlag | kModulatesInput_OptimizationFlag;
+        return kPreservesOpaqueInput_OptimizationFlag;
     } else {
-        return kModulatesInput_OptimizationFlag;
+        return kNone_OptimizationFlags;
     }
 }
 
@@ -177,9 +178,6 @@ sk_sp<GrFragmentProcessor> GrAlphaThresholdFragmentProcessor::TestCreate(GrProce
     // Make the inner and outer thresholds be in (0, 1) exclusive and be sorted correctly.
     float innerThresh = d->fRandom->nextUScalar1() * .99f + 0.005f;
     float outerThresh = d->fRandom->nextUScalar1() * .99f + 0.005f;
-    if (innerThresh > outerThresh) {
-        SkTSwap(innerThresh, outerThresh);
-    }
     const int kMaxWidth = 1000;
     const int kMaxHeight = 1000;
     uint32_t width = d->fRandom->nextULessThan(kMaxWidth);
