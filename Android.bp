@@ -684,6 +684,7 @@ cc_library {
         "src/svg/SkSVGCanvas.cpp",
         "src/svg/SkSVGDevice.cpp",
         "src/utils/SkBase64.cpp",
+        "src/utils/SkBitmapSourceDeserializer.cpp",
         "src/utils/SkBoundaryPatch.cpp",
         "src/utils/SkCamera.cpp",
         "src/utils/SkCanvasStack.cpp",
