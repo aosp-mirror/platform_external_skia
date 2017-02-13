@@ -112,21 +112,16 @@ namespace {
         splice(buf, jb_near);      // jb <next 4 bytes>  (b == "before", unsigned less than)
         splice(buf, loop_start - (int)(buf->bytesWritten() + 4));
     }
-    static void ret(SkWStream* buf) {
-        static const uint8_t vzeroupper[] = { 0xc5, 0xf8, 0x77 };
-        static const uint8_t        ret[] = { 0xc3 };
-        splice(buf, vzeroupper);
-        splice(buf, ret);
-    }
 #endif
 
 #if defined(_MSC_VER)
     // Adapt from MS ABI to System V ABI used by stages.
     static void before_loop(SkWStream* buf) {
+        // On the way into this adapter the stack is 16-byte aligned plus an 8-byte return address.
+        // We need to leave the stack the same way: at an odd 8-byte alignment.
         static const uint8_t ms_to_system_v[] = {
             0x56,                                         // push   %rsi
-            0x57,                                         // push   %rdi
-            0x48,0x81,0xec,0xa8,0x00,0x00,0x00,           // sub    $0xa8,%rsp
+            0x48,0x81,0xec,0xa0,0x00,0x00,0x00,           // sub    $0xa0,%rsp
             0x44,0x0f,0x29,0xbc,0x24,0x90,0x00,0x00,0x00, // movaps %xmm15,0x90(%rsp)
             0x44,0x0f,0x29,0xb4,0x24,0x80,0x00,0x00,0x00, // movaps %xmm14,0x80(%rsp)
             0x44,0x0f,0x29,0x6c,0x24,0x70,                // movaps %xmm13,0x70(%rsp)
@@ -137,6 +132,7 @@ namespace {
             0x44,0x0f,0x29,0x44,0x24,0x20,                // movaps %xmm8,0x20(%rsp)
             0x0f,0x29,0x7c,0x24,0x10,                     // movaps %xmm7,0x10(%rsp)
             0x0f,0x29,0x34,0x24,                          // movaps %xmm6,(%rsp)
+            0x57,                                         // push   %rdi
             0x48,0x89,0xcf,                               // mov    %rcx,%rdi
             0x48,0x89,0xd6,                               // mov    %rdx,%rsi
             0x4c,0x89,0xc2,                               // mov    %r8,%rdx
@@ -147,6 +143,7 @@ namespace {
     static void after_loop(SkWStream* buf) {
         static const uint8_t system_v_to_ms[] = {
             // TODO: vzeroupper here?
+            0x5f,                                         // pop    %rdi
             0x0f,0x28,0x34,0x24,                          // movaps (%rsp),%xmm6
             0x0f,0x28,0x7c,0x24,0x10,                     // movaps 0x10(%rsp),%xmm7
             0x44,0x0f,0x28,0x44,0x24,0x20,                // movaps 0x20(%rsp),%xmm8
@@ -157,8 +154,7 @@ namespace {
             0x44,0x0f,0x28,0x6c,0x24,0x70,                // movaps 0x70(%rsp),%xmm13
             0x44,0x0f,0x28,0xb4,0x24,0x80,0x00,0x00,0x00, // movaps 0x80(%rsp),%xmm14
             0x44,0x0f,0x28,0xbc,0x24,0x90,0x00,0x00,0x00, // movaps 0x90(%rsp),%xmm15
-            0x48,0x81,0xc4,0xa8,0x00,0x00,0x00,           // add    $0xa8,%rsp
-            0x5f,                                         // pop    %rdi
+            0x48,0x81,0xc4,0xa0,0x00,0x00,0x00,           // add    $0xa0,%rsp
             0x5e,                                         // pop    %rsi
         };
         splice(buf, system_v_to_ms);
@@ -277,6 +273,7 @@ namespace {
         DEFINE_SPLICE_STAGE(armv7)
     #else
         DEFINE_SPLICE_STAGE(hsw)
+        DEFINE_SPLICE_STAGE(sse2)
     #endif
 #undef DEFINE_SPLICE
 #undef CASE
@@ -303,12 +300,25 @@ namespace {
             auto splice_stage = armv7_splice_stage;
             auto inc_x = [](SkWStream* buf) { splice_until_ret(buf, armv7_inc_x); };
         #else
-            // To keep things simple, only one x86 target supported: Haswell+ x86-64.
-            if (!SkCpu::Supports(SkCpu::HSW) || sizeof(void*) != 8) {
+            // To keep things simple, only x86-64 supported.
+            if (sizeof(void*) != 8) {
                 return;
             }
-            auto splice_stage = hsw_splice_stage;
-            auto inc_x = [&](SkWStream* buf) { splice_until_ret(buf, hsw_inc_x); };
+            bool hsw = true && SkCpu::Supports(SkCpu::HSW);
+
+            auto splice_stage = hsw ? hsw_splice_stage : sse2_splice_stage;
+            auto inc_x = [hsw](SkWStream* buf) {
+                if (hsw) { splice_until_ret(buf,  hsw_inc_x); }
+                else     { splice_until_ret(buf, sse2_inc_x); }
+            };
+            auto ret = [hsw](SkWStream* buf) {
+                static const uint8_t vzeroupper[] = { 0xc5, 0xf8, 0x77 };
+                static const uint8_t        ret[] = { 0xc3 };
+                if (hsw) {
+                    splice(buf, vzeroupper);
+                }
+                splice(buf, ret);
+            };
         #endif
 
             SkDynamicMemoryWStream buf;
