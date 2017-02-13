@@ -10,9 +10,7 @@
 #if SK_SUPPORT_GPU
 
 #include "GrContext.h"
-#include "GrInvariantOutput.h"
 #include "GrTextureProvider.h"
-
 #include "glsl/GrGLSLFragmentProcessor.h"
 #include "glsl/GrGLSLFragmentShaderBuilder.h"
 #include "glsl/GrGLSLProgramDataManager.h"
@@ -47,7 +45,6 @@ void GrCircleBlurFragmentProcessor::GLSLProcessor::emitCode(EmitArgs& args) {
                                                     &dataName);
 
     GrGLSLFPFragmentBuilder* fragBuilder = args.fFragBuilder;
-    const char *fragmentPos = fragBuilder->fragmentPosition();
 
     if (args.fInputColor) {
         fragBuilder->codeAppendf("vec4 src=%s;", args.fInputColor);
@@ -57,9 +54,9 @@ void GrCircleBlurFragmentProcessor::GLSLProcessor::emitCode(EmitArgs& args) {
 
     // We just want to compute "(length(vec) - %s.z + 0.5) * %s.w" but need to rearrange
     // for precision.
-    fragBuilder->codeAppendf("vec2 vec = vec2( (%s.x - %s.x) * %s.w , (%s.y - %s.y) * %s.w );",
-                             fragmentPos, dataName, dataName,
-                             fragmentPos, dataName, dataName);
+    fragBuilder->codeAppendf("vec2 vec = vec2( (sk_FragCoord.x - %s.x) * %s.w, "
+                                              "(sk_FragCoord.y - %s.y) * %s.w );",
+                             dataName, dataName, dataName, dataName);
     fragBuilder->codeAppendf("float dist = length(vec) + (0.5 - %s.z) * %s.w;",
                              dataName, dataName);
 
@@ -96,7 +93,6 @@ GrCircleBlurFragmentProcessor::GrCircleBlurFragmentProcessor(const SkRect& circl
         , fBlurProfileSampler(blurProfile, GrSamplerParams::kBilerp_FilterMode) {
     this->initClassID<GrCircleBlurFragmentProcessor>();
     this->addTextureSampler(&fBlurProfileSampler);
-    this->setWillReadFragmentPosition();
 }
 
 GrGLSLFragmentProcessor* GrCircleBlurFragmentProcessor::onCreateGLSLInstance() const {
@@ -107,10 +103,6 @@ void GrCircleBlurFragmentProcessor::onGetGLSLProcessorKey(const GrShaderCaps& ca
                                                           GrProcessorKeyBuilder* b) const {
     // The code for this processor is always the same so there is nothing to add to the key.
     return;
-}
-
-void GrCircleBlurFragmentProcessor::onComputeInvariantOutput(GrInvariantOutput* inout) const {
-    inout->mulByUnknownSingleComponent();
 }
 
 // Computes an unnormalized half kernel (right side). Returns the summation of all the half kernel

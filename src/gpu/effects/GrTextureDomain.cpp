@@ -8,7 +8,6 @@
 #include "GrTextureDomain.h"
 
 #include "GrContext.h"
-#include "GrInvariantOutput.h"
 #include "GrShaderCaps.h"
 #include "GrSimpleTextureEffect.h"
 #include "GrSurfaceProxyPriv.h"
@@ -359,18 +358,6 @@ bool GrTextureDomainEffect::onIsEqual(const GrFragmentProcessor& sBase) const {
     return this->fTextureDomain == s.fTextureDomain;
 }
 
-void GrTextureDomainEffect::onComputeInvariantOutput(GrInvariantOutput* inout) const {
-    if (GrTextureDomain::kDecal_Mode == fTextureDomain.mode()) {
-        if (GrPixelConfigIsAlphaOnly(this->textureSampler(0).texture()->config())) {
-            inout->mulByUnknownSingleComponent();
-        } else {
-            inout->mulByUnknownFourComponents();
-        }
-    } else {
-        this->updateInvariantOutputForModulation(inout);
-    }
-}
-
 ///////////////////////////////////////////////////////////////////////////////
 
 GR_DEFINE_FRAGMENT_PROCESSOR_TEST(GrTextureDomainEffect);
@@ -419,7 +406,6 @@ GrDeviceSpaceTextureDecalFragmentProcessor::GrDeviceSpaceTextureDecalFragmentPro
     fDeviceSpaceOffset.fX = deviceSpaceOffset.fX - subset.fLeft;
     fDeviceSpaceOffset.fY = deviceSpaceOffset.fY - subset.fTop;
     this->initClassID<GrDeviceSpaceTextureDecalFragmentProcessor>();
-    this->setWillReadFragmentPosition();
 }
 
 sk_sp<GrFragmentProcessor> GrDeviceSpaceTextureDecalFragmentProcessor::Make(
@@ -444,7 +430,6 @@ GrDeviceSpaceTextureDecalFragmentProcessor::GrDeviceSpaceTextureDecalFragmentPro
     fDeviceSpaceOffset.fX = deviceSpaceOffset.fX - subset.fLeft;
     fDeviceSpaceOffset.fY = deviceSpaceOffset.fY - subset.fTop;
     this->initClassID<GrDeviceSpaceTextureDecalFragmentProcessor>();
-    this->setWillReadFragmentPosition();
 }
 
 GrGLSLFragmentProcessor* GrDeviceSpaceTextureDecalFragmentProcessor::onCreateGLSLInstance() const  {
@@ -459,8 +444,7 @@ GrGLSLFragmentProcessor* GrDeviceSpaceTextureDecalFragmentProcessor::onCreateGLS
                                                                      kDefault_GrSLPrecision,
                                                                      "scaleAndTranslate",
                                                                      &scaleAndTranslateName);
-            args.fFragBuilder->codeAppendf("vec2 coords = %s.xy * %s.xy + %s.zw;",
-                                           args.fFragBuilder->fragmentPosition(),
+            args.fFragBuilder->codeAppendf("vec2 coords = sk_FragCoord.xy * %s.xy + %s.zw;",
                                            scaleAndTranslateName, scaleAndTranslateName);
             fGLDomain.sampleTexture(args.fFragBuilder,
                                     args.fUniformHandler,
@@ -505,15 +489,6 @@ bool GrDeviceSpaceTextureDecalFragmentProcessor::onIsEqual(const GrFragmentProce
     return dstdfp.fTextureSampler.texture() == fTextureSampler.texture() &&
            dstdfp.fDeviceSpaceOffset == fDeviceSpaceOffset &&
            dstdfp.fTextureDomain == fTextureDomain;
-}
-
-void GrDeviceSpaceTextureDecalFragmentProcessor::onComputeInvariantOutput(
-        GrInvariantOutput* inout) const {
-    if (GrPixelConfigIsAlphaOnly(this->textureSampler(0).texture()->config())) {
-        inout->mulByUnknownSingleComponent();
-    } else {
-        inout->mulByUnknownFourComponents();
-    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////

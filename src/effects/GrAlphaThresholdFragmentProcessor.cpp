@@ -9,9 +9,7 @@
 
 #if SK_SUPPORT_GPU
 
-#include "GrInvariantOutput.h"
 #include "SkRefCnt.h"
-
 #include "glsl/GrGLSLColorSpaceXformHelper.h"
 #include "glsl/GrGLSLFragmentProcessor.h"
 #include "glsl/GrGLSLFragmentShaderBuilder.h"
@@ -33,11 +31,10 @@ sk_sp<GrFragmentProcessor> GrAlphaThresholdFragmentProcessor::Make(
 }
 
 inline GrFragmentProcessor::OptimizationFlags GrAlphaThresholdFragmentProcessor::OptFlags(float outerThreshold) {
-    // TODO: Advertise that this processor modulates.
     if (outerThreshold >= 1.f) {
-        return kPreservesOpaqueInput_OptimizationFlag;
+        return kPreservesOpaqueInput_OptimizationFlag | kModulatesInput_OptimizationFlag;
     } else {
-        return kNone_OptimizationFlags;
+        return kModulatesInput_OptimizationFlag;
     }
 }
 
@@ -70,17 +67,6 @@ bool GrAlphaThresholdFragmentProcessor::onIsEqual(const GrFragmentProcessor& sBa
     const GrAlphaThresholdFragmentProcessor& s = sBase.cast<GrAlphaThresholdFragmentProcessor>();
     return (this->fInnerThreshold == s.fInnerThreshold &&
             this->fOuterThreshold == s.fOuterThreshold);
-}
-
-void GrAlphaThresholdFragmentProcessor::onComputeInvariantOutput(GrInvariantOutput* inout) const {
-    GrPixelConfig config = this->textureSampler(0).texture()->config();
-    if (GrPixelConfigIsAlphaOnly(config)) {
-        inout->mulByUnknownSingleComponent();
-    } else if (GrPixelConfigIsOpaque(config) && fOuterThreshold >= 1.f) {
-        inout->mulByUnknownOpaqueFourComponents();
-    } else {
-        inout->mulByUnknownFourComponents();
-    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////

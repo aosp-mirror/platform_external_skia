@@ -1290,7 +1290,6 @@ cc_test {
         "tests/GLProgramsTest.cpp",
         "tests/GeometryTest.cpp",
         "tests/GifTest.cpp",
-        "tests/GpuColorFilterTest.cpp",
         "tests/GpuDrawPathTest.cpp",
         "tests/GpuLayerCacheTest.cpp",
         "tests/GpuRectanizerTest.cpp",
