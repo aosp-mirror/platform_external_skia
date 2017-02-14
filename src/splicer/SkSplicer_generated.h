@@ -34,6 +34,14 @@ static const unsigned int aarch64_seed_shader[] = {
     0x6f00e407,                                 //  movi          v7.2d, #0x0
     0xd65f03c0,                                 //  return
 };
+static const unsigned int aarch64_constant_color[] = {
+    0x3dc00043,                                 //  ldr           q3, [x2]
+    0x4e040460,                                 //  dup           v0.4s, v3.s[0]
+    0x4e0c0461,                                 //  dup           v1.4s, v3.s[1]
+    0x4e140462,                                 //  dup           v2.4s, v3.s[2]
+    0x4e1c0463,                                 //  dup           v3.4s, v3.s[3]
+    0xd65f03c0,                                 //  return
+};
 static const unsigned int aarch64_clear[] = {
     0x6f00e400,                                 //  movi          v0.2d, #0x0
     0x6f00e401,                                 //  movi          v1.2d, #0x0
@@ -58,12 +66,20 @@ static const unsigned int aarch64_srcover[] = {
     0xd65f03c0,                                 //  return
 };
 static const unsigned int aarch64_dstover[] = {
-    0x4d40c870,                                 //  ld1r          {v16.4s}, [x3]
-    0x4ea7d610,                                 //  fsub          v16.4s, v16.4s, v7.4s
-    0x4e20ce04,                                 //  fmla          v4.4s, v16.4s, v0.4s
-    0x4e21ce05,                                 //  fmla          v5.4s, v16.4s, v1.4s
-    0x4e22ce06,                                 //  fmla          v6.4s, v16.4s, v2.4s
-    0x4e23ce07,                                 //  fmla          v7.4s, v16.4s, v3.4s
+    0x4d40c871,                                 //  ld1r          {v17.4s}, [x3]
+    0x4ea41c90,                                 //  mov           v16.16b, v4.16b
+    0x4ea61cd2,                                 //  mov           v18.16b, v6.16b
+    0x4ea71cf3,                                 //  mov           v19.16b, v7.16b
+    0x4ea7d634,                                 //  fsub          v20.4s, v17.4s, v7.4s
+    0x4ea51cb1,                                 //  mov           v17.16b, v5.16b
+    0x4e20ce90,                                 //  fmla          v16.4s, v20.4s, v0.4s
+    0x4e21ce91,                                 //  fmla          v17.4s, v20.4s, v1.4s
+    0x4e22ce92,                                 //  fmla          v18.4s, v20.4s, v2.4s
+    0x4e23ce93,                                 //  fmla          v19.4s, v20.4s, v3.4s
+    0x4eb01e00,                                 //  mov           v0.16b, v16.16b
+    0x4eb11e21,                                 //  mov           v1.16b, v17.16b
+    0x4eb21e42,                                 //  mov           v2.16b, v18.16b
+    0x4eb31e63,                                 //  mov           v3.16b, v19.16b
     0xd65f03c0,                                 //  return
 };
 static const unsigned int aarch64_clamp_0[] = {
@@ -469,6 +485,14 @@ static const unsigned int armv7_seed_shader[] = {
     0xf2807010,                                 //  vmov.i32      d7, #0
     0xe12fff1e,                                 //  return
 };
+static const unsigned int armv7_constant_color[] = {
+    0xf4620a0f,                                 //  vld1.8        {d16-d17}, [r2]
+    0xf3b40c20,                                 //  vdup.32       d0, d16[0]
+    0xf3bc1c20,                                 //  vdup.32       d1, d16[1]
+    0xf3b42c21,                                 //  vdup.32       d2, d17[0]
+    0xf3bc3c21,                                 //  vdup.32       d3, d17[1]
+    0xe12fff1e,                                 //  return
+};
 static const unsigned int armv7_clear[] = {
     0xf2800010,                                 //  vmov.i32      d0, #0
     0xf2801010,                                 //  vmov.i32      d1, #0
@@ -494,11 +518,19 @@ static const unsigned int armv7_srcover[] = {
 };
 static const unsigned int armv7_dstover[] = {
     0xf4e30c9f,                                 //  vld1.32       {d16[]}, [r3 :32]
-    0xf2600d87,                                 //  vsub.f32      d16, d16, d7
-    0xf2004c30,                                 //  vfma.f32      d4, d0, d16
-    0xf2015c30,                                 //  vfma.f32      d5, d1, d16
-    0xf2026c30,                                 //  vfma.f32      d6, d2, d16
-    0xf2037c30,                                 //  vfma.f32      d7, d3, d16
+    0xf2651115,                                 //  vorr          d17, d5, d5
+    0xf2604d87,                                 //  vsub.f32      d20, d16, d7
+    0xf2640114,                                 //  vorr          d16, d4, d4
+    0xf2662116,                                 //  vorr          d18, d6, d6
+    0xf2673117,                                 //  vorr          d19, d7, d7
+    0xf2400c34,                                 //  vfma.f32      d16, d0, d20
+    0xf2411c34,                                 //  vfma.f32      d17, d1, d20
+    0xf2422c34,                                 //  vfma.f32      d18, d2, d20
+    0xf2433c34,                                 //  vfma.f32      d19, d3, d20
+    0xf22001b0,                                 //  vorr          d0, d16, d16
+    0xf22111b1,                                 //  vorr          d1, d17, d17
+    0xf22221b2,                                 //  vorr          d2, d18, d18
+    0xf22331b3,                                 //  vorr          d3, d19, d19
     0xe12fff1e,                                 //  return
 };
 static const unsigned int armv7_clamp_0[] = {
@@ -944,6 +976,17 @@ static const unsigned char sse2_seed_shader[] = {
     0x0f,0x57,0xff,                             //  xorps         %xmm7,%xmm7
     0xc3,                                       //  return
 };
+static const unsigned char sse2_constant_color[] = {
+    0x0f,0x10,0x1a,                             //  movups        (%rdx),%xmm3
+    0x0f,0x28,0xc3,                             //  movaps        %xmm3,%xmm0
+    0x0f,0xc6,0xc0,0x00,                        //  shufps        $0x0,%xmm0,%xmm0
+    0x0f,0x28,0xcb,                             //  movaps        %xmm3,%xmm1
+    0x0f,0xc6,0xc9,0x55,                        //  shufps        $0x55,%xmm1,%xmm1
+    0x0f,0x28,0xd3,                             //  movaps        %xmm3,%xmm2
+    0x0f,0xc6,0xd2,0xaa,                        //  shufps        $0xaa,%xmm2,%xmm2
+    0x0f,0xc6,0xdb,0xff,                        //  shufps        $0xff,%xmm3,%xmm3
+    0xc3,                                       //  return
+};
 static const unsigned char sse2_clear[] = {
     0x0f,0x57,0xc0,                             //  xorps         %xmm0,%xmm0
     0x0f,0x57,0xc9,                             //  xorps         %xmm1,%xmm1
@@ -979,17 +1022,14 @@ static const unsigned char sse2_dstover[] = {
     0xf3,0x44,0x0f,0x10,0x01,                   //  movss         (%rcx),%xmm8
     0x45,0x0f,0xc6,0xc0,0x00,                   //  shufps        $0x0,%xmm8,%xmm8
     0x44,0x0f,0x5c,0xc7,                        //  subps         %xmm7,%xmm8
-    0x45,0x0f,0x28,0xc8,                        //  movaps        %xmm8,%xmm9
-    0x44,0x0f,0x59,0xc8,                        //  mulps         %xmm0,%xmm9
-    0x41,0x0f,0x58,0xe1,                        //  addps         %xmm9,%xmm4
-    0x45,0x0f,0x28,0xc8,                        //  movaps        %xmm8,%xmm9
-    0x44,0x0f,0x59,0xc9,                        //  mulps         %xmm1,%xmm9
-    0x41,0x0f,0x58,0xe9,                        //  addps         %xmm9,%xmm5
-    0x45,0x0f,0x28,0xc8,                        //  movaps        %xmm8,%xmm9
-    0x44,0x0f,0x59,0xca,                        //  mulps         %xmm2,%xmm9
-    0x41,0x0f,0x58,0xf1,                        //  addps         %xmm9,%xmm6
-    0x44,0x0f,0x59,0xc3,                        //  mulps         %xmm3,%xmm8
-    0x41,0x0f,0x58,0xf8,                        //  addps         %xmm8,%xmm7
+    0x41,0x0f,0x59,0xc0,                        //  mulps         %xmm8,%xmm0
+    0x0f,0x58,0xc4,                             //  addps         %xmm4,%xmm0
+    0x41,0x0f,0x59,0xc8,                        //  mulps         %xmm8,%xmm1
+    0x0f,0x58,0xcd,                             //  addps         %xmm5,%xmm1
+    0x41,0x0f,0x59,0xd0,                        //  mulps         %xmm8,%xmm2
+    0x0f,0x58,0xd6,                             //  addps         %xmm6,%xmm2
+    0x41,0x0f,0x59,0xd8,                        //  mulps         %xmm8,%xmm3
+    0x0f,0x58,0xdf,                             //  addps         %xmm7,%xmm3
     0xc3,                                       //  return
 };
 static const unsigned char sse2_clamp_0[] = {
@@ -1514,6 +1554,13 @@ static const unsigned char hsw_seed_shader[] = {
     0xc5,0xc4,0x57,0xff,                        //  vxorps        %ymm7,%ymm7,%ymm7
     0xc3,                                       //  return
 };
+static const unsigned char hsw_constant_color[] = {
+    0xc4,0xe2,0x7d,0x18,0x02,                   //  vbroadcastss  (%rdx),%ymm0
+    0xc4,0xe2,0x7d,0x18,0x4a,0x04,              //  vbroadcastss  0x4(%rdx),%ymm1
+    0xc4,0xe2,0x7d,0x18,0x52,0x08,              //  vbroadcastss  0x8(%rdx),%ymm2
+    0xc4,0xe2,0x7d,0x18,0x5a,0x0c,              //  vbroadcastss  0xc(%rdx),%ymm3
+    0xc3,                                       //  return
+};
 static const unsigned char hsw_clear[] = {
     0xc5,0xfc,0x57,0xc0,                        //  vxorps        %ymm0,%ymm0,%ymm0
     0xc5,0xf4,0x57,0xc9,                        //  vxorps        %ymm1,%ymm1,%ymm1
@@ -1540,10 +1587,10 @@ static const unsigned char hsw_srcover[] = {
 static const unsigned char hsw_dstover[] = {
     0xc4,0x62,0x7d,0x18,0x01,                   //  vbroadcastss  (%rcx),%ymm8
     0xc5,0x3c,0x5c,0xc7,                        //  vsubps        %ymm7,%ymm8,%ymm8
-    0xc4,0xc2,0x7d,0xb8,0xe0,                   //  vfmadd231ps   %ymm8,%ymm0,%ymm4
-    0xc4,0xc2,0x75,0xb8,0xe8,                   //  vfmadd231ps   %ymm8,%ymm1,%ymm5
-    0xc4,0xc2,0x6d,0xb8,0xf0,                   //  vfmadd231ps   %ymm8,%ymm2,%ymm6
-    0xc4,0xc2,0x65,0xb8,0xf8,                   //  vfmadd231ps   %ymm8,%ymm3,%ymm7
+    0xc4,0xe2,0x3d,0xa8,0xc4,                   //  vfmadd213ps   %ymm4,%ymm8,%ymm0
+    0xc4,0xe2,0x3d,0xa8,0xcd,                   //  vfmadd213ps   %ymm5,%ymm8,%ymm1
+    0xc4,0xe2,0x3d,0xa8,0xd6,                   //  vfmadd213ps   %ymm6,%ymm8,%ymm2
+    0xc4,0xe2,0x3d,0xa8,0xdf,                   //  vfmadd213ps   %ymm7,%ymm8,%ymm3
     0xc3,                                       //  return
 };
 static const unsigned char hsw_clamp_0[] = {
