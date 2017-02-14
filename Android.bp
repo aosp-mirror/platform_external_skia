@@ -825,6 +825,7 @@ cc_library {
         "libz",
     ],
     static_libs: [
+        "libarect",
         "libsfntly",
         "libwebp-decode",
         "libwebp-encode",
@@ -1572,6 +1573,7 @@ cc_test {
     ],
 
     static_libs: [
+        "libarect",
         "libjsoncpp",
         "libskia",
         "libsfntly",
@@ -2135,6 +2137,7 @@ cc_test {
     ],
 
     static_libs: [
+        "libarect",
         "libjsoncpp",
         "libskia",
         "libsfntly",
