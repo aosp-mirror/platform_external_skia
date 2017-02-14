@@ -1480,7 +1480,6 @@ cc_test {
         "tests/SkSLGLSLTest.cpp",
         "tests/SkSLMemoryLayoutTest.cpp",
         "tests/SkSharedMutexTest.cpp",
-        "tests/SmallAllocatorTest.cpp",
         "tests/SortTest.cpp",
         "tests/SpecialImageTest.cpp",
         "tests/SpecialSurfaceTest.cpp",
