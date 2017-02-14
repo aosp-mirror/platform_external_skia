@@ -459,7 +459,6 @@ bool SkBmpCodec::ReadHeader(SkStream* stream, bool inIco, SkCodec** codecOut) {
         SkCodecPrintf("Error: RLE requires valid input size.\n");
         return false;
     }
-    const size_t RLEBytes = totalBytes - offset;
 
     // Calculate the number of bytes read so far
     const uint32_t bytesRead = kBmpHeaderBytes + infoBytes + maskBytes;
@@ -519,7 +518,7 @@ bool SkBmpCodec::ReadHeader(SkStream* stream, bool inIco, SkCodec** codecOut) {
                 // Icos skip the header that contains totalBytes.
                 SkASSERT(!inIco);
                 *codecOut = new SkBmpRLECodec(imageInfo, stream, bitsPerPixel, numColors,
-                        bytesPerColor, offset - bytesRead, rowOrder, RLEBytes);
+                        bytesPerColor, offset - bytesRead, rowOrder);
                 return true;
             default:
                 SkASSERT(false);
