@@ -4,6 +4,8 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
+#ifndef SkPictureImageGenerator_DEFINED
+#define SkPictureImageGenerator_DEFINED
 
 #include "SkImageGenerator.h"
 #include "SkTLazy.h"
@@ -16,8 +18,6 @@ public:
 protected:
     bool onGetPixels(const SkImageInfo& info, void* pixels, size_t rowBytes, SkPMColor ctable[],
                      int* ctableCount) override;
-    bool onComputeScaledDimensions(SkScalar scale, SupportedSizes*) override;
-    bool onGenerateScaledPixels(const SkPixmap&) override;
 
 #if SK_SUPPORT_GPU
     GrTexture* onGenerateTexture(GrContext*, const SkImageInfo&, const SkIPoint&) override;
@@ -33,3 +33,4 @@ private:
 
     typedef SkImageGenerator INHERITED;
 };
+#endif  // SkPictureImageGenerator_DEFINED
