@@ -5,15 +5,15 @@
  * found in the LICENSE file.
  */
 
-#include "SkSplicer_shared.h"
+#include "SkJumper.h"
 #include <string.h>
 
 // It's tricky to relocate code referencing ordinary constants, so we read them from this struct.
-using K = const SkSplicer_constants;
+using K = const SkJumper_constants;
 
-#if !defined(SPLICER) && !defined(JUMPER)
+#if !defined(JUMPER)
     // This path should lead to portable code that can be compiled directly into Skia.
-    // (All other paths are compiled offline by Clang into SkSplicer_generated.h.)
+    // (All other paths are compiled offline by Clang into SkJumper_generated.h.)
     #include <math.h>
 
     using F   = float;
@@ -125,12 +125,12 @@ using K = const SkSplicer_constants;
 // We need to be a careful with casts.
 // (F)x means cast x to float in the portable path, but bit_cast x to float in the others.
 // These named casts and bit_cast() are always what they seem to be.
-#if !defined(SPLICER) && !defined(JUMPER)
-    static F   cast  (U32 v) { return (F)v; }
-    static U32 expand(U8  v) { return (U32)v; }
-#else
+#if defined(JUMPER)
     static F   cast  (U32 v) { return __builtin_convertvector((I32)v, F);   }
     static U32 expand(U8  v) { return __builtin_convertvector(     v, U32); }
+#else
+    static F   cast  (U32 v) { return (F)v; }
+    static U32 expand(U8  v) { return (U32)v; }
 #endif
 
 template <typename T, typename P>
@@ -147,105 +147,72 @@ static Dst bit_cast(const Src& src) {
 }
 
 // Sometimes we want to work with 4 floats directly, regardless of the depth of the F vector.
-#if !defined(SPLICER) && !defined(JUMPER)
+#if defined(JUMPER)
+    using F4 = float __attribute__((ext_vector_type(4)));
+#else
     struct F4 {
         float vals[4];
         float operator[](int i) const { return vals[i]; }
     };
-#else
-    using F4 = float __attribute__((ext_vector_type(4)));
 #endif
 
-// We'll be compiling this file to an object file, then extracting parts of it into
-// SkSplicer_generated.h.  It's easier to do if the function names are not C++ mangled.
-#define C extern "C"
+// Stages tail call between each other by following program,
+// an interlaced sequence of Stage pointers and context pointers.
+using Stage = void(size_t x, void** program, K* k, F,F,F,F, F,F,F,F);
 
-#if defined(SPLICER)
-    // Splicer Stages all fit a common interface that allows SkSplicer to splice them together.
-    // (This is just for reference... nothing uses this type when we're in Splicer mode.)
-    using Stage = void(size_t x, size_t limit, void* ctx, K* k, F,F,F,F, F,F,F,F);
-
-    // Stage's arguments act as the working set of registers within the final spliced function.
-    // Here's a little primer on the x86-64/aarch64 ABIs:
-    //   x:         rdi/x0   x and limit work to drive the loop, see loop_start in SkSplicer.cpp.
-    //   limit:     rsi/x1
-    //   ctx:       rdx/x2   Look for set_ctx in SkSplicer.cpp to see how this works.
-    //   k:         rcx/x3
-    //   vectors:   ymm0-ymm7/v0-v7
-
-    // done() is the key to this entire splicing strategy.
+static void* load_and_inc(void**& program) {
+#if defined(__GNUC__) && defined(__x86_64__)
+    // Passing program as the second Stage argument makes it likely that it's in %rsi,
+    // so this is usually a single instruction *program++.
+    void* rax;
+    asm("lodsq" : "=a"(rax), "+S"(program));  // Write-only %rax, read-write %rsi.
+    return rax;
+    // When a Stage uses its ctx pointer, this optimization typically cuts an instruction:
+    //    mov    (%rsi), %rcx     // ctx  = program[0]
+    //    ...
+    //    mov 0x8(%rsi), %rax     // next = program[1]
+    //    add $0x10, %rsi         // program += 2
+    //    jmpq *%rax              // JUMP!
+    // becomes
+    //    lods   %ds:(%rsi),%rax  // ctx  = *program++;
+    //    ...
+    //    lods   %ds:(%rsi),%rax  // next = *program++;
+    //    jmpq *%rax              // JUMP!
     //
-    // It matches the signature of Stage, so all the registers are kept live.
-    // Every Stage calls done() and so will end in a single jmp (i.e. tail-call) into done(),
-    // which marks the point where we can splice one Stage onto the next.
-    //
-    // The lovely bit is that we don't have to define done(), just declare it.
-    C void done(size_t, size_t, void*, K*, F,F,F,F, F,F,F,F);
-
-    // This should feel familiar to anyone who's read SkRasterPipeline_opts.h.
-    // It's just a convenience to make a valid, spliceable Stage, nothing magic.
-    #define STAGE(name)                                                           \
-        static void name##_k(size_t& x, size_t limit, void* ctx, K* k,            \
-                             F& r, F& g, F& b, F& a, F& dr, F& dg, F& db, F& da); \
-        C void name(size_t x, size_t limit, void* ctx, K* k,                      \
-                    F r, F g, F b, F a, F dr, F dg, F db, F da) {                 \
-            name##_k(x,limit,ctx,k, r,g,b,a, dr,dg,db,da);                        \
-            done    (x,limit,ctx,k, r,g,b,a, dr,dg,db,da);                        \
-        }                                                                         \
-        static void name##_k(size_t& x, size_t limit, void* ctx, K* k,            \
-                             F& r, F& g, F& b, F& a, F& dr, F& dg, F& db, F& da)
+    // When a Stage doesn't use its ctx pointer, it's 3 instructions either way,
+    // but using lodsq (a 2-byte instruction) tends to trim a few bytes.
 #else
-    // Jumper and portable Stages tail call between each other by following
-    // program, an interlaced sequence of Stage pointers and context pointers.
-    using Stage = void(size_t x, void** program, K* k, F,F,F,F, F,F,F,F);
-
-    static void* load_and_inc(void**& program) {
-    #if defined(__GNUC__) && defined(__x86_64__)
-        // Passing program as the second Stage argument makes it likely that it's in %rsi,
-        // so this is usually a single instruction *program++.
-        void* rax;
-        asm("lodsq" : "=a"(rax), "+S"(program));  // Write-only %rax, read-write %rsi.
-        return rax;
-        // When a Stage uses its ctx pointer, this optimization typically cuts an instruction:
-        //    mov    (%rsi), %rcx     // ctx  = program[0]
-        //    ...
-        //    mov 0x8(%rsi), %rax     // next = program[1]
-        //    add $0x10, %rsi         // program += 2
-        //    jmpq *%rax              // JUMP!
-        // becomes
-        //    lods   %ds:(%rsi),%rax  // ctx  = *program++;
-        //    ...
-        //    lods   %ds:(%rsi),%rax  // next = *program++;
-        //    jmpq *%rax              // JUMP!
-        //
-        // When a Stage doesn't use its ctx pointer, it's 3 instructions either way,
-        // but using lodsq (a 2-byte instruction) tends to trim a few bytes.
-    #else
-        // On ARM *program++ compiles into a single instruction without any handholding.
-        return *program++;
-    #endif
-    }
-
-    #define STAGE(name)                                                           \
-        static void name##_k(size_t& x, void* ctx, K* k,                          \
-                             F& r, F& g, F& b, F& a, F& dr, F& dg, F& db, F& da); \
-        C void name(size_t x, void** program, K* k,                               \
-                    F r, F g, F b, F a, F dr, F dg, F db, F da) {                 \
-            auto ctx = load_and_inc(program);                                     \
-            name##_k(x,ctx,k, r,g,b,a, dr,dg,db,da);                              \
-            auto next = (Stage*)load_and_inc(program);                            \
-            next(x,program,k, r,g,b,a, dr,dg,db,da);                              \
-        }                                                                         \
-        static void name##_k(size_t& x, void* ctx, K* k,                          \
-                             F& r, F& g, F& b, F& a, F& dr, F& dg, F& db, F& da)
+    // On ARM *program++ compiles into a single instruction without any handholding.
+    return *program++;
 #endif
+}
+
+#define STAGE(name)                                                           \
+    static void name##_k(size_t& x, void* ctx, K* k,                          \
+                         F& r, F& g, F& b, F& a, F& dr, F& dg, F& db, F& da); \
+    extern "C" void sk_##name(size_t x, void** program, K* k,                 \
+                              F r, F g, F b, F a, F dr, F dg, F db, F da) {   \
+        auto ctx = load_and_inc(program);                                     \
+        name##_k(x,ctx,k, r,g,b,a, dr,dg,db,da);                              \
+        auto next = (Stage*)load_and_inc(program);                            \
+        next(x,program,k, r,g,b,a, dr,dg,db,da);                              \
+    }                                                                         \
+    static void name##_k(size_t& x, void* ctx, K* k,                          \
+                         F& r, F& g, F& b, F& a, F& dr, F& dg, F& db, F& da)
+
+// A glue Stage to end the tail call chain, finally returning to the caller.
+extern "C" void sk_just_return(size_t, void**, K*, F,F,F,F, F,F,F,F) {
+#if defined(JUMPER) && defined(__AVX2__)
+    _mm256_zeroupper();
+#endif
+}
 
 // We can now define Stages!
 
 // Some things to keep in mind while writing Stages:
-//   - do not branch;                                       (i.e. avoid jmp)
-//   - do not call functions that don't inline;             (i.e. avoid call, ret)
-//   - do not use constant literals other than 0 and 0.0f.  (i.e. avoid rip relative addressing)
+//   - do not branch;                                           (i.e. avoid jmp)
+//   - do not call functions that don't inline;                 (i.e. avoid call, ret)
+//   - do not use constant literals other than 0, ~0 and 0.0f.  (i.e. avoid rip relative addressing)
 //
 // Some things that should work fine:
 //   - 0, ~0, and 0.0f;
@@ -254,10 +221,6 @@ static Dst bit_cast(const Src& src) {
 //   - temporary values;
 //   - lambdas;
 //   - memcpy() with a compile-time constant size argument.
-
-STAGE(inc_x) {
-    x += sizeof(F) / sizeof(float);
-}
 
 STAGE(seed_shader) {
     auto y = *(const int*)ctx;
@@ -438,8 +401,9 @@ STAGE(store_8888) {
 STAGE(load_f16) {
     auto ptr = *(const uint64_t**)ctx + x;
 
-#if !defined(SPLICER) && !defined(JUMPER)
+#if !defined(JUMPER)
     // TODO:
+    (void)ptr;
 #elif defined(__aarch64__)
     auto halfs = vld4_f16((const float16_t*)ptr);
     r = vcvt_f32_f16(halfs.val[0]);
@@ -499,8 +463,9 @@ STAGE(load_f16) {
 STAGE(store_f16) {
     auto ptr = *(uint64_t**)ctx + x;
 
-#if !defined(SPLICER) && !defined(JUMPER)
+#if !defined(JUMPER)
     // TODO:
+    (void)ptr;
 #elif defined(__aarch64__)
     float16x4x4_t halfs = {{
         vcvt_f16_f32(r),

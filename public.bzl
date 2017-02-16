@@ -106,9 +106,9 @@ BASE_SRCS_ALL = struct(
         "src/gpu/gl/mac/*",
         "src/gpu/gl/win/*",
         "src/images/*",
+        "src/jumper/*",
         "src/opts/**/*",
         "src/ports/**/*",
-        "src/splicer/*",
         "src/utils/android/**/*",
         "src/utils/mac/**/*",
         "src/utils/SkThreadUtils_win.cpp",  # Windows-only. Move to ports?
