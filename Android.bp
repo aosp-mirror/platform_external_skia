@@ -62,7 +62,6 @@ cc_library {
         "src/xml/",
         "third_party/etc1/",
         "third_party/gif/",
-        "third_party/ktx/",
     ],
 
     srcs: [
@@ -732,7 +731,6 @@ cc_library {
         "src/xps/SkXPSDocument.cpp",
         "third_party/etc1/etc1.cpp",
         "third_party/gif/SkGifImageReader.cpp",
-        "third_party/ktx/ktx.cpp",
     ],
 
     arch: {
@@ -880,7 +878,6 @@ cc_test {
         "tests/",
         "third_party/etc1/",
         "third_party/gif/",
-        "third_party/ktx/",
         "tools/",
         "tools/debugger/",
         "tools/flags/",
@@ -1629,7 +1626,6 @@ cc_test {
         "src/xml/",
         "third_party/etc1/",
         "third_party/gif/",
-        "third_party/ktx/",
         "tools/",
         "tools/debugger/",
         "tools/flags/",
