@@ -19,6 +19,8 @@
 #include "SkPicture.h"
 #include "gm.h"
 
+//#define TEST_VIA_SVG
+
 namespace DM {
 
 // This is just convenience.  It lets you use either return "foo" or return SkStringPrintf(...).
@@ -464,6 +466,12 @@ public:
 class ViaTwice : public Via {
 public:
     explicit ViaTwice(Sink* sink) : Via(sink) {}
+    Error draw(const Src&, SkBitmap*, SkWStream*, SkString*) const override;
+};
+
+class ViaSVG : public Via {
+public:
+    explicit ViaSVG(Sink* sink) : Via(sink) {}
     Error draw(const Src&, SkBitmap*, SkWStream*, SkString*) const override;
 };
 
