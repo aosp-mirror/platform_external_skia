@@ -29,13 +29,12 @@ declare_args() {
   skia_enable_android_framework_defines = false
   skia_enable_discrete_gpu = true
   skia_enable_effects = true
-  skia_enable_jumper = is_skia_standalone && sanitize != "MSAN" && !is_win
+  skia_enable_jumper = is_skia_standalone && sanitize != "MSAN"
   skia_enable_gpu = true
   skia_enable_pdf = true
   skia_enable_tools = is_skia_standalone
   skia_enable_vulkan_debug_layers = is_skia_standalone && is_debug
   skia_vulkan_sdk = getenv("VULKAN_SDK")
-  is_fuzzing = false
 }
 declare_args() {
   skia_use_dng_sdk =
@@ -154,9 +153,6 @@ config("skia_private") {
   }
   if (skia_enable_discrete_gpu) {
     defines += [ "SK_ENABLE_DISCRETE_GPU" ]
-  }
-  if (is_fuzzing) {
-    defines += [ "IS_FUZZING" ]
   }
 }
 
@@ -502,9 +498,13 @@ optional("jumper") {
   public_defines = [ "SK_JUMPER" ]
   sources = [
     "src/jumper/SkJumper.cpp",
-    "src/jumper/SkJumper_generated.S",
     "src/jumper/SkJumper_stages.cpp",
   ]
+  if (is_win && target_cpu == "x64") {
+    sources += [ "src/jumper/SkJumper_generated_win.S" ]
+  } else if (!is_win) {
+    sources += [ "src/jumper/SkJumper_generated.S" ]
+  }
 }
 
 optional("typeface_freetype") {
