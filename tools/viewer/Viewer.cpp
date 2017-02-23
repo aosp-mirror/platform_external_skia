@@ -16,6 +16,7 @@
 #include "SkATrace.h"
 #include "SkCanvas.h"
 #include "SkCommandLineFlags.h"
+#include "SkCommonFlagsPathRenderer.h"
 #include "SkDashPathEffect.h"
 #include "SkGraphics.h"
 #include "SkImagePriv.h"
@@ -133,6 +134,8 @@ static DEFINE_string(jpgs, "jpgs", "Directory to read jpgs from.");
 static DEFINE_string2(backend, b, "sw", "Backend to use. Allowed values are " BACKENDS_STR ".");
 
 static DEFINE_bool(atrace, false, "Enable support for using ATrace. ATrace is only supported on Android.");
+
+DEFINE_pathrenderer_flag;
 
 const char *kBackendTypeStrings[sk_app::Window::kBackendTypeCount] = {
     " [OpenGL]",
@@ -593,7 +596,8 @@ void Viewer::setColorMode(SkColorType colorType, sk_sp<SkColorSpace> colorSpace)
 }
 
 void Viewer::drawSlide(SkCanvas* canvas) {
-    int count = canvas->save();
+    SkAutoCanvasRestore autorestore(canvas, false);
+
     if (fWindow->supportsContentRect()) {
         SkRect contentRect = fWindow->getContentRect();
         canvas->clipRect(contentRect);
@@ -614,14 +618,15 @@ void Viewer::drawSlide(SkCanvas* canvas) {
         slideCanvas = offscreenSurface->getCanvas();
     }
 
+    int count = slideCanvas->save();
     slideCanvas->clear(SK_ColorWHITE);
     slideCanvas->concat(fDefaultMatrix);
     slideCanvas->concat(computeMatrix());
-
     // Time the painting logic of the slide
     double startTime = SkTime::GetMSecs();
     fSlides[fCurrentSlide]->draw(slideCanvas);
     fPaintTimes[fCurrentMeasurement] = SkTime::GetMSecs() - startTime;
+    slideCanvas->restoreToCount(count);
 
     // Force a flush so we can time that, too
     startTime = SkTime::GetMSecs();
@@ -636,10 +641,10 @@ void Viewer::drawSlide(SkCanvas* canvas) {
         sk_sp<SkColorSpace> cs = (kRGBA_F16_SkColorType == fColorType)
             ? SkColorSpace::MakeSRGBLinear() : SkColorSpace::MakeSRGB();
         auto retaggedImage = SkImageMakeRasterCopyAndAssignColorSpace(fLastImage.get(), cs.get());
-        canvas->drawImage(retaggedImage, 0, 0);
+        SkPaint paint;
+        paint.setBlendMode(SkBlendMode::kSrc);
+        canvas->drawImage(retaggedImage, 0, 0, &paint);
     }
-
-    canvas->restoreToCount(count);
 }
 
 void Viewer::onPaint(SkCanvas* canvas) {

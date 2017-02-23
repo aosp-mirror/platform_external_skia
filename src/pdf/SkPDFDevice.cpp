@@ -137,7 +137,7 @@ public:
     }
 
     void updateClip(const SkClipStack& clipStack, const SkRegion& clipRegion,
-                    const SkPoint& translation);
+                    const SkPoint& translation, const SkRect& bounds);
     void updateMatrix(const SkMatrix& matrix);
     void updateDrawingState(const SkPDFDevice::GraphicStateEntry& state);
 
@@ -188,21 +188,24 @@ static bool calculate_inverse_path(const SkRect& bounds, const SkPath& invPath,
     return Op(clipPath, invPath, kIntersect_SkPathOp, outPath);
 }
 
-// Sanity check the numerical values of the SkRegion ops and PathOps ops
-// enums so region_op_to_pathops_op can do a straight passthrough cast.
-// If these are failing, it may be necessary to make region_op_to_pathops_op
-// do more.
-static_assert(SkRegion::kDifference_Op == (int)kDifference_SkPathOp, "region_pathop_mismatch");
-static_assert(SkRegion::kIntersect_Op == (int)kIntersect_SkPathOp, "region_pathop_mismatch");
-static_assert(SkRegion::kUnion_Op == (int)kUnion_SkPathOp, "region_pathop_mismatch");
-static_assert(SkRegion::kXOR_Op == (int)kXOR_SkPathOp, "region_pathop_mismatch");
-static_assert(SkRegion::kReverseDifference_Op == (int)kReverseDifference_SkPathOp,
-              "region_pathop_mismatch");
-
-static SkPathOp region_op_to_pathops_op(SkClipOp op) {
-    SkASSERT(static_cast<int>(op) >= 0);
-    SkASSERT(static_cast<int>(op) <= static_cast<int>(kReverseDifference_SkClipOp));
-    return (SkPathOp)op;
+bool apply_clip(SkClipOp op, const SkPath& u, const SkPath& v, SkPath* r)  {
+    switch (op) {
+        case SkClipOp::kDifference:
+            return Op(u, v, kDifference_SkPathOp, r);
+        case SkClipOp::kIntersect:
+            return Op(u, v, kIntersect_SkPathOp, r);
+        case SkClipOp::kUnion_deprecated:
+            return Op(u, v, kUnion_SkPathOp, r);
+        case SkClipOp::kXOR_deprecated:
+            return Op(u, v, kXOR_SkPathOp, r);
+        case SkClipOp::kReverseDifference_deprecated:
+            return Op(u, v, kReverseDifference_SkPathOp, r);
+        case SkClipOp::kReplace_deprecated:
+            *r = v;
+            return true;
+        default:
+            return false;
+    }
 }
 
 /* Uses Path Ops to calculate a vector SkPath clip from a clip stack.
@@ -213,7 +216,7 @@ static SkPathOp region_op_to_pathops_op(SkClipOp op) {
  */
 static bool get_clip_stack_path(const SkMatrix& transform,
                                 const SkClipStack& clipStack,
-                                const SkRegion& clipRegion,
+                                const SkRect& bounds,
                                 SkPath* outClipPath) {
     outClipPath->reset();
     outClipPath->setFillType(SkPath::kInverseWinding_FillType);
@@ -231,14 +234,8 @@ static bool get_clip_stack_path(const SkMatrix& transform,
             clipEntry->asPath(&entryPath);
         }
         entryPath.transform(transform);
-
-        if (kReplace_SkClipOp == clipEntry->getOp()) {
-            *outClipPath = entryPath;
-        } else {
-            SkPathOp op = region_op_to_pathops_op(clipEntry->getOp());
-            if (!Op(*outClipPath, entryPath, op, outClipPath)) {
-                return false;
-            }
+        if (!apply_clip(clipEntry->getOp(), *outClipPath, entryPath, outClipPath)) {
+            return false;
         }
     }
 
@@ -246,7 +243,7 @@ static bool get_clip_stack_path(const SkMatrix& transform,
         // The bounds are slightly outset to ensure this is correct in the
         // face of floating-point accuracy and possible SkRegion bitmap
         // approximations.
-        SkRect clipBounds = SkRect::Make(clipRegion.getBounds());
+        SkRect clipBounds = bounds;
         clipBounds.outset(SK_Scalar1, SK_Scalar1);
         if (!calculate_inverse_path(clipBounds, *outClipPath, outClipPath)) {
             return false;
@@ -260,7 +257,8 @@ static bool get_clip_stack_path(const SkMatrix& transform,
 // on the page to optimize this.
 void GraphicStackState::updateClip(const SkClipStack& clipStack,
                                    const SkRegion& clipRegion,
-                                   const SkPoint& translation) {
+                                   const SkPoint& translation,
+                                   const SkRect& bounds) {
     if (clipStack == currentEntry()->fClipStack) {
         return;
     }
@@ -280,7 +278,7 @@ void GraphicStackState::updateClip(const SkClipStack& clipStack,
     transform.setTranslate(translation.fX, translation.fY);
 
     SkPath clipPath;
-    if (get_clip_stack_path(transform, clipStack, clipRegion, &clipPath)) {
+    if (get_clip_stack_path(transform, clipStack, bounds, &clipPath)) {
         SkPDFUtils::EmitPath(clipPath, SkPaint::kFill_Style, fContentStream);
         SkPath::FillType clipFill = clipPath.getFillType();
         NOT_IMPLEMENTED(clipFill == SkPath::kInverseEvenOdd_FillType, false);
@@ -513,12 +511,13 @@ void SkPDFDevice::cleanUp() {
 
 void SkPDFDevice::drawAnnotation(const SkDraw& d, const SkRect& rect, const char key[],
                                  SkData* value) {
-    if (0 == rect.width() && 0 == rect.height()) {
-        handlePointAnnotation({ rect.x(), rect.y() }, *d.fMatrix, key, value);
+    if (!value) {
+        return;
+    }
+    if (rect.isEmpty()) {
+        this->handlePointAnnotation({ rect.x(), rect.y() }, *d.fMatrix, key, value);
     } else {
-        SkPath path;
-        path.addRect(rect);
-        handlePathAnnotation(path, d, key, value);
+        this->handleRectAnnotation(rect, d, key, value);
     }
 }
 
@@ -1541,7 +1540,7 @@ std::unique_ptr<SkStreamAsset> SkPDFDevice::content() const {
         translation.iset(this->getOrigin());
         translation.negate();
         gsState.updateClip(entry.fState.fClipStack, entry.fState.fClipRegion,
-                           translation);
+                           translation, SkRect::Make(this->getGlobalBounds()));
         gsState.updateMatrix(entry.fState.fMatrix);
         gsState.updateDrawingState(entry.fState);
 
@@ -1604,7 +1603,9 @@ bool SkPDFDevice::handleInversePath(const SkDraw& d, const SkPath& origPath,
     if (!totalMatrix.invert(&transformInverse)) {
         return false;
     }
-    SkRect bounds = SkRect::Make(d.fRC->getBounds());
+    SkRect bounds = d.fClipStack->bounds(this->getGlobalBounds());
+    SkIPoint deviceOrigin = this->getOrigin();
+    bounds.offset(-deviceOrigin.x(), -deviceOrigin.y());
     transformInverse.mapRect(&bounds);
 
     // Extend the bounds by the line width (plus some padding)
@@ -1623,10 +1624,7 @@ bool SkPDFDevice::handleInversePath(const SkDraw& d, const SkPath& origPath,
 void SkPDFDevice::handlePointAnnotation(const SkPoint& point,
                                         const SkMatrix& matrix,
                                         const char key[], SkData* value) {
-    if (!value) {
-        return;
-    }
-
+    SkASSERT(value);
     if (!strcmp(SkAnnotationKeys::Define_Named_Dest_Key(), key)) {
         SkPoint transformedPoint;
         matrix.mapXY(point.x(), point.y(), &transformedPoint);
@@ -1634,25 +1632,28 @@ void SkPDFDevice::handlePointAnnotation(const SkPoint& point,
     }
 }
 
-void SkPDFDevice::handlePathAnnotation(const SkPath& path,
+void SkPDFDevice::handleRectAnnotation(const SkRect& rect,
                                        const SkDraw& d,
                                        const char key[], SkData* value) {
-    if (!value) {
-        return;
-    }
+    SkASSERT(value);
+    // Convert to path to handle non-90-degree rotations.
+    SkPath path;
+    path.addRect(rect);
+    path.transform(*d.fMatrix, &path);
+    SkPath clip;
+    (void)d.fClipStack->asPath(&clip);
+    SkIPoint deviceOrigin = this->getOrigin();
+    clip.offset(-deviceOrigin.x(), -deviceOrigin.y());
+    // Offset here to make clip and path share coordinates.
+    // We remove the offset in SkPDFDevice::drawDevice().
+    Op(clip, path, kIntersect_SkPathOp, &path);
+    // PDF wants a rectangle only.
+    SkRect transformedRect = path.getBounds();
 
-    SkRasterClip clip = *d.fRC;
-    clip.op(path, *d.fMatrix, SkIRect::MakeWH(width(), height()),
-            SkRegion::kIntersect_Op,
-            false);
-    SkRect transformedRect = SkRect::Make(clip.getBounds());
-
-    if (!strcmp(SkAnnotationKeys::URL_Key(), key)) {
-        if (!transformedRect.isEmpty()) {
+    if (!transformedRect.isEmpty()) {
+        if (!strcmp(SkAnnotationKeys::URL_Key(), key)) {
             fLinkToURLs.emplace_back(transformedRect, value);
-        }
-    } else if (!strcmp(SkAnnotationKeys::Link_Named_Dest_Key(), key)) {
-        if (!transformedRect.isEmpty()) {
+        } else if (!strcmp(SkAnnotationKeys::Link_Named_Dest_Key(), key)) {
             fLinkToDestinations.emplace_back(transformedRect, value);
         }
     }
@@ -2005,14 +2006,15 @@ void SkPDFDevice::populateGraphicStateEntryFromPaint(
 
             // PDF doesn't support kClamp_TileMode, so we simulate it by making
             // a pattern the size of the current clip.
-            SkIRect bounds = clipRegion.getBounds();
+            SkRect clipStackBounds = clipStack.bounds(this->getGlobalBounds());
+            SkIPoint deviceOrigin = this->getOrigin();
+            clipStackBounds.offset(-deviceOrigin.x(), -deviceOrigin.y());
 
             // We need to apply the initial transform to bounds in order to get
             // bounds in a consistent coordinate system.
-            SkRect boundsTemp;
-            boundsTemp.set(bounds);
-            fInitialTransform.mapRect(&boundsTemp);
-            boundsTemp.roundOut(&bounds);
+            fInitialTransform.mapRect(&clipStackBounds);
+            SkIRect bounds;
+            clipStackBounds.roundOut(&bounds);
 
             SkScalar rasterScale =
                     SkIntToScalar(fRasterDpi) / DPI_FOR_RASTER_SCALE_ONE;
