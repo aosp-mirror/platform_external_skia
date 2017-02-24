@@ -529,7 +529,6 @@ cc_library {
         "src/gpu/ops/GrDashOp.cpp",
         "src/gpu/ops/GrDefaultPathRenderer.cpp",
         "src/gpu/ops/GrDrawAtlasOp.cpp",
-        "src/gpu/ops/GrDrawOp.cpp",
         "src/gpu/ops/GrDrawPathOp.cpp",
         "src/gpu/ops/GrDrawVerticesOp.cpp",
         "src/gpu/ops/GrLatticeOp.cpp",
