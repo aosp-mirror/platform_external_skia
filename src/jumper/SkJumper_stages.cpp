@@ -38,10 +38,13 @@ static Dst bit_cast(const Src& src) {
     static F   mad(F f, F m, F a)  { return f*m+a; }
     static F   min(F a, F b)       { return fminf(a,b); }
     static F   max(F a, F b)       { return fmaxf(a,b); }
+    static F   abs_ (F v)          { return fabsf(v); }
+    static F   floor(F v, K*)      { return floorf(v); }
     static F   rcp  (F v)          { return 1.0f / v; }
     static F   rsqrt(F v)          { return 1.0f / sqrtf(v); }
     static U32 round(F v, F scale) { return (uint32_t)lrintf(v*scale); }
     static U16 pack(U32 v)         { return (U16)v; }
+    static U8  pack(U16 v)         { return  (U8)v; }
 
     static F if_then_else(I32 c, F t, F e) { return c ? t : e; }
 
@@ -63,10 +66,13 @@ static Dst bit_cast(const Src& src) {
     static F   mad(F f, F m, F a)                   { return vfmaq_f32(a,f,m);        }
     static F   min(F a, F b)                        { return vminq_f32(a,b);          }
     static F   max(F a, F b)                        { return vmaxq_f32(a,b);          }
+    static F   abs_ (F v)                           { return vabsq_f32(v);            }
+    static F   floor(F v, K*)                       { return vrndmq_f32(v);           }
     static F   rcp  (F v) { auto e = vrecpeq_f32 (v); return vrecpsq_f32 (v,e  ) * e; }
     static F   rsqrt(F v) { auto e = vrsqrteq_f32(v); return vrsqrtsq_f32(v,e*e) * e; }
     static U32 round(F v, F scale)                  { return vcvtnq_u32_f32(v*scale); }
     static U16 pack(U32 v)                          { return __builtin_convertvector(v, U16); }
+    static U8  pack(U16 v)                          { return __builtin_convertvector(v,  U8); }
 
     static F if_then_else(I32 c, F t, F e) { return vbslq_f32((U32)c,t,e); }
 
@@ -90,12 +96,19 @@ static Dst bit_cast(const Src& src) {
     static F   mad(F f, F m, F a)                  { return vfma_f32(a,f,m);        }
     static F   min(F a, F b)                       { return vmin_f32(a,b);          }
     static F   max(F a, F b)                       { return vmax_f32(a,b);          }
+    static F   abs_ (F v)                          { return vabs_f32(v);            }
     static F   rcp  (F v) { auto e = vrecpe_f32 (v); return vrecps_f32 (v,e  ) * e; }
     static F   rsqrt(F v) { auto e = vrsqrte_f32(v); return vrsqrts_f32(v,e*e) * e; }
     static U32 round(F v, F scale)                 { return vcvt_u32_f32(mad(v,scale,0.5f)); }
     static U16 pack(U32 v)                         { return __builtin_convertvector(v, U16); }
+    static U8  pack(U16 v)                         { return __builtin_convertvector(v,  U8); }
 
     static F if_then_else(I32 c, F t, F e) { return vbsl_f32((U32)c,t,e); }
+
+    static F floor(F v, K* k) {
+        F roundtrip = vcvt_f32_s32(vcvt_s32_f32(v));
+        return roundtrip - if_then_else(roundtrip > v, k->_1, 0);
+    }
 
     static F gather(const float* p, U32 ix) { return {p[ix[0]], p[ix[1]]}; }
 
@@ -114,6 +127,8 @@ static Dst bit_cast(const Src& src) {
     static F   mad(F f, F m, F a)  { return _mm256_fmadd_ps(f,m,a);}
     static F   min(F a, F b)       { return _mm256_min_ps(a,b);    }
     static F   max(F a, F b)       { return _mm256_max_ps(a,b);    }
+    static F   abs_(F v)           { return _mm256_and_ps(v, 0-v); }
+    static F   floor(F v, K*)      { return _mm256_floor_ps(v);    }
     static F   rcp  (F v)          { return _mm256_rcp_ps  (v);    }
     static F   rsqrt(F v)          { return _mm256_rsqrt_ps(v);    }
     static U32 round(F v, F scale) { return _mm256_cvtps_epi32(v*scale); }
@@ -122,6 +137,10 @@ static Dst bit_cast(const Src& src) {
         __m128i lo = _mm256_extractf128_si256(v, 0),
                 hi = _mm256_extractf128_si256(v, 1);
         return _mm_packus_epi32(lo, hi);
+    }
+    static U8 pack(U16 v) {
+        __m128i r = _mm_packus_epi16(v,v);
+        return unaligned_load<U8>(&r);
     }
 
     static F if_then_else(I32 c, F t, F e) { return _mm256_blendv_ps(e,t,c); }
@@ -139,17 +158,23 @@ static Dst bit_cast(const Src& src) {
     using U16 = uint16_t __attribute__((ext_vector_type(8)));
     using U8  = uint8_t  __attribute__((ext_vector_type(8)));
 
-    static F   mad(F f, F m, F a)  { return f*m+a;              }
-    static F   min(F a, F b)       { return _mm256_min_ps(a,b); }
-    static F   max(F a, F b)       { return _mm256_max_ps(a,b); }
-    static F   rcp  (F v)          { return _mm256_rcp_ps  (v); }
-    static F   rsqrt(F v)          { return _mm256_rsqrt_ps(v); }
+    static F   mad(F f, F m, F a)  { return f*m+a;                 }
+    static F   min(F a, F b)       { return _mm256_min_ps(a,b);    }
+    static F   max(F a, F b)       { return _mm256_max_ps(a,b);    }
+    static F   abs_(F v)           { return _mm256_and_ps(v, 0-v); }
+    static F   floor(F v, K*)      { return _mm256_floor_ps(v);    }
+    static F   rcp  (F v)          { return _mm256_rcp_ps  (v);    }
+    static F   rsqrt(F v)          { return _mm256_rsqrt_ps(v);    }
     static U32 round(F v, F scale) { return _mm256_cvtps_epi32(v*scale); }
 
     static U16 pack(U32 v) {
         __m128i lo = _mm256_extractf128_si256(v, 0),
                 hi = _mm256_extractf128_si256(v, 1);
         return _mm_packus_epi32(lo, hi);
+    }
+    static U8 pack(U16 v) {
+        __m128i r = _mm_packus_epi16(v,v);
+        return unaligned_load<U8>(&r);
     }
 
     static F if_then_else(I32 c, F t, F e) { return _mm256_blendv_ps(e,t,c); }
@@ -170,11 +195,12 @@ static Dst bit_cast(const Src& src) {
     using U16 = uint16_t __attribute__((ext_vector_type(4)));
     using U8  = uint8_t  __attribute__((ext_vector_type(4)));
 
-    static F   mad(F f, F m, F a)  { return f*m+a;           }
-    static F   min(F a, F b)       { return _mm_min_ps(a,b); }
-    static F   max(F a, F b)       { return _mm_max_ps(a,b); }
-    static F   rcp  (F v)          { return _mm_rcp_ps  (v); }
-    static F   rsqrt(F v)          { return _mm_rsqrt_ps(v); }
+    static F   mad(F f, F m, F a)  { return f*m+a;              }
+    static F   min(F a, F b)       { return _mm_min_ps(a,b);    }
+    static F   max(F a, F b)       { return _mm_max_ps(a,b);    }
+    static F   abs_(F v)           { return _mm_and_ps(v, 0-v); }
+    static F   rcp  (F v)          { return _mm_rcp_ps  (v);    }
+    static F   rsqrt(F v)          { return _mm_rsqrt_ps(v);    }
     static U32 round(F v, F scale) { return _mm_cvtps_epi32(v*scale); }
 
     static U16 pack(U32 v) {
@@ -187,12 +213,27 @@ static Dst bit_cast(const Src& src) {
     #endif
         return unaligned_load<U16>(&p);  // We have two copies.  Return (the lower) one.
     }
+    static U8 pack(U16 v) {
+        __m128i r;
+        memcpy(&r, &v, sizeof(v));
+        r = _mm_packus_epi16(r,r);
+        return unaligned_load<U8>(&r);
+    }
 
     static F if_then_else(I32 c, F t, F e) {
     #if defined(__SSE4_1__)
         return _mm_blendv_ps(e,t,c);
     #else
         return _mm_or_ps(_mm_and_ps(c, t), _mm_andnot_ps(c, e));
+    #endif
+    }
+
+    static F floor(F v, K* k) {
+    #if defined(__SSE4_1__)
+        return _mm_floor_ps(v);
+    #else
+        F roundtrip = _mm_cvtepi32_ps(_mm_cvttps_epi32(v));
+        return roundtrip - if_then_else(roundtrip > v, k->_1, 0);
     #endif
     }
 
@@ -213,7 +254,7 @@ static Dst bit_cast(const Src& src) {
     static U32 expand(U16 v) { return __builtin_convertvector(     v, U32); }
     static U32 expand(U8  v) { return __builtin_convertvector(     v, U32); }
 #else
-    static F   cast  (U32 v) { return (F)v; }
+    static F   cast  (U32 v) { return   (F)v; }
     static U32 expand(U16 v) { return (U32)v; }
     static U32 expand(U8  v) { return (U32)v; }
 #endif
@@ -525,6 +566,19 @@ STAGE(load_tables) {
     a = cast(        (px >> 24)) * k->_1_255;
 }
 
+STAGE(load_a8) {
+    auto ptr = *(const uint8_t**)ctx + x;
+
+    r = g = b = 0.0f;
+    a = cast(expand(unaligned_load<U8>(ptr))) * k->_1_255;
+}
+STAGE(store_a8) {
+    auto ptr = *(uint8_t**)ctx + x;
+
+    U8 packed = pack(pack(round(a, k->_255)));
+    memcpy(ptr, &packed, sizeof(packed));
+}
+
 STAGE(load_565) {
     auto ptr = *(const uint16_t**)ctx + x;
 
@@ -765,12 +819,27 @@ STAGE(store_f16) {
 #endif
 }
 
-static F clamp(const F& v, float limit) {
-    F l = bit_cast<F>(bit_cast<U32>(F(limit)) + U32(0xffffffff));  // limit - 1 ulp
-    return max(0, min(v, l));
+static F ulp_before(F v) {
+    return bit_cast<F>(bit_cast<U32>(v) + U32(0xffffffff));
 }
-STAGE(clamp_x) { r = clamp(r, *(const float*)ctx); }
-STAGE(clamp_y) { g = clamp(g, *(const float*)ctx); }
+static F clamp(F v, float limit, K*) {
+    v = max(0, v);
+    return min(v, ulp_before(limit));
+}
+static F repeat(F v, float limit, K* k) {
+    v = v - floor(v/limit, k)*limit;
+    return min(v, ulp_before(limit));
+}
+static F mirror(F v, float limit, K* k) {
+    v = abs_( (v-limit) - (limit+limit)*floor((v-limit)/(limit+limit),k) - limit );
+    return min(v, ulp_before(limit));
+}
+STAGE(clamp_x)  { r = clamp (r, *(const float*)ctx, k); }
+STAGE(clamp_y)  { g = clamp (g, *(const float*)ctx, k); }
+STAGE(repeat_x) { r = repeat(r, *(const float*)ctx, k); }
+STAGE(repeat_y) { g = repeat(g, *(const float*)ctx, k); }
+STAGE(mirror_x) { r = mirror(r, *(const float*)ctx, k); }
+STAGE(mirror_y) { g = mirror(g, *(const float*)ctx, k); }
 
 STAGE(matrix_2x3) {
     auto m = (const float*)ctx;
@@ -789,6 +858,16 @@ STAGE(matrix_3x4) {
     r = R;
     g = G;
     b = B;
+}
+STAGE(matrix_perspective) {
+    // N.B. Unlike the other matrix_ stages, this matrix is row-major.
+    auto m = (const float*)ctx;
+
+    auto R = mad(r,m[0], mad(g,m[1], m[2])),
+         G = mad(r,m[3], mad(g,m[4], m[5])),
+         Z = mad(r,m[6], mad(g,m[7], m[8]));
+    r = R * rcp(Z);
+    g = G * rcp(Z);
 }
 
 STAGE(linear_gradient_2stops) {
