@@ -13,6 +13,7 @@
 #include "SkData.h"
 #include "SkFrontBufferedStream.h"
 #include "SkMD5.h"
+#include "SkOSFile.h"
 #include "SkRandom.h"
 #include "SkStream.h"
 #include "SkStreamPriv.h"
@@ -20,6 +21,7 @@
 #include "Test.h"
 
 #include "png.h"
+#include <initializer_list>
 
 static SkStreamAsset* resource(const char path[]) {
     SkString fullPath = GetResourcePath(path);
@@ -1002,6 +1004,21 @@ DEF_TEST(Codec_jpeg_rewind, r) {
     // Rewind the codec and perform a full image decode.
     SkCodec::Result result = codec->getPixels(codec->getInfo(), pixelStorage.get(), rowBytes);
     REPORTER_ASSERT(r, SkCodec::kSuccess == result);
+}
+
+DEF_TEST(Codec_InvalidBmp, r) {
+    // These files report values that have caused problems with SkFILEStreams.
+    // They are invalid, and should not create SkCodecs.
+    for (auto* bmp : { "b34778578.bmp" } ) {
+        SkString path = SkOSPath::Join("invalid_images", bmp);
+        path = GetResourcePath(path.c_str());
+        SkAutoTDelete<SkFILEStream> stream(new SkFILEStream(path.c_str()));
+        if (!stream->isValid()) {
+            return;
+        }
+        SkAutoTDelete<SkCodec> codec(SkCodec::NewFromStream(stream.release()));
+        REPORTER_ASSERT(r, !codec);
+    }
 }
 
 DEF_TEST(Codec_InvalidRLEBmp, r) {
