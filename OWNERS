@@ -1,2 +1,5 @@
-reed@google.com
-bsalomon@google.com
+# Owners in upstream OWNERS files must be registered in AOSP Gerrit
+# before added into this file.
+djsollen@google.com
+msarett@google.com
+scroggo@google.com
