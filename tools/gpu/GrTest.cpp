@@ -124,7 +124,17 @@ void GrContext::printGpuStats() const {
 sk_sp<SkImage> GrContext::getFontAtlasImage_ForTesting(GrMaskFormat format) {
     GrAtlasGlyphCache* cache = this->getAtlasGlyphCache();
 
-    GrTexture* tex = cache->getTexture(format);
+    sk_sp<GrTextureProxy> proxy = cache->getProxy(format);
+    if (!proxy) {
+        return nullptr;
+    }
+
+    GrTexture* tex = proxy->instantiate(this->textureProvider());
+    if (!tex) {
+        return nullptr;
+    }
+
+    // MDB TODO: add proxy-backed SkImage_Gpu's
     sk_sp<SkImage> image(new SkImage_Gpu(tex->width(), tex->height(),
                                          kNeedNewImageUniqueID, kPremul_SkAlphaType,
                                          sk_ref_sp(tex), nullptr, SkBudgeted::kNo));
@@ -252,7 +262,7 @@ void GrRenderTargetContextPriv::testingOnly_addDrawOp(GrPaint&& paint,
 ///////////////////////////////////////////////////////////////////////////////
 
 GrRenderTarget::Flags GrRenderTargetProxy::testingOnly_getFlags() const {
-    return fFlags;
+    return fRenderTargetFlags;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -313,6 +323,7 @@ public:
     GrFence SK_WARN_UNUSED_RESULT insertFence() const override { return 0; }
     bool waitFence(GrFence, uint64_t) const override { return true; }
     void deleteFence(GrFence) const override {}
+    void flush() override {}
 
 private:
     void onResetContext(uint32_t resetBits) override {}
