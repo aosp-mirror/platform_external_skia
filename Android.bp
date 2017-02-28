@@ -1307,7 +1307,6 @@ cc_test {
         "tests/GrSurfaceTest.cpp",
         "tests/GrTRecorderTest.cpp",
         "tests/GrTextureMipMapInvalidationTest.cpp",
-        "tests/GrTextureStripAtlasTest.cpp",
         "tests/GradientTest.cpp",
         "tests/HSVRoundTripTest.cpp",
         "tests/HashTest.cpp",
