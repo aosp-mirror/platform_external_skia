@@ -683,6 +683,7 @@ cc_library {
         "src/sksl/SkSLUtil.cpp",
         "src/sksl/ir/SkSLSymbolTable.cpp",
         "src/sksl/ir/SkSLType.cpp",
+        "src/sksl/lex.layout.cpp",
         "src/svg/SkSVGCanvas.cpp",
         "src/svg/SkSVGDevice.cpp",
         "src/utils/SkBase64.cpp",
