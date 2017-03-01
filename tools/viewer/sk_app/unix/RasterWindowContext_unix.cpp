@@ -38,6 +38,8 @@ RasterWindowContext_xlib::RasterWindowContext_xlib(Display* display, XWindow win
     fDisplayParams = params;
     fGC = XCreateGC(fDisplay, fWindow, 0, nullptr);
     this->resize(width, height);
+    fWidth = width;
+    fHeight = height;
 }
 
 void RasterWindowContext_xlib::setDisplayParams(const DisplayParams& params) {
@@ -63,6 +65,7 @@ void RasterWindowContext_xlib::swapBuffers() {
     }
     int bitsPerPixel = pm.info().bytesPerPixel() * 8;
     XImage image;
+    memset(&image, 0, sizeof(image));
     image.width = pm.width();
     image.height = pm.height();
     image.format = ZPixmap;
