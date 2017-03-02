@@ -175,6 +175,10 @@
   },
   {
     "cmd": [
+      "python",
+      "-u",
+      "[START_DIR]/skia/infra/bots/recipe_modules/core/resources/symbolize_stack_trace.py",
+      "[START_DIR]",
       "catchsegv",
       "[START_DIR]/out/Debug/dm",
       "--undefok",
@@ -237,6 +241,7 @@
       "sp-8888",
       "2ndpic-8888",
       "lite-8888",
+      "srgbnl",
       "serialize-8888",
       "tiles_rt-8888",
       "pic-8888",
@@ -526,7 +531,7 @@
       "CHROME_HEADLESS": "1",
       "SKIA_OUT": "[START_DIR]/out"
     },
-    "name": "dm"
+    "name": "symbolized dm"
   },
   {
     "name": "$result",
