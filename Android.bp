@@ -476,6 +476,7 @@ cc_library {
         "src/gpu/gl/GrGLCreateNullInterface.cpp",
         "src/gpu/gl/GrGLDefaultInterface_native.cpp",
         "src/gpu/gl/GrGLExtensions.cpp",
+        "src/gpu/gl/GrGLExternalTextureData.cpp",
         "src/gpu/gl/GrGLGLSL.cpp",
         "src/gpu/gl/GrGLGpu.cpp",
         "src/gpu/gl/GrGLGpuProgramCache.cpp",
