@@ -580,6 +580,7 @@ cc_library {
         "src/gpu/vk/GrVkRenderTarget.cpp",
         "src/gpu/vk/GrVkResourceProvider.cpp",
         "src/gpu/vk/GrVkSampler.cpp",
+        "src/gpu/vk/GrVkSemaphore.cpp",
         "src/gpu/vk/GrVkStencilAttachment.cpp",
         "src/gpu/vk/GrVkTexture.cpp",
         "src/gpu/vk/GrVkTextureRenderTarget.cpp",
