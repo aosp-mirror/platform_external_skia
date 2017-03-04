@@ -434,7 +434,6 @@ cc_library {
         "src/gpu/GrTextureMaker.cpp",
         "src/gpu/GrTextureOpList.cpp",
         "src/gpu/GrTextureProducer.cpp",
-        "src/gpu/GrTextureProvider.cpp",
         "src/gpu/GrTextureProxy.cpp",
         "src/gpu/GrTextureRenderTargetProxy.cpp",
         "src/gpu/GrTextureToYUVPlanes.cpp",
