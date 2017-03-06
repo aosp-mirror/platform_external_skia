@@ -8,6 +8,7 @@ cc_library {
         "-U_FORTIFY_SOURCE",
         "-D_FORTIFY_SOURCE=1",
         "-DSKIA_IMPLEMENTATION=1",
+        "-DATRACE_TAG=ATRACE_TAG_VIEW",
     ],
 
     export_include_dirs: [
@@ -539,7 +540,6 @@ cc_library {
         "src/gpu/ops/GrNonAAStrokeRectOp.cpp",
         "src/gpu/ops/GrOp.cpp",
         "src/gpu/ops/GrOvalOpFactory.cpp",
-        "src/gpu/ops/GrPLSPathRenderer.cpp",
         "src/gpu/ops/GrRectOpFactory.cpp",
         "src/gpu/ops/GrRegionOp.cpp",
         "src/gpu/ops/GrShadowRRectOp.cpp",
@@ -828,6 +828,7 @@ cc_library {
         "libpng",
         "libvulkan",
         "libz",
+        "libcutils",
     ],
     static_libs: [
         "libarect",
@@ -1563,6 +1564,7 @@ cc_test {
     shared_libs: [
         "libEGL",
         "libGLESv2",
+        "libcutils",
         "libdng_sdk",
         "libexpat",
         "libft2",
@@ -2127,6 +2129,7 @@ cc_test {
     shared_libs: [
         "libEGL",
         "libGLESv2",
+        "libcutils",
         "libdng_sdk",
         "libexpat",
         "libft2",
