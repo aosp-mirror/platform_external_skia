@@ -604,7 +604,7 @@ cc_library {
         "src/images/SkPNGImageEncoder.cpp",
         "src/images/SkWEBPImageEncoder.cpp",
         "src/jumper/SkJumper.cpp",
-        "src/jumper/SkJumper_generated.S",
+        "src/jumper/SkJumper_generated.cpp",
         "src/jumper/SkJumper_stages.cpp",
         "src/lazy/SkDiscardableMemoryPool.cpp",
         "src/pathops/SkAddIntersections.cpp",
