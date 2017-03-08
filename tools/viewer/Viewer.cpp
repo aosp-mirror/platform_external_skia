@@ -153,6 +153,8 @@ static DEFINE_bool(atrace, false, "Enable support for using ATrace. ATrace is on
 DEFINE_int32(msaa, 0, "Number of subpixel samples. 0 for no HW antialiasing.");
 DEFINE_pathrenderer_flag;
 
+DEFINE_bool(instancedRendering, false, "Enable instanced rendering on GPU backends.");
+
 const char *kBackendTypeStrings[sk_app::Window::kBackendTypeCount] = {
     "OpenGL",
 #ifdef SK_VULKAN
@@ -284,6 +286,7 @@ Viewer::Viewer(int argc, char** argv, void* platformData)
 
     DisplayParams displayParams;
     displayParams.fMSAASampleCount = FLAGS_msaa;
+    displayParams.fGrContextOptions.fEnableInstancedRendering = FLAGS_instancedRendering;
     displayParams.fGrContextOptions.fGpuPathRenderers = CollectGpuPathRenderersFromFlags();
     fWindow->setRequestedDisplayParams(displayParams);
 
@@ -1008,6 +1011,20 @@ void Viewer::drawImGui(SkCanvas* canvas) {
                 bool* inst = &params.fGrContextOptions.fEnableInstancedRendering;
                 if (ctx && ImGui::Checkbox("Instanced Rendering", inst)) {
                     paramsChanged = true;
+                }
+
+                if (ctx) {
+                    int sampleCount = fWindow->sampleCount();
+                    ImGui::Text("MSAA: "); ImGui::SameLine();
+                    ImGui::RadioButton("0", &sampleCount, 0); ImGui::SameLine();
+                    ImGui::RadioButton("4", &sampleCount, 4); ImGui::SameLine();
+                    ImGui::RadioButton("8", &sampleCount, 8); ImGui::SameLine();
+                    ImGui::RadioButton("16", &sampleCount, 16);
+
+                    if (sampleCount != params.fMSAASampleCount) {
+                        params.fMSAASampleCount = sampleCount;
+                        paramsChanged = true;
+                    }
                 }
 
                 if (ImGui::TreeNode("Path Renderers")) {

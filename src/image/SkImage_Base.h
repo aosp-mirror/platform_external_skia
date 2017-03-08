@@ -41,6 +41,9 @@ public:
 
     virtual const SkBitmap* onPeekBitmap() const { return nullptr; }
 
+    virtual bool onReadYUV8Planes(const SkISize sizes[3], void* const planes[3],
+                                  const size_t rowBytes[3], SkYUVColorSpace colorSpace) const;
+
     virtual bool onReadPixels(const SkImageInfo& dstInfo, void* dstPixels, size_t dstRowBytes,
                               int srcX, int srcY, CachingHint) const = 0;
 
@@ -73,6 +76,11 @@ public:
     // to know automatically those entries can be purged when this SkImage deleted.
     void notifyAddedToCache() const {
         fAddedToCache.store(true);
+    }
+
+    virtual sk_sp<SkImage> onMakeColorSpace(sk_sp<SkColorSpace>) {
+        // TODO: Implement this.
+        return sk_ref_sp(this);
     }
 
     virtual bool onPinAsTexture(GrContext*) const { return false; }

@@ -1131,7 +1131,6 @@ SK_DEFINE_FLATTENABLE_REGISTRAR_GROUP_END
 #include "glsl/GrGLSLProgramDataManager.h"
 #include "glsl/GrGLSLUniformHandler.h"
 #include "SkGr.h"
-#include "SkGrPriv.h"
 
 static inline bool close_to_one_half(const SkFixed& val) {
     return SkScalarNearlyEqual(SkFixedToScalar(val), SK_ScalarHalf);
@@ -1345,7 +1344,7 @@ void GrGradientEffect::GLSLProcessor::onSetData(const GrGLSLProgramDataManager& 
                 fCachedYCoord = yCoord;
             }
             if (SkToBool(e.fColorSpaceXform)) {
-                pdman.setSkMatrix44(fColorSpaceXformUni, e.fColorSpaceXform->srcToDst());
+                fColorSpaceHelper.setData(pdman, e.fColorSpaceXform.get());
             }
             break;
         }
@@ -1583,15 +1582,14 @@ void GrGradientEffect::GLSLProcessor::emitColor(GrGLSLFPFragmentBuilder* fragBui
         }
 
         case kTexture_ColorType: {
-            GrGLSLColorSpaceXformHelper colorSpaceHelper(uniformHandler, ge.fColorSpaceXform.get(),
-                                                         &fColorSpaceXformUni);
+            fColorSpaceHelper.emitCode(uniformHandler, ge.fColorSpaceXform.get());
 
             const char* fsyuni = uniformHandler->getUniformCStr(fFSYUni);
 
             fragBuilder->codeAppendf("vec2 coord = vec2(%s, %s);", gradientTValue, fsyuni);
             fragBuilder->codeAppendf("%s = ", outputColor);
             fragBuilder->appendTextureLookupAndModulate(inputColor, texSamplers[0], "coord",
-                                                        kVec2f_GrSLType, &colorSpaceHelper);
+                                                        kVec2f_GrSLType, &fColorSpaceHelper);
             fragBuilder->codeAppend(";");
 
             break;
