@@ -541,6 +541,7 @@ cc_library {
         "src/gpu/ops/GrOvalOpFactory.cpp",
         "src/gpu/ops/GrRectOpFactory.cpp",
         "src/gpu/ops/GrRegionOp.cpp",
+        "src/gpu/ops/GrSemaphoreOp.cpp",
         "src/gpu/ops/GrShadowRRectOp.cpp",
         "src/gpu/ops/GrStencilAndCoverPathRenderer.cpp",
         "src/gpu/ops/GrTessellatingPathRenderer.cpp",
