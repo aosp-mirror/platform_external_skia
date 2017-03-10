@@ -213,7 +213,6 @@ LOCAL_SRC_FILES := \
 	../tests/PremulAlphaRoundTripTest.cpp \
 	../tests/QuickRejectTest.cpp \
 	../tests/RRectInPathTest.cpp \
-	../tests/RTConfRegistryTest.cpp \
 	../tests/RTreeTest.cpp \
 	../tests/RandomTest.cpp \
 	../tests/ReadPixelsTest.cpp \
