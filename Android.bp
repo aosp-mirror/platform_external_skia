@@ -136,6 +136,7 @@ cc_library {
         "src/core/SkColorShader.cpp",
         "src/core/SkColorSpace.cpp",
         "src/core/SkColorSpaceXform.cpp",
+        "src/core/SkColorSpaceXformCanvas.cpp",
         "src/core/SkColorSpaceXform_A2B.cpp",
         "src/core/SkColorSpace_A2B.cpp",
         "src/core/SkColorSpace_ICC.cpp",
