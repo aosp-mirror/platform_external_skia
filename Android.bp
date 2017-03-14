@@ -1517,6 +1517,7 @@ cc_test {
         "tests/UnicodeTest.cpp",
         "tests/UtilsTest.cpp",
         "tests/VarAllocTest.cpp",
+        "tests/VerticesTest.cpp",
         "tests/VkClearTests.cpp",
         "tests/VkHeapTests.cpp",
         "tests/VkUploadPixelsTests.cpp",
