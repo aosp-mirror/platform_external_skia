@@ -297,6 +297,7 @@ cc_library {
         "src/core/SkValidatingReadBuffer.cpp",
         "src/core/SkVarAlloc.cpp",
         "src/core/SkVertState.cpp",
+        "src/core/SkVertices.cpp",
         "src/core/SkWriteBuffer.cpp",
         "src/core/SkWriter32.cpp",
         "src/core/SkXfermode.cpp",
