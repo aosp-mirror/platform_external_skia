@@ -17,6 +17,7 @@
 #include "GrResourceKey.h"
 #include "GrSemaphore.h"
 #include "GrStencilAttachment.h"
+#include "GrSurfaceProxyPriv.h"
 #include "GrTexturePriv.h"
 #include "../private/GrSingleOwner.h"
 #include "SkMathPriv.h"
@@ -39,6 +40,9 @@ GrResourceProvider::GrResourceProvider(GrGpu* gpu, GrResourceCache* cache, GrSin
     fQuadIndexBufferKey = gQuadIndexBufferKey;
 }
 
+bool GrResourceProvider::IsFunctionallyExact(GrTextureProxy* proxy) {
+    return proxy->priv().isExact() || (SkIsPow2(proxy->width()) && SkIsPow2(proxy->height()));
+}
 
 GrTexture* GrResourceProvider::createMipMappedTexture(const GrSurfaceDesc& desc,
                                                       SkBudgeted budgeted, const GrMipLevel* texels,
@@ -206,6 +210,34 @@ GrTexture* GrResourceProvider::findAndRefTextureByUniqueKey(const GrUniqueKey& k
         return texture;
     }
     return NULL;
+}
+
+// MDB TODO (caching): this side-steps the issue of texture proxies with unique IDs
+void GrResourceProvider::assignUniqueKeyToProxy(const GrUniqueKey& key, GrTextureProxy* proxy) {
+    ASSERT_SINGLE_OWNER
+    SkASSERT(key.isValid());
+    if (this->isAbandoned() || !proxy) {
+        return;
+    }
+
+    GrTexture* texture = proxy->instantiate(this);
+    if (!texture) {
+        return;
+    }
+
+    this->assignUniqueKeyToResource(key, texture);
+}
+
+// MDB TODO (caching): this side-steps the issue of texture proxies with unique IDs
+sk_sp<GrTextureProxy> GrResourceProvider::findProxyByUniqueKey(const GrUniqueKey& key) {
+    ASSERT_SINGLE_OWNER
+
+    sk_sp<GrTexture> texture(this->findAndRefTextureByUniqueKey(key));
+    if (!texture) {
+        return nullptr;
+    }
+
+    return GrSurfaceProxy::MakeWrapped(std::move(texture));
 }
 
 const GrBuffer* GrResourceProvider::createInstancedIndexBuffer(const uint16_t* pattern,
