@@ -459,6 +459,7 @@ cc_library {
         "src/gpu/effects/GrDitherEffect.cpp",
         "src/gpu/effects/GrGaussianConvolutionFragmentProcessor.cpp",
         "src/gpu/effects/GrMatrixConvolutionEffect.cpp",
+        "src/gpu/effects/GrNonlinearColorSpaceXformEffect.cpp",
         "src/gpu/effects/GrOvalEffect.cpp",
         "src/gpu/effects/GrPorterDuffXferProcessor.cpp",
         "src/gpu/effects/GrRRectEffect.cpp",
