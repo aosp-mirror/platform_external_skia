@@ -1054,7 +1054,7 @@ HRESULT SkXPSDevice::createXpsBrush(const SkPaint& skPaint,
         //TODO: outMatrix??
         SkMatrix localMatrix = shader->getLocalMatrix();
         if (parentTransform) {
-            localMatrix.preConcat(*parentTransform);
+            localMatrix.postConcat(*parentTransform);
         }
 
         SkTScopedComPtr<IXpsOMTileBrush> tileBrush;
@@ -2256,9 +2256,18 @@ void SkXPSDevice::drawBitmapRect(const SkBitmap& bitmap,
                                  const SkRect& dst,
                                  const SkPaint& paint,
                                  SkCanvas::SrcRectConstraint constraint) {
-    SkRect srcBounds = src ? *src : SkRect::Make(bitmap.bounds());
+    SkRect bitmapBounds = SkRect::Make(bitmap.bounds());
+    SkRect srcBounds = src ? *src : bitmapBounds;
     SkMatrix matrix = SkMatrix::MakeRectToRect(srcBounds, dst, SkMatrix::kFill_ScaleToFit);
-
+    SkRect actualDst;
+    if (!src || bitmapBounds.contains(*src)) {
+        actualDst = dst;
+    } else {
+        if (!srcBounds.intersect(bitmapBounds)) {
+            return;
+        }
+        matrix.mapRect(&actualDst, srcBounds);
+    }
     auto bitmapShader = SkMakeBitmapShader(bitmap, SkShader::kClamp_TileMode,
                                            SkShader::kClamp_TileMode, &matrix,
                                            kNever_SkCopyPixelsMode);
@@ -2267,6 +2276,6 @@ void SkXPSDevice::drawBitmapRect(const SkBitmap& bitmap,
     SkPaint paintWithShader(paint);
     paintWithShader.setStyle(SkPaint::kFill_Style);
     paintWithShader.setShader(std::move(bitmapShader));
-    this->drawRect(dst, paintWithShader);
+    this->drawRect(actualDst, paintWithShader);
 }
 #endif//defined(SK_BUILD_FOR_WIN32)
