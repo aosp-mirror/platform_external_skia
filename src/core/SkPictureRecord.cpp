@@ -36,6 +36,7 @@ SkPictureRecord::~SkPictureRecord() {
     fPictureRefs.unrefAll();
     fDrawableRefs.unrefAll();
     fTextBlobRefs.unrefAll();
+    fVerticesRefs.unrefAll();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
