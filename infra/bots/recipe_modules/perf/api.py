@@ -53,6 +53,11 @@ def nanobench_flags(bot):
       gl_prefix + 'nvpr' + sample_count,
       gl_prefix + 'nvprdit' + sample_count])
 
+  # We want to test both the OpenGL config and the GLES config on Linux Intel:
+  # GL is used by Chrome, GLES is used by ChromeOS.
+  if 'Intel' in bot and 'Ubuntu' in bot:
+    config.extend(['gles', 'glesmsaa4'])
+
   # Bench instanced rendering on a limited number of platforms
   inst_config = gl_prefix + 'inst'
   if 'Nexus6' in bot:
@@ -100,6 +105,8 @@ def nanobench_flags(bot):
     match.append('~GLInstancedArraysBench') # skia:4714
   if 'IntelIris540' in bot and 'ANGLE' in bot:
     match.append('~tile_image_filter_tiled_64')  # skia:6082
+  if 'Intel' in bot and 'Ubuntu' in bot and not 'Vulkan' in bot:
+    match.append('~native_image_to_raster_surface')  # skia:6401
   if 'Vulkan' in bot and 'NexusPlayer' in bot:
     match.append('~hardstop') # skia:6037
 
@@ -180,6 +187,16 @@ def perf_steps(api):
     args.append(skip_flag)
   args.extend(nanobench_flags(api.vars.builder_name))
 
+  if 'Chromecast' in api.vars.builder_cfg.get('os', ''):
+    # Due to limited disk space, run a watered down perf run on Chromecast.
+    args = [
+      target,
+       '-i', api.flavor.device_dirs.resource_dir,
+       '--images', api.flavor.device_path_join(
+            api.flavor.device_dirs.resource_dir, 'color_wheel.jpg'),
+       '--svgs',  api.flavor.device_dirs.svg_dir,
+    ]
+
   if api.vars.upload_perf_results:
     now = api.time.utcnow()
     ts = int(calendar.timegm(now.utctimetuple()))
@@ -242,7 +259,10 @@ class PerfApi(recipe_api.RecipeApi):
       env['IOS_BUNDLE_ID'] = 'com.google.nanobench'
     with self.m.step.context({'env': env}):
       try:
-        self.m.flavor.install_everything()
+        if 'Chromecast' in self.m.vars.builder_name:
+          self.m.flavor.install(resources=True, skps=True)
+        else:
+          self.m.flavor.install_everything()
         perf_steps(self.m)
       finally:
         self.m.flavor.cleanup_steps()

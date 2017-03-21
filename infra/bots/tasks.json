@@ -30,6 +30,12 @@
         "Build-Mac-Clang-arm64-Release-iOS"
       ]
     },
+    "Build-Mac-Clang-x64-Release-iOS": {
+      "priority": 0.8,
+      "tasks": [
+        "Build-Mac-Clang-x64-Release-iOS"
+      ]
+    },
     "Build-Mac-Clang-x86_64-Debug": {
       "priority": 0.8,
       "tasks": [
@@ -666,6 +672,18 @@
       "priority": 0.8,
       "tasks": [
         "Upload-Perf-Android-Clang-PixelC-GPU-TegraX1-arm64-Release-Android_Vulkan_Skpbench"
+      ]
+    },
+    "Perf-Chromecast-GCC-Chorizo-CPU-Cortex_A7-arm-Debug": {
+      "priority": 0.8,
+      "tasks": [
+        "Perf-Chromecast-GCC-Chorizo-CPU-Cortex_A7-arm-Debug"
+      ]
+    },
+    "Perf-Chromecast-GCC-Chorizo-CPU-Cortex_A7-arm-Release": {
+      "priority": 0.8,
+      "tasks": [
+        "Upload-Perf-Chromecast-GCC-Chorizo-CPU-Cortex_A7-arm-Release"
       ]
     },
     "Perf-Mac-Clang-MacMini4.1-GPU-GeForce320M-x86_64-Debug": {
@@ -1868,7 +1886,7 @@
     "Build-Mac-Clang-arm-Debug-iOS": {
       "dimensions": [
         "gpu:none",
-        "os:Mac-10.11",
+        "os:Mac-10.12",
         "pool:Skia"
       ],
       "extra_args": [
@@ -1893,7 +1911,7 @@
     "Build-Mac-Clang-arm-Release-iOS": {
       "dimensions": [
         "gpu:none",
-        "os:Mac-10.11",
+        "os:Mac-10.12",
         "pool:Skia"
       ],
       "extra_args": [
@@ -1925,7 +1943,7 @@
       ],
       "dimensions": [
         "gpu:none",
-        "os:Mac-10.11",
+        "os:Mac-10.12",
         "pool:Skia"
       ],
       "extra_args": [
@@ -1950,7 +1968,7 @@
     "Build-Mac-Clang-arm64-Debug-iOS": {
       "dimensions": [
         "gpu:none",
-        "os:Mac-10.11",
+        "os:Mac-10.12",
         "pool:Skia"
       ],
       "extra_args": [
@@ -1975,7 +1993,7 @@
     "Build-Mac-Clang-arm64-Release-iOS": {
       "dimensions": [
         "gpu:none",
-        "os:Mac-10.11",
+        "os:Mac-10.12",
         "pool:Skia"
       ],
       "extra_args": [
@@ -1997,10 +2015,35 @@
       "isolate": "compile_skia.isolate",
       "priority": 0.8
     },
+    "Build-Mac-Clang-x64-Release-iOS": {
+      "dimensions": [
+        "gpu:none",
+        "os:Mac-10.12",
+        "pool:Skia"
+      ],
+      "extra_args": [
+        "--workdir",
+        "../../..",
+        "swarm_compile",
+        "repository=<(REPO)",
+        "buildername=Build-Mac-Clang-x64-Release-iOS",
+        "mastername=fake-master",
+        "buildnumber=2",
+        "slavename=fake-buildslave",
+        "nobuildbot=True",
+        "swarm_out_dir=${ISOLATED_OUTDIR}",
+        "revision=<(REVISION)",
+        "patch_storage=<(PATCH_STORAGE)",
+        "patch_issue=<(ISSUE)",
+        "patch_set=<(PATCHSET)"
+      ],
+      "isolate": "compile_skia.isolate",
+      "priority": 0.8
+    },
     "Build-Mac-Clang-x86_64-Debug": {
       "dimensions": [
         "gpu:none",
-        "os:Mac-10.11",
+        "os:Mac-10.12",
         "pool:Skia"
       ],
       "extra_args": [
@@ -2025,7 +2068,7 @@
     "Build-Mac-Clang-x86_64-Debug-CommandBuffer": {
       "dimensions": [
         "gpu:none",
-        "os:Mac-10.11",
+        "os:Mac-10.12",
         "pool:Skia"
       ],
       "extra_args": [
@@ -2050,7 +2093,7 @@
     "Build-Mac-Clang-x86_64-Release": {
       "dimensions": [
         "gpu:none",
-        "os:Mac-10.11",
+        "os:Mac-10.12",
         "pool:Skia"
       ],
       "extra_args": [
@@ -2075,7 +2118,7 @@
     "Build-Mac-Clang-x86_64-Release-CommandBuffer": {
       "dimensions": [
         "gpu:none",
-        "os:Mac-10.11",
+        "os:Mac-10.12",
         "pool:Skia"
       ],
       "extra_args": [
@@ -5959,6 +6002,86 @@
       ],
       "io_timeout_ns": 2400000000000,
       "isolate": "skpbench_skia.isolate",
+      "max_attempts": 1,
+      "priority": 0.8
+    },
+    "Perf-Chromecast-GCC-Chorizo-CPU-Cortex_A7-arm-Debug": {
+      "cipd_packages": [
+        {
+          "name": "skia/bots/skp",
+          "path": "skp",
+          "version": "version:41"
+        }
+      ],
+      "dependencies": [
+        "Build-Ubuntu-GCC-arm-Debug-Chromecast"
+      ],
+      "dimensions": [
+        "device_os:1.24_82923",
+        "device_type:chorizo",
+        "os:Android",
+        "pool:Skia"
+      ],
+      "execution_timeout_ns": 14400000000000,
+      "expiration_ns": 72000000000000,
+      "extra_args": [
+        "--workdir",
+        "../../..",
+        "swarm_perf",
+        "repository=<(REPO)",
+        "buildername=Perf-Chromecast-GCC-Chorizo-CPU-Cortex_A7-arm-Debug",
+        "mastername=fake-master",
+        "buildnumber=2",
+        "slavename=fake-buildslave",
+        "nobuildbot=True",
+        "swarm_out_dir=${ISOLATED_OUTDIR}",
+        "revision=<(REVISION)",
+        "patch_storage=<(PATCH_STORAGE)",
+        "patch_issue=<(ISSUE)",
+        "patch_set=<(PATCHSET)"
+      ],
+      "io_timeout_ns": 2400000000000,
+      "isolate": "perf_skia.isolate",
+      "max_attempts": 1,
+      "priority": 0.8
+    },
+    "Perf-Chromecast-GCC-Chorizo-CPU-Cortex_A7-arm-Release": {
+      "cipd_packages": [
+        {
+          "name": "skia/bots/skp",
+          "path": "skp",
+          "version": "version:41"
+        }
+      ],
+      "dependencies": [
+        "Build-Ubuntu-GCC-arm-Release-Chromecast"
+      ],
+      "dimensions": [
+        "device_os:1.24_82923",
+        "device_type:chorizo",
+        "os:Android",
+        "pool:Skia"
+      ],
+      "execution_timeout_ns": 14400000000000,
+      "expiration_ns": 72000000000000,
+      "extra_args": [
+        "--workdir",
+        "../../..",
+        "swarm_perf",
+        "repository=<(REPO)",
+        "buildername=Perf-Chromecast-GCC-Chorizo-CPU-Cortex_A7-arm-Release",
+        "mastername=fake-master",
+        "buildnumber=2",
+        "slavename=fake-buildslave",
+        "nobuildbot=True",
+        "swarm_out_dir=${ISOLATED_OUTDIR}",
+        "revision=<(REVISION)",
+        "patch_storage=<(PATCH_STORAGE)",
+        "patch_issue=<(ISSUE)",
+        "patch_set=<(PATCHSET)"
+      ],
+      "io_timeout_ns": 2400000000000,
+      "isolate": "perf_skia.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -16428,6 +16551,36 @@
         "upload_nano_results",
         "repository=<(REPO)",
         "buildername=Perf-Android-Clang-PixelC-GPU-TegraX1-arm64-Release-Android_Vulkan_Skpbench",
+        "mastername=fake-master",
+        "buildnumber=2",
+        "slavename=fake-buildslave",
+        "nobuildbot=True",
+        "swarm_out_dir=${ISOLATED_OUTDIR}",
+        "revision=<(REVISION)",
+        "patch_storage=<(PATCH_STORAGE)",
+        "patch_issue=<(ISSUE)",
+        "patch_set=<(PATCHSET)",
+        "gs_bucket=skia-perf"
+      ],
+      "isolate": "upload_nano_results.isolate",
+      "priority": 0.8
+    },
+    "Upload-Perf-Chromecast-GCC-Chorizo-CPU-Cortex_A7-arm-Release": {
+      "dependencies": [
+        "Perf-Chromecast-GCC-Chorizo-CPU-Cortex_A7-arm-Release"
+      ],
+      "dimensions": [
+        "cpu:x86-64-avx2",
+        "gpu:none",
+        "os:Ubuntu-14.04",
+        "pool:Skia"
+      ],
+      "extra_args": [
+        "--workdir",
+        "../../..",
+        "upload_nano_results",
+        "repository=<(REPO)",
+        "buildername=Perf-Chromecast-GCC-Chorizo-CPU-Cortex_A7-arm-Release",
         "mastername=fake-master",
         "buildnumber=2",
         "slavename=fake-buildslave",
