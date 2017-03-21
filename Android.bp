@@ -1528,6 +1528,7 @@ cc_test {
         "tests/YUVTest.cpp",
         "tests/image-bitmap.cpp",
         "tests/skbug5221.cpp",
+        "tests/skbug6389.cpp",
         "tools/AndroidSkDebugToStdOut.cpp",
         "tools/CrashHandler.cpp",
         "tools/LsanSuppressions.cpp",
