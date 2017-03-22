@@ -74,7 +74,7 @@ public:
     }
 
     SkImage_Raster(const SkImageInfo&, sk_sp<SkData>, size_t rb, SkColorTable*);
-    virtual ~SkImage_Raster();
+    ~SkImage_Raster() override;
 
     SkImageInfo onImageInfo() const override {
         return fBitmap.info();
@@ -92,9 +92,6 @@ public:
                                             SkColorSpace*, sk_sp<SkColorSpace>*,
                                             SkScalar scaleAdjust[2]) const override;
 #endif
-
-    GrTexture* asTextureRef(GrContext*, const GrSamplerParams&, SkColorSpace*,
-                            sk_sp<SkColorSpace>*, SkScalar scaleAdjust[2]) const override;
 
     bool getROPixels(SkBitmap*, SkColorSpace* dstColorSpace, CachingHint) const override;
     sk_sp<SkImage> onMakeSubset(const SkIRect&) const override;
@@ -186,18 +183,7 @@ sk_sp<GrTextureProxy> SkImage_Raster::asTextureProxyRef(GrContext* context,
                                                         SkColorSpace* dstColorSpace,
                                                         sk_sp<SkColorSpace>* texColorSpace,
                                                         SkScalar scaleAdjust[2]) const {
-    sk_sp<GrTexture> tex(this->asTextureRef(context, params, dstColorSpace, texColorSpace,
-                                            scaleAdjust));
-    return GrSurfaceProxy::MakeWrapped(std::move(tex));
-}
-#endif
-
-GrTexture* SkImage_Raster::asTextureRef(GrContext* ctx, const GrSamplerParams& params,
-                                        SkColorSpace* dstColorSpace,
-                                        sk_sp<SkColorSpace>* texColorSpace,
-                                        SkScalar scaleAdjust[2]) const {
-#if SK_SUPPORT_GPU
-    if (!ctx) {
+    if (!context) {
         return nullptr;
     }
 
@@ -208,17 +194,17 @@ GrTexture* SkImage_Raster::asTextureRef(GrContext* ctx, const GrSamplerParams& p
     uint32_t uniqueID;
     sk_sp<GrTexture> tex = this->refPinnedTexture(&uniqueID);
     if (tex) {
-        GrTextureAdjuster adjuster(ctx, fPinnedTexture.get(),
+        GrTextureAdjuster adjuster(context, fPinnedTexture.get(),
                                    fBitmap.alphaType(), fBitmap.bounds(),
                                    fPinnedUniqueID, fBitmap.colorSpace());
-        return adjuster.refTextureSafeForParams(params, nullptr, scaleAdjust);
+        tex.reset(adjuster.refTextureSafeForParams(params, nullptr, scaleAdjust));
+    } else {
+        tex.reset(GrRefCachedBitmapTexture(context, fBitmap, params, scaleAdjust));
     }
 
-    return GrRefCachedBitmapTexture(ctx, fBitmap, params, scaleAdjust);
-#else
-    return nullptr;
-#endif
+    return GrSurfaceProxy::MakeWrapped(std::move(tex));
 }
+#endif
 
 #if SK_SUPPORT_GPU
 
@@ -371,13 +357,14 @@ bool SkImage_Raster::onAsLegacyBitmap(SkBitmap* bitmap, LegacyBitmapMode mode) c
 }
 
 sk_sp<SkImage> SkImage_Raster::onMakeColorSpace(sk_sp<SkColorSpace> target) const {
+    // Force the color type of the new image to be kN32_SkColorType.
+    // (1) This means we lose precision on F16 images.  This is necessary while this function is
+    //     used to pre-transform inputs to a legacy canvas.  Legacy canvases do not handle F16.
+    // (2) kIndex8 and kGray8 must be expanded in order perform a color space transformation.
+    // (3) Seems reasonable to expand k565 and k4444.  It's nice to avoid these color types for
+    //     clients who opt into color space support.
+    SkImageInfo dstInfo = fBitmap.info().makeColorType(kN32_SkColorType).makeColorSpace(target);
     SkBitmap dst;
-    SkImageInfo dstInfo = fBitmap.info().makeColorSpace(target);
-    if (kIndex_8_SkColorType == dstInfo.colorType() ||
-        kGray_8_SkColorType == dstInfo.colorType())
-    {
-        dstInfo = dstInfo.makeColorType(kN32_SkColorType);
-    }
     dst.allocPixels(dstInfo);
 
     SkPixmap src;
