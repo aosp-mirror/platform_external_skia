@@ -160,6 +160,12 @@ public:
      */
     void purgeAllUnlockedResources();
 
+    /**
+     * Purge GPU resources that haven't been used in the past 'ms' milliseconds, regardless of
+     * whether the context is currently under budget.
+     */
+    void purgeResourcesNotUsedInMs(std::chrono::milliseconds ms);
+
     /** Access the context capabilities */
     const GrCaps* caps() const { return fCaps; }
 
@@ -424,11 +430,9 @@ private:
      * of effects that make a readToUPM->writeToPM->readToUPM cycle invariant. Otherwise, they
      * return NULL. They also can perform a swizzle as part of the draw.
      */
-    sk_sp<GrFragmentProcessor> createPMToUPMEffect(GrTexture*, const GrSwizzle&, const SkMatrix&);
-    sk_sp<GrFragmentProcessor> createPMToUPMEffect(sk_sp<GrTextureProxy>, const GrSwizzle&,
-                                                   const SkMatrix&);
-    sk_sp<GrFragmentProcessor> createUPMToPMEffect(sk_sp<GrTextureProxy>, const GrSwizzle&,
-                                                   const SkMatrix&);
+    sk_sp<GrFragmentProcessor> createPMToUPMEffect(GrTexture*, const SkMatrix&);
+    sk_sp<GrFragmentProcessor> createPMToUPMEffect(sk_sp<GrTextureProxy>, const SkMatrix&);
+    sk_sp<GrFragmentProcessor> createUPMToPMEffect(sk_sp<GrTextureProxy>, const SkMatrix&);
     /** Called before either of the above two functions to determine the appropriate fragment
         processors for conversions. */
     void testPMConversionsIfNecessary(uint32_t flags);
