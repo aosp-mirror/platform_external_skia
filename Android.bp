@@ -1673,6 +1673,7 @@ cc_test {
         "bench/ColorPrivBench.cpp",
         "bench/ControlBench.cpp",
         "bench/CoverageBench.cpp",
+        "bench/CubicKLMBench.cpp",
         "bench/DashBench.cpp",
         "bench/DisplacementBench.cpp",
         "bench/DrawBitmapAABench.cpp",
