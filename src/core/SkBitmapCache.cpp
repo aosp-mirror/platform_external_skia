@@ -78,7 +78,9 @@ SkBitmapCacheDesc SkBitmapCacheDesc::Make(const SkBitmap& bm) {
 SkBitmapCacheDesc SkBitmapCacheDesc::Make(const SkImage* image, int scaledWidth, int scaledHeight) {
     SkASSERT(image->width() > 0 && image->height() > 0);
     SkASSERT(scaledWidth > 0 && scaledHeight > 0);
-    SkASSERT(scaledWidth != image->width() || scaledHeight != image->height());
+
+    // If the dimensions are the same, should we set them to 0,0?
+    //SkASSERT(scaledWidth != image->width() || scaledHeight != image->height());
 
     return { image->uniqueID(), scaledWidth, scaledHeight, get_bounds_from_image(image) };
 }
