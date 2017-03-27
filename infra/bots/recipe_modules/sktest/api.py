@@ -374,6 +374,9 @@ def dm_flags(bot):
   if 'GalaxyS6' in bot:
     match.append('~SpecialImage') # skia:6338
 
+  if 'GalaxyS7_G930A' in bot:
+    match.append('~WritePixels') # skia:6427
+
   if 'ANGLE' in bot and 'Debug' in bot:
     match.append('~GLPrograms') # skia:4717
 
@@ -482,6 +485,9 @@ def dm_flags(bot):
       blacklist([config, 'gm', '_', 'multipicturedraw_pathclip_simple'])
       blacklist([config, 'gm', '_', 'multipicturedraw_rectclip_simple'])
       blacklist([config, 'gm', '_', 'multipicturedraw_rrectclip_simple'])
+
+  if 'IntelBayTrail' in bot and 'Ubuntu' in bot:
+    match.append('~ImageStorageLoad') # skia:6358
 
   if 'Vivante' in bot:
     # This causes the bot to spin for >3.5 hours.

@@ -267,7 +267,17 @@ int main(int argc, char** argv) {
             }
         }
     }
-    if (!stream || !dst_factory) { return help(); }
+    if (!stream) { return help(); }
+    if (!dst_factory) {
+        // A default Dst that's enough for unit tests and not much else.
+        dst_factory = []{
+            struct : Dst {
+                bool draw(Src* src) override { return src->draw(nullptr); }
+                sk_sp<SkImage> image() override { return nullptr; }
+            } dst;
+            return move_unique(dst);
+        };
+    }
 
     std::unique_ptr<Engine> engine;
     if (jobs == 0) { engine.reset(new SerialEngine);                            }
@@ -364,7 +374,7 @@ Options::Options(std::string str) {
     std::string k,v, *curr = &k;
     for (auto c : str) {
         switch(c) {
-            case ',': this->kv[k] = v;
+            case ',': (*this)[k] = v;
                       curr = &(k = "");
                       break;
             case '=': curr = &(v = "");
@@ -372,8 +382,10 @@ Options::Options(std::string str) {
             default: *curr += c;
         }
     }
-    this->kv[k] = v;
+    (*this)[k] = v;
 }
+
+std::string& Options::operator[](std::string k) { return this->kv[k]; }
 
 std::string Options::operator()(std::string k, std::string fallback) const {
     for (auto it = kv.find(k); it != kv.end(); ) {

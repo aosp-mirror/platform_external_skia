@@ -6,7 +6,6 @@
  */
 
 #include "GrPaint.h"
-#include "GrProcOptInfo.h"
 #include "GrXferProcessor.h"
 #include "effects/GrCoverageSetOpXP.h"
 #include "effects/GrPorterDuffXferProcessor.h"
@@ -18,34 +17,6 @@ void GrPaint::setPorterDuffXPFactory(SkBlendMode mode) {
 
 void GrPaint::setCoverageSetOpXPFactory(SkRegion::Op regionOp, bool invertCoverage) {
     fXPFactory = GrCoverageSetOpXPFactory::Get(regionOp, invertCoverage);
-}
-
-void GrPaint::addColorTextureProcessor(GrTexture* texture,
-                                       sk_sp<GrColorSpaceXform> colorSpaceXform,
-                                       const SkMatrix& matrix) {
-    this->addColorFragmentProcessor(GrSimpleTextureEffect::Make(texture,
-                                                                std::move(colorSpaceXform),
-                                                                matrix));
-}
-
-void GrPaint::addCoverageTextureProcessor(GrTexture* texture, const SkMatrix& matrix) {
-    this->addCoverageFragmentProcessor(GrSimpleTextureEffect::Make(texture, nullptr, matrix));
-}
-
-void GrPaint::addColorTextureProcessor(GrTexture* texture,
-                                       sk_sp<GrColorSpaceXform> colorSpaceXform,
-                                       const SkMatrix& matrix,
-                                       const GrSamplerParams& params) {
-    this->addColorFragmentProcessor(GrSimpleTextureEffect::Make(texture,
-                                                                std::move(colorSpaceXform),
-                                                                matrix, params));
-}
-
-void GrPaint::addCoverageTextureProcessor(GrTexture* texture,
-                                          const SkMatrix& matrix,
-                                          const GrSamplerParams& params) {
-    this->addCoverageFragmentProcessor(GrSimpleTextureEffect::Make(texture, nullptr, matrix,
-                                                                   params));
 }
 
 void GrPaint::addColorTextureProcessor(GrResourceProvider* resourceProvider,
