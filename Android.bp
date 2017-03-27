@@ -1268,6 +1268,7 @@ cc_test {
         "tests/DashPathEffectTest.cpp",
         "tests/DataRefTest.cpp",
         "tests/DequeTest.cpp",
+        "tests/DetermineDomainModeTest.cpp",
         "tests/DeviceLooperTest.cpp",
         "tests/DeviceTest.cpp",
         "tests/DiscardableMemoryPoolTest.cpp",
