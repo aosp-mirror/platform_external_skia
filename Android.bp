@@ -313,7 +313,6 @@ cc_library {
         "src/effects/SkArcToPathEffect.cpp",
         "src/effects/SkArithmeticImageFilter.cpp",
         "src/effects/SkArithmeticMode.cpp",
-        "src/effects/SkBlurDrawLooper.cpp",
         "src/effects/SkBlurMask.cpp",
         "src/effects/SkBlurMaskFilter.cpp",
         "src/effects/SkColorFilterImageFilter.cpp",
