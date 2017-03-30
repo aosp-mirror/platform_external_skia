@@ -107,10 +107,6 @@ GrRenderTargetContext::~GrRenderTargetContext() {
     SkSafeUnref(fOpList);
 }
 
-GrRenderTarget* GrRenderTargetContext::instantiate() {
-    return fRenderTargetProxy->instantiate(fContext->resourceProvider());
-}
-
 GrTextureProxy* GrRenderTargetContext::asTextureProxy() {
     return fRenderTargetProxy->asTextureProxy();
 }
@@ -1724,7 +1720,7 @@ uint32_t GrRenderTargetContext::addMeshDrawOp(const GrPipelineBuilder& pipelineB
         }
     }
 
-    GrProcessorSet::FragmentProcessorAnalysis analysis;
+    GrProcessorSet::Analysis analysis;
     op->analyzeProcessors(&analysis, pipelineBuilder.processors(), &appliedClip, *this->caps());
 
     GrPipeline::InitArgs args;

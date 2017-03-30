@@ -132,11 +132,11 @@ private:
                         isHairline ? IsZeroArea::kYes : IsZeroArea::kNo);
     }
 
-    void getFragmentProcessorAnalysisInputs(GrPipelineAnalysisColor* color,
-                                            GrPipelineAnalysisCoverage* coverage) const override {
+    void getProcessorAnalysisInputs(GrProcessorAnalysisColor* color,
+                                    GrProcessorAnalysisCoverage* coverage) const override {
         color->setToConstant(fColor);
-        *coverage = this->coverage() == 0xff ? GrPipelineAnalysisCoverage::kNone
-                                             : GrPipelineAnalysisCoverage::kSingleChannel;
+        *coverage = this->coverage() == 0xff ? GrProcessorAnalysisCoverage::kNone
+                                             : GrProcessorAnalysisCoverage::kSingleChannel;
     }
 
     void applyPipelineOptimizations(const PipelineOptimizations& optimizations) override {
@@ -343,9 +343,7 @@ private:
                     case SkPath::kConic_Verb: {
                         SkScalar weight = iter.conicWeight();
                         SkAutoConicToQuads converter;
-                        // Converting in src-space, hance the finer tolerance (0.25)
-                        // TODO: find a way to do this in dev-space so the tolerance means something
-                        const SkPoint* quadPts = converter.computeQuads(pts, weight, 0.25f);
+                        const SkPoint* quadPts = converter.computeQuads(pts, weight, srcSpaceTol);
                         for (int i = 0; i < converter.countQuads(); ++i) {
                             add_quad(&vert, base, quadPts + i*2, srcSpaceTolSqd, srcSpaceTol,
                                      isIndexed, this->isHairline(), subpathIdxStart,
