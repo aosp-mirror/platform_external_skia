@@ -315,15 +315,10 @@ void GrRenderTargetContextPriv::absClear(const SkIRect* clearRect, const GrColor
                                                   GrAAType::kNone);
 
     } else {
-        if (!fRenderTargetContext->accessRenderTarget()) {
-            return;
-        }
-
         // This path doesn't handle coalescing of full screen clears b.c. it
         // has to clear the entire render target - not just the content area.
         // It could be done but will take more finagling.
-        std::unique_ptr<GrOp> op(GrClearOp::Make(
-                rtRect, color, fRenderTargetContext->accessRenderTarget(), !clearRect));
+        std::unique_ptr<GrOp> op(GrClearOp::Make(rtRect, color, fRenderTargetContext, !clearRect));
         if (!op) {
             return;
         }
@@ -371,14 +366,9 @@ void GrRenderTargetContext::internalClear(const GrFixedClip& clip,
 
         this->drawRect(clip, std::move(paint), GrAA::kNo, SkMatrix::I(), SkRect::Make(clearRect));
     } else if (isFull) {
-        if (this->accessRenderTarget()) {
-            this->getOpList()->fullClear(this, color);
-        }
+        this->getOpList()->fullClear(this, color);
     } else {
-        if (!this->accessRenderTarget()) {
-            return;
-        }
-        std::unique_ptr<GrOp> op(GrClearOp::Make(clip, color, this->accessRenderTarget()));
+        std::unique_ptr<GrOp> op(GrClearOp::Make(clip, color, this));
         if (!op) {
             return;
         }
@@ -1761,11 +1751,10 @@ void GrRenderTargetContext::setupDstTexture(GrRenderTarget* rt, const GrClip& cl
     clip.getConservativeBounds(rt->width(), rt->height(), &copyRect);
 
     SkIRect drawIBounds;
-    SkIRect clippedRect;
     opBounds.roundOut(&drawIBounds);
     // Cover up for any precision issues by outsetting the op bounds a pixel in each direction.
     drawIBounds.outset(1, 1);
-    if (!clippedRect.intersect(copyRect, drawIBounds)) {
+    if (!copyRect.intersect(drawIBounds)) {
 #ifdef SK_DEBUG
         GrCapsDebugf(this->caps(), "Missed an early reject. "
                                    "Bailing on draw from setupDstTexture.\n");
@@ -1776,43 +1765,24 @@ void GrRenderTargetContext::setupDstTexture(GrRenderTarget* rt, const GrClip& cl
     // MSAA consideration: When there is support for reading MSAA samples in the shader we could
     // have per-sample dst values by making the copy multisampled.
     GrSurfaceDesc desc;
-    bool rectsMustMatch = false;
-    bool disallowSubrect = false;
-    if (!this->caps()->initDescForDstCopy(rt, &desc, &rectsMustMatch, &disallowSubrect)) {
+    if (!this->caps()->initDescForDstCopy(rt, &desc)) {
         desc.fOrigin = kDefault_GrSurfaceOrigin;
         desc.fFlags = kRenderTarget_GrSurfaceFlag;
         desc.fConfig = rt->config();
     }
 
-    if (!disallowSubrect) {
-        copyRect = clippedRect;
-    }
+    desc.fWidth = copyRect.width();
+    desc.fHeight = copyRect.height();
 
-    SkIPoint dstPoint;
-    SkIPoint dstOffset;
     static const uint32_t kFlags = 0;
-    sk_sp<GrTexture> copy;
-    if (rectsMustMatch) {
-        SkASSERT(desc.fOrigin == rt->origin());
-        desc.fWidth = rt->width();
-        desc.fHeight = rt->height();
-        dstPoint = {copyRect.fLeft, copyRect.fTop};
-        dstOffset = {0, 0};
-        copy.reset(fContext->resourceProvider()->createTexture(desc, SkBudgeted::kYes, kFlags));
-    } else {
-        desc.fWidth = copyRect.width();
-        desc.fHeight = copyRect.height();
-        dstPoint = {0, 0};
-        dstOffset = {copyRect.fLeft, copyRect.fTop};
-        copy.reset(fContext->resourceProvider()->createApproxTexture(desc, kFlags));
-    }
+    sk_sp<GrTexture> copy(fContext->resourceProvider()->createApproxTexture(desc, kFlags));
 
     if (!copy) {
         SkDebugf("Failed to create temporary copy of destination texture.\n");
         return;
     }
-
+    SkIPoint dstPoint = {0, 0};
     this->getOpList()->copySurface(copy.get(), rt, copyRect, dstPoint);
     dstTexture->setTexture(std::move(copy));
-    dstTexture->setOffset(dstOffset);
+    dstTexture->setOffset(copyRect.fLeft, copyRect.fTop);
 }

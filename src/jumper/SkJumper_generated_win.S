@@ -143,12 +143,81 @@ _sk_clear_hsw LABEL PROC
   DB  197,228,87,219                      ; vxorps        %ymm3,%ymm3,%ymm3
   DB  255,224                             ; jmpq          *%rax
 
-PUBLIC _sk_plus__hsw
-_sk_plus__hsw LABEL PROC
-  DB  197,252,88,196                      ; vaddps        %ymm4,%ymm0,%ymm0
-  DB  197,244,88,205                      ; vaddps        %ymm5,%ymm1,%ymm1
-  DB  197,236,88,214                      ; vaddps        %ymm6,%ymm2,%ymm2
-  DB  197,228,88,223                      ; vaddps        %ymm7,%ymm3,%ymm3
+PUBLIC _sk_srcatop_hsw
+_sk_srcatop_hsw LABEL PROC
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  197,121,110,192                     ; vmovd         %eax,%xmm8
+  DB  196,66,125,88,192                   ; vpbroadcastd  %xmm8,%ymm8
+  DB  197,60,92,195                       ; vsubps        %ymm3,%ymm8,%ymm8
+  DB  197,60,89,204                       ; vmulps        %ymm4,%ymm8,%ymm9
+  DB  196,194,69,168,193                  ; vfmadd213ps   %ymm9,%ymm7,%ymm0
+  DB  197,60,89,205                       ; vmulps        %ymm5,%ymm8,%ymm9
+  DB  196,194,69,168,201                  ; vfmadd213ps   %ymm9,%ymm7,%ymm1
+  DB  197,60,89,206                       ; vmulps        %ymm6,%ymm8,%ymm9
+  DB  196,194,69,168,209                  ; vfmadd213ps   %ymm9,%ymm7,%ymm2
+  DB  197,60,89,199                       ; vmulps        %ymm7,%ymm8,%ymm8
+  DB  196,194,69,168,216                  ; vfmadd213ps   %ymm8,%ymm7,%ymm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_dstatop_hsw
+_sk_dstatop_hsw LABEL PROC
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  197,121,110,192                     ; vmovd         %eax,%xmm8
+  DB  196,66,125,88,192                   ; vpbroadcastd  %xmm8,%ymm8
+  DB  197,60,92,199                       ; vsubps        %ymm7,%ymm8,%ymm8
+  DB  197,188,89,192                      ; vmulps        %ymm0,%ymm8,%ymm0
+  DB  196,226,101,184,196                 ; vfmadd231ps   %ymm4,%ymm3,%ymm0
+  DB  197,188,89,201                      ; vmulps        %ymm1,%ymm8,%ymm1
+  DB  196,226,101,184,205                 ; vfmadd231ps   %ymm5,%ymm3,%ymm1
+  DB  197,188,89,210                      ; vmulps        %ymm2,%ymm8,%ymm2
+  DB  196,226,101,184,214                 ; vfmadd231ps   %ymm6,%ymm3,%ymm2
+  DB  197,60,89,195                       ; vmulps        %ymm3,%ymm8,%ymm8
+  DB  196,194,69,168,216                  ; vfmadd213ps   %ymm8,%ymm7,%ymm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_srcin_hsw
+_sk_srcin_hsw LABEL PROC
+  DB  197,252,89,199                      ; vmulps        %ymm7,%ymm0,%ymm0
+  DB  197,244,89,207                      ; vmulps        %ymm7,%ymm1,%ymm1
+  DB  197,236,89,215                      ; vmulps        %ymm7,%ymm2,%ymm2
+  DB  197,228,89,223                      ; vmulps        %ymm7,%ymm3,%ymm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_dstin_hsw
+_sk_dstin_hsw LABEL PROC
+  DB  197,228,89,196                      ; vmulps        %ymm4,%ymm3,%ymm0
+  DB  197,228,89,205                      ; vmulps        %ymm5,%ymm3,%ymm1
+  DB  197,228,89,214                      ; vmulps        %ymm6,%ymm3,%ymm2
+  DB  197,228,89,223                      ; vmulps        %ymm7,%ymm3,%ymm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_srcout_hsw
+_sk_srcout_hsw LABEL PROC
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  197,121,110,192                     ; vmovd         %eax,%xmm8
+  DB  196,66,125,88,192                   ; vpbroadcastd  %xmm8,%ymm8
+  DB  197,60,92,199                       ; vsubps        %ymm7,%ymm8,%ymm8
+  DB  197,188,89,192                      ; vmulps        %ymm0,%ymm8,%ymm0
+  DB  197,188,89,201                      ; vmulps        %ymm1,%ymm8,%ymm1
+  DB  197,188,89,210                      ; vmulps        %ymm2,%ymm8,%ymm2
+  DB  197,188,89,219                      ; vmulps        %ymm3,%ymm8,%ymm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_dstout_hsw
+_sk_dstout_hsw LABEL PROC
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  197,249,110,192                     ; vmovd         %eax,%xmm0
+  DB  196,226,125,88,192                  ; vpbroadcastd  %xmm0,%ymm0
+  DB  197,252,92,219                      ; vsubps        %ymm3,%ymm0,%ymm3
+  DB  197,228,89,196                      ; vmulps        %ymm4,%ymm3,%ymm0
+  DB  197,228,89,205                      ; vmulps        %ymm5,%ymm3,%ymm1
+  DB  197,228,89,214                      ; vmulps        %ymm6,%ymm3,%ymm2
+  DB  197,228,89,223                      ; vmulps        %ymm7,%ymm3,%ymm3
   DB  72,173                              ; lods          %ds:(%rsi),%rax
   DB  255,224                             ; jmpq          *%rax
 
@@ -176,6 +245,495 @@ _sk_dstover_hsw LABEL PROC
   DB  196,226,61,168,214                  ; vfmadd213ps   %ymm6,%ymm8,%ymm2
   DB  196,226,61,168,223                  ; vfmadd213ps   %ymm7,%ymm8,%ymm3
   DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_modulate_hsw
+_sk_modulate_hsw LABEL PROC
+  DB  197,252,89,196                      ; vmulps        %ymm4,%ymm0,%ymm0
+  DB  197,244,89,205                      ; vmulps        %ymm5,%ymm1,%ymm1
+  DB  197,236,89,214                      ; vmulps        %ymm6,%ymm2,%ymm2
+  DB  197,228,89,223                      ; vmulps        %ymm7,%ymm3,%ymm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_multiply_hsw
+_sk_multiply_hsw LABEL PROC
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  197,121,110,192                     ; vmovd         %eax,%xmm8
+  DB  196,66,125,88,192                   ; vpbroadcastd  %xmm8,%ymm8
+  DB  197,60,92,207                       ; vsubps        %ymm7,%ymm8,%ymm9
+  DB  197,60,92,195                       ; vsubps        %ymm3,%ymm8,%ymm8
+  DB  197,60,89,212                       ; vmulps        %ymm4,%ymm8,%ymm10
+  DB  196,98,53,184,208                   ; vfmadd231ps   %ymm0,%ymm9,%ymm10
+  DB  196,194,93,168,194                  ; vfmadd213ps   %ymm10,%ymm4,%ymm0
+  DB  197,52,89,209                       ; vmulps        %ymm1,%ymm9,%ymm10
+  DB  196,98,61,184,213                   ; vfmadd231ps   %ymm5,%ymm8,%ymm10
+  DB  196,194,85,168,202                  ; vfmadd213ps   %ymm10,%ymm5,%ymm1
+  DB  197,52,89,210                       ; vmulps        %ymm2,%ymm9,%ymm10
+  DB  196,98,61,184,214                   ; vfmadd231ps   %ymm6,%ymm8,%ymm10
+  DB  196,194,77,168,210                  ; vfmadd213ps   %ymm10,%ymm6,%ymm2
+  DB  197,52,89,203                       ; vmulps        %ymm3,%ymm9,%ymm9
+  DB  196,66,69,168,193                   ; vfmadd213ps   %ymm9,%ymm7,%ymm8
+  DB  196,194,69,168,216                  ; vfmadd213ps   %ymm8,%ymm7,%ymm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_plus__hsw
+_sk_plus__hsw LABEL PROC
+  DB  197,252,88,196                      ; vaddps        %ymm4,%ymm0,%ymm0
+  DB  197,244,88,205                      ; vaddps        %ymm5,%ymm1,%ymm1
+  DB  197,236,88,214                      ; vaddps        %ymm6,%ymm2,%ymm2
+  DB  197,228,88,223                      ; vaddps        %ymm7,%ymm3,%ymm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_screen_hsw
+_sk_screen_hsw LABEL PROC
+  DB  197,124,88,196                      ; vaddps        %ymm4,%ymm0,%ymm8
+  DB  196,194,93,172,192                  ; vfnmadd213ps  %ymm8,%ymm4,%ymm0
+  DB  197,116,88,197                      ; vaddps        %ymm5,%ymm1,%ymm8
+  DB  196,194,85,172,200                  ; vfnmadd213ps  %ymm8,%ymm5,%ymm1
+  DB  197,108,88,198                      ; vaddps        %ymm6,%ymm2,%ymm8
+  DB  196,194,77,172,208                  ; vfnmadd213ps  %ymm8,%ymm6,%ymm2
+  DB  197,100,88,199                      ; vaddps        %ymm7,%ymm3,%ymm8
+  DB  196,194,69,172,216                  ; vfnmadd213ps  %ymm8,%ymm7,%ymm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_xor__hsw
+_sk_xor__hsw LABEL PROC
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  197,121,110,192                     ; vmovd         %eax,%xmm8
+  DB  196,66,125,88,192                   ; vpbroadcastd  %xmm8,%ymm8
+  DB  197,60,92,207                       ; vsubps        %ymm7,%ymm8,%ymm9
+  DB  197,60,92,195                       ; vsubps        %ymm3,%ymm8,%ymm8
+  DB  197,60,89,212                       ; vmulps        %ymm4,%ymm8,%ymm10
+  DB  196,194,53,168,194                  ; vfmadd213ps   %ymm10,%ymm9,%ymm0
+  DB  197,180,89,201                      ; vmulps        %ymm1,%ymm9,%ymm1
+  DB  196,226,61,184,205                  ; vfmadd231ps   %ymm5,%ymm8,%ymm1
+  DB  197,180,89,210                      ; vmulps        %ymm2,%ymm9,%ymm2
+  DB  196,226,61,184,214                  ; vfmadd231ps   %ymm6,%ymm8,%ymm2
+  DB  197,180,89,219                      ; vmulps        %ymm3,%ymm9,%ymm3
+  DB  196,98,69,168,195                   ; vfmadd213ps   %ymm3,%ymm7,%ymm8
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  197,124,41,195                      ; vmovaps       %ymm8,%ymm3
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_darken_hsw
+_sk_darken_hsw LABEL PROC
+  DB  197,124,88,196                      ; vaddps        %ymm4,%ymm0,%ymm8
+  DB  197,252,89,199                      ; vmulps        %ymm7,%ymm0,%ymm0
+  DB  197,100,89,204                      ; vmulps        %ymm4,%ymm3,%ymm9
+  DB  196,193,124,95,193                  ; vmaxps        %ymm9,%ymm0,%ymm0
+  DB  197,188,92,192                      ; vsubps        %ymm0,%ymm8,%ymm0
+  DB  197,116,88,197                      ; vaddps        %ymm5,%ymm1,%ymm8
+  DB  197,244,89,207                      ; vmulps        %ymm7,%ymm1,%ymm1
+  DB  197,100,89,205                      ; vmulps        %ymm5,%ymm3,%ymm9
+  DB  196,193,116,95,201                  ; vmaxps        %ymm9,%ymm1,%ymm1
+  DB  197,188,92,201                      ; vsubps        %ymm1,%ymm8,%ymm1
+  DB  197,108,88,198                      ; vaddps        %ymm6,%ymm2,%ymm8
+  DB  197,236,89,215                      ; vmulps        %ymm7,%ymm2,%ymm2
+  DB  197,100,89,206                      ; vmulps        %ymm6,%ymm3,%ymm9
+  DB  196,193,108,95,209                  ; vmaxps        %ymm9,%ymm2,%ymm2
+  DB  197,188,92,210                      ; vsubps        %ymm2,%ymm8,%ymm2
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  197,121,110,192                     ; vmovd         %eax,%xmm8
+  DB  196,66,125,88,192                   ; vpbroadcastd  %xmm8,%ymm8
+  DB  197,60,92,195                       ; vsubps        %ymm3,%ymm8,%ymm8
+  DB  196,194,69,184,216                  ; vfmadd231ps   %ymm8,%ymm7,%ymm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_lighten_hsw
+_sk_lighten_hsw LABEL PROC
+  DB  197,124,88,196                      ; vaddps        %ymm4,%ymm0,%ymm8
+  DB  197,252,89,199                      ; vmulps        %ymm7,%ymm0,%ymm0
+  DB  197,100,89,204                      ; vmulps        %ymm4,%ymm3,%ymm9
+  DB  196,193,124,93,193                  ; vminps        %ymm9,%ymm0,%ymm0
+  DB  197,188,92,192                      ; vsubps        %ymm0,%ymm8,%ymm0
+  DB  197,116,88,197                      ; vaddps        %ymm5,%ymm1,%ymm8
+  DB  197,244,89,207                      ; vmulps        %ymm7,%ymm1,%ymm1
+  DB  197,100,89,205                      ; vmulps        %ymm5,%ymm3,%ymm9
+  DB  196,193,116,93,201                  ; vminps        %ymm9,%ymm1,%ymm1
+  DB  197,188,92,201                      ; vsubps        %ymm1,%ymm8,%ymm1
+  DB  197,108,88,198                      ; vaddps        %ymm6,%ymm2,%ymm8
+  DB  197,236,89,215                      ; vmulps        %ymm7,%ymm2,%ymm2
+  DB  197,100,89,206                      ; vmulps        %ymm6,%ymm3,%ymm9
+  DB  196,193,108,93,209                  ; vminps        %ymm9,%ymm2,%ymm2
+  DB  197,188,92,210                      ; vsubps        %ymm2,%ymm8,%ymm2
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  197,121,110,192                     ; vmovd         %eax,%xmm8
+  DB  196,66,125,88,192                   ; vpbroadcastd  %xmm8,%ymm8
+  DB  197,60,92,195                       ; vsubps        %ymm3,%ymm8,%ymm8
+  DB  196,194,69,184,216                  ; vfmadd231ps   %ymm8,%ymm7,%ymm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_difference_hsw
+_sk_difference_hsw LABEL PROC
+  DB  197,124,88,196                      ; vaddps        %ymm4,%ymm0,%ymm8
+  DB  197,252,89,199                      ; vmulps        %ymm7,%ymm0,%ymm0
+  DB  197,100,89,204                      ; vmulps        %ymm4,%ymm3,%ymm9
+  DB  196,193,124,93,193                  ; vminps        %ymm9,%ymm0,%ymm0
+  DB  197,252,88,192                      ; vaddps        %ymm0,%ymm0,%ymm0
+  DB  197,188,92,192                      ; vsubps        %ymm0,%ymm8,%ymm0
+  DB  197,116,88,197                      ; vaddps        %ymm5,%ymm1,%ymm8
+  DB  197,244,89,207                      ; vmulps        %ymm7,%ymm1,%ymm1
+  DB  197,100,89,205                      ; vmulps        %ymm5,%ymm3,%ymm9
+  DB  196,193,116,93,201                  ; vminps        %ymm9,%ymm1,%ymm1
+  DB  197,244,88,201                      ; vaddps        %ymm1,%ymm1,%ymm1
+  DB  197,188,92,201                      ; vsubps        %ymm1,%ymm8,%ymm1
+  DB  197,108,88,198                      ; vaddps        %ymm6,%ymm2,%ymm8
+  DB  197,236,89,215                      ; vmulps        %ymm7,%ymm2,%ymm2
+  DB  197,100,89,206                      ; vmulps        %ymm6,%ymm3,%ymm9
+  DB  196,193,108,93,209                  ; vminps        %ymm9,%ymm2,%ymm2
+  DB  197,236,88,210                      ; vaddps        %ymm2,%ymm2,%ymm2
+  DB  197,188,92,210                      ; vsubps        %ymm2,%ymm8,%ymm2
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  197,121,110,192                     ; vmovd         %eax,%xmm8
+  DB  196,66,125,88,192                   ; vpbroadcastd  %xmm8,%ymm8
+  DB  197,60,92,195                       ; vsubps        %ymm3,%ymm8,%ymm8
+  DB  196,194,69,184,216                  ; vfmadd231ps   %ymm8,%ymm7,%ymm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_exclusion_hsw
+_sk_exclusion_hsw LABEL PROC
+  DB  197,124,88,196                      ; vaddps        %ymm4,%ymm0,%ymm8
+  DB  197,252,89,196                      ; vmulps        %ymm4,%ymm0,%ymm0
+  DB  197,252,88,192                      ; vaddps        %ymm0,%ymm0,%ymm0
+  DB  197,188,92,192                      ; vsubps        %ymm0,%ymm8,%ymm0
+  DB  197,116,88,197                      ; vaddps        %ymm5,%ymm1,%ymm8
+  DB  197,244,89,205                      ; vmulps        %ymm5,%ymm1,%ymm1
+  DB  197,244,88,201                      ; vaddps        %ymm1,%ymm1,%ymm1
+  DB  197,188,92,201                      ; vsubps        %ymm1,%ymm8,%ymm1
+  DB  197,108,88,198                      ; vaddps        %ymm6,%ymm2,%ymm8
+  DB  197,236,89,214                      ; vmulps        %ymm6,%ymm2,%ymm2
+  DB  197,236,88,210                      ; vaddps        %ymm2,%ymm2,%ymm2
+  DB  197,188,92,210                      ; vsubps        %ymm2,%ymm8,%ymm2
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  197,121,110,192                     ; vmovd         %eax,%xmm8
+  DB  196,66,125,88,192                   ; vpbroadcastd  %xmm8,%ymm8
+  DB  197,60,92,195                       ; vsubps        %ymm3,%ymm8,%ymm8
+  DB  196,194,69,184,216                  ; vfmadd231ps   %ymm8,%ymm7,%ymm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_colorburn_hsw
+_sk_colorburn_hsw LABEL PROC
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  197,121,110,192                     ; vmovd         %eax,%xmm8
+  DB  196,66,125,88,192                   ; vpbroadcastd  %xmm8,%ymm8
+  DB  197,60,92,207                       ; vsubps        %ymm7,%ymm8,%ymm9
+  DB  197,52,89,216                       ; vmulps        %ymm0,%ymm9,%ymm11
+  DB  196,65,44,87,210                    ; vxorps        %ymm10,%ymm10,%ymm10
+  DB  197,60,92,195                       ; vsubps        %ymm3,%ymm8,%ymm8
+  DB  197,60,89,228                       ; vmulps        %ymm4,%ymm8,%ymm12
+  DB  197,68,92,236                       ; vsubps        %ymm4,%ymm7,%ymm13
+  DB  197,20,89,235                       ; vmulps        %ymm3,%ymm13,%ymm13
+  DB  197,20,94,232                       ; vdivps        %ymm0,%ymm13,%ymm13
+  DB  196,65,68,93,237                    ; vminps        %ymm13,%ymm7,%ymm13
+  DB  196,65,68,92,237                    ; vsubps        %ymm13,%ymm7,%ymm13
+  DB  196,66,101,168,235                  ; vfmadd213ps   %ymm11,%ymm3,%ymm13
+  DB  196,65,28,88,237                    ; vaddps        %ymm13,%ymm12,%ymm13
+  DB  197,28,88,224                       ; vaddps        %ymm0,%ymm12,%ymm12
+  DB  196,193,124,194,194,0               ; vcmpeqps      %ymm10,%ymm0,%ymm0
+  DB  196,195,21,74,196,0                 ; vblendvps     %ymm0,%ymm12,%ymm13,%ymm0
+  DB  197,92,194,231,0                    ; vcmpeqps      %ymm7,%ymm4,%ymm12
+  DB  197,36,88,220                       ; vaddps        %ymm4,%ymm11,%ymm11
+  DB  196,195,125,74,195,192              ; vblendvps     %ymm12,%ymm11,%ymm0,%ymm0
+  DB  197,52,89,217                       ; vmulps        %ymm1,%ymm9,%ymm11
+  DB  197,60,89,229                       ; vmulps        %ymm5,%ymm8,%ymm12
+  DB  197,68,92,237                       ; vsubps        %ymm5,%ymm7,%ymm13
+  DB  197,20,89,235                       ; vmulps        %ymm3,%ymm13,%ymm13
+  DB  197,20,94,233                       ; vdivps        %ymm1,%ymm13,%ymm13
+  DB  196,65,68,93,237                    ; vminps        %ymm13,%ymm7,%ymm13
+  DB  196,65,68,92,237                    ; vsubps        %ymm13,%ymm7,%ymm13
+  DB  196,66,101,168,235                  ; vfmadd213ps   %ymm11,%ymm3,%ymm13
+  DB  196,65,28,88,237                    ; vaddps        %ymm13,%ymm12,%ymm13
+  DB  197,28,88,225                       ; vaddps        %ymm1,%ymm12,%ymm12
+  DB  196,193,116,194,202,0               ; vcmpeqps      %ymm10,%ymm1,%ymm1
+  DB  196,195,21,74,204,16                ; vblendvps     %ymm1,%ymm12,%ymm13,%ymm1
+  DB  197,84,194,231,0                    ; vcmpeqps      %ymm7,%ymm5,%ymm12
+  DB  197,36,88,221                       ; vaddps        %ymm5,%ymm11,%ymm11
+  DB  196,195,117,74,203,192              ; vblendvps     %ymm12,%ymm11,%ymm1,%ymm1
+  DB  197,52,89,202                       ; vmulps        %ymm2,%ymm9,%ymm9
+  DB  196,65,108,194,210,0                ; vcmpeqps      %ymm10,%ymm2,%ymm10
+  DB  197,60,89,222                       ; vmulps        %ymm6,%ymm8,%ymm11
+  DB  197,68,92,230                       ; vsubps        %ymm6,%ymm7,%ymm12
+  DB  197,28,89,227                       ; vmulps        %ymm3,%ymm12,%ymm12
+  DB  197,28,94,226                       ; vdivps        %ymm2,%ymm12,%ymm12
+  DB  197,164,88,210                      ; vaddps        %ymm2,%ymm11,%ymm2
+  DB  196,65,68,93,228                    ; vminps        %ymm12,%ymm7,%ymm12
+  DB  196,65,68,92,228                    ; vsubps        %ymm12,%ymm7,%ymm12
+  DB  196,66,101,168,225                  ; vfmadd213ps   %ymm9,%ymm3,%ymm12
+  DB  196,65,36,88,220                    ; vaddps        %ymm12,%ymm11,%ymm11
+  DB  196,227,37,74,210,160               ; vblendvps     %ymm10,%ymm2,%ymm11,%ymm2
+  DB  197,76,194,215,0                    ; vcmpeqps      %ymm7,%ymm6,%ymm10
+  DB  197,52,88,206                       ; vaddps        %ymm6,%ymm9,%ymm9
+  DB  196,195,109,74,209,160              ; vblendvps     %ymm10,%ymm9,%ymm2,%ymm2
+  DB  196,194,69,184,216                  ; vfmadd231ps   %ymm8,%ymm7,%ymm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_colordodge_hsw
+_sk_colordodge_hsw LABEL PROC
+  DB  196,65,60,87,192                    ; vxorps        %ymm8,%ymm8,%ymm8
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  197,121,110,200                     ; vmovd         %eax,%xmm9
+  DB  196,66,125,88,201                   ; vpbroadcastd  %xmm9,%ymm9
+  DB  197,52,92,215                       ; vsubps        %ymm7,%ymm9,%ymm10
+  DB  197,44,89,216                       ; vmulps        %ymm0,%ymm10,%ymm11
+  DB  197,52,92,203                       ; vsubps        %ymm3,%ymm9,%ymm9
+  DB  197,100,89,228                      ; vmulps        %ymm4,%ymm3,%ymm12
+  DB  197,100,92,232                      ; vsubps        %ymm0,%ymm3,%ymm13
+  DB  196,65,28,94,229                    ; vdivps        %ymm13,%ymm12,%ymm12
+  DB  197,52,89,236                       ; vmulps        %ymm4,%ymm9,%ymm13
+  DB  196,65,68,93,228                    ; vminps        %ymm12,%ymm7,%ymm12
+  DB  196,66,101,168,227                  ; vfmadd213ps   %ymm11,%ymm3,%ymm12
+  DB  196,65,20,88,228                    ; vaddps        %ymm12,%ymm13,%ymm12
+  DB  197,20,88,232                       ; vaddps        %ymm0,%ymm13,%ymm13
+  DB  197,252,194,195,0                   ; vcmpeqps      %ymm3,%ymm0,%ymm0
+  DB  196,195,29,74,197,0                 ; vblendvps     %ymm0,%ymm13,%ymm12,%ymm0
+  DB  196,65,92,194,224,0                 ; vcmpeqps      %ymm8,%ymm4,%ymm12
+  DB  197,36,88,220                       ; vaddps        %ymm4,%ymm11,%ymm11
+  DB  196,195,125,74,195,192              ; vblendvps     %ymm12,%ymm11,%ymm0,%ymm0
+  DB  197,44,89,217                       ; vmulps        %ymm1,%ymm10,%ymm11
+  DB  197,100,89,229                      ; vmulps        %ymm5,%ymm3,%ymm12
+  DB  197,100,92,233                      ; vsubps        %ymm1,%ymm3,%ymm13
+  DB  196,65,28,94,229                    ; vdivps        %ymm13,%ymm12,%ymm12
+  DB  197,52,89,237                       ; vmulps        %ymm5,%ymm9,%ymm13
+  DB  196,65,68,93,228                    ; vminps        %ymm12,%ymm7,%ymm12
+  DB  196,66,101,168,227                  ; vfmadd213ps   %ymm11,%ymm3,%ymm12
+  DB  196,65,20,88,228                    ; vaddps        %ymm12,%ymm13,%ymm12
+  DB  197,20,88,233                       ; vaddps        %ymm1,%ymm13,%ymm13
+  DB  197,244,194,203,0                   ; vcmpeqps      %ymm3,%ymm1,%ymm1
+  DB  196,195,29,74,205,16                ; vblendvps     %ymm1,%ymm13,%ymm12,%ymm1
+  DB  196,65,84,194,224,0                 ; vcmpeqps      %ymm8,%ymm5,%ymm12
+  DB  197,36,88,221                       ; vaddps        %ymm5,%ymm11,%ymm11
+  DB  196,195,117,74,203,192              ; vblendvps     %ymm12,%ymm11,%ymm1,%ymm1
+  DB  197,44,89,210                       ; vmulps        %ymm2,%ymm10,%ymm10
+  DB  197,100,89,222                      ; vmulps        %ymm6,%ymm3,%ymm11
+  DB  197,100,92,226                      ; vsubps        %ymm2,%ymm3,%ymm12
+  DB  196,65,36,94,220                    ; vdivps        %ymm12,%ymm11,%ymm11
+  DB  197,52,89,230                       ; vmulps        %ymm6,%ymm9,%ymm12
+  DB  196,65,68,93,219                    ; vminps        %ymm11,%ymm7,%ymm11
+  DB  196,66,101,168,218                  ; vfmadd213ps   %ymm10,%ymm3,%ymm11
+  DB  196,65,28,88,219                    ; vaddps        %ymm11,%ymm12,%ymm11
+  DB  197,28,88,226                       ; vaddps        %ymm2,%ymm12,%ymm12
+  DB  197,236,194,211,0                   ; vcmpeqps      %ymm3,%ymm2,%ymm2
+  DB  196,195,37,74,212,32                ; vblendvps     %ymm2,%ymm12,%ymm11,%ymm2
+  DB  196,65,76,194,192,0                 ; vcmpeqps      %ymm8,%ymm6,%ymm8
+  DB  197,44,88,214                       ; vaddps        %ymm6,%ymm10,%ymm10
+  DB  196,195,109,74,210,128              ; vblendvps     %ymm8,%ymm10,%ymm2,%ymm2
+  DB  196,194,69,184,217                  ; vfmadd231ps   %ymm9,%ymm7,%ymm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_hardlight_hsw
+_sk_hardlight_hsw LABEL PROC
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  197,121,110,192                     ; vmovd         %eax,%xmm8
+  DB  196,66,125,88,192                   ; vpbroadcastd  %xmm8,%ymm8
+  DB  197,60,92,215                       ; vsubps        %ymm7,%ymm8,%ymm10
+  DB  197,60,92,195                       ; vsubps        %ymm3,%ymm8,%ymm8
+  DB  197,60,89,220                       ; vmulps        %ymm4,%ymm8,%ymm11
+  DB  196,98,45,184,216                   ; vfmadd231ps   %ymm0,%ymm10,%ymm11
+  DB  197,124,88,200                      ; vaddps        %ymm0,%ymm0,%ymm9
+  DB  197,52,194,227,2                    ; vcmpleps      %ymm3,%ymm9,%ymm12
+  DB  197,124,89,204                      ; vmulps        %ymm4,%ymm0,%ymm9
+  DB  196,65,52,88,233                    ; vaddps        %ymm9,%ymm9,%ymm13
+  DB  197,100,89,207                      ; vmulps        %ymm7,%ymm3,%ymm9
+  DB  197,68,92,244                       ; vsubps        %ymm4,%ymm7,%ymm14
+  DB  197,228,92,192                      ; vsubps        %ymm0,%ymm3,%ymm0
+  DB  196,193,124,89,198                  ; vmulps        %ymm14,%ymm0,%ymm0
+  DB  197,252,88,192                      ; vaddps        %ymm0,%ymm0,%ymm0
+  DB  197,180,92,192                      ; vsubps        %ymm0,%ymm9,%ymm0
+  DB  196,195,125,74,197,192              ; vblendvps     %ymm12,%ymm13,%ymm0,%ymm0
+  DB  196,193,124,88,195                  ; vaddps        %ymm11,%ymm0,%ymm0
+  DB  197,44,89,217                       ; vmulps        %ymm1,%ymm10,%ymm11
+  DB  196,98,61,184,221                   ; vfmadd231ps   %ymm5,%ymm8,%ymm11
+  DB  197,116,88,225                      ; vaddps        %ymm1,%ymm1,%ymm12
+  DB  197,28,194,227,2                    ; vcmpleps      %ymm3,%ymm12,%ymm12
+  DB  197,116,89,237                      ; vmulps        %ymm5,%ymm1,%ymm13
+  DB  196,65,20,88,237                    ; vaddps        %ymm13,%ymm13,%ymm13
+  DB  197,68,92,245                       ; vsubps        %ymm5,%ymm7,%ymm14
+  DB  197,228,92,201                      ; vsubps        %ymm1,%ymm3,%ymm1
+  DB  196,193,116,89,206                  ; vmulps        %ymm14,%ymm1,%ymm1
+  DB  197,244,88,201                      ; vaddps        %ymm1,%ymm1,%ymm1
+  DB  197,180,92,201                      ; vsubps        %ymm1,%ymm9,%ymm1
+  DB  196,195,117,74,205,192              ; vblendvps     %ymm12,%ymm13,%ymm1,%ymm1
+  DB  196,193,116,88,203                  ; vaddps        %ymm11,%ymm1,%ymm1
+  DB  197,44,89,210                       ; vmulps        %ymm2,%ymm10,%ymm10
+  DB  196,98,61,184,214                   ; vfmadd231ps   %ymm6,%ymm8,%ymm10
+  DB  197,108,88,218                      ; vaddps        %ymm2,%ymm2,%ymm11
+  DB  197,36,194,219,2                    ; vcmpleps      %ymm3,%ymm11,%ymm11
+  DB  197,108,89,230                      ; vmulps        %ymm6,%ymm2,%ymm12
+  DB  196,65,28,88,228                    ; vaddps        %ymm12,%ymm12,%ymm12
+  DB  197,68,92,238                       ; vsubps        %ymm6,%ymm7,%ymm13
+  DB  197,228,92,210                      ; vsubps        %ymm2,%ymm3,%ymm2
+  DB  196,193,108,89,213                  ; vmulps        %ymm13,%ymm2,%ymm2
+  DB  197,236,88,210                      ; vaddps        %ymm2,%ymm2,%ymm2
+  DB  197,180,92,210                      ; vsubps        %ymm2,%ymm9,%ymm2
+  DB  196,195,109,74,212,176              ; vblendvps     %ymm11,%ymm12,%ymm2,%ymm2
+  DB  196,193,108,88,210                  ; vaddps        %ymm10,%ymm2,%ymm2
+  DB  196,194,69,184,216                  ; vfmadd231ps   %ymm8,%ymm7,%ymm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_overlay_hsw
+_sk_overlay_hsw LABEL PROC
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  197,121,110,192                     ; vmovd         %eax,%xmm8
+  DB  196,66,125,88,192                   ; vpbroadcastd  %xmm8,%ymm8
+  DB  197,60,92,215                       ; vsubps        %ymm7,%ymm8,%ymm10
+  DB  197,60,92,195                       ; vsubps        %ymm3,%ymm8,%ymm8
+  DB  197,60,89,220                       ; vmulps        %ymm4,%ymm8,%ymm11
+  DB  196,98,45,184,216                   ; vfmadd231ps   %ymm0,%ymm10,%ymm11
+  DB  197,92,88,204                       ; vaddps        %ymm4,%ymm4,%ymm9
+  DB  197,52,194,231,2                    ; vcmpleps      %ymm7,%ymm9,%ymm12
+  DB  197,124,89,204                      ; vmulps        %ymm4,%ymm0,%ymm9
+  DB  196,65,52,88,233                    ; vaddps        %ymm9,%ymm9,%ymm13
+  DB  197,100,89,207                      ; vmulps        %ymm7,%ymm3,%ymm9
+  DB  197,68,92,244                       ; vsubps        %ymm4,%ymm7,%ymm14
+  DB  197,228,92,192                      ; vsubps        %ymm0,%ymm3,%ymm0
+  DB  196,193,124,89,198                  ; vmulps        %ymm14,%ymm0,%ymm0
+  DB  197,252,88,192                      ; vaddps        %ymm0,%ymm0,%ymm0
+  DB  197,180,92,192                      ; vsubps        %ymm0,%ymm9,%ymm0
+  DB  196,195,125,74,197,192              ; vblendvps     %ymm12,%ymm13,%ymm0,%ymm0
+  DB  196,193,124,88,195                  ; vaddps        %ymm11,%ymm0,%ymm0
+  DB  197,44,89,217                       ; vmulps        %ymm1,%ymm10,%ymm11
+  DB  196,98,61,184,221                   ; vfmadd231ps   %ymm5,%ymm8,%ymm11
+  DB  197,84,88,229                       ; vaddps        %ymm5,%ymm5,%ymm12
+  DB  197,28,194,231,2                    ; vcmpleps      %ymm7,%ymm12,%ymm12
+  DB  197,116,89,237                      ; vmulps        %ymm5,%ymm1,%ymm13
+  DB  196,65,20,88,237                    ; vaddps        %ymm13,%ymm13,%ymm13
+  DB  197,68,92,245                       ; vsubps        %ymm5,%ymm7,%ymm14
+  DB  197,228,92,201                      ; vsubps        %ymm1,%ymm3,%ymm1
+  DB  196,193,116,89,206                  ; vmulps        %ymm14,%ymm1,%ymm1
+  DB  197,244,88,201                      ; vaddps        %ymm1,%ymm1,%ymm1
+  DB  197,180,92,201                      ; vsubps        %ymm1,%ymm9,%ymm1
+  DB  196,195,117,74,205,192              ; vblendvps     %ymm12,%ymm13,%ymm1,%ymm1
+  DB  196,193,116,88,203                  ; vaddps        %ymm11,%ymm1,%ymm1
+  DB  197,44,89,210                       ; vmulps        %ymm2,%ymm10,%ymm10
+  DB  196,98,61,184,214                   ; vfmadd231ps   %ymm6,%ymm8,%ymm10
+  DB  197,76,88,222                       ; vaddps        %ymm6,%ymm6,%ymm11
+  DB  197,36,194,223,2                    ; vcmpleps      %ymm7,%ymm11,%ymm11
+  DB  197,108,89,230                      ; vmulps        %ymm6,%ymm2,%ymm12
+  DB  196,65,28,88,228                    ; vaddps        %ymm12,%ymm12,%ymm12
+  DB  197,68,92,238                       ; vsubps        %ymm6,%ymm7,%ymm13
+  DB  197,228,92,210                      ; vsubps        %ymm2,%ymm3,%ymm2
+  DB  196,193,108,89,213                  ; vmulps        %ymm13,%ymm2,%ymm2
+  DB  197,236,88,210                      ; vaddps        %ymm2,%ymm2,%ymm2
+  DB  197,180,92,210                      ; vsubps        %ymm2,%ymm9,%ymm2
+  DB  196,195,109,74,212,176              ; vblendvps     %ymm11,%ymm12,%ymm2,%ymm2
+  DB  196,193,108,88,210                  ; vaddps        %ymm10,%ymm2,%ymm2
+  DB  196,194,69,184,216                  ; vfmadd231ps   %ymm8,%ymm7,%ymm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_softlight_hsw
+_sk_softlight_hsw LABEL PROC
+  DB  72,131,236,56                       ; sub           $0x38,%rsp
+  DB  197,252,17,20,36                    ; vmovups       %ymm2,(%rsp)
+  DB  196,65,44,87,210                    ; vxorps        %ymm10,%ymm10,%ymm10
+  DB  197,44,194,223,1                    ; vcmpltps      %ymm7,%ymm10,%ymm11
+  DB  197,92,94,199                       ; vdivps        %ymm7,%ymm4,%ymm8
+  DB  196,67,45,74,224,176                ; vblendvps     %ymm11,%ymm8,%ymm10,%ymm12
+  DB  196,65,28,88,196                    ; vaddps        %ymm12,%ymm12,%ymm8
+  DB  196,65,60,88,232                    ; vaddps        %ymm8,%ymm8,%ymm13
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  197,121,110,192                     ; vmovd         %eax,%xmm8
+  DB  196,66,125,88,192                   ; vpbroadcastd  %xmm8,%ymm8
+  DB  196,66,21,168,237                   ; vfmadd213ps   %ymm13,%ymm13,%ymm13
+  DB  196,65,28,92,240                    ; vsubps        %ymm8,%ymm12,%ymm14
+  DB  184,0,0,224,64                      ; mov           $0x40e00000,%eax
+  DB  197,121,110,200                     ; vmovd         %eax,%xmm9
+  DB  196,66,125,88,201                   ; vpbroadcastd  %xmm9,%ymm9
+  DB  196,65,28,89,249                    ; vmulps        %ymm9,%ymm12,%ymm15
+  DB  196,66,21,184,254                   ; vfmadd231ps   %ymm14,%ymm13,%ymm15
+  DB  196,65,124,82,236                   ; vrsqrtps      %ymm12,%ymm13
+  DB  196,65,124,83,237                   ; vrcpps        %ymm13,%ymm13
+  DB  196,65,20,92,236                    ; vsubps        %ymm12,%ymm13,%ymm13
+  DB  197,92,88,244                       ; vaddps        %ymm4,%ymm4,%ymm14
+  DB  196,65,12,88,246                    ; vaddps        %ymm14,%ymm14,%ymm14
+  DB  197,12,194,247,2                    ; vcmpleps      %ymm7,%ymm14,%ymm14
+  DB  196,67,21,74,239,224                ; vblendvps     %ymm14,%ymm15,%ymm13,%ymm13
+  DB  197,124,88,240                      ; vaddps        %ymm0,%ymm0,%ymm14
+  DB  197,12,92,251                       ; vsubps        %ymm3,%ymm14,%ymm15
+  DB  196,65,60,92,228                    ; vsubps        %ymm12,%ymm8,%ymm12
+  DB  196,98,5,168,227                    ; vfmadd213ps   %ymm3,%ymm15,%ymm12
+  DB  197,28,89,228                       ; vmulps        %ymm4,%ymm12,%ymm12
+  DB  197,4,89,255                        ; vmulps        %ymm7,%ymm15,%ymm15
+  DB  196,65,4,89,237                     ; vmulps        %ymm13,%ymm15,%ymm13
+  DB  196,98,101,184,236                  ; vfmadd231ps   %ymm4,%ymm3,%ymm13
+  DB  197,12,194,243,2                    ; vcmpleps      %ymm3,%ymm14,%ymm14
+  DB  196,195,21,74,212,224               ; vblendvps     %ymm14,%ymm12,%ymm13,%ymm2
+  DB  197,84,94,239                       ; vdivps        %ymm7,%ymm5,%ymm13
+  DB  196,67,45,74,237,176                ; vblendvps     %ymm11,%ymm13,%ymm10,%ymm13
+  DB  196,65,20,88,245                    ; vaddps        %ymm13,%ymm13,%ymm14
+  DB  196,65,12,88,246                    ; vaddps        %ymm14,%ymm14,%ymm14
+  DB  196,66,13,168,246                   ; vfmadd213ps   %ymm14,%ymm14,%ymm14
+  DB  196,65,20,92,248                    ; vsubps        %ymm8,%ymm13,%ymm15
+  DB  196,65,4,89,246                     ; vmulps        %ymm14,%ymm15,%ymm14
+  DB  196,66,53,184,245                   ; vfmadd231ps   %ymm13,%ymm9,%ymm14
+  DB  196,65,124,82,253                   ; vrsqrtps      %ymm13,%ymm15
+  DB  196,65,124,83,255                   ; vrcpps        %ymm15,%ymm15
+  DB  196,65,4,92,253                     ; vsubps        %ymm13,%ymm15,%ymm15
+  DB  197,84,88,229                       ; vaddps        %ymm5,%ymm5,%ymm12
+  DB  196,65,28,88,228                    ; vaddps        %ymm12,%ymm12,%ymm12
+  DB  197,28,194,231,2                    ; vcmpleps      %ymm7,%ymm12,%ymm12
+  DB  196,67,5,74,230,192                 ; vblendvps     %ymm12,%ymm14,%ymm15,%ymm12
+  DB  197,116,88,241                      ; vaddps        %ymm1,%ymm1,%ymm14
+  DB  196,65,60,92,237                    ; vsubps        %ymm13,%ymm8,%ymm13
+  DB  197,12,92,251                       ; vsubps        %ymm3,%ymm14,%ymm15
+  DB  196,98,5,168,235                    ; vfmadd213ps   %ymm3,%ymm15,%ymm13
+  DB  197,4,89,255                        ; vmulps        %ymm7,%ymm15,%ymm15
+  DB  196,65,4,89,228                     ; vmulps        %ymm12,%ymm15,%ymm12
+  DB  197,20,89,237                       ; vmulps        %ymm5,%ymm13,%ymm13
+  DB  196,98,101,184,229                  ; vfmadd231ps   %ymm5,%ymm3,%ymm12
+  DB  197,12,194,243,2                    ; vcmpleps      %ymm3,%ymm14,%ymm14
+  DB  196,67,29,74,237,224                ; vblendvps     %ymm14,%ymm13,%ymm12,%ymm13
+  DB  197,76,94,231                       ; vdivps        %ymm7,%ymm6,%ymm12
+  DB  196,67,45,74,212,176                ; vblendvps     %ymm11,%ymm12,%ymm10,%ymm10
+  DB  196,65,44,88,218                    ; vaddps        %ymm10,%ymm10,%ymm11
+  DB  196,65,36,88,219                    ; vaddps        %ymm11,%ymm11,%ymm11
+  DB  196,66,37,168,219                   ; vfmadd213ps   %ymm11,%ymm11,%ymm11
+  DB  196,65,44,92,224                    ; vsubps        %ymm8,%ymm10,%ymm12
+  DB  196,65,28,89,219                    ; vmulps        %ymm11,%ymm12,%ymm11
+  DB  196,66,45,168,203                   ; vfmadd213ps   %ymm11,%ymm10,%ymm9
+  DB  196,65,124,82,218                   ; vrsqrtps      %ymm10,%ymm11
+  DB  196,65,124,83,219                   ; vrcpps        %ymm11,%ymm11
+  DB  196,65,36,92,218                    ; vsubps        %ymm10,%ymm11,%ymm11
+  DB  197,76,88,230                       ; vaddps        %ymm6,%ymm6,%ymm12
+  DB  196,65,28,88,228                    ; vaddps        %ymm12,%ymm12,%ymm12
+  DB  197,28,194,231,2                    ; vcmpleps      %ymm7,%ymm12,%ymm12
+  DB  196,67,37,74,201,192                ; vblendvps     %ymm12,%ymm9,%ymm11,%ymm9
+  DB  197,124,16,52,36                    ; vmovups       (%rsp),%ymm14
+  DB  196,65,12,88,222                    ; vaddps        %ymm14,%ymm14,%ymm11
+  DB  197,36,92,227                       ; vsubps        %ymm3,%ymm11,%ymm12
+  DB  196,65,60,92,210                    ; vsubps        %ymm10,%ymm8,%ymm10
+  DB  196,98,29,168,211                   ; vfmadd213ps   %ymm3,%ymm12,%ymm10
+  DB  197,28,89,231                       ; vmulps        %ymm7,%ymm12,%ymm12
+  DB  196,65,28,89,201                    ; vmulps        %ymm9,%ymm12,%ymm9
+  DB  197,44,89,214                       ; vmulps        %ymm6,%ymm10,%ymm10
+  DB  196,98,101,184,206                  ; vfmadd231ps   %ymm6,%ymm3,%ymm9
+  DB  197,36,194,219,2                    ; vcmpleps      %ymm3,%ymm11,%ymm11
+  DB  196,67,53,74,202,176                ; vblendvps     %ymm11,%ymm10,%ymm9,%ymm9
+  DB  197,60,92,215                       ; vsubps        %ymm7,%ymm8,%ymm10
+  DB  197,60,92,195                       ; vsubps        %ymm3,%ymm8,%ymm8
+  DB  197,60,89,220                       ; vmulps        %ymm4,%ymm8,%ymm11
+  DB  196,98,45,184,216                   ; vfmadd231ps   %ymm0,%ymm10,%ymm11
+  DB  196,193,108,88,195                  ; vaddps        %ymm11,%ymm2,%ymm0
+  DB  197,172,89,201                      ; vmulps        %ymm1,%ymm10,%ymm1
+  DB  196,226,61,184,205                  ; vfmadd231ps   %ymm5,%ymm8,%ymm1
+  DB  196,193,116,88,205                  ; vaddps        %ymm13,%ymm1,%ymm1
+  DB  196,193,44,89,214                   ; vmulps        %ymm14,%ymm10,%ymm2
+  DB  196,226,61,184,214                  ; vfmadd231ps   %ymm6,%ymm8,%ymm2
+  DB  196,193,108,88,209                  ; vaddps        %ymm9,%ymm2,%ymm2
+  DB  196,194,69,184,216                  ; vfmadd231ps   %ymm8,%ymm7,%ymm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  72,131,196,56                       ; add           $0x38,%rsp
   DB  255,224                             ; jmpq          *%rax
 
 PUBLIC _sk_clamp_0_hsw
@@ -396,7 +954,7 @@ _sk_scale_u8_hsw LABEL PROC
   DB  72,139,0                            ; mov           (%rax),%rax
   DB  72,1,248                            ; add           %rdi,%rax
   DB  77,133,192                          ; test          %r8,%r8
-  DB  117,56                              ; jne           556 <_sk_scale_u8_hsw+0x48>
+  DB  117,56                              ; jne           de4 <_sk_scale_u8_hsw+0x48>
   DB  197,122,126,0                       ; vmovq         (%rax),%xmm8
   DB  196,66,125,49,192                   ; vpmovzxbd     %xmm8,%ymm8
   DB  196,65,124,91,192                   ; vcvtdq2ps     %ymm8,%ymm8
@@ -420,9 +978,9 @@ _sk_scale_u8_hsw LABEL PROC
   DB  77,9,217                            ; or            %r11,%r9
   DB  72,131,193,8                        ; add           $0x8,%rcx
   DB  73,255,202                          ; dec           %r10
-  DB  117,234                             ; jne           55e <_sk_scale_u8_hsw+0x50>
+  DB  117,234                             ; jne           dec <_sk_scale_u8_hsw+0x50>
   DB  196,65,249,110,193                  ; vmovq         %r9,%xmm8
-  DB  235,167                             ; jmp           522 <_sk_scale_u8_hsw+0x14>
+  DB  235,167                             ; jmp           db0 <_sk_scale_u8_hsw+0x14>
 
 PUBLIC _sk_lerp_1_float_hsw
 _sk_lerp_1_float_hsw LABEL PROC
@@ -446,7 +1004,7 @@ _sk_lerp_u8_hsw LABEL PROC
   DB  72,139,0                            ; mov           (%rax),%rax
   DB  72,1,248                            ; add           %rdi,%rax
   DB  77,133,192                          ; test          %r8,%r8
-  DB  117,76                              ; jne           606 <_sk_lerp_u8_hsw+0x5c>
+  DB  117,76                              ; jne           e94 <_sk_lerp_u8_hsw+0x5c>
   DB  197,122,126,0                       ; vmovq         (%rax),%xmm8
   DB  196,66,125,49,192                   ; vpmovzxbd     %xmm8,%ymm8
   DB  196,65,124,91,192                   ; vcvtdq2ps     %ymm8,%ymm8
@@ -474,16 +1032,16 @@ _sk_lerp_u8_hsw LABEL PROC
   DB  77,9,217                            ; or            %r11,%r9
   DB  72,131,193,8                        ; add           $0x8,%rcx
   DB  73,255,202                          ; dec           %r10
-  DB  117,234                             ; jne           60e <_sk_lerp_u8_hsw+0x64>
+  DB  117,234                             ; jne           e9c <_sk_lerp_u8_hsw+0x64>
   DB  196,65,249,110,193                  ; vmovq         %r9,%xmm8
-  DB  235,147                             ; jmp           5be <_sk_lerp_u8_hsw+0x14>
+  DB  235,147                             ; jmp           e4c <_sk_lerp_u8_hsw+0x14>
 
 PUBLIC _sk_lerp_565_hsw
 _sk_lerp_565_hsw LABEL PROC
   DB  72,173                              ; lods          %ds:(%rsi),%rax
   DB  76,139,16                           ; mov           (%rax),%r10
   DB  72,133,201                          ; test          %rcx,%rcx
-  DB  15,133,179,0,0,0                    ; jne           6ec <_sk_lerp_565_hsw+0xc1>
+  DB  15,133,179,0,0,0                    ; jne           f7a <_sk_lerp_565_hsw+0xc1>
   DB  196,193,122,111,28,122              ; vmovdqu       (%r10,%rdi,2),%xmm3
   DB  196,98,125,51,195                   ; vpmovzxwd     %xmm3,%ymm8
   DB  184,0,248,0,0                       ; mov           $0xf800,%eax
@@ -529,9 +1087,9 @@ _sk_lerp_565_hsw LABEL PROC
   DB  197,225,239,219                     ; vpxor         %xmm3,%xmm3,%xmm3
   DB  65,254,200                          ; dec           %r8b
   DB  65,128,248,6                        ; cmp           $0x6,%r8b
-  DB  15,135,59,255,255,255               ; ja            63f <_sk_lerp_565_hsw+0x14>
+  DB  15,135,59,255,255,255               ; ja            ecd <_sk_lerp_565_hsw+0x14>
   DB  69,15,182,192                       ; movzbl        %r8b,%r8d
-  DB  76,141,13,73,0,0,0                  ; lea           0x49(%rip),%r9        # 758 <_sk_lerp_565_hsw+0x12d>
+  DB  76,141,13,75,0,0,0                  ; lea           0x4b(%rip),%r9        # fe8 <_sk_lerp_565_hsw+0x12f>
   DB  75,99,4,129                         ; movslq        (%r9,%r8,4),%rax
   DB  76,1,200                            ; add           %r9,%rax
   DB  255,224                             ; jmpq          *%rax
@@ -543,27 +1101,28 @@ _sk_lerp_565_hsw LABEL PROC
   DB  196,193,97,196,92,122,4,2           ; vpinsrw       $0x2,0x4(%r10,%rdi,2),%xmm3,%xmm3
   DB  196,193,97,196,92,122,2,1           ; vpinsrw       $0x1,0x2(%r10,%rdi,2),%xmm3,%xmm3
   DB  196,193,97,196,28,122,0             ; vpinsrw       $0x0,(%r10,%rdi,2),%xmm3,%xmm3
-  DB  233,231,254,255,255                 ; jmpq          63f <_sk_lerp_565_hsw+0x14>
-  DB  244                                 ; hlt
+  DB  233,231,254,255,255                 ; jmpq          ecd <_sk_lerp_565_hsw+0x14>
+  DB  102,144                             ; xchg          %ax,%ax
+  DB  242,255                             ; repnz         (bad)
+  DB  255                                 ; (bad)
+  DB  255                                 ; (bad)
+  DB  234                                 ; (bad)
+  DB  255                                 ; (bad)
+  DB  255                                 ; (bad)
+  DB  255,226                             ; jmpq          *%rdx
   DB  255                                 ; (bad)
   DB  255                                 ; (bad)
   DB  255                                 ; (bad)
-  DB  236                                 ; in            (%dx),%al
+  DB  218,255                             ; (bad)
+  DB  255                                 ; (bad)
+  DB  255,210                             ; callq         *%rdx
   DB  255                                 ; (bad)
   DB  255                                 ; (bad)
-  DB  255,228                             ; jmpq          *%rsp
+  DB  255,202                             ; dec           %edx
   DB  255                                 ; (bad)
   DB  255                                 ; (bad)
   DB  255                                 ; (bad)
-  DB  220,255                             ; fdivr         %st,%st(7)
-  DB  255                                 ; (bad)
-  DB  255,212                             ; callq         *%rsp
-  DB  255                                 ; (bad)
-  DB  255                                 ; (bad)
-  DB  255,204                             ; dec           %esp
-  DB  255                                 ; (bad)
-  DB  255                                 ; (bad)
-  DB  255,192                             ; inc           %eax
+  DB  190                                 ; .byte         0xbe
   DB  255                                 ; (bad)
   DB  255                                 ; (bad)
   DB  255                                 ; .byte         0xff
@@ -575,7 +1134,7 @@ _sk_load_tables_hsw LABEL PROC
   DB  76,141,12,189,0,0,0,0               ; lea           0x0(,%rdi,4),%r9
   DB  76,3,8                              ; add           (%rax),%r9
   DB  77,133,192                          ; test          %r8,%r8
-  DB  117,121                             ; jne           802 <_sk_load_tables_hsw+0x8e>
+  DB  117,121                             ; jne           1092 <_sk_load_tables_hsw+0x8e>
   DB  196,193,126,111,25                  ; vmovdqu       (%r9),%ymm3
   DB  185,255,0,0,0                       ; mov           $0xff,%ecx
   DB  197,249,110,193                     ; vmovd         %ecx,%xmm0
@@ -611,7 +1170,7 @@ _sk_load_tables_hsw LABEL PROC
   DB  196,193,249,110,194                 ; vmovq         %r10,%xmm0
   DB  196,226,125,33,192                  ; vpmovsxbd     %xmm0,%ymm0
   DB  196,194,125,140,25                  ; vpmaskmovd    (%r9),%ymm0,%ymm3
-  DB  233,99,255,255,255                  ; jmpq          78e <_sk_load_tables_hsw+0x1a>
+  DB  233,99,255,255,255                  ; jmpq          101e <_sk_load_tables_hsw+0x1a>
 
 PUBLIC _sk_load_a8_hsw
 _sk_load_a8_hsw LABEL PROC
@@ -620,7 +1179,7 @@ _sk_load_a8_hsw LABEL PROC
   DB  72,139,0                            ; mov           (%rax),%rax
   DB  72,1,248                            ; add           %rdi,%rax
   DB  77,133,192                          ; test          %r8,%r8
-  DB  117,50                              ; jne           86d <_sk_load_a8_hsw+0x42>
+  DB  117,50                              ; jne           10fd <_sk_load_a8_hsw+0x42>
   DB  197,250,126,0                       ; vmovq         (%rax),%xmm0
   DB  196,226,125,49,192                  ; vpmovzxbd     %xmm0,%ymm0
   DB  197,252,91,192                      ; vcvtdq2ps     %ymm0,%ymm0
@@ -643,9 +1202,9 @@ _sk_load_a8_hsw LABEL PROC
   DB  77,9,217                            ; or            %r11,%r9
   DB  72,131,193,8                        ; add           $0x8,%rcx
   DB  73,255,202                          ; dec           %r10
-  DB  117,234                             ; jne           875 <_sk_load_a8_hsw+0x4a>
+  DB  117,234                             ; jne           1105 <_sk_load_a8_hsw+0x4a>
   DB  196,193,249,110,193                 ; vmovq         %r9,%xmm0
-  DB  235,173                             ; jmp           83f <_sk_load_a8_hsw+0x14>
+  DB  235,173                             ; jmp           10cf <_sk_load_a8_hsw+0x14>
 
 PUBLIC _sk_store_a8_hsw
 _sk_store_a8_hsw LABEL PROC
@@ -660,7 +1219,7 @@ _sk_store_a8_hsw LABEL PROC
   DB  196,66,57,43,193                    ; vpackusdw     %xmm9,%xmm8,%xmm8
   DB  196,65,57,103,192                   ; vpackuswb     %xmm8,%xmm8,%xmm8
   DB  72,133,201                          ; test          %rcx,%rcx
-  DB  117,10                              ; jne           8cd <_sk_store_a8_hsw+0x3b>
+  DB  117,10                              ; jne           115d <_sk_store_a8_hsw+0x3b>
   DB  196,65,123,17,4,57                  ; vmovsd        %xmm8,(%r9,%rdi,1)
   DB  72,173                              ; lods          %ds:(%rsi),%rax
   DB  255,224                             ; jmpq          *%rax
@@ -668,10 +1227,10 @@ _sk_store_a8_hsw LABEL PROC
   DB  65,128,224,7                        ; and           $0x7,%r8b
   DB  65,254,200                          ; dec           %r8b
   DB  65,128,248,6                        ; cmp           $0x6,%r8b
-  DB  119,236                             ; ja            8c9 <_sk_store_a8_hsw+0x37>
+  DB  119,236                             ; ja            1159 <_sk_store_a8_hsw+0x37>
   DB  196,66,121,48,192                   ; vpmovzxbw     %xmm8,%xmm8
   DB  65,15,182,192                       ; movzbl        %r8b,%eax
-  DB  76,141,5,67,0,0,0                   ; lea           0x43(%rip),%r8        # 930 <_sk_store_a8_hsw+0x9e>
+  DB  76,141,5,67,0,0,0                   ; lea           0x43(%rip),%r8        # 11c0 <_sk_store_a8_hsw+0x9e>
   DB  73,99,4,128                         ; movslq        (%r8,%rax,4),%rax
   DB  76,1,192                            ; add           %r8,%rax
   DB  255,224                             ; jmpq          *%rax
@@ -682,7 +1241,7 @@ _sk_store_a8_hsw LABEL PROC
   DB  196,67,121,20,68,57,2,4             ; vpextrb       $0x4,%xmm8,0x2(%r9,%rdi,1)
   DB  196,67,121,20,68,57,1,2             ; vpextrb       $0x2,%xmm8,0x1(%r9,%rdi,1)
   DB  196,67,121,20,4,57,0                ; vpextrb       $0x0,%xmm8,(%r9,%rdi,1)
-  DB  235,154                             ; jmp           8c9 <_sk_store_a8_hsw+0x37>
+  DB  235,154                             ; jmp           1159 <_sk_store_a8_hsw+0x37>
   DB  144                                 ; nop
   DB  246,255                             ; idiv          %bh
   DB  255                                 ; (bad)
@@ -707,12 +1266,48 @@ _sk_store_a8_hsw LABEL PROC
   DB  255                                 ; (bad)
   DB  255                                 ; .byte         0xff
 
+PUBLIC _sk_load_g8_hsw
+_sk_load_g8_hsw LABEL PROC
+  DB  73,137,200                          ; mov           %rcx,%r8
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  72,139,0                            ; mov           (%rax),%rax
+  DB  72,1,248                            ; add           %rdi,%rax
+  DB  77,133,192                          ; test          %r8,%r8
+  DB  117,60                              ; jne           1228 <_sk_load_g8_hsw+0x4c>
+  DB  197,250,126,0                       ; vmovq         (%rax),%xmm0
+  DB  196,226,125,49,192                  ; vpmovzxbd     %xmm0,%ymm0
+  DB  197,252,91,192                      ; vcvtdq2ps     %ymm0,%ymm0
+  DB  184,129,128,128,59                  ; mov           $0x3b808081,%eax
+  DB  197,249,110,200                     ; vmovd         %eax,%xmm1
+  DB  196,226,125,88,201                  ; vpbroadcastd  %xmm1,%ymm1
+  DB  197,252,89,193                      ; vmulps        %ymm1,%ymm0,%ymm0
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  197,249,110,200                     ; vmovd         %eax,%xmm1
+  DB  196,226,125,88,217                  ; vpbroadcastd  %xmm1,%ymm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  76,137,193                          ; mov           %r8,%rcx
+  DB  197,252,40,200                      ; vmovaps       %ymm0,%ymm1
+  DB  197,252,40,208                      ; vmovaps       %ymm0,%ymm2
+  DB  255,224                             ; jmpq          *%rax
+  DB  49,201                              ; xor           %ecx,%ecx
+  DB  77,137,194                          ; mov           %r8,%r10
+  DB  69,49,201                           ; xor           %r9d,%r9d
+  DB  68,15,182,24                        ; movzbl        (%rax),%r11d
+  DB  72,255,192                          ; inc           %rax
+  DB  73,211,227                          ; shl           %cl,%r11
+  DB  77,9,217                            ; or            %r11,%r9
+  DB  72,131,193,8                        ; add           $0x8,%rcx
+  DB  73,255,202                          ; dec           %r10
+  DB  117,234                             ; jne           1230 <_sk_load_g8_hsw+0x54>
+  DB  196,193,249,110,193                 ; vmovq         %r9,%xmm0
+  DB  235,163                             ; jmp           11f0 <_sk_load_g8_hsw+0x14>
+
 PUBLIC _sk_load_565_hsw
 _sk_load_565_hsw LABEL PROC
   DB  72,173                              ; lods          %ds:(%rsi),%rax
   DB  76,139,16                           ; mov           (%rax),%r10
   DB  72,133,201                          ; test          %rcx,%rcx
-  DB  15,133,149,0,0,0                    ; jne           9ef <_sk_load_565_hsw+0xa3>
+  DB  15,133,149,0,0,0                    ; jne           12f0 <_sk_load_565_hsw+0xa3>
   DB  196,193,122,111,4,122               ; vmovdqu       (%r10,%rdi,2),%xmm0
   DB  196,226,125,51,208                  ; vpmovzxwd     %xmm0,%ymm2
   DB  184,0,248,0,0                       ; mov           $0xf800,%eax
@@ -752,9 +1347,9 @@ _sk_load_565_hsw LABEL PROC
   DB  197,249,239,192                     ; vpxor         %xmm0,%xmm0,%xmm0
   DB  65,254,200                          ; dec           %r8b
   DB  65,128,248,6                        ; cmp           $0x6,%r8b
-  DB  15,135,89,255,255,255               ; ja            960 <_sk_load_565_hsw+0x14>
+  DB  15,135,89,255,255,255               ; ja            1261 <_sk_load_565_hsw+0x14>
   DB  69,15,182,192                       ; movzbl        %r8b,%r8d
-  DB  76,141,13,74,0,0,0                  ; lea           0x4a(%rip),%r9        # a5c <_sk_load_565_hsw+0x110>
+  DB  76,141,13,73,0,0,0                  ; lea           0x49(%rip),%r9        # 135c <_sk_load_565_hsw+0x10f>
   DB  75,99,4,129                         ; movslq        (%r9,%r8,4),%rax
   DB  76,1,200                            ; add           %r9,%rax
   DB  255,224                             ; jmpq          *%rax
@@ -766,27 +1361,27 @@ _sk_load_565_hsw LABEL PROC
   DB  196,193,121,196,68,122,4,2          ; vpinsrw       $0x2,0x4(%r10,%rdi,2),%xmm0,%xmm0
   DB  196,193,121,196,68,122,2,1          ; vpinsrw       $0x1,0x2(%r10,%rdi,2),%xmm0,%xmm0
   DB  196,193,121,196,4,122,0             ; vpinsrw       $0x0,(%r10,%rdi,2),%xmm0,%xmm0
-  DB  233,5,255,255,255                   ; jmpq          960 <_sk_load_565_hsw+0x14>
-  DB  144                                 ; nop
-  DB  243,255                             ; repz          (bad)
-  DB  255                                 ; (bad)
-  DB  255                                 ; (bad)
-  DB  235,255                             ; jmp           a61 <_sk_load_565_hsw+0x115>
-  DB  255                                 ; (bad)
-  DB  255,227                             ; jmpq          *%rbx
+  DB  233,5,255,255,255                   ; jmpq          1261 <_sk_load_565_hsw+0x14>
+  DB  244                                 ; hlt
   DB  255                                 ; (bad)
   DB  255                                 ; (bad)
   DB  255                                 ; (bad)
-  DB  219,255                             ; (bad)
-  DB  255                                 ; (bad)
-  DB  255,211                             ; callq         *%rbx
+  DB  236                                 ; in            (%dx),%al
   DB  255                                 ; (bad)
   DB  255                                 ; (bad)
-  DB  255,203                             ; dec           %ebx
+  DB  255,228                             ; jmpq          *%rsp
   DB  255                                 ; (bad)
   DB  255                                 ; (bad)
   DB  255                                 ; (bad)
-  DB  191                                 ; .byte         0xbf
+  DB  220,255                             ; fdivr         %st,%st(7)
+  DB  255                                 ; (bad)
+  DB  255,212                             ; callq         *%rsp
+  DB  255                                 ; (bad)
+  DB  255                                 ; (bad)
+  DB  255,204                             ; dec           %esp
+  DB  255                                 ; (bad)
+  DB  255                                 ; (bad)
+  DB  255,192                             ; inc           %eax
   DB  255                                 ; (bad)
   DB  255                                 ; (bad)
   DB  255                                 ; .byte         0xff
@@ -814,7 +1409,7 @@ _sk_store_565_hsw LABEL PROC
   DB  196,67,125,57,193,1                 ; vextracti128  $0x1,%ymm8,%xmm9
   DB  196,66,57,43,193                    ; vpackusdw     %xmm9,%xmm8,%xmm8
   DB  72,133,201                          ; test          %rcx,%rcx
-  DB  117,10                              ; jne           ae4 <_sk_store_565_hsw+0x6c>
+  DB  117,10                              ; jne           13e4 <_sk_store_565_hsw+0x6c>
   DB  196,65,122,127,4,121                ; vmovdqu       %xmm8,(%r9,%rdi,2)
   DB  72,173                              ; lods          %ds:(%rsi),%rax
   DB  255,224                             ; jmpq          *%rax
@@ -822,9 +1417,9 @@ _sk_store_565_hsw LABEL PROC
   DB  65,128,224,7                        ; and           $0x7,%r8b
   DB  65,254,200                          ; dec           %r8b
   DB  65,128,248,6                        ; cmp           $0x6,%r8b
-  DB  119,236                             ; ja            ae0 <_sk_store_565_hsw+0x68>
+  DB  119,236                             ; ja            13e0 <_sk_store_565_hsw+0x68>
   DB  65,15,182,192                       ; movzbl        %r8b,%eax
-  DB  76,141,5,69,0,0,0                   ; lea           0x45(%rip),%r8        # b44 <_sk_store_565_hsw+0xcc>
+  DB  76,141,5,69,0,0,0                   ; lea           0x45(%rip),%r8        # 1444 <_sk_store_565_hsw+0xcc>
   DB  73,99,4,128                         ; movslq        (%r8,%rax,4),%rax
   DB  76,1,192                            ; add           %r8,%rax
   DB  255,224                             ; jmpq          *%rax
@@ -835,7 +1430,7 @@ _sk_store_565_hsw LABEL PROC
   DB  196,67,121,21,68,121,4,2            ; vpextrw       $0x2,%xmm8,0x4(%r9,%rdi,2)
   DB  196,67,121,21,68,121,2,1            ; vpextrw       $0x1,%xmm8,0x2(%r9,%rdi,2)
   DB  196,67,121,21,4,121,0               ; vpextrw       $0x0,%xmm8,(%r9,%rdi,2)
-  DB  235,159                             ; jmp           ae0 <_sk_store_565_hsw+0x68>
+  DB  235,159                             ; jmp           13e0 <_sk_store_565_hsw+0x68>
   DB  15,31,0                             ; nopl          (%rax)
   DB  244                                 ; hlt
   DB  255                                 ; (bad)
@@ -861,6 +1456,165 @@ _sk_store_565_hsw LABEL PROC
   DB  255                                 ; (bad)
   DB  255                                 ; .byte         0xff
 
+PUBLIC _sk_load_4444_hsw
+_sk_load_4444_hsw LABEL PROC
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  76,139,16                           ; mov           (%rax),%r10
+  DB  72,133,201                          ; test          %rcx,%rcx
+  DB  15,133,179,0,0,0                    ; jne           1521 <_sk_load_4444_hsw+0xc1>
+  DB  196,193,122,111,4,122               ; vmovdqu       (%r10,%rdi,2),%xmm0
+  DB  196,98,125,51,200                   ; vpmovzxwd     %xmm0,%ymm9
+  DB  184,0,240,0,0                       ; mov           $0xf000,%eax
+  DB  197,249,110,192                     ; vmovd         %eax,%xmm0
+  DB  196,226,125,88,192                  ; vpbroadcastd  %xmm0,%ymm0
+  DB  196,193,125,219,193                 ; vpand         %ymm9,%ymm0,%ymm0
+  DB  197,252,91,192                      ; vcvtdq2ps     %ymm0,%ymm0
+  DB  184,137,136,136,55                  ; mov           $0x37888889,%eax
+  DB  197,249,110,200                     ; vmovd         %eax,%xmm1
+  DB  196,226,125,88,201                  ; vpbroadcastd  %xmm1,%ymm1
+  DB  197,252,89,193                      ; vmulps        %ymm1,%ymm0,%ymm0
+  DB  184,0,15,0,0                        ; mov           $0xf00,%eax
+  DB  197,249,110,200                     ; vmovd         %eax,%xmm1
+  DB  196,226,125,88,201                  ; vpbroadcastd  %xmm1,%ymm1
+  DB  196,193,117,219,201                 ; vpand         %ymm9,%ymm1,%ymm1
+  DB  197,252,91,201                      ; vcvtdq2ps     %ymm1,%ymm1
+  DB  184,137,136,136,57                  ; mov           $0x39888889,%eax
+  DB  197,249,110,208                     ; vmovd         %eax,%xmm2
+  DB  196,226,125,88,210                  ; vpbroadcastd  %xmm2,%ymm2
+  DB  197,244,89,202                      ; vmulps        %ymm2,%ymm1,%ymm1
+  DB  184,240,0,0,0                       ; mov           $0xf0,%eax
+  DB  197,249,110,208                     ; vmovd         %eax,%xmm2
+  DB  196,226,125,88,210                  ; vpbroadcastd  %xmm2,%ymm2
+  DB  196,193,109,219,209                 ; vpand         %ymm9,%ymm2,%ymm2
+  DB  197,124,91,194                      ; vcvtdq2ps     %ymm2,%ymm8
+  DB  184,137,136,136,59                  ; mov           $0x3b888889,%eax
+  DB  197,249,110,208                     ; vmovd         %eax,%xmm2
+  DB  196,226,125,88,210                  ; vpbroadcastd  %xmm2,%ymm2
+  DB  197,188,89,210                      ; vmulps        %ymm2,%ymm8,%ymm2
+  DB  184,15,0,0,0                        ; mov           $0xf,%eax
+  DB  197,249,110,216                     ; vmovd         %eax,%xmm3
+  DB  196,226,125,88,219                  ; vpbroadcastd  %xmm3,%ymm3
+  DB  196,193,101,219,217                 ; vpand         %ymm9,%ymm3,%ymm3
+  DB  197,124,91,195                      ; vcvtdq2ps     %ymm3,%ymm8
+  DB  184,137,136,136,61                  ; mov           $0x3d888889,%eax
+  DB  197,249,110,216                     ; vmovd         %eax,%xmm3
+  DB  196,226,125,88,219                  ; vpbroadcastd  %xmm3,%ymm3
+  DB  197,188,89,219                      ; vmulps        %ymm3,%ymm8,%ymm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+  DB  65,137,200                          ; mov           %ecx,%r8d
+  DB  65,128,224,7                        ; and           $0x7,%r8b
+  DB  197,249,239,192                     ; vpxor         %xmm0,%xmm0,%xmm0
+  DB  65,254,200                          ; dec           %r8b
+  DB  65,128,248,6                        ; cmp           $0x6,%r8b
+  DB  15,135,59,255,255,255               ; ja            1474 <_sk_load_4444_hsw+0x14>
+  DB  69,15,182,192                       ; movzbl        %r8b,%r8d
+  DB  76,141,13,76,0,0,0                  ; lea           0x4c(%rip),%r9        # 1590 <_sk_load_4444_hsw+0x130>
+  DB  75,99,4,129                         ; movslq        (%r9,%r8,4),%rax
+  DB  76,1,200                            ; add           %r9,%rax
+  DB  255,224                             ; jmpq          *%rax
+  DB  197,249,239,192                     ; vpxor         %xmm0,%xmm0,%xmm0
+  DB  196,193,121,196,68,122,12,6         ; vpinsrw       $0x6,0xc(%r10,%rdi,2),%xmm0,%xmm0
+  DB  196,193,121,196,68,122,10,5         ; vpinsrw       $0x5,0xa(%r10,%rdi,2),%xmm0,%xmm0
+  DB  196,193,121,196,68,122,8,4          ; vpinsrw       $0x4,0x8(%r10,%rdi,2),%xmm0,%xmm0
+  DB  196,193,121,196,68,122,6,3          ; vpinsrw       $0x3,0x6(%r10,%rdi,2),%xmm0,%xmm0
+  DB  196,193,121,196,68,122,4,2          ; vpinsrw       $0x2,0x4(%r10,%rdi,2),%xmm0,%xmm0
+  DB  196,193,121,196,68,122,2,1          ; vpinsrw       $0x1,0x2(%r10,%rdi,2),%xmm0,%xmm0
+  DB  196,193,121,196,4,122,0             ; vpinsrw       $0x0,(%r10,%rdi,2),%xmm0,%xmm0
+  DB  233,231,254,255,255                 ; jmpq          1474 <_sk_load_4444_hsw+0x14>
+  DB  15,31,0                             ; nopl          (%rax)
+  DB  241                                 ; icebp
+  DB  255                                 ; (bad)
+  DB  255                                 ; (bad)
+  DB  255                                 ; (bad)
+  DB  233,255,255,255,225                 ; jmpq          ffffffffe2001598 <_sk_linear_gradient_2stops_hsw+0xffffffffe1fff7f0>
+  DB  255                                 ; (bad)
+  DB  255                                 ; (bad)
+  DB  255                                 ; (bad)
+  DB  217,255                             ; fcos
+  DB  255                                 ; (bad)
+  DB  255,209                             ; callq         *%rcx
+  DB  255                                 ; (bad)
+  DB  255                                 ; (bad)
+  DB  255,201                             ; dec           %ecx
+  DB  255                                 ; (bad)
+  DB  255                                 ; (bad)
+  DB  255                                 ; (bad)
+  DB  189                                 ; .byte         0xbd
+  DB  255                                 ; (bad)
+  DB  255                                 ; (bad)
+  DB  255                                 ; .byte         0xff
+
+PUBLIC _sk_store_4444_hsw
+_sk_store_4444_hsw LABEL PROC
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  76,139,8                            ; mov           (%rax),%r9
+  DB  184,0,0,112,65                      ; mov           $0x41700000,%eax
+  DB  197,121,110,192                     ; vmovd         %eax,%xmm8
+  DB  196,66,125,88,192                   ; vpbroadcastd  %xmm8,%ymm8
+  DB  197,60,89,200                       ; vmulps        %ymm0,%ymm8,%ymm9
+  DB  196,65,125,91,201                   ; vcvtps2dq     %ymm9,%ymm9
+  DB  196,193,53,114,241,12               ; vpslld        $0xc,%ymm9,%ymm9
+  DB  197,60,89,209                       ; vmulps        %ymm1,%ymm8,%ymm10
+  DB  196,65,125,91,210                   ; vcvtps2dq     %ymm10,%ymm10
+  DB  196,193,45,114,242,8                ; vpslld        $0x8,%ymm10,%ymm10
+  DB  196,65,45,235,201                   ; vpor          %ymm9,%ymm10,%ymm9
+  DB  197,60,89,210                       ; vmulps        %ymm2,%ymm8,%ymm10
+  DB  196,65,125,91,210                   ; vcvtps2dq     %ymm10,%ymm10
+  DB  196,193,45,114,242,4                ; vpslld        $0x4,%ymm10,%ymm10
+  DB  197,60,89,195                       ; vmulps        %ymm3,%ymm8,%ymm8
+  DB  196,65,125,91,192                   ; vcvtps2dq     %ymm8,%ymm8
+  DB  196,65,45,235,192                   ; vpor          %ymm8,%ymm10,%ymm8
+  DB  196,65,53,235,192                   ; vpor          %ymm8,%ymm9,%ymm8
+  DB  196,67,125,57,193,1                 ; vextracti128  $0x1,%ymm8,%xmm9
+  DB  196,66,57,43,193                    ; vpackusdw     %xmm9,%xmm8,%xmm8
+  DB  72,133,201                          ; test          %rcx,%rcx
+  DB  117,10                              ; jne           161e <_sk_store_4444_hsw+0x72>
+  DB  196,65,122,127,4,121                ; vmovdqu       %xmm8,(%r9,%rdi,2)
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+  DB  65,137,200                          ; mov           %ecx,%r8d
+  DB  65,128,224,7                        ; and           $0x7,%r8b
+  DB  65,254,200                          ; dec           %r8b
+  DB  65,128,248,6                        ; cmp           $0x6,%r8b
+  DB  119,236                             ; ja            161a <_sk_store_4444_hsw+0x6e>
+  DB  65,15,182,192                       ; movzbl        %r8b,%eax
+  DB  76,141,5,67,0,0,0                   ; lea           0x43(%rip),%r8        # 167c <_sk_store_4444_hsw+0xd0>
+  DB  73,99,4,128                         ; movslq        (%r8,%rax,4),%rax
+  DB  76,1,192                            ; add           %r8,%rax
+  DB  255,224                             ; jmpq          *%rax
+  DB  196,67,121,21,68,121,12,6           ; vpextrw       $0x6,%xmm8,0xc(%r9,%rdi,2)
+  DB  196,67,121,21,68,121,10,5           ; vpextrw       $0x5,%xmm8,0xa(%r9,%rdi,2)
+  DB  196,67,121,21,68,121,8,4            ; vpextrw       $0x4,%xmm8,0x8(%r9,%rdi,2)
+  DB  196,67,121,21,68,121,6,3            ; vpextrw       $0x3,%xmm8,0x6(%r9,%rdi,2)
+  DB  196,67,121,21,68,121,4,2            ; vpextrw       $0x2,%xmm8,0x4(%r9,%rdi,2)
+  DB  196,67,121,21,68,121,2,1            ; vpextrw       $0x1,%xmm8,0x2(%r9,%rdi,2)
+  DB  196,67,121,21,4,121,0               ; vpextrw       $0x0,%xmm8,(%r9,%rdi,2)
+  DB  235,159                             ; jmp           161a <_sk_store_4444_hsw+0x6e>
+  DB  144                                 ; nop
+  DB  246,255                             ; idiv          %bh
+  DB  255                                 ; (bad)
+  DB  255                                 ; (bad)
+  DB  238                                 ; out           %al,(%dx)
+  DB  255                                 ; (bad)
+  DB  255                                 ; (bad)
+  DB  255,230                             ; jmpq          *%rsi
+  DB  255                                 ; (bad)
+  DB  255                                 ; (bad)
+  DB  255                                 ; (bad)
+  DB  222,255                             ; fdivrp        %st,%st(7)
+  DB  255                                 ; (bad)
+  DB  255,214                             ; callq         *%rsi
+  DB  255                                 ; (bad)
+  DB  255                                 ; (bad)
+  DB  255,206                             ; dec           %esi
+  DB  255                                 ; (bad)
+  DB  255                                 ; (bad)
+  DB  255,198                             ; inc           %esi
+  DB  255                                 ; (bad)
+  DB  255                                 ; (bad)
+  DB  255                                 ; .byte         0xff
+
 PUBLIC _sk_load_8888_hsw
 _sk_load_8888_hsw LABEL PROC
   DB  73,137,200                          ; mov           %rcx,%r8
@@ -868,7 +1622,7 @@ _sk_load_8888_hsw LABEL PROC
   DB  76,141,12,189,0,0,0,0               ; lea           0x0(,%rdi,4),%r9
   DB  76,3,8                              ; add           (%rax),%r9
   DB  77,133,192                          ; test          %r8,%r8
-  DB  117,104                             ; jne           bdd <_sk_load_8888_hsw+0x7d>
+  DB  117,104                             ; jne           1715 <_sk_load_8888_hsw+0x7d>
   DB  196,193,126,111,25                  ; vmovdqu       (%r9),%ymm3
   DB  184,255,0,0,0                       ; mov           $0xff,%eax
   DB  197,249,110,192                     ; vmovd         %eax,%xmm0
@@ -901,7 +1655,7 @@ _sk_load_8888_hsw LABEL PROC
   DB  196,225,249,110,192                 ; vmovq         %rax,%xmm0
   DB  196,226,125,33,192                  ; vpmovsxbd     %xmm0,%ymm0
   DB  196,194,125,140,25                  ; vpmaskmovd    (%r9),%ymm0,%ymm3
-  DB  233,116,255,255,255                 ; jmpq          b7a <_sk_load_8888_hsw+0x1a>
+  DB  233,116,255,255,255                 ; jmpq          16b2 <_sk_load_8888_hsw+0x1a>
 
 PUBLIC _sk_store_8888_hsw
 _sk_store_8888_hsw LABEL PROC
@@ -927,7 +1681,7 @@ _sk_store_8888_hsw LABEL PROC
   DB  196,65,45,235,192                   ; vpor          %ymm8,%ymm10,%ymm8
   DB  196,65,53,235,192                   ; vpor          %ymm8,%ymm9,%ymm8
   DB  77,133,192                          ; test          %r8,%r8
-  DB  117,12                              ; jne           c7a <_sk_store_8888_hsw+0x74>
+  DB  117,12                              ; jne           17b2 <_sk_store_8888_hsw+0x74>
   DB  196,65,126,127,1                    ; vmovdqu       %ymm8,(%r9)
   DB  72,173                              ; lods          %ds:(%rsi),%rax
   DB  76,137,193                          ; mov           %r8,%rcx
@@ -940,14 +1694,14 @@ _sk_store_8888_hsw LABEL PROC
   DB  196,97,249,110,200                  ; vmovq         %rax,%xmm9
   DB  196,66,125,33,201                   ; vpmovsxbd     %xmm9,%ymm9
   DB  196,66,53,142,1                     ; vpmaskmovd    %ymm8,%ymm9,(%r9)
-  DB  235,211                             ; jmp           c73 <_sk_store_8888_hsw+0x6d>
+  DB  235,211                             ; jmp           17ab <_sk_store_8888_hsw+0x6d>
 
 PUBLIC _sk_load_f16_hsw
 _sk_load_f16_hsw LABEL PROC
   DB  72,173                              ; lods          %ds:(%rsi),%rax
   DB  72,139,0                            ; mov           (%rax),%rax
   DB  72,133,201                          ; test          %rcx,%rcx
-  DB  117,97                              ; jne           d0b <_sk_load_f16_hsw+0x6b>
+  DB  117,97                              ; jne           1843 <_sk_load_f16_hsw+0x6b>
   DB  197,121,16,4,248                    ; vmovupd       (%rax,%rdi,8),%xmm8
   DB  197,249,16,84,248,16                ; vmovupd       0x10(%rax,%rdi,8),%xmm2
   DB  197,249,16,92,248,32                ; vmovupd       0x20(%rax,%rdi,8),%xmm3
@@ -973,29 +1727,29 @@ _sk_load_f16_hsw LABEL PROC
   DB  197,123,16,4,248                    ; vmovsd        (%rax,%rdi,8),%xmm8
   DB  196,65,49,239,201                   ; vpxor         %xmm9,%xmm9,%xmm9
   DB  72,131,249,1                        ; cmp           $0x1,%rcx
-  DB  116,79                              ; je            d6a <_sk_load_f16_hsw+0xca>
+  DB  116,79                              ; je            18a2 <_sk_load_f16_hsw+0xca>
   DB  197,57,22,68,248,8                  ; vmovhpd       0x8(%rax,%rdi,8),%xmm8,%xmm8
   DB  72,131,249,3                        ; cmp           $0x3,%rcx
-  DB  114,67                              ; jb            d6a <_sk_load_f16_hsw+0xca>
+  DB  114,67                              ; jb            18a2 <_sk_load_f16_hsw+0xca>
   DB  197,251,16,84,248,16                ; vmovsd        0x10(%rax,%rdi,8),%xmm2
   DB  72,131,249,3                        ; cmp           $0x3,%rcx
-  DB  116,68                              ; je            d77 <_sk_load_f16_hsw+0xd7>
+  DB  116,68                              ; je            18af <_sk_load_f16_hsw+0xd7>
   DB  197,233,22,84,248,24                ; vmovhpd       0x18(%rax,%rdi,8),%xmm2,%xmm2
   DB  72,131,249,5                        ; cmp           $0x5,%rcx
-  DB  114,56                              ; jb            d77 <_sk_load_f16_hsw+0xd7>
+  DB  114,56                              ; jb            18af <_sk_load_f16_hsw+0xd7>
   DB  197,251,16,92,248,32                ; vmovsd        0x20(%rax,%rdi,8),%xmm3
   DB  72,131,249,5                        ; cmp           $0x5,%rcx
-  DB  15,132,114,255,255,255              ; je            cc1 <_sk_load_f16_hsw+0x21>
+  DB  15,132,114,255,255,255              ; je            17f9 <_sk_load_f16_hsw+0x21>
   DB  197,225,22,92,248,40                ; vmovhpd       0x28(%rax,%rdi,8),%xmm3,%xmm3
   DB  72,131,249,7                        ; cmp           $0x7,%rcx
-  DB  15,130,98,255,255,255               ; jb            cc1 <_sk_load_f16_hsw+0x21>
+  DB  15,130,98,255,255,255               ; jb            17f9 <_sk_load_f16_hsw+0x21>
   DB  197,122,126,76,248,48               ; vmovq         0x30(%rax,%rdi,8),%xmm9
-  DB  233,87,255,255,255                  ; jmpq          cc1 <_sk_load_f16_hsw+0x21>
+  DB  233,87,255,255,255                  ; jmpq          17f9 <_sk_load_f16_hsw+0x21>
   DB  197,225,87,219                      ; vxorpd        %xmm3,%xmm3,%xmm3
   DB  197,233,87,210                      ; vxorpd        %xmm2,%xmm2,%xmm2
-  DB  233,74,255,255,255                  ; jmpq          cc1 <_sk_load_f16_hsw+0x21>
+  DB  233,74,255,255,255                  ; jmpq          17f9 <_sk_load_f16_hsw+0x21>
   DB  197,225,87,219                      ; vxorpd        %xmm3,%xmm3,%xmm3
-  DB  233,65,255,255,255                  ; jmpq          cc1 <_sk_load_f16_hsw+0x21>
+  DB  233,65,255,255,255                  ; jmpq          17f9 <_sk_load_f16_hsw+0x21>
 
 PUBLIC _sk_store_f16_hsw
 _sk_store_f16_hsw LABEL PROC
@@ -1014,7 +1768,7 @@ _sk_store_f16_hsw LABEL PROC
   DB  196,65,57,98,205                    ; vpunpckldq    %xmm13,%xmm8,%xmm9
   DB  196,65,57,106,197                   ; vpunpckhdq    %xmm13,%xmm8,%xmm8
   DB  72,133,201                          ; test          %rcx,%rcx
-  DB  117,27                              ; jne           de5 <_sk_store_f16_hsw+0x65>
+  DB  117,27                              ; jne           191d <_sk_store_f16_hsw+0x65>
   DB  197,120,17,28,248                   ; vmovups       %xmm11,(%rax,%rdi,8)
   DB  197,120,17,84,248,16                ; vmovups       %xmm10,0x10(%rax,%rdi,8)
   DB  197,120,17,76,248,32                ; vmovups       %xmm9,0x20(%rax,%rdi,8)
@@ -1023,22 +1777,22 @@ _sk_store_f16_hsw LABEL PROC
   DB  255,224                             ; jmpq          *%rax
   DB  197,121,214,28,248                  ; vmovq         %xmm11,(%rax,%rdi,8)
   DB  72,131,249,1                        ; cmp           $0x1,%rcx
-  DB  116,241                             ; je            de1 <_sk_store_f16_hsw+0x61>
+  DB  116,241                             ; je            1919 <_sk_store_f16_hsw+0x61>
   DB  197,121,23,92,248,8                 ; vmovhpd       %xmm11,0x8(%rax,%rdi,8)
   DB  72,131,249,3                        ; cmp           $0x3,%rcx
-  DB  114,229                             ; jb            de1 <_sk_store_f16_hsw+0x61>
+  DB  114,229                             ; jb            1919 <_sk_store_f16_hsw+0x61>
   DB  197,121,214,84,248,16               ; vmovq         %xmm10,0x10(%rax,%rdi,8)
-  DB  116,221                             ; je            de1 <_sk_store_f16_hsw+0x61>
+  DB  116,221                             ; je            1919 <_sk_store_f16_hsw+0x61>
   DB  197,121,23,84,248,24                ; vmovhpd       %xmm10,0x18(%rax,%rdi,8)
   DB  72,131,249,5                        ; cmp           $0x5,%rcx
-  DB  114,209                             ; jb            de1 <_sk_store_f16_hsw+0x61>
+  DB  114,209                             ; jb            1919 <_sk_store_f16_hsw+0x61>
   DB  197,121,214,76,248,32               ; vmovq         %xmm9,0x20(%rax,%rdi,8)
-  DB  116,201                             ; je            de1 <_sk_store_f16_hsw+0x61>
+  DB  116,201                             ; je            1919 <_sk_store_f16_hsw+0x61>
   DB  197,121,23,76,248,40                ; vmovhpd       %xmm9,0x28(%rax,%rdi,8)
   DB  72,131,249,7                        ; cmp           $0x7,%rcx
-  DB  114,189                             ; jb            de1 <_sk_store_f16_hsw+0x61>
+  DB  114,189                             ; jb            1919 <_sk_store_f16_hsw+0x61>
   DB  197,121,214,68,248,48               ; vmovq         %xmm8,0x30(%rax,%rdi,8)
-  DB  235,181                             ; jmp           de1 <_sk_store_f16_hsw+0x61>
+  DB  235,181                             ; jmp           1919 <_sk_store_f16_hsw+0x61>
 
 PUBLIC _sk_store_f32_hsw
 _sk_store_f32_hsw LABEL PROC
@@ -1054,7 +1808,7 @@ _sk_store_f32_hsw LABEL PROC
   DB  196,65,37,20,196                    ; vunpcklpd     %ymm12,%ymm11,%ymm8
   DB  196,65,37,21,220                    ; vunpckhpd     %ymm12,%ymm11,%ymm11
   DB  72,133,201                          ; test          %rcx,%rcx
-  DB  117,55                              ; jne           e99 <_sk_store_f32_hsw+0x6d>
+  DB  117,55                              ; jne           19d1 <_sk_store_f32_hsw+0x6d>
   DB  196,67,45,24,225,1                  ; vinsertf128   $0x1,%xmm9,%ymm10,%ymm12
   DB  196,67,61,24,235,1                  ; vinsertf128   $0x1,%xmm11,%ymm8,%ymm13
   DB  196,67,45,6,201,49                  ; vperm2f128    $0x31,%ymm9,%ymm10,%ymm9
@@ -1067,22 +1821,22 @@ _sk_store_f32_hsw LABEL PROC
   DB  255,224                             ; jmpq          *%rax
   DB  196,65,121,17,20,128                ; vmovupd       %xmm10,(%r8,%rax,4)
   DB  72,131,249,1                        ; cmp           $0x1,%rcx
-  DB  116,240                             ; je            e95 <_sk_store_f32_hsw+0x69>
+  DB  116,240                             ; je            19cd <_sk_store_f32_hsw+0x69>
   DB  196,65,121,17,76,128,16             ; vmovupd       %xmm9,0x10(%r8,%rax,4)
   DB  72,131,249,3                        ; cmp           $0x3,%rcx
-  DB  114,227                             ; jb            e95 <_sk_store_f32_hsw+0x69>
+  DB  114,227                             ; jb            19cd <_sk_store_f32_hsw+0x69>
   DB  196,65,121,17,68,128,32             ; vmovupd       %xmm8,0x20(%r8,%rax,4)
-  DB  116,218                             ; je            e95 <_sk_store_f32_hsw+0x69>
+  DB  116,218                             ; je            19cd <_sk_store_f32_hsw+0x69>
   DB  196,65,121,17,92,128,48             ; vmovupd       %xmm11,0x30(%r8,%rax,4)
   DB  72,131,249,5                        ; cmp           $0x5,%rcx
-  DB  114,205                             ; jb            e95 <_sk_store_f32_hsw+0x69>
+  DB  114,205                             ; jb            19cd <_sk_store_f32_hsw+0x69>
   DB  196,67,125,25,84,128,64,1           ; vextractf128  $0x1,%ymm10,0x40(%r8,%rax,4)
-  DB  116,195                             ; je            e95 <_sk_store_f32_hsw+0x69>
+  DB  116,195                             ; je            19cd <_sk_store_f32_hsw+0x69>
   DB  196,67,125,25,76,128,80,1           ; vextractf128  $0x1,%ymm9,0x50(%r8,%rax,4)
   DB  72,131,249,7                        ; cmp           $0x7,%rcx
-  DB  114,181                             ; jb            e95 <_sk_store_f32_hsw+0x69>
+  DB  114,181                             ; jb            19cd <_sk_store_f32_hsw+0x69>
   DB  196,67,125,25,68,128,96,1           ; vextractf128  $0x1,%ymm8,0x60(%r8,%rax,4)
-  DB  235,171                             ; jmp           e95 <_sk_store_f32_hsw+0x69>
+  DB  235,171                             ; jmp           19cd <_sk_store_f32_hsw+0x69>
 
 PUBLIC _sk_clamp_x_hsw
 _sk_clamp_x_hsw LABEL PROC
@@ -1470,12 +2224,93 @@ _sk_clear_avx LABEL PROC
   DB  197,228,87,219                      ; vxorps        %ymm3,%ymm3,%ymm3
   DB  255,224                             ; jmpq          *%rax
 
-PUBLIC _sk_plus__avx
-_sk_plus__avx LABEL PROC
-  DB  197,252,88,196                      ; vaddps        %ymm4,%ymm0,%ymm0
-  DB  197,244,88,205                      ; vaddps        %ymm5,%ymm1,%ymm1
-  DB  197,236,88,214                      ; vaddps        %ymm6,%ymm2,%ymm2
-  DB  197,228,88,223                      ; vaddps        %ymm7,%ymm3,%ymm3
+PUBLIC _sk_srcatop_avx
+_sk_srcatop_avx LABEL PROC
+  DB  197,124,89,199                      ; vmulps        %ymm7,%ymm0,%ymm8
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  197,249,110,192                     ; vmovd         %eax,%xmm0
+  DB  196,227,121,4,192,0                 ; vpermilps     $0x0,%xmm0,%xmm0
+  DB  196,227,125,24,192,1                ; vinsertf128   $0x1,%xmm0,%ymm0,%ymm0
+  DB  197,124,92,203                      ; vsubps        %ymm3,%ymm0,%ymm9
+  DB  197,180,89,196                      ; vmulps        %ymm4,%ymm9,%ymm0
+  DB  197,188,88,192                      ; vaddps        %ymm0,%ymm8,%ymm0
+  DB  197,244,89,207                      ; vmulps        %ymm7,%ymm1,%ymm1
+  DB  197,52,89,197                       ; vmulps        %ymm5,%ymm9,%ymm8
+  DB  196,193,116,88,200                  ; vaddps        %ymm8,%ymm1,%ymm1
+  DB  197,236,89,215                      ; vmulps        %ymm7,%ymm2,%ymm2
+  DB  197,52,89,198                       ; vmulps        %ymm6,%ymm9,%ymm8
+  DB  196,193,108,88,208                  ; vaddps        %ymm8,%ymm2,%ymm2
+  DB  197,228,89,223                      ; vmulps        %ymm7,%ymm3,%ymm3
+  DB  197,52,89,199                       ; vmulps        %ymm7,%ymm9,%ymm8
+  DB  196,193,100,88,216                  ; vaddps        %ymm8,%ymm3,%ymm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_dstatop_avx
+_sk_dstatop_avx LABEL PROC
+  DB  197,100,89,196                      ; vmulps        %ymm4,%ymm3,%ymm8
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  197,121,110,200                     ; vmovd         %eax,%xmm9
+  DB  196,67,121,4,201,0                  ; vpermilps     $0x0,%xmm9,%xmm9
+  DB  196,67,53,24,201,1                  ; vinsertf128   $0x1,%xmm9,%ymm9,%ymm9
+  DB  197,52,92,207                       ; vsubps        %ymm7,%ymm9,%ymm9
+  DB  197,180,89,192                      ; vmulps        %ymm0,%ymm9,%ymm0
+  DB  197,188,88,192                      ; vaddps        %ymm0,%ymm8,%ymm0
+  DB  197,100,89,197                      ; vmulps        %ymm5,%ymm3,%ymm8
+  DB  197,180,89,201                      ; vmulps        %ymm1,%ymm9,%ymm1
+  DB  197,188,88,201                      ; vaddps        %ymm1,%ymm8,%ymm1
+  DB  197,100,89,198                      ; vmulps        %ymm6,%ymm3,%ymm8
+  DB  197,180,89,210                      ; vmulps        %ymm2,%ymm9,%ymm2
+  DB  197,188,88,210                      ; vaddps        %ymm2,%ymm8,%ymm2
+  DB  197,100,89,199                      ; vmulps        %ymm7,%ymm3,%ymm8
+  DB  197,180,89,219                      ; vmulps        %ymm3,%ymm9,%ymm3
+  DB  197,188,88,219                      ; vaddps        %ymm3,%ymm8,%ymm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_srcin_avx
+_sk_srcin_avx LABEL PROC
+  DB  197,252,89,199                      ; vmulps        %ymm7,%ymm0,%ymm0
+  DB  197,244,89,207                      ; vmulps        %ymm7,%ymm1,%ymm1
+  DB  197,236,89,215                      ; vmulps        %ymm7,%ymm2,%ymm2
+  DB  197,228,89,223                      ; vmulps        %ymm7,%ymm3,%ymm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_dstin_avx
+_sk_dstin_avx LABEL PROC
+  DB  197,228,89,196                      ; vmulps        %ymm4,%ymm3,%ymm0
+  DB  197,228,89,205                      ; vmulps        %ymm5,%ymm3,%ymm1
+  DB  197,228,89,214                      ; vmulps        %ymm6,%ymm3,%ymm2
+  DB  197,228,89,223                      ; vmulps        %ymm7,%ymm3,%ymm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_srcout_avx
+_sk_srcout_avx LABEL PROC
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  197,121,110,192                     ; vmovd         %eax,%xmm8
+  DB  196,67,121,4,192,0                  ; vpermilps     $0x0,%xmm8,%xmm8
+  DB  196,67,61,24,192,1                  ; vinsertf128   $0x1,%xmm8,%ymm8,%ymm8
+  DB  197,60,92,199                       ; vsubps        %ymm7,%ymm8,%ymm8
+  DB  197,188,89,192                      ; vmulps        %ymm0,%ymm8,%ymm0
+  DB  197,188,89,201                      ; vmulps        %ymm1,%ymm8,%ymm1
+  DB  197,188,89,210                      ; vmulps        %ymm2,%ymm8,%ymm2
+  DB  197,188,89,219                      ; vmulps        %ymm3,%ymm8,%ymm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_dstout_avx
+_sk_dstout_avx LABEL PROC
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  197,249,110,192                     ; vmovd         %eax,%xmm0
+  DB  196,227,121,4,192,0                 ; vpermilps     $0x0,%xmm0,%xmm0
+  DB  196,227,125,24,192,1                ; vinsertf128   $0x1,%xmm0,%ymm0,%ymm0
+  DB  197,252,92,219                      ; vsubps        %ymm3,%ymm0,%ymm3
+  DB  197,228,89,196                      ; vmulps        %ymm4,%ymm3,%ymm0
+  DB  197,228,89,205                      ; vmulps        %ymm5,%ymm3,%ymm1
+  DB  197,228,89,214                      ; vmulps        %ymm6,%ymm3,%ymm2
+  DB  197,228,89,223                      ; vmulps        %ymm7,%ymm3,%ymm3
   DB  72,173                              ; lods          %ds:(%rsi),%rax
   DB  255,224                             ; jmpq          *%rax
 
@@ -1513,6 +2348,559 @@ _sk_dstover_avx LABEL PROC
   DB  197,188,89,219                      ; vmulps        %ymm3,%ymm8,%ymm3
   DB  197,228,88,223                      ; vaddps        %ymm7,%ymm3,%ymm3
   DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_modulate_avx
+_sk_modulate_avx LABEL PROC
+  DB  197,252,89,196                      ; vmulps        %ymm4,%ymm0,%ymm0
+  DB  197,244,89,205                      ; vmulps        %ymm5,%ymm1,%ymm1
+  DB  197,236,89,214                      ; vmulps        %ymm6,%ymm2,%ymm2
+  DB  197,228,89,223                      ; vmulps        %ymm7,%ymm3,%ymm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_multiply_avx
+_sk_multiply_avx LABEL PROC
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  197,121,110,192                     ; vmovd         %eax,%xmm8
+  DB  196,67,121,4,192,0                  ; vpermilps     $0x0,%xmm8,%xmm8
+  DB  196,67,61,24,192,1                  ; vinsertf128   $0x1,%xmm8,%ymm8,%ymm8
+  DB  197,60,92,207                       ; vsubps        %ymm7,%ymm8,%ymm9
+  DB  197,52,89,208                       ; vmulps        %ymm0,%ymm9,%ymm10
+  DB  197,60,92,195                       ; vsubps        %ymm3,%ymm8,%ymm8
+  DB  197,60,89,220                       ; vmulps        %ymm4,%ymm8,%ymm11
+  DB  196,65,44,88,211                    ; vaddps        %ymm11,%ymm10,%ymm10
+  DB  197,252,89,196                      ; vmulps        %ymm4,%ymm0,%ymm0
+  DB  196,193,124,88,194                  ; vaddps        %ymm10,%ymm0,%ymm0
+  DB  197,52,89,209                       ; vmulps        %ymm1,%ymm9,%ymm10
+  DB  197,60,89,221                       ; vmulps        %ymm5,%ymm8,%ymm11
+  DB  196,65,36,88,210                    ; vaddps        %ymm10,%ymm11,%ymm10
+  DB  197,244,89,205                      ; vmulps        %ymm5,%ymm1,%ymm1
+  DB  196,193,116,88,202                  ; vaddps        %ymm10,%ymm1,%ymm1
+  DB  197,52,89,210                       ; vmulps        %ymm2,%ymm9,%ymm10
+  DB  197,60,89,222                       ; vmulps        %ymm6,%ymm8,%ymm11
+  DB  196,65,36,88,210                    ; vaddps        %ymm10,%ymm11,%ymm10
+  DB  197,236,89,214                      ; vmulps        %ymm6,%ymm2,%ymm2
+  DB  196,193,108,88,210                  ; vaddps        %ymm10,%ymm2,%ymm2
+  DB  197,52,89,203                       ; vmulps        %ymm3,%ymm9,%ymm9
+  DB  197,60,89,199                       ; vmulps        %ymm7,%ymm8,%ymm8
+  DB  196,65,60,88,193                    ; vaddps        %ymm9,%ymm8,%ymm8
+  DB  197,228,89,223                      ; vmulps        %ymm7,%ymm3,%ymm3
+  DB  196,193,100,88,216                  ; vaddps        %ymm8,%ymm3,%ymm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_plus__avx
+_sk_plus__avx LABEL PROC
+  DB  197,252,88,196                      ; vaddps        %ymm4,%ymm0,%ymm0
+  DB  197,244,88,205                      ; vaddps        %ymm5,%ymm1,%ymm1
+  DB  197,236,88,214                      ; vaddps        %ymm6,%ymm2,%ymm2
+  DB  197,228,88,223                      ; vaddps        %ymm7,%ymm3,%ymm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_screen_avx
+_sk_screen_avx LABEL PROC
+  DB  197,124,88,196                      ; vaddps        %ymm4,%ymm0,%ymm8
+  DB  197,252,89,196                      ; vmulps        %ymm4,%ymm0,%ymm0
+  DB  197,188,92,192                      ; vsubps        %ymm0,%ymm8,%ymm0
+  DB  197,116,88,197                      ; vaddps        %ymm5,%ymm1,%ymm8
+  DB  197,244,89,205                      ; vmulps        %ymm5,%ymm1,%ymm1
+  DB  197,188,92,201                      ; vsubps        %ymm1,%ymm8,%ymm1
+  DB  197,108,88,198                      ; vaddps        %ymm6,%ymm2,%ymm8
+  DB  197,236,89,214                      ; vmulps        %ymm6,%ymm2,%ymm2
+  DB  197,188,92,210                      ; vsubps        %ymm2,%ymm8,%ymm2
+  DB  197,100,88,199                      ; vaddps        %ymm7,%ymm3,%ymm8
+  DB  197,228,89,223                      ; vmulps        %ymm7,%ymm3,%ymm3
+  DB  197,188,92,219                      ; vsubps        %ymm3,%ymm8,%ymm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_xor__avx
+_sk_xor__avx LABEL PROC
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  197,121,110,192                     ; vmovd         %eax,%xmm8
+  DB  196,67,121,4,192,0                  ; vpermilps     $0x0,%xmm8,%xmm8
+  DB  196,67,61,24,192,1                  ; vinsertf128   $0x1,%xmm8,%ymm8,%ymm8
+  DB  197,60,92,207                       ; vsubps        %ymm7,%ymm8,%ymm9
+  DB  197,180,89,192                      ; vmulps        %ymm0,%ymm9,%ymm0
+  DB  197,60,92,195                       ; vsubps        %ymm3,%ymm8,%ymm8
+  DB  197,60,89,212                       ; vmulps        %ymm4,%ymm8,%ymm10
+  DB  196,193,124,88,194                  ; vaddps        %ymm10,%ymm0,%ymm0
+  DB  197,180,89,201                      ; vmulps        %ymm1,%ymm9,%ymm1
+  DB  197,60,89,213                       ; vmulps        %ymm5,%ymm8,%ymm10
+  DB  197,172,88,201                      ; vaddps        %ymm1,%ymm10,%ymm1
+  DB  197,180,89,210                      ; vmulps        %ymm2,%ymm9,%ymm2
+  DB  197,60,89,214                       ; vmulps        %ymm6,%ymm8,%ymm10
+  DB  197,172,88,210                      ; vaddps        %ymm2,%ymm10,%ymm2
+  DB  197,180,89,219                      ; vmulps        %ymm3,%ymm9,%ymm3
+  DB  197,60,89,199                       ; vmulps        %ymm7,%ymm8,%ymm8
+  DB  197,188,88,219                      ; vaddps        %ymm3,%ymm8,%ymm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_darken_avx
+_sk_darken_avx LABEL PROC
+  DB  197,124,88,196                      ; vaddps        %ymm4,%ymm0,%ymm8
+  DB  197,252,89,199                      ; vmulps        %ymm7,%ymm0,%ymm0
+  DB  197,100,89,204                      ; vmulps        %ymm4,%ymm3,%ymm9
+  DB  196,193,124,95,193                  ; vmaxps        %ymm9,%ymm0,%ymm0
+  DB  197,188,92,192                      ; vsubps        %ymm0,%ymm8,%ymm0
+  DB  197,116,88,197                      ; vaddps        %ymm5,%ymm1,%ymm8
+  DB  197,244,89,207                      ; vmulps        %ymm7,%ymm1,%ymm1
+  DB  197,100,89,205                      ; vmulps        %ymm5,%ymm3,%ymm9
+  DB  196,193,116,95,201                  ; vmaxps        %ymm9,%ymm1,%ymm1
+  DB  197,188,92,201                      ; vsubps        %ymm1,%ymm8,%ymm1
+  DB  197,108,88,198                      ; vaddps        %ymm6,%ymm2,%ymm8
+  DB  197,236,89,215                      ; vmulps        %ymm7,%ymm2,%ymm2
+  DB  197,100,89,206                      ; vmulps        %ymm6,%ymm3,%ymm9
+  DB  196,193,108,95,209                  ; vmaxps        %ymm9,%ymm2,%ymm2
+  DB  197,188,92,210                      ; vsubps        %ymm2,%ymm8,%ymm2
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  197,121,110,192                     ; vmovd         %eax,%xmm8
+  DB  196,67,121,4,192,0                  ; vpermilps     $0x0,%xmm8,%xmm8
+  DB  196,67,61,24,192,1                  ; vinsertf128   $0x1,%xmm8,%ymm8,%ymm8
+  DB  197,60,92,195                       ; vsubps        %ymm3,%ymm8,%ymm8
+  DB  197,60,89,199                       ; vmulps        %ymm7,%ymm8,%ymm8
+  DB  197,188,88,219                      ; vaddps        %ymm3,%ymm8,%ymm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_lighten_avx
+_sk_lighten_avx LABEL PROC
+  DB  197,124,88,196                      ; vaddps        %ymm4,%ymm0,%ymm8
+  DB  197,252,89,199                      ; vmulps        %ymm7,%ymm0,%ymm0
+  DB  197,100,89,204                      ; vmulps        %ymm4,%ymm3,%ymm9
+  DB  196,193,124,93,193                  ; vminps        %ymm9,%ymm0,%ymm0
+  DB  197,188,92,192                      ; vsubps        %ymm0,%ymm8,%ymm0
+  DB  197,116,88,197                      ; vaddps        %ymm5,%ymm1,%ymm8
+  DB  197,244,89,207                      ; vmulps        %ymm7,%ymm1,%ymm1
+  DB  197,100,89,205                      ; vmulps        %ymm5,%ymm3,%ymm9
+  DB  196,193,116,93,201                  ; vminps        %ymm9,%ymm1,%ymm1
+  DB  197,188,92,201                      ; vsubps        %ymm1,%ymm8,%ymm1
+  DB  197,108,88,198                      ; vaddps        %ymm6,%ymm2,%ymm8
+  DB  197,236,89,215                      ; vmulps        %ymm7,%ymm2,%ymm2
+  DB  197,100,89,206                      ; vmulps        %ymm6,%ymm3,%ymm9
+  DB  196,193,108,93,209                  ; vminps        %ymm9,%ymm2,%ymm2
+  DB  197,188,92,210                      ; vsubps        %ymm2,%ymm8,%ymm2
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  197,121,110,192                     ; vmovd         %eax,%xmm8
+  DB  196,67,121,4,192,0                  ; vpermilps     $0x0,%xmm8,%xmm8
+  DB  196,67,61,24,192,1                  ; vinsertf128   $0x1,%xmm8,%ymm8,%ymm8
+  DB  197,60,92,195                       ; vsubps        %ymm3,%ymm8,%ymm8
+  DB  197,60,89,199                       ; vmulps        %ymm7,%ymm8,%ymm8
+  DB  197,188,88,219                      ; vaddps        %ymm3,%ymm8,%ymm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_difference_avx
+_sk_difference_avx LABEL PROC
+  DB  197,124,88,196                      ; vaddps        %ymm4,%ymm0,%ymm8
+  DB  197,252,89,199                      ; vmulps        %ymm7,%ymm0,%ymm0
+  DB  197,100,89,204                      ; vmulps        %ymm4,%ymm3,%ymm9
+  DB  196,193,124,93,193                  ; vminps        %ymm9,%ymm0,%ymm0
+  DB  197,252,88,192                      ; vaddps        %ymm0,%ymm0,%ymm0
+  DB  197,188,92,192                      ; vsubps        %ymm0,%ymm8,%ymm0
+  DB  197,116,88,197                      ; vaddps        %ymm5,%ymm1,%ymm8
+  DB  197,244,89,207                      ; vmulps        %ymm7,%ymm1,%ymm1
+  DB  197,100,89,205                      ; vmulps        %ymm5,%ymm3,%ymm9
+  DB  196,193,116,93,201                  ; vminps        %ymm9,%ymm1,%ymm1
+  DB  197,244,88,201                      ; vaddps        %ymm1,%ymm1,%ymm1
+  DB  197,188,92,201                      ; vsubps        %ymm1,%ymm8,%ymm1
+  DB  197,108,88,198                      ; vaddps        %ymm6,%ymm2,%ymm8
+  DB  197,236,89,215                      ; vmulps        %ymm7,%ymm2,%ymm2
+  DB  197,100,89,206                      ; vmulps        %ymm6,%ymm3,%ymm9
+  DB  196,193,108,93,209                  ; vminps        %ymm9,%ymm2,%ymm2
+  DB  197,236,88,210                      ; vaddps        %ymm2,%ymm2,%ymm2
+  DB  197,188,92,210                      ; vsubps        %ymm2,%ymm8,%ymm2
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  197,121,110,192                     ; vmovd         %eax,%xmm8
+  DB  196,67,121,4,192,0                  ; vpermilps     $0x0,%xmm8,%xmm8
+  DB  196,67,61,24,192,1                  ; vinsertf128   $0x1,%xmm8,%ymm8,%ymm8
+  DB  197,60,92,195                       ; vsubps        %ymm3,%ymm8,%ymm8
+  DB  197,60,89,199                       ; vmulps        %ymm7,%ymm8,%ymm8
+  DB  197,188,88,219                      ; vaddps        %ymm3,%ymm8,%ymm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_exclusion_avx
+_sk_exclusion_avx LABEL PROC
+  DB  197,124,88,196                      ; vaddps        %ymm4,%ymm0,%ymm8
+  DB  197,252,89,196                      ; vmulps        %ymm4,%ymm0,%ymm0
+  DB  197,252,88,192                      ; vaddps        %ymm0,%ymm0,%ymm0
+  DB  197,188,92,192                      ; vsubps        %ymm0,%ymm8,%ymm0
+  DB  197,116,88,197                      ; vaddps        %ymm5,%ymm1,%ymm8
+  DB  197,244,89,205                      ; vmulps        %ymm5,%ymm1,%ymm1
+  DB  197,244,88,201                      ; vaddps        %ymm1,%ymm1,%ymm1
+  DB  197,188,92,201                      ; vsubps        %ymm1,%ymm8,%ymm1
+  DB  197,108,88,198                      ; vaddps        %ymm6,%ymm2,%ymm8
+  DB  197,236,89,214                      ; vmulps        %ymm6,%ymm2,%ymm2
+  DB  197,236,88,210                      ; vaddps        %ymm2,%ymm2,%ymm2
+  DB  197,188,92,210                      ; vsubps        %ymm2,%ymm8,%ymm2
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  197,121,110,192                     ; vmovd         %eax,%xmm8
+  DB  196,67,121,4,192,0                  ; vpermilps     $0x0,%xmm8,%xmm8
+  DB  196,67,61,24,192,1                  ; vinsertf128   $0x1,%xmm8,%ymm8,%ymm8
+  DB  197,60,92,195                       ; vsubps        %ymm3,%ymm8,%ymm8
+  DB  197,60,89,199                       ; vmulps        %ymm7,%ymm8,%ymm8
+  DB  197,188,88,219                      ; vaddps        %ymm3,%ymm8,%ymm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_colorburn_avx
+_sk_colorburn_avx LABEL PROC
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  197,121,110,192                     ; vmovd         %eax,%xmm8
+  DB  196,67,121,4,192,0                  ; vpermilps     $0x0,%xmm8,%xmm8
+  DB  196,67,61,24,192,1                  ; vinsertf128   $0x1,%xmm8,%ymm8,%ymm8
+  DB  197,60,92,207                       ; vsubps        %ymm7,%ymm8,%ymm9
+  DB  197,52,89,216                       ; vmulps        %ymm0,%ymm9,%ymm11
+  DB  196,65,44,87,210                    ; vxorps        %ymm10,%ymm10,%ymm10
+  DB  197,60,92,195                       ; vsubps        %ymm3,%ymm8,%ymm8
+  DB  197,60,89,228                       ; vmulps        %ymm4,%ymm8,%ymm12
+  DB  197,68,92,236                       ; vsubps        %ymm4,%ymm7,%ymm13
+  DB  197,20,89,235                       ; vmulps        %ymm3,%ymm13,%ymm13
+  DB  197,20,94,232                       ; vdivps        %ymm0,%ymm13,%ymm13
+  DB  196,65,68,93,237                    ; vminps        %ymm13,%ymm7,%ymm13
+  DB  196,65,68,92,237                    ; vsubps        %ymm13,%ymm7,%ymm13
+  DB  197,20,89,235                       ; vmulps        %ymm3,%ymm13,%ymm13
+  DB  196,65,20,88,235                    ; vaddps        %ymm11,%ymm13,%ymm13
+  DB  196,65,28,88,237                    ; vaddps        %ymm13,%ymm12,%ymm13
+  DB  197,28,88,224                       ; vaddps        %ymm0,%ymm12,%ymm12
+  DB  196,193,124,194,194,0               ; vcmpeqps      %ymm10,%ymm0,%ymm0
+  DB  196,195,21,74,196,0                 ; vblendvps     %ymm0,%ymm12,%ymm13,%ymm0
+  DB  197,92,194,231,0                    ; vcmpeqps      %ymm7,%ymm4,%ymm12
+  DB  197,36,88,220                       ; vaddps        %ymm4,%ymm11,%ymm11
+  DB  196,195,125,74,195,192              ; vblendvps     %ymm12,%ymm11,%ymm0,%ymm0
+  DB  197,52,89,217                       ; vmulps        %ymm1,%ymm9,%ymm11
+  DB  197,60,89,229                       ; vmulps        %ymm5,%ymm8,%ymm12
+  DB  197,68,92,237                       ; vsubps        %ymm5,%ymm7,%ymm13
+  DB  197,20,89,235                       ; vmulps        %ymm3,%ymm13,%ymm13
+  DB  197,20,94,233                       ; vdivps        %ymm1,%ymm13,%ymm13
+  DB  196,65,68,93,237                    ; vminps        %ymm13,%ymm7,%ymm13
+  DB  196,65,68,92,237                    ; vsubps        %ymm13,%ymm7,%ymm13
+  DB  197,20,89,235                       ; vmulps        %ymm3,%ymm13,%ymm13
+  DB  196,65,36,88,237                    ; vaddps        %ymm13,%ymm11,%ymm13
+  DB  196,65,28,88,237                    ; vaddps        %ymm13,%ymm12,%ymm13
+  DB  197,28,88,225                       ; vaddps        %ymm1,%ymm12,%ymm12
+  DB  196,193,116,194,202,0               ; vcmpeqps      %ymm10,%ymm1,%ymm1
+  DB  196,195,21,74,204,16                ; vblendvps     %ymm1,%ymm12,%ymm13,%ymm1
+  DB  197,84,194,231,0                    ; vcmpeqps      %ymm7,%ymm5,%ymm12
+  DB  197,36,88,221                       ; vaddps        %ymm5,%ymm11,%ymm11
+  DB  196,195,117,74,203,192              ; vblendvps     %ymm12,%ymm11,%ymm1,%ymm1
+  DB  197,52,89,202                       ; vmulps        %ymm2,%ymm9,%ymm9
+  DB  196,65,108,194,210,0                ; vcmpeqps      %ymm10,%ymm2,%ymm10
+  DB  197,60,89,222                       ; vmulps        %ymm6,%ymm8,%ymm11
+  DB  197,68,92,230                       ; vsubps        %ymm6,%ymm7,%ymm12
+  DB  197,28,89,227                       ; vmulps        %ymm3,%ymm12,%ymm12
+  DB  197,28,94,226                       ; vdivps        %ymm2,%ymm12,%ymm12
+  DB  197,164,88,210                      ; vaddps        %ymm2,%ymm11,%ymm2
+  DB  196,65,68,93,228                    ; vminps        %ymm12,%ymm7,%ymm12
+  DB  196,65,68,92,228                    ; vsubps        %ymm12,%ymm7,%ymm12
+  DB  197,28,89,227                       ; vmulps        %ymm3,%ymm12,%ymm12
+  DB  196,65,52,88,228                    ; vaddps        %ymm12,%ymm9,%ymm12
+  DB  196,65,36,88,220                    ; vaddps        %ymm12,%ymm11,%ymm11
+  DB  196,227,37,74,210,160               ; vblendvps     %ymm10,%ymm2,%ymm11,%ymm2
+  DB  197,76,194,215,0                    ; vcmpeqps      %ymm7,%ymm6,%ymm10
+  DB  197,52,88,206                       ; vaddps        %ymm6,%ymm9,%ymm9
+  DB  196,195,109,74,209,160              ; vblendvps     %ymm10,%ymm9,%ymm2,%ymm2
+  DB  197,60,89,199                       ; vmulps        %ymm7,%ymm8,%ymm8
+  DB  197,188,88,219                      ; vaddps        %ymm3,%ymm8,%ymm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_colordodge_avx
+_sk_colordodge_avx LABEL PROC
+  DB  196,65,60,87,192                    ; vxorps        %ymm8,%ymm8,%ymm8
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  197,121,110,200                     ; vmovd         %eax,%xmm9
+  DB  196,67,121,4,201,0                  ; vpermilps     $0x0,%xmm9,%xmm9
+  DB  196,67,53,24,201,1                  ; vinsertf128   $0x1,%xmm9,%ymm9,%ymm9
+  DB  197,52,92,215                       ; vsubps        %ymm7,%ymm9,%ymm10
+  DB  197,44,89,216                       ; vmulps        %ymm0,%ymm10,%ymm11
+  DB  197,52,92,203                       ; vsubps        %ymm3,%ymm9,%ymm9
+  DB  197,100,89,228                      ; vmulps        %ymm4,%ymm3,%ymm12
+  DB  197,100,92,232                      ; vsubps        %ymm0,%ymm3,%ymm13
+  DB  196,65,28,94,229                    ; vdivps        %ymm13,%ymm12,%ymm12
+  DB  197,52,89,236                       ; vmulps        %ymm4,%ymm9,%ymm13
+  DB  196,65,68,93,228                    ; vminps        %ymm12,%ymm7,%ymm12
+  DB  197,28,89,227                       ; vmulps        %ymm3,%ymm12,%ymm12
+  DB  196,65,28,88,227                    ; vaddps        %ymm11,%ymm12,%ymm12
+  DB  196,65,20,88,228                    ; vaddps        %ymm12,%ymm13,%ymm12
+  DB  197,20,88,232                       ; vaddps        %ymm0,%ymm13,%ymm13
+  DB  197,252,194,195,0                   ; vcmpeqps      %ymm3,%ymm0,%ymm0
+  DB  196,195,29,74,197,0                 ; vblendvps     %ymm0,%ymm13,%ymm12,%ymm0
+  DB  196,65,92,194,224,0                 ; vcmpeqps      %ymm8,%ymm4,%ymm12
+  DB  197,36,88,220                       ; vaddps        %ymm4,%ymm11,%ymm11
+  DB  196,195,125,74,195,192              ; vblendvps     %ymm12,%ymm11,%ymm0,%ymm0
+  DB  197,44,89,217                       ; vmulps        %ymm1,%ymm10,%ymm11
+  DB  197,100,89,229                      ; vmulps        %ymm5,%ymm3,%ymm12
+  DB  197,100,92,233                      ; vsubps        %ymm1,%ymm3,%ymm13
+  DB  196,65,28,94,229                    ; vdivps        %ymm13,%ymm12,%ymm12
+  DB  197,52,89,237                       ; vmulps        %ymm5,%ymm9,%ymm13
+  DB  196,65,68,93,228                    ; vminps        %ymm12,%ymm7,%ymm12
+  DB  197,28,89,227                       ; vmulps        %ymm3,%ymm12,%ymm12
+  DB  196,65,28,88,227                    ; vaddps        %ymm11,%ymm12,%ymm12
+  DB  196,65,20,88,228                    ; vaddps        %ymm12,%ymm13,%ymm12
+  DB  197,20,88,233                       ; vaddps        %ymm1,%ymm13,%ymm13
+  DB  197,244,194,203,0                   ; vcmpeqps      %ymm3,%ymm1,%ymm1
+  DB  196,195,29,74,205,16                ; vblendvps     %ymm1,%ymm13,%ymm12,%ymm1
+  DB  196,65,84,194,224,0                 ; vcmpeqps      %ymm8,%ymm5,%ymm12
+  DB  197,36,88,221                       ; vaddps        %ymm5,%ymm11,%ymm11
+  DB  196,195,117,74,203,192              ; vblendvps     %ymm12,%ymm11,%ymm1,%ymm1
+  DB  197,44,89,210                       ; vmulps        %ymm2,%ymm10,%ymm10
+  DB  197,100,89,222                      ; vmulps        %ymm6,%ymm3,%ymm11
+  DB  197,100,92,226                      ; vsubps        %ymm2,%ymm3,%ymm12
+  DB  196,65,36,94,220                    ; vdivps        %ymm12,%ymm11,%ymm11
+  DB  197,52,89,230                       ; vmulps        %ymm6,%ymm9,%ymm12
+  DB  196,65,68,93,219                    ; vminps        %ymm11,%ymm7,%ymm11
+  DB  197,36,89,219                       ; vmulps        %ymm3,%ymm11,%ymm11
+  DB  196,65,44,88,219                    ; vaddps        %ymm11,%ymm10,%ymm11
+  DB  196,65,28,88,219                    ; vaddps        %ymm11,%ymm12,%ymm11
+  DB  197,28,88,226                       ; vaddps        %ymm2,%ymm12,%ymm12
+  DB  197,236,194,211,0                   ; vcmpeqps      %ymm3,%ymm2,%ymm2
+  DB  196,195,37,74,212,32                ; vblendvps     %ymm2,%ymm12,%ymm11,%ymm2
+  DB  196,65,76,194,192,0                 ; vcmpeqps      %ymm8,%ymm6,%ymm8
+  DB  197,44,88,214                       ; vaddps        %ymm6,%ymm10,%ymm10
+  DB  196,195,109,74,210,128              ; vblendvps     %ymm8,%ymm10,%ymm2,%ymm2
+  DB  197,52,89,199                       ; vmulps        %ymm7,%ymm9,%ymm8
+  DB  197,188,88,219                      ; vaddps        %ymm3,%ymm8,%ymm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_hardlight_avx
+_sk_hardlight_avx LABEL PROC
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  197,121,110,192                     ; vmovd         %eax,%xmm8
+  DB  196,67,121,4,192,0                  ; vpermilps     $0x0,%xmm8,%xmm8
+  DB  196,67,61,24,192,1                  ; vinsertf128   $0x1,%xmm8,%ymm8,%ymm8
+  DB  197,60,92,215                       ; vsubps        %ymm7,%ymm8,%ymm10
+  DB  197,44,89,200                       ; vmulps        %ymm0,%ymm10,%ymm9
+  DB  197,60,92,195                       ; vsubps        %ymm3,%ymm8,%ymm8
+  DB  197,60,89,220                       ; vmulps        %ymm4,%ymm8,%ymm11
+  DB  196,65,52,88,219                    ; vaddps        %ymm11,%ymm9,%ymm11
+  DB  197,124,88,200                      ; vaddps        %ymm0,%ymm0,%ymm9
+  DB  197,52,194,227,2                    ; vcmpleps      %ymm3,%ymm9,%ymm12
+  DB  197,124,89,204                      ; vmulps        %ymm4,%ymm0,%ymm9
+  DB  196,65,52,88,233                    ; vaddps        %ymm9,%ymm9,%ymm13
+  DB  197,100,89,207                      ; vmulps        %ymm7,%ymm3,%ymm9
+  DB  197,68,92,244                       ; vsubps        %ymm4,%ymm7,%ymm14
+  DB  197,228,92,192                      ; vsubps        %ymm0,%ymm3,%ymm0
+  DB  196,193,124,89,198                  ; vmulps        %ymm14,%ymm0,%ymm0
+  DB  197,252,88,192                      ; vaddps        %ymm0,%ymm0,%ymm0
+  DB  197,180,92,192                      ; vsubps        %ymm0,%ymm9,%ymm0
+  DB  196,195,125,74,197,192              ; vblendvps     %ymm12,%ymm13,%ymm0,%ymm0
+  DB  196,193,124,88,195                  ; vaddps        %ymm11,%ymm0,%ymm0
+  DB  197,44,89,217                       ; vmulps        %ymm1,%ymm10,%ymm11
+  DB  197,60,89,229                       ; vmulps        %ymm5,%ymm8,%ymm12
+  DB  196,65,28,88,219                    ; vaddps        %ymm11,%ymm12,%ymm11
+  DB  197,116,88,225                      ; vaddps        %ymm1,%ymm1,%ymm12
+  DB  197,28,194,227,2                    ; vcmpleps      %ymm3,%ymm12,%ymm12
+  DB  197,116,89,237                      ; vmulps        %ymm5,%ymm1,%ymm13
+  DB  196,65,20,88,237                    ; vaddps        %ymm13,%ymm13,%ymm13
+  DB  197,68,92,245                       ; vsubps        %ymm5,%ymm7,%ymm14
+  DB  197,228,92,201                      ; vsubps        %ymm1,%ymm3,%ymm1
+  DB  196,193,116,89,206                  ; vmulps        %ymm14,%ymm1,%ymm1
+  DB  197,244,88,201                      ; vaddps        %ymm1,%ymm1,%ymm1
+  DB  197,180,92,201                      ; vsubps        %ymm1,%ymm9,%ymm1
+  DB  196,195,117,74,205,192              ; vblendvps     %ymm12,%ymm13,%ymm1,%ymm1
+  DB  196,193,116,88,203                  ; vaddps        %ymm11,%ymm1,%ymm1
+  DB  197,44,89,210                       ; vmulps        %ymm2,%ymm10,%ymm10
+  DB  197,60,89,222                       ; vmulps        %ymm6,%ymm8,%ymm11
+  DB  196,65,36,88,210                    ; vaddps        %ymm10,%ymm11,%ymm10
+  DB  197,108,88,218                      ; vaddps        %ymm2,%ymm2,%ymm11
+  DB  197,36,194,219,2                    ; vcmpleps      %ymm3,%ymm11,%ymm11
+  DB  197,108,89,230                      ; vmulps        %ymm6,%ymm2,%ymm12
+  DB  196,65,28,88,228                    ; vaddps        %ymm12,%ymm12,%ymm12
+  DB  197,68,92,238                       ; vsubps        %ymm6,%ymm7,%ymm13
+  DB  197,228,92,210                      ; vsubps        %ymm2,%ymm3,%ymm2
+  DB  196,193,108,89,213                  ; vmulps        %ymm13,%ymm2,%ymm2
+  DB  197,236,88,210                      ; vaddps        %ymm2,%ymm2,%ymm2
+  DB  197,180,92,210                      ; vsubps        %ymm2,%ymm9,%ymm2
+  DB  196,195,109,74,212,176              ; vblendvps     %ymm11,%ymm12,%ymm2,%ymm2
+  DB  196,193,108,88,210                  ; vaddps        %ymm10,%ymm2,%ymm2
+  DB  197,60,89,199                       ; vmulps        %ymm7,%ymm8,%ymm8
+  DB  197,188,88,219                      ; vaddps        %ymm3,%ymm8,%ymm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_overlay_avx
+_sk_overlay_avx LABEL PROC
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  197,121,110,192                     ; vmovd         %eax,%xmm8
+  DB  196,67,121,4,192,0                  ; vpermilps     $0x0,%xmm8,%xmm8
+  DB  196,67,61,24,192,1                  ; vinsertf128   $0x1,%xmm8,%ymm8,%ymm8
+  DB  197,60,92,215                       ; vsubps        %ymm7,%ymm8,%ymm10
+  DB  197,44,89,200                       ; vmulps        %ymm0,%ymm10,%ymm9
+  DB  197,60,92,195                       ; vsubps        %ymm3,%ymm8,%ymm8
+  DB  197,60,89,220                       ; vmulps        %ymm4,%ymm8,%ymm11
+  DB  196,65,52,88,219                    ; vaddps        %ymm11,%ymm9,%ymm11
+  DB  197,92,88,204                       ; vaddps        %ymm4,%ymm4,%ymm9
+  DB  197,52,194,231,2                    ; vcmpleps      %ymm7,%ymm9,%ymm12
+  DB  197,124,89,204                      ; vmulps        %ymm4,%ymm0,%ymm9
+  DB  196,65,52,88,233                    ; vaddps        %ymm9,%ymm9,%ymm13
+  DB  197,100,89,207                      ; vmulps        %ymm7,%ymm3,%ymm9
+  DB  197,68,92,244                       ; vsubps        %ymm4,%ymm7,%ymm14
+  DB  197,228,92,192                      ; vsubps        %ymm0,%ymm3,%ymm0
+  DB  196,193,124,89,198                  ; vmulps        %ymm14,%ymm0,%ymm0
+  DB  197,252,88,192                      ; vaddps        %ymm0,%ymm0,%ymm0
+  DB  197,180,92,192                      ; vsubps        %ymm0,%ymm9,%ymm0
+  DB  196,195,125,74,197,192              ; vblendvps     %ymm12,%ymm13,%ymm0,%ymm0
+  DB  196,193,124,88,195                  ; vaddps        %ymm11,%ymm0,%ymm0
+  DB  197,44,89,217                       ; vmulps        %ymm1,%ymm10,%ymm11
+  DB  197,60,89,229                       ; vmulps        %ymm5,%ymm8,%ymm12
+  DB  196,65,28,88,219                    ; vaddps        %ymm11,%ymm12,%ymm11
+  DB  197,84,88,229                       ; vaddps        %ymm5,%ymm5,%ymm12
+  DB  197,28,194,231,2                    ; vcmpleps      %ymm7,%ymm12,%ymm12
+  DB  197,116,89,237                      ; vmulps        %ymm5,%ymm1,%ymm13
+  DB  196,65,20,88,237                    ; vaddps        %ymm13,%ymm13,%ymm13
+  DB  197,68,92,245                       ; vsubps        %ymm5,%ymm7,%ymm14
+  DB  197,228,92,201                      ; vsubps        %ymm1,%ymm3,%ymm1
+  DB  196,193,116,89,206                  ; vmulps        %ymm14,%ymm1,%ymm1
+  DB  197,244,88,201                      ; vaddps        %ymm1,%ymm1,%ymm1
+  DB  197,180,92,201                      ; vsubps        %ymm1,%ymm9,%ymm1
+  DB  196,195,117,74,205,192              ; vblendvps     %ymm12,%ymm13,%ymm1,%ymm1
+  DB  196,193,116,88,203                  ; vaddps        %ymm11,%ymm1,%ymm1
+  DB  197,44,89,210                       ; vmulps        %ymm2,%ymm10,%ymm10
+  DB  197,60,89,222                       ; vmulps        %ymm6,%ymm8,%ymm11
+  DB  196,65,36,88,210                    ; vaddps        %ymm10,%ymm11,%ymm10
+  DB  197,76,88,222                       ; vaddps        %ymm6,%ymm6,%ymm11
+  DB  197,36,194,223,2                    ; vcmpleps      %ymm7,%ymm11,%ymm11
+  DB  197,108,89,230                      ; vmulps        %ymm6,%ymm2,%ymm12
+  DB  196,65,28,88,228                    ; vaddps        %ymm12,%ymm12,%ymm12
+  DB  197,68,92,238                       ; vsubps        %ymm6,%ymm7,%ymm13
+  DB  197,228,92,210                      ; vsubps        %ymm2,%ymm3,%ymm2
+  DB  196,193,108,89,213                  ; vmulps        %ymm13,%ymm2,%ymm2
+  DB  197,236,88,210                      ; vaddps        %ymm2,%ymm2,%ymm2
+  DB  197,180,92,210                      ; vsubps        %ymm2,%ymm9,%ymm2
+  DB  196,195,109,74,212,176              ; vblendvps     %ymm11,%ymm12,%ymm2,%ymm2
+  DB  196,193,108,88,210                  ; vaddps        %ymm10,%ymm2,%ymm2
+  DB  197,60,89,199                       ; vmulps        %ymm7,%ymm8,%ymm8
+  DB  197,188,88,219                      ; vaddps        %ymm3,%ymm8,%ymm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_softlight_avx
+_sk_softlight_avx LABEL PROC
+  DB  72,131,236,56                       ; sub           $0x38,%rsp
+  DB  197,252,17,20,36                    ; vmovups       %ymm2,(%rsp)
+  DB  197,252,40,209                      ; vmovaps       %ymm1,%ymm2
+  DB  196,65,52,87,201                    ; vxorps        %ymm9,%ymm9,%ymm9
+  DB  197,52,194,215,1                    ; vcmpltps      %ymm7,%ymm9,%ymm10
+  DB  197,92,94,199                       ; vdivps        %ymm7,%ymm4,%ymm8
+  DB  196,67,53,74,216,160                ; vblendvps     %ymm10,%ymm8,%ymm9,%ymm11
+  DB  196,65,36,88,195                    ; vaddps        %ymm11,%ymm11,%ymm8
+  DB  196,65,60,88,224                    ; vaddps        %ymm8,%ymm8,%ymm12
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  197,121,110,192                     ; vmovd         %eax,%xmm8
+  DB  196,67,121,4,192,0                  ; vpermilps     $0x0,%xmm8,%xmm8
+  DB  196,67,61,24,192,1                  ; vinsertf128   $0x1,%xmm8,%ymm8,%ymm8
+  DB  196,65,28,89,236                    ; vmulps        %ymm12,%ymm12,%ymm13
+  DB  196,65,28,88,229                    ; vaddps        %ymm13,%ymm12,%ymm12
+  DB  196,65,36,92,232                    ; vsubps        %ymm8,%ymm11,%ymm13
+  DB  196,65,28,89,237                    ; vmulps        %ymm13,%ymm12,%ymm13
+  DB  184,0,0,224,64                      ; mov           $0x40e00000,%eax
+  DB  197,121,110,224                     ; vmovd         %eax,%xmm12
+  DB  196,67,121,4,228,0                  ; vpermilps     $0x0,%xmm12,%xmm12
+  DB  196,67,29,24,228,1                  ; vinsertf128   $0x1,%xmm12,%ymm12,%ymm12
+  DB  196,65,36,89,244                    ; vmulps        %ymm12,%ymm11,%ymm14
+  DB  196,65,20,88,238                    ; vaddps        %ymm14,%ymm13,%ymm13
+  DB  196,65,124,82,243                   ; vrsqrtps      %ymm11,%ymm14
+  DB  196,65,124,83,246                   ; vrcpps        %ymm14,%ymm14
+  DB  196,65,12,92,243                    ; vsubps        %ymm11,%ymm14,%ymm14
+  DB  197,92,88,252                       ; vaddps        %ymm4,%ymm4,%ymm15
+  DB  196,65,4,88,255                     ; vaddps        %ymm15,%ymm15,%ymm15
+  DB  197,4,194,255,2                     ; vcmpleps      %ymm7,%ymm15,%ymm15
+  DB  196,67,13,74,237,240                ; vblendvps     %ymm15,%ymm13,%ymm14,%ymm13
+  DB  197,124,88,240                      ; vaddps        %ymm0,%ymm0,%ymm14
+  DB  197,12,92,251                       ; vsubps        %ymm3,%ymm14,%ymm15
+  DB  196,65,60,92,219                    ; vsubps        %ymm11,%ymm8,%ymm11
+  DB  196,65,4,89,219                     ; vmulps        %ymm11,%ymm15,%ymm11
+  DB  197,36,88,219                       ; vaddps        %ymm3,%ymm11,%ymm11
+  DB  197,36,89,220                       ; vmulps        %ymm4,%ymm11,%ymm11
+  DB  197,4,89,255                        ; vmulps        %ymm7,%ymm15,%ymm15
+  DB  196,65,4,89,237                     ; vmulps        %ymm13,%ymm15,%ymm13
+  DB  197,100,89,252                      ; vmulps        %ymm4,%ymm3,%ymm15
+  DB  196,65,4,88,237                     ; vaddps        %ymm13,%ymm15,%ymm13
+  DB  197,12,194,243,2                    ; vcmpleps      %ymm3,%ymm14,%ymm14
+  DB  196,195,21,74,203,224               ; vblendvps     %ymm14,%ymm11,%ymm13,%ymm1
+  DB  197,84,94,239                       ; vdivps        %ymm7,%ymm5,%ymm13
+  DB  196,67,53,74,237,160                ; vblendvps     %ymm10,%ymm13,%ymm9,%ymm13
+  DB  196,65,20,88,245                    ; vaddps        %ymm13,%ymm13,%ymm14
+  DB  196,65,12,88,246                    ; vaddps        %ymm14,%ymm14,%ymm14
+  DB  196,65,12,89,254                    ; vmulps        %ymm14,%ymm14,%ymm15
+  DB  196,65,12,88,247                    ; vaddps        %ymm15,%ymm14,%ymm14
+  DB  196,65,20,92,248                    ; vsubps        %ymm8,%ymm13,%ymm15
+  DB  196,65,4,89,246                     ; vmulps        %ymm14,%ymm15,%ymm14
+  DB  196,65,28,89,253                    ; vmulps        %ymm13,%ymm12,%ymm15
+  DB  196,65,4,88,246                     ; vaddps        %ymm14,%ymm15,%ymm14
+  DB  196,65,124,82,253                   ; vrsqrtps      %ymm13,%ymm15
+  DB  196,65,124,83,255                   ; vrcpps        %ymm15,%ymm15
+  DB  196,65,4,92,253                     ; vsubps        %ymm13,%ymm15,%ymm15
+  DB  197,84,88,221                       ; vaddps        %ymm5,%ymm5,%ymm11
+  DB  196,65,36,88,219                    ; vaddps        %ymm11,%ymm11,%ymm11
+  DB  197,36,194,223,2                    ; vcmpleps      %ymm7,%ymm11,%ymm11
+  DB  196,67,5,74,222,176                 ; vblendvps     %ymm11,%ymm14,%ymm15,%ymm11
+  DB  197,108,88,242                      ; vaddps        %ymm2,%ymm2,%ymm14
+  DB  196,65,60,92,237                    ; vsubps        %ymm13,%ymm8,%ymm13
+  DB  197,12,92,251                       ; vsubps        %ymm3,%ymm14,%ymm15
+  DB  196,65,4,89,237                     ; vmulps        %ymm13,%ymm15,%ymm13
+  DB  197,4,89,255                        ; vmulps        %ymm7,%ymm15,%ymm15
+  DB  196,65,4,89,219                     ; vmulps        %ymm11,%ymm15,%ymm11
+  DB  197,100,89,253                      ; vmulps        %ymm5,%ymm3,%ymm15
+  DB  196,65,4,88,219                     ; vaddps        %ymm11,%ymm15,%ymm11
+  DB  197,20,88,235                       ; vaddps        %ymm3,%ymm13,%ymm13
+  DB  197,20,89,237                       ; vmulps        %ymm5,%ymm13,%ymm13
+  DB  197,12,194,243,2                    ; vcmpleps      %ymm3,%ymm14,%ymm14
+  DB  196,67,37,74,237,224                ; vblendvps     %ymm14,%ymm13,%ymm11,%ymm13
+  DB  197,76,94,223                       ; vdivps        %ymm7,%ymm6,%ymm11
+  DB  196,67,53,74,203,160                ; vblendvps     %ymm10,%ymm11,%ymm9,%ymm9
+  DB  196,65,52,88,209                    ; vaddps        %ymm9,%ymm9,%ymm10
+  DB  196,65,44,88,210                    ; vaddps        %ymm10,%ymm10,%ymm10
+  DB  196,65,44,89,218                    ; vmulps        %ymm10,%ymm10,%ymm11
+  DB  196,65,44,88,211                    ; vaddps        %ymm11,%ymm10,%ymm10
+  DB  196,65,52,92,216                    ; vsubps        %ymm8,%ymm9,%ymm11
+  DB  196,65,36,89,210                    ; vmulps        %ymm10,%ymm11,%ymm10
+  DB  196,65,28,89,217                    ; vmulps        %ymm9,%ymm12,%ymm11
+  DB  196,65,36,88,210                    ; vaddps        %ymm10,%ymm11,%ymm10
+  DB  196,65,124,82,217                   ; vrsqrtps      %ymm9,%ymm11
+  DB  196,65,124,83,219                   ; vrcpps        %ymm11,%ymm11
+  DB  196,65,36,92,217                    ; vsubps        %ymm9,%ymm11,%ymm11
+  DB  197,76,88,230                       ; vaddps        %ymm6,%ymm6,%ymm12
+  DB  196,65,28,88,228                    ; vaddps        %ymm12,%ymm12,%ymm12
+  DB  197,28,194,231,2                    ; vcmpleps      %ymm7,%ymm12,%ymm12
+  DB  196,67,37,74,210,192                ; vblendvps     %ymm12,%ymm10,%ymm11,%ymm10
+  DB  197,124,16,52,36                    ; vmovups       (%rsp),%ymm14
+  DB  196,65,12,88,222                    ; vaddps        %ymm14,%ymm14,%ymm11
+  DB  197,36,92,227                       ; vsubps        %ymm3,%ymm11,%ymm12
+  DB  196,65,60,92,201                    ; vsubps        %ymm9,%ymm8,%ymm9
+  DB  196,65,28,89,201                    ; vmulps        %ymm9,%ymm12,%ymm9
+  DB  197,28,89,231                       ; vmulps        %ymm7,%ymm12,%ymm12
+  DB  196,65,28,89,210                    ; vmulps        %ymm10,%ymm12,%ymm10
+  DB  197,100,89,230                      ; vmulps        %ymm6,%ymm3,%ymm12
+  DB  196,65,28,88,210                    ; vaddps        %ymm10,%ymm12,%ymm10
+  DB  197,52,88,203                       ; vaddps        %ymm3,%ymm9,%ymm9
+  DB  197,52,89,206                       ; vmulps        %ymm6,%ymm9,%ymm9
+  DB  197,36,194,219,2                    ; vcmpleps      %ymm3,%ymm11,%ymm11
+  DB  196,67,45,74,201,176                ; vblendvps     %ymm11,%ymm9,%ymm10,%ymm9
+  DB  197,60,92,215                       ; vsubps        %ymm7,%ymm8,%ymm10
+  DB  197,172,89,192                      ; vmulps        %ymm0,%ymm10,%ymm0
+  DB  197,60,92,195                       ; vsubps        %ymm3,%ymm8,%ymm8
+  DB  197,60,89,220                       ; vmulps        %ymm4,%ymm8,%ymm11
+  DB  196,193,124,88,195                  ; vaddps        %ymm11,%ymm0,%ymm0
+  DB  197,244,88,192                      ; vaddps        %ymm0,%ymm1,%ymm0
+  DB  197,172,89,202                      ; vmulps        %ymm2,%ymm10,%ymm1
+  DB  197,188,89,213                      ; vmulps        %ymm5,%ymm8,%ymm2
+  DB  197,236,88,201                      ; vaddps        %ymm1,%ymm2,%ymm1
+  DB  196,193,116,88,205                  ; vaddps        %ymm13,%ymm1,%ymm1
+  DB  196,193,44,89,214                   ; vmulps        %ymm14,%ymm10,%ymm2
+  DB  197,60,89,214                       ; vmulps        %ymm6,%ymm8,%ymm10
+  DB  197,172,88,210                      ; vaddps        %ymm2,%ymm10,%ymm2
+  DB  196,193,108,88,209                  ; vaddps        %ymm9,%ymm2,%ymm2
+  DB  197,60,89,199                       ; vmulps        %ymm7,%ymm8,%ymm8
+  DB  197,188,88,219                      ; vaddps        %ymm3,%ymm8,%ymm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  72,131,196,56                       ; add           $0x38,%rsp
   DB  255,224                             ; jmpq          *%rax
 
 PUBLIC _sk_clamp_0_avx
@@ -1757,7 +3145,7 @@ _sk_scale_u8_avx LABEL PROC
   DB  72,139,0                            ; mov           (%rax),%rax
   DB  72,1,248                            ; add           %rdi,%rax
   DB  77,133,192                          ; test          %r8,%r8
-  DB  117,80                              ; jne           639 <_sk_scale_u8_avx+0x60>
+  DB  117,80                              ; jne           1015 <_sk_scale_u8_avx+0x60>
   DB  197,122,126,0                       ; vmovq         (%rax),%xmm8
   DB  196,66,121,49,200                   ; vpmovzxbd     %xmm8,%xmm9
   DB  196,67,121,4,192,229                ; vpermilps     $0xe5,%xmm8,%xmm8
@@ -1785,9 +3173,9 @@ _sk_scale_u8_avx LABEL PROC
   DB  77,9,217                            ; or            %r11,%r9
   DB  72,131,193,8                        ; add           $0x8,%rcx
   DB  73,255,202                          ; dec           %r10
-  DB  117,234                             ; jne           641 <_sk_scale_u8_avx+0x68>
+  DB  117,234                             ; jne           101d <_sk_scale_u8_avx+0x68>
   DB  196,65,249,110,193                  ; vmovq         %r9,%xmm8
-  DB  235,143                             ; jmp           5ed <_sk_scale_u8_avx+0x14>
+  DB  235,143                             ; jmp           fc9 <_sk_scale_u8_avx+0x14>
 
 PUBLIC _sk_lerp_1_float_avx
 _sk_lerp_1_float_avx LABEL PROC
@@ -1815,7 +3203,7 @@ _sk_lerp_u8_avx LABEL PROC
   DB  72,139,0                            ; mov           (%rax),%rax
   DB  72,1,248                            ; add           %rdi,%rax
   DB  77,133,192                          ; test          %r8,%r8
-  DB  117,116                             ; jne           721 <_sk_lerp_u8_avx+0x84>
+  DB  117,116                             ; jne           10fd <_sk_lerp_u8_avx+0x84>
   DB  197,122,126,0                       ; vmovq         (%rax),%xmm8
   DB  196,66,121,49,200                   ; vpmovzxbd     %xmm8,%xmm9
   DB  196,67,121,4,192,229                ; vpermilps     $0xe5,%xmm8,%xmm8
@@ -1851,16 +3239,16 @@ _sk_lerp_u8_avx LABEL PROC
   DB  77,9,217                            ; or            %r11,%r9
   DB  72,131,193,8                        ; add           $0x8,%rcx
   DB  73,255,202                          ; dec           %r10
-  DB  117,234                             ; jne           729 <_sk_lerp_u8_avx+0x8c>
+  DB  117,234                             ; jne           1105 <_sk_lerp_u8_avx+0x8c>
   DB  196,65,249,110,193                  ; vmovq         %r9,%xmm8
-  DB  233,104,255,255,255                 ; jmpq          6b1 <_sk_lerp_u8_avx+0x14>
+  DB  233,104,255,255,255                 ; jmpq          108d <_sk_lerp_u8_avx+0x14>
 
 PUBLIC _sk_lerp_565_avx
 _sk_lerp_565_avx LABEL PROC
   DB  72,173                              ; lods          %ds:(%rsi),%rax
   DB  76,139,16                           ; mov           (%rax),%r10
   DB  72,133,201                          ; test          %rcx,%rcx
-  DB  15,133,250,0,0,0                    ; jne           851 <_sk_lerp_565_avx+0x108>
+  DB  15,133,250,0,0,0                    ; jne           122d <_sk_lerp_565_avx+0x108>
   DB  196,65,122,111,4,122                ; vmovdqu       (%r10,%rdi,2),%xmm8
   DB  197,225,239,219                     ; vpxor         %xmm3,%xmm3,%xmm3
   DB  197,185,105,219                     ; vpunpckhwd    %xmm3,%xmm8,%xmm3
@@ -1919,9 +3307,9 @@ _sk_lerp_565_avx LABEL PROC
   DB  196,65,57,239,192                   ; vpxor         %xmm8,%xmm8,%xmm8
   DB  65,254,200                          ; dec           %r8b
   DB  65,128,248,6                        ; cmp           $0x6,%r8b
-  DB  15,135,243,254,255,255              ; ja            75d <_sk_lerp_565_avx+0x14>
+  DB  15,135,243,254,255,255              ; ja            1139 <_sk_lerp_565_avx+0x14>
   DB  69,15,182,192                       ; movzbl        %r8b,%r8d
-  DB  76,141,13,75,0,0,0                  ; lea           0x4b(%rip),%r9        # 8c0 <_sk_lerp_565_avx+0x177>
+  DB  76,141,13,75,0,0,0                  ; lea           0x4b(%rip),%r9        # 129c <_sk_lerp_565_avx+0x177>
   DB  75,99,4,129                         ; movslq        (%r9,%r8,4),%rax
   DB  76,1,200                            ; add           %r9,%rax
   DB  255,224                             ; jmpq          *%rax
@@ -1933,7 +3321,7 @@ _sk_lerp_565_avx LABEL PROC
   DB  196,65,57,196,68,122,4,2            ; vpinsrw       $0x2,0x4(%r10,%rdi,2),%xmm8,%xmm8
   DB  196,65,57,196,68,122,2,1            ; vpinsrw       $0x1,0x2(%r10,%rdi,2),%xmm8,%xmm8
   DB  196,65,57,196,4,122,0               ; vpinsrw       $0x0,(%r10,%rdi,2),%xmm8,%xmm8
-  DB  233,159,254,255,255                 ; jmpq          75d <_sk_lerp_565_avx+0x14>
+  DB  233,159,254,255,255                 ; jmpq          1139 <_sk_lerp_565_avx+0x14>
   DB  102,144                             ; xchg          %ax,%ax
   DB  242,255                             ; repnz         (bad)
   DB  255                                 ; (bad)
@@ -1970,7 +3358,7 @@ _sk_load_tables_avx LABEL PROC
   DB  72,173                              ; lods          %ds:(%rsi),%rax
   DB  76,139,0                            ; mov           (%rax),%r8
   DB  72,133,201                          ; test          %rcx,%rcx
-  DB  15,133,56,2,0,0                     ; jne           b2c <_sk_load_tables_avx+0x250>
+  DB  15,133,56,2,0,0                     ; jne           1508 <_sk_load_tables_avx+0x250>
   DB  196,65,124,16,4,184                 ; vmovups       (%r8,%rdi,4),%ymm8
   DB  187,255,0,0,0                       ; mov           $0xff,%ebx
   DB  197,249,110,195                     ; vmovd         %ebx,%xmm0
@@ -2089,9 +3477,9 @@ _sk_load_tables_avx LABEL PROC
   DB  196,65,60,87,192                    ; vxorps        %ymm8,%ymm8,%ymm8
   DB  254,203                             ; dec           %bl
   DB  128,251,6                           ; cmp           $0x6,%bl
-  DB  15,135,185,253,255,255              ; ja            8fa <_sk_load_tables_avx+0x1e>
+  DB  15,135,185,253,255,255              ; ja            12d6 <_sk_load_tables_avx+0x1e>
   DB  15,182,219                          ; movzbl        %bl,%ebx
-  DB  76,141,13,137,0,0,0                 ; lea           0x89(%rip),%r9        # bd4 <_sk_load_tables_avx+0x2f8>
+  DB  76,141,13,137,0,0,0                 ; lea           0x89(%rip),%r9        # 15b0 <_sk_load_tables_avx+0x2f8>
   DB  73,99,28,153                        ; movslq        (%r9,%rbx,4),%rbx
   DB  76,1,203                            ; add           %r9,%rbx
   DB  255,227                             ; jmpq          *%rbx
@@ -2114,7 +3502,7 @@ _sk_load_tables_avx LABEL PROC
   DB  196,99,61,12,192,15                 ; vblendps      $0xf,%ymm0,%ymm8,%ymm8
   DB  196,195,57,34,4,184,0               ; vpinsrd       $0x0,(%r8,%rdi,4),%xmm8,%xmm0
   DB  196,99,61,12,192,15                 ; vblendps      $0xf,%ymm0,%ymm8,%ymm8
-  DB  233,38,253,255,255                  ; jmpq          8fa <_sk_load_tables_avx+0x1e>
+  DB  233,38,253,255,255                  ; jmpq          12d6 <_sk_load_tables_avx+0x1e>
   DB  238                                 ; out           %al,(%dx)
   DB  255                                 ; (bad)
   DB  255                                 ; (bad)
@@ -2141,7 +3529,7 @@ _sk_load_a8_avx LABEL PROC
   DB  72,139,0                            ; mov           (%rax),%rax
   DB  72,1,248                            ; add           %rdi,%rax
   DB  77,133,192                          ; test          %r8,%r8
-  DB  117,74                              ; jne           c4a <_sk_load_a8_avx+0x5a>
+  DB  117,74                              ; jne           1626 <_sk_load_a8_avx+0x5a>
   DB  197,250,126,0                       ; vmovq         (%rax),%xmm0
   DB  196,226,121,49,200                  ; vpmovzxbd     %xmm0,%xmm1
   DB  196,227,121,4,192,229               ; vpermilps     $0xe5,%xmm0,%xmm0
@@ -2168,9 +3556,9 @@ _sk_load_a8_avx LABEL PROC
   DB  77,9,217                            ; or            %r11,%r9
   DB  72,131,193,8                        ; add           $0x8,%rcx
   DB  73,255,202                          ; dec           %r10
-  DB  117,234                             ; jne           c52 <_sk_load_a8_avx+0x62>
+  DB  117,234                             ; jne           162e <_sk_load_a8_avx+0x62>
   DB  196,193,249,110,193                 ; vmovq         %r9,%xmm0
-  DB  235,149                             ; jmp           c04 <_sk_load_a8_avx+0x14>
+  DB  235,149                             ; jmp           15e0 <_sk_load_a8_avx+0x14>
 
 PUBLIC _sk_store_a8_avx
 _sk_store_a8_avx LABEL PROC
@@ -2186,7 +3574,7 @@ _sk_store_a8_avx LABEL PROC
   DB  196,66,57,43,193                    ; vpackusdw     %xmm9,%xmm8,%xmm8
   DB  196,65,57,103,192                   ; vpackuswb     %xmm8,%xmm8,%xmm8
   DB  72,133,201                          ; test          %rcx,%rcx
-  DB  117,10                              ; jne           cb1 <_sk_store_a8_avx+0x42>
+  DB  117,10                              ; jne           168d <_sk_store_a8_avx+0x42>
   DB  196,65,123,17,4,57                  ; vmovsd        %xmm8,(%r9,%rdi,1)
   DB  72,173                              ; lods          %ds:(%rsi),%rax
   DB  255,224                             ; jmpq          *%rax
@@ -2194,10 +3582,10 @@ _sk_store_a8_avx LABEL PROC
   DB  65,128,224,7                        ; and           $0x7,%r8b
   DB  65,254,200                          ; dec           %r8b
   DB  65,128,248,6                        ; cmp           $0x6,%r8b
-  DB  119,236                             ; ja            cad <_sk_store_a8_avx+0x3e>
+  DB  119,236                             ; ja            1689 <_sk_store_a8_avx+0x3e>
   DB  196,66,121,48,192                   ; vpmovzxbw     %xmm8,%xmm8
   DB  65,15,182,192                       ; movzbl        %r8b,%eax
-  DB  76,141,5,67,0,0,0                   ; lea           0x43(%rip),%r8        # d14 <_sk_store_a8_avx+0xa5>
+  DB  76,141,5,67,0,0,0                   ; lea           0x43(%rip),%r8        # 16f0 <_sk_store_a8_avx+0xa5>
   DB  73,99,4,128                         ; movslq        (%r8,%rax,4),%rax
   DB  76,1,192                            ; add           %r8,%rax
   DB  255,224                             ; jmpq          *%rax
@@ -2208,7 +3596,7 @@ _sk_store_a8_avx LABEL PROC
   DB  196,67,121,20,68,57,2,4             ; vpextrb       $0x4,%xmm8,0x2(%r9,%rdi,1)
   DB  196,67,121,20,68,57,1,2             ; vpextrb       $0x2,%xmm8,0x1(%r9,%rdi,1)
   DB  196,67,121,20,4,57,0                ; vpextrb       $0x0,%xmm8,(%r9,%rdi,1)
-  DB  235,154                             ; jmp           cad <_sk_store_a8_avx+0x3e>
+  DB  235,154                             ; jmp           1689 <_sk_store_a8_avx+0x3e>
   DB  144                                 ; nop
   DB  246,255                             ; idiv          %bh
   DB  255                                 ; (bad)
@@ -2233,12 +3621,53 @@ _sk_store_a8_avx LABEL PROC
   DB  255                                 ; (bad)
   DB  255                                 ; .byte         0xff
 
+PUBLIC _sk_load_g8_avx
+_sk_load_g8_avx LABEL PROC
+  DB  73,137,200                          ; mov           %rcx,%r8
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  72,139,0                            ; mov           (%rax),%rax
+  DB  72,1,248                            ; add           %rdi,%rax
+  DB  77,133,192                          ; test          %r8,%r8
+  DB  117,91                              ; jne           1777 <_sk_load_g8_avx+0x6b>
+  DB  197,250,126,0                       ; vmovq         (%rax),%xmm0
+  DB  196,226,121,49,200                  ; vpmovzxbd     %xmm0,%xmm1
+  DB  196,227,121,4,192,229               ; vpermilps     $0xe5,%xmm0,%xmm0
+  DB  196,226,121,49,192                  ; vpmovzxbd     %xmm0,%xmm0
+  DB  196,227,117,24,192,1                ; vinsertf128   $0x1,%xmm0,%ymm1,%ymm0
+  DB  197,252,91,192                      ; vcvtdq2ps     %ymm0,%ymm0
+  DB  184,129,128,128,59                  ; mov           $0x3b808081,%eax
+  DB  197,249,110,200                     ; vmovd         %eax,%xmm1
+  DB  196,227,121,4,201,0                 ; vpermilps     $0x0,%xmm1,%xmm1
+  DB  196,227,117,24,201,1                ; vinsertf128   $0x1,%xmm1,%ymm1,%ymm1
+  DB  197,252,89,193                      ; vmulps        %ymm1,%ymm0,%ymm0
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  197,249,110,200                     ; vmovd         %eax,%xmm1
+  DB  196,227,121,4,201,0                 ; vpermilps     $0x0,%xmm1,%xmm1
+  DB  196,227,117,24,217,1                ; vinsertf128   $0x1,%xmm1,%ymm1,%ymm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  76,137,193                          ; mov           %r8,%rcx
+  DB  197,252,40,200                      ; vmovaps       %ymm0,%ymm1
+  DB  197,252,40,208                      ; vmovaps       %ymm0,%ymm2
+  DB  255,224                             ; jmpq          *%rax
+  DB  49,201                              ; xor           %ecx,%ecx
+  DB  77,137,194                          ; mov           %r8,%r10
+  DB  69,49,201                           ; xor           %r9d,%r9d
+  DB  68,15,182,24                        ; movzbl        (%rax),%r11d
+  DB  72,255,192                          ; inc           %rax
+  DB  73,211,227                          ; shl           %cl,%r11
+  DB  77,9,217                            ; or            %r11,%r9
+  DB  72,131,193,8                        ; add           $0x8,%rcx
+  DB  73,255,202                          ; dec           %r10
+  DB  117,234                             ; jne           177f <_sk_load_g8_avx+0x73>
+  DB  196,193,249,110,193                 ; vmovq         %r9,%xmm0
+  DB  235,132                             ; jmp           1720 <_sk_load_g8_avx+0x14>
+
 PUBLIC _sk_load_565_avx
 _sk_load_565_avx LABEL PROC
   DB  72,173                              ; lods          %ds:(%rsi),%rax
   DB  76,139,16                           ; mov           (%rax),%r10
   DB  72,133,201                          ; test          %rcx,%rcx
-  DB  15,133,209,0,0,0                    ; jne           e0f <_sk_load_565_avx+0xdf>
+  DB  15,133,209,0,0,0                    ; jne           187b <_sk_load_565_avx+0xdf>
   DB  196,193,122,111,4,122               ; vmovdqu       (%r10,%rdi,2),%xmm0
   DB  197,241,239,201                     ; vpxor         %xmm1,%xmm1,%xmm1
   DB  197,249,105,201                     ; vpunpckhwd    %xmm1,%xmm0,%xmm1
@@ -2288,9 +3717,9 @@ _sk_load_565_avx LABEL PROC
   DB  197,249,239,192                     ; vpxor         %xmm0,%xmm0,%xmm0
   DB  65,254,200                          ; dec           %r8b
   DB  65,128,248,6                        ; cmp           $0x6,%r8b
-  DB  15,135,29,255,255,255               ; ja            d44 <_sk_load_565_avx+0x14>
+  DB  15,135,29,255,255,255               ; ja            17b0 <_sk_load_565_avx+0x14>
   DB  69,15,182,192                       ; movzbl        %r8b,%r8d
-  DB  76,141,13,74,0,0,0                  ; lea           0x4a(%rip),%r9        # e7c <_sk_load_565_avx+0x14c>
+  DB  76,141,13,74,0,0,0                  ; lea           0x4a(%rip),%r9        # 18e8 <_sk_load_565_avx+0x14c>
   DB  75,99,4,129                         ; movslq        (%r9,%r8,4),%rax
   DB  76,1,200                            ; add           %r9,%rax
   DB  255,224                             ; jmpq          *%rax
@@ -2302,12 +3731,12 @@ _sk_load_565_avx LABEL PROC
   DB  196,193,121,196,68,122,4,2          ; vpinsrw       $0x2,0x4(%r10,%rdi,2),%xmm0,%xmm0
   DB  196,193,121,196,68,122,2,1          ; vpinsrw       $0x1,0x2(%r10,%rdi,2),%xmm0,%xmm0
   DB  196,193,121,196,4,122,0             ; vpinsrw       $0x0,(%r10,%rdi,2),%xmm0,%xmm0
-  DB  233,201,254,255,255                 ; jmpq          d44 <_sk_load_565_avx+0x14>
+  DB  233,201,254,255,255                 ; jmpq          17b0 <_sk_load_565_avx+0x14>
   DB  144                                 ; nop
   DB  243,255                             ; repz          (bad)
   DB  255                                 ; (bad)
   DB  255                                 ; (bad)
-  DB  235,255                             ; jmp           e81 <_sk_load_565_avx+0x151>
+  DB  235,255                             ; jmp           18ed <_sk_load_565_avx+0x151>
   DB  255                                 ; (bad)
   DB  255,227                             ; jmpq          *%rbx
   DB  255                                 ; (bad)
@@ -2358,7 +3787,7 @@ _sk_store_565_avx LABEL PROC
   DB  196,67,125,25,193,1                 ; vextractf128  $0x1,%ymm8,%xmm9
   DB  196,66,57,43,193                    ; vpackusdw     %xmm9,%xmm8,%xmm8
   DB  72,133,201                          ; test          %rcx,%rcx
-  DB  117,10                              ; jne           f36 <_sk_store_565_avx+0x9e>
+  DB  117,10                              ; jne           19a2 <_sk_store_565_avx+0x9e>
   DB  196,65,122,127,4,121                ; vmovdqu       %xmm8,(%r9,%rdi,2)
   DB  72,173                              ; lods          %ds:(%rsi),%rax
   DB  255,224                             ; jmpq          *%rax
@@ -2366,9 +3795,9 @@ _sk_store_565_avx LABEL PROC
   DB  65,128,224,7                        ; and           $0x7,%r8b
   DB  65,254,200                          ; dec           %r8b
   DB  65,128,248,6                        ; cmp           $0x6,%r8b
-  DB  119,236                             ; ja            f32 <_sk_store_565_avx+0x9a>
+  DB  119,236                             ; ja            199e <_sk_store_565_avx+0x9a>
   DB  65,15,182,192                       ; movzbl        %r8b,%eax
-  DB  76,141,5,67,0,0,0                   ; lea           0x43(%rip),%r8        # f94 <_sk_store_565_avx+0xfc>
+  DB  76,141,5,67,0,0,0                   ; lea           0x43(%rip),%r8        # 1a00 <_sk_store_565_avx+0xfc>
   DB  73,99,4,128                         ; movslq        (%r8,%rax,4),%rax
   DB  76,1,192                            ; add           %r8,%rax
   DB  255,224                             ; jmpq          *%rax
@@ -2379,7 +3808,7 @@ _sk_store_565_avx LABEL PROC
   DB  196,67,121,21,68,121,4,2            ; vpextrw       $0x2,%xmm8,0x4(%r9,%rdi,2)
   DB  196,67,121,21,68,121,2,1            ; vpextrw       $0x1,%xmm8,0x2(%r9,%rdi,2)
   DB  196,67,121,21,4,121,0               ; vpextrw       $0x0,%xmm8,(%r9,%rdi,2)
-  DB  235,159                             ; jmp           f32 <_sk_store_565_avx+0x9a>
+  DB  235,159                             ; jmp           199e <_sk_store_565_avx+0x9a>
   DB  144                                 ; nop
   DB  246,255                             ; idiv          %bh
   DB  255                                 ; (bad)
@@ -2404,12 +3833,192 @@ _sk_store_565_avx LABEL PROC
   DB  255                                 ; (bad)
   DB  255                                 ; .byte         0xff
 
+PUBLIC _sk_load_4444_avx
+_sk_load_4444_avx LABEL PROC
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  76,139,16                           ; mov           (%rax),%r10
+  DB  72,133,201                          ; test          %rcx,%rcx
+  DB  15,133,245,0,0,0                    ; jne           1b1f <_sk_load_4444_avx+0x103>
+  DB  196,193,122,111,4,122               ; vmovdqu       (%r10,%rdi,2),%xmm0
+  DB  197,241,239,201                     ; vpxor         %xmm1,%xmm1,%xmm1
+  DB  197,249,105,201                     ; vpunpckhwd    %xmm1,%xmm0,%xmm1
+  DB  196,226,121,51,192                  ; vpmovzxwd     %xmm0,%xmm0
+  DB  196,99,125,24,201,1                 ; vinsertf128   $0x1,%xmm1,%ymm0,%ymm9
+  DB  184,0,240,0,0                       ; mov           $0xf000,%eax
+  DB  197,249,110,192                     ; vmovd         %eax,%xmm0
+  DB  197,249,112,192,0                   ; vpshufd       $0x0,%xmm0,%xmm0
+  DB  196,227,125,24,192,1                ; vinsertf128   $0x1,%xmm0,%ymm0,%ymm0
+  DB  196,193,124,84,193                  ; vandps        %ymm9,%ymm0,%ymm0
+  DB  197,252,91,192                      ; vcvtdq2ps     %ymm0,%ymm0
+  DB  184,137,136,136,55                  ; mov           $0x37888889,%eax
+  DB  197,249,110,200                     ; vmovd         %eax,%xmm1
+  DB  196,227,121,4,201,0                 ; vpermilps     $0x0,%xmm1,%xmm1
+  DB  196,227,117,24,201,1                ; vinsertf128   $0x1,%xmm1,%ymm1,%ymm1
+  DB  197,252,89,193                      ; vmulps        %ymm1,%ymm0,%ymm0
+  DB  184,0,15,0,0                        ; mov           $0xf00,%eax
+  DB  197,249,110,200                     ; vmovd         %eax,%xmm1
+  DB  197,249,112,201,0                   ; vpshufd       $0x0,%xmm1,%xmm1
+  DB  196,227,117,24,201,1                ; vinsertf128   $0x1,%xmm1,%ymm1,%ymm1
+  DB  196,193,116,84,201                  ; vandps        %ymm9,%ymm1,%ymm1
+  DB  197,252,91,201                      ; vcvtdq2ps     %ymm1,%ymm1
+  DB  184,137,136,136,57                  ; mov           $0x39888889,%eax
+  DB  197,249,110,208                     ; vmovd         %eax,%xmm2
+  DB  196,227,121,4,210,0                 ; vpermilps     $0x0,%xmm2,%xmm2
+  DB  196,227,109,24,210,1                ; vinsertf128   $0x1,%xmm2,%ymm2,%ymm2
+  DB  197,244,89,202                      ; vmulps        %ymm2,%ymm1,%ymm1
+  DB  184,240,0,0,0                       ; mov           $0xf0,%eax
+  DB  197,249,110,208                     ; vmovd         %eax,%xmm2
+  DB  197,249,112,210,0                   ; vpshufd       $0x0,%xmm2,%xmm2
+  DB  196,227,109,24,210,1                ; vinsertf128   $0x1,%xmm2,%ymm2,%ymm2
+  DB  196,193,108,84,209                  ; vandps        %ymm9,%ymm2,%ymm2
+  DB  197,124,91,194                      ; vcvtdq2ps     %ymm2,%ymm8
+  DB  184,137,136,136,59                  ; mov           $0x3b888889,%eax
+  DB  197,249,110,208                     ; vmovd         %eax,%xmm2
+  DB  196,227,121,4,210,0                 ; vpermilps     $0x0,%xmm2,%xmm2
+  DB  196,227,109,24,210,1                ; vinsertf128   $0x1,%xmm2,%ymm2,%ymm2
+  DB  197,188,89,210                      ; vmulps        %ymm2,%ymm8,%ymm2
+  DB  184,15,0,0,0                        ; mov           $0xf,%eax
+  DB  197,249,110,216                     ; vmovd         %eax,%xmm3
+  DB  197,249,112,219,0                   ; vpshufd       $0x0,%xmm3,%xmm3
+  DB  196,227,101,24,219,1                ; vinsertf128   $0x1,%xmm3,%ymm3,%ymm3
+  DB  196,193,100,84,217                  ; vandps        %ymm9,%ymm3,%ymm3
+  DB  197,124,91,195                      ; vcvtdq2ps     %ymm3,%ymm8
+  DB  184,137,136,136,61                  ; mov           $0x3d888889,%eax
+  DB  197,249,110,216                     ; vmovd         %eax,%xmm3
+  DB  196,227,121,4,219,0                 ; vpermilps     $0x0,%xmm3,%xmm3
+  DB  196,227,101,24,219,1                ; vinsertf128   $0x1,%xmm3,%ymm3,%ymm3
+  DB  197,188,89,219                      ; vmulps        %ymm3,%ymm8,%ymm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+  DB  65,137,200                          ; mov           %ecx,%r8d
+  DB  65,128,224,7                        ; and           $0x7,%r8b
+  DB  197,249,239,192                     ; vpxor         %xmm0,%xmm0,%xmm0
+  DB  65,254,200                          ; dec           %r8b
+  DB  65,128,248,6                        ; cmp           $0x6,%r8b
+  DB  15,135,249,254,255,255              ; ja            1a30 <_sk_load_4444_avx+0x14>
+  DB  69,15,182,192                       ; movzbl        %r8b,%r8d
+  DB  76,141,13,74,0,0,0                  ; lea           0x4a(%rip),%r9        # 1b8c <_sk_load_4444_avx+0x170>
+  DB  75,99,4,129                         ; movslq        (%r9,%r8,4),%rax
+  DB  76,1,200                            ; add           %r9,%rax
+  DB  255,224                             ; jmpq          *%rax
+  DB  197,249,239,192                     ; vpxor         %xmm0,%xmm0,%xmm0
+  DB  196,193,121,196,68,122,12,6         ; vpinsrw       $0x6,0xc(%r10,%rdi,2),%xmm0,%xmm0
+  DB  196,193,121,196,68,122,10,5         ; vpinsrw       $0x5,0xa(%r10,%rdi,2),%xmm0,%xmm0
+  DB  196,193,121,196,68,122,8,4          ; vpinsrw       $0x4,0x8(%r10,%rdi,2),%xmm0,%xmm0
+  DB  196,193,121,196,68,122,6,3          ; vpinsrw       $0x3,0x6(%r10,%rdi,2),%xmm0,%xmm0
+  DB  196,193,121,196,68,122,4,2          ; vpinsrw       $0x2,0x4(%r10,%rdi,2),%xmm0,%xmm0
+  DB  196,193,121,196,68,122,2,1          ; vpinsrw       $0x1,0x2(%r10,%rdi,2),%xmm0,%xmm0
+  DB  196,193,121,196,4,122,0             ; vpinsrw       $0x0,(%r10,%rdi,2),%xmm0,%xmm0
+  DB  233,165,254,255,255                 ; jmpq          1a30 <_sk_load_4444_avx+0x14>
+  DB  144                                 ; nop
+  DB  243,255                             ; repz          (bad)
+  DB  255                                 ; (bad)
+  DB  255                                 ; (bad)
+  DB  235,255                             ; jmp           1b91 <_sk_load_4444_avx+0x175>
+  DB  255                                 ; (bad)
+  DB  255,227                             ; jmpq          *%rbx
+  DB  255                                 ; (bad)
+  DB  255                                 ; (bad)
+  DB  255                                 ; (bad)
+  DB  219,255                             ; (bad)
+  DB  255                                 ; (bad)
+  DB  255,211                             ; callq         *%rbx
+  DB  255                                 ; (bad)
+  DB  255                                 ; (bad)
+  DB  255,203                             ; dec           %ebx
+  DB  255                                 ; (bad)
+  DB  255                                 ; (bad)
+  DB  255                                 ; (bad)
+  DB  191                                 ; .byte         0xbf
+  DB  255                                 ; (bad)
+  DB  255                                 ; (bad)
+  DB  255                                 ; .byte         0xff
+
+PUBLIC _sk_store_4444_avx
+_sk_store_4444_avx LABEL PROC
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  76,139,8                            ; mov           (%rax),%r9
+  DB  184,0,0,112,65                      ; mov           $0x41700000,%eax
+  DB  197,121,110,192                     ; vmovd         %eax,%xmm8
+  DB  196,67,121,4,192,0                  ; vpermilps     $0x0,%xmm8,%xmm8
+  DB  196,67,61,24,192,1                  ; vinsertf128   $0x1,%xmm8,%ymm8,%ymm8
+  DB  197,60,89,200                       ; vmulps        %ymm0,%ymm8,%ymm9
+  DB  196,65,125,91,201                   ; vcvtps2dq     %ymm9,%ymm9
+  DB  196,193,41,114,241,12               ; vpslld        $0xc,%xmm9,%xmm10
+  DB  196,67,125,25,201,1                 ; vextractf128  $0x1,%ymm9,%xmm9
+  DB  196,193,49,114,241,12               ; vpslld        $0xc,%xmm9,%xmm9
+  DB  196,67,45,24,201,1                  ; vinsertf128   $0x1,%xmm9,%ymm10,%ymm9
+  DB  197,60,89,209                       ; vmulps        %ymm1,%ymm8,%ymm10
+  DB  196,65,125,91,210                   ; vcvtps2dq     %ymm10,%ymm10
+  DB  196,193,33,114,242,8                ; vpslld        $0x8,%xmm10,%xmm11
+  DB  196,67,125,25,210,1                 ; vextractf128  $0x1,%ymm10,%xmm10
+  DB  196,193,41,114,242,8                ; vpslld        $0x8,%xmm10,%xmm10
+  DB  196,67,37,24,210,1                  ; vinsertf128   $0x1,%xmm10,%ymm11,%ymm10
+  DB  196,65,45,86,201                    ; vorpd         %ymm9,%ymm10,%ymm9
+  DB  197,60,89,210                       ; vmulps        %ymm2,%ymm8,%ymm10
+  DB  196,65,125,91,210                   ; vcvtps2dq     %ymm10,%ymm10
+  DB  196,193,33,114,242,4                ; vpslld        $0x4,%xmm10,%xmm11
+  DB  196,67,125,25,210,1                 ; vextractf128  $0x1,%ymm10,%xmm10
+  DB  196,193,41,114,242,4                ; vpslld        $0x4,%xmm10,%xmm10
+  DB  196,67,37,24,210,1                  ; vinsertf128   $0x1,%xmm10,%ymm11,%ymm10
+  DB  197,60,89,195                       ; vmulps        %ymm3,%ymm8,%ymm8
+  DB  196,65,125,91,192                   ; vcvtps2dq     %ymm8,%ymm8
+  DB  196,65,45,86,192                    ; vorpd         %ymm8,%ymm10,%ymm8
+  DB  196,65,53,86,192                    ; vorpd         %ymm8,%ymm9,%ymm8
+  DB  196,67,125,25,193,1                 ; vextractf128  $0x1,%ymm8,%xmm9
+  DB  196,66,57,43,193                    ; vpackusdw     %xmm9,%xmm8,%xmm8
+  DB  72,133,201                          ; test          %rcx,%rcx
+  DB  117,10                              ; jne           1c57 <_sk_store_4444_avx+0xaf>
+  DB  196,65,122,127,4,121                ; vmovdqu       %xmm8,(%r9,%rdi,2)
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+  DB  65,137,200                          ; mov           %ecx,%r8d
+  DB  65,128,224,7                        ; and           $0x7,%r8b
+  DB  65,254,200                          ; dec           %r8b
+  DB  65,128,248,6                        ; cmp           $0x6,%r8b
+  DB  119,236                             ; ja            1c53 <_sk_store_4444_avx+0xab>
+  DB  65,15,182,192                       ; movzbl        %r8b,%eax
+  DB  76,141,5,66,0,0,0                   ; lea           0x42(%rip),%r8        # 1cb4 <_sk_store_4444_avx+0x10c>
+  DB  73,99,4,128                         ; movslq        (%r8,%rax,4),%rax
+  DB  76,1,192                            ; add           %r8,%rax
+  DB  255,224                             ; jmpq          *%rax
+  DB  196,67,121,21,68,121,12,6           ; vpextrw       $0x6,%xmm8,0xc(%r9,%rdi,2)
+  DB  196,67,121,21,68,121,10,5           ; vpextrw       $0x5,%xmm8,0xa(%r9,%rdi,2)
+  DB  196,67,121,21,68,121,8,4            ; vpextrw       $0x4,%xmm8,0x8(%r9,%rdi,2)
+  DB  196,67,121,21,68,121,6,3            ; vpextrw       $0x3,%xmm8,0x6(%r9,%rdi,2)
+  DB  196,67,121,21,68,121,4,2            ; vpextrw       $0x2,%xmm8,0x4(%r9,%rdi,2)
+  DB  196,67,121,21,68,121,2,1            ; vpextrw       $0x1,%xmm8,0x2(%r9,%rdi,2)
+  DB  196,67,121,21,4,121,0               ; vpextrw       $0x0,%xmm8,(%r9,%rdi,2)
+  DB  235,159                             ; jmp           1c53 <_sk_store_4444_avx+0xab>
+  DB  247,255                             ; idiv          %edi
+  DB  255                                 ; (bad)
+  DB  255                                 ; (bad)
+  DB  239                                 ; out           %eax,(%dx)
+  DB  255                                 ; (bad)
+  DB  255                                 ; (bad)
+  DB  255,231                             ; jmpq          *%rdi
+  DB  255                                 ; (bad)
+  DB  255                                 ; (bad)
+  DB  255                                 ; (bad)
+  DB  223,255                             ; (bad)
+  DB  255                                 ; (bad)
+  DB  255,215                             ; callq         *%rdi
+  DB  255                                 ; (bad)
+  DB  255                                 ; (bad)
+  DB  255,207                             ; dec           %edi
+  DB  255                                 ; (bad)
+  DB  255                                 ; (bad)
+  DB  255,199                             ; inc           %edi
+  DB  255                                 ; (bad)
+  DB  255                                 ; (bad)
+  DB  255                                 ; .byte         0xff
+
 PUBLIC _sk_load_8888_avx
 _sk_load_8888_avx LABEL PROC
   DB  72,173                              ; lods          %ds:(%rsi),%rax
   DB  76,139,16                           ; mov           (%rax),%r10
   DB  72,133,201                          ; test          %rcx,%rcx
-  DB  15,133,157,0,0,0                    ; jne           105b <_sk_load_8888_avx+0xab>
+  DB  15,133,157,0,0,0                    ; jne           1d7b <_sk_load_8888_avx+0xab>
   DB  196,65,124,16,12,186                ; vmovups       (%r10,%rdi,4),%ymm9
   DB  184,255,0,0,0                       ; mov           $0xff,%eax
   DB  197,249,110,192                     ; vmovd         %eax,%xmm0
@@ -2447,9 +4056,9 @@ _sk_load_8888_avx LABEL PROC
   DB  196,65,52,87,201                    ; vxorps        %ymm9,%ymm9,%ymm9
   DB  65,254,200                          ; dec           %r8b
   DB  65,128,248,6                        ; cmp           $0x6,%r8b
-  DB  15,135,80,255,255,255               ; ja            fc4 <_sk_load_8888_avx+0x14>
+  DB  15,135,80,255,255,255               ; ja            1ce4 <_sk_load_8888_avx+0x14>
   DB  69,15,182,192                       ; movzbl        %r8b,%r8d
-  DB  76,141,13,137,0,0,0                 ; lea           0x89(%rip),%r9        # 1108 <_sk_load_8888_avx+0x158>
+  DB  76,141,13,137,0,0,0                 ; lea           0x89(%rip),%r9        # 1e28 <_sk_load_8888_avx+0x158>
   DB  75,99,4,129                         ; movslq        (%r9,%r8,4),%rax
   DB  76,1,200                            ; add           %r9,%rax
   DB  255,224                             ; jmpq          *%rax
@@ -2472,7 +4081,7 @@ _sk_load_8888_avx LABEL PROC
   DB  196,99,53,12,200,15                 ; vblendps      $0xf,%ymm0,%ymm9,%ymm9
   DB  196,195,49,34,4,186,0               ; vpinsrd       $0x0,(%r10,%rdi,4),%xmm9,%xmm0
   DB  196,99,53,12,200,15                 ; vblendps      $0xf,%ymm0,%ymm9,%ymm9
-  DB  233,188,254,255,255                 ; jmpq          fc4 <_sk_load_8888_avx+0x14>
+  DB  233,188,254,255,255                 ; jmpq          1ce4 <_sk_load_8888_avx+0x14>
   DB  238                                 ; out           %al,(%dx)
   DB  255                                 ; (bad)
   DB  255                                 ; (bad)
@@ -2524,7 +4133,7 @@ _sk_store_8888_avx LABEL PROC
   DB  196,65,45,86,192                    ; vorpd         %ymm8,%ymm10,%ymm8
   DB  196,65,53,86,192                    ; vorpd         %ymm8,%ymm9,%ymm8
   DB  72,133,201                          ; test          %rcx,%rcx
-  DB  117,10                              ; jne           11c8 <_sk_store_8888_avx+0xa4>
+  DB  117,10                              ; jne           1ee8 <_sk_store_8888_avx+0xa4>
   DB  196,65,124,17,4,185                 ; vmovups       %ymm8,(%r9,%rdi,4)
   DB  72,173                              ; lods          %ds:(%rsi),%rax
   DB  255,224                             ; jmpq          *%rax
@@ -2532,9 +4141,9 @@ _sk_store_8888_avx LABEL PROC
   DB  65,128,224,7                        ; and           $0x7,%r8b
   DB  65,254,200                          ; dec           %r8b
   DB  65,128,248,6                        ; cmp           $0x6,%r8b
-  DB  119,236                             ; ja            11c4 <_sk_store_8888_avx+0xa0>
+  DB  119,236                             ; ja            1ee4 <_sk_store_8888_avx+0xa0>
   DB  65,15,182,192                       ; movzbl        %r8b,%eax
-  DB  76,141,5,85,0,0,0                   ; lea           0x55(%rip),%r8        # 1238 <_sk_store_8888_avx+0x114>
+  DB  76,141,5,85,0,0,0                   ; lea           0x55(%rip),%r8        # 1f58 <_sk_store_8888_avx+0x114>
   DB  73,99,4,128                         ; movslq        (%r8,%rax,4),%rax
   DB  76,1,192                            ; add           %r8,%rax
   DB  255,224                             ; jmpq          *%rax
@@ -2548,7 +4157,7 @@ _sk_store_8888_avx LABEL PROC
   DB  196,67,121,22,68,185,8,2            ; vpextrd       $0x2,%xmm8,0x8(%r9,%rdi,4)
   DB  196,67,121,22,68,185,4,1            ; vpextrd       $0x1,%xmm8,0x4(%r9,%rdi,4)
   DB  196,65,121,126,4,185                ; vmovd         %xmm8,(%r9,%rdi,4)
-  DB  235,143                             ; jmp           11c4 <_sk_store_8888_avx+0xa0>
+  DB  235,143                             ; jmp           1ee4 <_sk_store_8888_avx+0xa0>
   DB  15,31,0                             ; nopl          (%rax)
   DB  245                                 ; cmc
   DB  255                                 ; (bad)
@@ -2579,7 +4188,7 @@ _sk_load_f16_avx LABEL PROC
   DB  72,173                              ; lods          %ds:(%rsi),%rax
   DB  72,139,0                            ; mov           (%rax),%rax
   DB  72,133,201                          ; test          %rcx,%rcx
-  DB  15,133,2,1,0,0                      ; jne           1364 <_sk_load_f16_avx+0x110>
+  DB  15,133,2,1,0,0                      ; jne           2084 <_sk_load_f16_avx+0x110>
   DB  197,121,16,4,248                    ; vmovupd       (%rax,%rdi,8),%xmm8
   DB  197,249,16,84,248,16                ; vmovupd       0x10(%rax,%rdi,8),%xmm2
   DB  197,249,16,92,248,32                ; vmovupd       0x20(%rax,%rdi,8),%xmm3
@@ -2637,29 +4246,29 @@ _sk_load_f16_avx LABEL PROC
   DB  197,123,16,4,248                    ; vmovsd        (%rax,%rdi,8),%xmm8
   DB  196,65,49,239,201                   ; vpxor         %xmm9,%xmm9,%xmm9
   DB  72,131,249,1                        ; cmp           $0x1,%rcx
-  DB  116,79                              ; je            13c3 <_sk_load_f16_avx+0x16f>
+  DB  116,79                              ; je            20e3 <_sk_load_f16_avx+0x16f>
   DB  197,57,22,68,248,8                  ; vmovhpd       0x8(%rax,%rdi,8),%xmm8,%xmm8
   DB  72,131,249,3                        ; cmp           $0x3,%rcx
-  DB  114,67                              ; jb            13c3 <_sk_load_f16_avx+0x16f>
+  DB  114,67                              ; jb            20e3 <_sk_load_f16_avx+0x16f>
   DB  197,251,16,84,248,16                ; vmovsd        0x10(%rax,%rdi,8),%xmm2
   DB  72,131,249,3                        ; cmp           $0x3,%rcx
-  DB  116,68                              ; je            13d0 <_sk_load_f16_avx+0x17c>
+  DB  116,68                              ; je            20f0 <_sk_load_f16_avx+0x17c>
   DB  197,233,22,84,248,24                ; vmovhpd       0x18(%rax,%rdi,8),%xmm2,%xmm2
   DB  72,131,249,5                        ; cmp           $0x5,%rcx
-  DB  114,56                              ; jb            13d0 <_sk_load_f16_avx+0x17c>
+  DB  114,56                              ; jb            20f0 <_sk_load_f16_avx+0x17c>
   DB  197,251,16,92,248,32                ; vmovsd        0x20(%rax,%rdi,8),%xmm3
   DB  72,131,249,5                        ; cmp           $0x5,%rcx
-  DB  15,132,209,254,255,255              ; je            1279 <_sk_load_f16_avx+0x25>
+  DB  15,132,209,254,255,255              ; je            1f99 <_sk_load_f16_avx+0x25>
   DB  197,225,22,92,248,40                ; vmovhpd       0x28(%rax,%rdi,8),%xmm3,%xmm3
   DB  72,131,249,7                        ; cmp           $0x7,%rcx
-  DB  15,130,193,254,255,255              ; jb            1279 <_sk_load_f16_avx+0x25>
+  DB  15,130,193,254,255,255              ; jb            1f99 <_sk_load_f16_avx+0x25>
   DB  197,122,126,76,248,48               ; vmovq         0x30(%rax,%rdi,8),%xmm9
-  DB  233,182,254,255,255                 ; jmpq          1279 <_sk_load_f16_avx+0x25>
+  DB  233,182,254,255,255                 ; jmpq          1f99 <_sk_load_f16_avx+0x25>
   DB  197,225,87,219                      ; vxorpd        %xmm3,%xmm3,%xmm3
   DB  197,233,87,210                      ; vxorpd        %xmm2,%xmm2,%xmm2
-  DB  233,169,254,255,255                 ; jmpq          1279 <_sk_load_f16_avx+0x25>
+  DB  233,169,254,255,255                 ; jmpq          1f99 <_sk_load_f16_avx+0x25>
   DB  197,225,87,219                      ; vxorpd        %xmm3,%xmm3,%xmm3
-  DB  233,160,254,255,255                 ; jmpq          1279 <_sk_load_f16_avx+0x25>
+  DB  233,160,254,255,255                 ; jmpq          1f99 <_sk_load_f16_avx+0x25>
 
 PUBLIC _sk_store_f16_avx
 _sk_store_f16_avx LABEL PROC
@@ -2698,7 +4307,7 @@ _sk_store_f16_avx LABEL PROC
   DB  196,65,25,98,205                    ; vpunpckldq    %xmm13,%xmm12,%xmm9
   DB  196,65,25,106,197                   ; vpunpckhdq    %xmm13,%xmm12,%xmm8
   DB  72,133,201                          ; test          %rcx,%rcx
-  DB  117,31                              ; jne           14af <_sk_store_f16_avx+0xd6>
+  DB  117,31                              ; jne           21cf <_sk_store_f16_avx+0xd6>
   DB  196,65,120,17,28,248                ; vmovups       %xmm11,(%r8,%rdi,8)
   DB  196,65,120,17,84,248,16             ; vmovups       %xmm10,0x10(%r8,%rdi,8)
   DB  196,65,120,17,76,248,32             ; vmovups       %xmm9,0x20(%r8,%rdi,8)
@@ -2707,22 +4316,22 @@ _sk_store_f16_avx LABEL PROC
   DB  255,224                             ; jmpq          *%rax
   DB  196,65,121,214,28,248               ; vmovq         %xmm11,(%r8,%rdi,8)
   DB  72,131,249,1                        ; cmp           $0x1,%rcx
-  DB  116,240                             ; je            14ab <_sk_store_f16_avx+0xd2>
+  DB  116,240                             ; je            21cb <_sk_store_f16_avx+0xd2>
   DB  196,65,121,23,92,248,8              ; vmovhpd       %xmm11,0x8(%r8,%rdi,8)
   DB  72,131,249,3                        ; cmp           $0x3,%rcx
-  DB  114,227                             ; jb            14ab <_sk_store_f16_avx+0xd2>
+  DB  114,227                             ; jb            21cb <_sk_store_f16_avx+0xd2>
   DB  196,65,121,214,84,248,16            ; vmovq         %xmm10,0x10(%r8,%rdi,8)
-  DB  116,218                             ; je            14ab <_sk_store_f16_avx+0xd2>
+  DB  116,218                             ; je            21cb <_sk_store_f16_avx+0xd2>
   DB  196,65,121,23,84,248,24             ; vmovhpd       %xmm10,0x18(%r8,%rdi,8)
   DB  72,131,249,5                        ; cmp           $0x5,%rcx
-  DB  114,205                             ; jb            14ab <_sk_store_f16_avx+0xd2>
+  DB  114,205                             ; jb            21cb <_sk_store_f16_avx+0xd2>
   DB  196,65,121,214,76,248,32            ; vmovq         %xmm9,0x20(%r8,%rdi,8)
-  DB  116,196                             ; je            14ab <_sk_store_f16_avx+0xd2>
+  DB  116,196                             ; je            21cb <_sk_store_f16_avx+0xd2>
   DB  196,65,121,23,76,248,40             ; vmovhpd       %xmm9,0x28(%r8,%rdi,8)
   DB  72,131,249,7                        ; cmp           $0x7,%rcx
-  DB  114,183                             ; jb            14ab <_sk_store_f16_avx+0xd2>
+  DB  114,183                             ; jb            21cb <_sk_store_f16_avx+0xd2>
   DB  196,65,121,214,68,248,48            ; vmovq         %xmm8,0x30(%r8,%rdi,8)
-  DB  235,174                             ; jmp           14ab <_sk_store_f16_avx+0xd2>
+  DB  235,174                             ; jmp           21cb <_sk_store_f16_avx+0xd2>
 
 PUBLIC _sk_store_f32_avx
 _sk_store_f32_avx LABEL PROC
@@ -2738,7 +4347,7 @@ _sk_store_f32_avx LABEL PROC
   DB  196,65,37,20,196                    ; vunpcklpd     %ymm12,%ymm11,%ymm8
   DB  196,65,37,21,220                    ; vunpckhpd     %ymm12,%ymm11,%ymm11
   DB  72,133,201                          ; test          %rcx,%rcx
-  DB  117,55                              ; jne           156a <_sk_store_f32_avx+0x6d>
+  DB  117,55                              ; jne           228a <_sk_store_f32_avx+0x6d>
   DB  196,67,45,24,225,1                  ; vinsertf128   $0x1,%xmm9,%ymm10,%ymm12
   DB  196,67,61,24,235,1                  ; vinsertf128   $0x1,%xmm11,%ymm8,%ymm13
   DB  196,67,45,6,201,49                  ; vperm2f128    $0x31,%ymm9,%ymm10,%ymm9
@@ -2751,22 +4360,22 @@ _sk_store_f32_avx LABEL PROC
   DB  255,224                             ; jmpq          *%rax
   DB  196,65,121,17,20,128                ; vmovupd       %xmm10,(%r8,%rax,4)
   DB  72,131,249,1                        ; cmp           $0x1,%rcx
-  DB  116,240                             ; je            1566 <_sk_store_f32_avx+0x69>
+  DB  116,240                             ; je            2286 <_sk_store_f32_avx+0x69>
   DB  196,65,121,17,76,128,16             ; vmovupd       %xmm9,0x10(%r8,%rax,4)
   DB  72,131,249,3                        ; cmp           $0x3,%rcx
-  DB  114,227                             ; jb            1566 <_sk_store_f32_avx+0x69>
+  DB  114,227                             ; jb            2286 <_sk_store_f32_avx+0x69>
   DB  196,65,121,17,68,128,32             ; vmovupd       %xmm8,0x20(%r8,%rax,4)
-  DB  116,218                             ; je            1566 <_sk_store_f32_avx+0x69>
+  DB  116,218                             ; je            2286 <_sk_store_f32_avx+0x69>
   DB  196,65,121,17,92,128,48             ; vmovupd       %xmm11,0x30(%r8,%rax,4)
   DB  72,131,249,5                        ; cmp           $0x5,%rcx
-  DB  114,205                             ; jb            1566 <_sk_store_f32_avx+0x69>
+  DB  114,205                             ; jb            2286 <_sk_store_f32_avx+0x69>
   DB  196,67,125,25,84,128,64,1           ; vextractf128  $0x1,%ymm10,0x40(%r8,%rax,4)
-  DB  116,195                             ; je            1566 <_sk_store_f32_avx+0x69>
+  DB  116,195                             ; je            2286 <_sk_store_f32_avx+0x69>
   DB  196,67,125,25,76,128,80,1           ; vextractf128  $0x1,%ymm9,0x50(%r8,%rax,4)
   DB  72,131,249,7                        ; cmp           $0x7,%rcx
-  DB  114,181                             ; jb            1566 <_sk_store_f32_avx+0x69>
+  DB  114,181                             ; jb            2286 <_sk_store_f32_avx+0x69>
   DB  196,67,125,25,68,128,96,1           ; vextractf128  $0x1,%ymm8,0x60(%r8,%rax,4)
-  DB  235,171                             ; jmp           1566 <_sk_store_f32_avx+0x69>
+  DB  235,171                             ; jmp           2286 <_sk_store_f32_avx+0x69>
 
 PUBLIC _sk_clamp_x_avx
 _sk_clamp_x_avx LABEL PROC
@@ -3207,13 +4816,103 @@ _sk_clear_sse41 LABEL PROC
   DB  15,87,219                           ; xorps         %xmm3,%xmm3
   DB  255,224                             ; jmpq          *%rax
 
-PUBLIC _sk_plus__sse41
-_sk_plus__sse41 LABEL PROC
-  DB  15,88,196                           ; addps         %xmm4,%xmm0
-  DB  15,88,205                           ; addps         %xmm5,%xmm1
-  DB  15,88,214                           ; addps         %xmm6,%xmm2
-  DB  15,88,223                           ; addps         %xmm7,%xmm3
+PUBLIC _sk_srcatop_sse41
+_sk_srcatop_sse41 LABEL PROC
+  DB  15,89,199                           ; mulps         %xmm7,%xmm0
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  102,68,15,110,192                   ; movd          %eax,%xmm8
+  DB  69,15,198,192,0                     ; shufps        $0x0,%xmm8,%xmm8
+  DB  68,15,92,195                        ; subps         %xmm3,%xmm8
+  DB  69,15,40,200                        ; movaps        %xmm8,%xmm9
+  DB  68,15,89,204                        ; mulps         %xmm4,%xmm9
+  DB  65,15,88,193                        ; addps         %xmm9,%xmm0
+  DB  15,89,207                           ; mulps         %xmm7,%xmm1
+  DB  69,15,40,200                        ; movaps        %xmm8,%xmm9
+  DB  68,15,89,205                        ; mulps         %xmm5,%xmm9
+  DB  65,15,88,201                        ; addps         %xmm9,%xmm1
+  DB  15,89,215                           ; mulps         %xmm7,%xmm2
+  DB  69,15,40,200                        ; movaps        %xmm8,%xmm9
+  DB  68,15,89,206                        ; mulps         %xmm6,%xmm9
+  DB  65,15,88,209                        ; addps         %xmm9,%xmm2
+  DB  15,89,223                           ; mulps         %xmm7,%xmm3
+  DB  68,15,89,199                        ; mulps         %xmm7,%xmm8
+  DB  65,15,88,216                        ; addps         %xmm8,%xmm3
   DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_dstatop_sse41
+_sk_dstatop_sse41 LABEL PROC
+  DB  68,15,40,195                        ; movaps        %xmm3,%xmm8
+  DB  68,15,89,196                        ; mulps         %xmm4,%xmm8
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  102,68,15,110,200                   ; movd          %eax,%xmm9
+  DB  69,15,198,201,0                     ; shufps        $0x0,%xmm9,%xmm9
+  DB  68,15,92,207                        ; subps         %xmm7,%xmm9
+  DB  65,15,89,193                        ; mulps         %xmm9,%xmm0
+  DB  65,15,88,192                        ; addps         %xmm8,%xmm0
+  DB  68,15,40,195                        ; movaps        %xmm3,%xmm8
+  DB  68,15,89,197                        ; mulps         %xmm5,%xmm8
+  DB  65,15,89,201                        ; mulps         %xmm9,%xmm1
+  DB  65,15,88,200                        ; addps         %xmm8,%xmm1
+  DB  68,15,40,195                        ; movaps        %xmm3,%xmm8
+  DB  68,15,89,198                        ; mulps         %xmm6,%xmm8
+  DB  65,15,89,209                        ; mulps         %xmm9,%xmm2
+  DB  65,15,88,208                        ; addps         %xmm8,%xmm2
+  DB  68,15,89,203                        ; mulps         %xmm3,%xmm9
+  DB  15,89,223                           ; mulps         %xmm7,%xmm3
+  DB  65,15,88,217                        ; addps         %xmm9,%xmm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_srcin_sse41
+_sk_srcin_sse41 LABEL PROC
+  DB  15,89,199                           ; mulps         %xmm7,%xmm0
+  DB  15,89,207                           ; mulps         %xmm7,%xmm1
+  DB  15,89,215                           ; mulps         %xmm7,%xmm2
+  DB  15,89,223                           ; mulps         %xmm7,%xmm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_dstin_sse41
+_sk_dstin_sse41 LABEL PROC
+  DB  15,40,195                           ; movaps        %xmm3,%xmm0
+  DB  15,89,196                           ; mulps         %xmm4,%xmm0
+  DB  15,40,203                           ; movaps        %xmm3,%xmm1
+  DB  15,89,205                           ; mulps         %xmm5,%xmm1
+  DB  15,40,211                           ; movaps        %xmm3,%xmm2
+  DB  15,89,214                           ; mulps         %xmm6,%xmm2
+  DB  15,89,223                           ; mulps         %xmm7,%xmm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_srcout_sse41
+_sk_srcout_sse41 LABEL PROC
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  102,68,15,110,192                   ; movd          %eax,%xmm8
+  DB  69,15,198,192,0                     ; shufps        $0x0,%xmm8,%xmm8
+  DB  68,15,92,199                        ; subps         %xmm7,%xmm8
+  DB  65,15,89,192                        ; mulps         %xmm8,%xmm0
+  DB  65,15,89,200                        ; mulps         %xmm8,%xmm1
+  DB  65,15,89,208                        ; mulps         %xmm8,%xmm2
+  DB  65,15,89,216                        ; mulps         %xmm8,%xmm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_dstout_sse41
+_sk_dstout_sse41 LABEL PROC
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  102,68,15,110,192                   ; movd          %eax,%xmm8
+  DB  69,15,198,192,0                     ; shufps        $0x0,%xmm8,%xmm8
+  DB  68,15,92,195                        ; subps         %xmm3,%xmm8
+  DB  65,15,40,192                        ; movaps        %xmm8,%xmm0
+  DB  15,89,196                           ; mulps         %xmm4,%xmm0
+  DB  65,15,40,200                        ; movaps        %xmm8,%xmm1
+  DB  15,89,205                           ; mulps         %xmm5,%xmm1
+  DB  65,15,40,208                        ; movaps        %xmm8,%xmm2
+  DB  15,89,214                           ; mulps         %xmm6,%xmm2
+  DB  68,15,89,199                        ; mulps         %xmm7,%xmm8
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  65,15,40,216                        ; movaps        %xmm8,%xmm3
   DB  255,224                             ; jmpq          *%rax
 
 PUBLIC _sk_srcover_sse41
@@ -3251,6 +4950,735 @@ _sk_dstover_sse41 LABEL PROC
   DB  65,15,89,216                        ; mulps         %xmm8,%xmm3
   DB  15,88,223                           ; addps         %xmm7,%xmm3
   DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_modulate_sse41
+_sk_modulate_sse41 LABEL PROC
+  DB  15,89,196                           ; mulps         %xmm4,%xmm0
+  DB  15,89,205                           ; mulps         %xmm5,%xmm1
+  DB  15,89,214                           ; mulps         %xmm6,%xmm2
+  DB  15,89,223                           ; mulps         %xmm7,%xmm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_multiply_sse41
+_sk_multiply_sse41 LABEL PROC
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  102,68,15,110,192                   ; movd          %eax,%xmm8
+  DB  69,15,198,192,0                     ; shufps        $0x0,%xmm8,%xmm8
+  DB  69,15,40,200                        ; movaps        %xmm8,%xmm9
+  DB  68,15,92,207                        ; subps         %xmm7,%xmm9
+  DB  69,15,40,209                        ; movaps        %xmm9,%xmm10
+  DB  68,15,89,208                        ; mulps         %xmm0,%xmm10
+  DB  68,15,92,195                        ; subps         %xmm3,%xmm8
+  DB  69,15,40,216                        ; movaps        %xmm8,%xmm11
+  DB  68,15,89,220                        ; mulps         %xmm4,%xmm11
+  DB  69,15,88,218                        ; addps         %xmm10,%xmm11
+  DB  15,89,196                           ; mulps         %xmm4,%xmm0
+  DB  65,15,88,195                        ; addps         %xmm11,%xmm0
+  DB  69,15,40,209                        ; movaps        %xmm9,%xmm10
+  DB  68,15,89,209                        ; mulps         %xmm1,%xmm10
+  DB  69,15,40,216                        ; movaps        %xmm8,%xmm11
+  DB  68,15,89,221                        ; mulps         %xmm5,%xmm11
+  DB  69,15,88,218                        ; addps         %xmm10,%xmm11
+  DB  15,89,205                           ; mulps         %xmm5,%xmm1
+  DB  65,15,88,203                        ; addps         %xmm11,%xmm1
+  DB  69,15,40,209                        ; movaps        %xmm9,%xmm10
+  DB  68,15,89,210                        ; mulps         %xmm2,%xmm10
+  DB  69,15,40,216                        ; movaps        %xmm8,%xmm11
+  DB  68,15,89,222                        ; mulps         %xmm6,%xmm11
+  DB  69,15,88,218                        ; addps         %xmm10,%xmm11
+  DB  15,89,214                           ; mulps         %xmm6,%xmm2
+  DB  65,15,88,211                        ; addps         %xmm11,%xmm2
+  DB  68,15,89,203                        ; mulps         %xmm3,%xmm9
+  DB  68,15,89,199                        ; mulps         %xmm7,%xmm8
+  DB  69,15,88,193                        ; addps         %xmm9,%xmm8
+  DB  15,89,223                           ; mulps         %xmm7,%xmm3
+  DB  65,15,88,216                        ; addps         %xmm8,%xmm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_plus__sse41
+_sk_plus__sse41 LABEL PROC
+  DB  15,88,196                           ; addps         %xmm4,%xmm0
+  DB  15,88,205                           ; addps         %xmm5,%xmm1
+  DB  15,88,214                           ; addps         %xmm6,%xmm2
+  DB  15,88,223                           ; addps         %xmm7,%xmm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_screen_sse41
+_sk_screen_sse41 LABEL PROC
+  DB  68,15,40,192                        ; movaps        %xmm0,%xmm8
+  DB  68,15,88,196                        ; addps         %xmm4,%xmm8
+  DB  15,89,196                           ; mulps         %xmm4,%xmm0
+  DB  68,15,92,192                        ; subps         %xmm0,%xmm8
+  DB  68,15,40,201                        ; movaps        %xmm1,%xmm9
+  DB  68,15,88,205                        ; addps         %xmm5,%xmm9
+  DB  15,89,205                           ; mulps         %xmm5,%xmm1
+  DB  68,15,92,201                        ; subps         %xmm1,%xmm9
+  DB  68,15,40,210                        ; movaps        %xmm2,%xmm10
+  DB  68,15,88,214                        ; addps         %xmm6,%xmm10
+  DB  15,89,214                           ; mulps         %xmm6,%xmm2
+  DB  68,15,92,210                        ; subps         %xmm2,%xmm10
+  DB  68,15,40,219                        ; movaps        %xmm3,%xmm11
+  DB  68,15,88,223                        ; addps         %xmm7,%xmm11
+  DB  15,89,223                           ; mulps         %xmm7,%xmm3
+  DB  68,15,92,219                        ; subps         %xmm3,%xmm11
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  65,15,40,192                        ; movaps        %xmm8,%xmm0
+  DB  65,15,40,201                        ; movaps        %xmm9,%xmm1
+  DB  65,15,40,210                        ; movaps        %xmm10,%xmm2
+  DB  65,15,40,219                        ; movaps        %xmm11,%xmm3
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_xor__sse41
+_sk_xor__sse41 LABEL PROC
+  DB  68,15,40,195                        ; movaps        %xmm3,%xmm8
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  102,15,110,216                      ; movd          %eax,%xmm3
+  DB  15,198,219,0                        ; shufps        $0x0,%xmm3,%xmm3
+  DB  68,15,40,203                        ; movaps        %xmm3,%xmm9
+  DB  68,15,92,207                        ; subps         %xmm7,%xmm9
+  DB  65,15,89,193                        ; mulps         %xmm9,%xmm0
+  DB  65,15,92,216                        ; subps         %xmm8,%xmm3
+  DB  68,15,40,211                        ; movaps        %xmm3,%xmm10
+  DB  68,15,89,212                        ; mulps         %xmm4,%xmm10
+  DB  65,15,88,194                        ; addps         %xmm10,%xmm0
+  DB  65,15,89,201                        ; mulps         %xmm9,%xmm1
+  DB  68,15,40,211                        ; movaps        %xmm3,%xmm10
+  DB  68,15,89,213                        ; mulps         %xmm5,%xmm10
+  DB  65,15,88,202                        ; addps         %xmm10,%xmm1
+  DB  65,15,89,209                        ; mulps         %xmm9,%xmm2
+  DB  68,15,40,211                        ; movaps        %xmm3,%xmm10
+  DB  68,15,89,214                        ; mulps         %xmm6,%xmm10
+  DB  65,15,88,210                        ; addps         %xmm10,%xmm2
+  DB  69,15,89,200                        ; mulps         %xmm8,%xmm9
+  DB  15,89,223                           ; mulps         %xmm7,%xmm3
+  DB  65,15,88,217                        ; addps         %xmm9,%xmm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_darken_sse41
+_sk_darken_sse41 LABEL PROC
+  DB  68,15,40,193                        ; movaps        %xmm1,%xmm8
+  DB  68,15,40,200                        ; movaps        %xmm0,%xmm9
+  DB  15,88,196                           ; addps         %xmm4,%xmm0
+  DB  68,15,89,207                        ; mulps         %xmm7,%xmm9
+  DB  15,40,203                           ; movaps        %xmm3,%xmm1
+  DB  15,89,204                           ; mulps         %xmm4,%xmm1
+  DB  68,15,95,201                        ; maxps         %xmm1,%xmm9
+  DB  65,15,92,193                        ; subps         %xmm9,%xmm0
+  DB  65,15,40,200                        ; movaps        %xmm8,%xmm1
+  DB  15,88,205                           ; addps         %xmm5,%xmm1
+  DB  68,15,89,199                        ; mulps         %xmm7,%xmm8
+  DB  68,15,40,203                        ; movaps        %xmm3,%xmm9
+  DB  68,15,89,205                        ; mulps         %xmm5,%xmm9
+  DB  69,15,95,193                        ; maxps         %xmm9,%xmm8
+  DB  65,15,92,200                        ; subps         %xmm8,%xmm1
+  DB  68,15,40,194                        ; movaps        %xmm2,%xmm8
+  DB  68,15,88,198                        ; addps         %xmm6,%xmm8
+  DB  15,89,215                           ; mulps         %xmm7,%xmm2
+  DB  68,15,40,203                        ; movaps        %xmm3,%xmm9
+  DB  68,15,89,206                        ; mulps         %xmm6,%xmm9
+  DB  65,15,95,209                        ; maxps         %xmm9,%xmm2
+  DB  68,15,92,194                        ; subps         %xmm2,%xmm8
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  102,15,110,208                      ; movd          %eax,%xmm2
+  DB  15,198,210,0                        ; shufps        $0x0,%xmm2,%xmm2
+  DB  15,92,211                           ; subps         %xmm3,%xmm2
+  DB  15,89,215                           ; mulps         %xmm7,%xmm2
+  DB  15,88,218                           ; addps         %xmm2,%xmm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  65,15,40,208                        ; movaps        %xmm8,%xmm2
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_lighten_sse41
+_sk_lighten_sse41 LABEL PROC
+  DB  68,15,40,193                        ; movaps        %xmm1,%xmm8
+  DB  68,15,40,200                        ; movaps        %xmm0,%xmm9
+  DB  15,88,196                           ; addps         %xmm4,%xmm0
+  DB  68,15,89,207                        ; mulps         %xmm7,%xmm9
+  DB  15,40,203                           ; movaps        %xmm3,%xmm1
+  DB  15,89,204                           ; mulps         %xmm4,%xmm1
+  DB  68,15,93,201                        ; minps         %xmm1,%xmm9
+  DB  65,15,92,193                        ; subps         %xmm9,%xmm0
+  DB  65,15,40,200                        ; movaps        %xmm8,%xmm1
+  DB  15,88,205                           ; addps         %xmm5,%xmm1
+  DB  68,15,89,199                        ; mulps         %xmm7,%xmm8
+  DB  68,15,40,203                        ; movaps        %xmm3,%xmm9
+  DB  68,15,89,205                        ; mulps         %xmm5,%xmm9
+  DB  69,15,93,193                        ; minps         %xmm9,%xmm8
+  DB  65,15,92,200                        ; subps         %xmm8,%xmm1
+  DB  68,15,40,194                        ; movaps        %xmm2,%xmm8
+  DB  68,15,88,198                        ; addps         %xmm6,%xmm8
+  DB  15,89,215                           ; mulps         %xmm7,%xmm2
+  DB  68,15,40,203                        ; movaps        %xmm3,%xmm9
+  DB  68,15,89,206                        ; mulps         %xmm6,%xmm9
+  DB  65,15,93,209                        ; minps         %xmm9,%xmm2
+  DB  68,15,92,194                        ; subps         %xmm2,%xmm8
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  102,15,110,208                      ; movd          %eax,%xmm2
+  DB  15,198,210,0                        ; shufps        $0x0,%xmm2,%xmm2
+  DB  15,92,211                           ; subps         %xmm3,%xmm2
+  DB  15,89,215                           ; mulps         %xmm7,%xmm2
+  DB  15,88,218                           ; addps         %xmm2,%xmm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  65,15,40,208                        ; movaps        %xmm8,%xmm2
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_difference_sse41
+_sk_difference_sse41 LABEL PROC
+  DB  68,15,40,193                        ; movaps        %xmm1,%xmm8
+  DB  68,15,40,200                        ; movaps        %xmm0,%xmm9
+  DB  15,88,196                           ; addps         %xmm4,%xmm0
+  DB  68,15,89,207                        ; mulps         %xmm7,%xmm9
+  DB  15,40,203                           ; movaps        %xmm3,%xmm1
+  DB  15,89,204                           ; mulps         %xmm4,%xmm1
+  DB  68,15,93,201                        ; minps         %xmm1,%xmm9
+  DB  69,15,88,201                        ; addps         %xmm9,%xmm9
+  DB  65,15,92,193                        ; subps         %xmm9,%xmm0
+  DB  65,15,40,200                        ; movaps        %xmm8,%xmm1
+  DB  15,88,205                           ; addps         %xmm5,%xmm1
+  DB  68,15,89,199                        ; mulps         %xmm7,%xmm8
+  DB  68,15,40,203                        ; movaps        %xmm3,%xmm9
+  DB  68,15,89,205                        ; mulps         %xmm5,%xmm9
+  DB  69,15,93,193                        ; minps         %xmm9,%xmm8
+  DB  69,15,88,192                        ; addps         %xmm8,%xmm8
+  DB  65,15,92,200                        ; subps         %xmm8,%xmm1
+  DB  68,15,40,194                        ; movaps        %xmm2,%xmm8
+  DB  68,15,88,198                        ; addps         %xmm6,%xmm8
+  DB  15,89,215                           ; mulps         %xmm7,%xmm2
+  DB  68,15,40,203                        ; movaps        %xmm3,%xmm9
+  DB  68,15,89,206                        ; mulps         %xmm6,%xmm9
+  DB  65,15,93,209                        ; minps         %xmm9,%xmm2
+  DB  15,88,210                           ; addps         %xmm2,%xmm2
+  DB  68,15,92,194                        ; subps         %xmm2,%xmm8
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  102,15,110,208                      ; movd          %eax,%xmm2
+  DB  15,198,210,0                        ; shufps        $0x0,%xmm2,%xmm2
+  DB  15,92,211                           ; subps         %xmm3,%xmm2
+  DB  15,89,215                           ; mulps         %xmm7,%xmm2
+  DB  15,88,218                           ; addps         %xmm2,%xmm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  65,15,40,208                        ; movaps        %xmm8,%xmm2
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_exclusion_sse41
+_sk_exclusion_sse41 LABEL PROC
+  DB  68,15,40,193                        ; movaps        %xmm1,%xmm8
+  DB  15,40,200                           ; movaps        %xmm0,%xmm1
+  DB  15,88,196                           ; addps         %xmm4,%xmm0
+  DB  15,89,204                           ; mulps         %xmm4,%xmm1
+  DB  15,88,201                           ; addps         %xmm1,%xmm1
+  DB  15,92,193                           ; subps         %xmm1,%xmm0
+  DB  65,15,40,200                        ; movaps        %xmm8,%xmm1
+  DB  15,88,205                           ; addps         %xmm5,%xmm1
+  DB  68,15,89,197                        ; mulps         %xmm5,%xmm8
+  DB  69,15,88,192                        ; addps         %xmm8,%xmm8
+  DB  65,15,92,200                        ; subps         %xmm8,%xmm1
+  DB  68,15,40,194                        ; movaps        %xmm2,%xmm8
+  DB  68,15,88,198                        ; addps         %xmm6,%xmm8
+  DB  15,89,214                           ; mulps         %xmm6,%xmm2
+  DB  15,88,210                           ; addps         %xmm2,%xmm2
+  DB  68,15,92,194                        ; subps         %xmm2,%xmm8
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  102,15,110,208                      ; movd          %eax,%xmm2
+  DB  15,198,210,0                        ; shufps        $0x0,%xmm2,%xmm2
+  DB  15,92,211                           ; subps         %xmm3,%xmm2
+  DB  15,89,215                           ; mulps         %xmm7,%xmm2
+  DB  15,88,218                           ; addps         %xmm2,%xmm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  65,15,40,208                        ; movaps        %xmm8,%xmm2
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_colorburn_sse41
+_sk_colorburn_sse41 LABEL PROC
+  DB  68,15,40,200                        ; movaps        %xmm0,%xmm9
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  102,68,15,110,208                   ; movd          %eax,%xmm10
+  DB  69,15,198,210,0                     ; shufps        $0x0,%xmm10,%xmm10
+  DB  69,15,40,218                        ; movaps        %xmm10,%xmm11
+  DB  68,15,92,223                        ; subps         %xmm7,%xmm11
+  DB  69,15,40,227                        ; movaps        %xmm11,%xmm12
+  DB  69,15,89,225                        ; mulps         %xmm9,%xmm12
+  DB  69,15,87,192                        ; xorps         %xmm8,%xmm8
+  DB  15,40,199                           ; movaps        %xmm7,%xmm0
+  DB  15,92,196                           ; subps         %xmm4,%xmm0
+  DB  15,89,195                           ; mulps         %xmm3,%xmm0
+  DB  65,15,94,193                        ; divps         %xmm9,%xmm0
+  DB  68,15,40,239                        ; movaps        %xmm7,%xmm13
+  DB  68,15,93,232                        ; minps         %xmm0,%xmm13
+  DB  68,15,40,247                        ; movaps        %xmm7,%xmm14
+  DB  69,15,92,245                        ; subps         %xmm13,%xmm14
+  DB  65,15,40,193                        ; movaps        %xmm9,%xmm0
+  DB  65,15,194,192,0                     ; cmpeqps       %xmm8,%xmm0
+  DB  68,15,92,211                        ; subps         %xmm3,%xmm10
+  DB  68,15,89,243                        ; mulps         %xmm3,%xmm14
+  DB  69,15,88,244                        ; addps         %xmm12,%xmm14
+  DB  102,69,15,56,20,241                 ; blendvps      %xmm0,%xmm9,%xmm14
+  DB  69,15,40,202                        ; movaps        %xmm10,%xmm9
+  DB  68,15,89,204                        ; mulps         %xmm4,%xmm9
+  DB  68,15,88,228                        ; addps         %xmm4,%xmm12
+  DB  15,40,196                           ; movaps        %xmm4,%xmm0
+  DB  15,194,199,0                        ; cmpeqps       %xmm7,%xmm0
+  DB  69,15,88,206                        ; addps         %xmm14,%xmm9
+  DB  102,69,15,56,20,204                 ; blendvps      %xmm0,%xmm12,%xmm9
+  DB  69,15,40,227                        ; movaps        %xmm11,%xmm12
+  DB  68,15,89,225                        ; mulps         %xmm1,%xmm12
+  DB  15,40,199                           ; movaps        %xmm7,%xmm0
+  DB  15,92,197                           ; subps         %xmm5,%xmm0
+  DB  15,89,195                           ; mulps         %xmm3,%xmm0
+  DB  15,94,193                           ; divps         %xmm1,%xmm0
+  DB  68,15,40,239                        ; movaps        %xmm7,%xmm13
+  DB  68,15,93,232                        ; minps         %xmm0,%xmm13
+  DB  68,15,40,247                        ; movaps        %xmm7,%xmm14
+  DB  69,15,92,245                        ; subps         %xmm13,%xmm14
+  DB  15,40,193                           ; movaps        %xmm1,%xmm0
+  DB  65,15,194,192,0                     ; cmpeqps       %xmm8,%xmm0
+  DB  68,15,89,243                        ; mulps         %xmm3,%xmm14
+  DB  69,15,88,244                        ; addps         %xmm12,%xmm14
+  DB  102,68,15,56,20,241                 ; blendvps      %xmm0,%xmm1,%xmm14
+  DB  65,15,40,202                        ; movaps        %xmm10,%xmm1
+  DB  15,89,205                           ; mulps         %xmm5,%xmm1
+  DB  68,15,88,229                        ; addps         %xmm5,%xmm12
+  DB  65,15,88,206                        ; addps         %xmm14,%xmm1
+  DB  15,40,197                           ; movaps        %xmm5,%xmm0
+  DB  15,194,199,0                        ; cmpeqps       %xmm7,%xmm0
+  DB  102,65,15,56,20,204                 ; blendvps      %xmm0,%xmm12,%xmm1
+  DB  15,40,199                           ; movaps        %xmm7,%xmm0
+  DB  15,92,198                           ; subps         %xmm6,%xmm0
+  DB  15,89,195                           ; mulps         %xmm3,%xmm0
+  DB  15,94,194                           ; divps         %xmm2,%xmm0
+  DB  68,15,40,231                        ; movaps        %xmm7,%xmm12
+  DB  68,15,93,224                        ; minps         %xmm0,%xmm12
+  DB  68,15,40,239                        ; movaps        %xmm7,%xmm13
+  DB  69,15,92,236                        ; subps         %xmm12,%xmm13
+  DB  68,15,89,218                        ; mulps         %xmm2,%xmm11
+  DB  68,15,194,194,0                     ; cmpeqps       %xmm2,%xmm8
+  DB  68,15,89,235                        ; mulps         %xmm3,%xmm13
+  DB  69,15,88,235                        ; addps         %xmm11,%xmm13
+  DB  65,15,40,192                        ; movaps        %xmm8,%xmm0
+  DB  102,68,15,56,20,234                 ; blendvps      %xmm0,%xmm2,%xmm13
+  DB  68,15,88,222                        ; addps         %xmm6,%xmm11
+  DB  65,15,40,210                        ; movaps        %xmm10,%xmm2
+  DB  15,89,214                           ; mulps         %xmm6,%xmm2
+  DB  65,15,88,213                        ; addps         %xmm13,%xmm2
+  DB  15,40,198                           ; movaps        %xmm6,%xmm0
+  DB  15,194,199,0                        ; cmpeqps       %xmm7,%xmm0
+  DB  102,65,15,56,20,211                 ; blendvps      %xmm0,%xmm11,%xmm2
+  DB  68,15,89,215                        ; mulps         %xmm7,%xmm10
+  DB  65,15,88,218                        ; addps         %xmm10,%xmm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  65,15,40,193                        ; movaps        %xmm9,%xmm0
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_colordodge_sse41
+_sk_colordodge_sse41 LABEL PROC
+  DB  68,15,40,192                        ; movaps        %xmm0,%xmm8
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  102,68,15,110,208                   ; movd          %eax,%xmm10
+  DB  69,15,198,210,0                     ; shufps        $0x0,%xmm10,%xmm10
+  DB  69,15,40,218                        ; movaps        %xmm10,%xmm11
+  DB  68,15,92,223                        ; subps         %xmm7,%xmm11
+  DB  69,15,40,227                        ; movaps        %xmm11,%xmm12
+  DB  69,15,89,224                        ; mulps         %xmm8,%xmm12
+  DB  68,15,40,203                        ; movaps        %xmm3,%xmm9
+  DB  68,15,89,204                        ; mulps         %xmm4,%xmm9
+  DB  15,40,195                           ; movaps        %xmm3,%xmm0
+  DB  65,15,92,192                        ; subps         %xmm8,%xmm0
+  DB  68,15,94,200                        ; divps         %xmm0,%xmm9
+  DB  68,15,40,239                        ; movaps        %xmm7,%xmm13
+  DB  68,15,40,247                        ; movaps        %xmm7,%xmm14
+  DB  69,15,93,241                        ; minps         %xmm9,%xmm14
+  DB  65,15,40,192                        ; movaps        %xmm8,%xmm0
+  DB  15,194,195,0                        ; cmpeqps       %xmm3,%xmm0
+  DB  68,15,89,243                        ; mulps         %xmm3,%xmm14
+  DB  69,15,88,244                        ; addps         %xmm12,%xmm14
+  DB  102,69,15,56,20,240                 ; blendvps      %xmm0,%xmm8,%xmm14
+  DB  69,15,87,201                        ; xorps         %xmm9,%xmm9
+  DB  68,15,92,211                        ; subps         %xmm3,%xmm10
+  DB  69,15,40,194                        ; movaps        %xmm10,%xmm8
+  DB  68,15,89,196                        ; mulps         %xmm4,%xmm8
+  DB  68,15,88,228                        ; addps         %xmm4,%xmm12
+  DB  69,15,88,198                        ; addps         %xmm14,%xmm8
+  DB  15,40,196                           ; movaps        %xmm4,%xmm0
+  DB  65,15,194,193,0                     ; cmpeqps       %xmm9,%xmm0
+  DB  102,69,15,56,20,196                 ; blendvps      %xmm0,%xmm12,%xmm8
+  DB  68,15,40,227                        ; movaps        %xmm3,%xmm12
+  DB  68,15,89,229                        ; mulps         %xmm5,%xmm12
+  DB  15,40,195                           ; movaps        %xmm3,%xmm0
+  DB  15,92,193                           ; subps         %xmm1,%xmm0
+  DB  68,15,94,224                        ; divps         %xmm0,%xmm12
+  DB  69,15,40,243                        ; movaps        %xmm11,%xmm14
+  DB  68,15,89,241                        ; mulps         %xmm1,%xmm14
+  DB  69,15,93,236                        ; minps         %xmm12,%xmm13
+  DB  15,40,193                           ; movaps        %xmm1,%xmm0
+  DB  15,194,195,0                        ; cmpeqps       %xmm3,%xmm0
+  DB  68,15,89,235                        ; mulps         %xmm3,%xmm13
+  DB  69,15,88,238                        ; addps         %xmm14,%xmm13
+  DB  102,68,15,56,20,233                 ; blendvps      %xmm0,%xmm1,%xmm13
+  DB  65,15,40,202                        ; movaps        %xmm10,%xmm1
+  DB  15,89,205                           ; mulps         %xmm5,%xmm1
+  DB  68,15,88,245                        ; addps         %xmm5,%xmm14
+  DB  65,15,88,205                        ; addps         %xmm13,%xmm1
+  DB  15,40,197                           ; movaps        %xmm5,%xmm0
+  DB  65,15,194,193,0                     ; cmpeqps       %xmm9,%xmm0
+  DB  102,65,15,56,20,206                 ; blendvps      %xmm0,%xmm14,%xmm1
+  DB  68,15,40,227                        ; movaps        %xmm3,%xmm12
+  DB  68,15,89,230                        ; mulps         %xmm6,%xmm12
+  DB  15,40,195                           ; movaps        %xmm3,%xmm0
+  DB  15,92,194                           ; subps         %xmm2,%xmm0
+  DB  68,15,94,224                        ; divps         %xmm0,%xmm12
+  DB  68,15,40,239                        ; movaps        %xmm7,%xmm13
+  DB  68,15,89,218                        ; mulps         %xmm2,%xmm11
+  DB  69,15,93,236                        ; minps         %xmm12,%xmm13
+  DB  15,40,194                           ; movaps        %xmm2,%xmm0
+  DB  15,194,195,0                        ; cmpeqps       %xmm3,%xmm0
+  DB  68,15,89,235                        ; mulps         %xmm3,%xmm13
+  DB  69,15,88,235                        ; addps         %xmm11,%xmm13
+  DB  102,68,15,56,20,234                 ; blendvps      %xmm0,%xmm2,%xmm13
+  DB  65,15,40,210                        ; movaps        %xmm10,%xmm2
+  DB  15,89,214                           ; mulps         %xmm6,%xmm2
+  DB  65,15,88,213                        ; addps         %xmm13,%xmm2
+  DB  68,15,194,206,0                     ; cmpeqps       %xmm6,%xmm9
+  DB  68,15,88,222                        ; addps         %xmm6,%xmm11
+  DB  65,15,40,193                        ; movaps        %xmm9,%xmm0
+  DB  102,65,15,56,20,211                 ; blendvps      %xmm0,%xmm11,%xmm2
+  DB  68,15,89,215                        ; mulps         %xmm7,%xmm10
+  DB  65,15,88,218                        ; addps         %xmm10,%xmm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  65,15,40,192                        ; movaps        %xmm8,%xmm0
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_hardlight_sse41
+_sk_hardlight_sse41 LABEL PROC
+  DB  72,131,236,24                       ; sub           $0x18,%rsp
+  DB  15,41,52,36                         ; movaps        %xmm6,(%rsp)
+  DB  68,15,40,229                        ; movaps        %xmm5,%xmm12
+  DB  15,40,244                           ; movaps        %xmm4,%xmm6
+  DB  15,40,227                           ; movaps        %xmm3,%xmm4
+  DB  15,40,234                           ; movaps        %xmm2,%xmm5
+  DB  68,15,40,200                        ; movaps        %xmm0,%xmm9
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  102,68,15,110,208                   ; movd          %eax,%xmm10
+  DB  69,15,198,210,0                     ; shufps        $0x0,%xmm10,%xmm10
+  DB  65,15,40,210                        ; movaps        %xmm10,%xmm2
+  DB  15,92,215                           ; subps         %xmm7,%xmm2
+  DB  15,40,194                           ; movaps        %xmm2,%xmm0
+  DB  65,15,89,193                        ; mulps         %xmm9,%xmm0
+  DB  68,15,92,212                        ; subps         %xmm4,%xmm10
+  DB  69,15,40,194                        ; movaps        %xmm10,%xmm8
+  DB  68,15,89,198                        ; mulps         %xmm6,%xmm8
+  DB  68,15,88,192                        ; addps         %xmm0,%xmm8
+  DB  68,15,40,252                        ; movaps        %xmm4,%xmm15
+  DB  69,15,92,249                        ; subps         %xmm9,%xmm15
+  DB  15,89,223                           ; mulps         %xmm7,%xmm3
+  DB  68,15,40,239                        ; movaps        %xmm7,%xmm13
+  DB  68,15,40,247                        ; movaps        %xmm7,%xmm14
+  DB  15,40,199                           ; movaps        %xmm7,%xmm0
+  DB  15,92,198                           ; subps         %xmm6,%xmm0
+  DB  65,15,89,199                        ; mulps         %xmm15,%xmm0
+  DB  15,88,192                           ; addps         %xmm0,%xmm0
+  DB  68,15,40,251                        ; movaps        %xmm3,%xmm15
+  DB  68,15,92,248                        ; subps         %xmm0,%xmm15
+  DB  65,15,40,193                        ; movaps        %xmm9,%xmm0
+  DB  15,88,192                           ; addps         %xmm0,%xmm0
+  DB  15,194,196,2                        ; cmpleps       %xmm4,%xmm0
+  DB  68,15,89,206                        ; mulps         %xmm6,%xmm9
+  DB  69,15,88,201                        ; addps         %xmm9,%xmm9
+  DB  102,69,15,56,20,249                 ; blendvps      %xmm0,%xmm9,%xmm15
+  DB  68,15,40,218                        ; movaps        %xmm2,%xmm11
+  DB  68,15,89,217                        ; mulps         %xmm1,%xmm11
+  DB  15,40,196                           ; movaps        %xmm4,%xmm0
+  DB  15,92,193                           ; subps         %xmm1,%xmm0
+  DB  69,15,40,204                        ; movaps        %xmm12,%xmm9
+  DB  69,15,92,233                        ; subps         %xmm9,%xmm13
+  DB  68,15,89,232                        ; mulps         %xmm0,%xmm13
+  DB  69,15,88,237                        ; addps         %xmm13,%xmm13
+  DB  68,15,40,227                        ; movaps        %xmm3,%xmm12
+  DB  69,15,92,229                        ; subps         %xmm13,%xmm12
+  DB  15,40,193                           ; movaps        %xmm1,%xmm0
+  DB  15,88,192                           ; addps         %xmm0,%xmm0
+  DB  15,194,196,2                        ; cmpleps       %xmm4,%xmm0
+  DB  65,15,89,201                        ; mulps         %xmm9,%xmm1
+  DB  69,15,40,233                        ; movaps        %xmm9,%xmm13
+  DB  15,88,201                           ; addps         %xmm1,%xmm1
+  DB  102,68,15,56,20,225                 ; blendvps      %xmm0,%xmm1,%xmm12
+  DB  65,15,40,202                        ; movaps        %xmm10,%xmm1
+  DB  69,15,40,202                        ; movaps        %xmm10,%xmm9
+  DB  68,15,89,215                        ; mulps         %xmm7,%xmm10
+  DB  69,15,88,199                        ; addps         %xmm15,%xmm8
+  DB  65,15,89,205                        ; mulps         %xmm13,%xmm1
+  DB  65,15,88,203                        ; addps         %xmm11,%xmm1
+  DB  65,15,88,204                        ; addps         %xmm12,%xmm1
+  DB  15,89,213                           ; mulps         %xmm5,%xmm2
+  DB  68,15,40,28,36                      ; movaps        (%rsp),%xmm11
+  DB  69,15,89,203                        ; mulps         %xmm11,%xmm9
+  DB  68,15,88,202                        ; addps         %xmm2,%xmm9
+  DB  15,40,197                           ; movaps        %xmm5,%xmm0
+  DB  15,88,192                           ; addps         %xmm0,%xmm0
+  DB  15,194,196,2                        ; cmpleps       %xmm4,%xmm0
+  DB  15,40,212                           ; movaps        %xmm4,%xmm2
+  DB  15,92,213                           ; subps         %xmm5,%xmm2
+  DB  65,15,89,235                        ; mulps         %xmm11,%xmm5
+  DB  15,88,237                           ; addps         %xmm5,%xmm5
+  DB  69,15,92,243                        ; subps         %xmm11,%xmm14
+  DB  68,15,89,242                        ; mulps         %xmm2,%xmm14
+  DB  69,15,88,246                        ; addps         %xmm14,%xmm14
+  DB  65,15,92,222                        ; subps         %xmm14,%xmm3
+  DB  102,15,56,20,221                    ; blendvps      %xmm0,%xmm5,%xmm3
+  DB  68,15,88,203                        ; addps         %xmm3,%xmm9
+  DB  65,15,88,226                        ; addps         %xmm10,%xmm4
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  65,15,40,192                        ; movaps        %xmm8,%xmm0
+  DB  65,15,40,209                        ; movaps        %xmm9,%xmm2
+  DB  15,40,220                           ; movaps        %xmm4,%xmm3
+  DB  15,40,230                           ; movaps        %xmm6,%xmm4
+  DB  65,15,40,237                        ; movaps        %xmm13,%xmm5
+  DB  65,15,40,243                        ; movaps        %xmm11,%xmm6
+  DB  72,131,196,24                       ; add           $0x18,%rsp
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_overlay_sse41
+_sk_overlay_sse41 LABEL PROC
+  DB  68,15,40,201                        ; movaps        %xmm1,%xmm9
+  DB  68,15,40,240                        ; movaps        %xmm0,%xmm14
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  102,68,15,110,208                   ; movd          %eax,%xmm10
+  DB  69,15,198,210,0                     ; shufps        $0x0,%xmm10,%xmm10
+  DB  69,15,40,218                        ; movaps        %xmm10,%xmm11
+  DB  68,15,92,223                        ; subps         %xmm7,%xmm11
+  DB  65,15,40,195                        ; movaps        %xmm11,%xmm0
+  DB  65,15,89,198                        ; mulps         %xmm14,%xmm0
+  DB  68,15,92,211                        ; subps         %xmm3,%xmm10
+  DB  69,15,40,194                        ; movaps        %xmm10,%xmm8
+  DB  68,15,89,196                        ; mulps         %xmm4,%xmm8
+  DB  68,15,88,192                        ; addps         %xmm0,%xmm8
+  DB  68,15,40,235                        ; movaps        %xmm3,%xmm13
+  DB  69,15,92,238                        ; subps         %xmm14,%xmm13
+  DB  68,15,89,244                        ; mulps         %xmm4,%xmm14
+  DB  15,40,207                           ; movaps        %xmm7,%xmm1
+  DB  15,92,204                           ; subps         %xmm4,%xmm1
+  DB  15,40,196                           ; movaps        %xmm4,%xmm0
+  DB  15,88,192                           ; addps         %xmm0,%xmm0
+  DB  15,194,199,2                        ; cmpleps       %xmm7,%xmm0
+  DB  69,15,88,246                        ; addps         %xmm14,%xmm14
+  DB  68,15,40,227                        ; movaps        %xmm3,%xmm12
+  DB  68,15,89,231                        ; mulps         %xmm7,%xmm12
+  DB  65,15,89,205                        ; mulps         %xmm13,%xmm1
+  DB  15,88,201                           ; addps         %xmm1,%xmm1
+  DB  69,15,40,236                        ; movaps        %xmm12,%xmm13
+  DB  68,15,92,233                        ; subps         %xmm1,%xmm13
+  DB  102,69,15,56,20,238                 ; blendvps      %xmm0,%xmm14,%xmm13
+  DB  69,15,88,197                        ; addps         %xmm13,%xmm8
+  DB  65,15,40,195                        ; movaps        %xmm11,%xmm0
+  DB  65,15,89,193                        ; mulps         %xmm9,%xmm0
+  DB  65,15,40,202                        ; movaps        %xmm10,%xmm1
+  DB  15,89,205                           ; mulps         %xmm5,%xmm1
+  DB  15,88,200                           ; addps         %xmm0,%xmm1
+  DB  68,15,40,235                        ; movaps        %xmm3,%xmm13
+  DB  69,15,92,233                        ; subps         %xmm9,%xmm13
+  DB  68,15,89,205                        ; mulps         %xmm5,%xmm9
+  DB  68,15,40,247                        ; movaps        %xmm7,%xmm14
+  DB  68,15,92,245                        ; subps         %xmm5,%xmm14
+  DB  15,40,197                           ; movaps        %xmm5,%xmm0
+  DB  15,88,192                           ; addps         %xmm0,%xmm0
+  DB  15,194,199,2                        ; cmpleps       %xmm7,%xmm0
+  DB  69,15,88,201                        ; addps         %xmm9,%xmm9
+  DB  69,15,89,245                        ; mulps         %xmm13,%xmm14
+  DB  69,15,88,246                        ; addps         %xmm14,%xmm14
+  DB  69,15,40,236                        ; movaps        %xmm12,%xmm13
+  DB  69,15,92,238                        ; subps         %xmm14,%xmm13
+  DB  102,69,15,56,20,233                 ; blendvps      %xmm0,%xmm9,%xmm13
+  DB  65,15,88,205                        ; addps         %xmm13,%xmm1
+  DB  68,15,89,218                        ; mulps         %xmm2,%xmm11
+  DB  69,15,40,202                        ; movaps        %xmm10,%xmm9
+  DB  68,15,89,206                        ; mulps         %xmm6,%xmm9
+  DB  69,15,88,203                        ; addps         %xmm11,%xmm9
+  DB  68,15,40,219                        ; movaps        %xmm3,%xmm11
+  DB  68,15,92,218                        ; subps         %xmm2,%xmm11
+  DB  15,89,214                           ; mulps         %xmm6,%xmm2
+  DB  68,15,40,239                        ; movaps        %xmm7,%xmm13
+  DB  68,15,92,238                        ; subps         %xmm6,%xmm13
+  DB  15,40,198                           ; movaps        %xmm6,%xmm0
+  DB  15,88,192                           ; addps         %xmm0,%xmm0
+  DB  15,194,199,2                        ; cmpleps       %xmm7,%xmm0
+  DB  15,88,210                           ; addps         %xmm2,%xmm2
+  DB  69,15,89,235                        ; mulps         %xmm11,%xmm13
+  DB  69,15,88,237                        ; addps         %xmm13,%xmm13
+  DB  69,15,92,229                        ; subps         %xmm13,%xmm12
+  DB  102,68,15,56,20,226                 ; blendvps      %xmm0,%xmm2,%xmm12
+  DB  69,15,88,204                        ; addps         %xmm12,%xmm9
+  DB  68,15,89,215                        ; mulps         %xmm7,%xmm10
+  DB  65,15,88,218                        ; addps         %xmm10,%xmm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  65,15,40,192                        ; movaps        %xmm8,%xmm0
+  DB  65,15,40,209                        ; movaps        %xmm9,%xmm2
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_softlight_sse41
+_sk_softlight_sse41 LABEL PROC
+  DB  72,131,236,56                       ; sub           $0x38,%rsp
+  DB  15,41,116,36,16                     ; movaps        %xmm6,0x10(%rsp)
+  DB  15,40,244                           ; movaps        %xmm4,%xmm6
+  DB  15,41,84,36,32                      ; movaps        %xmm2,0x20(%rsp)
+  DB  68,15,40,225                        ; movaps        %xmm1,%xmm12
+  DB  68,15,40,192                        ; movaps        %xmm0,%xmm8
+  DB  15,87,228                           ; xorps         %xmm4,%xmm4
+  DB  15,194,231,1                        ; cmpltps       %xmm7,%xmm4
+  DB  15,40,198                           ; movaps        %xmm6,%xmm0
+  DB  15,94,199                           ; divps         %xmm7,%xmm0
+  DB  15,84,196                           ; andps         %xmm4,%xmm0
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  102,15,110,200                      ; movd          %eax,%xmm1
+  DB  15,198,201,0                        ; shufps        $0x0,%xmm1,%xmm1
+  DB  68,15,40,209                        ; movaps        %xmm1,%xmm10
+  DB  68,15,92,208                        ; subps         %xmm0,%xmm10
+  DB  68,15,40,240                        ; movaps        %xmm0,%xmm14
+  DB  68,15,40,248                        ; movaps        %xmm0,%xmm15
+  DB  15,82,208                           ; rsqrtps       %xmm0,%xmm2
+  DB  68,15,83,218                        ; rcpps         %xmm2,%xmm11
+  DB  68,15,92,216                        ; subps         %xmm0,%xmm11
+  DB  15,88,192                           ; addps         %xmm0,%xmm0
+  DB  15,88,192                           ; addps         %xmm0,%xmm0
+  DB  15,40,208                           ; movaps        %xmm0,%xmm2
+  DB  15,89,210                           ; mulps         %xmm2,%xmm2
+  DB  15,88,208                           ; addps         %xmm0,%xmm2
+  DB  69,15,40,200                        ; movaps        %xmm8,%xmm9
+  DB  69,15,88,201                        ; addps         %xmm9,%xmm9
+  DB  68,15,92,241                        ; subps         %xmm1,%xmm14
+  DB  68,15,89,242                        ; mulps         %xmm2,%xmm14
+  DB  184,0,0,224,64                      ; mov           $0x40e00000,%eax
+  DB  102,68,15,110,232                   ; movd          %eax,%xmm13
+  DB  69,15,198,237,0                     ; shufps        $0x0,%xmm13,%xmm13
+  DB  69,15,89,253                        ; mulps         %xmm13,%xmm15
+  DB  69,15,88,254                        ; addps         %xmm14,%xmm15
+  DB  15,40,198                           ; movaps        %xmm6,%xmm0
+  DB  15,88,192                           ; addps         %xmm0,%xmm0
+  DB  15,88,192                           ; addps         %xmm0,%xmm0
+  DB  15,194,199,2                        ; cmpleps       %xmm7,%xmm0
+  DB  102,69,15,56,20,223                 ; blendvps      %xmm0,%xmm15,%xmm11
+  DB  65,15,40,193                        ; movaps        %xmm9,%xmm0
+  DB  15,92,195                           ; subps         %xmm3,%xmm0
+  DB  68,15,89,208                        ; mulps         %xmm0,%xmm10
+  DB  68,15,88,211                        ; addps         %xmm3,%xmm10
+  DB  68,15,89,214                        ; mulps         %xmm6,%xmm10
+  DB  15,40,211                           ; movaps        %xmm3,%xmm2
+  DB  15,89,214                           ; mulps         %xmm6,%xmm2
+  DB  15,89,199                           ; mulps         %xmm7,%xmm0
+  DB  68,15,89,216                        ; mulps         %xmm0,%xmm11
+  DB  68,15,88,218                        ; addps         %xmm2,%xmm11
+  DB  68,15,194,203,2                     ; cmpleps       %xmm3,%xmm9
+  DB  65,15,40,193                        ; movaps        %xmm9,%xmm0
+  DB  102,69,15,56,20,218                 ; blendvps      %xmm0,%xmm10,%xmm11
+  DB  68,15,40,213                        ; movaps        %xmm5,%xmm10
+  DB  68,15,94,215                        ; divps         %xmm7,%xmm10
+  DB  68,15,84,212                        ; andps         %xmm4,%xmm10
+  DB  68,15,40,201                        ; movaps        %xmm1,%xmm9
+  DB  69,15,92,202                        ; subps         %xmm10,%xmm9
+  DB  65,15,40,210                        ; movaps        %xmm10,%xmm2
+  DB  15,88,210                           ; addps         %xmm2,%xmm2
+  DB  15,88,210                           ; addps         %xmm2,%xmm2
+  DB  15,40,194                           ; movaps        %xmm2,%xmm0
+  DB  15,89,192                           ; mulps         %xmm0,%xmm0
+  DB  15,88,194                           ; addps         %xmm2,%xmm0
+  DB  65,15,40,210                        ; movaps        %xmm10,%xmm2
+  DB  15,92,209                           ; subps         %xmm1,%xmm2
+  DB  15,89,208                           ; mulps         %xmm0,%xmm2
+  DB  65,15,82,194                        ; rsqrtps       %xmm10,%xmm0
+  DB  68,15,83,240                        ; rcpps         %xmm0,%xmm14
+  DB  69,15,92,242                        ; subps         %xmm10,%xmm14
+  DB  69,15,89,213                        ; mulps         %xmm13,%xmm10
+  DB  68,15,88,210                        ; addps         %xmm2,%xmm10
+  DB  15,40,197                           ; movaps        %xmm5,%xmm0
+  DB  15,88,192                           ; addps         %xmm0,%xmm0
+  DB  15,88,192                           ; addps         %xmm0,%xmm0
+  DB  15,194,199,2                        ; cmpleps       %xmm7,%xmm0
+  DB  102,69,15,56,20,242                 ; blendvps      %xmm0,%xmm10,%xmm14
+  DB  65,15,40,196                        ; movaps        %xmm12,%xmm0
+  DB  15,88,192                           ; addps         %xmm0,%xmm0
+  DB  15,40,208                           ; movaps        %xmm0,%xmm2
+  DB  15,92,211                           ; subps         %xmm3,%xmm2
+  DB  68,15,89,202                        ; mulps         %xmm2,%xmm9
+  DB  68,15,88,203                        ; addps         %xmm3,%xmm9
+  DB  15,41,44,36                         ; movaps        %xmm5,(%rsp)
+  DB  68,15,89,205                        ; mulps         %xmm5,%xmm9
+  DB  15,89,215                           ; mulps         %xmm7,%xmm2
+  DB  68,15,89,242                        ; mulps         %xmm2,%xmm14
+  DB  15,40,211                           ; movaps        %xmm3,%xmm2
+  DB  15,89,213                           ; mulps         %xmm5,%xmm2
+  DB  68,15,88,242                        ; addps         %xmm2,%xmm14
+  DB  68,15,40,249                        ; movaps        %xmm1,%xmm15
+  DB  15,194,195,2                        ; cmpleps       %xmm3,%xmm0
+  DB  102,69,15,56,20,241                 ; blendvps      %xmm0,%xmm9,%xmm14
+  DB  68,15,40,209                        ; movaps        %xmm1,%xmm10
+  DB  15,40,108,36,16                     ; movaps        0x10(%rsp),%xmm5
+  DB  15,40,197                           ; movaps        %xmm5,%xmm0
+  DB  15,94,199                           ; divps         %xmm7,%xmm0
+  DB  15,84,196                           ; andps         %xmm4,%xmm0
+  DB  15,40,208                           ; movaps        %xmm0,%xmm2
+  DB  15,92,209                           ; subps         %xmm1,%xmm2
+  DB  15,92,200                           ; subps         %xmm0,%xmm1
+  DB  68,15,89,232                        ; mulps         %xmm0,%xmm13
+  DB  15,82,224                           ; rsqrtps       %xmm0,%xmm4
+  DB  68,15,83,204                        ; rcpps         %xmm4,%xmm9
+  DB  68,15,92,200                        ; subps         %xmm0,%xmm9
+  DB  15,88,192                           ; addps         %xmm0,%xmm0
+  DB  15,88,192                           ; addps         %xmm0,%xmm0
+  DB  15,40,224                           ; movaps        %xmm0,%xmm4
+  DB  15,89,228                           ; mulps         %xmm4,%xmm4
+  DB  15,88,224                           ; addps         %xmm0,%xmm4
+  DB  15,89,226                           ; mulps         %xmm2,%xmm4
+  DB  68,15,88,236                        ; addps         %xmm4,%xmm13
+  DB  15,40,197                           ; movaps        %xmm5,%xmm0
+  DB  15,88,192                           ; addps         %xmm0,%xmm0
+  DB  15,88,192                           ; addps         %xmm0,%xmm0
+  DB  15,194,199,2                        ; cmpleps       %xmm7,%xmm0
+  DB  102,69,15,56,20,205                 ; blendvps      %xmm0,%xmm13,%xmm9
+  DB  68,15,40,108,36,32                  ; movaps        0x20(%rsp),%xmm13
+  DB  65,15,40,197                        ; movaps        %xmm13,%xmm0
+  DB  15,88,192                           ; addps         %xmm0,%xmm0
+  DB  15,40,208                           ; movaps        %xmm0,%xmm2
+  DB  15,92,211                           ; subps         %xmm3,%xmm2
+  DB  15,89,202                           ; mulps         %xmm2,%xmm1
+  DB  15,89,215                           ; mulps         %xmm7,%xmm2
+  DB  68,15,89,202                        ; mulps         %xmm2,%xmm9
+  DB  15,40,211                           ; movaps        %xmm3,%xmm2
+  DB  15,89,213                           ; mulps         %xmm5,%xmm2
+  DB  68,15,88,202                        ; addps         %xmm2,%xmm9
+  DB  15,88,203                           ; addps         %xmm3,%xmm1
+  DB  15,89,205                           ; mulps         %xmm5,%xmm1
+  DB  15,40,213                           ; movaps        %xmm5,%xmm2
+  DB  15,194,195,2                        ; cmpleps       %xmm3,%xmm0
+  DB  102,68,15,56,20,201                 ; blendvps      %xmm0,%xmm1,%xmm9
+  DB  68,15,92,255                        ; subps         %xmm7,%xmm15
+  DB  69,15,89,199                        ; mulps         %xmm15,%xmm8
+  DB  69,15,89,231                        ; mulps         %xmm15,%xmm12
+  DB  69,15,89,253                        ; mulps         %xmm13,%xmm15
+  DB  68,15,92,211                        ; subps         %xmm3,%xmm10
+  DB  65,15,40,194                        ; movaps        %xmm10,%xmm0
+  DB  15,89,198                           ; mulps         %xmm6,%xmm0
+  DB  68,15,88,192                        ; addps         %xmm0,%xmm8
+  DB  69,15,88,195                        ; addps         %xmm11,%xmm8
+  DB  65,15,40,194                        ; movaps        %xmm10,%xmm0
+  DB  15,40,44,36                         ; movaps        (%rsp),%xmm5
+  DB  15,89,197                           ; mulps         %xmm5,%xmm0
+  DB  68,15,88,224                        ; addps         %xmm0,%xmm12
+  DB  69,15,88,230                        ; addps         %xmm14,%xmm12
+  DB  65,15,40,194                        ; movaps        %xmm10,%xmm0
+  DB  15,89,194                           ; mulps         %xmm2,%xmm0
+  DB  65,15,88,199                        ; addps         %xmm15,%xmm0
+  DB  68,15,88,200                        ; addps         %xmm0,%xmm9
+  DB  68,15,89,215                        ; mulps         %xmm7,%xmm10
+  DB  65,15,88,218                        ; addps         %xmm10,%xmm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  15,40,230                           ; movaps        %xmm6,%xmm4
+  DB  15,40,242                           ; movaps        %xmm2,%xmm6
+  DB  65,15,40,192                        ; movaps        %xmm8,%xmm0
+  DB  65,15,40,204                        ; movaps        %xmm12,%xmm1
+  DB  65,15,40,209                        ; movaps        %xmm9,%xmm2
+  DB  72,131,196,56                       ; add           $0x38,%rsp
   DB  255,224                             ; jmpq          *%rax
 
 PUBLIC _sk_clamp_0_sse41
@@ -3715,6 +6143,24 @@ _sk_store_a8_sse41 LABEL PROC
   DB  72,173                              ; lods          %ds:(%rsi),%rax
   DB  255,224                             ; jmpq          *%rax
 
+PUBLIC _sk_load_g8_sse41
+_sk_load_g8_sse41 LABEL PROC
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  72,139,0                            ; mov           (%rax),%rax
+  DB  102,15,56,49,4,56                   ; pmovzxbd      (%rax,%rdi,1),%xmm0
+  DB  15,91,200                           ; cvtdq2ps      %xmm0,%xmm1
+  DB  184,129,128,128,59                  ; mov           $0x3b808081,%eax
+  DB  102,15,110,192                      ; movd          %eax,%xmm0
+  DB  15,198,192,0                        ; shufps        $0x0,%xmm0,%xmm0
+  DB  15,89,193                           ; mulps         %xmm1,%xmm0
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  102,15,110,216                      ; movd          %eax,%xmm3
+  DB  15,198,219,0                        ; shufps        $0x0,%xmm3,%xmm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  15,40,200                           ; movaps        %xmm0,%xmm1
+  DB  15,40,208                           ; movaps        %xmm0,%xmm2
+  DB  255,224                             ; jmpq          *%rax
+
 PUBLIC _sk_load_565_sse41
 _sk_load_565_sse41 LABEL PROC
   DB  72,173                              ; lods          %ds:(%rsi),%rax
@@ -3773,6 +6219,79 @@ _sk_store_565_sse41 LABEL PROC
   DB  102,69,15,235,209                   ; por           %xmm9,%xmm10
   DB  68,15,89,194                        ; mulps         %xmm2,%xmm8
   DB  102,69,15,91,192                    ; cvtps2dq      %xmm8,%xmm8
+  DB  102,69,15,86,194                    ; orpd          %xmm10,%xmm8
+  DB  102,69,15,56,43,192                 ; packusdw      %xmm8,%xmm8
+  DB  102,68,15,214,4,120                 ; movq          %xmm8,(%rax,%rdi,2)
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_load_4444_sse41
+_sk_load_4444_sse41 LABEL PROC
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  72,139,0                            ; mov           (%rax),%rax
+  DB  102,68,15,56,51,12,120              ; pmovzxwd      (%rax,%rdi,2),%xmm9
+  DB  184,0,240,0,0                       ; mov           $0xf000,%eax
+  DB  102,15,110,192                      ; movd          %eax,%xmm0
+  DB  102,15,112,192,0                    ; pshufd        $0x0,%xmm0,%xmm0
+  DB  102,65,15,219,193                   ; pand          %xmm9,%xmm0
+  DB  15,91,200                           ; cvtdq2ps      %xmm0,%xmm1
+  DB  184,137,136,136,55                  ; mov           $0x37888889,%eax
+  DB  102,15,110,192                      ; movd          %eax,%xmm0
+  DB  15,198,192,0                        ; shufps        $0x0,%xmm0,%xmm0
+  DB  15,89,193                           ; mulps         %xmm1,%xmm0
+  DB  184,0,15,0,0                        ; mov           $0xf00,%eax
+  DB  102,15,110,200                      ; movd          %eax,%xmm1
+  DB  102,15,112,201,0                    ; pshufd        $0x0,%xmm1,%xmm1
+  DB  102,65,15,219,201                   ; pand          %xmm9,%xmm1
+  DB  15,91,209                           ; cvtdq2ps      %xmm1,%xmm2
+  DB  184,137,136,136,57                  ; mov           $0x39888889,%eax
+  DB  102,15,110,200                      ; movd          %eax,%xmm1
+  DB  15,198,201,0                        ; shufps        $0x0,%xmm1,%xmm1
+  DB  15,89,202                           ; mulps         %xmm2,%xmm1
+  DB  184,240,0,0,0                       ; mov           $0xf0,%eax
+  DB  102,15,110,208                      ; movd          %eax,%xmm2
+  DB  102,15,112,210,0                    ; pshufd        $0x0,%xmm2,%xmm2
+  DB  102,65,15,219,209                   ; pand          %xmm9,%xmm2
+  DB  68,15,91,194                        ; cvtdq2ps      %xmm2,%xmm8
+  DB  184,137,136,136,59                  ; mov           $0x3b888889,%eax
+  DB  102,15,110,208                      ; movd          %eax,%xmm2
+  DB  15,198,210,0                        ; shufps        $0x0,%xmm2,%xmm2
+  DB  65,15,89,208                        ; mulps         %xmm8,%xmm2
+  DB  184,15,0,0,0                        ; mov           $0xf,%eax
+  DB  102,15,110,216                      ; movd          %eax,%xmm3
+  DB  102,15,112,219,0                    ; pshufd        $0x0,%xmm3,%xmm3
+  DB  102,65,15,219,217                   ; pand          %xmm9,%xmm3
+  DB  68,15,91,195                        ; cvtdq2ps      %xmm3,%xmm8
+  DB  184,137,136,136,61                  ; mov           $0x3d888889,%eax
+  DB  102,15,110,216                      ; movd          %eax,%xmm3
+  DB  15,198,219,0                        ; shufps        $0x0,%xmm3,%xmm3
+  DB  65,15,89,216                        ; mulps         %xmm8,%xmm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_store_4444_sse41
+_sk_store_4444_sse41 LABEL PROC
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  72,139,0                            ; mov           (%rax),%rax
+  DB  185,0,0,112,65                      ; mov           $0x41700000,%ecx
+  DB  102,68,15,110,193                   ; movd          %ecx,%xmm8
+  DB  69,15,198,192,0                     ; shufps        $0x0,%xmm8,%xmm8
+  DB  69,15,40,200                        ; movaps        %xmm8,%xmm9
+  DB  68,15,89,200                        ; mulps         %xmm0,%xmm9
+  DB  102,69,15,91,201                    ; cvtps2dq      %xmm9,%xmm9
+  DB  102,65,15,114,241,12                ; pslld         $0xc,%xmm9
+  DB  69,15,40,208                        ; movaps        %xmm8,%xmm10
+  DB  68,15,89,209                        ; mulps         %xmm1,%xmm10
+  DB  102,69,15,91,210                    ; cvtps2dq      %xmm10,%xmm10
+  DB  102,65,15,114,242,8                 ; pslld         $0x8,%xmm10
+  DB  102,69,15,235,209                   ; por           %xmm9,%xmm10
+  DB  69,15,40,200                        ; movaps        %xmm8,%xmm9
+  DB  68,15,89,202                        ; mulps         %xmm2,%xmm9
+  DB  102,69,15,91,201                    ; cvtps2dq      %xmm9,%xmm9
+  DB  102,65,15,114,241,4                 ; pslld         $0x4,%xmm9
+  DB  68,15,89,195                        ; mulps         %xmm3,%xmm8
+  DB  102,69,15,91,192                    ; cvtps2dq      %xmm8,%xmm8
+  DB  102,69,15,86,193                    ; orpd          %xmm9,%xmm8
   DB  102,69,15,86,194                    ; orpd          %xmm10,%xmm8
   DB  102,69,15,56,43,192                 ; packusdw      %xmm8,%xmm8
   DB  102,68,15,214,4,120                 ; movq          %xmm8,(%rax,%rdi,2)
@@ -4419,13 +6938,103 @@ _sk_clear_sse2 LABEL PROC
   DB  15,87,219                           ; xorps         %xmm3,%xmm3
   DB  255,224                             ; jmpq          *%rax
 
-PUBLIC _sk_plus__sse2
-_sk_plus__sse2 LABEL PROC
-  DB  15,88,196                           ; addps         %xmm4,%xmm0
-  DB  15,88,205                           ; addps         %xmm5,%xmm1
-  DB  15,88,214                           ; addps         %xmm6,%xmm2
-  DB  15,88,223                           ; addps         %xmm7,%xmm3
+PUBLIC _sk_srcatop_sse2
+_sk_srcatop_sse2 LABEL PROC
+  DB  15,89,199                           ; mulps         %xmm7,%xmm0
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  102,68,15,110,192                   ; movd          %eax,%xmm8
+  DB  69,15,198,192,0                     ; shufps        $0x0,%xmm8,%xmm8
+  DB  68,15,92,195                        ; subps         %xmm3,%xmm8
+  DB  69,15,40,200                        ; movaps        %xmm8,%xmm9
+  DB  68,15,89,204                        ; mulps         %xmm4,%xmm9
+  DB  65,15,88,193                        ; addps         %xmm9,%xmm0
+  DB  15,89,207                           ; mulps         %xmm7,%xmm1
+  DB  69,15,40,200                        ; movaps        %xmm8,%xmm9
+  DB  68,15,89,205                        ; mulps         %xmm5,%xmm9
+  DB  65,15,88,201                        ; addps         %xmm9,%xmm1
+  DB  15,89,215                           ; mulps         %xmm7,%xmm2
+  DB  69,15,40,200                        ; movaps        %xmm8,%xmm9
+  DB  68,15,89,206                        ; mulps         %xmm6,%xmm9
+  DB  65,15,88,209                        ; addps         %xmm9,%xmm2
+  DB  15,89,223                           ; mulps         %xmm7,%xmm3
+  DB  68,15,89,199                        ; mulps         %xmm7,%xmm8
+  DB  65,15,88,216                        ; addps         %xmm8,%xmm3
   DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_dstatop_sse2
+_sk_dstatop_sse2 LABEL PROC
+  DB  68,15,40,195                        ; movaps        %xmm3,%xmm8
+  DB  68,15,89,196                        ; mulps         %xmm4,%xmm8
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  102,68,15,110,200                   ; movd          %eax,%xmm9
+  DB  69,15,198,201,0                     ; shufps        $0x0,%xmm9,%xmm9
+  DB  68,15,92,207                        ; subps         %xmm7,%xmm9
+  DB  65,15,89,193                        ; mulps         %xmm9,%xmm0
+  DB  65,15,88,192                        ; addps         %xmm8,%xmm0
+  DB  68,15,40,195                        ; movaps        %xmm3,%xmm8
+  DB  68,15,89,197                        ; mulps         %xmm5,%xmm8
+  DB  65,15,89,201                        ; mulps         %xmm9,%xmm1
+  DB  65,15,88,200                        ; addps         %xmm8,%xmm1
+  DB  68,15,40,195                        ; movaps        %xmm3,%xmm8
+  DB  68,15,89,198                        ; mulps         %xmm6,%xmm8
+  DB  65,15,89,209                        ; mulps         %xmm9,%xmm2
+  DB  65,15,88,208                        ; addps         %xmm8,%xmm2
+  DB  68,15,89,203                        ; mulps         %xmm3,%xmm9
+  DB  15,89,223                           ; mulps         %xmm7,%xmm3
+  DB  65,15,88,217                        ; addps         %xmm9,%xmm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_srcin_sse2
+_sk_srcin_sse2 LABEL PROC
+  DB  15,89,199                           ; mulps         %xmm7,%xmm0
+  DB  15,89,207                           ; mulps         %xmm7,%xmm1
+  DB  15,89,215                           ; mulps         %xmm7,%xmm2
+  DB  15,89,223                           ; mulps         %xmm7,%xmm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_dstin_sse2
+_sk_dstin_sse2 LABEL PROC
+  DB  15,40,195                           ; movaps        %xmm3,%xmm0
+  DB  15,89,196                           ; mulps         %xmm4,%xmm0
+  DB  15,40,203                           ; movaps        %xmm3,%xmm1
+  DB  15,89,205                           ; mulps         %xmm5,%xmm1
+  DB  15,40,211                           ; movaps        %xmm3,%xmm2
+  DB  15,89,214                           ; mulps         %xmm6,%xmm2
+  DB  15,89,223                           ; mulps         %xmm7,%xmm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_srcout_sse2
+_sk_srcout_sse2 LABEL PROC
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  102,68,15,110,192                   ; movd          %eax,%xmm8
+  DB  69,15,198,192,0                     ; shufps        $0x0,%xmm8,%xmm8
+  DB  68,15,92,199                        ; subps         %xmm7,%xmm8
+  DB  65,15,89,192                        ; mulps         %xmm8,%xmm0
+  DB  65,15,89,200                        ; mulps         %xmm8,%xmm1
+  DB  65,15,89,208                        ; mulps         %xmm8,%xmm2
+  DB  65,15,89,216                        ; mulps         %xmm8,%xmm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_dstout_sse2
+_sk_dstout_sse2 LABEL PROC
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  102,68,15,110,192                   ; movd          %eax,%xmm8
+  DB  69,15,198,192,0                     ; shufps        $0x0,%xmm8,%xmm8
+  DB  68,15,92,195                        ; subps         %xmm3,%xmm8
+  DB  65,15,40,192                        ; movaps        %xmm8,%xmm0
+  DB  15,89,196                           ; mulps         %xmm4,%xmm0
+  DB  65,15,40,200                        ; movaps        %xmm8,%xmm1
+  DB  15,89,205                           ; mulps         %xmm5,%xmm1
+  DB  65,15,40,208                        ; movaps        %xmm8,%xmm2
+  DB  15,89,214                           ; mulps         %xmm6,%xmm2
+  DB  68,15,89,199                        ; mulps         %xmm7,%xmm8
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  65,15,40,216                        ; movaps        %xmm8,%xmm3
   DB  255,224                             ; jmpq          *%rax
 
 PUBLIC _sk_srcover_sse2
@@ -4463,6 +7072,771 @@ _sk_dstover_sse2 LABEL PROC
   DB  65,15,89,216                        ; mulps         %xmm8,%xmm3
   DB  15,88,223                           ; addps         %xmm7,%xmm3
   DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_modulate_sse2
+_sk_modulate_sse2 LABEL PROC
+  DB  15,89,196                           ; mulps         %xmm4,%xmm0
+  DB  15,89,205                           ; mulps         %xmm5,%xmm1
+  DB  15,89,214                           ; mulps         %xmm6,%xmm2
+  DB  15,89,223                           ; mulps         %xmm7,%xmm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_multiply_sse2
+_sk_multiply_sse2 LABEL PROC
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  102,68,15,110,192                   ; movd          %eax,%xmm8
+  DB  69,15,198,192,0                     ; shufps        $0x0,%xmm8,%xmm8
+  DB  69,15,40,200                        ; movaps        %xmm8,%xmm9
+  DB  68,15,92,207                        ; subps         %xmm7,%xmm9
+  DB  69,15,40,209                        ; movaps        %xmm9,%xmm10
+  DB  68,15,89,208                        ; mulps         %xmm0,%xmm10
+  DB  68,15,92,195                        ; subps         %xmm3,%xmm8
+  DB  69,15,40,216                        ; movaps        %xmm8,%xmm11
+  DB  68,15,89,220                        ; mulps         %xmm4,%xmm11
+  DB  69,15,88,218                        ; addps         %xmm10,%xmm11
+  DB  15,89,196                           ; mulps         %xmm4,%xmm0
+  DB  65,15,88,195                        ; addps         %xmm11,%xmm0
+  DB  69,15,40,209                        ; movaps        %xmm9,%xmm10
+  DB  68,15,89,209                        ; mulps         %xmm1,%xmm10
+  DB  69,15,40,216                        ; movaps        %xmm8,%xmm11
+  DB  68,15,89,221                        ; mulps         %xmm5,%xmm11
+  DB  69,15,88,218                        ; addps         %xmm10,%xmm11
+  DB  15,89,205                           ; mulps         %xmm5,%xmm1
+  DB  65,15,88,203                        ; addps         %xmm11,%xmm1
+  DB  69,15,40,209                        ; movaps        %xmm9,%xmm10
+  DB  68,15,89,210                        ; mulps         %xmm2,%xmm10
+  DB  69,15,40,216                        ; movaps        %xmm8,%xmm11
+  DB  68,15,89,222                        ; mulps         %xmm6,%xmm11
+  DB  69,15,88,218                        ; addps         %xmm10,%xmm11
+  DB  15,89,214                           ; mulps         %xmm6,%xmm2
+  DB  65,15,88,211                        ; addps         %xmm11,%xmm2
+  DB  68,15,89,203                        ; mulps         %xmm3,%xmm9
+  DB  68,15,89,199                        ; mulps         %xmm7,%xmm8
+  DB  69,15,88,193                        ; addps         %xmm9,%xmm8
+  DB  15,89,223                           ; mulps         %xmm7,%xmm3
+  DB  65,15,88,216                        ; addps         %xmm8,%xmm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_plus__sse2
+_sk_plus__sse2 LABEL PROC
+  DB  15,88,196                           ; addps         %xmm4,%xmm0
+  DB  15,88,205                           ; addps         %xmm5,%xmm1
+  DB  15,88,214                           ; addps         %xmm6,%xmm2
+  DB  15,88,223                           ; addps         %xmm7,%xmm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_screen_sse2
+_sk_screen_sse2 LABEL PROC
+  DB  68,15,40,192                        ; movaps        %xmm0,%xmm8
+  DB  68,15,88,196                        ; addps         %xmm4,%xmm8
+  DB  15,89,196                           ; mulps         %xmm4,%xmm0
+  DB  68,15,92,192                        ; subps         %xmm0,%xmm8
+  DB  68,15,40,201                        ; movaps        %xmm1,%xmm9
+  DB  68,15,88,205                        ; addps         %xmm5,%xmm9
+  DB  15,89,205                           ; mulps         %xmm5,%xmm1
+  DB  68,15,92,201                        ; subps         %xmm1,%xmm9
+  DB  68,15,40,210                        ; movaps        %xmm2,%xmm10
+  DB  68,15,88,214                        ; addps         %xmm6,%xmm10
+  DB  15,89,214                           ; mulps         %xmm6,%xmm2
+  DB  68,15,92,210                        ; subps         %xmm2,%xmm10
+  DB  68,15,40,219                        ; movaps        %xmm3,%xmm11
+  DB  68,15,88,223                        ; addps         %xmm7,%xmm11
+  DB  15,89,223                           ; mulps         %xmm7,%xmm3
+  DB  68,15,92,219                        ; subps         %xmm3,%xmm11
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  65,15,40,192                        ; movaps        %xmm8,%xmm0
+  DB  65,15,40,201                        ; movaps        %xmm9,%xmm1
+  DB  65,15,40,210                        ; movaps        %xmm10,%xmm2
+  DB  65,15,40,219                        ; movaps        %xmm11,%xmm3
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_xor__sse2
+_sk_xor__sse2 LABEL PROC
+  DB  68,15,40,195                        ; movaps        %xmm3,%xmm8
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  102,15,110,216                      ; movd          %eax,%xmm3
+  DB  15,198,219,0                        ; shufps        $0x0,%xmm3,%xmm3
+  DB  68,15,40,203                        ; movaps        %xmm3,%xmm9
+  DB  68,15,92,207                        ; subps         %xmm7,%xmm9
+  DB  65,15,89,193                        ; mulps         %xmm9,%xmm0
+  DB  65,15,92,216                        ; subps         %xmm8,%xmm3
+  DB  68,15,40,211                        ; movaps        %xmm3,%xmm10
+  DB  68,15,89,212                        ; mulps         %xmm4,%xmm10
+  DB  65,15,88,194                        ; addps         %xmm10,%xmm0
+  DB  65,15,89,201                        ; mulps         %xmm9,%xmm1
+  DB  68,15,40,211                        ; movaps        %xmm3,%xmm10
+  DB  68,15,89,213                        ; mulps         %xmm5,%xmm10
+  DB  65,15,88,202                        ; addps         %xmm10,%xmm1
+  DB  65,15,89,209                        ; mulps         %xmm9,%xmm2
+  DB  68,15,40,211                        ; movaps        %xmm3,%xmm10
+  DB  68,15,89,214                        ; mulps         %xmm6,%xmm10
+  DB  65,15,88,210                        ; addps         %xmm10,%xmm2
+  DB  69,15,89,200                        ; mulps         %xmm8,%xmm9
+  DB  15,89,223                           ; mulps         %xmm7,%xmm3
+  DB  65,15,88,217                        ; addps         %xmm9,%xmm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_darken_sse2
+_sk_darken_sse2 LABEL PROC
+  DB  68,15,40,193                        ; movaps        %xmm1,%xmm8
+  DB  68,15,40,200                        ; movaps        %xmm0,%xmm9
+  DB  15,88,196                           ; addps         %xmm4,%xmm0
+  DB  68,15,89,207                        ; mulps         %xmm7,%xmm9
+  DB  15,40,203                           ; movaps        %xmm3,%xmm1
+  DB  15,89,204                           ; mulps         %xmm4,%xmm1
+  DB  68,15,95,201                        ; maxps         %xmm1,%xmm9
+  DB  65,15,92,193                        ; subps         %xmm9,%xmm0
+  DB  65,15,40,200                        ; movaps        %xmm8,%xmm1
+  DB  15,88,205                           ; addps         %xmm5,%xmm1
+  DB  68,15,89,199                        ; mulps         %xmm7,%xmm8
+  DB  68,15,40,203                        ; movaps        %xmm3,%xmm9
+  DB  68,15,89,205                        ; mulps         %xmm5,%xmm9
+  DB  69,15,95,193                        ; maxps         %xmm9,%xmm8
+  DB  65,15,92,200                        ; subps         %xmm8,%xmm1
+  DB  68,15,40,194                        ; movaps        %xmm2,%xmm8
+  DB  68,15,88,198                        ; addps         %xmm6,%xmm8
+  DB  15,89,215                           ; mulps         %xmm7,%xmm2
+  DB  68,15,40,203                        ; movaps        %xmm3,%xmm9
+  DB  68,15,89,206                        ; mulps         %xmm6,%xmm9
+  DB  65,15,95,209                        ; maxps         %xmm9,%xmm2
+  DB  68,15,92,194                        ; subps         %xmm2,%xmm8
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  102,15,110,208                      ; movd          %eax,%xmm2
+  DB  15,198,210,0                        ; shufps        $0x0,%xmm2,%xmm2
+  DB  15,92,211                           ; subps         %xmm3,%xmm2
+  DB  15,89,215                           ; mulps         %xmm7,%xmm2
+  DB  15,88,218                           ; addps         %xmm2,%xmm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  65,15,40,208                        ; movaps        %xmm8,%xmm2
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_lighten_sse2
+_sk_lighten_sse2 LABEL PROC
+  DB  68,15,40,193                        ; movaps        %xmm1,%xmm8
+  DB  68,15,40,200                        ; movaps        %xmm0,%xmm9
+  DB  15,88,196                           ; addps         %xmm4,%xmm0
+  DB  68,15,89,207                        ; mulps         %xmm7,%xmm9
+  DB  15,40,203                           ; movaps        %xmm3,%xmm1
+  DB  15,89,204                           ; mulps         %xmm4,%xmm1
+  DB  68,15,93,201                        ; minps         %xmm1,%xmm9
+  DB  65,15,92,193                        ; subps         %xmm9,%xmm0
+  DB  65,15,40,200                        ; movaps        %xmm8,%xmm1
+  DB  15,88,205                           ; addps         %xmm5,%xmm1
+  DB  68,15,89,199                        ; mulps         %xmm7,%xmm8
+  DB  68,15,40,203                        ; movaps        %xmm3,%xmm9
+  DB  68,15,89,205                        ; mulps         %xmm5,%xmm9
+  DB  69,15,93,193                        ; minps         %xmm9,%xmm8
+  DB  65,15,92,200                        ; subps         %xmm8,%xmm1
+  DB  68,15,40,194                        ; movaps        %xmm2,%xmm8
+  DB  68,15,88,198                        ; addps         %xmm6,%xmm8
+  DB  15,89,215                           ; mulps         %xmm7,%xmm2
+  DB  68,15,40,203                        ; movaps        %xmm3,%xmm9
+  DB  68,15,89,206                        ; mulps         %xmm6,%xmm9
+  DB  65,15,93,209                        ; minps         %xmm9,%xmm2
+  DB  68,15,92,194                        ; subps         %xmm2,%xmm8
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  102,15,110,208                      ; movd          %eax,%xmm2
+  DB  15,198,210,0                        ; shufps        $0x0,%xmm2,%xmm2
+  DB  15,92,211                           ; subps         %xmm3,%xmm2
+  DB  15,89,215                           ; mulps         %xmm7,%xmm2
+  DB  15,88,218                           ; addps         %xmm2,%xmm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  65,15,40,208                        ; movaps        %xmm8,%xmm2
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_difference_sse2
+_sk_difference_sse2 LABEL PROC
+  DB  68,15,40,193                        ; movaps        %xmm1,%xmm8
+  DB  68,15,40,200                        ; movaps        %xmm0,%xmm9
+  DB  15,88,196                           ; addps         %xmm4,%xmm0
+  DB  68,15,89,207                        ; mulps         %xmm7,%xmm9
+  DB  15,40,203                           ; movaps        %xmm3,%xmm1
+  DB  15,89,204                           ; mulps         %xmm4,%xmm1
+  DB  68,15,93,201                        ; minps         %xmm1,%xmm9
+  DB  69,15,88,201                        ; addps         %xmm9,%xmm9
+  DB  65,15,92,193                        ; subps         %xmm9,%xmm0
+  DB  65,15,40,200                        ; movaps        %xmm8,%xmm1
+  DB  15,88,205                           ; addps         %xmm5,%xmm1
+  DB  68,15,89,199                        ; mulps         %xmm7,%xmm8
+  DB  68,15,40,203                        ; movaps        %xmm3,%xmm9
+  DB  68,15,89,205                        ; mulps         %xmm5,%xmm9
+  DB  69,15,93,193                        ; minps         %xmm9,%xmm8
+  DB  69,15,88,192                        ; addps         %xmm8,%xmm8
+  DB  65,15,92,200                        ; subps         %xmm8,%xmm1
+  DB  68,15,40,194                        ; movaps        %xmm2,%xmm8
+  DB  68,15,88,198                        ; addps         %xmm6,%xmm8
+  DB  15,89,215                           ; mulps         %xmm7,%xmm2
+  DB  68,15,40,203                        ; movaps        %xmm3,%xmm9
+  DB  68,15,89,206                        ; mulps         %xmm6,%xmm9
+  DB  65,15,93,209                        ; minps         %xmm9,%xmm2
+  DB  15,88,210                           ; addps         %xmm2,%xmm2
+  DB  68,15,92,194                        ; subps         %xmm2,%xmm8
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  102,15,110,208                      ; movd          %eax,%xmm2
+  DB  15,198,210,0                        ; shufps        $0x0,%xmm2,%xmm2
+  DB  15,92,211                           ; subps         %xmm3,%xmm2
+  DB  15,89,215                           ; mulps         %xmm7,%xmm2
+  DB  15,88,218                           ; addps         %xmm2,%xmm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  65,15,40,208                        ; movaps        %xmm8,%xmm2
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_exclusion_sse2
+_sk_exclusion_sse2 LABEL PROC
+  DB  68,15,40,193                        ; movaps        %xmm1,%xmm8
+  DB  15,40,200                           ; movaps        %xmm0,%xmm1
+  DB  15,88,196                           ; addps         %xmm4,%xmm0
+  DB  15,89,204                           ; mulps         %xmm4,%xmm1
+  DB  15,88,201                           ; addps         %xmm1,%xmm1
+  DB  15,92,193                           ; subps         %xmm1,%xmm0
+  DB  65,15,40,200                        ; movaps        %xmm8,%xmm1
+  DB  15,88,205                           ; addps         %xmm5,%xmm1
+  DB  68,15,89,197                        ; mulps         %xmm5,%xmm8
+  DB  69,15,88,192                        ; addps         %xmm8,%xmm8
+  DB  65,15,92,200                        ; subps         %xmm8,%xmm1
+  DB  68,15,40,194                        ; movaps        %xmm2,%xmm8
+  DB  68,15,88,198                        ; addps         %xmm6,%xmm8
+  DB  15,89,214                           ; mulps         %xmm6,%xmm2
+  DB  15,88,210                           ; addps         %xmm2,%xmm2
+  DB  68,15,92,194                        ; subps         %xmm2,%xmm8
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  102,15,110,208                      ; movd          %eax,%xmm2
+  DB  15,198,210,0                        ; shufps        $0x0,%xmm2,%xmm2
+  DB  15,92,211                           ; subps         %xmm3,%xmm2
+  DB  15,89,215                           ; mulps         %xmm7,%xmm2
+  DB  15,88,218                           ; addps         %xmm2,%xmm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  65,15,40,208                        ; movaps        %xmm8,%xmm2
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_colorburn_sse2
+_sk_colorburn_sse2 LABEL PROC
+  DB  68,15,40,193                        ; movaps        %xmm1,%xmm8
+  DB  68,15,40,224                        ; movaps        %xmm0,%xmm12
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  102,68,15,110,200                   ; movd          %eax,%xmm9
+  DB  69,15,198,201,0                     ; shufps        $0x0,%xmm9,%xmm9
+  DB  69,15,40,217                        ; movaps        %xmm9,%xmm11
+  DB  68,15,92,223                        ; subps         %xmm7,%xmm11
+  DB  65,15,40,195                        ; movaps        %xmm11,%xmm0
+  DB  65,15,89,196                        ; mulps         %xmm12,%xmm0
+  DB  69,15,87,210                        ; xorps         %xmm10,%xmm10
+  DB  15,40,207                           ; movaps        %xmm7,%xmm1
+  DB  15,92,204                           ; subps         %xmm4,%xmm1
+  DB  15,89,203                           ; mulps         %xmm3,%xmm1
+  DB  65,15,94,204                        ; divps         %xmm12,%xmm1
+  DB  68,15,40,239                        ; movaps        %xmm7,%xmm13
+  DB  68,15,93,233                        ; minps         %xmm1,%xmm13
+  DB  68,15,40,247                        ; movaps        %xmm7,%xmm14
+  DB  69,15,92,245                        ; subps         %xmm13,%xmm14
+  DB  65,15,40,204                        ; movaps        %xmm12,%xmm1
+  DB  65,15,194,202,0                     ; cmpeqps       %xmm10,%xmm1
+  DB  68,15,92,203                        ; subps         %xmm3,%xmm9
+  DB  68,15,89,243                        ; mulps         %xmm3,%xmm14
+  DB  68,15,88,240                        ; addps         %xmm0,%xmm14
+  DB  68,15,84,225                        ; andps         %xmm1,%xmm12
+  DB  65,15,85,206                        ; andnps        %xmm14,%xmm1
+  DB  69,15,40,233                        ; movaps        %xmm9,%xmm13
+  DB  68,15,89,236                        ; mulps         %xmm4,%xmm13
+  DB  15,88,196                           ; addps         %xmm4,%xmm0
+  DB  65,15,86,204                        ; orps          %xmm12,%xmm1
+  DB  68,15,40,228                        ; movaps        %xmm4,%xmm12
+  DB  68,15,194,231,0                     ; cmpeqps       %xmm7,%xmm12
+  DB  65,15,88,205                        ; addps         %xmm13,%xmm1
+  DB  65,15,84,196                        ; andps         %xmm12,%xmm0
+  DB  68,15,85,225                        ; andnps        %xmm1,%xmm12
+  DB  65,15,86,196                        ; orps          %xmm12,%xmm0
+  DB  65,15,40,203                        ; movaps        %xmm11,%xmm1
+  DB  65,15,89,200                        ; mulps         %xmm8,%xmm1
+  DB  68,15,40,231                        ; movaps        %xmm7,%xmm12
+  DB  68,15,92,229                        ; subps         %xmm5,%xmm12
+  DB  68,15,89,227                        ; mulps         %xmm3,%xmm12
+  DB  69,15,94,224                        ; divps         %xmm8,%xmm12
+  DB  68,15,40,239                        ; movaps        %xmm7,%xmm13
+  DB  69,15,93,236                        ; minps         %xmm12,%xmm13
+  DB  68,15,40,231                        ; movaps        %xmm7,%xmm12
+  DB  69,15,92,229                        ; subps         %xmm13,%xmm12
+  DB  69,15,40,232                        ; movaps        %xmm8,%xmm13
+  DB  69,15,194,234,0                     ; cmpeqps       %xmm10,%xmm13
+  DB  68,15,89,227                        ; mulps         %xmm3,%xmm12
+  DB  68,15,88,225                        ; addps         %xmm1,%xmm12
+  DB  69,15,84,197                        ; andps         %xmm13,%xmm8
+  DB  69,15,85,236                        ; andnps        %xmm12,%xmm13
+  DB  69,15,86,232                        ; orps          %xmm8,%xmm13
+  DB  69,15,40,193                        ; movaps        %xmm9,%xmm8
+  DB  68,15,89,197                        ; mulps         %xmm5,%xmm8
+  DB  15,88,205                           ; addps         %xmm5,%xmm1
+  DB  69,15,88,232                        ; addps         %xmm8,%xmm13
+  DB  68,15,40,197                        ; movaps        %xmm5,%xmm8
+  DB  68,15,194,199,0                     ; cmpeqps       %xmm7,%xmm8
+  DB  65,15,84,200                        ; andps         %xmm8,%xmm1
+  DB  69,15,85,197                        ; andnps        %xmm13,%xmm8
+  DB  65,15,86,200                        ; orps          %xmm8,%xmm1
+  DB  68,15,40,199                        ; movaps        %xmm7,%xmm8
+  DB  68,15,92,198                        ; subps         %xmm6,%xmm8
+  DB  68,15,89,195                        ; mulps         %xmm3,%xmm8
+  DB  68,15,94,194                        ; divps         %xmm2,%xmm8
+  DB  68,15,40,231                        ; movaps        %xmm7,%xmm12
+  DB  69,15,93,224                        ; minps         %xmm8,%xmm12
+  DB  68,15,40,199                        ; movaps        %xmm7,%xmm8
+  DB  69,15,92,196                        ; subps         %xmm12,%xmm8
+  DB  68,15,89,218                        ; mulps         %xmm2,%xmm11
+  DB  68,15,194,210,0                     ; cmpeqps       %xmm2,%xmm10
+  DB  68,15,89,195                        ; mulps         %xmm3,%xmm8
+  DB  69,15,88,195                        ; addps         %xmm11,%xmm8
+  DB  65,15,84,210                        ; andps         %xmm10,%xmm2
+  DB  69,15,85,208                        ; andnps        %xmm8,%xmm10
+  DB  69,15,40,195                        ; movaps        %xmm11,%xmm8
+  DB  68,15,88,198                        ; addps         %xmm6,%xmm8
+  DB  68,15,86,210                        ; orps          %xmm2,%xmm10
+  DB  65,15,40,209                        ; movaps        %xmm9,%xmm2
+  DB  15,89,214                           ; mulps         %xmm6,%xmm2
+  DB  68,15,88,210                        ; addps         %xmm2,%xmm10
+  DB  15,40,214                           ; movaps        %xmm6,%xmm2
+  DB  15,194,215,0                        ; cmpeqps       %xmm7,%xmm2
+  DB  68,15,84,194                        ; andps         %xmm2,%xmm8
+  DB  65,15,85,210                        ; andnps        %xmm10,%xmm2
+  DB  68,15,86,194                        ; orps          %xmm2,%xmm8
+  DB  68,15,89,207                        ; mulps         %xmm7,%xmm9
+  DB  65,15,88,217                        ; addps         %xmm9,%xmm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  65,15,40,208                        ; movaps        %xmm8,%xmm2
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_colordodge_sse2
+_sk_colordodge_sse2 LABEL PROC
+  DB  68,15,40,200                        ; movaps        %xmm0,%xmm9
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  102,68,15,110,208                   ; movd          %eax,%xmm10
+  DB  69,15,198,210,0                     ; shufps        $0x0,%xmm10,%xmm10
+  DB  69,15,40,218                        ; movaps        %xmm10,%xmm11
+  DB  68,15,92,223                        ; subps         %xmm7,%xmm11
+  DB  65,15,40,195                        ; movaps        %xmm11,%xmm0
+  DB  65,15,89,193                        ; mulps         %xmm9,%xmm0
+  DB  68,15,40,195                        ; movaps        %xmm3,%xmm8
+  DB  68,15,89,196                        ; mulps         %xmm4,%xmm8
+  DB  68,15,40,227                        ; movaps        %xmm3,%xmm12
+  DB  69,15,92,225                        ; subps         %xmm9,%xmm12
+  DB  69,15,94,196                        ; divps         %xmm12,%xmm8
+  DB  68,15,40,231                        ; movaps        %xmm7,%xmm12
+  DB  68,15,40,239                        ; movaps        %xmm7,%xmm13
+  DB  69,15,93,232                        ; minps         %xmm8,%xmm13
+  DB  69,15,40,241                        ; movaps        %xmm9,%xmm14
+  DB  68,15,194,243,0                     ; cmpeqps       %xmm3,%xmm14
+  DB  68,15,89,235                        ; mulps         %xmm3,%xmm13
+  DB  68,15,88,232                        ; addps         %xmm0,%xmm13
+  DB  69,15,84,206                        ; andps         %xmm14,%xmm9
+  DB  69,15,85,245                        ; andnps        %xmm13,%xmm14
+  DB  69,15,87,192                        ; xorps         %xmm8,%xmm8
+  DB  68,15,92,211                        ; subps         %xmm3,%xmm10
+  DB  69,15,86,241                        ; orps          %xmm9,%xmm14
+  DB  69,15,40,202                        ; movaps        %xmm10,%xmm9
+  DB  68,15,89,204                        ; mulps         %xmm4,%xmm9
+  DB  15,88,196                           ; addps         %xmm4,%xmm0
+  DB  69,15,88,241                        ; addps         %xmm9,%xmm14
+  DB  68,15,40,204                        ; movaps        %xmm4,%xmm9
+  DB  69,15,194,200,0                     ; cmpeqps       %xmm8,%xmm9
+  DB  65,15,84,193                        ; andps         %xmm9,%xmm0
+  DB  69,15,85,206                        ; andnps        %xmm14,%xmm9
+  DB  65,15,86,193                        ; orps          %xmm9,%xmm0
+  DB  68,15,40,235                        ; movaps        %xmm3,%xmm13
+  DB  68,15,89,237                        ; mulps         %xmm5,%xmm13
+  DB  68,15,40,203                        ; movaps        %xmm3,%xmm9
+  DB  68,15,92,201                        ; subps         %xmm1,%xmm9
+  DB  69,15,94,233                        ; divps         %xmm9,%xmm13
+  DB  69,15,40,203                        ; movaps        %xmm11,%xmm9
+  DB  68,15,89,201                        ; mulps         %xmm1,%xmm9
+  DB  69,15,93,229                        ; minps         %xmm13,%xmm12
+  DB  68,15,40,233                        ; movaps        %xmm1,%xmm13
+  DB  68,15,194,235,0                     ; cmpeqps       %xmm3,%xmm13
+  DB  68,15,89,227                        ; mulps         %xmm3,%xmm12
+  DB  69,15,88,225                        ; addps         %xmm9,%xmm12
+  DB  65,15,84,205                        ; andps         %xmm13,%xmm1
+  DB  69,15,85,236                        ; andnps        %xmm12,%xmm13
+  DB  68,15,86,233                        ; orps          %xmm1,%xmm13
+  DB  65,15,40,202                        ; movaps        %xmm10,%xmm1
+  DB  15,89,205                           ; mulps         %xmm5,%xmm1
+  DB  68,15,88,205                        ; addps         %xmm5,%xmm9
+  DB  68,15,88,233                        ; addps         %xmm1,%xmm13
+  DB  15,40,205                           ; movaps        %xmm5,%xmm1
+  DB  65,15,194,200,0                     ; cmpeqps       %xmm8,%xmm1
+  DB  68,15,84,201                        ; andps         %xmm1,%xmm9
+  DB  65,15,85,205                        ; andnps        %xmm13,%xmm1
+  DB  68,15,86,201                        ; orps          %xmm1,%xmm9
+  DB  68,15,40,227                        ; movaps        %xmm3,%xmm12
+  DB  68,15,89,230                        ; mulps         %xmm6,%xmm12
+  DB  15,40,203                           ; movaps        %xmm3,%xmm1
+  DB  15,92,202                           ; subps         %xmm2,%xmm1
+  DB  68,15,94,225                        ; divps         %xmm1,%xmm12
+  DB  68,15,40,239                        ; movaps        %xmm7,%xmm13
+  DB  68,15,89,218                        ; mulps         %xmm2,%xmm11
+  DB  69,15,93,236                        ; minps         %xmm12,%xmm13
+  DB  15,40,202                           ; movaps        %xmm2,%xmm1
+  DB  15,194,203,0                        ; cmpeqps       %xmm3,%xmm1
+  DB  68,15,89,235                        ; mulps         %xmm3,%xmm13
+  DB  69,15,88,235                        ; addps         %xmm11,%xmm13
+  DB  15,84,209                           ; andps         %xmm1,%xmm2
+  DB  65,15,85,205                        ; andnps        %xmm13,%xmm1
+  DB  15,86,202                           ; orps          %xmm2,%xmm1
+  DB  65,15,40,210                        ; movaps        %xmm10,%xmm2
+  DB  15,89,214                           ; mulps         %xmm6,%xmm2
+  DB  15,88,202                           ; addps         %xmm2,%xmm1
+  DB  68,15,194,198,0                     ; cmpeqps       %xmm6,%xmm8
+  DB  68,15,88,222                        ; addps         %xmm6,%xmm11
+  DB  69,15,84,216                        ; andps         %xmm8,%xmm11
+  DB  68,15,85,193                        ; andnps        %xmm1,%xmm8
+  DB  69,15,86,195                        ; orps          %xmm11,%xmm8
+  DB  68,15,89,215                        ; mulps         %xmm7,%xmm10
+  DB  65,15,88,218                        ; addps         %xmm10,%xmm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  65,15,40,201                        ; movaps        %xmm9,%xmm1
+  DB  65,15,40,208                        ; movaps        %xmm8,%xmm2
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_hardlight_sse2
+_sk_hardlight_sse2 LABEL PROC
+  DB  72,131,236,24                       ; sub           $0x18,%rsp
+  DB  15,41,52,36                         ; movaps        %xmm6,(%rsp)
+  DB  15,40,245                           ; movaps        %xmm5,%xmm6
+  DB  15,40,236                           ; movaps        %xmm4,%xmm5
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  102,68,15,110,216                   ; movd          %eax,%xmm11
+  DB  69,15,198,219,0                     ; shufps        $0x0,%xmm11,%xmm11
+  DB  69,15,40,211                        ; movaps        %xmm11,%xmm10
+  DB  68,15,92,215                        ; subps         %xmm7,%xmm10
+  DB  69,15,40,194                        ; movaps        %xmm10,%xmm8
+  DB  68,15,89,192                        ; mulps         %xmm0,%xmm8
+  DB  68,15,92,219                        ; subps         %xmm3,%xmm11
+  DB  69,15,40,203                        ; movaps        %xmm11,%xmm9
+  DB  68,15,89,205                        ; mulps         %xmm5,%xmm9
+  DB  69,15,88,200                        ; addps         %xmm8,%xmm9
+  DB  68,15,40,195                        ; movaps        %xmm3,%xmm8
+  DB  68,15,92,192                        ; subps         %xmm0,%xmm8
+  DB  15,40,227                           ; movaps        %xmm3,%xmm4
+  DB  15,89,231                           ; mulps         %xmm7,%xmm4
+  DB  68,15,40,239                        ; movaps        %xmm7,%xmm13
+  DB  68,15,40,247                        ; movaps        %xmm7,%xmm14
+  DB  68,15,40,255                        ; movaps        %xmm7,%xmm15
+  DB  68,15,92,253                        ; subps         %xmm5,%xmm15
+  DB  69,15,89,248                        ; mulps         %xmm8,%xmm15
+  DB  69,15,88,255                        ; addps         %xmm15,%xmm15
+  DB  68,15,40,228                        ; movaps        %xmm4,%xmm12
+  DB  69,15,92,231                        ; subps         %xmm15,%xmm12
+  DB  68,15,40,192                        ; movaps        %xmm0,%xmm8
+  DB  69,15,88,192                        ; addps         %xmm8,%xmm8
+  DB  68,15,194,195,2                     ; cmpleps       %xmm3,%xmm8
+  DB  15,89,197                           ; mulps         %xmm5,%xmm0
+  DB  15,88,192                           ; addps         %xmm0,%xmm0
+  DB  65,15,84,192                        ; andps         %xmm8,%xmm0
+  DB  69,15,85,196                        ; andnps        %xmm12,%xmm8
+  DB  68,15,86,192                        ; orps          %xmm0,%xmm8
+  DB  69,15,40,251                        ; movaps        %xmm11,%xmm15
+  DB  69,15,40,227                        ; movaps        %xmm11,%xmm12
+  DB  68,15,89,223                        ; mulps         %xmm7,%xmm11
+  DB  69,15,88,193                        ; addps         %xmm9,%xmm8
+  DB  65,15,40,194                        ; movaps        %xmm10,%xmm0
+  DB  15,89,193                           ; mulps         %xmm1,%xmm0
+  DB  68,15,89,254                        ; mulps         %xmm6,%xmm15
+  DB  68,15,88,248                        ; addps         %xmm0,%xmm15
+  DB  15,40,195                           ; movaps        %xmm3,%xmm0
+  DB  15,92,193                           ; subps         %xmm1,%xmm0
+  DB  68,15,92,238                        ; subps         %xmm6,%xmm13
+  DB  68,15,89,232                        ; mulps         %xmm0,%xmm13
+  DB  69,15,88,237                        ; addps         %xmm13,%xmm13
+  DB  15,40,196                           ; movaps        %xmm4,%xmm0
+  DB  65,15,92,197                        ; subps         %xmm13,%xmm0
+  DB  68,15,40,201                        ; movaps        %xmm1,%xmm9
+  DB  69,15,88,201                        ; addps         %xmm9,%xmm9
+  DB  68,15,194,203,2                     ; cmpleps       %xmm3,%xmm9
+  DB  15,89,206                           ; mulps         %xmm6,%xmm1
+  DB  15,88,201                           ; addps         %xmm1,%xmm1
+  DB  65,15,84,201                        ; andps         %xmm9,%xmm1
+  DB  68,15,85,200                        ; andnps        %xmm0,%xmm9
+  DB  68,15,86,201                        ; orps          %xmm1,%xmm9
+  DB  69,15,88,207                        ; addps         %xmm15,%xmm9
+  DB  68,15,89,210                        ; mulps         %xmm2,%xmm10
+  DB  68,15,40,44,36                      ; movaps        (%rsp),%xmm13
+  DB  69,15,89,229                        ; mulps         %xmm13,%xmm12
+  DB  69,15,88,226                        ; addps         %xmm10,%xmm12
+  DB  68,15,40,210                        ; movaps        %xmm2,%xmm10
+  DB  69,15,88,210                        ; addps         %xmm10,%xmm10
+  DB  68,15,194,211,2                     ; cmpleps       %xmm3,%xmm10
+  DB  15,40,195                           ; movaps        %xmm3,%xmm0
+  DB  15,92,194                           ; subps         %xmm2,%xmm0
+  DB  65,15,89,213                        ; mulps         %xmm13,%xmm2
+  DB  15,88,210                           ; addps         %xmm2,%xmm2
+  DB  69,15,92,245                        ; subps         %xmm13,%xmm14
+  DB  68,15,89,240                        ; mulps         %xmm0,%xmm14
+  DB  69,15,88,246                        ; addps         %xmm14,%xmm14
+  DB  65,15,92,230                        ; subps         %xmm14,%xmm4
+  DB  65,15,84,210                        ; andps         %xmm10,%xmm2
+  DB  68,15,85,212                        ; andnps        %xmm4,%xmm10
+  DB  68,15,86,210                        ; orps          %xmm2,%xmm10
+  DB  69,15,88,212                        ; addps         %xmm12,%xmm10
+  DB  65,15,88,219                        ; addps         %xmm11,%xmm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  65,15,40,192                        ; movaps        %xmm8,%xmm0
+  DB  65,15,40,201                        ; movaps        %xmm9,%xmm1
+  DB  65,15,40,210                        ; movaps        %xmm10,%xmm2
+  DB  15,40,229                           ; movaps        %xmm5,%xmm4
+  DB  15,40,238                           ; movaps        %xmm6,%xmm5
+  DB  65,15,40,245                        ; movaps        %xmm13,%xmm6
+  DB  72,131,196,24                       ; add           $0x18,%rsp
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_overlay_sse2
+_sk_overlay_sse2 LABEL PROC
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  102,68,15,110,192                   ; movd          %eax,%xmm8
+  DB  69,15,198,192,0                     ; shufps        $0x0,%xmm8,%xmm8
+  DB  69,15,40,200                        ; movaps        %xmm8,%xmm9
+  DB  68,15,92,207                        ; subps         %xmm7,%xmm9
+  DB  69,15,40,209                        ; movaps        %xmm9,%xmm10
+  DB  68,15,89,208                        ; mulps         %xmm0,%xmm10
+  DB  68,15,92,195                        ; subps         %xmm3,%xmm8
+  DB  69,15,40,216                        ; movaps        %xmm8,%xmm11
+  DB  68,15,89,220                        ; mulps         %xmm4,%xmm11
+  DB  69,15,88,218                        ; addps         %xmm10,%xmm11
+  DB  68,15,40,227                        ; movaps        %xmm3,%xmm12
+  DB  68,15,92,224                        ; subps         %xmm0,%xmm12
+  DB  15,89,196                           ; mulps         %xmm4,%xmm0
+  DB  68,15,40,239                        ; movaps        %xmm7,%xmm13
+  DB  68,15,92,236                        ; subps         %xmm4,%xmm13
+  DB  68,15,40,244                        ; movaps        %xmm4,%xmm14
+  DB  69,15,88,246                        ; addps         %xmm14,%xmm14
+  DB  68,15,194,247,2                     ; cmpleps       %xmm7,%xmm14
+  DB  15,88,192                           ; addps         %xmm0,%xmm0
+  DB  68,15,40,211                        ; movaps        %xmm3,%xmm10
+  DB  68,15,89,215                        ; mulps         %xmm7,%xmm10
+  DB  69,15,89,236                        ; mulps         %xmm12,%xmm13
+  DB  69,15,88,237                        ; addps         %xmm13,%xmm13
+  DB  69,15,40,226                        ; movaps        %xmm10,%xmm12
+  DB  69,15,92,229                        ; subps         %xmm13,%xmm12
+  DB  65,15,84,198                        ; andps         %xmm14,%xmm0
+  DB  69,15,85,244                        ; andnps        %xmm12,%xmm14
+  DB  65,15,86,198                        ; orps          %xmm14,%xmm0
+  DB  65,15,88,195                        ; addps         %xmm11,%xmm0
+  DB  69,15,40,217                        ; movaps        %xmm9,%xmm11
+  DB  68,15,89,217                        ; mulps         %xmm1,%xmm11
+  DB  69,15,40,224                        ; movaps        %xmm8,%xmm12
+  DB  68,15,89,229                        ; mulps         %xmm5,%xmm12
+  DB  69,15,88,227                        ; addps         %xmm11,%xmm12
+  DB  68,15,40,219                        ; movaps        %xmm3,%xmm11
+  DB  68,15,92,217                        ; subps         %xmm1,%xmm11
+  DB  15,89,205                           ; mulps         %xmm5,%xmm1
+  DB  68,15,40,239                        ; movaps        %xmm7,%xmm13
+  DB  68,15,92,237                        ; subps         %xmm5,%xmm13
+  DB  68,15,40,245                        ; movaps        %xmm5,%xmm14
+  DB  69,15,88,246                        ; addps         %xmm14,%xmm14
+  DB  68,15,194,247,2                     ; cmpleps       %xmm7,%xmm14
+  DB  15,88,201                           ; addps         %xmm1,%xmm1
+  DB  69,15,89,235                        ; mulps         %xmm11,%xmm13
+  DB  69,15,88,237                        ; addps         %xmm13,%xmm13
+  DB  69,15,40,218                        ; movaps        %xmm10,%xmm11
+  DB  69,15,92,221                        ; subps         %xmm13,%xmm11
+  DB  65,15,84,206                        ; andps         %xmm14,%xmm1
+  DB  69,15,85,243                        ; andnps        %xmm11,%xmm14
+  DB  65,15,86,206                        ; orps          %xmm14,%xmm1
+  DB  65,15,88,204                        ; addps         %xmm12,%xmm1
+  DB  68,15,89,202                        ; mulps         %xmm2,%xmm9
+  DB  69,15,40,216                        ; movaps        %xmm8,%xmm11
+  DB  68,15,89,222                        ; mulps         %xmm6,%xmm11
+  DB  69,15,88,217                        ; addps         %xmm9,%xmm11
+  DB  68,15,40,203                        ; movaps        %xmm3,%xmm9
+  DB  68,15,92,202                        ; subps         %xmm2,%xmm9
+  DB  15,89,214                           ; mulps         %xmm6,%xmm2
+  DB  68,15,40,231                        ; movaps        %xmm7,%xmm12
+  DB  68,15,92,230                        ; subps         %xmm6,%xmm12
+  DB  68,15,40,238                        ; movaps        %xmm6,%xmm13
+  DB  69,15,88,237                        ; addps         %xmm13,%xmm13
+  DB  68,15,194,239,2                     ; cmpleps       %xmm7,%xmm13
+  DB  15,88,210                           ; addps         %xmm2,%xmm2
+  DB  69,15,89,225                        ; mulps         %xmm9,%xmm12
+  DB  69,15,88,228                        ; addps         %xmm12,%xmm12
+  DB  69,15,92,212                        ; subps         %xmm12,%xmm10
+  DB  65,15,84,213                        ; andps         %xmm13,%xmm2
+  DB  69,15,85,234                        ; andnps        %xmm10,%xmm13
+  DB  65,15,86,213                        ; orps          %xmm13,%xmm2
+  DB  65,15,88,211                        ; addps         %xmm11,%xmm2
+  DB  68,15,89,199                        ; mulps         %xmm7,%xmm8
+  DB  65,15,88,216                        ; addps         %xmm8,%xmm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_softlight_sse2
+_sk_softlight_sse2 LABEL PROC
+  DB  72,131,236,56                       ; sub           $0x38,%rsp
+  DB  15,41,84,36,32                      ; movaps        %xmm2,0x20(%rsp)
+  DB  15,40,209                           ; movaps        %xmm1,%xmm2
+  DB  68,15,40,192                        ; movaps        %xmm0,%xmm8
+  DB  69,15,87,228                        ; xorps         %xmm12,%xmm12
+  DB  68,15,194,231,1                     ; cmpltps       %xmm7,%xmm12
+  DB  68,15,40,212                        ; movaps        %xmm4,%xmm10
+  DB  68,15,94,215                        ; divps         %xmm7,%xmm10
+  DB  69,15,84,212                        ; andps         %xmm12,%xmm10
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  102,68,15,110,200                   ; movd          %eax,%xmm9
+  DB  69,15,198,201,0                     ; shufps        $0x0,%xmm9,%xmm9
+  DB  69,15,40,241                        ; movaps        %xmm9,%xmm14
+  DB  69,15,92,242                        ; subps         %xmm10,%xmm14
+  DB  69,15,40,218                        ; movaps        %xmm10,%xmm11
+  DB  69,15,40,234                        ; movaps        %xmm10,%xmm13
+  DB  65,15,82,194                        ; rsqrtps       %xmm10,%xmm0
+  DB  68,15,83,248                        ; rcpps         %xmm0,%xmm15
+  DB  69,15,92,250                        ; subps         %xmm10,%xmm15
+  DB  69,15,88,210                        ; addps         %xmm10,%xmm10
+  DB  69,15,88,210                        ; addps         %xmm10,%xmm10
+  DB  65,15,40,194                        ; movaps        %xmm10,%xmm0
+  DB  15,89,192                           ; mulps         %xmm0,%xmm0
+  DB  65,15,88,194                        ; addps         %xmm10,%xmm0
+  DB  69,15,92,217                        ; subps         %xmm9,%xmm11
+  DB  68,15,89,216                        ; mulps         %xmm0,%xmm11
+  DB  184,0,0,224,64                      ; mov           $0x40e00000,%eax
+  DB  102,68,15,110,208                   ; movd          %eax,%xmm10
+  DB  69,15,198,210,0                     ; shufps        $0x0,%xmm10,%xmm10
+  DB  69,15,89,234                        ; mulps         %xmm10,%xmm13
+  DB  69,15,88,235                        ; addps         %xmm11,%xmm13
+  DB  68,15,40,219                        ; movaps        %xmm3,%xmm11
+  DB  15,40,204                           ; movaps        %xmm4,%xmm1
+  DB  68,15,89,217                        ; mulps         %xmm1,%xmm11
+  DB  15,88,228                           ; addps         %xmm4,%xmm4
+  DB  15,88,228                           ; addps         %xmm4,%xmm4
+  DB  15,194,231,2                        ; cmpleps       %xmm7,%xmm4
+  DB  68,15,84,236                        ; andps         %xmm4,%xmm13
+  DB  65,15,85,231                        ; andnps        %xmm15,%xmm4
+  DB  65,15,40,192                        ; movaps        %xmm8,%xmm0
+  DB  15,88,192                           ; addps         %xmm0,%xmm0
+  DB  65,15,86,229                        ; orps          %xmm13,%xmm4
+  DB  68,15,40,232                        ; movaps        %xmm0,%xmm13
+  DB  68,15,92,235                        ; subps         %xmm3,%xmm13
+  DB  69,15,89,245                        ; mulps         %xmm13,%xmm14
+  DB  68,15,89,239                        ; mulps         %xmm7,%xmm13
+  DB  65,15,89,229                        ; mulps         %xmm13,%xmm4
+  DB  65,15,88,227                        ; addps         %xmm11,%xmm4
+  DB  69,15,40,217                        ; movaps        %xmm9,%xmm11
+  DB  68,15,92,219                        ; subps         %xmm3,%xmm11
+  DB  69,15,40,251                        ; movaps        %xmm11,%xmm15
+  DB  15,41,76,36,16                      ; movaps        %xmm1,0x10(%rsp)
+  DB  68,15,89,249                        ; mulps         %xmm1,%xmm15
+  DB  69,15,40,233                        ; movaps        %xmm9,%xmm13
+  DB  68,15,92,239                        ; subps         %xmm7,%xmm13
+  DB  69,15,89,197                        ; mulps         %xmm13,%xmm8
+  DB  69,15,88,199                        ; addps         %xmm15,%xmm8
+  DB  68,15,88,243                        ; addps         %xmm3,%xmm14
+  DB  68,15,89,241                        ; mulps         %xmm1,%xmm14
+  DB  15,194,195,2                        ; cmpleps       %xmm3,%xmm0
+  DB  68,15,84,240                        ; andps         %xmm0,%xmm14
+  DB  15,85,196                           ; andnps        %xmm4,%xmm0
+  DB  65,15,86,198                        ; orps          %xmm14,%xmm0
+  DB  65,15,88,192                        ; addps         %xmm8,%xmm0
+  DB  15,41,44,36                         ; movaps        %xmm5,(%rsp)
+  DB  68,15,40,197                        ; movaps        %xmm5,%xmm8
+  DB  68,15,94,199                        ; divps         %xmm7,%xmm8
+  DB  69,15,84,196                        ; andps         %xmm12,%xmm8
+  DB  69,15,40,240                        ; movaps        %xmm8,%xmm14
+  DB  69,15,88,246                        ; addps         %xmm14,%xmm14
+  DB  69,15,88,246                        ; addps         %xmm14,%xmm14
+  DB  65,15,40,230                        ; movaps        %xmm14,%xmm4
+  DB  15,89,228                           ; mulps         %xmm4,%xmm4
+  DB  65,15,88,230                        ; addps         %xmm14,%xmm4
+  DB  69,15,40,248                        ; movaps        %xmm8,%xmm15
+  DB  69,15,92,249                        ; subps         %xmm9,%xmm15
+  DB  68,15,89,252                        ; mulps         %xmm4,%xmm15
+  DB  69,15,40,241                        ; movaps        %xmm9,%xmm14
+  DB  69,15,92,240                        ; subps         %xmm8,%xmm14
+  DB  65,15,82,224                        ; rsqrtps       %xmm8,%xmm4
+  DB  15,83,228                           ; rcpps         %xmm4,%xmm4
+  DB  65,15,92,224                        ; subps         %xmm8,%xmm4
+  DB  69,15,89,194                        ; mulps         %xmm10,%xmm8
+  DB  69,15,88,199                        ; addps         %xmm15,%xmm8
+  DB  68,15,40,253                        ; movaps        %xmm5,%xmm15
+  DB  69,15,88,255                        ; addps         %xmm15,%xmm15
+  DB  69,15,88,255                        ; addps         %xmm15,%xmm15
+  DB  68,15,194,255,2                     ; cmpleps       %xmm7,%xmm15
+  DB  69,15,84,199                        ; andps         %xmm15,%xmm8
+  DB  68,15,85,252                        ; andnps        %xmm4,%xmm15
+  DB  69,15,86,248                        ; orps          %xmm8,%xmm15
+  DB  68,15,40,194                        ; movaps        %xmm2,%xmm8
+  DB  69,15,88,192                        ; addps         %xmm8,%xmm8
+  DB  65,15,40,224                        ; movaps        %xmm8,%xmm4
+  DB  15,92,227                           ; subps         %xmm3,%xmm4
+  DB  68,15,89,244                        ; mulps         %xmm4,%xmm14
+  DB  15,89,231                           ; mulps         %xmm7,%xmm4
+  DB  68,15,89,252                        ; mulps         %xmm4,%xmm15
+  DB  15,40,227                           ; movaps        %xmm3,%xmm4
+  DB  15,89,229                           ; mulps         %xmm5,%xmm4
+  DB  68,15,88,252                        ; addps         %xmm4,%xmm15
+  DB  65,15,40,227                        ; movaps        %xmm11,%xmm4
+  DB  15,89,229                           ; mulps         %xmm5,%xmm4
+  DB  65,15,89,213                        ; mulps         %xmm13,%xmm2
+  DB  15,88,212                           ; addps         %xmm4,%xmm2
+  DB  68,15,88,243                        ; addps         %xmm3,%xmm14
+  DB  68,15,89,245                        ; mulps         %xmm5,%xmm14
+  DB  68,15,194,195,2                     ; cmpleps       %xmm3,%xmm8
+  DB  69,15,84,240                        ; andps         %xmm8,%xmm14
+  DB  69,15,85,199                        ; andnps        %xmm15,%xmm8
+  DB  69,15,86,198                        ; orps          %xmm14,%xmm8
+  DB  68,15,88,194                        ; addps         %xmm2,%xmm8
+  DB  68,15,40,246                        ; movaps        %xmm6,%xmm14
+  DB  65,15,40,206                        ; movaps        %xmm14,%xmm1
+  DB  15,94,207                           ; divps         %xmm7,%xmm1
+  DB  65,15,84,204                        ; andps         %xmm12,%xmm1
+  DB  15,40,225                           ; movaps        %xmm1,%xmm4
+  DB  65,15,92,225                        ; subps         %xmm9,%xmm4
+  DB  68,15,92,201                        ; subps         %xmm1,%xmm9
+  DB  68,15,89,209                        ; mulps         %xmm1,%xmm10
+  DB  15,82,241                           ; rsqrtps       %xmm1,%xmm6
+  DB  15,83,246                           ; rcpps         %xmm6,%xmm6
+  DB  15,92,241                           ; subps         %xmm1,%xmm6
+  DB  15,88,201                           ; addps         %xmm1,%xmm1
+  DB  15,88,201                           ; addps         %xmm1,%xmm1
+  DB  15,40,233                           ; movaps        %xmm1,%xmm5
+  DB  15,89,237                           ; mulps         %xmm5,%xmm5
+  DB  15,88,233                           ; addps         %xmm1,%xmm5
+  DB  15,89,236                           ; mulps         %xmm4,%xmm5
+  DB  68,15,88,213                        ; addps         %xmm5,%xmm10
+  DB  65,15,40,238                        ; movaps        %xmm14,%xmm5
+  DB  15,40,205                           ; movaps        %xmm5,%xmm1
+  DB  15,88,201                           ; addps         %xmm1,%xmm1
+  DB  15,88,201                           ; addps         %xmm1,%xmm1
+  DB  15,194,207,2                        ; cmpleps       %xmm7,%xmm1
+  DB  68,15,84,209                        ; andps         %xmm1,%xmm10
+  DB  15,85,206                           ; andnps        %xmm6,%xmm1
+  DB  15,40,84,36,32                      ; movaps        0x20(%rsp),%xmm2
+  DB  68,15,89,234                        ; mulps         %xmm2,%xmm13
+  DB  15,88,210                           ; addps         %xmm2,%xmm2
+  DB  65,15,86,202                        ; orps          %xmm10,%xmm1
+  DB  15,40,226                           ; movaps        %xmm2,%xmm4
+  DB  15,92,227                           ; subps         %xmm3,%xmm4
+  DB  68,15,89,204                        ; mulps         %xmm4,%xmm9
+  DB  15,89,231                           ; mulps         %xmm7,%xmm4
+  DB  15,89,204                           ; mulps         %xmm4,%xmm1
+  DB  15,40,227                           ; movaps        %xmm3,%xmm4
+  DB  15,89,229                           ; mulps         %xmm5,%xmm4
+  DB  15,88,204                           ; addps         %xmm4,%xmm1
+  DB  65,15,40,227                        ; movaps        %xmm11,%xmm4
+  DB  15,89,229                           ; mulps         %xmm5,%xmm4
+  DB  65,15,88,229                        ; addps         %xmm13,%xmm4
+  DB  68,15,88,203                        ; addps         %xmm3,%xmm9
+  DB  68,15,89,205                        ; mulps         %xmm5,%xmm9
+  DB  15,40,245                           ; movaps        %xmm5,%xmm6
+  DB  15,194,211,2                        ; cmpleps       %xmm3,%xmm2
+  DB  68,15,84,202                        ; andps         %xmm2,%xmm9
+  DB  15,85,209                           ; andnps        %xmm1,%xmm2
+  DB  65,15,86,209                        ; orps          %xmm9,%xmm2
+  DB  15,88,212                           ; addps         %xmm4,%xmm2
+  DB  68,15,89,223                        ; mulps         %xmm7,%xmm11
+  DB  65,15,88,219                        ; addps         %xmm11,%xmm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  15,40,100,36,16                     ; movaps        0x10(%rsp),%xmm4
+  DB  15,40,44,36                         ; movaps        (%rsp),%xmm5
+  DB  65,15,40,200                        ; movaps        %xmm8,%xmm1
+  DB  72,131,196,56                       ; add           $0x38,%rsp
   DB  255,224                             ; jmpq          *%rax
 
 PUBLIC _sk_clamp_0_sse2
@@ -4937,6 +8311,27 @@ _sk_store_a8_sse2 LABEL PROC
   DB  72,173                              ; lods          %ds:(%rsi),%rax
   DB  255,224                             ; jmpq          *%rax
 
+PUBLIC _sk_load_g8_sse2
+_sk_load_g8_sse2 LABEL PROC
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  72,139,0                            ; mov           (%rax),%rax
+  DB  102,15,110,4,56                     ; movd          (%rax,%rdi,1),%xmm0
+  DB  102,15,239,201                      ; pxor          %xmm1,%xmm1
+  DB  102,15,96,193                       ; punpcklbw     %xmm1,%xmm0
+  DB  102,15,97,193                       ; punpcklwd     %xmm1,%xmm0
+  DB  15,91,200                           ; cvtdq2ps      %xmm0,%xmm1
+  DB  184,129,128,128,59                  ; mov           $0x3b808081,%eax
+  DB  102,15,110,192                      ; movd          %eax,%xmm0
+  DB  15,198,192,0                        ; shufps        $0x0,%xmm0,%xmm0
+  DB  15,89,193                           ; mulps         %xmm1,%xmm0
+  DB  184,0,0,128,63                      ; mov           $0x3f800000,%eax
+  DB  102,15,110,216                      ; movd          %eax,%xmm3
+  DB  15,198,219,0                        ; shufps        $0x0,%xmm3,%xmm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  15,40,200                           ; movaps        %xmm0,%xmm1
+  DB  15,40,208                           ; movaps        %xmm0,%xmm2
+  DB  255,224                             ; jmpq          *%rax
+
 PUBLIC _sk_load_565_sse2
 _sk_load_565_sse2 LABEL PROC
   DB  72,173                              ; lods          %ds:(%rsi),%rax
@@ -4997,6 +8392,83 @@ _sk_store_565_sse2 LABEL PROC
   DB  102,69,15,235,209                   ; por           %xmm9,%xmm10
   DB  68,15,89,194                        ; mulps         %xmm2,%xmm8
   DB  102,69,15,91,192                    ; cvtps2dq      %xmm8,%xmm8
+  DB  102,69,15,86,194                    ; orpd          %xmm10,%xmm8
+  DB  102,65,15,114,240,16                ; pslld         $0x10,%xmm8
+  DB  102,65,15,114,224,16                ; psrad         $0x10,%xmm8
+  DB  102,69,15,107,192                   ; packssdw      %xmm8,%xmm8
+  DB  102,68,15,214,4,120                 ; movq          %xmm8,(%rax,%rdi,2)
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_load_4444_sse2
+_sk_load_4444_sse2 LABEL PROC
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  72,139,0                            ; mov           (%rax),%rax
+  DB  243,68,15,126,12,120                ; movq          (%rax,%rdi,2),%xmm9
+  DB  102,15,239,192                      ; pxor          %xmm0,%xmm0
+  DB  102,68,15,97,200                    ; punpcklwd     %xmm0,%xmm9
+  DB  184,0,240,0,0                       ; mov           $0xf000,%eax
+  DB  102,15,110,192                      ; movd          %eax,%xmm0
+  DB  102,15,112,192,0                    ; pshufd        $0x0,%xmm0,%xmm0
+  DB  102,65,15,219,193                   ; pand          %xmm9,%xmm0
+  DB  15,91,200                           ; cvtdq2ps      %xmm0,%xmm1
+  DB  184,137,136,136,55                  ; mov           $0x37888889,%eax
+  DB  102,15,110,192                      ; movd          %eax,%xmm0
+  DB  15,198,192,0                        ; shufps        $0x0,%xmm0,%xmm0
+  DB  15,89,193                           ; mulps         %xmm1,%xmm0
+  DB  184,0,15,0,0                        ; mov           $0xf00,%eax
+  DB  102,15,110,200                      ; movd          %eax,%xmm1
+  DB  102,15,112,201,0                    ; pshufd        $0x0,%xmm1,%xmm1
+  DB  102,65,15,219,201                   ; pand          %xmm9,%xmm1
+  DB  15,91,209                           ; cvtdq2ps      %xmm1,%xmm2
+  DB  184,137,136,136,57                  ; mov           $0x39888889,%eax
+  DB  102,15,110,200                      ; movd          %eax,%xmm1
+  DB  15,198,201,0                        ; shufps        $0x0,%xmm1,%xmm1
+  DB  15,89,202                           ; mulps         %xmm2,%xmm1
+  DB  184,240,0,0,0                       ; mov           $0xf0,%eax
+  DB  102,15,110,208                      ; movd          %eax,%xmm2
+  DB  102,15,112,210,0                    ; pshufd        $0x0,%xmm2,%xmm2
+  DB  102,65,15,219,209                   ; pand          %xmm9,%xmm2
+  DB  68,15,91,194                        ; cvtdq2ps      %xmm2,%xmm8
+  DB  184,137,136,136,59                  ; mov           $0x3b888889,%eax
+  DB  102,15,110,208                      ; movd          %eax,%xmm2
+  DB  15,198,210,0                        ; shufps        $0x0,%xmm2,%xmm2
+  DB  65,15,89,208                        ; mulps         %xmm8,%xmm2
+  DB  184,15,0,0,0                        ; mov           $0xf,%eax
+  DB  102,15,110,216                      ; movd          %eax,%xmm3
+  DB  102,15,112,219,0                    ; pshufd        $0x0,%xmm3,%xmm3
+  DB  102,65,15,219,217                   ; pand          %xmm9,%xmm3
+  DB  68,15,91,195                        ; cvtdq2ps      %xmm3,%xmm8
+  DB  184,137,136,136,61                  ; mov           $0x3d888889,%eax
+  DB  102,15,110,216                      ; movd          %eax,%xmm3
+  DB  15,198,219,0                        ; shufps        $0x0,%xmm3,%xmm3
+  DB  65,15,89,216                        ; mulps         %xmm8,%xmm3
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  255,224                             ; jmpq          *%rax
+
+PUBLIC _sk_store_4444_sse2
+_sk_store_4444_sse2 LABEL PROC
+  DB  72,173                              ; lods          %ds:(%rsi),%rax
+  DB  72,139,0                            ; mov           (%rax),%rax
+  DB  185,0,0,112,65                      ; mov           $0x41700000,%ecx
+  DB  102,68,15,110,193                   ; movd          %ecx,%xmm8
+  DB  69,15,198,192,0                     ; shufps        $0x0,%xmm8,%xmm8
+  DB  69,15,40,200                        ; movaps        %xmm8,%xmm9
+  DB  68,15,89,200                        ; mulps         %xmm0,%xmm9
+  DB  102,69,15,91,201                    ; cvtps2dq      %xmm9,%xmm9
+  DB  102,65,15,114,241,12                ; pslld         $0xc,%xmm9
+  DB  69,15,40,208                        ; movaps        %xmm8,%xmm10
+  DB  68,15,89,209                        ; mulps         %xmm1,%xmm10
+  DB  102,69,15,91,210                    ; cvtps2dq      %xmm10,%xmm10
+  DB  102,65,15,114,242,8                 ; pslld         $0x8,%xmm10
+  DB  102,69,15,235,209                   ; por           %xmm9,%xmm10
+  DB  69,15,40,200                        ; movaps        %xmm8,%xmm9
+  DB  68,15,89,202                        ; mulps         %xmm2,%xmm9
+  DB  102,69,15,91,201                    ; cvtps2dq      %xmm9,%xmm9
+  DB  102,65,15,114,241,4                 ; pslld         $0x4,%xmm9
+  DB  68,15,89,195                        ; mulps         %xmm3,%xmm8
+  DB  102,69,15,91,192                    ; cvtps2dq      %xmm8,%xmm8
+  DB  102,69,15,86,193                    ; orpd          %xmm9,%xmm8
   DB  102,69,15,86,194                    ; orpd          %xmm10,%xmm8
   DB  102,65,15,114,240,16                ; pslld         $0x10,%xmm8
   DB  102,65,15,114,224,16                ; psrad         $0x10,%xmm8

@@ -685,6 +685,7 @@ cc_library {
         "src/sksl/SkSLIRGenerator.cpp",
         "src/sksl/SkSLParser.cpp",
         "src/sksl/SkSLSPIRVCodeGenerator.cpp",
+        "src/sksl/SkSLString.cpp",
         "src/sksl/SkSLUtil.cpp",
         "src/sksl/ir/SkSLSymbolTable.cpp",
         "src/sksl/ir/SkSLType.cpp",

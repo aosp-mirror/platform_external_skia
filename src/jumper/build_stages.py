@@ -5,57 +5,57 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import os
 import re
 import subprocess
 import sys
 
-#clang = ['clang++']
-clang = ['ccache', 'clang-4.0', '-x', 'c++']
+clang   = sys.argv[1] if len(sys.argv) > 1 else 'clang-4.0'
+ndk     = sys.argv[2] if len(sys.argv) > 2 else os.path.expanduser('~/ndk')
+objdump = sys.argv[3] if len(sys.argv) > 3 else 'gobjdump'
 
-ndk = '/Users/mtklein/ndk/'
-objdump = 'gobjdump'
+clang = ['ccache', clang, '-x', 'c++']
 
-#ndk = '/home/mtklein/ndk/'
-#objdump = '/home/mtklein/binutils-2.27/binutils/objdump'
 
 cflags = ['-std=c++11', '-Os', '-DJUMPER',
           '-fomit-frame-pointer', '-ffp-contract=fast' ]
 
-sse2 = '-mno-red-zone -msse2 -mno-sse3 -mno-ssse3 -mno-sse4.1'.split()
+win = ['-DWIN', '-mno-red-zone']
+sse2 = ['-msse2', '-mno-sse3', '-mno-ssse3', '-mno-sse4.1']
 subprocess.check_call(clang + cflags + sse2 +
                       ['-c', 'src/jumper/SkJumper_stages.cpp'] +
                       ['-o', 'sse2.o'])
-subprocess.check_call(clang + cflags + sse2 + ['-DWIN'] +
+subprocess.check_call(clang + cflags + sse2 + win +
                       ['-c', 'src/jumper/SkJumper_stages.cpp'] +
                       ['-o', 'win_sse2.o'])
 
-sse41 = '-mno-red-zone -msse4.1'.split()
+sse41 = ['-msse4.1']
 subprocess.check_call(clang + cflags + sse41 +
                       ['-c', 'src/jumper/SkJumper_stages.cpp'] +
                       ['-o', 'sse41.o'])
-subprocess.check_call(clang + cflags + sse41 + ['-DWIN'] +
+subprocess.check_call(clang + cflags + sse41 + win +
                       ['-c', 'src/jumper/SkJumper_stages.cpp'] +
                       ['-o', 'win_sse41.o'])
 
-avx = '-mno-red-zone -mavx'.split()
+avx = ['-mavx']
 subprocess.check_call(clang + cflags + avx +
                       ['-c', 'src/jumper/SkJumper_stages.cpp'] +
                       ['-o', 'avx.o'])
-subprocess.check_call(clang + cflags + avx + ['-DWIN'] +
+subprocess.check_call(clang + cflags + avx + win +
                       ['-c', 'src/jumper/SkJumper_stages.cpp'] +
                       ['-o', 'win_avx.o'])
 
-hsw = '-mno-red-zone -mavx2 -mfma -mf16c'.split()
+hsw = ['-mavx2', '-mfma', '-mf16c']
 subprocess.check_call(clang + cflags + hsw +
                       ['-c', 'src/jumper/SkJumper_stages.cpp'] +
                       ['-o', 'hsw.o'])
-subprocess.check_call(clang + cflags + hsw + ['-DWIN'] +
+subprocess.check_call(clang + cflags + hsw + win +
                       ['-c', 'src/jumper/SkJumper_stages.cpp'] +
                       ['-o', 'win_hsw.o'])
 
 aarch64 = [
     '--target=aarch64-linux-android',
-    '--sysroot=' + ndk + 'platforms/android-21/arch-arm64',
+    '--sysroot=' + ndk + '/platforms/android-21/arch-arm64',
 ]
 subprocess.check_call(clang + cflags + aarch64 +
                       ['-c', 'src/jumper/SkJumper_stages.cpp'] +
@@ -63,7 +63,7 @@ subprocess.check_call(clang + cflags + aarch64 +
 
 vfp4 = [
     '--target=armv7a-linux-android',
-    '--sysroot=' + ndk + 'platforms/android-18/arch-arm',
+    '--sysroot=' + ndk + '/platforms/android-18/arch-arm',
     '-mfpu=neon-vfpv4',
     '-mfloat-abi=hard',
 ]

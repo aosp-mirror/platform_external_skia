@@ -353,6 +353,13 @@ SI void from_565(U16 _565, F* r, F* g, F* b) {
     *g = cast(wide & C(63<< 5)) * C(1.0f / (63<< 5));
     *b = cast(wide & C(31<< 0)) * C(1.0f / (31<< 0));
 }
+SI void from_4444(U16 _4444, F* r, F* g, F* b, F* a) {
+    U32 wide = expand(_4444);
+    *r = cast(wide & C(15<<12)) * C(1.0f / (15<<12));
+    *g = cast(wide & C(15<< 8)) * C(1.0f / (15<< 8));
+    *b = cast(wide & C(15<< 4)) * C(1.0f / (15<< 4));
+    *a = cast(wide & C(15<< 0)) * C(1.0f / (15<< 0));
+}
 
 // Sometimes we want to work with 4 floats directly, regardless of the depth of the F vector.
 #if defined(JUMPER)
@@ -520,30 +527,84 @@ STAGE(constant_color) {
     a = rgba[3];
 }
 
-STAGE(clear) {
-    r = g = b = a = 0;
+#define BLEND_MODE(name)                       \
+    SI F name##_channel(F s, F d, F sa, F da); \
+    STAGE(name) {                              \
+        r = name##_channel(r,dr,a,da);         \
+        g = name##_channel(g,dg,a,da);         \
+        b = name##_channel(b,db,a,da);         \
+        a = name##_channel(a,da,a,da);         \
+    }                                          \
+    SI F name##_channel(F s, F d, F sa, F da)
+
+SI F inv(F x) { return 1.0_f - x; }
+SI F two(F x) { return x + x; }
+
+BLEND_MODE(clear)    { return 0; }
+BLEND_MODE(srcatop)  { return s*da + d*inv(sa); }
+BLEND_MODE(dstatop)  { return d*sa + s*inv(da); }
+BLEND_MODE(srcin)    { return s * da; }
+BLEND_MODE(dstin)    { return d * sa; }
+BLEND_MODE(srcout)   { return s * inv(da); }
+BLEND_MODE(dstout)   { return d * inv(sa); }
+BLEND_MODE(srcover)  { return mad(d, inv(sa), s); }
+BLEND_MODE(dstover)  { return mad(s, inv(da), d); }
+
+BLEND_MODE(modulate) { return s*d; }
+BLEND_MODE(multiply) { return s*inv(da) + d*inv(sa) + s*d; }
+BLEND_MODE(plus_)    { return s + d; }
+BLEND_MODE(screen)   { return s + d - s*d; }
+BLEND_MODE(xor_)     { return s*inv(da) + d*inv(sa); }
+
+#undef BLEND_MODE
+#define BLEND_MODE(name)                       \
+    SI F name##_channel(F s, F d, F sa, F da); \
+    STAGE(name) {                              \
+        r = name##_channel(r,dr,a,da);         \
+        g = name##_channel(g,dg,a,da);         \
+        b = name##_channel(b,db,a,da);         \
+        a = mad(da, inv(a), a);                \
+    }                                          \
+    SI F name##_channel(F s, F d, F sa, F da)
+
+BLEND_MODE(darken)     { return s + d -     max(s*da, d*sa) ; }
+BLEND_MODE(lighten)    { return s + d -     min(s*da, d*sa) ; }
+BLEND_MODE(difference) { return s + d - two(min(s*da, d*sa)); }
+BLEND_MODE(exclusion)  { return s + d - two(s*d); }
+
+BLEND_MODE(colorburn) {
+    return if_then_else(d == da, d + s*inv(da),
+           if_then_else(s ==  0, s + d*inv(sa),
+                                 sa*(da - min(da, (da-d)*sa/s)) + s*inv(da) + d*inv(sa)));
+}
+BLEND_MODE(colordodge) {
+    return if_then_else(d ==  0, d + s*inv(da),
+           if_then_else(s == sa, s + d*inv(sa),
+                                 sa*min(da, (d*sa)/(sa - s)) + s*inv(da) + d*inv(sa)));
+}
+BLEND_MODE(hardlight) {
+    return s*inv(da) + d*inv(sa)
+         + if_then_else(two(s) <= sa, two(s*d), sa*da - two((da-d)*(sa-s)));
+}
+BLEND_MODE(overlay) {
+    return s*inv(da) + d*inv(sa)
+         + if_then_else(two(d) <= da, two(s*d), sa*da - two((da-d)*(sa-s)));
 }
 
-STAGE(plus_) {
-    r = r + dr;
-    g = g + dg;
-    b = b + db;
-    a = a + da;
-}
+BLEND_MODE(softlight) {
+    F m  = if_then_else(da > 0, d / da, 0),
+      s2 = two(s),
+      m4 = two(two(m));
 
-STAGE(srcover) {
-    auto A = C(1.0f) - a;
-    r = mad(dr, A, r);
-    g = mad(dg, A, g);
-    b = mad(db, A, b);
-    a = mad(da, A, a);
-}
-STAGE(dstover) {
-    auto DA = 1.0_f - da;
-    r = mad(r, DA, dr);
-    g = mad(g, DA, dg);
-    b = mad(b, DA, db);
-    a = mad(a, DA, da);
+    // The logic forks three ways:
+    //    1. dark src?
+    //    2. light src, dark dst?
+    //    3. light src, light dst?
+    F darkSrc = d*(sa + (s2 - sa)*(1.0_f - m)),      // Used in case 1.
+      darkDst = (m4*m4 + m4)*(m - 1.0_f) + 7.0_f*m,  // Used in case 2.
+      liteDst = rcp(rsqrt(m)) - m,                   // Used in case 3.
+      liteSrc = d*sa + da*(s2 - sa) * if_then_else(two(two(d)) <= da, darkDst, liteDst); // 2 or 3?
+    return s*inv(da) + d*inv(sa) + if_then_else(s2 <= sa, darkSrc, liteSrc);      // 1 or (2 or 3)?
 }
 
 STAGE(clamp_0) {
@@ -717,6 +778,13 @@ STAGE(store_a8) {
     store(ptr, packed, tail);
 }
 
+STAGE(load_g8) {
+    auto ptr = *(const uint8_t**)ctx + x;
+
+    r = g = b = cast(expand(load<U8>(ptr, tail))) * C(1/255.0f);
+    a = 1.0_f;
+}
+
 STAGE(load_565) {
     auto ptr = *(const uint16_t**)ctx + x;
 
@@ -732,6 +800,19 @@ STAGE(store_565) {
     store(ptr, px, tail);
 }
 
+STAGE(load_4444) {
+    auto ptr = *(const uint16_t**)ctx + x;
+    from_4444(load<U16>(ptr, tail), &r,&g,&b,&a);
+}
+STAGE(store_4444) {
+    auto ptr = *(uint16_t**)ctx + x;
+    U16 px = pack( round(r, 15.0_f) << 12
+                 | round(g, 15.0_f) <<  8
+                 | round(b, 15.0_f) <<  4
+                 | round(a, 15.0_f)      );
+    store(ptr, px, tail);
+}
+
 STAGE(load_8888) {
     auto ptr = *(const uint32_t**)ctx + x;
 
@@ -741,7 +822,6 @@ STAGE(load_8888) {
     b = cast((px >> 16) & 0xff_i) * C(1/255.0f);
     a = cast((px >> 24)         ) * C(1/255.0f);
 }
-
 STAGE(store_8888) {
     auto ptr = *(uint32_t**)ctx + x;
 

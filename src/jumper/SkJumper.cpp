@@ -44,9 +44,28 @@ static K kConstants = {
     M(seed_shader)        \
     M(constant_color)     \
     M(clear)              \
-    M(plus_)              \
+    M(srcatop)            \
+    M(dstatop)            \
+    M(srcin)              \
+    M(dstin)              \
+    M(srcout)             \
+    M(dstout)             \
     M(srcover)            \
     M(dstover)            \
+    M(modulate)           \
+    M(multiply)           \
+    M(plus_)              \
+    M(screen)             \
+    M(xor_)               \
+    M(darken)             \
+    M(lighten)            \
+    M(difference)         \
+    M(exclusion)          \
+    M(colorburn)          \
+    M(colordodge)         \
+    M(hardlight)          \
+    M(overlay)            \
+    M(softlight)          \
     M(clamp_0)            \
     M(clamp_1)            \
     M(clamp_a)            \
@@ -67,8 +86,11 @@ static K kConstants = {
     M(load_tables)        \
     M(load_a8)            \
     M(store_a8)           \
+    M(load_g8)            \
     M(load_565)           \
     M(store_565)          \
+    M(load_4444)          \
+    M(store_4444)         \
     M(load_8888)          \
     M(store_8888)         \
     M(load_f16)           \

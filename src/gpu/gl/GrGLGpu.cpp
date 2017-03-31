@@ -3344,13 +3344,8 @@ static inline bool can_blit_framebuffer_for_copy_surface(const GrSurface* dst,
         }
     }
     if (GrGLCaps::kResolveMustBeFull_BlitFrambufferFlag & blitFramebufferFlags) {
-        if (srcRT && srcRT->numColorSamples()) {
-            if (dstRT && !dstRT->numColorSamples()) {
-                return false;
-            }
-            if (SkRect::Make(srcRect) != srcRT->getBoundsRect()) {
-                return false;
-            }
+        if (srcRT && srcRT->numColorSamples() && dstRT && !dstRT->numColorSamples()) {
+            return false;
         }
     }
     if (GrGLCaps::kNoMSAADst_BlitFramebufferFlag & blitFramebufferFlags) {
@@ -3369,13 +3364,9 @@ static inline bool can_blit_framebuffer_for_copy_surface(const GrSurface* dst,
         }
     }
     if (GrGLCaps::kRectsMustMatchForMSAASrc_BlitFramebufferFlag & blitFramebufferFlags) {
-        if (srcRT && srcRT->numColorSamples()) {
-            if (dstPoint.fX != srcRect.fLeft || dstPoint.fY != srcRect.fTop) {
-                return false;
-            }
-            if (dst->origin() != src->origin()) {
-                return false;
-            }
+        if (srcRT && srcRT->numColorSamples() &&
+            (dstPoint.fX != srcRect.fLeft || dstPoint.fY != srcRect.fTop)) {
+            return false;
         }
     }
     return true;
@@ -3578,7 +3569,7 @@ bool GrGLGpu::createCopyProgram(GrTexture* srcTex) {
         fshaderTxt.appendf("#extension %s : require\n",
                            shaderCaps->externalTextureExtensionString());
     }
-    GrGLSLAppendDefaultFloatPrecisionDeclaration(kDefault_GrSLPrecision, *shaderCaps,
+    GrGLSLAppendDefaultFloatPrecisionDeclaration(kMedium_GrSLPrecision, *shaderCaps,
                                                  &fshaderTxt);
     vTexCoord.setTypeModifier(GrShaderVar::kIn_TypeModifier);
     vTexCoord.appendDecl(shaderCaps, &fshaderTxt);
@@ -3716,7 +3707,7 @@ bool GrGLGpu::createMipmapProgram(int progIdx) {
             fshaderTxt.appendf("#extension %s : require\n", extension);
         }
     }
-    GrGLSLAppendDefaultFloatPrecisionDeclaration(kDefault_GrSLPrecision, *shaderCaps,
+    GrGLSLAppendDefaultFloatPrecisionDeclaration(kMedium_GrSLPrecision, *shaderCaps,
                                                  &fshaderTxt);
     for (int i = 0; i < numTaps; ++i) {
         vTexCoords[i].setTypeModifier(GrShaderVar::kIn_TypeModifier);
@@ -3831,7 +3822,7 @@ bool GrGLGpu::createWireRectProgram() {
     GrShaderVar oFragColor("o_FragColor", kVec4f_GrSLType, GrShaderVar::kOut_TypeModifier);
 
     SkString fshaderTxt(version);
-    GrGLSLAppendDefaultFloatPrecisionDeclaration(kDefault_GrSLPrecision,
+    GrGLSLAppendDefaultFloatPrecisionDeclaration(kMedium_GrSLPrecision,
                                                  *this->caps()->shaderCaps(),
                                                  &fshaderTxt);
     uColor.appendDecl(this->caps()->shaderCaps(), &fshaderTxt);
