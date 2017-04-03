@@ -35,9 +35,9 @@ public:
 
     enum CachedFormat {
         kLegacy_CachedFormat,    // The format from the generator, with any color space stripped out
-        kAsIs_CachedFormat,      // The format from the generator, with no modification
         kLinearF16_CachedFormat, // Half float RGBA with linear gamma
         kSRGB8888_CachedFormat,  // sRGB bytes
+        kSBGR8888_CachedFormat,  // sRGB bytes, in BGR order
 
         kNumCachedFormats,
     };
@@ -88,7 +88,7 @@ public:
     bool lockAsBitmapOnlyIfAlreadyCached(SkBitmap*, CachedFormat);
     // Call the underlying generator directly
     bool directGeneratePixels(const SkImageInfo& dstInfo, void* dstPixels, size_t dstRB,
-                              int srcX, int srcY);
+                              int srcX, int srcY, SkTransferFunctionBehavior behavior);
 
 private:
     // Ref-counted tuple(SkImageGenerator, SkMutex) which allows sharing of one generator

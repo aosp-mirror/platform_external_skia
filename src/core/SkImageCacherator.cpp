@@ -157,7 +157,7 @@ bool SkImageCacherator::generateBitmap(SkBitmap* bitmap, const SkImageInfo& deco
                                           allocator)) {
             return false;
         }
-        if (!bitmap->tryAllocPixels(decodeInfo, nullptr, full.getColorTable())) {
+        if (!bitmap->tryAllocPixels(decodeInfo, sk_ref_sp(full.getColorTable()))) {
             return false;
         }
         return full.readPixels(bitmap->info(), bitmap->getPixels(), bitmap->rowBytes(),
@@ -166,14 +166,18 @@ bool SkImageCacherator::generateBitmap(SkBitmap* bitmap, const SkImageInfo& deco
 }
 
 bool SkImageCacherator::directGeneratePixels(const SkImageInfo& info, void* pixels, size_t rb,
-                                             int srcX, int srcY) {
+                                             int srcX, int srcY,
+                                             SkTransferFunctionBehavior behavior) {
     ScopedGenerator generator(fSharedGenerator);
     const SkImageInfo& genInfo = generator->getInfo();
     // Currently generators do not natively handle subsets, so check that first.
     if (srcX || srcY || genInfo.width() != info.width() || genInfo.height() != info.height()) {
         return false;
     }
-    return generator->getPixels(info, pixels, rb);
+
+    SkImageGenerator::Options opts;
+    opts.fBehavior = behavior;
+    return generator->getPixels(info, pixels, rb, &opts);
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////
@@ -359,7 +363,7 @@ SkImageCacherator::CachedFormat SkImageCacherator::chooseCacheFormat(SkColorSpac
         case kRGBA_8888_SkColorType:
             if (cs->gammaCloseToSRGB()) {
                 if (caps.supportsSRGB()) {
-                    return kAsIs_CachedFormat;
+                    return kSRGB8888_CachedFormat;
                 } else if (caps.supportsHalfFloat()) {
                     return kLinearF16_CachedFormat;
                 } else {
@@ -379,7 +383,7 @@ SkImageCacherator::CachedFormat SkImageCacherator::chooseCacheFormat(SkColorSpac
             // Odd case. sBGRA isn't a real thing, so we may not have this texturable.
             if (caps.supportsSBGR()) {
                 if (cs->gammaCloseToSRGB()) {
-                    return kAsIs_CachedFormat;
+                    return kSBGR8888_CachedFormat;
                 } else if (caps.supportsHalfFloat()) {
                     return kLinearF16_CachedFormat;
                 } else if (caps.supportsSRGB()) {
@@ -409,16 +413,12 @@ SkImageCacherator::CachedFormat SkImageCacherator::chooseCacheFormat(SkColorSpac
             }
 
         case kRGBA_F16_SkColorType:
-            if (!caps.supportsHalfFloat()) {
-                if (caps.supportsSRGB()) {
-                    return kSRGB8888_CachedFormat;
-                } else {
-                    return kLegacy_CachedFormat;
-                }
-            } else if (cs->gammaIsLinear()) {
-                return kAsIs_CachedFormat;
-            } else {
+            if (caps.supportsHalfFloat()) {
                 return kLinearF16_CachedFormat;
+            } else if (caps.supportsSRGB()) {
+                return kSRGB8888_CachedFormat;
+            } else {
+                return kLegacy_CachedFormat;
             }
     }
     SkDEBUGFAIL("Unreachable");
@@ -429,8 +429,6 @@ SkImageInfo SkImageCacherator::buildCacheInfo(CachedFormat format) {
     switch (format) {
         case kLegacy_CachedFormat:
             return fInfo.makeColorSpace(nullptr);
-        case kAsIs_CachedFormat:
-            return fInfo;
         case kLinearF16_CachedFormat:
             return fInfo
                 .makeColorType(kRGBA_F16_SkColorType)
@@ -439,6 +437,10 @@ SkImageInfo SkImageCacherator::buildCacheInfo(CachedFormat format) {
             return fInfo
                 .makeColorType(kRGBA_8888_SkColorType)
                 .makeColorSpace(as_CSB(fInfo.colorSpace())->makeSRGBGamma());
+        case kSBGR8888_CachedFormat:
+            return fInfo
+                .makeColorType(kBGRA_8888_SkColorType)
+                .makeColorSpace(as_CSB(fInfo.colorSpace())->makeSRGBGamma());;
         default:
             SkDEBUGFAIL("Invalid cached format");
             return fInfo;
