@@ -247,7 +247,8 @@ uint32_t GrRenderTargetContextPriv::testingOnly_addLegacyMeshDrawOp(
     }
     pipelineBuilder.setSnapVerticesToPixelCenters(snapToCenters);
 
-    return fRenderTargetContext->addLegacyMeshDrawOp(pipelineBuilder, GrNoClip(), std::move(op));
+    return fRenderTargetContext->addLegacyMeshDrawOp(std::move(pipelineBuilder), GrNoClip(),
+                                                     std::move(op));
 }
 
 #undef ASSERT_SINGLE_OWNER
@@ -272,7 +273,8 @@ public:
     bool isConfigTexturable(GrPixelConfig config) const override { return false; }
     bool isConfigRenderable(GrPixelConfig config, bool withMSAA) const override { return false; }
     bool canConfigBeImageStorage(GrPixelConfig) const override { return false; }
-    bool initDescForDstCopy(const GrRenderTarget* src, GrSurfaceDesc* desc) const override {
+    bool initDescForDstCopy(const GrRenderTarget* src, GrSurfaceDesc* desc, bool* rectsMustMatch,
+                            bool* disallowSubrect) const override {
         return false;
     }
 
