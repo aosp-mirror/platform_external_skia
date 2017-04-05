@@ -255,11 +255,6 @@ public:
         }
     }
 
-    // TEMPORARY -- remove after updating Android BitmapTests.cpp:35
-    void allocPixels(const SkImageInfo& info, std::nullptr_t, SkColorTable* ctable) {
-        this->allocPixels(info, sk_ref_sp(ctable));
-    }
-
     /**
      *  Allocate the bitmap's pixels to match the requested image info and
      *  rowBytes. If the request cannot be met (e.g. the info is invalid or
@@ -294,6 +289,11 @@ public:
         SkImageInfo info = SkImageInfo::MakeN32(width, height,
                                             isOpaque ? kOpaque_SkAlphaType : kPremul_SkAlphaType);
         this->allocPixels(info);
+    }
+
+    // TEMPORARY -- remove after updating Android BitmapTests.cpp:35
+    void allocPixels(const SkImageInfo& info, std::nullptr_t, SkColorTable* ctable) {
+        this->allocPixels(info, sk_ref_sp(ctable));
     }
 
     /**

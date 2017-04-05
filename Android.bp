@@ -28,6 +28,7 @@ cc_library {
     ],
 
     local_include_dirs: [
+        "include/",
         "include/android/",
         "include/c/",
         "include/codec/",
@@ -852,6 +853,7 @@ cc_test {
     local_include_dirs: [
         "experimental/svg/model/",
         "gm/",
+        "include/",
         "include/android/",
         "include/c/",
         "include/codec/",
@@ -1608,6 +1610,7 @@ cc_test {
         "bench/",
         "experimental/svg/model/",
         "gm/",
+        "include/",
         "include/android/",
         "include/c/",
         "include/codec/",
