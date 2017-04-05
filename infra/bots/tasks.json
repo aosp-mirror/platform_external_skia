@@ -66,10 +66,22 @@
         "Build-Ubuntu-Clang-arm-Debug-Android"
       ]
     },
+    "Build-Ubuntu-Clang-arm-Debug-Chromebook_C100p": {
+      "priority": 0.8,
+      "tasks": [
+        "Build-Ubuntu-Clang-arm-Debug-Chromebook_C100p"
+      ]
+    },
     "Build-Ubuntu-Clang-arm-Release-Android": {
       "priority": 0.8,
       "tasks": [
         "Build-Ubuntu-Clang-arm-Release-Android"
+      ]
+    },
+    "Build-Ubuntu-Clang-arm-Release-Chromebook_C100p": {
+      "priority": 0.8,
+      "tasks": [
+        "Build-Ubuntu-Clang-arm-Release-Chromebook_C100p"
       ]
     },
     "Build-Ubuntu-Clang-arm64-Debug-Android": {
@@ -1196,12 +1208,6 @@
         "Upload-Test-Android-Clang-GalaxyS7_G930FD-GPU-MaliT880-arm64-Release-Android"
       ]
     },
-    "Test-Android-Clang-GalaxyTab3-GPU-Vivante-arm-Debug-Android": {
-      "priority": 0.8,
-      "tasks": [
-        "Upload-Test-Android-Clang-GalaxyTab3-GPU-Vivante-arm-Debug-Android"
-      ]
-    },
     "Test-Android-Clang-MotoG4-GPU-Adreno405-arm-Debug-Android": {
       "priority": 0.8,
       "tasks": [
@@ -2179,6 +2185,49 @@
       "isolate": "compile_skia.isolate",
       "priority": 0.8
     },
+    "Build-Ubuntu-Clang-arm-Debug-Chromebook_C100p": {
+      "cipd_packages": [
+        {
+          "name": "skia/bots/clang_linux",
+          "path": "clang_linux",
+          "version": "version:4"
+        },
+        {
+          "name": "skia/bots/armhf_sysroot",
+          "path": "armhf_sysroot",
+          "version": "version:3"
+        },
+        {
+          "name": "skia/bots/chromebook_c100p_lib",
+          "path": "chromebook_c100p_lib",
+          "version": "version:2"
+        }
+      ],
+      "dimensions": [
+        "cpu:x86-64-avx2",
+        "gpu:none",
+        "os:Ubuntu-14.04",
+        "pool:Skia"
+      ],
+      "extra_args": [
+        "--workdir",
+        "../../..",
+        "swarm_compile",
+        "repository=<(REPO)",
+        "buildername=Build-Ubuntu-Clang-arm-Debug-Chromebook_C100p",
+        "mastername=fake-master",
+        "buildnumber=2",
+        "slavename=fake-buildslave",
+        "nobuildbot=True",
+        "swarm_out_dir=${ISOLATED_OUTDIR}",
+        "revision=<(REVISION)",
+        "patch_storage=<(PATCH_STORAGE)",
+        "patch_issue=<(ISSUE)",
+        "patch_set=<(PATCHSET)"
+      ],
+      "isolate": "compile_skia.isolate",
+      "priority": 0.8
+    },
     "Build-Ubuntu-Clang-arm-Release-Android": {
       "cipd_packages": [
         {
@@ -2199,6 +2248,49 @@
         "swarm_compile",
         "repository=<(REPO)",
         "buildername=Build-Ubuntu-Clang-arm-Release-Android",
+        "mastername=fake-master",
+        "buildnumber=2",
+        "slavename=fake-buildslave",
+        "nobuildbot=True",
+        "swarm_out_dir=${ISOLATED_OUTDIR}",
+        "revision=<(REVISION)",
+        "patch_storage=<(PATCH_STORAGE)",
+        "patch_issue=<(ISSUE)",
+        "patch_set=<(PATCHSET)"
+      ],
+      "isolate": "compile_skia.isolate",
+      "priority": 0.8
+    },
+    "Build-Ubuntu-Clang-arm-Release-Chromebook_C100p": {
+      "cipd_packages": [
+        {
+          "name": "skia/bots/clang_linux",
+          "path": "clang_linux",
+          "version": "version:4"
+        },
+        {
+          "name": "skia/bots/armhf_sysroot",
+          "path": "armhf_sysroot",
+          "version": "version:3"
+        },
+        {
+          "name": "skia/bots/chromebook_c100p_lib",
+          "path": "chromebook_c100p_lib",
+          "version": "version:2"
+        }
+      ],
+      "dimensions": [
+        "cpu:x86-64-avx2",
+        "gpu:none",
+        "os:Ubuntu-14.04",
+        "pool:Skia"
+      ],
+      "extra_args": [
+        "--workdir",
+        "../../..",
+        "swarm_compile",
+        "repository=<(REPO)",
+        "buildername=Build-Ubuntu-Clang-arm-Release-Chromebook_C100p",
         "mastername=fake-master",
         "buildnumber=2",
         "slavename=fake-buildslave",
@@ -10386,57 +10478,6 @@
       "max_attempts": 1,
       "priority": 0.8
     },
-    "Test-Android-Clang-GalaxyTab3-GPU-Vivante-arm-Debug-Android": {
-      "cipd_packages": [
-        {
-          "name": "skia/bots/skimage",
-          "path": "skimage",
-          "version": "version:23"
-        },
-        {
-          "name": "skia/bots/skp",
-          "path": "skp",
-          "version": "version:43"
-        },
-        {
-          "name": "skia/bots/svg",
-          "path": "svg",
-          "version": "version:5"
-        }
-      ],
-      "dependencies": [
-        "Build-Ubuntu-Clang-arm-Debug-Android",
-        "Housekeeper-PerCommit-BundleRecipes"
-      ],
-      "dimensions": [
-        "device_os:JDQ39",
-        "device_type:goyawifi",
-        "os:Android",
-        "pool:Skia"
-      ],
-      "execution_timeout_ns": 14400000000000,
-      "expiration_ns": 72000000000000,
-      "extra_args": [
-        "--workdir",
-        "../../..",
-        "swarm_test",
-        "repository=<(REPO)",
-        "buildername=Test-Android-Clang-GalaxyTab3-GPU-Vivante-arm-Debug-Android",
-        "mastername=fake-master",
-        "buildnumber=2",
-        "slavename=fake-buildslave",
-        "nobuildbot=True",
-        "swarm_out_dir=${ISOLATED_OUTDIR}",
-        "revision=<(REVISION)",
-        "patch_storage=<(PATCH_STORAGE)",
-        "patch_issue=<(ISSUE)",
-        "patch_set=<(PATCHSET)"
-      ],
-      "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia_bundled.isolate",
-      "max_attempts": 1,
-      "priority": 0.8
-    },
     "Test-Android-Clang-MotoG4-GPU-Adreno405-arm-Debug-Android": {
       "cipd_packages": [
         {
@@ -17978,36 +18019,6 @@
         "upload_dm_results",
         "repository=<(REPO)",
         "buildername=Test-Android-Clang-GalaxyS7_G930FD-GPU-MaliT880-arm64-Release-Android",
-        "mastername=fake-master",
-        "buildnumber=2",
-        "slavename=fake-buildslave",
-        "nobuildbot=True",
-        "swarm_out_dir=${ISOLATED_OUTDIR}",
-        "revision=<(REVISION)",
-        "patch_storage=<(PATCH_STORAGE)",
-        "patch_issue=<(ISSUE)",
-        "patch_set=<(PATCHSET)",
-        "gs_bucket=skia-infra-gm"
-      ],
-      "isolate": "upload_dm_results.isolate",
-      "priority": 0.8
-    },
-    "Upload-Test-Android-Clang-GalaxyTab3-GPU-Vivante-arm-Debug-Android": {
-      "dependencies": [
-        "Test-Android-Clang-GalaxyTab3-GPU-Vivante-arm-Debug-Android"
-      ],
-      "dimensions": [
-        "cpu:x86-64-avx2",
-        "gpu:none",
-        "os:Ubuntu-14.04",
-        "pool:Skia"
-      ],
-      "extra_args": [
-        "--workdir",
-        "../../..",
-        "upload_dm_results",
-        "repository=<(REPO)",
-        "buildername=Test-Android-Clang-GalaxyTab3-GPU-Vivante-arm-Debug-Android",
         "mastername=fake-master",
         "buildnumber=2",
         "slavename=fake-buildslave",
