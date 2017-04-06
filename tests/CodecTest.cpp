@@ -1538,13 +1538,17 @@ static void encode_format(SkDynamicMemoryWStream* stream, const SkPixmap& pixmap
         case SkEncodedImageFormat::kJPEG:
             SkEncodeImageAsJPEG(stream, pixmap, opts);
             break;
+        case SkEncodedImageFormat::kWEBP:
+            SkEncodeImageAsWEBP(stream, pixmap, opts);
+            break;
         default:
             SkASSERT(false);
             break;
     }
 }
 
-static void test_encode_icc(skiatest::Reporter* r, SkEncodedImageFormat format) {
+static void test_encode_icc(skiatest::Reporter* r, SkEncodedImageFormat format,
+                            SkTransferFunctionBehavior unpremulBehavior) {
     // Test with sRGB color space.
     SkBitmap srgbBitmap;
     SkImageInfo srgbInfo = SkImageInfo::MakeS32(1, 1, kOpaque_SkAlphaType);
@@ -1554,7 +1558,7 @@ static void test_encode_icc(skiatest::Reporter* r, SkEncodedImageFormat format) 
     srgbBitmap.peekPixels(&pixmap);
     SkDynamicMemoryWStream srgbBuf;
     SkEncodeOptions opts;
-    opts.fUnpremulBehavior = SkTransferFunctionBehavior::kRespect;
+    opts.fUnpremulBehavior = unpremulBehavior;
     encode_format(&srgbBuf, pixmap, opts, format);
     sk_sp<SkData> srgbData = srgbBuf.detachAsData();
     std::unique_ptr<SkCodec> srgbCodec(SkCodec::NewFromData(srgbData));
@@ -1584,6 +1588,8 @@ static void test_encode_icc(skiatest::Reporter* r, SkEncodedImageFormat format) 
 }
 
 DEF_TEST(Codec_EncodeICC, r) {
-    test_encode_icc(r, SkEncodedImageFormat::kPNG);
-    test_encode_icc(r, SkEncodedImageFormat::kJPEG);
+    test_encode_icc(r, SkEncodedImageFormat::kPNG, SkTransferFunctionBehavior::kRespect);
+    test_encode_icc(r, SkEncodedImageFormat::kJPEG, SkTransferFunctionBehavior::kRespect);
+    test_encode_icc(r, SkEncodedImageFormat::kPNG, SkTransferFunctionBehavior::kIgnore);
+    test_encode_icc(r, SkEncodedImageFormat::kJPEG, SkTransferFunctionBehavior::kIgnore);
 }
