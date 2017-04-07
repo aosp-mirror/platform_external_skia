@@ -6,12 +6,12 @@ import default_flavor
 
 """GN flavor utils, used for building Skia with GN."""
 class GNFlavorUtils(default_flavor.DefaultFlavorUtils):
-  def _run(self, title, cmd, infra_step=False):
-    self.m.run(self.m.step, title, cmd=cmd,
-               infra_step=infra_step)
+  def _run(self, title, cmd, infra_step=False, **kwargs):
+    return self.m.run(self.m.step, title, cmd=cmd,
+               infra_step=infra_step, **kwargs)
 
   def _py(self, title, script, infra_step=True, args=()):
-    self.m.run(self.m.python, title, script=script, args=args,
+    return self.m.run(self.m.python, title, script=script, args=args,
                infra_step=infra_step)
 
   def build_command_buffer(self):
@@ -170,8 +170,7 @@ class GNFlavorUtils(default_flavor.DefaultFlavorUtils):
       args = [self.m.vars.slave_dir] + [str(x) for x in cmd]
       with self.m.step.context({'cwd': self.m.vars.skia_dir, 'env': env}):
         self._py('symbolized %s' % name,
-                 self.m.vars.infrabots_dir.join('recipe_modules', 'core',
-                 'resources', 'symbolize_stack_trace.py'),
+                 self.module.resource('symbolize_stack_trace.py'),
                  args=args,
                  infra_step=False)
 

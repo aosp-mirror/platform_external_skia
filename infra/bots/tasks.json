@@ -680,6 +680,18 @@
         "Upload-Perf-Android-Clang-PixelC-GPU-TegraX1-arm64-Release-Android_Vulkan_Skpbench"
       ]
     },
+    "Perf-ChromeOS-Clang-Chromebook_C100p-GPU-MaliT764-arm-Debug": {
+      "priority": 0.8,
+      "tasks": [
+        "Perf-ChromeOS-Clang-Chromebook_C100p-GPU-MaliT764-arm-Debug"
+      ]
+    },
+    "Perf-ChromeOS-Clang-Chromebook_C100p-GPU-MaliT764-arm-Release": {
+      "priority": 0.8,
+      "tasks": [
+        "Upload-Perf-ChromeOS-Clang-Chromebook_C100p-GPU-MaliT764-arm-Release"
+      ]
+    },
     "Perf-Chromecast-GCC-Chorizo-CPU-Cortex_A7-arm-Debug": {
       "priority": 0.8,
       "tasks": [
@@ -1386,6 +1398,18 @@
       "priority": 0.8,
       "tasks": [
         "Upload-Test-Android-Clang-PixelXL-GPU-Adreno530-arm64-Release-Android_Vulkan"
+      ]
+    },
+    "Test-ChromeOS-Clang-Chromebook_C100p-GPU-MaliT764-arm-Debug": {
+      "priority": 0.8,
+      "tasks": [
+        "Upload-Test-ChromeOS-Clang-Chromebook_C100p-GPU-MaliT764-arm-Debug"
+      ]
+    },
+    "Test-ChromeOS-Clang-Chromebook_C100p-GPU-MaliT764-arm-Release": {
+      "priority": 0.8,
+      "tasks": [
+        "Upload-Test-ChromeOS-Clang-Chromebook_C100p-GPU-MaliT764-arm-Release"
       ]
     },
     "Test-Mac-Clang-MacMini4.1-GPU-GeForce320M-x86_64-Debug": {
@@ -4289,7 +4313,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia_bundled.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -4340,7 +4364,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia_bundled.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -4391,7 +4415,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia_bundled.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -4442,7 +4466,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia_bundled.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -4493,7 +4517,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia_bundled.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -4544,7 +4568,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia_bundled.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -4595,7 +4619,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia_bundled.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -4646,7 +4670,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia_bundled.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -4697,7 +4721,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia_bundled.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -4748,7 +4772,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia_bundled.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -4799,7 +4823,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia_bundled.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -4850,7 +4874,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia_bundled.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -4901,7 +4925,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia_bundled.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -4952,7 +4976,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia_bundled.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -5003,7 +5027,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia_bundled.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -5054,7 +5078,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia_bundled.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -5105,7 +5129,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia_bundled.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -5156,7 +5180,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia_bundled.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -5207,7 +5231,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia_bundled.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -5258,7 +5282,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia_bundled.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -5309,7 +5333,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia_bundled.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -5360,7 +5384,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia_bundled.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -5411,7 +5435,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia_bundled.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -5462,7 +5486,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia_bundled.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -5513,7 +5537,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia_bundled.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -5564,7 +5588,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia_bundled.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -5615,7 +5639,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia_bundled.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -5666,7 +5690,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia_bundled.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -5717,7 +5741,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia_bundled.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -5768,7 +5792,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia_bundled.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -5819,7 +5843,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia_bundled.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -5870,7 +5894,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia_bundled.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -5921,7 +5945,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia_bundled.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -5972,7 +5996,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia_bundled.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -6023,7 +6047,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia_bundled.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -6064,7 +6088,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "skpbench_skia_bundled.isolate",
+      "isolate": "skpbench_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -6105,7 +6129,107 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "skpbench_skia_bundled.isolate",
+      "isolate": "skpbench_skia_bundled_unix.isolate",
+      "max_attempts": 1,
+      "priority": 0.8
+    },
+    "Perf-ChromeOS-Clang-Chromebook_C100p-GPU-MaliT764-arm-Debug": {
+      "cipd_packages": [
+        {
+          "name": "skia/bots/skimage",
+          "path": "skimage",
+          "version": "version:23"
+        },
+        {
+          "name": "skia/bots/skp",
+          "path": "skp",
+          "version": "version:43"
+        },
+        {
+          "name": "skia/bots/svg",
+          "path": "svg",
+          "version": "version:5"
+        }
+      ],
+      "dependencies": [
+        "Build-Ubuntu-Clang-arm-Debug-Chromebook_C100p",
+        "Housekeeper-PerCommit-BundleRecipes"
+      ],
+      "dimensions": [
+        "gpu:MaliT764",
+        "os:ChromeOS",
+        "pool:Skia"
+      ],
+      "execution_timeout_ns": 14400000000000,
+      "expiration_ns": 72000000000000,
+      "extra_args": [
+        "--workdir",
+        "../../..",
+        "swarm_perf",
+        "repository=<(REPO)",
+        "buildername=Perf-ChromeOS-Clang-Chromebook_C100p-GPU-MaliT764-arm-Debug",
+        "mastername=fake-master",
+        "buildnumber=2",
+        "slavename=fake-buildslave",
+        "nobuildbot=True",
+        "swarm_out_dir=${ISOLATED_OUTDIR}",
+        "revision=<(REVISION)",
+        "patch_storage=<(PATCH_STORAGE)",
+        "patch_issue=<(ISSUE)",
+        "patch_set=<(PATCHSET)"
+      ],
+      "io_timeout_ns": 2400000000000,
+      "isolate": "perf_skia_bundled_unix.isolate",
+      "max_attempts": 1,
+      "priority": 0.8
+    },
+    "Perf-ChromeOS-Clang-Chromebook_C100p-GPU-MaliT764-arm-Release": {
+      "cipd_packages": [
+        {
+          "name": "skia/bots/skimage",
+          "path": "skimage",
+          "version": "version:23"
+        },
+        {
+          "name": "skia/bots/skp",
+          "path": "skp",
+          "version": "version:43"
+        },
+        {
+          "name": "skia/bots/svg",
+          "path": "svg",
+          "version": "version:5"
+        }
+      ],
+      "dependencies": [
+        "Build-Ubuntu-Clang-arm-Release-Chromebook_C100p",
+        "Housekeeper-PerCommit-BundleRecipes"
+      ],
+      "dimensions": [
+        "gpu:MaliT764",
+        "os:ChromeOS",
+        "pool:Skia"
+      ],
+      "execution_timeout_ns": 14400000000000,
+      "expiration_ns": 72000000000000,
+      "extra_args": [
+        "--workdir",
+        "../../..",
+        "swarm_perf",
+        "repository=<(REPO)",
+        "buildername=Perf-ChromeOS-Clang-Chromebook_C100p-GPU-MaliT764-arm-Release",
+        "mastername=fake-master",
+        "buildnumber=2",
+        "slavename=fake-buildslave",
+        "nobuildbot=True",
+        "swarm_out_dir=${ISOLATED_OUTDIR}",
+        "revision=<(REVISION)",
+        "patch_storage=<(PATCH_STORAGE)",
+        "patch_issue=<(ISSUE)",
+        "patch_set=<(PATCHSET)"
+      ],
+      "io_timeout_ns": 2400000000000,
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -6118,7 +6242,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-GCC-arm-Debug-Chromecast"
+        "Build-Ubuntu-GCC-arm-Debug-Chromecast",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "device_os:1.24_82923",
@@ -6145,7 +6270,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -6158,7 +6283,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-GCC-arm-Release-Chromecast"
+        "Build-Ubuntu-GCC-arm-Release-Chromecast",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "device_os:1.24_82923",
@@ -6185,7 +6311,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -6208,7 +6334,8 @@
         }
       ],
       "dependencies": [
-        "Build-Mac-Clang-x86_64-Debug"
+        "Build-Mac-Clang-x86_64-Debug",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:10de:08a4",
@@ -6234,7 +6361,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -6257,7 +6384,8 @@
         }
       ],
       "dependencies": [
-        "Build-Mac-Clang-x86_64-Release"
+        "Build-Mac-Clang-x86_64-Release",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:10de:08a4",
@@ -6283,7 +6411,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -6306,7 +6434,8 @@
         }
       ],
       "dependencies": [
-        "Build-Mac-Clang-x86_64-Debug"
+        "Build-Mac-Clang-x86_64-Debug",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "cpu:x86-64",
@@ -6333,7 +6462,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -6356,7 +6485,8 @@
         }
       ],
       "dependencies": [
-        "Build-Mac-Clang-x86_64-Release"
+        "Build-Mac-Clang-x86_64-Release",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "cpu:x86-64",
@@ -6383,7 +6513,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -6406,7 +6536,8 @@
         }
       ],
       "dependencies": [
-        "Build-Mac-Clang-x86_64-Debug"
+        "Build-Mac-Clang-x86_64-Debug",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:8086:0a2e",
@@ -6432,7 +6563,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -6455,7 +6586,8 @@
         }
       ],
       "dependencies": [
-        "Build-Mac-Clang-x86_64-Release"
+        "Build-Mac-Clang-x86_64-Release",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:8086:0a2e",
@@ -6481,7 +6613,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -6504,7 +6636,8 @@
         }
       ],
       "dependencies": [
-        "Build-Mac-Clang-x86_64-Release-CommandBuffer"
+        "Build-Mac-Clang-x86_64-Release-CommandBuffer",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:8086:0a2e",
@@ -6530,7 +6663,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -6553,7 +6686,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-Clang-x86_64-Debug"
+        "Build-Ubuntu-Clang-x86_64-Debug",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "cpu:x86-64-avx2",
@@ -6580,7 +6714,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -6608,7 +6742,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-Clang-x86_64-Debug-ASAN"
+        "Build-Ubuntu-Clang-x86_64-Debug-ASAN",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "cpu:x86-64-avx2",
@@ -6635,7 +6770,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -6663,7 +6798,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-Clang-x86_64-Debug-MSAN"
+        "Build-Ubuntu-Clang-x86_64-Debug-MSAN",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "cpu:x86-64-avx2",
@@ -6690,7 +6826,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -6713,7 +6849,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-Clang-x86_64-Release"
+        "Build-Ubuntu-Clang-x86_64-Release",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "cpu:x86-64-avx2",
@@ -6740,7 +6877,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -6768,7 +6905,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-Clang-x86_64-Release-ASAN"
+        "Build-Ubuntu-Clang-x86_64-Release-ASAN",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "cpu:x86-64-avx2",
@@ -6795,7 +6933,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -6818,7 +6956,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-Clang-x86_64-Release-Fast"
+        "Build-Ubuntu-Clang-x86_64-Release-Fast",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "cpu:x86-64-avx2",
@@ -6845,7 +6984,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -6873,7 +7012,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-Clang-x86_64-Debug-ASAN"
+        "Build-Ubuntu-Clang-x86_64-Debug-ASAN",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:10de:104a",
@@ -6899,7 +7039,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -6927,7 +7067,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-Clang-x86_64-Release-ASAN"
+        "Build-Ubuntu-Clang-x86_64-Release-ASAN",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:10de:104a",
@@ -6953,7 +7094,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -6976,7 +7117,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-GCC-x86-Debug"
+        "Build-Ubuntu-GCC-x86-Debug",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "cpu:x86-64-avx2",
@@ -7003,7 +7145,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -7026,7 +7168,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-GCC-x86_64-Debug"
+        "Build-Ubuntu-GCC-x86_64-Debug",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "cpu:x86-64-avx2",
@@ -7053,7 +7196,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -7076,7 +7219,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-GCC-x86_64-Debug-SK_USE_DISCARDABLE_SCALEDIMAGECACHE"
+        "Build-Ubuntu-GCC-x86_64-Debug-SK_USE_DISCARDABLE_SCALEDIMAGECACHE",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "cpu:x86-64-avx2",
@@ -7103,7 +7247,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -7126,7 +7270,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-GCC-x86_64-Release"
+        "Build-Ubuntu-GCC-x86_64-Release",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "cpu:x86-64-avx2",
@@ -7153,7 +7298,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -7226,7 +7371,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-GCC-x86_64-Release"
+        "Build-Ubuntu-GCC-x86_64-Release",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:10de:1244",
@@ -7252,7 +7398,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 3600000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -7275,7 +7421,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-GCC-x86_64-Release"
+        "Build-Ubuntu-GCC-x86_64-Release",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:10de:1244",
@@ -7301,7 +7448,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 3600000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -7324,7 +7471,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-GCC-x86_64-Debug"
+        "Build-Ubuntu-GCC-x86_64-Debug",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:10de:11c0",
@@ -7350,7 +7498,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -7373,7 +7521,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-GCC-x86_64-Release"
+        "Build-Ubuntu-GCC-x86_64-Release",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:10de:11c0",
@@ -7399,7 +7548,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -7422,7 +7571,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-GCC-x86_64-Debug"
+        "Build-Ubuntu-GCC-x86_64-Debug",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:10de:1401",
@@ -7448,7 +7598,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -7471,7 +7621,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-GCC-x86_64-Release"
+        "Build-Ubuntu-GCC-x86_64-Release",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:10de:1401",
@@ -7497,7 +7648,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -7525,7 +7676,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-Clang-x86_64-Debug"
+        "Build-Ubuntu-Clang-x86_64-Debug",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:8086:22b1",
@@ -7551,7 +7703,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -7579,7 +7731,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-Clang-x86_64-Release"
+        "Build-Ubuntu-Clang-x86_64-Release",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:8086:22b1",
@@ -7605,7 +7758,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -7633,7 +7786,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-Clang-x86_64-Debug"
+        "Build-Ubuntu-Clang-x86_64-Debug",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:8086:1926",
@@ -7659,7 +7813,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -7692,7 +7846,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-Clang-x86_64-Debug-Vulkan"
+        "Build-Ubuntu-Clang-x86_64-Debug-Vulkan",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:8086:1926",
@@ -7718,7 +7873,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -7746,7 +7901,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-Clang-x86_64-Release"
+        "Build-Ubuntu-Clang-x86_64-Release",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:8086:1926",
@@ -7772,7 +7928,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -7805,7 +7961,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-Clang-x86_64-Release-Vulkan"
+        "Build-Ubuntu-Clang-x86_64-Release-Vulkan",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:8086:1926",
@@ -7831,7 +7988,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -7859,7 +8016,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-Clang-x86_64-Debug"
+        "Build-Ubuntu-Clang-x86_64-Debug",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:8086:0f31",
@@ -7885,7 +8043,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -7913,7 +8071,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-Clang-x86_64-Release"
+        "Build-Ubuntu-Clang-x86_64-Release",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:8086:0f31",
@@ -7939,7 +8098,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -7967,7 +8126,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-Clang-x86_64-Debug"
+        "Build-Ubuntu-Clang-x86_64-Debug",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:8086:0102",
@@ -7993,7 +8153,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -8021,7 +8181,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-Clang-x86_64-Release"
+        "Build-Ubuntu-Clang-x86_64-Release",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:8086:0102",
@@ -8047,7 +8208,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -8070,7 +8231,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Debug"
+        "Build-Win-MSVC-x86_64-Debug",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:1002:6646",
@@ -8096,7 +8258,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -8119,7 +8281,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Debug-ANGLE"
+        "Build-Win-MSVC-x86_64-Debug-ANGLE",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:1002:6646",
@@ -8145,7 +8308,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -8168,7 +8331,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Debug-Vulkan"
+        "Build-Win-MSVC-x86_64-Debug-Vulkan",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:1002:6646",
@@ -8194,7 +8358,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -8217,7 +8381,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Release"
+        "Build-Win-MSVC-x86_64-Release",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:1002:6646",
@@ -8243,7 +8408,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -8266,7 +8431,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Release-ANGLE"
+        "Build-Win-MSVC-x86_64-Release-ANGLE",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:1002:6646",
@@ -8292,7 +8458,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -8315,7 +8481,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Release-Vulkan"
+        "Build-Win-MSVC-x86_64-Release-Vulkan",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:1002:6646",
@@ -8341,7 +8508,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -8364,7 +8531,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Release"
+        "Build-Win-MSVC-x86_64-Release",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:10de:104a",
@@ -8390,7 +8558,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -8413,7 +8581,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Debug-ANGLE"
+        "Build-Win-MSVC-x86_64-Debug-ANGLE",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:8086:162b",
@@ -8439,7 +8608,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -8462,7 +8631,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Release-ANGLE"
+        "Build-Win-MSVC-x86_64-Release-ANGLE",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:8086:162b",
@@ -8488,7 +8658,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -8511,7 +8681,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Debug"
+        "Build-Win-MSVC-x86_64-Debug",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:8086:1926",
@@ -8537,7 +8708,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -8560,7 +8731,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Debug-ANGLE"
+        "Build-Win-MSVC-x86_64-Debug-ANGLE",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:8086:1926",
@@ -8586,7 +8758,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -8609,7 +8781,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Debug-Vulkan"
+        "Build-Win-MSVC-x86_64-Debug-Vulkan",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:8086:1926",
@@ -8635,7 +8808,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -8658,7 +8831,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Release"
+        "Build-Win-MSVC-x86_64-Release",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:8086:1926",
@@ -8684,7 +8858,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -8707,7 +8881,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Release-ANGLE"
+        "Build-Win-MSVC-x86_64-Release-ANGLE",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:8086:1926",
@@ -8733,7 +8908,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -8756,7 +8931,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Release-Vulkan"
+        "Build-Win-MSVC-x86_64-Release-Vulkan",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:8086:1926",
@@ -8782,7 +8958,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -8805,7 +8981,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Debug"
+        "Build-Win-MSVC-x86_64-Debug",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:10de:1401",
@@ -8832,7 +9009,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -8855,7 +9032,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Release"
+        "Build-Win-MSVC-x86_64-Release",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:10de:1401",
@@ -8882,7 +9060,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -8905,7 +9083,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Debug"
+        "Build-Win-MSVC-x86_64-Debug",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:1002:683d",
@@ -8931,7 +9110,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -8954,7 +9133,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Release"
+        "Build-Win-MSVC-x86_64-Release",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:1002:683d",
@@ -8980,7 +9160,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -9003,7 +9183,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Debug"
+        "Build-Win-MSVC-x86_64-Debug",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:10de:11c0",
@@ -9029,7 +9210,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -9052,7 +9233,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Debug-Vulkan"
+        "Build-Win-MSVC-x86_64-Debug-Vulkan",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:10de:11c0",
@@ -9078,7 +9260,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -9101,7 +9283,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Release"
+        "Build-Win-MSVC-x86_64-Release",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:10de:11c0",
@@ -9127,7 +9310,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -9150,7 +9333,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Release-Vulkan"
+        "Build-Win-MSVC-x86_64-Release-Vulkan",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:10de:11c0",
@@ -9176,7 +9360,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -9199,7 +9383,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Debug"
+        "Build-Win-MSVC-x86_64-Debug",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:8086:0412",
@@ -9225,7 +9410,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -9248,7 +9433,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Release"
+        "Build-Win-MSVC-x86_64-Release",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:8086:0412",
@@ -9274,7 +9460,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -9297,7 +9483,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Debug"
+        "Build-Win-MSVC-x86_64-Debug",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:10de:1401",
@@ -9324,7 +9511,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -9347,7 +9534,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Debug-ANGLE"
+        "Build-Win-MSVC-x86_64-Debug-ANGLE",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:10de:1401",
@@ -9374,7 +9562,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -9397,7 +9585,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Release"
+        "Build-Win-MSVC-x86_64-Release",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:10de:1401",
@@ -9424,7 +9613,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -9447,7 +9636,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Release-ANGLE"
+        "Build-Win-MSVC-x86_64-Release-ANGLE",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:10de:1401",
@@ -9474,7 +9664,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -9497,7 +9687,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Debug"
+        "Build-Win-MSVC-x86_64-Debug",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:10de:1ba1",
@@ -9523,7 +9714,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -9546,7 +9737,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Debug-ANGLE"
+        "Build-Win-MSVC-x86_64-Debug-ANGLE",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:10de:1ba1",
@@ -9572,7 +9764,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -9595,7 +9787,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Debug-Vulkan"
+        "Build-Win-MSVC-x86_64-Debug-Vulkan",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:10de:1ba1",
@@ -9621,7 +9814,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -9644,7 +9837,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Release"
+        "Build-Win-MSVC-x86_64-Release",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:10de:1ba1",
@@ -9670,7 +9864,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -9693,7 +9887,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Release-ANGLE"
+        "Build-Win-MSVC-x86_64-Release-ANGLE",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:10de:1ba1",
@@ -9719,7 +9914,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -9742,7 +9937,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Release-Vulkan"
+        "Build-Win-MSVC-x86_64-Release-Vulkan",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:10de:1ba1",
@@ -9768,7 +9964,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -9791,7 +9987,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86-Debug"
+        "Build-Win-MSVC-x86-Debug",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "cpu:x86-64",
@@ -9818,7 +10015,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -9841,7 +10038,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Debug"
+        "Build-Win-MSVC-x86_64-Debug",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "cpu:x86-64",
@@ -9868,7 +10066,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -9891,7 +10089,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Debug-GDI"
+        "Build-Win-MSVC-x86_64-Debug-GDI",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "cpu:x86-64",
@@ -9918,7 +10117,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -9941,7 +10140,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Release"
+        "Build-Win-MSVC-x86_64-Release",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "cpu:x86-64",
@@ -9968,7 +10168,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -9991,7 +10191,8 @@
         }
       ],
       "dependencies": [
-        "Build-Mac-Clang-arm64-Debug-iOS"
+        "Build-Mac-Clang-arm64-Debug-iOS",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "device:iPad5,1",
@@ -10017,7 +10218,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -10040,7 +10241,8 @@
         }
       ],
       "dependencies": [
-        "Build-Mac-Clang-arm64-Release-iOS"
+        "Build-Mac-Clang-arm64-Release-iOS",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "device:iPad5,1",
@@ -10066,7 +10268,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia.isolate",
+      "isolate": "perf_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -10117,7 +10319,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia_bundled.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -10168,7 +10370,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia_bundled.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -10219,7 +10421,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia_bundled.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -10270,7 +10472,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia_bundled.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -10321,7 +10523,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia_bundled.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -10372,7 +10574,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia_bundled.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -10423,7 +10625,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia_bundled.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -10474,7 +10676,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia_bundled.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -10525,7 +10727,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia_bundled.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -10576,7 +10778,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia_bundled.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -10627,7 +10829,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia_bundled.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -10678,7 +10880,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia_bundled.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -10729,7 +10931,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia_bundled.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -10780,7 +10982,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia_bundled.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -10831,7 +11033,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia_bundled.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -10882,7 +11084,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia_bundled.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -10933,7 +11135,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia_bundled.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -10984,7 +11186,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia_bundled.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -11035,7 +11237,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia_bundled.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -11086,7 +11288,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia_bundled.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -11137,7 +11339,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia_bundled.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -11188,7 +11390,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia_bundled.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -11239,7 +11441,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia_bundled.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -11290,7 +11492,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia_bundled.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -11341,7 +11543,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia_bundled.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -11392,7 +11594,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia_bundled.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -11443,7 +11645,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia_bundled.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -11494,7 +11696,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia_bundled.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -11545,7 +11747,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia_bundled.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -11596,7 +11798,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia_bundled.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -11647,7 +11849,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia_bundled.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -11698,7 +11900,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia_bundled.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -11749,7 +11951,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia_bundled.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -11800,7 +12002,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia_bundled.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -11851,7 +12053,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia_bundled.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -11902,7 +12104,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia_bundled.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -11953,7 +12155,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia_bundled.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -12004,7 +12206,107 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia_bundled.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
+      "max_attempts": 1,
+      "priority": 0.8
+    },
+    "Test-ChromeOS-Clang-Chromebook_C100p-GPU-MaliT764-arm-Debug": {
+      "cipd_packages": [
+        {
+          "name": "skia/bots/skimage",
+          "path": "skimage",
+          "version": "version:23"
+        },
+        {
+          "name": "skia/bots/skp",
+          "path": "skp",
+          "version": "version:43"
+        },
+        {
+          "name": "skia/bots/svg",
+          "path": "svg",
+          "version": "version:5"
+        }
+      ],
+      "dependencies": [
+        "Build-Ubuntu-Clang-arm-Debug-Chromebook_C100p",
+        "Housekeeper-PerCommit-BundleRecipes"
+      ],
+      "dimensions": [
+        "gpu:MaliT764",
+        "os:ChromeOS",
+        "pool:Skia"
+      ],
+      "execution_timeout_ns": 14400000000000,
+      "expiration_ns": 72000000000000,
+      "extra_args": [
+        "--workdir",
+        "../../..",
+        "swarm_test",
+        "repository=<(REPO)",
+        "buildername=Test-ChromeOS-Clang-Chromebook_C100p-GPU-MaliT764-arm-Debug",
+        "mastername=fake-master",
+        "buildnumber=2",
+        "slavename=fake-buildslave",
+        "nobuildbot=True",
+        "swarm_out_dir=${ISOLATED_OUTDIR}",
+        "revision=<(REVISION)",
+        "patch_storage=<(PATCH_STORAGE)",
+        "patch_issue=<(ISSUE)",
+        "patch_set=<(PATCHSET)"
+      ],
+      "io_timeout_ns": 2400000000000,
+      "isolate": "test_skia_bundled_unix.isolate",
+      "max_attempts": 1,
+      "priority": 0.8
+    },
+    "Test-ChromeOS-Clang-Chromebook_C100p-GPU-MaliT764-arm-Release": {
+      "cipd_packages": [
+        {
+          "name": "skia/bots/skimage",
+          "path": "skimage",
+          "version": "version:23"
+        },
+        {
+          "name": "skia/bots/skp",
+          "path": "skp",
+          "version": "version:43"
+        },
+        {
+          "name": "skia/bots/svg",
+          "path": "svg",
+          "version": "version:5"
+        }
+      ],
+      "dependencies": [
+        "Build-Ubuntu-Clang-arm-Release-Chromebook_C100p",
+        "Housekeeper-PerCommit-BundleRecipes"
+      ],
+      "dimensions": [
+        "gpu:MaliT764",
+        "os:ChromeOS",
+        "pool:Skia"
+      ],
+      "execution_timeout_ns": 14400000000000,
+      "expiration_ns": 72000000000000,
+      "extra_args": [
+        "--workdir",
+        "../../..",
+        "swarm_test",
+        "repository=<(REPO)",
+        "buildername=Test-ChromeOS-Clang-Chromebook_C100p-GPU-MaliT764-arm-Release",
+        "mastername=fake-master",
+        "buildnumber=2",
+        "slavename=fake-buildslave",
+        "nobuildbot=True",
+        "swarm_out_dir=${ISOLATED_OUTDIR}",
+        "revision=<(REVISION)",
+        "patch_storage=<(PATCH_STORAGE)",
+        "patch_issue=<(ISSUE)",
+        "patch_set=<(PATCHSET)"
+      ],
+      "io_timeout_ns": 2400000000000,
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -12027,7 +12329,8 @@
         }
       ],
       "dependencies": [
-        "Build-Mac-Clang-x86_64-Debug"
+        "Build-Mac-Clang-x86_64-Debug",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:10de:08a4",
@@ -12053,7 +12356,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -12076,7 +12379,8 @@
         }
       ],
       "dependencies": [
-        "Build-Mac-Clang-x86_64-Release"
+        "Build-Mac-Clang-x86_64-Release",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:10de:08a4",
@@ -12102,7 +12406,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -12125,7 +12429,8 @@
         }
       ],
       "dependencies": [
-        "Build-Mac-Clang-x86_64-Debug"
+        "Build-Mac-Clang-x86_64-Debug",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "cpu:x86-64",
@@ -12152,7 +12457,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -12175,7 +12480,8 @@
         }
       ],
       "dependencies": [
-        "Build-Mac-Clang-x86_64-Release"
+        "Build-Mac-Clang-x86_64-Release",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "cpu:x86-64",
@@ -12202,7 +12508,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -12225,7 +12531,8 @@
         }
       ],
       "dependencies": [
-        "Build-Mac-Clang-x86_64-Debug"
+        "Build-Mac-Clang-x86_64-Debug",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:8086:0a2e",
@@ -12251,7 +12558,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -12274,7 +12581,8 @@
         }
       ],
       "dependencies": [
-        "Build-Mac-Clang-x86_64-Debug-CommandBuffer"
+        "Build-Mac-Clang-x86_64-Debug-CommandBuffer",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:8086:0a2e",
@@ -12300,7 +12608,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -12323,7 +12631,8 @@
         }
       ],
       "dependencies": [
-        "Build-Mac-Clang-x86_64-Release"
+        "Build-Mac-Clang-x86_64-Release",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:8086:0a2e",
@@ -12349,7 +12658,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -12372,7 +12681,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-Clang-x86_64-Debug"
+        "Build-Ubuntu-Clang-x86_64-Debug",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "cpu:x86-64-avx2",
@@ -12399,7 +12709,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -12427,7 +12737,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-Clang-x86_64-Debug-ASAN"
+        "Build-Ubuntu-Clang-x86_64-Debug-ASAN",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "cpu:x86-64-avx2",
@@ -12454,7 +12765,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -12482,7 +12793,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-Clang-x86_64-Debug-MSAN"
+        "Build-Ubuntu-Clang-x86_64-Debug-MSAN",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "cpu:x86-64-avx2",
@@ -12509,7 +12821,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -12532,7 +12844,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-Clang-x86_64-Release"
+        "Build-Ubuntu-Clang-x86_64-Release",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "cpu:x86-64-avx2",
@@ -12559,7 +12872,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -12587,7 +12900,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-Clang-x86_64-Release-ASAN"
+        "Build-Ubuntu-Clang-x86_64-Release-ASAN",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "cpu:x86-64-avx2",
@@ -12614,7 +12928,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -12637,7 +12951,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-Clang-x86_64-Release-Fast"
+        "Build-Ubuntu-Clang-x86_64-Release-Fast",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "cpu:x86-64-avx2",
@@ -12664,7 +12979,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -12692,7 +13007,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-Clang-x86_64-Release-TSAN"
+        "Build-Ubuntu-Clang-x86_64-Release-TSAN",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "cpu:x86-64-avx2",
@@ -12719,7 +13035,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -12747,7 +13063,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-Clang-x86_64-Debug-ASAN"
+        "Build-Ubuntu-Clang-x86_64-Debug-ASAN",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:10de:104a",
@@ -12773,7 +13090,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -12801,7 +13118,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-Clang-x86_64-Release-ASAN"
+        "Build-Ubuntu-Clang-x86_64-Release-ASAN",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:10de:104a",
@@ -12827,7 +13145,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -12855,7 +13173,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-Clang-x86_64-Release-TSAN"
+        "Build-Ubuntu-Clang-x86_64-Release-TSAN",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:10de:104a",
@@ -12881,7 +13200,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -12904,7 +13223,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-GCC-x86-Debug"
+        "Build-Ubuntu-GCC-x86-Debug",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "cpu:x86-64-avx2",
@@ -12931,7 +13251,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -12954,7 +13274,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-GCC-x86_64-Debug"
+        "Build-Ubuntu-GCC-x86_64-Debug",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "cpu:x86-64-avx2",
@@ -12981,7 +13302,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -13079,7 +13400,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-GCC-x86_64-Debug-SK_USE_DISCARDABLE_SCALEDIMAGECACHE"
+        "Build-Ubuntu-GCC-x86_64-Debug-SK_USE_DISCARDABLE_SCALEDIMAGECACHE",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "cpu:x86-64-avx2",
@@ -13106,7 +13428,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -13129,7 +13451,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-GCC-x86_64-Release"
+        "Build-Ubuntu-GCC-x86_64-Release",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "cpu:x86-64-avx2",
@@ -13156,7 +13479,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -13179,7 +13502,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-GCC-x86_64-Release-SKNX_NO_SIMD"
+        "Build-Ubuntu-GCC-x86_64-Release-SKNX_NO_SIMD",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "cpu:x86-64-avx2",
@@ -13206,7 +13530,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -13229,7 +13553,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-GCC-x86_64-Release"
+        "Build-Ubuntu-GCC-x86_64-Release",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:10de:1244",
@@ -13255,7 +13580,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 3600000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -13278,7 +13603,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-GCC-x86_64-Release"
+        "Build-Ubuntu-GCC-x86_64-Release",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:10de:1244",
@@ -13304,7 +13630,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 3600000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -13327,7 +13653,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-GCC-x86_64-Release"
+        "Build-Ubuntu-GCC-x86_64-Release",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:10de:1244",
@@ -13353,7 +13680,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 3600000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -13376,7 +13703,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-GCC-x86_64-Debug"
+        "Build-Ubuntu-GCC-x86_64-Debug",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:10de:11c0",
@@ -13402,7 +13730,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -13425,7 +13753,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-GCC-x86_64-Release"
+        "Build-Ubuntu-GCC-x86_64-Release",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:10de:11c0",
@@ -13451,7 +13780,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -13474,7 +13803,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-GCC-x86_64-Debug"
+        "Build-Ubuntu-GCC-x86_64-Debug",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:10de:1401",
@@ -13500,7 +13830,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -13523,7 +13853,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-GCC-x86_64-Release"
+        "Build-Ubuntu-GCC-x86_64-Release",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:10de:1401",
@@ -13549,7 +13880,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -13577,7 +13908,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-Clang-x86_64-Debug"
+        "Build-Ubuntu-Clang-x86_64-Debug",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:8086:22b1",
@@ -13603,7 +13935,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -13631,7 +13963,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-Clang-x86_64-Release"
+        "Build-Ubuntu-Clang-x86_64-Release",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:8086:22b1",
@@ -13657,7 +13990,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -13685,7 +14018,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-Clang-x86_64-Debug"
+        "Build-Ubuntu-Clang-x86_64-Debug",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:8086:1926",
@@ -13711,7 +14045,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -13744,7 +14078,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-Clang-x86_64-Debug-Vulkan"
+        "Build-Ubuntu-Clang-x86_64-Debug-Vulkan",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:8086:1926",
@@ -13770,7 +14105,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -13798,7 +14133,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-Clang-x86_64-Release"
+        "Build-Ubuntu-Clang-x86_64-Release",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:8086:1926",
@@ -13824,7 +14160,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -13857,7 +14193,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-Clang-x86_64-Release-Vulkan"
+        "Build-Ubuntu-Clang-x86_64-Release-Vulkan",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:8086:1926",
@@ -13883,7 +14220,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -13911,7 +14248,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-Clang-x86_64-Debug"
+        "Build-Ubuntu-Clang-x86_64-Debug",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:8086:0f31",
@@ -13937,7 +14275,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -13965,7 +14303,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-Clang-x86_64-Release"
+        "Build-Ubuntu-Clang-x86_64-Release",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:8086:0f31",
@@ -13991,7 +14330,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -14019,7 +14358,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-Clang-x86_64-Debug"
+        "Build-Ubuntu-Clang-x86_64-Debug",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:8086:0102",
@@ -14045,7 +14385,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -14073,7 +14413,8 @@
         }
       ],
       "dependencies": [
-        "Build-Ubuntu-Clang-x86_64-Release"
+        "Build-Ubuntu-Clang-x86_64-Release",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:8086:0102",
@@ -14099,7 +14440,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -14122,7 +14463,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Debug"
+        "Build-Win-MSVC-x86_64-Debug",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:1002:6646",
@@ -14148,7 +14490,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -14171,7 +14513,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Debug-ANGLE"
+        "Build-Win-MSVC-x86_64-Debug-ANGLE",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:1002:6646",
@@ -14197,7 +14540,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -14220,7 +14563,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Debug-Vulkan"
+        "Build-Win-MSVC-x86_64-Debug-Vulkan",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:1002:6646",
@@ -14246,7 +14590,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -14269,7 +14613,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Release"
+        "Build-Win-MSVC-x86_64-Release",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:1002:6646",
@@ -14295,7 +14640,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -14318,7 +14663,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Release-ANGLE"
+        "Build-Win-MSVC-x86_64-Release-ANGLE",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:1002:6646",
@@ -14344,7 +14690,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -14367,7 +14713,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Release-Vulkan"
+        "Build-Win-MSVC-x86_64-Release-Vulkan",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:1002:6646",
@@ -14393,7 +14740,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -14416,7 +14763,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Release"
+        "Build-Win-MSVC-x86_64-Release",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:10de:104a",
@@ -14442,7 +14790,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -14465,7 +14813,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Debug-ANGLE"
+        "Build-Win-MSVC-x86_64-Debug-ANGLE",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:8086:162b",
@@ -14491,7 +14840,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -14514,7 +14863,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Release-ANGLE"
+        "Build-Win-MSVC-x86_64-Release-ANGLE",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:8086:162b",
@@ -14540,7 +14890,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -14563,7 +14913,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Debug"
+        "Build-Win-MSVC-x86_64-Debug",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:8086:1926",
@@ -14589,7 +14940,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -14612,7 +14963,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Debug-ANGLE"
+        "Build-Win-MSVC-x86_64-Debug-ANGLE",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:8086:1926",
@@ -14638,7 +14990,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -14661,7 +15013,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Debug-Vulkan"
+        "Build-Win-MSVC-x86_64-Debug-Vulkan",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:8086:1926",
@@ -14687,7 +15040,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -14710,7 +15063,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Release"
+        "Build-Win-MSVC-x86_64-Release",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:8086:1926",
@@ -14736,7 +15090,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -14759,7 +15113,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Release-ANGLE"
+        "Build-Win-MSVC-x86_64-Release-ANGLE",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:8086:1926",
@@ -14785,7 +15140,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -14808,7 +15163,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Release-Vulkan"
+        "Build-Win-MSVC-x86_64-Release-Vulkan",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:8086:1926",
@@ -14834,7 +15190,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -14857,7 +15213,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Debug"
+        "Build-Win-MSVC-x86_64-Debug",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:10de:1401",
@@ -14884,7 +15241,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -14907,7 +15264,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Release"
+        "Build-Win-MSVC-x86_64-Release",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:10de:1401",
@@ -14934,7 +15292,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -14957,7 +15315,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Debug"
+        "Build-Win-MSVC-x86_64-Debug",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:1002:683d",
@@ -14983,7 +15342,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -15006,7 +15365,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Release"
+        "Build-Win-MSVC-x86_64-Release",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:1002:683d",
@@ -15032,7 +15392,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -15055,7 +15415,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Debug"
+        "Build-Win-MSVC-x86_64-Debug",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:10de:11c0",
@@ -15081,7 +15442,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -15104,7 +15465,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Debug-Vulkan"
+        "Build-Win-MSVC-x86_64-Debug-Vulkan",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:10de:11c0",
@@ -15130,7 +15492,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -15153,7 +15515,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Release"
+        "Build-Win-MSVC-x86_64-Release",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:10de:11c0",
@@ -15179,7 +15542,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -15202,7 +15565,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Debug"
+        "Build-Win-MSVC-x86_64-Debug",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:8086:0412",
@@ -15228,7 +15592,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -15251,7 +15615,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Release"
+        "Build-Win-MSVC-x86_64-Release",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:8086:0412",
@@ -15277,7 +15642,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -15300,7 +15665,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Debug"
+        "Build-Win-MSVC-x86_64-Debug",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:10de:1401",
@@ -15327,7 +15693,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -15350,7 +15716,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Debug-ANGLE"
+        "Build-Win-MSVC-x86_64-Debug-ANGLE",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:10de:1401",
@@ -15377,7 +15744,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -15400,7 +15767,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Release"
+        "Build-Win-MSVC-x86_64-Release",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:10de:1401",
@@ -15427,7 +15795,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -15450,7 +15818,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Release-ANGLE"
+        "Build-Win-MSVC-x86_64-Release-ANGLE",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:10de:1401",
@@ -15477,7 +15846,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -15500,7 +15869,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Debug"
+        "Build-Win-MSVC-x86_64-Debug",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:10de:1ba1",
@@ -15526,7 +15896,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -15549,7 +15919,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Debug-ANGLE"
+        "Build-Win-MSVC-x86_64-Debug-ANGLE",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:10de:1ba1",
@@ -15575,7 +15946,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -15598,7 +15969,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Debug-Vulkan"
+        "Build-Win-MSVC-x86_64-Debug-Vulkan",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:10de:1ba1",
@@ -15624,7 +15996,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -15647,7 +16019,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Release"
+        "Build-Win-MSVC-x86_64-Release",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:10de:1ba1",
@@ -15673,7 +16046,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -15696,7 +16069,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Release-ANGLE"
+        "Build-Win-MSVC-x86_64-Release-ANGLE",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:10de:1ba1",
@@ -15722,7 +16096,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -15745,7 +16119,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Release-Vulkan"
+        "Build-Win-MSVC-x86_64-Release-Vulkan",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "gpu:10de:1ba1",
@@ -15771,7 +16146,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -15794,7 +16169,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86-Debug"
+        "Build-Win-MSVC-x86-Debug",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "cpu:x86-64",
@@ -15821,7 +16197,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -15844,7 +16220,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86-Release"
+        "Build-Win-MSVC-x86-Release",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "cpu:x86-64",
@@ -15871,7 +16248,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -15894,7 +16271,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Debug"
+        "Build-Win-MSVC-x86_64-Debug",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "cpu:x86-64",
@@ -15921,7 +16299,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -15944,7 +16322,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Debug-GDI"
+        "Build-Win-MSVC-x86_64-Debug-GDI",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "cpu:x86-64",
@@ -15971,7 +16350,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -15994,7 +16373,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Release"
+        "Build-Win-MSVC-x86_64-Release",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "cpu:x86-64",
@@ -16021,7 +16401,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -16044,7 +16424,8 @@
         }
       ],
       "dependencies": [
-        "Build-Win-MSVC-x86_64-Release-GDI"
+        "Build-Win-MSVC-x86_64-Release-GDI",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "cpu:x86-64",
@@ -16071,7 +16452,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_win.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -16094,7 +16475,8 @@
         }
       ],
       "dependencies": [
-        "Build-Mac-Clang-arm64-Debug-iOS"
+        "Build-Mac-Clang-arm64-Debug-iOS",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "device:iPad5,1",
@@ -16120,7 +16502,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -16143,7 +16525,8 @@
         }
       ],
       "dependencies": [
-        "Build-Mac-Clang-arm64-Release-iOS"
+        "Build-Mac-Clang-arm64-Release-iOS",
+        "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
         "device:iPad5,1",
@@ -16169,7 +16552,7 @@
         "patch_set=<(PATCHSET)"
       ],
       "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia.isolate",
+      "isolate": "test_skia_bundled_unix.isolate",
       "max_attempts": 1,
       "priority": 0.8
     },
@@ -16729,6 +17112,36 @@
         "upload_nano_results",
         "repository=<(REPO)",
         "buildername=Perf-Android-Clang-PixelC-GPU-TegraX1-arm64-Release-Android_Vulkan_Skpbench",
+        "mastername=fake-master",
+        "buildnumber=2",
+        "slavename=fake-buildslave",
+        "nobuildbot=True",
+        "swarm_out_dir=${ISOLATED_OUTDIR}",
+        "revision=<(REVISION)",
+        "patch_storage=<(PATCH_STORAGE)",
+        "patch_issue=<(ISSUE)",
+        "patch_set=<(PATCHSET)",
+        "gs_bucket=skia-perf"
+      ],
+      "isolate": "upload_nano_results.isolate",
+      "priority": 0.8
+    },
+    "Upload-Perf-ChromeOS-Clang-Chromebook_C100p-GPU-MaliT764-arm-Release": {
+      "dependencies": [
+        "Perf-ChromeOS-Clang-Chromebook_C100p-GPU-MaliT764-arm-Release"
+      ],
+      "dimensions": [
+        "cpu:x86-64-avx2",
+        "gpu:none",
+        "os:Ubuntu-14.04",
+        "pool:Skia"
+      ],
+      "extra_args": [
+        "--workdir",
+        "../../..",
+        "upload_nano_results",
+        "repository=<(REPO)",
+        "buildername=Perf-ChromeOS-Clang-Chromebook_C100p-GPU-MaliT764-arm-Release",
         "mastername=fake-master",
         "buildnumber=2",
         "slavename=fake-buildslave",
@@ -18919,6 +19332,66 @@
         "upload_dm_results",
         "repository=<(REPO)",
         "buildername=Test-Android-Clang-PixelXL-GPU-Adreno530-arm64-Release-Android_Vulkan",
+        "mastername=fake-master",
+        "buildnumber=2",
+        "slavename=fake-buildslave",
+        "nobuildbot=True",
+        "swarm_out_dir=${ISOLATED_OUTDIR}",
+        "revision=<(REVISION)",
+        "patch_storage=<(PATCH_STORAGE)",
+        "patch_issue=<(ISSUE)",
+        "patch_set=<(PATCHSET)",
+        "gs_bucket=skia-infra-gm"
+      ],
+      "isolate": "upload_dm_results.isolate",
+      "priority": 0.8
+    },
+    "Upload-Test-ChromeOS-Clang-Chromebook_C100p-GPU-MaliT764-arm-Debug": {
+      "dependencies": [
+        "Test-ChromeOS-Clang-Chromebook_C100p-GPU-MaliT764-arm-Debug"
+      ],
+      "dimensions": [
+        "cpu:x86-64-avx2",
+        "gpu:none",
+        "os:Ubuntu-14.04",
+        "pool:Skia"
+      ],
+      "extra_args": [
+        "--workdir",
+        "../../..",
+        "upload_dm_results",
+        "repository=<(REPO)",
+        "buildername=Test-ChromeOS-Clang-Chromebook_C100p-GPU-MaliT764-arm-Debug",
+        "mastername=fake-master",
+        "buildnumber=2",
+        "slavename=fake-buildslave",
+        "nobuildbot=True",
+        "swarm_out_dir=${ISOLATED_OUTDIR}",
+        "revision=<(REVISION)",
+        "patch_storage=<(PATCH_STORAGE)",
+        "patch_issue=<(ISSUE)",
+        "patch_set=<(PATCHSET)",
+        "gs_bucket=skia-infra-gm"
+      ],
+      "isolate": "upload_dm_results.isolate",
+      "priority": 0.8
+    },
+    "Upload-Test-ChromeOS-Clang-Chromebook_C100p-GPU-MaliT764-arm-Release": {
+      "dependencies": [
+        "Test-ChromeOS-Clang-Chromebook_C100p-GPU-MaliT764-arm-Release"
+      ],
+      "dimensions": [
+        "cpu:x86-64-avx2",
+        "gpu:none",
+        "os:Ubuntu-14.04",
+        "pool:Skia"
+      ],
+      "extra_args": [
+        "--workdir",
+        "../../..",
+        "upload_dm_results",
+        "repository=<(REPO)",
+        "buildername=Test-ChromeOS-Clang-Chromebook_C100p-GPU-MaliT764-arm-Release",
         "mastername=fake-master",
         "buildnumber=2",
         "slavename=fake-buildslave",
