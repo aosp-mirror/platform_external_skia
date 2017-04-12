@@ -1359,7 +1359,6 @@ cc_test {
         "tests/PDFDeflateWStreamTest.cpp",
         "tests/PDFDocumentTest.cpp",
         "tests/PDFGlyphsToUnicodeTest.cpp",
-        "tests/PDFInvalidBitmapTest.cpp",
         "tests/PDFJpegEmbedTest.cpp",
         "tests/PDFMetadataAttributeTest.cpp",
         "tests/PDFOpaqueSrcModeToSrcOverTest.cpp",
