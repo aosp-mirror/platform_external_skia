@@ -85,9 +85,6 @@ public:
     /** Clears the entire render target */
     void fullClear(GrRenderTargetContext*, GrColor color);
 
-    /** Discards the contents render target. */
-    void discard(GrRenderTargetContext*);
-
     /**
      * Copies a pixel rectangle from one surface to another. This call may finalize
      * reserved vertex/index data (as though a draw call was made). The src pixels
@@ -99,7 +96,7 @@ public:
      * limitations.
      */
     bool copySurface(GrResourceProvider* resourceProvider,
-                     GrSurfaceProxy* dst,
+                     GrRenderTargetContext* dst,
                      GrSurfaceProxy* src,
                      const SkIRect& srcRect,
                      const SkIPoint& dstPoint);

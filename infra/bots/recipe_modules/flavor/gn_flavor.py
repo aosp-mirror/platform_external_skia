@@ -44,6 +44,8 @@ class GNFlavorUtils(default_flavor.DefaultFlavorUtils):
     if compiler == 'Clang' and os == 'Ubuntu':
       cc  = clang_linux + '/bin/clang'
       cxx = clang_linux + '/bin/clang++'
+      extra_cflags .append('-B%s/bin' % clang_linux)
+      extra_ldflags.append('-B%s/bin' % clang_linux)
       extra_ldflags.append('-fuse-ld=lld')
     elif compiler == 'Clang':
       cc, cxx = 'clang', 'clang++'
@@ -74,6 +76,7 @@ class GNFlavorUtils(default_flavor.DefaultFlavorUtils):
     if extra_config == 'GDI':
       args['skia_use_gdi'] = 'true'
     if extra_config == 'MSAN':
+      args['skia_enable_gpu']     = 'false'
       args['skia_use_fontconfig'] = 'false'
     if extra_config == 'ASAN':
       args['skia_enable_spirv_validation'] = 'false'
