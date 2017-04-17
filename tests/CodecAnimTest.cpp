@@ -31,20 +31,27 @@ static void write_bm(const char* name, const SkBitmap& bm) {
     }
 }
 
+DEF_TEST(Codec_trunc, r) {
+    sk_sp<SkData> data(GetResourceAsData("box.gif"));
+    data = SkData::MakeSubset(data.get(), 0, 23);
+    std::unique_ptr<SkCodec> codec(SkCodec::NewFromData(data));
+    codec->getFrameInfo();
+}
+
 DEF_TEST(Codec_frames, r) {
     #define kOpaque     kOpaque_SkAlphaType
     #define kUnpremul   kUnpremul_SkAlphaType
     static const struct {
         const char*              fName;
-        size_t                   fFrameCount;
+        int                      fFrameCount;
         // One less than fFramecount, since the first frame is always
         // independent.
-        std::vector<size_t>      fRequiredFrames;
+        std::vector<int>         fRequiredFrames;
         // Same, since the first frame should match getInfo.
         std::vector<SkAlphaType> fAlphaTypes;
         // The size of this one should match fFrameCount for animated, empty
         // otherwise.
-        std::vector<size_t>      fDurations;
+        std::vector<int>         fDurations;
         int                      fRepetitionCount;
     } gRecs[] = {
         { "alphabetAnim.gif", 13,
@@ -119,14 +126,14 @@ DEF_TEST(Codec_frames, r) {
                       rec.fName, rec.fRepetitionCount, repetitionCount);
         }
 
-        const size_t expected = rec.fFrameCount;
-        if (rec.fRequiredFrames.size() + 1 != expected) {
+        const int expected = rec.fFrameCount;
+        if (rec.fRequiredFrames.size() + 1 != static_cast<size_t>(expected)) {
             ERRORF(r, "'%s' has wrong number entries in fRequiredFrames; expected: %i\tactual: %i",
                    rec.fName, expected, rec.fRequiredFrames.size() + 1);
             continue;
         }
 
-        if (rec.fDurations.size() != expected) {
+        if (rec.fDurations.size() != static_cast<size_t>(expected)) {
             ERRORF(r, "'%s' has wrong number entries in fDurations; expected: %i\tactual: %i",
                    rec.fName, expected, rec.fDurations.size());
             continue;
@@ -141,7 +148,7 @@ DEF_TEST(Codec_frames, r) {
             // Re-create the codec to reset state and test parsing.
             codec.reset(SkCodec::NewFromData(data));
 
-            size_t frameCount;
+            int frameCount;
             std::vector<SkCodec::FrameInfo> frameInfos;
             switch (mode) {
                 case TestMode::kVector:
@@ -165,7 +172,7 @@ DEF_TEST(Codec_frames, r) {
                 continue;
             }
 
-            for (size_t i = 0; i < frameCount; i++) {
+            for (int i = 0; i < frameCount; i++) {
                 SkCodec::FrameInfo frameInfo;
                 switch (mode) {
                     case TestMode::kVector:
@@ -226,11 +233,11 @@ DEF_TEST(Codec_frames, r) {
             std::vector<SkBitmap> cachedFrames(frameCount);
             const auto& info = codec->getInfo().makeColorType(kN32_SkColorType);
 
-            auto decode = [&](SkBitmap* bm, bool cached, size_t index) {
+            auto decode = [&](SkBitmap* bm, bool cached, int index) {
                 bm->allocPixels(info);
                 if (cached) {
                     // First copy the pixels from the cached frame
-                    const size_t requiredFrame = frameInfos[index].fRequiredFrame;
+                    const int requiredFrame = frameInfos[index].fRequiredFrame;
                     if (requiredFrame != SkCodec::kNone) {
                         const bool success = cachedFrames[requiredFrame].copyTo(bm);
                         REPORTER_ASSERT(r, success);
@@ -244,7 +251,7 @@ DEF_TEST(Codec_frames, r) {
                 REPORTER_ASSERT(r, result == SkCodec::kSuccess);
             };
 
-            for (size_t i = 0; i < frameCount; i++) {
+            for (int i = 0; i < frameCount; i++) {
                 SkBitmap& cachedFrame = cachedFrames[i];
                 decode(&cachedFrame, true, i);
                 SkBitmap uncachedFrame;

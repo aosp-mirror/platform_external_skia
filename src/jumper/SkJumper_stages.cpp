@@ -87,9 +87,7 @@ struct LazyCtx {
     // tail is always < kStride.
     using Stage = void(size_t x, void** program, K* k, size_t tail, F,F,F,F, F,F,F,F);
 
-    #if defined(JUMPER) && defined(WIN)
-    __attribute__((ms_abi))
-    #endif
+    MAYBE_MSABI
     extern "C" size_t WRAP(start_pipeline)(size_t x, void** program, K* k, size_t limit) {
         F v{};
         auto start = (Stage*)load_and_inc(program);
@@ -125,9 +123,7 @@ struct LazyCtx {
     using Stage = void(size_t x, void** program, K* k, F,F,F,F, F,F,F,F);
 
     // On Windows, start_pipeline() has a normal Windows ABI, and then the rest is System V.
-    #if defined(JUMPER) && defined(WIN)
-    __attribute__((ms_abi))
-    #endif
+    MAYBE_MSABI
     extern "C" size_t WRAP(start_pipeline)(size_t x, void** program, K* k, size_t limit) {
         F v{};
         auto start = (Stage*)load_and_inc(program);
@@ -612,17 +608,39 @@ STAGE(lerp_565) {
 }
 
 STAGE(load_tables) {
-    struct Ctx {
-        const uint32_t* src;
-        const float *r, *g, *b;
-    };
-    auto c = (const Ctx*)ctx;
+    auto c = (const SkJumper_LoadTablesCtx*)ctx;
 
-    auto px = load<U32>(c->src + x, tail);
+    auto px = load<U32>((const uint32_t*)c->src + x, tail);
     r = gather(c->r, (px      ) & 0xff_i);
     g = gather(c->g, (px >>  8) & 0xff_i);
     b = gather(c->b, (px >> 16) & 0xff_i);
     a = cast(        (px >> 24)) * C(1/255.0f);
+}
+STAGE(load_tables_u16_be) {
+    auto c = (const SkJumper_LoadTablesCtx*)ctx;
+    auto ptr = (const uint16_t*)c->src + 4*x;
+
+    U16 R,G,B,A;
+    load4(ptr, tail, &R,&G,&B,&A);
+
+    // c->src is big-endian, so & 0xff_i grabs the 8 most signficant bits.
+    r = gather(c->r, expand(R) & 0xff_i);
+    g = gather(c->g, expand(G) & 0xff_i);
+    b = gather(c->b, expand(B) & 0xff_i);
+    a = C(1/65535.0f) * cast(expand(bswap(A)));
+}
+STAGE(load_tables_rgb_u16_be) {
+    auto c = (const SkJumper_LoadTablesCtx*)ctx;
+    auto ptr = (const uint16_t*)c->src + 3*x;
+
+    U16 R,G,B;
+    load3(ptr, tail, &R,&G,&B);
+
+    // c->src is big-endian, so & 0xff_i grabs the 8 most signficant bits.
+    r = gather(c->r, expand(R) & 0xff_i);
+    g = gather(c->g, expand(G) & 0xff_i);
+    b = gather(c->b, expand(B) & 0xff_i);
+    a = 1.0_f;
 }
 
 STAGE(byte_tables) {
@@ -774,25 +792,36 @@ STAGE(store_f16) {
 }
 
 STAGE(load_u16_be) {
-    auto ptr = *(const uint64_t**)ctx + x;
+    auto ptr = *(const uint16_t**)ctx + 4*x;
 
     U16 R,G,B,A;
-    load4((const uint16_t*)ptr,tail, &R,&G,&B,&A);
+    load4(ptr,tail, &R,&G,&B,&A);
 
     r = C(1/65535.0f) * cast(expand(bswap(R)));
     g = C(1/65535.0f) * cast(expand(bswap(G)));
     b = C(1/65535.0f) * cast(expand(bswap(B)));
     a = C(1/65535.0f) * cast(expand(bswap(A)));
 }
+STAGE(load_rgb_u16_be) {
+    auto ptr = *(const uint16_t**)ctx + 3*x;
+
+    U16 R,G,B;
+    load3(ptr,tail, &R,&G,&B);
+
+    r = C(1/65535.0f) * cast(expand(bswap(R)));
+    g = C(1/65535.0f) * cast(expand(bswap(G)));
+    b = C(1/65535.0f) * cast(expand(bswap(B)));
+    a = 1.0_f;
+}
 STAGE(store_u16_be) {
-    auto ptr = *(uint64_t**)ctx + x;
+    auto ptr = *(uint16_t**)ctx + 4*x;
 
     U16 R = bswap(pack(round(r, 65535.0_f))),
         G = bswap(pack(round(g, 65535.0_f))),
         B = bswap(pack(round(b, 65535.0_f))),
         A = bswap(pack(round(a, 65535.0_f)));
 
-    store4((uint16_t*)ptr,tail, R,G,B,A);
+    store4(ptr,tail, R,G,B,A);
 }
 
 STAGE(load_f32) {
@@ -1022,3 +1051,8 @@ STAGE(bicubic_n3y) { bicubic_y<-3>(ctx, &g); }
 STAGE(bicubic_n1y) { bicubic_y<-1>(ctx, &g); }
 STAGE(bicubic_p1y) { bicubic_y<+1>(ctx, &g); }
 STAGE(bicubic_p3y) { bicubic_y<+3>(ctx, &g); }
+
+STAGE(callback) {
+    auto c = (const SkJumper_CallbackCtx*)ctx;
+    c->fn(c->arg, tail ? tail : kStride);
+}

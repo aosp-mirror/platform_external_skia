@@ -67,7 +67,6 @@ bool SkImage::scalePixels(const SkPixmap& dst, SkFilterQuality quality, CachingH
     //
     SkBitmap bm;
     if (as_IB(this)->getROPixels(&bm, dst.info().colorSpace(), chint)) {
-        bm.lockPixels();
         SkPixmap pmap;
         // Note: By calling the pixmap scaler, we never cache the final result, so the chint
         //       is (currently) only being applied to the getROPixels. If we get a request to
@@ -115,15 +114,14 @@ SkData* SkImage::encode(SkPixelSerializer* serializer) const {
     }
 
     SkBitmap bm;
-    SkAutoPixmapUnlock apu;
+    SkPixmap pmap;
     SkColorSpace* legacyColorSpace = nullptr;
-    if (as_IB(this)->getROPixels(&bm, legacyColorSpace) &&
-        bm.requestLock(&apu)) {
+    if (as_IB(this)->getROPixels(&bm, legacyColorSpace) && bm.peekPixels(&pmap)) {
         if (serializer) {
-            return serializer->encode(apu.pixmap());
+            return serializer->encode(pmap);
         } else {
             SkDynamicMemoryWStream buf;
-            return SkEncodeImage(&buf, apu.pixmap(), SkEncodedImageFormat::kPNG, 100)
+            return SkEncodeImage(&buf, pmap, SkEncodedImageFormat::kPNG, 100)
                    ? buf.detachAsData().release() : nullptr;
         }
     }
@@ -377,12 +375,12 @@ std::unique_ptr<SkCrossContextImageData> SkCrossContextImageData::MakeFromEncode
         return nullptr;
     }
     // TODO: Force decode to raster here?
-    return std::unique_ptr<SkCrossContextImageData>(new SkCrossContextImageData(std::move(image)));
+    return std::unique_ptr<SkCrossContextImageData>(new SkCCIDImage(std::move(image)));
 }
 
 sk_sp<SkImage> SkImage::MakeFromCrossContextImageData(
         GrContext*, std::unique_ptr<SkCrossContextImageData> ccid) {
-    return ccid->fImage;
+    return ccid->makeImage(nullptr);
 }
 
 sk_sp<SkImage> SkImage::makeNonTextureImage() const {

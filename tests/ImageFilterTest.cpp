@@ -63,6 +63,9 @@ protected:
         offset->fX = offset->fY = 0;
         return sk_ref_sp<SkSpecialImage>(source);
     }
+    sk_sp<SkImageFilter> onMakeColorSpace(SkColorSpaceXformer*) const override {
+        return sk_ref_sp(const_cast<MatrixTestImageFilter*>(this));
+    }
 
     void flatten(SkWriteBuffer& buffer) const override {
         SkDEBUGFAIL("Should never get here");
@@ -88,6 +91,9 @@ public:
     sk_sp<SkSpecialImage> onFilterImage(SkSpecialImage* source,
                                         const Context& ctx,
                                         SkIPoint* offset) const override {
+        return nullptr;
+    }
+    sk_sp<SkImageFilter> onMakeColorSpace(SkColorSpaceXformer*) const override {
         return nullptr;
     }
 
@@ -594,10 +600,6 @@ static void test_negative_blur_sigma(skiatest::Reporter* reporter,
     REPORTER_ASSERT(reporter, negativeResult1->getROPixels(&negativeResultBM1));
     REPORTER_ASSERT(reporter, negativeResult2->getROPixels(&negativeResultBM2));
 
-    SkAutoLockPixels lockP1(positiveResultBM1);
-    SkAutoLockPixels lockP2(positiveResultBM2);
-    SkAutoLockPixels lockN1(negativeResultBM1);
-    SkAutoLockPixels lockN2(negativeResultBM2);
     for (int y = 0; y < height; y++) {
         int diffs = memcmp(positiveResultBM1.getAddr32(0, y),
                            negativeResultBM1.getAddr32(0, y),
@@ -656,7 +658,6 @@ static void test_zero_blur_sigma(skiatest::Reporter* reporter, GrContext* contex
 
     REPORTER_ASSERT(reporter, result->getROPixels(&resultBM));
 
-    SkAutoLockPixels lock(resultBM);
     for (int y = 0; y < resultBM.height(); y++) {
         for (int x = 0; x < resultBM.width(); x++) {
             bool diff = *resultBM.getAddr32(x, y) != SK_ColorGREEN;
@@ -696,7 +697,6 @@ static void test_fail_affects_transparent_black(skiatest::Reporter* reporter, Gr
     if (result.get()) {
         SkBitmap resultBM;
         REPORTER_ASSERT(reporter, result->getROPixels(&resultBM));
-        SkAutoLockPixels lock(resultBM);
         REPORTER_ASSERT(reporter, *resultBM.getAddr32(0, 0) == SK_ColorGREEN);
     }
 }
@@ -1573,7 +1573,6 @@ static void test_composed_imagefilter_bounds(skiatest::Reporter* reporter, GrCon
 
     SkBitmap resultBM;
     REPORTER_ASSERT(reporter, result->getROPixels(&resultBM));
-    SkAutoLockPixels lock(resultBM);
     REPORTER_ASSERT(reporter, resultBM.getColor(50, 50) == SK_ColorGREEN);
 }
 
