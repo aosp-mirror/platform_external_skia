@@ -295,27 +295,28 @@ bool GrVkGpu::onGetWritePixelsInfo(GrSurface* dstSurface, int width, int height,
     tempDrawInfo->fTempSurfaceDesc.fOrigin = kTopLeft_GrSurfaceOrigin;
 
     if (dstSurface->config() == srcConfig) {
-        return true;
-    }
-
-    if (renderTarget && this->vkCaps().isConfigRenderable(renderTarget->config(),
-                                                          renderTarget->numColorSamples() > 1)) {
-        ElevateDrawPreference(drawPreference, kRequireDraw_DrawPreference);
-
-        bool configsAreRBSwaps = GrPixelConfigSwapRAndB(srcConfig) == dstSurface->config();
-
-        if (!this->vkCaps().isConfigTexturable(srcConfig) && configsAreRBSwaps) {
-            if (!this->vkCaps().isConfigTexturable(dstSurface->config())) {
-                return false;
-            }
-            tempDrawInfo->fTempSurfaceDesc.fConfig = dstSurface->config();
-            tempDrawInfo->fSwizzle = GrSwizzle::BGRA();
-            tempDrawInfo->fWriteConfig = dstSurface->config();
+        // We only support writing pixels to textures. Forcing a draw lets us write to pure RTs.
+        if (!dstSurface->asTexture()) {
+            ElevateDrawPreference(drawPreference, kRequireDraw_DrawPreference);
+        }
+        // If the dst is MSAA, we have to draw, or we'll just be writing to the resolve target.
+        if (renderTarget && renderTarget->numColorSamples() > 1) {
+            ElevateDrawPreference(drawPreference, kRequireDraw_DrawPreference);
         }
         return true;
     }
 
-    return false;
+    // Any config change requires a draw
+    ElevateDrawPreference(drawPreference, kRequireDraw_DrawPreference);
+
+    bool configsAreRBSwaps = GrPixelConfigSwapRAndB(srcConfig) == dstSurface->config();
+
+    if (!this->vkCaps().isConfigTexturable(srcConfig) && configsAreRBSwaps) {
+        tempDrawInfo->fTempSurfaceDesc.fConfig = dstSurface->config();
+        tempDrawInfo->fSwizzle = GrSwizzle::BGRA();
+        tempDrawInfo->fWriteConfig = dstSurface->config();
+    }
+    return true;
 }
 
 bool GrVkGpu::onWritePixels(GrSurface* surface,
@@ -411,7 +412,6 @@ void GrVkGpu::resolveImage(GrSurface* dst, GrVkRenderTarget* src, const SkIRect&
     GrRenderTarget* dstRT = dst->asRenderTarget();
     if (dstRT) {
         GrVkRenderTarget* vkRT = static_cast<GrVkRenderTarget*>(dstRT);
-        SkASSERT(vkRT->numColorSamples() <= 1);
         dstImage = vkRT;
     } else {
         SkASSERT(dst->asTexture());
@@ -848,6 +848,28 @@ sk_sp<GrRenderTarget> GrVkGpu::onWrapBackendRenderTarget(const GrBackendRenderTa
     return tgt;
 }
 
+sk_sp<GrRenderTarget> GrVkGpu::onWrapBackendTextureAsRenderTarget(
+        const GrBackendTextureDesc& wrapDesc){
+
+    const GrVkImageInfo* info =
+        reinterpret_cast<const GrVkImageInfo*>(wrapDesc.fTextureHandle);
+    if (VK_NULL_HANDLE == info->fImage) {
+        return nullptr;
+    }
+
+    GrSurfaceDesc desc;
+    desc.fFlags = (GrSurfaceFlags) wrapDesc.fFlags;
+    desc.fConfig = wrapDesc.fConfig;
+    desc.fWidth = wrapDesc.fWidth;
+    desc.fHeight = wrapDesc.fHeight;
+    desc.fSampleCnt = SkTMin(wrapDesc.fSampleCnt, this->caps()->maxSampleCount());
+
+    desc.fOrigin = resolve_origin(wrapDesc.fOrigin);
+
+    sk_sp<GrVkRenderTarget> tgt = GrVkRenderTarget::MakeWrappedRenderTarget(this, desc, info);
+    return tgt;
+}
+
 void GrVkGpu::generateMipmap(GrVkTexture* tex) {
     // don't do anything for linearly tiled textures (can't have mipmaps)
     if (tex->isLinearTiled()) {
@@ -925,7 +947,7 @@ void GrVkGpu::generateMipmap(GrVkTexture* tex) {
     }
 
     // setup memory barrier
-    SkASSERT(GrVkFormatToPixelConfig(tex->imageFormat(), nullptr));
+    SkASSERT(kUnknown_GrPixelConfig != GrVkFormatToPixelConfig(tex->imageFormat()));
     VkImageAspectFlags aspectFlags = VK_IMAGE_ASPECT_COLOR_BIT;
     VkImageMemoryBarrier imageMemoryBarrier = {
         VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,          // sType
@@ -1560,8 +1582,10 @@ inline bool can_copy_as_resolve(const GrSurface* dst,
         return false;
     }
 
-    // The dst must not be a multisampled render target
-    if (dst->asRenderTarget() && dst->asRenderTarget()->numColorSamples() > 1) {
+    // The dst must not be a multisampled render target, expect in the case where the dst is the
+    // resolve texture connected to the msaa src. We check for this in case we are copying a part of
+    // a surface to a different region in the same surface.
+    if (dst->asRenderTarget() && dst->asRenderTarget()->numColorSamples() > 1 && dst != src) {
         return false;
     }
 
@@ -1653,7 +1677,7 @@ bool GrVkGpu::onGetReadPixelsInfo(GrSurface* srcSurface, int width, int height, 
 
     // Depends on why we need/want a temp draw. Start off assuming no change, the surface we read
     // from will be srcConfig and we will read readConfig pixels from it.
-    // Not that if we require a draw and return a non-renderable format for the temp surface the
+    // Note that if we require a draw and return a non-renderable format for the temp surface the
     // base class will fail for us.
     tempDrawInfo->fTempSurfaceDesc.fConfig = srcSurface->config();
     tempDrawInfo->fReadConfig = readConfig;
@@ -1662,14 +1686,12 @@ bool GrVkGpu::onGetReadPixelsInfo(GrSurface* srcSurface, int width, int height, 
         return true;
     }
 
-    if (this->vkCaps().isConfigRenderable(readConfig, srcSurface->desc().fSampleCnt > 1)) {
-        ElevateDrawPreference(drawPreference, kRequireDraw_DrawPreference);
-        tempDrawInfo->fTempSurfaceDesc.fConfig = readConfig;
-        tempDrawInfo->fReadConfig = readConfig;
-        return true;
-    }
+    // Any config change requires a draw
+    ElevateDrawPreference(drawPreference, kRequireDraw_DrawPreference);
+    tempDrawInfo->fTempSurfaceDesc.fConfig = readConfig;
+    tempDrawInfo->fReadConfig = readConfig;
 
-    return false;
+    return true;
 }
 
 bool GrVkGpu::onReadPixels(GrSurface* surface,
