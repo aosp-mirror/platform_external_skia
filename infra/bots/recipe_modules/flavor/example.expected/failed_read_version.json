@@ -436,7 +436,11 @@
     },
     "infra_step": true,
     "name": "read /sdcard/revenge_of_the_skiabot/SK_IMAGE_VERSION",
-    "stdout": "/path/to/tmp/"
+    "stdout": "/path/to/tmp/",
+    "~followup_annotations": [
+      "step returned non-zero exit code: 1",
+      "@@@STEP_EXCEPTION@@@"
+    ]
   },
   {
     "cmd": [
@@ -847,6 +851,23 @@
   {
     "cmd": [
       "adb",
+      "shell",
+      "reboot",
+      "-p"
+    ],
+    "cwd": "[START_DIR]/skia",
+    "env": {
+      "BUILDTYPE": "Debug",
+      "CHROME_HEADLESS": "1",
+      "PATH": "%(PATH)s:RECIPE_PACKAGE_REPO[depot_tools]",
+      "SKIA_OUT": "[START_DIR]/out"
+    },
+    "infra_step": true,
+    "name": "shut down device to quarantine bot"
+  },
+  {
+    "cmd": [
+      "adb",
       "kill-server"
     ],
     "cwd": "[START_DIR]/skia",
@@ -861,7 +882,8 @@
   },
   {
     "name": "$result",
+    "reason": "Failed build steps: read /sdcard/revenge_of_the_skiabot/SK_IMAGE_VERSION",
     "recipe_result": null,
-    "status_code": 0
+    "status_code": 1
   }
 ]

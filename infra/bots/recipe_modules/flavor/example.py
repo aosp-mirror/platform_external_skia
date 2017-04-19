@@ -84,7 +84,7 @@ def GenTests(api):
 
   builder = 'Perf-Android-Clang-NexusPlayer-GPU-PowerVR-x86-Debug-Android'
   yield (
-      api.test(builder) +
+      api.test('failed_infra_step') +
       api.properties(buildername=builder,
                      repository='https://skia.googlesource.com/skia.git',
                      revision='abc123',
@@ -95,7 +95,7 @@ def GenTests(api):
 
   builder = 'Perf-Android-Clang-NexusPlayer-GPU-PowerVR-x86-Debug-Android'
   yield (
-      api.test(builder) +
+      api.test('failed_read_version') +
       api.properties(buildername=builder,
                      repository='https://skia.googlesource.com/skia.git',
                      revision='abc123',
