@@ -658,11 +658,15 @@ sk_sp<GrSurfaceContext> GrContextPriv::makeDeferredSurfaceContext(const GrSurfac
     return this->makeWrappedSurfaceContext(std::move(proxy), nullptr);
 }
 
-sk_sp<GrSurfaceContext> GrContextPriv::makeBackendSurfaceContext(const GrBackendTextureDesc& desc,
+sk_sp<GrSurfaceContext> GrContextPriv::makeBackendSurfaceContext(const GrBackendTexture& tex,
+                                                                 GrSurfaceOrigin origin,
+                                                                 GrBackendTextureFlags flags,
+                                                                 int sampleCnt,
                                                                  sk_sp<SkColorSpace> colorSpace) {
     ASSERT_SINGLE_OWNER_PRIV
 
-    sk_sp<GrSurface> surface(fContext->resourceProvider()->wrapBackendTexture(desc));
+    sk_sp<GrSurface> surface(fContext->resourceProvider()->wrapBackendTexture(tex, origin,
+                                                                              flags, sampleCnt));
     if (!surface) {
         return nullptr;
     }
@@ -676,13 +680,16 @@ sk_sp<GrSurfaceContext> GrContextPriv::makeBackendSurfaceContext(const GrBackend
 }
 
 sk_sp<GrRenderTargetContext> GrContextPriv::makeBackendTextureRenderTargetContext(
-                                                                   const GrBackendTextureDesc& desc,
+                                                                   const GrBackendTexture& tex,
+                                                                   GrSurfaceOrigin origin,
+                                                                   int sampleCnt,
                                                                    sk_sp<SkColorSpace> colorSpace,
                                                                    const SkSurfaceProps* props) {
     ASSERT_SINGLE_OWNER_PRIV
-    SkASSERT(desc.fFlags & kRenderTarget_GrBackendTextureFlag);
 
-    sk_sp<GrSurface> surface(fContext->resourceProvider()->wrapBackendTexture(desc));
+    static const GrBackendTextureFlags kForceRT = kRenderTarget_GrBackendTextureFlag;
+    sk_sp<GrSurface> surface(fContext->resourceProvider()->wrapBackendTexture(tex, origin, kForceRT,
+                                                                              sampleCnt));
     if (!surface) {
         return nullptr;
     }
@@ -718,13 +725,17 @@ sk_sp<GrRenderTargetContext> GrContextPriv::makeBackendRenderTargetRenderTargetC
 }
 
 sk_sp<GrRenderTargetContext> GrContextPriv::makeBackendTextureAsRenderTargetRenderTargetContext(
-                                                     const GrBackendTextureDesc& desc,
+                                                     const GrBackendTexture& tex,
+                                                     GrSurfaceOrigin origin,
+                                                     int sampleCnt,
                                                      sk_sp<SkColorSpace> colorSpace,
                                                      const SkSurfaceProps* surfaceProps) {
     ASSERT_SINGLE_OWNER_PRIV
-    SkASSERT(desc.fFlags & kRenderTarget_GrBackendTextureFlag);
 
-    sk_sp<GrSurface> surface(fContext->resourceProvider()->wrapBackendTextureAsRenderTarget(desc));
+    sk_sp<GrSurface> surface(fContext->resourceProvider()->wrapBackendTextureAsRenderTarget(
+                                                                                        tex,
+                                                                                        origin,
+                                                                                        sampleCnt));
     if (!surface) {
         return nullptr;
     }
@@ -878,16 +889,6 @@ bool GrContext::abandoned() const {
     return fDrawingManager->wasAbandoned();
 }
 
-namespace {
-void test_pm_conversions(GrContext* ctx, int* pmToUPMValue, int* upmToPMValue) {
-    GrConfigConversionEffect::PMConversion pmToUPM;
-    GrConfigConversionEffect::PMConversion upmToPM;
-    GrConfigConversionEffect::TestForPreservingPMConversions(ctx, &pmToUPM, &upmToPM);
-    *pmToUPMValue = pmToUPM;
-    *upmToPMValue = upmToPM;
-}
-}
-
 sk_sp<GrFragmentProcessor> GrContext::createPMToUPMEffect(sk_sp<GrFragmentProcessor> fp,
                                                           bool useConfigConversionEffect) {
     ASSERT_SINGLE_OWNER
@@ -898,9 +899,8 @@ sk_sp<GrFragmentProcessor> GrContext::createPMToUPMEffect(sk_sp<GrFragmentProces
         // ...and it should have succeeded
         SkASSERT(this->validPMUPMConversionExists());
 
-        GrConfigConversionEffect::PMConversion pmToUPM =
-            static_cast<GrConfigConversionEffect::PMConversion>(fPMToUPMConversion);
-        return GrConfigConversionEffect::Make(std::move(fp), pmToUPM);
+        return GrConfigConversionEffect::Make(std::move(fp),
+                                              GrConfigConversionEffect::kToUnpremul_PMConversion);
     } else {
         // For everything else (sRGB, half-float, etc...), it doesn't make sense to try and
         // explicitly round the results. Just do the obvious, naive thing in the shader.
@@ -918,9 +918,8 @@ sk_sp<GrFragmentProcessor> GrContext::createUPMToPMEffect(sk_sp<GrFragmentProces
         // ...and it should have succeeded
         SkASSERT(this->validPMUPMConversionExists());
 
-        GrConfigConversionEffect::PMConversion upmToPM =
-            static_cast<GrConfigConversionEffect::PMConversion>(fUPMToPMConversion);
-        return GrConfigConversionEffect::Make(std::move(fp), upmToPM);
+        return GrConfigConversionEffect::Make(std::move(fp),
+                                              GrConfigConversionEffect::kToPremul_PMConversion);
     } else {
         // For everything else (sRGB, half-float, etc...), it doesn't make sense to try and
         // explicitly round the results. Just do the obvious, naive thing in the shader.
@@ -931,12 +930,12 @@ sk_sp<GrFragmentProcessor> GrContext::createUPMToPMEffect(sk_sp<GrFragmentProces
 bool GrContext::validPMUPMConversionExists() {
     ASSERT_SINGLE_OWNER
     if (!fDidTestPMConversions) {
-        test_pm_conversions(this, &fPMToUPMConversion, &fUPMToPMConversion);
+        fPMUPMConversionsRoundTrip = GrConfigConversionEffect::TestForPreservingPMConversions(this);
         fDidTestPMConversions = true;
     }
 
     // The PM<->UPM tests fail or succeed together so we only need to check one.
-    return GrConfigConversionEffect::kPMConversionCnt != fPMToUPMConversion;
+    return fPMUPMConversionsRoundTrip;
 }
 
 //////////////////////////////////////////////////////////////////////////////

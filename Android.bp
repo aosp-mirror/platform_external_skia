@@ -1259,7 +1259,6 @@ cc_test {
         "tests/ClipStackTest.cpp",
         "tests/ClipperTest.cpp",
         "tests/CodecAnimTest.cpp",
-        "tests/CodecExactReadTest.cpp",
         "tests/CodecPartialTest.cpp",
         "tests/CodecTest.cpp",
         "tests/ColorFilterTest.cpp",
