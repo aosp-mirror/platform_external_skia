@@ -10,7 +10,6 @@
 #include "CrashHandler.h"
 #include "DMJsonWriter.h"
 #include "DMSrcSink.h"
-#include "DMSrcSinkAndroid.h"
 #include "ProcStats.h"
 #include "Resources.h"
 #include "SkBBHFactory.h"
@@ -695,10 +694,6 @@ static Sink* create_sink(const SkCommandLineConfig* config) {
 
 #define SINK(t, sink, ...) if (config->getBackend().equals(t)) { return new sink(__VA_ARGS__); }
 
-#ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
-    SINK("hwui",           HWUISink);
-#endif
-
     if (FLAGS_cpu) {
         SINK("565",  RasterSink, kRGB_565_SkColorType);
         SINK("8888", RasterSink, kN32_SkColorType);
@@ -736,10 +731,6 @@ static Sink* create_via(const SkString& tag, Sink* wrapped) {
         VIA("matrix",  ViaMatrix,  m, wrapped);
         VIA("upright", ViaUpright, m, wrapped);
     }
-
-#ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
-    VIA("androidsdk", ViaAndroidSDK, wrapped);
-#endif
 
 #undef VIA
     return nullptr;
