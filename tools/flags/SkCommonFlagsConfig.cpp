@@ -16,9 +16,6 @@ static const char defaultConfigs[] =
     " angle"
 #endif
 #endif
-#ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
-    " hwui"
-#endif
     ;
 
 static const char configHelp[] =
@@ -36,9 +33,6 @@ static const char configHelp[] =
 #endif
 #if SK_MESA
     " mesa"
-#endif
-#ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
-    " hwui"
 #endif
     " or use extended form 'backend(option=value,...)'.\n";
 
