@@ -521,6 +521,7 @@ cc_library {
         "src/gpu/glsl/GrGLSLXferProcessor.cpp",
         "src/gpu/instanced/GLInstancedRendering.cpp",
         "src/gpu/instanced/InstanceProcessor.cpp",
+        "src/gpu/instanced/InstancedOp.cpp",
         "src/gpu/instanced/InstancedRendering.cpp",
         "src/gpu/ops/GrAAConvexPathRenderer.cpp",
         "src/gpu/ops/GrAAConvexTessellator.cpp",
