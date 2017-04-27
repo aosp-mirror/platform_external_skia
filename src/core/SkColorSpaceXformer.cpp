@@ -44,23 +44,12 @@ sk_sp<SkImage> SkColorSpaceXformer::apply(const SkBitmap& src) {
     return xformed;
 }
 
-// Currently, SkModeColorFilter is the only color filter that holds a color.  And
-// SkComposeColorFilter is the only color filter that holds another color filter.  If this
-// changes, this function will need updating.
 sk_sp<SkColorFilter> SkColorSpaceXformer::apply(const SkColorFilter* colorFilter) {
-    SkColor color;
-    SkBlendMode mode;
-    if (colorFilter->asColorMode(&color, &mode)) {
-        return SkColorFilter::MakeModeFilter(this->apply(color), mode);
-    }
+    return colorFilter->makeColorSpace(this);
+}
 
-    SkColorFilter* outer;
-    SkColorFilter* inner;
-    if (colorFilter->asACompose(&outer, &inner)) {
-        return SkColorFilter::MakeComposeFilter(this->apply(outer), this->apply(inner));
-    }
-
-    return sk_ref_sp(const_cast<SkColorFilter*>(colorFilter));
+sk_sp<SkImageFilter> SkColorSpaceXformer::apply(const SkImageFilter* imageFilter) {
+    return imageFilter->makeColorSpace(this);
 }
 
 void SkColorSpaceXformer::apply(SkColor* xformed, const SkColor* srgb, int n) {
@@ -75,52 +64,29 @@ SkColor SkColorSpaceXformer::apply(SkColor srgb) {
     return xformed;
 }
 
-const SkPaint& SkColorSpaceXformer::apply(const SkPaint& src) {
-    const SkPaint* result = &src;
-    auto get_dst = [&] {
-        if (result == &src) {
-            fDstPaint = src;
-            result = &fDstPaint;
-        }
-        return &fDstPaint;
-    };
+SkPaint SkColorSpaceXformer::apply(const SkPaint& src) {
+    SkPaint dst = src;
 
     // All SkColorSpaces have the same black point.
     if (src.getColor() & 0xffffff) {
-        get_dst()->setColor(this->apply(src.getColor()));
+        dst.setColor(this->apply(src.getColor()));
     }
 
     if (auto shader = src.getShader()) {
-        auto replacement = shader->makeColorSpace(this);
-        if (replacement.get() != shader) {
-            get_dst()->setShader(std::move(replacement));
-        }
+        dst.setShader(shader->makeColorSpace(this));
     }
 
     if (auto cf = src.getColorFilter()) {
-        auto replacement = this->apply(cf);
-        if (replacement.get() != cf) {
-            get_dst()->setColorFilter(std::move(replacement));
-        }
+        dst.setColorFilter(this->apply(cf));
     }
 
     if (auto looper = src.getDrawLooper()) {
-        auto replacement = looper->makeColorSpace(this);
-        if (replacement.get() != looper) {
-            get_dst()->setDrawLooper(std::move(replacement));
-        }
+        dst.setDrawLooper(looper->makeColorSpace(this));
     }
 
     if (auto imageFilter = src.getImageFilter()) {
-        auto replacement = imageFilter->makeColorSpace(this);
-        if (replacement.get() != imageFilter) {
-            get_dst()->setImageFilter(std::move(replacement));
-        }
+        dst.setImageFilter(this->apply(imageFilter));
     }
 
-    return *result;
-}
-
-const SkPaint* SkColorSpaceXformer::apply(const SkPaint* src) {
-    return src ? &this->apply(*src) : nullptr;
+    return dst;
 }
