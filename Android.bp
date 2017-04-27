@@ -25,7 +25,6 @@ cc_library {
         "include/svg/",
         "include/utils/",
         "include/utils/mac/",
-        "third_party/vulkan/",
     ],
 
     local_include_dirs: [
@@ -64,7 +63,6 @@ cc_library {
         "src/xml/",
         "third_party/etc1/",
         "third_party/gif/",
-        "third_party/vulkan/",
     ],
 
     srcs: [
@@ -890,7 +888,6 @@ cc_test {
         "tests/",
         "third_party/etc1/",
         "third_party/gif/",
-        "third_party/vulkan/",
         "tools/",
         "tools/debugger/",
         "tools/flags/",
@@ -1646,7 +1643,6 @@ cc_test {
         "src/xml/",
         "third_party/etc1/",
         "third_party/gif/",
-        "third_party/vulkan/",
         "tools/",
         "tools/debugger/",
         "tools/flags/",

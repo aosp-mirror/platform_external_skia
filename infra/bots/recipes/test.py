@@ -63,8 +63,11 @@ def dm_flags(bot):
   # doesn't support it.
   if ('NexusPlayer' in bot or
       'Tegra3'      in bot or
-      # We aren't interested in fixing msaa bugs on iPad4.
+      # We aren't interested in fixing msaa bugs on current iOS devices.
       'iPad4' in bot or
+      'iPadPro' in bot or
+      'iPhone6' in bot or
+      'iPhone7' in bot or
       # skia:5792
       'iHD530'       in bot or
       'IntelIris540' in bot):
@@ -677,6 +680,9 @@ def test_steps(api):
     args.append('--abandonGpuContext')
   if '_PreAbandonGpuContext' in api.vars.builder_cfg.get('extra_config', ''):
     args.append('--preAbandonGpuContext')
+  if ('ReleaseAndAbandonGpuContext' in
+      api.vars.builder_cfg.get('extra_config', '')):
+    args.append('--releaseAndAbandonGpuContext')
 
   with api.env(env):
     api.run(api.flavor.step, 'dm', cmd=args, abort_on_failure=False)
@@ -735,6 +741,8 @@ TEST_BUILDERS = [
   'Test-Ubuntu16-Clang-NUC6i5SYK-GPU-IntelIris540-x86_64-Release',
   'Test-Ubuntu16-Clang-NUCDE3815TYKHE-GPU-IntelBayTrail-x86_64-Debug',
   'Test-Win10-MSVC-AlphaR2-GPU-RadeonR9M470X-x86_64-Debug-Vulkan',
+  ('Test-Win10-MSVC-NUC5i7RYH-GPU-IntelIris6100-x86_64-Release-'
+   'ReleaseAndAbandonGpuContext'),
   'Test-Win10-MSVC-NUC6i5SYK-GPU-IntelIris540-x86_64-Debug-ANGLE',
   'Test-Win10-MSVC-NUC6i5SYK-GPU-IntelIris540-x86_64-Debug-Vulkan',
   'Test-Win10-MSVC-ShuttleA-GPU-GTX660-x86_64-Debug-Vulkan',
