@@ -181,7 +181,6 @@ cc_library {
         "src/core/SkGraphics.cpp",
         "src/core/SkHalf.cpp",
         "src/core/SkICC.cpp",
-        "src/core/SkImageCacherator.cpp",
         "src/core/SkImageFilter.cpp",
         "src/core/SkImageFilterCache.cpp",
         "src/core/SkImageGenerator.cpp",
