@@ -35,6 +35,7 @@
 #include "SkShadowPaintFilterCanvas.h"
 #include "SkShadowShader.h"
 #include "SkSpecialImage.h"
+#include "SkString.h"
 #include "SkSurface_Base.h"
 #include "SkTextBlob.h"
 #include "SkTextFormatParams.h"
@@ -1929,18 +1930,6 @@ void SkCanvas::legacy_drawBitmapRect(const SkBitmap& bitmap, const SkRect* src, 
     }
 }
 
-void SkCanvas::temporary_internal_describeTopLayer(SkMatrix* matrix, SkIRect* clip_bounds) {
-    SkIRect layer_bounds = this->getTopLayerBounds();
-    if (matrix) {
-        *matrix = this->getTotalMatrix();
-        matrix->preTranslate(-layer_bounds.left(), -layer_bounds.top());
-    }
-    if (clip_bounds) {
-        *clip_bounds = this->getDeviceClipBounds();
-        clip_bounds->offset(-layer_bounds.left(), -layer_bounds.top());
-    }
-}
-
 //////////////////////////////////////////////////////////////////////////////
 //  These are the virtual drawing methods
 //////////////////////////////////////////////////////////////////////////////
@@ -2573,6 +2562,10 @@ void SkCanvas::onDrawTextBlob(const SkTextBlob* blob, SkScalar x, SkScalar y,
     LOOPER_END
 
     fMCRec->fFilter = drawFilter;
+}
+
+void SkCanvas::drawString(const SkString& string, SkScalar x, SkScalar y, const SkPaint& paint) {
+    this->drawText(string.c_str(), string.size(), x, y, paint);
 }
 
 // These will become non-virtual, so they always call the (virtual) onDraw... method

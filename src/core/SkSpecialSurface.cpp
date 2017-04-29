@@ -68,6 +68,7 @@ public:
                             const SkIRect& subset,
                             const SkSurfaceProps* props)
         : INHERITED(subset, props) {
+        SkASSERT(info.width() == pr->width() && info.height() == pr->height());
         fBitmap.setInfo(info, info.minRowBytes());
         fBitmap.setPixelRef(std::move(pr), 0, 0);
 

@@ -65,7 +65,7 @@ protected:
         SkScalar vertMargin = 10;
 
         SkBitmap src;
-        src.allocN32Pixels(40, 40);
+        src.allocN32Pixels(40, 40, kOpaque_SkAlphaType);
         SkCanvas canvasTmp(src);
 
         draw_checks(&canvasTmp, 40, 40);
@@ -101,7 +101,7 @@ protected:
             SkScalar textWidth = paint.measureText(name, strlen(name));
             SkScalar x = (width - textWidth) / SkScalar(2);
             SkScalar y = paint.getFontSpacing() / SkScalar(2);
-            canvas->drawText(name, strlen(name), x, y, paint);
+            canvas->drawString(name, x, y, paint);
 
             // Draw destination bitmap
             canvas->translate(0, vertOffset);

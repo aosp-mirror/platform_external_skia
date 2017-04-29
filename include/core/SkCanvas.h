@@ -950,6 +950,29 @@ public:
     void drawText(const void* text, size_t byteLength, SkScalar x, SkScalar y,
                   const SkPaint& paint);
 
+    /** Draw null-terminated UTF-8 string, with origin at (x,y), using the specified paint.
+        The origin is interpreted based on the Align setting in the paint.
+        @param string   The null-terminated string to be drawn
+        @param x        The x-coordinate of the origin of the string being drawn
+        @param y        The y-coordinate of the origin of the string being drawn
+        @param paint    The paint used for the string (e.g. color, size, style)
+    */
+    void drawString(const char* string, SkScalar x, SkScalar y, const SkPaint& paint) {
+        if (!string) {
+            return;
+        }
+        this->drawText(string, strlen(string), x, y, paint);
+    }
+
+    /** Draw string, with origin at (x,y), using the specified paint.
+        The origin is interpreted based on the Align setting in the paint.
+        @param string   The string to be drawn
+        @param x        The x-coordinate of the origin of the string being drawn
+        @param y        The y-coordinate of the origin of the string being drawn
+        @param paint    The paint used for the string (e.g. color, size, style)
+    */
+    void drawString(const SkString& string, SkScalar x, SkScalar y, const SkPaint& paint);
+
     /** Draw the text, with each character/glyph origin specified by the pos[]
         array. The origin is interpreted by the Align setting in the paint.
         @param text The text to be drawn
@@ -1255,12 +1278,6 @@ public:
     void legacy_drawBitmapRect(const SkBitmap& bitmap, const SkRect* src, const SkRect& dst,
                                const SkPaint* paint,
                                SrcRectConstraint constraint = kStrict_SrcRectConstraint);
-
-    // expose minimum amount of information necessary for transitional refactoring
-    /**
-     * Returns CTM and clip bounds, translated from canvas coordinates to top layer coordinates.
-     */
-    void temporary_internal_describeTopLayer(SkMatrix* matrix, SkIRect* clip_bounds);
 
     /**
      *  Returns the global clip as a region. If the clip contains AA, then only the bounds
