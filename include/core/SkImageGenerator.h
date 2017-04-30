@@ -42,12 +42,7 @@ public:
      *  unref() on the data when it is finished.
      */
     SkData* refEncodedData() {
-#ifdef SK_SUPPORT_GPU_REF_ENCODED_DATA
-        GrContext* ctx = nullptr;
-        return this->onRefEncodedData(ctx);
-#else
         return this->onRefEncodedData();
-#endif
     }
 
     /**
@@ -166,11 +161,7 @@ protected:
 
     SkImageGenerator(const SkImageInfo& info, uint32_t uniqueId = kNeedNewImageUniqueID);
 
-    virtual SkData* onRefEncodedData(
-#ifdef SK_SUPPORT_GPU_REF_ENCODED_DATA
-        GrContext* ctx
-#endif
-    );
+    virtual SkData* onRefEncodedData();
 
     virtual bool onGetPixels(const SkImageInfo& info, void* pixels, size_t rowBytes,
                              SkPMColor ctable[], int* ctableCount);
@@ -208,7 +199,7 @@ private:
     const SkImageInfo fInfo;
     const uint32_t fUniqueID;
 
-    friend class SkImageCacherator;
+    friend class SkImage_Lazy;
 
     // This is our default impl, which may be different on different platforms.
     // It is called from NewFromEncoded() after it has checked for any runtime factory.

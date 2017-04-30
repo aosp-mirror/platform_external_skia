@@ -39,6 +39,8 @@ public:
         return fInfo;
     }
 
+    int width() const { return fInfo.width(); }
+    int height() const { return fInfo.height(); }
     void* pixels() const { return fPixels; }
     SkColorTable* colorTable() const { return fCTable.get(); }
     size_t rowBytes() const { return fRowBytes; }
@@ -165,14 +167,9 @@ private:
     friend class SkImage_Raster;
     friend class SkSpecialImage_Raster;
 
-    // When copying a bitmap to another with the same shape and config, we can safely
-    // clone the pixelref generation ID too, which makes them equivalent under caching.
-    friend class SkBitmap;  // only for cloneGenID
-    void cloneGenID(const SkPixelRef&);
-
     void setImmutableWithID(uint32_t genID);
     friend class SkImage_Gpu;
-    friend class SkImageCacherator;
+    friend class SkImage_Lazy;
     friend class SkSpecialImage_Gpu;
     friend void SkBitmapCache_setImmutableWithID(SkPixelRef*, uint32_t);
 

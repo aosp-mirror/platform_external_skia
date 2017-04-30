@@ -14,8 +14,15 @@
 #include "SkColorPriv.h"
 
 static SkBitmap copy_bitmap(const SkBitmap& src, SkColorType colorType) {
+    const SkBitmap* srcPtr = &src;
+    SkBitmap tmp(src);
+    if (kRGB_565_SkColorType == colorType) {
+        tmp.setAlphaType(kOpaque_SkAlphaType);
+        srcPtr = &tmp;
+    }
+
     SkBitmap copy;
-    src.copyTo(&copy, colorType);
+    sk_tool_utils::copy_to(&copy, colorType, *srcPtr);
     copy.setImmutable();
     return copy;
 }
@@ -143,7 +150,7 @@ static void draw(SkCanvas* canvas,
                  const char text[]) {
     SkASSERT(src.colorType() == colorType);
     canvas->drawBitmap(src, 0.0f, 0.0f);
-    canvas->drawText(text, strlen(text), 0.0f, 12.0f, p);
+    canvas->drawString(text, 0.0f, 12.0f, p);
 }
 
 DEF_SIMPLE_GM(all_bitmap_configs, canvas, SCALE, 6 * SCALE) {
@@ -200,7 +207,7 @@ sk_sp<SkImage> make_not_native32_color_wheel() {
         const SkColorType ct = kBGRA_8888_SkColorType;
     #endif
     static_assert(ct != kN32_SkColorType, "BRGA!=RGBA");
-    SkAssertResult(n32bitmap.copyTo(&notN32bitmap, ct));
+    SkAssertResult(sk_tool_utils::copy_to(&notN32bitmap, ct, n32bitmap));
     SkASSERT(notN32bitmap.colorType() == ct);
     return SkImage::MakeFromBitmap(notN32bitmap);
 }

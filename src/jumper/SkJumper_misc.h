@@ -38,20 +38,15 @@ SI Dst widen_cast(const Src& src) {
 
 // A couple functions for embedding constants directly into code,
 // so that no .const or .literal4 section is created.
-SI int C(int x) {
+SI float C(float f) {
+    int x = bit_cast<int>(f);
 #if defined(JUMPER) && defined(__x86_64__)
     // Move x-the-compile-time-constant as a literal into x-the-register.
     asm("mov %1, %0" : "=r"(x) : "i"(x));
 #endif
-    return x;
+    return bit_cast<float>(x);
 }
-SI float C(float f) {
-    int x = C(unaligned_load<int>(&f));
-    return unaligned_load<float>(&x);
-}
-
 // Syntax sugar to make C() easy to use for constant literals.
-SI int   operator "" _i(unsigned long long int i) { return C(  (int)i); }
-SI float operator "" _f(           long double f) { return C((float)f); }
+SI float operator "" _f(long double f) { return C((float)f); }
 
 #endif//SkJumper_misc_DEFINED

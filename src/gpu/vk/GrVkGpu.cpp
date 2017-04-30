@@ -146,10 +146,7 @@ GrVkGpu::GrVkGpu(GrContext* context, const GrContextOptions& options,
 
     // set up our heaps
     fHeaps[kLinearImage_Heap].reset(new GrVkHeap(this, GrVkHeap::kSubAlloc_Strategy, 16*1024*1024));
-    // We want the OptimalImage_Heap to use a SubAlloc_strategy but it occasionally causes the
-    // device to run out of memory. Most likely this is caused by fragmentation in the device heap
-    // and we can't allocate more. Until we get a fix moving this to SingleAlloc.
-    fHeaps[kOptimalImage_Heap].reset(new GrVkHeap(this, GrVkHeap::kSingleAlloc_Strategy, 64*1024*1024));
+    fHeaps[kOptimalImage_Heap].reset(new GrVkHeap(this, GrVkHeap::kSubAlloc_Strategy, 64*1024*1024));
     fHeaps[kSmallOptimalImage_Heap].reset(new GrVkHeap(this, GrVkHeap::kSubAlloc_Strategy, 2*1024*1024));
     fHeaps[kVertexBuffer_Heap].reset(new GrVkHeap(this, GrVkHeap::kSingleAlloc_Strategy, 0));
     fHeaps[kIndexBuffer_Heap].reset(new GrVkHeap(this, GrVkHeap::kSingleAlloc_Strategy, 0));
@@ -596,6 +593,8 @@ bool GrVkGpu::uploadTexDataOptimal(GrVkTexture* tex,
     // allocate buffer to hold our mip data
     GrVkTransferBuffer* transferBuffer =
                    GrVkTransferBuffer::Create(this, combinedBufferSize, GrVkBuffer::kCopyRead_Type);
+    if(!transferBuffer)
+        return false;
 
     char* buffer = (char*) transferBuffer->map();
     SkTArray<VkBufferImageCopy> regions(texelsShallowCopy.count());
@@ -1925,9 +1924,10 @@ sk_sp<GrSemaphore> SK_WARN_UNUSED_RESULT GrVkGpu::makeSemaphore() {
     return GrVkSemaphore::Make(this);
 }
 
-void GrVkGpu::insertSemaphore(sk_sp<GrSemaphore> semaphore) {
+void GrVkGpu::insertSemaphore(sk_sp<GrSemaphore> semaphore, bool /*flush*/) {
     GrVkSemaphore* vkSem = static_cast<GrVkSemaphore*>(semaphore.get());
 
+    // We *always* flush, so ignore that parameter
     this->submitCommandBuffer(kSkip_SyncQueue, vkSem->getResource());
 }
 
@@ -1937,8 +1937,4 @@ void GrVkGpu::waitSemaphore(sk_sp<GrSemaphore> semaphore) {
     const GrVkSemaphore::Resource* resource = vkSem->getResource();
     resource->ref();
     fSemaphoresToWaitOn.push_back(resource);
-}
-
-void GrVkGpu::flush() {
-    // We submit the command buffer to the queue whenever Ganesh is flushed, so nothing is needed
 }
