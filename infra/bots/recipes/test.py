@@ -371,6 +371,10 @@ def dm_flags(bot):
   if 'Valgrind' in bot: # skia:3021
     match.append('~Threaded')
 
+  if 'CommandBuffer' in bot:
+    # https://crbug.com/697030
+    match.append('~HalfFloatAlphaTextureTest')
+
   if 'AndroidOne' in bot:  # skia:4711
     match.append('~WritePixels')
 
@@ -769,7 +773,11 @@ def GenTests(api):
           api.path['start_dir'].join('skia', 'infra', 'bots', 'assets',
                                      'svg', 'VERSION'),
           api.path['start_dir'].join('tmp', 'uninteresting_hashes.txt')
-      )
+      ) +
+      api.step_data('get swarming bot id',
+          stdout=api.raw_io.output('skia-bot-123')) +
+      api.step_data('get swarming task id',
+          stdout=api.raw_io.output('123456'))
     )
     if 'Win' in builder:
       test += api.platform('win', 64)
