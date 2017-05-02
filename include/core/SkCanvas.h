@@ -323,13 +323,10 @@ public:
     typedef uint32_t SaveLayerFlags;
 
     struct SaveLayerRec {
-        SaveLayerRec()
-            : fBounds(nullptr), fPaint(nullptr), fBackdrop(nullptr), fSaveLayerFlags(0)
-        {}
+        SaveLayerRec() {}
         SaveLayerRec(const SkRect* bounds, const SkPaint* paint, SaveLayerFlags saveLayerFlags = 0)
             : fBounds(bounds)
             , fPaint(paint)
-            , fBackdrop(nullptr)
             , fSaveLayerFlags(saveLayerFlags)
         {}
         SaveLayerRec(const SkRect* bounds, const SkPaint* paint, const SkImageFilter* backdrop,
@@ -340,10 +337,24 @@ public:
             , fSaveLayerFlags(saveLayerFlags)
         {}
 
-        const SkRect*           fBounds;    // optional
-        const SkPaint*          fPaint;     // optional
-        const SkImageFilter*    fBackdrop;  // optional
-        SaveLayerFlags          fSaveLayerFlags;
+        // EXPERIMENTAL: not ready for general use.
+        SaveLayerRec(const SkRect* bounds, const SkPaint* paint, const SkImageFilter* backdrop,
+                     const SkImage* clipMask, const SkMatrix* clipMatrix,
+                     SaveLayerFlags saveLayerFlags)
+            : fBounds(bounds)
+            , fPaint(paint)
+            , fBackdrop(backdrop)
+            , fClipMask(std::move(clipMask))
+            , fClipMatrix(clipMatrix)
+            , fSaveLayerFlags(saveLayerFlags)
+        {}
+
+        const SkRect*           fBounds = nullptr;      // optional
+        const SkPaint*          fPaint = nullptr;       // optional
+        const SkImageFilter*    fBackdrop = nullptr;    // optional
+        const SkImage*          fClipMask = nullptr;    // optional
+        const SkMatrix*         fClipMatrix = nullptr;  // optional -- only used with fClipMask
+        SaveLayerFlags          fSaveLayerFlags = 0;
     };
 
     int saveLayer(const SaveLayerRec&);
@@ -950,6 +961,29 @@ public:
     void drawText(const void* text, size_t byteLength, SkScalar x, SkScalar y,
                   const SkPaint& paint);
 
+    /** Draw null-terminated UTF-8 string, with origin at (x,y), using the specified paint.
+        The origin is interpreted based on the Align setting in the paint.
+        @param string   The null-terminated string to be drawn
+        @param x        The x-coordinate of the origin of the string being drawn
+        @param y        The y-coordinate of the origin of the string being drawn
+        @param paint    The paint used for the string (e.g. color, size, style)
+    */
+    void drawString(const char* string, SkScalar x, SkScalar y, const SkPaint& paint) {
+        if (!string) {
+            return;
+        }
+        this->drawText(string, strlen(string), x, y, paint);
+    }
+
+    /** Draw string, with origin at (x,y), using the specified paint.
+        The origin is interpreted based on the Align setting in the paint.
+        @param string   The string to be drawn
+        @param x        The x-coordinate of the origin of the string being drawn
+        @param y        The y-coordinate of the origin of the string being drawn
+        @param paint    The paint used for the string (e.g. color, size, style)
+    */
+    void drawString(const SkString& string, SkScalar x, SkScalar y, const SkPaint& paint);
+
     /** Draw the text, with each character/glyph origin specified by the pos[]
         array. The origin is interpreted by the Align setting in the paint.
         @param text The text to be drawn
@@ -1256,12 +1290,6 @@ public:
                                const SkPaint* paint,
                                SrcRectConstraint constraint = kStrict_SrcRectConstraint);
 
-    // expose minimum amount of information necessary for transitional refactoring
-    /**
-     * Returns CTM and clip bounds, translated from canvas coordinates to top layer coordinates.
-     */
-    void temporary_internal_describeTopLayer(SkMatrix* matrix, SkIRect* clip_bounds);
-
     /**
      *  Returns the global clip as a region. If the clip contains AA, then only the bounds
      *  of the clip may be returned.
@@ -1472,7 +1500,7 @@ private:
     enum {
         kMCRecSize      = 128,  // most recent measurement
         kMCRecCount     = 32,   // common depth for save/restores
-        kDeviceCMSize   = 184,  // most recent measurement
+        kDeviceCMSize   = 224,  // most recent measurement
     };
     intptr_t fMCRecStorage[kMCRecSize * kMCRecCount / sizeof(intptr_t)];
     intptr_t fDeviceCMStorage[kDeviceCMSize / sizeof(intptr_t)];
@@ -1544,7 +1572,8 @@ private:
                                 SrcRectConstraint);
     void internalDrawPaint(const SkPaint& paint);
     void internalSaveLayer(const SaveLayerRec&, SaveLayerStrategy);
-    void internalDrawDevice(SkBaseDevice*, int x, int y, const SkPaint*);
+    void internalDrawDevice(SkBaseDevice*, int x, int y, const SkPaint*, SkImage* clipImage,
+                            const SkMatrix& clipMatrix);
 
     // shared by save() and saveLayer()
     void internalSave();

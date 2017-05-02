@@ -147,12 +147,10 @@ public:
     void deleteFence(GrFence) const override;
 
     sk_sp<GrSemaphore> SK_WARN_UNUSED_RESULT makeSemaphore() override;
-    void insertSemaphore(sk_sp<GrSemaphore> semaphore) override;
+    void insertSemaphore(sk_sp<GrSemaphore> semaphore, bool flush) override;
     void waitSemaphore(sk_sp<GrSemaphore> semaphore) override;
 
     void deleteSync(GrGLsync) const;
-
-    void flush() override;
 
 private:
     GrGLGpu(GrGLContext* ctx, GrContext* context);
@@ -176,7 +174,8 @@ private:
                                           GrBackendTextureFlags,
                                           int sampleCnt,
                                           GrWrapOwnership) override;
-    sk_sp<GrRenderTarget> onWrapBackendRenderTarget(const GrBackendRenderTargetDesc&) override;
+    sk_sp<GrRenderTarget> onWrapBackendRenderTarget(const GrBackendRenderTarget&,
+                                                    GrSurfaceOrigin origin) override;
     sk_sp<GrRenderTarget> onWrapBackendTextureAsRenderTarget(const GrBackendTexture&,
                                                              GrSurfaceOrigin,
                                                              int sampleCnt) override;
