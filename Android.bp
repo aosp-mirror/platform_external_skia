@@ -1275,6 +1275,7 @@ cc_test {
         "tests/DynamicHashTest.cpp",
         "tests/EGLImageTest.cpp",
         "tests/EmptyPathTest.cpp",
+        "tests/EncodeTest.cpp",
         "tests/ExifTest.cpp",
         "tests/F16StagesTest.cpp",
         "tests/FillPathTest.cpp",
