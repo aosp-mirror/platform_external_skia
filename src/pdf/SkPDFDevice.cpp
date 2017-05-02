@@ -106,7 +106,9 @@ static SkImageSubset make_image_subset(const SkBitmap& bitmap) {
     SkIRect subset = bitmap.getSubset();
     SkASSERT(bitmap.pixelRef());
     SkBitmap tmp;
-    tmp.setInfo(bitmap.pixelRef()->info(), bitmap.rowBytes());
+    SkImageInfo pixelRefInfo =
+            bitmap.info().makeWH(bitmap.pixelRef()->width(), bitmap.pixelRef()->height());
+    tmp.setInfo(pixelRefInfo, bitmap.rowBytes());
     tmp.setPixelRef(sk_ref_sp(bitmap.pixelRef()), 0, 0);
     auto img = SkImage::MakeFromBitmap(tmp);
     if (img) {
@@ -2200,9 +2202,11 @@ void SkPDFDevice::internalDrawImage(const SkMatrix& origMatrix,
 #include "SkSpecialImage.h"
 #include "SkImageFilter.h"
 
-void SkPDFDevice::drawSpecial(SkSpecialImage* srcImg, int x, int y,
-                              const SkPaint& paint) {
+void SkPDFDevice::drawSpecial(SkSpecialImage* srcImg, int x, int y, const SkPaint& paint,
+                              SkImage* clipImage, const SkMatrix& clipMatrix) {
     SkASSERT(!srcImg->isTextureBacked());
+
+    //TODO: clipImage support
 
     SkBitmap resultBM;
 

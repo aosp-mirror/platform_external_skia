@@ -218,7 +218,7 @@ def dm_flags(bot):
     blacklist('_ image gen_platf inc13.png')
     blacklist('_ image gen_platf inc14.png')
 
-  # WIC fails on questionable bmps and arithmetic jpegs
+  # WIC fails on questionable bmps
   if 'Win' in bot:
     blacklist('_ image gen_platf rle8-height-negative.bmp')
     blacklist('_ image gen_platf rle4-height-negative.bmp')
@@ -231,10 +231,13 @@ def dm_flags(bot):
     blacklist('_ image gen_platf 4bpp-pixeldata-cropped.bmp')
     blacklist('_ image gen_platf 32bpp-pixeldata-cropped.bmp')
     blacklist('_ image gen_platf 24bpp-pixeldata-cropped.bmp')
-    blacklist('_ image gen_platf testimgari.jpg')
     if 'x86_64' in bot and 'CPU' in bot:
       # This GM triggers a SkSmallAllocator assert.
       blacklist('_ gm _ composeshader_bitmap')
+
+  # WIC and CG fail on arithmetic jpegs
+  if 'Win' in bot or 'Mac' in bot:
+    blacklist('_ image gen_platf testimgari.jpg')
 
   if 'Android' in bot or 'iOS' in bot:
     # This test crashes the N9 (perhaps because of large malloc/frees). It also
@@ -371,6 +374,10 @@ def dm_flags(bot):
   if 'Valgrind' in bot: # skia:3021
     match.append('~Threaded')
 
+  if 'CommandBuffer' in bot:
+    # https://crbug.com/697030
+    match.append('~HalfFloatAlphaTextureTest')
+
   if 'AndroidOne' in bot:  # skia:4711
     match.append('~WritePixels')
 
@@ -503,6 +510,9 @@ def dm_flags(bot):
     match.append('~PathOpsSimplify') # skia:6479
     blacklist(['_', 'gm', '_', 'fast_slow_blurimagefilter']) # skia:6480
 
+  if ('Win10' in bot and 'Vulkan' in bot
+      and ('GTX1070' in bot or 'GTX660' in bot)):
+    blacklist('_ test _ SkImage_makeTextureImage') # skia:6554
 
   if blacklisted:
     args.append('--blacklist')
@@ -676,12 +686,12 @@ def test_steps(api):
       })
 
   # See skia:2789.
-  if '_AbandonGpuContext' in api.vars.builder_cfg.get('extra_config', ''):
+  extra_config_parts = api.vars.builder_cfg.get('extra_config', '').split('_')
+  if 'AbandonGpuContext' in extra_config_parts:
     args.append('--abandonGpuContext')
-  if '_PreAbandonGpuContext' in api.vars.builder_cfg.get('extra_config', ''):
+  if 'PreAbandonGpuContext' in extra_config_parts:
     args.append('--preAbandonGpuContext')
-  if ('ReleaseAndAbandonGpuContext' in
-      api.vars.builder_cfg.get('extra_config', '')):
+  if 'ReleaseAndAbandonGpuContext' in extra_config_parts:
     args.append('--releaseAndAbandonGpuContext')
 
   with api.env(env):
@@ -769,7 +779,11 @@ def GenTests(api):
           api.path['start_dir'].join('skia', 'infra', 'bots', 'assets',
                                      'svg', 'VERSION'),
           api.path['start_dir'].join('tmp', 'uninteresting_hashes.txt')
-      )
+      ) +
+      api.step_data('get swarming bot id',
+          stdout=api.raw_io.output('skia-bot-123')) +
+      api.step_data('get swarming task id',
+          stdout=api.raw_io.output('123456'))
     )
     if 'Win' in builder:
       test += api.platform('win', 64)

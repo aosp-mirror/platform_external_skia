@@ -23,7 +23,6 @@
 #include "GrTextureAdjuster.h"
 #include "GrTexturePriv.h"
 #include "GrTextureProxy.h"
-#include "GrTextureToYUVPlanes.h"
 #include "effects/GrNonlinearColorSpaceXformEffect.h"
 #include "effects/GrYUVEffect.h"
 #include "SkCanvas.h"
@@ -63,11 +62,13 @@ SkImageInfo SkImage_Gpu::onImageInfo() const {
     return SkImageInfo::Make(fProxy->width(), fProxy->height(), ct, fAlphaType, fColorSpace);
 }
 
-static SkImageInfo make_info(int w, int h, SkAlphaType at, sk_sp<SkColorSpace> colorSpace) {
-    return SkImageInfo::MakeN32(w, h, at, std::move(colorSpace));
-}
-
-bool SkImage_Gpu::getROPixels(SkBitmap* dst, SkColorSpace* dstColorSpace, CachingHint chint) const {
+bool SkImage_Gpu::getROPixels(SkBitmap* dst, SkColorSpace*, CachingHint chint) const {
+    // The SkColorSpace parameter "dstColorSpace" is really just a hint about how/where the bitmap
+    // will be used. The client doesn't expect that we convert to that color space, it's intended
+    // for codec-backed images, to drive our decoding heuristic. In theory we *could* read directly
+    // into that color space (to save the client some effort in whatever they're about to do), but
+    // that would make our use of the bitmap cache incorrect (or much less efficient, assuming we
+    // rolled the dstColorSpace into the key).
     const auto desc = SkBitmapCacheDesc::Make(this);
     if (SkBitmapCache::Find(desc, dst)) {
         SkASSERT(dst->getGenerationID() == this->uniqueID());
@@ -76,17 +77,15 @@ bool SkImage_Gpu::getROPixels(SkBitmap* dst, SkColorSpace* dstColorSpace, Cachin
         return true;
     }
 
-    SkImageInfo ii = make_info(this->width(), this->height(), this->alphaType(),
-                               sk_ref_sp(dstColorSpace));
     SkBitmapCache::RecPtr rec = nullptr;
     SkPixmap pmap;
     if (kAllow_CachingHint == chint) {
-        rec = SkBitmapCache::Alloc(desc, ii, &pmap);
+        rec = SkBitmapCache::Alloc(desc, this->onImageInfo(), &pmap);
         if (!rec) {
             return false;
         }
     } else {
-        if (!dst->tryAllocPixels(ii) || !dst->peekPixels(&pmap)) {
+        if (!dst->tryAllocPixels(this->onImageInfo()) || !dst->peekPixels(&pmap)) {
             return false;
         }
     }
@@ -173,15 +172,6 @@ GrTexture* SkImage_Gpu::onGetTexture() const {
     }
 
     return proxy->instantiate(fContext->resourceProvider());
-}
-
-bool SkImage_Gpu::onReadYUV8Planes(const SkISize sizes[3], void* const planes[3],
-                                   const size_t rowBytes[3], SkYUVColorSpace colorSpace) const {
-    if (GrTextureToYUVPlanes(fContext, fProxy, sizes, planes, rowBytes, colorSpace)) {
-        return true;
-    }
-
-    return INHERITED::onReadYUV8Planes(sizes, planes, rowBytes, colorSpace);
 }
 
 bool SkImage_Gpu::onReadPixels(const SkImageInfo& dstInfo, void* dstPixels, size_t dstRB,
@@ -457,8 +447,8 @@ sk_sp<SkImage> SkImage::makeTextureImage(GrContext* context, SkColorSpace* dstCo
         return peek->getContext() == context ? sk_ref_sp(const_cast<SkImage*>(this)) : nullptr;
     }
 
-    if (SkImageCacherator* cacher = as_IB(this)->peekCacherator()) {
-        GrImageTextureMaker maker(context, cacher, this, kDisallow_CachingHint);
+    if (this->isLazyGenerated()) {
+        GrImageTextureMaker maker(context, this, kDisallow_CachingHint);
         return create_image_from_maker(context, &maker, this->alphaType(),
                                        this->uniqueID(), dstColorSpace);
     }

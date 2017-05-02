@@ -146,10 +146,7 @@ GrVkGpu::GrVkGpu(GrContext* context, const GrContextOptions& options,
 
     // set up our heaps
     fHeaps[kLinearImage_Heap].reset(new GrVkHeap(this, GrVkHeap::kSubAlloc_Strategy, 16*1024*1024));
-    // We want the OptimalImage_Heap to use a SubAlloc_strategy but it occasionally causes the
-    // device to run out of memory. Most likely this is caused by fragmentation in the device heap
-    // and we can't allocate more. Until we get a fix moving this to SingleAlloc.
-    fHeaps[kOptimalImage_Heap].reset(new GrVkHeap(this, GrVkHeap::kSingleAlloc_Strategy, 64*1024*1024));
+    fHeaps[kOptimalImage_Heap].reset(new GrVkHeap(this, GrVkHeap::kSubAlloc_Strategy, 64*1024*1024));
     fHeaps[kSmallOptimalImage_Heap].reset(new GrVkHeap(this, GrVkHeap::kSubAlloc_Strategy, 2*1024*1024));
     fHeaps[kVertexBuffer_Heap].reset(new GrVkHeap(this, GrVkHeap::kSingleAlloc_Strategy, 0));
     fHeaps[kIndexBuffer_Heap].reset(new GrVkHeap(this, GrVkHeap::kSingleAlloc_Strategy, 0));
@@ -596,6 +593,8 @@ bool GrVkGpu::uploadTexDataOptimal(GrVkTexture* tex,
     // allocate buffer to hold our mip data
     GrVkTransferBuffer* transferBuffer =
                    GrVkTransferBuffer::Create(this, combinedBufferSize, GrVkBuffer::kCopyRead_Type);
+    if(!transferBuffer)
+        return false;
 
     char* buffer = (char*) transferBuffer->map();
     SkTArray<VkBufferImageCopy> regions(texelsShallowCopy.count());
@@ -818,32 +817,36 @@ sk_sp<GrTexture> GrVkGpu::onWrapBackendTexture(const GrBackendTexture& backendTe
     return GrVkTextureRenderTarget::MakeWrappedTextureRenderTarget(this, surfDesc, ownership, info);
 }
 
-sk_sp<GrRenderTarget> GrVkGpu::onWrapBackendRenderTarget(const GrBackendRenderTargetDesc& wrapDesc){
+sk_sp<GrRenderTarget> GrVkGpu::onWrapBackendRenderTarget(const GrBackendRenderTarget& backendRT,
+                                                         GrSurfaceOrigin origin){
     // Currently the Vulkan backend does not support wrapping of msaa render targets directly. In
     // general this is not an issue since swapchain images in vulkan are never multisampled. Thus if
     // you want a multisampled RT it is best to wrap the swapchain images and then let Skia handle
     // creating and owning the MSAA images.
-    if (wrapDesc.fSampleCnt) {
+    if (backendRT.sampleCnt()) {
         return nullptr;
     }
 
-    const GrVkImageInfo* info =
-        reinterpret_cast<const GrVkImageInfo*>(wrapDesc.fRenderTargetHandle);
+    const GrVkImageInfo* info = backendRT.getVkImageInfo();
+    if (!info) {
+        return nullptr;
+    }
     if (VK_NULL_HANDLE == info->fImage) {
         return nullptr;
     }
 
     GrSurfaceDesc desc;
-    desc.fConfig = wrapDesc.fConfig;
+    desc.fConfig = backendRT.config();
     desc.fFlags = kCheckAllocation_GrSurfaceFlag | kRenderTarget_GrSurfaceFlag;
-    desc.fWidth = wrapDesc.fWidth;
-    desc.fHeight = wrapDesc.fHeight;
+    desc.fWidth = backendRT.width();
+    desc.fHeight = backendRT.height();
     desc.fSampleCnt = 0;
 
-    desc.fOrigin = resolve_origin(wrapDesc.fOrigin);
+    SkASSERT(kDefault_GrSurfaceOrigin != origin);
+    desc.fOrigin = origin;
 
     sk_sp<GrVkRenderTarget> tgt = GrVkRenderTarget::MakeWrappedRenderTarget(this, desc, info);
-    if (tgt && wrapDesc.fStencilBits) {
+    if (tgt && backendRT.stencilBits()) {
         if (!createStencilAttachmentForRenderTarget(tgt.get(), desc.fWidth, desc.fHeight)) {
             return nullptr;
         }
@@ -856,6 +859,9 @@ sk_sp<GrRenderTarget> GrVkGpu::onWrapBackendTextureAsRenderTarget(const GrBacken
                                                                   int sampleCnt) {
 
     const GrVkImageInfo* info = tex.getVkImageInfo();
+    if (!info) {
+        return nullptr;
+    }
     if (VK_NULL_HANDLE == info->fImage) {
         return nullptr;
     }
@@ -1925,9 +1931,10 @@ sk_sp<GrSemaphore> SK_WARN_UNUSED_RESULT GrVkGpu::makeSemaphore() {
     return GrVkSemaphore::Make(this);
 }
 
-void GrVkGpu::insertSemaphore(sk_sp<GrSemaphore> semaphore) {
+void GrVkGpu::insertSemaphore(sk_sp<GrSemaphore> semaphore, bool /*flush*/) {
     GrVkSemaphore* vkSem = static_cast<GrVkSemaphore*>(semaphore.get());
 
+    // We *always* flush, so ignore that parameter
     this->submitCommandBuffer(kSkip_SyncQueue, vkSem->getResource());
 }
 
@@ -1937,8 +1944,4 @@ void GrVkGpu::waitSemaphore(sk_sp<GrSemaphore> semaphore) {
     const GrVkSemaphore::Resource* resource = vkSem->getResource();
     resource->ref();
     fSemaphoresToWaitOn.push_back(resource);
-}
-
-void GrVkGpu::flush() {
-    // We submit the command buffer to the queue whenever Ganesh is flushed, so nothing is needed
 }

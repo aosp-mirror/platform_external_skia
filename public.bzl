@@ -648,12 +648,14 @@ DEFINES_IOS = [
 ]
 
 DEFINES_ALL = [
+    "SK_SUPPORT_LEGACY_BITMAP_COPYTO",
     # Chrome DEFINES.
     "SK_USE_FLOATBITS",
     "SK_USE_FREETYPE_EMBOLDEN",
     # Turn on a few Google3-specific build fixes.
     "GOOGLE3",
     # Staging flags for API changes
+    "SK_SUPPORT_LEGACY_PIXELREF_API",
     # Temporarily Disable analytic AA for Google3
     "SK_NO_ANALYTIC_AA",
 ]
