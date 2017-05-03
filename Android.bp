@@ -534,6 +534,7 @@ cc_library {
         "src/gpu/ops/GrLatticeOp.cpp",
         "src/gpu/ops/GrMSAAPathRenderer.cpp",
         "src/gpu/ops/GrMeshDrawOp.cpp",
+        "src/gpu/ops/GrNewNonAAFillRectOp.cpp",
         "src/gpu/ops/GrNonAAFillRectOp.cpp",
         "src/gpu/ops/GrNonAAFillRectPerspectiveOp.cpp",
         "src/gpu/ops/GrNonAAStrokeRectOp.cpp",
