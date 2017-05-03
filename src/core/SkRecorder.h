@@ -62,12 +62,6 @@ public:
     void didSetMatrix(const SkMatrix&) override;
     void didTranslate(SkScalar, SkScalar) override;
 
-#ifdef SK_EXPERIMENTAL_SHADOWING
-    void didTranslateZ(SkScalar) override;
-#else
-    void didTranslateZ(SkScalar);
-#endif
-
     void onDrawDRRect(const SkRRect&, const SkRRect&, const SkPaint&) override;
     void onDrawDrawable(SkDrawable*, const SkMatrix*) override;
     void onDrawText(const void* text,
@@ -134,18 +128,6 @@ public:
     void onClipRegion(const SkRegion& deviceRgn, SkClipOp) override;
 
     void onDrawPicture(const SkPicture*, const SkMatrix*, const SkPaint*) override;
-
-#ifdef SK_EXPERIMENTAL_SHADOWING
-    void onDrawShadowedPicture(const SkPicture*,
-                               const SkMatrix*,
-                               const SkPaint*,
-                               const SkShadowParams& params) override;
-#else
-    void onDrawShadowedPicture(const SkPicture*,
-                               const SkMatrix*,
-                               const SkPaint*,
-                               const SkShadowParams& params);
-#endif
 
     void onDrawAnnotation(const SkRect&, const char[], SkData*) override;
 

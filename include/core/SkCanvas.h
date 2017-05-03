@@ -15,7 +15,6 @@
 #include "SkRasterHandleAllocator.h"
 #include "SkSurfaceProps.h"
 #include "SkLights.h"
-#include "../private/SkShadowParams.h"
 
 class GrContext;
 class GrRenderTargetContext;
@@ -423,24 +422,6 @@ public:
     /** Helper for setMatrix(identity). Sets the current matrix to identity.
     */
     void resetMatrix();
-
-#ifdef SK_EXPERIMENTAL_SHADOWING
-    /** Add the specified translation to the current draw depth of the canvas.
-        @param z    The distance to translate in Z.
-                    Negative into screen, positive out of screen.
-                    Without translation, the draw depth defaults to 0.
-    */
-    void translateZ(SkScalar z);
-
-    /** Set the current set of lights in the canvas.
-        @param lights   The lights that we want the canvas to have.
-    */
-    void setLights(sk_sp<SkLights> lights);
-
-    /** Returns the current set of lights the canvas uses
-      */
-    sk_sp<SkLights> getLights() const;
-#endif
 
     /**
      *  Modify the current clip with the specified rectangle.
@@ -1083,53 +1064,6 @@ public:
         this->drawPicture(picture.get(), matrix, paint);
     }
 
-#ifdef SK_EXPERIMENTAL_SHADOWING
-    /**
-     *  Draw the picture into this canvas, with shadows!
-     *
-     *  We will use the canvas's lights along with the picture information (draw depths of
-     *  objects, etc) to first create a set of shadowmaps for the light-picture pairs, and
-     *  then use that set of shadowmaps to render the scene with shadows.
-     *
-     *  If matrix is non-null, apply that matrix to the CTM when drawing this picture. This is
-     *  logically equivalent to
-     *      save/concat/drawPicture/restore
-     *
-     *  If paint is non-null, draw the picture into a temporary buffer, and then apply the paint's
-     *  alpha/colorfilter/imagefilter/xfermode to that buffer as it is drawn to the canvas.
-     *  This is logically equivalent to
-     *      saveLayer(paint)/drawPicture/restore
-     *
-     *  We also support using variance shadow maps for blurred shadows; the user can specify
-     *  what shadow mapping algorithm to use with params.
-     *    - Variance Shadow Mapping works by storing both the depth and depth^2 in the shadow map.
-     *    - Then, the shadow map can be blurred, and when reading from it, the fragment shader
-     *      can calculate the variance of the depth at a position by doing E(x^2) - E(x)^2.
-     *    - We can then use the depth variance and depth at a fragment to arrive at an upper bound
-     *      of the probability that the current surface is shadowed by using Chebyshev's
-     *      inequality, and then use that to shade the fragment.
-     *
-     *    - There are a few problems with VSM.
-     *      * Light Bleeding | Areas with high variance, such as near the edges of high up rects,
-     *                         will cause their shadow penumbras to overwrite otherwise solid
-     *                         shadows.
-     *      * Shape Distortion | We can combat Light Bleeding by biasing the shadow (setting
-     *                           mostly shaded fragments to completely shaded) and increasing
-     *                           the minimum allowed variance. However, this warps and rounds
-     *                           out the shape of the shadow.
-     */
-    void drawShadowedPicture(const SkPicture*,
-                             const SkMatrix* matrix,
-                             const SkPaint* paint,
-                             const SkShadowParams& params);
-    void drawShadowedPicture(const sk_sp<SkPicture>& picture,
-                             const SkMatrix* matrix,
-                             const SkPaint* paint,
-                             const SkShadowParams& params) {
-        this->drawShadowedPicture(picture.get(), matrix, paint, params);
-    }
-#endif
-
     /** Draw vertices from an immutable SkVertices object.
 
         @param vertices The mesh to draw.
@@ -1297,14 +1231,6 @@ public:
     void temporary_internal_getRgnClip(SkRegion*);
 
 protected:
-#ifdef SK_EXPERIMENTAL_SHADOWING
-    /** Returns the current (cumulative) draw depth of the canvas.
-      */
-    SkScalar getZ() const;
-
-    sk_sp<SkLights> fLights;
-#endif
-
     // default impl defers to getDevice()->newSurface(info)
     virtual sk_sp<SkSurface> onNewSurface(const SkImageInfo&, const SkSurfaceProps&);
 
@@ -1335,10 +1261,6 @@ protected:
     virtual void didTranslate(SkScalar dx, SkScalar dy) {
         this->didConcat(SkMatrix::MakeTrans(dx, dy));
     }
-
-#ifdef SK_EXPERIMENTAL_SHADOWING
-    virtual void didTranslateZ(SkScalar) {}
-#endif
 
     virtual SkRect onGetLocalClipBounds() const;
     virtual SkIRect onGetDeviceClipBounds() const;
@@ -1412,13 +1334,6 @@ protected:
     virtual void onDiscard();
 
     virtual void onDrawPicture(const SkPicture*, const SkMatrix*, const SkPaint*);
-
-#ifdef SK_EXPERIMENTAL_SHADOWING
-    virtual void onDrawShadowedPicture(const SkPicture*,
-                                       const SkMatrix*,
-                                       const SkPaint*,
-                                       const SkShadowParams& params);
-#endif
 
     // Clip rectangle bounds. Called internally by saveLayer.
     // returns false if the entire rectangle is entirely clipped out
@@ -1530,13 +1445,10 @@ private:
     friend class AutoDrawLooper;
     friend class SkDebugCanvas;     // needs experimental fAllowSimplifyClip
     friend class SkSurface_Raster;  // needs getDevice()
-    friend class SkRecorder;        // resetForNextPicture
-    friend class SkLiteRecorder;    // resetForNextPicture
     friend class SkNoDrawCanvas;    // InitFlags
     friend class SkPictureImageFilter;  // SkCanvas(SkBaseDevice*, SkSurfaceProps*, InitFlags)
     friend class SkPictureRecord;   // predrawNotify (why does it need it? <reed>)
     friend class SkPicturePlayback; // SaveFlagsToSaveLayerFlags
-    friend class SkDeferredCanvas;  // For use of resetForNextPicture
     friend class SkOverdrawCanvas;
     friend class SkRasterHandleAllocator;
 

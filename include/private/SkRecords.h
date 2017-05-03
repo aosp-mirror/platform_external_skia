@@ -50,7 +50,6 @@ namespace SkRecords {
     M(SaveLayer)                                                    \
     M(SetMatrix)                                                    \
     M(Translate)                                                    \
-    M(TranslateZ)                                                   \
     M(Concat)                                                       \
     M(ClipPath)                                                     \
     M(ClipRRect)                                                    \
@@ -68,7 +67,6 @@ namespace SkRecords {
     M(DrawPath)                                                     \
     M(DrawPatch)                                                    \
     M(DrawPicture)                                                  \
-    M(DrawShadowedPicture)                                          \
     M(DrawPoints)                                                   \
     M(DrawPosText)                                                  \
     M(DrawPosTextH)                                                 \
@@ -192,7 +190,6 @@ RECORD(Concat, 0,
 RECORD(Translate, 0,
         SkScalar dx;
         SkScalar dy);
-RECORD(TranslateZ, 0, SkScalar z);
 
 struct ClipOpAndAA {
     ClipOpAndAA() {}
@@ -278,11 +275,6 @@ RECORD(DrawPicture, kDraw_Tag|kHasPaint_Tag,
         Optional<SkPaint> paint;
         sk_sp<const SkPicture> picture;
         TypedMatrix matrix);
-RECORD(DrawShadowedPicture, kDraw_Tag|kHasPaint_Tag,
-        Optional<SkPaint> paint;
-        sk_sp<const SkPicture> picture;
-        TypedMatrix matrix;
-        const SkShadowParams& params);
 RECORD(DrawPoints, kDraw_Tag|kHasPaint_Tag,
         SkPaint paint;
         SkCanvas::PointMode mode;

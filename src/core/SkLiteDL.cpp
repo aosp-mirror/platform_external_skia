@@ -47,11 +47,10 @@ static const D* pod(const T* op, size_t offset = 0) {
 namespace {
 #define TYPES(M)                                                                \
     M(SetDrawFilter) M(Save) M(Restore) M(SaveLayer)                            \
-    M(Concat) M(SetMatrix) M(Translate) M(TranslateZ)                           \
+    M(Concat) M(SetMatrix) M(Translate)                                         \
     M(ClipPath) M(ClipRect) M(ClipRRect) M(ClipRegion)                          \
     M(DrawPaint) M(DrawPath) M(DrawRect) M(DrawRegion) M(DrawOval) M(DrawArc)   \
     M(DrawRRect) M(DrawDRRect) M(DrawAnnotation) M(DrawDrawable) M(DrawPicture) \
-    M(DrawShadowedPicture)                                                      \
     M(DrawImage) M(DrawImageNine) M(DrawImageRect) M(DrawImageLattice)          \
     M(DrawText) M(DrawPosText) M(DrawPosTextH)                                  \
     M(DrawTextOnPath) M(DrawTextRSXform) M(DrawTextBlob)                        \
@@ -132,16 +131,6 @@ namespace {
         SkScalar dx,dy;
         void draw(SkCanvas* c, const SkMatrix&) const {
             c->translate(dx, dy);
-        }
-    };
-    struct TranslateZ final : Op {
-        static const auto kType = Type::TranslateZ;
-        TranslateZ(SkScalar dz) : dz(dz) {}
-        SkScalar dz;
-        void draw(SkCanvas* c, const SkMatrix&) const {
-        #ifdef SK_EXPERIMENTAL_SHADOWING
-            c->translateZ(dz);
-        #endif
         }
     };
 
@@ -274,25 +263,6 @@ namespace {
         bool                   has_paint = false;  // TODO: why is a default paint not the same?
         void draw(SkCanvas* c, const SkMatrix&) const {
             c->drawPicture(picture.get(), &matrix, has_paint ? &paint : nullptr);
-        }
-    };
-    struct DrawShadowedPicture final : Op {
-        static const auto kType = Type::DrawShadowedPicture;
-        DrawShadowedPicture(const SkPicture* picture, const SkMatrix* matrix,
-                            const SkPaint* paint, const SkShadowParams& params)
-            : picture(sk_ref_sp(picture)) {
-            if (matrix) { this->matrix = *matrix; }
-            if (paint)  { this->paint  = *paint;  }
-            this->params = params;
-        }
-        sk_sp<const SkPicture> picture;
-        SkMatrix               matrix = SkMatrix::I();
-        SkPaint                paint;
-        SkShadowParams         params;
-        void draw(SkCanvas* c, const SkMatrix&) const {
-        #ifdef SK_EXPERIMENTAL_SHADOWING
-            c->drawShadowedPicture(picture.get(), &matrix, &paint, params);
-        #endif
         }
     };
 
@@ -558,7 +528,6 @@ void SkLiteDL::saveLayer(const SkRect* bounds, const SkPaint* paint,
 void SkLiteDL::   concat(const SkMatrix& matrix)   { this->push   <Concat>(0, matrix); }
 void SkLiteDL::setMatrix(const SkMatrix& matrix)   { this->push<SetMatrix>(0, matrix); }
 void SkLiteDL::translate(SkScalar dx, SkScalar dy) { this->push<Translate>(0, dx, dy); }
-void SkLiteDL::translateZ(SkScalar dz) { this->push<TranslateZ>(0, dz); }
 
 void SkLiteDL::clipPath(const SkPath& path, SkClipOp op, bool aa) {
     this->push<ClipPath>(0, path, op, aa);
@@ -611,11 +580,6 @@ void SkLiteDL::drawPicture(const SkPicture* picture,
                            const SkMatrix* matrix, const SkPaint* paint) {
     this->push<DrawPicture>(0, picture, matrix, paint);
 }
-void SkLiteDL::drawShadowedPicture(const SkPicture* picture, const SkMatrix* matrix,
-                                   const SkPaint* paint, const SkShadowParams& params) {
-    push<DrawShadowedPicture>(0, picture, matrix, paint, params);
-}
-
 void SkLiteDL::drawImage(sk_sp<const SkImage> image, SkScalar x, SkScalar y, const SkPaint* paint) {
     this->push<DrawImage>(0, std::move(image), x,y, paint);
 }
