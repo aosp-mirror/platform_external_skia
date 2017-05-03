@@ -293,6 +293,36 @@ STAGE(seed_shader) {
     dr = dg = db = da = 0;
 }
 
+STAGE(dither) {
+    auto c = (const SkJumper_DitherCtx*)ctx;
+
+    // Get [(x,y), (x+1,y), (x+2,y), ...] loaded up in integer vectors.
+    U32 X = trunc_((int)x + unaligned_load<F>(k->iota)),  // Going through float is kind of lazy..
+        Y = (uint32_t)*c->y;
+
+    // We're doing 8x8 ordered dithering, see https://en.wikipedia.org/wiki/Ordered_dithering.
+    // In this case n=8 and we're using the matrix that looks like 1/64 x [ 0 48 12 60 ... ].
+
+    // We only need X and X^Y from here on, so it's easier to just think of that as "Y".
+    Y ^= X;
+
+    // We'll mix the bottom 3 bits of each of X and Y to make 6 bits,
+    // for 2^6 == 64 == 8x8 matrix values.  If X=abc and Y=def, we make fcebda.
+    U32 M = (Y & 1) << 5 | (X & 1) << 4
+          | (Y & 2) << 2 | (X & 2) << 1
+          | (Y & 4) >> 1 | (X & 4) >> 2;
+
+    // Scale that dither to [0,1], then [-0.5,+0.5].
+    // I chose to scale by 1/63.0f here to make this exactly [0,1].
+    // I suspect the divide by 64 in the article was written with fast integer math in mind.
+    F dither = cast(M) * (1/63.0f) - 0.5f;
+
+    // Fold in an extra alpha to dither as if applied to the unpremul values of r,g,b.
+    r += c->rate*dither*a;
+    g += c->rate*dither*a;
+    b += c->rate*dither*a;
+}
+
 STAGE(constant_color) {
     auto rgba = (const float*)ctx;
     r = rgba[0];
@@ -943,6 +973,32 @@ STAGE(linear_gradient_2stops) {
     g = mad(t, c->f[1], c->b[1]);
     b = mad(t, c->f[2], c->b[2]);
     a = mad(t, c->f[3], c->b[3]);
+}
+
+STAGE(xy_to_polar_unit) {
+    F X = r,
+      Y = g;
+    F xabs = abs_(X),
+      yabs = abs_(Y);
+
+    F slope = min(xabs, yabs)/max(xabs, yabs);
+    F s = slope * slope;
+
+    // Use a 7th degree polynomial to approximate atan.
+    // This was generated using sollya.gforge.inria.fr.
+    // A float optimized polynomial was generated using the following command.
+    // P1 = fpminimax((1/(2*Pi))*atan(x),[|1,3,5,7|],[|24...|],[2^(-40),1],relative);
+    F phi = slope
+             * (0.15912117063999176025390625f     + s
+             * (-5.185396969318389892578125e-2f   + s
+             * (2.476101927459239959716796875e-2f + s
+             * (-7.0547382347285747528076171875e-3f))));
+
+    phi = if_then_else(xabs < yabs, 1.0f/4.0f - phi, phi);
+    phi = if_then_else(X < 0.0f   , 1.0f/2.0f - phi, phi);
+    phi = if_then_else(Y < 0.0f   , 1.0f - phi     , phi);
+    phi = if_then_else(phi != phi , 0              , phi);  // Check for NaN.
+    r = phi;
 }
 
 STAGE(save_xy) {
