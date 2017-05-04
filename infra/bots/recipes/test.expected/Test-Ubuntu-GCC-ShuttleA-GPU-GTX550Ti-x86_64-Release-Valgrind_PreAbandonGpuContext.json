@@ -317,6 +317,10 @@
       "serialize-8888",
       "gm",
       "_",
+      "makecolorspace",
+      "serialize-8888",
+      "gm",
+      "_",
       "bleed_alpha_image",
       "serialize-8888",
       "gm",
@@ -476,6 +480,7 @@
       ".SRW",
       "--match",
       "~Threaded",
+      "--verbose",
       "--preAbandonGpuContext"
     ],
     "env": {
