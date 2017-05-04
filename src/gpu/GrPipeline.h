@@ -90,6 +90,8 @@ public:
      **/
     GrPipeline(GrRenderTarget*, SkBlendMode);
 
+    GrPipeline(const InitArgs& args) { this->init(args); }
+
     /** (Re)initializes a pipeline. After initialization the pipeline can be used. */
     void init(const InitArgs&);
 
@@ -213,6 +215,7 @@ public:
     bool isStencilEnabled() const {
         return SkToBool(fFlags & kStencilEnabled_Flag);
     }
+    bool isBad() const { return SkToBool(fFlags & kIsBad_Flag); }
 
     GrXferBarrierType xferBarrierType(const GrCaps& caps) const {
         if (fDstTexture.get() && fDstTexture.get() == fRenderTarget.get()->asTexture()) {
@@ -229,11 +232,14 @@ public:
     GrDrawFace getDrawFace() const { return static_cast<GrDrawFace>(fDrawFace); }
 
 private:
+    void markAsBad() { fFlags |= kIsBad_Flag; }
+
     /** This is a continuation of the public "Flags" enum. */
     enum PrivateFlags {
         kUsesDistanceVectorField_Flag = 0x10,
         kHasStencilClip_Flag = 0x20,
         kStencilEnabled_Flag = 0x40,
+        kIsBad_Flag = 0x80,
     };
 
     using RenderTarget = GrPendingIOResource<GrRenderTarget, kWrite_GrIOType>;

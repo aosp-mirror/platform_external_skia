@@ -62,7 +62,7 @@
     M(unpremul) M(premul)                                        \
     M(set_rgb) M(swap_rb)                                        \
     M(from_srgb) M(to_srgb)                                      \
-    M(constant_color) M(seed_shader)                             \
+    M(constant_color) M(seed_shader) M(dither)                   \
     M(load_a8)   M(store_a8)                                     \
     M(load_g8)                                                   \
     M(load_565)  M(store_565)                                    \
@@ -97,6 +97,7 @@
     M(save_xy) M(accumulate)                                     \
     M(linear_gradient)                                           \
     M(linear_gradient_2stops)                                    \
+    M(xy_to_polar_unit)                                          \
     M(byte_tables) M(byte_tables_rgb)                            \
     M(rgb_to_hsl)                                                \
     M(hsl_to_rgb)
