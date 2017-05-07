@@ -22,7 +22,7 @@ public:
         kTexelBufferDescSet = 2,
     };
     enum {
-        kVertexBinding = 0,
+        kGeometryBinding = 0,
         kFragBinding = 1,
     };
 
@@ -48,7 +48,7 @@ private:
         , fUniforms(kUniformsPerBlock)
         , fSamplers(kUniformsPerBlock)
         , fTexelBuffers(kUniformsPerBlock)
-        , fCurrentVertexUBOOffset(0)
+        , fCurrentGeometryUBOOffset(0)
         , fCurrentFragmentUBOOffset(0)
         , fCurrentSamplerBinding(0) {
     }
@@ -78,7 +78,16 @@ private:
         return fSamplers[handle.toIndex()].fVisibility;
     }
 
+    TexelBufferHandle addTexelBuffer(uint32_t visibility, GrSLPrecision,
+                                     const char* name) override {
+        SkFAIL("Texel buffers not implemented for Vulkan.");
+        return 0;
+    }
+
     int numTexelBuffers() const { return fTexelBuffers.count(); }
+    const GrShaderVar& texelBufferVariable(TexelBufferHandle handle) const override {
+        return fTexelBuffers[handle.toIndex()].fVariable;
+    }
     uint32_t texelBufferVisibility(SamplerHandle handle) const {
         return fTexelBuffers[handle.toIndex()].fVisibility;
     }
@@ -98,7 +107,7 @@ private:
 
     void appendUniformDecls(GrShaderFlags, SkString*) const override;
 
-    bool hasVertexUniforms() const { return fCurrentVertexUBOOffset > 0; }
+    bool hasGeometryUniforms() const { return fCurrentGeometryUBOOffset > 0; }
     bool hasFragmentUniforms() const { return fCurrentFragmentUBOOffset > 0; }
 
 
@@ -112,7 +121,7 @@ private:
     SkTArray<GrSwizzle> fSamplerSwizzles;
     UniformInfoArray    fTexelBuffers;
 
-    uint32_t            fCurrentVertexUBOOffset;
+    uint32_t            fCurrentGeometryUBOOffset;
     uint32_t            fCurrentFragmentUBOOffset;
     uint32_t            fCurrentSamplerBinding;
 

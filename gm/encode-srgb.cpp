@@ -15,8 +15,10 @@
 #include "SkImage.h"
 #include "SkImageEncoderPriv.h"
 #include "SkJpegEncoder.h"
+#include "SkPngEncoder.h"
 #include "SkPM4f.h"
 #include "SkSRGB.h"
+#include "SkWebpEncoder.h"
 
 namespace skiagm {
 
@@ -117,17 +119,19 @@ static sk_sp<SkData> encode_data(const SkBitmap& bitmap, SkEncodedImageFormat fo
     }
     SkDynamicMemoryWStream buf;
 
-    SkEncodeOptions options;
+    SkPngEncoder::Options pngOptions;
+    SkWebpEncoder::Options webpOptions;
     if (bitmap.colorSpace()) {
-        options.fUnpremulBehavior = SkTransferFunctionBehavior::kRespect;
+        pngOptions.fUnpremulBehavior = SkTransferFunctionBehavior::kRespect;
+        webpOptions.fUnpremulBehavior = SkTransferFunctionBehavior::kRespect;
     }
 
     switch (format) {
         case SkEncodedImageFormat::kPNG:
-            SkAssertResult(SkEncodeImageAsPNG(&buf, src, options));
+            SkAssertResult(SkPngEncoder::Encode(&buf, src, pngOptions));
             break;
         case SkEncodedImageFormat::kWEBP:
-            SkAssertResult(SkEncodeImageAsWEBP(&buf, src, options));
+            SkAssertResult(SkWebpEncoder::Encode(&buf, src, webpOptions));
             break;
         case SkEncodedImageFormat::kJPEG:
             SkAssertResult(SkJpegEncoder::Encode(&buf, src, SkJpegEncoder::Options()));

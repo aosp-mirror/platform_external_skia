@@ -25,7 +25,10 @@ GrVkPipelineState* GrVkPipelineStateBuilder::CreatePipelineState(
     // uniforms, varyings, textures, etc
     GrVkPipelineStateBuilder builder(gpu, pipeline, primProc, desc);
 
-    if (!builder.emitAndInstallProcs()) {
+    GrGLSLExpr4 inputColor;
+    GrGLSLExpr4 inputCoverage;
+
+    if (!builder.emitAndInstallProcs(&inputColor, &inputCoverage)) {
         builder.cleanupFragmentProcessors();
         return nullptr;
     }
@@ -177,7 +180,7 @@ GrVkPipelineState* GrVkPipelineStateBuilder::finalize(const GrStencilSettings& s
                                  samplerDSHandle,
                                  fUniformHandles,
                                  fUniformHandler.fUniforms,
-                                 fUniformHandler.fCurrentVertexUBOOffset,
+                                 fUniformHandler.fCurrentGeometryUBOOffset,
                                  fUniformHandler.fCurrentFragmentUBOOffset,
                                  (uint32_t)fUniformHandler.numSamplers(),
                                  fGeometryProcessor,

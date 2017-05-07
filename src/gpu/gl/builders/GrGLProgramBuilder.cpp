@@ -42,7 +42,12 @@ GrGLProgram* GrGLProgramBuilder::CreateProgram(const GrPipeline& pipeline,
     // uniforms, varyings, textures, etc
     GrGLProgramBuilder builder(gpu, pipeline, primProc, desc);
 
-    if (!builder.emitAndInstallProcs()) {
+    // TODO: Once all stages can handle taking a float or vec4 and correctly handling them we can
+    // seed correctly here
+    GrGLSLExpr4 inputColor;
+    GrGLSLExpr4 inputCoverage;
+
+    if (!builder.emitAndInstallProcs(&inputColor, &inputCoverage)) {
         builder.cleanupFragmentProcessors();
         return nullptr;
     }
@@ -254,6 +259,7 @@ GrGLProgram* GrGLProgramBuilder::createProgram(GrGLuint programID) {
                            programID,
                            fUniformHandler.fUniforms,
                            fUniformHandler.fSamplers,
+                           fUniformHandler.fTexelBuffers,
                            fUniformHandler.fImageStorages,
                            fVaryingHandler.fPathProcVaryingInfos,
                            fGeometryProcessor,

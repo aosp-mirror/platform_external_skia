@@ -38,6 +38,7 @@ skia_gpu_sources = [
   # Private includes
   "$_include/private/GrAuditTrail.h",
   "$_include/private/GrGLSL.h",
+  "$_include/private/GrGLSL_impl.h",
   "$_include/private/GrInstancedPipelineInfo.h",
   "$_include/private/GrSingleOwner.h",
   "$_include/private/GrRenderTargetProxy.h",
@@ -121,8 +122,8 @@ skia_gpu_sources = [
   "$_src/gpu/GrPathUtils.cpp",
   "$_src/gpu/GrPathUtils.h",
   "$_src/gpu/GrPendingProgramElement.h",
-  "$_src/gpu/GrPreFlushResourceProvider.cpp",
-  "$_src/gpu/GrPreFlushResourceProvider.h",
+  "$_src/gpu/GrOnFlushResourceProvider.cpp",
+  "$_src/gpu/GrOnFlushResourceProvider.h",
   "$_src/gpu/GrPipeline.cpp",
   "$_src/gpu/GrPipeline.h",
   "$_src/gpu/GrPipelineBuilder.h",

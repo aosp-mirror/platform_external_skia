@@ -358,7 +358,7 @@ sk_sp<SkImage> SkImage_Raster::onMakeColorSpace(sk_sp<SkColorSpace> target,
         src.setColorSpace(SkColorSpace::MakeSRGB());
     }
 
-    SkAssertResult(dst.writePixels(src));
+    SkAssertResult(dst.writePixels(src, 0, 0, premulBehavior));
     dst.setImmutable();
     return SkImage::MakeFromBitmap(dst);
 }

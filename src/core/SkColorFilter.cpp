@@ -50,24 +50,6 @@ bool SkColorFilter::onAppendStages(SkRasterPipeline*, SkColorSpace*, SkArenaAllo
     return false;
 }
 
-void SkColorFilter::filterSpan4f(const SkPM4f src[], int count, SkPM4f result[]) const {
-    const int N = 128;
-    SkPMColor tmp[N];
-    while (count > 0) {
-        int n = SkTMin(count, N);
-        for (int i = 0; i < n; ++i) {
-            tmp[i] = src[i].toPMColor();
-        }
-        this->filterSpan(tmp, n, tmp);
-        for (int i = 0; i < n; ++i) {
-            result[i] = SkPM4f::FromPMColor(tmp[i]);
-        }
-        src += n;
-        result += n;
-        count -= n;
-    }
-}
-
 SkColor SkColorFilter::filterColor(SkColor c) const {
     SkPMColor dst, src = SkPreMultiplyColor(c);
     this->filterSpan(&src, 1, &dst);
@@ -119,6 +101,16 @@ public:
                                    innerS.c_str()));
     }
 #endif
+
+    bool onAppendStages(SkRasterPipeline* p, SkColorSpace* dst, SkArenaAlloc* scratch,
+                        bool shaderIsOpaque) const override {
+        bool innerIsOpaque = shaderIsOpaque;
+        if (!(fInner->getFlags() & kAlphaUnchanged_Flag)) {
+            innerIsOpaque = false;
+        }
+        return fInner->appendStages(p, dst, scratch, shaderIsOpaque) &&
+               fOuter->appendStages(p, dst, scratch, innerIsOpaque);
+    }
 
 #if SK_SUPPORT_GPU
     sk_sp<GrFragmentProcessor> asFragmentProcessor(GrContext* context,
