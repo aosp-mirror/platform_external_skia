@@ -82,8 +82,11 @@ public:
     sk_sp<SkImage> onMakeSubset(const SkIRect&) const override;
     bool getROPixels(SkBitmap*, SkColorSpace* dstColorSpace, CachingHint) const override;
     bool onIsLazyGenerated() const override { return true; }
+    bool onCanLazyGenerateOnGPU() const override;
     sk_sp<SkImage> onMakeColorSpace(sk_sp<SkColorSpace>, SkColorType,
                                     SkTransferFunctionBehavior) const override;
+
+    bool onIsValid(GrContext*) const override;
 
     SkImageCacherator* peekCacherator() const override {
         return const_cast<SkImage_Lazy*>(this);
@@ -547,6 +550,20 @@ bool SkImage_Lazy::getROPixels(SkBitmap* bitmap, SkColorSpace* dstColorSpace,
     CachedFormat cacheFormat = this->chooseCacheFormat(dstColorSpace);
     SkImageInfo cacheInfo = this->buildCacheInfo(cacheFormat);
     return this->lockAsBitmap(bitmap, chint, cacheFormat, cacheInfo);
+}
+
+bool SkImage_Lazy::onIsValid(GrContext* context) const {
+    ScopedGenerator generator(fSharedGenerator);
+    return generator->isValid(context);
+}
+
+bool SkImage_Lazy::onCanLazyGenerateOnGPU() const {
+#if SK_SUPPORT_GPU
+    ScopedGenerator generator(fSharedGenerator);
+    return generator->onCanGenerateTexture();
+#else
+    return false;
+#endif
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

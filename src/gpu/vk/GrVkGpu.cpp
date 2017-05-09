@@ -27,6 +27,7 @@
 #include "GrVkRenderPass.h"
 #include "GrVkResourceProvider.h"
 #include "GrVkSemaphore.h"
+#include "GrVkTexelBuffer.h"
 #include "GrVkTexture.h"
 #include "GrVkTextureRenderTarget.h"
 #include "GrVkTransferBuffer.h"
@@ -96,7 +97,8 @@ GrVkGpu::GrVkGpu(GrContext* context, const GrContextOptions& options,
     : INHERITED(context)
     , fDevice(backendCtx->fDevice)
     , fQueue(backendCtx->fQueue)
-    , fResourceProvider(this) {
+    , fResourceProvider(this)
+    , fDisconnected(false) {
     fBackendContext.reset(backendCtx);
 
 #ifdef SK_ENABLE_VK_LAYERS
@@ -151,13 +153,16 @@ GrVkGpu::GrVkGpu(GrContext* context, const GrContextOptions& options,
     fHeaps[kVertexBuffer_Heap].reset(new GrVkHeap(this, GrVkHeap::kSingleAlloc_Strategy, 0));
     fHeaps[kIndexBuffer_Heap].reset(new GrVkHeap(this, GrVkHeap::kSingleAlloc_Strategy, 0));
     fHeaps[kUniformBuffer_Heap].reset(new GrVkHeap(this, GrVkHeap::kSubAlloc_Strategy, 256*1024));
+    fHeaps[kTexelBuffer_Heap].reset(new GrVkHeap(this, GrVkHeap::kSingleAlloc_Strategy, 0));
     fHeaps[kCopyReadBuffer_Heap].reset(new GrVkHeap(this, GrVkHeap::kSingleAlloc_Strategy, 0));
     fHeaps[kCopyWriteBuffer_Heap].reset(new GrVkHeap(this, GrVkHeap::kSubAlloc_Strategy, 16*1024*1024));
 }
 
-GrVkGpu::~GrVkGpu() {
-    fCurrentCmdBuffer->end(this);
-    fCurrentCmdBuffer->unref(this);
+void GrVkGpu::destroyResources() {
+    if (fCurrentCmdBuffer) {
+        fCurrentCmdBuffer->end(this);
+        fCurrentCmdBuffer->unref(this);
+    }
 
     // wait for all commands to finish
     fResourceProvider.checkCommandBuffers();
@@ -191,16 +196,49 @@ GrVkGpu::~GrVkGpu() {
     // must call this just before we destroy the command pool and VkDevice
     fResourceProvider.destroyResources(VK_ERROR_DEVICE_LOST == res);
 
-    VK_CALL(DestroyCommandPool(fDevice, fCmdPool, nullptr));
-
-    delete fCompiler;
+    if (fCmdPool != VK_NULL_HANDLE) {
+        VK_CALL(DestroyCommandPool(fDevice, fCmdPool, nullptr));
+    }
 
 #ifdef SK_ENABLE_VK_LAYERS
     if (fCallback) {
         VK_CALL(DestroyDebugReportCallbackEXT(fBackendContext->fInstance, fCallback, nullptr));
-        fCallback = VK_NULL_HANDLE;
     }
 #endif
+
+}
+
+GrVkGpu::~GrVkGpu() {
+    if (!fDisconnected) {
+        this->destroyResources();
+    }
+    delete fCompiler;
+}
+
+
+void GrVkGpu::disconnect(DisconnectType type) {
+    INHERITED::disconnect(type);
+    if (!fDisconnected) {
+        if (DisconnectType::kCleanup == type) {
+            this->destroyResources();
+        } else {
+            fCurrentCmdBuffer->unrefAndAbandon();
+            for (int i = 0; i < fSemaphoresToWaitOn.count(); ++i) {
+                fSemaphoresToWaitOn[i]->unrefAndAbandon();
+            }
+            fCopyManager.abandonResources();
+
+            // must call this just before we destroy the command pool and VkDevice
+            fResourceProvider.abandonResources();
+        }
+        fSemaphoresToWaitOn.reset();
+#ifdef SK_ENABLE_VK_LAYERS
+        fCallback = VK_NULL_HANDLE;
+#endif
+        fCurrentCmdBuffer = nullptr;
+        fCmdPool = VK_NULL_HANDLE;
+        fDisconnected = true;
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -256,6 +294,13 @@ GrBuffer* GrVkGpu::onCreateBuffer(size_t size, GrBufferType type, GrAccessPatter
             SkASSERT(kStream_GrAccessPattern == accessPattern);
             buff = GrVkTransferBuffer::Create(this, size, GrVkBuffer::kCopyWrite_Type);
             break;
+        case kTexel_GrBufferType:
+            SkASSERT(kDynamic_GrAccessPattern == accessPattern);
+            buff = GrVkTexelBuffer::Create(this, size);
+            break;
+        case kDrawIndirect_GrBufferType:
+            SkFAIL("DrawIndirect Buffers not supported  in vulkan backend.");
+            return nullptr;
         default:
             SkFAIL("Unknown buffer type.");
             return nullptr;

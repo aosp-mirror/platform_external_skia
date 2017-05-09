@@ -372,17 +372,22 @@ void GrGLGpu::disconnect(DisconnectType type) {
 ///////////////////////////////////////////////////////////////////////////////
 
 void GrGLGpu::onResetContext(uint32_t resetBits) {
-    // we don't use the zb at all
     if (resetBits & kMisc_GrGLBackendState) {
+        // we don't use the zb at all
         GL_CALL(Disable(GR_GL_DEPTH_TEST));
         GL_CALL(DepthMask(GR_GL_FALSE));
+
+        // We don't use face culling.
+        GL_CALL(Disable(GR_GL_CULL_FACE));
+        // We do use separate stencil. Our algorithms don't care which face is front vs. back so
+        // just set this to the default for self-consistency.
+        GL_CALL(FrontFace(GR_GL_CCW));
 
         fHWBufferState[kTexel_GrBufferType].invalidate();
         fHWBufferState[kDrawIndirect_GrBufferType].invalidate();
         fHWBufferState[kXferCpuToGpu_GrBufferType].invalidate();
         fHWBufferState[kXferGpuToCpu_GrBufferType].invalidate();
 
-        fHWDrawFace = GrDrawFace::kInvalid;
         if (kGL_GrGLStandard == this->glStandard()) {
 #ifndef USE_NSIGHT
             // Desktop-only state that we never change
@@ -1948,7 +1953,6 @@ bool GrGLGpu::flushGLState(const GrPipeline& pipeline, const GrPrimitiveProcesso
     pipeline.getXferProcessor().getBlendInfo(&blendInfo);
 
     this->flushColorWrite(blendInfo.fWriteColor);
-    this->flushDrawFace(pipeline.getDrawFace());
     this->flushMinSampleShading(primProc.getSampleShading());
 
     GrGLuint programID = program->programID();
@@ -1999,34 +2003,23 @@ void GrGLGpu::setupGeometry(const GrPrimitiveProcessor& primProc,
         attribState = fHWVertexArrayState.bindInternalVertexArray(this);
     }
 
-    SkASSERT(vertexBuffer);
-    SkASSERT(!vertexBuffer->isMapped());
-
     int vaCount = primProc.numAttribs();
+    attribState->enableVertexArrays(this, vaCount);
+
     if (vaCount > 0) {
+        SkASSERT(vertexBuffer);
+        SkASSERT(!vertexBuffer->isMapped());
 
         GrGLsizei stride = static_cast<GrGLsizei>(primProc.getVertexStride());
-
-        size_t vertexOffsetInBytes = stride * baseVertex;
-
-        vertexOffsetInBytes += vertexBuffer->baseOffset();
-
-        uint32_t usedAttribArraysMask = 0;
-        size_t offset = 0;
+        size_t vertexBufferOffsetInBytes = stride * baseVertex + vertexBuffer->baseOffset();
+        size_t attribOffset = 0;
 
         for (int attribIndex = 0; attribIndex < vaCount; attribIndex++) {
             const GrGeometryProcessor::Attribute& attrib = primProc.getAttrib(attribIndex);
-            usedAttribArraysMask |= (1 << attribIndex);
-            GrVertexAttribType attribType = attrib.fType;
-            attribState->set(this,
-                             attribIndex,
-                             vertexBuffer,
-                             attribType,
-                             stride,
-                             reinterpret_cast<GrGLvoid*>(vertexOffsetInBytes + offset));
-            offset += attrib.fOffset;
+            attribState->set(this, attribIndex, vertexBuffer, attrib.fType, stride,
+                             vertexBufferOffsetInBytes + attribOffset);
+            attribOffset += attrib.fOffset;
         }
-        attribState->disableUnusedArrays(this, usedAttribArraysMask);
     }
 }
 
@@ -2819,7 +2812,6 @@ void GrGLGpu::flushStencil(const GrStencilSettings& stencilSettings) {
             fHWStencilTestEnabled = kYes_TriState;
         }
         if (stencilSettings.isTwoSided()) {
-            SkASSERT(this->caps()->twoSidedStencilSupport());
             set_gl_stencil(this->glInterface(),
                            stencilSettings.front(),
                            GR_GL_FRONT);
@@ -3279,27 +3271,6 @@ void GrGLGpu::flushColorWrite(bool writeColor) {
             GL_CALL(ColorMask(GR_GL_TRUE, GR_GL_TRUE, GR_GL_TRUE, GR_GL_TRUE));
             fHWWriteToColor = kYes_TriState;
         }
-    }
-}
-
-void GrGLGpu::flushDrawFace(GrDrawFace face) {
-    if (fHWDrawFace != face) {
-        switch (face) {
-            case GrDrawFace::kCCW:
-                GL_CALL(Enable(GR_GL_CULL_FACE));
-                GL_CALL(CullFace(GR_GL_BACK));
-                break;
-            case GrDrawFace::kCW:
-                GL_CALL(Enable(GR_GL_CULL_FACE));
-                GL_CALL(CullFace(GR_GL_FRONT));
-                break;
-            case GrDrawFace::kBoth:
-                GL_CALL(Disable(GR_GL_CULL_FACE));
-                break;
-            default:
-                SkFAIL("Unknown draw face.");
-        }
-        fHWDrawFace = face;
     }
 }
 
@@ -3940,9 +3911,9 @@ void GrGLGpu::drawDebugWireRect(GrRenderTarget* rt, const SkIRect& rect, GrColor
     fHWVertexArrayState.setVertexArrayID(this, 0);
 
     GrGLAttribArrayState* attribs = fHWVertexArrayState.bindInternalVertexArray(this);
+    attribs->enableVertexArrays(this, 1);
     attribs->set(this, 0, fWireRectArrayBuffer.get(), kVec2f_GrVertexAttribType,
                  2 * sizeof(GrGLfloat), 0);
-    attribs->disableUnusedArrays(this, 0x1);
 
     GL_CALL(Uniform4fv(fWireRectProgram.fRectUniform, 1, edges));
     GL_CALL(Uniform4fv(fWireRectProgram.fColorUniform, 1, channels));
@@ -3951,7 +3922,6 @@ void GrGLGpu::drawDebugWireRect(GrRenderTarget* rt, const SkIRect& rect, GrColor
     blendInfo.reset();
     this->flushBlend(blendInfo, GrSwizzle::RGBA());
     this->flushColorWrite(true);
-    this->flushDrawFace(GrDrawFace::kBoth);
     this->flushHWAAState(glRT, false, false);
     this->disableScissor();
     this->disableWindowRectangles();
@@ -3994,9 +3964,9 @@ bool GrGLGpu::copySurfaceAsDraw(GrSurface* dst,
     fHWVertexArrayState.setVertexArrayID(this, 0);
 
     GrGLAttribArrayState* attribs = fHWVertexArrayState.bindInternalVertexArray(this);
+    attribs->enableVertexArrays(this, 1);
     attribs->set(this, 0, fCopyProgramArrayBuffer.get(), kVec2f_GrVertexAttribType,
                  2 * sizeof(GrGLfloat), 0);
-    attribs->disableUnusedArrays(this, 0x1);
 
     // dst rect edges in NDC (-1 to 1)
     int dw = dst->width();
@@ -4035,7 +4005,6 @@ bool GrGLGpu::copySurfaceAsDraw(GrSurface* dst,
     blendInfo.reset();
     this->flushBlend(blendInfo, GrSwizzle::RGBA());
     this->flushColorWrite(true);
-    this->flushDrawFace(GrDrawFace::kBoth);
     this->flushHWAAState(nullptr, false, false);
     this->disableScissor();
     this->disableWindowRectangles();
@@ -4235,16 +4204,15 @@ bool GrGLGpu::generateMipmap(GrGLTexture* texture, bool gammaCorrect) {
     fHWVertexArrayState.setVertexArrayID(this, 0);
 
     GrGLAttribArrayState* attribs = fHWVertexArrayState.bindInternalVertexArray(this);
+    attribs->enableVertexArrays(this, 1);
     attribs->set(this, 0, fMipmapProgramArrayBuffer.get(), kVec2f_GrVertexAttribType,
                  2 * sizeof(GrGLfloat), 0);
-    attribs->disableUnusedArrays(this, 0x1);
 
     // Set "simple" state once:
     GrXferProcessor::BlendInfo blendInfo;
     blendInfo.reset();
     this->flushBlend(blendInfo, GrSwizzle::RGBA());
     this->flushColorWrite(true);
-    this->flushDrawFace(GrDrawFace::kBoth);
     this->flushHWAAState(nullptr, false, false);
     this->disableScissor();
     this->disableWindowRectangles();

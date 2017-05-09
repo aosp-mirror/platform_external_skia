@@ -80,6 +80,7 @@
     M(clear) M(modulate) M(multiply) M(plus_) M(screen) M(xor_)  \
     M(colorburn) M(colordodge) M(darken) M(difference)           \
     M(exclusion) M(hardlight) M(lighten) M(overlay) M(softlight) \
+    M(hue) M(saturation) M(color) M(luminosity)                  \
     M(luminance_to_alpha)                                        \
     M(matrix_2x3) M(matrix_3x4) M(matrix_4x5)                    \
     M(matrix_perspective)                                        \
@@ -98,6 +99,7 @@
     M(linear_gradient)                                           \
     M(linear_gradient_2stops)                                    \
     M(xy_to_polar_unit)                                          \
+    M(xy_to_radius)                                              \
     M(byte_tables) M(byte_tables_rgb)                            \
     M(rgb_to_hsl)                                                \
     M(hsl_to_rgb)

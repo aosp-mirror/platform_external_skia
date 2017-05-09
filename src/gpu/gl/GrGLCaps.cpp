@@ -378,19 +378,6 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
     this->initBlendEqationSupport(ctxInfo);
     this->initStencilFormats(ctxInfo);
 
-    if (kGL_GrGLStandard == standard) {
-        // we could also look for GL_ATI_separate_stencil extension or
-        // GL_EXT_stencil_two_side but they use different function signatures
-        // than GL2.0+ (and than each other).
-        fTwoSidedStencilSupport = (ctxInfo.version() >= GR_GL_VER(2,0));
-        // supported on GL 1.4 and higher or by extension
-        fStencilWrapOpsSupport = (ctxInfo.version() >= GR_GL_VER(1,4)) ||
-                                  ctxInfo.hasExtension("GL_EXT_stencil_wrap");
-    } else {
-        // ES 2 has two sided stencil and stencil wrap
-        fTwoSidedStencilSupport = true;
-        fStencilWrapOpsSupport = true;
-    }
 
     if (kGL_GrGLStandard == standard) {
         fMapBufferFlags = kCanMap_MapFlag; // we require VBO support and the desktop VBO
@@ -442,8 +429,6 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
     }
 
     if (kGL_GrGLStandard == standard) {
-        SkASSERT(ctxInfo.version() >= GR_GL_VER(2,0) ||
-                 ctxInfo.hasExtension("GL_ARB_texture_non_power_of_two"));
         fNPOTTextureTileSupport = true;
         fMipMapSupport = true;
     } else {

@@ -74,13 +74,19 @@ public:
 
     virtual bool onAsLegacyBitmap(SkBitmap*, LegacyBitmapMode) const;
 
+    // True for picture-backed and codec-backed
     virtual bool onIsLazyGenerated() const { return false; }
+
+    // True only for generators that operate directly on gpu (e.g. picture-generators)
+    virtual bool onCanLazyGenerateOnGPU() const { return false; }
 
     // Call when this image is part of the key to a resourcecache entry. This allows the cache
     // to know automatically those entries can be purged when this SkImage deleted.
     void notifyAddedToCache() const {
         fAddedToCache.store(true);
     }
+
+    virtual bool onIsValid(GrContext*) const = 0;
 
     virtual bool onPinAsTexture(GrContext*) const { return false; }
     virtual void onUnpinAsTexture(GrContext*) const {}
