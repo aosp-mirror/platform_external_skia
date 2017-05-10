@@ -100,7 +100,7 @@ public:
     */
     enum Flags {
         kAntiAlias_Flag       = 0x01,   //!< mask to enable antialiasing
-        kDither_Flag          = 0x04,   //!< mask to enable dithering
+        kDither_Flag          = 0x04,   //!< mask to enable dithering. see setDither()
         kFakeBoldText_Flag    = 0x20,   //!< mask to enable fake-bold text
         kLinearText_Flag      = 0x40,   //!< mask to enable linear-text
         kSubpixelText_Flag    = 0x80,   //!< mask to enable subpixel text positioning
@@ -154,9 +154,12 @@ public:
         return SkToBool(this->getFlags() & kDither_Flag);
     }
 
-    /** Helper for setFlags(), setting or clearing the kDither_Flag bit
-        @param dither   true to enable dithering, false to disable it
-        */
+    /**
+     *  Helper for setFlags(), setting or clearing the kDither_Flag bit
+     *  @param dither   true to enable dithering, false to disable it
+     *
+     *  Note: gradients ignore this setting and always dither.
+     */
     void setDither(bool dither);
 
     /** Helper for getFlags(), returning true if kLinearText_Flag bit is set
@@ -1007,22 +1010,6 @@ public:
     // without having to make a copy of the paint just to change that field.
     const SkRect& doComputeFastBounds(const SkRect& orig, SkRect* storage,
                                       Style) const;
-
-    /**
-     *  Return a matrix that applies the paint's text values: size, scale, skew
-     */
-    static SkMatrix* SetTextMatrix(SkMatrix* matrix, SkScalar size,
-                                   SkScalar scaleX, SkScalar skewX) {
-        matrix->setScale(size * scaleX, size);
-        if (skewX) {
-            matrix->postSkew(skewX, 0);
-        }
-        return matrix;
-    }
-
-    SkMatrix* setTextMatrix(SkMatrix* matrix) const {
-        return SetTextMatrix(matrix, fTextSize, fTextScaleX, fTextSkewX);
-    }
 
     typedef const SkGlyph& (*GlyphCacheProc)(SkGlyphCache*, const char**);
 

@@ -380,11 +380,9 @@ private:
             quads.indices = nullptr;
             quads.nextIndex = nullptr;
         }
-
         // fill buffers
         for (int i = 0; i < fPaths.count(); i++) {
             const PathInfo& pathInfo = fPaths[i];
-
             if (!this->createGeom(lines,
                                   quads,
                                   pathInfo.fPath,
@@ -423,7 +421,12 @@ private:
             lineMeshes.fVertexCount = lineVertexOffset;
             lineMeshes.fBaseVertex = firstLineVertex;
 
-            target->draw(lineGP.get(), this->pipeline(), lineMeshes);
+            // We can get line vertices from path moveTos with no actual segments and thus no index
+            // count. We assert that indexed draws contain a positive index count, so bail here in
+            // that case.
+            if (!fIsIndexed || lineIndexOffset) {
+                target->draw(lineGP.get(), this->pipeline(), lineMeshes);
+            }
         }
 
         if (quadVertexOffset) {
@@ -677,6 +680,10 @@ bool GrMSAAPathRenderer::internalDrawPath(GrRenderTargetContext* renderTargetCon
 }
 
 bool GrMSAAPathRenderer::onCanDrawPath(const CanDrawPathArgs& args) const {
+    // If we aren't a single_pass_shape, we require stencil buffers.
+    if (!single_pass_shape(*args.fShape) && args.fCaps->avoidStencilBuffers()) {
+        return false;
+    }
     // This path renderer only fills and relies on MSAA for antialiasing. Stroked shapes are
     // handled by passing on the original shape and letting the caller compute the stroked shape
     // which will have a fill style.
