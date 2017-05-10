@@ -1493,6 +1493,7 @@ cc_test {
         "tests/SkSLErrorTest.cpp",
         "tests/SkSLGLSLTest.cpp",
         "tests/SkSLMemoryLayoutTest.cpp",
+        "tests/SkSLSPIRVTest.cpp",
         "tests/SkSharedMutexTest.cpp",
         "tests/SortTest.cpp",
         "tests/SpecialImageTest.cpp",
