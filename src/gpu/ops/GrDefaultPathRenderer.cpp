@@ -22,7 +22,7 @@
 #include "SkTraceEvent.h"
 
 #include "ops/GrMeshDrawOp.h"
-#include "ops/GrRectOpFactory.h"
+#include "ops/GrNonAAFillRectOp.h"
 
 GrDefaultPathRenderer::GrDefaultPathRenderer() {
 }
@@ -523,12 +523,10 @@ bool GrDefaultPathRenderer::internalDrawPath(GrRenderTargetContext* renderTarget
             }
             const SkMatrix& viewM = (reverse && viewMatrix.hasPerspective()) ? SkMatrix::I() :
                                                                                viewMatrix;
-            std::unique_ptr<GrLegacyMeshDrawOp> op(GrRectOpFactory::MakeNonAAFill(
-                    paint.getColor(), viewM, bounds, nullptr, &localMatrix));
-            GrPipelineBuilder pipelineBuilder(std::move(paint), aaType);
-            pipelineBuilder.setUserStencil(passes[p]);
-            renderTargetContext->addLegacyMeshDrawOp(std::move(pipelineBuilder), clip,
-                                                     std::move(op));
+            renderTargetContext->addDrawOp(
+                    clip,
+                    GrNonAAFillRectOp::Make(std::move(paint), viewM, bounds, nullptr, &localMatrix,
+                                            aaType, passes[p]));
         } else {
             std::unique_ptr<GrLegacyMeshDrawOp> op =
                     DefaultPathOp::Make(paint.getColor(), path, srcSpaceTol, newCoverage,
@@ -548,10 +546,14 @@ bool GrDefaultPathRenderer::internalDrawPath(GrRenderTargetContext* renderTarget
 }
 
 bool GrDefaultPathRenderer::onCanDrawPath(const CanDrawPathArgs& args) const {
+    bool isHairline = IsStrokeHairlineOrEquivalent(args.fShape->style(), *args.fViewMatrix, nullptr);
+    // If we aren't a single_pass_shape or hairline, we require stencil buffers.
+    if (!(single_pass_shape(*args.fShape) || isHairline) && args.fCaps->avoidStencilBuffers()) {
+        return false;
+    }
     // This can draw any path with any simple fill style but doesn't do coverage-based antialiasing.
     return GrAAType::kCoverage != args.fAAType &&
-           (args.fShape->style().isSimpleFill() ||
-            IsStrokeHairlineOrEquivalent(args.fShape->style(), *args.fViewMatrix, nullptr));
+           (args.fShape->style().isSimpleFill() || isHairline);
 }
 
 bool GrDefaultPathRenderer::onDrawPath(const DrawPathArgs& args) {

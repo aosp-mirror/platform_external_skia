@@ -12,7 +12,7 @@
 #include "GrPipelineBuilder.h"
 #include "GrResourceProvider.h"
 #include "GrSWMaskHelper.h"
-#include "ops/GrRectOpFactory.h"
+#include "ops/GrNonAAFillRectOp.h"
 
 ////////////////////////////////////////////////////////////////////////////////
 bool GrSoftwarePathRenderer::onCanDrawPath(const CanDrawPathArgs& args) const {
@@ -76,12 +76,9 @@ void GrSoftwarePathRenderer::DrawNonAARect(GrRenderTargetContext* renderTargetCo
                                            const SkMatrix& viewMatrix,
                                            const SkRect& rect,
                                            const SkMatrix& localMatrix) {
-    std::unique_ptr<GrLegacyMeshDrawOp> op(GrRectOpFactory::MakeNonAAFill(
-            paint.getColor(), viewMatrix, rect, nullptr, &localMatrix));
-
-    GrPipelineBuilder pipelineBuilder(std::move(paint), GrAAType::kNone);
-    pipelineBuilder.setUserStencil(&userStencilSettings);
-    renderTargetContext->addLegacyMeshDrawOp(std::move(pipelineBuilder), clip, std::move(op));
+    renderTargetContext->addDrawOp(
+            clip, GrNonAAFillRectOp::Make(std::move(paint), viewMatrix, rect, nullptr, &localMatrix,
+                                          GrAAType::kNone, &userStencilSettings));
 }
 
 void GrSoftwarePathRenderer::DrawAroundInvPath(GrRenderTargetContext* renderTargetContext,
@@ -136,7 +133,9 @@ bool GrSoftwarePathRenderer::onDrawPath(const DrawPathArgs& args) {
     bool inverseFilled = false;
     SkTLazy<GrShape> tmpShape;
     SkASSERT(!args.fShape->style().applies());
-    inverseFilled = args.fShape->inverseFilled();
+    // If the path is hairline, ignore inverse fill.
+    inverseFilled = args.fShape->inverseFilled() &&
+                    !IsStrokeHairlineOrEquivalent(args.fShape->style(), *args.fViewMatrix, nullptr);
 
     SkIRect unclippedDevShapeBounds, clippedDevShapeBounds, devClipBounds;
     // To prevent overloading the cache with entries during animations we limit the cache of masks

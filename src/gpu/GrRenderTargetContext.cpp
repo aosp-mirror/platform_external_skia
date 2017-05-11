@@ -32,7 +32,7 @@
 #include "ops/GrDrawOp.h"
 #include "ops/GrDrawVerticesOp.h"
 #include "ops/GrLatticeOp.h"
-#include "ops/GrNewNonAAFillRectOp.h"
+#include "ops/GrNonAAFillRectOp.h"
 #include "ops/GrOp.h"
 #include "ops/GrOvalOpFactory.h"
 #include "ops/GrRectOpFactory.h"
@@ -127,7 +127,7 @@ GrRenderTargetOpList* GrRenderTargetContext::getOpList() {
     return fOpList.get();
 }
 
-// TODO: move this (and GrTextContext::copy) to GrSurfaceContext?
+// MDB TODO: move this (and GrTextContext::copy) to GrSurfaceContext?
 bool GrRenderTargetContext::onCopy(GrSurfaceProxy* srcProxy,
                                    const SkIRect& srcRect,
                                    const SkIPoint& dstPoint) {
@@ -1274,19 +1274,9 @@ void GrRenderTargetContext::drawNonAAFilledRect(const GrClip& clip,
                                                 GrAAType hwOrNoneAAType) {
     SkASSERT(GrAAType::kCoverage != hwOrNoneAAType);
     SkASSERT(GrAAType::kNone == hwOrNoneAAType || this->isStencilBufferMultisampled());
-    if (!viewMatrix.hasPerspective() && (!localMatrix || !localMatrix->hasPerspective())) {
-        std::unique_ptr<GrDrawOp> op = GrNewNonAAFillRectOp::Make(
-                std::move(paint), viewMatrix, rect, localRect, localMatrix, hwOrNoneAAType, ss);
-        this->addDrawOp(clip, std::move(op));
-        return;
-    }
-    std::unique_ptr<GrLegacyMeshDrawOp> op = GrRectOpFactory::MakeNonAAFill(
-            paint.getColor(), viewMatrix, rect, localRect, localMatrix);
-    GrPipelineBuilder pipelineBuilder(std::move(paint), hwOrNoneAAType);
-    if (ss) {
-        pipelineBuilder.setUserStencil(ss);
-    }
-    this->addLegacyMeshDrawOp(std::move(pipelineBuilder), clip, std::move(op));
+    std::unique_ptr<GrDrawOp> op = GrNonAAFillRectOp::Make(
+            std::move(paint), viewMatrix, rect, localRect, localMatrix, hwOrNoneAAType, ss);
+    this->addDrawOp(clip, std::move(op));
 }
 
 // Can 'path' be drawn as a pair of filled nested rectangles?
@@ -1425,8 +1415,7 @@ bool GrRenderTargetContextPriv::drawAndStencilPath(const GrClip& clip,
 
     GrShape shape(path, GrStyle::SimpleFill());
     GrPathRenderer::CanDrawPathArgs canDrawArgs;
-    canDrawArgs.fShaderCaps =
-        fRenderTargetContext->drawingManager()->getContext()->caps()->shaderCaps();
+    canDrawArgs.fCaps = fRenderTargetContext->drawingManager()->getContext()->caps();
     canDrawArgs.fViewMatrix = &viewMatrix;
     canDrawArgs.fShape = &shape;
     canDrawArgs.fAAType = aaType;
@@ -1487,7 +1476,7 @@ void GrRenderTargetContext::internalDrawPath(const GrClip& clip,
         aaType = GrAAType::kCoverage;
     }
     GrPathRenderer::CanDrawPathArgs canDrawArgs;
-    canDrawArgs.fShaderCaps = this->drawingManager()->getContext()->caps()->shaderCaps();
+    canDrawArgs.fCaps = this->drawingManager()->getContext()->caps();
     canDrawArgs.fViewMatrix = &viewMatrix;
     canDrawArgs.fShape = &shape;
     canDrawArgs.fHasUserStencilSettings = false;

@@ -10,12 +10,14 @@
 #include "SkColorSpaceXformer.h"
 #include "SkNx.h"
 #include "SkPM4f.h"
+#include "SkRasterPipeline.h"
 #include "SkReadBuffer.h"
 #include "SkRefCnt.h"
 #include "SkString.h"
 #include "SkTDArray.h"
 #include "SkUnPreMultiply.h"
 #include "SkWriteBuffer.h"
+#include "../jumper/SkJumper.h"
 
 #if SK_SUPPORT_GPU
 #include "GrFragmentProcessor.h"
@@ -39,15 +41,29 @@ sk_sp<GrFragmentProcessor> SkColorFilter::asFragmentProcessor(GrContext*, SkColo
 }
 #endif
 
-bool SkColorFilter::appendStages(SkRasterPipeline* pipeline,
-                                 SkColorSpace* dst,
-                                 SkArenaAlloc* scratch,
+void SkColorFilter::appendStages(SkRasterPipeline* p,
+                                 SkColorSpace* dstCS,
+                                 SkArenaAlloc* alloc,
                                  bool shaderIsOpaque) const {
-    return this->onAppendStages(pipeline, dst, scratch, shaderIsOpaque);
+    this->onAppendStages(p, dstCS, alloc, shaderIsOpaque);
 }
 
-bool SkColorFilter::onAppendStages(SkRasterPipeline*, SkColorSpace*, SkArenaAlloc*, bool) const {
-    return false;
+void SkColorFilter::onAppendStages(SkRasterPipeline* p,
+                                   SkColorSpace* dstCS,
+                                   SkArenaAlloc* alloc,
+                                   bool) const {
+    struct Ctx : SkJumper_CallbackCtx {
+        sk_sp<SkColorFilter> cf;
+    };
+    auto ctx = alloc->make<Ctx>();
+    ctx->cf = dstCS ? SkColorSpaceXformer::Make(sk_ref_sp(dstCS))->apply(this)
+                    : sk_ref_sp(const_cast<SkColorFilter*>(this));
+    ctx->fn = [](SkJumper_CallbackCtx* arg, int active_pixels) {
+        auto ctx = (Ctx*)arg;
+        auto buf = (SkPM4f*)ctx->rgba;
+        ctx->cf->filterSpan4f(buf, active_pixels, buf);
+    };
+    p->append(SkRasterPipeline::callback, ctx);
 }
 
 SkColor SkColorFilter::filterColor(SkColor c) const {
@@ -102,14 +118,14 @@ public:
     }
 #endif
 
-    bool onAppendStages(SkRasterPipeline* p, SkColorSpace* dst, SkArenaAlloc* scratch,
+    void onAppendStages(SkRasterPipeline* p, SkColorSpace* dst, SkArenaAlloc* scratch,
                         bool shaderIsOpaque) const override {
         bool innerIsOpaque = shaderIsOpaque;
         if (!(fInner->getFlags() & kAlphaUnchanged_Flag)) {
             innerIsOpaque = false;
         }
-        return fInner->appendStages(p, dst, scratch, shaderIsOpaque) &&
-               fOuter->appendStages(p, dst, scratch, innerIsOpaque);
+        fInner->appendStages(p, dst, scratch, shaderIsOpaque);
+        fOuter->appendStages(p, dst, scratch, innerIsOpaque);
     }
 
 #if SK_SUPPORT_GPU

@@ -111,7 +111,8 @@ SkBlitter* SkRasterPipelineBlitter::Create(const SkPixmap& dst,
     if (shader) {
         pipeline->append(SkRasterPipeline::seed_shader, &blitter->fCurrentY);
         if (!shader->appendStages(pipeline, dst.colorSpace(), alloc, ctm, paint)) {
-            return nullptr;
+            // When a shader fails to append stages, it means it has vetoed drawing entirely.
+            return alloc->make<SkNullBlitter>();
         }
         if (!is_opaque) {
             pipeline->append(SkRasterPipeline::scale_1_float,
@@ -125,9 +126,7 @@ SkBlitter* SkRasterPipelineBlitter::Create(const SkPixmap& dst,
     }
 
     if (colorFilter) {
-        if (!colorFilter->appendStages(pipeline, dst.colorSpace(), alloc, is_opaque)) {
-            return nullptr;
-        }
+        colorFilter->appendStages(pipeline, dst.colorSpace(), alloc, is_opaque);
         is_opaque = is_opaque && (colorFilter->getFlags() & SkColorFilter::kAlphaUnchanged_Flag);
     }
 
