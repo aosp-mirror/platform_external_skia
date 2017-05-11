@@ -969,20 +969,17 @@ STAGE(store_f32) {
     store4(ptr,tail, r,g,b,a);
 }
 
-SI F ulp_before(F v) {
-    return bit_cast<F>(bit_cast<U32>(v) + U32(0xffffffff));
-}
 SI F clamp(F v, float limit) {
     v = max(0, v);
-    return min(v, ulp_before(limit));
+    return min(v, limit);
 }
 SI F repeat(F v, float limit) {
     v = v - floor_(v/limit)*limit;
-    return min(v, ulp_before(limit));
+    return min(v, limit);
 }
 SI F mirror(F v, float limit) {
     v = abs_( (v-limit) - (limit+limit)*floor_((v-limit)/(limit+limit)) - limit );
-    return min(v, ulp_before(limit));
+    return min(v, limit);
 }
 STAGE(clamp_x)  { r = clamp (r, *(const float*)ctx); }
 STAGE(clamp_y)  { g = clamp (g, *(const float*)ctx); }
@@ -1035,6 +1032,52 @@ STAGE(matrix_perspective) {
          Z = mad(r,m[6], mad(g,m[7], m[8]));
     r = R * rcp(Z);
     g = G * rcp(Z);
+}
+
+STAGE(evenly_spaced_linear_gradient) {
+    struct Ctx {
+        size_t stopCount;
+        float* fs[4];
+        float* bs[4];
+    };
+
+    auto c = (const Ctx*)ctx;
+    auto t = r;
+    auto i = trunc_(t*(c->stopCount - 1));
+
+#if defined(JUMPER) && defined(__AVX2__)
+    if (c->stopCount <=8) {
+        auto fr = _mm256_permutevar8x32_ps(_mm256_loadu_ps(c->fs[0]), i);
+        auto br = _mm256_permutevar8x32_ps(_mm256_loadu_ps(c->bs[0]), i);
+        auto fg = _mm256_permutevar8x32_ps(_mm256_loadu_ps(c->fs[1]), i);
+        auto bg = _mm256_permutevar8x32_ps(_mm256_loadu_ps(c->bs[1]), i);
+        auto fb = _mm256_permutevar8x32_ps(_mm256_loadu_ps(c->fs[2]), i);
+        auto bb = _mm256_permutevar8x32_ps(_mm256_loadu_ps(c->bs[2]), i);
+        auto fa = _mm256_permutevar8x32_ps(_mm256_loadu_ps(c->fs[3]), i);
+        auto ba = _mm256_permutevar8x32_ps(_mm256_loadu_ps(c->bs[3]), i);
+        r = mad(t, fr, br);
+        g = mad(t, fg, bg);
+        b = mad(t, fb, bb);
+        a = mad(t, fa, ba);
+
+    } else
+#endif
+    {
+        auto fr = gather(c->fs[0], i);
+        auto br = gather(c->bs[0], i);
+        auto fg = gather(c->fs[1], i);
+        auto bg = gather(c->bs[1], i);
+        auto fb = gather(c->fs[2], i);
+        auto bb = gather(c->bs[2], i);
+        auto fa = gather(c->fs[3], i);
+        auto ba = gather(c->bs[3], i);
+
+        r = mad(t, fr, br);
+        g = mad(t, fg, bg);
+        b = mad(t, fb, bb);
+        a = mad(t, fa, ba);
+    }
+
 }
 
 STAGE(linear_gradient) {

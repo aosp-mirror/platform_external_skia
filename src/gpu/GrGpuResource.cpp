@@ -43,17 +43,6 @@ void GrGpuResource::registerWithCacheWrapped() {
     get_resource_cache(fGpu)->resourceAccess().insertResource(this);
 }
 
-void GrGpuResource::detachFromCache() {
-    if (this->wasDestroyed()) {
-        return;
-    }
-    if (fUniqueKey.isValid()) {
-        this->removeUniqueKey();
-    }
-    this->removeScratchKey();
-    this->makeUnbudgeted();
-}
-
 GrGpuResource::~GrGpuResource() {
     // The cache should have released or destroyed this resource.
     SkASSERT(this->wasDestroyed());
@@ -172,8 +161,7 @@ bool GrGpuResource::notifyRefCountIsZero() const {
     }
 
     GrGpuResource* mutableThis = const_cast<GrGpuResource*>(this);
-    uint32_t flags =
-        GrResourceCache::ResourceAccess::kRefCntReachedZero_RefNotificationFlag;
+    uint32_t flags = GrResourceCache::ResourceAccess::kRefCntReachedZero_RefNotificationFlag;
     if (!this->internalHasPendingIO()) {
         flags |= GrResourceCache::ResourceAccess::kAllCntsReachedZero_RefNotificationFlag;
     }
