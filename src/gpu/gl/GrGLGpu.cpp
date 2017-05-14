@@ -7,6 +7,7 @@
 
 #include "GrGLGpu.h"
 
+#include <cmath>
 #include "../private/GrGLSL.h"
 #include "GrBackendSurface.h"
 #include "GrFixedClip.h"
@@ -528,7 +529,6 @@ sk_sp<GrTexture> GrGLGpu::onWrapBackendTexture(const GrBackendTexture& backendTe
 
     // next line relies on GrBackendTextureFlags matching GrTexture's
     bool renderTarget = SkToBool(flags & kRenderTarget_GrBackendTextureFlag);
-    SkASSERT(!renderTarget || kAdoptAndCache_GrWrapOwnership != ownership);  // Not supported
 
     GrGLTexture::IDDesc idDesc;
     idDesc.fInfo = *info;
@@ -585,11 +585,7 @@ sk_sp<GrTexture> GrGLGpu::onWrapBackendTexture(const GrBackendTexture& backendTe
         return GrGLTextureRenderTarget::MakeWrapped(this, surfDesc, idDesc, rtIDDesc);
     }
 
-    if (kAdoptAndCache_GrWrapOwnership == ownership) {
-        return sk_sp<GrTexture>(new GrGLTexture(this, SkBudgeted::kYes, surfDesc, idDesc));
-    } else {
-        return GrGLTexture::MakeWrapped(this, surfDesc, idDesc);
-    }
+    return GrGLTexture::MakeWrapped(this, surfDesc, idDesc);
 }
 
 sk_sp<GrRenderTarget> GrGLGpu::onWrapBackendRenderTarget(const GrBackendRenderTarget& backendRT,
@@ -2104,6 +2100,16 @@ void GrGLGpu::clear(const GrFixedClip& clip, GrColor color, GrRenderTarget* targ
 
     GL_CALL(ColorMask(GR_GL_TRUE, GR_GL_TRUE, GR_GL_TRUE, GR_GL_TRUE));
     fHWWriteToColor = kYes_TriState;
+
+    if (this->glCaps().clearToOpaqueBlackIsBroken() && 0 == r && 0 == g && 0 == b && 1 == a) {
+#ifdef SK_BUILD_FOR_ANDROID
+        // Android doesn't have std::nextafter but has nextafter.
+        static const GrGLfloat safeAlpha = nextafter(1.f, 2.f);
+#else
+        static const GrGLfloat safeAlpha = std::nextafter(1.f, 2.f);
+#endif
+        a = safeAlpha;
+    }
     GL_CALL(ClearColor(r, g, b, a));
     GL_CALL(Clear(GR_GL_COLOR_BUFFER_BIT));
 }
@@ -2855,7 +2861,7 @@ void GrGLGpu::flushHWAAState(GrRenderTarget* rt, bool useHWAA, bool stencilEnabl
     }
 
     if (0 != this->caps()->maxRasterSamples()) {
-        if (useHWAA && rt->isMixedSampled() && !stencilEnabled) {
+        if (useHWAA && GrFSAAType::kMixedSamples == rt->fsaaType() && !stencilEnabled) {
             // Since stencil is disabled and we want more samples than are in the color buffer, we
             // need to tell the rasterizer explicitly how many to run.
             if (kYes_TriState != fHWRasterMultisampleEnabled) {
@@ -2874,7 +2880,7 @@ void GrGLGpu::flushHWAAState(GrRenderTarget* rt, bool useHWAA, bool stencilEnabl
             }
         }
     } else {
-        SkASSERT(!useHWAA || !rt->isMixedSampled() || stencilEnabled);
+        SkASSERT(!useHWAA || GrFSAAType::kMixedSamples != rt->fsaaType() || stencilEnabled);
     }
 }
 
@@ -4267,8 +4273,8 @@ bool GrGLGpu::generateMipmap(GrGLTexture* texture, bool gammaCorrect) {
 
 void GrGLGpu::onQueryMultisampleSpecs(GrRenderTarget* rt, const GrStencilSettings& stencil,
                                       int* effectiveSampleCnt, SamplePattern* samplePattern) {
-    SkASSERT(!rt->isMixedSampled() || rt->renderTargetPriv().getStencilAttachment() ||
-             stencil.isDisabled());
+    SkASSERT(GrFSAAType::kMixedSamples != rt->fsaaType() ||
+             rt->renderTargetPriv().getStencilAttachment() || stencil.isDisabled());
 
     this->flushStencil(stencil);
     this->flushHWAAState(rt, true, !stencil.isDisabled());

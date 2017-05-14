@@ -327,7 +327,7 @@ private:
 bool GrAALinearizingConvexPathRenderer::onDrawPath(const DrawPathArgs& args) {
     GR_AUDIT_TRAIL_AUTO_FRAME(args.fRenderTargetContext->auditTrail(),
                               "GrAALinearizingConvexPathRenderer::onDrawPath");
-    SkASSERT(!args.fRenderTargetContext->isUnifiedMultisampled());
+    SkASSERT(GrFSAAType::kUnifiedMSAA != args.fRenderTargetContext->fsaaType());
     SkASSERT(!args.fShape->isEmpty());
     SkASSERT(!args.fShape->style().pathEffect());
 
@@ -356,7 +356,7 @@ bool GrAALinearizingConvexPathRenderer::onDrawPath(const DrawPathArgs& args) {
 
 #if GR_TEST_UTILS
 
-DRAW_OP_TEST_DEFINE(AAFlatteningConvexPathOp) {
+GR_LEGACY_MESH_DRAW_OP_TEST_DEFINE(AAFlatteningConvexPathOp) {
     GrColor color = GrRandomColor(random);
     SkMatrix viewMatrix = GrTest::TestMatrixPreservesRightAngles(random);
     SkPath path = GrTest::TestPathConvex(random);

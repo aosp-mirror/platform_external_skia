@@ -953,7 +953,7 @@ void AAHairlineOp::onPrepareDraws(Target* target) const {
 bool GrAAHairLinePathRenderer::onDrawPath(const DrawPathArgs& args) {
     GR_AUDIT_TRAIL_AUTO_FRAME(args.fRenderTargetContext->auditTrail(),
                               "GrAAHairlinePathRenderer::onDrawPath");
-    SkASSERT(!args.fRenderTargetContext->isUnifiedMultisampled());
+    SkASSERT(GrFSAAType::kUnifiedMSAA != args.fRenderTargetContext->fsaaType());
 
     SkIRect devClipBounds;
     args.fClip->getConservativeBounds(args.fRenderTargetContext->width(),
@@ -974,7 +974,7 @@ bool GrAAHairLinePathRenderer::onDrawPath(const DrawPathArgs& args) {
 
 #if GR_TEST_UTILS
 
-DRAW_OP_TEST_DEFINE(AAHairlineOp) {
+GR_LEGACY_MESH_DRAW_OP_TEST_DEFINE(AAHairlineOp) {
     GrColor color = GrRandomColor(random);
     SkMatrix viewMatrix = GrTest::TestMatrix(random);
     SkPath path = GrTest::TestPath(random);
