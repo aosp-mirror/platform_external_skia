@@ -604,7 +604,7 @@ sk_sp<GrRenderTarget> GrGLGpu::onWrapBackendRenderTarget(const GrBackendRenderTa
 
     GrSurfaceDesc desc;
     desc.fConfig = backendRT.config();
-    desc.fFlags = kCheckAllocation_GrSurfaceFlag | kRenderTarget_GrSurfaceFlag;
+    desc.fFlags = kRenderTarget_GrSurfaceFlag;
     desc.fWidth = backendRT.width();
     desc.fHeight = backendRT.height();
     desc.fSampleCnt = SkTMin(backendRT.sampleCnt(), this->caps()->maxSampleCount());
@@ -841,15 +841,6 @@ static inline GrGLint config_alignment(GrPixelConfig config) {
     return 0;
 }
 
-static inline GrGLenum check_alloc_error(const GrSurfaceDesc& desc,
-                                         const GrGLInterface* interface) {
-    if (SkToBool(desc.fFlags & kCheckAllocation_GrSurfaceFlag)) {
-        return GR_GL_GET_ERROR(interface);
-    } else {
-        return CHECK_ALLOC_ERROR(interface);
-    }
-}
-
 /**
  * Creates storage space for the texture and fills it with texels.
  *
@@ -893,7 +884,7 @@ static bool allocate_and_populate_uncompressed_texture(const GrSurfaceDesc& desc
                                    SkTMax(texels.count(), 1),
                                    internalFormatForTexStorage,
                                    desc.fWidth, desc.fHeight));
-        GrGLenum error = check_alloc_error(desc, &interface);
+        GrGLenum error = CHECK_ALLOC_ERROR(&interface);
         if (error != GR_GL_NO_ERROR) {
             return  false;
         } else {
@@ -929,7 +920,7 @@ static bool allocate_and_populate_uncompressed_texture(const GrSurfaceDesc& desc
                                      0, // border
                                      externalFormat, externalType,
                                      nullptr));
-            GrGLenum error = check_alloc_error(desc, &interface);
+            GrGLenum error = CHECK_ALLOC_ERROR(&interface);
             if (error != GR_GL_NO_ERROR) {
                 return false;
             }
@@ -950,7 +941,7 @@ static bool allocate_and_populate_uncompressed_texture(const GrSurfaceDesc& desc
                                          0, // border
                                          externalFormat, externalType,
                                          currentMipData));
-                GrGLenum error = check_alloc_error(desc, &interface);
+                GrGLenum error = CHECK_ALLOC_ERROR(&interface);
                 if (error != GR_GL_NO_ERROR) {
                     return false;
                 }
@@ -992,7 +983,7 @@ static bool allocate_and_populate_compressed_texture(const GrSurfaceDesc& desc,
                                    texels.count(),
                                    internalFormat,
                                    baseWidth, baseHeight));
-        GrGLenum error = check_alloc_error(desc, &interface);
+        GrGLenum error = CHECK_ALLOC_ERROR(&interface);
         if (error != GR_GL_NO_ERROR) {
             return false;
         } else {
@@ -1041,7 +1032,7 @@ static bool allocate_and_populate_compressed_texture(const GrSurfaceDesc& desc,
                                                SkToInt(dataSize),
                                                texels[currentMipLevel].fPixels));
 
-            GrGLenum error = check_alloc_error(desc, &interface);
+            GrGLenum error = CHECK_ALLOC_ERROR(&interface);
             if (error != GR_GL_NO_ERROR) {
                 return false;
             }
@@ -1435,8 +1426,7 @@ bool GrGLGpu::createRenderTargetObjects(const GrSurfaceDesc& desc,
                                         GR_GL_COLOR_ATTACHMENT0,
                                         GR_GL_RENDERBUFFER,
                                         idDesc->fMSColorRenderbufferID));
-        if ((desc.fFlags & kCheckAllocation_GrSurfaceFlag) ||
-            !this->glCaps().isConfigVerifiedColorAttachment(desc.fConfig)) {
+        if (!this->glCaps().isConfigVerifiedColorAttachment(desc.fConfig)) {
             GL_CALL_RET(status, CheckFramebufferStatus(GR_GL_FRAMEBUFFER));
             if (status != GR_GL_FRAMEBUFFER_COMPLETE) {
                 goto FAILED;
@@ -1458,8 +1448,7 @@ bool GrGLGpu::createRenderTargetObjects(const GrSurfaceDesc& desc,
                                      texInfo.fTarget,
                                      texInfo.fID, 0));
     }
-    if ((desc.fFlags & kCheckAllocation_GrSurfaceFlag) ||
-        !this->glCaps().isConfigVerifiedColorAttachment(desc.fConfig)) {
+    if (!this->glCaps().isConfigVerifiedColorAttachment(desc.fConfig)) {
         GL_CALL_RET(status, CheckFramebufferStatus(GR_GL_FRAMEBUFFER));
         if (status != GR_GL_FRAMEBUFFER_COMPLETE) {
             goto FAILED;
@@ -1816,7 +1805,7 @@ GrStencilAttachment* GrGLGpu::createStencilAttachmentForRenderTarget(const GrRen
         GL_ALLOC_CALL(this->glInterface(), RenderbufferStorage(GR_GL_RENDERBUFFER,
                                                                sFmt.fInternalFormat,
                                                                width, height));
-        SkASSERT(GR_GL_NO_ERROR == check_alloc_error(rt->desc(), this->glInterface()));
+        SkASSERT(GR_GL_NO_ERROR == CHECK_ALLOC_ERROR(this->glInterface()));
     }
     fStats.incStencilAttachmentCreates();
     // After sized formats we attempt an unsized format and take
@@ -2643,7 +2632,7 @@ void GrGLGpu::draw(const GrPipeline& pipeline,
 
     bool hasPoints = false;
     for (int i = 0; i < meshCount; ++i) {
-        if (meshes[i].fPrimitiveType == kPoints_GrPrimitiveType) {
+        if (meshes[i].primitiveType() == kPoints_GrPrimitiveType) {
             hasPoints = true;
             break;
         }
@@ -2658,36 +2647,32 @@ void GrGLGpu::draw(const GrPipeline& pipeline,
         }
 
         const GrMesh& mesh = meshes[i];
-        for (GrMesh::PatternBatch batch : mesh) {
-            this->setupGeometry(primProc, mesh.fIndexBuffer.get(), mesh.fVertexBuffer.get(),
-                                batch.fBaseVertex);
-            if (const GrBuffer* indexBuffer = mesh.fIndexBuffer.get()) {
-                GrGLvoid* indices = reinterpret_cast<void*>(indexBuffer->baseOffset() +
-                                                            sizeof(uint16_t) * mesh.fBaseIndex);
-                // mesh.fBaseVertex was accounted for by setupGeometry.
+        const GrGLenum primType = gPrimitiveType2GLMode[mesh.primitiveType()];
+
+        if (mesh.isIndexed()) {
+            GrGLvoid* indices = reinterpret_cast<void*>(mesh.indexBuffer()->baseOffset() +
+                                                        sizeof(uint16_t) * mesh.baseIndex());
+            for (const GrMesh::PatternBatch batch : mesh) {
+                this->setupGeometry(primProc, mesh.indexBuffer(), mesh.vertexBuffer(),
+                                    batch.fBaseVertex);
+                // mesh.baseVertex() was accounted for by setupGeometry.
                 if (this->glCaps().drawRangeElementsSupport()) {
                     // We assume here that the GrMeshDrawOps that generated the mesh used the full
                     // 0..vertexCount()-1 range.
                     int start = 0;
-                    int end = mesh.fVertexCount * batch.fRepeatCount - 1;
-                    GL_CALL(DrawRangeElements(gPrimitiveType2GLMode[mesh.fPrimitiveType],
-                                              start, end,
-                                              mesh.fIndexCount * batch.fRepeatCount,
-                                              GR_GL_UNSIGNED_SHORT,
-                                              indices));
+                    int end = mesh.vertexCount() * batch.fRepeatCount - 1;
+                    GL_CALL(DrawRangeElements(primType, start, end,
+                                              mesh.indexCount() * batch.fRepeatCount,
+                                              GR_GL_UNSIGNED_SHORT, indices));
                 } else {
-                    GL_CALL(DrawElements(gPrimitiveType2GLMode[mesh.fPrimitiveType],
-                                         mesh.fIndexCount * batch.fRepeatCount,
-                                         GR_GL_UNSIGNED_SHORT,
-                                         indices));
+                    GL_CALL(DrawElements(primType, mesh.indexCount() * batch.fRepeatCount,
+                                         GR_GL_UNSIGNED_SHORT, indices));
                 }
-            } else {
-                // Pass 0 for parameter first. We have to adjust glVertexAttribPointer() to account
-                // for mesh.fBaseVertex in the DrawElements case. So we always rely on setupGeometry
-                // to have accounted for mesh.fBaseVertex.
-                GL_CALL(DrawArrays(gPrimitiveType2GLMode[mesh.fPrimitiveType], 0,
-                                   mesh.fVertexCount * batch.fRepeatCount));
+                fStats.incNumDraws();
             }
+        } else {
+            this->setupGeometry(primProc, mesh.indexBuffer(), mesh.vertexBuffer(), 0);
+            GL_CALL(DrawArrays(primType, mesh.baseVertex(), mesh.vertexCount()));
             fStats.incNumDraws();
         }
     }
