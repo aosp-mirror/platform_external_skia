@@ -162,6 +162,7 @@ cc_library {
         "src/core/SkDocument.cpp",
         "src/core/SkDraw.cpp",
         "src/core/SkDrawLooper.cpp",
+        "src/core/SkDraw_vertices.cpp",
         "src/core/SkDrawable.cpp",
         "src/core/SkEdge.cpp",
         "src/core/SkEdgeBuilder.cpp",
