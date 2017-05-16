@@ -851,7 +851,6 @@ sk_sp<GrTexture> GrVkGpu::onWrapBackendTexture(const GrBackendTexture& backendTe
     surfDesc.fConfig = backendTex.config();
     surfDesc.fSampleCnt = SkTMin(sampleCnt, this->caps()->maxSampleCount());
     bool renderTarget = SkToBool(flags & kRenderTarget_GrBackendTextureFlag);
-    SkASSERT(!renderTarget || kAdoptAndCache_GrWrapOwnership != ownership);  // Not supported
     // In GL, Chrome assumes all textures are BottomLeft
     // In VK, we don't have this restriction
     surfDesc.fOrigin = resolve_origin(origin);
@@ -882,7 +881,7 @@ sk_sp<GrRenderTarget> GrVkGpu::onWrapBackendRenderTarget(const GrBackendRenderTa
 
     GrSurfaceDesc desc;
     desc.fConfig = backendRT.config();
-    desc.fFlags = kCheckAllocation_GrSurfaceFlag | kRenderTarget_GrSurfaceFlag;
+    desc.fFlags = kRenderTarget_GrSurfaceFlag;
     desc.fWidth = backendRT.width();
     desc.fHeight = backendRT.height();
     desc.fSampleCnt = 0;
@@ -1418,7 +1417,7 @@ void GrVkGpu::addImageMemoryBarrier(VkPipelineStageFlags srcStageMask,
                                        barrier);
 }
 
-void GrVkGpu::finishOpList() {
+void GrVkGpu::finishFlush() {
     // Submit the current command buffer to the Queue
     this->submitCommandBuffer(kSkip_SyncQueue);
 }

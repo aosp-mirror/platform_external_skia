@@ -105,6 +105,9 @@ void GrRenderTargetContext::validate() const {
 #endif
 
 GrRenderTargetContext::~GrRenderTargetContext() {
+    if (fOpList) {
+        fOpList->makeClosed(*this->caps());
+    }
     ASSERT_SINGLE_OWNER
 }
 
@@ -121,7 +124,7 @@ GrRenderTargetOpList* GrRenderTargetContext::getOpList() {
     SkDEBUGCODE(this->validate();)
 
     if (!fOpList || fOpList->isClosed()) {
-        fOpList = this->drawingManager()->newRTOpList(fRenderTargetProxy);
+        fOpList = this->drawingManager()->newRTOpList(fRenderTargetProxy.get());
     }
 
     return fOpList.get();
@@ -444,7 +447,7 @@ bool GrRenderTargetContext::drawFilledRect(const GrClip& clip,
             return true;
         }
     }
-    GrAAType aaType = this->decideAAType(aa);
+    GrAAType aaType = this->chooseAAType(aa, GrAllowMixedSamples::kNo);
     if (GrAAType::kCoverage == aaType) {
         // The fill path can handle rotation but not skew.
         if (view_matrix_ok_for_aa_fill_rect(viewMatrix)) {
@@ -561,7 +564,7 @@ void GrRenderTargetContext::drawRect(const GrClip& clip,
         std::unique_ptr<GrLegacyMeshDrawOp> op;
 
         GrColor color = paint.getColor();
-        GrAAType aaType = this->decideAAType(aa);
+        GrAAType aaType = this->chooseAAType(aa, GrAllowMixedSamples::kNo);
         if (GrAAType::kCoverage == aaType) {
             // The stroke path needs the rect to remain axis aligned (no rotation or skew).
             if (viewMatrix.rectStaysRect()) {
@@ -572,7 +575,7 @@ void GrRenderTargetContext::drawRect(const GrClip& clip,
             // hairline rects. We jam all the vertices to pixel centers to avoid this, but not
             // when MSAA is enabled because it can cause ugly artifacts.
             snapToPixelCenters = stroke.getStyle() == SkStrokeRec::kHairline_Style &&
-                                 !fRenderTargetProxy->isUnifiedMultisampled();
+                                 GrFSAAType::kUnifiedMSAA != fRenderTargetProxy->fsaaType();
             op = GrRectOpFactory::MakeNonAAStroke(color, viewMatrix, rect, stroke,
                                                   snapToPixelCenters);
         }
@@ -748,7 +751,7 @@ void GrRenderTargetContext::fillRectToRect(const GrClip& clip,
         }
     }
 
-    GrAAType aaType = this->decideAAType(aa);
+    GrAAType aaType = this->chooseAAType(aa, GrAllowMixedSamples::kNo);
     if (GrAAType::kCoverage != aaType) {
         this->drawNonAAFilledRect(clip, std::move(paint), viewMatrix, croppedRect,
                                   &croppedLocalRect, nullptr, nullptr, aaType);
@@ -804,7 +807,7 @@ void GrRenderTargetContext::fillRectWithLocalMatrix(const GrClip& clip,
         }
     }
 
-    GrAAType aaType = this->decideAAType(aa);
+    GrAAType aaType = this->chooseAAType(aa, GrAllowMixedSamples::kNo);
     if (GrAAType::kCoverage != aaType) {
         this->drawNonAAFilledRect(clip, std::move(paint), viewMatrix, croppedRect, nullptr,
                                   &localMatrix, nullptr, aaType);
@@ -956,19 +959,17 @@ void GrRenderTargetContext::drawRRect(const GrClip& origClip,
         }
     }
 
-    GrAAType aaType = this->decideAAType(aa);
+    GrAAType aaType = this->chooseAAType(aa, GrAllowMixedSamples::kNo);
     if (GrAAType::kCoverage == aaType) {
         const GrShaderCaps* shaderCaps = fContext->caps()->shaderCaps();
-        std::unique_ptr<GrLegacyMeshDrawOp> op =
-                GrOvalOpFactory::MakeRRectOp(paint.getColor(),
-                                             paint.usesDistanceVectorField(),
-                                             viewMatrix,
-                                             rrect,
-                                             stroke,
-                                             shaderCaps);
+        std::unique_ptr<GrDrawOp> op = GrOvalOpFactory::MakeRRectOp(std::move(paint),
+                                                                    paint.usesDistanceVectorField(),
+                                                                    viewMatrix,
+                                                                    rrect,
+                                                                    stroke,
+                                                                    shaderCaps);
         if (op) {
-            GrPipelineBuilder pipelineBuilder(std::move(paint), aaType);
-            this->addLegacyMeshDrawOp(std::move(pipelineBuilder), *clip, std::move(op));
+            this->addDrawOp(*clip, std::move(op));
             return;
         }
     }
@@ -986,7 +987,8 @@ void GrRenderTargetContext::drawShadowRRect(const GrClip& clip,
                                             const SkMatrix& viewMatrix,
                                             const SkRRect& rrect,
                                             SkScalar blurWidth,
-                                            SkScalar insetWidth) {
+                                            SkScalar insetWidth,
+                                            SkScalar blurClamp) {
     ASSERT_SINGLE_OWNER
     RETURN_IF_ABANDONED
     SkDEBUGCODE(this->validate();)
@@ -999,7 +1001,8 @@ void GrRenderTargetContext::drawShadowRRect(const GrClip& clip,
     // TODO: add instancing support?
 
     std::unique_ptr<GrLegacyMeshDrawOp> op = GrShadowRRectOp::Make(paint.getColor(), viewMatrix,
-                                                                   rrect, blurWidth, insetWidth);
+                                                                   rrect, blurWidth, insetWidth,
+                                                                   blurClamp);
     if (op) {
         GrPipelineBuilder pipelineBuilder(std::move(paint), GrAAType::kNone);
         this->addLegacyMeshDrawOp(std::move(pipelineBuilder), clip, std::move(op));
@@ -1028,7 +1031,7 @@ bool GrRenderTargetContext::drawFilledDRRect(const GrClip& clip,
         }
     }
 
-    GrAAType aaType = this->decideAAType(aa);
+    GrAAType aaType = this->chooseAAType(aa, GrAllowMixedSamples::kNo);
 
     GrPrimitiveEdgeType innerEdgeType, outerEdgeType;
     if (GrAAType::kCoverage == aaType) {
@@ -1177,14 +1180,13 @@ void GrRenderTargetContext::drawOval(const GrClip& clip,
         }
     }
 
-    GrAAType aaType = this->decideAAType(aa);
+    GrAAType aaType = this->chooseAAType(aa, GrAllowMixedSamples::kNo);
     if (GrAAType::kCoverage == aaType) {
         const GrShaderCaps* shaderCaps = fContext->caps()->shaderCaps();
-        std::unique_ptr<GrLegacyMeshDrawOp> op =
-                GrOvalOpFactory::MakeOvalOp(paint.getColor(), viewMatrix, oval, stroke, shaderCaps);
+        std::unique_ptr<GrDrawOp> op =
+                GrOvalOpFactory::MakeOvalOp(std::move(paint), viewMatrix, oval, stroke, shaderCaps);
         if (op) {
-            GrPipelineBuilder pipelineBuilder(std::move(paint), aaType);
-            this->addLegacyMeshDrawOp(std::move(pipelineBuilder), clip, std::move(op));
+            this->addDrawOp(clip, std::move(op));
             return;
         }
     }
@@ -1211,20 +1213,19 @@ void GrRenderTargetContext::drawArc(const GrClip& clip,
 
     AutoCheckFlush acf(this->drawingManager());
 
-    GrAAType aaType = this->decideAAType(aa);
+    GrAAType aaType = this->chooseAAType(aa, GrAllowMixedSamples::kNo);
     if (GrAAType::kCoverage == aaType) {
         const GrShaderCaps* shaderCaps = fContext->caps()->shaderCaps();
-        std::unique_ptr<GrLegacyMeshDrawOp> op = GrOvalOpFactory::MakeArcOp(paint.getColor(),
-                                                                            viewMatrix,
-                                                                            oval,
-                                                                            startAngle,
-                                                                            sweepAngle,
-                                                                            useCenter,
-                                                                            style,
-                                                                            shaderCaps);
+        std::unique_ptr<GrDrawOp> op = GrOvalOpFactory::MakeArcOp(std::move(paint),
+                                                                  viewMatrix,
+                                                                  oval,
+                                                                  startAngle,
+                                                                  sweepAngle,
+                                                                  useCenter,
+                                                                  style,
+                                                                  shaderCaps);
         if (op) {
-            GrPipelineBuilder pipelineBuilder(std::move(paint), aaType);
-            this->addLegacyMeshDrawOp(std::move(pipelineBuilder), clip, std::move(op));
+            this->addDrawOp(clip, std::move(op));
             return;
         }
     }
@@ -1273,7 +1274,7 @@ void GrRenderTargetContext::drawNonAAFilledRect(const GrClip& clip,
                                                 const GrUserStencilSettings* ss,
                                                 GrAAType hwOrNoneAAType) {
     SkASSERT(GrAAType::kCoverage != hwOrNoneAAType);
-    SkASSERT(GrAAType::kNone == hwOrNoneAAType || this->isStencilBufferMultisampled());
+    SkASSERT(GrAAType::kNone == hwOrNoneAAType || GrFSAAType::kNone != this->fsaaType());
     std::unique_ptr<GrDrawOp> op = GrNonAAFillRectOp::Make(
             std::move(paint), viewMatrix, rect, localRect, localMatrix, hwOrNoneAAType, ss);
     this->addDrawOp(clip, std::move(op));
@@ -1345,7 +1346,7 @@ void GrRenderTargetContext::drawPath(const GrClip& clip,
 
     AutoCheckFlush acf(this->drawingManager());
 
-    GrAAType aaType = this->decideAAType(aa);
+    GrAAType aaType = this->chooseAAType(aa, GrAllowMixedSamples::kNo);
     if (GrAAType::kCoverage == aaType && !style.pathEffect()) {
         if (style.isSimpleFill() && !path.isConvex()) {
             // Concave AA paths are expensive - try to avoid them for special cases
@@ -1366,11 +1367,10 @@ void GrRenderTargetContext::drawPath(const GrClip& clip,
 
         if (isOval && !path.isInverseFillType()) {
             const GrShaderCaps* shaderCaps = fContext->caps()->shaderCaps();
-            std::unique_ptr<GrLegacyMeshDrawOp> op = GrOvalOpFactory::MakeOvalOp(
-                    paint.getColor(), viewMatrix, ovalRect, style.strokeRec(), shaderCaps);
+            std::unique_ptr<GrDrawOp> op = GrOvalOpFactory::MakeOvalOp(
+                    std::move(paint), viewMatrix, ovalRect, style.strokeRec(), shaderCaps);
             if (op) {
-                GrPipelineBuilder pipelineBuilder(std::move(paint), aaType);
-                this->addLegacyMeshDrawOp(std::move(pipelineBuilder), clip, std::move(op));
+                this->addDrawOp(clip, std::move(op));
                 return;
             }
         }
@@ -1410,7 +1410,7 @@ bool GrRenderTargetContextPriv::drawAndStencilPath(const GrClip& clip,
     // the src color (either the input alpha or in the frag shader) to implement
     // aa. If we have some future driver-mojo path AA that can do the right
     // thing WRT to the blend then we'll need some query on the PR.
-    GrAAType aaType = fRenderTargetContext->decideAAType(aa);
+    GrAAType aaType = fRenderTargetContext->chooseAAType(aa, GrAllowMixedSamples::kNo);
     bool hasUserStencilSettings = !ss->isUnused();
 
     GrShape shape(path, GrStyle::SimpleFill());
@@ -1467,14 +1467,12 @@ void GrRenderTargetContext::internalDrawPath(const GrClip& clip,
     RETURN_IF_ABANDONED
     SkASSERT(!path.isEmpty());
     GrShape shape;
-
-    GrAAType aaType = this->decideAAType(aa, /*allowMixedSamples*/ true);
-    if (style.isSimpleHairline() && aaType == GrAAType::kMixedSamples) {
-        // NVPR cannot handle hairlines, so this will would get picked up by a different stencil and
-        // cover path renderer (i.e. default path renderer). The hairline renderer produces much
-        // smoother hairlines than MSAA.
-        aaType = GrAAType::kCoverage;
-    }
+    // NVPR cannot handle hairlines, so this would get picked up by a different stencil and
+    // cover path renderer (i.e. default path renderer). The hairline renderer produces much
+    // smoother hairlines than MSAA.
+    GrAllowMixedSamples allowMixedSamples =
+            style.isSimpleHairline() ? GrAllowMixedSamples::kNo : GrAllowMixedSamples::kYes;
+    GrAAType aaType = this->chooseAAType(aa, allowMixedSamples);
     GrPathRenderer::CanDrawPathArgs canDrawArgs;
     canDrawArgs.fCaps = this->drawingManager()->getContext()->caps();
     canDrawArgs.fViewMatrix = &viewMatrix;
@@ -1646,7 +1644,7 @@ uint32_t GrRenderTargetContext::addLegacyMeshDrawOp(GrPipelineBuilder&& pipeline
         }
     }
 
-    bool isMixedSamples = fRenderTargetProxy->isMixedSampled() &&
+    bool isMixedSamples = GrFSAAType::kMixedSamples == this->fsaaType() &&
                           (pipelineBuilder.isHWAntialias() || usesStencil);
 
     GrColor overrideColor;

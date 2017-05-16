@@ -231,10 +231,10 @@ private:
         size_t vertexStride = gp->getVertexStride();
 
         sk_sp<const GrBuffer> indexBuffer(get_index_buffer(target->resourceProvider()));
-        PatternHelper helper;
+        PatternHelper helper(kTriangles_GrPrimitiveType);
         void* vertices =
-                helper.init(target, kTriangles_GrPrimitiveType, vertexStride, indexBuffer.get(),
-                            kVertsPerAAFillRect, kIndicesPerAAFillRect, fRectCnt);
+                helper.init(target, vertexStride, indexBuffer.get(), kVertsPerAAFillRect,
+                            kIndicesPerAAFillRect, fRectCnt);
         if (!vertices || !indexBuffer) {
             SkDebugf("Could not allocate vertices\n");
             return;
@@ -389,7 +389,7 @@ std::unique_ptr<GrLegacyMeshDrawOp> MakeWithLocalRect(GrColor color,
 
 #include "GrDrawOpTest.h"
 
-DRAW_OP_TEST_DEFINE(AAFillRectOp) {
+GR_LEGACY_MESH_DRAW_OP_TEST_DEFINE(AAFillRectOp) {
     GrColor color = GrRandomColor(random);
     SkMatrix viewMatrix = GrTest::TestMatrixInvertible(random);
     SkRect rect = GrTest::TestRect(random);
@@ -397,7 +397,7 @@ DRAW_OP_TEST_DEFINE(AAFillRectOp) {
     return GrAAFillRectOp::Make(color, viewMatrix, rect, devRect);
 }
 
-DRAW_OP_TEST_DEFINE(AAFillRectOpLocalMatrix) {
+GR_LEGACY_MESH_DRAW_OP_TEST_DEFINE(AAFillRectOpLocalMatrix) {
     GrColor color = GrRandomColor(random);
     SkMatrix viewMatrix = GrTest::TestMatrixInvertible(random);
     SkMatrix localMatrix = GrTest::TestMatrix(random);

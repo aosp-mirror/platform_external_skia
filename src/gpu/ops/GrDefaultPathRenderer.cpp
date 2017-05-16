@@ -247,16 +247,11 @@ private:
             SkASSERT(vertexOffset <= maxVertices && indexOffset <= maxIndices);
         }
 
-        GrMesh mesh;
-        mesh.fPrimitiveType = primitiveType;
+        GrMesh mesh(primitiveType);
         if (isIndexed) {
-            mesh.fIndexBuffer.reset(indexBuffer);
-            mesh.fIndexCount = indexOffset;
-            mesh.fBaseIndex = firstIndex;
+            mesh.setIndexed(indexBuffer, indexOffset, firstIndex);
         }
-        mesh.fVertexBuffer.reset(vertexBuffer);
-        mesh.fVertexCount = vertexOffset;
-        mesh.fBaseVertex = firstVertex;
+        mesh.setVertices(vertexBuffer, vertexOffset, firstVertex);
         target->draw(gp.get(), this->pipeline(), mesh);
 
         // put back reserves
@@ -586,7 +581,7 @@ void GrDefaultPathRenderer::onStencilPath(const StencilPathArgs& args) {
 
 #if GR_TEST_UTILS
 
-DRAW_OP_TEST_DEFINE(DefaultPathOp) {
+GR_LEGACY_MESH_DRAW_OP_TEST_DEFINE(DefaultPathOp) {
     GrColor color = GrRandomColor(random);
     SkMatrix viewMatrix = GrTest::TestMatrix(random);
 

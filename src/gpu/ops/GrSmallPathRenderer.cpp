@@ -679,17 +679,13 @@ private:
 
     void flush(GrLegacyMeshDrawOp::Target* target, FlushInfo* flushInfo) const {
         if (flushInfo->fInstancesToFlush) {
-            GrMesh mesh;
+            GrMesh mesh(kTriangles_GrPrimitiveType);
             int maxInstancesPerDraw =
                 static_cast<int>(flushInfo->fIndexBuffer->gpuMemorySize() / sizeof(uint16_t) / 6);
-            mesh.fPrimitiveType = kTriangles_GrPrimitiveType;
-            mesh.fIndexBuffer.reset(flushInfo->fIndexBuffer.get());
-            mesh.fIndexCount = kIndicesPerQuad;
-            mesh.fVertexBuffer.reset(flushInfo->fVertexBuffer.get());
-            mesh.fVertexCount = kVerticesPerQuad;
-            mesh.fBaseVertex = flushInfo->fVertexOffset;
-            mesh.fPatternRepeatCount = flushInfo->fInstancesToFlush;
-            mesh.fMaxPatternRepetitionsInIndexBuffer = maxInstancesPerDraw;
+            mesh.setIndexedPatterned(flushInfo->fIndexBuffer.get(), kIndicesPerQuad,
+                                     flushInfo->fInstancesToFlush, maxInstancesPerDraw);
+            mesh.setVertices(flushInfo->fVertexBuffer.get(), kVerticesPerQuad,
+                             flushInfo->fVertexOffset);
             target->draw(flushInfo->fGeometryProcessor.get(), this->pipeline(), mesh);
             flushInfo->fVertexOffset += kVerticesPerQuad * flushInfo->fInstancesToFlush;
             flushInfo->fInstancesToFlush = 0;
@@ -823,7 +819,7 @@ struct PathTestStruct {
     ShapeDataList fShapeList;
 };
 
-DRAW_OP_TEST_DEFINE(SmallPathOp) {
+GR_LEGACY_MESH_DRAW_OP_TEST_DEFINE(SmallPathOp) {
     static PathTestStruct gTestStruct;
 
     if (context->uniqueID() != gTestStruct.fContextID) {

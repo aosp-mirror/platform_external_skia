@@ -156,11 +156,8 @@ private:
             vertex[4].set(fRect.fLeft, fRect.fTop);
         }
 
-        GrMesh mesh;
-        mesh.fPrimitiveType = primType;
-        mesh.fVertexBuffer.reset(vertexBuffer);
-        mesh.fVertexCount = vertexCount;
-        mesh.fBaseVertex = firstVertex;
+        GrMesh mesh(primType);
+        mesh.setVertices(vertexBuffer, vertexCount, firstVertex);
         target->draw(gp.get(), this->pipeline(), mesh);
     }
 
@@ -200,7 +197,7 @@ std::unique_ptr<GrLegacyMeshDrawOp> Make(GrColor color,
 
 #if GR_TEST_UTILS
 
-DRAW_OP_TEST_DEFINE(NonAAStrokeRectOp) {
+GR_LEGACY_MESH_DRAW_OP_TEST_DEFINE(NonAAStrokeRectOp) {
     SkMatrix viewMatrix = GrTest::TestMatrix(random);
     GrColor color = GrRandomColor(random);
     SkRect rect = GrTest::TestRect(random);

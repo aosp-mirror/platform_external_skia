@@ -181,10 +181,12 @@ struct SpotVerticesFactory {
     enum class OccluderType {
         // The umbra cannot be dropped out because the occluder is not opaque.
         kTransparent,
+        // The occluder is opaque and the umbra is fully visible
+        kOpaqueFullUmbra,
         // The umbra can be dropped where it is occluded.
-        kOpaque,
+        kOpaquePartialUmbra,
         // It is known that the entire umbra is occluded.
-        kOpaqueCoversUmbra
+        kOpaqueNoUmbra
     };
 
     SkVector fOffset;
@@ -200,12 +202,13 @@ struct SpotVerticesFactory {
         }
         switch (fOccluderType) {
             case OccluderType::kTransparent:
-            case OccluderType::kOpaqueCoversUmbra:
+            case OccluderType::kOpaqueFullUmbra:
+            case OccluderType::kOpaqueNoUmbra:
                 // 'this' and 'that' will either both have no umbra removed or both have all the
                 // umbra removed.
                 *translate = that.fOffset - fOffset;
                 return true;
-            case OccluderType::kOpaque:
+            case OccluderType::kOpaquePartialUmbra:
                 // In this case we partially remove the umbra differently for 'this' and 'that'
                 // if the offsets don't match.
                 if (fOffset == that.fOffset) {
@@ -580,8 +583,11 @@ void SkShadowUtils::DrawShadow(SkCanvas* canvas, const SkPath& path, const SkPoi
                                const SkPoint3& devLightPos, SkScalar lightRadius,
                                SkScalar ambientAlpha, SkScalar spotAlpha, SkColor color,
                                uint32_t flags) {
+    // check z plane
+    bool tiltZPlane = !SkScalarNearlyZero(zPlaneParams.fX) || !SkScalarNearlyZero(zPlaneParams.fY);
+
     // try fast paths
-    bool skipAnalytic = SkToBool(flags & SkShadowFlags::kGeometricOnly_ShadowFlag);
+    bool skipAnalytic = SkToBool(flags & SkShadowFlags::kGeometricOnly_ShadowFlag) || tiltZPlane;
     if (!skipAnalytic && draw_analytic_shadows(canvas, path, zPlaneParams.fZ, devLightPos,
                                                lightRadius, ambientAlpha, spotAlpha, color,
                                                flags)) {
@@ -595,7 +601,7 @@ void SkShadowUtils::DrawShadow(SkCanvas* canvas, const SkPath& path, const SkPoi
     ShadowedPath shadowedPath(&path, &viewMatrix);
 
     bool transparent = SkToBool(flags & SkShadowFlags::kTransparentOccluder_ShadowFlag);
-    bool uncached = viewMatrix.hasPerspective() || path.isVolatile();
+    bool uncached = tiltZPlane || path.isVolatile();
 
     if (ambientAlpha > 0) {
         ambientAlpha = SkTMin(ambientAlpha, 1.f);
@@ -640,6 +646,10 @@ void SkShadowUtils::DrawShadow(SkCanvas* canvas, const SkPath& path, const SkPoi
             SpotVerticesFactory factory;
             SkScalar occluderHeight = zPlaneParams.fZ;
             float zRatio = SkTPin(occluderHeight / (devLightPos.fZ - occluderHeight), 0.0f, 0.95f);
+            SkScalar radius = lightRadius * zRatio;
+
+            // Compute the scale and translation for the spot shadow.
+            SkScalar scale = devLightPos.fZ / (devLightPos.fZ - occluderHeight);
             SkPoint center = SkPoint::Make(path.getBounds().centerX(), path.getBounds().centerY());
             viewMatrix.mapPoints(&center, 1);
             factory.fOffset = SkVector::Make(zRatio * (center.fX - devLightPos.fX),
@@ -647,9 +657,38 @@ void SkShadowUtils::DrawShadow(SkCanvas* canvas, const SkPath& path, const SkPoi
             factory.fOccluderHeight = occluderHeight;
             factory.fDevLightPos = devLightPos;
             factory.fLightRadius = lightRadius;
-            // the only valid choice we have right now
-            factory.fOccluderType = SpotVerticesFactory::OccluderType::kTransparent;
+            SkRect devBounds;
+            viewMatrix.mapRect(&devBounds, path.getBounds());
+            if (transparent) {
+                factory.fOccluderType = SpotVerticesFactory::OccluderType::kTransparent;
+            } else if (SkTAbs(factory.fOffset.fX) > 0.5f*devBounds.width() ||
+                       SkTAbs(factory.fOffset.fY) > 0.5f*devBounds.height()) {
+                // if the translation of the shadow is big enough we're going to end up
+                // filling the entire umbra, so we can treat these as all the same
+                factory.fOccluderType = SpotVerticesFactory::OccluderType::kOpaqueFullUmbra;
+            } else if (factory.fOffset.length()*scale + scale < radius) {
+                // if we don't translate more than the blur distance, can assume umbra is covered
+                factory.fOccluderType = SpotVerticesFactory::OccluderType::kOpaqueNoUmbra;
+            } else {
+                factory.fOccluderType = SpotVerticesFactory::OccluderType::kOpaquePartialUmbra;
+            }
 
+#ifdef DEBUG_SHADOW_CHECKS
+            switch (factory.fOccluderType) {
+                case SpotVerticesFactory::OccluderType::kTransparent:
+                    color = 0xFFD2B48C;  // tan for transparent
+                    break;
+                case SpotVerticesFactory::OccluderType::kOpaqueFullUmbra:
+                    color = 0xFF614126;   // brown for umBra
+                    break;
+                case SpotVerticesFactory::OccluderType::kOpaquePartialUmbra:
+                    color = 0xFFFFA500;   // orange for opaque
+                    break;
+                case SpotVerticesFactory::OccluderType::kOpaqueNoUmbra:
+                    color = 0xFFE5E500;  // corn yellow for covered
+                    break;
+            }
+#endif
             SkColor renderColor = compute_render_color(color, spotAlpha);
             draw_shadow(factory, canvas, shadowedPath, renderColor);
         }

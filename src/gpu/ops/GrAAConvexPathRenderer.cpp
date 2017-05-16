@@ -812,14 +812,9 @@ private:
 
             extract_verts(tess, verts, vertexStride, fColor, idxs, canTweakAlphaForCoverage);
 
-            GrMesh mesh;
-            mesh.fPrimitiveType = kTriangles_GrPrimitiveType;
-            mesh.fIndexBuffer.reset(indexBuffer);
-            mesh.fIndexCount = tess.numIndices();
-            mesh.fBaseIndex = firstIndex;
-            mesh.fVertexBuffer.reset(vertexBuffer);
-            mesh.fVertexCount = tess.numPts();
-            mesh.fBaseVertex = firstVertex;
+            GrMesh mesh(kTriangles_GrPrimitiveType);
+            mesh.setIndexed(indexBuffer, tess.numIndices(), firstIndex);
+            mesh.setVertices(vertexBuffer, tess.numPts(), firstVertex);
             target->draw(gp.get(), this->pipeline(), mesh);
         }
     }
@@ -878,14 +873,12 @@ private:
                 continue;
             }
 
-            GrMesh mesh;
-            mesh.fPrimitiveType = kTriangles_GrPrimitiveType;
-
             const GrBuffer* vertexBuffer;
+            int firstVertex;
+
             size_t vertexStride = quadProcessor->getVertexStride();
             QuadVertex* verts = reinterpret_cast<QuadVertex*>(target->makeVertexSpace(
-                vertexStride, vertexCount, &vertexBuffer, &mesh.fBaseVertex));
-            mesh.fVertexBuffer.reset(vertexBuffer);
+                vertexStride, vertexCount, &vertexBuffer, &firstVertex));
 
             if (!verts) {
                 SkDebugf("Could not allocate vertices\n");
@@ -893,23 +886,26 @@ private:
             }
 
             const GrBuffer* indexBuffer;
-            uint16_t *idxs = target->makeIndexSpace(indexCount, &indexBuffer, &mesh.fBaseIndex);
+            int firstIndex;
+
+            uint16_t *idxs = target->makeIndexSpace(indexCount, &indexBuffer, &firstIndex);
             if (!idxs) {
                 SkDebugf("Could not allocate indices\n");
                 return;
             }
-            mesh.fIndexBuffer.reset(indexBuffer);
 
             SkSTArray<kPreallocDrawCnt, Draw, true> draws;
             create_vertices(segments, fanPt, &draws, verts, idxs);
 
+            GrMesh mesh(kTriangles_GrPrimitiveType);
+
             for (int j = 0; j < draws.count(); ++j) {
                 const Draw& draw = draws[j];
-                mesh.fIndexCount = draw.fIndexCnt;
-                mesh.fVertexCount = draw.fVertexCnt;
+                mesh.setIndexed(indexBuffer, draw.fIndexCnt, firstIndex);
+                mesh.setVertices(vertexBuffer, draw.fVertexCnt, firstVertex);
                 target->draw(quadProcessor.get(), this->pipeline(), mesh);
-                mesh.fBaseIndex += draw.fIndexCnt;
-                mesh.fBaseVertex += draw.fVertexCnt;
+                firstIndex += draw.fIndexCnt;
+                firstVertex += draw.fVertexCnt;
             }
         }
     }
@@ -969,7 +965,7 @@ private:
 bool GrAAConvexPathRenderer::onDrawPath(const DrawPathArgs& args) {
     GR_AUDIT_TRAIL_AUTO_FRAME(args.fRenderTargetContext->auditTrail(),
                               "GrAAConvexPathRenderer::onDrawPath");
-    SkASSERT(!args.fRenderTargetContext->isUnifiedMultisampled());
+    SkASSERT(GrFSAAType::kUnifiedMSAA != args.fRenderTargetContext->fsaaType());
     SkASSERT(!args.fShape->isEmpty());
 
     SkPath path;
@@ -992,7 +988,7 @@ bool GrAAConvexPathRenderer::onDrawPath(const DrawPathArgs& args) {
 
 #if GR_TEST_UTILS
 
-DRAW_OP_TEST_DEFINE(AAConvexPathOp) {
+GR_LEGACY_MESH_DRAW_OP_TEST_DEFINE(AAConvexPathOp) {
     GrColor color = GrRandomColor(random);
     SkMatrix viewMatrix = GrTest::TestMatrixInvertible(random);
     SkPath path = GrTest::TestPathConvex(random);

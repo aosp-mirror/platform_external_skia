@@ -15,7 +15,6 @@ skia_gpu_sources = [
   "$_include/gpu/GrConfig.h",
   "$_include/gpu/GrContextOptions.h",
   "$_include/gpu/GrContext.h",
-  "$_include/gpu/GrExternalTextureData.h",
   "$_include/gpu/GrGpuResource.h",
   "$_include/gpu/GrGpuResourceRef.h",
   "$_include/gpu/GrRenderTarget.h",
@@ -32,7 +31,6 @@ skia_gpu_sources = [
   "$_include/gpu/gl/GrGLExtensions.h",
   "$_include/gpu/gl/GrGLFunctions.h",
   "$_include/gpu/gl/GrGLInterface.h",
-  "$_include/gpu/gl/GrGLSLPrettyPrint.h",
   "$_include/gpu/gl/GrGLTypes.h",
 
   # Private includes
@@ -190,8 +188,8 @@ skia_gpu_sources = [
   "$_src/gpu/GrTestUtils.h",
   "$_src/gpu/GrShaderVar.cpp",
   "$_src/gpu/GrShaderVar.h",
-  "$_src/gpu/GrSWMaskHelper.cpp",
-  "$_src/gpu/GrSWMaskHelper.h",
+  "$_src/gpu/GrSKSLPrettyPrint.cpp",
+  "$_src/gpu/GrSKSLPrettyPrint.h",
   "$_src/gpu/GrSoftwarePathRenderer.cpp",
   "$_src/gpu/GrSoftwarePathRenderer.h",
   "$_src/gpu/GrSurfacePriv.h",
@@ -199,6 +197,8 @@ skia_gpu_sources = [
   "$_src/gpu/GrSurfaceContext.cpp",
   "$_src/gpu/GrSurfaceContext.h",
   "$_src/gpu/GrSurfaceProxy.cpp",
+  "$_src/gpu/GrSWMaskHelper.cpp",
+  "$_src/gpu/GrSWMaskHelper.h",
   "$_src/gpu/GrTexture.cpp",
   "$_src/gpu/GrTextureAdjuster.cpp",
   "$_src/gpu/GrTextureAdjuster.h",
@@ -388,7 +388,6 @@ skia_gpu_sources = [
   "$_src/gpu/gl/GrGLGpuCommandBuffer.h",
   "$_src/gpu/gl/GrGLGpuProgramCache.cpp",
   "$_src/gpu/gl/GrGLExtensions.cpp",
-  "$_src/gpu/gl/GrGLExternalTextureData.cpp",
   "$_src/gpu/gl/GrGLInterface.cpp",
   "$_src/gpu/gl/GrGLIRect.h",
   "$_src/gpu/gl/GrGLPath.cpp",
@@ -426,7 +425,6 @@ skia_gpu_sources = [
   "$_src/gpu/gl/builders/GrGLProgramBuilder.h",
   "$_src/gpu/gl/builders/GrGLShaderStringBuilder.cpp",
   "$_src/gpu/gl/builders/GrGLShaderStringBuilder.h",
-  "$_src/gpu/gl/builders/GrGLSLPrettyPrint.cpp",
 
   # GLSL
   "$_src/gpu/glsl/GrGLSL.cpp",

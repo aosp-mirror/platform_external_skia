@@ -262,9 +262,9 @@ void AAStrokeRectOp::onPrepareDraws(Target* target) const {
 
     const sk_sp<const GrBuffer> indexBuffer(
             GetIndexBuffer(target->resourceProvider(), this->miterStroke()));
-    PatternHelper helper;
+    PatternHelper helper(kTriangles_GrPrimitiveType);
     void* vertices =
-            helper.init(target, kTriangles_GrPrimitiveType, vertexStride, indexBuffer.get(),
+            helper.init(target, vertexStride, indexBuffer.get(),
                         verticesPerInstance, indicesPerInstance, instanceCount);
     if (!vertices || !indexBuffer) {
         SkDebugf("Could not allocate vertices\n");
@@ -593,7 +593,7 @@ std::unique_ptr<GrLegacyMeshDrawOp> Make(GrColor color,
 
 #include "GrDrawOpTest.h"
 
-DRAW_OP_TEST_DEFINE(AAStrokeRectOp) {
+GR_LEGACY_MESH_DRAW_OP_TEST_DEFINE(AAStrokeRectOp) {
     bool miterStroke = random->nextBool();
 
     // Create either a empty rect or a non-empty rect.

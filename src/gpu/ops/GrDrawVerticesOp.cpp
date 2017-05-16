@@ -235,16 +235,11 @@ void GrDrawVerticesOp::onPrepareDraws(Target* target) const {
         vertexOffset += vertexCount;
     }
 
-    GrMesh mesh;
-    mesh.fPrimitiveType = this->primitiveType();
+    GrMesh mesh(this->primitiveType());
     if (indices) {
-        mesh.fIndexBuffer.reset(indexBuffer);
-        mesh.fIndexCount = fIndexCount;
-        mesh.fBaseIndex = firstIndex;
+        mesh.setIndexed(indexBuffer, fIndexCount, firstIndex);
     }
-    mesh.fVertexBuffer.reset(vertexBuffer);
-    mesh.fVertexCount = fVertexCount;
-    mesh.fBaseVertex = firstVertex;
+    mesh.setVertices(vertexBuffer, fVertexCount, firstVertex);
     target->draw(gp.get(), this->pipeline(), mesh);
 }
 
@@ -358,7 +353,7 @@ static void randomize_params(size_t count, size_t maxVertex, SkScalar min, SkSca
     }
 }
 
-DRAW_OP_TEST_DEFINE(VerticesOp) {
+GR_LEGACY_MESH_DRAW_OP_TEST_DEFINE(VerticesOp) {
     GrPrimitiveType type = GrPrimitiveType(random->nextULessThan(kLast_GrPrimitiveType + 1));
     uint32_t primitiveCount = random->nextRangeU(1, 100);
 

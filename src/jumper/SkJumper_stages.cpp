@@ -195,7 +195,7 @@ SI void store(T* dst, V v, size_t tail) {
         return;
     }
 #endif
-    memcpy(dst, &v, sizeof(v));
+    unaligned_store(dst, v);
 }
 
 // This doesn't look strictly necessary, but without it Clang would generate load() using
@@ -245,7 +245,7 @@ SI void store(T* dst, V v, size_t tail) {
         if (__builtin_expect(tail, 0)) {
             return _mm256_maskstore_epi32((int*)dst, mask(tail), v);
         }
-        memcpy(dst, &v, sizeof(v));
+        unaligned_store(dst, v);
     }
 #endif
 
@@ -322,12 +322,31 @@ STAGE(dither) {
     b += c->rate*dither;
 }
 
+// load 4 floats from memory, and splat them into r,g,b,a
 STAGE(constant_color) {
     auto rgba = (const float*)ctx;
     r = rgba[0];
     g = rgba[1];
     b = rgba[2];
     a = rgba[3];
+}
+
+// load registers r,g,b,a from context (mirrors store_rgba)
+STAGE(load_rgba) {
+    auto ptr = (const float*)ctx;
+    r = unaligned_load<F>(ptr + 0*kStride);
+    g = unaligned_load<F>(ptr + 1*kStride);
+    b = unaligned_load<F>(ptr + 2*kStride);
+    a = unaligned_load<F>(ptr + 3*kStride);
+}
+
+// store registers r,g,b,a into context (mirrors load_rgba)
+STAGE(store_rgba) {
+    auto ptr = (float*)ctx;
+    unaligned_store(ptr + 0*kStride, r);
+    unaligned_store(ptr + 1*kStride, g);
+    unaligned_store(ptr + 2*kStride, b);
+    unaligned_store(ptr + 3*kStride, a);
 }
 
 // Most blend modes apply the same logic to each channel.
@@ -418,6 +437,8 @@ BLEND_MODE(softlight) {
 // and
 //   https://www.khronos.org/registry/OpenGL/specs/es/3.2/es_spec_3.2.pdf
 // They're equivalent, but ES' math has been better simplified.
+//
+// Anything extra we add beyond that is to make the math work with premul inputs.
 
 SI F max(F r, F g, F b) { return max(r, max(g, b)); }
 SI F min(F r, F g, F b) { return min(r, min(g, b)); }
@@ -438,14 +459,20 @@ SI void set_sat(F* r, F* g, F* b, F s) {
     *g = scale(*g);
     *b = scale(*b);
 }
-SI void clip_color(F* r, F* g, F* b) {
+SI void set_lum(F* r, F* g, F* b, F l) {
+    F diff = l - lum(*r, *g, *b);
+    *r += diff;
+    *g += diff;
+    *b += diff;
+}
+SI void clip_color(F* r, F* g, F* b, F a) {
     F mn = min(*r, *g, *b),
       mx = max(*r, *g, *b),
       l  = lum(*r, *g, *b);
 
     auto clip = [=](F c) {
         c = if_then_else(mn >= 0, c, l + (c - l) * (    l) / (l - mn)   );
-        c = if_then_else(mx >  1,    l + (c - l) * (1 - l) / (mx - l), c);
+        c = if_then_else(mx >  a,    l + (c - l) * (a - l) / (mx - l), c);
         c = max(c, 0);  // Sometimes without this we may dip just a little negative.
         return c;
     };
@@ -453,67 +480,60 @@ SI void clip_color(F* r, F* g, F* b) {
     *g = clip(*g);
     *b = clip(*b);
 }
-SI void set_lum(F* r, F* g, F* b, F l) {
-    F diff = l - lum(*r, *g, *b);
-    *r += diff;
-    *g += diff;
-    *b += diff;
-    clip_color(r, g, b);
-}
-
-SI F unpremultiply(F c, F a) {
-    return c * if_then_else(a == 0, 0, 1.0f / a);
-}
 
 STAGE(hue) {
-    F R = unpremultiply(r,a),
-      G = unpremultiply(g,a),
-      B = unpremultiply(b,a);
+    F R = r*a,
+      G = g*a,
+      B = b*a;
 
-    set_sat(&R, &G, &B, sat(dr,dg,db));
-    set_lum(&R, &G, &B, lum(dr,dg,db));
+    set_sat(&R, &G, &B, sat(dr,dg,db)*a);
+    set_lum(&R, &G, &B, lum(dr,dg,db)*a);
+    clip_color(&R,&G,&B, a*da);
 
+    r = r*inv(da) + dr*inv(a) + R;
+    g = g*inv(da) + dg*inv(a) + G;
+    b = b*inv(da) + db*inv(a) + B;
     a = a + da - a*da;
-    r = R * a;
-    g = G * a;
-    b = B * a;
 }
 STAGE(saturation) {
-    F R = unpremultiply(dr,da),
-      G = unpremultiply(dg,da),
-      B = unpremultiply(db,da);
+    F R = dr*a,
+      G = dg*a,
+      B = db*a;
 
-    set_sat(&R, &G, &B, sat( r, g, b));
-    set_lum(&R, &G, &B, lum(dr,dg,db));  // (This is not redundant.)
+    set_sat(&R, &G, &B, sat( r, g, b)*da);
+    set_lum(&R, &G, &B, lum(dr,dg,db)* a);  // (This is not redundant.)
+    clip_color(&R,&G,&B, a*da);
 
+    r = r*inv(da) + dr*inv(a) + R;
+    g = g*inv(da) + dg*inv(a) + G;
+    b = b*inv(da) + db*inv(a) + B;
     a = a + da - a*da;
-    r = R * a;
-    g = G * a;
-    b = B * a;
 }
 STAGE(color) {
-    F R = unpremultiply(r,a),
-      G = unpremultiply(g,a),
-      B = unpremultiply(b,a);
+    F R = r*da,
+      G = g*da,
+      B = b*da;
 
-    set_lum(&R, &G, &B, lum(dr,dg,db));
+    set_lum(&R, &G, &B, lum(dr,dg,db)*a);
+    clip_color(&R,&G,&B, a*da);
 
+    r = r*inv(da) + dr*inv(a) + R;
+    g = g*inv(da) + dg*inv(a) + G;
+    b = b*inv(da) + db*inv(a) + B;
     a = a + da - a*da;
-    r = R * a;
-    g = G * a;
-    b = B * a;
 }
 STAGE(luminosity) {
-    F R = unpremultiply(dr,da),
-      G = unpremultiply(dg,da),
-      B = unpremultiply(db,da);
+    F R = dr*a,
+      G = dg*a,
+      B = db*a;
 
-    set_lum(&R, &G, &B, lum(r,g,b));
+    set_lum(&R, &G, &B, lum(r,g,b)*da);
+    clip_color(&R,&G,&B, a*da);
 
+    r = r*inv(da) + dr*inv(a) + R;
+    g = g*inv(da) + dg*inv(a) + G;
+    b = b*inv(da) + db*inv(a) + B;
     a = a + da - a*da;
-    r = R * a;
-    g = G * a;
-    b = B * a;
 }
 
 STAGE(clamp_0) {
@@ -579,9 +599,10 @@ STAGE(premul) {
     b = b * a;
 }
 STAGE(unpremul) {
-    r = unpremultiply(r,a);
-    g = unpremultiply(g,a);
-    b = unpremultiply(b,a);
+    auto scale = if_then_else(a == 0, 0, 1.0f / a);
+    r *= scale;
+    g *= scale;
+    b *= scale;
 }
 
 STAGE(from_srgb) {
@@ -969,20 +990,17 @@ STAGE(store_f32) {
     store4(ptr,tail, r,g,b,a);
 }
 
-SI F ulp_before(F v) {
-    return bit_cast<F>(bit_cast<U32>(v) + U32(0xffffffff));
-}
 SI F clamp(F v, float limit) {
     v = max(0, v);
-    return min(v, ulp_before(limit));
+    return min(v, limit);
 }
 SI F repeat(F v, float limit) {
     v = v - floor_(v/limit)*limit;
-    return min(v, ulp_before(limit));
+    return min(v, limit);
 }
 SI F mirror(F v, float limit) {
     v = abs_( (v-limit) - (limit+limit)*floor_((v-limit)/(limit+limit)) - limit );
-    return min(v, ulp_before(limit));
+    return min(v, limit);
 }
 STAGE(clamp_x)  { r = clamp (r, *(const float*)ctx); }
 STAGE(clamp_y)  { g = clamp (g, *(const float*)ctx); }
@@ -1037,35 +1055,59 @@ STAGE(matrix_perspective) {
     g = G * rcp(Z);
 }
 
-STAGE(linear_gradient) {
-    struct Stop { float pos; float f[4], b[4]; };
-    struct Ctx { size_t n; Stop *stops; float start[4]; };
-
-    auto c = (const Ctx*)ctx;
-    F fr = 0, fg = 0, fb = 0, fa = 0;
-    F br = c->start[0],
-      bg = c->start[1],
-      bb = c->start[2],
-      ba = c->start[3];
-    auto t = r;
-    for (size_t i = 0; i < c->n; i++) {
-        fr = if_then_else(t < c->stops[i].pos, fr, c->stops[i].f[0]);
-        fg = if_then_else(t < c->stops[i].pos, fg, c->stops[i].f[1]);
-        fb = if_then_else(t < c->stops[i].pos, fb, c->stops[i].f[2]);
-        fa = if_then_else(t < c->stops[i].pos, fa, c->stops[i].f[3]);
-        br = if_then_else(t < c->stops[i].pos, br, c->stops[i].b[0]);
-        bg = if_then_else(t < c->stops[i].pos, bg, c->stops[i].b[1]);
-        bb = if_then_else(t < c->stops[i].pos, bb, c->stops[i].b[2]);
-        ba = if_then_else(t < c->stops[i].pos, ba, c->stops[i].b[3]);
+SI void gradient_lookup(const SkJumper_GradientCtx* c, U32 idx, F t,
+                        F* r, F* g, F* b, F* a) {
+    F fr, br, fg, bg, fb, bb, fa, ba;
+#if defined(JUMPER) && defined(__AVX2__)
+    if (c->stopCount <=8) {
+        fr = _mm256_permutevar8x32_ps(_mm256_loadu_ps(c->fs[0]), idx);
+        br = _mm256_permutevar8x32_ps(_mm256_loadu_ps(c->bs[0]), idx);
+        fg = _mm256_permutevar8x32_ps(_mm256_loadu_ps(c->fs[1]), idx);
+        bg = _mm256_permutevar8x32_ps(_mm256_loadu_ps(c->bs[1]), idx);
+        fb = _mm256_permutevar8x32_ps(_mm256_loadu_ps(c->fs[2]), idx);
+        bb = _mm256_permutevar8x32_ps(_mm256_loadu_ps(c->bs[2]), idx);
+        fa = _mm256_permutevar8x32_ps(_mm256_loadu_ps(c->fs[3]), idx);
+        ba = _mm256_permutevar8x32_ps(_mm256_loadu_ps(c->bs[3]), idx);
+    } else
+#endif
+    {
+        fr = gather(c->fs[0], idx);
+        br = gather(c->bs[0], idx);
+        fg = gather(c->fs[1], idx);
+        bg = gather(c->bs[1], idx);
+        fb = gather(c->fs[2], idx);
+        bb = gather(c->bs[2], idx);
+        fa = gather(c->fs[3], idx);
+        ba = gather(c->bs[3], idx);
     }
 
-    r = mad(t, fr, br);
-    g = mad(t, fg, bg);
-    b = mad(t, fb, bb);
-    a = mad(t, fa, ba);
+    *r = mad(t, fr, br);
+    *g = mad(t, fg, bg);
+    *b = mad(t, fb, bb);
+    *a = mad(t, fa, ba);
 }
 
-STAGE(linear_gradient_2stops) {
+STAGE(evenly_spaced_gradient) {
+    auto c = (const SkJumper_GradientCtx*)ctx;
+    auto t = r;
+    auto idx = trunc_(t * (c->stopCount-1));
+    gradient_lookup(c, idx, t, &r, &g, &b, &a);
+}
+
+STAGE(gradient) {
+    auto c = (const SkJumper_GradientCtx*)ctx;
+    auto t = r;
+    U32 idx = 0;
+
+    // N.B. The loop starts at 1 because idx 0 is the color to use before the first stop.
+    for (size_t i = 1; i < c->stopCount; i++) {
+        idx += if_then_else(t >= c->ts[i], U32(1), U32(0));
+    }
+
+    gradient_lookup(c, idx, t, &r, &g, &b, &a);
+}
+
+STAGE(evenly_spaced_2_stop_gradient) {
     struct Ctx { float f[4], b[4]; };
     auto c = (const Ctx*)ctx;
 
@@ -1076,7 +1118,7 @@ STAGE(linear_gradient_2stops) {
     a = mad(t, c->f[3], c->b[3]);
 }
 
-STAGE(xy_to_polar_unit) {
+STAGE(xy_to_unit_angle) {
     F X = r,
       Y = g;
     F xabs = abs_(X),
@@ -1105,7 +1147,7 @@ STAGE(xy_to_polar_unit) {
 STAGE(xy_to_radius) {
     F X2 = r * r,
       Y2 = g * g;
-    r = rcp(rsqrt(X2 + Y2));
+    r = sqrt_(X2 + Y2);
 }
 
 STAGE(save_xy) {
@@ -1118,10 +1160,10 @@ STAGE(save_xy) {
       fy = fract(g + 0.5f);
 
     // Samplers will need to load x and fx, or y and fy.
-    memcpy(c->x,  &r,  sizeof(F));
-    memcpy(c->y,  &g,  sizeof(F));
-    memcpy(c->fx, &fx, sizeof(F));
-    memcpy(c->fy, &fy, sizeof(F));
+    unaligned_store(c->x,  r);
+    unaligned_store(c->y,  g);
+    unaligned_store(c->fx, fx);
+    unaligned_store(c->fy, fy);
 }
 
 STAGE(accumulate) {
@@ -1150,7 +1192,7 @@ SI void bilinear_x(SkJumper_SamplerCtx* ctx, F* x) {
     F scalex;
     if (kScale == -1) { scalex = 1.0f - fx; }
     if (kScale == +1) { scalex =        fx; }
-    memcpy(ctx->scalex, &scalex, sizeof(F));
+    unaligned_store(ctx->scalex, scalex);
 }
 template <int kScale>
 SI void bilinear_y(SkJumper_SamplerCtx* ctx, F* y) {
@@ -1160,7 +1202,7 @@ SI void bilinear_y(SkJumper_SamplerCtx* ctx, F* y) {
     F scaley;
     if (kScale == -1) { scaley = 1.0f - fy; }
     if (kScale == +1) { scaley =        fy; }
-    memcpy(ctx->scaley, &scaley, sizeof(F));
+    unaligned_store(ctx->scaley, scaley);
 }
 
 STAGE(bilinear_nx) { bilinear_x<-1>(ctx, &r); }
@@ -1194,7 +1236,7 @@ SI void bicubic_x(SkJumper_SamplerCtx* ctx, F* x) {
     if (kScale == -1) { scalex = bicubic_near(1.0f - fx); }
     if (kScale == +1) { scalex = bicubic_near(       fx); }
     if (kScale == +3) { scalex = bicubic_far (       fx); }
-    memcpy(ctx->scalex, &scalex, sizeof(F));
+    unaligned_store(ctx->scalex, scalex);
 }
 template <int kScale>
 SI void bicubic_y(SkJumper_SamplerCtx* ctx, F* y) {
@@ -1206,7 +1248,7 @@ SI void bicubic_y(SkJumper_SamplerCtx* ctx, F* y) {
     if (kScale == -1) { scaley = bicubic_near(1.0f - fy); }
     if (kScale == +1) { scaley = bicubic_near(       fy); }
     if (kScale == +3) { scaley = bicubic_far (       fy); }
-    memcpy(ctx->scaley, &scaley, sizeof(F));
+    unaligned_store(ctx->scaley, scaley);
 }
 
 STAGE(bicubic_n3x) { bicubic_x<-3>(ctx, &r); }
