@@ -359,6 +359,7 @@ public:
         return fRGBAToBGRAReadbackConversionsAreSlow;
     }
 
+    bool clearToOpaqueBlackIsBroken() const { return fClearToOpaqueBlackIsBroken; }
     bool initDescForDstCopy(const GrRenderTargetProxy* src, GrSurfaceDesc* desc,
                             bool* rectsMustMatch, bool* disallowSubrect) const override;
 
@@ -380,9 +381,10 @@ private:
 
     void onApplyOptionsOverrides(const GrContextOptions& options) override;
 
-    void initFSAASupport(const GrGLContextInfo&, const GrGLInterface*);
+    void initFSAASupport(const GrContextOptions& contextOptions, const GrGLContextInfo&,
+                         const GrGLInterface*);
     void initBlendEqationSupport(const GrGLContextInfo&);
-    void initStencilFormats(const GrGLContextInfo&);
+    void initStencilSupport(const GrGLContextInfo&);
     // This must be called after initFSAASupport().
     void initConfigTable(const GrContextOptions&, const GrGLContextInfo&, const GrGLInterface*,
                          GrShaderCaps*);
@@ -429,6 +431,7 @@ private:
     bool fDoManualMipmapping : 1;
     bool fSRGBDecodeDisableSupport : 1;
     bool fSRGBDecodeDisableAffectsMipmaps : 1;
+    bool fClearToOpaqueBlackIsBroken : 1;
 
     uint32_t fBlitFramebufferFlags;
 

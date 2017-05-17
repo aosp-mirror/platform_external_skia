@@ -28,7 +28,7 @@ class SkiaVarsApi(recipe_api.RecipeApi):
 
     self.slave_dir = self.m.path['start_dir']
     self.checkout_root = self.slave_dir
-    self.default_env = self.m.step.get_from_context('env', {})
+    self.default_env = self.m.context.env
     self.default_env['CHROME_HEADLESS'] = '1'
     self.default_env['PATH'] = self.m.path.pathsep.join([
         self.default_env.get('PATH', '%(PATH)s'),
@@ -43,7 +43,6 @@ class SkiaVarsApi(recipe_api.RecipeApi):
                                 '-CT_' in self.builder_name or
                                 'Presubmit' in self.builder_name or
                                 'InfraTests' in self.builder_name or
-                                'BundleRecipes' in self.builder_name or
                                 self.builder_name == "Housekeeper-PerCommit")
     if self.persistent_checkout:
       if 'Win' in self.builder_name:

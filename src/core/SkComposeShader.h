@@ -48,6 +48,7 @@ public:
                              SkShader::Context* contextA, SkShader::Context* contextB);
 
         void shadeSpan(int x, int y, SkPMColor[], int count) override;
+        void shadeSpan4f(int x, int y, SkPM4f[], int count) override;
 
     private:
         SkShader::Context* fShaderContextA;
@@ -70,10 +71,11 @@ protected:
     SkComposeShader(SkReadBuffer&);
     void flatten(SkWriteBuffer&) const override;
     Context* onMakeContext(const ContextRec&, SkArenaAlloc*) const override;
-    sk_sp<SkShader> onMakeColorSpace(SkColorSpaceXformer* xformer) const override {
-        return SkShader::MakeComposeShader(fShaderA->makeColorSpace(xformer),
-                                           fShaderB->makeColorSpace(xformer), fMode);
-    }
+    sk_sp<SkShader> onMakeColorSpace(SkColorSpaceXformer* xformer) const override;
+    bool onAppendStages(SkRasterPipeline*, SkColorSpace* dstCS, SkArenaAlloc*,
+                        const SkMatrix&, const SkPaint&, const SkMatrix* localM) const override;
+
+    bool isRasterPipelineOnly() const final;
 
 private:
     sk_sp<SkShader>     fShaderA;

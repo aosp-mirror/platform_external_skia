@@ -376,6 +376,16 @@ sk_sp<SkShader> SkRadialGradient::onMakeColorSpace(SkColorSpaceXformer* xformer)
                                         &this->getLocalMatrix());
 }
 
+bool SkRadialGradient::adjustMatrixAndAppendStages(SkArenaAlloc* alloc,
+                                 SkMatrix* matrix,
+                                 SkRasterPipeline* p) const {
+    matrix->postTranslate(-fCenter.fX, -fCenter.fY);
+    matrix->postScale(1/fRadius, 1/fRadius);
+
+    p->append(SkRasterPipeline::xy_to_radius);
+    return true;
+}
+
 #ifndef SK_IGNORE_TO_STRING
 void SkRadialGradient::toString(SkString* str) const {
     str->append("SkRadialGradient: (");

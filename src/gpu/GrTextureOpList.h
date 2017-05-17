@@ -23,7 +23,7 @@ struct SkIRect;
 
 class GrTextureOpList final : public GrOpList {
 public:
-    GrTextureOpList(sk_sp<GrTextureProxy>, GrGpu*, GrAuditTrail*);
+    GrTextureOpList(GrTextureProxy*, GrAuditTrail*);
 
     ~GrTextureOpList() override;
 
@@ -64,6 +64,8 @@ public:
 
     SkDEBUGCODE(virtual void validateTargetsSingleRenderTarget() const override;)
 
+    SkDEBUGCODE(int numOps() const override { return fRecordedOps.count(); })
+
 private:
     // MDB TODO: The unique IDs are only needed for the audit trail. There should only be one
     // on the opList itself.
@@ -72,7 +74,6 @@ private:
                   GrSurfaceProxy::UniqueID proxyUniqueID);
 
     SkSTArray<2, std::unique_ptr<GrOp>, true> fRecordedOps;
-    GrGpu*                          fGpu;
 
     typedef GrOpList INHERITED;
 };

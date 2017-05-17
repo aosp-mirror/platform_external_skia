@@ -11,6 +11,7 @@
 
 #include "SkAutoPixmapStorage.h"
 #include "GrBackendSurface.h"
+#include "GrBackendTextureImageGenerator.h"
 #include "GrBitmapTextureMaker.h"
 #include "GrCaps.h"
 #include "GrContext.h"
@@ -26,7 +27,6 @@
 #include "effects/GrNonlinearColorSpaceXformEffect.h"
 #include "effects/GrYUVEffect.h"
 #include "SkCanvas.h"
-#include "SkCrossContextImageData.h"
 #include "SkBitmapCache.h"
 #include "SkGr.h"
 #include "SkImage_Gpu.h"
@@ -267,8 +267,7 @@ static sk_sp<SkImage> new_wrapped_texture_common(GrContext* ctx,
         tex->setRelease(releaseProc, releaseCtx);
     }
 
-    const SkBudgeted budgeted = (kAdoptAndCache_GrWrapOwnership == ownership)
-            ? SkBudgeted::kYes : SkBudgeted::kNo;
+    const SkBudgeted budgeted = SkBudgeted::kNo;
     sk_sp<GrTextureProxy> proxy(GrSurfaceProxy::MakeWrapped(std::move(tex)));
     return sk_make_sp<SkImage_Gpu>(ctx, kNeedNewImageUniqueID,
                                    at, std::move(proxy), std::move(colorSpace), budgeted);
@@ -315,11 +314,11 @@ static GrBackendTexture make_backend_texture_from_handle(GrBackend backend,
 
     if (kOpenGL_GrBackend == backend) {
         GrGLTextureInfo* glInfo = (GrGLTextureInfo*)(handle);
-        return GrBackendTexture(width, height, config, glInfo);
+        return GrBackendTexture(width, height, config, *glInfo);
     } else {
         SkASSERT(kVulkan_GrBackend == backend);
         GrVkImageInfo* vkInfo = (GrVkImageInfo*)(handle);
-        return GrBackendTexture(width, height, vkInfo);
+        return GrBackendTexture(width, height, *vkInfo);
     }
 }
 
@@ -461,62 +460,44 @@ sk_sp<SkImage> SkImage::makeTextureImage(GrContext* context, SkColorSpace* dstCo
     return nullptr;
 }
 
-std::unique_ptr<SkCrossContextImageData> SkCrossContextImageData::MakeFromEncoded(
-        GrContext* context, sk_sp<SkData> encoded, SkColorSpace* dstColorSpace) {
+sk_sp<SkImage> SkImage::MakeCrossContextFromEncoded(GrContext* context, sk_sp<SkData> encoded,
+                                                    bool buildMips, SkColorSpace* dstColorSpace) {
     sk_sp<SkImage> codecImage = SkImage::MakeFromEncoded(std::move(encoded));
     if (!codecImage) {
         return nullptr;
     }
 
     // Some backends or drivers don't support (safely) moving resources between contexts
-    if (!context->caps()->crossContextTextureSupport()) {
-        return std::unique_ptr<SkCrossContextImageData>(
-            new SkCCIDImage(std::move(codecImage)));
+    if (!context || !context->caps()->crossContextTextureSupport()) {
+        return codecImage;
     }
 
-    sk_sp<SkImage> textureImage = codecImage->makeTextureImage(context, dstColorSpace);
-    if (!textureImage) {
-        // TODO: Force decode to raster here? Do mip-mapping, like getDeferredTextureImageData?
-        return std::unique_ptr<SkCrossContextImageData>(
-            new SkCCIDImage(std::move(codecImage)));
+    // Turn the codec image into a GrTextureProxy
+    GrImageTextureMaker maker(context, codecImage.get(), kDisallow_CachingHint);
+    sk_sp<SkColorSpace> texColorSpace;
+    GrSamplerParams params(SkShader::kClamp_TileMode,
+                           buildMips ? GrSamplerParams::kMipMap_FilterMode
+                                     : GrSamplerParams::kBilerp_FilterMode);
+    sk_sp<GrTextureProxy> proxy(maker.refTextureProxyForParams(params, dstColorSpace,
+                                                               &texColorSpace, nullptr));
+    if (!proxy) {
+        return codecImage;
     }
 
-    // Crack open the gpu image, extract the backend data, stick it in the SkCCID
-    GrTexture* texture = as_IB(textureImage)->peekTexture();
-    SkASSERT(texture);
-
-    context->contextPriv().prepareSurfaceForExternalIO(as_IB(textureImage)->peekProxy());
-    auto textureData = texture->texturePriv().detachBackendTexture();
-    SkASSERT(textureData);
-
-    GrBackend backend = context->contextPriv().getBackend();
-    GrBackendTexture backendTex = make_backend_texture_from_handle(backend,
-                                                                   texture->width(),
-                                                                   texture->height(),
-                                                                   texture->config(),
-                                                                   textureData->getBackendObject());
-
-    SkImageInfo info = as_IB(textureImage)->onImageInfo();
-    return std::unique_ptr<SkCrossContextImageData>(new SkCCIDBackendTexture(
-        backendTex, texture->origin(), std::move(textureData),
-        info.alphaType(), info.refColorSpace()));
-}
-
-sk_sp<SkImage> SkCCIDBackendTexture::makeImage(GrContext* context) {
-    if (fTextureData) {
-        fTextureData->attachToContext(context);
+    sk_sp<GrTexture> texture(sk_ref_sp(proxy->instantiate(context->resourceProvider())));
+    if (!texture) {
+        return codecImage;
     }
 
-    // This texture was created by Ganesh on another thread (see MakeFromEncoded, above).
-    // Thus, we can import it back into our cache and treat it as our own (again).
-    GrWrapOwnership ownership = kAdoptAndCache_GrWrapOwnership;
-    return new_wrapped_texture_common(context, fBackendTex, fOrigin, fAlphaType,
-                                      std::move(fColorSpace), ownership, nullptr, nullptr);
-}
+    // Flush any writes or uploads
+    context->contextPriv().prepareSurfaceForExternalIO(proxy.get());
 
-sk_sp<SkImage> SkImage::MakeFromCrossContextImageData(
-        GrContext* context, std::unique_ptr<SkCrossContextImageData> ccid) {
-    return ccid->makeImage(context);
+    sk_sp<GrSemaphore> sema = context->getGpu()->prepareTextureForCrossContextUsage(texture.get());
+
+    auto gen = GrBackendTextureImageGenerator::Make(std::move(texture), std::move(sema),
+                                                    codecImage->alphaType(),
+                                                    std::move(texColorSpace));
+    return SkImage::MakeFromGenerator(std::move(gen));
 }
 
 sk_sp<SkImage> SkImage::makeNonTextureImage() const {
@@ -598,6 +579,18 @@ size_t SkImage::getDeferredTextureImageData(const GrContextThreadSafeProxy& prox
                                             const DeferredTextureImageUsageParams params[],
                                             int paramCnt, void* buffer,
                                             SkColorSpace* dstColorSpace) const {
+    // Some quick-rejects where is makes no sense to return CPU data
+    //  e.g.
+    //      - texture backed
+    //      - picture backed
+    //
+    if (this->isTextureBacked()) {
+        return 0;
+    }
+    if (as_IB(this)->onCanLazyGenerateOnGPU()) {
+        return 0;
+    }
+
     // Extract relevant min/max values from the params array.
     int lowestPreScaleMipLevel = params[0].fPreScaleMipLevel;
     SkFilterQuality highestFilterQuality = params[0].fQuality;
@@ -650,11 +643,7 @@ size_t SkImage::getDeferredTextureImageData(const GrContextThreadSafeProxy& prox
             info = info.makeColorSpace(nullptr);
         }
     } else {
-        // Here we're just using presence of data to know whether there is a codec behind the image.
-        // In the future we will access the cacherator and get the exact data that we want to (e.g.
-        // yuv planes) upload.
-        sk_sp<SkData> data(this->refEncoded());
-        if (!data && !this->peekPixels(nullptr)) {
+        if (!this->isLazyGenerated() && !this->peekPixels(nullptr)) {
             return 0;
         }
         if (SkImageCacherator* cacher = as_IB(this)->peekCacherator()) {
@@ -858,13 +847,11 @@ sk_sp<SkImage> SkImage::MakeFromDeferredTextureImageData(GrContext* context, con
         SkPixmap pixmap;
         pixmap.reset(info, dti->fMipMapLevelData[0].fPixelData, dti->fMipMapLevelData[0].fRowBytes);
 
-        // Use the NoCheck version because we have already validated the SkImage.  The |data|
-        // used to be an SkImage before calling getDeferredTextureImageData().  In legacy mode,
-        // getDeferredTextureImageData() will allow parametric transfer functions for images
-        // generated from codecs - which is slightly more lenient than typical SkImage
-        // constructors.
-        sk_sp<GrTextureProxy> proxy(GrUploadPixmapToTextureProxyNoCheck(
-                context->resourceProvider(), pixmap, budgeted));
+        // Pass nullptr for the |dstColorSpace|.  This opts in to more lenient color space
+        // verification.  This is ok because we've already verified the color space in
+        // getDeferredTextureImageData().
+        sk_sp<GrTextureProxy> proxy(GrUploadPixmapToTextureProxy(
+                context->resourceProvider(), pixmap, budgeted, nullptr));
         if (!proxy) {
             return nullptr;
         }
@@ -905,7 +892,13 @@ sk_sp<SkImage> SkImage::MakeTextureFromMipMap(GrContext* ctx, const SkImageInfo&
                                    info.refColorSpace(), budgeted);
 }
 
-sk_sp<SkImage> SkImage_Gpu::onMakeColorSpace(sk_sp<SkColorSpace> colorSpace) const {
+sk_sp<SkImage> SkImage_Gpu::onMakeColorSpace(sk_sp<SkColorSpace> colorSpace, SkColorType,
+                                             SkTransferFunctionBehavior premulBehavior) const {
+    if (SkTransferFunctionBehavior::kRespect == premulBehavior) {
+        // TODO: Implement this.
+        return nullptr;
+    }
+
     sk_sp<SkColorSpace> srcSpace = fColorSpace ? fColorSpace : SkColorSpace::MakeSRGB();
     auto xform = GrNonlinearColorSpaceXformEffect::Make(srcSpace.get(), colorSpace.get());
     if (!xform) {
@@ -936,4 +929,17 @@ sk_sp<SkImage> SkImage_Gpu::onMakeColorSpace(sk_sp<SkColorSpace> colorSpace) con
                                    fAlphaType, renderTargetContext->asTextureProxyRef(),
                                    std::move(colorSpace), fBudgeted);
 
+}
+
+bool SkImage_Gpu::onIsValid(GrContext* context) const {
+    // The base class has already checked that context isn't abandoned (if it's not nullptr)
+    if (fContext->abandoned()) {
+        return false;
+    }
+
+    if (context && context != fContext) {
+        return false;
+    }
+
+    return true;
 }

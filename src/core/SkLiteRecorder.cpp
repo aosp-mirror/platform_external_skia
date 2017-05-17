@@ -14,7 +14,7 @@ SkLiteRecorder::SkLiteRecorder()
     , fDL(nullptr) {}
 
 void SkLiteRecorder::reset(SkLiteDL* dl, const SkIRect& bounds) {
-    this->resetForNextPicture(bounds);
+    this->resetCanvas(bounds.right(), bounds.bottom());
     fDL = dl;
 }
 
@@ -31,7 +31,8 @@ SkDrawFilter* SkLiteRecorder::setDrawFilter(SkDrawFilter* df) {
 
 void SkLiteRecorder::willSave() { fDL->save(); }
 SkCanvas::SaveLayerStrategy SkLiteRecorder::getSaveLayerStrategy(const SaveLayerRec& rec) {
-    fDL->saveLayer(rec.fBounds, rec.fPaint, rec.fBackdrop, rec.fSaveLayerFlags);
+    fDL->saveLayer(rec.fBounds, rec.fPaint, rec.fBackdrop, rec.fClipMask, rec.fClipMatrix,
+                   rec.fSaveLayerFlags);
     return SkCanvas::kNoLayer_SaveLayerStrategy;
 }
 void SkLiteRecorder::willRestore() { fDL->restore(); }
@@ -192,14 +193,4 @@ void SkLiteRecorder::onDrawAtlas(const SkImage* atlas,
                                  const SkRect* cull,
                                  const SkPaint* paint) {
     fDL->drawAtlas(atlas, xforms, texs, colors, count, bmode, cull, paint);
-}
-
-void SkLiteRecorder::didTranslateZ(SkScalar dz) {
-    fDL->translateZ(dz);
-}
-void SkLiteRecorder::onDrawShadowedPicture(const SkPicture* picture,
-                                           const SkMatrix* matrix,
-                                           const SkPaint* paint,
-                                           const SkShadowParams& params) {
-    fDL->drawShadowedPicture(picture, matrix, paint, params);
 }

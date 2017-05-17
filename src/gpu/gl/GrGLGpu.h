@@ -26,7 +26,6 @@
 
 class GrGLBuffer;
 class GrPipeline;
-class GrNonInstancedMesh;
 class GrSwizzle;
 
 namespace gr_instanced { class GLInstancedRendering; }
@@ -150,6 +149,8 @@ public:
     void insertSemaphore(sk_sp<GrSemaphore> semaphore, bool flush) override;
     void waitSemaphore(sk_sp<GrSemaphore> semaphore) override;
 
+    sk_sp<GrSemaphore> prepareTextureForCrossContextUsage(GrTexture*) override;
+
     void deleteSync(GrGLsync) const;
 
 private:
@@ -174,7 +175,8 @@ private:
                                           GrBackendTextureFlags,
                                           int sampleCnt,
                                           GrWrapOwnership) override;
-    sk_sp<GrRenderTarget> onWrapBackendRenderTarget(const GrBackendRenderTargetDesc&) override;
+    sk_sp<GrRenderTarget> onWrapBackendRenderTarget(const GrBackendRenderTarget&,
+                                                    GrSurfaceOrigin origin) override;
     sk_sp<GrRenderTarget> onWrapBackendTextureAsRenderTarget(const GrBackendTexture&,
                                                              GrSurfaceOrigin,
                                                              int sampleCnt) override;
@@ -253,8 +255,9 @@ private:
     // an into the index buffer. It does not account for vertices.startIndex() but rather the start
     // index is relative to the returned offset.
     void setupGeometry(const GrPrimitiveProcessor&,
-                       const GrNonInstancedMesh& mesh,
-                       size_t* indexOffsetInBytes);
+                       const GrBuffer* indexBuffer,
+                       const GrBuffer* vertexBuffer,
+                       int baseVertex);
 
     void flushBlend(const GrXferProcessor::BlendInfo& blendInfo, const GrSwizzle&);
 
@@ -313,7 +316,6 @@ private:
     };
 
     void flushColorWrite(bool writeColor);
-    void flushDrawFace(GrDrawFace face);
 
     // flushes the scissor. see the note on flushBoundTextureAndParams about
     // flushing the scissor after that function is called.
@@ -565,7 +567,6 @@ private:
     TriState                                fHWStencilTestEnabled;
 
 
-    GrDrawFace                              fHWDrawFace;
     TriState                                fHWWriteToColor;
     GrGpuResource::UniqueID                 fHWBoundRenderTargetUniqueID;
     TriState                                fHWSRGBFramebuffer;

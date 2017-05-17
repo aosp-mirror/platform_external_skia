@@ -430,11 +430,26 @@ void delete_left(BasicBlock* b,
                  std::vector<BasicBlock::Node>::iterator* iter,
                  bool* outUpdated,
                  bool* outNeedsRescan) {
-    ASSERT((*(*iter)->expression())->fKind == Expression::kBinary_Kind);
     *outUpdated = true;
-    if (!try_replace_expression(b, iter, &((BinaryExpression&) **(*iter)->expression()).fRight)) {
-        *outNeedsRescan = true;
+    std::unique_ptr<Expression>* target = (*iter)->expression();
+    ASSERT((*target)->fKind == Expression::kBinary_Kind);
+    BinaryExpression& bin = (BinaryExpression&) **target;
+    bool result;
+    if (bin.fOperator == Token::EQ) {
+        result = !b->tryRemoveLValueBefore(iter, bin.fLeft.get());
+    } else {
+        result = !b->tryRemoveExpressionBefore(iter, bin.fLeft.get());
     }
+    if (!result) {
+        *target = std::move(bin.fRight);
+        *outNeedsRescan = true;
+        return;
+    }
+    --(*iter);
+    ASSERT((*iter)->expression() == &bin.fRight);
+    *iter = b->fNodes.erase(*iter);
+    ASSERT((*iter)->expression() == target);
+    *target = std::move(bin.fRight);
 }
 
 /**
@@ -445,11 +460,20 @@ void delete_right(BasicBlock* b,
                   std::vector<BasicBlock::Node>::iterator* iter,
                   bool* outUpdated,
                   bool* outNeedsRescan) {
-    ASSERT((*(*iter)->expression())->fKind == Expression::kBinary_Kind);
     *outUpdated = true;
-    if (!try_replace_expression(b, iter, &((BinaryExpression&) **(*iter)->expression()).fLeft)) {
+    std::unique_ptr<Expression>* target = (*iter)->expression();
+    ASSERT((*target)->fKind == Expression::kBinary_Kind);
+    BinaryExpression& bin = (BinaryExpression&) **target;
+    if (!b->tryRemoveExpressionBefore(iter, bin.fRight.get())) {
+        *target = std::move(bin.fLeft);
         *outNeedsRescan = true;
+        return;
     }
+    --(*iter);
+    ASSERT((*iter)->expression() == &bin.fLeft);
+    *iter = b->fNodes.erase(*iter);
+    ASSERT((*iter)->expression() == target);
+    *target = std::move(bin.fLeft);
 }
 
 /**
@@ -580,8 +604,12 @@ void Compiler::simplifyExpression(DefinitionMap& definitions,
             break;
         }
         case Expression::kBinary_Kind: {
-            // collapse useless expressions like x * 1 or x + 0
             BinaryExpression* bin = (BinaryExpression*) expr;
+            if (dead_assignment(*bin)) {
+                delete_left(&b, iter, outUpdated, outNeedsRescan);
+                break;
+            }
+            // collapse useless expressions like x * 1 or x + 0
             if (((bin->fLeft->fType.kind()  != Type::kScalar_Kind) &&
                  (bin->fLeft->fType.kind()  != Type::kVector_Kind)) ||
                 ((bin->fRight->fType.kind() != Type::kScalar_Kind) &&
@@ -736,12 +764,70 @@ void Compiler::simplifyExpression(DefinitionMap& definitions,
     }
 }
 
+
+// returns true if this statement could potentially execute a break at the current level (we ignore
+// nested loops and switches, since any breaks inside of them will merely break the loop / switch)
+static bool contains_break(Statement& s) {
+    switch (s.fKind) {
+        case Statement::kBlock_Kind:
+            for (const auto& sub : ((Block&) s).fStatements) {
+                if (contains_break(*sub)) {
+                    return true;
+                }
+            }
+            return false;
+        case Statement::kBreak_Kind:
+            return true;
+        case Statement::kIf_Kind: {
+            const IfStatement& i = (IfStatement&) s;
+            return contains_break(*i.fIfTrue) || (i.fIfFalse && contains_break(*i.fIfFalse));
+        }
+        default:
+            return false;
+    }
+}
+
+// Returns a block containing all of the statements that will be run if the given case matches
+// (which, owing to the statements being owned by unique_ptrs, means the switch itself will be
+// broken by this call and must then be discarded).
+// Returns null (and leaves the switch unmodified) if no such simple reduction is possible, such as
+// when break statements appear inside conditionals.
+static std::unique_ptr<Statement> block_for_case(SwitchStatement* s, SwitchCase* c) {
+    bool capturing = false;
+    std::vector<std::unique_ptr<Statement>*> statementPtrs;
+    for (const auto& current : s->fCases) {
+        if (current.get() == c) {
+            capturing = true;
+        }
+        if (capturing) {
+            for (auto& stmt : current->fStatements) {
+                if (stmt->fKind == Statement::kBreak_Kind) {
+                    capturing = false;
+                    break;
+                }
+                if (contains_break(*stmt)) {
+                    return nullptr;
+                }
+                statementPtrs.push_back(&stmt);
+            }
+            if (!capturing) {
+                break;
+            }
+        }
+    }
+    std::vector<std::unique_ptr<Statement>> statements;
+    for (const auto& s : statementPtrs) {
+        statements.push_back(std::move(*s));
+    }
+    return std::unique_ptr<Statement>(new Block(Position(), std::move(statements)));
+}
+
 void Compiler::simplifyStatement(DefinitionMap& definitions,
-                                  BasicBlock& b,
-                                  std::vector<BasicBlock::Node>::iterator* iter,
-                                  std::unordered_set<const Variable*>* undefinedVariables,
-                                  bool* outUpdated,
-                                  bool* outNeedsRescan) {
+                                 BasicBlock& b,
+                                 std::vector<BasicBlock::Node>::iterator* iter,
+                                 std::unordered_set<const Variable*>* undefinedVariables,
+                                 bool* outUpdated,
+                                 bool* outNeedsRescan) {
     Statement* stmt = (*iter)->statement()->get();
     switch (stmt->fKind) {
         case Statement::kVarDeclarations_Kind: {
@@ -770,6 +856,22 @@ void Compiler::simplifyStatement(DefinitionMap& definitions,
         }
         case Statement::kIf_Kind: {
             IfStatement& i = (IfStatement&) *stmt;
+            if (i.fTest->fKind == Expression::kBoolLiteral_Kind) {
+                // constant if, collapse down to a single branch
+                if (((BoolLiteral&) *i.fTest).fValue) {
+                    ASSERT(i.fIfTrue);
+                    (*iter)->setStatement(std::move(i.fIfTrue));
+                } else {
+                    if (i.fIfFalse) {
+                        (*iter)->setStatement(std::move(i.fIfFalse));
+                    } else {
+                        (*iter)->setStatement(std::unique_ptr<Statement>(new Nop()));
+                    }
+                }
+                *outUpdated = true;
+                *outNeedsRescan = true;
+                break;
+            }
             if (i.fIfFalse && i.fIfFalse->isEmpty()) {
                 // else block doesn't do anything, remove it
                 i.fIfFalse.reset();
@@ -792,31 +894,60 @@ void Compiler::simplifyStatement(DefinitionMap& definitions,
             }
             break;
         }
+        case Statement::kSwitch_Kind: {
+            SwitchStatement& s = (SwitchStatement&) *stmt;
+            if (s.fValue->isConstant()) {
+                // switch is constant, replace it with the case that matches
+                bool found = false;
+                SwitchCase* defaultCase = nullptr;
+                for (const auto& c : s.fCases) {
+                    if (!c->fValue) {
+                        defaultCase = c.get();
+                        continue;
+                    }
+                    ASSERT(c->fValue->fKind == s.fValue->fKind);
+                    found = c->fValue->compareConstant(fContext, *s.fValue);
+                    if (found) {
+                        std::unique_ptr<Statement> newBlock = block_for_case(&s, c.get());
+                        if (newBlock) {
+                            (*iter)->setStatement(std::move(newBlock));
+                            break;
+                        } else {
+                            if (s.fIsStatic) {
+                                this->error(s.fPosition,
+                                            "static switch contains non-static conditional break");
+                                s.fIsStatic = false;
+                            }
+                            return; // can't simplify
+                        }
+                    }
+                }
+                if (!found) {
+                    // no matching case. use default if it exists, or kill the whole thing
+                    if (defaultCase) {
+                        std::unique_ptr<Statement> newBlock = block_for_case(&s, defaultCase);
+                        if (newBlock) {
+                            (*iter)->setStatement(std::move(newBlock));
+                        } else {
+                            if (s.fIsStatic) {
+                                this->error(s.fPosition,
+                                            "static switch contains non-static conditional break");
+                                s.fIsStatic = false;
+                            }
+                            return; // can't simplify
+                        }
+                    } else {
+                        (*iter)->setStatement(std::unique_ptr<Statement>(new Nop()));
+                    }
+                }
+                *outUpdated = true;
+                *outNeedsRescan = true;
+            }
+            break;
+        }
         case Statement::kExpression_Kind: {
             ExpressionStatement& e = (ExpressionStatement&) *stmt;
             ASSERT((*iter)->statement()->get() == &e);
-            if (e.fExpression->fKind == Expression::kBinary_Kind) {
-                BinaryExpression& bin = (BinaryExpression&) *e.fExpression;
-                if (dead_assignment(bin)) {
-                    if (!b.tryRemoveExpressionBefore(iter, &bin)) {
-                        *outNeedsRescan = true;
-                    }
-                    if (bin.fRight->hasSideEffects()) {
-                        // still have to evaluate the right due to side effects,
-                        // replace the binary expression with just the right side
-                        e.fExpression = std::move(bin.fRight);
-                        if (!b.tryInsertExpression(iter, &e.fExpression)) {
-                            *outNeedsRescan = true;
-                        }
-                    } else {
-                        // no side effects, kill the whole statement
-                        ASSERT((*iter)->statement()->get() == stmt);
-                        (*iter)->setStatement(std::unique_ptr<Statement>(new Nop()));
-                    }
-                    *outUpdated = true;
-                    break;
-                }
-            }
             if (!e.fExpression->hasSideEffects()) {
                 // Expression statement with no side effects, kill it
                 if (!b.tryRemoveExpressionBefore(iter, e.fExpression.get())) {
@@ -885,6 +1016,31 @@ void Compiler::scanCFG(FunctionDefinition& f) {
         }
     } while (updated);
     ASSERT(!needsRescan);
+
+    // verify static ifs & switches
+    for (BasicBlock& b : cfg.fBlocks) {
+        DefinitionMap definitions = b.fBefore;
+
+        for (auto iter = b.fNodes.begin(); iter != b.fNodes.end() && !needsRescan; ++iter) {
+            if (iter->fKind == BasicBlock::Node::kStatement_Kind) {
+                const Statement& s = **iter->statement();
+                switch (s.fKind) {
+                    case Statement::kIf_Kind:
+                        if (((const IfStatement&) s).fIsStatic) {
+                            this->error(s.fPosition, "static if has non-static test");
+                        }
+                        break;
+                    case Statement::kSwitch_Kind:
+                        if (((const SwitchStatement&) s).fIsStatic) {
+                            this->error(s.fPosition, "static switch has non-static test");
+                        }
+                        break;
+                    default:
+                        break;
+                }
+            }
+        }
+    }
 
     // check for missing return
     if (f.fDeclaration.fReturnType != *fContext.fVoid_Type) {

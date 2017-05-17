@@ -149,32 +149,22 @@ bool SkAmbientShadowMaskFilterImpl::directFilterMaskGPU(GrContext* context,
     SkASSERT(rtContext);
     // TODO: this will not handle local coordinates properly
 
-    if (fAmbientAlpha <= 0.0f) {
-        return true;
-    }
-
-    // only convex paths for now
-    if (!path.isConvex()) {
-        return false;
-    }
-
-    if (strokeRec.getStyle() != SkStrokeRec::kFill_Style) {
-        return false;
-    }
-
-    // if circle
-    if (path.isOval(nullptr) && SkScalarNearlyEqual(path.getBounds().width(),
-                                                    path.getBounds().height())) {
-        SkRRect rrect = SkRRect::MakeOval(path.getBounds());
+    SkRect rect;
+    SkRRect rrect;
+    if (path.isOval(&rect) && SkScalarNearlyEqual(rect.width(),
+                                                  rect.height())) {
+        rrect = SkRRect::MakeOval(rect);
         return this->directFilterRRectMaskGPU(context, rtContext, std::move(paint), clip,
                                               SkMatrix::I(), strokeRec, rrect, rrect);
-    } else if (path.isRect(nullptr)) {
-        SkRRect rrect = SkRRect::MakeRect(path.getBounds());
+    } else if (path.isRect(&rect)) {
+        rrect = SkRRect::MakeRect(rect);
+        return this->directFilterRRectMaskGPU(context, rtContext, std::move(paint), clip,
+                                              SkMatrix::I(), strokeRec, rrect, rrect);
+    } else if (path.isRRect(&rrect) && rrect.isSimpleCircular()) {
         return this->directFilterRRectMaskGPU(context, rtContext, std::move(paint), clip,
                                               SkMatrix::I(), strokeRec, rrect, rrect);
     }
 
-    // TODO
     return false;
 }
 
@@ -186,68 +176,57 @@ bool SkAmbientShadowMaskFilterImpl::directFilterRRectMaskGPU(GrContext*,
                                                              const SkStrokeRec& strokeRec,
                                                              const SkRRect& rrect,
                                                              const SkRRect& devRRect) const {
-    // It's likely the caller has already done these checks, but we have to be sure.
-    // TODO: support analytic blurring of general rrect
-
     // Fast path only supports filled rrects for now.
     // TODO: fill and stroke as well.
     if (SkStrokeRec::kFill_Style != strokeRec.getStyle()) {
         return false;
     }
+    // These should have been checked by the caller.
     // Fast path only supports simple rrects with circular corners.
-    SkASSERT(devRRect.allCornersCircular());
-    if (!rrect.isRect() && !rrect.isOval() && !rrect.isSimple()) {
-        return false;
-    }
+    SkASSERT(devRRect.isRect() || devRRect.isCircle() ||
+             (devRRect.isSimple() && devRRect.allCornersCircular()));
     // Fast path only supports uniform scale.
-    SkScalar scaleFactors[2];
-    if (!viewMatrix.getMinMaxScales(scaleFactors)) {
-        // matrix is degenerate
-        return false;
+    SkASSERT(viewMatrix.isSimilarity());
+    // Assume we have positive alpha
+    SkASSERT(fAmbientAlpha > 0);
+
+    // 1/scale
+    SkScalar devToSrcScale = viewMatrix.isScaleTranslate() ?
+        SkScalarInvert(viewMatrix[SkMatrix::kMScaleX]) :
+        sk_float_rsqrt(viewMatrix[SkMatrix::kMScaleX] * viewMatrix[SkMatrix::kMScaleX] +
+                       viewMatrix[SkMatrix::kMSkewX] * viewMatrix[SkMatrix::kMSkewX]);
+
+    SkScalar devSpaceInsetWidth = fOccluderHeight * kHeightFactor * kGeomFactor;
+    const float umbraAlpha = (1.0f + SkTMax(fOccluderHeight * kHeightFactor, 0.0f));
+    const SkScalar devSpaceAmbientBlur = devSpaceInsetWidth * umbraAlpha;
+
+    // Outset the shadow rrect to the border of the penumbra
+    SkScalar ambientPathOutset = devSpaceInsetWidth * devToSrcScale;
+    SkRRect ambientRRect;
+    SkRect outsetRect = rrect.rect().makeOutset(ambientPathOutset, ambientPathOutset);
+    // If the rrect was an oval then its outset will also be one.
+    // We set it explicitly to avoid errors.
+    if (rrect.isOval()) {
+        ambientRRect = SkRRect::MakeOval(outsetRect);
+    } else {
+        SkScalar outsetRad = rrect.getSimpleRadii().fX + ambientPathOutset;
+        ambientRRect = SkRRect::MakeRectXY(outsetRect, outsetRad, outsetRad);
     }
-    if (scaleFactors[0] != scaleFactors[1]) {
-        return false;
+
+    GrPaint newPaint(paint);
+    GrColor4f color = newPaint.getColor4f();
+    newPaint.setColor4f(color.mulByScalar(fAmbientAlpha));
+    if (SkToBool(fFlags & SkShadowFlags::kTransparentOccluder_ShadowFlag)) {
+        // set a large inset to force a fill
+        devSpaceInsetWidth = ambientRRect.width();
     }
-    SkScalar scaleFactor = scaleFactors[0];
 
-    // For all of these, we need to ensure we have a rrect with radius >= 0.5f in device space
-    const SkScalar minRadius = 0.5f / scaleFactor;
-    bool isRect = rrect.getSimpleRadii().fX <= minRadius;
-
-    // TODO: take flags into account when generating shadow data
-
-    if (fAmbientAlpha > 0.0f) {
-        SkScalar srcSpaceStrokeWidth = fOccluderHeight * kHeightFactor * kGeomFactor;
-        const float umbraAlpha = (1.0f + SkTMax(fOccluderHeight * kHeightFactor, 0.0f));
-        const SkScalar blurWidth = srcSpaceStrokeWidth * umbraAlpha;
-
-        // For the ambient rrect, we outset the offset rect by srcSpaceAmbientRadius
-        // minus half the strokeWidth to get our stroke shape.
-        SkScalar ambientPathOutset = SkTMax(srcSpaceStrokeWidth * 0.5f,
-                                            minRadius);
-
-        SkRRect ambientRRect;
-        if (isRect) {
-            const SkRect temp = rrect.rect().makeOutset(ambientPathOutset, ambientPathOutset);
-            ambientRRect = SkRRect::MakeRectXY(temp, ambientPathOutset, ambientPathOutset);
-        } else {
-             rrect.outset(ambientPathOutset, ambientPathOutset, &ambientRRect);
-        }
-
-        const SkScalar devSpaceAmbientBlur = blurWidth * scaleFactor;
-
-        GrPaint newPaint(paint);
-        GrColor4f color = newPaint.getColor4f();
-        color.fRGBA[3] *= fAmbientAlpha;
-        newPaint.setColor4f(color);
-        SkStrokeRec ambientStrokeRec(SkStrokeRec::kHairline_InitStyle);
-        bool transparent = SkToBool(fFlags & SkShadowFlags::kTransparentOccluder_ShadowFlag);
-        ambientStrokeRec.setStrokeStyle(srcSpaceStrokeWidth, transparent);
-
-        rtContext->drawShadowRRect(clip, std::move(newPaint), viewMatrix, ambientRRect,
-                                   devSpaceAmbientBlur,
-                                   GrStyle(ambientStrokeRec, nullptr));
-    }
+    // the fraction of the blur we want to apply is devSpaceInsetWidth/devSpaceAmbientBlur,
+    // which is just 1/umbraAlpha.
+    SkScalar blurClamp = SkScalarInvert(umbraAlpha);
+    rtContext->drawShadowRRect(clip, std::move(newPaint), viewMatrix, ambientRRect,
+                               devSpaceAmbientBlur, devSpaceInsetWidth,
+                               blurClamp);
 
     return true;
 }
@@ -280,12 +259,6 @@ void SkAmbientShadowMaskFilterImpl::toString(SkString* str) const {
         SkAddFlagToString(str,
                           SkToBool(fFlags & SkShadowFlags::kTransparentOccluder_ShadowFlag),
                           "TransparentOccluder", &needSeparator);
-        SkAddFlagToString(str,
-                          SkToBool(fFlags & SkShadowFlags::kGaussianEdge_ShadowFlag),
-                          "GaussianEdge", &needSeparator);
-        SkAddFlagToString(str,
-                          SkToBool(fFlags & SkShadowFlags::kLargerUmbra_ShadowFlag),
-                          "LargerUmbra", &needSeparator);
     } else {
         str->append("None");
     }

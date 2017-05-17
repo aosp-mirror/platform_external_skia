@@ -464,13 +464,15 @@ public:
     SK_DEFINE_FLATTENABLE_TYPE(SkShader)
     SK_DECLARE_FLATTENABLE_REGISTRAR_GROUP()
 
-    bool appendStages(SkRasterPipeline*, SkColorSpace*, SkArenaAlloc*,
-                      const SkMatrix& ctm, const SkPaint&) const;
+    bool appendStages(SkRasterPipeline*, SkColorSpace* dstCS, SkArenaAlloc*,
+                      const SkMatrix& ctm, const SkPaint&, const SkMatrix* localM=nullptr) const;
 
 protected:
     void flatten(SkWriteBuffer&) const override;
 
-    bool computeTotalInverse(const ContextRec&, SkMatrix* totalInverse) const;
+    bool computeTotalInverse(const SkMatrix& ctm,
+                             const SkMatrix* outerLocalMatrix,
+                             SkMatrix* totalInverse) const;
 
     /**
      * Specialize creating a SkShader context using the supplied allocator.
@@ -494,10 +496,6 @@ protected:
         return nullptr;
     }
 
-    virtual bool onAppendStages(SkRasterPipeline*, SkColorSpace*, SkArenaAlloc*,
-                                const SkMatrix&, const SkPaint&,
-                                const SkMatrix* /*local matrix*/) const;
-
     /**
      *  Returns a shader transformed into a new color space via the |xformer|.
      */
@@ -508,18 +506,20 @@ protected:
         return sk_ref_sp(const_cast<SkShader*>(this));
     }
 
+    virtual bool isRasterPipelineOnly() const { return false; }
+
 private:
-    // This is essentially const, but not officially so it can be modified in
-    // constructors.
+    virtual bool onAppendStages(SkRasterPipeline*, SkColorSpace* dstCS, SkArenaAlloc*,
+                                const SkMatrix&, const SkPaint&, const SkMatrix* localM) const;
+
+    // This is essentially const, but not officially so it can be modified in constructors.
     SkMatrix fLocalMatrix;
 
-    // So the SkLocalMatrixShader can whack fLocalMatrix in its SkReadBuffer constructor.
-    friend class SkLocalMatrixShader;
-    friend class SkBitmapProcLegacyShader;    // for computeTotalInverse()
-    friend class SkComposeShader;
-    friend class SkColorFilterShader;
-    friend class SkColorSpaceXformer;
-    friend class SkLightingShaderImpl;
+    friend class SkLocalMatrixShader;         // sets fLocalMatrix in SkReadBuffer constructor
+    friend class SkBitmapProcLegacyShader;    // calls computeTotalInverse()
+    friend class SkColorSpaceXformer;         // calls makeColorSpace()
+    friend class SkBlitter;                   // calls isRasterPipelineOnly()
+    friend class SkComposeShader;             // calls isRasterPipelineOnly()
 
     typedef SkFlattenable INHERITED;
 };

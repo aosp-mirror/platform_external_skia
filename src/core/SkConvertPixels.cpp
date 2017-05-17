@@ -310,12 +310,18 @@ static void convert_with_pipeline(const SkImageInfo& dstInfo, void* dstRow, size
 
     if (isColorAware && srcInfo.gammaCloseToSRGB()) {
         pipeline.append_from_srgb(srcInfo.alphaType());
+    } else if (isColorAware && !srcInfo.colorSpace()->gammaIsLinear()) {
+        SkColorSpaceTransferFn fn;
+        SkAssertResult(srcInfo.colorSpace()->isNumericalTransferFn(&fn));
+        pipeline.append(SkRasterPipeline::parametric_r, &fn);
+        pipeline.append(SkRasterPipeline::parametric_g, &fn);
+        pipeline.append(SkRasterPipeline::parametric_b, &fn);
     }
 
     float matrix[12];
     if (isColorAware) {
-        SkAssertResult(append_gamut_transform(&pipeline, matrix, srcInfo.colorSpace(),
-                                              dstInfo.colorSpace()));
+        append_gamut_transform(&pipeline, matrix, srcInfo.colorSpace(), dstInfo.colorSpace(),
+                               premulState);
     }
 
     SkAlphaType dat = dstInfo.alphaType();
@@ -331,6 +337,13 @@ static void convert_with_pipeline(const SkImageInfo& dstInfo, void* dstRow, size
 
     if (isColorAware && dstInfo.gammaCloseToSRGB()) {
         pipeline.append(SkRasterPipeline::to_srgb);
+    } else if (isColorAware && !dstInfo.colorSpace()->gammaIsLinear()) {
+        SkColorSpaceTransferFn fn;
+        SkAssertResult(dstInfo.colorSpace()->isNumericalTransferFn(&fn));
+        fn = fn.invert();
+        pipeline.append(SkRasterPipeline::parametric_r, &fn);
+        pipeline.append(SkRasterPipeline::parametric_g, &fn);
+        pipeline.append(SkRasterPipeline::parametric_b, &fn);
     }
 
     if (kUnpremul_SkAlphaType == premulState && kPremul_SkAlphaType == dat &&

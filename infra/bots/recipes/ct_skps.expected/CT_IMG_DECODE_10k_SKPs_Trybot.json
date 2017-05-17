@@ -92,7 +92,7 @@
       "--patch_root",
       "skia",
       "--revision_mapping_file",
-      "{\"skia\": \"got_revision\"}",
+      "{\"got_revision\": \"skia\"}",
       "--git-cache-dir",
       "[CUSTOM_/_B_CACHE]",
       "--gerrit_repo",
@@ -102,8 +102,7 @@
       "--output_json",
       "/path/to/tmp/json",
       "--revision",
-      "skia@abc123",
-      "--output_manifest"
+      "skia@abc123"
     ],
     "cwd": "[CUSTOM_/_B_WORK]",
     "env": {
@@ -420,8 +419,8 @@
     ],
     "name": "Copy Go binary",
     "~followup_annotations": [
-      "@@@SET_BUILD_PROPERTY@Webpage rankings@\"https://storage.cloud.google.com/cluster-telemetry/csv/top-1m.csv\"@@@",
-      "@@@SET_BUILD_PROPERTY@Download SKPs by rank@\"https://pantheon.corp.google.com/storage/browser/cluster-telemetry/swarming/skps/10k/fad657e-276e633/\"@@@"
+      "@@@SET_BUILD_PROPERTY@Download SKPs by rank@\"https://pantheon.corp.google.com/storage/browser/cluster-telemetry/swarming/skps/10k/fad657e-276e633/\"@@@",
+      "@@@SET_BUILD_PROPERTY@Webpage rankings@\"https://storage.cloud.google.com/cluster-telemetry/csv/top-1m.csv\"@@@"
     ]
   },
   {
@@ -988,6 +987,7 @@
       "slavename:test_bot",
       "--tag",
       "stepname:ct-get_images_from_skps-1",
+      "--isolated",
       "[dummy hash for ct-get_images_from_skps-1]"
     ],
     "infra_step": true,
@@ -1061,6 +1061,7 @@
       "slavename:test_bot",
       "--tag",
       "stepname:ct-get_images_from_skps-2",
+      "--isolated",
       "[dummy hash for ct-get_images_from_skps-2]"
     ],
     "infra_step": true,
@@ -1134,6 +1135,7 @@
       "slavename:test_bot",
       "--tag",
       "stepname:ct-get_images_from_skps-3",
+      "--isolated",
       "[dummy hash for ct-get_images_from_skps-3]"
     ],
     "infra_step": true,
@@ -1207,6 +1209,7 @@
       "slavename:test_bot",
       "--tag",
       "stepname:ct-get_images_from_skps-4",
+      "--isolated",
       "[dummy hash for ct-get_images_from_skps-4]"
     ],
     "infra_step": true,
@@ -1280,6 +1283,7 @@
       "slavename:test_bot",
       "--tag",
       "stepname:ct-get_images_from_skps-5",
+      "--isolated",
       "[dummy hash for ct-get_images_from_skps-5]"
     ],
     "infra_step": true,
@@ -1305,6 +1309,22 @@
     "cmd": [
       "python",
       "-u",
+      "RECIPE_PACKAGE_REPO[build]/scripts/tools/runit.py",
+      "--show-path",
+      "--",
+      "python",
+      "RECIPE_MODULE[build::swarming]/resources/collect_task.py",
+      "-o",
+      "/path/to/tmp/json",
+      "--task-output-dir",
+      "[START_DIR]/swarming_temp_dir/outputs/ct-get_images_from_skps-1",
+      "--merge-script",
+      "RECIPE_MODULE[build::swarming]/resources/noop_merge.py",
+      "--merge-additional-args",
+      "[]",
+      "--",
+      "python",
+      "-u",
       "[START_DIR]/swarming.client/swarming.py",
       "collect",
       "--swarming",
@@ -1314,13 +1334,13 @@
       "--json",
       "{\"base_task_name\": \"ct-get_images_from_skps-1/Ubuntu-14.04/[dummy has/Test-Ubuntu-GCC-GCE-CPU-AVX2-x86_64-Debug-CT_IMG_DECODE_10k_SKPs/571\", \"tasks\": {\"ct-get_images_from_skps-1/Ubuntu-14.04/[dummy has/Test-Ubuntu-GCC-GCE-CPU-AVX2-x86_64-Debug-CT_IMG_DECODE_10k_SKPs/571\": {\"shard_index\": 0, \"task_id\": \"10000\", \"view_url\": \"https://chromium-swarm.appspot.com/user/task/10000\"}}}",
       "--task-summary-json",
-      "/path/to/tmp/json",
-      "--task-output-dir",
-      "[START_DIR]/swarming_temp_dir/outputs/ct-get_images_from_skps-1"
+      "/path/to/tmp/json"
     ],
     "name": "ct-get_images_from_skps-1",
     "~followup_annotations": [
       "@@@STEP_TEXT@Run on OS: 'Ubuntu-14.04'<br>swarming pending 71s@@@",
+      "@@@STEP_LOG_LINE@json.output@{}@@@",
+      "@@@STEP_LOG_END@json.output@@@",
       "@@@STEP_LOG_LINE@swarming.summary@{@@@",
       "@@@STEP_LOG_LINE@swarming.summary@  \"shards\": [@@@",
       "@@@STEP_LOG_LINE@swarming.summary@    {@@@",
@@ -1368,6 +1388,22 @@
   },
   {
     "cmd": [
+      "python",
+      "-u",
+      "RECIPE_PACKAGE_REPO[build]/scripts/tools/runit.py",
+      "--show-path",
+      "--",
+      "python",
+      "RECIPE_MODULE[build::swarming]/resources/collect_task.py",
+      "-o",
+      "/path/to/tmp/json",
+      "--task-output-dir",
+      "[START_DIR]/swarming_temp_dir/outputs/ct-get_images_from_skps-2",
+      "--merge-script",
+      "RECIPE_MODULE[build::swarming]/resources/noop_merge.py",
+      "--merge-additional-args",
+      "[]",
+      "--",
       "python",
       "-u",
       "[START_DIR]/swarming.client/swarming.py",
@@ -1379,13 +1415,13 @@
       "--json",
       "{\"base_task_name\": \"ct-get_images_from_skps-2/Ubuntu-14.04/[dummy has/Test-Ubuntu-GCC-GCE-CPU-AVX2-x86_64-Debug-CT_IMG_DECODE_10k_SKPs/571\", \"tasks\": {\"ct-get_images_from_skps-2/Ubuntu-14.04/[dummy has/Test-Ubuntu-GCC-GCE-CPU-AVX2-x86_64-Debug-CT_IMG_DECODE_10k_SKPs/571\": {\"shard_index\": 0, \"task_id\": \"10000\", \"view_url\": \"https://chromium-swarm.appspot.com/user/task/10000\"}}}",
       "--task-summary-json",
-      "/path/to/tmp/json",
-      "--task-output-dir",
-      "[START_DIR]/swarming_temp_dir/outputs/ct-get_images_from_skps-2"
+      "/path/to/tmp/json"
     ],
     "name": "ct-get_images_from_skps-2",
     "~followup_annotations": [
       "@@@STEP_TEXT@Run on OS: 'Ubuntu-14.04'<br>swarming pending 71s@@@",
+      "@@@STEP_LOG_LINE@json.output@{}@@@",
+      "@@@STEP_LOG_END@json.output@@@",
       "@@@STEP_LOG_LINE@swarming.summary@{@@@",
       "@@@STEP_LOG_LINE@swarming.summary@  \"shards\": [@@@",
       "@@@STEP_LOG_LINE@swarming.summary@    {@@@",
@@ -1433,6 +1469,22 @@
   },
   {
     "cmd": [
+      "python",
+      "-u",
+      "RECIPE_PACKAGE_REPO[build]/scripts/tools/runit.py",
+      "--show-path",
+      "--",
+      "python",
+      "RECIPE_MODULE[build::swarming]/resources/collect_task.py",
+      "-o",
+      "/path/to/tmp/json",
+      "--task-output-dir",
+      "[START_DIR]/swarming_temp_dir/outputs/ct-get_images_from_skps-3",
+      "--merge-script",
+      "RECIPE_MODULE[build::swarming]/resources/noop_merge.py",
+      "--merge-additional-args",
+      "[]",
+      "--",
       "python",
       "-u",
       "[START_DIR]/swarming.client/swarming.py",
@@ -1444,13 +1496,13 @@
       "--json",
       "{\"base_task_name\": \"ct-get_images_from_skps-3/Ubuntu-14.04/[dummy has/Test-Ubuntu-GCC-GCE-CPU-AVX2-x86_64-Debug-CT_IMG_DECODE_10k_SKPs/571\", \"tasks\": {\"ct-get_images_from_skps-3/Ubuntu-14.04/[dummy has/Test-Ubuntu-GCC-GCE-CPU-AVX2-x86_64-Debug-CT_IMG_DECODE_10k_SKPs/571\": {\"shard_index\": 0, \"task_id\": \"10000\", \"view_url\": \"https://chromium-swarm.appspot.com/user/task/10000\"}}}",
       "--task-summary-json",
-      "/path/to/tmp/json",
-      "--task-output-dir",
-      "[START_DIR]/swarming_temp_dir/outputs/ct-get_images_from_skps-3"
+      "/path/to/tmp/json"
     ],
     "name": "ct-get_images_from_skps-3",
     "~followup_annotations": [
       "@@@STEP_TEXT@Run on OS: 'Ubuntu-14.04'<br>swarming pending 71s@@@",
+      "@@@STEP_LOG_LINE@json.output@{}@@@",
+      "@@@STEP_LOG_END@json.output@@@",
       "@@@STEP_LOG_LINE@swarming.summary@{@@@",
       "@@@STEP_LOG_LINE@swarming.summary@  \"shards\": [@@@",
       "@@@STEP_LOG_LINE@swarming.summary@    {@@@",
@@ -1498,6 +1550,22 @@
   },
   {
     "cmd": [
+      "python",
+      "-u",
+      "RECIPE_PACKAGE_REPO[build]/scripts/tools/runit.py",
+      "--show-path",
+      "--",
+      "python",
+      "RECIPE_MODULE[build::swarming]/resources/collect_task.py",
+      "-o",
+      "/path/to/tmp/json",
+      "--task-output-dir",
+      "[START_DIR]/swarming_temp_dir/outputs/ct-get_images_from_skps-4",
+      "--merge-script",
+      "RECIPE_MODULE[build::swarming]/resources/noop_merge.py",
+      "--merge-additional-args",
+      "[]",
+      "--",
       "python",
       "-u",
       "[START_DIR]/swarming.client/swarming.py",
@@ -1509,13 +1577,13 @@
       "--json",
       "{\"base_task_name\": \"ct-get_images_from_skps-4/Ubuntu-14.04/[dummy has/Test-Ubuntu-GCC-GCE-CPU-AVX2-x86_64-Debug-CT_IMG_DECODE_10k_SKPs/571\", \"tasks\": {\"ct-get_images_from_skps-4/Ubuntu-14.04/[dummy has/Test-Ubuntu-GCC-GCE-CPU-AVX2-x86_64-Debug-CT_IMG_DECODE_10k_SKPs/571\": {\"shard_index\": 0, \"task_id\": \"10000\", \"view_url\": \"https://chromium-swarm.appspot.com/user/task/10000\"}}}",
       "--task-summary-json",
-      "/path/to/tmp/json",
-      "--task-output-dir",
-      "[START_DIR]/swarming_temp_dir/outputs/ct-get_images_from_skps-4"
+      "/path/to/tmp/json"
     ],
     "name": "ct-get_images_from_skps-4",
     "~followup_annotations": [
       "@@@STEP_TEXT@Run on OS: 'Ubuntu-14.04'<br>swarming pending 71s@@@",
+      "@@@STEP_LOG_LINE@json.output@{}@@@",
+      "@@@STEP_LOG_END@json.output@@@",
       "@@@STEP_LOG_LINE@swarming.summary@{@@@",
       "@@@STEP_LOG_LINE@swarming.summary@  \"shards\": [@@@",
       "@@@STEP_LOG_LINE@swarming.summary@    {@@@",
@@ -1565,6 +1633,22 @@
     "cmd": [
       "python",
       "-u",
+      "RECIPE_PACKAGE_REPO[build]/scripts/tools/runit.py",
+      "--show-path",
+      "--",
+      "python",
+      "RECIPE_MODULE[build::swarming]/resources/collect_task.py",
+      "-o",
+      "/path/to/tmp/json",
+      "--task-output-dir",
+      "[START_DIR]/swarming_temp_dir/outputs/ct-get_images_from_skps-5",
+      "--merge-script",
+      "RECIPE_MODULE[build::swarming]/resources/noop_merge.py",
+      "--merge-additional-args",
+      "[]",
+      "--",
+      "python",
+      "-u",
       "[START_DIR]/swarming.client/swarming.py",
       "collect",
       "--swarming",
@@ -1574,13 +1658,13 @@
       "--json",
       "{\"base_task_name\": \"ct-get_images_from_skps-5/Ubuntu-14.04/[dummy has/Test-Ubuntu-GCC-GCE-CPU-AVX2-x86_64-Debug-CT_IMG_DECODE_10k_SKPs/571\", \"tasks\": {\"ct-get_images_from_skps-5/Ubuntu-14.04/[dummy has/Test-Ubuntu-GCC-GCE-CPU-AVX2-x86_64-Debug-CT_IMG_DECODE_10k_SKPs/571\": {\"shard_index\": 0, \"task_id\": \"10000\", \"view_url\": \"https://chromium-swarm.appspot.com/user/task/10000\"}}}",
       "--task-summary-json",
-      "/path/to/tmp/json",
-      "--task-output-dir",
-      "[START_DIR]/swarming_temp_dir/outputs/ct-get_images_from_skps-5"
+      "/path/to/tmp/json"
     ],
     "name": "ct-get_images_from_skps-5",
     "~followup_annotations": [
       "@@@STEP_TEXT@Run on OS: 'Ubuntu-14.04'<br>swarming pending 71s@@@",
+      "@@@STEP_LOG_LINE@json.output@{}@@@",
+      "@@@STEP_LOG_END@json.output@@@",
       "@@@STEP_LOG_LINE@swarming.summary@{@@@",
       "@@@STEP_LOG_LINE@swarming.summary@  \"shards\": [@@@",
       "@@@STEP_LOG_LINE@swarming.summary@    {@@@",

@@ -11,6 +11,9 @@
 #include <algorithm>
 #include <cmath>
 
+#include "SkPM4fPriv.h"
+#include "SkRasterPipeline.h"
+
 static SkMatrix translate(SkScalar dx, SkScalar dy) {
     SkMatrix matrix;
     matrix.setTranslate(dx, dy);
@@ -59,8 +62,15 @@ SkSweepGradient::SweepGradientContext::SweepGradientContext(
         const SkSweepGradient& shader, const ContextRec& rec)
     : INHERITED(shader, rec) {}
 
-//  returns angle in a circle [0..2PI) -> [0..255]
+bool SkSweepGradient::isRasterPipelineOnly() const {
 #ifdef SK_LEGACY_SWEEP_GRADIENT
+    return false;
+#else
+    return true;
+#endif
+}
+
+//  returns angle in a circle [0..2PI) -> [0..255]
 static unsigned SkATan2_255(float y, float x) {
     //    static const float g255Over2PI = 255 / (2 * SK_ScalarPI);
     static const float g255Over2PI = 40.584510488433314f;
@@ -79,30 +89,6 @@ static unsigned SkATan2_255(float y, float x) {
     SkASSERT(ir >= 0 && ir <= 255);
     return ir;
 }
-#else
-static unsigned SkATan2_255(float y, float x) {
-    float yabs = sk_float_abs(y),
-          xabs = sk_float_abs(x);
-    float little, big;
-    std::tie(little, big) = std::minmax(yabs, xabs);
-    float a = little/big;
-    if (!std::isfinite(a)) {
-        return 0;
-    }
-    SkASSERT(a >=0 && a <= 1);
-
-    float s = a * a;
-    float r = a*(40.57589784014689f
-                 + s*(-13.222755844396332f + s*(6.314046289038564f - s*1.7989502668982151f)));
-    r = xabs < yabs ? 255/4.0f - r : r;
-    r = x < 0.0f    ? 255/2.0f - r : r;
-    r = y < 0.0f    ? 255      - r : r;
-
-    int ir = (int)r;
-    SkASSERT(ir >= 0 && ir <= 255);
-    return ir;
-}
-#endif
 
 void SkSweepGradient::SweepGradientContext::shadeSpan(int x, int y, SkPMColor* SK_RESTRICT dstC,
                                                       int count) {
@@ -307,4 +293,14 @@ void SkSweepGradient::toString(SkString* str) const {
 
     str->append(")");
 }
+
+bool SkSweepGradient::adjustMatrixAndAppendStages(SkArenaAlloc* alloc,
+                                                  SkMatrix* matrix,
+                                                  SkRasterPipeline* p) const {
+    matrix->postTranslate(-fCenter.fX, -fCenter.fY);
+    p->append(SkRasterPipeline::xy_to_unit_angle);
+
+    return true;
+}
+
 #endif

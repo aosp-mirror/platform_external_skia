@@ -704,7 +704,7 @@ bool GrReducedClip::drawStencilClipMask(GrContext* context,
     for (ElementList::Iter iter(fElements); iter.get(); iter.next()) {
         const Element* element = iter.get();
         GrAAType aaType = GrAAType::kNone;
-        if (element->isAA() && renderTargetContext->isStencilBufferMultisampled()) {
+        if (element->isAA() && GrFSAAType::kNone != renderTargetContext->fsaaType()) {
             aaType = GrAAType::kMSAA;
         }
 
@@ -730,7 +730,7 @@ bool GrReducedClip::drawStencilClipMask(GrContext* context,
 
             GrShape shape(clipPath, GrStyle::SimpleFill());
             GrPathRenderer::CanDrawPathArgs canDrawArgs;
-            canDrawArgs.fShaderCaps = context->caps()->shaderCaps();
+            canDrawArgs.fCaps = context->caps();
             canDrawArgs.fViewMatrix = &SkMatrix::I();
             canDrawArgs.fShape = &shape;
             canDrawArgs.fAAType = aaType;

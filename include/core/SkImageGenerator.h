@@ -51,6 +51,14 @@ public:
     const SkImageInfo& getInfo() const { return fInfo; }
 
     /**
+     *  Can this generator be used to produce images that will be drawable to the specified context
+     *  (or to CPU, if context is nullptr)?
+     */
+    bool isValid(GrContext* context) const {
+        return this->onIsValid(context);
+    }
+
+    /**
      *  Decode into the given pixels, a block of memory of size at
      *  least (info.fHeight - 1) * rowBytes + (info.fWidth *
      *  bytesPerPixel)
@@ -58,7 +66,7 @@ public:
      *  Repeated calls to this function should give the same results,
      *  allowing the PixelRef to be immutable.
      *
-     *  @param info A description of the format (config, size)
+     *  @param info A description of the format
      *         expected by the caller.  This can simply be identical
      *         to the info returned by getInfo().
      *
@@ -68,25 +76,30 @@ public:
      *
      *         A size that does not match getInfo() implies a request
      *         to scale. If the generator cannot perform this scale,
-     *         it will return kInvalidScale.
+     *         it will return false.
      *
-     *  If info is kIndex8_SkColorType, then the caller must provide storage for up to 256
-     *  SkPMColor values in ctable. On success the generator must copy N colors into that storage,
-     *  (where N is the logical number of table entries) and set ctableCount to N.
-     *
-     *  If info is not kIndex8_SkColorType, then the last two parameters may be NULL. If ctableCount
-     *  is not null, it will be set to 0.
+     *         kIndex_8_SkColorType is not supported.
      *
      *  @return true on success.
      */
-    bool getPixels(const SkImageInfo& info, void* pixels, size_t rowBytes,
-                   SkPMColor ctable[], int* ctableCount);
+    struct Options {
+        Options()
+            : fBehavior(SkTransferFunctionBehavior::kIgnore)
+        {}
+
+        SkTransferFunctionBehavior fBehavior;
+    };
+    bool getPixels(const SkImageInfo& info, void* pixels, size_t rowBytes, const Options* options);
 
     /**
-     *  Simplified version of getPixels() that asserts that info is NOT kIndex8_SkColorType and
-     *  uses the default Options.
+     *  Simplified version of getPixels() that uses the default Options.
      */
     bool getPixels(const SkImageInfo& info, void* pixels, size_t rowBytes);
+
+#ifdef SK_SUPPORT_LEGACY_IMGEN_API
+    bool getPixels(const SkImageInfo& info, void* pixels, size_t rowBytes, SkPMColor ctable[],
+            int* ctableCount);
+#endif
 
     /**
      *  If decoding to YUV is supported, this returns true.  Otherwise, this
@@ -161,38 +174,35 @@ protected:
 
     SkImageGenerator(const SkImageInfo& info, uint32_t uniqueId = kNeedNewImageUniqueID);
 
-    virtual SkData* onRefEncodedData();
+    virtual SkData* onRefEncodedData() { return nullptr; }
 
-    virtual bool onGetPixels(const SkImageInfo& info, void* pixels, size_t rowBytes,
-                             SkPMColor ctable[], int* ctableCount);
-
-    virtual bool onQueryYUV8(SkYUVSizeInfo*, SkYUVColorSpace*) const {
+#ifdef SK_SUPPORT_LEGACY_IMGEN_API
+    virtual bool onGetPixels(const SkImageInfo&, void*, size_t, SkPMColor*, int*) {
         return false;
     }
-    virtual bool onGetYUV8Planes(const SkYUVSizeInfo&, void*[3] /*planes*/) {
+#endif
+
+#ifdef SK_SUPPORT_LEGACY_IMGEN_API
+    virtual bool onGetPixels(const SkImageInfo& info, void* pixels, size_t rowBytes,
+                             const Options&) {
+
+        return this->onGetPixels(info, pixels, rowBytes, nullptr, nullptr);
+    }
+#else
+    virtual bool onGetPixels(const SkImageInfo&, void*, size_t, const Options&) {
         return false;
     }
+#endif
 
-    struct Options {
-        Options()
-            : fColorTable(nullptr)
-            , fColorTableCount(nullptr)
-            , fBehavior(SkTransferFunctionBehavior::kRespect)
-        {}
+    virtual bool onIsValid(GrContext*) const { return true; }
 
-        SkPMColor*                 fColorTable;
-        int*                       fColorTableCount;
-        SkTransferFunctionBehavior fBehavior;
-    };
-    bool getPixels(const SkImageInfo& info, void* pixels, size_t rowBytes, const Options* opts);
-    virtual bool onGetPixels(const SkImageInfo& info, void* pixels, size_t rowBytes,
-                             const Options& opts) {
-        return this->onGetPixels(info, pixels, rowBytes, opts.fColorTable, opts.fColorTableCount);
-    }
+    virtual bool onQueryYUV8(SkYUVSizeInfo*, SkYUVColorSpace*) const { return false; }
+    virtual bool onGetYUV8Planes(const SkYUVSizeInfo&, void*[3] /*planes*/) { return false; }
 
 #if SK_SUPPORT_GPU
+    virtual bool onCanGenerateTexture() const { return false; }
     virtual sk_sp<GrTextureProxy> onGenerateTexture(GrContext*, const SkImageInfo&,
-                                                    const SkIPoint&);
+                                                    const SkIPoint&);   // returns nullptr
 #endif
 
 private:

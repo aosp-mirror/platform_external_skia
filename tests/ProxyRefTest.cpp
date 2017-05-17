@@ -31,7 +31,6 @@ int32_t GrIORefProxy::getBackingRefCnt_TestOnly() const {
 
 int32_t GrIORefProxy::getPendingReadCnt_TestOnly() const {
     if (fTarget) {
-        SkASSERT(!fPendingReads);
         return fTarget->fPendingReads;
     }
 
@@ -40,14 +39,11 @@ int32_t GrIORefProxy::getPendingReadCnt_TestOnly() const {
 
 int32_t GrIORefProxy::getPendingWriteCnt_TestOnly() const {
     if (fTarget) {
-        SkASSERT(!fPendingWrites);
         return fTarget->fPendingWrites;
     }
 
     return fPendingWrites;
 }
-
-#ifndef SK_DISABLE_DEFERRED_PROXIES
 
 static const int kWidthHeight = 128;
 
@@ -191,7 +187,5 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ProxyRefTest, reporter, ctxInfo) {
         }
     }
 }
-
-#endif
 
 #endif

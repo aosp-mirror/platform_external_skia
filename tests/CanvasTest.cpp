@@ -130,6 +130,7 @@ static void test_restriction(skiatest::Reporter* reporter, SkCanvas* canvas) {
     canvas->clipRect(SkRect::Make(clipR), SkClipOp::kIntersect);
     REPORTER_ASSERT(reporter, canvas->getDeviceClipBounds() == clipR);
 
+#ifdef SK_SUPPORT_DEPRECATED_CLIPOPS
     // now test that expanding clipops can't exceed the restriction
     const SkClipOp expanders[] = {
         SkClipOp::kUnion_deprecated,
@@ -147,6 +148,7 @@ static void test_restriction(skiatest::Reporter* reporter, SkCanvas* canvas) {
         REPORTER_ASSERT(reporter, gBaseRestrictedR.contains(canvas->getDeviceClipBounds()));
         canvas->restore();
     }
+#endif
 }
 
 /**
@@ -658,46 +660,6 @@ DEF_TEST(Canvas_ClipEmptyPath, reporter) {
     canvas.restore();
 }
 
-#define SHADOW_TEST_CANVAS_CONST 10
-#ifdef SK_EXPERIMENTAL_SHADOWING
-class SkShadowTestCanvas : public SkPaintFilterCanvas {
-public:
-
-    SkShadowTestCanvas(int x, int y, skiatest::Reporter* reporter)
-        : INHERITED(x,y)
-        , fReporter(reporter) {}
-
-    bool onFilter(SkTCopyOnFirstWrite<SkPaint>* paint, Type type) const {
-        REPORTER_ASSERT(this->fReporter, this->getZ() == SHADOW_TEST_CANVAS_CONST);
-
-        return true;
-    }
-
-    void testUpdateDepth(skiatest::Reporter *reporter) {
-        // set some depths (with picture enabled), then check them as they get set
-
-        REPORTER_ASSERT(reporter, this->getZ() == 0);
-        this->translateZ(-10);
-        REPORTER_ASSERT(reporter, this->getZ() == -10);
-
-        this->save();
-        this->translateZ(20);
-        REPORTER_ASSERT(reporter, this->getZ() == 10);
-
-        this->restore();
-        REPORTER_ASSERT(reporter, this->getZ() == -10);
-
-        this->translateZ(13.14f);
-        REPORTER_ASSERT(reporter, SkScalarNearlyEqual(this->getZ(), 3.14f));
-    }
-
-private:
-    skiatest::Reporter* fReporter;
-
-    typedef SkPaintFilterCanvas INHERITED;
-};
-#endif
-
 namespace {
 
 class MockFilterCanvas : public SkPaintFilterCanvas {
@@ -727,22 +689,6 @@ DEF_TEST(PaintFilterCanvas_ConsistentState, reporter) {
     filterCanvas.scale(0.75f, 0.5f);
     REPORTER_ASSERT(reporter, canvas.getTotalMatrix() == filterCanvas.getTotalMatrix());
     REPORTER_ASSERT(reporter, filterCanvas.getLocalClipBounds().contains(canvas.getLocalClipBounds()));
-
-#ifdef SK_EXPERIMENTAL_SHADOWING
-    SkShadowTestCanvas* tCanvas = new SkShadowTestCanvas(100,100, reporter);
-    tCanvas->testUpdateDepth(reporter);
-    delete(tCanvas);
-
-    SkPictureRecorder recorder;
-    SkShadowTestCanvas *tSCanvas = new SkShadowTestCanvas(100, 100, reporter);
-    SkCanvas *tPCanvas = recorder.beginRecording(SkRect::MakeIWH(100, 100));
-
-    tPCanvas->translateZ(SHADOW_TEST_CANVAS_CONST);
-    sk_sp<SkPicture> pic = recorder.finishRecordingAsPicture();
-    tSCanvas->drawPicture(pic);
-
-    delete(tSCanvas);
-#endif
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

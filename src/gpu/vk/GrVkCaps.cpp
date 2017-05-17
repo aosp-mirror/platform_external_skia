@@ -28,8 +28,6 @@ GrVkCaps::GrVkCaps(const GrContextOptions& contextOptions, const GrVkInterface* 
     fMipMapSupport = true;   // always available in Vulkan
     fSRGBSupport = true;   // always available in Vulkan
     fNPOTTextureTileSupport = true;  // always available in Vulkan
-    fTwoSidedStencilSupport = true;  // always available in Vulkan
-    fStencilWrapOpsSupport = true; // always available in Vulkan
     fDiscardRenderTargetSupport = true;
     fReuseScratchTextures = true; //TODO: figure this out
     fGpuTracingSupport = false; //TODO: figure this out
@@ -38,7 +36,7 @@ GrVkCaps::GrVkCaps(const GrContextOptions& contextOptions, const GrVkInterface* 
 
     fUseDrawInsteadOfClear = false;
     fFenceSyncSupport = true;   // always available in Vulkan
-    fCrossContextTextureSupport = false; // TODO: Add thread-safe memory pools so we can enable this
+    fCrossContextTextureSupport = false;
 
     fMapBufferFlags = kNone_MapFlags; //TODO: figure this out
     fBufferMapThreshold = SK_MaxS32;  //TODO: figure this out
@@ -99,8 +97,15 @@ void GrVkCaps::init(const GrContextOptions& contextOptions, const GrVkInterface*
     }
 
     if (kNvidia_VkVendor == properties.vendorID) {
-        fSupportsCopiesAsDraws = true;
         fMustSubmitCommandsBeforeCopyOp = true;
+    }
+
+    if (kQualcomm_VkVendor != properties.vendorID) {
+        fSupportsCopiesAsDraws = true;
+    }
+
+    if (fSupportsCopiesAsDraws) {
+        fCrossContextTextureSupport = true;
     }
 
 #if defined(SK_BUILD_FOR_WIN)
@@ -178,7 +183,6 @@ void GrVkCaps::initGrCaps(const VkPhysicalDeviceProperties& properties,
 
     fMapBufferFlags = kCanMap_MapFlag | kSubset_MapFlag;
 
-    fStencilWrapOpsSupport = true;
     fOversizedStencilSupport = true;
     fSampleShadingSupport = SkToBool(featureFlags & kSampleRateShading_GrVkFeatureFlag);
 

@@ -10,6 +10,7 @@
 #include "Test.h"
 
 #if SK_SUPPORT_GPU
+#include "GrBackendSurface.h"
 #include "GrRenderTargetPriv.h"
 #include "GrRenderTargetProxy.h"
 #include "GrResourceProvider.h"
@@ -20,7 +21,7 @@
 static void check_surface(skiatest::Reporter* reporter,
                           GrSurfaceProxy* proxy,
                           GrSurfaceOrigin origin,
-                          int width, int height, 
+                          int width, int height,
                           GrPixelConfig config,
                           const GrGpuResource::UniqueID& uniqueID,
                           SkBudgeted budgeted) {
@@ -70,12 +71,9 @@ static void check_rendertarget(skiatest::Reporter* reporter,
     }
     REPORTER_ASSERT(reporter, rt->config() == rtProxy->config());
 
-    REPORTER_ASSERT(reporter, rt->isUnifiedMultisampled() == rtProxy->isUnifiedMultisampled());
-    REPORTER_ASSERT(reporter, rt->isStencilBufferMultisampled() ==
-                              rtProxy->isStencilBufferMultisampled());
+    REPORTER_ASSERT(reporter, rt->fsaaType() == rtProxy->fsaaType());
     REPORTER_ASSERT(reporter, rt->numColorSamples() == rtProxy->numColorSamples());
     REPORTER_ASSERT(reporter, rt->numStencilSamples() == rtProxy->numStencilSamples());
-    REPORTER_ASSERT(reporter, rt->isMixedSampled() == rtProxy->isMixedSampled());
     REPORTER_ASSERT(reporter, rt->renderTargetPriv().flags() == rtProxy->testingOnly_getFlags());
 }
 
@@ -228,17 +226,13 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(WrappedProxyTest, reporter, ctxInfo) {
 
                     // External on-screen render target.
                     if (renderable && kOpenGL_GrBackend == ctxInfo.backend()) {
-                        GrBackendRenderTargetDesc backendDesc;
-                        backendDesc.fWidth = kWidthHeight;
-                        backendDesc.fHeight = kWidthHeight;
-                        backendDesc.fConfig = config;
-                        backendDesc.fOrigin = origin;
-                        backendDesc.fSampleCnt = numSamples;
-                        backendDesc.fStencilBits = 8;
-                        backendDesc.fRenderTargetHandle = 0;
+                        GrGLFramebufferInfo fboInfo;
+                        fboInfo.fFBOID = 0;
+                        GrBackendRenderTarget backendRT(kWidthHeight, kWidthHeight, numSamples, 8,
+                                                        config, fboInfo);
 
                         sk_sp<GrRenderTarget> defaultFBO(
-                            provider->wrapBackendRenderTarget(backendDesc));
+                            provider->wrapBackendRenderTarget(backendRT, origin));
 
                         sk_sp<GrSurfaceProxy> sProxy(GrSurfaceProxy::MakeWrapped(defaultFBO));
                         check_surface(reporter, sProxy.get(), origin,

@@ -26,7 +26,10 @@ import (
 )
 
 const (
-	BUNDLE_RECIPES_NAME = "Housekeeper-PerCommit-BundleRecipes"
+	BUNDLE_RECIPES_NAME  = "Housekeeper-PerCommit-BundleRecipes"
+	ISOLATE_SKIMAGE_NAME = "Housekeeper-PerCommit-IsolateSkImage"
+	ISOLATE_SKP_NAME     = "Housekeeper-PerCommit-IsolateSKP"
+	ISOLATE_SVG_NAME     = "Housekeeper-PerCommit-IsolateSVG"
 
 	DEFAULT_OS       = DEFAULT_OS_LINUX
 	DEFAULT_OS_LINUX = "Ubuntu-14.04"
@@ -151,7 +154,7 @@ func swarmDimensions(parts map[string]string) []string {
 			"Ubuntu":     DEFAULT_OS_LINUX,
 			"Ubuntu16":   "Ubuntu-16.10",
 			"Win":        "Windows-2008ServerR2-SP1",
-			"Win10":      "Windows-10-14393",
+			"Win10":      "Windows-10-15063",
 			"Win2k8":     "Windows-2008ServerR2-SP1",
 			"Win7":       "Windows-7-SP1",
 			"Win8":       "Windows-8.1-SP0",
@@ -245,17 +248,11 @@ func bundleRecipes(b *specs.TasksCfgBuilder) string {
 		Dimensions:   linuxGceDimensions(),
 		ExtraArgs: []string{
 			"--workdir", "../../..", "bundle_recipes",
-			fmt.Sprintf("repository=%s", specs.PLACEHOLDER_REPO),
 			fmt.Sprintf("buildername=%s", BUNDLE_RECIPES_NAME),
 			fmt.Sprintf("swarm_out_dir=%s", specs.PLACEHOLDER_ISOLATED_OUTDIR),
-			fmt.Sprintf("revision=%s", specs.PLACEHOLDER_REVISION),
-			fmt.Sprintf("patch_repo=%s", specs.PLACEHOLDER_PATCH_REPO),
-			fmt.Sprintf("patch_storage=%s", specs.PLACEHOLDER_PATCH_STORAGE),
-			fmt.Sprintf("patch_issue=%s", specs.PLACEHOLDER_ISSUE),
-			fmt.Sprintf("patch_set=%s", specs.PLACEHOLDER_PATCHSET),
 		},
 		Isolate:  "bundle_recipes.isolate",
-		Priority: 0.95,
+		Priority: 0.7,
 	})
 	return BUNDLE_RECIPES_NAME
 }
@@ -265,6 +262,63 @@ func bundleRecipes(b *specs.TasksCfgBuilder) string {
 func useBundledRecipes(parts map[string]string) bool {
 	// Use bundled recipes for all test/perf tasks.
 	return true
+}
+
+type isolateAssetCfg struct {
+	isolateFile string
+	cipdPkg     string
+}
+
+var ISOLATE_ASSET_MAPPING = map[string]isolateAssetCfg{
+	ISOLATE_SKIMAGE_NAME: {
+		isolateFile: "isolate_skimage.isolate",
+		cipdPkg:     "skimage",
+	},
+	ISOLATE_SKP_NAME: {
+		isolateFile: "isolate_skp.isolate",
+		cipdPkg:     "skp",
+	},
+	ISOLATE_SVG_NAME: {
+		isolateFile: "isolate_svg.isolate",
+		cipdPkg:     "svg",
+	},
+}
+
+// bundleRecipes generates the task to bundle and isolate the recipes.
+func isolateCIPDAsset(b *specs.TasksCfgBuilder, name string) string {
+	b.MustAddTask(name, &specs.TaskSpec{
+		CipdPackages: []*specs.CipdPackage{
+			b.MustGetCipdPackageFromAsset(ISOLATE_ASSET_MAPPING[name].cipdPkg),
+		},
+		Dimensions: linuxGceDimensions(),
+		Isolate:    ISOLATE_ASSET_MAPPING[name].isolateFile,
+		Priority:   0.7,
+	})
+	return name
+}
+
+// getIsolatedCIPDDeps returns the slice of Isolate_* tasks a given task needs.
+// This allows us to  save time on I/O bound bots, like the RPIs.
+func getIsolatedCIPDDeps(parts map[string]string) []string {
+	deps := []string{}
+	// Only do this on the RPIs for now. Other, faster machines shouldn't see much
+	// benefit and we don't need the extra complexity, for now
+	rpiOS := []string{"Android", "ChromeOS", "iOS"}
+
+	if o := parts["os"]; strings.Contains(o, "Chromecast") {
+		// Chromecasts don't have enough disk space to fit all of the content,
+		// so we do a subset of the skps.
+		deps = append(deps, ISOLATE_SKP_NAME)
+	} else if e := parts["extra_config"]; strings.Contains(e, "Skpbench") {
+		// Skpbench only needs skps
+		deps = append(deps, ISOLATE_SKP_NAME)
+	} else if util.In(o, rpiOS) {
+		deps = append(deps, ISOLATE_SKP_NAME)
+		deps = append(deps, ISOLATE_SVG_NAME)
+		deps = append(deps, ISOLATE_SKIMAGE_NAME)
+	}
+
+	return deps
 }
 
 // compile generates a compile task. Returns the name of the last task in the
@@ -488,6 +542,9 @@ func test(b *specs.TasksCfgBuilder, name string, parts map[string]string, compil
 			s.Isolate = "test_skia_bundled_unix.isolate"
 		}
 	}
+	if deps := getIsolatedCIPDDeps(parts); len(deps) > 0 {
+		s.Dependencies = append(s.Dependencies, deps...)
+	}
 	if strings.Contains(parts["extra_config"], "Valgrind") {
 		s.ExecutionTimeout = 9 * time.Hour
 		s.Expiration = 48 * time.Hour
@@ -570,6 +627,10 @@ func perf(b *specs.TasksCfgBuilder, name string, parts map[string]string, compil
 	if useBundledRecipes(parts) {
 		s.Dependencies = append(s.Dependencies, BUNDLE_RECIPES_NAME)
 	}
+	if deps := getIsolatedCIPDDeps(parts); len(deps) > 0 {
+		s.Dependencies = append(s.Dependencies, deps...)
+	}
+
 	if strings.Contains(parts["extra_config"], "Valgrind") {
 		s.ExecutionTimeout = 9 * time.Hour
 		s.Expiration = 48 * time.Hour
@@ -612,6 +673,11 @@ func process(b *specs.TasksCfgBuilder, name string) {
 	// Bundle Recipes.
 	if name == BUNDLE_RECIPES_NAME {
 		deps = append(deps, bundleRecipes(b))
+	}
+
+	// Isolate CIPD assets.
+	if _, ok := ISOLATE_ASSET_MAPPING[name]; ok {
+		deps = append(deps, isolateCIPDAsset(b, name))
 	}
 
 	parts, err := jobNameSchema.ParseJobName(name)
@@ -660,18 +726,17 @@ func process(b *specs.TasksCfgBuilder, name string) {
 	}
 
 	// Common assets needed by the remaining bots.
-	pkgs := []*specs.CipdPackage{
-		b.MustGetCipdPackageFromAsset("skimage"),
-		b.MustGetCipdPackageFromAsset("skp"),
-		b.MustGetCipdPackageFromAsset("svg"),
-	}
-	if strings.Contains(name, "Chromecast") {
-		// Chromecasts don't have enough disk space to fit all of the content,
-		// so we do a subset of the skps.
+
+	pkgs := []*specs.CipdPackage{}
+
+	if deps := getIsolatedCIPDDeps(parts); len(deps) == 0 {
 		pkgs = []*specs.CipdPackage{
+			b.MustGetCipdPackageFromAsset("skimage"),
 			b.MustGetCipdPackageFromAsset("skp"),
+			b.MustGetCipdPackageFromAsset("svg"),
 		}
 	}
+
 	if strings.Contains(name, "Ubuntu") && strings.Contains(name, "SAN") {
 		pkgs = append(pkgs, b.MustGetCipdPackageFromAsset("clang_linux"))
 	}
@@ -683,12 +748,6 @@ func process(b *specs.TasksCfgBuilder, name string) {
 			pkgs = append(pkgs, b.MustGetCipdPackageFromAsset("linux_vulkan_intel_driver_release"))
 		} else {
 			pkgs = append(pkgs, b.MustGetCipdPackageFromAsset("linux_vulkan_intel_driver_debug"))
-		}
-	}
-	// Skpbench only needs skps
-	if strings.Contains(name, "Skpbench") {
-		pkgs = []*specs.CipdPackage{
-			b.MustGetCipdPackageFromAsset("skp"),
 		}
 	}
 

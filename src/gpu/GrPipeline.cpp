@@ -42,8 +42,6 @@ void GrPipeline::init(const InitArgs& args) {
 
     fUserStencilSettings = args.fUserStencil;
 
-    fDrawFace = static_cast<int16_t>(args.fDrawFace);
-
     fXferProcessor = args.fProcessors->refXferProcessor();
 
     if (args.fDstTexture.texture()) {
@@ -64,15 +62,24 @@ void GrPipeline::init(const InitArgs& args) {
     for (int i = 0; i < args.fProcessors->numColorFragmentProcessors(); ++i, ++currFPIdx) {
         const GrFragmentProcessor* fp = args.fProcessors->colorFragmentProcessor(i);
         fFragmentProcessors[currFPIdx].reset(fp);
+        if (fp->isBad()) {
+            this->markAsBad();
+        }
     }
 
     for (int i = 0; i < args.fProcessors->numCoverageFragmentProcessors(); ++i, ++currFPIdx) {
         const GrFragmentProcessor* fp = args.fProcessors->coverageFragmentProcessor(i);
         fFragmentProcessors[currFPIdx].reset(fp);
+        if (fp->isBad()) {
+            this->markAsBad();
+        }
     }
     if (args.fAppliedClip) {
         if (const GrFragmentProcessor* fp = args.fAppliedClip->clipCoverageFragmentProcessor()) {
             fFragmentProcessors[currFPIdx].reset(fp);
+            if (fp->isBad()) {
+                this->markAsBad();
+            }
         }
     }
 }
@@ -109,7 +116,6 @@ GrPipeline::GrPipeline(GrRenderTarget* rt, SkBlendMode blendmode)
         , fScissorState()
         , fWindowRectsState()
         , fUserStencilSettings(&GrUserStencilSettings::kUnused)
-        , fDrawFace(static_cast<uint16_t>(GrDrawFace::kBoth))
         , fFlags()
         , fXferProcessor(GrPorterDuffXPFactory::MakeNoCoverageXP(blendmode))
         , fFragmentProcessors()
@@ -126,8 +132,7 @@ bool GrPipeline::AreEqual(const GrPipeline& a, const GrPipeline& b) {
         a.fScissorState != b.fScissorState ||
         a.fWindowRectsState != b.fWindowRectsState ||
         a.fFlags != b.fFlags ||
-        a.fUserStencilSettings != b.fUserStencilSettings ||
-        a.fDrawFace != b.fDrawFace) {
+        a.fUserStencilSettings != b.fUserStencilSettings) {
         return false;
     }
 

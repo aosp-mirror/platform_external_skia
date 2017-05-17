@@ -781,6 +781,9 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(SurfaceAttachStencil_Gpu, reporter, ctxInf
     if (!gpu) {
         return;
     }
+    if (gpu->caps()->avoidStencilBuffers()) {
+        return;
+    }
     static const uint32_t kOrigColor = 0xFFAABBCC;
 
     for (auto& surfaceFunc : {&create_gpu_surface_backend_texture,
@@ -910,6 +913,8 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SurfaceCreationWithColorSpace_Gpu, reporter, 
 
     test_surface_creation_and_snapshot_with_color_space(reporter, "wrapped", f16Support,
                                                         wrappedSurfaceMaker);
+
+    context->flush();
 
     for (auto textureHandle : textureHandles) {
         context->getGpu()->deleteTestingOnlyBackendTexture(textureHandle);

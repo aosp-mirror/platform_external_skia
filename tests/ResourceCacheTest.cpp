@@ -101,6 +101,9 @@ DEF_GPUTEST_FOR_CONTEXTS(ResourceCacheStencilBuffers, &is_rendering_and_not_angl
     smallDesc.fHeight = 4;
     smallDesc.fSampleCnt = 0;
 
+    if (context->caps()->avoidStencilBuffers()) {
+        return;
+    }
     GrResourceProvider* resourceProvider = context->resourceProvider();
     // Test that two budgeted RTs with the same desc share a stencil buffer.
     sk_sp<GrTexture> smallRT0(resourceProvider->createTexture(smallDesc, SkBudgeted::kYes));
@@ -209,13 +212,12 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ResourceCacheWrappedResources, reporter, ctxI
         return;
     }
 
-    GrBackendObject texHandles[3];
+    GrBackendObject texHandles[2];
     static const int kW = 100;
     static const int kH = 100;
 
     texHandles[0] = gpu->createTestingOnlyBackendTexture(nullptr, kW, kH, kRGBA_8888_GrPixelConfig);
     texHandles[1] = gpu->createTestingOnlyBackendTexture(nullptr, kW, kH, kRGBA_8888_GrPixelConfig);
-    texHandles[2] = gpu->createTestingOnlyBackendTexture(nullptr, kW, kH, kRGBA_8888_GrPixelConfig);
 
     context->resetContext();
 
@@ -237,46 +239,26 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ResourceCacheWrappedResources, reporter, ctxI
                              backendTex2, kTopLeft_GrSurfaceOrigin, kNone_GrBackendTextureFlag, 0,
                              kAdopt_GrWrapOwnership));
 
-    GrBackendTexture backendTex3 = GrTest::CreateBackendTexture(context->contextPriv().getBackend(),
-                                                                kW,
-                                                                kH,
-                                                                kRGBA_8888_GrPixelConfig,
-                                                                texHandles[2]);
-    sk_sp<GrTexture> adoptedAndCached(context->resourceProvider()->wrapBackendTexture(
-                             backendTex3, kTopLeft_GrSurfaceOrigin, kNone_GrBackendTextureFlag, 0,
-                             kAdoptAndCache_GrWrapOwnership));
-
-    REPORTER_ASSERT(reporter, borrowed != nullptr && adopted != nullptr &&
-                              adoptedAndCached != nullptr);
-    if (!borrowed || !adopted || !adoptedAndCached) {
+    REPORTER_ASSERT(reporter, borrowed != nullptr && adopted != nullptr);
+    if (!borrowed || !adopted) {
         return;
     }
 
     borrowed.reset(nullptr);
     adopted.reset(nullptr);
-    adoptedAndCached.reset(nullptr);
 
     context->flush();
 
     bool borrowedIsAlive = gpu->isTestingOnlyBackendTexture(texHandles[0]);
     bool adoptedIsAlive = gpu->isTestingOnlyBackendTexture(texHandles[1]);
-    bool adoptedAndCachedIsAlive = gpu->isTestingOnlyBackendTexture(texHandles[2]);
 
     REPORTER_ASSERT(reporter, borrowedIsAlive);
     REPORTER_ASSERT(reporter, !adoptedIsAlive);
-    REPORTER_ASSERT(reporter, adoptedAndCachedIsAlive); // Still alive because it's in the cache
 
     gpu->deleteTestingOnlyBackendTexture(texHandles[0], !borrowedIsAlive);
     gpu->deleteTestingOnlyBackendTexture(texHandles[1], !adoptedIsAlive);
-    // We can't delete texHandles[2] - we've given control of the lifetime to the context/cache
 
     context->resetContext();
-
-    // Purge the cache. This should force texHandles[2] to be deleted
-    context->getResourceCache()->purgeAllUnlocked();
-    adoptedAndCachedIsAlive = gpu->isTestingOnlyBackendTexture(texHandles[2]);
-    REPORTER_ASSERT(reporter, !adoptedAndCachedIsAlive);
-    gpu->deleteTestingOnlyBackendTexture(texHandles[2], !adoptedAndCachedIsAlive);
 }
 
 class TestResource : public GrGpuResource {
@@ -471,11 +453,15 @@ static void test_budgeting(skiatest::Reporter* reporter) {
             new TestResource(context->getGpu(), SkBudgeted::kNo);
     unbudgeted->setSize(13);
 
-    // Make sure we can't add a unique key to the wrapped resource
+    // Make sure we can add a unique key to the wrapped resource
     GrUniqueKey uniqueKey2;
     make_unique_key<0>(&uniqueKey2, 1);
     wrapped->resourcePriv().setUniqueKey(uniqueKey2);
-    REPORTER_ASSERT(reporter, nullptr == cache->findAndRefUniqueResource(uniqueKey2));
+    GrGpuResource* wrappedViaKey = cache->findAndRefUniqueResource(uniqueKey2);
+    REPORTER_ASSERT(reporter, wrappedViaKey != nullptr);
+
+    // Remove the extra ref we just added.
+    wrappedViaKey->unref();
 
     // Make sure sizes are as we expect
     REPORTER_ASSERT(reporter, 4 == cache->getResourceCount());

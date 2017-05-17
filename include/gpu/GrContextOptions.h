@@ -79,6 +79,11 @@ struct GrContextOptions {
     bool fSuppressPathRendering = false;
 
     /**
+     * Render everything in wireframe
+     */
+    bool fWireframeMode = false;
+
+    /**
      * Allows the client to include or exclude specific GPU path renderers.
      */
     enum class GpuPathRenderers {
@@ -100,6 +105,17 @@ struct GrContextOptions {
     };
 
     GpuPathRenderers fGpuPathRenderers = GpuPathRenderers::kAll;
+
+    /**
+     * The maximum size of cache textures used for Skia's Glyph cache.
+     */
+    float fGlyphCacheTextureMaximumBytes = 2048 * 1024 * 4;
+
+    /**
+     * Bugs on certain drivers cause stencil buffers to leak. This flag causes Skia to avoid
+     * allocating stencil buffers and use alternate rasterization paths, avoiding the leak.
+     */
+    bool fAvoidStencilBuffers = false;
 };
 
 GR_MAKE_BITFIELD_CLASS_OPS(GrContextOptions::GpuPathRenderers)

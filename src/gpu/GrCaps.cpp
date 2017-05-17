@@ -36,8 +36,6 @@ GrCaps::GrCaps(const GrContextOptions& options) {
     fNPOTTextureTileSupport = false;
     fSRGBSupport = false;
     fSRGBWriteControl = false;
-    fTwoSidedStencilSupport = false;
-    fStencilWrapOpsSupport = false;
     fDiscardRenderTargetSupport = false;
     fReuseScratchTextures = true;
     fReuseScratchBuffers = true;
@@ -74,10 +72,12 @@ GrCaps::GrCaps(const GrContextOptions& options) {
 
     fSuppressPrints = options.fSuppressPrints;
     fImmediateFlush = options.fImmediateMode;
+    fWireframeMode = options.fWireframeMode;
     fBufferMapThreshold = options.fBufferMapThreshold;
     fUseDrawInsteadOfPartialRenderTargetWrite = options.fUseDrawInsteadOfPartialRenderTargetWrite;
     fUseDrawInsteadOfAllRenderTargetWrites = false;
     fAvoidInstancedDrawsToFPTargets = false;
+    fAvoidStencilBuffers = false;
 
     fPreferVRAMUseOverFlushes = true;
 }
@@ -96,6 +96,7 @@ void GrCaps::applyOptionsOverrides(const GrContextOptions& options) {
                  GrWindowRectangles::kMaxWindows, fMaxWindowRectangles);
         fMaxWindowRectangles = GrWindowRectangles::kMaxWindows;
     }
+    fAvoidStencilBuffers = options.fAvoidStencilBuffers;
 }
 
 static SkString map_flags_to_string(uint32_t flags) {
@@ -125,8 +126,6 @@ SkString GrCaps::dump() const {
     r.appendf("NPOT Texture Tile Support          : %s\n", gNY[fNPOTTextureTileSupport]);
     r.appendf("sRGB Support                       : %s\n", gNY[fSRGBSupport]);
     r.appendf("sRGB Write Control                 : %s\n", gNY[fSRGBWriteControl]);
-    r.appendf("Two Sided Stencil Support          : %s\n", gNY[fTwoSidedStencilSupport]);
-    r.appendf("Stencil Wrap Ops  Support          : %s\n", gNY[fStencilWrapOpsSupport]);
     r.appendf("Discard Render Target Support      : %s\n", gNY[fDiscardRenderTargetSupport]);
     r.appendf("Reuse Scratch Textures             : %s\n", gNY[fReuseScratchTextures]);
     r.appendf("Reuse Scratch Buffers              : %s\n", gNY[fReuseScratchBuffers]);

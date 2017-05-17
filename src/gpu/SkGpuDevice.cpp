@@ -862,9 +862,8 @@ void SkGpuDevice::drawBitmap(const SkBitmap& bitmap,
 
     // The tile code path doesn't currently support AA, so if the paint asked for aa and we could
     // draw untiled, then we bypass checking for tiling purely for optimization reasons.
-    bool drawAA = !fRenderTargetContext->isUnifiedMultisampled() &&
-                  paint.isAntiAlias() &&
-                  bitmap.width() <= maxTileSize &&
+    bool drawAA = GrFSAAType::kUnifiedMSAA != fRenderTargetContext->fsaaType() &&
+                  paint.isAntiAlias() && bitmap.width() <= maxTileSize &&
                   bitmap.height() <= maxTileSize;
 
     bool skipTileCheck = drawAA || paint.getMaskFilter();
@@ -959,7 +958,7 @@ void SkGpuDevice::drawTiledBitmap(const SkBitmap& bitmap,
 
     const SkPaint* paint = &origPaint;
     SkPaint tempPaint;
-    if (origPaint.isAntiAlias() && !fRenderTargetContext->isUnifiedMultisampled()) {
+    if (origPaint.isAntiAlias() && GrFSAAType::kUnifiedMSAA != fRenderTargetContext->fsaaType()) {
         // Drop antialiasing to avoid seams at tile boundaries.
         tempPaint = origPaint;
         tempPaint.setAntiAlias(false);
@@ -1106,7 +1105,7 @@ void SkGpuDevice::drawBitmapTile(const SkBitmap& bitmap,
 
     // Coverage-based AA would cause seams between tiles.
     GrAA aa = GrBoolToAA(paint.isAntiAlias() &&
-                         fRenderTargetContext->isStencilBufferMultisampled());
+                         GrFSAAType::kNone != fRenderTargetContext->fsaaType());
     fRenderTargetContext->drawRect(this->clip(), std::move(grPaint), aa, viewMatrix, dstRect);
 }
 
@@ -1125,16 +1124,17 @@ void SkGpuDevice::drawSprite(const SkBitmap& bitmap,
         return;
     }
 
-    this->drawSpecial(srcImg.get(), left, top, paint);
+    this->drawSpecial(srcImg.get(), left, top, paint, nullptr, SkMatrix::I());
 }
 
 
-void SkGpuDevice::drawSpecial(SkSpecialImage* special1,
-                              int left, int top,
-                              const SkPaint& paint) {
+void SkGpuDevice::drawSpecial(SkSpecialImage* special1, int left, int top, const SkPaint& paint,
+                              SkImage* clipImage,const SkMatrix& clipMatrix) {
     ASSERT_SINGLE_OWNER
     CHECK_SHOULD_DRAW();
     GR_CREATE_TRACE_MARKER_CONTEXT("SkGpuDevice", "drawSpecial", fContext.get());
+
+    // TODO: clipImage support.
 
     SkIPoint offset = { 0, 0 };
 
@@ -1230,12 +1230,11 @@ void SkGpuDevice::drawBitmapRect(const SkBitmap& bitmap,
 
     // The tile code path doesn't currently support AA, so if the paint asked for aa and we could
     // draw untiled, then we bypass checking for tiling purely for optimization reasons.
-    bool drawAA = !fRenderTargetContext->isUnifiedMultisampled() &&
-        paint.isAntiAlias() &&
-        bitmap.width() <= maxTileSize &&
-        bitmap.height() <= maxTileSize;
+    bool useCoverageAA = GrFSAAType::kUnifiedMSAA != fRenderTargetContext->fsaaType() &&
+                         paint.isAntiAlias() && bitmap.width() <= maxTileSize &&
+                         bitmap.height() <= maxTileSize;
 
-    bool skipTileCheck = drawAA || paint.getMaskFilter();
+    bool skipTileCheck = useCoverageAA || paint.getMaskFilter();
 
     if (!skipTileCheck) {
         int tileSize;
@@ -1354,7 +1353,7 @@ void SkGpuDevice::drawDevice(SkBaseDevice* device,
         return;
     }
 
-    this->drawSpecial(srcImg.get(), left, top, paint);
+    this->drawSpecial(srcImg.get(), left, top, paint, nullptr, SkMatrix::I());
 }
 
 void SkGpuDevice::drawImage(const SkImage* image, SkScalar x, SkScalar y,
@@ -1433,7 +1432,7 @@ void SkGpuDevice::drawProducerNine(GrTextureProducer* producer,
     CHECK_SHOULD_DRAW();
 
     bool useFallback = paint.getMaskFilter() || paint.isAntiAlias() ||
-                       fRenderTargetContext->isUnifiedMultisampled();
+                       GrFSAAType::kUnifiedMSAA == fRenderTargetContext->fsaaType();
     bool doBicubic;
     GrSamplerParams::FilterMode textureFilterMode =
         GrSkFilterQualityToGrFilterMode(paint.getFilterQuality(), this->ctm(), SkMatrix::I(),
@@ -1763,7 +1762,7 @@ SkBaseDevice* SkGpuDevice::onCreateDevice(const CreateInfo& cinfo, const SkPaint
                                                    cinfo.fInfo.width(), cinfo.fInfo.height(),
                                                    fRenderTargetContext->config(),
                                                    fRenderTargetContext->refColorSpace(),
-                                                   fRenderTargetContext->desc().fSampleCnt,
+                                                   fRenderTargetContext->numStencilSamples(),
                                                    kBottomLeft_GrSurfaceOrigin,
                                                    &props));
     if (!rtc) {
@@ -1782,7 +1781,7 @@ sk_sp<SkSurface> SkGpuDevice::makeSurface(const SkImageInfo& info, const SkSurfa
     // TODO: Change the signature of newSurface to take a budgeted parameter.
     static const SkBudgeted kBudgeted = SkBudgeted::kNo;
     return SkSurface::MakeRenderTarget(fContext.get(), kBudgeted, info,
-                                       fRenderTargetContext->desc().fSampleCnt,
+                                       fRenderTargetContext->numStencilSamples(),
                                        fRenderTargetContext->origin(), &props);
 }
 

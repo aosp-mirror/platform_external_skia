@@ -43,8 +43,6 @@ public:
      * Is there support for enabling/disabling sRGB writes for sRGB-capable color buffers?
      */
     bool srgbWriteControl() const { return fSRGBWriteControl; }
-    bool twoSidedStencilSupport() const { return fTwoSidedStencilSupport; }
-    bool stencilWrapOpsSupport() const { return  fStencilWrapOpsSupport; }
     bool discardRenderTargetSupport() const { return fDiscardRenderTargetSupport; }
     bool gpuTracingSupport() const { return fGpuTracingSupport; }
     bool compressedTexSubImageSupport() const { return fCompressedTexSubImageSupport; }
@@ -80,6 +78,8 @@ public:
     InstancedSupport instancedSupport() const { return fInstancedSupport; }
 
     bool avoidInstancedDrawsToFPTargets() const { return fAvoidInstancedDrawsToFPTargets; }
+
+    bool avoidStencilBuffers() const { return fAvoidStencilBuffers; }
 
     /**
      * Indicates the capabilities of the fixed function blend unit.
@@ -178,6 +178,8 @@ public:
         is not initialized (even if not read by draw calls). */
     bool mustClearUploadedBufferData() const { return fMustClearUploadedBufferData; }
 
+    bool wireframeMode() const { return fWireframeMode; }
+
     bool sampleShadingSupport() const { return fSampleShadingSupport; }
 
     bool fenceSyncSupport() const { return fFenceSyncSupport; }
@@ -206,8 +208,6 @@ protected:
     bool fMipMapSupport                              : 1;
     bool fSRGBSupport                                : 1;
     bool fSRGBWriteControl                           : 1;
-    bool fTwoSidedStencilSupport                     : 1;
-    bool fStencilWrapOpsSupport                      : 1;
     bool fDiscardRenderTargetSupport                 : 1;
     bool fReuseScratchTextures                       : 1;
     bool fReuseScratchBuffers                        : 1;
@@ -227,6 +227,7 @@ protected:
     bool fUseDrawInsteadOfPartialRenderTargetWrite   : 1;
     bool fUseDrawInsteadOfAllRenderTargetWrites      : 1;
     bool fAvoidInstancedDrawsToFPTargets             : 1;
+    bool fAvoidStencilBuffers                        : 1;
 
     // ANGLE workaround
     bool fPreferVRAMUseOverFlushes                   : 1;
@@ -260,7 +261,8 @@ private:
     virtual void onApplyOptionsOverrides(const GrContextOptions&) {}
 
     bool fSuppressPrints : 1;
-    bool fImmediateFlush: 1;
+    bool fImmediateFlush : 1;
+    bool fWireframeMode  : 1;
 
     typedef SkRefCnt INHERITED;
 };

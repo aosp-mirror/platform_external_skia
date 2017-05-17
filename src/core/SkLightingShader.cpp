@@ -9,6 +9,7 @@
 #include "SkBitmapProcShader.h"
 #include "SkBitmapProcState.h"
 #include "SkColor.h"
+#include "SkColorSpaceXformer.h"
 #include "SkEmptyShader.h"
 #include "SkLightingShader.h"
 #include "SkMathPriv.h"
@@ -168,7 +169,7 @@ public:
             fragBuilder->codeAppendf("vec4 diffuseColor = %s;", args.fInputColor);
 
             SkString dstNormalName("dstNormal");
-            this->emitChild(0, nullptr, &dstNormalName, args);
+            this->emitChild(0, &dstNormalName, args);
 
             fragBuilder->codeAppendf("vec3 normal = %s.xyz;", dstNormalName.c_str());
 
@@ -458,7 +459,7 @@ SkShader::Context* SkLightingShaderImpl::onMakeContext(
 
 sk_sp<SkShader> SkLightingShaderImpl::onMakeColorSpace(SkColorSpaceXformer* xformer) const {
     sk_sp<SkShader> xformedDiffuseShader =
-            fDiffuseShader ? fDiffuseShader->makeColorSpace(xformer) : nullptr;
+            fDiffuseShader ? xformer->apply(fDiffuseShader.get()) : nullptr;
     return SkLightingShader::Make(std::move(xformedDiffuseShader), fNormalSource,
                                   fLights->makeColorSpace(xformer));
 }

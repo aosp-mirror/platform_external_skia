@@ -27,6 +27,7 @@
 #include "GrVkRenderPass.h"
 #include "GrVkResourceProvider.h"
 #include "GrVkSemaphore.h"
+#include "GrVkTexelBuffer.h"
 #include "GrVkTexture.h"
 #include "GrVkTextureRenderTarget.h"
 #include "GrVkTransferBuffer.h"
@@ -96,7 +97,8 @@ GrVkGpu::GrVkGpu(GrContext* context, const GrContextOptions& options,
     : INHERITED(context)
     , fDevice(backendCtx->fDevice)
     , fQueue(backendCtx->fQueue)
-    , fResourceProvider(this) {
+    , fResourceProvider(this)
+    , fDisconnected(false) {
     fBackendContext.reset(backendCtx);
 
 #ifdef SK_ENABLE_VK_LAYERS
@@ -151,13 +153,16 @@ GrVkGpu::GrVkGpu(GrContext* context, const GrContextOptions& options,
     fHeaps[kVertexBuffer_Heap].reset(new GrVkHeap(this, GrVkHeap::kSingleAlloc_Strategy, 0));
     fHeaps[kIndexBuffer_Heap].reset(new GrVkHeap(this, GrVkHeap::kSingleAlloc_Strategy, 0));
     fHeaps[kUniformBuffer_Heap].reset(new GrVkHeap(this, GrVkHeap::kSubAlloc_Strategy, 256*1024));
+    fHeaps[kTexelBuffer_Heap].reset(new GrVkHeap(this, GrVkHeap::kSingleAlloc_Strategy, 0));
     fHeaps[kCopyReadBuffer_Heap].reset(new GrVkHeap(this, GrVkHeap::kSingleAlloc_Strategy, 0));
     fHeaps[kCopyWriteBuffer_Heap].reset(new GrVkHeap(this, GrVkHeap::kSubAlloc_Strategy, 16*1024*1024));
 }
 
-GrVkGpu::~GrVkGpu() {
-    fCurrentCmdBuffer->end(this);
-    fCurrentCmdBuffer->unref(this);
+void GrVkGpu::destroyResources() {
+    if (fCurrentCmdBuffer) {
+        fCurrentCmdBuffer->end(this);
+        fCurrentCmdBuffer->unref(this);
+    }
 
     // wait for all commands to finish
     fResourceProvider.checkCommandBuffers();
@@ -191,16 +196,49 @@ GrVkGpu::~GrVkGpu() {
     // must call this just before we destroy the command pool and VkDevice
     fResourceProvider.destroyResources(VK_ERROR_DEVICE_LOST == res);
 
-    VK_CALL(DestroyCommandPool(fDevice, fCmdPool, nullptr));
-
-    delete fCompiler;
+    if (fCmdPool != VK_NULL_HANDLE) {
+        VK_CALL(DestroyCommandPool(fDevice, fCmdPool, nullptr));
+    }
 
 #ifdef SK_ENABLE_VK_LAYERS
     if (fCallback) {
         VK_CALL(DestroyDebugReportCallbackEXT(fBackendContext->fInstance, fCallback, nullptr));
-        fCallback = VK_NULL_HANDLE;
     }
 #endif
+
+}
+
+GrVkGpu::~GrVkGpu() {
+    if (!fDisconnected) {
+        this->destroyResources();
+    }
+    delete fCompiler;
+}
+
+
+void GrVkGpu::disconnect(DisconnectType type) {
+    INHERITED::disconnect(type);
+    if (!fDisconnected) {
+        if (DisconnectType::kCleanup == type) {
+            this->destroyResources();
+        } else {
+            fCurrentCmdBuffer->unrefAndAbandon();
+            for (int i = 0; i < fSemaphoresToWaitOn.count(); ++i) {
+                fSemaphoresToWaitOn[i]->unrefAndAbandon();
+            }
+            fCopyManager.abandonResources();
+
+            // must call this just before we destroy the command pool and VkDevice
+            fResourceProvider.abandonResources();
+        }
+        fSemaphoresToWaitOn.reset();
+#ifdef SK_ENABLE_VK_LAYERS
+        fCallback = VK_NULL_HANDLE;
+#endif
+        fCurrentCmdBuffer = nullptr;
+        fCmdPool = VK_NULL_HANDLE;
+        fDisconnected = true;
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -256,6 +294,13 @@ GrBuffer* GrVkGpu::onCreateBuffer(size_t size, GrBufferType type, GrAccessPatter
             SkASSERT(kStream_GrAccessPattern == accessPattern);
             buff = GrVkTransferBuffer::Create(this, size, GrVkBuffer::kCopyWrite_Type);
             break;
+        case kTexel_GrBufferType:
+            SkASSERT(kDynamic_GrAccessPattern == accessPattern);
+            buff = GrVkTexelBuffer::Create(this, size);
+            break;
+        case kDrawIndirect_GrBufferType:
+            SkFAIL("DrawIndirect Buffers not supported  in vulkan backend.");
+            return nullptr;
         default:
             SkFAIL("Unknown buffer type.");
             return nullptr;
@@ -806,7 +851,6 @@ sk_sp<GrTexture> GrVkGpu::onWrapBackendTexture(const GrBackendTexture& backendTe
     surfDesc.fConfig = backendTex.config();
     surfDesc.fSampleCnt = SkTMin(sampleCnt, this->caps()->maxSampleCount());
     bool renderTarget = SkToBool(flags & kRenderTarget_GrBackendTextureFlag);
-    SkASSERT(!renderTarget || kAdoptAndCache_GrWrapOwnership != ownership);  // Not supported
     // In GL, Chrome assumes all textures are BottomLeft
     // In VK, we don't have this restriction
     surfDesc.fOrigin = resolve_origin(origin);
@@ -817,32 +861,36 @@ sk_sp<GrTexture> GrVkGpu::onWrapBackendTexture(const GrBackendTexture& backendTe
     return GrVkTextureRenderTarget::MakeWrappedTextureRenderTarget(this, surfDesc, ownership, info);
 }
 
-sk_sp<GrRenderTarget> GrVkGpu::onWrapBackendRenderTarget(const GrBackendRenderTargetDesc& wrapDesc){
+sk_sp<GrRenderTarget> GrVkGpu::onWrapBackendRenderTarget(const GrBackendRenderTarget& backendRT,
+                                                         GrSurfaceOrigin origin){
     // Currently the Vulkan backend does not support wrapping of msaa render targets directly. In
     // general this is not an issue since swapchain images in vulkan are never multisampled. Thus if
     // you want a multisampled RT it is best to wrap the swapchain images and then let Skia handle
     // creating and owning the MSAA images.
-    if (wrapDesc.fSampleCnt) {
+    if (backendRT.sampleCnt()) {
         return nullptr;
     }
 
-    const GrVkImageInfo* info =
-        reinterpret_cast<const GrVkImageInfo*>(wrapDesc.fRenderTargetHandle);
+    const GrVkImageInfo* info = backendRT.getVkImageInfo();
+    if (!info) {
+        return nullptr;
+    }
     if (VK_NULL_HANDLE == info->fImage) {
         return nullptr;
     }
 
     GrSurfaceDesc desc;
-    desc.fConfig = wrapDesc.fConfig;
-    desc.fFlags = kCheckAllocation_GrSurfaceFlag | kRenderTarget_GrSurfaceFlag;
-    desc.fWidth = wrapDesc.fWidth;
-    desc.fHeight = wrapDesc.fHeight;
+    desc.fConfig = backendRT.config();
+    desc.fFlags = kRenderTarget_GrSurfaceFlag;
+    desc.fWidth = backendRT.width();
+    desc.fHeight = backendRT.height();
     desc.fSampleCnt = 0;
 
-    desc.fOrigin = resolve_origin(wrapDesc.fOrigin);
+    SkASSERT(kDefault_GrSurfaceOrigin != origin);
+    desc.fOrigin = origin;
 
     sk_sp<GrVkRenderTarget> tgt = GrVkRenderTarget::MakeWrappedRenderTarget(this, desc, info);
-    if (tgt && wrapDesc.fStencilBits) {
+    if (tgt && backendRT.stencilBits()) {
         if (!createStencilAttachmentForRenderTarget(tgt.get(), desc.fWidth, desc.fHeight)) {
             return nullptr;
         }
@@ -855,6 +903,9 @@ sk_sp<GrRenderTarget> GrVkGpu::onWrapBackendTextureAsRenderTarget(const GrBacken
                                                                   int sampleCnt) {
 
     const GrVkImageInfo* info = tex.getVkImageInfo();
+    if (!info) {
+        return nullptr;
+    }
     if (VK_NULL_HANDLE == info->fImage) {
         return nullptr;
     }
@@ -1366,7 +1417,7 @@ void GrVkGpu::addImageMemoryBarrier(VkPipelineStageFlags srcStageMask,
                                        barrier);
 }
 
-void GrVkGpu::finishOpList() {
+void GrVkGpu::finishFlush() {
     // Submit the current command buffer to the Queue
     this->submitCommandBuffer(kSkip_SyncQueue);
 }
@@ -1641,6 +1692,11 @@ bool GrVkGpu::onCopySurface(GrSurface* dst,
     } else {
         SkASSERT(src->asTexture());
         srcImage = static_cast<GrVkTexture*>(src->asTexture());
+    }
+
+    // For borrowed textures, we *only* want to copy using draws (to avoid layout changes)
+    if (srcImage->isBorrowed()) {
+        return false;
     }
 
     if (can_copy_image(dst, src, this)) {
@@ -1937,4 +1993,18 @@ void GrVkGpu::waitSemaphore(sk_sp<GrSemaphore> semaphore) {
     const GrVkSemaphore::Resource* resource = vkSem->getResource();
     resource->ref();
     fSemaphoresToWaitOn.push_back(resource);
+}
+
+sk_sp<GrSemaphore> GrVkGpu::prepareTextureForCrossContextUsage(GrTexture* texture) {
+    SkASSERT(texture);
+    GrVkTexture* vkTexture = static_cast<GrVkTexture*>(texture);
+    vkTexture->setImageLayout(this,
+                              VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                              VK_ACCESS_SHADER_READ_BIT,
+                              VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT,
+                              false);
+    this->submitCommandBuffer(kSkip_SyncQueue);
+
+    // The image layout change serves as a barrier, so no semaphore is needed
+    return nullptr;
 }

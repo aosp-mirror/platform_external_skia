@@ -98,6 +98,14 @@ void SkPictureRecord::recordSaveLayer(const SaveLayerRec& rec) {
         flatFlags |= SAVELAYERREC_HAS_FLAGS;
         size += sizeof(uint32_t);
     }
+    if (rec.fClipMask) {
+        flatFlags |= SAVELAYERREC_HAS_CLIPMASK;
+        size += sizeof(uint32_t); // clip image index
+    }
+    if (rec.fClipMatrix) {
+        flatFlags |= SAVELAYERREC_HAS_CLIPMATRIX;
+        size += rec.fClipMatrix->writeToMemory(nullptr);
+    }
 
     const size_t initialOffset = this->addDraw(SAVE_LAYER_SAVELAYERREC, &size);
     this->addInt(flatFlags);
@@ -115,6 +123,12 @@ void SkPictureRecord::recordSaveLayer(const SaveLayerRec& rec) {
     }
     if (flatFlags & SAVELAYERREC_HAS_FLAGS) {
         this->addInt(rec.fSaveLayerFlags);
+    }
+    if (flatFlags & SAVELAYERREC_HAS_CLIPMASK) {
+        this->addImage(rec.fClipMask);
+    }
+    if (flatFlags & SAVELAYERREC_HAS_CLIPMATRIX) {
+        this->addMatrix(*rec.fClipMatrix);
     }
     this->validate(initialOffset, size);
 }
@@ -218,18 +232,6 @@ void SkPictureRecord::didSetMatrix(const SkMatrix& matrix) {
     this->addMatrix(matrix);
     this->validate(initialOffset, size);
     this->INHERITED::didSetMatrix(matrix);
-}
-
-void SkPictureRecord::didTranslateZ(SkScalar z) {
-#ifdef SK_EXPERIMENTAL_SHADOWING
-    this->validate(fWriter.bytesWritten(), 0);
-    // op + scalar
-    size_t size = 1 * kUInt32Size + 1 * sizeof(SkScalar);
-    size_t initialOffset = this->addDraw(TRANSLATE_Z, &size);
-    this->addScalar(z);
-    this->validate(initialOffset, size);
-    this->INHERITED::didTranslateZ(z);
-#endif
 }
 
 static bool clipOpExpands(SkClipOp op) {
@@ -668,29 +670,6 @@ void SkPictureRecord::onDrawPicture(const SkPicture* picture, const SkMatrix* ma
     size_t size = 2 * kUInt32Size;
     size_t initialOffset;
 
-    if (nullptr == matrix && nullptr == paint) {
-        initialOffset = this->addDraw(DRAW_PICTURE, &size);
-        this->addPicture(picture);
-    } else {
-        const SkMatrix& m = matrix ? *matrix : SkMatrix::I();
-        size += m.writeToMemory(nullptr) + kUInt32Size;    // matrix + paint
-        initialOffset = this->addDraw(DRAW_PICTURE_MATRIX_PAINT, &size);
-        this->addPaintPtr(paint);
-        this->addMatrix(m);
-        this->addPicture(picture);
-    }
-    this->validate(initialOffset, size);
-}
-
-void SkPictureRecord::onDrawShadowedPicture(const SkPicture* picture,
-                                            const SkMatrix* matrix,
-                                            const SkPaint* paint,
-                                            const SkShadowParams& params) {
-    // op + picture index
-    size_t size = 2 * kUInt32Size;
-    size_t initialOffset;
-
-    // TODO: handle recording params.
     if (nullptr == matrix && nullptr == paint) {
         initialOffset = this->addDraw(DRAW_PICTURE, &size);
         this->addPicture(picture);

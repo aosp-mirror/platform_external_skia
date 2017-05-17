@@ -589,11 +589,6 @@ enum GrSurfaceFlags {
      * Placeholder for managing zero-copy textures
      */
     kZeroCopy_GrSurfaceFlag         = 0x2,
-    /**
-     * Indicates that all allocations (color buffer, FBO completeness, etc)
-     * should be verified.
-     */
-    kCheckAllocation_GrSurfaceFlag  = 0x4,
 };
 
 GR_MAKE_BITFIELD_OPS(GrSurfaceFlags)
@@ -676,9 +671,6 @@ enum GrWrapOwnership {
 
     /** Skia will assume ownership of the resource and free it. */
     kAdopt_GrWrapOwnership,
-
-    /** Skia will assume ownership of the resource, free it, and reuse it within the cache. */
-    kAdoptAndCache_GrWrapOwnership,
 };
 
 /**

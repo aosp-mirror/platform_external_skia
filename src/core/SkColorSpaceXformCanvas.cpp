@@ -229,10 +229,13 @@ public:
 
     SaveLayerStrategy getSaveLayerStrategy(const SaveLayerRec& rec) override {
         sk_sp<SkImageFilter> backdrop = rec.fBackdrop ? fXformer->apply(rec.fBackdrop) : nullptr;
+        sk_sp<SkImage> clipMask = rec.fClipMask ? fXformer->apply(rec.fClipMask) : nullptr;
         fTarget->saveLayer({
             rec.fBounds,
             MaybePaint(rec.fPaint, fXformer.get()),
             backdrop.get(),
+            clipMask.get(),
+            rec.fClipMatrix,
             rec.fSaveLayerFlags,
         });
         return kNoLayer_SaveLayerStrategy;
@@ -295,6 +298,7 @@ public:
         return false;
     }
 
+    GrContext* getGrContext() override { return fTarget->getGrContext(); }
     bool onGetProps(SkSurfaceProps* props) const override { return fTarget->getProps(props); }
     void onFlush() override { return fTarget->flush(); }
 

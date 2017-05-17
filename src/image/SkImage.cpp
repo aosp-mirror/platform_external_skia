@@ -9,7 +9,6 @@
 #include "SkBitmapCache.h"
 #include "SkCanvas.h"
 #include "SkColorSpace_Base.h"
-#include "SkCrossContextImageData.h"
 #include "SkData.h"
 #include "SkImageEncoder.h"
 #include "SkImageFilter.h"
@@ -175,6 +174,13 @@ GrBackendObject SkImage::getTextureHandle(bool flushPendingGrContextIO,
     return as_IB(this)->onGetTextureHandle(flushPendingGrContextIO, origin);
 }
 
+bool SkImage::isValid(GrContext* context) const {
+    if (context && context->abandoned()) {
+        return false;
+    }
+    return as_IB(this)->onIsValid(context);
+}
+
 #else
 
 GrTexture* SkImage::getTexture() const { return nullptr; }
@@ -182,6 +188,13 @@ GrTexture* SkImage::getTexture() const { return nullptr; }
 bool SkImage::isTextureBacked() const { return false; }
 
 GrBackendObject SkImage::getTextureHandle(bool, GrSurfaceOrigin*) const { return 0; }
+
+bool SkImage::isValid(GrContext* context) const {
+    if (context) {
+        return false;
+    }
+    return as_IB(this)->onIsValid(context);
+}
 
 #endif
 
@@ -288,11 +301,6 @@ bool SkImage::isAlphaOnly() const {
 
 sk_sp<SkImage> SkImage::makeColorSpace(sk_sp<SkColorSpace> target,
                                        SkTransferFunctionBehavior premulBehavior) const {
-    if (SkTransferFunctionBehavior::kRespect == premulBehavior) {
-        // TODO (msarett, brianosman): Implement this.
-        return nullptr;
-    }
-
     SkColorSpaceTransferFn fn;
     if (!target || !target->isNumericalTransferFn(&fn)) {
         return nullptr;
@@ -307,8 +315,13 @@ sk_sp<SkImage> SkImage::makeColorSpace(sk_sp<SkColorSpace> target,
         return sk_ref_sp(const_cast<SkImage*>(this));
     }
 
+    SkColorType targetColorType = kN32_SkColorType;
+    if (SkTransferFunctionBehavior::kRespect == premulBehavior && target->gammaIsLinear()) {
+        targetColorType = kRGBA_F16_SkColorType;
+    }
+
     // TODO: We might consider making this a deferred conversion?
-    return as_IB(this)->onMakeColorSpace(std::move(target));
+    return as_IB(this)->onMakeColorSpace(std::move(target), targetColorType, premulBehavior);
 }
 
 //////////////////////////////////////////////////////////////////////////////////////
@@ -365,21 +378,6 @@ sk_sp<SkImage> SkImage::MakeFromYUVTexturesCopy(GrContext* ctx, SkYUVColorSpace 
 
 sk_sp<SkImage> SkImage::makeTextureImage(GrContext*, SkColorSpace* dstColorSpace) const {
     return nullptr;
-}
-
-std::unique_ptr<SkCrossContextImageData> SkCrossContextImageData::MakeFromEncoded(
-        GrContext*, sk_sp<SkData> encoded, SkColorSpace* dstColorSpace) {
-    sk_sp<SkImage> image = SkImage::MakeFromEncoded(std::move(encoded));
-    if (!image) {
-        return nullptr;
-    }
-    // TODO: Force decode to raster here?
-    return std::unique_ptr<SkCrossContextImageData>(new SkCCIDImage(std::move(image)));
-}
-
-sk_sp<SkImage> SkImage::MakeFromCrossContextImageData(
-        GrContext*, std::unique_ptr<SkCrossContextImageData> ccid) {
-    return ccid->makeImage(nullptr);
 }
 
 sk_sp<SkImage> SkImage::makeNonTextureImage() const {

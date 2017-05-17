@@ -92,7 +92,7 @@
       "--patch_root",
       "skia",
       "--revision_mapping_file",
-      "{\"parent_repo\": \"got_revision\"}",
+      "{\"got_revision\": \"parent_repo\"}",
       "--git-cache-dir",
       "[CUSTOM_/_B_CACHE]",
       "--gerrit_repo",
@@ -102,8 +102,7 @@
       "--output_json",
       "/path/to/tmp/json",
       "--revision",
-      "parent_repo@abc123",
-      "--output_manifest"
+      "parent_repo@abc123"
     ],
     "cwd": "[CUSTOM_/_B_WORK]",
     "env": {

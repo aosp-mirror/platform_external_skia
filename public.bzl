@@ -421,6 +421,7 @@ INCLUDES = [
     "include/config",
     "include/core",
     "include/effects",
+    "include/encode",
     "include/gpu",
     "include/images",
     "include/pathops",
@@ -583,6 +584,7 @@ def DM_ARGS(asan):
     # The ASAN we use with Bazel has some strict checks, so omit tests that
     # trigger them.
     match += [
+        "~bigrect",
         "~clippedcubic2",
         "~conicpaths",
         "~^gradients",
@@ -610,7 +612,11 @@ COPTS_UNIX = [
     "-Wno-deprecated-declarations",  # Internal use of deprecated methods. :(
 ]
 
-COPTS_ANDROID = ["-mfpu=neon"]
+COPTS_ANDROID = [
+    "-mfpu=neon",
+    "-Wno-error=attributes",  # 'GrResourceCache' declared with greater visibility than the
+                              # type of its field 'GrResourceCache::fPurgeableQueue'... bogus.
+]
 
 COPTS_IOS = []
 
@@ -643,12 +649,10 @@ DEFINES_IOS = [
     "SK_BUILD_FOR_IOS",
     "SK_BUILD_NO_OPTS",
     "SK_HAS_JPEG_LIBRARY",
-    "SK_IGNORE_ETC1_SUPPORT",
     "SKNX_NO_SIMD",
 ]
 
 DEFINES_ALL = [
-    "SK_SUPPORT_LEGACY_BITMAP_COPYTO",
     # Chrome DEFINES.
     "SK_USE_FLOATBITS",
     "SK_USE_FREETYPE_EMBOLDEN",

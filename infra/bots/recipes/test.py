@@ -11,6 +11,7 @@ DEPS = [
   'core',
   'env',
   'flavor',
+  'recipe_engine/context',
   'recipe_engine/json',
   'recipe_engine/path',
   'recipe_engine/platform',
@@ -144,6 +145,10 @@ def dm_flags(bot):
     # This bot is really slow, cut it down to just 8888.
     configs = ['8888']
 
+  # This bot only differs from vanilla CPU bots in 8888 config.
+  if 'SK_FORCE_RASTER_PIPELINE_BLITTER' in bot:
+    configs = ['8888']
+
   args.append('--config')
   args.extend(configs)
 
@@ -152,6 +157,10 @@ def dm_flags(bot):
   if 'Vulkan' in bot and 'NexusPlayer' in bot:
     args.remove('svg')
     args.remove('image')
+
+  # Eventually I'd like these to pass, but for now just skip 'em.
+  if 'SK_FORCE_RASTER_PIPELINE_BLITTER' in bot:
+    args.remove('tests')
 
   blacklisted = []
   def blacklist(quad):
@@ -218,7 +227,7 @@ def dm_flags(bot):
     blacklist('_ image gen_platf inc13.png')
     blacklist('_ image gen_platf inc14.png')
 
-  # WIC fails on questionable bmps and arithmetic jpegs
+  # WIC fails on questionable bmps
   if 'Win' in bot:
     blacklist('_ image gen_platf rle8-height-negative.bmp')
     blacklist('_ image gen_platf rle4-height-negative.bmp')
@@ -231,10 +240,13 @@ def dm_flags(bot):
     blacklist('_ image gen_platf 4bpp-pixeldata-cropped.bmp')
     blacklist('_ image gen_platf 32bpp-pixeldata-cropped.bmp')
     blacklist('_ image gen_platf 24bpp-pixeldata-cropped.bmp')
-    blacklist('_ image gen_platf testimgari.jpg')
     if 'x86_64' in bot and 'CPU' in bot:
       # This GM triggers a SkSmallAllocator assert.
       blacklist('_ gm _ composeshader_bitmap')
+
+  # WIC and CG fail on arithmetic jpegs
+  if 'Win' in bot or 'Mac' in bot:
+    blacklist('_ image gen_platf testimgari.jpg')
 
   if 'Android' in bot or 'iOS' in bot:
     # This test crashes the N9 (perhaps because of large malloc/frees). It also
@@ -284,6 +296,9 @@ def dm_flags(bot):
   # skia:6189
   bad_serialize_gms.append('shadow_utils')
 
+  # Not expected to round trip encoding/decoding.
+  bad_serialize_gms.append('makecolorspace')
+
   for test in bad_serialize_gms:
     blacklist(['serialize-8888', 'gm', '_', test])
 
@@ -330,7 +345,11 @@ def dm_flags(bot):
   # Blacklist RAW images (and a few large PNGs) on GPU bots
   # until we can resolve failures.
   # Also blacklisted on 32-bit Win2k8 for F16 OOM errors.
-  if 'GPU' in bot or ('Win2k8' in bot and 'x86-' in bot):
+  # Test-Win8-MSVC-Golo-CPU-AVX-x86-Debug is running out of memory on the
+  # interlaced images, so blacklist those. For simplicity, blacklist the
+  # RAW images which also use lots of memory.
+  if ('GPU' in bot or ('Win2k8' in bot and 'x86-' in bot)
+      or 'Test-Win8-MSVC-Golo-CPU-AVX-x86-Debug' in bot):
     blacklist('_ image _ interlaced1.png')
     blacklist('_ image _ interlaced2.png')
     blacklist('_ image _ interlaced3.png')
@@ -370,6 +389,10 @@ def dm_flags(bot):
   match = []
   if 'Valgrind' in bot: # skia:3021
     match.append('~Threaded')
+
+  if 'CommandBuffer' in bot:
+    # https://crbug.com/697030
+    match.append('~HalfFloatAlphaTextureTest')
 
   if 'AndroidOne' in bot:  # skia:4711
     match.append('~WritePixels')
@@ -503,6 +526,9 @@ def dm_flags(bot):
     match.append('~PathOpsSimplify') # skia:6479
     blacklist(['_', 'gm', '_', 'fast_slow_blurimagefilter']) # skia:6480
 
+  if ('Win10' in bot and 'Vulkan' in bot
+      and ('GTX1070' in bot or 'GTX660' in bot)):
+    blacklist('_ test _ SkImage_makeTextureImage') # skia:6554
 
   if blacklisted:
     args.append('--blacklist')
@@ -517,6 +543,9 @@ def dm_flags(bot):
   if ('NexusPlayer' in bot or 'Nexus5' in bot or 'Nexus9' in bot
       or 'Win8-MSVC-ShuttleB' in bot):
     args.append('--noRAW_threading')
+
+  if 'Valgrind' in bot and 'PreAbandonGpuContext' in bot:
+    args.append('--verbose')
 
   return args
 
@@ -695,11 +724,11 @@ def test_steps(api):
 
 def RunSteps(api):
   api.core.setup()
-  env = api.step.get_from_context('env', {})
+  env = {}
   if 'iOS' in api.vars.builder_name:
     env['IOS_BUNDLE_ID'] = 'com.google.dm'
     env['IOS_MOUNT_POINT'] = api.vars.slave_dir.join('mnt_iosdevice')
-  with api.step.context({'env': env}):
+  with api.context(env=env):
     try:
       api.flavor.install_everything()
       test_steps(api)
@@ -740,6 +769,7 @@ TEST_BUILDERS = [
   'Test-Ubuntu16-Clang-NUC6i5SYK-GPU-IntelIris540-x86_64-Debug-Vulkan',
   'Test-Ubuntu16-Clang-NUC6i5SYK-GPU-IntelIris540-x86_64-Release',
   'Test-Ubuntu16-Clang-NUCDE3815TYKHE-GPU-IntelBayTrail-x86_64-Debug',
+  'Test-Win8-MSVC-Golo-CPU-AVX-x86-Debug',
   'Test-Win10-MSVC-AlphaR2-GPU-RadeonR9M470X-x86_64-Debug-Vulkan',
   ('Test-Win10-MSVC-NUC5i7RYH-GPU-IntelIris6100-x86_64-Release-'
    'ReleaseAndAbandonGpuContext'),
@@ -749,6 +779,8 @@ TEST_BUILDERS = [
   'Test-Win10-MSVC-ShuttleC-GPU-GTX960-x86_64-Debug-ANGLE',
   'Test-Win10-MSVC-ZBOX-GPU-GTX1070-x86_64-Debug-Vulkan',
   'Test-iOS-Clang-iPadMini4-GPU-GX6450-arm-Release',
+  ('Test-Ubuntu-Clang-GCE-CPU-AVX2-x86_64-Release-'
+   'SK_FORCE_RASTER_PIPELINE_BLITTER'),
 ]
 
 
@@ -769,7 +801,11 @@ def GenTests(api):
           api.path['start_dir'].join('skia', 'infra', 'bots', 'assets',
                                      'svg', 'VERSION'),
           api.path['start_dir'].join('tmp', 'uninteresting_hashes.txt')
-      )
+      ) +
+      api.step_data('get swarming bot id',
+          stdout=api.raw_io.output('skia-bot-123')) +
+      api.step_data('get swarming task id',
+          stdout=api.raw_io.output('123456'))
     )
     if 'Win' in builder:
       test += api.platform('win', 64)

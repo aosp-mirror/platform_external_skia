@@ -20,12 +20,12 @@
 #include "SkTArray.h"
 #include <map>
 
+class GrBackendRenderTarget;
 class GrBuffer;
 class GrContext;
 struct GrContextOptions;
 class GrGLContext;
 class GrMesh;
-class GrNonInstancedVertices;
 class GrPath;
 class GrPathRange;
 class GrPathRenderer;
@@ -135,7 +135,7 @@ public:
     /**
      * Implements GrResourceProvider::wrapBackendRenderTarget
      */
-    sk_sp<GrRenderTarget> wrapBackendRenderTarget(const GrBackendRenderTargetDesc&);
+    sk_sp<GrRenderTarget> wrapBackendRenderTarget(const GrBackendRenderTarget&, GrSurfaceOrigin);
 
     /**
      * Implements GrResourceProvider::wrapBackendTextureAsRenderTarget
@@ -376,9 +376,9 @@ public:
             const GrGpuCommandBuffer::LoadAndStoreInfo& colorInfo,
             const GrGpuCommandBuffer::LoadAndStoreInfo& stencilInfo) = 0;
 
-    // Called by GrOpList when flushing.
+    // Called by GrDrawingManager when flushing.
     // Provides a hook for post-flush actions (e.g. Vulkan command buffer submits).
-    virtual void finishOpList() {}
+    virtual void finishFlush() {}
 
     virtual GrFence SK_WARN_UNUSED_RESULT insertFence() = 0;
     virtual bool waitFence(GrFence, uint64_t timeout = 1000) = 0;
@@ -387,6 +387,13 @@ public:
     virtual sk_sp<GrSemaphore> SK_WARN_UNUSED_RESULT makeSemaphore() = 0;
     virtual void insertSemaphore(sk_sp<GrSemaphore> semaphore, bool flush = false) = 0;
     virtual void waitSemaphore(sk_sp<GrSemaphore> semaphore) = 0;
+
+    /**
+     *  Put this texture in a safe and known state for use across multiple GrContexts. Depending on
+     *  the backend, this may return a GrSemaphore. If so, other contexts should wait on that
+     *  semaphore before using this texture.
+     */
+    virtual sk_sp<GrSemaphore> prepareTextureForCrossContextUsage(GrTexture*) = 0;
 
     ///////////////////////////////////////////////////////////////////////////
     // Debugging and Stats
@@ -552,7 +559,8 @@ private:
                                                   GrBackendTextureFlags,
                                                   int sampleCnt,
                                                   GrWrapOwnership) = 0;
-    virtual sk_sp<GrRenderTarget> onWrapBackendRenderTarget(const GrBackendRenderTargetDesc&) = 0;
+    virtual sk_sp<GrRenderTarget> onWrapBackendRenderTarget(const GrBackendRenderTarget&,
+                                                            GrSurfaceOrigin) = 0;
     virtual sk_sp<GrRenderTarget> onWrapBackendTextureAsRenderTarget(const GrBackendTexture&,
                                                                      GrSurfaceOrigin,
                                                                      int sampleCnt)=0;

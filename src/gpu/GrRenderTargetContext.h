@@ -8,15 +8,16 @@
 #ifndef GrRenderTargetContext_DEFINED
 #define GrRenderTargetContext_DEFINED
 
+#include "../private/GrInstancedPipelineInfo.h"
+#include "../private/GrRenderTargetProxy.h"
 #include "GrColor.h"
 #include "GrContext.h"
 #include "GrPaint.h"
 #include "GrSurfaceContext.h"
+#include "GrTypesPriv.h"
 #include "GrXferProcessor.h"
 #include "SkRefCnt.h"
 #include "SkSurfaceProps.h"
-#include "../private/GrInstancedPipelineInfo.h"
-#include "../private/GrRenderTargetProxy.h"
 
 class GrClip;
 class GrDrawingManager;
@@ -158,15 +159,18 @@ public:
      * @param paint        describes how to color pixels.
      * @param viewMatrix   transformation matrix
      * @param rrect        the roundrect to draw
-     * @param blurRadius   amount of shadow blur to apply (in device space)
-     * @param style        style to apply to the rrect. Currently path effects are not allowed.
+     * @param blurWidth    amount of shadow blur to apply (in device space)
+     * @param insetWidth   minimum amount to inset from the rrect edge (in local space).
+     *                     We may inset more depending on the blur radius and geometry.
+     * @param blurClamp    Optional parameter used to indicate fraction of blur to actually apply
      */
     void drawShadowRRect(const GrClip&,
                          GrPaint&&,
                          const SkMatrix& viewMatrix,
                          const SkRRect& rrect,
                          SkScalar blurRadius,
-                         const GrStyle& style);
+                         SkScalar insetWidth,
+                         SkScalar blurClamp = 1);
 
     /**
      * Shortcut for filling a SkPath consisting of nested rrects using a paint. The result is
@@ -341,18 +345,13 @@ public:
      */
     void prepareForExternalIO();
 
-    bool isStencilBufferMultisampled() const {
-        return fRenderTargetProxy->isStencilBufferMultisampled();
-    }
-    bool isUnifiedMultisampled() const { return fRenderTargetProxy->isUnifiedMultisampled(); }
-    bool hasMixedSamples() const { return fRenderTargetProxy->isMixedSampled(); }
-
+    GrFSAAType fsaaType() const { return fRenderTargetProxy->fsaaType(); }
     const GrCaps* caps() const { return fContext->caps(); }
-    const GrSurfaceDesc& desc() const { return fRenderTargetProxy->desc(); }
     int width() const { return fRenderTargetProxy->width(); }
     int height() const { return fRenderTargetProxy->height(); }
     GrPixelConfig config() const { return fRenderTargetProxy->config(); }
     int numColorSamples() const { return fRenderTargetProxy->numColorSamples(); }
+    int numStencilSamples() const { return fRenderTargetProxy->numStencilSamples(); }
     const SkSurfaceProps& surfaceProps() const { return fSurfaceProps; }
     GrColorSpaceXform* getColorXformFromSRGB() const { return fColorXformFromSRGB.get(); }
     GrSurfaceOrigin origin() const { return fRenderTargetProxy->origin(); }
@@ -391,17 +390,8 @@ protected:
     SkDEBUGCODE(void validate() const;)
 
 private:
-    inline GrAAType decideAAType(GrAA aa, bool allowMixedSamples = false) {
-        if (GrAA::kNo == aa) {
-            return GrAAType::kNone;
-        }
-        if (this->isUnifiedMultisampled()) {
-            return GrAAType::kMSAA;
-        }
-        if (allowMixedSamples && this->isStencilBufferMultisampled()) {
-            return GrAAType::kMixedSamples;
-        }
-        return GrAAType::kCoverage;
+    inline GrAAType chooseAAType(GrAA aa, GrAllowMixedSamples allowMixedSamples) {
+        return GrChooseAAType(aa, this->fsaaType(), allowMixedSamples);
     }
 
     friend class GrAtlasTextBlob;               // for access to add[Mesh]DrawOp

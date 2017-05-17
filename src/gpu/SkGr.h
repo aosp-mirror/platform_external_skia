@@ -211,7 +211,8 @@ sk_sp<GrTextureProxy> GrRefCachedBitmapTextureProxy(GrContext*,
  * The bitmap must have CPU-accessible pixels. Attempts to take advantage of faster paths for
  * compressed textures and yuv planes.
  */
-sk_sp<GrTextureProxy> GrUploadBitmapToTextureProxy(GrResourceProvider*, const SkBitmap&);
+sk_sp<GrTextureProxy> GrUploadBitmapToTextureProxy(GrResourceProvider*, const SkBitmap&,
+                                                   SkColorSpace* dstColorSpace);
 
 sk_sp<GrTextureProxy> GrGenerateMipMapsAndUploadToTextureProxy(GrContext*, const SkBitmap&,
                                                                SkColorSpace* dstColorSpace);
@@ -220,9 +221,7 @@ sk_sp<GrTextureProxy> GrGenerateMipMapsAndUploadToTextureProxy(GrContext*, const
  * Creates a new texture for the pixmap.
  */
 sk_sp<GrTextureProxy> GrUploadPixmapToTextureProxy(GrResourceProvider*,
-                                                   const SkPixmap&, SkBudgeted);
-sk_sp<GrTextureProxy> GrUploadPixmapToTextureProxyNoCheck(GrResourceProvider*,
-                                                          const SkPixmap&, SkBudgeted);
+                                                   const SkPixmap&, SkBudgeted, SkColorSpace*);
 
 /**
  * Creates a new texture populated with the mipmap levels.
@@ -270,19 +269,5 @@ void GrInstallBitmapUniqueKeyInvalidator(const GrUniqueKey& key, SkPixelRef* pix
     format, but we want to preserve the color space of that source. This picks an appropriate format
     to use. */
 GrPixelConfig GrRenderableConfigForColorSpace(const SkColorSpace*);
-
-/**
- *  If the compressed data in the SkData is supported (as a texture format, this returns
- *  the pixel-config that should be used, and sets outStartOfDataToUpload to the ptr into
- *  the data where the actual raw data starts (skipping any header bytes).
- *
- *  If the compressed data is not supported, this returns kUnknown_GrPixelConfig, and
- *  ignores outStartOfDataToUpload.
- */
-GrPixelConfig GrIsCompressedTextureDataSupported(GrContext* ctx, SkData* data,
-                                                 int expectedW, int expectedH,
-                                                 const void** outStartOfDataToUpload);
-
-
 
 #endif

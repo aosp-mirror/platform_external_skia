@@ -97,7 +97,7 @@ void GrContext::initCommon(const GrContextOptions& options) {
     ASSERT_SINGLE_OWNER
 
     fCaps = SkRef(fGpu->caps());
-    fResourceCache = new GrResourceCache(fCaps);
+    fResourceCache = new GrResourceCache(fCaps, fUniqueID);
     fResourceProvider = new GrResourceProvider(fGpu, fResourceCache, &fSingleOwner);
 
     fDisableGpuYUVConversion = options.fDisableGpuYUVConversion;
@@ -109,7 +109,7 @@ void GrContext::initCommon(const GrContextOptions& options) {
     fDrawingManager.reset(new GrDrawingManager(this, prcOptions,
                                                options.fImmediateMode, &fSingleOwner));
 
-    fAtlasGlyphCache = new GrAtlasGlyphCache(this);
+    fAtlasGlyphCache = new GrAtlasGlyphCache(this, options.fGlyphCacheTextureMaximumBytes);
 
     fTextBlobCache.reset(new GrTextBlobCache(TextBlobCacheOverBudgetCB, this));
 }
@@ -702,12 +702,14 @@ sk_sp<GrRenderTargetContext> GrContextPriv::makeBackendTextureRenderTargetContex
 }
 
 sk_sp<GrRenderTargetContext> GrContextPriv::makeBackendRenderTargetRenderTargetContext(
-                                                const GrBackendRenderTargetDesc& desc,
+                                                const GrBackendRenderTarget& backendRT,
+                                                GrSurfaceOrigin origin,
                                                 sk_sp<SkColorSpace> colorSpace,
                                                 const SkSurfaceProps* surfaceProps) {
     ASSERT_SINGLE_OWNER_PRIV
 
-    sk_sp<GrRenderTarget> rt(fContext->resourceProvider()->wrapBackendRenderTarget(desc));
+    sk_sp<GrRenderTarget> rt(fContext->resourceProvider()->wrapBackendRenderTarget(backendRT,
+                                                                                   origin));
     if (!rt) {
         return nullptr;
     }
@@ -748,8 +750,8 @@ sk_sp<GrRenderTargetContext> GrContextPriv::makeBackendTextureAsRenderTargetRend
                                                            surfaceProps);
 }
 
-void GrContextPriv::addPreFlushCallbackObject(sk_sp<GrPreFlushCallbackObject> preFlushCBObject) {
-    fContext->fDrawingManager->addPreFlushCallbackObject(std::move(preFlushCBObject));
+void GrContextPriv::addOnFlushCallbackObject(GrOnFlushCallbackObject* onFlushCBObject) {
+    fContext->fDrawingManager->addOnFlushCallbackObject(onFlushCBObject);
 }
 
 

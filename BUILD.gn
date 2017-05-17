@@ -81,6 +81,7 @@ skia_public_includes = [
   "include/config",
   "include/core",
   "include/effects",
+  "include/encode",
   "include/gpu",
   "include/gpu/gl",
   "include/pathops",
@@ -139,10 +140,7 @@ config("skia_private") {
     "third_party/gif",
   ]
 
-  defines = [
-    "SK_GAMMA_APPLY_TO_A8",
-    "SK_INTERNAL",
-  ]
+  defines = [ "SK_GAMMA_APPLY_TO_A8" ]
   if (is_android) {
     defines += [
       "SK_GAMMA_EXPONENT=1.4",
@@ -473,8 +471,8 @@ optional("jpeg") {
     "src/codec/SkJpegCodec.cpp",
     "src/codec/SkJpegDecoderMgr.cpp",
     "src/codec/SkJpegUtility.cpp",
-    "src/images/SkJPEGImageEncoder.cpp",
     "src/images/SkJPEGWriteUtility.cpp",
+    "src/images/SkJpegEncoder.cpp",
   ]
 }
 
@@ -504,7 +502,7 @@ optional("png") {
   sources = [
     "src/codec/SkIcoCodec.cpp",
     "src/codec/SkPngCodec.cpp",
-    "src/images/SkPNGImageEncoder.cpp",
+    "src/images/SkPngEncoder.cpp",
   ]
 }
 
@@ -550,7 +548,7 @@ optional("webp") {
   sources = [
     "src/codec/SkWebpAdapterCodec.cpp",
     "src/codec/SkWebpCodec.cpp",
-    "src/images/SkWEBPImageEncoder.cpp",
+    "src/images/SkWebpEncoder.cpp",
   ]
 }
 
@@ -1184,6 +1182,7 @@ if (skia_enable_tools) {
       ":gm",
       ":skia",
       ":tests",
+      ":tool_utils",
     ]
   }
 
