@@ -171,7 +171,7 @@ GrTexture* SkImage_Gpu::onGetTexture() const {
         return nullptr;
     }
 
-    return proxy->instantiate(fContext->resourceProvider());
+    return proxy->instantiateTexture(fContext->resourceProvider());
 }
 
 bool SkImage_Gpu::onReadPixels(const SkImageInfo& dstInfo, void* dstPixels, size_t dstRB,
@@ -219,9 +219,11 @@ bool SkImage_Gpu::onReadPixels(const SkImageInfo& dstInfo, void* dstPixels, size
 }
 
 sk_sp<SkImage> SkImage_Gpu::onMakeSubset(const SkIRect& subset) const {
-    GrSurfaceDesc desc = fProxy->desc();
+    GrSurfaceDesc desc;
+    desc.fConfig = fProxy->config();
     desc.fWidth = subset.width();
     desc.fHeight = subset.height();
+    desc.fOrigin = fProxy->origin();
 
     sk_sp<GrSurfaceContext> sContext(fContext->contextPriv().makeDeferredSurfaceContext(
                                                                         desc,
@@ -484,7 +486,7 @@ sk_sp<SkImage> SkImage::MakeCrossContextFromEncoded(GrContext* context, sk_sp<Sk
         return codecImage;
     }
 
-    sk_sp<GrTexture> texture(sk_ref_sp(proxy->instantiate(context->resourceProvider())));
+    sk_sp<GrTexture> texture(sk_ref_sp(proxy->instantiateTexture(context->resourceProvider())));
     if (!texture) {
         return codecImage;
     }
