@@ -451,6 +451,13 @@
       ],
       "trigger": "nightly"
     },
+    "Housekeeper-Nightly-UpdateMetaConfig": {
+      "priority": 0.8,
+      "tasks": [
+        "Housekeeper-Nightly-UpdateMetaConfig"
+      ],
+      "trigger": "nightly"
+    },
     "Housekeeper-PerCommit": {
       "priority": 0.8,
       "tasks": [
@@ -1298,40 +1305,40 @@
         "Upload-Perf-Win8-MSVC-Golo-CPU-AVX-x86_64-Release"
       ]
     },
-    "Perf-iOS-Clang-iPadPro-GPU-GT7800-arm64-Debug-RaspberryPi": {
+    "Perf-iOS-Clang-iPadPro-GPU-GT7800-arm64-Debug": {
       "priority": 0.8,
       "tasks": [
-        "Perf-iOS-Clang-iPadPro-GPU-GT7800-arm64-Debug-RaspberryPi"
+        "Perf-iOS-Clang-iPadPro-GPU-GT7800-arm64-Debug"
       ]
     },
-    "Perf-iOS-Clang-iPadPro-GPU-GT7800-arm64-Release-RaspberryPi": {
+    "Perf-iOS-Clang-iPadPro-GPU-GT7800-arm64-Release": {
       "priority": 0.8,
       "tasks": [
-        "Upload-Perf-iOS-Clang-iPadPro-GPU-GT7800-arm64-Release-RaspberryPi"
+        "Upload-Perf-iOS-Clang-iPadPro-GPU-GT7800-arm64-Release"
       ]
     },
-    "Perf-iOS-Clang-iPhone6-GPU-GX6450-arm64-Debug-RaspberryPi": {
+    "Perf-iOS-Clang-iPhone6-GPU-GX6450-arm64-Debug": {
       "priority": 0.8,
       "tasks": [
-        "Perf-iOS-Clang-iPhone6-GPU-GX6450-arm64-Debug-RaspberryPi"
+        "Perf-iOS-Clang-iPhone6-GPU-GX6450-arm64-Debug"
       ]
     },
-    "Perf-iOS-Clang-iPhone6-GPU-GX6450-arm64-Release-RaspberryPi": {
+    "Perf-iOS-Clang-iPhone6-GPU-GX6450-arm64-Release": {
       "priority": 0.8,
       "tasks": [
-        "Upload-Perf-iOS-Clang-iPhone6-GPU-GX6450-arm64-Release-RaspberryPi"
+        "Upload-Perf-iOS-Clang-iPhone6-GPU-GX6450-arm64-Release"
       ]
     },
-    "Perf-iOS-Clang-iPhone7-GPU-GT7600-arm64-Debug-RaspberryPi": {
+    "Perf-iOS-Clang-iPhone7-GPU-GT7600-arm64-Debug": {
       "priority": 0.8,
       "tasks": [
-        "Perf-iOS-Clang-iPhone7-GPU-GT7600-arm64-Debug-RaspberryPi"
+        "Perf-iOS-Clang-iPhone7-GPU-GT7600-arm64-Debug"
       ]
     },
-    "Perf-iOS-Clang-iPhone7-GPU-GT7600-arm64-Release-RaspberryPi": {
+    "Perf-iOS-Clang-iPhone7-GPU-GT7600-arm64-Release": {
       "priority": 0.8,
       "tasks": [
-        "Upload-Perf-iOS-Clang-iPhone7-GPU-GT7600-arm64-Release-RaspberryPi"
+        "Upload-Perf-iOS-Clang-iPhone7-GPU-GT7600-arm64-Release"
       ]
     },
     "Test-Android-Clang-AndroidOne-GPU-Mali400MP2-arm-Debug-Android": {
@@ -2229,40 +2236,40 @@
         "Upload-Test-Win8-MSVC-Golo-CPU-AVX-x86_64-Release-GDI"
       ]
     },
-    "Test-iOS-Clang-iPadPro-GPU-GT7800-arm64-Debug-RaspberryPi": {
+    "Test-iOS-Clang-iPadPro-GPU-GT7800-arm64-Debug": {
       "priority": 0.8,
       "tasks": [
-        "Upload-Test-iOS-Clang-iPadPro-GPU-GT7800-arm64-Debug-RaspberryPi"
+        "Upload-Test-iOS-Clang-iPadPro-GPU-GT7800-arm64-Debug"
       ]
     },
-    "Test-iOS-Clang-iPadPro-GPU-GT7800-arm64-Release-RaspberryPi": {
+    "Test-iOS-Clang-iPadPro-GPU-GT7800-arm64-Release": {
       "priority": 0.8,
       "tasks": [
-        "Upload-Test-iOS-Clang-iPadPro-GPU-GT7800-arm64-Release-RaspberryPi"
+        "Upload-Test-iOS-Clang-iPadPro-GPU-GT7800-arm64-Release"
       ]
     },
-    "Test-iOS-Clang-iPhone6-GPU-GX6450-arm64-Debug-RaspberryPi": {
+    "Test-iOS-Clang-iPhone6-GPU-GX6450-arm64-Debug": {
       "priority": 0.8,
       "tasks": [
-        "Upload-Test-iOS-Clang-iPhone6-GPU-GX6450-arm64-Debug-RaspberryPi"
+        "Upload-Test-iOS-Clang-iPhone6-GPU-GX6450-arm64-Debug"
       ]
     },
-    "Test-iOS-Clang-iPhone6-GPU-GX6450-arm64-Release-RaspberryPi": {
+    "Test-iOS-Clang-iPhone6-GPU-GX6450-arm64-Release": {
       "priority": 0.8,
       "tasks": [
-        "Upload-Test-iOS-Clang-iPhone6-GPU-GX6450-arm64-Release-RaspberryPi"
+        "Upload-Test-iOS-Clang-iPhone6-GPU-GX6450-arm64-Release"
       ]
     },
-    "Test-iOS-Clang-iPhone7-GPU-GT7600-arm64-Debug-RaspberryPi": {
+    "Test-iOS-Clang-iPhone7-GPU-GT7600-arm64-Debug": {
       "priority": 0.8,
       "tasks": [
-        "Upload-Test-iOS-Clang-iPhone7-GPU-GT7600-arm64-Debug-RaspberryPi"
+        "Upload-Test-iOS-Clang-iPhone7-GPU-GT7600-arm64-Debug"
       ]
     },
-    "Test-iOS-Clang-iPhone7-GPU-GT7600-arm64-Release-RaspberryPi": {
+    "Test-iOS-Clang-iPhone7-GPU-GT7600-arm64-Release": {
       "priority": 0.8,
       "tasks": [
-        "Upload-Test-iOS-Clang-iPhone7-GPU-GT7600-arm64-Release-RaspberryPi"
+        "Upload-Test-iOS-Clang-iPhone7-GPU-GT7600-arm64-Release"
       ]
     }
   },
@@ -4379,6 +4386,29 @@
       "isolate": "compile_skia.isolate",
       "priority": 0.8
     },
+    "Housekeeper-Nightly-UpdateMetaConfig": {
+      "dimensions": [
+        "cpu:x86-64-avx2",
+        "gpu:none",
+        "os:Ubuntu-14.04",
+        "pool:Skia"
+      ],
+      "extra_args": [
+        "--workdir",
+        "../../..",
+        "update_meta_config",
+        "repository=<(REPO)",
+        "buildername=Housekeeper-Nightly-UpdateMetaConfig",
+        "swarm_out_dir=${ISOLATED_OUTDIR}",
+        "revision=<(REVISION)",
+        "patch_repo=<(PATCH_REPO)",
+        "patch_storage=<(PATCH_STORAGE)",
+        "patch_issue=<(ISSUE)",
+        "patch_set=<(PATCHSET)"
+      ],
+      "isolate": "meta_config.isolate",
+      "priority": 0.8
+    },
     "Housekeeper-PerCommit": {
       "cipd_packages": [
         {
@@ -4498,7 +4528,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         }
       ],
       "dimensions": [
@@ -5435,7 +5465,7 @@
         "Housekeeper-PerCommit-IsolateSkImage"
       ],
       "dimensions": [
-        "device_os:OPP1.170223.012",
+        "device_os:OPP2.170420.017",
         "device_type:fugu",
         "os:Android",
         "pool:Skia"
@@ -5469,7 +5499,7 @@
         "Housekeeper-PerCommit-IsolateSkImage"
       ],
       "dimensions": [
-        "device_os:OPP1.170223.012",
+        "device_os:OPP2.170420.017",
         "device_type:fugu",
         "os:Android",
         "pool:Skia"
@@ -5503,7 +5533,7 @@
         "Housekeeper-PerCommit-IsolateSkImage"
       ],
       "dimensions": [
-        "device_os:OPP1.170223.012",
+        "device_os:OPP2.170420.017",
         "device_type:fugu",
         "os:Android",
         "pool:Skia"
@@ -6129,7 +6159,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -6177,7 +6207,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -6225,7 +6255,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -6272,7 +6302,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -6319,7 +6349,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -6366,7 +6396,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -6414,7 +6444,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -6467,7 +6497,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -6520,7 +6550,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -6568,7 +6598,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -6621,7 +6651,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -6669,7 +6699,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -6717,7 +6747,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -6769,7 +6799,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -6821,7 +6851,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -6869,7 +6899,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -6917,7 +6947,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -6965,7 +6995,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -7057,7 +7087,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -7104,7 +7134,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -7151,7 +7181,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -7198,7 +7228,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -7245,7 +7275,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -7292,7 +7322,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -7339,7 +7369,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -7391,7 +7421,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -7443,7 +7473,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -7495,7 +7525,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -7552,7 +7582,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -7604,7 +7634,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -7661,7 +7691,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -7713,7 +7743,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -7765,7 +7795,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -7817,7 +7847,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -7869,7 +7899,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -7916,7 +7946,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -7963,7 +7993,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -8010,7 +8040,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -8057,7 +8087,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -8104,7 +8134,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -8151,7 +8181,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -8198,7 +8228,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -8245,7 +8275,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -8292,7 +8322,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -8339,7 +8369,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -8386,7 +8416,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -8433,7 +8463,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -8480,7 +8510,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -8527,7 +8557,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -8574,7 +8604,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -8622,7 +8652,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -8670,7 +8700,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -8717,7 +8747,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -8764,7 +8794,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -8811,7 +8841,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -8858,7 +8888,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -8905,7 +8935,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -8952,7 +8982,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -8999,7 +9029,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -9046,7 +9076,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -9093,7 +9123,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -9140,7 +9170,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -9187,7 +9217,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -9234,7 +9264,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -9282,7 +9312,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -9330,7 +9360,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -9378,7 +9408,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -9426,7 +9456,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -9473,7 +9503,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -9520,7 +9550,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -9567,7 +9597,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -9614,7 +9644,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -9661,7 +9691,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -9708,7 +9738,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -9756,7 +9786,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -9804,7 +9834,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -9852,7 +9882,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -9900,7 +9930,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -9948,7 +9978,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -9996,7 +10026,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -10044,7 +10074,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -10092,7 +10122,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -10140,7 +10170,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -10188,7 +10218,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -10236,7 +10266,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -10279,7 +10309,7 @@
       "max_attempts": 1,
       "priority": 0.8
     },
-    "Perf-iOS-Clang-iPadPro-GPU-GT7800-arm64-Debug-RaspberryPi": {
+    "Perf-iOS-Clang-iPadPro-GPU-GT7800-arm64-Debug": {
       "dependencies": [
         "Build-Mac-Clang-arm64-Debug-iOS",
         "Housekeeper-PerCommit-BundleRecipes",
@@ -10289,7 +10319,6 @@
       ],
       "dimensions": [
         "device:iPad6,3",
-        "machine_type:RaspberryPi",
         "os:iOS-10.3.1",
         "pool:Skia"
       ],
@@ -10300,7 +10329,7 @@
         "../../..",
         "perf",
         "repository=<(REPO)",
-        "buildername=Perf-iOS-Clang-iPadPro-GPU-GT7800-arm64-Debug-RaspberryPi",
+        "buildername=Perf-iOS-Clang-iPadPro-GPU-GT7800-arm64-Debug",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -10313,7 +10342,7 @@
       "max_attempts": 1,
       "priority": 0.8
     },
-    "Perf-iOS-Clang-iPadPro-GPU-GT7800-arm64-Release-RaspberryPi": {
+    "Perf-iOS-Clang-iPadPro-GPU-GT7800-arm64-Release": {
       "dependencies": [
         "Build-Mac-Clang-arm64-Release-iOS",
         "Housekeeper-PerCommit-BundleRecipes",
@@ -10323,7 +10352,6 @@
       ],
       "dimensions": [
         "device:iPad6,3",
-        "machine_type:RaspberryPi",
         "os:iOS-10.3.1",
         "pool:Skia"
       ],
@@ -10334,7 +10362,7 @@
         "../../..",
         "perf",
         "repository=<(REPO)",
-        "buildername=Perf-iOS-Clang-iPadPro-GPU-GT7800-arm64-Release-RaspberryPi",
+        "buildername=Perf-iOS-Clang-iPadPro-GPU-GT7800-arm64-Release",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -10347,7 +10375,7 @@
       "max_attempts": 1,
       "priority": 0.8
     },
-    "Perf-iOS-Clang-iPhone6-GPU-GX6450-arm64-Debug-RaspberryPi": {
+    "Perf-iOS-Clang-iPhone6-GPU-GX6450-arm64-Debug": {
       "dependencies": [
         "Build-Mac-Clang-arm64-Debug-iOS",
         "Housekeeper-PerCommit-BundleRecipes",
@@ -10357,7 +10385,6 @@
       ],
       "dimensions": [
         "device:iPhone7,2",
-        "machine_type:RaspberryPi",
         "os:iOS-10.3.1",
         "pool:Skia"
       ],
@@ -10368,7 +10395,7 @@
         "../../..",
         "perf",
         "repository=<(REPO)",
-        "buildername=Perf-iOS-Clang-iPhone6-GPU-GX6450-arm64-Debug-RaspberryPi",
+        "buildername=Perf-iOS-Clang-iPhone6-GPU-GX6450-arm64-Debug",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -10381,7 +10408,7 @@
       "max_attempts": 1,
       "priority": 0.8
     },
-    "Perf-iOS-Clang-iPhone6-GPU-GX6450-arm64-Release-RaspberryPi": {
+    "Perf-iOS-Clang-iPhone6-GPU-GX6450-arm64-Release": {
       "dependencies": [
         "Build-Mac-Clang-arm64-Release-iOS",
         "Housekeeper-PerCommit-BundleRecipes",
@@ -10391,7 +10418,6 @@
       ],
       "dimensions": [
         "device:iPhone7,2",
-        "machine_type:RaspberryPi",
         "os:iOS-10.3.1",
         "pool:Skia"
       ],
@@ -10402,7 +10428,7 @@
         "../../..",
         "perf",
         "repository=<(REPO)",
-        "buildername=Perf-iOS-Clang-iPhone6-GPU-GX6450-arm64-Release-RaspberryPi",
+        "buildername=Perf-iOS-Clang-iPhone6-GPU-GX6450-arm64-Release",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -10415,7 +10441,7 @@
       "max_attempts": 1,
       "priority": 0.8
     },
-    "Perf-iOS-Clang-iPhone7-GPU-GT7600-arm64-Debug-RaspberryPi": {
+    "Perf-iOS-Clang-iPhone7-GPU-GT7600-arm64-Debug": {
       "dependencies": [
         "Build-Mac-Clang-arm64-Debug-iOS",
         "Housekeeper-PerCommit-BundleRecipes",
@@ -10425,7 +10451,6 @@
       ],
       "dimensions": [
         "device:iPhone9,1",
-        "machine_type:RaspberryPi",
         "os:iOS-10.3.1",
         "pool:Skia"
       ],
@@ -10436,7 +10461,7 @@
         "../../..",
         "perf",
         "repository=<(REPO)",
-        "buildername=Perf-iOS-Clang-iPhone7-GPU-GT7600-arm64-Debug-RaspberryPi",
+        "buildername=Perf-iOS-Clang-iPhone7-GPU-GT7600-arm64-Debug",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -10449,7 +10474,7 @@
       "max_attempts": 1,
       "priority": 0.8
     },
-    "Perf-iOS-Clang-iPhone7-GPU-GT7600-arm64-Release-RaspberryPi": {
+    "Perf-iOS-Clang-iPhone7-GPU-GT7600-arm64-Release": {
       "dependencies": [
         "Build-Mac-Clang-arm64-Release-iOS",
         "Housekeeper-PerCommit-BundleRecipes",
@@ -10459,7 +10484,6 @@
       ],
       "dimensions": [
         "device:iPhone9,1",
-        "machine_type:RaspberryPi",
         "os:iOS-10.3.1",
         "pool:Skia"
       ],
@@ -10470,7 +10494,7 @@
         "../../..",
         "perf",
         "repository=<(REPO)",
-        "buildername=Perf-iOS-Clang-iPhone7-GPU-GT7600-arm64-Release-RaspberryPi",
+        "buildername=Perf-iOS-Clang-iPhone7-GPU-GT7600-arm64-Release",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -11444,7 +11468,7 @@
         "Housekeeper-PerCommit-IsolateSkImage"
       ],
       "dimensions": [
-        "device_os:OPP1.170223.012",
+        "device_os:OPP2.170420.017",
         "device_type:fugu",
         "os:Android",
         "pool:Skia"
@@ -11478,7 +11502,7 @@
         "Housekeeper-PerCommit-IsolateSkImage"
       ],
       "dimensions": [
-        "device_os:OPP1.170223.012",
+        "device_os:OPP2.170420.017",
         "device_type:fugu",
         "os:Android",
         "pool:Skia"
@@ -11512,7 +11536,7 @@
         "Housekeeper-PerCommit-IsolateSkImage"
       ],
       "dimensions": [
-        "device_os:OPP1.170223.012",
+        "device_os:OPP2.170420.017",
         "device_type:fugu",
         "os:Android",
         "pool:Skia"
@@ -11546,7 +11570,7 @@
         "Housekeeper-PerCommit-IsolateSkImage"
       ],
       "dimensions": [
-        "device_os:OPP1.170223.012",
+        "device_os:OPP2.170420.017",
         "device_type:fugu",
         "os:Android",
         "pool:Skia"
@@ -11580,7 +11604,7 @@
         "Housekeeper-PerCommit-IsolateSkImage"
       ],
       "dimensions": [
-        "device_os:OPP1.170223.012",
+        "device_os:OPP2.170420.017",
         "device_type:fugu",
         "os:Android",
         "pool:Skia"
@@ -11614,7 +11638,7 @@
         "Housekeeper-PerCommit-IsolateSkImage"
       ],
       "dimensions": [
-        "device_os:OPP1.170223.012",
+        "device_os:OPP2.170420.017",
         "device_type:fugu",
         "os:Android",
         "pool:Skia"
@@ -12112,7 +12136,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -12160,7 +12184,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -12208,7 +12232,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -12255,7 +12279,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -12302,7 +12326,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -12349,7 +12373,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -12397,7 +12421,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -12450,7 +12474,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -12503,7 +12527,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -12551,7 +12575,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -12604,7 +12628,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -12652,7 +12676,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -12700,7 +12724,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -12748,7 +12772,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -12796,7 +12820,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -12849,7 +12873,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -12901,7 +12925,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -12953,7 +12977,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -13005,7 +13029,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -13053,7 +13077,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -13167,7 +13191,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -13215,7 +13239,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -13263,7 +13287,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -13311,7 +13335,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -13358,7 +13382,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -13405,7 +13429,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -13452,7 +13476,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -13499,7 +13523,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -13546,7 +13570,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -13593,7 +13617,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -13640,7 +13664,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -13687,7 +13711,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -13739,7 +13763,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -13791,7 +13815,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -13843,7 +13867,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -13900,7 +13924,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -13952,7 +13976,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -14009,7 +14033,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -14061,7 +14085,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -14113,7 +14137,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -14165,7 +14189,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -14217,7 +14241,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -14264,7 +14288,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -14311,7 +14335,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -14358,7 +14382,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -14405,7 +14429,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -14452,7 +14476,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -14499,7 +14523,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -14546,7 +14570,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -14593,7 +14617,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -14640,7 +14664,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -14687,7 +14711,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -14734,7 +14758,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -14781,7 +14805,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -14828,7 +14852,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -14875,7 +14899,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -14922,7 +14946,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -14969,7 +14993,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -15017,7 +15041,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -15065,7 +15089,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -15112,7 +15136,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -15159,7 +15183,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -15206,7 +15230,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -15253,7 +15277,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -15300,7 +15324,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -15347,7 +15371,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -15394,7 +15418,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -15441,7 +15465,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -15488,7 +15512,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -15535,7 +15559,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -15582,7 +15606,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -15630,7 +15654,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -15678,7 +15702,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -15726,7 +15750,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -15774,7 +15798,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -15821,7 +15845,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -15868,7 +15892,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -15915,7 +15939,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -15962,7 +15986,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -16009,7 +16033,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -16056,7 +16080,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -16104,7 +16128,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -16152,7 +16176,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -16200,7 +16224,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -16248,7 +16272,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -16296,7 +16320,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -16344,7 +16368,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -16392,7 +16416,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -16440,7 +16464,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -16488,7 +16512,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -16536,7 +16560,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -16584,7 +16608,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -16632,7 +16656,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -16680,7 +16704,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -16728,7 +16752,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -16776,7 +16800,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -16824,7 +16848,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -16872,7 +16896,7 @@
         {
           "name": "skia/bots/skimage",
           "path": "skimage",
-          "version": "version:24"
+          "version": "version:26"
         },
         {
           "name": "skia/bots/skp",
@@ -16915,7 +16939,7 @@
       "max_attempts": 1,
       "priority": 0.8
     },
-    "Test-iOS-Clang-iPadPro-GPU-GT7800-arm64-Debug-RaspberryPi": {
+    "Test-iOS-Clang-iPadPro-GPU-GT7800-arm64-Debug": {
       "dependencies": [
         "Build-Mac-Clang-arm64-Debug-iOS",
         "Housekeeper-PerCommit-BundleRecipes",
@@ -16925,7 +16949,6 @@
       ],
       "dimensions": [
         "device:iPad6,3",
-        "machine_type:RaspberryPi",
         "os:iOS-10.3.1",
         "pool:Skia"
       ],
@@ -16936,7 +16959,7 @@
         "../../..",
         "test",
         "repository=<(REPO)",
-        "buildername=Test-iOS-Clang-iPadPro-GPU-GT7800-arm64-Debug-RaspberryPi",
+        "buildername=Test-iOS-Clang-iPadPro-GPU-GT7800-arm64-Debug",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -16949,7 +16972,7 @@
       "max_attempts": 1,
       "priority": 0.8
     },
-    "Test-iOS-Clang-iPadPro-GPU-GT7800-arm64-Release-RaspberryPi": {
+    "Test-iOS-Clang-iPadPro-GPU-GT7800-arm64-Release": {
       "dependencies": [
         "Build-Mac-Clang-arm64-Release-iOS",
         "Housekeeper-PerCommit-BundleRecipes",
@@ -16959,7 +16982,6 @@
       ],
       "dimensions": [
         "device:iPad6,3",
-        "machine_type:RaspberryPi",
         "os:iOS-10.3.1",
         "pool:Skia"
       ],
@@ -16970,7 +16992,7 @@
         "../../..",
         "test",
         "repository=<(REPO)",
-        "buildername=Test-iOS-Clang-iPadPro-GPU-GT7800-arm64-Release-RaspberryPi",
+        "buildername=Test-iOS-Clang-iPadPro-GPU-GT7800-arm64-Release",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -16983,7 +17005,7 @@
       "max_attempts": 1,
       "priority": 0.8
     },
-    "Test-iOS-Clang-iPhone6-GPU-GX6450-arm64-Debug-RaspberryPi": {
+    "Test-iOS-Clang-iPhone6-GPU-GX6450-arm64-Debug": {
       "dependencies": [
         "Build-Mac-Clang-arm64-Debug-iOS",
         "Housekeeper-PerCommit-BundleRecipes",
@@ -16993,7 +17015,6 @@
       ],
       "dimensions": [
         "device:iPhone7,2",
-        "machine_type:RaspberryPi",
         "os:iOS-10.3.1",
         "pool:Skia"
       ],
@@ -17004,7 +17025,7 @@
         "../../..",
         "test",
         "repository=<(REPO)",
-        "buildername=Test-iOS-Clang-iPhone6-GPU-GX6450-arm64-Debug-RaspberryPi",
+        "buildername=Test-iOS-Clang-iPhone6-GPU-GX6450-arm64-Debug",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -17017,7 +17038,7 @@
       "max_attempts": 1,
       "priority": 0.8
     },
-    "Test-iOS-Clang-iPhone6-GPU-GX6450-arm64-Release-RaspberryPi": {
+    "Test-iOS-Clang-iPhone6-GPU-GX6450-arm64-Release": {
       "dependencies": [
         "Build-Mac-Clang-arm64-Release-iOS",
         "Housekeeper-PerCommit-BundleRecipes",
@@ -17027,7 +17048,6 @@
       ],
       "dimensions": [
         "device:iPhone7,2",
-        "machine_type:RaspberryPi",
         "os:iOS-10.3.1",
         "pool:Skia"
       ],
@@ -17038,7 +17058,7 @@
         "../../..",
         "test",
         "repository=<(REPO)",
-        "buildername=Test-iOS-Clang-iPhone6-GPU-GX6450-arm64-Release-RaspberryPi",
+        "buildername=Test-iOS-Clang-iPhone6-GPU-GX6450-arm64-Release",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -17051,7 +17071,7 @@
       "max_attempts": 1,
       "priority": 0.8
     },
-    "Test-iOS-Clang-iPhone7-GPU-GT7600-arm64-Debug-RaspberryPi": {
+    "Test-iOS-Clang-iPhone7-GPU-GT7600-arm64-Debug": {
       "dependencies": [
         "Build-Mac-Clang-arm64-Debug-iOS",
         "Housekeeper-PerCommit-BundleRecipes",
@@ -17061,7 +17081,6 @@
       ],
       "dimensions": [
         "device:iPhone9,1",
-        "machine_type:RaspberryPi",
         "os:iOS-10.3.1",
         "pool:Skia"
       ],
@@ -17072,7 +17091,7 @@
         "../../..",
         "test",
         "repository=<(REPO)",
-        "buildername=Test-iOS-Clang-iPhone7-GPU-GT7600-arm64-Debug-RaspberryPi",
+        "buildername=Test-iOS-Clang-iPhone7-GPU-GT7600-arm64-Debug",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -17085,7 +17104,7 @@
       "max_attempts": 1,
       "priority": 0.8
     },
-    "Test-iOS-Clang-iPhone7-GPU-GT7600-arm64-Release-RaspberryPi": {
+    "Test-iOS-Clang-iPhone7-GPU-GT7600-arm64-Release": {
       "dependencies": [
         "Build-Mac-Clang-arm64-Release-iOS",
         "Housekeeper-PerCommit-BundleRecipes",
@@ -17095,7 +17114,6 @@
       ],
       "dimensions": [
         "device:iPhone9,1",
-        "machine_type:RaspberryPi",
         "os:iOS-10.3.1",
         "pool:Skia"
       ],
@@ -17106,7 +17124,7 @@
         "../../..",
         "test",
         "repository=<(REPO)",
-        "buildername=Test-iOS-Clang-iPhone7-GPU-GT7600-arm64-Release-RaspberryPi",
+        "buildername=Test-iOS-Clang-iPhone7-GPU-GT7600-arm64-Release",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -18766,9 +18784,9 @@
       "isolate": "upload_nano_results.isolate",
       "priority": 0.8
     },
-    "Upload-Perf-iOS-Clang-iPadPro-GPU-GT7800-arm64-Release-RaspberryPi": {
+    "Upload-Perf-iOS-Clang-iPadPro-GPU-GT7800-arm64-Release": {
       "dependencies": [
-        "Perf-iOS-Clang-iPadPro-GPU-GT7800-arm64-Release-RaspberryPi"
+        "Perf-iOS-Clang-iPadPro-GPU-GT7800-arm64-Release"
       ],
       "dimensions": [
         "cpu:x86-64-avx2",
@@ -18781,7 +18799,7 @@
         "../../..",
         "upload_nano_results",
         "repository=<(REPO)",
-        "buildername=Perf-iOS-Clang-iPadPro-GPU-GT7800-arm64-Release-RaspberryPi",
+        "buildername=Perf-iOS-Clang-iPadPro-GPU-GT7800-arm64-Release",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -18793,9 +18811,9 @@
       "isolate": "upload_nano_results.isolate",
       "priority": 0.8
     },
-    "Upload-Perf-iOS-Clang-iPhone6-GPU-GX6450-arm64-Release-RaspberryPi": {
+    "Upload-Perf-iOS-Clang-iPhone6-GPU-GX6450-arm64-Release": {
       "dependencies": [
-        "Perf-iOS-Clang-iPhone6-GPU-GX6450-arm64-Release-RaspberryPi"
+        "Perf-iOS-Clang-iPhone6-GPU-GX6450-arm64-Release"
       ],
       "dimensions": [
         "cpu:x86-64-avx2",
@@ -18808,7 +18826,7 @@
         "../../..",
         "upload_nano_results",
         "repository=<(REPO)",
-        "buildername=Perf-iOS-Clang-iPhone6-GPU-GX6450-arm64-Release-RaspberryPi",
+        "buildername=Perf-iOS-Clang-iPhone6-GPU-GX6450-arm64-Release",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -18820,9 +18838,9 @@
       "isolate": "upload_nano_results.isolate",
       "priority": 0.8
     },
-    "Upload-Perf-iOS-Clang-iPhone7-GPU-GT7600-arm64-Release-RaspberryPi": {
+    "Upload-Perf-iOS-Clang-iPhone7-GPU-GT7600-arm64-Release": {
       "dependencies": [
-        "Perf-iOS-Clang-iPhone7-GPU-GT7600-arm64-Release-RaspberryPi"
+        "Perf-iOS-Clang-iPhone7-GPU-GT7600-arm64-Release"
       ],
       "dimensions": [
         "cpu:x86-64-avx2",
@@ -18835,7 +18853,7 @@
         "../../..",
         "upload_nano_results",
         "repository=<(REPO)",
-        "buildername=Perf-iOS-Clang-iPhone7-GPU-GT7600-arm64-Release-RaspberryPi",
+        "buildername=Perf-iOS-Clang-iPhone7-GPU-GT7600-arm64-Release",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -22465,9 +22483,9 @@
       "isolate": "upload_dm_results.isolate",
       "priority": 0.8
     },
-    "Upload-Test-iOS-Clang-iPadPro-GPU-GT7800-arm64-Debug-RaspberryPi": {
+    "Upload-Test-iOS-Clang-iPadPro-GPU-GT7800-arm64-Debug": {
       "dependencies": [
-        "Test-iOS-Clang-iPadPro-GPU-GT7800-arm64-Debug-RaspberryPi"
+        "Test-iOS-Clang-iPadPro-GPU-GT7800-arm64-Debug"
       ],
       "dimensions": [
         "cpu:x86-64-avx2",
@@ -22480,7 +22498,7 @@
         "../../..",
         "upload_dm_results",
         "repository=<(REPO)",
-        "buildername=Test-iOS-Clang-iPadPro-GPU-GT7800-arm64-Debug-RaspberryPi",
+        "buildername=Test-iOS-Clang-iPadPro-GPU-GT7800-arm64-Debug",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -22492,9 +22510,9 @@
       "isolate": "upload_dm_results.isolate",
       "priority": 0.8
     },
-    "Upload-Test-iOS-Clang-iPadPro-GPU-GT7800-arm64-Release-RaspberryPi": {
+    "Upload-Test-iOS-Clang-iPadPro-GPU-GT7800-arm64-Release": {
       "dependencies": [
-        "Test-iOS-Clang-iPadPro-GPU-GT7800-arm64-Release-RaspberryPi"
+        "Test-iOS-Clang-iPadPro-GPU-GT7800-arm64-Release"
       ],
       "dimensions": [
         "cpu:x86-64-avx2",
@@ -22507,7 +22525,7 @@
         "../../..",
         "upload_dm_results",
         "repository=<(REPO)",
-        "buildername=Test-iOS-Clang-iPadPro-GPU-GT7800-arm64-Release-RaspberryPi",
+        "buildername=Test-iOS-Clang-iPadPro-GPU-GT7800-arm64-Release",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -22519,9 +22537,9 @@
       "isolate": "upload_dm_results.isolate",
       "priority": 0.8
     },
-    "Upload-Test-iOS-Clang-iPhone6-GPU-GX6450-arm64-Debug-RaspberryPi": {
+    "Upload-Test-iOS-Clang-iPhone6-GPU-GX6450-arm64-Debug": {
       "dependencies": [
-        "Test-iOS-Clang-iPhone6-GPU-GX6450-arm64-Debug-RaspberryPi"
+        "Test-iOS-Clang-iPhone6-GPU-GX6450-arm64-Debug"
       ],
       "dimensions": [
         "cpu:x86-64-avx2",
@@ -22534,7 +22552,7 @@
         "../../..",
         "upload_dm_results",
         "repository=<(REPO)",
-        "buildername=Test-iOS-Clang-iPhone6-GPU-GX6450-arm64-Debug-RaspberryPi",
+        "buildername=Test-iOS-Clang-iPhone6-GPU-GX6450-arm64-Debug",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -22546,9 +22564,9 @@
       "isolate": "upload_dm_results.isolate",
       "priority": 0.8
     },
-    "Upload-Test-iOS-Clang-iPhone6-GPU-GX6450-arm64-Release-RaspberryPi": {
+    "Upload-Test-iOS-Clang-iPhone6-GPU-GX6450-arm64-Release": {
       "dependencies": [
-        "Test-iOS-Clang-iPhone6-GPU-GX6450-arm64-Release-RaspberryPi"
+        "Test-iOS-Clang-iPhone6-GPU-GX6450-arm64-Release"
       ],
       "dimensions": [
         "cpu:x86-64-avx2",
@@ -22561,7 +22579,7 @@
         "../../..",
         "upload_dm_results",
         "repository=<(REPO)",
-        "buildername=Test-iOS-Clang-iPhone6-GPU-GX6450-arm64-Release-RaspberryPi",
+        "buildername=Test-iOS-Clang-iPhone6-GPU-GX6450-arm64-Release",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -22573,9 +22591,9 @@
       "isolate": "upload_dm_results.isolate",
       "priority": 0.8
     },
-    "Upload-Test-iOS-Clang-iPhone7-GPU-GT7600-arm64-Debug-RaspberryPi": {
+    "Upload-Test-iOS-Clang-iPhone7-GPU-GT7600-arm64-Debug": {
       "dependencies": [
-        "Test-iOS-Clang-iPhone7-GPU-GT7600-arm64-Debug-RaspberryPi"
+        "Test-iOS-Clang-iPhone7-GPU-GT7600-arm64-Debug"
       ],
       "dimensions": [
         "cpu:x86-64-avx2",
@@ -22588,7 +22606,7 @@
         "../../..",
         "upload_dm_results",
         "repository=<(REPO)",
-        "buildername=Test-iOS-Clang-iPhone7-GPU-GT7600-arm64-Debug-RaspberryPi",
+        "buildername=Test-iOS-Clang-iPhone7-GPU-GT7600-arm64-Debug",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -22600,9 +22618,9 @@
       "isolate": "upload_dm_results.isolate",
       "priority": 0.8
     },
-    "Upload-Test-iOS-Clang-iPhone7-GPU-GT7600-arm64-Release-RaspberryPi": {
+    "Upload-Test-iOS-Clang-iPhone7-GPU-GT7600-arm64-Release": {
       "dependencies": [
-        "Test-iOS-Clang-iPhone7-GPU-GT7600-arm64-Release-RaspberryPi"
+        "Test-iOS-Clang-iPhone7-GPU-GT7600-arm64-Release"
       ],
       "dimensions": [
         "cpu:x86-64-avx2",
@@ -22615,7 +22633,7 @@
         "../../..",
         "upload_dm_results",
         "repository=<(REPO)",
-        "buildername=Test-iOS-Clang-iPhone7-GPU-GT7600-arm64-Release-RaspberryPi",
+        "buildername=Test-iOS-Clang-iPhone7-GPU-GT7600-arm64-Release",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",

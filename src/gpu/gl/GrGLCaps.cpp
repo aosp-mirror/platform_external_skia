@@ -53,7 +53,8 @@ GrGLCaps::GrGLCaps(const GrContextOptions& contextOptions,
     fDoManualMipmapping = false;
     fSRGBDecodeDisableSupport = false;
     fSRGBDecodeDisableAffectsMipmaps = false;
-    fClearToOpaqueBlackIsBroken = false;
+    fClearToBoundaryValuesIsBroken = false;
+    fDrawArraysBaseVertexIsBroken = false;
 
     fBlitFramebufferFlags = kNoSupport_BlitFramebufferFlag;
 
@@ -570,9 +571,12 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
     // See http://crbug.com/710443
 #ifdef SK_BUILD_FOR_MAC
     if (kIntel6xxx_GrGLRenderer == ctxInfo.renderer()) {
-        fClearToOpaqueBlackIsBroken = true;
+        fClearToBoundaryValuesIsBroken = true;
     }
 #endif
+    if (kQualcomm_GrGLVendor == ctxInfo.vendor()) {
+        fDrawArraysBaseVertexIsBroken = true;
+    }
 
     // Requires fTextureRedSupport, fTextureSwizzleSupport, msaa support, ES compatibility have
     // already been detected.
