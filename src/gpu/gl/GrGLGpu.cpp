@@ -1222,10 +1222,10 @@ bool GrGLGpu::uploadTexData(GrPixelConfig texConfig, int texWidth, int texHeight
     bool succeeded = true;
     if (kNewTexture_UploadType == uploadType) {
         if (0 == left && 0 == top && texWidth == width && texHeight == height) {
-            allocate_and_populate_uncompressed_texture(texConfig, *interface, caps, target,
-                                                       internalFormat, internalFormatForTexStorage,
-                                                       externalFormat, externalType,
-                                                       texelsShallowCopy, width, height);
+            succeeded = allocate_and_populate_uncompressed_texture(
+                    texConfig, *interface, caps, target, internalFormat,
+                    internalFormatForTexStorage, externalFormat, externalType, texelsShallowCopy,
+                    width, height);
         } else {
             succeeded = false;
         }
@@ -2084,14 +2084,17 @@ void GrGLGpu::clear(const GrFixedClip& clip, GrColor color, GrRenderTarget* targ
     GL_CALL(ColorMask(GR_GL_TRUE, GR_GL_TRUE, GR_GL_TRUE, GR_GL_TRUE));
     fHWWriteToColor = kYes_TriState;
 
-    if (this->glCaps().clearToOpaqueBlackIsBroken() && 0 == r && 0 == g && 0 == b && 1 == a) {
+    if (this->glCaps().clearToBoundaryValuesIsBroken() &&
+        (1 == r || 0 == r) && (1 == g || 0 == g) && (1 == b || 0 == b) && (1 == a || 0 == a)) {
 #ifdef SK_BUILD_FOR_ANDROID
         // Android doesn't have std::nextafter but has nextafter.
-        static const GrGLfloat safeAlpha = nextafter(1.f, 2.f);
+        static const GrGLfloat safeAlpha1 = nextafter(1.f, 2.f);
+        static const GrGLfloat safeAlpha0 = nextafter(0.f, -1.f);
 #else
-        static const GrGLfloat safeAlpha = std::nextafter(1.f, 2.f);
+        static const GrGLfloat safeAlpha1 = std::nextafter(1.f, 2.f);
+        static const GrGLfloat safeAlpha0 = std::nextafter(0.f, -1.f);
 #endif
-        a = safeAlpha;
+        a = (1 == a) ? safeAlpha1 : safeAlpha0;
     }
     GL_CALL(ClearColor(r, g, b, a));
     GL_CALL(Clear(GR_GL_COLOR_BUFFER_BIT));
@@ -2649,7 +2652,7 @@ void GrGLGpu::draw(const GrPipeline& pipeline,
             for (const GrMesh::PatternBatch batch : mesh) {
                 this->setupGeometry(primProc, mesh.indexBuffer(), mesh.vertexBuffer(),
                                     batch.fBaseVertex);
-                // mesh.baseVertex() was accounted for by setupGeometry.
+                // batch.fBaseVertex was accounted for by setupGeometry.
                 if (this->glCaps().drawRangeElementsSupport()) {
                     // We assume here that the GrMeshDrawOps that generated the mesh used the full
                     // 0..vertexCount()-1 range.
@@ -2665,8 +2668,14 @@ void GrGLGpu::draw(const GrPipeline& pipeline,
                 fStats.incNumDraws();
             }
         } else {
-            this->setupGeometry(primProc, mesh.indexBuffer(), mesh.vertexBuffer(), 0);
-            GL_CALL(DrawArrays(primType, mesh.baseVertex(), mesh.vertexCount()));
+            if (this->glCaps().drawArraysBaseVertexIsBroken()) {
+                this->setupGeometry(primProc, mesh.indexBuffer(), mesh.vertexBuffer(),
+                                    mesh.baseVertex());
+                GL_CALL(DrawArrays(primType, 0, mesh.vertexCount()));
+            } else {
+                this->setupGeometry(primProc, mesh.indexBuffer(), mesh.vertexBuffer(), 0);
+                GL_CALL(DrawArrays(primType, mesh.baseVertex(), mesh.vertexCount()));
+            }
             fStats.incNumDraws();
         }
     }

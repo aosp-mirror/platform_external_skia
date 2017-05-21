@@ -661,7 +661,6 @@
   {
     "cmd": [
       "idevice-app-runner",
-      "-d",
       "-s",
       "com.google.dm",
       "--args",
@@ -726,10 +725,6 @@
       "svg",
       "--blacklist",
       "glessrgb",
-      "image",
-      "_",
-      "_",
-      "8888",
       "image",
       "_",
       "_",
