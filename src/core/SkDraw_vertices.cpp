@@ -257,9 +257,9 @@ void SkTriColorShader::TriColorShaderContext::shadeSpan4f(int x, int y, SkPM4f d
 #ifndef SK_IGNORE_TO_STRING
 void SkTriColorShader::toString(SkString* str) const {
     str->append("SkTriColorShader: (");
-    
+
     this->INHERITED::toString(str);
-    
+
     str->append(")");
 }
 #endif
@@ -402,15 +402,11 @@ static SkPM4f* convert_colors(const SkColor src[], int count, SkColorSpace* devi
             dst[i] = SkPM4f_from_SkColor(src[i], nullptr);
         }
     } else {
-        // For now, we want premul to happen on the colors before interplation. If we later want
-        // to apply it after the interp, pass kUnpremul here.
-        SkAlphaType alphaVerb = kPremul_SkAlphaType;
         auto srcCS = SkColorSpace::MakeSRGB();
         auto dstCS = as_CSB(deviceCS)->makeLinearGamma();
-        SkColorSpaceXform::New(srcCS.get(),
-                               dstCS.get())->apply(SkColorSpaceXform::kRGBA_F32_ColorFormat, dst,
-                                                   SkColorSpaceXform::kBGRA_8888_ColorFormat, src,
-                                                   count, alphaVerb);
+        SkColorSpaceXform::Apply(dstCS.get(), SkColorSpaceXform::kRGBA_F32_ColorFormat, dst,
+                                 srcCS.get(), SkColorSpaceXform::kBGRA_8888_ColorFormat, src,
+                                 count, SkColorSpaceXform::kPremul_AlphaOp);
     }
     return dst;
 }
@@ -472,6 +468,17 @@ void SkDraw::drawVertices(SkVertices::VertexMode vmode, int count,
         //
         SkPM4f* dstColors = convert_colors(colors, count, fDst.colorSpace(), &alloc);
 
+        bool is_opaque;
+        if (paint.getAlpha() == 0xff) {
+            is_opaque = compute_is_opaque(colors, count);
+        } else {
+            is_opaque = false;
+            Sk4f alpha = paint.getAlpha() * (1/255.0f);
+            for (int i = 0; i < count; i++) {
+                (dstColors[i].to4f() * alpha).store(dstColors + i);
+            }
+        }
+
         shaderPipeline.append(SkRasterPipeline::matrix_4x3, &matrix43);
         // In theory we should never need to clamp. However, either due to imprecision in our
         // matrix43, or the scan converter passing us pixel centers that in fact are not within
@@ -480,9 +487,8 @@ void SkDraw::drawVertices(SkVertices::VertexMode vmode, int count,
         shaderPipeline.append(SkRasterPipeline::clamp_0);
         shaderPipeline.append(SkRasterPipeline::clamp_a);
 
-        bool is_opaque = compute_is_opaque(colors, count),
-             wants_dither = paint.isDither();
-        auto blitter = SkCreateRasterPipelineBlitter(fDst, paint, *fMatrix, shaderPipeline,
+        bool wants_dither = paint.isDither();
+        auto blitter = SkCreateRasterPipelineBlitter(fDst, paint, shaderPipeline,
                                                      is_opaque, wants_dither, &alloc);
         SkASSERT(!blitter->isNullBlitter());
 
