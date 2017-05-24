@@ -16,6 +16,8 @@
 #include <functional>
 #include <vector>
 
+struct SkJumper_Engine;
+
 /**
  * SkRasterPipeline provides a cheap way to chain together a pixel processing pipeline.
  *
@@ -90,8 +92,9 @@
     M(parametric_a)                                              \
     M(table_r) M(table_g) M(table_b) M(table_a)                  \
     M(lab_to_xyz)                                                \
-    M(clamp_x) M(mirror_x) M(repeat_x)                           \
-    M(clamp_y) M(mirror_y) M(repeat_y)                           \
+    M(clamp_x)   M(mirror_x)   M(repeat_x)                       \
+    M(clamp_y)   M(mirror_y)   M(repeat_y)                       \
+    M(clamp_x_1) M(mirror_x_1) M(repeat_x_1)                     \
     M(gather_a8) M(gather_g8) M(gather_i8)                       \
     M(gather_565) M(gather_4444) M(gather_8888) M(gather_f16)    \
     M(bilinear_nx) M(bilinear_px) M(bilinear_ny) M(bilinear_py)  \
@@ -109,7 +112,15 @@
 
 class SkRasterPipeline {
 public:
-    SkRasterPipeline(int size_hint=0);
+    explicit SkRasterPipeline(SkArenaAlloc*);
+
+    SkRasterPipeline(const SkRasterPipeline&) = delete;
+    SkRasterPipeline(SkRasterPipeline&&)      = default;
+
+    SkRasterPipeline& operator=(const SkRasterPipeline&) = delete;
+    SkRasterPipeline& operator=(SkRasterPipeline&&)      = default;
+
+    void reset();
 
     enum StockStage {
     #define M(stage) stage,
@@ -126,26 +137,43 @@ public:
     void run(size_t x, size_t n) const;
 
     // Allocates a thunk which amortizes run() setup cost in alloc.
-    std::function<void(size_t, size_t)> compile(SkArenaAlloc*) const;
+    std::function<void(size_t, size_t)> compile() const;
 
     void dump() const;
-
-    struct Stage {
-        StockStage stage;
-        void*        ctx;
-    };
 
     // Conversion from sRGB can be subtly tricky when premultiplication is involved.
     // Use these helpers to keep things sane.
     void append_from_srgb(SkAlphaType);
 
-    bool empty() const { return fStages.empty(); }
-
-    // Cheaply reset all state so that empty() returns true.
-    void rewind();
+    bool empty() const { return fStages == nullptr; }
 
 private:
-    std::vector<Stage> fStages;
+    struct StageList {
+        StageList* prev;
+        StockStage stage;
+        void*      ctx;
+    };
+
+    static void BuildPipeline(const StageList*, const SkJumper_Engine&, void**);
+    void unchecked_append(StockStage, void*);
+
+    SkArenaAlloc* fAlloc;
+    StageList*    fStages;
+    int           fNumStages;
+    int           fSlotsNeeded;
 };
+
+template <size_t bytes>
+class SkRasterPipeline_ : public SkRasterPipeline {
+public:
+    SkRasterPipeline_()
+        : SkRasterPipeline(&fBuiltinAlloc)
+        , fBuiltinAlloc(fBuffer) {}
+
+private:
+    char         fBuffer[bytes];
+    SkArenaAlloc fBuiltinAlloc;
+};
+
 
 #endif//SkRasterPipeline_DEFINED

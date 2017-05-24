@@ -24,6 +24,10 @@ std::unique_ptr<GrDrawOpAtlas> GrDrawOpAtlas::Make(GrContext* ctx, GrPixelConfig
     desc.fHeight = height;
     desc.fConfig = config;
 
+    if (ctx->caps()->mustClearAtlases()) {
+        desc.fFlags |= kPerformInitialClear_GrSurfaceFlag;
+    }
+
     // We don't want to flush the context so we claim we're in the middle of flushing so as to
     // guarantee we do not recieve a texture with pending IO
     // TODO: Determine how to avoid having to do this. (https://bug.skia.org/4156)
@@ -171,9 +175,6 @@ GrDrawOpAtlas::GrDrawOpAtlas(GrContext* context, sk_sp<GrTextureProxy> proxy,
     SkASSERT(fPlotHeight * numPlotsY == fProxy->height());
 
     SkDEBUGCODE(fNumPlots = numPlotsX * numPlotsY;)
-
-    // We currently do not support compressed atlases...
-    SkASSERT(!GrPixelConfigIsCompressed(fProxy->config()));
 
     // set up allocated plots
     fPlotArray.reset(new sk_sp<Plot>[ numPlotsX * numPlotsY ]);

@@ -45,7 +45,6 @@ public:
     bool srgbWriteControl() const { return fSRGBWriteControl; }
     bool discardRenderTargetSupport() const { return fDiscardRenderTargetSupport; }
     bool gpuTracingSupport() const { return fGpuTracingSupport; }
-    bool compressedTexSubImageSupport() const { return fCompressedTexSubImageSupport; }
     bool oversizedStencilSupport() const { return fOversizedStencilSupport; }
     bool textureBarrierSupport() const { return fTextureBarrierSupport; }
     bool sampleLocationsSupport() const { return fSampleLocationsSupport; }
@@ -177,6 +176,8 @@ public:
     /** True in environments that will issue errors if memory uploaded to buffers
         is not initialized (even if not read by draw calls). */
     bool mustClearUploadedBufferData() const { return fMustClearUploadedBufferData; }
+    /** True when there is a performance cost to using an atlas that has not been cleared. */
+    bool mustClearAtlases() const { return fMustClearAtlases; }
 
     bool wireframeMode() const { return fWireframeMode; }
 
@@ -212,7 +213,6 @@ protected:
     bool fReuseScratchTextures                       : 1;
     bool fReuseScratchBuffers                        : 1;
     bool fGpuTracingSupport                          : 1;
-    bool fCompressedTexSubImageSupport               : 1;
     bool fOversizedStencilSupport                    : 1;
     bool fTextureBarrierSupport                      : 1;
     bool fSampleLocationsSupport                     : 1;
@@ -221,6 +221,7 @@ protected:
     bool fPreferClientSideDynamicBuffers             : 1;
     bool fFullClearIsFree                            : 1;
     bool fMustClearUploadedBufferData                : 1;
+    bool fMustClearAtlases                           : 1;
 
     // Driver workaround
     bool fUseDrawInsteadOfClear                      : 1;

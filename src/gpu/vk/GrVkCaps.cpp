@@ -31,7 +31,6 @@ GrVkCaps::GrVkCaps(const GrContextOptions& contextOptions, const GrVkInterface* 
     fDiscardRenderTargetSupport = true;
     fReuseScratchTextures = true; //TODO: figure this out
     fGpuTracingSupport = false; //TODO: figure this out
-    fCompressedTexSubImageSupport = false; //TODO: figure this out
     fOversizedStencilSupport = false; //TODO: figure this out
 
     fUseDrawInsteadOfClear = false;
@@ -191,6 +190,12 @@ void GrVkCaps::initGrCaps(const VkPhysicalDeviceProperties& properties,
     if (kAMD_VkVendor == properties.vendorID) {
         fNewCBOnPipelineChange = true;
     }
+
+#if defined(SK_CPU_X86)
+    if (kImagination_VkVendor == properties.vendorID) {
+        fSRGBSupport = false;
+    }
+#endif
 }
 
 void GrVkCaps::initShaderCaps(const VkPhysicalDeviceProperties& properties, uint32_t featureFlags) {
@@ -304,14 +309,11 @@ void GrVkCaps::initConfigTable(const GrVkInterface* interface, VkPhysicalDevice 
     for (int i = 0; i < kGrPixelConfigCnt; ++i) {
         VkFormat format;
         if (GrPixelConfigToVkFormat(static_cast<GrPixelConfig>(i), &format)) {
-            fConfigTable[i].init(interface, physDev, format);
+            if (!GrPixelConfigIsSRGB(static_cast<GrPixelConfig>(i)) || fSRGBSupport) {
+                fConfigTable[i].init(interface, physDev, format);
+            }
         }
     }
-
-    // We currently do not support compressed textures in Vulkan
-    const uint16_t kFlagsToRemove = ConfigInfo::kTextureable_Flag|ConfigInfo::kRenderable_Flag;
-    fConfigTable[kETC1_GrPixelConfig].fOptimalFlags &= ~kFlagsToRemove;
-    fConfigTable[kETC1_GrPixelConfig].fLinearFlags &= ~kFlagsToRemove;
 }
 
 void GrVkCaps::ConfigInfo::InitConfigFlags(VkFormatFeatureFlags vkFlags, uint16_t* flags) {

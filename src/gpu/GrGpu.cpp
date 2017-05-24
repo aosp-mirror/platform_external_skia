@@ -138,29 +138,17 @@ GrTexture* GrGpu::createTexture(const GrSurfaceDesc& origDesc, SkBudgeted budget
     }
 
     desc.fSampleCnt = SkTMin(desc.fSampleCnt, caps->maxSampleCount());
-    // Attempt to catch un- or wrongly intialized sample counts;
+    // Attempt to catch un- or wrongly initialized sample counts.
     SkASSERT(desc.fSampleCnt >= 0 && desc.fSampleCnt <= 64);
 
     desc.fOrigin = resolve_origin(desc.fOrigin, isRT);
 
-    GrTexture* tex = nullptr;
-
-    if (GrPixelConfigIsCompressed(desc.fConfig)) {
-        // We shouldn't be rendering into this
-        SkASSERT(!isRT);
-        SkASSERT(0 == desc.fSampleCnt);
-
-        if (!caps->npotTextureTileSupport() &&
-            (!SkIsPow2(desc.fWidth) || !SkIsPow2(desc.fHeight))) {
-            return nullptr;
-        }
-
-        this->handleDirtyContext();
-        tex = this->onCreateCompressedTexture(desc, budgeted, texels);
-    } else {
-        this->handleDirtyContext();
-        tex = this->onCreateTexture(desc, budgeted, texels);
+    if (texels.count() && (desc.fFlags & kPerformInitialClear_GrSurfaceFlag)) {
+        return nullptr;
     }
+
+    this->handleDirtyContext();
+    GrTexture* tex = this->onCreateTexture(desc, budgeted, texels);
     if (tex) {
         if (!caps->reuseScratchTextures() && !isRT) {
             tex->resourcePriv().removeScratchKey();
@@ -261,9 +249,6 @@ bool GrGpu::copySurface(GrSurface* dst,
     if (GrPixelConfigIsSint(dst->config()) != GrPixelConfigIsSint(src->config())) {
         return false;
     }
-    if (GrPixelConfigIsCompressed(dst->config())) {
-        return false;
-    }
     return this->onCopySurface(dst, src, srcRect, dstPoint);
 }
 
@@ -275,18 +260,13 @@ bool GrGpu::getReadPixelsInfo(GrSurface* srcSurface, int width, int height, size
     SkASSERT(srcSurface);
     SkASSERT(kGpuPrefersDraw_DrawPreference != *drawPreference);
 
-    // We currently do not support reading into a compressed buffer
-    if (GrPixelConfigIsCompressed(readConfig)) {
-        return false;
-    }
-
     // We currently do not support reading into the packed formats 565 or 4444 as they are not
     // required to have read back support on all devices and backends.
     if (kRGB_565_GrPixelConfig == readConfig || kRGBA_4444_GrPixelConfig == readConfig) {
         return false;
     }
 
-    if (!this->onGetReadPixelsInfo(srcSurface, width, height, rowBytes, readConfig, drawPreference,
+   if (!this->onGetReadPixelsInfo(srcSurface, width, height, rowBytes, readConfig, drawPreference,
                                    tempDrawInfo)) {
         return false;
     }
@@ -310,10 +290,6 @@ bool GrGpu::getWritePixelsInfo(GrSurface* dstSurface, int width, int height,
     SkASSERT(tempDrawInfo);
     SkASSERT(dstSurface);
     SkASSERT(kGpuPrefersDraw_DrawPreference != *drawPreference);
-
-    if (GrPixelConfigIsCompressed(dstSurface->config()) && dstSurface->config() != srcConfig) {
-        return false;
-    }
 
     if (SkToBool(dstSurface->asRenderTarget())) {
         if (this->caps()->useDrawInsteadOfAllRenderTargetWrites()) {
@@ -350,11 +326,6 @@ bool GrGpu::readPixels(GrSurface* surface,
 
     // We don't allow conversion between integer configs and float/fixed configs.
     if (GrPixelConfigIsSint(surface->config()) != GrPixelConfigIsSint(config)) {
-        return false;
-    }
-
-    // We cannot read pixels into a compressed buffer
-    if (GrPixelConfigIsCompressed(config)) {
         return false;
     }
 

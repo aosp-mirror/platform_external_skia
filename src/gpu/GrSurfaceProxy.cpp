@@ -30,6 +30,7 @@ GrSurfaceProxy::GrSurfaceProxy(sk_sp<GrSurface> surface, SkBackingFit fit)
         , fBudgeted(fTarget->resourcePriv().isBudgeted())
         , fFlags(0)
         , fUniqueID(fTarget->uniqueID())  // Note: converting from unique resource ID to a proxy ID!
+        , fNeedsClear(false)
         , fGpuMemorySize(kInvalidGpuMemorySize)
         , fLastOpList(nullptr) {}
 
@@ -53,6 +54,9 @@ GrSurface* GrSurfaceProxy::instantiateImpl(GrResourceProvider* resourceProvider,
     desc.fSampleCnt = sampleCnt;
     desc.fIsMipMapped = isMipMapped;
     desc.fFlags = flags;
+    if (fNeedsClear) {
+        desc.fFlags |= kPerformInitialClear_GrSurfaceFlag;
+    }
 
     if (SkBackingFit::kApprox == fFit) {
         fTarget = resourceProvider->createApproxTexture(desc, fFlags);
@@ -136,18 +140,6 @@ sk_sp<GrTextureProxy> GrSurfaceProxy::MakeDeferred(GrResourceProvider* resourceP
 
     // TODO: move this logic into GrResourceProvider!
     // TODO: share this testing code with check_texture_creation_params
-    if (GrPixelConfigIsCompressed(desc.fConfig)) {
-        if (SkBackingFit::kApprox == fit || kBottomLeft_GrSurfaceOrigin == desc.fOrigin) {
-            // We don't allow scratch compressed textures and, apparently can't Y-flip compressed
-            // textures
-            return nullptr;
-        }
-
-        if (!caps->npotTextureTileSupport() && (!SkIsPow2(desc.fWidth) || !SkIsPow2(desc.fHeight))) {
-            return nullptr;
-        }
-    }
-
     if (!caps->isConfigTexturable(desc.fConfig)) {
         return nullptr;
     }
