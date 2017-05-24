@@ -54,6 +54,7 @@ GrGLCaps::GrGLCaps(const GrContextOptions& contextOptions,
     fSRGBDecodeDisableSupport = false;
     fSRGBDecodeDisableAffectsMipmaps = false;
     fClearToBoundaryValuesIsBroken = false;
+    fClearTextureSupport = false;
     fDrawArraysBaseVertexIsBroken = false;
 
     fBlitFramebufferFlags = kNoSupport_BlitFramebufferFlag;
@@ -251,6 +252,22 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
     // Both mesa and mac have reduced performance if reading back an RGBA framebuffer as BGRA or
     // vis-versa.
     fRGBAToBGRAReadbackConversionsAreSlow = isMESA || isMAC;
+
+    if (kGL_GrGLStandard == standard) {
+        if (version >= GR_GL_VER(4,4) || ctxInfo.hasExtension("GL_ARB_clear_texture")) {
+            // glClearTexImage seems to have a bug in NVIDIA drivers that was fixed sometime between
+            // 340.96 and 367.57.
+            if (ctxInfo.driver() != kNVIDIA_GrGLDriver ||
+                ctxInfo.driverVersion() >= GR_GL_DRIVER_VER(367, 57)) {
+                fClearTextureSupport = true;
+            }
+        }
+    } else if (ctxInfo.hasExtension("GL_EXT_clear_texture")) {
+        // Calling glClearTexImage crashes on the NexusPlayer.
+        if (kPowerVRRogue_GrGLRenderer != ctxInfo.renderer()) {
+            fClearTextureSupport = true;
+        }
+    }
 
     /**************************************************************************
     * GrShaderCaps fields
@@ -1344,15 +1361,6 @@ bool GrGLCaps::getTexImageFormats(GrPixelConfig surfaceConfig, GrPixelConfig ext
     return true;
 }
 
-bool GrGLCaps::getCompressedTexImageFormats(GrPixelConfig surfaceConfig,
-                                            GrGLenum* internalFormat) const {
-    if (!GrPixelConfigIsCompressed(surfaceConfig)) {
-        return false;
-    }
-    *internalFormat = fConfigTable[surfaceConfig].fFormats.fInternalFormatTexImage;
-    return true;
-}
-
 bool GrGLCaps::getReadPixelsFormat(GrPixelConfig surfaceConfig, GrPixelConfig externalConfig,
                                    GrGLenum* externalFormat, GrGLenum* externalType) const {
     if (!this->getExternalFormat(surfaceConfig, externalConfig, kOther_ExternalFormatUsage,
@@ -1363,9 +1371,6 @@ bool GrGLCaps::getReadPixelsFormat(GrPixelConfig surfaceConfig, GrPixelConfig ex
 }
 
 bool GrGLCaps::getRenderbufferFormat(GrPixelConfig config, GrGLenum* internalFormat) const {
-    if (GrPixelConfigIsCompressed(config)) {
-        return false;
-    }
     *internalFormat = fConfigTable[config].fFormats.fInternalFormatRenderbuffer;
     return true;
 }
@@ -1374,9 +1379,6 @@ bool GrGLCaps::getExternalFormat(GrPixelConfig surfaceConfig, GrPixelConfig memo
                                  ExternalFormatUsage usage, GrGLenum* externalFormat,
                                  GrGLenum* externalType) const {
     SkASSERT(externalFormat && externalType);
-    if (GrPixelConfigIsCompressed(memoryConfig)) {
-        return false;
-    }
 
     bool surfaceIsAlphaOnly = GrPixelConfigIsAlphaOnly(surfaceConfig);
     bool memoryIsAlphaOnly = GrPixelConfigIsAlphaOnly(memoryConfig);
@@ -1925,39 +1927,6 @@ void GrGLCaps::initConfigTable(const GrContextOptions& contextOptions,
         fConfigTable[kRGBA_half_GrPixelConfig].fFlags |= ConfigInfo::kCanUseWithTexelBuffer_Flag;
     }
     fConfigTable[kRGBA_half_GrPixelConfig].fSwizzle = GrSwizzle::RGBA();
-
-    // Compressed texture support
-
-    // glCompressedTexImage2D is available on all OpenGL ES devices. It is available on standard
-    // OpenGL after version 1.3. We'll assume at least that level of OpenGL support.
-
-    // TODO: Fix command buffer bindings and remove this.
-    fCompressedTexSubImageSupport = SkToBool(gli->fFunctions.fCompressedTexSubImage2D);
-
-    // No sized/unsized internal format distinction for compressed formats, no external format.
-    // Below we set the external formats and types to 0.
-    {
-        fConfigTable[kETC1_GrPixelConfig].fFormats.fBaseInternalFormat = GR_GL_COMPRESSED_ETC1_RGB8;
-        fConfigTable[kETC1_GrPixelConfig].fFormats.fSizedInternalFormat =
-                                                                         GR_GL_COMPRESSED_ETC1_RGB8;
-        fConfigTable[kETC1_GrPixelConfig].fFormats.fExternalFormat[kOther_ExternalFormatUsage] = 0;
-        fConfigTable[kETC1_GrPixelConfig].fFormats.fExternalType = 0;
-        fConfigTable[kETC1_GrPixelConfig].fFormatType = kNormalizedFixedPoint_FormatType;
-        if (kGL_GrGLStandard == standard) {
-            if (version >= GR_GL_VER(4, 3) || ctxInfo.hasExtension("GL_ARB_ES3_compatibility")) {
-                fConfigTable[kETC1_GrPixelConfig].fFlags = ConfigInfo::kTextureable_Flag;
-            }
-        } else {
-            if (version >= GR_GL_VER(3, 0) ||
-                ctxInfo.hasExtension("GL_OES_compressed_ETC1_RGB8_texture") ||
-                // ETC2 is a superset of ETC1, so we can just check for that, too.
-                (ctxInfo.hasExtension("GL_OES_compressed_ETC2_RGB8_texture") &&
-                 ctxInfo.hasExtension("GL_OES_compressed_ETC2_RGBA8_texture"))) {
-                fConfigTable[kETC1_GrPixelConfig].fFlags = ConfigInfo::kTextureable_Flag;
-            }
-        }
-        fConfigTable[kETC1_GrPixelConfig].fSwizzle = GrSwizzle::RGBA();
-    }
 
     // Bulk populate the texture internal/external formats here and then deal with exceptions below.
 
