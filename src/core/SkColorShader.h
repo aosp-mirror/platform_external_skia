@@ -17,7 +17,7 @@
     accomplished by just using the color field on the paint, but if an
     actual shader object is needed, this provides that feature.
 */
-class SK_API SkColorShader : public SkShaderBase {
+class SkColorShader : public SkShaderBase {
 public:
     /** Create a ColorShader that ignores the color in the paint, and uses the
         specified color. Note: like all shaders, at draw time the paint's alpha
@@ -36,9 +36,6 @@ public:
         void shadeSpan(int x, int y, SkPMColor span[], int count) override;
         void shadeSpanAlpha(int x, int y, uint8_t alpha[], int count) override;
         void shadeSpan4f(int x, int y, SkPM4f[], int count) override;
-
-    protected:
-        bool onChooseBlitProcs(const SkImageInfo&, BlitState*) override;
 
     private:
         SkPM4f      fPM4f;
@@ -97,9 +94,6 @@ public:
         void shadeSpan(int x, int y, SkPMColor span[], int count) override;
         void shadeSpanAlpha(int x, int y, uint8_t alpha[], int count) override;
         void shadeSpan4f(int x, int y, SkPM4f[], int count) override;
-
-    protected:
-        bool onChooseBlitProcs(const SkImageInfo&, BlitState*) override;
 
     private:
         SkPM4f      fPM4f;
