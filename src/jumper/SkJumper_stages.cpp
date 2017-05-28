@@ -76,10 +76,8 @@ struct LazyCtx {
 // We're finally going to get to what a Stage function looks like!
 // It's best to jump down to the #else case first, then to come back up here for AVX.
 
-#if defined(JUMPER) && defined(__AVX__)
-    // There's a big cost to switch between SSE and AVX, so we do a little
-    // extra work to handle even the jagged <kStride tail in AVX mode.
-    // Compared to normal stages, we maintain an extra tail register:
+#if defined(JUMPER) && defined(__SSE2__)
+    // Process the tail on all x86 processors with SSE2 or better instructions.
     //    tail == 0 ~~> work on a full kStride pixels
     //    tail != 0 ~~> work on only the first tail pixels
     // tail is always < kStride.
@@ -113,8 +111,7 @@ struct LazyCtx {
                          F& r, F& g, F& b, F& a, F& dr, F& dg, F& db, F& da)
 
 #else
-    // Other instruction sets (SSE, NEON, portable) can fall back on narrower
-    // pipelines cheaply, which frees us to always assume tail==0.
+    // Other instruction sets (NEON, portable) currently always assume tail == 0.
 
     // Stages tail call between each other by following program as described above.
     // x is our induction variable, stepping forward kStride at a time.
@@ -540,6 +537,30 @@ STAGE(luminosity) {
     a = a + da - a*da;
 }
 
+STAGE(srcover_rgba_8888) {
+    auto ptr = *(uint32_t**)ctx + x;
+
+    U32 dst = load<U32>(ptr, tail);
+    dr = cast((dst      ) & 0xff);
+    dg = cast((dst >>  8) & 0xff);
+    db = cast((dst >> 16) & 0xff);
+    da = cast((dst >> 24)       );
+    // {dr,dg,db,da} are in [0,255]
+    // { r, g, b, a} are in [0,  1]
+
+    r = mad(dr, inv(a), r*255.0f);
+    g = mad(dg, inv(a), g*255.0f);
+    b = mad(db, inv(a), b*255.0f);
+    a = mad(da, inv(a), a*255.0f);
+    // { r, g, b, a} are now in [0,255]
+
+    dst = round(r, 1.0f)
+        | round(g, 1.0f) <<  8
+        | round(b, 1.0f) << 16
+        | round(a, 1.0f) << 24;
+    store(ptr, dst, tail);
+}
+
 STAGE(clamp_0) {
     r = max(r, 0);
     g = max(g, 0);
@@ -621,10 +642,21 @@ STAGE(from_srgb) {
 }
 STAGE(to_srgb) {
     auto fn = [&](F l) {
+        // We tweak c and d for each instruction set to make sure fn(1) is exactly 1.
+    #if defined(JUMPER) && defined(__SSE2__)
+        const float c = 1.130048394203f,
+                    d = 0.141357362270f;
+    #elif defined(JUMPER) && (defined(__aarch64__) || defined(__arm__))
+        const float c = 1.129999995232f,
+                    d = 0.141381442547f;
+    #else
+        const float c = 1.129999995232f,
+                    d = 0.141377761960f;
+    #endif
         F t = rsqrt(l);
         auto lo = l * 12.92f;
-        auto hi = mad(t, mad(t, -0.0024542345f, 0.013832027f), 1.1334244f)
-                * rcp(0.14513608f + t);
+        auto hi = mad(t, mad(t, -0.0024542345f, 0.013832027f), c)
+                * rcp(d + t);
         return if_then_else(l < 0.00465985f, lo, hi);
     };
     r = fn(r);

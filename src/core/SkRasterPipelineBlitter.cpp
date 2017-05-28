@@ -16,6 +16,7 @@
 #include "SkPM4fPriv.h"
 #include "SkRasterPipeline.h"
 #include "SkShader.h"
+#include "SkShaderBase.h"
 #include "SkUtils.h"
 #include "../jumper/SkJumper.h"
 
@@ -23,13 +24,14 @@ class SkRasterPipelineBlitter final : public SkBlitter {
 public:
     // This is our common entrypoint for creating the blitter once we've sorted out shaders.
     static SkBlitter* Create(const SkPixmap&, const SkPaint&, SkArenaAlloc*,
-                             const SkRasterPipeline& shaderPipeline, SkShader::Context* shaderCtx,
+                             const SkRasterPipeline& shaderPipeline,
+                             SkShaderBase::Context* shaderCtx,
                              bool is_opaque, bool is_constant, bool wants_dither);
 
     SkRasterPipelineBlitter(SkPixmap dst,
                             SkBlendMode blend,
                             SkArenaAlloc* alloc,
-                            SkShader::Context* shaderCtx)
+                            SkShaderBase::Context* shaderCtx)
         : fDst(dst)
         , fBlend(blend)
         , fAlloc(alloc)
@@ -54,11 +56,11 @@ private:
     // If we have an SkShader::Context, use it to fill our shader buffer.
     void maybe_shade(int x, int y, int w);
 
-    SkPixmap           fDst;
-    SkBlendMode        fBlend;
-    SkArenaAlloc*      fAlloc;
-    SkShader::Context* fShaderCtx;
-    SkRasterPipeline   fColorPipeline;
+    SkPixmap               fDst;
+    SkBlendMode            fBlend;
+    SkArenaAlloc*          fAlloc;
+    SkShaderBase::Context* fShaderCtx;
+    SkRasterPipeline       fColorPipeline;
 
     // We may be able to specialize blitH() into a memset.
     bool     fCanMemsetInBlitH = false;
@@ -90,15 +92,19 @@ SkBlitter* SkCreateRasterPipelineBlitter(const SkPixmap& dst,
                                          SkArenaAlloc* alloc) {
     SkColorSpace* dstCS = dst.colorSpace();
     auto paintColor = alloc->make<SkPM4f>(SkPM4f_from_SkColor(paint.getColor(), dstCS));
-    auto shader = paint.getShader();
+    auto shader = as_SB(paint.getShader());
+    bool wants_dither = paint.isDither();
+
+#ifdef SK_SUPPORT_LEGACY_RASTERPIPELINE
+    wants_dither = shader && shader->asAGradient(nullptr) >= SkShader::kLinear_GradientType;
+#endif
 
     SkRasterPipeline_<256> shaderPipeline;
     if (!shader) {
         // Having no shader makes things nice and easy... just use the paint color.
         shaderPipeline.append(SkRasterPipeline::constant_color, paintColor);
         bool is_opaque    = paintColor->a() == 1.0f,
-             is_constant  = true,
-             wants_dither = false;
+             is_constant  = true;
         return SkRasterPipelineBlitter::Create(dst, paint, alloc,
                                                shaderPipeline, nullptr,
                                                is_opaque, is_constant, wants_dither);
@@ -106,7 +112,6 @@ SkBlitter* SkCreateRasterPipelineBlitter(const SkPixmap& dst,
 
     bool is_opaque    = shader->isOpaque() && paintColor->a() == 1.0f;
     bool is_constant  = shader->isConstant();
-    bool wants_dither = shader->asAGradient(nullptr) >= SkShader::kLinear_GradientType;
 
     // See if the shader can express itself by appending pipeline stages.
     if (shader->appendStages(&shaderPipeline, dstCS, alloc, ctm, paint)) {
@@ -124,11 +129,12 @@ SkBlitter* SkCreateRasterPipelineBlitter(const SkPixmap& dst,
     if (dstCS) {
         // We need to transform the shader into the dst color space, and extend its lifetime.
         sk_sp<SkShader> in_dstCS = SkColorSpaceXformer::Make(sk_ref_sp(dstCS))->apply(shader);
-        shader = in_dstCS.get();
+        shader = as_SB(in_dstCS.get());
         alloc->make<sk_sp<SkShader>>(std::move(in_dstCS));
     }
-    SkShader::ContextRec rec(paint, ctm, nullptr, SkShader::ContextRec::kPM4f_DstType, dstCS);
-    SkShader::Context* shaderCtx = shader->makeContext(rec, alloc);
+    SkShaderBase::ContextRec rec(paint, ctm, nullptr, SkShaderBase::ContextRec::kPM4f_DstType,
+                                 dstCS);
+    SkShaderBase::Context* shaderCtx = shader->makeContext(rec, alloc);
     if (!shaderCtx) {
         // When a shader fails to create a context, it has vetoed drawing entirely.
         return alloc->make<SkNullBlitter>();
@@ -154,7 +160,7 @@ SkBlitter* SkRasterPipelineBlitter::Create(const SkPixmap& dst,
                                            const SkPaint& paint,
                                            SkArenaAlloc* alloc,
                                            const SkRasterPipeline& shaderPipeline,
-                                           SkShader::Context* shaderCtx,
+                                           SkShaderBase::Context* shaderCtx,
                                            bool is_opaque,
                                            bool is_constant,
                                            bool wants_dither) {
@@ -314,12 +320,19 @@ void SkRasterPipelineBlitter::blitH(int x, int y, int w) {
     if (!fBlitH) {
         SkRasterPipeline p(fAlloc);
         p.extend(fColorPipeline);
-        if (fBlend != SkBlendMode::kSrc) {
-            this->append_load_d(&p);
-            this->append_blend(&p);
-            this->maybe_clamp(&p);
+        if (fBlend == SkBlendMode::kSrcOver
+                && fDst.info().colorType() == kRGBA_8888_SkColorType
+                && !fDst.colorSpace()
+                && fDitherCtx.rate == 0.0f) {
+            p.append(SkRasterPipeline::srcover_rgba_8888, &fDstPtr);
+        } else {
+            if (fBlend != SkBlendMode::kSrc) {
+                this->append_load_d(&p);
+                this->append_blend(&p);
+                this->maybe_clamp(&p);
+            }
+            this->append_store(&p);
         }
-        this->append_store(&p);
         fBlitH = p.compile();
     }
     this->maybe_shade(x,y,w);

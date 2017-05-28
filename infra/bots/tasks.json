@@ -669,10 +669,22 @@
         "Perf-Android-Clang-NexusPlayer-GPU-PowerVR-x86-Debug-Android"
       ]
     },
+    "Perf-Android-Clang-NexusPlayer-GPU-PowerVR-x86-Debug-Android_Vulkan": {
+      "priority": 0.8,
+      "tasks": [
+        "Perf-Android-Clang-NexusPlayer-GPU-PowerVR-x86-Debug-Android_Vulkan"
+      ]
+    },
     "Perf-Android-Clang-NexusPlayer-GPU-PowerVR-x86-Release-Android": {
       "priority": 0.8,
       "tasks": [
         "Upload-Perf-Android-Clang-NexusPlayer-GPU-PowerVR-x86-Release-Android"
+      ]
+    },
+    "Perf-Android-Clang-NexusPlayer-GPU-PowerVR-x86-Release-Android_Vulkan": {
+      "priority": 0.8,
+      "tasks": [
+        "Upload-Perf-Android-Clang-NexusPlayer-GPU-PowerVR-x86-Release-Android_Vulkan"
       ]
     },
     "Perf-Android-Clang-Pixel-GPU-Adreno530-arm64-Debug-Android": {
@@ -795,22 +807,22 @@
         "Upload-Perf-Mac-Clang-MacMini6.2-CPU-AVX-x86_64-Release"
       ]
     },
-    "Perf-Mac-Clang-MacMini6.2-GPU-HD4000-x86_64-Debug": {
+    "Perf-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Debug": {
       "priority": 0.8,
       "tasks": [
-        "Perf-Mac-Clang-MacMini6.2-GPU-HD4000-x86_64-Debug"
+        "Perf-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Debug"
       ]
     },
-    "Perf-Mac-Clang-MacMini6.2-GPU-HD4000-x86_64-Release": {
+    "Perf-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Release": {
       "priority": 0.8,
       "tasks": [
-        "Upload-Perf-Mac-Clang-MacMini6.2-GPU-HD4000-x86_64-Release"
+        "Upload-Perf-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Release"
       ]
     },
-    "Perf-Mac-Clang-MacMini6.2-GPU-HD4000-x86_64-Release-CommandBuffer": {
+    "Perf-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Release-CommandBuffer": {
       "priority": 0.8,
       "tasks": [
-        "Upload-Perf-Mac-Clang-MacMini6.2-GPU-HD4000-x86_64-Release-CommandBuffer"
+        "Upload-Perf-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Release-CommandBuffer"
       ]
     },
     "Perf-Ubuntu-Clang-GCE-CPU-AVX2-x86_64-Debug": {
@@ -1641,22 +1653,22 @@
         "Upload-Test-Mac-Clang-MacMini6.2-CPU-AVX-x86_64-Release"
       ]
     },
-    "Test-Mac-Clang-MacMini6.2-GPU-HD4000-x86_64-Debug": {
+    "Test-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Debug": {
       "priority": 0.8,
       "tasks": [
-        "Upload-Test-Mac-Clang-MacMini6.2-GPU-HD4000-x86_64-Debug"
+        "Upload-Test-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Debug"
       ]
     },
-    "Test-Mac-Clang-MacMini6.2-GPU-HD4000-x86_64-Debug-CommandBuffer": {
+    "Test-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Debug-CommandBuffer": {
       "priority": 0.8,
       "tasks": [
-        "Upload-Test-Mac-Clang-MacMini6.2-GPU-HD4000-x86_64-Debug-CommandBuffer"
+        "Upload-Test-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Debug-CommandBuffer"
       ]
     },
-    "Test-Mac-Clang-MacMini6.2-GPU-HD4000-x86_64-Release": {
+    "Test-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Release": {
       "priority": 0.8,
       "tasks": [
-        "Upload-Test-Mac-Clang-MacMini6.2-GPU-HD4000-x86_64-Release"
+        "Upload-Test-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Release"
       ]
     },
     "Test-Ubuntu-Clang-GCE-CPU-AVX2-x86_64-Debug": {
@@ -5534,6 +5546,40 @@
       "max_attempts": 1,
       "priority": 0.8
     },
+    "Perf-Android-Clang-NexusPlayer-GPU-PowerVR-x86-Debug-Android_Vulkan": {
+      "dependencies": [
+        "Build-Ubuntu-Clang-x86-Debug-Android_Vulkan",
+        "Housekeeper-PerCommit-BundleRecipes",
+        "Housekeeper-PerCommit-IsolateSKP",
+        "Housekeeper-PerCommit-IsolateSVG",
+        "Housekeeper-PerCommit-IsolateSkImage"
+      ],
+      "dimensions": [
+        "device_os:OPP2.170420.017",
+        "device_type:fugu",
+        "os:Android",
+        "pool:Skia"
+      ],
+      "execution_timeout_ns": 14400000000000,
+      "expiration_ns": 72000000000000,
+      "extra_args": [
+        "--workdir",
+        "../../..",
+        "perf",
+        "repository=<(REPO)",
+        "buildername=Perf-Android-Clang-NexusPlayer-GPU-PowerVR-x86-Debug-Android_Vulkan",
+        "swarm_out_dir=${ISOLATED_OUTDIR}",
+        "revision=<(REVISION)",
+        "patch_repo=<(PATCH_REPO)",
+        "patch_storage=<(PATCH_STORAGE)",
+        "patch_issue=<(ISSUE)",
+        "patch_set=<(PATCHSET)"
+      ],
+      "io_timeout_ns": 2400000000000,
+      "isolate": "perf_skia_bundled_unix.isolate",
+      "max_attempts": 1,
+      "priority": 0.8
+    },
     "Perf-Android-Clang-NexusPlayer-GPU-PowerVR-x86-Release-Android": {
       "dependencies": [
         "Build-Ubuntu-Clang-x86-Release-Android",
@@ -5556,6 +5602,40 @@
         "perf",
         "repository=<(REPO)",
         "buildername=Perf-Android-Clang-NexusPlayer-GPU-PowerVR-x86-Release-Android",
+        "swarm_out_dir=${ISOLATED_OUTDIR}",
+        "revision=<(REVISION)",
+        "patch_repo=<(PATCH_REPO)",
+        "patch_storage=<(PATCH_STORAGE)",
+        "patch_issue=<(ISSUE)",
+        "patch_set=<(PATCHSET)"
+      ],
+      "io_timeout_ns": 2400000000000,
+      "isolate": "perf_skia_bundled_unix.isolate",
+      "max_attempts": 1,
+      "priority": 0.8
+    },
+    "Perf-Android-Clang-NexusPlayer-GPU-PowerVR-x86-Release-Android_Vulkan": {
+      "dependencies": [
+        "Build-Ubuntu-Clang-x86-Release-Android_Vulkan",
+        "Housekeeper-PerCommit-BundleRecipes",
+        "Housekeeper-PerCommit-IsolateSKP",
+        "Housekeeper-PerCommit-IsolateSVG",
+        "Housekeeper-PerCommit-IsolateSkImage"
+      ],
+      "dimensions": [
+        "device_os:OPP2.170420.017",
+        "device_type:fugu",
+        "os:Android",
+        "pool:Skia"
+      ],
+      "execution_timeout_ns": 14400000000000,
+      "expiration_ns": 72000000000000,
+      "extra_args": [
+        "--workdir",
+        "../../..",
+        "perf",
+        "repository=<(REPO)",
+        "buildername=Perf-Android-Clang-NexusPlayer-GPU-PowerVR-x86-Release-Android_Vulkan",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -6260,7 +6340,7 @@
       "max_attempts": 1,
       "priority": 0.8
     },
-    "Perf-Mac-Clang-MacMini6.2-GPU-HD4000-x86_64-Debug": {
+    "Perf-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Debug": {
       "cipd_packages": [
         {
           "name": "skia/bots/skimage",
@@ -6294,7 +6374,7 @@
         "../../..",
         "perf",
         "repository=<(REPO)",
-        "buildername=Perf-Mac-Clang-MacMini6.2-GPU-HD4000-x86_64-Debug",
+        "buildername=Perf-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Debug",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -6307,7 +6387,7 @@
       "max_attempts": 1,
       "priority": 0.8
     },
-    "Perf-Mac-Clang-MacMini6.2-GPU-HD4000-x86_64-Release": {
+    "Perf-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Release": {
       "cipd_packages": [
         {
           "name": "skia/bots/skimage",
@@ -6341,7 +6421,7 @@
         "../../..",
         "perf",
         "repository=<(REPO)",
-        "buildername=Perf-Mac-Clang-MacMini6.2-GPU-HD4000-x86_64-Release",
+        "buildername=Perf-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Release",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -6354,7 +6434,7 @@
       "max_attempts": 1,
       "priority": 0.8
     },
-    "Perf-Mac-Clang-MacMini6.2-GPU-HD4000-x86_64-Release-CommandBuffer": {
+    "Perf-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Release-CommandBuffer": {
       "cipd_packages": [
         {
           "name": "skia/bots/skimage",
@@ -6388,7 +6468,7 @@
         "../../..",
         "perf",
         "repository=<(REPO)",
-        "buildername=Perf-Mac-Clang-MacMini6.2-GPU-HD4000-x86_64-Release-CommandBuffer",
+        "buildername=Perf-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Release-CommandBuffer",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -12237,7 +12317,7 @@
       "max_attempts": 1,
       "priority": 0.8
     },
-    "Test-Mac-Clang-MacMini6.2-GPU-HD4000-x86_64-Debug": {
+    "Test-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Debug": {
       "cipd_packages": [
         {
           "name": "skia/bots/skimage",
@@ -12271,7 +12351,7 @@
         "../../..",
         "test",
         "repository=<(REPO)",
-        "buildername=Test-Mac-Clang-MacMini6.2-GPU-HD4000-x86_64-Debug",
+        "buildername=Test-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Debug",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -12284,7 +12364,7 @@
       "max_attempts": 1,
       "priority": 0.8
     },
-    "Test-Mac-Clang-MacMini6.2-GPU-HD4000-x86_64-Debug-CommandBuffer": {
+    "Test-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Debug-CommandBuffer": {
       "cipd_packages": [
         {
           "name": "skia/bots/skimage",
@@ -12318,7 +12398,7 @@
         "../../..",
         "test",
         "repository=<(REPO)",
-        "buildername=Test-Mac-Clang-MacMini6.2-GPU-HD4000-x86_64-Debug-CommandBuffer",
+        "buildername=Test-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Debug-CommandBuffer",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -12331,7 +12411,7 @@
       "max_attempts": 1,
       "priority": 0.8
     },
-    "Test-Mac-Clang-MacMini6.2-GPU-HD4000-x86_64-Release": {
+    "Test-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Release": {
       "cipd_packages": [
         {
           "name": "skia/bots/skimage",
@@ -12365,7 +12445,7 @@
         "../../..",
         "test",
         "repository=<(REPO)",
-        "buildername=Test-Mac-Clang-MacMini6.2-GPU-HD4000-x86_64-Release",
+        "buildername=Test-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Release",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -17525,6 +17605,33 @@
       "isolate": "upload_nano_results.isolate",
       "priority": 0.8
     },
+    "Upload-Perf-Android-Clang-NexusPlayer-GPU-PowerVR-x86-Release-Android_Vulkan": {
+      "dependencies": [
+        "Perf-Android-Clang-NexusPlayer-GPU-PowerVR-x86-Release-Android_Vulkan"
+      ],
+      "dimensions": [
+        "cpu:x86-64-avx2",
+        "gpu:none",
+        "os:Ubuntu-14.04",
+        "pool:Skia"
+      ],
+      "extra_args": [
+        "--workdir",
+        "../../..",
+        "upload_nano_results",
+        "repository=<(REPO)",
+        "buildername=Perf-Android-Clang-NexusPlayer-GPU-PowerVR-x86-Release-Android_Vulkan",
+        "swarm_out_dir=${ISOLATED_OUTDIR}",
+        "revision=<(REVISION)",
+        "patch_repo=<(PATCH_REPO)",
+        "patch_storage=<(PATCH_STORAGE)",
+        "patch_issue=<(ISSUE)",
+        "patch_set=<(PATCHSET)",
+        "gs_bucket=skia-perf"
+      ],
+      "isolate": "upload_nano_results.isolate",
+      "priority": 0.8
+    },
     "Upload-Perf-Android-Clang-Pixel-GPU-Adreno530-arm64-Release-Android": {
       "dependencies": [
         "Perf-Android-Clang-Pixel-GPU-Adreno530-arm64-Release-Android"
@@ -17822,9 +17929,9 @@
       "isolate": "upload_nano_results.isolate",
       "priority": 0.8
     },
-    "Upload-Perf-Mac-Clang-MacMini6.2-GPU-HD4000-x86_64-Release": {
+    "Upload-Perf-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Release": {
       "dependencies": [
-        "Perf-Mac-Clang-MacMini6.2-GPU-HD4000-x86_64-Release"
+        "Perf-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Release"
       ],
       "dimensions": [
         "cpu:x86-64-avx2",
@@ -17837,7 +17944,7 @@
         "../../..",
         "upload_nano_results",
         "repository=<(REPO)",
-        "buildername=Perf-Mac-Clang-MacMini6.2-GPU-HD4000-x86_64-Release",
+        "buildername=Perf-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Release",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -17849,9 +17956,9 @@
       "isolate": "upload_nano_results.isolate",
       "priority": 0.8
     },
-    "Upload-Perf-Mac-Clang-MacMini6.2-GPU-HD4000-x86_64-Release-CommandBuffer": {
+    "Upload-Perf-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Release-CommandBuffer": {
       "dependencies": [
-        "Perf-Mac-Clang-MacMini6.2-GPU-HD4000-x86_64-Release-CommandBuffer"
+        "Perf-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Release-CommandBuffer"
       ],
       "dimensions": [
         "cpu:x86-64-avx2",
@@ -17864,7 +17971,7 @@
         "../../..",
         "upload_nano_results",
         "repository=<(REPO)",
-        "buildername=Perf-Mac-Clang-MacMini6.2-GPU-HD4000-x86_64-Release-CommandBuffer",
+        "buildername=Perf-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Release-CommandBuffer",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -20225,9 +20332,9 @@
       "isolate": "upload_dm_results.isolate",
       "priority": 0.8
     },
-    "Upload-Test-Mac-Clang-MacMini6.2-GPU-HD4000-x86_64-Debug": {
+    "Upload-Test-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Debug": {
       "dependencies": [
-        "Test-Mac-Clang-MacMini6.2-GPU-HD4000-x86_64-Debug"
+        "Test-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Debug"
       ],
       "dimensions": [
         "cpu:x86-64-avx2",
@@ -20240,7 +20347,7 @@
         "../../..",
         "upload_dm_results",
         "repository=<(REPO)",
-        "buildername=Test-Mac-Clang-MacMini6.2-GPU-HD4000-x86_64-Debug",
+        "buildername=Test-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Debug",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -20252,9 +20359,9 @@
       "isolate": "upload_dm_results.isolate",
       "priority": 0.8
     },
-    "Upload-Test-Mac-Clang-MacMini6.2-GPU-HD4000-x86_64-Debug-CommandBuffer": {
+    "Upload-Test-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Debug-CommandBuffer": {
       "dependencies": [
-        "Test-Mac-Clang-MacMini6.2-GPU-HD4000-x86_64-Debug-CommandBuffer"
+        "Test-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Debug-CommandBuffer"
       ],
       "dimensions": [
         "cpu:x86-64-avx2",
@@ -20267,7 +20374,7 @@
         "../../..",
         "upload_dm_results",
         "repository=<(REPO)",
-        "buildername=Test-Mac-Clang-MacMini6.2-GPU-HD4000-x86_64-Debug-CommandBuffer",
+        "buildername=Test-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Debug-CommandBuffer",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -20279,9 +20386,9 @@
       "isolate": "upload_dm_results.isolate",
       "priority": 0.8
     },
-    "Upload-Test-Mac-Clang-MacMini6.2-GPU-HD4000-x86_64-Release": {
+    "Upload-Test-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Release": {
       "dependencies": [
-        "Test-Mac-Clang-MacMini6.2-GPU-HD4000-x86_64-Release"
+        "Test-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Release"
       ],
       "dimensions": [
         "cpu:x86-64-avx2",
@@ -20294,7 +20401,7 @@
         "../../..",
         "upload_dm_results",
         "repository=<(REPO)",
-        "buildername=Test-Mac-Clang-MacMini6.2-GPU-HD4000-x86_64-Release",
+        "buildername=Test-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Release",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
