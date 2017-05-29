@@ -326,6 +326,16 @@ static void premultiply_if_necessary(SkBitmap& bitmap) {
     }
 
     switch (bitmap.colorType()) {
+        case kRGBA_F16_SkColorType:
+            for (int y = 0; y < bitmap.height(); y++) {
+                void* row = bitmap.getAddr(0, y);
+                SkRasterPipeline_<256> p;
+                p.append(SkRasterPipeline::load_f16, &row);
+                p.append(SkRasterPipeline::premul);
+                p.append(SkRasterPipeline::store_f16, &row);
+                p.run(0, bitmap.width());
+            }
+            break;
         case kN32_SkColorType:
             for (int y = 0; y < bitmap.height(); y++) {
                 uint32_t* row = (uint32_t*) bitmap.getAddr(0, y);
@@ -405,6 +415,19 @@ static void draw_to_canvas(SkCanvas* canvas, const SkImageInfo& info, void* pixe
     canvas->drawBitmap(bitmap, left, top);
 }
 
+// For codec srcs, we want the "draw" step to be a memcpy.  Any interesting color space or
+// color format conversions should be performed by the codec.  Sometimes the output of the
+// decode will be in an interesting color space.  On our srgb and f16 backends, we need to
+// "pretend" that the color space is standard sRGB to avoid triggering color conversion
+// at draw time.
+static void set_bitmap_color_space(SkImageInfo* info) {
+    if (kRGBA_F16_SkColorType == info->colorType()) {
+        *info = info->makeColorSpace(SkColorSpace::MakeSRGBLinear());
+    } else {
+        *info = info->makeColorSpace(SkColorSpace::MakeSRGB());
+    }
+}
+
 Error CodecSrc::draw(SkCanvas* canvas) const {
     sk_sp<SkData> encoded(SkData::MakeFromFileName(fPath.c_str()));
     if (!encoded) {
@@ -451,6 +474,7 @@ Error CodecSrc::draw(SkCanvas* canvas) const {
     }
 
     SkImageInfo bitmapInfo = decodeInfo;
+    set_bitmap_color_space(&bitmapInfo);
     if (kRGBA_8888_SkColorType == decodeInfo.colorType() ||
             kBGRA_8888_SkColorType == decodeInfo.colorType()) {
         bitmapInfo = bitmapInfo.makeColorType(kN32_SkColorType);
@@ -847,6 +871,7 @@ Error AndroidCodecSrc::draw(SkCanvas* canvas) const {
 
     SkBitmap bitmap;
     SkImageInfo bitmapInfo = decodeInfo;
+    set_bitmap_color_space(&bitmapInfo);
     if (kRGBA_8888_SkColorType == decodeInfo.colorType() ||
             kBGRA_8888_SkColorType == decodeInfo.colorType()) {
         bitmapInfo = bitmapInfo.makeColorType(kN32_SkColorType);
@@ -986,6 +1011,7 @@ Error ImageGenSrc::draw(SkCanvas* canvas) const {
 
     SkPMColor colorPtr[256];
     int colorCount = 256;
+    set_bitmap_color_space(&decodeInfo);
     draw_to_canvas(canvas, decodeInfo, pixels.get(), rowBytes, colorPtr, colorCount,
                    CodecSrc::kGetFromCanvas_DstColorType);
     return "";
@@ -1064,6 +1090,7 @@ Error ColorCodecSrc::draw(SkCanvas* canvas) const {
     }
 
     SkImageInfo bitmapInfo = decodeInfo;
+    set_bitmap_color_space(&bitmapInfo);
     if (kRGBA_8888_SkColorType == decodeInfo.colorType() ||
         kBGRA_8888_SkColorType == decodeInfo.colorType())
     {

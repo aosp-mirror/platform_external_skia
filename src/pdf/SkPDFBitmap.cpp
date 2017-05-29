@@ -93,6 +93,7 @@ static U8CPU SkGetB32Component(uint32_t value, SkColorType ct) {
 
 // unpremultiply and extract R, G, B components.
 static void pmcolor_to_rgb24(uint32_t color, uint8_t* rgb, SkColorType ct) {
+    SkPMColorAssert(color);
     uint32_t s = SkUnPreMultiply::GetScale(SkGetA32Component(color, ct));
     rgb[0] = SkUnPreMultiply::ApplyScale(s, SkGetR32Component(color, ct));
     rgb[1] = SkUnPreMultiply::ApplyScale(s, SkGetG32Component(color, ct));
@@ -123,6 +124,7 @@ static void get_neighbor_avg_color(const SkBitmap& bm,
         uint32_t* scanline = bm.getAddr32(0, y);
         for (int x = xmin; x <= xmax; ++x) {
             uint32_t color = scanline[x];
+            SkPMColorAssert(color);
             a += SkGetA32Component(color, ct);
             r += SkGetR32Component(color, ct);
             g += SkGetG32Component(color, ct);
@@ -356,8 +358,7 @@ static void emit_image_xobject(SkWStream* stream,
     } else {
         bitmap_to_pdf_pixels(bitmap, &deflateWStream);
     }
-    deflateWStream.finalize();  // call before detachAsStream().
-    std::unique_ptr<SkStreamAsset> asset(buffer.detachAsStream());
+    deflateWStream.finalize();  // call before buffer.bytesWritten().
 
     SkPDFDict pdfDict("XObject");
     pdfDict.insertName("Subtype", "Image");
@@ -380,11 +381,11 @@ static void emit_image_xobject(SkWStream* stream,
     }
     pdfDict.insertInt("BitsPerComponent", 8);
     pdfDict.insertName("Filter", "FlateDecode");
-    pdfDict.insertInt("Length", asset->getLength());
+    pdfDict.insertInt("Length", buffer.bytesWritten());
     pdfDict.emitObject(stream, objNumMap);
 
     pdf_stream_begin(stream);
-    stream->writeStream(asset.get(), asset->getLength());
+    buffer.writeToAndReset(stream);
     pdf_stream_end(stream);
 }
 

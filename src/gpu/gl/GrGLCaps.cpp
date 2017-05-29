@@ -70,10 +70,6 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
     GrGLStandard standard = ctxInfo.standard();
     GrGLVersion version = ctxInfo.version();
 
-    /**************************************************************************
-     * Caps specific to GrGLCaps
-     **************************************************************************/
-
     if (kGLES_GrGLStandard == standard) {
         GR_GL_GetIntegerv(gli, GR_GL_MAX_FRAGMENT_UNIFORM_VECTORS,
                           &fMaxFragmentUniformVectors);
@@ -359,10 +355,6 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
                                                         shaderCaps->fMaxFragmentImageStorages);
     }
 
-    /**************************************************************************
-     * GrCaps fields
-     **************************************************************************/
-
     // SGX and Mali GPUs that are based on a tiled-deferred architecture that have trouble with
     // frequently changing VBOs. We've measured a performance increase using non-VBO vertex
     // data for dynamic content on these GPUs. Perhaps we should read the renderer string and
@@ -380,6 +372,32 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
         this->initFSAASupport(contextOptions, ctxInfo, gli);
         this->initStencilSupport(ctxInfo);
     }
+
+    // Setup blit framebuffer
+    if (kGL_GrGLStandard != ctxInfo.standard()) {
+        if (ctxInfo.version() >= GR_GL_VER(3, 0)) {
+            fBlitFramebufferFlags = kNoFormatConversionForMSAASrc_BlitFramebufferFlag |
+                                    kNoMSAADst_BlitFramebufferFlag |
+                                    kRectsMustMatchForMSAASrc_BlitFramebufferFlag;
+        } else if (ctxInfo.hasExtension("GL_CHROMIUM_framebuffer_multisample") ||
+                   ctxInfo.hasExtension("GL_ANGLE_framebuffer_blit")) {
+            // The CHROMIUM extension uses the ANGLE version of glBlitFramebuffer and includes its
+            // limitations.
+            fBlitFramebufferFlags = kNoScalingOrMirroring_BlitFramebufferFlag |
+                                    kResolveMustBeFull_BlitFrambufferFlag |
+                                    kNoMSAADst_BlitFramebufferFlag |
+                                    kNoFormatConversion_BlitFramebufferFlag |
+                                    kRectsMustMatchForMSAASrc_BlitFramebufferFlag;
+        }
+    } else {
+        if (fUsesMixedSamples ||
+            ctxInfo.version() >= GR_GL_VER(3,0) ||
+            ctxInfo.hasExtension("GL_ARB_framebuffer_object") ||
+            ctxInfo.hasExtension("GL_EXT_framebuffer_blit")) {
+            fBlitFramebufferFlags = 0;
+        }
+    }
+
     this->initBlendEqationSupport(ctxInfo);
 
     if (kGL_GrGLStandard == standard) {
@@ -857,6 +875,16 @@ void GrGLCaps::initGLSL(const GrGLContextInfo& ctxInfo) {
     // term plan for this WAR is for it to eventually be baked into SkSL.
     shaderCaps->fMustImplementGSInvocationsWithLoop = true;
 #endif
+
+    // Newer Mali GPUs do incorrect static analysis in specific situations: If there is uniform
+    // color, and that uniform contains an opaque color, and the output of the shader is only based
+    // on that uniform plus soemthing un-trackable (like a texture read), the compiler will deduce
+    // that the shader always outputs opaque values. In that case, it appears to remove the shader
+    // based blending code it normally injects, turning SrcOver into Src. To fix this, we always
+    // insert an extra bit of math on the uniform that confuses the compiler just enough...
+    if (kMaliT_GrGLRenderer == ctxInfo.renderer()) {
+        shaderCaps->fMustObfuscateUniformColor = true;
+    }
 }
 
 bool GrGLCaps::hasPathRenderingSupport(const GrGLContextInfo& ctxInfo, const GrGLInterface* gli) {
@@ -984,7 +1012,7 @@ void GrGLCaps::initFSAASupport(const GrContextOptions& contextOptions, const GrG
         this->shaderCaps()->pathRenderingSupport() &&
         (contextOptions.fGpuPathRenderers & GrContextOptions::GpuPathRenderers::kStencilAndCover)) {
         fUsesMixedSamples = ctxInfo.hasExtension("GL_NV_framebuffer_mixed_samples") ||
-                ctxInfo.hasExtension("GL_CHROMIUM_framebuffer_mixed_samples");
+                            ctxInfo.hasExtension("GL_CHROMIUM_framebuffer_mixed_samples");
         // Workaround NVIDIA bug related to glInvalidateFramebuffer and mixed samples.
         if (fUsesMixedSamples && (kNVIDIA_GrGLDriver == ctxInfo.driver() ||
                                   kChromium_GrGLDriver == ctxInfo.driver())) {
@@ -1010,36 +1038,21 @@ void GrGLCaps::initFSAASupport(const GrContextOptions& contextOptions, const GrG
         } else if (ctxInfo.hasExtension("GL_APPLE_framebuffer_multisample")) {
             fMSFBOType = kES_Apple_MSFBOType;
         }
-
-        // Above determined the preferred MSAA approach, now decide whether glBlitFramebuffer
-        // is available.
-        if (ctxInfo.version() >= GR_GL_VER(3, 0)) {
-            fBlitFramebufferFlags = kNoFormatConversionForMSAASrc_BlitFramebufferFlag |
-                                    kNoMSAADst_BlitFramebufferFlag |
-                                    kRectsMustMatchForMSAASrc_BlitFramebufferFlag;
-        } else if (ctxInfo.hasExtension("GL_CHROMIUM_framebuffer_multisample") ||
-                   ctxInfo.hasExtension("GL_ANGLE_framebuffer_blit")) {
-            // The CHROMIUM extension uses the ANGLE version of glBlitFramebuffer and includes its
-            // limitations.
-            fBlitFramebufferFlags = kNoScalingOrMirroring_BlitFramebufferFlag |
-                                    kResolveMustBeFull_BlitFrambufferFlag |
-                                    kNoMSAADst_BlitFramebufferFlag |
-                                    kNoFormatConversion_BlitFramebufferFlag |
-                                    kRectsMustMatchForMSAASrc_BlitFramebufferFlag;
-        }
     } else {
         if (fUsesMixedSamples) {
             fMSFBOType = kMixedSamples_MSFBOType;
-            fBlitFramebufferFlags = 0;
         } else if (ctxInfo.version() >= GR_GL_VER(3,0) ||
                    ctxInfo.hasExtension("GL_ARB_framebuffer_object")) {
             fMSFBOType = kStandard_MSFBOType;
-            fBlitFramebufferFlags = 0;
         } else if (ctxInfo.hasExtension("GL_EXT_framebuffer_multisample") &&
                    ctxInfo.hasExtension("GL_EXT_framebuffer_blit")) {
             fMSFBOType = kEXT_MSFBOType;
-            fBlitFramebufferFlags = 0;
         }
+    }
+
+    // We disable MSAA across the board for Intel GPUs
+    if (kIntel_GrGLVendor == ctxInfo.vendor()) {
+        fMSFBOType = kNone_MSFBOType;
     }
 
     if (GrGLCaps::kES_IMG_MsToTexture_MSFBOType == fMSFBOType) {
@@ -1653,7 +1666,7 @@ void GrGLCaps::initConfigTable(const GrContextOptions& contextOptions,
     fConfigTable[kSBGRA_8888_GrPixelConfig].fFormatType = kNormalizedFixedPoint_FormatType;
     if (fSRGBSupport && kGL_GrGLStandard == standard) {
         fConfigTable[kSBGRA_8888_GrPixelConfig].fFlags = ConfigInfo::kTextureable_Flag |
-            allRenderFlags;
+                                                         allRenderFlags;
     }
 
     if (texStorageSupported) {
