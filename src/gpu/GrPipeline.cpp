@@ -44,9 +44,13 @@ void GrPipeline::init(const InitArgs& args) {
 
     fXferProcessor = args.fProcessors->refXferProcessor();
 
-    if (args.fDstTexture.texture()) {
-        fDstTexture.reset(args.fDstTexture.texture());
-        fDstTextureOffset = args.fDstTexture.offset();
+    if (args.fDstProxy.proxy()) {
+        if (!args.fDstProxy.proxy()->instantiate(args.fResourceProvider)) {
+            this->markAsBad();
+        }
+
+        fDstTextureProxy.reset(args.fDstProxy.proxy());
+        fDstTextureOffset = args.fDstProxy.offset();
     }
 
     // Copy GrFragmentProcessors from GrPipelineBuilder to Pipeline, possibly removing some of the
@@ -62,7 +66,7 @@ void GrPipeline::init(const InitArgs& args) {
     for (int i = 0; i < args.fProcessors->numColorFragmentProcessors(); ++i, ++currFPIdx) {
         const GrFragmentProcessor* fp = args.fProcessors->colorFragmentProcessor(i);
         fFragmentProcessors[currFPIdx].reset(fp);
-        if (fp->isBad()) {
+        if (!fp->instantiate(args.fResourceProvider)) {
             this->markAsBad();
         }
     }
@@ -70,14 +74,14 @@ void GrPipeline::init(const InitArgs& args) {
     for (int i = 0; i < args.fProcessors->numCoverageFragmentProcessors(); ++i, ++currFPIdx) {
         const GrFragmentProcessor* fp = args.fProcessors->coverageFragmentProcessor(i);
         fFragmentProcessors[currFPIdx].reset(fp);
-        if (fp->isBad()) {
+        if (!fp->instantiate(args.fResourceProvider)) {
             this->markAsBad();
         }
     }
     if (args.fAppliedClip) {
         if (const GrFragmentProcessor* fp = args.fAppliedClip->clipCoverageFragmentProcessor()) {
             fFragmentProcessors[currFPIdx].reset(fp);
-            if (fp->isBad()) {
+            if (!fp->instantiate(args.fResourceProvider)) {
                 this->markAsBad();
             }
         }
@@ -91,7 +95,7 @@ static void add_dependencies_for_processor(const GrFragmentProcessor* proc,
     GrFragmentProcessor::TextureAccessIter iter(proc);
     while (const GrResourceIOProcessor::TextureSampler* sampler = iter.next()) {
         SkASSERT(rtp->getLastOpList());
-        rtp->getLastOpList()->addDependency(sampler->texture());
+        rtp->getLastOpList()->addDependency(sampler->proxy());
     }
 }
 #endif
@@ -104,7 +108,7 @@ void GrPipeline::addDependenciesTo(GrRenderTargetProxy* rtp) const {
     }
 #endif
 
-    if (fDstTexture) {
+    if (fDstTextureProxy) {
         //SkASSERT(rtp->getLastOpList());
         // MDB TODO: re-enable when TextureSamplers store texture proxies
         //rtp->getLastOpList()->addDependency(fDstTexture.get());

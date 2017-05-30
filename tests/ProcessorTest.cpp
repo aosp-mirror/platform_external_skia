@@ -324,6 +324,11 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(ProcessorOptimizationValidationTest, repor
     }
     proxies[1] = GrSurfaceProxy::MakeDeferred(context->resourceProvider(), desc, SkBudgeted::kYes,
                                               alphaData.get(), 256);
+
+    if (!proxies[0] || !proxies[1]) {
+        return;
+    }
+
     GrProcessorTestData testData(&random, context, rtc.get(), proxies);
 
     // Use a different array of premul colors for the output of the fragment processor that preceeds
@@ -353,7 +358,7 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(ProcessorOptimizationValidationTest, repor
         }
         for (int j = 0; j < timesToInvokeFactory; ++j) {
             fp = FPFactory::MakeIdx(i, &testData);
-            if (fp->isBad()) {
+            if (!fp->instantiate(context->resourceProvider())) {
                 continue;
             }
 
