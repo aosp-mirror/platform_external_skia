@@ -108,31 +108,63 @@
     }
 
     SI void load3(const uint16_t* ptr, size_t tail, U16* r, U16* g, U16* b) {
-        uint16x4x3_t rgb = vld3_u16(ptr);
+        uint16x4x3_t rgb;
+        if (__builtin_expect(tail,0)) {
+            if (  true  ) { rgb = vld3_lane_u16(ptr + 0, rgb, 0); }
+            if (tail > 1) { rgb = vld3_lane_u16(ptr + 3, rgb, 1); }
+            if (tail > 2) { rgb = vld3_lane_u16(ptr + 6, rgb, 2); }
+        } else {
+            rgb = vld3_u16(ptr);
+        }
         *r = rgb.val[0];
         *g = rgb.val[1];
         *b = rgb.val[2];
     }
     SI void load4(const uint16_t* ptr, size_t tail, U16* r, U16* g, U16* b, U16* a) {
-        uint16x4x4_t rgba = vld4_u16(ptr);
+        uint16x4x4_t rgba;
+        if (__builtin_expect(tail,0)) {
+            if (  true  ) { rgba = vld4_lane_u16(ptr + 0, rgba, 0); }
+            if (tail > 1) { rgba = vld4_lane_u16(ptr + 4, rgba, 1); }
+            if (tail > 2) { rgba = vld4_lane_u16(ptr + 8, rgba, 2); }
+        } else {
+            rgba = vld4_u16(ptr);
+        }
         *r = rgba.val[0];
         *g = rgba.val[1];
         *b = rgba.val[2];
         *a = rgba.val[3];
     }
     SI void store4(uint16_t* ptr, size_t tail, U16 r, U16 g, U16 b, U16 a) {
-        vst4_u16(ptr, (uint16x4x4_t{{r,g,b,a}}));
+        if (__builtin_expect(tail,0)) {
+            if (  true  ) { vst4_lane_u16(ptr + 0, (uint16x4x4_t{{r,g,b,a}}), 0); }
+            if (tail > 1) { vst4_lane_u16(ptr + 4, (uint16x4x4_t{{r,g,b,a}}), 1); }
+            if (tail > 2) { vst4_lane_u16(ptr + 8, (uint16x4x4_t{{r,g,b,a}}), 2); }
+        } else {
+            vst4_u16(ptr, (uint16x4x4_t{{r,g,b,a}}));
+        }
     }
-
     SI void load4(const float* ptr, size_t tail, F* r, F* g, F* b, F* a) {
-        float32x4x4_t rgba = vld4q_f32(ptr);
+        float32x4x4_t rgba;
+        if (__builtin_expect(tail,0)) {
+            if (  true  ) { rgba = vld4q_lane_f32(ptr + 0, rgba, 0); }
+            if (tail > 1) { rgba = vld4q_lane_f32(ptr + 4, rgba, 1); }
+            if (tail > 2) { rgba = vld4q_lane_f32(ptr + 8, rgba, 2); }
+        } else {
+            rgba = vld4q_f32(ptr);
+        }
         *r = rgba.val[0];
         *g = rgba.val[1];
         *b = rgba.val[2];
         *a = rgba.val[3];
     }
     SI void store4(float* ptr, size_t tail, F r, F g, F b, F a) {
-        vst4q_f32(ptr, (float32x4x4_t{{r,g,b,a}}));
+        if (__builtin_expect(tail,0)) {
+            if (  true  ) { vst4q_lane_f32(ptr + 0, (float32x4x4_t{{r,g,b,a}}), 0); }
+            if (tail > 1) { vst4q_lane_f32(ptr + 4, (float32x4x4_t{{r,g,b,a}}), 1); }
+            if (tail > 2) { vst4q_lane_f32(ptr + 8, (float32x4x4_t{{r,g,b,a}}), 2); }
+        } else {
+            vst4q_f32(ptr, (float32x4x4_t{{r,g,b,a}}));
+        }
     }
 
 #elif defined(__arm__)
@@ -182,7 +214,13 @@
     SI void load3(const uint16_t* ptr, size_t tail, U16* r, U16* g, U16* b) {
         uint16x4x3_t rgb;
         rgb = vld3_lane_u16(ptr + 0, rgb, 0);
-        rgb = vld3_lane_u16(ptr + 3, rgb, 1);
+        if (__builtin_expect(tail, 0)) {
+            vset_lane_u16(0, rgb.val[0], 1);
+            vset_lane_u16(0, rgb.val[1], 1);
+            vset_lane_u16(0, rgb.val[2], 1);
+        } else {
+            rgb = vld3_lane_u16(ptr + 3, rgb, 1);
+        }
         *r = unaligned_load<U16>(rgb.val+0);
         *g = unaligned_load<U16>(rgb.val+1);
         *b = unaligned_load<U16>(rgb.val+2);
@@ -190,7 +228,14 @@
     SI void load4(const uint16_t* ptr, size_t tail, U16* r, U16* g, U16* b, U16* a) {
         uint16x4x4_t rgba;
         rgba = vld4_lane_u16(ptr + 0, rgba, 0);
-        rgba = vld4_lane_u16(ptr + 4, rgba, 1);
+        if (__builtin_expect(tail, 0)) {
+            vset_lane_u16(0, rgba.val[0], 1);
+            vset_lane_u16(0, rgba.val[1], 1);
+            vset_lane_u16(0, rgba.val[2], 1);
+            vset_lane_u16(0, rgba.val[3], 1);
+        } else {
+            rgba = vld4_lane_u16(ptr + 4, rgba, 1);
+        }
         *r = unaligned_load<U16>(rgba.val+0);
         *g = unaligned_load<U16>(rgba.val+1);
         *b = unaligned_load<U16>(rgba.val+2);
@@ -204,18 +249,29 @@
             widen_cast<uint16x4_t>(a),
         }};
         vst4_lane_u16(ptr + 0, rgba, 0);
-        vst4_lane_u16(ptr + 4, rgba, 1);
+        if (__builtin_expect(tail == 0, true)) {
+            vst4_lane_u16(ptr + 4, rgba, 1);
+        }
     }
 
     SI void load4(const float* ptr, size_t tail, F* r, F* g, F* b, F* a) {
-        float32x2x4_t rgba = vld4_f32(ptr);
+        float32x2x4_t rgba;
+        if (__builtin_expect(tail, 0)) {
+            rgba = vld4_dup_f32(ptr);
+        } else {
+            rgba = vld4_f32(ptr);
+        }
         *r = rgba.val[0];
         *g = rgba.val[1];
         *b = rgba.val[2];
         *a = rgba.val[3];
     }
     SI void store4(float* ptr, size_t tail, F r, F g, F b, F a) {
-        vst4_f32(ptr, (float32x2x4_t{{r,g,b,a}}));
+        if (__builtin_expect(tail, 0)) {
+            vst4_lane_f32(ptr, (float32x2x4_t{{r,g,b,a}}), 0);
+        } else {
+            vst4_f32(ptr, (float32x2x4_t{{r,g,b,a}}));
+        }
     }
 
 
