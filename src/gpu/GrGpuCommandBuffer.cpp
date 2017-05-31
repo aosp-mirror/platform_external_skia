@@ -7,6 +7,7 @@
 
 #include "GrGpuCommandBuffer.h"
 
+#include "GrContext.h"
 #include "GrCaps.h"
 #include "GrFixedClip.h"
 #include "GrGpu.h"
@@ -42,11 +43,11 @@ bool GrGpuCommandBuffer::draw(const GrPipeline& pipeline,
                               const SkRect& bounds) {
 #ifdef SK_DEBUG
     for (int i = 0; i < meshCount; ++i) {
-        SkASSERT(SkToBool(primProc.numAttribs()) == SkToBool(meshes[i].vertexBuffer()));
+        SkASSERT(SkToBool(primProc.numAttribs()) == meshes[i].hasVertexData());
     }
 #endif
 
-    if (pipeline.isBad() || primProc.isBad()) {
+    if (pipeline.isBad() || !primProc.instantiate(this->gpu()->getContext()->resourceProvider())) {
         return false;
     }
 
