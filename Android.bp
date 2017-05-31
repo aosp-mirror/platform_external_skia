@@ -266,7 +266,6 @@ cc_library {
         "src/core/SkSpecialSurface.cpp",
         "src/core/SkSpinlock.cpp",
         "src/core/SkSpriteBlitter_ARGB32.cpp",
-        "src/core/SkSpriteBlitter_RGB16.cpp",
         "src/core/SkStream.cpp",
         "src/core/SkString.cpp",
         "src/core/SkStringUtils.cpp",
