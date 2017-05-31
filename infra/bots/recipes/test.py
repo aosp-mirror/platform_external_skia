@@ -70,7 +70,7 @@ def dm_flags(bot):
       'iPhone6' in bot or
       'iPhone7' in bot or
       # skia:5792
-      'iHD530'       in bot or
+      'IntelHD530'   in bot or
       'IntelIris540' in bot):
     configs = [x for x in configs if 'msaa' not in x]
 
@@ -147,7 +147,7 @@ def dm_flags(bot):
 
   # This bot only differs from vanilla CPU bots in 8888 config.
   if 'SK_FORCE_RASTER_PIPELINE_BLITTER' in bot:
-    configs = ['8888']
+    configs = ['8888', 'srgb']
 
   args.append('--config')
   args.extend(configs)
@@ -491,6 +491,7 @@ def dm_flags(bot):
     match.append('~ApplyGamma')
     match.append('~ComposedImageFilterBounds_Gpu')
     match.append('~DeferredTextureImage')
+    match.append('~GrMeshTest')
     match.append('~ImageFilterFailAffectsTransparentBlack_Gpu')
     match.append('~ImageFilterZeroBlurSigma_Gpu')
     match.append('~ImageNewShader_GPU')
@@ -751,7 +752,7 @@ TEST_BUILDERS = [
   'Test-Android-Clang-PixelC-CPU-TegraX1-arm64-Debug-Android',
   'Test-ChromeOS-Clang-Chromebook_C100p-GPU-MaliT764-arm-Debug',
   'Test-Mac-Clang-MacMini6.2-CPU-AVX-x86_64-Debug',
-  'Test-Mac-Clang-MacMini6.2-GPU-HD4000-x86_64-Debug-CommandBuffer',
+  'Test-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Debug-CommandBuffer',
   'Test-Ubuntu-Clang-GCE-CPU-AVX2-x86_64-Debug-ASAN',
   'Test-Ubuntu-Clang-GCE-CPU-AVX2-x86_64-Debug-MSAN',
   'Test-Ubuntu-Clang-GCE-CPU-AVX2-x86_64-Release-TSAN',

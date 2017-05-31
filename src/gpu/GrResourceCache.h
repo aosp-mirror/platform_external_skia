@@ -93,6 +93,11 @@ public:
     size_t getResourceBytes() const { return fBytes; }
 
     /**
+     * Returns the number of bytes held by unlocked reosources which are available for purging.
+     */
+    size_t getPurgeableBytes() const { return fPurgeableBytes; }
+
+    /**
      * Returns the number of bytes consumed by budgeted resources.
      */
     size_t getBudgetedResourceBytes() const { return fBudgetedBytes; }
@@ -167,6 +172,18 @@ public:
 
     /** Purge all resources not used since the passed in time. */
     void purgeResourcesNotUsedSince(GrStdSteadyClock::time_point);
+
+    /**
+     * Purge unlocked resources from the cache until the the provided byte count has been reached
+     * or we have purged all unlocked resources. The default policy is to purge in LRU order, but
+     * can be overridden to prefer purging scratch resources (in LRU order) prior to purging other
+     * resource types.
+     *
+     * @param maxBytesToPurge the desired number of bytes to be purged.
+     * @param preferScratchResources If true scratch resources will be purged prior to other
+     *                               resource types.
+     */
+    void purgeUnlockedResources(size_t bytesToPurge, bool preferScratchResources);
 
     /** Returns true if the cache would like a flush to occur in order to make more resources
         purgeable. */
@@ -331,6 +348,7 @@ private:
     // our current stats for resources that count against the budget
     int                                 fBudgetedCount;
     size_t                              fBudgetedBytes;
+    size_t                              fPurgeableBytes;
 
     bool                                fRequestFlush;
     uint32_t                            fExternalFlushCnt;

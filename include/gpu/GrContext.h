@@ -138,6 +138,11 @@ public:
     void getResourceCacheUsage(int* resourceCount, size_t* resourceBytes) const;
 
     /**
+     *  Gets the number of bytes in the cache consumed by purgeable (e.g. unlocked) resources.
+     */
+    size_t getResourceCachePurgeableBytes() const;
+
+    /**
      *  Specify the GPU resource cache limits. If the current cache exceeds either
      *  of these, it will be purged (LRU) to keep the cache within these limits.
      *
@@ -166,6 +171,18 @@ public:
      * whether the context is currently under budget.
      */
     void purgeResourcesNotUsedInMs(std::chrono::milliseconds ms);
+
+    /**
+     * Purge unlocked resources from the cache until the the provided byte count has been reached
+     * or we have purged all unlocked resources. The default policy is to purge in LRU order, but
+     * can be overridden to prefer purging scratch resources (in LRU order) prior to purging other
+     * resource types.
+     *
+     * @param maxBytesToPurge the desired number of bytes to be purged.
+     * @param preferScratchResources If true scratch resources will be purged prior to other
+     *                               resource types.
+     */
+    void purgeUnlockedResources(size_t bytesToPurge, bool preferScratchResources);
 
     /** Access the context capabilities */
     const GrCaps* caps() const { return fCaps; }

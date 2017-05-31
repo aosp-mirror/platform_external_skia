@@ -25,6 +25,9 @@ public:
     int build(const SkPath& path, const SkIRect* clip, int shiftUp, bool clipToTheRight,
               bool analyticAA = false);
 
+    int build_edges(const SkPath& path, const SkIRect* shiftedClip,
+            int shiftEdgesUp, bool pathContainedInClip, bool analyticAA = false);
+
     SkEdge** edgeList() { return (SkEdge**)fEdgeList; }
     SkAnalyticEdge** analyticEdgeList() { return (SkAnalyticEdge**)fEdgeList; }
 
@@ -42,8 +45,7 @@ private:
     bool vertical_line(const SkEdge* edge);
     bool vertical_line(const SkAnalyticEdge* edge);
 
-    char                fStorage[512];
-    SkArenaAlloc        fAlloc{fStorage};
+    SkSTArenaAlloc<512> fAlloc;
     SkTDArray<void*>    fList;
 
     /*

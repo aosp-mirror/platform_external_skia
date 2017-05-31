@@ -277,7 +277,7 @@ static void convert_to_alpha8(uint8_t* dst, size_t dstRB, const SkImageInfo& src
 static void convert_with_pipeline(const SkImageInfo& dstInfo, void* dstRow, size_t dstRB,
                                   const SkImageInfo& srcInfo, const void* srcRow, size_t srcRB,
                                   bool isColorAware, SkTransferFunctionBehavior behavior) {
-    SkRasterPipeline pipeline;
+    SkRasterPipeline_<256> pipeline;
     switch (srcInfo.colorType()) {
         case kRGBA_8888_SkColorType:
             pipeline.append(SkRasterPipeline::load_8888, &srcRow);
@@ -309,14 +309,14 @@ static void convert_with_pipeline(const SkImageInfo& dstInfo, void* dstRow, size
         premulState = kUnpremul_SkAlphaType;
     }
 
+    SkColorSpaceTransferFn srcFn;
     if (isColorAware && srcInfo.gammaCloseToSRGB()) {
         pipeline.append_from_srgb(srcInfo.alphaType());
     } else if (isColorAware && !srcInfo.colorSpace()->gammaIsLinear()) {
-        SkColorSpaceTransferFn fn;
-        SkAssertResult(srcInfo.colorSpace()->isNumericalTransferFn(&fn));
-        pipeline.append(SkRasterPipeline::parametric_r, &fn);
-        pipeline.append(SkRasterPipeline::parametric_g, &fn);
-        pipeline.append(SkRasterPipeline::parametric_b, &fn);
+        SkAssertResult(srcInfo.colorSpace()->isNumericalTransferFn(&srcFn));
+        pipeline.append(SkRasterPipeline::parametric_r, &srcFn);
+        pipeline.append(SkRasterPipeline::parametric_g, &srcFn);
+        pipeline.append(SkRasterPipeline::parametric_b, &srcFn);
     }
 
     float matrix[12];
@@ -336,15 +336,15 @@ static void convert_with_pipeline(const SkImageInfo& dstInfo, void* dstRow, size
         }
     }
 
+    SkColorSpaceTransferFn dstFn;
     if (isColorAware && dstInfo.gammaCloseToSRGB()) {
         pipeline.append(SkRasterPipeline::to_srgb);
     } else if (isColorAware && !dstInfo.colorSpace()->gammaIsLinear()) {
-        SkColorSpaceTransferFn fn;
-        SkAssertResult(dstInfo.colorSpace()->isNumericalTransferFn(&fn));
-        fn = fn.invert();
-        pipeline.append(SkRasterPipeline::parametric_r, &fn);
-        pipeline.append(SkRasterPipeline::parametric_g, &fn);
-        pipeline.append(SkRasterPipeline::parametric_b, &fn);
+        SkAssertResult(dstInfo.colorSpace()->isNumericalTransferFn(&dstFn));
+        dstFn = dstFn.invert();
+        pipeline.append(SkRasterPipeline::parametric_r, &dstFn);
+        pipeline.append(SkRasterPipeline::parametric_g, &dstFn);
+        pipeline.append(SkRasterPipeline::parametric_b, &dstFn);
     }
 
     if (kUnpremul_SkAlphaType == premulState && kPremul_SkAlphaType == dat &&

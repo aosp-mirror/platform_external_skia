@@ -9,7 +9,7 @@
 #define SkColorShader_DEFINED
 
 #include "SkColorSpaceXformer.h"
-#include "SkShader.h"
+#include "SkShaderBase.h"
 #include "SkPM4f.h"
 
 /** \class SkColorShader
@@ -17,7 +17,7 @@
     accomplished by just using the color field on the paint, but if an
     actual shader object is needed, this provides that feature.
 */
-class SK_API SkColorShader : public SkShader {
+class SkColorShader : public SkShaderBase {
 public:
     /** Create a ColorShader that ignores the color in the paint, and uses the
         specified color. Note: like all shaders, at draw time the paint's alpha
@@ -28,7 +28,7 @@ public:
     bool isOpaque() const override;
     bool isConstant() const override { return true; }
 
-    class ColorShaderContext : public SkShader::Context {
+    class ColorShaderContext : public Context {
     public:
         ColorShaderContext(const SkColorShader& shader, const ContextRec&);
 
@@ -37,15 +37,12 @@ public:
         void shadeSpanAlpha(int x, int y, uint8_t alpha[], int count) override;
         void shadeSpan4f(int x, int y, SkPM4f[], int count) override;
 
-    protected:
-        bool onChooseBlitProcs(const SkImageInfo&, BlitState*) override;
-
     private:
         SkPM4f      fPM4f;
         SkPMColor   fPMColor;
         uint32_t    fFlags;
 
-        typedef SkShader::Context INHERITED;
+        typedef Context INHERITED;
     };
 
     GradientType asAGradient(GradientInfo* info) const override;
@@ -77,10 +74,10 @@ protected:
 private:
     SkColor fColor;
 
-    typedef SkShader INHERITED;
+    typedef SkShaderBase INHERITED;
 };
 
-class SkColor4Shader : public SkShader {
+class SkColor4Shader : public SkShaderBase {
 public:
     SkColor4Shader(const SkColor4f&, sk_sp<SkColorSpace>);
 
@@ -89,7 +86,7 @@ public:
     }
     bool isConstant() const override { return true; }
 
-    class Color4Context : public SkShader::Context {
+    class Color4Context : public Context {
     public:
         Color4Context(const SkColor4Shader& shader, const ContextRec&);
 
@@ -98,15 +95,12 @@ public:
         void shadeSpanAlpha(int x, int y, uint8_t alpha[], int count) override;
         void shadeSpan4f(int x, int y, SkPM4f[], int count) override;
 
-    protected:
-        bool onChooseBlitProcs(const SkImageInfo&, BlitState*) override;
-
     private:
         SkPM4f      fPM4f;
         SkPMColor   fPMColor;
         uint32_t    fFlags;
 
-        typedef SkShader::Context INHERITED;
+        typedef Context INHERITED;
     };
 
     GradientType asAGradient(GradientInfo* info) const override;
@@ -136,7 +130,7 @@ private:
     const SkColor4f     fColor4;
     const SkColor       fCachedByteColor;
 
-    typedef SkShader INHERITED;
+    typedef SkShaderBase INHERITED;
 };
 
 #endif
