@@ -54,6 +54,16 @@ uint32_t SkColorFilterShader::FilterShaderContext::getFlags() const {
     return shaderF;
 }
 
+bool SkColorFilterShader::onAppendStages(SkRasterPipeline* pipeline, SkColorSpace* dstCS,
+                                         SkArenaAlloc* alloc, const SkMatrix& ctm,
+                                         const SkPaint& paint, const SkMatrix* localM) const {
+    if (!as_SB(fShader)->appendStages(pipeline, dstCS, alloc, ctm, paint, localM)) {
+        return false;
+    }
+    fFilter->appendStages(pipeline, dstCS, alloc, fShader->isOpaque());
+    return true;
+}
+
 SkShaderBase::Context* SkColorFilterShader::onMakeContext(const ContextRec& rec,
                                                           SkArenaAlloc* alloc) const {
     auto* shaderContext = as_SB(fShader)->makeContext(rec, alloc);
@@ -84,11 +94,9 @@ void SkColorFilterShader::FilterShaderContext::shadeSpan(int x, int y, SkPMColor
 }
 
 void SkColorFilterShader::FilterShaderContext::shadeSpan4f(int x, int y, SkPM4f result[],
-                                                          int count) {
-    const SkColorFilterShader& filterShader = static_cast<const SkColorFilterShader&>(fShader);
-
-    fShaderContext->shadeSpan4f(x, y, result, count);
-    filterShader.fFilter->filterSpan4f(result, count, result);
+                                                           int count) {
+    // Should never get here, as shadeSpan4f should only be called if stages fails
+    SkASSERT(false);
 }
 
 #if SK_SUPPORT_GPU

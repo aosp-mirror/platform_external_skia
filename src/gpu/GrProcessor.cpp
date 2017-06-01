@@ -57,7 +57,7 @@ SkTArray<GrXPFactoryTestFactory*, true>* GrXPFactoryTestFactory::GetFactories() 
  * we verify the count is as expected.  If a new factory is added, then these numbers must be
  * manually adjusted.
  */
-static const int kFPFactoryCount = 41;
+static const int kFPFactoryCount = 42;
 static const int kGPFactoryCount = 14;
 static const int kXPFactoryCount = 4;
 
@@ -184,6 +184,8 @@ bool GrResourceIOProcessor::instantiate(GrResourceProvider* resourceProvider) co
         }
     }
 
+    // MDB TODO: instantiate 'fBufferAccesses' here as well
+
     for (const auto& imageStorage : fImageStorageAccesses) {
         if (!imageStorage->instantiate(resourceProvider)) {
             return false;
@@ -279,14 +281,14 @@ GrResourceIOProcessor::ImageStorageAccess::ImageStorageAccess(sk_sp<GrTexturePro
                                                               GrSLRestrict restrict,
                                                               GrShaderFlags visibility)
         : fProxyRef(std::move(proxy), ioType) {
-    SkASSERT(fProxyRef.getProxy());
+    SkASSERT(fProxyRef.get());
 
     fMemoryModel = memoryModel;
     fRestrict = restrict;
     fVisibility = visibility;
     // We currently infer this from the config. However, we could allow the client to specify
     // a format that is different but compatible with the config.
-    switch (fProxyRef.getProxy()->config()) {
+    switch (fProxyRef.get()->config()) {
         case kRGBA_8888_GrPixelConfig:
             fFormat = GrImageStorageFormat::kRGBA8;
             break;
