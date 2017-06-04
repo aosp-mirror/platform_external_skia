@@ -20,41 +20,6 @@ static const size_t kStride = sizeof(F) / sizeof(float);
 // You can use most constants in this file, but in a few rare exceptions we read from this struct.
 using K = const SkJumper_constants;
 
-
-// Let's start first with the mechanisms we use to build Stages.
-
-// Our program is an array of void*, either
-//   - 1 void* per stage with no context pointer, the next stage;
-//   - 2 void* per stage with a context pointer, first the context pointer, then the next stage.
-
-// load_and_inc() steps the program forward by 1 void*, returning that pointer.
-SI void* load_and_inc(void**& program) {
-#if defined(__GNUC__) && defined(__x86_64__)
-    // If program is in %rsi (we try to make this likely) then this is a single instruction.
-    void* rax;
-    asm("lodsq" : "=a"(rax), "+S"(program));  // Write-only %rax, read-write %rsi.
-    return rax;
-#else
-    // On ARM *program++ compiles into pretty ideal code without any handholding.
-    return *program++;
-#endif
-}
-
-// LazyCtx doesn't do anything unless you call operator T*(), encapsulating the logic
-// from above that stages without a context pointer are represented by just 1 void*.
-struct LazyCtx {
-    void*   ptr;
-    void**& program;
-
-    explicit LazyCtx(void**& p) : ptr(nullptr), program(p) {}
-
-    template <typename T>
-    operator T*() {
-        if (!ptr) { ptr = load_and_inc(program); }
-        return (T*)ptr;
-    }
-};
-
 // A little wrapper macro to name Stages differently depending on the instruction set.
 // That lets us link together several options.
 #if !defined(JUMPER)
@@ -77,38 +42,40 @@ struct LazyCtx {
 //    tail == 0 ~~> work on a full kStride pixels
 //    tail != 0 ~~> work on only the first tail pixels
 // tail is always < kStride.
-using Stage = void(size_t x, void** program, K* k, size_t tail, F,F,F,F, F,F,F,F);
+//
+// We keep program the second argument, so that it's passed in rsi for load_and_inc().
+using Stage = void(K* k, void** program, size_t x, size_t y, size_t tail, F,F,F,F, F,F,F,F);
 
 MAYBE_MSABI
-extern "C" void WRAP(start_pipeline)(size_t x, void** program, K* k, size_t limit) {
+extern "C" void WRAP(start_pipeline)(size_t x, size_t y, size_t limit, void** program, K* k) {
     F v{};
     auto start = (Stage*)load_and_inc(program);
     while (x + kStride <= limit) {
-        start(x,program,k,0,    v,v,v,v, v,v,v,v);
+        start(k,program,x,y,0,    v,v,v,v, v,v,v,v);
         x += kStride;
     }
     if (size_t tail = limit - x) {
-        start(x,program,k,tail, v,v,v,v, v,v,v,v);
+        start(k,program,x,y,tail, v,v,v,v, v,v,v,v);
     }
 }
 
-#define STAGE(name)                                                           \
-    SI void name##_k(size_t x, LazyCtx ctx, K* k, size_t tail,                \
-                     F& r, F& g, F& b, F& a, F& dr, F& dg, F& db, F& da);     \
-    extern "C" void WRAP(name)(size_t x, void** program, K* k, size_t tail,   \
-                               F r, F g, F b, F a, F dr, F dg, F db, F da) {  \
-        LazyCtx ctx(program);                                                 \
-        name##_k(x,ctx,k,tail, r,g,b,a, dr,dg,db,da);                         \
-        auto next = (Stage*)load_and_inc(program);                            \
-        next(x,program,k,tail, r,g,b,a, dr,dg,db,da);                         \
-    }                                                                         \
-    SI void name##_k(size_t x, LazyCtx ctx, K* k, size_t tail,                \
+#define STAGE(name)                                                                   \
+    SI void name##_k(K* k, LazyCtx ctx, size_t x, size_t y, size_t tail,              \
+                     F& r, F& g, F& b, F& a, F& dr, F& dg, F& db, F& da);             \
+    extern "C" void WRAP(name)(K* k, void** program, size_t x, size_t y, size_t tail, \
+                               F r, F g, F b, F a, F dr, F dg, F db, F da) {          \
+        LazyCtx ctx(program);                                                         \
+        name##_k(k,ctx,x,y,tail, r,g,b,a, dr,dg,db,da);                               \
+        auto next = (Stage*)load_and_inc(program);                                    \
+        next(k,program,x,y,tail, r,g,b,a, dr,dg,db,da);                               \
+    }                                                                                 \
+    SI void name##_k(K* k, LazyCtx ctx, size_t x, size_t y, size_t tail,              \
                      F& r, F& g, F& b, F& a, F& dr, F& dg, F& db, F& da)
 
 
 // just_return() is a simple no-op stage that only exists to end the chain,
 // returning back up to start_pipeline(), and from there to the caller.
-extern "C" void WRAP(just_return)(size_t, void**, K*, F,F,F,F, F,F,F,F) {}
+extern "C" void WRAP(just_return)(K*, void**, size_t,size_t,size_t, F,F,F,F, F,F,F,F) {}
 
 
 // We could start defining normal Stages now.  But first, some helper functions.
@@ -176,8 +143,8 @@ SI void store(T* dst, V v, size_t tail) {
     }
 #endif
 
-// AVX2 adds some mask loads and stores that make for shorter, faster code.
-#if defined(JUMPER) && defined(__AVX2__)
+// AVX adds some mask loads and stores that make for shorter, faster code.
+#if defined(JUMPER) && defined(__AVX__)
     SI U32 mask(size_t tail) {
         // We go a little out of our way to avoid needing large constant values here.
 
@@ -186,14 +153,16 @@ SI void store(T* dst, V v, size_t tail) {
         uint64_t mask = 0xffffffffffffffff >> 8*(kStride-tail);
 
         // Sign-extend each mask lane to its full width, 0x00000000 or 0xffffffff.
-        return _mm256_cvtepi8_epi32(_mm_cvtsi64_si128((int64_t)mask));
+        using S8  = int8_t  __attribute__((ext_vector_type(8)));
+        using S32 = int32_t __attribute__((ext_vector_type(8)));
+        return (U32)__builtin_convertvector(unaligned_load<S8>(&mask), S32);
     }
 
     template <>
     inline U32 load(const uint32_t* src, size_t tail) {
         __builtin_assume(tail < kStride);
         if (__builtin_expect(tail, 0)) {
-            return _mm256_maskload_epi32((const int*)src, mask(tail));
+            return (U32)_mm256_maskload_ps((const float*)src, mask(tail));
         }
         return unaligned_load<U32>(src);
     }
@@ -202,7 +171,7 @@ SI void store(T* dst, V v, size_t tail) {
     inline void store(uint32_t* dst, U32 v, size_t tail) {
         __builtin_assume(tail < kStride);
         if (__builtin_expect(tail, 0)) {
-            return _mm256_maskstore_epi32((int*)dst, mask(tail), v);
+            return _mm256_maskstore_ps((float*)dst, mask(tail), (F)v);
         }
         unaligned_store(dst, v);
     }
@@ -240,8 +209,6 @@ SI U32 ix_and_ptr(T** ptr, const SkJumper_GatherCtx* ctx, F x, F y) {
 // Now finally, normal Stages!
 
 STAGE(seed_shader) {
-    auto y = *(const int*)ctx;
-
     // It's important for speed to explicitly cast(x) and cast(y),
     // which has the effect of splatting them to vectors before converting to floats.
     // On Intel this breaks a data dependency on previous loop iterations' registers.
@@ -253,11 +220,11 @@ STAGE(seed_shader) {
 }
 
 STAGE(dither) {
-    auto c = (const SkJumper_DitherCtx*)ctx;
+    auto rate = *(const float*)ctx;
 
     // Get [(x,y), (x+1,y), (x+2,y), ...] loaded up in integer vectors.
     U32 X = x + unaligned_load<U32>(k->iota_U32),
-        Y = (uint32_t)*c->y;
+        Y = y;
 
     // We're doing 8x8 ordered dithering, see https://en.wikipedia.org/wiki/Ordered_dithering.
     // In this case n=8 and we're using the matrix that looks like 1/64 x [ 0 48 12 60 ... ].
@@ -276,9 +243,9 @@ STAGE(dither) {
     // like 0 and 1 unchanged after rounding.
     F dither = cast(M) * (2/128.0f) - (63/128.0f);
 
-    r += c->rate*dither;
-    g += c->rate*dither;
-    b += c->rate*dither;
+    r += rate*dither;
+    g += rate*dither;
+    b += rate*dither;
 
     r = max(0, min(r, a));
     g = max(0, min(g, a));

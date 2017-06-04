@@ -106,8 +106,7 @@ void GrContext::initCommon(const GrContextOptions& options) {
     GrPathRendererChain::Options prcOptions;
     prcOptions.fAllowPathMaskCaching = options.fAllowPathMaskCaching;
     prcOptions.fGpuPathRenderers = options.fGpuPathRenderers;
-    fDrawingManager.reset(new GrDrawingManager(this, prcOptions,
-                                               options.fImmediateMode, &fSingleOwner));
+    fDrawingManager.reset(new GrDrawingManager(this, prcOptions, &fSingleOwner));
 
     fAtlasGlyphCache = new GrAtlasGlyphCache(this, options.fGlyphCacheTextureMaximumBytes);
 
@@ -613,22 +612,6 @@ int GrContext::getRecommendedSampleCount(GrPixelConfig config,
     return chosenSampleCount <= fGpu->caps()->maxSampleCount() ? chosenSampleCount : 0;
 }
 
-sk_sp<GrRenderTargetContext> GrContextPriv::makeWrappedRenderTargetContext(
-                                                               sk_sp<GrRenderTarget> rt,
-                                                               sk_sp<SkColorSpace> colorSpace,
-                                                               const SkSurfaceProps* surfaceProps) {
-    ASSERT_SINGLE_OWNER_PRIV
-
-    sk_sp<GrSurfaceProxy> proxy(GrSurfaceProxy::MakeWrapped(std::move(rt)));
-    if (!proxy) {
-        return nullptr;
-    }
-
-    return this->drawingManager()->makeRenderTargetContext(std::move(proxy),
-                                                           std::move(colorSpace),
-                                                           surfaceProps);
-}
-
 sk_sp<GrSurfaceContext> GrContextPriv::makeWrappedSurfaceContext(sk_sp<GrSurfaceProxy> proxy,
                                                                  sk_sp<SkColorSpace> colorSpace) {
     ASSERT_SINGLE_OWNER_PRIV
@@ -640,17 +623,6 @@ sk_sp<GrSurfaceContext> GrContextPriv::makeWrappedSurfaceContext(sk_sp<GrSurface
         SkASSERT(proxy->asTextureProxy());
         return this->drawingManager()->makeTextureContext(std::move(proxy), std::move(colorSpace));
     }
-}
-
-sk_sp<GrSurfaceContext> GrContextPriv::makeWrappedSurfaceContext(sk_sp<GrSurface> surface) {
-    ASSERT_SINGLE_OWNER_PRIV
-
-    sk_sp<GrSurfaceProxy> proxy(GrSurfaceProxy::MakeWrapped(std::move(surface)));
-    if (!proxy) {
-        return nullptr;
-    }
-
-    return this->makeWrappedSurfaceContext(std::move(proxy), nullptr);
 }
 
 sk_sp<GrSurfaceContext> GrContextPriv::makeDeferredSurfaceContext(const GrSurfaceDesc& dstDesc,
@@ -827,7 +799,6 @@ sk_sp<GrRenderTargetContext> GrContext::makeDeferredRenderTargetContext(
         fDrawingManager->makeRenderTargetContext(std::move(rtp),
                                                  std::move(colorSpace),
                                                  surfaceProps));
-
     if (!renderTargetContext) {
         return nullptr;
     }

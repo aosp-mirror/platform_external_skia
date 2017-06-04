@@ -333,7 +333,7 @@ static void premultiply_if_necessary(SkBitmap& bitmap) {
                 p.append(SkRasterPipeline::load_f16, &row);
                 p.append(SkRasterPipeline::premul);
                 p.append(SkRasterPipeline::store_f16, &row);
-                p.run(0, bitmap.width());
+                p.run(0,y, bitmap.width());
             }
             break;
         case kN32_SkColorType:
@@ -1307,12 +1307,10 @@ GPUSink::GPUSink(GrContextFactory::ContextType ct,
     , fColorSpace(std::move(colorSpace))
     , fThreaded(threaded) {}
 
-DEFINE_bool(imm, false, "Run gpu configs in immediate mode.");
 DEFINE_bool(drawOpClip, false, "Clip each GrDrawOp to its device bounds for testing.");
 
 Error GPUSink::draw(const Src& src, SkBitmap* dst, SkWStream*, SkString* log) const {
     GrContextOptions grOptions;
-    grOptions.fImmediateMode = FLAGS_imm;
 
     src.modifyGrContextOptions(&grOptions);
 

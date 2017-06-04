@@ -138,8 +138,8 @@ bool GrRenderTargetContext::onCopy(GrSurfaceProxy* srcProxy,
     SkDEBUGCODE(this->validate();)
     GR_AUDIT_TRAIL_AUTO_FRAME(fAuditTrail, "GrRenderTargetContext::onCopy");
 
-    return this->getOpList()->copySurface(fContext->resourceProvider(),
-                                          this, srcProxy, srcRect, dstPoint);
+    return this->getOpList()->copySurface(*this->caps(),
+                                          this->asSurfaceProxy(), srcProxy, srcRect, dstPoint);
 }
 
 void GrRenderTargetContext::drawText(const GrClip& clip, const SkPaint& skPaint,
@@ -605,8 +605,9 @@ void GrRenderTargetContextPriv::clearStencilClip(const GrFixedClip& clip, bool i
 
     AutoCheckFlush acf(fRenderTargetContext->drawingManager());
 
-    std::unique_ptr<GrOp> op(GrClearStencilClipOp::Make(clip, insideStencilMask,
-                                                        fRenderTargetContext));
+    std::unique_ptr<GrOp> op(GrClearStencilClipOp::Make(
+                                                 clip, insideStencilMask,
+                                                 fRenderTargetContext->fRenderTargetProxy.get()));
     if (!op) {
         return;
     }
@@ -662,7 +663,6 @@ void GrRenderTargetContextPriv::stencilPath(const GrClip& clip,
                                                      appliedClip.hasStencilClip(),
                                                      stencilAttachment->bits(),
                                                      appliedClip.scissorState(),
-                                                     fRenderTargetContext,
                                                      path);
     if (!op) {
         return;
@@ -929,7 +929,6 @@ void GrRenderTargetContext::drawRRect(const GrClip& origClip,
     if (GrAAType::kCoverage == aaType) {
         const GrShaderCaps* shaderCaps = fContext->caps()->shaderCaps();
         std::unique_ptr<GrDrawOp> op = GrOvalOpFactory::MakeRRectOp(std::move(paint),
-                                                                    paint.usesDistanceVectorField(),
                                                                     viewMatrix,
                                                                     rrect,
                                                                     stroke,

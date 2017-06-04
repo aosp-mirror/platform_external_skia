@@ -135,10 +135,10 @@ public:
     void extend(const SkRasterPipeline&);
 
     // Runs the pipeline walking x through [x,x+n).
-    void run(size_t x, size_t n) const;
+    void run(size_t x, size_t y, size_t n) const;
 
     // Allocates a thunk which amortizes run() setup cost in alloc.
-    std::function<void(size_t, size_t)> compile() const;
+    std::function<void(size_t, size_t, size_t)> compile() const;
 
     void dump() const;
 
@@ -155,7 +155,7 @@ private:
         void*      ctx;
     };
 
-    static void BuildPipeline(const StageList*, const SkJumper_Engine&, void**);
+    void build_pipeline(const SkJumper_Engine&, void**) const;
     void unchecked_append(StockStage, void*);
 
     SkArenaAlloc* fAlloc;

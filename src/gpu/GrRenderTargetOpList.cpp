@@ -209,15 +209,13 @@ void GrRenderTargetOpList::fullClear(const GrCaps& caps, GrColor color) {
 ////////////////////////////////////////////////////////////////////////////////
 
 // MDB TODO: fuse with GrTextureOpList::copySurface
-bool GrRenderTargetOpList::copySurface(GrResourceProvider* resourceProvider,
-                                       GrRenderTargetContext* dst,
+bool GrRenderTargetOpList::copySurface(const GrCaps& caps,
+                                       GrSurfaceProxy* dst,
                                        GrSurfaceProxy* src,
                                        const SkIRect& srcRect,
                                        const SkIPoint& dstPoint) {
     SkASSERT(dst->asRenderTargetProxy() == fTarget.get());
-
-    std::unique_ptr<GrOp> op = GrCopySurfaceOp::Make(resourceProvider, dst->asSurfaceProxy(),
-                                                     src, srcRect, dstPoint);
+    std::unique_ptr<GrOp> op = GrCopySurfaceOp::Make(dst, src, srcRect, dstPoint);
     if (!op) {
         return false;
     }
@@ -225,7 +223,7 @@ bool GrRenderTargetOpList::copySurface(GrResourceProvider* resourceProvider,
     this->addDependency(src);
 #endif
 
-    this->recordOp(std::move(op), *resourceProvider->caps());
+    this->recordOp(std::move(op), caps);
     return true;
 }
 
@@ -322,6 +320,8 @@ GrOp* GrRenderTargetOpList::recordOp(std::unique_ptr<GrOp> op,
 void GrRenderTargetOpList::forwardCombine(const GrCaps& caps) {
     SkASSERT(!this->isClosed());
 
+    GrOP_INFO("opList: %d ForwardCombine %d ops:\n", this->uniqueID(), fRecordedOps.count());
+
     for (int i = 0; i < fRecordedOps.count() - 1; ++i) {
         GrOp* op = fRecordedOps[i].fOp.get();
 
@@ -332,21 +332,24 @@ void GrRenderTargetOpList::forwardCombine(const GrCaps& caps) {
 
             if (this->combineIfPossible(fRecordedOps[i], candidate.fOp.get(),
                                         candidate.fAppliedClip, &candidate.fDstProxy, caps)) {
-                GrOP_INFO("\t\tForward: Combining with (%s, opID: %u)\n", candidate.fOp->name(),
-                          candidate.fOp->uniqueID());
+                GrOP_INFO("\t\t%d: (%s opID: %u) -> Combining with (%s, opID: %u)\n",
+                          i, op->name(), op->uniqueID(),
+                          candidate.fOp->name(), candidate.fOp->uniqueID());
                 GR_AUDIT_TRAIL_OPS_RESULT_COMBINED(fAuditTrail, op, candidate.fOp.get());
                 fRecordedOps[j].fOp = std::move(fRecordedOps[i].fOp);
                 break;
             }
             // Stop traversing if we would cause a painter's order violation.
             if (!can_reorder(fRecordedOps[j].fOp->bounds(), op->bounds())) {
-                GrOP_INFO("\t\tForward: Intersects with (%s, opID: %u)\n", candidate.fOp->name(),
-                          candidate.fOp->uniqueID());
+                GrOP_INFO("\t\t%d: (%s opID: %u) -> Intersects with (%s, opID: %u)\n",
+                          i, op->name(), op->uniqueID(),
+                          candidate.fOp->name(), candidate.fOp->uniqueID());
                 break;
             }
             ++j;
             if (j > maxCandidateIdx) {
-                GrOP_INFO("\t\tForward: Reached max lookahead or end of op array %d\n", i);
+                GrOP_INFO("\t\t%d: (%s opID: %u) -> Reached max lookahead or end of array\n",
+                          i, op->name(), op->uniqueID());
                 break;
             }
         }
