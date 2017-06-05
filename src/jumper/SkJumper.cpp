@@ -70,15 +70,33 @@ using StartPipelineFn = void(size_t,size_t,size_t,void**,K*);
 #endif
 
 // Some stages have low-precision (~15 bit) versions from SkJumper_stages_lowp.cpp.
-#define LOWP_STAGES(M)  \
-    M(constant_color)   \
-    M(load_8888)        \
-    M(store_8888)       \
-    M(swap_rb)          \
-    M(swap)             \
-    M(move_src_dst)     \
-    M(move_dst_src)     \
-    M(srcover)
+#define LOWP_STAGES(M)   \
+    M(constant_color)    \
+    M(load_8888)         \
+    M(store_8888)        \
+    M(srcover_rgba_8888) \
+    M(lerp_1_float)      \
+    M(lerp_u8)           \
+    M(scale_1_float)     \
+    M(scale_u8)          \
+    M(swap_rb)           \
+    M(swap)              \
+    M(move_src_dst)      \
+    M(move_dst_src)      \
+    M(clear)             \
+    M(srcatop)           \
+    M(dstatop)           \
+    M(srcin)             \
+    M(dstin)             \
+    M(srcout)            \
+    M(dstout)            \
+    M(srcover)           \
+    M(dstover)           \
+    M(modulate)          \
+    M(multiply)          \
+    M(plus_)             \
+    M(screen)            \
+    M(xor_)
 
 extern "C" {
 
@@ -227,6 +245,7 @@ StartPipelineFn* SkRasterPipeline::build_pipeline(void** ip) const {
             #define M(st) case SkRasterPipeline::st: fn = ASM(st, ssse3_lowp); break;
                 LOWP_STAGES(M)
             #undef M
+                case SkRasterPipeline::clamp_0: continue;  // clamp_0 is a no-op in lowp.
                 default:
                     log_missing(st->stage);
                     ip = reset_point;
