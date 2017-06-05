@@ -88,8 +88,8 @@ public:
      * depending on the type of surface, configs, etc, and the backend-specific
      * limitations.
      */
-    bool copySurface(GrResourceProvider* resourceProvider,
-                     GrRenderTargetContext* dst,
+    bool copySurface(const GrCaps& caps,
+                     GrSurfaceProxy* dst,
                      GrSurfaceProxy* src,
                      const SkIRect& srcRect,
                      const SkIPoint& dstPoint);
@@ -120,8 +120,8 @@ private:
             }
         }
         std::unique_ptr<GrOp> fOp;
-        DstProxy fDstProxy;
-        const GrAppliedClip* fAppliedClip;
+        DstProxy              fDstProxy;
+        const GrAppliedClip*  fAppliedClip;
     };
 
     // If the input op is combined with an earlier op, this returns the combined op. Otherwise, it

@@ -419,8 +419,10 @@ bool SkGradientShaderBase::onAppendStages(SkRasterPipeline* p,
 
     SkRasterPipeline_<256> subclass;
     if (!this->adjustMatrixAndAppendStages(alloc, &matrix, &subclass)) {
-        return false;
+        return this->INHERITED::onAppendStages(p, dstCS, alloc, ctm, paint, localM);
     }
+
+    p->append(SkRasterPipeline::seed_shader);
 
     auto* m = alloc->makeArrayDefault<float>(9);
     if (matrix.asAffine(m)) {

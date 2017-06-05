@@ -27,7 +27,7 @@
 
 GR_DECLARE_STATIC_UNIQUE_KEY(gQuadIndexBufferKey);
 
-const int GrResourceProvider::kMinScratchTextureSize = 16;
+const uint32_t GrResourceProvider::kMinScratchTextureSize = 16;
 
 #define ASSERT_SINGLE_OWNER \
     SkDEBUGCODE(GrSingleOwner::AutoEnforce debug_SingleOwner(fSingleOwner);)
@@ -65,7 +65,7 @@ bool validate_desc(const GrSurfaceDesc& desc, const GrCaps& caps, int levelCount
             return false;
         }
     }
-    if (levelCount > 1 && GrPixelConfigIsSint(desc.fConfig)) {
+    if (levelCount > 1 && (GrPixelConfigIsSint(desc.fConfig) || !caps.mipMapSupport())) {
         return false;
     }
     return true;
@@ -161,11 +161,14 @@ sk_sp<GrTextureProxy> GrResourceProvider::createTextureProxy(const GrSurfaceDesc
 
     if (make_info(desc.fWidth, desc.fHeight, desc.fConfig, &srcInfo)) {
         sk_sp<GrTexture> tex = this->getExactScratch(desc, budgeted, 0);
-        sk_sp<GrSurfaceContext> sContext =
-                            context->contextPriv().makeWrappedSurfaceContext(std::move(tex));
-        if (sContext) {
-            if (sContext->writePixels(srcInfo, mipLevel.fPixels, mipLevel.fRowBytes, 0, 0)) {
-                return sContext->asTextureProxyRef();
+        sk_sp<GrTextureProxy> proxy = GrSurfaceProxy::MakeWrapped(std::move(tex));
+        if (proxy) {
+            sk_sp<GrSurfaceContext> sContext =
+                       context->contextPriv().makeWrappedSurfaceContext(std::move(proxy), nullptr);
+            if (sContext) {
+                if (sContext->writePixels(srcInfo, mipLevel.fPixels, mipLevel.fRowBytes, 0, 0)) {
+                    return sContext->asTextureProxyRef();
+                }
             }
         }
     }
