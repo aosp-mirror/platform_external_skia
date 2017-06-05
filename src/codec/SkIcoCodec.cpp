@@ -14,6 +14,7 @@
 #include "SkStream.h"
 #include "SkTDArray.h"
 #include "SkTSort.h"
+#include "../private/SkTemplates.h"
 
 /*
  * Checks the start of the stream to see if the image is an Ico or Cur
@@ -128,12 +129,18 @@ SkCodec* SkIcoCodec::NewFromStream(SkStream* stream) {
         bytesRead = offset;
 
         // Create a new stream for the embedded codec
-        SkAutoTUnref<SkData> data(
-                SkData::NewFromStream(inputStream.get(), size));
-        if (nullptr == data.get()) {
+        SkAutoFree buffer(sk_malloc_flags(size, 0));
+        if (!buffer.get()) {
+            SkCodecPrintf("Warning: OOM trying to create embedded stream.\n");
+            break;
+        }
+
+        if (inputStream->read(buffer.get(), size) != size) {
             SkCodecPrintf("Warning: could not create embedded stream.\n");
             break;
         }
+
+        SkAutoTUnref<SkData> data(SkData::NewFromMalloc(buffer.detach(), size));
         SkAutoTDelete<SkMemoryStream> embeddedStream(new SkMemoryStream(data.get()));
         bytesRead += size;
 
