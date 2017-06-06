@@ -128,11 +128,18 @@ SkCodec* SkIcoCodec::NewFromStream(SkStream* stream) {
         bytesRead = offset;
 
         // Create a new stream for the embedded codec
-        sk_sp<SkData> data(SkData::MakeFromStream(inputStream.get(), size));
-        if (nullptr == data.get()) {
+        SkAutoFree buffer(sk_malloc_flags(size, 0));
+        if (!buffer) {
+            SkCodecPrintf("Warning: OOM trying to create embedded stream.\n");
+            break;
+        }
+
+        if (inputStream->read(buffer.get(), size) != size) {
             SkCodecPrintf("Warning: could not create embedded stream.\n");
             break;
         }
+
+        sk_sp<SkData> data(SkData::MakeFromMalloc(buffer.release(), size));
         std::unique_ptr<SkMemoryStream> embeddedStream(new SkMemoryStream(data));
         bytesRead += size;
 
@@ -185,7 +192,10 @@ SkCodec* SkIcoCodec::NewFromStream(SkStream* stream) {
 SkIcoCodec::SkIcoCodec(int width, int height, const SkEncodedInfo& info,
                        SkTArray<std::unique_ptr<SkCodec>, true>* codecs,
                        sk_sp<SkColorSpace> colorSpace)
-    : INHERITED(width, height, info, nullptr, std::move(colorSpace))
+    // The source SkColorSpaceXform::ColorFormat will not be used. The embedded
+    // codec's will be used instead.
+    : INHERITED(width, height, info, SkColorSpaceXform::ColorFormat(), nullptr,
+                std::move(colorSpace))
     , fEmbeddedCodecs(codecs)
     , fCurrScanlineCodec(nullptr)
     , fCurrIncrementalCodec(nullptr)

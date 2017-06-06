@@ -46,6 +46,11 @@ using K = const SkJumper_constants;
 // We keep program the second argument, so that it's passed in rsi for load_and_inc().
 using Stage = void(K* k, void** program, size_t x, size_t y, size_t tail, F,F,F,F, F,F,F,F);
 
+#if defined(JUMPER) && defined(__AVX__)
+    // We really want to make sure all paths go through this function's (implicit) vzeroupper.
+    // If they don't, we'll experience severe slowdowns when we first use SSE instructions again.
+    __attribute__((disable_tail_calls))
+#endif
 MAYBE_MSABI
 extern "C" void WRAP(start_pipeline)(size_t x, size_t y, size_t limit, void** program, K* k) {
     F v{};

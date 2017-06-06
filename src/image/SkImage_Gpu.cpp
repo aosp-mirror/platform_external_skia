@@ -155,15 +155,20 @@ GrBackendObject SkImage_Gpu::onGetTextureHandle(bool flushPendingGrContextIO,
                                                 GrSurfaceOrigin* origin) const {
     SkASSERT(fProxy);
 
-    GrSurface* surface = fProxy->instantiate(fContext->resourceProvider());
-    if (surface && surface->asTexture()) {
+    if (!fProxy->instantiate(fContext->resourceProvider())) {
+        return 0;
+    }
+
+    GrTexture* texture = fProxy->priv().peekTexture();
+
+    if (texture) {
         if (flushPendingGrContextIO) {
             fContext->contextPriv().prepareSurfaceForExternalIO(fProxy.get());
         }
         if (origin) {
             *origin = fProxy->origin();
         }
-        return surface->asTexture()->getTextureHandle();
+        return texture->getTextureHandle();
     }
     return 0;
 }
@@ -174,7 +179,11 @@ GrTexture* SkImage_Gpu::onGetTexture() const {
         return nullptr;
     }
 
-    return proxy->instantiateTexture(fContext->resourceProvider());
+    if (!proxy->instantiate(fContext->resourceProvider())) {
+        return nullptr;
+    }
+
+    return proxy->priv().peekTexture();
 }
 
 bool SkImage_Gpu::onReadPixels(const SkImageInfo& dstInfo, void* dstPixels, size_t dstRB,
@@ -489,10 +498,10 @@ sk_sp<SkImage> SkImage::MakeCrossContextFromEncoded(GrContext* context, sk_sp<Sk
         return codecImage;
     }
 
-    sk_sp<GrTexture> texture(sk_ref_sp(proxy->instantiateTexture(context->resourceProvider())));
-    if (!texture) {
+    if (!proxy->instantiate(context->resourceProvider())) {
         return codecImage;
     }
+    sk_sp<GrTexture> texture = sk_ref_sp(proxy->priv().peekTexture());
 
     // Flush any writes or uploads
     context->contextPriv().prepareSurfaceForExternalIO(proxy.get());
@@ -905,15 +914,23 @@ sk_sp<SkImage> SkImage::MakeTextureFromMipMap(GrContext* ctx, const SkImageInfo&
                                    info.refColorSpace(), budgeted);
 }
 
-sk_sp<SkImage> SkImage_Gpu::onMakeColorSpace(sk_sp<SkColorSpace> colorSpace, SkColorType,
+sk_sp<SkImage> SkImage_Gpu::onMakeColorSpace(sk_sp<SkColorSpace> target, SkColorType,
                                              SkTransferFunctionBehavior premulBehavior) const {
     if (SkTransferFunctionBehavior::kRespect == premulBehavior) {
         // TODO: Implement this.
         return nullptr;
     }
 
-    sk_sp<SkColorSpace> srcSpace = fColorSpace ? fColorSpace : SkColorSpace::MakeSRGB();
-    auto xform = GrNonlinearColorSpaceXformEffect::Make(srcSpace.get(), colorSpace.get());
+    sk_sp<SkColorSpace> srcSpace = fColorSpace;
+    if (!fColorSpace) {
+        if (target->isSRGB()) {
+            return sk_ref_sp(const_cast<SkImage*>((SkImage*)this));
+        }
+
+        srcSpace = SkColorSpace::MakeSRGB();
+    }
+
+    auto xform = GrNonlinearColorSpaceXformEffect::Make(srcSpace.get(), target.get());
     if (!xform) {
         return sk_ref_sp(const_cast<SkImage_Gpu*>(this));
     }
@@ -940,7 +957,7 @@ sk_sp<SkImage> SkImage_Gpu::onMakeColorSpace(sk_sp<SkColorSpace> colorSpace, SkC
     // MDB: this call is okay bc we know 'renderTargetContext' was exact
     return sk_make_sp<SkImage_Gpu>(fContext, kNeedNewImageUniqueID,
                                    fAlphaType, renderTargetContext->asTextureProxyRef(),
-                                   std::move(colorSpace), fBudgeted);
+                                   std::move(target), fBudgeted);
 
 }
 

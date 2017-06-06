@@ -481,8 +481,13 @@ bool SkBmpCodec::ReadHeader(SkStream* stream, bool inIco, SkCodec** codecOut) {
 
                 // Set the image info and create a codec.
                 const SkEncodedInfo info = SkEncodedInfo::Make(color, alpha, bitsPerComponent);
-                *codecOut = new SkBmpStandardCodec(width, height, info, stream, bitsPerPixel,
-                        numColors, bytesPerColor, offset - bytesRead, rowOrder, isOpaque, inIco);
+                std::unique_ptr<SkBmpStandardCodec> codec(new SkBmpStandardCodec(width, height,
+                        info, stream, bitsPerPixel, numColors, bytesPerColor, offset - bytesRead,
+                        rowOrder, isOpaque, inIco));
+                if (!codec->didCreateSrcBuffer()) {
+                    return false;
+                }
+                *codecOut = codec.release();
             }
             return true;
         }
@@ -534,8 +539,12 @@ bool SkBmpCodec::ReadHeader(SkStream* stream, bool inIco, SkCodec** codecOut) {
                     alpha = SkEncodedInfo::kOpaque_Alpha;
                 }
                 const SkEncodedInfo info = SkEncodedInfo::Make(color, alpha, 8);
-                *codecOut = new SkBmpMaskCodec(width, height, info, stream, bitsPerPixel,
-                        masks.release(), rowOrder);
+                std::unique_ptr<SkBmpMaskCodec> codec(new SkBmpMaskCodec(width, height, info,
+                        stream, bitsPerPixel, masks.release(), rowOrder));
+                if (!codec->didCreateSrcBuffer()) {
+                    return false;
+                }
+                *codecOut = codec.release();
             }
             return true;
         }
@@ -593,7 +602,7 @@ SkCodec* SkBmpCodec::NewFromStream(SkStream* stream, bool inIco) {
 
 SkBmpCodec::SkBmpCodec(int width, int height, const SkEncodedInfo& info, SkStream* stream,
         uint16_t bitsPerPixel, SkCodec::SkScanlineOrder rowOrder)
-    : INHERITED(width, height, info, stream, SkColorSpace::MakeSRGB())
+    : INHERITED(width, height, info, kXformSrcColorFormat, stream, SkColorSpace::MakeSRGB())
     , fBitsPerPixel(bitsPerPixel)
     , fRowOrder(rowOrder)
     , fSrcRowBytes(SkAlign4(compute_row_bytes(width, fBitsPerPixel)))
@@ -643,16 +652,4 @@ bool SkBmpCodec::skipRows(int count) {
 
 bool SkBmpCodec::onSkipScanlines(int count) {
     return this->skipRows(count);
-}
-
-void SkBmpCodec::applyColorXform(const SkImageInfo& dstInfo, void* dst, void* src) const {
-    SkColorSpaceXform* xform = this->colorXform();
-    if (xform) {
-        const SkColorSpaceXform::ColorFormat dstFormat = select_xform_format(dstInfo.colorType());
-        const SkColorSpaceXform::ColorFormat srcFormat = select_xform_format(kXformSrcColorType);
-        const SkAlphaType alphaType = select_xform_alpha(dstInfo.alphaType(),
-                                                         this->getInfo().alphaType());
-        SkAssertResult(xform->apply(dstFormat, dst, srcFormat, src, dstInfo.width(),
-                                    alphaType));
-    }
 }
