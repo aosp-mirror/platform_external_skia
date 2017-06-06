@@ -28,7 +28,7 @@ struct F {
     U16 vec;
 
     F() = default;
-    F(uint16_t bits) : vec(bits) {}
+    F(float f) : vec((uint16_t)(f * 0x8000)) {}
 
     F(U16 v) : vec(v) {}
     operator U16() const { return vec; }
@@ -38,6 +38,9 @@ SI F operator+(F x, F y) { return x.vec + y.vec; }
 SI F operator-(F x, F y) { return x.vec - y.vec; }
 SI F operator*(F x, F y) { return _mm_abs_epi16(_mm_mulhrs_epi16(x.vec, y.vec)); }
 SI F mad(F f, F m, F a) { return f*m+a; }
+SI F inv(F v) { return 1.0f - v; }
+SI F two(F v) { return v + v; }
+SI F lerp(F from, F to, F t) { return to*t + from*inv(t); }
 
 SI F operator<<(F x, int bits) { return x.vec << bits; }
 SI F operator>>(F x, int bits) { return x.vec >> bits; }
@@ -45,7 +48,7 @@ SI F operator>>(F x, int bits) { return x.vec >> bits; }
 using Stage = void(K* k, void** program, size_t x, size_t y, size_t tail, F,F,F,F, F,F,F,F);
 
 MAYBE_MSABI
-extern "C" void WRAP(start_pipeline)(size_t x, size_t y, size_t limit, void** program, K* k) {
+extern "C" size_t WRAP(start_pipeline)(size_t x, size_t y, size_t limit, void** program, K* k) {
     F v{};
     auto start = (Stage*)load_and_inc(program);
     while (x + kStride <= limit) {
@@ -55,6 +58,7 @@ extern "C" void WRAP(start_pipeline)(size_t x, size_t y, size_t limit, void** pr
     if (size_t tail = limit - x) {
         start(k,program,x,y,tail, v,v,v,v, v,v,v,v);
     }
+    return limit;
 }
 extern "C" void WRAP(just_return)(K*, void**, size_t,size_t,size_t, F,F,F,F, F,F,F,F) {}
 
@@ -120,14 +124,13 @@ SI void from_8888(U32 rgba, F* r, F* g, F* b, F* a) {
     U16 lo = unaligned_load<U16>((const uint32_t*)&rgba + 0),
         hi = unaligned_load<U16>((const uint32_t*)&rgba + 4);
 
-    U16 _0415 = _mm_unpacklo_epi8(lo, hi),       // r0 r4 g0 g4 b0 b4 a0 a4  r1 r5 g1 g5 b1 b5 a1 a5
-        _2637 = _mm_unpackhi_epi8(lo, hi);
+    // Shuffle so that the 4 bytes of each color channel are contiguous...
+    lo = _mm_shuffle_epi8(lo, _mm_setr_epi8(0,4,8,12, 1,5,9,13, 2,6,10,14, 3,7,11,15));
+    hi = _mm_shuffle_epi8(hi, _mm_setr_epi8(0,4,8,12, 1,5,9,13, 2,6,10,14, 3,7,11,15));
 
-    U16 even = _mm_unpacklo_epi8(_0415, _2637),  // r0 r2 r4 r6 g0 g2 g4 g6  b0 b2 b4 b6 a0 a2 a4 a6
-         odd = _mm_unpackhi_epi8(_0415, _2637);
-
-    U16 rg = _mm_unpacklo_epi8(even, odd),  // r0 r1 r2 r3 r4 r5 r6 r7  g0 g1 g2 g3 g4 g5 g6 g7
-        ba = _mm_unpackhi_epi8(even, odd);
+    // ...then get all 8 bytes of each color channel together into a single register.
+    U16 rg = _mm_unpacklo_epi32(lo,hi),
+        ba = _mm_unpackhi_epi32(lo,hi);
 
     // Unpack as 16-bit values into the high half of each 16-bit lane, to get a free *256.
     U16 R = _mm_unpacklo_epi8(U16(0), rg),
@@ -143,6 +146,12 @@ SI void from_8888(U32 rgba, F* r, F* g, F* b, F* a) {
     *b = _mm_mulhi_epu16(B, U16(32897));
     *a = _mm_mulhi_epu16(A, U16(32897));
 }
+SI F from_byte(U8 bytes) {
+    // See from_8888() just above.
+    U16 hi = _mm_unpacklo_epi8(U16(0), widen_cast<__m128i>(bytes));
+    return (F)_mm_mulhi_epu16(hi, U16(32897));
+}
+
 SI U32 to_8888(F r, F g, F b, F a) {
     // We want to interlace and pack these values from [0,32768] to [0,255].
     // Luckily the simplest possible thing works great: >>7, then saturate.
@@ -161,8 +170,34 @@ SI U32 to_8888(F r, F g, F b, F a) {
     memcpy((uint32_t*)&px + 4, &hi, sizeof(hi));
     return px;
 }
+SI U8 to_byte(F v) {
+    // See to_8888() just above.
+    U16 packed = _mm_packus_epi16(v>>7, v>>7);  // Doesn't really matter what we pack on top.
+    return unaligned_load<U8>(&packed);
+}
 
 // Stages!
+
+STAGE(constant_color) {
+    auto rgba = (const float*)ctx;
+    r = rgba[0];
+    g = rgba[1];
+    b = rgba[2];
+    a = rgba[3];
+}
+
+STAGE(set_rgb) {
+    auto rgb = (const float*)ctx;
+    r = rgb[0];
+    g = rgb[1];
+    b = rgb[2];
+}
+
+STAGE(premul) {
+    r = r * a;
+    g = g * a;
+    b = b * a;
+}
 
 STAGE(load_8888) {
     auto ptr = *(const uint32_t**)ctx + x;
@@ -173,8 +208,130 @@ STAGE(store_8888) {
     store(ptr, to_8888(r,g,b,a), tail);
 }
 
+STAGE(load_a8) {
+    auto ptr = *(const uint8_t**)ctx + x;
+    r = g = b = 0.0f;
+    a = from_byte(load<U8>(ptr, tail));
+}
+STAGE(store_a8) {
+    auto ptr = *(uint8_t**)ctx + x;
+    store(ptr, to_byte(a), tail);
+}
+
+STAGE(load_g8) {
+    auto ptr = *(const uint8_t**)ctx + x;
+    r = g = b = from_byte(load<U8>(ptr, tail));
+    a = 1.0f;
+}
+
+STAGE(srcover_rgba_8888) {
+    auto ptr = *(uint32_t**)ctx + x;
+
+    from_8888(load<U32>(ptr, tail), &dr,&dg,&db,&da);
+
+    r = mad(dr, inv(a), r);
+    g = mad(dg, inv(a), g);
+    b = mad(db, inv(a), b);
+    a = mad(da, inv(a), a);
+
+    store(ptr, to_8888(r,g,b,a), tail);
+}
+
+STAGE(scale_1_float) {
+    float c = *(const float*)ctx;
+
+    r = r * c;
+    g = g * c;
+    b = b * c;
+    a = a * c;
+}
+STAGE(scale_u8) {
+    auto ptr = *(const uint8_t**)ctx + x;
+
+    U8 scales = load<U8>(ptr, tail);
+    F c = from_byte(scales);
+
+    r = r * c;
+    g = g * c;
+    b = b * c;
+    a = a * c;
+}
+
+STAGE(lerp_1_float) {
+    float c = *(const float*)ctx;
+
+    r = lerp(dr, r, c);
+    g = lerp(dg, g, c);
+    b = lerp(db, b, c);
+    a = lerp(da, a, c);
+}
+STAGE(lerp_u8) {
+    auto ptr = *(const uint8_t**)ctx + x;
+
+    U8 scales = load<U8>(ptr, tail);
+    F c = from_byte(scales);
+
+    r = lerp(dr, r, c);
+    g = lerp(dg, g, c);
+    b = lerp(db, b, c);
+    a = lerp(da, a, c);
+}
+
 STAGE(swap_rb) {
     auto tmp = r;
     r = b;
     b = tmp;
 }
+
+STAGE(swap) {
+    auto swap = [](F& v, F& dv) {
+        auto tmp = v;
+        v = dv;
+        dv = tmp;
+    };
+    swap(r, dr);
+    swap(g, dg);
+    swap(b, db);
+    swap(a, da);
+}
+STAGE(move_src_dst) {
+    dr = r;
+    dg = g;
+    db = b;
+    da = a;
+}
+STAGE(move_dst_src) {
+    r = dr;
+    g = dg;
+    b = db;
+    a = da;
+}
+
+// Most blend modes apply the same logic to each channel.
+#define BLEND_MODE(name)                       \
+    SI F name##_channel(F s, F d, F sa, F da); \
+    STAGE(name) {                              \
+        r = name##_channel(r,dr,a,da);         \
+        g = name##_channel(g,dg,a,da);         \
+        b = name##_channel(b,db,a,da);         \
+        a = name##_channel(a,da,a,da);         \
+    }                                          \
+    SI F name##_channel(F s, F d, F sa, F da)
+
+BLEND_MODE(clear)    { return 0.0f; }
+BLEND_MODE(srcatop)  { return s*da + d*inv(sa); }
+BLEND_MODE(dstatop)  { return d*sa + s*inv(da); }
+BLEND_MODE(srcin)    { return s * da; }
+BLEND_MODE(dstin)    { return d * sa; }
+BLEND_MODE(srcout)   { return s * inv(da); }
+BLEND_MODE(dstout)   { return d * inv(sa); }
+BLEND_MODE(srcover)  { return mad(d, inv(sa), s); }
+BLEND_MODE(dstover)  { return mad(s, inv(da), d); }
+
+BLEND_MODE(modulate) { return s*d; }
+BLEND_MODE(multiply) { return s*inv(da) + d*inv(sa) + s*d; }
+BLEND_MODE(plus_)    { return s + d; }
+BLEND_MODE(screen)   { return s + inv(s)*d; }
+BLEND_MODE(xor_)     { return s*inv(da) + d*inv(sa); }
+
+#undef BLEND_MODE

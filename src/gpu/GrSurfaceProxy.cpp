@@ -40,11 +40,11 @@ GrSurfaceProxy::~GrSurfaceProxy() {
     SkASSERT(!fLastOpList);
 }
 
-GrSurface* GrSurfaceProxy::instantiateImpl(GrResourceProvider* resourceProvider, int sampleCnt,
-                                           GrSurfaceFlags flags, bool isMipMapped,
-                                           SkDestinationSurfaceColorMode mipColorMode) {
+bool GrSurfaceProxy::instantiateImpl(GrResourceProvider* resourceProvider, int sampleCnt,
+                                     GrSurfaceFlags flags, bool isMipMapped,
+                                     SkDestinationSurfaceColorMode mipColorMode) {
     if (fTarget) {
-        return fTarget;
+        return true;
     }
     GrSurfaceDesc desc;
     desc.fConfig = fConfig;
@@ -59,12 +59,12 @@ GrSurface* GrSurfaceProxy::instantiateImpl(GrResourceProvider* resourceProvider,
     }
 
     if (SkBackingFit::kApprox == fFit) {
-        fTarget = resourceProvider->createApproxTexture(desc, fFlags);
+        fTarget = resourceProvider->createApproxTexture(desc, fFlags).release();
     } else {
         fTarget = resourceProvider->createTexture(desc, fBudgeted, fFlags).release();
     }
     if (!fTarget) {
-        return nullptr;
+        return false;
     }
 
     fTarget->asTexture()->texturePriv().setMipColorMode(mipColorMode);
@@ -76,7 +76,7 @@ GrSurface* GrSurfaceProxy::instantiateImpl(GrResourceProvider* resourceProvider,
     }
 #endif
 
-    return fTarget;
+    return true;
 }
 
 void GrSurfaceProxy::setLastOpList(GrOpList* opList) {
@@ -172,7 +172,7 @@ sk_sp<GrTextureProxy> GrSurfaceProxy::MakeDeferred(GrResourceProvider* resourceP
     sk_sp<GrTexture> tex;
 
     if (SkBackingFit::kApprox == fit) {
-        tex.reset(resourceProvider->createApproxTexture(copyDesc, flags));
+        tex = resourceProvider->createApproxTexture(copyDesc, flags);
     } else {
         tex = resourceProvider->createTexture(copyDesc, budgeted, flags);
     }

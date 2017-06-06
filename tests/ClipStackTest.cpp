@@ -16,6 +16,7 @@
 #include "GrClipStackClip.h"
 #include "GrReducedClip.h"
 #include "GrResourceCache.h"
+#include "GrSurfaceProxyPriv.h"
 #include "GrTextureProxy.h"
 typedef GrReducedClip::ElementList ElementList;
 typedef GrReducedClip::InitialState InitialState;
@@ -1356,6 +1357,36 @@ static void test_reduced_clip_stack_aa(skiatest::Reporter* reporter) {
     }
 }
 
+static void test_tiny_query_bounds_assertion_bug(skiatest::Reporter* reporter) {
+    // https://bugs.chromium.org/p/skia/issues/detail?id=5990
+    const SkRect clipBounds = SkRect::MakeXYWH(1.5f, 100, 1000, 1000);
+
+    SkClipStack rectStack;
+    rectStack.clipRect(clipBounds, SkMatrix::I(), kIntersect_SkClipOp, true);
+
+    SkPath clipPath;
+    clipPath.moveTo(clipBounds.left(), clipBounds.top());
+    clipPath.quadTo(clipBounds.right(), clipBounds.top(),
+                    clipBounds.right(), clipBounds.bottom());
+    clipPath.quadTo(clipBounds.left(), clipBounds.bottom(),
+                    clipBounds.left(), clipBounds.top());
+    SkClipStack pathStack;
+    pathStack.clipPath(clipPath, SkMatrix::I(), kIntersect_SkClipOp, true);
+
+    for (const SkClipStack& stack : {rectStack, pathStack}) {
+        for (SkRect queryBounds : {SkRect::MakeXYWH(53, 60, GrClip::kBoundsTolerance, 1000),
+                                   SkRect::MakeXYWH(53, 60, GrClip::kBoundsTolerance/2, 1000),
+                                   SkRect::MakeXYWH(53, 160, 1000, GrClip::kBoundsTolerance),
+                                   SkRect::MakeXYWH(53, 160, 1000, GrClip::kBoundsTolerance/2)}) {
+            const GrReducedClip reduced(stack, queryBounds);
+            REPORTER_ASSERT(reporter, !reduced.hasIBounds());
+            REPORTER_ASSERT(reporter, reduced.elements().isEmpty());
+            REPORTER_ASSERT(reporter,
+                            GrReducedClip::InitialState::kAllOut == reduced.initialState());
+        }
+    }
+}
+
 #endif
 
 DEF_TEST(ClipStack, reporter) {
@@ -1408,6 +1439,7 @@ DEF_TEST(ClipStack, reporter) {
     test_reduced_clip_stack_genid(reporter);
     test_reduced_clip_stack_no_aa_crash(reporter);
     test_reduced_clip_stack_aa(reporter);
+    test_tiny_query_bounds_assertion_bug(reporter);
 #endif
 }
 
@@ -1442,7 +1474,8 @@ DEF_GPUTEST_FOR_ALL_CONTEXTS(ClipMaskCache, reporter, ctxInfo) {
         stack.save();
         stack.clipPath(path, m, SkClipOp::kIntersect, true);
         sk_sp<GrTextureProxy> mask = GrClipStackClip(&stack).testingOnly_createClipMask(context);
-        GrTexture* tex = mask->instantiateTexture(context->resourceProvider());
+        mask->instantiate(context->resourceProvider());
+        GrTexture* tex = mask->priv().peekTexture();
         REPORTER_ASSERT(reporter, 0 == strcmp(tex->getUniqueKey().tag(), kTag));
         // Make sure mask isn't pinned in cache.
         mask.reset(nullptr);
