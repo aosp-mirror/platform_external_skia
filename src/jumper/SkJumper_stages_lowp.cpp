@@ -28,7 +28,11 @@ struct F {
     U16 vec;
 
     F() = default;
-    F(float f) : vec((uint16_t)(f * 0x8000)) {}
+    F(float f) {
+        // After adding 256.0f, the SkFixed15 value is the bottom two bytes of the float.
+        f += 256.0f;
+        vec = unaligned_load<uint16_t>(&f);
+    }
 
     F(U16 v) : vec(v) {}
     operator U16() const { return vec; }
@@ -179,11 +183,13 @@ SI U8 to_byte(F v) {
 // Stages!
 
 STAGE(constant_color) {
-    auto rgba = (const float*)ctx;
-    r = rgba[0];
-    g = rgba[1];
-    b = rgba[2];
-    a = rgba[3];
+    // We're converting to fixed point, which lets us play some IEEE representation tricks,
+    // replacing a naive *32768 and float->int conversion with a simple float add.
+    __m128i bits = _mm_loadu_ps((const float*)ctx) + _mm_set1_ps(256.0f);
+    r = _mm_shuffle_epi8(bits, _mm_set1_epi16(0x0100));
+    g = _mm_shuffle_epi8(bits, _mm_set1_epi16(0x0504));
+    b = _mm_shuffle_epi8(bits, _mm_set1_epi16(0x0908));
+    a = _mm_shuffle_epi8(bits, _mm_set1_epi16(0x0d0c));
 }
 
 STAGE(set_rgb) {
