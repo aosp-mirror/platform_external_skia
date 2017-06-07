@@ -54,13 +54,76 @@ void SkPDFCanvas::onDrawImageNine(const SkImage* image,
     }
 }
 
+void SkPDFCanvas::onDrawImage(const SkImage* image,
+                              SkScalar x,
+                              SkScalar y,
+                              const SkPaint* paint) {
+    SkASSERT(image);
+    if (paint && paint->getMaskFilter()) {
+        SkPaint paintCopy(*paint);
+        SkMatrix m = SkMatrix::MakeTrans(x, y);
+        paintCopy.setShader(image->makeShader(&m));
+        this->drawRect(SkRect::MakeXYWH(x, y, image->width(), image->height()), paintCopy);
+        return;
+    }
+    this->SkCanvas::onDrawImage(image, x, y, paint);
+}
+
+void SkPDFCanvas::onDrawBitmap(const SkBitmap& bitmap,
+                              SkScalar x,
+                              SkScalar y,
+                              const SkPaint* paint) {
+    if (paint && paint->getMaskFilter()) {
+        if (sk_sp<SkImage> img = SkImage::MakeFromBitmap(bitmap)) {
+            this->onDrawImage(img.get(), x, y, paint);
+        }
+        return;
+    }
+    this->SkCanvas::onDrawBitmap(bitmap, x, y, paint);
+}
+
+
+static bool is_integer(SkScalar x) {
+    return x == SkScalarTruncToScalar(x);
+}
+
+static bool is_integral(const SkRect& r) {
+    return is_integer(r.left()) &&
+           is_integer(r.top()) &&
+           is_integer(r.right()) &&
+           is_integer(r.bottom());
+}
+
 void SkPDFCanvas::onDrawImageRect(const SkImage* image,
                                   const SkRect* src,
                                   const SkRect& dst,
                                   const SkPaint* paint,
                                   SkCanvas::SrcRectConstraint constraint) {
-    SkAutoCanvasRestore autoCanvasRestore(this, true);
-    this->clipRect(dst);
+    SkASSERT(src);
+    SkASSERT(image);
+    if (paint && paint->getMaskFilter()) {
+        SkPaint paintCopy(*paint);
+        paintCopy.setAntiAlias(true);
+        SkRect srcRect = src ? *src : SkRect::Make(image->bounds());
+        SkMatrix m = SkMatrix::MakeRectToRect(srcRect, dst, SkMatrix::kFill_ScaleToFit);
+        if (!src || *src == SkRect::Make(image->bounds()) ||
+                SkCanvas::kFast_SrcRectConstraint == constraint) {
+            paintCopy.setShader(image->makeShader(&m));
+        } else {
+            SkIRect subset = src->roundOut();
+            m.preTranslate(subset.x(), subset.y());
+            auto si = image->makeSubset(subset);
+            if (!si) { return; }
+            paintCopy.setShader(si->makeShader(&m));
+        }
+        this->drawRect(dst, paintCopy);
+        return;
+    }
+    SkAutoCanvasRestore autoCanvasRestore(this, false);
+    if (src && !is_integral(*src)) {
+        this->save();
+        this->clipRect(dst);
+    }
     this->SkCanvas::onDrawImageRect(image, src, dst, paint, constraint);
 }
 
@@ -69,8 +132,18 @@ void SkPDFCanvas::onDrawBitmapRect(const SkBitmap& bitmap,
                                    const SkRect& dst,
                                    const SkPaint* paint,
                                    SkCanvas::SrcRectConstraint constraint) {
-    SkAutoCanvasRestore autoCanvasRestore(this, true);
-    this->clipRect(dst);
+    SkASSERT(src);
+    if (paint && paint->getMaskFilter()) {
+        if (sk_sp<SkImage> img = SkImage::MakeFromBitmap(bitmap)) {
+            this->onDrawImageRect(img.get(), src, dst, paint, constraint);
+        }
+        return;
+    }
+    SkAutoCanvasRestore autoCanvasRestore(this, false);
+    if (src && !is_integral(*src)) {
+        this->save();
+        this->clipRect(dst);
+    }
     this->SkCanvas::onDrawBitmapRect(bitmap, src, dst, paint, constraint);
 }
 
