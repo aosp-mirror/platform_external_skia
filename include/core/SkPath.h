@@ -9,13 +9,9 @@
 #define SkPath_DEFINED
 
 #include "SkMatrix.h"
-#include "SkPathRef.h"
-#include "SkRefCnt.h"
+#include "../private/SkPathRef.h"
 
-class SkReader32;
-class SkWriter32;
 class SkAutoPathBoundsUpdate;
-class SkString;
 class SkRRect;
 class SkWStream;
 

@@ -13,6 +13,7 @@
 #include "glsl/GrGLSLBlend.h"
 #include "glsl/GrGLSLFragmentShaderBuilder.h"
 #include "SkGr.h"
+#include "SkXfermodePriv.h"
 
 // Some of the cpu implementations of blend modes differ too much from the GPU enough that
 // we can't use the cpu implementation to implement constantOutputForConstantInput.
@@ -210,7 +211,7 @@ void GLComposeTwoFragmentProcessor::emitCode(EmitArgs& args) {
 
     // emit blend code
     SkBlendMode mode = cs.getMode();
-    fragBuilder->codeAppendf("// Compose Xfer Mode: %s\n", SkXfermode::ModeName(mode));
+    fragBuilder->codeAppendf("// Compose Xfer Mode: %s\n", SkBlendMode_Name(mode));
     GrGLSLBlend::AppendMode(fragBuilder,
                             srcColor.c_str(),
                             dstColor.c_str(),
@@ -425,7 +426,7 @@ public:
         }
 
         // emit blend code
-        fragBuilder->codeAppendf("// Compose Xfer Mode: %s\n", SkXfermode::ModeName(mode));
+        fragBuilder->codeAppendf("// Compose Xfer Mode: %s\n", SkBlendMode_Name(mode));
         const char* childStr = childColor.c_str();
         if (ComposeOneFragmentProcessor::kDst_Child == child) {
             GrGLSLBlend::AppendMode(fragBuilder, inputColor, childStr, args.fOutputColor, mode);

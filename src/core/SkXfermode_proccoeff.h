@@ -8,14 +8,11 @@
 #ifndef SkXfermode_proccoeff_DEFINED
 #define SkXfermode_proccoeff_DEFINED
 
-#include "SkReadBuffer.h"
-#include "SkWriteBuffer.h"
+#include "SkXfermodePriv.h"
 
 struct ProcCoeff {
     SkXfermodeProc      fProc;
     SkXfermodeProc4f    fProc4f;
-    SkXfermode::Coeff   fSC;
-    SkXfermode::Coeff   fDC;
 };
 
 #define CANNOT_USE_COEFF    SkXfermode::Coeff(-1)
@@ -25,23 +22,12 @@ public:
     SkProcCoeffXfermode(const ProcCoeff& rec, SkBlendMode mode) {
         fMode = mode;
         fProc = rec.fProc;
-        // these may be valid, or may be CANNOT_USE_COEFF
-        fSrcCoeff = rec.fSC;
-        fDstCoeff = rec.fDC;
     }
 
     void xfer32(SkPMColor dst[], const SkPMColor src[], int count,
                 const SkAlpha aa[]) const override;
-    void xfer16(uint16_t dst[], const SkPMColor src[], int count,
-                const SkAlpha aa[]) const override;
-    void xferA8(SkAlpha dst[], const SkPMColor src[], int count,
-                const SkAlpha aa[]) const override;
 
-    bool asMode(Mode* mode) const override;
-
-    bool supportsCoverageAsAlpha() const override;
-
-    bool isOpaque(SkXfermode::SrcColorOpacity opacityType) const override;
+    bool asMode(SkBlendMode* mode) const override;
 
 #if SK_SUPPORT_GPU
     sk_sp<GrFragmentProcessor> makeFragmentProcessorForImageFilter(
@@ -62,7 +48,6 @@ protected:
 private:
     SkXfermodeProc  fProc;
     SkBlendMode     fMode;
-    Coeff           fSrcCoeff, fDstCoeff;
 
     friend class SkXfermode;
 

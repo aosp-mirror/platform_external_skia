@@ -83,9 +83,9 @@ BASE_SRCS_ALL = struct(
         "src/gpu/gl/iOS/*",
         "src/gpu/gl/mac/*",
         "src/gpu/gl/win/*",
-        "src/images/*",
         "src/opts/**/*",
         "src/ports/**/*",
+        "src/ports/SkImageEncoder_none.cpp",
         "src/utils/android/**/*",
         "src/utils/mac/**/*",
         "src/utils/SkThreadUtils_win.cpp",  # Windows-only. Move to ports?
@@ -129,7 +129,6 @@ BASE_SRCS_UNIX = struct(
         "src/android/*",
         "src/codec/*",
         "src/gpu/gl/GrGLDefaultInterface_none.cpp",
-        "src/images/*",
         "src/opts/**/*.cpp",
         "src/opts/**/*.h",
         "src/ports/**/*.cpp",
@@ -183,7 +182,6 @@ BASE_SRCS_ANDROID = struct(
         "src/android/*",
         "src/codec/*",
         "src/gpu/gl/GrGLDefaultInterface_none.cpp",
-        "src/images/*",
         # TODO(benjaminwagner): Figure out how to compile with EGL.
         "src/opts/**/*.cpp",
         "src/opts/**/*.h",
@@ -273,6 +271,7 @@ BASE_SRCS_IOS = struct(
         "src/ports/SkFontMgr_custom_empty_factory.cpp",
         "src/ports/SkFontMgr_empty_factory.cpp",
         "src/ports/SkGlobalInitialization_none.cpp",
+        "src/ports/SkImageEncoder_none.cpp",
         "src/ports/SkImageGenerator_none.cpp",
         "src/ports/SkTLS_none.cpp",
     ],
@@ -387,6 +386,8 @@ SKIA_OS_IOS = "IOS"
 
 SKIA_CPU_UNSPECIFIED = "UNSPECIFIED"
 
+SKIA_CPU_ARM = "ARM"
+
 SKIA_CPU_PPC = "PPC"
 
 def skia_srcs(os=SKIA_OS_UNIX, cpu=SKIA_CPU_UNSPECIFIED):
@@ -403,7 +404,7 @@ def skia_srcs(os=SKIA_OS_UNIX, cpu=SKIA_CPU_UNSPECIFIED):
   elif os == SKIA_OS_UNIX:
     if cpu == SKIA_CPU_UNSPECIFIED:
       srcs = srcs + ["src/opts/opts_check_x86.cpp"] + skia_glob(BASE_SRCS_UNIX)
-    elif cpu == SKIA_CPU_PPC:
+    elif cpu == SKIA_CPU_PPC or cpu == SKIA_CPU_ARM:
       srcs = srcs + skia_glob(BASE_SRCS_UNIX)
     else:
       fail("cpu must be one of SKIA_CPU_*")

@@ -43,8 +43,7 @@ static bool use_4f_context(const SkShaderBase::ContextRec& rec, uint32_t flags) 
 #ifdef FORCE_4F_CONTEXT
     return true;
 #else
-    return rec.fPreferredDstType == SkShaderBase::ContextRec::kPM4f_DstType
-        || SkToBool(flags & SkLinearGradient::kForce4fContext_PrivateFlag);
+    return rec.fPreferredDstType == SkShaderBase::ContextRec::kPM4f_DstType;
 #endif
 }
 
@@ -81,6 +80,14 @@ SkShaderBase::Context* SkLinearGradient::onMakeContext(
     return use_4f_context(rec, fGradFlags)
            ? CheckedMakeContext<LinearGradient4fContext>(alloc, *this, rec)
            : CheckedMakeContext<  LinearGradientContext>(alloc, *this, rec);
+}
+
+SkShaderBase::Context* SkLinearGradient::onMakeBurstPipelineContext(
+    const ContextRec& rec, SkArenaAlloc* alloc) const {
+
+    // Raster pipeline has a 2-stop specialization faster than our burst.
+    return fColorCount > 2 ? CheckedMakeContext<LinearGradient4fContext>(alloc, *this, rec)
+                           : nullptr;
 }
 
 bool SkLinearGradient::adjustMatrixAndAppendStages(SkArenaAlloc* alloc,
