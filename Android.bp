@@ -300,7 +300,6 @@ cc_library {
         "src/effects/SkAlphaThresholdFilter.cpp",
         "src/effects/SkArcToPathEffect.cpp",
         "src/effects/SkArithmeticImageFilter.cpp",
-        "src/effects/SkArithmeticMode.cpp",
         "src/effects/SkBlurMask.cpp",
         "src/effects/SkBlurMaskFilter.cpp",
         "src/effects/SkColorFilterImageFilter.cpp",
