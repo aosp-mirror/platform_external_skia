@@ -446,27 +446,11 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(c, reporter, ctxInfo) {
     }
 }
 
-GrContextFactory::ContextType pick_second_context_type(const sk_gpu_test::ContextInfo& info) {
-    switch (info.backend()) {
-        case kOpenGL_GrBackend:
-#if defined(SK_BUILD_FOR_WIN) || defined(SK_BUILD_FOR_UNIX) || defined (SK_BUILD_FOR_MAC)
-            return GrContextFactory::kGL_ContextType;
-#else
-            return GrContextFactory::kGLES_ContextType;
-#endif
-        case kVulkan_GrBackend:
-            return GrContextFactory::kVulkan_ContextType;
-    }
-    SkFAIL("Unknown backend type.");
-    return GrContextFactory::kGL_ContextType;
-}
-
 DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SkImage_makeTextureImage, reporter, contextInfo) {
     GrContext* context = contextInfo.grContext();
     sk_gpu_test::TestContext* testContext = contextInfo.testContext();
     GrContextFactory otherFactory;
-    GrContextFactory::ContextType otherContextType = pick_second_context_type(contextInfo);
-    ContextInfo otherContextInfo = otherFactory.getContextInfo(otherContextType);
+    ContextInfo otherContextInfo = otherFactory.getContextInfo(contextInfo.type());
     testContext->makeCurrent();
 
     std::function<sk_sp<SkImage>()> imageFactories[] = {
@@ -911,7 +895,7 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(SkImage_MakeCrossContextRelease, reporter,
     sk_gpu_test::TestContext* testContext = ctxInfo.testContext();
 
     GrContextFactory otherFactory;
-    ContextInfo otherContextInfo = otherFactory.getContextInfo(pick_second_context_type(ctxInfo));
+    ContextInfo otherContextInfo = otherFactory.getContextInfo(ctxInfo.type());
     GrContext* otherCtx = otherContextInfo.grContext();
     sk_gpu_test::TestContext* otherTestContext = otherContextInfo.testContext();
 
@@ -1030,8 +1014,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(DeferredTextureImage, reporter, ctxInfo) {
     sk_sp<GrContextThreadSafeProxy> proxy = context->threadSafeProxy();
 
     GrContextFactory otherFactory;
-    ContextInfo otherContextInfo =
-        otherFactory.getContextInfo(pick_second_context_type(ctxInfo));
+    ContextInfo otherContextInfo = otherFactory.getContextInfo(ctxInfo.type());
 
     testContext->makeCurrent();
     REPORTER_ASSERT(reporter, proxy);
@@ -1078,13 +1061,6 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(DeferredTextureImage, reporter, ctxInfo) {
         { createLarge, {{SkMatrix::I(), kMedium_SkFilterQuality, 5},
                         {SkMatrix::I(), kMedium_SkFilterQuality, 4}},
           kMedium_SkFilterQuality, 16, true},
-        // Create a images which are decoded to a 4444 backing.
-        { create_image,       {{SkMatrix::I(), kNone_SkFilterQuality, 0,kARGB_4444_SkColorType}},
-          kNone_SkFilterQuality, 1, true },
-        { create_codec_image, {{SkMatrix::I(), kNone_SkFilterQuality, 0, kARGB_4444_SkColorType}},
-          kNone_SkFilterQuality, 1, true },
-        { create_data_image,  {{SkMatrix::I(), kNone_SkFilterQuality, 0, kARGB_4444_SkColorType}},
-          kNone_SkFilterQuality, 1, true },
     };
 
 

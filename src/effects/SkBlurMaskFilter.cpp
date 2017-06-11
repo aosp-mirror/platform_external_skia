@@ -25,7 +25,6 @@
 #include "GrResourceProvider.h"
 #include "GrShaderCaps.h"
 #include "GrStyle.h"
-#include "GrTexture.h"
 #include "GrTextureProxy.h"
 #include "effects/GrSimpleTextureEffect.h"
 #include "glsl/GrGLSLFragmentProcessor.h"
@@ -743,11 +742,7 @@ sk_sp<SkFlattenable> SkBlurMaskFilterImpl::CreateProc(SkReadBuffer& buffer) {
     flags &= SkBlurMaskFilter::kAll_BlurFlag;
 
     SkRect occluder;
-    if (buffer.isVersionLT(SkReadBuffer::kBlurMaskFilterWritesOccluder)) {
-        occluder.setEmpty();
-    } else {
-        buffer.readRect(&occluder);
-    }
+    buffer.readRect(&occluder);
 
     if (style <= kLastEnum_SkBlurStyle) {
         return SkBlurMaskFilter::Make((SkBlurStyle)style, sigma, occluder, flags);

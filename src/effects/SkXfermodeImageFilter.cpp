@@ -7,7 +7,6 @@
 
 #include "SkXfermodeImageFilter.h"
 #include "SkArithmeticImageFilter.h"
-#include "SkArithmeticModePriv.h"
 #include "SkCanvas.h"
 #include "SkColorPriv.h"
 #include "SkReadBuffer.h"
@@ -84,36 +83,20 @@ SkXfermodeImageFilter_Base::SkXfermodeImageFilter_Base(SkBlendMode mode,
     , fMode(mode)
 {}
 
-static int unflatten_blendmode(SkReadBuffer& buffer, SkArithmeticParams* arith) {
-    if (buffer.isVersionLT(SkReadBuffer::kXfermodeToBlendMode_Version)) {
-        sk_sp<SkXfermode> xfer = buffer.readXfermode();
-        if (xfer) {
-            if (xfer->isArithmetic(arith)) {
-                return -1;
-            }
-            return (int)xfer->blend();
-        } else {
-            return (int)SkBlendMode::kSrcOver;
-        }
-    } else {
-        uint32_t mode = buffer.read32();
-        (void)buffer.validate(mode <= (unsigned)SkBlendMode::kLastMode);
-        return mode;
-    }
+static unsigned unflatten_blendmode(SkReadBuffer& buffer) {
+    unsigned mode = buffer.read32();
+    (void)buffer.validate(mode <= (unsigned)SkBlendMode::kLastMode);
+    return mode;
 }
 
 sk_sp<SkFlattenable> SkXfermodeImageFilter_Base::CreateProc(SkReadBuffer& buffer) {
     SK_IMAGEFILTER_UNFLATTEN_COMMON(common, 2);
-    SkArithmeticParams arith;
-    int mode = unflatten_blendmode(buffer, &arith);
-    if (mode >= 0) {
-        return SkXfermodeImageFilter::Make((SkBlendMode)mode, common.getInput(0),
-                                           common.getInput(1), &common.cropRect());
-    } else {
-        return SkArithmeticImageFilter::Make(arith.fK[0], arith.fK[1], arith.fK[2], arith.fK[3],
-                                             arith.fEnforcePMColor, common.getInput(0),
-                                             common.getInput(1), &common.cropRect());
+    unsigned mode = unflatten_blendmode(buffer);
+    if (!buffer.isValid()) {
+        return nullptr;
     }
+    return SkXfermodeImageFilter::Make((SkBlendMode)mode, common.getInput(0),
+                                       common.getInput(1), &common.cropRect());
 }
 
 void SkXfermodeImageFilter_Base::flatten(SkWriteBuffer& buffer) const {
@@ -238,7 +221,7 @@ void SkXfermodeImageFilter_Base::toString(SkString* str) const {
 
 #if SK_SUPPORT_GPU
 
-#include "SkXfermode_proccoeff.h"
+#include "effects/GrXfermodeFragmentProcessor.h"
 
 sk_sp<SkSpecialImage> SkXfermodeImageFilter_Base::filterImageGPU(
                                                    SkSpecialImage* source,
@@ -332,21 +315,7 @@ sk_sp<SkSpecialImage> SkXfermodeImageFilter_Base::filterImageGPU(
 
 sk_sp<GrFragmentProcessor>
 SkXfermodeImageFilter_Base::makeFGFrag(sk_sp<GrFragmentProcessor> bgFP) const {
-    // A null fMode is interpreted to mean kSrcOver_Mode (to match raster).
-    SkXfermode* xfer = SkXfermode::Peek(fMode);
-    sk_sp<SkXfermode> srcover;
-    if (!xfer) {
-        // It would be awesome to use SkXfermode::Create here but it knows better
-        // than us and won't return a kSrcOver_Mode SkXfermode. That means we
-        // have to get one the hard way.
-        struct ProcCoeff rec;
-        rec.fProc = SkXfermode::GetProc(SkBlendMode::kSrcOver);
-
-        srcover.reset(new SkProcCoeffXfermode(rec, SkBlendMode::kSrcOver));
-        xfer = srcover.get();
-
-    }
-    return xfer->makeFragmentProcessorForImageFilter(std::move(bgFP));
+    return GrXfermodeFragmentProcessor::MakeFromDstProcessor(std::move(bgFP), fMode);
 }
 
 #endif
@@ -355,7 +324,7 @@ SkXfermodeImageFilter_Base::makeFGFrag(sk_sp<GrFragmentProcessor> bgFP) const {
 sk_sp<SkFlattenable> SkXfermodeImageFilter_Base::LegacyArithmeticCreateProc(SkReadBuffer& buffer) {
     SK_IMAGEFILTER_UNFLATTEN_COMMON(common, 2);
     // skip the unused mode (srcover) field
-    SkDEBUGCODE(int mode =) unflatten_blendmode(buffer, nullptr);
+    SkDEBUGCODE(unsigned mode =) unflatten_blendmode(buffer);
     if (!buffer.isValid()) {
         return nullptr;
     }

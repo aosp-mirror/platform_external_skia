@@ -434,7 +434,8 @@ def dm_flags(bot):
   if 'Vulkan' in bot and 'IntelIris540' in bot and 'Ubuntu' in bot:
     match.extend(['~VkHeapTests']) # skia:6245
 
-  if 'Vulkan' in bot and 'IntelIris540' in bot and 'Win' in bot:
+  if ('Vulkan' in bot and ('IntelIris540' in bot or 'IntelIris640' in bot) and
+      'Win' in bot):
     # skia:6398
     blacklist(['vk', 'gm', '_', 'aarectmodes'])
     blacklist(['vk', 'gm', '_', 'aaxfermodes'])
@@ -467,6 +468,7 @@ def dm_flags(bot):
     blacklist(['vk', 'gm', '_', 'lcdtextsize'])
     blacklist(['vk', 'gm', '_', 'matriximagefilter'])
     blacklist(['vk', 'gm', '_', 'mixedtextblobsCOLR'])
+    blacklist(['vk', 'gm', '_', 'mixershader'])
     blacklist(['vk', 'gm', '_', 'pictureimagefilter'])
     blacklist(['vk', 'gm', '_', 'resizeimagefilter'])
     blacklist(['vk', 'gm', '_', 'rotate_imagefilter'])
