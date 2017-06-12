@@ -10,6 +10,7 @@
 #ifdef SK_HAS_JPEG_LIBRARY
 
 #include "SkColorPriv.h"
+#include "SkColorSpace_Base.h"
 #include "SkImageEncoderFns.h"
 #include "SkImageInfoPriv.h"
 #include "SkJpegEncoder.h"
@@ -206,22 +207,19 @@ std::unique_ptr<SkEncoder> SkJpegEncoder::Make(SkWStream* dst, const SkPixmap& s
     jpeg_set_quality(encoderMgr->cinfo(), options.fQuality, TRUE);
     jpeg_start_compress(encoderMgr->cinfo(), TRUE);
 
-    if (src.colorSpace()) {
-        sk_sp<SkData> icc = icc_from_color_space(*src.colorSpace());
-        if (icc) {
-            // Create a contiguous block of memory with the icc signature followed by the profile.
-            sk_sp<SkData> markerData =
-                    SkData::MakeUninitialized(kICCMarkerHeaderSize + icc->size());
-            uint8_t* ptr = (uint8_t*) markerData->writable_data();
-            memcpy(ptr, kICCSig, sizeof(kICCSig));
-            ptr += sizeof(kICCSig);
-            *ptr++ = 1; // This is the first marker.
-            *ptr++ = 1; // Out of one total markers.
-            memcpy(ptr, icc->data(), icc->size());
+    sk_sp<SkData> icc = icc_from_color_space(src.info());
+    if (icc) {
+        // Create a contiguous block of memory with the icc signature followed by the profile.
+        sk_sp<SkData> markerData =
+                SkData::MakeUninitialized(kICCMarkerHeaderSize + icc->size());
+        uint8_t* ptr = (uint8_t*) markerData->writable_data();
+        memcpy(ptr, kICCSig, sizeof(kICCSig));
+        ptr += sizeof(kICCSig);
+        *ptr++ = 1; // This is the first marker.
+        *ptr++ = 1; // Out of one total markers.
+        memcpy(ptr, icc->data(), icc->size());
 
-            jpeg_write_marker(encoderMgr->cinfo(), kICCMarker, markerData->bytes(),
-                              markerData->size());
-        }
+        jpeg_write_marker(encoderMgr->cinfo(), kICCMarker, markerData->bytes(), markerData->size());
     }
 
     return std::unique_ptr<SkJpegEncoder>(new SkJpegEncoder(std::move(encoderMgr), src));
