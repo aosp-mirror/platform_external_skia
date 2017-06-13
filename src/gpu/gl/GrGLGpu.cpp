@@ -583,7 +583,10 @@ sk_sp<GrTexture> GrGLGpu::onWrapBackendTexture(const GrBackendTexture& backendTe
         if (!this->createRenderTargetObjects(surfDesc, idDesc.fInfo, &rtIDDesc)) {
             return nullptr;
         }
-        return GrGLTextureRenderTarget::MakeWrapped(this, surfDesc, idDesc, rtIDDesc);
+        sk_sp<GrGLTextureRenderTarget> texRT(
+                GrGLTextureRenderTarget::MakeWrapped(this, surfDesc, idDesc, rtIDDesc));
+        texRT->baseLevelWasBoundToFBO();
+        return texRT;
     }
 
     return GrGLTexture::MakeWrapped(this, surfDesc, idDesc);
@@ -663,16 +666,28 @@ bool GrGLGpu::onGetWritePixelsInfo(GrSurface* dstSurface, int width, int height,
                                    GrPixelConfig srcConfig,
                                    DrawPreference* drawPreference,
                                    WritePixelTempDrawInfo* tempDrawInfo) {
-    // This subclass only allows writes to textures. If the dst is not a texture we have to draw
-    // into it. We could use glDrawPixels on GLs that have it, but we don't today.
-    if (!dstSurface->asTexture()) {
-        ElevateDrawPreference(drawPreference, kRequireDraw_DrawPreference);
-    } else {
-        GrGLTexture* texture = static_cast<GrGLTexture*>(dstSurface->asTexture());
+    if (SkToBool(dstSurface->asRenderTarget())) {
+        if (this->glCaps().useDrawInsteadOfAllRenderTargetWrites()) {
+            ElevateDrawPreference(drawPreference, kRequireDraw_DrawPreference);
+        }
+    }
+
+    GrGLTexture* texture = static_cast<GrGLTexture*>(dstSurface->asTexture());
+
+    if (texture) {
         if (GR_GL_TEXTURE_EXTERNAL == texture->target()) {
              // We don't currently support writing pixels to EXTERNAL textures.
              return false;
         }
+        if (GrPixelConfigIsUnorm(texture->config()) && texture->hasBaseLevelBeenBoundToFBO() &&
+            this->glCaps().disallowTexSubImageForUnormConfigTexturesEverBoundToFBO() &&
+            (width < dstSurface->width() || height < dstSurface->height())) {
+            ElevateDrawPreference(drawPreference, kRequireDraw_DrawPreference);
+        }
+    } else {
+        // This subclass only allows writes to textures. If the dst is not a texture we have to draw
+        // into it. We could use glDrawPixels on GLs that have it, but we don't today.
+        ElevateDrawPreference(drawPreference, kRequireDraw_DrawPreference);
     }
 
     // If the dst is MSAA, we have to draw, or we'll just be writing to the resolve target.
@@ -1373,6 +1388,7 @@ sk_sp<GrTexture> GrGLGpu::onCreateTexture(const GrSurfaceDesc& desc,
         }
         tex = sk_make_sp<GrGLTextureRenderTarget>(this, budgeted, desc, idDesc, rtIDDesc,
                                                   wasMipMapDataProvided);
+        tex->baseLevelWasBoundToFBO();
     } else {
         tex = sk_make_sp<GrGLTexture>(this, budgeted, desc, idDesc, wasMipMapDataProvided);
     }
@@ -2471,8 +2487,14 @@ void GrGLGpu::draw(const GrPipeline& pipeline,
                                    glRT->getViewport(), glRT->origin());
             }
         }
-
+        if (this->glCaps().requiresCullFaceEnableDisableWhenDrawingLinesAfterNonLines() &&
+            GrIsPrimTypeLines(meshes[i].primitiveType()) &&
+            !GrIsPrimTypeLines(fLastPrimitiveType)) {
+            GL_CALL(Enable(GR_GL_CULL_FACE));
+            GL_CALL(Disable(GR_GL_CULL_FACE));
+        }
         meshes[i].sendToGpu(primProc, this);
+        fLastPrimitiveType = meshes[i].primitiveType();
     }
 
 #if SWAP_PER_DRAW
@@ -2492,10 +2514,6 @@ void GrGLGpu::draw(const GrPipeline& pipeline,
 void GrGLGpu::sendMeshToGpu(const GrPrimitiveProcessor& primProc, GrPrimitiveType primitiveType,
                             const GrBuffer* vertexBuffer, int vertexCount, int baseVertex) {
     const GrGLenum glPrimType = gPrimitiveType2GLMode[primitiveType];
-    if (this->glCaps().requiresFlushToDrawLinesAfterNonLines() &&
-        GrIsPrimTypeLines(primitiveType) && !GrIsPrimTypeLines(fLastPrimitiveType)) {
-        GL_CALL(Flush());
-    }
     if (this->glCaps().drawArraysBaseVertexIsBroken()) {
         this->setupGeometry(primProc, nullptr, vertexBuffer, baseVertex, nullptr, 0);
         GL_CALL(DrawArrays(glPrimType, 0, vertexCount));
@@ -2503,7 +2521,6 @@ void GrGLGpu::sendMeshToGpu(const GrPrimitiveProcessor& primProc, GrPrimitiveTyp
         this->setupGeometry(primProc, nullptr, vertexBuffer, 0, nullptr, 0);
         GL_CALL(DrawArrays(glPrimType, baseVertex, vertexCount));
     }
-    fLastPrimitiveType = primitiveType;
     fStats.incNumDraws();
 }
 
@@ -2512,10 +2529,6 @@ void GrGLGpu::sendIndexedMeshToGpu(const GrPrimitiveProcessor& primProc,
                                    int indexCount, int baseIndex, uint16_t minIndexValue,
                                    uint16_t maxIndexValue, const GrBuffer* vertexBuffer,
                                    int baseVertex) {
-    if (this->glCaps().requiresFlushToDrawLinesAfterNonLines() &&
-        GrIsPrimTypeLines(primitiveType) && !GrIsPrimTypeLines(fLastPrimitiveType)) {
-        GL_CALL(Flush());
-    }
     const GrGLenum glPrimType = gPrimitiveType2GLMode[primitiveType];
     GrGLvoid* const indices = reinterpret_cast<void*>(indexBuffer->baseOffset() +
                                                       sizeof(uint16_t) * baseIndex);
@@ -2528,7 +2541,6 @@ void GrGLGpu::sendIndexedMeshToGpu(const GrPrimitiveProcessor& primProc,
     } else {
         GL_CALL(DrawElements(glPrimType, indexCount, GR_GL_UNSIGNED_SHORT, indices));
     }
-    fLastPrimitiveType = primitiveType;
     fStats.incNumDraws();
 }
 
@@ -2537,14 +2549,9 @@ void GrGLGpu::sendInstancedMeshToGpu(const GrPrimitiveProcessor& primProc, GrPri
                                      int vertexCount, int baseVertex,
                                      const GrBuffer* instanceBuffer, int instanceCount,
                                      int baseInstance) {
-    if (this->glCaps().requiresFlushToDrawLinesAfterNonLines() &&
-        GrIsPrimTypeLines(primitiveType) && !GrIsPrimTypeLines(fLastPrimitiveType)) {
-        GL_CALL(Flush());
-    }
     const GrGLenum glPrimType = gPrimitiveType2GLMode[primitiveType];
     this->setupGeometry(primProc, nullptr, vertexBuffer, 0, instanceBuffer, baseInstance);
     GL_CALL(DrawArraysInstanced(glPrimType, baseVertex, vertexCount, instanceCount));
-    fLastPrimitiveType = primitiveType;
     fStats.incNumDraws();
 }
 
@@ -2554,10 +2561,6 @@ void GrGLGpu::sendIndexedInstancedMeshToGpu(const GrPrimitiveProcessor& primProc
                                             int baseIndex, const GrBuffer* vertexBuffer,
                                             int baseVertex, const GrBuffer* instanceBuffer,
                                             int instanceCount, int baseInstance) {
-    if (this->glCaps().requiresFlushToDrawLinesAfterNonLines() &&
-        GrIsPrimTypeLines(primitiveType) && !GrIsPrimTypeLines(fLastPrimitiveType)) {
-        GL_CALL(Flush());
-    }
     const GrGLenum glPrimType = gPrimitiveType2GLMode[primitiveType];
     GrGLvoid* indices = reinterpret_cast<void*>(indexBuffer->baseOffset() +
                                                 sizeof(uint16_t) * baseIndex);
@@ -2565,7 +2568,6 @@ void GrGLGpu::sendIndexedInstancedMeshToGpu(const GrPrimitiveProcessor& primProc
                         instanceBuffer, baseInstance);
     GL_CALL(DrawElementsInstanced(glPrimType, indexCount, GR_GL_UNSIGNED_SHORT, indices,
                                   instanceCount));
-    fLastPrimitiveType = primitiveType;
     fStats.incNumDraws();
 }
 
@@ -3288,8 +3290,9 @@ void GrGLGpu::bindSurfaceFBOForPixelOps(GrSurface* surface, GrGLenum fboTarget, 
     GrGLRenderTarget* rt = static_cast<GrGLRenderTarget*>(surface->asRenderTarget());
     if (!rt) {
         SkASSERT(surface->asTexture());
-        GrGLuint texID = static_cast<GrGLTexture*>(surface->asTexture())->textureID();
-        GrGLenum target = static_cast<GrGLTexture*>(surface->asTexture())->target();
+        GrGLTexture* texture = static_cast<GrGLTexture*>(surface->asTexture());
+        GrGLuint texID = texture->textureID();
+        GrGLenum target = texture->target();
         GrGLuint* tempFBOID;
         tempFBOID = kSrc_TempFBOTarget == tempFBOTarget ? &fTempSrcFBOID : &fTempDstFBOID;
 
@@ -3304,6 +3307,7 @@ void GrGLGpu::bindSurfaceFBOForPixelOps(GrSurface* surface, GrGLenum fboTarget, 
                                                              target,
                                                              texID,
                                                              0));
+        texture->baseLevelWasBoundToFBO();
         viewport->fLeft = 0;
         viewport->fBottom = 0;
         viewport->fWidth = surface->width();

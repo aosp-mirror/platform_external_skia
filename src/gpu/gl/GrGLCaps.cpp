@@ -57,7 +57,9 @@ GrGLCaps::GrGLCaps(const GrContextOptions& contextOptions,
     fClearTextureSupport = false;
     fDrawArraysBaseVertexIsBroken = false;
     fUseDrawToClearStencilClip = false;
-    fRequiresFlushToDrawLinesAfterNonLines = false;
+    fDisallowTexSubImageForUnormConfigTexturesEverBoundToFBO = false;
+    fUseDrawInsteadOfAllRenderTargetWrites = false;
+    fRequiresCullFaceEnableDisableWhenDrawingLinesAfterNonLines = false;
 
     fBlitFramebufferFlags = kNoSupport_BlitFramebufferFlag;
 
@@ -523,32 +525,30 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
     }
 
     if (kAdreno4xx_GrGLRenderer == ctxInfo.renderer()) {
-        fUseDrawInsteadOfPartialRenderTargetWrite = true;
         // This is known to be fixed sometime between driver 145.0 and 219.0
         if (ctxInfo.driver() == kQualcomm_GrGLDriver &&
             ctxInfo.driverVersion() <= GR_GL_DRIVER_VER(219, 0)) {
             fUseDrawToClearStencilClip = true;
         }
+        fDisallowTexSubImageForUnormConfigTexturesEverBoundToFBO = true;
     }
 
     // This was reproduced on the following configurations:
     // - A Galaxy J5 (Adreno 306) running Android 6 with driver 140.0
     // - A Nexus 7 2013 (Adreno 320) running Android 5 with driver 104.0
     // - A Nexus 7 2013 (Adreno 320) running Android 6 with driver 127.0
+    // - A Nexus 5 (Adreno 330) running Android 6 with driver 127.0
     // and not produced on:
     // - A Nexus 7 2013 (Adreno 320) running Android 4 with driver 53.0
-    // - A Nexus 5 (Adreno 330) running Android 6 with driver 127.0
-    // The Nexus 5 and Nexus 7 with driver 127.0 had different git hashes in the GL_VERSION string
-    // so it seems that either the N5's branch didn't have the bug or the bug affects Adreno 320
-    // and 306 but not a 330. Further dissection is left to a future unfortunate soul if necessary.
+    // The particular lines that get dropped from test images varies across different devices.
     if (kAdreno3xx_GrGLRenderer == ctxInfo.renderer() && kQualcomm_GrGLDriver == ctxInfo.driver() &&
         ctxInfo.driverVersion() > GR_GL_DRIVER_VER(53, 0)) {
-        fRequiresFlushToDrawLinesAfterNonLines = true;
+        fRequiresCullFaceEnableDisableWhenDrawingLinesAfterNonLines = true;
     }
 
     // Texture uploads sometimes seem to be ignored to textures bound to FBOS on Tegra3.
     if (kTegra3_GrGLRenderer == ctxInfo.renderer()) {
-        fUseDrawInsteadOfPartialRenderTargetWrite = true;
+        fDisallowTexSubImageForUnormConfigTexturesEverBoundToFBO = true;
         fUseDrawInsteadOfAllRenderTargetWrites = true;
     }
 
@@ -1300,6 +1300,10 @@ SkString GrGLCaps::dump() const {
     r.appendf("Texture swizzle support: %s\n", (fTextureSwizzleSupport ? "YES" : "NO"));
     r.appendf("BGRA to RGBA readback conversions are slow: %s\n",
               (fRGBAToBGRAReadbackConversionsAreSlow ? "YES" : "NO"));
+    r.appendf("Intermediate texture for partial updates of unorm textures ever bound to FBOs: %s\n",
+              fDisallowTexSubImageForUnormConfigTexturesEverBoundToFBO ? "YES" : "NO");
+    r.appendf("Intermediate texture for all updates of textures bound to FBOs: %s\n",
+              fUseDrawInsteadOfAllRenderTargetWrites ? "YES" : "NO");
 
     r.append("Configs\n-------\n");
     for (int i = 0; i < kGrPixelConfigCnt; ++i) {
@@ -2218,5 +2222,8 @@ void GrGLCaps::onApplyOptionsOverrides(const GrContextOptions& options) {
         // glDraw*Indirect, regardless of the underlying GPU.
         fAvoidInstancedDrawsToFPTargets = true;
 #endif
+    }
+    if (options.fUseDrawInsteadOfPartialRenderTargetWrite) {
+        fUseDrawInsteadOfAllRenderTargetWrites = true;
     }
 }
