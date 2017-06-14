@@ -351,7 +351,7 @@ public:
 protected:
     GrRenderTargetContext(GrContext*, GrDrawingManager*, sk_sp<GrRenderTargetProxy>,
                           sk_sp<SkColorSpace>, const SkSurfaceProps*, GrAuditTrail*,
-                          GrSingleOwner*);
+                          GrSingleOwner*, bool managedOpList = true);
 
     SkDEBUGCODE(void validate() const;)
 
@@ -400,15 +400,6 @@ private:
                         const SkRect& rect,
                         const GrUserStencilSettings* ss);
 
-    void drawNonAAFilledRect(const GrClip&,
-                             GrPaint&&,
-                             const SkMatrix& viewMatrix,
-                             const SkRect& rect,
-                             const SkRect* localRect,
-                             const SkMatrix* localMatrix,
-                             const GrUserStencilSettings* ss,
-                             GrAAType hwOrNoneAAType);
-
     void internalDrawPath(
             const GrClip&, GrPaint&&, GrAA, const SkMatrix&, const SkPath&, const GrStyle&);
 
@@ -440,6 +431,7 @@ private:
 
     sk_sp<GrColorSpaceXform>          fColorXformFromSRGB;
     SkSurfaceProps                    fSurfaceProps;
+    bool                              fManagedOpList;
 
     typedef GrSurfaceContext INHERITED;
 };
