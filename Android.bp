@@ -517,6 +517,7 @@ cc_library {
         "src/gpu/ops/GrNonAAStrokeRectOp.cpp",
         "src/gpu/ops/GrOp.cpp",
         "src/gpu/ops/GrOvalOpFactory.cpp",
+        "src/gpu/ops/GrRectOpFactory.cpp",
         "src/gpu/ops/GrRegionOp.cpp",
         "src/gpu/ops/GrSemaphoreOp.cpp",
         "src/gpu/ops/GrShadowRRectOp.cpp",
