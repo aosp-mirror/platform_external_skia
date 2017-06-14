@@ -55,6 +55,33 @@
 #define RETURN_FALSE_IF_ABANDONED_PRIV  if (fRenderTargetContext->drawingManager()->wasAbandoned()) { return false; }
 #define RETURN_NULL_IF_ABANDONED   if (this->drawingManager()->wasAbandoned()) { return nullptr; }
 
+//////////////////////////////////////////////////////////////////////////////
+
+GrAAType GrChooseAAType(GrAA aa, GrFSAAType fsaaType, GrAllowMixedSamples allowMixedSamples,
+                        const GrCaps& caps) {
+    if (GrAA::kNo == aa) {
+        // On some devices we cannot disable MSAA if it is enabled so we make the AA type reflect
+        // that.
+        if (fsaaType == GrFSAAType::kUnifiedMSAA && !caps.multisampleDisableSupport()) {
+            return GrAAType::kMSAA;
+        }
+        return GrAAType::kNone;
+    }
+    switch (fsaaType) {
+        case GrFSAAType::kNone:
+            return GrAAType::kCoverage;
+        case GrFSAAType::kUnifiedMSAA:
+            return GrAAType::kMSAA;
+        case GrFSAAType::kMixedSamples:
+            return GrAllowMixedSamples::kYes == allowMixedSamples ? GrAAType::kMixedSamples
+                                                                  : GrAAType::kCoverage;
+    }
+    SkFAIL("Unexpected fsaa type");
+    return GrAAType::kNone;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+
 class AutoCheckFlush {
 public:
     AutoCheckFlush(GrDrawingManager* drawingManager) : fDrawingManager(drawingManager) {
@@ -92,11 +119,6 @@ GrRenderTargetContext::GrRenderTargetContext(GrContext* context,
         auto srgbColorSpace = SkColorSpace::MakeSRGB();
         fColorXformFromSRGB = GrColorSpaceXform::Make(srgbColorSpace.get(), fColorSpace.get());
     }
-
-    // MDB TODO: to ensure all resources still get allocated in the correct order in the hybrid
-    // world we need to get the correct opList here so that it, in turn, can grab and hold
-    // its rendertarget.
-    this->getOpList();
     SkDEBUGCODE(this->validate();)
 }
 
