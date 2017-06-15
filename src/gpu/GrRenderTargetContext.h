@@ -351,13 +351,13 @@ public:
 protected:
     GrRenderTargetContext(GrContext*, GrDrawingManager*, sk_sp<GrRenderTargetProxy>,
                           sk_sp<SkColorSpace>, const SkSurfaceProps*, GrAuditTrail*,
-                          GrSingleOwner*);
+                          GrSingleOwner*, bool managedOpList = true);
 
     SkDEBUGCODE(void validate() const;)
 
 private:
     inline GrAAType chooseAAType(GrAA aa, GrAllowMixedSamples allowMixedSamples) {
-        return GrChooseAAType(aa, this->fsaaType(), allowMixedSamples);
+        return GrChooseAAType(aa, this->fsaaType(), allowMixedSamples, *this->caps());
     }
 
     friend class GrAtlasTextBlob;               // for access to add[Mesh]DrawOp
@@ -440,6 +440,7 @@ private:
 
     sk_sp<GrColorSpaceXform>          fColorXformFromSRGB;
     SkSurfaceProps                    fSurfaceProps;
+    bool                              fManagedOpList;
 
     typedef GrSurfaceContext INHERITED;
 };
