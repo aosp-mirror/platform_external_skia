@@ -219,9 +219,9 @@ public:
 
     FixedFunctionFlags fixedFunctionFlags() const override { return fHelper.fixedFunctionFlags(); }
 
-    bool xpRequiresDstTexture(const GrCaps& caps, const GrAppliedClip* clip) override {
+    RequiresDstTexture finalize(const GrCaps& caps, const GrAppliedClip* clip) override {
         GrColor color = this->first()->color();
-        bool result = fHelper.xpRequiresDstTexture(
+        auto result = fHelper.xpRequiresDstTexture(
                 caps, clip, GrProcessorAnalysisCoverage::kSingleChannel, &color);
         this->first()->setColor(color);
         return result;
@@ -359,14 +359,6 @@ std::unique_ptr<GrDrawOp> MakeAAFill(GrPaint&& paint, const SkMatrix& viewMatrix
     SkRect devRect;
     viewMatrix.mapRect(&devRect, rect);
     return AAFillRectOp::Make(std::move(paint), viewMatrix, rect, devRect, nullptr, stencil);
-}
-
-std::unique_ptr<GrDrawOp> MakeAAFillWithDevRect(GrPaint&& paint, const SkMatrix& viewMatrix,
-                                                const SkRect& rect, const SkRect& devRect) {
-    if (!view_matrix_ok_for_aa_fill_rect(viewMatrix)) {
-        return nullptr;
-    }
-    return AAFillRectOp::Make(std::move(paint), viewMatrix, rect, devRect, nullptr, nullptr);
 }
 
 std::unique_ptr<GrDrawOp> MakeAAFillWithLocalMatrix(GrPaint&& paint, const SkMatrix& viewMatrix,

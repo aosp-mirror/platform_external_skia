@@ -191,7 +191,7 @@ public:
 
     FixedFunctionFlags fixedFunctionFlags() const override { return fHelper.fixedFunctionFlags(); }
 
-    bool xpRequiresDstTexture(const GrCaps& caps, const GrAppliedClip* clip) override {
+    RequiresDstTexture finalize(const GrCaps& caps, const GrAppliedClip* clip) override {
         return fHelper.xpRequiresDstTexture(caps, clip, GrProcessorAnalysisCoverage::kSingleChannel,
                                             &fRects.back().fColor);
     }
@@ -582,7 +582,7 @@ std::unique_ptr<GrDrawOp> MakeAAFillNestedRects(GrPaint&& paint,
         if (devOutside.isEmpty()) {
             return nullptr;
         }
-        return MakeAAFillWithDevRect(std::move(paint), viewMatrix, rects[0], devOutside);
+        return MakeAAFill(std::move(paint), viewMatrix, rects[0]);
     }
 
     return AAStrokeRectOp::Make(std::move(paint), viewMatrix, devOutside, devInside);
