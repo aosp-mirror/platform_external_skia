@@ -783,6 +783,18 @@
         "Upload-Perf-ChromeOS-Clang-Chromebook_CB5_311-GPU-TegraK1-arm-Release"
       ]
     },
+    "Perf-Chromecast-GCC-Chorizo-CPU-Cortex_A7-arm-Debug": {
+      "priority": 0.8,
+      "tasks": [
+        "Perf-Chromecast-GCC-Chorizo-CPU-Cortex_A7-arm-Debug"
+      ]
+    },
+    "Perf-Chromecast-GCC-Chorizo-CPU-Cortex_A7-arm-Release": {
+      "priority": 0.8,
+      "tasks": [
+        "Upload-Perf-Chromecast-GCC-Chorizo-CPU-Cortex_A7-arm-Release"
+      ]
+    },
     "Perf-Chromecast-GCC-Chorizo-GPU-Cortex_A7-arm-Debug": {
       "priority": 0.8,
       "tasks": [
@@ -6192,6 +6204,70 @@
       "max_attempts": 1,
       "priority": 0.8
     },
+    "Perf-Chromecast-GCC-Chorizo-CPU-Cortex_A7-arm-Debug": {
+      "dependencies": [
+        "Build-Ubuntu-GCC-arm-Debug-Chromecast",
+        "Housekeeper-PerCommit-BundleRecipes",
+        "Housekeeper-PerCommit-IsolateSKP"
+      ],
+      "dimensions": [
+        "device_os:1.24_82923",
+        "device_type:chorizo",
+        "os:Android",
+        "pool:Skia"
+      ],
+      "execution_timeout_ns": 14400000000000,
+      "expiration_ns": 72000000000000,
+      "extra_args": [
+        "--workdir",
+        "../../..",
+        "perf",
+        "repository=<(REPO)",
+        "buildername=Perf-Chromecast-GCC-Chorizo-CPU-Cortex_A7-arm-Debug",
+        "swarm_out_dir=${ISOLATED_OUTDIR}",
+        "revision=<(REVISION)",
+        "patch_repo=<(PATCH_REPO)",
+        "patch_storage=<(PATCH_STORAGE)",
+        "patch_issue=<(ISSUE)",
+        "patch_set=<(PATCHSET)"
+      ],
+      "io_timeout_ns": 2400000000000,
+      "isolate": "perf_skia_bundled_unix.isolate",
+      "max_attempts": 1,
+      "priority": 0.8
+    },
+    "Perf-Chromecast-GCC-Chorizo-CPU-Cortex_A7-arm-Release": {
+      "dependencies": [
+        "Build-Ubuntu-GCC-arm-Release-Chromecast",
+        "Housekeeper-PerCommit-BundleRecipes",
+        "Housekeeper-PerCommit-IsolateSKP"
+      ],
+      "dimensions": [
+        "device_os:1.24_82923",
+        "device_type:chorizo",
+        "os:Android",
+        "pool:Skia"
+      ],
+      "execution_timeout_ns": 14400000000000,
+      "expiration_ns": 72000000000000,
+      "extra_args": [
+        "--workdir",
+        "../../..",
+        "perf",
+        "repository=<(REPO)",
+        "buildername=Perf-Chromecast-GCC-Chorizo-CPU-Cortex_A7-arm-Release",
+        "swarm_out_dir=${ISOLATED_OUTDIR}",
+        "revision=<(REVISION)",
+        "patch_repo=<(PATCH_REPO)",
+        "patch_storage=<(PATCH_STORAGE)",
+        "patch_issue=<(ISSUE)",
+        "patch_set=<(PATCHSET)"
+      ],
+      "io_timeout_ns": 2400000000000,
+      "isolate": "perf_skia_bundled_unix.isolate",
+      "max_attempts": 1,
+      "priority": 0.8
+    },
     "Perf-Chromecast-GCC-Chorizo-GPU-Cortex_A7-arm-Debug": {
       "dependencies": [
         "Build-Ubuntu-GCC-arm-Debug-Chromecast",
@@ -8734,8 +8810,8 @@
         "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
+        "cpu:x86-64-i7-6770HQ",
         "gpu:10de:1401-22.21.13.8205",
-        "machine_type:n1-highcpu-8",
         "os:Windows-10-15063",
         "pool:Skia"
       ],
@@ -8782,8 +8858,8 @@
         "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
+        "cpu:x86-64-i7-6770HQ",
         "gpu:10de:1401-22.21.13.8205",
-        "machine_type:n1-highcpu-8",
         "os:Windows-10-15063",
         "pool:Skia"
       ],
@@ -9394,8 +9470,8 @@
         "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
+        "cpu:x86-64-i7-6700K",
         "gpu:10de:1401-22.21.13.8205",
-        "machine_type:n1-standard-8",
         "os:Windows-10-15063",
         "pool:Skia"
       ],
@@ -9442,8 +9518,8 @@
         "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
+        "cpu:x86-64-i7-6700K",
         "gpu:10de:1401-22.21.13.8205",
-        "machine_type:n1-standard-8",
         "os:Windows-10-15063",
         "pool:Skia"
       ],
@@ -9490,8 +9566,8 @@
         "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
+        "cpu:x86-64-i7-6700K",
         "gpu:10de:1401-22.21.13.8205",
-        "machine_type:n1-standard-8",
         "os:Windows-10-15063",
         "pool:Skia"
       ],
@@ -9538,8 +9614,8 @@
         "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
+        "cpu:x86-64-i7-6700K",
         "gpu:10de:1401-22.21.13.8205",
-        "machine_type:n1-standard-8",
         "os:Windows-10-15063",
         "pool:Skia"
       ],
@@ -15138,8 +15214,8 @@
         "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
+        "cpu:x86-64-i7-6770HQ",
         "gpu:10de:1401-22.21.13.8205",
-        "machine_type:n1-highcpu-8",
         "os:Windows-10-15063",
         "pool:Skia"
       ],
@@ -15186,8 +15262,8 @@
         "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
+        "cpu:x86-64-i7-6770HQ",
         "gpu:10de:1401-22.21.13.8205",
-        "machine_type:n1-highcpu-8",
         "os:Windows-10-15063",
         "pool:Skia"
       ],
@@ -15751,8 +15827,8 @@
         "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
+        "cpu:x86-64-i7-6700K",
         "gpu:10de:1401-22.21.13.8205",
-        "machine_type:n1-standard-8",
         "os:Windows-10-15063",
         "pool:Skia"
       ],
@@ -15799,8 +15875,8 @@
         "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
+        "cpu:x86-64-i7-6700K",
         "gpu:10de:1401-22.21.13.8205",
-        "machine_type:n1-standard-8",
         "os:Windows-10-15063",
         "pool:Skia"
       ],
@@ -15847,8 +15923,8 @@
         "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
+        "cpu:x86-64-i7-6700K",
         "gpu:10de:1401-22.21.13.8205",
-        "machine_type:n1-standard-8",
         "os:Windows-10-15063",
         "pool:Skia"
       ],
@@ -15895,8 +15971,8 @@
         "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
+        "cpu:x86-64-i7-6700K",
         "gpu:10de:1401-22.21.13.8205",
-        "machine_type:n1-standard-8",
         "os:Windows-10-15063",
         "pool:Skia"
       ],
@@ -17901,6 +17977,33 @@
         "upload_nano_results",
         "repository=<(REPO)",
         "buildername=Perf-ChromeOS-Clang-Chromebook_CB5_311-GPU-TegraK1-arm-Release",
+        "swarm_out_dir=${ISOLATED_OUTDIR}",
+        "revision=<(REVISION)",
+        "patch_repo=<(PATCH_REPO)",
+        "patch_storage=<(PATCH_STORAGE)",
+        "patch_issue=<(ISSUE)",
+        "patch_set=<(PATCHSET)",
+        "gs_bucket=skia-perf"
+      ],
+      "isolate": "upload_nano_results.isolate",
+      "priority": 0.8
+    },
+    "Upload-Perf-Chromecast-GCC-Chorizo-CPU-Cortex_A7-arm-Release": {
+      "dependencies": [
+        "Perf-Chromecast-GCC-Chorizo-CPU-Cortex_A7-arm-Release"
+      ],
+      "dimensions": [
+        "cpu:x86-64-avx2",
+        "gpu:none",
+        "os:Ubuntu-14.04",
+        "pool:Skia"
+      ],
+      "extra_args": [
+        "--workdir",
+        "../../..",
+        "upload_nano_results",
+        "repository=<(REPO)",
+        "buildername=Perf-Chromecast-GCC-Chorizo-CPU-Cortex_A7-arm-Release",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",

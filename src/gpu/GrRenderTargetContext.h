@@ -54,10 +54,6 @@ class SK_API GrRenderTargetContext : public GrSurfaceContext {
 public:
     ~GrRenderTargetContext() override;
 
-    // MDB TODO: This access is mainly provided for the image filters. Remove it when they
-    // no longer need to pass it to the FragmentProcessor ctors.
-    GrResourceProvider* resourceProvider() { return fContext->resourceProvider(); }
-
     // We use SkPaint rather than GrPaint here for two reasons:
     //    * The SkPaint carries extra text settings. If these were extracted to a lighter object
     //      we could use GrPaint except that
@@ -399,15 +395,6 @@ private:
                         const SkMatrix& viewMatrix,
                         const SkRect& rect,
                         const GrUserStencilSettings* ss);
-
-    void drawNonAAFilledRect(const GrClip&,
-                             GrPaint&&,
-                             const SkMatrix& viewMatrix,
-                             const SkRect& rect,
-                             const SkRect* localRect,
-                             const SkMatrix* localMatrix,
-                             const GrUserStencilSettings* ss,
-                             GrAAType hwOrNoneAAType);
 
     void internalDrawPath(
             const GrClip&, GrPaint&&, GrAA, const SkMatrix&, const SkPath&, const GrStyle&);
