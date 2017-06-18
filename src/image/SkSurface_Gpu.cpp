@@ -10,7 +10,6 @@
 #include "GrBackendSurface.h"
 #include "GrContextPriv.h"
 #include "GrRenderTargetContextPriv.h"
-#include "GrResourceProvider.h"
 #include "GrTexture.h"
 
 #include "SkCanvas.h"
@@ -167,8 +166,12 @@ void SkSurface_Gpu::onDiscard() {
     fDevice->accessRenderTargetContext()->discard();
 }
 
-void SkSurface_Gpu::onPrepareForExternalIO() {
-    fDevice->flush();
+void SkSurface_Gpu::onFlush(int numSemaphores, GrBackendSemaphore* signalSemaphores) {
+    fDevice->flushAndSignalSemaphores(numSemaphores, signalSemaphores);
+}
+
+void SkSurface_Gpu::onWait(int numSemaphores, const GrBackendSemaphore* waitSemaphores) {
+    fDevice->wait(numSemaphores, waitSemaphores);
 }
 
 ///////////////////////////////////////////////////////////////////////////////

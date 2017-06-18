@@ -9,7 +9,6 @@
 DEPS = [
   'core',
   'env',
-  'file',
   'flavor',
   'recipe_engine/context',
   'recipe_engine/json',
@@ -18,6 +17,7 @@ DEPS = [
   'recipe_engine/properties',
   'recipe_engine/python',
   'recipe_engine/raw_io',
+  'recipe_engine/shutil',
   'recipe_engine/step',
   'run',
   'vars',
@@ -405,6 +405,7 @@ def dm_flags(bot):
 
   if 'GalaxyS6' in bot:
     match.append('~SpecialImage') # skia:6338
+    match.append('~skbug6653') # skia:6653
 
   if 'GalaxyS7_G930A' in bot:
     match.append('~WritePixels') # skia:6427
@@ -496,6 +497,7 @@ def dm_flags(bot):
     match.append('~ReadPixels_Gpu')
     match.append('~ReadPixels_Texture')
     match.append('~ReadWriteAlpha')
+    match.append('~skbug6653')
     match.append('~SRGBReadWritePixels')
     match.append('~SpecialImage_DeferredGpu')
     match.append('~SpecialImage_Gpu')
@@ -581,10 +583,10 @@ def test_steps(api):
     hash_filename = 'uninteresting_hashes.txt'
 
     # Ensure that the tmp_dir exists.
-    api.run.run_once(api.file.makedirs,
-                           'tmp_dir',
-                           api.vars.tmp_dir,
-                           infra_step=True)
+    api.run.run_once(api.shutil.makedirs,
+                     'tmp_dir',
+                     api.vars.tmp_dir,
+                     infra_step=True)
 
     host_hashes_file = api.vars.tmp_dir.join(hash_filename)
     hashes_file = api.flavor.device_path_join(

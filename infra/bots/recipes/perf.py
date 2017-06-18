@@ -12,13 +12,13 @@ import calendar
 DEPS = [
   'core',
   'env',
-  'file',
   'flavor',
   'recipe_engine/json',
   'recipe_engine/path',
   'recipe_engine/platform',
   'recipe_engine/properties',
   'recipe_engine/raw_io',
+  'recipe_engine/shutil',
   'recipe_engine/step',
   'recipe_engine/time',
   'run',
@@ -239,7 +239,14 @@ def perf_steps(api):
     args = [
       target,
       '--config',
+      '8888',
       'gles',
+    ]
+    if api.vars.builder_cfg.get('cpu_or_gpu') == 'CPU':
+      args.extend(['--nogpu'])
+    elif api.vars.builder_cfg.get('cpu_or_gpu') == 'GPU':
+      args.extend(['--nocpu'])
+    args.extend([
       '-i', api.flavor.device_dirs.resource_dir,
       '--images', api.flavor.device_path_join(
           api.flavor.device_dirs.resource_dir, 'color_wheel.jpg'),
@@ -250,7 +257,7 @@ def perf_steps(api):
       '~blur_image_filter',
       '~blur_0.01',
       '~GM_animated-image-blurs',
-    ]
+    ])
 
   if api.vars.upload_perf_results:
     now = api.time.utcnow()
@@ -302,7 +309,7 @@ def perf_steps(api):
 
   # Copy results to swarming out dir.
   if api.vars.upload_perf_results:
-    api.file.makedirs('perf_dir', api.vars.perf_data_dir)
+    api.shutil.makedirs('perf_dir', api.vars.perf_data_dir, infra_step=True)
     api.flavor.copy_directory_contents_to_host(
         api.flavor.device_dirs.perf_data_dir,
         api.vars.perf_data_dir)
@@ -335,7 +342,7 @@ TEST_BUILDERS = [
   'Perf-Android-Clang-NexusPlayer-GPU-PowerVR-x86-Release-Android_Vulkan',
   'Perf-Android-Clang-PixelC-GPU-TegraX1-arm64-Release-Android',
   'Perf-ChromeOS-Clang-Chromebook_C100p-GPU-MaliT764-arm-Release',
-  'Perf-Chromecast-GCC-Chorizo-GPU-Cortex_A7-arm-Debug',
+  'Perf-Chromecast-GCC-Chorizo-CPU-Cortex_A7-arm-Debug',
   'Perf-Chromecast-GCC-Chorizo-GPU-Cortex_A7-arm-Release',
   'Perf-Mac-Clang-MacMini6.2-CPU-AVX-x86_64-Release',
   'Perf-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Debug-CommandBuffer',

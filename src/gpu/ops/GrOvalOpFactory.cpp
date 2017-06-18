@@ -795,11 +795,12 @@ public:
                     fCircles[i].fDevBounds.fRight, fCircles[i].fDevBounds.fBottom,
                     fCircles[i].fInnerRadius, fCircles[i].fOuterRadius);
         }
-        string.append(INHERITED::dumpInfo());
+        string += fHelper.dumpInfo();
+        string += INHERITED::dumpInfo();
         return string;
     }
 
-    bool xpRequiresDstTexture(const GrCaps& caps, const GrAppliedClip* clip) override {
+    RequiresDstTexture finalize(const GrCaps& caps, const GrAppliedClip* clip) override {
         GrColor* color = &fCircles.front().fColor;
         return fHelper.xpRequiresDstTexture(caps, clip, GrProcessorAnalysisCoverage::kSingleChannel,
                                             color);
@@ -1257,11 +1258,12 @@ public:
                     geo.fDevBounds.fBottom, geo.fXRadius, geo.fYRadius, geo.fInnerXRadius,
                     geo.fInnerYRadius);
         }
-        string.append(INHERITED::dumpInfo());
+        string += fHelper.dumpInfo();
+        string += INHERITED::dumpInfo();
         return string;
     }
 
-    bool xpRequiresDstTexture(const GrCaps& caps, const GrAppliedClip* clip) override {
+    RequiresDstTexture finalize(const GrCaps& caps, const GrAppliedClip* clip) override {
         GrColor* color = &fEllipses.front().fColor;
         return fHelper.xpRequiresDstTexture(caps, clip, GrProcessorAnalysisCoverage::kSingleChannel,
                                             color);
@@ -1482,11 +1484,12 @@ public:
                     geo.fBounds.fBottom, geo.fXRadius, geo.fYRadius, geo.fInnerXRadius,
                     geo.fInnerYRadius, geo.fGeoDx, geo.fGeoDy);
         }
-        string.append(INHERITED::dumpInfo());
+        string += fHelper.dumpInfo();
+        string += INHERITED::dumpInfo();
         return string;
     }
 
-    bool xpRequiresDstTexture(const GrCaps& caps, const GrAppliedClip* clip) override {
+    RequiresDstTexture finalize(const GrCaps& caps, const GrAppliedClip* clip) override {
         GrColor* color = &fEllipses.front().fColor;
         return fHelper.xpRequiresDstTexture(caps, clip, GrProcessorAnalysisCoverage::kSingleChannel,
                                             color);
@@ -1794,11 +1797,12 @@ public:
                     fRRects[i].fDevBounds.fRight, fRRects[i].fDevBounds.fBottom,
                     fRRects[i].fInnerRadius, fRRects[i].fOuterRadius);
         }
-        string.append(INHERITED::dumpInfo());
+        string += fHelper.dumpInfo();
+        string += INHERITED::dumpInfo();
         return string;
     }
 
-    bool xpRequiresDstTexture(const GrCaps& caps, const GrAppliedClip* clip) override {
+    RequiresDstTexture finalize(const GrCaps& caps, const GrAppliedClip* clip) override {
         GrColor* color = &fRRects.front().fColor;
         return fHelper.xpRequiresDstTexture(caps, clip, GrProcessorAnalysisCoverage::kSingleChannel,
                                             color);
@@ -2147,11 +2151,12 @@ public:
                     geo.fDevBounds.fBottom, geo.fXRadius, geo.fYRadius, geo.fInnerXRadius,
                     geo.fInnerYRadius);
         }
-        string.append(INHERITED::dumpInfo());
+        string += fHelper.dumpInfo();
+        string += INHERITED::dumpInfo();
         return string;
     }
 
-    bool xpRequiresDstTexture(const GrCaps& caps, const GrAppliedClip* clip) override {
+    RequiresDstTexture finalize(const GrCaps& caps, const GrAppliedClip* clip) override {
         GrColor* color = &fRRects.front().fColor;
         return fHelper.xpRequiresDstTexture(caps, clip, GrProcessorAnalysisCoverage::kSingleChannel,
                                             color);

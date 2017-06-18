@@ -19,6 +19,7 @@
 #include "SkRefCnt.h"
 #include "SkSurfaceProps.h"
 
+class GrBackendSemaphore;
 class GrClip;
 class GrDrawingManager;
 class GrDrawOp;
@@ -53,10 +54,6 @@ class SkVertices;
 class SK_API GrRenderTargetContext : public GrSurfaceContext {
 public:
     ~GrRenderTargetContext() override;
-
-    // MDB TODO: This access is mainly provided for the image filters. Remove it when they
-    // no longer need to pass it to the FragmentProcessor ctors.
-    GrResourceProvider* resourceProvider() { return fContext->resourceProvider(); }
 
     // We use SkPaint rather than GrPaint here for two reasons:
     //    * The SkPaint carries extra text settings. If these were extracted to a lighter object
@@ -306,7 +303,13 @@ public:
      * After this returns any pending surface IO will be issued to the backend 3D API and
      * if the surface has MSAA it will be resolved.
      */
-    void prepareForExternalIO();
+    void prepareForExternalIO(int numSemaphores, GrBackendSemaphore* backendSemaphores);
+
+    /**
+     *  The next time this GrRenderTargetContext is flushed, the gpu will wait on the passed in
+     *  semaphores before executing any commands.
+     */
+    void waitOnSemaphores(int numSemaphores, const GrBackendSemaphore* waitSemaphores);
 
     GrFSAAType fsaaType() const { return fRenderTargetProxy->fsaaType(); }
     const GrCaps* caps() const { return fContext->caps(); }
@@ -399,15 +402,6 @@ private:
                         const SkMatrix& viewMatrix,
                         const SkRect& rect,
                         const GrUserStencilSettings* ss);
-
-    void drawNonAAFilledRect(const GrClip&,
-                             GrPaint&&,
-                             const SkMatrix& viewMatrix,
-                             const SkRect& rect,
-                             const SkRect* localRect,
-                             const SkMatrix* localMatrix,
-                             const GrUserStencilSettings* ss,
-                             GrAAType hwOrNoneAAType);
 
     void internalDrawPath(
             const GrClip&, GrPaint&&, GrAA, const SkMatrix&, const SkPath&, const GrStyle&);
