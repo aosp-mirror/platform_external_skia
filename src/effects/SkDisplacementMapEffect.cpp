@@ -35,10 +35,10 @@ namespace {
 
 const uint8_t gChannelTypeToShift[] = {
      0,  // unknown
-    SK_RGBA_R32_SHIFT,
-    SK_RGBA_G32_SHIFT,
-    SK_RGBA_B32_SHIFT,
-    SK_RGBA_A32_SHIFT,
+    SK_R32_SHIFT,
+    SK_G32_SHIFT,
+    SK_B32_SHIFT,
+    SK_A32_SHIFT,
 };
 struct Extractor {
     Extractor(SkDisplacementMapEffect::ChannelSelectorType typeX,
