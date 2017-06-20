@@ -417,9 +417,7 @@
       "_",
       "image",
       "_",
-      ".SRW",
-      "--match",
-      "~GLPrograms"
+      ".SRW"
     ],
     "env": {
       "BUILDTYPE": "Debug_x64",

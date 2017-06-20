@@ -389,6 +389,10 @@ def dm_flags(bot):
   if 'Valgrind' in bot: # skia:3021
     match.append('~Threaded')
 
+  if 'Valgrind' in bot and 'PreAbandonGpuContext' in bot:
+    # skia:6575
+    match.append('~multipicturedraw_')
+
   if 'CommandBuffer' in bot:
     # https://crbug.com/697030
     match.append('~HalfFloatAlphaTextureTest')
@@ -409,9 +413,6 @@ def dm_flags(bot):
 
   if 'GalaxyS7_G930A' in bot:
     match.append('~WritePixels') # skia:6427
-
-  if 'ANGLE' in bot and 'Debug' in bot:
-    match.append('~GLPrograms') # skia:4717
 
   if 'MSAN' in bot:
     match.extend(['~Once', '~Shared'])  # Not sure what's up with these tests.
