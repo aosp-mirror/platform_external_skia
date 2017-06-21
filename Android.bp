@@ -1521,6 +1521,7 @@ cc_test {
         "tests/TopoSortTest.cpp",
         "tests/TraceMemoryDumpTest.cpp",
         "tests/TracingTest.cpp",
+        "tests/TransferPixelsTest.cpp",
         "tests/TypefaceTest.cpp",
         "tests/UnicodeTest.cpp",
         "tests/UtilsTest.cpp",
