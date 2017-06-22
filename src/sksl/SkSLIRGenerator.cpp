@@ -545,9 +545,13 @@ std::unique_ptr<Block> IRGenerator::applyInvocationIDWorkaround(std::unique_ptr<
     std::vector<std::unique_ptr<Statement>> loopBody;
     std::vector<std::unique_ptr<Expression>> invokeArgs;
     loopBody.push_back(std::unique_ptr<Statement>(new ExpressionStatement(
-                                                        this->call(Position(), *invokeDecl, { }))));
+                                          this->call(Position(),
+                                                     *invokeDecl,
+                                                     std::vector<std::unique_ptr<Expression>>()))));
     loopBody.push_back(std::unique_ptr<Statement>(new ExpressionStatement(
-                                            this->call(Position(), std::move(endPrimitive), { }))));
+                                          this->call(Position(),
+                                                     std::move(endPrimitive),
+                                                     std::vector<std::unique_ptr<Expression>>()))));
     std::unique_ptr<Expression> assignment(new BinaryExpression(Position(),
                     std::unique_ptr<Expression>(new VariableReference(Position(), *loopIdx)),
                     Token::EQ,
