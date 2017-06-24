@@ -18,11 +18,25 @@
 #include "SkWriteBuffer.h"
 #include "../jumper/SkJumper.h"
 
+/**
+ *  We are faster in clamp, so always use that tiling when we can.
+ */
+static SkShader::TileMode optimize(SkShader::TileMode tm, int dimension) {
+    SkASSERT(dimension > 0);
+#ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
+    // need to update frameworks/base/libs/hwui/tests/unit/SkiaBehaviorTests.cpp:55 to allow
+    // for transforming to clamp.
+    return tm;
+#else
+    return dimension == 1 ? SkShader::kClamp_TileMode : tm;
+#endif
+}
+
 SkImageShader::SkImageShader(sk_sp<SkImage> img, TileMode tmx, TileMode tmy, const SkMatrix* matrix)
     : INHERITED(matrix)
     , fImage(std::move(img))
-    , fTileModeX(tmx)
-    , fTileModeY(tmy)
+    , fTileModeX(optimize(tmx, fImage->width()))
+    , fTileModeY(optimize(tmy, fImage->height()))
 {}
 
 sk_sp<SkFlattenable> SkImageShader::CreateProc(SkReadBuffer& buffer) {
@@ -54,7 +68,7 @@ bool SkImageShader::IsRasterPipelineOnly(SkColorType ct, SkShader::TileMode tx,
     if (ct != kN32_SkColorType) {
         return true;
     }
-    if (tx != SkShader::kClamp_TileMode || ty != SkShader::kClamp_TileMode) {
+    if (tx != ty) {
         return true;
     }
 #endif

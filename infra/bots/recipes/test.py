@@ -34,11 +34,15 @@ def dm_flags(bot):
   # 32-bit desktop bots tend to run out of memory, because they have relatively
   # far more cores than RAM (e.g. 32 cores, 3G RAM).  Hold them back a bit.
   if '-x86-' in bot and not 'NexusPlayer' in bot:
-    args.extend('--threads 4'.split(' '))
+    args.extend(['--threads', '4'])
 
   # Avoid issues with dynamically exceeding resource cache limits.
   if 'Test' in bot and 'DISCARDABLE' in bot:
-    args.extend('--threads 0'.split(' '))
+    args.extend(['--threads', '0'])
+
+  # See if staying on the main thread helps skia:6748.
+  if 'Test-iOS' in bot:
+    args.extend(['--threads', '0'])
 
   # These are the canonical configs that we would ideally run on all bots. We
   # may opt out or substitute some below for specific bots
@@ -251,7 +255,8 @@ def dm_flags(bot):
     blacklist('_ test _ GrShape')
 
   # skia:4095
-  bad_serialize_gms = ['bleed_image',
+  bad_serialize_gms = ['all_variants_8888',
+                       'bleed_image',
                        'c_gms',
                        'colortype',
                        'colortype_xfermodes',
@@ -512,15 +517,15 @@ def dm_flags(bot):
     match.append('~XfermodeImageFilterCroppedInput_Gpu')
 
   if 'IntelIris540' in bot and 'ANGLE' in bot:
-    match.append('~IntTexture') # skia:6086
-    blacklist(['_', 'gm', '_', 'discard']) # skia:6141
-    # skia:6103
     for config in ['angle_d3d9_es2', 'angle_d3d11_es2', 'angle_gl_es2']:
+      # skia:6103
       blacklist([config, 'gm', '_', 'multipicturedraw_invpathclip_simple'])
       blacklist([config, 'gm', '_', 'multipicturedraw_noclip_simple'])
       blacklist([config, 'gm', '_', 'multipicturedraw_pathclip_simple'])
       blacklist([config, 'gm', '_', 'multipicturedraw_rectclip_simple'])
       blacklist([config, 'gm', '_', 'multipicturedraw_rrectclip_simple'])
+      # skia:6141
+      blacklist([config, 'gm', '_', 'discard'])
 
   if 'IntelBayTrail' in bot and 'Ubuntu' in bot:
     match.append('~ImageStorageLoad') # skia:6358
