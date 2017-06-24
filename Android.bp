@@ -119,7 +119,6 @@ cc_library {
         "src/core/SkBitmapScaler.cpp",
         "src/core/SkBlendMode.cpp",
         "src/core/SkBlitMask_D32.cpp",
-        "src/core/SkBlitRow_D16.cpp",
         "src/core/SkBlitRow_D32.cpp",
         "src/core/SkBlitter.cpp",
         "src/core/SkBlitter_A8.cpp",
