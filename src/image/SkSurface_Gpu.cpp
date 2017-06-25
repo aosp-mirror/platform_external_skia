@@ -105,26 +105,9 @@ sk_sp<SkImage> SkSurface_Gpu::onNewImageSnapshot() {
     // want to ever retarget the SkSurface at another buffer we create. Force a copy now to avoid
     // copy-on-write.
     if (!srcProxy || rtc->priv().refsWrappedObjects()) {
-        // MDB TODO: replace this with GrSurfaceProxy::Copy?
-        GrSurfaceDesc desc;
-        desc.fConfig = rtc->config();
-        desc.fWidth = rtc->width();
-        desc.fHeight = rtc->height();
-        desc.fOrigin = rtc->origin();
+        SkASSERT(rtc->origin() == rtc->asSurfaceProxy()->origin());
 
-        sk_sp<GrSurfaceContext> copyCtx = ctx->contextPriv().makeDeferredSurfaceContext(
-                                                                desc,
-                                                                SkBackingFit::kExact,
-                                                                budgeted);
-        if (!copyCtx) {
-            return nullptr;
-        }
-
-        if (!copyCtx->copy(rtc->asSurfaceProxy())) {
-            return nullptr;
-        }
-
-        srcProxy = copyCtx->asTextureProxyRef();
+        srcProxy = GrSurfaceProxy::Copy(ctx, rtc->asSurfaceProxy(), budgeted);
     }
 
     const SkImageInfo info = fDevice->imageInfo();
@@ -144,18 +127,17 @@ sk_sp<SkImage> SkSurface_Gpu::onNewImageSnapshot() {
 // render target into it. Note that this flushes the SkGpuDevice but
 // doesn't force an OpenGL flush.
 void SkSurface_Gpu::onCopyOnWrite(ContentChangeMode mode) {
-    GrRenderTarget* rt = fDevice->accessRenderTargetContext()->accessRenderTarget();
-    if (!rt) {
-        return;
-    }
-    // are we sharing our render target with the image? Note this call should never create a new
+    GrRenderTargetContext* rtc = fDevice->accessRenderTargetContext();
+
+    // are we sharing our backing proxy with the image? Note this call should never create a new
     // image because onCopyOnWrite is only called when there is a cached image.
     sk_sp<SkImage> image(this->refCachedImage());
     SkASSERT(image);
-    // MDB TODO: this is unfortunate. The snapping of an Image_Gpu from a surface currently
-    // funnels down to a GrTexture. Once Image_Gpus are proxy-backed we should be able to
-    // compare proxy uniqueIDs.
-    if (rt->asTexture()->getTextureHandle() == image->getTextureHandle(false)) {
+
+    GrSurfaceProxy* imageProxy = ((SkImage_Base*) image.get())->peekProxy();
+    SkASSERT(imageProxy);
+
+    if (rtc->asSurfaceProxy()->underlyingUniqueID() == imageProxy->underlyingUniqueID()) {
         fDevice->replaceRenderTargetContext(SkSurface::kRetain_ContentChangeMode == mode);
     } else if (kDiscard_ContentChangeMode == mode) {
         this->SkSurface_Gpu::onDiscard();

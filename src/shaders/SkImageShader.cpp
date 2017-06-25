@@ -18,11 +18,25 @@
 #include "SkWriteBuffer.h"
 #include "../jumper/SkJumper.h"
 
+/**
+ *  We are faster in clamp, so always use that tiling when we can.
+ */
+static SkShader::TileMode optimize(SkShader::TileMode tm, int dimension) {
+    SkASSERT(dimension > 0);
+#ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
+    // need to update frameworks/base/libs/hwui/tests/unit/SkiaBehaviorTests.cpp:55 to allow
+    // for transforming to clamp.
+    return tm;
+#else
+    return dimension == 1 ? SkShader::kClamp_TileMode : tm;
+#endif
+}
+
 SkImageShader::SkImageShader(sk_sp<SkImage> img, TileMode tmx, TileMode tmy, const SkMatrix* matrix)
     : INHERITED(matrix)
     , fImage(std::move(img))
-    , fTileModeX(tmx)
-    , fTileModeY(tmy)
+    , fTileModeX(optimize(tmx, fImage->width()))
+    , fTileModeY(optimize(tmy, fImage->height()))
 {}
 
 sk_sp<SkFlattenable> SkImageShader::CreateProc(SkReadBuffer& buffer) {
@@ -46,6 +60,24 @@ void SkImageShader::flatten(SkWriteBuffer& buffer) const {
 
 bool SkImageShader::isOpaque() const {
     return fImage->isOpaque();
+}
+
+bool SkImageShader::IsRasterPipelineOnly(SkColorType ct, SkShader::TileMode tx,
+                                         SkShader::TileMode ty) {
+#ifndef SK_SUPPORT_LEGACY_TILED_BITMAPS
+    if (ct != kN32_SkColorType) {
+        return true;
+    }
+    if (tx != ty) {
+        return true;
+    }
+#endif
+    return false;
+}
+
+bool SkImageShader::isRasterPipelineOnly() const {
+    SkBitmapProvider provider(fImage.get(), nullptr);
+    return IsRasterPipelineOnly(provider.info().colorType(), fTileModeX, fTileModeY);
 }
 
 SkShaderBase::Context* SkImageShader::onMakeContext(const ContextRec& rec,
@@ -280,17 +312,12 @@ bool SkImageShader::onAppendStages(SkRasterPipeline* p, SkColorSpace* dstCS, SkA
     gather->ctable  = pm.ctable() ? pm.ctable()->readColors() : nullptr;
     gather->stride  = pm.rowBytesAsPixels();
 
-    // Tiling stages (clamp_x, mirror_y, etc.) are inclusive of their limit,
-    // so we tick down our width and height by one float to make them exclusive.
-    auto ulp_before = [](float f) {
-        uint32_t bits;
-        memcpy(&bits, &f, 4);
-        bits--;
-        memcpy(&f, &bits, 4);
-        return f;
-    };
-    auto limit_x = alloc->make<float>(ulp_before((float)pm. width())),
-         limit_y = alloc->make<float>(ulp_before((float)pm.height()));
+    auto limit_x = alloc->make<SkJumper_TileCtx>(),
+         limit_y = alloc->make<SkJumper_TileCtx>();
+    limit_x->scale = pm.width();
+    limit_x->invScale = 1.0f / pm.width();
+    limit_y->scale = pm.height();
+    limit_y->invScale = 1.0f / pm.height();
 
     auto append_tiling_and_gather = [&] {
         switch (fTileModeX) {
