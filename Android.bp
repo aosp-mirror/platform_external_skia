@@ -279,7 +279,6 @@ cc_library {
         "src/core/SkTaskGroup.cpp",
         "src/core/SkTextBlob.cpp",
         "src/core/SkThreadID.cpp",
-        "src/core/SkThreadedBMPDevice.cpp",
         "src/core/SkTime.cpp",
         "src/core/SkTypeface.cpp",
         "src/core/SkTypefaceCache.cpp",
