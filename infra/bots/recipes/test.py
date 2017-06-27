@@ -168,6 +168,9 @@ def dm_flags(bot):
   if 'SK_FORCE_RASTER_PIPELINE_BLITTER' in bot:
     args.remove('tests')
 
+  # Some people don't like verbose output.
+  verbose = False
+
   blacklisted = []
   def blacklist(quad):
     config, src, options, name = quad.split(' ') if type(quad) is str else quad
@@ -420,9 +423,6 @@ def dm_flags(bot):
   if 'GalaxyS7_G930A' in bot:
     match.append('~WritePixels') # skia:6427
 
-  if 'NVIDIA_Shield' in bot:
-    match.append('~TransferPixels') # skia:6784
-
   if 'MSAN' in bot:
     match.extend(['~Once', '~Shared'])  # Not sure what's up with these tests.
 
@@ -444,6 +444,10 @@ def dm_flags(bot):
 
   if 'Vulkan' in bot and 'IntelIris540' in bot and 'Ubuntu' in bot:
     match.extend(['~VkHeapTests']) # skia:6245
+
+  if 'Intel' in bot and 'Ubuntu' in bot and not 'Vulkan' in bot:
+    # TODO(dogben): Track down what's causing bots to die.
+    verbose = True
 
   if 'Vulkan' in bot and 'IntelIris540' in bot and 'Win' in bot:
     # skia:6398
@@ -554,12 +558,15 @@ def dm_flags(bot):
     args.append('--noRAW_threading')
 
   if 'Valgrind' in bot and 'PreAbandonGpuContext' in bot:
-    args.append('--verbose')
+    verbose = True
 
   if 'NexusPlayer' in bot and 'CPU' in bot:
     # The Nexus Player's image decoding tests are slow enough that swarming
     # times it out for not printing anything frequently enough.  --verbose
     # makes dm print something every time we start or complete a task.
+    verbose = True
+
+  if verbose:
     args.append('--verbose')
 
   return args

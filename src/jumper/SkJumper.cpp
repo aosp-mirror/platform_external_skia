@@ -74,18 +74,15 @@ using StartPipelineFn = void(size_t,size_t,size_t,void**,K*);
     M(constant_color)    \
     M(set_rgb)           \
     M(premul)            \
-    M(load_8888)         \
-    M(store_8888)        \
-    M(load_a8)           \
-    M(store_a8)          \
-    M(load_g8)           \
+    M(load_8888) M(load_8888_dst) M(store_8888) \
+    M(load_a8)   M(load_a8_dst)   M(store_a8)   \
+    M(load_g8)   M(load_g8_dst)                 \
+    M(swap_rb)   M(swap_rb_dst)                 \
     M(srcover_rgba_8888) \
     M(lerp_1_float)      \
     M(lerp_u8)           \
     M(scale_1_float)     \
     M(scale_u8)          \
-    M(swap_rb)           \
-    M(swap)              \
     M(move_src_dst)      \
     M(move_dst_src)      \
     M(clear)             \
@@ -155,6 +152,14 @@ extern "C" {
     #define M(st) StageFn ASM(st,ssse3_lowp);
         LOWP_STAGES(M)
     #undef M
+
+#elif defined(__i386__)
+    StartPipelineFn ASM(start_pipeline,sse2);
+    StageFn ASM(just_return,sse2);
+    #define M(st) StageFn ASM(st,sse2);
+        SK_RASTER_PIPELINE_STAGES(M)
+    #undef M
+
 #endif
 
     // Portable, single-pixel stages.
@@ -256,6 +261,17 @@ static SkJumper_Engine choose_engine() {
         #undef M
         };
     }
+
+#elif defined(__i386__)
+    if (1 && SkCpu::Supports(SkCpu::SSE2)) {
+        return {
+        #define M(stage) ASM(stage, sse2),
+            { SK_RASTER_PIPELINE_STAGES(M) },
+            M(start_pipeline) M(just_return)
+        #undef M
+        };
+    }
+
 #endif
     return kPortable;
 }
