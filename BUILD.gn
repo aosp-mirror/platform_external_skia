@@ -426,6 +426,11 @@ optional("gpu") {
   libs = []
   if (is_android) {
     sources += [ "src/gpu/gl/android/GrGLCreateNativeInterface_android.cpp" ]
+
+    # this lib is required to link against AHardwareBuffer
+    if (defined(ndk_api) && ndk_api >= 26) {
+      libs += [ "android" ]
+    }
   } else if (skia_use_egl) {
     sources += [ "src/gpu/gl/egl/GrGLCreateNativeInterface_egl.cpp" ]
     libs += [ "EGL" ]
@@ -1136,6 +1141,12 @@ if (skia_enable_tools) {
                 "experimental/SkSetPoly3To3.cpp",
                 "experimental/SkSetPoly3To3_A.cpp",
                 "experimental/SkSetPoly3To3_D.cpp",
+
+                # Relocating these files here, so that clients don't try to build them while they're
+                # still in active development. Clang's thread safety analysis gets tripped up by
+                # conditional locks.
+                "src/core/SkThreadedBMPDevice.cpp",
+                "src/core/SkThreadedBMPDevice.h",
               ]
     deps = [
       ":experimental_svg_model",

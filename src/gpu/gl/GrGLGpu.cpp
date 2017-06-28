@@ -257,14 +257,17 @@ GrGLGpu::GrGLGpu(GrGLContext* ctx, GrContext* context)
         const GrGLubyte* vendor;
         const GrGLubyte* renderer;
         const GrGLubyte* version;
+        const GrGLubyte* glslVersion;
         GL_CALL_RET(vendor, GetString(GR_GL_VENDOR));
         GL_CALL_RET(renderer, GetString(GR_GL_RENDERER));
         GL_CALL_RET(version, GetString(GR_GL_VERSION));
+        GL_CALL_RET(glslVersion, GetString(GR_GL_SHADING_LANGUAGE_VERSION));
         SkDebugf("------------------------- create GrGLGpu %p --------------\n",
                  this);
         SkDebugf("------ VENDOR %s\n", vendor);
         SkDebugf("------ RENDERER %s\n", renderer);
         SkDebugf("------ VERSION %s\n",  version);
+        SkDebugf("------ SHADING LANGUAGE VERSION %s\n", glslVersion);
         SkDebugf("------ EXTENSIONS\n");
         this->glContext().extensions().print();
         SkDebugf("\n");
@@ -833,16 +836,18 @@ bool GrGLGpu::onTransferPixels(GrTexture* texture,
     const GrGLBuffer* glBuffer = static_cast<const GrGLBuffer*>(transferBuffer);
     this->bindBuffer(kXferCpuToGpu_GrBufferType, glBuffer);
 
+    SkDEBUGCODE(
+        SkIRect subRect = SkIRect::MakeXYWH(left, top, width, height);
+        SkIRect bounds = SkIRect::MakeWH(texture->width(), texture->height());
+        SkASSERT(bounds.contains(subRect));
+    )
+
     size_t bpp = GrBytesPerPixel(config);
     const size_t trimRowBytes = width * bpp;
-    const void* pixels = (void*)offset;
-    if (!GrSurfacePriv::AdjustWritePixelParams(glTex->width(), glTex->height(), bpp,
-                                               &left, &top,
-                                               &width, &height,
-                                               &pixels,
-                                               &rowBytes)) {
-        return false;
+    if (!rowBytes) {
+        rowBytes = trimRowBytes;
     }
+    const void* pixels = (void*)offset;
     if (width < 0 || width < 0) {
         return false;
     }
@@ -1012,6 +1017,13 @@ bool GrGLGpu::uploadTexData(GrPixelConfig texConfig, int texWidth, int texHeight
                             int left, int top, int width, int height, GrPixelConfig dataConfig,
                             const SkTArray<GrMipLevel>& texels) {
     SkASSERT(this->caps()->isConfigTexturable(texConfig));
+    SkDEBUGCODE(
+        SkIRect subRect = SkIRect::MakeXYWH(left, top, width, height);
+        SkIRect bounds = SkIRect::MakeWH(texWidth, texHeight);
+        SkASSERT(bounds.contains(subRect));
+    )
+    SkASSERT(1 == texels.count() ||
+             (0 == left && 0 == top && width == texWidth && height == texHeight));
 
     // unbind any previous transfer buffer
     auto& xferBufferState = fHWBufferState[kXferCpuToGpu_GrBufferType];
@@ -1039,26 +1051,6 @@ bool GrGLGpu::uploadTexData(GrPixelConfig texConfig, int texWidth, int texHeight
 
     if (width == 0 || height == 0) {
         return false;
-    }
-
-    for (int currentMipLevel = 0; currentMipLevel < texelsShallowCopy.count(); currentMipLevel++) {
-        int twoToTheMipLevel = 1 << currentMipLevel;
-        int currentWidth = SkTMax(1, width / twoToTheMipLevel);
-        int currentHeight = SkTMax(1, height / twoToTheMipLevel);
-
-        if (currentHeight > SK_MaxS32 ||
-            currentWidth > SK_MaxS32) {
-            return false;
-        }
-        if (!GrSurfacePriv::AdjustWritePixelParams(texWidth, texHeight, bpp, &left, &top,
-                                                   &currentWidth, &currentHeight,
-                                                   &texelsShallowCopy[currentMipLevel].fPixels,
-                                                   &texelsShallowCopy[currentMipLevel].fRowBytes)) {
-            return false;
-        }
-        if (currentWidth < 0 || currentHeight < 0) {
-            return false;
-        }
     }
 
     // Internal format comes from the texture desc.
@@ -1122,8 +1114,10 @@ bool GrGLGpu::uploadTexData(GrPixelConfig texConfig, int texWidth, int texHeight
          */
         restoreGLRowLength = false;
 
-        const size_t rowBytes = texelsShallowCopy[currentMipLevel].fRowBytes;
-      
+        const size_t rowBytes = texelsShallowCopy[currentMipLevel].fRowBytes ?
+                                texelsShallowCopy[currentMipLevel].fRowBytes :
+                                trimRowBytes;
+
         // TODO: This optimization should be enabled with or without mips.
         // For use with mips, we must set GR_GL_UNPACK_ROW_LENGTH once per
         // mip level, before calling glTexImage2D.

@@ -12,9 +12,7 @@
 #include "SkAutoPixmapStorage.h"
 #include "GrBackendSurface.h"
 #include "GrBackendTextureImageGenerator.h"
-#ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
 #include "GrAHardwareBufferImageGenerator.h"
-#endif
 #include "GrBitmapTextureMaker.h"
 #include "GrCaps.h"
 #include "GrContext.h"
@@ -454,8 +452,8 @@ sk_sp<SkImage> SkImage::makeTextureImage(GrContext* context, SkColorSpace* dstCo
     if (!context) {
         return nullptr;
     }
-    if (GrTexture* peek = as_IB(this)->peekTexture()) {
-        return peek->getContext() == context ? sk_ref_sp(const_cast<SkImage*>(this)) : nullptr;
+    if (GrContext* incumbent = as_IB(this)->context()) {
+        return incumbent == context ? sk_ref_sp(const_cast<SkImage*>(this)) : nullptr;
     }
 
     if (this->isLazyGenerated()) {
@@ -512,7 +510,7 @@ sk_sp<SkImage> SkImage::MakeCrossContextFromEncoded(GrContext* context, sk_sp<Sk
     return SkImage::MakeFromGenerator(std::move(gen));
 }
 
-#ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
+#if defined(SK_BUILD_FOR_ANDROID) && __ANDROID_API__ >= 26
 sk_sp<SkImage> SkImage::MakeFromAHardwareBuffer(AHardwareBuffer* graphicBuffer, SkAlphaType at,
                                                sk_sp<SkColorSpace> cs) {
     auto gen = GrAHardwareBufferImageGenerator::Make(graphicBuffer, at, cs);
