@@ -75,9 +75,10 @@ using StartPipelineFn = void(size_t,size_t,size_t,void**,K*);
     M(set_rgb)           \
     M(premul)            \
     M(load_8888) M(load_8888_dst) M(store_8888) \
+    M(load_bgra) M(load_bgra_dst) M(store_bgra) \
     M(load_a8)   M(load_a8_dst)   M(store_a8)   \
     M(load_g8)   M(load_g8_dst)                 \
-    M(swap_rb)   M(swap_rb_dst)                 \
+    M(swap_rb)           \
     M(srcover_rgba_8888) \
     M(lerp_1_float)      \
     M(lerp_u8)           \
@@ -153,7 +154,7 @@ extern "C" {
         LOWP_STAGES(M)
     #undef M
 
-#elif defined(__i386__)
+#elif defined(__i386__) && !defined(_MSC_VER)
     StartPipelineFn ASM(start_pipeline,sse2);
     StageFn ASM(just_return,sse2);
     #define M(st) StageFn ASM(st,sse2);
@@ -262,7 +263,7 @@ static SkJumper_Engine choose_engine() {
         };
     }
 
-#elif defined(__i386__)
+#elif defined(__i386__) && !defined(_MSC_VER)
     if (1 && SkCpu::Supports(SkCpu::SSE2)) {
         return {
         #define M(stage) ASM(stage, sse2),

@@ -64,10 +64,12 @@ bool SkImageShader::isOpaque() const {
 
 bool SkImageShader::IsRasterPipelineOnly(SkColorType ct, SkShader::TileMode tx,
                                          SkShader::TileMode ty) {
-#ifndef SK_SUPPORT_LEGACY_TILED_BITMAPS
+#ifndef SK_SUPPORT_LEGACY_SWIZZLE_SHADER
     if (ct != kN32_SkColorType) {
         return true;
     }
+#endif
+#ifndef SK_SUPPORT_LEGACY_TILED_BITMAPS
     if (tx != ty) {
         return true;
     }
@@ -336,8 +338,8 @@ bool SkImageShader::onAppendStages(SkRasterPipeline* p, SkColorSpace* dstCS, SkA
             case kGray_8_SkColorType:    p->append(SkRasterPipeline::gather_g8,   gather); break;
             case kRGB_565_SkColorType:   p->append(SkRasterPipeline::gather_565,  gather); break;
             case kARGB_4444_SkColorType: p->append(SkRasterPipeline::gather_4444, gather); break;
-            case kRGBA_8888_SkColorType:
-            case kBGRA_8888_SkColorType: p->append(SkRasterPipeline::gather_8888, gather); break;
+            case kBGRA_8888_SkColorType: p->append(SkRasterPipeline::gather_bgra, gather); break;
+            case kRGBA_8888_SkColorType: p->append(SkRasterPipeline::gather_8888, gather); break;
             case kRGBA_F16_SkColorType:  p->append(SkRasterPipeline::gather_f16,  gather); break;
             default: SkASSERT(false);
         }
@@ -396,11 +398,7 @@ bool SkImageShader::onAppendStages(SkRasterPipeline* p, SkColorSpace* dstCS, SkA
         p->append(SkRasterPipeline::move_dst_src);
     }
 
-    auto effective_color_type = [](SkColorType ct) {
-        return ct == kIndex_8_SkColorType ? kN32_SkColorType : ct;
-    };
-
-    if (effective_color_type(info.colorType()) == kBGRA_8888_SkColorType) {
+    if (info.colorType() == kIndex_8_SkColorType && kN32_SkColorType == kBGRA_8888_SkColorType) {
         p->append(SkRasterPipeline::swap_rb);
     }
     if (info.colorType() == kAlpha_8_SkColorType) {

@@ -96,7 +96,7 @@ public:
                      GrSurfaceProxy* dst,
                      GrSurfaceProxy* src,
                      const SkIRect& srcRect,
-                     const SkIPoint& dstPoint);
+                     const SkIPoint& dstPoint) override;
 
     gr_instanced::InstancedRendering* instancedRendering() const {
         SkASSERT(fInstancedRendering);
@@ -143,7 +143,7 @@ private:
 
     std::unique_ptr<gr_instanced::InstancedRendering> fInstancedRendering;
 
-    int32_t                        fLastClipStackGenID;
+    uint32_t                       fLastClipStackGenID;
     SkIRect                        fLastDevClipBounds;
 
     // For ops/opList we have mean: 5 stdDev: 28
