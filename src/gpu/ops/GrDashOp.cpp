@@ -53,9 +53,16 @@ bool GrDashOp::CanDrawDashLine(const SkPoint pts[2], const GrStyle& style,
     }
 
     SkPaint::Cap cap = style.strokeRec().getCap();
-    // Current we do don't handle Round or Square cap dashes
-    if (SkPaint::kRound_Cap == cap && intervals[0] != 0.f) {
-        return false;
+    if (SkPaint::kRound_Cap == cap) {
+        // Current we don't support round caps unless the on interval is zero
+        if (intervals[0] != 0.f) {
+            return false;
+        }
+        // If the width of the circle caps in greater than the off interval we will pick up unwanted
+        // segments of circles at the start and end of the dash line.
+        if (style.strokeRec().getWidth() > intervals[1]) {
+            return false;
+        }
     }
 
     return true;
@@ -137,9 +144,6 @@ static SkScalar calc_end_adjustment(const SkScalar intervals[2], const SkPoint p
         *endingInt = srcIntervalLen;
     }
     if (*endingInt > intervals[0]) {
-        if (0 == intervals[0]) {
-            *endingInt -= 0.01f; // make sure we capture the last zero size pnt (used if has caps)
-        }
         return *endingInt - intervals[0];
     }
     return 0;
@@ -1228,20 +1232,23 @@ GR_LEGACY_MESH_DRAW_OP_TEST_DEFINE(DashOp) {
         kCloseOpen_Intervals,
     };
 
-    Intervals intervalType = SkPaint::kRound_Cap ?
+    Intervals intervalType = SkPaint::kRound_Cap == cap ?
                              kOpenClose_Intervals :
                              Intervals(random->nextULessThan(kCloseOpen_Intervals + 1));
     static const SkScalar kIntervalMin = 0.1f;
+    static const SkScalar kIntervalMinCircles = 1.f; // Must be >= to stroke width
     static const SkScalar kIntervalMax = 10.f;
     switch (intervalType) {
         case kOpenOpen_Intervals:
             intervals[0] = random->nextRangeScalar(kIntervalMin, kIntervalMax);
             intervals[1] = random->nextRangeScalar(kIntervalMin, kIntervalMax);
             break;
-        case kOpenClose_Intervals:
+        case kOpenClose_Intervals: {
             intervals[0] = 0.f;
-            intervals[1] = random->nextRangeScalar(kIntervalMin, kIntervalMax);
+            SkScalar min = SkPaint::kRound_Cap == cap ? kIntervalMinCircles : kIntervalMin;
+            intervals[1] = random->nextRangeScalar(min, kIntervalMax);
             break;
+        }
         case kCloseOpen_Intervals:
             intervals[0] = random->nextRangeScalar(kIntervalMin, kIntervalMax);
             intervals[1] = 0.f;
