@@ -57,9 +57,7 @@ public:
         if (kUnknown_SkColorType == info.colorType()) {
             return false;
         }
-
-        const bool needsCT = kIndex_8_SkColorType == info.colorType();
-        if (needsCT != hasColorTable) {
+        if (kIndex_8_SkColorType == info.colorType()) {
             return false;
         }
 

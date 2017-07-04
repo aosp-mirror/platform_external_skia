@@ -190,11 +190,8 @@ bool SkTwoPointConicalGradient::adjustMatrixAndAppendStages(SkArenaAlloc* alloc,
         auto scale =  fRadius2 / dRadius;
         auto bias  = -fRadius1 / dRadius;
 
-        auto mad_matrix = SkMatrix::Concat(SkMatrix::MakeTrans(bias, 0),
-                                           SkMatrix::MakeScale(scale, 1));
-        auto m = alloc->makeArrayDefault<float>(6);
-        SkAssertResult(mad_matrix.asAffine(m));
-        p->append(SkRasterPipeline::matrix_2x3, m);
+        p->append_matrix(alloc, SkMatrix::Concat(SkMatrix::MakeTrans(bias, 0),
+                                                 SkMatrix::MakeScale(scale, 1)));
 
         return true;
     }
@@ -204,7 +201,9 @@ bool SkTwoPointConicalGradient::adjustMatrixAndAppendStages(SkArenaAlloc* alloc,
     SkMatrix map_to_unit_vector;
     const SkPoint centers[2] = { fCenter1, fCenter2 };
     const SkPoint unitvec[2] = { {0, 0}, {1, 0} };
-    SkAssertResult(map_to_unit_vector.setPolyToPoly(centers, unitvec, 2));
+    if (!map_to_unit_vector.setPolyToPoly(centers, unitvec, 2)) {
+        return false;
+    }
     matrix->postConcat(map_to_unit_vector);
 
     // Since we've squashed the centers into a unit vector, we must also scale

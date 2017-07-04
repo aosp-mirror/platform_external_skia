@@ -120,7 +120,9 @@ public:
 
     /** Return true iff drawing this bitmap has no effect.
      */
-    bool drawsNothing() const { return this->empty() || this->isNull(); }
+    bool drawsNothing() const {
+        return this->colorType() == kIndex_8_SkColorType || this->empty() || this->isNull();
+    }
 
     /** Return the number of bytes between subsequent rows of the bitmap. */
     size_t rowBytes() const { return fRowBytes; }
