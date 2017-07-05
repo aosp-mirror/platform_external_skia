@@ -627,6 +627,7 @@ cc_library {
         "src/pdf/SkPDFDocument.cpp",
         "src/pdf/SkPDFFont.cpp",
         "src/pdf/SkPDFFormXObject.cpp",
+        "src/pdf/SkPDFGradientShader.cpp",
         "src/pdf/SkPDFGraphicState.cpp",
         "src/pdf/SkPDFMakeCIDGlyphWidthsArray.cpp",
         "src/pdf/SkPDFMakeToUnicodeCmap.cpp",
