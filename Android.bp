@@ -1740,6 +1740,7 @@ cc_test {
         "bench/PatchBench.cpp",
         "bench/PathBench.cpp",
         "bench/PathIterBench.cpp",
+        "bench/PathTextBench.cpp",
         "bench/PerlinNoiseBench.cpp",
         "bench/PictureNestingBench.cpp",
         "bench/PictureOverheadBench.cpp",
