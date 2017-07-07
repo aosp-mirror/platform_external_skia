@@ -653,7 +653,7 @@ private:
                             BoundaryMode boundaryMode,
                             const SkIRect* srcBounds);
 
-    GR_DECLARE_FRAGMENT_PROCESSOR_TEST;
+    GR_DECLARE_FRAGMENT_PROCESSOR_TEST
     SkScalar fKD;
 
     typedef GrLightingEffect INHERITED;
@@ -696,7 +696,7 @@ private:
                              BoundaryMode boundaryMode,
                              const SkIRect* srcBounds);
 
-    GR_DECLARE_FRAGMENT_PROCESSOR_TEST;
+    GR_DECLARE_FRAGMENT_PROCESSOR_TEST
     SkScalar fKS;
     SkScalar fShininess;
 
@@ -1341,11 +1341,13 @@ sk_sp<SkSpecialImage> SkDiffuseLightingImageFilter::onFilterImage(SkSpecialImage
 sk_sp<SkImageFilter> SkDiffuseLightingImageFilter::onMakeColorSpace(SkColorSpaceXformer* xformer)
 const {
     SkASSERT(1 == this->countInputs());
-    sk_sp<SkImageFilter> input =
-            this->getInput(0) ? this->getInput(0)->onMakeColorSpace(xformer) : nullptr;
-    return SkDiffuseLightingImageFilter::Make(this->light()->makeColorSpace(xformer),
-                                              255.0f * this->surfaceScale(), fKD, std::move(input),
-                                              this->getCropRectIfSet());
+    auto input = xformer->apply(this->getInput(0));
+    auto light = this->light()->makeColorSpace(xformer);
+    if (input.get() != this->getInput(0) || light.get() != this->light()) {
+        return SkDiffuseLightingImageFilter::Make(std::move(light), 255.0f * this->surfaceScale(),
+                                                  fKD, std::move(input), this->getCropRectIfSet());
+    }
+    return this->refMe();
 }
 
 #ifndef SK_IGNORE_TO_STRING
@@ -1495,11 +1497,14 @@ sk_sp<SkImageFilter> SkSpecularLightingImageFilter::onMakeColorSpace(SkColorSpac
 const {
     SkASSERT(1 == this->countInputs());
 
-    sk_sp<SkImageFilter> input =
-            this->getInput(0) ? this->getInput(0)->onMakeColorSpace(xformer) : nullptr;
-    return SkSpecularLightingImageFilter::Make(this->light()->makeColorSpace(xformer),
-                                               255.0f * this->surfaceScale(), fKS, fShininess,
-                                               std::move(input), this->getCropRectIfSet());
+    auto input = xformer->apply(this->getInput(0));
+    auto light = this->light()->makeColorSpace(xformer);
+    if (input.get() != this->getInput(0) || light.get() != this->light()) {
+        return SkSpecularLightingImageFilter::Make(std::move(light),
+                                                   255.0f * this->surfaceScale(), fKS, fShininess,
+                                                   std::move(input), this->getCropRectIfSet());
+    }
+    return this->refMe();
 }
 
 #ifndef SK_IGNORE_TO_STRING
@@ -1526,31 +1531,6 @@ sk_sp<GrFragmentProcessor> SkSpecularLightingImageFilter::makeFragmentProcessor(
 ///////////////////////////////////////////////////////////////////////////////
 
 #if SK_SUPPORT_GPU
-
-static SkPoint3 random_point3(SkRandom* random) {
-    return SkPoint3::Make(SkScalarToFloat(random->nextSScalar1()),
-                          SkScalarToFloat(random->nextSScalar1()),
-                          SkScalarToFloat(random->nextSScalar1()));
-}
-
-static SkImageFilterLight* create_random_light(SkRandom* random) {
-    int type = random->nextULessThan(3);
-    switch (type) {
-        case 0: {
-            return new SkDistantLight(random_point3(random), random->nextU());
-        }
-        case 1: {
-            return new SkPointLight(random_point3(random), random->nextU());
-        }
-        case 2: {
-            return new SkSpotLight(random_point3(random), random_point3(random),
-                                   random->nextUScalar1(), random->nextUScalar1(), random->nextU());
-        }
-        default:
-            SkFAIL("Unexpected value.");
-            return nullptr;
-    }
-}
 
 static SkString emitNormalFunc(BoundaryMode mode,
                                const char* pointToNormalName,
@@ -1755,6 +1735,32 @@ GrGLSLFragmentProcessor* GrDiffuseLightingEffect::onCreateGLSLInstance() const {
 GR_DEFINE_FRAGMENT_PROCESSOR_TEST(GrDiffuseLightingEffect);
 
 #if GR_TEST_UTILS
+
+static SkPoint3 random_point3(SkRandom* random) {
+    return SkPoint3::Make(SkScalarToFloat(random->nextSScalar1()),
+                          SkScalarToFloat(random->nextSScalar1()),
+                          SkScalarToFloat(random->nextSScalar1()));
+}
+
+static SkImageFilterLight* create_random_light(SkRandom* random) {
+    int type = random->nextULessThan(3);
+    switch (type) {
+        case 0: {
+            return new SkDistantLight(random_point3(random), random->nextU());
+        }
+        case 1: {
+            return new SkPointLight(random_point3(random), random->nextU());
+        }
+        case 2: {
+            return new SkSpotLight(random_point3(random), random_point3(random),
+                                   random->nextUScalar1(), random->nextUScalar1(), random->nextU());
+        }
+        default:
+            SkFAIL("Unexpected value.");
+            return nullptr;
+    }
+}
+
 sk_sp<GrFragmentProcessor> GrDiffuseLightingEffect::TestCreate(GrProcessorTestData* d) {
     int texIdx = d->fRandom->nextBool() ? GrProcessorUnitTest::kSkiaPMTextureIdx
                                         : GrProcessorUnitTest::kAlphaTextureIdx;
