@@ -69,7 +69,7 @@ SkColor4f SkColorFilter::filterColor4f(const SkColor4f& c) const {
     SkSTArenaAlloc<128> alloc;
     SkRasterPipeline    pipeline(&alloc);
 
-    pipeline.append(SkRasterPipeline::constant_color, &src);
+    pipeline.append_uniform_color(&alloc, src);
     this->onAppendStages(&pipeline, nullptr, &alloc, c.fA == 1);
     SkPM4f* dstPtr = &dst;
     pipeline.append(SkRasterPipeline::store_f32, &dstPtr);
@@ -155,8 +155,12 @@ private:
     }
 
     sk_sp<SkColorFilter> onMakeColorSpace(SkColorSpaceXformer* xformer) const override {
-        return SkColorFilter::MakeComposeFilter(xformer->apply(fOuter.get()),
-                                                xformer->apply(fInner.get()));
+        auto outer = xformer->apply(fOuter.get());
+        auto inner = xformer->apply(fInner.get());
+        if (outer != fOuter || inner != fInner) {
+            return SkColorFilter::MakeComposeFilter(outer, inner);
+        }
+        return this->INHERITED::onMakeColorSpace(xformer);
     }
 
     sk_sp<SkColorFilter> fOuter;
@@ -212,11 +216,13 @@ public:
 
 #if SK_SUPPORT_GPU
     sk_sp<GrFragmentProcessor> asFragmentProcessor(GrContext* x, SkColorSpace* cs) const override {
+        // wish our caller would let us know if our input was opaque...
+        GrSRGBEffect::Alpha alpha = GrSRGBEffect::Alpha::kPremul;
         switch (fDir) {
             case Direction::kLinearToSRGB:
-                return GrSRGBEffect::Make(GrSRGBEffect::Mode::kLinearToSRGB);
+                return GrSRGBEffect::Make(GrSRGBEffect::Mode::kLinearToSRGB, alpha);
             case Direction::kSRGBToLinear:
-                return GrSRGBEffect::Make(GrSRGBEffect::Mode::kSRGBToLinear);
+                return GrSRGBEffect::Make(GrSRGBEffect::Mode::kSRGBToLinear, alpha);
         }
         return nullptr;
     }
@@ -228,13 +234,19 @@ public:
 
     void onAppendStages(SkRasterPipeline* p, SkColorSpace*, SkArenaAlloc* alloc,
                         bool shaderIsOpaque) const override {
+        if (!shaderIsOpaque) {
+            p->append(SkRasterPipeline::unpremul);
+        }
         switch (fDir) {
             case Direction::kLinearToSRGB:
                 p->append(SkRasterPipeline::to_srgb);
                 break;
             case Direction::kSRGBToLinear:
-                p->append_from_srgb(shaderIsOpaque ? kOpaque_SkAlphaType : kPremul_SkAlphaType);
+                p->append_from_srgb(shaderIsOpaque ? kOpaque_SkAlphaType : kUnpremul_SkAlphaType);
                 break;
+        }
+        if (!shaderIsOpaque) {
+            p->append(SkRasterPipeline::premul);
         }
     }
 

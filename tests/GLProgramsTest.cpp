@@ -83,7 +83,7 @@ private:
     }
     bool onIsEqual(const GrFragmentProcessor&) const override { return true; }
 
-    GR_DECLARE_FRAGMENT_PROCESSOR_TEST;
+    GR_DECLARE_FRAGMENT_PROCESSOR_TEST
 
     typedef GrFragmentProcessor INHERITED;
 };
@@ -283,7 +283,7 @@ bool GrDrawingManager::ProgramUnitTest(GrContext* context, int maxStages, int ma
     // dummy scissor state
     GrScissorState scissor;
 
-    SkRandom random;
+    SkRandom random(1);
     static const int NUM_TESTS = 1024;
     for (int t = 0; t < NUM_TESTS; t++) {
         // setup random render target(can fail)
