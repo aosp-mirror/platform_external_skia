@@ -378,7 +378,7 @@ bool SkGradientShaderBase::onAppendStages(SkRasterPipeline* p,
     SkRasterPipeline_<256> tPipeline;
     SkRasterPipeline_<256> postPipeline;
     if (!this->adjustMatrixAndAppendStages(alloc, &matrix, &tPipeline, &postPipeline)) {
-        return this->INHERITED::onAppendStages(p, dstCS, alloc, ctm, paint, localM);
+        return false;
     }
 
     p->append(SkRasterPipeline::seed_shader);
@@ -534,9 +534,9 @@ SkGradientShaderBase::GradientShaderBaseContext::GradientShaderBaseContext(
     const SkMatrix& inverse = this->getTotalInverse();
 
     fDstToIndex.setConcat(shader.fPtsToUnit, inverse);
+    SkASSERT(!fDstToIndex.hasPerspective());
 
     fDstToIndexProc = fDstToIndex.getMapXYProc();
-    fDstToIndexClass = (uint8_t)SkShaderBase::Context::ComputeMatrixClass(fDstToIndex);
 
     // now convert our colors in to PMColors
     unsigned paintAlpha = this->getPaintAlpha();

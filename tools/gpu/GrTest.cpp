@@ -315,10 +315,8 @@ void GrDrawingManager::testingOnly_removeOnFlushCallbackObject(GrOnFlushCallback
 
 LEGACY_MESH_DRAW_OP_TEST_EXTERN(AAFlatteningConvexPathOp);
 LEGACY_MESH_DRAW_OP_TEST_EXTERN(AnalyticRectOp);
-LEGACY_MESH_DRAW_OP_TEST_EXTERN(DashOp);
 LEGACY_MESH_DRAW_OP_TEST_EXTERN(DefaultPathOp);
 LEGACY_MESH_DRAW_OP_TEST_EXTERN(GrDrawAtlasOp);
-LEGACY_MESH_DRAW_OP_TEST_EXTERN(SmallPathOp);
 LEGACY_MESH_DRAW_OP_TEST_EXTERN(TextBlobOp);
 LEGACY_MESH_DRAW_OP_TEST_EXTERN(VerticesOp);
 
@@ -327,11 +325,14 @@ DRAW_OP_TEST_EXTERN(AAFillRectOp);
 DRAW_OP_TEST_EXTERN(AAHairlineOp);
 DRAW_OP_TEST_EXTERN(AAStrokeRectOp);
 DRAW_OP_TEST_EXTERN(CircleOp);
+DRAW_OP_TEST_EXTERN(DashOp);
 DRAW_OP_TEST_EXTERN(DIEllipseOp);
 DRAW_OP_TEST_EXTERN(EllipseOp);
 DRAW_OP_TEST_EXTERN(NonAAFillRectOp);
 DRAW_OP_TEST_EXTERN(NonAALatticeOp);
 DRAW_OP_TEST_EXTERN(NonAAStrokeRectOp);
+DRAW_OP_TEST_EXTERN(SmallPathOp);
+DRAW_OP_TEST_EXTERN(RegionOp);
 DRAW_OP_TEST_EXTERN(RRectOp);
 DRAW_OP_TEST_EXTERN(TesselatingPathOp);
 
@@ -341,10 +342,8 @@ void GrDrawRandomOp(SkRandom* random, GrRenderTargetContext* renderTargetContext
     static constexpr MakeTestLegacyMeshDrawOpFn* gLegacyFactories[] = {
         DRAW_OP_TEST_ENTRY(AAFlatteningConvexPathOp),
         DRAW_OP_TEST_ENTRY(AnalyticRectOp),
-        DRAW_OP_TEST_ENTRY(DashOp),
         DRAW_OP_TEST_ENTRY(DefaultPathOp),
         DRAW_OP_TEST_ENTRY(GrDrawAtlasOp),
-        DRAW_OP_TEST_ENTRY(SmallPathOp),
         DRAW_OP_TEST_ENTRY(TextBlobOp),
         DRAW_OP_TEST_ENTRY(VerticesOp)
     };
@@ -356,11 +355,14 @@ void GrDrawRandomOp(SkRandom* random, GrRenderTargetContext* renderTargetContext
         DRAW_OP_TEST_ENTRY(AAHairlineOp),
         DRAW_OP_TEST_ENTRY(AAStrokeRectOp),
         DRAW_OP_TEST_ENTRY(CircleOp),
+        DRAW_OP_TEST_ENTRY(DashOp),
         DRAW_OP_TEST_ENTRY(DIEllipseOp),
         DRAW_OP_TEST_ENTRY(EllipseOp),
         DRAW_OP_TEST_ENTRY(NonAAFillRectOp),
         DRAW_OP_TEST_ENTRY(NonAALatticeOp),
         DRAW_OP_TEST_ENTRY(NonAAStrokeRectOp),
+        DRAW_OP_TEST_ENTRY(SmallPathOp),
+        DRAW_OP_TEST_ENTRY(RegionOp),
         DRAW_OP_TEST_ENTRY(RRectOp),
         DRAW_OP_TEST_ENTRY(TesselatingPathOp),
     };
