@@ -423,6 +423,7 @@ cc_library {
         "src/gpu/effects/GrBicubicEffect.cpp",
         "src/gpu/effects/GrBitmapTextGeoProc.cpp",
         "src/gpu/effects/GrBlurredEdgeFragmentProcessor.cpp",
+        "src/gpu/effects/GrCircleEffect.cpp",
         "src/gpu/effects/GrConfigConversionEffect.cpp",
         "src/gpu/effects/GrConstColorProcessor.cpp",
         "src/gpu/effects/GrConvexPolyEffect.cpp",
