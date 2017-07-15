@@ -18,7 +18,6 @@
   // Legacy flags
   #define SK_IGNORE_GPU_DITHER
   #define SK_IGNORE_LINEONLY_AA_CONVEX_PATH_OPTS
-  #define SK_LEGACY_SWEEP_GRADIENT
   #define SK_SUPPORT_DEPRECATED_CLIPOPS
   #define SK_SUPPORT_LEGACY_BILERP_IGNORING_HACK
   // Needed until we fix https://bug.skia.org/2440
