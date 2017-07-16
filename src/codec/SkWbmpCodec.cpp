@@ -25,7 +25,9 @@ static inline bool valid_color_type(const SkImageInfo& dstInfo) {
     switch (dstInfo.colorType()) {
         case kRGBA_8888_SkColorType:
         case kBGRA_8888_SkColorType:
+#ifdef SK_SUPPORT_LEGACY_INDEX_8_COLORTYPE
         case kIndex_8_SkColorType:
+#endif
         case kGray_8_SkColorType:
         case kRGB_565_SkColorType:
             return true;
@@ -146,12 +148,16 @@ bool SkWbmpCodec::IsWbmp(const void* buffer, size_t bytesRead) {
     return read_header(&stream, nullptr);
 }
 
-SkCodec* SkWbmpCodec::NewFromStream(SkStream* stream) {
+SkCodec* SkWbmpCodec::NewFromStream(SkStream* stream, Result* result) {
     std::unique_ptr<SkStream> streamDeleter(stream);
     SkISize size;
     if (!read_header(stream, &size)) {
+        // This already succeeded in IsWbmp, so this stream was corrupted in/
+        // after rewind.
+        *result = kCouldNotRewind;
         return nullptr;
     }
+    *result = kSuccess;
     SkEncodedInfo info = SkEncodedInfo::Make(SkEncodedInfo::kGray_Color,
             SkEncodedInfo::kOpaque_Alpha, 1);
     return new SkWbmpCodec(size.width(), size.height(), info, streamDeleter.release());

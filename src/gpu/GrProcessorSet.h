@@ -24,6 +24,8 @@ private:
 
 public:
     GrProcessorSet(GrPaint&& paint);
+    GrProcessorSet(SkBlendMode mode);
+    GrProcessorSet(sk_sp<GrFragmentProcessor> colorFP);
 
     ~GrProcessorSet();
 
@@ -132,6 +134,7 @@ public:
 
     bool isFinalized() const { return SkToBool(kFinalized_Flag & fFlags); }
 
+    /** These are valid only for non-LCD coverage. */
     static const GrProcessorSet& EmptySet();
     static constexpr const Analysis EmptySetAnalysis() { return Analysis(Empty::kEmpty); }
 

@@ -9,6 +9,7 @@
 #include "GrAppliedClip.h"
 #include "GrCaps.h"
 #include "GrXferProcessor.h"
+#include "SkBlendModePriv.h"
 #include "effects/GrPorterDuffXferProcessor.h"
 
 const GrProcessorSet& GrProcessorSet::EmptySet() {
@@ -34,6 +35,22 @@ GrProcessorSet::GrProcessorSet(GrPaint&& paint) : fXP(paint.getXPFactory()) {
         SkDebugf("Insane number of color fragment processors in paint. Dropping all processors.");
         fColorFragmentProcessorCnt = 0;
     }
+}
+
+GrProcessorSet::GrProcessorSet(SkBlendMode mode)
+        : fXP(SkBlendMode_AsXPFactory(mode))
+        , fColorFragmentProcessorCnt(0)
+        , fFragmentProcessorOffset(0)
+        , fFlags(0) {}
+
+GrProcessorSet::GrProcessorSet(sk_sp<GrFragmentProcessor> colorFP)
+        : fFragmentProcessors(1)
+        , fXP((const GrXPFactory*)nullptr)
+        , fColorFragmentProcessorCnt(1)
+        , fFragmentProcessorOffset(0)
+        , fFlags(0) {
+    SkASSERT(colorFP);
+    fFragmentProcessors[0] = colorFP.release();
 }
 
 GrProcessorSet::~GrProcessorSet() {

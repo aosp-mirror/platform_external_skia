@@ -66,7 +66,7 @@ SkAndroidCodec::SkAndroidCodec(SkCodec* codec)
 {}
 
 SkAndroidCodec* SkAndroidCodec::NewFromStream(SkStream* stream, SkPngChunkReader* chunkReader) {
-    std::unique_ptr<SkCodec> codec(SkCodec::NewFromStream(stream, chunkReader));
+    std::unique_ptr<SkCodec> codec(SkCodec::NewFromStream(stream, nullptr, chunkReader));
     if (nullptr == codec) {
         return nullptr;
     }
@@ -110,7 +110,9 @@ SkColorType SkAndroidCodec::computeOutputColorType(SkColorType requestedColorTyp
         case kARGB_4444_SkColorType:
             return kN32_SkColorType;
         case kN32_SkColorType:
+#ifdef SK_SUPPORT_LEGACY_INDEX_8_COLORTYPE
         case kIndex_8_SkColorType:
+#endif
             break;
         case kAlpha_8_SkColorType:
             // Fall through to kGray_8.  Before kGray_8_SkColorType existed,
@@ -146,9 +148,11 @@ SkAlphaType SkAndroidCodec::computeOutputAlphaType(bool requestedUnpremul) {
 sk_sp<SkColorSpace> SkAndroidCodec::computeOutputColorSpace(SkColorType outputColorType,
                                                             sk_sp<SkColorSpace> prefColorSpace) {
     switch (outputColorType) {
+#ifdef SK_SUPPORT_LEGACY_INDEX_8_COLORTYPE
+        case kIndex_8_SkColorType:
+#endif
         case kRGBA_8888_SkColorType:
-        case kBGRA_8888_SkColorType:
-        case kIndex_8_SkColorType: {
+        case kBGRA_8888_SkColorType: {
             // If |prefColorSpace| is supported, choose it.
             SkColorSpaceTransferFn fn;
             if (prefColorSpace && prefColorSpace->isNumericalTransferFn(&fn)) {
