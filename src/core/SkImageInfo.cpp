@@ -46,24 +46,25 @@ const Stored_SkColorType gLiveToStored[] = {
     kARGB_4444_Stored_SkColorType,
     kRGBA_8888_Stored_SkColorType,
     kBGRA_8888_Stored_SkColorType,
-#ifdef SK_SUPPORT_LEGACY_INDEX_8_COLORTYPE
-    kIndex_8_Stored_SkColorType_DEPRECATED,
-#endif
     kGray_8_Stored_SkColorType,
     kRGBA_F16_Stored_SkColorType,
 };
 
 static uint8_t live_to_stored(unsigned ct) {
     static_assert(SK_ARRAY_COUNT(gLiveToStored) == (kLastEnum_SkColorType + 1), "");
-    SkASSERT(ct < SK_ARRAY_COUNT(gLiveToStored));
 
+    if (ct >= SK_ARRAY_COUNT(gLiveToStored)) {
+        ct = kUnknown_SkColorType;
+    }
     return gLiveToStored[ct];
 }
 
 static SkColorType stored_to_live(unsigned stored) {
     static_assert(SK_ARRAY_COUNT(gStoredToLive) == (kLast_Stored_SkColorType + 1), "");
-    SkASSERT(stored < SK_ARRAY_COUNT(gStoredToLive));
 
+    if (stored >= SK_ARRAY_COUNT(gStoredToLive)) {
+        stored = kUnknown_Stored_SkColorType;
+    }
     return gStoredToLive[stored];
 }
 
@@ -90,7 +91,7 @@ void SkImageInfo::unflatten(SkReadBuffer& buffer) {
     fHeight = buffer.read32();
 
     uint32_t packed = buffer.read32();
-    fColorType = stored_to_live((SkColorType)((packed >> 0) & kColorTypeMask));
+    fColorType = stored_to_live((packed >> 0) & kColorTypeMask);
     fAlphaType = (SkAlphaType)((packed >> 8) & kAlphaTypeMask);
     buffer.validate(alpha_type_is_valid(fAlphaType) && color_type_is_valid(fColorType));
 
@@ -131,9 +132,6 @@ bool SkColorTypeValidateAlphaType(SkColorType colorType, SkAlphaType alphaType,
                 alphaType = kPremul_SkAlphaType;
             }
             // fall-through
-#ifdef SK_SUPPORT_LEGACY_INDEX_8_COLORTYPE
-        case kIndex_8_SkColorType:
-#endif
         case kARGB_4444_SkColorType:
         case kRGBA_8888_SkColorType:
         case kBGRA_8888_SkColorType:
