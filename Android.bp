@@ -510,7 +510,6 @@ cc_library {
         "src/gpu/ops/GrAAHairLinePathRenderer.cpp",
         "src/gpu/ops/GrAALinearizingConvexPathRenderer.cpp",
         "src/gpu/ops/GrAAStrokeRectOp.cpp",
-        "src/gpu/ops/GrAnalyticRectOp.cpp",
         "src/gpu/ops/GrAtlasTextOp.cpp",
         "src/gpu/ops/GrClearOp.cpp",
         "src/gpu/ops/GrCopySurfaceOp.cpp",
@@ -904,6 +903,7 @@ cc_test {
         "tools/flags/",
         "tools/gpu/",
         "tools/timer/",
+        "tools/trace/",
     ],
 
     srcs: [
@@ -1596,6 +1596,7 @@ cc_test {
         "tools/sk_tool_utils.cpp",
         "tools/sk_tool_utils_font.cpp",
         "tools/timer/Timer.cpp",
+        "tools/trace/SkDebugfTracer.cpp",
     ],
 
     shared_libs: [
@@ -1679,6 +1680,7 @@ cc_test {
         "tools/flags/",
         "tools/gpu/",
         "tools/timer/",
+        "tools/trace/",
     ],
 
     srcs: [
@@ -2175,6 +2177,7 @@ cc_test {
         "tools/sk_tool_utils.cpp",
         "tools/sk_tool_utils_font.cpp",
         "tools/timer/Timer.cpp",
+        "tools/trace/SkDebugfTracer.cpp",
     ],
 
     shared_libs: [
