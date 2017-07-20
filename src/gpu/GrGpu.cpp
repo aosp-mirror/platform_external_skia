@@ -23,6 +23,7 @@
 #include "GrStencilSettings.h"
 #include "GrSurfacePriv.h"
 #include "GrTexturePriv.h"
+#include "GrTracing.h"
 #include "SkMathPriv.h"
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -131,6 +132,7 @@ static bool check_texture_creation_params(const GrCaps& caps, const GrSurfaceDes
 
 sk_sp<GrTexture> GrGpu::createTexture(const GrSurfaceDesc& origDesc, SkBudgeted budgeted,
                                       const GrMipLevel texels[], int mipLevelCount) {
+    GR_CREATE_TRACE_MARKER_CONTEXT("GrGpu", "createTexture", fContext);
     GrSurfaceDesc desc = origDesc;
 
     const GrCaps* caps = this->caps();
@@ -141,7 +143,7 @@ sk_sp<GrTexture> GrGpu::createTexture(const GrSurfaceDesc& origDesc, SkBudgeted 
         return nullptr;
     }
 
-    desc.fSampleCnt = SkTMin(desc.fSampleCnt, caps->maxSampleCount());
+    desc.fSampleCnt = caps->getSampleCount(desc.fSampleCnt, desc.fConfig);
     // Attempt to catch un- or wrongly initialized sample counts.
     SkASSERT(desc.fSampleCnt >= 0 && desc.fSampleCnt <= 64);
 
@@ -251,6 +253,7 @@ bool GrGpu::copySurface(GrSurface* dst,
                         GrSurface* src,
                         const SkIRect& srcRect,
                         const SkIPoint& dstPoint) {
+    GR_CREATE_TRACE_MARKER_CONTEXT("GrGpu", "copySurface", fContext);
     SkASSERT(dst && src);
     this->handleDirtyContext();
     // We don't allow conversion between integer configs and float/fixed configs.

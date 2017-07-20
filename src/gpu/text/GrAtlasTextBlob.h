@@ -24,7 +24,6 @@
 class GrBlobRegenHelper;
 struct GrDistanceFieldAdjustTable;
 class GrMemoryPool;
-class GrLegacyMeshDrawOp;
 class SkDrawFilter;
 class SkTextBlob;
 class SkTextBlobRunIterator;
@@ -271,10 +270,11 @@ public:
 
     ////////////////////////////////////////////////////////////////////////////////////////////////
     // Internal test methods
-    std::unique_ptr<GrLegacyMeshDrawOp> test_makeOp(
-            int glyphCount, int run, int subRun, const SkMatrix& viewMatrix, SkScalar x, SkScalar y,
-            const GrTextUtils::Paint& paint, const SkSurfaceProps& props,
-            const GrDistanceFieldAdjustTable* distanceAdjustTable, GrAtlasGlyphCache* cache);
+    std::unique_ptr<GrDrawOp> test_makeOp(int glyphCount, int run, int subRun,
+                                          const SkMatrix& viewMatrix, SkScalar x, SkScalar y,
+                                          const GrTextUtils::Paint&, const SkSurfaceProps&,
+                                          const GrDistanceFieldAdjustTable*, GrAtlasGlyphCache*,
+                                          GrRenderTargetContext*);
 
 private:
     GrAtlasTextBlob()
@@ -497,11 +497,12 @@ private:
                    Run* run, Run::SubRunInfo* info, SkAutoGlyphCache*, int glyphCount,
                    size_t vertexStride, GrColor color, SkScalar transX, SkScalar transY) const;
 
-    inline std::unique_ptr<GrLegacyMeshDrawOp> makeOp(
-            const Run::SubRunInfo& info, int glyphCount, int run, int subRun,
-            const SkMatrix& viewMatrix, SkScalar x, SkScalar y, const GrTextUtils::Paint& paint,
-            const SkSurfaceProps& props, const GrDistanceFieldAdjustTable* distanceAdjustTable,
-            bool useGammaCorrectDistanceTable, GrAtlasGlyphCache* cache);
+    inline std::unique_ptr<GrDrawOp> makeOp(const Run::SubRunInfo& info, int glyphCount, int run,
+                                            int subRun, const SkMatrix& viewMatrix, SkScalar x,
+                                            SkScalar y, const GrTextUtils::Paint& paint,
+                                            const SkSurfaceProps& props,
+                                            const GrDistanceFieldAdjustTable* distanceAdjustTable,
+                                            GrAtlasGlyphCache* cache, GrRenderTargetContext*);
 
     struct BigGlyph {
         BigGlyph(const SkPath& path, SkScalar vx, SkScalar vy, SkScalar scale, bool treatAsBMP)

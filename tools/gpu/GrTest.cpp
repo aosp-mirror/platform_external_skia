@@ -14,7 +14,6 @@
 #include "GrDrawingManager.h"
 #include "GrGpu.h"
 #include "GrGpuResourceCacheAccess.h"
-#include "GrPipelineBuilder.h"
 #include "GrRenderTargetContext.h"
 #include "GrRenderTargetContextPriv.h"
 #include "GrRenderTargetProxy.h"
@@ -246,30 +245,6 @@ int GrResourceCache::countUniqueKeysWithTag(const char* tag) const {
 #define ASSERT_SINGLE_OWNER \
     SkDEBUGCODE(GrSingleOwner::AutoEnforce debug_SingleOwner(fRenderTargetContext->singleOwner());)
 
-uint32_t GrRenderTargetContextPriv::testingOnly_addLegacyMeshDrawOp(
-        GrPaint&& paint,
-        GrAAType aaType,
-        std::unique_ptr<GrLegacyMeshDrawOp> op,
-        const GrUserStencilSettings* uss,
-        bool snapToCenters) {
-    ASSERT_SINGLE_OWNER
-    if (fRenderTargetContext->drawingManager()->wasAbandoned()) {
-        return SK_InvalidUniqueID;
-    }
-    SkDEBUGCODE(fRenderTargetContext->validate());
-    GR_AUDIT_TRAIL_AUTO_FRAME(fRenderTargetContext->fAuditTrail,
-                              "GrRenderTargetContext::testingOnly_addLegacyMeshDrawOp");
-
-    GrPipelineBuilder pipelineBuilder(std::move(paint), aaType);
-    if (uss) {
-        pipelineBuilder.setUserStencil(uss);
-    }
-    pipelineBuilder.setSnapVerticesToPixelCenters(snapToCenters);
-
-    return fRenderTargetContext->addLegacyMeshDrawOp(std::move(pipelineBuilder), GrNoClip(),
-                                                     std::move(op));
-}
-
 uint32_t GrRenderTargetContextPriv::testingOnly_addDrawOp(std::unique_ptr<GrDrawOp> op) {
     ASSERT_SINGLE_OWNER
     if (fRenderTargetContext->drawingManager()->wasAbandoned()) {
@@ -307,14 +282,7 @@ void GrDrawingManager::testingOnly_removeOnFlushCallbackObject(GrOnFlushCallback
 
 #define DRAW_OP_TEST_EXTERN(Op) \
     extern std::unique_ptr<GrDrawOp> Op##__Test(GrPaint&&, SkRandom*, GrContext*, GrFSAAType)
-
-#define LEGACY_MESH_DRAW_OP_TEST_EXTERN(Op) \
-    extern std::unique_ptr<GrLegacyMeshDrawOp> Op##__Test(SkRandom*, GrContext*)
-
 #define DRAW_OP_TEST_ENTRY(Op) Op##__Test
-
-LEGACY_MESH_DRAW_OP_TEST_EXTERN(AnalyticRectOp);
-LEGACY_MESH_DRAW_OP_TEST_EXTERN(TextBlobOp);
 
 DRAW_OP_TEST_EXTERN(AAConvexPathOp);
 DRAW_OP_TEST_EXTERN(AAFillRectOp);
@@ -326,6 +294,7 @@ DRAW_OP_TEST_EXTERN(DashOp);
 DRAW_OP_TEST_EXTERN(DefaultPathOp);
 DRAW_OP_TEST_EXTERN(DIEllipseOp);
 DRAW_OP_TEST_EXTERN(EllipseOp);
+DRAW_OP_TEST_EXTERN(GrAtlasTextOp);
 DRAW_OP_TEST_EXTERN(GrDrawAtlasOp);
 DRAW_OP_TEST_EXTERN(GrDrawVerticesOp);
 DRAW_OP_TEST_EXTERN(NonAAFillRectOp);
@@ -339,12 +308,6 @@ DRAW_OP_TEST_EXTERN(TesselatingPathOp);
 
 void GrDrawRandomOp(SkRandom* random, GrRenderTargetContext* renderTargetContext, GrPaint&& paint) {
     GrContext* context = renderTargetContext->surfPriv().getContext();
-    using MakeTestLegacyMeshDrawOpFn = std::unique_ptr<GrLegacyMeshDrawOp>(SkRandom*, GrContext*);
-    static constexpr MakeTestLegacyMeshDrawOpFn* gLegacyFactories[] = {
-        DRAW_OP_TEST_ENTRY(AnalyticRectOp),
-        DRAW_OP_TEST_ENTRY(TextBlobOp),
-    };
-
     using MakeDrawOpFn = std::unique_ptr<GrDrawOp>(GrPaint&&, SkRandom*, GrContext*, GrFSAAType);
     static constexpr MakeDrawOpFn* gFactories[] = {
         DRAW_OP_TEST_ENTRY(AAConvexPathOp),
@@ -357,6 +320,7 @@ void GrDrawRandomOp(SkRandom* random, GrRenderTargetContext* renderTargetContext
         DRAW_OP_TEST_ENTRY(DefaultPathOp),
         DRAW_OP_TEST_ENTRY(DIEllipseOp),
         DRAW_OP_TEST_ENTRY(EllipseOp),
+        DRAW_OP_TEST_ENTRY(GrAtlasTextOp),
         DRAW_OP_TEST_ENTRY(GrDrawAtlasOp),
         DRAW_OP_TEST_ENTRY(GrDrawVerticesOp),
         DRAW_OP_TEST_ENTRY(NonAAFillRectOp),
@@ -369,24 +333,10 @@ void GrDrawRandomOp(SkRandom* random, GrRenderTargetContext* renderTargetContext
         DRAW_OP_TEST_ENTRY(TesselatingPathOp),
     };
 
-    static constexpr size_t kTotal = SK_ARRAY_COUNT(gLegacyFactories) + SK_ARRAY_COUNT(gFactories);
-
+    static constexpr size_t kTotal = SK_ARRAY_COUNT(gFactories);
     uint32_t index = random->nextULessThan(static_cast<uint32_t>(kTotal));
-    if (index < SK_ARRAY_COUNT(gLegacyFactories)) {
-        const GrUserStencilSettings* uss = GrGetRandomStencil(random, context);
-        // We don't use kHW because we will hit an assertion if the render target is not
-        // multisampled
-        static constexpr GrAAType kAATypes[] = {GrAAType::kNone, GrAAType::kCoverage};
-        GrAAType aaType = kAATypes[random->nextULessThan(SK_ARRAY_COUNT(kAATypes))];
-        bool snapToCenters = random->nextBool();
-        auto op = gLegacyFactories[index](random, context);
-        SkASSERT(op);
-        renderTargetContext->priv().testingOnly_addLegacyMeshDrawOp(
-                std::move(paint), aaType, std::move(op), uss, snapToCenters);
-    } else {
-        auto op = gFactories[index - SK_ARRAY_COUNT(gLegacyFactories)](
-                std::move(paint), random, context, renderTargetContext->fsaaType());
-        SkASSERT(op);
-        renderTargetContext->priv().testingOnly_addDrawOp(std::move(op));
-    }
+    auto op = gFactories[index](
+            std::move(paint), random, context, renderTargetContext->fsaaType());
+    SkASSERT(op);
+    renderTargetContext->priv().testingOnly_addDrawOp(std::move(op));
 }

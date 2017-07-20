@@ -148,6 +148,8 @@ def nanobench_flags(api, bot):
     match.append('~text_16_LCD_BK')
     match.append('~text_16_LCD_FF')
     match.append('~text_16_LCD_WT')
+    # skia:6863
+    match.append('~desk_skbug6850overlay2')
   if ('Intel' in bot and api.vars.is_linux and not 'Vulkan' in bot):
     # TODO(dogben): Track down what's causing bots to die.
     verbose = True
@@ -266,6 +268,7 @@ def perf_steps(api):
       '~blur_image_filter',
       '~blur_0.01',
       '~GM_animated-image-blurs',
+      '~blendmode_mask_',
     ])
 
   if api.vars.upload_perf_results:
