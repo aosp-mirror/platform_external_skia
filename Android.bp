@@ -1590,7 +1590,9 @@ cc_test {
         "tools/sk_tool_utils.cpp",
         "tools/sk_tool_utils_font.cpp",
         "tools/timer/Timer.cpp",
+        "tools/trace/SkChromeTracingTracer.cpp",
         "tools/trace/SkDebugfTracer.cpp",
+        "tools/trace/SkEventTracingPriv.cpp",
     ],
 
     shared_libs: [
@@ -2169,7 +2171,9 @@ cc_test {
         "tools/sk_tool_utils.cpp",
         "tools/sk_tool_utils_font.cpp",
         "tools/timer/Timer.cpp",
+        "tools/trace/SkChromeTracingTracer.cpp",
         "tools/trace/SkDebugfTracer.cpp",
+        "tools/trace/SkEventTracingPriv.cpp",
     ],
 
     shared_libs: [
