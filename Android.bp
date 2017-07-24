@@ -295,7 +295,6 @@ cc_library {
         "src/effects/Sk1DPathEffect.cpp",
         "src/effects/Sk2DPathEffect.cpp",
         "src/effects/SkAlphaThresholdFilter.cpp",
-        "src/effects/SkArcToPathEffect.cpp",
         "src/effects/SkArithmeticImageFilter.cpp",
         "src/effects/SkBlurMask.cpp",
         "src/effects/SkBlurMaskFilter.cpp",
