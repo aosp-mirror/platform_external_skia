@@ -5,10 +5,12 @@
  * found in the LICENSE file.
  */
 
+#include "SkEventTracingPriv.h"
 #include "SkImage.h"
 #include "SkOSFile.h"
 #include "SkPictureRecorder.h"
 #include "SkPngEncoder.h"
+#include "SkTraceEvent.h"
 #include "ProcStats.h"
 #include "Timer.h"
 #include "ok.h"
@@ -41,6 +43,7 @@ struct ViaPic : Dst {
     }
 
     Status draw(Src* src) override {
+        TRACE_EVENT0("ok", TRACE_FUNC);
         SkRTreeFactory factory;
         SkPictureRecorder rec;
         rec.beginRecording(SkRect::MakeSize(SkSize::Make(src->size())),
@@ -75,6 +78,7 @@ struct Png : Dst {
     }
 
     Status draw(Src* src) override {
+        TRACE_EVENT0("ok", TRACE_FUNC);
         for (auto status = target->draw(src); status != Status::OK; ) {
             return status;
         }
@@ -186,3 +190,28 @@ struct Memory : Dst {
     }
 };
 static Register memory{"memory", "print process maximum memory usage", Memory::Create};
+
+static SkOnce init_tracing_once;
+struct Trace : Dst {
+    std::unique_ptr<Dst> target;
+    std::string trace_mode;
+
+    static std::unique_ptr<Dst> Create(Options options, std::unique_ptr<Dst> dst) {
+        Trace via;
+        via.target = std::move(dst);
+        via.trace_mode = options("mode", "trace.json");
+        return move_unique(via);
+    }
+
+    Status draw(Src* src) override {
+        init_tracing_once([&] { initializeEventTracingForTools(trace_mode.c_str()); });
+        return target->draw(src);
+    }
+
+    sk_sp<SkImage> image() override {
+        return target->image();
+    }
+};
+static Register trace {"trace",
+                       "enable tracing in mode=atrace, mode=debugf, or mode=trace.json",
+                       Trace::Create};
