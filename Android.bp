@@ -329,6 +329,7 @@ cc_library {
         "src/effects/SkTableColorFilter.cpp",
         "src/effects/SkTableMaskFilter.cpp",
         "src/effects/SkTileImageFilter.cpp",
+        "src/effects/SkToSRGBColorFilter.cpp",
         "src/effects/SkXfermodeImageFilter.cpp",
         "src/fonts/SkRandomScalerContext.cpp",
         "src/fonts/SkTestScalerContext.cpp",
