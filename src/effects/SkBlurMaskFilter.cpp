@@ -807,6 +807,11 @@ public:
                                                                std::move(blurProfile), precision));
     }
 
+    sk_sp<GrFragmentProcessor> clone() const override {
+        return sk_sp<GrFragmentProcessor>(new GrRectBlurEffect(
+                fRect, fSigma, sk_ref_sp(fBlurProfileSampler.proxy()), fPrecision));
+    }
+
     const SkRect& getRect() const { return fRect; }
     float getSigma() const { return fSigma; }
     GrSLPrecision precision() const { return fPrecision; }
@@ -950,7 +955,8 @@ sk_sp<GrTextureProxy> GrRectBlurEffect::CreateBlurProfileTexture(
     builder[0] = profileSize;
     builder.finish();
 
-    sk_sp<GrTextureProxy> blurProfile(resourceProvider->findProxyByUniqueKey(key));
+    sk_sp<GrTextureProxy> blurProfile(resourceProvider->findProxyByUniqueKey(
+                                                                  key, kTopLeft_GrSurfaceOrigin));
     if (!blurProfile) {
         GrSurfaceDesc texDesc;
         texDesc.fOrigin = kTopLeft_GrSurfaceOrigin;
@@ -1080,6 +1086,8 @@ public:
     const SkRRect& getRRect() const { return fRRect; }
     float getSigma() const { return fSigma; }
 
+    sk_sp<GrFragmentProcessor> clone() const override;
+
 private:
     GrGLSLFragmentProcessor* onCreateGLSLInstance() const override;
 
@@ -1118,7 +1126,8 @@ static sk_sp<GrTextureProxy> find_or_create_rrect_blur_mask(GrContext* context,
     }
     builder.finish();
 
-    sk_sp<GrTextureProxy> mask(context->resourceProvider()->findProxyByUniqueKey(key));
+    sk_sp<GrTextureProxy> mask(context->resourceProvider()->findProxyByUniqueKey(
+                                                                key, kBottomLeft_GrSurfaceOrigin));
     if (!mask) {
         // TODO: this could be approx but the texture coords will need to be updated
         sk_sp<GrRenderTargetContext> rtc(context->makeDeferredRenderTargetContextWithFallback(
@@ -1212,6 +1221,11 @@ GrRRectBlurEffect::GrRRectBlurEffect(float sigma, const SkRRect& rrect,
         , fNinePatchSampler(std::move(ninePatchProxy)) {
     this->initClassID<GrRRectBlurEffect>();
     this->addTextureSampler(&fNinePatchSampler);
+}
+
+sk_sp<GrFragmentProcessor> GrRRectBlurEffect::clone() const {
+    return sk_sp<GrFragmentProcessor>(
+            new GrRRectBlurEffect(fSigma, fRRect, sk_ref_sp(fNinePatchSampler.proxy())));
 }
 
 bool GrRRectBlurEffect::onIsEqual(const GrFragmentProcessor& other) const {
