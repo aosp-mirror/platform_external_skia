@@ -413,7 +413,6 @@ cc_library {
         "src/gpu/GrTextureProducer.cpp",
         "src/gpu/GrTextureProxy.cpp",
         "src/gpu/GrTextureRenderTargetProxy.cpp",
-        "src/gpu/GrTraceMarker.cpp",
         "src/gpu/GrXferProcessor.cpp",
         "src/gpu/GrYUVProvider.cpp",
         "src/gpu/SkGpuDevice.cpp",
