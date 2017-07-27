@@ -230,12 +230,16 @@ GrTextureDomainEffect::GrTextureDomainEffect(sk_sp<GrTextureProxy> proxy,
                                              const SkRect& domain,
                                              GrTextureDomain::Mode mode,
                                              GrSamplerParams::FilterMode filterMode)
-    : GrSingleTextureEffect(OptFlags(proxy->config(), mode), proxy,
-                            std::move(colorSpaceXform), matrix, filterMode)
-    , fTextureDomain(proxy.get(), domain, mode) {
+        : INHERITED(OptFlags(proxy->config(), mode))
+        , fCoordTransform(matrix, proxy.get())
+        , fTextureDomain(proxy.get(), domain, mode)
+        , fTextureSampler(std::move(proxy), filterMode)
+        , fColorSpaceXform(std::move(colorSpaceXform)) {
     SkASSERT(mode != GrTextureDomain::kRepeat_Mode ||
              filterMode == GrSamplerParams::kNone_FilterMode);
     this->initClassID<GrTextureDomainEffect>();
+    this->addCoordTransform(&fCoordTransform);
+    this->addTextureSampler(&fTextureSampler);
 }
 
 void GrTextureDomainEffect::onGetGLSLProcessorKey(const GrShaderCaps& caps,
@@ -344,6 +348,20 @@ GrDeviceSpaceTextureDecalFragmentProcessor::GrDeviceSpaceTextureDecalFragmentPro
     this->initClassID<GrDeviceSpaceTextureDecalFragmentProcessor>();
 }
 
+GrDeviceSpaceTextureDecalFragmentProcessor::GrDeviceSpaceTextureDecalFragmentProcessor(
+        const GrDeviceSpaceTextureDecalFragmentProcessor& that)
+        : INHERITED(kCompatibleWithCoverageAsAlpha_OptimizationFlag)
+        , fTextureSampler(that.fTextureSampler)
+        , fTextureDomain(that.fTextureDomain)
+        , fDeviceSpaceOffset(that.fDeviceSpaceOffset) {
+    this->initClassID<GrDeviceSpaceTextureDecalFragmentProcessor>();
+    this->addTextureSampler(&fTextureSampler);
+}
+
+sk_sp<GrFragmentProcessor> GrDeviceSpaceTextureDecalFragmentProcessor::clone() const {
+    return sk_sp<GrFragmentProcessor>(new GrDeviceSpaceTextureDecalFragmentProcessor(*this));
+}
+
 GrGLSLFragmentProcessor* GrDeviceSpaceTextureDecalFragmentProcessor::onCreateGLSLInstance() const  {
     class GLSLProcessor : public GrGLSLFragmentProcessor {
     public:
@@ -402,7 +420,7 @@ bool GrDeviceSpaceTextureDecalFragmentProcessor::onIsEqual(const GrFragmentProce
     const GrDeviceSpaceTextureDecalFragmentProcessor& dstdfp =
             fp.cast<GrDeviceSpaceTextureDecalFragmentProcessor>();
     return dstdfp.fTextureSampler.proxy()->underlyingUniqueID() ==
-                                                fTextureSampler.proxy()->underlyingUniqueID() &&
+                   fTextureSampler.proxy()->underlyingUniqueID() &&
            dstdfp.fDeviceSpaceOffset == fDeviceSpaceOffset &&
            dstdfp.fTextureDomain == fTextureDomain;
 }

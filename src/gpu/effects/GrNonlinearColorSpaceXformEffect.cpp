@@ -88,9 +88,8 @@ public:
 
         // 3: Apply gamut matrix
         if (gamutXformName) {
-            // Color is unpremultiplied at this point, so clamp to [0, 1]
             fragBuilder->codeAppendf(
-                "color.rgb = clamp((%s * vec4(color.rgb, 1.0)).rgb, 0.0, 1.0);", gamutXformName);
+                "color.rgb = (%s * vec4(color.rgb, 1.0)).rgb;", gamutXformName);
         }
 
         // 4: Apply dst transfer fn
@@ -162,6 +161,20 @@ GrNonlinearColorSpaceXformEffect::GrNonlinearColorSpaceXformEffect(
     fDstTransferFnCoeffs[4] = dstTransferFn.fE;
     fDstTransferFnCoeffs[5] = dstTransferFn.fF;
     fDstTransferFnCoeffs[6] = dstTransferFn.fG;
+}
+
+GrNonlinearColorSpaceXformEffect::GrNonlinearColorSpaceXformEffect(
+        const GrNonlinearColorSpaceXformEffect& that)
+        : INHERITED(kPreservesOpaqueInput_OptimizationFlag)
+        , fGamutXform(that.fGamutXform)
+        , fOps(that.fOps) {
+    this->initClassID<GrNonlinearColorSpaceXformEffect>();
+    memcpy(fSrcTransferFnCoeffs, that.fSrcTransferFnCoeffs, sizeof(fSrcTransferFnCoeffs));
+    memcpy(fDstTransferFnCoeffs, that.fDstTransferFnCoeffs, sizeof(fDstTransferFnCoeffs));
+}
+
+sk_sp<GrFragmentProcessor> GrNonlinearColorSpaceXformEffect::clone() const {
+    return sk_sp<GrFragmentProcessor>(new GrNonlinearColorSpaceXformEffect(*this));
 }
 
 bool GrNonlinearColorSpaceXformEffect::onIsEqual(const GrFragmentProcessor& s) const {

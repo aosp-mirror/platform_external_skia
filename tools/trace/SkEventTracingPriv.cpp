@@ -12,7 +12,7 @@
 #include "SkCommandLineFlags.h"
 #include "SkDebugfTracer.h"
 #include "SkEventTracer.h"
-#include "SkTraceEventCommon.h"
+#include "SkTraceEvent.h"
 
 DEFINE_string(trace, "",
               "Log trace events in one of several modes:\n"
@@ -21,6 +21,10 @@ DEFINE_string(trace, "",
               "  <filename> : Any other string is interpreted as a filename. Writes\n"
               "               trace events to specified file as JSON, for viewing\n"
               "               with chrome://tracing");
+
+DEFINE_string(traceMatch, "",
+              "Filter which categories are traced.\n"
+              "Uses same format as --match\n");
 
 void initializeEventTracingForTools(const char* traceFlag) {
     if (!traceFlag) {
@@ -45,9 +49,9 @@ void initializeEventTracingForTools(const char* traceFlag) {
 uint8_t* SkEventTracingCategories::getCategoryGroupEnabled(const char* name) {
     static_assert(0 == offsetof(CategoryState, fEnabled), "CategoryState");
 
-    // We ignore the "disabled-by-default-" prefix in our internal tools (though we could honor it)
-    if (SkStrStartsWith(name, TRACE_DISABLED_BY_DEFAULT_PREFIX)) {
-        name += strlen(TRACE_DISABLED_BY_DEFAULT_PREFIX);
+    // We ignore the "disabled-by-default-" prefix in our internal tools
+    if (SkStrStartsWith(name, TRACE_CATEGORY_PREFIX)) {
+        name += strlen(TRACE_CATEGORY_PREFIX);
     }
 
     // Chrome's implementation of this API does a two-phase lookup (once without a lock, then again
@@ -65,8 +69,9 @@ uint8_t* SkEventTracingCategories::getCategoryGroupEnabled(const char* name) {
         return reinterpret_cast<uint8_t*>(&fCategories[0]);
     }
 
-    fCategories[fNumCategories].fEnabled =
-            SkEventTracer::kEnabledForRecording_CategoryGroupEnabledFlags;
+    fCategories[fNumCategories].fEnabled = SkCommandLineFlags::ShouldSkip(FLAGS_traceMatch, name)
+            ? 0 : SkEventTracer::kEnabledForRecording_CategoryGroupEnabledFlags;
+
     fCategories[fNumCategories].fName = name;
     return reinterpret_cast<uint8_t*>(&fCategories[fNumCategories++]);
 }

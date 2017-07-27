@@ -123,8 +123,7 @@ std::unique_ptr<SkCodec> SkCodec::MakeFromData(sk_sp<SkData> data, SkPngChunkRea
     if (!data) {
         return nullptr;
     }
-    return MakeFromStream(std::unique_ptr<SkStream>(new SkMemoryStream(std::move(data))),
-                                                    nullptr, reader);
+    return MakeFromStream(SkMemoryStream::Make(std::move(data)), nullptr, reader);
 }
 
 SkCodec::SkCodec(int width, int height, const SkEncodedInfo& info,
@@ -618,12 +617,3 @@ std::vector<SkCodec::FrameInfo> SkCodec::getFrameInfo() {
     }
     return result;
 }
-
-#ifdef SK_SUPPORT_LEGACY_CODEC_NEW
-SkCodec* SkCodec::NewFromStream(SkStream* str, Result* res, SkPngChunkReader* chunk) {
-    return MakeFromStream(std::unique_ptr<SkStream>(str), res, chunk).release();
-}
-SkCodec* SkCodec::NewFromData(sk_sp<SkData> data, SkPngChunkReader* chunk) {
-    return MakeFromData(std::move(data), chunk).release();
-}
-#endif

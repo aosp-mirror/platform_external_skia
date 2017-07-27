@@ -8,7 +8,9 @@
 #ifndef GrTextureDomainEffect_DEFINED
 #define GrTextureDomainEffect_DEFINED
 
-#include "GrSingleTextureEffect.h"
+#include "GrCoordTransform.h"
+#include "GrFragmentProcessor.h"
+#include "GrColorSpaceXform.h"
 #include "glsl/GrGLSLFragmentProcessor.h"
 #include "glsl/GrGLSLProgramDataManager.h"
 
@@ -149,8 +151,7 @@ protected:
 /**
  * A basic texture effect that uses GrTextureDomain.
  */
-class GrTextureDomainEffect : public GrSingleTextureEffect {
-
+class GrTextureDomainEffect : public GrFragmentProcessor {
 public:
     static sk_sp<GrFragmentProcessor> Make(sk_sp<GrTextureProxy>,
                                            sk_sp<GrColorSpaceXform>,
@@ -171,7 +172,10 @@ public:
     }
 
 private:
+    GrCoordTransform fCoordTransform;
     GrTextureDomain fTextureDomain;
+    TextureSampler fTextureSampler;
+    sk_sp<GrColorSpaceXform> fColorSpaceXform;
 
     GrTextureDomainEffect(sk_sp<GrTextureProxy>,
                           sk_sp<GrColorSpaceXform>,
@@ -188,9 +192,11 @@ private:
 
     bool onIsEqual(const GrFragmentProcessor&) const override;
 
+    const GrColorSpaceXform* colorSpaceXform() const { return fColorSpaceXform.get(); }
+
     GR_DECLARE_FRAGMENT_PROCESSOR_TEST
 
-    typedef GrSingleTextureEffect INHERITED;
+    typedef GrFragmentProcessor INHERITED;
 };
 
 class GrDeviceSpaceTextureDecalFragmentProcessor : public GrFragmentProcessor {
@@ -211,6 +217,8 @@ public:
         return str;
     }
 
+    sk_sp<GrFragmentProcessor> clone() const override;
+
 private:
     TextureSampler fTextureSampler;
     GrTextureDomain fTextureDomain;
@@ -218,6 +226,7 @@ private:
 
     GrDeviceSpaceTextureDecalFragmentProcessor(sk_sp<GrTextureProxy>,
                                                const SkIRect&, const SkIPoint&);
+    GrDeviceSpaceTextureDecalFragmentProcessor(const GrDeviceSpaceTextureDecalFragmentProcessor&);
 
     GrGLSLFragmentProcessor* onCreateGLSLInstance() const override;
 

@@ -13,7 +13,6 @@
 #include "SkMakeUnique.h"
 #include "SkString.h"
 #include "SkOSFile.h"
-#include "SkTraceEvent.h"
 #include "SkTypes.h"
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -273,6 +272,18 @@ SkMemoryStream::SkMemoryStream(sk_sp<SkData> data) : fData(std::move(data)) {
         fData = SkData::MakeEmpty();
     }
     fOffset = 0;
+}
+
+std::unique_ptr<SkMemoryStream> SkMemoryStream::MakeCopy(const void* data, size_t length) {
+    return skstd::make_unique<SkMemoryStream>(data, length, true);
+}
+
+std::unique_ptr<SkMemoryStream> SkMemoryStream::MakeDirect(const void* data, size_t length) {
+    return skstd::make_unique<SkMemoryStream>(data, length, false);
+}
+
+std::unique_ptr<SkMemoryStream> SkMemoryStream::Make(sk_sp<SkData> data) {
+    return skstd::make_unique<SkMemoryStream>(std::move(data));
 }
 
 void SkMemoryStream::setMemoryOwned(const void* src, size_t size) {
@@ -663,7 +674,6 @@ public:
         , fSize(size) , fOffset(0), fCurrentOffset(0) { }
 
     size_t read(void* buffer, size_t rawCount) override {
-        TRACE_EVENT0("skia-dynamic-memory-stream", "SkBlockMemoryStream::read");
         size_t count = rawCount;
         if (fOffset + count > fSize) {
             count = fSize - fOffset;
