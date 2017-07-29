@@ -27,10 +27,21 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ImageStorageLoad, reporter, ctxInfo) {
 
         const char* name() const override { return "Image Load Test FP"; }
 
+        sk_sp<GrFragmentProcessor> clone() const override {
+            return sk_sp<GrFragmentProcessor>(new TestFP(*this));
+        }
+
     private:
         TestFP(sk_sp<GrTextureProxy> proxy, GrSLMemoryModel mm, GrSLRestrict restrict)
                 : INHERITED(kNone_OptimizationFlags)
                 , fImageStorageAccess(std::move(proxy), kRead_GrIOType, mm, restrict) {
+            this->initClassID<TestFP>();
+            this->addImageStorageAccess(&fImageStorageAccess);
+        }
+
+        explicit TestFP(const TestFP& that)
+                : INHERITED(that.optimizationFlags())
+                , fImageStorageAccess(that.fImageStorageAccess) {
             this->initClassID<TestFP>();
             this->addImageStorageAccess(&fImageStorageAccess);
         }
@@ -47,21 +58,21 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ImageStorageLoad, reporter, ctxInfo) {
                     const TestFP& tfp = args.fFp.cast<TestFP>();
                     GrGLSLFPFragmentBuilder* fb = args.fFragBuilder;
                     SkString imageLoadStr;
-                    fb->codeAppend("highp vec2 coord = sk_FragCoord.xy;");
+                    fb->codeAppend("highp float2 coord = sk_FragCoord.xy;");
                     fb->appendImageStorageLoad(&imageLoadStr, args.fImageStorages[0],
-                                               "ivec2(coord)");
+                                               "int2(coord)");
                     if (GrPixelConfigIsSint(tfp.fImageStorageAccess.peekTexture()->config())) {
                         // Map the signed bytes so that when then get read back as unorm values they
                         // will have their original bit pattern.
-                        fb->codeAppendf("highp ivec4 ivals = %s;", imageLoadStr.c_str());
+                        fb->codeAppendf("highp int4 ivals = %s;", imageLoadStr.c_str());
                         // NV gives a linker error for this:
                         // fb->codeAppend("ivals +=
-                        //                "mix(ivec4(0), ivec4(256), lessThan(ivals, ivec4(0)));");
+                        //                "mix(int4(0), int4(256), lessThan(ivals, int4(0)));");
                         fb->codeAppend("if (ivals.r < 0) { ivals.r += 256; }");
                         fb->codeAppend("if (ivals.g < 0) { ivals.g += 256; }");
                         fb->codeAppend("if (ivals.b < 0) { ivals.b += 256; }");
                         fb->codeAppend("if (ivals.a < 0) { ivals.a += 256; }");
-                        fb->codeAppendf("%s = vec4(ivals)/255;", args.fOutputColor);
+                        fb->codeAppendf("%s = float4(ivals)/255;", args.fOutputColor);
                     } else {
                         fb->codeAppendf("%s = %s;", args.fOutputColor, imageLoadStr.c_str());
                     }
@@ -134,22 +145,28 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ImageStorageLoad, reporter, ctxInfo) {
                 sk_sp<GrRenderTargetContext> rtContext =
                     context->makeDeferredRenderTargetContext(SkBackingFit::kExact, kS, kS,
                                                              kRGBA_8888_GrPixelConfig, nullptr);
-                GrPaint paint;
-                paint.setPorterDuffXPFactory(SkBlendMode::kSrc);
-                paint.addColorFragmentProcessor(TestFP::Make(imageStorageTexture, mm, restrict));
-                rtContext->drawPaint(GrNoClip(), std::move(paint), SkMatrix::I());
-                std::unique_ptr<uint32_t[]> readData(new uint32_t[kS * kS]);
-                SkImageInfo info = SkImageInfo::Make(kS, kS, kRGBA_8888_SkColorType,
-                                                     kPremul_SkAlphaType);
-                rtContext->readPixels(info, readData.get(), 0, 0, 0);
-                int failed = false;
-                for (int j = 0; j < kS && !failed; ++j) {
-                    for (int i = 0; i < kS && !failed; ++i) {
-                        uint32_t d = test.fData[j * kS + i];
-                        uint32_t rd = readData[j * kS + i];
-                        if (d != rd) {
-                            failed = true;
-                            ERRORF(reporter, "Expected 0x%08x, got 0x%08x at %d, %d.", d, rd, i, j);
+                // We make a clone to test that copying GrFragmentProcessor::ImageStorageAccess
+                // copying works.
+                auto testFP = TestFP::Make(imageStorageTexture, mm, restrict);
+                for (auto fp : {testFP, testFP->clone()}) {
+                    GrPaint paint;
+                    paint.setPorterDuffXPFactory(SkBlendMode::kSrc);
+                    paint.addColorFragmentProcessor(fp);
+                    rtContext->drawPaint(GrNoClip(), std::move(paint), SkMatrix::I());
+                    std::unique_ptr<uint32_t[]> readData(new uint32_t[kS * kS]);
+                    SkImageInfo info = SkImageInfo::Make(kS, kS, kRGBA_8888_SkColorType,
+                                                         kPremul_SkAlphaType);
+                    rtContext->readPixels(info, readData.get(), 0, 0, 0);
+                    int failed = false;
+                    for (int j = 0; j < kS && !failed; ++j) {
+                        for (int i = 0; i < kS && !failed; ++i) {
+                            uint32_t d = test.fData[j * kS + i];
+                            uint32_t rd = readData[j * kS + i];
+                            if (d != rd) {
+                                failed = true;
+                                ERRORF(reporter, "Expected 0x%08x, got 0x%08x at %d, %d.",
+                                       d, rd, i, j);
+                            }
                         }
                     }
                 }
