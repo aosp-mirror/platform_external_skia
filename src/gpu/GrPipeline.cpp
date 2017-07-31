@@ -17,8 +17,9 @@
 
 #include "ops/GrOp.h"
 
-void GrPipeline::init(const InitArgs& args) {
+GrPipeline::GrPipeline(const InitArgs& args) {
     SkASSERT(args.fProxy);
+    SkASSERT(kDefault_GrSurfaceOrigin != args.fProxy->origin());
     SkASSERT(args.fProcessors);
     SkASSERT(args.fProcessors->isFinalized());
 
@@ -114,37 +115,8 @@ GrPipeline::GrPipeline(GrRenderTargetProxy* proxy, ScissorState scissorState, Sk
         , fXferProcessor(GrPorterDuffXPFactory::MakeNoCoverageXP(blendmode))
         , fFragmentProcessors()
         , fNumColorProcessors(0) {
+    SkASSERT(proxy);
     if (ScissorState::kEnabled == scissorState) {
         fScissorState.set({0, 0, 0, 0}); // caller will use the DynamicState struct.
     }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-bool GrPipeline::AreEqual(const GrPipeline& a, const GrPipeline& b) {
-    SkASSERT(&a != &b);
-
-    if (a.proxy() != b.proxy() ||
-        a.fFragmentProcessors.count() != b.fFragmentProcessors.count() ||
-        a.fNumColorProcessors != b.fNumColorProcessors ||
-        a.fScissorState != b.fScissorState ||
-        a.fWindowRectsState != b.fWindowRectsState ||
-        a.fFlags != b.fFlags ||
-        a.fUserStencilSettings != b.fUserStencilSettings) {
-        return false;
-    }
-
-    // Most of the time both are nullptr
-    if (a.fXferProcessor.get() || b.fXferProcessor.get()) {
-        if (!a.getXferProcessor().isEqual(b.getXferProcessor())) {
-            return false;
-        }
-    }
-
-    for (int i = 0; i < a.numFragmentProcessors(); i++) {
-        if (!a.getFragmentProcessor(i).isEqual(b.getFragmentProcessor(i))) {
-            return false;
-        }
-    }
-    return true;
 }
