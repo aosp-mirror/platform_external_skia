@@ -65,6 +65,11 @@ SI U8x4 pack(U16x4 v) {
     auto _02 = _mm256_permute2x128_si256(lo,hi, 0x20),
          _13 = _mm256_permute2x128_si256(lo,hi, 0x31);
     return _mm256_packus_epi16(_02, _13);
+#elif defined(__SSE2__)
+    static_assert(sizeof(v) == 32, "");
+    auto lo = unaligned_load<__m128i>((char*)&v +  0),
+         hi = unaligned_load<__m128i>((char*)&v + 16);
+    return _mm_packus_epi16(lo,hi);
 #else
     return __builtin_convertvector(v, U8x4);
 #endif
@@ -220,13 +225,10 @@ SI T* ptr_at_xy(const SkJumper_MemoryCtx* ctx, int x, int y) {
 }
 
 STAGE(uniform_color) {
-    auto c = (const float*)ctx;
-
-    src.u32 = (uint32_t)(c[0] * 255) << 0
-            | (uint32_t)(c[1] * 255) << 8
-            | (uint32_t)(c[2] * 255) << 16
-            | (uint32_t)(c[3] * 255) << 24;
+    auto c = (const SkJumper_UniformColorCtx*)ctx;
+    src.u32 = c->rgba;
 }
+
 STAGE(set_rgb) {
     auto c = (const float*)ctx;
 
