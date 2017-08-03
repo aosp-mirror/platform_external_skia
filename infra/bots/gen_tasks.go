@@ -34,7 +34,7 @@ const (
 	ISOLATE_SKP_NAME     = "Housekeeper-PerCommit-IsolateSKP"
 	ISOLATE_SVG_NAME     = "Housekeeper-PerCommit-IsolateSVG"
 
-	DEFAULT_OS_DEBIAN = "Debian-9.0"
+	DEFAULT_OS_DEBIAN = "Debian-9.1"
 	DEFAULT_OS_UBUNTU = "Ubuntu-14.04"
 
 	// Name prefix for upload jobs.
@@ -187,10 +187,6 @@ func defaultSwarmDimensions(parts map[string]string) []string {
 		// Chrome Golo has a different Windows image.
 		if parts["model"] == "Golo" && os == "Win10" {
 			d["os"] = "Windows-10-10586"
-		}
-		// dogben accidentally upgraded this machine.
-		if os == "Debian9" && parts["cpu_or_gpu_value"] == "GTX960" {
-			d["os"] = "Debian-9.1"
 		}
 	} else {
 		d["os"] = DEFAULT_OS_DEBIAN
@@ -469,6 +465,9 @@ func compile(b *specs.TasksCfgBuilder, name string, parts map[string]string) str
 		}
 	} else if strings.Contains(name, "Win") {
 		pkgs = append(pkgs, b.MustGetCipdPackageFromAsset("win_toolchain"))
+		if strings.Contains(name, "Clang") {
+			pkgs = append(pkgs, b.MustGetCipdPackageFromAsset("clang_win"))
+		}
 		if strings.Contains(name, "Vulkan") {
 			pkgs = append(pkgs, b.MustGetCipdPackageFromAsset("win_vulkan_sdk"))
 		}
@@ -947,18 +946,14 @@ func process(b *specs.TasksCfgBuilder, name string) {
 	j := &specs.JobSpec{
 		Priority:  0.8,
 		TaskSpecs: deps,
+		Trigger:   specs.TRIGGER_ANY_BRANCH,
 	}
-	if name == "Housekeeper-Nightly-RecreateSKPs_Canary" {
-		j.Trigger = "nightly"
-	}
-	if name == "Housekeeper-Nightly-UpdateMetaConfig" {
-		j.Trigger = "nightly"
-	}
-	if name == "Housekeeper-Weekly-RecreateSKPs" {
-		j.Trigger = "weekly"
-	}
-	if name == "Test-Ubuntu14-GCC-GCE-CPU-AVX2-x86_64-Debug-CT_DM_1m_SKPs" {
-		j.Trigger = "weekly"
+	if strings.Contains(name, "-Nightly-") {
+		j.Trigger = specs.TRIGGER_NIGHTLY
+	} else if strings.Contains(name, "-Weekly-") || name == "Test-Ubuntu14-GCC-GCE-CPU-AVX2-x86_64-Debug-CT_DM_1m_SKPs" {
+		j.Trigger = specs.TRIGGER_WEEKLY
+	} else if strings.Contains(name, "Flutter") || strings.Contains(name, "PDFium") || strings.Contains(name, "CommandBuffer") {
+		j.Trigger = specs.TRIGGER_MASTER_ONLY
 	}
 	b.MustAddJob(name, j)
 }

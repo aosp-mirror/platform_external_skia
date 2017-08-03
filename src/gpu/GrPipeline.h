@@ -96,57 +96,16 @@ public:
     };
 
     /**
-     * A Default constructed pipeline is unusable until init() is called.
-     **/
-    GrPipeline() = default;
-
-    /**
      * Creates a simple pipeline with default settings and no processors. The provided blend mode
      * must be "Porter Duff" (<= kLastCoeffMode). If using ScissorState::kEnabled, the caller must
      * specify a scissor rectangle through the DynamicState struct.
      **/
     GrPipeline(GrRenderTargetProxy*, ScissorState, SkBlendMode);
 
-    GrPipeline(const InitArgs& args) { this->init(args); }
+    GrPipeline(const InitArgs& args);
 
     GrPipeline(const GrPipeline&) = delete;
     GrPipeline& operator=(const GrPipeline&) = delete;
-
-    /** (Re)initializes a pipeline. After initialization the pipeline can be used. */
-    void init(const InitArgs&);
-
-    /** True if the pipeline has been initialized. */
-    bool isInitialized() const { return SkToBool(fProxy.get()); }
-
-    /// @}
-
-    ///////////////////////////////////////////////////////////////////////////
-    /// @name Comparisons
-
-    /**
-     * Returns true if these pipelines are equivalent.  Coord transforms may be applied either on
-     * the GPU or the CPU. When we apply them on the CPU then the matrices need not agree in order
-     * to combine draws. Therefore we take a param that indicates whether coord transforms should be
-     * compared."
-     */
-    static bool AreEqual(const GrPipeline& a, const GrPipeline& b);
-
-    /**
-     * Allows a GrOp subclass to determine whether two GrOp instances can combine. This is a
-     * stricter test than isEqual because it also considers blend barriers when the two ops'
-     * bounds overlap
-     */
-    static bool CanCombine(const GrPipeline& a, const SkRect& aBounds,
-                           const GrPipeline& b, const SkRect& bBounds,
-                           const GrCaps& caps)  {
-        if (!AreEqual(a, b)) {
-            return false;
-        }
-        if (a.xferBarrierType(caps)) {
-            return !GrRectsTouchOrOverlap(aBounds, bBounds);
-        }
-        return true;
-    }
 
     /// @}
 

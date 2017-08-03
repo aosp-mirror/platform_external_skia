@@ -13,16 +13,6 @@ declare_args() {
   malloc = ""
 }
 
-is_clang = is_android || is_ios || is_mac || (cc == "clang" && cxx == "clang++")
-if (!is_clang && !is_win) {
-  is_clang = exec_script("is_clang.py",
-                         [
-                           cc,
-                           cxx,
-                         ],
-                         "value")
-}
-
 if (is_ios) {
   if (is_tvos) {
     sdk = "appletvos"
@@ -54,13 +44,17 @@ config("default") {
       "/WX",  # Treat warnings as errors.
       "/utf-8",  # Set Source and Executable character sets to UTF-8.
     ]
+    if (is_clang) {
+      cflags += [ "-fms-compatibility-version=19" ]  # 2015
+    }
     defines += [
       "_CRT_SECURE_NO_WARNINGS",  # Disables warnings about sscanf().
       "_HAS_EXCEPTIONS=0",  # Disables exceptions in MSVC STL.
       "WIN32_LEAN_AND_MEAN",
       "NOMINMAX",
     ]
-    include_dirs = [
+
+    _include_dirs = [
       #2017
       "$windk/VC/Tools/MSVC/14.10.25017/include",
 
@@ -86,6 +80,17 @@ config("default") {
       "$windk/win_sdk/Include/10.0.14393.0/um",
       "$windk/win_sdk/Include/10.0.14393.0/winrt",
     ]
+    if (is_clang) {
+      foreach(dir, _include_dirs) {
+        cflags += [
+          "-imsvc",
+          dir,
+        ]
+      }
+    } else {
+      include_dirs = _include_dirs
+    }
+
     lib_dirs = [
       # For local builds.
       # 2017

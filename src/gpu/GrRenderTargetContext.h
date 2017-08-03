@@ -246,7 +246,8 @@ public:
                     GrAA aa,
                     const SkMatrix& viewMatrix,
                     const SkRegion& region,
-                    const GrStyle& style);
+                    const GrStyle& style,
+                    const GrUserStencilSettings* ss = nullptr);
 
     /**
      * Draws an oval.
@@ -303,7 +304,8 @@ public:
      * After this returns any pending surface IO will be issued to the backend 3D API and
      * if the surface has MSAA it will be resolved.
      */
-    bool prepareForExternalIO(int numSemaphores, GrBackendSemaphore* backendSemaphores);
+    GrSemaphoresSubmitted prepareForExternalIO(int numSemaphores,
+                                               GrBackendSemaphore backendSemaphores[]);
 
     /**
      *  The next time this GrRenderTargetContext is flushed, the gpu will wait on the passed in
