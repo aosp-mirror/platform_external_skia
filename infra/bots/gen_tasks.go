@@ -262,7 +262,7 @@ func defaultSwarmDimensions(parts map[string]string) []string {
 					"GTX660":        "10de:11c0-22.21.13.8205",
 					"GTX960":        "10de:1401-22.21.13.8205",
 					"IntelHD530":    "8086:1912-21.20.16.4590",
-					"IntelHD4400":   "8086:0a16-20.19.15.4624",
+					"IntelHD4400":   "8086:0a16-20.19.15.4703",
 					"IntelHD4600":   "8086:0412-20.19.15.4624",
 					"IntelIris540":  "8086:1926-21.20.16.4590",
 					"IntelIris6100": "8086:162b-20.19.15.4624",
@@ -568,8 +568,11 @@ func updateMetaConfig(b *specs.TasksCfgBuilder, name string) string {
 // generated chain of tasks, which the Job should add as a dependency.
 func ctSKPs(b *specs.TasksCfgBuilder, name string) string {
 	b.MustAddTask(name, &specs.TaskSpec{
-		CipdPackages:     []*specs.CipdPackage{},
-		Dimensions:       []string{"pool:SkiaCT"},
+		CipdPackages: []*specs.CipdPackage{},
+		Dimensions: []string{
+			"pool:SkiaCT",
+			"os:Ubuntu-14.04",
+		},
 		ExecutionTimeout: 24 * time.Hour,
 		ExtraArgs: []string{
 			"--workdir", "../../..", "ct_skps",
