@@ -184,8 +184,8 @@ func defaultSwarmDimensions(parts map[string]string) []string {
 		if !ok {
 			glog.Fatalf("Entry %q not found in OS mapping.", os)
 		}
-		// Chrome Golo has a different Windows image.
-		if parts["model"] == "Golo" && os == "Win10" {
+		// These machines have a different Windows image.
+		if parts["model"] == "Golo" && os == "Win10" && parts["cpu_or_gpu_value"] == "GT610" {
 			d["os"] = "Windows-10-10586"
 		}
 	} else {
@@ -262,11 +262,12 @@ func defaultSwarmDimensions(parts map[string]string) []string {
 					"GTX660":        "10de:11c0-22.21.13.8205",
 					"GTX960":        "10de:1401-22.21.13.8205",
 					"IntelHD530":    "8086:1912-21.20.16.4590",
-					"IntelHD4400":   "8086:0a16-20.19.15.4624",
+					"IntelHD4400":   "8086:0a16-20.19.15.4703",
 					"IntelHD4600":   "8086:0412-20.19.15.4624",
 					"IntelIris540":  "8086:1926-21.20.16.4590",
 					"IntelIris6100": "8086:162b-20.19.15.4624",
 					"RadeonR9M470X": "1002:6646-22.19.165.512",
+					"QuadroP400":    "10de:1cb3-22.21.13.8205",
 				}[parts["cpu_or_gpu_value"]]
 				if !ok {
 					glog.Fatalf("Entry %q not found in Win GPU mapping.", parts["cpu_or_gpu_value"])
@@ -293,6 +294,7 @@ func defaultSwarmDimensions(parts map[string]string) []string {
 					"IntelHD2000":   "8086:0102",
 					"IntelHD405":    "8086:22b1",
 					"IntelIris540":  "8086:1926",
+					"QuadroP400":    "10de:1cb3-384.59",
 				}[parts["cpu_or_gpu_value"]]
 				if !ok {
 					glog.Fatalf("Entry %q not found in Ubuntu GPU mapping.", parts["cpu_or_gpu_value"])
@@ -566,8 +568,11 @@ func updateMetaConfig(b *specs.TasksCfgBuilder, name string) string {
 // generated chain of tasks, which the Job should add as a dependency.
 func ctSKPs(b *specs.TasksCfgBuilder, name string) string {
 	b.MustAddTask(name, &specs.TaskSpec{
-		CipdPackages:     []*specs.CipdPackage{},
-		Dimensions:       []string{"pool:SkiaCT"},
+		CipdPackages: []*specs.CipdPackage{},
+		Dimensions: []string{
+			"pool:SkiaCT",
+			"os:Ubuntu-14.04",
+		},
 		ExecutionTimeout: 24 * time.Hour,
 		ExtraArgs: []string{
 			"--workdir", "../../..", "ct_skps",

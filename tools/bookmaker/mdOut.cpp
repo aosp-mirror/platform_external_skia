@@ -90,6 +90,9 @@ string MdOut::addReferences(const char* refStart, const char* refEnd,
                 }
                 if (!foundMatch) {
                     if (!(def = this->isDefined(t, fullRef, true))) {
+                        if (!result.size()) {
+                            t.reportError("missing method");
+                        }
                         return result;
                     }
                     ref = fullRef;
@@ -140,7 +143,8 @@ string MdOut::addReferences(const char* refStart, const char* refEnd,
                     && string::npos != ref.find_first_of("ABCDEFGHIJKLMNOPQRSTUVWXYZ")) {
                 // FIXME: see isDefined(); check to see if fXX is a member of xx.fXX
                 if (('f' != ref[0] && string::npos == ref.find("()"))
-                        || '.' != t.backup(ref.c_str())) {
+//                        || '.' != t.backup(ref.c_str())
+                        && ('k' != ref[0] && string::npos == ref.find("_Private"))) {
                     if (BmhParser::Resolvable::kOut != resolvable) {
                         t.reportError("missed camelCase");
                         return result;
@@ -284,6 +288,8 @@ void MdOut::childrenOut(const Definition* def, const char* start) {
     fLineCount = def->fLineCount;
     if (def->isRoot()) {
         fRoot = const_cast<RootDefinition*>(def->asRoot());
+    } else if (MarkType::kEnumClass == def->fMarkType) {
+        fEnumClass = def;
     }
     BmhParser::Resolvable resolvable = this->resolvable(def->fMarkType);
     for (auto& child : def->fChildren) {
@@ -297,6 +303,9 @@ void MdOut::childrenOut(const Definition* def, const char* start) {
     if (BmhParser::Resolvable::kNo != resolvable) {
         end = def->fContentEnd;
         this->resolveOut(start, end, resolvable);
+    }
+    if (MarkType::kEnumClass == def->fMarkType) {
+        fEnumClass = nullptr;
     }
 }
 
@@ -388,6 +397,17 @@ const Definition* MdOut::isDefined(const TextParser& parser, const string& ref, 
                 if (iter.second.find(ref)) {
                     return &iter.second;
                 }
+            }
+            if (fEnumClass) {
+                string fullName = fEnumClass->fName + "::" + ref;
+                for (auto child : fEnumClass->fChildren) {
+                    if (fullName == child->fName) {
+                        return child;
+                    }
+                }
+            }
+            if (string::npos != ref.find("_Private")) {
+                return nullptr;
             }
         }
         if ('f' == ref[0]) {
@@ -486,8 +506,7 @@ string MdOut::linkRef(const string& leadingSpaces, const Definition* def,
         while (start > 0 && (isalnum(filename[start - 1]) || '_' == filename[start - 1])) {
             --start;
         }
-        buildup = "bmh_" + filename.substr(start) + "?cl=9919#"
-                + (classMatch ? namePart : *str);
+        buildup = filename.substr(start) + "#" + (classMatch ? namePart : *str);
         str = &buildup;
     }
     string refOut(ref);

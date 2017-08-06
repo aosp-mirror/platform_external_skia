@@ -8,10 +8,13 @@
 #include "SkJumper.h"
 #include "SkJumper_misc.h"
 
-// We're going to try going even lower precision than _lowp.cpp,
-// 8-bit per channel, and while we're at it keep our pixels interlaced.
-// This is the natural format for kN32_SkColorType buffers, and we hope
-// the stages in this file can replace many custom legacy routines.
+#if defined(__SSE2__)
+    #include <immintrin.h>
+#endif
+
+// This restricted SkJumper backend works on 8-bit per channel interlaced
+// pixels.  This is the natural format for kN32_SkColorType buffers, and we
+// hope the stages in this file can replace many custom legacy routines.
 
 #if !defined(JUMPER)
     #error "This file must be pre-compiled."
@@ -51,13 +54,33 @@ union V {
 };
 static const size_t kStride = sizeof(V) / sizeof(uint32_t);
 
+// Usually __builtin_convertvector() is pretty good, but sometimes we can do better.
+SI U8x4 pack(U16x4 v) {
+#if defined(__AVX2__)
+    static_assert(sizeof(v) == 64, "");
+    auto lo = unaligned_load<__m256i>((char*)&v +  0),
+         hi = unaligned_load<__m256i>((char*)&v + 32);
+
+    auto _02 = _mm256_permute2x128_si256(lo,hi, 0x20),
+         _13 = _mm256_permute2x128_si256(lo,hi, 0x31);
+    return _mm256_packus_epi16(_02, _13);
+#elif defined(__SSE2__)
+    static_assert(sizeof(v) == 32, "");
+    auto lo = unaligned_load<__m128i>((char*)&v +  0),
+         hi = unaligned_load<__m128i>((char*)&v + 16);
+    return _mm_packus_epi16(lo,hi);
+#else
+    return __builtin_convertvector(v, U8x4);
+#endif
+}
+
 SI V operator+(V x, V y) { return x.u8x4 + y.u8x4; }
 SI V operator-(V x, V y) { return x.u8x4 - y.u8x4; }
 SI V operator*(V x, V y) {
     // (x*y + x)/256 is a very good approximation of (x*y + 127)/255.
     U16x4 X = __builtin_convertvector(x.u8x4, U16x4),
           Y = __builtin_convertvector(y.u8x4, U16x4);
-    return __builtin_convertvector((X*Y + X)>>8, U8x4);
+    return pack((X*Y + X)>>8);
 }
 
 SI V inv(V v) { return 0xff - v; }
@@ -162,8 +185,6 @@ SI void store(T* dst, V v, size_t tail) {
 }
 
 #if 1 && defined(__AVX2__)
-    #include <immintrin.h>
-
     SI U32 mask(size_t tail) {
         // We go a little out of our way to avoid needing large constant values here.
 
@@ -203,13 +224,10 @@ SI T* ptr_at_xy(const SkJumper_MemoryCtx* ctx, int x, int y) {
 }
 
 STAGE(uniform_color) {
-    auto c = (const float*)ctx;
-
-    src.u32 = (uint32_t)(c[0] * 255) << 0
-            | (uint32_t)(c[1] * 255) << 8
-            | (uint32_t)(c[2] * 255) << 16
-            | (uint32_t)(c[3] * 255) << 24;
+    auto c = (const SkJumper_UniformColorCtx*)ctx;
+    src.u32 = c->rgba;
 }
+
 STAGE(set_rgb) {
     auto c = (const float*)ctx;
 
@@ -279,7 +297,7 @@ STAGE(srcover_rgba_8888) {
     auto ptr = ptr_at_xy<uint32_t>(ctx, x,y);
 
     V d = load<U32>(ptr, tail);
-    V b = src + d*inv(alpha(src));
+    V b = src + (d - d*alpha(src));
 
     store(ptr, b.u32, tail);
 }
@@ -319,8 +337,8 @@ STAGE(srcin)    { src = src * alpha(dst); }
 STAGE(dstin)    { src = dst * alpha(src); }
 STAGE(srcout)   { src = src * inv(alpha(dst)); }
 STAGE(dstout)   { src = dst * inv(alpha(src)); }
-STAGE(srcover)  { src = src + dst*inv(alpha(src)); }
-STAGE(dstover)  { src = dst + src*inv(alpha(dst)); }
+STAGE(srcover)  { src = src + (dst - dst*alpha(src)); }
+STAGE(dstover)  { src = dst + (src - src*alpha(dst)); }
 STAGE(modulate) { src = src*dst; }
 STAGE(multiply) { src = src*inv(alpha(dst)) + dst*inv(alpha(src)) + src*dst; }
 STAGE(screen)   { src = src + inv(src)*dst; }

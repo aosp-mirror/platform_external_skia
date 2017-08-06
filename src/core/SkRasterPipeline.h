@@ -11,6 +11,7 @@
 #include "SkArenaAlloc.h"
 #include "SkImageInfo.h"
 #include "SkNx.h"
+#include "SkPM4f.h"
 #include "SkTArray.h"
 #include "SkTypes.h"
 #include <functional>
@@ -18,7 +19,6 @@
 
 struct SkJumper_constants;
 struct SkJumper_Engine;
-struct SkPM4f;
 
 /**
  * SkRasterPipeline provides a cheap way to chain together a pixel processing pipeline.
@@ -129,12 +129,20 @@ public:
     void append_from_srgb(SkAlphaType);
     void append_from_srgb_dst(SkAlphaType);
 
-    // Appends a stage for the specified matrix. Tries to optimize the stage by analyzing
-    // the type of matrix.
+    // Appends a stage for the specified matrix.
+    // Tries to optimize the stage by analyzing the type of matrix.
     void append_matrix(SkArenaAlloc*, const SkMatrix&);
 
-    // Appends a stage for the uniform color. Tries to optimize the stage based on the color.
-    void append_uniform_color(SkArenaAlloc*, const SkPM4f& color);
+    // Appends a stage for a constant uniform color.
+    // Tries to optimize the stage based on the color.
+    void append_constant_color(SkArenaAlloc*, const float rgba[4]);
+
+    void append_constant_color(SkArenaAlloc* alloc, const SkPM4f& color) {
+        this->append_constant_color(alloc, color.fVec);
+    }
+    void append_constant_color(SkArenaAlloc* alloc, const SkColor4f& color) {
+        this->append_constant_color(alloc, color.vec());
+    }
 
     bool empty() const { return fStages == nullptr; }
 
