@@ -142,11 +142,12 @@ public:
         return &this->glContext();
     }
 
-    void clearStencil(GrRenderTarget*) override;
+    void clearStencil(GrRenderTarget*, int clearValue) override;
 
     GrGpuCommandBuffer* createCommandBuffer(
-            const GrGpuCommandBuffer::LoadAndStoreInfo& colorInfo,
-            const GrGpuCommandBuffer::LoadAndStoreInfo& stencilInfo) override;
+            GrRenderTarget*, GrSurfaceOrigin,
+            const GrGpuCommandBuffer::LoadAndStoreInfo&,
+            const GrGpuCommandBuffer::StencilLoadAndStoreInfo&) override;
 
     void invalidateBoundRenderTarget() {
         fHWBoundRenderTargetUniqueID.makeInvalid();
@@ -177,6 +178,8 @@ public:
     sk_sp<GrSemaphore> prepareTextureForCrossContextUsage(GrTexture*) override;
 
     void deleteSync(GrGLsync) const;
+
+    void insertEventMarker(const char*);
 
 private:
     GrGLGpu(GrGLContext* ctx, GrContext* context);

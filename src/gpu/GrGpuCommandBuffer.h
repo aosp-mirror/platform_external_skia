@@ -53,9 +53,17 @@ public:
         GrColor fClearColor;
     };
 
+    // Load-time clears of the stencil buffer are always to 0 so we don't store
+    // an 'fStencilClearValue'
+    struct StencilLoadAndStoreInfo {
+        LoadOp fLoadOp;
+        StoreOp fStoreOp;
+    };
+
     GrGpuCommandBuffer() {}
     virtual ~GrGpuCommandBuffer() {}
 
+    virtual void begin() = 0;
     // Signals the end of recording to the command buffer and that it can now be submitted.
     virtual void end() = 0;
 
@@ -91,6 +99,8 @@ public:
      */
     // TODO: This should be removed in the future to favor using the load and store ops for discard
     virtual void discard(GrRenderTargetProxy*) = 0;
+
+    virtual void insertEventMarker(GrRenderTargetProxy*, const char*) = 0;
 
 private:
     virtual GrGpu* gpu() = 0;
