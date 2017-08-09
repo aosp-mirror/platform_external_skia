@@ -1318,7 +1318,6 @@ cc_test {
         "tests/GrAllocatorTest.cpp",
         "tests/GrContextAbandonTest.cpp",
         "tests/GrContextFactoryTest.cpp",
-        "tests/GrDrawTargetTest.cpp",
         "tests/GrMemoryPoolTest.cpp",
         "tests/GrMeshTest.cpp",
         "tests/GrPipelineDynamicStateTest.cpp",
