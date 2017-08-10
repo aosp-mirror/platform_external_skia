@@ -33,7 +33,13 @@ def dm_flags(api, bot):
 
   # This enables non-deterministic random seeding of the GPU FP optimization
   # test.
-  args.append('--randomProcessorTest')
+  # Not Android due to :
+  #  - https://skia.googlesource.com/skia/+/
+  #    5910ed347a638ded8cd4c06dbfda086695df1112/BUILD.gn#160
+  #  - https://skia.googlesource.com/skia/+/
+  #    ce06e261e68848ae21cac1052abc16bc07b961bf/tests/ProcessorTest.cpp#307
+  if 'Android' not in bot:
+    args.append('--randomProcessorTest')
 
   # 32-bit desktop bots tend to run out of memory, because they have relatively
   # far more cores than RAM (e.g. 32 cores, 3G RAM).  Hold them back a bit.
@@ -136,8 +142,8 @@ def dm_flags(api, bot):
     configs = [x.replace(old, new) for x in configs]
     # We also test non-msaa instanced.
     configs.append(new)
-  elif 'MacMini6.2' in bot and sample_count is not '':
-    configs.extend([gl_prefix + 'inst', gl_prefix + 'inst' + sample_count])
+  elif 'MacMini6.2' in bot:
+    configs.extend([gl_prefix + 'inst'])
 
   # CommandBuffer bot *only* runs the command_buffer config.
   if 'CommandBuffer' in bot:
@@ -691,7 +697,6 @@ def test_steps(api):
 
   args = [
     'dm',
-    '--undefok',   # This helps branches that may not know new flags.
     '--resourcePath', api.flavor.device_dirs.resource_dir,
     '--skps', api.flavor.device_dirs.skp_dir,
     '--images', api.flavor.device_path_join(
