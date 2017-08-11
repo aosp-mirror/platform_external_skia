@@ -1480,6 +1480,7 @@ cc_test {
         "tests/SRGBReadWritePixelsTest.cpp",
         "tests/SRGBTest.cpp",
         "tests/SVGDeviceTest.cpp",
+        "tests/SafeMathTest.cpp",
         "tests/ScalarTest.cpp",
         "tests/ScaleToSidesTest.cpp",
         "tests/SerializationTest.cpp",
