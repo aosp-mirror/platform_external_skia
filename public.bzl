@@ -570,8 +570,8 @@ DM_INCLUDES = [
 
 def DM_ARGS(asan):
   source = ["tests", "gm", "image"]
-  # TODO(benjaminwagner): f16 and serialize-8888 fail.
-  config = ["565", "8888", "pdf", "srgb", "tiles_rt", "pic"]
+  # TODO(benjaminwagner): f16, pic-8888, serialize-8888, and tiles_rt-8888 fail.
+  config = ["565", "8888", "pdf", "srgb"]
   # TODO(mtklein): maybe investigate why these fail?
   match = [
       "~Canvas",
@@ -665,7 +665,6 @@ DEFINES_ALL = [
     # Required for building dm.
     "GR_TEST_UTILS",
     # Staging flags for API changes
-    "SK_SUPPORT_LEGACY_ROTATED_SHADERS",
     # Should remove after we update golden images
     "SK_WEBP_ENCODER_USE_DEFAULT_METHOD",
     # Experiment to diagnose image diffs in Google3

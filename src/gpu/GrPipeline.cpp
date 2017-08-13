@@ -17,20 +17,19 @@
 
 #include "ops/GrOp.h"
 
-GrPipeline::GrPipeline(const InitArgs& args, GrProcessorSet&& processors) {
+GrPipeline::GrPipeline(const InitArgs& args, GrProcessorSet&& processors,
+                       GrAppliedClip&& appliedClip) {
     SkASSERT(args.fProxy);
     SkASSERT(processors.isFinalized());
 
     fProxy.reset(args.fProxy);
 
     fFlags = args.fFlags;
-    if (args.fAppliedClip) {
-        fScissorState = args.fAppliedClip->scissorState();
-        if (args.fAppliedClip->hasStencilClip()) {
-            fFlags |= kHasStencilClip_Flag;
-        }
-        fWindowRectsState = args.fAppliedClip->windowRectsState();
+    fScissorState = appliedClip.scissorState();
+    if (appliedClip.hasStencilClip()) {
+        fFlags |= kHasStencilClip_Flag;
     }
+    fWindowRectsState = appliedClip.windowRectsState();
     if (!args.fUserStencil->isDisabled(fFlags & kHasStencilClip_Flag)) {
         fFlags |= kStencilEnabled_Flag;
     }
@@ -52,32 +51,29 @@ GrPipeline::GrPipeline(const InitArgs& args, GrProcessorSet&& processors) {
     fNumColorProcessors = processors.numColorFragmentProcessors();
     int numTotalProcessors =
             fNumColorProcessors + processors.numCoverageFragmentProcessors();
-    if (args.fAppliedClip && args.fAppliedClip->clipCoverageFragmentProcessor()) {
+    auto clipFP = appliedClip.detachClipCoverageFragmentProcessor();
+    if (clipFP) {
         ++numTotalProcessors;
     }
     fFragmentProcessors.reset(numTotalProcessors);
     int currFPIdx = 0;
     for (int i = 0; i < processors.numColorFragmentProcessors(); ++i, ++currFPIdx) {
-        const GrFragmentProcessor* fp = processors.colorFragmentProcessor(i);
-        fFragmentProcessors[currFPIdx].reset(fp);
-        if (!fp->instantiate(args.fResourceProvider)) {
+        fFragmentProcessors[currFPIdx] = processors.detachColorFragmentProcessor(i);
+        if (!fFragmentProcessors[currFPIdx]->instantiate(args.fResourceProvider)) {
             this->markAsBad();
         }
     }
 
     for (int i = 0; i < processors.numCoverageFragmentProcessors(); ++i, ++currFPIdx) {
-        const GrFragmentProcessor* fp = processors.coverageFragmentProcessor(i);
-        fFragmentProcessors[currFPIdx].reset(fp);
-        if (!fp->instantiate(args.fResourceProvider)) {
+        fFragmentProcessors[currFPIdx] = processors.detachCoverageFragmentProcessor(i);
+        if (!fFragmentProcessors[currFPIdx]->instantiate(args.fResourceProvider)) {
             this->markAsBad();
         }
     }
-    if (args.fAppliedClip) {
-        if (const GrFragmentProcessor* fp = args.fAppliedClip->clipCoverageFragmentProcessor()) {
-            fFragmentProcessors[currFPIdx].reset(fp);
-            if (!fp->instantiate(args.fResourceProvider)) {
-                this->markAsBad();
-            }
+    if (clipFP) {
+        fFragmentProcessors[currFPIdx] = std::move(clipFP);
+        if (!fFragmentProcessors[currFPIdx]->instantiate(args.fResourceProvider)) {
+            this->markAsBad();
         }
     }
 }

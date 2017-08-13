@@ -1295,23 +1295,12 @@ if (skia_enable_tools) {
       "tools/ok_vias.cpp",
     ]
     deps = [
+      ":bench",
       ":gm",
       ":skia",
       ":tests",
       ":tool_utils",
     ]
-  }
-
-  if (!is_debug) {  # I've benchmarked debug code once too many times...
-    test_app("monobench") {
-      sources = [
-        "tools/monobench.cpp",
-      ]
-      deps = [
-        ":bench",
-        ":skia",
-      ]
-    }
   }
 
   test_app("nanobench") {

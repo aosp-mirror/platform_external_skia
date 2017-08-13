@@ -710,6 +710,7 @@ cc_library {
         "src/utils/SkFrontBufferedStream.cpp",
         "src/utils/SkInsetConvexPolygon.cpp",
         "src/utils/SkInterpolator.cpp",
+        "src/utils/SkJSONWriter.cpp",
         "src/utils/SkMatrix22.cpp",
         "src/utils/SkMultiPictureDocument.cpp",
         "src/utils/SkNWayCanvas.cpp",
@@ -751,7 +752,7 @@ cc_library {
                 "src/opts/SkBlitRow_opts_arm.cpp",
             ],
 
-            armv7_a_neon: {
+            neon: {
                 srcs: [
                     "src/opts/SkBitmapProcState_arm_neon.cpp",
                     "src/opts/SkBitmapProcState_matrixProcs_neon.cpp",
@@ -1319,7 +1320,6 @@ cc_test {
         "tests/GrAllocatorTest.cpp",
         "tests/GrContextAbandonTest.cpp",
         "tests/GrContextFactoryTest.cpp",
-        "tests/GrDrawTargetTest.cpp",
         "tests/GrMemoryPoolTest.cpp",
         "tests/GrMeshTest.cpp",
         "tests/GrPipelineDynamicStateTest.cpp",
@@ -1480,6 +1480,7 @@ cc_test {
         "tests/SRGBReadWritePixelsTest.cpp",
         "tests/SRGBTest.cpp",
         "tests/SVGDeviceTest.cpp",
+        "tests/SafeMathTest.cpp",
         "tests/ScalarTest.cpp",
         "tests/ScaleToSidesTest.cpp",
         "tests/SerializationTest.cpp",

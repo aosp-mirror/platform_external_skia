@@ -26,6 +26,7 @@
 #include "GrTracing.h"
 #include "SkConvertPixels.h"
 #include "SkGr.h"
+#include "SkJSONWriter.h"
 #include "SkUnPreMultiplyPriv.h"
 #include "effects/GrConfigConversionEffect.h"
 #include "text/GrTextBlobCache.h"
@@ -478,8 +479,7 @@ bool GrContextPriv::writeSurfacePixels(GrSurfaceContext* dst,
     }
 
     if (tempProxy) {
-        sk_sp<GrFragmentProcessor> fp = GrSimpleTextureEffect::Make(
-                tempProxy, nullptr, SkMatrix::I());
+        auto fp = GrSimpleTextureEffect::Make(tempProxy, nullptr, SkMatrix::I());
         if (premulOnGpu) {
             fp = fContext->createUPMToPMEffect(std::move(fp), useConfigConversionEffect);
         }
@@ -606,8 +606,7 @@ bool GrContextPriv::readSurfacePixels(GrSurfaceContext* src,
         if (tempRTC) {
             SkMatrix textureMatrix = SkMatrix::MakeTrans(SkIntToScalar(left), SkIntToScalar(top));
             sk_sp<GrTextureProxy> proxy = src->asTextureProxyRef();
-            sk_sp<GrFragmentProcessor> fp = GrSimpleTextureEffect::Make(
-                    std::move(proxy), nullptr, textureMatrix);
+            auto fp = GrSimpleTextureEffect::Make(std::move(proxy), nullptr, textureMatrix);
             if (unpremulOnGpu) {
                 fp = fContext->createPMToUPMEffect(std::move(fp), useConfigConversionEffect);
                 // We no longer need to do this on CPU after the read back.
@@ -921,8 +920,8 @@ bool GrContext::abandoned() const {
     return fDrawingManager->wasAbandoned();
 }
 
-sk_sp<GrFragmentProcessor> GrContext::createPMToUPMEffect(sk_sp<GrFragmentProcessor> fp,
-                                                          bool useConfigConversionEffect) {
+std::unique_ptr<GrFragmentProcessor> GrContext::createPMToUPMEffect(
+        std::unique_ptr<GrFragmentProcessor> fp, bool useConfigConversionEffect) {
     ASSERT_SINGLE_OWNER
     // We have specialized effects that guarantee round-trip conversion for some formats
     if (useConfigConversionEffect) {
@@ -940,8 +939,8 @@ sk_sp<GrFragmentProcessor> GrContext::createPMToUPMEffect(sk_sp<GrFragmentProces
     }
 }
 
-sk_sp<GrFragmentProcessor> GrContext::createUPMToPMEffect(sk_sp<GrFragmentProcessor> fp,
-                                                          bool useConfigConversionEffect) {
+std::unique_ptr<GrFragmentProcessor> GrContext::createUPMToPMEffect(
+        std::unique_ptr<GrFragmentProcessor> fp, bool useConfigConversionEffect) {
     ASSERT_SINGLE_OWNER
     // We have specialized effects that guarantee round-trip conversion for these formats
     if (useConfigConversionEffect) {
@@ -992,4 +991,42 @@ void GrContext::setResourceCacheLimits(int maxTextures, size_t maxTextureBytes) 
 void GrContext::dumpMemoryStatistics(SkTraceMemoryDump* traceMemoryDump) const {
     ASSERT_SINGLE_OWNER
     fResourceCache->dumpMemoryStatistics(traceMemoryDump);
+}
+
+//////////////////////////////////////////////////////////////////////////////
+
+SkString GrContext::dump() const {
+    SkDynamicMemoryWStream stream;
+    SkJSONWriter writer(&stream, SkJSONWriter::Mode::kPretty);
+    writer.beginObject();
+
+    static const char* kBackendStr[] = {
+        "Metal",
+        "OpenGL",
+        "Vulkan",
+        "Mock",
+    };
+    GR_STATIC_ASSERT(0 == kMetal_GrBackend);
+    GR_STATIC_ASSERT(1 == kOpenGL_GrBackend);
+    GR_STATIC_ASSERT(2 == kVulkan_GrBackend);
+    GR_STATIC_ASSERT(3 == kMock_GrBackend);
+    writer.appendString("backend", kBackendStr[fBackend]);
+
+    writer.appendName("caps");
+    fCaps->dumpJSON(&writer);
+
+    writer.appendName("gpu");
+    fGpu->dumpJSON(&writer);
+
+    // Flush JSON to the memory stream
+    writer.endObject();
+    writer.flush();
+
+    // Null terminate the JSON data in the memory stream
+    stream.write8(0);
+
+    // Allocate a string big enough to hold all the data, then copy out of the stream
+    SkString result(stream.bytesWritten());
+    stream.copyToAndReset(result.writable_str());
+    return result;
 }

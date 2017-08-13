@@ -310,6 +310,9 @@ public:
     void dumpGpuStatsKeyValuePairs(SkTArray<SkString>* keys, SkTArray<double>* values) const;
     void printGpuStats() const;
 
+    /** Returns a string with detailed information about the context & GPU, in JSON format. */
+    SkString dump() const;
+
     /** Specify the TextBlob cache limit. If the current cache exceeds this limit it will purge.
         this is for testing only */
     void setTextBlobCacheLimit_ForTesting(size_t bytes);
@@ -383,10 +386,10 @@ private:
      * use the specialized round-trip effects from GrConfigConversionEffect, otherwise they
      * create effects that do naive multiply or divide.
      */
-    sk_sp<GrFragmentProcessor> createPMToUPMEffect(sk_sp<GrFragmentProcessor>,
-                                                   bool useConfigConversionEffect);
-    sk_sp<GrFragmentProcessor> createUPMToPMEffect(sk_sp<GrFragmentProcessor>,
-                                                   bool useConfigConversionEffect);
+    std::unique_ptr<GrFragmentProcessor> createPMToUPMEffect(std::unique_ptr<GrFragmentProcessor>,
+                                                             bool useConfigConversionEffect);
+    std::unique_ptr<GrFragmentProcessor> createUPMToPMEffect(std::unique_ptr<GrFragmentProcessor>,
+                                                             bool useConfigConversionEffect);
 
     /**
      * Returns true if createPMtoUPMEffect and createUPMToPMEffect will succeed for non-sRGB 8888

@@ -41,8 +41,9 @@ class GrXPFactory;
 class GrPaint {
 public:
     GrPaint() = default;
-    explicit GrPaint(const GrPaint&) = default;
     ~GrPaint() = default;
+
+    static GrPaint Clone(const GrPaint& src) { return GrPaint(src); }
 
     /**
      * The initial color of the drawn primitive. Defaults to solid white.
@@ -90,7 +91,7 @@ public:
     /**
      * Appends an additional color processor to the color computation.
      */
-    void addColorFragmentProcessor(sk_sp<GrFragmentProcessor> fp) {
+    void addColorFragmentProcessor(std::unique_ptr<GrFragmentProcessor> fp) {
         SkASSERT(fp);
         fColorFragmentProcessors.push_back(std::move(fp));
         fTrivial = false;
@@ -99,7 +100,7 @@ public:
     /**
      * Appends an additional coverage processor to the coverage computation.
      */
-    void addCoverageFragmentProcessor(sk_sp<GrFragmentProcessor> fp) {
+    void addCoverageFragmentProcessor(std::unique_ptr<GrFragmentProcessor> fp) {
         SkASSERT(fp);
         fCoverageFragmentProcessors.push_back(std::move(fp));
         fTrivial = false;
@@ -148,60 +149,20 @@ public:
     bool isTrivial() const { return fTrivial; }
 
 private:
-    template <bool> class MoveOrImpl;
-
-public:
-    /**
-     * A temporary instance of this class can be used to select between moving an existing paint or
-     * a temporary copy of an existing paint into a call site. MoveOrClone(paint, false) is a rvalue
-     * reference to paint while MoveOrClone(paint, true) is a rvalue reference to a copy of paint.
-     */
-    using MoveOrClone = MoveOrImpl<true>;
-
-    /**
-     * A temporary instance of this class can be used to select between moving an existing or a
-     * newly default constructed paint into a call site. MoveOrNew(paint, false) is a rvalue
-     * reference to paint while MoveOrNew(paint, true) is a rvalue reference to a default paint.
-     */
-    using MoveOrNew = MoveOrImpl<false>;
-
-private:
+    // Since paint copying is expensive if there are fragment processors, we require going through
+    // the Clone() method.
+    GrPaint(const GrPaint&);
     GrPaint& operator=(const GrPaint&) = delete;
 
     friend class GrProcessorSet;
 
     const GrXPFactory* fXPFactory = nullptr;
-    SkSTArray<4, sk_sp<GrFragmentProcessor>>  fColorFragmentProcessors;
-    SkSTArray<2, sk_sp<GrFragmentProcessor>>  fCoverageFragmentProcessors;
+    SkSTArray<4, std::unique_ptr<GrFragmentProcessor>> fColorFragmentProcessors;
+    SkSTArray<2, std::unique_ptr<GrFragmentProcessor>> fCoverageFragmentProcessors;
     bool fDisableOutputConversionToSRGB = false;
     bool fAllowSRGBInputs = false;
     bool fTrivial = true;
     GrColor4f fColor = GrColor4f::OpaqueWhite();
-};
-
-/** This is the implementation of MoveOrCopy and MoveOrNew. */
-template <bool COPY_IF_NEW>
-class GrPaint::MoveOrImpl {
-public:
-    MoveOrImpl(GrPaint& paint, bool newPaint) {
-        if (newPaint) {
-            if (COPY_IF_NEW) {
-                fStorage.init(paint);
-            } else {
-                fStorage.init();
-            };
-            fPaint = fStorage.get();
-        } else {
-            fPaint = &paint;
-        }
-    }
-
-    operator GrPaint&&() && { return std::move(*fPaint); }
-    GrPaint& paint() { return *fPaint; }
-
-private:
-    SkTLazy<GrPaint> fStorage;
-    GrPaint* fPaint;
 };
 
 #endif
