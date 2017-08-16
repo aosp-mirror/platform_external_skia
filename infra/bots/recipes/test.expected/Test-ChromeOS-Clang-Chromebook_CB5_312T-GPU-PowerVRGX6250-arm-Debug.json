@@ -837,7 +837,7 @@
       "gitHash",
       "abc123",
       "builder",
-      "Test-ChromeOS-Clang-Chromebook_C100p-GPU-MaliT764-arm-Debug",
+      "Test-ChromeOS-Clang-Chromebook_CB5_312T-GPU-PowerVRGX6250-arm-Debug",
       "swarming_bot_id",
       "skia-bot-123",
       "swarming_task_id",
@@ -854,9 +854,9 @@
       "cpu_or_gpu",
       "GPU",
       "cpu_or_gpu_value",
-      "MaliT764",
+      "PowerVRGX6250",
       "model",
-      "Chromebook_C100p",
+      "Chromebook_CB5_312T",
       "os",
       "ChromeOS",
       "--uninterestingHashesFile",
@@ -971,7 +971,9 @@
       "_",
       "image",
       "_",
-      ".SRW"
+      ".SRW",
+      "--match",
+      "~gradients_view_perspective_nodither"
     ],
     "env": {
       "BUILDTYPE": "Debug",

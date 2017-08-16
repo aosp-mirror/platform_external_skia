@@ -221,8 +221,16 @@ def dm_flags(api, bot):
   blacklisted = []
   def blacklist(quad):
     config, src, options, name = quad.split(' ') if type(quad) is str else quad
-    if config == '_' or config in configs:
+    if (config == '_' or
+        config in configs or
+        (config[0] == '~' and config[1:] in configs)):
       blacklisted.extend([config, src, options, name])
+
+  # Only run the 'svgparse_*' svgs on 8888.
+  if api.vars.builder_cfg.get('cpu_or_gpu') == 'GPU':
+    blacklist('_ svg _ svgparse_')
+  else:
+    blacklist('~8888 svg _ svgparse_')
 
   # TODO: ???
   blacklist('f16 _ _ dstreadshuffle')
@@ -583,6 +591,9 @@ def dm_flags(api, bot):
     match.append('~PathOpsSimplify') # skia:6479
     blacklist(['_', 'gm', '_', 'fast_slow_blurimagefilter']) # skia:6480
 
+  if 'PowerVRGX6250' in bot:
+    match.append('~gradients_view_perspective_nodither') #skia:6972
+
   if blacklisted:
     args.append('--blacklist')
     args.extend(blacklisted)
@@ -818,6 +829,7 @@ TEST_BUILDERS = [
   'Test-Android-Clang-NexusPlayer-GPU-PowerVR-x86-Release-Android_Vulkan',
   'Test-Android-Clang-PixelC-CPU-TegraX1-arm64-Debug-Android',
   'Test-ChromeOS-Clang-Chromebook_C100p-GPU-MaliT764-arm-Debug',
+  'Test-ChromeOS-Clang-Chromebook_CB5_312T-GPU-PowerVRGX6250-arm-Debug',
   'Test-Mac-Clang-MacMini6.2-CPU-AVX-x86_64-Debug',
   'Test-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Debug-CommandBuffer',
   'Test-Ubuntu-Clang-GCE-CPU-AVX2-x86_64-Debug-ASAN',

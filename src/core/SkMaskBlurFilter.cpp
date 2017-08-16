@@ -24,9 +24,15 @@ static uint64_t weight_from_diameter(uint32_t d) {
     return d3;
 }
 
+#if defined(SK_SUPPORT_LEGACY_USE_GAUSS_FOR_SMALL_RADII)
+    static constexpr double kSmallSigma = 0.0;
+#else
+    static constexpr double kSmallSigma = 2.0;
+#endif
+
 static uint32_t filter_window(double sigma) {
-    if (sigma < 2) {
-        uint32_t radius = static_cast<uint32_t>(ceil(1.5 * sigma - 0.5));
+    if (sigma < kSmallSigma) {
+        auto radius = static_cast<uint32_t>(ceil(1.5 * sigma - 0.5));
         return 2 * radius + 1;
     }
     auto possibleWindow = static_cast<uint32_t>(floor(sigma * 3 * sqrt(2 * kPi) / 4 + 0.5));
@@ -34,7 +40,7 @@ static uint32_t filter_window(double sigma) {
 }
 
 SkMaskBlurFilter::FilterInfo::FilterInfo(double sigma)
-    : fIsSmall{sigma < 2}
+    : fIsSmall{sigma < kSmallSigma}
     , fFilterWindow{filter_window(sigma)}
     , fWeight{fIsSmall ? fFilterWindow : weight_from_diameter(fFilterWindow)}
     , fScaledWeight{(static_cast<uint64_t>(1) << 32) / fWeight}

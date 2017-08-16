@@ -249,7 +249,6 @@ BASE_SRCS_IOS = struct(
         "src/opts/*x86*",
         "src/opts/SkBlitMask_opts_arm*.cpp",
         "src/opts/SkBlitRow_opts_arm*.cpp",
-        "src/ports/*CG*",
         "src/ports/*FontConfig*",
         "src/ports/*FreeType*",
         "src/ports/*WIC*",
@@ -437,6 +436,7 @@ INCLUDES = [
     "src/core",
     "src/gpu",
     "src/image",
+    "src/images",
     "src/lazy",
     "src/opts",
     "src/ports",
@@ -668,7 +668,7 @@ DEFINES_ALL = [
     # Should remove after we update golden images
     "SK_WEBP_ENCODER_USE_DEFAULT_METHOD",
     # Experiment to diagnose image diffs in Google3
-    "SK_DISABLE_SSSE3_RUNTIME_CHECK_FOR_LOWP_STAGES",
+    "SK_JUMPER_DISABLE_8BIT",
 ]
 
 ################################################################################
@@ -681,7 +681,13 @@ LINKOPTS_ANDROID = [
     "-lEGL",
 ]
 
-LINKOPTS_IOS = []
+LINKOPTS_IOS = [
+    "-framework CoreFoundation",
+    "-framework CoreGraphics",
+    "-framework CoreText",
+    "-framework ImageIO",
+    "-framework MobileCoreServices",
+]
 
 LINKOPTS_ALL = [
     "-ldl",
