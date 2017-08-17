@@ -32,12 +32,6 @@ static const Type& get_type(const Context& context, Expression& value, size_t co
             case 3: return *context.fFloat3_Type;
             case 4: return *context.fFloat4_Type;
         }
-    } else if (base == *context.fHalf_Type) {
-        switch (count) {
-            case 2: return *context.fHalf2_Type;
-            case 3: return *context.fHalf3_Type;
-            case 4: return *context.fHalf4_Type;
-        }
     } else if (base == *context.fDouble_Type) {
         switch (count) {
             case 2: return *context.fDouble2_Type;
@@ -50,23 +44,11 @@ static const Type& get_type(const Context& context, Expression& value, size_t co
             case 3: return *context.fInt3_Type;
             case 4: return *context.fInt4_Type;
         }
-    } else if (base == *context.fShort_Type) {
-        switch (count) {
-            case 2: return *context.fShort2_Type;
-            case 3: return *context.fShort3_Type;
-            case 4: return *context.fShort4_Type;
-        }
     } else if (base == *context.fUInt_Type) {
         switch (count) {
             case 2: return *context.fUInt2_Type;
             case 3: return *context.fUInt3_Type;
             case 4: return *context.fUInt4_Type;
-        }
-    } else if (base == *context.fUShort_Type) {
-        switch (count) {
-            case 2: return *context.fUShort2_Type;
-            case 3: return *context.fUShort3_Type;
-            case 4: return *context.fUShort4_Type;
         }
     } else if (base == *context.fBool_Type) {
         switch (count) {
@@ -94,15 +76,13 @@ struct Swizzle : public Expression {
         if (fBase->fKind == Expression::kConstructor_Kind && fBase->isConstant()) {
             // we're swizzling a constant vector, e.g. float4(1).x. Simplify it.
             ASSERT(fBase->fKind == Expression::kConstructor_Kind);
-            if (fType == *irGenerator.fContext.fInt_Type ||
-                fType == *irGenerator.fContext.fShort_Type) {
+            if (fType == *irGenerator.fContext.fInt_Type) {
                 ASSERT(fComponents.size() == 1);
                 int64_t value = ((Constructor&) *fBase).getIVecComponent(fComponents[0]);
                 return std::unique_ptr<Expression>(new IntLiteral(irGenerator.fContext,
                                                                     Position(),
                                                                     value));
-            } else if (fType == *irGenerator.fContext.fFloat_Type ||
-                       fType == *irGenerator.fContext.fHalf_Type) {
+            } else if (fType == *irGenerator.fContext.fFloat_Type) {
                 ASSERT(fComponents.size() == 1);
                 double value = ((Constructor&) *fBase).getFVecComponent(fComponents[0]);
                 return std::unique_ptr<Expression>(new FloatLiteral(irGenerator.fContext,
