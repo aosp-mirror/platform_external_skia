@@ -141,7 +141,7 @@ private:
             varyingHandler->addPassThroughAttribute(cgp.fInColor, args.fOutputColor);
 
             // Setup position
-            this->setupPosition(vertBuilder, gpArgs, cgp.fInPosition->fName);
+            this->writeOutputPosition(vertBuilder, gpArgs, cgp.fInPosition->fName);
 
             // emit transforms
             this->emitTransforms(vertBuilder,
@@ -289,7 +289,7 @@ private:
             varyingHandler->addPassThroughAttribute(egp.fInColor, args.fOutputColor);
 
             // Setup position
-            this->setupPosition(vertBuilder, gpArgs, egp.fInPosition->fName);
+            this->writeOutputPosition(vertBuilder, gpArgs, egp.fInPosition->fName);
 
             // emit transforms
             this->emitTransforms(vertBuilder,
@@ -429,12 +429,12 @@ private:
             varyingHandler->addPassThroughAttribute(diegp.fInColor, args.fOutputColor);
 
             // Setup position
-            this->setupPosition(vertBuilder,
-                                uniformHandler,
-                                gpArgs,
-                                diegp.fInPosition->fName,
-                                diegp.fViewMatrix,
-                                &fViewMatrixUniform);
+            this->writeOutputPosition(vertBuilder,
+                                      uniformHandler,
+                                      gpArgs,
+                                      diegp.fInPosition->fName,
+                                      diegp.fViewMatrix,
+                                      &fViewMatrixUniform);
 
             // emit transforms
             this->emitTransforms(vertBuilder,
@@ -1679,7 +1679,7 @@ static int rrect_type_to_vert_count(RRectType type) {
         case kOverstroke_RRectType:
             return kVertsPerOverstrokeRRect;
     }
-    SkFAIL("Invalid type");
+    SK_ABORT("Invalid type");
     return 0;
 }
 
@@ -1692,7 +1692,7 @@ static int rrect_type_to_index_count(RRectType type) {
         case kOverstroke_RRectType:
             return kIndicesPerOverstrokeRRect;
     }
-    SkFAIL("Invalid type");
+    SK_ABORT("Invalid type");
     return 0;
 }
 
@@ -1704,7 +1704,7 @@ static const uint16_t* rrect_type_to_indices(RRectType type) {
         case kOverstroke_RRectType:
             return gOverstrokeRRectIndices;
     }
-    SkFAIL("Invalid type");
+    SK_ABORT("Invalid type");
     return 0;
 }
 

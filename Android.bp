@@ -848,6 +848,7 @@ cc_test {
 
     cflags: [
         "-Wno-unused-parameter",
+        "-fexceptions",
     ],
 
     local_include_dirs: [
@@ -1626,6 +1627,7 @@ cc_test {
 
     cflags: [
         "-Wno-unused-parameter",
+        "-fexceptions",
     ],
 
     local_include_dirs: [
