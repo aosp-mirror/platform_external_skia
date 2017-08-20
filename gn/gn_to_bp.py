@@ -15,7 +15,6 @@ import subprocess
 import tempfile
 
 tool_cflags = [
-    '-fexceptions',
     '-Wno-unused-parameter',
 ]
 
@@ -32,6 +31,7 @@ tool_shared_libs = [
     'libicui18n',
     'libexpat',
     'libft2',
+    'libheif',
     'libdng_sdk',
     'libpiex',
     'libcutils',
@@ -125,6 +125,7 @@ cc_library {
         "libdng_sdk",
         "libexpat",
         "libft2",
+        "libheif",
         "libicui18n",
         "libicuuc",
         "libjpeg",
@@ -196,6 +197,7 @@ cc_test {
 gn_args = {
   'is_official_build':  'true',
   'skia_enable_tools':  'true',
+  'skia_use_libheif':   'true',
   'skia_use_vulkan':    'true',
   'target_cpu':         '"none"',
   'target_os':          '"android"',

@@ -175,7 +175,7 @@ def dm_flags(api, bot):
       configs = [x.replace(old, new) for x in configs]
       # We also test non-msaa instanced.
       configs.append(new)
-    elif 'MacMini6.2' in bot:
+    elif 'MacMini7.1' in bot:
       configs.extend([gl_prefix + 'inst'])
 
     # CommandBuffer bot *only* runs the command_buffer config.
@@ -287,8 +287,6 @@ def dm_flags(api, bot):
 
   # WIC fails on questionable bmps
   if 'Win' in bot:
-    blacklist('_ image gen_platf rle8-height-negative.bmp')
-    blacklist('_ image gen_platf rle4-height-negative.bmp')
     blacklist('_ image gen_platf pal8os2v2.bmp')
     blacklist('_ image gen_platf pal8os2v2-16.bmp')
     blacklist('_ image gen_platf rgba32abf.bmp')
@@ -302,9 +300,12 @@ def dm_flags(api, bot):
       # This GM triggers a SkSmallAllocator assert.
       blacklist('_ gm _ composeshader_bitmap')
 
-  # WIC and CG fail on arithmetic jpegs
   if 'Win' in bot or 'Mac' in bot:
+    # WIC and CG fail on arithmetic jpegs
     blacklist('_ image gen_platf testimgari.jpg')
+    # More questionable bmps that fail on Mac, too. skbug.com/6984
+    blacklist('_ image gen_platf rle8-height-negative.bmp')
+    blacklist('_ image gen_platf rle4-height-negative.bmp')
 
   if 'Android' in bot or 'iOS' in bot:
     # This test crashes the N9 (perhaps because of large malloc/frees). It also
@@ -830,8 +831,8 @@ TEST_BUILDERS = [
   'Test-Android-Clang-PixelC-CPU-TegraX1-arm64-Debug-Android',
   'Test-ChromeOS-Clang-Chromebook_C100p-GPU-MaliT764-arm-Debug',
   'Test-ChromeOS-Clang-Chromebook_CB5_312T-GPU-PowerVRGX6250-arm-Debug',
-  'Test-Mac-Clang-MacMini6.2-CPU-AVX-x86_64-Debug',
-  'Test-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Debug-CommandBuffer',
+  'Test-Mac-Clang-MacMini7.1-CPU-AVX-x86_64-Debug',
+  'Test-Mac-Clang-MacMini7.1-GPU-IntelIris5100-x86_64-Debug-CommandBuffer',
   'Test-Ubuntu-Clang-GCE-CPU-AVX2-x86_64-Debug-ASAN',
   'Test-Ubuntu-Clang-GCE-CPU-AVX2-x86_64-Debug-MSAN',
   'Test-Ubuntu-Clang-GCE-CPU-AVX2-x86_64-Release-TSAN',

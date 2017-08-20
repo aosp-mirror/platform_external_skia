@@ -305,7 +305,11 @@ bool SkWebpCodec::onGetFrameInfo(int i, FrameInfo* frameInfo) const {
         // libwebp only reports fully received frames for an
         // animated image.
         frameInfo->fFullyReceived = true;
+#ifdef SK_LEGACY_FRAME_INFO_ALPHA_TYPE
         frameInfo->fAlphaType = alpha_type(frame->hasAlpha());
+#endif
+        frameInfo->fAlpha = frame->hasAlpha() ? SkEncodedInfo::kUnpremul_Alpha
+                                              : SkEncodedInfo::kOpaque_Alpha;
         frameInfo->fDisposalMethod = frame->getDisposalMethod();
     }
 
@@ -402,19 +406,6 @@ SkCodec::Result SkWebpCodec::onGetPixels(const SkImageInfo& dstInfo, void* dst, 
     SkASSERT(0 == index || index < fFrameHolder.size());
 
     const auto& srcInfo = this->getInfo();
-    {
-        auto info = srcInfo;
-        if (index > 0) {
-            auto alphaType = alpha_type(fFrameHolder.frame(index)->hasAlpha());
-            info = info.makeAlphaType(alphaType);
-        }
-        if (!conversion_possible(dstInfo, info) ||
-            !this->initializeColorXform(dstInfo, options.fPremulBehavior))
-        {
-            return kInvalidConversion;
-        }
-    }
-
     SkASSERT(0 == index || (!options.fSubset && dstInfo.dimensions() == srcInfo.dimensions()));
 
     WebPDecoderConfig config;

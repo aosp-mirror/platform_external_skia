@@ -170,7 +170,7 @@ func defaultSwarmDimensions(parts map[string]string) []string {
 			"Chromecast": "Android",
 			"ChromeOS":   "ChromeOS",
 			"Debian9":    DEFAULT_OS_DEBIAN,
-			"Mac":        "Mac-10.11",
+			"Mac":        "Mac-10.12",
 			"Ubuntu14":   DEFAULT_OS_UBUNTU,
 			"Ubuntu16":   "Ubuntu-16.10",
 			"Ubuntu17":   "Ubuntu-17.04",
@@ -187,6 +187,10 @@ func defaultSwarmDimensions(parts map[string]string) []string {
 		// These machines have a different Windows image.
 		if parts["model"] == "Golo" && os == "Win10" && parts["cpu_or_gpu_value"] == "GT610" {
 			d["os"] = "Windows-10-10586"
+		}
+		// This machine hasn't been upgraded yet.
+		if parts["model"] == "MacMini7.1" && os == "Mac" && parts["cpu_or_gpu"] == "CPU" {
+			d["os"] = "Mac-10.11"
 		}
 	} else {
 		d["os"] = DEFAULT_OS_DEBIAN
@@ -264,6 +268,7 @@ func defaultSwarmDimensions(parts map[string]string) []string {
 					"IntelHD530":    "8086:1912-21.20.16.4590",
 					"IntelHD4400":   "8086:0a16-20.19.15.4703",
 					"IntelHD4600":   "8086:0412-20.19.15.4703",
+					"IntelHD615":    "8086:591e-21.20.16.4590",
 					"IntelIris540":  "8086:1926-21.20.16.4590",
 					"IntelIris6100": "8086:162b-20.19.15.4703",
 					"RadeonR9M470X": "1002:6646-22.19.165.512",
@@ -303,8 +308,7 @@ func defaultSwarmDimensions(parts map[string]string) []string {
 				d["gpu"] = gpu
 			} else if strings.Contains(parts["os"], "Mac") {
 				gpu, ok := map[string]string{
-					// TODO(benjaminwagner): GPU name doesn't match device ID.
-					"IntelHD4000": "8086:0a2e",
+					"IntelIris5100": "8086:0a2e",
 				}[parts["cpu_or_gpu_value"]]
 				if !ok {
 					glog.Fatalf("Entry %q not found in Mac GPU mapping.", parts["cpu_or_gpu_value"])
@@ -477,18 +481,7 @@ func compile(b *specs.TasksCfgBuilder, name string, parts map[string]string) str
 		}
 	}
 
-	// TODO(stephana): Remove this once all Mac machines are on the same
-	// OS version again. Move the call to swarmDimensions back to the
-	// creation of the TaskSpec struct below.
 	dimensions := swarmDimensions(parts)
-	if strings.Contains(name, "Mac") {
-		for idx, dim := range dimensions {
-			if strings.HasPrefix(dim, "os") {
-				dimensions[idx] = "os:Mac-10.12"
-				break
-			}
-		}
-	}
 
 	// Add the task.
 	b.MustAddTask(name, &specs.TaskSpec{

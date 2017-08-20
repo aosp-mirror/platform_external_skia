@@ -919,8 +919,8 @@ DEF_TEST(Codec_wbmp_restrictive, r) {
 // wbmp images have a header that can be arbitrarily large, depending on the
 // size of the image. We cap the size at 65535, meaning we only need to look at
 // 8 bytes to determine whether we can read the image. This is important
-// because SkCodec only passes 14 bytes to SkWbmpCodec to determine whether the
-// image is a wbmp.
+// because SkCodec only passes a limited number of bytes to SkWbmpCodec to
+// determine whether the image is a wbmp.
 DEF_TEST(Codec_wbmp_max_size, r) {
     const unsigned char maxSizeWbmp[] = { 0x00, 0x00,           // Header
                                           0x83, 0xFF, 0x7F,     // W: 65535
@@ -1138,14 +1138,16 @@ static void test_conversion_possible(skiatest::Reporter* r, const char* path,
     if (supportsScanlineDecoder) {
         REPORTER_ASSERT(r, SkCodec::kInvalidConversion == result);
     } else {
-        REPORTER_ASSERT(r, SkCodec::kUnimplemented == result);
+        REPORTER_ASSERT(r, SkCodec::kUnimplemented == result
+                        || SkCodec::kInvalidConversion == result);
     }
 
     result = codec->startIncrementalDecode(infoF16, bm.getPixels(), bm.rowBytes());
     if (supportsIncrementalDecoder) {
         REPORTER_ASSERT(r, SkCodec::kInvalidConversion == result);
     } else {
-        REPORTER_ASSERT(r, SkCodec::kUnimplemented == result);
+        REPORTER_ASSERT(r, SkCodec::kUnimplemented == result
+                        || SkCodec::kInvalidConversion == result);
     }
 
     SkASSERT(SkColorSpace_Base::Type::kXYZ == as_CSB(infoF16.colorSpace())->type());
@@ -1277,7 +1279,7 @@ DEF_TEST(Codec_fallBack, r) {
             "randPixels.bmp",
             };
     for (auto file : files) {
-        auto stream = LimitedRewindingStream::Make(file, 14);
+        auto stream = LimitedRewindingStream::Make(file, SkCodec::MinBufferedBytesNeeded());
         if (!stream) {
             SkDebugf("Missing resources (%s). Set --resourcePath.\n", file);
             return;

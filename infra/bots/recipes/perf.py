@@ -105,7 +105,7 @@ def nanobench_flags(api, bot):
 
     # Bench instanced rendering on a limited number of platforms
     inst_config = gl_prefix + 'inst'
-    if 'PixelC' in bot or 'NVIDIA_Shield' in bot or 'MacMini6.2' in bot:
+    if 'PixelC' in bot or 'NVIDIA_Shield' in bot or 'MacMini7.1' in bot:
       configs.extend([inst_config, inst_config + sample_count])
 
     if 'CommandBuffer' in bot:
@@ -155,6 +155,10 @@ def nanobench_flags(api, bot):
     match.append('~GLInstancedArraysBench') # skia:4714
   if 'IntelIris540' in bot and 'ANGLE' in bot:
     match.append('~tile_image_filter_tiled_64')  # skia:6082
+  if 'IntelHD615' in bot and 'ANGLE' in bot and 'Release' in bot:
+    # skia:6980
+    match.append('~hardstop_')
+    match.append('~GM_radial_gradient3')
   if ('Vulkan' in bot and ('IntelIris540' in bot or 'IntelIris640' in bot) and
       'Win' in bot):
     # skia:6398
@@ -370,8 +374,8 @@ TEST_BUILDERS = [
   'Perf-ChromeOS-Clang-Chromebook_C100p-GPU-MaliT764-arm-Release',
   'Perf-Chromecast-GCC-Chorizo-CPU-Cortex_A7-arm-Debug',
   'Perf-Chromecast-GCC-Chorizo-GPU-Cortex_A7-arm-Release',
-  'Perf-Mac-Clang-MacMini6.2-CPU-AVX-x86_64-Release',
-  'Perf-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Debug-CommandBuffer',
+  'Perf-Mac-Clang-MacMini7.1-CPU-AVX-x86_64-Release',
+  'Perf-Mac-Clang-MacMini7.1-GPU-IntelIris5100-x86_64-Debug-CommandBuffer',
   'Perf-Ubuntu-Clang-GCE-CPU-AVX2-x86_64-Release',
   'Perf-Ubuntu-GCC-ShuttleA-GPU-GTX550Ti-x86_64-Release-Valgrind',
   ('Perf-Ubuntu-GCC-ShuttleA-GPU-GTX550Ti-x86_64-Release-Valgrind' +
@@ -382,6 +386,7 @@ TEST_BUILDERS = [
   'Perf-Win10-MSVC-NUC6i5SYK-GPU-IntelIris540-x86_64-Release-ANGLE',
   'Perf-Win10-MSVC-NUC6i5SYK-GPU-IntelIris540-x86_64-Release-Vulkan',
   'Perf-Win10-MSVC-ShuttleC-GPU-GTX960-x86_64-Release-ANGLE',
+  'Perf-Win10-MSVC-SurfacePro2017-GPU-IntelHD615-x86_64-Release-ANGLE',
   'Perf-Win2k8-MSVC-GCE-CPU-AVX2-x86_64-Debug',
   'Perf-Win2k8-MSVC-GCE-CPU-AVX2-x86_64-Release',
   'Perf-iOS-Clang-iPadMini4-GPU-GX6450-arm-Release'

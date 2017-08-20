@@ -14,6 +14,9 @@
 #include "SkFrameHolder.h"
 #include "SkGifCodec.h"
 #include "SkHalf.h"
+#ifdef SK_HAS_HEIF_LIBRARY
+#include "SkHeifCodec.h"
+#endif
 #include "SkIcoCodec.h"
 #include "SkJpegCodec.h"
 #ifdef SK_HAS_PNG_LIBRARY
@@ -41,12 +44,11 @@ static const DecoderProc gDecoderProcs[] = {
     { SkIcoCodec::IsIco, SkIcoCodec::MakeFromStream },
 #endif
     { SkBmpCodec::IsBmp, SkBmpCodec::MakeFromStream },
-    { SkWbmpCodec::IsWbmp, SkWbmpCodec::MakeFromStream }
+    { SkWbmpCodec::IsWbmp, SkWbmpCodec::MakeFromStream },
+#ifdef SK_HAS_HEIF_LIBRARY
+    { SkHeifCodec::IsHeif, SkHeifCodec::MakeFromStream },
+#endif
 };
-
-size_t SkCodec::MinBufferedBytesNeeded() {
-    return WEBP_VP8_HEADER_SIZE;
-}
 
 std::unique_ptr<SkCodec> SkCodec::MakeFromStream(std::unique_ptr<SkStream> stream,
                                                  Result* outResult, SkPngChunkReader* chunkReader) {
@@ -60,9 +62,7 @@ std::unique_ptr<SkCodec> SkCodec::MakeFromStream(std::unique_ptr<SkStream> strea
         return nullptr;
     }
 
-    // 14 is enough to read all of the supported types.
-    const size_t bytesToRead = 14;
-    SkASSERT(bytesToRead <= MinBufferedBytesNeeded());
+    constexpr size_t bytesToRead = MinBufferedBytesNeeded();
 
     char buffer[bytesToRead];
     size_t bytesRead = stream->peek(buffer, bytesToRead);
@@ -155,6 +155,29 @@ SkCodec::SkCodec(const SkEncodedInfo& info, const SkImageInfo& imageInfo,
 
 SkCodec::~SkCodec() {}
 
+bool SkCodec::conversionSupported(const SkImageInfo& dst, SkEncodedInfo::Color srcColor,
+                                  bool srcIsOpaque, const SkColorSpace* srcCS) const {
+    if (!valid_alpha(dst.alphaType(), srcIsOpaque)) {
+        return false;
+    }
+
+    switch (dst.colorType()) {
+        case kRGBA_8888_SkColorType:
+        case kBGRA_8888_SkColorType:
+            return true;
+        case kRGBA_F16_SkColorType:
+            return dst.colorSpace() && dst.colorSpace()->gammaIsLinear();
+        case kRGB_565_SkColorType:
+            return srcIsOpaque;
+        case kGray_8_SkColorType:
+            return SkEncodedInfo::kGray_Color == srcColor && srcIsOpaque &&
+                   !needs_color_xform(dst, srcCS, false);
+        default:
+            return false;
+    }
+
+}
+
 bool SkCodec::rewindIfNeeded() {
     // Store the value of fNeedsRewind so we can update it. Next read will
     // require a rewind.
@@ -194,7 +217,17 @@ SkCodec::Result SkCodec::handleFrameIndex(const SkImageInfo& info, void* pixels,
                                           const Options& options) {
     const int index = options.fFrameIndex;
     if (0 == index) {
+        if (!this->conversionSupported(info, fEncodedInfo.color(), fEncodedInfo.opaque(),
+                                      fSrcInfo.colorSpace())
+            || !this->initializeColorXform(info, fEncodedInfo.alpha(), options.fPremulBehavior))
+        {
+            return kInvalidConversion;
+        }
         return kSuccess;
+    }
+
+    if (index < 0) {
+        return kInvalidParameters;
     }
 
     if (options.fSubset || info.dimensions() != fSrcInfo.dimensions()) {
@@ -213,48 +246,54 @@ SkCodec::Result SkCodec::handleFrameIndex(const SkImageInfo& info, void* pixels,
     const auto* frame = frameHolder->getFrame(index);
     SkASSERT(frame);
 
+    if (!this->conversionSupported(info, fEncodedInfo.color(), !frame->hasAlpha(),
+                                   fSrcInfo.colorSpace())) {
+        return kInvalidConversion;
+    }
+
     const int requiredFrame = frame->getRequiredFrame();
-    if (requiredFrame == kNone) {
-        return kSuccess;
-    }
-
-    if (options.fPriorFrame != kNone) {
-        // Check for a valid frame as a starting point. Alternatively, we could
-        // treat an invalid frame as not providing one, but rejecting it will
-        // make it easier to catch the mistake.
-        if (options.fPriorFrame < requiredFrame || options.fPriorFrame >= index) {
-            return kInvalidParameters;
-        }
-        const auto* prevFrame = frameHolder->getFrame(options.fPriorFrame);
-        switch (prevFrame->getDisposalMethod()) {
-            case SkCodecAnimation::DisposalMethod::kRestorePrevious:
+    if (requiredFrame != kNone) {
+        if (options.fPriorFrame != kNone) {
+            // Check for a valid frame as a starting point. Alternatively, we could
+            // treat an invalid frame as not providing one, but rejecting it will
+            // make it easier to catch the mistake.
+            if (options.fPriorFrame < requiredFrame || options.fPriorFrame >= index) {
                 return kInvalidParameters;
-            case SkCodecAnimation::DisposalMethod::kRestoreBGColor:
-                // If a frame after the required frame is provided, there is no
-                // need to clear, since it must be covered by the desired frame.
-                if (options.fPriorFrame == requiredFrame) {
-                    zero_rect(info, pixels, rowBytes, prevFrame->frameRect());
-                }
-                break;
-            default:
-                break;
+            }
+            const auto* prevFrame = frameHolder->getFrame(options.fPriorFrame);
+            switch (prevFrame->getDisposalMethod()) {
+                case SkCodecAnimation::DisposalMethod::kRestorePrevious:
+                    return kInvalidParameters;
+                case SkCodecAnimation::DisposalMethod::kRestoreBGColor:
+                    // If a frame after the required frame is provided, there is no
+                    // need to clear, since it must be covered by the desired frame.
+                    if (options.fPriorFrame == requiredFrame) {
+                        zero_rect(info, pixels, rowBytes, prevFrame->frameRect());
+                    }
+                    break;
+                default:
+                    break;
+            }
+        } else {
+            Options prevFrameOptions(options);
+            prevFrameOptions.fFrameIndex = requiredFrame;
+            prevFrameOptions.fZeroInitialized = kNo_ZeroInitialized;
+            const Result result = this->getPixels(info, pixels, rowBytes, &prevFrameOptions);
+            if (result != kSuccess) {
+                return result;
+            }
+            const auto* prevFrame = frameHolder->getFrame(requiredFrame);
+            const auto disposalMethod = prevFrame->getDisposalMethod();
+            if (disposalMethod == SkCodecAnimation::DisposalMethod::kRestoreBGColor) {
+                zero_rect(info, pixels, rowBytes, prevFrame->frameRect());
+            }
         }
-        return kSuccess;
     }
 
-    Options prevFrameOptions(options);
-    prevFrameOptions.fFrameIndex = requiredFrame;
-    prevFrameOptions.fZeroInitialized = kNo_ZeroInitialized;
-    const Result result = this->getPixels(info, pixels, rowBytes, &prevFrameOptions);
-    if (result == kSuccess) {
-        const auto* prevFrame = frameHolder->getFrame(requiredFrame);
-        const auto disposalMethod = prevFrame->getDisposalMethod();
-        if (disposalMethod == SkCodecAnimation::DisposalMethod::kRestoreBGColor) {
-            zero_rect(info, pixels, rowBytes, prevFrame->frameRect());
-        }
-    }
-
-    return result;
+    FrameInfo frameInfo;
+    SkAssertResult(this->getFrameInfo(index, &frameInfo));
+    return this->initializeColorXform(info, frameInfo.fAlpha, options.fPremulBehavior)
+        ? kSuccess : kInvalidConversion;
 }
 
 SkCodec::Result SkCodec::getPixels(const SkImageInfo& info, void* pixels, size_t rowBytes,
@@ -278,10 +317,6 @@ SkCodec::Result SkCodec::getPixels(const SkImageInfo& info, void* pixels, size_t
     if (nullptr == options) {
         options = &optsStorage;
     } else {
-        const Result frameIndexResult = this->handleFrameIndex(info, pixels, rowBytes, *options);
-        if (frameIndexResult != kSuccess) {
-            return frameIndexResult;
-        }
         if (options->fSubset) {
             SkIRect subset(*options->fSubset);
             if (!this->onGetValidSubset(&subset) || subset != *options->fSubset) {
@@ -290,6 +325,12 @@ SkCodec::Result SkCodec::getPixels(const SkImageInfo& info, void* pixels, size_t
                 return kUnimplemented;
             }
         }
+    }
+
+    const Result frameIndexResult = this->handleFrameIndex(info, pixels, rowBytes,
+                                                           *options);
+    if (frameIndexResult != kSuccess) {
+        return frameIndexResult;
     }
 
     // FIXME: Support subsets somehow? Note that this works for SkWebpCodec
@@ -350,10 +391,6 @@ SkCodec::Result SkCodec::startIncrementalDecode(const SkImageInfo& info, void* p
     if (nullptr == options) {
         options = &optsStorage;
     } else {
-        const Result frameIndexResult = this->handleFrameIndex(info, pixels, rowBytes, *options);
-        if (frameIndexResult != kSuccess) {
-            return frameIndexResult;
-        }
         if (options->fSubset) {
             SkIRect size = SkIRect::MakeSize(info.dimensions());
             if (!size.contains(*options->fSubset)) {
@@ -366,6 +403,12 @@ SkCodec::Result SkCodec::startIncrementalDecode(const SkImageInfo& info, void* p
                 return kInvalidParameters;
             }
         }
+    }
+
+    const Result frameIndexResult = this->handleFrameIndex(info, pixels, rowBytes,
+                                                           *options);
+    if (frameIndexResult != kSuccess) {
+        return frameIndexResult;
     }
 
     if (!this->dimensionsSupported(info.dimensions())) {
@@ -416,6 +459,18 @@ SkCodec::Result SkCodec::startScanlineDecode(const SkImageInfo& info,
         if (options->fSubset->top() != 0 || options->fSubset->height() != info.height()) {
             return kInvalidInput;
         }
+    }
+
+    // Scanline decoding only supports decoding the first frame.
+    if (options->fFrameIndex != 0) {
+        return kUnimplemented;
+    }
+
+    // The void* dst and rowbytes in handleFrameIndex or only used for decoding prior
+    // frames, which is not supported here anyway, so it is safe to pass nullptr/0.
+    const Result frameIndexResult = this->handleFrameIndex(info, nullptr, 0, *options);
+    if (frameIndexResult != kSuccess) {
+        return frameIndexResult;
     }
 
     // FIXME: Support subsets somehow?
@@ -561,13 +616,16 @@ static inline SkColorSpaceXform::ColorFormat select_xform_format_ct(SkColorType 
     }
 }
 
-bool SkCodec::initializeColorXform(const SkImageInfo& dstInfo,
+bool SkCodec::initializeColorXform(const SkImageInfo& dstInfo, SkEncodedInfo::Alpha encodedAlpha,
                                    SkTransferFunctionBehavior premulBehavior) {
     fColorXform = nullptr;
     fXformOnDecode = false;
-    bool needsColorCorrectPremul = needs_premul(dstInfo, fEncodedInfo) &&
+    if (!this->usesColorXform()) {
+        return true;
+    }
+    bool needsColorCorrectPremul = needs_premul(dstInfo.alphaType(), encodedAlpha) &&
                                    SkTransferFunctionBehavior::kRespect == premulBehavior;
-    if (needs_color_xform(dstInfo, fSrcInfo, needsColorCorrectPremul)) {
+    if (needs_color_xform(dstInfo, fSrcInfo.colorSpace(), needsColorCorrectPremul)) {
         fColorXform = SkColorSpaceXform_Base::New(fSrcInfo.colorSpace(), dstInfo.colorSpace(),
                                                   premulBehavior);
         if (!fColorXform) {

@@ -66,6 +66,12 @@ SkAndroidCodec::SkAndroidCodec(SkCodec* codec)
     , fCodec(codec)
 {}
 
+SkAndroidCodec::~SkAndroidCodec() {}
+
+const SkEncodedInfo& SkAndroidCodec::getEncodedInfo() const {
+    return fCodec->getEncodedInfo();
+}
+
 std::unique_ptr<SkAndroidCodec> SkAndroidCodec::MakeFromStream(std::unique_ptr<SkStream> stream, SkPngChunkReader* chunkReader) {
     auto codec = SkCodec::MakeFromStream(std::move(stream), nullptr, chunkReader);
     if (nullptr == codec) {
@@ -83,6 +89,9 @@ std::unique_ptr<SkAndroidCodec> SkAndroidCodec::MakeFromStream(std::unique_ptr<S
         case SkEncodedImageFormat::kGIF:
         case SkEncodedImageFormat::kBMP:
         case SkEncodedImageFormat::kWBMP:
+#ifdef SK_HAS_HEIF_LIBRARY
+        case SkEncodedImageFormat::kHEIF:
+#endif
             return skstd::make_unique<SkSampledCodec>(codec.release());
 #ifdef SK_HAS_WEBP_LIBRARY
         case SkEncodedImageFormat::kWEBP:

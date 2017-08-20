@@ -263,7 +263,8 @@ bool SkPngCodec::createColorTable(const SkImageInfo& dstInfo) {
     if (png_get_tRNS(fPng_ptr, fInfo_ptr, &alphas, &numColorsWithAlpha, nullptr)) {
         // If we are performing a color xform, it will handle the premultiply.  Otherwise,
         // we'll do it here.
-        bool premultiply = !this->colorXform() && needs_premul(dstInfo, this->getEncodedInfo());
+        bool premultiply = !this->colorXform() && needs_premul(dstInfo.alphaType(),
+                                                               this->getEncodedInfo().alpha());
 
         // Choose which function to use to create the color table. If the final destination's
         // colortype is unpremultiplied, the color table will store unpremultiplied colors.
@@ -980,10 +981,6 @@ SkCodec::Result SkPngCodec::initializeXforms(const SkImageInfo& dstInfo, const O
     // interlaced scanline decoder may need to rewind.
     fSwizzler.reset(nullptr);
 
-    if (!this->initializeColorXform(dstInfo, options.fPremulBehavior)) {
-        return kInvalidConversion;
-    }
-
     // If SkColorSpaceXform directly supports the encoded PNG format, we should skip format
     // conversion in the swizzler (or skip swizzling altogether).
     bool skipFormatConversion = false;
@@ -1086,10 +1083,6 @@ bool SkPngCodec::onRewind() {
 SkCodec::Result SkPngCodec::onGetPixels(const SkImageInfo& dstInfo, void* dst,
                                         size_t rowBytes, const Options& options,
                                         int* rowsDecoded) {
-    if (!conversion_possible(dstInfo, this->getInfo())) {
-        return kInvalidConversion;
-    }
-
     Result result = this->initializeXforms(dstInfo, options);
     if (kSuccess != result) {
         return result;
@@ -1106,10 +1099,6 @@ SkCodec::Result SkPngCodec::onGetPixels(const SkImageInfo& dstInfo, void* dst,
 
 SkCodec::Result SkPngCodec::onStartIncrementalDecode(const SkImageInfo& dstInfo,
         void* dst, size_t rowBytes, const SkCodec::Options& options) {
-    if (!conversion_possible(dstInfo, this->getInfo())) {
-        return kInvalidConversion;
-    }
-
     Result result = this->initializeXforms(dstInfo, options);
     if (kSuccess != result) {
         return result;

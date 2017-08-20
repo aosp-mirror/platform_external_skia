@@ -956,34 +956,34 @@
         "Upload-Perf-Debian9-GCC-ShuttleA-GPU-GTX960-x86_64-Release"
       ]
     },
-    "Perf-Mac-Clang-MacMini6.2-CPU-AVX-x86_64-Debug": {
+    "Perf-Mac-Clang-MacMini7.1-CPU-AVX-x86_64-Debug": {
       "priority": 0.8,
       "tasks": [
-        "Perf-Mac-Clang-MacMini6.2-CPU-AVX-x86_64-Debug"
+        "Perf-Mac-Clang-MacMini7.1-CPU-AVX-x86_64-Debug"
       ]
     },
-    "Perf-Mac-Clang-MacMini6.2-CPU-AVX-x86_64-Release": {
+    "Perf-Mac-Clang-MacMini7.1-CPU-AVX-x86_64-Release": {
       "priority": 0.8,
       "tasks": [
-        "Upload-Perf-Mac-Clang-MacMini6.2-CPU-AVX-x86_64-Release"
+        "Upload-Perf-Mac-Clang-MacMini7.1-CPU-AVX-x86_64-Release"
       ]
     },
-    "Perf-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Debug": {
+    "Perf-Mac-Clang-MacMini7.1-GPU-IntelIris5100-x86_64-Debug": {
       "priority": 0.8,
       "tasks": [
-        "Perf-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Debug"
+        "Perf-Mac-Clang-MacMini7.1-GPU-IntelIris5100-x86_64-Debug"
       ]
     },
-    "Perf-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Release": {
+    "Perf-Mac-Clang-MacMini7.1-GPU-IntelIris5100-x86_64-Release": {
       "priority": 0.8,
       "tasks": [
-        "Upload-Perf-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Release"
+        "Upload-Perf-Mac-Clang-MacMini7.1-GPU-IntelIris5100-x86_64-Release"
       ]
     },
-    "Perf-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Release-CommandBuffer": {
+    "Perf-Mac-Clang-MacMini7.1-GPU-IntelIris5100-x86_64-Release-CommandBuffer": {
       "priority": 0.8,
       "tasks": [
-        "Upload-Perf-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Release-CommandBuffer"
+        "Upload-Perf-Mac-Clang-MacMini7.1-GPU-IntelIris5100-x86_64-Release-CommandBuffer"
       ],
       "trigger": "master"
     },
@@ -1363,6 +1363,30 @@
       "priority": 0.8,
       "tasks": [
         "Upload-Perf-Win10-MSVC-ShuttleC-GPU-GTX960-x86_64-Release-ANGLE"
+      ]
+    },
+    "Perf-Win10-MSVC-SurfacePro2017-GPU-IntelHD615-x86_64-Debug": {
+      "priority": 0.8,
+      "tasks": [
+        "Perf-Win10-MSVC-SurfacePro2017-GPU-IntelHD615-x86_64-Debug"
+      ]
+    },
+    "Perf-Win10-MSVC-SurfacePro2017-GPU-IntelHD615-x86_64-Debug-ANGLE": {
+      "priority": 0.8,
+      "tasks": [
+        "Perf-Win10-MSVC-SurfacePro2017-GPU-IntelHD615-x86_64-Debug-ANGLE"
+      ]
+    },
+    "Perf-Win10-MSVC-SurfacePro2017-GPU-IntelHD615-x86_64-Release": {
+      "priority": 0.8,
+      "tasks": [
+        "Upload-Perf-Win10-MSVC-SurfacePro2017-GPU-IntelHD615-x86_64-Release"
+      ]
+    },
+    "Perf-Win10-MSVC-SurfacePro2017-GPU-IntelHD615-x86_64-Release-ANGLE": {
+      "priority": 0.8,
+      "tasks": [
+        "Upload-Perf-Win10-MSVC-SurfacePro2017-GPU-IntelHD615-x86_64-Release-ANGLE"
       ]
     },
     "Perf-Win10-MSVC-ZBOX-GPU-GTX1070-x86_64-Debug": {
@@ -1953,35 +1977,35 @@
         "Upload-Test-Debian9-GCC-ShuttleA-GPU-GTX960-x86_64-Release"
       ]
     },
-    "Test-Mac-Clang-MacMini6.2-CPU-AVX-x86_64-Debug": {
+    "Test-Mac-Clang-MacMini7.1-CPU-AVX-x86_64-Debug": {
       "priority": 0.8,
       "tasks": [
-        "Upload-Test-Mac-Clang-MacMini6.2-CPU-AVX-x86_64-Debug"
+        "Upload-Test-Mac-Clang-MacMini7.1-CPU-AVX-x86_64-Debug"
       ]
     },
-    "Test-Mac-Clang-MacMini6.2-CPU-AVX-x86_64-Release": {
+    "Test-Mac-Clang-MacMini7.1-CPU-AVX-x86_64-Release": {
       "priority": 0.8,
       "tasks": [
-        "Upload-Test-Mac-Clang-MacMini6.2-CPU-AVX-x86_64-Release"
+        "Upload-Test-Mac-Clang-MacMini7.1-CPU-AVX-x86_64-Release"
       ]
     },
-    "Test-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Debug": {
+    "Test-Mac-Clang-MacMini7.1-GPU-IntelIris5100-x86_64-Debug": {
       "priority": 0.8,
       "tasks": [
-        "Upload-Test-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Debug"
+        "Upload-Test-Mac-Clang-MacMini7.1-GPU-IntelIris5100-x86_64-Debug"
       ]
     },
-    "Test-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Debug-CommandBuffer": {
+    "Test-Mac-Clang-MacMini7.1-GPU-IntelIris5100-x86_64-Debug-CommandBuffer": {
       "priority": 0.8,
       "tasks": [
-        "Upload-Test-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Debug-CommandBuffer"
+        "Upload-Test-Mac-Clang-MacMini7.1-GPU-IntelIris5100-x86_64-Debug-CommandBuffer"
       ],
       "trigger": "master"
     },
-    "Test-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Release": {
+    "Test-Mac-Clang-MacMini7.1-GPU-IntelIris5100-x86_64-Release": {
       "priority": 0.8,
       "tasks": [
-        "Upload-Test-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Release"
+        "Upload-Test-Mac-Clang-MacMini7.1-GPU-IntelIris5100-x86_64-Release"
       ]
     },
     "Test-Ubuntu14-GCC-GCE-CPU-AVX2-x86_64-Debug-CT_DM_100k_SKPs": {
@@ -7658,7 +7682,7 @@
       "max_attempts": 1,
       "priority": 0.8
     },
-    "Perf-Mac-Clang-MacMini6.2-CPU-AVX-x86_64-Debug": {
+    "Perf-Mac-Clang-MacMini7.1-CPU-AVX-x86_64-Debug": {
       "cipd_packages": [
         {
           "name": "skia/bots/skimage",
@@ -7693,7 +7717,7 @@
         "../../..",
         "perf",
         "repository=<(REPO)",
-        "buildername=Perf-Mac-Clang-MacMini6.2-CPU-AVX-x86_64-Debug",
+        "buildername=Perf-Mac-Clang-MacMini7.1-CPU-AVX-x86_64-Debug",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -7706,7 +7730,7 @@
       "max_attempts": 1,
       "priority": 0.8
     },
-    "Perf-Mac-Clang-MacMini6.2-CPU-AVX-x86_64-Release": {
+    "Perf-Mac-Clang-MacMini7.1-CPU-AVX-x86_64-Release": {
       "cipd_packages": [
         {
           "name": "skia/bots/skimage",
@@ -7741,7 +7765,7 @@
         "../../..",
         "perf",
         "repository=<(REPO)",
-        "buildername=Perf-Mac-Clang-MacMini6.2-CPU-AVX-x86_64-Release",
+        "buildername=Perf-Mac-Clang-MacMini7.1-CPU-AVX-x86_64-Release",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -7754,7 +7778,7 @@
       "max_attempts": 1,
       "priority": 0.8
     },
-    "Perf-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Debug": {
+    "Perf-Mac-Clang-MacMini7.1-GPU-IntelIris5100-x86_64-Debug": {
       "cipd_packages": [
         {
           "name": "skia/bots/skimage",
@@ -7778,7 +7802,7 @@
       ],
       "dimensions": [
         "gpu:8086:0a2e",
-        "os:Mac-10.11",
+        "os:Mac-10.12",
         "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
@@ -7788,7 +7812,7 @@
         "../../..",
         "perf",
         "repository=<(REPO)",
-        "buildername=Perf-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Debug",
+        "buildername=Perf-Mac-Clang-MacMini7.1-GPU-IntelIris5100-x86_64-Debug",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -7801,7 +7825,7 @@
       "max_attempts": 1,
       "priority": 0.8
     },
-    "Perf-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Release": {
+    "Perf-Mac-Clang-MacMini7.1-GPU-IntelIris5100-x86_64-Release": {
       "cipd_packages": [
         {
           "name": "skia/bots/skimage",
@@ -7825,7 +7849,7 @@
       ],
       "dimensions": [
         "gpu:8086:0a2e",
-        "os:Mac-10.11",
+        "os:Mac-10.12",
         "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
@@ -7835,7 +7859,7 @@
         "../../..",
         "perf",
         "repository=<(REPO)",
-        "buildername=Perf-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Release",
+        "buildername=Perf-Mac-Clang-MacMini7.1-GPU-IntelIris5100-x86_64-Release",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -7848,7 +7872,7 @@
       "max_attempts": 1,
       "priority": 0.8
     },
-    "Perf-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Release-CommandBuffer": {
+    "Perf-Mac-Clang-MacMini7.1-GPU-IntelIris5100-x86_64-Release-CommandBuffer": {
       "cipd_packages": [
         {
           "name": "skia/bots/skimage",
@@ -7872,7 +7896,7 @@
       ],
       "dimensions": [
         "gpu:8086:0a2e",
-        "os:Mac-10.11",
+        "os:Mac-10.12",
         "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
@@ -7882,7 +7906,7 @@
         "../../..",
         "perf",
         "repository=<(REPO)",
-        "buildername=Perf-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Release-CommandBuffer",
+        "buildername=Perf-Mac-Clang-MacMini7.1-GPU-IntelIris5100-x86_64-Release-CommandBuffer",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -10922,6 +10946,194 @@
         "perf",
         "repository=<(REPO)",
         "buildername=Perf-Win10-MSVC-ShuttleC-GPU-GTX960-x86_64-Release-ANGLE",
+        "swarm_out_dir=${ISOLATED_OUTDIR}",
+        "revision=<(REVISION)",
+        "patch_repo=<(PATCH_REPO)",
+        "patch_storage=<(PATCH_STORAGE)",
+        "patch_issue=<(ISSUE)",
+        "patch_set=<(PATCHSET)"
+      ],
+      "io_timeout_ns": 2400000000000,
+      "isolate": "perf_skia_bundled_win.isolate",
+      "max_attempts": 1,
+      "priority": 0.8
+    },
+    "Perf-Win10-MSVC-SurfacePro2017-GPU-IntelHD615-x86_64-Debug": {
+      "cipd_packages": [
+        {
+          "name": "skia/bots/skimage",
+          "path": "skimage",
+          "version": "version:29"
+        },
+        {
+          "name": "skia/bots/skp",
+          "path": "skp",
+          "version": "version:80"
+        },
+        {
+          "name": "skia/bots/svg",
+          "path": "svg",
+          "version": "version:9"
+        }
+      ],
+      "dependencies": [
+        "Build-Win-MSVC-x86_64-Debug",
+        "Housekeeper-PerCommit-BundleRecipes"
+      ],
+      "dimensions": [
+        "gpu:8086:591e-21.20.16.4590",
+        "os:Windows-10-15063",
+        "pool:Skia"
+      ],
+      "execution_timeout_ns": 14400000000000,
+      "expiration_ns": 72000000000000,
+      "extra_args": [
+        "--workdir",
+        "../../..",
+        "perf",
+        "repository=<(REPO)",
+        "buildername=Perf-Win10-MSVC-SurfacePro2017-GPU-IntelHD615-x86_64-Debug",
+        "swarm_out_dir=${ISOLATED_OUTDIR}",
+        "revision=<(REVISION)",
+        "patch_repo=<(PATCH_REPO)",
+        "patch_storage=<(PATCH_STORAGE)",
+        "patch_issue=<(ISSUE)",
+        "patch_set=<(PATCHSET)"
+      ],
+      "io_timeout_ns": 2400000000000,
+      "isolate": "perf_skia_bundled_win.isolate",
+      "max_attempts": 1,
+      "priority": 0.8
+    },
+    "Perf-Win10-MSVC-SurfacePro2017-GPU-IntelHD615-x86_64-Debug-ANGLE": {
+      "cipd_packages": [
+        {
+          "name": "skia/bots/skimage",
+          "path": "skimage",
+          "version": "version:29"
+        },
+        {
+          "name": "skia/bots/skp",
+          "path": "skp",
+          "version": "version:80"
+        },
+        {
+          "name": "skia/bots/svg",
+          "path": "svg",
+          "version": "version:9"
+        }
+      ],
+      "dependencies": [
+        "Build-Win-MSVC-x86_64-Debug-ANGLE",
+        "Housekeeper-PerCommit-BundleRecipes"
+      ],
+      "dimensions": [
+        "gpu:8086:591e-21.20.16.4590",
+        "os:Windows-10-15063",
+        "pool:Skia"
+      ],
+      "execution_timeout_ns": 14400000000000,
+      "expiration_ns": 72000000000000,
+      "extra_args": [
+        "--workdir",
+        "../../..",
+        "perf",
+        "repository=<(REPO)",
+        "buildername=Perf-Win10-MSVC-SurfacePro2017-GPU-IntelHD615-x86_64-Debug-ANGLE",
+        "swarm_out_dir=${ISOLATED_OUTDIR}",
+        "revision=<(REVISION)",
+        "patch_repo=<(PATCH_REPO)",
+        "patch_storage=<(PATCH_STORAGE)",
+        "patch_issue=<(ISSUE)",
+        "patch_set=<(PATCHSET)"
+      ],
+      "io_timeout_ns": 2400000000000,
+      "isolate": "perf_skia_bundled_win.isolate",
+      "max_attempts": 1,
+      "priority": 0.8
+    },
+    "Perf-Win10-MSVC-SurfacePro2017-GPU-IntelHD615-x86_64-Release": {
+      "cipd_packages": [
+        {
+          "name": "skia/bots/skimage",
+          "path": "skimage",
+          "version": "version:29"
+        },
+        {
+          "name": "skia/bots/skp",
+          "path": "skp",
+          "version": "version:80"
+        },
+        {
+          "name": "skia/bots/svg",
+          "path": "svg",
+          "version": "version:9"
+        }
+      ],
+      "dependencies": [
+        "Build-Win-MSVC-x86_64-Release",
+        "Housekeeper-PerCommit-BundleRecipes"
+      ],
+      "dimensions": [
+        "gpu:8086:591e-21.20.16.4590",
+        "os:Windows-10-15063",
+        "pool:Skia"
+      ],
+      "execution_timeout_ns": 14400000000000,
+      "expiration_ns": 72000000000000,
+      "extra_args": [
+        "--workdir",
+        "../../..",
+        "perf",
+        "repository=<(REPO)",
+        "buildername=Perf-Win10-MSVC-SurfacePro2017-GPU-IntelHD615-x86_64-Release",
+        "swarm_out_dir=${ISOLATED_OUTDIR}",
+        "revision=<(REVISION)",
+        "patch_repo=<(PATCH_REPO)",
+        "patch_storage=<(PATCH_STORAGE)",
+        "patch_issue=<(ISSUE)",
+        "patch_set=<(PATCHSET)"
+      ],
+      "io_timeout_ns": 2400000000000,
+      "isolate": "perf_skia_bundled_win.isolate",
+      "max_attempts": 1,
+      "priority": 0.8
+    },
+    "Perf-Win10-MSVC-SurfacePro2017-GPU-IntelHD615-x86_64-Release-ANGLE": {
+      "cipd_packages": [
+        {
+          "name": "skia/bots/skimage",
+          "path": "skimage",
+          "version": "version:29"
+        },
+        {
+          "name": "skia/bots/skp",
+          "path": "skp",
+          "version": "version:80"
+        },
+        {
+          "name": "skia/bots/svg",
+          "path": "svg",
+          "version": "version:9"
+        }
+      ],
+      "dependencies": [
+        "Build-Win-MSVC-x86_64-Release-ANGLE",
+        "Housekeeper-PerCommit-BundleRecipes"
+      ],
+      "dimensions": [
+        "gpu:8086:591e-21.20.16.4590",
+        "os:Windows-10-15063",
+        "pool:Skia"
+      ],
+      "execution_timeout_ns": 14400000000000,
+      "expiration_ns": 72000000000000,
+      "extra_args": [
+        "--workdir",
+        "../../..",
+        "perf",
+        "repository=<(REPO)",
+        "buildername=Perf-Win10-MSVC-SurfacePro2017-GPU-IntelHD615-x86_64-Release-ANGLE",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -14860,7 +15072,7 @@
       "max_attempts": 1,
       "priority": 0.8
     },
-    "Test-Mac-Clang-MacMini6.2-CPU-AVX-x86_64-Debug": {
+    "Test-Mac-Clang-MacMini7.1-CPU-AVX-x86_64-Debug": {
       "cipd_packages": [
         {
           "name": "skia/bots/skimage",
@@ -14895,7 +15107,7 @@
         "../../..",
         "test",
         "repository=<(REPO)",
-        "buildername=Test-Mac-Clang-MacMini6.2-CPU-AVX-x86_64-Debug",
+        "buildername=Test-Mac-Clang-MacMini7.1-CPU-AVX-x86_64-Debug",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -14908,7 +15120,7 @@
       "max_attempts": 1,
       "priority": 0.8
     },
-    "Test-Mac-Clang-MacMini6.2-CPU-AVX-x86_64-Release": {
+    "Test-Mac-Clang-MacMini7.1-CPU-AVX-x86_64-Release": {
       "cipd_packages": [
         {
           "name": "skia/bots/skimage",
@@ -14943,7 +15155,7 @@
         "../../..",
         "test",
         "repository=<(REPO)",
-        "buildername=Test-Mac-Clang-MacMini6.2-CPU-AVX-x86_64-Release",
+        "buildername=Test-Mac-Clang-MacMini7.1-CPU-AVX-x86_64-Release",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -14956,7 +15168,7 @@
       "max_attempts": 1,
       "priority": 0.8
     },
-    "Test-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Debug": {
+    "Test-Mac-Clang-MacMini7.1-GPU-IntelIris5100-x86_64-Debug": {
       "cipd_packages": [
         {
           "name": "skia/bots/skimage",
@@ -14980,7 +15192,7 @@
       ],
       "dimensions": [
         "gpu:8086:0a2e",
-        "os:Mac-10.11",
+        "os:Mac-10.12",
         "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
@@ -14990,7 +15202,7 @@
         "../../..",
         "test",
         "repository=<(REPO)",
-        "buildername=Test-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Debug",
+        "buildername=Test-Mac-Clang-MacMini7.1-GPU-IntelIris5100-x86_64-Debug",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -15003,7 +15215,7 @@
       "max_attempts": 1,
       "priority": 0.8
     },
-    "Test-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Debug-CommandBuffer": {
+    "Test-Mac-Clang-MacMini7.1-GPU-IntelIris5100-x86_64-Debug-CommandBuffer": {
       "cipd_packages": [
         {
           "name": "skia/bots/skimage",
@@ -15027,7 +15239,7 @@
       ],
       "dimensions": [
         "gpu:8086:0a2e",
-        "os:Mac-10.11",
+        "os:Mac-10.12",
         "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
@@ -15037,7 +15249,7 @@
         "../../..",
         "test",
         "repository=<(REPO)",
-        "buildername=Test-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Debug-CommandBuffer",
+        "buildername=Test-Mac-Clang-MacMini7.1-GPU-IntelIris5100-x86_64-Debug-CommandBuffer",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -15050,7 +15262,7 @@
       "max_attempts": 1,
       "priority": 0.8
     },
-    "Test-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Release": {
+    "Test-Mac-Clang-MacMini7.1-GPU-IntelIris5100-x86_64-Release": {
       "cipd_packages": [
         {
           "name": "skia/bots/skimage",
@@ -15074,7 +15286,7 @@
       ],
       "dimensions": [
         "gpu:8086:0a2e",
-        "os:Mac-10.11",
+        "os:Mac-10.12",
         "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
@@ -15084,7 +15296,7 @@
         "../../..",
         "test",
         "repository=<(REPO)",
-        "buildername=Test-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Release",
+        "buildername=Test-Mac-Clang-MacMini7.1-GPU-IntelIris5100-x86_64-Release",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -20693,9 +20905,9 @@
       "isolate": "upload_nano_results.isolate",
       "priority": 0.8
     },
-    "Upload-Perf-Mac-Clang-MacMini6.2-CPU-AVX-x86_64-Release": {
+    "Upload-Perf-Mac-Clang-MacMini7.1-CPU-AVX-x86_64-Release": {
       "dependencies": [
-        "Perf-Mac-Clang-MacMini6.2-CPU-AVX-x86_64-Release"
+        "Perf-Mac-Clang-MacMini7.1-CPU-AVX-x86_64-Release"
       ],
       "dimensions": [
         "cpu:x86-64-avx2",
@@ -20708,7 +20920,7 @@
         "../../..",
         "upload_nano_results",
         "repository=<(REPO)",
-        "buildername=Perf-Mac-Clang-MacMini6.2-CPU-AVX-x86_64-Release",
+        "buildername=Perf-Mac-Clang-MacMini7.1-CPU-AVX-x86_64-Release",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -20720,9 +20932,9 @@
       "isolate": "upload_nano_results.isolate",
       "priority": 0.8
     },
-    "Upload-Perf-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Release": {
+    "Upload-Perf-Mac-Clang-MacMini7.1-GPU-IntelIris5100-x86_64-Release": {
       "dependencies": [
-        "Perf-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Release"
+        "Perf-Mac-Clang-MacMini7.1-GPU-IntelIris5100-x86_64-Release"
       ],
       "dimensions": [
         "cpu:x86-64-avx2",
@@ -20735,7 +20947,7 @@
         "../../..",
         "upload_nano_results",
         "repository=<(REPO)",
-        "buildername=Perf-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Release",
+        "buildername=Perf-Mac-Clang-MacMini7.1-GPU-IntelIris5100-x86_64-Release",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -20747,9 +20959,9 @@
       "isolate": "upload_nano_results.isolate",
       "priority": 0.8
     },
-    "Upload-Perf-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Release-CommandBuffer": {
+    "Upload-Perf-Mac-Clang-MacMini7.1-GPU-IntelIris5100-x86_64-Release-CommandBuffer": {
       "dependencies": [
-        "Perf-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Release-CommandBuffer"
+        "Perf-Mac-Clang-MacMini7.1-GPU-IntelIris5100-x86_64-Release-CommandBuffer"
       ],
       "dimensions": [
         "cpu:x86-64-avx2",
@@ -20762,7 +20974,7 @@
         "../../..",
         "upload_nano_results",
         "repository=<(REPO)",
-        "buildername=Perf-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Release-CommandBuffer",
+        "buildername=Perf-Mac-Clang-MacMini7.1-GPU-IntelIris5100-x86_64-Release-CommandBuffer",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -21519,6 +21731,60 @@
         "upload_nano_results",
         "repository=<(REPO)",
         "buildername=Perf-Win10-MSVC-ShuttleC-GPU-GTX960-x86_64-Release-ANGLE",
+        "swarm_out_dir=${ISOLATED_OUTDIR}",
+        "revision=<(REVISION)",
+        "patch_repo=<(PATCH_REPO)",
+        "patch_storage=<(PATCH_STORAGE)",
+        "patch_issue=<(ISSUE)",
+        "patch_set=<(PATCHSET)",
+        "gs_bucket=skia-perf"
+      ],
+      "isolate": "upload_nano_results.isolate",
+      "priority": 0.8
+    },
+    "Upload-Perf-Win10-MSVC-SurfacePro2017-GPU-IntelHD615-x86_64-Release": {
+      "dependencies": [
+        "Perf-Win10-MSVC-SurfacePro2017-GPU-IntelHD615-x86_64-Release"
+      ],
+      "dimensions": [
+        "cpu:x86-64-avx2",
+        "gpu:none",
+        "os:Debian-9.1",
+        "pool:Skia"
+      ],
+      "extra_args": [
+        "--workdir",
+        "../../..",
+        "upload_nano_results",
+        "repository=<(REPO)",
+        "buildername=Perf-Win10-MSVC-SurfacePro2017-GPU-IntelHD615-x86_64-Release",
+        "swarm_out_dir=${ISOLATED_OUTDIR}",
+        "revision=<(REVISION)",
+        "patch_repo=<(PATCH_REPO)",
+        "patch_storage=<(PATCH_STORAGE)",
+        "patch_issue=<(ISSUE)",
+        "patch_set=<(PATCHSET)",
+        "gs_bucket=skia-perf"
+      ],
+      "isolate": "upload_nano_results.isolate",
+      "priority": 0.8
+    },
+    "Upload-Perf-Win10-MSVC-SurfacePro2017-GPU-IntelHD615-x86_64-Release-ANGLE": {
+      "dependencies": [
+        "Perf-Win10-MSVC-SurfacePro2017-GPU-IntelHD615-x86_64-Release-ANGLE"
+      ],
+      "dimensions": [
+        "cpu:x86-64-avx2",
+        "gpu:none",
+        "os:Debian-9.1",
+        "pool:Skia"
+      ],
+      "extra_args": [
+        "--workdir",
+        "../../..",
+        "upload_nano_results",
+        "repository=<(REPO)",
+        "buildername=Perf-Win10-MSVC-SurfacePro2017-GPU-IntelHD615-x86_64-Release-ANGLE",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -23555,9 +23821,9 @@
       "isolate": "upload_dm_results.isolate",
       "priority": 0.8
     },
-    "Upload-Test-Mac-Clang-MacMini6.2-CPU-AVX-x86_64-Debug": {
+    "Upload-Test-Mac-Clang-MacMini7.1-CPU-AVX-x86_64-Debug": {
       "dependencies": [
-        "Test-Mac-Clang-MacMini6.2-CPU-AVX-x86_64-Debug"
+        "Test-Mac-Clang-MacMini7.1-CPU-AVX-x86_64-Debug"
       ],
       "dimensions": [
         "cpu:x86-64-avx2",
@@ -23570,7 +23836,7 @@
         "../../..",
         "upload_dm_results",
         "repository=<(REPO)",
-        "buildername=Test-Mac-Clang-MacMini6.2-CPU-AVX-x86_64-Debug",
+        "buildername=Test-Mac-Clang-MacMini7.1-CPU-AVX-x86_64-Debug",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -23582,9 +23848,9 @@
       "isolate": "upload_dm_results.isolate",
       "priority": 0.8
     },
-    "Upload-Test-Mac-Clang-MacMini6.2-CPU-AVX-x86_64-Release": {
+    "Upload-Test-Mac-Clang-MacMini7.1-CPU-AVX-x86_64-Release": {
       "dependencies": [
-        "Test-Mac-Clang-MacMini6.2-CPU-AVX-x86_64-Release"
+        "Test-Mac-Clang-MacMini7.1-CPU-AVX-x86_64-Release"
       ],
       "dimensions": [
         "cpu:x86-64-avx2",
@@ -23597,7 +23863,7 @@
         "../../..",
         "upload_dm_results",
         "repository=<(REPO)",
-        "buildername=Test-Mac-Clang-MacMini6.2-CPU-AVX-x86_64-Release",
+        "buildername=Test-Mac-Clang-MacMini7.1-CPU-AVX-x86_64-Release",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -23609,9 +23875,9 @@
       "isolate": "upload_dm_results.isolate",
       "priority": 0.8
     },
-    "Upload-Test-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Debug": {
+    "Upload-Test-Mac-Clang-MacMini7.1-GPU-IntelIris5100-x86_64-Debug": {
       "dependencies": [
-        "Test-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Debug"
+        "Test-Mac-Clang-MacMini7.1-GPU-IntelIris5100-x86_64-Debug"
       ],
       "dimensions": [
         "cpu:x86-64-avx2",
@@ -23624,7 +23890,7 @@
         "../../..",
         "upload_dm_results",
         "repository=<(REPO)",
-        "buildername=Test-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Debug",
+        "buildername=Test-Mac-Clang-MacMini7.1-GPU-IntelIris5100-x86_64-Debug",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -23636,9 +23902,9 @@
       "isolate": "upload_dm_results.isolate",
       "priority": 0.8
     },
-    "Upload-Test-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Debug-CommandBuffer": {
+    "Upload-Test-Mac-Clang-MacMini7.1-GPU-IntelIris5100-x86_64-Debug-CommandBuffer": {
       "dependencies": [
-        "Test-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Debug-CommandBuffer"
+        "Test-Mac-Clang-MacMini7.1-GPU-IntelIris5100-x86_64-Debug-CommandBuffer"
       ],
       "dimensions": [
         "cpu:x86-64-avx2",
@@ -23651,7 +23917,7 @@
         "../../..",
         "upload_dm_results",
         "repository=<(REPO)",
-        "buildername=Test-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Debug-CommandBuffer",
+        "buildername=Test-Mac-Clang-MacMini7.1-GPU-IntelIris5100-x86_64-Debug-CommandBuffer",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -23663,9 +23929,9 @@
       "isolate": "upload_dm_results.isolate",
       "priority": 0.8
     },
-    "Upload-Test-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Release": {
+    "Upload-Test-Mac-Clang-MacMini7.1-GPU-IntelIris5100-x86_64-Release": {
       "dependencies": [
-        "Test-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Release"
+        "Test-Mac-Clang-MacMini7.1-GPU-IntelIris5100-x86_64-Release"
       ],
       "dimensions": [
         "cpu:x86-64-avx2",
@@ -23678,7 +23944,7 @@
         "../../..",
         "upload_dm_results",
         "repository=<(REPO)",
-        "buildername=Test-Mac-Clang-MacMini6.2-GPU-IntelHD4000-x86_64-Release",
+        "buildername=Test-Mac-Clang-MacMini7.1-GPU-IntelIris5100-x86_64-Release",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",

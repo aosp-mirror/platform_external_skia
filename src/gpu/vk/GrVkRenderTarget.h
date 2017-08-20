@@ -83,13 +83,13 @@ protected:
                      const GrVkImageInfo& msaaInfo,
                      const GrVkImageView* colorAttachmentView,
                      const GrVkImageView* resolveAttachmentView,
-                     GrVkImage::Wrapped wrapped);
+                     GrBackendObjectOwnership);
 
     GrVkRenderTarget(GrVkGpu* gpu,
                      const GrSurfaceDesc& desc,
                      const GrVkImageInfo& info,
                      const GrVkImageView* colorAttachmentView,
-                     GrVkImage::Wrapped wrapped);
+                     GrBackendObjectOwnership);
 
     GrVkGpu* getVkGpu() const;
 
@@ -98,8 +98,7 @@ protected:
 
     // This accounts for the texture's memory and any MSAA renderbuffer's memory.
     size_t onGpuMemorySize() const override {
-        // The plus 1 is to account for the resolve texture.
-        // TODO: is this still correct?
+        // The plus 1 is to account for the resolve texture or if not using msaa the RT itself
         int numColorSamples = this->numColorSamples() + 1;
         return GrSurface::ComputeSize(this->config(), this->width(), this->height(),
                                       numColorSamples, false);
@@ -119,17 +118,17 @@ private:
                      const GrVkImageInfo& msaaInfo,
                      const GrVkImageView* colorAttachmentView,
                      const GrVkImageView* resolveAttachmentView,
-                     GrVkImage::Wrapped wrapped);
+                     GrBackendObjectOwnership);
 
     GrVkRenderTarget(GrVkGpu* gpu,
                      SkBudgeted,
                      const GrSurfaceDesc& desc,
                      const GrVkImageInfo& info,
                      const GrVkImageView* colorAttachmentView,
-                     GrVkImage::Wrapped wrapped);
+                     GrBackendObjectOwnership);
 
     static GrVkRenderTarget* Create(GrVkGpu*, SkBudgeted, const GrSurfaceDesc&,
-                                    const GrVkImageInfo&, GrVkImage::Wrapped wrapped);
+                                    const GrVkImageInfo&, GrBackendObjectOwnership);
 
     bool completeStencilAttachment() override;
 

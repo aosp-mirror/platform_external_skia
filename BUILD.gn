@@ -31,6 +31,7 @@ declare_args() {
   skia_use_piex = !is_win
   skia_use_zlib = true
   skia_use_metal = false
+  skia_use_libheif = false
 
   skia_android_serial = ""
   skia_enable_discrete_gpu = true
@@ -532,6 +533,17 @@ optional("gpu") {
   }
 }
 
+optional("heif") {
+  enabled = skia_use_libheif
+  public_defines = [ "SK_HAS_HEIF_LIBRARY" ]
+
+  deps = []
+
+  sources = [
+    "src/codec/SkHeifCodec.cpp",
+  ]
+}
+
 optional("jpeg") {
   enabled = skia_use_libjpeg_turbo
   public_defines = [ "SK_HAS_JPEG_LIBRARY" ]
@@ -655,6 +667,7 @@ component("skia") {
     ":fontmgr_fontconfig",
     ":fontmgr_fuchsia",
     ":gpu",
+    ":heif",
     ":jpeg",
     ":none",
     ":pdf",
@@ -1579,6 +1592,9 @@ if (skia_enable_tools) {
           "tools/viewer/sk_app/win/Window_win.cpp",
           "tools/viewer/sk_app/win/main_win.cpp",
         ]
+        if (skia_use_angle) {
+          sources += [ "tools/viewer/sk_app/win/ANGLEWindowContext_win.cpp" ]
+        }
       } else if (is_mac) {
         sources += [
           "tools/viewer/sk_app/mac/GLWindowContext_mac.cpp",
@@ -1617,6 +1633,9 @@ if (skia_enable_tools) {
         deps += [ "//third_party/native_app_glue" ]
       } else if (is_mac) {
         deps += [ "//third_party/libsdl" ]
+      }
+      if (skia_use_angle) {
+        deps += [ "//third_party/angle2" ]
       }
     }
   }
