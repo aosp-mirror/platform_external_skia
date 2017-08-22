@@ -531,7 +531,6 @@ cc_library {
         "src/gpu/ops/GrStencilAndCoverPathRenderer.cpp",
         "src/gpu/ops/GrStencilPathOp.cpp",
         "src/gpu/ops/GrTessellatingPathRenderer.cpp",
-        "src/gpu/ops/GrTextureOp.cpp",
         "src/gpu/text/GrAtlasGlyphCache.cpp",
         "src/gpu/text/GrAtlasTextBlob.cpp",
         "src/gpu/text/GrAtlasTextBlob_regenInOp.cpp",

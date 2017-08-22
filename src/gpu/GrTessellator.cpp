@@ -711,7 +711,7 @@ void path_to_contours(const SkPath& path, SkScalar tolerance, const SkRect& clip
     }
     SkAutoConicToQuads converter;
     SkPath::Verb verb;
-    while ((verb = iter.next(pts)) != SkPath::kDone_Verb) {
+    while ((verb = iter.next(pts, false)) != SkPath::kDone_Verb) {
         switch (verb) {
             case SkPath::kConic_Verb: {
                 SkScalar weight = iter.conicWeight();
@@ -1167,6 +1167,9 @@ void sanitize_contours(VertexList* contours, int contourCnt, bool approximate) {
             Vertex* next = v->fNext;
             if (coincident(prev->fPoint, v->fPoint)) {
                 LOG("vertex %g,%g coincident; removing\n", v->fPoint.fX, v->fPoint.fY);
+                contour->remove(v);
+            } else if (!v->fPoint.isFinite()) {
+                LOG("vertex %g,%g non-finite; removing\n", v->fPoint.fX, v->fPoint.fY);
                 contour->remove(v);
             }
             prev = v;
