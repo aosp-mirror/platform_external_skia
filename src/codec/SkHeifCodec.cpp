@@ -284,6 +284,7 @@ SkCodec::Result SkHeifCodec::onGetPixels(const SkImageInfo& dstInfo,
         return kInvalidInput;
     }
 
+    fSwizzler.reset(nullptr);
     this->allocateStorage(dstInfo);
 
     int rows = this->readRows(dstInfo, dst, dstRowBytes, dstInfo.height(), options);
@@ -362,6 +363,12 @@ SkCodec::Result SkHeifCodec::onStartScanlineDecode(
     // but the tile configuration needs to be retrieved from the metadata.
     if (!fHeifDecoder->decode(&fFrameInfo)) {
         return kInvalidInput;
+    }
+
+    if (options.fSubset) {
+        this->initializeSwizzler(dstInfo, options);
+    } else {
+        fSwizzler.reset(nullptr);
     }
 
     this->allocateStorage(dstInfo);
