@@ -12,6 +12,7 @@
 #if SK_SUPPORT_GPU
 #include "GrClip.h"
 #include "GrContext.h"
+#include "GrContextPriv.h"
 #include "SkGradientShader.h"
 #include "SkShaderBase.h"
 #include "effects/GrPorterDuffXferProcessor.h"
@@ -414,7 +415,6 @@ static void test_path(GrContext* ctx,
 
 DEF_GPUTEST_FOR_ALL_CONTEXTS(TessellatingPathRendererTests, reporter, ctxInfo) {
     GrContext* ctx = ctxInfo.grContext();
-
     sk_sp<GrRenderTargetContext> rtc(ctx->makeDeferredRenderTargetContext(
                                                                   SkBackingFit::kApprox,
                                                                   800, 800,
@@ -454,6 +454,9 @@ DEF_GPUTEST_FOR_ALL_CONTEXTS(TessellatingPathRendererTests, reporter, ctxInfo) {
     test_path(ctx, rtc.get(), create_path_21(), SkMatrix(), GrAAType::kCoverage);
     test_path(ctx, rtc.get(), create_path_22());
     test_path(ctx, rtc.get(), create_path_23());
-    test_path(ctx, rtc.get(), create_path_24());
+    // TODO: implement large buffer uploads in VK and remove this check.
+    if (ctx->contextPriv().getBackend() != kVulkan_GrBackend) {
+        test_path(ctx, rtc.get(), create_path_24());
+    }
 }
 #endif
