@@ -257,11 +257,16 @@ void GrVkGpu::disconnect(DisconnectType type) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-GrGpuCommandBuffer* GrVkGpu::createCommandBuffer(
+GrGpuRTCommandBuffer* GrVkGpu::createCommandBuffer(
             GrRenderTarget* rt, GrSurfaceOrigin origin,
-            const GrGpuCommandBuffer::LoadAndStoreInfo& colorInfo,
-            const GrGpuCommandBuffer::StencilLoadAndStoreInfo& stencilInfo) {
-    return new GrVkGpuCommandBuffer(this, rt, origin, colorInfo, stencilInfo);
+            const GrGpuRTCommandBuffer::LoadAndStoreInfo& colorInfo,
+            const GrGpuRTCommandBuffer::StencilLoadAndStoreInfo& stencilInfo) {
+    return new GrVkGpuRTCommandBuffer(this, rt, origin, colorInfo, stencilInfo);
+}
+
+GrGpuTextureCommandBuffer* GrVkGpu::createCommandBuffer(GrTexture* texture,
+                                                        GrSurfaceOrigin origin) {
+    return new GrVkGpuTextureCommandBuffer(this, texture, origin);
 }
 
 void GrVkGpu::submitCommandBuffer(SyncQueue sync) {
@@ -685,8 +690,9 @@ bool GrVkGpu::uploadTexDataOptimal(GrVkTexture* tex,
     // allocate buffer to hold our mip data
     GrVkTransferBuffer* transferBuffer =
                    GrVkTransferBuffer::Create(this, combinedBufferSize, GrVkBuffer::kCopyRead_Type);
-    if(!transferBuffer)
+    if(!transferBuffer) {
         return false;
+    }
 
     char* buffer = (char*) transferBuffer->map();
     SkTArray<VkBufferImageCopy> regions(mipLevelCount);
@@ -839,9 +845,17 @@ sk_sp<GrTexture> GrVkGpu::onCreateTexture(const GrSurfaceDesc& desc, SkBudgeted 
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void GrVkGpu::copyBuffer(GrVkBuffer* srcBuffer, GrVkBuffer* dstBuffer, VkDeviceSize srcOffset,
+                         VkDeviceSize dstOffset, VkDeviceSize size) {
+    VkBufferCopy copyRegion;
+    copyRegion.srcOffset = srcOffset;
+    copyRegion.dstOffset = dstOffset;
+    copyRegion.size = size;
+    fCurrentCmdBuffer->copyBuffer(this, srcBuffer, dstBuffer, 1, &copyRegion);
+}
+
 bool GrVkGpu::updateBuffer(GrVkBuffer* buffer, const void* src,
                            VkDeviceSize offset, VkDeviceSize size) {
-
     // Update the buffer
     fCurrentCmdBuffer->updateBuffer(this, buffer, offset, size, src);
 
