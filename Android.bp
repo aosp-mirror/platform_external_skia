@@ -422,6 +422,7 @@ cc_library {
         "src/gpu/ccpr/GrCCPRCoverageOpsBuilder.cpp",
         "src/gpu/ccpr/GrCCPRCoverageProcessor.cpp",
         "src/gpu/ccpr/GrCCPRCubicProcessor.cpp",
+        "src/gpu/ccpr/GrCCPRGeometry.cpp",
         "src/gpu/ccpr/GrCCPRPathProcessor.cpp",
         "src/gpu/ccpr/GrCCPRQuadraticProcessor.cpp",
         "src/gpu/ccpr/GrCCPRTriangleProcessor.cpp",
