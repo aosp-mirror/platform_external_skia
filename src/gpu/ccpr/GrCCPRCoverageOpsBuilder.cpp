@@ -11,7 +11,6 @@
 #include "GrGpuCommandBuffer.h"
 #include "GrOnFlushResourceProvider.h"
 #include "GrOpFlushState.h"
-#include "GrPathUtils.h"
 #include "SkGeometry.h"
 #include "SkMakeUnique.h"
 #include "SkMathPriv.h"
@@ -19,6 +18,7 @@
 #include "SkPathPriv.h"
 #include "SkPoint.h"
 #include "SkNx.h"
+#include "ccpr/GrCCPRGeometry.h"
 #include "ops/GrDrawOp.h"
 #include "../pathops/SkPathOpsCubic.h"
 #include <numeric>
@@ -194,8 +194,6 @@ void MaxBufferItems::countPathItems(GrCCPRCoverageOpsBuilder::ScissorMode scisso
                 currFanPts += kMaxCubicSegments;
                 // Each cubic segment has two control points.
                 fMaxControlPoints += kMaxCubicSegments * 2;
-                // Each cubic segment also emits two root t,s values as "control points".
-                fMaxControlPoints += kMaxCubicSegments * 2;
                 maxPrimitives.fMaxCubics += kMaxCubicSegments;
                 // The cubic may also turn out to be a quadratic. While we over-allocate by a fair
                 // amount, this is still a relatively small amount of space compared to the atlas.
@@ -311,9 +309,8 @@ void GrCCPRCoverageOpsBuilder::fanTo(const SkPoint& pt) {
 void GrCCPRCoverageOpsBuilder::quadraticTo(SkPoint controlPt, SkPoint endPt) {
     SkASSERT(fCurrPathIndices.fQuadratics+2 <= fBaseInstances[(int)fCurrScissorMode].fSerpentines);
 
-    SkPoint P[3] = {fCurrFanPoint, controlPt, endPt};
     SkPoint chopped[5];
-    if (GrPathUtils::chopMonotonicQuads(P, chopped)) {
+    if (GrCCPRChopMonotonicQuadratics(fCurrFanPoint, controlPt, endPt, chopped)) {
         this->fanTo(chopped[2]);
         fPointsData[fControlPtsIdx++] = chopped[1];
         fInstanceData[fCurrPathIndices.fQuadratics++].fQuadraticData = {
@@ -380,8 +377,7 @@ void GrCCPRCoverageOpsBuilder::cubicTo(SkPoint controlPt1, SkPoint controlPt2, S
         }
 
         // (This might put ts0/ts1 out of order, but it doesn't matter anymore at this point.)
-        this->emitCubicSegment(type, chopped.first(),
-                               to_skpoint(t[1 - x], s[1 - x] * chopT), to_skpoint(1, 1));
+        this->emitCubicSegment(type, chopped.first());
         t[x] = 0;
         s[x] = 1;
 
@@ -392,25 +388,20 @@ void GrCCPRCoverageOpsBuilder::cubicTo(SkPoint controlPt1, SkPoint controlPt2, S
         C = chopped.second();
     }
 
-    this->emitCubicSegment(type, C, to_skpoint(t[0], s[0]), to_skpoint(t[1], s[1]));
+    this->emitCubicSegment(type, C);
 }
 
-void GrCCPRCoverageOpsBuilder::emitCubicSegment(SkCubicType type, const SkDCubic& C,
-                                                const SkPoint& ts0, const SkPoint& ts1) {
+void GrCCPRCoverageOpsBuilder::emitCubicSegment(SkCubicType type, const SkDCubic& C) {
     SkASSERT(fCurrPathIndices.fSerpentines < fCurrPathIndices.fLoops);
 
     fPointsData[fControlPtsIdx++] = to_skpoint(C[1]);
     fPointsData[fControlPtsIdx++] = to_skpoint(C[2]);
     this->fanTo(to_skpoint(C[3]));
 
-    // Also emit the cubic's root t,s values as "control points".
-    fPointsData[fControlPtsIdx++] = ts0;
-    fPointsData[fControlPtsIdx++] = ts1;
-
     // Serpentines grow up from the front, and loops grow down from the back.
     fInstanceData[SkCubicType::kLoop != type ?
                   fCurrPathIndices.fSerpentines++ : --fCurrPathIndices.fLoops].fCubicData = {
-        fControlPtsIdx - 4,
+        fControlPtsIdx - 2,
         fFanPtsIdx - 2
     };
 }

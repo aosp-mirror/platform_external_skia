@@ -124,13 +124,41 @@ namespace GrPathUtils {
                                                 SkPathPriv::FirstDirection dir,
                                                 SkTArray<SkPoint, true>* quads);
 
-    // Ensures that a quadratic bezier is monotonic with respect to its vector [P2 - P0] (the vector
-    // between its endpoints). In the event that the curve is not monotonic, it is chopped into two
-    // segments that are monotonic. This should be rare for well-behaved curves in the real world.
+    enum class ExcludedTerm {
+        kNonInvertible,
+        kQuadraticTerm,
+        kLinearTerm
+    };
+
+    // Computes the inverse-transpose of the cubic's power basis matrix, after removing a specific
+    // row of coefficients.
     //
-    // Returns false if the curve was already monotonic.
-    //         true if it was chopped into two monotonic segments, now contained in dst.
-    bool chopMonotonicQuads(const SkPoint p[3], SkPoint dst[5]);
+    // E.g. if the cubic is defined in power basis form as follows:
+    //
+    //                                         | x3   y3   0 |
+    //     C(t,s) = [t^3  t^2*s  t*s^2  s^3] * | x2   y2   0 |
+    //                                         | x1   y1   0 |
+    //                                         | x0   y0   1 |
+    //
+    // And the excluded term is "kQuadraticTerm", then the resulting inverse-transpose will be:
+    //
+    //     | x3   y3   0 | -1 T
+    //     | x1   y1   0 |
+    //     | x0   y0   1 |
+    //
+    // (The term to exclude is chosen based on maximizing the resulting matrix determinant.)
+    //
+    // This can be used to find the KLM linear functionals:
+    //
+    //     | ..K.. |   | ..kcoeffs.. |
+    //     | ..L.. | = | ..lcoeffs.. | * inverse_transpose_power_basis_matrix
+    //     | ..M.. |   | ..mcoeffs.. |
+    //
+    // NOTE: the same term that was excluded here must also be removed from the corresponding column
+    // of the klmcoeffs matrix.
+    //
+    // Returns which row of coefficients was removed, or kNonInvertible if the cubic was degenerate.
+    ExcludedTerm calcCubicInverseTransposePowerBasisMatrix(const SkPoint p[4], SkMatrix* out);
 
     // Computes the KLM linear functionals for the cubic implicit form. The "right" side of the
     // curve (when facing in the direction of increasing parameter values) will be the area that

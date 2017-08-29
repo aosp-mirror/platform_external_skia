@@ -155,7 +155,8 @@ public:
 
     /** Adopts a ref from the caller. ioType expresses what type of IO operations will be marked as
         pending on the resource when markPendingIO is called. */
-    GrTGpuResourceRef(T* resource, GrIOType ioType) : INHERITED(resource, ioType) { }
+    GrTGpuResourceRef(T* resource, GrIOType ioType) : INHERITED(resource, ioType) {}
+    GrTGpuResourceRef(sk_sp<T> resource, GrIOType ioType) : INHERITED(resource, ioType) {}
 
     T* get() const { return static_cast<T*>(this->getResource()); }
 
@@ -173,7 +174,7 @@ private:
  */
 template <typename T, GrIOType IO_TYPE> class GrPendingIOResource : SkNoncopyable {
 public:
-    GrPendingIOResource(T* resource = NULL) : fResource(NULL) {
+    GrPendingIOResource(T* resource = nullptr) : fResource(nullptr) {
         this->reset(resource);
     }
 
