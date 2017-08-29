@@ -18,14 +18,6 @@
     #define __has_feature(x) 0
 #endif
 
-// Stages expect these constants to be set to these values.
-// It's fine to rearrange and add new ones if you update SkJumper_constants.
-using K = const SkJumper_constants;
-static K kConstants = {
-    {0,1,2,3,4,5,6,7},
-    {0,1,2,3,4,5,6,7},
-};
-
 #define M(st) +1
 static const int kNumStages = SK_RASTER_PIPELINE_STAGES(M);
 #undef M
@@ -60,7 +52,7 @@ static const int kNumStages = SK_RASTER_PIPELINE_STAGES(M);
 // We can't express the real types of most stage functions portably, so we use a stand-in.
 // We'll only ever call start_pipeline(), which then chains into the rest.
 using StageFn         = void(void);
-using StartPipelineFn = void(size_t,size_t,size_t,size_t, void**,K*);
+using StartPipelineFn = void(size_t,size_t,size_t,size_t, void**);
 
 // Some platforms expect C "name" maps to asm "_name", others to "name".
 #if defined(__APPLE__)
@@ -175,7 +167,7 @@ extern "C" {
         SK_RASTER_PIPELINE_STAGES(M)
     #undef M
 
-#if defined(__clang__) && defined(__aarch64__)
+#if defined(JUMPER_HAS_NEON_8BIT)
     // We also compile 8-bit stages on ARMv8 as a normal part of Skia when compiled with Clang.
     StartPipelineFn sk_start_pipeline_8bit;
     StageFn sk_just_return_8bit;
@@ -208,13 +200,13 @@ extern "C" {
         }
         LOWP_STAGES(M)
     #undef M
-#elif defined(__clang__) && defined(__aarch64__)
+#elif defined(JUMPER_HAS_NEON_8BIT)
     template <SkRasterPipeline::StockStage st>
-    static constexpr StageFn* aarch64_8bit() { return nullptr; }
+    static constexpr StageFn* neon_8bit() { return nullptr; }
 
-    #define M(st)                                                               \
-        template <> constexpr StageFn* aarch64_8bit<SkRasterPipeline::st>() {   \
-            return sk_##st##_8bit;                                              \
+    #define M(st)                                                            \
+        template <> constexpr StageFn* neon_8bit<SkRasterPipeline::st>() {   \
+            return sk_##st##_8bit;                                           \
         }
         LOWP_STAGES(M)
     #undef M
@@ -346,9 +338,9 @@ static SkJumper_Engine choose_engine() {
             #undef M
             };
         }
-    #elif defined(__clang__) && defined(__aarch64__)
+    #elif defined(JUMPER_HAS_NEON_8BIT)
         return {
-        #define M(st) aarch64_8bit<SkRasterPipeline::st>(),
+        #define M(st) neon_8bit<SkRasterPipeline::st>(),
             { SK_RASTER_PIPELINE_STAGES(M) },
             sk_start_pipeline_8bit,
             sk_just_return_8bit,
@@ -410,7 +402,7 @@ void SkRasterPipeline::run(size_t x, size_t y, size_t w, size_t h) const {
     SkAutoSTMalloc<64, void*> program(fSlotsNeeded);
 
     const SkJumper_Engine& engine = this->build_pipeline(program.get() + fSlotsNeeded);
-    engine.start_pipeline(x,y,x+w,y+h, program.get(), &kConstants);
+    engine.start_pipeline(x,y,x+w,y+h, program.get());
 }
 
 std::function<void(size_t, size_t, size_t, size_t)> SkRasterPipeline::compile() const {
@@ -423,6 +415,6 @@ std::function<void(size_t, size_t, size_t, size_t)> SkRasterPipeline::compile() 
 
     auto start_pipeline = engine.start_pipeline;
     return [=](size_t x, size_t y, size_t w, size_t h) {
-        start_pipeline(x,y,x+w,y+h, program, &kConstants);
+        start_pipeline(x,y,x+w,y+h, program);
     };
 }
