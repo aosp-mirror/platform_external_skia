@@ -248,6 +248,18 @@ private:
     Path fPath;
 };
 
+// DeferredDisplayList flavor
+class DDLSKPSrc : public Src {
+public:
+    explicit DDLSKPSrc(Path path);
+
+    Error draw(SkCanvas*) const override;
+    SkISize size() const override;
+    Name name() const override;
+private:
+    Path fPath;
+};
+
 #if defined(SK_XML)
 } // namespace DM
 
@@ -343,6 +355,11 @@ public:
                          const GrContextOptions& grCtxOptions);
 
     Error draw(const Src&, SkBitmap*, SkWStream*, SkString*) const override;
+
+    const char* fileExtension() const override {
+        // Suppress writing out results from this config - we just want to do our matching test
+        return nullptr;
+    }
 
 private:
     std::unique_ptr<SkExecutor> fExecutor;

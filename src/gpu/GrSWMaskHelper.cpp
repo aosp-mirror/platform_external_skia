@@ -33,12 +33,16 @@ static SkBlendMode op_to_mode(SkRegion::Op op) {
 /**
  * Draw a single rect element of the clip stack into the accumulation bitmap
  */
-void GrSWMaskHelper::drawRect(const SkRect& rect, SkRegion::Op op, GrAA aa, uint8_t alpha) {
+void GrSWMaskHelper::drawRect(const SkRect& rect, const SkMatrix& matrix, SkRegion::Op op, GrAA aa,
+                              uint8_t alpha) {
     SkPaint paint;
-
     paint.setBlendMode(op_to_mode(op));
     paint.setAntiAlias(GrAA::kYes == aa);
     paint.setColor(SkColorSetARGB(alpha, alpha, alpha, alpha));
+
+    SkMatrix translatedMatrix = matrix;
+    translatedMatrix.postTranslate(fTranslate.fX, fTranslate.fY);
+    fDraw.fMatrix = &translatedMatrix;
 
     fDraw.drawRect(rect, paint);
 }
@@ -46,11 +50,16 @@ void GrSWMaskHelper::drawRect(const SkRect& rect, SkRegion::Op op, GrAA aa, uint
 /**
  * Draw a single path element of the clip stack into the accumulation bitmap
  */
-void GrSWMaskHelper::drawShape(const GrShape& shape, SkRegion::Op op, GrAA aa, uint8_t alpha) {
+void GrSWMaskHelper::drawShape(const GrShape& shape, const SkMatrix& matrix, SkRegion::Op op,
+                               GrAA aa, uint8_t alpha) {
     SkPaint paint;
     paint.setPathEffect(shape.style().refPathEffect());
     shape.style().strokeRec().applyToPaint(&paint);
     paint.setAntiAlias(GrAA::kYes == aa);
+
+    SkMatrix translatedMatrix = matrix;
+    translatedMatrix.postTranslate(fTranslate.fX, fTranslate.fY);
+    fDraw.fMatrix = &translatedMatrix;
 
     SkPath path;
     shape.asPath(&path);
@@ -62,17 +71,11 @@ void GrSWMaskHelper::drawShape(const GrShape& shape, SkRegion::Op op, GrAA aa, u
         paint.setColor(SkColorSetARGB(alpha, alpha, alpha, alpha));
         fDraw.drawPath(path, paint);
     }
-}
+};
 
-bool GrSWMaskHelper::init(const SkIRect& resultBounds, const SkMatrix* matrix) {
-    if (matrix) {
-        fMatrix = *matrix;
-    } else {
-        fMatrix.setIdentity();
-    }
-
-    // Now translate so the bound's UL corner is at the origin
-    fMatrix.postTranslate(-SkIntToScalar(resultBounds.fLeft), -SkIntToScalar(resultBounds.fTop));
+bool GrSWMaskHelper::init(const SkIRect& resultBounds) {
+    // We will need to translate draws so the bound's UL corner is at the origin
+    fTranslate = {-SkIntToScalar(resultBounds.fLeft), -SkIntToScalar(resultBounds.fTop)};
     SkIRect bounds = SkIRect::MakeWH(resultBounds.width(), resultBounds.height());
 
     const SkImageInfo bmImageInfo = SkImageInfo::MakeA8(bounds.width(), bounds.height());
@@ -85,7 +88,6 @@ bool GrSWMaskHelper::init(const SkIRect& resultBounds, const SkMatrix* matrix) {
     fDraw.fDst      = *fPixels;
     fRasterClip.setRect(bounds);
     fDraw.fRC       = &fRasterClip;
-    fDraw.fMatrix   = &fMatrix;
     return true;
 }
 

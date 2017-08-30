@@ -10,7 +10,7 @@
 
 #if SK_SUPPORT_GPU
 
-#include "GrContextOptions.h"
+#include "GrTypesPriv.h"
 #include "SkCommandLineFlags.h"
 #include "SkTypes.h"
 
@@ -19,11 +19,10 @@ DECLARE_string(pr);
 #define DEFINE_pathrenderer_flag                                                   \
     DEFINE_string(pr, "default",                                                   \
                   "Set of enabled gpu path renderers. Defined as a list of: "      \
-                  "[[~]all [~]default [~]dashline [~]nvpr [~]msaa [~]aahairline [~]aaconvex " \
+                  "[[~]all [~]default [~]dashline [~]nvpr [~]msaa [~]aaconvex "    \
                   "[~]aalinearizing [~]small [~]tess]")
 
-inline GrContextOptions::GpuPathRenderers get_named_pathrenderers_flags(const char* name) {
-    using GpuPathRenderers = GrContextOptions::GpuPathRenderers;
+inline GpuPathRenderers get_named_pathrenderers_flags(const char* name) {
     if (!strcmp(name, "all")) {
         return GpuPathRenderers::kAll;
     } else if (!strcmp(name, "default")) {
@@ -34,8 +33,6 @@ inline GrContextOptions::GpuPathRenderers get_named_pathrenderers_flags(const ch
         return GpuPathRenderers::kStencilAndCover;
     } else if (!strcmp(name, "msaa")) {
         return GpuPathRenderers::kMSAA;
-    } else if (!strcmp(name, "aahairline")) {
-        return GpuPathRenderers::kAAHairline;
     } else if (!strcmp(name, "aaconvex")) {
         return GpuPathRenderers::kAAConvex;
     } else if (!strcmp(name, "aalinearizing")) {
@@ -53,8 +50,7 @@ inline GrContextOptions::GpuPathRenderers get_named_pathrenderers_flags(const ch
     return GpuPathRenderers::kNone;
 }
 
-inline GrContextOptions::GpuPathRenderers CollectGpuPathRenderersFromFlags() {
-    using GpuPathRenderers = GrContextOptions::GpuPathRenderers;
+inline GpuPathRenderers CollectGpuPathRenderersFromFlags() {
     if (FLAGS_pr.isEmpty()) {
         return GpuPathRenderers::kDefault;
     }
