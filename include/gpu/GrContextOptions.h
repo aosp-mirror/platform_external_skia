@@ -46,10 +46,6 @@ struct GrContextOptions {
     /** some gpus have problems with partial writes of the rendertarget */
     bool fUseDrawInsteadOfPartialRenderTargetWrite = false;
 
-    /** Force us to do all swizzling manually in the shader and don't rely on extensions to do
-        swizzling. */
-    bool fUseShaderSwizzling = false;
-
     /** Construct mipmaps manually, via repeated downsampling draw-calls. This is used when
         the driver's implementation (glGenerateMipmap) contains bugs. This requires mipmap
         level and LOD control (ie desktop or ES3). */
@@ -58,6 +54,12 @@ struct GrContextOptions {
     /** Enable instanced rendering as long as all required functionality is supported by the HW.
         Instanced rendering is still experimental at this point and disabled by default. */
     bool fEnableInstancedRendering = false;
+
+    /**
+     * Disables distance field rendering for paths. Distance field computation can be expensive,
+     * and yields no benefit if a path is not rendered multiple times with different transforms.
+     */
+    bool fDisableDistanceFieldPaths = false;
 
     /**
      * If true this allows path mask textures to be cached. This is only really useful if paths
@@ -93,7 +95,7 @@ struct GrContextOptions {
      * Allows the client to include or exclude specific GPU path renderers.
      */
     enum class GpuPathRenderers {
-        kNone              = 0, // Always use sofware masks.
+        kNone              = 0, // Always use sofware masks and/or GrDefaultPathRenderer.
         kDashLine          = 1 << 0,
         kStencilAndCover   = 1 << 1,
         kMSAA              = 1 << 2,
@@ -103,16 +105,17 @@ struct GrContextOptions {
         kSmall             = 1 << 6,
         kCoverageCounting  = 1 << 7,
         kTessellating      = 1 << 8,
-        kDefault           = 1 << 9,
+
+        kAll               = (kTessellating | (kTessellating - 1)),
 
         // Temporarily disabling CCPR by default until it has had a time to soak.
-        kAll               = (kDefault | (kDefault - 1)) & ~kCoverageCounting,
+        kDefault           = kAll & ~kCoverageCounting,
 
         // For legacy. To be removed when updated in Android.
         kDistanceField     = kSmall
     };
 
-    GpuPathRenderers fGpuPathRenderers = GpuPathRenderers::kAll;
+    GpuPathRenderers fGpuPathRenderers = GpuPathRenderers::kDefault;
 
     /**
      * The maximum size of cache textures used for Skia's Glyph cache.

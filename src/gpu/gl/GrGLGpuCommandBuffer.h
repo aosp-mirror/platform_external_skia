@@ -1,9 +1,9 @@
 /*
-* Copyright 2016 Google Inc.
-*
-* Use of this source code is governed by a BSD-style license that can be
-* found in the LICENSE file.
-*/
+ * Copyright 2016 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
 
 #ifndef GrGLGpuCommandBuffer_DEFINED
 #define GrGLGpuCommandBuffer_DEFINED
@@ -28,8 +28,9 @@ public:
 
     void submit() override {}
 
-    void copy(GrSurface* src, const SkIRect& srcRect, const SkIPoint& dstPoint) override {
-        fGpu->copySurface(fTexture, src, srcRect, dstPoint);
+    void copy(GrSurface* src, GrSurfaceOrigin srcOrigin, const SkIRect& srcRect,
+              const SkIPoint& dstPoint) override {
+        fGpu->copySurface(fTexture, fOrigin, src, srcOrigin, srcRect, dstPoint);
     }
 
     void insertEventMarker(const char* msg) override {
@@ -37,7 +38,7 @@ public:
     }
 
 private:
-    GrGLGpu*                    fGpu;
+    GrGLGpu* fGpu;
 
     typedef GrGpuTextureCommandBuffer INHERITED;
 };
@@ -50,16 +51,22 @@ class GrGLGpuRTCommandBuffer : public GrGpuRTCommandBuffer {
  */
 public:
     GrGLGpuRTCommandBuffer(GrGLGpu* gpu, GrRenderTarget* rt, GrSurfaceOrigin origin,
+                           const GrGpuRTCommandBuffer::LoadAndStoreInfo& colorInfo,
                            const GrGpuRTCommandBuffer::StencilLoadAndStoreInfo& stencilInfo)
             : INHERITED(rt, origin)
-            , fGpu(gpu) {
-        fClearSB = LoadOp::kClear == stencilInfo.fLoadOp;
+            , fGpu(gpu)
+            , fColorLoadAndStoreInfo(colorInfo)
+            , fStencilLoadAndStoreInfo(stencilInfo) {
     }
 
     ~GrGLGpuRTCommandBuffer() override {}
 
     void begin() override {
-        if (fClearSB) {
+        if (GrLoadOp::kClear == fColorLoadAndStoreInfo.fLoadOp) {
+            fGpu->clear(GrFixedClip::Disabled(), fColorLoadAndStoreInfo.fClearColor,
+                        fRenderTarget, fOrigin);
+        }
+        if (GrLoadOp::kClear == fStencilLoadAndStoreInfo.fLoadOp) {
             fGpu->clearStencil(fRenderTarget, 0x0);
         }
     }
@@ -75,8 +82,9 @@ public:
         state->doUpload(upload);
     }
 
-    void copy(GrSurface* src, const SkIRect& srcRect, const SkIPoint& dstPoint) override {
-        fGpu->copySurface(fRenderTarget, src, srcRect, dstPoint);
+    void copy(GrSurface* src, GrSurfaceOrigin srcOrigin, const SkIRect& srcRect,
+              const SkIPoint& dstPoint) override {
+        fGpu->copySurface(fRenderTarget, fOrigin, src, srcOrigin, srcRect, dstPoint);
     }
 
     void submit() override {}
@@ -102,8 +110,9 @@ private:
         fGpu->clearStencilClip(clip, insideStencilMask, fRenderTarget, fOrigin);
     }
 
-    GrGLGpu*                    fGpu;
-    bool                        fClearSB;
+    GrGLGpu*                                      fGpu;
+    GrGpuRTCommandBuffer::LoadAndStoreInfo        fColorLoadAndStoreInfo;
+    GrGpuRTCommandBuffer::StencilLoadAndStoreInfo fStencilLoadAndStoreInfo;
 
     typedef GrGpuRTCommandBuffer INHERITED;
 };
