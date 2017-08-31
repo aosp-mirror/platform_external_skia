@@ -209,6 +209,14 @@ bool SkSurface::wait(int numSemaphores, const GrBackendSemaphore* waitSemaphores
     return asSB(this)->onWait(numSemaphores, waitSemaphores);
 }
 
+bool SkSurface::characterize(SkSurfaceCharacterization* characterization) const {
+    return asSB(const_cast<SkSurface*>(this))->onCharacterize(characterization);
+}
+
+void SkSurface::draw(SkDeferredDisplayList* ddl) {
+    return asSB(this)->onDraw(ddl);
+}
+
 //////////////////////////////////////////////////////////////////////////////////////
 #include "SkNoDrawCanvas.h"
 
@@ -247,13 +255,6 @@ sk_sp<SkSurface> SkSurface::MakeRenderTarget(GrContext*, SkBudgeted, const SkIma
 sk_sp<SkSurface> SkSurface::MakeFromBackendTexture(GrContext*, const GrBackendTexture&,
                                                    GrSurfaceOrigin origin, int sampleCnt,
                                                    sk_sp<SkColorSpace>, const SkSurfaceProps*) {
-    return nullptr;
-}
-
-sk_sp<SkSurface> SkSurface::MakeFromBackendRenderTarget(GrContext*,
-                                                        const GrBackendRenderTargetDesc&,
-                                                        sk_sp<SkColorSpace>,
-                                                        const SkSurfaceProps*) {
     return nullptr;
 }
 

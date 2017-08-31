@@ -248,6 +248,18 @@ private:
     Path fPath;
 };
 
+// DeferredDisplayList flavor
+class DDLSKPSrc : public Src {
+public:
+    explicit DDLSKPSrc(Path path);
+
+    Error draw(SkCanvas*) const override;
+    SkISize size() const override;
+    Name name() const override;
+private:
+    Path fPath;
+};
+
 #if defined(SK_XML)
 } // namespace DM
 
@@ -310,6 +322,9 @@ public:
             bool threaded, const GrContextOptions& grCtxOptions);
 
     Error draw(const Src&, SkBitmap*, SkWStream*, SkString*) const override;
+    Error onDraw(const Src&, SkBitmap*, SkWStream*, SkString*,
+                 const GrContextOptions& baseOptions) const;
+
     bool serial() const override { return !fThreaded; }
     const char* fileExtension() const override { return "png"; }
     SinkFlags flags() const override {
@@ -317,6 +332,8 @@ public:
                                                       : SinkFlags::kNotMultisampled;
         return SinkFlags{ SinkFlags::kGPU, SinkFlags::kDirect, ms };
     }
+    const GrContextOptions& baseContextOptions() const { return fBaseContextOptions; }
+
 private:
     sk_gpu_test::GrContextFactory::ContextType        fContextType;
     sk_gpu_test::GrContextFactory::ContextOverrides   fContextOverrides;
@@ -327,6 +344,27 @@ private:
     sk_sp<SkColorSpace>                               fColorSpace;
     bool                                              fThreaded;
     GrContextOptions                                  fBaseContextOptions;
+};
+
+class GPUThreadTestingSink : public GPUSink {
+public:
+    GPUThreadTestingSink(sk_gpu_test::GrContextFactory::ContextType,
+                         sk_gpu_test::GrContextFactory::ContextOverrides, int samples, bool diText,
+                         SkColorType colorType, SkAlphaType alphaType,
+                         sk_sp<SkColorSpace> colorSpace, bool threaded,
+                         const GrContextOptions& grCtxOptions);
+
+    Error draw(const Src&, SkBitmap*, SkWStream*, SkString*) const override;
+
+    const char* fileExtension() const override {
+        // Suppress writing out results from this config - we just want to do our matching test
+        return nullptr;
+    }
+
+private:
+    std::unique_ptr<SkExecutor> fExecutor;
+
+    typedef GPUSink INHERITED;
 };
 
 class PDFSink : public Sink {

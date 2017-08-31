@@ -19,6 +19,7 @@
 #include "SkColorSpace_Base.h"
 #include "SkColorSpaceXformCanvas.h"
 #include "SkCommandLineFlags.h"
+#include "SkCommonFlagsGpuThreads.h"
 #include "SkCommonFlagsPathRenderer.h"
 #include "SkDashPathEffect.h"
 #include "SkEventTracingPriv.h"
@@ -46,7 +47,6 @@
 
 using namespace sk_app;
 
-using GpuPathRenderers = GrContextOptions::GpuPathRenderers;
 static std::map<GpuPathRenderers, std::string> gPathRendererNames;
 
 Application* Application::Create(int argc, char** argv, void* platformData) {
@@ -304,6 +304,7 @@ Viewer::Viewer(int argc, char** argv, void* platformData)
     displayParams.fMSAASampleCount = FLAGS_msaa;
     displayParams.fGrContextOptions.fEnableInstancedRendering = FLAGS_instancedRendering;
     displayParams.fGrContextOptions.fGpuPathRenderers = CollectGpuPathRenderersFromFlags();
+    displayParams.fGrContextOptions.fExecutor = GpuExecutorForTools();
     fWindow->setRequestedDisplayParams(displayParams);
 
     // register callbacks

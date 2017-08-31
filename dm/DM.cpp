@@ -18,6 +18,7 @@
 #include "SkColorSpacePriv.h"
 #include "SkCommonFlags.h"
 #include "SkCommonFlagsConfig.h"
+#include "SkCommonFlagsGpuThreads.h"
 #include "SkCommonFlagsPathRenderer.h"
 #include "SkData.h"
 #include "SkDocument.h"
@@ -90,6 +91,8 @@ DEFINE_int32(shard,  0, "Which shard do I run?");
 
 DEFINE_string(mskps, "", "Directory to read mskps from, or a single mskp file.");
 DEFINE_bool(forceRasterPipeline, false, "sets gSkForceRasterPipelineBlitter");
+
+DEFINE_bool(ddl, false, "If true, use DeferredDisplayLists for GPU SKP rendering.");
 
 #if SK_SUPPORT_GPU
 DEFINE_pathrenderer_flag;
@@ -772,7 +775,11 @@ static bool gather_srcs() {
         push_src("gm", "", new GMSrc(r->factory()));
     }
 
-    gather_file_srcs<SKPSrc>(FLAGS_skps, "skp");
+    if (FLAGS_ddl) {
+        gather_file_srcs<DDLSKPSrc>(FLAGS_skps, "skp");
+    } else {
+        gather_file_srcs<SKPSrc>(FLAGS_skps, "skp");
+    }
     gather_file_srcs<MSKPSrc>(FLAGS_mskps, "mskp");
 #if defined(SK_XML)
     gather_file_srcs<SVGSrc>(FLAGS_svgs, "svg");
@@ -858,10 +865,19 @@ static Sink* create_sink(const GrContextOptions& grCtxOptions, const SkCommandLi
                      "GM tests will be skipped.\n", gpuConfig->getTag().c_str());
                 return nullptr;
             }
-            return new GPUSink(contextType, contextOverrides, gpuConfig->getSamples(),
-                               gpuConfig->getUseDIText(), gpuConfig->getColorType(),
-                               gpuConfig->getAlphaType(), sk_ref_sp(gpuConfig->getColorSpace()),
-                               FLAGS_gpu_threading, grCtxOptions);
+            if (gpuConfig->getTestThreading()) {
+                return new GPUThreadTestingSink(contextType, contextOverrides,
+                                                gpuConfig->getSamples(), gpuConfig->getUseDIText(),
+                                                gpuConfig->getColorType(),
+                                                gpuConfig->getAlphaType(),
+                                                sk_ref_sp(gpuConfig->getColorSpace()),
+                                                FLAGS_gpu_threading, grCtxOptions);
+            } else {
+                return new GPUSink(contextType, contextOverrides, gpuConfig->getSamples(),
+                                   gpuConfig->getUseDIText(), gpuConfig->getColorType(),
+                                   gpuConfig->getAlphaType(), sk_ref_sp(gpuConfig->getColorSpace()),
+                                   FLAGS_gpu_threading, grCtxOptions);
+            }
         }
     }
 #endif
@@ -1136,7 +1152,7 @@ struct Task {
 
                 if (!FLAGS_writePath.isEmpty()) {
                     const char* ext = task.sink->fileExtension();
-                    if (!FLAGS_dont_write.contains(ext)) {
+                    if (ext && !FLAGS_dont_write.contains(ext)) {
                         if (data->getLength()) {
                             WriteToDisk(task, md5, ext, data, data->getLength(), nullptr);
                             SkASSERT(bitmap.drawsNothing());
@@ -1320,6 +1336,7 @@ int main(int argc, char** argv) {
     GrContextOptions grCtxOptions;
 #if SK_SUPPORT_GPU
     grCtxOptions.fGpuPathRenderers = CollectGpuPathRenderersFromFlags();
+    grCtxOptions.fExecutor = GpuExecutorForTools();
 #endif
 
     JsonWriter::DumpJson();  // It's handy for the bots to assume this is ~never missing.

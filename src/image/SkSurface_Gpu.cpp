@@ -15,11 +15,13 @@
 
 #include "SkCanvas.h"
 #include "SkColorSpace_Base.h"
+#include "SkDeferredDisplayList.h"
 #include "SkGpuDevice.h"
 #include "SkImage_Base.h"
 #include "SkImage_Gpu.h"
 #include "SkImagePriv.h"
 #include "SkSurface_Base.h"
+#include "SkSurfaceCharacterization.h"
 
 #if SK_SUPPORT_GPU
 
@@ -158,6 +160,35 @@ bool SkSurface_Gpu::onWait(int numSemaphores, const GrBackendSemaphore* waitSema
     return fDevice->wait(numSemaphores, waitSemaphores);
 }
 
+bool SkSurface_Gpu::onCharacterize(SkSurfaceCharacterization* data) const {
+    GrRenderTargetContext* rtc = fDevice->accessRenderTargetContext();
+
+    data->set(rtc->origin(), rtc->width(), rtc->height(),
+              rtc->config(), rtc->numColorSamples());
+    return true;
+}
+
+bool SkSurface_Gpu::isCompatible(const SkSurfaceCharacterization& data) const {
+    GrRenderTargetContext* rtc = fDevice->accessRenderTargetContext();
+
+    return data.origin() == rtc->origin() &&
+           data.width() == rtc->width() &&
+           data.height() == rtc->height() &&
+           data.config() == rtc->config() &&
+           data.sampleCount() == rtc->numColorSamples();
+}
+
+void SkSurface_Gpu::onDraw(SkDeferredDisplayList* dl) {
+    if (!this->isCompatible(dl->characterization())) {
+        return;
+    }
+
+    // Ultimately need to pass opLists from the DeferredDisplayList on to the
+    // SkGpuDevice's renderTargetContext.
+    dl->draw(this);
+}
+
+
 ///////////////////////////////////////////////////////////////////////////////
 
 bool SkSurface_Gpu::Valid(const SkImageInfo& info) {
@@ -232,20 +263,6 @@ sk_sp<SkSurface> SkSurface::MakeFromBackendTexture(GrContext* context, const GrB
         return nullptr;
     }
     return sk_make_sp<SkSurface_Gpu>(std::move(device));
-}
-
-sk_sp<SkSurface> SkSurface::MakeFromBackendRenderTarget(GrContext* context,
-                                                        const GrBackendRenderTargetDesc& desc,
-                                                        sk_sp<SkColorSpace> colorSpace,
-                                                        const SkSurfaceProps* props) {
-    if (!context) {
-        return nullptr;
-    }
-
-    GrBackendRenderTarget backendRT(desc, context->contextPriv().getBackend());
-    return MakeFromBackendRenderTarget(context, backendRT, desc.fOrigin,
-                                       std::move(colorSpace), props);
-
 }
 
 sk_sp<SkSurface> SkSurface::MakeFromBackendRenderTarget(GrContext* context,

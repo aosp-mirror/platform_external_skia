@@ -28,7 +28,6 @@
 #include "ops/GrTessellatingPathRenderer.h"
 
 GrPathRendererChain::GrPathRendererChain(GrContext* context, const Options& options) {
-    using GpuPathRenderers = GrContextOptions::GpuPathRenderers;
     const GrCaps& caps = *context->caps();
     if (options.fGpuPathRenderers & GpuPathRenderers::kDashLine) {
         fChain.push_back(sk_make_sp<GrDashLinePathRenderer>());
@@ -47,9 +46,10 @@ GrPathRendererChain::GrPathRendererChain(GrContext* context, const Options& opti
         }
     }
 #endif
-    if (options.fGpuPathRenderers & GpuPathRenderers::kAAHairline) {
-        fChain.push_back(sk_make_sp<GrAAHairLinePathRenderer>());
-    }
+
+    // AA hairline path renderer is very specialized - no other renderer can do this job well
+    fChain.push_back(sk_make_sp<GrAAHairLinePathRenderer>());
+
     if (options.fGpuPathRenderers & GpuPathRenderers::kAAConvex) {
         fChain.push_back(sk_make_sp<GrAAConvexPathRenderer>());
     }
