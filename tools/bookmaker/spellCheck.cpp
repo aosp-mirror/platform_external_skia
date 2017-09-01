@@ -461,7 +461,7 @@ void SpellCheck::printCheck(const string& str) {
     }
 }
 
-static bool stringCompare(std::pair<string, CheckEntry>& i, std::pair<string, CheckEntry>& j) {
+static bool stringCompare(const std::pair<string, CheckEntry>& i, const std::pair<string, CheckEntry>& j) {
     return i.first.compare(j.first) < 0;
 }
 
