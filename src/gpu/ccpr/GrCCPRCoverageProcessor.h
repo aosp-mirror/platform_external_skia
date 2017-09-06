@@ -25,8 +25,8 @@ class GrGLSLFragmentBuilder;
  * be used to draw the path (see GrCCPRPathProcessor).
  *
  * Caller provides the primitives' (x,y) points in an fp32x2 (RG) texel buffer, and an instance
- * buffer with a single int32x4 attrib for each primitive (defined below). There are no vertex
- * attribs.
+ * buffer with a single int32x4 attrib (for triangles) or int32x2 (for curves) defined below. There
+ * are no vertex attribs.
  *
  * Draw calls are instanced, with one vertex per bezier point (3 for triangles). They use the
  * corresponding GrPrimitiveType as defined below.
@@ -40,31 +40,21 @@ public:
     static constexpr GrPrimitiveType kQuadraticsGrPrimitiveType = GrPrimitiveType::kTriangles;
     static constexpr GrPrimitiveType kCubicsGrPrimitiveType = GrPrimitiveType::kLinesAdjacency;
 
-    struct PrimitiveInstance {
-        union {
-            struct {
-                int32_t fPt0Idx;
-                int32_t fPt1Idx;
-                int32_t fPt2Idx;
-            } fTriangleData;
-
-            struct {
-                int32_t fControlPtIdx;
-                int32_t fEndPtsIdx; // The endpoints (P0 and P2) are adjacent in the texel buffer.
-            } fQuadraticData;
-
-            struct {
-                int32_t fControlPtsKLMRootsIdx; // The control points (P1 and P2) are adjacent in
-                                                // the texel buffer, followed immediately by the
-                                                // homogenous KLM roots ({tl,sl}, {tm,sm}).
-                int32_t fEndPtsIdx; // The endpoints (P0 and P3) are adjacent in the texel buffer.
-            } fCubicData;
-        };
-
+    struct TriangleInstance {
+        int32_t fPt0Idx;
+        int32_t fPt1Idx;
+        int32_t fPt2Idx;
         int32_t fPackedAtlasOffset; // (offsetY << 16) | (offsetX & 0xffff)
     };
 
-    GR_STATIC_ASSERT(4 * 4 == sizeof(PrimitiveInstance));
+    GR_STATIC_ASSERT(4 * 4 == sizeof(TriangleInstance));
+
+    struct CurveInstance {
+        int32_t fPtsIdx;
+        int32_t fPackedAtlasOffset; // (offsetY << 16) | (offsetX & 0xffff)
+    };
+
+    GR_STATIC_ASSERT(2 * 4 == sizeof(CurveInstance));
 
     enum class Mode {
         // Triangles.
@@ -78,16 +68,22 @@ public:
         kQuadraticCorners,
 
         // Cubics.
-        kSerpentineInsets,
-        kSerpentineBorders,
-        kLoopInsets,
-        kLoopBorders
+        kSerpentineHulls,
+        kLoopHulls,
+        kSerpentineCorners,
+        kLoopCorners
     };
+    static constexpr GrVertexAttribType InstanceArrayFormat(Mode mode) {
+        return mode < Mode::kQuadraticHulls ? kVec4i_GrVertexAttribType : kVec2i_GrVertexAttribType;
+    }
     static const char* GetProcessorName(Mode);
 
     GrCCPRCoverageProcessor(Mode, GrBuffer* pointsBuffer);
 
     const char* instanceAttrib() const { return fInstanceAttrib.fName; }
+    int atlasOffsetIdx() const {
+        return kVec4i_GrVertexAttribType == InstanceArrayFormat(fMode) ? 3 : 1;
+    }
     const char* name() const override { return GetProcessorName(fMode); }
     SkString dumpInfo() const override {
         return SkStringPrintf("%s\n%s", this->name(), this->INHERITED::dumpInfo().c_str());
@@ -96,9 +92,8 @@ public:
     void getGLSLProcessorKey(const GrShaderCaps&, GrProcessorKeyBuilder*) const override;
     GrGLSLPrimitiveProcessor* createGLSLInstance(const GrShaderCaps&) const override;
 
-#ifdef SK_DEBUG
     static constexpr float kDebugBloat = 50;
-
+#ifdef SK_DEBUG
     // Increases the 1/2 pixel AA bloat by a factor of kDebugBloat and outputs color instead of
     // coverage (coverage=+1 -> green, coverage=0 -> black, coverage=-1 -> red).
     void enableDebugVisualizations() { fDebugVisualizations = true; }
@@ -192,14 +187,11 @@ protected:
     // Logically, the conservative raster hull is equivalent to the convex hull of pixel-size boxes
     // centered on the vertices.
     //
-    // If an optional inset polygon is provided, then this emits a border from the inset to the
-    // hull, rather than the entire hull.
-    //
     // Geometry shader must be configured to output triangle strips.
     //
     // Returns the maximum number of vertices that will be emitted.
     int emitHullGeometry(GrGLSLGeometryBuilder*, const char* emitVertexFn, const char* polygonPts,
-                         int numSides, const char* wedgeIdx, const char* insetPts = nullptr) const;
+                         int numSides, const char* wedgeIdx, const char* midpoint = nullptr) const;
 
     // Emits the conservative raster of an edge (i.e. convex hull of two pixel-size boxes centered
     // on the endpoints). Coverage is -1 on the outside border of the edge geometry and 0 on the
