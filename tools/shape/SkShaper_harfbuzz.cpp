@@ -12,6 +12,7 @@
 
 #include "SkShaper.h"
 #include "SkStream.h"
+#include "SkTemplates.h"
 #include "SkTextBlob.h"
 #include "SkTypeface.h"
 #include "SkUtils.h"
@@ -52,24 +53,40 @@ struct SkShaper::Impl {
     sk_sp<SkTypeface> fTypeface;
 };
 
-SkShaper::SkShaper(sk_sp<SkTypeface> tf) : fImpl(new Impl) {
-    fImpl->fTypeface = tf ? std::move(tf) : SkTypeface::MakeDefault();
+static HBFont create_hb_font(SkTypeface* tf) {
     int index;
-    HBBlob blob(stream_to_blob(std::unique_ptr<SkStreamAsset>(
-                               fImpl->fTypeface->openStream(&index))));
+    HBBlob blob(stream_to_blob(std::unique_ptr<SkStreamAsset>(tf->openStream(&index))));
     HBFace face(hb_face_create(blob.get(), (unsigned)index));
     SkASSERT(face);
     if (!face) {
-        return;
+        return nullptr;
     }
     hb_face_set_index(face.get(), (unsigned)index);
-    hb_face_set_upem(face.get(), fImpl->fTypeface->getUnitsPerEm());
+    hb_face_set_upem(face.get(), tf->getUnitsPerEm());
 
-    fImpl->fHarfBuzzFont.reset(hb_font_create(face.get()));
+    HBFont font(hb_font_create(face.get()));
+    SkASSERT(font);
+    if (!font) {
+        return nullptr;
+    }
+    hb_font_set_scale(font.get(), FONT_SIZE_SCALE, FONT_SIZE_SCALE);
+    hb_ot_font_set_funcs(font.get());
+    int axis_count = tf->getVariationDesignPosition(nullptr, 0);
+    if (axis_count > 0) {
+        SkAutoSTMalloc<4, SkFontArguments::VariationPosition::Coordinate> axis_values(axis_count);
+        if (tf->getVariationDesignPosition(axis_values, axis_count) == axis_count) {
+            hb_font_set_variations(font.get(),
+                                   reinterpret_cast<hb_variation_t*>(axis_values.get()),
+                                   axis_count);
+        }
+    }
+    return font;
+}
+
+SkShaper::SkShaper(sk_sp<SkTypeface> tf) : fImpl(new Impl) {
+    fImpl->fTypeface = tf ? std::move(tf) : SkTypeface::MakeDefault();
+    fImpl->fHarfBuzzFont = create_hb_font(fImpl->fTypeface.get());
     SkASSERT(fImpl->fHarfBuzzFont);
-    hb_font_set_scale(fImpl->fHarfBuzzFont.get(), FONT_SIZE_SCALE, FONT_SIZE_SCALE);
-    hb_ot_font_set_funcs(fImpl->fHarfBuzzFont.get());
-
     fImpl->fBuffer.reset(hb_buffer_create());
 }
 
@@ -119,6 +136,8 @@ SkScalar SkShaper::shape(SkTextBlobBuilder* builder,
         return (SkScalar)x;
     }
 
+    const UChar* utf16End = utf16.getBuffer();
+    const char* utf8End = utf8text;
     for (int32_t i = 0; i < runCount; ++i) {
         int32_t start;
         int32_t length;
@@ -134,26 +153,39 @@ SkScalar SkShaper::shape(SkTextBlobBuilder* builder,
         // The difficulty here is the cluster mapping.
         // If the hb_buffer is created with utf16, clusters will be pointing to the utf16 indexes,
         // but the SkTextBlob can only take utf8 and utf8 cluster indexes.
-        // Instead of updating each cluster index, create the hb_buffer from the utf8.
-        // TODO: this is horribly inefficient.
-        const char* utf8textStart = utf8text;
-        const UChar* utf16Start = utf16.getBuffer();
-        while (utf16Start < utf16.getBuffer() + start) {
-            SkUTF16_NextUnichar(&utf16Start);
-            SkUTF8_NextUnichar(&utf8textStart);
+        // So populate the hb_buffer directly with utf32 and utf8 cluster indexes.
+        // Since this steps through the visual runs in order, it is expected that each run will
+        // start just after the previous one ended.
+        const UChar* utf16Start = utf16.getBuffer() + start;
+        const char* utf8Start;
+        if (utf16End == utf16Start) {
+            utf16Start = utf16End;
+            utf8Start = utf8End;
+        } else {
+            SkDEBUGFAIL("Did not expect to ever get here.");
+            utf16Start = utf16.getBuffer();
+            utf8Start = utf8text;
+            while (utf16Start < utf16.getBuffer() + start) {
+                SkUTF16_NextUnichar(&utf16Start);
+                SkUTF8_NextUnichar(&utf8Start);
+            }
         }
-        const char* utf8textEnd = utf8textStart;
-        const UChar* utf16End = utf16Start;
-        while (utf16End < utf16.getBuffer() + start + length) {
-            SkUTF16_NextUnichar(&utf16End);
-            SkUTF8_NextUnichar(&utf8textEnd);
+        const char* utf8Current = utf8Start;
+        const UChar* utf16Current = utf16Start;
+        utf16End = utf16Current + length;
+        while (utf16Current < utf16End) {
+            hb_codepoint_t u;
+            u = SkUTF16_NextUnichar(&utf16Current);
+            hb_buffer_add(buffer, u, utf8Current - utf8Start);
+            SkUTF8_NextUnichar(&utf8Current);
         }
-        size_t utf8runLength = utf8textEnd - utf8textStart;
+        hb_buffer_set_content_type(buffer, HB_BUFFER_CONTENT_TYPE_UNICODE);
+        utf8End = utf8Current;
+        size_t utf8runLength = utf8End - utf8Start;
         if (!SkTFitsIn<int>(utf8runLength)) {
             SkDebugf("Shaping error: utf8 too long");
             return (SkScalar)x;
         }
-        hb_buffer_add_utf8(buffer, utf8textStart, utf8runLength, 0, -1);
         hb_buffer_guess_segment_properties(buffer);
         //hb_buffer_set_script(buffer, script);
         hb_buffer_set_direction(buffer, direction ? HB_DIRECTION_RTL : HB_DIRECTION_LTR);
@@ -171,7 +203,7 @@ SkScalar SkShaper::shape(SkTextBlobBuilder* builder,
             return (SkScalar)x;
         }
         auto runBuffer = builder->allocRunTextPos(paint, len, utf8runLength, SkString());
-        memcpy(runBuffer.utf8text, utf8textStart, utf8runLength);
+        memcpy(runBuffer.utf8text, utf8Start, utf8runLength);
 
         double textSizeY = paint.getTextSize() / (double)FONT_SIZE_SCALE;
         double textSizeX = textSizeY * paint.getTextScaleX();
