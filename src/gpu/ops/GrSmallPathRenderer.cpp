@@ -81,30 +81,30 @@ GrSmallPathRenderer::~GrSmallPathRenderer() {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-bool GrSmallPathRenderer::onCanDrawPath(const CanDrawPathArgs& args) const {
+GrPathRenderer::CanDrawPath GrSmallPathRenderer::onCanDrawPath(const CanDrawPathArgs& args) const {
     if (!args.fCaps->shaderCaps()->shaderDerivativeSupport()) {
-        return false;
+        return CanDrawPath::kNo;
     }
     // If the shape has no key then we won't get any reuse.
     if (!args.fShape->hasUnstyledKey()) {
-        return false;
+        return CanDrawPath::kNo;
     }
     // This only supports filled paths, however, the caller may apply the style to make a filled
     // path and try again.
     if (!args.fShape->style().isSimpleFill()) {
-        return false;
+        return CanDrawPath::kNo;
     }
     // This does non-inverse coverage-based antialiased fills.
     if (GrAAType::kCoverage != args.fAAType) {
-        return false;
+        return CanDrawPath::kNo;
     }
     // TODO: Support inverse fill
     if (args.fShape->inverseFilled()) {
-        return false;
+        return CanDrawPath::kNo;
     }
     // currently don't support perspective
     if (args.fViewMatrix->hasPerspective()) {
-        return false;
+        return CanDrawPath::kNo;
     }
 
     // Only support paths with bounds within kMaxDim by kMaxDim,
@@ -112,15 +112,18 @@ bool GrSmallPathRenderer::onCanDrawPath(const CanDrawPathArgs& args) const {
     // The goal is to accelerate rendering of lots of small paths that may be scaling.
     SkScalar scaleFactors[2];
     if (!args.fViewMatrix->getMinMaxScales(scaleFactors)) {
-        return false;
+        return CanDrawPath::kNo;
     }
     SkRect bounds = args.fShape->styledBounds();
     SkScalar minDim = SkMinScalar(bounds.width(), bounds.height());
     SkScalar maxDim = SkMaxScalar(bounds.width(), bounds.height());
     SkScalar minSize = minDim * SkScalarAbs(scaleFactors[0]);
     SkScalar maxSize = maxDim * SkScalarAbs(scaleFactors[1]);
+    if (maxDim > kMaxDim || kMinSize > minSize || maxSize > kMaxSize) {
+        return CanDrawPath::kNo;
+    }
 
-    return maxDim <= kMaxDim && kMinSize <= minSize && maxSize <= kMaxSize;
+    return CanDrawPath::kYes;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -225,19 +228,15 @@ private:
         // Setup GrGeometryProcessor
         GrDrawOpAtlas* atlas = fAtlas;
         if (fUsesDistanceField) {
-            GrSamplerParams params(SkShader::kClamp_TileMode, GrSamplerParams::kBilerp_FilterMode);
-
             uint32_t flags = 0;
             flags |= ctm.isScaleTranslate() ? kScaleOnly_DistanceFieldEffectFlag : 0;
             flags |= ctm.isSimilarity() ? kSimilarity_DistanceFieldEffectFlag : 0;
             flags |= fGammaCorrect ? kGammaCorrect_DistanceFieldEffectFlag : 0;
 
             flushInfo.fGeometryProcessor = GrDistanceFieldPathGeoProc::Make(
-                    this->color(), this->viewMatrix(), atlas->getProxy(), params, flags,
-                    fHelper.usesLocalCoords());
+                    this->color(), this->viewMatrix(), atlas->getProxy(),
+                    GrSamplerState::ClampBilerp(), flags, fHelper.usesLocalCoords());
         } else {
-            GrSamplerParams params(SkShader::kClamp_TileMode, GrSamplerParams::kNone_FilterMode);
-
             SkMatrix invert;
             if (fHelper.usesLocalCoords()) {
                 if (!this->viewMatrix().invert(&invert)) {
@@ -249,9 +248,9 @@ private:
                 invert.preTranslate(-fShapes[0].fTranslate.fX, -fShapes[0].fTranslate.fY);
             }
 
-            flushInfo.fGeometryProcessor =
-                    GrBitmapTextGeoProc::Make(this->color(), atlas->getProxy(), params,
-                                              kA8_GrMaskFormat, invert, fHelper.usesLocalCoords());
+            flushInfo.fGeometryProcessor = GrBitmapTextGeoProc::Make(
+                    this->color(), atlas->getProxy(), GrSamplerState::ClampNearest(),
+                    kA8_GrMaskFormat, invert, fHelper.usesLocalCoords());
         }
 
         // allocate vertices

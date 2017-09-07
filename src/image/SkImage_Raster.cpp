@@ -88,8 +88,8 @@ public:
     const SkBitmap* onPeekBitmap() const override { return &fBitmap; }
 
 #if SK_SUPPORT_GPU
-    sk_sp<GrTextureProxy> asTextureProxyRef(GrContext*, const GrSamplerParams&,
-                                            SkColorSpace*, sk_sp<SkColorSpace>*,
+    sk_sp<GrTextureProxy> asTextureProxyRef(GrContext*, const GrSamplerState&, SkColorSpace*,
+                                            sk_sp<SkColorSpace>*,
                                             SkScalar scaleAdjust[2]) const override;
 #endif
 
@@ -171,7 +171,7 @@ bool SkImage_Raster::getROPixels(SkBitmap* dst, SkColorSpace* dstColorSpace, Cac
 
 #if SK_SUPPORT_GPU
 sk_sp<GrTextureProxy> SkImage_Raster::asTextureProxyRef(GrContext* context,
-                                                        const GrSamplerParams& params,
+                                                        const GrSamplerState& params,
                                                         SkColorSpace* dstColorSpace,
                                                         sk_sp<SkColorSpace>* texColorSpace,
                                                         SkScalar scaleAdjust[2]) const {
@@ -186,9 +186,10 @@ sk_sp<GrTextureProxy> SkImage_Raster::asTextureProxyRef(GrContext* context,
     uint32_t uniqueID;
     sk_sp<GrTextureProxy> tex = this->refPinnedTextureProxy(&uniqueID);
     if (tex) {
-        GrTextureAdjuster adjuster(context, fPinnedProxy, fBitmap.alphaType(), fPinnedUniqueID,
-                                   fBitmap.colorSpace());
-        return adjuster.refTextureProxySafeForParams(params, scaleAdjust);
+        GrTextureAdjuster adjuster(context, fPinnedProxy,
+                                   fBitmap.alphaType(), fBitmap.bounds(),
+                                   fPinnedUniqueID, fBitmap.colorSpace());
+        return adjuster.refTextureProxySafeForParams(params, nullptr, scaleAdjust);
     }
 
     return GrRefCachedBitmapTextureProxy(context, fBitmap, params, scaleAdjust);
@@ -214,8 +215,8 @@ bool SkImage_Raster::onPinAsTexture(GrContext* ctx) const {
     } else {
         SkASSERT(fPinnedCount == 0);
         SkASSERT(fPinnedUniqueID == 0);
-        fPinnedProxy = GrRefCachedBitmapTextureProxy(ctx, fBitmap,
-                                                     GrSamplerParams::ClampNoFilter(), nullptr);
+        fPinnedProxy = GrRefCachedBitmapTextureProxy(ctx, fBitmap, GrSamplerState::ClampNearest(),
+                                                     nullptr);
         if (!fPinnedProxy) {
             return false;
         }
