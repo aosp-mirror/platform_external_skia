@@ -1710,6 +1710,7 @@ if (skia_enable_tools) {
         "tools/debugger/SkJsonWriteBuffer.cpp",
         "tools/debugger/SkObjectParser.cpp",
         "tools/mdbviz/MainWindow.cpp",
+        "tools/mdbviz/Model.cpp",
         "tools/mdbviz/main.cpp",
         "tools/picture_utils.cpp",
 
@@ -1725,6 +1726,7 @@ if (skia_enable_tools) {
       ]
       include_dirs = [
         "$skia_qt_path/include",
+        "$skia_qt_path/include/QtCore",
         "$skia_qt_path/include/QtWidgets",
         "tools",
         "tools/debugger",

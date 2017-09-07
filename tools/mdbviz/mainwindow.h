@@ -11,11 +11,12 @@
 #include <memory>
 #include <QMainWindow>
 
-#include "SkDebugCanvas.h"
+#include "Model.h"
 
 class QLabel;
-class QListWidget;
 class QMenu;
+class QTreeWidget;
+class QTreeWidgetItem;
 
 
 class MainWindow : public QMainWindow {
@@ -27,10 +28,13 @@ public:
 private slots:
     void openFile();
     void about();
+    void onCurrentItemChanged(QTreeWidgetItem* cur, QTreeWidgetItem* prev);
 
 private:
     void loadFile(const QString &fileName);
     void setupOpListWidget();
+    void presentCurrentRenderState();
+
 
     void createActions();
     void createStatusBar();
@@ -42,11 +46,11 @@ private:
     QImage  fImage;
     QLabel* fImageLabel;
 
-    QListWidget* fOpListWidget;
+    QTreeWidget* fOpListWidget;
 
     QMenu* fViewMenu;
 
-    std::unique_ptr<SkDebugCanvas> fDebugCanvas;
+    Model fModel;
 };
 
 #endif

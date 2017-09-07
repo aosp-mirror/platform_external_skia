@@ -9,11 +9,6 @@
 
 #include "MainWindow.h"
 
-#include "SkBitmap.h"
-#include "SkCanvas.h"
-#include "SkPicture.h"
-#include "SkStream.h"
-
 MainWindow::MainWindow() {
     this->createActions();
     this->createStatusBar();
@@ -35,16 +30,39 @@ void MainWindow::openFile() {
 void MainWindow::setupOpListWidget() {
     fOpListWidget->clear();
 
-    for (int i = 0; i < fDebugCanvas->getSize(); i++) {
-        QListWidgetItem *item = new QListWidgetItem();
+    QTreeWidgetItem* item = nullptr;
+    SkTDArray<QTreeWidgetItem*> parents;
 
-        const SkDrawCommand* command = fDebugCanvas->getDrawCommandAt(i);
+    for (int i = 0; i < fModel.numOps(); i++) {
+        item = new QTreeWidgetItem();
 
-        SkString commandString = command->toString();
-        item->setData(Qt::DisplayRole, commandString.c_str());
+        item->setText(0, QString::number(i));
+        item->setData(0, Qt::UserRole, i);
+        item->setText(1, fModel.getOpName(i));
 
-        fOpListWidget->addItem(item);
+        if (fModel.isHierarchyPop(i)) {
+            parents.pop();
+        }
+
+        if (parents.isEmpty()) {
+            fOpListWidget->addTopLevelItem(item);
+        } else {
+            parents.top()->addChild(item);
+        }
+
+        if (fModel.isHierarchyPush(i)) {
+            *parents.push() = item;
+        }
     }
+
+    fOpListWidget->setCurrentItem(item);
+    fOpListWidget->expandToDepth(100);
+}
+
+void MainWindow::presentCurrentRenderState() {
+    fImage = QImage((uchar*)fModel.getPixels(), fModel.width(), fModel.height(),
+                    QImage::Format_RGBA8888);
+    fImageLabel->setPixmap(QPixmap::fromImage(fImage));
 }
 
 void MainWindow::loadFile(const QString &fileName) {
@@ -63,37 +81,14 @@ void MainWindow::loadFile(const QString &fileName) {
 
     std::string str = file.fileName().toLocal8Bit().constData();
 
-    std::unique_ptr<SkStream> stream = SkStream::MakeFromFile(str.c_str());
-    if (!stream) {
-        this->statusBar()->showMessage(tr("Couldn't read file"));
+    Model::ErrorCode err = fModel.load(str.c_str());
+    if (Model::ErrorCode::kOK != err) {
+        this->statusBar()->showMessage(Model::ErrorString(err));
         return;
     }
-    sk_sp<SkPicture> pic(SkPicture::MakeFromStream(stream.get()));
-    if (!pic) {
-        this->statusBar()->showMessage(tr("Couldn't decode picture"));
-        return;
-    }
-
-    fDebugCanvas.reset(new SkDebugCanvas(SkScalarCeilToInt(pic->cullRect().width()),
-                                         SkScalarCeilToInt(pic->cullRect().height())));
-
-    fDebugCanvas->setPicture(pic.get());
-    pic->playback(fDebugCanvas.get());
-    fDebugCanvas->setPicture(nullptr);
 
     this->setupOpListWidget();
-
-    SkBitmap bm;
-
-    SkImageInfo ii = SkImageInfo::MakeN32Premul(1024, 1024);
-    bm.allocPixels(ii, 0);
-
-    SkCanvas canvas(bm);
-
-    fDebugCanvas->draw(&canvas);
-
-    fImage = QImage((uchar*)bm.getPixels(), bm.width(), bm.height(), QImage::Format_RGBA8888);
-    fImageLabel->setPixmap(QPixmap::fromImage(fImage));
+    this->presentCurrentRenderState();
 
 #ifndef QT_NO_CURSOR
     QApplication::restoreOverrideCursor();
@@ -138,6 +133,12 @@ void MainWindow::createActions() {
     aboutAct->setStatusTip(tr("Show the application's About box"));
 }
 
+void MainWindow::onCurrentItemChanged(QTreeWidgetItem* cur, QTreeWidgetItem* /* prev */) {
+    int currentRow = cur->data(0, Qt::UserRole).toInt();
+    fModel.setCurOp(currentRow);
+    this->presentCurrentRenderState();
+}
+
 void MainWindow::createStatusBar() {
     this->statusBar()->showMessage(tr("Ready"));
 }
@@ -149,12 +150,23 @@ void MainWindow::createDockWindows() {
         QDockWidget* opListDock = new QDockWidget("Ops", this);
         opListDock->setAllowedAreas(Qt::LeftDockWidgetArea);
 
-        fOpListWidget = new QListWidget(opListDock);
+        fOpListWidget = new QTreeWidget(opListDock);
+
+        QTreeWidgetItem* headerItem = new QTreeWidgetItem;
+        headerItem->setText(0, "Index");
+        headerItem->setText(1, "Op Name");
+        fOpListWidget->setHeaderItem(headerItem);
+
+        fOpListWidget->header()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
+        fOpListWidget->header()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
 
         opListDock->setWidget(fOpListWidget);
         this->addDockWidget(Qt::LeftDockWidgetArea, opListDock);
 
         fViewMenu->addAction(opListDock->toggleViewAction());
+
+        connect(fOpListWidget, SIGNAL(currentItemChanged(QTreeWidgetItem*,QTreeWidgetItem*)),
+                this, SLOT(onCurrentItemChanged(QTreeWidgetItem*, QTreeWidgetItem*)));
     }
 
     // Main canvas Window
@@ -163,6 +175,10 @@ void MainWindow::createDockWindows() {
         mainCanvasDock->setAllowedAreas(Qt::RightDockWidgetArea);
 
         fImageLabel = new QLabel(mainCanvasDock);
+
+        fImage = QImage(1024, 1024, QImage::Format_RGBA8888);
+        fImage.fill(0);
+        fImageLabel->setPixmap(QPixmap::fromImage(fImage));
 
         mainCanvasDock->setWidget(fImageLabel);
         this->addDockWidget(Qt::RightDockWidgetArea, mainCanvasDock);
