@@ -116,6 +116,9 @@ BASE_SRCS_ALL = struct(
 
         # Defines main.
         "src/sksl/SkSLMain.cpp",
+
+        # Only used to regenerate the lexer
+        "src/sksl/lex/*",
     ],
 )
 

@@ -779,7 +779,7 @@ static bool must_filter(const SkRect& src, const SkRect& dst, const SkMatrix& ct
 }
 
 void GrRenderTargetContext::drawTextureAffine(const GrClip& clip, sk_sp<GrTextureProxy> proxy,
-                                              GrSamplerParams::FilterMode filter, GrColor color,
+                                              GrSamplerState::Filter filter, GrColor color,
                                               const SkRect& srcRect, const SkRect& dstRect,
                                               const SkMatrix& viewMatrix,
                                               sk_sp<GrColorSpaceXform> colorSpaceXform) {
@@ -788,12 +788,20 @@ void GrRenderTargetContext::drawTextureAffine(const GrClip& clip, sk_sp<GrTextur
     SkDEBUGCODE(this->validate();)
     GR_CREATE_TRACE_MARKER_CONTEXT("GrRenderTargetContext", "drawTextureAffine", fContext);
     SkASSERT(!viewMatrix.hasPerspective());
-    if (filter != GrSamplerParams::kNone_FilterMode && !must_filter(srcRect, dstRect, viewMatrix)) {
-        filter = GrSamplerParams::kNone_FilterMode;
+    if (filter != GrSamplerState::Filter::kNearest && !must_filter(srcRect, dstRect, viewMatrix)) {
+        filter = GrSamplerState::Filter::kNearest;
     }
+    SkRect clippedDstRect = dstRect;
+    SkRect clippedSrcRect = srcRect;
+    if (!crop_filled_rect(this->width(), this->height(), clip, viewMatrix, &clippedDstRect,
+                          &clippedSrcRect)) {
+        return;
+    }
+
     bool allowSRGB = SkToBool(this->getColorSpace());
-    this->addDrawOp(clip, GrTextureOp::Make(std::move(proxy), filter, color, srcRect, dstRect,
-                                            viewMatrix, std::move(colorSpaceXform), allowSRGB));
+    this->addDrawOp(clip, GrTextureOp::Make(std::move(proxy), filter, color, clippedSrcRect,
+                                            clippedDstRect, viewMatrix, std::move(colorSpaceXform),
+                                            allowSRGB));
 }
 
 void GrRenderTargetContext::fillRectWithLocalMatrix(const GrClip& clip,

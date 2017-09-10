@@ -24,7 +24,7 @@
 #include "GrImageTextureMaker.h"
 #include "GrResourceKey.h"
 #include "GrResourceProvider.h"
-#include "GrSamplerParams.h"
+#include "GrSamplerState.h"
 #include "GrYUVProvider.h"
 #include "SkGr.h"
 #endif
@@ -78,8 +78,9 @@ public:
     bool onReadPixels(const SkImageInfo&, void*, size_t, int srcX, int srcY,
                       CachingHint) const override;
 #if SK_SUPPORT_GPU
-    sk_sp<GrTextureProxy> asTextureProxyRef(GrContext*, const GrSamplerParams&,
-                                            SkColorSpace*, sk_sp<SkColorSpace>*,
+    sk_sp<GrTextureProxy> asTextureProxyRef(GrContext*,
+                                            const GrSamplerState&, SkColorSpace*,
+                                            sk_sp<SkColorSpace>*,
                                             SkScalar scaleAdjust[2]) const override;
 #endif
     SkData* onRefEncoded() const override;
@@ -613,7 +614,7 @@ SkTransferFunctionBehavior SkImage_Lazy::getGeneratorBehaviorAndInfo(SkImageInfo
 
 #if SK_SUPPORT_GPU
 sk_sp<GrTextureProxy> SkImage_Lazy::asTextureProxyRef(GrContext* context,
-                                                      const GrSamplerParams& params,
+                                                      const GrSamplerState& params,
                                                       SkColorSpace* dstColorSpace,
                                                       sk_sp<SkColorSpace>* texColorSpace,
                                                       SkScalar scaleAdjust[2]) const {
@@ -703,12 +704,16 @@ static void set_key_on_proxy(GrResourceProvider* resourceProvider,
 }
 
 sk_sp<SkColorSpace> SkImage_Lazy::getColorSpace(GrContext* ctx, SkColorSpace* dstColorSpace) {
-    // TODO: This isn't always correct. Picture generator currently produces textures in N32,
-    // and will (soon) emit them in an arbitrary (destination) space. We will need to stash that
-    // information in/on the key so we can return the correct space in case #1 of lockTexture.
-    CachedFormat format = this->chooseCacheFormat(dstColorSpace, ctx->caps());
-    SkImageInfo cacheInfo = this->buildCacheInfo(format);
-    return sk_ref_sp(cacheInfo.colorSpace());
+    if (!dstColorSpace) {
+        // In legacy mode, we do no modification to the image's color space or encoding.
+        // Subsequent legacy drawing is likely to ignore the color space, but some clients
+        // may want to know what space the image data is in, so return it.
+        return fInfo.refColorSpace();
+    } else {
+        CachedFormat format = this->chooseCacheFormat(dstColorSpace, ctx->caps());
+        SkImageInfo cacheInfo = this->buildCacheInfo(format);
+        return cacheInfo.refColorSpace();
+    }
 }
 
 /*

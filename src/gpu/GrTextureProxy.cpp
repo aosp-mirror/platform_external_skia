@@ -7,18 +7,14 @@
 
 #include "GrTextureProxy.h"
 
-#include "GrResourceProvider.h"
 #include "GrTexturePriv.h"
 
 GrTextureProxy::GrTextureProxy(const GrSurfaceDesc& srcDesc, SkBackingFit fit, SkBudgeted budgeted,
                                const void* srcData, size_t /*rowBytes*/, uint32_t flags)
         : INHERITED(srcDesc, fit, budgeted, flags)
-        , fIsMipMapped(SkToBool(GrResourceProvider::kMipMapped_Flag & flags))
+        , fIsMipMapped(srcDesc.fIsMipMapped)
         , fMipColorMode(SkDestinationSurfaceColorMode::kLegacy) {
     SkASSERT(!srcData);  // currently handled in Make()
-    // Currently we do not support creating GrTextureProxys that are not wrapped that are mip
-    // mapped. This will be changed once we update our mip mapping support.
-    SkASSERT(!fIsMipMapped);
 }
 
 GrTextureProxy::GrTextureProxy(sk_sp<GrSurface> surf, GrSurfaceOrigin origin)
@@ -61,20 +57,20 @@ void GrTextureProxy::setMipColorMode(SkDestinationSurfaceColorMode colorMode) {
 }
 
 // This method parallels the highest_filter_mode functions in GrGLTexture & GrVkTexture.
-GrSamplerParams::FilterMode GrTextureProxy::highestFilterMode() const {
+GrSamplerState::Filter GrTextureProxy::highestFilterMode() const {
     if (fTarget) {
         return fTarget->asTexture()->texturePriv().highestFilterMode();
     }
 
     if (GrPixelConfigIsSint(this->config())) {
         // We only ever want to nearest-neighbor sample signed int textures.
-        return GrSamplerParams::kNone_FilterMode;
+        return GrSamplerState::Filter::kNearest;
     }
 
     // In OpenGL, GR_GL_TEXTURE_RECTANGLE and GR_GL_TEXTURE_EXTERNAL (which have a highest filter
     // mode of bilerp) can only be created via wrapping.
 
-    return GrSamplerParams::kMipMap_FilterMode;
+    return GrSamplerState::Filter::kMipMap;
 }
 
 size_t GrTextureProxy::onUninstantiatedGpuMemorySize() const {
@@ -84,4 +80,3 @@ size_t GrTextureProxy::onUninstantiatedGpuMemorySize() const {
     return GrSurface::ComputeSize(fConfig, fWidth, fHeight, 1, kHasMipMaps,
                                   SkBackingFit::kApprox == fFit);
 }
-

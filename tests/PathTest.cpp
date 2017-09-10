@@ -4517,6 +4517,24 @@ static void test_skbug_6947() {
     paint.setAntiAlias(true);
     surface->getCanvas()->drawPath(path, paint);
 }
+
+static void test_skbug_7015() {
+    SkPath path;
+    path.setFillType(SkPath::kWinding_FillType);
+    path.moveTo(SkBits2Float(0x4388c000), SkBits2Float(0x43947c08));  // 273.5f, 296.969f
+    path.lineTo(SkBits2Float(0x4386c000), SkBits2Float(0x43947c08));  // 269.5f, 296.969f
+    // 269.297f, 292.172f, 273.695f, 292.172f, 273.5f, 296.969f
+    path.cubicTo(SkBits2Float(0x4386a604), SkBits2Float(0x43921604),
+            SkBits2Float(0x4388d8f6), SkBits2Float(0x43921604),
+            SkBits2Float(0x4388c000), SkBits2Float(0x43947c08));
+    path.close();
+
+    auto surface = SkSurface::MakeRasterN32Premul(500, 500);
+    SkPaint paint;
+    paint.setAntiAlias(true);
+    surface->getCanvas()->drawPath(path, paint);
+}
+
 #endif
 
 static void test_interp(skiatest::Reporter* reporter) {
@@ -4593,6 +4611,7 @@ DEF_TEST(Paths, reporter) {
     test_fuzz_crbug_668907();
 #if !defined(SK_SUPPORT_LEGACY_DELTA_AA)
     test_skbug_6947();
+    test_skbug_7015();
 #endif
 
     SkSize::Make(3, 4);
@@ -4891,4 +4910,19 @@ DEF_TEST(PathRefSerialization, reporter) {
         size_t bytesRead = readBack.readFromMemory(data->data(), bytesWritten - 4);
         REPORTER_ASSERT(reporter, !bytesRead);
     }
+}
+
+DEF_TEST(NonFinitePathIteration, reporter) {
+    SkPath path;
+    path.moveTo(SK_ScalarInfinity, SK_ScalarInfinity);
+
+    int verbs = 0;
+
+    SkPath::RawIter iter(path);
+    SkPoint         pts[4];
+    while (iter.next(pts) != SkPath::kDone_Verb) {
+        verbs++;
+    }
+
+    REPORTER_ASSERT(reporter, verbs == 0);
 }

@@ -110,7 +110,7 @@ bool SkImage_Gpu::getROPixels(SkBitmap* dst, SkColorSpace*, CachingHint chint) c
 }
 
 sk_sp<GrTextureProxy> SkImage_Gpu::asTextureProxyRef(GrContext* context,
-                                                     const GrSamplerParams& params,
+                                                     const GrSamplerState& params,
                                                      SkColorSpace* dstColorSpace,
                                                      sk_sp<SkColorSpace>* texColorSpace,
                                                      SkScalar scaleAdjust[2]) const {
@@ -203,9 +203,19 @@ bool SkImage_Gpu::onReadPixels(const SkImageInfo& dstInfo, void* dstPixels, size
         flags = GrContextPriv::kUnpremul_PixelOpsFlag;
     }
 
+    // This hack allows us to call makeNonTextureImage on images with arbitrary color spaces.
+    // Otherwise, we'll be unable to create a render target context.
+    // TODO: This shouldn't be necessary - we need more robust support for images (and surfaces)
+    // with arbitrary color spaces. Unfortunately, this is one spot where we go from image to
+    // surface (rather than the opposite), and our lenient image rules break our (currently) more
+    // strict surface rules.
+    sk_sp<SkColorSpace> surfaceColorSpace = fColorSpace;
+    if (!flags && SkColorSpace::Equals(fColorSpace.get(), dstInfo.colorSpace())) {
+        surfaceColorSpace = nullptr;
+    }
+
     sk_sp<GrSurfaceContext> sContext = fContext->contextPriv().makeWrappedSurfaceContext(
-                                                                                    fProxy,
-                                                                                    fColorSpace);
+            fProxy, surfaceColorSpace);
     if (!sContext) {
         return false;
     }
@@ -423,9 +433,8 @@ static sk_sp<SkImage> create_image_from_maker(GrContext* context, GrTextureMaker
                                               SkAlphaType at, uint32_t id,
                                               SkColorSpace* dstColorSpace) {
     sk_sp<SkColorSpace> texColorSpace;
-    sk_sp<GrTextureProxy> proxy(maker->refTextureProxyForParams(GrSamplerParams::ClampNoFilter(),
-                                                                dstColorSpace,
-                                                                &texColorSpace, nullptr));
+    sk_sp<GrTextureProxy> proxy(maker->refTextureProxyForParams(
+            GrSamplerState::ClampNearest(), dstColorSpace, &texColorSpace, nullptr));
     if (!proxy) {
         return nullptr;
     }
@@ -470,11 +479,11 @@ sk_sp<SkImage> SkImage::MakeCrossContextFromEncoded(GrContext* context, sk_sp<Sk
     // Turn the codec image into a GrTextureProxy
     GrImageTextureMaker maker(context, codecImage.get(), kDisallow_CachingHint);
     sk_sp<SkColorSpace> texColorSpace;
-    GrSamplerParams params(SkShader::kClamp_TileMode,
-                           buildMips ? GrSamplerParams::kMipMap_FilterMode
-                                     : GrSamplerParams::kBilerp_FilterMode);
-    sk_sp<GrTextureProxy> proxy(maker.refTextureProxyForParams(params, dstColorSpace,
-                                                               &texColorSpace, nullptr));
+    GrSamplerState samplerState(
+            GrSamplerState::WrapMode::kClamp,
+            buildMips ? GrSamplerState::Filter::kMipMap : GrSamplerState::Filter::kBilerp);
+    sk_sp<GrTextureProxy> proxy(
+            maker.refTextureProxyForParams(samplerState, dstColorSpace, &texColorSpace, nullptr));
     if (!proxy) {
         return codecImage;
     }

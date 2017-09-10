@@ -167,6 +167,13 @@ def dm_flags(api, bot):
       blacklist('gltestthreading gm _ lcdblendmodes')
       blacklist('gltestthreading gm _ lcdoverlap')
       blacklist('gltestthreading gm _ textbloblooper')
+      # All of these GMs are flaky, too:
+      blacklist('gltestthreading gm _ bleed_alpha_bmp')
+      blacklist('gltestthreading gm _ bleed_alpha_bmp_shader')
+      blacklist('gltestthreading gm _ bleed_alpha_image')
+      blacklist('gltestthreading gm _ bleed_alpha_image_shader')
+      blacklist('gltestthreading gm _ savelayer_with_backdrop')
+      blacklist('gltestthreading gm _ persp_shaders_bw')
 
     # The following devices do not support glessrgb.
     if 'glessrgb' in configs:
@@ -233,16 +240,19 @@ def dm_flags(api, bot):
   if 'Vulkan' in bot and 'NexusPlayer' in bot:
     args.remove('svg')
     args.remove('image')
+  elif api.vars.builder_cfg.get('cpu_or_gpu') == 'GPU':
+    # Don't run the 'svgparse_*' svgs on GPU.
+    blacklist('_ svg _ svgparse_')
+  elif bot == 'Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-ASAN':
+    # Only run the CPU SVGs on 8888.
+    blacklist('~8888 svg _ _')
+  else:
+    # On CPU SVGs we only care about parsing. Only run them on the above bot.
+    args.remove('svg')
 
   # Eventually I'd like these to pass, but for now just skip 'em.
   if 'SK_FORCE_RASTER_PIPELINE_BLITTER' in bot:
     args.remove('tests')
-
-  # Only run the 'svgparse_*' svgs on 8888.
-  if api.vars.builder_cfg.get('cpu_or_gpu') == 'GPU':
-    blacklist('_ svg _ svgparse_')
-  else:
-    blacklist('~8888 svg _ svgparse_')
 
   # TODO: ???
   blacklist('f16 _ _ dstreadshuffle')
@@ -380,7 +390,7 @@ def dm_flags(api, bot):
   if 'Win' in bot or 'Android' in bot or 'Chromecast' in bot:
     for test in ['verylargebitmap', 'verylarge_picture_image']:
       blacklist(['serialize-8888', 'gm', '_', test])
-  if 'Mac' in bot and 'CPU' in bot and 'Release' in bot:
+  if 'Mac' in bot and 'CPU' in bot:
     # skia:6992
     blacklist(['pic-8888', 'gm', '_', 'encode-platform'])
     blacklist(['serialize-8888', 'gm', '_', 'encode-platform'])
@@ -515,11 +525,26 @@ def dm_flags(api, bot):
       match.extend(['~CopySurface'])
 
   if 'Vulkan' in bot and 'NexusPlayer' in bot:
-    match.extend(['~gradients_no_texture$', # skia:6132
-                  '~tilemodes', # skia:6132
-                  '~shadertext$', # skia:6132
-                  '~bitmapfilters', # skia:6132
-                  '~GrContextFactory_abandon']) #skia:6209
+    # skia:6132
+    match.extend(['~gradients_no_texture$',
+                  '~tilemodes',
+                  '~shadertext$',
+                  '~bitmapfilters'])
+    match.append('~GrContextFactory_abandon') #skia:6209
+    # skia:7018
+    match.extend(['~ClearOp',
+                  '~ComposedImageFilterBounds_Gpu',
+                  '~ImageEncode_Gpu',
+                  '~ImageFilterFailAffectsTransparentBlack_Gpu',
+                  '~ImageFilterZeroBlurSigma_Gpu',
+                  '~ImageNewShader_GPU',
+                  '~ImageReadPixels_Gpu',
+                  '~ImageScalePixels_Gpu',
+                  '~OverdrawSurface_Gpu',
+                  '~ReadWriteAlpha',
+                  '~SpecialImage_DeferredGpu',
+                  '~SpecialImage_Gpu',
+                  '~SurfaceSemaphores'])
 
   if ('Vulkan' in bot and api.vars.is_linux and
       ('IntelIris540' in bot or 'IntelIris640' in bot)):
@@ -876,6 +901,7 @@ TEST_BUILDERS = [
   'Test-Ubuntu-Clang-GCE-CPU-AVX2-x86_64-Release-TSAN',
   'Test-Ubuntu-GCC-GCE-CPU-AVX2-x86-Debug',
   'Test-Ubuntu-GCC-GCE-CPU-AVX2-x86_64-Debug',
+  'Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-ASAN',
   'Test-Ubuntu-GCC-ShuttleA-GPU-GTX550Ti-x86_64-Release-Valgrind',
   ('Test-Ubuntu-GCC-ShuttleA-GPU-GTX550Ti-x86_64-Release-Valgrind' +
    '_AbandonGpuContext'),

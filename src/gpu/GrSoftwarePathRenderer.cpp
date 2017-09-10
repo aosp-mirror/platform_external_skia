@@ -22,11 +22,16 @@
 #include "ops/GrRectOpFactory.h"
 
 ////////////////////////////////////////////////////////////////////////////////
-bool GrSoftwarePathRenderer::onCanDrawPath(const CanDrawPathArgs& args) const {
+GrPathRenderer::CanDrawPath
+GrSoftwarePathRenderer::onCanDrawPath(const CanDrawPathArgs& args) const {
     // Pass on any style that applies. The caller will apply the style if a suitable renderer is
     // not found and try again with the new GrShape.
-    return !args.fShape->style().applies() && SkToBool(fResourceProvider) &&
-           (args.fAAType == GrAAType::kCoverage || args.fAAType == GrAAType::kNone);
+    if (!args.fShape->style().applies() && SkToBool(fResourceProvider) &&
+        (args.fAAType == GrAAType::kCoverage || args.fAAType == GrAAType::kNone)) {
+        // This is the fallback renderer for when a path is too complicated for the GPU ones.
+        return CanDrawPath::kAsBackup;
+    }
+    return CanDrawPath::kNo;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -151,7 +156,7 @@ void GrSoftwarePathRenderer::DrawToTargetWithShapeMask(
                                               SkIntToScalar(-textureOriginInDeviceSpace.fY));
     maskMatrix.preConcat(viewMatrix);
     paint.addCoverageFragmentProcessor(GrSimpleTextureEffect::Make(
-                std::move(proxy), nullptr, maskMatrix, GrSamplerParams::kNone_FilterMode));
+            std::move(proxy), nullptr, maskMatrix, GrSamplerState::Filter::kNearest));
     DrawNonAARect(renderTargetContext, std::move(paint), userStencilSettings, clip, SkMatrix::I(),
                   dstRect, invert);
 }
@@ -163,13 +168,7 @@ static sk_sp<GrTextureProxy> make_deferred_mask_texture_proxy(GrContext* context
     desc.fWidth = width;
     desc.fHeight = height;
     desc.fConfig = kAlpha_8_GrPixelConfig;
-
-    sk_sp<GrSurfaceContext> sContext =
-            context->contextPriv().makeDeferredSurfaceContext(desc, fit, SkBudgeted::kYes);
-    if (!sContext || !sContext->asTextureProxy()) {
-        return nullptr;
-    }
-    return sContext->asTextureProxyRef();
+    return GrSurfaceProxy::MakeDeferred(context->resourceProvider(), desc, fit, SkBudgeted::kYes);
 }
 
 namespace {
