@@ -88,13 +88,12 @@ About to run repo init. If it hangs asking you to run glogin then please:
 """
   os.chdir(android_dir)
   subprocess.check_call(
-      '%s init -u %s/a/platform/manifest -g "all,-notdefault,-darwin" -b master'
+      '%s init -u %s/a/platform/manifest -g "all,-notdefault,-darwin" '
+      '-b master --depth=1'
           % (repo_binary, ANDROID_REPO_URL), shell=True)
 
   print 'Syncing the Android checkout at %s' % android_dir
-  print '%s sync %s tools/repohooks -j 32' % (
-                            repo_binary, SKIA_PATH_IN_ANDROID)
-  subprocess.check_call('%s sync %s tools/repohooks -j 32' % (
+  subprocess.check_call('%s sync %s tools/repohooks -j 32 -c' % (
                             repo_binary, SKIA_PATH_IN_ANDROID), shell=True)
 
   # Set the necessary git config options.
@@ -122,11 +121,12 @@ About to run repo init. If it hangs asking you to run glogin then please:
         shell=True)
     subprocess.check_call('git cherry-pick FETCH_HEAD', shell=True)
 
-    # Amend the commit message to add "Test:" which is required by Android
-    # presubmit checks.
+    # Amend the commit message to add a "[DO NOT SUBMIT]" prefix and a "Test:"
+    # line which is required by Android presubmit checks.
     original_commit_message = change_details['subject']
     new_commit_message = (
-        "%s\n\nTest: Presubmit checks will test this change." % (
+        '[DO NOT SUBMIT] %s\n\n'
+        'Test: Presubmit checks will test this change.' % (
             original_commit_message))
     subprocess.check_call('git commit --amend -m "%s"' % new_commit_message,
                           shell=True)
