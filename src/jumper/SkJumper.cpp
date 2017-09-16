@@ -17,13 +17,21 @@
 #if !defined(__has_feature)
     #define __has_feature(x) 0
 #endif
+#if !defined(SK_JUMPER_USE_ASSEMBLY)
+#if __has_feature(memory_sanitizer)
+#define SK_JUMPER_USE_ASSEMBLY 0
+#else
+#define SK_JUMPER_USE_ASSEMBLY 1
+#endif
+#endif
 
 #define M(st) +1
 static const int kNumStages = SK_RASTER_PIPELINE_STAGES(M);
 #undef M
 
 #ifndef SK_JUMPER_DISABLE_8BIT
-    #if 0 && !__has_feature(memory_sanitizer) && (defined(__x86_64__) || defined(_M_X64))
+    // Intentionally commented out; optional logging for local debugging.
+    #if 0 && SK_JUMPER_USE_ASSEMBLY && (defined(__x86_64__) || defined(_M_X64))
         #include <atomic>
 
         #define M(st) #st,
@@ -64,19 +72,22 @@ using StartPipelineFn = void(size_t,size_t,size_t,size_t, void**);
 // Some stages have 8-bit versions from SkJumper_stages_lowp.cpp.
 #define LOWP_STAGES(M)   \
     M(black_color) M(white_color) M(uniform_color) \
-    M(set_rgb)           \
-    M(premul)            \
+    M(set_rgb)            \
+    M(premul)             \
+    M(luminance_to_alpha) \
     M(load_8888) M(load_8888_dst) M(store_8888) \
     M(load_bgra) M(load_bgra_dst) M(store_bgra) \
     M(load_a8)   M(load_a8_dst)   M(store_a8)   \
     M(load_g8)   M(load_g8_dst)                 \
-                 M(load_565_dst)  M(store_565)  \
+    M(load_565)  M(load_565_dst)  M(store_565)  \
     M(swap_rb)           \
     M(srcover_rgba_8888) \
     M(lerp_1_float)      \
     M(lerp_u8)           \
+    M(lerp_565)          \
     M(scale_1_float)     \
     M(scale_u8)          \
+    M(scale_565)         \
     M(move_src_dst)      \
     M(move_dst_src)      \
     M(clear)             \
@@ -102,7 +113,7 @@ using StartPipelineFn = void(size_t,size_t,size_t,size_t, void**);
 
 extern "C" {
 
-#if __has_feature(memory_sanitizer)
+#if !SK_JUMPER_USE_ASSEMBLY
     // We'll just run baseline code.
 
 #elif defined(__arm__)
@@ -172,7 +183,8 @@ extern "C" {
 
 }
 
-#if !__has_feature(memory_sanitizer) && (defined(__x86_64__) || defined(_M_X64))
+#if SK_JUMPER_USE_ASSEMBLY
+#if defined(__x86_64__) || defined(_M_X64)
     template <SkRasterPipeline::StockStage st>
     static constexpr StageFn* hsw_lowp() { return nullptr; }
 
@@ -217,6 +229,7 @@ extern "C" {
         LOWP_STAGES(M)
     #undef M
 #endif
+#endif
 
 // Engines comprise everything we need to run SkRasterPipelines.
 struct SkJumper_Engine {
@@ -237,7 +250,7 @@ static SkJumper_Engine gEngine = kBaseline;
 static SkOnce gChooseEngineOnce;
 
 static SkJumper_Engine choose_engine() {
-#if __has_feature(memory_sanitizer)
+#if !SK_JUMPER_USE_ASSEMBLY
     // We'll just run baseline code.
 
 #elif defined(__arm__)
@@ -316,7 +329,8 @@ static SkJumper_Engine choose_engine() {
     static SkOnce gChooseLowpOnce;
 
     static SkJumper_Engine choose_lowp() {
-    #if !__has_feature(memory_sanitizer) && (defined(__x86_64__) || defined(_M_X64))
+    #if SK_JUMPER_USE_ASSEMBLY
+    #if defined(__x86_64__) || defined(_M_X64)
         if (1 && SkCpu::Supports(SkCpu::HSW)) {
             return {
             #define M(st) hsw_lowp<SkRasterPipeline::st>(),
@@ -363,6 +377,7 @@ static SkJumper_Engine choose_engine() {
             sk_just_return_lowp,
         #undef M
         };
+    #endif
     #endif
         return kNone;
     }
