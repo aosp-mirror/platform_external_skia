@@ -335,6 +335,14 @@ def dm_flags(api, bot):
     # Android and iOS. skia:5438
     blacklist('_ test _ GrShape')
 
+  if api.vars.internal_hardware_label == 1:
+    # skia:7046
+    blacklist('_ test _ WritePixelsNonTexture_Gpu')
+    blacklist('_ test _ WritePixels_Gpu')
+    blacklist('_ test _ GrSurfaceRenderability')
+    blacklist('_ test _ ES2BlendWithNoTexture')
+
+
   # skia:4095
   bad_serialize_gms = ['bleed_image',
                        'c_gms',
@@ -1084,4 +1092,23 @@ def GenTests(api):
     api.step_data('dm', retcode=1) +
     api.step_data('pull /sdcard/revenge_of_the_skiabot/dm_out '+
                   '[CUSTOM_[SWARM_OUT_DIR]]/dm', retcode=1)
+  )
+
+  yield (
+    api.test('internal_bot_1') +
+    api.properties(buildername=builder,
+                   revision='abc123',
+                   path_config='kitchen',
+                   swarm_out_dir='[SWARM_OUT_DIR]',
+                   internal_hardware_label=1) +
+    api.path.exists(
+        api.path['start_dir'].join('skia'),
+        api.path['start_dir'].join('skia', 'infra', 'bots', 'assets',
+                                     'skimage', 'VERSION'),
+        api.path['start_dir'].join('skia', 'infra', 'bots', 'assets',
+                                     'skp', 'VERSION'),
+        api.path['start_dir'].join('skia', 'infra', 'bots', 'assets',
+                                     'svg', 'VERSION'),
+        api.path['start_dir'].join('tmp', 'uninteresting_hashes.txt')
+    )
   )

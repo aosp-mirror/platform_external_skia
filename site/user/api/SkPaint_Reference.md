@@ -2,6 +2,8 @@ SkPaint Reference
 ===
 
 # <a name="Paint"></a> Paint
+
+# <a name="SkPaint"></a> Class SkPaint
 <a href="#Paint">Paint</a> controls options applied when drawing and measuring. <a href="#Paint">Paint</a> collects all
 options outside of the <a href="#Clip">Canvas Clip</a> and <a href="#Matrix">Canvas Matrix</a>.
 
@@ -27,8 +29,6 @@ is set in <a href="#Paint">Paint</a>.
 <a href="#Paint">Paint</a> describes a single color, a single font, a single image quality, and so on.
 Multiple colors are drawn either by using multiple paints or with objects like
 <a href="undocumented#Shader">Shader</a> attached to <a href="#Paint">Paint</a>.
-
-# <a name="SkPaint"></a> Class SkPaint
 
 # <a name="Overview"></a> Overview
 
@@ -332,7 +332,7 @@ SK_ColorBLUE == paint2.getColor()
 SkPaint(SkPaint&& paint)
 </pre>
 
-Implements a move constructor to avoid incrementing the reference counts
+Implements a move constructor to avoid increasing the reference counts
 of objects referenced by the <a href="#SkPaint_move_SkPaint_paint">paint</a>.
 
 After the call, <a href="#SkPaint_move_SkPaint_paint">paint</a> is undefined, and can be safely destructed.
@@ -450,7 +450,7 @@ SK_ColorRED == paint2.getColor()
 SkPaint& operator=(SkPaint&& paint)
 </pre>
 
-Moves the <a href="#SkPaint_move_assignment_operator_paint">paint</a> to avoid incrementing the reference counts
+Moves the <a href="#SkPaint_move_assignment_operator_paint">paint</a> to avoid increasing the reference counts
 of objects referenced by the <a href="#SkPaint_move_assignment_operator_paint">paint</a> parameter. Objects containing <a href="undocumented#Reference_Count">Reference Count</a> in the
 prior destination are decreased by one; those objects are deleted if the resulting count
 is zero.
@@ -1143,7 +1143,7 @@ When <a href="SkPaint_Reference#Subpixel_Text">Subpixel Text</a> is enabled, the
 
 <a href="SkPaint_Reference#Linear_Text">Linear Text</a> selects whether text is rendered as a <a href="undocumented#Glyph">Glyph</a> or as a <a href="SkPath_Reference#Path">Path</a>.
 If <a href="#SkPaint_kLinearText_Flag">kLinearText Flag</a> is set, it has the same effect as setting <a href="#SkPaint_Hinting">Hinting</a> to <a href="#SkPaint_kNormal_Hinting">kNormal Hinting</a>.
-If <a href="#SkPaint_kLinearText_Flag">kLinearText Flag</a> is clear, it's the same as setting <a href="#SkPaint_Hinting">Hinting</a> to <a href="#SkPaint_kNo_Hinting">kNo Hinting</a>.
+If <a href="#SkPaint_kLinearText_Flag">kLinearText Flag</a> is clear, it is the same as setting <a href="#SkPaint_Hinting">Hinting</a> to <a href="#SkPaint_kNo_Hinting">kNo Hinting</a>.
 
 <a name="SkPaint_isLinearText"></a>
 ## isLinearText
@@ -2825,7 +2825,7 @@ void setShader(sk_sp<SkShader> shader)
 
 Optional colors used when filling a path, such as a gradient.
 
-Sets <a href="undocumented#Shader">Shader</a> to <a href="#SkPaint_setShader_shader">shader</a>, decrementing <a href="undocumented#Reference_Count">Reference Count</a> of the previous <a href="undocumented#Shader">Shader</a>.
+Sets <a href="undocumented#Shader">Shader</a> to <a href="#SkPaint_setShader_shader">shader</a>, decreasing <a href="undocumented#Reference_Count">Reference Count</a> of the previous <a href="undocumented#Shader">Shader</a>.
 Does not alter <a href="#SkPaint_setShader_shader">shader</a> <a href="undocumented#Reference_Count">Reference Count</a>.
 
 ### Parameters
@@ -2917,7 +2917,7 @@ color filter unique: false
 void setColorFilter(sk_sp<SkColorFilter> colorFilter)
 </pre>
 
-Sets <a href="undocumented#Color_Filter">Color Filter</a> to filter, decrementing <a href="undocumented#Reference_Count">Reference Count</a> of the previous <a href="undocumented#Color_Filter">Color Filter</a>. 
+Sets <a href="undocumented#Color_Filter">Color Filter</a> to filter, decreasing <a href="undocumented#Reference_Count">Reference Count</a> of the previous <a href="undocumented#Color_Filter">Color Filter</a>. 
 Pass nullptr to clear <a href="undocumented#Color_Filter">Color Filter</a>.
 Does not alter filter <a href="undocumented#Reference_Count">Reference Count</a>.
 
@@ -3115,7 +3115,7 @@ void setPathEffect(sk_sp<SkPathEffect> pathEffect)
 </pre>
 
 Sets <a href="undocumented#Path_Effect">Path Effect</a> to <a href="#SkPaint_setPathEffect_pathEffect">pathEffect</a>, 
-decrementing <a href="undocumented#Reference_Count">Reference Count</a> of the previous <a href="undocumented#Path_Effect">Path Effect</a>. 
+decreasing <a href="undocumented#Reference_Count">Reference Count</a> of the previous <a href="undocumented#Path_Effect">Path Effect</a>. 
 Pass nullptr to leave the path geometry unaltered.
 Does not alter <a href="#SkPaint_setPathEffect_pathEffect">pathEffect</a> <a href="undocumented#Reference_Count">Reference Count</a>.
 
@@ -3209,7 +3209,7 @@ void setMaskFilter(sk_sp<SkMaskFilter> maskFilter)
 </pre>
 
 Sets <a href="undocumented#Mask_Filter">Mask Filter</a> to <a href="#SkPaint_setMaskFilter_maskFilter">maskFilter</a>,
-decrementing <a href="undocumented#Reference_Count">Reference Count</a> of the previous <a href="undocumented#Mask_Filter">Mask Filter</a>. 
+decreasing <a href="undocumented#Reference_Count">Reference Count</a> of the previous <a href="undocumented#Mask_Filter">Mask Filter</a>. 
 Pass nullptr to clear <a href="undocumented#Mask_Filter">Mask Filter</a> and leave <a href="undocumented#Mask_Filter">Mask Filter</a> effect on <a href="undocumented#Mask_Alpha">Mask Alpha</a> unaltered.
 Does not affect <a href="undocumented#Rasterizer">Rasterizer</a>.
 Does not alter <a href="#SkPaint_setMaskFilter_maskFilter">maskFilter</a> <a href="undocumented#Reference_Count">Reference Count</a>.
@@ -3302,7 +3302,7 @@ void setTypeface(sk_sp<SkTypeface> typeface)
 </pre>
 
 Sets <a href="undocumented#Typeface">Typeface</a> to <a href="#SkPaint_setTypeface_typeface">typeface</a>,
-decrementing <a href="undocumented#Reference_Count">Reference Count</a> of the previous <a href="undocumented#Typeface">Typeface</a>. 
+decreasing <a href="undocumented#Reference_Count">Reference Count</a> of the previous <a href="undocumented#Typeface">Typeface</a>. 
 Pass nullptr to clear <a href="undocumented#Typeface">Typeface</a> and use the default <a href="#SkPaint_setTypeface_typeface">typeface</a>.
 Does not alter <a href="#SkPaint_setTypeface_typeface">typeface</a> <a href="undocumented#Reference_Count">Reference Count</a>.
 
@@ -3399,7 +3399,7 @@ void setRasterizer(sk_sp<SkRasterizer> rasterizer)
 </pre>
 
 Sets <a href="undocumented#Rasterizer">Rasterizer</a> to <a href="#SkPaint_setRasterizer_rasterizer">rasterizer</a>,
-decrementing <a href="undocumented#Reference_Count">Reference Count</a> of the previous <a href="undocumented#Rasterizer">Rasterizer</a>. 
+decreasing <a href="undocumented#Reference_Count">Reference Count</a> of the previous <a href="undocumented#Rasterizer">Rasterizer</a>. 
 Pass nullptr to clear <a href="undocumented#Rasterizer">Rasterizer</a> and leave <a href="undocumented#Rasterizer">Rasterizer</a> effect on <a href="undocumented#Mask_Alpha">Mask Alpha</a> unaltered.
 Does not affect <a href="undocumented#Mask_Filter">Mask Filter</a>.
 Does not alter <a href="#SkPaint_setRasterizer_rasterizer">rasterizer</a> <a href="undocumented#Reference_Count">Reference Count</a>.
@@ -3496,7 +3496,7 @@ void setImageFilter(sk_sp<SkImageFilter> imageFilter)
 </pre>
 
 Sets <a href="undocumented#Image_Filter">Image Filter</a> to <a href="#SkPaint_setImageFilter_imageFilter">imageFilter</a>,
-decrementing <a href="undocumented#Reference_Count">Reference Count</a> of the previous <a href="undocumented#Image_Filter">Image Filter</a>. 
+decreasing <a href="undocumented#Reference_Count">Reference Count</a> of the previous <a href="undocumented#Image_Filter">Image Filter</a>. 
 Pass nullptr to clear <a href="undocumented#Image_Filter">Image Filter</a>, and remove <a href="undocumented#Image_Filter">Image Filter</a> effect
 on drawing.
 Does not affect <a href="undocumented#Rasterizer">Rasterizer</a> or <a href="undocumented#Mask_Filter">Mask Filter</a>.
@@ -3609,7 +3609,7 @@ void setDrawLooper(sk_sp<SkDrawLooper> drawLooper)
 </pre>
 
 Sets <a href="undocumented#Draw_Looper">Draw Looper</a> to <a href="#SkPaint_setDrawLooper_drawLooper">drawLooper</a>,
-decrementing <a href="undocumented#Reference_Count">Reference Count</a> of the previous <a href="#SkPaint_setDrawLooper_drawLooper">drawLooper</a>. 
+decreasing <a href="undocumented#Reference_Count">Reference Count</a> of the previous <a href="#SkPaint_setDrawLooper_drawLooper">drawLooper</a>. 
 Pass nullptr to clear <a href="undocumented#Draw_Looper">Draw Looper</a> and leave <a href="undocumented#Draw_Looper">Draw Looper</a> effect on drawing unaltered.
 Does not alter <a href="#SkPaint_setDrawLooper_drawLooper">drawLooper</a> <a href="undocumented#Reference_Count">Reference Count</a>.
 
@@ -3947,11 +3947,11 @@ All character encoding are able to represent all of <a href="undocumented#Unicod
 in the total storage required.
 
 <a href="undocumented#UTF_8">UTF-8</a> (<a href="undocumented#RFC">RFC</a> 3629)is made up of 8-bit bytes, 
-and is a superset of <a href="undocumented#ASCII">ASCII</a>.
-<a href="undocumented#UTF_16">UTF-16</a> (<a href="undocumented#RFC">RFC</a> 2781)is made up of 16-bit words, 
-and is a superset of <a href="undocumented#Unicode">Unicode</a> ranges 0x0000 to 0xD7FF and 0xE000 to 0xFFFF.
-<a href="undocumented#UTF_32">UTF-32</a>is
-made up of 32-bit words, and is a superset of <a href="undocumented#Unicode">Unicode</a>.
+and encodes <a href="undocumented#ASCII">ASCII</a> in one byte, and all valid code points in <a href="undocumented#Unicode">Unicode</a> in multiple
+bytes.<a href="undocumented#UTF_16">UTF-16</a> (<a href="undocumented#RFC">RFC</a> 2781)uses one or two 16-bit words, 
+and encodes <a href="undocumented#Unicode">Unicode</a> ranges 0x0000 to 0xD7FF and 0xE000 to 0xFFFF in one 
+word.<a href="undocumented#UTF_32">UTF-32</a>describes
+a 32-bit word, which encodes all code points in <a href="undocumented#Unicode">Unicode</a>.
 
 <a href="undocumented#Font_Manager">Font Manager</a> uses font data to convert character code points into glyph indices. 
 A glyph index is a 16-bit word.
@@ -4063,6 +4063,14 @@ Y-axis values above the baseline are negative, and below the baseline are positi
 <div><fiddle-embed name="b5b76e0a15da0c3530071186a9006498"></fiddle-embed></div>
 
 # <a name="SkPaint_FontMetrics"></a> Struct SkPaint::FontMetrics
+<a href="#SkPaint_FontMetrics">FontMetrics</a> is filled out by <a href="#SkPaint_getFontMetrics">getFontMetrics</a>. <a href="#SkPaint_FontMetrics">FontMetrics</a> contents reflect the values
+computed by <a href="undocumented#Font_Manager">Font Manager</a> using <a href="undocumented#Typeface">Typeface</a>. Values are set to zero if they are
+not available.
+
+<a href="#SkPaint_FontMetrics_fUnderlineThickness">fUnderlineThickness</a> and <a href="#SkPaint_FontMetrics_fUnderlinePosition">fUnderlinePosition</a> have a bit set in <a href="#SkPaint_FontMetrics_fFlags">fFlags</a> if their values
+are valid, since their value may be zero.
+<a href="#SkPaint_FontMetrics_fStrikeoutThickness">fStrikeoutThickness</a> and <a href="#SkPaint_FontMetrics_fStrikeoutPosition">fStrikeoutPosition</a> have a bit set in <a href="#SkPaint_FontMetrics_fFlags">fFlags</a> if their values
+are valid, since their value may be zero.
 
 <pre style="padding: 1em 1em 1em 1em;width: 44em; background-color: #f0f0f0">
 struct <a href="#SkPaint_FontMetrics">FontMetrics</a> {
@@ -4096,16 +4104,11 @@ bool <a href="#SkPaint_FontMetrics_hasStrikeoutThickness">hasStrikeoutThickness(
 bool <a href="#SkPaint_FontMetrics_hasStrikeoutPosition">hasStrikeoutPosition(SkScalar* position)</a> const;
 };</pre>
 
-<a href="#SkPaint_FontMetrics">FontMetrics</a> is filled out by <a href="#SkPaint_getFontMetrics">getFontMetrics</a>. <a href="#SkPaint_FontMetrics">FontMetrics</a> contents reflect the values
-computed by <a href="undocumented#Font_Manager">Font Manager</a> using <a href="undocumented#Typeface">Typeface</a>. Values are set to zero if they are
-not available.
-
-<a href="#SkPaint_FontMetrics_fUnderlineThickness">fUnderlineThickness</a> and <a href="#SkPaint_FontMetrics_fUnderlinePosition">fUnderlinePosition</a> have a bit set in <a href="#SkPaint_FontMetrics_fFlags">fFlags</a> if their values
-are valid, since their value may be zero.
-<a href="#SkPaint_FontMetrics_fStrikeoutThickness">fStrikeoutThickness</a> and <a href="#SkPaint_FontMetrics_fStrikeoutPosition">fStrikeoutPosition</a> have a bit set in <a href="#SkPaint_FontMetrics_fFlags">fFlags</a> if their values
-are valid, since their value may be zero.
-
 ## <a name="SkPaint_FontMetrics_FontMetricsFlags"></a> Enum SkPaint::FontMetrics::FontMetricsFlags
+
+<a href="#SkPaint_FontMetrics_FontMetricsFlags">FontMetricsFlags</a> are set in <a href="#SkPaint_FontMetrics_fFlags">fFlags</a> when underline and strikeout metrics are valid;
+the underline or strikeout metric may be valid and zero.
+Fonts with embedded bitmaps may not have valid underline or strikeout metrics.
 
 <pre style="padding: 1em 1em 1em 1em;width: 44em; background-color: #f0f0f0">
 enum <a href="#SkPaint_FontMetrics_FontMetricsFlags">FontMetricsFlags</a> {
@@ -4114,10 +4117,6 @@ enum <a href="#SkPaint_FontMetrics_FontMetricsFlags">FontMetricsFlags</a> {
 <a href="#SkPaint_FontMetrics_kStrikeoutThicknessIsValid_Flag">kStrikeoutThicknessIsValid Flag</a> = 1 << 2,
 <a href="#SkPaint_FontMetrics_kStrikeoutPositionIsValid_Flag">kStrikeoutPositionIsValid Flag</a> = 1 << 3,
 };</pre>
-
-<a href="#SkPaint_FontMetrics_FontMetricsFlags">FontMetricsFlags</a> are set in <a href="#SkPaint_FontMetrics_fFlags">fFlags</a> when underline and strikeout metrics are valid;
-the underline or strikeout metric may be valid and zero.
-Fonts with embedded bitmaps may not have valid underline or strikeout metrics.
 
 ### Constants
 

@@ -39,8 +39,8 @@ GrOpList::GrOpList(GrResourceProvider* resourceProvider,
     // here so that the GrSurfaces are created in an order that preserves the GrSurface
     // re-use assumptions.
     fTarget.get()->instantiate(resourceProvider);
-    fTarget.markPendingIO();
 #endif
+    fTarget.markPendingIO();
 }
 
 GrOpList::~GrOpList() {
@@ -81,7 +81,7 @@ void GrOpList::addDependency(GrOpList* dependedOn) {
         return;  // don't add duplicate dependencies
     }
 
-    *fDependencies.push() = dependedOn;
+    fDependencies.push_back(dependedOn);
 }
 
 // Convert from a GrSurface-based dependency to a GrOpList one

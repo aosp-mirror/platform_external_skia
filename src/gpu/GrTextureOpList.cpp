@@ -9,6 +9,7 @@
 
 #include "GrAuditTrail.h"
 #include "GrGpu.h"
+#include "GrResourceAllocator.h"
 #include "GrTextureProxy.h"
 #include "SkStringUtils.h"
 #include "ops/GrCopySurfaceOp.h"
@@ -98,12 +99,33 @@ bool GrTextureOpList::copySurface(const GrCaps& caps,
     if (!op) {
         return false;
     }
-#ifdef ENABLE_MDB
-    this->addDependency(src);
-#endif
+
+    auto addDependency = [ &caps, this ] (GrSurfaceProxy* p) {
+        this->addDependency(p, caps);
+    };
+    op->visitProxies(addDependency);
 
     this->recordOp(std::move(op));
     return true;
+}
+
+void GrTextureOpList::gatherProxyIntervals(GrResourceAllocator* alloc) const {
+    unsigned int cur = alloc->numOps();
+
+    // Add the interval for all the writes to this opList's target
+    alloc->addInterval(fTarget.get(), cur, cur+fRecordedOps.count()-1);
+
+    auto gather = [ alloc ] (GrSurfaceProxy* p) {
+        alloc->addInterval(p);
+    };
+    for (int i = 0; i < fRecordedOps.count(); ++i) {
+        SkASSERT(alloc->curOp() == cur+i);
+
+        const GrOp* op = fRecordedOps[i].get(); // only diff from the GrRenderTargetOpList version
+        op->visitProxies(gather);
+
+        alloc->incOps();
+    }
 }
 
 void GrTextureOpList::recordOp(std::unique_ptr<GrOp> op) {

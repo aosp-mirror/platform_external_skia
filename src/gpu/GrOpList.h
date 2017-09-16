@@ -13,13 +13,19 @@
 #include "SkRefCnt.h"
 #include "SkTDArray.h"
 
-//#define ENABLE_MDB 1
+
+// Turn on/off the explicit distribution of GPU resources at flush time
+//#define MDB_ALLOC_RESOURCES 1
+
+// Turn on/off the sorting of opLists at flush time
+//#define ENABLE_MDB_SORT 1
 
 class GrAuditTrail;
 class GrCaps;
 class GrOpFlushState;
 class GrPrepareCallback;
 class GrRenderTargetOpList;
+class GrResourceAllocator;
 class GrResourceProvider;
 class GrSurfaceProxy;
 class GrTextureProxy;
@@ -71,7 +77,13 @@ public:
      * Does this opList depend on 'dependedOn'?
      */
     bool dependsOn(GrOpList* dependedOn) const {
-        return fDependencies.find(dependedOn) >= 0;
+        for (int i = 0; i < fDependencies.count(); ++i) {
+            if (fDependencies[i] == dependedOn) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /*
@@ -108,7 +120,10 @@ protected:
     GrLoadOp          fStencilLoadOp  = GrLoadOp::kLoad;
 
 private:
-    friend class GrDrawingManager; // for resetFlag & TopoSortTraits
+    friend class GrDrawingManager; // for resetFlag, TopoSortTraits & gatherProxyIntervals
+
+    // Feed proxy usage intervals to the GrResourceAllocator class
+    virtual void gatherProxyIntervals(GrResourceAllocator*) const = 0;
 
     static uint32_t CreateUniqueID();
 
@@ -160,11 +175,11 @@ private:
 
     void addDependency(GrOpList* dependedOn);
 
-    uint32_t              fUniqueID;
-    uint32_t              fFlags;
+    uint32_t               fUniqueID;
+    uint32_t               fFlags;
 
     // 'this' GrOpList relies on the output of the GrOpLists in 'fDependencies'
-    SkTDArray<GrOpList*>  fDependencies;
+    SkSTArray<1, GrOpList*, true> fDependencies;
 
     // These are used rarely, most clients never produce any
     SkTArray<std::unique_ptr<GrPrepareCallback>> fPrepareCallbacks;

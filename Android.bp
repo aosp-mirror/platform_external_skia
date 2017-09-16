@@ -597,7 +597,7 @@ cc_library {
         "src/jumper/SkJumper.cpp",
         "src/jumper/SkJumper_generated.S",
         "src/jumper/SkJumper_stages.cpp",
-        "src/jumper/SkJumper_stages_8bit.cpp",
+        "src/jumper/SkJumper_stages_lowp.cpp",
         "src/lazy/SkDiscardableMemoryPool.cpp",
         "src/pathops/SkAddIntersections.cpp",
         "src/pathops/SkDConicLineIntersection.cpp",

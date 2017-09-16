@@ -108,14 +108,14 @@ public:
                                      gpArgs->fPositionVar,
                                      textureGP.fTextureCoords.fName,
                                      args.fFPCoordTransformHandler);
-                if (args.fShaderCaps->flatInterpolationSupport()) {
+                if (args.fShaderCaps->preferFlatInterpolation()) {
                     args.fVaryingHandler->addFlatPassThroughAttribute(&textureGP.fColors,
                                                                       args.fOutputColor);
                 } else {
                     args.fVaryingHandler->addPassThroughAttribute(&textureGP.fColors,
                                                                   args.fOutputColor);
                 }
-                args.fFragBuilder->codeAppend("highp float2 texCoord;");
+                args.fFragBuilder->codeAppend("highfloat2 texCoord;");
                 args.fVaryingHandler->addPassThroughAttribute(&textureGP.fTextureCoords, "texCoord",
                                                               kHigh_GrSLPrecision);
                 if (textureGP.numTextureSamplers() > 1) {
@@ -134,7 +134,7 @@ public:
                         args.fFragBuilder->appendTextureLookupAndModulate(args.fOutputColor,
                                                                           args.fTexSamplers[i],
                                                                           "texCoord",
-                                                                          kVec2f_GrSLType,
+                                                                          kHighFloat2_GrSLType,
                                                                           &fColorSpaceXformHelper);
                         args.fFragBuilder->codeAppend("; break;");
                     }
@@ -144,11 +144,11 @@ public:
                     args.fFragBuilder->appendTextureLookupAndModulate(args.fOutputColor,
                                                                       args.fTexSamplers[0],
                                                                       "texCoord",
-                                                                      kVec2f_GrSLType,
+                                                                      kHighFloat2_GrSLType,
                                                                       &fColorSpaceXformHelper);
                 }
                 args.fFragBuilder->codeAppend(";");
-                args.fFragBuilder->codeAppendf("%s = float4(1);", args.fOutputCoverage);
+                args.fFragBuilder->codeAppendf("%s = highfloat4(1);", args.fOutputCoverage);
             }
             GrGLSLColorSpaceXformHelper fColorSpaceXformHelper;
         };
@@ -245,7 +245,7 @@ public:
 
     const char* name() const override { return "TextureOp"; }
 
-    void visitProxies(VisitProxyFunc func) const override {
+    void visitProxies(const VisitProxyFunc& func) const override {
         auto proxies = this->proxies();
         for (int i = 0; i < fProxyCnt; ++i) {
             func(proxies[i]);

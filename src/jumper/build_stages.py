@@ -13,7 +13,7 @@ clang         = 'clang-5.0'
 objdump       = 'gobjdump'
 ccache        = 'ccache'
 stages        = 'src/jumper/SkJumper_stages.cpp'
-stages_8bit   = 'src/jumper/SkJumper_stages_8bit.cpp'
+stages_lowp   = 'src/jumper/SkJumper_stages_lowp.cpp'
 generated     = 'src/jumper/SkJumper_generated.S'
 generated_win = 'src/jumper/SkJumper_generated_win.S'
 
@@ -21,7 +21,7 @@ clang         = sys.argv[1] if len(sys.argv) > 1 else clang
 objdump       = sys.argv[2] if len(sys.argv) > 2 else objdump
 ccache        = sys.argv[3] if len(sys.argv) > 3 else ccache
 stages        = sys.argv[4] if len(sys.argv) > 4 else stages
-stages_8bit   = sys.argv[5] if len(sys.argv) > 5 else stages_8bit
+stages_lowp   = sys.argv[5] if len(sys.argv) > 5 else stages_lowp
 generated     = sys.argv[6] if len(sys.argv) > 6 else generated
 generated_win = sys.argv[7] if len(sys.argv) > 7 else generated_win
 
@@ -49,17 +49,17 @@ subprocess.check_call(clang + cflags + sse2 + win + x86 +
                       ['-o', 'win_x86_sse2.o'])
 
 subprocess.check_call(clang + cflags + sse2 +
-                      ['-c', stages_8bit] +
-                      ['-o', '8bit_sse2.o'])
+                      ['-c', stages_lowp] +
+                      ['-o', 'lowp_sse2.o'])
 subprocess.check_call(clang + cflags + sse2 + win +
-                      ['-c', stages_8bit] +
-                      ['-o', 'win_8bit_sse2.o'])
+                      ['-c', stages_lowp] +
+                      ['-o', 'win_lowp_sse2.o'])
 subprocess.check_call(clang + cflags + sse2 + x86 +
-                      ['-c', stages_8bit] +
-                      ['-o', 'x86_8bit_sse2.o'])
+                      ['-c', stages_lowp] +
+                      ['-o', 'x86_lowp_sse2.o'])
 subprocess.check_call(clang + cflags + sse2 + win + x86 +
-                      ['-c', stages_8bit] +
-                      ['-o', 'win_x86_8bit_sse2.o'])
+                      ['-c', stages_lowp] +
+                      ['-o', 'win_x86_lowp_sse2.o'])
 
 sse41 = ['-msse4.1']
 subprocess.check_call(clang + cflags + sse41 +
@@ -70,11 +70,11 @@ subprocess.check_call(clang + cflags + sse41 + win +
                       ['-o', 'win_sse41.o'])
 
 subprocess.check_call(clang + cflags + sse41 +
-                      ['-c', stages_8bit] +
-                      ['-o', '8bit_sse41.o'])
+                      ['-c', stages_lowp] +
+                      ['-o', 'lowp_sse41.o'])
 subprocess.check_call(clang + cflags + sse41 + win +
-                      ['-c', stages_8bit] +
-                      ['-o', 'win_8bit_sse41.o'])
+                      ['-c', stages_lowp] +
+                      ['-o', 'win_lowp_sse41.o'])
 
 avx = ['-mavx']
 subprocess.check_call(clang + cflags + avx +
@@ -93,25 +93,27 @@ subprocess.check_call(clang + cflags + hsw + win +
                       ['-o', 'win_hsw.o'])
 
 subprocess.check_call(clang + cflags + hsw +
-                      ['-c', stages_8bit] +
-                      ['-o', '8bit_hsw.o'])
+                      ['-c', stages_lowp] +
+                      ['-o', 'lowp_hsw.o'])
 subprocess.check_call(clang + cflags + hsw + win +
-                      ['-c', stages_8bit] +
-                      ['-o', 'win_8bit_hsw.o'])
+                      ['-c', stages_lowp] +
+                      ['-o', 'win_lowp_hsw.o'])
 
 # Merge x86-64 object files to deduplicate constants.
 # (No other platform has more than one specialization.)
 subprocess.check_call(['ld', '-r', '-o', 'merged.o',
                        'hsw.o', 'avx.o', 'sse41.o', 'sse2.o',
-                       '8bit_hsw.o', '8bit_sse41.o', '8bit_sse2.o'])
+                       'lowp_hsw.o', 'lowp_sse41.o', 'lowp_sse2.o'])
 subprocess.check_call(['ld', '-r', '-o', 'win_merged.o',
                        'win_hsw.o', 'win_avx.o', 'win_sse41.o', 'win_sse2.o',
-                       'win_8bit_hsw.o', 'win_8bit_sse41.o', 'win_8bit_sse2.o'])
+                       'win_lowp_hsw.o', 'win_lowp_sse41.o', 'win_lowp_sse2.o'])
 
 subprocess.check_call(['ld', '-r', '-o', 'x86_merged.o',
-                       'x86_sse2.o', 'x86_8bit_sse2.o'])
+                       'x86_sse2.o',
+                       'x86_lowp_sse2.o'])
 subprocess.check_call(['ld', '-r', '-o', 'win_x86_merged.o',
-                       'win_x86_sse2.o', 'win_x86_8bit_sse2.o'])
+                       'win_x86_sse2.o',
+                       'win_x86_lowp_sse2.o'])
 
 vfp4 = [
     '--target=armv7a-linux-gnueabihf',
