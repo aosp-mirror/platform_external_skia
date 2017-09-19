@@ -3,7 +3,7 @@ use_relative_paths = True
 deps = {
   "buildtools"                          : "https://chromium.googlesource.com/chromium/buildtools.git@e6b510a9daf822bbe9f922c200c58150803d2fd8",
   "common"                              : "https://skia.googlesource.com/common.git@9737551d7a52c3db3262db5856e6bcd62c462b92",
-  "third_party/externals/angle2"        : "https://chromium.googlesource.com/angle/angle.git@8b2142e3734e5403ba247deea4bdda1cdde207db",
+  "third_party/externals/angle2"        : "https://chromium.googlesource.com/angle/angle.git@abd313592dfe98bb82b72c98bb1db78606f88189",
   "third_party/externals/dng_sdk"       : "https://android.googlesource.com/platform/external/dng_sdk.git@96443b262250c390b0caefbf3eed8463ba35ecae",
   "third_party/externals/expat"         : "https://android.googlesource.com/platform/external/expat.git@android-6.0.1_r55",
   "third_party/externals/freetype"      : "https://skia.googlesource.com/third_party/freetype2.git@447a0b62634802d8acdb56008cff5ff4e50be244",
@@ -12,6 +12,7 @@ deps = {
   "third_party/externals/imgui"         : "https://github.com/ocornut/imgui.git@6384eee34f08cb7eab8d835043e1738e4adcdf75",
   "third_party/externals/jsoncpp"       : "https://chromium.googlesource.com/external/github.com/open-source-parsers/jsoncpp.git@1.0.0",
   "third_party/externals/libjpeg-turbo" : "https://skia.googlesource.com/third_party/libjpeg-turbo.git@6de58e0d28014caf2fc1370145f22fd6d65f63e3",
+  "third_party/externals/libpng"        : "https://skia.googlesource.com/third_party/libpng.git@v1.6.32",
   "third_party/externals/libwebp"       : "https://chromium.googlesource.com/webm/libwebp.git@v0.6.0",
   "third_party/externals/microhttpd"    : "https://android.googlesource.com/platform/external/libmicrohttpd@748945ec6f1c67b7efc934ab0808e1d32f2fb98d",
   "third_party/externals/piex"          : "https://android.googlesource.com/platform/external/piex.git@8f540f64b6c170a16fb7e6e52d61819705c1522a",
