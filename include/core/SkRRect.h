@@ -13,6 +13,8 @@
 
 class SkPath;
 class SkMatrix;
+class SkRBuffer;
+class SkWBuffer;
 
 // Path forward:
 //   core work
@@ -46,7 +48,7 @@ class SkMatrix;
 */
 class SK_API SkRRect {
 public:
-    SkRRect() { /* unititialized */ }
+    SkRRect() { this->setEmpty(); }
     SkRRect(const SkRRect&) = default;
     SkRRect& operator=(const SkRRect&) = default;
 
@@ -135,7 +137,7 @@ public:
         fRect = rect;
         fRect.sort();
 
-        if (fRect.isEmpty()) {
+        if (fRect.isEmpty() || !fRect.isFinite()) {
             this->setEmpty();
             return;
         }
@@ -178,7 +180,7 @@ public:
         fRect = oval;
         fRect.sort();
 
-        if (fRect.isEmpty()) {
+        if (fRect.isEmpty() || !fRect.isFinite()) {
             this->setEmpty();
             return;
         }
@@ -290,6 +292,7 @@ public:
     bool contains(const SkRect& rect) const;
 
     bool isValid() const;
+    static bool AreRectAndRadiiValid(const SkRect&, const SkVector[4]);
 
     enum {
         kSizeInMemory = 12 * sizeof(SkScalar)
@@ -301,6 +304,7 @@ public:
      *  a multiple of 4. Return kSizeInMemory.
      */
     size_t writeToMemory(void* buffer) const;
+    void writeToBuffer(SkWBuffer*) const;
 
     /**
      * Reads the rrect from the specified buffer
@@ -314,6 +318,7 @@ public:
      *         0 if there was not enough memory available
      */
     size_t readFromMemory(const void* buffer, size_t length);
+    bool readFromBuffer(SkRBuffer*);
 
     /**
      *  Transform by the specified matrix, and put the result in dst.

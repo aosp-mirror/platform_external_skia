@@ -45,17 +45,19 @@ public:
         return static_cast<T*>(this->findAndRefResourceByUniqueKey(key));
     }
 
+    /*
+     * Assigns a unique key to a proxy. The proxy will be findable via this key using
+     * findProxyByUniqueKey(). It is an error if an existing proxy already has a key.
+     */
+    void assignUniqueKeyToProxy(const GrUniqueKey&, GrTextureProxy*);
+
+    /*
+     * Finds a proxy by unique key.
+     */
+    sk_sp<GrTextureProxy> findProxyByUniqueKey(const GrUniqueKey&, GrSurfaceOrigin);
+
     ///////////////////////////////////////////////////////////////////////////
     // Textures
-
-    /** Assigns a unique key to the texture. The texture will be findable via this key using
-    findTextureByUniqueKey(). If an existing texture has this key, it's key will be removed. */
-    void assignUniqueKeyToProxy(const GrUniqueKey& key, GrTextureProxy*);
-
-    /** Finds a texture by unique key. If the texture is found it is ref'ed and returned. */
-    // MDB TODO (caching): If this were actually caching proxies (rather than shallowly 
-    // wrapping GrSurface caching) we would not need the origin parameter.
-    sk_sp<GrTextureProxy> findProxyByUniqueKey(const GrUniqueKey& key, GrSurfaceOrigin);
 
     /**
      * Finds a texture that approximately matches the descriptor. Will be at least as large in width
@@ -197,10 +199,10 @@ public:
 
 
     /**
-     * If passed in render target already has a stencil buffer, return it. Otherwise attempt to
-     * attach one.
+     * If passed in render target already has a stencil buffer, return true. Otherwise attempt to
+     * attach one and return true on success.
      */
-    GrStencilAttachment* attachStencilAttachment(GrRenderTarget* rt);
+    bool attachStencilAttachment(GrRenderTarget* rt);
 
      /**
       * Wraps an existing texture with a GrRenderTarget object. This is useful when the provided

@@ -1540,6 +1540,7 @@ cc_test {
         "tests/TestUtils.cpp",
         "tests/TextBlobCacheTest.cpp",
         "tests/TextBlobTest.cpp",
+        "tests/TextureProxyTest.cpp",
         "tests/Time.cpp",
         "tests/TopoSortTest.cpp",
         "tests/TraceMemoryDumpTest.cpp",

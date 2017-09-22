@@ -19,7 +19,7 @@
  *  X bytes (inclusive), and the wrapped stream is not necessarily
  *  able to rewind at all.
  */
-class SkFrontBufferedStream {
+class SK_API SkFrontBufferedStream {
 public:
     /**
      *  Creates a new stream that wraps and buffers an SkStream.
@@ -35,11 +35,5 @@ public:
      */
     static std::unique_ptr<SkStreamRewindable> Make(std::unique_ptr<SkStream> stream,
                                                     size_t minBufferSize);
-
-#ifdef SK_SUPPORT_LEGACY_STREAM_API
-    static SkStreamRewindable* Create(SkStream* stream, size_t minBufferSize) {
-        return Make(std::unique_ptr<SkStream>(stream), minBufferSize).release();
-    }
-#endif
 };
 #endif  // SkFrontBufferedStream_DEFINED

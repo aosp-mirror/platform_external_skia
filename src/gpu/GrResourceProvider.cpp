@@ -292,7 +292,6 @@ void GrResourceProvider::assignUniqueKeyToTexture(const GrUniqueKey& key, GrText
     this->assignUniqueKeyToResource(key, texture);
 }
 
-// MDB TODO (caching): this side-steps the issue of texture proxies with unique IDs
 void GrResourceProvider::assignUniqueKeyToProxy(const GrUniqueKey& key, GrTextureProxy* proxy) {
     ASSERT_SINGLE_OWNER
     SkASSERT(key.isValid());
@@ -300,25 +299,13 @@ void GrResourceProvider::assignUniqueKeyToProxy(const GrUniqueKey& key, GrTextur
         return;
     }
 
-    if (!proxy->instantiate(this)) {
-        return;
-    }
-    GrTexture* texture = proxy->priv().peekTexture();
-
-    this->assignUniqueKeyToResource(key, texture);
+    fCache->assignUniqueKeyToProxy(key, proxy);
 }
 
-// MDB TODO (caching): this side-steps the issue of texture proxies with unique IDs
 sk_sp<GrTextureProxy> GrResourceProvider::findProxyByUniqueKey(const GrUniqueKey& key,
                                                                GrSurfaceOrigin origin) {
     ASSERT_SINGLE_OWNER
-
-    sk_sp<GrTexture> texture(this->findAndRefTextureByUniqueKey(key));
-    if (!texture) {
-        return nullptr;
-    }
-
-    return GrSurfaceProxy::MakeWrapped(std::move(texture), origin);
+    return this->isAbandoned() ? nullptr : fCache->findProxyByUniqueKey(key, origin);
 }
 
 const GrBuffer* GrResourceProvider::createPatternedIndexBuffer(const uint16_t* pattern,
@@ -334,11 +321,8 @@ const GrBuffer* GrResourceProvider::createPatternedIndexBuffer(const uint16_t* p
     if (!buffer) {
         return nullptr;
     }
-    uint16_t* data = (uint16_t*) buffer->map();
-    bool useTempData = (nullptr == data);
-    if (useTempData) {
-        data = new uint16_t[reps * patternSize];
-    }
+
+    SkAutoTArray<uint16_t> data(reps * patternSize);
     for (int i = 0; i < reps; ++i) {
         int baseIdx = i * patternSize;
         uint16_t baseVert = (uint16_t)(i * vertCount);
@@ -346,15 +330,12 @@ const GrBuffer* GrResourceProvider::createPatternedIndexBuffer(const uint16_t* p
             data[baseIdx+j] = baseVert + pattern[j];
         }
     }
-    if (useTempData) {
-        if (!buffer->updateData(data, bufferSize)) {
-            buffer->unref();
-            return nullptr;
-        }
-        delete[] data;
-    } else {
-        buffer->unmap();
+
+    if (!buffer->updateData(data.get(), bufferSize)) {
+        buffer->unref();
+        return nullptr;
     }
+
     this->assignUniqueKeyToResource(key, buffer);
     return buffer;
 }
@@ -371,12 +352,20 @@ const GrBuffer* GrResourceProvider::createQuadIndexBuffer() {
 int GrResourceProvider::QuadCountOfQuadBuffer() { return kMaxQuads; }
 
 sk_sp<GrPath> GrResourceProvider::createPath(const SkPath& path, const GrStyle& style) {
+    if (this->isAbandoned()) {
+        return nullptr;
+    }
+
     SkASSERT(this->gpu()->pathRendering());
     return this->gpu()->pathRendering()->createPath(path, style);
 }
 
 sk_sp<GrPathRange> GrResourceProvider::createPathRange(GrPathRange::PathGenerator* gen,
                                                        const GrStyle& style) {
+    if (this->isAbandoned()) {
+        return nullptr;
+    }
+
     SkASSERT(this->gpu()->pathRendering());
     return this->gpu()->pathRendering()->createPathRange(gen, style);
 }
@@ -433,10 +422,10 @@ GrBuffer* GrResourceProvider::createBuffer(size_t size, GrBufferType intendedTyp
     return buffer;
 }
 
-GrStencilAttachment* GrResourceProvider::attachStencilAttachment(GrRenderTarget* rt) {
+bool GrResourceProvider::attachStencilAttachment(GrRenderTarget* rt) {
     SkASSERT(rt);
     if (rt->renderTargetPriv().getStencilAttachment()) {
-        return rt->renderTargetPriv().getStencilAttachment();
+        return true;
     }
 
     if (!rt->wasDestroyed() && rt->canAttemptStencilAttachment()) {
@@ -475,7 +464,7 @@ GrStencilAttachment* GrResourceProvider::attachStencilAttachment(GrRenderTarget*
 #endif
         }
     }
-    return rt->renderTargetPriv().getStencilAttachment();
+    return SkToBool(rt->renderTargetPriv().getStencilAttachment());
 }
 
 sk_sp<GrRenderTarget> GrResourceProvider::wrapBackendTextureAsRenderTarget(

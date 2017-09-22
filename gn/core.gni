@@ -530,6 +530,6 @@ if (is_win) {
     # assembler situation is figured out, https://crbug.com/762167
     skia_core_defines += [ "SK_JUMPER_USE_ASSEMBLY=0" ]
   }
-} else {
+} else if (target_cpu != "wasm") {
   skia_core_sources += [ "$_src/jumper/SkJumper_generated.S" ]
 }
