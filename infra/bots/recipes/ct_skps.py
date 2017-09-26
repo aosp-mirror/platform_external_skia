@@ -9,7 +9,6 @@ import math
 DEPS = [
   'core',
   'ct',
-  'depot_tools/gsutil',
   'flavor',
   'recipe_engine/context',
   'recipe_engine/file',
@@ -200,11 +199,15 @@ def RunSteps(api):
   tasks_to_swarm_hashes.sort()
 
   # Trigger all swarming tasks.
-  dimensions={'os': 'Ubuntu-14.04', 'cpu': 'x86-64', 'pool': 'Chrome'}
+  dimensions={'os': 'Ubuntu-14.04'}
   if 'GPU' in buildername:
+    dimensions['cpu'] = 'x86-64-E3-1230_v5'
     dimensions['gpu'] = '10de:104a'
     # See crbug.com/700053
     dimensions['pool'] = 'Chrome-GPU'
+  else:
+    dimensions['cpu'] = 'x86-64-Broadwell_GCE'
+    dimensions['pool'] = 'Chrome'
   tasks = api.skia_swarming.trigger_swarming_tasks(
       tasks_to_swarm_hashes, dimensions=dimensions, io_timeout=40*60)
 
@@ -219,18 +222,13 @@ def RunSteps(api):
         output_dir = api.skia_swarming.tasks_output_dir.join(
             task.title).join('0')
         utc = api.time.utcnow()
-        gs_dest_dir = 'ct/%s/%d/%02d/%02d/%02d/' % (
+        gs_dest_dir = 'gs://skia-perf/ct/%s/%d/%02d/%02d/%02d/' % (
             ct_page_type, utc.year, utc.month, utc.day, utc.hour)
         for json_output in api.file.listdir(
             'listdir output dir', output_dir, test_data=['file 1', 'file 2']):
           with api.context(env=env):
-            api.gsutil.upload(
-                name='upload json output',
-                source=json_output,
-                bucket='skia-perf',
-                dest=gs_dest_dir,
-                args=['-R']
-            )
+            cmd = ['gsutil', 'cp', '-R', json_output, gs_dest_dir]
+            api.step('upload json output', cmd=cmd, infra_step=True)
 
     except api.step.StepFailure as e:
       # Add SKP links for convenience.
