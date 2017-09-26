@@ -49,7 +49,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ResourceCacheCache, reporter, ctxInfo) {
     SkBitmap src;
     src.allocN32Pixels(size.width(), size.height());
     src.eraseColor(SK_ColorBLACK);
-    size_t srcSize = src.getSize();
+    size_t srcSize = src.computeByteSize();
 
     size_t initialCacheSize;
     context->getResourceCacheUsage(nullptr, &initialCacheSize);
@@ -1668,7 +1668,6 @@ static sk_sp<GrTextureProxy> make_mipmap_proxy(GrResourceProvider* provider,
     desc.fHeight = height;
     desc.fConfig = kRGBA_8888_GrPixelConfig;
     desc.fSampleCnt = sampleCnt;
-    desc.fIsMipMapped = true;
 
     return GrSurfaceProxy::MakeDeferredMipMap(provider, desc, SkBudgeted::kYes,
                                               texels.get(), mipLevelCount);

@@ -63,7 +63,7 @@ sk_sp<GrSurface> GrSurfaceProxy::createSurfaceImpl(
                                                 int sampleCnt, bool needsStencil,
                                                 GrSurfaceFlags flags, bool isMipMapped,
                                                 SkDestinationSurfaceColorMode mipColorMode) const {
-
+    SkASSERT(!isMipMapped);
     GrSurfaceDesc desc;
     desc.fFlags = flags;
     if (fNeedsClear) {
@@ -74,8 +74,6 @@ sk_sp<GrSurface> GrSurfaceProxy::createSurfaceImpl(
     desc.fHeight = fHeight;
     desc.fConfig = fConfig;
     desc.fSampleCnt = sampleCnt;
-    SkASSERT(!isMipMapped);
-    desc.fIsMipMapped = false;
 
     sk_sp<GrSurface> surface;
     if (SkBackingFit::kApprox == fFit) {
@@ -182,6 +180,16 @@ sk_sp<GrSurfaceProxy> GrSurfaceProxy::MakeWrapped(sk_sp<GrSurface> surf, GrSurfa
         return nullptr;
     }
 
+    if (surf->getUniqueKey().isValid()) {
+        // The proxy may already be in the hash. Thus we need to look for it first before creating
+        // new one.
+        GrResourceProvider* provider = surf->getContext()->resourceProvider();
+        sk_sp<GrSurfaceProxy> proxy = provider->findProxyByUniqueKey(surf->getUniqueKey(), origin);
+        if (proxy) {
+            return proxy;
+        }
+    }
+
     if (surf->asTexture()) {
         if (surf->asRenderTarget()) {
             return sk_sp<GrSurfaceProxy>(new GrTextureRenderTargetProxy(std::move(surf), origin));
@@ -199,6 +207,16 @@ sk_sp<GrSurfaceProxy> GrSurfaceProxy::MakeWrapped(sk_sp<GrSurface> surf, GrSurfa
 sk_sp<GrTextureProxy> GrSurfaceProxy::MakeWrapped(sk_sp<GrTexture> tex, GrSurfaceOrigin origin) {
     if (!tex) {
         return nullptr;
+    }
+
+    if (tex->getUniqueKey().isValid()) {
+        // The proxy may already be in the hash. Thus we need to look for it first before creating
+        // new one.
+        GrResourceProvider* provider = tex->getContext()->resourceProvider();
+        sk_sp<GrTextureProxy> proxy = provider->findProxyByUniqueKey(tex->getUniqueKey(), origin);
+        if (proxy) {
+            return proxy;
+        }
     }
 
     if (tex->asRenderTarget()) {

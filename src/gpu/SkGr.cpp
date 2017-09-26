@@ -197,9 +197,6 @@ sk_sp<GrTextureProxy> GrGenerateMipMapsAndUploadToTextureProxy(GrContext* ctx,
         return nullptr;
     }
 
-    const bool isMipMapped = mipLevelCount > 1;
-    desc.fIsMipMapped = isMipMapped;
-
     std::unique_ptr<GrMipLevel[]> texels(new GrMipLevel[mipLevelCount]);
 
     texels[0].fPixels = pmap->addr();
@@ -256,7 +253,8 @@ sk_sp<GrTextureProxy> GrMakeCachedBitmapProxy(GrResourceProvider* resourceProvid
     sk_sp<GrTextureProxy> proxy;
 
     if (originalKey.isValid()) {
-        proxy = resourceProvider->findProxyByUniqueKey(originalKey, kTopLeft_GrSurfaceOrigin);
+        proxy = resourceProvider->findOrCreateProxyByUniqueKey(originalKey,
+                                                               kTopLeft_GrSurfaceOrigin);
     }
     if (!proxy) {
         // Pass nullptr for |dstColorSpace|.  This is lenient - we allow a wider range of
