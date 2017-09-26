@@ -344,7 +344,7 @@ public:
             // We made/have an off-screen surface. Extract the pixels exactly as we rendered them:
             SkImageInfo info = win->info();
             size_t rowBytes = info.minRowBytes();
-            size_t size = info.computeByteSize(rowBytes);
+            size_t size = info.getSafeSize(rowBytes);
             auto data = SkData::MakeUninitialized(size);
             SkASSERT(data);
 
@@ -2532,15 +2532,6 @@ SkOSWindow* create_sk_window(void* hwnd, int argc, char** argv) {
         test();
     }
     return new SampleWindow(hwnd, argc, argv, nullptr);
-}
-
-// FIXME: this should be in a header
-void get_preferred_size(int* x, int* y, int* width, int* height);
-void get_preferred_size(int* x, int* y, int* width, int* height) {
-    *x = 10;
-    *y = 50;
-    *width = 640;
-    *height = 480;
 }
 
 #ifdef SK_BUILD_FOR_IOS
