@@ -235,7 +235,10 @@ SkCodec::Result SkWebpCodec::onGetPixels(const SkImageInfo& dstInfo, void* dst, 
     while (true) {
         const size_t bytesRead = stream()->read(buffer, BUFFER_SIZE);
         if (0 == bytesRead) {
-            WebPIDecGetRGB(idec, rowsDecoded, NULL, NULL, NULL);
+            if (!WebPIDecGetRGB(idec, rowsDecoded, NULL, NULL, NULL)
+                    || rowsDecoded && *rowsDecoded <= 0) {
+                return kInvalidInput;
+            }
             return kIncompleteInput;
         }
 
