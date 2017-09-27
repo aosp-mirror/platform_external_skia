@@ -22,8 +22,6 @@ const char* GrCCPRCoverageProcessor::GetProcessorName(Mode mode) {
             return "GrCCPRTriangleHullAndEdgeProcessor (hulls)";
         case Mode::kTriangleEdges:
             return "GrCCPRTriangleHullAndEdgeProcessor (edges)";
-        case Mode::kCombinedTriangleHullsAndEdges:
-            return "GrCCPRTriangleHullAndEdgeProcessor (combined hulls & edges)";
         case Mode::kTriangleCorners:
             return "GrCCPRTriangleCornerProcessor";
         case Mode::kQuadraticHulls:
@@ -68,8 +66,6 @@ GrGLSLPrimitiveProcessor* GrCCPRCoverageProcessor::createGLSLInstance(const GrSh
             return new GrCCPRTriangleHullAndEdgeProcessor(GeometryType::kHulls);
         case Mode::kTriangleEdges:
             return new GrCCPRTriangleHullAndEdgeProcessor(GeometryType::kEdges);
-        case Mode::kCombinedTriangleHullsAndEdges:
-            return new GrCCPRTriangleHullAndEdgeProcessor(GeometryType::kHullsAndEdges);
         case Mode::kTriangleCorners:
             return new GrCCPRTriangleCornerProcessor();
         case Mode::kQuadraticHulls:
@@ -149,7 +145,7 @@ void PrimitiveProcessor::emitGeometryShader(const GrCCPRCoverageProcessor& proc,
             fnBody.appendf("%s = %s * %s;",
                            fFragCoverageTimesWind.gsOut(), coverage, fGeomWind.c_str());
         }
-        fnBody.append ("gl_Position = float4(position, 0, 1);");
+        fnBody.append ("sk_Position = float4(position, 0, 1);");
         fnBody.append ("EmitVertex();");
         return fnBody;
     }().c_str(), &emitVertexFn);

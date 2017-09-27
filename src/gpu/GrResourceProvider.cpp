@@ -77,7 +77,7 @@ sk_sp<GrTexture> GrResourceProvider::createTexture(const GrSurfaceDesc& desc, Sk
                                                    SkDestinationSurfaceColorMode mipColorMode) {
     ASSERT_SINGLE_OWNER
 
-    SkASSERT(mipLevelCount >= 1);
+    SkASSERT(mipLevelCount > 1);
 
     if (this->isAbandoned()) {
         return nullptr;
@@ -272,6 +272,14 @@ void GrResourceProvider::assignUniqueKeyToResource(const GrUniqueKey& key,
     resource->resourcePriv().setUniqueKey(key);
 }
 
+void GrResourceProvider::removeUniqueKeyFromProxy(const GrUniqueKey& key, GrTextureProxy* proxy) {
+    ASSERT_SINGLE_OWNER
+    if (this->isAbandoned() || !proxy) {
+        return;
+    }
+    fCache->processInvalidProxyUniqueKey(key, proxy, true);
+}
+
 GrGpuResource* GrResourceProvider::findAndRefResourceByUniqueKey(const GrUniqueKey& key) {
     ASSERT_SINGLE_OWNER
     return this->isAbandoned() ? nullptr : fCache->findAndRefUniqueResource(key);
@@ -288,11 +296,6 @@ GrTexture* GrResourceProvider::findAndRefTextureByUniqueKey(const GrUniqueKey& k
     return nullptr;
 }
 
-void GrResourceProvider::assignUniqueKeyToTexture(const GrUniqueKey& key, GrTexture* texture) {
-    SkASSERT(key.isValid());
-    this->assignUniqueKeyToResource(key, texture);
-}
-
 void GrResourceProvider::assignUniqueKeyToProxy(const GrUniqueKey& key, GrTextureProxy* proxy) {
     ASSERT_SINGLE_OWNER
     SkASSERT(key.isValid());
@@ -307,6 +310,12 @@ sk_sp<GrTextureProxy> GrResourceProvider::findProxyByUniqueKey(const GrUniqueKey
                                                                GrSurfaceOrigin origin) {
     ASSERT_SINGLE_OWNER
     return this->isAbandoned() ? nullptr : fCache->findProxyByUniqueKey(key, origin);
+}
+
+sk_sp<GrTextureProxy> GrResourceProvider::findOrCreateProxyByUniqueKey(const GrUniqueKey& key,
+                                                                       GrSurfaceOrigin origin) {
+    ASSERT_SINGLE_OWNER
+    return this->isAbandoned() ? nullptr : fCache->findOrCreateProxyByUniqueKey(key, origin);
 }
 
 const GrBuffer* GrResourceProvider::createPatternedIndexBuffer(const uint16_t* pattern,

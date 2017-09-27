@@ -1472,6 +1472,7 @@ cc_test {
         "tests/PathOpsTigerTest.cpp",
         "tests/PathOpsTightBoundsTest.cpp",
         "tests/PathOpsTypesTest.cpp",
+        "tests/PathRendererCacheTests.cpp",
         "tests/PathTest.cpp",
         "tests/PictureBBHTest.cpp",
         "tests/PictureShaderTest.cpp",
