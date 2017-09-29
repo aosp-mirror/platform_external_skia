@@ -46,7 +46,7 @@ PATH_PREFIX_TO_EXTRA_TRYBOTS = {
       'Test-Debian9-GCC-GCE-CPU-AVX2-x86_64-Release-SKNX_NO_SIMD'),
     'include/private/SkAtomics.h': ('skia.primary:'
       'Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Release-TSAN,'
-      'Test-Ubuntu14-Clang-Golo-GPU-GT610-x86_64-Release-TSAN'
+      'Test-Ubuntu17-Clang-Golo-GPU-QuadroP400-x86_64-Release-TSAN'
     ),
 
     # Below are examples to show what is possible with this feature.
@@ -74,6 +74,9 @@ def _CheckChangeHasEol(input_api, output_api, source_file_filter=None):
 
 def _PythonChecks(input_api, output_api):
   """Run checks on any modified Python files."""
+  pylint_disabled_files = (
+      'infra/bots/recipes.py',
+  )
   pylint_disabled_warnings = (
       'F0401',  # Unable to import.
       'E0611',  # No name in module.
@@ -91,7 +94,8 @@ def _PythonChecks(input_api, output_api):
   for affected_file in input_api.AffectedSourceFiles(None):
     affected_file_path = affected_file.LocalPath()
     if affected_file_path.endswith('.py'):
-      affected_python_files.append(affected_file_path)
+      if affected_file_path not in pylint_disabled_files:
+        affected_python_files.append(affected_file_path)
   return input_api.canned_checks.RunPylint(
       input_api, output_api,
       disabled_warnings=pylint_disabled_warnings,
