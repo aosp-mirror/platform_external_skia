@@ -1477,6 +1477,7 @@ cc_test {
         "tests/PictureBBHTest.cpp",
         "tests/PictureShaderTest.cpp",
         "tests/PictureTest.cpp",
+        "tests/PinnedImageTest.cpp",
         "tests/PipeTest.cpp",
         "tests/PixelRefTest.cpp",
         "tests/Point3Test.cpp",

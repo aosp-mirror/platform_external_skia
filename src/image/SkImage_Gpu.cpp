@@ -125,7 +125,7 @@ sk_sp<GrTextureProxy> SkImage_Gpu::asTextureProxyRef(GrContext* context,
 
     GrTextureAdjuster adjuster(fContext, fProxy, this->alphaType(), this->bounds(),
                                this->uniqueID(), this->fColorSpace.get());
-    return adjuster.refTextureProxySafeForParams(params, nullptr, scaleAdjust);
+    return adjuster.refTextureProxySafeForParams(params, scaleAdjust);
 }
 
 static void apply_premul(const SkImageInfo& info, void* pixels, size_t rowBytes) {
@@ -921,6 +921,13 @@ sk_sp<SkImage> SkImage::MakeTextureFromMipMap(GrContext* ctx, const SkImageInfo&
     SkASSERT(mipLevelCount >= 1);
     if (!ctx) {
         return nullptr;
+    }
+    // For images where the client is passing the mip data we require that all the mip levels have
+    // valid data.
+    for (int i = 0; i < mipLevelCount; ++i) {
+        if (!texels[i].fPixels) {
+            return nullptr;
+        }
     }
     sk_sp<GrTextureProxy> proxy(GrUploadMipMapToTextureProxy(ctx, info, texels, mipLevelCount,
                                                              colorMode));
