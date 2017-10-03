@@ -524,7 +524,8 @@ sk_sp<GrTextureProxy> GrClipStackClip::createSoftwareClipMask(
         desc.fHeight = maskSpaceIBounds.height();
         desc.fConfig = kAlpha_8_GrPixelConfig;
         proxy = GrSurfaceProxy::MakeDeferred(context->resourceProvider(), desc,
-                                             SkBackingFit::kApprox, SkBudgeted::kYes);
+                                             SkBackingFit::kApprox, SkBudgeted::kYes,
+                                             GrResourceProvider::kNoPendingIO_Flag);
 
         auto uploader = skstd::make_unique<GrTDeferredProxyUploader<ClipMaskData>>(reducedClip);
         GrTDeferredProxyUploader<ClipMaskData>* uploaderRaw = uploader.get();
