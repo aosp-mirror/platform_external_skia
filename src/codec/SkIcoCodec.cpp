@@ -29,8 +29,8 @@ bool SkIcoCodec::IsIco(const void* buffer, size_t bytesRead) {
 std::unique_ptr<SkCodec> SkIcoCodec::MakeFromStream(std::unique_ptr<SkStream> stream,
                                                     Result* result) {
     // Header size constants
-    static const uint32_t kIcoDirectoryBytes = 6;
-    static const uint32_t kIcoDirEntryBytes = 16;
+    constexpr uint32_t kIcoDirectoryBytes = 6;
+    constexpr uint32_t kIcoDirEntryBytes = 16;
 
     // Read the directory header
     std::unique_ptr<uint8_t[]> dirBuffer(new uint8_t[kIcoDirectoryBytes]);
@@ -173,7 +173,7 @@ std::unique_ptr<SkCodec> SkIcoCodec::MakeFromStream(std::unique_ptr<SkStream> st
     int maxIndex = 0;
     for (int i = 0; i < codecs->count(); i++) {
         SkImageInfo info = codecs->operator[](i)->getInfo();
-        size_t size = info.getSafeSize(info.minRowBytes());
+        size_t size = info.computeMinByteSize();
 
         if (size > maxSize) {
             maxSize = size;
