@@ -643,7 +643,6 @@ LOCAL_SRC_FILES := \
 	src/utils/SkPatchGrid.cpp \
 	src/utils/SkPatchUtils.cpp \
 	src/utils/SkRGBAToYUV.cpp \
-	src/utils/SkRTConf.cpp \
 	src/utils/SkTextBox.cpp \
 	src/utils/SkTextureCompressor.cpp \
 	src/utils/SkTextureCompressor_ASTC.cpp \
