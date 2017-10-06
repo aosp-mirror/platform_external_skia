@@ -1409,6 +1409,7 @@ cc_test {
         "tests/GpuRectanizerTest.cpp",
         "tests/GpuSampleLocationsTest.cpp",
         "tests/GrAllocatorTest.cpp",
+        "tests/GrCCPRTest.cpp",
         "tests/GrContextAbandonTest.cpp",
         "tests/GrContextFactoryTest.cpp",
         "tests/GrMemoryPoolTest.cpp",
