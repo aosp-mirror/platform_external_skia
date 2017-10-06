@@ -535,10 +535,20 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
          ctxInfo.driver() != kChromium_GrGLDriver)) {
         fUseDrawInsteadOfClear = true;
     }
+
+#ifdef SK_BUILD_FOR_MAC
+    // crbug.com/768134 - On MacBook Pros, the Intel Iris Pro doesn't always perform
+    // full screen clears
+    if (kIntelIrisPro_GrGLRenderer == ctxInfo.renderer()) {
+        fUseDrawInsteadOfClear = true;
+    }
+#endif
+
     // See crbug.com/755871. This could probably be narrowed to just partial clears as the driver
     // bugs seems to involve clearing too much and not skipping the clear.
-    if (GrGLANGLEBackend::kD3D11 == ctxInfo.angleBackend() &&
-        GrGLANGLERenderer::kIvyBridge == ctxInfo.angleRenderer()) {
+    // See crbug.com/768134. This is also needed for full clears and was seen on an nVidia K620 
+    // but only for D3D11 ANGLE.
+    if (GrGLANGLEBackend::kD3D11 == ctxInfo.angleBackend()) {
         fUseDrawInsteadOfClear = true;
     }
 
