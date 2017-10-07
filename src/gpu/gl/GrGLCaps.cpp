@@ -62,6 +62,7 @@ GrGLCaps::GrGLCaps(const GrContextOptions& contextOptions,
     fRequiresCullFaceEnableDisableWhenDrawingLinesAfterNonLines = false;
 
     fBlitFramebufferFlags = kNoSupport_BlitFramebufferFlag;
+    fMaxInstancesPerDrawArraysWithoutCrashing = 0;
 
     fShaderCaps.reset(new GrShaderCaps(contextOptions));
 
@@ -307,10 +308,24 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
         shaderCaps->fDualSourceBlendingSupport = (ctxInfo.version() >= GR_GL_VER(3, 3) ||
             ctxInfo.hasExtension("GL_ARB_blend_func_extended")) &&
             GrGLSLSupportsNamedFragmentShaderOutputs(ctxInfo.glslGeneration());
+
         shaderCaps->fShaderDerivativeSupport = true;
+
         // we don't support GL_ARB_geometry_shader4, just GL 3.2+ GS
         shaderCaps->fGeometryShaderSupport = ctxInfo.version() >= GR_GL_VER(3, 2) &&
             ctxInfo.glslGeneration() >= k150_GrGLSLGeneration;
+        if (shaderCaps->fGeometryShaderSupport) {
+            // On at least some MacBooks, GLSL 4.0 geometry shaders break if we use invocations.
+#ifndef SK_BUILD_FOR_MAC
+            if (ctxInfo.glslGeneration() >= k400_GrGLSLGeneration) {
+                shaderCaps->fGSInvocationsSupport = true;
+            } else if (ctxInfo.hasExtension("GL_ARB_gpu_shader5")) {
+                shaderCaps->fGSInvocationsSupport = true;
+                shaderCaps->fGSInvocationsExtensionString = "GL_ARB_gpu_shader5";
+            }
+#endif
+        }
+
         shaderCaps->fIntegerSupport = ctxInfo.version() >= GR_GL_VER(3, 0) &&
             ctxInfo.glslGeneration() >= k130_GrGLSLGeneration;
     }
@@ -321,6 +336,7 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
             ctxInfo.hasExtension("GL_OES_standard_derivatives");
 
         shaderCaps->fGeometryShaderSupport = ctxInfo.hasExtension("GL_EXT_geometry_shader");
+        shaderCaps->fGSInvocationsSupport = shaderCaps->fGeometryShaderSupport;
 
         shaderCaps->fIntegerSupport = ctxInfo.version() >= GR_GL_VER(3, 0) &&
             ctxInfo.glslGeneration() >= k330_GrGLSLGeneration; // We use this value for GLSL ES 3.0.
@@ -391,6 +407,12 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
     // Mali GPUs have serious issues with CCPR. Blacklisting until we can look into workarounds.
     if (kARM_GrGLVendor == ctxInfo.vendor()) {
         fBlacklistCoverageCounting = true;
+    }
+
+    if (kIntel_GrGLDriver == ctxInfo.driver()) {
+        // Intel HD4400, HD4600, and Iris6100 crash on the bots.
+        fBlacklistCoverageCounting = kIntel4xxx_GrGLRenderer == ctxInfo.renderer() ||
+                                     kIntel6xxx_GrGLRenderer == ctxInfo.renderer();
     }
 
     if (!contextOptions.fAvoidStencilBuffers) {
@@ -572,6 +594,12 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
     if (kAdreno3xx_GrGLRenderer == ctxInfo.renderer() && kQualcomm_GrGLDriver == ctxInfo.driver() &&
         ctxInfo.driverVersion() > GR_GL_DRIVER_VER(53, 0)) {
         fRequiresCullFaceEnableDisableWhenDrawingLinesAfterNonLines = true;
+    }
+
+    // Our Chromebook with kPowerVRRogue_GrGLRenderer seems to crash when glDrawArraysInstanced is
+    // given 1 << 15 or more instances.
+    if (kPowerVRRogue_GrGLRenderer == ctxInfo.renderer()) {
+        fMaxInstancesPerDrawArraysWithoutCrashing = 0x7fff;
     }
 
     // Texture uploads sometimes seem to be ignored to textures bound to FBOS on Tegra3.
@@ -937,13 +965,6 @@ void GrGLCaps::initGLSL(const GrGLContextInfo& ctxInfo) {
     if (shaderCaps->fFBFetchSupport && kQualcomm_GrGLVendor == ctxInfo.vendor()) {
         shaderCaps->fRequiresLocalOutputColorForFBFetch = true;
     }
-
-#ifdef SK_BUILD_FOR_MAC
-    // On at least some MacBooks, geometry shaders fall apart if we use more than one invocation. To
-    // work around this, we always use a single invocation and wrap the shader in a loop. The long-
-    // term plan for this WAR is for it to eventually be baked into SkSL.
-    shaderCaps->fMustImplementGSInvocationsWithLoop = true;
-#endif
 
     // Newer Mali GPUs do incorrect static analysis in specific situations: If there is uniform
     // color, and that uniform contains an opaque color, and the output of the shader is only based
@@ -1360,6 +1381,8 @@ void GrGLCaps::onDumpJSON(SkJSONWriter* writer) const {
                        fDisallowTexSubImageForUnormConfigTexturesEverBoundToFBO);
     writer->appendBool("Intermediate texture for all updates of textures bound to FBOs",
                        fUseDrawInsteadOfAllRenderTargetWrites);
+    writer->appendBool("Max instances per glDrawArraysInstanced without crashing (or zero)",
+                       fMaxInstancesPerDrawArraysWithoutCrashing);
 
     writer->beginArray("configs");
 
