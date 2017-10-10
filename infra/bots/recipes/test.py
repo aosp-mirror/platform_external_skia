@@ -195,7 +195,8 @@ def dm_flags(api, bot):
       configs = [x.replace(old, new) for x in configs]
       # We also test non-msaa instanced.
       configs.append(new)
-    elif 'MacMini7.1' in bot:
+    elif 'MacMini7.1' in bot and 'TSAN' not in bot:
+      # The TSAN bot disables GL buffer mapping which is required for inst.
       configs.extend([gl_prefix + 'inst'])
 
     # CommandBuffer bot *only* runs the command_buffer config.
@@ -652,6 +653,10 @@ def dm_flags(api, bot):
       # skia:6141
       blacklist([config, 'gm', '_', 'discard'])
 
+  if ('IntelIris6100' in bot or 'IntelHD4400' in bot) and 'ANGLE' in bot:
+    # skia:6857
+    blacklist(['angle_d3d9_es2', 'gm', '_', 'lighting'])
+
   if 'IntelBayTrail' in bot and api.vars.is_linux:
     match.append('~ImageStorageLoad') # skia:6358
 
@@ -864,6 +869,7 @@ TEST_BUILDERS = [
   'Test-ChromeOS-Clang-Chromebook_CB5_312T-GPU-PowerVRGX6250-arm-Debug',
   'Test-Chromecast-GCC-Chorizo-GPU-Cortex_A7-arm-Release',
   'Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-ASAN',
+  'Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-Coverage',
   'Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-MSAN',
   ('Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug'
    '-SK_USE_DISCARDABLE_SCALEDIMAGECACHE'),
@@ -884,12 +890,13 @@ TEST_BUILDERS = [
    '-Valgrind_PreAbandonGpuContext_SK_CPU_LIMIT_SSE41'),
   ('Test-Ubuntu17-GCC-Golo-GPU-QuadroP400-x86_64-Release'
    '-Valgrind_SK_CPU_LIMIT_SSE41'),
-  ('Test-Win10-Clang-NUC5i7RYH-GPU-IntelIris6100-x86_64-Release'
+  ('Test-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Release'
    '-ReleaseAndAbandonGpuContext'),
   'Test-Win10-MSVC-AlphaR2-GPU-RadeonR9M470X-x86_64-Debug-ANGLE',
   'Test-Win10-MSVC-AlphaR2-GPU-RadeonR9M470X-x86_64-Debug-Vulkan',
   'Test-Win10-MSVC-NUC6i5SYK-GPU-IntelIris540-x86_64-Debug-ANGLE',
   'Test-Win10-MSVC-NUC6i5SYK-GPU-IntelIris540-x86_64-Debug-Vulkan',
+  'Test-Win10-MSVC-NUCD34010WYKH-GPU-IntelHD4400-x86_64-Release-ANGLE',
   'Test-Win10-MSVC-ShuttleA-GPU-GTX660-x86_64-Debug-Vulkan',
   'Test-Win10-MSVC-ShuttleC-GPU-GTX960-x86_64-Debug-ANGLE',
   'Test-Win10-MSVC-ZBOX-GPU-GTX1070-x86_64-Debug-Vulkan',

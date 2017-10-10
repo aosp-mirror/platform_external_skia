@@ -1172,11 +1172,13 @@ if (skia_enable_tools) {
       "experimental/svg/model/SkSVGContainer.cpp",
       "experimental/svg/model/SkSVGDOM.cpp",
       "experimental/svg/model/SkSVGEllipse.cpp",
+      "experimental/svg/model/SkSVGGradient.cpp",
       "experimental/svg/model/SkSVGLine.cpp",
       "experimental/svg/model/SkSVGLinearGradient.cpp",
       "experimental/svg/model/SkSVGNode.cpp",
       "experimental/svg/model/SkSVGPath.cpp",
       "experimental/svg/model/SkSVGPoly.cpp",
+      "experimental/svg/model/SkSVGRadialGradient.cpp",
       "experimental/svg/model/SkSVGRect.cpp",
       "experimental/svg/model/SkSVGRenderContext.cpp",
       "experimental/svg/model/SkSVGSVG.cpp",
@@ -1418,6 +1420,26 @@ if (skia_enable_tools) {
       if (skia_use_angle) {
         deps += [ "//third_party/angle2" ]
       }
+    }
+  }
+
+  if (skia_enable_gpu && !skia_use_angle && (is_linux || is_win || is_mac)) {
+    test_app("HelloWorld") {
+      sources = [
+        "example/HelloWorld.cpp",
+      ]
+      if (is_mac) {
+        sources += [ "src/views/mac/skia_mac.mm" ]
+      } else if (is_win) {
+        sources += [ "src/views/win/skia_win.cpp" ]
+      } else if (is_linux) {
+        sources += [ "src/views/unix/skia_unix.cpp" ]
+      }
+      deps = [
+        ":gpu_tool_utils",
+        ":skia",
+        ":views",
+      ]
     }
   }
 

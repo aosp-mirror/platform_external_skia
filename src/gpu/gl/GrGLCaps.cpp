@@ -481,6 +481,14 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
         }
     }
 
+#if defined(__has_feature)
+#if defined(SK_BUILD_FOR_MAC) && __has_feature(thread_sanitizer)
+    // See skbug.com/7058
+    fMapBufferType = kNone_MapBufferType;
+    fMapBufferFlags = kNone_MapFlags;
+#endif
+#endif
+
     // We found that the Galaxy J5 with an Adreno 306 running 6.0.1 has a bug where
     // GL_INVALID_OPERATION thrown by glDrawArrays when using a buffer that was mapped. The same bug
     // did not reproduce on a Nexus7 2013 with a 320 running Android M with driver 127.0. It's
@@ -577,7 +585,7 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
 
     // See crbug.com/755871. This could probably be narrowed to just partial clears as the driver
     // bugs seems to involve clearing too much and not skipping the clear.
-    // See crbug.com/768134. This is also needed for full clears and was seen on an nVidia K620 
+    // See crbug.com/768134. This is also needed for full clears and was seen on an nVidia K620
     // but only for D3D11 ANGLE.
     if (GrGLANGLEBackend::kD3D11 == ctxInfo.angleBackend()) {
         fUseDrawInsteadOfClear = true;

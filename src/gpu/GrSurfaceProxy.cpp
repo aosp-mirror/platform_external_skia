@@ -269,25 +269,20 @@ sk_sp<GrTextureProxy> GrSurfaceProxy::MakeDeferred(GrResourceProvider* resourceP
     copyDesc.fSampleCnt = caps->getSampleCount(desc.fSampleCnt, desc.fConfig);
 
 #ifdef SK_DISABLE_DEFERRED_PROXIES
-    // Temporarily force instantiation for crbug.com/769760
-    if (willBeRT) {
-        // We know anything we instantiate later from this deferred path will be
-        // both texturable and renderable
-        sk_sp<GrTextureProxy> temp(new GrTextureRenderTargetProxy(*caps, copyDesc, fit,
-                                                                  budgeted, flags));
-        if (temp && temp->instantiate(resourceProvider)) {
-            return temp;
-        }
+    // Temporarily force instantiation for crbug.com/769760 and crbug.com/769898
+    sk_sp<GrTexture> tex;
 
+    if (SkBackingFit::kApprox == fit) {
+        tex = resourceProvider->createApproxTexture(copyDesc, flags);
+    } else {
+        tex = resourceProvider->createTexture(copyDesc, budgeted, flags);
+    }
+
+    if (!tex) {
         return nullptr;
     }
 
-    sk_sp<GrTextureProxy> temp(new GrTextureProxy(copyDesc, fit, budgeted, nullptr, 0, flags));
-    if (temp && temp->instantiate(resourceProvider)) {
-        return temp;
-    }
-
-    return nullptr;
+    return GrSurfaceProxy::MakeWrapped(std::move(tex), copyDesc.fOrigin);
 #else
     if (willBeRT) {
         // We know anything we instantiate later from this deferred path will be
@@ -459,7 +454,7 @@ void GrSurfaceProxyPriv::exactify() {
     if (fProxy->fTarget) {
         // The kApprox but already instantiated case. Setting the proxy's width & height to
         // the instantiated width & height could have side-effects going forward, since we're
-        // obliterating the area of interest information. This call (exactify) only used 
+        // obliterating the area of interest information. This call (exactify) only used
         // when converting an SkSpecialImage to an SkImage so the proxy shouldn't be
         // used for additional draws.
         fProxy->fWidth = fProxy->fTarget->width();

@@ -193,7 +193,7 @@ public:
             SkASSERT(rec->fMalloc != nullptr);
         }
     }
-    
+
     bool install(SkBitmap* bitmap) {
         SkAutoMutexAcquire ama(fMutex);
 
@@ -290,7 +290,7 @@ SkBitmapCache::RecPtr SkBitmapCache::Alloc(const SkBitmapCacheDesc& desc, const 
 
     const size_t rb = info.minRowBytes();
     size_t size = info.computeByteSize(rb);
-    if (0 == size) {
+    if (SkImageInfo::ByteSizeOverflowed(size)) {
         return nullptr;
     }
 
