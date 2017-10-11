@@ -15,6 +15,7 @@ class SkSVGRenderContext;
 
 enum class SkSVGAttribute {
     kClipPath,
+    kClipRule,
     kCx, // <circle>, <ellipse>, <radialGradient>: center x position
     kCy, // <circle>, <ellipse>, <radialGradient>: center y position
     kD,
@@ -39,6 +40,7 @@ enum class SkSVGAttribute {
     kStrokeOpacity,
     kStrokeLineCap,
     kStrokeLineJoin,
+    kStrokeMiterLimit,
     kStrokeWidth,
     kTransform,
     kViewBox,
@@ -61,10 +63,12 @@ struct SkSVGPresentationAttributes {
     SkTLazy<SkSVGPaint>      fFill;
     SkTLazy<SkSVGNumberType> fFillOpacity;
     SkTLazy<SkSVGFillRule>   fFillRule;
+    SkTLazy<SkSVGFillRule>   fClipRule;
 
     SkTLazy<SkSVGPaint>      fStroke;
     SkTLazy<SkSVGLineCap>    fStrokeLineCap;
     SkTLazy<SkSVGLineJoin>   fStrokeLineJoin;
+    SkTLazy<SkSVGNumberType> fStrokeMiterLimit;
     SkTLazy<SkSVGNumberType> fStrokeOpacity;
     SkTLazy<SkSVGLength>     fStrokeWidth;
 

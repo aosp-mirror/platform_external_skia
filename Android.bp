@@ -990,6 +990,7 @@ cc_test {
 
     srcs: [
         "dm/DM.cpp",
+        "dm/DMGpuTestProcs.cpp",
         "dm/DMJsonWriter.cpp",
         "dm/DMSrcSink.cpp",
         "experimental/svg/model/SkSVGAttribute.cpp",

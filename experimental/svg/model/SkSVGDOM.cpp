@@ -279,6 +279,7 @@ struct AttrParseInfo {
 
 SortedDictionaryEntry<AttrParseInfo> gAttributeParseInfo[] = {
     { "clip-path"        , { SkSVGAttribute::kClipPath         , SetClipPathAttribute     }},
+    { "clip-rule"        , { SkSVGAttribute::kClipRule         , SetFillRuleAttribute     }},
     { "cx"               , { SkSVGAttribute::kCx               , SetLengthAttribute       }},
     { "cy"               , { SkSVGAttribute::kCy               , SetLengthAttribute       }},
     { "d"                , { SkSVGAttribute::kD                , SetPathDataAttribute     }},
@@ -302,6 +303,7 @@ SortedDictionaryEntry<AttrParseInfo> gAttributeParseInfo[] = {
     { "stroke"           , { SkSVGAttribute::kStroke           , SetPaintAttribute        }},
     { "stroke-linecap"   , { SkSVGAttribute::kStrokeLineCap    , SetLineCapAttribute      }},
     { "stroke-linejoin"  , { SkSVGAttribute::kStrokeLineJoin   , SetLineJoinAttribute     }},
+    { "stroke-miterlimit", { SkSVGAttribute::kStrokeMiterLimit , SetNumberAttribute       }},
     { "stroke-opacity"   , { SkSVGAttribute::kStrokeOpacity    , SetNumberAttribute       }},
     { "stroke-width"     , { SkSVGAttribute::kStrokeWidth      , SetLengthAttribute       }},
     { "style"            , { SkSVGAttribute::kUnknown          , SetStyleAttributes       }},
@@ -318,6 +320,7 @@ SortedDictionaryEntry<AttrParseInfo> gAttributeParseInfo[] = {
 };
 
 SortedDictionaryEntry<sk_sp<SkSVGNode>(*)()> gTagFactories[] = {
+    { "a"             , []() -> sk_sp<SkSVGNode> { return SkSVGG::Make();              }},
     { "circle"        , []() -> sk_sp<SkSVGNode> { return SkSVGCircle::Make();         }},
     { "clipPath"      , []() -> sk_sp<SkSVGNode> { return SkSVGClipPath::Make();       }},
     { "defs"          , []() -> sk_sp<SkSVGNode> { return SkSVGDefs::Make();           }},
