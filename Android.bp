@@ -1822,6 +1822,7 @@ cc_test {
         "bench/MergeBench.cpp",
         "bench/MipMapBench.cpp",
         "bench/MorphologyBench.cpp",
+        "bench/MultitextureImageBench.cpp",
         "bench/MutexBench.cpp",
         "bench/PDFBench.cpp",
         "bench/PatchBench.cpp",
