@@ -43,6 +43,10 @@ public:
         kTypeCount
     };
 
+    // Forwarded to the wrapped canvas.
+    SkISize getBaseLayerSize() const override { return proxy()->getBaseLayerSize(); }
+    GrContext*  getGrContext()       override { return proxy()->getGrContext();     }
+
 protected:
     /**
      *  Called with the paint that will be used to draw the specified type.
@@ -95,8 +99,17 @@ protected:
     void onDrawTextBlob(const SkTextBlob* blob, SkScalar x, SkScalar y,
                         const SkPaint& paint) override;
 
+    // Forwarded to the wrapped canvas.
+    sk_sp<SkSurface> onNewSurface(const SkImageInfo&, const SkSurfaceProps&) override;
+    bool onPeekPixels(SkPixmap* pixmap) override;
+    bool onAccessTopLayerPixels(SkPixmap* pixmap) override;
+    SkImageInfo onImageInfo() const override;
+    bool onGetProps(SkSurfaceProps* props) const override;
+
 private:
     class AutoPaintFilter;
+
+    SkCanvas* proxy() const { SkASSERT(fList.count() == 1); return fList[0]; }
 
     typedef SkNWayCanvas INHERITED;
 };
