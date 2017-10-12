@@ -1420,6 +1420,7 @@ cc_test {
         "tests/GrContextFactoryTest.cpp",
         "tests/GrMemoryPoolTest.cpp",
         "tests/GrMeshTest.cpp",
+        "tests/GrMipMappedTest.cpp",
         "tests/GrPipelineDynamicStateTest.cpp",
         "tests/GrPorterDuffTest.cpp",
         "tests/GrSKSLPrettyPrintTest.cpp",

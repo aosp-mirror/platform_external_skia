@@ -779,13 +779,13 @@ Return a list of targets to build, depending on the builder type.
 &mdash; **def [RunSteps](/infra/bots/recipe_modules/isolate/tests/run_isolated.py#10)(api):**
 ### *recipes* / [perf](/infra/bots/recipes/perf.py)
 
-[DEPS](/infra/bots/recipes/perf.py#12): [recipe\_engine/file][recipe_engine/recipe_modules/file], [recipe\_engine/json][recipe_engine/recipe_modules/json], [recipe\_engine/path][recipe_engine/recipe_modules/path], [recipe\_engine/platform][recipe_engine/recipe_modules/platform], [recipe\_engine/properties][recipe_engine/recipe_modules/properties], [recipe\_engine/raw\_io][recipe_engine/recipe_modules/raw_io], [recipe\_engine/step][recipe_engine/recipe_modules/step], [recipe\_engine/time][recipe_engine/recipe_modules/time], [core](#recipe_modules-core), [env](#recipe_modules-env), [flavor](#recipe_modules-flavor), [run](#recipe_modules-run), [vars](#recipe_modules-vars)
+[DEPS](/infra/bots/recipes/perf.py#13): [recipe\_engine/file][recipe_engine/recipe_modules/file], [recipe\_engine/json][recipe_engine/recipe_modules/json], [recipe\_engine/path][recipe_engine/recipe_modules/path], [recipe\_engine/platform][recipe_engine/recipe_modules/platform], [recipe\_engine/properties][recipe_engine/recipe_modules/properties], [recipe\_engine/raw\_io][recipe_engine/recipe_modules/raw_io], [recipe\_engine/step][recipe_engine/recipe_modules/step], [recipe\_engine/time][recipe_engine/recipe_modules/time], [core](#recipe_modules-core), [env](#recipe_modules-env), [flavor](#recipe_modules-flavor), [run](#recipe_modules-run), [vars](#recipe_modules-vars)
 
-&mdash; **def [RunSteps](/infra/bots/recipes/perf.py#317)(api):**
+&mdash; **def [RunSteps](/infra/bots/recipes/perf.py#319)(api):**
 
-&mdash; **def [nanobench\_flags](/infra/bots/recipes/perf.py#29)(api, bot):**
+&mdash; **def [nanobench\_flags](/infra/bots/recipes/perf.py#30)(api, bot):**
 
-&mdash; **def [perf\_steps](/infra/bots/recipes/perf.py#228)(api):**
+&mdash; **def [perf\_steps](/infra/bots/recipes/perf.py#229)(api):**
 
 Run Skia benchmarks.
 ### *recipes* / [recreate\_skps](/infra/bots/recipes/recreate_skps.py)
@@ -830,7 +830,7 @@ benchmark Skia using skpbench.
 
 [DEPS](/infra/bots/recipes/test.py#9): [recipe\_engine/context][recipe_engine/recipe_modules/context], [recipe\_engine/file][recipe_engine/recipe_modules/file], [recipe\_engine/json][recipe_engine/recipe_modules/json], [recipe\_engine/path][recipe_engine/recipe_modules/path], [recipe\_engine/platform][recipe_engine/recipe_modules/platform], [recipe\_engine/properties][recipe_engine/recipe_modules/properties], [recipe\_engine/python][recipe_engine/recipe_modules/python], [recipe\_engine/raw\_io][recipe_engine/recipe_modules/raw_io], [recipe\_engine/step][recipe_engine/recipe_modules/step], [core](#recipe_modules-core), [env](#recipe_modules-env), [flavor](#recipe_modules-flavor), [run](#recipe_modules-run), [vars](#recipe_modules-vars)
 
-&mdash; **def [RunSteps](/infra/bots/recipes/test.py#835)(api):**
+&mdash; **def [RunSteps](/infra/bots/recipes/test.py#831)(api):**
 
 &mdash; **def [dm\_flags](/infra/bots/recipes/test.py#27)(api, bot):**
 
@@ -871,12 +871,12 @@ Recipe for the Bot that updates meta config.
 
 &mdash; **def [RunSteps](/infra/bots/recipe_modules/vars/examples/full.py#12)(api):**
 
-[depot_tools/recipe_modules/bot_update]: https://chromium.googlesource.com/chromium/tools/depot_tools.git/+/3f1ab05820af5b675682e9d9ad2bf2910801d768/recipes/README.recipes.md#recipe_modules-bot_update
-[depot_tools/recipe_modules/depot_tools]: https://chromium.googlesource.com/chromium/tools/depot_tools.git/+/3f1ab05820af5b675682e9d9ad2bf2910801d768/recipes/README.recipes.md#recipe_modules-depot_tools
-[depot_tools/recipe_modules/gclient]: https://chromium.googlesource.com/chromium/tools/depot_tools.git/+/3f1ab05820af5b675682e9d9ad2bf2910801d768/recipes/README.recipes.md#recipe_modules-gclient
-[depot_tools/recipe_modules/git]: https://chromium.googlesource.com/chromium/tools/depot_tools.git/+/3f1ab05820af5b675682e9d9ad2bf2910801d768/recipes/README.recipes.md#recipe_modules-git
-[depot_tools/recipe_modules/gsutil]: https://chromium.googlesource.com/chromium/tools/depot_tools.git/+/3f1ab05820af5b675682e9d9ad2bf2910801d768/recipes/README.recipes.md#recipe_modules-gsutil
-[depot_tools/recipe_modules/tryserver]: https://chromium.googlesource.com/chromium/tools/depot_tools.git/+/3f1ab05820af5b675682e9d9ad2bf2910801d768/recipes/README.recipes.md#recipe_modules-tryserver
+[depot_tools/recipe_modules/bot_update]: https://chromium.googlesource.com/chromium/tools/depot_tools.git/+/b40a45149a73a6b00e92fd1d2df4c0b1543d0005/recipes/README.recipes.md#recipe_modules-bot_update
+[depot_tools/recipe_modules/depot_tools]: https://chromium.googlesource.com/chromium/tools/depot_tools.git/+/b40a45149a73a6b00e92fd1d2df4c0b1543d0005/recipes/README.recipes.md#recipe_modules-depot_tools
+[depot_tools/recipe_modules/gclient]: https://chromium.googlesource.com/chromium/tools/depot_tools.git/+/b40a45149a73a6b00e92fd1d2df4c0b1543d0005/recipes/README.recipes.md#recipe_modules-gclient
+[depot_tools/recipe_modules/git]: https://chromium.googlesource.com/chromium/tools/depot_tools.git/+/b40a45149a73a6b00e92fd1d2df4c0b1543d0005/recipes/README.recipes.md#recipe_modules-git
+[depot_tools/recipe_modules/gsutil]: https://chromium.googlesource.com/chromium/tools/depot_tools.git/+/b40a45149a73a6b00e92fd1d2df4c0b1543d0005/recipes/README.recipes.md#recipe_modules-gsutil
+[depot_tools/recipe_modules/tryserver]: https://chromium.googlesource.com/chromium/tools/depot_tools.git/+/b40a45149a73a6b00e92fd1d2df4c0b1543d0005/recipes/README.recipes.md#recipe_modules-tryserver
 [recipe_engine/recipe_modules/context]: https://chromium.googlesource.com/infra/luci/recipes-py.git/+/c07de907b2223efcacbf45d7b793fc0d8a964f31/README.recipes.md#recipe_modules-context
 [recipe_engine/recipe_modules/file]: https://chromium.googlesource.com/infra/luci/recipes-py.git/+/c07de907b2223efcacbf45d7b793fc0d8a964f31/README.recipes.md#recipe_modules-file
 [recipe_engine/recipe_modules/json]: https://chromium.googlesource.com/infra/luci/recipes-py.git/+/c07de907b2223efcacbf45d7b793fc0d8a964f31/README.recipes.md#recipe_modules-json
