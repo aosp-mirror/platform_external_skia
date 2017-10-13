@@ -489,7 +489,7 @@ bool GrVkGpu::onTransferPixels(GrTexture* texture,
                                          1,
                                          &region);
 
-    vkTex->texturePriv().dirtyMipMaps(true);
+    vkTex->texturePriv().markMipMapsDirty();
     return true;
 }
 
@@ -766,7 +766,7 @@ bool GrVkGpu::uploadTexDataOptimal(GrVkTexture* tex, GrSurfaceOrigin texOrigin,
                                          regions.begin());
     transferBuffer->unref();
     if (1 == mipLevelCount) {
-       tex->texturePriv().dirtyMipMaps(true);
+        tex->texturePriv().markMipMapsDirty();
     }
 
     return true;
@@ -818,11 +818,14 @@ sk_sp<GrTexture> GrVkGpu::onCreateTexture(const GrSurfaceDesc& desc, SkBudgeted 
     imageDesc.fUsageFlags = usageFlags;
     imageDesc.fMemProps = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
 
-    bool fullMipMapDataProvided = true;
-    for (int i = 0; i < mipLevelCount; ++i) {
-        if (!texels[i].fPixels) {
-            fullMipMapDataProvided = false;
-            break;
+    GrMipMapsStatus mipMapsStatus = GrMipMapsStatus::kNotAllocated;
+    if (mipLevels > 1) {
+        mipMapsStatus = GrMipMapsStatus::kValid;
+        for (int i = 0; i < mipLevels; ++i) {
+            if (!texels[i].fPixels) {
+                mipMapsStatus = GrMipMapsStatus::kDirty;
+                break;
+            }
         }
     }
 
@@ -830,10 +833,10 @@ sk_sp<GrTexture> GrVkGpu::onCreateTexture(const GrSurfaceDesc& desc, SkBudgeted 
     if (renderTarget) {
         tex = GrVkTextureRenderTarget::CreateNewTextureRenderTarget(this, budgeted, desc,
                                                                     imageDesc,
-                                                                    fullMipMapDataProvided);
+                                                                    mipMapsStatus);
     } else {
         tex = GrVkTexture::CreateNewTexture(this, budgeted, desc, imageDesc,
-                                            fullMipMapDataProvided);
+                                            mipMapsStatus);
     }
 
     if (!tex) {
@@ -998,9 +1001,6 @@ void GrVkGpu::generateMipmap(GrVkTexture* tex, GrSurfaceOrigin texOrigin) {
         SkDebugf("Trying to create mipmap for linear tiled texture");
         return;
     }
-
-    // Make sure we at least have some base layer to make mips from
-    SkASSERT(tex->texturePriv().mipMapsAreValid());
 
     // determine if we can blit to and from this format
     const GrVkCaps& caps = this->vkCaps();
@@ -1175,7 +1175,8 @@ bool copy_testing_data(GrVkGpu* gpu, void* srcData, const GrVkAlloc& alloc,
 
 GrBackendObject GrVkGpu::createTestingOnlyBackendTexture(void* srcData, int w, int h,
                                                          GrPixelConfig config,
-                                                         bool isRenderTarget) {
+                                                         bool isRenderTarget,
+                                                         GrMipMapped mipMapped) {
 
     VkFormat pixelFormat;
     if (!GrPixelConfigToVkFormat(config, &pixelFormat)) {
@@ -1191,8 +1192,14 @@ GrBackendObject GrVkGpu::createTestingOnlyBackendTexture(void* srcData, int w, i
         return 0;
     }
 
+    // Currently we don't support uploading pixel data when mipped.
+    if (srcData && GrMipMapped::kYes == mipMapped) {
+        return 0;
+    }
+
     if (fVkCaps->isConfigTexturableLinearly(config) &&
-        (!isRenderTarget || fVkCaps->isConfigRenderableLinearly(config, false))) {
+        (!isRenderTarget || fVkCaps->isConfigRenderableLinearly(config, false)) &&
+        GrMipMapped::kNo == mipMapped) {
         linearTiling = true;
     }
 
@@ -1217,6 +1224,12 @@ GrBackendObject GrVkGpu::createTestingOnlyBackendTexture(void* srcData, int w, i
         return 0;
     }
 
+    // Figure out the number of mip levels.
+    uint32_t mipLevels = 1;
+    if (GrMipMapped::kYes == mipMapped) {
+        mipLevels = SkMipMap::ComputeLevelCount(w, h) + 1;
+    }
+
     const VkImageCreateInfo imageCreateInfo = {
         VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,         // sType
         nullptr,                                     // pNext
@@ -1224,7 +1237,7 @@ GrBackendObject GrVkGpu::createTestingOnlyBackendTexture(void* srcData, int w, i
         VK_IMAGE_TYPE_2D,                            // VkImageType
         pixelFormat,                                 // VkFormat
         { (uint32_t) w, (uint32_t) h, 1 },           // VkExtent3D
-        1,                                           // mipLevels
+        mipLevels,                                   // mipLevels
         1,                                           // arrayLayers
         vkSamples,                                   // samples
         imageTiling,                                 // VkImageTiling
@@ -1414,7 +1427,7 @@ GrBackendObject GrVkGpu::createTestingOnlyBackendTexture(void* srcData, int w, i
     info->fImageTiling = imageTiling;
     info->fImageLayout = initialLayout;
     info->fFormat = pixelFormat;
-    info->fLevelCount = 1;
+    info->fLevelCount = mipLevels;
 
     return (GrBackendObject)info;
 }

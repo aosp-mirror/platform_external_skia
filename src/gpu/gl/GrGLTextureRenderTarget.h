@@ -29,8 +29,7 @@ public:
                             const GrSurfaceDesc& desc,
                             const GrGLTexture::IDDesc& texIDDesc,
                             const GrGLRenderTarget::IDDesc& rtIDDesc,
-                            bool mipsAllocated,
-                            bool wasFullMipMapDataProvided);
+                            GrMipMapsStatus);
 
     bool canAttemptStencilAttachment() const override;
 
@@ -38,7 +37,8 @@ public:
 
     static sk_sp<GrGLTextureRenderTarget> MakeWrapped(GrGLGpu* gpu, const GrSurfaceDesc& desc,
                                                       const GrGLTexture::IDDesc& texIDDesc,
-                                                      const GrGLRenderTarget::IDDesc& rtIDDesc);
+                                                      const GrGLRenderTarget::IDDesc& rtIDDesc,
+                                                      GrMipMapsStatus);
 protected:
     void onAbandon() override {
         GrGLRenderTarget::onAbandon();
@@ -55,7 +55,8 @@ private:
     GrGLTextureRenderTarget(GrGLGpu* gpu,
                             const GrSurfaceDesc& desc,
                             const GrGLTexture::IDDesc& texIDDesc,
-                            const GrGLRenderTarget::IDDesc& rtIDDesc);
+                            const GrGLRenderTarget::IDDesc& rtIDDesc,
+                            GrMipMapsStatus);
 
     size_t onGpuMemorySize() const override;
 };

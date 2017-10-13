@@ -704,10 +704,6 @@ def test_steps(api):
   """Run the DM test."""
   use_hash_file = False
   if api.vars.upload_dm_results:
-    # This must run before we write anything into
-    # api.flavor.device_dirs.dm_dir or we may end up deleting our
-    # output on machines where they're the same.
-    api.flavor.create_clean_host_dir(api.vars.dm_dir)
     host_dm_dir = str(api.vars.dm_dir)
     device_dm_dir = str(api.flavor.device_dirs.dm_dir)
     if host_dm_dir != device_dm_dir:
@@ -892,16 +888,16 @@ TEST_BUILDERS = [
    '-Valgrind_PreAbandonGpuContext_SK_CPU_LIMIT_SSE41'),
   ('Test-Ubuntu17-GCC-Golo-GPU-QuadroP400-x86_64-Release'
    '-Valgrind_SK_CPU_LIMIT_SSE41'),
+  'Test-Win10-Clang-AlphaR2-GPU-RadeonR9M470X-x86_64-Debug-Vulkan',
   ('Test-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Release'
    '-ReleaseAndAbandonGpuContext'),
+  'Test-Win10-Clang-NUC6i5SYK-GPU-IntelIris540-x86_64-Debug-Vulkan',
+  'Test-Win10-Clang-ShuttleA-GPU-GTX660-x86_64-Debug-Vulkan',
+  'Test-Win10-Clang-ZBOX-GPU-GTX1070-x86_64-Debug-Vulkan',
   'Test-Win10-MSVC-AlphaR2-GPU-RadeonR9M470X-x86_64-Debug-ANGLE',
-  'Test-Win10-MSVC-AlphaR2-GPU-RadeonR9M470X-x86_64-Debug-Vulkan',
   'Test-Win10-MSVC-NUC6i5SYK-GPU-IntelIris540-x86_64-Debug-ANGLE',
-  'Test-Win10-MSVC-NUC6i5SYK-GPU-IntelIris540-x86_64-Debug-Vulkan',
   'Test-Win10-MSVC-NUCD34010WYKH-GPU-IntelHD4400-x86_64-Release-ANGLE',
-  'Test-Win10-MSVC-ShuttleA-GPU-GTX660-x86_64-Debug-Vulkan',
   'Test-Win10-MSVC-ShuttleC-GPU-GTX960-x86_64-Debug-ANGLE',
-  'Test-Win10-MSVC-ZBOX-GPU-GTX1070-x86_64-Debug-Vulkan',
   'Test-Win8-MSVC-Golo-CPU-AVX-x86-Debug',
   'Test-iOS-Clang-iPadPro-GPU-GT7800-arm64-Release',
 ]

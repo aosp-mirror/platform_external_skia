@@ -20,6 +20,7 @@
 #include "SkSVGLinearGradient.h"
 #include "SkSVGNode.h"
 #include "SkSVGPath.h"
+#include "SkSVGPattern.h"
 #include "SkSVGPoly.h"
 #include "SkSVGRadialGradient.h"
 #include "SkSVGRect.h"
@@ -27,6 +28,7 @@
 #include "SkSVGStop.h"
 #include "SkSVGSVG.h"
 #include "SkSVGTypes.h"
+#include "SkSVGUse.h"
 #include "SkSVGValue.h"
 #include "SkTSearch.h"
 
@@ -200,6 +202,18 @@ bool SetFillRuleAttribute(const sk_sp<SkSVGNode>& node, SkSVGAttribute attr,
     return true;
 }
 
+bool SetVisibilityAttribute(const sk_sp<SkSVGNode>& node, SkSVGAttribute attr,
+                            const char* stringValue) {
+    SkSVGVisibility visibility;
+    SkSVGAttributeParser parser(stringValue);
+    if (!parser.parseVisibility(&visibility)) {
+        return false;
+    }
+
+    node->setAttribute(attr, SkSVGVisibilityValue(visibility));
+    return true;
+}
+
 SkString TrimmedString(const char* first, const char* last) {
     SkASSERT(first);
     SkASSERT(last);
@@ -293,6 +307,7 @@ SortedDictionaryEntry<AttrParseInfo> gAttributeParseInfo[] = {
     { "height"           , { SkSVGAttribute::kHeight           , SetLengthAttribute       }},
     { "offset"           , { SkSVGAttribute::kOffset           , SetLengthAttribute       }},
     { "opacity"          , { SkSVGAttribute::kOpacity          , SetNumberAttribute       }},
+    { "patternTransform" , { SkSVGAttribute::kPatternTransform , SetTransformAttribute    }},
     { "points"           , { SkSVGAttribute::kPoints           , SetPointsAttribute       }},
     { "r"                , { SkSVGAttribute::kR                , SetLengthAttribute       }},
     { "rx"               , { SkSVGAttribute::kRx               , SetLengthAttribute       }},
@@ -309,6 +324,7 @@ SortedDictionaryEntry<AttrParseInfo> gAttributeParseInfo[] = {
     { "style"            , { SkSVGAttribute::kUnknown          , SetStyleAttributes       }},
     { "transform"        , { SkSVGAttribute::kTransform        , SetTransformAttribute    }},
     { "viewBox"          , { SkSVGAttribute::kViewBox          , SetViewBoxAttribute      }},
+    { "visibility"       , { SkSVGAttribute::kVisibility       , SetVisibilityAttribute   }},
     { "width"            , { SkSVGAttribute::kWidth            , SetLengthAttribute       }},
     { "x"                , { SkSVGAttribute::kX                , SetLengthAttribute       }},
     { "x1"               , { SkSVGAttribute::kX1               , SetLengthAttribute       }},
@@ -329,12 +345,14 @@ SortedDictionaryEntry<sk_sp<SkSVGNode>(*)()> gTagFactories[] = {
     { "line"          , []() -> sk_sp<SkSVGNode> { return SkSVGLine::Make();           }},
     { "linearGradient", []() -> sk_sp<SkSVGNode> { return SkSVGLinearGradient::Make(); }},
     { "path"          , []() -> sk_sp<SkSVGNode> { return SkSVGPath::Make();           }},
+    { "pattern"       , []() -> sk_sp<SkSVGNode> { return SkSVGPattern::Make();        }},
     { "polygon"       , []() -> sk_sp<SkSVGNode> { return SkSVGPoly::MakePolygon();    }},
     { "polyline"      , []() -> sk_sp<SkSVGNode> { return SkSVGPoly::MakePolyline();   }},
     { "radialGradient", []() -> sk_sp<SkSVGNode> { return SkSVGRadialGradient::Make(); }},
     { "rect"          , []() -> sk_sp<SkSVGNode> { return SkSVGRect::Make();           }},
     { "stop"          , []() -> sk_sp<SkSVGNode> { return SkSVGStop::Make();           }},
     { "svg"           , []() -> sk_sp<SkSVGNode> { return SkSVGSVG::Make();            }},
+    { "use"           , []() -> sk_sp<SkSVGNode> { return SkSVGUse::Make();            }},
 };
 
 struct ConstructionContext {

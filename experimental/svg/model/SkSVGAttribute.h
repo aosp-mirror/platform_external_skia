@@ -29,6 +29,7 @@ enum class SkSVGAttribute {
     kHref,
     kOffset,
     kOpacity,
+    kPatternTransform,
     kPoints,
     kR,  // <circle>, <radialGradient>: radius
     kRx, // <ellipse>,<rect>: horizontal (corner) radius
@@ -44,6 +45,7 @@ enum class SkSVGAttribute {
     kStrokeWidth,
     kTransform,
     kViewBox,
+    kVisibility,
     kWidth,
     kX,
     kX1, // <line>: first endpoint x
@@ -71,6 +73,8 @@ struct SkSVGPresentationAttributes {
     SkTLazy<SkSVGNumberType> fStrokeMiterLimit;
     SkTLazy<SkSVGNumberType> fStrokeOpacity;
     SkTLazy<SkSVGLength>     fStrokeWidth;
+
+    SkTLazy<SkSVGVisibility> fVisibility;
 
     // uninherited
     SkTLazy<SkSVGNumberType> fOpacity;

@@ -7,6 +7,7 @@
 
 
 import calendar
+import os
 
 
 DEPS = [
@@ -189,18 +190,6 @@ def nanobench_flags(api, bot):
     verbose = True
   if 'Vulkan' in bot and 'NexusPlayer' in bot:
     match.append('~blendmode_') # skia:6691
-  if 'ANGLE' in bot and 'Radeon' in bot and 'Release' in bot:
-    # skia:6534
-    match.append('~shapes_mixed_10000_32x33')
-    match.append('~shapes_oval_10000_32x32')
-    match.append('~shapes_oval_10000_32x33')
-    match.append('~shapes_rect_100_500x500')
-    match.append('~shapes_rrect_10000_32x32')
-  if 'ANGLE' in bot and 'GTX960' in bot and 'Release' in bot:
-    # skia:6534
-    match.append('~shapes_mixed_10000_32x33')
-    match.append('~shapes_rect_100_500x500')
-    match.append('~shapes_rrect_10000_32x32')
   if 'float_cast_overflow' in bot and 'CPU' in bot:
     # skia:4632
     match.append('~^floor2int_undef$')
@@ -320,7 +309,8 @@ def perf_steps(api):
 
   # Copy results to swarming out dir.
   if api.vars.upload_perf_results:
-    api.file.ensure_directory('makedirs perf_dir', api.vars.perf_data_dir)
+    api.file.ensure_directory('makedirs perf_dir',
+                              api.path.dirname(api.vars.perf_data_dir))
     api.flavor.copy_directory_contents_to_host(
         api.flavor.device_dirs.perf_data_dir,
         api.vars.perf_data_dir)
@@ -366,9 +356,9 @@ TEST_BUILDERS = [
    '-Valgrind_AbandonGpuContext_SK_CPU_LIMIT_SSE41'),
   ('Perf-Ubuntu17-GCC-Golo-GPU-QuadroP400-x86_64-Release'
    '-Valgrind_SK_CPU_LIMIT_SSE41'),
+  'Perf-Win10-Clang-NUC6i5SYK-GPU-IntelIris540-x86_64-Release-Vulkan',
   'Perf-Win10-MSVC-AlphaR2-GPU-RadeonR9M470X-x86_64-Release-ANGLE',
   'Perf-Win10-MSVC-NUC6i5SYK-GPU-IntelIris540-x86_64-Release-ANGLE',
-  'Perf-Win10-MSVC-NUC6i5SYK-GPU-IntelIris540-x86_64-Release-Vulkan',
   'Perf-Win10-MSVC-ShuttleC-GPU-GTX960-x86_64-Release-ANGLE',
   'Perf-Win2k8-MSVC-GCE-CPU-AVX2-x86_64-Debug',
   'Perf-Win2k8-MSVC-GCE-CPU-AVX2-x86_64-Release',
