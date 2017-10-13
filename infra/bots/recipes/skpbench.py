@@ -24,6 +24,8 @@ DEPS = [
   'vars',
 ]
 
+ADB_BINARY = 'adb.1.0.35'
+
 
 def _run(api, title, *cmd, **kwargs):
   with api.context(cwd=api.vars.skia_dir):
@@ -33,7 +35,7 @@ def _run(api, title, *cmd, **kwargs):
 def _adb(api, title, *cmd, **kwargs):
   if 'infra_step' not in kwargs:
     kwargs['infra_step'] = True
-  return _run(api, title, 'adb', *cmd, **kwargs)
+  return _run(api, title, ADB_BINARY, *cmd, **kwargs)
 
 
 def skpbench_steps(api):
@@ -52,6 +54,7 @@ def skpbench_steps(api):
         api.path.join(api.vars.android_bin_dir, 'skpbench'),
         api.path.join(api.vars.android_data_dir, 'skps'),
         '--adb',
+        '--adb_binary', ADB_BINARY,
         '--resultsfile', table,
         '--config', config,
         # TODO(dogben): Track down what's causing bots to die.
