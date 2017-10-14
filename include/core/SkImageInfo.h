@@ -300,23 +300,6 @@ public:
     void unflatten(SkReadBuffer&);
     void flatten(SkWriteBuffer&) const;
 
-#ifdef SK_SUPPORT_LEGACY_SAFESIZE64
-    int64_t getSafeSize64(size_t rowBytes) const {
-        if (0 == fHeight) {
-            return 0;
-        }
-        return sk_64_mul(fHeight - 1, rowBytes) + sk_64_mul(fWidth, this->bytesPerPixel());
-    }
-
-    size_t getSafeSize(size_t rowBytes) const {
-        int64_t size = this->getSafeSize64(rowBytes);
-        if (!sk_64_isS32(size)) {
-            return 0;
-        }
-        return sk_64_asS32(size);
-    }
-#endif
-
     /**
      *  Returns the size (in bytes) of the image buffer that this info needs, given the specified
      *  rowBytes. The rowBytes must be >= this->minRowBytes().
@@ -341,11 +324,7 @@ public:
 
     // Returns true if the result of computeByteSize (or computeMinByteSize) overflowed
     static bool ByteSizeOverflowed(size_t byteSize) {
-#ifdef SK_SUPPORT_LEGACY_COMPUTEBYTESIZE_RET_0
-        return 0 == byteSize;
-#else
         return SK_MaxSizeT == byteSize;
-#endif
     }
 
     bool validRowBytes(size_t rowBytes) const {

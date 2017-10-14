@@ -6,6 +6,7 @@
  */
 
 #include "SkCanvas.h"
+#include "SkDashPathEffect.h"
 #include "SkPath.h"
 #include "SkSVGAttribute.h"
 #include "SkSVGNode.h"
@@ -154,6 +155,45 @@ void commitToPaint<SkSVGAttribute::kFillOpacity>(const SkSVGPresentationAttribut
 }
 
 template <>
+void commitToPaint<SkSVGAttribute::kStrokeDashArray>(const SkSVGPresentationAttributes& attrs,
+                                                     const SkSVGRenderContext& ctx,
+                                                     SkSVGPresentationContext* pctx) {
+    const auto& dashArray = attrs.fStrokeDashArray.get();
+    if (dashArray->type() != SkSVGDashArray::Type::kDashArray) {
+        return;
+    }
+
+    const auto count = dashArray->dashArray().count();
+    SkSTArray<128, SkScalar, true> intervals(count);
+    for (const auto& dash : dashArray->dashArray()) {
+        intervals.push_back(ctx.lengthContext().resolve(dash,
+                                                        SkSVGLengthContext::LengthType::kOther));
+    }
+
+    if (count & 1) {
+        // If an odd number of values is provided, then the list of values
+        // is repeated to yield an even number of values.
+        intervals.push_back_n(count);
+        memcpy(intervals.begin() + count, intervals.begin(), count);
+    }
+
+    SkASSERT((intervals.count() & 1) == 0);
+
+    const SkScalar phase = ctx.lengthContext().resolve(*pctx->fInherited.fStrokeDashOffset.get(),
+                                                       SkSVGLengthContext::LengthType::kOther);
+    pctx->fStrokePaint.setPathEffect(SkDashPathEffect::Make(intervals.begin(),
+                                                            intervals.count(),
+                                                            phase));
+}
+
+template <>
+void commitToPaint<SkSVGAttribute::kStrokeDashOffset>(const SkSVGPresentationAttributes&,
+                                                      const SkSVGRenderContext&,
+                                                      SkSVGPresentationContext*) {
+    // Applied via kStrokeDashArray.
+}
+
+template <>
 void commitToPaint<SkSVGAttribute::kStrokeLineCap>(const SkSVGPresentationAttributes& attrs,
                                                    const SkSVGRenderContext&,
                                                    SkSVGPresentationContext* pctx) {
@@ -297,6 +337,8 @@ void SkSVGRenderContext::applyPresentationAttributes(const SkSVGPresentationAttr
     ApplyLazyInheritedAttribute(FillRule);
     ApplyLazyInheritedAttribute(ClipRule);
     ApplyLazyInheritedAttribute(Stroke);
+    ApplyLazyInheritedAttribute(StrokeDashOffset);
+    ApplyLazyInheritedAttribute(StrokeDashArray);
     ApplyLazyInheritedAttribute(StrokeLineCap);
     ApplyLazyInheritedAttribute(StrokeLineJoin);
     ApplyLazyInheritedAttribute(StrokeMiterLimit);

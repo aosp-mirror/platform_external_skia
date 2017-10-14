@@ -811,9 +811,9 @@ Recipe for the Skia RecreateSKPs Bot.
 
 [DEPS](/infra/bots/recipes/skpbench.py#12): [recipe\_engine/context][recipe_engine/recipe_modules/context], [recipe\_engine/file][recipe_engine/recipe_modules/file], [recipe\_engine/path][recipe_engine/recipe_modules/path], [recipe\_engine/properties][recipe_engine/recipe_modules/properties], [recipe\_engine/python][recipe_engine/recipe_modules/python], [recipe\_engine/raw\_io][recipe_engine/recipe_modules/raw_io], [recipe\_engine/step][recipe_engine/recipe_modules/step], [recipe\_engine/time][recipe_engine/recipe_modules/time], [core](#recipe_modules-core), [flavor](#recipe_modules-flavor), [run](#recipe_modules-run), [vars](#recipe_modules-vars)
 
-&mdash; **def [RunSteps](/infra/bots/recipes/skpbench.py#101)(api):**
+&mdash; **def [RunSteps](/infra/bots/recipes/skpbench.py#104)(api):**
 
-&mdash; **def [skpbench\_steps](/infra/bots/recipes/skpbench.py#39)(api):**
+&mdash; **def [skpbench\_steps](/infra/bots/recipes/skpbench.py#41)(api):**
 
 benchmark Skia using skpbench.
 ### *recipes* / [swarming:examples/full](/infra/bots/recipe_modules/swarming/examples/full.py)
@@ -830,17 +830,17 @@ benchmark Skia using skpbench.
 
 [DEPS](/infra/bots/recipes/test.py#9): [recipe\_engine/context][recipe_engine/recipe_modules/context], [recipe\_engine/file][recipe_engine/recipe_modules/file], [recipe\_engine/json][recipe_engine/recipe_modules/json], [recipe\_engine/path][recipe_engine/recipe_modules/path], [recipe\_engine/platform][recipe_engine/recipe_modules/platform], [recipe\_engine/properties][recipe_engine/recipe_modules/properties], [recipe\_engine/python][recipe_engine/recipe_modules/python], [recipe\_engine/raw\_io][recipe_engine/recipe_modules/raw_io], [recipe\_engine/step][recipe_engine/recipe_modules/step], [core](#recipe_modules-core), [env](#recipe_modules-env), [flavor](#recipe_modules-flavor), [run](#recipe_modules-run), [vars](#recipe_modules-vars)
 
-&mdash; **def [RunSteps](/infra/bots/recipes/test.py#831)(api):**
+&mdash; **def [RunSteps](/infra/bots/recipes/test.py#836)(api):**
 
 &mdash; **def [dm\_flags](/infra/bots/recipes/test.py#27)(api, bot):**
 
-&mdash; **def [key\_params](/infra/bots/recipes/test.py#686)(api):**
+&mdash; **def [key\_params](/infra/bots/recipes/test.py#691)(api):**
 
 Build a unique key from the builder name (as a list).
 
 E.g.  arch x86 gpu GeForce320M mode MacMini4.1 os Mac10.6
 
-&mdash; **def [test\_steps](/infra/bots/recipes/test.py#703)(api):**
+&mdash; **def [test\_steps](/infra/bots/recipes/test.py#708)(api):**
 
 Run the DM test.
 ### *recipes* / [update\_meta\_config](/infra/bots/recipes/update_meta_config.py)
@@ -871,12 +871,12 @@ Recipe for the Bot that updates meta config.
 
 &mdash; **def [RunSteps](/infra/bots/recipe_modules/vars/examples/full.py#12)(api):**
 
-[depot_tools/recipe_modules/bot_update]: https://chromium.googlesource.com/chromium/tools/depot_tools.git/+/b40a45149a73a6b00e92fd1d2df4c0b1543d0005/recipes/README.recipes.md#recipe_modules-bot_update
-[depot_tools/recipe_modules/depot_tools]: https://chromium.googlesource.com/chromium/tools/depot_tools.git/+/b40a45149a73a6b00e92fd1d2df4c0b1543d0005/recipes/README.recipes.md#recipe_modules-depot_tools
-[depot_tools/recipe_modules/gclient]: https://chromium.googlesource.com/chromium/tools/depot_tools.git/+/b40a45149a73a6b00e92fd1d2df4c0b1543d0005/recipes/README.recipes.md#recipe_modules-gclient
-[depot_tools/recipe_modules/git]: https://chromium.googlesource.com/chromium/tools/depot_tools.git/+/b40a45149a73a6b00e92fd1d2df4c0b1543d0005/recipes/README.recipes.md#recipe_modules-git
-[depot_tools/recipe_modules/gsutil]: https://chromium.googlesource.com/chromium/tools/depot_tools.git/+/b40a45149a73a6b00e92fd1d2df4c0b1543d0005/recipes/README.recipes.md#recipe_modules-gsutil
-[depot_tools/recipe_modules/tryserver]: https://chromium.googlesource.com/chromium/tools/depot_tools.git/+/b40a45149a73a6b00e92fd1d2df4c0b1543d0005/recipes/README.recipes.md#recipe_modules-tryserver
+[depot_tools/recipe_modules/bot_update]: https://chromium.googlesource.com/chromium/tools/depot_tools.git/+/7de54ef0a25f546747ea9f2a536d5cb175abc566/recipes/README.recipes.md#recipe_modules-bot_update
+[depot_tools/recipe_modules/depot_tools]: https://chromium.googlesource.com/chromium/tools/depot_tools.git/+/7de54ef0a25f546747ea9f2a536d5cb175abc566/recipes/README.recipes.md#recipe_modules-depot_tools
+[depot_tools/recipe_modules/gclient]: https://chromium.googlesource.com/chromium/tools/depot_tools.git/+/7de54ef0a25f546747ea9f2a536d5cb175abc566/recipes/README.recipes.md#recipe_modules-gclient
+[depot_tools/recipe_modules/git]: https://chromium.googlesource.com/chromium/tools/depot_tools.git/+/7de54ef0a25f546747ea9f2a536d5cb175abc566/recipes/README.recipes.md#recipe_modules-git
+[depot_tools/recipe_modules/gsutil]: https://chromium.googlesource.com/chromium/tools/depot_tools.git/+/7de54ef0a25f546747ea9f2a536d5cb175abc566/recipes/README.recipes.md#recipe_modules-gsutil
+[depot_tools/recipe_modules/tryserver]: https://chromium.googlesource.com/chromium/tools/depot_tools.git/+/7de54ef0a25f546747ea9f2a536d5cb175abc566/recipes/README.recipes.md#recipe_modules-tryserver
 [recipe_engine/recipe_modules/context]: https://chromium.googlesource.com/infra/luci/recipes-py.git/+/c07de907b2223efcacbf45d7b793fc0d8a964f31/README.recipes.md#recipe_modules-context
 [recipe_engine/recipe_modules/file]: https://chromium.googlesource.com/infra/luci/recipes-py.git/+/c07de907b2223efcacbf45d7b793fc0d8a964f31/README.recipes.md#recipe_modules-file
 [recipe_engine/recipe_modules/json]: https://chromium.googlesource.com/infra/luci/recipes-py.git/+/c07de907b2223efcacbf45d7b793fc0d8a964f31/README.recipes.md#recipe_modules-json
