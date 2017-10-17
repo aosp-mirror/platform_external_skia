@@ -118,8 +118,8 @@ public:
                                                                   args.fOutputColor);
                 }
                 args.fFragBuilder->codeAppend("float2 texCoord;");
-                args.fVaryingHandler->addPassThroughAttribute(&textureGP.fTextureCoords, "texCoord",
-                                                              kHigh_GrSLPrecision);
+                args.fVaryingHandler->addPassThroughAttribute(&textureGP.fTextureCoords,
+                                                              "texCoord");
                 if (textureGP.numTextureSamplers() > 1) {
                     SkASSERT(args.fShaderCaps->integerSupport());
                     args.fFragBuilder->codeAppend("int texIdx;");
@@ -346,7 +346,7 @@ private:
         }
         sk_sp<const GrBuffer> ibuffer;
         if (fDraws.count() > 1) {
-            ibuffer.reset(target->resourceProvider()->refQuadIndexBuffer());
+            ibuffer = target->resourceProvider()->refQuadIndexBuffer();
             if (!ibuffer) {
                 SkDebugf("Could not allocate quad indices\n");
                 return;
