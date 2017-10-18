@@ -229,6 +229,16 @@ def dm_flags(api, bot):
       configs = [c for c in configs if c == 'gl' or c == 'gles']
       args.extend(['--pr', 'ccpr', '--cachePathMasks', 'false'])
 
+  tf = api.vars.builder_cfg.get('test_filter')
+  if 'All' != tf:
+    # Expected format: shard_XX_YY
+    parts = tf.split('_')
+    if len(parts) == 3:
+      args.extend(['--shard', parts[1]])
+      args.extend(['--shards', parts[2]])
+    else:
+      raise Exception('Invalid task name - bad shards') #pragma: nocover
+
   args.append('--config')
   args.extend(configs)
 
@@ -682,6 +692,13 @@ def dm_flags(api, bot):
       or 'Win8-MSVC-ShuttleB' in bot):
     args.append('--noRAW_threading')
 
+  if 'FSAA' in bot:
+    args.extend(['--analyticAA', 'false', '--deltaAA', 'false'])
+  if 'FAAA' in bot:
+    args.extend(['--deltaAA', 'false', '--forceAnalyticAA'])
+  if 'FDAA' in bot:
+    args.extend(['--deltaAA', '--forceDeltaAA'])
+
   # Let's make all bots produce verbose output by default.
   args.append('--verbose')
 
@@ -869,7 +886,7 @@ TEST_BUILDERS = [
   'Test-ChromeOS-Clang-Chromebook_CB5_312T-GPU-PowerVRGX6250-arm-Debug-All',
   'Test-Chromecast-GCC-Chorizo-GPU-Cortex_A7-arm-Release-All',
   'Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-All-ASAN',
-  'Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-All-Coverage',
+  'Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_00_10-Coverage',
   'Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-All-MSAN',
   ('Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-All'
    '-SK_USE_DISCARDABLE_SCALEDIMAGECACHE'),
@@ -898,6 +915,9 @@ TEST_BUILDERS = [
   'Test-Win10-Clang-NUC6i5SYK-GPU-IntelIris540-x86_64-Debug-All-Vulkan',
   'Test-Win10-Clang-ShuttleA-GPU-GTX660-x86_64-Debug-All-Vulkan',
   'Test-Win10-Clang-ZBOX-GPU-GTX1070-x86_64-Debug-All-Vulkan',
+  'Test-Win10-Clang-ZBOX-GPU-GTX1070-x86_64-Debug-All-Vulkan_FSAA',
+  'Test-Win10-Clang-ZBOX-GPU-GTX1070-x86_64-Debug-All-Vulkan_FAAA',
+  'Test-Win10-Clang-ZBOX-GPU-GTX1070-x86_64-Debug-All-Vulkan_FDAA',
   'Test-Win10-MSVC-AlphaR2-GPU-RadeonR9M470X-x86_64-Debug-All-ANGLE',
   'Test-Win10-MSVC-NUC6i5SYK-GPU-IntelIris540-x86_64-Debug-All-ANGLE',
   'Test-Win10-MSVC-NUCD34010WYKH-GPU-IntelHD4400-x86_64-Release-All-ANGLE',

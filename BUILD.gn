@@ -429,6 +429,9 @@ if (skia_lex) {
 
   action("run_sksllex") {
     script = "gn/run_sksllex.py"
+    deps = [
+      ":sksllex(//gn/toolchain:$host_toolchain)",
+    ]
     sources = [
       "src/sksl/lex/layout.lex",
       "src/sksl/lex/sksl.lex",
@@ -1632,6 +1635,24 @@ if (skia_enable_tools) {
       ":tool_utils",
       "//third_party/jsoncpp",
     ]
+  }
+
+  if (!is_win) {
+    test_app("gpucts") {
+      sources = [
+        "dm/DMGpuTestProcs.cpp",
+        "tools/gpucts/gm_knowledge.c",
+        "tools/gpucts/gm_runner.cpp",
+        "tools/gpucts/gpucts.cpp",
+      ]
+      deps = [
+        ":gm",
+        ":gpu_tool_utils",
+        ":skia",
+        ":tests",
+        "//third_party/googletest",
+      ]
+    }
   }
 
   if (skia_enable_gpu) {
