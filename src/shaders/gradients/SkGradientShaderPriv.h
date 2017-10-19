@@ -212,22 +212,11 @@ protected:
     void flatten(SkWriteBuffer&) const override;
     SK_TO_STRING_OVERRIDE()
 
-    void commonAsAGradient(GradientInfo*, bool flipGrad = false) const;
+    void commonAsAGradient(GradientInfo*) const;
 
     bool onAsLuminanceColor(SkColor*) const override;
 
     void initLinearBitmap(SkBitmap* bitmap) const;
-
-    /*
-     * Takes in pointers to gradient color and Rec info as colorSrc and recSrc respectively.
-     * Count is the number of colors in the gradient
-     * It will then flip all the color and rec information and return in their respective Dst
-     * pointers. It is assumed that space has already been allocated for the Dst pointers.
-     * The rec src and dst are only assumed to be valid if count > 2
-     */
-    static void FlipGradientColors(SkColor* colorDst, Rec* recDst,
-                                   SkColor* colorSrc, Rec* recSrc,
-                                   int count);
 
     bool onAppendStages(const StageRec&) const override;
 
@@ -413,13 +402,7 @@ public:
 
     PremulType getPremulType() const { return fPremulType; }
 
-    const SkColor* getColors(int pos) const {
-        SkASSERT(fColorType != kTexture_ColorType);
-        SkASSERT(pos < fColors.count());
-        return &fColors[pos];
-    }
-
-    const SkColor4f* getColors4f(int pos) const {
+    const GrColor4f* getColors4f(int pos) const {
         SkASSERT(fColorType != kTexture_ColorType);
         SkASSERT(pos < fColors4f.count());
         return &fColors4f[pos];
@@ -464,11 +447,9 @@ protected:
 private:
     static OptimizationFlags OptFlags(bool isOpaque);
 
-    // If we're in legacy mode, then fColors will be populated. If we're gamma-correct, then
-    // fColors4f and fColorSpaceXform will be populated.
-    SkTDArray<SkColor> fColors;
+    SkTDArray<GrColor4f> fColors4f;
 
-    SkTDArray<SkColor4f> fColors4f;
+    // Only present if a color space transformation is needed
     sk_sp<GrColorSpaceXform> fColorSpaceXform;
 
     SkTDArray<SkScalar> fPositions;
