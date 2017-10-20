@@ -18,6 +18,7 @@
 #include "GrTest.h"
 #include "SkColorPriv.h"
 #include "SkGeometry.h"
+#include "SkPoint3.h"
 #include "effects/GrBezierEffect.h"
 #include "ops/GrMeshDrawOp.h"
 
@@ -92,7 +93,7 @@ private:
             return;
         }
         SkRect rect = this->rect();
-        pts[0].setRectFan(rect.fLeft, rect.fTop, rect.fRight, rect.fBottom, vertexStride);
+        pts[0].setRectTriStrip(rect.fLeft, rect.fTop, rect.fRight, rect.fBottom, vertexStride);
         helper.recordDraw(target, this->gp(), this->makePipeline(target));
     }
 
@@ -267,11 +268,11 @@ private:
             return;
         }
         SkRect rect = this->rect();
-        verts[0].fPosition.setRectFan(rect.fLeft, rect.fTop, rect.fRight, rect.fBottom,
-                                      sizeof(Vertex));
+        verts[0].fPosition.setRectTriStrip(rect.fLeft, rect.fTop, rect.fRight, rect.fBottom,
+                                           sizeof(Vertex));
         for (int v = 0; v < 4; ++v) {
-            SkScalar pt3[3] = {verts[v].fPosition.x(), verts[v].fPosition.y(), 1.f};
-            fKLM.mapHomogeneousPoints(verts[v].fKLM, pt3, 1);
+            SkPoint3 pt3 = {verts[v].fPosition.x(), verts[v].fPosition.y(), 1.f};
+            fKLM.mapHomogeneousPoints((SkPoint3* ) verts[v].fKLM, &pt3, 1);
         }
         helper.recordDraw(target, this->gp(), this->makePipeline(target));
     }
@@ -481,8 +482,8 @@ private:
             return;
         }
         SkRect rect = this->rect();
-        verts[0].fPosition.setRectFan(rect.fLeft, rect.fTop, rect.fRight, rect.fBottom,
-                                      sizeof(Vertex));
+        verts[0].fPosition.setRectTriStrip(rect.fLeft, rect.fTop, rect.fRight, rect.fBottom,
+                                           sizeof(Vertex));
         fDevToUV.apply<4, sizeof(Vertex), sizeof(SkPoint)>(verts);
         helper.recordDraw(target, this->gp(), this->makePipeline(target));
     }

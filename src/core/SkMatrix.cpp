@@ -9,6 +9,7 @@
 #include "SkMatrix.h"
 #include "SkNx.h"
 #include "SkPaint.h"
+#include "SkPoint3.h"
 #include "SkRSXform.h"
 #include "SkString.h"
 #include <stddef.h>
@@ -1036,30 +1037,28 @@ const SkMatrix::MapPtsProc SkMatrix::gMapPtsProcs[] = {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-void SkMatrix::mapHomogeneousPoints(SkScalar dst[], const SkScalar src[], int count) const {
+void SkMatrix::mapHomogeneousPoints(SkPoint3 dst[], const SkPoint3 src[], int count) const {
     SkASSERT((dst && src && count > 0) || 0 == count);
     // no partial overlap
-    SkASSERT(src == dst || &dst[3*count] <= &src[0] || &src[3*count] <= &dst[0]);
+    SkASSERT(src == dst || &dst[count] <= &src[0] || &src[count] <= &dst[0]);
 
     if (count > 0) {
         if (this->isIdentity()) {
-            memcpy(dst, src, 3*count*sizeof(SkScalar));
+            memcpy(dst, src, count * sizeof(SkPoint3));
             return;
         }
         do {
-            SkScalar sx = src[0];
-            SkScalar sy = src[1];
-            SkScalar sw = src[2];
-            src += 3;
+            SkScalar sx = src->fX;
+            SkScalar sy = src->fY;
+            SkScalar sw = src->fZ;
+            src++;
 
             SkScalar x = sdot(sx, fMat[kMScaleX], sy, fMat[kMSkewX],  sw, fMat[kMTransX]);
             SkScalar y = sdot(sx, fMat[kMSkewY],  sy, fMat[kMScaleY], sw, fMat[kMTransY]);
             SkScalar w = sdot(sx, fMat[kMPersp0], sy, fMat[kMPersp1], sw, fMat[kMPersp2]);
 
-            dst[0] = x;
-            dst[1] = y;
-            dst[2] = w;
-            dst += 3;
+            dst->set(x, y, w);
+            dst++;
         } while (--count);
     }
 }
@@ -1129,7 +1128,7 @@ bool SkMatrix::mapRect(SkRect* dst, const SkRect& src) const {
         src.toQuad(quad);
         this->mapPoints(quad, quad, 4);
         dst->set(quad, 4);
-        return false;
+        return this->rectStaysRect();   // might still return true if rotated by 90, etc.
     }
 }
 
@@ -1840,4 +1839,18 @@ void SkRSXform::toQuad(SkScalar width, SkScalar height, SkPoint quad[4]) const {
     quad[2].set(m00 * width + m01 * height + m02, m10 * width + m11 * height + m12);
     quad[3].set(m01 * height + m02, m11 * height + m12);
 #endif
+}
+
+void SkRSXform::toTriStrip(SkScalar width, SkScalar height, SkPoint strip[4]) const {
+    const SkScalar m00 = fSCos;
+    const SkScalar m01 = -fSSin;
+    const SkScalar m02 = fTx;
+    const SkScalar m10 = -m01;
+    const SkScalar m11 = m00;
+    const SkScalar m12 = fTy;
+
+    strip[0].set(m02, m12);
+    strip[1].set(m01 * height + m02, m11 * height + m12);
+    strip[2].set(m00 * width + m02, m10 * width + m12);
+    strip[3].set(m00 * width + m01 * height + m02, m10 * width + m11 * height + m12);
 }
