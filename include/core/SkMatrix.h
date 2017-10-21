@@ -572,30 +572,6 @@ public:
     */
     SkScalar mapRadius(SkScalar radius) const;
 
-    typedef void (*MapXYProc)(const SkMatrix& mat, SkScalar x, SkScalar y,
-                                 SkPoint* result);
-
-    static MapXYProc GetMapXYProc(TypeMask mask) {
-        SkASSERT((mask & ~kAllMasks) == 0);
-        return gMapXYProcs[mask & kAllMasks];
-    }
-
-    MapXYProc getMapXYProc() const {
-        return GetMapXYProc(this->getType());
-    }
-
-    typedef void (*MapPtsProc)(const SkMatrix& mat, SkPoint dst[],
-                                  const SkPoint src[], int count);
-
-    static MapPtsProc GetMapPtsProc(TypeMask mask) {
-        SkASSERT((mask & ~kAllMasks) == 0);
-        return gMapPtsProcs[mask & kAllMasks];
-    }
-
-    MapPtsProc getMapPtsProc() const {
-        return GetMapPtsProc(this->getType());
-    }
-
     /** Returns true if the matrix can be stepped in X (not complex
         perspective).
     */
@@ -624,22 +600,6 @@ public:
     friend SK_API bool operator!=(const SkMatrix& a, const SkMatrix& b) {
         return !(a == b);
     }
-
-    enum {
-        // writeTo/readFromMemory will never return a value larger than this
-        kMaxFlattenSize = 9 * sizeof(SkScalar) + sizeof(uint32_t),
-    };
-    // return the number of bytes written, whether or not buffer is null
-    size_t writeToMemory(void* buffer) const;
-    /**
-     * Reads data from the buffer parameter
-     *
-     * @param buffer Memory to read from
-     * @param length Amount of memory available in the buffer
-     * @return number of bytes read (must be a multiple of 4) or
-     *         0 if there was not enough memory available
-     */
-    size_t readFromMemory(const void* buffer, size_t length);
 
     void dump() const;
     void toString(SkString* str) const;
@@ -823,6 +783,30 @@ private:
         }
     }
 
+    typedef void (*MapXYProc)(const SkMatrix& mat, SkScalar x, SkScalar y,
+                                 SkPoint* result);
+
+    static MapXYProc GetMapXYProc(TypeMask mask) {
+        SkASSERT((mask & ~kAllMasks) == 0);
+        return gMapXYProcs[mask & kAllMasks];
+    }
+
+    MapXYProc getMapXYProc() const {
+        return GetMapXYProc(this->getType());
+    }
+
+    typedef void (*MapPtsProc)(const SkMatrix& mat, SkPoint dst[],
+                                  const SkPoint src[], int count);
+
+    static MapPtsProc GetMapPtsProc(TypeMask mask) {
+        SkASSERT((mask & ~kAllMasks) == 0);
+        return gMapPtsProcs[mask & kAllMasks];
+    }
+
+    MapPtsProc getMapPtsProc() const {
+        return GetMapPtsProc(this->getType());
+    }
+
     bool SK_WARN_UNUSED_RESULT invertNonIdentity(SkMatrix* inverse) const;
 
     static bool Poly2Proc(const SkPoint[], SkMatrix*, const SkPoint& scale);
@@ -850,8 +834,22 @@ private:
 
     static const MapPtsProc gMapPtsProcs[];
 
+    // return the number of bytes written, whether or not buffer is null
+    size_t writeToMemory(void* buffer) const;
+    /**
+     * Reads data from the buffer parameter
+     *
+     * @param buffer Memory to read from
+     * @param length Amount of memory available in the buffer
+     * @return number of bytes read (must be a multiple of 4) or
+     *         0 if there was not enough memory available
+     */
+    size_t readFromMemory(const void* buffer, size_t length);
+
     friend class SkPerspIter;
     friend class SkMatrixPriv;
+    friend class SkReader32;
+    friend class SerializationTest;
 };
 SK_END_REQUIRE_DENSE
 
