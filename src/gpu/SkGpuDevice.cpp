@@ -8,6 +8,7 @@
 #include "SkGpuDevice.h"
 #include "GrBitmapTextureMaker.h"
 #include "GrBlurUtils.h"
+#include "GrColorSpaceXform.h"
 #include "GrContext.h"
 #include "GrGpu.h"
 #include "GrImageTextureMaker.h"
@@ -96,8 +97,8 @@ sk_sp<SkGpuDevice> SkGpuDevice::Make(GrContext* context,
 
 sk_sp<SkGpuDevice> SkGpuDevice::Make(GrContext* context, SkBudgeted budgeted,
                                      const SkImageInfo& info, int sampleCount,
-                                     GrSurfaceOrigin origin,
-                                     const SkSurfaceProps* props, InitContents init) {
+                                     GrSurfaceOrigin origin, const SkSurfaceProps* props,
+                                     GrMipMapped mipMapped, InitContents init) {
     unsigned flags;
     if (!CheckAlphaTypeAndGetFlags(&info, init, &flags)) {
         return nullptr;
@@ -105,7 +106,8 @@ sk_sp<SkGpuDevice> SkGpuDevice::Make(GrContext* context, SkBudgeted budgeted,
 
     sk_sp<GrRenderTargetContext> renderTargetContext(MakeRenderTargetContext(context, budgeted,
                                                                              info, sampleCount,
-                                                                             origin, props));
+                                                                             origin, props,
+                                                                             mipMapped));
     if (!renderTargetContext) {
         return nullptr;
     }
@@ -145,7 +147,8 @@ sk_sp<GrRenderTargetContext> SkGpuDevice::MakeRenderTargetContext(
                                                                const SkImageInfo& origInfo,
                                                                int sampleCount,
                                                                GrSurfaceOrigin origin,
-                                                               const SkSurfaceProps* surfaceProps) {
+                                                               const SkSurfaceProps* surfaceProps,
+                                                               GrMipMapped mipMapped) {
     if (kUnknown_SkColorType == origInfo.colorType() ||
         origInfo.width() < 0 || origInfo.height() < 0) {
         return nullptr;
@@ -245,7 +248,8 @@ void SkGpuDevice::replaceRenderTargetContext(bool shouldRetainContent) {
                                                             this->imageInfo(),
                                                             fRenderTargetContext->numColorSamples(),
                                                             fRenderTargetContext->origin(),
-                                                            &this->surfaceProps()));
+                                                            &this->surfaceProps(),
+                                                            fRenderTargetContext->mipMapped()));
     if (!newRTC) {
         return;
     }
