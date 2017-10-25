@@ -199,7 +199,7 @@ extern "C" {
     LOWP(load_g8)   LOWP(load_g8_dst)
     LOWP(load_565)  LOWP(load_565_dst)  LOWP(store_565)
     LOWP(swap_rb)
-    LOWP(srcover_rgba_8888)
+    LOWP(srcover_rgba_8888) LOWP(srcover_bgra_8888)
     LOWP(lerp_1_float)
     LOWP(lerp_u8)
     LOWP(lerp_565)
@@ -228,7 +228,13 @@ extern "C" {
     LOWP(exclusion)
     LOWP(hardlight)
     LOWP(overlay)
+#if defined(SK_LEGACY_LOWP_STAGES)
     LOWP(seed_shader) LOWP(matrix_2x3) LOWP(gather_8888)
+#else
+    LOWP(seed_shader)
+    LOWP(matrix_translate) LOWP(matrix_scale_translate) LOWP(matrix_2x3) LOWP(matrix_perspective)
+    LOWP(gather_8888) LOWP(gather_bgra) LOWP(gather_565) LOWP(gather_a8) LOWP(gather_g8)
+#endif
     #undef LOWP
 #endif
 
