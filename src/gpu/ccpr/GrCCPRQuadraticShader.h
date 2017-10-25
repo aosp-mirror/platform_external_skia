@@ -28,15 +28,13 @@ protected:
                                const TexelBufferHandle& pointsBuffer,
                                const char* pointId) const override;
 
-    void emitWind(GrGLSLShaderBuilder*, const char* pts, const char* rtAdjust,
-                  const char* outputWind) const final;
+    void emitWind(GrGLSLShaderBuilder*, const char* pts, const char* outputWind) const final;
 
     void emitSetupCode(GrGLSLShaderBuilder*, const char* pts, const char* segmentId,
-                       const char* bloat, const char* wind, const char* rtAdjust,
-                       GeometryVars*) const final;
+                       const char* wind, GeometryVars*) const final;
 
     virtual void onEmitSetupCode(GrGLSLShaderBuilder*, const char* pts, const char* segmentId,
-                                 const char* rtAdjust, GeometryVars*) const = 0;
+                                 GeometryVars*) const = 0;
 
     WindHandling onEmitVaryings(GrGLSLVaryingHandler*, SkString* code, const char* position,
                                 const char* coverage, const char* wind) final;
@@ -44,7 +42,6 @@ protected:
     virtual void onEmitVaryings(GrGLSLVaryingHandler*, SkString* code) = 0;
 
     const GrShaderVar   fCanonicalMatrix{"canonical_matrix", kFloat3x3_GrSLType};
-    const GrShaderVar   fCanonicalDerivatives{"canonical_derivatives", kFloat2x2_GrSLType};
     const GrShaderVar   fEdgeDistanceEquation{"edge_distance_equation", kFloat3_GrSLType};
     GrGLSLGeoToFrag     fXYD{kFloat3_GrSLType};
 };
@@ -60,7 +57,7 @@ class GrCCPRQuadraticHullShader : public GrCCPRQuadraticShader {
 
     GeometryType getGeometryType() const override { return GeometryType::kHull; }
     void onEmitSetupCode(GrGLSLShaderBuilder*, const char* pts, const char* wedgeId,
-                         const char* rtAdjust, GeometryVars*) const override;
+                         GeometryVars*) const override;
     void onEmitVaryings(GrGLSLVaryingHandler*, SkString* code) override;
     void onEmitFragmentCode(GrGLSLPPFragmentBuilder*, const char* outputCoverage) const override;
 
@@ -75,11 +72,10 @@ class GrCCPRQuadraticCornerShader : public GrCCPRQuadraticShader {
 
     GeometryType getGeometryType() const override { return GeometryType::kCorners; }
     void onEmitSetupCode(GrGLSLShaderBuilder*, const char* pts, const char* cornerId,
-                         const char* rtAdjust, GeometryVars*) const override;
+                         GeometryVars*) const override;
     void onEmitVaryings(GrGLSLVaryingHandler*, SkString* code) override;
     void onEmitFragmentCode(GrGLSLPPFragmentBuilder*, const char* outputCoverage) const override;
 
-    const GrShaderVar   fEdgeDistanceDerivatives{"edge_distance_derivatives", kFloat2_GrSLType};
     GrGLSLGeoToFrag     fdXYDdx{kFloat3_GrSLType};
     GrGLSLGeoToFrag     fdXYDdy{kFloat3_GrSLType};
 };

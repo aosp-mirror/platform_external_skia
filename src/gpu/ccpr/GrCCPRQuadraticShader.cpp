@@ -17,13 +17,12 @@ void GrCCPRQuadraticShader::appendInputPointFetch(const GrCCPRCoverageProcessor&
                         SkStringPrintf("%s.x + %s", proc.instanceAttrib(), pointId).c_str());
 }
 
-void GrCCPRQuadraticShader::emitWind(GrGLSLShaderBuilder* s, const char* pts, const char* rtAdjust,
+void GrCCPRQuadraticShader::emitWind(GrGLSLShaderBuilder* s, const char* pts,
                                      const char* outputWind) const {
     s->codeAppendf("float area_times_2 = determinant(float2x2(%s[1] - %s[0], %s[2] - %s[0]));",
                                                      pts, pts, pts, pts);
     // Drop curves that are nearly flat, in favor of the higher quality triangle antialiasing.
-    s->codeAppendf("if (2 * abs(area_times_2) < length((%s[2] - %s[0]) * %s.zx)) {",
-                   pts, pts, rtAdjust);
+    s->codeAppendf("if (2 * abs(area_times_2) < length(%s[2] - %s[0])) {", pts, pts);
 #ifndef SK_BUILD_FOR_MAC
     s->codeAppend (    "return;");
 #else
@@ -35,8 +34,7 @@ void GrCCPRQuadraticShader::emitWind(GrGLSLShaderBuilder* s, const char* pts, co
 }
 
 void GrCCPRQuadraticShader::emitSetupCode(GrGLSLShaderBuilder* s, const char* pts,
-                                          const char* segmentId, const char* bloat,
-                                          const char* wind, const char* rtAdjust,
+                                          const char* segmentId, const char* wind,
                                           GeometryVars* vars) const {
     s->declareGlobal(fCanonicalMatrix);
     s->codeAppendf("%s = float3x3(0.0, 0, 1, "
@@ -47,16 +45,12 @@ void GrCCPRQuadraticShader::emitSetupCode(GrGLSLShaderBuilder* s, const char* pt
                                          "%s[2], 1));",
                    fCanonicalMatrix.c_str(), pts, pts, pts);
 
-    s->declareGlobal(fCanonicalDerivatives);
-    s->codeAppendf("%s = float2x2(%s) * float2x2(%s.x, 0, 0, %s.z);",
-                   fCanonicalDerivatives.c_str(), fCanonicalMatrix.c_str(), rtAdjust, rtAdjust);
-
     s->declareGlobal(fEdgeDistanceEquation);
     s->codeAppendf("float2 edgept0 = %s[%s > 0 ? 2 : 0];", pts, wind);
     s->codeAppendf("float2 edgept1 = %s[%s > 0 ? 0 : 2];", pts, wind);
     Shader::EmitEdgeDistanceEquation(s, "edgept0", "edgept1", fEdgeDistanceEquation.c_str());
 
-    this->onEmitSetupCode(s, pts, segmentId, rtAdjust, vars);
+    this->onEmitSetupCode(s, pts, segmentId, vars);
 }
 
 GrCCPRQuadraticShader::WindHandling
@@ -75,8 +69,7 @@ GrCCPRQuadraticShader::onEmitVaryings(GrGLSLVaryingHandler* varyingHandler, SkSt
 }
 
 void GrCCPRQuadraticHullShader::onEmitSetupCode(GrGLSLShaderBuilder* s, const char* pts,
-                                                const char* /*wedgeId*/, const char* /*rtAdjust*/,
-                                                GeometryVars* vars) const {
+                                                const char* /*wedgeId*/, GeometryVars* vars) const {
     // Find the T value whose tangent is halfway between the tangents at the endpionts.
     s->codeAppendf("float2 tan0 = %s[1] - %s[0];", pts, pts);
     s->codeAppendf("float2 tan1 = %s[2] - %s[1];", pts, pts);
@@ -96,8 +89,8 @@ void GrCCPRQuadraticHullShader::onEmitSetupCode(GrGLSLShaderBuilder* s, const ch
 void GrCCPRQuadraticHullShader::onEmitVaryings(GrGLSLVaryingHandler* varyingHandler,
                                                SkString* code) {
     varyingHandler->addVarying("grad", &fGrad);
-    code->appendf("%s = float2(2 * %s.x, -1) * %s;",
-                  fGrad.gsOut(), fXYD.gsOut(), fCanonicalDerivatives.c_str());
+    code->appendf("%s = float2(2 * %s.x, -1) * float2x2(%s);",
+                  fGrad.gsOut(), fXYD.gsOut(), fCanonicalMatrix.c_str());
 }
 
 void GrCCPRQuadraticHullShader::onEmitFragmentCode(GrGLSLPPFragmentBuilder* f,
@@ -109,12 +102,7 @@ void GrCCPRQuadraticHullShader::onEmitFragmentCode(GrGLSLPPFragmentBuilder* f,
 }
 
 void GrCCPRQuadraticCornerShader::onEmitSetupCode(GrGLSLShaderBuilder* s, const char* pts,
-                                                  const char* cornerId, const char* rtAdjust,
-                                                  GeometryVars* vars) const {
-    s->declareGlobal(fEdgeDistanceDerivatives);
-    s->codeAppendf("%s = %s.xy * %s.xz;",
-                   fEdgeDistanceDerivatives.c_str(), fEdgeDistanceEquation.c_str(), rtAdjust);
-
+                                                  const char* cornerId, GeometryVars* vars) const {
     s->codeAppendf("float2 corner = %s[%s * 2];", pts, cornerId);
     vars->fCornerVars.fPoint = "corner";
 }
@@ -123,13 +111,13 @@ void GrCCPRQuadraticCornerShader::onEmitVaryings(GrGLSLVaryingHandler* varyingHa
                                                  SkString* code) {
     varyingHandler->addFlatVarying("dXYDdx", &fdXYDdx);
     code->appendf("%s = float3(%s[0].x, %s[0].y, %s.x);",
-                  fdXYDdx.gsOut(), fCanonicalDerivatives.c_str(), fCanonicalDerivatives.c_str(),
-                  fEdgeDistanceDerivatives.c_str());
+                  fdXYDdx.gsOut(), fCanonicalMatrix.c_str(), fCanonicalMatrix.c_str(),
+                  fEdgeDistanceEquation.c_str());
 
     varyingHandler->addFlatVarying("dXYDdy", &fdXYDdy);
     code->appendf("%s = float3(%s[1].x, %s[1].y, %s.y);",
-                  fdXYDdy.gsOut(), fCanonicalDerivatives.c_str(), fCanonicalDerivatives.c_str(),
-                  fEdgeDistanceDerivatives.c_str());
+                  fdXYDdy.gsOut(), fCanonicalMatrix.c_str(), fCanonicalMatrix.c_str(),
+                  fEdgeDistanceEquation.c_str());
 }
 
 void GrCCPRQuadraticCornerShader::onEmitFragmentCode(GrGLSLPPFragmentBuilder* f,
