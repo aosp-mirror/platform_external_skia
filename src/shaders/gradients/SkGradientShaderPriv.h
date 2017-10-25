@@ -188,7 +188,7 @@ protected:
 
     bool onAsLuminanceColor(SkColor*) const override;
 
-    void initLinearBitmap(SkBitmap* bitmap) const;
+    void initLinearBitmap(SkBitmap* bitmap, GradientBitmapType) const;
 
     bool onAppendStages(const StageRec&) const override;
 
@@ -257,7 +257,7 @@ static inline int next_dither_toggle(int toggle) {
 
 #if SK_SUPPORT_GPU
 
-#include "GrColorSpaceXform.h"
+#include "GrColorSpaceInfo.h"
 #include "GrCoordTransform.h"
 #include "GrFragmentProcessor.h"
 #include "glsl/GrGLSLFragmentProcessor.h"
