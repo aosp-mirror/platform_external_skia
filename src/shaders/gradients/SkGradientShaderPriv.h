@@ -122,26 +122,18 @@ public:
     // The cache is initialized on-demand when getCache32 is called.
     class GradientShaderCache : public SkRefCnt {
     public:
-        GradientShaderCache(U8CPU alpha, bool dither, const SkGradientShaderBase& shader);
+        GradientShaderCache(const SkGradientShaderBase& shader);
         ~GradientShaderCache();
 
         const SkPMColor*    getCache32();
 
         SkPixelRef* getCache32PixelRef() const { return fCache32PixelRef.get(); }
 
-        unsigned getAlpha() const { return fCacheAlpha; }
-        bool getDither() const { return fCacheDither; }
-
     private:
         // Working pointer. If it's nullptr, we need to recompute the cache values.
         SkPMColor*  fCache32;
 
         sk_sp<SkPixelRef> fCache32PixelRef;
-        const unsigned    fCacheAlpha;        // The alpha value we used when we computed the cache.
-                                              // Larger than 8bits so we can store uninitialized
-                                              // value.
-        const bool        fCacheDither;       // The dither flag used when we computed the cache.
-
         const SkGradientShaderBase& fShader;
 
         // Make sure we only initialize the cache once.
@@ -150,28 +142,7 @@ public:
         static void initCache32(GradientShaderCache* cache);
 
         static void Build32bitCache(SkPMColor[], SkColor c0, SkColor c1, int count,
-                                    U8CPU alpha, uint32_t gradFlags, bool dither);
-    };
-
-    class GradientShaderBaseContext : public Context {
-    public:
-        GradientShaderBaseContext(const SkGradientShaderBase& shader, const ContextRec&);
-
-        uint32_t getFlags() const override { return fFlags; }
-
-        bool isValid() const;
-
-    protected:
-        SkMatrix    fDstToIndex;
-        SkMatrixPriv::MapXYProc fDstToIndexProc;
-        uint8_t     fDstToIndexClass;
-        uint8_t     fFlags;
-        bool        fDither;
-
-        sk_sp<GradientShaderCache> fCache;
-
-    private:
-        typedef Context INHERITED;
+                                    uint32_t gradFlags);
     };
 
     bool isOpaque() const override;
@@ -217,7 +188,7 @@ protected:
 
     bool onAsLuminanceColor(SkColor*) const override;
 
-    void initLinearBitmap(SkBitmap* bitmap) const;
+    void initLinearBitmap(SkBitmap* bitmap, GradientBitmapType) const;
 
     bool onAppendStages(const StageRec&) const override;
 
@@ -262,7 +233,7 @@ public:
 private:
     bool                fColorsAreOpaque;
 
-    sk_sp<GradientShaderCache> refCache(U8CPU alpha, bool dither) const;
+    sk_sp<GradientShaderCache> refCache() const;
     mutable SkMutex                    fCacheMutex;
     mutable sk_sp<GradientShaderCache> fCache;
 
@@ -286,10 +257,9 @@ static inline int next_dither_toggle(int toggle) {
 
 #if SK_SUPPORT_GPU
 
-#include "GrColorSpaceXform.h"
+#include "GrColorSpaceInfo.h"
 #include "GrCoordTransform.h"
 #include "GrFragmentProcessor.h"
-#include "glsl/GrGLSLColorSpaceXformHelper.h"
 #include "glsl/GrGLSLFragmentProcessor.h"
 #include "glsl/GrGLSLProgramDataManager.h"
 
@@ -328,13 +298,11 @@ public:
                    const SkGradientShaderBase* shader,
                    const SkMatrix* matrix,
                    SkShader::TileMode tileMode,
-                   sk_sp<GrColorSpaceXform> colorSpaceXform,
-                   bool gammaCorrect)
+                   const SkColorSpace* dstColorSpace)
                 : fContext(context)
                 , fShader(shader)
                 , fMatrix(matrix)
-                , fColorSpaceXform(std::move(colorSpaceXform))
-                , fGammaCorrect(gammaCorrect) {
+                , fDstColorSpace(dstColorSpace) {
             switch (tileMode) {
                 case SkShader::kClamp_TileMode:
                     fWrapMode = GrSamplerState::WrapMode::kClamp;
@@ -352,21 +320,18 @@ public:
                    const SkGradientShaderBase* shader,
                    const SkMatrix* matrix,
                    GrSamplerState::WrapMode wrapMode,
-                   sk_sp<GrColorSpaceXform> colorSpaceXform,
-                   bool gammaCorrect)
+                   const SkColorSpace* dstColorSpace)
                 : fContext(context)
                 , fShader(shader)
                 , fMatrix(matrix)
                 , fWrapMode(wrapMode)
-                , fColorSpaceXform(std::move(colorSpaceXform))
-                , fGammaCorrect(gammaCorrect) {}
+                , fDstColorSpace(dstColorSpace) {}
 
         GrContext*                  fContext;
         const SkGradientShaderBase* fShader;
         const SkMatrix*             fMatrix;
         GrSamplerState::WrapMode    fWrapMode;
-        sk_sp<GrColorSpaceXform>    fColorSpaceXform;
-        bool                        fGammaCorrect;
+        const SkColorSpace*         fDstColorSpace;
     };
 
     class GLSLProcessor;
@@ -413,7 +378,28 @@ protected:
     GrGradientEffect(ClassID classID, const CreateArgs&, bool isOpaque);
     explicit GrGradientEffect(const GrGradientEffect&);  // facilitates clone() implementations
 
-    #if GR_TEST_UTILS
+    // Helper function used by derived class factories to handle color space transformation and
+    // modulation by input alpha.
+    static std::unique_ptr<GrFragmentProcessor> AdjustFP(
+            std::unique_ptr<GrGradientEffect> gradientFP, const CreateArgs& args) {
+        if (!gradientFP->isValid()) {
+            return nullptr;
+        }
+        std::unique_ptr<GrFragmentProcessor> fp;
+        // With analytic gradients, we pre-convert the stops to the destination color space, so no
+        // xform is needed. With texture-based gradients, we leave the data in the source color
+        // space (to avoid clamping if we can't use F16)... Add an extra FP to do the xform.
+        if (kTexture_ColorType == gradientFP->getColorType()) {
+            fp = GrColorSpaceXformEffect::Make(std::move(gradientFP),
+                                               args.fShader->fColorSpace.get(),
+                                               args.fDstColorSpace);
+        } else {
+            fp = std::move(gradientFP);
+        }
+        return GrFragmentProcessor::MulOutputByInputAlpha(std::move(fp));
+    }
+
+#if GR_TEST_UTILS
     /** Helper struct that stores (and populates) parameters to construct a random gradient.
         If fUseColors4f is true, then the SkColor4f factory should be called, with fColors4f and
         fColorSpace. Otherwise, the SkColor factory should be called, with fColors. fColorCount
@@ -449,9 +435,6 @@ private:
     static OptimizationFlags OptFlags(bool isOpaque);
 
     SkTDArray<GrColor4f> fColors4f;
-
-    // Only present if a color space transformation is needed
-    sk_sp<GrColorSpaceXform> fColorSpaceXform;
 
     SkTDArray<SkScalar> fPositions;
     GrSamplerState::WrapMode fWrapMode;
@@ -541,7 +524,6 @@ private:
     GrGLSLProgramDataManager::UniformHandle fColorsUni;
     GrGLSLProgramDataManager::UniformHandle fExtraStopT;
     GrGLSLProgramDataManager::UniformHandle fFSYUni;
-    GrGLSLColorSpaceXformHelper             fColorSpaceHelper;
 
     typedef GrGLSLFragmentProcessor INHERITED;
 };

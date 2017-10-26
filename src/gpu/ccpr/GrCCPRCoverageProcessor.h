@@ -34,9 +34,6 @@ class GrGLSLShaderBuilder;
  */
 class GrCCPRCoverageProcessor : public GrGeometryProcessor {
 public:
-    // Use top-left to avoid a uniform access in the fragment shader.
-    static constexpr GrSurfaceOrigin kAtlasOrigin = kTopLeft_GrSurfaceOrigin;
-
     static constexpr GrPrimitiveType kTrianglesGrPrimitiveType = GrPrimitiveType::kTriangles;
     static constexpr GrPrimitiveType kQuadraticsGrPrimitiveType = GrPrimitiveType::kTriangles;
     static constexpr GrPrimitiveType kCubicsGrPrimitiveType = GrPrimitiveType::kLinesAdjacency;
@@ -127,7 +124,7 @@ public:
 
         // Determines the winding direction of the primitive. The subclass must write a value of
         // either -1, 0, or +1 to "outputWind" (e.g. "sign(area)"). Fractional values are not valid.
-        virtual void emitWind(GrGLSLShaderBuilder*, const char* pts, const char* rtAdjust,
+        virtual void emitWind(GrGLSLShaderBuilder*, const char* pts,
                               const char* outputWind) const = 0;
 
         union GeometryVars {
@@ -147,8 +144,7 @@ public:
         // GeometryVars (if any), and may also use this opportunity to setup internal member
         // variables that will be needed during onEmitVaryings (e.g. transformation matrices).
         virtual void emitSetupCode(GrGLSLShaderBuilder*, const char* pts, const char* segmentId,
-                                   const char* bloat, const char* wind, const char* rtAdjust,
-                                   GeometryVars*) const {}
+                                   const char* wind, GeometryVars*) const {}
 
         void emitVaryings(GrGLSLVaryingHandler*, SkString* code, const char* position,
                           const char* coverage, const char* wind);
@@ -157,7 +153,8 @@ public:
                               const char* skOutputColor, const char* skOutputCoverage) const;
 
         // Defines an equation ("dot(float3(pt, 1), distance_equation)") that is -1 on the outside
-        // border of a conservative raster edge and 0 on the inside (see emitEdgeGeometry).
+        // border of a conservative raster edge and 0 on the inside. 'leftPt' and 'rightPt' must be
+        // ordered clockwise.
         static void EmitEdgeDistanceEquation(GrGLSLShaderBuilder*, const char* leftPt,
                                              const char* rightPt,
                                              const char* outputDistanceEquation);
@@ -213,8 +210,6 @@ public:
     void enableDebugVisualizations(float debugBloat) { fDebugBloat = debugBloat; }
     bool debugVisualizationsEnabled() const { return fDebugBloat > 0; }
     float debugBloat() const { SkASSERT(this->debugVisualizationsEnabled()); return fDebugBloat; }
-
-    static void Validate(GrRenderTargetProxy* atlasProxy);
 #endif
 
     class GSImpl;
