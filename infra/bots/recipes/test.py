@@ -106,6 +106,11 @@ def dm_flags(api, bot):
     if 'SK_FORCE_RASTER_PIPELINE_BLITTER' in bot:
       configs = ['8888', 'srgb']
 
+    if 'FSAA' in bot or 'FAAA' in bot or 'FDAA' in bot:
+      # Scan converters shouldn't really be sensitive to different color
+      # configurations.
+      configs = ['8888', 'tiles_rt-8888']
+
   elif api.vars.builder_cfg.get('cpu_or_gpu') == 'GPU':
     args.append('--nocpu')
 
@@ -876,7 +881,7 @@ TEST_BUILDERS = [
   'Test-Android-Clang-GalaxyS7_G930A-GPU-Adreno530-arm64-Debug-All-Android',
   'Test-Android-Clang-NVIDIA_Shield-GPU-TegraX1-arm64-Debug-All-Android',
   'Test-Android-Clang-NVIDIA_Shield-GPU-TegraX1-arm64-Debug-All-Android_CCPR',
-  'Test-Android-Clang-Nexus10-GPU-MaliT604-arm-Release-All-Android',
+  'Test-Android-Clang-Nexus10-CPU-Exynos5250-arm-Release-All-Android',
   'Test-Android-Clang-Nexus5-GPU-Adreno330-arm-Release-All-Android',
   'Test-Android-Clang-Nexus6p-GPU-Adreno430-arm64-Debug-All-Android_Vulkan',
   'Test-Android-Clang-Nexus7-GPU-Tegra3-arm-Debug-All-Android',
@@ -922,9 +927,9 @@ TEST_BUILDERS = [
   'Test-Win10-Clang-ShuttleA-GPU-GTX660-x86_64-Debug-All-Vulkan',
   'Test-Win10-Clang-ShuttleC-GPU-GTX960-x86_64-Debug-All-ANGLE',
   'Test-Win10-Clang-ZBOX-GPU-GTX1070-x86_64-Debug-All-Vulkan',
-  'Test-Win10-Clang-ZBOX-GPU-GTX1070-x86_64-Debug-All-Vulkan_FSAA',
-  'Test-Win10-Clang-ZBOX-GPU-GTX1070-x86_64-Debug-All-Vulkan_FAAA',
-  'Test-Win10-Clang-ZBOX-GPU-GTX1070-x86_64-Debug-All-Vulkan_FDAA',
+  'Test-Win2k8-Clang-GCE-CPU-AVX2-x86_64-Debug-All-FAAA',
+  'Test-Win2k8-Clang-GCE-CPU-AVX2-x86_64-Debug-All-FDAA',
+  'Test-Win2k8-Clang-GCE-CPU-AVX2-x86_64-Debug-All-FSAA',
   'Test-Win8-MSVC-Golo-CPU-AVX-x86-Debug-All',
   'Test-iOS-Clang-iPadPro-GPU-GT7800-arm64-Release-All',
 ]
@@ -1056,7 +1061,7 @@ def GenTests(api):
                   '/sdcard/revenge_of_the_skiabot/resources', retcode=1)
   )
 
-  builder = 'Test-Android-Clang-Nexus10-GPU-MaliT604-arm-Debug-All-Android'
+  builder = 'Test-Android-Clang-Nexus7-GPU-Tegra3-arm-Debug-All-Android'
   yield (
     api.test('failed_pull') +
     api.properties(buildername=builder,

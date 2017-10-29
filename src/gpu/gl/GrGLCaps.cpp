@@ -1152,6 +1152,12 @@ void GrGLCaps::initFSAASupport(const GrContextOptions& contextOptions, const GrG
     }
 
     if (kGL_GrGLStandard != ctxInfo.standard()) {
+        if (ctxInfo.version() >= GR_GL_VER(3,0) &&
+            ctxInfo.renderer() != kGalliumLLVM_GrGLRenderer) {
+            // The gallium llvmpipe renderer for es3.0 does not have textureRed support even though
+            // it is part of the spec. Thus alpha8 will not be renderable for those devices.
+            fAlpha8IsRenderable = true;
+        }
         // We prefer the EXT/IMG extension over ES3 MSAA because we've observed
         // ES3 driver bugs on at least one device with a tiled GPU (N10).
         if (ctxInfo.hasExtension("GL_EXT_multisampled_render_to_texture")) {
@@ -1162,7 +1168,6 @@ void GrGLCaps::initFSAASupport(const GrContextOptions& contextOptions, const GrG
             fMSFBOType = kMixedSamples_MSFBOType;
         } else if (ctxInfo.version() >= GR_GL_VER(3,0)) {
             fMSFBOType = kStandard_MSFBOType;
-            fAlpha8IsRenderable = true;
         } else if (ctxInfo.hasExtension("GL_CHROMIUM_framebuffer_multisample")) {
             fMSFBOType = kStandard_MSFBOType;
         } else if (ctxInfo.hasExtension("GL_ANGLE_framebuffer_multisample")) {
@@ -2137,6 +2142,14 @@ void GrGLCaps::initConfigTable(const GrContextOptions& contextOptions,
             fConfigTable[i].fFormats.fSizedInternalFormat :
             fConfigTable[i].fFormats.fBaseInternalFormat;
     }
+    // Gallium llvmpipe renderer on ES 3.0 does not have R8 so we use Alpha for
+    // kAlpha_8_GrPixelConfig. Alpha8 is not a valid signed internal format so we must use the base
+    // internal format for that config when doing TexImage calls.
+    if(kGalliumLLVM_GrGLRenderer == ctxInfo.renderer()) {
+        fConfigTable[kAlpha_8_GrPixelConfig].fFormats.fInternalFormatTexImage =
+            fConfigTable[kAlpha_8_GrPixelConfig].fFormats.fBaseInternalFormat;
+    }
+
     // OpenGL ES 2.0 + GL_EXT_sRGB allows GL_SRGB_ALPHA to be specified as the <format>
     // param to Tex(Sub)Image. ES 2.0 requires the <internalFormat> and <format> params to match.
     // Thus, on ES 2.0 we will use GL_SRGB_ALPHA as the <format> param.
