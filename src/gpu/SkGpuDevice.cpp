@@ -164,7 +164,7 @@ sk_sp<GrRenderTargetContext> SkGpuDevice::MakeRenderTargetContext(
                                     SkBackingFit::kExact,
                                     origInfo.width(), origInfo.height(),
                                     config, origInfo.refColorSpace(), sampleCount,
-                                    false, origin, surfaceProps, budgeted);
+                                    mipMapped, origin, surfaceProps, budgeted);
 }
 
 sk_sp<SkSpecialImage> SkGpuDevice::filterTexture(SkSpecialImage* srcImg,
@@ -1238,6 +1238,7 @@ sk_sp<SkSpecialImage> SkGpuDevice::snapSpecial() {
         // filter
         proxy = GrSurfaceProxy::Copy(fContext.get(),
                                      this->accessRenderTargetContext()->asSurfaceProxy(),
+                                     GrMipMapped::kNo,
                                      SkBudgeted::kYes);
         if (!proxy) {
             return nullptr;
@@ -1702,7 +1703,8 @@ SkBaseDevice* SkGpuDevice::onCreateDevice(const CreateInfo& cinfo, const SkPaint
             fit, cinfo.fInfo.width(), cinfo.fInfo.height(),
             fRenderTargetContext->colorSpaceInfo().config(),
             fRenderTargetContext->colorSpaceInfo().refColorSpace(),
-            fRenderTargetContext->numStencilSamples(), false, kBottomLeft_GrSurfaceOrigin, &props));
+            fRenderTargetContext->numStencilSamples(), GrMipMapped::kNo,
+            kBottomLeft_GrSurfaceOrigin, &props));
     if (!rtc) {
         return nullptr;
     }
