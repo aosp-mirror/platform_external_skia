@@ -1379,7 +1379,6 @@ cc_test {
         "tests/DFPathRendererTest.cpp",
         "tests/DashPathEffectTest.cpp",
         "tests/DataRefTest.cpp",
-        "tests/DefaultPathRendererTest.cpp",
         "tests/DequeTest.cpp",
         "tests/DetermineDomainModeTest.cpp",
         "tests/DeviceLooperTest.cpp",

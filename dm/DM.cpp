@@ -38,7 +38,6 @@
 #include "SkSpinlock.h"
 #include "SkTHash.h"
 #include "SkTaskGroup.h"
-#include "SkThreadUtils.h"
 #include "Test.h"
 #include "Timer.h"
 #include "ios_utils.h"
@@ -1282,11 +1281,8 @@ static void run_test(skiatest::Test test, const GrContextOptions& grCtxOptions) 
     } reporter;
 
     if (!FLAGS_dryRun && !is_blacklisted("_", "tests", "_", test.name)) {
-        GrContextOptions options = grCtxOptions;
-        test.modifyGrContextOptions(&options);
-
         start("unit", "test", "", test.name);
-        GrContextFactory factory(options);
+        GrContextFactory factory(grCtxOptions);
         test.run(&reporter, &factory);
     }
     done("unit", "test", "", test.name);
