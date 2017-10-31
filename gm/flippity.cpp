@@ -128,6 +128,9 @@ static sk_sp<SkImage> make_image(GrContext* context, const SkTArray<sk_sp<SkImag
     sk_sp<GrTextureProxy> proxy = GrSurfaceProxy::MakeDeferred(context->resourceProvider(),
                                                                desc, SkBudgeted::kYes,
                                                                bm.getPixels(), bm.rowBytes());
+    if (!proxy) {
+        return nullptr;
+    }
 
     return sk_make_sp<SkImage_Gpu>(context, kNeedNewImageUniqueID, kOpaque_SkAlphaType,
                                    std::move(proxy), nullptr, SkBudgeted::kYes);
