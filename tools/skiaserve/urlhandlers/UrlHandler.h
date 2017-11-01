@@ -4,6 +4,8 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
+#ifndef UrlHandler_DEFINED
+#define UrlHandler_DEFINED
 
 #include "SkColor.h"
 
@@ -41,8 +43,6 @@ public:
     int handle(Request* request, MHD_Connection* connection,
                const char* url, const char* method,
                const char* upload_data, size_t* upload_data_size) override;
-private:
-    static SkColor GetPixel(Request* request, int x, int y);
 };
 
 /**
@@ -58,10 +58,22 @@ public:
 };
 
 /**
-   Controls whether GPU rendering is enabled. Posting to /enableGPU/1 turns GPU on, /enableGPU/0 
+   Controls whether GPU rendering is enabled. Posting to /enableGPU/1 turns GPU on, /enableGPU/0
    disables it.
  */
 class EnableGPUHandler : public UrlHandler {
+public:
+    bool canHandle(const char* method, const char* url) override;
+    int handle(Request* request, MHD_Connection* connection,
+               const char* url, const char* method,
+               const char* upload_data, size_t* upload_data_size) override;
+};
+
+/**
+   Controls whether overdraw rendering is enabled. Posting to /overdraw/1 turns overdraw on,
+   /overdraw/0 disables it.
+ */
+class OverdrawHandler : public UrlHandler {
 public:
     bool canHandle(const char* method, const char* url) override;
     int handle(Request* request, MHD_Connection* connection,
@@ -101,6 +113,28 @@ public:
                const char* upload_data, size_t* upload_data_size) override;
 };
 
+/*
+ * Returns a json descripton of all the GPU ops in the image
+ */
+class OpsHandler : public UrlHandler {
+public:
+    bool canHandle(const char* method, const char* url) override;
+    int handle(Request* request, MHD_Connection* connection,
+               const char* url, const char* method,
+               const char* upload_data, size_t* upload_data_size) override;
+};
+
+/*
+ * Enables drawing of gpu op bounds
+ */
+class OpBoundsHandler : public UrlHandler {
+public:
+    bool canHandle(const char* method, const char* url) override;
+    int handle(Request* request, MHD_Connection* connection,
+               const char* url, const char* method,
+               const char* upload_data, size_t* upload_data_size) override;
+};
+
 class RootHandler : public UrlHandler {
 public:
     bool canHandle(const char* method, const char* url) override;
@@ -109,3 +143,25 @@ public:
                const char* upload_data, size_t* upload_data_size) override;
 };
 
+/**
+ * Controls how rendering is performed (L32, S32, F16).
+ * Posting to /colorMode/0 turns on L32, /colorMode/1 turns on sRGB,
+ * /colorMode/2 turns on FP16.
+ */
+class ColorModeHandler : public UrlHandler {
+public:
+    bool canHandle(const char* method, const char* url) override;
+    int handle(Request* request, MHD_Connection* connection,
+               const char* url, const char* method,
+               const char* upload_data, size_t* upload_data_size) override;
+};
+
+class QuitHandler : public UrlHandler {
+public:
+    bool canHandle(const char* method, const char* url) override;
+    int handle(Request* request, MHD_Connection* connection,
+               const char* url, const char* method,
+               const char* upload_data, size_t* upload_data_size) override;
+};
+
+#endif  // UrlHandler_DEFINED

@@ -133,7 +133,7 @@ XFERMODE(ColorDodge) {
 
     auto srcover = s + d*isa,
          dstover = d + s*ida,
-         otherwise = sa * Sk4f::Min(da, (d*sa)*(sa-s).approxInvert()) + s*ida + d*isa;
+         otherwise = sa * Sk4f::Min(da, (d*sa)*(sa-s).invert()) + s*ida + d*isa;
 
     // Order matters here, preferring d==0 over s==sa.
     auto colors = (d == Sk4f(0)).thenElse(dstover,
@@ -149,7 +149,7 @@ XFERMODE(ColorBurn) {
 
     auto srcover = s + d*isa,
          dstover = d + s*ida,
-         otherwise = sa*(da-Sk4f::Min(da, (da-d)*sa*s.approxInvert())) + s*ida + d*isa;
+         otherwise = sa*(da-Sk4f::Min(da, (da-d)*sa*s.invert())) + s*ida + d*isa;
 
     // Order matters here, preferring d==da over s==0.
     auto colors = (d ==      da).thenElse(dstover,
@@ -217,7 +217,7 @@ template <> void mark_dst_initialized_if_safe<Clear>(void* dst, void* end) {
 template <typename Xfermode>
 class Sk4pxXfermode : public SkProcCoeffXfermode {
 public:
-    Sk4pxXfermode(const ProcCoeff& rec, SkXfermode::Mode mode)
+    Sk4pxXfermode(const ProcCoeff& rec, SkBlendMode mode)
         : INHERITED(rec, mode) {}
 
     void xfer32(SkPMColor dst[], const SkPMColor src[], int n, const SkAlpha aa[]) const override {
@@ -229,39 +229,6 @@ public:
         }
     }
 
-    void xfer16(uint16_t dst[], const SkPMColor src[], int n, const SkAlpha aa[]) const override {
-        mark_dst_initialized_if_safe<Xfermode>(dst, dst+n);
-        SkPMColor dst32[4];
-        while (n >= 4) {
-            dst32[0] = SkPixel16ToPixel32(dst[0]);
-            dst32[1] = SkPixel16ToPixel32(dst[1]);
-            dst32[2] = SkPixel16ToPixel32(dst[2]);
-            dst32[3] = SkPixel16ToPixel32(dst[3]);
-
-            this->xfer32(dst32, src, 4, aa);
-
-            dst[0] = SkPixel32ToPixel16(dst32[0]);
-            dst[1] = SkPixel32ToPixel16(dst32[1]);
-            dst[2] = SkPixel32ToPixel16(dst32[2]);
-            dst[3] = SkPixel32ToPixel16(dst32[3]);
-
-            dst += 4;
-            src += 4;
-            aa  += aa ? 4 : 0;
-            n -= 4;
-        }
-        while (n) {
-            SkPMColor dst32 = SkPixel16ToPixel32(*dst);
-            this->xfer32(&dst32, src, 1, aa);
-            *dst = SkPixel32ToPixel16(dst32);
-
-            dst += 1;
-            src += 1;
-            aa  += aa ? 1 : 0;
-            n   -= 1;
-        }
-    }
-
 private:
     typedef SkProcCoeffXfermode INHERITED;
 };
@@ -269,20 +236,12 @@ private:
 template <typename Xfermode>
 class Sk4fXfermode : public SkProcCoeffXfermode {
 public:
-    Sk4fXfermode(const ProcCoeff& rec, SkXfermode::Mode mode)
+    Sk4fXfermode(const ProcCoeff& rec, SkBlendMode mode)
         : INHERITED(rec, mode) {}
 
     void xfer32(SkPMColor dst[], const SkPMColor src[], int n, const SkAlpha aa[]) const override {
         for (int i = 0; i < n; i++) {
             dst[i] = Xfer32_1(dst[i], src[i], aa ? aa+i : nullptr);
-        }
-    }
-
-    void xfer16(uint16_t dst[], const SkPMColor src[], int n, const SkAlpha aa[]) const override {
-        for (int i = 0; i < n; i++) {
-            SkPMColor dst32 = SkPixel16ToPixel32(dst[i]);
-            dst32 = Xfer32_1(dst32, src[i], aa ? aa+i : nullptr);
-            dst[i] = SkPixel32ToPixel16(dst32);
         }
     }
 
@@ -315,10 +274,10 @@ private:
 
 namespace SK_OPTS_NS {
 
-static SkXfermode* create_xfermode(const ProcCoeff& rec, SkXfermode::Mode mode) {
+static SkXfermode* create_xfermode(const ProcCoeff& rec, SkBlendMode mode) {
     switch (mode) {
 #define CASE(Xfermode) \
-    case SkXfermode::k##Xfermode##_Mode: return new Sk4pxXfermode<Xfermode>(rec, mode)
+    case SkBlendMode::k##Xfermode: return new Sk4pxXfermode<Xfermode>(rec, mode)
         CASE(Clear);
         CASE(Src);
         CASE(Dst);
@@ -344,7 +303,7 @@ static SkXfermode* create_xfermode(const ProcCoeff& rec, SkXfermode::Mode mode) 
     #undef CASE
 
 #define CASE(Xfermode) \
-    case SkXfermode::k##Xfermode##_Mode: return new Sk4fXfermode<Xfermode>(rec, mode)
+    case SkBlendMode::k##Xfermode: return new Sk4fXfermode<Xfermode>(rec, mode)
         CASE(ColorDodge);
         CASE(ColorBurn);
         CASE(SoftLight);

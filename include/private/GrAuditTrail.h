@@ -9,9 +9,14 @@
 #define GrAuditTrail_DEFINED
 
 #include "GrConfig.h"
+#include "GrGpuResource.h"
+#include "GrRenderTargetProxy.h"
 #include "SkRect.h"
 #include "SkString.h"
 #include "SkTArray.h"
+#include "SkTHash.h"
+
+class GrOp;
 
 /*
  * GrAuditTrail collects a list of draw ops, detailed information about those ops, and can dump them
@@ -25,27 +30,8 @@
 class GrAuditTrail {
 public:
     GrAuditTrail() 
-    : fEnabled(false)
-    , fUniqueID(0) {}
-
-    class AutoFrame {
-    public:
-        AutoFrame(GrAuditTrail* auditTrail, const char* name)
-            : fAuditTrail(auditTrail) {
-            if (fAuditTrail->fEnabled) {
-                fAuditTrail->pushFrame(name);
-            }
-        }
-
-        ~AutoFrame() {
-            if (fAuditTrail->fEnabled) {
-                fAuditTrail->popFrame();
-            }
-        }
-
-    private:
-        GrAuditTrail* fAuditTrail;
-    };
+    : fClientID(kGrAuditTrailInvalidID)
+    , fEnabled(false) {}
 
     class AutoEnable {
     public:
@@ -64,68 +50,117 @@ public:
         GrAuditTrail* fAuditTrail;
     };
 
-    void pushFrame(const char* name) {
-        SkASSERT(fEnabled);
-        Frame* frame = new Frame;
-        if (fStack.empty()) {
-            fFrames.emplace_back(frame);
-        } else {
-            fStack.back()->fChildren.emplace_back(frame);
+    class AutoManageOpList {
+    public:
+        AutoManageOpList(GrAuditTrail* auditTrail)
+                : fAutoEnable(auditTrail), fAuditTrail(auditTrail) {}
+
+        ~AutoManageOpList() { fAuditTrail->fullReset(); }
+
+    private:
+        AutoEnable fAutoEnable;
+        GrAuditTrail* fAuditTrail;
+    };
+
+    class AutoCollectOps {
+    public:
+        AutoCollectOps(GrAuditTrail* auditTrail, int clientID)
+                : fAutoEnable(auditTrail), fAuditTrail(auditTrail) {
+            fAuditTrail->setClientID(clientID);
         }
 
-        frame->fUniqueID = fUniqueID++;
-        frame->fName = name;
-        fStack.push_back(frame);
-    }
+        ~AutoCollectOps() { fAuditTrail->setClientID(kGrAuditTrailInvalidID); }
 
-    void popFrame() {
+    private:
+        AutoEnable fAutoEnable;
+        GrAuditTrail* fAuditTrail;
+    };
+
+    void pushFrame(const char* framename) {
         SkASSERT(fEnabled);
-        fStack.pop_back();
+        fCurrentStackTrace.push_back(SkString(framename));
     }
 
-    void addBatch(const char* name, const SkRect& bounds) {
-        SkASSERT(fEnabled && !fStack.empty());
-        Batch* batch = new Batch;
-        fStack.back()->fChildren.emplace_back(batch);
-        batch->fName = name;
-        batch->fBounds = bounds;
-    }
+    void addOp(const GrOp*, GrRenderTargetProxy::UniqueID proxyID);
 
+    void opsCombined(const GrOp* consumer, const GrOp* consumed);
+
+    // Because op combining is heavily dependent on sequence of draw calls, these calls will only
+    // produce valid information for the given draw sequence which preceeded them. Specifically, ops
+    // of future draw calls may combine with previous ops and thus would invalidate the json. What
+    // this means is that for some sequence of draw calls N, the below toJson calls will only
+    // produce JSON which reflects N draw calls. This JSON may or may not be accurate for N + 1 or
+    // N - 1 draws depending on the actual combining algorithm used.
     SkString toJson(bool prettyPrint = false) const;
+
+    // returns a json string of all of the ops associated with a given client id
+    SkString toJson(int clientID, bool prettyPrint = false) const;
 
     bool isEnabled() { return fEnabled; }
     void setEnabled(bool enabled) { fEnabled = enabled; }
 
-    void reset() { SkASSERT(fEnabled && fStack.empty()); fFrames.reset(); }
+    void setClientID(int clientID) { fClientID = clientID; }
+
+    // We could just return our internal bookkeeping struct if copying the data out becomes
+    // a performance issue, but until then its nice to decouple
+    struct OpInfo {
+        struct Op {
+            int    fClientID;
+            SkRect fBounds;
+        };
+
+        SkRect                   fBounds;
+        GrSurfaceProxy::UniqueID fProxyUniqueID;
+        SkTArray<Op>             fOps;
+    };
+
+    void getBoundsByClientID(SkTArray<OpInfo>* outInfo, int clientID);
+    void getBoundsByOpListID(OpInfo* outInfo, int opListID);
+
+    void fullReset();
+
+    static const int kGrAuditTrailInvalidID;
 
 private:
     // TODO if performance becomes an issue, we can move to using SkVarAlloc
-    struct Event {
-        virtual ~Event() {}
-        virtual SkString toJson() const=0;
-
-        const char* fName;
-        uint64_t fUniqueID;
-    };
-
-    typedef SkTArray<SkAutoTDelete<Event>, true> FrameArray;
-    struct Frame : public Event {
-        SkString toJson() const override;
-        FrameArray fChildren;
-    };
-
-    struct Batch : public Event {
-        SkString toJson() const override;
+    struct Op {
+        SkString toJson() const;
+        SkString fName;
+        SkTArray<SkString> fStackTrace;
         SkRect fBounds;
+        int fClientID;
+        int fOpListID;
+        int fChildID;
     };
+    typedef SkTArray<std::unique_ptr<Op>, true> OpPool;
 
-    static void JsonifyTArray(SkString* json, const char* name, const FrameArray& array,
+    typedef SkTArray<Op*> Ops;
+
+    struct OpNode {
+        OpNode(const GrSurfaceProxy::UniqueID& proxyID) : fProxyUniqueID(proxyID) { }
+        SkString toJson() const;
+
+        SkRect                         fBounds;
+        Ops                            fChildren;
+        const GrSurfaceProxy::UniqueID fProxyUniqueID;
+    };
+    typedef SkTArray<std::unique_ptr<OpNode>, true> OpList;
+
+    void copyOutFromOpList(OpInfo* outOpInfo, int opListID);
+
+    template <typename T>
+    static void JsonifyTArray(SkString* json, const char* name, const T& array,
                               bool addComma);
 
+    OpPool fOpPool;
+    SkTHashMap<uint32_t, int> fIDLookup;
+    SkTHashMap<int, Ops*> fClientIDLookup;
+    OpList fOpList;
+    SkTArray<SkString> fCurrentStackTrace;
+
+    // The client can pass in an optional client ID which we will use to mark the ops
+    int fClientID;
     bool fEnabled;
-    FrameArray fFrames;
-    SkTArray<Frame*> fStack;
-    uint64_t fUniqueID;
 };
 
 #define GR_AUDIT_TRAIL_INVOKE_GUARD(audit_trail, invoke, ...) \
@@ -134,12 +169,17 @@ private:
     }
 
 #define GR_AUDIT_TRAIL_AUTO_FRAME(audit_trail, framename) \
-    GrAuditTrail::AutoFrame SK_MACRO_APPEND_LINE(auto_frame)(audit_trail, framename);
+    GR_AUDIT_TRAIL_INVOKE_GUARD((audit_trail), pushFrame, framename);
 
 #define GR_AUDIT_TRAIL_RESET(audit_trail) \
-    GR_AUDIT_TRAIL_INVOKE_GUARD(audit_trail, reset);
+    //GR_AUDIT_TRAIL_INVOKE_GUARD(audit_trail, fullReset);
 
-#define GR_AUDIT_TRAIL_ADDBATCH(audit_trail, batchname, bounds) \
-    GR_AUDIT_TRAIL_INVOKE_GUARD(audit_trail, addBatch, batchname, bounds);
+#define GR_AUDIT_TRAIL_ADD_OP(audit_trail, op, proxy_id) \
+    GR_AUDIT_TRAIL_INVOKE_GUARD(audit_trail, addOp, op, proxy_id);
+
+#define GR_AUDIT_TRAIL_OPS_RESULT_COMBINED(audit_trail, combineWith, op) \
+    GR_AUDIT_TRAIL_INVOKE_GUARD(audit_trail, opsCombined, combineWith, op);
+
+#define GR_AUDIT_TRAIL_OP_RESULT_NEW(audit_trail, op) // Doesn't do anything now, one day...
 
 #endif

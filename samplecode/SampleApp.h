@@ -13,10 +13,18 @@
 #include "SkPicture.h"
 #include "SkPictureRecorder.h"
 #include "SkScalar.h"
+#include "SkStream.h"
+#include "SkSurface.h"
 #include "SkTDArray.h"
 #include "SkTouchGesture.h"
 #include "SkWindow.h"
 #include "timer/Timer.h"
+
+#include "SkPipe.h"
+
+#if SK_SUPPORT_GPU
+#include "GrContextOptions.h"
+#endif
 
 class GrContext;
 class GrRenderTarget;
@@ -38,9 +46,6 @@ public:
 #if SK_ANGLE
         kANGLE_DeviceType,
 #endif // SK_ANGLE
-#if SK_COMMAND_BUFFER
-        kCommandBufferES2_DeviceType,
-#endif // SK_COMMAND_BUFFER
 #endif // SK_SUPPORT_GPU
         kDeviceTypeCnt
     };
@@ -52,9 +57,6 @@ public:
     #if SK_ANGLE
             case kANGLE_DeviceType:
     #endif // SK_ANGLE
-    #if SK_COMMAND_BUFFER
-            case kCommandBufferES2_DeviceType:
-    #endif // SK_COMMAND_BUFFER
                 return true;
             default:
                 return false;
@@ -72,15 +74,21 @@ public:
      */
     class DeviceManager : public SkRefCnt {
     public:
-        
+        struct BackendOptions {
+#if SK_SUPPORT_GPU
+            GrContextOptions   fGrContextOptions;
+            int                fMSAASampleCount;
+            bool               fDeepColor;
+#endif
+        };
 
-        virtual void setUpBackend(SampleWindow* win, int msaaSampleCount) = 0;
+        virtual void setUpBackend(SampleWindow* win, const BackendOptions&) = 0;
 
         virtual void tearDownBackend(SampleWindow* win) = 0;
 
         // called before drawing. should install correct device
         // type on the canvas. Will skip drawing if returns false.
-        virtual SkSurface* createSurface(DeviceType dType, SampleWindow* win) = 0;
+        virtual sk_sp<SkSurface> makeSurface(DeviceType dType, SampleWindow* win) = 0;
 
         // called after drawing, should get the results onto the
         // screen.
@@ -96,21 +104,25 @@ public:
         virtual GrContext* getGrContext() = 0;
 
         // return the GrRenderTarget backing gpu devices (nullptr if not built with GPU support)
-        virtual GrRenderTarget* getGrRenderTarget() = 0;
+        virtual int numColorSamples() const = 0;
+
+        // return the color depth of the output device
+        virtual int getColorBits() = 0;
+
     private:
         typedef SkRefCnt INHERITED;
     };
 
     SampleWindow(void* hwnd, int argc, char** argv, DeviceManager*);
-    virtual ~SampleWindow();
+    ~SampleWindow() override;
 
-    SkSurface* createSurface() override {
-        SkSurface* surface = nullptr;
+    sk_sp<SkSurface> makeSurface() override {
+        sk_sp<SkSurface> surface;
         if (fDevManager) {
-            surface = fDevManager->createSurface(fDeviceType, this);
+            surface = fDevManager->makeSurface(fDeviceType, this);
         }
-        if (nullptr == surface) {
-            surface = this->INHERITED::createSurface();
+        if (!surface) {
+            surface = this->INHERITED::makeSurface();
         }
         return surface;
     }
@@ -118,17 +130,20 @@ public:
     void draw(SkCanvas*) override;
 
     void setDeviceType(DeviceType type);
-    void setDeviceColorType(SkColorType, SkColorProfileType);
+    void setDeviceColorType(SkColorType, sk_sp<SkColorSpace>);
     void toggleRendering();
     void toggleSlideshow();
     void toggleFPS();
+    void resetFPS();
     void showOverview();
     void toggleDistanceFieldFonts();
+    void setPixelGeometry(int pixelGeometryIndex);
 
     GrContext* getGrContext() const { return fDevManager->getGrContext(); }
 
     void setZoomCenter(float x, float y);
     void changeZoomLevel(float delta);
+    void changeOffset(SkVector delta);
     bool nextSample();
     bool previousSample();
     bool goToSample(int i);
@@ -140,6 +155,12 @@ public:
     void postInvalDelay();
 
     DeviceType getDeviceType() const { return fDeviceType; }
+    int getColorConfigIndex() const { return fColorConfigIndex; }
+
+    int getTiles() const { return fTiles; }
+    void setTiles(int tiles) { fTiles = tiles; }
+    int getThreads() const { return fThreads; }
+    void setThreads(int threads) { fThreads = threads; }
 
 protected:
     void onDraw(SkCanvas* canvas) override;
@@ -165,20 +186,25 @@ private:
 
     int fCurrIndex;
 
+    std::unique_ptr<SkDynamicMemoryWStream> fPipeStream;
+    SkPipeSerializer        fPipeSerializer;
+    SkPipeDeserializer      fPipeDeserializer;
+
     SkPictureRecorder fRecorder;
-    SkAutoTDelete<SkCanvas> fFlagsFilterCanvas;
+    std::unique_ptr<SkCanvas> fFlagsFilterCanvas;
     SkPath fClipPath;
 
     SkTouchGesture fGesture;
     SkScalar fZoomLevel;
     SkScalar fZoomScale;
+    SkVector fOffset;
 
     DeviceType fDeviceType;
     DeviceManager* fDevManager;
 
     bool fSaveToPdf;
     bool fSaveToSKP;
-    SkAutoTUnref<SkDocument> fPDFDocument;
+    sk_sp<SkDocument> fPDFDocument;
 
     bool fUseClip;
     bool fUsePicture;
@@ -187,8 +213,11 @@ private:
     bool fPerspAnim;
     bool fRequestGrabImage;
     bool fMeasureFPS;
+    bool fUseDeferredCanvas;
     WallTimer fTimer;
     double fMeasureFPS_Time;
+    double fCumulativeFPS_Time;
+    int    fCumulativeFPS_Count;
     bool fMagnify;
     int fTilingMode;
 
@@ -197,25 +226,30 @@ private:
     int fMouseX, fMouseY;
     int fFatBitsScale;
     // Used by the text showing position and color values.
-    SkTypeface* fTypeface;
+    sk_sp<SkTypeface> fTypeface;
     bool fShowZoomer;
 
     SkOSMenu::TriState fLCDState;
     SkOSMenu::TriState fAAState;
     SkOSMenu::TriState fSubpixelState;
     int fHintingState;
+    int fPixelGeometryIndex;
     int fFilterQualityIndex;
     unsigned   fFlipAxis;
 
-    int fMSAASampleCount;
+    DeviceManager::BackendOptions fBackendOptions;
 
-    int fScrollTestX, fScrollTestY;
+    int fColorConfigIndex;
+
     SkScalar fZoomCenterX, fZoomCenterY;
 
     //Stores global settings
     SkOSMenu* fAppMenu; // We pass ownership to SkWindow, when we call addMenu
     //Stores slide specific settings
     SkOSMenu* fSlideMenu; // We pass ownership to SkWindow, when we call addMenu
+
+    int fTiles = 0;
+    int fThreads = 0;
 
     void loadView(SkView*);
     void updateTitle();

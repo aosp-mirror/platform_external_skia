@@ -92,7 +92,7 @@ protected:
         SkMask mask;
         if (!SkBlurMask::BlurRect(SkBlurMask::ConvertRadiusToSigma(this->radius()),
                                   &mask, r, kNormal_SkBlurStyle)) {
-            return;    
+            return;
         }
         SkMask::FreeImage(mask.fImage);
     }
@@ -105,7 +105,7 @@ class BlurRectSeparableBench: public BlurRectBench {
 public:
     BlurRectSeparableBench(SkScalar rad) : INHERITED(rad) { }
 
-    ~BlurRectSeparableBench() {
+    ~BlurRectSeparableBench() override {
         SkMask::FreeImage(fSrcMask.fImage);
     }
 

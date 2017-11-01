@@ -9,6 +9,7 @@
 #include "SkBlurImageFilter.h"
 #include "SkRRect.h"
 #include "SkSurface.h"
+#include "SkClipOpPriv.h"
 
 #define WIDTH 512
 #define HEIGHT 512
@@ -31,35 +32,30 @@ protected:
 
     void onDraw(SkCanvas* canvas) override {
         SkPaint blurPaint;
-        SkAutoTUnref<SkImageFilter> blur(SkBlurImageFilter::Create(5.0f, 5.0f));
-        blurPaint.setImageFilter(blur);
-        const SkScalar tile_size = SkIntToScalar(128);
-        SkRect bounds;
-        if (!canvas->getClipBounds(&bounds)) {
-            bounds.setEmpty();
-        }
-        int ts = SkScalarCeilToInt(tile_size);
+        blurPaint.setImageFilter(SkBlurImageFilter::Make(5.0f, 5.0f, nullptr));
+        const SkScalar tileSize = SkIntToScalar(128);
+        SkRect bounds = canvas->getLocalClipBounds();
+        int ts = SkScalarCeilToInt(tileSize);
         SkImageInfo info = SkImageInfo::MakeN32Premul(ts, ts);
-        SkAutoTUnref<SkSurface> tileSurface(canvas->newSurface(info));
-        if (!tileSurface.get()) {
-            tileSurface.reset(SkSurface::NewRaster(info));
+        auto tileSurface(canvas->makeSurface(info));
+        if (!tileSurface) {
+            tileSurface = SkSurface::MakeRaster(info);
         }
         SkCanvas* tileCanvas = tileSurface->getCanvas();
-        for (SkScalar y = bounds.top(); y < bounds.bottom(); y += tile_size) {
-            for (SkScalar x = bounds.left(); x < bounds.right(); x += tile_size) {
+        for (SkScalar y = bounds.top(); y < bounds.bottom(); y += tileSize) {
+            for (SkScalar x = bounds.left(); x < bounds.right(); x += tileSize) {
                 tileCanvas->save();
                 tileCanvas->clear(0);
                 tileCanvas->translate(-x, -y);
                 SkRect rect = SkRect::MakeWH(WIDTH, HEIGHT);
                 tileCanvas->saveLayer(&rect, &blurPaint);
                 SkRRect rrect = SkRRect::MakeRectXY(rect.makeInset(20, 20), 25, 25);
-                tileCanvas->clipRRect(rrect, SkRegion::kDifference_Op, true);
+                tileCanvas->clipRRect(rrect, kDifference_SkClipOp, true);
                 SkPaint paint;
                 tileCanvas->drawRect(rect, paint);
                 tileCanvas->restore();
                 tileCanvas->restore();
-                SkAutoTUnref<SkImage> tileImage(tileSurface->newImageSnapshot());
-                canvas->drawImage(tileImage, x, y);
+                canvas->drawImage(tileSurface->makeImageSnapshot().get(), x, y);
             }
         }
     }
@@ -70,7 +66,6 @@ private:
 
 //////////////////////////////////////////////////////////////////////////////
 
-static GM* MyFactory1(void*) { return new ComplexClipBlurTiledGM(); }
-static GMRegistry reg1(MyFactory1);
+DEF_GM(return new ComplexClipBlurTiledGM;)
 
 }

@@ -27,19 +27,11 @@
 #include "GrContext.h"
 #include "GrTest.h"
 
-struct TextBlobWrapper {
-    // This class assumes it 'owns' the textblob it wraps, and thus does not need to take a ref
-    explicit TextBlobWrapper(const SkTextBlob* blob) : fBlob(blob) {}
-    TextBlobWrapper(const TextBlobWrapper& blob) : fBlob(SkRef(blob.fBlob.get())) {}
-
-    SkAutoTUnref<const SkTextBlob> fBlob;
-};
-
-static void draw(SkCanvas* canvas, int redraw, const SkTArray<TextBlobWrapper>& blobs) {
+static void draw(SkCanvas* canvas, int redraw, const SkTArray<sk_sp<SkTextBlob>>& blobs) {
     int yOffset = 0;
     for (int r = 0; r < redraw; r++) {
         for (int i = 0; i < blobs.count(); i++) {
-            const SkTextBlob* blob = blobs[i].fBlob.get();
+            const auto& blob = blobs[i];
             const SkRect& bounds = blob->bounds();
             yOffset += SkScalarCeilToInt(bounds.height());
             SkPaint paint;
@@ -66,8 +58,7 @@ static void text_blob_cache_inner(skiatest::Reporter* reporter, GrContext* conte
     }
 
     SkImageInfo info = SkImageInfo::Make(kWidth, kHeight, kN32_SkColorType, kPremul_SkAlphaType);
-    SkAutoTUnref<SkSurface> surface(SkSurface::NewRenderTarget(context, SkBudgeted::kNo, info,
-                                                               0, &props));
+    auto surface(SkSurface::MakeRenderTarget(context, SkBudgeted::kNo, info, 0, &props));
     REPORTER_ASSERT(reporter, surface);
     if (!surface) {
         return;
@@ -75,7 +66,7 @@ static void text_blob_cache_inner(skiatest::Reporter* reporter, GrContext* conte
 
     SkCanvas* canvas = surface->getCanvas();
 
-    SkAutoTUnref<SkFontMgr> fm(SkFontMgr::RefDefault());
+    sk_sp<SkFontMgr> fm(SkFontMgr::RefDefault());
 
     int count = SkMin32(fm->countFamilies(), maxFamilies);
 
@@ -86,7 +77,7 @@ static void text_blob_cache_inner(skiatest::Reporter* reporter, GrContext* conte
     }
 
     // generate textblobs
-    SkTArray<TextBlobWrapper> blobs;
+    SkTArray<sk_sp<SkTextBlob>> blobs;
     for (int i = 0; i < count; i++) {
         SkPaint paint;
         paint.setTextEncoding(SkPaint::kGlyphID_TextEncoding);
@@ -94,18 +85,17 @@ static void text_blob_cache_inner(skiatest::Reporter* reporter, GrContext* conte
 
         SkString familyName;
         fm->getFamilyName(i, &familyName);
-        SkAutoTUnref<SkFontStyleSet> set(fm->createStyleSet(i));
+        sk_sp<SkFontStyleSet> set(fm->createStyleSet(i));
         for (int j = 0; j < set->count(); ++j) {
             SkFontStyle fs;
             set->getStyle(j, &fs, nullptr);
 
             // We use a typeface which randomy returns unexpected mask formats to fuzz
-            SkAutoTUnref<SkTypeface> orig(set->createTypeface(j));
+            sk_sp<SkTypeface> orig(set->createTypeface(j));
             if (normal) {
                 paint.setTypeface(orig);
             } else {
-                SkAutoTUnref<SkTypeface> typeface(new SkRandomTypeface(orig, paint, true));
-                paint.setTypeface(typeface);
+                paint.setTypeface(sk_make_sp<SkRandomTypeface>(orig, paint, true));
             }
 
             SkTextBlobBuilder builder;
@@ -126,14 +116,14 @@ static void text_blob_cache_inner(skiatest::Reporter* reporter, GrContext* conte
                     }
                 }
             }
-            blobs.emplace_back(builder.build());
+            blobs.emplace_back(builder.make());
         }
     }
 
     // create surface where LCD is impossible
     info = SkImageInfo::MakeN32Premul(kWidth, kHeight);
     SkSurfaceProps propsNoLCD(0, kUnknown_SkPixelGeometry);
-    SkAutoTUnref<SkSurface> surfaceNoLCD(canvas->newSurface(info, &propsNoLCD));
+    auto surfaceNoLCD(canvas->makeSurface(info, &propsNoLCD));
     REPORTER_ASSERT(reporter, surface);
     if (!surface) {
         return;
@@ -157,19 +147,19 @@ static void text_blob_cache_inner(skiatest::Reporter* reporter, GrContext* conte
     draw(canvas, 1, blobs);
 }
 
-DEF_GPUTEST_FOR_NULL_CONTEXT(TextBlobCache, reporter, context) {
-    text_blob_cache_inner(reporter, context, 1024, 256, 30, true, false);
+DEF_GPUTEST_FOR_NULLGL_CONTEXT(TextBlobCache, reporter, ctxInfo) {
+    text_blob_cache_inner(reporter, ctxInfo.grContext(), 1024, 256, 30, true, false);
 }
 
-DEF_GPUTEST_FOR_NULL_CONTEXT(TextBlobStressCache, reporter, context) {
-    text_blob_cache_inner(reporter, context, 256, 256, 10, true, true);
+DEF_GPUTEST_FOR_NULLGL_CONTEXT(TextBlobStressCache, reporter, ctxInfo) {
+    text_blob_cache_inner(reporter, ctxInfo.grContext(), 256, 256, 10, true, true);
 }
 
-DEF_GPUTEST_FOR_NULL_CONTEXT(TextBlobAbnormal, reporter, context) {
-    text_blob_cache_inner(reporter, context, 256, 256, 10, false, false);
+DEF_GPUTEST_FOR_NULLGL_CONTEXT(TextBlobAbnormal, reporter, ctxInfo) {
+    text_blob_cache_inner(reporter, ctxInfo.grContext(), 256, 256, 10, false, false);
 }
 
-DEF_GPUTEST_FOR_NULL_CONTEXT(TextBlobStressAbnormal, reporter, context) {
-    text_blob_cache_inner(reporter, context, 256, 256, 10, false, true);
+DEF_GPUTEST_FOR_NULLGL_CONTEXT(TextBlobStressAbnormal, reporter, ctxInfo) {
+    text_blob_cache_inner(reporter, ctxInfo.grContext(), 256, 256, 10, false, true);
 }
 #endif

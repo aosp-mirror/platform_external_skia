@@ -24,7 +24,7 @@ class SkCommandLineConfigGpu;
 // The string has following form:
 // tag:
 //   [via-]*backend
-// where 'backend' consists of chars excluding hyphen or "angle-gl"
+// where 'backend' consists of chars excluding hyphen
 // and each 'via' consists of chars excluding hyphen.
 class SkCommandLineConfig {
   public:
@@ -46,28 +46,42 @@ class SkCommandLineConfig {
 #if SK_SUPPORT_GPU
 // SkCommandLineConfigGpu is a SkCommandLineConfig that extracts information out of the backend
 // part of the tag. It is constructed tags that have:
-// * backends of form "gpu(option=value,option2=value,...)"
-// * backends that represent a shorthand of above (such as "msaa16" representing "gpu(samples=16)")
+// * backends of form "gpu[option=value,option2=value,...]"
+// * backends that represent a shorthand of above (such as "glmsaa16" representing
+// "gpu(api=gl,samples=16)")
 class SkCommandLineConfigGpu : public SkCommandLineConfig {
   public:
-    typedef GrContextFactory::GLContextType ContextType;
+    typedef sk_gpu_test::GrContextFactory::ContextType ContextType;
+    typedef sk_gpu_test::GrContextFactory::ContextOverrides ContextOverrides;
     SkCommandLineConfigGpu(const SkString& tag, const SkTArray<SkString>& viaParts,
-                           ContextType contextType, bool useNVPR, bool useDIText, int samples);
+                           ContextType contextType, bool useNVPR, bool useInstanced, bool useDIText,
+                           int samples, SkColorType colorType, sk_sp<SkColorSpace> colorSpace,
+                           bool useStencilBuffers);
     const SkCommandLineConfigGpu* asConfigGpu() const override { return this; }
     ContextType getContextType() const { return fContextType; }
-    bool getUseNVPR() const { return fUseNVPR; }
+    ContextOverrides getContextOverrides() const { return fContextOverrides; }
+    bool getUseNVPR() const {
+        SkASSERT(!(fContextOverrides & ContextOverrides::kRequireNVPRSupport) ||
+                 !(fContextOverrides & ContextOverrides::kDisableNVPR));
+        return fContextOverrides & ContextOverrides::kRequireNVPRSupport;
+    }
+    bool getUseInstanced() const { return fContextOverrides & ContextOverrides::kUseInstanced; }
     bool getUseDIText() const { return fUseDIText; }
     int getSamples() const { return fSamples; }
+    SkColorType getColorType() const { return fColorType; }
+    SkColorSpace* getColorSpace() const { return fColorSpace.get(); }
 
   private:
     ContextType fContextType;
-    bool fUseNVPR;
+    ContextOverrides fContextOverrides;
     bool fUseDIText;
     int fSamples;
+    SkColorType fColorType;
+    sk_sp<SkColorSpace> fColorSpace;
 };
 #endif
 
-typedef SkTArray<SkAutoTDelete<SkCommandLineConfig>, true> SkCommandLineConfigArray;
+typedef SkTArray<std::unique_ptr<SkCommandLineConfig>, true> SkCommandLineConfigArray;
 void ParseConfigs(const SkCommandLineFlags::StringArray& configList,
                   SkCommandLineConfigArray* outResult);
 

@@ -25,7 +25,7 @@ int ClipAlphaHandler::handle(Request* request, MHD_Connection* connection,
     SkTArray<SkString> commands;
     SkStrSplit(url, "/", &commands);
 
-    if (!request->fPicture.get() || commands.count() != 2) {
+    if (!request->hasPicture() || commands.count() != 2) {
         return MHD_NO;
     }
 
@@ -35,4 +35,3 @@ int ClipAlphaHandler::handle(Request* request, MHD_Connection* connection,
     request->fDebugCanvas->setClipVizColor(SkColorSetARGB(alpha, 0, 0, 0));
     return SendOK(connection);
 }
-

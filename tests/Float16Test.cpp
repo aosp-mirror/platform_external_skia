@@ -6,12 +6,15 @@
  */
 
 #include "Test.h"
+#include "SkAutoPixmapStorage.h"
 #include "SkColor.h"
 #include "SkHalf.h"
 #include "SkOpts.h"
 #include "SkPixmap.h"
 #include "SkPM4f.h"
 #include "SkRandom.h"
+
+#include <cmath>
 
 static bool eq_within_half_float(float a, float b) {
     const float kTolerance = 1.0f / (1 << (8 + 10));
@@ -42,7 +45,7 @@ DEF_TEST(color_half_float, reporter) {
     pm.alloc(info);
     REPORTER_ASSERT(reporter, pm.getSafeSize() == SkToSizeT(w * h * sizeof(uint64_t)));
 
-    SkColor4f c4 { 0.5f, 1, 0.5f, 0.25f };
+    SkColor4f c4 { 1, 0.5f, 0.25f, 0.5f };
     pm.erase(c4);
 
     SkPM4f origpm4 = c4.premul();
@@ -54,45 +57,34 @@ DEF_TEST(color_half_float, reporter) {
     }
 }
 
-DEF_TEST(float_to_half, reporter) {
-    const float    fs[] = {    1.0,    2.0,    3.0,    4.0,    5.0,    6.0,    7.0 };
-    const uint16_t hs[] = { 0x3c00, 0x4000, 0x4200, 0x4400, 0x4500, 0x4600, 0x4700 };
-
-    uint16_t hscratch[7];
-    SkOpts::float_to_half(hscratch, fs, 7);
-    REPORTER_ASSERT(reporter, 0 == memcmp(hscratch, hs, sizeof(hs)));
-
-    float fscratch[7];
-    SkOpts::half_to_float(fscratch, hs, 7);
-    REPORTER_ASSERT(reporter, 0 == memcmp(fscratch, fs, sizeof(fs)));
+static bool is_denorm(uint16_t h) {
+    return (h & 0x7fff) < 0x0400;
 }
 
-static uint32_t u(float f) {
-    uint32_t x;
-    memcpy(&x, &f, 4);
-    return x;
+static bool is_finite(uint16_t h) {
+    return (h & 0x7c00) != 0x7c00;
 }
 
-DEF_TEST(HalfToFloat_01, r) {
-    for (uint16_t h = 0; h < 0x8000; h++) {
-        float f = SkHalfToFloat(h);
-        if (f >= 0 && f <= 1) {
-            float got = SkHalfToFloat_01(h)[0];
-            if (got != f) {
-                SkDebugf("0x%04x -> 0x%08x (%g), want 0x%08x (%g)\n",
-                        h,
-                        u(got), got,
-                        u(f), f);
-            }
-            REPORTER_ASSERT(r, SkHalfToFloat_01(h)[0] == f);
-            REPORTER_ASSERT(r, SkFloatToHalf_01(SkHalfToFloat_01(h)) == h);
+DEF_TEST(SkHalfToFloat_finite_ftz, r) {
+    for (uint32_t h = 0; h <= 0xffff; h++) {
+        if (!is_finite(h)) {
+            // _finite_ftz() only works for values that can be represented as a finite half float.
+            continue;
         }
+
+        // _finite_ftz() may flush denorms to zero.  0.0f will compare == with both +0.0f and -0.0f.
+        float expected  = SkHalfToFloat(h),
+              alternate = is_denorm(h) ? 0.0f : expected;
+
+        float actual = SkHalfToFloat_finite_ftz(h)[0];
+
+        REPORTER_ASSERT(r, actual == expected || actual == alternate);
     }
 }
 
-DEF_TEST(FloatToHalf_01, r) {
+DEF_TEST(SkFloatToHalf_finite_ftz, r) {
 #if 0
-    for (uint32_t bits = 0; bits < 0x80000000; bits++) {
+    for (uint64_t bits = 0; bits <= 0xffffffff; bits++) {
 #else
     SkRandom rand;
     for (int i = 0; i < 1000000; i++) {
@@ -100,16 +92,22 @@ DEF_TEST(FloatToHalf_01, r) {
 #endif
         float f;
         memcpy(&f, &bits, 4);
-        if (f >= 0 && f <= 1) {
-            uint16_t h1 = (uint16_t)SkFloatToHalf_01(Sk4f(f,0,0,0)),
-                     h2 = SkFloatToHalf(f);
-            bool ok = (h1 == h2 || h1 == h2-1);
-            REPORTER_ASSERT(r, ok);
-            if (!ok) {
-                SkDebugf("%08x (%d) -> %04x (%d), want %04x (%d)\n",
-                         bits, bits>>23, h1, h1>>10, h2, h2>>10);
-                break;
-            }
+
+        uint16_t expected = SkFloatToHalf(f);
+        if (!is_finite(expected)) {
+            // _finite_ftz() only works for values that can be represented as a finite half float.
+            continue;
         }
+
+        uint16_t alternate = expected;
+        if (is_denorm(expected)) {
+            // _finite_ftz() may flush denorms to zero, and happens to keep the sign bit.
+            alternate = std::signbit(f) ? 0x8000 : 0x0000;
+        }
+
+        uint16_t actual = SkFloatToHalf_finite_ftz(Sk4f{f})[0];
+        // _finite_ftz() may truncate instead of rounding, so it may be one too small.
+        REPORTER_ASSERT(r, actual == expected  || actual == expected  - 1 ||
+                           actual == alternate || actual == alternate - 1);
     }
 }

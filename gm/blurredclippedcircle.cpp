@@ -6,7 +6,9 @@
  */
 
 #include "gm.h"
+#include "sk_tool_utils.h"
 #include "SkBlurMaskFilter.h"
+#include "SkClipOpPriv.h"
 #include "SkColorFilter.h"
 #include "SkPaint.h"
 #include "SkRRect.h"
@@ -34,42 +36,42 @@ protected:
     void onDraw(SkCanvas* canvas) override {
         SkPaint whitePaint;
         whitePaint.setColor(SK_ColorWHITE);
-        whitePaint.setXfermode(SkXfermode::Create(SkXfermode::kSrc_Mode))->unref();
+        whitePaint.setBlendMode(SkBlendMode::kSrc);
         whitePaint.setAntiAlias(true);
 
         // This scale exercises precision limits in the circle blur effect (crbug.com/560651)
-        static const float kScale = 2.0f;
+        constexpr float kScale = 2.0f;
         canvas->scale(kScale, kScale);
 
         canvas->save();
             SkRect clipRect1 = SkRect::MakeLTRB(0, 0,
                                                 SkIntToScalar(kWidth), SkIntToScalar(kHeight));
 
-            canvas->clipRect(clipRect1, SkRegion::kIntersect_Op, false);
+            canvas->clipRect(clipRect1);
 
             canvas->save();
 
-                canvas->clipRect(clipRect1, SkRegion::kIntersect_Op, false);
+                canvas->clipRect(clipRect1);
                 canvas->drawRect(clipRect1, whitePaint);
 
                 canvas->save();
 
                     SkRect clipRect2 = SkRect::MakeLTRB(8, 8, 288, 288);
                     SkRRect clipRRect = SkRRect::MakeOval(clipRect2);
-                    canvas->clipRRect(clipRRect, SkRegion::kDifference_Op, true);
+                    canvas->clipRRect(clipRRect, kDifference_SkClipOp, true);
 
                     SkRect r = SkRect::MakeLTRB(4, 4, 292, 292);
                     SkRRect rr = SkRRect::MakeOval(r);
 
                     SkPaint paint;
 
-                    paint.setMaskFilter(SkBlurMaskFilter::Create(
+                    paint.setMaskFilter(SkBlurMaskFilter::Make(
                                             kNormal_SkBlurStyle,
                                             1.366025f,
-                                            SkBlurMaskFilter::kHighQuality_BlurFlag))->unref();
-                    paint.setColorFilter(SkColorFilter::CreateModeFilter(
+                                            SkBlurMaskFilter::kHighQuality_BlurFlag));
+                    paint.setColorFilter(SkColorFilter::MakeModeFilter(
                                              SK_ColorRED,
-                                             SkXfermode::kSrcIn_Mode))->unref();
+                                             SkBlendMode::kSrcIn));
                     paint.setAntiAlias(true);
 
                     canvas->drawRRect(rr, paint);
@@ -80,8 +82,8 @@ protected:
     }
 
 private:
-    static const int kWidth = 1164;
-    static const int kHeight = 802;
+    static constexpr int kWidth = 1164;
+    static constexpr int kHeight = 802;
 
     typedef GM INHERITED;
 };

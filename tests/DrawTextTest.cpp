@@ -11,8 +11,10 @@
 #include "SkPaint.h"
 #include "SkPoint.h"
 #include "SkRect.h"
+#include "SkSurface.h"
 #include "SkTypes.h"
 #include "Test.h"
+#include <math.h>
 
 static const SkColor bgColor = SK_ColorWHITE;
 
@@ -34,9 +36,6 @@ static bool compare(const SkBitmap& ref, const SkIRect& iref,
 {
     const int xOff = itest.fLeft - iref.fLeft;
     const int yOff = itest.fTop - iref.fTop;
-
-    SkAutoLockPixels alpRef(ref);
-    SkAutoLockPixels alpTest(test);
 
     for (int y = 0; y < test.height(); ++y) {
         for (int x = 0; x < test.width(); ++x) {
@@ -109,5 +108,23 @@ DEF_TEST(DrawText, reporter) {
                 }
             }
         }
+    }
+}
+
+// Test drawing text at some unusual coordinates.
+// We measure success by not crashing or asserting.
+DEF_TEST(DrawText_weirdCoordinates, r) {
+    auto surface = SkSurface::MakeRasterN32Premul(10,10);
+    auto canvas = surface->getCanvas();
+
+    SkScalar oddballs[] = { 0.0f, (float)INFINITY, (float)NAN, 34359738368.0f };
+
+    for (auto x : oddballs) {
+        canvas->drawString("a", +x, 0.0f, SkPaint());
+        canvas->drawString("a", -x, 0.0f, SkPaint());
+    }
+    for (auto y : oddballs) {
+        canvas->drawString("a", 0.0f, +y, SkPaint());
+        canvas->drawString("a", 0.0f, -y, SkPaint());
     }
 }

@@ -30,9 +30,9 @@ SkWindow::~SkWindow() {
     fMenus.deleteAll();
 }
 
-SkSurface* SkWindow::createSurface() {
+sk_sp<SkSurface> SkWindow::makeSurface() {
     const SkBitmap& bm = this->getBitmap();
-    return SkSurface::NewRasterDirect(bm.info(), bm.getPixels(), bm.rowBytes(), &fSurfaceProps);
+    return SkSurface::MakeRasterDirect(bm.info(), bm.getPixels(), bm.rowBytes(), &fSurfaceProps);
 }
 
 void SkWindow::setMatrix(const SkMatrix& matrix) {
@@ -66,9 +66,9 @@ void SkWindow::resize(int width, int height) {
     this->resize(fBitmap.info().makeWH(width, height));
 }
 
-void SkWindow::setColorType(SkColorType ct, SkColorProfileType pt) {
+void SkWindow::setColorType(SkColorType ct, sk_sp<SkColorSpace> cs) {
     const SkImageInfo& info = fBitmap.info();
-    this->resize(SkImageInfo::Make(info.width(), info.height(), ct, kPremul_SkAlphaType, pt));
+    this->resize(SkImageInfo::Make(info.width(), info.height(), ct, kPremul_SkAlphaType, cs));
 }
 
 bool SkWindow::handleInval(const SkRect* localR) {
@@ -105,7 +105,7 @@ extern bool gEnableControlledThrow;
 
 bool SkWindow::update(SkIRect* updateArea) {
     if (!fDirtyRgn.isEmpty()) {
-        SkAutoTUnref<SkSurface> surface(this->createSurface());
+        sk_sp<SkSurface> surface(this->makeSurface());
         SkCanvas* canvas = surface->getCanvas();
 
         canvas->clipRegion(fDirtyRgn);
@@ -316,24 +316,52 @@ bool SkWindow::onDispatchClick(int x, int y, Click::State state,
 
 #if SK_SUPPORT_GPU
 
+#include "GrBackendSurface.h"
 #include "GrContext.h"
 #include "gl/GrGLInterface.h"
 #include "gl/GrGLUtil.h"
 #include "SkGr.h"
 
-GrRenderTarget* SkWindow::renderTarget(const AttachmentInfo& attachmentInfo,
-        const GrGLInterface* interface, GrContext* grContext) {
-    GrBackendRenderTargetDesc desc;
-    desc.fWidth = SkScalarRoundToInt(this->width());
-    desc.fHeight = SkScalarRoundToInt(this->height());
-    desc.fConfig = kSkia8888_GrPixelConfig;
-    desc.fOrigin = kBottomLeft_GrSurfaceOrigin;
-    desc.fSampleCnt = attachmentInfo.fSampleCount;
-    desc.fStencilBits = attachmentInfo.fStencilBits;
+sk_sp<SkSurface> SkWindow::makeGpuBackedSurface(const AttachmentInfo& attachmentInfo,
+                                                const GrGLInterface* interface,
+                                                GrContext* grContext) {
+    int width = SkScalarRoundToInt(this->width());
+    int height = SkScalarRoundToInt(this->height());
+    if (0 == width || 0 == height) {
+        return nullptr;
+    }
+
+    // TODO: Query the actual framebuffer for sRGB capable. However, to
+    // preserve old (fake-linear) behavior, we don't do this. Instead, rely
+    // on the flag (currently driven via 'C' mode in SampleApp).
+    //
+    // Also, we may not have real sRGB support (ANGLE, in particular), so check for
+    // that, and fall back to L32:
+    //
+    // ... and, if we're using a 10-bit/channel FB0, it doesn't do sRGB conversion on write,
+    // so pretend that it's non-sRGB 8888:
+    GrPixelConfig config = grContext->caps()->srgbSupport() &&
+                           info().colorSpace() &&
+                           (attachmentInfo.fColorBits != 30)
+                           ? kSRGBA_8888_GrPixelConfig : kRGBA_8888_GrPixelConfig;
+    GrGLFramebufferInfo fbInfo;
     GrGLint buffer;
     GR_GL_GetIntegerv(interface, GR_GL_FRAMEBUFFER_BINDING, &buffer);
-    desc.fRenderTargetHandle = buffer;
-    return grContext->textureProvider()->wrapBackendRenderTarget(desc);
+    fbInfo.fFBOID = buffer;
+
+    GrBackendRenderTarget backendRT(width,
+                                    height,
+                                    attachmentInfo.fSampleCount,
+                                    attachmentInfo.fStencilBits,
+                                    config,
+                                    fbInfo);
+
+
+    sk_sp<SkColorSpace> colorSpace =
+        grContext->caps()->srgbSupport() && info().colorSpace()
+        ? SkColorSpace::MakeSRGB() : nullptr;
+    return SkSurface::MakeFromBackendRenderTarget(grContext, backendRT, kBottomLeft_GrSurfaceOrigin,
+                                                  colorSpace, &fSurfaceProps);
 }
 
 #endif

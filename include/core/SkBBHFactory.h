@@ -18,12 +18,11 @@ public:
      *  Allocate a new SkBBoxHierarchy. Return NULL on failure.
      */
     virtual SkBBoxHierarchy* operator()(const SkRect& bounds) const = 0;
-    virtual ~SkBBHFactory() {};
+    virtual ~SkBBHFactory() {}
 };
 
 class SK_API SkRTreeFactory : public SkBBHFactory {
 public:
-    SkRTreeFactory();
     SkBBoxHierarchy* operator()(const SkRect& bounds) const override;
 private:
     typedef SkBBHFactory INHERITED;

@@ -26,14 +26,11 @@ public:
             intervals.push_back(len);
         }
 
-        SkAutoTUnref<SkPathEffect> effect(
-            SkDashPathEffect::Create(intervals.begin(), intervals.count(), 0));
-
         fDashPaint.setAntiAlias(true);
         fDashPaint.setStyle(SkPaint::kStroke_Style);
         fDashPaint.setStrokeWidth(6);
         fDashPaint.setColor(0xff008000);
-        fDashPaint.setPathEffect(effect);
+        fDashPaint.setPathEffect(SkDashPathEffect::Make(intervals.begin(), intervals.count(), 0));
 
         fPointsPaint.setColor(0xff800000);
         fPointsPaint.setStrokeWidth(3);
@@ -93,8 +90,8 @@ protected:
     }
 
 private:
-    static const int kImageWidth = 1200;
-    static const int kImageHeight = 600;
+    static constexpr int kImageWidth = 1200;
+    static constexpr int kImageHeight = 600;
 
     SkPaint fDashPaint, fPointsPaint;
     SkRect  fRect;
@@ -130,4 +127,3 @@ private:
 DEF_GM( return new ContourStartGM(); )
 
 } // namespace skiagm
-

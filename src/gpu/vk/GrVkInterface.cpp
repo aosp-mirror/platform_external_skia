@@ -6,179 +6,199 @@
  */
 
 #include "vk/GrVkInterface.h"
+#include "vk/GrVkBackendContext.h"
+#include "vk/GrVkUtil.h"
 
-GrVkInterface::GrVkInterface() {
+#define ACQUIRE_PROC(name, instance, device) fFunctions.f##name = \
+    reinterpret_cast<PFN_vk##name>(getProc("vk"#name, instance, device));
+
+GrVkInterface::GetProc make_unified_getter(const GrVkInterface::GetInstanceProc& iproc,
+                                           const GrVkInterface::GetDeviceProc& dproc) {
+    return [&iproc, &dproc](const char* proc_name, VkInstance instance, VkDevice device) {
+        if (device != VK_NULL_HANDLE) {
+            return dproc(device, proc_name);
+        }
+        return iproc(instance, proc_name);
+    };
 }
 
-#define GET_PROC(F) functions->f ## F = (PFN_vk ## F) vkGetInstanceProcAddr(instance, "vk" #F)
+GrVkInterface::GrVkInterface(const GetInstanceProc& getInstanceProc,
+                             const GetDeviceProc& getDeviceProc,
+                             VkInstance instance,
+                             VkDevice device,
+                             uint32_t extensionFlags)
+        : GrVkInterface(make_unified_getter(getInstanceProc, getDeviceProc),
+                        instance,
+                        device,
+                        extensionFlags) {}
 
-const GrVkInterface* GrVkCreateInterface(VkInstance instance) {
+GrVkInterface::GrVkInterface(GetProc getProc,
+                             VkInstance instance,
+                             VkDevice device,
+                             uint32_t extensionFlags) {
+    if (getProc == nullptr) {
+        return;
+    }
+    // Global/Loader Procs.
+    ACQUIRE_PROC(CreateInstance, VK_NULL_HANDLE, VK_NULL_HANDLE);
+    ACQUIRE_PROC(EnumerateInstanceExtensionProperties, VK_NULL_HANDLE, VK_NULL_HANDLE);
+    ACQUIRE_PROC(EnumerateInstanceLayerProperties, VK_NULL_HANDLE, VK_NULL_HANDLE);
 
-    GrVkInterface* interface = new GrVkInterface();
-    GrVkInterface::Functions* functions = &interface->fFunctions;
+    // Instance Procs.
+    ACQUIRE_PROC(EnumeratePhysicalDevices, instance, VK_NULL_HANDLE);
+    ACQUIRE_PROC(GetPhysicalDeviceFeatures, instance, VK_NULL_HANDLE);
+    ACQUIRE_PROC(GetPhysicalDeviceFormatProperties, instance, VK_NULL_HANDLE);
+    ACQUIRE_PROC(GetPhysicalDeviceImageFormatProperties, instance, VK_NULL_HANDLE);
+    ACQUIRE_PROC(GetPhysicalDeviceProperties, instance, VK_NULL_HANDLE);
+    ACQUIRE_PROC(GetPhysicalDeviceQueueFamilyProperties, instance, VK_NULL_HANDLE);
+    ACQUIRE_PROC(GetPhysicalDeviceMemoryProperties, instance, VK_NULL_HANDLE);
+    ACQUIRE_PROC(GetPhysicalDeviceSparseImageFormatProperties, instance, VK_NULL_HANDLE);
+    ACQUIRE_PROC(DestroyInstance, instance, VK_NULL_HANDLE);
+    ACQUIRE_PROC(CreateDevice, instance, VK_NULL_HANDLE);
+    ACQUIRE_PROC(DestroyDevice, instance, VK_NULL_HANDLE);
+    ACQUIRE_PROC(EnumerateDeviceExtensionProperties, instance, VK_NULL_HANDLE);
+    ACQUIRE_PROC(EnumerateDeviceLayerProperties, instance, VK_NULL_HANDLE);
 
-    GET_PROC(CreateInstance);
-    GET_PROC(DestroyInstance);
-    GET_PROC(EnumeratePhysicalDevices);
-    GET_PROC(GetPhysicalDeviceFeatures);
-    GET_PROC(GetPhysicalDeviceFormatProperties);
-    GET_PROC(GetPhysicalDeviceImageFormatProperties);
-    GET_PROC(GetPhysicalDeviceProperties);
-    GET_PROC(GetPhysicalDeviceQueueFamilyProperties);
-    GET_PROC(GetPhysicalDeviceMemoryProperties);
-    GET_PROC(CreateDevice);
-    GET_PROC(DestroyDevice);
-    GET_PROC(EnumerateInstanceExtensionProperties);
-    GET_PROC(EnumerateDeviceExtensionProperties);
-    GET_PROC(EnumerateInstanceLayerProperties);
-    GET_PROC(EnumerateDeviceLayerProperties);
-    GET_PROC(GetDeviceQueue);
-    GET_PROC(QueueSubmit);
-    GET_PROC(QueueWaitIdle);
-    GET_PROC(DeviceWaitIdle);
-    GET_PROC(AllocateMemory);
-    GET_PROC(FreeMemory);
-    GET_PROC(MapMemory);
-    GET_PROC(UnmapMemory);
-    GET_PROC(FlushMappedMemoryRanges);
-    GET_PROC(InvalidateMappedMemoryRanges);
-    GET_PROC(GetDeviceMemoryCommitment);
-    GET_PROC(BindBufferMemory);
-    GET_PROC(BindImageMemory);
-    GET_PROC(GetBufferMemoryRequirements);
-    GET_PROC(GetImageMemoryRequirements);
-    GET_PROC(GetImageSparseMemoryRequirements);
-    GET_PROC(GetPhysicalDeviceSparseImageFormatProperties);
-    GET_PROC(QueueBindSparse);
-    GET_PROC(CreateFence);
-    GET_PROC(DestroyFence);
-    GET_PROC(ResetFences);
-    GET_PROC(GetFenceStatus);
-    GET_PROC(WaitForFences);
-    GET_PROC(CreateSemaphore);
-    GET_PROC(DestroySemaphore);
-    GET_PROC(CreateEvent);
-    GET_PROC(DestroyEvent);
-    GET_PROC(GetEventStatus);
-    GET_PROC(SetEvent);
-    GET_PROC(ResetEvent);
-    GET_PROC(CreateQueryPool);
-    GET_PROC(DestroyQueryPool);
-    GET_PROC(GetQueryPoolResults);
-    GET_PROC(CreateBuffer);
-    GET_PROC(DestroyBuffer);
-    GET_PROC(CreateBufferView);
-    GET_PROC(DestroyBufferView);
-    GET_PROC(CreateImage);
-    GET_PROC(DestroyImage);
-    GET_PROC(GetImageSubresourceLayout);
-    GET_PROC(CreateImageView);
-    GET_PROC(DestroyImageView);
-    GET_PROC(CreateShaderModule);
-    GET_PROC(DestroyShaderModule);
-    GET_PROC(CreatePipelineCache);
-    GET_PROC(DestroyPipelineCache);
-    GET_PROC(GetPipelineCacheData);
-    GET_PROC(MergePipelineCaches);
-    GET_PROC(CreateGraphicsPipelines);
-    GET_PROC(CreateComputePipelines);
-    GET_PROC(DestroyPipeline);
-    GET_PROC(CreatePipelineLayout);
-    GET_PROC(DestroyPipelineLayout);
-    GET_PROC(CreateSampler);
-    GET_PROC(DestroySampler);
-    GET_PROC(CreateDescriptorSetLayout);
-    GET_PROC(DestroyDescriptorSetLayout);
-    GET_PROC(CreateDescriptorPool);
-    GET_PROC(DestroyDescriptorPool);
-    GET_PROC(ResetDescriptorPool);
-    GET_PROC(AllocateDescriptorSets);
-    GET_PROC(FreeDescriptorSets);
-    GET_PROC(UpdateDescriptorSets);
-    GET_PROC(CreateFramebuffer);
-    GET_PROC(DestroyFramebuffer);
-    GET_PROC(CreateRenderPass);
-    GET_PROC(DestroyRenderPass);
-    GET_PROC(GetRenderAreaGranularity);
-    GET_PROC(CreateCommandPool);
-    GET_PROC(DestroyCommandPool);
-    GET_PROC(ResetCommandPool);
-    GET_PROC(AllocateCommandBuffers);
-    GET_PROC(FreeCommandBuffers);
-    GET_PROC(BeginCommandBuffer);
-    GET_PROC(EndCommandBuffer);
-    GET_PROC(ResetCommandBuffer);
-    GET_PROC(CmdBindPipeline);
-    GET_PROC(CmdSetViewport);
-    GET_PROC(CmdSetScissor);
-    GET_PROC(CmdSetLineWidth);
-    GET_PROC(CmdSetDepthBias);
-    GET_PROC(CmdSetBlendConstants);
-    GET_PROC(CmdSetDepthBounds);
-    GET_PROC(CmdSetStencilCompareMask);
-    GET_PROC(CmdSetStencilWriteMask);
-    GET_PROC(CmdSetStencilReference);
-    GET_PROC(CmdBindDescriptorSets);
-    GET_PROC(CmdBindIndexBuffer);
-    GET_PROC(CmdBindVertexBuffers);
-    GET_PROC(CmdDraw);
-    GET_PROC(CmdDrawIndexed);
-    GET_PROC(CmdDrawIndirect);
-    GET_PROC(CmdDrawIndexedIndirect);
-    GET_PROC(CmdDispatch);
-    GET_PROC(CmdDispatchIndirect);
-    GET_PROC(CmdCopyBuffer);
-    GET_PROC(CmdCopyImage);
-    GET_PROC(CmdBlitImage);
-    GET_PROC(CmdCopyBufferToImage);
-    GET_PROC(CmdCopyImageToBuffer);
-    GET_PROC(CmdUpdateBuffer);
-    GET_PROC(CmdFillBuffer);
-    GET_PROC(CmdClearColorImage);
-    GET_PROC(CmdClearDepthStencilImage);
-    GET_PROC(CmdClearAttachments);
-    GET_PROC(CmdResolveImage);
-    GET_PROC(CmdSetEvent);
-    GET_PROC(CmdResetEvent);
-    GET_PROC(CmdWaitEvents);
-    GET_PROC(CmdPipelineBarrier);
-    GET_PROC(CmdBeginQuery);
-    GET_PROC(CmdEndQuery);
-    GET_PROC(CmdResetQueryPool);
-    GET_PROC(CmdWriteTimestamp);
-    GET_PROC(CmdCopyQueryPoolResults);
-    GET_PROC(CmdPushConstants);
-    GET_PROC(CmdBeginRenderPass);
-    GET_PROC(CmdNextSubpass);
-    GET_PROC(CmdEndRenderPass);
-    GET_PROC(CmdExecuteCommands);
-    GET_PROC(DestroySurfaceKHR);
-    GET_PROC(GetPhysicalDeviceSurfaceSupportKHR);
-    GET_PROC(GetPhysicalDeviceSurfaceCapabilitiesKHR);
-    GET_PROC(GetPhysicalDeviceSurfaceFormatsKHR);
-    GET_PROC(GetPhysicalDeviceSurfacePresentModesKHR);
-    GET_PROC(CreateSwapchainKHR);
-    GET_PROC(DestroySwapchainKHR);
-    GET_PROC(GetSwapchainImagesKHR);
-    GET_PROC(AcquireNextImageKHR);
-    GET_PROC(QueuePresentKHR);
-    GET_PROC(GetPhysicalDeviceDisplayPropertiesKHR);
-    GET_PROC(GetPhysicalDeviceDisplayPlanePropertiesKHR);
-    GET_PROC(GetDisplayPlaneSupportedDisplaysKHR);
-    GET_PROC(GetDisplayModePropertiesKHR);
-    GET_PROC(CreateDisplayModeKHR);
-    GET_PROC(GetDisplayPlaneCapabilitiesKHR);
-    GET_PROC(CreateDisplayPlaneSurfaceKHR);
-    GET_PROC(CreateSharedSwapchainsKHR);
+    if (extensionFlags & kEXT_debug_report_GrVkExtensionFlag) {
+        // Also instance Procs.
+        ACQUIRE_PROC(CreateDebugReportCallbackEXT, instance, VK_NULL_HANDLE);
+        ACQUIRE_PROC(DebugReportMessageEXT, instance, VK_NULL_HANDLE);
+        ACQUIRE_PROC(DestroyDebugReportCallbackEXT, instance, VK_NULL_HANDLE);
+    }
 
-    return interface;
+    // Device Procs.
+    ACQUIRE_PROC(GetDeviceQueue, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(QueueSubmit, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(QueueWaitIdle, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(DeviceWaitIdle, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(AllocateMemory, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(FreeMemory, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(MapMemory, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(UnmapMemory, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(FlushMappedMemoryRanges, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(InvalidateMappedMemoryRanges, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(GetDeviceMemoryCommitment, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(BindBufferMemory, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(BindImageMemory, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(GetBufferMemoryRequirements, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(GetImageMemoryRequirements, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(GetImageSparseMemoryRequirements, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(QueueBindSparse, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CreateFence, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(DestroyFence, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(ResetFences, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(GetFenceStatus, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(WaitForFences, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CreateSemaphore, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(DestroySemaphore, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CreateEvent, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(DestroyEvent, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(GetEventStatus, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(SetEvent, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(ResetEvent, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CreateQueryPool, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(DestroyQueryPool, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(GetQueryPoolResults, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CreateBuffer, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(DestroyBuffer, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CreateBufferView, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(DestroyBufferView, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CreateImage, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(DestroyImage, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(GetImageSubresourceLayout, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CreateImageView, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(DestroyImageView, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CreateShaderModule, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(DestroyShaderModule, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CreatePipelineCache, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(DestroyPipelineCache, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(GetPipelineCacheData, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(MergePipelineCaches, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CreateGraphicsPipelines, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CreateComputePipelines, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(DestroyPipeline, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CreatePipelineLayout, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(DestroyPipelineLayout, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CreateSampler, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(DestroySampler, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CreateDescriptorSetLayout, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(DestroyDescriptorSetLayout, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CreateDescriptorPool, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(DestroyDescriptorPool, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(ResetDescriptorPool, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(AllocateDescriptorSets, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(FreeDescriptorSets, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(UpdateDescriptorSets, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CreateFramebuffer, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(DestroyFramebuffer, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CreateRenderPass, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(DestroyRenderPass, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(GetRenderAreaGranularity, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CreateCommandPool, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(DestroyCommandPool, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(ResetCommandPool, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(AllocateCommandBuffers, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(FreeCommandBuffers, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(BeginCommandBuffer, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(EndCommandBuffer, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(ResetCommandBuffer, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CmdBindPipeline, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CmdSetViewport, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CmdSetScissor, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CmdSetLineWidth, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CmdSetDepthBias, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CmdSetBlendConstants, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CmdSetDepthBounds, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CmdSetStencilCompareMask, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CmdSetStencilWriteMask, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CmdSetStencilReference, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CmdBindDescriptorSets, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CmdBindIndexBuffer, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CmdBindVertexBuffers, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CmdDraw, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CmdDrawIndexed, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CmdDrawIndirect, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CmdDrawIndexedIndirect, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CmdDispatch, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CmdDispatchIndirect, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CmdCopyBuffer, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CmdCopyImage, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CmdBlitImage, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CmdCopyBufferToImage, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CmdCopyImageToBuffer, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CmdUpdateBuffer, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CmdFillBuffer, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CmdClearColorImage, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CmdClearDepthStencilImage, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CmdClearAttachments, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CmdResolveImage, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CmdSetEvent, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CmdResetEvent, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CmdWaitEvents, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CmdPipelineBarrier, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CmdBeginQuery, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CmdEndQuery, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CmdResetQueryPool, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CmdWriteTimestamp, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CmdCopyQueryPoolResults, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CmdPushConstants, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CmdBeginRenderPass, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CmdNextSubpass, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CmdEndRenderPass, VK_NULL_HANDLE, device);
+    ACQUIRE_PROC(CmdExecuteCommands, VK_NULL_HANDLE, device);
 }
+
+#ifdef SK_DEBUG
+    static int kIsDebug = 1;
+#else
+    static int kIsDebug = 0;
+#endif
 
 #define RETURN_FALSE_INTERFACE                                                                   \
     if (kIsDebug) { SkDebugf("%s:%d GrVkInterface::validate() failed.\n", __FILE__, __LINE__); } \
     return false;
 
-bool GrVkInterface::validate() const {
+bool GrVkInterface::validate(uint32_t extensionFlags) const {
     // functions that are always required
     if (NULL == fFunctions.fCreateInstance ||
         NULL == fFunctions.fDestroyInstance ||
@@ -314,26 +334,16 @@ bool GrVkInterface::validate() const {
         NULL == fFunctions.fCmdBeginRenderPass ||
         NULL == fFunctions.fCmdNextSubpass ||
         NULL == fFunctions.fCmdEndRenderPass ||
-        NULL == fFunctions.fCmdExecuteCommands ||
-        NULL == fFunctions.fDestroySurfaceKHR ||
-        NULL == fFunctions.fGetPhysicalDeviceSurfaceSupportKHR ||
-        NULL == fFunctions.fGetPhysicalDeviceSurfaceCapabilitiesKHR ||
-        NULL == fFunctions.fGetPhysicalDeviceSurfaceFormatsKHR ||
-        NULL == fFunctions.fGetPhysicalDeviceSurfacePresentModesKHR ||
-        NULL == fFunctions.fCreateSwapchainKHR ||
-        NULL == fFunctions.fDestroySwapchainKHR ||
-        NULL == fFunctions.fGetSwapchainImagesKHR ||
-        NULL == fFunctions.fAcquireNextImageKHR ||
-        NULL == fFunctions.fQueuePresentKHR ||
-        NULL == fFunctions.fGetPhysicalDeviceDisplayPropertiesKHR ||
-        NULL == fFunctions.fGetPhysicalDeviceDisplayPlanePropertiesKHR ||
-        NULL == fFunctions.fGetDisplayPlaneSupportedDisplaysKHR ||
-        NULL == fFunctions.fGetDisplayModePropertiesKHR ||
-        NULL == fFunctions.fCreateDisplayModeKHR ||
-        NULL == fFunctions.fGetDisplayPlaneCapabilitiesKHR ||
-        NULL == fFunctions.fCreateDisplayPlaneSurfaceKHR ||
-        NULL == fFunctions.fCreateSharedSwapchainsKHR) {
-        return false;
+        NULL == fFunctions.fCmdExecuteCommands) {
+        RETURN_FALSE_INTERFACE
+    }
+
+    if (extensionFlags & kEXT_debug_report_GrVkExtensionFlag) {
+        if (NULL == fFunctions.fCreateDebugReportCallbackEXT ||
+            NULL == fFunctions.fDebugReportMessageEXT ||
+            NULL == fFunctions.fDestroyDebugReportCallbackEXT) {
+            RETURN_FALSE_INTERFACE
+        }
     }
     return true;
 }

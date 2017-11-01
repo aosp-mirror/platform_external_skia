@@ -9,7 +9,7 @@
 #include "SkCanvas.h"
 #include "SkData.h"
 #include "SkDiscardableMemoryPool.h"
-#include "SkImageGeneratorPriv.h"
+#include "SkImageGenerator.h"
 #include "SkMatrixUtils.h"
 #include "SkPaint.h"
 #include "SkPath.h"
@@ -18,46 +18,6 @@
 #include "SkShader.h"
 #include "SkSurface.h"
 #include "Test.h"
-
-class FailurePixelRef : public SkPixelRef {
-public:
-    FailurePixelRef(const SkImageInfo& info) : SkPixelRef(info) {}
-protected:
-    bool onNewLockPixels(LockRec*) override { return false; }
-    void onUnlockPixels() override {}
-};
-
-// crbug.com/295895
-// Crashing in skia when a pixelref fails in lockPixels
-//
-static void test_faulty_pixelref(skiatest::Reporter* reporter) {
-    // need a cache, but don't expect to use it, so the budget is not critical
-    SkAutoTUnref<SkDiscardableMemoryPool> pool(
-        SkDiscardableMemoryPool::Create(10 * 1000, nullptr));
-
-    SkBitmap bm;
-    const SkImageInfo info = SkImageInfo::MakeN32Premul(100, 100);
-    bm.setInfo(info);
-    bm.setPixelRef(new FailurePixelRef(info), 0, 0)->unref();
-    // now our bitmap has a pixelref, but we know it will fail to lock
-
-    SkAutoTUnref<SkSurface> surface(SkSurface::NewRasterN32Premul(200, 200));
-    SkCanvas* canvas = surface->getCanvas();
-
-    const SkFilterQuality levels[] = {
-        kNone_SkFilterQuality,
-        kLow_SkFilterQuality,
-        kMedium_SkFilterQuality,
-        kHigh_SkFilterQuality,
-    };
-
-    SkPaint paint;
-    canvas->scale(2, 2);    // need a scale, otherwise we may ignore filtering
-    for (size_t i = 0; i < SK_ARRAY_COUNT(levels); ++i) {
-        paint.setFilterQuality(levels[i]);
-        canvas->drawBitmap(bm, 0, 0, &paint);
-    }
-}
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -195,11 +155,9 @@ static void test_wacky_bitmapshader(skiatest::Reporter* reporter,
                   0.0078740157f,
                   SkIntToScalar(239),
                   0, 0, SK_Scalar1);
-    SkShader* s = SkShader::CreateBitmapShader(bm, SkShader::kRepeat_TileMode,
-                                               SkShader::kRepeat_TileMode, &matrix);
-
     SkPaint paint;
-    paint.setShader(s)->unref();
+    paint.setShader(SkShader::MakeBitmapShader(bm, SkShader::kRepeat_TileMode,
+                                               SkShader::kRepeat_TileMode, &matrix));
 
     SkRect r = SkRect::MakeXYWH(681, 239, 695, 253);
     c.drawRect(r, paint);
@@ -268,8 +226,6 @@ static void test_nan_antihair() {
 }
 
 static bool check_for_all_zeros(const SkBitmap& bm) {
-    SkAutoLockPixels alp(bm);
-
     size_t count = bm.width() * bm.bytesPerPixel();
     for (int y = 0; y < bm.height(); y++) {
         const uint8_t* ptr = reinterpret_cast<const uint8_t*>(bm.getAddr(0, y));
@@ -310,5 +266,4 @@ DEF_TEST(DrawBitmapRect, reporter) {
     test_giantrepeat_crbug118018(reporter);
 
     test_treatAsSprite(reporter);
-    test_faulty_pixelref(reporter);
 }

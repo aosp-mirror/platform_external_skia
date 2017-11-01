@@ -17,19 +17,9 @@
     implemented privately in GrTexture with a inline public method here). */
 class GrTexturePriv {
 public:
-    void setFlag(GrSurfaceFlags flags) {
-        fTexture->fDesc.fFlags = fTexture->fDesc.fFlags | flags;
+    void dirtyMipMaps(bool mipMapsDirty) {
+        fTexture->dirtyMipMaps(mipMapsDirty);
     }
-
-    void resetFlag(GrSurfaceFlags flags) {
-        fTexture->fDesc.fFlags = fTexture->fDesc.fFlags & ~flags;
-    }
-
-    bool isSetFlag(GrSurfaceFlags flags) const {
-        return 0 != (fTexture->fDesc.fFlags & flags);
-    }
-
-    void dirtyMipMaps(bool mipMapsDirty) { fTexture->dirtyMipMaps(mipMapsDirty); }
 
     bool mipMapsAreDirty() const {
         return GrTexture::kValid_MipMapsStatus != fTexture->fMipMapsStatus;
@@ -39,9 +29,39 @@ public:
         return GrTexture::kNotAllocated_MipMapsStatus != fTexture->fMipMapsStatus;
     }
 
+    void setMaxMipMapLevel(int maxMipMapLevel) const {
+        fTexture->fMaxMipMapLevel = maxMipMapLevel;
+    }
+
+    int maxMipMapLevel() const {
+        return fTexture->fMaxMipMapLevel;
+    }
+
+    GrSLType imageStorageType() const {
+        if (GrPixelConfigIsSint(fTexture->config())) {
+            return kIImageStorage2D_GrSLType;
+        } else {
+            return kImageStorage2D_GrSLType;
+        }
+    }
+
+    GrSLType samplerType() const { return fTexture->fSamplerType; }
+
+    /** The filter used is clamped to this value in GrProcessor::TextureSampler. */
+    GrSamplerParams::FilterMode highestFilterMode() const { return fTexture->fHighestFilterMode; }
+
+    void setMipColorMode(SkDestinationSurfaceColorMode colorMode) const {
+        fTexture->fMipColorMode = colorMode;
+    }
+    SkDestinationSurfaceColorMode mipColorMode() const { return fTexture->fMipColorMode; }
+
     static void ComputeScratchKey(const GrSurfaceDesc&, GrScratchKey*);
 
 private:
+    static void ComputeScratchKey(GrPixelConfig config, int width, int height,
+                                  GrSurfaceOrigin origin, bool isRenderTarget, int sampleCnt,
+                                  bool isMipMapped, GrScratchKey* key);
+
     GrTexturePriv(GrTexture* texture) : fTexture(texture) { }
     GrTexturePriv(const GrTexturePriv& that) : fTexture(that.fTexture) { }
     GrTexturePriv& operator=(const GrTexturePriv&); // unimpl

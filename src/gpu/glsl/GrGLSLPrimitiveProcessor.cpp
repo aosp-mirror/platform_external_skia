@@ -9,18 +9,19 @@
 
 #include "GrCoordTransform.h"
 #include "glsl/GrGLSLFragmentShaderBuilder.h"
+#include "glsl/GrGLSLProgramBuilder.h"
 #include "glsl/GrGLSLUniformHandler.h"
 #include "glsl/GrGLSLVertexShaderBuilder.h"
 
 SkMatrix GrGLSLPrimitiveProcessor::GetTransformMatrix(const SkMatrix& localMatrix,
                                                       const GrCoordTransform& coordTransform) {
     SkMatrix combined;
-    // We only apply the localmatrix to localcoords
-    if (kLocal_GrCoordSet == coordTransform.sourceCoords()) {
-        combined.setConcat(coordTransform.getMatrix(), localMatrix);
-    } else {
-        combined = coordTransform.getMatrix();
+    combined.setConcat(coordTransform.getMatrix(), localMatrix);
+    if (coordTransform.normalize()) {
+        combined.postIDiv(coordTransform.peekTexture()->width(),
+                          coordTransform.peekTexture()->height());
     }
+
     if (coordTransform.reverseY()) {
         // combined.postScale(1,-1);
         // combined.postTranslate(0,1);
@@ -46,4 +47,20 @@ void GrGLSLPrimitiveProcessor::setupUniformColor(GrGLSLPPFragmentBuilder* fragBu
                                                "Color",
                                                &stagedLocalVarName);
     fragBuilder->codeAppendf("%s = %s;", outputName, stagedLocalVarName);
+    if (fragBuilder->getProgramBuilder()->shaderCaps()->mustObfuscateUniformColor()) {
+        fragBuilder->codeAppendf("%s = max(%s, vec4(0, 0, 0, 0));", outputName, outputName);
+    }
+}
+
+//////////////////////////////////////////////////////////////////////////////
+
+const GrCoordTransform* GrGLSLPrimitiveProcessor::FPCoordTransformHandler::nextCoordTransform() {
+#ifdef SK_DEBUG
+    SkASSERT(nullptr == fCurr || fAddedCoord);
+    fAddedCoord = false;
+    fCurr = fIter.next();
+    return fCurr;
+#else
+    return fIter.next();
+#endif
 }

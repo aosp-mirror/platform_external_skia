@@ -9,42 +9,40 @@
 #define GrContext_DEFINED
 
 #include "GrCaps.h"
-#include "GrClip.h"
 #include "GrColor.h"
-#include "GrPaint.h"
-#include "GrRenderTarget.h"
-#include "GrTextureProvider.h"
 #include "SkMatrix.h"
 #include "SkPathEffect.h"
 #include "SkTypes.h"
 #include "../private/GrAuditTrail.h"
 #include "../private/GrSingleOwner.h"
-#include "../private/SkMutex.h"
 
-struct GrBatchAtlasConfig;
-class GrBatchFontCache;
+class GrAtlasGlyphCache;
 struct GrContextOptions;
+class GrContextPriv;
+class GrContextThreadSafeProxy;
 class GrDrawingManager;
-class GrDrawContext;
-class GrDrawTarget;
+struct GrDrawOpAtlasConfig;
+class GrRenderTargetContext;
 class GrFragmentProcessor;
 class GrGpu;
 class GrIndexBuffer;
-class GrLayerCache;
 class GrOvalRenderer;
 class GrPath;
 class GrPipelineBuilder;
 class GrResourceEntry;
 class GrResourceCache;
 class GrResourceProvider;
-class GrTestTarget;
+class GrSamplerParams;
+class GrSurfaceProxy;
 class GrTextBlobCache;
 class GrTextContext;
-class GrTextureParams;
+class GrTextureProxy;
 class GrVertexBuffer;
-class GrStrokeInfo;
 class GrSwizzle;
 class SkTraceMemoryDump;
+
+class SkImage;
+class SkSurfaceProps;
 
 class SK_API GrContext : public SkRefCnt {
 public:
@@ -60,6 +58,8 @@ public:
     static GrContext* CreateMockContext();
 
     virtual ~GrContext();
+
+    sk_sp<GrContextThreadSafeProxy> threadSafeProxy();
 
     /**
      * The GrContext normally assumes that no outsider is setting state
@@ -90,20 +90,28 @@ public:
     }
 
     /**
-     * Abandons all GPU resources and assumes the underlying backend 3D API
-     * context is not longer usable. Call this if you have lost the associated
-     * GPU context, and thus internal texture, buffer, etc. references/IDs are
-     * now invalid. Should be called even when GrContext is no longer going to
-     * be used for two reasons:
-     *  1) ~GrContext will not try to free the objects in the 3D API.
-     *  2) Any GrGpuResources created by this GrContext that outlive
-     *     will be marked as invalid (GrGpuResource::wasDestroyed()) and
-     *     when they're destroyed no 3D API calls will be made.
-     * Content drawn since the last GrContext::flush() may be lost. After this
-     * function is called the only valid action on the GrContext or
-     * GrGpuResources it created is to destroy them.
+     * Abandons all GPU resources and assumes the underlying backend 3D API context is not longer
+     * usable. Call this if you have lost the associated GPU context, and thus internal texture,
+     * buffer, etc. references/IDs are now invalid. Calling this ensures that the destructors of the
+     * GrContext and any of its created resource objects will not make backend 3D API calls. Content
+     * rendered but not previously flushed may be lost. After this function is called all subsequent
+     * calls on the GrContext will fail or be no-ops.
+     *
+     * The typical use case for this function is that the underlying 3D context was lost and further
+     * API calls may crash.
      */
     void abandonContext();
+
+    /**
+     * This is similar to abandonContext() however the underlying 3D context is not yet lost and
+     * the GrContext will cleanup all allocated resources before returning. After returning it will
+     * assume that the underlying context may no longer be valid.
+     *
+     * The typical use case for this function is that the client is going to destroy the 3D context
+     * but can't guarantee that GrContext will be destroyed first (perhaps because it may be ref'ed
+     * elsewhere by either the client or Skia objects).
+     */
+    void releaseResourcesAndAbandonContext();
 
     ///////////////////////////////////////////////////////////////////////////
     // Resource Cache
@@ -129,6 +137,11 @@ public:
     void getResourceCacheUsage(int* resourceCount, size_t* resourceBytes) const;
 
     /**
+     *  Gets the number of bytes in the cache consumed by purgeable (e.g. unlocked) resources.
+     */
+    size_t getResourceCachePurgeableBytes() const;
+
+    /**
      *  Specify the GPU resource cache limits. If the current cache exceeds either
      *  of these, it will be purged (LRU) to keep the cache within these limits.
      *
@@ -138,9 +151,6 @@ public:
      *                          that can be held in the cache.
      */
     void setResourceCacheLimits(int maxResources, size_t maxResourceBytes);
-
-    GrTextureProvider* textureProvider() { return fTextureProvider; }
-    const GrTextureProvider* textureProvider() const { return fTextureProvider; }
 
     /**
      * Frees GPU created by the context. Can be called to reduce GPU memory
@@ -154,6 +164,24 @@ public:
      * and is not defined in normal builds of Skia.
      */
     void purgeAllUnlockedResources();
+
+    /**
+     * Purge GPU resources that haven't been used in the past 'ms' milliseconds, regardless of
+     * whether the context is currently under budget.
+     */
+    void purgeResourcesNotUsedInMs(std::chrono::milliseconds ms);
+
+    /**
+     * Purge unlocked resources from the cache until the the provided byte count has been reached
+     * or we have purged all unlocked resources. The default policy is to purge in LRU order, but
+     * can be overridden to prefer purging scratch resources (in LRU order) prior to purging other
+     * resource types.
+     *
+     * @param maxBytesToPurge the desired number of bytes to be purged.
+     * @param preferScratchResources If true scratch resources will be purged prior to other
+     *                               resource types.
+     */
+    void purgeUnlockedResources(size_t bytesToPurge, bool preferScratchResources);
 
     /** Access the context capabilities */
     const GrCaps* caps() const { return fCaps; }
@@ -171,140 +199,44 @@ public:
      */
     int getRecommendedSampleCount(GrPixelConfig config, SkScalar dpi) const;
 
-    /**
-     * Returns a helper object to orchestrate draws.
-     * Callers assume the creation ref of the drawContext
-     * NULL will be returned if the context has been abandoned.
-     *
-     * @param  rt           the render target receiving the draws
-     * @param  surfaceProps the surface properties (mainly defines text drawing)
-     *
-     * @return a draw context
+    /*
+     * Create a new render target context backed by a deferred-style
+     * GrRenderTargetProxy. We guarantee that "asTextureProxy" will succeed for
+     * renderTargetContexts created via this entry point.
      */
-    GrDrawContext* drawContext(GrRenderTarget* rt, const SkSurfaceProps* surfaceProps = NULL);
+    sk_sp<GrRenderTargetContext> makeDeferredRenderTargetContext(
+                                                 SkBackingFit fit,
+                                                 int width, int height,
+                                                 GrPixelConfig config,
+                                                 sk_sp<SkColorSpace> colorSpace,
+                                                 int sampleCnt = 0,
+                                                 GrSurfaceOrigin origin = kBottomLeft_GrSurfaceOrigin,
+                                                 const SkSurfaceProps* surfaceProps = nullptr,
+                                                 SkBudgeted = SkBudgeted::kYes);
+    /*
+     * This method will attempt to create a renderTargetContext that has, at least, the number of
+     * channels and precision per channel as requested in 'config' (e.g., A8 and 888 can be
+     * converted to 8888). It may also swizzle the channels (e.g., BGRA -> RGBA).
+     * SRGB-ness will be preserved.
+     */
+    sk_sp<GrRenderTargetContext> makeDeferredRenderTargetContextWithFallback(
+                                                 SkBackingFit fit,
+                                                 int width, int height,
+                                                 GrPixelConfig config,
+                                                 sk_sp<SkColorSpace> colorSpace,
+                                                 int sampleCnt = 0,
+                                                 GrSurfaceOrigin origin = kBottomLeft_GrSurfaceOrigin,
+                                                 const SkSurfaceProps* surfaceProps = nullptr,
+                                                 SkBudgeted budgeted = SkBudgeted::kYes);
 
     ///////////////////////////////////////////////////////////////////////////
     // Misc.
 
     /**
-     * Flags that affect flush() behavior.
-     */
-    enum FlushBits {
-        /**
-         * A client may reach a point where it has partially rendered a frame
-         * through a GrContext that it knows the user will never see. This flag
-         * causes the flush to skip submission of deferred content to the 3D API
-         * during the flush.
-         */
-        kDiscard_FlushBit                    = 0x2,
-    };
-
-    /**
      * Call to ensure all drawing to the context has been issued to the
      * underlying 3D API.
-     * @param flagsBitfield     flags that control the flushing behavior. See
-     *                          FlushBits.
      */
-    void flush(int flagsBitfield = 0);
-
-    void flushIfNecessary() {
-        if (fFlushToReduceCacheSize || this->caps()->immediateFlush()) {
-            this->flush();
-        }
-    }
-
-   /**
-    * These flags can be used with the read/write pixels functions below.
-    */
-    enum PixelOpsFlags {
-        /** The GrContext will not be flushed before the surface read or write. This means that
-            the read or write may occur before previous draws have executed. */
-        kDontFlush_PixelOpsFlag = 0x1,
-        /** Any surface writes should be flushed to the backend 3D API after the surface operation
-            is complete */
-        kFlushWrites_PixelOp = 0x2,
-        /** The src for write or dst read is unpremultiplied. This is only respected if both the
-            config src and dst configs are an RGBA/BGRA 8888 format. */
-        kUnpremul_PixelOpsFlag  = 0x4,
-    };
-
-    /**
-     * Reads a rectangle of pixels from a surface.
-     * @param surface       the surface to read from.
-     * @param left          left edge of the rectangle to read (inclusive)
-     * @param top           top edge of the rectangle to read (inclusive)
-     * @param width         width of rectangle to read in pixels.
-     * @param height        height of rectangle to read in pixels.
-     * @param config        the pixel config of the destination buffer
-     * @param buffer        memory to read the rectangle into.
-     * @param rowBytes      number of bytes bewtween consecutive rows. Zero means rows are tightly
-     *                      packed.
-     * @param pixelOpsFlags see PixelOpsFlags enum above.
-     *
-     * @return true if the read succeeded, false if not. The read can fail because of an unsupported
-     *         pixel configs
-     */
-    bool readSurfacePixels(GrSurface* surface,
-                           int left, int top, int width, int height,
-                           GrPixelConfig config, void* buffer,
-                           size_t rowBytes = 0,
-                           uint32_t pixelOpsFlags = 0);
-
-    /**
-     * Writes a rectangle of pixels to a surface.
-     * @param surface       the surface to write to.
-     * @param left          left edge of the rectangle to write (inclusive)
-     * @param top           top edge of the rectangle to write (inclusive)
-     * @param width         width of rectangle to write in pixels.
-     * @param height        height of rectangle to write in pixels.
-     * @param config        the pixel config of the source buffer
-     * @param buffer        memory to read pixels from
-     * @param rowBytes      number of bytes between consecutive rows. Zero
-     *                      means rows are tightly packed.
-     * @param pixelOpsFlags see PixelOpsFlags enum above.
-     * @return true if the write succeeded, false if not. The write can fail because of an
-     *         unsupported combination of surface and src configs.
-     */
-    bool writeSurfacePixels(GrSurface* surface,
-                            int left, int top, int width, int height,
-                            GrPixelConfig config, const void* buffer,
-                            size_t rowBytes,
-                            uint32_t pixelOpsFlags = 0);
-
-    /**
-     * Copies a rectangle of texels from src to dst.
-     * bounds.
-     * @param dst           the surface to copy to.
-     * @param src           the surface to copy from.
-     * @param srcRect       the rectangle of the src that should be copied.
-     * @param dstPoint      the translation applied when writing the srcRect's pixels to the dst.
-     */
-    bool copySurface(GrSurface* dst,
-                     GrSurface* src,
-                     const SkIRect& srcRect,
-                     const SkIPoint& dstPoint);
-
-    /** Helper that copies the whole surface but fails when the two surfaces are not identically
-        sized. */
-    bool copySurface(GrSurface* dst, GrSurface* src) {
-        return this->copySurface(dst, src, SkIRect::MakeWH(dst->width(), dst->height()),
-                                 SkIPoint::Make(0,0));
-    }
-
-    /**
-     * After this returns any pending writes to the surface will have been issued to the backend 3D API.
-     */
-    void flushSurfaceWrites(GrSurface* surface);
-
-    /**
-     * Finalizes all pending reads and writes to the surface and also performs an MSAA resolve
-     * if necessary.
-     *
-     * It is not necessary to call this before reading the render target via Skia/GrContext.
-     * GrContext will detect when it must perform a resolve before reading pixels back from the
-     * surface or using it as a texture.
-     */
-    void prepareSurfaceForExternalIO(GrSurface*);
+    void flush();
 
     /**
      * An ID associated with this context, guaranteed to be unique.
@@ -315,16 +247,12 @@ public:
     // Functions intended for internal use only.
     GrGpu* getGpu() { return fGpu; }
     const GrGpu* getGpu() const { return fGpu; }
-    GrBatchFontCache* getBatchFontCache() { return fBatchFontCache; }
-    GrLayerCache* getLayerCache() { return fLayerCache.get(); }
-    GrTextBlobCache* getTextBlobCache() { return fTextBlobCache; }
+    GrAtlasGlyphCache* getAtlasGlyphCache() { return fAtlasGlyphCache; }
+    GrTextBlobCache* getTextBlobCache() { return fTextBlobCache.get(); }
     bool abandoned() const;
     GrResourceProvider* resourceProvider() { return fResourceProvider; }
     const GrResourceProvider* resourceProvider() const { return fResourceProvider; }
     GrResourceCache* getResourceCache() { return fResourceCache; }
-
-    // Called by tests that draw directly to the context via GrDrawTarget
-    void getTestTarget(GrTestTarget*, GrRenderTarget* rt);
 
     /** Reset GPU stats */
     void resetGpuStats() const ;
@@ -345,74 +273,63 @@ public:
 
     /** Specify the sizes of the GrAtlasTextContext atlases.  The configs pointer below should be
         to an array of 3 entries */
-    void setTextContextAtlasSizes_ForTesting(const GrBatchAtlasConfig* configs);
+    void setTextContextAtlasSizes_ForTesting(const GrDrawOpAtlasConfig* configs);
 
     /** Enumerates all cached GPU resources and dumps their memory to traceMemoryDump. */
     void dumpMemoryStatistics(SkTraceMemoryDump* traceMemoryDump) const;
 
-    /** Get pointer to atlas texture for given mask format */
-    GrTexture* getFontAtlasTexture(GrMaskFormat format);
+    /** Get pointer to atlas texture for given mask format. Note that this wraps an
+        actively mutating texture in an SkImage. This could yield unexpected results
+        if it gets cached or used more generally. */
+    sk_sp<SkImage> getFontAtlasImage_ForTesting(GrMaskFormat format);
 
     GrAuditTrail* getAuditTrail() { return &fAuditTrail; }
 
     /** This is only useful for debug purposes */
     SkDEBUGCODE(GrSingleOwner* debugSingleOwner() const { return &fSingleOwner; } )
 
+    // Provides access to functions that aren't part of the public API.
+    GrContextPriv contextPriv();
+    const GrContextPriv contextPriv() const;
+
 private:
-    GrGpu*                          fGpu;
-    const GrCaps*                   fCaps;
-    GrResourceCache*                fResourceCache;
-    // this union exists because the inheritance of GrTextureProvider->GrResourceProvider
-    // is in a private header.
-    union {
-        GrResourceProvider*         fResourceProvider;
-        GrTextureProvider*          fTextureProvider;
-    };
+    GrGpu*                                  fGpu;
+    const GrCaps*                           fCaps;
+    GrResourceCache*                        fResourceCache;
+    GrResourceProvider*                     fResourceProvider;
 
-    GrBatchFontCache*               fBatchFontCache;
-    SkAutoTDelete<GrLayerCache>     fLayerCache;
-    SkAutoTDelete<GrTextBlobCache>  fTextBlobCache;
+    sk_sp<GrContextThreadSafeProxy>         fThreadSafeProxy;
 
-    // Set by OverbudgetCB() to request that GrContext flush before exiting a draw.
-    bool                            fFlushToReduceCacheSize;
-    bool                            fDidTestPMConversions;
-    int                             fPMToUPMConversion;
-    int                             fUPMToPMConversion;
-    // The sw backend may call GrContext::readSurfacePixels on multiple threads
-    // We may transfer the responsibilty for using a mutex to the sw backend
-    // when there are fewer code paths that lead to a readSurfacePixels call
-    // from the sw backend. readSurfacePixels is reentrant in one case - when performing
-    // the PM conversions test. To handle this we do the PM conversions test outside
-    // of fReadPixelsMutex and use a separate mutex to guard it. When it re-enters
-    // readSurfacePixels it will grab fReadPixelsMutex and release it before the outer
-    // readSurfacePixels proceeds to grab it.
-    // TODO: Stop pretending to make GrContext thread-safe for sw rasterization and provide
-    // a mechanism to make a SkPicture safe for multithreaded sw rasterization.
-    SkMutex                         fReadPixelsMutex;
-    SkMutex                         fTestPMConversionsMutex;
+    GrAtlasGlyphCache*                      fAtlasGlyphCache;
+    std::unique_ptr<GrTextBlobCache>        fTextBlobCache;
+
+    bool                                    fDisableGpuYUVConversion;
+    bool                                    fDidTestPMConversions;
+    // true if the PM/UPM conversion succeeded; false otherwise
+    bool                                    fPMUPMConversionsRoundTrip;
 
     // In debug builds we guard against improper thread handling
     // This guard is passed to the GrDrawingManager and, from there to all the
-    // GrDrawContexts.  It is also passed to the GrTextureProvider and SkGpuDevice.
-    mutable GrSingleOwner fSingleOwner;
+    // GrRenderTargetContexts.  It is also passed to the GrResourceProvider and SkGpuDevice.
+    mutable GrSingleOwner                   fSingleOwner;
 
     struct CleanUpData {
         PFCleanUpFunc fFunc;
         void*         fInfo;
     };
 
-    SkTDArray<CleanUpData>          fCleanUpData;
+    SkTDArray<CleanUpData>                  fCleanUpData;
 
-    const uint32_t                  fUniqueID;
+    const uint32_t                          fUniqueID;
 
-    SkAutoTDelete<GrDrawingManager> fDrawingManager;
+    std::unique_ptr<GrDrawingManager>       fDrawingManager;
 
-    GrAuditTrail                    fAuditTrail;
+    GrAuditTrail                            fAuditTrail;
 
-    // TODO: have the CMM use drawContexts and rm this friending
-    friend class GrClipMaskManager; // the CMM is friended just so it can call 'drawingManager'
-    friend class GrDrawingManager;  // for access to drawingManager for ProgramUnitTest
-    GrDrawingManager* drawingManager() { return fDrawingManager; }
+    GrBackend                               fBackend;
+
+    // TODO: have the GrClipStackClip use renderTargetContexts and rm this friending
+    friend class GrContextPriv;
 
     GrContext(); // init must be called after the constructor.
     bool init(GrBackend, GrBackendContext, const GrContextOptions& options);
@@ -421,33 +338,45 @@ private:
     void initCommon(const GrContextOptions&);
 
     /**
-     * These functions create premul <-> unpremul effects if it is possible to generate a pair
-     * of effects that make a readToUPM->writeToPM->readToUPM cycle invariant. Otherwise, they
-     * return NULL. They also can perform a swizzle as part of the draw.
+     * These functions create premul <-> unpremul effects. If the second argument is 'true', they
+     * use the specialized round-trip effects from GrConfigConversionEffect, otherwise they
+     * create effects that do naive multiply or divide.
      */
-    const GrFragmentProcessor* createPMToUPMEffect(GrTexture*, const GrSwizzle&,
-                                                   const SkMatrix&) const;
-    const GrFragmentProcessor* createUPMToPMEffect(GrTexture*, const GrSwizzle&,
-                                                   const SkMatrix&) const;
-    /** Called before either of the above two functions to determine the appropriate fragment
-        processors for conversions. This must be called by readSurfacePixels before a mutex is
-        taken, since testingvPM conversions itself will call readSurfacePixels */
-    void testPMConversionsIfNecessary(uint32_t flags);
-    /** Returns true if we've already determined that createPMtoUPMEffect and createUPMToPMEffect
-        will fail. In such cases fall back to SW conversion. */
-    bool didFailPMUPMConversionTest() const;
+    sk_sp<GrFragmentProcessor> createPMToUPMEffect(sk_sp<GrFragmentProcessor>,
+                                                   bool useConfigConversionEffect);
+    sk_sp<GrFragmentProcessor> createUPMToPMEffect(sk_sp<GrFragmentProcessor>,
+                                                   bool useConfigConversionEffect);
 
     /**
-     *  This callback allows the resource cache to callback into the GrContext
-     *  when the cache is still over budget after a purge.
+     * Returns true if createPMtoUPMEffect and createUPMToPMEffect will succeed for non-sRGB 8888
+     * configs. In other words, did we find a pair of round-trip preserving conversion effects?
      */
-    static void OverBudgetCB(void* data);
+    bool validPMUPMConversionExists();
 
     /**
      * A callback similar to the above for use by the TextBlobCache
      * TODO move textblob draw calls below context so we can use the call above.
      */
     static void TextBlobCacheOverBudgetCB(void* data);
+
+    typedef SkRefCnt INHERITED;
+};
+
+/**
+ * Can be used to perform actions related to the generating GrContext in a thread safe manner. The
+ * proxy does not access the 3D API (e.g. OpenGL) that backs the generating GrContext.
+ */
+class GrContextThreadSafeProxy : public SkRefCnt {
+private:
+    GrContextThreadSafeProxy(sk_sp<const GrCaps> caps, uint32_t uniqueID)
+        : fCaps(std::move(caps))
+        , fContextUniqueID(uniqueID) {}
+
+    sk_sp<const GrCaps> fCaps;
+    uint32_t            fContextUniqueID;
+
+    friend class GrContext;
+    friend class SkImage;
 
     typedef SkRefCnt INHERITED;
 };

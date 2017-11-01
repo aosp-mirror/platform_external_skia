@@ -7,8 +7,13 @@
 #ifndef PathOpsThreadedCommon_DEFINED
 #define PathOpsThreadedCommon_DEFINED
 
+#include "SkBitmap.h"
 #include "SkGraphics.h"
+#include "SkPath.h"
+#include "SkPathOps.h"
 #include "SkTDArray.h"
+
+#include <string>
 
 #define PATH_STR_SIZE 512
 
@@ -23,11 +28,14 @@ struct PathOpsThreadState {
     unsigned char fB;
     unsigned char fC;
     unsigned char fD;
-    char* fPathStr;
+    std::string fPathStr;
     const char* fKey;
     char fSerialNo[256];
     skiatest::Reporter* fReporter;
     SkBitmap* fBitmap;
+
+    void outputProgress(const char* pathStr, SkPath::FillType);
+    void outputProgress(const char* pathStr, SkPathOp);
 };
 
 class PathOpsThreadedTestRunner {
@@ -75,8 +83,6 @@ public:
     void operator()() {
         SkBitmap bitmap;
         fState.fBitmap = &bitmap;
-        char pathStr[PATH_STR_SIZE];
-        fState.fPathStr = pathStr;
         SkGraphics::SetTLSFontCacheLimit(1 * 1024 * 1024);
         (*fTestFun)(&fState);
     }

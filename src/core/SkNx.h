@@ -8,195 +8,353 @@
 #ifndef SkNx_DEFINED
 #define SkNx_DEFINED
 
-//#define SKNX_NO_SIMD
-
+#include "SkSafe_math.h"
 #include "SkScalar.h"
 #include "SkTypes.h"
-#include <math.h>
+#include <limits>
+#include <type_traits>
 
-// The default implementations just fall back on a pair of size N/2.
-// These support the union of operations we might do to ints and floats, but
-// platform specializations might support fewer (e.g. no float <<, no int /).
+// Every single SkNx method wants to be fully inlined.  (We know better than MSVC).
+#define AI SK_ALWAYS_INLINE
+
+namespace {
+
+// The default SkNx<N,T> just proxies down to a pair of SkNx<N/2, T>.
 template <int N, typename T>
-class SkNx {
-public:
-    SkNx() {}
-    SkNx(T val) : fLo(val), fHi(val) {}
-
+struct SkNx {
     typedef SkNx<N/2, T> Half;
-    SkNx(const Half& lo, const Half& hi) : fLo(lo), fHi(hi) {}
 
-    SkNx(T a, T b)                                : fLo(a),       fHi(b)       {}
-    SkNx(T a, T b, T c, T d)                      : fLo(a,b),     fHi(c,d)     {}
-    SkNx(T a, T b, T c, T d,  T e, T f, T g, T h) : fLo(a,b,c,d), fHi(e,f,g,h) {}
-    SkNx(T a, T b, T c, T d,  T e, T f, T g, T h,
-         T i, T j, T k, T l,  T m, T n, T o, T p) : fLo(a,b,c,d, e,f,g,h), fHi(i,j,k,l, m,n,o,p) {}
+    Half fLo, fHi;
 
-    static SkNx Load(const void* ptr) {
-        auto vals = (const T*)ptr;
-        return SkNx(Half::Load(vals), Half::Load(vals+N/2));
+    AI SkNx() = default;
+    AI SkNx(const Half& lo, const Half& hi) : fLo(lo), fHi(hi) {}
+
+    AI SkNx(T v) : fLo(v), fHi(v) {}
+
+    AI SkNx(T a, T b)           : fLo(a)  , fHi(b)   { static_assert(N==2, ""); }
+    AI SkNx(T a, T b, T c, T d) : fLo(a,b), fHi(c,d) { static_assert(N==4, ""); }
+    AI SkNx(T a, T b, T c, T d,  T e, T f, T g, T h) : fLo(a,b,c,d), fHi(e,f,g,h) {
+        static_assert(N==8, "");
+    }
+    AI SkNx(T a, T b, T c, T d,  T e, T f, T g, T h,
+            T i, T j, T k, T l,  T m, T n, T o, T p)
+        : fLo(a,b,c,d, e,f,g,h), fHi(i,j,k,l, m,n,o,p) {
+        static_assert(N==16, "");
     }
 
-    void store(void* ptr) const {
-        auto vals = (T*)ptr;
-        fLo.store(vals);
-        fHi.store(vals+N/2);
-    }
-
-#define OP(op) SkNx operator op(const SkNx& o) const { return {fLo op o.fLo, fHi op o.fHi}; }
-    OP(+) OP(-) OP(*) OP(/)
-    OP(&) OP(|) OP(^)
-    OP(==) OP(!=) OP(<) OP(>) OP(<=) OP(>=)
-#undef OP
-
-#define OP(op) SkNx op() const { return {fLo.op(), fHi.op()}; }
-    OP(abs) OP(floor)
-    OP(sqrt) OP(rsqrt0) OP(rsqrt1) OP(rsqrt2)
-    OP(invert) OP(approxInvert)
-#undef OP
-
-    SkNx operator << (int bits) const { return SkNx(fLo << bits, fHi << bits); }
-    SkNx operator >> (int bits) const { return SkNx(fLo >> bits, fHi >> bits); }
-
-    SkNx saturatedAdd(const SkNx& o) const {
-        return {fLo.saturatedAdd(o.fLo), fHi.saturatedAdd(o.fHi)};
-    }
-
-    static SkNx Min(const SkNx& a, const SkNx& b) {
-        return {Half::Min(a.fLo, b.fLo), Half::Min(a.fHi, b.fHi)};
-    }
-    static SkNx Max(const SkNx& a, const SkNx& b) {
-        return {Half::Max(a.fLo, b.fLo), Half::Max(a.fHi, b.fHi)};
-    }
-
-    T operator[](int k) const {
+    AI T operator[](int k) const {
         SkASSERT(0 <= k && k < N);
         return k < N/2 ? fLo[k] : fHi[k-N/2];
     }
 
-    bool allTrue() const { return fLo.allTrue() && fHi.allTrue(); }
-    bool anyTrue() const { return fLo.anyTrue() || fHi.anyTrue(); }
-    SkNx thenElse(const SkNx& t, const SkNx& e) const {
-        return SkNx(fLo.thenElse(t.fLo, e.fLo), fHi.thenElse(t.fHi, e.fHi));
+    AI static SkNx Load(const void* vptr) {
+        auto ptr = (const char*)vptr;
+        return { Half::Load(ptr), Half::Load(ptr + N/2*sizeof(T)) };
+    }
+    AI void store(void* vptr) const {
+        auto ptr = (char*)vptr;
+        fLo.store(ptr);
+        fHi.store(ptr + N/2*sizeof(T));
     }
 
-protected:
-    static_assert(0 == (N & (N-1)), "N must be a power of 2.");
+    AI static void Load4(const void* vptr, SkNx* a, SkNx* b, SkNx* c, SkNx* d) {
+        auto ptr = (const char*)vptr;
+        Half al, bl, cl, dl,
+             ah, bh, ch, dh;
+        Half::Load4(ptr                  , &al, &bl, &cl, &dl);
+        Half::Load4(ptr + 4*N/2*sizeof(T), &ah, &bh, &ch, &dh);
+        *a = SkNx{al, ah};
+        *b = SkNx{bl, bh};
+        *c = SkNx{cl, ch};
+        *d = SkNx{dl, dh};
+    }
+    AI static void Load3(const void* vptr, SkNx* a, SkNx* b, SkNx* c) {
+        auto ptr = (const char*)vptr;
+        Half al, bl, cl,
+             ah, bh, ch;
+        Half::Load3(ptr                  , &al, &bl, &cl);
+        Half::Load3(ptr + 3*N/2*sizeof(T), &ah, &bh, &ch);
+        *a = SkNx{al, ah};
+        *b = SkNx{bl, bh};
+        *c = SkNx{cl, ch};
+    }
+    AI static void Store4(void* vptr, const SkNx& a, const SkNx& b, const SkNx& c, const SkNx& d) {
+        auto ptr = (char*)vptr;
+        Half::Store4(ptr,                   a.fLo, b.fLo, c.fLo, d.fLo);
+        Half::Store4(ptr + 4*N/2*sizeof(T), a.fHi, b.fHi, c.fHi, d.fHi);
+    }
 
-    Half fLo, fHi;
+    AI bool anyTrue() const { return fLo.anyTrue() || fHi.anyTrue(); }
+    AI bool allTrue() const { return fLo.allTrue() && fHi.allTrue(); }
+
+    AI SkNx    abs() const { return { fLo.   abs(), fHi.   abs() }; }
+    AI SkNx   sqrt() const { return { fLo.  sqrt(), fHi.  sqrt() }; }
+    AI SkNx  rsqrt() const { return { fLo. rsqrt(), fHi. rsqrt() }; }
+    AI SkNx  floor() const { return { fLo. floor(), fHi. floor() }; }
+    AI SkNx invert() const { return { fLo.invert(), fHi.invert() }; }
+
+    AI SkNx operator!() const { return { !fLo, !fHi }; }
+    AI SkNx operator-() const { return { -fLo, -fHi }; }
+    AI SkNx operator~() const { return { ~fLo, ~fHi }; }
+
+    AI SkNx operator<<(int bits) const { return { fLo << bits, fHi << bits }; }
+    AI SkNx operator>>(int bits) const { return { fLo >> bits, fHi >> bits }; }
+
+    AI SkNx operator+(const SkNx& y) const { return { fLo + y.fLo, fHi + y.fHi }; }
+    AI SkNx operator-(const SkNx& y) const { return { fLo - y.fLo, fHi - y.fHi }; }
+    AI SkNx operator*(const SkNx& y) const { return { fLo * y.fLo, fHi * y.fHi }; }
+    AI SkNx operator/(const SkNx& y) const { return { fLo / y.fLo, fHi / y.fHi }; }
+
+    AI SkNx operator&(const SkNx& y) const { return { fLo & y.fLo, fHi & y.fHi }; }
+    AI SkNx operator|(const SkNx& y) const { return { fLo | y.fLo, fHi | y.fHi }; }
+    AI SkNx operator^(const SkNx& y) const { return { fLo ^ y.fLo, fHi ^ y.fHi }; }
+
+    AI SkNx operator==(const SkNx& y) const { return { fLo == y.fLo, fHi == y.fHi }; }
+    AI SkNx operator!=(const SkNx& y) const { return { fLo != y.fLo, fHi != y.fHi }; }
+    AI SkNx operator<=(const SkNx& y) const { return { fLo <= y.fLo, fHi <= y.fHi }; }
+    AI SkNx operator>=(const SkNx& y) const { return { fLo >= y.fLo, fHi >= y.fHi }; }
+    AI SkNx operator< (const SkNx& y) const { return { fLo <  y.fLo, fHi <  y.fHi }; }
+    AI SkNx operator> (const SkNx& y) const { return { fLo >  y.fLo, fHi >  y.fHi }; }
+
+    AI SkNx saturatedAdd(const SkNx& y) const {
+        return { fLo.saturatedAdd(y.fLo), fHi.saturatedAdd(y.fHi) };
+    }
+    AI SkNx thenElse(const SkNx& t, const SkNx& e) const {
+        return { fLo.thenElse(t.fLo, e.fLo), fHi.thenElse(t.fHi, e.fHi) };
+    }
+
+    AI static SkNx Min(const SkNx& x, const SkNx& y) {
+        return { Half::Min(x.fLo, y.fLo), Half::Min(x.fHi, y.fHi) };
+    }
+    AI static SkNx Max(const SkNx& x, const SkNx& y) {
+        return { Half::Max(x.fLo, y.fLo), Half::Max(x.fHi, y.fHi) };
+    }
 };
 
-// Bottom out the default implementations with scalars when nothing's been specialized.
+// The N -> N/2 recursion bottoms out at N == 1, a scalar value.
 template <typename T>
-class SkNx<1, T> {
-public:
-    SkNx() {}
-    SkNx(T val) : fVal(val) {}
+struct SkNx<1,T> {
+    T fVal;
 
-    static SkNx Load(const void* ptr) {
-        auto vals = (const T*)ptr;
-        return SkNx(vals[0]);
-    }
+    AI SkNx() = default;
+    AI SkNx(T v) : fVal(v) {}
 
-    void store(void* ptr) const {
-        auto vals = (T*) ptr;
-        vals[0] = fVal;
-    }
-
-#define OP(op) SkNx operator op(const SkNx& o) const { return fVal op o.fVal; }
-    OP(+) OP(-) OP(*) OP(/)
-    OP(&) OP(|) OP(^)
-    OP(==) OP(!=) OP(<) OP(>) OP(<=) OP(>=)
-#undef OP
-
-    SkNx operator << (int bits) const { return fVal << bits; }
-    SkNx operator >> (int bits) const { return fVal >> bits; }
-
-    SkNx saturatedAdd(const SkNx& o) const {
-        SkASSERT((T)(~0) > 0); // TODO: support signed T?
-        T sum = fVal + o.fVal;
-        return sum < fVal ? (T)(~0) : sum;
-    }
-
-    static SkNx Min(const SkNx& a, const SkNx& b) { return SkTMin(a.fVal, b.fVal); }
-    static SkNx Max(const SkNx& a, const SkNx& b) { return SkTMax(a.fVal, b.fVal); }
-
-    SkNx abs() const { return SkTAbs(fVal); }
-    SkNx floor() const { return Floor(fVal); }
-
-    SkNx  sqrt () const { return Sqrt(fVal); }
-    SkNx rsqrt0() const { return this->sqrt().invert(); }
-    SkNx rsqrt1() const { return this->rsqrt0(); }
-    SkNx rsqrt2() const { return this->rsqrt1(); }
-
-    SkNx       invert() const { return 1 / fVal; }
-    SkNx approxInvert() const { return this->invert(); }
-
-    T operator[](int k) const {
-        SkASSERT(0 == k);
+    // Android complains against unused parameters, so we guard it
+    AI T operator[](int SkDEBUGCODE(k)) const {
+        SkASSERT(k == 0);
         return fVal;
     }
 
-    bool allTrue() const { return fVal != 0; }
-    bool anyTrue() const { return fVal != 0; }
-    SkNx thenElse(const SkNx& t, const SkNx& e) const { return fVal != 0 ? t : e; }
+    AI static SkNx Load(const void* ptr) {
+        SkNx v;
+        memcpy(&v, ptr, sizeof(T));
+        return v;
+    }
+    AI void store(void* ptr) const { memcpy(ptr, &fVal, sizeof(T)); }
 
-protected:
-    static double Floor(double val) { return ::floor (val); }
-    static float  Floor(float  val) { return ::floorf(val); }
-    static double Sqrt(double val) { return ::sqrt (val); }
-    static float  Sqrt(float  val) { return ::sqrtf(val); }
+    AI static void Load4(const void* vptr, SkNx* a, SkNx* b, SkNx* c, SkNx* d) {
+        auto ptr = (const char*)vptr;
+        *a = Load(ptr + 0*sizeof(T));
+        *b = Load(ptr + 1*sizeof(T));
+        *c = Load(ptr + 2*sizeof(T));
+        *d = Load(ptr + 3*sizeof(T));
+    }
+    AI static void Load3(const void* vptr, SkNx* a, SkNx* b, SkNx* c) {
+        auto ptr = (const char*)vptr;
+        *a = Load(ptr + 0*sizeof(T));
+        *b = Load(ptr + 1*sizeof(T));
+        *c = Load(ptr + 2*sizeof(T));
+    }
+    AI static void Store4(void* vptr, const SkNx& a, const SkNx& b, const SkNx& c, const SkNx& d) {
+        auto ptr = (char*)vptr;
+        a.store(ptr + 0*sizeof(T));
+        b.store(ptr + 1*sizeof(T));
+        c.store(ptr + 2*sizeof(T));
+        d.store(ptr + 3*sizeof(T));
+    }
 
-    T fVal;
+    AI bool anyTrue() const { return fVal != 0; }
+    AI bool allTrue() const { return fVal != 0; }
+
+    AI SkNx    abs() const { return Abs(fVal); }
+    AI SkNx   sqrt() const { return Sqrt(fVal); }
+    AI SkNx  rsqrt() const { return T(1) / this->sqrt(); }
+    AI SkNx  floor() const { return Floor(fVal); }
+    AI SkNx invert() const { return T(1) / *this; }
+
+    AI SkNx operator!() const { return !fVal; }
+    AI SkNx operator-() const { return -fVal; }
+    AI SkNx operator~() const { return FromBits(~ToBits(fVal)); }
+
+    AI SkNx operator<<(int bits) const { return fVal << bits; }
+    AI SkNx operator>>(int bits) const { return fVal >> bits; }
+
+    AI SkNx operator+(const SkNx& y) const { return fVal + y.fVal; }
+    AI SkNx operator-(const SkNx& y) const { return fVal - y.fVal; }
+    AI SkNx operator*(const SkNx& y) const { return fVal * y.fVal; }
+    AI SkNx operator/(const SkNx& y) const { return fVal / y.fVal; }
+
+    AI SkNx operator&(const SkNx& y) const { return FromBits(ToBits(fVal) & ToBits(y.fVal)); }
+    AI SkNx operator|(const SkNx& y) const { return FromBits(ToBits(fVal) | ToBits(y.fVal)); }
+    AI SkNx operator^(const SkNx& y) const { return FromBits(ToBits(fVal) ^ ToBits(y.fVal)); }
+
+    AI SkNx operator==(const SkNx& y) const { return FromBits(fVal == y.fVal ? ~0 : 0); }
+    AI SkNx operator!=(const SkNx& y) const { return FromBits(fVal != y.fVal ? ~0 : 0); }
+    AI SkNx operator<=(const SkNx& y) const { return FromBits(fVal <= y.fVal ? ~0 : 0); }
+    AI SkNx operator>=(const SkNx& y) const { return FromBits(fVal >= y.fVal ? ~0 : 0); }
+    AI SkNx operator< (const SkNx& y) const { return FromBits(fVal <  y.fVal ? ~0 : 0); }
+    AI SkNx operator> (const SkNx& y) const { return FromBits(fVal >  y.fVal ? ~0 : 0); }
+
+    AI static SkNx Min(const SkNx& x, const SkNx& y) { return x.fVal < y.fVal ? x : y; }
+    AI static SkNx Max(const SkNx& x, const SkNx& y) { return x.fVal > y.fVal ? x : y; }
+
+    AI SkNx saturatedAdd(const SkNx& y) const {
+        static_assert(std::is_unsigned<T>::value, "");
+        T sum = fVal + y.fVal;
+        return sum < fVal ? std::numeric_limits<T>::max() : sum;
+    }
+
+    AI SkNx thenElse(const SkNx& t, const SkNx& e) const { return fVal != 0 ? t : e; }
+
+private:
+    // Helper functions to choose the right float/double methods.  (In <cmath> madness lies...)
+    AI static float   Abs(float val) { return  ::fabsf(val); }
+    AI static float  Sqrt(float val) { return  ::sqrtf(val); }
+    AI static float Floor(float val) { return ::floorf(val); }
+
+    AI static double   Abs(double val) { return  ::fabs(val); }
+    AI static double  Sqrt(double val) { return  ::sqrt(val); }
+    AI static double Floor(double val) { return ::floor(val); }
+
+    // Helper functions for working with floats/doubles as bit patterns.
+    template <typename U>
+    AI static U ToBits(U v) { return v; }
+    AI static int32_t ToBits(float  v) { int32_t bits; memcpy(&bits, &v, sizeof(v)); return bits; }
+    AI static int64_t ToBits(double v) { int64_t bits; memcpy(&bits, &v, sizeof(v)); return bits; }
+
+    template <typename Bits>
+    AI static T FromBits(Bits bits) {
+        static_assert(std::is_pod<T   >::value &&
+                      std::is_pod<Bits>::value &&
+                      sizeof(T) <= sizeof(Bits), "");
+        T val;
+        memcpy(&val, &bits, sizeof(T));
+        return val;
+    }
 };
 
-// This generic shuffle can be called to create any valid SkNx<N,T>.
-//     Sk4f f(a,b,c,d);
-//     Sk2f t = SkNx_shuffle<2,1>(f);  // ~~~> Sk2f(c,b)
-//     f = SkNx_shuffle<0,1,1,0>(t);   // ~~~> Sk4f(c,b,b,c)
+// Allow scalars on the left or right of binary operators, and things like +=, &=, etc.
+#define V template <int N, typename T> AI static SkNx<N,T>
+    V operator+ (T x, const SkNx<N,T>& y) { return SkNx<N,T>(x) +  y; }
+    V operator- (T x, const SkNx<N,T>& y) { return SkNx<N,T>(x) -  y; }
+    V operator* (T x, const SkNx<N,T>& y) { return SkNx<N,T>(x) *  y; }
+    V operator/ (T x, const SkNx<N,T>& y) { return SkNx<N,T>(x) /  y; }
+    V operator& (T x, const SkNx<N,T>& y) { return SkNx<N,T>(x) &  y; }
+    V operator| (T x, const SkNx<N,T>& y) { return SkNx<N,T>(x) |  y; }
+    V operator^ (T x, const SkNx<N,T>& y) { return SkNx<N,T>(x) ^  y; }
+    V operator==(T x, const SkNx<N,T>& y) { return SkNx<N,T>(x) == y; }
+    V operator!=(T x, const SkNx<N,T>& y) { return SkNx<N,T>(x) != y; }
+    V operator<=(T x, const SkNx<N,T>& y) { return SkNx<N,T>(x) <= y; }
+    V operator>=(T x, const SkNx<N,T>& y) { return SkNx<N,T>(x) >= y; }
+    V operator< (T x, const SkNx<N,T>& y) { return SkNx<N,T>(x) <  y; }
+    V operator> (T x, const SkNx<N,T>& y) { return SkNx<N,T>(x) >  y; }
+
+    V operator+ (const SkNx<N,T>& x, T y) { return x +  SkNx<N,T>(y); }
+    V operator- (const SkNx<N,T>& x, T y) { return x -  SkNx<N,T>(y); }
+    V operator* (const SkNx<N,T>& x, T y) { return x *  SkNx<N,T>(y); }
+    V operator/ (const SkNx<N,T>& x, T y) { return x /  SkNx<N,T>(y); }
+    V operator& (const SkNx<N,T>& x, T y) { return x &  SkNx<N,T>(y); }
+    V operator| (const SkNx<N,T>& x, T y) { return x |  SkNx<N,T>(y); }
+    V operator^ (const SkNx<N,T>& x, T y) { return x ^  SkNx<N,T>(y); }
+    V operator==(const SkNx<N,T>& x, T y) { return x == SkNx<N,T>(y); }
+    V operator!=(const SkNx<N,T>& x, T y) { return x != SkNx<N,T>(y); }
+    V operator<=(const SkNx<N,T>& x, T y) { return x <= SkNx<N,T>(y); }
+    V operator>=(const SkNx<N,T>& x, T y) { return x >= SkNx<N,T>(y); }
+    V operator< (const SkNx<N,T>& x, T y) { return x <  SkNx<N,T>(y); }
+    V operator> (const SkNx<N,T>& x, T y) { return x >  SkNx<N,T>(y); }
+
+    V& operator<<=(SkNx<N,T>& x, int bits) { return (x = x << bits); }
+    V& operator>>=(SkNx<N,T>& x, int bits) { return (x = x >> bits); }
+
+    V& operator +=(SkNx<N,T>& x, const SkNx<N,T>& y) { return (x = x + y); }
+    V& operator -=(SkNx<N,T>& x, const SkNx<N,T>& y) { return (x = x - y); }
+    V& operator *=(SkNx<N,T>& x, const SkNx<N,T>& y) { return (x = x * y); }
+    V& operator /=(SkNx<N,T>& x, const SkNx<N,T>& y) { return (x = x / y); }
+    V& operator &=(SkNx<N,T>& x, const SkNx<N,T>& y) { return (x = x & y); }
+    V& operator |=(SkNx<N,T>& x, const SkNx<N,T>& y) { return (x = x | y); }
+    V& operator ^=(SkNx<N,T>& x, const SkNx<N,T>& y) { return (x = x ^ y); }
+
+    V& operator +=(SkNx<N,T>& x, T y) { return (x = x + SkNx<N,T>(y)); }
+    V& operator -=(SkNx<N,T>& x, T y) { return (x = x - SkNx<N,T>(y)); }
+    V& operator *=(SkNx<N,T>& x, T y) { return (x = x * SkNx<N,T>(y)); }
+    V& operator /=(SkNx<N,T>& x, T y) { return (x = x / SkNx<N,T>(y)); }
+    V& operator &=(SkNx<N,T>& x, T y) { return (x = x & SkNx<N,T>(y)); }
+    V& operator |=(SkNx<N,T>& x, T y) { return (x = x | SkNx<N,T>(y)); }
+    V& operator ^=(SkNx<N,T>& x, T y) { return (x = x ^ SkNx<N,T>(y)); }
+#undef V
+
+// SkNx<N,T> ~~> SkNx<N/2,T> + SkNx<N/2,T>
+template <int N, typename T>
+AI static void SkNx_split(const SkNx<N,T>& v, SkNx<N/2,T>* lo, SkNx<N/2,T>* hi) {
+    *lo = v.fLo;
+    *hi = v.fHi;
+}
+
+// SkNx<N/2,T> + SkNx<N/2,T> ~~> SkNx<N,T>
+template <int N, typename T>
+AI static SkNx<N*2,T> SkNx_join(const SkNx<N,T>& lo, const SkNx<N,T>& hi) {
+    return { lo, hi };
+}
+
+// A very generic shuffle.  Can reorder, duplicate, contract, expand...
+//    Sk4f v = { R,G,B,A };
+//    SkNx_shuffle<2,1,0,3>(v)         ~~> {B,G,R,A}
+//    SkNx_shuffle<2,1>(v)             ~~> {B,G}
+//    SkNx_shuffle<2,1,2,1,2,1,2,1>(v) ~~> {B,G,B,G,B,G,B,G}
+//    SkNx_shuffle<3,3,3,3>(v)         ~~> {A,A,A,A}
 template <int... Ix, int N, typename T>
-static inline SkNx<sizeof...(Ix), T> SkNx_shuffle(const SkNx<N,T>& src) { return { src[Ix]... }; }
-
-// This is a generic cast between two SkNx with the same number of elements N.  E.g.
-//   Sk4b bs = ...;                     // Load 4 bytes.
-//   Sk4f fs = SkNx_cast<float>(bs);    // Cast each byte to a float.
-//   Sk4h hs = SkNx_cast<uint16_t>(fs); // Cast each float to uint16_t.
-template <typename D, typename S>
-static inline SkNx<2,D> SkNx_cast(const SkNx<2,S>& src) {
-    return { (D)src[0], (D)src[1] };
+AI static SkNx<sizeof...(Ix),T> SkNx_shuffle(const SkNx<N,T>& v) {
+    return { v[Ix]... };
 }
 
-template <typename D, typename S>
-static inline SkNx<4,D> SkNx_cast(const SkNx<4,S>& src) {
-    return { (D)src[0], (D)src[1], (D)src[2], (D)src[3] };
+// Cast from SkNx<N, Src> to SkNx<N, Dst>, as if you called static_cast<Dst>(Src).
+template <typename Dst, typename Src, int N>
+AI static SkNx<N,Dst> SkNx_cast(const SkNx<N,Src>& v) {
+    return { SkNx_cast<Dst>(v.fLo), SkNx_cast<Dst>(v.fHi) };
+}
+template <typename Dst, typename Src>
+AI static SkNx<1,Dst> SkNx_cast(const SkNx<1,Src>& v) {
+    return static_cast<Dst>(v.fVal);
 }
 
-template <typename D, typename S>
-static inline SkNx<8,D> SkNx_cast(const SkNx<8,S>& src) {
-    return { (D)src[0], (D)src[1], (D)src[2], (D)src[3],
-             (D)src[4], (D)src[5], (D)src[6], (D)src[7] };
+template <int N, typename T>
+AI static SkNx<N,T> SkNx_fma(const SkNx<N,T>& f, const SkNx<N,T>& m, const SkNx<N,T>& a) {
+    return f*m+a;
 }
 
-template <typename D, typename S>
-static inline SkNx<16,D> SkNx_cast(const SkNx<16,S>& src) {
-    return { (D)src[ 0], (D)src[ 1], (D)src[ 2], (D)src[ 3],
-             (D)src[ 4], (D)src[ 5], (D)src[ 6], (D)src[ 7],
-             (D)src[ 8], (D)src[ 9], (D)src[10], (D)src[11],
-             (D)src[12], (D)src[13], (D)src[14], (D)src[15] };
-}
+}  // namespace
 
 typedef SkNx<2,     float> Sk2f;
 typedef SkNx<4,     float> Sk4f;
+typedef SkNx<8,     float> Sk8f;
+typedef SkNx<16,    float> Sk16f;
+
 typedef SkNx<2,  SkScalar> Sk2s;
 typedef SkNx<4,  SkScalar> Sk4s;
+typedef SkNx<8,  SkScalar> Sk8s;
+typedef SkNx<16, SkScalar> Sk16s;
 
 typedef SkNx<4,   uint8_t> Sk4b;
+typedef SkNx<8,   uint8_t> Sk8b;
 typedef SkNx<16,  uint8_t> Sk16b;
-typedef SkNx<4,  uint16_t> Sk4h;
-typedef SkNx<16, uint16_t> Sk16h;
-typedef SkNx<4,       int> Sk4i;
 
-typedef SkNx<4, int> Sk4i;
+typedef SkNx<4,  uint16_t> Sk4h;
+typedef SkNx<8,  uint16_t> Sk8h;
+typedef SkNx<16, uint16_t> Sk16h;
+
+typedef SkNx<4,  int32_t> Sk4i;
+typedef SkNx<8,  int32_t> Sk8i;
+typedef SkNx<4, uint32_t> Sk4u;
 
 // Include platform specific specializations if available.
 #if !defined(SKNX_NO_SIMD) && SK_CPU_SSE_LEVEL >= SK_CPU_SSE_LEVEL_SSE2
@@ -204,13 +362,21 @@ typedef SkNx<4, int> Sk4i;
 #elif !defined(SKNX_NO_SIMD) && defined(SK_ARM_HAS_NEON)
     #include "../opts/SkNx_neon.h"
 #else
-    static inline
-    void Sk4f_ToBytes(uint8_t p[16], const Sk4f& a, const Sk4f& b, const Sk4f& c, const Sk4f& d) {
-        SkNx_cast<uint8_t>(a).store(p+ 0);
-        SkNx_cast<uint8_t>(b).store(p+ 4);
-        SkNx_cast<uint8_t>(c).store(p+ 8);
-        SkNx_cast<uint8_t>(d).store(p+12);
-    }
+
+AI static Sk4i Sk4f_round(const Sk4f& x) {
+    return { (int) lrintf (x[0]),
+             (int) lrintf (x[1]),
+             (int) lrintf (x[2]),
+             (int) lrintf (x[3]), };
+}
+
 #endif
+
+AI static void Sk4f_ToBytes(uint8_t p[16],
+                            const Sk4f& a, const Sk4f& b, const Sk4f& c, const Sk4f& d) {
+    SkNx_cast<uint8_t>(SkNx_join(SkNx_join(a,b), SkNx_join(c,d))).store(p);
+}
+
+#undef AI
 
 #endif//SkNx_DEFINED

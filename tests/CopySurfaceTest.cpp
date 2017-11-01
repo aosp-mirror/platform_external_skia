@@ -10,12 +10,16 @@
 
 #if SK_SUPPORT_GPU
 #include "GrContext.h"
+#include "GrContextPriv.h"
+#include "GrResourceProvider.h"
+#include "GrSurfaceContext.h"
+#include "GrSurfaceProxy.h"
 #include "GrTexture.h"
-#include "GrTextureProvider.h"
 
 #include "SkUtils.h"
 
-DEF_GPUTEST_FOR_RENDERING_CONTEXTS(CopySurface, reporter, context) {
+DEF_GPUTEST_FOR_RENDERING_CONTEXTS(CopySurface, reporter, ctxInfo) {
+    GrContext* context = ctxInfo.grContext();
     static const int kW = 10;
     static const int kH = 10;
     static const size_t kRowBytes = sizeof(uint32_t) * kW;
@@ -52,6 +56,8 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(CopySurface, reporter, context) {
         {-1   , -1   },
     };
 
+    const SkImageInfo ii = SkImageInfo::Make(kW, kH, kRGBA_8888_SkColorType, kPremul_SkAlphaType);
+
     SkAutoTMalloc<uint32_t> read(kW * kH);
 
     for (auto sOrigin : {kBottomLeft_GrSurfaceOrigin, kTopLeft_GrSurfaceOrigin}) {
@@ -67,21 +73,28 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(CopySurface, reporter, context) {
                             dstDesc.fOrigin = dOrigin;
                             dstDesc.fFlags = dFlags;
 
-                            SkAutoTUnref<GrTexture> src(
-                                context->textureProvider()->createTexture(srcDesc, SkBudgeted::kNo,
-                                                                          srcPixels.get(),
-                                                                          kRowBytes));
-                            SkAutoTUnref<GrTexture> dst(
-                                context->textureProvider()->createTexture(dstDesc, SkBudgeted::kNo,
-                                                                          dstPixels.get(),
-                                                                          kRowBytes));
+                            sk_sp<GrTextureProxy> src(GrSurfaceProxy::MakeDeferred(
+                                                                    context->resourceProvider(),
+                                                                    srcDesc, SkBudgeted::kNo,
+                                                                    srcPixels.get(),
+                                                                    kRowBytes));
+
+                            sk_sp<GrTextureProxy> dst(GrSurfaceProxy::MakeDeferred(
+                                                                    context->resourceProvider(),
+                                                                    dstDesc, SkBudgeted::kNo,
+                                                                    dstPixels.get(),
+                                                                    kRowBytes));
                             if (!src || !dst) {
                                 ERRORF(reporter,
                                        "Could not create surfaces for copy surface test.");
                                 continue;
                             }
 
-                            bool result = context->copySurface(dst, src, srcRect, dstPoint);
+                            sk_sp<GrSurfaceContext> dstContext =
+                                   context->contextPriv().makeWrappedSurfaceContext(std::move(dst),
+                                                                                    nullptr);
+
+                            bool result = dstContext->copy(src.get(), srcRect, dstPoint);
 
                             bool expectedResult = true;
                             SkIPoint dstOffset = { dstPoint.fX - srcRect.fLeft,
@@ -119,8 +132,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(CopySurface, reporter, context) {
                             }
 
                             sk_memset32(read.get(), 0, kW * kH);
-                            if (!dst->readPixels(0, 0, kW, kH, baseDesc.fConfig, read.get(),
-                                                 kRowBytes)) {
+                            if (!dstContext->readPixels(ii, read.get(), kRowBytes, 0, 0)) {
                                 ERRORF(reporter, "Error calling readPixels");
                                 continue;
                             }

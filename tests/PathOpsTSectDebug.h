@@ -4,21 +4,23 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
+#ifndef PathOpsTSectDebug_DEFINED
+#define PathOpsTSectDebug_DEFINED
 
 #include "SkPathOpsTSect.h"
 
 template<typename TCurve, typename OppCurve>
 char SkTCoincident<TCurve, OppCurve>::dumpIsCoincidentStr() const {
-    if (!!fCoincident != fCoincident) {
+    if (!!fMatch != fMatch) {
         return '?';
     }
-    return fCoincident ? '*' : 0;
+    return fMatch ? '*' : 0;
 }
 
 template<typename TCurve, typename OppCurve>
 void SkTCoincident<TCurve, OppCurve>::dump() const {
     SkDebugf("t=%1.9g pt=(%1.9g,%1.9g)%s\n", fPerpT, fPerpPt.fX, fPerpPt.fY,
-            fCoincident ? " coincident" : "");
+            fMatch ? " match" : "");
 }
 
 template<typename TCurve, typename OppCurve>
@@ -195,7 +197,7 @@ void SkTSpan<TCurve, OppCurve>::dumpBounds() const {
     dumpID();
     SkDebugf(" bounds=(%1.9g,%1.9g, %1.9g,%1.9g) boundsMax=%1.9g%s\n",
             fBounds.fLeft, fBounds.fTop, fBounds.fRight, fBounds.fBottom, fBoundsMax,
-            fCollapsed ? " collapsed" : ""); 
+            fCollapsed ? " collapsed" : "");
 }
 
 template<typename TCurve, typename OppCurve>
@@ -219,3 +221,4 @@ void SkTSpan<TCurve, OppCurve>::dumpID() const {
         SkDebugf("%c", cE);
     }
 }
+#endif  // PathOpsTSectDebug_DEFINED

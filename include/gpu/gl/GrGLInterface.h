@@ -43,47 +43,17 @@ const GrGLInterface* GrGLDefaultInterface();
  */
 SK_API const GrGLInterface* GrGLCreateNativeInterface();
 
-#if SK_MESA
-/**
- * Creates a GrGLInterface for an OSMesa context.
- */
-SK_API const GrGLInterface* GrGLCreateMesaInterface();
-#endif
-
-#if SK_ANGLE
-/**
- * Creates a GrGLInterface for an ANGLE context.
- */
-SK_API const GrGLInterface* GrGLCreateANGLEInterface();
-#endif
-
-#if SK_COMMAND_BUFFER
-/**
- * Creates a GrGLInterface for a Command Buffer context.
- */
-SK_API const GrGLInterface* GrGLCreateCommandBufferInterface();
-#endif
-
-/**
- * Creates a null GrGLInterface that doesn't draw anything. Used for measuring
- * CPU overhead.
- */
-const SK_API GrGLInterface* GrGLCreateNullInterface();
-
-/**
- * Creates a debugging GrGLInterface that doesn't draw anything. Used for
- * finding memory leaks and invalid memory accesses.
- */
-const GrGLInterface* GrGLCreateDebugInterface();
-
 #if GR_GL_PER_GL_FUNC_CALLBACK
 typedef void (*GrGLInterfaceCallbackProc)(const GrGLInterface*);
 typedef intptr_t GrGLInterfaceCallbackData;
 #endif
 
-/** Function that returns a new interface identical to "interface" but without support for
-    GL_NV_path_rendering. */
-const GrGLInterface* GrGLInterfaceRemoveNVPR(const GrGLInterface*);
+/**
+ * Creates a null GrGLInterface that doesn't draw anything. Used for measuring
+ * CPU overhead. TODO: We would like to move this to tools/gpu/gl/null but currently
+ * Chromium is using it in its unit tests.
+ */
+const SK_API GrGLInterface* GrGLCreateNullInterface(bool enableNVPR = false);
 
 /** Function that returns a new interface identical to "interface" but with support for
     test version of GL_EXT_debug_marker. */
@@ -142,6 +112,7 @@ public:
         GrGLFunction<GrGLBindFramebufferProc> fBindFramebuffer;
         GrGLFunction<GrGLBindRenderbufferProc> fBindRenderbuffer;
         GrGLFunction<GrGLBindTextureProc> fBindTexture;
+        GrGLFunction<GrGLBindImageTextureProc> fBindImageTexture;
         GrGLFunction<GrGLBindVertexArrayProc> fBindVertexArray;
         GrGLFunction<GrGLBlendBarrierProc> fBlendBarrier;
         GrGLFunction<GrGLBlendColorProc> fBlendColor;
@@ -154,6 +125,8 @@ public:
         GrGLFunction<GrGLClearProc> fClear;
         GrGLFunction<GrGLClearColorProc> fClearColor;
         GrGLFunction<GrGLClearStencilProc> fClearStencil;
+        GrGLFunction<GrGLClearTexImageProc> fClearTexImage;
+        GrGLFunction<GrGLClearTexSubImageProc> fClearTexSubImage;
         GrGLFunction<GrGLColorMaskProc> fColorMask;
         GrGLFunction<GrGLCompileShaderProc> fCompileShader;
         GrGLFunction<GrGLCompressedTexImage2DProc> fCompressedTexImage2D;
@@ -181,6 +154,7 @@ public:
         GrGLFunction<GrGLDrawElementsProc> fDrawElements;
         GrGLFunction<GrGLDrawElementsIndirectProc> fDrawElementsIndirect;
         GrGLFunction<GrGLDrawElementsInstancedProc> fDrawElementsInstanced;
+        GrGLFunction<GrGLDrawRangeElementsProc> fDrawRangeElements;
         GrGLFunction<GrGLEnableProc> fEnable;
         GrGLFunction<GrGLEnableVertexAttribArrayProc> fEnableVertexAttribArray;
         GrGLFunction<GrGLEndQueryProc> fEndQuery;
@@ -202,6 +176,7 @@ public:
         GrGLFunction<GrGLGetErrorProc> fGetError;
         GrGLFunction<GrGLGetFramebufferAttachmentParameterivProc> fGetFramebufferAttachmentParameteriv;
         GrGLFunction<GrGLGetIntegervProc> fGetIntegerv;
+        GrGLFunction<GrGLGetMultisamplefvProc> fGetMultisamplefv;
         GrGLFunction<GrGLGetQueryObjecti64vProc> fGetQueryObjecti64v;
         GrGLFunction<GrGLGetQueryObjectivProc> fGetQueryObjectiv;
         GrGLFunction<GrGLGetQueryObjectui64vProc> fGetQueryObjectui64v;
@@ -231,7 +206,12 @@ public:
         GrGLFunction<GrGLMapBufferRangeProc> fMapBufferRange;
         GrGLFunction<GrGLMapBufferSubDataProc> fMapBufferSubData;
         GrGLFunction<GrGLMapTexSubImage2DProc> fMapTexSubImage2D;
+        GrGLFunction<GrGLMemoryBarrierProc> fMemoryBarrier;
+        GrGLFunction<GrGLMemoryBarrierByRegionProc> fMemoryBarrierByRegion;
+        GrGLFunction<GrGLMultiDrawArraysIndirectProc> fMultiDrawArraysIndirect;
+        GrGLFunction<GrGLMultiDrawElementsIndirectProc> fMultiDrawElementsIndirect;
         GrGLFunction<GrGLPixelStoreiProc> fPixelStorei;
+        GrGLFunction<GrGLPolygonModeProc> fPolygonMode;
         GrGLFunction<GrGLPopGroupMarkerProc> fPopGroupMarker;
         GrGLFunction<GrGLPushGroupMarkerProc> fPushGroupMarker;
         GrGLFunction<GrGLQueryCounterProc> fQueryCounter;
@@ -275,6 +255,8 @@ public:
         GrGLFunction<GrGLStencilMaskSeparateProc> fStencilMaskSeparate;
         GrGLFunction<GrGLStencilOpProc> fStencilOp;
         GrGLFunction<GrGLStencilOpSeparateProc> fStencilOpSeparate;
+        GrGLFunction<GrGLTexBufferProc> fTexBuffer;
+        GrGLFunction<GrGLTexBufferRangeProc> fTexBufferRange;
         GrGLFunction<GrGLTexImage2DProc> fTexImage2D;
         GrGLFunction<GrGLTexParameteriProc> fTexParameteri;
         GrGLFunction<GrGLTexParameterivProc> fTexParameteriv;
@@ -346,10 +328,6 @@ public:
         /* NV_framebuffer_mixed_samples */
         GrGLFunction<GrGLCoverageModulationProc> fCoverageModulation;
 
-        /* EXT_multi_draw_indirect */
-        GrGLFunction<GrGLMultiDrawArraysIndirectProc> fMultiDrawArraysIndirect;
-        GrGLFunction<GrGLMultiDrawElementsIndirectProc> fMultiDrawElementsIndirect;
-
         /* NV_bindless_texture */
         // We use the NVIDIA verson for now because it does not require dynamically uniform handles.
         // We may switch the the ARB version and/or omit methods in the future.
@@ -366,6 +344,9 @@ public:
         GrGLFunction<GrGLUniformHandleui64vProc> fUniformHandleui64v;
         GrGLFunction<GrGLProgramUniformHandleui64Proc> fProgramUniformHandleui64;
         GrGLFunction<GrGLProgramUniformHandleui64vProc> fProgramUniformHandleui64v;
+
+        /* ARB_sample_shading */
+        GrGLFunction<GrGLMinSampleShadingProc> fMinSampleShading;
 
         /* EXT_direct_state_access */
         // We use the EXT verson because it is more expansive and interacts with more extensions
@@ -470,6 +451,14 @@ public:
         GrGLFunction<GrGLGetVertexArrayPointeri_vProc> fGetVertexArrayPointeri_v;
         GrGLFunction<GrGLMapNamedBufferRangeProc> fMapNamedBufferRange;
         GrGLFunction<GrGLFlushMappedNamedBufferRangeProc> fFlushMappedNamedBufferRange;
+        // OpenGL 3.1
+        GrGLFunction<GrGLTextureBufferProc> fTextureBuffer;
+
+        /* ARB_sync */
+        GrGLFunction<GrGLFenceSyncProc> fFenceSync;
+        GrGLFunction<GrGLClientWaitSyncProc> fClientWaitSync;
+        GrGLFunction<GrGLWaitSyncProc> fWaitSync;
+        GrGLFunction<GrGLDeleteSyncProc> fDeleteSync;
 
         /* KHR_debug */
         GrGLFunction<GrGLDebugMessageControlProc> fDebugMessageControl;
@@ -480,16 +469,13 @@ public:
         GrGLFunction<GrGLPopDebugGroupProc> fPopDebugGroup;
         GrGLFunction<GrGLObjectLabelProc> fObjectLabel;
 
+        /* EXT_window_rectangles */
+        GrGLFunction<GrGLWindowRectanglesProc> fWindowRectangles;
+
         /* EGL functions */
         GrGLFunction<GrEGLCreateImageProc> fEGLCreateImage;
         GrGLFunction<GrEGLDestroyImageProc> fEGLDestroyImage;
     } fFunctions;
-
-    // Per-GL func callback
-#if GR_GL_PER_GL_FUNC_CALLBACK
-    GrGLInterfaceCallbackProc fCallback;
-    GrGLInterfaceCallbackData fCallbackData;
-#endif
 
     // This exists for internal testing.
     virtual void abandon() const {}

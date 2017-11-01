@@ -29,19 +29,19 @@ public:
     SkStreamRewindable* duplicate() const override { return nullptr; }
 
 private:
-    SkAutoTDelete<SkStream> fStream;
-    const bool              fHasLength;
-    const size_t            fLength;
+    std::unique_ptr<SkStream> fStream;
+    const bool                fHasLength;
+    const size_t              fLength;
     // Current offset into the stream. Always >= 0.
-    size_t                  fOffset;
+    size_t                    fOffset;
     // Amount that has been buffered by calls to read. Will always be less than
     // fBufferSize.
-    size_t                  fBufferedSoFar;
+    size_t                    fBufferedSoFar;
     // Total size of the buffer.
-    const size_t            fBufferSize;
+    const size_t              fBufferSize;
     // FIXME: SkAutoTMalloc throws on failure. Instead, Create should return a
     // nullptr stream.
-    SkAutoTMalloc<char>     fBuffer;
+    SkAutoTMalloc<char>       fBuffer;
 
     // Read up to size bytes from already buffered data, and copy to
     // dst, if non-nullptr. Updates fOffset. Assumes that fOffset is less
@@ -147,7 +147,7 @@ size_t FrontBufferedStream::readDirectlyFromStream(char* dst, size_t size) {
     // If we have read past the end of the buffer, rewinding is no longer
     // supported, so we can go ahead and free the memory.
     if (bytesReadDirectly > 0) {
-        sk_free(fBuffer.detach());
+        sk_free(fBuffer.release());
     }
 
     return bytesReadDirectly;

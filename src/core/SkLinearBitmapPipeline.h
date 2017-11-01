@@ -8,68 +8,105 @@
 #ifndef SkLinearBitmapPipeline_DEFINED
 #define SkLinearBitmapPipeline_DEFINED
 
-
+#include "SkArenaAlloc.h"
 #include "SkColor.h"
 #include "SkImageInfo.h"
 #include "SkMatrix.h"
-#include "SkNx.h"
 #include "SkShader.h"
 
+class SkEmbeddableLinearPipeline;
+
+enum SkGammaType {
+    kLinear_SkGammaType,
+    kSRGB_SkGammaType,
+};
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// SkLinearBitmapPipeline - encapsulates all the machinery for doing floating point pixel
+// processing in a linear color space.
+// Note: this class has unusual alignment requirements due to its use of SIMD instructions. The
+// class SkEmbeddableLinearPipeline below manages these requirements.
 class SkLinearBitmapPipeline {
 public:
     SkLinearBitmapPipeline(
         const SkMatrix& inverse,
         SkFilterQuality filterQuality,
         SkShader::TileMode xTile, SkShader::TileMode yTile,
-        const SkPixmap& srcPixmap);
+        SkColor paintColor,
+        const SkPixmap& srcPixmap,
+        SkArenaAlloc* allocator);
+
+    SkLinearBitmapPipeline(
+        const SkLinearBitmapPipeline& pipeline,
+        const SkPixmap& srcPixmap,
+        SkBlendMode,
+        const SkImageInfo& dstInfo,
+        SkArenaAlloc* allocator);
+
     ~SkLinearBitmapPipeline();
 
     void shadeSpan4f(int x, int y, SkPM4f* dst, int count);
-
-    template<typename Base, size_t kSize>
-    class PolymorphicUnion {
-    public:
-        PolymorphicUnion() {}
-
-        ~PolymorphicUnion() { get()->~Base(); }
-
-        template<typename Variant, typename... Args>
-        void Initialize(Args&&... args) {
-            SkASSERTF(sizeof(Variant) <= sizeof(fSpace),
-                      "Size Variant: %d, Space: %d", sizeof(Variant), sizeof(fSpace));
-
-            new(&fSpace) Variant(std::forward<Args>(args)...);
-        };
-
-        Base* get() const { return reinterpret_cast<Base*>(&fSpace); }
-        Base* operator->() const { return get(); }
-        Base& operator*() const { return *get(); }
-
-    private:
-        struct SK_STRUCT_ALIGN(16) Space {
-            char space[kSize];
-        };
-        mutable Space fSpace;
-    };
+    void blitSpan(int32_t x, int32_t y, void* dst, int count);
 
     class PointProcessorInterface;
-    class BilerpProcessorInterface;
-    class PixelPlacerInterface;
+    class SampleProcessorInterface;
+    class BlendProcessorInterface;
+    class DestinationInterface;
+    class PixelAccessorInterface;
 
-    using MatrixStage = PolymorphicUnion<PointProcessorInterface, 112>;
-    using FilterStage = PolymorphicUnion<PointProcessorInterface,   8>;
-    using TileStage   = PolymorphicUnion<BilerpProcessorInterface, 96>;
-    using SampleStage = PolymorphicUnion<BilerpProcessorInterface, 80>;
-    using PixelStage  = PolymorphicUnion<PixelPlacerInterface,     80>;
+    using MatrixCloner =
+        std::function<PointProcessorInterface* (PointProcessorInterface*, SkArenaAlloc*)>;
+    using TilerCloner =
+        std::function<PointProcessorInterface* (SampleProcessorInterface*, SkArenaAlloc*)>;
 
-private:
+    PointProcessorInterface* chooseMatrix(
+        PointProcessorInterface* next,
+        const SkMatrix& inverse,
+        SkArenaAlloc* allocator);
+
+    template <typename Tiler>
+    PointProcessorInterface* createTiler(SampleProcessorInterface* next, SkISize dimensions,
+                                         SkArenaAlloc* allocator);
+
+    template <typename XStrategy>
+    PointProcessorInterface* chooseTilerYMode(
+        SampleProcessorInterface* next, SkShader::TileMode yMode, SkISize dimensions,
+        SkArenaAlloc* allocator);
+
+    PointProcessorInterface* chooseTiler(
+        SampleProcessorInterface* next,
+        SkISize dimensions,
+        SkShader::TileMode xMode, SkShader::TileMode yMode,
+        SkFilterQuality filterQuality,
+        SkScalar dx,
+        SkArenaAlloc* allocator);
+
+    template <SkColorType colorType>
+    PixelAccessorInterface* chooseSpecificAccessor(const SkPixmap& srcPixmap,
+                                                   SkArenaAlloc* allocator);
+
+    PixelAccessorInterface* choosePixelAccessor(
+        const SkPixmap& srcPixmap,
+        const SkColor A8TintColor,
+        SkArenaAlloc* allocator);
+
+    SampleProcessorInterface* chooseSampler(
+        BlendProcessorInterface* next,
+        SkFilterQuality filterQuality,
+        SkShader::TileMode xTile, SkShader::TileMode yTile,
+        const SkPixmap& srcPixmap,
+        const SkColor A8TintColor,
+        SkArenaAlloc* allocator);
+
+    BlendProcessorInterface* chooseBlenderForShading(
+        SkAlphaType alphaType,
+        float postAlpha,
+        SkArenaAlloc* allocator);
+
     PointProcessorInterface* fFirstStage;
-    MatrixStage fMatrixStage;
-    FilterStage fFilterStage;
-    TileStage   fTileXOrBothStage;
-    TileStage   fTileYStage;
-    SampleStage fSampleStage;
-    PixelStage  fPixelStage;
+    MatrixCloner             fMatrixStageCloner;
+    TilerCloner              fTileStageCloner;
+    DestinationInterface*    fLastStage;
 };
 
 #endif  // SkLinearBitmapPipeline_DEFINED

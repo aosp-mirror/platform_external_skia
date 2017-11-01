@@ -8,7 +8,6 @@
 #ifndef GrTracing_DEFINED
 #define GrTracing_DEFINED
 
-#include "GrDrawTarget.h"
 #include "GrGpu.h"
 #include "GrTraceMarker.h"
 #include "SkTLazy.h"
@@ -19,7 +18,7 @@
  */
 class GrGpuTraceMarkerGenerator : public ::SkNoncopyable {
 public:
-    GrGpuTraceMarkerGenerator(GrDrawTarget* target) {}
+    GrGpuTraceMarkerGenerator() {}
 
     ~GrGpuTraceMarkerGenerator() {
         if (fTraceMarker.isValid()) {
@@ -58,7 +57,7 @@ private:
 /**
  * GR_CREATE_TRACE_MARKER will place begin and end trace markers for both
  * cpu and gpu (if gpu tracing enabled) for the current scope.
- * name is of type const char* and target is of type GrDrawTarget*
+ * name is of type const char* and target is of type GrOpList*
  */
 #define GR_CREATE_TRACE_MARKER(name, target)                                                       \
     /* Chromium tracing */                                                                         \

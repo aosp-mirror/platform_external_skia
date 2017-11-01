@@ -5,27 +5,14 @@
  * found in the LICENSE file.
  */
 
-#ifndef GrRadInterface_DEFINED
-#define GrRadInterface_DEFINED
+#ifndef GrVkInterface_DEFINED
+#define GrVkInterface_DEFINED
 
 #include "SkRefCnt.h"
 
-#include "vulkan/vulkan.h"
+#include "vk/GrVkDefines.h"
 
 ////////////////////////////////////////////////////////////////////////////////
-
-/**
- * The default interface is returned by GrVkDefaultInterface. This function's
- * implementation is platform-specific.
- */
-
-struct GrVkInterface;
-
-/**
- * Creates a GrVkInterface.
- */
-const GrVkInterface* GrVkCreateInterface(VkInstance instance);
-
 
 /**
  * GrContext uses the following interface to make all calls into Vulkan. When a
@@ -48,11 +35,32 @@ private:
     typedef SkRefCnt INHERITED;
 
 public:
-    GrVkInterface();
+    using GetProc = std::function<PFN_vkVoidFunction(
+        const char*, // function name
+        VkInstance,  // instance or VK_NULL_HANDLE
+        VkDevice     // device or VK_NULL_HANDLE
+        )>;
+
+    // This is typically vkGetInstanceProcAddr.
+    using GetInstanceProc = std::function<PFN_vkVoidFunction(VkInstance, const char*)>;
+
+    // This is typically vkGetDeviceProcAddr.
+    using GetDeviceProc = std::function<PFN_vkVoidFunction(VkDevice, const char*)>;
+
+    GrVkInterface(GetProc getProc,
+                  VkInstance instance,
+                  VkDevice device,
+                  uint32_t extensionFlags);
+
+    GrVkInterface(const GetInstanceProc&,
+                  const GetDeviceProc&,
+                  VkInstance instance,
+                  VkDevice device,
+                  uint32_t extensionFlags);
 
     // Validates that the GrVkInterface supports its advertised standard. This means the necessary
     // function pointers have been initialized for Vulkan version.
-    bool validate() const;
+    bool validate(uint32_t extensionFlags) const;
 
     /**
      * The function pointers are in a struct so that we can have a compiler generated assignment
@@ -194,25 +202,12 @@ public:
         VkPtr<PFN_vkCmdNextSubpass> fCmdNextSubpass;
         VkPtr<PFN_vkCmdEndRenderPass> fCmdEndRenderPass;
         VkPtr<PFN_vkCmdExecuteCommands> fCmdExecuteCommands;
-        VkPtr<PFN_vkDestroySurfaceKHR> fDestroySurfaceKHR;
-        VkPtr<PFN_vkGetPhysicalDeviceSurfaceSupportKHR> fGetPhysicalDeviceSurfaceSupportKHR;
-        VkPtr<PFN_vkGetPhysicalDeviceSurfaceCapabilitiesKHR> fGetPhysicalDeviceSurfaceCapabilitiesKHR;
-        VkPtr<PFN_vkGetPhysicalDeviceSurfaceFormatsKHR> fGetPhysicalDeviceSurfaceFormatsKHR;
-        VkPtr<PFN_vkGetPhysicalDeviceSurfacePresentModesKHR> fGetPhysicalDeviceSurfacePresentModesKHR;
-        VkPtr<PFN_vkCreateSwapchainKHR> fCreateSwapchainKHR;
-        VkPtr<PFN_vkDestroySwapchainKHR> fDestroySwapchainKHR;
-        VkPtr<PFN_vkGetSwapchainImagesKHR> fGetSwapchainImagesKHR;
-        VkPtr<PFN_vkAcquireNextImageKHR> fAcquireNextImageKHR;
-        VkPtr<PFN_vkQueuePresentKHR> fQueuePresentKHR;
-        VkPtr<PFN_vkGetPhysicalDeviceDisplayPropertiesKHR> fGetPhysicalDeviceDisplayPropertiesKHR;
-        VkPtr<PFN_vkGetPhysicalDeviceDisplayPlanePropertiesKHR> fGetPhysicalDeviceDisplayPlanePropertiesKHR;
-        VkPtr<PFN_vkGetDisplayPlaneSupportedDisplaysKHR> fGetDisplayPlaneSupportedDisplaysKHR;
-        VkPtr<PFN_vkGetDisplayModePropertiesKHR> fGetDisplayModePropertiesKHR;
-        VkPtr<PFN_vkCreateDisplayModeKHR> fCreateDisplayModeKHR;
-        VkPtr<PFN_vkGetDisplayPlaneCapabilitiesKHR> fGetDisplayPlaneCapabilitiesKHR;
-        VkPtr<PFN_vkCreateDisplayPlaneSurfaceKHR> fCreateDisplayPlaneSurfaceKHR;
-        VkPtr<PFN_vkCreateSharedSwapchainsKHR> fCreateSharedSwapchainsKHR;
+
+        VkPtr<PFN_vkCreateDebugReportCallbackEXT> fCreateDebugReportCallbackEXT;
+        VkPtr<PFN_vkDebugReportMessageEXT> fDebugReportMessageEXT;
+        VkPtr<PFN_vkDestroyDebugReportCallbackEXT> fDestroyDebugReportCallbackEXT;
     } fFunctions;
+
 };
 
 #endif

@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2016 Google Inc.
  *
@@ -60,7 +59,6 @@ protected:
     SkISize onISize() override { return SkISize::Make(500, 500); }
 
     void onOnceBeforeDraw() override {
-        fPaint.setXfermodeMode(SkXfermode::kDarken_Mode);
         fPaint.setAntiAlias(fAntialias);
     }
 

@@ -8,14 +8,15 @@
 #include "Test.h"
 #include "RecordTestUtils.h"
 
+#include "SkBlurImageFilter.h"
 #include "SkColorFilter.h"
 #include "SkRecord.h"
 #include "SkRecordOpts.h"
 #include "SkRecorder.h"
 #include "SkRecords.h"
-#include "SkXfermode.h"
 #include "SkPictureRecorder.h"
 #include "SkPictureImageFilter.h"
+#include "SkSurface.h"
 
 static const int W = 1920, H = 1080;
 
@@ -100,6 +101,7 @@ DEF_TEST(RecordOpts_SaveSaveLayerRestoreRestore, r) {
     }
 }
 
+#ifndef SK_BUILD_FOR_ANDROID_FRAMEWORK
 static void assert_savelayer_restore(skiatest::Reporter* r,
                                      SkRecord* record,
                                      int i,
@@ -128,7 +130,6 @@ static void assert_savelayer_draw_restore(skiatest::Reporter* r,
     }
 }
 
-#include "SkBlurImageFilter.h"
 DEF_TEST(RecordOpts_NoopSaveLayerDrawRestore, r) {
     SkRecord record;
     SkRecorder recorder(&record, W, H);
@@ -139,7 +140,7 @@ DEF_TEST(RecordOpts_NoopSaveLayerDrawRestore, r) {
     SkPaint alphaOnlyLayerPaint, translucentLayerPaint, xfermodeLayerPaint;
     alphaOnlyLayerPaint.setColor(0x03000000);  // Only alpha.
     translucentLayerPaint.setColor(0x03040506);  // Not only alpha.
-    xfermodeLayerPaint.setXfermodeMode(SkXfermode::kDstIn_Mode);  // Any effect will do.
+    xfermodeLayerPaint.setBlendMode(SkBlendMode::kDstIn);  // Any effect will do.
 
     SkPaint opaqueDrawPaint, translucentDrawPaint;
     opaqueDrawPaint.setColor(0xFF020202);  // Opaque.
@@ -188,12 +189,23 @@ DEF_TEST(RecordOpts_NoopSaveLayerDrawRestore, r) {
     REPORTER_ASSERT(r, drawRect->paint.getColor() == 0x03020202);
 
     // saveLayer w/ backdrop should NOT go away
-    SkAutoTUnref<SkImageFilter> filter(SkBlurImageFilter::Create(3, 3));
-    recorder.saveLayer({ nullptr, nullptr, filter, 0});
+    sk_sp<SkImageFilter> filter(SkBlurImageFilter::Make(3, 3, nullptr));
+    recorder.saveLayer({ nullptr, nullptr, filter.get(), nullptr, nullptr, 0});
         recorder.drawRect(draw, opaqueDrawPaint);
     recorder.restore();
     assert_savelayer_draw_restore(r, &record, 18, false);
+
+    // saveLayer w/ clip mask should also NOT go away
+    {
+        sk_sp<SkSurface> surface(SkSurface::MakeRasterN32Premul(10, 10));
+        recorder.saveLayer({ nullptr, nullptr, nullptr, surface->makeImageSnapshot().get(),
+                             nullptr, 0});
+            recorder.drawRect(draw, opaqueDrawPaint);
+        recorder.restore();
+        assert_savelayer_draw_restore(r, &record, 21, false);
+    }
 }
+#endif
 
 static void assert_merge_svg_opacity_and_filter_layers(skiatest::Reporter* r,
                                                        SkRecord* record,
@@ -221,30 +233,30 @@ DEF_TEST(RecordOpts_MergeSvgOpacityAndFilterLayers, r) {
     SkPaint translucentLayerPaint;
     translucentLayerPaint.setColor(0x03040506);  // Not only alpha.
     SkPaint xfermodePaint;
-    xfermodePaint.setXfermodeMode(SkXfermode::kDstIn_Mode);
+    xfermodePaint.setBlendMode(SkBlendMode::kDstIn);
     SkPaint colorFilterPaint;
     colorFilterPaint.setColorFilter(
-        SkColorFilter::CreateModeFilter(SK_ColorLTGRAY, SkXfermode::kSrcIn_Mode))->unref();
+        SkColorFilter::MakeModeFilter(SK_ColorLTGRAY, SkBlendMode::kSrcIn));
 
     SkPaint opaqueFilterLayerPaint;
     opaqueFilterLayerPaint.setColor(0xFF020202);  // Opaque.
     SkPaint translucentFilterLayerPaint;
     translucentFilterLayerPaint.setColor(0x0F020202);  // Not opaque.
-    SkAutoTUnref<SkPicture> shape;
+    sk_sp<SkPicture> shape;
     {
         SkPictureRecorder recorder;
         SkCanvas* canvas = recorder.beginRecording(SkIntToScalar(100), SkIntToScalar(100));
         SkPaint shapePaint;
         shapePaint.setColor(SK_ColorWHITE);
         canvas->drawRect(SkRect::MakeWH(SkIntToScalar(50), SkIntToScalar(50)), shapePaint);
-        shape.reset(recorder.endRecordingAsPicture());
+        shape = recorder.finishRecordingAsPicture();
     }
-    translucentFilterLayerPaint.setImageFilter(SkPictureImageFilter::Create(shape))->unref();
+    translucentFilterLayerPaint.setImageFilter(SkPictureImageFilter::Make(shape));
 
     int index = 0;
 
     {
-        SkAutoTUnref<SkImageFilter> filter(SkBlurImageFilter::Create(3, 3));
+        sk_sp<SkImageFilter> filter(SkBlurImageFilter::Make(3, 3, nullptr));
         // first (null) should be optimized, 2nd should not
         SkImageFilter* filters[] = { nullptr, filter.get() };
 
@@ -263,16 +275,20 @@ DEF_TEST(RecordOpts_MergeSvgOpacityAndFilterLayers, r) {
                             for (size_t m = 0; m < SK_ARRAY_COUNT(secondPaints); ++m) {
                                 bool innerNoOped = !secondBounds[k] && !secondPaints[m] && !innerF;
 
-                                recorder.saveLayer({firstBounds[i], firstPaints[j], outerF, 0});
+                                recorder.saveLayer({firstBounds[i], firstPaints[j], outerF,
+                                                    nullptr, nullptr, 0});
                                 recorder.save();
                                 recorder.clipRect(clip);
-                                recorder.saveLayer({secondBounds[k], secondPaints[m], innerF, 0});
+                                recorder.saveLayer({secondBounds[k], secondPaints[m], innerF,
+                                                    nullptr, nullptr, 0});
                                 recorder.restore();
                                 recorder.restore();
                                 recorder.restore();
                                 assert_merge_svg_opacity_and_filter_layers(r, &record, index,
                                                                            outerNoOped);
+                            #ifndef SK_BUILD_FOR_ANDROID_FRAMEWORK
                                 assert_savelayer_restore(r, &record, index + 3, innerNoOped);
+                            #endif
                                 index += 7;
                             }
                         }
@@ -343,3 +359,71 @@ DEF_TEST(RecordOpts_MergeSvgOpacityAndFilterLayers, r) {
     assert_type<SkRecords::Restore>(r, record, index + 3);
     index += 4;
 }
+
+static void do_draw(SkCanvas* canvas, SkColor color, bool doLayer) {
+    canvas->drawColor(SK_ColorWHITE);
+
+    SkPaint p;
+    p.setColor(color);
+
+    if (doLayer) {
+        canvas->saveLayer(nullptr, nullptr);
+        p.setBlendMode(SkBlendMode::kSrc);
+        canvas->drawPaint(p);
+        canvas->restore();
+    } else {
+        canvas->drawPaint(p);
+    }
+}
+
+static bool is_equal(SkSurface* a, SkSurface* b) {
+    const SkImageInfo info = SkImageInfo::MakeN32Premul(1, 1);
+    SkPMColor ca, cb;
+    a->readPixels(info, &ca, sizeof(SkPMColor), 0, 0);
+    b->readPixels(info, &cb, sizeof(SkPMColor), 0, 0);
+    return ca == cb;
+}
+
+// Test drawing w/ and w/o a simple layer (no bounds or paint), so see that drawing ops
+// that *should* draw the same in fact do.
+//
+// Perform this test twice : once directly, and once via a picture
+//
+static void do_savelayer_srcmode(skiatest::Reporter* r, SkColor color) {
+    for (int doPicture = 0; doPicture <= 1; ++doPicture) {
+        sk_sp<SkSurface> surf0 = SkSurface::MakeRasterN32Premul(10, 10);
+        sk_sp<SkSurface> surf1 = SkSurface::MakeRasterN32Premul(10, 10);
+        SkCanvas* c0 = surf0->getCanvas();
+        SkCanvas* c1 = surf1->getCanvas();
+
+        SkPictureRecorder rec0, rec1;
+        if (doPicture) {
+            c0 = rec0.beginRecording(10, 10);
+            c1 = rec1.beginRecording(10, 10);
+        }
+
+        do_draw(c0, color, false);
+        do_draw(c1, color, true);
+
+        if (doPicture) {
+            surf0->getCanvas()->drawPicture(rec0.finishRecordingAsPicture());
+            surf1->getCanvas()->drawPicture(rec1.finishRecordingAsPicture());
+        }
+
+        // we replicate the assert so we can see which line is reported if there is a failure
+        if (doPicture) {
+            REPORTER_ASSERT(r, is_equal(surf0.get(), surf1.get()));
+        } else {
+            REPORTER_ASSERT(r, is_equal(surf0.get(), surf1.get()));
+        }
+    }
+}
+
+DEF_TEST(savelayer_srcmode_opaque, r) {
+    do_savelayer_srcmode(r, SK_ColorRED);
+}
+
+DEF_TEST(savelayer_srcmode_alpha, r) {
+    do_savelayer_srcmode(r, 0x80FF0000);
+}
+

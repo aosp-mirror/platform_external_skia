@@ -11,7 +11,7 @@
 
 #include "GrContext.h"
 #include "GrPath.h"
-#include "GrStrokeInfo.h"
+#include "GrShape.h"
 #include "SkBitmap.h"
 #include "SkCanvas.h"
 #include "SkColor.h"
@@ -49,7 +49,7 @@ static void test_drawPathEmpty(skiatest::Reporter*, SkCanvas* canvas) {
 }
 
 static void fill_and_stroke(SkCanvas* canvas, const SkPath& p1, const SkPath& p2,
-                            SkPathEffect* effect) {
+                            sk_sp<SkPathEffect> effect) {
     SkPaint paint;
     paint.setAntiAlias(true);
     paint.setPathEffect(effect);
@@ -73,17 +73,16 @@ static void test_drawSameRectOvals(skiatest::Reporter*, SkCanvas* canvas) {
     fill_and_stroke(canvas, oval1, oval2, nullptr);
 
     const SkScalar intervals[] = { 1, 1 };
-    SkAutoTUnref<SkPathEffect> dashEffect(SkDashPathEffect::Create(intervals, 2, 0));
-    fill_and_stroke(canvas, oval1, oval2, dashEffect);
+    fill_and_stroke(canvas, oval1, oval2, SkDashPathEffect::Make(intervals, 2, 0));
 }
 
-DEF_GPUTEST_FOR_ALL_CONTEXTS(GpuDrawPath, reporter, context) {
+DEF_GPUTEST_FOR_ALL_GL_CONTEXTS(GpuDrawPath, reporter, ctxInfo) {
     for (auto& test_func : { &test_drawPathEmpty, &test_drawSameRectOvals }) {
         for (auto& sampleCount : {0, 4, 16}) {
             SkImageInfo info = SkImageInfo::MakeN32Premul(255, 255);
-            SkAutoTUnref<SkSurface> surface(
-                SkSurface::NewRenderTarget(context, SkBudgeted::kNo, info,
-                                           sampleCount, nullptr));
+            auto surface(
+                SkSurface::MakeRenderTarget(ctxInfo.grContext(), SkBudgeted::kNo, info,
+                                            sampleCount, nullptr));
             if (!surface) {
                 continue;
             }
@@ -93,22 +92,76 @@ DEF_GPUTEST_FOR_ALL_CONTEXTS(GpuDrawPath, reporter, context) {
 }
 
 DEF_GPUTEST(GrPathKeys, reporter, /*factory*/) {
-    // Keys should not ignore conic weights.
-    SkPath path1, path2;
-    path1.setIsVolatile(true);
-    path2.setIsVolatile(true);
-    SkPoint p0 = SkPoint::Make(100, 0);
-    SkPoint p1 = SkPoint::Make(100, 100);
+    SkPaint strokePaint;
+    strokePaint.setStyle(SkPaint::kStroke_Style);
+    strokePaint.setStrokeWidth(10.f);
+    GrStyle styles[] = {
+        GrStyle::SimpleFill(),
+        GrStyle::SimpleHairline(),
+        GrStyle(strokePaint)
+    };
 
-    path1.conicTo(p0, p1, .5f);
-    path2.conicTo(p0, p1, .7f);
+    for (const GrStyle& style : styles) {
+        // Keys should not ignore conic weights.
+        SkPath path1, path2;
+        SkPoint p0 = SkPoint::Make(100, 0);
+        SkPoint p1 = SkPoint::Make(100, 100);
 
-    bool isVolatile;
-    GrUniqueKey key1, key2;
-    GrStrokeInfo stroke(SkStrokeRec::kFill_InitStyle);
-    GrPath::ComputeKey(path1, stroke, &key1, &isVolatile);
-    GrPath::ComputeKey(path2, stroke, &key2, &isVolatile);
-    REPORTER_ASSERT(reporter, key1 != key2);
+        path1.conicTo(p0, p1, .5f);
+        path2.conicTo(p0, p1, .7f);
+
+        GrUniqueKey key1, key2;
+        // We expect these small paths to be keyed based on their data.
+        bool isVolatile;
+        GrPath::ComputeKey(GrShape(path1, GrStyle::SimpleFill()), &key1, &isVolatile);
+        REPORTER_ASSERT(reporter, !isVolatile);
+        REPORTER_ASSERT(reporter, key1.isValid());
+        GrPath::ComputeKey(GrShape(path2, GrStyle::SimpleFill()), &key2, &isVolatile);
+        REPORTER_ASSERT(reporter, !isVolatile);
+        REPORTER_ASSERT(reporter, key1.isValid());
+        REPORTER_ASSERT(reporter, key1 != key2);
+        {
+            GrUniqueKey tempKey;
+            path1.setIsVolatile(true);
+            GrPath::ComputeKey(GrShape(path1, style), &key1, &isVolatile);
+            REPORTER_ASSERT(reporter, isVolatile);
+            REPORTER_ASSERT(reporter, !tempKey.isValid());
+        }
+
+        // Ensure that recreating the GrShape doesn't change the key.
+        {
+            GrUniqueKey tempKey;
+            GrPath::ComputeKey(GrShape(path2, GrStyle::SimpleFill()), &tempKey, &isVolatile);
+            REPORTER_ASSERT(reporter, key2 == tempKey);
+        }
+
+        // Try a large path that is too big to be keyed off its data.
+        SkPath path3;
+        SkPath path4;
+        for (int i = 0; i < 1000; ++i) {
+            SkScalar s = SkIntToScalar(i);
+            path3.conicTo(s, 3.f * s / 4, s + 1.f, s, 0.5f + s / 2000.f);
+            path4.conicTo(s, 3.f * s / 4, s + 1.f, s, 0.3f + s / 2000.f);
+        }
+
+        GrUniqueKey key3, key4;
+        // These aren't marked volatile and so should have keys
+        GrPath::ComputeKey(GrShape(path3, style), &key3, &isVolatile);
+        REPORTER_ASSERT(reporter, !isVolatile);
+        REPORTER_ASSERT(reporter, key3.isValid());
+        GrPath::ComputeKey(GrShape(path4, style), &key4, &isVolatile);
+        REPORTER_ASSERT(reporter, !isVolatile);
+        REPORTER_ASSERT(reporter, key4.isValid());
+        REPORTER_ASSERT(reporter, key3 != key4);
+
+        {
+            GrUniqueKey tempKey;
+            path3.setIsVolatile(true);
+            GrPath::ComputeKey(GrShape(path3, style), &key1, &isVolatile);
+            REPORTER_ASSERT(reporter, isVolatile);
+            REPORTER_ASSERT(reporter, !tempKey.isValid());
+        }
+    }
 }
 
 #endif

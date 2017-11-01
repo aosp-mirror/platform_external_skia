@@ -10,10 +10,10 @@
 #define GrTexture_DEFINED
 
 #include "GrSurface.h"
+#include "GrSamplerParams.h"
 #include "SkPoint.h"
 #include "SkRefCnt.h"
 
-class GrTextureParams;
 class GrTexturePriv;
 
 class GrTexture : virtual public GrSurface {
@@ -36,20 +36,25 @@ public:
 #ifdef SK_DEBUG
     void validate() const {
         this->INHERITED::validate();
-        this->validateDesc();
     }
 #endif
+
+    // These match the definitions in SkImage, for whence they came
+    typedef void* ReleaseCtx;
+    typedef void (*ReleaseProc)(ReleaseCtx);
+
+    virtual void setRelease(ReleaseProc proc, ReleaseCtx ctx) = 0;
 
     /** Access methods that are only to be used within Skia code. */
     inline GrTexturePriv texturePriv();
     inline const GrTexturePriv texturePriv() const;
 
 protected:
-    GrTexture(GrGpu*, LifeCycle, const GrSurfaceDesc&);
-
-    void validateDesc() const;
+    GrTexture(GrGpu*, const GrSurfaceDesc&, GrSLType samplerType,
+              GrSamplerParams::FilterMode highestFilterMode, bool wasMipMapDataProvided);
 
 private:
+    void computeScratchKey(GrScratchKey*) const override;
     size_t onGpuMemorySize() const override;
     void dirtyMipMaps(bool mipMapsDirty);
 
@@ -59,8 +64,11 @@ private:
         kValid_MipMapsStatus
     };
 
-    MipMapsStatus   fMipMapsStatus;
-
+    GrSLType                      fSamplerType;
+    GrSamplerParams::FilterMode   fHighestFilterMode;
+    MipMapsStatus                 fMipMapsStatus;
+    int                           fMaxMipMapLevel;
+    SkDestinationSurfaceColorMode fMipColorMode;
     friend class GrTexturePriv;
 
     typedef GrSurface INHERITED;

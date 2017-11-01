@@ -6,72 +6,93 @@
  */
 
 #include "DMSrcSink.h"
+#include "Resources.h"
 #include "SkAndroidCodec.h"
+#include "SkAutoMalloc.h"
 #include "SkCodec.h"
 #include "SkCodecImageGenerator.h"
+#include "SkColorSpace.h"
+#include "SkColorSpaceXform.h"
+#include "SkColorSpaceXformCanvas.h"
+#include "SkColorSpace_XYZ.h"
 #include "SkCommonFlags.h"
 #include "SkData.h"
+#include "SkDebugCanvas.h"
+#include "SkDeferredCanvas.h"
 #include "SkDocument.h"
-#include "SkError.h"
 #include "SkImageGenerator.h"
+#include "SkImageGeneratorCG.h"
+#include "SkImageGeneratorWIC.h"
+#include "SkLiteDL.h"
+#include "SkLiteRecorder.h"
 #include "SkMallocPixelRef.h"
+#include "SkMultiPictureDocumentPriv.h"
 #include "SkMultiPictureDraw.h"
 #include "SkNullCanvas.h"
 #include "SkOSFile.h"
+#include "SkOSPath.h"
 #include "SkOpts.h"
 #include "SkPictureData.h"
 #include "SkPictureRecorder.h"
+#include "SkPipe.h"
 #include "SkRandom.h"
 #include "SkRecordDraw.h"
 #include "SkRecorder.h"
-#include "SkRemote.h"
 #include "SkSVGCanvas.h"
 #include "SkStream.h"
-#include "SkTLogic.h"
-#include "SkXMLWriter.h"
 #include "SkSwizzler.h"
+#include "SkTLogic.h"
+#include <cmath>
 #include <functional>
 
-#ifdef SK_MOJO
-    #include "SkMojo.mojom.h"
+#if defined(SK_BUILD_FOR_WIN)
+    #include "SkAutoCoInitialize.h"
+    #include "SkHRESULT.h"
+    #include "SkTScopedComPtr.h"
+    #include <XpsObjectModel.h>
+#endif
+
+#if defined(SK_XML)
+    #include "SkSVGDOM.h"
+    #include "SkXMLWriter.h"
 #endif
 
 DEFINE_bool(multiPage, false, "For document-type backends, render the source"
             " into multiple pages");
 DEFINE_bool(RAW_threading, true, "Allow RAW decodes to run on multiple threads?");
 
+using sk_gpu_test::GrContextFactory;
+
 namespace DM {
 
 GMSrc::GMSrc(skiagm::GMRegistry::Factory factory) : fFactory(factory) {}
 
 Error GMSrc::draw(SkCanvas* canvas) const {
-    SkAutoTDelete<skiagm::GM> gm(fFactory(nullptr));
+    std::unique_ptr<skiagm::GM> gm(fFactory(nullptr));
     canvas->concat(gm->getInitialTransform());
     gm->draw(canvas);
     return "";
 }
 
 SkISize GMSrc::size() const {
-    SkAutoTDelete<skiagm::GM> gm(fFactory(nullptr));
+    std::unique_ptr<skiagm::GM> gm(fFactory(nullptr));
     return gm->getISize();
 }
 
 Name GMSrc::name() const {
-    SkAutoTDelete<skiagm::GM> gm(fFactory(nullptr));
+    std::unique_ptr<skiagm::GM> gm(fFactory(nullptr));
     return gm->getName();
 }
 
 void GMSrc::modifyGrContextOptions(GrContextOptions* options) const {
-    SkAutoTDelete<skiagm::GM> gm(fFactory(nullptr));
+    std::unique_ptr<skiagm::GM> gm(fFactory(nullptr));
     gm->modifyGrContextOptions(options);
 }
 
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
-BRDSrc::BRDSrc(Path path, SkBitmapRegionDecoder::Strategy strategy, Mode mode,
-        CodecSrc::DstColorType dstColorType, uint32_t sampleSize)
+BRDSrc::BRDSrc(Path path, Mode mode, CodecSrc::DstColorType dstColorType, uint32_t sampleSize)
     : fPath(path)
-    , fStrategy(strategy)
     , fMode(mode)
     , fDstColorType(dstColorType)
     , fSampleSize(sampleSize)
@@ -83,16 +104,33 @@ bool BRDSrc::veto(SinkFlags flags) const {
         || flags.approach != SinkFlags::kDirect;
 }
 
-static SkBitmapRegionDecoder* create_brd(Path path,
-        SkBitmapRegionDecoder::Strategy strategy) {
-    SkAutoTUnref<SkData> encoded(SkData::NewFromFileName(path.c_str()));
+static SkBitmapRegionDecoder* create_brd(Path path) {
+    sk_sp<SkData> encoded(SkData::MakeFromFileName(path.c_str()));
     if (!encoded) {
         return NULL;
     }
-    return SkBitmapRegionDecoder::Create(encoded, strategy);
+    return SkBitmapRegionDecoder::Create(encoded, SkBitmapRegionDecoder::kAndroidCodec_Strategy);
+}
+
+static inline void alpha8_to_gray8(SkBitmap* bitmap) {
+    // Android requires kGray8 bitmaps to be tagged as kAlpha8.  Here we convert
+    // them back to kGray8 so our test framework can draw them correctly.
+    if (kAlpha_8_SkColorType == bitmap->info().colorType()) {
+        SkImageInfo newInfo = bitmap->info().makeColorType(kGray_8_SkColorType)
+                                            .makeAlphaType(kOpaque_SkAlphaType);
+        *const_cast<SkImageInfo*>(&bitmap->info()) = newInfo;
+    }
 }
 
 Error BRDSrc::draw(SkCanvas* canvas) const {
+    if (canvas->imageInfo().colorSpace() &&
+            kRGBA_F16_SkColorType != canvas->imageInfo().colorType()) {
+        // SkAndroidCodec uses legacy premultiplication and blending.  Therefore, we only
+        // run these tests on legacy canvases.
+        // We allow an exception for F16, since Android uses F16.
+        return Error::Nonfatal("Skip testing to color correct canvas.");
+    }
+
     SkColorType colorType = canvas->imageInfo().colorType();
     if (kRGB_565_SkColorType == colorType &&
             CodecSrc::kGetFromCanvas_DstColorType != fDstColorType) {
@@ -107,9 +145,12 @@ Error BRDSrc::draw(SkCanvas* canvas) const {
         case CodecSrc::kGrayscale_Always_DstColorType:
             colorType = kGray_8_SkColorType;
             break;
+        default:
+            SkASSERT(false);
+            break;
     }
 
-    SkAutoTDelete<SkBitmapRegionDecoder> brd(create_brd(fPath, fStrategy));
+    std::unique_ptr<SkBitmapRegionDecoder> brd(create_brd(fPath));
     if (nullptr == brd.get()) {
         return Error::Nonfatal(SkStringPrintf("Could not create brd for %s.", fPath.c_str()));
     }
@@ -128,12 +169,10 @@ Error BRDSrc::draw(SkCanvas* canvas) const {
         case kFullImage_Mode: {
             SkBitmap bitmap;
             if (!brd->decodeRegion(&bitmap, nullptr, SkIRect::MakeXYWH(0, 0, width, height),
-                    fSampleSize, colorType, false)) {
+                    fSampleSize, colorType, false, SkColorSpace::MakeSRGB())) {
                 return "Cannot decode (full) region.";
             }
-            if (colorType != bitmap.colorType()) {
-                return Error::Nonfatal("Cannot convert to color type.");
-            }
+            alpha8_to_gray8(&bitmap);
             canvas->drawBitmap(bitmap, 0, 0);
             return "";
         }
@@ -184,13 +223,12 @@ Error BRDSrc::draw(SkCanvas* canvas) const {
                     const uint32_t decodeHeight = subsetHeight + unscaledBorder * 2;
                     SkBitmap bitmap;
                     if (!brd->decodeRegion(&bitmap, nullptr, SkIRect::MakeXYWH(decodeLeft,
-                            decodeTop, decodeWidth, decodeHeight), fSampleSize, colorType, false)) {
+                            decodeTop, decodeWidth, decodeHeight), fSampleSize, colorType, false,
+                            SkColorSpace::MakeSRGB())) {
                         return "Cannot decode region.";
                     }
-                    if (colorType != bitmap.colorType()) {
-                        return Error::Nonfatal("Cannot convert to color type.");
-                    }
 
+                    alpha8_to_gray8(&bitmap);
                     canvas->drawBitmapRect(bitmap,
                             SkRect::MakeXYWH((SkScalar) scaledBorder, (SkScalar) scaledBorder,
                                     (SkScalar) (subsetWidth / fSampleSize),
@@ -211,12 +249,12 @@ Error BRDSrc::draw(SkCanvas* canvas) const {
 }
 
 SkISize BRDSrc::size() const {
-    SkAutoTDelete<SkBitmapRegionDecoder> brd(create_brd(fPath, fStrategy));
+    std::unique_ptr<SkBitmapRegionDecoder> brd(create_brd(fPath));
     if (brd) {
-        return SkISize::Make(SkTMax(1, brd->width() / (int) fSampleSize),
-                SkTMax(1, brd->height() / (int) fSampleSize));
+        return {SkTMax(1, brd->width() / (int)fSampleSize),
+                SkTMax(1, brd->height() / (int)fSampleSize)};
     }
-    return SkISize::Make(0, 0);
+    return {0, 0};
 }
 
 static SkString get_scaled_name(const Path& path, float scale) {
@@ -264,26 +302,40 @@ CodecSrc::CodecSrc(Path path, Mode mode, DstColorType dstColorType, SkAlphaType 
 {}
 
 bool CodecSrc::veto(SinkFlags flags) const {
-    // Test CodecImageGenerator on 8888, 565, and gpu
-    if (kGen_Mode == fMode) {
-        // For image generator, we want to test kDirect approaches for kRaster and kGPU,
-        // while skipping everything else.
-        return (flags.type != SinkFlags::kRaster && flags.type != SinkFlags::kGPU) ||
-                flags.approach != SinkFlags::kDirect;
+    // Test to direct raster backends (8888 and 565).
+    return flags.type != SinkFlags::kRaster || flags.approach != SinkFlags::kDirect;
+}
+
+// Allows us to test decodes to non-native 8888.
+static void swap_rb_if_necessary(SkBitmap& bitmap, CodecSrc::DstColorType dstColorType) {
+    if (CodecSrc::kNonNative8888_Always_DstColorType != dstColorType) {
+        return;
     }
 
-    // Test all other modes to direct raster backends (8888 and 565).
-    return flags.type != SinkFlags::kRaster || flags.approach != SinkFlags::kDirect;
+    for (int y = 0; y < bitmap.height(); y++) {
+        uint32_t* row = (uint32_t*) bitmap.getAddr(0, y);
+        SkOpts::RGBA_to_BGRA(row, row, bitmap.width());
+    }
 }
 
 // FIXME: Currently we cannot draw unpremultiplied sources. skbug.com/3338 and skbug.com/3339.
 // This allows us to still test unpremultiplied decodes.
-void premultiply_if_necessary(SkBitmap& bitmap) {
+static void premultiply_if_necessary(SkBitmap& bitmap) {
     if (kUnpremul_SkAlphaType != bitmap.alphaType()) {
         return;
     }
 
     switch (bitmap.colorType()) {
+        case kRGBA_F16_SkColorType:
+            for (int y = 0; y < bitmap.height(); y++) {
+                void* row = bitmap.getAddr(0, y);
+                SkRasterPipeline_<256> p;
+                p.append(SkRasterPipeline::load_f16, &row);
+                p.append(SkRasterPipeline::premul);
+                p.append(SkRasterPipeline::store_f16, &row);
+                p.run(0,y, bitmap.width());
+            }
+            break;
         case kN32_SkColorType:
             for (int y = 0; y < bitmap.height(); y++) {
                 uint32_t* row = (uint32_t*) bitmap.getAddr(0, y);
@@ -306,8 +358,8 @@ void premultiply_if_necessary(SkBitmap& bitmap) {
     bitmap.setAlphaType(kPremul_SkAlphaType);
 }
 
-bool get_decode_info(SkImageInfo* decodeInfo, SkColorType canvasColorType,
-                     CodecSrc::DstColorType dstColorType) {
+static bool get_decode_info(SkImageInfo* decodeInfo, SkColorType canvasColorType,
+                            CodecSrc::DstColorType dstColorType, SkAlphaType dstAlphaType) {
     switch (dstColorType) {
         case CodecSrc::kIndex8_Always_DstColorType:
             if (kRGB_565_SkColorType == canvasColorType) {
@@ -316,68 +368,81 @@ bool get_decode_info(SkImageInfo* decodeInfo, SkColorType canvasColorType,
             *decodeInfo = decodeInfo->makeColorType(kIndex_8_SkColorType);
             break;
         case CodecSrc::kGrayscale_Always_DstColorType:
-            if (kRGB_565_SkColorType == canvasColorType ||
-                    kOpaque_SkAlphaType != decodeInfo->alphaType()) {
+            if (kRGB_565_SkColorType == canvasColorType) {
                 return false;
             }
             *decodeInfo = decodeInfo->makeColorType(kGray_8_SkColorType);
+            break;
+        case CodecSrc::kNonNative8888_Always_DstColorType:
+            if (kRGB_565_SkColorType == canvasColorType
+                    || kRGBA_F16_SkColorType == canvasColorType) {
+                return false;
+            }
+#ifdef SK_PMCOLOR_IS_RGBA
+            *decodeInfo = decodeInfo->makeColorType(kBGRA_8888_SkColorType);
+#else
+            *decodeInfo = decodeInfo->makeColorType(kRGBA_8888_SkColorType);
+#endif
             break;
         default:
             if (kRGB_565_SkColorType == canvasColorType &&
                     kOpaque_SkAlphaType != decodeInfo->alphaType()) {
                 return false;
             }
+
+            if (kRGBA_F16_SkColorType == canvasColorType) {
+                sk_sp<SkColorSpace> linearSpace =
+                        as_CSB(decodeInfo->colorSpace())->makeLinearGamma();
+                *decodeInfo = decodeInfo->makeColorSpace(std::move(linearSpace));
+            }
+
             *decodeInfo = decodeInfo->makeColorType(canvasColorType);
             break;
     }
 
+    *decodeInfo = decodeInfo->makeAlphaType(dstAlphaType);
     return true;
 }
 
-Error test_gen(SkCanvas* canvas, SkData* data) {
-    SkAutoTDelete<SkImageGenerator> gen = SkCodecImageGenerator::NewFromEncodedCodec(data);
-    if (!gen) {
-        return "Could not create image generator.";
+static void draw_to_canvas(SkCanvas* canvas, const SkImageInfo& info, void* pixels, size_t rowBytes,
+                           SkPMColor* colorPtr, int colorCount, CodecSrc::DstColorType dstColorType,
+                           SkScalar left = 0, SkScalar top = 0) {
+    sk_sp<SkColorTable> colorTable(new SkColorTable(colorPtr, colorCount));
+    SkBitmap bitmap;
+    bitmap.installPixels(info, pixels, rowBytes, colorTable.get(), nullptr, nullptr);
+    premultiply_if_necessary(bitmap);
+    swap_rb_if_necessary(bitmap, dstColorType);
+    canvas->drawBitmap(bitmap, left, top);
+}
+
+// For codec srcs, we want the "draw" step to be a memcpy.  Any interesting color space or
+// color format conversions should be performed by the codec.  Sometimes the output of the
+// decode will be in an interesting color space.  On our srgb and f16 backends, we need to
+// "pretend" that the color space is standard sRGB to avoid triggering color conversion
+// at draw time.
+static void set_bitmap_color_space(SkImageInfo* info) {
+    if (kRGBA_F16_SkColorType == info->colorType()) {
+        *info = info->makeColorSpace(SkColorSpace::MakeSRGBLinear());
+    } else {
+        *info = info->makeColorSpace(SkColorSpace::MakeSRGB());
     }
-
-    // FIXME: The gpu backend does not draw kGray sources correctly. (skbug.com/4822)
-    // Currently, we will avoid creating a CodecSrc for this case (see DM.cpp).
-    SkASSERT(kGray_8_SkColorType != gen->getInfo().colorType());
-
-    if (kOpaque_SkAlphaType != gen->getInfo().alphaType() &&
-            kRGB_565_SkColorType == canvas->imageInfo().colorType()) {
-        return Error::Nonfatal("Skip testing non-opaque images to 565.");
-    }
-
-    SkAutoTDelete<SkImage> image(SkImage::NewFromGenerator(gen.detach(), nullptr));
-    if (!image) {
-        return "Could not create image from codec image generator.";
-    }
-
-    canvas->drawImage(image, 0, 0);
-    return "";
 }
 
 Error CodecSrc::draw(SkCanvas* canvas) const {
-    SkAutoTUnref<SkData> encoded(SkData::NewFromFileName(fPath.c_str()));
+    sk_sp<SkData> encoded(SkData::MakeFromFileName(fPath.c_str()));
     if (!encoded) {
         return SkStringPrintf("Couldn't read %s.", fPath.c_str());
     }
 
-    // The CodecImageGenerator test does not share much code with the other tests,
-    // so we will handle it in its own function.
-    if (kGen_Mode == fMode) {
-        return test_gen(canvas, encoded);
-    }
-
-    SkAutoTDelete<SkCodec> codec(SkCodec::NewFromData(encoded));
+    std::unique_ptr<SkCodec> codec(SkCodec::NewFromData(encoded));
     if (nullptr == codec.get()) {
         return SkStringPrintf("Couldn't create codec for %s.", fPath.c_str());
     }
 
-    SkImageInfo decodeInfo = codec->getInfo().makeAlphaType(fDstAlphaType);
-    if (!get_decode_info(&decodeInfo, canvas->imageInfo().colorType(), fDstColorType)) {
-        return Error::Nonfatal("Testing non-565 to 565 is uninteresting.");
+    SkImageInfo decodeInfo = codec->getInfo();
+    if (!get_decode_info(&decodeInfo, canvas->imageInfo().colorType(), fDstColorType,
+                         fDstAlphaType)) {
+        return Error::Nonfatal("Skipping uninteresting test.");
     }
 
     // Try to scale the image if it is desired
@@ -393,36 +458,108 @@ Error CodecSrc::draw(SkCanvas* canvas) const {
     }
     decodeInfo = decodeInfo.makeWH(size.width(), size.height());
 
-    // Construct a color table for the decode if necessary
-    SkAutoTUnref<SkColorTable> colorTable(nullptr);
-    SkPMColor* colorPtr = nullptr;
-    int* colorCountPtr = nullptr;
-    int maxColors = 256;
-    if (kIndex_8_SkColorType == decodeInfo.colorType()) {
-        SkPMColor colors[256];
-        colorTable.reset(new SkColorTable(colors, maxColors));
-        colorPtr = const_cast<SkPMColor*>(colorTable->readColors());
-        colorCountPtr = &maxColors;
-    }
+    const int bpp = SkColorTypeBytesPerPixel(decodeInfo.colorType());
+    const size_t rowBytes = size.width() * bpp;
+    const size_t safeSize = decodeInfo.getSafeSize(rowBytes);
+    SkAutoMalloc pixels(safeSize);
+    SkPMColor colorPtr[256];
+    int colorCount = 256;
 
-    SkBitmap bitmap;
-    SkPixelRefFactory* factory = nullptr;
-    SkMallocPixelRef::ZeroedPRFactory zeroFactory;
     SkCodec::Options options;
+    options.fPremulBehavior = canvas->imageInfo().colorSpace() ?
+            SkTransferFunctionBehavior::kRespect : SkTransferFunctionBehavior::kIgnore;
     if (kCodecZeroInit_Mode == fMode) {
-        factory = &zeroFactory;
+        memset(pixels.get(), 0, size.height() * rowBytes);
         options.fZeroInitialized = SkCodec::kYes_ZeroInitialized;
     }
-    if (!bitmap.tryAllocPixels(decodeInfo, factory, colorTable.get())) {
-        return SkStringPrintf("Image(%s) is too large (%d x %d)", fPath.c_str(),
-                              decodeInfo.width(), decodeInfo.height());
+
+    SkImageInfo bitmapInfo = decodeInfo;
+    set_bitmap_color_space(&bitmapInfo);
+    if (kRGBA_8888_SkColorType == decodeInfo.colorType() ||
+            kBGRA_8888_SkColorType == decodeInfo.colorType()) {
+        bitmapInfo = bitmapInfo.makeColorType(kN32_SkColorType);
     }
 
     switch (fMode) {
+        case kAnimated_Mode: {
+            std::vector<SkCodec::FrameInfo> frameInfos = codec->getFrameInfo();
+            if (frameInfos.size() <= 1) {
+                return SkStringPrintf("%s is not an animated image.", fPath.c_str());
+            }
+
+            // As in CodecSrc::size(), compute a roughly square grid to draw the frames
+            // into. "factor" is the number of frames to draw on one row. There will be
+            // up to "factor" rows as well.
+            const float root = sqrt((float) frameInfos.size());
+            const int factor = sk_float_ceil2int(root);
+
+            // Used to cache a frame that future frames will depend on.
+            SkAutoMalloc priorFramePixels;
+            int cachedFrame = SkCodec::kNone;
+            for (int i = 0; static_cast<size_t>(i) < frameInfos.size(); i++) {
+                options.fFrameIndex = i;
+                // Check for a prior frame
+                const int reqFrame = frameInfos[i].fRequiredFrame;
+                if (reqFrame != SkCodec::kNone && reqFrame == cachedFrame
+                        && priorFramePixels.get()) {
+                    // Copy into pixels
+                    memcpy(pixels.get(), priorFramePixels.get(), safeSize);
+                    options.fHasPriorFrame = true;
+                } else {
+                    options.fHasPriorFrame = false;
+                }
+                SkCodec::Result result = codec->getPixels(decodeInfo, pixels.get(),
+                                                          rowBytes, &options,
+                                                          colorPtr, &colorCount);
+                if (SkCodec::kInvalidInput == result && i > 0) {
+                    // Some of our test images have truncated later frames. Treat that
+                    // the same as incomplete.
+                    result = SkCodec::kIncompleteInput;
+                }
+                switch (result) {
+                    case SkCodec::kSuccess:
+                    case SkCodec::kIncompleteInput: {
+                        // If the next frame depends on this one, store it in priorFrame.
+                        // It is possible that we may discard a frame that future frames depend on,
+                        // but the codec will simply redecode the discarded frame.
+                        // Do this before calling draw_to_canvas, which premultiplies in place. If
+                        // we're decoding to unpremul, we want to pass the unmodified frame to the
+                        // codec for decoding the next frame.
+                        if (static_cast<size_t>(i+1) < frameInfos.size()
+                                && frameInfos[i+1].fRequiredFrame == i) {
+                            memcpy(priorFramePixels.reset(safeSize), pixels.get(), safeSize);
+                            cachedFrame = i;
+                        }
+
+                        SkAutoCanvasRestore acr(canvas, true);
+                        const int xTranslate = (i % factor) * decodeInfo.width();
+                        const int yTranslate = (i / factor) * decodeInfo.height();
+                        canvas->translate(SkIntToScalar(xTranslate), SkIntToScalar(yTranslate));
+                        draw_to_canvas(canvas, bitmapInfo, pixels.get(), rowBytes,
+                                       colorPtr, colorCount, fDstColorType);
+                        if (result == SkCodec::kIncompleteInput) {
+                            return "";
+                        }
+                        break;
+                    }
+                    case SkCodec::kInvalidConversion:
+                        if (i > 0 && (decodeInfo.colorType() == kRGB_565_SkColorType
+                                      || decodeInfo.colorType() == kIndex_8_SkColorType)) {
+                            return Error::Nonfatal(SkStringPrintf(
+                                "Cannot decode frame %i to 565/Index8 (%s).", i, fPath.c_str()));
+                        }
+                        // Fall through.
+                    default:
+                        return SkStringPrintf("Couldn't getPixels for frame %i in %s.",
+                                              i, fPath.c_str());
+                }
+            }
+            break;
+        }
         case kCodecZeroInit_Mode:
         case kCodec_Mode: {
-            switch (codec->getPixels(decodeInfo, bitmap.getPixels(), bitmap.rowBytes(), &options,
-                    colorPtr, colorCountPtr)) {
+            switch (codec->getPixels(decodeInfo, pixels.get(), rowBytes, &options,
+                    colorPtr, &colorCount)) {
                 case SkCodec::kSuccess:
                     // We consider incomplete to be valid, since we should still decode what is
                     // available.
@@ -432,42 +569,64 @@ Error CodecSrc::draw(SkCanvas* canvas) const {
                     // Everything else is considered a failure.
                     return SkStringPrintf("Couldn't getPixels %s.", fPath.c_str());
             }
-            premultiply_if_necessary(bitmap);
-            canvas->drawBitmap(bitmap, 0, 0);
+
+            draw_to_canvas(canvas, bitmapInfo, pixels.get(), rowBytes, colorPtr, colorCount,
+                           fDstColorType);
             break;
         }
         case kScanline_Mode: {
-            if (SkCodec::kSuccess != codec->startScanlineDecode(decodeInfo, NULL, colorPtr,
-                                                                colorCountPtr)) {
-                return "Could not start scanline decoder";
-            }
-
-            void* dst = bitmap.getAddr(0, 0);
-            size_t rowBytes = bitmap.rowBytes();
+            void* dst = pixels.get();
             uint32_t height = decodeInfo.height();
-            switch (codec->getScanlineOrder()) {
-                case SkCodec::kTopDown_SkScanlineOrder:
-                case SkCodec::kBottomUp_SkScanlineOrder:
-                case SkCodec::kNone_SkScanlineOrder:
-                    // We do not need to check the return value.  On an incomplete
-                    // image, memory will be filled with a default value.
-                    codec->getScanlines(dst, height, rowBytes);
-                    break;
-                case SkCodec::kOutOfOrder_SkScanlineOrder: {
-                    for (int y = 0; y < decodeInfo.height(); y++) {
-                        int dstY = codec->outputScanline(y);
-                        void* dstPtr = bitmap.getAddr(0, dstY);
-                        // We complete the loop, even if this call begins to fail
-                        // due to an incomplete image.  This ensures any uninitialized
-                        // memory will be filled with the proper value.
-                        codec->getScanlines(dstPtr, 1, bitmap.rowBytes());
+            const bool useIncremental = [this]() {
+                auto exts = { "png", "PNG", "gif", "GIF" };
+                for (auto ext : exts) {
+                    if (fPath.endsWith(ext)) {
+                        return true;
                     }
-                    break;
+                }
+                return false;
+            }();
+            // ico may use the old scanline method or the new one, depending on whether it
+            // internally holds a bmp or a png.
+            const bool ico = fPath.endsWith("ico");
+            bool useOldScanlineMethod = !useIncremental && !ico;
+            if (useIncremental || ico) {
+                if (SkCodec::kSuccess == codec->startIncrementalDecode(decodeInfo, dst,
+                        rowBytes, &options, colorPtr, &colorCount)) {
+                    int rowsDecoded;
+                    if (SkCodec::kIncompleteInput == codec->incrementalDecode(&rowsDecoded)) {
+                        codec->fillIncompleteImage(decodeInfo, dst, rowBytes,
+                                                   SkCodec::kNo_ZeroInitialized, height,
+                                                   rowsDecoded);
+                    }
+                } else {
+                    if (useIncremental) {
+                        // Error: These should support incremental decode.
+                        return "Could not start incremental decode";
+                    }
+                    // Otherwise, this is an ICO. Since incremental failed, it must contain a BMP,
+                    // which should work via startScanlineDecode
+                    useOldScanlineMethod = true;
                 }
             }
 
-            premultiply_if_necessary(bitmap);
-            canvas->drawBitmap(bitmap, 0, 0);
+            if (useOldScanlineMethod) {
+                if (SkCodec::kSuccess != codec->startScanlineDecode(decodeInfo, NULL, colorPtr,
+                                                                    &colorCount)) {
+                    return "Could not start scanline decoder";
+                }
+
+                switch (codec->getScanlineOrder()) {
+                    case SkCodec::kTopDown_SkScanlineOrder:
+                    case SkCodec::kBottomUp_SkScanlineOrder:
+                        // We do not need to check the return value.  On an incomplete
+                        // image, memory will be filled with a default value.
+                        codec->getScanlines(dst, height, rowBytes);
+                        break;
+                }
+            }
+
+            draw_to_canvas(canvas, bitmapInfo, dst, rowBytes, colorPtr, colorCount, fDstColorType);
             break;
         }
         case kStripe_Mode: {
@@ -476,19 +635,19 @@ Error CodecSrc::draw(SkCanvas* canvas) const {
             // does not align with image blocks.
             const int stripeHeight = 37;
             const int numStripes = (height + stripeHeight - 1) / stripeHeight;
+            void* dst = pixels.get();
 
             // Decode odd stripes
-            if (SkCodec::kSuccess != codec->startScanlineDecode(decodeInfo, NULL, colorPtr,
-                                                                colorCountPtr)) {
+            if (SkCodec::kSuccess != codec->startScanlineDecode(decodeInfo, &options, colorPtr,
+                                                                &colorCount)) {
                 return "Could not start scanline decoder";
             }
 
             // This mode was designed to test the new skip scanlines API in libjpeg-turbo.
             // Jpegs have kTopDown_SkScanlineOrder, and at this time, it is not interesting
             // to run this test for image types that do not have this scanline ordering.
-            if (SkCodec::kTopDown_SkScanlineOrder != codec->getScanlineOrder()) {
-                return Error::Nonfatal("kStripe test is only interesting for kTopDown codecs.");
-            }
+            // We only run this on Jpeg, which is always kTopDown.
+            SkASSERT(SkCodec::kTopDown_SkScanlineOrder == codec->getScanlineOrder());
 
             for (int i = 0; i < numStripes; i += 2) {
                 // Skip a stripe
@@ -499,13 +658,14 @@ Error CodecSrc::draw(SkCanvas* canvas) const {
                 const int startY = (i + 1) * stripeHeight;
                 const int linesToRead = SkTMin(stripeHeight, height - startY);
                 if (linesToRead > 0) {
-                    codec->getScanlines(bitmap.getAddr(0, startY), linesToRead, bitmap.rowBytes());
+                    codec->getScanlines(SkTAddOffset<void>(dst, rowBytes * startY), linesToRead,
+                                        rowBytes);
                 }
             }
 
             // Decode even stripes
             const SkCodec::Result startResult = codec->startScanlineDecode(decodeInfo, nullptr,
-                    colorPtr, colorCountPtr);
+                    colorPtr, &colorCount);
             if (SkCodec::kSuccess != startResult) {
                 return "Failed to restart scanline decoder with same parameters.";
             }
@@ -513,7 +673,8 @@ Error CodecSrc::draw(SkCanvas* canvas) const {
                 // Read a stripe
                 const int startY = i * stripeHeight;
                 const int linesToRead = SkTMin(stripeHeight, height - startY);
-                codec->getScanlines(bitmap.getAddr(0, startY), linesToRead, bitmap.rowBytes());
+                codec->getScanlines(SkTAddOffset<void>(dst, rowBytes * startY), linesToRead,
+                                    rowBytes);
 
                 // Skip a stripe
                 const int linesToSkip = SkTMin(stripeHeight, height - (i + 1) * stripeHeight);
@@ -521,8 +682,8 @@ Error CodecSrc::draw(SkCanvas* canvas) const {
                     codec->skipScanlines(linesToSkip);
                 }
             }
-            premultiply_if_necessary(bitmap);
-            canvas->drawBitmap(bitmap, 0, 0);
+
+            draw_to_canvas(canvas, bitmapInfo, dst, rowBytes, colorPtr, colorCount, fDstColorType);
             break;
         }
         case kCroppedScanline_Mode: {
@@ -532,22 +693,20 @@ Error CodecSrc::draw(SkCanvas* canvas) const {
             // align with the jpeg block sizes and it will sometimes not.  This allows us
             // to test interestingly different code paths in the implementation.
             const int tileSize = 36;
-
-            SkCodec::Options opts;
             SkIRect subset;
             for (int x = 0; x < width; x += tileSize) {
                 subset = SkIRect::MakeXYWH(x, 0, SkTMin(tileSize, width - x), height);
-                opts.fSubset = &subset;
-                if (SkCodec::kSuccess != codec->startScanlineDecode(decodeInfo, &opts,
-                        colorPtr, colorCountPtr)) {
+                options.fSubset = &subset;
+                if (SkCodec::kSuccess != codec->startScanlineDecode(decodeInfo, &options,
+                        colorPtr, &colorCount)) {
                     return "Could not start scanline decoder.";
                 }
 
-                codec->getScanlines(bitmap.getAddr(x, 0), height, bitmap.rowBytes());
+                codec->getScanlines(SkTAddOffset<void>(pixels.get(), x * bpp), height, rowBytes);
             }
 
-            premultiply_if_necessary(bitmap);
-            canvas->drawBitmap(bitmap, 0, 0);
+            draw_to_canvas(canvas, bitmapInfo, pixels.get(), rowBytes, colorPtr, colorCount,
+                           fDstColorType);
             break;
         }
         case kSubset_Mode: {
@@ -566,11 +725,10 @@ Error CodecSrc::draw(SkCanvas* canvas) const {
             const int w = SkAlign2(W / divisor);
             const int h = SkAlign2(H / divisor);
             SkIRect subset;
-            SkCodec::Options opts;
-            opts.fSubset = &subset;
+            options.fSubset = &subset;
             SkBitmap subsetBm;
             // We will reuse pixel memory from bitmap.
-            void* pixels = bitmap.getPixels();
+            void* dst = pixels.get();
             // Keep track of left and top (for drawing subsetBm into canvas). We could use
             // fScale * x and fScale * y, but we want integers such that the next subset will start
             // where the last one ended. So we'll add decodeInfo.width() and height().
@@ -585,16 +743,13 @@ Error CodecSrc::draw(SkCanvas* canvas) const {
                     // And scale
                     // FIXME: Should we have a version of getScaledDimensions that takes a subset
                     // into account?
-                    decodeInfo = decodeInfo.makeWH(
-                            SkTMax(1, SkScalarRoundToInt(preScaleW * fScale)),
-                            SkTMax(1, SkScalarRoundToInt(preScaleH * fScale)));
-                    size_t rowBytes = decodeInfo.minRowBytes();
-                    if (!subsetBm.installPixels(decodeInfo, pixels, rowBytes, colorTable.get(),
-                                                nullptr, nullptr)) {
-                        return SkStringPrintf("could not install pixels for %s.", fPath.c_str());
-                    }
-                    const SkCodec::Result result = codec->getPixels(decodeInfo, pixels, rowBytes,
-                            &opts, colorPtr, colorCountPtr);
+                    const int scaledW = SkTMax(1, SkScalarRoundToInt(preScaleW * fScale));
+                    const int scaledH = SkTMax(1, SkScalarRoundToInt(preScaleH * fScale));
+                    decodeInfo = decodeInfo.makeWH(scaledW, scaledH);
+                    SkImageInfo subsetBitmapInfo = bitmapInfo.makeWH(scaledW, scaledH);
+                    size_t subsetRowBytes = subsetBitmapInfo.minRowBytes();
+                    const SkCodec::Result result = codec->getPixels(decodeInfo, dst, subsetRowBytes,
+                            &options, colorPtr, &colorCount);
                     switch (result) {
                         case SkCodec::kSuccess:
                         case SkCodec::kIncompleteInput:
@@ -605,8 +760,10 @@ Error CodecSrc::draw(SkCanvas* canvas) const {
                                                   x, y, decodeInfo.width(), decodeInfo.height(),
                                                   fPath.c_str(), W, H, result);
                     }
-                    premultiply_if_necessary(subsetBm);
-                    canvas->drawBitmap(subsetBm, SkIntToScalar(left), SkIntToScalar(top));
+                    draw_to_canvas(canvas, subsetBitmapInfo, dst, subsetRowBytes, colorPtr,
+                                   colorCount, fDstColorType, SkIntToScalar(left),
+                                   SkIntToScalar(top));
+
                     // translate by the scaled height.
                     top += decodeInfo.height();
                 }
@@ -623,27 +780,43 @@ Error CodecSrc::draw(SkCanvas* canvas) const {
 }
 
 SkISize CodecSrc::size() const {
-    SkAutoTUnref<SkData> encoded(SkData::NewFromFileName(fPath.c_str()));
-    SkAutoTDelete<SkCodec> codec(SkCodec::NewFromData(encoded));
+    sk_sp<SkData> encoded(SkData::MakeFromFileName(fPath.c_str()));
+    std::unique_ptr<SkCodec> codec(SkCodec::NewFromData(encoded));
     if (nullptr == codec) {
-        return SkISize::Make(0, 0);
+        return {0, 0};
     }
-    return codec->getScaledDimensions(fScale);
+
+    auto imageSize = codec->getScaledDimensions(fScale);
+    if (fMode == kAnimated_Mode) {
+        // We'll draw one of each frame, so make it big enough to hold them all
+        // in a grid. The grid will be roughly square, with "factor" frames per
+        // row and up to "factor" rows.
+        const size_t count = codec->getFrameInfo().size();
+        const float root = sqrt((float) count);
+        const int factor = sk_float_ceil2int(root);
+        imageSize.fWidth  = imageSize.fWidth  * factor;
+        imageSize.fHeight = imageSize.fHeight * sk_float_ceil2int((float) count / (float) factor);
+    }
+    return imageSize;
 }
 
 Name CodecSrc::name() const {
     if (1.0f == fScale) {
-        return SkOSPath::Basename(fPath.c_str());
+        Name name = SkOSPath::Basename(fPath.c_str());
+        if (fMode == kAnimated_Mode) {
+            name.append("_animated");
+        }
+        return name;
     }
+    SkASSERT(fMode != kAnimated_Mode);
     return get_scaled_name(fPath, fScale);
 }
 
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
-AndroidCodecSrc::AndroidCodecSrc(Path path, Mode mode, CodecSrc::DstColorType dstColorType,
+AndroidCodecSrc::AndroidCodecSrc(Path path, CodecSrc::DstColorType dstColorType,
         SkAlphaType dstAlphaType, int sampleSize)
     : fPath(path)
-    , fMode(mode)
     , fDstColorType(dstColorType)
     , fDstAlphaType(dstAlphaType)
     , fSampleSize(sampleSize)
@@ -657,18 +830,27 @@ bool AndroidCodecSrc::veto(SinkFlags flags) const {
 }
 
 Error AndroidCodecSrc::draw(SkCanvas* canvas) const {
-    SkAutoTUnref<SkData> encoded(SkData::NewFromFileName(fPath.c_str()));
+    if (canvas->imageInfo().colorSpace() &&
+            kRGBA_F16_SkColorType != canvas->imageInfo().colorType()) {
+        // SkAndroidCodec uses legacy premultiplication and blending.  Therefore, we only
+        // run these tests on legacy canvases.
+        // We allow an exception for F16, since Android uses F16.
+        return Error::Nonfatal("Skip testing to color correct canvas.");
+    }
+
+    sk_sp<SkData> encoded(SkData::MakeFromFileName(fPath.c_str()));
     if (!encoded) {
         return SkStringPrintf("Couldn't read %s.", fPath.c_str());
     }
-    SkAutoTDelete<SkAndroidCodec> codec(SkAndroidCodec::NewFromData(encoded));
+    std::unique_ptr<SkAndroidCodec> codec(SkAndroidCodec::NewFromData(encoded));
     if (nullptr == codec.get()) {
         return SkStringPrintf("Couldn't create android codec for %s.", fPath.c_str());
     }
 
-    SkImageInfo decodeInfo = codec->getInfo().makeAlphaType(fDstAlphaType);
-    if (!get_decode_info(&decodeInfo, canvas->imageInfo().colorType(), fDstColorType)) {
-        return Error::Nonfatal("Testing non-565 to 565 is uninteresting.");
+    SkImageInfo decodeInfo = codec->getInfo();
+    if (!get_decode_info(&decodeInfo, canvas->imageInfo().colorType(), fDstColorType,
+                         fDstAlphaType)) {
+        return Error::Nonfatal("Skipping uninteresting test.");
     }
 
     // Scale the image if it is desired.
@@ -681,113 +863,42 @@ Error AndroidCodecSrc::draw(SkCanvas* canvas) const {
     }
     decodeInfo = decodeInfo.makeWH(size.width(), size.height());
 
-    // Construct a color table for the decode if necessary
-    SkAutoTUnref<SkColorTable> colorTable(nullptr);
-    SkPMColor* colorPtr = nullptr;
-    int* colorCountPtr = nullptr;
-    int maxColors = 256;
-    if (kIndex_8_SkColorType == decodeInfo.colorType()) {
-        SkPMColor colors[256];
-        colorTable.reset(new SkColorTable(colors, maxColors));
-        colorPtr = const_cast<SkPMColor*>(colorTable->readColors());
-        colorCountPtr = &maxColors;
-    }
+    int bpp = SkColorTypeBytesPerPixel(decodeInfo.colorType());
+    size_t rowBytes = size.width() * bpp;
+    SkAutoMalloc pixels(size.height() * rowBytes);
+    SkPMColor colorPtr[256];
+    int colorCount = 256;
 
     SkBitmap bitmap;
-    if (!bitmap.tryAllocPixels(decodeInfo, nullptr, colorTable.get())) {
-        return SkStringPrintf("Image(%s) is too large (%d x %d)", fPath.c_str(),
-                              decodeInfo.width(), decodeInfo.height());
+    SkImageInfo bitmapInfo = decodeInfo;
+    set_bitmap_color_space(&bitmapInfo);
+    if (kRGBA_8888_SkColorType == decodeInfo.colorType() ||
+            kBGRA_8888_SkColorType == decodeInfo.colorType()) {
+        bitmapInfo = bitmapInfo.makeColorType(kN32_SkColorType);
     }
 
     // Create options for the codec.
     SkAndroidCodec::AndroidOptions options;
     options.fColorPtr = colorPtr;
-    options.fColorCount = colorCountPtr;
+    options.fColorCount = &colorCount;
     options.fSampleSize = fSampleSize;
 
-    switch (fMode) {
-        case kFullImage_Mode: {
-            switch (codec->getAndroidPixels(decodeInfo, bitmap.getPixels(), bitmap.rowBytes(),
-                    &options)) {
-                case SkCodec::kSuccess:
-                case SkCodec::kIncompleteInput:
-                    break;
-                default:
-                    return SkStringPrintf("Couldn't getPixels %s.", fPath.c_str());
-            }
-            premultiply_if_necessary(bitmap);
-            canvas->drawBitmap(bitmap, 0, 0);
-            return "";
-        }
-        case kDivisor_Mode: {
-            const int width = codec->getInfo().width();
-            const int height = codec->getInfo().height();
-            const int divisor = 2;
-            if (width < divisor || height < divisor) {
-                return Error::Nonfatal("Divisor is larger than image dimension.");
-            }
-
-            // Keep track of the final decoded dimensions.
-            int finalScaledWidth = 0;
-            int finalScaledHeight = 0;
-            for (int x = 0; x < divisor; x++) {
-                for (int y = 0; y < divisor; y++) {
-                    // Calculate the subset dimensions
-                    int subsetWidth = width / divisor;
-                    int subsetHeight = height / divisor;
-                    const int left = x * subsetWidth;
-                    const int top = y * subsetHeight;
-
-                    // Increase the size of the last subset in each row or column, when the
-                    // divisor does not divide evenly into the image dimensions
-                    subsetWidth += (x + 1 == divisor) ? (width % divisor) : 0;
-                    subsetHeight += (y + 1 == divisor) ? (height % divisor) : 0;
-                    SkIRect subset = SkIRect::MakeXYWH(left, top, subsetWidth, subsetHeight);
-                    if (!codec->getSupportedSubset(&subset)) {
-                        return "Could not get supported subset to decode.";
-                    }
-                    options.fSubset = &subset;
-                    const int scaledWidthOffset = subset.left() / fSampleSize;
-                    const int scaledHeightOffset = subset.top() / fSampleSize;
-                    void* pixels = bitmap.getAddr(scaledWidthOffset, scaledHeightOffset);
-                    SkISize scaledSubsetSize = codec->getSampledSubsetDimensions(fSampleSize,
-                            subset);
-                    SkImageInfo subsetDecodeInfo = decodeInfo.makeWH(scaledSubsetSize.width(),
-                            scaledSubsetSize.height());
-
-                    if (x + 1 == divisor && y + 1 == divisor) {
-                        finalScaledWidth = scaledWidthOffset + scaledSubsetSize.width();
-                        finalScaledHeight = scaledHeightOffset + scaledSubsetSize.height();
-                    }
-
-                    switch (codec->getAndroidPixels(subsetDecodeInfo, pixels, bitmap.rowBytes(),
-                            &options)) {
-                        case SkCodec::kSuccess:
-                        case SkCodec::kIncompleteInput:
-                            break;
-                        default:
-                            return SkStringPrintf("Couldn't getPixels %s.", fPath.c_str());
-                    }
-                }
-            }
-
-            SkRect rect = SkRect::MakeXYWH(0, 0, (SkScalar) finalScaledWidth,
-                    (SkScalar) finalScaledHeight);
-            premultiply_if_necessary(bitmap);
-            canvas->drawBitmapRect(bitmap, rect, rect, nullptr);
-            return "";
-        }
+    switch (codec->getAndroidPixels(decodeInfo, pixels.get(), rowBytes, &options)) {
+        case SkCodec::kSuccess:
+        case SkCodec::kIncompleteInput:
+            break;
         default:
-            SkASSERT(false);
-            return "Error: Should not be reached.";
+            return SkStringPrintf("Couldn't getPixels %s.", fPath.c_str());
     }
+    draw_to_canvas(canvas, bitmapInfo, pixels.get(), rowBytes, colorPtr, colorCount, fDstColorType);
+    return "";
 }
 
 SkISize AndroidCodecSrc::size() const {
-    SkAutoTUnref<SkData> encoded(SkData::NewFromFileName(fPath.c_str()));
-    SkAutoTDelete<SkAndroidCodec> codec(SkAndroidCodec::NewFromData(encoded));
+    sk_sp<SkData> encoded(SkData::MakeFromFileName(fPath.c_str()));
+    std::unique_ptr<SkAndroidCodec> codec(SkAndroidCodec::NewFromData(encoded));
     if (nullptr == codec) {
-        return SkISize::Make(0, 0);
+        return {0, 0};
     }
     return codec->getSampledDimensions(fSampleSize);
 }
@@ -803,20 +914,243 @@ Name AndroidCodecSrc::name() const {
 
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
+ImageGenSrc::ImageGenSrc(Path path, Mode mode, SkAlphaType alphaType, bool isGpu)
+    : fPath(path)
+    , fMode(mode)
+    , fDstAlphaType(alphaType)
+    , fIsGpu(isGpu)
+    , fRunSerially(serial_from_path_name(path))
+{}
+
+bool ImageGenSrc::veto(SinkFlags flags) const {
+    if (fIsGpu) {
+        // MSAA runs tend to run out of memory and tests the same code paths as regular gpu configs.
+        return flags.type != SinkFlags::kGPU || flags.approach != SinkFlags::kDirect ||
+               flags.multisampled == SinkFlags::kMultisampled;
+    }
+
+    return flags.type != SinkFlags::kRaster || flags.approach != SinkFlags::kDirect;
+}
+
+Error ImageGenSrc::draw(SkCanvas* canvas) const {
+    if (kRGB_565_SkColorType == canvas->imageInfo().colorType()) {
+        return Error::Nonfatal("Uninteresting to test image generator to 565.");
+    }
+
+    sk_sp<SkData> encoded(SkData::MakeFromFileName(fPath.c_str()));
+    if (!encoded) {
+        return SkStringPrintf("Couldn't read %s.", fPath.c_str());
+    }
+
+#if defined(SK_BUILD_FOR_WIN)
+    // Initialize COM in order to test with WIC.
+    SkAutoCoInitialize com;
+    if (!com.succeeded()) {
+        return "Could not initialize COM.";
+    }
+#endif
+
+    std::unique_ptr<SkImageGenerator> gen(nullptr);
+    switch (fMode) {
+        case kCodec_Mode:
+            gen = SkCodecImageGenerator::MakeFromEncodedCodec(encoded);
+            if (!gen) {
+                return "Could not create codec image generator.";
+            }
+            break;
+        case kPlatform_Mode: {
+#if defined(SK_BUILD_FOR_MAC) || defined(SK_BUILD_FOR_IOS)
+            gen.reset(SkImageGeneratorCG::NewFromEncodedCG(encoded.get()));
+#elif defined(SK_BUILD_FOR_WIN)
+            gen.reset(SkImageGeneratorWIC::NewFromEncodedWIC(encoded.get()));
+#endif
+
+            if (!gen) {
+                return "Could not create platform image generator.";
+            }
+            break;
+        }
+        default:
+            SkASSERT(false);
+            return "Invalid image generator mode";
+    }
+
+    // Test deferred decoding path on GPU
+    if (fIsGpu) {
+        sk_sp<SkImage> image(SkImage::MakeFromGenerator(std::move(gen), nullptr));
+        if (!image) {
+            return "Could not create image from codec image generator.";
+        }
+        canvas->drawImage(image, 0, 0);
+        return "";
+    }
+
+    // Test various color and alpha types on CPU
+    SkImageInfo decodeInfo = gen->getInfo().makeAlphaType(fDstAlphaType);
+
+    SkImageGenerator::Options options;
+    options.fBehavior = canvas->imageInfo().colorSpace() ?
+            SkTransferFunctionBehavior::kRespect : SkTransferFunctionBehavior::kIgnore;
+
+    int bpp = SkColorTypeBytesPerPixel(decodeInfo.colorType());
+    size_t rowBytes = decodeInfo.width() * bpp;
+    SkAutoMalloc pixels(decodeInfo.height() * rowBytes);
+    if (!gen->getPixels(decodeInfo, pixels.get(), rowBytes, &options)) {
+        SkString err =
+                SkStringPrintf("Image generator could not getPixels() for %s\n", fPath.c_str());
+
+#if defined(SK_BUILD_FOR_WIN)
+        if (kPlatform_Mode == fMode) {
+            // Do not issue a fatal error for WIC flakiness.
+            return Error::Nonfatal(err);
+        }
+#endif
+
+        return err;
+    }
+
+    SkPMColor colorPtr[256];
+    int colorCount = 256;
+    set_bitmap_color_space(&decodeInfo);
+    draw_to_canvas(canvas, decodeInfo, pixels.get(), rowBytes, colorPtr, colorCount,
+                   CodecSrc::kGetFromCanvas_DstColorType);
+    return "";
+}
+
+SkISize ImageGenSrc::size() const {
+    sk_sp<SkData> encoded(SkData::MakeFromFileName(fPath.c_str()));
+    std::unique_ptr<SkCodec> codec(SkCodec::NewFromData(encoded));
+    if (nullptr == codec) {
+        return {0, 0};
+    }
+    return codec->getInfo().dimensions();
+}
+
+Name ImageGenSrc::name() const {
+    return SkOSPath::Basename(fPath.c_str());
+}
+
+/*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
+
+ColorCodecSrc::ColorCodecSrc(Path path, Mode mode, SkColorType colorType)
+    : fPath(path)
+    , fMode(mode)
+    , fColorType(colorType)
+{}
+
+bool ColorCodecSrc::veto(SinkFlags flags) const {
+    // Test to direct raster backends (8888 and 565).
+    return flags.type != SinkFlags::kRaster || flags.approach != SinkFlags::kDirect;
+}
+
+Error ColorCodecSrc::draw(SkCanvas* canvas) const {
+    if (kRGB_565_SkColorType == canvas->imageInfo().colorType()) {
+        return Error::Nonfatal("No need to test color correction to 565 backend.");
+    }
+
+    bool runInLegacyMode = kBaseline_Mode == fMode;
+    if (runInLegacyMode && canvas->imageInfo().colorSpace()) {
+        return Error::Nonfatal("Skipping tests that are only interesting in legacy mode.");
+    } else if (!runInLegacyMode && !canvas->imageInfo().colorSpace()) {
+        return Error::Nonfatal("Skipping tests that are only interesting in srgb mode.");
+    }
+
+    sk_sp<SkData> encoded(SkData::MakeFromFileName(fPath.c_str()));
+    if (!encoded) {
+        return SkStringPrintf("Couldn't read %s.", fPath.c_str());
+    }
+
+    std::unique_ptr<SkCodec> codec(SkCodec::NewFromData(encoded));
+    if (nullptr == codec.get()) {
+        return SkStringPrintf("Couldn't create codec for %s.", fPath.c_str());
+    }
+
+    // Load the dst ICC profile.  This particular dst is fairly similar to Adobe RGB.
+    sk_sp<SkData> dstData = SkData::MakeFromFileName(
+            GetResourcePath("icc_profiles/HP_ZR30w.icc").c_str());
+    if (!dstData) {
+        return "Cannot read monitor profile.  Is the resource path set correctly?";
+    }
+
+    sk_sp<SkColorSpace> dstSpace = nullptr;
+    if (kDst_sRGB_Mode == fMode) {
+        dstSpace = SkColorSpace::MakeSRGB();
+    } else if (kDst_HPZR30w_Mode == fMode) {
+        dstSpace = SkColorSpace::MakeICC(dstData->data(), dstData->size());
+    }
+
+    SkImageInfo decodeInfo = codec->getInfo().makeColorType(fColorType).makeColorSpace(dstSpace);
+    if (kUnpremul_SkAlphaType == decodeInfo.alphaType()) {
+        decodeInfo = decodeInfo.makeAlphaType(kPremul_SkAlphaType);
+    }
+    if (kRGBA_F16_SkColorType == fColorType) {
+        SkASSERT(SkColorSpace_Base::Type::kXYZ == as_CSB(decodeInfo.colorSpace())->type());
+        SkColorSpace_XYZ* csXYZ = static_cast<SkColorSpace_XYZ*>(decodeInfo.colorSpace());
+        decodeInfo = decodeInfo.makeColorSpace(csXYZ->makeLinearGamma());
+    }
+
+    SkImageInfo bitmapInfo = decodeInfo;
+    set_bitmap_color_space(&bitmapInfo);
+    if (kRGBA_8888_SkColorType == decodeInfo.colorType() ||
+        kBGRA_8888_SkColorType == decodeInfo.colorType())
+    {
+        bitmapInfo = bitmapInfo.makeColorType(kN32_SkColorType);
+    }
+
+    SkBitmap bitmap;
+    if (!bitmap.tryAllocPixels(bitmapInfo)) {
+        return SkStringPrintf("Image(%s) is too large (%d x %d)", fPath.c_str(),
+                              bitmapInfo.width(), bitmapInfo.height());
+    }
+
+    size_t rowBytes = bitmap.rowBytes();
+    SkCodec::Result r = codec->getPixels(decodeInfo, bitmap.getPixels(), rowBytes);
+    if (SkCodec::kSuccess != r && SkCodec::kIncompleteInput != r) {
+        return SkStringPrintf("Couldn't getPixels %s. Error code %d", fPath.c_str(), r);
+    }
+
+    switch (fMode) {
+        case kBaseline_Mode:
+        case kDst_sRGB_Mode:
+        case kDst_HPZR30w_Mode:
+            canvas->drawBitmap(bitmap, 0, 0);
+            break;
+        default:
+            SkASSERT(false);
+            return "Invalid fMode";
+    }
+    return "";
+}
+
+SkISize ColorCodecSrc::size() const {
+    sk_sp<SkData> encoded(SkData::MakeFromFileName(fPath.c_str()));
+    std::unique_ptr<SkCodec> codec(SkCodec::NewFromData(encoded));
+    if (nullptr == codec) {
+        return {0, 0};
+    }
+    return {codec->getInfo().width(), codec->getInfo().height()};
+}
+
+Name ColorCodecSrc::name() const {
+    return SkOSPath::Basename(fPath.c_str());
+}
+
+/*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
+
 static const SkRect kSKPViewport = {0,0, 1000,1000};
 
 SKPSrc::SKPSrc(Path path) : fPath(path) {}
 
 Error SKPSrc::draw(SkCanvas* canvas) const {
-    SkAutoTDelete<SkStream> stream(SkStream::NewFromFile(fPath.c_str()));
+    std::unique_ptr<SkStream> stream = SkStream::MakeFromFile(fPath.c_str());
     if (!stream) {
         return SkStringPrintf("Couldn't read %s.", fPath.c_str());
     }
-    SkAutoTUnref<SkPicture> pic(SkPicture::CreateFromStream(stream));
+    sk_sp<SkPicture> pic(SkPicture::MakeFromStream(stream.get()));
     if (!pic) {
         return SkStringPrintf("Couldn't decode %s as a picture.", fPath.c_str());
     }
-    stream.reset((SkStream*)nullptr);  // Might as well drop this when we're done with it.
+    stream = nullptr;  // Might as well drop this when we're done with it.
 
     canvas->clipRect(kSKPViewport);
     canvas->drawPicture(pic);
@@ -824,17 +1158,17 @@ Error SKPSrc::draw(SkCanvas* canvas) const {
 }
 
 SkISize SKPSrc::size() const {
-    SkAutoTDelete<SkStream> stream(SkStream::NewFromFile(fPath.c_str()));
+    std::unique_ptr<SkStream> stream = SkStream::MakeFromFile(fPath.c_str());
     if (!stream) {
-        return SkISize::Make(0,0);
+        return {0, 0};
     }
     SkPictInfo info;
-    if (!SkPicture::InternalOnly_StreamIsSKP(stream, &info)) {
-        return SkISize::Make(0,0);
+    if (!SkPicture::InternalOnly_StreamIsSKP(stream.get(), &info)) {
+        return {0, 0};
     }
     SkRect viewport = kSKPViewport;
     if (!viewport.intersect(info.fCullRect)) {
-        return SkISize::Make(0,0);
+        return {0, 0};
     }
     return viewport.roundOut().size();
 }
@@ -842,62 +1176,163 @@ SkISize SKPSrc::size() const {
 Name SKPSrc::name() const { return SkOSPath::Basename(fPath.c_str()); }
 
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
+#if defined(SK_XML)
+// Used when the image doesn't have an intrinsic size.
+static const SkSize kDefaultSVGSize = {1000, 1000};
+
+// Used to force-scale tiny fixed-size images.
+static const SkSize kMinimumSVGSize = {128, 128};
+
+SVGSrc::SVGSrc(Path path)
+    : fName(SkOSPath::Basename(path.c_str()))
+    , fScale(1) {
+
+  SkFILEStream stream(path.c_str());
+  if (!stream.isValid()) {
+      return;
+  }
+  fDom = SkSVGDOM::MakeFromStream(stream);
+  if (!fDom) {
+      return;
+  }
+
+  const SkSize& sz = fDom->containerSize();
+  if (sz.isEmpty()) {
+      // no intrinsic size
+      fDom->setContainerSize(kDefaultSVGSize);
+  } else {
+      fScale = SkTMax(1.f, SkTMax(kMinimumSVGSize.width()  / sz.width(),
+                                  kMinimumSVGSize.height() / sz.height()));
+  }
+}
+
+Error SVGSrc::draw(SkCanvas* canvas) const {
+    if (!fDom) {
+        return SkStringPrintf("Unable to parse file: %s", fName.c_str());
+    }
+
+    SkAutoCanvasRestore acr(canvas, true);
+    canvas->scale(fScale, fScale);
+    fDom->render(canvas);
+
+    return "";
+}
+
+SkISize SVGSrc::size() const {
+    if (!fDom) {
+        return {0, 0};
+    }
+
+    return SkSize{fDom->containerSize().width() * fScale, fDom->containerSize().height() * fScale}
+            .toRound();
+}
+
+Name SVGSrc::name() const { return fName; }
+
+bool SVGSrc::veto(SinkFlags flags) const {
+    // No need to test to non-(raster||gpu) or indirect backends.
+    bool type_ok = flags.type == SinkFlags::kRaster
+                || flags.type == SinkFlags::kGPU;
+
+    return !type_ok || flags.approach != SinkFlags::kDirect;
+}
+
+#endif // defined(SK_XML)
+/*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
+
+MSKPSrc::MSKPSrc(Path path) : fPath(path) {
+    std::unique_ptr<SkStreamAsset> stream = SkStream::MakeFromFile(fPath.c_str());
+    int count = SkMultiPictureDocumentReadPageCount(stream.get());
+    if (count > 0) {
+        fPages.reset(count);
+        (void)SkMultiPictureDocumentReadPageSizes(stream.get(), &fPages[0], fPages.count());
+    }
+}
+
+int MSKPSrc::pageCount() const { return fPages.count(); }
+
+SkISize MSKPSrc::size() const { return this->size(0); }
+SkISize MSKPSrc::size(int i) const {
+    return i >= 0 && i < fPages.count() ? fPages[i].fSize.toCeil() : SkISize{0, 0};
+}
+
+Error MSKPSrc::draw(SkCanvas* c) const { return this->draw(0, c); }
+Error MSKPSrc::draw(int i, SkCanvas* canvas) const {
+    if (this->pageCount() == 0) {
+        return SkStringPrintf("Unable to parse MultiPictureDocument file: %s", fPath.c_str());
+    }
+    if (i >= fPages.count() || i < 0) {
+        return SkStringPrintf("MultiPictureDocument page number out of range: %d", i);
+    }
+    SkPicture* page = fPages[i].fPicture.get();
+    if (!page) {
+        std::unique_ptr<SkStreamAsset> stream = SkStream::MakeFromFile(fPath.c_str());
+        if (!stream) {
+            return SkStringPrintf("Unable to open file: %s", fPath.c_str());
+        }
+        if (!SkMultiPictureDocumentRead(stream.get(), &fPages[0], fPages.count())) {
+            return SkStringPrintf("SkMultiPictureDocument reader failed on page %d: %s", i,
+                                  fPath.c_str());
+        }
+        page = fPages[i].fPicture.get();
+    }
+    canvas->drawPicture(page);
+    return "";
+}
+
+Name MSKPSrc::name() const { return SkOSPath::Basename(fPath.c_str()); }
+
+/*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
 Error NullSink::draw(const Src& src, SkBitmap*, SkWStream*, SkString*) const {
-    SkAutoTDelete<SkCanvas> canvas(SkCreateNullCanvas());
-    return src.draw(canvas);
+    return src.draw(SkMakeNullCanvas().get());
 }
 
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
 DEFINE_bool(gpuStats, false, "Append GPU stats to the log for each GPU task?");
 
-GPUSink::GPUSink(GrContextFactory::GLContextType ct,
-                 GrContextFactory::GLContextOptions options,
+GPUSink::GPUSink(GrContextFactory::ContextType ct,
+                 GrContextFactory::ContextOverrides overrides,
                  int samples,
                  bool diText,
+                 SkColorType colorType,
+                 sk_sp<SkColorSpace> colorSpace,
                  bool threaded)
     : fContextType(ct)
-    , fContextOptions(options)
+    , fContextOverrides(overrides)
     , fSampleCount(samples)
     , fUseDIText(diText)
+    , fColorType(colorType)
+    , fColorSpace(std::move(colorSpace))
     , fThreaded(threaded) {}
 
-void PreAbandonGpuContextErrorHandler(SkError, void*) {}
-
-DEFINE_bool(imm, false, "Run gpu configs in immediate mode.");
-DEFINE_bool(batchClip, false, "Clip each GrBatch to its device bounds for testing.");
-DEFINE_bool(batchBounds, false, "Draw a wireframe bounds of each GrBatch.");
-DEFINE_int32(batchLookback, -1, "Maximum GrBatch lookback for combining, negative means default.");
+DEFINE_bool(drawOpClip, false, "Clip each GrDrawOp to its device bounds for testing.");
 
 Error GPUSink::draw(const Src& src, SkBitmap* dst, SkWStream*, SkString* log) const {
     GrContextOptions grOptions;
-    grOptions.fImmediateMode = FLAGS_imm;
-    grOptions.fClipBatchToBounds = FLAGS_batchClip;
-    grOptions.fDrawBatchBounds = FLAGS_batchBounds;
-    grOptions.fMaxBatchLookback = FLAGS_batchLookback;
 
     src.modifyGrContextOptions(&grOptions);
 
     GrContextFactory factory(grOptions);
     const SkISize size = src.size();
     const SkImageInfo info =
-        SkImageInfo::Make(size.width(), size.height(), kN32_SkColorType, kPremul_SkAlphaType);
+        SkImageInfo::Make(size.width(), size.height(), fColorType,
+                          kPremul_SkAlphaType, fColorSpace);
 #if SK_SUPPORT_GPU
-    const int maxDimension = factory.getContextInfo(fContextType, fContextOptions).
-            fGrContext->caps()->maxTextureSize();
+    GrContext* context = factory.getContextInfo(fContextType, fContextOverrides).grContext();
+    const int maxDimension = context->caps()->maxTextureSize();
     if (maxDimension < SkTMax(size.width(), size.height())) {
         return Error::Nonfatal("Src too large to create a texture.\n");
     }
 #endif
 
-    SkAutoTUnref<SkSurface> surface(
-            NewGpuSurface(&factory, fContextType, fContextOptions, info, fSampleCount, fUseDIText));
+    auto surface(
+        NewGpuSurface(&factory, fContextType, fContextOverrides, info, fSampleCount, fUseDIText));
     if (!surface) {
         return "Could not create a surface.";
     }
     if (FLAGS_preAbandonGpuContext) {
-        SkSetErrorCallback(&PreAbandonGpuContextErrorHandler, nullptr);
         factory.abandonContexts();
     }
     SkCanvas* canvas = surface->getCanvas();
@@ -911,9 +1346,11 @@ Error GPUSink::draw(const Src& src, SkBitmap* dst, SkWStream*, SkString* log) co
         canvas->getGrContext()->dumpGpuStats(log);
     }
     dst->allocPixels(info);
-    canvas->readPixels(dst, 0, 0);
+    canvas->readPixels(*dst, 0, 0);
     if (FLAGS_abandonGpuContext) {
         factory.abandonContexts();
+    } else if (FLAGS_releaseAndAbandonGpuContext) {
+        factory.releaseResourcesAndAbandonContexts();
     }
     return "";
 }
@@ -921,73 +1358,39 @@ Error GPUSink::draw(const Src& src, SkBitmap* dst, SkWStream*, SkString* log) co
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
 static Error draw_skdocument(const Src& src, SkDocument* doc, SkWStream* dst) {
-    // Print the given DM:Src to a document, breaking on 8.5x11 pages.
+    if (src.size().isEmpty()) {
+        return "Source has empty dimensions";
+    }
     SkASSERT(doc);
-    int width  = src.size().width(),
-        height = src.size().height();
-
-    if (FLAGS_multiPage) {
-        const int kLetterWidth = 612,  // 8.5 * 72
-                kLetterHeight = 792;   // 11 * 72
-        const SkRect letter = SkRect::MakeWH(SkIntToScalar(kLetterWidth),
-                                             SkIntToScalar(kLetterHeight));
-
-        int xPages = ((width - 1) / kLetterWidth) + 1;
-        int yPages = ((height - 1) / kLetterHeight) + 1;
-
-        for (int y = 0; y < yPages; ++y) {
-            for (int x = 0; x < xPages; ++x) {
-                int w = SkTMin(kLetterWidth, width - (x * kLetterWidth));
-                int h = SkTMin(kLetterHeight, height - (y * kLetterHeight));
-                SkCanvas* canvas =
-                        doc->beginPage(SkIntToScalar(w), SkIntToScalar(h));
-                if (!canvas) {
-                    return "SkDocument::beginPage(w,h) returned nullptr";
-                }
-                canvas->clipRect(letter);
-                canvas->translate(-letter.width() * x, -letter.height() * y);
-                Error err = src.draw(canvas);
-                if (!err.isEmpty()) {
-                    return err;
-                }
-                doc->endPage();
-            }
-        }
-    } else {
+    int pageCount = src.pageCount();
+    for (int i = 0; i < pageCount; ++i) {
+        int width = src.size(i).width(), height = src.size(i).height();
         SkCanvas* canvas =
                 doc->beginPage(SkIntToScalar(width), SkIntToScalar(height));
         if (!canvas) {
             return "SkDocument::beginPage(w,h) returned nullptr";
         }
-        Error err = src.draw(canvas);
+        Error err = src.draw(i, canvas);
         if (!err.isEmpty()) {
             return err;
         }
         doc->endPage();
     }
-    if (!doc->close()) {
-        return "SkDocument::close() returned false";
-    }
+    doc->close();
     dst->flush();
     return "";
 }
 
-PDFSink::PDFSink(const char* rasterizer) : fRasterizer(rasterizer) {}
-
 Error PDFSink::draw(const Src& src, SkBitmap*, SkWStream* dst, SkString*) const {
-    SkAutoTUnref<SkDocument> doc(SkDocument::CreatePDF(dst));
+    SkDocument::PDFMetadata metadata;
+    metadata.fTitle = src.name();
+    metadata.fSubject = "rendering correctness test";
+    metadata.fCreator = "Skia/DM";
+    sk_sp<SkDocument> doc = SkDocument::MakePDF(dst, SK_ScalarDefaultRasterDPI,
+                                                metadata, nullptr, fPDFA);
     if (!doc) {
-        return "SkDocument::CreatePDF() returned nullptr";
+        return "SkDocument::MakePDF() returned nullptr";
     }
-    SkTArray<SkDocument::Attribute> info;
-    info.emplace_back(SkString("Title"), src.name());
-    info.emplace_back(SkString("Subject"),
-                      SkString("rendering correctness test"));
-    info.emplace_back(SkString("Creator"), SkString("Skia/DM"));
-
-    info.emplace_back(SkString("Keywords"),
-                      SkStringPrintf("Rasterizer:%s;", fRasterizer));
-    doc->setMetadata(&info[0], info.count(), nullptr, nullptr);
     return draw_skdocument(src, doc.get(), dst);
 }
 
@@ -995,13 +1398,45 @@ Error PDFSink::draw(const Src& src, SkBitmap*, SkWStream* dst, SkString*) const 
 
 XPSSink::XPSSink() {}
 
+#ifdef SK_BUILD_FOR_WIN
+static SkTScopedComPtr<IXpsOMObjectFactory> make_xps_factory() {
+    IXpsOMObjectFactory* factory;
+    HRN(CoCreateInstance(CLSID_XpsOMObjectFactory,
+                         nullptr,
+                         CLSCTX_INPROC_SERVER,
+                         IID_PPV_ARGS(&factory)));
+    return SkTScopedComPtr<IXpsOMObjectFactory>(factory);
+}
+
 Error XPSSink::draw(const Src& src, SkBitmap*, SkWStream* dst, SkString*) const {
-    SkAutoTUnref<SkDocument> doc(SkDocument::CreateXPS(dst));
+    SkAutoCoInitialize com;
+    if (!com.succeeded()) {
+        return "Could not initialize COM.";
+    }
+    SkTScopedComPtr<IXpsOMObjectFactory> factory = make_xps_factory();
+    if (!factory) {
+        return "Failed to create XPS Factory.";
+    }
+    sk_sp<SkDocument> doc(SkDocument::MakeXPS(dst, factory.get()));
     if (!doc) {
-        return "SkDocument::CreateXPS() returned nullptr";
+        return "SkDocument::MakeXPS() returned nullptr";
     }
     return draw_skdocument(src, doc.get(), dst);
 }
+#else
+Error XPSSink::draw(const Src& src, SkBitmap*, SkWStream* dst, SkString*) const {
+    return "XPS not supported on this platform.";
+}
+#endif
+
+/*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
+
+PipeSink::PipeSink() {}
+
+Error PipeSink::draw(const Src& src, SkBitmap*, SkWStream* dst, SkString*) const {
+    return src.draw(SkPipeSerializer().beginWrite(SkRect::Make(src.size()), dst));
+}
+
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
 SKPSink::SKPSink() {}
@@ -1014,9 +1449,24 @@ Error SKPSink::draw(const Src& src, SkBitmap*, SkWStream* dst, SkString*) const 
     if (!err.isEmpty()) {
         return err;
     }
-    SkAutoTUnref<SkPicture> pic(recorder.endRecording());
-    pic->serialize(dst);
+    recorder.finishRecordingAsPicture()->serialize(dst);
     return "";
+}
+
+/*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
+
+Error DebugSink::draw(const Src& src, SkBitmap*, SkWStream* dst, SkString*) const {
+    SkDebugCanvas debugCanvas(src.size().width(), src.size().height());
+    Error err = src.draw(&debugCanvas);
+    if (!err.isEmpty()) {
+        return err;
+    }
+    std::unique_ptr<SkCanvas> nullCanvas = SkMakeNullCanvas();
+    UrlDataManager dataManager(SkString("data"));
+    Json::Value json = debugCanvas.toJSON(
+            dataManager, debugCanvas.getSize(), nullCanvas.get());
+    std::string value = Json::StyledWriter().write(json);
+    return dst->write(value.c_str(), value.size()) ? "" : "SkWStream Error";
 }
 
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
@@ -1024,16 +1474,21 @@ Error SKPSink::draw(const Src& src, SkBitmap*, SkWStream* dst, SkString*) const 
 SVGSink::SVGSink() {}
 
 Error SVGSink::draw(const Src& src, SkBitmap*, SkWStream* dst, SkString*) const {
-    SkAutoTDelete<SkXMLWriter> xmlWriter(new SkXMLStreamWriter(dst));
-    SkAutoTUnref<SkCanvas> canvas(SkSVGCanvas::Create(
-        SkRect::MakeWH(SkIntToScalar(src.size().width()), SkIntToScalar(src.size().height())),
-        xmlWriter));
-    return src.draw(canvas);
+#if defined(SK_XML)
+    std::unique_ptr<SkXMLWriter> xmlWriter(new SkXMLStreamWriter(dst));
+    return src.draw(SkSVGCanvas::Make(SkRect::MakeWH(SkIntToScalar(src.size().width()),
+                                                     SkIntToScalar(src.size().height())),
+                                      xmlWriter.get()).get());
+#else
+    return Error("SVG sink is disabled.");
+#endif // SK_XML
 }
 
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
-RasterSink::RasterSink(SkColorType colorType) : fColorType(colorType) {}
+RasterSink::RasterSink(SkColorType colorType, sk_sp<SkColorSpace> colorSpace)
+    : fColorType(colorType)
+    , fColorSpace(std::move(colorSpace)) {}
 
 Error RasterSink::draw(const Src& src, SkBitmap* dst, SkWStream*, SkString*) const {
     const SkISize size = src.size();
@@ -1041,10 +1496,9 @@ Error RasterSink::draw(const Src& src, SkBitmap* dst, SkWStream*, SkString*) con
     SkAlphaType alphaType = kPremul_SkAlphaType;
     (void)SkColorTypeValidateAlphaType(fColorType, alphaType, &alphaType);
 
-    SkMallocPixelRef::ZeroedPRFactory factory;
-    dst->allocPixels(SkImageInfo::Make(size.width(), size.height(), fColorType, alphaType),
-                     &factory,
-                     nullptr/*colortable*/);
+    dst->allocPixels(SkImageInfo::Make(size.width(), size.height(),
+                                       fColorType, alphaType, fColorSpace),
+                     nullptr/*colortable*/, SkBitmap::kZeroPixels_AllocFlag);
     SkCanvas canvas(*dst);
     return src.draw(&canvas);
 }
@@ -1062,8 +1516,8 @@ static Error draw_to_canvas(Sink* sink, SkBitmap* bitmap, SkWStream* stream, SkS
     public:
         ProxySrc(SkISize size, const Fn& draw) : fSize(size), fDraw(draw) {}
         Error   draw(SkCanvas* canvas) const override { return fDraw(canvas); }
-        Name                    name() const override { sk_throw(); return ""; } // Won't be called.
-        SkISize                 size() const override { return fSize; }
+        Name    name() const override { return "ProxySrc"; }
+        SkISize size() const override { return fSize; }
     private:
         SkISize   fSize;
         const Fn& fDraw;
@@ -1082,7 +1536,8 @@ static Error check_against_reference(const SkBitmap* bitmap, const Src& src, Sin
     if (FLAGS_check && bitmap) {
         SkBitmap reference;
         SkString log;
-        Error err = sink->draw(src, &reference, nullptr, &log);
+        SkDynamicMemoryWStream wStream;
+        Error err = sink->draw(src, &reference, &wStream, &log);
         // If we can draw into this Sink via some pipeline, we should be able to draw directly.
         SkASSERT(err.isEmpty());
         if (!err.isEmpty()) {
@@ -1107,7 +1562,7 @@ static SkISize auto_compute_translate(SkMatrix* matrix, int srcW, int srcH) {
     SkRect bounds = SkRect::MakeIWH(srcW, srcH);
     matrix->mapRect(&bounds);
     matrix->postTranslate(-bounds.x(), -bounds.y());
-    return SkISize::Make(SkScalarRoundToInt(bounds.width()), SkScalarRoundToInt(bounds.height()));
+    return {SkScalarRoundToInt(bounds.width()), SkScalarRoundToInt(bounds.height())};
 }
 
 ViaMatrix::ViaMatrix(SkMatrix matrix, Sink* sink) : Via(sink), fMatrix(matrix) {}
@@ -1115,7 +1570,7 @@ ViaMatrix::ViaMatrix(SkMatrix matrix, Sink* sink) : Via(sink), fMatrix(matrix) {
 Error ViaMatrix::draw(const Src& src, SkBitmap* bitmap, SkWStream* stream, SkString* log) const {
     SkMatrix matrix = fMatrix;
     SkISize size = auto_compute_translate(&matrix, src.size().width(), src.size().height());
-    return draw_to_canvas(fSink, bitmap, stream, log, size, [&](SkCanvas* canvas) {
+    return draw_to_canvas(fSink.get(), bitmap, stream, log, size, [&](SkCanvas* canvas) {
         canvas->concat(matrix);
         return src.draw(canvas);
     });
@@ -1148,24 +1603,11 @@ Error ViaUpright::draw(const Src& src, SkBitmap* bitmap, SkWStream* stream, SkSt
     SkCanvas canvas(uprighted);
     canvas.concat(upright);
     SkPaint paint;
-    paint.setXfermodeMode(SkXfermode::kSrc_Mode);
+    paint.setBlendMode(SkBlendMode::kSrc);
     canvas.drawBitmap(*bitmap, 0, 0, &paint);
 
     *bitmap = uprighted;
-    bitmap->lockPixels();
     return "";
-}
-
-/*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
-
-Error ViaRemote::draw(const Src& src, SkBitmap* bitmap, SkWStream* stream, SkString* log) const {
-    return draw_to_canvas(fSink, bitmap, stream, log, src.size(), [&](SkCanvas* target) {
-        SkAutoTDelete<SkRemote::Encoder> decoder(SkRemote::NewDecoder(target));
-        SkAutoTDelete<SkRemote::Encoder>   cache(fCache ? SkRemote::NewCachingEncoder(decoder)
-                                                        : nullptr);
-        SkAutoTDelete<SkCanvas> canvas(SkRemote::NewCanvas(cache ? cache : decoder));
-        return src.draw(canvas);
-    });
 }
 
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
@@ -1180,17 +1622,14 @@ Error ViaSerialization::draw(
     if (!err.isEmpty()) {
         return err;
     }
-    SkAutoTUnref<SkPicture> pic(recorder.endRecording());
+    sk_sp<SkPicture> pic(recorder.finishRecordingAsPicture());
 
     // Serialize it and then deserialize it.
-    SkDynamicMemoryWStream wStream;
-    pic->serialize(&wStream);
-    SkAutoTDelete<SkStream> rStream(wStream.detachAsStream());
-    SkAutoTUnref<SkPicture> deserialized(SkPicture::CreateFromStream(rStream));
+    sk_sp<SkPicture> deserialized(SkPicture::MakeFromData(pic->serialize().get()));
 
-    return draw_to_canvas(fSink, bitmap, stream, log, size, [&](SkCanvas* canvas) {
+    return draw_to_canvas(fSink.get(), bitmap, stream, log, size, [&](SkCanvas* canvas) {
         canvas->drawPicture(deserialized);
-        return check_against_reference(bitmap, src, fSink);
+        return check_against_reference(bitmap, src, fSink.get());
     });
 }
 
@@ -1211,39 +1650,38 @@ Error ViaTiles::draw(const Src& src, SkBitmap* bitmap, SkWStream* stream, SkStri
     if (!err.isEmpty()) {
         return err;
     }
-    SkAutoTUnref<SkPicture> pic(recorder.endRecordingAsPicture());
+    sk_sp<SkPicture> pic(recorder.finishRecordingAsPicture());
 
-    return draw_to_canvas(fSink, bitmap, stream, log, src.size(), [&](SkCanvas* canvas) {
+    return draw_to_canvas(fSink.get(), bitmap, stream, log, src.size(), [&](SkCanvas* canvas) {
         const int xTiles = (size.width()  + fW - 1) / fW,
                   yTiles = (size.height() + fH - 1) / fH;
         SkMultiPictureDraw mpd(xTiles*yTiles);
-        SkTDArray<SkSurface*> surfaces;
-        surfaces.setReserve(xTiles*yTiles);
+        SkTArray<sk_sp<SkSurface>> surfaces;
+//        surfaces.setReserve(xTiles*yTiles);
 
         SkImageInfo info = canvas->imageInfo().makeWH(fW, fH);
         for (int j = 0; j < yTiles; j++) {
             for (int i = 0; i < xTiles; i++) {
                 // This lets our ultimate Sink determine the best kind of surface.
                 // E.g., if it's a GpuSink, the surfaces and images are textures.
-                SkSurface* s = canvas->newSurface(info);
+                auto s = canvas->makeSurface(info);
                 if (!s) {
-                    s = SkSurface::NewRaster(info);  // Some canvases can't create surfaces.
+                    s = SkSurface::MakeRaster(info);  // Some canvases can't create surfaces.
                 }
-                surfaces.push(s);
+                surfaces.push_back(s);
                 SkCanvas* c = s->getCanvas();
                 c->translate(SkIntToScalar(-i * fW),
                              SkIntToScalar(-j * fH));  // Line up the canvas with this tile.
-                mpd.add(c, pic);
+                mpd.add(c, pic.get());
             }
         }
         mpd.draw();
         for (int j = 0; j < yTiles; j++) {
             for (int i = 0; i < xTiles; i++) {
-                SkAutoTUnref<SkImage> image(surfaces[i+xTiles*j]->newImageSnapshot());
+                sk_sp<SkImage> image(surfaces[i+xTiles*j]->makeImageSnapshot());
                 canvas->drawImage(image, SkIntToScalar(i*fW), SkIntToScalar(j*fH));
             }
         }
-        surfaces.unrefAll();
         return "";
     });
 }
@@ -1252,17 +1690,43 @@ Error ViaTiles::draw(const Src& src, SkBitmap* bitmap, SkWStream* stream, SkStri
 
 Error ViaPicture::draw(const Src& src, SkBitmap* bitmap, SkWStream* stream, SkString* log) const {
     auto size = src.size();
-    return draw_to_canvas(fSink, bitmap, stream, log, size, [&](SkCanvas* canvas) -> Error {
+    return draw_to_canvas(fSink.get(), bitmap, stream, log, size, [&](SkCanvas* canvas) -> Error {
         SkPictureRecorder recorder;
-        SkAutoTUnref<SkPicture> pic;
+        sk_sp<SkPicture> pic;
         Error err = src.draw(recorder.beginRecording(SkIntToScalar(size.width()),
                                                      SkIntToScalar(size.height())));
         if (!err.isEmpty()) {
             return err;
         }
-        pic.reset(recorder.endRecordingAsPicture());
+        pic = recorder.finishRecordingAsPicture();
         canvas->drawPicture(pic);
-        return check_against_reference(bitmap, src, fSink);
+        return check_against_reference(bitmap, src, fSink.get());
+    });
+}
+
+/*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
+
+Error ViaDefer::draw(const Src& src, SkBitmap* bitmap, SkWStream* stream, SkString* log) const {
+    auto size = src.size();
+    return draw_to_canvas(fSink.get(), bitmap, stream, log, size, [&](SkCanvas* canvas) -> Error {
+        SkDeferredCanvas deferred(canvas, SkDeferredCanvas::kEager);
+        return src.draw(&deferred);
+    });
+}
+
+/*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
+
+Error ViaPipe::draw(const Src& src, SkBitmap* bitmap, SkWStream* stream, SkString* log) const {
+    auto size = src.size();
+    return draw_to_canvas(fSink.get(), bitmap, stream, log, size, [&](SkCanvas* canvas) -> Error {
+        SkDynamicMemoryWStream tmpStream;
+        Error err = src.draw(SkPipeSerializer().beginWrite(SkRect::Make(size), &tmpStream));
+        if (!err.isEmpty()) {
+            return err;
+        }
+        sk_sp<SkData> data = tmpStream.detachAsData();
+        SkPipeDeserializer().playback(data->data(), data->size(), canvas);
+        return check_against_reference(bitmap, src, fSink.get());
     });
 }
 
@@ -1273,19 +1737,19 @@ Error ViaPicture::draw(const Src& src, SkBitmap* bitmap, SkWStream* stream, SkSt
 Error ViaSecondPicture::draw(
         const Src& src, SkBitmap* bitmap, SkWStream* stream, SkString* log) const {
     auto size = src.size();
-    return draw_to_canvas(fSink, bitmap, stream, log, size, [&](SkCanvas* canvas) -> Error {
+    return draw_to_canvas(fSink.get(), bitmap, stream, log, size, [&](SkCanvas* canvas) -> Error {
         SkPictureRecorder recorder;
-        SkAutoTUnref<SkPicture> pic;
+        sk_sp<SkPicture> pic;
         for (int i = 0; i < 2; i++) {
             Error err = src.draw(recorder.beginRecording(SkIntToScalar(size.width()),
                                                          SkIntToScalar(size.height())));
             if (!err.isEmpty()) {
                 return err;
             }
-            pic.reset(recorder.endRecordingAsPicture());
+            pic = recorder.finishRecordingAsPicture();
         }
         canvas->drawPicture(pic);
-        return check_against_reference(bitmap, src, fSink);
+        return check_against_reference(bitmap, src, fSink.get());
     });
 }
 
@@ -1293,7 +1757,7 @@ Error ViaSecondPicture::draw(
 
 // Draw the Src twice.  This can help exercise caching.
 Error ViaTwice::draw(const Src& src, SkBitmap* bitmap, SkWStream* stream, SkString* log) const {
-    return draw_to_canvas(fSink, bitmap, stream, log, src.size(), [&](SkCanvas* canvas) -> Error {
+    return draw_to_canvas(fSink.get(), bitmap, stream, log, src.size(), [&](SkCanvas* canvas) -> Error {
         for (int i = 0; i < 2; i++) {
             SkAutoCanvasRestore acr(canvas, true/*save now*/);
             canvas->clear(SK_ColorTRANSPARENT);
@@ -1302,57 +1766,35 @@ Error ViaTwice::draw(const Src& src, SkBitmap* bitmap, SkWStream* stream, SkStri
                 return err;
             }
         }
-        return check_against_reference(bitmap, src, fSink);
+        return check_against_reference(bitmap, src, fSink.get());
     });
 }
 
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
-#ifdef SK_MOJO
-    Error ViaMojo::draw(const Src& src, SkBitmap* bitmap, SkWStream* stream, SkString* log) const {
-        SkPictureRecorder recorder;
-        SkRect size = SkRect::Make(SkIRect::MakeSize(src.size()));
-        Error err = src.draw(recorder.beginRecording(size));
+#ifdef TEST_VIA_SVG
+#include "SkXMLWriter.h"
+#include "SkSVGCanvas.h"
+#include "SkSVGDOM.h"
+
+Error ViaSVG::draw(const Src& src, SkBitmap* bitmap, SkWStream* stream, SkString* log) const {
+    auto size = src.size();
+    return draw_to_canvas(fSink.get(), bitmap, stream, log, size, [&](SkCanvas* canvas) -> Error {
+        SkDynamicMemoryWStream wstream;
+        SkXMLStreamWriter writer(&wstream);
+        Error err = src.draw(SkSVGCanvas::Make(SkRect::Make(size), &writer).get());
         if (!err.isEmpty()) {
             return err;
         }
-        SkAutoTUnref<SkPicture> skPicture(recorder.endRecording());
-
-        SkASSERT(skPicture);
-        SkDynamicMemoryWStream buffer;
-        skPicture->serialize(&buffer);
-        skPicture.reset();
-        SkMojo::FlattenedPicturePtr mojoPicture = SkMojo::FlattenedPicture::New();
-        mojoPicture->data.resize(buffer.bytesWritten());
-        buffer.copyTo(mojoPicture->data.data());
-        buffer.reset();
-        SkASSERT(mojoPicture.get() && mojoPicture->data);
-
-        size_t flatSize = mojoPicture->GetSerializedSize();
-        SkAutoMalloc storage(flatSize);
-        if (!mojoPicture->Serialize(storage.get(), flatSize)) {
-            return "SkMojo::FlattenedPicture::Serialize failed";
+        std::unique_ptr<SkStream> rstream(wstream.detachAsStream());
+        auto dom = SkSVGDOM::MakeFromStream(*rstream);
+        if (dom) {
+            dom->setContainerSize(SkSize::Make(size));
+            dom->render(canvas);
         }
-        mojoPicture = SkMojo::FlattenedPicture::New();
-        mojoPicture->Deserialize(storage.get());
-        storage.free();
-        if (!mojoPicture) {
-            return "SkMojo::FlattenedPicture::Deserialize failed";
-        }
-        SkMemoryStream tmpStream(mojoPicture->data.data(),
-                                 mojoPicture->data.size());
-        skPicture.reset(SkPicture::CreateFromStream(&tmpStream));
-        mojoPicture.reset();
-        auto fn = [&](SkCanvas* canvas) -> Error {
-            canvas->drawPicture(skPicture.get());
-            return check_against_reference(bitmap, src, fSink);
-        };
-        return draw_to_canvas(fSink, bitmap, stream, log, src.size(), fn);
-    }
-#else // not SK_MOJO
-    Error ViaMojo::draw(const Src&, SkBitmap*, SkWStream*, SkString*) const {
-        return "Mojo is missing!";
-    }
+        return "";
+    });
+}
 #endif
 
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
@@ -1363,6 +1805,7 @@ Error ViaTwice::draw(const Src& src, SkBitmap* bitmap, SkWStream* stream, SkStri
 struct DrawsAsSingletonPictures {
     SkCanvas* fCanvas;
     const SkDrawableList& fDrawables;
+    SkRect fBounds;
 
     template <typename T>
     void draw(const T& op, SkCanvas* canvas) {
@@ -1377,8 +1820,8 @@ struct DrawsAsSingletonPictures {
     template <typename T>
     SK_WHEN(T::kTags & SkRecords::kDraw_Tag, void) operator()(const T& op) {
         SkPictureRecorder rec;
-        this->draw(op, rec.beginRecording(SkRect::MakeLargest()));
-        SkAutoTUnref<SkPicture> pic(rec.endRecordingAsPicture());
+        this->draw(op, rec.beginRecording(fBounds));
+        sk_sp<SkPicture> pic(rec.finishRecordingAsPicture());
         fCanvas->drawPicture(pic);
     }
 
@@ -1394,7 +1837,7 @@ struct DrawsAsSingletonPictures {
 Error ViaSingletonPictures::draw(
         const Src& src, SkBitmap* bitmap, SkWStream* stream, SkString* log) const {
     auto size = src.size();
-    return draw_to_canvas(fSink, bitmap, stream, log, size, [&](SkCanvas* canvas) -> Error {
+    return draw_to_canvas(fSink.get(), bitmap, stream, log, size, [&](SkCanvas* canvas) -> Error {
         // Use low-level (Skia-private) recording APIs so we can read the SkRecord.
         SkRecord skr;
         SkRecorder recorder(&skr, size.width(), size.height());
@@ -1408,20 +1851,80 @@ Error ViaSingletonPictures::draw(
         SkCanvas* macroCanvas = macroRec.beginRecording(SkIntToScalar(size.width()),
                                                         SkIntToScalar(size.height()));
 
-        SkAutoTDelete<SkDrawableList> drawables(recorder.detachDrawableList());
+        std::unique_ptr<SkDrawableList> drawables(recorder.detachDrawableList());
         const SkDrawableList empty;
 
         DrawsAsSingletonPictures drawsAsSingletonPictures = {
             macroCanvas,
             drawables ? *drawables : empty,
+            SkRect::MakeWH((SkScalar)size.width(), (SkScalar)size.height()),
         };
         for (int i = 0; i < skr.count(); i++) {
-            skr.visit<void>(i, drawsAsSingletonPictures);
+            skr.visit(i, drawsAsSingletonPictures);
         }
-        SkAutoTUnref<SkPicture> macroPic(macroRec.endRecordingAsPicture());
+        sk_sp<SkPicture> macroPic(macroRec.finishRecordingAsPicture());
 
         canvas->drawPicture(macroPic);
-        return check_against_reference(bitmap, src, fSink);
+        return check_against_reference(bitmap, src, fSink.get());
+    });
+}
+
+/*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
+
+Error ViaLite::draw(const Src& src, SkBitmap* bitmap, SkWStream* stream, SkString* log) const {
+    auto size = src.size();
+    SkIRect bounds = {0,0, size.width(), size.height()};
+    return draw_to_canvas(fSink.get(), bitmap, stream, log, size, [&](SkCanvas* canvas) -> Error {
+        SkLiteDL dl;
+        SkLiteRecorder rec;
+        rec.reset(&dl, bounds);
+
+        Error err = src.draw(&rec);
+        if (!err.isEmpty()) {
+            return err;
+        }
+        dl.draw(canvas);
+        return check_against_reference(bitmap, src, fSink.get());
+    });
+}
+
+/*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
+
+ViaCSXform::ViaCSXform(Sink* sink, sk_sp<SkColorSpace> cs, bool colorSpin)
+    : Via(sink)
+    , fCS(std::move(cs))
+    , fColorSpin(colorSpin) {}
+
+Error ViaCSXform::draw(const Src& src, SkBitmap* bitmap, SkWStream* stream, SkString* log) const {
+    return draw_to_canvas(fSink.get(), bitmap, stream, log, src.size(),
+                          [&](SkCanvas* canvas) -> Error {
+        auto proxy = SkCreateColorSpaceXformCanvas(canvas, fCS);
+        Error err = src.draw(proxy.get());
+        if (!err.isEmpty()) {
+            return err;
+        }
+
+        // Undo the color spin, so we can look at the pixels in Gold.
+        if (fColorSpin) {
+            SkBitmap pixels;
+            pixels.allocPixels(canvas->imageInfo());
+            canvas->readPixels(pixels, 0, 0);
+            for (int y = 0; y < pixels.height(); y++) {
+                for (int x = 0; x < pixels.width(); x++) {
+                    uint32_t pixel = *pixels.getAddr32(x, y);
+                    uint8_t r = SkGetPackedR32(pixel);
+                    uint8_t g = SkGetPackedG32(pixel);
+                    uint8_t b = SkGetPackedB32(pixel);
+                    uint8_t a = SkGetPackedA32(pixel);
+                    *pixels.getAddr32(x, y) =
+                            SkSwizzle_RGBA_to_PMColor(b << 0 | r << 8 | g << 16 | a << 24);
+                }
+            }
+
+            canvas->writePixels(pixels, 0, 0);
+        }
+
+        return "";
     });
 }
 

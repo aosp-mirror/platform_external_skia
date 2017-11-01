@@ -6,6 +6,7 @@
  */
 
 #include "gm.h"
+#include "sk_tool_utils.h"
 #include "SkCanvas.h"
 #include "SkPathPriv.h"
 #include "SkTextFormatParams.h"
@@ -241,7 +242,7 @@ static void path_bold(SkCanvas* canvas, const SkPath& path, const SkPaint& paint
         SkScalar fakeBoldScale = SkScalarInterpFunc(p.getTextSize(),
                 kStdFakeBoldInterpKeys, kStdFakeBoldInterpValues,
                 kStdFakeBoldInterpLength);
-        SkScalar extra = SkScalarMul(p.getTextSize(), fakeBoldScale);
+        SkScalar extra = p.getTextSize() * fakeBoldScale;
         p.setStrokeWidth(extra);
         canvas->save();
         canvas->translate(0, 120);
@@ -258,12 +259,12 @@ DEF_SIMPLE_GM_BG_NAME(strokefill, canvas, 640, 480, SK_ColorWHITE,
         paint.setAntiAlias(true);
         paint.setTextSize(SkIntToScalar(100));
         paint.setStrokeWidth(SkIntToScalar(5));
-        
+
         // use paths instead of text to test the path data on all platforms, since the
         // Mac-specific font may change or is not available everywhere
         path_bold(canvas, papyrus_hello(), paint);
         path_bold(canvas, hiragino_maru_gothic_pro_dash(), paint);
-        
+
         // use the portable typeface to generically test the fake bold code everywhere
         // (as long as the freetype option to do the bolding itself isn't enabled)
         sk_tool_utils::set_portable_typeface(&paint, "serif");
@@ -304,7 +305,7 @@ DEF_SIMPLE_GM_BG_NAME(strokefill, canvas, 640, 480, SK_ColorWHITE,
         path3.addRect(r, SkPath::kCCW_Direction);
         canvas->drawPath(path3, paint);
 
-        r = SkRect::MakeXYWH(x + SkIntToScalar(70), y + SkIntToScalar(280), 
+        r = SkRect::MakeXYWH(x + SkIntToScalar(70), y + SkIntToScalar(280),
                              SkIntToScalar(100), SkIntToScalar(100));
         SkPath path4;
         path4.setFillType(SkPath::kWinding_FillType);
@@ -313,7 +314,7 @@ DEF_SIMPLE_GM_BG_NAME(strokefill, canvas, 640, 480, SK_ColorWHITE,
         path4.addRect(r, SkPath::kCW_Direction);
         canvas->drawPath(path4, paint);
 
-        r = SkRect::MakeXYWH(x + SkIntToScalar(190), y + SkIntToScalar(280), 
+        r = SkRect::MakeXYWH(x + SkIntToScalar(190), y + SkIntToScalar(280),
                              SkIntToScalar(100), SkIntToScalar(100));
         path4.reset();
         SkASSERT(!SkPathPriv::CheapComputeFirstDirection(path4, nullptr));
@@ -322,7 +323,7 @@ DEF_SIMPLE_GM_BG_NAME(strokefill, canvas, 640, 480, SK_ColorWHITE,
         path4.moveTo(0, 0); // test for crbug.com/247770
         canvas->drawPath(path4, paint);
 
-        r = SkRect::MakeXYWH(x + SkIntToScalar(310), y + SkIntToScalar(280), 
+        r = SkRect::MakeXYWH(x + SkIntToScalar(310), y + SkIntToScalar(280),
                              SkIntToScalar(100), SkIntToScalar(100));
         path4.reset();
         SkASSERT(!SkPathPriv::CheapComputeFirstDirection(path4, nullptr));

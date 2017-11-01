@@ -29,8 +29,7 @@ static const int kInvalidTag = 3;
 static const int kMissingInput = 4;
 static const int kIOError = 5;
 
-int tool_main(int argc, char** argv);
-int tool_main(int argc, char** argv) {
+int main(int argc, char** argv) {
     SkCommandLineFlags::SetUsage("Prints information about an skp file");
     SkCommandLineFlags::Parse(argc, argv);
 
@@ -57,7 +56,7 @@ int tool_main(int argc, char** argv) {
     }
 
     if (FLAGS_version && !FLAGS_quiet) {
-        SkDebugf("Version: %d\n", info.fVersion);
+        SkDebugf("Version: %d\n", info.getVersion());
     }
     if (FLAGS_cullRect && !FLAGS_quiet) {
         SkDebugf("Cull Rect: %f,%f,%f,%f\n",
@@ -65,7 +64,26 @@ int tool_main(int argc, char** argv) {
                  info.fCullRect.fRight, info.fCullRect.fBottom);
     }
     if (FLAGS_flags && !FLAGS_quiet) {
-        SkDebugf("Flags: 0x%x\n", info.fFlags);
+        SkDebugf("Flags: ");
+        bool needsSeparator = false;
+        if (info.fFlags & SkPictInfo::kCrossProcess_Flag) {
+            SkDebugf("kCrossProcess");
+            needsSeparator = true;
+        }
+        if (info.fFlags & SkPictInfo::kScalarIsFloat_Flag) {
+            if (needsSeparator) {
+                SkDebugf("|");
+            }
+            SkDebugf("kScalarIsFloat");
+            needsSeparator = true;
+        }
+        if (info.fFlags & SkPictInfo::kPtrIs64Bit_Flag) {
+            if (needsSeparator) {
+                SkDebugf("|");
+            }
+            SkDebugf("kPtrIs64Bit");
+        }
+        SkDebugf("\n");
     }
 
     if (!stream.readBool()) {
@@ -157,9 +175,3 @@ int tool_main(int argc, char** argv) {
 
     return kSuccess;
 }
-
-#if !defined SK_BUILD_FOR_IOS
-int main(int argc, char * const argv[]) {
-    return tool_main(argc, (char**) argv);
-}
-#endif

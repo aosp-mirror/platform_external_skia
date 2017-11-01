@@ -7,14 +7,27 @@
 
 #include "GrGLSLFragmentShaderBuilder.h"
 #include "GrRenderTarget.h"
+#include "GrRenderTargetPriv.h"
+#include "GrShaderCaps.h"
 #include "gl/GrGLGpu.h"
-#include "glsl/GrGLSL.h"
-#include "glsl/GrGLSLCaps.h"
 #include "glsl/GrGLSLProgramBuilder.h"
 #include "glsl/GrGLSLUniformHandler.h"
 #include "glsl/GrGLSLVarying.h"
+#include "../private/GrGLSL.h"
 
-const char* GrGLSLFragmentShaderBuilder::kDstTextureColorName = "_dstColor";
+const char* GrGLSLFragmentShaderBuilder::kDstColorName = "_dstColor";
+
+static const char* sample_offset_array_name(GrGLSLFPFragmentBuilder::Coordinates coords) {
+    static const char* kArrayNames[] = {
+        "deviceSpaceSampleOffsets",
+        "windowSpaceSampleOffsets"
+    };
+    return kArrayNames[coords];
+
+    GR_STATIC_ASSERT(0 == GrGLSLFPFragmentBuilder::kSkiaDevice_Coordinates);
+    GR_STATIC_ASSERT(1 == GrGLSLFPFragmentBuilder::kGLSLWindow_Coordinates);
+    GR_STATIC_ASSERT(SK_ARRAY_COUNT(kArrayNames) == GrGLSLFPFragmentBuilder::kLast_Coordinates + 1);
+}
 
 static const char* specific_layout_qualifier_name(GrBlendEquation equation) {
     SkASSERT(GrBlendEquationIsAdvanced(equation));
@@ -57,126 +70,78 @@ static const char* specific_layout_qualifier_name(GrBlendEquation equation) {
                      kGrBlendEquationCnt - kFirstAdvancedGrBlendEquation);
 }
 
-GrGLSLFragmentShaderBuilder::FragPosKey
-GrGLSLFragmentShaderBuilder::KeyForFragmentPosition(const GrRenderTarget* dst) {
-    if (kTopLeft_GrSurfaceOrigin == dst->origin()) {
-        return kTopLeftFragPosRead_FragPosKey;
-    } else {
-        return kBottomLeftFragPosRead_FragPosKey;
-    }
+uint8_t GrGLSLFragmentShaderBuilder::KeyForSurfaceOrigin(GrSurfaceOrigin origin) {
+    SkASSERT(kTopLeft_GrSurfaceOrigin == origin || kBottomLeft_GrSurfaceOrigin == origin);
+    return origin;
+
+    GR_STATIC_ASSERT(1 == kTopLeft_GrSurfaceOrigin);
+    GR_STATIC_ASSERT(2 == kBottomLeft_GrSurfaceOrigin);
 }
 
-GrGLSLFragmentShaderBuilder::GrGLSLFragmentShaderBuilder(GrGLSLProgramBuilder* program,
-                                                         uint8_t fragPosKey)
+GrGLSLFragmentShaderBuilder::GrGLSLFragmentShaderBuilder(GrGLSLProgramBuilder* program)
     : GrGLSLFragmentBuilder(program)
     , fSetupFragPosition(false)
-    , fTopLeftFragPosRead(kTopLeftFragPosRead_FragPosKey == fragPosKey)
     , fHasCustomColorOutput(false)
     , fCustomColorOutputIndex(-1)
     , fHasSecondaryOutput(false)
+    , fUsedSampleOffsetArrays(0)
     , fHasInitializedSampleMask(false)
-    , fHasReadDstColor(false)
-    , fHasReadFragmentPosition(false) {
+    , fDefaultPrecision(kMedium_GrSLPrecision) {
     fSubstageIndices.push_back(0);
+#ifdef SK_DEBUG
+    fUsedProcessorFeatures = GrProcessor::kNone_RequiredFeatures;
+    fHasReadDstColor = false;
+#endif
 }
 
 bool GrGLSLFragmentShaderBuilder::enableFeature(GLSLFeature feature) {
+    const GrShaderCaps& shaderCaps = *fProgramBuilder->shaderCaps();
     switch (feature) {
-        case kStandardDerivatives_GLSLFeature: {
-            if (!fProgramBuilder->glslCaps()->shaderDerivativeSupport()) {
+        case kMultisampleInterpolation_GLSLFeature:
+            if (!shaderCaps.multisampleInterpolationSupport()) {
                 return false;
             }
-            const char* extension = fProgramBuilder->glslCaps()->shaderDerivativeExtensionString();
-            if (extension) {
-                this->addFeature(1 << kStandardDerivatives_GLSLFeature, extension);
+            if (const char* extension = shaderCaps.multisampleInterpolationExtensionString()) {
+                this->addFeature(1 << kMultisampleInterpolation_GLSLFeature, extension);
             }
             return true;
-        }
-        case kPixelLocalStorage_GLSLFeature: {
-            if (fProgramBuilder->glslCaps()->pixelLocalStorageSize() <= 0) {
-                return false;
-            }
-            this->addFeature(1 << kPixelLocalStorage_GLSLFeature,
-                             "GL_EXT_shader_pixel_local_storage");
-            return true;
-        }
         default:
             SkFAIL("Unexpected GLSLFeature requested.");
             return false;
     }
 }
 
-SkString GrGLSLFragmentShaderBuilder::ensureFSCoords2D(const GrGLSLTransformedCoordsArray& coords,
-                                                       int index) {
-    if (kVec3f_GrSLType != coords[index].getType()) {
-        SkASSERT(kVec2f_GrSLType == coords[index].getType());
-        return coords[index].getName();
+SkString GrGLSLFragmentShaderBuilder::ensureCoords2D(const GrShaderVar& coords) {
+    if (kVec3f_GrSLType != coords.getType()) {
+        SkASSERT(kVec2f_GrSLType == coords.getType());
+        return coords.getName();
     }
 
-    SkString coords2D("coords2D");
-    if (0 != index) {
-        coords2D.appendf("_%i", index);
-    }
-    this->codeAppendf("\tvec2 %s = %s.xy / %s.z;",
-                      coords2D.c_str(), coords[index].c_str(), coords[index].c_str());
+    SkString coords2D;
+    coords2D.printf("%s_ensure2D", coords.c_str());
+    this->codeAppendf("\tvec2 %s = %s.xy / %s.z;", coords2D.c_str(), coords.c_str(),
+                      coords.c_str());
     return coords2D;
 }
 
-const char* GrGLSLFragmentShaderBuilder::fragmentPosition() {
-    fHasReadFragmentPosition = true;
-
-    const GrGLSLCaps* glslCaps = fProgramBuilder->glslCaps();
-    // We only declare "gl_FragCoord" when we're in the case where we want to use layout qualifiers
-    // to reverse y. Otherwise it isn't necessary and whether the "in" qualifier appears in the
-    // declaration varies in earlier GLSL specs. So it is simpler to omit it.
-    if (fTopLeftFragPosRead) {
-        fSetupFragPosition = true;
-        return "gl_FragCoord";
-    } else if (const char* extension = glslCaps->fragCoordConventionsExtensionString()) {
-        if (!fSetupFragPosition) {
-            if (glslCaps->generation() < k150_GrGLSLGeneration) {
-                this->addFeature(1 << kFragCoordConventions_GLSLPrivateFeature,
-                                 extension);
-            }
-            fInputs.push_back().set(kVec4f_GrSLType,
-                                    GrGLSLShaderVar::kIn_TypeModifier,
-                                    "gl_FragCoord",
-                                    kDefault_GrSLPrecision,
-                                    "origin_upper_left");
-            fSetupFragPosition = true;
-        }
-        return "gl_FragCoord";
-    } else {
-        static const char* kTempName = "tmpXYFragCoord";
-        static const char* kCoordName = "fragCoordYDown";
-        if (!fSetupFragPosition) {
-            const char* rtHeightName;
-
-            fProgramBuilder->addRTHeightUniform("RTHeight", &rtHeightName);
-
-            // The Adreno compiler seems to be very touchy about access to "gl_FragCoord".
-            // Accessing glFragCoord.zw can cause a program to fail to link. Additionally,
-            // depending on the surrounding code, accessing .xy with a uniform involved can
-            // do the same thing. Copying gl_FragCoord.xy into a temp vec2 beforehand 
-            // (and only accessing .xy) seems to "fix" things.
-            const char* precision = glslCaps->usesPrecisionModifiers() ? "highp " : "";
-            this->codePrependf("\t%svec4 %s = vec4(%s.x, %s - %s.y, 1.0, 1.0);\n",
-                               precision, kCoordName, kTempName, rtHeightName, kTempName);
-            this->codePrependf("%svec2 %s = gl_FragCoord.xy;", precision, kTempName);
-            fSetupFragPosition = true;
-        }
-        SkASSERT(fProgramBuilder->fUniformHandles.fRTHeightUni.isValid());
-        return kCoordName;
+void GrGLSLFragmentShaderBuilder::appendOffsetToSample(const char* sampleIdx, Coordinates coords) {
+    SkASSERT(fProgramBuilder->header().fSamplePatternKey);
+    SkDEBUGCODE(fUsedProcessorFeatures |= GrProcessor::kSampleLocations_RequiredFeature);
+    if (kTopLeft_GrSurfaceOrigin == this->getSurfaceOrigin()) {
+        // With a top left origin, device and window space are equal, so we only use device coords.
+        coords = kSkiaDevice_Coordinates;
     }
+    this->codeAppendf("%s[%s]", sample_offset_array_name(coords), sampleIdx);
+    fUsedSampleOffsetArrays |= (1 << coords);
 }
 
 void GrGLSLFragmentShaderBuilder::maskSampleCoverage(const char* mask, bool invert) {
-    const GrGLSLCaps& glslCaps = *fProgramBuilder->glslCaps();
-    if (!glslCaps.sampleVariablesSupport()) {
+    const GrShaderCaps& shaderCaps = *fProgramBuilder->shaderCaps();
+    if (!shaderCaps.sampleVariablesSupport()) {
         SkDEBUGFAIL("Attempted to mask sample coverage without support.");
         return;
     }
-    if (const char* extension = glslCaps.sampleVariablesExtensionString()) {
+    if (const char* extension = shaderCaps.sampleVariablesExtensionString()) {
         this->addFeature(1 << kSampleVariables_GLSLPrivateFeature, extension);
     }
     if (!fHasInitializedSampleMask) {
@@ -191,56 +156,61 @@ void GrGLSLFragmentShaderBuilder::maskSampleCoverage(const char* mask, bool inve
 }
 
 void GrGLSLFragmentShaderBuilder::overrideSampleCoverage(const char* mask) {
-    const GrGLSLCaps& glslCaps = *fProgramBuilder->glslCaps();
-    if (!glslCaps.sampleMaskOverrideCoverageSupport()) {
+    const GrShaderCaps& shaderCaps = *fProgramBuilder->shaderCaps();
+    if (!shaderCaps.sampleMaskOverrideCoverageSupport()) {
         SkDEBUGFAIL("Attempted to override sample coverage without support.");
         return;
     }
-    SkASSERT(glslCaps.sampleVariablesSupport());
-    if (const char* extension = glslCaps.sampleVariablesExtensionString()) {
+    SkASSERT(shaderCaps.sampleVariablesSupport());
+    if (const char* extension = shaderCaps.sampleVariablesExtensionString()) {
         this->addFeature(1 << kSampleVariables_GLSLPrivateFeature, extension);
     }
     if (this->addFeature(1 << kSampleMaskOverrideCoverage_GLSLPrivateFeature,
                          "GL_NV_sample_mask_override_coverage")) {
         // Redeclare gl_SampleMask with layout(override_coverage) if we haven't already.
-        fOutputs.push_back().set(kInt_GrSLType, GrShaderVar::kOut_TypeModifier,
-                                 "gl_SampleMask", 1, kHigh_GrSLPrecision,
-                                 "override_coverage");
+        fOutputs.push_back().set(kInt_GrSLType, "gl_SampleMask", 1, GrShaderVar::kOut_TypeModifier,
+                                 kHigh_GrSLPrecision, "override_coverage");
     }
     this->codeAppendf("gl_SampleMask[0] = %s;", mask);
     fHasInitializedSampleMask = true;
 }
 
+void GrGLSLFragmentShaderBuilder::elevateDefaultPrecision(GrSLPrecision precision) {
+    fDefaultPrecision = SkTMax(fDefaultPrecision, precision);
+}
+
 const char* GrGLSLFragmentShaderBuilder::dstColor() {
-    fHasReadDstColor = true;
+    SkDEBUGCODE(fHasReadDstColor = true;)
 
     const char* override = fProgramBuilder->primitiveProcessor().getDestColorOverride();
     if (override != nullptr) {
         return override;
     }
 
-    const GrGLSLCaps* glslCaps = fProgramBuilder->glslCaps();
-    if (glslCaps->fbFetchSupport()) {
+    const GrShaderCaps* shaderCaps = fProgramBuilder->shaderCaps();
+    if (shaderCaps->fbFetchSupport()) {
         this->addFeature(1 << kFramebufferFetch_GLSLPrivateFeature,
-                         glslCaps->fbFetchExtensionString());
+                         shaderCaps->fbFetchExtensionString());
 
         // Some versions of this extension string require declaring custom color output on ES 3.0+
-        const char* fbFetchColorName = glslCaps->fbFetchColorName();
-        if (glslCaps->fbFetchNeedsCustomOutput()) {
+        const char* fbFetchColorName = shaderCaps->fbFetchColorName();
+        if (shaderCaps->fbFetchNeedsCustomOutput()) {
             this->enableCustomOutput();
             fOutputs[fCustomColorOutputIndex].setTypeModifier(GrShaderVar::kInOut_TypeModifier);
             fbFetchColorName = DeclaredColorOutputName();
+            // Set the dstColor to an intermediate variable so we don't override it with the output
+            this->codeAppendf("vec4 %s = %s;", kDstColorName, fbFetchColorName);
+        } else {
+            return fbFetchColorName;
         }
-        return fbFetchColorName;
-    } else {
-        return kDstTextureColorName;
-    } 
+    }
+    return kDstColorName;
 }
 
 void GrGLSLFragmentShaderBuilder::enableAdvancedBlendEquationIfNeeded(GrBlendEquation equation) {
     SkASSERT(GrBlendEquationIsAdvanced(equation));
 
-    const GrGLSLCaps& caps = *fProgramBuilder->glslCaps();
+    const GrShaderCaps& caps = *fProgramBuilder->shaderCaps();
     if (!caps.mustEnableAdvBlendEqs()) {
         return;
     }
@@ -258,17 +228,16 @@ void GrGLSLFragmentShaderBuilder::enableCustomOutput() {
     if (!fHasCustomColorOutput) {
         fHasCustomColorOutput = true;
         fCustomColorOutputIndex = fOutputs.count();
-        fOutputs.push_back().set(kVec4f_GrSLType,
-                                 GrGLSLShaderVar::kOut_TypeModifier,
-                                 DeclaredColorOutputName());
-        fProgramBuilder->finalizeFragmentOutputColor(fOutputs.back());
+        fOutputs.push_back().set(kVec4f_GrSLType, DeclaredColorOutputName(),
+                                 GrShaderVar::kOut_TypeModifier);
+        fProgramBuilder->finalizeFragmentOutputColor(fOutputs.back()); 
     }
 }
 
 void GrGLSLFragmentShaderBuilder::enableSecondaryOutput() {
     SkASSERT(!fHasSecondaryOutput);
     fHasSecondaryOutput = true;
-    const GrGLSLCaps& caps = *fProgramBuilder->glslCaps();
+    const GrShaderCaps& caps = *fProgramBuilder->shaderCaps();
     if (const char* extension = caps.secondaryOutputExtensionString()) {
         this->addFeature(1 << kBlendFuncExtended_GLSLPrivateFeature, extension);
     }
@@ -278,34 +247,69 @@ void GrGLSLFragmentShaderBuilder::enableSecondaryOutput() {
     // output. The condition also co-incides with the condition in whici GLES SL 2.0
     // requires the built-in gl_SecondaryFragColorEXT, where as 3.0 requires a custom output.
     if (caps.mustDeclareFragmentShaderOutput()) {
-        fOutputs.push_back().set(kVec4f_GrSLType, GrGLSLShaderVar::kOut_TypeModifier,
-                                 DeclaredSecondaryColorOutputName());
+        fOutputs.push_back().set(kVec4f_GrSLType, DeclaredSecondaryColorOutputName(),
+                                 GrShaderVar::kOut_TypeModifier);
         fProgramBuilder->finalizeFragmentSecondaryColor(fOutputs.back());
     }
 }
 
 const char* GrGLSLFragmentShaderBuilder::getPrimaryColorOutputName() const {
-    return fHasCustomColorOutput ? DeclaredColorOutputName() : "gl_FragColor";
+    return fHasCustomColorOutput ? DeclaredColorOutputName() : "sk_FragColor";
 }
 
 void GrGLSLFragmentBuilder::declAppendf(const char* fmt, ...) {
     va_list argp;
     va_start(argp, fmt);
     inputs().appendVAList(fmt, argp);
-    va_end(argp);    
+    va_end(argp);
 }
 
 const char* GrGLSLFragmentShaderBuilder::getSecondaryColorOutputName() const {
-    const GrGLSLCaps& caps = *fProgramBuilder->glslCaps();
+    const GrShaderCaps& caps = *fProgramBuilder->shaderCaps();
     return caps.mustDeclareFragmentShaderOutput() ? DeclaredSecondaryColorOutputName()
                                                   : "gl_SecondaryFragColorEXT";
 }
 
+GrSurfaceOrigin GrGLSLFragmentShaderBuilder::getSurfaceOrigin() const {
+    SkASSERT(fProgramBuilder->header().fSurfaceOriginKey);
+    return static_cast<GrSurfaceOrigin>(fProgramBuilder->header().fSurfaceOriginKey);
+
+    GR_STATIC_ASSERT(1 == kTopLeft_GrSurfaceOrigin);
+    GR_STATIC_ASSERT(2 == kBottomLeft_GrSurfaceOrigin);
+}
+
 void GrGLSLFragmentShaderBuilder::onFinalize() {
     fProgramBuilder->varyingHandler()->getFragDecls(&this->inputs(), &this->outputs());
-    GrGLSLAppendDefaultFloatPrecisionDeclaration(kDefault_GrSLPrecision,
-                                                 *fProgramBuilder->glslCaps(),
+    GrGLSLAppendDefaultFloatPrecisionDeclaration(fDefaultPrecision,
+                                                 *fProgramBuilder->shaderCaps(),
                                                  &this->precisionQualifier());
+    if (fUsedSampleOffsetArrays & (1 << kSkiaDevice_Coordinates)) {
+        this->defineSampleOffsetArray(sample_offset_array_name(kSkiaDevice_Coordinates),
+                                      SkMatrix::MakeTrans(-0.5f, -0.5f));
+    }
+    if (fUsedSampleOffsetArrays & (1 << kGLSLWindow_Coordinates)) {
+        // With a top left origin, device and window space are equal, so we only use device coords.
+        SkASSERT(kBottomLeft_GrSurfaceOrigin == this->getSurfaceOrigin());
+        SkMatrix m;
+        m.setScale(1, -1);
+        m.preTranslate(-0.5f, -0.5f);
+        this->defineSampleOffsetArray(sample_offset_array_name(kGLSLWindow_Coordinates), m);
+    }
+}
+
+void GrGLSLFragmentShaderBuilder::defineSampleOffsetArray(const char* name, const SkMatrix& m) {
+    SkASSERT(fProgramBuilder->caps()->sampleLocationsSupport());
+    const GrPipeline& pipeline = fProgramBuilder->pipeline();
+    const GrRenderTargetPriv& rtp = pipeline.getRenderTarget()->renderTargetPriv();
+    const GrGpu::MultisampleSpecs& specs = rtp.getMultisampleSpecs(pipeline);
+    SkSTArray<16, SkPoint, true> offsets;
+    offsets.push_back_n(specs.fEffectiveSampleCnt);
+    m.mapPoints(offsets.begin(), specs.fSampleLocations, specs.fEffectiveSampleCnt);
+    this->definitions().appendf("const highp vec2 %s[] = vec2[](", name);
+    for (int i = 0; i < specs.fEffectiveSampleCnt; ++i) {
+        this->definitions().appendf("vec2(%f, %f)", offsets[i].x(), offsets[i].y());
+        this->definitions().append(i + 1 != specs.fEffectiveSampleCnt ? ", " : ");\n");
+    }
 }
 
 void GrGLSLFragmentShaderBuilder::onBeforeChildProcEmitCode() {
@@ -323,4 +327,3 @@ void GrGLSLFragmentShaderBuilder::onAfterChildProcEmitCode() {
     int removeAt = fMangleString.findLastOf('_');
     fMangleString.remove(removeAt, fMangleString.size() - removeAt);
 }
-

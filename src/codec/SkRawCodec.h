@@ -9,6 +9,7 @@
 #define SkRawCodec_DEFINED
 
 #include "SkCodec.h"
+#include "SkColorSpace.h"
 #include "SkImageInfo.h"
 #include "SkTypes.h"
 
@@ -36,8 +37,8 @@ protected:
     Result onGetPixels(const SkImageInfo& dstInfo, void* dst, size_t dstRowBytes, const Options&,
             SkPMColor*, int*, int*) override;
 
-    SkEncodedFormat onGetEncodedFormat() const override {
-        return kRAW_SkEncodedFormat;
+    SkEncodedImageFormat onGetEncodedFormat() const override {
+        return SkEncodedImageFormat::kDNG;
     }
 
     SkISize onGetScaledDimensions(float desiredScale) const override;
@@ -52,7 +53,7 @@ private:
      */
     SkRawCodec(SkDngImage* dngImage);
 
-    SkAutoTDelete<SkDngImage> fDngImage;
+    std::unique_ptr<SkDngImage> fDngImage;
 
     typedef SkCodec INHERITED;
 };
