@@ -6,6 +6,7 @@
  */
 
 #include "SkChecksum.h"
+#include "SkRefCnt.h"
 #include "SkString.h"
 #include "SkTHash.h"
 #include "Test.h"
@@ -65,6 +66,21 @@ DEF_TEST(HashMap, r) {
 
     map.reset();
     REPORTER_ASSERT(r, map.count() == 0);
+
+    {
+        // Test that we don't leave dangling values in empty slots.
+        SkTHashMap<int, sk_sp<SkRefCnt>> refMap;
+        auto ref = sk_make_sp<SkRefCnt>();
+        REPORTER_ASSERT(r, ref->unique());
+
+        refMap.set(0, ref);
+        REPORTER_ASSERT(r, refMap.count() == 1);
+        REPORTER_ASSERT(r, !ref->unique());
+
+        refMap.remove(0);
+        REPORTER_ASSERT(r, refMap.count() == 0);
+        REPORTER_ASSERT(r, ref->unique());
+    }
 }
 
 DEF_TEST(HashSet, r) {
@@ -110,6 +126,13 @@ public:
         fCounter = other.fCounter;
         *fCounter += 1;
     }
+
+    CopyCounter(CopyCounter&& other) { *this = std::move(other); }
+    void operator=(CopyCounter&& other) {
+        fID = other.fID;
+        fCounter = other.fCounter;
+    }
+
 
     bool operator==(const CopyCounter& other) const {
         return fID == other.fID;

@@ -8,51 +8,79 @@
 #ifndef GrDrawingManager_DEFINED
 #define GrDrawingManager_DEFINED
 
-#include "GrDrawTarget.h"
-#include "GrBatchFlushState.h"
-#include "GrPathRendererChain.h"
+#include "GrOpFlushState.h"
 #include "GrPathRenderer.h"
-#include "SkTDArray.h"
+#include "GrPathRendererChain.h"
+#include "GrOnFlushResourceProvider.h"
+#include "GrRenderTargetOpList.h"
+#include "GrResourceCache.h"
+#include "SkTArray.h"
+#include "instanced/InstancedRendering.h"
+#include "text/GrAtlasTextContext.h"
 
 class GrContext;
-class GrDrawContext;
+class GrRenderTargetContext;
+class GrRenderTargetProxy;
 class GrSingleOWner;
 class GrSoftwarePathRenderer;
+class GrTextureContext;
+class GrTextureOpList;
 
-// The GrDrawingManager allocates a new GrDrawContext for each GrRenderTarget
-// but all of them still land in the same GrDrawTarget!
+// The GrDrawingManager allocates a new GrRenderTargetContext for each GrRenderTarget
+// but all of them still land in the same GrOpList!
 //
-// In the future this class will allocate a new GrDrawContext for
-// each GrRenderTarget/GrDrawTarget and manage the DAG.
+// In the future this class will allocate a new GrRenderTargetContext for
+// each GrRenderTarget/GrOpList and manage the DAG.
 class GrDrawingManager {
 public:
     ~GrDrawingManager();
 
-    bool abandoned() const { return fAbandoned; }
+    bool wasAbandoned() const { return fAbandoned; }
     void freeGpuResources();
 
-    GrDrawContext* drawContext(GrRenderTarget* rt, const SkSurfaceProps*);
+    gr_instanced::OpAllocator* instancingAllocator();
 
-    // The caller automatically gets a ref on the returned drawTarget. It must 
+    sk_sp<GrRenderTargetContext> makeRenderTargetContext(sk_sp<GrSurfaceProxy>,
+                                                         sk_sp<SkColorSpace>,
+                                                         const SkSurfaceProps*);
+    sk_sp<GrTextureContext> makeTextureContext(sk_sp<GrSurfaceProxy>, sk_sp<SkColorSpace>);
+
+    // The caller automatically gets a ref on the returned opList. It must
     // be balanced by an unref call.
-    GrDrawTarget* newDrawTarget(GrRenderTarget* rt);
+    sk_sp<GrRenderTargetOpList> newRTOpList(GrRenderTargetProxy* rtp);
+    sk_sp<GrTextureOpList> newTextureOpList(GrTextureProxy* textureProxy);
 
     GrContext* getContext() { return fContext; }
+
+    GrAtlasTextContext* getAtlasTextContext();
 
     GrPathRenderer* getPathRenderer(const GrPathRenderer::CanDrawPathArgs& args,
                                     bool allowSW,
                                     GrPathRendererChain::DrawType drawType,
                                     GrPathRenderer::StencilSupport* stencilSupport = NULL);
 
+    void flushIfNecessary() {
+        if (fContext->getResourceCache()->requestsFlush()) {
+            this->internalFlush(nullptr, GrResourceCache::kCacheRequested);
+        }
+    }
+
     static bool ProgramUnitTest(GrContext* context, int maxStages);
 
+    void prepareSurfaceForExternalIO(GrSurfaceProxy*);
+
+    void addOnFlushCallbackObject(GrOnFlushCallbackObject*);
+    void testingOnly_removeOnFlushCallbackObject(GrOnFlushCallbackObject*);
+
 private:
-    GrDrawingManager(GrContext* context, const GrDrawTarget::Options& optionsForDrawTargets,
+    GrDrawingManager(GrContext* context,
+                     const GrPathRendererChain::Options& optionsForPathRendererChain,
                      GrSingleOwner* singleOwner)
         : fContext(context)
-        , fOptionsForDrawTargets(optionsForDrawTargets)
+        , fOptionsForPathRendererChain(optionsForPathRendererChain)
         , fSingleOwner(singleOwner)
         , fAbandoned(false)
+        , fAtlasTextContext(nullptr)
         , fPathRendererChain(nullptr)
         , fSoftwarePathRenderer(nullptr)
         , fFlushState(context->getGpu(), context->resourceProvider())
@@ -62,27 +90,39 @@ private:
     void abandon();
     void cleanup();
     void reset();
-    void flush();
+    void flush(GrSurfaceProxy* proxy) {
+        this->internalFlush(proxy, GrResourceCache::FlushType::kExternal);
+    }
+    void internalFlush(GrSurfaceProxy*, GrResourceCache::FlushType);
 
     friend class GrContext;  // for access to: ctor, abandon, reset & flush
+    friend class GrContextPriv; // access to: flush
+    friend class GrOnFlushResourceProvider; // this is just a shallow wrapper around this class
 
     static const int kNumPixelGeometries = 5; // The different pixel geometries
     static const int kNumDFTOptions = 2;      // DFT or no DFT
 
-    GrContext*                  fContext;
-    GrDrawTarget::Options       fOptionsForDrawTargets;
+    GrContext*                        fContext;
+    GrPathRendererChain::Options      fOptionsForPathRendererChain;
 
     // In debug builds we guard against improper thread handling
-    GrSingleOwner*              fSingleOwner;
+    GrSingleOwner*                    fSingleOwner;
 
-    bool                        fAbandoned;
-    SkTDArray<GrDrawTarget*>    fDrawTargets;
+    bool                              fAbandoned;
+    SkTArray<sk_sp<GrOpList>>         fOpLists;
 
-    GrPathRendererChain*        fPathRendererChain;
-    GrSoftwarePathRenderer*     fSoftwarePathRenderer;
+    std::unique_ptr<GrAtlasTextContext> fAtlasTextContext;
 
-    GrBatchFlushState           fFlushState;
-    bool                        fFlushing;
+    GrPathRendererChain*              fPathRendererChain;
+    GrSoftwarePathRenderer*           fSoftwarePathRenderer;
+
+    GrOpFlushState                    fFlushState;
+    bool                              fFlushing;
+
+    SkTArray<GrOnFlushCallbackObject*> fOnFlushCBObjects;
+
+    // Lazily allocated
+    std::unique_ptr<gr_instanced::OpAllocator> fInstancingAllocator;
 };
 
 #endif

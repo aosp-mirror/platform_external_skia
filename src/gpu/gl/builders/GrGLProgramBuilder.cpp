@@ -8,41 +8,41 @@
 #include "GrGLProgramBuilder.h"
 
 #include "GrAutoLocaleSetter.h"
+#include "GrContext.h"
 #include "GrCoordTransform.h"
 #include "GrGLProgramBuilder.h"
+#include "GrProgramDesc.h"
+#include "GrShaderCaps.h"
 #include "GrSwizzle.h"
 #include "GrTexture.h"
-#include "SkRTConf.h"
+#include "SkAutoMalloc.h"
+#include "SkATrace.h"
 #include "SkTraceEvent.h"
 #include "gl/GrGLGpu.h"
 #include "gl/GrGLProgram.h"
-#include "gl/GrGLSLPrettyPrint.h"
 #include "gl/builders/GrGLShaderStringBuilder.h"
-#include "glsl/GrGLSLCaps.h"
 #include "glsl/GrGLSLFragmentProcessor.h"
 #include "glsl/GrGLSLGeometryProcessor.h"
 #include "glsl/GrGLSLProgramDataManager.h"
-#include "glsl/GrGLSLTextureSampler.h"
 #include "glsl/GrGLSLXferProcessor.h"
 
 #define GL_CALL(X) GR_GL_CALL(this->gpu()->glInterface(), X)
 #define GL_CALL_RET(R, X) GR_GL_CALL_RET(this->gpu()->glInterface(), R, X)
 
-GrGLProgram* GrGLProgramBuilder::CreateProgram(const DrawArgs& args, GrGLGpu* gpu) {
+GrGLProgram* GrGLProgramBuilder::CreateProgram(const GrPipeline& pipeline,
+                                               const GrPrimitiveProcessor& primProc,
+                                               GrProgramDesc* desc,
+                                               GrGLGpu* gpu) {
+    SkASSERT(!pipeline.isBad() && primProc.instantiate(gpu->getContext()->resourceProvider()));
+
+    ATRACE_ANDROID_FRAMEWORK("Shader Compile");
     GrAutoLocaleSetter als("C");
 
     // create a builder.  This will be handed off to effects so they can use it to add
     // uniforms, varyings, textures, etc
-    GrGLProgramBuilder builder(gpu, args);
+    GrGLProgramBuilder builder(gpu, pipeline, primProc, desc);
 
-    // TODO: Once all stages can handle taking a float or vec4 and correctly handling them we can
-    // seed correctly here
-    GrGLSLExpr4 inputColor;
-    GrGLSLExpr4 inputCoverage;
-
-    if (!builder.emitAndInstallProcs(&inputColor,
-                                     &inputCoverage,
-                                     gpu->glCaps().maxFragmentTextureUnits())) {
+    if (!builder.emitAndInstallProcs()) {
         builder.cleanupFragmentProcessors();
         return nullptr;
     }
@@ -52,10 +52,12 @@ GrGLProgram* GrGLProgramBuilder::CreateProgram(const DrawArgs& args, GrGLGpu* gp
 
 /////////////////////////////////////////////////////////////////////////////
 
-GrGLProgramBuilder::GrGLProgramBuilder(GrGLGpu* gpu, const DrawArgs& args)
-    : INHERITED(args)
+GrGLProgramBuilder::GrGLProgramBuilder(GrGLGpu* gpu,
+                                       const GrPipeline& pipeline,
+                                       const GrPrimitiveProcessor& primProc,
+                                       GrProgramDesc* desc)
+    : INHERITED(pipeline, primProc, desc)
     , fGpu(gpu)
-    , fSamplerUniforms(4)
     , fVaryingHandler(this)
     , fUniformHandler(this) {
 }
@@ -64,47 +66,12 @@ const GrCaps* GrGLProgramBuilder::caps() const {
     return fGpu->caps();
 }
 
-const GrGLSLCaps* GrGLProgramBuilder::glslCaps() const {
-    return fGpu->ctxInfo().caps()->glslCaps();
-}
-
-static GrSLType get_sampler_type(const GrTextureAccess& access) {
-    GrGLTexture* glTexture = static_cast<GrGLTexture*>(access.getTexture());
-    if (glTexture->target() == GR_GL_TEXTURE_EXTERNAL) {
-        return kSamplerExternal_GrSLType;
-    } else if (glTexture->target() == GR_GL_TEXTURE_RECTANGLE) {
-        return kSampler2DRect_GrSLType;
-    } else {
-        SkASSERT(glTexture->target() == GR_GL_TEXTURE_2D);
-        return kSampler2D_GrSLType;
-    }
-}
-
-void GrGLProgramBuilder::emitSamplers(const GrProcessor& processor,
-                                      GrGLSLTextureSampler::TextureSamplerArray* outSamplers) {
-    int numTextures = processor.numTextures();
-    UniformHandle* localSamplerUniforms = fSamplerUniforms.push_back_n(numTextures);
-    SkString name;
-    for (int t = 0; t < numTextures; ++t) {
-        name.printf("Sampler%d", t);
-        GrSLType samplerType = get_sampler_type(processor.textureAccess(t));
-        localSamplerUniforms[t] = fUniformHandler.addUniform(kFragment_GrShaderFlag, samplerType,
-                                                             kDefault_GrSLPrecision, name.c_str());
-        outSamplers->emplace_back(localSamplerUniforms[t], processor.textureAccess(t));
-        if (kSamplerExternal_GrSLType == samplerType) {
-            const char* externalFeatureString = this->glslCaps()->externalTextureExtensionString();
-            // We shouldn't ever create a GrGLTexture that requires external sampler type 
-            SkASSERT(externalFeatureString);
-            fFS.addFeature(1 << GrGLSLFragmentShaderBuilder::kExternalTexture_GLSLPrivateFeature,
-                           externalFeatureString);
-        }
-    }
-}
-
 bool GrGLProgramBuilder::compileAndAttachShaders(GrGLSLShaderBuilder& shader,
                                                  GrGLuint programId,
                                                  GrGLenum type,
-                                                 SkTDArray<GrGLuint>* shaderIds) {
+                                                 SkTDArray<GrGLuint>* shaderIds,
+                                                 const SkSL::Program::Settings& settings,
+                                                 SkSL::Program::Inputs* outInputs) {
     GrGLGpu* gpu = this->gpu();
     GrGLuint shaderId = GrGLCompileAndAttachShader(gpu->glContext(),
                                                    programId,
@@ -112,13 +79,21 @@ bool GrGLProgramBuilder::compileAndAttachShaders(GrGLSLShaderBuilder& shader,
                                                    shader.fCompilerStrings.begin(),
                                                    shader.fCompilerStringLengths.begin(),
                                                    shader.fCompilerStrings.count(),
-                                                   gpu->stats());
+                                                   gpu->stats(),
+                                                   settings,
+                                                   outInputs);
 
     if (!shaderId) {
         return false;
     }
 
     *shaderIds->append() = shaderId;
+    if (outInputs->fFlipY) {
+        GrProgramDesc* d = this->desc();
+        d->setSurfaceOriginKey(GrGLSLFragmentShaderBuilder::KeyForSurfaceOrigin(
+                                                     this->pipeline().getRenderTarget()->origin()));
+        d->finalize();
+    }
 
     return true;
 }
@@ -135,26 +110,42 @@ GrGLProgram* GrGLProgramBuilder::finalize() {
     this->finalizeShaders();
 
     // compile shaders and bind attributes / uniforms
+    SkSL::Program::Settings settings;
+    settings.fCaps = this->gpu()->glCaps().shaderCaps();
+    settings.fFlipY = this->pipeline().getRenderTarget()->origin() != kTopLeft_GrSurfaceOrigin;
+    SkSL::Program::Inputs inputs;
     SkTDArray<GrGLuint> shadersToDelete;
-    if (!this->compileAndAttachShaders(fVS, programID, GR_GL_VERTEX_SHADER, &shadersToDelete)) {
+    if (!this->compileAndAttachShaders(fVS, programID, GR_GL_VERTEX_SHADER, &shadersToDelete,
+                                       settings, &inputs)) {
         this->cleanupProgram(programID, shadersToDelete);
         return nullptr;
     }
 
     // NVPR actually requires a vertex shader to compile
-    bool useNvpr = primitiveProcessor().isPathRendering();
+    const GrPrimitiveProcessor& primProc = this->primitiveProcessor();
+    bool useNvpr = primProc.isPathRendering();
     if (!useNvpr) {
-        const GrPrimitiveProcessor& primProc = this->primitiveProcessor();
-
         int vaCount = primProc.numAttribs();
         for (int i = 0; i < vaCount; i++) {
             GL_CALL(BindAttribLocation(programID, i, primProc.getAttrib(i).fName));
         }
     }
 
-    if (!this->compileAndAttachShaders(fFS, programID, GR_GL_FRAGMENT_SHADER, &shadersToDelete)) {
+    if (primProc.willUseGeoShader() &&
+        !this->compileAndAttachShaders(fGS, programID, GR_GL_GEOMETRY_SHADER, &shadersToDelete,
+                                       settings, &inputs)) {
         this->cleanupProgram(programID, shadersToDelete);
         return nullptr;
+    }
+
+    if (!this->compileAndAttachShaders(fFS, programID, GR_GL_FRAGMENT_SHADER, &shadersToDelete,
+                                       settings, &inputs)) {
+        this->cleanupProgram(programID, shadersToDelete);
+        return nullptr;
+    }
+
+    if (inputs.fRTHeight) {
+        this->addRTHeightUniform(SKSL_RTHEIGHT_NAME);
     }
 
     this->bindProgramResourceLocations(programID);
@@ -167,7 +158,24 @@ GrGLProgram* GrGLProgramBuilder::finalize() {
     checkLinked = true;
 #endif
     if (checkLinked) {
-        checkLinkStatus(programID);
+        if (!this->checkLinkStatus(programID)) {
+            SkDebugf("VS:\n");
+            GrGLPrintShader(fGpu->glContext(), GR_GL_VERTEX_SHADER, fVS.fCompilerStrings.begin(),
+                            fVS.fCompilerStringLengths.begin(), fVS.fCompilerStrings.count(),
+                            settings);
+            if (primProc.willUseGeoShader()) {
+                SkDebugf("\nGS:\n");
+                GrGLPrintShader(fGpu->glContext(), GR_GL_GEOMETRY_SHADER,
+                                fGS.fCompilerStrings.begin(), fGS.fCompilerStringLengths.begin(),
+                                fGS.fCompilerStrings.count(), settings);
+            }
+            SkDebugf("\nFS:\n");
+            GrGLPrintShader(fGpu->glContext(), GR_GL_FRAGMENT_SHADER, fFS.fCompilerStrings.begin(),
+                            fFS.fCompilerStringLengths.begin(), fFS.fCompilerStrings.count(),
+                            settings);
+            SkDEBUGFAIL("");
+            return nullptr;
+        }
     }
     this->resolveProgramResourceLocations(programID);
 
@@ -184,7 +192,7 @@ void GrGLProgramBuilder::bindProgramResourceLocations(GrGLuint programID) {
         GL_CALL(BindFragDataLocation(programID, 0,
                                      GrGLSLFragmentShaderBuilder::DeclaredColorOutputName()));
     }
-    if (fFS.hasSecondaryOutput() && caps.glslCaps()->mustDeclareFragmentShaderOutput()) {
+    if (fFS.hasSecondaryOutput() && caps.shaderCaps()->mustDeclareFragmentShaderOutput()) {
         GL_CALL(BindFragDataLocationIndexed(programID, 0, 1,
                                   GrGLSLFragmentShaderBuilder::DeclaredSecondaryColorOutputName()));
     }
@@ -206,6 +214,7 @@ bool GrGLProgramBuilder::checkLinkStatus(GrGLuint programID) {
     GrGLint linked = GR_GL_INIT_ZERO;
     GL_CALL(GetProgramiv(programID, GR_GL_LINK_STATUS, &linked));
     if (!linked) {
+        SkDebugf("Program linking failed.\n");
         GrGLint infoLen = GR_GL_INIT_ZERO;
         GL_CALL(GetProgramiv(programID, GR_GL_INFO_LOG_LENGTH, &infoLen));
         SkAutoMalloc log(sizeof(char)*(infoLen+1));  // outside if for debugger
@@ -219,7 +228,6 @@ bool GrGLProgramBuilder::checkLinkStatus(GrGLuint programID) {
                                       (char*)log.get()));
             SkDebugf("%s", (char*)log.get());
         }
-        SkDEBUGFAIL("Error linking program");
         GL_CALL(DeleteProgram(programID));
         programID = 0;
     }
@@ -258,14 +266,15 @@ void GrGLProgramBuilder::cleanupShaders(const SkTDArray<GrGLuint>& shaderIDs) {
 
 GrGLProgram* GrGLProgramBuilder::createProgram(GrGLuint programID) {
     return new GrGLProgram(fGpu,
-                           this->desc(),
+                           *this->desc(),
                            fUniformHandles,
                            programID,
                            fUniformHandler.fUniforms,
+                           fUniformHandler.fSamplers,
+                           fUniformHandler.fTexelBuffers,
+                           fUniformHandler.fImageStorages,
                            fVaryingHandler.fPathProcVaryingInfos,
                            fGeometryProcessor,
                            fXferProcessor,
-                           fFragmentProcessors,
-                           &fSamplerUniforms);
+                           fFragmentProcessors);
 }
-

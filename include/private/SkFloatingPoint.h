@@ -11,9 +11,14 @@
 #define SkFloatingPoint_DEFINED
 
 #include "SkTypes.h"
-
-#include <math.h>
+#include "SkSafe_math.h"
 #include <float.h>
+
+#if SK_CPU_SSE_LEVEL >= SK_CPU_SSE_LEVEL_SSE1
+    #include <xmmintrin.h>
+#elif defined(SK_ARM_HAS_NEON)
+    #include <arm_neon.h>
+#endif
 
 // For _POSIX_VERSION
 #if defined(__unix__) || (defined(__APPLE__) && defined(__MACH__))
@@ -29,39 +34,13 @@ static inline float sk_float_pow(float base, float exp) {
     return powf(base, exp);
 }
 
-static inline float sk_float_copysign(float x, float y) {
-// c++11 contains a 'float copysign(float, float)' function in <cmath>.
-// clang-cl reports __cplusplus for clang, not the __cplusplus vc++ version _MSC_VER would report.
-#if (defined(_MSC_VER) && defined(__clang__))
-#    define SK_BUILD_WITH_CLANG_CL 1
-#else
-#    define SK_BUILD_WITH_CLANG_CL 0
-#endif
-#if (!SK_BUILD_WITH_CLANG_CL && __cplusplus >= 201103L) || (_MSC_VER >= 1800)
-    return copysignf(x, y);
-
-// Posix has demanded 'float copysignf(float, float)' (from C99) since Issue 6.
-#elif defined(_POSIX_VERSION) && _POSIX_VERSION >= 200112L
-    return copysignf(x, y);
-
-// Visual studio prior to 13 only has 'double _copysign(double, double)'.
-#elif defined(_MSC_VER)
-    return (float)_copysign(x, y);
-
-// Otherwise convert to bits and extract sign.
-#else
-    int32_t xbits = SkFloat2Bits(x);
-    int32_t ybits = SkFloat2Bits(y);
-    return SkBits2Float((xbits & 0x7FFFFFFF) | (ybits & 0x80000000));
-#endif
-}
-
 #define sk_float_sqrt(x)        sqrtf(x)
 #define sk_float_sin(x)         sinf(x)
 #define sk_float_cos(x)         cosf(x)
 #define sk_float_tan(x)         tanf(x)
 #define sk_float_floor(x)       floorf(x)
 #define sk_float_ceil(x)        ceilf(x)
+#define sk_float_trunc(x)       truncf(x)
 #ifdef SK_BUILD_FOR_MAC
 #    define sk_float_acos(x)    static_cast<float>(acos(x))
 #    define sk_float_asin(x)    static_cast<float>(asin(x))
@@ -71,6 +50,7 @@ static inline float sk_float_copysign(float x, float y) {
 #endif
 #define sk_float_atan2(y,x)     atan2f(y,x)
 #define sk_float_abs(x)         fabsf(x)
+#define sk_float_copysign(x, y) copysignf(x, y)
 #define sk_float_mod(x,y)       fmodf(x,y)
 #define sk_float_exp(x)         expf(x)
 #define sk_float_log(x)         logf(x)
@@ -119,19 +99,18 @@ static inline float sk_float_copysign(float x, float y) {
 #define sk_double_round2int(x)      (int)floor((x) + 0.5f)
 #define sk_double_ceil2int(x)       (int)ceil(x)
 
-extern const uint32_t gIEEENotANumber;
-extern const uint32_t gIEEEInfinity;
-extern const uint32_t gIEEENegativeInfinity;
-
-#define SK_FloatNaN                 (*SkTCast<const float*>(&gIEEENotANumber))
-#define SK_FloatInfinity            (*SkTCast<const float*>(&gIEEEInfinity))
-#define SK_FloatNegativeInfinity    (*SkTCast<const float*>(&gIEEENegativeInfinity))
+static const uint32_t kIEEENotANumber = 0x7fffffff;
+#define SK_FloatNaN                 (*SkTCast<const float*>(&kIEEENotANumber))
+#define SK_FloatInfinity            (+(float)INFINITY)
+#define SK_FloatNegativeInfinity    (-(float)INFINITY)
 
 static inline float sk_float_rsqrt_portable(float x) {
     // Get initial estimate.
-    int i = *SkTCast<int*>(&x);
+    int i;
+    memcpy(&i, &x, 4);
     i = 0x5F1FFFF9 - (i>>1);
-    float estimate = *SkTCast<float*>(&i);
+    float estimate;
+    memcpy(&estimate, &i, 4);
 
     // One step of Newton's method to refine.
     const float estimate_sq = estimate*estimate;

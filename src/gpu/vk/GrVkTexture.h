@@ -14,17 +14,15 @@
 
 class GrVkGpu;
 class GrVkImageView;
+struct GrVkImageInfo;
 
 class GrVkTexture : public GrTexture, public virtual GrVkImage {
 public:
-    static GrVkTexture* CreateNewTexture(GrVkGpu*, const GrSurfaceDesc&,
-                                         GrGpuResource::LifeCycle,
-                                         const GrVkImage::ImageDesc&);
-                                          
+    static sk_sp<GrVkTexture> CreateNewTexture(GrVkGpu*, SkBudgeted budgeted, const GrSurfaceDesc&,
+                                               const GrVkImage::ImageDesc&);
 
-    static GrVkTexture* CreateWrappedTexture(GrVkGpu*, const GrSurfaceDesc&,
-                                             GrGpuResource::LifeCycle,
-                                             VkFormat, const GrVkImage::Resource*);
+    static sk_sp<GrVkTexture> MakeWrappedTexture(GrVkGpu*, const GrSurfaceDesc&,
+                                                 GrWrapOwnership, const GrVkImageInfo*);
 
     ~GrVkTexture() override;
 
@@ -32,28 +30,35 @@ public:
 
     void textureParamsModified() override {}
 
-    const GrVkImageView* textureView() const { return fTextureView; }
+    const GrVkImageView* textureView(bool allowSRGB);
+
+    bool reallocForMipmap(GrVkGpu* gpu, uint32_t mipLevels);
+
+    // In Vulkan we call the release proc after we are finished with the underlying
+    // GrVkImage::Resource object (which occurs after the GPU has finsihed all work on it).
+    void setRelease(GrTexture::ReleaseProc proc, GrTexture::ReleaseCtx ctx) override {
+        // Forward the release proc on to GrVkImage
+        this->setResourceRelease(proc, ctx);
+    }
 
 protected:
-    enum Derived { kDerived };
+    GrVkTexture(GrVkGpu*, const GrSurfaceDesc&, const GrVkImageInfo&, const GrVkImageView*,
+                GrVkImage::Wrapped wrapped);
 
-    GrVkTexture(GrVkGpu*, const GrSurfaceDesc&, GrGpuResource::LifeCycle,
-                const GrVkImage::Resource*, const GrVkImageView* imageView);
-
-    GrVkTexture(GrVkGpu*, const GrSurfaceDesc&, GrGpuResource::LifeCycle,
-                const GrVkImage::Resource*, const GrVkImageView* imageView, Derived);
-
-    static GrVkTexture* Create(GrVkGpu*, const GrSurfaceDesc&,
-                               GrGpuResource::LifeCycle, VkFormat,
-                               const GrVkImage::Resource* texImpl);
-
-    GrVkGpu* getVkGpu() const; 
+    GrVkGpu* getVkGpu() const;
 
     void onAbandon() override;
     void onRelease() override;
 
 private:
-    const GrVkImageView* fTextureView;
+    enum Wrapped { kWrapped };
+    GrVkTexture(GrVkGpu*, SkBudgeted, const GrSurfaceDesc&,
+                const GrVkImageInfo&, const GrVkImageView* imageView);
+    GrVkTexture(GrVkGpu*, Wrapped, const GrSurfaceDesc&,
+                const GrVkImageInfo&, const GrVkImageView* imageView, GrVkImage::Wrapped wrapped);
+
+    const GrVkImageView*     fTextureView;
+    const GrVkImageView*     fLinearTextureView;
 
     typedef GrTexture INHERITED;
 };

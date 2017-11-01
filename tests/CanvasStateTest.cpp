@@ -6,12 +6,14 @@
  */
 
 #include "CanvasStateHelpers.h"
+#include "SkBitmap.h"
 #include "SkCanvas.h"
+#include "SkClipOpPriv.h"
 #include "SkCanvasStateUtils.h"
 #include "SkCommandLineFlags.h"
 #include "SkDrawFilter.h"
-#include "SkError.h"
 #include "SkPaint.h"
+#include "SkRegion.h"
 #include "SkRRect.h"
 #include "SkRect.h"
 #include "SkTLazy.h"
@@ -279,22 +281,18 @@ DEF_TEST(CanvasState_test_draw_filters, reporter) {
 
     SkCanvasState* state = SkCanvasStateUtils::CaptureCanvasState(&canvas);
     REPORTER_ASSERT(reporter, state);
-    SkCanvas* tmpCanvas = SkCanvasStateUtils::CreateFromCanvasState(state);
+    std::unique_ptr<SkCanvas> tmpCanvas = SkCanvasStateUtils::MakeFromCanvasState(state);
     REPORTER_ASSERT(reporter, tmpCanvas);
 
     REPORTER_ASSERT(reporter, canvas.getDrawFilter());
     REPORTER_ASSERT(reporter, nullptr == tmpCanvas->getDrawFilter());
 
-    tmpCanvas->unref();
     SkCanvasStateUtils::ReleaseCanvasState(state);
 }
 
 #endif
 
 ////////////////////////////////////////////////////////////////////////////////
-
-// we need this function to prevent SkError from printing to stdout
-static void error_callback(SkError code, void* ctx) {}
 
 DEF_TEST(CanvasState_test_soft_clips, reporter) {
     SkBitmap bitmap;
@@ -304,20 +302,17 @@ DEF_TEST(CanvasState_test_soft_clips, reporter) {
     SkRRect roundRect;
     roundRect.setOval(SkRect::MakeWH(5, 5));
 
-    canvas.clipRRect(roundRect, SkRegion::kIntersect_Op, true);
-
-    SkSetErrorCallback(error_callback, nullptr);
+    canvas.clipRRect(roundRect, kIntersect_SkClipOp, true);
 
     SkCanvasState* state = SkCanvasStateUtils::CaptureCanvasState(&canvas);
     REPORTER_ASSERT(reporter, !state);
-
-    REPORTER_ASSERT(reporter, kInvalidOperation_SkError == SkGetLastError());
-    SkClearLastError();
 }
 
-#ifdef SK_SUPPORT_LEGACY_CLIPTOLAYERFLAG
-#include "SkClipStack.h"
 DEF_TEST(CanvasState_test_saveLayer_clip, reporter) {
+    const uint32_t dontSaveFlag = 1 << 31;    // secret flag for don't save
+#ifdef SK_SUPPORT_LEGACY_CLIPTOLAYERFLAG
+    static_assert(SkCanvas::kDontClipToLayer_Legacy_SaveLayerFlag == dontSaveFlag, "");
+#endif
     const int WIDTH = 100;
     const int HEIGHT = 100;
     const int LAYER_WIDTH = 50;
@@ -330,31 +325,21 @@ DEF_TEST(CanvasState_test_saveLayer_clip, reporter) {
     SkRect bounds = SkRect::MakeWH(SkIntToScalar(LAYER_WIDTH), SkIntToScalar(LAYER_HEIGHT));
     canvas.clipRect(SkRect::MakeWH(SkIntToScalar(WIDTH), SkIntToScalar(HEIGHT)));
 
-    // Check that saveLayer without the kClipToLayer_SaveFlag leaves the
-    // clip stack unchanged.
-    canvas.saveLayer(SkCanvas::SaveLayerRec(&bounds,
-                                            nullptr,
-                                            SkCanvas::kDontClipToLayer_Legacy_SaveLayerFlag));
-    SkRect clipStackBounds;
-    SkClipStack::BoundsType boundsType;
-    canvas.getClipStack()->getBounds(&clipStackBounds, &boundsType);
-    // The clip stack will return its bounds, or it may be "full" : i.e. empty + inside_out.
-    // Either result is consistent with this test, since the canvas' size is WIDTH/HEIGHT
-    if (SkClipStack::kInsideOut_BoundsType == boundsType) {
-        REPORTER_ASSERT(reporter, clipStackBounds.isEmpty());
-    } else {
-        REPORTER_ASSERT(reporter, clipStackBounds.width() == WIDTH);
-        REPORTER_ASSERT(reporter, clipStackBounds.height() == HEIGHT);
-    }
+    SkIRect devClip;
+    // Check that saveLayer without the kClipToLayer_SaveFlag leaves the clip unchanged.
+    canvas.saveLayer(SkCanvas::SaveLayerRec(&bounds, nullptr, dontSaveFlag));
+    devClip = canvas.getDeviceClipBounds();
+    REPORTER_ASSERT(reporter, canvas.isClipRect());
+    REPORTER_ASSERT(reporter, devClip.width() == WIDTH);
+    REPORTER_ASSERT(reporter, devClip.height() == HEIGHT);
     canvas.restore();
 
     // Check that saveLayer with the kClipToLayer_SaveFlag sets the clip
     // stack to the layer bounds.
     canvas.saveLayer(&bounds, nullptr);
-    canvas.getClipStack()->getBounds(&clipStackBounds, &boundsType);
-    REPORTER_ASSERT(reporter, clipStackBounds.width() == LAYER_WIDTH);
-    REPORTER_ASSERT(reporter, clipStackBounds.height() == LAYER_HEIGHT);
-
+    devClip = canvas.getDeviceClipBounds();
+    REPORTER_ASSERT(reporter, canvas.isClipRect());
+    REPORTER_ASSERT(reporter, devClip.width() == LAYER_WIDTH);
+    REPORTER_ASSERT(reporter, devClip.height() == LAYER_HEIGHT);
     canvas.restore();
 }
-#endif

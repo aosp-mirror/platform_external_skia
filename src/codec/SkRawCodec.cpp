@@ -201,7 +201,7 @@ public:
 
 class SkRawLimitedDynamicMemoryWStream : public SkDynamicMemoryWStream {
 public:
-    virtual ~SkRawLimitedDynamicMemoryWStream() {}
+    ~SkRawLimitedDynamicMemoryWStream() override {}
 
     bool write(const void* buffer, size_t size) override {
         size_t newSize;
@@ -257,7 +257,7 @@ public:
     }
 
     SkMemoryStream* transferBuffer(size_t offset, size_t size) override {
-        SkAutoTUnref<SkData> data(SkData::NewUninitialized(size));
+        sk_sp<SkData> data(SkData::MakeUninitialized(size));
         if (offset > fStreamBuffer.bytesWritten()) {
             // If the offset is not buffered, read from fStream directly and skip the buffering.
             const size_t skipLength = offset - fStreamBuffer.bytesWritten();
@@ -266,7 +266,7 @@ public:
             }
             const size_t bytesRead = fStream->read(data->writable_data(), size);
             if (bytesRead < size) {
-                data.reset(SkData::NewSubset(data.get(), 0, bytesRead));
+                data = SkData::MakeSubset(data.get(), 0, bytesRead);
             }
         } else {
             const size_t alreadyBuffered = SkTMin(fStreamBuffer.bytesWritten() - offset, size);
@@ -284,7 +284,7 @@ public:
                     if (!safe_add_to_size_t(alreadyBuffered, bytesRead, &newSize)) {
                         return nullptr;
                     }
-                    data.reset(SkData::NewSubset(data.get(), 0, newSize));
+                    data = SkData::MakeSubset(data.get(), 0, newSize);
                 }
             }
         }
@@ -322,7 +322,7 @@ private:
         return fStreamBuffer.write(tempBuffer.get(), bytesRead);
     }
 
-    SkAutoTDelete<SkStream> fStream;
+    std::unique_ptr<SkStream> fStream;
     bool fWholeStreamRead;
 
     // Use a size-limited stream to avoid holding too huge buffer.
@@ -379,24 +379,24 @@ public:
         }
 
         if (fStream->getMemoryBase()) {  // directly copy if getMemoryBase() is available.
-            SkAutoTUnref<SkData> data(SkData::NewWithCopy(
+            sk_sp<SkData> data(SkData::MakeWithCopy(
                 static_cast<const uint8_t*>(fStream->getMemoryBase()) + offset, bytesToRead));
-            fStream.free();
+            fStream.reset();
             return new SkMemoryStream(data);
         } else {
-            SkAutoTUnref<SkData> data(SkData::NewUninitialized(bytesToRead));
+            sk_sp<SkData> data(SkData::MakeUninitialized(bytesToRead));
             if (!fStream->seek(offset)) {
                 return nullptr;
             }
             const size_t bytesRead = fStream->read(data->writable_data(), bytesToRead);
             if (bytesRead < bytesToRead) {
-                data.reset(SkData::NewSubset(data.get(), 0, bytesRead));
+                data = SkData::MakeSubset(data.get(), 0, bytesRead);
             }
             return new SkMemoryStream(data);
         }
     }
 private:
-    SkAutoTDelete<SkStream> fStream;
+    std::unique_ptr<SkStream> fStream;
 };
 
 class SkPiexStream : public ::piex::StreamInterface {
@@ -446,7 +446,7 @@ public:
      * Note: this will take the ownership of the stream.
      */
     static SkDngImage* NewFromStream(SkRawStream* stream) {
-        SkAutoTDelete<SkDngImage> dngImage(new SkDngImage(stream));
+        std::unique_ptr<SkDngImage> dngImage(new SkDngImage(stream));
         if (!dngImage->isTiffHeaderValid()) {
             return nullptr;
         }
@@ -479,10 +479,10 @@ public:
         const int preferredSize = SkTMax(width, height);
         try {
             // render() takes ownership of fHost, fInfo, fNegative and fDngStream when available.
-            SkAutoTDelete<dng_host> host(fHost.release());
-            SkAutoTDelete<dng_info> info(fInfo.release());
-            SkAutoTDelete<dng_negative> negative(fNegative.release());
-            SkAutoTDelete<dng_stream> dngStream(fDngStream.release());
+            std::unique_ptr<dng_host> host(fHost.release());
+            std::unique_ptr<dng_info> info(fInfo.release());
+            std::unique_ptr<dng_negative> negative(fNegative.release());
+            std::unique_ptr<dng_stream> dngStream(fDngStream.release());
 
             host->SetPreferredSize(preferredSize);
             host->ValidateSizes();
@@ -515,8 +515,16 @@ public:
         }
     }
 
-    const SkImageInfo& getImageInfo() const {
-        return fImageInfo;
+    const SkEncodedInfo& getEncodedInfo() const {
+        return fEncodedInfo;
+    }
+
+    int width() const {
+        return fWidth;
+    }
+
+    int height() const {
+        return fHeight;
     }
 
     bool isScalable() const {
@@ -537,18 +545,24 @@ private:
         }
 
         // Check if the header is valid (endian info and magic number "42").
-        return
-            (header[0] == 0x49 && header[1] == 0x49 && header[2] == 0x2A && header[3] == 0x00) ||
-            (header[0] == 0x4D && header[1] == 0x4D && header[2] == 0x00 && header[3] == 0x2A);
+        bool littleEndian;
+        if (!is_valid_endian_marker(header, &littleEndian)) {
+            return false;
+        }
+
+        return 0x2A == get_endian_short(header + 2, littleEndian);
     }
 
-    void init(const int width, const int height, const dng_point& cfaPatternSize) {
-        fImageInfo = SkImageInfo::Make(width, height, kN32_SkColorType, kOpaque_SkAlphaType);
+    bool init(int width, int height, const dng_point& cfaPatternSize) {
+        fWidth = width;
+        fHeight = height;
 
         // The DNG SDK scales only during demosaicing, so scaling is only possible when
         // a mosaic info is available.
         fIsScalable = cfaPatternSize.v != 0 && cfaPatternSize.h != 0;
         fIsXtransImage = fIsScalable ? (cfaPatternSize.v == 6 && cfaPatternSize.h == 6) : false;
+
+        return width > 0 && height > 0;
     }
 
     bool initFromPiex() {
@@ -558,15 +572,9 @@ private:
         if (::piex::IsRaw(&piexStream)
             && ::piex::GetPreviewImageData(&piexStream, &imageData) == ::piex::Error::kOk)
         {
-            // Verify the size information, as it is only optional information for PIEX.
-            if (imageData.full_width == 0 || imageData.full_height == 0) {
-                return false;
-            }
-
             dng_point cfaPatternSize(imageData.cfa_pattern_dim[1], imageData.cfa_pattern_dim[0]);
-            this->init(static_cast<int>(imageData.full_width),
-                       static_cast<int>(imageData.full_height), cfaPatternSize);
-            return true;
+            return this->init(static_cast<int>(imageData.full_width),
+                              static_cast<int>(imageData.full_height), cfaPatternSize);
         }
         return false;
     }
@@ -576,7 +584,7 @@ private:
             // Due to the limit of DNG SDK, we need to reset host and info.
             fHost.reset(new SkDngHost(&fAllocator));
             fInfo.reset(new dng_info);
-            fDngStream.reset(new SkDngStream(fStream));
+            fDngStream.reset(new SkDngStream(fStream.get()));
 
             fHost->ValidateSizes();
             fInfo->Parse(*fHost, *fDngStream);
@@ -594,26 +602,30 @@ private:
             if (fNegative->GetMosaicInfo() != nullptr) {
                 cfaPatternSize = fNegative->GetMosaicInfo()->fCFAPatternSize;
             }
-            this->init(static_cast<int>(fNegative->DefaultCropSizeH().As_real64()),
-                       static_cast<int>(fNegative->DefaultCropSizeV().As_real64()),
-                       cfaPatternSize);
-            return true;
+            return this->init(static_cast<int>(fNegative->DefaultCropSizeH().As_real64()),
+                              static_cast<int>(fNegative->DefaultCropSizeV().As_real64()),
+                              cfaPatternSize);
         } catch (...) {
             return false;
         }
     }
 
     SkDngImage(SkRawStream* stream)
-        : fStream(stream) {}
+        : fStream(stream)
+        , fEncodedInfo(SkEncodedInfo::Make(SkEncodedInfo::kRGB_Color,
+                                           SkEncodedInfo::kOpaque_Alpha, 8))
+    {}
 
     SkDngMemoryAllocator fAllocator;
-    SkAutoTDelete<SkRawStream> fStream;
-    SkAutoTDelete<dng_host> fHost;
-    SkAutoTDelete<dng_info> fInfo;
-    SkAutoTDelete<dng_negative> fNegative;
-    SkAutoTDelete<dng_stream> fDngStream;
+    std::unique_ptr<SkRawStream> fStream;
+    std::unique_ptr<dng_host> fHost;
+    std::unique_ptr<dng_info> fInfo;
+    std::unique_ptr<dng_negative> fNegative;
+    std::unique_ptr<dng_stream> fDngStream;
 
-    SkImageInfo fImageInfo;
+    int fWidth;
+    int fHeight;
+    SkEncodedInfo fEncodedInfo;
     bool fIsScalable;
     bool fIsXtransImage;
 };
@@ -624,7 +636,7 @@ private:
  * fallback to create SkRawCodec for DNG images.
  */
 SkCodec* SkRawCodec::NewFromStream(SkStream* stream) {
-    SkAutoTDelete<SkRawStream> rawStream;
+    std::unique_ptr<SkRawStream> rawStream;
     if (is_asset_stream(*stream)) {
         rawStream.reset(new SkRawAssetStream(stream));
     } else {
@@ -636,6 +648,19 @@ SkCodec* SkRawCodec::NewFromStream(SkStream* stream) {
     ::piex::PreviewImageData imageData;
     if (::piex::IsRaw(&piexStream)) {
         ::piex::Error error = ::piex::GetPreviewImageData(&piexStream, &imageData);
+        if (error == ::piex::Error::kFail) {
+            return nullptr;
+        }
+
+        sk_sp<SkColorSpace> colorSpace;
+        switch (imageData.color_space) {
+            case ::piex::PreviewImageData::kSrgb:
+                colorSpace = SkColorSpace::MakeSRGB();
+                break;
+            case ::piex::PreviewImageData::kAdobeRgb:
+                colorSpace = SkColorSpace_Base::MakeNamed(SkColorSpace_Base::kAdobeRGB_Named);
+                break;
+        }
 
         //  Theoretically PIEX can return JPEG compressed image or uncompressed RGB image. We only
         //  handle the JPEG compressed preview image here.
@@ -647,14 +672,13 @@ SkCodec* SkRawCodec::NewFromStream(SkStream* stream) {
             // FIXME: one may avoid the copy of memoryStream and use the buffered rawStream.
             SkMemoryStream* memoryStream =
                 rawStream->transferBuffer(imageData.preview.offset, imageData.preview.length);
-            return memoryStream ? SkJpegCodec::NewFromStream(memoryStream) : nullptr;
-        } else if (error == ::piex::Error::kFail) {
-            return nullptr;
+            return memoryStream ? SkJpegCodec::NewFromStream(memoryStream, std::move(colorSpace))
+                                : nullptr;
         }
     }
 
     // Takes the ownership of the rawStream.
-    SkAutoTDelete<SkDngImage> dngImage(SkDngImage::NewFromStream(rawStream.release()));
+    std::unique_ptr<SkDngImage> dngImage(SkDngImage::NewFromStream(rawStream.release()));
     if (!dngImage) {
         return nullptr;
     }
@@ -662,22 +686,31 @@ SkCodec* SkRawCodec::NewFromStream(SkStream* stream) {
     return new SkRawCodec(dngImage.release());
 }
 
-SkCodec::Result SkRawCodec::onGetPixels(const SkImageInfo& requestedInfo, void* dst,
+SkCodec::Result SkRawCodec::onGetPixels(const SkImageInfo& dstInfo, void* dst,
                                         size_t dstRowBytes, const Options& options,
                                         SkPMColor ctable[], int* ctableCount,
                                         int* rowsDecoded) {
-    if (!conversion_possible(requestedInfo, this->getInfo())) {
+    if (!conversion_possible(dstInfo, this->getInfo()) ||
+        !this->initializeColorXform(dstInfo, options.fPremulBehavior))
+    {
         SkCodecPrintf("Error: cannot convert input type to output type.\n");
         return kInvalidConversion;
     }
 
-    SkAutoTDelete<SkSwizzler> swizzler(SkSwizzler::CreateSwizzler(
-            SkSwizzler::kRGB, nullptr, requestedInfo, options));
+    SkImageInfo swizzlerInfo = dstInfo;
+    std::unique_ptr<uint32_t[]> xformBuffer = nullptr;
+    if (this->colorXform()) {
+        swizzlerInfo = swizzlerInfo.makeColorType(kRGBA_8888_SkColorType);
+        xformBuffer.reset(new uint32_t[dstInfo.width()]);
+    }
+
+    std::unique_ptr<SkSwizzler> swizzler(SkSwizzler::CreateSwizzler(
+            this->getEncodedInfo(), nullptr, swizzlerInfo, options));
     SkASSERT(swizzler);
 
-    const int width = requestedInfo.width();
-    const int height = requestedInfo.height();
-    SkAutoTDelete<dng_image> image(fDngImage->render(width, height));
+    const int width = dstInfo.width();
+    const int height = dstInfo.height();
+    std::unique_ptr<dng_image> image(fDngImage->render(width, height));
     if (!image) {
         return kInvalidInput;
     }
@@ -686,8 +719,8 @@ SkCodec::Result SkRawCodec::onGetPixels(const SkImageInfo& requestedInfo, void* 
     // difference. Only the overlapping region will be converted.
     const float maxDiffRatio = 1.03f;
     const dng_point& imageSize = image->Size();
-    if (imageSize.h / width > maxDiffRatio || imageSize.h < width ||
-        imageSize.v / height > maxDiffRatio || imageSize.v < height) {
+    if (imageSize.h / (float) width > maxDiffRatio || imageSize.h < width ||
+        imageSize.v / (float) height > maxDiffRatio || imageSize.v < height) {
         return SkCodec::kInvalidScale;
     }
 
@@ -714,8 +747,15 @@ SkCodec::Result SkRawCodec::onGetPixels(const SkImageInfo& requestedInfo, void* 
             return kIncompleteInput; 
         }
 
-        swizzler->swizzle(dstRow, &srcRow[0]);
-        dstRow = SkTAddOffset<void>(dstRow, dstRowBytes);
+        if (this->colorXform()) {
+            swizzler->swizzle(xformBuffer.get(), &srcRow[0]);
+
+            this->applyColorXform(dstRow, xformBuffer.get(), dstInfo.width(), kOpaque_SkAlphaType);
+            dstRow = SkTAddOffset<void>(dstRow, dstRowBytes);
+        } else {
+            swizzler->swizzle(dstRow, &srcRow[0]);
+            dstRow = SkTAddOffset<void>(dstRow, dstRowBytes);
+        }
     }
     return kSuccess;
 }
@@ -761,5 +801,7 @@ bool SkRawCodec::onDimensionsSupported(const SkISize& dim) {
 SkRawCodec::~SkRawCodec() {}
 
 SkRawCodec::SkRawCodec(SkDngImage* dngImage)
-    : INHERITED(dngImage->getImageInfo(), nullptr)
+    : INHERITED(dngImage->width(), dngImage->height(), dngImage->getEncodedInfo(),
+                SkColorSpaceXform::kRGBA_8888_ColorFormat, nullptr,
+                SkColorSpace::MakeSRGB())
     , fDngImage(dngImage) {}

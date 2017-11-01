@@ -50,8 +50,8 @@ const char* SKPBench::onGetUniqueName() {
 }
 
 void SKPBench::onPerCanvasPreDraw(SkCanvas* canvas) {
-    SkIRect bounds;
-    SkAssertResult(canvas->getClipDeviceBounds(&bounds));
+    SkIRect bounds = canvas->getDeviceClipBounds();
+    SkAssertResult(!bounds.isEmpty());
 
     const bool gpu = canvas->getGrContext() != nullptr;
     int tileW = gpu ? FLAGS_GPUbenchTileW : FLAGS_CPUbenchTileW,
@@ -72,7 +72,7 @@ void SKPBench::onPerCanvasPreDraw(SkCanvas* canvas) {
         for (int x = bounds.fLeft; x < bounds.fRight; x += tileW) {
             const SkIRect tileRect = SkIRect::MakeXYWH(x, y, tileW, tileH);
             *fTileRects.append() = tileRect;
-            *fSurfaces.push() = canvas->newSurface(ii);
+            *fSurfaces.push() = canvas->makeSurface(ii).release();
 
             // Never want the contents of a tile to include stuff the parent
             // canvas clips out
@@ -90,7 +90,7 @@ void SKPBench::onPerCanvasPostDraw(SkCanvas* canvas) {
     // Draw the last set of tiles into the master canvas in case we're
     // saving the images
     for (int i = 0; i < fTileRects.count(); ++i) {
-        SkAutoTUnref<SkImage> image(fSurfaces[i]->newImageSnapshot());
+        sk_sp<SkImage> image(fSurfaces[i]->makeImageSnapshot());
         canvas->drawImage(image,
                           SkIntToScalar(fTileRects[i].fLeft), SkIntToScalar(fTileRects[i].fTop));
         SkSafeSetNull(fSurfaces[i]);
@@ -120,7 +120,7 @@ void SKPBench::onDraw(int loops, SkCanvas* canvas) {
             break;
         }
 #if SK_SUPPORT_GPU
-        // Ensure the GrContext doesn't batch across draw loops.
+        // Ensure the GrContext doesn't combine ops across draw loops.
         if (GrContext* context = canvas->getGrContext()) {
             context->flush();
         }
@@ -135,7 +135,7 @@ void SKPBench::drawMPDPicture() {
         SkMatrix trans;
         trans.setTranslate(-fTileRects[j].fLeft/fScale,
                            -fTileRects[j].fTop/fScale);
-        mpd.add(fSurfaces[j]->getCanvas(), fPic, &trans);
+        mpd.add(fSurfaces[j]->getCanvas(), fPic.get(), &trans);
     }
 
     mpd.draw();
@@ -149,7 +149,7 @@ void SKPBench::drawPicture() {
     for (int j = 0; j < fTileRects.count(); ++j) {
         const SkMatrix trans = SkMatrix::MakeTrans(-fTileRects[j].fLeft / fScale,
                                                    -fTileRects[j].fTop / fScale);
-        fSurfaces[j]->getCanvas()->drawPicture(fPic, &trans, nullptr);
+        fSurfaces[j]->getCanvas()->drawPicture(fPic.get(), &trans, nullptr);
     }
 
     for (int j = 0; j < fTileRects.count(); ++j) {
@@ -190,10 +190,10 @@ void SKPBench::getGpuStats(SkCanvas* canvas, SkTArray<SkString>* keys, SkTArray<
     context->freeGpuResources();
     context->resetContext();
     context->getGpu()->resetShaderCacheForTesting();
-    draw_pic_for_stats(canvas, context, fPic, keys, values, "first_frame");
+    draw_pic_for_stats(canvas, context, fPic.get(), keys, values, "first_frame");
 
     // draw second frame
-    draw_pic_for_stats(canvas, context, fPic, keys, values, "second_frame");
+    draw_pic_for_stats(canvas, context, fPic.get(), keys, values, "second_frame");
 
 #endif
 }

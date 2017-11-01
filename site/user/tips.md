@@ -1,81 +1,18 @@
 Tips & FAQ
 ==========
 
-+   [Gyp Options](#gypdefines)
 +   [Bitmap Subsetting](#bitmap-subsetting)
 +   [Capture a `.skp` file on a web page in Chromium](#skp-capture)
++   [Capture a `.mskp` file on a web page in Chromium](#mskp-capture)
 +   [How to add hardware acceleration in Skia](#hw-acceleration)
 +   [Does Skia support Font hinting?](#font-hinting)
 +   [Does Skia shape text (kerning)?](#kerning)
++   [How do I add drop shadow on text?](#text-shadow)
 
 * * *
 
-<span id="gypdefines"></span>
-
-Gyp Options
------------
-
-When running `sync-and-gyp`, the `GYP_DEFINES` environment variable can
-be used to change Skia’s compile-time settings, using a
-space-separated list of key=value pairs. For example, to disable both
-the Skia GPU backend and PDF backends, run it as follows:
-
-<!--?prettify lang=sh?-->
-
-    GYP_DEFINES='skia_gpu=0 skia_pdf=0' python bin/sync-and-gyp
-    ninja -C out/Debug
-
-Note: Setting enviroment variables in the Windows CMD.EXE shell [uses a
-different syntax](/user/quick/windows#env).
-
-You can also set environment variables such as `CC`, `CXX`,
-`CFLAGS`, `CXXFLAGS`, or `CPPFLAGS` to control how Skia is compiled.
-To build with clang, for example:
-
-<!--?prettify lang=sh?-->
-
-    CC='clang' CXX='clang++' python bin/sync-and-gyp
-    ninja -C out/Debug
-
-To build with clang and enable a compiler warning for unused parameters in C++
-(but not C or assembly) code:
-
-<!--?prettify lang=sh?-->
-
-    CXXFLAGS='-Wunused-parameter' \
-        CC='clang' CXX='clang++' python bin/sync-and-gyp
-    ninja -C out/Debug
-
-
-The `GYP_GENERATORS` environment variable can be used to set the
-build systems that you want to use (as a comma-separated list).
-The default is `'ninja,msvs-ninja'` on Windows, `'ninja,xcode'` on
-Mac OS X, and just `'ninja'` on Linux.  For example, to generate
-only Ninja files on Mac:
-
-<!--?prettify lang=sh?-->
-
-    GYP_GENERATORS='ninja' python bin/sync-and-gyp
-    ninja -C out/Debug
-
-Finally, the `SKIA_OUT` environment variable can be used to set
-the path for the build directory.  The default is `out` inside the
-top-level Skia source directory.  For example to test Skia with
-two different compilers:
-
-<!--?prettify lang=sh?-->
-
-    CC='clang' CXX='clang++' SKIA_OUT=~/build/skia_clang python bin/sync-and-gyp
-    CC='gcc'   CXX='g++'     SKIA_OUT=~/build/skia_gcc   python bin/sync-and-gyp
-    ninja -C ~/build/skia_clang/Debug
-    ninja -C ~/build/skia_gcc/Debug
-
-* * *
-
-<span id="bitmap-subsetting"></span>
-
-Bitmap Subsetting
------------------
+<span id="bitmap-subsetting">Bitmap Subsetting</span>
+-----------------------------------------------------
 
 Taking a subset of a bitmap is effectively free - no pixels are copied or
 memory is allocated. This allows Skia to offer an API that typically operates
@@ -87,28 +24,23 @@ drawBitmapNine():
     bitmap.extractSubset(&subset, rect);
     canvas->drawBitmapNine(subset, ...);
 
-[An example](https://fiddle.skia.org/c/c91694020f0810994917b56c323e4559)
+[An example](https://fiddle.skia.org/c/@subset_example)
+
 
 * * *
 
-<span id="skp-capture"></span>
-
-Capture a `.skp` file on a web page in Chromium
------------------------------------------------
+<span id="skp-capture">Capture a `.skp` file on a web page in Chromium</span>
+-----------------------------------------------------------------------------
 
 1.  Launch Chrome or Chromium with `--no-sandbox --enable-gpu-benchmarking`
 2.  Open the JS console (ctrl-shift-J)
 3.  Execute: `chrome.gpuBenchmarking.printToSkPicture('/tmp')`
     This returns "undefined" on success.
 
-Open the resulting file in the Skia Debugger, rasterize it with `dm`,
+Open the resulting file in the [Skia Debugger](/dev/tools/debugger), rasterize it with `dm`,
 or use Skia's `SampleApp` to view it:
 
 <!--?prettify lang=sh?-->
-
-    bin/sync-and-gyp
-    ninja -C out/Release debugger dm SampleApp
-    out/Release/debugger /tmp/layer_0.skp &
 
     out/Release/dm --src skp --skps /tmp/layer_0.skp -w /tmp \
         --config 8888 gpu pdf --verbose
@@ -118,10 +50,34 @@ or use Skia's `SampleApp` to view it:
 
 * * *
 
-<span id="hw-acceleration"></span>
+<span id="mskp-capture">Capture a `.mskp` file on a web page in Chromium</span>
+-------------------------------------------------------------------------------
 
-How to add hardware acceleration in Skia
-----------------------------------------
+Multipage Skia Picture files capture the commands sent to produce PDFs
+and printed documents.
+
+1.  Launch Chrome or Chromium with `--no-sandbox --enable-gpu-benchmarking`
+2.  Open the JS console (ctrl-shift-J)
+3.  Execute: `chrome.gpuBenchmarking.printPagesToSkPictures('/tmp/filename.mskp')`
+    This returns "undefined" on success.
+
+Open the resulting file in the [Skia Debugger](/dev/tools/debugger) or
+process it with `dm`.
+
+<!--?prettify lang=sh?-->
+
+    experimental/tools/mskp_parser.py /tmp/filename.mskp /tmp/filename.mskp.skp
+    ls -l /tmp/filename.mskp.skp
+    # open filename.mskp.skp in the debugger.
+
+    out/Release/dm --src mskp --mskps /tmp/filename.mskp -w /tmp \
+        --config pdf --verbose
+    ls -l /tmp/pdf/mskp/filename.mskp.pdf
+
+* * *
+
+<span id="hw-acceleration">How to add hardware acceleration in Skia</span>
+--------------------------------------------------------------------------
 
 There are two ways Skia takes advantage of specific hardware.
 
@@ -140,10 +96,8 @@ There are two ways Skia takes advantage of specific hardware.
 
 * * *
 
-<span id="font-hinting"></span>
-
-Does Skia support Font hinting?
--------------------------------
+<span id="font-hinting">Does Skia support Font hinting?</span>
+--------------------------------------------------------------
 
 Skia has a built-in font cache, but it does not know how to actual render font
 files like TrueType into its cache. For that it relies on the platform to
@@ -155,14 +109,52 @@ engines can easily be supported in a like manner.
 
 * * *
 
-<span id="kerning"></span>
-
-Does Skia shape text (kerning)?
--------------------------------
+<span id="kerning">Does Skia shape text (kerning)?</span>
+---------------------------------------------------------
 
 No.  Skia provides interfaces to draw glyphs, but does not implement a
 text shaper. Skia's client's often use
 [HarfBuzz](http://www.freedesktop.org/wiki/Software/HarfBuzz/) to
 generate the glyphs and their positions, including kerning.
+
+[Here is an example of how to use Skia and HarfBuzz
+together](https://github.com/aam/skiaex).  In the example, a
+`SkTypeface` and a `hb_face_t` are created using the same `mmap()`ed
+`.ttf` font file. The HarfBuzz face is used to shape unicode text into
+a sequence of glyphs and positions, and the SkTypeface can then be
+used to draw those glyphs.
+
+* * *
+
+<span id="text-shadow">How do I add drop shadow on text?</span>
+---------------------------------------------------------------
+
+<!--?prettify lang=cc?-->
+
+    void draw(SkCanvas* canvas) {
+        const char text[] = "Skia";
+        const SkScalar radius = 2.0f;
+        const SkScalar xDrop = 2.0f;
+        const SkScalar yDrop = 2.0f;
+        const SkScalar x = 8.0f;
+        const SkScalar y = 52.0f;
+        const SkScalar textSize = 48.0f;
+        const uint8_t blurAlpha = 127;
+        canvas->drawColor(SK_ColorWHITE);
+        SkPaint paint;
+        paint.setAntiAlias(true);
+        paint.setTextSize(textSize);
+        SkPaint blur(paint);
+        blur.setAlpha(blurAlpha);
+        blur.setMaskFilter(SkBlurMaskFilter::Make(
+            kNormal_SkBlurStyle,
+            SkBlurMaskFilter::ConvertRadiusToSigma(radius), 0));
+        canvas->drawText(text, strlen(text), x + xDrop, y + yDrop, blur);
+        canvas->drawText(text, strlen(text), x, y, paint);
+    }
+
+<a href='https://fiddle.skia.org/c/@text_shadow'><img src='https://fiddle.skia.org/i/@text_shadow_raster.png'></a>
+
+* * *
 
 <div style="margin-bottom:99%"></div>

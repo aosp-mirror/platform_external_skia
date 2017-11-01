@@ -6,6 +6,7 @@
  *
  */
 
+#include "GrBackendSurface.h"
 #include "GrContext.h"
 #include "SDL.h"
 #include "SkCanvas.h"
@@ -20,7 +21,7 @@
 #elif defined(SK_BUILD_FOR_UNIX)
 #include <GL/gl.h>
 #elif defined(SK_BUILD_FOR_MAC)
-#include <gl.h>
+#include <OpenGL/gl.h>
 #endif
 
 /*
@@ -183,38 +184,32 @@ int main(int argc, char** argv) {
     glClear(GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
     // setup GrContext
-    SkAutoTUnref<const GrGLInterface> interface(GrGLCreateNativeInterface());
-
-    // To use NVPR, comment this out
-    interface.reset(GrGLInterfaceRemoveNVPR(interface));
-    SkASSERT(interface);
+    sk_sp<const GrGLInterface> interface(GrGLCreateNativeInterface());
 
     // setup contexts
-    SkAutoTUnref<GrContext> grContext(GrContext::Create(kOpenGL_GrBackend,
-                                                        (GrBackendContext)interface.get()));
+    sk_sp<GrContext> grContext(GrContext::Create(kOpenGL_GrBackend,
+                                                 (GrBackendContext)interface.get()));
     SkASSERT(grContext);
 
     // Wrap the frame buffer object attached to the screen in a Skia render target so Skia can
     // render to it
-    GrBackendRenderTargetDesc desc;
-    desc.fWidth = dm.w;
-    desc.fHeight = dm.h;
-    desc.fConfig = kSkia8888_GrPixelConfig;
-    desc.fOrigin = kBottomLeft_GrSurfaceOrigin;
-    desc.fSampleCnt = kMsaaSampleCount;
-    desc.fStencilBits = kStencilBits;
+    GrGLFrameBufferInfo fbInfo;
     GrGLint buffer;
     GR_GL_GetIntegerv(interface, GR_GL_FRAMEBUFFER_BINDING, &buffer);
-    desc.fRenderTargetHandle = buffer;
-    SkAutoTUnref<GrRenderTarget>
-            renderTarget(grContext->textureProvider()->wrapBackendRenderTarget(desc));
+    fbInfo.fFBOID = buffer;
+    GrBackendRenderTarget backendRT(dm.w, dm.h, kMsaaSampleCount, kStencilBits,
+                                    kSkia8888_GrPixelConfig, fbInfo);
 
     // setup SkSurface
     // To use distance field text, use commented out SkSurfaceProps instead
     // SkSurfaceProps props(SkSurfaceProps::kUseDeviceIndependentFonts_Flag,
     //                      SkSurfaceProps::kLegacyFontHost_InitType);
     SkSurfaceProps props(SkSurfaceProps::kLegacyFontHost_InitType);
-    SkAutoTUnref<SkSurface> surface(SkSurface::NewRenderTargetDirect(renderTarget, &props));
+
+    sk_sp<SkSurface> surface(SkSurface::MakeFromBackendRenderTarget(grContext,
+                                                                    backendRT,
+                                                                    kBottomLeft_GrSurfaceOrigin,
+                                                                    &props));
 
     SkCanvas* canvas = surface->getCanvas();
 
@@ -225,7 +220,7 @@ int main(int argc, char** argv) {
     SkPaint paint;
 
     // create a surface for CPU rasterization
-    SkAutoTUnref<SkSurface> cpuSurface(SkSurface::NewRaster(canvas->imageInfo()));
+    sk_sp<SkSurface> cpuSurface(SkSurface::MakeRaster(canvas->imageInfo()));
 
     SkCanvas* offscreen = cpuSurface->getCanvas();
     offscreen->save();
@@ -233,7 +228,7 @@ int main(int argc, char** argv) {
     offscreen->drawPath(create_star(), paint);
     offscreen->restore();
 
-    SkAutoTUnref<SkImage> image(cpuSurface->newImageSnapshot());
+    sk_sp<SkImage> image = cpuSurface->makeImageSnapshot();
 
     int rotation = 0;
     while (!state.fQuit) { // Our application loop

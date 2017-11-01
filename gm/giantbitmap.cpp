@@ -66,7 +66,7 @@ public:
         fDoRotate = doRotate;
     }
 
-    virtual ~GiantBitmapGM() { delete fBM; }
+    ~GiantBitmapGM() override { delete fBM; }
 
 protected:
 
@@ -104,9 +104,7 @@ protected:
             SkScalar scale = 11*SK_Scalar1/12;
             m.setScale(scale, scale);
         }
-        SkShader* s = SkShader::CreateBitmapShader(getBitmap(), fMode, fMode, &m);
-
-        paint.setShader(s)->unref();
+        paint.setShader(SkShader::MakeBitmapShader(getBitmap(), fMode, fMode, &m));
         paint.setFilterQuality(fDoFilter ? kLow_SkFilterQuality : kNone_SkFilterQuality);
 
         canvas->translate(SkIntToScalar(50), SkIntToScalar(50));

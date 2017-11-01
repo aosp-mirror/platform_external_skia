@@ -91,7 +91,7 @@ protected:
                 if (indexMask & (1 << index)) {
                     canvas->drawPath(path, paint);
                 }
-                if (paint.getStrokeWidth() < 2) {
+                if (this->getMode() == skiagm::GM::kSample_Mode && paint.getStrokeWidth() < 2) {
                     drawFat(canvas, path, paint, index);
                 }
                 ++index;
@@ -151,7 +151,7 @@ private:
         SkScalar pathX = bounds.fLeft - 2;
         SkScalar pathY = bounds.fTop - 2;
         SkMatrix cMatrix = canvas->getTotalMatrix();
-        if (!canvas->readPixels(&offscreen, SkScalarRoundToInt(pathX + cMatrix.getTranslateX()),
+        if (!canvas->readPixels(offscreen, SkScalarRoundToInt(pathX + cMatrix.getTranslateX()),
                 SkScalarRoundToInt(pathY + cMatrix.getTranslateY()))) {
             return;
         }
@@ -167,7 +167,7 @@ private:
         } else {
             fClipS.transform(clipM, &clip);
         }
-        canvas->clipPath(clip, SkRegion::kIntersect_Op, true);
+        canvas->clipPath(clip, true);
         canvas->scale(scale, scale);
         canvas->drawBitmap(offscreen, (bounds.fLeft - 17) / scale,
                     (bounds.fTop - 20 + 420) / scale);
@@ -180,7 +180,7 @@ private:
             clipM.postTranslate(bounds.fLeft - 17 - 275, bounds.fTop - 24.5f + 420);
             SkPath clip;
             fClipR.transform(clipM, &clip);
-            canvas->clipPath(clip, SkRegion::kIntersect_Op, true);
+            canvas->clipPath(clip, true);
             canvas->scale(10.f, 10.f);
             canvas->drawBitmap(offscreen, (bounds.fLeft - 17 - 275
                     + (index >= 5 ? 5 : 0)) / scale, (bounds.fTop - 20 + 420) / scale);
@@ -193,4 +193,3 @@ private:
 ///////////////////////////////////////////////////////////////////////////////
 
 DEF_GM( return new StrokeZeroGM(); )
-

@@ -6,15 +6,17 @@
  */
 
 #include "gm.h"
+#include "sk_tool_utils.h"
 #include "SkBlurMask.h"
 #include "SkBlurMaskFilter.h"
 #include "SkReadBuffer.h"
+#include "SkTextBlob.h"
 #include "SkWriteBuffer.h"
 #include "SkLayerRasterizer.h"
 
 static void r0(SkLayerRasterizer::Builder* rastBuilder, SkPaint& p) {
-    p.setMaskFilter(SkBlurMaskFilter::Create(kNormal_SkBlurStyle,
-                              SkBlurMask::ConvertRadiusToSigma(SkIntToScalar(3))))->unref();
+    p.setMaskFilter(SkBlurMaskFilter::Make(kNormal_SkBlurStyle,
+                                           SkBlurMask::ConvertRadiusToSigma(SkIntToScalar(3))));
     rastBuilder->addLayer(p, SkIntToScalar(3), SkIntToScalar(3));
 
     p.setMaskFilter(nullptr);
@@ -24,7 +26,7 @@ static void r0(SkLayerRasterizer::Builder* rastBuilder, SkPaint& p) {
 
     p.setAlpha(0x11);
     p.setStyle(SkPaint::kFill_Style);
-    p.setXfermodeMode(SkXfermode::kSrc_Mode);
+    p.setBlendMode(SkBlendMode::kSrc);
     rastBuilder->addLayer(p);
 }
 
@@ -32,7 +34,7 @@ static void r1(SkLayerRasterizer::Builder* rastBuilder, SkPaint& p) {
     rastBuilder->addLayer(p);
 
     p.setAlpha(0x40);
-    p.setXfermodeMode(SkXfermode::kSrc_Mode);
+    p.setBlendMode(SkBlendMode::kSrc);
     p.setStyle(SkPaint::kStroke_Style);
     p.setStrokeWidth(SK_Scalar1*2);
     rastBuilder->addLayer(p);
@@ -45,7 +47,7 @@ static void r2(SkLayerRasterizer::Builder* rastBuilder, SkPaint& p) {
 
     p.setStyle(SkPaint::kStroke_Style);
     p.setStrokeWidth(SK_Scalar1*3/2);
-    p.setXfermodeMode(SkXfermode::kClear_Mode);
+    p.setBlendMode(SkBlendMode::kClear);
     rastBuilder->addLayer(p);
 }
 
@@ -56,7 +58,7 @@ static void r3(SkLayerRasterizer::Builder* rastBuilder, SkPaint& p) {
 
     p.setAlpha(0x20);
     p.setStyle(SkPaint::kFill_Style);
-    p.setXfermodeMode(SkXfermode::kSrc_Mode);
+    p.setBlendMode(SkBlendMode::kSrc);
     rastBuilder->addLayer(p);
 }
 
@@ -65,10 +67,10 @@ static void r4(SkLayerRasterizer::Builder* rastBuilder, SkPaint& p) {
     rastBuilder->addLayer(p, SkIntToScalar(3), SkIntToScalar(3));
 
     p.setAlpha(0xFF);
-    p.setXfermodeMode(SkXfermode::kClear_Mode);
+    p.setBlendMode(SkBlendMode::kClear);
     rastBuilder->addLayer(p, SK_Scalar1*3/2, SK_Scalar1*3/2);
 
-    p.setXfermode(nullptr);
+    p.setBlendMode(SkBlendMode::kSrcOver);
     rastBuilder->addLayer(p);
 }
 
@@ -77,8 +79,8 @@ static void r4(SkLayerRasterizer::Builder* rastBuilder, SkPaint& p) {
 static void r5(SkLayerRasterizer::Builder* rastBuilder, SkPaint& p) {
     rastBuilder->addLayer(p);
 
-    p.setPathEffect(SkDiscretePathEffect::Create(SK_Scalar1*4, SK_Scalar1*3))->unref();
-    p.setXfermodeMode(SkXfermode::kSrcOut_Mode);
+    p.setPathEffect(SkDiscretePathEffect::Make(SK_Scalar1*4, SK_Scalar1*3));
+    p.setBlendMode(SkBlendMode::kSrcOut);
     rastBuilder->addLayer(p);
 }
 
@@ -88,24 +90,24 @@ static void r6(SkLayerRasterizer::Builder* rastBuilder, SkPaint& p) {
     p.setAntiAlias(false);
     SkLayerRasterizer::Builder rastBuilder2;
     r5(&rastBuilder2, p);
-    p.setRasterizer(rastBuilder2.detachRasterizer())->unref();
-    p.setXfermodeMode(SkXfermode::kClear_Mode);
+    p.setRasterizer(rastBuilder2.detach());
+    p.setBlendMode(SkBlendMode::kClear);
     rastBuilder->addLayer(p);
 }
 
 #include "Sk2DPathEffect.h"
 
-static SkPathEffect* MakeDotEffect(SkScalar radius, const SkMatrix& matrix) {
+static sk_sp<SkPathEffect> MakeDotEffect(SkScalar radius, const SkMatrix& matrix) {
     SkPath path;
     path.addCircle(0, 0, radius);
-    return SkPath2DPathEffect::Create(matrix, path);
+    return SkPath2DPathEffect::Make(matrix, path);
 }
 
 static void r7(SkLayerRasterizer::Builder* rastBuilder, SkPaint& p) {
     SkMatrix    lattice;
     lattice.setScale(SK_Scalar1*6, SK_Scalar1*6, 0, 0);
     lattice.postSkew(SK_Scalar1/3, 0, 0, 0);
-    p.setPathEffect(MakeDotEffect(SK_Scalar1*4, lattice))->unref();
+    p.setPathEffect(MakeDotEffect(SK_Scalar1*4, lattice));
     rastBuilder->addLayer(p);
 }
 
@@ -115,12 +117,12 @@ static void r8(SkLayerRasterizer::Builder* rastBuilder, SkPaint& p) {
     SkMatrix    lattice;
     lattice.setScale(SK_Scalar1*6, SK_Scalar1*6, 0, 0);
     lattice.postSkew(SK_Scalar1/3, 0, 0, 0);
-    p.setPathEffect(MakeDotEffect(SK_Scalar1*2, lattice))->unref();
-    p.setXfermodeMode(SkXfermode::kClear_Mode);
+    p.setPathEffect(MakeDotEffect(SK_Scalar1*2, lattice));
+    p.setBlendMode(SkBlendMode::kClear);
     rastBuilder->addLayer(p);
 
     p.setPathEffect(nullptr);
-    p.setXfermode(nullptr);
+    p.setBlendMode(SkBlendMode::kSrcOver);
     p.setStyle(SkPaint::kStroke_Style);
     p.setStrokeWidth(SK_Scalar1);
     rastBuilder->addLayer(p);
@@ -132,12 +134,12 @@ static void r9(SkLayerRasterizer::Builder* rastBuilder, SkPaint& p) {
     SkMatrix    lattice;
     lattice.setScale(SK_Scalar1, SK_Scalar1*6, 0, 0);
     lattice.postRotate(SkIntToScalar(30), 0, 0);
-    p.setPathEffect(SkLine2DPathEffect::Create(SK_Scalar1*2, lattice))->unref();
-    p.setXfermodeMode(SkXfermode::kClear_Mode);
+    p.setPathEffect(SkLine2DPathEffect::Make(SK_Scalar1*2, lattice));
+    p.setBlendMode(SkBlendMode::kClear);
     rastBuilder->addLayer(p);
 
     p.setPathEffect(nullptr);
-    p.setXfermode(nullptr);
+    p.setBlendMode(SkBlendMode::kSrcOver);
     p.setStyle(SkPaint::kStroke_Style);
     p.setStrokeWidth(SK_Scalar1);
     rastBuilder->addLayer(p);
@@ -145,22 +147,19 @@ static void r9(SkLayerRasterizer::Builder* rastBuilder, SkPaint& p) {
 
 typedef void (*raster_proc)(SkLayerRasterizer::Builder*, SkPaint&);
 
-static const raster_proc gRastProcs[] = {
+constexpr raster_proc gRastProcs[] = {
     r0, r1, r2, r3, r4, r5, r6, r7, r8, r9
 };
 
-#include "SkXfermode.h"
-
 static void apply_shader(SkPaint* paint, int index) {
     raster_proc proc = gRastProcs[index];
-    if (proc)
-    {
+    if (proc) {
         SkPaint p;
         SkLayerRasterizer::Builder rastBuilder;
 
         p.setAntiAlias(true);
         proc(&rastBuilder, p);
-        paint->setRasterizer(rastBuilder.detachRasterizer())->unref();
+        paint->setRasterizer(rastBuilder.detach());
     }
 
 #if 0
@@ -189,44 +188,12 @@ DEF_SIMPLE_GM(texteffects, canvas, 460, 680) {
             //  paint.setMaskFilter(nullptr);
             //  paint.setColor(SK_ColorBLACK);
 
-            canvas->drawText(str.c_str(), str.size(), x, y, paint);
+            canvas->drawString(str, x, y, paint);
 
             y += paint.getFontSpacing();
         }
 
         canvas->restore();
-}
-
-DEF_SIMPLE_GM(textunderstrike, canvas, 460, 680) {
-    canvas->clear(SK_ColorYELLOW);
-    SkPaint paint;
-    sk_tool_utils::set_portable_typeface(&paint);
-    paint.setTextSize(50);
-    paint.setStrokeWidth(5);
-    paint.setAntiAlias(true);
-
-    auto drawText = [&]() {
-        paint.setStyle(SkPaint::kFill_Style);
-        canvas->drawText("Hello", 5, 100, 50, paint);
-        paint.setStyle(SkPaint::kStroke_Style);
-        canvas->drawText("Hello", 5, 100, 100, paint);
-        canvas->translate(0, 100);
-    };
-
-    drawText();
-    paint.setUnderlineText(true);
-    drawText();
-    paint.setUnderlineText(false);
-    paint.setStrikeThruText(true);
-    drawText();
-    paint.setUnderlineText(true);
-    drawText();
-    paint.setColor(SK_ColorWHITE);
-    paint.setStyle(SkPaint::kStroke_Style);
-    canvas->drawText("Hello", 5, 100, 50, paint);
-    paint.setColor(SK_ColorBLUE);
-    paint.setStyle(SkPaint::kFill_Style);
-    canvas->drawText("Hello", 5, 100, 50, paint);
 }
 
 static SkPath create_underline(const SkTDArray<SkScalar>& intersections,
@@ -268,8 +235,8 @@ DEF_SIMPLE_GM(fancyunderline, canvas, 900, 1350) {
     const char* fam[] = { "sans-serif", "serif", "monospace" };
     const char test[] = "aAjJgGyY_|{-(~[,]qQ}pP}zZ";
     SkPoint textPt = { 10, 80 };
-    for (int font = 0; font < 3; ++font) {
-        sk_tool_utils::set_portable_typeface(&paint, fam[font], SkTypeface::kNormal);
+    for (size_t font = 0; font < SK_ARRAY_COUNT(fam); ++font) {
+        sk_tool_utils::set_portable_typeface(&paint, fam[font]);
         for (SkScalar textSize = 100; textSize > 10; textSize -= 20) {
             paint.setTextSize(textSize);
             const SkScalar uWidth = textSize / 15;
@@ -312,8 +279,8 @@ DEF_SIMPLE_GM(fancyposunderline, canvas, 900, 1350) {
     const char* fam[] = { "sans-serif", "serif", "monospace" };
     const char test[] = "aAjJgGyY_|{-(~[,]qQ}pP}zZ";
     SkPoint textPt = { 10, 80 };
-    for (int font = 0; font < 3; ++font) {
-        sk_tool_utils::set_portable_typeface(&paint, fam[font], SkTypeface::kNormal);
+    for (size_t font = 0; font < SK_ARRAY_COUNT(fam); ++font) {
+        sk_tool_utils::set_portable_typeface(&paint, fam[font]);
         for (SkScalar textSize = 100; textSize > 10; textSize -= 20) {
             paint.setTextSize(textSize);
             const SkScalar uWidth = textSize / 15;
@@ -345,6 +312,114 @@ DEF_SIMPLE_GM(fancyposunderline, canvas, 900, 1350) {
 
             canvas->translate(0, textSize * 1.3f);
         }
+        canvas->translate(0, 60);
+    }
+}
+
+namespace {
+
+sk_sp<SkTextBlob> MakeFancyBlob(const SkPaint& paint, const char* text) {
+    SkPaint blobPaint(paint);
+
+    const size_t textLen = strlen(text);
+    const int glyphCount = blobPaint.textToGlyphs(text, textLen, nullptr);
+    SkAutoTArray<SkGlyphID> glyphs(glyphCount);
+    blobPaint.textToGlyphs(text, textLen, glyphs.get());
+
+    blobPaint.setTextEncoding(SkPaint::kGlyphID_TextEncoding);
+    const size_t glyphTextBytes = SkTo<uint32_t>(glyphCount) * sizeof(SkGlyphID);
+    const int widthCount = blobPaint.getTextWidths(glyphs.get(), glyphTextBytes, nullptr);
+    SkAssertResult(widthCount == glyphCount);
+
+    SkAutoTArray<SkScalar> widths(glyphCount);
+    blobPaint.getTextWidths(glyphs.get(), glyphTextBytes, widths.get());
+
+    SkTextBlobBuilder blobBuilder;
+    int glyphIndex = 0;
+    SkScalar advance = 0;
+
+    // Default-positioned run.
+    {
+        const int defaultRunLen = glyphCount / 3;
+        const SkTextBlobBuilder::RunBuffer& buf = blobBuilder.allocRun(blobPaint,
+                                                                       defaultRunLen,
+                                                                       advance, 0);
+        memcpy(buf.glyphs, glyphs.get(), SkTo<uint32_t>(defaultRunLen) * sizeof(SkGlyphID));
+
+        for (int i = 0; i < defaultRunLen; ++i) {
+            advance += widths[glyphIndex++];
+        }
+    }
+
+    // Horizontal-positioned run.
+    {
+        const int horizontalRunLen = glyphCount / 3;
+        const SkTextBlobBuilder::RunBuffer& buf = blobBuilder.allocRunPosH(blobPaint,
+                                                                           horizontalRunLen,
+                                                                           0);
+        memcpy(buf.glyphs, glyphs.get() + glyphIndex,
+               SkTo<uint32_t>(horizontalRunLen) * sizeof(SkGlyphID));
+        for (int i = 0; i < horizontalRunLen; ++i) {
+            buf.pos[i] = advance;
+            advance += widths[glyphIndex++];
+        }
+    }
+
+    // Full-positioned run.
+    {
+        const int fullRunLen = glyphCount - glyphIndex;
+        const SkTextBlobBuilder::RunBuffer& buf = blobBuilder.allocRunPos(blobPaint, fullRunLen);
+        memcpy(buf.glyphs, glyphs.get() + glyphIndex,
+               SkTo<uint32_t>(fullRunLen) * sizeof(SkGlyphID));
+        for (int i = 0; i < fullRunLen; ++i) {
+            buf.pos[i * 2 + 0] = advance; // x offset
+            buf.pos[i * 2 + 1] = 0;       // y offset
+            advance += widths[glyphIndex++];
+        }
+    }
+
+    return blobBuilder.make();
+}
+
+} // anonymous ns
+
+DEF_SIMPLE_GM(fancyblobunderline, canvas, 1480, 1380) {
+    SkPaint paint;
+    paint.setAntiAlias(true);
+    const char* fam[] = { "sans-serif", "serif", "monospace" };
+    const char test[] = "aAjJgGyY_|{-(~[,]qQ}pP}zZ";
+    const SkPoint blobOffset = { 10, 80 };
+
+    for (size_t font = 0; font < SK_ARRAY_COUNT(fam); ++font) {
+        sk_tool_utils::set_portable_typeface(&paint, fam[font]);
+        for (SkScalar textSize = 100; textSize > 10; textSize -= 20) {
+            paint.setTextSize(textSize);
+            const SkScalar uWidth = textSize / 15;
+            paint.setStrokeWidth(uWidth);
+            paint.setStyle(SkPaint::kFill_Style);
+
+            sk_sp<SkTextBlob> blob = MakeFancyBlob(paint, test);
+            canvas->drawTextBlob(blob, blobOffset.x(), blobOffset.y(), paint);
+
+            const SkScalar uPos = uWidth;
+            const SkScalar bounds[2] = { uPos - uWidth / 2, uPos + uWidth / 2 };
+            const int interceptCount = paint.getTextBlobIntercepts(blob.get(), bounds, nullptr);
+            SkASSERT(!(interceptCount % 2));
+
+            SkTDArray<SkScalar> intercepts;
+            intercepts.setCount(interceptCount);
+            paint.getTextBlobIntercepts(blob.get(), bounds, intercepts.begin());
+
+            const SkScalar start = blob->bounds().left();
+            const SkScalar end = blob->bounds().right();
+            SkPath underline = create_underline(intercepts, start, end, uPos, uWidth, textSize);
+            underline.offset(blobOffset.x(), blobOffset.y());
+            paint.setStyle(SkPaint::kStroke_Style);
+            canvas->drawPath(underline, paint);
+
+            canvas->translate(0, textSize * 1.3f);
+        }
+
         canvas->translate(0, 60);
     }
 }

@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2011 Google Inc.
  *
@@ -8,11 +7,12 @@
 #ifndef SkEdgeBuilder_DEFINED
 #define SkEdgeBuilder_DEFINED
 
-#include "SkChunkAlloc.h"
+#include "SkArenaAlloc.h"
 #include "SkRect.h"
 #include "SkTDArray.h"
 
 struct SkEdge;
+struct SkAnalyticEdge;
 class SkEdgeClipper;
 class SkPath;
 
@@ -22,9 +22,14 @@ public:
 
     // returns the number of built edges. The array of those edge pointers
     // is returned from edgeList().
-    int build(const SkPath& path, const SkIRect* clip, int shiftUp, bool clipToTheRight);
+    int build(const SkPath& path, const SkIRect* clip, int shiftUp, bool clipToTheRight,
+              bool analyticAA = false);
 
-    SkEdge** edgeList() { return fEdgeList; }
+    int build_edges(const SkPath& path, const SkIRect* shiftedClip,
+            int shiftEdgesUp, bool pathContainedInClip, bool analyticAA = false);
+
+    SkEdge** edgeList() { return (SkEdge**)fEdgeList; }
+    SkAnalyticEdge** analyticEdgeList() { return (SkAnalyticEdge**)fEdgeList; }
 
 private:
     enum Combine {
@@ -33,11 +38,15 @@ private:
         kTotal_Combine
     };
 
-    static Combine CombineVertical(const SkEdge* edge, SkEdge* last);
+    Combine CombineVertical(const SkEdge* edge, SkEdge* last);
+    Combine CombineVertical(const SkAnalyticEdge* edge, SkAnalyticEdge* last);
     Combine checkVertical(const SkEdge* edge, SkEdge** edgePtr);
+    Combine checkVertical(const SkAnalyticEdge* edge, SkAnalyticEdge** edgePtr);
+    bool vertical_line(const SkEdge* edge);
+    bool vertical_line(const SkAnalyticEdge* edge);
 
-    SkChunkAlloc        fAlloc;
-    SkTDArray<SkEdge*>  fList;
+    SkSTArenaAlloc<512> fAlloc;
+    SkTDArray<void*>    fList;
 
     /*
      *  If we're in general mode, we allcoate the pointers in fList, and this
@@ -45,9 +54,10 @@ private:
      *  empty, as we will have preallocated room for the pointers in fAlloc's
      *  block, and fEdgeList will point into that.
      */
-    SkEdge**    fEdgeList;
+    void**      fEdgeList;
 
     int         fShiftUp;
+    bool        fAnalyticAA;
 
 public:
     void addLine(const SkPoint pts[]);

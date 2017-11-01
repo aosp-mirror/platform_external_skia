@@ -153,38 +153,7 @@ T sk_atomic_exchange(T* ptr, T val, sk_memory_order mo) {
 // We use the default sequentially-consistent memory order to make things simple
 // and to match the practical reality of our old _sync and _win implementations.
 
-inline int32_t sk_atomic_inc(int32_t* ptr)            { return sk_atomic_fetch_add(ptr, +1); }
-inline int32_t sk_atomic_dec(int32_t* ptr)            { return sk_atomic_fetch_add(ptr, -1); }
-inline int32_t sk_atomic_add(int32_t* ptr, int32_t v) { return sk_atomic_fetch_add(ptr,  v); }
-
-inline int64_t sk_atomic_inc(int64_t* ptr) { return sk_atomic_fetch_add<int64_t>(ptr, +1); }
-
-inline bool sk_atomic_cas(int32_t* ptr, int32_t expected, int32_t desired) {
-    return sk_atomic_compare_exchange(ptr, &expected, desired);
-}
-
-inline void* sk_atomic_cas(void** ptr, void* expected, void* desired) {
-    (void)sk_atomic_compare_exchange(ptr, &expected, desired);
-    return expected;
-}
-
-inline int32_t sk_atomic_conditional_inc(int32_t* ptr) {
-    int32_t prev = sk_atomic_load(ptr);
-    do {
-        if (0 == prev) {
-            break;
-        }
-    } while(!sk_atomic_compare_exchange(ptr, &prev, prev+1));
-    return prev;
-}
-
-template <typename T>
-T sk_acquire_load(T* ptr) { return sk_atomic_load(ptr, sk_memory_order_acquire); }
-
-template <typename T>
-void sk_release_store(T* ptr, T val) { sk_atomic_store(ptr, val, sk_memory_order_release); }
-
-inline void sk_membar_acquire__after_atomic_dec() {}
-inline void sk_membar_acquire__after_atomic_conditional_inc() {}
+inline int32_t sk_atomic_inc(int32_t* ptr) { return sk_atomic_fetch_add(ptr, +1); }
+inline int32_t sk_atomic_dec(int32_t* ptr) { return sk_atomic_fetch_add(ptr, -1); }
 
 #endif//SkAtomics_DEFINED

@@ -9,6 +9,7 @@
 #define AndroidCodecBench_DEFINED
 
 #include "Benchmark.h"
+#include "SkAutoMalloc.h"
 #include "SkData.h"
 #include "SkImageInfo.h"
 #include "SkRefCnt.h"
@@ -30,7 +31,7 @@ protected:
 
 private:
     SkString                fName;
-    SkAutoTUnref<SkData>    fData;
+    sk_sp<SkData>           fData;
     const int               fSampleSize;
     SkImageInfo             fInfo;          // Set in onDelayedSetup.
     SkAutoMalloc            fPixelStorage;  // Set in onDelayedSetup.

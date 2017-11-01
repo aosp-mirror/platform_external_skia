@@ -8,53 +8,73 @@
 #ifndef SkImage_Gpu_DEFINED
 #define SkImage_Gpu_DEFINED
 
-#include "SkAtomics.h"
-#include "GrTexture.h"
+#include "GrClip.h"
+#include "GrContext.h"
 #include "GrGpuResourcePriv.h"
+#include "GrSurfaceProxyPriv.h"
+#include "GrTexture.h"
+#include "SkAtomics.h"
 #include "SkBitmap.h"
-#include "SkImage_Base.h"
+#include "SkGr.h"
 #include "SkImagePriv.h"
+#include "SkImage_Base.h"
 #include "SkSurface.h"
 
 class SkImage_Gpu : public SkImage_Base {
 public:
-    /**
-     *  An "image" can be a subset/window into a larger texture, so we explicit take the
-     *  width and height.
-     */
-    SkImage_Gpu(int w, int h, uint32_t uniqueID, SkAlphaType, GrTexture*, SkBudgeted);
+    SkImage_Gpu(GrContext*, uint32_t uniqueID, SkAlphaType, sk_sp<GrTextureProxy>,
+                sk_sp<SkColorSpace>, SkBudgeted);
     ~SkImage_Gpu() override;
 
-    void applyBudgetDecision() const {
-        GrTexture* tex = this->getTexture();
-        SkASSERT(tex);
-        if (SkBudgeted::kYes == fBudgeted) {
-            tex->resourcePriv().makeBudgeted();
-        } else {
-            tex->resourcePriv().makeUnbudgeted();
-        }
+    SkImageInfo onImageInfo() const override;
+    SkAlphaType onAlphaType() const override { return fAlphaType; }
+
+    bool getROPixels(SkBitmap*, SkColorSpace* dstColorSpace, CachingHint) const override;
+    sk_sp<SkImage> onMakeSubset(const SkIRect&) const override;
+
+    GrTextureProxy* peekProxy() const override {
+        return fProxy.get();
     }
+    GrTexture* peekTexture() const override {
+        if (!fProxy->instantiate(fContext->resourceProvider())) {
+            return nullptr;
+        }
 
-    bool getROPixels(SkBitmap*, CachingHint) const override;
-    GrTexture* asTextureRef(GrContext* ctx, const GrTextureParams& params) const override;
-    SkImage* onNewSubset(const SkIRect&) const override;
+        return fProxy->priv().peekTexture();
+    }
+    sk_sp<GrTextureProxy> asTextureProxyRef() const override {
+        return fProxy;
+    }
+    sk_sp<GrTextureProxy> asTextureProxyRef(GrContext*, const GrSamplerParams&, SkColorSpace*,
+                                            sk_sp<SkColorSpace>*,
+                                            SkScalar scaleAdjust[2]) const override;
 
-    GrTexture* peekTexture() const override { return fTexture; }
-    bool isOpaque() const override;
+    sk_sp<GrTextureProxy> refPinnedTextureProxy(uint32_t* uniqueID) const override {
+        *uniqueID = this->uniqueID();
+        return fProxy;
+    }
+    GrBackendObject onGetTextureHandle(bool flushPendingGrContextIO,
+                                       GrSurfaceOrigin* origin) const override;
+    GrTexture* onGetTexture() const override;
+
     bool onReadPixels(const SkImageInfo&, void* dstPixels, size_t dstRowBytes,
                       int srcX, int srcY, CachingHint) const override;
 
-    SkSurface* onNewSurface(const SkImageInfo& info) const override {
-        return SkSurface::NewRenderTarget(fTexture->getContext(), SkBudgeted::kNo, info);
-    }
+    GrContext* context() { return fContext; }
+    sk_sp<SkColorSpace> refColorSpace() { return fColorSpace; }
 
-    bool asBitmapForImageFilters(SkBitmap* bitmap) const override;
+    sk_sp<SkImage> onMakeColorSpace(sk_sp<SkColorSpace>, SkColorType,
+                                    SkTransferFunctionBehavior) const override;
+
+    bool onIsValid(GrContext*) const override;
 
 private:
-    SkAutoTUnref<GrTexture>     fTexture;
-    const SkAlphaType           fAlphaType;
-    const SkBudgeted            fBudgeted;
-    mutable SkAtomic<bool>      fAddedRasterVersionToCache;
+    GrContext*             fContext;
+    sk_sp<GrTextureProxy>  fProxy;
+    const SkAlphaType      fAlphaType;
+    const SkBudgeted       fBudgeted;
+    sk_sp<SkColorSpace>    fColorSpace;
+    mutable SkAtomic<bool> fAddedRasterVersionToCache;
 
 
     typedef SkImage_Base INHERITED;

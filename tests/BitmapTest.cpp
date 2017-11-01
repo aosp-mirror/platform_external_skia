@@ -7,7 +7,9 @@
 
 #include "SkBitmap.h"
 #include "SkMallocPixelRef.h"
+#include "SkRandom.h"
 #include "Test.h"
+#include "sk_tool_utils.h"
 
 static void test_peekpixels(skiatest::Reporter* reporter) {
     const SkImageInfo info = SkImageInfo::MakeN32Premul(10, 10);
@@ -43,7 +45,7 @@ static void test_bigalloc(skiatest::Reporter* reporter) {
     SkBitmap bm;
     REPORTER_ASSERT(reporter, !bm.tryAllocPixels(info));
 
-    SkPixelRef* pr = SkMallocPixelRef::NewAllocate(info, info.minRowBytes(), nullptr);
+    sk_sp<SkPixelRef> pr = SkMallocPixelRef::MakeAllocate(info, info.minRowBytes(), nullptr);
     REPORTER_ASSERT(reporter, !pr);
 }
 
@@ -136,12 +138,10 @@ DEF_TEST(Bitmap_getColor_Swizzle, r) {
     };
     for (SkColorType ct : colorTypes) {
         SkBitmap copy;
-        if (!source.copyTo(&copy, ct)) {
+        if (!sk_tool_utils::copy_to(&copy, ct, source)) {
             ERRORF(r, "SkBitmap::copy failed %d", (int)ct);
             continue;
         }
-        SkAutoLockPixels autoLockPixels1(copy);
-        SkAutoLockPixels autoLockPixels2(source);
         REPORTER_ASSERT(r, source.getColor(0, 0) == copy.getColor(0, 0));
     }
 }
@@ -166,3 +166,56 @@ DEF_TEST(Bitmap_eraseColor_Premul, r) {
     test_erasecolor_premul(r, kRGBA_8888_SkColorType, color, color);
     test_erasecolor_premul(r, kBGRA_8888_SkColorType, color, color);
 }
+
+// Test that SkBitmap::ComputeOpaque() is correct for various colortypes.
+DEF_TEST(Bitmap_compute_is_opaque, r) {
+    struct {
+        SkColorType fCT;
+        SkAlphaType fAT;
+    } types[] = {
+        { kGray_8_SkColorType,    kOpaque_SkAlphaType },
+        { kAlpha_8_SkColorType,   kPremul_SkAlphaType },
+        { kARGB_4444_SkColorType, kPremul_SkAlphaType },
+        { kRGB_565_SkColorType,   kOpaque_SkAlphaType },
+        { kBGRA_8888_SkColorType, kPremul_SkAlphaType },
+        { kRGBA_8888_SkColorType, kPremul_SkAlphaType },
+        { kRGBA_F16_SkColorType,  kPremul_SkAlphaType },
+    };
+    for (auto type : types) {
+        SkBitmap bm;
+        REPORTER_ASSERT(r, !SkBitmap::ComputeIsOpaque(bm));
+
+        bm.allocPixels(SkImageInfo::Make(13, 17, type.fCT, type.fAT));
+        bm.eraseColor(SkColorSetARGB(255, 10, 20, 30));
+        REPORTER_ASSERT(r, SkBitmap::ComputeIsOpaque(bm));
+
+        bm.eraseColor(SkColorSetARGB(128, 255, 255, 255));
+        bool isOpaque = SkBitmap::ComputeIsOpaque(bm);
+        bool shouldBeOpaque = (type.fAT == kOpaque_SkAlphaType);
+        REPORTER_ASSERT(r, isOpaque == shouldBeOpaque);
+    }
+}
+
+// Test that erase+getColor round trips with RGBA_F16 pixels.
+DEF_TEST(Bitmap_erase_f16_erase_getColor, r) {
+    SkRandom random;
+    SkPixmap pm;
+    SkBitmap bm;
+    bm.allocPixels(SkImageInfo::Make(1, 1, kRGBA_F16_SkColorType, kPremul_SkAlphaType));
+    REPORTER_ASSERT(r, bm.peekPixels(&pm));
+    for (unsigned i = 0; i < 0x100; ++i) {
+        // Test all possible values of blue component.
+        SkColor color1 = (SkColor)((random.nextU() & 0xFFFFFF00) | i);
+        // Test all possible values of alpha component.
+        SkColor color2 = (SkColor)((random.nextU() & 0x00FFFFFF) | (i << 24));
+        for (SkColor color : {color1, color2}) {
+            pm.erase(color);
+            if (SkColorGetA(color) != 0) {
+                REPORTER_ASSERT(r, color == pm.getColor(0, 0));
+            } else {
+                REPORTER_ASSERT(r, 0 == SkColorGetA(pm.getColor(0, 0)));
+            }
+        }
+    }
+}
+

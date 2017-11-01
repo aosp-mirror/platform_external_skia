@@ -7,13 +7,14 @@
 #include "Benchmark.h"
 #include "SkCanvas.h"
 #include "SkChecksum.h"
+#include "SkOpts.h"
 #include "SkMD5.h"
 #include "SkRandom.h"
 #include "SkTemplates.h"
 
 enum ChecksumType {
     kMD5_ChecksumType,
-    kMurmur3_ChecksumType,
+    kHash_ChecksumType,
 };
 
 class ComputeChecksumBench : public Benchmark {
@@ -40,7 +41,7 @@ protected:
     const char* onGetName() override {
         switch (fType) {
             case kMD5_ChecksumType: return "compute_md5";
-            case kMurmur3_ChecksumType: return "compute_murmur3";
+            case kHash_ChecksumType: return "compute_hash";
 
             default: SK_ABORT("Invalid Type"); return "";
         }
@@ -51,14 +52,14 @@ protected:
             case kMD5_ChecksumType: {
                 for (int i = 0; i < loops; i++) {
                     SkMD5 md5;
-                    md5.update(reinterpret_cast<uint8_t*>(fData), sizeof(fData));
+                    md5.write(fData, sizeof(fData));
                     SkMD5::Digest digest;
                     md5.finish(digest);
                 }
             } break;
-            case kMurmur3_ChecksumType: {
+            case kHash_ChecksumType: {
                 for (int i = 0; i < loops; i++) {
-                    volatile uint32_t result = SkChecksum::Murmur3(fData, sizeof(fData));
+                    volatile uint32_t result = SkOpts::hash(fData, sizeof(fData));
                     sk_ignore_unused_variable(result);
                 }
             }break;
@@ -73,4 +74,4 @@ private:
 ///////////////////////////////////////////////////////////////////////////////
 
 DEF_BENCH( return new ComputeChecksumBench(kMD5_ChecksumType); )
-DEF_BENCH( return new ComputeChecksumBench(kMurmur3_ChecksumType); )
+DEF_BENCH( return new ComputeChecksumBench(kHash_ChecksumType); )

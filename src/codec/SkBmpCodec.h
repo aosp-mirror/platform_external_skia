@@ -8,6 +8,7 @@
 #define SkBmpCodec_DEFINED
 
 #include "SkCodec.h"
+#include "SkColorSpace.h"
 #include "SkColorTable.h"
 #include "SkImageInfo.h"
 #include "SkStream.h"
@@ -37,10 +38,10 @@ public:
 
 protected:
 
-    SkBmpCodec(const SkImageInfo& info, SkStream* stream, uint16_t bitsPerPixel,
-            SkCodec::SkScanlineOrder rowOrder);
+    SkBmpCodec(int width, int height, const SkEncodedInfo& info, SkStream* stream,
+            uint16_t bitsPerPixel, SkCodec::SkScanlineOrder rowOrder);
 
-    SkEncodedFormat onGetEncodedFormat() const override { return kBMP_SkEncodedFormat; }
+    SkEncodedImageFormat onGetEncodedFormat() const override { return SkEncodedImageFormat::kBMP; }
 
     /*
      * Read enough of the stream to initialize the SkBmpCodec. Returns a bool
@@ -98,9 +99,22 @@ protected:
      *                        will be set to the number of colors in the
      *                        color table.
      */
-    virtual SkCodec::Result prepareToDecode(const SkImageInfo& dstInfo,
+    virtual SkCodec::Result onPrepareToDecode(const SkImageInfo& dstInfo,
             const SkCodec::Options& options, SkPMColor inputColorPtr[],
             int* inputColorCount) = 0;
+    SkCodec::Result prepareToDecode(const SkImageInfo& dstInfo,
+            const SkCodec::Options& options, SkPMColor inputColorPtr[],
+            int* inputColorCount);
+
+    uint32_t* xformBuffer() const { return fXformBuffer.get(); }
+    void resetXformBuffer(int count) { fXformBuffer.reset(new uint32_t[count]); }
+
+    /*
+     * BMPs are typically encoded as BGRA/BGR so this is a more efficient choice
+     * than RGBA.
+     */
+    static const SkColorType kXformSrcColorType = kBGRA_8888_SkColorType;
+    static const auto kXformSrcColorFormat = SkColorSpaceXform::kBGRA_8888_ColorFormat;
 
 private:
 
@@ -137,9 +151,10 @@ private:
 
     bool onSkipScanlines(int count) override;
 
-    const uint16_t          fBitsPerPixel;
-    const SkScanlineOrder   fRowOrder;
-    const size_t            fSrcRowBytes;
+    const uint16_t              fBitsPerPixel;
+    const SkScanlineOrder       fRowOrder;
+    const size_t                fSrcRowBytes;
+    std::unique_ptr<uint32_t[]> fXformBuffer;
 
     typedef SkCodec INHERITED;
 };

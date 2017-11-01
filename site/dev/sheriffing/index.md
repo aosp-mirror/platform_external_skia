@@ -29,12 +29,34 @@ Below is a brief summary of what the sheriff does for each task:
 
 <a name="skia_tree"></a>
 ### Skia tree
-* Understand the [buildbots infrastructure](https://skia.org/dev/testing/buildbot).
+* Understand the [testing infrastructure](https://skia.org/dev/testing/automated_testing).
 * Start watching the [status page](https://status.skia.org) for bot breakages.
-* Track down people responsible for breakages and revert broken changes if there is no easy fix.
+* Track down people responsible for breakages and revert broken changes if there is no easy fix. You can use [blamer](#blamer) to help track down such changes.
 * Close and open the [tree](http://skia-tree-status.appspot.com).
 * Keep the builder comments on the [status page](https://status.skia.org) up to date.
 * File or follow up with [BreakingTheBuildbots bugs](https://bug.skia.org/?q=label:BreakingTheBuildbots). See the tip on [when to file bugs](#when_to_file_bugs).
+
+<a name="blamer"></a>
+### Blamer
+If you have Go installed, a command-line tool is available to search through
+git history and do text searches on the full patch text and the commit
+message. To install blamer run:
+
+    go get go.skia.org/infra/blamer/go/blamer
+
+Then run blamer from within a Skia checkout. For example, to search if the
+string "SkDevice" has appeared in the last 10 commits:
+
+    $ $GOPATH/bin/blamer --match SkDevice --num 10
+
+    commit ea70c4bb22394c8dcc29a369d3422a2b8f3b3e80
+    Author: robertphillips <robertphillips@google.com>
+    Date:   Wed Jul 20 08:54:31 2016 -0700
+
+        Remove SkDevice::accessRenderTarget virtual
+        GOLD_TRYBOT_URL= https://gold.skia.org/search?issue=2167723002
+
+        Review-Url: https://codereview.chromium.org/2167723002
 
 <a name="deps_rolls"></a>
 ### DEPS rolls
@@ -92,13 +114,13 @@ Look at all existing [BreakingTheBuildbots bugs](https://bug.skia.org/?q=label:B
 ### How to submit when the tree is closed
 
 * Submit manually using the "git cl land" with the --bypass-hooks flag.
-* Add "NOTREECHECKS=true" to your CL description and use the CQ as usual.
+* Add "No-Tree-Checks: true" to your CL description and use the CQ as usual.
 
 
 <a name="tree_closers"></a>
 ### Compile bot failures automatically close the tree
 
-A failure of the build steps in all compile bots automatically closes the tree. Sheriffs will have to manually reopen the tree manually when they deem the problem fixed.
+A failure of the build steps in all compile bots automatically closes the tree. Sheriffs will have to manually reopen the tree when they deem the problem fixed.
 
 Note: The tree is not closed automatically if the last run of the failed compile builder had the same failing step. The tree is also not closed if the tree was automatically closed less than 10 mins ago. If the tree is already closed then no action is taken.
 
@@ -127,7 +149,7 @@ If a Skia CL changes layout tests, but the new images look good, the tests need 
   * Description:
       * DEPS roll #,
       * Helpful message about what went wrong (e.g., “Changes to how lighting is scaled in Skia r#### changed the following images:”)
-      * Layout tests effected
+      * Layout tests affected
       * You should copy the list of affected from stdio of the failing bot
   * Status: Assigned
   * Owner: yourself

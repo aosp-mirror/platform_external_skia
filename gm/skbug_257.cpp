@@ -6,6 +6,7 @@
  */
 
 #include "gm.h"
+#include "sk_tool_utils.h"
 #include "SkImage.h"
 #include "SkRRect.h"
 
@@ -21,10 +22,9 @@ static void rotated_checkerboard_shader(SkPaint* paint,
     SkMatrix matrix;
     matrix.setScale(0.75f, 0.75f);
     matrix.preRotate(30.0f);
-    SkAutoTUnref<SkShader> shader(
-            SkShader::CreateBitmapShader(bm, SkShader::kRepeat_TileMode,
-                                         SkShader::kRepeat_TileMode, &matrix));
-    paint->setShader(shader);
+    paint->setShader(
+            SkShader::MakeBitmapShader(bm, SkShader::kRepeat_TileMode, SkShader::kRepeat_TileMode,
+                                       &matrix));
 }
 
 static void exercise_draw_pos_text(SkCanvas* canvas,
@@ -66,7 +66,7 @@ static void test_text(SkCanvas* canvas, SkScalar size,
     sk_tool_utils::set_portable_typeface(&type);
     type.setColor(color);
     const char text[] = "HELLO WORLD";
-    canvas->drawText(text, strlen(text), 32, size / 2 + Y, type);
+    canvas->drawString(text, 32, size / 2 + Y, type);
     SkScalar lineSpacing = type.getFontSpacing();
     exercise_draw_pos_text(canvas, text, 32, size / 2 + Y + lineSpacing, type);
     exercise_draw_pos_text_h(canvas, text, 32,

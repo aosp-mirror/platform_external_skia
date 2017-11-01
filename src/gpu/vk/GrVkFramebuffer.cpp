@@ -15,22 +15,18 @@ GrVkFramebuffer* GrVkFramebuffer::Create(GrVkGpu* gpu,
                                          int width, int height,
                                          const GrVkRenderPass* renderPass,
                                          const GrVkImageView* colorAttachment,
-                                         const GrVkImageView* resolveAttachment,
                                          const GrVkImageView* stencilAttachment) {
     // At the very least we need a renderPass and a colorAttachment
     SkASSERT(renderPass);
     SkASSERT(colorAttachment);
-    
+
     VkImageView attachments[3];
     attachments[0] = colorAttachment->imageView();
     int numAttachments = 1;
-    if (resolveAttachment) {
-        attachments[numAttachments++] = resolveAttachment->imageView();
-    }
     if (stencilAttachment) {
         attachments[numAttachments++] = stencilAttachment->imageView();
     }
-    
+
     VkFramebufferCreateInfo createInfo;
     memset(&createInfo, 0, sizeof(VkFramebufferCreateInfo));
     createInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
@@ -42,7 +38,7 @@ GrVkFramebuffer* GrVkFramebuffer::Create(GrVkGpu* gpu,
     createInfo.width = width;
     createInfo.height = height;
     createInfo.layers = 1;
-    
+
     VkFramebuffer framebuffer;
     VkResult err = GR_VK_CALL(gpu->vkInterface(), CreateFramebuffer(gpu->device(),
                                                                     &createInfo,
@@ -59,5 +55,3 @@ void GrVkFramebuffer::freeGPUData(const GrVkGpu* gpu) const {
     SkASSERT(fFramebuffer);
     GR_VK_CALL(gpu->vkInterface(), DestroyFramebuffer(gpu->device(), fFramebuffer, nullptr));
 }
-
-

@@ -10,9 +10,11 @@
 
 #include "GrColor.h"
 #include "GrTypes.h"
+#include "vk/GrVkDefines.h"
 #include "vk/GrVkInterface.h"
+#include "ir/SkSLProgram.h"
 
-#include "vulkan/vulkan.h"
+class GrVkGpu;
 
 // makes a Vk call on the interface
 #define GR_VK_CALL(IFACE, X) (IFACE)->fFunctions.f##X;
@@ -30,7 +32,25 @@
  */
 bool GrPixelConfigToVkFormat(GrPixelConfig config, VkFormat* format);
 
+/**
+* Returns the GrPixelConfig for the given vulkan texture format
+*/
+GrPixelConfig GrVkFormatToPixelConfig(VkFormat format);
+
+/**
+ * Returns true if the given vulkan texture format is sRGB encoded.
+ * Also provides the non-sRGB version, if there is one.
+ */
+bool GrVkFormatIsSRGB(VkFormat format, VkFormat* linearFormat);
+
 bool GrSampleCountToVkSampleCount(uint32_t samples, VkSampleCountFlagBits* vkSamples);
 
-#endif
+bool GrCompileVkShaderModule(const GrVkGpu* gpu,
+                             const char* shaderString,
+                             VkShaderStageFlagBits stage,
+                             VkShaderModule* shaderModule,
+                             VkPipelineShaderStageCreateInfo* stageInfo,
+                             const SkSL::Program::Settings& settings,
+                             SkSL::Program::Inputs* outInputs);
 
+#endif

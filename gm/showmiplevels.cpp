@@ -6,17 +6,16 @@
  */
 
 #include "gm.h"
+#include "sk_tool_utils.h"
 
 #include "Resources.h"
 #include "SkBitmapScaler.h"
 #include "SkGradientShader.h"
 #include "SkTypeface.h"
-#include "SkImageDecoder.h"
 #include "SkStream.h"
 #include "SkPaint.h"
 #include "SkMipMap.h"
 #include "Resources.h"
-#include "sk_tool_utils.h"
 
 #define SHOW_MIP_COLOR  0xFF000000
 
@@ -94,7 +93,6 @@ public:
 
     static void apply_gamma(const SkBitmap& bm) {
         return; // below is our experiment for sRGB correction
-        bm.lockPixels();
         for (int y = 0; y < bm.height(); ++y) {
             for (int x = 0; x < bm.width(); ++x) {
                 SkPMColor c = *bm.getAddr32(x, y);
@@ -106,12 +104,7 @@ public:
         }
     }
 
-    ShowMipLevels(int N) : fN(N) {
-        fBM[0] = sk_tool_utils::create_checkerboard_bitmap(N, N, SK_ColorBLACK, SK_ColorWHITE, 2);
-        fBM[1] = make_bitmap(N, N);
-        fBM[2] = make_bitmap2(N, N);
-        fBM[3] = make_bitmap3(N, N);
-    }
+    ShowMipLevels(int N) : fN(N) { }
 
 protected:
 
@@ -127,7 +120,7 @@ protected:
 
     static void DrawAndFrame(SkCanvas* canvas, const SkBitmap& orig, SkScalar x, SkScalar y) {
         SkBitmap bm;
-        orig.copyTo(&bm);
+        sk_tool_utils::copy_to(&bm, orig.colorType(), orig);
         apply_gamma(bm);
 
         canvas->drawBitmap(bm, x, y, nullptr);
@@ -142,10 +135,10 @@ protected:
         SkScalar y = 4;
 
         SkPixmap prevPM;
-        baseBM.lockPixels();
         baseBM.peekPixels(&prevPM);
 
-        SkAutoTUnref<SkMipMap> mm(SkMipMap::Build(baseBM, nullptr));
+        SkDestinationSurfaceColorMode colorMode = SkDestinationSurfaceColorMode::kLegacy;
+        sk_sp<SkMipMap> mm(SkMipMap::Build(baseBM, colorMode, nullptr));
 
         int index = 0;
         SkMipMap::Level level;
@@ -186,16 +179,22 @@ protected:
         };
 
         SkPixmap basePM;
-        orig.lockPixels();
         orig.peekPixels(&basePM);
         for (auto method : methods) {
             canvas->translate(orig.width()/2 + 8.0f, 0);
-            drawLevels(canvas, orig, [basePM, method](const SkPixmap& prev, const SkPixmap& curr) {
+            drawLevels(canvas, orig, [method](const SkPixmap& prev, const SkPixmap& curr) {
                 SkBitmap bm;
                 SkBitmapScaler::Resize(&bm, prev, method, curr.width(), curr.height());
                 return bm;
             });
         }
+    }
+
+    void onOnceBeforeDraw() override {
+        fBM[0] = sk_tool_utils::create_checkerboard_bitmap(fN, fN, SK_ColorBLACK, SK_ColorWHITE, 2);
+        fBM[1] = make_bitmap(fN, fN);
+        fBM[2] = make_bitmap2(fN, fN);
+        fBM[3] = make_bitmap3(fN, fN);
     }
 
     void onDraw(SkCanvas* canvas) override {
@@ -205,7 +204,7 @@ protected:
             canvas->translate(0, bm.height() * 0.85f);
         }
     }
-    
+
 private:
     typedef skiagm::GM INHERITED;
 };
@@ -213,6 +212,21 @@ DEF_GM( return new ShowMipLevels(255); )
 DEF_GM( return new ShowMipLevels(256); )
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+
+void copy_to(SkBitmap* dst, SkColorType dstColorType, const SkBitmap& src) {
+    if (kGray_8_SkColorType == dstColorType) {
+        return sk_tool_utils::copy_to_g8(dst, src);
+    }
+
+    const SkBitmap* srcPtr = &src;
+    SkBitmap tmp(src);
+    if (kRGB_565_SkColorType == dstColorType) {
+        tmp.setAlphaType(kOpaque_SkAlphaType);
+        srcPtr = &tmp;
+    }
+
+    sk_tool_utils::copy_to(dst, dstColorType, *srcPtr);
+}
 
 /**
  *  Show mip levels that were built, for all supported colortypes
@@ -222,12 +236,7 @@ class ShowMipLevels2 : public skiagm::GM {
     SkBitmap  fBM[4];
 
 public:
-    ShowMipLevels2(int w, int h) : fW(w), fH(h) {
-        fBM[0] = sk_tool_utils::create_checkerboard_bitmap(w, h, SHOW_MIP_COLOR, SK_ColorWHITE, 2);
-        fBM[1] = make_bitmap(w, h);
-        fBM[2] = make_bitmap2(w, h);
-        fBM[3] = make_bitmap3(w, h);
-    }
+    ShowMipLevels2(int w, int h) : fW(w), fH(h) { }
 
 protected:
 
@@ -253,7 +262,8 @@ protected:
         SkScalar x = 4;
         SkScalar y = 4;
 
-        SkAutoTUnref<SkMipMap> mm(SkMipMap::Build(baseBM, nullptr));
+        SkDestinationSurfaceColorMode colorMode = SkDestinationSurfaceColorMode::kLegacy;
+        sk_sp<SkMipMap> mm(SkMipMap::Build(baseBM, colorMode, nullptr));
 
         int index = 0;
         SkMipMap::Level level;
@@ -285,10 +295,18 @@ protected:
 
         for (auto ctype : ctypes) {
             SkBitmap bm;
-            orig.copyTo(&bm, ctype);
+            copy_to(&bm, ctype, orig);
             drawLevels(canvas, bm);
             canvas->translate(orig.width()/2 + 8.0f, 0);
         }
+    }
+
+    void onOnceBeforeDraw() override {
+        fBM[0] = sk_tool_utils::create_checkerboard_bitmap(fW, fH,
+                                                           SHOW_MIP_COLOR, SK_ColorWHITE, 2);
+        fBM[1] = make_bitmap(fW, fH);
+        fBM[2] = make_bitmap2(fW, fH);
+        fBM[3] = make_bitmap3(fW, fH);
     }
 
     void onDraw(SkCanvas* canvas) override {
@@ -301,7 +319,7 @@ protected:
             canvas->translate(0, SkScalarRoundToScalar(bm.height() * 0.85f));
         }
     }
-    
+
 private:
     typedef skiagm::GM INHERITED;
 };

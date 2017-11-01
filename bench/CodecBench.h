@@ -9,6 +9,7 @@
 #define CodecBench_DEFINED
 
 #include "Benchmark.h"
+#include "SkAutoMalloc.h"
 #include "SkData.h"
 #include "SkImageInfo.h"
 #include "SkRefCnt.h"
@@ -32,7 +33,7 @@ private:
     SkString                fName;
     const SkColorType       fColorType;
     const SkAlphaType       fAlphaType;
-    SkAutoTUnref<SkData>    fData;
+    sk_sp<SkData>           fData;
     SkImageInfo             fInfo;          // Set in onDelayedSetup.
     SkAutoMalloc            fPixelStorage;
     typedef Benchmark INHERITED;

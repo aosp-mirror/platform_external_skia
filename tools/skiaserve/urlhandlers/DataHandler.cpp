@@ -25,11 +25,11 @@ int DataHandler::handle(Request* request, MHD_Connection* connection,
     SkTArray<SkString> commands;
     SkStrSplit(url, "/", &commands);
 
-    if (!request->fPicture.get() || commands.count() != 2) {
+    if (!request->hasPicture() || commands.count() != 2) {
         return MHD_NO;
     }
 
-    SkAutoTUnref<UrlDataManager::UrlData> urlData(
+    sk_sp<UrlDataManager::UrlData> urlData(
         SkRef(request->fUrlDataManager.getDataFromUrl(SkString(url))));
 
     if (urlData) {
@@ -37,4 +37,3 @@ int DataHandler::handle(Request* request, MHD_Connection* connection,
     }
     return MHD_NO;
 }
-

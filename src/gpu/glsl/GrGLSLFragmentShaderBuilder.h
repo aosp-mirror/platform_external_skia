@@ -8,9 +8,9 @@
 #ifndef GrGLSLFragmentShaderBuilder_DEFINED
 #define GrGLSLFragmentShaderBuilder_DEFINED
 
+#include "GrBlend.h"
 #include "GrGLSLShaderBuilder.h"
-
-#include "glsl/GrGLSLProcessorTypes.h"
+#include "GrProcessor.h"
 
 class GrRenderTarget;
 class GrGLSLVarying;
@@ -29,8 +29,7 @@ public:
      * if code is added that uses one of these features without calling enableFeature()
      */
     enum GLSLFeature {
-        kStandardDerivatives_GLSLFeature = kLastGLSLPrivateFeature + 1,
-        kPixelLocalStorage_GLSLFeature
+        kMultisampleInterpolation_GLSLFeature
     };
 
     /**
@@ -41,15 +40,11 @@ public:
 
     /**
      * This returns a variable name to access the 2D, perspective correct version of the coords in
-     * the fragment shader. If the coordinates at index are 3-dimensional, it immediately emits a
-     * perspective divide into the fragment shader (xy / z) to convert them to 2D.
+     * the fragment shader. The passed in coordinates must either be of type kVec2f or kVec3f. If
+     * the coordinates are 3-dimensional, it a perspective divide into is emitted into the
+     * fragment shader (xy / z) to convert them to 2D.
      */
-    virtual SkString ensureFSCoords2D(const GrGLSLTransformedCoordsArray& coords, int index) = 0;
-
-
-    /** Returns a variable name that represents the position of the fragment in the FS. The position
-        is in device space (e.g. 0,0 is the top left and pixel centers are at half-integers). */
-    virtual const char* fragmentPosition() = 0;
+    virtual SkString ensureCoords2D(const GrShaderVar&) = 0;
 
     // TODO: remove this method.
     void declAppendf(const char* fmt, ...);
@@ -66,6 +61,23 @@ public:
     /** Appease the compiler; the derived class initializes GrGLSLFragmentBuilder. */
     GrGLSLFPFragmentBuilder() : GrGLSLFragmentBuilder(nullptr) {}
 
+    enum Coordinates {
+        kSkiaDevice_Coordinates,
+        kGLSLWindow_Coordinates,
+
+        kLast_Coordinates = kGLSLWindow_Coordinates
+    };
+
+    /**
+     * Appends the offset from the center of the pixel to a specified sample.
+     *
+     * @param sampleIdx      GLSL expression of the sample index.
+     * @param Coordinates    Coordinate space in which to emit the offset.
+     *
+     * A processor must call setWillUseSampleLocations in its constructor before using this method.
+     */
+    virtual void appendOffsetToSample(const char* sampleIdx, Coordinates) = 0;
+
     /**
      * Subtracts sample coverage from the fragment. Any sample whose corresponding bit is not found
      * in the mask will not be written out to the framebuffer.
@@ -76,6 +88,13 @@ public:
      * Requires GLSL support for sample variables.
      */
     virtual void maskSampleCoverage(const char* mask, bool invert = false) = 0;
+
+    /**
+     * Overrides the default precision for the entire fragment program. Processors that require
+     * high precision input (eg from incoming texture samples) may use this. For calculations that
+     * are limited to a single processor's code, it is better to annotate individual declarations.
+     */
+    virtual void elevateDefaultPrecision(GrSLPrecision) = 0;
 
     /**
      * Fragment procs with child procs should call these functions before/after calling emitCode
@@ -136,24 +155,21 @@ public:
  */
 class GrGLSLFragmentShaderBuilder : public GrGLSLPPFragmentBuilder, public GrGLSLXPFragmentBuilder {
 public:
-    typedef uint8_t FragPosKey;
+   /** Returns a nonzero key for a surface's origin. This should only be called if a processor will
+       use the fragment position and/or sample locations. */
+    static uint8_t KeyForSurfaceOrigin(GrSurfaceOrigin);
 
-    /** Returns a key for reading the fragment location. This should only be called if there is an
-       effect that will requires the fragment position. If the fragment position is not required,
-       the key is 0. */
-    static FragPosKey KeyForFragmentPosition(const GrRenderTarget* dst);
-
-    GrGLSLFragmentShaderBuilder(GrGLSLProgramBuilder* program, uint8_t fragPosKey);
+    GrGLSLFragmentShaderBuilder(GrGLSLProgramBuilder* program);
 
     // Shared GrGLSLFragmentBuilder interface.
     bool enableFeature(GLSLFeature) override;
-    virtual SkString ensureFSCoords2D(const GrGLSLTransformedCoordsArray& coords,
-                                      int index) override;
-    const char* fragmentPosition() override;
+    virtual SkString ensureCoords2D(const GrShaderVar&) override;
 
     // GrGLSLFPFragmentBuilder interface.
+    void appendOffsetToSample(const char* sampleIdx, Coordinates) override;
     void maskSampleCoverage(const char* mask, bool invert = false) override;
     void overrideSampleCoverage(const char* mask) override;
+    void elevateDefaultPrecision(GrSLPrecision) override;
     const SkString& getMangleString() const override { return fMangleString; }
     void onBeforeChildProcEmitCode() override;
     void onAfterChildProcEmitCode() override;
@@ -171,33 +187,26 @@ private:
     const char* getPrimaryColorOutputName() const;
     const char* getSecondaryColorOutputName() const;
 
+#ifdef SK_DEBUG
     // As GLSLProcessors emit code, there are some conditions we need to verify.  We use the below
     // state to track this.  The reset call is called per processor emitted.
+    GrProcessor::RequiredFeatures usedProcessorFeatures() const { return fUsedProcessorFeatures; }
     bool hasReadDstColor() const { return fHasReadDstColor; }
-    bool hasReadFragmentPosition() const { return fHasReadFragmentPosition; }
-    void reset() {
+    void resetVerification() {
+        fUsedProcessorFeatures = GrProcessor::kNone_RequiredFeatures;
         fHasReadDstColor = false;
-        fHasReadFragmentPosition = false;
     }
+#endif
 
-    static const char* DeclaredColorOutputName() { return "fsColorOut"; }
+    static const char* DeclaredColorOutputName() { return "sk_FragColor"; }
     static const char* DeclaredSecondaryColorOutputName() { return "fsSecondaryColorOut"; }
 
-    /*
-     * An internal call for GrGLProgramBuilder to use to add varyings to the vertex shader
-     */
-    void addVarying(GrGLSLVarying*, GrSLPrecision);
+    GrSurfaceOrigin getSurfaceOrigin() const;
 
     void onFinalize() override;
+    void defineSampleOffsetArray(const char* name, const SkMatrix&);
 
-    // Interpretation of FragPosKey when generating code
-    enum {
-        kNoFragPosRead_FragPosKey           = 0,  // The fragment positition will not be needed.
-        kTopLeftFragPosRead_FragPosKey      = 0x1,// Read frag pos relative to top-left.
-        kBottomLeftFragPosRead_FragPosKey   = 0x2,// Read frag pos relative to bottom-left.
-    };
-
-    static const char* kDstTextureColorName;
+    static const char* kDstColorName;
 
     /*
      * State that tracks which child proc in the proc tree is currently emitting code.  This is
@@ -219,17 +228,20 @@ private:
      */
     SkString fMangleString;
 
-    bool fSetupFragPosition;
-    bool fTopLeftFragPosRead;
-    bool fHasCustomColorOutput;
-    int  fCustomColorOutputIndex;
-    bool fHasSecondaryOutput;
-    bool fHasInitializedSampleMask;
+    bool          fSetupFragPosition;
+    bool          fHasCustomColorOutput;
+    int           fCustomColorOutputIndex;
+    bool          fHasSecondaryOutput;
+    uint8_t       fUsedSampleOffsetArrays;
+    bool          fHasInitializedSampleMask;
+    GrSLPrecision fDefaultPrecision;
 
+#ifdef SK_DEBUG
     // some state to verify shaders and effects are consistent, this is reset between effects by
     // the program creator
+    GrProcessor::RequiredFeatures fUsedProcessorFeatures;
     bool fHasReadDstColor;
-    bool fHasReadFragmentPosition;
+#endif
 
     friend class GrGLSLProgramBuilder;
     friend class GrGLProgramBuilder;

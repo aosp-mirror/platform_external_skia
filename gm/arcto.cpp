@@ -187,3 +187,42 @@ DEF_SIMPLE_GM(parsedpaths, canvas, kParsePathTestDimension, kParsePathTestDimens
     sk_fclose(file);
 #endif
 }
+
+DEF_SIMPLE_GM(bug593049, canvas, 300, 300) {
+    canvas->translate(111, 0);
+
+    SkPath p;
+    p.moveTo(-43.44464063610148f, 79.43535936389853f);
+    const SkScalar yOffset = 122.88f;
+    const SkScalar radius = 61.44f;
+    SkRect oval = SkRect::MakeXYWH(-radius, yOffset - radius, 2 * radius, 2 * radius);
+    p.arcTo(oval, 1.25f * 180, .5f * 180, false);
+
+    SkPaint paint;
+    paint.setStyle(SkPaint::kStroke_Style);
+    paint.setStrokeCap(SkPaint::kRound_Cap);
+    paint.setStrokeWidth(15.36f);
+
+    canvas->drawPath(p, paint);
+}
+
+#include "SkDashPathEffect.h"
+#include "SkPathMeasure.h"
+
+DEF_SIMPLE_GM(bug583299, canvas, 300, 300) {
+  const char* d="M60,60 A50,50 0 0 0 160,60 A50,50 0 0 0 60,60z";
+  SkPaint p;
+  p.setStyle(SkPaint::kStroke_Style);
+  p.setStrokeWidth(100);
+  p.setAntiAlias(true);
+  p.setColor(0xFF008200);
+  p.setStrokeCap(SkPaint::kSquare_Cap);
+  SkPath path;
+  SkParsePath::FromSVGString(d, &path);
+  SkPathMeasure meas(path, false);
+  SkScalar length = meas.getLength();
+  SkScalar intervals[] = {0, length };
+  int intervalCount = (int) SK_ARRAY_COUNT(intervals);
+  p.setPathEffect(SkDashPathEffect::Make(intervals, intervalCount, 0));
+  canvas->drawPath(path, p);
+}

@@ -53,12 +53,9 @@ static void test_Nf(skiatest::Reporter* r) {
     SkNx<N,float> fours(4);
 
     assert_eq(fours.sqrt(), 2,2,2,2);
-    assert_nearly_eq(0.001f, fours.rsqrt0(), 0.5, 0.5, 0.5, 0.5);
-    assert_nearly_eq(0.001f, fours.rsqrt1(), 0.5, 0.5, 0.5, 0.5);
-    assert_nearly_eq(0.001f, fours.rsqrt2(), 0.5, 0.5, 0.5, 0.5);
+    assert_nearly_eq(0.001f, fours.rsqrt(), 0.5, 0.5, 0.5, 0.5);
 
-    assert_eq(               fours.      invert(), 0.25, 0.25, 0.25, 0.25);
-    assert_nearly_eq(0.001f, fours.approxInvert(), 0.25, 0.25, 0.25, 0.25);
+    assert_nearly_eq(0.001f, fours.invert(), 0.25, 0.25, 0.25, 0.25);
 
     assert_eq(SkNx<N,float>::Min(a, fours), 3, 4, 4, 4);
     assert_eq(SkNx<N,float>::Max(a, fours), 4, 4, 5, 6);
@@ -290,4 +287,55 @@ DEF_TEST(SkNx_u16_float, r) {
         u4_1.store(d16);
         REPORTER_ASSERT(r, !memcmp(s16, d16, sizeof(s16)));
     }
+}
+
+// The SSE2 implementation of SkNx_cast<uint16_t>(Sk4i) is non-trivial, so worth a test.
+DEF_TEST(SkNx_int_u16, r) {
+    // These are pretty hard to get wrong.
+    for (int i = 0; i <= 0x7fff; i++) {
+        uint16_t expected = (uint16_t)i;
+        uint16_t actual = SkNx_cast<uint16_t>(Sk4i(i))[0];
+
+        REPORTER_ASSERT(r, expected == actual);
+    }
+
+    // A naive implementation with _mm_packs_epi32 would succeed up to 0x7fff but fail here:
+    for (int i = 0x8000; (1) && i <= 0xffff; i++) {
+        uint16_t expected = (uint16_t)i;
+        uint16_t actual = SkNx_cast<uint16_t>(Sk4i(i))[0];
+
+        REPORTER_ASSERT(r, expected == actual);
+    }
+}
+
+DEF_TEST(SkNx_4fLoad4Store4, r) {
+    float src[] = {
+         0.0f,  1.0f,  2.0f,  3.0f,
+         4.0f,  5.0f,  6.0f,  7.0f,
+         8.0f,  9.0f, 10.0f, 11.0f,
+        12.0f, 13.0f, 14.0f, 15.0f
+    };
+
+    Sk4f a, b, c, d;
+    Sk4f::Load4(src, &a, &b, &c, &d);
+    REPORTER_ASSERT(r,  0.0f == a[0]);
+    REPORTER_ASSERT(r,  4.0f == a[1]);
+    REPORTER_ASSERT(r,  8.0f == a[2]);
+    REPORTER_ASSERT(r, 12.0f == a[3]);
+    REPORTER_ASSERT(r,  1.0f == b[0]);
+    REPORTER_ASSERT(r,  5.0f == b[1]);
+    REPORTER_ASSERT(r,  9.0f == b[2]);
+    REPORTER_ASSERT(r, 13.0f == b[3]);
+    REPORTER_ASSERT(r,  2.0f == c[0]);
+    REPORTER_ASSERT(r,  6.0f == c[1]);
+    REPORTER_ASSERT(r, 10.0f == c[2]);
+    REPORTER_ASSERT(r, 14.0f == c[3]);
+    REPORTER_ASSERT(r,  3.0f == d[0]);
+    REPORTER_ASSERT(r,  7.0f == d[1]);
+    REPORTER_ASSERT(r, 11.0f == d[2]);
+    REPORTER_ASSERT(r, 15.0f == d[3]);
+
+    float dst[16];
+    Sk4f::Store4(dst, a, b, c, d);
+    REPORTER_ASSERT(r, 0 == memcmp(dst, src, 16 * sizeof(float)));
 }

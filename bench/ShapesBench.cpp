@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2016 Google Inc.
  *
@@ -249,6 +248,9 @@ private:
     typedef Benchmark INHERITED;
 };
 
+#if ENABLE_COMMAND_LINE_SHAPES_BENCH
+DEF_BENCH(return new ShapesBench;)
+#else
 // Small primitives (CPU bound, in theory):
 DEF_BENCH(return new ShapesBench(ShapesBench::kRect_ShapesType, ShapesBench::kNone_ShapesType,
                                  10000, SkISize::Make(32, 32), false);)
@@ -283,7 +285,4 @@ DEF_BENCH(return new ShapesBench(ShapesBench::kRect_ShapesType, ShapesBench::kRe
                                  50, SkISize::Make(500, 500), false);)
 DEF_BENCH(return new ShapesBench(ShapesBench::kRRect_ShapesType, ShapesBench::kRRect_ShapesType,
                                  50, SkISize::Make(500, 500), false);)
-
-#if ENABLE_COMMAND_LINE_SHAPES_BENCH
-DEF_BENCH(return new ShapesBench;)
 #endif

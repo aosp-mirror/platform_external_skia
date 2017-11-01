@@ -13,18 +13,18 @@
 manually compute the intersection of a pair of circles and see if the conic intersection matches
   given two circles
     construct a line connecting their centers
-    
+
  */
 
-static const SkDConic testSet[] = {
+static const ConicPts testSet[] = {
     {{{{306.588013,-227.983994}, {212.464996,-262.242004}, {95.5512009,58.9763985}}}, 0.707107008f},
     {{{{377.218994,-141.981003}, {40.578701,-201.339996}, {23.1854992,-102.697998}}}, 0.707107008f},
 
     {{{{5.1114602088928223, 628.77813720703125},
-        {10.834027290344238, 988.964111328125}, 
+        {10.834027290344238, 988.964111328125},
         {163.40835571289062, 988.964111328125}}}, 0.72944212f},
-    {{{{163.40835571289062, 988.964111328125}, 
-        {5, 988.964111328125}, 
+    {{{{163.40835571289062, 988.964111328125},
+        {5, 988.964111328125},
         {5, 614.7423095703125}}}, 0.707106769f},
 
     {{{{11.17222976684570312, -8.103978157043457031},
@@ -110,14 +110,14 @@ static void writePng(const SkConic& c, const SkConic ch[2], const char* name) {
     canvas.drawPath(path, paint);
     SkString filename("c:\\Users\\caryclark\\Documents\\");
     filename.appendf("%s.png", name);
-    SkImageEncoder::EncodeFile(filename.c_str(), bitmap,
-            SkImageEncoder::kPNG_Type, 100);
+    sk_tool_utils::EncodeImageToFile(filename.c_str(), bitmap,
+            SkEncodedImageFormat::kPNG, 100);
 }
 
 static void writeDPng(const SkDConic& dC, const char* name) {
     const int scale = 5;
-    SkDConic dConic = {{{ {dC.fPts[0].fX * scale, dC.fPts[0].fY * scale }, 
-        {dC.fPts[1].fX * scale, dC.fPts[1].fY * scale }, 
+    SkDConic dConic = {{{ {dC.fPts[0].fX * scale, dC.fPts[0].fY * scale },
+        {dC.fPts[1].fX * scale, dC.fPts[1].fY * scale },
         {dC.fPts[2].fX * scale, dC.fPts[2].fY * scale }}}, dC.fWeight };
     SkBitmap bitmap;
     SkDRect bounds;
@@ -152,8 +152,8 @@ static void writeDPng(const SkDConic& dC, const char* name) {
     canvas.drawPath(path, paint);
     SkString filename("c:\\Users\\caryclark\\Documents\\");
     filename.appendf("%s.png", name);
-    SkImageEncoder::EncodeFile(filename.c_str(), bitmap,
-            SkImageEncoder::kPNG_Type, 100);
+    sk_tool_utils::EncodeImageToFile(filename.c_str(), bitmap,
+            SkEncodedImageFormat::kPNG, 100);
 }
 #endif
 
@@ -165,7 +165,9 @@ static void chopBothWays(const SkDConic& dConic, double t, const char* name) {
     conic.fW = dConic.fWeight;
     SkConic chopped[2];
     SkDConic dChopped[2];
-    conic.chopAt(SkDoubleToScalar(t), chopped);
+    if (!conic.chopAt(SkDoubleToScalar(t), chopped)) {
+        return;
+    }
     dChopped[0] = dConic.subDivide(0, t);
     dChopped[1] = dConic.subDivide(t, 1);
 #if DEBUG_VISUALIZE_CONICS
@@ -226,7 +228,7 @@ const SkDConic frame6[] = {
 };
 
 const SkDConic* frames[] = {
-    frame0, frame1, frame2, frame3, frame4, frame5, frame6 
+    frame0, frame1, frame2, frame3, frame4, frame5, frame6
 };
 
 const int frameSizes[] = { (int) SK_ARRAY_COUNT(frame0), (int) SK_ARRAY_COUNT(frame1),
@@ -244,8 +246,8 @@ static void writeFrames() {
         int frameSize = frameSizes[index];
         for (int fIndex = 0; fIndex < frameSize; ++fIndex) {
             const SkDConic& dC = frames[index][fIndex];
-            SkDConic dConic = {{{ {dC.fPts[0].fX * scale, dC.fPts[0].fY * scale }, 
-                {dC.fPts[1].fX * scale, dC.fPts[1].fY * scale }, 
+            SkDConic dConic = {{{ {dC.fPts[0].fX * scale, dC.fPts[0].fY * scale },
+                {dC.fPts[1].fX * scale, dC.fPts[1].fY * scale },
                 {dC.fPts[2].fX * scale, dC.fPts[2].fY * scale }}}, dC.fWeight };
             SkDRect dBounds;
             dBounds.setBounds(dConic);
@@ -273,8 +275,8 @@ static void writeFrames() {
         canvas.drawColor(SK_ColorWHITE);
         for (int fIndex = 0; fIndex < frameSize; ++fIndex) {
             const SkDConic& dC = frames[index][fIndex];
-            SkDConic dConic = {{{ {dC.fPts[0].fX * scale, dC.fPts[0].fY * scale }, 
-                {dC.fPts[1].fX * scale, dC.fPts[1].fY * scale }, 
+            SkDConic dConic = {{{ {dC.fPts[0].fX * scale, dC.fPts[0].fY * scale },
+                {dC.fPts[1].fX * scale, dC.fPts[1].fY * scale },
                 {dC.fPts[2].fX * scale, dC.fPts[2].fY * scale }}}, dC.fWeight };
             SkPath path;
             path.moveTo(dConic.fPts[0].asSkPoint());
@@ -288,16 +290,19 @@ static void writeFrames() {
         }
         SkString filename("c:\\Users\\caryclark\\Documents\\");
         filename.appendf("f%d.png", index);
-        SkImageEncoder::EncodeFile(filename.c_str(), bitmap, SkImageEncoder::kPNG_Type, 100);
+        sk_tool_utils::EncodeImageToFile(filename.c_str(), bitmap, SkEncodedImageFormat::kPNG, 100);
     }
 }
 #endif
 
-static void oneOff(skiatest::Reporter* reporter, const SkDConic& c1, const SkDConic& c2,
+static void oneOff(skiatest::Reporter* reporter, const ConicPts& conic1, const ConicPts& conic2,
         bool coin) {
 #if DEBUG_VISUALIZE_CONICS
     writeFrames();
 #endif
+    SkDConic c1, c2;
+    c1.debugSet(conic1.fPts.fPts, conic1.fWeight);
+    c2.debugSet(conic2.fPts.fPts, conic2.fWeight);
     chopBothWays(c1, 0.5, "c1");
     chopBothWays(c2, 0.5, "c2");
 #if DEBUG_VISUALIZE_CONICS
@@ -328,8 +333,8 @@ static void oneOff(skiatest::Reporter* reporter, const SkDConic& c1, const SkDCo
 }
 
 static void oneOff(skiatest::Reporter* reporter, int outer, int inner) {
-    const SkDConic& c1 = testSet[outer];
-    const SkDConic& c2 = testSet[inner];
+    const ConicPts& c1 = testSet[outer];
+    const ConicPts& c2 = testSet[inner];
     oneOff(reporter, c1, c2, false);
 }
 

@@ -25,15 +25,14 @@ static void excercise_draw_pos_text(SkCanvas* canvas,
 }
 
 DEF_SIMPLE_GM(pdf_never_embed, canvas, 512, 512) {
-    const char resource[] = "fonts/Roboto2-Regular_NoEmbed.ttf";
-    SkAutoTUnref<SkTypeface> typeface(GetResourceAsTypeface(resource));
-    if (!typeface) {
-        return;
-    }
     SkPaint p;
     p.setTextSize(60);
-    p.setTypeface(typeface);
+    p.setTypeface(MakeResourceAsTypeface("fonts/Roboto2-Regular_NoEmbed.ttf"));
     p.setAntiAlias(true);
+
+    if (!p.getTypeface()) {
+        return;
+    }
 
     const char text[] = "HELLO, WORLD!";
 
@@ -54,5 +53,5 @@ DEF_SIMPLE_GM(pdf_never_embed, canvas, 512, 512) {
 
     canvas->scale(1.0, 0.5);
     p.setColor(0xF0000080);
-    canvas->drawText(text, strlen(text), 30, 700, p);
+    canvas->drawString(text, 30, 700, p);
 }

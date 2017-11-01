@@ -42,7 +42,7 @@ static void init_skia(int w, int h) {
     desc.fStencilBits = 0;
     desc.fRenderTargetHandle = 0;  // assume default framebuffer
  
-    sSurface = SkSurface::NewFromBackendRenderTarget(sContext, desc, NULL);
+    sSurface = SkSurface::MakeFromBackendRenderTarget(sContext, desc, nullptr, nullptr).release();
 }
 
 static void cleanup_skia() {
@@ -76,15 +76,15 @@ int main(void) {
     
     init_skia(kWidth, kHeight);
     
-    SkAutoTUnref<SkImage> atlas;
+    sk_sp<SkImage> atlas;
     SkRSXform   xform[kGrid*kGrid+1];
     SkRect      tex[kGrid*kGrid+1];
     WallTimer   timer;
     float       times[32];
     int         currentTime;
 
-    SkAutoTUnref<SkData> imageData(SkData::NewFromFileName("ship.png"));
-    atlas.reset(SkImage::NewFromEncoded(imageData));
+    sk_sp<SkData> imageData(SkData::MakeFromFileName("ship.png"));
+    atlas.reset(SkImage::NewFromEncoded(imageData.get()));
     if (!atlas) {
         SkDebugf("\nCould not decode file ship.png\n");
         
