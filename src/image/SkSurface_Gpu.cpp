@@ -110,7 +110,7 @@ sk_sp<SkImage> SkSurface_Gpu::onNewImageSnapshot() {
     if (!srcProxy || rtc->priv().refsWrappedObjects()) {
         SkASSERT(rtc->origin() == rtc->asSurfaceProxy()->origin());
 
-        srcProxy = GrSurfaceProxy::Copy(ctx, rtc->asSurfaceProxy(), budgeted);
+        srcProxy = GrSurfaceProxy::Copy(ctx, rtc->asSurfaceProxy(), rtc->mipMapped(), budgeted);
     }
 
     const SkImageInfo info = fDevice->imageInfo();

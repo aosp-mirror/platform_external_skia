@@ -109,7 +109,9 @@ sk_sp<GrTextureProxy> GrYUVProvider::refAsTextureProxy(GrContext* ctx, const GrS
                 (yuvDesc.fHeight != yuvInfo.fSizeInfo.fSizes[SkYUVSizeInfo::kY].fHeight)
                     ? SkBackingFit::kExact : SkBackingFit::kApprox;
 
-        yuvTextureContexts[i] = ctx->contextPriv().makeDeferredSurfaceContext(yuvDesc, fit,
+        yuvTextureContexts[i] = ctx->contextPriv().makeDeferredSurfaceContext(yuvDesc,
+                                                                              GrMipMapped::kNo,
+                                                                              fit,
                                                                               SkBudgeted::kYes);
         if (!yuvTextureContexts[i]) {
             return nullptr;
@@ -129,7 +131,7 @@ sk_sp<GrTextureProxy> GrYUVProvider::refAsTextureProxy(GrContext* ctx, const GrS
                                                                     desc.fWidth, desc.fHeight,
                                                                     desc.fConfig, nullptr,
                                                                     desc.fSampleCnt,
-                                                                    false, // always non mipped
+                                                                    GrMipMapped::kNo,
                                                                     kTopLeft_GrSurfaceOrigin));
     if (!renderTargetContext) {
         return nullptr;

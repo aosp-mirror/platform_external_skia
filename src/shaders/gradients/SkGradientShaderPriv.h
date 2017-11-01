@@ -15,8 +15,10 @@
 #include "SkMatrix.h"
 #include "SkShaderBase.h"
 #include "SkTDArray.h"
+#include "SkTemplates.h"
 
 class SkColorSpace;
+class SkColorSpaceXformer;
 class SkRasterPipeline;
 class SkReadBuffer;
 class SkWriteBuffer;
@@ -105,6 +107,12 @@ protected:
         return ctx;
     }
 
+    struct AutoXformColors {
+        AutoXformColors(const SkGradientShaderBase&, SkColorSpaceXformer*);
+
+        SkAutoSTMalloc<8, SkColor> fColors;
+    };
+
     const SkMatrix fPtsToUnit;
     TileMode       fTileMode;
     uint8_t        fGradFlags;
@@ -113,20 +121,25 @@ private:
     enum {
         kColorStorageCount = 4, // more than this many colors, and we'll use sk_malloc for the space
 
-        kStorageSize = kColorStorageCount * (sizeof(SkColor) + sizeof(SkScalar) + sizeof(SkColor4f))
+        kStorageSize = kColorStorageCount * (sizeof(SkColor4f) + sizeof(SkScalar))
     };
-    SkColor             fStorage[(kStorageSize + 3) >> 2];
+    SkColor4f fStorage[(kStorageSize + sizeof(SkColor4f) - 1) / sizeof(SkColor4f)];
+
 public:
     SkScalar getPos(int i) const {
         SkASSERT(i < fColorCount);
         return fOrigPos ? fOrigPos[i] : SkIntToScalar(i) / (fColorCount - 1);
     }
 
-    SkColor*            fOrigColors;   // original colors, before modulation by paint in context.
+    SkColor getLegacyColor(int i) const {
+        SkASSERT(i < fColorCount);
+        return fOrigColors4f[i].toSkColor();
+    }
+
     SkColor4f*          fOrigColors4f; // original colors, as linear floats
     SkScalar*           fOrigPos;      // original positions
     int                 fColorCount;
-    sk_sp<SkColorSpace> fColorSpace; // color space of gradient stops
+    sk_sp<SkColorSpace> fColorSpace;   // color space of gradient stops
 
     bool colorsAreOpaque() const { return fColorsAreOpaque; }
 
@@ -134,8 +147,6 @@ public:
 
 private:
     bool                fColorsAreOpaque;
-
-    void initCommon();
 
     typedef SkShaderBase INHERITED;
 };
@@ -277,8 +288,13 @@ protected:
         // xform is needed. With texture-based gradients, we leave the data in the source color
         // space (to avoid clamping if we can't use F16)... Add an extra FP to do the xform.
         if (kTexture_ColorType == gradientFP->getColorType()) {
+            // Our texture is always either F16 or sRGB, so the data is "linear" in the shader.
+            // Create our xform assuming float inputs, which will suppress any extra sRGB work.
+            // We do support having a transfer function on the color space of the stops, so
+            // this FP may include that transformation.
             fp = GrColorSpaceXformEffect::Make(std::move(gradientFP),
                                                args.fShader->fColorSpace.get(),
+                                               kRGBA_float_GrPixelConfig,
                                                args.fDstColorSpace);
         } else {
             fp = std::move(gradientFP);

@@ -164,7 +164,7 @@ sk_sp<GrRenderTargetContext> SkGpuDevice::MakeRenderTargetContext(
                                     SkBackingFit::kExact,
                                     origInfo.width(), origInfo.height(),
                                     config, origInfo.refColorSpace(), sampleCount,
-                                    false, origin, surfaceProps, budgeted);
+                                    mipMapped, origin, surfaceProps, budgeted);
 }
 
 sk_sp<SkSpecialImage> SkGpuDevice::filterTexture(SkSpecialImage* srcImg,
@@ -992,6 +992,7 @@ void SkGpuDevice::drawBitmapTile(const SkBitmap& bitmap,
     // Construct a GrPaint by setting the bitmap texture as the first effect and then configuring
     // the rest from the SkPaint.
     std::unique_ptr<GrFragmentProcessor> fp;
+    GrPixelConfig config = proxy->config();
 
     if (needsTextureDomain && (SkCanvas::kStrict_SrcRectConstraint == constraint)) {
         // Use a constrained texture domain to avoid color bleeding
@@ -1022,7 +1023,7 @@ void SkGpuDevice::drawBitmapTile(const SkBitmap& bitmap,
         fp = GrSimpleTextureEffect::Make(std::move(proxy), texMatrix, samplerState);
     }
 
-    fp = GrColorSpaceXformEffect::Make(std::move(fp), bitmap.colorSpace(),
+    fp = GrColorSpaceXformEffect::Make(std::move(fp), bitmap.colorSpace(), config,
                                        fRenderTargetContext->colorSpaceInfo().colorSpace());
     GrPaint grPaint;
     if (!SkPaintToGrPaintWithTexture(this->context(), fRenderTargetContext->colorSpaceInfo(), paint,
@@ -1088,7 +1089,7 @@ void SkGpuDevice::drawSpecial(SkSpecialImage* special1, int left, int top, const
     tmpUnfiltered.setImageFilter(nullptr);
 
     auto fp = GrSimpleTextureEffect::Make(std::move(proxy), SkMatrix::I());
-    fp = GrColorSpaceXformEffect::Make(std::move(fp), result->getColorSpace(),
+    fp = GrColorSpaceXformEffect::Make(std::move(fp), result->getColorSpace(), config,
                                        fRenderTargetContext->colorSpaceInfo().colorSpace());
     if (GrPixelConfigIsAlphaOnly(config)) {
         fp = GrFragmentProcessor::MakeInputPremulAndMulByOutput(std::move(fp));
@@ -1238,6 +1239,7 @@ sk_sp<SkSpecialImage> SkGpuDevice::snapSpecial() {
         // filter
         proxy = GrSurfaceProxy::Copy(fContext.get(),
                                      this->accessRenderTargetContext()->asSurfaceProxy(),
+                                     GrMipMapped::kNo,
                                      SkBudgeted::kYes);
         if (!proxy) {
             return nullptr;
@@ -1702,7 +1704,8 @@ SkBaseDevice* SkGpuDevice::onCreateDevice(const CreateInfo& cinfo, const SkPaint
             fit, cinfo.fInfo.width(), cinfo.fInfo.height(),
             fRenderTargetContext->colorSpaceInfo().config(),
             fRenderTargetContext->colorSpaceInfo().refColorSpace(),
-            fRenderTargetContext->numStencilSamples(), false, kBottomLeft_GrSurfaceOrigin, &props));
+            fRenderTargetContext->numStencilSamples(), GrMipMapped::kNo,
+            kBottomLeft_GrSurfaceOrigin, &props));
     if (!rtc) {
         return nullptr;
     }
