@@ -204,6 +204,10 @@ def dm_flags(api, bot):
       # The TSAN bot disables GL buffer mapping which is required for inst.
       configs.extend([gl_prefix + 'inst'])
 
+    # Test SkColorSpaceXformCanvas on a few bots
+    if 'GTX1070' in bot:
+      configs.append('gbr-gl')
+
     # CommandBuffer bot *only* runs the command_buffer config.
     if 'CommandBuffer' in bot:
       configs = ['commandbuffer']
@@ -403,6 +407,7 @@ def dm_flags(api, bot):
   bad_serialize_gms.append('shadow_utils')
 
   # Not expected to round trip encoding/decoding.
+  bad_serialize_gms.append('all_bitmap_configs')
   bad_serialize_gms.append('makecolorspace')
 
   for test in bad_serialize_gms:
@@ -930,6 +935,7 @@ TEST_BUILDERS = [
   'Test-Win10-Clang-NUCD34010WYKH-GPU-IntelHD4400-x86_64-Release-All-ANGLE',
   'Test-Win10-Clang-ShuttleA-GPU-GTX660-x86_64-Debug-All-Vulkan',
   'Test-Win10-Clang-ShuttleC-GPU-GTX960-x86_64-Debug-All-ANGLE',
+  'Test-Win10-Clang-ZBOX-GPU-GTX1070-x86_64-Debug-All',
   'Test-Win10-Clang-ZBOX-GPU-GTX1070-x86_64-Debug-All-Vulkan',
   'Test-Win2k8-Clang-GCE-CPU-AVX2-x86_64-Debug-All-FAAA',
   'Test-Win2k8-Clang-GCE-CPU-AVX2-x86_64-Debug-All-FDAA',
