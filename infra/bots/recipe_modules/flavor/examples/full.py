@@ -58,6 +58,8 @@ def RunSteps(api):
 
 TEST_BUILDERS = [
   'Build-Debian9-Clang-arm-Release-Android_API26',
+  'Build-Debian9-Clang-arm-Release-Chromebook_GLES',
+  'Build-Debian9-Clang-x86_64-Debug-Chromebook_GLES',
   'Build-Debian9-Clang-x86_64-Debug-SK_USE_DISCARDABLE_SCALEDIMAGECACHE',
   'Build-Debian9-Clang-x86_64-Release-Fast',
   'Build-Debian9-Clang-x86_64-Release-Mini',
@@ -81,14 +83,14 @@ TEST_BUILDERS = [
   'Housekeeper-PerCommit-CheckGeneratedFiles',
   'Perf-Android-Clang-NexusPlayer-GPU-PowerVR-x86-Debug-All-Android',
   'Perf-Android-Clang-Pixel-GPU-Adreno530-arm64-Debug-All-Android',
-  'Perf-ChromeOS-Clang-Chromebook_513C24_K01-GPU-MaliT860-arm-Release-All',
+  'Perf-ChromeOS-Clang-SamsungChromebookPlus-GPU-MaliT860-arm-Release-All',
   'Perf-Chromecast-GCC-Chorizo-CPU-Cortex_A7-arm-Release-All',
   'Perf-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-All-MSAN',
   'Perf-Debian9-Clang-GCE-CPU-AVX2-x86_64-Release-All-ASAN',
   ('Perf-Debian9-Clang-GCE-CPU-AVX2-x86_64-Release-All-'
    'UBSAN_float_cast_overflow'),
   'Perf-Ubuntu14-GCC-GCE-CPU-AVX2-x86_64-Release-All-CT_BENCH_1k_SKPs',
-  'Test-ChromeOS-Clang-Chromebook_513C24_K01-GPU-MaliT860-arm-Release-All',
+  'Test-ChromeOS-Clang-SamsungChromebookPlus-GPU-MaliT860-arm-Release-All',
   'Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-All-Coverage',
   'Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Release-All-TSAN',
   'Test-Debian9-GCC-GCE-CPU-AVX2-x86_64-Release-All',
@@ -111,7 +113,7 @@ def GenTests(api):
                      path_config='kitchen',
                      swarm_out_dir='[SWARM_OUT_DIR]')
     )
-    if 'Chromebook' in buildername:
+    if 'Chromebook' in buildername and not 'Build' in buildername:
       test += api.step_data(
           'read chromeos ip',
           stdout=api.raw_io.output('{"user_ip":"foo@127.0.0.1"}'))

@@ -6,10 +6,10 @@
         "Build-Debian9-Clang-arm-Debug-Android"
       ]
     },
-    "Build-Debian9-Clang-arm-Debug-Chromebook_ARM_GLES": {
+    "Build-Debian9-Clang-arm-Debug-Chromebook_GLES": {
       "priority": 0.8,
       "tasks": [
-        "Build-Debian9-Clang-arm-Debug-Chromebook_ARM_GLES"
+        "Build-Debian9-Clang-arm-Debug-Chromebook_GLES"
       ]
     },
     "Build-Debian9-Clang-arm-Release-Android": {
@@ -24,10 +24,10 @@
         "Build-Debian9-Clang-arm-Release-Android_API26"
       ]
     },
-    "Build-Debian9-Clang-arm-Release-Chromebook_ARM_GLES": {
+    "Build-Debian9-Clang-arm-Release-Chromebook_GLES": {
       "priority": 0.8,
       "tasks": [
-        "Build-Debian9-Clang-arm-Release-Chromebook_ARM_GLES"
+        "Build-Debian9-Clang-arm-Release-Chromebook_GLES"
       ]
     },
     "Build-Debian9-Clang-arm64-Debug-Android": {
@@ -132,6 +132,12 @@
         "Build-Debian9-Clang-x86_64-Debug-ASAN"
       ]
     },
+    "Build-Debian9-Clang-x86_64-Debug-Chromebook_GLES": {
+      "priority": 0.8,
+      "tasks": [
+        "Build-Debian9-Clang-x86_64-Debug-Chromebook_GLES"
+      ]
+    },
     "Build-Debian9-Clang-x86_64-Debug-Coverage": {
       "priority": 0.8,
       "tasks": [
@@ -184,6 +190,12 @@
       "priority": 0.8,
       "tasks": [
         "Build-Debian9-Clang-x86_64-Release-ASAN"
+      ]
+    },
+    "Build-Debian9-Clang-x86_64-Release-Chromebook_GLES": {
+      "priority": 0.8,
+      "tasks": [
+        "Build-Debian9-Clang-x86_64-Release-Chromebook_GLES"
       ]
     },
     "Build-Debian9-Clang-x86_64-Release-Fast": {
@@ -545,10 +557,16 @@
         "Build-Win-MSVC-x86_64-Release-Vulkan"
       ]
     },
-    "Calmbench-Debian9-Clang-GCE-CPU-AVX2-x86_64-Release": {
+    "Calmbench-Debian9-Clang-GCE-CPU-AVX2-x86_64-Release-All": {
       "priority": 0.8,
       "tasks": [
-        "Upload-Calmbench-Debian9-Clang-GCE-CPU-AVX2-x86_64-Release"
+        "Upload-Calmbench-Debian9-Clang-GCE-CPU-AVX2-x86_64-Release-All"
+      ]
+    },
+    "Calmbench-Ubuntu17-Clang-Golo-GPU-QuadroP400-x86_64-Release-All": {
+      "priority": 0.8,
+      "tasks": [
+        "Upload-Calmbench-Ubuntu17-Clang-Golo-GPU-QuadroP400-x86_64-Release-All"
       ]
     },
     "Housekeeper-Nightly-RecreateSKPs_Canary": {
@@ -884,64 +902,64 @@
         "Upload-Perf-Android-Clang-PixelC-GPU-TegraX1-arm64-Release-All-Android_Vulkan_Skpbench"
       ]
     },
-    "Perf-ChromeOS-Clang-Chromebook_303C12-GPU-MaliT604-arm-Debug-All": {
+    "Perf-ChromeOS-Clang-ASUSChromebookFlipC100-GPU-MaliT764-arm-Debug-All": {
       "priority": 0.8,
       "tasks": [
-        "Perf-ChromeOS-Clang-Chromebook_303C12-GPU-MaliT604-arm-Debug-All"
+        "Perf-ChromeOS-Clang-ASUSChromebookFlipC100-GPU-MaliT764-arm-Debug-All"
       ]
     },
-    "Perf-ChromeOS-Clang-Chromebook_303C12-GPU-MaliT604-arm-Release-All": {
+    "Perf-ChromeOS-Clang-ASUSChromebookFlipC100-GPU-MaliT764-arm-Release-All": {
       "priority": 0.8,
       "tasks": [
-        "Upload-Perf-ChromeOS-Clang-Chromebook_303C12-GPU-MaliT604-arm-Release-All"
+        "Upload-Perf-ChromeOS-Clang-ASUSChromebookFlipC100-GPU-MaliT764-arm-Release-All"
       ]
     },
-    "Perf-ChromeOS-Clang-Chromebook_513C24_K01-GPU-MaliT860-arm-Debug-All": {
+    "Perf-ChromeOS-Clang-AcerChromebook13_CB5_311-GPU-TegraK1-arm-Debug-All": {
       "priority": 0.8,
       "tasks": [
-        "Perf-ChromeOS-Clang-Chromebook_513C24_K01-GPU-MaliT860-arm-Debug-All"
+        "Perf-ChromeOS-Clang-AcerChromebook13_CB5_311-GPU-TegraK1-arm-Debug-All"
       ]
     },
-    "Perf-ChromeOS-Clang-Chromebook_513C24_K01-GPU-MaliT860-arm-Release-All": {
+    "Perf-ChromeOS-Clang-AcerChromebook13_CB5_311-GPU-TegraK1-arm-Release-All": {
       "priority": 0.8,
       "tasks": [
-        "Upload-Perf-ChromeOS-Clang-Chromebook_513C24_K01-GPU-MaliT860-arm-Release-All"
+        "Upload-Perf-ChromeOS-Clang-AcerChromebook13_CB5_311-GPU-TegraK1-arm-Release-All"
       ]
     },
-    "Perf-ChromeOS-Clang-Chromebook_C100p-GPU-MaliT764-arm-Debug-All": {
+    "Perf-ChromeOS-Clang-AcerChromebookR13Convertible-GPU-PowerVRGX6250-arm-Debug-All": {
       "priority": 0.8,
       "tasks": [
-        "Perf-ChromeOS-Clang-Chromebook_C100p-GPU-MaliT764-arm-Debug-All"
+        "Perf-ChromeOS-Clang-AcerChromebookR13Convertible-GPU-PowerVRGX6250-arm-Debug-All"
       ]
     },
-    "Perf-ChromeOS-Clang-Chromebook_C100p-GPU-MaliT764-arm-Release-All": {
+    "Perf-ChromeOS-Clang-AcerChromebookR13Convertible-GPU-PowerVRGX6250-arm-Release-All": {
       "priority": 0.8,
       "tasks": [
-        "Upload-Perf-ChromeOS-Clang-Chromebook_C100p-GPU-MaliT764-arm-Release-All"
+        "Upload-Perf-ChromeOS-Clang-AcerChromebookR13Convertible-GPU-PowerVRGX6250-arm-Release-All"
       ]
     },
-    "Perf-ChromeOS-Clang-Chromebook_CB5_311-GPU-TegraK1-arm-Debug-All": {
+    "Perf-ChromeOS-Clang-SamsungChromebook2012-GPU-MaliT604-arm-Debug-All": {
       "priority": 0.8,
       "tasks": [
-        "Perf-ChromeOS-Clang-Chromebook_CB5_311-GPU-TegraK1-arm-Debug-All"
+        "Perf-ChromeOS-Clang-SamsungChromebook2012-GPU-MaliT604-arm-Debug-All"
       ]
     },
-    "Perf-ChromeOS-Clang-Chromebook_CB5_311-GPU-TegraK1-arm-Release-All": {
+    "Perf-ChromeOS-Clang-SamsungChromebook2012-GPU-MaliT604-arm-Release-All": {
       "priority": 0.8,
       "tasks": [
-        "Upload-Perf-ChromeOS-Clang-Chromebook_CB5_311-GPU-TegraK1-arm-Release-All"
+        "Upload-Perf-ChromeOS-Clang-SamsungChromebook2012-GPU-MaliT604-arm-Release-All"
       ]
     },
-    "Perf-ChromeOS-Clang-Chromebook_CB5_312T-GPU-PowerVRGX6250-arm-Debug-All": {
+    "Perf-ChromeOS-Clang-SamsungChromebookPlus-GPU-MaliT860-arm-Debug-All": {
       "priority": 0.8,
       "tasks": [
-        "Perf-ChromeOS-Clang-Chromebook_CB5_312T-GPU-PowerVRGX6250-arm-Debug-All"
+        "Perf-ChromeOS-Clang-SamsungChromebookPlus-GPU-MaliT860-arm-Debug-All"
       ]
     },
-    "Perf-ChromeOS-Clang-Chromebook_CB5_312T-GPU-PowerVRGX6250-arm-Release-All": {
+    "Perf-ChromeOS-Clang-SamsungChromebookPlus-GPU-MaliT860-arm-Release-All": {
       "priority": 0.8,
       "tasks": [
-        "Upload-Perf-ChromeOS-Clang-Chromebook_CB5_312T-GPU-PowerVRGX6250-arm-Release-All"
+        "Upload-Perf-ChromeOS-Clang-SamsungChromebookPlus-GPU-MaliT860-arm-Release-All"
       ]
     },
     "Perf-Chromecast-GCC-Chorizo-CPU-Cortex_A7-arm-Debug-All": {
@@ -1947,64 +1965,64 @@
         "Upload-Test-Android-Clang-PixelXL-GPU-Adreno530-arm64-Release-All-Android_Vulkan"
       ]
     },
-    "Test-ChromeOS-Clang-Chromebook_303C12-GPU-MaliT604-arm-Debug-All": {
+    "Test-ChromeOS-Clang-ASUSChromebookFlipC100-GPU-MaliT764-arm-Debug-All": {
       "priority": 0.8,
       "tasks": [
-        "Upload-Test-ChromeOS-Clang-Chromebook_303C12-GPU-MaliT604-arm-Debug-All"
+        "Upload-Test-ChromeOS-Clang-ASUSChromebookFlipC100-GPU-MaliT764-arm-Debug-All"
       ]
     },
-    "Test-ChromeOS-Clang-Chromebook_303C12-GPU-MaliT604-arm-Release-All": {
+    "Test-ChromeOS-Clang-ASUSChromebookFlipC100-GPU-MaliT764-arm-Release-All": {
       "priority": 0.8,
       "tasks": [
-        "Upload-Test-ChromeOS-Clang-Chromebook_303C12-GPU-MaliT604-arm-Release-All"
+        "Upload-Test-ChromeOS-Clang-ASUSChromebookFlipC100-GPU-MaliT764-arm-Release-All"
       ]
     },
-    "Test-ChromeOS-Clang-Chromebook_513C24_K01-GPU-MaliT860-arm-Debug-All": {
+    "Test-ChromeOS-Clang-AcerChromebook13_CB5_311-GPU-TegraK1-arm-Debug-All": {
       "priority": 0.8,
       "tasks": [
-        "Upload-Test-ChromeOS-Clang-Chromebook_513C24_K01-GPU-MaliT860-arm-Debug-All"
+        "Upload-Test-ChromeOS-Clang-AcerChromebook13_CB5_311-GPU-TegraK1-arm-Debug-All"
       ]
     },
-    "Test-ChromeOS-Clang-Chromebook_513C24_K01-GPU-MaliT860-arm-Release-All": {
+    "Test-ChromeOS-Clang-AcerChromebook13_CB5_311-GPU-TegraK1-arm-Release-All": {
       "priority": 0.8,
       "tasks": [
-        "Upload-Test-ChromeOS-Clang-Chromebook_513C24_K01-GPU-MaliT860-arm-Release-All"
+        "Upload-Test-ChromeOS-Clang-AcerChromebook13_CB5_311-GPU-TegraK1-arm-Release-All"
       ]
     },
-    "Test-ChromeOS-Clang-Chromebook_C100p-GPU-MaliT764-arm-Debug-All": {
+    "Test-ChromeOS-Clang-AcerChromebookR13Convertible-GPU-PowerVRGX6250-arm-Debug-All": {
       "priority": 0.8,
       "tasks": [
-        "Upload-Test-ChromeOS-Clang-Chromebook_C100p-GPU-MaliT764-arm-Debug-All"
+        "Upload-Test-ChromeOS-Clang-AcerChromebookR13Convertible-GPU-PowerVRGX6250-arm-Debug-All"
       ]
     },
-    "Test-ChromeOS-Clang-Chromebook_C100p-GPU-MaliT764-arm-Release-All": {
+    "Test-ChromeOS-Clang-AcerChromebookR13Convertible-GPU-PowerVRGX6250-arm-Release-All": {
       "priority": 0.8,
       "tasks": [
-        "Upload-Test-ChromeOS-Clang-Chromebook_C100p-GPU-MaliT764-arm-Release-All"
+        "Upload-Test-ChromeOS-Clang-AcerChromebookR13Convertible-GPU-PowerVRGX6250-arm-Release-All"
       ]
     },
-    "Test-ChromeOS-Clang-Chromebook_CB5_311-GPU-TegraK1-arm-Debug-All": {
+    "Test-ChromeOS-Clang-SamsungChromebook2012-GPU-MaliT604-arm-Debug-All": {
       "priority": 0.8,
       "tasks": [
-        "Upload-Test-ChromeOS-Clang-Chromebook_CB5_311-GPU-TegraK1-arm-Debug-All"
+        "Upload-Test-ChromeOS-Clang-SamsungChromebook2012-GPU-MaliT604-arm-Debug-All"
       ]
     },
-    "Test-ChromeOS-Clang-Chromebook_CB5_311-GPU-TegraK1-arm-Release-All": {
+    "Test-ChromeOS-Clang-SamsungChromebook2012-GPU-MaliT604-arm-Release-All": {
       "priority": 0.8,
       "tasks": [
-        "Upload-Test-ChromeOS-Clang-Chromebook_CB5_311-GPU-TegraK1-arm-Release-All"
+        "Upload-Test-ChromeOS-Clang-SamsungChromebook2012-GPU-MaliT604-arm-Release-All"
       ]
     },
-    "Test-ChromeOS-Clang-Chromebook_CB5_312T-GPU-PowerVRGX6250-arm-Debug-All": {
+    "Test-ChromeOS-Clang-SamsungChromebookPlus-GPU-MaliT860-arm-Debug-All": {
       "priority": 0.8,
       "tasks": [
-        "Upload-Test-ChromeOS-Clang-Chromebook_CB5_312T-GPU-PowerVRGX6250-arm-Debug-All"
+        "Upload-Test-ChromeOS-Clang-SamsungChromebookPlus-GPU-MaliT860-arm-Debug-All"
       ]
     },
-    "Test-ChromeOS-Clang-Chromebook_CB5_312T-GPU-PowerVRGX6250-arm-Release-All": {
+    "Test-ChromeOS-Clang-SamsungChromebookPlus-GPU-MaliT860-arm-Release-All": {
       "priority": 0.8,
       "tasks": [
-        "Upload-Test-ChromeOS-Clang-Chromebook_CB5_312T-GPU-PowerVRGX6250-arm-Release-All"
+        "Upload-Test-ChromeOS-Clang-SamsungChromebookPlus-GPU-MaliT860-arm-Release-All"
       ]
     },
     "Test-Chromecast-GCC-Chorizo-CPU-Cortex_A7-arm-Debug-All": {
@@ -2109,10 +2127,10 @@
         "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-All-UBSAN_float_cast_overflow"
       ]
     },
-    "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-Shard_16-Coverage": {
+    "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-Shard_12-Coverage": {
       "priority": 0.8,
       "tasks": [
-        "Upload-Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-Shard_16-Coverage"
+        "Upload-Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-Shard_12-Coverage"
       ]
     },
     "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Release-All": {
@@ -2977,7 +2995,7 @@
       "isolate": "compile_skia.isolate",
       "priority": 0.8
     },
-    "Build-Debian9-Clang-arm-Debug-Chromebook_ARM_GLES": {
+    "Build-Debian9-Clang-arm-Debug-Chromebook_GLES": {
       "cipd_packages": [
         {
           "name": "skia/bots/clang_linux",
@@ -3006,7 +3024,7 @@
         "../../..",
         "compile",
         "repository=<(REPO)",
-        "buildername=Build-Debian9-Clang-arm-Debug-Chromebook_ARM_GLES",
+        "buildername=Build-Debian9-Clang-arm-Debug-Chromebook_GLES",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -3077,7 +3095,7 @@
       "isolate": "compile_skia.isolate",
       "priority": 0.8
     },
-    "Build-Debian9-Clang-arm-Release-Chromebook_ARM_GLES": {
+    "Build-Debian9-Clang-arm-Release-Chromebook_GLES": {
       "cipd_packages": [
         {
           "name": "skia/bots/clang_linux",
@@ -3106,7 +3124,7 @@
         "../../..",
         "compile",
         "repository=<(REPO)",
-        "buildername=Build-Debian9-Clang-arm-Release-Chromebook_ARM_GLES",
+        "buildername=Build-Debian9-Clang-arm-Release-Chromebook_GLES",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -3627,6 +3645,41 @@
       "isolate": "compile_skia.isolate",
       "priority": 0.8
     },
+    "Build-Debian9-Clang-x86_64-Debug-Chromebook_GLES": {
+      "cipd_packages": [
+        {
+          "name": "skia/bots/clang_linux",
+          "path": "clang_linux",
+          "version": "version:10"
+        },
+        {
+          "name": "skia/bots/chromebook_x86_64_gles",
+          "path": "chromebook_x86_64_gles",
+          "version": "version:2"
+        }
+      ],
+      "dimensions": [
+        "cpu:x86-64-Haswell_GCE",
+        "gpu:none",
+        "os:Debian-9.1",
+        "pool:Skia"
+      ],
+      "extra_args": [
+        "--workdir",
+        "../../..",
+        "compile",
+        "repository=<(REPO)",
+        "buildername=Build-Debian9-Clang-x86_64-Debug-Chromebook_GLES",
+        "swarm_out_dir=${ISOLATED_OUTDIR}",
+        "revision=<(REVISION)",
+        "patch_repo=<(PATCH_REPO)",
+        "patch_storage=<(PATCH_STORAGE)",
+        "patch_issue=<(ISSUE)",
+        "patch_set=<(PATCHSET)"
+      ],
+      "isolate": "compile_skia.isolate",
+      "priority": 0.8
+    },
     "Build-Debian9-Clang-x86_64-Debug-Coverage": {
       "cipd_packages": [
         {
@@ -3897,6 +3950,41 @@
         "compile",
         "repository=<(REPO)",
         "buildername=Build-Debian9-Clang-x86_64-Release-ASAN",
+        "swarm_out_dir=${ISOLATED_OUTDIR}",
+        "revision=<(REVISION)",
+        "patch_repo=<(PATCH_REPO)",
+        "patch_storage=<(PATCH_STORAGE)",
+        "patch_issue=<(ISSUE)",
+        "patch_set=<(PATCHSET)"
+      ],
+      "isolate": "compile_skia.isolate",
+      "priority": 0.8
+    },
+    "Build-Debian9-Clang-x86_64-Release-Chromebook_GLES": {
+      "cipd_packages": [
+        {
+          "name": "skia/bots/clang_linux",
+          "path": "clang_linux",
+          "version": "version:10"
+        },
+        {
+          "name": "skia/bots/chromebook_x86_64_gles",
+          "path": "chromebook_x86_64_gles",
+          "version": "version:2"
+        }
+      ],
+      "dimensions": [
+        "cpu:x86-64-Haswell_GCE",
+        "gpu:none",
+        "os:Debian-9.1",
+        "pool:Skia"
+      ],
+      "extra_args": [
+        "--workdir",
+        "../../..",
+        "compile",
+        "repository=<(REPO)",
+        "buildername=Build-Debian9-Clang-x86_64-Release-Chromebook_GLES",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -4590,9 +4678,8 @@
     },
     "Build-Mac-Clang-arm-Debug-iOS": {
       "dimensions": [
-        "cpu:x86-64-E5-2697_v2",
         "gpu:none",
-        "os:Mac-10.12",
+        "os:Mac-10.12.2",
         "pool:Skia"
       ],
       "extra_args": [
@@ -4613,9 +4700,8 @@
     },
     "Build-Mac-Clang-arm-Release-iOS": {
       "dimensions": [
-        "cpu:x86-64-E5-2697_v2",
         "gpu:none",
-        "os:Mac-10.12",
+        "os:Mac-10.12.2",
         "pool:Skia"
       ],
       "extra_args": [
@@ -4643,9 +4729,8 @@
         }
       ],
       "dimensions": [
-        "cpu:x86-64-E5-2697_v2",
         "gpu:none",
-        "os:Mac-10.12",
+        "os:Mac-10.12.2",
         "pool:Skia"
       ],
       "extra_args": [
@@ -4666,9 +4751,8 @@
     },
     "Build-Mac-Clang-arm64-Debug-iOS": {
       "dimensions": [
-        "cpu:x86-64-E5-2697_v2",
         "gpu:none",
-        "os:Mac-10.12",
+        "os:Mac-10.12.2",
         "pool:Skia"
       ],
       "extra_args": [
@@ -4689,9 +4773,8 @@
     },
     "Build-Mac-Clang-arm64-Release-iOS": {
       "dimensions": [
-        "cpu:x86-64-E5-2697_v2",
         "gpu:none",
-        "os:Mac-10.12",
+        "os:Mac-10.12.2",
         "pool:Skia"
       ],
       "extra_args": [
@@ -4712,9 +4795,8 @@
     },
     "Build-Mac-Clang-x64-Release-iOS": {
       "dimensions": [
-        "cpu:x86-64-E5-2697_v2",
         "gpu:none",
-        "os:Mac-10.12",
+        "os:Mac-10.12.2",
         "pool:Skia"
       ],
       "extra_args": [
@@ -4735,9 +4817,8 @@
     },
     "Build-Mac-Clang-x86_64-Debug": {
       "dimensions": [
-        "cpu:x86-64-E5-2697_v2",
         "gpu:none",
-        "os:Mac-10.12",
+        "os:Mac-10.12.2",
         "pool:Skia"
       ],
       "extra_args": [
@@ -4758,9 +4839,8 @@
     },
     "Build-Mac-Clang-x86_64-Debug-CommandBuffer": {
       "dimensions": [
-        "cpu:x86-64-E5-2697_v2",
         "gpu:none",
-        "os:Mac-10.12",
+        "os:Mac-10.12.2",
         "pool:Skia"
       ],
       "extra_args": [
@@ -4781,9 +4861,8 @@
     },
     "Build-Mac-Clang-x86_64-Debug-Metal": {
       "dimensions": [
-        "cpu:x86-64-E5-2697_v2",
         "gpu:none",
-        "os:Mac-10.12",
+        "os:Mac-10.12.2",
         "pool:Skia"
       ],
       "extra_args": [
@@ -4804,9 +4883,8 @@
     },
     "Build-Mac-Clang-x86_64-Release": {
       "dimensions": [
-        "cpu:x86-64-E5-2697_v2",
         "gpu:none",
-        "os:Mac-10.12",
+        "os:Mac-10.12.2",
         "pool:Skia"
       ],
       "extra_args": [
@@ -4827,9 +4905,8 @@
     },
     "Build-Mac-Clang-x86_64-Release-CommandBuffer": {
       "dimensions": [
-        "cpu:x86-64-E5-2697_v2",
         "gpu:none",
-        "os:Mac-10.12",
+        "os:Mac-10.12.2",
         "pool:Skia"
       ],
       "extra_args": [
@@ -4850,9 +4927,8 @@
     },
     "Build-Mac-Clang-x86_64-Release-TSAN": {
       "dimensions": [
-        "cpu:x86-64-E5-2697_v2",
         "gpu:none",
-        "os:Mac-10.12",
+        "os:Mac-10.12.2",
         "pool:Skia"
       ],
       "extra_args": [
@@ -5591,7 +5667,7 @@
       "isolate": "compile_skia.isolate",
       "priority": 0.8
     },
-    "Calmbench-Debian9-Clang-GCE-CPU-AVX2-x86_64-Release": {
+    "Calmbench-Debian9-Clang-GCE-CPU-AVX2-x86_64-Release-All": {
       "cipd_packages": [
         {
           "name": "skia/bots/clang_linux",
@@ -5614,7 +5690,40 @@
         "../../..",
         "calmbench",
         "repository=<(REPO)",
-        "buildername=Calmbench-Debian9-Clang-GCE-CPU-AVX2-x86_64-Release",
+        "buildername=Calmbench-Debian9-Clang-GCE-CPU-AVX2-x86_64-Release-All",
+        "swarm_out_dir=${ISOLATED_OUTDIR}",
+        "revision=<(REVISION)",
+        "patch_repo=<(PATCH_REPO)",
+        "patch_storage=<(PATCH_STORAGE)",
+        "patch_issue=<(ISSUE)",
+        "patch_set=<(PATCHSET)"
+      ],
+      "isolate": "infra_skia.isolate",
+      "priority": 0.8
+    },
+    "Calmbench-Ubuntu17-Clang-Golo-GPU-QuadroP400-x86_64-Release-All": {
+      "cipd_packages": [
+        {
+          "name": "skia/bots/clang_linux",
+          "path": "clang_linux",
+          "version": "version:10"
+        }
+      ],
+      "dependencies": [
+        "Housekeeper-PerCommit-IsolateSKP",
+        "Housekeeper-PerCommit-IsolateSVG"
+      ],
+      "dimensions": [
+        "gpu:10de:1cb3-384.59",
+        "os:Ubuntu-17.04",
+        "pool:Skia"
+      ],
+      "extra_args": [
+        "--workdir",
+        "../../..",
+        "calmbench",
+        "repository=<(REPO)",
+        "buildername=Calmbench-Ubuntu17-Clang-Golo-GPU-QuadroP400-x86_64-Release-All",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -6499,7 +6608,7 @@
         "Housekeeper-PerCommit-IsolateSkImage"
       ],
       "dimensions": [
-        "device_os:OPP1.170223.012",
+        "device_os:OPR5.170623.007",
         "device_type:angler",
         "os:Android",
         "pool:Skia"
@@ -6533,7 +6642,7 @@
         "Housekeeper-PerCommit-IsolateSkImage"
       ],
       "dimensions": [
-        "device_os:OPP1.170223.012",
+        "device_os:OPR5.170623.007",
         "device_type:angler",
         "os:Android",
         "pool:Skia"
@@ -6567,7 +6676,7 @@
         "Housekeeper-PerCommit-IsolateSkImage"
       ],
       "dimensions": [
-        "device_os:OPP1.170223.012",
+        "device_os:OPR5.170623.007",
         "device_type:angler",
         "os:Android",
         "pool:Skia"
@@ -6601,7 +6710,7 @@
         "Housekeeper-PerCommit-IsolateSkImage"
       ],
       "dimensions": [
-        "device_os:OPP1.170223.012",
+        "device_os:OPR5.170623.007",
         "device_type:angler",
         "os:Android",
         "pool:Skia"
@@ -6703,7 +6812,7 @@
         "Housekeeper-PerCommit-IsolateSkImage"
       ],
       "dimensions": [
-        "device_os:OPR6.170623.010",
+        "device_os:OPR6.170623.021",
         "device_type:fugu",
         "os:Android",
         "pool:Skia"
@@ -6737,7 +6846,7 @@
         "Housekeeper-PerCommit-IsolateSkImage"
       ],
       "dimensions": [
-        "device_os:OPR6.170623.010",
+        "device_os:OPR6.170623.021",
         "device_type:fugu",
         "os:Android",
         "pool:Skia"
@@ -6771,7 +6880,7 @@
         "Housekeeper-PerCommit-IsolateSkImage"
       ],
       "dimensions": [
-        "device_os:OPR6.170623.010",
+        "device_os:OPR6.170623.021",
         "device_type:fugu",
         "os:Android",
         "pool:Skia"
@@ -6805,7 +6914,7 @@
         "Housekeeper-PerCommit-IsolateSkImage"
       ],
       "dimensions": [
-        "device_os:OPR6.170623.010",
+        "device_os:OPR6.170623.021",
         "device_type:fugu",
         "os:Android",
         "pool:Skia"
@@ -6839,7 +6948,7 @@
         "Housekeeper-PerCommit-IsolateSkImage"
       ],
       "dimensions": [
-        "device_os:OPR6.170623.010",
+        "device_os:OPR6.170623.021",
         "device_type:fugu",
         "os:Android",
         "pool:Skia"
@@ -7396,141 +7505,9 @@
       "max_attempts": 1,
       "priority": 0.8
     },
-    "Perf-ChromeOS-Clang-Chromebook_303C12-GPU-MaliT604-arm-Debug-All": {
+    "Perf-ChromeOS-Clang-ASUSChromebookFlipC100-GPU-MaliT764-arm-Debug-All": {
       "dependencies": [
-        "Build-Debian9-Clang-arm-Debug-Chromebook_ARM_GLES",
-        "Housekeeper-PerCommit-BundleRecipes",
-        "Housekeeper-PerCommit-IsolateSKP",
-        "Housekeeper-PerCommit-IsolateSVG",
-        "Housekeeper-PerCommit-IsolateSkImage"
-      ],
-      "dimensions": [
-        "gpu:MaliT604",
-        "os:ChromeOS",
-        "pool:Skia"
-      ],
-      "execution_timeout_ns": 14400000000000,
-      "expiration_ns": 72000000000000,
-      "extra_args": [
-        "--workdir",
-        "../../..",
-        "perf",
-        "repository=<(REPO)",
-        "buildername=Perf-ChromeOS-Clang-Chromebook_303C12-GPU-MaliT604-arm-Debug-All",
-        "swarm_out_dir=${ISOLATED_OUTDIR}",
-        "revision=<(REVISION)",
-        "patch_repo=<(PATCH_REPO)",
-        "patch_storage=<(PATCH_STORAGE)",
-        "patch_issue=<(ISSUE)",
-        "patch_set=<(PATCHSET)"
-      ],
-      "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia_bundled_unix.isolate",
-      "max_attempts": 1,
-      "priority": 0.8
-    },
-    "Perf-ChromeOS-Clang-Chromebook_303C12-GPU-MaliT604-arm-Release-All": {
-      "dependencies": [
-        "Build-Debian9-Clang-arm-Release-Chromebook_ARM_GLES",
-        "Housekeeper-PerCommit-BundleRecipes",
-        "Housekeeper-PerCommit-IsolateSKP",
-        "Housekeeper-PerCommit-IsolateSVG",
-        "Housekeeper-PerCommit-IsolateSkImage"
-      ],
-      "dimensions": [
-        "gpu:MaliT604",
-        "os:ChromeOS",
-        "pool:Skia"
-      ],
-      "execution_timeout_ns": 14400000000000,
-      "expiration_ns": 72000000000000,
-      "extra_args": [
-        "--workdir",
-        "../../..",
-        "perf",
-        "repository=<(REPO)",
-        "buildername=Perf-ChromeOS-Clang-Chromebook_303C12-GPU-MaliT604-arm-Release-All",
-        "swarm_out_dir=${ISOLATED_OUTDIR}",
-        "revision=<(REVISION)",
-        "patch_repo=<(PATCH_REPO)",
-        "patch_storage=<(PATCH_STORAGE)",
-        "patch_issue=<(ISSUE)",
-        "patch_set=<(PATCHSET)"
-      ],
-      "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia_bundled_unix.isolate",
-      "max_attempts": 1,
-      "priority": 0.8
-    },
-    "Perf-ChromeOS-Clang-Chromebook_513C24_K01-GPU-MaliT860-arm-Debug-All": {
-      "dependencies": [
-        "Build-Debian9-Clang-arm-Debug-Chromebook_ARM_GLES",
-        "Housekeeper-PerCommit-BundleRecipes",
-        "Housekeeper-PerCommit-IsolateSKP",
-        "Housekeeper-PerCommit-IsolateSVG",
-        "Housekeeper-PerCommit-IsolateSkImage"
-      ],
-      "dimensions": [
-        "gpu:MaliT860",
-        "os:ChromeOS",
-        "pool:Skia"
-      ],
-      "execution_timeout_ns": 14400000000000,
-      "expiration_ns": 72000000000000,
-      "extra_args": [
-        "--workdir",
-        "../../..",
-        "perf",
-        "repository=<(REPO)",
-        "buildername=Perf-ChromeOS-Clang-Chromebook_513C24_K01-GPU-MaliT860-arm-Debug-All",
-        "swarm_out_dir=${ISOLATED_OUTDIR}",
-        "revision=<(REVISION)",
-        "patch_repo=<(PATCH_REPO)",
-        "patch_storage=<(PATCH_STORAGE)",
-        "patch_issue=<(ISSUE)",
-        "patch_set=<(PATCHSET)"
-      ],
-      "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia_bundled_unix.isolate",
-      "max_attempts": 1,
-      "priority": 0.8
-    },
-    "Perf-ChromeOS-Clang-Chromebook_513C24_K01-GPU-MaliT860-arm-Release-All": {
-      "dependencies": [
-        "Build-Debian9-Clang-arm-Release-Chromebook_ARM_GLES",
-        "Housekeeper-PerCommit-BundleRecipes",
-        "Housekeeper-PerCommit-IsolateSKP",
-        "Housekeeper-PerCommit-IsolateSVG",
-        "Housekeeper-PerCommit-IsolateSkImage"
-      ],
-      "dimensions": [
-        "gpu:MaliT860",
-        "os:ChromeOS",
-        "pool:Skia"
-      ],
-      "execution_timeout_ns": 14400000000000,
-      "expiration_ns": 72000000000000,
-      "extra_args": [
-        "--workdir",
-        "../../..",
-        "perf",
-        "repository=<(REPO)",
-        "buildername=Perf-ChromeOS-Clang-Chromebook_513C24_K01-GPU-MaliT860-arm-Release-All",
-        "swarm_out_dir=${ISOLATED_OUTDIR}",
-        "revision=<(REVISION)",
-        "patch_repo=<(PATCH_REPO)",
-        "patch_storage=<(PATCH_STORAGE)",
-        "patch_issue=<(ISSUE)",
-        "patch_set=<(PATCHSET)"
-      ],
-      "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia_bundled_unix.isolate",
-      "max_attempts": 1,
-      "priority": 0.8
-    },
-    "Perf-ChromeOS-Clang-Chromebook_C100p-GPU-MaliT764-arm-Debug-All": {
-      "dependencies": [
-        "Build-Debian9-Clang-arm-Debug-Chromebook_ARM_GLES",
+        "Build-Debian9-Clang-arm-Debug-Chromebook_GLES",
         "Housekeeper-PerCommit-BundleRecipes",
         "Housekeeper-PerCommit-IsolateSKP",
         "Housekeeper-PerCommit-IsolateSVG",
@@ -7548,7 +7525,7 @@
         "../../..",
         "perf",
         "repository=<(REPO)",
-        "buildername=Perf-ChromeOS-Clang-Chromebook_C100p-GPU-MaliT764-arm-Debug-All",
+        "buildername=Perf-ChromeOS-Clang-ASUSChromebookFlipC100-GPU-MaliT764-arm-Debug-All",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -7561,9 +7538,9 @@
       "max_attempts": 1,
       "priority": 0.8
     },
-    "Perf-ChromeOS-Clang-Chromebook_C100p-GPU-MaliT764-arm-Release-All": {
+    "Perf-ChromeOS-Clang-ASUSChromebookFlipC100-GPU-MaliT764-arm-Release-All": {
       "dependencies": [
-        "Build-Debian9-Clang-arm-Release-Chromebook_ARM_GLES",
+        "Build-Debian9-Clang-arm-Release-Chromebook_GLES",
         "Housekeeper-PerCommit-BundleRecipes",
         "Housekeeper-PerCommit-IsolateSKP",
         "Housekeeper-PerCommit-IsolateSVG",
@@ -7581,7 +7558,7 @@
         "../../..",
         "perf",
         "repository=<(REPO)",
-        "buildername=Perf-ChromeOS-Clang-Chromebook_C100p-GPU-MaliT764-arm-Release-All",
+        "buildername=Perf-ChromeOS-Clang-ASUSChromebookFlipC100-GPU-MaliT764-arm-Release-All",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -7594,9 +7571,9 @@
       "max_attempts": 1,
       "priority": 0.8
     },
-    "Perf-ChromeOS-Clang-Chromebook_CB5_311-GPU-TegraK1-arm-Debug-All": {
+    "Perf-ChromeOS-Clang-AcerChromebook13_CB5_311-GPU-TegraK1-arm-Debug-All": {
       "dependencies": [
-        "Build-Debian9-Clang-arm-Debug-Chromebook_ARM_GLES",
+        "Build-Debian9-Clang-arm-Debug-Chromebook_GLES",
         "Housekeeper-PerCommit-BundleRecipes",
         "Housekeeper-PerCommit-IsolateSKP",
         "Housekeeper-PerCommit-IsolateSVG",
@@ -7614,7 +7591,7 @@
         "../../..",
         "perf",
         "repository=<(REPO)",
-        "buildername=Perf-ChromeOS-Clang-Chromebook_CB5_311-GPU-TegraK1-arm-Debug-All",
+        "buildername=Perf-ChromeOS-Clang-AcerChromebook13_CB5_311-GPU-TegraK1-arm-Debug-All",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -7627,9 +7604,9 @@
       "max_attempts": 1,
       "priority": 0.8
     },
-    "Perf-ChromeOS-Clang-Chromebook_CB5_311-GPU-TegraK1-arm-Release-All": {
+    "Perf-ChromeOS-Clang-AcerChromebook13_CB5_311-GPU-TegraK1-arm-Release-All": {
       "dependencies": [
-        "Build-Debian9-Clang-arm-Release-Chromebook_ARM_GLES",
+        "Build-Debian9-Clang-arm-Release-Chromebook_GLES",
         "Housekeeper-PerCommit-BundleRecipes",
         "Housekeeper-PerCommit-IsolateSKP",
         "Housekeeper-PerCommit-IsolateSVG",
@@ -7647,7 +7624,7 @@
         "../../..",
         "perf",
         "repository=<(REPO)",
-        "buildername=Perf-ChromeOS-Clang-Chromebook_CB5_311-GPU-TegraK1-arm-Release-All",
+        "buildername=Perf-ChromeOS-Clang-AcerChromebook13_CB5_311-GPU-TegraK1-arm-Release-All",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -7660,9 +7637,9 @@
       "max_attempts": 1,
       "priority": 0.8
     },
-    "Perf-ChromeOS-Clang-Chromebook_CB5_312T-GPU-PowerVRGX6250-arm-Debug-All": {
+    "Perf-ChromeOS-Clang-AcerChromebookR13Convertible-GPU-PowerVRGX6250-arm-Debug-All": {
       "dependencies": [
-        "Build-Debian9-Clang-arm-Debug-Chromebook_ARM_GLES",
+        "Build-Debian9-Clang-arm-Debug-Chromebook_GLES",
         "Housekeeper-PerCommit-BundleRecipes",
         "Housekeeper-PerCommit-IsolateSKP",
         "Housekeeper-PerCommit-IsolateSVG",
@@ -7680,7 +7657,7 @@
         "../../..",
         "perf",
         "repository=<(REPO)",
-        "buildername=Perf-ChromeOS-Clang-Chromebook_CB5_312T-GPU-PowerVRGX6250-arm-Debug-All",
+        "buildername=Perf-ChromeOS-Clang-AcerChromebookR13Convertible-GPU-PowerVRGX6250-arm-Debug-All",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -7693,9 +7670,9 @@
       "max_attempts": 1,
       "priority": 0.8
     },
-    "Perf-ChromeOS-Clang-Chromebook_CB5_312T-GPU-PowerVRGX6250-arm-Release-All": {
+    "Perf-ChromeOS-Clang-AcerChromebookR13Convertible-GPU-PowerVRGX6250-arm-Release-All": {
       "dependencies": [
-        "Build-Debian9-Clang-arm-Release-Chromebook_ARM_GLES",
+        "Build-Debian9-Clang-arm-Release-Chromebook_GLES",
         "Housekeeper-PerCommit-BundleRecipes",
         "Housekeeper-PerCommit-IsolateSKP",
         "Housekeeper-PerCommit-IsolateSVG",
@@ -7713,7 +7690,139 @@
         "../../..",
         "perf",
         "repository=<(REPO)",
-        "buildername=Perf-ChromeOS-Clang-Chromebook_CB5_312T-GPU-PowerVRGX6250-arm-Release-All",
+        "buildername=Perf-ChromeOS-Clang-AcerChromebookR13Convertible-GPU-PowerVRGX6250-arm-Release-All",
+        "swarm_out_dir=${ISOLATED_OUTDIR}",
+        "revision=<(REVISION)",
+        "patch_repo=<(PATCH_REPO)",
+        "patch_storage=<(PATCH_STORAGE)",
+        "patch_issue=<(ISSUE)",
+        "patch_set=<(PATCHSET)"
+      ],
+      "io_timeout_ns": 2400000000000,
+      "isolate": "perf_skia_bundled_unix.isolate",
+      "max_attempts": 1,
+      "priority": 0.8
+    },
+    "Perf-ChromeOS-Clang-SamsungChromebook2012-GPU-MaliT604-arm-Debug-All": {
+      "dependencies": [
+        "Build-Debian9-Clang-arm-Debug-Chromebook_GLES",
+        "Housekeeper-PerCommit-BundleRecipes",
+        "Housekeeper-PerCommit-IsolateSKP",
+        "Housekeeper-PerCommit-IsolateSVG",
+        "Housekeeper-PerCommit-IsolateSkImage"
+      ],
+      "dimensions": [
+        "gpu:MaliT604",
+        "os:ChromeOS",
+        "pool:Skia"
+      ],
+      "execution_timeout_ns": 14400000000000,
+      "expiration_ns": 72000000000000,
+      "extra_args": [
+        "--workdir",
+        "../../..",
+        "perf",
+        "repository=<(REPO)",
+        "buildername=Perf-ChromeOS-Clang-SamsungChromebook2012-GPU-MaliT604-arm-Debug-All",
+        "swarm_out_dir=${ISOLATED_OUTDIR}",
+        "revision=<(REVISION)",
+        "patch_repo=<(PATCH_REPO)",
+        "patch_storage=<(PATCH_STORAGE)",
+        "patch_issue=<(ISSUE)",
+        "patch_set=<(PATCHSET)"
+      ],
+      "io_timeout_ns": 2400000000000,
+      "isolate": "perf_skia_bundled_unix.isolate",
+      "max_attempts": 1,
+      "priority": 0.8
+    },
+    "Perf-ChromeOS-Clang-SamsungChromebook2012-GPU-MaliT604-arm-Release-All": {
+      "dependencies": [
+        "Build-Debian9-Clang-arm-Release-Chromebook_GLES",
+        "Housekeeper-PerCommit-BundleRecipes",
+        "Housekeeper-PerCommit-IsolateSKP",
+        "Housekeeper-PerCommit-IsolateSVG",
+        "Housekeeper-PerCommit-IsolateSkImage"
+      ],
+      "dimensions": [
+        "gpu:MaliT604",
+        "os:ChromeOS",
+        "pool:Skia"
+      ],
+      "execution_timeout_ns": 14400000000000,
+      "expiration_ns": 72000000000000,
+      "extra_args": [
+        "--workdir",
+        "../../..",
+        "perf",
+        "repository=<(REPO)",
+        "buildername=Perf-ChromeOS-Clang-SamsungChromebook2012-GPU-MaliT604-arm-Release-All",
+        "swarm_out_dir=${ISOLATED_OUTDIR}",
+        "revision=<(REVISION)",
+        "patch_repo=<(PATCH_REPO)",
+        "patch_storage=<(PATCH_STORAGE)",
+        "patch_issue=<(ISSUE)",
+        "patch_set=<(PATCHSET)"
+      ],
+      "io_timeout_ns": 2400000000000,
+      "isolate": "perf_skia_bundled_unix.isolate",
+      "max_attempts": 1,
+      "priority": 0.8
+    },
+    "Perf-ChromeOS-Clang-SamsungChromebookPlus-GPU-MaliT860-arm-Debug-All": {
+      "dependencies": [
+        "Build-Debian9-Clang-arm-Debug-Chromebook_GLES",
+        "Housekeeper-PerCommit-BundleRecipes",
+        "Housekeeper-PerCommit-IsolateSKP",
+        "Housekeeper-PerCommit-IsolateSVG",
+        "Housekeeper-PerCommit-IsolateSkImage"
+      ],
+      "dimensions": [
+        "gpu:MaliT860",
+        "os:ChromeOS",
+        "pool:Skia"
+      ],
+      "execution_timeout_ns": 14400000000000,
+      "expiration_ns": 72000000000000,
+      "extra_args": [
+        "--workdir",
+        "../../..",
+        "perf",
+        "repository=<(REPO)",
+        "buildername=Perf-ChromeOS-Clang-SamsungChromebookPlus-GPU-MaliT860-arm-Debug-All",
+        "swarm_out_dir=${ISOLATED_OUTDIR}",
+        "revision=<(REVISION)",
+        "patch_repo=<(PATCH_REPO)",
+        "patch_storage=<(PATCH_STORAGE)",
+        "patch_issue=<(ISSUE)",
+        "patch_set=<(PATCHSET)"
+      ],
+      "io_timeout_ns": 2400000000000,
+      "isolate": "perf_skia_bundled_unix.isolate",
+      "max_attempts": 1,
+      "priority": 0.8
+    },
+    "Perf-ChromeOS-Clang-SamsungChromebookPlus-GPU-MaliT860-arm-Release-All": {
+      "dependencies": [
+        "Build-Debian9-Clang-arm-Release-Chromebook_GLES",
+        "Housekeeper-PerCommit-BundleRecipes",
+        "Housekeeper-PerCommit-IsolateSKP",
+        "Housekeeper-PerCommit-IsolateSVG",
+        "Housekeeper-PerCommit-IsolateSkImage"
+      ],
+      "dimensions": [
+        "gpu:MaliT860",
+        "os:ChromeOS",
+        "pool:Skia"
+      ],
+      "execution_timeout_ns": 14400000000000,
+      "expiration_ns": 72000000000000,
+      "extra_args": [
+        "--workdir",
+        "../../..",
+        "perf",
+        "repository=<(REPO)",
+        "buildername=Perf-ChromeOS-Clang-SamsungChromebookPlus-GPU-MaliT860-arm-Release-All",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -8908,7 +9017,7 @@
       "dimensions": [
         "cpu:x86-64-E5-2697_v2",
         "gpu:none",
-        "os:Mac-10.12",
+        "os:Mac-10.12.2",
         "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
@@ -8956,7 +9065,7 @@
       "dimensions": [
         "cpu:x86-64-E5-2697_v2",
         "gpu:none",
-        "os:Mac-10.12",
+        "os:Mac-10.12.2",
         "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
@@ -9003,7 +9112,7 @@
       ],
       "dimensions": [
         "gpu:8086:0a2e",
-        "os:Mac-10.12",
+        "os:Mac-10.12.2",
         "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
@@ -9050,7 +9159,7 @@
       ],
       "dimensions": [
         "gpu:8086:0a2e",
-        "os:Mac-10.12",
+        "os:Mac-10.12.2",
         "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
@@ -9097,7 +9206,7 @@
       ],
       "dimensions": [
         "gpu:8086:0a2e",
-        "os:Mac-10.12",
+        "os:Mac-10.12.2",
         "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
@@ -14256,7 +14365,7 @@
         "Housekeeper-PerCommit-IsolateSkImage"
       ],
       "dimensions": [
-        "device_os:OPP1.170223.012",
+        "device_os:OPR5.170623.007",
         "device_type:angler",
         "os:Android",
         "pool:Skia"
@@ -14290,7 +14399,7 @@
         "Housekeeper-PerCommit-IsolateSkImage"
       ],
       "dimensions": [
-        "device_os:OPP1.170223.012",
+        "device_os:OPR5.170623.007",
         "device_type:angler",
         "os:Android",
         "pool:Skia"
@@ -14324,7 +14433,7 @@
         "Housekeeper-PerCommit-IsolateSkImage"
       ],
       "dimensions": [
-        "device_os:OPP1.170223.012",
+        "device_os:OPR5.170623.007",
         "device_type:angler",
         "os:Android",
         "pool:Skia"
@@ -14358,7 +14467,7 @@
         "Housekeeper-PerCommit-IsolateSkImage"
       ],
       "dimensions": [
-        "device_os:OPP1.170223.012",
+        "device_os:OPR5.170623.007",
         "device_type:angler",
         "os:Android",
         "pool:Skia"
@@ -14460,7 +14569,7 @@
         "Housekeeper-PerCommit-IsolateSkImage"
       ],
       "dimensions": [
-        "device_os:OPR6.170623.010",
+        "device_os:OPR6.170623.021",
         "device_type:fugu",
         "os:Android",
         "pool:Skia"
@@ -14494,7 +14603,7 @@
         "Housekeeper-PerCommit-IsolateSkImage"
       ],
       "dimensions": [
-        "device_os:OPR6.170623.010",
+        "device_os:OPR6.170623.021",
         "device_type:fugu",
         "os:Android",
         "pool:Skia"
@@ -14528,7 +14637,7 @@
         "Housekeeper-PerCommit-IsolateSkImage"
       ],
       "dimensions": [
-        "device_os:OPR6.170623.010",
+        "device_os:OPR6.170623.021",
         "device_type:fugu",
         "os:Android",
         "pool:Skia"
@@ -14562,7 +14671,7 @@
         "Housekeeper-PerCommit-IsolateSkImage"
       ],
       "dimensions": [
-        "device_os:OPR6.170623.010",
+        "device_os:OPR6.170623.021",
         "device_type:fugu",
         "os:Android",
         "pool:Skia"
@@ -14596,7 +14705,7 @@
         "Housekeeper-PerCommit-IsolateSkImage"
       ],
       "dimensions": [
-        "device_os:OPR6.170623.010",
+        "device_os:OPR6.170623.021",
         "device_type:fugu",
         "os:Android",
         "pool:Skia"
@@ -14630,7 +14739,7 @@
         "Housekeeper-PerCommit-IsolateSkImage"
       ],
       "dimensions": [
-        "device_os:OPR6.170623.010",
+        "device_os:OPR6.170623.021",
         "device_type:fugu",
         "os:Android",
         "pool:Skia"
@@ -15029,141 +15138,9 @@
       "max_attempts": 1,
       "priority": 0.8
     },
-    "Test-ChromeOS-Clang-Chromebook_303C12-GPU-MaliT604-arm-Debug-All": {
+    "Test-ChromeOS-Clang-ASUSChromebookFlipC100-GPU-MaliT764-arm-Debug-All": {
       "dependencies": [
-        "Build-Debian9-Clang-arm-Debug-Chromebook_ARM_GLES",
-        "Housekeeper-PerCommit-BundleRecipes",
-        "Housekeeper-PerCommit-IsolateSKP",
-        "Housekeeper-PerCommit-IsolateSVG",
-        "Housekeeper-PerCommit-IsolateSkImage"
-      ],
-      "dimensions": [
-        "gpu:MaliT604",
-        "os:ChromeOS",
-        "pool:Skia"
-      ],
-      "execution_timeout_ns": 14400000000000,
-      "expiration_ns": 72000000000000,
-      "extra_args": [
-        "--workdir",
-        "../../..",
-        "test",
-        "repository=<(REPO)",
-        "buildername=Test-ChromeOS-Clang-Chromebook_303C12-GPU-MaliT604-arm-Debug-All",
-        "swarm_out_dir=${ISOLATED_OUTDIR}",
-        "revision=<(REVISION)",
-        "patch_repo=<(PATCH_REPO)",
-        "patch_storage=<(PATCH_STORAGE)",
-        "patch_issue=<(ISSUE)",
-        "patch_set=<(PATCHSET)"
-      ],
-      "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia_bundled_unix.isolate",
-      "max_attempts": 1,
-      "priority": 0.8
-    },
-    "Test-ChromeOS-Clang-Chromebook_303C12-GPU-MaliT604-arm-Release-All": {
-      "dependencies": [
-        "Build-Debian9-Clang-arm-Release-Chromebook_ARM_GLES",
-        "Housekeeper-PerCommit-BundleRecipes",
-        "Housekeeper-PerCommit-IsolateSKP",
-        "Housekeeper-PerCommit-IsolateSVG",
-        "Housekeeper-PerCommit-IsolateSkImage"
-      ],
-      "dimensions": [
-        "gpu:MaliT604",
-        "os:ChromeOS",
-        "pool:Skia"
-      ],
-      "execution_timeout_ns": 14400000000000,
-      "expiration_ns": 72000000000000,
-      "extra_args": [
-        "--workdir",
-        "../../..",
-        "test",
-        "repository=<(REPO)",
-        "buildername=Test-ChromeOS-Clang-Chromebook_303C12-GPU-MaliT604-arm-Release-All",
-        "swarm_out_dir=${ISOLATED_OUTDIR}",
-        "revision=<(REVISION)",
-        "patch_repo=<(PATCH_REPO)",
-        "patch_storage=<(PATCH_STORAGE)",
-        "patch_issue=<(ISSUE)",
-        "patch_set=<(PATCHSET)"
-      ],
-      "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia_bundled_unix.isolate",
-      "max_attempts": 1,
-      "priority": 0.8
-    },
-    "Test-ChromeOS-Clang-Chromebook_513C24_K01-GPU-MaliT860-arm-Debug-All": {
-      "dependencies": [
-        "Build-Debian9-Clang-arm-Debug-Chromebook_ARM_GLES",
-        "Housekeeper-PerCommit-BundleRecipes",
-        "Housekeeper-PerCommit-IsolateSKP",
-        "Housekeeper-PerCommit-IsolateSVG",
-        "Housekeeper-PerCommit-IsolateSkImage"
-      ],
-      "dimensions": [
-        "gpu:MaliT860",
-        "os:ChromeOS",
-        "pool:Skia"
-      ],
-      "execution_timeout_ns": 14400000000000,
-      "expiration_ns": 72000000000000,
-      "extra_args": [
-        "--workdir",
-        "../../..",
-        "test",
-        "repository=<(REPO)",
-        "buildername=Test-ChromeOS-Clang-Chromebook_513C24_K01-GPU-MaliT860-arm-Debug-All",
-        "swarm_out_dir=${ISOLATED_OUTDIR}",
-        "revision=<(REVISION)",
-        "patch_repo=<(PATCH_REPO)",
-        "patch_storage=<(PATCH_STORAGE)",
-        "patch_issue=<(ISSUE)",
-        "patch_set=<(PATCHSET)"
-      ],
-      "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia_bundled_unix.isolate",
-      "max_attempts": 1,
-      "priority": 0.8
-    },
-    "Test-ChromeOS-Clang-Chromebook_513C24_K01-GPU-MaliT860-arm-Release-All": {
-      "dependencies": [
-        "Build-Debian9-Clang-arm-Release-Chromebook_ARM_GLES",
-        "Housekeeper-PerCommit-BundleRecipes",
-        "Housekeeper-PerCommit-IsolateSKP",
-        "Housekeeper-PerCommit-IsolateSVG",
-        "Housekeeper-PerCommit-IsolateSkImage"
-      ],
-      "dimensions": [
-        "gpu:MaliT860",
-        "os:ChromeOS",
-        "pool:Skia"
-      ],
-      "execution_timeout_ns": 14400000000000,
-      "expiration_ns": 72000000000000,
-      "extra_args": [
-        "--workdir",
-        "../../..",
-        "test",
-        "repository=<(REPO)",
-        "buildername=Test-ChromeOS-Clang-Chromebook_513C24_K01-GPU-MaliT860-arm-Release-All",
-        "swarm_out_dir=${ISOLATED_OUTDIR}",
-        "revision=<(REVISION)",
-        "patch_repo=<(PATCH_REPO)",
-        "patch_storage=<(PATCH_STORAGE)",
-        "patch_issue=<(ISSUE)",
-        "patch_set=<(PATCHSET)"
-      ],
-      "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia_bundled_unix.isolate",
-      "max_attempts": 1,
-      "priority": 0.8
-    },
-    "Test-ChromeOS-Clang-Chromebook_C100p-GPU-MaliT764-arm-Debug-All": {
-      "dependencies": [
-        "Build-Debian9-Clang-arm-Debug-Chromebook_ARM_GLES",
+        "Build-Debian9-Clang-arm-Debug-Chromebook_GLES",
         "Housekeeper-PerCommit-BundleRecipes",
         "Housekeeper-PerCommit-IsolateSKP",
         "Housekeeper-PerCommit-IsolateSVG",
@@ -15181,7 +15158,7 @@
         "../../..",
         "test",
         "repository=<(REPO)",
-        "buildername=Test-ChromeOS-Clang-Chromebook_C100p-GPU-MaliT764-arm-Debug-All",
+        "buildername=Test-ChromeOS-Clang-ASUSChromebookFlipC100-GPU-MaliT764-arm-Debug-All",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -15194,9 +15171,9 @@
       "max_attempts": 1,
       "priority": 0.8
     },
-    "Test-ChromeOS-Clang-Chromebook_C100p-GPU-MaliT764-arm-Release-All": {
+    "Test-ChromeOS-Clang-ASUSChromebookFlipC100-GPU-MaliT764-arm-Release-All": {
       "dependencies": [
-        "Build-Debian9-Clang-arm-Release-Chromebook_ARM_GLES",
+        "Build-Debian9-Clang-arm-Release-Chromebook_GLES",
         "Housekeeper-PerCommit-BundleRecipes",
         "Housekeeper-PerCommit-IsolateSKP",
         "Housekeeper-PerCommit-IsolateSVG",
@@ -15214,7 +15191,7 @@
         "../../..",
         "test",
         "repository=<(REPO)",
-        "buildername=Test-ChromeOS-Clang-Chromebook_C100p-GPU-MaliT764-arm-Release-All",
+        "buildername=Test-ChromeOS-Clang-ASUSChromebookFlipC100-GPU-MaliT764-arm-Release-All",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -15227,9 +15204,9 @@
       "max_attempts": 1,
       "priority": 0.8
     },
-    "Test-ChromeOS-Clang-Chromebook_CB5_311-GPU-TegraK1-arm-Debug-All": {
+    "Test-ChromeOS-Clang-AcerChromebook13_CB5_311-GPU-TegraK1-arm-Debug-All": {
       "dependencies": [
-        "Build-Debian9-Clang-arm-Debug-Chromebook_ARM_GLES",
+        "Build-Debian9-Clang-arm-Debug-Chromebook_GLES",
         "Housekeeper-PerCommit-BundleRecipes",
         "Housekeeper-PerCommit-IsolateSKP",
         "Housekeeper-PerCommit-IsolateSVG",
@@ -15247,7 +15224,7 @@
         "../../..",
         "test",
         "repository=<(REPO)",
-        "buildername=Test-ChromeOS-Clang-Chromebook_CB5_311-GPU-TegraK1-arm-Debug-All",
+        "buildername=Test-ChromeOS-Clang-AcerChromebook13_CB5_311-GPU-TegraK1-arm-Debug-All",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -15260,9 +15237,9 @@
       "max_attempts": 1,
       "priority": 0.8
     },
-    "Test-ChromeOS-Clang-Chromebook_CB5_311-GPU-TegraK1-arm-Release-All": {
+    "Test-ChromeOS-Clang-AcerChromebook13_CB5_311-GPU-TegraK1-arm-Release-All": {
       "dependencies": [
-        "Build-Debian9-Clang-arm-Release-Chromebook_ARM_GLES",
+        "Build-Debian9-Clang-arm-Release-Chromebook_GLES",
         "Housekeeper-PerCommit-BundleRecipes",
         "Housekeeper-PerCommit-IsolateSKP",
         "Housekeeper-PerCommit-IsolateSVG",
@@ -15280,7 +15257,7 @@
         "../../..",
         "test",
         "repository=<(REPO)",
-        "buildername=Test-ChromeOS-Clang-Chromebook_CB5_311-GPU-TegraK1-arm-Release-All",
+        "buildername=Test-ChromeOS-Clang-AcerChromebook13_CB5_311-GPU-TegraK1-arm-Release-All",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -15293,9 +15270,9 @@
       "max_attempts": 1,
       "priority": 0.8
     },
-    "Test-ChromeOS-Clang-Chromebook_CB5_312T-GPU-PowerVRGX6250-arm-Debug-All": {
+    "Test-ChromeOS-Clang-AcerChromebookR13Convertible-GPU-PowerVRGX6250-arm-Debug-All": {
       "dependencies": [
-        "Build-Debian9-Clang-arm-Debug-Chromebook_ARM_GLES",
+        "Build-Debian9-Clang-arm-Debug-Chromebook_GLES",
         "Housekeeper-PerCommit-BundleRecipes",
         "Housekeeper-PerCommit-IsolateSKP",
         "Housekeeper-PerCommit-IsolateSVG",
@@ -15313,7 +15290,7 @@
         "../../..",
         "test",
         "repository=<(REPO)",
-        "buildername=Test-ChromeOS-Clang-Chromebook_CB5_312T-GPU-PowerVRGX6250-arm-Debug-All",
+        "buildername=Test-ChromeOS-Clang-AcerChromebookR13Convertible-GPU-PowerVRGX6250-arm-Debug-All",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -15326,9 +15303,9 @@
       "max_attempts": 1,
       "priority": 0.8
     },
-    "Test-ChromeOS-Clang-Chromebook_CB5_312T-GPU-PowerVRGX6250-arm-Release-All": {
+    "Test-ChromeOS-Clang-AcerChromebookR13Convertible-GPU-PowerVRGX6250-arm-Release-All": {
       "dependencies": [
-        "Build-Debian9-Clang-arm-Release-Chromebook_ARM_GLES",
+        "Build-Debian9-Clang-arm-Release-Chromebook_GLES",
         "Housekeeper-PerCommit-BundleRecipes",
         "Housekeeper-PerCommit-IsolateSKP",
         "Housekeeper-PerCommit-IsolateSVG",
@@ -15346,7 +15323,139 @@
         "../../..",
         "test",
         "repository=<(REPO)",
-        "buildername=Test-ChromeOS-Clang-Chromebook_CB5_312T-GPU-PowerVRGX6250-arm-Release-All",
+        "buildername=Test-ChromeOS-Clang-AcerChromebookR13Convertible-GPU-PowerVRGX6250-arm-Release-All",
+        "swarm_out_dir=${ISOLATED_OUTDIR}",
+        "revision=<(REVISION)",
+        "patch_repo=<(PATCH_REPO)",
+        "patch_storage=<(PATCH_STORAGE)",
+        "patch_issue=<(ISSUE)",
+        "patch_set=<(PATCHSET)"
+      ],
+      "io_timeout_ns": 2400000000000,
+      "isolate": "test_skia_bundled_unix.isolate",
+      "max_attempts": 1,
+      "priority": 0.8
+    },
+    "Test-ChromeOS-Clang-SamsungChromebook2012-GPU-MaliT604-arm-Debug-All": {
+      "dependencies": [
+        "Build-Debian9-Clang-arm-Debug-Chromebook_GLES",
+        "Housekeeper-PerCommit-BundleRecipes",
+        "Housekeeper-PerCommit-IsolateSKP",
+        "Housekeeper-PerCommit-IsolateSVG",
+        "Housekeeper-PerCommit-IsolateSkImage"
+      ],
+      "dimensions": [
+        "gpu:MaliT604",
+        "os:ChromeOS",
+        "pool:Skia"
+      ],
+      "execution_timeout_ns": 14400000000000,
+      "expiration_ns": 72000000000000,
+      "extra_args": [
+        "--workdir",
+        "../../..",
+        "test",
+        "repository=<(REPO)",
+        "buildername=Test-ChromeOS-Clang-SamsungChromebook2012-GPU-MaliT604-arm-Debug-All",
+        "swarm_out_dir=${ISOLATED_OUTDIR}",
+        "revision=<(REVISION)",
+        "patch_repo=<(PATCH_REPO)",
+        "patch_storage=<(PATCH_STORAGE)",
+        "patch_issue=<(ISSUE)",
+        "patch_set=<(PATCHSET)"
+      ],
+      "io_timeout_ns": 2400000000000,
+      "isolate": "test_skia_bundled_unix.isolate",
+      "max_attempts": 1,
+      "priority": 0.8
+    },
+    "Test-ChromeOS-Clang-SamsungChromebook2012-GPU-MaliT604-arm-Release-All": {
+      "dependencies": [
+        "Build-Debian9-Clang-arm-Release-Chromebook_GLES",
+        "Housekeeper-PerCommit-BundleRecipes",
+        "Housekeeper-PerCommit-IsolateSKP",
+        "Housekeeper-PerCommit-IsolateSVG",
+        "Housekeeper-PerCommit-IsolateSkImage"
+      ],
+      "dimensions": [
+        "gpu:MaliT604",
+        "os:ChromeOS",
+        "pool:Skia"
+      ],
+      "execution_timeout_ns": 14400000000000,
+      "expiration_ns": 72000000000000,
+      "extra_args": [
+        "--workdir",
+        "../../..",
+        "test",
+        "repository=<(REPO)",
+        "buildername=Test-ChromeOS-Clang-SamsungChromebook2012-GPU-MaliT604-arm-Release-All",
+        "swarm_out_dir=${ISOLATED_OUTDIR}",
+        "revision=<(REVISION)",
+        "patch_repo=<(PATCH_REPO)",
+        "patch_storage=<(PATCH_STORAGE)",
+        "patch_issue=<(ISSUE)",
+        "patch_set=<(PATCHSET)"
+      ],
+      "io_timeout_ns": 2400000000000,
+      "isolate": "test_skia_bundled_unix.isolate",
+      "max_attempts": 1,
+      "priority": 0.8
+    },
+    "Test-ChromeOS-Clang-SamsungChromebookPlus-GPU-MaliT860-arm-Debug-All": {
+      "dependencies": [
+        "Build-Debian9-Clang-arm-Debug-Chromebook_GLES",
+        "Housekeeper-PerCommit-BundleRecipes",
+        "Housekeeper-PerCommit-IsolateSKP",
+        "Housekeeper-PerCommit-IsolateSVG",
+        "Housekeeper-PerCommit-IsolateSkImage"
+      ],
+      "dimensions": [
+        "gpu:MaliT860",
+        "os:ChromeOS",
+        "pool:Skia"
+      ],
+      "execution_timeout_ns": 14400000000000,
+      "expiration_ns": 72000000000000,
+      "extra_args": [
+        "--workdir",
+        "../../..",
+        "test",
+        "repository=<(REPO)",
+        "buildername=Test-ChromeOS-Clang-SamsungChromebookPlus-GPU-MaliT860-arm-Debug-All",
+        "swarm_out_dir=${ISOLATED_OUTDIR}",
+        "revision=<(REVISION)",
+        "patch_repo=<(PATCH_REPO)",
+        "patch_storage=<(PATCH_STORAGE)",
+        "patch_issue=<(ISSUE)",
+        "patch_set=<(PATCHSET)"
+      ],
+      "io_timeout_ns": 2400000000000,
+      "isolate": "test_skia_bundled_unix.isolate",
+      "max_attempts": 1,
+      "priority": 0.8
+    },
+    "Test-ChromeOS-Clang-SamsungChromebookPlus-GPU-MaliT860-arm-Release-All": {
+      "dependencies": [
+        "Build-Debian9-Clang-arm-Release-Chromebook_GLES",
+        "Housekeeper-PerCommit-BundleRecipes",
+        "Housekeeper-PerCommit-IsolateSKP",
+        "Housekeeper-PerCommit-IsolateSVG",
+        "Housekeeper-PerCommit-IsolateSkImage"
+      ],
+      "dimensions": [
+        "gpu:MaliT860",
+        "os:ChromeOS",
+        "pool:Skia"
+      ],
+      "execution_timeout_ns": 14400000000000,
+      "expiration_ns": 72000000000000,
+      "extra_args": [
+        "--workdir",
+        "../../..",
+        "test",
+        "repository=<(REPO)",
+        "buildername=Test-ChromeOS-Clang-SamsungChromebookPlus-GPU-MaliT860-arm-Release-All",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -16156,7 +16265,7 @@
       "max_attempts": 1,
       "priority": 0.8
     },
-    "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_00_16-Coverage": {
+    "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_00_12-Coverage": {
       "cipd_packages": [
         {
           "name": "skia/bots/skimage",
@@ -16191,7 +16300,7 @@
         "../../..",
         "test",
         "repository=<(REPO)",
-        "buildername=Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_00_16-Coverage",
+        "buildername=Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_00_12-Coverage",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -16204,7 +16313,7 @@
       "max_attempts": 1,
       "priority": 0.8
     },
-    "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_01_16-Coverage": {
+    "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_01_12-Coverage": {
       "cipd_packages": [
         {
           "name": "skia/bots/skimage",
@@ -16239,7 +16348,7 @@
         "../../..",
         "test",
         "repository=<(REPO)",
-        "buildername=Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_01_16-Coverage",
+        "buildername=Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_01_12-Coverage",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -16252,7 +16361,7 @@
       "max_attempts": 1,
       "priority": 0.8
     },
-    "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_02_16-Coverage": {
+    "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_02_12-Coverage": {
       "cipd_packages": [
         {
           "name": "skia/bots/skimage",
@@ -16287,7 +16396,7 @@
         "../../..",
         "test",
         "repository=<(REPO)",
-        "buildername=Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_02_16-Coverage",
+        "buildername=Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_02_12-Coverage",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -16300,7 +16409,7 @@
       "max_attempts": 1,
       "priority": 0.8
     },
-    "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_03_16-Coverage": {
+    "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_03_12-Coverage": {
       "cipd_packages": [
         {
           "name": "skia/bots/skimage",
@@ -16335,7 +16444,7 @@
         "../../..",
         "test",
         "repository=<(REPO)",
-        "buildername=Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_03_16-Coverage",
+        "buildername=Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_03_12-Coverage",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -16348,7 +16457,7 @@
       "max_attempts": 1,
       "priority": 0.8
     },
-    "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_04_16-Coverage": {
+    "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_04_12-Coverage": {
       "cipd_packages": [
         {
           "name": "skia/bots/skimage",
@@ -16383,7 +16492,7 @@
         "../../..",
         "test",
         "repository=<(REPO)",
-        "buildername=Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_04_16-Coverage",
+        "buildername=Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_04_12-Coverage",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -16396,7 +16505,7 @@
       "max_attempts": 1,
       "priority": 0.8
     },
-    "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_05_16-Coverage": {
+    "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_05_12-Coverage": {
       "cipd_packages": [
         {
           "name": "skia/bots/skimage",
@@ -16431,7 +16540,7 @@
         "../../..",
         "test",
         "repository=<(REPO)",
-        "buildername=Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_05_16-Coverage",
+        "buildername=Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_05_12-Coverage",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -16444,7 +16553,7 @@
       "max_attempts": 1,
       "priority": 0.8
     },
-    "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_06_16-Coverage": {
+    "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_06_12-Coverage": {
       "cipd_packages": [
         {
           "name": "skia/bots/skimage",
@@ -16479,7 +16588,7 @@
         "../../..",
         "test",
         "repository=<(REPO)",
-        "buildername=Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_06_16-Coverage",
+        "buildername=Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_06_12-Coverage",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -16492,7 +16601,7 @@
       "max_attempts": 1,
       "priority": 0.8
     },
-    "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_07_16-Coverage": {
+    "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_07_12-Coverage": {
       "cipd_packages": [
         {
           "name": "skia/bots/skimage",
@@ -16527,7 +16636,7 @@
         "../../..",
         "test",
         "repository=<(REPO)",
-        "buildername=Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_07_16-Coverage",
+        "buildername=Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_07_12-Coverage",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -16540,7 +16649,7 @@
       "max_attempts": 1,
       "priority": 0.8
     },
-    "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_08_16-Coverage": {
+    "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_08_12-Coverage": {
       "cipd_packages": [
         {
           "name": "skia/bots/skimage",
@@ -16575,7 +16684,7 @@
         "../../..",
         "test",
         "repository=<(REPO)",
-        "buildername=Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_08_16-Coverage",
+        "buildername=Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_08_12-Coverage",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -16588,7 +16697,7 @@
       "max_attempts": 1,
       "priority": 0.8
     },
-    "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_09_16-Coverage": {
+    "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_09_12-Coverage": {
       "cipd_packages": [
         {
           "name": "skia/bots/skimage",
@@ -16623,7 +16732,7 @@
         "../../..",
         "test",
         "repository=<(REPO)",
-        "buildername=Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_09_16-Coverage",
+        "buildername=Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_09_12-Coverage",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -16636,7 +16745,7 @@
       "max_attempts": 1,
       "priority": 0.8
     },
-    "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_10_16-Coverage": {
+    "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_10_12-Coverage": {
       "cipd_packages": [
         {
           "name": "skia/bots/skimage",
@@ -16671,7 +16780,7 @@
         "../../..",
         "test",
         "repository=<(REPO)",
-        "buildername=Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_10_16-Coverage",
+        "buildername=Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_10_12-Coverage",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -16684,7 +16793,7 @@
       "max_attempts": 1,
       "priority": 0.8
     },
-    "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_11_16-Coverage": {
+    "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_11_12-Coverage": {
       "cipd_packages": [
         {
           "name": "skia/bots/skimage",
@@ -16719,199 +16828,7 @@
         "../../..",
         "test",
         "repository=<(REPO)",
-        "buildername=Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_11_16-Coverage",
-        "swarm_out_dir=${ISOLATED_OUTDIR}",
-        "revision=<(REVISION)",
-        "patch_repo=<(PATCH_REPO)",
-        "patch_storage=<(PATCH_STORAGE)",
-        "patch_issue=<(ISSUE)",
-        "patch_set=<(PATCHSET)"
-      ],
-      "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia_bundled_unix.isolate",
-      "max_attempts": 1,
-      "priority": 0.8
-    },
-    "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_12_16-Coverage": {
-      "cipd_packages": [
-        {
-          "name": "skia/bots/skimage",
-          "path": "skimage",
-          "version": "version:32"
-        },
-        {
-          "name": "skia/bots/skp",
-          "path": "skp",
-          "version": "version:92"
-        },
-        {
-          "name": "skia/bots/svg",
-          "path": "svg",
-          "version": "version:9"
-        }
-      ],
-      "dependencies": [
-        "Build-Debian9-Clang-x86_64-Debug-Coverage",
-        "Housekeeper-PerCommit-BundleRecipes"
-      ],
-      "dimensions": [
-        "cpu:x86-64-Haswell_GCE",
-        "gpu:none",
-        "os:Debian-9.1",
-        "pool:Skia"
-      ],
-      "execution_timeout_ns": 14400000000000,
-      "expiration_ns": 72000000000000,
-      "extra_args": [
-        "--workdir",
-        "../../..",
-        "test",
-        "repository=<(REPO)",
-        "buildername=Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_12_16-Coverage",
-        "swarm_out_dir=${ISOLATED_OUTDIR}",
-        "revision=<(REVISION)",
-        "patch_repo=<(PATCH_REPO)",
-        "patch_storage=<(PATCH_STORAGE)",
-        "patch_issue=<(ISSUE)",
-        "patch_set=<(PATCHSET)"
-      ],
-      "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia_bundled_unix.isolate",
-      "max_attempts": 1,
-      "priority": 0.8
-    },
-    "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_13_16-Coverage": {
-      "cipd_packages": [
-        {
-          "name": "skia/bots/skimage",
-          "path": "skimage",
-          "version": "version:32"
-        },
-        {
-          "name": "skia/bots/skp",
-          "path": "skp",
-          "version": "version:92"
-        },
-        {
-          "name": "skia/bots/svg",
-          "path": "svg",
-          "version": "version:9"
-        }
-      ],
-      "dependencies": [
-        "Build-Debian9-Clang-x86_64-Debug-Coverage",
-        "Housekeeper-PerCommit-BundleRecipes"
-      ],
-      "dimensions": [
-        "cpu:x86-64-Haswell_GCE",
-        "gpu:none",
-        "os:Debian-9.1",
-        "pool:Skia"
-      ],
-      "execution_timeout_ns": 14400000000000,
-      "expiration_ns": 72000000000000,
-      "extra_args": [
-        "--workdir",
-        "../../..",
-        "test",
-        "repository=<(REPO)",
-        "buildername=Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_13_16-Coverage",
-        "swarm_out_dir=${ISOLATED_OUTDIR}",
-        "revision=<(REVISION)",
-        "patch_repo=<(PATCH_REPO)",
-        "patch_storage=<(PATCH_STORAGE)",
-        "patch_issue=<(ISSUE)",
-        "patch_set=<(PATCHSET)"
-      ],
-      "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia_bundled_unix.isolate",
-      "max_attempts": 1,
-      "priority": 0.8
-    },
-    "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_14_16-Coverage": {
-      "cipd_packages": [
-        {
-          "name": "skia/bots/skimage",
-          "path": "skimage",
-          "version": "version:32"
-        },
-        {
-          "name": "skia/bots/skp",
-          "path": "skp",
-          "version": "version:92"
-        },
-        {
-          "name": "skia/bots/svg",
-          "path": "svg",
-          "version": "version:9"
-        }
-      ],
-      "dependencies": [
-        "Build-Debian9-Clang-x86_64-Debug-Coverage",
-        "Housekeeper-PerCommit-BundleRecipes"
-      ],
-      "dimensions": [
-        "cpu:x86-64-Haswell_GCE",
-        "gpu:none",
-        "os:Debian-9.1",
-        "pool:Skia"
-      ],
-      "execution_timeout_ns": 14400000000000,
-      "expiration_ns": 72000000000000,
-      "extra_args": [
-        "--workdir",
-        "../../..",
-        "test",
-        "repository=<(REPO)",
-        "buildername=Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_14_16-Coverage",
-        "swarm_out_dir=${ISOLATED_OUTDIR}",
-        "revision=<(REVISION)",
-        "patch_repo=<(PATCH_REPO)",
-        "patch_storage=<(PATCH_STORAGE)",
-        "patch_issue=<(ISSUE)",
-        "patch_set=<(PATCHSET)"
-      ],
-      "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia_bundled_unix.isolate",
-      "max_attempts": 1,
-      "priority": 0.8
-    },
-    "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_15_16-Coverage": {
-      "cipd_packages": [
-        {
-          "name": "skia/bots/skimage",
-          "path": "skimage",
-          "version": "version:32"
-        },
-        {
-          "name": "skia/bots/skp",
-          "path": "skp",
-          "version": "version:92"
-        },
-        {
-          "name": "skia/bots/svg",
-          "path": "svg",
-          "version": "version:9"
-        }
-      ],
-      "dependencies": [
-        "Build-Debian9-Clang-x86_64-Debug-Coverage",
-        "Housekeeper-PerCommit-BundleRecipes"
-      ],
-      "dimensions": [
-        "cpu:x86-64-Haswell_GCE",
-        "gpu:none",
-        "os:Debian-9.1",
-        "pool:Skia"
-      ],
-      "execution_timeout_ns": 14400000000000,
-      "expiration_ns": 72000000000000,
-      "extra_args": [
-        "--workdir",
-        "../../..",
-        "test",
-        "repository=<(REPO)",
-        "buildername=Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_15_16-Coverage",
+        "buildername=Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_11_12-Coverage",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -17824,7 +17741,7 @@
       "dimensions": [
         "cpu:x86-64-E5-2697_v2",
         "gpu:none",
-        "os:Mac-10.12",
+        "os:Mac-10.12.2",
         "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
@@ -17872,7 +17789,7 @@
       "dimensions": [
         "cpu:x86-64-E5-2697_v2",
         "gpu:none",
-        "os:Mac-10.12",
+        "os:Mac-10.12.2",
         "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
@@ -17920,7 +17837,7 @@
       "dimensions": [
         "cpu:x86-64-E5-2697_v2",
         "gpu:none",
-        "os:Mac-10.12",
+        "os:Mac-10.12.2",
         "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
@@ -17967,7 +17884,7 @@
       ],
       "dimensions": [
         "gpu:8086:0a2e",
-        "os:Mac-10.12",
+        "os:Mac-10.12.2",
         "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
@@ -18014,7 +17931,7 @@
       ],
       "dimensions": [
         "gpu:8086:0a2e",
-        "os:Mac-10.12",
+        "os:Mac-10.12.2",
         "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
@@ -18061,7 +17978,7 @@
       ],
       "dimensions": [
         "gpu:8086:0a2e",
-        "os:Mac-10.12",
+        "os:Mac-10.12.2",
         "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
@@ -18108,7 +18025,7 @@
       ],
       "dimensions": [
         "gpu:8086:0a2e",
-        "os:Mac-10.12",
+        "os:Mac-10.12.2",
         "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
@@ -23471,9 +23388,9 @@
       "max_attempts": 1,
       "priority": 0.8
     },
-    "Upload-Calmbench-Debian9-Clang-GCE-CPU-AVX2-x86_64-Release": {
+    "Upload-Calmbench-Debian9-Clang-GCE-CPU-AVX2-x86_64-Release-All": {
       "dependencies": [
-        "Calmbench-Debian9-Clang-GCE-CPU-AVX2-x86_64-Release"
+        "Calmbench-Debian9-Clang-GCE-CPU-AVX2-x86_64-Release-All"
       ],
       "dimensions": [
         "cpu:x86-64-Haswell_GCE",
@@ -23486,7 +23403,34 @@
         "../../..",
         "upload_calmbench_results",
         "repository=<(REPO)",
-        "buildername=Calmbench-Debian9-Clang-GCE-CPU-AVX2-x86_64-Release",
+        "buildername=Calmbench-Debian9-Clang-GCE-CPU-AVX2-x86_64-Release-All",
+        "swarm_out_dir=${ISOLATED_OUTDIR}",
+        "revision=<(REVISION)",
+        "patch_repo=<(PATCH_REPO)",
+        "patch_storage=<(PATCH_STORAGE)",
+        "patch_issue=<(ISSUE)",
+        "patch_set=<(PATCHSET)",
+        "gs_bucket=skia-calmbench"
+      ],
+      "isolate": "upload_nano_results.isolate",
+      "priority": 0.8
+    },
+    "Upload-Calmbench-Ubuntu17-Clang-Golo-GPU-QuadroP400-x86_64-Release-All": {
+      "dependencies": [
+        "Calmbench-Ubuntu17-Clang-Golo-GPU-QuadroP400-x86_64-Release-All"
+      ],
+      "dimensions": [
+        "cpu:x86-64-Haswell_GCE",
+        "gpu:none",
+        "os:Debian-9.1",
+        "pool:Skia"
+      ],
+      "extra_args": [
+        "--workdir",
+        "../../..",
+        "upload_calmbench_results",
+        "repository=<(REPO)",
+        "buildername=Calmbench-Ubuntu17-Clang-Golo-GPU-QuadroP400-x86_64-Release-All",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -24173,9 +24117,9 @@
       "isolate": "upload_nano_results.isolate",
       "priority": 0.8
     },
-    "Upload-Perf-ChromeOS-Clang-Chromebook_303C12-GPU-MaliT604-arm-Release-All": {
+    "Upload-Perf-ChromeOS-Clang-ASUSChromebookFlipC100-GPU-MaliT764-arm-Release-All": {
       "dependencies": [
-        "Perf-ChromeOS-Clang-Chromebook_303C12-GPU-MaliT604-arm-Release-All"
+        "Perf-ChromeOS-Clang-ASUSChromebookFlipC100-GPU-MaliT764-arm-Release-All"
       ],
       "dimensions": [
         "cpu:x86-64-Haswell_GCE",
@@ -24188,7 +24132,7 @@
         "../../..",
         "upload_nano_results",
         "repository=<(REPO)",
-        "buildername=Perf-ChromeOS-Clang-Chromebook_303C12-GPU-MaliT604-arm-Release-All",
+        "buildername=Perf-ChromeOS-Clang-ASUSChromebookFlipC100-GPU-MaliT764-arm-Release-All",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -24200,9 +24144,9 @@
       "isolate": "upload_nano_results.isolate",
       "priority": 0.8
     },
-    "Upload-Perf-ChromeOS-Clang-Chromebook_513C24_K01-GPU-MaliT860-arm-Release-All": {
+    "Upload-Perf-ChromeOS-Clang-AcerChromebook13_CB5_311-GPU-TegraK1-arm-Release-All": {
       "dependencies": [
-        "Perf-ChromeOS-Clang-Chromebook_513C24_K01-GPU-MaliT860-arm-Release-All"
+        "Perf-ChromeOS-Clang-AcerChromebook13_CB5_311-GPU-TegraK1-arm-Release-All"
       ],
       "dimensions": [
         "cpu:x86-64-Haswell_GCE",
@@ -24215,7 +24159,7 @@
         "../../..",
         "upload_nano_results",
         "repository=<(REPO)",
-        "buildername=Perf-ChromeOS-Clang-Chromebook_513C24_K01-GPU-MaliT860-arm-Release-All",
+        "buildername=Perf-ChromeOS-Clang-AcerChromebook13_CB5_311-GPU-TegraK1-arm-Release-All",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -24227,9 +24171,9 @@
       "isolate": "upload_nano_results.isolate",
       "priority": 0.8
     },
-    "Upload-Perf-ChromeOS-Clang-Chromebook_C100p-GPU-MaliT764-arm-Release-All": {
+    "Upload-Perf-ChromeOS-Clang-AcerChromebookR13Convertible-GPU-PowerVRGX6250-arm-Release-All": {
       "dependencies": [
-        "Perf-ChromeOS-Clang-Chromebook_C100p-GPU-MaliT764-arm-Release-All"
+        "Perf-ChromeOS-Clang-AcerChromebookR13Convertible-GPU-PowerVRGX6250-arm-Release-All"
       ],
       "dimensions": [
         "cpu:x86-64-Haswell_GCE",
@@ -24242,7 +24186,7 @@
         "../../..",
         "upload_nano_results",
         "repository=<(REPO)",
-        "buildername=Perf-ChromeOS-Clang-Chromebook_C100p-GPU-MaliT764-arm-Release-All",
+        "buildername=Perf-ChromeOS-Clang-AcerChromebookR13Convertible-GPU-PowerVRGX6250-arm-Release-All",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -24254,9 +24198,9 @@
       "isolate": "upload_nano_results.isolate",
       "priority": 0.8
     },
-    "Upload-Perf-ChromeOS-Clang-Chromebook_CB5_311-GPU-TegraK1-arm-Release-All": {
+    "Upload-Perf-ChromeOS-Clang-SamsungChromebook2012-GPU-MaliT604-arm-Release-All": {
       "dependencies": [
-        "Perf-ChromeOS-Clang-Chromebook_CB5_311-GPU-TegraK1-arm-Release-All"
+        "Perf-ChromeOS-Clang-SamsungChromebook2012-GPU-MaliT604-arm-Release-All"
       ],
       "dimensions": [
         "cpu:x86-64-Haswell_GCE",
@@ -24269,7 +24213,7 @@
         "../../..",
         "upload_nano_results",
         "repository=<(REPO)",
-        "buildername=Perf-ChromeOS-Clang-Chromebook_CB5_311-GPU-TegraK1-arm-Release-All",
+        "buildername=Perf-ChromeOS-Clang-SamsungChromebook2012-GPU-MaliT604-arm-Release-All",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -24281,9 +24225,9 @@
       "isolate": "upload_nano_results.isolate",
       "priority": 0.8
     },
-    "Upload-Perf-ChromeOS-Clang-Chromebook_CB5_312T-GPU-PowerVRGX6250-arm-Release-All": {
+    "Upload-Perf-ChromeOS-Clang-SamsungChromebookPlus-GPU-MaliT860-arm-Release-All": {
       "dependencies": [
-        "Perf-ChromeOS-Clang-Chromebook_CB5_312T-GPU-PowerVRGX6250-arm-Release-All"
+        "Perf-ChromeOS-Clang-SamsungChromebookPlus-GPU-MaliT860-arm-Release-All"
       ],
       "dimensions": [
         "cpu:x86-64-Haswell_GCE",
@@ -24296,7 +24240,7 @@
         "../../..",
         "upload_nano_results",
         "repository=<(REPO)",
-        "buildername=Perf-ChromeOS-Clang-Chromebook_CB5_312T-GPU-PowerVRGX6250-arm-Release-All",
+        "buildername=Perf-ChromeOS-Clang-SamsungChromebookPlus-GPU-MaliT860-arm-Release-All",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -26873,9 +26817,9 @@
       "isolate": "upload_dm_results.isolate",
       "priority": 0.8
     },
-    "Upload-Test-ChromeOS-Clang-Chromebook_303C12-GPU-MaliT604-arm-Debug-All": {
+    "Upload-Test-ChromeOS-Clang-ASUSChromebookFlipC100-GPU-MaliT764-arm-Debug-All": {
       "dependencies": [
-        "Test-ChromeOS-Clang-Chromebook_303C12-GPU-MaliT604-arm-Debug-All"
+        "Test-ChromeOS-Clang-ASUSChromebookFlipC100-GPU-MaliT764-arm-Debug-All"
       ],
       "dimensions": [
         "cpu:x86-64-Haswell_GCE",
@@ -26888,7 +26832,7 @@
         "../../..",
         "upload_dm_results",
         "repository=<(REPO)",
-        "buildername=Test-ChromeOS-Clang-Chromebook_303C12-GPU-MaliT604-arm-Debug-All",
+        "buildername=Test-ChromeOS-Clang-ASUSChromebookFlipC100-GPU-MaliT764-arm-Debug-All",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -26900,9 +26844,9 @@
       "isolate": "upload_dm_results.isolate",
       "priority": 0.8
     },
-    "Upload-Test-ChromeOS-Clang-Chromebook_303C12-GPU-MaliT604-arm-Release-All": {
+    "Upload-Test-ChromeOS-Clang-ASUSChromebookFlipC100-GPU-MaliT764-arm-Release-All": {
       "dependencies": [
-        "Test-ChromeOS-Clang-Chromebook_303C12-GPU-MaliT604-arm-Release-All"
+        "Test-ChromeOS-Clang-ASUSChromebookFlipC100-GPU-MaliT764-arm-Release-All"
       ],
       "dimensions": [
         "cpu:x86-64-Haswell_GCE",
@@ -26915,7 +26859,7 @@
         "../../..",
         "upload_dm_results",
         "repository=<(REPO)",
-        "buildername=Test-ChromeOS-Clang-Chromebook_303C12-GPU-MaliT604-arm-Release-All",
+        "buildername=Test-ChromeOS-Clang-ASUSChromebookFlipC100-GPU-MaliT764-arm-Release-All",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -26927,9 +26871,9 @@
       "isolate": "upload_dm_results.isolate",
       "priority": 0.8
     },
-    "Upload-Test-ChromeOS-Clang-Chromebook_513C24_K01-GPU-MaliT860-arm-Debug-All": {
+    "Upload-Test-ChromeOS-Clang-AcerChromebook13_CB5_311-GPU-TegraK1-arm-Debug-All": {
       "dependencies": [
-        "Test-ChromeOS-Clang-Chromebook_513C24_K01-GPU-MaliT860-arm-Debug-All"
+        "Test-ChromeOS-Clang-AcerChromebook13_CB5_311-GPU-TegraK1-arm-Debug-All"
       ],
       "dimensions": [
         "cpu:x86-64-Haswell_GCE",
@@ -26942,7 +26886,7 @@
         "../../..",
         "upload_dm_results",
         "repository=<(REPO)",
-        "buildername=Test-ChromeOS-Clang-Chromebook_513C24_K01-GPU-MaliT860-arm-Debug-All",
+        "buildername=Test-ChromeOS-Clang-AcerChromebook13_CB5_311-GPU-TegraK1-arm-Debug-All",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -26954,9 +26898,9 @@
       "isolate": "upload_dm_results.isolate",
       "priority": 0.8
     },
-    "Upload-Test-ChromeOS-Clang-Chromebook_513C24_K01-GPU-MaliT860-arm-Release-All": {
+    "Upload-Test-ChromeOS-Clang-AcerChromebook13_CB5_311-GPU-TegraK1-arm-Release-All": {
       "dependencies": [
-        "Test-ChromeOS-Clang-Chromebook_513C24_K01-GPU-MaliT860-arm-Release-All"
+        "Test-ChromeOS-Clang-AcerChromebook13_CB5_311-GPU-TegraK1-arm-Release-All"
       ],
       "dimensions": [
         "cpu:x86-64-Haswell_GCE",
@@ -26969,7 +26913,7 @@
         "../../..",
         "upload_dm_results",
         "repository=<(REPO)",
-        "buildername=Test-ChromeOS-Clang-Chromebook_513C24_K01-GPU-MaliT860-arm-Release-All",
+        "buildername=Test-ChromeOS-Clang-AcerChromebook13_CB5_311-GPU-TegraK1-arm-Release-All",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -26981,9 +26925,9 @@
       "isolate": "upload_dm_results.isolate",
       "priority": 0.8
     },
-    "Upload-Test-ChromeOS-Clang-Chromebook_C100p-GPU-MaliT764-arm-Debug-All": {
+    "Upload-Test-ChromeOS-Clang-AcerChromebookR13Convertible-GPU-PowerVRGX6250-arm-Debug-All": {
       "dependencies": [
-        "Test-ChromeOS-Clang-Chromebook_C100p-GPU-MaliT764-arm-Debug-All"
+        "Test-ChromeOS-Clang-AcerChromebookR13Convertible-GPU-PowerVRGX6250-arm-Debug-All"
       ],
       "dimensions": [
         "cpu:x86-64-Haswell_GCE",
@@ -26996,7 +26940,7 @@
         "../../..",
         "upload_dm_results",
         "repository=<(REPO)",
-        "buildername=Test-ChromeOS-Clang-Chromebook_C100p-GPU-MaliT764-arm-Debug-All",
+        "buildername=Test-ChromeOS-Clang-AcerChromebookR13Convertible-GPU-PowerVRGX6250-arm-Debug-All",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -27008,9 +26952,9 @@
       "isolate": "upload_dm_results.isolate",
       "priority": 0.8
     },
-    "Upload-Test-ChromeOS-Clang-Chromebook_C100p-GPU-MaliT764-arm-Release-All": {
+    "Upload-Test-ChromeOS-Clang-AcerChromebookR13Convertible-GPU-PowerVRGX6250-arm-Release-All": {
       "dependencies": [
-        "Test-ChromeOS-Clang-Chromebook_C100p-GPU-MaliT764-arm-Release-All"
+        "Test-ChromeOS-Clang-AcerChromebookR13Convertible-GPU-PowerVRGX6250-arm-Release-All"
       ],
       "dimensions": [
         "cpu:x86-64-Haswell_GCE",
@@ -27023,7 +26967,7 @@
         "../../..",
         "upload_dm_results",
         "repository=<(REPO)",
-        "buildername=Test-ChromeOS-Clang-Chromebook_C100p-GPU-MaliT764-arm-Release-All",
+        "buildername=Test-ChromeOS-Clang-AcerChromebookR13Convertible-GPU-PowerVRGX6250-arm-Release-All",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -27035,9 +26979,9 @@
       "isolate": "upload_dm_results.isolate",
       "priority": 0.8
     },
-    "Upload-Test-ChromeOS-Clang-Chromebook_CB5_311-GPU-TegraK1-arm-Debug-All": {
+    "Upload-Test-ChromeOS-Clang-SamsungChromebook2012-GPU-MaliT604-arm-Debug-All": {
       "dependencies": [
-        "Test-ChromeOS-Clang-Chromebook_CB5_311-GPU-TegraK1-arm-Debug-All"
+        "Test-ChromeOS-Clang-SamsungChromebook2012-GPU-MaliT604-arm-Debug-All"
       ],
       "dimensions": [
         "cpu:x86-64-Haswell_GCE",
@@ -27050,7 +26994,7 @@
         "../../..",
         "upload_dm_results",
         "repository=<(REPO)",
-        "buildername=Test-ChromeOS-Clang-Chromebook_CB5_311-GPU-TegraK1-arm-Debug-All",
+        "buildername=Test-ChromeOS-Clang-SamsungChromebook2012-GPU-MaliT604-arm-Debug-All",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -27062,9 +27006,9 @@
       "isolate": "upload_dm_results.isolate",
       "priority": 0.8
     },
-    "Upload-Test-ChromeOS-Clang-Chromebook_CB5_311-GPU-TegraK1-arm-Release-All": {
+    "Upload-Test-ChromeOS-Clang-SamsungChromebook2012-GPU-MaliT604-arm-Release-All": {
       "dependencies": [
-        "Test-ChromeOS-Clang-Chromebook_CB5_311-GPU-TegraK1-arm-Release-All"
+        "Test-ChromeOS-Clang-SamsungChromebook2012-GPU-MaliT604-arm-Release-All"
       ],
       "dimensions": [
         "cpu:x86-64-Haswell_GCE",
@@ -27077,7 +27021,7 @@
         "../../..",
         "upload_dm_results",
         "repository=<(REPO)",
-        "buildername=Test-ChromeOS-Clang-Chromebook_CB5_311-GPU-TegraK1-arm-Release-All",
+        "buildername=Test-ChromeOS-Clang-SamsungChromebook2012-GPU-MaliT604-arm-Release-All",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -27089,9 +27033,9 @@
       "isolate": "upload_dm_results.isolate",
       "priority": 0.8
     },
-    "Upload-Test-ChromeOS-Clang-Chromebook_CB5_312T-GPU-PowerVRGX6250-arm-Debug-All": {
+    "Upload-Test-ChromeOS-Clang-SamsungChromebookPlus-GPU-MaliT860-arm-Debug-All": {
       "dependencies": [
-        "Test-ChromeOS-Clang-Chromebook_CB5_312T-GPU-PowerVRGX6250-arm-Debug-All"
+        "Test-ChromeOS-Clang-SamsungChromebookPlus-GPU-MaliT860-arm-Debug-All"
       ],
       "dimensions": [
         "cpu:x86-64-Haswell_GCE",
@@ -27104,7 +27048,7 @@
         "../../..",
         "upload_dm_results",
         "repository=<(REPO)",
-        "buildername=Test-ChromeOS-Clang-Chromebook_CB5_312T-GPU-PowerVRGX6250-arm-Debug-All",
+        "buildername=Test-ChromeOS-Clang-SamsungChromebookPlus-GPU-MaliT860-arm-Debug-All",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -27116,9 +27060,9 @@
       "isolate": "upload_dm_results.isolate",
       "priority": 0.8
     },
-    "Upload-Test-ChromeOS-Clang-Chromebook_CB5_312T-GPU-PowerVRGX6250-arm-Release-All": {
+    "Upload-Test-ChromeOS-Clang-SamsungChromebookPlus-GPU-MaliT860-arm-Release-All": {
       "dependencies": [
-        "Test-ChromeOS-Clang-Chromebook_CB5_312T-GPU-PowerVRGX6250-arm-Release-All"
+        "Test-ChromeOS-Clang-SamsungChromebookPlus-GPU-MaliT860-arm-Release-All"
       ],
       "dimensions": [
         "cpu:x86-64-Haswell_GCE",
@@ -27131,7 +27075,7 @@
         "../../..",
         "upload_dm_results",
         "repository=<(REPO)",
-        "buildername=Test-ChromeOS-Clang-Chromebook_CB5_312T-GPU-PowerVRGX6250-arm-Release-All",
+        "buildername=Test-ChromeOS-Clang-SamsungChromebookPlus-GPU-MaliT860-arm-Release-All",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -27359,7 +27303,7 @@
       "isolate": "upload_dm_results.isolate",
       "priority": 0.8
     },
-    "Upload-Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-Shard_16-Coverage": {
+    "Upload-Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-Shard_12-Coverage": {
       "cipd_packages": [
         {
           "name": "skia/bots/clang_linux",
@@ -27368,22 +27312,18 @@
         }
       ],
       "dependencies": [
-        "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_00_16-Coverage",
-        "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_01_16-Coverage",
-        "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_02_16-Coverage",
-        "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_03_16-Coverage",
-        "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_04_16-Coverage",
-        "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_05_16-Coverage",
-        "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_06_16-Coverage",
-        "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_07_16-Coverage",
-        "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_08_16-Coverage",
-        "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_09_16-Coverage",
-        "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_10_16-Coverage",
-        "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_11_16-Coverage",
-        "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_12_16-Coverage",
-        "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_13_16-Coverage",
-        "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_14_16-Coverage",
-        "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_15_16-Coverage",
+        "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_00_12-Coverage",
+        "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_01_12-Coverage",
+        "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_02_12-Coverage",
+        "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_03_12-Coverage",
+        "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_04_12-Coverage",
+        "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_05_12-Coverage",
+        "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_06_12-Coverage",
+        "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_07_12-Coverage",
+        "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_08_12-Coverage",
+        "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_09_12-Coverage",
+        "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_10_12-Coverage",
+        "Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-shard_11_12-Coverage",
         "Build-Debian9-Clang-x86_64-Debug-Coverage"
       ],
       "dimensions": [
@@ -27397,7 +27337,7 @@
         "../../..",
         "upload_coverage_results",
         "repository=<(REPO)",
-        "buildername=Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-Shard_16-Coverage",
+        "buildername=Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-Shard_12-Coverage",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
