@@ -179,17 +179,29 @@ SkGradientShaderBase::SkGradientShaderBase(const Descriptor& desc, const SkMatri
     }
 
     if (desc.fPos) {
-        SkScalar pos = 0;
+        SkScalar prev = 0;
         SkScalar* origPosPtr = fOrigPos;
-        *origPosPtr++ = pos; // force the first pos to 0
+        *origPosPtr++ = prev; // force the first pos to 0
 
         int startIndex = dummyFirst ? 0 : 1;
         int count = desc.fCount + dummyLast;
+
+        bool uniformStops = true;
+        const SkScalar uniformStep = desc.fPos[startIndex] - prev;
         for (int i = startIndex; i < count; i++) {
             // Pin the last value to 1.0, and make sure pos is monotonic.
-            pos = (i == desc.fCount) ? 1 : SkScalarPin(desc.fPos[i], pos, 1);
-            *origPosPtr++ = pos;
+            auto curr = (i == desc.fCount) ? 1 : SkScalarPin(desc.fPos[i], prev, 1);
+            uniformStops &= SkScalarNearlyEqual(uniformStep, curr - prev);
+
+            *origPosPtr++ = prev = curr;
         }
+
+#ifndef SK_SUPPORT_LEGACY_UNIFORM_GRADIENTS
+        // If the stops are uniform, treat them as implicit.
+        if (uniformStops) {
+            fOrigPos = nullptr;
+        }
+#endif
     }
 }
 
@@ -508,14 +520,10 @@ SkColor4f SkGradientShaderBase::getXformedColor(size_t i, SkColorSpace* dstCS) c
     }
 
     // Legacy/srgb color.
-#ifdef SK_SUPPORT_LEGACY_GRADIENT_COLOR_CONVERSION
-    return SkColor4f_from_SkColor(this->getLegacyColor(i), nullptr);
-#else
     // We quantize upfront to ensure stable SkColor round-trips.
     auto rgb255 = sk_linear_to_srgb(Sk4f::Load(fOrigColors4f[i].vec()));
     auto rgb    = SkNx_cast<float>(rgb255) * (1/255.0f);
     return { rgb[0], rgb[1], rgb[2], fOrigColors4f[i].fA };
-#endif
 }
 
 SK_DECLARE_STATIC_MUTEX(gGradientCacheMutex);
