@@ -119,7 +119,7 @@ func deriveCompileTaskName(jobName string, parts map[string]string) string {
 		ec := []string{}
 		if val := parts["extra_config"]; val != "" {
 			ec = strings.Split(val, "_")
-			ignore := []string{"Skpbench", "AbandonGpuContext", "PreAbandonGpuContext", "Valgrind", "ReleaseAndAbandonGpuContext", "CCPR", "FSAA", "FAAA", "FDAA"}
+			ignore := []string{"Skpbench", "AbandonGpuContext", "PreAbandonGpuContext", "Valgrind", "ReleaseAndAbandonGpuContext", "CCPR", "FSAA", "FAAA", "FDAA", "NativeFonts"}
 			keep := make([]string, 0, len(ec))
 			for _, part := range ec {
 				if !util.In(part, ignore) {
@@ -186,7 +186,7 @@ func defaultSwarmDimensions(parts map[string]string) []string {
 			"Chromecast": "Android",
 			"ChromeOS":   "ChromeOS",
 			"Debian9":    DEFAULT_OS_DEBIAN,
-			"Mac":        "Mac-10.12.2",
+			"Mac":        "Mac-10.12",
 			"Ubuntu14":   DEFAULT_OS_UBUNTU,
 			"Ubuntu16":   "Ubuntu-16.10",
 			"Ubuntu17":   "Ubuntu-17.04",
@@ -247,7 +247,6 @@ func defaultSwarmDimensions(parts map[string]string) []string {
 			}
 			d["device"] = device
 		} else if parts["cpu_or_gpu"] == "CPU" {
-			d["gpu"] = "none"
 			modelMapping, ok := map[string]map[string]string{
 				"AVX": {
 					"MacMini7.1": "x86-64-E5-2697_v2",
@@ -255,6 +254,7 @@ func defaultSwarmDimensions(parts map[string]string) []string {
 				},
 				"AVX2": {
 					"GCE": "x86-64-Haswell_GCE",
+					"NUC5i7RYH": "x86-64-i7-5557U",
 				},
 				"AVX512": {
 					"GCE": "x86-64-Skylake_GCE",
