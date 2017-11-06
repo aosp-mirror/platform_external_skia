@@ -993,6 +993,7 @@ cc_test {
 
     srcs: [
         "dm/DM.cpp",
+        "dm/DMFontMgr.cpp",
         "dm/DMGpuTestProcs.cpp",
         "dm/DMJsonWriter.cpp",
         "dm/DMSrcSink.cpp",
