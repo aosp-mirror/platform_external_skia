@@ -23,9 +23,6 @@ using DrawPathsOp = GrCoverageCountingPathRenderer::DrawPathsOp;
 using ScissorMode = GrCCPRCoverageOpsBuilder::ScissorMode;
 
 bool GrCoverageCountingPathRenderer::IsSupported(const GrCaps& caps) {
-#ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
-    return false;
-#else
     const GrShaderCaps& shaderCaps = *caps.shaderCaps();
     return shaderCaps.geometryShaderSupport() &&
            shaderCaps.texelBufferSupport() &&
@@ -33,11 +30,11 @@ bool GrCoverageCountingPathRenderer::IsSupported(const GrCaps& caps) {
            shaderCaps.flatInterpolationSupport() &&
            shaderCaps.maxVertexSamplers() >= 1 &&
            caps.instanceAttribSupport() &&
+           GrCaps::kNone_MapFlags != caps.mapBufferFlags() &&
            caps.isConfigTexturable(kAlpha_half_GrPixelConfig) &&
            caps.isConfigRenderable(kAlpha_half_GrPixelConfig, /*withMSAA=*/false) &&
            GrCaps::kNone_MapFlags != caps.mapBufferFlags() &&
            !caps.blacklistCoverageCounting();
-#endif // SK_BUILD_FOR_ANDROID_FRAMEWORK
 }
 
 sk_sp<GrCoverageCountingPathRenderer>
@@ -107,6 +104,7 @@ GrCoverageCountingPathRenderer::DrawPathsOp::DrawPathsOp(GrCoverageCountingPathR
         , fProcessors(std::move(args.fPaint))
         , fTailDraw(&fHeadDraw)
         , fOwningRTPendingOps(nullptr) {
+    SkDEBUGCODE(++fCCPR->fPendingDrawOpsCount);
     SkDEBUGCODE(fBaseInstance = -1);
     SkDEBUGCODE(fDebugInstanceCount = 1;)
     SkDEBUGCODE(fDebugSkippedInstances = 0;)
@@ -142,20 +140,34 @@ GrCoverageCountingPathRenderer::DrawPathsOp::DrawPathsOp(GrCoverageCountingPathR
     this->setBounds(devBounds, GrOp::HasAABloat::kYes, GrOp::IsZeroArea::kNo);
 }
 
+GrCoverageCountingPathRenderer::DrawPathsOp::~DrawPathsOp() {
+    if (fOwningRTPendingOps) {
+        // Remove CCPR's dangling pointer to this Op before deleting it.
+        SkASSERT(!fCCPR->fFlushing);
+        fOwningRTPendingOps->fOpList.remove(this);
+    }
+    SkDEBUGCODE(--fCCPR->fPendingDrawOpsCount);
+}
+
 GrDrawOp::RequiresDstTexture DrawPathsOp::finalize(const GrCaps& caps, const GrAppliedClip* clip,
                                                    GrPixelConfigIsClamped dstIsClamped) {
-    SingleDraw& onlyDraw = this->getOnlyPathDraw();
+    SkASSERT(!fCCPR->fFlushing);
+    // There should only be one single path draw in this Op right now.
+    SkASSERT(1 == fDebugInstanceCount);
+    SkASSERT(&fHeadDraw == fTailDraw);
     GrProcessorSet::Analysis analysis = fProcessors.finalize(
-            onlyDraw.fColor, GrProcessorAnalysisCoverage::kSingleChannel, clip, false, caps,
-            dstIsClamped, &onlyDraw.fColor);
+            fHeadDraw.fColor, GrProcessorAnalysisCoverage::kSingleChannel, clip, false, caps,
+            dstIsClamped, &fHeadDraw.fColor);
     return analysis.requiresDstTexture() ? RequiresDstTexture::kYes : RequiresDstTexture::kNo;
 }
 
 bool DrawPathsOp::onCombineIfPossible(GrOp* op, const GrCaps& caps) {
     DrawPathsOp* that = op->cast<DrawPathsOp>();
     SkASSERT(fCCPR == that->fCCPR);
+    SkASSERT(!fCCPR->fFlushing);
     SkASSERT(fOwningRTPendingOps);
     SkASSERT(fDebugInstanceCount);
+    SkASSERT(!that->fOwningRTPendingOps || that->fOwningRTPendingOps == fOwningRTPendingOps);
     SkASSERT(that->fDebugInstanceCount);
 
     if (this->getFillType() != that->getFillType() ||
@@ -164,20 +176,8 @@ bool DrawPathsOp::onCombineIfPossible(GrOp* op, const GrCaps& caps) {
         return false;
     }
 
-    if (RTPendingOps* owningRTPendingOps = that->fOwningRTPendingOps) {
-        SkASSERT(owningRTPendingOps == fOwningRTPendingOps);
-        owningRTPendingOps->fOpList.remove(that);
-    } else {
-        // The Op is being combined immediately after creation, before a call to wasRecorded. In
-        // this case wasRecorded will not be called. So we count its path here instead.
-        const SingleDraw& onlyDraw = that->getOnlyPathDraw();
-        ++fOwningRTPendingOps->fNumTotalPaths;
-        fOwningRTPendingOps->fNumSkPoints += onlyDraw.fPath.countPoints();
-        fOwningRTPendingOps->fNumSkVerbs += onlyDraw.fPath.countVerbs();
-    }
-
     fTailDraw->fNext = &fOwningRTPendingOps->fDrawsAllocator.push_back(that->fHeadDraw);
-    fTailDraw = that->fTailDraw == &that->fHeadDraw ? fTailDraw->fNext : that->fTailDraw;
+    fTailDraw = (that->fTailDraw == &that->fHeadDraw) ? fTailDraw->fNext : that->fTailDraw;
 
     this->joinBounds(*that);
 
@@ -187,12 +187,9 @@ bool DrawPathsOp::onCombineIfPossible(GrOp* op, const GrCaps& caps) {
 }
 
 void DrawPathsOp::wasRecorded(GrRenderTargetOpList* opList) {
+    SkASSERT(!fCCPR->fFlushing);
     SkASSERT(!fOwningRTPendingOps);
-    const SingleDraw& onlyDraw = this->getOnlyPathDraw();
     fOwningRTPendingOps = &fCCPR->fRTPendingOpsMap[opList->uniqueID()];
-    ++fOwningRTPendingOps->fNumTotalPaths;
-    fOwningRTPendingOps->fNumSkPoints += onlyDraw.fPath.countPoints();
-    fOwningRTPendingOps->fNumSkVerbs += onlyDraw.fPath.countVerbs();
     fOwningRTPendingOps->fOpList.addToTail(this);
 }
 
@@ -227,22 +224,29 @@ void GrCoverageCountingPathRenderer::setupPerFlushResources(GrOnFlushResourcePro
 
     fPerFlushResourcesAreValid = false;
 
-    SkTInternalLList<DrawPathsOp> flushingOps;
+    // Gather the Ops that are being flushed.
     int maxTotalPaths = 0, numSkPoints = 0, numSkVerbs = 0;
-
+    SkTInternalLList<DrawPathsOp> flushingOps;
     for (int i = 0; i < numOpListIDs; ++i) {
         auto it = fRTPendingOpsMap.find(opListIDs[i]);
-        if (fRTPendingOpsMap.end() != it) {
-            RTPendingOps& rtPendingOps = it->second;
-            SkASSERT(!rtPendingOps.fOpList.isEmpty());
-            flushingOps.concat(std::move(rtPendingOps.fOpList));
-            maxTotalPaths += rtPendingOps.fNumTotalPaths;
-            numSkPoints += rtPendingOps.fNumSkPoints;
-            numSkVerbs += rtPendingOps.fNumSkVerbs;
+        if (fRTPendingOpsMap.end() == it) {
+            continue;
         }
+        SkTInternalLList<DrawPathsOp>::Iter iter;
+        SkTInternalLList<DrawPathsOp>& rtFlushingOps = it->second.fOpList;
+        iter.init(rtFlushingOps, SkTInternalLList<DrawPathsOp>::Iter::kHead_IterStart);
+        while (DrawPathsOp* flushingOp = iter.get()) {
+            for (const auto* draw = &flushingOp->fHeadDraw; draw; draw = draw->fNext) {
+                ++maxTotalPaths;
+                numSkPoints += draw->fPath.countPoints();
+                numSkVerbs += draw->fPath.countVerbs();
+            }
+            flushingOp->fOwningRTPendingOps = nullptr; // Owner is about to change to 'flushingOps'.
+            iter.next();
+        }
+        flushingOps.concat(std::move(rtFlushingOps));
     }
 
-    SkASSERT(flushingOps.isEmpty() == !maxTotalPaths);
     if (flushingOps.isEmpty()) {
         return; // Nothing to draw.
     }
@@ -378,6 +382,8 @@ void DrawPathsOp::onExecute(GrOpFlushState* flushState) {
     if (!fCCPR->fPerFlushResourcesAreValid) {
         return; // Setup failed.
     }
+
+    SkASSERT(fBaseInstance >= 0); // Make sure setupPerFlushResources has set us up.
 
     GrPipeline::InitArgs initArgs;
     initArgs.fFlags = fSRGBFlags;
