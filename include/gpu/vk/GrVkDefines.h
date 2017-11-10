@@ -31,6 +31,12 @@
 #   endif
 #endif
 
+// We create our own function table and never directly call any functions via vk*(). So no need to
+// include the prototype functions.
+#if !defined(VK_NO_PROTOTYPES) && !defined(SK_BUILD_FOR_ANDROID_FRAMEWORK)
+#define VK_NO_PROTOTYPES
+#endif
+
 #include <vulkan/vulkan.h>
 
 #define SKIA_REQUIRED_VULKAN_HEADER_VERSION 17
