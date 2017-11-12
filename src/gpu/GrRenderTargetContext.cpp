@@ -158,7 +158,7 @@ GrRenderTargetContext::GrRenderTargetContext(GrContext* context,
         , fInstancedPipelineInfo(fRenderTargetProxy.get())
         , fSurfaceProps(SkSurfacePropsCopyOrDefault(surfaceProps))
         , fManagedOpList(managedOpList) {
-#ifndef MDB_ALLOC_RESOURCES
+#ifdef SK_DISABLE_EXPLICIT_GPU_RESOURCE_ALLOCATION
     // MDB TODO: to ensure all resources still get allocated in the correct order in the hybrid
     // world we need to get the correct opList here so that it, in turn, can grab and hold
     // its rendertarget.
@@ -1226,13 +1226,13 @@ bool GrRenderTargetContext::drawFilledDRRect(const GrClip& clip,
 
     GrAAType aaType = this->chooseAAType(aa, GrAllowMixedSamples::kNo);
 
-    GrPrimitiveEdgeType innerEdgeType, outerEdgeType;
+    GrClipEdgeType innerEdgeType, outerEdgeType;
     if (GrAAType::kCoverage == aaType) {
-        innerEdgeType = kInverseFillAA_GrProcessorEdgeType;
-        outerEdgeType = kFillAA_GrProcessorEdgeType;
+        innerEdgeType = GrClipEdgeType::kInverseFillAA;
+        outerEdgeType = GrClipEdgeType::kFillAA;
     } else {
-        innerEdgeType = kInverseFillBW_GrProcessorEdgeType;
-        outerEdgeType = kFillBW_GrProcessorEdgeType;
+        innerEdgeType = GrClipEdgeType::kInverseFillBW;
+        outerEdgeType = GrClipEdgeType::kFillBW;
     }
 
     SkTCopyOnFirstWrite<SkRRect> inner(origInner), outer(origOuter);

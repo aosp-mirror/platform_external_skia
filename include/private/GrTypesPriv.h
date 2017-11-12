@@ -649,46 +649,46 @@ enum class GrSLRestrict {
  * GrProcessorEdgeType will succeed with all values and it is up to the caller to check for
  * a NULL return.
  */
-enum GrPrimitiveEdgeType {
-    kFillBW_GrProcessorEdgeType,
-    kFillAA_GrProcessorEdgeType,
-    kInverseFillBW_GrProcessorEdgeType,
-    kInverseFillAA_GrProcessorEdgeType,
-    kHairlineAA_GrProcessorEdgeType,
+enum class GrClipEdgeType {
+    kFillBW,
+    kFillAA,
+    kInverseFillBW,
+    kInverseFillAA,
+    kHairlineAA,
 
-    kLast_GrProcessorEdgeType = kHairlineAA_GrProcessorEdgeType
+    kLast = kHairlineAA
 };
 
-static const int kGrProcessorEdgeTypeCnt = kLast_GrProcessorEdgeType + 1;
+static const int kGrClipEdgeTypeCnt = (int) GrClipEdgeType::kLast + 1;
 
-static inline bool GrProcessorEdgeTypeIsFill(const GrPrimitiveEdgeType edgeType) {
-    return (kFillAA_GrProcessorEdgeType == edgeType || kFillBW_GrProcessorEdgeType == edgeType);
+static inline bool GrProcessorEdgeTypeIsFill(const GrClipEdgeType edgeType) {
+    return (GrClipEdgeType::kFillAA == edgeType || GrClipEdgeType::kFillBW == edgeType);
 }
 
-static inline bool GrProcessorEdgeTypeIsInverseFill(const GrPrimitiveEdgeType edgeType) {
-    return (kInverseFillAA_GrProcessorEdgeType == edgeType ||
-            kInverseFillBW_GrProcessorEdgeType == edgeType);
+static inline bool GrProcessorEdgeTypeIsInverseFill(const GrClipEdgeType edgeType) {
+    return (GrClipEdgeType::kInverseFillAA == edgeType ||
+            GrClipEdgeType::kInverseFillBW == edgeType);
 }
 
-static inline bool GrProcessorEdgeTypeIsAA(const GrPrimitiveEdgeType edgeType) {
-    return (kFillBW_GrProcessorEdgeType != edgeType &&
-            kInverseFillBW_GrProcessorEdgeType != edgeType);
+static inline bool GrProcessorEdgeTypeIsAA(const GrClipEdgeType edgeType) {
+    return (GrClipEdgeType::kFillBW != edgeType &&
+            GrClipEdgeType::kInverseFillBW != edgeType);
 }
 
-static inline GrPrimitiveEdgeType GrInvertProcessorEdgeType(const GrPrimitiveEdgeType edgeType) {
+static inline GrClipEdgeType GrInvertProcessorEdgeType(const GrClipEdgeType edgeType) {
     switch (edgeType) {
-        case kFillBW_GrProcessorEdgeType:
-            return kInverseFillBW_GrProcessorEdgeType;
-        case kFillAA_GrProcessorEdgeType:
-            return kInverseFillAA_GrProcessorEdgeType;
-        case kInverseFillBW_GrProcessorEdgeType:
-            return kFillBW_GrProcessorEdgeType;
-        case kInverseFillAA_GrProcessorEdgeType:
-            return kFillAA_GrProcessorEdgeType;
-        case kHairlineAA_GrProcessorEdgeType:
+        case GrClipEdgeType::kFillBW:
+            return GrClipEdgeType::kInverseFillBW;
+        case GrClipEdgeType::kFillAA:
+            return GrClipEdgeType::kInverseFillAA;
+        case GrClipEdgeType::kInverseFillBW:
+            return GrClipEdgeType::kFillBW;
+        case GrClipEdgeType::kInverseFillAA:
+            return GrClipEdgeType::kFillAA;
+        case GrClipEdgeType::kHairlineAA:
             SK_ABORT("Hairline fill isn't invertible.");
     }
-    return kFillAA_GrProcessorEdgeType;  // suppress warning.
+    return GrClipEdgeType::kFillAA;  // suppress warning.
 }
 
 /**

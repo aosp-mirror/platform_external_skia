@@ -206,16 +206,16 @@ static bool get_analytic_clip_processor(const ElementList& elements,
                 return false;
         }
         if (!skip) {
-            GrPrimitiveEdgeType edgeType;
+            GrClipEdgeType edgeType;
             if (iter.get()->isAA()) {
                 if (abortIfAA) {
                     return false;
                 }
                 edgeType =
-                    invert ? kInverseFillAA_GrProcessorEdgeType : kFillAA_GrProcessorEdgeType;
+                    invert ? GrClipEdgeType::kInverseFillAA : GrClipEdgeType::kFillAA;
             } else {
                 edgeType =
-                    invert ? kInverseFillBW_GrProcessorEdgeType : kFillBW_GrProcessorEdgeType;
+                    invert ? GrClipEdgeType::kInverseFillBW : GrClipEdgeType::kFillBW;
             }
 
             switch (iter.get()->getDeviceSpaceType()) {
