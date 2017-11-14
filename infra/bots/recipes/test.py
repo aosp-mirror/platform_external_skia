@@ -568,6 +568,7 @@ def dm_flags(api, bot):
   if 'Vulkan' in bot and 'NexusPlayer' in bot:
     # skia:6132
     match.append('~^tilemodes$')
+    match.append('~tilemodes_npot$')
     match.append('~^bitmapfilters$')
     match.append('~^shadertext$')
     match.append('~^FullScreenClearWithLayers$') #skia:7191
@@ -604,13 +605,13 @@ def dm_flags(api, bot):
     blacklist(['vk', 'gm', '_', 'drawregionmodes'])
     blacklist(['vk', 'gm', '_', 'filterfastbounds'])
     blacklist(['vk', 'gm', '_', 'fontcache'])
-    blacklist(['vk', 'gm', '_', 'fontmgr_iterWin10'])
-    blacklist(['vk', 'gm', '_', 'fontmgr_iter_factoryWin10'])
-    blacklist(['vk', 'gm', '_', 'fontmgr_matchWin10'])
-    blacklist(['vk', 'gm', '_', 'fontscalerWin'])
+    blacklist(['vk', 'gm', '_', 'fontmgr_iter'])
+    blacklist(['vk', 'gm', '_', 'fontmgr_iter_factory'])
+    blacklist(['vk', 'gm', '_', 'fontmgr_match'])
+    blacklist(['vk', 'gm', '_', 'fontscaler'])
     blacklist(['vk', 'gm', '_', 'fontscalerdistortable'])
     blacklist(['vk', 'gm', '_', 'gammagradienttext'])
-    blacklist(['vk', 'gm', '_', 'gammatextWin'])
+    blacklist(['vk', 'gm', '_', 'gammatext'])
     blacklist(['vk', 'gm', '_', 'gradtext'])
     blacklist(['vk', 'gm', '_', 'hairmodes'])
     blacklist(['vk', 'gm', '_', 'imagefilters_xfermodes'])
@@ -622,7 +623,7 @@ def dm_flags(api, bot):
     blacklist(['vk', 'gm', '_', 'imageresizetiled'])
     blacklist(['vk', 'gm', '_', 'lcdblendmodes'])
     blacklist(['vk', 'gm', '_', 'lcdoverlap'])
-    blacklist(['vk', 'gm', '_', 'lcdtextWin'])
+    blacklist(['vk', 'gm', '_', 'lcdtext'])
     blacklist(['vk', 'gm', '_', 'lcdtextsize'])
     blacklist(['vk', 'gm', '_', 'matriximagefilter'])
     blacklist(['vk', 'gm', '_', 'mixedtextblobsCOLR'])
@@ -640,7 +641,7 @@ def dm_flags(api, bot):
     blacklist(['vk', 'gm', '_', 'textblobrandomfont'])
     blacklist(['vk', 'gm', '_', 'textfilter_color'])
     blacklist(['vk', 'gm', '_', 'textfilter_image'])
-    blacklist(['vk', 'gm', '_', 'typefacerenderingWin'])
+    blacklist(['vk', 'gm', '_', 'typefacerendering'])
     blacklist(['vk', 'gm', '_', 'varied_text_clipped_lcd'])
     blacklist(['vk', 'gm', '_', 'varied_text_ignorable_clip_lcd'])
     blacklist(['vk', 'gm', '_', 'xfermodeimagefilter'])
@@ -713,6 +714,9 @@ def dm_flags(api, bot):
 
   if 'NativeFonts' not in bot:
     args.append('--nonativeFonts')
+
+  if 'GDI' in bot:
+    args.append('--gdi')
 
   # Let's make all bots produce verbose output by default.
   args.append('--verbose')
@@ -942,6 +946,7 @@ TEST_BUILDERS = [
   'Test-Win8-MSVC-Golo-CPU-AVX-x86-Debug-All',
   'Test-iOS-Clang-iPadPro-GPU-GT7800-arm64-Release-All',
   'Test-Win2k8-Clang-GCE-CPU-AVX2-x86_64-Debug-All-NativeFonts',
+  'Test-Win2k8-Clang-GCE-CPU-AVX2-x86_64-Debug-All-NativeFonts_GDI',
 ]
 
 
