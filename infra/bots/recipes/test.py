@@ -603,7 +603,7 @@ def dm_flags(api, bot):
     blacklist(['vk', 'gm', '_', 'composeshader_alpha'])
     blacklist(['vk', 'gm', '_', 'composeshader_bitmap'])
     blacklist(['vk', 'gm', '_', 'composeshader_bitmap2'])
-    blacklist(['vk', 'gm', '_', 'dftextCOLR'])
+    blacklist(['vk', 'gm', '_', 'dftext'])
     blacklist(['vk', 'gm', '_', 'drawregionmodes'])
     blacklist(['vk', 'gm', '_', 'filterfastbounds'])
     blacklist(['vk', 'gm', '_', 'fontcache'])
@@ -628,7 +628,7 @@ def dm_flags(api, bot):
     blacklist(['vk', 'gm', '_', 'lcdtext'])
     blacklist(['vk', 'gm', '_', 'lcdtextsize'])
     blacklist(['vk', 'gm', '_', 'matriximagefilter'])
-    blacklist(['vk', 'gm', '_', 'mixedtextblobsCOLR'])
+    blacklist(['vk', 'gm', '_', 'mixedtextblobs'])
     blacklist(['vk', 'gm', '_', 'mixershader'])
     blacklist(['vk', 'gm', '_', 'pictureimagefilter'])
     blacklist(['vk', 'gm', '_', 'resizeimagefilter'])
@@ -942,9 +942,9 @@ TEST_BUILDERS = [
   'Test-Win10-Clang-ShuttleC-GPU-GTX960-x86_64-Debug-All-ANGLE',
   'Test-Win10-Clang-ZBOX-GPU-GTX1070-x86_64-Debug-All',
   'Test-Win10-Clang-ZBOX-GPU-GTX1070-x86_64-Debug-All-Vulkan',
-  'Test-Win2k8-Clang-GCE-CPU-AVX2-x86_64-Debug-All-FAAA',
-  'Test-Win2k8-Clang-GCE-CPU-AVX2-x86_64-Debug-All-FDAA',
-  'Test-Win2k8-Clang-GCE-CPU-AVX2-x86_64-Debug-All-FSAA',
+  'Test-Win2016-Clang-GCE-CPU-AVX2-x86_64-Debug-All-FAAA',
+  'Test-Win2016-Clang-GCE-CPU-AVX2-x86_64-Debug-All-FDAA',
+  'Test-Win2016-Clang-GCE-CPU-AVX2-x86_64-Debug-All-FSAA',
   'Test-Win8-MSVC-Golo-CPU-AVX-x86-Debug-All',
   'Test-iOS-Clang-iPadPro-GPU-GT7800-arm64-Release-All',
   'Test-Win2k8-Clang-GCE-CPU-AVX2-x86_64-Debug-All-NativeFonts',
