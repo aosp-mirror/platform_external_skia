@@ -468,7 +468,7 @@ def dm_flags(api, bot):
       blacklist('_ image _ .%s' % raw_ext)
 
   # Blacklist memory intensive tests on 32-bit bots.
-  if ('Win2k8' in bot or 'Win8' in bot or 'Win2016' in bot) and 'x86-' in bot:
+  if ('Win8' in bot or 'Win2016' in bot) and 'x86-' in bot:
     blacklist('_ image f16 _')
     blacklist('_ image _ abnormal.wbmp')
     blacklist('_ image _ interlaced1.png')
@@ -569,6 +569,8 @@ def dm_flags(api, bot):
     # skia:6132
     match.append('~^tilemodes$')
     match.append('~tilemodes_npot$')
+    match.append('~scaled_tilemodes$')
+    match.append('~emboss')
     match.append('~^bitmapfilters$')
     match.append('~^shadertext$')
     match.append('~^FullScreenClearWithLayers$') #skia:7191
@@ -601,7 +603,7 @@ def dm_flags(api, bot):
     blacklist(['vk', 'gm', '_', 'composeshader_alpha'])
     blacklist(['vk', 'gm', '_', 'composeshader_bitmap'])
     blacklist(['vk', 'gm', '_', 'composeshader_bitmap2'])
-    blacklist(['vk', 'gm', '_', 'dftextCOLR'])
+    blacklist(['vk', 'gm', '_', 'dftext'])
     blacklist(['vk', 'gm', '_', 'drawregionmodes'])
     blacklist(['vk', 'gm', '_', 'filterfastbounds'])
     blacklist(['vk', 'gm', '_', 'fontcache'])
@@ -626,7 +628,7 @@ def dm_flags(api, bot):
     blacklist(['vk', 'gm', '_', 'lcdtext'])
     blacklist(['vk', 'gm', '_', 'lcdtextsize'])
     blacklist(['vk', 'gm', '_', 'matriximagefilter'])
-    blacklist(['vk', 'gm', '_', 'mixedtextblobsCOLR'])
+    blacklist(['vk', 'gm', '_', 'mixedtextblobs'])
     blacklist(['vk', 'gm', '_', 'mixershader'])
     blacklist(['vk', 'gm', '_', 'pictureimagefilter'])
     blacklist(['vk', 'gm', '_', 'resizeimagefilter'])
@@ -684,9 +686,6 @@ def dm_flags(api, bot):
   if ('IntelIris6100' in bot or 'IntelHD4400' in bot) and 'ANGLE' in bot:
     # skia:6857
     blacklist(['angle_d3d9_es2', 'gm', '_', 'lighting'])
-
-  if 'IntelBayTrail' in bot and api.vars.is_linux:
-    match.append('~ImageStorageLoad') # skia:6358
 
   if 'PowerVRGX6250' in bot:
     match.append('~gradients_view_perspective_nodither') #skia:6972
@@ -933,6 +932,8 @@ TEST_BUILDERS = [
   'Test-Win10-Clang-AlphaR2-GPU-RadeonR9M470X-x86_64-Debug-All-Vulkan',
   ('Test-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Release-All'
    '-ReleaseAndAbandonGpuContext'),
+  'Test-Win10-Clang-NUC5i7RYH-CPU-AVX2-x86_64-Debug-All-NativeFonts',
+  'Test-Win10-Clang-NUC5i7RYH-CPU-AVX2-x86_64-Debug-All-NativeFonts_GDI',
   'Test-Win10-Clang-NUC6i5SYK-GPU-IntelIris540-x86_64-Debug-All-ANGLE',
   'Test-Win10-Clang-NUC6i5SYK-GPU-IntelIris540-x86_64-Debug-All-Vulkan',
   'Test-Win10-Clang-NUCD34010WYKH-GPU-IntelHD4400-x86_64-Release-All-ANGLE',
@@ -940,13 +941,11 @@ TEST_BUILDERS = [
   'Test-Win10-Clang-ShuttleC-GPU-GTX960-x86_64-Debug-All-ANGLE',
   'Test-Win10-Clang-ZBOX-GPU-GTX1070-x86_64-Debug-All',
   'Test-Win10-Clang-ZBOX-GPU-GTX1070-x86_64-Debug-All-Vulkan',
-  'Test-Win2k8-Clang-GCE-CPU-AVX2-x86_64-Debug-All-FAAA',
-  'Test-Win2k8-Clang-GCE-CPU-AVX2-x86_64-Debug-All-FDAA',
-  'Test-Win2k8-Clang-GCE-CPU-AVX2-x86_64-Debug-All-FSAA',
+  'Test-Win2016-Clang-GCE-CPU-AVX2-x86_64-Debug-All-FAAA',
+  'Test-Win2016-Clang-GCE-CPU-AVX2-x86_64-Debug-All-FDAA',
+  'Test-Win2016-Clang-GCE-CPU-AVX2-x86_64-Debug-All-FSAA',
   'Test-Win8-MSVC-Golo-CPU-AVX-x86-Debug-All',
   'Test-iOS-Clang-iPadPro-GPU-GT7800-arm64-Release-All',
-  'Test-Win2k8-Clang-GCE-CPU-AVX2-x86_64-Debug-All-NativeFonts',
-  'Test-Win2k8-Clang-GCE-CPU-AVX2-x86_64-Debug-All-NativeFonts_GDI',
 ]
 
 
