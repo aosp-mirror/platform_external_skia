@@ -489,6 +489,7 @@ cc_library_static {
         "src/gpu/ccpr/GrCCPRQuadraticShader.cpp",
         "src/gpu/ccpr/GrCCPRTriangleShader.cpp",
         "src/gpu/ccpr/GrCoverageCountingPathRenderer.cpp",
+        "src/gpu/effects/GrAARectEffect.cpp",
         "src/gpu/effects/GrArithmeticFP.cpp",
         "src/gpu/effects/GrBezierEffect.cpp",
         "src/gpu/effects/GrBicubicEffect.cpp",
