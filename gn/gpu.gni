@@ -360,6 +360,8 @@ skia_gpu_sources = [
   "$_src/gpu/effects/GrOvalEffect.h",
   "$_src/gpu/effects/GrPorterDuffXferProcessor.cpp",
   "$_src/gpu/effects/GrPorterDuffXferProcessor.h",
+  "$_src/gpu/effects/GrPremulInputFragmentProcessor.cpp",
+  "$_src/gpu/effects/GrPremulInputFragmentProcessor.h",
   "$_src/gpu/effects/GrRectBlurEffect.cpp",
   "$_src/gpu/effects/GrRectBlurEffect.h",
   "$_src/gpu/effects/GrRRectEffect.cpp",
@@ -373,6 +375,8 @@ skia_gpu_sources = [
   "$_src/gpu/effects/GrTextureDomain.cpp",
   "$_src/gpu/effects/GrTextureDomain.h",
   "$_src/gpu/effects/GrTextureStripAtlas.cpp",
+  "$_src/gpu/effects/GrUnpremulInputFragmentProcessor.cpp",
+  "$_src/gpu/effects/GrUnpremulInputFragmentProcessor.h",
   "$_src/gpu/effects/GrXfermodeFragmentProcessor.cpp",
   "$_src/gpu/effects/GrXfermodeFragmentProcessor.h",
   "$_src/gpu/effects/GrYUVEffect.cpp",
@@ -623,4 +627,15 @@ skia_native_gpu_sources = [
   "$_src/gpu/gl/egl/GrGLCreateNativeInterface_egl.cpp",
   "$_src/gpu/gl/iOS/GrGLCreateNativeInterface_iOS.cpp",
   "$_src/gpu/gl/android/GrGLCreateNativeInterface_android.cpp",
+]
+
+skia_atlas_text_sources = [
+  "$_include/atlastext/SkAtlasTextContext.h",
+  "$_include/atlastext/SkAtlasTextFont.h",
+  "$_include/atlastext/SkAtlasTextRenderer.h",
+  "$_include/atlastext/SkAtlasTextTarget.h",
+
+  "$_src/atlastext/SkAtlasTextContext.cpp",
+  "$_src/atlastext/SkAtlasTextTarget.cpp",
+  "$_src/atlastext/SkInternalAtlasTextContext.cpp",
 ]
