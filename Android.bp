@@ -72,7 +72,6 @@ cc_library_static {
 
     export_include_dirs: [
         "include/android/",
-        "include/atlastext/",
         "include/c/",
         "include/codec/",
         "include/config/",
@@ -91,7 +90,6 @@ cc_library_static {
 
     local_include_dirs: [
         "include/android/",
-        "include/atlastext/",
         "include/c/",
         "include/codec/",
         "include/config/",
@@ -951,7 +949,6 @@ cc_test {
         "experimental/svg/model/",
         "gm/",
         "include/android/",
-        "include/atlastext/",
         "include/c/",
         "include/codec/",
         "include/config/",
@@ -1042,7 +1039,6 @@ cc_test {
         "gm/arcofzorro.cpp",
         "gm/arcto.cpp",
         "gm/arithmode.cpp",
-        "gm/atlastext.cpp",
         "gm/badpaint.cpp",
         "gm/beziereffects.cpp",
         "gm/beziers.cpp",
@@ -1686,7 +1682,6 @@ cc_test {
         "tools/gpu/GrContextFactory.cpp",
         "tools/gpu/GrTest.cpp",
         "tools/gpu/TestContext.cpp",
-        "tools/gpu/atlastext/GLTestAtlasTextRenderer.cpp",
         "tools/gpu/gl/GLTestContext.cpp",
         "tools/gpu/gl/command_buffer/GLTestContext_command_buffer.cpp",
         "tools/gpu/gl/debug/DebugGLTestContext.cpp",
@@ -1724,7 +1719,6 @@ cc_test {
         "experimental/svg/model/",
         "gm/",
         "include/android/",
-        "include/atlastext/",
         "include/c/",
         "include/codec/",
         "include/config/",
@@ -1928,7 +1922,6 @@ cc_test {
         "gm/arcofzorro.cpp",
         "gm/arcto.cpp",
         "gm/arithmode.cpp",
-        "gm/atlastext.cpp",
         "gm/badpaint.cpp",
         "gm/beziereffects.cpp",
         "gm/beziers.cpp",
@@ -2252,7 +2245,6 @@ cc_test {
         "tools/gpu/GrContextFactory.cpp",
         "tools/gpu/GrTest.cpp",
         "tools/gpu/TestContext.cpp",
-        "tools/gpu/atlastext/GLTestAtlasTextRenderer.cpp",
         "tools/gpu/gl/GLTestContext.cpp",
         "tools/gpu/gl/command_buffer/GLTestContext_command_buffer.cpp",
         "tools/gpu/gl/debug/DebugGLTestContext.cpp",
