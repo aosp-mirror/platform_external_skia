@@ -142,11 +142,3 @@ SkGaussFilter::SkGaussFilter(double sigma, Type type) {
         fN = calculate_gauss_factors(sigma, fBasis);
     }
 }
-
-int SkGaussFilter::filterDouble(double* values) const {
-    for (int i = 0; i < fN; i++) {
-        values[i] = fBasis[i];
-    }
-    return fN;
-}
-

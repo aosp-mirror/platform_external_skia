@@ -368,7 +368,9 @@ GrPixelConfig SkImageInfo2GrPixelConfig(const SkImageInfo& info, const GrCaps& c
 bool GrPixelConfigToColorType(GrPixelConfig config, SkColorType* ctOut) {
     SkColorType ct;
     switch (config) {
-        case kAlpha_8_GrPixelConfig:
+        case kAlpha_8_GrPixelConfig: // fall through
+        case kAlpha_8_as_Alpha_GrPixelConfig: // fall through
+        case kAlpha_8_as_Red_GrPixelConfig:
             ct = kAlpha_8_SkColorType;
             break;
         case kGray_8_GrPixelConfig:
@@ -444,9 +446,6 @@ static inline bool skpaint_to_grpaint_impl(GrContext* context,
         } else if (const auto* shader = as_SB(skPaint.getShader())) {
             shaderFP = shader->asFragmentProcessor(SkShaderBase::AsFPArgs(
                     context, &viewM, nullptr, skPaint.getFilterQuality(), &colorSpaceInfo));
-            if (!shaderFP) {
-                return false;
-            }
         }
     }
 

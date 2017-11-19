@@ -14,6 +14,8 @@ static const char* pixel_config_name(GrPixelConfig config) {
     switch (config) {
         case kUnknown_GrPixelConfig: return "Unknown";
         case kAlpha_8_GrPixelConfig: return "Alpha8";
+        case kAlpha_8_as_Alpha_GrPixelConfig: return "Alpha8_asAlpha";
+        case kAlpha_8_as_Red_GrPixelConfig: return "Alpha8_asRed";
         case kGray_8_GrPixelConfig: return "Gray8";
         case kRGB_565_GrPixelConfig: return "RGB565";
         case kRGBA_4444_GrPixelConfig: return "RGBA444";
@@ -25,6 +27,7 @@ static const char* pixel_config_name(GrPixelConfig config) {
         case kRGBA_float_GrPixelConfig: return "RGBAFloat";
         case kRG_float_GrPixelConfig: return "RGFloat";
         case kAlpha_half_GrPixelConfig: return "AlphaHalf";
+        case kAlpha_half_as_Red_GrPixelConfig: return "AlphaHalf_asRed";
         case kRGBA_half_GrPixelConfig: return "RGBAHalf";
     }
     SK_ABORT("Invalid pixel config");
@@ -68,6 +71,14 @@ GrCaps::GrCaps(const GrContextOptions& options) {
     fMaxStencilSampleCount = 0;
     fMaxRasterSamples = 0;
     fMaxWindowRectangles = 0;
+
+    // An default count of 4 was chosen because of the common pattern in Blink of:
+    //   isect RR
+    //   diff  RR
+    //   isect convex_poly
+    //   isect convex_poly
+    // when drawing rounded div borders.
+    fMaxClipAnalyticFPs = 4;
 
     fSuppressPrints = options.fSuppressPrints;
 #if GR_TEST_UTILS
@@ -161,6 +172,7 @@ void GrCaps::dumpJSON(SkJSONWriter* writer) const {
     writer->appendS32("Max Stencil Sample Count", fMaxStencilSampleCount);
     writer->appendS32("Max Raster Samples", fMaxRasterSamples);
     writer->appendS32("Max Window Rectangles", fMaxWindowRectangles);
+    writer->appendS32("Max Clip Analytic Fragment Processors", fMaxClipAnalyticFPs);
 
     static const char* kInstancedSupportNames[] = {
         "None",

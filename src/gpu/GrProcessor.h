@@ -65,7 +65,6 @@ private:
 class GrProcessor {
 public:
     enum ClassID {
-        kAARectEffect_ClassID,
         kBigKeyProcessor_ClassID,
         kBlockInputFragmentProcessor_ClassID,
         kCircleGeometryProcessor_ClassID,
@@ -89,6 +88,7 @@ public:
         kFocalInside2PtConicalEffect_ClassID,
         kFocalOutside2PtConicalEffect_ClassID,
         kGP_ClassID,
+        kGrAARectEffect_ClassID,
         kGrAlphaThresholdFragmentProcessor_ClassID,
         kGrArithmeticFP_ClassID,
         kGrBicubicEffect_ClassID,
@@ -126,6 +126,7 @@ public:
         kGrPathProcessor_ClassID,
         kGrPerlinNoise2Effect_ClassID,
         kGrPipelineDynamicStateTestProcessor_ClassID,
+        kGrPremulInputFragmentProcessor_ClassID,
         kGrQuadEffect_ClassID,
         kGrRadialGradient_ClassID,
         kGrRectBlurEffect_ClassID,
@@ -136,6 +137,7 @@ public:
         kGrSRGBEffect_ClassID,
         kGrSweepGradient_ClassID,
         kGrTextureDomainEffect_ClassID,
+        kGrUnpremulInputFragmentProcessor_ClassID,
         kHighContrastFilterEffect_ClassID,
         kInstanceProcessor_ClassID,
         kLumaColorFilterEffect_ClassID,
@@ -143,7 +145,6 @@ public:
         kPDLCDXferProcessor_ClassID,
         kPorterDuffXferProcessor_ClassID,
         kPremulFragmentProcessor_ClassID,
-        kPremulInputFragmentProcessor_ClassID,
         kQuadEdgeEffect_ClassID,
         kReplaceInputFragmentProcessor_ClassID,
         kRRectsGaussianEdgeFP_ClassID,
@@ -152,7 +153,6 @@ public:
         kSwizzleFragmentProcessor_ClassID,
         kTestFP_ClassID,
         kTextureGeometryProcessor_ClassID,
-        kUnpremulInputFragmentProcessor_ClassID,
         kYUVtoRGBEffect_ClassID
     };
 

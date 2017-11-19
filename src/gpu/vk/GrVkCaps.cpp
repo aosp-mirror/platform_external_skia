@@ -208,7 +208,9 @@ void GrVkCaps::initShaderCaps(const VkPhysicalDeviceProperties& properties, uint
     // fConfigOutputSwizzle will default to RGBA so we only need to set it for alpha only config.
     for (int i = 0; i < kGrPixelConfigCnt; ++i) {
         GrPixelConfig config = static_cast<GrPixelConfig>(i);
-        if (GrPixelConfigIsAlphaOnly(config)) {
+        // Vulkan doesn't support a single channel format stored in alpha.
+        if (GrPixelConfigIsAlphaOnly(config) &&
+            kAlpha_8_as_Alpha_GrPixelConfig != config) {
             shaderCaps->fConfigTextureSwizzle[i] = GrSwizzle::RRRR();
             shaderCaps->fConfigOutputSwizzle[i] = GrSwizzle::AAAA();
         } else {
@@ -259,19 +261,8 @@ void GrVkCaps::initShaderCaps(const VkPhysicalDeviceProperties& properties, uint
     shaderCaps->fVertexIDSupport = true;
 
     // Assume the minimum precisions mandated by the SPIR-V spec.
-    shaderCaps->fShaderPrecisionVaries = true;
-    for (int s = 0; s < kGrShaderTypeCount; ++s) {
-        auto& highp = shaderCaps->fFloatPrecisions[s][kHigh_GrSLPrecision];
-        highp.fLogRangeLow = highp.fLogRangeHigh = 127;
-        highp.fBits = 23;
-
-        auto& mediump = shaderCaps->fFloatPrecisions[s][kMedium_GrSLPrecision];
-        mediump.fLogRangeLow = mediump.fLogRangeHigh = 14;
-        mediump.fBits = 10;
-
-        shaderCaps->fFloatPrecisions[s][kLow_GrSLPrecision] = mediump;
-    }
-    shaderCaps->initSamplerPrecisionTable();
+    shaderCaps->fFloatIs32Bits = true;
+    shaderCaps->fHalfIs32Bits = false;
 
     shaderCaps->fMaxVertexSamplers =
     shaderCaps->fMaxGeometrySamplers =
