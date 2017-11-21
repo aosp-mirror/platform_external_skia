@@ -7,6 +7,8 @@
 
 #include "SkAtlasTextTarget.h"
 #include "GrClip.h"
+#include "GrContextPriv.h"
+#include "GrDrawingManager.h"
 #include "SkAtlasTextContext.h"
 #include "SkAtlasTextFont.h"
 #include "SkAtlasTextRenderer.h"
@@ -50,7 +52,7 @@ public:
 
     /** SkAtlasTextTarget overrides */
 
-    void drawText(const void* text, size_t byteLength, SkScalar x, SkScalar y, uint32_t color,
+    void drawText(const SkGlyphID[], const SkPoint[], int glyphCnt, uint32_t color,
                   const SkAtlasTextFont&) override;
     void flush() override;
 
@@ -75,31 +77,28 @@ std::unique_ptr<SkAtlasTextTarget> SkAtlasTextTarget::Make(sk_sp<SkAtlasTextCont
 
 //////////////////////////////////////////////////////////////////////////////
 
-#include "GrContextPriv.h"
-#include "GrDrawingManager.h"
-
-void SkInternalAtlasTextTarget::drawText(const void* text, size_t byteLength, SkScalar x,
-                                         SkScalar y, uint32_t color, const SkAtlasTextFont& font) {
+void SkInternalAtlasTextTarget::drawText(const SkGlyphID glyphs[], const SkPoint positions[],
+                                         int glyphCnt, uint32_t color,
+                                         const SkAtlasTextFont& font) {
     SkPaint paint;
     paint.setAntiAlias(true);
     paint.setTypeface(font.refTypeface());
     paint.setTextSize(font.size());
     paint.setStyle(SkPaint::kFill_Style);
-
-    // TODO: Figure out what if anything to do with these:
-    // Paint setTextEncoding? Font isEnableByteCodeHints()? Font isUseNonLinearMetrics()?
+    paint.setTextEncoding(SkPaint::kGlyphID_TextEncoding);
 
     // The atlas text context does munging of the paint color. We store the client's color here
     // and the context will write it into the final vertices given to the client's renderer.
     fColor = color;
 
-    // The pixel geometry here is arbitrary. We don't draw LCD text.
     SkSurfaceProps props(SkSurfaceProps::kUseDistanceFieldFonts_Flag, kUnknown_SkPixelGeometry);
     auto* grContext = this->context()->internal().grContext();
     auto bounds = SkIRect::MakeWH(fWidth, fHeight);
     auto atlasTextContext = grContext->contextPriv().drawingManager()->getAtlasTextContext();
-    atlasTextContext->drawText(grContext, this, GrNoClip(), paint, SkMatrix::I(), props,
-                               (const char*)text, byteLength, x, y, bounds);
+    size_t byteLength = sizeof(SkGlyphID) * glyphCnt;
+    const SkScalar* pos = &positions->fX;
+    atlasTextContext->drawPosText(grContext, this, GrNoClip(), paint, SkMatrix::I(), props,
+                                  (const char*)glyphs, byteLength, pos, 2, {0, 0}, bounds);
 }
 
 void SkInternalAtlasTextTarget::addDrawOp(const GrClip& clip, std::unique_ptr<GrAtlasTextOp> op) {

@@ -594,6 +594,18 @@ def dm_flags(api, bot):
       ('IntelIris540' in bot or 'IntelIris640' in bot)):
     match.extend(['~VkHeapTests']) # skia:6245
 
+  if 'Vulkan' in bot and api.vars.is_linux and 'IntelHD405' in bot:
+    # skia:7322
+    blacklist(['vk', 'gm', '_', 'skbug_257'])
+    match.append('~^ClearOp$')
+    match.append('~^InitialTextureClear$')
+    match.append('~^ReadPixels_Gpu$')
+    match.append('~^ReadPixels_Texture$')
+    match.append('~^VkUploadPixelsTests$')
+    match.append('~^WritePixelsNonTexture_Gpu$')
+    match.append('~^WritePixels_Gpu$')
+    match.append('~^skbug6653$')
+
   if 'Vulkan' in bot and 'IntelIris540' in bot and 'Win' in bot:
     # skia:6398
     blacklist(['vk', 'gm', '_', 'aarectmodes'])
@@ -603,6 +615,7 @@ def dm_flags(api, bot):
     blacklist(['vk', 'gm', '_', 'composeshader_alpha'])
     blacklist(['vk', 'gm', '_', 'composeshader_bitmap'])
     blacklist(['vk', 'gm', '_', 'composeshader_bitmap2'])
+    blacklist(['vk', 'gm', '_', 'dont_clip_to_layer'])
     blacklist(['vk', 'gm', '_', 'dftext'])
     blacklist(['vk', 'gm', '_', 'drawregionmodes'])
     blacklist(['vk', 'gm', '_', 'filterfastbounds'])
@@ -668,7 +681,7 @@ def dm_flags(api, bot):
     match.append('~GrDefaultPathRendererTest') #skia:7244
     match.append('~GrMSAAPathRendererTest') #skia:7244
 
-  if 'AlphaR2' in bot and 'ANGLE' in bot:
+  if (('RadeonR9M470X' in bot or 'AMDHD7770' in bot) and 'ANGLE' in bot):
     # skia:7096
     match.append('~PinnedImageTest')
 
@@ -918,6 +931,7 @@ TEST_BUILDERS = [
   'Test-Mac-Clang-MacMini7.1-CPU-AVX-x86_64-Release-All',
   'Test-Mac-Clang-MacMini7.1-GPU-IntelIris5100-x86_64-Debug-All-CommandBuffer',
   'Test-Ubuntu16-Clang-NUC5PPYH-GPU-IntelHD405-x86_64-Debug-All',
+  'Test-Ubuntu16-Clang-NUC5PPYH-GPU-IntelHD405-x86_64-Release-All-Vulkan',
   'Test-Ubuntu16-Clang-NUC6i5SYK-GPU-IntelIris540-x86_64-Debug-All-Vulkan',
   ('Test-Ubuntu16-Clang-NUC6i5SYK-GPU-IntelIris540-x86_64-Debug-All-Vulkan'
    '_Coverage'),
@@ -984,7 +998,10 @@ def GenTests(api):
       test += api.step_data(
           'read chromeos ip',
           stdout=api.raw_io.output('{"user_ip":"foo@127.0.0.1"}'))
-
+    if 'Android' in builder:
+      test += api.step_data(
+          'fetch available frequencies',
+          stdout=api.raw_io.output('100000 1300000'))
 
     yield test
 
@@ -1132,5 +1149,7 @@ def GenTests(api):
         api.path['start_dir'].join('skia', 'infra', 'bots', 'assets',
                                      'svg', 'VERSION'),
         api.path['start_dir'].join('tmp', 'uninteresting_hashes.txt')
-    )
+    ) +
+    api.step_data(
+          'root (to set cpu frequency)', retcode=1)
   )
