@@ -189,10 +189,7 @@ def dm_flags(api, bot):
         configs.remove('glessrgb')
 
     # Test instanced rendering on a limited number of platforms
-    if 'Nexus6' in bot:
-      # inst msaa isn't working yet on Adreno.
-      configs.append(gl_prefix + 'inst')
-    elif 'NVIDIA_Shield' in bot or 'PixelC' in bot:
+    if 'NVIDIA_Shield' in bot or 'PixelC' in bot:
       # Multisampled instanced configs use nvpr so we substitute inst msaa
       # configs for nvpr msaa configs.
       old = gl_prefix + 'nvpr'
@@ -906,7 +903,6 @@ TEST_BUILDERS = [
   'Test-Android-Clang-NVIDIA_Shield-GPU-TegraX1-arm64-Debug-All-Android_CCPR',
   'Test-Android-Clang-Nexus10-CPU-Exynos5250-arm-Release-All-Android',
   'Test-Android-Clang-Nexus5-GPU-Adreno330-arm-Release-All-Android',
-  'Test-Android-Clang-Nexus6p-GPU-Adreno430-arm64-Debug-All-Android_Vulkan',
   'Test-Android-Clang-Nexus7-GPU-Tegra3-arm-Debug-All-Android',
   'Test-Android-Clang-NexusPlayer-CPU-Moorefield-x86-Release-All-Android',
   'Test-Android-Clang-NexusPlayer-GPU-PowerVR-x86-Release-All-Android_Vulkan',
@@ -998,10 +994,6 @@ def GenTests(api):
       test += api.step_data(
           'read chromeos ip',
           stdout=api.raw_io.output('{"user_ip":"foo@127.0.0.1"}'))
-    if 'Android' in builder:
-      test += api.step_data(
-          'fetch available frequencies',
-          stdout=api.raw_io.output('100000 1300000'))
 
     yield test
 
@@ -1149,7 +1141,5 @@ def GenTests(api):
         api.path['start_dir'].join('skia', 'infra', 'bots', 'assets',
                                      'svg', 'VERSION'),
         api.path['start_dir'].join('tmp', 'uninteresting_hashes.txt')
-    ) +
-    api.step_data(
-          'root (to set cpu frequency)', retcode=1)
+    )
   )
