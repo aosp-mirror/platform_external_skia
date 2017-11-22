@@ -24,10 +24,6 @@ BUILD_PRODUCTS_ISOLATE_WHITELIST = [
   '*.dylib',
   'skia_launcher',
   'lib/*.so',
-  'iOSShell.app',
-  'iOSShell.ipa',
-  'visualbench',
-  'visualbench.exe',
   'vulkan-1.dll',
 ]
 
