@@ -30,21 +30,9 @@ const SkBlendMode gModes[] = {
 };
 const int N_Modes = SK_ARRAY_COUNT(gModes);
 
-class HasEventWig : public SkView {
-public:
-    void postWidgetEvent() {
-        SkEvent evt;
-        this->onPrepareWidEvent(&evt);
-        this->postToListeners(evt, 0);
-    }
-
-protected:
-    virtual void onPrepareWidEvent(SkEvent*) {}
-};
-
 static SkRandom gRand;
 
-class PushButtonWig : public HasEventWig {
+class PushButtonWig : public SkView {
     SkString fLabel;
     SkColor  fColor;
     uint32_t fFast32;
@@ -55,14 +43,15 @@ public:
         fFast32 = fast;
     }
 
-protected:
-    void onPrepareWidEvent(SkEvent* evt) override {
-        evt->setType("push-button");
-        evt->setFast32(fFast32);
-        evt->setString("label", fLabel.c_str());
+    void postWidgetEvent() {
+        SkEvent evt;
+        evt.setType("push-button");
+        evt.setFast32(fFast32);
+        evt.setString("label", fLabel.c_str());
+        this->sendEventToParents(evt);
     }
 
-//    bool onEvent(const SkEvent&) override;
+protected:
     void onDraw(SkCanvas* canvas) override {
         SkRect r;
         this->getLocalBounds(&r);
@@ -98,9 +87,6 @@ protected:
         }
         return true;
     }
-
-private:
-    typedef HasEventWig INHERITED;
 };
 
 
@@ -162,7 +148,6 @@ class XferDemo : public SampleView {
             v->setLoc(x, y);
             v->setVisibleP(true);
             v->setEnabledP(true);
-            v->addListenerID(this->getSinkID());
             this->attachChildToFront(v.get());
             fModeRect[i] = SkRect::MakeXYWH(x, y + 28, 70, 2);
             x += 80;
