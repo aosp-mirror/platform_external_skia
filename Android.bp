@@ -1647,6 +1647,7 @@ cc_test {
         "tests/TextBlobTest.cpp",
         "tests/TextureProxyTest.cpp",
         "tests/Time.cpp",
+        "tests/ToSRGBColorFilter.cpp",
         "tests/TopoSortTest.cpp",
         "tests/TraceMemoryDumpTest.cpp",
         "tests/TracingTest.cpp",
