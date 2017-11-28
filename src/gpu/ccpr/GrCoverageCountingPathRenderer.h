@@ -51,7 +51,7 @@ public:
     // GrOnFlushCallbackObject overrides.
     void preFlush(GrOnFlushResourceProvider*, const uint32_t* opListIDs, int numOpListIDs,
                   SkTArray<sk_sp<GrRenderTargetContext>>* results) override;
-    void postFlush(GrDeferredUploadToken) override;
+    void postFlush(GrDeferredUploadToken, const uint32_t* opListIDs, int numOpListIDs) override;
 
     // This is the Op that ultimately draws a path into its final destination, using the atlas we
     // generate at flush time.
@@ -85,9 +85,7 @@ public:
         }
 
         struct SingleDraw  {
-            using ScissorMode = GrCCPRCoverageOpsBuilder::ScissorMode;
-            SkIRect       fClipBounds;
-            ScissorMode   fScissorMode;
+            SkIRect       fClipIBounds;
             SkMatrix      fMatrix;
             SkPath        fPath;
             GrColor       fColor;
