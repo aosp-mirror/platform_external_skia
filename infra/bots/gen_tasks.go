@@ -590,7 +590,7 @@ func ctSKPs(b *specs.TasksCfgBuilder, name string) string {
 		CipdPackages: []*specs.CipdPackage{},
 		Dimensions: []string{
 			"pool:SkiaCT",
-			"os:Debian-9.1",
+			fmt.Sprintf("os:%s", DEFAULT_OS_LINUX_GCE),
 		},
 		ExecutionTimeout: 24 * time.Hour,
 		ExtraArgs: []string{
@@ -760,6 +760,7 @@ func test(b *specs.TasksCfgBuilder, name string, parts map[string]string, compil
 		ExtraArgs: []string{
 			"--workdir", "../../..", "test",
 			fmt.Sprintf("repository=%s", specs.PLACEHOLDER_REPO),
+			fmt.Sprintf("buildbucket_build_id=%s", specs.PLACEHOLDER_BUILDBUCKET_BUILD_ID),
 			fmt.Sprintf("buildername=%s", name),
 			fmt.Sprintf("swarm_out_dir=%s", specs.PLACEHOLDER_ISOLATED_OUTDIR),
 			fmt.Sprintf("revision=%s", specs.PLACEHOLDER_REVISION),
