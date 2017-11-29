@@ -179,6 +179,7 @@ def dm_flags(api, bot):
     # The following devices do not support glessrgb.
     if 'glessrgb' in configs:
       if ('IntelHD405'    in bot or
+          'IntelHD4400'   in bot or
           'IntelIris540'  in bot or
           'IntelIris640'  in bot or
           'IntelBayTrail' in bot or
@@ -320,6 +321,12 @@ def dm_flags(api, bot):
     blacklist('_ image gen_platf inc12.png')
     blacklist('_ image gen_platf inc13.png')
     blacklist('_ image gen_platf inc14.png')
+
+    # These images fail after Mac 10.13.1 upgrade.
+    blacklist('_ image gen_platf incInterlaced.gif')
+    blacklist('_ image gen_platf inc1.gif')
+    blacklist('_ image gen_platf inc0.gif')
+    blacklist('_ image gen_platf butterfly.gif')
 
   # WIC fails on questionable bmps
   if 'Win' in bot:

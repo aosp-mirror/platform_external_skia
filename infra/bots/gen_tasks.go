@@ -37,7 +37,7 @@ const (
 
 	DEFAULT_OS_DEBIAN    = "Debian-9.1"
 	DEFAULT_OS_LINUX_GCE = "Debian-9.2"
-	DEFAULT_OS_MAC       = "Mac-10.12"
+	DEFAULT_OS_MAC       = "Mac-10.13.1"
 	DEFAULT_OS_UBUNTU    = "Ubuntu-14.04"
 	DEFAULT_OS_WIN       = "Windows-2016Server-14393"
 
@@ -307,6 +307,7 @@ func defaultSwarmDimensions(parts map[string]string) []string {
 					"IntelBayTrail": "8086:0f31",
 					"IntelHD2000":   "8086:0102",
 					"IntelHD405":    "8086:22b1",
+					"IntelHD4400":   "8086:0a16",
 					"IntelIris540":  "8086:1926",
 					"IntelIris640":  "8086:5926",
 					"QuadroP400":    "10de:1cb3-384.59",
