@@ -321,6 +321,12 @@ def dm_flags(api, bot):
     blacklist('_ image gen_platf inc13.png')
     blacklist('_ image gen_platf inc14.png')
 
+    # These images fail after Mac 10.13.1 upgrade.
+    blacklist('_ image gen_platf incInterlaced.gif')
+    blacklist('_ image gen_platf inc1.gif')
+    blacklist('_ image gen_platf inc0.gif')
+    blacklist('_ image gen_platf butterfly.gif')
+
   # WIC fails on questionable bmps
   if 'Win' in bot:
     blacklist('_ image gen_platf pal8os2v2.bmp')
@@ -407,6 +413,10 @@ def dm_flags(api, bot):
   # Not expected to round trip encoding/decoding.
   bad_serialize_gms.append('all_bitmap_configs')
   bad_serialize_gms.append('makecolorspace')
+
+  # This GM forces a path to be convex. That property doesn't survive
+  # serialization.
+  bad_serialize_gms.append('analytic_antialias_convex')
 
   for test in bad_serialize_gms:
     blacklist(['serialize-8888', 'gm', '_', test])
@@ -813,8 +823,9 @@ def test_steps(api):
 
   # Run DM.
   properties = [
-    'gitHash',      api.vars.got_revision,
-    'builder',      api.vars.builder_name,
+    'gitHash',              api.vars.got_revision,
+    'builder',              api.vars.builder_name,
+    'buildbucket_build_id', api.properties.get('buildbucket_build_id', ''),
   ]
   if api.vars.is_trybot:
     properties.extend([
@@ -962,6 +973,7 @@ def GenTests(api):
     test = (
       api.test(builder) +
       api.properties(buildername=builder,
+                     buildbucket_build_id='123454321',
                      revision='abc123',
                      path_config='kitchen',
                      swarm_out_dir='[SWARM_OUT_DIR]') +
@@ -999,6 +1011,7 @@ def GenTests(api):
   yield (
     api.test('trybot') +
     api.properties(buildername=builder,
+                   buildbucket_build_id='123454321',
                    revision='abc123',
                    path_config='kitchen',
                    swarm_out_dir='[SWARM_OUT_DIR]') +
@@ -1024,6 +1037,7 @@ def GenTests(api):
   yield (
     api.test('failed_dm') +
     api.properties(buildername=builder,
+                   buildbucket_build_id='123454321',
                    revision='abc123',
                    path_config='kitchen',
                    swarm_out_dir='[SWARM_OUT_DIR]') +
@@ -1044,6 +1058,7 @@ def GenTests(api):
   yield (
     api.test('failed_get_hashes') +
     api.properties(buildername=builder,
+                   buildbucket_build_id='123454321',
                    revision='abc123',
                    path_config='kitchen',
                    swarm_out_dir='[SWARM_OUT_DIR]') +
@@ -1065,6 +1080,7 @@ def GenTests(api):
   yield (
     api.test('failed_push') +
     api.properties(buildername=builder,
+                   buildbucket_build_id='123454321',
                    revision='abc123',
                    path_config='kitchen',
                    swarm_out_dir='[SWARM_OUT_DIR]') +
@@ -1086,6 +1102,7 @@ def GenTests(api):
   yield (
     api.test('failed_pull') +
     api.properties(buildername=builder,
+                   buildbucket_build_id='123454321',
                    revision='abc123',
                    path_config='kitchen',
                    swarm_out_dir='[SWARM_OUT_DIR]') +
@@ -1107,6 +1124,7 @@ def GenTests(api):
   yield (
     api.test('internal_bot_1') +
     api.properties(buildername=builder,
+                   buildbucket_build_id='123454321',
                    revision='abc123',
                    path_config='kitchen',
                    swarm_out_dir='[SWARM_OUT_DIR]',
@@ -1126,6 +1144,7 @@ def GenTests(api):
   yield (
     api.test('internal_bot_2') +
     api.properties(buildername=builder,
+                   buildbucket_build_id='123454321',
                    revision='abc123',
                    path_config='kitchen',
                    swarm_out_dir='[SWARM_OUT_DIR]',
