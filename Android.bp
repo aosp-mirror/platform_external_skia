@@ -877,6 +877,9 @@ cc_library_static {
                 "src/opts/SkOpts_ssse3.cpp",
                 "src/opts/opts_check_x86.cpp",
             ],
+            cflags: [
+                "-Wno-over-aligned"
+            ],
         },
 
         x86_64: {
@@ -1467,6 +1470,7 @@ cc_test {
         "tests/LRUCacheTest.cpp",
         "tests/LayerDrawLooperTest.cpp",
         "tests/LayerRasterizerTest.cpp",
+        "tests/LazyProxyTest.cpp",
         "tests/MD5Test.cpp",
         "tests/MallocPixelRefTest.cpp",
         "tests/MaskCacheTest.cpp",
