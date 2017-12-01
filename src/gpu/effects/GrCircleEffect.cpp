@@ -111,7 +111,7 @@ std::unique_ptr<GrFragmentProcessor> GrCircleEffect::TestCreate(GrProcessorTestD
     SkPoint center;
     center.fX = testData->fRandom->nextRangeScalar(0.f, 1000.f);
     center.fY = testData->fRandom->nextRangeScalar(0.f, 1000.f);
-    SkScalar radius = testData->fRandom->nextRangeF(0.f, 1000.f);
+    SkScalar radius = testData->fRandom->nextRangeF(1.f, 1000.f);
     GrClipEdgeType et;
     do {
         et = (GrClipEdgeType)testData->fRandom->nextULessThan(kGrClipEdgeTypeCnt);
