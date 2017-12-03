@@ -60,6 +60,12 @@ void GrRenderTargetOpList::dump() const {
         }
     }
 }
+
+void GrRenderTargetOpList::visitProxies_debugOnly(const GrOp::VisitProxyFunc& func) const {
+    for (const RecordedOp& recordedOp : fRecordedOps) {
+        recordedOp.visitProxies(func);
+    }
+}
 #endif
 
 void GrRenderTargetOpList::onPrepare(GrOpFlushState* flushState) {
@@ -260,6 +266,16 @@ bool GrRenderTargetOpList::copySurface(const GrCaps& caps,
 void GrRenderTargetOpList::gatherProxyIntervals(GrResourceAllocator* alloc) const {
     unsigned int cur = alloc->numOps();
 
+    for (int i = 0; i < fDeferredProxies.count(); ++i) {
+        SkASSERT(!fDeferredProxies[i]->priv().isInstantiated());
+        // We give all the deferred proxies a write usage at the very start of flushing. This
+        // locks them out of being reused for the entire flush until they are read - and then
+        // they can be recycled. This is a bit unfortunate because a flush can proceed in waves
+        // with sub-flushes. The deferred proxies only need to be pinned from the start of
+        // the sub-flush in which they appear.
+        alloc->addInterval(fDeferredProxies[i], 0, 0);
+    }
+
     // Add the interval for all the writes to this opList's target
     if (fRecordedOps.count()) {
         alloc->addInterval(fTarget.get(), cur, cur+fRecordedOps.count()-1);
@@ -271,14 +287,11 @@ void GrRenderTargetOpList::gatherProxyIntervals(GrResourceAllocator* alloc) cons
         alloc->incOps();
     }
 
-    auto gather = [ alloc ] (GrSurfaceProxy* p) {
-        alloc->addInterval(p);
+    auto gather = [ alloc SkDEBUGCODE(, this) ] (GrSurfaceProxy* p) {
+        alloc->addInterval(p SkDEBUGCODE(, fTarget.get() == p));
     };
-    for (int i = 0; i < fRecordedOps.count(); ++i) {
-        const GrOp* op = fRecordedOps[i].fOp.get(); // only diff from the GrTextureOpList version
-        if (op) {
-            op->visitProxies(gather);
-        }
+    for (const RecordedOp& recordedOp : fRecordedOps) {
+        recordedOp.visitProxies(gather); // only diff from the GrTextureOpList version
 
         // Even though the op may have been moved we still need to increment the op count to
         // keep all the math consistent.

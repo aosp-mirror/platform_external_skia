@@ -47,12 +47,14 @@ public:
 
     // Add a usage interval from 'start' to 'end' inclusive. This is usually used for renderTargets.
     // If an existing interval already exists it will be expanded to include the new range.
-    void addInterval(GrSurfaceProxy*, unsigned int start, unsigned int end);
+    void addInterval(GrSurfaceProxy*, unsigned int start, unsigned int end
+                     SkDEBUGCODE(, bool isDirectDstRead = false));
 
     // Add an interval that spans just the current op. Usually this is for texture uses.
     // If an existing interval already exists it will be expanded to include the new operation.
-    void addInterval(GrSurfaceProxy* proxy) {
-        this->addInterval(proxy, fNumOps, fNumOps);
+    void addInterval(GrSurfaceProxy* proxy
+                     SkDEBUGCODE(, bool isDirectDstRead = false)) {
+        this->addInterval(proxy, fNumOps, fNumOps SkDEBUGCODE(, isDirectDstRead));
     }
 
     // Returns true when the opLists from 'startIndex' to 'stopIndex' should be executed;
@@ -120,8 +122,9 @@ private:
         void setNext(Interval* next) { fNext = next; }
 
         void extendEnd(unsigned int newEnd) {
-            SkASSERT(newEnd >= fEnd);
-            fEnd = newEnd;
+            if (newEnd > fEnd) {
+                fEnd = newEnd;
+            }
         }
 
         void assign(sk_sp<GrSurface>);
@@ -171,7 +174,8 @@ private:
     IntervalList           fIntvlList;         // All the intervals sorted by increasing start
     IntervalList           fActiveIntvls;      // List of live intervals during assignment
                                                // (sorted by increasing end)
-    unsigned int           fNumOps = 0;
+    unsigned int           fNumOps = 1;        // op # 0 is reserved for uploads at the start
+                                               // of a flush
     SkTArray<unsigned int> fEndOfOpListOpIndices;
     int                    fCurOpListIndex = 0;
 

@@ -358,6 +358,25 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
     GR_GL_GetIntegerv(gli, GR_GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS, &maxSamplers);
     shaderCaps->fMaxCombinedSamplers = SkTMin<GrGLint>(kMaxSaneSamplers, maxSamplers);
 
+    // This is all *very* approximate.
+    switch (ctxInfo.vendor()) {
+        case kNVIDIA_GrGLVendor:
+            // We've seen a range from 100 x 100 (TegraK1, GTX660) up to 300 x 300 (GTX 1070)
+            // but it doesn't clearly align with Pascal vs Maxwell vs Kepler.
+            fShaderCaps->fDisableImageMultitexturingDstRectAreaThreshold = 150 * 150;
+            break;
+        case kImagination_GrGLVendor:
+            // Two PowerVR Rogues, Nexus Player and Chromebook Cb5-312T (PowerVR GX6250), show that
+            // it is always a win to use multitexturing.
+            if (kPowerVRRogue_GrGLRenderer == ctxInfo.renderer()) {
+                fShaderCaps->fDisableImageMultitexturingDstRectAreaThreshold =
+                        std::numeric_limits<size_t>::max();
+            }
+            break;
+        default:
+            break;
+    }
+
     // SGX and Mali GPUs that are based on a tiled-deferred architecture that have trouble with
     // frequently changing VBOs. We've measured a performance increase using non-VBO vertex
     // data for dynamic content on these GPUs. Perhaps we should read the renderer string and
@@ -979,6 +998,13 @@ void GrGLCaps::initGLSL(const GrGLContextInfo& ctxInfo, const GrGLInterface* gli
     // thus must us -1.0 * %s.x to work correctly
     if (kIntel_GrGLVendor == ctxInfo.vendor()) {
         shaderCaps->fMustForceNegatedAtanParamToFloat = true;
+    }
+
+    // On some Intel GPUs there is an issue where the driver outputs bogus values in the shader
+    // when floor and abs are called on the same line. Thus we must execute an Op between them to
+    // make sure the compiler doesn't re-inline them even if we break the calls apart.
+    if (kIntel_GrGLVendor == ctxInfo.vendor()) {
+        shaderCaps->fMustDoOpBetweenFloorAndAbs = true;
     }
 
     // On Adreno devices with framebuffer fetch support, there is a bug where they always return

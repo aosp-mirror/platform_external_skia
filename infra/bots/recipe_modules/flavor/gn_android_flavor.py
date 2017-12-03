@@ -74,11 +74,14 @@ class GNAndroidFlavorUtils(default_flavor.DefaultFlavorUtils):
     if (self.m.vars.builder_cfg.get('model') in self.rootable_blacklist or
         self.m.vars.internal_hardware_label):
       return
-    self.m.run(self.m.python.inline, 'Scale CPU to %f' % target_percent,
+    self.m.run.with_retry(self.m.python.inline,
+        'Scale CPU to %f' % target_percent,
+        3, # attempts
         program="""
 import os
 import subprocess
 import sys
+import time
 ADB = sys.argv[1]
 model = sys.argv[2]
 target_percent = float(sys.argv[3])
@@ -88,7 +91,11 @@ if 'cannot' in log:
   raise Exception('adb root failed')
 
 if model == 'Nexus10':
-  available_freqs = [200000, 300000, 400000, 500000, 600000, 700000, 800000]
+  # Nexus10 doesn't list available frequencies, but it does give a
+  # min and a max and seems to round to the nearest 100khz, so a
+  # subset of those available are here.
+  available_freqs = [200000, 400000, 600000, 800000, 1000000, 1200000,
+                     1400000, 1700000]
 elif model == 'Nexus7':
   # Nexus7 claims to support 1300000, but only really allows 1200000
   available_freqs = [51000, 102000, 204000, 340000, 475000, 640000, 760000,
@@ -122,9 +129,12 @@ subprocess.check_output([ADB, 'shell', 'echo "userspace" > '
 subprocess.check_output([ADB, 'shell', 'echo %d > '
     '/sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq' % freq])
 subprocess.check_output([ADB, 'shell', 'echo %d > '
+    '/sys/devices/system/cpu/cpu0/cpufreq/scaling_min_freq' % freq])
+subprocess.check_output([ADB, 'shell', 'echo %d > '
     '/sys/devices/system/cpu/cpu0/cpufreq/scaling_setspeed' % freq])
+time.sleep(5)
 actual_freq = subprocess.check_output([ADB, 'shell', 'cat '
-    '/sys/devices/system/cpu/cpu0/cpufreq/scaling_setspeed']).strip()
+    '/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq']).strip()
 if actual_freq != str(freq):
   raise Exception('(actual, expected) (%s, %d)'
                   % (actual_freq, freq))

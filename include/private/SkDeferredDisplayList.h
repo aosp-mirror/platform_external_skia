@@ -10,7 +10,8 @@
 
 #include "SkSurfaceCharacterization.h"
 
-class SkImage; // TODO: rm this
+class SkImage; // TODO: rm this since it is just for the temporary placeholder implementation
+class SkSurface;
 
 /*
  * This class contains pre-processed gpu operations that can be replayed into
@@ -34,7 +35,7 @@ public:
     void draw(SkSurface*);
 
 private:
-    SkSurfaceCharacterization fCharacterization;
+    const SkSurfaceCharacterization fCharacterization;
 
     // TODO: actually store the GPU opLists
     sk_sp<SkImage> fImage;

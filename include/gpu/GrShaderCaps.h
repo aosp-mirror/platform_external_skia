@@ -116,6 +116,11 @@ public:
     // Returns whether a device incorrectly implements atan(y,x) as atan(y/x)
     bool atan2ImplementedAsAtanYOverX() const { return fAtan2ImplementedAsAtanYOverX; }
 
+    // If this returns true some operation (could be a no op) must be called between floor and abs
+    // to make sure the driver compiler doesn't inline them together which can cause a driver bug in
+    // the shader.
+    bool mustDoOpBetweenFloorAndAbs() const { return fMustDoOpBetweenFloorAndAbs; }
+
     bool requiresLocalOutputColorForFBFetch() const { return fRequiresLocalOutputColorForFBFetch; }
 
     bool mustObfuscateUniformColor() const { return fMustObfuscateUniformColor; }
@@ -196,7 +201,14 @@ public:
 
     int maxCombinedSamplers() const { return fMaxCombinedSamplers; }
 
-    bool disableImageMultitexturingSupport() const { return fDisableImageMultitexturing; }
+    /**
+     * In general using multiple texture units for image rendering seems to be a win at smaller
+     * sizes of dst rects and a loss at larger sizes. Dst rects above this pixel area threshold will
+     * not use multitexturing.
+     */
+    size_t disableImageMultitexturingDstRectAreaThreshold() const {
+        return fDisableImageMultitexturingDstRectAreaThreshold;
+    }
 
     /**
      * Given a texture's config, this determines what swizzle must be appended to accesses to the
@@ -245,13 +257,13 @@ private:
     bool fVertexIDSupport : 1;
     bool fFloatIs32Bits : 1;
     bool fHalfIs32Bits : 1;
-    bool fDisableImageMultitexturing : 1;
 
     // Used for specific driver bug work arounds
     bool fCanUseMinAndAbsTogether : 1;
     bool fCanUseFractForNegativeValues : 1;
     bool fMustForceNegatedAtanParamToFloat : 1;
     bool fAtan2ImplementedAsAtanYOverX : 1;
+    bool fMustDoOpBetweenFloorAndAbs : 1;
     bool fRequiresLocalOutputColorForFBFetch : 1;
     bool fMustObfuscateUniformColor : 1;
     bool fMustGuardDivisionEvenAfterExplicitZeroCheck : 1;
@@ -276,6 +288,8 @@ private:
     int fMaxGeometrySamplers;
     int fMaxFragmentSamplers;
     int fMaxCombinedSamplers;
+
+    size_t fDisableImageMultitexturingDstRectAreaThreshold;
 
     AdvBlendEqInteraction fAdvBlendEqInteraction;
 
