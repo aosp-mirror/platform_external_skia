@@ -326,18 +326,19 @@ func defaultSwarmDimensions(parts map[string]string) []string {
 				}
 				d["gpu"] = gpu
 			} else if strings.Contains(parts["os"], "ChromeOS") {
-				gpu, ok := map[string]string{
-					"MaliT604":           "MaliT604",
-					"MaliT764":           "MaliT764",
-					"MaliT860":           "MaliT860",
-					"PowerVRGX6250":      "PowerVRGX6250",
-					"TegraK1":            "TegraK1",
-					"IntelHDGraphics615": "IntelHDGraphics615",
+				version, ok := map[string]string{
+					"MaliT604":           "9901.12.0",
+					"MaliT764":           "10172.0.0",
+					"MaliT860":           "10172.0.0",
+					"PowerVRGX6250":      "9592.71.0",
+					"TegraK1":            "10172.0.0",
+					"IntelHDGraphics615": "10032.17.0",
 				}[parts["cpu_or_gpu_value"]]
 				if !ok {
 					glog.Fatalf("Entry %q not found in ChromeOS GPU mapping.", parts["cpu_or_gpu_value"])
 				}
-				d["gpu"] = gpu
+				d["gpu"] = parts["cpu_or_gpu_value"]
+				d["release_version"] = version
 			} else {
 				glog.Fatalf("Unknown GPU mapping for OS %q.", parts["os"])
 			}
@@ -805,6 +806,7 @@ func test(b *specs.TasksCfgBuilder, name string, parts map[string]string, compil
 		s.Expiration = 48 * time.Hour
 		s.IoTimeout = time.Hour
 		s.CipdPackages = append(s.CipdPackages, b.MustGetCipdPackageFromAsset("valgrind"))
+		s.Dimensions = append(s.Dimensions, "valgrind:1")
 	} else if strings.Contains(parts["extra_config"], "MSAN") {
 		s.ExecutionTimeout = 9 * time.Hour
 	} else if parts["arch"] == "x86" && parts["configuration"] == "Debug" {
@@ -986,6 +988,7 @@ func perf(b *specs.TasksCfgBuilder, name string, parts map[string]string, compil
 		s.Expiration = 48 * time.Hour
 		s.IoTimeout = time.Hour
 		s.CipdPackages = append(s.CipdPackages, b.MustGetCipdPackageFromAsset("valgrind"))
+		s.Dimensions = append(s.Dimensions, "valgrind:1")
 	} else if strings.Contains(parts["extra_config"], "MSAN") {
 		s.ExecutionTimeout = 9 * time.Hour
 	} else if parts["arch"] == "x86" && parts["configuration"] == "Debug" {
