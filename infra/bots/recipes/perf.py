@@ -193,8 +193,8 @@ def nanobench_flags(api, bot):
     match.append('~top25desk_ebay_com.skp_1.1')
   if 'Vulkan' in bot and 'NexusPlayer' in bot:
     match.append('~blendmode_') # skia:6691
-  if 'float_cast_overflow' in bot and 'CPU' in bot:
-    # skia:4632
+  if 'ASAN' in bot and 'CPU' in bot:
+    # floor2int_undef benches undefined behavior, so ASAN correctly complains.
     match.append('~^floor2int_undef$')
 
   # We do not need or want to benchmark the decodes of incomplete images.
@@ -348,7 +348,7 @@ TEST_BUILDERS = [
   'Perf-ChromeOS-Clang-ASUSChromebookFlipC100-GPU-MaliT764-arm-Release-All',
   'Perf-Chromecast-GCC-Chorizo-CPU-Cortex_A7-arm-Debug-All',
   'Perf-Chromecast-GCC-Chorizo-GPU-Cortex_A7-arm-Release-All',
-  'Perf-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-All-UBSAN_float_cast_overflow',
+  'Perf-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-All-ASAN',
   'Perf-Debian9-Clang-GCE-CPU-AVX2-x86_64-Release-All',
   'Perf-Mac-Clang-MacMini7.1-CPU-AVX-x86_64-Release-All',
   'Perf-Mac-Clang-MacMini7.1-GPU-IntelIris5100-x86_64-Release-All',

@@ -164,8 +164,13 @@ bool SkSurface_Gpu::onCharacterize(SkSurfaceCharacterization* data) const {
     GrRenderTargetContext* rtc = fDevice->accessRenderTargetContext();
     GrContext* ctx = fDevice->context();
 
-    data->set(ctx->threadSafeProxy(), rtc->origin(), rtc->width(), rtc->height(),
-              rtc->colorSpaceInfo().config(), rtc->numColorSamples(),
+    int maxResourceCount;
+    size_t maxResourceBytes;
+    ctx->getResourceCacheLimits(&maxResourceCount, &maxResourceBytes);
+
+    data->set(ctx->threadSafeProxy(), maxResourceCount, maxResourceBytes,
+              rtc->origin(), rtc->width(), rtc->height(),
+              rtc->colorSpaceInfo().config(), rtc->fsaaType(), rtc->numStencilSamples(),
               rtc->colorSpaceInfo().refColorSpace(), this->props());
 
     return true;
@@ -175,22 +180,30 @@ bool SkSurface_Gpu::isCompatible(const SkSurfaceCharacterization& data) const {
     GrRenderTargetContext* rtc = fDevice->accessRenderTargetContext();
     GrContext* ctx = fDevice->context();
 
+    // As long as the current state if the context allows for greater or equal resources,
+    // we allow the DDL to be replayed.
+    int maxResourceCount;
+    size_t maxResourceBytes;
+    ctx->getResourceCacheLimits(&maxResourceCount, &maxResourceBytes);
+
     return data.contextInfo() && data.contextInfo()->matches(ctx) &&
+           data.cacheMaxResourceCount() <= maxResourceCount &&
+           data.cacheMaxResourceBytes() <= maxResourceBytes &&
            data.origin() == rtc->origin() && data.width() == rtc->width() &&
            data.height() == rtc->height() && data.config() == rtc->colorSpaceInfo().config() &&
-           data.sampleCount() == rtc->numColorSamples() &&
+           data.fsaaType() == rtc->fsaaType() && data.stencilCount() == rtc->numStencilSamples() &&
            SkColorSpace::Equals(data.colorSpace(), rtc->colorSpaceInfo().colorSpace()) &&
            data.surfaceProps() == rtc->surfaceProps();
 }
 
-void SkSurface_Gpu::onDraw(SkDeferredDisplayList* dl) {
+bool SkSurface_Gpu::onDraw(SkDeferredDisplayList* dl) {
     if (!this->isCompatible(dl->characterization())) {
-        return;
+        return false;
     }
 
     // Ultimately need to pass opLists from the DeferredDisplayList on to the
     // SkGpuDevice's renderTargetContext.
-    dl->draw(this);
+    return dl->draw(this);
 }
 
 
