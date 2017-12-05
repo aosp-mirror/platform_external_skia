@@ -1391,6 +1391,7 @@ cc_test {
         "tests/CodecAnimTest.cpp",
         "tests/CodecExactReadTest.cpp",
         "tests/CodecPartialTest.cpp",
+        "tests/CodecRecommendedTypeTest.cpp",
         "tests/CodecTest.cpp",
         "tests/ColorFilterTest.cpp",
         "tests/ColorMatrixTest.cpp",
