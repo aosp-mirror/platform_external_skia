@@ -8,10 +8,6 @@
 #include "SkBlendModePriv.h"
 #include "SkRasterPipeline.h"
 
-bool SkBlendMode_CanOverflow(SkBlendMode mode) {
-    return mode == SkBlendMode::kPlus;
-}
-
 bool SkBlendMode_SupportsCoverageAsAlpha(SkBlendMode mode) {
     switch (mode) {
         case SkBlendMode::kDst:
@@ -65,7 +61,7 @@ bool SkBlendMode_AsCoeff(SkBlendMode mode, SkBlendModeCoeff* src, SkBlendModeCoe
     return true;
 }
 
-void SkBlendMode_AppendStages(SkBlendMode mode, SkRasterPipeline* p) {
+void SkBlendMode_AppendStagesNoClamp(SkBlendMode mode, SkRasterPipeline* p) {
     auto stage = SkRasterPipeline::srcover;
     switch (mode) {
         case SkBlendMode::kClear:    stage = SkRasterPipeline::clear; break;
@@ -101,4 +97,41 @@ void SkBlendMode_AppendStages(SkBlendMode mode, SkRasterPipeline* p) {
         case SkBlendMode::kLuminosity: stage = SkRasterPipeline::luminosity; break;
     }
     p->append(stage);
+}
+
+void SkBlendMode_AppendClampIfNeeded(SkBlendMode mode, SkRasterPipeline* p) {
+    if (mode == SkBlendMode::kPlus) {
+        // Both clamp_a and clamp_1 would preserve premultiplication invariants here,
+        // so we pick clamp_1 for being a smidge faster.
+        p->append(SkRasterPipeline::clamp_1);
+    }
+}
+
+SkPM4f SkBlendMode_Apply(SkBlendMode mode, const SkPM4f& src, const SkPM4f& dst) {
+    // special-case simple/common modes...
+    switch (mode) {
+        case SkBlendMode::kClear:   return {{ 0, 0, 0, 0 }};
+        case SkBlendMode::kSrc:     return src;
+        case SkBlendMode::kDst:     return dst;
+        case SkBlendMode::kSrcOver:
+            return SkPM4f::From4f(src.to4f() + dst.to4f() * Sk4f(1 - src.a()));
+        default:
+            break;
+    }
+
+    SkRasterPipeline_<256> p;
+    SkPM4f                 src_storage = src,
+                           dst_storage = dst,
+                           result_storage,
+                           *src_ctx = &src_storage,
+                           *dst_ctx = &dst_storage,
+                           *res_ctx = &result_storage;
+
+    p.append(SkRasterPipeline::load_f32, &dst_ctx);
+    p.append(SkRasterPipeline::move_src_dst);
+    p.append(SkRasterPipeline::load_f32, &src_ctx);
+    SkBlendMode_AppendStages(mode, &p);
+    p.append(SkRasterPipeline::store_f32, &res_ctx);
+    p.run(0, 0, 1);
+    return result_storage;
 }

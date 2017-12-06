@@ -37,6 +37,8 @@
 
 #include "imgui.h"
 
+#include "ccpr/GrCoverageCountingPathRenderer.h"
+
 #include <stdlib.h>
 #include <map>
 
@@ -251,6 +253,7 @@ Viewer::Viewer(int argc, char** argv, void* platformData)
     , fColorMode(ColorMode::kLegacy)
     , fColorSpacePrimaries(gSrgbPrimaries)
     , fZoomLevel(0.0f)
+    , fGestureDevice(GestureDevice::kNone)
 {
     static SkTaskGroup::Enabler kTaskGroupEnabler;
     SkGraphics::Init();
@@ -261,6 +264,7 @@ Viewer::Viewer(int argc, char** argv, void* platformData)
         gPathRendererNames[GpuPathRenderers::kStencilAndCover] = "NV_path_rendering";
         gPathRendererNames[GpuPathRenderers::kMSAA] = "Sample shading";
         gPathRendererNames[GpuPathRenderers::kSmall] = "Small paths (cached sdf or alpha masks)";
+        gPathRendererNames[GpuPathRenderers::kCoverageCounting] = "Coverage counting";
         gPathRendererNames[GpuPathRenderers::kTessellating] = "Tessellating";
         gPathRendererNames[GpuPathRenderers::kDefault] = "Original Ganesh path renderer";
         gPathRendererNames[GpuPathRenderers::kNone] = "Software masks";
@@ -666,9 +670,10 @@ void Viewer::setBackend(sk_app::Window::BackendType backendType) {
     fWindow->detach();
 
 #if defined(SK_BUILD_FOR_WIN) && defined(SK_VULKAN)
-    // Switching from OpenGL to Vulkan in the same window is problematic at this point on
-    // Windows, so we just delete the window and recreate it.
-    if (sk_app::Window::kVulkan_BackendType == fBackendType) {
+    // Switching from OpenGL to Vulkan (or vice-versa on some systems) in the same window is
+    // problematic at this point on Windows, so we just delete the window and recreate it.
+    if (sk_app::Window::kVulkan_BackendType == fBackendType ||
+            sk_app::Window::kNativeGL_BackendType == fBackendType) {
         DisplayParams params = fWindow->getRequestedDisplayParams();
         delete fWindow;
         fWindow = Window::CreateNativeWindow(nullptr);
@@ -683,7 +688,13 @@ void Viewer::setBackend(sk_app::Window::BackendType backendType) {
         fWindow->registerMouseWheelFunc(on_mouse_wheel_handler, this);
         fWindow->registerKeyFunc(on_key_handler, this);
         fWindow->registerCharFunc(on_char_handler, this);
-        fWindow->setRequestedDisplayParams(params);
+        // Don't allow the window to re-attach. If we're in MSAA mode, the params we grabbed above
+        // will still include our correct sample count. But the re-created fWindow will lose that
+        // information. On Windows, we need to re-create the window when changing sample count,
+        // so we'll incorrectly detect that situation, then re-initialize the window in GL mode,
+        // rendering this tear-down step pointless (and causing the Vulkan window context to fail
+        // as if we had never changed windows at all).
+        fWindow->setRequestedDisplayParams(params, false);
     }
 #endif
 
@@ -819,6 +830,9 @@ void Viewer::onPaint(SkCanvas* canvas) {
 }
 
 bool Viewer::onTouch(intptr_t owner, Window::InputState state, float x, float y) {
+    if (GestureDevice::kMouse == fGestureDevice) {
+        return false;
+    }
     void* castedOwner = reinterpret_cast<void*>(owner);
     switch (state) {
         case Window::kUp_InputState: {
@@ -834,11 +848,15 @@ bool Viewer::onTouch(intptr_t owner, Window::InputState state, float x, float y)
             break;
         }
     }
+    fGestureDevice = fGesture.isBeingTouched() ? GestureDevice::kTouch : GestureDevice::kNone;
     fWindow->inval();
     return true;
 }
 
 bool Viewer::onMouse(float x, float y, Window::InputState state, uint32_t modifiers) {
+    if (GestureDevice::kTouch == fGestureDevice) {
+        return false;
+    }
     switch (state) {
         case Window::kUp_InputState: {
             fGesture.touchEnd(nullptr);
@@ -853,6 +871,7 @@ bool Viewer::onMouse(float x, float y, Window::InputState state, uint32_t modifi
             break;
         }
     }
+    fGestureDevice = fGesture.isBeingTouched() ? GestureDevice::kMouse : GestureDevice::kNone;
     fWindow->inval();
     return true;
 }
@@ -1053,6 +1072,9 @@ void Viewer::drawImGui(SkCanvas* canvas) {
                         prButton(GpuPathRenderers::kNone);
                     } else {
                         prButton(GpuPathRenderers::kAll);
+                        if (GrCoverageCountingPathRenderer::IsSupported(*ctx->caps())) {
+                            prButton(GpuPathRenderers::kCoverageCounting);
+                        }
                         prButton(GpuPathRenderers::kSmall);
                         prButton(GpuPathRenderers::kTessellating);
                         prButton(GpuPathRenderers::kNone);
@@ -1289,6 +1311,9 @@ void Viewer::updateUIState() {
         prState[kOptions].append(gPathRendererNames[GpuPathRenderers::kNone]);
     } else {
         prState[kOptions].append(gPathRendererNames[GpuPathRenderers::kAll]);
+        if (GrCoverageCountingPathRenderer::IsSupported(*ctx->caps())) {
+            prState[kOptions].append(gPathRendererNames[GpuPathRenderers::kCoverageCounting]);
+        }
         prState[kOptions].append(gPathRendererNames[GpuPathRenderers::kSmall]);
         prState[kOptions].append(gPathRendererNames[GpuPathRenderers::kTessellating]);
         prState[kOptions].append(gPathRendererNames[GpuPathRenderers::kNone]);

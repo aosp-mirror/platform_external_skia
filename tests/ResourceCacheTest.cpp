@@ -16,11 +16,11 @@
 #include "GrGpu.h"
 #include "GrGpuResourceCacheAccess.h"
 #include "GrGpuResourcePriv.h"
-#include "GrRenderTarget.h"
-#include "GrRenderTargetPriv.h"
 #include "GrResourceCache.h"
 #include "GrResourceProvider.h"
 #include "GrTest.h"
+#include "GrTexture.h"
+
 #include "SkCanvas.h"
 #include "SkGr.h"
 #include "SkMessageBus.h"
@@ -150,10 +150,11 @@ DEF_GPUTEST_FOR_CONTEXTS(ResourceCacheStencilBuffers, &is_rendering_and_not_angl
                     resourceProvider->attachStencilAttachment(smallRT0->asRenderTarget()) !=
                     resourceProvider->attachStencilAttachment(bigRT->asRenderTarget()));
 
-    if (context->caps()->maxSampleCount() >= 4) {
+    int supportedSampleCount = context->caps()->getSampleCount(4, smallDesc.fConfig);
+    if (supportedSampleCount > 0) {
         // An RT with a different sample count should not share.
         GrSurfaceDesc smallMSAADesc = smallDesc;
-        smallMSAADesc.fSampleCnt = 4;
+        smallMSAADesc.fSampleCnt = supportedSampleCount;
         sk_sp<GrTexture> smallMSAART0(resourceProvider->createTexture(smallMSAADesc,
                                                                       SkBudgeted::kNo));
         if (smallMSAART0 && smallMSAART0->asRenderTarget()) {
@@ -184,10 +185,10 @@ DEF_GPUTEST_FOR_CONTEXTS(ResourceCacheStencilBuffers, &is_rendering_and_not_angl
                         resourceProvider->attachStencilAttachment(smallMSAART1->asRenderTarget()));
         // But not one with a larger sample count should not. (Also check that the request for 4
         // samples didn't get rounded up to >= 8 or else they could share.).
-        if (context->caps()->maxSampleCount() >= 8 &&
-            smallMSAART0 && smallMSAART0->asRenderTarget() &&
-            smallMSAART0->asRenderTarget()->numColorSamples() < 8) {
-            smallMSAADesc.fSampleCnt = 8;
+        supportedSampleCount = context->caps()->getSampleCount(8, smallDesc.fConfig);
+        if (supportedSampleCount != smallMSAADesc.fSampleCnt &&
+            smallMSAART0 && smallMSAART0->asRenderTarget()) {
+            smallMSAADesc.fSampleCnt = supportedSampleCount;
             smallMSAART1 = resourceProvider->createTexture(smallMSAADesc, SkBudgeted::kNo);
             sk_sp<GrTexture> smallMSAART1(
                 resourceProvider->createTexture(smallMSAADesc, SkBudgeted::kNo));
@@ -359,7 +360,7 @@ int TestResource::fNumAlive = 0;
 class Mock {
 public:
     Mock(int maxCnt, size_t maxBytes) {
-        fContext.reset(GrContext::CreateMockContext());
+        fContext.reset(GrContext::Create(kMock_GrBackend, (GrBackendContext) nullptr));
         SkASSERT(fContext);
         fContext->setResourceCacheLimits(maxCnt, maxBytes);
         GrResourceCache* cache = fContext->getResourceCache();
@@ -1680,7 +1681,8 @@ static sk_sp<GrTextureProxy> make_mipmap_proxy(GrResourceProvider* provider,
     desc.fSampleCnt = sampleCnt;
     desc.fIsMipMapped = true;
 
-    return provider->createMipMappedTexture(desc, SkBudgeted::kYes, texels.get(), mipLevelCount);
+    return GrSurfaceProxy::MakeDeferredMipMap(provider, desc, SkBudgeted::kYes,
+                                              texels.get(), mipLevelCount);
 }
 
 // Exercise GrSurface::gpuMemorySize for different combos of MSAA, RT-only,
@@ -1699,12 +1701,15 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(GPUMemorySize, reporter, ctxInfo) {
         size_t size = tex->gpuMemorySize();
         REPORTER_ASSERT(reporter, kSize*kSize*4 == size);
 
-        if (context->caps()->maxSampleCount() >= 4) {
-            tex = make_normal_texture(provider, kRenderTarget_GrSurfaceFlag, kSize, kSize, 4);
+        size_t sampleCount = (size_t)context->caps()->getSampleCount(4, kRGBA_8888_GrPixelConfig);
+        if (sampleCount >= 4) {
+            tex = make_normal_texture(provider, kRenderTarget_GrSurfaceFlag, kSize, kSize,
+                                      sampleCount);
             size = tex->gpuMemorySize();
-            REPORTER_ASSERT(reporter, kSize*kSize*4 == size ||    // msaa4 failed
-                                      kSize*kSize*4*4 == size ||  // auto-resolving
-                                      kSize*kSize*4*5 == size);   // explicit resolve buffer
+            REPORTER_ASSERT(reporter,
+                            kSize*kSize*4 == size ||                  // msaa4 failed
+                            kSize*kSize*4*sampleCount == size ||      // auto-resolving
+                            kSize*kSize*4*(sampleCount+1) == size);   // explicit resolve buffer
         }
 
         tex = make_normal_texture(provider, kNone_GrSurfaceFlags, kSize, kSize, 0);
@@ -1721,13 +1726,15 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(GPUMemorySize, reporter, ctxInfo) {
         size_t size = proxy->gpuMemorySize();
         REPORTER_ASSERT(reporter, kSize*kSize*4+(kSize*kSize*4)/3 == size);
 
-        if (context->caps()->maxSampleCount() >= 4) {
-            proxy = make_mipmap_proxy(provider, kRenderTarget_GrSurfaceFlag, kSize, kSize, 4);
+        size_t sampleCount = (size_t)context->caps()->getSampleCount(4, kRGBA_8888_GrPixelConfig);
+        if (sampleCount >= 4) {
+            proxy = make_mipmap_proxy(provider, kRenderTarget_GrSurfaceFlag, kSize, kSize,
+                                      sampleCount);
             size = proxy->gpuMemorySize();
             REPORTER_ASSERT(reporter,
-                            kSize*kSize*4+(kSize*kSize*4)/3 == size ||   // msaa4 failed
-                            kSize*kSize*4*4+(kSize*kSize*4)/3 == size || // auto-resolving
-                            kSize*kSize*4*5+(kSize*kSize*4)/3 == size);  // explicit resolve buffer
+               kSize*kSize*4+(kSize*kSize*4)/3 == size ||                 // msaa4 failed
+               kSize*kSize*4*sampleCount+(kSize*kSize*4)/3 == size ||     // auto-resolving
+               kSize*kSize*4*(sampleCount+1)+(kSize*kSize*4)/3 == size);  // explicit resolve buffer
         }
 
         proxy = make_mipmap_proxy(provider, kNone_GrSurfaceFlags, kSize, kSize, 0);

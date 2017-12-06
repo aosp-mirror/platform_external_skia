@@ -284,7 +284,7 @@ private:
     bool fLocalCoordsWillBeRead;
     sk_sp<GrColorSpaceXform> fColorSpaceXform;
 
-    GR_DECLARE_GEOMETRY_PROCESSOR_TEST;
+    GR_DECLARE_GEOMETRY_PROCESSOR_TEST
 
     typedef GrGeometryProcessor INHERITED;
 };
@@ -358,7 +358,6 @@ sk_sp<GrGeometryProcessor> GrDefaultGeoProcFactory::MakeForDeviceSpace(
     if (LocalCoords::kUnused_Type != localCoords.fType) {
         SkASSERT(LocalCoords::kUsePosition_Type == localCoords.fType);
         if (!viewMatrix.isIdentity() && !viewMatrix.invert(&invert)) {
-            SkDebugf("Could not invert\n");
             return nullptr;
         }
 

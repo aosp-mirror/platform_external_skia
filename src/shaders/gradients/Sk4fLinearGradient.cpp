@@ -12,8 +12,8 @@
 
 namespace {
 
-template<DstType dstType, ApplyPremul premul>
-void ramp(const Sk4f& c, const Sk4f& dc, typename DstTraits<dstType, premul>::Type dst[], int n) {
+template<ApplyPremul premul>
+void ramp(const Sk4f& c, const Sk4f& dc, SkPM4f dst[], int n) {
     SkASSERT(n > 0);
 
     const Sk4f dc2 = dc + dc;
@@ -25,7 +25,7 @@ void ramp(const Sk4f& c, const Sk4f& dc, typename DstTraits<dstType, premul>::Ty
     Sk4f c3 = c1 + dc2;
 
     while (n >= 4) {
-        DstTraits<dstType, premul>::store4x(c0, c1, c2, c3, dst);
+        DstTraits<premul>::store4x(c0, c1, c2, c3, dst);
         dst += 4;
 
         c0 = c0 + dc4;
@@ -35,12 +35,12 @@ void ramp(const Sk4f& c, const Sk4f& dc, typename DstTraits<dstType, premul>::Ty
         n -= 4;
     }
     if (n & 2) {
-        DstTraits<dstType, premul>::store(c0, dst++);
-        DstTraits<dstType, premul>::store(c1, dst++);
+        DstTraits<premul>::store(c0, dst++);
+        DstTraits<premul>::store(c1, dst++);
         c0 = c0 + dc2;
     }
     if (n & 1) {
-        DstTraits<dstType, premul>::store(c0, dst);
+        DstTraits<premul>::store(c0, dst);
     }
 }
 
@@ -91,7 +91,7 @@ LinearGradient4fContext::LinearGradient4fContext(const SkLinearGradient& shader,
     : INHERITED(shader, rec) {
 
     // Our fast path expects interval points to be monotonically increasing in x.
-    const bool reverseIntervals = this->isFast() && std::signbit(fDstToPos.getScaleX());
+    const bool reverseIntervals = std::signbit(fDstToPos.getScaleX());
     fIntervals.init(shader, rec.fDstColorSpace, shader.fTileMode,
                     fColorsArePremul, rec.fPaint->getAlpha() * (1.0f / 255), reverseIntervals);
 
@@ -142,72 +142,36 @@ SkLinearGradient::LinearGradient4fContext::findInterval(SkScalar fx) const {
 }
 
 void SkLinearGradient::
-LinearGradient4fContext::shadeSpan(int x, int y, SkPMColor dst[], int count) {
-    if (!this->isFast()) {
-        this->INHERITED::shadeSpan(x, y, dst, count);
-        return;
-    }
-
-    // TODO: plumb dithering
-    SkASSERT(count > 0);
-    if (fColorsArePremul) {
-        this->shadePremulSpan<DstType::L32,
-                              ApplyPremul::False>(x, y, dst, count);
-    } else {
-        this->shadePremulSpan<DstType::L32,
-                              ApplyPremul::True>(x, y, dst, count);
-    }
-}
-
-void SkLinearGradient::
 LinearGradient4fContext::shadeSpan4f(int x, int y, SkPM4f dst[], int count) {
-    if (!this->isFast()) {
-        this->INHERITED::shadeSpan4f(x, y, dst, count);
-        return;
-    }
-
-    // TONOTDO: plumb dithering
     SkASSERT(count > 0);
     if (fColorsArePremul) {
-        this->shadePremulSpan<DstType::F32,
-                              ApplyPremul::False>(x, y, dst, count);
+        this->shadePremulSpan<ApplyPremul::False>(x, y, dst, count);
     } else {
-        this->shadePremulSpan<DstType::F32,
-                              ApplyPremul::True>(x, y, dst, count);
+        this->shadePremulSpan<ApplyPremul::True>(x, y, dst, count);
     }
 }
 
-template<DstType dstType, ApplyPremul premul>
+template<ApplyPremul premul>
 void SkLinearGradient::
-LinearGradient4fContext::shadePremulSpan(int x, int y,
-                                         typename DstTraits<dstType, premul>::Type dst[],
-                                         int count) const {
+LinearGradient4fContext::shadePremulSpan(int x, int y, SkPM4f dst[], int count) const {
     const SkLinearGradient& shader =
         static_cast<const SkLinearGradient&>(fShader);
     switch (shader.fTileMode) {
     case kClamp_TileMode:
-        this->shadeSpanInternal<dstType,
-                                premul,
-                                kClamp_TileMode>(x, y, dst, count);
+        this->shadeSpanInternal<premul, kClamp_TileMode>(x, y, dst, count);
         break;
     case kRepeat_TileMode:
-        this->shadeSpanInternal<dstType,
-                                premul,
-                                kRepeat_TileMode>(x, y, dst, count);
+        this->shadeSpanInternal<premul, kRepeat_TileMode>(x, y, dst, count);
         break;
     case kMirror_TileMode:
-        this->shadeSpanInternal<dstType,
-                                premul,
-                                kMirror_TileMode>(x, y, dst, count);
+        this->shadeSpanInternal<premul, kMirror_TileMode>(x, y, dst, count);
         break;
     }
 }
 
-template<DstType dstType, ApplyPremul premul, SkShader::TileMode tileMode>
+template<ApplyPremul premul, SkShader::TileMode tileMode>
 void SkLinearGradient::
-LinearGradient4fContext::shadeSpanInternal(int x, int y,
-                                           typename DstTraits<dstType, premul>::Type dst[],
-                                           int count) const {
+LinearGradient4fContext::shadeSpanInternal(int x, int y, SkPM4f dst[], int count) const {
     SkPoint pt;
     fDstToPosProc(fDstToPos,
                   x + SK_ScalarHalf,
@@ -215,12 +179,12 @@ LinearGradient4fContext::shadeSpanInternal(int x, int y,
                   &pt);
     const SkScalar fx = pinFx<tileMode>(pt.x());
     const SkScalar dx = fDstToPos.getScaleX();
-    LinearIntervalProcessor<dstType, premul, tileMode> proc(fIntervals->begin(),
-                                                            fIntervals->end() - 1,
-                                                            this->findInterval(fx),
-                                                            fx,
-                                                            dx,
-                                                            SkScalarNearlyZero(dx * count));
+    LinearIntervalProcessor<premul, tileMode> proc(fIntervals->begin(),
+                                                   fIntervals->end() - 1,
+                                                   this->findInterval(fx),
+                                                   fx,
+                                                   dx,
+                                                   SkScalarNearlyZero(dx * count));
     while (count > 0) {
         // What we really want here is SkTPin(advance, 1, count)
         // but that's a significant perf hit for >> stops; investigate.
@@ -235,12 +199,9 @@ LinearGradient4fContext::shadeSpanInternal(int x, int y,
             || (n == count && proc.currentRampIsZero()));
 
         if (proc.currentRampIsZero()) {
-            DstTraits<dstType, premul>::store(proc.currentColor(),
-                                              dst, n);
+            DstTraits<premul>::store(proc.currentColor(), dst, n);
         } else {
-            ramp<dstType, premul>(proc.currentColor(),
-                                  proc.currentColorGrad(),
-                                  dst, n);
+            ramp<premul>(proc.currentColor(), proc.currentColorGrad(), dst, n);
         }
 
         proc.advance(SkIntToScalar(n));
@@ -249,7 +210,7 @@ LinearGradient4fContext::shadeSpanInternal(int x, int y,
     }
 }
 
-template<DstType dstType, ApplyPremul premul, SkShader::TileMode tileMode>
+template<ApplyPremul premul, SkShader::TileMode tileMode>
 class SkLinearGradient::
 LinearGradient4fContext::LinearIntervalProcessor {
 public:
@@ -314,8 +275,8 @@ private:
     void compute_interval_props(SkScalar t) {
         SkASSERT(in_range(t, fInterval->fT0, fInterval->fT1));
 
-        const Sk4f dc = DstTraits<dstType, premul>::load(fInterval->fCg);
-                  fCc = DstTraits<dstType, premul>::load(fInterval->fCb) + dc * Sk4f(t);
+        const Sk4f dc = DstTraits<premul>::load(fInterval->fCg);
+                  fCc = DstTraits<premul>::load(fInterval->fCb) + dc * Sk4f(t);
                 fDcDx = dc * fDx;
             fZeroRamp = fIsVertical || (dc == 0).allTrue();
     }
@@ -334,8 +295,8 @@ private:
             //
             //   Avg += C * (t1 - t0)
             //
-            const auto c = DstTraits<dstType, premul>::load(i->fCb)
-                         + DstTraits<dstType, premul>::load(i->fCg) * (i->fT0 + i->fT1) * 0.5f;
+            const auto c = DstTraits<premul>::load(i->fCb)
+                         + DstTraits<premul>::load(i->fCg) * (i->fT0 + i->fT1) * 0.5f;
             fCc = fCc + c * (i->fT1 - i->fT0);
         }
     }
@@ -381,50 +342,3 @@ private:
     const SkScalar              fDx;        // 'dx' for consistency with other impls; actually dt/dx
     const bool                  fIsVertical;
 };
-
-void SkLinearGradient::
-LinearGradient4fContext::mapTs(int x, int y, SkScalar ts[], int count) const {
-    SkASSERT(count > 0);
-    SkASSERT(fDstToPosClass != kLinear_MatrixClass);
-
-    SkScalar sx = x + SK_ScalarHalf;
-    const SkScalar sy = y + SK_ScalarHalf;
-    SkPoint pt;
-
-    if (fDstToPosClass != kPerspective_MatrixClass) {
-        // kLinear_MatrixClass, kFixedStepInX_MatrixClass => fixed dt per scanline
-        const SkScalar dtdx = fDstToPos.fixedStepInX(sy).x();
-        fDstToPosProc(fDstToPos, sx, sy, &pt);
-
-        const Sk4f dtdx4 = Sk4f(4 * dtdx);
-        Sk4f t4 = Sk4f(pt.x() + 0 * dtdx,
-                       pt.x() + 1 * dtdx,
-                       pt.x() + 2 * dtdx,
-                       pt.x() + 3 * dtdx);
-
-        while (count >= 4) {
-            t4.store(ts);
-            t4 = t4 + dtdx4;
-            ts += 4;
-            count -= 4;
-        }
-
-        if (count & 2) {
-            *ts++ = t4[0];
-            *ts++ = t4[1];
-            t4 = SkNx_shuffle<2, 0, 1, 3>(t4);
-        }
-
-        if (count & 1) {
-            *ts++ = t4[0];
-        }
-    } else {
-        for (int i = 0; i < count; ++i) {
-            fDstToPosProc(fDstToPos, sx, sy, &pt);
-            // Perspective may yield NaN values.
-            // Short of a better idea, drop to 0.
-            ts[i] = SkScalarIsNaN(pt.x()) ? 0 : pt.x();
-            sx += SK_Scalar1;
-        }
-    }
-}

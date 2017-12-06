@@ -94,21 +94,21 @@ sk_sp<SkShader> SkImage::makeShader(SkShader::TileMode tileX, SkShader::TileMode
     return SkImageShader::Make(sk_ref_sp(const_cast<SkImage*>(this)), tileX, tileY, localMatrix);
 }
 
-SkData* SkImage::encode(SkEncodedImageFormat type, int quality) const {
+sk_sp<SkData> SkImage::encodeToData(SkEncodedImageFormat type, int quality) const {
     SkBitmap bm;
     SkColorSpace* legacyColorSpace = nullptr;
     if (as_IB(this)->getROPixels(&bm, legacyColorSpace)) {
         SkDynamicMemoryWStream buf;
-        return SkEncodeImage(&buf, bm, type, quality) ? buf.detachAsData().release() : nullptr;
+        return SkEncodeImage(&buf, bm, type, quality) ? buf.detachAsData() : nullptr;
     }
     return nullptr;
 }
 
-SkData* SkImage::encode(SkPixelSerializer* serializer) const {
-    sk_sp<SkData> encoded(this->refEncoded());
+sk_sp<SkData> SkImage::encodeToData(SkPixelSerializer* serializer) const {
+    sk_sp<SkData> encoded(this->refEncodedData());
     if (encoded &&
         (!serializer || serializer->useEncodedData(encoded->data(), encoded->size()))) {
-        return encoded.release();
+        return encoded;
     }
 
     SkBitmap bm;
@@ -116,19 +116,19 @@ SkData* SkImage::encode(SkPixelSerializer* serializer) const {
     SkColorSpace* legacyColorSpace = nullptr;
     if (as_IB(this)->getROPixels(&bm, legacyColorSpace) && bm.peekPixels(&pmap)) {
         if (serializer) {
-            return serializer->encode(pmap);
+            return serializer->encodeToData(pmap);
         } else {
             SkDynamicMemoryWStream buf;
             return SkEncodeImage(&buf, pmap, SkEncodedImageFormat::kPNG, 100)
-                   ? buf.detachAsData().release() : nullptr;
+                   ? buf.detachAsData() : nullptr;
         }
     }
 
     return nullptr;
 }
 
-SkData* SkImage::refEncoded() const {
-    return as_IB(this)->onRefEncoded();
+sk_sp<SkData> SkImage::refEncodedData() const {
+    return sk_sp<SkData>(as_IB(this)->onRefEncoded());
 }
 
 sk_sp<SkImage> SkImage::MakeFromEncoded(sk_sp<SkData> encoded, const SkIRect* subset) {
@@ -137,6 +137,8 @@ sk_sp<SkImage> SkImage::MakeFromEncoded(sk_sp<SkData> encoded, const SkIRect* su
     }
     return SkImage::MakeFromGenerator(SkImageGenerator::MakeFromEncoded(encoded), subset);
 }
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
 
 const char* SkImage::toString(SkString* str) const {
     str->appendf("image: (id:%d (%d, %d) %s)", this->uniqueID(), this->width(), this->height(),
@@ -327,7 +329,7 @@ sk_sp<SkImage> SkImage::makeColorSpace(sk_sp<SkColorSpace> target,
 
 #if !SK_SUPPORT_GPU
 
-sk_sp<SkImage> MakeTextureFromMipMap(GrContext*, const SkImageInfo&, const GrMipLevel* texels,
+sk_sp<SkImage> MakeTextureFromMipMap(GrContext*, const SkImageInfo&, const GrMipLevel texels[],
                                      int mipLevelCount, SkBudgeted, SkDestinationSurfaceColorMode) {
     return nullptr;
 }
@@ -347,7 +349,8 @@ sk_sp<SkImage> SkImage::MakeFromTexture(GrContext* ctx,
 size_t SkImage::getDeferredTextureImageData(const GrContextThreadSafeProxy&,
                                             const DeferredTextureImageUsageParams[],
                                             int paramCnt, void* buffer,
-                                            SkColorSpace* dstColorSpace) const {
+                                            SkColorSpace* dstColorSpace,
+                                            SkColorType dstColorType) const {
     return 0;
 }
 
@@ -387,7 +390,7 @@ sk_sp<SkImage> SkImage::makeNonTextureImage() const {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-sk_sp<SkImage> MakeTextureFromMipMap(GrContext*, const SkImageInfo&, const GrMipLevel* texels,
+sk_sp<SkImage> MakeTextureFromMipMap(GrContext*, const SkImageInfo&, const GrMipLevel texels[],
                                      int mipLevelCount, SkBudgeted) {
     return nullptr;
 }

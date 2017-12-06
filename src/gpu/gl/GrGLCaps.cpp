@@ -33,6 +33,7 @@ GrGLCaps::GrGLCaps(const GrContextOptions& contextOptions,
     fPackFlipYSupport = false;
     fTextureUsageSupport = false;
     fTextureRedSupport = false;
+    fAlpha8IsRenderable = false;
     fImagingSupport = false;
     fVertexArrayObjectSupport = false;
     fDirectStateAccessSupport = false;
@@ -56,6 +57,9 @@ GrGLCaps::GrGLCaps(const GrContextOptions& contextOptions,
     fClearTextureSupport = false;
     fDrawArraysBaseVertexIsBroken = false;
     fUseDrawToClearStencilClip = false;
+    fDisallowTexSubImageForUnormConfigTexturesEverBoundToFBO = false;
+    fUseDrawInsteadOfAllRenderTargetWrites = false;
+    fRequiresCullFaceEnableDisableWhenDrawingLinesAfterNonLines = false;
 
     fBlitFramebufferFlags = kNoSupport_BlitFramebufferFlag;
 
@@ -438,15 +442,29 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
         }
     }
 
+    // We found that the Galaxy J5 with an Adreno 306 running 6.0.1 has a bug where
+    // GL_INVALID_OPERATION thrown by glDrawArrays when using a buffer that was mapped. The same bug
+    // did not reproduce on a Nexus7 2013 with a 320 running Android M with driver 127.0. It's
+    // unclear whether this really affects a wide range of devices.
+    if (ctxInfo.renderer() == kAdreno3xx_GrGLRenderer && ctxInfo.driver() == kQualcomm_GrGLDriver &&
+        ctxInfo.driverVersion() > GR_GL_DRIVER_VER(127, 0)) {
+        fMapBufferType = kNone_MapBufferType;
+        fMapBufferFlags = kNone_MapFlags;
+    }
+
     if (kGL_GrGLStandard == standard) {
         if (version >= GR_GL_VER(3, 0) || ctxInfo.hasExtension("GL_ARB_pixel_buffer_object")) {
             fTransferBufferType = kPBO_TransferBufferType;
         }
-    } else {
-        if (version >= GR_GL_VER(3, 0) || ctxInfo.hasExtension("GL_NV_pixel_buffer_object")) {
+    } else if (kANGLE_GrGLDriver != ctxInfo.driver()) {  // TODO: re-enable for ANGLE
+        if (version >= GR_GL_VER(3, 0) ||
+            (ctxInfo.hasExtension("GL_NV_pixel_buffer_object") &&
+             // GL_EXT_unpack_subimage needed to support subtexture rectangles
+             ctxInfo.hasExtension("GL_EXT_unpack_subimage"))) {
             fTransferBufferType = kPBO_TransferBufferType;
-        } else if (ctxInfo.hasExtension("GL_CHROMIUM_pixel_transfer_buffer_object")) {
-            fTransferBufferType = kChromium_TransferBufferType;
+// TODO: get transfer buffers working in Chrome
+//        } else if (ctxInfo.hasExtension("GL_CHROMIUM_pixel_transfer_buffer_object")) {
+//            fTransferBufferType = kChromium_TransferBufferType;
         }
     }
 
@@ -511,13 +529,30 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
     }
 
     if (kAdreno4xx_GrGLRenderer == ctxInfo.renderer()) {
-        fUseDrawInsteadOfPartialRenderTargetWrite = true;
-        fUseDrawToClearStencilClip = true;
+        // This is known to be fixed sometime between driver 145.0 and 219.0
+        if (ctxInfo.driver() == kQualcomm_GrGLDriver &&
+            ctxInfo.driverVersion() <= GR_GL_DRIVER_VER(219, 0)) {
+            fUseDrawToClearStencilClip = true;
+        }
+        fDisallowTexSubImageForUnormConfigTexturesEverBoundToFBO = true;
+    }
+
+    // This was reproduced on the following configurations:
+    // - A Galaxy J5 (Adreno 306) running Android 6 with driver 140.0
+    // - A Nexus 7 2013 (Adreno 320) running Android 5 with driver 104.0
+    // - A Nexus 7 2013 (Adreno 320) running Android 6 with driver 127.0
+    // - A Nexus 5 (Adreno 330) running Android 6 with driver 127.0
+    // and not produced on:
+    // - A Nexus 7 2013 (Adreno 320) running Android 4 with driver 53.0
+    // The particular lines that get dropped from test images varies across different devices.
+    if (kAdreno3xx_GrGLRenderer == ctxInfo.renderer() && kQualcomm_GrGLDriver == ctxInfo.driver() &&
+        ctxInfo.driverVersion() > GR_GL_DRIVER_VER(53, 0)) {
+        fRequiresCullFaceEnableDisableWhenDrawingLinesAfterNonLines = true;
     }
 
     // Texture uploads sometimes seem to be ignored to textures bound to FBOS on Tegra3.
     if (kTegra3_GrGLRenderer == ctxInfo.renderer()) {
-        fUseDrawInsteadOfPartialRenderTargetWrite = true;
+        fDisallowTexSubImageForUnormConfigTexturesEverBoundToFBO = true;
         fUseDrawInsteadOfAllRenderTargetWrites = true;
     }
 
@@ -568,7 +603,7 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
     }
 
     if (kGL_GrGLStandard == standard) {
-        if ((version >= GR_GL_VER(4, 0) || ctxInfo.hasExtension("GL_ARB_sample_shading")) && 
+        if ((version >= GR_GL_VER(4, 0) || ctxInfo.hasExtension("GL_ARB_sample_shading")) &&
             ctxInfo.vendor() != kIntel_GrGLVendor) {
             fSampleShadingSupport = true;
         }
@@ -581,7 +616,7 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
         if (version >= GR_GL_VER(3, 2) || ctxInfo.hasExtension("GL_ARB_sync")) {
             fFenceSyncSupport = true;
         }
-    } else if (version >= GR_GL_VER(3, 0)) {
+    } else if (version >= GR_GL_VER(3, 0) || ctxInfo.hasExtension("GL_APPLE_sync")) {
         fFenceSyncSupport = true;
     }
 
@@ -1038,11 +1073,13 @@ void GrGLCaps::initFSAASupport(const GrContextOptions& contextOptions, const GrG
             fMSFBOType = kES_IMG_MsToTexture_MSFBOType;
         } else if (fUsesMixedSamples) {
             fMSFBOType = kMixedSamples_MSFBOType;
-        } else if (ctxInfo.version() >= GR_GL_VER(3,0) ||
-                   ctxInfo.hasExtension("GL_CHROMIUM_framebuffer_multisample")) {
+        } else if (ctxInfo.version() >= GR_GL_VER(3,0)) {
+            fMSFBOType = kStandard_MSFBOType;
+            fAlpha8IsRenderable = true;
+        } else if (ctxInfo.hasExtension("GL_CHROMIUM_framebuffer_multisample")) {
             fMSFBOType = kStandard_MSFBOType;
         } else if (ctxInfo.hasExtension("GL_ANGLE_framebuffer_multisample")) {
-            fMSFBOType = kEXT_MSFBOType;
+            fMSFBOType = kStandard_MSFBOType;
         } else if (ctxInfo.hasExtension("GL_APPLE_framebuffer_multisample")) {
             fMSFBOType = kES_Apple_MSFBOType;
         }
@@ -1051,10 +1088,18 @@ void GrGLCaps::initFSAASupport(const GrContextOptions& contextOptions, const GrG
             fMSFBOType = kMixedSamples_MSFBOType;
         } else if (ctxInfo.version() >= GR_GL_VER(3,0) ||
                    ctxInfo.hasExtension("GL_ARB_framebuffer_object")) {
+
             fMSFBOType = kStandard_MSFBOType;
+            if (!fIsCoreProfile && ctxInfo.renderer() != kOSMesa_GrGLRenderer) {
+                // Core profile removes ALPHA8 support.
+                // OpenGL 3.0+ (and GL_ARB_framebuffer_object) supports ALPHA8 as renderable.
+                // However, osmesa fails if it is used even when GL_ARB_framebuffer_object is
+                // present.
+                fAlpha8IsRenderable = true;
+            }
         } else if (ctxInfo.hasExtension("GL_EXT_framebuffer_multisample") &&
                    ctxInfo.hasExtension("GL_EXT_framebuffer_blit")) {
-            fMSFBOType = kEXT_MSFBOType;
+            fMSFBOType = kStandard_MSFBOType;
         }
     }
 
@@ -1196,7 +1241,6 @@ SkString GrGLCaps::dump() const {
 
     static const char* kMSFBOExtStr[] = {
         "None",
-        "EXT",
         "Standard",
         "Apple",
         "IMG MS To Texture",
@@ -1204,12 +1248,11 @@ SkString GrGLCaps::dump() const {
         "MixedSamples",
     };
     GR_STATIC_ASSERT(0 == kNone_MSFBOType);
-    GR_STATIC_ASSERT(1 == kEXT_MSFBOType);
-    GR_STATIC_ASSERT(2 == kStandard_MSFBOType);
-    GR_STATIC_ASSERT(3 == kES_Apple_MSFBOType);
-    GR_STATIC_ASSERT(4 == kES_IMG_MsToTexture_MSFBOType);
-    GR_STATIC_ASSERT(5 == kES_EXT_MsToTexture_MSFBOType);
-    GR_STATIC_ASSERT(6 == kMixedSamples_MSFBOType);
+    GR_STATIC_ASSERT(1 == kStandard_MSFBOType);
+    GR_STATIC_ASSERT(2 == kES_Apple_MSFBOType);
+    GR_STATIC_ASSERT(3 == kES_IMG_MsToTexture_MSFBOType);
+    GR_STATIC_ASSERT(4 == kES_EXT_MsToTexture_MSFBOType);
+    GR_STATIC_ASSERT(5 == kMixedSamples_MSFBOType);
     GR_STATIC_ASSERT(SK_ARRAY_COUNT(kMSFBOExtStr) == kLast_MSFBOType + 1);
 
     static const char* kInvalidateFBTypeStr[] = {
@@ -1246,6 +1289,7 @@ SkString GrGLCaps::dump() const {
 
     r.appendf("Texture Usage support: %s\n", (fTextureUsageSupport ? "YES": "NO"));
     r.appendf("GL_R support: %s\n", (fTextureRedSupport ? "YES": "NO"));
+    r.appendf("Alpha8 is renderable: %s\n", (fAlpha8IsRenderable ? "YES" : "NO"));
     r.appendf("GL_ARB_imaging support: %s\n", (fImagingSupport ? "YES": "NO"));
     r.appendf("Vertex array object support: %s\n", (fVertexArrayObjectSupport ? "YES": "NO"));
     r.appendf("Direct state access support: %s\n", (fDirectStateAccessSupport ? "YES": "NO"));
@@ -1260,6 +1304,10 @@ SkString GrGLCaps::dump() const {
     r.appendf("Texture swizzle support: %s\n", (fTextureSwizzleSupport ? "YES" : "NO"));
     r.appendf("BGRA to RGBA readback conversions are slow: %s\n",
               (fRGBAToBGRAReadbackConversionsAreSlow ? "YES" : "NO"));
+    r.appendf("Intermediate texture for partial updates of unorm textures ever bound to FBOs: %s\n",
+              fDisallowTexSubImageForUnormConfigTexturesEverBoundToFBO ? "YES" : "NO");
+    r.appendf("Intermediate texture for all updates of textures bound to FBOs: %s\n",
+              fUseDrawInsteadOfAllRenderTargetWrites ? "YES" : "NO");
 
     r.append("Configs\n-------\n");
     for (int i = 0; i < kGrPixelConfigCnt; ++i) {
@@ -1795,20 +1843,18 @@ void GrGLCaps::initConfigTable(const GrContextOptions& contextOptions,
         if (texelBufferSupport) {
             fConfigTable[kAlpha_8_GrPixelConfig].fFlags |= ConfigInfo::kCanUseWithTexelBuffer_Flag;
         }
+        fConfigTable[kAlpha_8_GrPixelConfig].fFlags |= allRenderFlags;
     } else {
         fConfigTable[kAlpha_8_GrPixelConfig].fFormats.fBaseInternalFormat = GR_GL_ALPHA;
         fConfigTable[kAlpha_8_GrPixelConfig].fFormats.fSizedInternalFormat = GR_GL_ALPHA8;
         fConfigTable[kAlpha_8_GrPixelConfig].fFormats.fExternalFormat[kOther_ExternalFormatUsage] =
             GR_GL_ALPHA;
         fConfigTable[kAlpha_8_GrPixelConfig].fSwizzle = GrSwizzle::AAAA();
+        if (fAlpha8IsRenderable) {
+            fConfigTable[kAlpha_8_GrPixelConfig].fFlags |= allRenderFlags;
+        }
     }
-    if (this->textureRedSupport() ||
-        (kStandard_MSFBOType == this->msFBOType() && ctxInfo.renderer() != kOSMesa_GrGLRenderer)) {
-        // OpenGL 3.0+ (and GL_ARB_framebuffer_object) supports ALPHA8 as renderable.
-        // However, osmesa fails if it is used even when GL_ARB_framebuffer_object is present.
-        // Core profile removes ALPHA8 support, but we should have chosen R8 in that case.
-        fConfigTable[kAlpha_8_GrPixelConfig].fFlags |= allRenderFlags;
-    }
+
     // ES2 Command Buffer does not allow TexStorage with R8_EXT (so Alpha_8 and Gray_8)
     if (texStorageSupported && !isCommandBufferES2) {
         fConfigTable[kAlpha_8_GrPixelConfig].fFlags |= ConfigInfo::kCanUseTexStorage_Flag;
@@ -2063,6 +2109,46 @@ void GrGLCaps::initConfigTable(const GrContextOptions& contextOptions,
         }
     }
 
+    bool hasInternalformatFunction = gli->fFunctions.fGetInternalformativ != nullptr;
+    for (int i = 0; i < kGrPixelConfigCnt; ++i) {
+        if (ConfigInfo::kRenderableWithMSAA_Flag & fConfigTable[i].fFlags) {
+            if (hasInternalformatFunction && // This check is temporary until chrome is updated
+                ((kGL_GrGLStandard == ctxInfo.standard() &&
+                 (ctxInfo.version() >= GR_GL_VER(4,2) ||
+                  ctxInfo.hasExtension("GL_ARB_internalformat_query"))) ||
+                (kGLES_GrGLStandard == ctxInfo.standard() && ctxInfo.version() >= GR_GL_VER(3,0)))) {
+                int count;
+                GrGLenum format = fConfigTable[i].fFormats.fInternalFormatRenderbuffer;
+                GR_GL_GetInternalformativ(gli, GR_GL_RENDERBUFFER, format, GR_GL_NUM_SAMPLE_COUNTS,
+                                          1, &count);
+                if (count) {
+                    int* temp = new int[count];
+                    GR_GL_GetInternalformativ(gli, GR_GL_RENDERBUFFER, format, GR_GL_SAMPLES, count,
+                                              temp);
+                    fConfigTable[i].fColorSampleCounts.setCount(count+1);
+                    // We initialize our supported values with 0 (no msaa) and reverse the order
+                    // returned by GL so that the array is ascending.
+                    fConfigTable[i].fColorSampleCounts[0] = 0;
+                    for (int j = 0; j < count; ++j) {
+                        fConfigTable[i].fColorSampleCounts[j+1] = temp[count - j - 1];
+                    }
+                    delete[] temp;
+                }
+            } else {
+                static const int kDefaultSamples[] = {0,1,2,4,8};
+                int count = SK_ARRAY_COUNT(kDefaultSamples);
+                for (; count > 0; --count) {
+                    if (kDefaultSamples[count-i] <= fMaxColorSampleCount) {
+                        break;
+                    }
+                }
+                if (count > 0) {
+                    fConfigTable[i].fColorSampleCounts.append(count, kDefaultSamples);
+                }
+            }
+        }
+    }
+
 #ifdef SK_DEBUG
     // Make sure we initialized everything.
     ConfigInfo defaultEntry;
@@ -2181,4 +2267,22 @@ void GrGLCaps::onApplyOptionsOverrides(const GrContextOptions& options) {
         fAvoidInstancedDrawsToFPTargets = true;
 #endif
     }
+    if (options.fUseDrawInsteadOfPartialRenderTargetWrite) {
+        fUseDrawInsteadOfAllRenderTargetWrites = true;
+    }
 }
+
+int GrGLCaps::getSampleCount(int requestedCount, GrPixelConfig config) const {
+    int count = fConfigTable[config].fColorSampleCounts.count();
+    if (!count || !this->isConfigRenderable(config, true)) {
+        return 0;
+    }
+
+    for (int i = 0; i < count; ++i) {
+        if (fConfigTable[config].fColorSampleCounts[i] >= requestedCount) {
+            return fConfigTable[config].fColorSampleCounts[i];
+        }
+    }
+    return fConfigTable[config].fColorSampleCounts[count-1];
+}
+

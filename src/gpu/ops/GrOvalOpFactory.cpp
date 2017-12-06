@@ -213,7 +213,7 @@ private:
     const Attribute* fInUnionPlane;
     bool fStroke;
 
-    GR_DECLARE_GEOMETRY_PROCESSOR_TEST;
+    GR_DECLARE_GEOMETRY_PROCESSOR_TEST
 
     typedef GrGeometryProcessor INHERITED;
 };
@@ -351,7 +351,7 @@ private:
     SkMatrix fLocalMatrix;
     bool fStroke;
 
-    GR_DECLARE_GEOMETRY_PROCESSOR_TEST;
+    GR_DECLARE_GEOMETRY_PROCESSOR_TEST
 
     typedef GrGeometryProcessor INHERITED;
 };
@@ -519,7 +519,7 @@ private:
     SkMatrix fViewMatrix;
     DIEllipseStyle fStyle;
 
-    GR_DECLARE_GEOMETRY_PROCESSOR_TEST;
+    GR_DECLARE_GEOMETRY_PROCESSOR_TEST
 
     typedef GrGeometryProcessor INHERITED;
 };
@@ -795,11 +795,12 @@ public:
                     fCircles[i].fDevBounds.fRight, fCircles[i].fDevBounds.fBottom,
                     fCircles[i].fInnerRadius, fCircles[i].fOuterRadius);
         }
-        string.append(INHERITED::dumpInfo());
+        string += fHelper.dumpInfo();
+        string += INHERITED::dumpInfo();
         return string;
     }
 
-    bool xpRequiresDstTexture(const GrCaps& caps, const GrAppliedClip* clip) override {
+    RequiresDstTexture finalize(const GrCaps& caps, const GrAppliedClip* clip) override {
         GrColor* color = &fCircles.front().fColor;
         return fHelper.xpRequiresDstTexture(caps, clip, GrProcessorAnalysisCoverage::kSingleChannel,
                                             color);
@@ -1082,7 +1083,7 @@ private:
             vertices += circle_type_to_vert_count(circle.fStroked) * vertexStride;
         }
 
-        GrMesh mesh(kTriangles_GrPrimitiveType);
+        GrMesh mesh(GrPrimitiveType::kTriangles);
         mesh.setIndexed(indexBuffer, fIndexCount, firstIndex, 0, fVertCount - 1);
         mesh.setVertexData(vertexBuffer, firstVertex);
         target->draw(gp.get(),  fHelper.makePipeline(target), mesh);
@@ -1257,11 +1258,12 @@ public:
                     geo.fDevBounds.fBottom, geo.fXRadius, geo.fYRadius, geo.fInnerXRadius,
                     geo.fInnerYRadius);
         }
-        string.append(INHERITED::dumpInfo());
+        string += fHelper.dumpInfo();
+        string += INHERITED::dumpInfo();
         return string;
     }
 
-    bool xpRequiresDstTexture(const GrCaps& caps, const GrAppliedClip* clip) override {
+    RequiresDstTexture finalize(const GrCaps& caps, const GrAppliedClip* clip) override {
         GrColor* color = &fEllipses.front().fColor;
         return fHelper.xpRequiresDstTexture(caps, clip, GrProcessorAnalysisCoverage::kSingleChannel,
                                             color);
@@ -1482,11 +1484,12 @@ public:
                     geo.fBounds.fBottom, geo.fXRadius, geo.fYRadius, geo.fInnerXRadius,
                     geo.fInnerYRadius, geo.fGeoDx, geo.fGeoDy);
         }
-        string.append(INHERITED::dumpInfo());
+        string += fHelper.dumpInfo();
+        string += INHERITED::dumpInfo();
         return string;
     }
 
-    bool xpRequiresDstTexture(const GrCaps& caps, const GrAppliedClip* clip) override {
+    RequiresDstTexture finalize(const GrCaps& caps, const GrAppliedClip* clip) override {
         GrColor* color = &fEllipses.front().fColor;
         return fHelper.xpRequiresDstTexture(caps, clip, GrProcessorAnalysisCoverage::kSingleChannel,
                                             color);
@@ -1794,11 +1797,12 @@ public:
                     fRRects[i].fDevBounds.fRight, fRRects[i].fDevBounds.fBottom,
                     fRRects[i].fInnerRadius, fRRects[i].fOuterRadius);
         }
-        string.append(INHERITED::dumpInfo());
+        string += fHelper.dumpInfo();
+        string += INHERITED::dumpInfo();
         return string;
     }
 
-    bool xpRequiresDstTexture(const GrCaps& caps, const GrAppliedClip* clip) override {
+    RequiresDstTexture finalize(const GrCaps& caps, const GrAppliedClip* clip) override {
         GrColor* color = &fRRects.front().fColor;
         return fHelper.xpRequiresDstTexture(caps, clip, GrProcessorAnalysisCoverage::kSingleChannel,
                                             color);
@@ -1987,7 +1991,7 @@ private:
             currStartVertex += rrect_type_to_vert_count(rrect.fType);
         }
 
-        GrMesh mesh(kTriangles_GrPrimitiveType);
+        GrMesh mesh(GrPrimitiveType::kTriangles);
         mesh.setIndexed(indexBuffer, fIndexCount, firstIndex, 0, fVertCount - 1);
         mesh.setVertexData(vertexBuffer, firstVertex);
         target->draw(gp.get(), fHelper.makePipeline(target), mesh);
@@ -2147,11 +2151,12 @@ public:
                     geo.fDevBounds.fBottom, geo.fXRadius, geo.fYRadius, geo.fInnerXRadius,
                     geo.fInnerYRadius);
         }
-        string.append(INHERITED::dumpInfo());
+        string += fHelper.dumpInfo();
+        string += INHERITED::dumpInfo();
         return string;
     }
 
-    bool xpRequiresDstTexture(const GrCaps& caps, const GrAppliedClip* clip) override {
+    RequiresDstTexture finalize(const GrCaps& caps, const GrAppliedClip* clip) override {
         GrColor* color = &fRRects.front().fColor;
         return fHelper.xpRequiresDstTexture(caps, clip, GrProcessorAnalysisCoverage::kSingleChannel,
                                             color);
@@ -2177,7 +2182,7 @@ private:
         sk_sp<const GrBuffer> indexBuffer(ref_rrect_index_buffer(
                 fStroked ? kStroke_RRectType : kFill_RRectType, target->resourceProvider()));
 
-        PatternHelper helper(kTriangles_GrPrimitiveType);
+        PatternHelper helper(GrPrimitiveType::kTriangles);
         EllipseVertex* verts = reinterpret_cast<EllipseVertex*>(
                 helper.init(target, vertexStride, indexBuffer.get(), kVertsPerStandardRRect,
                             indicesPerInstance, fRRects.count()));

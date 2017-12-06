@@ -29,9 +29,7 @@ class GrContext;
 class GrContextThreadSafeProxy;
 class GrTexture;
 
-#ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
 struct AHardwareBuffer;
-#endif
 
 /**
  *  SkImage is an abstraction for drawing a rectagle of pixels, though the
@@ -236,7 +234,7 @@ public:
                                           const SkMatrix*, const SkPaint*, BitDepth,
                                           sk_sp<SkColorSpace>);
 
-#ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
+#if defined(SK_BUILD_FOR_ANDROID) && __ANDROID_API__ >= 26
     /**
      *  Create a new image from the an Android hardware buffer.
      *  The new image takes a reference on the buffer.
@@ -361,20 +359,16 @@ public:
     bool scalePixels(const SkPixmap& dst, SkFilterQuality, CachingHint = kAllow_CachingHint) const;
 
     /**
-     *  Encode the image's pixels and return the result as a new SkData, which
-     *  the caller must manage (i.e. call unref() when they are done).
+     *  Encode the image's pixels and return the result as SkData.
      *
-     *  If the image type cannot be encoded, or the requested encoder type is
+     *  If the image type cannot be encoded, or the requested encoder format is
      *  not supported, this will return NULL.
-     *
-     *  Note: this will attempt to encode the image's pixels in the specified format,
-     *  even if the image returns a data from refEncoded(). That data will be ignored.
      */
-    SkData* encode(SkEncodedImageFormat, int quality) const;
+    sk_sp<SkData> encodeToData(SkEncodedImageFormat, int quality) const;
 
     /**
-     *  Encode the image and return the result as a caller-managed SkData.  This will
-     *  attempt to reuse existing encoded data (as returned by refEncoded).
+     *  Encode the image and return the result as SkData.  This will attempt to reuse existing
+     *  encoded data (as returned by refEncodedData).
      *
      *  We defer to the SkPixelSerializer both for vetting existing encoded data
      *  (useEncodedData) and for encoding the image (encode) when no such data is
@@ -386,18 +380,15 @@ public:
      *  If no compatible encoded data exists and encoding fails, this method will also
      *  fail (return NULL).
      */
-    SkData* encode(SkPixelSerializer* = nullptr) const;
+    sk_sp<SkData> encodeToData(SkPixelSerializer* = nullptr) const;
 
     /**
-     *  If the image already has its contents in encoded form (e.g. PNG or JPEG), return a ref
-     *  to that data (which the caller must call unref() on). The caller is responsible for calling
-     *  unref on the data when they are done.
+     *  If the image already has its contents in encoded form (e.g. PNG or JPEG), return that
+     *  as SkData. If the image does not already has its contents in encoded form, return NULL.
      *
-     *  If the image does not already has its contents in encoded form, return NULL.
-     *
-     *  Note: to force the image to return its contents as encoded data, try calling encode(...).
+     *  Note: to force the image to return its contents as encoded data, use encodeToData(...).
      */
-    SkData* refEncoded() const;
+    sk_sp<SkData> refEncodedData() const;
 
     const char* toString(SkString*) const;
 
@@ -477,12 +468,18 @@ public:
      * dstColorSpace is the color space of the surface where this texture will ultimately be used.
      * If the method determines that mip-maps are needed, this helps determine the correct strategy
      * for building them (gamma-correct or not).
+     *
+     * dstColorType is the color type of the surface where this texture will ultimately be used.
+     * This determines the format with which the image will be uploaded to the GPU. If dstColorType
+     * does not support color spaces (low bit depth types such as ARGB_4444), then dstColorSpace
+     * must be null.
      */
     size_t getDeferredTextureImageData(const GrContextThreadSafeProxy&,
                                        const DeferredTextureImageUsageParams[],
                                        int paramCnt,
                                        void* buffer,
-                                       SkColorSpace* dstColorSpace = nullptr) const;
+                                       SkColorSpace* dstColorSpace = nullptr,
+                                       SkColorType dstColorType = kN32_SkColorType) const;
 
     /**
      * Returns a texture-backed image from data produced in SkImage::getDeferredTextureImageData.
@@ -536,7 +533,7 @@ private:
     friend class SkImage_Base;
 
     static sk_sp<SkImage> MakeTextureFromMipMap(GrContext*, const SkImageInfo&,
-                                                const GrMipLevel* texels, int mipLevelCount,
+                                                const GrMipLevel texels[], int mipLevelCount,
                                                 SkBudgeted, SkDestinationSurfaceColorMode);
 
     const int       fWidth;

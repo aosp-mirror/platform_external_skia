@@ -487,7 +487,8 @@ DEF_TEST(SkSLDerivatives, r) {
          "void main() { sk_FragColor.r = 1; }",
          *SkSL::ShaderCapsFactory::ShaderDerivativeExtensionString(),
          "#version 400\n"
-         "out vec4 sk_FragColor;\n"
+         "precision highp float;\n"
+         "out mediump vec4 sk_FragColor;\n"
          "void main() {\n"
          "    sk_FragColor.x = 1.0;\n"
          "}\n");
@@ -496,7 +497,8 @@ DEF_TEST(SkSLDerivatives, r) {
          *SkSL::ShaderCapsFactory::ShaderDerivativeExtensionString(),
          "#version 400\n"
          "#extension GL_OES_standard_derivatives : require\n"
-         "out vec4 sk_FragColor;\n"
+         "precision highp float;\n"
+         "out mediump vec4 sk_FragColor;\n"
          "void main() {\n"
          "    sk_FragColor.x = dFdx(1.0);\n"
          "}\n");
@@ -1373,6 +1375,59 @@ DEF_TEST(SkSLDependentInitializers, r) {
          "void main() {\n"
          "    sk_FragColor = vec4(1.0);\n"
          "}\n");
+}
+
+DEF_TEST(SkSLDeadLoopVar, r) {
+    test(r,
+         "void main() {"
+         "for (int x = 0; x < 4; ) {"
+         "break;"
+         "}"
+         "}",
+         *SkSL::ShaderCapsFactory::Default(),
+         "#version 400\n"
+         "out vec4 sk_FragColor;\n"
+         "void main() {\n"
+         "    for (; true; ) {\n"
+         "        break;\n"
+         "    }\n"
+         "}\n"
+         );
+}
+
+DEF_TEST(SkSLInvocations, r) {
+    test(r,
+         "layout(points) in;"
+         "layout(invocations = 2) in;"
+         "layout(line_strip, max_vertices = 2) out;"
+         "void test() {"
+         "gl_Position = sk_in[0].gl_Position + vec4(0.5, 0, 0, sk_InvocationID);"
+         "EmitVertex();"
+         "}"
+         "void main() {"
+         "gl_Position = sk_in[0].gl_Position + vec4(-0.5, 0, 0, sk_InvocationID);"
+         "EmitVertex();"
+         "}",
+         *SkSL::ShaderCapsFactory::MustImplementGSInvocationsWithLoop(),
+         "#version 400\n"
+         "int sk_InvocationID;\n"
+         "layout (points) in ;\n"
+         "layout (line_strip, max_vertices = 4) out ;\n"
+         "void test() {\n"
+         "    gl_Position = gl_in[0].gl_Position + vec4(0.5, 0.0, 0.0, float(sk_InvocationID));\n"
+         "    EmitVertex();\n"
+         "}\n"
+         "void _invoke() {\n"
+         "    gl_Position = gl_in[0].gl_Position + vec4(-0.5, 0.0, 0.0, float(sk_InvocationID));\n"
+         "    EmitVertex();\n"
+         "}\n"
+         "void main() {\n"
+         "    for (sk_InvocationID = 0;sk_InvocationID < 2; sk_InvocationID++) {\n"
+         "        _invoke();\n"
+         "        EndPrimitive();\n"
+         "    }\n"
+         "}\n",
+         SkSL::Program::kGeometry_Kind);
 }
 
 #endif

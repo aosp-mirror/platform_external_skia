@@ -10,9 +10,6 @@
 #include "SkLinearGradient.h"
 #include "SkRefCnt.h"
 
-// define to test the 4f gradient path
-// #define FORCE_4F_CONTEXT
-
 static const float kInv255Float = 1.0f / 255;
 
 static inline int repeat_8bits(int x) {
@@ -37,15 +34,6 @@ static SkMatrix pts_to_unit_matrix(const SkPoint pts[2]) {
     matrix.postTranslate(-pts[0].fX, -pts[0].fY);
     matrix.postScale(inv, inv);
     return matrix;
-}
-
-static bool use_4f_context(const SkShaderBase::ContextRec& rec, uint32_t flags) {
-#ifdef FORCE_4F_CONTEXT
-    return true;
-#else
-    return rec.fPreferredDstType == SkShaderBase::ContextRec::kPM4f_DstType
-        || SkToBool(flags & SkLinearGradient::kForce4fContext_PrivateFlag);
-#endif
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -78,7 +66,7 @@ void SkLinearGradient::flatten(SkWriteBuffer& buffer) const {
 SkShaderBase::Context* SkLinearGradient::onMakeContext(
     const ContextRec& rec, SkArenaAlloc* alloc) const
 {
-    return use_4f_context(rec, fGradFlags)
+    return rec.fPreferredDstType == ContextRec::kPM4f_DstType
            ? CheckedMakeContext<LinearGradient4fContext>(alloc, *this, rec)
            : CheckedMakeContext<  LinearGradientContext>(alloc, *this, rec);
 }
@@ -86,23 +74,16 @@ SkShaderBase::Context* SkLinearGradient::onMakeContext(
 SkShaderBase::Context* SkLinearGradient::onMakeBurstPipelineContext(
     const ContextRec& rec, SkArenaAlloc* alloc) const {
 
-    // TODO: refine heuristic.
-    if (fColorCount <= 8) {
-        return nullptr;
-    }
-    return CheckedMakeContext<LinearGradient4fContext>(alloc, *this, rec);
+    // Raster pipeline has a 2-stop specialization faster than our burst.
+    return fColorCount > 2 ? CheckedMakeContext<LinearGradient4fContext>(alloc, *this, rec)
+                           : nullptr;
 }
 
-bool SkLinearGradient::adjustMatrixAndAppendStages(SkArenaAlloc* alloc,
+bool SkLinearGradient::adjustMatrixAndAppendStages(SkArenaAlloc*,
                                                    SkMatrix* matrix,
-                                                   SkRasterPipeline* p) const {
+                                                   SkRasterPipeline*,
+                                                   SkRasterPipeline*) const {
     *matrix = SkMatrix::Concat(fPtsToUnit, *matrix);
-    // If the gradient is less than a quarter of a pixel, this falls into the
-    // subpixel gradient code handled on a different path.
-    SkVector dx = matrix->mapVector(1, 0);
-    if (dx.fX >= 4) {
-        return false;
-    }
     return true;
 }
 
@@ -304,9 +285,7 @@ void SkLinearGradient::LinearGradientContext::shadeSpan(int x, int y, SkPMColor*
     SkASSERT(count > 0);
     const SkLinearGradient& linearGradient = static_cast<const SkLinearGradient&>(fShader);
 
-    if (SkShader::kClamp_TileMode == linearGradient.fTileMode &&
-        kLinear_MatrixClass == fDstToIndexClass)
-    {
+    if (SkShader::kClamp_TileMode == linearGradient.fTileMode) {
         this->shade4_clamp(x, y, dstC, count);
         return;
     }
@@ -317,43 +296,22 @@ void SkLinearGradient::LinearGradientContext::shadeSpan(int x, int y, SkPMColor*
     const SkPMColor* SK_RESTRICT cache = fCache->getCache32();
     int                 toggle = init_dither_toggle(x, y);
 
-    if (fDstToIndexClass != kPerspective_MatrixClass) {
-        dstProc(fDstToIndex, SkIntToScalar(x) + SK_ScalarHalf,
-                             SkIntToScalar(y) + SK_ScalarHalf, &srcPt);
-        SkGradFixed dx, fx = SkScalarPinToGradFixed(srcPt.fX);
+    dstProc(fDstToIndex, SkIntToScalar(x) + SK_ScalarHalf,
+                         SkIntToScalar(y) + SK_ScalarHalf, &srcPt);
+    SkGradFixed fx = SkScalarPinToGradFixed(srcPt.fX),
+                dx = SkScalarPinToGradFixed(fDstToIndex.getScaleX());
 
-        if (fDstToIndexClass == kFixedStepInX_MatrixClass) {
-            const auto step = fDstToIndex.fixedStepInX(SkIntToScalar(y));
-            // todo: do we need a real/high-precision value for dx here?
-            dx = SkScalarPinToGradFixed(step.fX);
-        } else {
-            SkASSERT(fDstToIndexClass == kLinear_MatrixClass);
-            dx = SkScalarPinToGradFixed(fDstToIndex.getScaleX());
-        }
-
-        LinearShadeProc shadeProc = shadeSpan_linear_repeat;
-        if (0 == dx) {
-            shadeProc = shadeSpan_linear_vertical_lerp;
-        } else if (SkShader::kClamp_TileMode == linearGradient.fTileMode) {
-            shadeProc = shadeSpan_linear_clamp;
-        } else if (SkShader::kMirror_TileMode == linearGradient.fTileMode) {
-            shadeProc = shadeSpan_linear_mirror;
-        } else {
-            SkASSERT(SkShader::kRepeat_TileMode == linearGradient.fTileMode);
-        }
-        (*shadeProc)(proc, dx, fx, dstC, cache, toggle, count);
+    LinearShadeProc shadeProc = shadeSpan_linear_repeat;
+    if (0 == dx) {
+        shadeProc = shadeSpan_linear_vertical_lerp;
+    } else if (SkShader::kClamp_TileMode == linearGradient.fTileMode) {
+        shadeProc = shadeSpan_linear_clamp;
+    } else if (SkShader::kMirror_TileMode == linearGradient.fTileMode) {
+        shadeProc = shadeSpan_linear_mirror;
     } else {
-        SkScalar    dstX = SkIntToScalar(x);
-        SkScalar    dstY = SkIntToScalar(y);
-        do {
-            dstProc(fDstToIndex, dstX, dstY, &srcPt);
-            unsigned fi = proc(SkScalarToFixed(srcPt.fX));
-            SkASSERT(fi <= 0xFFFF);
-            *dstC++ = cache[toggle + (fi >> kCache32Shift)];
-            toggle = next_dither_toggle(toggle);
-            dstX += SK_Scalar1;
-        } while (--count != 0);
+        SkASSERT(SkShader::kRepeat_TileMode == linearGradient.fTileMode);
     }
+    (*shadeProc)(proc, dx, fx, dstC, cache, toggle, count);
 }
 
 SkShader::GradientType SkLinearGradient::asAGradient(GradientInfo* info) const {
@@ -379,7 +337,8 @@ public:
     class GLSLLinearProcessor;
 
     static sk_sp<GrFragmentProcessor> Make(const CreateArgs& args) {
-        return sk_sp<GrFragmentProcessor>(new GrLinearGradient(args));
+        auto processor = sk_sp<GrLinearGradient>(new GrLinearGradient(args));
+        return processor->isValid() ? std::move(processor) : nullptr;
     }
 
     ~GrLinearGradient() override {}
@@ -396,7 +355,7 @@ private:
     virtual void onGetGLSLProcessorKey(const GrShaderCaps& caps,
                                        GrProcessorKeyBuilder* b) const override;
 
-    GR_DECLARE_FRAGMENT_PROCESSOR_TEST;
+    GR_DECLARE_FRAGMENT_PROCESSOR_TEST
 
     typedef GrGradientEffect INHERITED;
 };
@@ -492,6 +451,9 @@ sk_sp<GrFragmentProcessor> SkLinearGradient::asFragmentProcessor(const AsFPArgs&
     sk_sp<GrFragmentProcessor> inner(GrLinearGradient::Make(
         GrGradientEffect::CreateArgs(args.fContext, this, &matrix, fTileMode,
                                      std::move(colorSpaceXform), SkToBool(args.fDstColorSpace))));
+    if (!inner) {
+        return nullptr;
+    }
     return GrFragmentProcessor::MulOutputByInputAlpha(std::move(inner));
 }
 
@@ -570,9 +532,6 @@ template <bool apply_alpha> SkPMColor trunc_from_255(const Sk4f& x, const Sk4f& 
     SkPMColor c;
     Sk4f c4f255 = x;
     if (apply_alpha) {
-#ifdef SK_SUPPORT_LEGACY_GRADIENT_ALPHATRUNC
-        static constexpr float alphaScale = 1;
-#else
         // Due to use of multiplication by the 1/255 reciprocal instead of division by 255,
         // non-integer alpha values very close to their ceiling can push the color values
         // above the alpha value, which will become an invalid premultiplied color. So nudge
@@ -582,7 +541,7 @@ template <bool apply_alpha> SkPMColor trunc_from_255(const Sk4f& x, const Sk4f& 
         // scaled by the alpha value, we need to scale the epsilon by 255 to get a safe
         // upper bound on the error.
         static constexpr float alphaScale = 1 + 255*std::numeric_limits<float>::epsilon();
-#endif
+
         const float scale = x[SkPM4f::A] * (1 / 255.f);
         c4f255 *= Sk4f(scale, scale, scale, alphaScale);
     }
@@ -774,7 +733,6 @@ void SkLinearGradient::LinearGradientContext::shade4_dx_clamp(SkPMColor dstC[], 
 void SkLinearGradient::LinearGradientContext::shade4_clamp(int x, int y, SkPMColor dstC[],
                                                            int count) {
     SkASSERT(count > 0);
-    SkASSERT(kLinear_MatrixClass == fDstToIndexClass);
 
     SkPoint srcPt;
     fDstToIndexProc(fDstToIndex, x + SK_ScalarHalf, y + SK_ScalarHalf, &srcPt);

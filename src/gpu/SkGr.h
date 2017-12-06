@@ -151,6 +151,7 @@ bool SkPaintToGrPaintWithTexture(GrContext* context,
 // Misc Sk to Gr type conversions
 
 GrSurfaceDesc GrImageInfoToSurfaceDesc(const SkImageInfo&, const GrCaps&);
+GrPixelConfig SkImageInfo2GrPixelConfig(const SkColorType, SkColorSpace*, const GrCaps& caps);
 GrPixelConfig SkImageInfo2GrPixelConfig(const SkImageInfo& info, const GrCaps& caps);
 
 bool GrPixelConfigToColorType(GrPixelConfig, SkColorType*);
@@ -165,14 +166,14 @@ GrSamplerParams::FilterMode GrSkFilterQualityToGrFilterMode(SkFilterQuality pain
 static inline GrPrimitiveType SkVertexModeToGrPrimitiveType(SkVertices::VertexMode mode) {
     switch (mode) {
         case SkVertices::kTriangles_VertexMode:
-            return kTriangles_GrPrimitiveType;
+            return GrPrimitiveType::kTriangles;
         case SkVertices::kTriangleStrip_VertexMode:
-            return kTriangleStrip_GrPrimitiveType;
+            return GrPrimitiveType::kTriangleStrip;
         case SkVertices::kTriangleFan_VertexMode:
-            return kTriangleFan_GrPrimitiveType;
+            return GrPrimitiveType::kTriangleFan;
     }
     SkFAIL("Invalid mode");
-    return kPoints_GrPrimitiveType;
+    return GrPrimitiveType::kPoints;
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -227,7 +228,7 @@ sk_sp<GrTextureProxy> GrUploadPixmapToTextureProxy(GrResourceProvider*,
  * Creates a new texture populated with the mipmap levels.
  */
 sk_sp<GrTextureProxy> GrUploadMipMapToTextureProxy(GrContext*, const SkImageInfo&,
-                                                   const GrMipLevel* texels,
+                                                   const GrMipLevel texels[],
                                                    int mipLevelCount,
                                                    SkDestinationSurfaceColorMode colorMode);
 

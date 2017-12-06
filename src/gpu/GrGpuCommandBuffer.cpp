@@ -39,11 +39,14 @@ void GrGpuCommandBuffer::clearStencilClip(GrRenderTarget* rt, const GrFixedClip&
 bool GrGpuCommandBuffer::draw(const GrPipeline& pipeline,
                               const GrPrimitiveProcessor& primProc,
                               const GrMesh meshes[],
+                              const GrPipeline::DynamicState dynamicStates[],
                               int meshCount,
                               const SkRect& bounds) {
 #ifdef SK_DEBUG
     SkASSERT(!primProc.hasInstanceAttribs() || this->gpu()->caps()->instanceAttribSupport());
     for (int i = 0; i < meshCount; ++i) {
+        SkASSERT(!GrPrimTypeRequiresGeometryShaderSupport(meshes[i].primitiveType()) ||
+                 this->gpu()->caps()->shaderCaps()->geometryShaderSupport());
         SkASSERT(primProc.hasVertexAttribs() == meshes[i].hasVertexData());
         SkASSERT(primProc.hasInstanceAttribs() == meshes[i].isInstanced());
     }
@@ -58,7 +61,7 @@ bool GrGpuCommandBuffer::draw(const GrPipeline& pipeline,
         this->gpu()->stats()->incNumFailedDraws();
         return false;
     }
-    this->onDraw(pipeline, primProc, meshes, meshCount, bounds);
+    this->onDraw(pipeline, primProc, meshes, dynamicStates, meshCount, bounds);
     return true;
 }
 

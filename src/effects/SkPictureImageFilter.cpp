@@ -71,21 +71,11 @@ sk_sp<SkFlattenable> SkPictureImageFilter::CreateProc(SkReadBuffer& buffer) {
         }
     }
     buffer.readRect(&cropRect);
-    PictureResolution pictureResolution;
-    if (buffer.isVersionLT(SkReadBuffer::kPictureImageFilterResolution_Version)) {
-        pictureResolution = kDeviceSpace_PictureResolution;
-    } else {
-        pictureResolution = (PictureResolution)buffer.readInt();
-    }
+    PictureResolution pictureResolution = (PictureResolution)buffer.readInt();
 
     if (kLocalSpace_PictureResolution == pictureResolution) {
         //filterLevel is only serialized if pictureResolution is LocalSpace
-        SkFilterQuality filterQuality;
-        if (buffer.isVersionLT(SkReadBuffer::kPictureImageFilterLevel_Version)) {
-            filterQuality = kLow_SkFilterQuality;
-        } else {
-            filterQuality = (SkFilterQuality)buffer.readInt();
-        }
+        SkFilterQuality filterQuality = (SkFilterQuality)buffer.readInt();
         return MakeForLocalSpace(picture, cropRect, filterQuality);
     }
     return Make(picture, cropRect);
@@ -146,8 +136,13 @@ sk_sp<SkSpecialImage> SkPictureImageFilter::onFilterImage(SkSpecialImage* source
 }
 
 sk_sp<SkImageFilter> SkPictureImageFilter::onMakeColorSpace(SkColorSpaceXformer* xformer) const {
+    sk_sp<SkColorSpace> dstCS = xformer->dst();
+    if (SkColorSpace::Equals(dstCS.get(), fColorSpace.get())) {
+        return this->refMe();
+    }
+
     return sk_sp<SkImageFilter>(new SkPictureImageFilter(fPicture, fCropRect, fPictureResolution,
-            fFilterQuality, xformer->dst()));
+            fFilterQuality, std::move(dstCS)));
 }
 
 void SkPictureImageFilter::drawPictureAtDeviceResolution(SkCanvas* canvas,

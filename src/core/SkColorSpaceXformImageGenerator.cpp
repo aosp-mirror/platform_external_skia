@@ -9,6 +9,11 @@
 
 std::unique_ptr<SkImageGenerator> SkColorSpaceXformImageGenerator::Make(
         const SkBitmap& src, sk_sp<SkColorSpace> dst, SkCopyPixelsMode mode) {
+    return SkColorSpaceXformImageGenerator::Make(src, dst, mode, kNeedNewImageUniqueID);
+}
+
+std::unique_ptr<SkImageGenerator> SkColorSpaceXformImageGenerator::Make(
+        const SkBitmap& src, sk_sp<SkColorSpace> dst, SkCopyPixelsMode mode, uint32_t id) {
     if (!dst) {
         return nullptr;
     }
@@ -26,16 +31,16 @@ std::unique_ptr<SkImageGenerator> SkColorSpaceXformImageGenerator::Make(
         srcPtr = &copy;
     }
 
-
     return std::unique_ptr<SkImageGenerator>(
-            new SkColorSpaceXformImageGenerator(*srcPtr, std::move(dst)));
+            new SkColorSpaceXformImageGenerator(*srcPtr, std::move(dst), id));
 }
 
 SkColorSpaceXformImageGenerator::SkColorSpaceXformImageGenerator(const SkBitmap& src,
-                                                                 sk_sp<SkColorSpace> dst)
-    : INHERITED(src.info().makeColorSpace(dst), kNeedNewImageUniqueID)
+                                                                 sk_sp<SkColorSpace> dst,
+                                                                 uint32_t id)
+    : INHERITED(src.info().makeColorSpace(dst), id)
     , fSrc(src)
-    , fDst(dst)
+    , fDst(std::move(dst))
 {}
 
 bool SkColorSpaceXformImageGenerator::onGetPixels(const SkImageInfo& info, void* pixels,
@@ -57,17 +62,21 @@ bool SkColorSpaceXformImageGenerator::onGetPixels(const SkImageInfo& info, void*
 #include "SkGr.h"
 #include "effects/GrNonlinearColorSpaceXformEffect.h"
 
-sk_sp<GrTextureProxy> SkColorSpaceXformImageGenerator::onGenerateTexture(GrContext* ctx,
-                                                                         const SkImageInfo& info,
-                                                                         const SkIPoint& origin) {
+sk_sp<GrTextureProxy> SkColorSpaceXformImageGenerator::onGenerateTexture(
+        GrContext* ctx, const SkImageInfo& info, const SkIPoint& origin,
+        SkTransferFunctionBehavior) {
     // FIXME:
     // This always operates as if SkTranferFunctionBehavior is kIgnore.  Should we add
     // options so that caller can also request kRespect?
 
     SkASSERT(ctx);
 
-    sk_sp<GrTextureProxy> proxy =
-            GrUploadBitmapToTextureProxy(ctx->resourceProvider(), fSrc, nullptr);
+    sk_sp<GrTextureProxy> proxy = GrUploadBitmapToTextureProxy(ctx->resourceProvider(),
+                                                               fSrc, nullptr);
+
+    if (!proxy) {
+        return nullptr;
+    }
 
     sk_sp<SkColorSpace> srcSpace =
             fSrc.colorSpace() ? sk_ref_sp(fSrc.colorSpace()) : SkColorSpace::MakeSRGB();
@@ -84,8 +93,8 @@ sk_sp<GrTextureProxy> SkColorSpaceXformImageGenerator::onGenerateTexture(GrConte
 
     GrPaint paint;
     paint.setPorterDuffXPFactory(SkBlendMode::kSrc);
-    paint.addColorTextureProcessor(ctx->resourceProvider(), proxy, nullptr,
-            SkMatrix::MakeTrans(origin.fX, origin.fY));
+    paint.addColorTextureProcessor(std::move(proxy), nullptr,
+                                   SkMatrix::MakeTrans(origin.fX, origin.fY));
     paint.addColorFragmentProcessor(std::move(xform));
 
     const SkRect rect = SkRect::MakeWH(info.width(), info.height());

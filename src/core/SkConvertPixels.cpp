@@ -243,19 +243,6 @@ static void convert_to_alpha8(uint8_t* dst, size_t dstRB, const SkImageInfo& src
             }
             break;
         }
-        case kIndex_8_SkColorType: {
-            SkASSERT(ctable);
-            const uint32_t* table = ctable->readColors();
-            auto src8 = (const uint8_t*)src;
-            for (int y = 0; y < srcInfo.height(); y++) {
-                for (int x = 0; x < srcInfo.width(); x++) {
-                    dst[x] = table[src8[x]] >> 24;
-                }
-                dst = SkTAddOffset<uint8_t>(dst, dstRB);
-                src8 = SkTAddOffset<const uint8_t>(src8, srcRB);
-            }
-            break;
-        }
         case kRGBA_F16_SkColorType: {
             auto src64 = (const uint64_t*) src;
             for (int y = 0; y < srcInfo.height(); y++) {
@@ -283,8 +270,7 @@ static void convert_with_pipeline(const SkImageInfo& dstInfo, void* dstRow, size
             pipeline.append(SkRasterPipeline::load_8888, &srcRow);
             break;
         case kBGRA_8888_SkColorType:
-            pipeline.append(SkRasterPipeline::load_8888, &srcRow);
-            pipeline.append(SkRasterPipeline::swap_rb);
+            pipeline.append(SkRasterPipeline::load_bgra, &srcRow);
             break;
         case kRGB_565_SkColorType:
             pipeline.append(SkRasterPipeline::load_565, &srcRow);
@@ -376,8 +362,7 @@ static void convert_with_pipeline(const SkImageInfo& dstInfo, void* dstRow, size
             pipeline.append(SkRasterPipeline::store_8888, &dstRow);
             break;
         case kBGRA_8888_SkColorType:
-            pipeline.append(SkRasterPipeline::swap_rb);
-            pipeline.append(SkRasterPipeline::store_8888, &dstRow);
+            pipeline.append(SkRasterPipeline::store_bgra, &dstRow);
             break;
         case kRGB_565_SkColorType:
             pipeline.append(SkRasterPipeline::store_565, &dstRow);
@@ -427,14 +412,6 @@ void SkConvertPixels(const SkImageInfo& dstInfo, void* dstPixels, size_t dstRB,
     // Fast Path 3: Color space xform.
     if (isColorAware && optimized_color_xform(dstInfo, srcInfo, behavior)) {
         apply_color_xform(dstInfo, dstPixels, dstRB, srcInfo, srcPixels, srcRB, behavior);
-        return;
-    }
-
-    // Fast Path 4: Index 8 sources.
-    if (kIndex_8_SkColorType == srcInfo.colorType()) {
-        SkASSERT(ctable);
-        convert_from_index8(dstInfo, dstPixels, dstRB, srcInfo, (const uint8_t*) srcPixels, srcRB,
-                            ctable, behavior);
         return;
     }
 

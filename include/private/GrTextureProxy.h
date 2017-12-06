@@ -8,8 +8,8 @@
 #ifndef GrTextureProxy_DEFINED
 #define GrTextureProxy_DEFINED
 
+#include "GrSamplerParams.h"
 #include "GrSurfaceProxy.h"
-#include "GrTexture.h"
 
 class GrCaps;
 class GrResourceProvider;
@@ -48,6 +48,8 @@ protected:
     GrTextureProxy(sk_sp<GrSurface>);
 
     SkDestinationSurfaceColorMode mipColorMode() const { return fMipColorMode;  }
+
+    sk_sp<GrSurface> createSurface(GrResourceProvider*) const override;
 
 private:
     bool fIsMipMapped;
