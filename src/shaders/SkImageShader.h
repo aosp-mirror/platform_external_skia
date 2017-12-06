@@ -29,6 +29,8 @@ public:
 
     SkImageShader(sk_sp<SkImage>, TileMode tx, TileMode ty, const SkMatrix* localMatrix);
 
+    static bool IsRasterPipelineOnly(SkColorType, SkShader::TileMode tx, SkShader::TileMode ty);
+
 protected:
     void flatten(SkWriteBuffer&) const override;
     Context* onMakeContext(const ContextRec&, SkArenaAlloc* storage) const override;
@@ -36,6 +38,8 @@ protected:
     bool onIsABitmap(SkBitmap*, SkMatrix*, TileMode*) const override;
 #endif
     SkImage* onIsAImage(SkMatrix*, TileMode*) const override;
+
+    bool onIsRasterPipelineOnly() const override;
 
     bool onAppendStages(SkRasterPipeline*, SkColorSpace*, SkArenaAlloc*,
                         const SkMatrix& ctm, const SkPaint&, const SkMatrix*) const override;

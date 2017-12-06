@@ -10,6 +10,7 @@
 #include "GrContextOptions.h"
 #include "GrContextPriv.h"
 #include "GrDrawingManager.h"
+#include "GrGpu.h"
 #include "GrRenderTargetContext.h"
 #include "GrRenderTargetProxy.h"
 #include "GrResourceCache.h"
@@ -19,12 +20,18 @@
 #include "GrSurfaceContext.h"
 #include "GrSurfacePriv.h"
 #include "GrSurfaceProxyPriv.h"
+#include "GrTexture.h"
 #include "GrTextureContext.h"
+#include "GrTracing.h"
 #include "SkConvertPixels.h"
 #include "SkGr.h"
 #include "SkUnPreMultiplyPriv.h"
 #include "effects/GrConfigConversionEffect.h"
 #include "text/GrTextBlobCache.h"
+
+#ifdef SK_METAL
+#include "mtl/GrMtlTrampoline.h"
+#endif
 
 #define ASSERT_OWNED_PROXY(P) \
 SkASSERT(!(P) || !((P)->priv().peekTexture()) || (P)->priv().peekTexture()->getContext() == this)
@@ -51,15 +58,28 @@ GrContext* GrContext::Create(GrBackend backend, GrBackendContext backendContext)
 
 GrContext* GrContext::Create(GrBackend backend, GrBackendContext backendContext,
                              const GrContextOptions& options) {
-    GrContext* context = new GrContext;
+    sk_sp<GrContext> context(new GrContext);
 
-    if (context->init(backend, backendContext, options)) {
-        return context;
-    } else {
-        context->unref();
+    if (!context->init(backend, backendContext, options)) {
         return nullptr;
     }
+    return context.release();
 }
+
+#ifdef SK_METAL
+sk_sp<GrContext> GrContext::MakeMetal(void* device, void* queue, const GrContextOptions& options) {
+    sk_sp<GrContext> context(new GrContext);
+    context->fGpu = GrMtlTrampoline::CreateGpu(context.get(), options, device, queue);
+    if (!context->fGpu) {
+        return nullptr;
+    }
+    context->fBackend = kMetal_GrBackend;
+    if (!context->init(options)) {
+        return nullptr;
+    }
+    return context;
+}
+#endif
 
 static int32_t gNextID = 1;
 static int32_t next_id() {
@@ -89,13 +109,11 @@ bool GrContext::init(GrBackend backend, GrBackendContext backendContext,
     if (!fGpu) {
         return false;
     }
-    this->initCommon(options);
-    return true;
+    return this->init(options);
 }
 
-void GrContext::initCommon(const GrContextOptions& options) {
+bool GrContext::init(const GrContextOptions& options) {
     ASSERT_SINGLE_OWNER
-
     fCaps = SkRef(fGpu->caps());
     fResourceCache = new GrResourceCache(fCaps, fUniqueID);
     fResourceProvider = new GrResourceProvider(fGpu, fResourceCache, &fSingleOwner);
@@ -111,6 +129,8 @@ void GrContext::initCommon(const GrContextOptions& options) {
     fAtlasGlyphCache = new GrAtlasGlyphCache(this, options.fGlyphCacheTextureMaximumBytes);
 
     fTextBlobCache.reset(new GrTextBlobCache(TextBlobCacheOverBudgetCB, this));
+
+    return true;
 }
 
 GrContext::~GrContext() {
@@ -306,7 +326,7 @@ bool GrContextPriv::writeSurfacePixels(GrSurfaceContext* dst,
     RETURN_FALSE_IF_ABANDONED_PRIV
     SkASSERT(dst);
     ASSERT_OWNED_PROXY_PRIV(dst->asSurfaceProxy());
-    GR_AUDIT_TRAIL_AUTO_FRAME(&fContext->fAuditTrail, "GrContextPriv::writeSurfacePixels");
+    GR_CREATE_TRACE_MARKER_CONTEXT("GrContextPriv", "writeSurfacePixels", fContext);
 
     if (!dst->asSurfaceProxy()->instantiate(fContext->resourceProvider())) {
         return false;
@@ -380,12 +400,14 @@ bool GrContextPriv::writeSurfacePixels(GrSurfaceContext* dst,
 
     if (tempProxy) {
         sk_sp<GrFragmentProcessor> fp = GrSimpleTextureEffect::Make(
-                fContext->resourceProvider(), tempProxy, nullptr, SkMatrix::I());
+                tempProxy, nullptr, SkMatrix::I());
         if (premulOnGpu) {
             fp = fContext->createUPMToPMEffect(std::move(fp), useConfigConversionEffect);
         }
         fp = GrFragmentProcessor::SwizzleOutput(std::move(fp), tempDrawInfo.fSwizzle);
-        SkASSERT(fp);
+        if (!fp) {
+            return false;
+        }
 
         if (tempProxy->priv().hasPendingIO()) {
             this->flush(tempProxy.get());
@@ -433,7 +455,7 @@ bool GrContextPriv::readSurfacePixels(GrSurfaceContext* src,
     RETURN_FALSE_IF_ABANDONED_PRIV
     SkASSERT(src);
     ASSERT_OWNED_PROXY_PRIV(src->asSurfaceProxy());
-    GR_AUDIT_TRAIL_AUTO_FRAME(&fContext->fAuditTrail, "GrContextPriv::readSurfacePixels");
+    GR_CREATE_TRACE_MARKER_CONTEXT("GrContextPriv", "readSurfacePixels", fContext);
 
     // MDB TODO: delay this instantiation until later in the method
     if (!src->asSurfaceProxy()->instantiate(fContext->resourceProvider())) {
@@ -505,14 +527,16 @@ bool GrContextPriv::readSurfacePixels(GrSurfaceContext* src,
             SkMatrix textureMatrix = SkMatrix::MakeTrans(SkIntToScalar(left), SkIntToScalar(top));
             sk_sp<GrTextureProxy> proxy = src->asTextureProxyRef();
             sk_sp<GrFragmentProcessor> fp = GrSimpleTextureEffect::Make(
-                    fContext->resourceProvider(), std::move(proxy), nullptr, textureMatrix);
+                    std::move(proxy), nullptr, textureMatrix);
             if (unpremulOnGpu) {
                 fp = fContext->createPMToUPMEffect(std::move(fp), useConfigConversionEffect);
                 // We no longer need to do this on CPU after the read back.
                 unpremul = false;
             }
             fp = GrFragmentProcessor::SwizzleOutput(std::move(fp), tempDrawInfo.fSwizzle);
-            SkASSERT(fp);
+            if (!fp) {
+                return false;
+            }
 
             GrPaint paint;
             paint.addColorFragmentProcessor(std::move(fp));
@@ -612,7 +636,8 @@ int GrContext::getRecommendedSampleCount(GrPixelConfig config,
             chosenSampleCount = 16;
         }
     }
-    return chosenSampleCount <= fGpu->caps()->maxSampleCount() ? chosenSampleCount : 0;
+    int supportedSampleCount = fGpu->caps()->getSampleCount(chosenSampleCount, config);
+    return chosenSampleCount <= supportedSampleCount ? supportedSampleCount : 0;
 }
 
 sk_sp<GrSurfaceContext> GrContextPriv::makeWrappedSurfaceContext(sk_sp<GrSurfaceProxy> proxy,
@@ -783,6 +808,10 @@ sk_sp<GrRenderTargetContext> GrContext::makeDeferredRenderTargetContext(
                                                         const SkSurfaceProps* surfaceProps,
                                                         SkBudgeted budgeted) {
     SkASSERT(kDefault_GrSurfaceOrigin != origin);
+
+    if (this->abandoned()) {
+        return nullptr;
+    }
 
     GrSurfaceDesc desc;
     desc.fFlags = kRenderTarget_GrSurfaceFlag;

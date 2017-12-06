@@ -12,7 +12,9 @@
 #include "SkFilterQuality.h"
 #include "SkImageInfo.h"
 
+#ifdef SK_SUPPORT_LEGACY_COLORTABLE
 class SkColorTable;
+#endif
 class SkData;
 struct SkMask;
 
@@ -23,25 +25,17 @@ struct SkMask;
 class SK_API SkPixmap {
 public:
     SkPixmap()
-        : fPixels(NULL), fCTable(NULL), fRowBytes(0), fInfo(SkImageInfo::MakeUnknown(0, 0))
+        : fPixels(NULL), fRowBytes(0), fInfo(SkImageInfo::MakeUnknown(0, 0))
     {}
 
-    SkPixmap(const SkImageInfo& info, const void* addr, size_t rowBytes,
-             SkColorTable* ctable = NULL)
-        : fPixels(addr), fCTable(ctable), fRowBytes(rowBytes), fInfo(info)
-    {
-        if (kIndex_8_SkColorType == info.colorType()) {
-            SkASSERT(ctable);
-        } else {
-            SkASSERT(NULL == ctable);
-        }
-    }
+    SkPixmap(const SkImageInfo& info, const void* addr, size_t rowBytes)
+        : fPixels(addr), fRowBytes(rowBytes), fInfo(info)
+    {}
 
     void reset();
-    void reset(const SkImageInfo& info, const void* addr, size_t rowBytes,
-               SkColorTable* ctable = NULL);
+    void reset(const SkImageInfo& info, const void* addr, size_t rowBytes);
     void reset(const SkImageInfo& info) {
-        this->reset(info, NULL, 0, NULL);
+        this->reset(info, NULL, 0);
     }
 
     // overrides the colorspace in the SkImageInfo of the pixmap
@@ -64,7 +58,6 @@ public:
     const SkImageInfo& info() const { return fInfo; }
     size_t rowBytes() const { return fRowBytes; }
     const void* addr() const { return fPixels; }
-    SkColorTable* ctable() const { return fCTable; }
 
     int width() const { return fInfo.width(); }
     int height() const { return fInfo.height(); }
@@ -217,9 +210,19 @@ public:
     bool erase(SkColor color) const { return this->erase(color, this->bounds()); }
     bool erase(const SkColor4f&, const SkIRect* subset = nullptr) const;
 
+#ifdef SK_SUPPORT_LEGACY_COLORTABLE
+    SkPixmap(const SkImageInfo& info, const void* addr, size_t rowBytes, SkColorTable*)
+    : fPixels(addr), fRowBytes(rowBytes), fInfo(info)
+    {}
+    void reset(const SkImageInfo& info, const void* addr, size_t rowBytes,
+               SkColorTable*) {
+        this->reset(info, addr, rowBytes);
+    }
+    SkColorTable* ctable() const { return nullptr; }
+#endif
+
 private:
     const void*     fPixels;
-    SkColorTable*   fCTable;
     size_t          fRowBytes;
     SkImageInfo     fInfo;
 };

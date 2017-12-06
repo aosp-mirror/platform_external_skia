@@ -26,10 +26,9 @@ class SkiaApi(recipe_api.RecipeApi):
     self.checkout_steps()
 
     if not self.m.path.exists(self.m.vars.tmp_dir):
-      self.m.run.run_once(self.m.file.makedirs,
-                          'tmp_dir',
-                          self.m.vars.tmp_dir,
-                          infra_step=True)
+      self.m.run.run_once(self.m.file.ensure_directory,
+                          'makedirs tmp_dir',
+                          self.m.vars.tmp_dir)
 
     self.m.flavor.setup()
 
@@ -46,9 +45,8 @@ class SkiaApi(recipe_api.RecipeApi):
 
     # Create the checkout path if necessary.
     if not self.m.path.exists(self.m.vars.checkout_root):
-      self.m.file.makedirs('checkout_path',
-                           self.m.vars.checkout_root,
-                           infra_step=True)
+      self.m.file.ensure_directory('makedirs checkout_path',
+                                   self.m.vars.checkout_root)
 
     # Initial cleanup.
     gclient_cfg = self.m.gclient.make_config(**cfg_kwargs)
@@ -75,7 +73,9 @@ class SkiaApi(recipe_api.RecipeApi):
     patch_repo = main.url
     if self.m.properties.get('patch_repo'):
       patch_repo = self.m.properties['patch_repo']
-      patch_root = patch_repo.split('/')[-1].rstrip('.git')
+      patch_root = patch_repo.split('/')[-1]
+      if patch_root.endswith('.git'):
+        patch_root = patch_root[:-4]
 
     if self.m.vars.need_pdfium_checkout:
       # Skia is a DEP of PDFium; the 'revision' property is a Skia revision, and
@@ -112,8 +112,7 @@ class SkiaApi(recipe_api.RecipeApi):
     entries_file = self.m.vars.checkout_root.join('.gclient_entries')
     if self.m.path.exists(entries_file) or self._test_data.enabled:
       self.m.file.remove('remove %s' % entries_file,
-                         entries_file,
-                         infra_step=True)
+                         entries_file)
 
     if self.m.vars.need_chromium_checkout:
       chromium = gclient_cfg.solutions.add()

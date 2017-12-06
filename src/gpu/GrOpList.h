@@ -9,7 +9,6 @@
 #define GrOpList_DEFINED
 
 #include "GrGpuResourceRef.h"
-
 #include "SkRefCnt.h"
 #include "SkTDArray.h"
 
@@ -24,6 +23,9 @@ class GrSurfaceProxy;
 class GrTextureProxy;
 class GrTextureOpList;
 
+struct SkIPoint;
+struct SkIRect;
+
 class GrOpList : public SkRefCnt {
 public:
     GrOpList(GrResourceProvider*, GrSurfaceProxy*, GrAuditTrail*);
@@ -34,8 +36,17 @@ public:
     virtual void prepareOps(GrOpFlushState* flushState) = 0;
     virtual bool executeOps(GrOpFlushState* flushState) = 0;
 
+    virtual bool copySurface(const GrCaps& caps,
+                             GrSurfaceProxy* dst,
+                             GrSurfaceProxy* src,
+                             const SkIRect& srcRect,
+                             const SkIPoint& dstPoint) = 0;
+
     virtual void makeClosed(const GrCaps&) {
-        this->setFlag(kClosed_Flag);
+        if (!this->isClosed()) {
+            this->setFlag(kClosed_Flag);
+            fTarget.removeRef();
+        }
     }
 
     virtual void reset();

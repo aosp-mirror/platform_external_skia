@@ -194,44 +194,23 @@ void SkRadialGradient::RadialGradientContext::shadeSpan(int x, int y,
 
     SkPoint             srcPt;
     SkMatrix::MapXYProc dstProc = fDstToIndexProc;
-    TileProc            proc = radialGradient.fTileProc;
     const SkPMColor* SK_RESTRICT cache = fCache->getCache32();
     int toggle = init_dither_toggle(x, y);
 
-    if (fDstToIndexClass != kPerspective_MatrixClass) {
-        dstProc(fDstToIndex, SkIntToScalar(x) + SK_ScalarHalf,
-                             SkIntToScalar(y) + SK_ScalarHalf, &srcPt);
-        SkScalar sdx = fDstToIndex.getScaleX();
-        SkScalar sdy = fDstToIndex.getSkewY();
+    dstProc(fDstToIndex, SkIntToScalar(x) + SK_ScalarHalf,
+                         SkIntToScalar(y) + SK_ScalarHalf, &srcPt);
+    SkScalar sdx = fDstToIndex.getScaleX();
+    SkScalar sdy = fDstToIndex.getSkewY();
 
-        if (fDstToIndexClass == kFixedStepInX_MatrixClass) {
-            const auto step = fDstToIndex.fixedStepInX(SkIntToScalar(y));
-            sdx = step.fX;
-            sdy = step.fY;
-        } else {
-            SkASSERT(fDstToIndexClass == kLinear_MatrixClass);
-        }
-
-        RadialShadeProc shadeProc = shadeSpan_radial_repeat;
-        if (SkShader::kClamp_TileMode == radialGradient.fTileMode) {
-            shadeProc = shadeSpan_radial_clamp2;
-        } else if (SkShader::kMirror_TileMode == radialGradient.fTileMode) {
-            shadeProc = shadeSpan_radial_mirror;
-        } else {
-            SkASSERT(SkShader::kRepeat_TileMode == radialGradient.fTileMode);
-        }
-        (*shadeProc)(srcPt.fX, sdx, srcPt.fY, sdy, dstC, cache, count, toggle);
-    } else {    // perspective case
-        SkScalar dstX = SkIntToScalar(x);
-        SkScalar dstY = SkIntToScalar(y);
-        do {
-            dstProc(fDstToIndex, dstX, dstY, &srcPt);
-            unsigned fi = proc(SkScalarToFixed(srcPt.length()));
-            SkASSERT(fi <= 0xFFFF);
-            *dstC++ = cache[fi >> SkGradientShaderBase::kCache32Shift];
-            dstX += SK_Scalar1;
-        } while (--count != 0);
+    RadialShadeProc shadeProc = shadeSpan_radial_repeat;
+    if (SkShader::kClamp_TileMode == radialGradient.fTileMode) {
+        shadeProc = shadeSpan_radial_clamp2;
+    } else if (SkShader::kMirror_TileMode == radialGradient.fTileMode) {
+        shadeProc = shadeSpan_radial_mirror;
+    } else {
+        SkASSERT(SkShader::kRepeat_TileMode == radialGradient.fTileMode);
     }
+    (*shadeProc)(srcPt.fX, sdx, srcPt.fY, sdy, dstC, cache, count, toggle);
 }
 
 /////////////////////////////////////////////////////////////////////
@@ -247,7 +226,8 @@ public:
     class GLSLRadialProcessor;
 
     static sk_sp<GrFragmentProcessor> Make(const CreateArgs& args) {
-        return sk_sp<GrFragmentProcessor>(new GrRadialGradient(args));
+        auto processor = sk_sp<GrRadialGradient>(new GrRadialGradient(args));
+        return processor->isValid() ? std::move(processor) : nullptr;
     }
 
     ~GrRadialGradient() override {}
@@ -264,7 +244,7 @@ private:
     virtual void onGetGLSLProcessorKey(const GrShaderCaps& caps,
                                        GrProcessorKeyBuilder* b) const override;
 
-    GR_DECLARE_FRAGMENT_PROCESSOR_TEST;
+    GR_DECLARE_FRAGMENT_PROCESSOR_TEST
 
     typedef GrGradientEffect INHERITED;
 };
@@ -363,6 +343,9 @@ sk_sp<GrFragmentProcessor> SkRadialGradient::asFragmentProcessor(const AsFPArgs&
     sk_sp<GrFragmentProcessor> inner(GrRadialGradient::Make(
         GrGradientEffect::CreateArgs(args.fContext, this, &matrix, fTileMode,
                                      std::move(colorSpaceXform), SkToBool(args.fDstColorSpace))));
+    if (!inner) {
+        return nullptr;
+    }
     return GrFragmentProcessor::MulOutputByInputAlpha(std::move(inner));
 }
 
@@ -378,7 +361,8 @@ sk_sp<SkShader> SkRadialGradient::onMakeColorSpace(SkColorSpaceXformer* xformer)
 
 bool SkRadialGradient::adjustMatrixAndAppendStages(SkArenaAlloc* alloc,
                                  SkMatrix* matrix,
-                                 SkRasterPipeline* p) const {
+                                 SkRasterPipeline* p,
+                                 SkRasterPipeline*) const {
     matrix->postTranslate(-fCenter.fX, -fCenter.fY);
     matrix->postScale(1/fRadius, 1/fRadius);
 

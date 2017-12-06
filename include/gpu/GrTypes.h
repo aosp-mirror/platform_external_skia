@@ -185,17 +185,21 @@ static inline size_t GrSizeAlignDown(size_t x, uint32_t alignment) {
  * Possible 3D APIs that may be used by Ganesh.
  */
 enum GrBackend {
+    kMetal_GrBackend,
     kOpenGL_GrBackend,
     kVulkan_GrBackend,
-
-    kLast_GrBackend = kVulkan_GrBackend
+    /**
+     * Mock is a backend that does not draw anything. It is used for unit tests
+     * and to measure CPU overhead.
+     */
+    kMock_GrBackend,
 };
-const int kBackendCount = kLast_GrBackend + 1;
 
 /**
  * Backend-specific 3D context handle
- *      GrGLInterface* for OpenGL. If NULL will use the default GL interface.
- *      GrVkBackendContext* for Vulkan.
+ *      OpenGL: const GrGLInterface*. If null will use the result of GrGLCreateNativeInterface().
+ *      Vulkan: GrVkBackendContext*.
+ *      Mock: const GrMockOptions* or null for default constructed GrMockContextOptions.
  */
 typedef intptr_t GrBackendContext;
 
@@ -216,24 +220,31 @@ static inline GrAA GrBoolToAA(bool aa) { return aa ? GrAA::kYes : GrAA::kNo; }
 /**
 * Geometric primitives used for drawing.
 */
-enum GrPrimitiveType {
-    kTriangles_GrPrimitiveType,
-    kTriangleStrip_GrPrimitiveType,
-    kTriangleFan_GrPrimitiveType,
-    kPoints_GrPrimitiveType,
-    kLines_GrPrimitiveType,     // 1 pix wide only
-    kLineStrip_GrPrimitiveType, // 1 pix wide only
-    kLast_GrPrimitiveType = kLineStrip_GrPrimitiveType
+enum class GrPrimitiveType {
+    kTriangles,
+    kTriangleStrip,
+    kTriangleFan,
+    kPoints,
+    kLines,     // 1 pix wide only
+    kLineStrip, // 1 pix wide only
+    kLinesAdjacency // requires geometry shader support.
 };
+static constexpr int kNumGrPrimitiveTypes = (int) GrPrimitiveType::kLinesAdjacency + 1;
 
-static inline bool GrIsPrimTypeLines(GrPrimitiveType type) {
-    return kLines_GrPrimitiveType == type || kLineStrip_GrPrimitiveType == type;
+static constexpr bool GrIsPrimTypeLines(GrPrimitiveType type) {
+    return GrPrimitiveType::kLines == type ||
+           GrPrimitiveType::kLineStrip == type ||
+           GrPrimitiveType::kLinesAdjacency == type;
 }
 
-static inline bool GrIsPrimTypeTris(GrPrimitiveType type) {
-    return kTriangles_GrPrimitiveType == type     ||
-           kTriangleStrip_GrPrimitiveType == type ||
-           kTriangleFan_GrPrimitiveType == type;
+static constexpr bool GrIsPrimTypeTris(GrPrimitiveType type) {
+    return GrPrimitiveType::kTriangles == type     ||
+           GrPrimitiveType::kTriangleStrip == type ||
+           GrPrimitiveType::kTriangleFan == type;
+}
+
+static constexpr bool GrPrimTypeRequiresGeometryShaderSupport(GrPrimitiveType type) {
+    return GrPrimitiveType::kLinesAdjacency == type;
 }
 
 /**
@@ -510,6 +521,29 @@ static inline bool GrPixelConfigIsFloatingPoint(GrPixelConfig config) {
 
 static inline bool GrPixelConfigIsSint(GrPixelConfig config) {
     return config == kRGBA_8888_sint_GrPixelConfig;
+}
+
+static inline bool GrPixelConfigIsUnorm(GrPixelConfig config) {
+    switch (config) {
+        case kAlpha_8_GrPixelConfig:
+        case kGray_8_GrPixelConfig:
+        case kRGB_565_GrPixelConfig:
+        case kRGBA_4444_GrPixelConfig:
+        case kRGBA_8888_GrPixelConfig:
+        case kBGRA_8888_GrPixelConfig:
+        case kSRGBA_8888_GrPixelConfig:
+        case kSBGRA_8888_GrPixelConfig:
+            return true;
+        case kUnknown_GrPixelConfig:
+        case kAlpha_half_GrPixelConfig:
+        case kRGBA_8888_sint_GrPixelConfig:
+        case kRGBA_float_GrPixelConfig:
+        case kRG_float_GrPixelConfig:
+        case kRGBA_half_GrPixelConfig:
+            return false;
+    }
+    SkFAIL("Invalid pixel config.");
+    return false;
 }
 
 /**

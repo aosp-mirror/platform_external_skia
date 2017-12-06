@@ -9,7 +9,7 @@
 
 #include "SkImageGenerator.h"
 
-#include <android/hardware_buffer.h>
+struct AHardwareBuffer;
 
 /**
  *  GrAHardwareBufferImageGenerator allows to create an SkImage attached to
@@ -34,18 +34,21 @@ protected:
     bool onIsValid(GrContext*) const override;
 
 #if SK_SUPPORT_GPU
-    bool onCanGenerateTexture() const override { return true; }
-    sk_sp<GrTextureProxy> onGenerateTexture(GrContext*, const SkImageInfo&,
-                                            const SkIPoint&) override;
+    TexGenType onCanGenerateTexture() const override { return TexGenType::kCheap; }
+    sk_sp<GrTextureProxy> onGenerateTexture(GrContext*, const SkImageInfo&, const SkIPoint&,
+                                            SkTransferFunctionBehavior) override;
 #endif
 
 private:
     GrAHardwareBufferImageGenerator(const SkImageInfo&, AHardwareBuffer*, SkAlphaType);
+    sk_sp<GrTextureProxy> makeProxy(GrContext* context);
+    void clear();
 
     static void deleteImageTexture(void* ctx);
 
     AHardwareBuffer* fGraphicBuffer;
-    SkAlphaType fAlphaType;
+    GrTexture* fOriginalTexture = nullptr;
+    uint32_t fOwningContextID;
 
     typedef SkImageGenerator INHERITED;
 };

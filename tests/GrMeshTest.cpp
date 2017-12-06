@@ -12,6 +12,7 @@
 
 #include "GrContext.h"
 #include "GrGeometryProcessor.h"
+#include "GrGpuCommandBuffer.h"
 #include "GrOpFlushState.h"
 #include "GrRenderTargetContext.h"
 #include "GrRenderTargetContextPriv.h"
@@ -147,7 +148,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(GrMeshTest, reporter, ctxInfo) {
         auto vbuff = helper->makeVertexBuffer(expandedVertexData);
         VALIDATE(vbuff);
         for (int y = 0; y < kBoxCountY; ++y) {
-            GrMesh mesh(kTriangles_GrPrimitiveType);
+            GrMesh mesh(GrPrimitiveType::kTriangles);
             mesh.setNonIndexedNonInstanced(kBoxCountX * 6);
             mesh.setVertexData(vbuff.get(), y * kBoxCountX * 6);
             helper->drawMesh(mesh);
@@ -167,7 +168,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(GrMeshTest, reporter, ctxInfo) {
             GR_STATIC_ASSERT(kIndexPatternRepeatCount >= 3);
             int repetitionCount = SkTMin(3 - baseRepetition, kBoxCount - i);
 
-            GrMesh mesh(kTriangles_GrPrimitiveType);
+            GrMesh mesh(GrPrimitiveType::kTriangles);
             mesh.setIndexed(ibuff.get(), repetitionCount * 6, baseRepetition * 6,
                             baseRepetition * 4, (baseRepetition + repetitionCount) * 4 - 1);
             mesh.setVertexData(vbuff.get(), (i - baseRepetition) * 4);
@@ -187,7 +188,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(GrMeshTest, reporter, ctxInfo) {
         // Draw boxes one line at a time to exercise base vertex. setIndexedPatterned does not
         // support a base index.
         for (int y = 0; y < kBoxCountY; ++y) {
-            GrMesh mesh(kTriangles_GrPrimitiveType);
+            GrMesh mesh(GrPrimitiveType::kTriangles);
             mesh.setIndexedPatterned(ibuff.get(), 6, 4, kBoxCountX, kIndexPatternRepeatCount);
             mesh.setVertexData(vbuff.get(), y * kBoxCountX * 4);
             helper->drawMesh(mesh);
@@ -213,7 +214,8 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(GrMeshTest, reporter, ctxInfo) {
             // Draw boxes one line at a time to exercise base instance, base vertex, and null vertex
             // buffer. setIndexedInstanced intentionally does not support a base index.
             for (int y = 0; y < kBoxCountY; ++y) {
-                GrMesh mesh(indexed ? kTriangles_GrPrimitiveType : kTriangleStrip_GrPrimitiveType);
+                GrMesh mesh(indexed ? GrPrimitiveType::kTriangles
+                                    : GrPrimitiveType::kTriangleStrip);
                 if (indexed) {
                     VALIDATE(idxbuff);
                     mesh.setIndexedInstanced(idxbuff.get(), 6,
@@ -260,7 +262,9 @@ public:
 private:
     const char* name() const override { return "GrMeshTestOp"; }
     FixedFunctionFlags fixedFunctionFlags() const override { return FixedFunctionFlags::kNone; }
-    bool xpRequiresDstTexture(const GrCaps&, const GrAppliedClip*) override { return false; }
+    RequiresDstTexture finalize(const GrCaps&, const GrAppliedClip*) override {
+        return RequiresDstTexture::kNo;
+    }
     bool onCombineIfPossible(GrOp* other, const GrCaps& caps) override { return false; }
     void onPrepare(GrOpFlushState*) override {}
     void onExecute(GrOpFlushState* state) override {
@@ -364,9 +368,9 @@ sk_sp<const GrBuffer> DrawMeshHelper::getIndexBuffer() {
 
 void DrawMeshHelper::drawMesh(const GrMesh& mesh) {
     GrRenderTarget* rt = fState->drawOpArgs().fRenderTarget;
-    GrPipeline pipeline(rt, SkBlendMode::kSrc);
+    GrPipeline pipeline(rt, GrPipeline::ScissorState::kDisabled, SkBlendMode::kSrc);
     GrMeshTestProcessor mtp(mesh.isInstanced(), mesh.hasVertexData());
-    fState->commandBuffer()->draw(pipeline, mtp, &mesh, 1,
+    fState->commandBuffer()->draw(pipeline, mtp, &mesh, nullptr, 1,
                                   SkRect::MakeIWH(kImageWidth, kImageHeight));
 }
 

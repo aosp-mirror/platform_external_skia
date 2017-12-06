@@ -60,20 +60,15 @@ public:
 
     uint32_t getFlags() const override { return fFlags; }
 
-    void shadeSpan(int x, int y, SkPMColor dst[], int count) override;
-    void shadeSpan4f(int x, int y, SkPM4f dst[], int count) override;
+    void shadeSpan(int x, int y, SkPMColor dst[], int count) final;
 
     bool isValid() const;
 
 protected:
-    virtual void mapTs(int x, int y, SkScalar ts[], int count) const = 0;
-
     Sk4fGradientIntervalBuffer fIntervals;
     SkMatrix                   fDstToPos;
     SkMatrix::MapXYProc        fDstToPosProc;
-    uint8_t                    fDstToPosClass;
     uint8_t                    fFlags;
-    bool                       fDither;
     bool                       fColorsArePremul;
 
 private:
@@ -81,17 +76,6 @@ private:
 
     void addMirrorIntervals(const SkGradientShaderBase&,
                             const Sk4f& componentScale, bool reverse);
-
-    template<DstType, ApplyPremul, SkShader::TileMode tileMode>
-    class TSampler;
-
-    template <DstType dstType, ApplyPremul premul>
-    void shadePremulSpan(int x, int y, typename DstTraits<dstType, premul>::Type[],
-                         int count) const;
-
-    template <DstType dstType, ApplyPremul premul, SkShader::TileMode tileMode>
-    void shadeSpanInternal(int x, int y, typename DstTraits<dstType, premul>::Type[],
-                           int count) const;
 };
 
 #endif // Sk4fGradientBase_DEFINED

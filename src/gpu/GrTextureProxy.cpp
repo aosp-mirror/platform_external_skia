@@ -7,7 +7,6 @@
 
 #include "GrTextureProxy.h"
 
-#include "GrResourceProvider.h"
 #include "GrTexturePriv.h"
 
 GrTextureProxy::GrTextureProxy(const GrSurfaceDesc& srcDesc, SkBackingFit fit, SkBudgeted budgeted,
@@ -32,6 +31,17 @@ bool GrTextureProxy::instantiate(GrResourceProvider* resourceProvider) {
 
     SkASSERT(fTarget->asTexture());
     return true;
+}
+
+sk_sp<GrSurface> GrTextureProxy::createSurface(GrResourceProvider* resourceProvider) const {
+    sk_sp<GrSurface> surface= this->createSurfaceImpl(resourceProvider, 0, kNone_GrSurfaceFlags,
+                                                      fIsMipMapped, fMipColorMode);
+    if (!surface) {
+        return nullptr;
+    }
+
+    SkASSERT(surface->asTexture());
+    return surface;
 }
 
 void GrTextureProxy::setMipColorMode(SkDestinationSurfaceColorMode colorMode) {

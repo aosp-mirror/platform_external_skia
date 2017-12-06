@@ -12,6 +12,7 @@
 #include "GrOpList.h"
 #include "GrPathRendering.h"
 #include "GrPrimitiveProcessor.h"
+#include "ops/GrOp.h"
 #include "SkArenaAlloc.h"
 #include "SkClipStack.h"
 #include "SkMatrix.h"
@@ -24,9 +25,11 @@
 class GrAuditTrail;
 class GrClearOp;
 class GrCaps;
-class GrOp;
-class GrPipelineBuilder;
 class GrRenderTargetProxy;
+
+namespace gr_instanced {
+    class InstancedRendering;
+}
 
 class GrRenderTargetOpList final : public GrOpList {
 private:
@@ -92,7 +95,7 @@ public:
                      GrSurfaceProxy* dst,
                      GrSurfaceProxy* src,
                      const SkIRect& srcRect,
-                     const SkIPoint& dstPoint);
+                     const SkIPoint& dstPoint) override;
 
     gr_instanced::InstancedRendering* instancedRendering() const {
         SkASSERT(fInstancedRendering);
@@ -139,7 +142,7 @@ private:
 
     std::unique_ptr<gr_instanced::InstancedRendering> fInstancedRendering;
 
-    int32_t                        fLastClipStackGenID;
+    uint32_t                       fLastClipStackGenID;
     SkIRect                        fLastDevClipBounds;
 
     // For ops/opList we have mean: 5 stdDev: 28

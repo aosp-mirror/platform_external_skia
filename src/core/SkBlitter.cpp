@@ -14,6 +14,7 @@
 #include "SkWriteBuffer.h"
 #include "SkMask.h"
 #include "SkMaskFilter.h"
+#include "SkPaintPriv.h"
 #include "SkShaderBase.h"
 #include "SkString.h"
 #include "SkTLazy.h"
@@ -779,8 +780,12 @@ SkShaderBase::ContextRec::DstType SkBlitter::PreferredShaderDest(const SkImageIn
 // hack for testing, not to be exposed to clients
 bool gSkForceRasterPipelineBlitter;
 
-bool SkBlitter::UseRasterPipelineBlitter(const SkPixmap& device, const SkPaint& paint) {
+bool SkBlitter::UseRasterPipelineBlitter(const SkPixmap& device, const SkPaint& paint,
+                                         const SkMatrix& matrix) {
     if (gSkForceRasterPipelineBlitter) {
+        return true;
+    }
+    if (device.info().alphaType() == kUnpremul_SkAlphaType) {
         return true;
     }
 #if 0 || defined(SK_FORCE_RASTER_PIPELINE_BLITTER)
@@ -790,16 +795,34 @@ bool SkBlitter::UseRasterPipelineBlitter(const SkPixmap& device, const SkPaint& 
     if (device.colorSpace()) {
         return true;
     }
-    // ... unless the shader is raster pipeline-only.
-    if (paint.getShader() && as_SB(paint.getShader())->isRasterPipelineOnly()) {
+    if (paint.getColorFilter()) {
         return true;
     }
-    #ifndef SK_SUPPORT_LEGACY_RASTERPIPELINE
-    // ... or unless the blend mode is complicated enough.
+#ifndef SK_SUPPORT_LEGACY_HQ_SCALER
+    if (paint.getFilterQuality() == kHigh_SkFilterQuality) {
+        return true;
+    }
+#endif
+    // ... unless the blend mode is complicated enough.
     if (paint.getBlendMode() > SkBlendMode::kLastSeparableMode) {
         return true;
     }
-    #endif
+
+    // ... or unless we have to deal with perspective.
+    if (matrix.hasPerspective()) {
+        return true;
+    }
+
+    // ... or unless the shader is raster pipeline-only.
+    if (paint.getShader() && as_SB(paint.getShader())->isRasterPipelineOnly()) {
+        return true;
+    }
+
+    // Added support only for shaders (and other constraints) for android
+    if (device.colorType() == kRGB_565_SkColorType) {
+        return false;
+    }
+
     return device.colorType() != kN32_SkColorType;
 #endif
 }
@@ -869,7 +892,12 @@ SkBlitter* SkBlitter::Choose(const SkPixmap& device,
         return alloc->make<SkA8_Coverage_Blitter>(device, *paint);
     }
 
-    if (UseRasterPipelineBlitter(device, *paint)) {
+    if (paint->isDither() && !SkPaintPriv::ShouldDither(*paint, device.colorType())) {
+        // Disable dithering when not needed.
+        paint.writable()->setDither(false);
+    }
+
+    if (UseRasterPipelineBlitter(device, *paint, matrix)) {
         auto blitter = SkCreateRasterPipelineBlitter(device, *paint, matrix, alloc);
         SkASSERT(blitter);
         return blitter;
@@ -929,6 +957,13 @@ SkBlitter* SkBlitter::Choose(const SkPixmap& device,
                 blitter = alloc->make<SkARGB32_Opaque_Blitter>(device, *paint);
             } else {
                 blitter = alloc->make<SkARGB32_Blitter>(device, *paint);
+            }
+            break;
+        case kRGB_565_SkColorType:
+            if (shader && SkRGB565_Shader_Blitter::Supports(device, *paint)) {
+                blitter = alloc->make<SkRGB565_Shader_Blitter>(device, *paint, shaderContext);
+            } else {
+                blitter = SkCreateRasterPipelineBlitter(device, *paint, matrix, alloc);
             }
             break;
 

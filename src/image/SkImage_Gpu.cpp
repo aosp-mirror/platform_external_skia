@@ -12,9 +12,7 @@
 #include "SkAutoPixmapStorage.h"
 #include "GrBackendSurface.h"
 #include "GrBackendTextureImageGenerator.h"
-#ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
 #include "GrAHardwareBufferImageGenerator.h"
-#endif
 #include "GrBitmapTextureMaker.h"
 #include "GrCaps.h"
 #include "GrContext.h"
@@ -25,7 +23,7 @@
 #include "GrResourceProvider.h"
 #include "GrSemaphore.h"
 #include "GrTextureAdjuster.h"
-#include "GrTexturePriv.h"
+#include "GrTexture.h"
 #include "GrTextureProxy.h"
 #include "effects/GrNonlinearColorSpaceXformEffect.h"
 #include "effects/GrYUVEffect.h"
@@ -325,14 +323,23 @@ static GrBackendTexture make_backend_texture_from_handle(GrBackend backend,
                                                          int width, int height,
                                                          GrPixelConfig config,
                                                          GrBackendObject handle) {
-
-    if (kOpenGL_GrBackend == backend) {
-        GrGLTextureInfo* glInfo = (GrGLTextureInfo*)(handle);
-        return GrBackendTexture(width, height, config, *glInfo);
-    } else {
-        SkASSERT(kVulkan_GrBackend == backend);
-        GrVkImageInfo* vkInfo = (GrVkImageInfo*)(handle);
-        return GrBackendTexture(width, height, *vkInfo);
+    switch (backend) {
+        case kOpenGL_GrBackend: {
+            const GrGLTextureInfo* glInfo = (const GrGLTextureInfo*)(handle);
+            return GrBackendTexture(width, height, config, *glInfo);
+        }
+#ifdef SK_VULKAN
+        case kVulkan_GrBackend: {
+            const GrVkImageInfo* vkInfo = (const GrVkImageInfo*)(handle);
+            return GrBackendTexture(width, height, *vkInfo);
+        }
+#endif
+        case kMock_GrBackend: {
+            const GrMockTextureInfo* mockInfo = (const GrMockTextureInfo*)(handle);
+            return GrBackendTexture(width, height, config, *mockInfo);
+        }
+        default:
+            return GrBackendTexture();
     }
 }
 
@@ -401,10 +408,8 @@ static sk_sp<SkImage> make_from_yuv_textures_copy(GrContext* ctx, SkYUVColorSpac
 
     GrPaint paint;
     paint.setPorterDuffXPFactory(SkBlendMode::kSrc);
-    paint.addColorFragmentProcessor(
-        GrYUVEffect::MakeYUVToRGB(ctx->resourceProvider(),
-                                  yProxy, uProxy, vProxy,
-                                  yuvSizes, colorSpace, nv12));
+    paint.addColorFragmentProcessor(GrYUVEffect::MakeYUVToRGB(yProxy, uProxy, vProxy,
+                                                              yuvSizes, colorSpace, nv12));
 
     const SkRect rect = SkRect::MakeIWH(width, height);
 
@@ -456,8 +461,8 @@ sk_sp<SkImage> SkImage::makeTextureImage(GrContext* context, SkColorSpace* dstCo
     if (!context) {
         return nullptr;
     }
-    if (GrTexture* peek = as_IB(this)->peekTexture()) {
-        return peek->getContext() == context ? sk_ref_sp(const_cast<SkImage*>(this)) : nullptr;
+    if (GrContext* incumbent = as_IB(this)->context()) {
+        return incumbent == context ? sk_ref_sp(const_cast<SkImage*>(this)) : nullptr;
     }
 
     if (this->isLazyGenerated()) {
@@ -514,7 +519,7 @@ sk_sp<SkImage> SkImage::MakeCrossContextFromEncoded(GrContext* context, sk_sp<Sk
     return SkImage::MakeFromGenerator(std::move(gen));
 }
 
-#ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
+#if defined(SK_BUILD_FOR_ANDROID) && __ANDROID_API__ >= 26
 sk_sp<SkImage> SkImage::MakeFromAHardwareBuffer(AHardwareBuffer* graphicBuffer, SkAlphaType at,
                                                sk_sp<SkColorSpace> cs) {
     auto gen = GrAHardwareBufferImageGenerator::Make(graphicBuffer, at, cs);
@@ -597,10 +602,22 @@ private:
                offsetof(DeferredTextureImage, member), \
                sizeof(DeferredTextureImage::member));
 
+static bool SupportsColorSpace(SkColorType colorType) {
+    switch (colorType) {
+        case kRGBA_8888_SkColorType:
+        case kBGRA_8888_SkColorType:
+        case kRGBA_F16_SkColorType:
+            return true;
+        default:
+            return false;
+    }
+}
+
 size_t SkImage::getDeferredTextureImageData(const GrContextThreadSafeProxy& proxy,
                                             const DeferredTextureImageUsageParams params[],
                                             int paramCnt, void* buffer,
-                                            SkColorSpace* dstColorSpace) const {
+                                            SkColorSpace* dstColorSpace,
+                                            SkColorType dstColorType) const {
     // Some quick-rejects where is makes no sense to return CPU data
     //  e.g.
     //      - texture backed
@@ -610,6 +627,12 @@ size_t SkImage::getDeferredTextureImageData(const GrContextThreadSafeProxy& prox
         return 0;
     }
     if (as_IB(this)->onCanLazyGenerateOnGPU()) {
+        return 0;
+    }
+
+    bool supportsColorSpace = SupportsColorSpace(dstColorType);
+    // Quick reject if the caller requests a color space with an unsupported color type.
+    if (SkToBool(dstColorSpace) && !supportsColorSpace) {
         return 0;
     }
 
@@ -657,7 +680,7 @@ size_t SkImage::getDeferredTextureImageData(const GrContextThreadSafeProxy& prox
     SkAutoPixmapStorage pixmap;
     SkImageInfo info;
     size_t pixelSize = 0;
-    if (!isScaled && this->peekPixels(&pixmap) && !pixmap.ctable()) {
+    if (!isScaled && this->peekPixels(&pixmap) && pixmap.info().colorType() == dstColorType) {
         info = pixmap.info();
         pixelSize = SkAlign8(pixmap.getSafeSize());
         if (!dstColorSpace) {
@@ -680,24 +703,34 @@ size_t SkImage::getDeferredTextureImageData(const GrContextThreadSafeProxy& prox
                 info = info.makeColorSpace(nullptr);
             }
         }
-        if (kIndex_8_SkColorType == info.colorType()) {
-            // Force Index8 to be N32 instead. Index8 is unsupported in Ganesh.
-            info = info.makeColorType(kN32_SkColorType);
-        }
+        // Force color type to be the requested type.
+        info = info.makeColorType(dstColorType);
         pixelSize = SkAlign8(SkAutoPixmapStorage::AllocSize(info, nullptr));
         if (fillMode) {
-            pixmap.alloc(info);
+            // Always decode to N32 and convert to the requested type if necessary.
+            SkImageInfo decodeInfo = info.makeColorType(kN32_SkColorType);
+            SkAutoPixmapStorage decodePixmap;
+            decodePixmap.alloc(decodeInfo);
+
             if (isScaled) {
-                if (!this->scalePixels(pixmap, scaleFilterQuality,
+                if (!this->scalePixels(decodePixmap, scaleFilterQuality,
                                        SkImage::kDisallow_CachingHint)) {
                     return 0;
                 }
             } else {
-                if (!this->readPixels(pixmap, 0, 0, SkImage::kDisallow_CachingHint)) {
+                if (!this->readPixels(decodePixmap, 0, 0, SkImage::kDisallow_CachingHint)) {
                     return 0;
                 }
             }
-            SkASSERT(!pixmap.ctable());
+
+            if (decodeInfo.colorType() != info.colorType()) {
+                pixmap.alloc(info);
+                // Convert and copy the decoded pixmap to the target pixmap.
+                decodePixmap.readPixels(pixmap.info(), pixmap.writable_addr(), pixmap.rowBytes(), 0,
+                                        0);
+            } else {
+                pixmap = std::move(decodePixmap);
+            }
         }
     }
     int mipMapLevelCount = 1;
@@ -735,10 +768,11 @@ size_t SkImage::getDeferredTextureImageData(const GrContextThreadSafeProxy& prox
     SkColorSpaceTransferFn fn;
     if (info.colorSpace()) {
         SkASSERT(dstColorSpace);
+        SkASSERT(supportsColorSpace);
         colorSpaceOffset = size;
         colorSpaceSize = info.colorSpace()->writeToMemory(nullptr);
         size += colorSpaceSize;
-    } else if (this->colorSpace() && this->colorSpace()->isNumericalTransferFn(&fn)) {
+    } else if (supportsColorSpace && this->colorSpace() && this->colorSpace()->isNumericalTransferFn(&fn)) {
         // In legacy mode, preserve the color space tag on the SkImage.  This is only
         // supported if the color space has a parametric transfer function.
         SkASSERT(!dstColorSpace);
@@ -762,6 +796,7 @@ size_t SkImage::getDeferredTextureImageData(const GrContextThreadSafeProxy& prox
     SkDestinationSurfaceColorMode colorMode = SkDestinationSurfaceColorMode::kLegacy;
     if (proxy.fCaps->srgbSupport() && SkToBool(dstColorSpace) &&
         info.colorSpace() && info.colorSpace()->gammaCloseToSRGB()) {
+        SkASSERT(supportsColorSpace);
         colorMode = SkDestinationSurfaceColorMode::kGammaAndColorSpaceAware;
     }
 
@@ -854,7 +889,7 @@ sk_sp<SkImage> SkImage::MakeFromDeferredTextureImageData(GrContext* context, con
     }
     const DeferredTextureImage* dti = reinterpret_cast<const DeferredTextureImage*>(data);
 
-    if (!context || context->uniqueID() != dti->fContextUniqueID) {
+    if (!context || context->uniqueID() != dti->fContextUniqueID || context->abandoned()) {
         return nullptr;
     }
     int mipLevelCount = dti->fMipMapLevelCount;
@@ -895,7 +930,7 @@ sk_sp<SkImage> SkImage::MakeFromDeferredTextureImageData(GrContext* context, con
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 sk_sp<SkImage> SkImage::MakeTextureFromMipMap(GrContext* ctx, const SkImageInfo& info,
-                                              const GrMipLevel* texels, int mipLevelCount,
+                                              const GrMipLevel texels[], int mipLevelCount,
                                               SkBudgeted budgeted,
                                               SkDestinationSurfaceColorMode colorMode) {
     SkASSERT(mipLevelCount >= 1);
@@ -943,7 +978,7 @@ sk_sp<SkImage> SkImage_Gpu::onMakeColorSpace(sk_sp<SkColorSpace> target, SkColor
 
     GrPaint paint;
     paint.setPorterDuffXPFactory(SkBlendMode::kSrc);
-    paint.addColorTextureProcessor(fContext->resourceProvider(), fProxy, nullptr, SkMatrix::I());
+    paint.addColorTextureProcessor(fProxy, nullptr, SkMatrix::I());
     paint.addColorFragmentProcessor(std::move(xform));
 
     const SkRect rect = SkRect::MakeIWH(this->width(), this->height());

@@ -7,185 +7,8 @@
 
 #include "SkTwoPointConicalGradient.h"
 
-struct TwoPtRadialContext {
-    const TwoPtRadial&  fRec;
-    float               fRelX, fRelY;
-    const float         fIncX, fIncY;
-    float               fB;
-    const float         fDB;
-
-    TwoPtRadialContext(const TwoPtRadial& rec, SkScalar fx, SkScalar fy,
-                       SkScalar dfx, SkScalar dfy);
-    SkFixed nextT();
-};
-
-static int valid_divide(float numer, float denom, float* ratio) {
-    SkASSERT(ratio);
-    if (0 == denom) {
-        return 0;
-    }
-    *ratio = numer / denom;
-    return 1;
-}
-
-// Return the number of distinct real roots, and write them into roots[] in
-// ascending order
-static int find_quad_roots(float A, float B, float C, float roots[2], bool descendingOrder = false) {
-    SkASSERT(roots);
-
-    if (A == 0) {
-        return valid_divide(-C, B, roots);
-    }
-
-    float R = B*B - 4*A*C;
-    if (R < 0) {
-        return 0;
-    }
-    R = sk_float_sqrt(R);
-
-#if 1
-    float Q = B;
-    if (Q < 0) {
-        Q -= R;
-    } else {
-        Q += R;
-    }
-#else
-    // on 10.6 this was much slower than the above branch :(
-    float Q = B + copysignf(R, B);
-#endif
-    Q *= -0.5f;
-    if (0 == Q) {
-        roots[0] = 0;
-        return 1;
-    }
-
-    float r0 = Q / A;
-    float r1 = C / Q;
-    roots[0] = r0 < r1 ? r0 : r1;
-    roots[1] = r0 > r1 ? r0 : r1;
-    if (descendingOrder) {
-        SkTSwap(roots[0], roots[1]);
-    }
-    return 2;
-}
-
-static float lerp(float x, float dx, float t) {
-    return x + t * dx;
-}
-
-static float sqr(float x) { return x * x; }
-
-void TwoPtRadial::init(const SkPoint& center0, SkScalar rad0,
-                       const SkPoint& center1, SkScalar rad1,
-                       bool flipped) {
-    fCenterX = SkScalarToFloat(center0.fX);
-    fCenterY = SkScalarToFloat(center0.fY);
-    fDCenterX = SkScalarToFloat(center1.fX) - fCenterX;
-    fDCenterY = SkScalarToFloat(center1.fY) - fCenterY;
-    fRadius = SkScalarToFloat(rad0);
-    fDRadius = SkScalarToFloat(rad1) - fRadius;
-
-    fA = sqr(fDCenterX) + sqr(fDCenterY) - sqr(fDRadius);
-    fRadius2 = sqr(fRadius);
-    fRDR = fRadius * fDRadius;
-
-    fFlipped = flipped;
-}
-
-TwoPtRadialContext::TwoPtRadialContext(const TwoPtRadial& rec, SkScalar fx, SkScalar fy,
-                                       SkScalar dfx, SkScalar dfy)
-    : fRec(rec)
-    , fRelX(SkScalarToFloat(fx) - rec.fCenterX)
-    , fRelY(SkScalarToFloat(fy) - rec.fCenterY)
-    , fIncX(SkScalarToFloat(dfx))
-    , fIncY(SkScalarToFloat(dfy))
-    , fB(-2 * (rec.fDCenterX * fRelX + rec.fDCenterY * fRelY + rec.fRDR))
-    , fDB(-2 * (rec.fDCenterX * fIncX + rec.fDCenterY * fIncY)) {}
-
-SkFixed TwoPtRadialContext::nextT() {
-    float roots[2];
-
-    float C = sqr(fRelX) + sqr(fRelY) - fRec.fRadius2;
-    int countRoots = find_quad_roots(fRec.fA, fB, C, roots, fRec.fFlipped);
-
-    fRelX += fIncX;
-    fRelY += fIncY;
-    fB += fDB;
-
-    if (0 == countRoots) {
-        return TwoPtRadial::kDontDrawT;
-    }
-
-    // Prefer the bigger t value if both give a radius(t) > 0
-    // find_quad_roots returns the values sorted, so we start with the last
-    float t = roots[countRoots - 1];
-    float r = lerp(fRec.fRadius, fRec.fDRadius, t);
-    if (r < 0) {
-        t = roots[0];   // might be the same as roots[countRoots-1]
-        r = lerp(fRec.fRadius, fRec.fDRadius, t);
-        if (r < 0) {
-            return TwoPtRadial::kDontDrawT;
-        }
-    }
-    return SkFloatToFixed(t);
-}
-
-typedef void (*TwoPointConicalProc)(TwoPtRadialContext* rec, SkPMColor* dstC,
-                                    const SkPMColor* cache, int toggle, int count);
-
-static void twopoint_clamp(TwoPtRadialContext* rec, SkPMColor* SK_RESTRICT dstC,
-                           const SkPMColor* SK_RESTRICT cache, int toggle,
-                           int count) {
-    for (; count > 0; --count) {
-        SkFixed t = rec->nextT();
-        if (TwoPtRadial::DontDrawT(t)) {
-            *dstC++ = 0;
-        } else {
-            SkFixed index = SkClampMax(t, 0xFFFF);
-            SkASSERT(index <= 0xFFFF);
-            *dstC++ = cache[toggle +
-                            (index >> SkGradientShaderBase::kCache32Shift)];
-        }
-        toggle = next_dither_toggle(toggle);
-    }
-}
-
-static void twopoint_repeat(TwoPtRadialContext* rec, SkPMColor* SK_RESTRICT dstC,
-                            const SkPMColor* SK_RESTRICT cache, int toggle,
-                            int count) {
-    for (; count > 0; --count) {
-        SkFixed t = rec->nextT();
-        if (TwoPtRadial::DontDrawT(t)) {
-            *dstC++ = 0;
-        } else {
-            SkFixed index = repeat_tileproc(t);
-            SkASSERT(index <= 0xFFFF);
-            *dstC++ = cache[toggle +
-                            (index >> SkGradientShaderBase::kCache32Shift)];
-        }
-        toggle = next_dither_toggle(toggle);
-    }
-}
-
-static void twopoint_mirror(TwoPtRadialContext* rec, SkPMColor* SK_RESTRICT dstC,
-                            const SkPMColor* SK_RESTRICT cache, int toggle,
-                            int count) {
-    for (; count > 0; --count) {
-        SkFixed t = rec->nextT();
-        if (TwoPtRadial::DontDrawT(t)) {
-            *dstC++ = 0;
-        } else {
-            SkFixed index = mirror_tileproc(t);
-            SkASSERT(index <= 0xFFFF);
-            *dstC++ = cache[toggle +
-                            (index >> SkGradientShaderBase::kCache32Shift)];
-        }
-        toggle = next_dither_toggle(toggle);
-    }
-}
-
-/////////////////////////////////////////////////////////////////////
+#include "SkRasterPipeline.h"
+#include "../../jumper/SkJumper.h"
 
 SkTwoPointConicalGradient::SkTwoPointConicalGradient(
         const SkPoint& start, SkScalar startRadius,
@@ -200,7 +23,6 @@ SkTwoPointConicalGradient::SkTwoPointConicalGradient(
 {
     // this is degenerate, and should be caught by our caller
     SkASSERT(fCenter1 != fCenter2 || fRadius1 != fRadius2);
-    fRec.init(fCenter1, fRadius1, fCenter2, fRadius2, fFlippedGrad);
 }
 
 bool SkTwoPointConicalGradient::isOpaque() const {
@@ -208,79 +30,6 @@ bool SkTwoPointConicalGradient::isOpaque() const {
     // shader as opaque even if the gradient itself is opaque.
     // TODO(junov): Compute whether the cone fills the plane crbug.com/222380
     return false;
-}
-
-SkShaderBase::Context* SkTwoPointConicalGradient::onMakeContext(
-    const ContextRec& rec, SkArenaAlloc* alloc) const {
-    return CheckedMakeContext<TwoPointConicalGradientContext>(alloc, *this, rec);
-}
-
-SkTwoPointConicalGradient::TwoPointConicalGradientContext::TwoPointConicalGradientContext(
-        const SkTwoPointConicalGradient& shader, const ContextRec& rec)
-    : INHERITED(shader, rec)
-{
-    // in general, we might discard based on computed-radius, so clear
-    // this flag (todo: sometimes we can detect that we never discard...)
-    fFlags &= ~kOpaqueAlpha_Flag;
-}
-
-void SkTwoPointConicalGradient::TwoPointConicalGradientContext::shadeSpan(
-        int x, int y, SkPMColor* dstCParam, int count) {
-    const SkTwoPointConicalGradient& twoPointConicalGradient =
-            static_cast<const SkTwoPointConicalGradient&>(fShader);
-
-    int toggle = init_dither_toggle(x, y);
-
-    SkASSERT(count > 0);
-
-    SkPMColor* SK_RESTRICT dstC = dstCParam;
-
-    SkMatrix::MapXYProc dstProc = fDstToIndexProc;
-
-    const SkPMColor* SK_RESTRICT cache = fCache->getCache32();
-
-    TwoPointConicalProc shadeProc = twopoint_repeat;
-    if (SkShader::kClamp_TileMode == twoPointConicalGradient.fTileMode) {
-        shadeProc = twopoint_clamp;
-    } else if (SkShader::kMirror_TileMode == twoPointConicalGradient.fTileMode) {
-        shadeProc = twopoint_mirror;
-    } else {
-        SkASSERT(SkShader::kRepeat_TileMode == twoPointConicalGradient.fTileMode);
-    }
-
-    if (fDstToIndexClass != kPerspective_MatrixClass) {
-        SkPoint srcPt;
-        dstProc(fDstToIndex, SkIntToScalar(x) + SK_ScalarHalf,
-                SkIntToScalar(y) + SK_ScalarHalf, &srcPt);
-        SkScalar dx, fx = srcPt.fX;
-        SkScalar dy, fy = srcPt.fY;
-
-        if (fDstToIndexClass == kFixedStepInX_MatrixClass) {
-            const auto step = fDstToIndex.fixedStepInX(SkIntToScalar(y));
-            dx = step.fX;
-            dy = step.fY;
-        } else {
-            SkASSERT(fDstToIndexClass == kLinear_MatrixClass);
-            dx = fDstToIndex.getScaleX();
-            dy = fDstToIndex.getSkewY();
-        }
-
-        TwoPtRadialContext rec(twoPointConicalGradient.fRec, fx, fy, dx, dy);
-        (*shadeProc)(&rec, dstC, cache, toggle, count);
-    } else {    // perspective case
-        SkScalar dstX = SkIntToScalar(x) + SK_ScalarHalf;
-        SkScalar dstY = SkIntToScalar(y) + SK_ScalarHalf;
-        for (; count > 0; --count) {
-            SkPoint srcPt;
-            dstProc(fDstToIndex, dstX, dstY, &srcPt);
-            TwoPtRadialContext rec(twoPointConicalGradient.fRec, srcPt.fX, srcPt.fY, 0, 0);
-            (*shadeProc)(&rec, dstC, cache, toggle, 1);
-
-            dstX += SK_Scalar1;
-            toggle = next_dither_toggle(toggle);
-            dstC += 1;
-        }
-    }
 }
 
 // Returns the original non-sorted version of the gradient
@@ -362,6 +111,9 @@ sk_sp<GrFragmentProcessor> SkTwoPointConicalGradient::asFragmentProcessor(
     sk_sp<GrFragmentProcessor> inner(Gr2PtConicalGradientEffect::Make(
         GrGradientEffect::CreateArgs(args.fContext, this, args.fLocalMatrix, fTileMode,
                                      std::move(colorSpaceXform), SkToBool(args.fDstColorSpace))));
+    if (!inner) {
+        return nullptr;
+    }
     return GrFragmentProcessor::MulOutputByInputAlpha(std::move(inner));
 }
 
@@ -419,3 +171,82 @@ void SkTwoPointConicalGradient::toString(SkString* str) const {
     str->append(")");
 }
 #endif
+
+bool SkTwoPointConicalGradient::adjustMatrixAndAppendStages(SkArenaAlloc* alloc,
+                                                            SkMatrix* matrix,
+                                                            SkRasterPipeline* p,
+                                                            SkRasterPipeline* postPipeline) const {
+    const auto dCenter = (fCenter1 - fCenter2).length();
+    const auto dRadius = fRadius2 - fRadius1;
+    SkASSERT(dRadius >= 0);
+
+    // When the two circles are concentric, we can pretend we're radial (with a tiny *twist).
+    if (SkScalarNearlyZero(dCenter)) {
+        matrix->postTranslate(-fCenter1.fX, -fCenter1.fY);
+        matrix->postScale(1 / fRadius2, 1 / fRadius2);
+        p->append(SkRasterPipeline::xy_to_radius);
+
+        // Tiny twist: radial computes a t for [0, r2], but we want a t for [r1, r2].
+        auto scale =  fRadius2 / dRadius;
+        auto bias  = -fRadius1 / dRadius;
+
+        p->append_matrix(alloc, SkMatrix::Concat(SkMatrix::MakeTrans(bias, 0),
+                                                 SkMatrix::MakeScale(scale, 1)));
+
+        return true;
+    }
+
+    // To simplify the stage math, we transform the universe (translate/scale/rotate)
+    // such that fCenter1 -> (0, 0) and fCenter2 -> (1, 0).
+    SkMatrix map_to_unit_vector;
+    const SkPoint centers[2] = { fCenter1, fCenter2 };
+    const SkPoint unitvec[2] = { {0, 0}, {1, 0} };
+    if (!map_to_unit_vector.setPolyToPoly(centers, unitvec, 2)) {
+        return false;
+    }
+    matrix->postConcat(map_to_unit_vector);
+
+    // Since we've squashed the centers into a unit vector, we must also scale
+    // all the coefficient variables by (1 / dCenter).
+    const auto coeffA = 1 - dRadius * dRadius / (dCenter * dCenter);
+    auto* ctx = alloc->make<SkJumper_2PtConicalCtx>();
+    ctx->fCoeffA    = coeffA;
+    ctx->fInvCoeffA = 1 / coeffA;
+    ctx->fR0        = fRadius1 / dCenter;
+    ctx->fDR        = dRadius  / dCenter;
+
+    // Is the solver guaranteed to not produce degenerates?
+    bool isWellBehaved = true;
+
+    if (SkScalarNearlyZero(coeffA)) {
+        // The focal point is on the edge of the end circle.
+        p->append(SkRasterPipeline::xy_to_2pt_conical_linear, ctx);
+        isWellBehaved = false;
+    } else {
+        if (dCenter + fRadius1 > fRadius2) {
+            // The focal point is outside the end circle.
+
+            // We want the larger root, per spec:
+            //   "For all values of ω where r(ω) > 0, starting with the value of ω nearest
+            //    to positive infinity and ending with the value of ω nearest to negative
+            //    infinity, draw the circumference of the circle with radius r(ω) at position
+            //    (x(ω), y(ω)), with the color at ω, but only painting on the parts of the
+            //    bitmap that have not yet been painted on by earlier circles in this step for
+            //    this rendering of the gradient."
+            // (https://html.spec.whatwg.org/multipage/canvas.html#dom-context-2d-createradialgradient)
+            p->append(fFlippedGrad ? SkRasterPipeline::xy_to_2pt_conical_quadratic_min
+                                   : SkRasterPipeline::xy_to_2pt_conical_quadratic_max, ctx);
+            isWellBehaved = false;
+        } else {
+            // The focal point is inside (well-behaved case).
+            p->append(SkRasterPipeline::xy_to_2pt_conical_quadratic_max, ctx);
+        }
+    }
+
+    if (!isWellBehaved) {
+        p->append(SkRasterPipeline::mask_2pt_conical_degenerates, ctx);
+        postPipeline->append(SkRasterPipeline::apply_vector_mask, &ctx->fMask);
+    }
+
+    return true;
+}

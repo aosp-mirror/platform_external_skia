@@ -13,7 +13,6 @@
 #include "GrContextOptions.h"
 #include "GrContextPriv.h"
 #include "GrGpu.h"
-#include "GrResourceProvider.h"
 #include "GrTest.h"
 #include "GrXferProcessor.h"
 #include "effects/GrPorterDuffXferProcessor.h"
@@ -1032,8 +1031,8 @@ static void test_lcd_coverage_fallback_case(skiatest::Reporter* reporter, const 
     // Test with non-opaque alpha
     color = GrColorPackRGBA(123, 45, 67, 221);
     coverage = GrProcessorAnalysisCoverage::kLCD;
-    TEST_ASSERT(GrXPFactory::GetAnalysisProperties(xpf, color, coverage, caps) &
-                GrXPFactory::AnalysisProperties::kRequiresDstTexture);
+    TEST_ASSERT(!(GrXPFactory::GetAnalysisProperties(xpf, color, coverage, caps) &
+                GrXPFactory::AnalysisProperties::kRequiresDstTexture));
     sk_sp<const GrXferProcessor> xp(
             GrXPFactory::MakeXferProcessor(xpf, color, coverage, false, caps));
     if (!xp) {

@@ -11,9 +11,7 @@
 #include "GrGpu.h"
 #include "GrGpuCommandBuffer.h"
 #include "GrRect.h"
-#include "GrRenderTarget.h"
 #include "GrRenderTargetContext.h"
-#include "GrResourceProvider.h"
 #include "instanced/InstancedRendering.h"
 #include "ops/GrClearOp.h"
 #include "ops/GrCopySurfaceOp.h"
@@ -208,7 +206,8 @@ void GrRenderTargetOpList::fullClear(const GrCaps& caps, GrColor color) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// MDB TODO: fuse with GrTextureOpList::copySurface
+// This closely parallels GrTextureOpList::copySurface but renderTargetOpLists
+// also store the applied clip and dest proxy with the op
 bool GrRenderTargetOpList::copySurface(const GrCaps& caps,
                                        GrSurfaceProxy* dst,
                                        GrSurfaceProxy* src,

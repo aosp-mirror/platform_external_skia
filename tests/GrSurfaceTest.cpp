@@ -12,7 +12,6 @@
 #include "GrContext.h"
 #include "GrContextPriv.h"
 #include "GrGpu.h"
-#include "GrRenderTarget.h"
 #include "GrResourceProvider.h"
 #include "GrTest.h"
 #include "GrTexture.h"
@@ -125,8 +124,10 @@ DEF_GPUTEST_FOR_ALL_CONTEXTS(GrSurfaceRenderability, reporter, ctxInfo) {
                 texels[i].fPixels = pixelData.get();
                 texels[i].fRowBytes = rowBytes >> i;
             }
-            sk_sp<GrTextureProxy> proxy = resourceProvider->createMipMappedTexture(
-                desc, SkBudgeted::kNo, texels.get(), levelCount);
+            sk_sp<GrTextureProxy> proxy = GrSurfaceProxy::MakeDeferredMipMap(resourceProvider,
+                                                                             desc, SkBudgeted::kNo,
+                                                                             texels.get(),
+                                                                             levelCount);
             REPORTER_ASSERT(reporter, SkToBool(proxy.get()) ==
                             (caps->isConfigTexturable(desc.fConfig) &&
                              caps->mipMapSupport() &&

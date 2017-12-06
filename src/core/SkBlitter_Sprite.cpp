@@ -104,11 +104,6 @@ public:
         , fSrcPtr(nullptr)
     {}
 
-    static bool Supports(const SkPixmap& src) {
-        // We'd need to add a load_i8 stage.
-        return src.colorType() != kIndex_8_SkColorType;
-    }
-
     void setup(const SkPixmap& dst, int left, int top, const SkPaint& paint) override {
         fDst  = dst;
         fLeft = left;
@@ -122,17 +117,14 @@ public:
             case kGray_8_SkColorType:    p.append(SkRasterPipeline::load_g8,   &fSrcPtr); break;
             case kRGB_565_SkColorType:   p.append(SkRasterPipeline::load_565,  &fSrcPtr); break;
             case kARGB_4444_SkColorType: p.append(SkRasterPipeline::load_4444, &fSrcPtr); break;
-            case kRGBA_8888_SkColorType:
-            case kBGRA_8888_SkColorType: p.append(SkRasterPipeline::load_8888, &fSrcPtr); break;
+            case kBGRA_8888_SkColorType: p.append(SkRasterPipeline::load_bgra, &fSrcPtr); break;
+            case kRGBA_8888_SkColorType: p.append(SkRasterPipeline::load_8888, &fSrcPtr); break;
             case kRGBA_F16_SkColorType:  p.append(SkRasterPipeline::load_f16,  &fSrcPtr); break;
             default: SkASSERT(false);
         }
         if (fDst.colorSpace() &&
                 (!fSource.colorSpace() || fSource.colorSpace()->gammaCloseToSRGB())) {
             p.append_from_srgb(fSource.alphaType());
-        }
-        if (fSource.colorType() == kBGRA_8888_SkColorType) {
-            p.append(SkRasterPipeline::swap_rb);
         }
         if (fSource.colorType() == kAlpha_8_SkColorType) {
             p.append(SkRasterPipeline::set_rgb, &fPaintColor);
@@ -144,9 +136,8 @@ public:
             p.append(SkRasterPipeline::scale_1_float, &fPaintColor.fA);
         }
 
-        bool is_opaque    = fSource.isOpaque() && fPaintColor.fA == 1.0f,
-             wants_dither = paint.isDither();
-        fBlitter = SkCreateRasterPipelineBlitter(fDst, paint, p, is_opaque, wants_dither, fAlloc);
+        bool is_opaque = fSource.isOpaque() && fPaintColor.fA == 1.0f;
+        fBlitter = SkCreateRasterPipelineBlitter(fDst, paint, p, is_opaque, fAlloc);
     }
 
     void blitRect(int x, int y, int width, int height) override {
@@ -195,10 +186,22 @@ SkBlitter* SkBlitter::ChooseSprite(const SkPixmap& dst, const SkPaint& paint,
     if (!blitter && SkSpriteBlitter_Memcpy::Supports(dst, source, paint)) {
         blitter = allocator->make<SkSpriteBlitter_Memcpy>(source);
     }
-    if (!blitter && !dst.colorSpace() && dst.colorType() == kN32_SkColorType) {
-        blitter = SkSpriteBlitter::ChooseL32(source, paint, allocator);
+    if (!blitter && !dst.colorSpace()) {
+        switch (dst.colorType()) {
+            case kN32_SkColorType:
+                blitter = SkSpriteBlitter::ChooseL32(source, paint, allocator);
+                break;
+            case kRGB_565_SkColorType:
+                blitter = SkSpriteBlitter::ChooseL565(source, paint, allocator);
+                break;
+            case kAlpha_8_SkColorType:
+                blitter = SkSpriteBlitter::ChooseLA8(source, paint, allocator);
+                break;
+            default:
+                break;
+        }
     }
-    if (!blitter && SkRasterPipelineSpriteBlitter::Supports(source)) {
+    if (!blitter) {
         blitter = allocator->make<SkRasterPipelineSpriteBlitter>(source, allocator);
     }
 
