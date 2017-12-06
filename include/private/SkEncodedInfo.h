@@ -119,7 +119,6 @@ public:
      */
     SkImageInfo makeImageInfo(int width, int height, sk_sp<SkColorSpace> colorSpace) const {
         auto ct = kGray_Color == fColor ? kGray_8_SkColorType   :
-                  fBitsPerComponent > 8 ? kRGBA_F16_SkColorType :
                                           kN32_SkColorType      ;
         auto alpha = kOpaque_Alpha == fAlpha ? kOpaque_SkAlphaType
                                              : kUnpremul_SkAlphaType;

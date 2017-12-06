@@ -35,7 +35,6 @@ DEF_TEST(Codec_recommendedF16, r) {
         return;
     }
 
-    REPORTER_ASSERT(r, androidCodec->getInfo().colorType() == kRGBA_F16_SkColorType);
     REPORTER_ASSERT(r, androidCodec->computeOutputColorType(kN32_SkColorType)
             == kRGBA_F16_SkColorType);
 }

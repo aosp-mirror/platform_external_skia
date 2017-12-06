@@ -924,5 +924,6 @@ private:
     friend class DM::CodecSrc;  // for fillIncompleteImage
     friend class SkSampledCodec;
     friend class SkIcoCodec;
+    friend class SkAndroidCodec; // for fEncodedInfo
 };
 #endif // SkCodec_DEFINED

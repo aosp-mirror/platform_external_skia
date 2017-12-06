@@ -64,6 +64,11 @@ public:
     //                                                                 | 1  1 |
     void parsePath(const SkMatrix&, const SkPath&, SkRect* devBounds, SkRect* devBounds45);
 
+    // Parses a device-space SkPath into a temporary staging area. The path will not yet be included
+    // in the next Op unless there is a matching call to saveParsedPath. The user must complement
+    // this with a following call to either saveParsedPath or discardParsedPath.
+    void parseDeviceSpacePath(const SkPath&);
+
     // Commits the currently-parsed path from staging to the next Op, and specifies whether the mask
     // should be rendered with a scissor clip in effect. Accepts an optional post-device-space
     // translate for placement in an atlas.
@@ -86,7 +91,7 @@ private:
     // Every kBeginPath verb has a corresponding PathInfo entry.
     struct PathInfo {
         ScissorMode fScissorMode;
-        int32_t fPackedAtlasOffset; // (offsetY << 16) | (offsetX & 0xffff)
+        int16_t fAtlasOffsetX, fAtlasOffsetY;
         std::unique_ptr<GrCCPRCoverageOp> fTerminatingOp;
     };
 
@@ -149,15 +154,14 @@ private:
                         GrOp::HasAABloat::kNo, GrOp::IsZeroArea::kNo);
     }
 
-    void setBuffers(sk_sp<GrBuffer> pointsBuffer, sk_sp<GrBuffer> instanceBuffer,
-                    const PrimitiveTallies baseInstances[kNumScissorModes],
-                    const PrimitiveTallies endInstances[kNumScissorModes]);
+    void setInstanceBuffer(sk_sp<GrBuffer> instanceBuffer,
+                           const PrimitiveTallies baseInstances[kNumScissorModes],
+                           const PrimitiveTallies endInstances[kNumScissorModes]);
 
     void drawMaskPrimitives(GrOpFlushState*, const GrPipeline&,
                             const GrCCPRCoverageProcessor::RenderPass, GrPrimitiveType,
                             int vertexCount, int PrimitiveTallies::* instanceType) const;
 
-    sk_sp<GrBuffer> fPointsBuffer;
     sk_sp<GrBuffer> fInstanceBuffer;
     PrimitiveTallies fBaseInstances[kNumScissorModes];
     PrimitiveTallies fInstanceCounts[kNumScissorModes];
