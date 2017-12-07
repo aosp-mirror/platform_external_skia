@@ -35,7 +35,10 @@ declare_args() {
     windk = "C:/Program Files (x86)/Microsoft Visual Studio 14.0"
   } else {
     windk = "C:/Program Files (x86)/Microsoft Visual Studio/2017/Professional"
+    win_toolchain_version = ""
   }
+  win_sdk = "C:/Program Files (x86)/Windows Kits/10"
+  win_sdk_version = ""
 }
 
 assert(!(is_debug && is_official_build))
@@ -127,6 +130,19 @@ if (is_android) {
     ndk_stdlib = "x86"
     ndk_gccdir = ndk_stdlib
     ndk_gdbserver = "prebuilt/android-x86/gdbserver/gdbserver"
+  }
+}
+
+if (target_os == "win") {
+  if (msvc == 2017 && win_toolchain_version == "") {
+    win_toolchain_version = exec_script("//gn/highest_version_dir.py",
+                                        [ "$windk/VC/Tools/MSVC" ],
+                                        "trim string")
+  }
+  if (win_sdk_version == "") {
+    win_sdk_version = exec_script("//gn/highest_version_dir.py",
+                                  [ "$win_sdk/Include" ],
+                                  "trim string")
   }
 }
 
