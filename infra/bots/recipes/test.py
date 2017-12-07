@@ -59,6 +59,10 @@ def dm_flags(api, bot):
   if '-x86-' in bot and not 'NexusPlayer' in bot:
     args.extend(['--threads', '4'])
 
+  # Nexus7 runs out of memory due to having 4 cores and only 1G RAM.
+  if 'CPU' in bot and 'Nexus7' in bot:
+    args.extend(['--threads', '2'])
+
   if 'Chromecast' in bot:
     args.extend(['--threads', '0'])
 
@@ -915,12 +919,13 @@ TEST_BUILDERS = [
   'Test-Android-Clang-NVIDIA_Shield-GPU-TegraX1-arm64-Debug-All-Android_CCPR',
   'Test-Android-Clang-Nexus10-CPU-Exynos5250-arm-Release-All-Android',
   'Test-Android-Clang-Nexus5-GPU-Adreno330-arm-Release-All-Android',
+  'Test-Android-Clang-Nexus7-CPU-Tegra3-arm-Release-All-Android',
   'Test-Android-Clang-Nexus7-GPU-Tegra3-arm-Debug-All-Android',
   'Test-Android-Clang-NexusPlayer-CPU-Moorefield-x86-Release-All-Android',
   'Test-Android-Clang-NexusPlayer-GPU-PowerVR-x86-Release-All-Android_Vulkan',
+  'Test-Android-Clang-Pixel-GPU-Adreno530-arm64-Debug-All-Android_CCPR',
+  'Test-Android-Clang-Pixel-GPU-Adreno530-arm64-Debug-All-Android_Vulkan',
   'Test-Android-Clang-PixelC-CPU-TegraX1-arm64-Debug-All-Android',
-  'Test-Android-Clang-PixelXL-GPU-Adreno530-arm64-Debug-All-Android_CCPR',
-  'Test-Android-Clang-PixelXL-GPU-Adreno530-arm64-Debug-All-Android_Vulkan',
   'Test-ChromeOS-Clang-ASUSChromebookFlipC100-GPU-MaliT764-arm-Debug-All',
   ('Test-ChromeOS-Clang-AcerChromebookR13Convertible-GPU-PowerVRGX6250-'
    'arm-Debug-All'),

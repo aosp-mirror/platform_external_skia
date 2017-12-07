@@ -90,6 +90,7 @@ cc_library_static {
         "include/svg/",
         "include/utils/",
         "include/utils/mac/",
+        "platform_tools/android/vulkan",
     ],
 
     local_include_dirs: [
@@ -110,6 +111,7 @@ cc_library_static {
         "include/svg/",
         "include/utils/",
         "include/utils/mac/",
+        "platform_tools/android/vulkan",
         "src/c/",
         "src/codec/",
         "src/core/",
@@ -1826,10 +1828,6 @@ cc_test {
         "bench/FSRectBench.cpp",
         "bench/FontCacheBench.cpp",
         "bench/FontScalerBench.cpp",
-        "bench/GLBench.cpp",
-        "bench/GLInstancedArraysBench.cpp",
-        "bench/GLVec4ScalarBench.cpp",
-        "bench/GLVertexAttributesBench.cpp",
         "bench/GMBench.cpp",
         "bench/GameBench.cpp",
         "bench/GeometryBench.cpp",
