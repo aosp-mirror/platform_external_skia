@@ -118,7 +118,9 @@ func linuxGceDimensions() []string {
 // deriveCompileTaskName returns the name of a compile task based on the given
 // job name.
 func deriveCompileTaskName(jobName string, parts map[string]string) string {
-	if parts["role"] == "Housekeeper" {
+	if jobName == "Housekeeper-Nightly-Bookmaker" {
+		return "Build-Debian9-GCC-x86_64-Release"
+	} else if parts["role"] == "Housekeeper" {
 		return "Build-Debian9-GCC-x86_64-Release-Shared"
 	} else if parts["role"] == "Test" || parts["role"] == "Perf" {
 		task_os := parts["os"]
@@ -222,7 +224,6 @@ func defaultSwarmDimensions(parts map[string]string) []string {
 				"GalaxyS7_G930FD": {"herolte", "NRD90M_G930FXXU1DQAS"},
 				"MotoG4":          {"athene", "NPJ25.93-14"},
 				"NVIDIA_Shield":   {"foster", "NRD90M_1915764_848"},
-				"Nexus10":         {"manta", "LMY49J_2640980"},
 				"Nexus5":          {"hammerhead", "M4B30Z_3437181"},
 				"Nexus5x":         {"bullhead", "OPR6.170623.023"},
 				"Nexus7":          {"grouper", "LMY47V_1836172"}, // 2012 Nexus 7
@@ -335,7 +336,7 @@ func defaultSwarmDimensions(parts map[string]string) []string {
 					"MaliT604":           "9901.12.0",
 					"MaliT764":           "10172.0.0",
 					"MaliT860":           "10172.0.0",
-					"PowerVRGX6250":      "9592.71.0",
+					"PowerVRGX6250":      "10176.5.0",
 					"TegraK1":            "10172.0.0",
 					"IntelHDGraphics615": "10032.17.0",
 				}[parts["cpu_or_gpu_value"]]
@@ -675,6 +676,32 @@ func housekeeper(b *specs.TasksCfgBuilder, name, compileTaskName string) string 
 		},
 		Isolate:  relpath("housekeeper_skia.isolate"),
 		Priority: 0.8,
+	})
+	return name
+}
+
+// bookmaker generates a Bookmaker task. Returns the name of the last task
+// in the generated chain of tasks, which the Job should add as a dependency.
+func bookmaker(b *specs.TasksCfgBuilder, name, compileTaskName string) string {
+	b.MustAddTask(name, &specs.TaskSpec{
+		CipdPackages: []*specs.CipdPackage{b.MustGetCipdPackageFromAsset("go")},
+		Dependencies: []string{compileTaskName},
+		Dimensions:   linuxGceDimensions(),
+		ExtraArgs: []string{
+			"--workdir", "../../..", "bookmaker",
+			fmt.Sprintf("repository=%s", specs.PLACEHOLDER_REPO),
+			fmt.Sprintf("buildername=%s", name),
+			fmt.Sprintf("swarm_out_dir=%s", specs.PLACEHOLDER_ISOLATED_OUTDIR),
+			fmt.Sprintf("revision=%s", specs.PLACEHOLDER_REVISION),
+			fmt.Sprintf("patch_repo=%s", specs.PLACEHOLDER_PATCH_REPO),
+			fmt.Sprintf("patch_storage=%s", specs.PLACEHOLDER_PATCH_STORAGE),
+			fmt.Sprintf("patch_issue=%s", specs.PLACEHOLDER_ISSUE),
+			fmt.Sprintf("patch_set=%s", specs.PLACEHOLDER_PATCHSET),
+		},
+		Isolate:          relpath("compile_skia.isolate"),
+		Priority:         0.8,
+		ExecutionTimeout: 2 * time.Hour,
+		IoTimeout:        2 * time.Hour,
 	})
 	return name
 }
@@ -1105,6 +1132,9 @@ func process(b *specs.TasksCfgBuilder, name string) {
 	}
 	if name == "Housekeeper-PerCommit-CheckGeneratedFiles" {
 		deps = append(deps, checkGeneratedFiles(b, name))
+	}
+	if name == "Housekeeper-Nightly-Bookmaker" {
+		deps = append(deps, bookmaker(b, name, compileTaskName))
 	}
 
 	// Common assets needed by the remaining bots.
