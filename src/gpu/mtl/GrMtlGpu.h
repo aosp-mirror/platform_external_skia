@@ -22,8 +22,8 @@ struct GrMtlBackendContext;
 
 class GrMtlGpu : public GrGpu {
 public:
-    static GrGpu* Create(GrContext* context, const GrContextOptions& options,
-                         id<MTLDevice> device, id<MTLCommandQueue> queue);
+    static sk_sp<GrGpu> Make(GrContext* context, const GrContextOptions& options,
+                             id<MTLDevice> device, id<MTLCommandQueue> queue);
 
     ~GrMtlGpu() override {}
 
@@ -106,8 +106,6 @@ private:
     GrBuffer* onCreateBuffer(size_t, GrBufferType, GrAccessPattern, const void*) override {
         return nullptr;
     }
-
-    gr_instanced::InstancedRendering* onCreateInstancedRendering() override { return nullptr; }
 
     bool onReadPixels(GrSurface* surface, GrSurfaceOrigin,
                       int left, int top, int width, int height,

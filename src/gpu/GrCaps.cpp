@@ -17,6 +17,8 @@ static const char* pixel_config_name(GrPixelConfig config) {
         case kAlpha_8_as_Alpha_GrPixelConfig: return "Alpha8_asAlpha";
         case kAlpha_8_as_Red_GrPixelConfig: return "Alpha8_asRed";
         case kGray_8_GrPixelConfig: return "Gray8";
+        case kGray_8_as_Lum_GrPixelConfig: return "Gray8_asLum";
+        case kGray_8_as_Red_GrPixelConfig: return "Gray8_asRed";
         case kRGB_565_GrPixelConfig: return "RGB565";
         case kRGBA_4444_GrPixelConfig: return "RGBA444";
         case kRGBA_8888_GrPixelConfig: return "RGBA8888";
@@ -57,8 +59,6 @@ GrCaps::GrCaps(const GrContextOptions& options) {
     fFenceSyncSupport = false;
     fCrossContextTextureSupport = false;
 
-    fInstancedSupport = InstancedSupport::kNone;
-
     fBlendEquationSupport = kBasic_BlendEquationSupport;
     fAdvBlendEqBlacklist = 0;
 
@@ -87,7 +87,6 @@ GrCaps::GrCaps(const GrContextOptions& options) {
     fWireframeMode = false;
 #endif
     fBufferMapThreshold = options.fBufferMapThreshold;
-    fAvoidInstancedDrawsToFPTargets = false;
     fBlacklistCoverageCounting = false;
     fAvoidStencilBuffers = false;
 
@@ -173,20 +172,6 @@ void GrCaps::dumpJSON(SkJSONWriter* writer) const {
     writer->appendS32("Max Raster Samples", fMaxRasterSamples);
     writer->appendS32("Max Window Rectangles", fMaxWindowRectangles);
     writer->appendS32("Max Clip Analytic Fragment Processors", fMaxClipAnalyticFPs);
-
-    static const char* kInstancedSupportNames[] = {
-        "None",
-        "Basic",
-        "Multisampled",
-        "Mixed Sampled",
-    };
-    GR_STATIC_ASSERT(0 == (int)InstancedSupport::kNone);
-    GR_STATIC_ASSERT(1 == (int)InstancedSupport::kBasic);
-    GR_STATIC_ASSERT(2 == (int)InstancedSupport::kMultisampled);
-    GR_STATIC_ASSERT(3 == (int)InstancedSupport::kMixedSampled);
-    GR_STATIC_ASSERT(4 == SK_ARRAY_COUNT(kInstancedSupportNames));
-
-    writer->appendString("Instanced Support", kInstancedSupportNames[(int)fInstancedSupport]);
 
     static const char* kBlendEquationSupportNames[] = {
         "Basic",

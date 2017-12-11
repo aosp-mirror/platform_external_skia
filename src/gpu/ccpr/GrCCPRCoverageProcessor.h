@@ -72,17 +72,39 @@ public:
         kQuadraticCorners,
 
         // Cubics.
-        kSerpentineHulls,
-        kLoopHulls,
-        kSerpentineCorners,
-        kLoopCorners
+        kCubicHulls,
+        kCubicCorners
     };
 
-    static constexpr bool RenderPassIsCubic(RenderPass pass) {
-        return pass >= RenderPass::kSerpentineHulls && pass <= RenderPass::kLoopCorners;
+    static inline bool RenderPassIsCubic(RenderPass pass) {
+        switch (pass) {
+            case RenderPass::kTriangleHulls:
+            case RenderPass::kTriangleEdges:
+            case RenderPass::kTriangleCorners:
+            case RenderPass::kQuadraticHulls:
+            case RenderPass::kQuadraticCorners:
+                return false;
+            case RenderPass::kCubicHulls:
+            case RenderPass::kCubicCorners:
+                return true;
+        }
+        SK_ABORT("Invalid GrCCPRCoverageProcessor::RenderPass");
+        return false;
     }
 
-    static const char* GetRenderPassName(RenderPass);
+    static inline const char* RenderPassName(RenderPass pass) {
+        switch (pass) {
+            case RenderPass::kTriangleHulls: return "kTriangleHulls";
+            case RenderPass::kTriangleEdges: return "kTriangleEdges";
+            case RenderPass::kTriangleCorners: return "kTriangleCorners";
+            case RenderPass::kQuadraticHulls: return "kQuadraticHulls";
+            case RenderPass::kQuadraticCorners: return "kQuadraticCorners";
+            case RenderPass::kCubicHulls: return "kCubicHulls";
+            case RenderPass::kCubicCorners: return "kCubicCorners";
+        }
+        SK_ABORT("Invalid GrCCPRCoverageProcessor::RenderPass");
+        return "";
+    }
 
     /**
      * This serves as the base class for each RenderPass's Shader. It indicates what type of
@@ -117,16 +139,10 @@ public:
         };
 
         virtual GeometryType getGeometryType() const = 0;
-        virtual int getNumInputPoints() const = 0;
 
         // Returns the number of independent geometric segments to generate for the render pass
         // (number of wedges for a hull, number of edges, or number of corners.)
         virtual int getNumSegments() const = 0;
-
-        // Determines the winding direction of the primitive. The subclass must write a value of
-        // either -1, 0, or +1 to "outputWind" (e.g. "sign(area)"). Fractional values are not valid.
-        virtual void emitWind(GrGLSLShaderBuilder*, const char* pts,
-                              const char* outputWind) const = 0;
 
         union GeometryVars {
             struct {
@@ -192,12 +208,12 @@ public:
                                         const char* outputCoverage) const = 0;
 
     private:
-        GrGLSLGeoToFrag fWind{kHalf_GrSLType};
+        GrGLSLVarying fWind{kHalf_GrSLType, GrGLSLVarying::Scope::kGeoToFrag};
     };
 
     GrCCPRCoverageProcessor(RenderPass);
 
-    const char* name() const override { return GetRenderPassName(fRenderPass); }
+    const char* name() const override { return RenderPassName(fRenderPass); }
     SkString dumpInfo() const override {
         return SkStringPrintf("%s\n%s", this->name(), this->INHERITED::dumpInfo().c_str());
     }
@@ -222,6 +238,10 @@ private:
     // Slightly undershoot a bloat radius of 0.5 so vertices that fall on integer boundaries don't
     // accidentally bleed into neighbor pixels.
     static constexpr float kAABloatRadius = 0.491111f;
+
+    int numInputPoints() const {
+        return RenderPassIsCubic(fRenderPass) ? 4 : 3;
+    }
 
     static GrGLSLPrimitiveProcessor* CreateGSImpl(std::unique_ptr<Shader>);
 

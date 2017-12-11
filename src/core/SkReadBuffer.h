@@ -36,7 +36,6 @@ class SkReadBuffer {
 public:
     SkReadBuffer();
     SkReadBuffer(const void* data, size_t size);
-    SkReadBuffer(SkStream* stream);
     virtual ~SkReadBuffer();
 
     virtual SkReadBuffer* clone(const void* data, size_t size) const {
@@ -115,37 +114,37 @@ public:
     size_t size() { return fReader.size(); }
     size_t offset() { return fReader.offset(); }
     bool eof() { return fReader.eof(); }
-    virtual const void* skip(size_t size) { return fReader.skip(size); }
+    const void* skip(size_t size);
 
     // primitives
-    virtual bool readBool();
-    virtual SkColor readColor();
-    virtual int32_t readInt();
-    virtual SkScalar readScalar();
-    virtual uint32_t readUInt();
-    virtual int32_t read32();
+    bool readBool();
+    SkColor readColor();
+    int32_t readInt();
+    SkScalar readScalar();
+    uint32_t readUInt();
+    int32_t read32();
 
     // peek
-    virtual uint8_t peekByte();
+    uint8_t peekByte();
 
     // strings -- the caller is responsible for freeing the string contents
-    virtual void readString(SkString* string);
+    void readString(SkString* string);
 
     // common data structures
-    virtual void readColor4f(SkColor4f* color);
-    virtual void readPoint(SkPoint* point);
+    void readColor4f(SkColor4f* color);
+    void readPoint(SkPoint* point);
     SkPoint readPoint() { SkPoint p; this->readPoint(&p); return p; }
-    virtual void readPoint3(SkPoint3* point);
-    virtual void readMatrix(SkMatrix* matrix);
-    virtual void readIRect(SkIRect* rect);
-    virtual void readRect(SkRect* rect);
-    virtual void readRRect(SkRRect* rrect);
-    virtual void readRegion(SkRegion* region);
+    void readPoint3(SkPoint3* point);
+    void readMatrix(SkMatrix* matrix);
+    void readIRect(SkIRect* rect);
+    void readRect(SkRect* rect);
+    void readRRect(SkRRect* rrect);
+    void readRegion(SkRegion* region);
 
-    virtual void readPath(SkPath* path);
+    void readPath(SkPath* path);
     virtual void readPaint(SkPaint* paint) { paint->unflatten(*this); }
 
-    virtual SkFlattenable* readFlattenable(SkFlattenable::Type);
+    SkFlattenable* readFlattenable(SkFlattenable::Type);
     template <typename T> sk_sp<T> readFlattenable() {
         return sk_sp<T>((T*)this->readFlattenable(T::GetFlattenableType()));
     }
@@ -158,15 +157,15 @@ public:
     sk_sp<SkShader> readShader() { return this->readFlattenable<SkShaderBase>(); }
 
     // Reads SkAlign4(bytes), but will only copy bytes into the buffer.
-    virtual bool readPad32(void* buffer, size_t bytes);
+    bool readPad32(void* buffer, size_t bytes);
 
     // binary data and arrays
-    virtual bool readByteArray(void* value, size_t size);
-    virtual bool readColorArray(SkColor* colors, size_t size);
-    virtual bool readColor4fArray(SkColor4f* colors, size_t size);
-    virtual bool readIntArray(int32_t* values, size_t size);
-    virtual bool readPointArray(SkPoint* points, size_t size);
-    virtual bool readScalarArray(SkScalar* values, size_t size);
+    bool readByteArray(void* value, size_t size);
+    bool readColorArray(SkColor* colors, size_t size);
+    bool readColor4fArray(SkColor4f* colors, size_t size);
+    bool readIntArray(int32_t* values, size_t size);
+    bool readPointArray(SkPoint* points, size_t size);
+    bool readScalarArray(SkScalar* values, size_t size);
 
     sk_sp<SkData> readByteArrayAsData() {
         size_t len = this->getArrayCount();
@@ -179,13 +178,13 @@ public:
     }
 
     // helpers to get info about arrays and binary data
-    virtual uint32_t getArrayCount();
+    uint32_t getArrayCount();
 
     // If there is a real error (e.g. data is corrupted) this returns null. If the image cannot
     // be created (e.g. it was not originally encoded) then this returns an image that doesn't
     // draw.
     sk_sp<SkImage> readImage();
-    virtual sk_sp<SkTypeface> readTypeface();
+    sk_sp<SkTypeface> readTypeface();
 
     void setTypefaceArray(SkTypeface* array[], int count) {
         fTFArray = array;
@@ -221,9 +220,17 @@ public:
     void setImageDeserializer(SkImageDeserializer* factory);
 #endif
 
-    // Default impelementations don't check anything.
-    virtual bool validate(bool isValid) { return isValid; }
-    virtual bool isValid() const { return true; }
+    /**
+     *  If isValid is false, sets the buffer to be "invalid". Returns true if the buffer
+     *  is still valid.
+     */
+    bool validate(bool isValid) {
+        if (!isValid) {
+            this->setInvalid();
+        }
+        return !fError;
+    }
+    bool isValid() const { return !fError; }
     bool validateIndex(int index, int count) {
         return this->validate(index >= 0 && index < count);
     }
@@ -266,7 +273,9 @@ protected:
     SkTHashMap<uint32_t, SkString> fFlattenableDict;
 
 private:
+    void setInvalid();
     bool readArray(void* value, size_t size, size_t elementSize);
+    void setMemory(const void*, size_t);
 
     uint32_t fFlags;
     int fVersion;
@@ -291,6 +300,12 @@ private:
 #endif // DEBUG_NON_DETERMINISTIC_ASSERT
 
     SkInflator* fInflator = nullptr;
+
+    static bool IsPtrAlign4(const void* ptr) {
+        return SkIsAlign4((uintptr_t)ptr);
+    }
+
+    bool fError = false;
 };
 
 #endif // SkReadBuffer_DEFINED

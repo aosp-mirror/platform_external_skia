@@ -59,6 +59,10 @@ def dm_flags(api, bot):
   if '-x86-' in bot and not 'NexusPlayer' in bot:
     args.extend(['--threads', '4'])
 
+  # Nexus7 runs out of memory due to having 4 cores and only 1G RAM.
+  if 'CPU' in bot and 'Nexus7' in bot:
+    args.extend(['--threads', '2'])
+
   if 'Chromecast' in bot:
     args.extend(['--threads', '0'])
 
@@ -75,7 +79,6 @@ def dm_flags(api, bot):
   # is ignored and dm will keep attempting to proceed until we actually
   # exhaust the available resources.
   if ('NexusPlayer' in bot or
-      'Nexus10' in bot or
       'PixelC' in bot):
     args.append('--ignoreSigInt')
 
@@ -186,19 +189,6 @@ def dm_flags(api, bot):
           'Nexus7'        in bot or
           'NexusPlayer'   in bot):
         configs.remove('glessrgb')
-
-    # Test instanced rendering on a limited number of platforms
-    if 'NVIDIA_Shield' in bot or 'PixelC' in bot:
-      # Multisampled instanced configs use nvpr so we substitute inst msaa
-      # configs for nvpr msaa configs.
-      old = gl_prefix + 'nvpr'
-      new = gl_prefix + 'inst'
-      configs = [x.replace(old, new) for x in configs]
-      # We also test non-msaa instanced.
-      configs.append(new)
-    elif 'MacMini7.1' in bot and 'TSAN' not in bot:
-      # The TSAN bot disables GL buffer mapping which is required for inst.
-      configs.extend([gl_prefix + 'inst'])
 
     # Test SkColorSpaceXformCanvas on a few bots
     if 'GTX1070' in bot:
@@ -488,7 +478,7 @@ def dm_flags(api, bot):
     blacklist(['glmsaa8',   'image', 'gen_codec_gpu', 'abnormal.wbmp'])
     blacklist(['glesmsaa4', 'image', 'gen_codec_gpu', 'abnormal.wbmp'])
 
-  if 'Nexus5' in bot:
+  if 'Nexus5' in bot and 'GPU' in bot:
     # skia:5876
     blacklist(['_', 'gm', '_', 'encode-platform'])
 
@@ -533,10 +523,6 @@ def dm_flags(api, bot):
     match.append('~blur_image_filter')
     match.append('~blur_0.01')
     match.append('~GM_animated-image-blurs')
-
-  if 'Nexus10' in bot:
-    match.append('~CopySurface') # skia:5509
-    match.append('~SRGBReadWritePixels') # skia:6097
 
   if 'GalaxyS6' in bot:
     match.append('~SpecialImage') # skia:6338
@@ -603,9 +589,13 @@ def dm_flags(api, bot):
     # skia:7322
     blacklist(['vk', 'gm', '_', 'skbug_257'])
     match.append('~^ClearOp$')
+    match.append('~^CopySurface$')
+    match.append('~^ImageNewShader_GPU$')
     match.append('~^InitialTextureClear$')
+    match.append('~^PinnedImageTest$')
     match.append('~^ReadPixels_Gpu$')
     match.append('~^ReadPixels_Texture$')
+    match.append('~^SRGBReadWritePixels$')
     match.append('~^VkUploadPixelsTests$')
     match.append('~^WritePixelsNonTexture_Gpu$')
     match.append('~^WritePixels_Gpu$')
@@ -909,14 +899,14 @@ TEST_BUILDERS = [
   'Test-Android-Clang-GalaxyS7_G930A-GPU-Adreno530-arm64-Debug-All-Android',
   'Test-Android-Clang-NVIDIA_Shield-GPU-TegraX1-arm64-Debug-All-Android',
   'Test-Android-Clang-NVIDIA_Shield-GPU-TegraX1-arm64-Debug-All-Android_CCPR',
-  'Test-Android-Clang-Nexus10-CPU-Exynos5250-arm-Release-All-Android',
   'Test-Android-Clang-Nexus5-GPU-Adreno330-arm-Release-All-Android',
+  'Test-Android-Clang-Nexus7-CPU-Tegra3-arm-Release-All-Android',
   'Test-Android-Clang-Nexus7-GPU-Tegra3-arm-Debug-All-Android',
   'Test-Android-Clang-NexusPlayer-CPU-Moorefield-x86-Release-All-Android',
   'Test-Android-Clang-NexusPlayer-GPU-PowerVR-x86-Release-All-Android_Vulkan',
+  'Test-Android-Clang-Pixel-GPU-Adreno530-arm64-Debug-All-Android_CCPR',
+  'Test-Android-Clang-Pixel-GPU-Adreno530-arm64-Debug-All-Android_Vulkan',
   'Test-Android-Clang-PixelC-CPU-TegraX1-arm64-Debug-All-Android',
-  'Test-Android-Clang-PixelXL-GPU-Adreno530-arm64-Debug-All-Android_CCPR',
-  'Test-Android-Clang-PixelXL-GPU-Adreno530-arm64-Debug-All-Android_Vulkan',
   'Test-ChromeOS-Clang-ASUSChromebookFlipC100-GPU-MaliT764-arm-Debug-All',
   ('Test-ChromeOS-Clang-AcerChromebookR13Convertible-GPU-PowerVRGX6250-'
    'arm-Debug-All'),

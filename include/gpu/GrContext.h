@@ -56,12 +56,15 @@ public:
     static GrContext* Create(GrBackend, GrBackendContext, const GrContextOptions& options);
     static GrContext* Create(GrBackend, GrBackendContext);
 
-    static sk_sp<GrContext> MakeGL(const GrGLInterface*, const GrContextOptions&);
+    static sk_sp<GrContext> MakeGL(sk_sp<const GrGLInterface>, const GrContextOptions&);
+    static sk_sp<GrContext> MakeGL(sk_sp<const GrGLInterface>);
+    // Deprecated
     static sk_sp<GrContext> MakeGL(const GrGLInterface*);
+    static sk_sp<GrContext> MakeGL(const GrGLInterface*, const GrContextOptions&);
 
 #ifdef SK_VULKAN
-    static sk_sp<GrContext> MakeVulkan(const GrVkBackendContext*, const GrContextOptions&);
-    static sk_sp<GrContext> MakeVulkan(const GrVkBackendContext*);
+    static sk_sp<GrContext> MakeVulkan(sk_sp<const GrVkBackendContext>, const GrContextOptions&);
+    static sk_sp<GrContext> MakeVulkan(sk_sp<const GrVkBackendContext>);
 #endif
 
 #ifdef SK_METAL
@@ -205,7 +208,7 @@ public:
     void purgeUnlockedResources(size_t bytesToPurge, bool preferScratchResources);
 
     /** Access the context capabilities */
-    const GrCaps* caps() const { return fCaps; }
+    const GrCaps* caps() const { return fCaps.get(); }
 
     /**
      * Returns the recommended sample count for a render target when using this
@@ -291,8 +294,8 @@ public:
 
     ///////////////////////////////////////////////////////////////////////////
     // Functions intended for internal use only.
-    GrGpu* getGpu() { return fGpu; }
-    const GrGpu* getGpu() const { return fGpu; }
+    GrGpu* getGpu() { return fGpu.get(); }
+    const GrGpu* getGpu() const { return fGpu.get(); }
     GrAtlasGlyphCache* getAtlasGlyphCache() { return fAtlasGlyphCache; }
     GrTextBlobCache* getTextBlobCache() { return fTextBlobCache.get(); }
     bool abandoned() const;
@@ -344,8 +347,8 @@ public:
     const GrContextPriv contextPriv() const;
 
 private:
-    GrGpu*                                  fGpu;
-    const GrCaps*                           fCaps;
+    sk_sp<GrGpu>                            fGpu;
+    sk_sp<const GrCaps>                     fCaps;
     GrResourceCache*                        fResourceCache;
     GrResourceProvider*                     fResourceProvider;
 

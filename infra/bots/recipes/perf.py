@@ -34,9 +34,6 @@ def nanobench_flags(api, bot):
     args.append('--images')
     args.extend(['--gpuStatsDump', 'true'])
 
-  if 'Android' in bot and 'GPU' in bot and 'Nexus5x' not in bot:
-    args.extend(['--useThermalManager', '1,1,10,1000'])
-
   args.extend(['--scales', '1.0', '1.1'])
 
   if 'iOS' in bot:
@@ -102,13 +99,6 @@ def nanobench_flags(api, bot):
           'Nexus7'        in bot or
           'NexusPlayer'   in bot):
         configs.remove('glessrgb')
-
-    # Bench instanced rendering on a limited number of platforms
-    inst_config = gl_prefix + 'inst'
-    if 'PixelC' in bot or 'NVIDIA_Shield' in bot or 'MacMini7.1' in bot:
-      configs.append(inst_config)
-      if sample_count:
-        configs.append(inst_config + sample_count)
 
     if 'CommandBuffer' in bot:
       configs = ['commandbuffer']
@@ -339,9 +329,9 @@ def RunSteps(api):
 TEST_BUILDERS = [
   ('Perf-Android-Clang-NVIDIA_Shield-GPU-TegraX1-arm64-Debug-All-'
    'Android_Vulkan'),
-  'Perf-Android-Clang-Nexus10-CPU-Exynos5250-arm-Release-All-Android',
   'Perf-Android-Clang-Nexus5-GPU-Adreno330-arm-Debug-All-Android',
   'Perf-Android-Clang-Nexus5x-GPU-Adreno418-arm64-Release-All-Android',
+  'Perf-Android-Clang-Nexus7-CPU-Tegra3-arm-Release-All-Android',
   'Perf-Android-Clang-Nexus7-GPU-Tegra3-arm-Release-All-Android',
   'Perf-Android-Clang-NexusPlayer-GPU-PowerVR-x86-Release-All-Android',
   'Perf-Android-Clang-NexusPlayer-GPU-PowerVR-x86-Release-All-Android_Vulkan',

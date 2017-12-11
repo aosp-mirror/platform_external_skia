@@ -118,7 +118,9 @@ func linuxGceDimensions() []string {
 // deriveCompileTaskName returns the name of a compile task based on the given
 // job name.
 func deriveCompileTaskName(jobName string, parts map[string]string) string {
-	if parts["role"] == "Housekeeper" {
+	if jobName == "Housekeeper-Nightly-Bookmaker" {
+		return "Build-Debian9-GCC-x86_64-Release"
+	} else if parts["role"] == "Housekeeper" {
 		return "Build-Debian9-GCC-x86_64-Release-Shared"
 	} else if parts["role"] == "Test" || parts["role"] == "Perf" {
 		task_os := parts["os"]
@@ -217,16 +219,14 @@ func defaultSwarmDimensions(parts map[string]string) []string {
 			deviceInfo, ok := map[string][]string{
 				"AndroidOne":      {"sprout", "MOB30Q"},
 				"Chorizo":         {"chorizo", "1.24_82923"},
-				"GalaxyJ5":        {"j5xnlte", "MMB29M"},
 				"GalaxyS6":        {"zerofltetmo", "NRD90M_G920TUVU5FQK1"},
 				"GalaxyS7_G930A":  {"heroqlteatt", "NRD90M_G930AUCS4BQC2"},
 				"GalaxyS7_G930FD": {"herolte", "NRD90M_G930FXXU1DQAS"},
 				"MotoG4":          {"athene", "NPJ25.93-14"},
-				"NVIDIA_Shield":   {"foster", "NRD90M"},
-				"Nexus10":         {"manta", "LMY49J"},
-				"Nexus5":          {"hammerhead", "M4B30Z"},
+				"NVIDIA_Shield":   {"foster", "NRD90M_1915764_848"},
+				"Nexus5":          {"hammerhead", "M4B30Z_3437181"},
 				"Nexus5x":         {"bullhead", "OPR6.170623.023"},
-				"Nexus7":          {"grouper", "LMY47V"}, // 2012 Nexus 7
+				"Nexus7":          {"grouper", "LMY47V_1836172"}, // 2012 Nexus 7
 				"NexusPlayer":     {"fugu", "OPR6.170623.021"},
 				"Pixel":           {"sailfish", "OPR3.170623.008"},
 				"Pixel2XL":        {"taimen", "OPD1.170816.023"},
@@ -238,6 +238,12 @@ func defaultSwarmDimensions(parts map[string]string) []string {
 			}
 			d["device_type"] = deviceInfo[0]
 			d["device_os"] = deviceInfo[1]
+			// TODO(kjlubick): Remove the python dimension after we have removed the
+			// Nexus5x devices from the local lab (on Monday, Dec 11, 2017 should be fine).
+			d["python"] = "2.7.9" // This indicates a RPI, e.g. in Skolo.  Golo is 2.7.12
+			if parts["model"] == "Nexus5x" {
+				d["python"] = "2.7.12"
+			}
 		} else if strings.Contains(parts["os"], "iOS") {
 			device, ok := map[string]string{
 				"iPadMini4": "iPad5,1",
@@ -330,7 +336,7 @@ func defaultSwarmDimensions(parts map[string]string) []string {
 					"MaliT604":           "9901.12.0",
 					"MaliT764":           "10172.0.0",
 					"MaliT860":           "10172.0.0",
-					"PowerVRGX6250":      "9592.71.0",
+					"PowerVRGX6250":      "10176.5.0",
 					"TegraK1":            "10172.0.0",
 					"IntelHDGraphics615": "10032.17.0",
 				}[parts["cpu_or_gpu_value"]]
@@ -670,6 +676,32 @@ func housekeeper(b *specs.TasksCfgBuilder, name, compileTaskName string) string 
 		},
 		Isolate:  relpath("housekeeper_skia.isolate"),
 		Priority: 0.8,
+	})
+	return name
+}
+
+// bookmaker generates a Bookmaker task. Returns the name of the last task
+// in the generated chain of tasks, which the Job should add as a dependency.
+func bookmaker(b *specs.TasksCfgBuilder, name, compileTaskName string) string {
+	b.MustAddTask(name, &specs.TaskSpec{
+		CipdPackages: []*specs.CipdPackage{b.MustGetCipdPackageFromAsset("go")},
+		Dependencies: []string{compileTaskName},
+		Dimensions:   linuxGceDimensions(),
+		ExtraArgs: []string{
+			"--workdir", "../../..", "bookmaker",
+			fmt.Sprintf("repository=%s", specs.PLACEHOLDER_REPO),
+			fmt.Sprintf("buildername=%s", name),
+			fmt.Sprintf("swarm_out_dir=%s", specs.PLACEHOLDER_ISOLATED_OUTDIR),
+			fmt.Sprintf("revision=%s", specs.PLACEHOLDER_REVISION),
+			fmt.Sprintf("patch_repo=%s", specs.PLACEHOLDER_PATCH_REPO),
+			fmt.Sprintf("patch_storage=%s", specs.PLACEHOLDER_PATCH_STORAGE),
+			fmt.Sprintf("patch_issue=%s", specs.PLACEHOLDER_ISSUE),
+			fmt.Sprintf("patch_set=%s", specs.PLACEHOLDER_PATCHSET),
+		},
+		Isolate:          relpath("compile_skia.isolate"),
+		Priority:         0.8,
+		ExecutionTimeout: 2 * time.Hour,
+		IoTimeout:        2 * time.Hour,
 	})
 	return name
 }
@@ -1100,6 +1132,9 @@ func process(b *specs.TasksCfgBuilder, name string) {
 	}
 	if name == "Housekeeper-PerCommit-CheckGeneratedFiles" {
 		deps = append(deps, checkGeneratedFiles(b, name))
+	}
+	if name == "Housekeeper-Nightly-Bookmaker" {
+		deps = append(deps, bookmaker(b, name, compileTaskName))
 	}
 
 	// Common assets needed by the remaining bots.

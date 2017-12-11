@@ -82,22 +82,22 @@ DEF_TEST(ColorSpace_sRGB, r) {
 DEF_TEST(ColorSpaceParseICCProfiles, r) {
 
 #if (PNG_LIBPNG_VER_MAJOR > 1) || (PNG_LIBPNG_VER_MAJOR == 1 && PNG_LIBPNG_VER_MINOR >= 6)
-    test_path(r, "color_wheel_with_profile.png", g_sRGB_R, g_sRGB_G, g_sRGB_B,
+    test_path(r, "images/color_wheel_with_profile.png", g_sRGB_R, g_sRGB_G, g_sRGB_B,
               kSRGB_SkGammaNamed);
 #endif
 
     const float red[] = { 0.385117f, 0.716904f, 0.0970612f };
     const float green[] = { 0.143051f, 0.0606079f, 0.713913f };
     const float blue[] = { 0.436035f, 0.222488f, 0.013916f };
-    test_path(r, "icc-v2-gbr.jpg", red, green, blue, k2Dot2Curve_SkGammaNamed);
+    test_path(r, "images/icc-v2-gbr.jpg", red, green, blue, k2Dot2Curve_SkGammaNamed);
 
-    test_path(r, "webp-color-profile-crash.webp",
+    test_path(r, "images/webp-color-profile-crash.webp",
             red, green, blue, kNonStandard_SkGammaNamed);
-    test_path(r, "webp-color-profile-lossless.webp",
+    test_path(r, "images/webp-color-profile-lossless.webp",
             red, green, blue, kNonStandard_SkGammaNamed);
-    test_path(r, "webp-color-profile-lossy.webp",
+    test_path(r, "images/webp-color-profile-lossy.webp",
             red, green, blue, kNonStandard_SkGammaNamed);
-    test_path(r, "webp-color-profile-lossy-alpha.webp",
+    test_path(r, "images/webp-color-profile-lossy-alpha.webp",
             red, green, blue, kNonStandard_SkGammaNamed);
 }
 
@@ -245,14 +245,13 @@ DEF_TEST(ColorSpace_Serialize, r) {
     test_serialize(r, SkColorSpace_Base::MakeNamed(SkColorSpace_Base::kAdobeRGB_Named).get(), true);
     test_serialize(r, SkColorSpace::MakeSRGBLinear().get(), true);
 
-    sk_sp<SkData> monitorData = SkData::MakeFromFileName(
-            GetResourcePath("icc_profiles/HP_ZR30w.icc").c_str());
+    sk_sp<SkData> monitorData = GetResourceAsData("icc_profiles/HP_ZR30w.icc");
     test_serialize(r, SkColorSpace::MakeICC(monitorData->data(), monitorData->size()).get(), false);
-    monitorData = SkData::MakeFromFileName( GetResourcePath("icc_profiles/HP_Z32x.icc").c_str());
+    monitorData = GetResourceAsData("icc_profiles/HP_Z32x.icc");
     test_serialize(r, SkColorSpace::MakeICC(monitorData->data(), monitorData->size()).get(), false);
-    monitorData = SkData::MakeFromFileName(GetResourcePath("icc_profiles/upperLeft.icc").c_str());
+    monitorData = GetResourceAsData("icc_profiles/upperLeft.icc");
     test_serialize(r, SkColorSpace::MakeICC(monitorData->data(), monitorData->size()).get(), false);
-    monitorData = SkData::MakeFromFileName(GetResourcePath("icc_profiles/upperRight.icc").c_str());
+    monitorData = GetResourceAsData("icc_profiles/upperRight.icc");
     test_serialize(r, SkColorSpace::MakeICC(monitorData->data(), monitorData->size()).get(), false);
 
     SkColorSpaceTransferFn fn;
@@ -270,14 +269,13 @@ DEF_TEST(ColorSpace_Serialize, r) {
 DEF_TEST(ColorSpace_Equals, r) {
     sk_sp<SkColorSpace> srgb = SkColorSpace::MakeSRGB();
     sk_sp<SkColorSpace> adobe = SkColorSpace_Base::MakeNamed(SkColorSpace_Base::kAdobeRGB_Named);
-    sk_sp<SkData> data = SkData::MakeFromFileName(
-            GetResourcePath("icc_profiles/HP_ZR30w.icc").c_str());
+    sk_sp<SkData> data = GetResourceAsData("icc_profiles/HP_ZR30w.icc");
     sk_sp<SkColorSpace> z30 = SkColorSpace::MakeICC(data->data(), data->size());
-    data = SkData::MakeFromFileName( GetResourcePath("icc_profiles/HP_Z32x.icc").c_str());
+    data = GetResourceAsData("icc_profiles/HP_Z32x.icc");
     sk_sp<SkColorSpace> z32 = SkColorSpace::MakeICC(data->data(), data->size());
-    data = SkData::MakeFromFileName(GetResourcePath("icc_profiles/upperLeft.icc").c_str());
+    data = GetResourceAsData("icc_profiles/upperLeft.icc");
     sk_sp<SkColorSpace> upperLeft = SkColorSpace::MakeICC(data->data(), data->size());
-    data = SkData::MakeFromFileName(GetResourcePath("icc_profiles/upperRight.icc").c_str());
+    data = GetResourceAsData("icc_profiles/upperRight.icc");
     sk_sp<SkColorSpace> upperRight = SkColorSpace::MakeICC(data->data(), data->size());
 
     SkColorSpaceTransferFn fn;

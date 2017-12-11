@@ -20,8 +20,8 @@ class GrPipeline;
 
 class GrMockGpu : public GrGpu {
 public:
-    static GrGpu* Create(GrBackendContext, const GrContextOptions&, GrContext*);
-    static GrGpu* Create(const GrMockOptions*, const GrContextOptions&, GrContext*);
+    static sk_sp<GrGpu> Make(GrBackendContext, const GrContextOptions&, GrContext*);
+    static sk_sp<GrGpu> Make(const GrMockOptions*, const GrContextOptions&, GrContext*);
 
     ~GrMockGpu() override {}
 
@@ -97,8 +97,6 @@ private:
 
     GrBuffer* onCreateBuffer(size_t sizeInBytes, GrBufferType, GrAccessPattern,
                              const void*) override;
-
-    gr_instanced::InstancedRendering* onCreateInstancedRendering() override { return nullptr; }
 
     bool onReadPixels(GrSurface* surface, GrSurfaceOrigin,
                       int left, int top, int width, int height,

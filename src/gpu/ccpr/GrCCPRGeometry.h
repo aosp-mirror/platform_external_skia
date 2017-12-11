@@ -30,8 +30,7 @@ public:
         kBeginContour,
         kLineTo,
         kMonotonicQuadraticTo, // Monotonic relative to the vector between its endpoints [P2 - P0].
-        kMonotonicSerpentineTo,
-        kMonotonicLoopTo,
+        kMonotonicCubicTo,
         kEndClosedContour, // endPt == startPt.
         kEndOpenContour // endPt != startPt.
     };
@@ -40,8 +39,7 @@ public:
     struct PrimitiveTallies {
         int fTriangles; // Number of triangles in the contour's fan.
         int fQuadratics;
-        int fSerpentines;
-        int fLoops;
+        int fCubics;
 
         void operator+=(const PrimitiveTallies&);
         PrimitiveTallies operator-(const PrimitiveTallies&) const;
@@ -93,8 +91,8 @@ public:
     PrimitiveTallies endContour(); // Returns the numbers of primitives needed to draw the contour.
 
 private:
-    inline void appendMonotonicQuadratics(const Sk2f& p0, const Sk2f& p1, const Sk2f& p2,
-                                          bool allowChop = true);
+    inline void appendMonotonicQuadratics(const Sk2f& p0, const Sk2f& p1, const Sk2f& p2);
+    inline void appendSingleMonotonicQuadratic(const Sk2f& p0, const Sk2f& p1, const Sk2f& p2);
 
     using AppendCubicFn = void(GrCCPRGeometry::*)(const Sk2f& p0, const Sk2f& p1,
                                                   const Sk2f& p2, const Sk2f& p3,
@@ -130,16 +128,14 @@ private:
 inline void GrCCPRGeometry::PrimitiveTallies::operator+=(const PrimitiveTallies& b) {
     fTriangles += b.fTriangles;
     fQuadratics += b.fQuadratics;
-    fSerpentines += b.fSerpentines;
-    fLoops += b.fLoops;
+    fCubics += b.fCubics;
 }
 
 GrCCPRGeometry::PrimitiveTallies
 inline GrCCPRGeometry::PrimitiveTallies::operator-(const PrimitiveTallies& b) const {
     return {fTriangles - b.fTriangles,
             fQuadratics - b.fQuadratics,
-            fSerpentines - b.fSerpentines,
-            fLoops - b.fLoops};
+            fCubics - b.fCubics};
 }
 
 #endif

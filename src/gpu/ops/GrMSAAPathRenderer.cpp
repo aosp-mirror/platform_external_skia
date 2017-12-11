@@ -140,7 +140,7 @@ public:
             varyingHandler->emitAttributes(qp);
             varyingHandler->addPassThroughAttribute(qp.inColor(), args.fOutputColor);
 
-            GrGLSLVertToFrag uv(kFloat2_GrSLType);
+            GrGLSLVarying uv(kFloat2_GrSLType);
             varyingHandler->addVarying("uv", &uv);
             vsBuilder->codeAppendf("%s = %s;", uv.vsOut(), qp.inUV()->fName);
 
@@ -149,8 +149,8 @@ public:
                                       qp.viewMatrix(), &fViewMatrixUniform);
 
             // emit transforms
-            this->emitTransforms(vsBuilder, varyingHandler, uniformHandler, gpArgs->fPositionVar,
-                                 qp.inPosition()->fName, SkMatrix::I(),
+            this->emitTransforms(vsBuilder, varyingHandler, uniformHandler,
+                                 qp.inPosition()->asShaderVar(), SkMatrix::I(),
                                  args.fFPCoordTransformHandler);
 
             GrGLSLPPFragmentBuilder* fsBuilder = args.fFragBuilder;

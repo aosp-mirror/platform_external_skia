@@ -15,7 +15,6 @@
 #include "GrTextureProducer.h"
 #include "GrTypes.h"
 #include "GrXferProcessor.h"
-#include "instanced/InstancedRendering.h"
 #include "SkPath.h"
 #include "SkTArray.h"
 #include <map>
@@ -42,12 +41,6 @@ class GrSurface;
 class GrTexture;
 class SkJSONWriter;
 
-namespace gr_instanced {
-    class InstancedOp;
-    class InstancedRendering;
-    class OpAllocator;
-}
-
 class GrGpu : public SkRefCnt {
 public:
     /**
@@ -55,7 +48,8 @@ public:
      * not supported (at compile-time or run-time) this returns nullptr. The context will not be
      * fully constructed and should not be used by GrGpu until after this function returns.
      */
-    static GrGpu* Create(GrBackend, GrBackendContext, const GrContextOptions&, GrContext* context);
+    static sk_sp<GrGpu> Make(GrBackend, GrBackendContext, const GrContextOptions&,
+                             GrContext* context);
 
     ////////////////////////////////////////////////////////////////////////////
 
@@ -150,12 +144,6 @@ public:
      */
     GrBuffer* createBuffer(size_t size, GrBufferType intendedType, GrAccessPattern accessPattern,
                            const void* data = nullptr);
-
-    /**
-     * Creates an instanced rendering object if it is supported on this platform.
-     */
-    std::unique_ptr<gr_instanced::OpAllocator> createInstancedRenderingAllocator();
-    gr_instanced::InstancedRendering* createInstancedRendering();
 
     /**
      * Resolves MSAA.
@@ -566,11 +554,6 @@ private:
     virtual GrBuffer* onCreateBuffer(size_t size, GrBufferType intendedType, GrAccessPattern,
                                      const void* data) = 0;
 
-    virtual gr_instanced::InstancedRendering* onCreateInstancedRendering() = 0;
-    virtual std::unique_ptr<gr_instanced::OpAllocator> onCreateInstancedRenderingAllocator() {
-        return nullptr;
-    }
-
     virtual bool onIsACopyNeededForTextureParams(GrTextureProxy* proxy, const GrSamplerState&,
                                                  GrTextureProducer::CopyParams*,
                                                  SkScalar scaleAdjust[2]) const {
@@ -643,7 +626,6 @@ private:
     GrContext*                             fContext;
 
     friend class GrPathRendering;
-    friend class gr_instanced::InstancedOp; // for xferBarrier
     typedef SkRefCnt INHERITED;
 };
 

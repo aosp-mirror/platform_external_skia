@@ -22,10 +22,6 @@
  */
 class GrCCPRQuadraticShader : public GrCCPRCoverageProcessor::Shader {
 protected:
-    int getNumInputPoints() const final { return 3; }
-
-    void emitWind(GrGLSLShaderBuilder*, const char* pts, const char* outputWind) const final;
-
     void emitSetupCode(GrGLSLShaderBuilder*, const char* pts, const char* segmentId,
                        const char* wind, GeometryVars*) const final;
 
@@ -37,9 +33,9 @@ protected:
 
     virtual void onEmitVaryings(GrGLSLVaryingHandler*, SkString* code) = 0;
 
-    const GrShaderVar   fCanonicalMatrix{"canonical_matrix", kFloat3x3_GrSLType};
-    const GrShaderVar   fEdgeDistanceEquation{"edge_distance_equation", kFloat3_GrSLType};
-    GrGLSLGeoToFrag     fXYD{kFloat3_GrSLType};
+    const GrShaderVar fCanonicalMatrix{"canonical_matrix", kFloat3x3_GrSLType};
+    const GrShaderVar fEdgeDistanceEquation{"edge_distance_equation", kFloat3_GrSLType};
+    GrGLSLVarying fXYD{kFloat3_GrSLType, GrGLSLVarying::Scope::kGeoToFrag};
 };
 
 /**
@@ -57,7 +53,7 @@ class GrCCPRQuadraticHullShader : public GrCCPRQuadraticShader {
     void onEmitVaryings(GrGLSLVaryingHandler*, SkString* code) override;
     void onEmitFragmentCode(GrGLSLPPFragmentBuilder*, const char* outputCoverage) const override;
 
-    GrGLSLGeoToFrag fGrad{kFloat2_GrSLType};
+    GrGLSLVarying fGrad{kFloat2_GrSLType, GrGLSLVarying::Scope::kGeoToFrag};
 };
 
 /**
@@ -72,8 +68,8 @@ class GrCCPRQuadraticCornerShader : public GrCCPRQuadraticShader {
     void onEmitVaryings(GrGLSLVaryingHandler*, SkString* code) override;
     void onEmitFragmentCode(GrGLSLPPFragmentBuilder*, const char* outputCoverage) const override;
 
-    GrGLSLGeoToFrag     fdXYDdx{kFloat3_GrSLType};
-    GrGLSLGeoToFrag     fdXYDdy{kFloat3_GrSLType};
+    GrGLSLVarying fdXYDdx{kFloat3_GrSLType, GrGLSLVarying::Scope::kGeoToFrag};
+    GrGLSLVarying fdXYDdy{kFloat3_GrSLType, GrGLSLVarying::Scope::kGeoToFrag};
 };
 
 #endif
