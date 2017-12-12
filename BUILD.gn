@@ -30,6 +30,7 @@ declare_args() {
   skia_use_zlib = true
   skia_use_metal = false
   skia_use_libheif = is_skia_dev_build
+  skia_embed_resources = false
 
   skia_android_serial = ""
   skia_enable_discrete_gpu = true
@@ -546,42 +547,37 @@ optional("gpu") {
   ]
   public_defines = []
 
-  sources = skia_gpu_sources + skia_sksl_sources +
-            [ "src/gpu/gl/GrGLDefaultInterface_native.cpp" ] +
-            skia_gpu_processor_outputs
+  sources = skia_gpu_sources + skia_sksl_sources + skia_gpu_processor_outputs
 
   # These paths need to be absolute to match the ones produced by shared_sources.gni.
-  sources -= get_path_info([
-                             "src/gpu/gl/GrGLCreateNativeInterface_none.cpp",
-                             "src/gpu/gl/GrGLDefaultInterface_none.cpp",
-                           ],
+  sources -= get_path_info([ "src/gpu/gl/GrGLMakeNativeInterface_none.cpp" ],
                            "abspath")
   libs = []
   if (is_android) {
-    sources += [ "src/gpu/gl/android/GrGLCreateNativeInterface_android.cpp" ]
+    sources += [ "src/gpu/gl/android/GrGLMakeNativeInterface_android.cpp" ]
 
     # this lib is required to link against AHardwareBuffer
     if (defined(ndk_api) && ndk_api >= 26) {
       libs += [ "android" ]
     }
   } else if (skia_use_egl) {
-    sources += [ "src/gpu/gl/egl/GrGLCreateNativeInterface_egl.cpp" ]
+    sources += [ "src/gpu/gl/egl/GrGLMakeNativeInterface_egl.cpp" ]
     libs += [ "EGL" ]
   } else if (is_linux) {
-    sources += [ "src/gpu/gl/glx/GrGLCreateNativeInterface_glx.cpp" ]
+    sources += [ "src/gpu/gl/glx/GrGLMakeNativeInterface_glx.cpp" ]
     libs += [
       "GL",
       "GLU",
     ]
   } else if (is_mac) {
-    sources += [ "src/gpu/gl/mac/GrGLCreateNativeInterface_mac.cpp" ]
+    sources += [ "src/gpu/gl/mac/GrGLMakeNativeInterface_mac.cpp" ]
   } else if (is_ios) {
-    sources += [ "src/gpu/gl/iOS/GrGLCreateNativeInterface_iOS.cpp" ]
+    sources += [ "src/gpu/gl/iOS/GrGLMakeNativeInterface_iOS.cpp" ]
   } else if (is_win) {
-    sources += [ "src/gpu/gl/win/GrGLCreateNativeInterface_win.cpp" ]
+    sources += [ "src/gpu/gl/win/GrGLMakeNativeInterface_win.cpp" ]
     libs += [ "OpenGL32.lib" ]
   } else {
-    sources += [ "src/gpu/gl/GrGLCreateNativeInterface_none.cpp" ]
+    sources += [ "src/gpu/gl/GrGLMakeNativeInterface_none.cpp" ]
   }
 
   if (skia_use_vulkan) {
@@ -907,6 +903,17 @@ if (skia_enable_tools) {
       # So we can get the header which includes vulkan
       include_dirs += [ "tools/gpu/vk" ]
     }
+  }
+  action("binary_resources.cpp") {
+    script = "gn/generate_binary_asset.py"
+    args = [
+      rebase_path("resources"),
+      "gResources",
+      rebase_path("$target_gen_dir/binary_resources.cpp", root_build_dir),
+    ]
+    outputs = [
+      "$target_gen_dir/binary_resources.cpp",
+    ]
   }
   action("skia.h") {
     public_configs = [ ":skia.h_config" ]
@@ -1256,6 +1263,11 @@ if (skia_enable_tools) {
     public_deps = [
       "//third_party/jsoncpp",
     ]
+    if (skia_embed_resources) {
+      defines = [ "SK_EMBED_RESOURCES" ]
+      sources += [ "$target_gen_dir/binary_resources.cpp" ]
+      deps += [ ":binary_resources.cpp" ]
+    }
   }
 
   import("gn/gm.gni")
@@ -1400,6 +1412,7 @@ if (skia_enable_tools) {
       ":flags",
       ":skia",
       ":tool_utils",
+      "//third_party/jsoncpp",
     ]
   }
 
@@ -1802,6 +1815,7 @@ if (skia_enable_tools) {
       }
       sources = [
         "tools/viewer/GMSlide.cpp",
+        "tools/viewer/ImGuiLayer.cpp",
         "tools/viewer/ImageSlide.cpp",
         "tools/viewer/SKPSlide.cpp",
         "tools/viewer/SampleSlide.cpp",

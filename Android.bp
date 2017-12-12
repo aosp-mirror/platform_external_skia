@@ -536,7 +536,6 @@ cc_library_static {
         "src/gpu/gl/GrGLCaps.cpp",
         "src/gpu/gl/GrGLContext.cpp",
         "src/gpu/gl/GrGLCreateNullInterface.cpp",
-        "src/gpu/gl/GrGLDefaultInterface_native.cpp",
         "src/gpu/gl/GrGLExtensions.cpp",
         "src/gpu/gl/GrGLGLSL.cpp",
         "src/gpu/gl/GrGLGpu.cpp",
@@ -558,7 +557,7 @@ cc_library_static {
         "src/gpu/gl/GrGLUtil.cpp",
         "src/gpu/gl/GrGLVaryingHandler.cpp",
         "src/gpu/gl/GrGLVertexArray.cpp",
-        "src/gpu/gl/android/GrGLCreateNativeInterface_android.cpp",
+        "src/gpu/gl/android/GrGLMakeNativeInterface_android.cpp",
         "src/gpu/gl/builders/GrGLProgramBuilder.cpp",
         "src/gpu/gl/builders/GrGLShaderStringBuilder.cpp",
         "src/gpu/glsl/GrGLSL.cpp",
@@ -902,7 +901,24 @@ cc_library_static {
         },
     },
 
-    defaults: ["skia_deps"],
+    defaults: ["skia_deps",
+               "skia_pgo",
+    ],
+}
+
+// Build libskia with PGO by default.
+// Location of PGO profile data is defined in build/soong/cc/pgo.go
+// and is separate from skia.
+// To turn it off, set ANDROID_PGO_NO_PROFILE_USE environment variable
+// or set enable_profile_use property to false.
+cc_defaults {
+    name: "skia_pgo",
+    pgo: {
+        instrumentation: true,
+        profile_file: "skia/skia.profdata",
+        benchmarks: ["hwui", "skia"],
+        enable_profile_use: true,
+    },
 }
 
 cc_defaults {
