@@ -21,6 +21,7 @@
 #include <map>
 
 class GrBackendRenderTarget;
+class GrBackendSemaphore;
 class GrBuffer;
 class GrContext;
 struct GrContextOptions;
@@ -103,28 +104,16 @@ public:
      *                    It contains width*height texels. If there is only one
      *                    element and it contains nullptr fPixels, texture data is
      *                    uninitialized.
+     * @param mipLevelCount the number of levels in 'texels'
      * @return    The texture object if successful, otherwise nullptr.
      */
     sk_sp<GrTexture> createTexture(const GrSurfaceDesc& desc, SkBudgeted budgeted,
-                                   const SkTArray<GrMipLevel>& texels);
+                                   const GrMipLevel texels[], int mipLevelCount);
 
     /**
      * Simplified createTexture() interface for when there is no initial texel data to upload.
      */
-    sk_sp<GrTexture> createTexture(const GrSurfaceDesc& desc, SkBudgeted budgeted) {
-        return this->createTexture(desc, budgeted, SkTArray<GrMipLevel>());
-    }
-
-    /** Simplified createTexture() interface for when there is only a base level */
-    sk_sp<GrTexture> createTexture(const GrSurfaceDesc& desc, SkBudgeted budgeted,
-                                   const void* level0Data,
-                                   size_t rowBytes) {
-        SkASSERT(level0Data);
-        GrMipLevel level = { level0Data, rowBytes };
-        SkSTArray<1, GrMipLevel> array;
-        array.push_back() = level;
-        return this->createTexture(desc, budgeted, array);
-    }
+    sk_sp<GrTexture> createTexture(const GrSurfaceDesc& desc, SkBudgeted budgeted);
 
     /**
      * Implements GrResourceProvider::wrapBackendTexture
@@ -278,11 +267,12 @@ public:
      * @param height        height of rectangle to write in pixels.
      * @param config        the pixel config of the source buffer
      * @param texels        array of mipmap levels containing texture data
+     * @param mipLevelCount number of levels in 'texels'
      */
     bool writePixels(GrSurface* surface,
                      int left, int top, int width, int height,
                      GrPixelConfig config,
-                     const SkTArray<GrMipLevel>& texels);
+                     const GrMipLevel texels[], int mipLevelCount);
 
     /**
      * This function is a shim which creates a SkTArray<GrMipLevel> of size 1.
@@ -298,23 +288,26 @@ public:
                      size_t rowBytes);
 
     /**
-     * Updates the pixels in a rectangle of a surface using a buffer
+     * Updates the pixels in a rectangle of a texture using a buffer
      *
-     * @param surface          The surface to write to.
+     * There are a couple of assumptions here. First, we only update the top miplevel.
+     * And second, that any y flip needed has already been done in the buffer.
+     *
+     * @param texture          The texture to write to.
      * @param left             left edge of the rectangle to write (inclusive)
      * @param top              top edge of the rectangle to write (inclusive)
      * @param width            width of rectangle to write in pixels.
      * @param height           height of rectangle to write in pixels.
      * @param config           the pixel config of the source buffer
-     * @param transferBuffer   GrBuffer to read pixels from (type must be "kCpuToGpu")
+     * @param transferBuffer   GrBuffer to read pixels from (type must be "kXferCpuToGpu")
      * @param offset           offset from the start of the buffer
-     * @param rowBytes         number of bytes between consecutive rows. Zero
+     * @param rowBytes         number of bytes between consecutive rows in the buffer. Zero
      *                         means rows are tightly packed.
      */
-    bool transferPixels(GrSurface* surface,
+    bool transferPixels(GrTexture* texture,
                         int left, int top, int width, int height,
                         GrPixelConfig config, GrBuffer* transferBuffer,
-                        size_t offset, size_t rowBytes, GrFence* fence);
+                        size_t offset, size_t rowBytes);
 
     // After the client interacts directly with the 3D context state the GrGpu
     // must resync its internal state and assumptions about 3D context state.
@@ -384,7 +377,9 @@ public:
     virtual bool waitFence(GrFence, uint64_t timeout = 1000) = 0;
     virtual void deleteFence(GrFence) const = 0;
 
-    virtual sk_sp<GrSemaphore> SK_WARN_UNUSED_RESULT makeSemaphore() = 0;
+    virtual sk_sp<GrSemaphore> SK_WARN_UNUSED_RESULT makeSemaphore(bool isOwned = true) = 0;
+    virtual sk_sp<GrSemaphore> wrapBackendSemaphore(const GrBackendSemaphore& semaphore,
+                                                    GrWrapOwnership ownership) = 0;
     virtual void insertSemaphore(sk_sp<GrSemaphore> semaphore, bool flush = false) = 0;
     virtual void waitSemaphore(sk_sp<GrSemaphore> semaphore) = 0;
 
@@ -546,7 +541,8 @@ private:
     // onCreateTexture is called.
     virtual sk_sp<GrTexture> onCreateTexture(const GrSurfaceDesc& desc,
                                              SkBudgeted budgeted,
-                                             const SkTArray<GrMipLevel>& texels) = 0;
+                                             const GrMipLevel texels[],
+                                             int mipLevelCount) = 0;
 
     virtual sk_sp<GrTexture> onWrapBackendTexture(const GrBackendTexture&,
                                                   GrSurfaceOrigin,
@@ -591,10 +587,10 @@ private:
     virtual bool onWritePixels(GrSurface*,
                                int left, int top, int width, int height,
                                GrPixelConfig config,
-                               const SkTArray<GrMipLevel>& texels) = 0;
+                               const GrMipLevel texels[], int mipLevelCount) = 0;
 
-    // overridden by backend-specific derived class to perform the surface write
-    virtual bool onTransferPixels(GrSurface*,
+    // overridden by backend-specific derived class to perform the texture transfer
+    virtual bool onTransferPixels(GrTexture*,
                                   int left, int top, int width, int height,
                                   GrPixelConfig config, GrBuffer* transferBuffer,
                                   size_t offset, size_t rowBytes) = 0;

@@ -41,7 +41,7 @@ class SkThreadedBMPDevice : public SkBitmapDevice {
 public:
     // When threads = 0, we make fThreadCnt = fTileCnt
     SkThreadedBMPDevice(const SkBitmap& bitmap, int tiles, int threads = 0);
-    ~SkThreadedBMPDevice() { finishThreads(); }
+    ~SkThreadedBMPDevice() override { finishThreads(); }
 
 protected:
     void drawPaint(const SkPaint& paint) override;
@@ -52,7 +52,7 @@ protected:
 
     void drawPath(const SkPath&, const SkPaint&, const SkMatrix* prePathMatrix,
                   bool pathIsMutable) override;
-    void drawBitmap(const SkBitmap&, const SkMatrix&, const SkPaint&) override;
+    void drawBitmap(const SkBitmap&, SkScalar x, SkScalar y, const SkPaint&) override;
     void drawSprite(const SkBitmap&, int x, int y, const SkPaint&) override;
 
     void drawText(const void* text, size_t len, SkScalar x, SkScalar y,

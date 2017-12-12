@@ -17,6 +17,7 @@
 #include "GrReducedClip.h"
 #include "GrResourceCache.h"
 #include "GrSurfaceProxyPriv.h"
+#include "GrTexture.h"
 #include "GrTextureProxy.h"
 typedef GrReducedClip::ElementList ElementList;
 typedef GrReducedClip::InitialState InitialState;
@@ -1106,16 +1107,16 @@ static void test_reduced_clip_stack_genid(skiatest::Reporter* reporter) {
 
         stack.clipRect(SkRect::MakeXYWH(0, 0, SkScalar(25.3), SkScalar(25.3)), SkMatrix::I(),
                        kReplace_SkClipOp, true);
-        int32_t genIDA = stack.getTopmostGenID();
+        uint32_t genIDA = stack.getTopmostGenID();
         stack.clipRect(SkRect::MakeXYWH(50, 0, SkScalar(25.3), SkScalar(25.3)), SkMatrix::I(),
                        kUnion_SkClipOp, true);
-        int32_t genIDB = stack.getTopmostGenID();
+        uint32_t genIDB = stack.getTopmostGenID();
         stack.clipRect(SkRect::MakeXYWH(0, 50, SkScalar(25.3), SkScalar(25.3)), SkMatrix::I(),
                        kUnion_SkClipOp, true);
-        int32_t genIDC = stack.getTopmostGenID();
+        uint32_t genIDC = stack.getTopmostGenID();
         stack.clipRect(SkRect::MakeXYWH(50, 50, SkScalar(25.3), SkScalar(25.3)), SkMatrix::I(),
                        kUnion_SkClipOp, true);
-        int32_t genIDD = stack.getTopmostGenID();
+        uint32_t genIDD = stack.getTopmostGenID();
 
 
 #define IXYWH SkIRect::MakeXYWH
@@ -1134,7 +1135,7 @@ static void test_reduced_clip_stack_genid(skiatest::Reporter* reporter) {
         static const struct SUPPRESS_VISIBILITY_WARNING {
             SkRect testBounds;
             int reducedClipCount;
-            int32_t reducedGenID;
+            uint32_t reducedGenID;
             InitialState initialState;
             SkIRect clipIRect;
             // parameter.
@@ -1497,7 +1498,7 @@ DEF_GPUTEST_FOR_ALL_CONTEXTS(canvas_private_clipRgn, reporter, ctxInfo) {
 
     const int w = 10;
     const int h = 10;
-    SkImageInfo info = SkImageInfo::MakeN32Premul(w, h);
+    SkImageInfo info = SkImageInfo::Make(w, h, kRGBA_8888_SkColorType, kPremul_SkAlphaType);
     sk_sp<SkSurface> surf = SkSurface::MakeRenderTarget(context, SkBudgeted::kNo, info);
     SkCanvas* canvas = surf->getCanvas();
     SkRegion rgn;

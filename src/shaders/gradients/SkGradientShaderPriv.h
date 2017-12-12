@@ -239,7 +239,8 @@ protected:
 
     virtual bool adjustMatrixAndAppendStages(SkArenaAlloc* alloc,
                                              SkMatrix* matrix,
-                                             SkRasterPipeline* p) const { return false; }
+                                             SkRasterPipeline* tPipeline,
+                                             SkRasterPipeline* postPipeline) const = 0;
 
     template <typename T, typename... Args>
     static Context* CheckedMakeContext(SkArenaAlloc* alloc, Args&&... args) {
@@ -440,6 +441,11 @@ protected:
     bool onIsEqual(const GrFragmentProcessor&) const override;
 
     const GrCoordTransform& getCoordTransform() const { return fCoordTransform; }
+
+    /** Checks whether the constructor failed to fully initialize the processor. */
+    bool isValid() const {
+        return fColorType != kTexture_ColorType || fTextureSampler.isInitialized();
+    }
 
 private:
     static OptimizationFlags OptFlags(bool isOpaque);

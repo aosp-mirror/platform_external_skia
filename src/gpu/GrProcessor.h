@@ -8,23 +8,23 @@
 #ifndef GrProcessor_DEFINED
 #define GrProcessor_DEFINED
 
-#include "GrColor.h"
+#include "../private/SkAtomics.h"
 #include "GrBuffer.h"
+#include "GrColor.h"
 #include "GrGpuResourceRef.h"
 #include "GrProcessorUnitTest.h"
 #include "GrProgramElement.h"
 #include "GrSamplerParams.h"
 #include "GrShaderVar.h"
 #include "GrSurfaceProxyPriv.h"
+#include "GrTextureProxy.h"
 #include "SkMath.h"
 #include "SkString.h"
-#include "../private/SkAtomics.h"
 
 class GrContext;
 class GrCoordTransform;
 class GrInvariantOutput;
 class GrResourceProvider;
-class GrTextureProxy;
 
 /**
  * Used by processors to build their keys. It incorporates each per-processor key into a larger
@@ -190,7 +190,7 @@ protected:
      */
     void addTextureSampler(const TextureSampler*);
     void addBufferAccess(const BufferAccess*);
-    void addImageStorageAccess(GrResourceProvider* resourceProvider, const ImageStorageAccess*);
+    void addImageStorageAccess(const ImageStorageAccess*);
 
     bool hasSameSamplersAndAccesses(const GrResourceIOProcessor&) const;
 
@@ -219,21 +219,20 @@ public:
      */
     TextureSampler();
 
-    // MDB TODO: ultimately we shouldn't need the resource provider parameter
-    TextureSampler(GrResourceProvider*, sk_sp<GrTextureProxy>, const GrSamplerParams&);
-    explicit TextureSampler(GrResourceProvider*, sk_sp<GrTextureProxy>,
+    TextureSampler(sk_sp<GrTextureProxy>, const GrSamplerParams&);
+    explicit TextureSampler(sk_sp<GrTextureProxy>,
                             GrSamplerParams::FilterMode = GrSamplerParams::kNone_FilterMode,
                             SkShader::TileMode tileXAndY = SkShader::kClamp_TileMode,
                             GrShaderFlags visibility = kFragment_GrShaderFlag);
-    void reset(GrResourceProvider*, sk_sp<GrTextureProxy>, const GrSamplerParams&,
+    void reset(sk_sp<GrTextureProxy>, const GrSamplerParams&,
                GrShaderFlags visibility = kFragment_GrShaderFlag);
-    void reset(GrResourceProvider*, sk_sp<GrTextureProxy>,
+    void reset(sk_sp<GrTextureProxy>,
                GrSamplerParams::FilterMode = GrSamplerParams::kNone_FilterMode,
                SkShader::TileMode tileXAndY = SkShader::kClamp_TileMode,
                GrShaderFlags visibility = kFragment_GrShaderFlag);
 
     bool operator==(const TextureSampler& that) const {
-        return this->proxy() == that.proxy() &&
+        return this->proxy()->underlyingUniqueID() == that.proxy()->underlyingUniqueID() &&
                fParams == that.fParams &&
                fVisibility == that.fVisibility;
     }
@@ -255,6 +254,7 @@ public:
     GrShaderFlags visibility() const { return fVisibility; }
     const GrSamplerParams& params() const { return fParams; }
 
+    bool isInitialized() const { return SkToBool(fProxyRef.get()); }
     /**
      * For internal use by GrProcessor.
      */

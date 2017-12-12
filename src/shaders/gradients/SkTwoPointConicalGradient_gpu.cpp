@@ -62,7 +62,8 @@ public:
     class GLSLEdge2PtConicalProcessor;
 
     static sk_sp<GrFragmentProcessor> Make(const CreateArgs& args) {
-        return sk_sp<GrFragmentProcessor>(new Edge2PtConicalEffect(args));
+        auto processor = sk_sp<Edge2PtConicalEffect>(new Edge2PtConicalEffect(args));
+        return processor->isValid() ? std::move(processor) : nullptr;
     }
 
     ~Edge2PtConicalEffect() override {}
@@ -120,7 +121,7 @@ private:
         this->addCoordTransform(&fBTransform);
     }
 
-    GR_DECLARE_FRAGMENT_PROCESSOR_TEST;
+    GR_DECLARE_FRAGMENT_PROCESSOR_TEST
 
     // @{
     // Cache of values - these can change arbitrarily, EXCEPT
@@ -370,8 +371,9 @@ public:
     class GLSLFocalOutside2PtConicalProcessor;
 
     static sk_sp<GrFragmentProcessor> Make(const CreateArgs& args, SkScalar focalX) {
-        return sk_sp<GrFragmentProcessor>(
-            new FocalOutside2PtConicalEffect(args, focalX));
+        auto processor =
+                sk_sp<FocalOutside2PtConicalEffect>(new FocalOutside2PtConicalEffect(args, focalX));
+        return processor->isValid() ? std::move(processor) : nullptr;
     }
 
     ~FocalOutside2PtConicalEffect() override {}
@@ -407,7 +409,7 @@ private:
         this->initClassID<FocalOutside2PtConicalEffect>();
     }
 
-    GR_DECLARE_FRAGMENT_PROCESSOR_TEST;
+    GR_DECLARE_FRAGMENT_PROCESSOR_TEST
 
     SkScalar         fFocalX;
     bool             fIsFlipped;
@@ -583,8 +585,9 @@ public:
     class GLSLFocalInside2PtConicalProcessor;
 
     static sk_sp<GrFragmentProcessor> Make(const CreateArgs& args, SkScalar focalX) {
-        return sk_sp<GrFragmentProcessor>(
-            new FocalInside2PtConicalEffect(args, focalX));
+        auto processor =
+                sk_sp<FocalInside2PtConicalEffect>(new FocalInside2PtConicalEffect(args, focalX));
+        return processor->isValid() ? std::move(processor) : nullptr;
     }
 
     ~FocalInside2PtConicalEffect() override {}
@@ -613,7 +616,7 @@ private:
         this->initClassID<FocalInside2PtConicalEffect>();
     }
 
-    GR_DECLARE_FRAGMENT_PROCESSOR_TEST;
+    GR_DECLARE_FRAGMENT_PROCESSOR_TEST
 
     SkScalar         fFocalX;
 
@@ -821,8 +824,9 @@ public:
     class GLSLCircleInside2PtConicalProcessor;
 
     static sk_sp<GrFragmentProcessor> Make(const CreateArgs& args, const CircleConicalInfo& info) {
-        return sk_sp<GrFragmentProcessor>(
-            new CircleInside2PtConicalEffect(args, info));
+        auto processor =
+                sk_sp<CircleInside2PtConicalEffect>(new CircleInside2PtConicalEffect(args, info));
+        return processor->isValid() ? std::move(processor) : nullptr;
     }
 
     ~CircleInside2PtConicalEffect() override {}
@@ -855,7 +859,7 @@ private:
         this->initClassID<CircleInside2PtConicalEffect>();
     }
 
-    GR_DECLARE_FRAGMENT_PROCESSOR_TEST;
+    GR_DECLARE_FRAGMENT_PROCESSOR_TEST
 
     const CircleConicalInfo fInfo;
 
@@ -1083,7 +1087,7 @@ private:
         fIsFlipped = shader.isFlippedGrad();
     }
 
-    GR_DECLARE_FRAGMENT_PROCESSOR_TEST;
+    GR_DECLARE_FRAGMENT_PROCESSOR_TEST
 
     const CircleConicalInfo fInfo;
     SkScalar fTLimit;

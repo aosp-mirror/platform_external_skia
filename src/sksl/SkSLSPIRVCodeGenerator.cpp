@@ -1519,9 +1519,27 @@ SpvId SPIRVCodeGenerator::writeIntConstructor(const Constructor& c, OutputStream
         this->writeInstruction(SpvOpConvertFToS, this->getType(c.fType), result, parameter,
                                out);
     } else if (c.fArguments[0]->fType == *fContext.fUInt_Type) {
-        this->writeInstruction(SpvOpSatConvertUToS, this->getType(c.fType), result, parameter,
+        this->writeInstruction(SpvOpBitcast, this->getType(c.fType), result, parameter,
                                out);
     } else if (c.fArguments[0]->fType == *fContext.fInt_Type) {
+        return parameter;
+    }
+    return result;
+}
+
+SpvId SPIRVCodeGenerator::writeUIntConstructor(const Constructor& c, OutputStream& out) {
+    ASSERT(c.fType == *fContext.fUInt_Type);
+    ASSERT(c.fArguments.size() == 1);
+    ASSERT(c.fArguments[0]->fType.isNumber());
+    SpvId result = this->nextId();
+    SpvId parameter = this->writeExpression(*c.fArguments[0], out);
+    if (c.fArguments[0]->fType == *fContext.fFloat_Type) {
+        this->writeInstruction(SpvOpConvertFToU, this->getType(c.fType), result, parameter,
+                               out);
+    } else if (c.fArguments[0]->fType == *fContext.fInt_Type) {
+        this->writeInstruction(SpvOpBitcast, this->getType(c.fType), result, parameter,
+                               out);
+    } else if (c.fArguments[0]->fType == *fContext.fUInt_Type) {
         return parameter;
     }
     return result;
@@ -1642,6 +1660,8 @@ SpvId SPIRVCodeGenerator::writeConstructor(const Constructor& c, OutputStream& o
         return this->writeFloatConstructor(c, out);
     } else if (c.fType == *fContext.fInt_Type) {
         return this->writeIntConstructor(c, out);
+    } else if (c.fType == *fContext.fUInt_Type) {
+        return this->writeUIntConstructor(c, out);
     }
     switch (c.fType.kind()) {
         case Type::kVector_Kind:
@@ -1906,7 +1926,7 @@ SpvId SPIRVCodeGenerator::writeVariableReference(const VariableReference& ref, O
             Type intfStruct(Position(), name, fields);
             Layout layout(-1, -1, 1, -1, -1, -1, -1, false, false, false,
                           Layout::Format::kUnspecified, false, Layout::kUnspecified_Primitive, -1,
-                          -1);
+                          -1, "", Layout::kNo_Key);
             Variable* intfVar = new Variable(Position(),
                                              Modifiers(layout, Modifiers::kUniform_Flag),
                                              name,
@@ -2035,6 +2055,40 @@ SpvId SPIRVCodeGenerator::foldToBool(SpvId id, const Type& operandType, OutputSt
     return id;
 }
 
+SpvId SPIRVCodeGenerator::writeMatrixComparison(const Type& operandType, SpvId lhs, SpvId rhs,
+                                                SpvOp_ floatOperator, SpvOp_ intOperator,
+                                                OutputStream& out) {
+    SpvOp_ compareOp = is_float(fContext, operandType) ? floatOperator : intOperator;
+    ASSERT(operandType.kind() == Type::kMatrix_Kind);
+    SpvId rowType = this->getType(operandType.componentType().toCompound(fContext,
+                                                                         operandType.columns(),
+                                                                         1));
+    SpvId bvecType = this->getType(fContext.fBool_Type->toCompound(fContext,
+                                                                    operandType.columns(),
+                                                                    1));
+    SpvId boolType = this->getType(*fContext.fBool_Type);
+    SpvId result = 0;
+    for (int i = 0; i < operandType.rows(); i++) {
+        SpvId rowL = this->nextId();
+        this->writeInstruction(SpvOpCompositeExtract, rowType, rowL, lhs, 0, out);
+        SpvId rowR = this->nextId();
+        this->writeInstruction(SpvOpCompositeExtract, rowType, rowR, rhs, 0, out);
+        SpvId compare = this->nextId();
+        this->writeInstruction(compareOp, bvecType, compare, rowL, rowR, out);
+        SpvId all = this->nextId();
+        this->writeInstruction(SpvOpAll, boolType, all, compare, out);
+        if (result != 0) {
+            SpvId next = this->nextId();
+            this->writeInstruction(SpvOpLogicalAnd, boolType, next, result, all, out);
+            result = next;
+        }
+        else {
+            result = all;
+        }
+    }
+    return result;
+}
+
 SpvId SPIRVCodeGenerator::writeBinaryExpression(const BinaryExpression& b, OutputStream& out) {
     // handle cases where we don't necessarily evaluate both LHS and RHS
     switch (b.fOperator) {
@@ -2063,6 +2117,9 @@ SpvId SPIRVCodeGenerator::writeBinaryExpression(const BinaryExpression& b, Outpu
         lhs = this->writeExpression(*b.fLeft, out);
     }
     SpvId rhs = this->writeExpression(*b.fRight, out);
+    if (b.fOperator == Token::COMMA) {
+        return rhs;
+    }
     // component type we are operating on: float, int, uint
     const Type* operandType;
     // IR allows mismatched types in expressions (e.g. vec2 * float), but they need special handling
@@ -2136,6 +2193,10 @@ SpvId SPIRVCodeGenerator::writeBinaryExpression(const BinaryExpression& b, Outpu
     }
     switch (b.fOperator) {
         case Token::EQEQ: {
+            if (operandType->kind() == Type::kMatrix_Kind) {
+                return this->writeMatrixComparison(*operandType, lhs, rhs, SpvOpFOrdEqual,
+                                                   SpvOpIEqual, out);
+            }
             ASSERT(resultType == *fContext.fBool_Type);
             return this->foldToBool(this->writeBinaryOperation(resultType, *operandType, lhs, rhs,
                                                                SpvOpFOrdEqual, SpvOpIEqual,
@@ -2143,6 +2204,10 @@ SpvId SPIRVCodeGenerator::writeBinaryExpression(const BinaryExpression& b, Outpu
                                     *operandType, out);
         }
         case Token::NEQ:
+            if (operandType->kind() == Type::kMatrix_Kind) {
+                return this->writeMatrixComparison(*operandType, lhs, rhs, SpvOpFOrdNotEqual,
+                                                   SpvOpINotEqual, out);
+            }
             ASSERT(resultType == *fContext.fBool_Type);
             return this->foldToBool(this->writeBinaryOperation(resultType, *operandType, lhs, rhs,
                                                                SpvOpFOrdNotEqual, SpvOpINotEqual,
@@ -2191,6 +2256,23 @@ SpvId SPIRVCodeGenerator::writeBinaryExpression(const BinaryExpression& b, Outpu
         case Token::PERCENT:
             return this->writeBinaryOperation(resultType, *operandType, lhs, rhs, SpvOpFMod,
                                               SpvOpSMod, SpvOpUMod, SpvOpUndef, out);
+        case Token::SHL:
+            return this->writeBinaryOperation(resultType, *operandType, lhs, rhs, SpvOpUndef,
+                                              SpvOpShiftLeftLogical, SpvOpShiftLeftLogical,
+                                              SpvOpUndef, out);
+        case Token::SHR:
+            return this->writeBinaryOperation(resultType, *operandType, lhs, rhs, SpvOpUndef,
+                                              SpvOpShiftRightArithmetic, SpvOpShiftRightLogical,
+                                              SpvOpUndef, out);
+        case Token::BITWISEAND:
+            return this->writeBinaryOperation(resultType, *operandType, lhs, rhs, SpvOpUndef,
+                                              SpvOpBitwiseAnd, SpvOpBitwiseAnd, SpvOpUndef, out);
+        case Token::BITWISEOR:
+            return this->writeBinaryOperation(resultType, *operandType, lhs, rhs, SpvOpUndef,
+                                              SpvOpBitwiseOr, SpvOpBitwiseOr, SpvOpUndef, out);
+        case Token::BITWISEXOR:
+            return this->writeBinaryOperation(resultType, *operandType, lhs, rhs, SpvOpUndef,
+                                              SpvOpBitwiseXor, SpvOpBitwiseXor, SpvOpUndef, out);
         case Token::PLUSEQ: {
             SpvId result = this->writeBinaryOperation(resultType, *operandType, lhs, rhs, SpvOpFAdd,
                                                       SpvOpIAdd, SpvOpIAdd, SpvOpUndef, out);
@@ -2236,8 +2318,47 @@ SpvId SPIRVCodeGenerator::writeBinaryExpression(const BinaryExpression& b, Outpu
             lvalue->store(result, out);
             return result;
         }
+        case Token::SHLEQ: {
+            SpvId result = this->writeBinaryOperation(resultType, *operandType, lhs, rhs,
+                                                      SpvOpUndef, SpvOpShiftLeftLogical,
+                                                      SpvOpShiftLeftLogical, SpvOpUndef, out);
+            ASSERT(lvalue);
+            lvalue->store(result, out);
+            return result;
+        }
+        case Token::SHREQ: {
+            SpvId result = this->writeBinaryOperation(resultType, *operandType, lhs, rhs,
+                                                      SpvOpUndef, SpvOpShiftRightArithmetic,
+                                                      SpvOpShiftRightLogical, SpvOpUndef, out);
+            ASSERT(lvalue);
+            lvalue->store(result, out);
+            return result;
+        }
+        case Token::BITWISEANDEQ: {
+            SpvId result = this->writeBinaryOperation(resultType, *operandType, lhs, rhs,
+                                                      SpvOpUndef, SpvOpBitwiseAnd, SpvOpBitwiseAnd,
+                                                      SpvOpUndef, out);
+            ASSERT(lvalue);
+            lvalue->store(result, out);
+            return result;
+        }
+        case Token::BITWISEOREQ: {
+            SpvId result = this->writeBinaryOperation(resultType, *operandType, lhs, rhs,
+                                                      SpvOpUndef, SpvOpBitwiseOr, SpvOpBitwiseOr,
+                                                      SpvOpUndef, out);
+            ASSERT(lvalue);
+            lvalue->store(result, out);
+            return result;
+        }
+        case Token::BITWISEXOREQ: {
+            SpvId result = this->writeBinaryOperation(resultType, *operandType, lhs, rhs,
+                                                      SpvOpUndef, SpvOpBitwiseXor, SpvOpBitwiseXor,
+                                                      SpvOpUndef, out);
+            ASSERT(lvalue);
+            lvalue->store(result, out);
+            return result;
+        }
         default:
-            // FIXME: missing support for some operators (bitwise, &&=, ||=, shift...)
             ABORT("unsupported binary expression: %s", b.description().c_str());
     }
 }
@@ -2599,6 +2720,13 @@ SpvId SPIRVCodeGenerator::writeInterfaceBlock(const InterfaceBlock& intf) {
     return result;
 }
 
+void SPIRVCodeGenerator::writePrecisionModifier(const Modifiers& modifiers, SpvId id) {
+    if ((modifiers.fFlags & Modifiers::kLowp_Flag) |
+        (modifiers.fFlags & Modifiers::kMediump_Flag)) {
+        this->writeInstruction(SpvOpDecorate, id, SpvDecorationRelaxedPrecision, fDecorationBuffer);
+    }
+}
+
 #define BUILTIN_IGNORE 9999
 void SPIRVCodeGenerator::writeGlobalVars(Program::Kind kind, const VarDeclarations& decl,
                                          OutputStream& out) {
@@ -2650,6 +2778,7 @@ void SPIRVCodeGenerator::writeGlobalVars(Program::Kind kind, const VarDeclaratio
         SpvId type = this->getPointerType(var->fType, storageClass);
         this->writeInstruction(SpvOpVariable, type, id, storageClass, fConstantBuffer);
         this->writeInstruction(SpvOpName, id, var->fName.c_str(), fNameBuffer);
+        this->writePrecisionModifier(var->fModifiers, id);
         if (var->fType.kind() == Type::kMatrix_Kind) {
             this->writeInstruction(SpvOpMemberDecorate, id, (SpvId) i, SpvDecorationColMajor,
                                    fDecorationBuffer);
@@ -2669,9 +2798,7 @@ void SPIRVCodeGenerator::writeGlobalVars(Program::Kind kind, const VarDeclaratio
 
 void SPIRVCodeGenerator::writeVarDeclarations(const VarDeclarations& decl, OutputStream& out) {
     for (const auto& stmt : decl.fVars) {
-        if (stmt->fKind == Statement::kNop_Kind) {
-            continue;
-        }
+        ASSERT(stmt->fKind == Statement::kVarDeclaration_Kind);
         VarDeclaration& varDecl = (VarDeclaration&) *stmt;
         const Variable* var = varDecl.fVar;
         // These haven't been implemented in our SPIR-V generator yet and we only currently use them
@@ -2942,6 +3069,8 @@ void SPIRVCodeGenerator::writeInstructions(const Program& program, OutputStream&
         case Program::kGeometry_Kind:
             this->writeWord(SpvExecutionModelGeometry, out);
             break;
+        default:
+            ABORT("cannot write this kind of program to SPIR-V\n");
     }
     this->writeWord(fFunctionMap[main], out);
     this->writeString(main->fName.c_str(), out);

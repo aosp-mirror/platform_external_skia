@@ -6,17 +6,22 @@
  */
 #include "SkTypes.h"
 
-//TODO: This define is temporary and we will compile with NDK after
-//TODO: Skia bug 6672 is resolved.
-#ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
+
+#if defined(SK_BUILD_FOR_ANDROID) && __ANDROID_API__ >= 26
 #define GL_GLEXT_PROTOTYPES
 #define EGL_EGLEXT_PROTOTYPES
 #include "GrAHardwareBufferImageGenerator.h"
 
+#include <android/hardware_buffer.h>
+
 #include "GrBackendSurface.h"
 #include "GrContext.h"
 #include "GrContextPriv.h"
+#include "GrResourceCache.h"
 #include "GrResourceProvider.h"
+#include "GrTexture.h"
+#include "GrTextureProxy.h"
+#include "SkMessageBus.h"
 
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
@@ -63,33 +68,65 @@ std::unique_ptr<SkImageGenerator> GrAHardwareBufferImageGenerator::Make(
 GrAHardwareBufferImageGenerator::GrAHardwareBufferImageGenerator(const SkImageInfo& info,
         AHardwareBuffer* graphicBuffer, SkAlphaType alphaType)
     : INHERITED(info)
-    , fGraphicBuffer(graphicBuffer)
-    , fAlphaType(alphaType) {
+    , fGraphicBuffer(graphicBuffer) {
     AHardwareBuffer_acquire(fGraphicBuffer);
 }
 
 GrAHardwareBufferImageGenerator::~GrAHardwareBufferImageGenerator() {
     AHardwareBuffer_release(fGraphicBuffer);
+    this->clear();
+}
+
+void GrAHardwareBufferImageGenerator::clear() {
+    if (fOriginalTexture) {
+        // Notify the original cache that it can free the last ref, so it happens on the correct
+        // thread.
+        GrGpuResourceFreedMessage msg { fOriginalTexture, fOwningContextID };
+        SkMessageBus<GrGpuResourceFreedMessage>::Post(msg);
+        fOriginalTexture = nullptr;
+    }
 }
 
 void GrAHardwareBufferImageGenerator::deleteImageTexture(void* context) {
-     BufferCleanupHelper* cleanupHelper = static_cast<BufferCleanupHelper*>(context);
-     delete cleanupHelper;
+    BufferCleanupHelper* cleanupHelper = static_cast<BufferCleanupHelper*>(context);
+    delete cleanupHelper;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 #if SK_SUPPORT_GPU
 
-
 sk_sp<GrTextureProxy> GrAHardwareBufferImageGenerator::onGenerateTexture(
-        GrContext* context, const SkImageInfo& info, const SkIPoint& origin) {
-    // TODO: return a cached GrTextureProxy if invoked with the same context
-    // TODO: if we cache GrTextureProxy, then deleteImageTexture may be invoked on the wrong thread
+        GrContext* context, const SkImageInfo& info, const SkIPoint& origin,
+        SkTransferFunctionBehavior) {
+    auto proxy = this->makeProxy(context);
+    if (!proxy) {
+        return nullptr;
+    }
 
+    if (0 == origin.fX && 0 == origin.fY &&
+            info.width() == getInfo().width() && info.height() == getInfo().height()) {
+        // If the caller wants the entire texture, we're done
+        return proxy;
+    } else {
+        // Otherwise, make a copy of the requested subset.
+        return GrSurfaceProxy::Copy(context, proxy.get(),
+                                    SkIRect::MakeXYWH(origin.fX, origin.fY, info.width(),
+                                                      info.height()),
+                                    SkBudgeted::kYes);
+    }
+}
+#endif
+
+sk_sp<GrTextureProxy> GrAHardwareBufferImageGenerator::makeProxy(GrContext* context) {
     if (!context->getGpu() || kOpenGL_GrBackend != context->contextPriv().getBackend()) {
         // Check if GrContext is not abandoned and the backend is GL.
         return nullptr;
+    }
+
+    // return a cached GrTexture if invoked with the same context
+    if (fOriginalTexture && fOwningContextID == context->uniqueID()) {
+        return GrSurfaceProxy::MakeWrapped(sk_ref_sp(fOriginalTexture));
     }
 
     while (GL_NO_ERROR != glGetError()) {} //clear GL errors
@@ -166,36 +203,23 @@ sk_sp<GrTextureProxy> GrAHardwareBufferImageGenerator::onGenerateTexture(
         return nullptr;
     }
     tex->setRelease(deleteImageTexture, new BufferCleanupHelper(image, display));
-    sk_sp<GrTextureProxy> proxy(GrSurfaceProxy::MakeWrapped(std::move(tex)));
 
-    if (0 == origin.fX && 0 == origin.fY &&
-            info.width() == backendTex.width() && info.height() == backendTex.height()) {
-        // If the caller wants the entire texture, we're done
-        return proxy;
-    } else {
-        // Otherwise, make a copy of the requested subset.
-        GrSurfaceDesc desc;
-        desc.fConfig = proxy->config();
-        desc.fWidth = info.width();
-        desc.fHeight = info.height();
-        desc.fOrigin = proxy->origin();
-        desc.fIsMipMapped = proxy->isMipMapped();
+    // We fail this assert, if the context has changed. This will be fully handled after
+    // skbug.com/6812 is ready.
+    SkASSERT(!fOriginalTexture);
 
-        sk_sp<GrSurfaceContext> sContext(context->contextPriv().makeDeferredSurfaceContext(
-            desc, SkBackingFit::kExact, SkBudgeted::kYes));
-        if (!sContext) {
-            return nullptr;
-        }
-
-        SkIRect subset = SkIRect::MakeXYWH(origin.fX, origin.fY, info.width(), info.height());
-        if (!sContext->copy(proxy.get(), subset, SkIPoint::Make(0, 0))) {
-            return nullptr;
-        }
-
-        return sContext->asTextureProxyRef();
-    }
+    this->clear();
+    fOriginalTexture = tex.get();
+    fOwningContextID = context->uniqueID();
+    // Attach our texture to this context's resource cache. This ensures that deletion will happen
+    // in the correct thread/context. This adds the only ref to the texture that will persist from
+    // this point. To trigger GrTexture deletion a message is sent by generator dtor or by
+    // makeProxy when it is invoked with a different context.
+    //TODO: GrResourceCache should delete GrTexture, when GrContext is deleted. Currently
+    //TODO: SkMessageBus ignores messages for deleted contexts and GrTexture will leak.
+    context->getResourceCache()->insertCrossContextGpuResource(fOriginalTexture);
+    return GrSurfaceProxy::MakeWrapped(std::move(tex));
 }
-#endif
 
 bool GrAHardwareBufferImageGenerator::onIsValid(GrContext* context) const {
     if (nullptr == context) {

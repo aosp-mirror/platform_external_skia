@@ -17,6 +17,11 @@ public:
     ~SkAutoPixmapStorage();
 
     /**
+    * Leave the moved-from object in a free-but-valid state.
+    */
+    SkAutoPixmapStorage& operator=(SkAutoPixmapStorage&& other);
+
+    /**
     *  Try to allocate memory for the pixels needed to match the specified Info. On success
     *  return true and fill out the pixmap to point to that memory. The storage will be freed
     *  when this object is destroyed, or if another call to tryAlloc() or alloc() is made.
@@ -52,9 +57,9 @@ public:
         this->freeStorage();
         this->INHERITED::reset();
     }
-    void reset(const SkImageInfo& info, const void* addr, size_t rb, SkColorTable* ctable = NULL) {
+    void reset(const SkImageInfo& info, const void* addr, size_t rb) {
         this->freeStorage();
-        this->INHERITED::reset(info, addr, rb, ctable);
+        this->INHERITED::reset(info, addr, rb);
     }
     void reset(const SkImageInfo& info) {
         this->freeStorage();
@@ -65,6 +70,12 @@ public:
         return this->INHERITED::reset(mask);
     }
 
+#ifdef SK_SUPPORT_LEGACY_COLORTABLE
+    void reset(const SkImageInfo& info, const void* addr, size_t rb, SkColorTable*) {
+        this->freeStorage();
+        this->INHERITED::reset(info, addr, rb);
+    }
+#endif
 private:
     void*   fStorage;
 

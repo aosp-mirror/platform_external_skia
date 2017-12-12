@@ -16,29 +16,21 @@ LinearGradient4fContext final : public GradientShaderBase4fContext {
 public:
     LinearGradient4fContext(const SkLinearGradient&, const ContextRec&);
 
-    void shadeSpan(int x, int y, SkPMColor dst[], int count) override;
     void shadeSpan4f(int x, int y, SkPM4f dst[], int count) override;
-
-protected:
-    void mapTs(int x, int y, SkScalar ts[], int count) const override;
 
 private:
     using INHERITED = GradientShaderBase4fContext;
 
-    template<DstType, ApplyPremul, TileMode>
+    template<ApplyPremul, TileMode>
     class LinearIntervalProcessor;
 
-    template <DstType dstType, ApplyPremul premul>
-    void shadePremulSpan(int x, int y, typename DstTraits<dstType, premul>::Type[],
-                         int count) const;
+    template <ApplyPremul premul>
+    void shadePremulSpan(int x, int y, SkPM4f[], int count) const;
 
-    template <DstType dstType, ApplyPremul premul, SkShader::TileMode tileMode>
-    void shadeSpanInternal(int x, int y, typename DstTraits<dstType, premul>::Type[],
-                           int count) const;
+    template <ApplyPremul premul, SkShader::TileMode tileMode>
+    void shadeSpanInternal(int x, int y, SkPM4f[], int count) const;
 
     const Sk4fGradientInterval* findInterval(SkScalar fx) const;
-
-    bool isFast() const { return fDstToPosClass == kLinear_MatrixClass; }
 
     mutable const Sk4fGradientInterval* fCachedInterval;
 };

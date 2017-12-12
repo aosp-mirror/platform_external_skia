@@ -22,18 +22,23 @@ protected:
                      const Options& opts) override;
 
 #if SK_SUPPORT_GPU
-    sk_sp<GrTextureProxy> onGenerateTexture(GrContext*, const SkImageInfo&,
-                                            const SkIPoint&) override;
+    sk_sp<GrTextureProxy> onGenerateTexture(GrContext*, const SkImageInfo&, const SkIPoint&,
+                                            SkTransferFunctionBehavior) override;
+    TexGenType onCanGenerateTexture() const override {
+        return TexGenType::kExpensive;
+    }
 #endif
 
 private:
     SkBitmap            fSrc;
     sk_sp<SkColorSpace> fDst;
 
-    SkColorSpaceXformImageGenerator(const SkBitmap& src, sk_sp<SkColorSpace> dst);
+    static std::unique_ptr<SkImageGenerator> Make(
+            const SkBitmap& src, sk_sp<SkColorSpace> dst, SkCopyPixelsMode, uint32_t id);
+    SkColorSpaceXformImageGenerator(const SkBitmap& src, sk_sp<SkColorSpace> dst, uint32_t id);
 
-    friend class SkImageGenerator;
-
+    friend sk_sp<SkImage> SkMakeImageInColorSpace(const SkBitmap&, sk_sp<SkColorSpace>, uint32_t,
+                                                  SkCopyPixelsMode);
     typedef SkImageGenerator INHERITED;
 };
 

@@ -18,7 +18,6 @@
 #include "GrGLVertexArray.h"
 #include "GrGpu.h"
 #include "GrMesh.h"
-#include "GrTexturePriv.h"
 #include "GrWindowRectsState.h"
 #include "GrXferProcessor.h"
 #include "SkLRUCache.h"
@@ -101,7 +100,8 @@ public:
     // on GrGLGpuCommandBuffer.
     void draw(const GrPipeline&,
               const GrPrimitiveProcessor&,
-              const GrMesh*,
+              const GrMesh[],
+              const GrPipeline::DynamicState[],
               int meshCount);
 
 
@@ -166,7 +166,9 @@ public:
     bool waitFence(GrFence, uint64_t timeout) override;
     void deleteFence(GrFence) const override;
 
-    sk_sp<GrSemaphore> SK_WARN_UNUSED_RESULT makeSemaphore() override;
+    sk_sp<GrSemaphore> SK_WARN_UNUSED_RESULT makeSemaphore(bool isOwned) override;
+    sk_sp<GrSemaphore> wrapBackendSemaphore(const GrBackendSemaphore& semaphore,
+                                            GrWrapOwnership ownership) override;
     void insertSemaphore(sk_sp<GrSemaphore> semaphore, bool flush) override;
     void waitSemaphore(sk_sp<GrSemaphore> semaphore) override;
 
@@ -183,7 +185,8 @@ private:
     void xferBarrier(GrRenderTarget*, GrXferBarrierType) override;
 
     sk_sp<GrTexture> onCreateTexture(const GrSurfaceDesc& desc, SkBudgeted budgeted,
-                                     const SkTArray<GrMipLevel>& texels) override;
+                                     const GrMipLevel texels[],
+                                     int mipLevelCount) override;
 
     GrBuffer* onCreateBuffer(size_t size, GrBufferType intendedType, GrAccessPattern,
                              const void* data) override;
@@ -213,7 +216,7 @@ private:
     // The texture parameters are cached in |initialTexParams|.
     bool createTextureImpl(const GrSurfaceDesc& desc, GrGLTextureInfo* info,
                            bool renderTarget, GrGLTexture::TexParams* initialTexParams,
-                           const SkTArray<GrMipLevel>& texels);
+                           const GrMipLevel texels[], int mipLevelCount);
 
     bool onIsACopyNeededForTextureParams(GrTextureProxy*, const GrSamplerParams&,
                                          GrTextureProducer::CopyParams*,
@@ -243,9 +246,9 @@ private:
     bool onWritePixels(GrSurface*,
                        int left, int top, int width, int height,
                        GrPixelConfig config,
-                       const SkTArray<GrMipLevel>& texels) override;
+                       const GrMipLevel texels[], int mipLevelCount) override;
 
-    bool onTransferPixels(GrSurface*,
+    bool onTransferPixels(GrTexture*,
                           int left, int top, int width, int height,
                           GrPixelConfig config, GrBuffer* transferBuffer,
                           size_t offset, size_t rowBytes) override;
@@ -371,14 +374,13 @@ private:
 
     // helper for onCreateTexture and writeTexturePixels
     enum UploadType {
-        kNewTexture_UploadType,    // we are creating a new texture
-        kWrite_UploadType,         // we are using TexSubImage2D to copy data to an existing texture
-        kTransfer_UploadType,      // we are using a transfer buffer to copy data
+        kNewTexture_UploadType,   // we are creating a new texture
+        kWrite_UploadType,        // we are using TexSubImage2D to copy data to an existing texture
     };
     bool uploadTexData(GrPixelConfig texConfig, int texWidth, int texHeight,
                        GrSurfaceOrigin texOrigin, GrGLenum target, UploadType uploadType, int left,
                        int top, int width, int height, GrPixelConfig dataConfig,
-                       const SkTArray<GrMipLevel>& texels);
+                       const GrMipLevel texels[], int mipLevelCount);
 
     bool createRenderTargetObjects(const GrSurfaceDesc&, const GrGLTextureInfo& texInfo,
                                    GrGLRenderTarget::IDDesc*);
@@ -617,21 +619,7 @@ private:
     GrGLuint                                fStencilClipClearProgram;
     sk_sp<GrGLBuffer>                       fStencilClipClearArrayBuffer;
 
-    static int TextureToCopyProgramIdx(GrTexture* texture) {
-        switch (texture->texturePriv().samplerType()) {
-            case kTexture2DSampler_GrSLType:
-                return 0;
-            case kITexture2DSampler_GrSLType:
-                return 1;
-            case kTexture2DRectSampler_GrSLType:
-                return 2;
-            case kTextureExternalSampler_GrSLType:
-                return 3;
-            default:
-                SkFAIL("Unexpected samper type");
-                return 0;
-        }
-    }
+    static int TextureToCopyProgramIdx(GrTexture* texture);
 
     static int TextureSizeToMipmapProgramIdx(int width, int height) {
         const bool wide = (width > 1) && SkToBool(width & 0x1);
@@ -640,6 +628,7 @@ private:
     }
 
     float                                   fHWMinSampleShading;
+    GrPrimitiveType                         fLastPrimitiveType;
 
     typedef GrGpu INHERITED;
     friend class GrGLPathRendering; // For accessing setTextureUnit.

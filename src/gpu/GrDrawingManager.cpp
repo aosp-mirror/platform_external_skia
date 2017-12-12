@@ -8,6 +8,8 @@
 #include "GrDrawingManager.h"
 
 #include "GrContext.h"
+#include "GrGpu.h"
+#include "GrOnFlushResourceProvider.h"
 #include "GrRenderTargetContext.h"
 #include "GrPathRenderingRenderTargetContext.h"
 #include "GrRenderTargetProxy.h"
@@ -20,6 +22,7 @@
 #include "SkSurface_Gpu.h"
 #include "SkTTopoSort.h"
 
+#include "GrTracing.h"
 #include "text/GrAtlasTextContext.h"
 #include "text/GrStencilAndCoverTextContext.h"
 
@@ -81,6 +84,8 @@ gr_instanced::OpAllocator* GrDrawingManager::instancingAllocator() {
 
 // MDB TODO: make use of the 'proxy' parameter.
 void GrDrawingManager::internalFlush(GrSurfaceProxy*, GrResourceCache::FlushType type) {
+    GR_CREATE_TRACE_MARKER_CONTEXT("GrDrawingManager", "internalFlush", fContext);
+
     if (fFlushing || this->wasAbandoned()) {
         return;
     }
@@ -138,7 +143,7 @@ void GrDrawingManager::internalFlush(GrSurfaceProxy*, GrResourceCache::FlushType
             }
 
             for (int j = 0; j < renderTargetContexts.count(); ++j) {
-                GrRenderTargetOpList* opList = renderTargetContexts[j]->getOpList();
+                GrOpList* opList = renderTargetContexts[j]->getOpList();
                 if (!opList) {
                     continue;   // Odd - but not a big deal
                 }
@@ -223,7 +228,8 @@ void GrDrawingManager::addOnFlushCallbackObject(GrOnFlushCallbackObject* onFlush
     fOnFlushCBObjects.push_back(onFlushCBObject);
 }
 
-sk_sp<GrRenderTargetOpList> GrDrawingManager::newRTOpList(GrRenderTargetProxy* rtp) {
+sk_sp<GrRenderTargetOpList> GrDrawingManager::newRTOpList(GrRenderTargetProxy* rtp,
+                                                          bool managedOpList) {
     SkASSERT(fContext);
 
     // This is  a temporary fix for the partial-MDB world. In that world we're not reordering
@@ -238,7 +244,9 @@ sk_sp<GrRenderTargetOpList> GrDrawingManager::newRTOpList(GrRenderTargetProxy* r
                                                                 fContext->getAuditTrail()));
     SkASSERT(rtp->getLastOpList() == opList.get());
 
-    fOpLists.push_back() = opList;
+    if (managedOpList) {
+        fOpLists.push_back() = opList;
+    }
 
     return opList;
 }
@@ -305,7 +313,8 @@ GrPathRenderer* GrDrawingManager::getPathRenderer(const GrPathRenderer::CanDrawP
 sk_sp<GrRenderTargetContext> GrDrawingManager::makeRenderTargetContext(
                                                             sk_sp<GrSurfaceProxy> sProxy,
                                                             sk_sp<SkColorSpace> colorSpace,
-                                                            const SkSurfaceProps* surfaceProps) {
+                                                            const SkSurfaceProps* surfaceProps,
+                                                            bool managedOpList) {
     if (this->wasAbandoned() || !sProxy->asRenderTargetProxy()) {
         return nullptr;
     }
@@ -346,7 +355,7 @@ sk_sp<GrRenderTargetContext> GrDrawingManager::makeRenderTargetContext(
                                                                   std::move(colorSpace),
                                                                   surfaceProps,
                                                                   fContext->getAuditTrail(),
-                                                                  fSingleOwner));
+                                                                  fSingleOwner, managedOpList));
 }
 
 sk_sp<GrTextureContext> GrDrawingManager::makeTextureContext(sk_sp<GrSurfaceProxy> sProxy,
