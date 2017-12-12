@@ -88,9 +88,14 @@ static void dump_output(const sk_sp<SkData>& data,
     }
 }
 
-static SkData* encode_snapshot(const sk_sp<SkSurface>& surface) {
+static sk_sp<SkData> encode_snapshot(const sk_sp<SkSurface>& surface) {
     sk_sp<SkImage> img(surface->makeImageSnapshot());
-    return img ? img->encode() : nullptr;
+    return img ? img->encodeToData() : nullptr;
+}
+
+static SkCanvas* prepare_canvas(SkCanvas * canvas) {
+    canvas->clear(SK_ColorWHITE);
+    return canvas;
 }
 
 int main(int argc, char** argv) {
@@ -136,8 +141,8 @@ int main(int argc, char** argv) {
     if (options.raster) {
         auto rasterSurface = SkSurface::MakeRaster(info);
         srand(0);
-        draw(rasterSurface->getCanvas());
-        rasterData.reset(encode_snapshot(rasterSurface));
+        draw(prepare_canvas(rasterSurface->getCanvas()));
+        rasterData = encode_snapshot(rasterSurface);
     }
     if (options.gpu) {
         auto grContext = create_grcontext(gGLDriverInfo);
@@ -150,8 +155,8 @@ int main(int argc, char** argv) {
                 exit(1);
             }
             srand(0);
-            draw(surface->getCanvas());
-            gpuData.reset(encode_snapshot(surface));
+            draw(prepare_canvas(surface->getCanvas()));
+            gpuData = encode_snapshot(surface);
         }
     }
     if (options.pdf) {
@@ -159,7 +164,7 @@ int main(int argc, char** argv) {
         sk_sp<SkDocument> document(SkDocument::MakePDF(&pdfStream));
         if (document) {
             srand(0);
-            draw(document->beginPage(options.size.width(), options.size.height()));
+            draw(prepare_canvas(document->beginPage(options.size.width(), options.size.height())));
             document->close();
             pdfData = pdfStream.detachAsData();
         }
@@ -169,7 +174,7 @@ int main(int argc, char** argv) {
         size = options.size;
         SkPictureRecorder recorder;
         srand(0);
-        draw(recorder.beginRecording(size.width(), size.height()));
+        draw(prepare_canvas(recorder.beginRecording(size.width(), size.height())));
         auto picture = recorder.finishRecordingAsPicture();
         SkDynamicMemoryWStream skpStream;
         picture->serialize(&skpStream);

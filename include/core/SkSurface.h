@@ -15,6 +15,7 @@
 class SkCanvas;
 class SkPaint;
 class GrBackendRenderTarget;
+class GrBackendSemaphore;
 class GrContext;
 class GrRenderTarget;
 
@@ -175,6 +176,12 @@ public:
         return MakeRenderTarget(gr, b, info, 0, kBottomLeft_GrSurfaceOrigin, nullptr);
     }
 
+    /**
+     *  Returns a surface that stores no pixels. It can be drawn to via its canvas, but that
+     *  canvas does not draw anything. Calling makeImageSnapshot() will return nullptr.
+     */
+    static sk_sp<SkSurface> MakeNull(int width, int height);
+
     int width() const { return fWidth; }
     int height() const { return fHeight; }
 
@@ -323,8 +330,39 @@ public:
 
     /**
      * Issue any pending surface IO to the current backend 3D API and resolve any surface MSAA.
+     *
+     * The flush calls below are the new preferred way to flush calls to a surface, and this call
+     * will eventually be removed.
      */
     void prepareForExternalIO();
+
+    /**
+     * Issue any pending surface IO to the current backend 3D API
+     */
+    void flush();
+
+    /**
+     * Issue any pending surface IO to the current backend 3D API. After issuing all commands, we
+     * will issue numSemaphore semaphores for the gpu to signal. We will then fill in the array
+     * signalSemaphores with the info on the semaphores we submitted. The client is reposonsible for
+     * allocating enough space in signalSemaphores to handle numSemaphores of GrBackendSemaphores.
+     * The client will also take ownership of the returned underlying backend semaphores.
+     *
+     * If this call returns false, the GPU backend will not have created or added any semaphores to
+     * signal. Thus the array of semaphores will remain uninitialized. However, we will still flush
+     * any pending surface IO.
+     */
+    bool flushAndSignalSemaphores(int numSemaphores, GrBackendSemaphore* signalSemaphores);
+
+    /**
+     * Inserts a list of GPU semaphores that the current backend 3D API must wait on before
+     * executing any more commands on the GPU for this surface. Skia will take ownership of the
+     * underlying semaphores and delete them once they have been signaled and waited on.
+     *
+     * If this call returns false, then the GPU backend will not wait on any passed in semaphores,
+     * and the client will still own the semaphores.
+     */
+    bool wait(int numSemaphores, const GrBackendSemaphore* waitSemaphores);
 
 protected:
     SkSurface(int width, int height, const SkSurfaceProps*);

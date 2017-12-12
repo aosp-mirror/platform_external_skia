@@ -113,15 +113,6 @@ bool SkJpegEncoderMgr::setParams(const SkImageInfo& srcInfo, const SkJpegEncoder
             jpegColorType = JCS_RGB;
             numComponents = 3;
             break;
-        case kIndex_8_SkColorType:
-            if (SkJpegEncoder::AlphaOption::kBlendOnBlack == options.fAlphaOption) {
-                return false;
-            }
-
-            fProc = transform_scanline_index8_opaque;
-            jpegColorType = JCS_RGB;
-            numComponents = 3;
-            break;
         case kGray_8_SkColorType:
             SkASSERT(srcInfo.isOpaque());
             jpegColorType = JCS_GRAYSCALE;
@@ -238,12 +229,11 @@ bool SkJpegEncoder::onEncodeRows(int numRows) {
     }
 
     const void* srcRow = fSrc.addr(0, fCurrRow);
-    const SkPMColor* colors = fSrc.ctable() ? fSrc.ctable()->readColors() : nullptr;
     for (int i = 0; i < numRows; i++) {
         JSAMPLE* jpegSrcRow = (JSAMPLE*) srcRow;
         if (fEncoderMgr->proc()) {
             fEncoderMgr->proc()((char*)fStorage.get(), (const char*)srcRow, fSrc.width(),
-                                fEncoderMgr->cinfo()->input_components, colors);
+                                fEncoderMgr->cinfo()->input_components, nullptr);
             jpegSrcRow = fStorage.get();
         }
 

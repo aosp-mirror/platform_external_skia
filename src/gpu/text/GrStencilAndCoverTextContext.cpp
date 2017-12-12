@@ -10,7 +10,6 @@
 #include "GrContext.h"
 #include "GrPath.h"
 #include "GrPathRange.h"
-#include "GrPipelineBuilder.h"
 #include "GrRenderTargetContext.h"
 #include "GrResourceProvider.h"
 #include "GrTextUtils.h"
@@ -607,7 +606,7 @@ void GrStencilAndCoverTextContext::TextRun::draw(GrContext* ctx,
 
         // The run's "font" overrides the anti-aliasing of the passed in SkPaint!
         GrAAType aaType = GrChooseAAType(this->aa(), renderTargetContext->fsaaType(),
-                                         GrAllowMixedSamples::kYes);
+                                         GrAllowMixedSamples::kYes, *renderTargetContext->caps());
 
         std::unique_ptr<GrDrawOp> op = GrDrawPathRangeOp::Make(
                 viewMatrix, fTextRatio, fTextInverseRatio * x, fTextInverseRatio * y,

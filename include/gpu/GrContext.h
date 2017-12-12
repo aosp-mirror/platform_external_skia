@@ -28,7 +28,6 @@ class GrGpu;
 class GrIndexBuffer;
 class GrOvalRenderer;
 class GrPath;
-class GrPipelineBuilder;
 class GrResourceEntry;
 class GrResourceCache;
 class GrResourceProvider;
@@ -52,10 +51,15 @@ public:
     static GrContext* Create(GrBackend, GrBackendContext, const GrContextOptions& options);
     static GrContext* Create(GrBackend, GrBackendContext);
 
+#ifdef SK_METAL
     /**
-     * Only defined in test apps.
+     * Makes a GrContext which uses Metal as the backend. The device parameter is an MTLDevice
+     * and queue is an MTLCommandQueue which should be used by the backend. These objects must
+     * have a ref on them which can be transferred to Ganesh which will release the ref when the
+     * GrContext is destroyed.
      */
-    static GrContext* CreateMockContext();
+    static sk_sp<GrContext> MakeMetal(void* device, void* queue, const GrContextOptions& options);
+#endif
 
     virtual ~GrContext();
 
@@ -333,9 +337,7 @@ private:
 
     GrContext(); // init must be called after the constructor.
     bool init(GrBackend, GrBackendContext, const GrContextOptions& options);
-
-    void initMockContext();
-    void initCommon(const GrContextOptions&);
+    bool init(const GrContextOptions& options);
 
     /**
      * These functions create premul <-> unpremul effects. If the second argument is 'true', they

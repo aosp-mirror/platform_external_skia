@@ -9,10 +9,12 @@
 
 #include "SkTypes.h"
 
-#if SK_SUPPORT_GPU && SK_ALLOW_STATIC_GLOBAL_INITIALIZERS && defined(SK_VULKAN)
+#if SK_SUPPORT_GPU && defined(SK_VULKAN)
 
 #include "GrContextFactory.h"
 #include "GrTest.h"
+#include "GrTexture.h"
+
 #include "Test.h"
 #include "vk/GrVkCaps.h"
 #include "vk/GrVkGpu.h"

@@ -85,7 +85,6 @@ BASE_SRCS_ALL = struct(
         "src/gpu/gl/win/*",
         "src/opts/**/*",
         "src/ports/**/*",
-        "src/ports/SkImageEncoder_none.cpp",
         "src/utils/android/**/*",
         "src/utils/mac/**/*",
         "src/utils/SkThreadUtils_win.cpp",  # Windows-only. Move to ports?
@@ -170,7 +169,6 @@ BASE_SRCS_UNIX = struct(
         "src/ports/SkFontMgr_fontconfig.cpp",
         "src/ports/SkFontMgr_fontconfig_factory.cpp",
         "src/ports/SkGlobalInitialization_none.cpp",
-        "src/ports/SkImageEncoder_none.cpp",
         "src/ports/SkImageGenerator_none.cpp",
         "src/ports/SkTLS_none.cpp",
     ],
@@ -215,7 +213,6 @@ BASE_SRCS_ANDROID = struct(
         "src/ports/SkFontMgr_custom_empty_factory.cpp",
         "src/ports/SkFontMgr_empty_factory.cpp",
         "src/ports/SkGlobalInitialization_none.cpp",
-        "src/ports/SkImageEncoder_none.cpp",
         "src/ports/SkImageGenerator_none.cpp",
         "src/ports/SkTLS_none.cpp",
     ],
@@ -271,7 +268,6 @@ BASE_SRCS_IOS = struct(
         "src/ports/SkFontMgr_custom_empty_factory.cpp",
         "src/ports/SkFontMgr_empty_factory.cpp",
         "src/ports/SkGlobalInitialization_none.cpp",
-        "src/ports/SkImageEncoder_none.cpp",
         "src/ports/SkImageGenerator_none.cpp",
         "src/ports/SkTLS_none.cpp",
     ],
@@ -496,6 +492,8 @@ DM_SRCS_ALL = struct(
         "tools/test_font_index.inc",
         "tools/timer/*.cpp",
         "tools/timer/*.h",
+        "tools/trace/*.cpp",
+        "tools/trace/*.h",
     ],
     exclude = [
         "tests/FontMgrAndroidParserTest.cpp",  # Android-only.
@@ -563,6 +561,7 @@ DM_INCLUDES = [
     "tools/flags",
     "tools/gpu",
     "tools/timer",
+    "tools/trace",
 ]
 
 ################################################################################
@@ -664,11 +663,15 @@ DEFINES_ALL = [
     "SK_USE_FREETYPE_EMBOLDEN",
     # Turn on a few Google3-specific build fixes.
     "GOOGLE3",
+    # Required for building dm.
+    "GR_TEST_UTILS",
     # Staging flags for API changes
     # Should remove after we update golden images
     "SK_WEBP_ENCODER_USE_DEFAULT_METHOD",
     # Temporarily Disable analytic AA for Google3
     "SK_NO_ANALYTIC_AA",
+    # Experiment to diagnose image diffs in Google3
+    "SK_DISABLE_SSSE3_RUNTIME_CHECK_FOR_LOWP_STAGES",
 ]
 
 ################################################################################

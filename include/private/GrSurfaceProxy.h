@@ -24,8 +24,6 @@ class GrSurfaceProxyPriv;
 class GrTextureOpList;
 class GrTextureProxy;
 
-//#define SK_DISABLE_DEFERRED_PROXIES 1
-
 // This class replicates the functionality GrIORef<GrSurface> but tracks the
 // utilitization for later resource allocation (for the deferred case) and
 // forwards on the utilization in the wrapped case
@@ -182,6 +180,20 @@ public:
                                               const GrSurfaceDesc&, SkBackingFit,
                                               SkBudgeted, uint32_t flags = 0);
 
+    /**
+     * Creates a proxy that will be mipmapped.
+     *
+     * @param desc          Description of the texture properties.
+     * @param budgeted      Does the texture count against the resource cache budget?
+     * @param texels        A contiguous array of mipmap levels
+     * @param mipLevelCount The amount of elements in the texels array
+     */
+    static sk_sp<GrTextureProxy> MakeDeferredMipMap(GrResourceProvider*,
+                                                    const GrSurfaceDesc& desc, SkBudgeted budgeted,
+                                                    const GrMipLevel texels[], int mipLevelCount,
+                                                    SkDestinationSurfaceColorMode mipColorMode =
+                                                           SkDestinationSurfaceColorMode::kLegacy);
+
     // TODO: need to refine ownership semantics of 'srcData' if we're in completely
     // deferred mode
     static sk_sp<GrTextureProxy> MakeDeferred(GrResourceProvider*,
@@ -243,6 +255,14 @@ public:
      * resources and proxies - beware!
      */
     UniqueID uniqueID() const { return fUniqueID; }
+
+    UniqueID underlyingUniqueID() const {
+        if (fTarget) {
+            return UniqueID(fTarget->uniqueID());
+        }
+
+        return fUniqueID;
+    }
 
     virtual bool instantiate(GrResourceProvider* resourceProvider) = 0;
 
@@ -309,6 +329,7 @@ public:
 
     bool isWrapped_ForTesting() const;
 
+    SkDEBUGCODE(bool isInstantiated() const { return SkToBool(fTarget); })
     SkDEBUGCODE(void validate(GrContext*) const;)
 
     // Provides access to functions that aren't part of the public API.
@@ -346,6 +367,13 @@ protected:
     bool hasPendingWrite() const {
         return this->internalHasPendingWrite();
     }
+
+    virtual sk_sp<GrSurface> createSurface(GrResourceProvider*) const = 0;
+    void assign(sk_sp<GrSurface> surface);
+
+    sk_sp<GrSurface> createSurfaceImpl(GrResourceProvider*, int sampleCnt,
+                                       GrSurfaceFlags flags, bool isMipMapped,
+                                       SkDestinationSurfaceColorMode mipColorMode) const;
 
     bool instantiateImpl(GrResourceProvider* resourceProvider, int sampleCnt,
                          GrSurfaceFlags flags, bool isMipMapped,

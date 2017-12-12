@@ -53,7 +53,11 @@ using Stage = void(K* k, void** program, size_t x, size_t y, size_t tail, F,F,F,
 #endif
 MAYBE_MSABI
 extern "C" void WRAP(start_pipeline)(size_t x, size_t y, size_t limit, void** program, K* k) {
+#if defined(JUMPER)
+    F v;
+#else
     F v{};
+#endif
     auto start = (Stage*)load_and_inc(program);
     while (x + kStride <= limit) {
         start(k,program,x,y,0,    v,v,v,v, v,v,v,v);
@@ -61,6 +65,22 @@ extern "C" void WRAP(start_pipeline)(size_t x, size_t y, size_t limit, void** pr
     }
     if (size_t tail = limit - x) {
         start(k,program,x,y,tail, v,v,v,v, v,v,v,v);
+    }
+}
+
+#if defined(JUMPER) && defined(__AVX__)
+    // We really want to make sure all paths go through this function's (implicit) vzeroupper.
+    // If they don't, we'll experience severe slowdowns when we first use SSE instructions again.
+    __attribute__((disable_tail_calls))
+#endif
+#if defined(JUMPER)
+    __attribute__((flatten))  // Force-inline the call to start_pipeline().
+#endif
+MAYBE_MSABI
+extern "C" void WRAP(start_pipeline_2d)(size_t x, size_t y, size_t xlimit, size_t ylimit,
+                                        void** program, K* k) {
+    for (; y < ylimit; y++) {
+        WRAP(start_pipeline)(x,y,xlimit, program, k);
     }
 }
 
@@ -94,14 +114,14 @@ SI V load(const T* src, size_t tail) {
     __builtin_assume(tail < kStride);
     if (__builtin_expect(tail, 0)) {
         V v{};  // Any inactive lanes are zeroed.
-        switch (tail-1) {
-            case 6: v[6] = src[6];
-            case 5: v[5] = src[5];
-            case 4: v[4] = src[4];
-            case 3: v[3] = src[3];
-            case 2: v[2] = src[2];
-            case 1: v[1] = src[1];
-            case 0: v[0] = src[0];
+        switch (tail) {
+            case 7: v[6] = src[6];
+            case 6: v[5] = src[5];
+            case 5: v[4] = src[4];
+            case 4: memcpy(&v, src, 4*sizeof(T)); break;
+            case 3: v[2] = src[2];
+            case 2: memcpy(&v, src, 2*sizeof(T)); break;
+            case 1: memcpy(&v, src, 1*sizeof(T)); break;
         }
         return v;
     }
@@ -114,39 +134,20 @@ SI void store(T* dst, V v, size_t tail) {
 #if defined(JUMPER)
     __builtin_assume(tail < kStride);
     if (__builtin_expect(tail, 0)) {
-        switch (tail-1) {
-            case 6: dst[6] = v[6];
-            case 5: dst[5] = v[5];
-            case 4: dst[4] = v[4];
-            case 3: dst[3] = v[3];
-            case 2: dst[2] = v[2];
-            case 1: dst[1] = v[1];
-            case 0: dst[0] = v[0];
+        switch (tail) {
+            case 7: dst[6] = v[6];
+            case 6: dst[5] = v[5];
+            case 5: dst[4] = v[4];
+            case 4: memcpy(dst, &v, 4*sizeof(T)); break;
+            case 3: dst[2] = v[2];
+            case 2: memcpy(dst, &v, 2*sizeof(T)); break;
+            case 1: memcpy(dst, &v, 1*sizeof(T)); break;
         }
         return;
     }
 #endif
     unaligned_store(dst, v);
 }
-
-// This doesn't look strictly necessary, but without it Clang would generate load() using
-// compiler-generated constants that we can't support.  This version doesn't need constants.
-#if defined(JUMPER) && defined(__AVX__)
-    template <>
-    inline U8 load(const uint8_t* src, size_t tail) {
-        if (__builtin_expect(tail, 0)) {
-            uint64_t v = 0;
-            size_t shift = 0;
-            #pragma nounroll
-            while (tail --> 0) {
-                v |= (uint64_t)*src++ << shift;
-                shift += 8;
-            }
-            return unaligned_load<U8>(&v);
-        }
-        return unaligned_load<U8>(src);
-    }
-#endif
 
 // AVX adds some mask loads and stores that make for shorter, faster code.
 #if defined(JUMPER) && defined(__AVX__)
@@ -206,7 +207,7 @@ SI void from_8888(U32 _8888, F* r, F* g, F* b, F* a) {
 }
 
 template <typename T>
-SI U32 ix_and_ptr(T** ptr, const SkJumper_GatherCtx* ctx, F x, F y) {
+SI U32 ix_and_ptr(T** ptr, const SkJumper_MemoryCtx* ctx, F x, F y) {
     *ptr = (const T*)ctx->pixels;
     return trunc_(y)*ctx->stride + trunc_(x);
 }
@@ -258,12 +259,22 @@ STAGE(dither) {
 }
 
 // load 4 floats from memory, and splat them into r,g,b,a
-STAGE(constant_color) {
+STAGE(uniform_color) {
     auto rgba = (const float*)ctx;
     r = rgba[0];
     g = rgba[1];
     b = rgba[2];
     a = rgba[3];
+}
+
+// splats opaque-black into r,g,b,a
+STAGE(black_color) {
+    r = g = b = 0.0f;
+    a = 1.0f;
+}
+
+STAGE(white_color) {
+    r = g = b = a = 1.0f;
 }
 
 // load registers r,g,b,a from context (mirrors store_rgba)
@@ -516,6 +527,13 @@ STAGE(clamp_a) {
     b = min(b, a);
 }
 
+STAGE(clamp_a_dst) {
+    da = min(da, 1.0f);
+    dr = min(dr, da);
+    dg = min(dg, da);
+    db = min(db, da);
+}
+
 STAGE(set_rgb) {
     auto rgb = (const float*)ctx;
     r = rgb[0];
@@ -528,17 +546,6 @@ STAGE(swap_rb) {
     b = tmp;
 }
 
-STAGE(swap) {
-    auto swap = [](F& v, F& dv) {
-        auto tmp = v;
-        v = dv;
-        dv = tmp;
-    };
-    swap(r, dr);
-    swap(g, dg);
-    swap(b, db);
-    swap(a, da);
-}
 STAGE(move_src_dst) {
     dr = r;
     dg = g;
@@ -557,6 +564,11 @@ STAGE(premul) {
     g = g * a;
     b = b * a;
 }
+STAGE(premul_dst) {
+    dr = dr * da;
+    dg = dg * da;
+    db = db * da;
+}
 STAGE(unpremul) {
     auto scale = if_then_else(a == 0, 0, 1.0f / a);
     r *= scale;
@@ -564,15 +576,21 @@ STAGE(unpremul) {
     b *= scale;
 }
 
+SI F from_srgb(F s) {
+    auto lo = s * (1/12.92f);
+    auto hi = mad(s*s, mad(s, 0.3000f, 0.6975f), 0.0025f);
+    return if_then_else(s < 0.055f, lo, hi);
+}
+
 STAGE(from_srgb) {
-    auto fn = [&](F s) {
-        auto lo = s * (1/12.92f);
-        auto hi = mad(s*s, mad(s, 0.3000f, 0.6975f), 0.0025f);
-        return if_then_else(s < 0.055f, lo, hi);
-    };
-    r = fn(r);
-    g = fn(g);
-    b = fn(b);
+    r = from_srgb(r);
+    g = from_srgb(g);
+    b = from_srgb(b);
+}
+STAGE(from_srgb_dst) {
+    dr = from_srgb(dr);
+    dg = from_srgb(dg);
+    db = from_srgb(db);
 }
 STAGE(to_srgb) {
     auto fn = [&](F l) {
@@ -795,6 +813,12 @@ STAGE(load_a8) {
     r = g = b = 0.0f;
     a = from_byte(load<U8>(ptr, tail));
 }
+STAGE(load_a8_dst) {
+    auto ptr = *(const uint8_t**)ctx + x;
+
+    dr = dg = db = 0.0f;
+    da = from_byte(load<U8>(ptr, tail));
+}
 STAGE(gather_a8) {
     const uint8_t* ptr;
     U32 ix = ix_and_ptr(&ptr, ctx, r,g);
@@ -814,6 +838,12 @@ STAGE(load_g8) {
     r = g = b = from_byte(load<U8>(ptr, tail));
     a = 1.0f;
 }
+STAGE(load_g8_dst) {
+    auto ptr = *(const uint8_t**)ctx + x;
+
+    dr = dg = db = from_byte(load<U8>(ptr, tail));
+    da = 1.0f;
+}
 STAGE(gather_g8) {
     const uint8_t* ptr;
     U32 ix = ix_and_ptr(&ptr, ctx, r,g);
@@ -821,19 +851,17 @@ STAGE(gather_g8) {
     a = 1.0f;
 }
 
-STAGE(gather_i8) {
-    auto c = (const SkJumper_GatherCtx*)ctx;
-    const uint8_t* ptr;
-    U32 ix = ix_and_ptr(&ptr, ctx, r,g);
-    ix = expand(gather(ptr, ix));
-    from_8888(gather(c->ctable, ix), &r,&g,&b,&a);
-}
-
 STAGE(load_565) {
     auto ptr = *(const uint16_t**)ctx + x;
 
     from_565(load<U16>(ptr, tail), &r,&g,&b);
     a = 1.0f;
+}
+STAGE(load_565_dst) {
+    auto ptr = *(const uint16_t**)ctx + x;
+
+    from_565(load<U16>(ptr, tail), &dr,&dg,&db);
+    da = 1.0f;
 }
 STAGE(gather_565) {
     const uint16_t* ptr;
@@ -854,6 +882,10 @@ STAGE(load_4444) {
     auto ptr = *(const uint16_t**)ctx + x;
     from_4444(load<U16>(ptr, tail), &r,&g,&b,&a);
 }
+STAGE(load_4444_dst) {
+    auto ptr = *(const uint16_t**)ctx + x;
+    from_4444(load<U16>(ptr, tail), &dr,&dg,&db,&da);
+}
 STAGE(gather_4444) {
     const uint16_t* ptr;
     U32 ix = ix_and_ptr(&ptr, ctx, r,g);
@@ -872,6 +904,10 @@ STAGE(load_8888) {
     auto ptr = *(const uint32_t**)ctx + x;
     from_8888(load<U32>(ptr, tail), &r,&g,&b,&a);
 }
+STAGE(load_8888_dst) {
+    auto ptr = *(const uint32_t**)ctx + x;
+    from_8888(load<U32>(ptr, tail), &dr,&dg,&db,&da);
+}
 STAGE(gather_8888) {
     const uint32_t* ptr;
     U32 ix = ix_and_ptr(&ptr, ctx, r,g);
@@ -887,6 +923,40 @@ STAGE(store_8888) {
     store(ptr, px, tail);
 }
 
+STAGE(store_8888_2d) {
+    auto c = (const SkJumper_MemoryCtx*)ctx;
+    auto ptr = (uint32_t*)c->pixels + y*c->stride + x;
+
+    U32 px = round(r, 255.0f)
+           | round(g, 255.0f) <<  8
+           | round(b, 255.0f) << 16
+           | round(a, 255.0f) << 24;
+    store(ptr, px, tail);
+}
+
+STAGE(load_bgra) {
+    auto ptr = *(const uint32_t**)ctx + x;
+    from_8888(load<U32>(ptr, tail), &b,&g,&r,&a);
+}
+STAGE(load_bgra_dst) {
+    auto ptr = *(const uint32_t**)ctx + x;
+    from_8888(load<U32>(ptr, tail), &db,&dg,&dr,&da);
+}
+STAGE(gather_bgra) {
+    const uint32_t* ptr;
+    U32 ix = ix_and_ptr(&ptr, ctx, r,g);
+    from_8888(gather(ptr, ix), &b,&g,&r,&a);
+}
+STAGE(store_bgra) {
+    auto ptr = *(uint32_t**)ctx + x;
+
+    U32 px = round(b, 255.0f)
+           | round(g, 255.0f) <<  8
+           | round(r, 255.0f) << 16
+           | round(a, 255.0f) << 24;
+    store(ptr, px, tail);
+}
+
 STAGE(load_f16) {
     auto ptr = *(const uint64_t**)ctx + x;
 
@@ -896,6 +966,16 @@ STAGE(load_f16) {
     g = from_half(G);
     b = from_half(B);
     a = from_half(A);
+}
+STAGE(load_f16_dst) {
+    auto ptr = *(const uint64_t**)ctx + x;
+
+    U16 R,G,B,A;
+    load4((const uint16_t*)ptr,tail, &R,&G,&B,&A);
+    dr = from_half(R);
+    dg = from_half(G);
+    db = from_half(B);
+    da = from_half(A);
 }
 STAGE(gather_f16) {
     const uint64_t* ptr;
@@ -954,29 +1034,45 @@ STAGE(load_f32) {
     auto ptr = *(const float**)ctx + 4*x;
     load4(ptr,tail, &r,&g,&b,&a);
 }
+STAGE(load_f32_dst) {
+    auto ptr = *(const float**)ctx + 4*x;
+    load4(ptr,tail, &dr,&dg,&db,&da);
+}
 STAGE(store_f32) {
     auto ptr = *(float**)ctx + 4*x;
     store4(ptr,tail, r,g,b,a);
 }
 
-SI F clamp(F v, float limit) {
-    return min(max(0, v), limit);
+SI F ulp_before(F f) {
+    U32 bits = -1 + unaligned_load<U32>(&f);
+    return unaligned_load<F>(&bits);
 }
-SI F repeat(F v, float limit) {
-    return v - floor_(v/limit)*limit;
-}
-SI F mirror(F v, float limit) {
-    return abs_( (v-limit) - (limit+limit)*floor_((v-limit)/(limit+limit)) - limit );
-}
-STAGE(clamp_x)  { r = clamp (r, *(const float*)ctx); }
-STAGE(clamp_y)  { g = clamp (g, *(const float*)ctx); }
-STAGE(repeat_x) { r = repeat(r, *(const float*)ctx); }
-STAGE(repeat_y) { g = repeat(g, *(const float*)ctx); }
-STAGE(mirror_x) { r = mirror(r, *(const float*)ctx); }
-STAGE(mirror_y) { g = mirror(g, *(const float*)ctx); }
 
-STAGE( clamp_x_1) { r = clamp (r, 1.0f); }
-STAGE(repeat_x_1) { r = repeat(r, 1.0f); }
+SI F exclusive_clamp(F v, const SkJumper_TileCtx* ctx) {
+    v = max(0,v);
+    return min(v, ulp_before(ctx->scale));
+}
+SI F exclusive_repeat(F v, const SkJumper_TileCtx* ctx) {
+    v = v - floor_(v*ctx->invScale)*ctx->scale;
+    return min(v, ulp_before(ctx->scale));
+}
+SI F exclusive_mirror(F v, const SkJumper_TileCtx* ctx) {
+    auto limit = ctx->scale;
+    auto invLimit = ctx->invScale;
+    v = abs_( (v-limit) - (limit+limit)*floor_((v-limit)*(invLimit*0.5f)) - limit );
+    return min(v, ulp_before(limit));
+}
+// Clamp x or y to [0,limit) == [0,limit - 1 ulp] (think, sampling from images).
+STAGE(clamp_x)  { r = exclusive_clamp (r, (const SkJumper_TileCtx*)ctx); }
+STAGE(clamp_y)  { g = exclusive_clamp (g, (const SkJumper_TileCtx*)ctx); }
+STAGE(repeat_x) { r = exclusive_repeat(r, (const SkJumper_TileCtx*)ctx); }
+STAGE(repeat_y) { g = exclusive_repeat(g, (const SkJumper_TileCtx*)ctx); }
+STAGE(mirror_x) { r = exclusive_mirror(r, (const SkJumper_TileCtx*)ctx); }
+STAGE(mirror_y) { g = exclusive_mirror(g, (const SkJumper_TileCtx*)ctx); }
+
+// Clamp x to [0,1], both sides exclusive (think, gradients).
+STAGE( clamp_x_1) { r = min(max(0, r), 1.0f); }
+STAGE(repeat_x_1) { r = r - floor_(r); }
 STAGE(mirror_x_1) { r = abs_( (r-1.0f) - two(floor_((r-1.0f)*0.5f)) - 1.0f ); }
 
 STAGE(luminance_to_alpha) {
@@ -984,6 +1080,18 @@ STAGE(luminance_to_alpha) {
     r = g = b = 0;
 }
 
+STAGE(matrix_translate) {
+    auto m = (const float*)ctx;
+
+    r += m[0];
+    g += m[1];
+}
+STAGE(matrix_scale_translate) {
+    auto m = (const float*)ctx;
+
+    r = mad(r,m[2], m[0]);
+    g = mad(g,m[3], m[1]);
+}
 STAGE(matrix_2x3) {
     auto m = (const float*)ctx;
 
@@ -1144,6 +1252,84 @@ STAGE(xy_to_radius) {
     F X2 = r * r,
       Y2 = g * g;
     r = sqrt_(X2 + Y2);
+}
+
+SI F solve_2pt_conical_quadratic(const SkJumper_2PtConicalCtx* c, F x, F y, F (*select)(F, F)) {
+    // At this point, (x, y) is mapped into a synthetic gradient space with
+    // the start circle centerd on (0, 0), and the end circle centered on (1, 0)
+    // (see the stage setup).
+    //
+    // We're searching along X-axis for x', such that
+    //
+    //   1) r(x') is a linear interpolation between r0 and r1
+    //   2) (x, y) is on the circle C(x', 0, r(x'))
+    //
+    // Solving this system boils down to a quadratic equation with coefficients
+    //
+    //   a = 1 - (r1 - r0)^2             <- constant, precomputed in ctx->fCoeffA)
+    //
+    //   b = -2 * (x + (r1 - r0) * r0)
+    //
+    //   c = x^2 + y^2 - r0^2
+    //
+    // Since the start/end circle centers are the extremes of the [0, 1] interval
+    // on the X axis, the solution (x') is exactly the t we are looking for.
+
+    const F coeffA = c->fCoeffA,
+            coeffB = -2 * (x + c->fDR*c->fR0),
+            coeffC = x*x + y*y - c->fR0*c->fR0;
+
+    const F disc      = mad(coeffB, coeffB, -4 * coeffA * coeffC);
+    const F sqrt_disc = sqrt_(disc);
+
+    const F invCoeffA = c->fInvCoeffA;
+    return select((-coeffB + sqrt_disc) * (invCoeffA * 0.5f),
+                  (-coeffB - sqrt_disc) * (invCoeffA * 0.5f));
+}
+
+STAGE(xy_to_2pt_conical_quadratic_max) {
+    r = solve_2pt_conical_quadratic(ctx, r, g, max);
+}
+
+STAGE(xy_to_2pt_conical_quadratic_min) {
+    r = solve_2pt_conical_quadratic(ctx, r, g, min);
+}
+
+STAGE(xy_to_2pt_conical_linear) {
+    auto* c = (const SkJumper_2PtConicalCtx*)ctx;
+
+    const F coeffB = -2 * (r + c->fDR*c->fR0),
+            coeffC = r*r + g*g - c->fR0*c->fR0;
+
+    r = -coeffC / coeffB;
+}
+
+STAGE(mask_2pt_conical_degenerates) {
+    auto* c = (SkJumper_2PtConicalCtx*)ctx;
+
+    // Compute and save a mask for degenerate values.
+    U32 mask = 0xffffffff;
+
+    // TODO: mtklein kindly volunteered to revisit this at some point.
+#if defined(JUMPER)
+    // Vector comparisons set all bits, so we can use something like this.
+    mask = mask & (mad(r, c->fDR, c->fR0) >= 0);  // R(t) >= 0
+    mask = mask & (r == r);                       // t != NaN
+#else
+    // The portable version is more involved, 'cause we only get one bit back.
+    mask = mask & if_then_else(mad(r, c->fDR, c->fR0) >= 0, U32(0xffffffff), U32(0)); // R(t) >= 0
+    mask = mask & if_then_else(r == r,                      U32(0xffffffff), U32(0)); // t != NaN
+#endif
+
+    unaligned_store(&c->fMask, mask);
+}
+
+STAGE(apply_vector_mask) {
+    const U32 mask = unaligned_load<U32>((const uint32_t*)ctx);
+    r = bit_cast<F>(bit_cast<U32>(r) & mask);
+    g = bit_cast<F>(bit_cast<U32>(g) & mask);
+    b = bit_cast<F>(bit_cast<U32>(b) & mask);
+    a = bit_cast<F>(bit_cast<U32>(a) & mask);
 }
 
 STAGE(save_xy) {

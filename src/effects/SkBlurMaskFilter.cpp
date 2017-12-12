@@ -25,9 +25,9 @@
 #include "GrResourceProvider.h"
 #include "GrShaderCaps.h"
 #include "GrStyle.h"
-#include "GrTexture.h"
 #include "GrTextureProxy.h"
 #include "effects/GrSimpleTextureEffect.h"
+#include "effects/GrTextureDomain.h"
 #include "glsl/GrGLSLFragmentProcessor.h"
 #include "glsl/GrGLSLFragmentShaderBuilder.h"
 #include "glsl/GrGLSLProgramDataManager.h"
@@ -743,11 +743,7 @@ sk_sp<SkFlattenable> SkBlurMaskFilterImpl::CreateProc(SkReadBuffer& buffer) {
     flags &= SkBlurMaskFilter::kAll_BlurFlag;
 
     SkRect occluder;
-    if (buffer.isVersionLT(SkReadBuffer::kBlurMaskFilterWritesOccluder)) {
-        occluder.setEmpty();
-    } else {
-        buffer.readRect(&occluder);
-    }
+    buffer.readRect(&occluder);
 
     if (style <= kLastEnum_SkBlurStyle) {
         return SkBlurMaskFilter::Make((SkBlurStyle)style, sigma, occluder, flags);
@@ -807,8 +803,7 @@ public:
             precision = kDefault_GrSLPrecision;
         }
 
-        return sk_sp<GrFragmentProcessor>(new GrRectBlurEffect(resourceProvider,
-                                                               rect, sigma,
+        return sk_sp<GrFragmentProcessor>(new GrRectBlurEffect(rect, sigma,
                                                                std::move(blurProfile), precision));
     }
 
@@ -817,7 +812,7 @@ public:
     GrSLPrecision precision() const { return fPrecision; }
 
 private:
-    GrRectBlurEffect(GrResourceProvider*, const SkRect& rect, float sigma,
+    GrRectBlurEffect(const SkRect& rect, float sigma,
                      sk_sp<GrTextureProxy> blurProfile, GrSLPrecision fPrecision);
 
     GrGLSLFragmentProcessor* onCreateGLSLInstance() const override;
@@ -833,7 +828,7 @@ private:
     TextureSampler  fBlurProfileSampler;
     GrSLPrecision   fPrecision;
 
-    GR_DECLARE_FRAGMENT_PROCESSOR_TEST;
+    GR_DECLARE_FRAGMENT_PROCESSOR_TEST
 
     typedef GrFragmentProcessor INHERITED;
 };
@@ -978,14 +973,13 @@ sk_sp<GrTextureProxy> GrRectBlurEffect::CreateBlurProfileTexture(
     return blurProfile;
 }
 
-GrRectBlurEffect::GrRectBlurEffect(GrResourceProvider* resourceProvider,
-                                   const SkRect& rect, float sigma,
+GrRectBlurEffect::GrRectBlurEffect(const SkRect& rect, float sigma,
                                    sk_sp<GrTextureProxy> blurProfile,
                                    GrSLPrecision precision)
         : INHERITED(kCompatibleWithCoverageAsAlpha_OptimizationFlag)
         , fRect(rect)
         , fSigma(sigma)
-        , fBlurProfileSampler(resourceProvider, std::move(blurProfile))
+        , fBlurProfileSampler(std::move(blurProfile))
         , fPrecision(precision) {
     this->initClassID<GrRectBlurEffect>();
     this->addTextureSampler(&fBlurProfileSampler);
@@ -1075,7 +1069,6 @@ bool SkBlurMaskFilterImpl::directFilterMaskGPU(GrContext* context,
 
 class GrRRectBlurEffect : public GrFragmentProcessor {
 public:
-
     static sk_sp<GrFragmentProcessor> Make(GrContext*,
                                            float sigma, float xformedSigma,
                                            const SkRRect& srcRRect, const SkRRect& devRRect);
@@ -1089,7 +1082,7 @@ public:
 private:
     GrGLSLFragmentProcessor* onCreateGLSLInstance() const override;
 
-    GrRRectBlurEffect(GrResourceProvider*, float sigma, const SkRRect&,
+    GrRRectBlurEffect(float sigma, const SkRRect&,
                       sk_sp<GrTextureProxy> profileProxy);
 
     virtual void onGetGLSLProcessorKey(const GrShaderCaps& caps,
@@ -1101,7 +1094,7 @@ private:
     float               fSigma;
     TextureSampler      fNinePatchSampler;
 
-    GR_DECLARE_FRAGMENT_PROCESSOR_TEST;
+    GR_DECLARE_FRAGMENT_PROCESSOR_TEST
 
     typedef GrFragmentProcessor INHERITED;
 };
@@ -1143,15 +1136,16 @@ static sk_sp<GrTextureProxy> find_or_create_rrect_blur_mask(GrContext* context,
         if (!srcProxy) {
             return nullptr;
         }
-        sk_sp<GrRenderTargetContext> rtc2(SkGpuBlurUtils::GaussianBlur(context,
-                                                                       std::move(srcProxy),
-                                                                       nullptr,
-                                                                       SkIRect::MakeWH(
-                                                                                    size.fWidth,
-                                                                                    size.fHeight),
-                                                                       nullptr,
-                                                                       xformedSigma, xformedSigma,
-                                                                       SkBackingFit::kExact));
+        sk_sp<GrRenderTargetContext> rtc2(
+                  SkGpuBlurUtils::GaussianBlur(context,
+                                               std::move(srcProxy),
+                                               nullptr,
+                                               SkIRect::MakeWH(size.fWidth, size.fHeight),
+                                               SkIRect::EmptyIRect(),
+                                               xformedSigma,
+                                               xformedSigma,
+                                               GrTextureDomain::kIgnore_Mode,
+                                               SkBackingFit::kExact));
         if (!rtc2) {
             return nullptr;
         }
@@ -1203,19 +1197,17 @@ sk_sp<GrFragmentProcessor> GrRRectBlurEffect::Make(GrContext* context,
         return nullptr;
     }
 
-    return sk_sp<GrFragmentProcessor>(new GrRRectBlurEffect(context->resourceProvider(),
-                                                            xformedSigma,
+    return sk_sp<GrFragmentProcessor>(new GrRRectBlurEffect(xformedSigma,
                                                             devRRect,
                                                             std::move(mask)));
 }
 
-GrRRectBlurEffect::GrRRectBlurEffect(GrResourceProvider* resourceProvider,
-                                     float sigma, const SkRRect& rrect,
+GrRRectBlurEffect::GrRRectBlurEffect(float sigma, const SkRRect& rrect,
                                      sk_sp<GrTextureProxy> ninePatchProxy)
         : INHERITED(kCompatibleWithCoverageAsAlpha_OptimizationFlag)
         , fRRect(rrect)
         , fSigma(sigma)
-        , fNinePatchSampler(resourceProvider, std::move(ninePatchProxy)) {
+        , fNinePatchSampler(std::move(ninePatchProxy)) {
     this->initClassID<GrRRectBlurEffect>();
     this->addTextureSampler(&fNinePatchSampler);
 }
@@ -1505,12 +1497,15 @@ sk_sp<GrTextureProxy> SkBlurMaskFilterImpl::filterMaskGPU(GrContext* context,
     // If we're doing a normal blur, we can clobber the pathTexture in the
     // gaussianBlur.  Otherwise, we need to save it for later compositing.
     bool isNormalBlur = (kNormal_SkBlurStyle == fBlurStyle);
-    sk_sp<GrRenderTargetContext> renderTargetContext(SkGpuBlurUtils::GaussianBlur(context,
-                                                                                  srcProxy,
-                                                                                  nullptr, clipRect,
-                                                                                  nullptr,
-                                                                                  xformedSigma,
-                                                                                  xformedSigma));
+    sk_sp<GrRenderTargetContext> renderTargetContext(
+              SkGpuBlurUtils::GaussianBlur(context,
+                                           srcProxy,
+                                           nullptr,
+                                           clipRect,
+                                           SkIRect::EmptyIRect(),
+                                           xformedSigma,
+                                           xformedSigma,
+                                           GrTextureDomain::kIgnore_Mode));
     if (!renderTargetContext) {
         return nullptr;
     }
@@ -1518,8 +1513,7 @@ sk_sp<GrTextureProxy> SkBlurMaskFilterImpl::filterMaskGPU(GrContext* context,
     if (!isNormalBlur) {
         GrPaint paint;
         // Blend pathTexture over blurTexture.
-        paint.addCoverageFragmentProcessor(GrSimpleTextureEffect::Make(context->resourceProvider(),
-                                                                       std::move(srcProxy),
+        paint.addCoverageFragmentProcessor(GrSimpleTextureEffect::Make(std::move(srcProxy),
                                                                        nullptr, SkMatrix::I()));
         if (kInner_SkBlurStyle == fBlurStyle) {
             // inner:  dst = dst * src

@@ -8,6 +8,7 @@
 #include "Test.h"
 #include "SkHalf.h"
 #include "SkRasterPipeline.h"
+#include "../src/jumper/SkJumper.h"
 
 DEF_TEST(SkRasterPipeline, r) {
     // Build and run a simple pipeline to exercise SkRasterPipeline,
@@ -21,10 +22,8 @@ DEF_TEST(SkRasterPipeline, r) {
     void* store_ctx  = &result;
 
     SkRasterPipeline_<256> p;
-    p.append(SkRasterPipeline::load_f16, &load_s_ctx);
-    p.append(SkRasterPipeline::move_src_dst);
-    p.append(SkRasterPipeline::load_f16, &load_d_ctx);
-    p.append(SkRasterPipeline::swap);
+    p.append(SkRasterPipeline::load_f16,     &load_s_ctx);
+    p.append(SkRasterPipeline::load_f16_dst, &load_d_ctx);
     p.append(SkRasterPipeline::srcover);
     p.append(SkRasterPipeline::store_f16, &store_ctx);
     p.run(0,0,1);
@@ -218,8 +217,7 @@ DEF_TEST(SkRasterPipeline_lowp, r) {
     void* ptr = rgba;
 
     SkRasterPipeline_<256> p;
-    p.append(SkRasterPipeline::load_8888,  &ptr);
-    p.append(SkRasterPipeline::swap_rb);
+    p.append(SkRasterPipeline::load_bgra,  &ptr);
     p.append(SkRasterPipeline::store_8888, &ptr);
     p.run(0,0,64);
 
@@ -232,4 +230,34 @@ DEF_TEST(SkRasterPipeline_lowp, r) {
             ERRORF(r, "got %08x, want %08x\n", rgba[i], want);
         }
     }
+}
+
+DEF_TEST(SkRasterPipeline_2d, r) {
+    uint32_t rgba[2*2] = {0,0,0,0};
+
+    SkSTArenaAlloc<256> alloc;
+    SkRasterPipeline p(&alloc);
+
+    // Splat out the (2d) dst coordinates: (0.5,0.5), (1.5,0.5), (0.5,1.5), (1.5,1.5).
+    p.append(SkRasterPipeline::seed_shader);
+
+    // Scale down to [0,1] range to write out as bytes.
+    p.append_matrix(&alloc, SkMatrix::Concat(SkMatrix::MakeScale(0.5f),
+                                             SkMatrix::MakeTrans(-0.5f, -0.5f)));
+
+    // Write out to rgba, with row stride = 2 pixels.
+    SkJumper_MemoryCtx ctx = { rgba, 2 };
+    p.append(SkRasterPipeline::store_8888_2d, &ctx);
+
+    p.run_2d(0,0, 2,2);
+
+    REPORTER_ASSERT(r, ((rgba[0] >> 0) & 0xff) ==   0);
+    REPORTER_ASSERT(r, ((rgba[1] >> 0) & 0xff) == 128);
+    REPORTER_ASSERT(r, ((rgba[2] >> 0) & 0xff) ==   0);
+    REPORTER_ASSERT(r, ((rgba[3] >> 0) & 0xff) == 128);
+
+    REPORTER_ASSERT(r, ((rgba[0] >> 8) & 0xff) ==   0);
+    REPORTER_ASSERT(r, ((rgba[1] >> 8) & 0xff) ==   0);
+    REPORTER_ASSERT(r, ((rgba[2] >> 8) & 0xff) == 128);
+    REPORTER_ASSERT(r, ((rgba[3] >> 8) & 0xff) == 128);
 }

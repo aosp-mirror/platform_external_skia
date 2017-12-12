@@ -10,33 +10,55 @@
 
 #include "GrTypes.h"
 #include "gl/GrGLTypes.h"
-#include "vk/GrVkTypes.h"
+#include "mock/GrMockTypes.h"
 
-class GrBackendTexture {
+#ifdef SK_VULKAN
+#include "vk/GrVkTypes.h"
+#endif
+
+class SK_API GrBackendTexture {
 public:
-    GrBackendTexture(int width,
-                     int height,
-                     const GrVkImageInfo& vkInfo);
+    // Creates an invalid backend texture.
+    GrBackendTexture() : fConfig(kUnknown_GrPixelConfig) {}
 
     GrBackendTexture(int width,
                      int height,
                      GrPixelConfig config,
                      const GrGLTextureInfo& glInfo);
 
+#ifdef SK_VULKAN
+    GrBackendTexture(int width,
+                     int height,
+                     const GrVkImageInfo& vkInfo);
+#endif
+
+    GrBackendTexture(int width,
+                     int height,
+                     GrPixelConfig config,
+                     const GrMockTextureInfo& mockInfo);
+
     int width() const { return fWidth; }
     int height() const { return fHeight; }
     GrPixelConfig config() const { return fConfig; }
     GrBackend backend() const {return fBackend; }
 
-    // If the backend API is Vulkan, this returns a pointer to the GrVkImageInfo struct. Otherwise
-    // it returns nullptr.
-    const GrVkImageInfo* getVkImageInfo() const;
-
     // If the backend API is GL, this returns a pointer to the GrGLTextureInfo struct. Otherwise
     // it returns nullptr.
     const GrGLTextureInfo* getGLTextureInfo() const;
 
+#ifdef SK_VULKAN
+    // If the backend API is Vulkan, this returns a pointer to the GrVkImageInfo struct. Otherwise
+    // it returns nullptr.
+    const GrVkImageInfo* getVkImageInfo() const;
+#endif
+
+    // If the backend API is Mock, this returns a pointer to the GrMockTextureInfo struct. Otherwise
+    // it returns nullptr.
+    const GrMockTextureInfo* getMockTextureInfo() const;
+
 private:
+    bool isValid() const { return fConfig != kUnknown_GrPixelConfig; }
+
     // Temporary constructor which can be used to convert from a GrBackendTextureDesc.
     GrBackendTexture(const GrBackendTextureDesc& desc, GrBackend backend);
 
@@ -50,25 +72,30 @@ private:
     GrBackend fBackend;
 
     union {
-        GrVkImageInfo   fVkInfo;
         GrGLTextureInfo fGLInfo;
+#ifdef SK_VULKAN
+        GrVkImageInfo   fVkInfo;
+#endif
+        GrMockTextureInfo fMockInfo;
     };
 };
 
-class GrBackendRenderTarget {
+class SK_API GrBackendRenderTarget {
 public:
-    GrBackendRenderTarget(int width,
-                          int height,
-                          int sampleCnt,
-                          int stencilBits,
-                          const GrVkImageInfo& vkInfo);
-
     GrBackendRenderTarget(int width,
                           int height,
                           int sampleCnt,
                           int stencilBits,
                           GrPixelConfig config,
                           const GrGLFramebufferInfo& glInfo);
+
+#ifdef SK_VULKAN
+    GrBackendRenderTarget(int width,
+                          int height,
+                          int sampleCnt,
+                          int stencilBits,
+                          const GrVkImageInfo& vkInfo);
+#endif
 
     int width() const { return fWidth; }
     int height() const { return fHeight; }
@@ -77,13 +104,15 @@ public:
     GrPixelConfig config() const { return fConfig; }
     GrBackend backend() const {return fBackend; }
 
-    // If the backend API is Vulkan, this returns a pointer to the GrVkImageInfo struct. Otherwise
-    // it returns nullptr
-    const GrVkImageInfo* getVkImageInfo() const;
-
     // If the backend API is GL, this returns a pointer to the GrGLFramebufferInfo struct. Otherwise
     // it returns nullptr.
     const GrGLFramebufferInfo* getGLFramebufferInfo() const;
+
+#ifdef SK_VULKAN
+    // If the backend API is Vulkan, this returns a pointer to the GrVkImageInfo struct. Otherwise
+    // it returns nullptr
+    const GrVkImageInfo* getVkImageInfo() const;
+#endif
 
 private:
     // Temporary constructor which can be used to convert from a GrBackendRenderTargetDesc.
@@ -102,8 +131,10 @@ private:
     GrBackend fBackend;
 
     union {
-        GrVkImageInfo   fVkInfo;
         GrGLFramebufferInfo fGLInfo;
+#ifdef SK_VULKAN
+        GrVkImageInfo   fVkInfo;
+#endif
     };
 };
 

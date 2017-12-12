@@ -372,9 +372,6 @@ SkLinearBitmapPipeline::SkLinearBitmapPipeline(
 
     // If it is an index 8 color type, the sampler converts to unpremul for better fidelity.
     SkAlphaType alphaType = srcImageInfo.alphaType();
-    if (srcPixmap.colorType() == kIndex_8_SkColorType) {
-        alphaType = kUnpremul_SkAlphaType;
-    }
 
     float postAlpha = SkColorGetA(paintColor) * (1.0f / 255.0f);
     // As the stages are built, the chooser function may skip a stage. For example, with the
@@ -596,8 +593,6 @@ SkLinearBitmapPipeline::PixelAccessorInterface* SkLinearBitmapPipeline::choosePi
             return this->chooseSpecificAccessor<kRGBA_8888_SkColorType>(srcPixmap, allocator);
         case kBGRA_8888_SkColorType:
             return this->chooseSpecificAccessor<kBGRA_8888_SkColorType>(srcPixmap, allocator);
-        case kIndex_8_SkColorType:
-            return this->chooseSpecificAccessor<kIndex_8_SkColorType>(srcPixmap, allocator);
         case kGray_8_SkColorType:
             return this->chooseSpecificAccessor<kGray_8_SkColorType>(srcPixmap, allocator);
         case kRGBA_F16_SkColorType: {
@@ -632,12 +627,6 @@ SkLinearBitmapPipeline::SampleProcessorInterface* SkLinearBitmapPipeline::choose
                         PixelAccessor<kN32_SkColorType, kSRGB_SkGammaType>, Blender>;
                     return allocator->make<Sampler>(next, srcPixmap);
                 }
-                case kIndex_8_SkColorType: {
-                    using Sampler =
-                    NearestNeighborSampler<
-                        PixelAccessor<kIndex_8_SkColorType, kSRGB_SkGammaType>, Blender>;
-                    return allocator->make<Sampler>(next, srcPixmap);
-                }
                 default:
                     break;
             }
@@ -647,12 +636,6 @@ SkLinearBitmapPipeline::SampleProcessorInterface* SkLinearBitmapPipeline::choose
                     using Sampler =
                     BilerpSampler<
                         PixelAccessor<kN32_SkColorType, kSRGB_SkGammaType>, Blender>;
-                    return allocator->make<Sampler>(next, dimensions, xTile, yTile, srcPixmap);
-                }
-                case kIndex_8_SkColorType: {
-                    using Sampler =
-                    BilerpSampler<
-                        PixelAccessor<kIndex_8_SkColorType, kSRGB_SkGammaType>, Blender>;
                     return allocator->make<Sampler>(next, dimensions, xTile, yTile, srcPixmap);
                 }
                 default:
