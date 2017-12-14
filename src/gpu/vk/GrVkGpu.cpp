@@ -898,7 +898,7 @@ static bool check_backend_texture(const GrBackendTexture& backendTex,
         return false;
     }
 
-    SkASSERT(config == GrVkFormatToPixelConfig(info->fFormat));
+    SkASSERT(GrVkFormatPixelConfigPairIsValid(info->fFormat, config));
     return true;
 }
 
@@ -1072,7 +1072,7 @@ void GrVkGpu::generateMipmap(GrVkTexture* tex, GrSurfaceOrigin texOrigin) {
     }
 
     // setup memory barrier
-    SkASSERT(kUnknown_GrPixelConfig != GrVkFormatToPixelConfig(tex->imageFormat()));
+    SkASSERT(GrVkFormatIsSupported(tex->imageFormat()));
     VkImageAspectFlags aspectFlags = VK_IMAGE_ASPECT_COLOR_BIT;
     VkImageMemoryBarrier imageMemoryBarrier = {
         VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,          // sType
@@ -1173,28 +1173,28 @@ bool copy_testing_data(GrVkGpu* gpu, void* srcData, const GrVkAlloc& alloc, size
     return true;
 }
 
-GrBackendObject GrVkGpu::createTestingOnlyBackendTexture(void* srcData, int w, int h,
-                                                         GrPixelConfig config,
-                                                         bool isRenderTarget,
-                                                         GrMipMapped mipMapped) {
+GrBackendTexture GrVkGpu::createTestingOnlyBackendTexture(void* srcData, int w, int h,
+                                                          GrPixelConfig config,
+                                                          bool isRenderTarget,
+                                                          GrMipMapped mipMapped) {
 
     VkFormat pixelFormat;
     if (!GrPixelConfigToVkFormat(config, &pixelFormat)) {
-        return 0;
+        return GrBackendTexture(); // invalid
     }
 
     bool linearTiling = false;
     if (!fVkCaps->isConfigTexturable(config)) {
-        return 0;
+        return GrBackendTexture(); // invalid
     }
 
     if (isRenderTarget && !fVkCaps->isConfigRenderable(config, false)) {
-        return 0;
+        return GrBackendTexture(); // invalid
     }
 
     // Currently we don't support uploading pixel data when mipped.
     if (srcData && GrMipMapped::kYes == mipMapped) {
-        return 0;
+        return GrBackendTexture(); // invalid
     }
 
     if (fVkCaps->isConfigTexturableLinearly(config) &&
@@ -1221,7 +1221,7 @@ GrBackendObject GrVkGpu::createTestingOnlyBackendTexture(void* srcData, int w, i
     // Create Image
     VkSampleCountFlagBits vkSamples;
     if (!GrSampleCountToVkSampleCount(1, &vkSamples)) {
-        return 0;
+        return GrBackendTexture(); // invalid
     }
 
     // Figure out the number of mip levels.
@@ -1252,7 +1252,7 @@ GrBackendObject GrVkGpu::createTestingOnlyBackendTexture(void* srcData, int w, i
 
     if (!GrVkMemory::AllocAndBindImageMemory(this, image, linearTiling, &alloc)) {
         VK_CALL(DestroyImage(this->device(), image, nullptr));
-        return 0;
+        return GrBackendTexture(); // invalid
     }
 
     // We need to declare these early so that we can delete them at the end outside of the if block.
@@ -1273,7 +1273,7 @@ GrBackendObject GrVkGpu::createTestingOnlyBackendTexture(void* srcData, int w, i
     if (err) {
         GrVkMemory::FreeImageMemory(this, false, alloc);
         VK_CALL(DestroyImage(fDevice, image, nullptr));
-        return 0;
+        return GrBackendTexture(); // invalid
     }
 
     VkCommandBufferBeginInfo cmdBufferBeginInfo;
@@ -1304,7 +1304,7 @@ GrBackendObject GrVkGpu::createTestingOnlyBackendTexture(void* srcData, int w, i
             VK_CALL(DestroyImage(fDevice, image, nullptr));
             VK_CALL(EndCommandBuffer(cmdBuffer));
             VK_CALL(FreeCommandBuffers(fDevice, fCmdPool, 1, &cmdBuffer));
-            return 0;
+            return GrBackendTexture(); // invalid
         }
     } else {
         SkASSERT(w && h);
@@ -1348,7 +1348,7 @@ GrBackendObject GrVkGpu::createTestingOnlyBackendTexture(void* srcData, int w, i
             VK_CALL(DestroyImage(fDevice, image, nullptr));
             VK_CALL(EndCommandBuffer(cmdBuffer));
             VK_CALL(FreeCommandBuffers(fDevice, fCmdPool, 1, &cmdBuffer));
-            return 0;
+            return GrBackendTexture(); // invalid
         }
 
         if (!GrVkMemory::AllocAndBindBufferMemory(this, buffer, GrVkBuffer::kCopyRead_Type,
@@ -1358,7 +1358,7 @@ GrBackendObject GrVkGpu::createTestingOnlyBackendTexture(void* srcData, int w, i
             VK_CALL(DestroyBuffer(fDevice, buffer, nullptr));
             VK_CALL(EndCommandBuffer(cmdBuffer));
             VK_CALL(FreeCommandBuffers(fDevice, fCmdPool, 1, &cmdBuffer));
-            return 0;
+            return GrBackendTexture(); // invalid
         }
 
         currentWidth = w;
@@ -1375,7 +1375,7 @@ GrBackendObject GrVkGpu::createTestingOnlyBackendTexture(void* srcData, int w, i
                 VK_CALL(DestroyBuffer(fDevice, buffer, nullptr));
                 VK_CALL(EndCommandBuffer(cmdBuffer));
                 VK_CALL(FreeCommandBuffers(fDevice, fCmdPool, 1, &cmdBuffer));
-                return 0;
+                return GrBackendTexture(); // invalid
             }
             currentWidth = SkTMax(1, currentWidth/2);
             currentHeight = SkTMax(1, currentHeight/2);
@@ -1497,19 +1497,21 @@ GrBackendObject GrVkGpu::createTestingOnlyBackendTexture(void* srcData, int w, i
     VK_CALL(DestroyFence(fDevice, fence, nullptr));
 
 
-    GrVkImageInfo* info = new GrVkImageInfo;
-    info->fImage = image;
-    info->fAlloc = alloc;
-    info->fImageTiling = imageTiling;
-    info->fImageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    info->fFormat = pixelFormat;
-    info->fLevelCount = mipLevels;
+    GrVkImageInfo info;
+    info.fImage = image;
+    info.fAlloc = alloc;
+    info.fImageTiling = imageTiling;
+    info.fImageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    info.fFormat = pixelFormat;
+    info.fLevelCount = mipLevels;
 
-    return (GrBackendObject)info;
+    return GrBackendTexture(w, h, info);
 }
 
-bool GrVkGpu::isTestingOnlyBackendTexture(GrBackendObject id) const {
-    const GrVkImageInfo* backend = reinterpret_cast<const GrVkImageInfo*>(id);
+bool GrVkGpu::isTestingOnlyBackendTexture(const GrBackendTexture& tex) const {
+    SkASSERT(kVulkan_GrBackend == tex.fBackend);
+
+    const GrVkImageInfo* backend = tex.getVkImageInfo();
 
     if (backend && backend->fImage && backend->fAlloc.fMemory) {
         VkMemoryRequirements req;
@@ -1525,15 +1527,15 @@ bool GrVkGpu::isTestingOnlyBackendTexture(GrBackendObject id) const {
     return false;
 }
 
-void GrVkGpu::deleteTestingOnlyBackendTexture(GrBackendObject id, bool abandon) {
-    GrVkImageInfo* backend = reinterpret_cast<GrVkImageInfo*>(id);
-    if (backend) {
-        if (!abandon) {
-            // something in the command buffer may still be using this, so force submit
-            this->submitCommandBuffer(kForce_SyncQueue);
-            GrVkImage::DestroyImageInfo(this, backend);
-        }
-        delete backend;
+void GrVkGpu::deleteTestingOnlyBackendTexture(GrBackendTexture* tex, bool abandon) {
+    SkASSERT(kVulkan_GrBackend == tex->fBackend);
+
+    const GrVkImageInfo* info = tex->getVkImageInfo();
+
+    if (info && !abandon) {
+        // something in the command buffer may still be using this, so force submit
+        this->submitCommandBuffer(kForce_SyncQueue);
+        GrVkImage::DestroyImageInfo(this, const_cast<GrVkImageInfo*>(info));
     }
 }
 

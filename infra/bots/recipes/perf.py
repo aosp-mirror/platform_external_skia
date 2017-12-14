@@ -292,8 +292,7 @@ def perf_steps(api):
         args.extend([k, api.vars.builder_cfg[k]])
 
   # See skia:2789.
-  extra_config_parts = api.vars.builder_cfg.get('extra_config', '').split('_')
-  if 'AbandonGpuContext' in extra_config_parts:
+  if 'AbandonGpuContext' in api.vars.extra_tokens:
     args.extend(['--abandonGpuContext'])
 
   api.run(api.flavor.step, target, cmd=args,
@@ -461,7 +460,7 @@ def GenTests(api):
                                      'svg', 'VERSION'),
         api.path['start_dir'].join('tmp', 'uninteresting_hashes.txt')
     ) +
-    api.step_data('Scale CPU 2 to 0.600000', retcode=1)
+    api.step_data('Scale CPU 0 to 0.600000', retcode=1)
   )
 
   yield (
@@ -480,7 +479,7 @@ def GenTests(api):
                                      'svg', 'VERSION'),
         api.path['start_dir'].join('tmp', 'uninteresting_hashes.txt')
     ) +
-    api.step_data('Scale CPU 2 to 0.600000', retcode=1)+
-    api.step_data('Scale CPU 2 to 0.600000 (attempt 2)', retcode=1)+
-    api.step_data('Scale CPU 2 to 0.600000 (attempt 3)', retcode=1)
+    api.step_data('Scale CPU 0 to 0.600000', retcode=1)+
+    api.step_data('Scale CPU 0 to 0.600000 (attempt 2)', retcode=1)+
+    api.step_data('Scale CPU 0 to 0.600000 (attempt 3)', retcode=1)
   )

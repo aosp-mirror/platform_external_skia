@@ -129,12 +129,10 @@ private:
                                                                 int height) override;
     void clearStencil(GrRenderTarget*, int clearValue) override  {}
 
-    GrBackendObject createTestingOnlyBackendTexture(void* pixels, int w, int h, GrPixelConfig,
+    GrBackendTexture createTestingOnlyBackendTexture(void* pixels, int w, int h, GrPixelConfig,
                                                     bool isRT, GrMipMapped) override;
-
-    bool isTestingOnlyBackendTexture(GrBackendObject) const override;
-
-    void deleteTestingOnlyBackendTexture(GrBackendObject, bool abandonTexture) override;
+    bool isTestingOnlyBackendTexture(const GrBackendTexture&) const override;
+    void deleteTestingOnlyBackendTexture(GrBackendTexture*, bool abandonTexture = false) override;
 
     static int NextInternalTextureID();
     static int NextExternalTextureID();

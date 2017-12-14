@@ -8,6 +8,7 @@
 #ifndef GrGpu_DEFINED
 #define GrGpu_DEFINED
 
+#include "GrCaps.h"
 #include "GrGpuCommandBuffer.h"
 #include "GrProgramDesc.h"
 #include "GrSwizzle.h"
@@ -48,8 +49,7 @@ public:
      * not supported (at compile-time or run-time) this returns nullptr. The context will not be
      * fully constructed and should not be used by GrGpu until after this function returns.
      */
-    static sk_sp<GrGpu> Make(GrBackend, GrBackendContext, const GrContextOptions&,
-                             GrContext* context);
+    static sk_sp<GrGpu> Make(GrBackend, GrBackendContext, const GrContextOptions&, GrContext*);
 
     ////////////////////////////////////////////////////////////////////////////
 
@@ -63,6 +63,7 @@ public:
      * Gets the capabilities of the draw target.
      */
     const GrCaps* caps() const { return fCaps.get(); }
+    sk_sp<const GrCaps> refCaps() const { return fCaps; }
 
     GrPathRendering* pathRendering() { return fPathRendering.get();  }
 
@@ -453,17 +454,17 @@ public:
     /** Creates a texture directly in the backend API without wrapping it in a GrTexture. This is
         only to be used for testing (particularly for testing the methods that import an externally
         created texture into Skia. Must be matched with a call to deleteTestingOnlyTexture(). */
-    virtual GrBackendObject createTestingOnlyBackendTexture(
+    virtual GrBackendTexture createTestingOnlyBackendTexture(
                                                       void* pixels, int w, int h,
                                                       GrPixelConfig config,
-                                                      bool isRenderTarget = false,
-                                                      GrMipMapped mipMapped = GrMipMapped::kNo) = 0;
+                                                      bool isRenderTarget,
+                                                      GrMipMapped mipMapped) = 0;
     /** Check a handle represents an actual texture in the backend API that has not been freed. */
-    virtual bool isTestingOnlyBackendTexture(GrBackendObject) const = 0;
+    virtual bool isTestingOnlyBackendTexture(const GrBackendTexture&) const = 0;
     /** If ownership of the backend texture has been transferred pass true for abandonTexture. This
         will do any necessary cleanup of the handle without freeing the texture in the backend
         API. */
-    virtual void deleteTestingOnlyBackendTexture(GrBackendObject,
+    virtual void deleteTestingOnlyBackendTexture(GrBackendTexture*,
                                                  bool abandonTexture = false) = 0;
 
     // width and height may be larger than rt (if underlying API allows it).
