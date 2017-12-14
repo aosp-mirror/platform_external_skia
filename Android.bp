@@ -210,6 +210,7 @@ cc_library_static {
         "src/core/SkColorSpaceXformer.cpp",
         "src/core/SkColorSpace_A2B.cpp",
         "src/core/SkColorSpace_ICC.cpp",
+        "src/core/SkColorSpace_New.cpp",
         "src/core/SkColorSpace_XYZ.cpp",
         "src/core/SkColorTable.cpp",
         "src/core/SkConvertPixels.cpp",
@@ -973,7 +974,8 @@ cc_defaults {
         "libskia",
     ],
     cflags: [
-        "-Wno-unused-parameter"
+        "-Wno-unused-parameter",
+        "-Wno-unused-variable",
     ],
 }
 
@@ -1646,6 +1648,7 @@ cc_test {
         "tests/Sk4x4fTest.cpp",
         "tests/SkBase64Test.cpp",
         "tests/SkColor4fTest.cpp",
+        "tests/SkColorSpace_NewTest.cpp",
         "tests/SkDOMTest.cpp",
         "tests/SkFixed15Test.cpp",
         "tests/SkGaussFilterTest.cpp",
