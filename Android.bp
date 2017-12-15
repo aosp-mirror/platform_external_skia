@@ -5,6 +5,7 @@ cc_library {
     cflags: [
         "-fexceptions",
         "-Wno-unused-parameter",
+        "-Wno-unused-variable",
         "-U_FORTIFY_SOURCE",
         "-D_FORTIFY_SOURCE=1",
         "-DSKIA_IMPLEMENTATION=1",
@@ -859,6 +860,7 @@ cc_test {
 
     cflags: [
         "-Wno-unused-parameter",
+        "-Wno-unused-variable",
     ],
 
     local_include_dirs: [
@@ -1637,6 +1639,7 @@ cc_test {
 
     cflags: [
         "-Wno-unused-parameter",
+        "-Wno-unused-variable",
     ],
 
     local_include_dirs: [
