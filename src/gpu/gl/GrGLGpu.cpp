@@ -4387,30 +4387,30 @@ void GrGLGpu::xferBarrier(GrRenderTarget* rt, GrXferBarrierType type) {
     }
 }
 
-GrBackendObject GrGLGpu::createTestingOnlyBackendTexture(void* pixels, int w, int h,
-                                                         GrPixelConfig config, bool /*isRT*/,
-                                                         GrMipMapped mipMapped) {
+GrBackendTexture GrGLGpu::createTestingOnlyBackendTexture(void* pixels, int w, int h,
+                                                          GrPixelConfig config, bool /*isRT*/,
+                                                          GrMipMapped mipMapped) {
     if (!this->caps()->isConfigTexturable(config)) {
-        return reinterpret_cast<GrBackendObject>(nullptr);
+        return GrBackendTexture();  // invalid
     }
 
     // Currently we don't support uploading pixel data when mipped.
     if (pixels && GrMipMapped::kYes == mipMapped) {
-        return reinterpret_cast<GrBackendObject>(nullptr);
+        return GrBackendTexture();  // invalid
     }
 
-    std::unique_ptr<GrGLTextureInfo> info = skstd::make_unique<GrGLTextureInfo>();
-    info->fTarget = GR_GL_TEXTURE_2D;
-    info->fID = 0;
-    GL_CALL(GenTextures(1, &info->fID));
+    GrGLTextureInfo info;
+    info.fTarget = GR_GL_TEXTURE_2D;
+    info.fID = 0;
+    GL_CALL(GenTextures(1, &info.fID));
     GL_CALL(ActiveTexture(GR_GL_TEXTURE0));
     GL_CALL(PixelStorei(GR_GL_UNPACK_ALIGNMENT, 1));
-    GL_CALL(BindTexture(info->fTarget, info->fID));
+    GL_CALL(BindTexture(info.fTarget, info.fID));
     fHWBoundTextureUniqueIDs[0].makeInvalid();
-    GL_CALL(TexParameteri(info->fTarget, GR_GL_TEXTURE_MAG_FILTER, GR_GL_NEAREST));
-    GL_CALL(TexParameteri(info->fTarget, GR_GL_TEXTURE_MIN_FILTER, GR_GL_NEAREST));
-    GL_CALL(TexParameteri(info->fTarget, GR_GL_TEXTURE_WRAP_S, GR_GL_CLAMP_TO_EDGE));
-    GL_CALL(TexParameteri(info->fTarget, GR_GL_TEXTURE_WRAP_T, GR_GL_CLAMP_TO_EDGE));
+    GL_CALL(TexParameteri(info.fTarget, GR_GL_TEXTURE_MAG_FILTER, GR_GL_NEAREST));
+    GL_CALL(TexParameteri(info.fTarget, GR_GL_TEXTURE_MIN_FILTER, GR_GL_NEAREST));
+    GL_CALL(TexParameteri(info.fTarget, GR_GL_TEXTURE_WRAP_S, GR_GL_CLAMP_TO_EDGE));
+    GL_CALL(TexParameteri(info.fTarget, GR_GL_TEXTURE_WRAP_T, GR_GL_CLAMP_TO_EDGE));
 
     GrGLenum internalFormat;
     GrGLenum externalFormat;
@@ -4418,7 +4418,7 @@ GrBackendObject GrGLGpu::createTestingOnlyBackendTexture(void* pixels, int w, in
 
     if (!this->glCaps().getTexImageFormats(config, config, &internalFormat, &externalFormat,
                                            &externalType)) {
-        return reinterpret_cast<GrBackendObject>(nullptr);
+        return GrBackendTexture();  // invalid
     }
 
     this->unbindCpuToGpuXferBuffer();
@@ -4441,29 +4441,36 @@ GrBackendObject GrGLGpu::createTestingOnlyBackendTexture(void* pixels, int w, in
     int width = w;
     int height = h;
     for (int i = 0; i < mipLevels; ++i) {
-        GL_CALL(TexImage2D(info->fTarget, i, internalFormat, width, height, 0, externalFormat,
+        GL_CALL(TexImage2D(info.fTarget, i, internalFormat, width, height, 0, externalFormat,
                            externalType, pixels));
         width = SkTMax(1, width / 2);
         height = SkTMax(1, height / 2);
     }
 
-    return reinterpret_cast<GrBackendObject>(info.release());
+    return GrBackendTexture(w, h, config, mipMapped, info);
 }
 
-bool GrGLGpu::isTestingOnlyBackendTexture(GrBackendObject id) const {
-    GrGLuint texID = reinterpret_cast<const GrGLTextureInfo*>(id)->fID;
+bool GrGLGpu::isTestingOnlyBackendTexture(const GrBackendTexture& tex) const {
+    SkASSERT(kOpenGL_GrBackend == tex.backend());
+
+    const GrGLTextureInfo* info = tex.getGLTextureInfo();
+    if (!info) {
+        return false;
+    }
 
     GrGLboolean result;
-    GL_CALL_RET(result, IsTexture(texID));
+    GL_CALL_RET(result, IsTexture(info->fID));
 
     return (GR_GL_TRUE == result);
 }
 
-void GrGLGpu::deleteTestingOnlyBackendTexture(GrBackendObject id, bool abandonTexture) {
-    std::unique_ptr<const GrGLTextureInfo> info(reinterpret_cast<const GrGLTextureInfo*>(id));
-    GrGLuint texID = info->fID;
+void GrGLGpu::deleteTestingOnlyBackendTexture(GrBackendTexture* tex, bool abandonTexture) {
+    SkASSERT(kOpenGL_GrBackend == tex->backend());
 
-    if (!abandonTexture) {
+    const GrGLTextureInfo* info = tex->getGLTextureInfo();
+    if (info && !abandonTexture) {
+        GrGLuint texID = info->fID;
+
         GL_CALL(DeleteTextures(1, &texID));
     }
 }

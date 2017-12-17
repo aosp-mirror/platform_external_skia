@@ -216,10 +216,6 @@ public:
 
     void setDeserialProcs(const SkDeserialProcs& procs);
 
-#ifdef SK_SUPPORT_LEGACY_SERIAL_BUFFER_OBJECTS
-    void setImageDeserializer(SkImageDeserializer* factory);
-#endif
-
     /**
      *  If isValid is false, sets the buffer to be "invalid". Returns true if the buffer
      *  is still valid.
@@ -292,6 +288,7 @@ private:
     SkTHashMap<SkString, SkFlattenable::Factory> fCustomFactory;
 
     SkDeserialProcs fProcs;
+    friend class SkPicture;
 
 #ifdef DEBUG_NON_DETERMINISTIC_ASSERT
     // Debugging counter to keep track of how many bitmaps we

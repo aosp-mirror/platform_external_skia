@@ -615,7 +615,7 @@ can reconstitute the paint at a later time.
 
 ### Example
 
-<div><fiddle-embed name="de31563f11e447dccc988108e9173d28">
+<div><fiddle-embed name="ef700e9d42d1826d35e92eeae120e7fa">
 
 #### Example Output
 
@@ -2606,7 +2606,7 @@ May be used to verify that <a href="#Stroke_Join">Stroke Join</a> is a legal val
 Join getStrokeJoin() const
 </pre>
 
-The geometry drawn at the corners of strokes. 
+The geometry drawn at the corners of strokes.
 
 ### Return Value
 
@@ -2637,7 +2637,7 @@ kMiter_Join == default stroke join
 void setStrokeJoin(Join join)
 </pre>
 
-The geometry drawn at the corners of strokes. 
+The geometry drawn at the corners of strokes.
 
 ### Parameters
 

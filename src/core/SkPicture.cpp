@@ -6,8 +6,8 @@
  */
 
 #include "SkAtomics.h"
-#include "SkImageDeserializer.h"
 #include "SkImageGenerator.h"
+#include "SkMathPriv.h"
 #include "SkPicture.h"
 #include "SkPictureCommon.h"
 #include "SkPictureData.h"
@@ -22,6 +22,18 @@ static bool g_AllPictureIOSecurityPrecautionsEnabled = true;
 #else
 static bool g_AllPictureIOSecurityPrecautionsEnabled = false;
 #endif
+
+// When we read/write the SkPictInfo via a stream, we have a sentinel byte right after the info.
+// Note: in the read/write buffer versions, we have a slightly different convention:
+//      We have a sentinel int32_t:
+//          0 : failure
+//          1 : PictureData
+//         <0 : -size of the custom data
+enum {
+    kFailure_TrailingStreamByteAfterPictInfo     = 0,   // nothing follows
+    kPictureData_TrailingStreamByteAfterPictInfo = 1,   // SkPictureData follows
+    kCustom_TrailingStreamByteAfterPictInfo      = 2,   // -size32 follows
+};
 
 /* SkPicture impl.  This handles generic responsibilities like unique IDs and serialization. */
 
@@ -130,31 +142,26 @@ sk_sp<SkPicture> SkPicture::Forwardport(const SkPictInfo& info,
     return r.finishRecordingAsPicture();
 }
 
-sk_sp<SkPicture> SkPicture::MakeFromStream(SkStream* stream, SkImageDeserializer* factory) {
-    SkDeserialProcs procs;
-    procs.fImageProc = ImageDeserializer_SkDeserialImageProc;
-    procs.fImageCtx  = factory;
-    return MakeFromStream(stream, procs, nullptr);
-}
-
 sk_sp<SkPicture> SkPicture::MakeFromStream(SkStream* stream) {
-    SkImageDeserializer factory;
-    return MakeFromStream(stream, &factory);
+    return MakeFromStream(stream, SkDeserialProcs(), nullptr);
 }
 
-sk_sp<SkPicture> SkPicture::MakeFromData(const void* data, size_t size,
-                                         SkImageDeserializer* factory) {
+sk_sp<SkPicture> SkPicture::MakeFromData(const void* data, size_t size) {
+    if (!data) {
+        return nullptr;
+    }
     SkMemoryStream stream(data, size);
-    return MakeFromStream(&stream, factory);
+    return MakeFromStream(&stream, SkDeserialProcs(), nullptr);
 }
 
-sk_sp<SkPicture> SkPicture::MakeFromData(const SkData* data, SkImageDeserializer* factory) {
+sk_sp<SkPicture> SkPicture::MakeFromData(const SkData* data) {
     if (!data) {
         return nullptr;
     }
     SkMemoryStream stream(data->data(), data->size());
-    return MakeFromStream(&stream, factory);
+    return MakeFromStream(&stream, SkDeserialProcs(), nullptr);
 }
+
 
 sk_sp<SkPicture> SkPicture::MakeFromData(const SkData* data, const SkDeserialProcs& procs) {
     if (!data) {
@@ -175,20 +182,54 @@ sk_sp<SkPicture> SkPicture::MakeFromStream(SkStream* stream, const SkDeserialPro
 sk_sp<SkPicture> SkPicture::MakeFromStream(SkStream* stream, const SkDeserialProcs& procs,
                                            SkTypefacePlayback* typefaces) {
     SkPictInfo info;
-    if (!InternalOnly_StreamIsSKP(stream, &info) || !stream->readBool()) {
+    if (!InternalOnly_StreamIsSKP(stream, &info)) {
         return nullptr;
     }
-    std::unique_ptr<SkPictureData> data(
-            SkPictureData::CreateFromStream(stream, info, procs, typefaces));
-    return Forwardport(info, data.get(), nullptr);
+
+    switch (stream->readU8()) {
+        case kPictureData_TrailingStreamByteAfterPictInfo: {
+            std::unique_ptr<SkPictureData> data(
+                    SkPictureData::CreateFromStream(stream, info, procs, typefaces));
+            return Forwardport(info, data.get(), nullptr);
+        }
+        case kCustom_TrailingStreamByteAfterPictInfo: {
+            int32_t ssize = stream->readS32();
+            if (ssize >= 0 || !procs.fPictureProc) {
+                return nullptr;
+            }
+            size_t size = sk_negate_to_size_t(ssize);
+            auto data = SkData::MakeUninitialized(size);
+            if (stream->read(data->writable_data(), size) != size) {
+                return nullptr;
+            }
+            return procs.fPictureProc(data->data(), size, procs.fPictureCtx);
+        }
+        default:    // fall through to error return
+            break;
+    }
+    return nullptr;
 }
 
 sk_sp<SkPicture> SkPicture::MakeFromBuffer(SkReadBuffer& buffer) {
     SkPictInfo info;
-    if (!InternalOnly_BufferIsSKP(&buffer, &info) || !buffer.readBool()) {
+    if (!InternalOnly_BufferIsSKP(&buffer, &info)) {
         return nullptr;
     }
-    std::unique_ptr<SkPictureData> data(SkPictureData::CreateFromBuffer(buffer, info));
+    // size should be 0, 1, or negative
+    int32_t ssize = buffer.read32();
+    if (ssize < 0) {
+        const SkDeserialProcs& procs = buffer.fProcs;
+        if (!procs.fPictureProc) {
+            return nullptr;
+        }
+        size_t size = sk_negate_to_size_t(ssize);
+        return procs.fPictureProc(buffer.skip(size), size, procs.fPictureCtx);
+    }
+    if (ssize != 1) {
+        // 1 is the magic 'size' that means SkPictureData follows
+        return nullptr;
+    }
+   std::unique_ptr<SkPictureData> data(SkPictureData::CreateFromBuffer(buffer, info));
     return Forwardport(info, data.get(), &buffer);
 }
 
@@ -201,18 +242,13 @@ SkPictureData* SkPicture::backport() const {
     return new SkPictureData(rec, info);
 }
 
-void SkPicture::serialize(SkWStream* stream, SkPixelSerializer* pixelSerializer) const {
-    SkSerialProcs procs;
-    if (pixelSerializer) {
-        procs.fImageProc = PixelSerializer_SkSerialImageProc;
-        procs.fImageCtx  = pixelSerializer;
-    }
-    this->serialize(stream, procs, nullptr);
+void SkPicture::serialize(SkWStream* stream) const {
+    this->serialize(stream, SkSerialProcs(), nullptr);
 }
 
-sk_sp<SkData> SkPicture::serialize(SkPixelSerializer* pixelSerializer) const {
+sk_sp<SkData> SkPicture::serialize() const {
     SkDynamicMemoryWStream stream;
-    this->serialize(&stream, pixelSerializer);
+    this->serialize(&stream);
     return stream.detachAsData();
 }
 
@@ -222,17 +258,54 @@ sk_sp<SkData> SkPicture::serialize(const SkSerialProcs& procs) const {
     return stream.detachAsData();
 }
 
+static sk_sp<SkData> custom_serialize(const SkPicture* picture, const SkSerialProcs& procs) {
+    if (procs.fPictureProc) {
+        auto data = procs.fPictureProc(const_cast<SkPicture*>(picture), procs.fPictureCtx);
+        if (data) {
+            size_t size = data->size();
+            if (!sk_64_isS32(size) || size <= 1) {
+                return SkData::MakeEmpty();
+            }
+            return data;
+        }
+    }
+    return nullptr;
+}
+
+static bool write_pad32(SkWStream* stream, const void* data, size_t size) {
+    if (!stream->write(data, size)) {
+        return false;
+    }
+    if (size & 3) {
+        uint32_t zero = 0;
+        return stream->write(&zero, 4 - (size & 3));
+    }
+    return true;
+}
+
 void SkPicture::serialize(SkWStream* stream, const SkSerialProcs& procs,
                           SkRefCntSet* typefaceSet) const {
     SkPictInfo info = this->createHeader();
-    std::unique_ptr<SkPictureData> data(this->backport());
-
     stream->write(&info, sizeof(info));
+
+    if (auto custom = custom_serialize(this, procs)) {
+        int32_t size = SkToS32(custom->size());
+        if (size == 0) {
+            stream->write8(kFailure_TrailingStreamByteAfterPictInfo);
+            return;
+        }
+        stream->write8(kCustom_TrailingStreamByteAfterPictInfo);
+        stream->write32(-size);    // negative for custom format
+        write_pad32(stream, custom->data(), size);
+        return;
+    }
+
+    std::unique_ptr<SkPictureData> data(this->backport());
     if (data) {
-        stream->writeBool(true);
+        stream->write8(kPictureData_TrailingStreamByteAfterPictInfo);
         data->serialize(stream, procs, typefaceSet);
     } else {
-        stream->writeBool(false);
+        stream->write8(kFailure_TrailingStreamByteAfterPictInfo);
     }
 }
 
@@ -244,11 +317,19 @@ void SkPicture::flatten(SkWriteBuffer& buffer) const {
     buffer.writeUInt(info.getVersion());
     buffer.writeRect(info.fCullRect);
     buffer.writeUInt(info.fFlags);
+
+    if (auto custom = custom_serialize(this, buffer.fProcs)) {
+        int32_t size = SkToS32(custom->size());
+        buffer.write32(-size);    // negative for custom format
+        buffer.writePad32(custom->data(), size);
+        return;
+    }
+
     if (data) {
-        buffer.writeBool(true);
+        buffer.write32(1); // special size meaning SkPictureData
         data->flatten(buffer);
     } else {
-        buffer.writeBool(false);
+        buffer.write32(0); // signal no content
     }
 }
 
@@ -270,46 +351,3 @@ void SkPicture::SetPictureIOSecurityPrecautionsEnabled_Dangerous(bool set) {
 bool SkPicture::PictureIOSecurityPrecautionsEnabled() {
     return g_AllPictureIOSecurityPrecautionsEnabled;
 }
-
-//////////////////////////////////////////////////////////////////////////////////////////////////
-
-sk_sp<SkData> PixelSerializer_SkSerialImageProc(SkImage* img, void* ctx) {
-    SkASSERT(ctx);
-    return img->encodeToData(static_cast<SkPixelSerializer*>(ctx));
-}
-
-sk_sp<SkImage> ImageDeserializer_SkDeserialImageProc(const void* data, size_t length, void* ctx) {
-    SkASSERT(ctx);
-    SkImageDeserializer* imd = static_cast<SkImageDeserializer*>(ctx);
-    const SkIRect* subset = nullptr;
-    return imd->makeFromMemory(data, length, subset);
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////////////
-
-#ifdef SK_SUPPORT_LEGACY_SERIAL_BUFFER_OBJECTS
-#include "SkReadBuffer.h"
-#include "SkWriteBuffer.h"
-
-void SkBinaryWriteBuffer::setPixelSerializer(sk_sp<SkPixelSerializer> ps) {
-    fPS = ps;
-    if (ps) {
-        fProcs.fImageProc = PixelSerializer_SkSerialImageProc;
-        fProcs.fImageCtx  = ps.get();
-    } else {
-        fProcs.fImageProc = nullptr;
-        fProcs.fImageCtx  = nullptr;
-    }
-}
-
-void SkReadBuffer::setImageDeserializer(SkImageDeserializer* factory) {
-    if (factory) {
-        fProcs.fImageProc = ImageDeserializer_SkDeserialImageProc;
-        fProcs.fImageCtx  = factory;
-    } else {
-        fProcs.fImageProc = nullptr;
-        fProcs.fImageCtx  = nullptr;
-    }
-}
-#endif
-

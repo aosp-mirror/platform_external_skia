@@ -19,10 +19,8 @@ class SkCanvas;
 class SkData;
 struct SkDeserialProcs;
 class SkImage;
-class SkImageDeserializer;
 class SkPath;
 class SkPictureData;
-class SkPixelSerializer;
 class SkReadBuffer;
 class SkRefCntSet;
 struct SkSerialProcs;
@@ -53,16 +51,12 @@ public:
     typedef bool (*InstallPixelRefProc)(const void* src, size_t length, SkBitmap* dst);
 
     /**
-     *  Recreate a picture that was serialized into a stream.
-     *
-     *  Any serialized images in the stream will be passed the image-deserializer, or if that is
-     *  null, to the default deserializer that will call SkImage::MakeFromEncoded().
+     *  Recreate a picture that was serialized into a stream or data.
      */
-    static sk_sp<SkPicture> MakeFromStream(SkStream*, SkImageDeserializer*);
+
     static sk_sp<SkPicture> MakeFromStream(SkStream*);
-    static sk_sp<SkPicture> MakeFromData(const void* data, size_t size,
-                                         SkImageDeserializer* = nullptr);
-    static sk_sp<SkPicture> MakeFromData(const SkData* data, SkImageDeserializer* = nullptr);
+    static sk_sp<SkPicture> MakeFromData(const SkData* data);
+    static sk_sp<SkPicture> MakeFromData(const void* data, size_t size);
 
     static sk_sp<SkPicture> MakeFromStream(SkStream*, const SkDeserialProcs& procs);
     static sk_sp<SkPicture> MakeFromData(const SkData* data, const SkDeserialProcs& procs);
@@ -112,19 +106,9 @@ public:
     /** Returns a non-zero value unique among all pictures. */
     uint32_t uniqueID() const;
 
-    /**
-     *  Serialize the picture to SkData. If non nullptr, pixel-serializer will be used to
-     *  customize how images reference by the picture are serialized/compressed.
-     */
-    sk_sp<SkData> serialize(SkPixelSerializer* = nullptr) const;
-
+    sk_sp<SkData> serialize() const;
+    void serialize(SkWStream*) const;
     sk_sp<SkData> serialize(const SkSerialProcs&) const;
-
-    /**
-     *  Serialize to a stream. If non nullptr, pixel-serializer will be used to
-     *  customize how images reference by the picture are serialized/compressed.
-     */
-    void serialize(SkWStream*, SkPixelSerializer* = nullptr) const;
 
     /**
      *  Serialize to a buffer.

@@ -171,15 +171,13 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static sk_sp<SkDocument> MakePDFDocument(const Config &config,
-                                         SkWStream *wStream) {
+static sk_sp<SkDocument> MakePDFDocument(const Config &config, SkWStream *wStream) {
     SkDocument::PDFMetadata pdf_info;
     pdf_info.fTitle = config.title.value.c_str();
     pdf_info.fAuthor = config.author.value.c_str();
     pdf_info.fSubject = config.subject.value.c_str();
     pdf_info.fKeywords = config.keywords.value.c_str();
     pdf_info.fCreator = config.creator.value.c_str();
-    bool pdfa = false;
     #if 0
         SkTime::DateTime now;
         SkTime::GetDateTime(&now);
@@ -187,10 +185,9 @@ static sk_sp<SkDocument> MakePDFDocument(const Config &config,
         pdf_info.fCreation.fDateTime = now;
         pdf_info.fModified.fEnabled = true;
         pdf_info.fModified.fDateTime = now;
-        pdfa = true;
+        pdf_info.fPDFA = true;
     #endif
-    return SkDocument::MakePDF(wStream, SK_ScalarDefaultRasterDPI, pdf_info,
-                               nullptr, pdfa);
+    return SkDocument::MakePDF(wStream, pdf_info);
 }
 
 int main(int argc, char **argv) {

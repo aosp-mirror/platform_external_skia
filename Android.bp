@@ -210,6 +210,7 @@ cc_library_static {
         "src/core/SkColorSpaceXformer.cpp",
         "src/core/SkColorSpace_A2B.cpp",
         "src/core/SkColorSpace_ICC.cpp",
+        "src/core/SkColorSpace_New.cpp",
         "src/core/SkColorSpace_XYZ.cpp",
         "src/core/SkColorTable.cpp",
         "src/core/SkConvertPixels.cpp",
@@ -497,6 +498,7 @@ cc_library_static {
         "src/gpu/ccpr/GrCCPRQuadraticShader.cpp",
         "src/gpu/ccpr/GrCCPRTriangleShader.cpp",
         "src/gpu/ccpr/GrCoverageCountingPathRenderer.cpp",
+        "src/gpu/ddl/GrDDLGpu.cpp",
         "src/gpu/effects/GrAARectEffect.cpp",
         "src/gpu/effects/GrArithmeticFP.cpp",
         "src/gpu/effects/GrBezierEffect.cpp",
@@ -515,6 +517,7 @@ cc_library_static {
         "src/gpu/effects/GrEllipseEffect.cpp",
         "src/gpu/effects/GrGaussianConvolutionFragmentProcessor.cpp",
         "src/gpu/effects/GrLumaColorFilterEffect.cpp",
+        "src/gpu/effects/GrMagnifierEffect.cpp",
         "src/gpu/effects/GrMatrixConvolutionEffect.cpp",
         "src/gpu/effects/GrNonlinearColorSpaceXformEffect.cpp",
         "src/gpu/effects/GrOvalEffect.cpp",
@@ -749,7 +752,6 @@ cc_library_static {
         "src/shaders/SkShader.cpp",
         "src/shaders/gradients/Sk4fGradientBase.cpp",
         "src/shaders/gradients/Sk4fLinearGradient.cpp",
-        "src/shaders/gradients/SkClampRange.cpp",
         "src/shaders/gradients/SkGradientBitmapCache.cpp",
         "src/shaders/gradients/SkGradientShader.cpp",
         "src/shaders/gradients/SkLinearGradient.cpp",
@@ -921,6 +923,17 @@ cc_defaults {
     },
 }
 
+// "defaults" property to disable profile use for Skia tools and benchmarks.
+cc_defaults {
+    name: "skia_pgo_no_profile_use",
+    defaults: [
+        "skia_pgo",
+    ],
+    pgo: {
+        enable_profile_use: false,
+    },
+}
+
 cc_defaults {
     name: "skia_deps",
     shared_libs: [
@@ -953,14 +966,16 @@ cc_defaults {
 cc_defaults {
     name: "skia_tool_deps",
     defaults: [
-        "skia_deps"
+        "skia_deps",
+        "skia_pgo_no_profile_use"
     ],
     static_libs: [
         "libjsoncpp",
         "libskia",
     ],
     cflags: [
-        "-Wno-unused-parameter"
+        "-Wno-unused-parameter",
+        "-Wno-unused-variable",
     ],
 }
 
@@ -1143,8 +1158,10 @@ cc_test {
         "gm/dashcircle.cpp",
         "gm/dashcubics.cpp",
         "gm/dashing.cpp",
+        "gm/deferredtextureimage.cpp",
         "gm/degeneratesegments.cpp",
         "gm/dftext.cpp",
+        "gm/dftext_blob_persp.cpp",
         "gm/discard.cpp",
         "gm/displacement.cpp",
         "gm/distantclip.cpp",
@@ -1394,7 +1411,6 @@ cc_test {
         "tests/CanvasStateTest.cpp",
         "tests/CanvasTest.cpp",
         "tests/ChecksumTest.cpp",
-        "tests/ClampRangeTest.cpp",
         "tests/ClearTest.cpp",
         "tests/ClipBoundsTest.cpp",
         "tests/ClipCubicTest.cpp",
@@ -1634,6 +1650,7 @@ cc_test {
         "tests/Sk4x4fTest.cpp",
         "tests/SkBase64Test.cpp",
         "tests/SkColor4fTest.cpp",
+        "tests/SkColorSpace_NewTest.cpp",
         "tests/SkDOMTest.cpp",
         "tests/SkFixed15Test.cpp",
         "tests/SkGaussFilterTest.cpp",
@@ -2032,8 +2049,10 @@ cc_test {
         "gm/dashcircle.cpp",
         "gm/dashcubics.cpp",
         "gm/dashing.cpp",
+        "gm/deferredtextureimage.cpp",
         "gm/degeneratesegments.cpp",
         "gm/dftext.cpp",
+        "gm/dftext_blob_persp.cpp",
         "gm/discard.cpp",
         "gm/displacement.cpp",
         "gm/distantclip.cpp",

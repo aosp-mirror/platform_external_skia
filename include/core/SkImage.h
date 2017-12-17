@@ -24,7 +24,6 @@ class SkCanvas;
 class SkImageGenerator;
 class SkPaint;
 class SkPicture;
-class SkPixelSerializer;
 class SkString;
 class SkSurface;
 class GrBackendTexture;
@@ -189,6 +188,29 @@ public:
                                                    GrSurfaceOrigin surfaceOrigin,
                                                    sk_sp<SkColorSpace> colorSpace = nullptr);
 
+    /**
+     *  Create a new image by copying the pixels from the specified y, u, v textures. The data
+     *  from the textures is immediately ingested into the image and the textures can be modified or
+     *  deleted after the function returns. The image will have the dimensions of the y texture.
+     */
+    static sk_sp<SkImage> MakeFromYUVTexturesCopy(GrContext* context, SkYUVColorSpace yuvColorSpace,
+                                                  const GrBackendTexture yuvTextureHandles[3],
+                                                  const SkISize yuvSizes[3],
+                                                  GrSurfaceOrigin surfaceOrigin,
+                                                  sk_sp<SkColorSpace> colorSpace = nullptr);
+
+    /**
+     *  Create a new image by copying the pixels from the specified y and uv textures. The data
+     *  from the textures is immediately ingested into the image and the textures can be modified or
+     *  deleted after the function returns. The image will have the dimensions of the y texture.
+     */
+    static sk_sp<SkImage> MakeFromNV12TexturesCopy(GrContext* context,
+                                                   SkYUVColorSpace yuvColorSpace,
+                                                   const GrBackendTexture nv12TextureHandles[2],
+                                                   const SkISize nv12Sizes[2],
+                                                   GrSurfaceOrigin surfaceOrigin,
+                                                   sk_sp<SkColorSpace> colorSpace = nullptr);
+
     enum class BitDepth {
         kU8,
         kF16,
@@ -329,28 +351,21 @@ public:
                      CachingHint cachingHint = kAllow_CachingHint) const;
 
     /**
-     *  Encode the image's pixels and return the result as SkData.
+     *  Encode the image's pixels and return the result as SkData. This will ignore any possible
+     *  existing encoded data (see refEncodedData()), and will always attempt to encode the
+     *  image using the specified encoded image format.
      *
      *  If the image type cannot be encoded, or the requested encoder format is
-     *  not supported, this will return NULL.
+     *  not supported, this will return nullptr.
      */
     sk_sp<SkData> encodeToData(SkEncodedImageFormat encodedImageFormat, int quality) const;
 
     /**
      *  Encode the image and return the result as SkData.  This will attempt to reuse existing
-     *  encoded data (as returned by refEncodedData).
-     *
-     *  We defer to the SkPixelSerializer both for vetting existing encoded data
-     *  (useEncodedData) and for encoding the image (encode) when no such data is
-     *  present or is rejected by the serializer.
-     *
-     *  If not specified, we use a default serializer which 1) always accepts existing data
-     *  (in any format) and 2) encodes to PNG.
-     *
-     *  If no compatible encoded data exists and encoding fails, this method will also
-     *  fail (return NULL).
+     *  encoded data (as returned by refEncodedData). If there is no eisting data, the image
+     *  will be encoded using PNG. On an error, this returns nullptr.
      */
-    sk_sp<SkData> encodeToData(SkPixelSerializer* pixelSerializer = nullptr) const;
+    sk_sp<SkData> encodeToData() const;
 
     /**
      *  If the image already has its contents in encoded form (e.g. PNG or JPEG), return that
@@ -412,6 +427,60 @@ public:
     sk_sp<SkImage> makeWithFilter(const SkImageFilter* filter, const SkIRect& subset,
                                   const SkIRect& clipBounds, SkIRect* outSubset,
                                   SkIPoint* offset) const;
+
+    /** Drawing params for which a deferred texture image data should be optimized. */
+    struct DeferredTextureImageUsageParams {
+        DeferredTextureImageUsageParams(const SkMatrix matrix, const SkFilterQuality quality,
+                                        int preScaleMipLevel)
+            : fMatrix(matrix), fQuality(quality), fPreScaleMipLevel(preScaleMipLevel) {}
+        SkMatrix        fMatrix;
+        SkFilterQuality fQuality;
+        int             fPreScaleMipLevel;
+    };
+
+    /**
+     * This method allows clients to capture the data necessary to turn a SkImage into a texture-
+     * backed image. If the original image is codec-backed this will decode into a format optimized
+     * for the context represented by the proxy. This method is thread safe with respect to the
+     * GrContext whence the proxy came. Clients allocate and manage the storage of the deferred
+     * texture data and control its lifetime. No cleanup is required, thus it is safe to simply free
+     * the memory out from under the data.
+     *
+     * The same method is used both for getting the size necessary for pre-uploaded texture data
+     * and for retrieving the data. The params array represents the set of draws over which to
+     * optimize the pre-upload data.
+     *
+     * When called with a null buffer this returns the size that the client must allocate in order
+     * to create deferred texture data for this image (or zero if this is an inappropriate
+     * candidate). The buffer allocated by the client should be 8 byte aligned.
+     *
+     * When buffer is not null this fills in the deferred texture data for this image in the
+     * provided buffer (assuming this is an appropriate candidate image and the buffer is
+     * appropriately aligned). Upon success the size written is returned, otherwise 0.
+     *
+     * dstColorSpace is the color space of the surface where this texture will ultimately be used.
+     * If the method determines that mip-maps are needed, this helps determine the correct strategy
+     * for building them (gamma-correct or not).
+     *
+     * dstColorType is the color type of the surface where this texture will ultimately be used.
+     * This determines the format with which the image will be uploaded to the GPU. If dstColorType
+     * does not support color spaces (low bit depth types such as ARGB_4444), then dstColorSpace
+     * must be null.
+     */
+    size_t getDeferredTextureImageData(const GrContextThreadSafeProxy& contextThreadSafeProxy,
+                            const DeferredTextureImageUsageParams deferredTextureImageUsageParams[],
+                            int paramCnt,
+                            void* buffer,
+                            SkColorSpace* dstColorSpace = nullptr,
+                            SkColorType dstColorType = kN32_SkColorType) const;
+
+    /**
+     * Returns a texture-backed image from data produced in SkImage::getDeferredTextureImageData.
+     * The context must be the context that provided the proxy passed to
+     * getDeferredTextureImageData.
+     */
+    static sk_sp<SkImage> MakeFromDeferredTextureImageData(GrContext* context, const void* data,
+                                                           SkBudgeted budgeted);
 
     typedef std::function<void(GrBackendTexture)> BackendTextureReleaseProc;
 

@@ -20,7 +20,6 @@
 #include "SkNextID.h"
 #include "SkPicture.h"
 #include "SkPixelRef.h"
-#include "SkPixelSerializer.h"
 #include "SkReadPixelsRec.h"
 #include "SkSpecialImage.h"
 #include "SkString.h"
@@ -102,10 +101,8 @@ sk_sp<SkData> SkImage::encodeToData(SkEncodedImageFormat type, int quality) cons
     return nullptr;
 }
 
-sk_sp<SkData> SkImage::encodeToData(SkPixelSerializer* serializer) const {
-    sk_sp<SkData> encoded(this->refEncodedData());
-    if (encoded &&
-        (!serializer || serializer->useEncodedData(encoded->data(), encoded->size()))) {
+sk_sp<SkData> SkImage::encodeToData() const {
+    if (auto encoded = this->refEncodedData()) {
         return encoded;
     }
 
@@ -113,11 +110,7 @@ sk_sp<SkData> SkImage::encodeToData(SkPixelSerializer* serializer) const {
     SkPixmap pmap;
     SkColorSpace* legacyColorSpace = nullptr;
     if (as_IB(this)->getROPixels(&bm, legacyColorSpace) && bm.peekPixels(&pmap)) {
-        if (serializer) {
-            return serializer->encodeToData(pmap);
-        } else {
-            return SkEncodePixmap(pmap, SkEncodedImageFormat::kPNG, 100);
-        }
+        return SkEncodePixmap(pmap, SkEncodedImageFormat::kPNG, 100);
     }
     return nullptr;
 }
@@ -358,6 +351,19 @@ sk_sp<SkImage> SkImage::MakeFromTexture(GrContext* ctx,
     return nullptr;
 }
 
+size_t SkImage::getDeferredTextureImageData(const GrContextThreadSafeProxy&,
+                                            const DeferredTextureImageUsageParams[],
+                                            int paramCnt, void* buffer,
+                                            SkColorSpace* dstColorSpace,
+                                            SkColorType dstColorType) const {
+    return 0;
+}
+
+sk_sp<SkImage> SkImage::MakeFromDeferredTextureImageData(GrContext* context, const void*,
+                                                         SkBudgeted) {
+    return nullptr;
+}
+
 bool SkImage::MakeBackendTextureFromSkImage(GrContext*,
                                             sk_sp<SkImage>,
                                             GrBackendTexture*,
@@ -379,6 +385,14 @@ sk_sp<SkImage> SkImage::MakeFromYUVTexturesCopy(GrContext* ctx, SkYUVColorSpace 
     return nullptr;
 }
 
+sk_sp<SkImage> SkImage::MakeFromYUVTexturesCopy(GrContext* ctx, SkYUVColorSpace space,
+                                                const GrBackendTexture yuvTextureHandles[3],
+                                                const SkISize yuvSizes[3],
+                                                GrSurfaceOrigin origin,
+                                                sk_sp<SkColorSpace> imageColorSpace) {
+    return nullptr;
+}
+
 sk_sp<SkImage> SkImage::makeTextureImage(GrContext*, SkColorSpace* dstColorSpace) const {
     return nullptr;
 }
@@ -394,17 +408,6 @@ sk_sp<SkImage> SkImage::makeNonTextureImage() const {
 sk_sp<SkImage> MakeTextureFromMipMap(GrContext*, const SkImageInfo&, const GrMipLevel texels[],
                                      int mipLevelCount, SkBudgeted) {
     return nullptr;
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////////////
-#include "SkImageDeserializer.h"
-
-sk_sp<SkImage> SkImageDeserializer::makeFromData(SkData* data, const SkIRect* subset) {
-    return SkImage::MakeFromEncoded(sk_ref_sp(data), subset);
-}
-sk_sp<SkImage> SkImageDeserializer::makeFromMemory(const void* data, size_t length,
-                                                   const SkIRect* subset) {
-    return SkImage::MakeFromEncoded(SkData::MakeWithCopy(data, length), subset);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

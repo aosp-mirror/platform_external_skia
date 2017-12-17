@@ -2512,7 +2512,7 @@ void SkPDFDevice::internalDrawImageRect(SkKeyedImage imageSubset,
     if (!pdfimage) {
         SkASSERT(imageSubset);
         pdfimage = SkPDFCreateBitmapObject(imageSubset.release(),
-                                           fDocument->canon()->fPixelSerializer.get());
+                                           fDocument->metadata().fEncodingQuality);
         if (!pdfimage) {
             return;
         }

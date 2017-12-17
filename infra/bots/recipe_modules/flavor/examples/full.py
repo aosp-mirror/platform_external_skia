@@ -77,7 +77,9 @@ TEST_BUILDERS = [
   'Build-Mac-Clang-x86_64-Debug-Metal',
   'Build-Win-Clang-arm64-Release-Android',
   'Build-Win-Clang-x86_64-Debug-GDI',
+  'Build-Win-Clang-x86_64-Debug-GomaNoFallback',
   'Build-Win-Clang-x86_64-Release',
+  'Build-Win-Clang-x86_64-Release-ANGLE_Goma',
   'Build-Win-Clang-x86_64-Release-Goma',
   'Build-Win-Clang-x86_64-Release-Vulkan',
   'Build-Win-MSVC-x86-Debug-Exceptions',
@@ -195,5 +197,5 @@ def GenTests(api):
                      revision='abc123',
                      path_config='kitchen',
                      swarm_out_dir='[SWARM_OUT_DIR]') +
-      api.step_data('Scale CPU 2 to 0.600000', retcode=1)
+      api.step_data('Scale CPU 0 to 0.600000', retcode=1)
   )

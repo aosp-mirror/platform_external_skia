@@ -272,14 +272,15 @@ void GrRenderTargetContext::discard() {
 
 void GrRenderTargetContext::clear(const SkIRect* rect,
                                   const GrColor color,
-                                  bool canIgnoreRect) {
+                                  CanClearFullscreen canClearFullscreen) {
     ASSERT_SINGLE_OWNER
     RETURN_IF_ABANDONED
     SkDEBUGCODE(this->validate();)
     GR_CREATE_TRACE_MARKER_CONTEXT("GrRenderTargetContext", "clear", fContext);
 
     AutoCheckFlush acf(this->drawingManager());
-    this->internalClear(rect ? GrFixedClip(*rect) : GrFixedClip::Disabled(), color, canIgnoreRect);
+    this->internalClear(rect ? GrFixedClip(*rect) : GrFixedClip::Disabled(), color,
+                        canClearFullscreen);
 }
 
 void GrRenderTargetContextPriv::absClear(const SkIRect* clearRect, const GrColor color) {
@@ -319,7 +320,7 @@ void GrRenderTargetContextPriv::absClear(const SkIRect* clearRect, const GrColor
 
 void GrRenderTargetContextPriv::clear(const GrFixedClip& clip,
                                       const GrColor color,
-                                      bool canIgnoreClip) {
+                                      CanClearFullscreen canClearFullscreen) {
     ASSERT_SINGLE_OWNER_PRIV
     RETURN_IF_ABANDONED_PRIV
     SkDEBUGCODE(fRenderTargetContext->validate();)
@@ -327,16 +328,17 @@ void GrRenderTargetContextPriv::clear(const GrFixedClip& clip,
                                    fRenderTargetContext->fContext);
 
     AutoCheckFlush acf(fRenderTargetContext->drawingManager());
-    fRenderTargetContext->internalClear(clip, color, canIgnoreClip);
+    fRenderTargetContext->internalClear(clip, color, canClearFullscreen);
 }
 
 void GrRenderTargetContext::internalClear(const GrFixedClip& clip,
                                           const GrColor color,
-                                          bool canIgnoreClip) {
+                                          CanClearFullscreen canClearFullscreen) {
     bool isFull = false;
     if (!clip.hasWindowRectangles()) {
         isFull = !clip.scissorEnabled() ||
-                 (canIgnoreClip && fContext->caps()->fullClearIsFree()) ||
+                 (CanClearFullscreen::kYes == canClearFullscreen &&
+                  fContext->caps()->preferFullscreenClears()) ||
                  clip.scissorRect().contains(SkIRect::MakeWH(this->width(), this->height()));
     }
 
@@ -519,7 +521,8 @@ void GrRenderTargetContext::drawRect(const GrClip& clip,
                 // Will it blend?
                 GrColor clearColor;
                 if (paint.isConstantBlendedColor(&clearColor)) {
-                    this->clear(nullptr, clearColor, true);
+                    this->clear(nullptr, clearColor,
+                                GrRenderTargetContext::CanClearFullscreen::kYes);
                     return;
                 }
             }
@@ -1660,44 +1663,35 @@ void GrRenderTargetContext::internalDrawPath(const GrClip& clip,
 
     GrPathRenderer* pr;
     static constexpr GrPathRendererChain::DrawType kType = GrPathRendererChain::DrawType::kColor;
-    do {
-        shape = GrShape(path, style);
-        if (shape.isEmpty() && !shape.inverseFilled()) {
+    shape = GrShape(path, style);
+    if (shape.isEmpty() && !shape.inverseFilled()) {
+        return;
+    }
+
+    canDrawArgs.fAAType = aaType;
+
+    // Try a 1st time without applying any of the style to the geometry (and barring sw)
+    pr = this->drawingManager()->getPathRenderer(canDrawArgs, false, kType);
+    SkScalar styleScale =  GrStyle::MatrixToScaleFactor(viewMatrix);
+
+    if (!pr && shape.style().pathEffect()) {
+        // It didn't work above, so try again with the path effect applied.
+        shape = shape.applyStyle(GrStyle::Apply::kPathEffectOnly, styleScale);
+        if (shape.isEmpty()) {
             return;
         }
-
-        canDrawArgs.fAAType = aaType;
-
-        // Try a 1st time without applying any of the style to the geometry (and barring sw)
         pr = this->drawingManager()->getPathRenderer(canDrawArgs, false, kType);
-        SkScalar styleScale =  GrStyle::MatrixToScaleFactor(viewMatrix);
-
-        if (!pr && shape.style().pathEffect()) {
-            // It didn't work above, so try again with the path effect applied.
-            shape = shape.applyStyle(GrStyle::Apply::kPathEffectOnly, styleScale);
+    }
+    if (!pr) {
+        if (shape.style().applies()) {
+            shape = shape.applyStyle(GrStyle::Apply::kPathEffectAndStrokeRec, styleScale);
             if (shape.isEmpty()) {
                 return;
             }
-            pr = this->drawingManager()->getPathRenderer(canDrawArgs, false, kType);
         }
-        if (!pr) {
-            if (shape.style().applies()) {
-                shape = shape.applyStyle(GrStyle::Apply::kPathEffectAndStrokeRec, styleScale);
-                if (shape.isEmpty()) {
-                    return;
-                }
-            }
-            // This time, allow SW renderer
-            pr = this->drawingManager()->getPathRenderer(canDrawArgs, true, kType);
-        }
-        if (!pr && GrAATypeIsHW(aaType)) {
-            // There are exceptional cases where we may wind up falling back to coverage based AA
-            // when the target is MSAA (e.g. through disabling path renderers via GrContextOptions).
-            aaType = GrAAType::kCoverage;
-        } else {
-            break;
-        }
-    } while(true);
+        // This time, allow SW renderer
+        pr = this->drawingManager()->getPathRenderer(canDrawArgs, true, kType);
+    }
 
     if (!pr) {
 #ifdef SK_DEBUG

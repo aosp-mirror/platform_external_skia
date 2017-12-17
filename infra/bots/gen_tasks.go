@@ -280,6 +280,10 @@ func defaultSwarmDimensions(parts map[string]string) []string {
 			if parts["model"] == "GCE" && d["os"] == DEFAULT_OS_DEBIAN {
 				d["os"] = DEFAULT_OS_LINUX_GCE
 			}
+			if parts["model"] == "GCE" && d["os"] == DEFAULT_OS_WIN {
+				// Use normal-size machines for Test and Perf tasks on Win GCE.
+				d["machine_type"] = "n1-standard-16"
+			}
 		} else {
 			if strings.Contains(parts["os"], "Win") {
 				gpu, ok := map[string]string{
@@ -356,9 +360,17 @@ func defaultSwarmDimensions(parts map[string]string) []string {
 		} else if d["os"] == DEFAULT_OS_WIN {
 			// Windows CPU bots.
 			d["cpu"] = "x86-64-Haswell_GCE"
+			// Use many-core machines for Build tasks on Win GCE, except for Goma.
+			if strings.Contains(parts["extra_config"], "Goma") {
+				d["machine_type"] = "n1-standard-16"
+			} else {
+				d["machine_type"] = "n1-highcpu-64"
+			}
 		} else if d["os"] == DEFAULT_OS_MAC {
 			// Mac CPU bots.
 			d["cpu"] = "x86-64-E5-2697_v2"
+			// skia:7408
+			d["cert"] = "1"
 		}
 	}
 
@@ -552,6 +564,35 @@ func compile(b *specs.TasksCfgBuilder, name string, parts map[string]string) str
 	if !util.In(name, JOBS) {
 		glog.Fatalf("Job %q is missing from the JOBS list!", name)
 	}
+
+	// Upload the skiaserve binary only for Linux Android compile bots.
+	// See skbug.com/7399 for context.
+	if parts["configuration"] == "Release" &&
+		parts["extra_config"] == "Android" &&
+		!strings.Contains(parts["os"], "Win") &&
+		!strings.Contains(parts["os"], "Mac") {
+		uploadName := fmt.Sprintf("%s%s%s", PREFIX_UPLOAD, jobNameSchema.Sep, name)
+		b.MustAddTask(uploadName, &specs.TaskSpec{
+			Dependencies: []string{name},
+			Dimensions:   linuxGceDimensions(),
+			ExtraArgs: []string{
+				"--workdir", "../../..", "upload_skiaserve",
+				fmt.Sprintf("repository=%s", specs.PLACEHOLDER_REPO),
+				fmt.Sprintf("buildername=%s", name),
+				fmt.Sprintf("swarm_out_dir=%s", specs.PLACEHOLDER_ISOLATED_OUTDIR),
+				fmt.Sprintf("revision=%s", specs.PLACEHOLDER_REVISION),
+				fmt.Sprintf("patch_repo=%s", specs.PLACEHOLDER_PATCH_REPO),
+				fmt.Sprintf("patch_storage=%s", specs.PLACEHOLDER_PATCH_STORAGE),
+				fmt.Sprintf("patch_issue=%s", specs.PLACEHOLDER_ISSUE),
+				fmt.Sprintf("patch_set=%s", specs.PLACEHOLDER_PATCHSET),
+			},
+			// We're using the same isolate as upload_dm_results
+			Isolate:  relpath("upload_dm_results.isolate"),
+			Priority: 0.8,
+		})
+		return uploadName
+	}
+
 	return name
 }
 
