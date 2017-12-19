@@ -238,7 +238,7 @@ void SkRasterPipelineBlitter::append_load_dst(SkRasterPipeline* p) const {
         default:                                                                           break;
     }
     if (fDst.info().gammaCloseToSRGB()) {
-        p->append_from_srgb_dst(fDst.info().alphaType());
+        p->append(SkRasterPipeline::from_srgb_dst);
     }
     if (fDst.info().alphaType() == kUnpremul_SkAlphaType) {
         p->append(SkRasterPipeline::premul_dst);
@@ -256,10 +256,6 @@ void SkRasterPipelineBlitter::append_store(SkRasterPipeline* p) const {
         // We dither after any sRGB transfer function to make sure our 1/255.0f is sensible
         // over the whole range.  If we did it before, 1/255.0f is too big a rate near zero.
         p->append(SkRasterPipeline::dither, &fDitherRate);
-    }
-
-    if (fDst.info().colorType() != kRGBA_F16_SkColorType) {
-        p->clamp_if_unclamped(kPremul_SkAlphaType);
     }
 
     switch (fDst.info().colorType()) {
@@ -311,7 +307,6 @@ void SkRasterPipelineBlitter::blitRect(int x, int y, int w, int h) {
                 && !fDst.colorSpace()
                 && fDst.info().alphaType() != kUnpremul_SkAlphaType
                 && fDitherRate == 0.0f) {
-            p.clamp_if_unclamped(kPremul_SkAlphaType);
             auto stage = fDst.info().colorType() == kRGBA_8888_SkColorType
                        ? SkRasterPipeline::srcover_rgba_8888
                        : SkRasterPipeline::srcover_bgra_8888;

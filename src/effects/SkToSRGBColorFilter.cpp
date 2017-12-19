@@ -27,8 +27,7 @@ void SkToSRGBColorFilter::onAppendStages(SkRasterPipeline* p,
     if (fSrcColorSpace->gammaIsLinear()) {
         // Nothing to do.
     } else if (fSrcColorSpace->gammaCloseToSRGB()) {
-        p->append_from_srgb(shaderIsOpaque ? kOpaque_SkAlphaType
-                                           : kPremul_SkAlphaType);
+        p->append(SkRasterPipeline::from_srgb);
     } else if (fSrcColorSpace->isNumericalTransferFn(&srcFn)) {
         auto copy = alloc->make<SkColorSpaceTransferFn>(srcFn);
         p->append(SkRasterPipeline::parametric_r, copy);
@@ -40,17 +39,12 @@ void SkToSRGBColorFilter::onAppendStages(SkRasterPipeline* p,
     }
 
     // Step 2: Transform to sRGB gamut, without clamping.
+    // TODO: because...
     float* gamut_transform = alloc->makeArrayDefault<float>(12);
-    if (append_gamut_transform_noclamp(p,
-                                       gamut_transform,
-                                       fSrcColorSpace.get(),
-                                       SkColorSpace::MakeSRGB().get())) {
-        bool needs_clamp_0, needs_clamp_1;
-        analyze_3x4_matrix(gamut_transform, &needs_clamp_0, &needs_clamp_1);
-        if (needs_clamp_0 || needs_clamp_1) {
-            p->set_clamped(false);
-        }
-    }
+    (void)append_gamut_transform_noclamp(p,
+                                         gamut_transform,
+                                         fSrcColorSpace.get(),
+                                         SkColorSpace::MakeSRGB().get());
 
     // Step 3: Back to sRGB encoding.
     p->append(SkRasterPipeline::to_srgb);

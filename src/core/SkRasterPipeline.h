@@ -125,11 +125,6 @@ public:
 
     void dump() const;
 
-    // Conversion from sRGB can be subtly tricky when premultiplication is involved.
-    // Use these helpers to keep things sane.
-    void append_from_srgb(SkAlphaType);
-    void append_from_srgb_dst(SkAlphaType);
-
     // Appends a stage for the specified matrix.
     // Tries to optimize the stage by analyzing the type of matrix.
     void append_matrix(SkArenaAlloc*, const SkMatrix&);
@@ -150,11 +145,6 @@ public:
 
     bool empty() const { return fStages == nullptr; }
 
-    // Used to track if we're handling values outside [0.0f, 1.0f],
-    // and to clamp back to [0.0f, 1.0f] if so.
-    void set_clamped(bool clamped) { fClamped = clamped; }
-    void clamp_if_unclamped(SkAlphaType);
-
 private:
     struct StageList {
         StageList* prev;
@@ -169,7 +159,6 @@ private:
     StageList*    fStages;
     int           fNumStages;
     int           fSlotsNeeded;
-    bool          fClamped;
 };
 
 template <size_t bytes>
