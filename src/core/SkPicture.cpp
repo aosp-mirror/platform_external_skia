@@ -16,8 +16,7 @@
 #include "SkPictureRecorder.h"
 #include "SkSerialProcs.h"
 
-#if defined(SK_DISALLOW_CROSSPROCESS_PICTUREIMAGEFILTERS) || \
-    defined(SK_ENABLE_PICTURE_IO_SECURITY_PRECAUTIONS)
+#if defined(SK_DISALLOW_CROSSPROCESS_PICTUREIMAGEFILTERS)
 static bool g_AllPictureIOSecurityPrecautionsEnabled = true;
 #else
 static bool g_AllPictureIOSecurityPrecautionsEnabled = false;
@@ -87,7 +86,7 @@ bool SkPicture::IsValidPictInfo(const SkPictInfo& info) {
     return true;
 }
 
-bool SkPicture::InternalOnly_StreamIsSKP(SkStream* stream, SkPictInfo* pInfo) {
+bool SkPicture::StreamIsSKP(SkStream* stream, SkPictInfo* pInfo) {
     if (!stream) {
         return false;
     }
@@ -111,8 +110,11 @@ bool SkPicture::InternalOnly_StreamIsSKP(SkStream* stream, SkPictInfo* pInfo) {
     }
     return false;
 }
+bool SkPicture_StreamIsSKP(SkStream* stream, SkPictInfo* pInfo) {
+    return SkPicture::StreamIsSKP(stream, pInfo);
+}
 
-bool SkPicture::InternalOnly_BufferIsSKP(SkReadBuffer* buffer, SkPictInfo* pInfo) {
+bool SkPicture::BufferIsSKP(SkReadBuffer* buffer, SkPictInfo* pInfo) {
     SkPictInfo info;
     SkASSERT(sizeof(kMagic) == sizeof(info.fMagic));
     if (!buffer->readByteArray(&info.fMagic, sizeof(kMagic))) {
@@ -182,7 +184,7 @@ sk_sp<SkPicture> SkPicture::MakeFromStream(SkStream* stream, const SkDeserialPro
 sk_sp<SkPicture> SkPicture::MakeFromStream(SkStream* stream, const SkDeserialProcs& procs,
                                            SkTypefacePlayback* typefaces) {
     SkPictInfo info;
-    if (!InternalOnly_StreamIsSKP(stream, &info)) {
+    if (!StreamIsSKP(stream, &info)) {
         return nullptr;
     }
 
@@ -212,7 +214,7 @@ sk_sp<SkPicture> SkPicture::MakeFromStream(SkStream* stream, const SkDeserialPro
 
 sk_sp<SkPicture> SkPicture::MakeFromBuffer(SkReadBuffer& buffer) {
     SkPictInfo info;
-    if (!InternalOnly_BufferIsSKP(&buffer, &info)) {
+    if (!BufferIsSKP(&buffer, &info)) {
         return nullptr;
     }
     // size should be 0, 1, or negative
@@ -344,10 +346,6 @@ bool SkPicture::suitableForGpuRasterization(GrContext*, const char** whyNot) con
 #endif
 
 // Global setting to disable security precautions for serialization.
-void SkPicture::SetPictureIOSecurityPrecautionsEnabled_Dangerous(bool set) {
-    g_AllPictureIOSecurityPrecautionsEnabled = set;
-}
-
 bool SkPicture::PictureIOSecurityPrecautionsEnabled() {
     return g_AllPictureIOSecurityPrecautionsEnabled;
 }

@@ -524,6 +524,7 @@ cc_library_static {
         "src/gpu/effects/GrOverdrawFragmentProcessor.cpp",
         "src/gpu/effects/GrPorterDuffXferProcessor.cpp",
         "src/gpu/effects/GrPremulInputFragmentProcessor.cpp",
+        "src/gpu/effects/GrRRectBlurEffect.cpp",
         "src/gpu/effects/GrRRectEffect.cpp",
         "src/gpu/effects/GrRectBlurEffect.cpp",
         "src/gpu/effects/GrSRGBEffect.cpp",

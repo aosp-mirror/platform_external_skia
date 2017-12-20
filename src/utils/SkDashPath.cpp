@@ -255,9 +255,9 @@ static bool cull_path(const SkPath& srcPath, const SkStrokeRec& rec,
             while (SkPath::kLine_Verb == iter.next(pts)) {
                 SkVector v = pts[1] - pts[0];
                 // if line is entirely outside clip rect, skip it
-                if (v.fX ? between(cullRect->fTop, pts[0].fY, cullRect->fBottom) :
-                        between(cullRect->fLeft, pts[0].fX, cullRect->fRight)) {
-                    bool skipMoveTo = contains_inclusive(*cullRect, pts[0]);
+                if (v.fX ? between(bounds.fTop, pts[0].fY, bounds.fBottom) :
+                        between(bounds.fLeft, pts[0].fX, bounds.fRight)) {
+                    bool skipMoveTo = contains_inclusive(bounds, pts[0]);
                     if (clip_line(pts, bounds, intervalLength,
                                   SkScalarMod(priorLength, intervalLength))) {
                         if (0 == priorLength || !skipMoveTo) {
