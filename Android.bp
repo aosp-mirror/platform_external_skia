@@ -533,7 +533,7 @@ cc_library_static {
         "src/gpu/effects/GrTextureStripAtlas.cpp",
         "src/gpu/effects/GrUnpremulInputFragmentProcessor.cpp",
         "src/gpu/effects/GrXfermodeFragmentProcessor.cpp",
-        "src/gpu/effects/GrYUVEffect.cpp",
+        "src/gpu/effects/GrYUVtoRGBEffect.cpp",
         "src/gpu/gl/GrGLAssembleInterface.cpp",
         "src/gpu/gl/GrGLBuffer.cpp",
         "src/gpu/gl/GrGLCaps.cpp",
