@@ -16,8 +16,7 @@
 #include "SkPictureRecorder.h"
 #include "SkSerialProcs.h"
 
-#if defined(SK_DISALLOW_CROSSPROCESS_PICTUREIMAGEFILTERS) || \
-    defined(SK_ENABLE_PICTURE_IO_SECURITY_PRECAUTIONS)
+#if defined(SK_DISALLOW_CROSSPROCESS_PICTUREIMAGEFILTERS)
 static bool g_AllPictureIOSecurityPrecautionsEnabled = true;
 #else
 static bool g_AllPictureIOSecurityPrecautionsEnabled = false;
@@ -87,7 +86,7 @@ bool SkPicture::IsValidPictInfo(const SkPictInfo& info) {
     return true;
 }
 
-bool SkPicture::InternalOnly_StreamIsSKP(SkStream* stream, SkPictInfo* pInfo) {
+bool SkPicture::StreamIsSKP(SkStream* stream, SkPictInfo* pInfo) {
     if (!stream) {
         return false;
     }
@@ -111,8 +110,11 @@ bool SkPicture::InternalOnly_StreamIsSKP(SkStream* stream, SkPictInfo* pInfo) {
     }
     return false;
 }
+bool SkPicture_StreamIsSKP(SkStream* stream, SkPictInfo* pInfo) {
+    return SkPicture::StreamIsSKP(stream, pInfo);
+}
 
-bool SkPicture::InternalOnly_BufferIsSKP(SkReadBuffer* buffer, SkPictInfo* pInfo) {
+bool SkPicture::BufferIsSKP(SkReadBuffer* buffer, SkPictInfo* pInfo) {
     SkPictInfo info;
     SkASSERT(sizeof(kMagic) == sizeof(info.fMagic));
     if (!buffer->readByteArray(&info.fMagic, sizeof(kMagic))) {
@@ -142,28 +144,20 @@ sk_sp<SkPicture> SkPicture::Forwardport(const SkPictInfo& info,
     return r.finishRecordingAsPicture();
 }
 
-sk_sp<SkPicture> SkPicture::MakeFromStream(SkStream* stream) {
-    return MakeFromStream(stream, SkDeserialProcs(), nullptr);
+sk_sp<SkPicture> SkPicture::MakeFromStream(SkStream* stream, const SkDeserialProcs* procs) {
+    return MakeFromStream(stream, procs, nullptr);
 }
 
-sk_sp<SkPicture> SkPicture::MakeFromData(const void* data, size_t size) {
+sk_sp<SkPicture> SkPicture::MakeFromData(const void* data, size_t size,
+                                         const SkDeserialProcs* procs) {
     if (!data) {
         return nullptr;
     }
     SkMemoryStream stream(data, size);
-    return MakeFromStream(&stream, SkDeserialProcs(), nullptr);
+    return MakeFromStream(&stream, procs, nullptr);
 }
 
-sk_sp<SkPicture> SkPicture::MakeFromData(const SkData* data) {
-    if (!data) {
-        return nullptr;
-    }
-    SkMemoryStream stream(data->data(), data->size());
-    return MakeFromStream(&stream, SkDeserialProcs(), nullptr);
-}
-
-
-sk_sp<SkPicture> SkPicture::MakeFromData(const SkData* data, const SkDeserialProcs& procs) {
+sk_sp<SkPicture> SkPicture::MakeFromData(const SkData* data, const SkDeserialProcs* procs) {
     if (!data) {
         return nullptr;
     }
@@ -171,19 +165,16 @@ sk_sp<SkPicture> SkPicture::MakeFromData(const SkData* data, const SkDeserialPro
     return MakeFromStream(&stream, procs, nullptr);
 }
 
-sk_sp<SkPicture> SkPicture::MakeFromData(sk_sp<SkData> data, const SkDeserialProcs& procs) {
-    return MakeFromData(data.get(), procs);
-}
-
-sk_sp<SkPicture> SkPicture::MakeFromStream(SkStream* stream, const SkDeserialProcs& procs) {
-    return MakeFromStream(stream, procs, nullptr);
-}
-
-sk_sp<SkPicture> SkPicture::MakeFromStream(SkStream* stream, const SkDeserialProcs& procs,
+sk_sp<SkPicture> SkPicture::MakeFromStream(SkStream* stream, const SkDeserialProcs* procsPtr,
                                            SkTypefacePlayback* typefaces) {
     SkPictInfo info;
-    if (!InternalOnly_StreamIsSKP(stream, &info)) {
+    if (!StreamIsSKP(stream, &info)) {
         return nullptr;
+    }
+
+    SkDeserialProcs procs;
+    if (procsPtr) {
+        procs = *procsPtr;
     }
 
     switch (stream->readU8()) {
@@ -212,7 +203,7 @@ sk_sp<SkPicture> SkPicture::MakeFromStream(SkStream* stream, const SkDeserialPro
 
 sk_sp<SkPicture> SkPicture::MakeFromBuffer(SkReadBuffer& buffer) {
     SkPictInfo info;
-    if (!InternalOnly_BufferIsSKP(&buffer, &info)) {
+    if (!BufferIsSKP(&buffer, &info)) {
         return nullptr;
     }
     // size should be 0, 1, or negative
@@ -242,17 +233,11 @@ SkPictureData* SkPicture::backport() const {
     return new SkPictureData(rec, info);
 }
 
-void SkPicture::serialize(SkWStream* stream) const {
-    this->serialize(stream, SkSerialProcs(), nullptr);
+void SkPicture::serialize(SkWStream* stream, const SkSerialProcs* procs) const {
+    this->serialize(stream, procs, nullptr);
 }
 
-sk_sp<SkData> SkPicture::serialize() const {
-    SkDynamicMemoryWStream stream;
-    this->serialize(&stream);
-    return stream.detachAsData();
-}
-
-sk_sp<SkData> SkPicture::serialize(const SkSerialProcs& procs) const {
+sk_sp<SkData> SkPicture::serialize(const SkSerialProcs* procs) const {
     SkDynamicMemoryWStream stream;
     this->serialize(&stream, procs, nullptr);
     return stream.detachAsData();
@@ -283,8 +268,13 @@ static bool write_pad32(SkWStream* stream, const void* data, size_t size) {
     return true;
 }
 
-void SkPicture::serialize(SkWStream* stream, const SkSerialProcs& procs,
+void SkPicture::serialize(SkWStream* stream, const SkSerialProcs* procsPtr,
                           SkRefCntSet* typefaceSet) const {
+    SkSerialProcs procs;
+    if (procsPtr) {
+        procs = *procsPtr;
+    }
+
     SkPictInfo info = this->createHeader();
     stream->write(&info, sizeof(info));
 
@@ -333,21 +323,7 @@ void SkPicture::flatten(SkWriteBuffer& buffer) const {
     }
 }
 
-#ifdef SK_SUPPORT_LEGACY_PICTURE_GPUVETO
-bool SkPicture::suitableForGpuRasterization(GrContext*, const char** whyNot) const {
-    if (this->numSlowPaths() > 5) {
-        if (whyNot) { *whyNot = "Too many slow paths (either concave or dashed)."; }
-        return false;
-    }
-    return true;
-}
-#endif
-
 // Global setting to disable security precautions for serialization.
-void SkPicture::SetPictureIOSecurityPrecautionsEnabled_Dangerous(bool set) {
-    g_AllPictureIOSecurityPrecautionsEnabled = set;
-}
-
 bool SkPicture::PictureIOSecurityPrecautionsEnabled() {
     return g_AllPictureIOSecurityPrecautionsEnabled;
 }

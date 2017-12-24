@@ -339,6 +339,11 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
             ctxInfo.hasExtension("GL_OES_standard_derivatives");
 
         shaderCaps->fGeometryShaderSupport = ctxInfo.hasExtension("GL_EXT_geometry_shader");
+        if (shaderCaps->fGeometryShaderSupport && kQualcomm_GrGLDriver == ctxInfo.driver()) {
+            // Qualcomm driver @103.0 has been observed to crash compiling ccpr geometry shaders.
+            // @127.0 is the earliest verified driver to not crash.
+            shaderCaps->fGeometryShaderSupport = ctxInfo.driverVersion() >= GR_GL_DRIVER_VER(127,0);
+        }
         shaderCaps->fGSInvocationsSupport = shaderCaps->fGeometryShaderSupport;
 
         shaderCaps->fIntegerSupport = ctxInfo.version() >= GR_GL_VER(3, 0) &&
@@ -399,14 +404,6 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
         // Mali GPUs have rendering issues with CCPR. Blacklisting until we look into workarounds.
         fBlacklistCoverageCounting = true;
     }
-
-#ifndef SK_BUILD_FOR_MAC
-    if (kIntel_GrGLVendor == ctxInfo.vendor()) {
-        // Non-Mac Intel bots across the board either crash with CCPR or do not draw properly.
-        // Hopefully this issue resolves itself when we move away from geometry shaders.
-        fBlacklistCoverageCounting = true;
-    }
-#endif
 
     if (!contextOptions.fAvoidStencilBuffers) {
         // To reduce surface area, if we avoid stencil buffers, we also disable MSAA.

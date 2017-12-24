@@ -12,14 +12,11 @@
 #include "SkRect.h"
 #include "SkTypes.h"
 
-class GrContext;
 class SkBigPicture;
-class SkBitmap;
 class SkCanvas;
 class SkData;
 struct SkDeserialProcs;
 class SkImage;
-class SkPath;
 class SkPictureData;
 class SkReadBuffer;
 class SkRefCntSet;
@@ -38,29 +35,13 @@ struct SkPictInfo;
 class SK_API SkPicture : public SkRefCnt {
 public:
     /**
-     *  Function signature defining a function that sets up an SkBitmap from encoded data. On
-     *  success, the SkBitmap should have its Config, width, height, rowBytes and pixelref set.
-     *  If the installed pixelref has decoded the data into pixels, then the src buffer need not be
-     *  copied. If the pixelref defers the actual decode until its lockPixels() is called, then it
-     *  must make a copy of the src buffer.
-     *  @param src Encoded data.
-     *  @param length Size of the encoded data, in bytes.
-     *  @param dst SkBitmap to install the pixel ref on.
-     *  @param bool Whether or not a pixel ref was successfully installed.
-     */
-    typedef bool (*InstallPixelRefProc)(const void* src, size_t length, SkBitmap* dst);
-
-    /**
      *  Recreate a picture that was serialized into a stream or data.
      */
 
-    static sk_sp<SkPicture> MakeFromStream(SkStream*);
-    static sk_sp<SkPicture> MakeFromData(const SkData* data);
-    static sk_sp<SkPicture> MakeFromData(const void* data, size_t size);
-
-    static sk_sp<SkPicture> MakeFromStream(SkStream*, const SkDeserialProcs& procs);
-    static sk_sp<SkPicture> MakeFromData(const SkData* data, const SkDeserialProcs& procs);
-    static sk_sp<SkPicture> MakeFromData(sk_sp<SkData> data, const SkDeserialProcs& procs);
+    static sk_sp<SkPicture> MakeFromStream(SkStream*, const SkDeserialProcs* = nullptr);
+    static sk_sp<SkPicture> MakeFromData(const SkData* data, const SkDeserialProcs* = nullptr);
+    static sk_sp<SkPicture> MakeFromData(const void* data, size_t size,
+                                         const SkDeserialProcs* = nullptr);
 
     /**
      *  Recreate a picture that was serialized into a buffer. If the creation requires bitmap
@@ -106,20 +87,13 @@ public:
     /** Returns a non-zero value unique among all pictures. */
     uint32_t uniqueID() const;
 
-    sk_sp<SkData> serialize() const;
-    void serialize(SkWStream*) const;
-    sk_sp<SkData> serialize(const SkSerialProcs&) const;
+    sk_sp<SkData> serialize(const SkSerialProcs* = nullptr) const;
+    void serialize(SkWStream*, const SkSerialProcs* = nullptr) const;
 
     /**
      *  Serialize to a buffer.
      */
     void flatten(SkWriteBuffer&) const;
-
-    /**
-     * Returns true if any bitmaps may be produced when this SkPicture
-     * is replayed.
-     */
-    virtual bool willPlayBackBitmaps() const = 0;
 
     /** Return the approximate number of operations in this picture.  This
      *  number may be greater or less than the number of SkCanvas calls
@@ -131,27 +105,9 @@ public:
     /** Returns the approximate byte size of this picture, not including large ref'd objects. */
     virtual size_t approximateBytesUsed() const = 0;
 
-    /** Return true if the SkStream/Buffer represents a serialized picture, and
-        fills out SkPictInfo. After this function returns, the data source is not
-        rewound so it will have to be manually reset before passing to
-        CreateFromStream or CreateFromBuffer. Note, CreateFromStream and
-        CreateFromBuffer perform this check internally so these entry points are
-        intended for stand alone tools.
-        If false is returned, SkPictInfo is unmodified.
-    */
-    static bool InternalOnly_StreamIsSKP(SkStream*, SkPictInfo*);
-    static bool InternalOnly_BufferIsSKP(SkReadBuffer*, SkPictInfo*);
-
-#ifdef SK_SUPPORT_LEGACY_PICTURE_GPUVETO
-    /** Return true if the picture is suitable for rendering on the GPU.  */
-    bool suitableForGpuRasterization(GrContext*, const char** whyNot = nullptr) const;
-#endif
-
     // Returns NULL if this is not an SkBigPicture.
     virtual const SkBigPicture* asSkBigPicture() const { return nullptr; }
 
-    // Global setting to enable or disable security precautions for serialization.
-    static void SetPictureIOSecurityPrecautionsEnabled_Dangerous(bool set);
     static bool PictureIOSecurityPrecautionsEnabled();
 
 private:
@@ -161,12 +117,22 @@ private:
     friend class SkEmptyPicture;
     template <typename> friend class SkMiniPicture;
 
-    void serialize(SkWStream*, const SkSerialProcs&, SkRefCntSet* typefaces) const;
-    static sk_sp<SkPicture> MakeFromStream(SkStream*, const SkDeserialProcs&, SkTypefacePlayback*);
+    void serialize(SkWStream*, const SkSerialProcs*, SkRefCntSet* typefaces) const;
+    static sk_sp<SkPicture> MakeFromStream(SkStream*, const SkDeserialProcs*, SkTypefacePlayback*);
     friend class SkPictureData;
 
-    virtual int numSlowPaths() const = 0;
-    friend class SkPictureGpuAnalyzer;
+    /** Return true if the SkStream/Buffer represents a serialized picture, and
+     fills out SkPictInfo. After this function returns, the data source is not
+     rewound so it will have to be manually reset before passing to
+     CreateFromStream or CreateFromBuffer. Note, CreateFromStream and
+     CreateFromBuffer perform this check internally so these entry points are
+     intended for stand alone tools.
+     If false is returned, SkPictInfo is unmodified.
+     */
+    static bool StreamIsSKP(SkStream*, SkPictInfo*);
+    static bool BufferIsSKP(SkReadBuffer*, SkPictInfo*);
+    friend bool SkPicture_StreamIsSKP(SkStream*, SkPictInfo*);
+
     friend struct SkPathCounter;
 
     // V35: Store SkRect (rather then width & height) in header

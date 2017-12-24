@@ -7,12 +7,14 @@
 
 #include "SkCanvas.h"
 #include "SkDrawShadowInfo.h"
+#include "SkPaintPriv.h"
 #include "SkPatchUtils.h"
 #include "SkPictureData.h"
 #include "SkPicturePlayback.h"
 #include "SkPictureRecord.h"
 #include "SkReadBuffer.h"
 #include "SkRSXform.h"
+#include "SkSafeMath.h"
 #include "SkTextBlob.h"
 #include "SkTDArray.h"
 #include "SkTypes.h"
@@ -70,16 +72,28 @@ static const SkRect* get_rect_ptr(SkReadBuffer* reader, SkRect* storage) {
 
 class TextContainer {
 public:
-    size_t length() { return fByteLength; }
-    const void* text() { return (const void*)fText; }
-    size_t fByteLength;
-    const char* fText;
-};
+    TextContainer(SkReadBuffer* reader, const SkPaint* paint) {
+        if (reader->validate(paint != nullptr)) {
+            fByteLength = reader->readInt();
+            fText = (const char*)reader->skip(fByteLength);
+            if (reader->isValid()) {
+                fCount = SkPaintPriv::ValidCountText(fText, fByteLength, paint->getTextEncoding());
+                reader->validate(fCount >= 0);
+            }
+        }
+    }
 
-void get_text(SkReadBuffer* reader, TextContainer* text) {
-    size_t length = text->fByteLength = reader->readInt();
-    text->fText = (const char*)reader->skip(length);
-}
+    operator bool() const { return fCount >= 0; }
+
+    size_t length() const { return fByteLength; }
+    const void* text() const { return (const void*)fText; }
+    unsigned count() const { return fCount; }
+
+private:
+    size_t fByteLength = 0;
+    const char* fText = nullptr;
+    int fCount = -1;
+};
 
 void SkPicturePlayback::draw(SkCanvas* canvas,
                              SkPicture::AbortCallback* callback,
@@ -233,12 +247,12 @@ void SkPicturePlayback::handleOp(SkReadBuffer* reader,
             const SkImage* atlas = fPictureData->getImage(reader);
             const uint32_t flags = reader->readUInt();
             const int count = reader->readUInt();
-            const SkRSXform* xform = (const SkRSXform*)reader->skip(count * sizeof(SkRSXform));
-            const SkRect* tex = (const SkRect*)reader->skip(count * sizeof(SkRect));
+            const SkRSXform* xform = (const SkRSXform*)reader->skip(count, sizeof(SkRSXform));
+            const SkRect* tex = (const SkRect*)reader->skip(count, sizeof(SkRect));
             const SkColor* colors = nullptr;
             SkBlendMode mode = SkBlendMode::kDst;
             if (flags & DRAW_ATLAS_HAS_COLORS) {
-                colors = (const SkColor*)reader->skip(count * sizeof(SkColor));
+                colors = (const SkColor*)reader->skip(count, sizeof(SkColor));
                 mode = (SkBlendMode)reader->readUInt();
             }
             const SkRect* cull = nullptr;
@@ -347,9 +361,9 @@ void SkPicturePlayback::handleOp(SkReadBuffer* reader,
             const SkImage* image = fPictureData->getImage(reader);
             SkCanvas::Lattice lattice;
             lattice.fXCount = reader->readInt();
-            lattice.fXDivs = (const int*) reader->skip(lattice.fXCount * sizeof(int32_t));
+            lattice.fXDivs = (const int*) reader->skip(lattice.fXCount, sizeof(int32_t));
             lattice.fYCount = reader->readInt();
-            lattice.fYDivs = (const int*) reader->skip(lattice.fYCount * sizeof(int32_t));
+            lattice.fYDivs = (const int*) reader->skip(lattice.fYCount, sizeof(int32_t));
             int flagCount = reader->readInt();
             lattice.fRectTypes = (0 == flagCount) ? nullptr :
                     (const SkCanvas::Lattice::RectType*)
@@ -414,16 +428,16 @@ void SkPicturePlayback::handleOp(SkReadBuffer* reader,
         case DRAW_PATCH: {
             const SkPaint* paint = fPictureData->getPaint(reader);
 
-            const SkPoint* cubics = (const SkPoint*)reader->skip(SkPatchUtils::kNumCtrlPts *
+            const SkPoint* cubics = (const SkPoint*)reader->skip(SkPatchUtils::kNumCtrlPts,
                                                                  sizeof(SkPoint));
             uint32_t flag = reader->readInt();
             const SkColor* colors = nullptr;
             if (flag & DRAW_VERTICES_HAS_COLORS) {
-                colors = (const SkColor*)reader->skip(SkPatchUtils::kNumCorners * sizeof(SkColor));
+                colors = (const SkColor*)reader->skip(SkPatchUtils::kNumCorners, sizeof(SkColor));
             }
             const SkPoint* texCoords = nullptr;
             if (flag & DRAW_VERTICES_HAS_TEXS) {
-                texCoords = (const SkPoint*)reader->skip(SkPatchUtils::kNumCorners *
+                texCoords = (const SkPoint*)reader->skip(SkPatchUtils::kNumCorners,
                                                          sizeof(SkPoint));
             }
             SkBlendMode bmode = SkBlendMode::kModulate;
@@ -467,7 +481,7 @@ void SkPicturePlayback::handleOp(SkReadBuffer* reader,
             const SkPaint* paint = fPictureData->getPaint(reader);
             SkCanvas::PointMode mode = (SkCanvas::PointMode)reader->readInt();
             size_t count = reader->readInt();
-            const SkPoint* pts = (const SkPoint*)reader->skip(sizeof(SkPoint)* count);
+            const SkPoint* pts = (const SkPoint*)reader->skip(count, sizeof(SkPoint));
             BREAK_ON_READ_ERROR(reader);
 
             if (paint) {
@@ -476,10 +490,10 @@ void SkPicturePlayback::handleOp(SkReadBuffer* reader,
         } break;
         case DRAW_POS_TEXT: {
             const SkPaint* paint = fPictureData->getPaint(reader);
-            TextContainer text;
-            get_text(reader, &text);
+            TextContainer text(reader, paint);
             size_t points = reader->readInt();
-            const SkPoint* pos = (const SkPoint*)reader->skip(points * sizeof(SkPoint));
+            reader->validate(points == text.count());
+            const SkPoint* pos = (const SkPoint*)reader->skip(points, sizeof(SkPoint));
             BREAK_ON_READ_ERROR(reader);
 
             if (paint && text.text()) {
@@ -488,12 +502,13 @@ void SkPicturePlayback::handleOp(SkReadBuffer* reader,
         } break;
         case DRAW_POS_TEXT_TOP_BOTTOM: {
             const SkPaint* paint = fPictureData->getPaint(reader);
-            TextContainer text;
-            get_text(reader, &text);
+            TextContainer text(reader, paint);
             size_t points = reader->readInt();
-            const SkPoint* pos = (const SkPoint*)reader->skip(points * sizeof(SkPoint));
+            reader->validate(points == text.count());
+            const SkPoint* pos = (const SkPoint*)reader->skip(points, sizeof(SkPoint));
             const SkScalar top = reader->readScalar();
             const SkScalar bottom = reader->readScalar();
+            SkDebugf("postexth count %zu pos %p\n", points, pos);
             BREAK_ON_READ_ERROR(reader);
 
             SkRect clip = canvas->getLocalClipBounds();
@@ -503,11 +518,11 @@ void SkPicturePlayback::handleOp(SkReadBuffer* reader,
         } break;
         case DRAW_POS_TEXT_H: {
             const SkPaint* paint = fPictureData->getPaint(reader);
-            TextContainer text;
-            get_text(reader, &text);
+            TextContainer text(reader, paint);
             size_t xCount = reader->readInt();
+            reader->validate(xCount == text.count());
             const SkScalar constY = reader->readScalar();
-            const SkScalar* xpos = (const SkScalar*)reader->skip(xCount * sizeof(SkScalar));
+            const SkScalar* xpos = (const SkScalar*)reader->skip(xCount, sizeof(SkScalar));
             BREAK_ON_READ_ERROR(reader);
 
             if (paint && text.text()) {
@@ -516,10 +531,11 @@ void SkPicturePlayback::handleOp(SkReadBuffer* reader,
         } break;
         case DRAW_POS_TEXT_H_TOP_BOTTOM: {
             const SkPaint* paint = fPictureData->getPaint(reader);
-            TextContainer text;
-            get_text(reader, &text);
+            TextContainer text(reader, paint);
             size_t xCount = reader->readInt();
-            const SkScalar* xpos = (const SkScalar*)reader->skip((3 + xCount) * sizeof(SkScalar));
+            reader->validate(xCount == text.count());
+            const SkScalar* xpos = (const SkScalar*)reader->skip(SkSafeMath::Add(3, xCount),
+                                                                 sizeof(SkScalar));
             BREAK_ON_READ_ERROR(reader);
 
             const SkScalar top = *xpos++;
@@ -583,8 +599,7 @@ void SkPicturePlayback::handleOp(SkReadBuffer* reader,
         } break;
         case DRAW_TEXT: {
             const SkPaint* paint = fPictureData->getPaint(reader);
-            TextContainer text;
-            get_text(reader, &text);
+            TextContainer text(reader, paint);
             SkScalar x = reader->readScalar();
             SkScalar y = reader->readScalar();
             BREAK_ON_READ_ERROR(reader);
@@ -606,8 +621,7 @@ void SkPicturePlayback::handleOp(SkReadBuffer* reader,
         } break;
         case DRAW_TEXT_TOP_BOTTOM: {
             const SkPaint* paint = fPictureData->getPaint(reader);
-            TextContainer text;
-            get_text(reader, &text);
+            TextContainer text(reader, paint);
             const SkScalar* ptr = (const SkScalar*)reader->skip(4 * sizeof(SkScalar));
             BREAK_ON_READ_ERROR(reader);
 
@@ -624,8 +638,7 @@ void SkPicturePlayback::handleOp(SkReadBuffer* reader,
         } break;
         case DRAW_TEXT_ON_PATH: {
             const SkPaint* paint = fPictureData->getPaint(reader);
-            TextContainer text;
-            get_text(reader, &text);
+            TextContainer text(reader, paint);
             const SkPath& path = fPictureData->getPath(reader);
             SkMatrix matrix;
             reader->readMatrix(&matrix);
@@ -639,9 +652,8 @@ void SkPicturePlayback::handleOp(SkReadBuffer* reader,
             const SkPaint* paint = fPictureData->getPaint(reader);
             int count = reader->readInt();
             uint32_t flags = reader->read32();
-            TextContainer text;
-            get_text(reader, &text);
-            const SkRSXform* xform = (const SkRSXform*)reader->skip(count * sizeof(SkRSXform));
+            TextContainer text(reader, paint);
+            const SkRSXform* xform = (const SkRSXform*)reader->skip(count, sizeof(SkRSXform));
             const SkRect* cull = nullptr;
             if (flags & DRAW_TEXT_RSXFORM_HAS_CULL) {
                 cull = (const SkRect*)reader->skip(sizeof(SkRect));
@@ -657,20 +669,20 @@ void SkPicturePlayback::handleOp(SkReadBuffer* reader,
             DrawVertexFlags flags = (DrawVertexFlags)reader->readInt();
             SkVertices::VertexMode vmode = (SkVertices::VertexMode)reader->readInt();
             int vCount = reader->readInt();
-            const SkPoint* verts = (const SkPoint*)reader->skip(vCount * sizeof(SkPoint));
+            const SkPoint* verts = (const SkPoint*)reader->skip(vCount, sizeof(SkPoint));
             const SkPoint* texs = nullptr;
             const SkColor* colors = nullptr;
             const uint16_t* indices = nullptr;
             int iCount = 0;
             if (flags & DRAW_VERTICES_HAS_TEXS) {
-                texs = (const SkPoint*)reader->skip(vCount * sizeof(SkPoint));
+                texs = (const SkPoint*)reader->skip(vCount, sizeof(SkPoint));
             }
             if (flags & DRAW_VERTICES_HAS_COLORS) {
-                colors = (const SkColor*)reader->skip(vCount * sizeof(SkColor));
+                colors = (const SkColor*)reader->skip(vCount, sizeof(SkColor));
             }
             if (flags & DRAW_VERTICES_HAS_INDICES) {
                 iCount = reader->readInt();
-                indices = (const uint16_t*)reader->skip(iCount * sizeof(uint16_t));
+                indices = (const uint16_t*)reader->skip(iCount, sizeof(uint16_t));
             }
             SkBlendMode bmode = SkBlendMode::kModulate;
             if (flags & DRAW_VERTICES_HAS_XFER) {

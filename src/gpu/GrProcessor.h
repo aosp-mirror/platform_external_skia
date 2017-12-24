@@ -69,8 +69,6 @@ public:
         kBlockInputFragmentProcessor_ClassID,
         kCCPRClipProcessor_ClassID,
         kCircleGeometryProcessor_ClassID,
-        kCircleInside2PtConicalEffect_ClassID,
-        kCircleOutside2PtConicalEffect_ClassID,
         kCircularRRectEffect_ClassID,
         kColorMatrixEffect_ClassID,
         kColorTableEffect_ClassID,
@@ -83,11 +81,9 @@ public:
         kDefaultGeoProc_ClassID,
         kDIEllipseGeometryProcessor_ClassID,
         kDisableColorXP_ClassID,
-        kEdge2PtConicalEffect_ClassID,
+        kTwoPointConicalEffect_ClassID,
         kEllipseGeometryProcessor_ClassID,
         kEllipticalRRectEffect_ClassID,
-        kFocalInside2PtConicalEffect_ClassID,
-        kFocalOutside2PtConicalEffect_ClassID,
         kGP_ClassID,
         kGrAARectEffect_ClassID,
         kGrAlphaThresholdFragmentProcessor_ClassID,
@@ -139,6 +135,7 @@ public:
         kGrSweepGradient_ClassID,
         kGrTextureDomainEffect_ClassID,
         kGrUnpremulInputFragmentProcessor_ClassID,
+        kGrYUVtoRGBEffect_ClassID,
         kHighContrastFilterEffect_ClassID,
         kInstanceProcessor_ClassID,
         kLumaColorFilterEffect_ClassID,
@@ -154,7 +151,6 @@ public:
         kSwizzleFragmentProcessor_ClassID,
         kTestFP_ClassID,
         kTextureGeometryProcessor_ClassID,
-        kYUVtoRGBEffect_ClassID
     };
 
     virtual ~GrProcessor() = default;
