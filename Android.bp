@@ -1859,6 +1859,7 @@ cc_test {
         "bench/ChecksumBench.cpp",
         "bench/ChromeBench.cpp",
         "bench/ClipMaskBench.cpp",
+        "bench/ClipStrategyBench.cpp",
         "bench/CmapBench.cpp",
         "bench/CodecBench.cpp",
         "bench/ColorCanvasDrawBitmapBench.cpp",
