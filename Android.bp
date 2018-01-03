@@ -196,6 +196,7 @@ cc_library_static {
         "src/core/SkBuffer.cpp",
         "src/core/SkCachedData.cpp",
         "src/core/SkCanvas.cpp",
+        "src/core/SkCanvasPriv.cpp",
         "src/core/SkClipStack.cpp",
         "src/core/SkClipStackDevice.cpp",
         "src/core/SkColor.cpp",
