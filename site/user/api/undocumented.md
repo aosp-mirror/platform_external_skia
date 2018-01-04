@@ -317,6 +317,8 @@ void flush()
 
 # <a name="GPU_Surface"></a> GPU Surface
 
+# <a name="GPU_Texture"></a> GPU Texture
+
 # <a name="Glyph"></a> Glyph
 
 # <a name="HTML_Canvas"></a> HTML Canvas
@@ -930,8 +932,6 @@ static std::unique_ptr&lt;SkCanvas&gt; MakeCanvas(std::unique_ptr&lt;SkRasterHan
 
 ---
 
-# <a name="Raster_Image"></a> Raster Image
-
 # <a name="Raster_Surface"></a> Raster Surface
 
 # <a name="Rasterizer"></a> Rasterizer
@@ -999,6 +999,12 @@ void dumpHex() const
 <table>
   <tr>
     <td><a name="SkShader_kClamp_TileMode"> <code><strong>SkShader::kClamp_TileMode </strong></code> </a></td><td>0</td><td></td>
+  </tr>
+  <tr>
+    <td><a name="SkShader_kRepeat_TileMode"> <code><strong>SkShader::kRepeat_TileMode </strong></code> </a></td><td>1</td><td></td>
+  </tr>
+  <tr>
+    <td><a name="SkShader_kMirror_TileMode"> <code><strong>SkShader::kMirror_TileMode </strong></code> </a></td><td>2</td><td></td>
   </tr>
 
 </table>

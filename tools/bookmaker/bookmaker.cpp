@@ -342,6 +342,7 @@ bool BmhParser::addDefinition(const char* defStart, bool hasEnd, MarkType markTy
         case MarkType::kOutdent:
         case MarkType::kPlatform:
         case MarkType::kSeeAlso:
+        case MarkType::kSet:
         case MarkType::kSubstitute:
         case MarkType::kTime:
         case MarkType::kVolatile:
@@ -1074,8 +1075,8 @@ string TextParser::typedefName() {
     if (!end) {
         return this->reportError<string>("missing typedef std::function end bracket >");
     }
-
-    if (this->startsWith("std::function")) {
+    bool stdFunction = this->startsWith("std::function");
+    if (stdFunction) {
         if (!this->skipToEndBracket('>')) {
             return this->reportError<string>("missing typedef std::function end bracket >");
         }
@@ -1262,6 +1263,7 @@ vector<string> BmhParser::typeName(MarkType markType, bool* checkEnd) {
         case MarkType::kPlatform:
         case MarkType::kReturn:
         case MarkType::kSeeAlso:
+        case MarkType::kSet:
         case MarkType::kSubstitute:
         case MarkType::kTime:
         case MarkType::kToDo:
