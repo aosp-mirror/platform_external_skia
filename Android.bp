@@ -1657,6 +1657,7 @@ cc_test {
         "tests/ResourceAllocatorTest.cpp",
         "tests/ResourceCacheTest.cpp",
         "tests/RoundRectTest.cpp",
+        "tests/SGTest.cpp",
         "tests/SRGBMipMapTest.cpp",
         "tests/SRGBReadWritePixelsTest.cpp",
         "tests/SRGBTest.cpp",
