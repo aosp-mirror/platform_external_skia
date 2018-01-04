@@ -73,6 +73,7 @@ TEST_BUILDERS = [
   'Build-Debian9-GCC-x86_64-Release-PDFium_SkiaPaths',
   'Build-Debian9-GCC-x86_64-Release-Shared',
   'Build-Mac-Clang-arm64-Debug-Android_Vulkan',
+  'Build-Mac-Clang-arm64-Debug-iOS',
   'Build-Mac-Clang-x86_64-Debug-CommandBuffer',
   'Build-Mac-Clang-x86_64-Debug-Metal',
   'Build-Win-Clang-arm64-Release-Android',
@@ -198,4 +199,27 @@ def GenTests(api):
                      path_config='kitchen',
                      swarm_out_dir='[SWARM_OUT_DIR]') +
       api.step_data('Scale CPU 0 to 0.600000', retcode=1)
+  )
+
+  builder = 'Test-iOS-Clang-iPhone7-GPU-GT7600-arm64-Release-All'
+  fail_step_name = 'install_dm'
+  yield (
+      api.test('retry_ios_install') +
+      api.properties(buildername=builder,
+                     repository='https://skia.googlesource.com/skia.git',
+                     revision='abc123',
+                     path_config='kitchen',
+                     swarm_out_dir='[SWARM_OUT_DIR]') +
+      api.step_data(fail_step_name, retcode=1)
+  )
+
+  yield (
+      api.test('retry_ios_install_retries_exhausted') +
+      api.properties(buildername=builder,
+                     repository='https://skia.googlesource.com/skia.git',
+                     revision='abc123',
+                     path_config='kitchen',
+                     swarm_out_dir='[SWARM_OUT_DIR]') +
+      api.step_data(fail_step_name, retcode=1) +
+      api.step_data(fail_step_name + ' (attempt 2)', retcode=1)
   )

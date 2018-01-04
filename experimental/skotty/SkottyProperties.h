@@ -21,6 +21,7 @@
 class SkPath;
 
 namespace sksg {
+class Path;
 class RRect;
 class RenderNode;
 class Transform;
@@ -101,12 +102,37 @@ public:
 
     COMPOSITE_PROPERTY(Position, SkPoint , SkPoint::Make(0, 0))
     COMPOSITE_PROPERTY(Size    , SkSize  , SkSize::Make(0, 0))
-    COMPOSITE_PROPERTY(Radius  , SkScalar, 0)
+    COMPOSITE_PROPERTY(Radius  , SkSize  , SkSize::Make(0, 0))
 
 private:
     void apply();
 
     sk_sp<sksg::RRect> fRRectNode;
+
+    using INHERITED = SkRefCnt;
+};
+
+class CompositePolyStar final : public SkRefCnt {
+public:
+    enum class Type {
+        kStar, kPoly,
+    };
+
+    CompositePolyStar(sk_sp<sksg::Path>, Type);
+
+    COMPOSITE_PROPERTY(Position      , SkPoint , SkPoint::Make(0, 0))
+    COMPOSITE_PROPERTY(PointCount    , SkScalar, 0)
+    COMPOSITE_PROPERTY(InnerRadius   , SkScalar, 0)
+    COMPOSITE_PROPERTY(OuterRadius   , SkScalar, 0)
+    COMPOSITE_PROPERTY(InnerRoundness, SkScalar, 0)
+    COMPOSITE_PROPERTY(OuterRoundness, SkScalar, 0)
+    COMPOSITE_PROPERTY(Rotation      , SkScalar, 0)
+
+private:
+    void apply();
+
+    sk_sp<sksg::Path> fPathNode;
+    Type              fType;
 
     using INHERITED = SkRefCnt;
 };
