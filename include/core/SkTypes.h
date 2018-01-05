@@ -235,6 +235,7 @@ template <typename D, typename S> D SkTo(S s) {
 #define SK_MaxU32   0xFFFFFFFF
 #define SK_MinU32   0
 #define SK_NaN32    ((int) (1U << 31))
+#define SK_MaxSizeT SIZE_MAX
 
 /** Returns true if the value can be represented with signed 16bits
  */
