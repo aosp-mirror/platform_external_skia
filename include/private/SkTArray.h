@@ -433,7 +433,7 @@ private:
             fOwnMemory = false;
         } else {
             fAllocCount = SkTMax(count, SkTMax(kMinHeapAllocCount, reserveCount));
-            fMemArray = sk_malloc_throw(fAllocCount * sizeof(T));
+            fMemArray = sk_malloc_throw(fAllocCount, sizeof(T));
             fOwnMemory = true;
         }
     }
@@ -446,7 +446,7 @@ private:
         fMemArray = nullptr;
         if (count > preallocCount) {
             fAllocCount = SkTMax(count, kMinHeapAllocCount);
-            fMemArray = sk_malloc_throw(fAllocCount * sizeof(T));
+            fMemArray = sk_malloc_throw(fAllocCount, sizeof(T));
             fOwnMemory = true;
         } else {
             fAllocCount = preallocCount;
@@ -523,7 +523,7 @@ private:
             return;
         }
         fAllocCount = newAllocCount;
-        void* newMemArray = sk_malloc_throw(fAllocCount * sizeof(T));
+        void* newMemArray = sk_malloc_throw(fAllocCount, sizeof(T));
         this->move(newMemArray);
         if (fOwnMemory) {
             sk_free(fMemArray);
