@@ -9,16 +9,17 @@
 
 namespace sksg {
 
-PaintNode::PaintNode() {}
+// Paint nodes don't generate damage on their own, but via their aggregation ancestor Draw nodes.
+PaintNode::PaintNode() : INHERITED(kBubbleDamage_Trait) {}
 
 const SkPaint& PaintNode::makePaint() {
-    SkASSERT(!this->isInvalidated());
+    SkASSERT(!this->hasInval());
 
     return fPaint;
 }
 
-void PaintNode::onRevalidate(InvalidationController*, const SkMatrix&) {
-    SkASSERT(this->isInvalidated());
+SkRect PaintNode::onRevalidate(InvalidationController*, const SkMatrix&) {
+    SkASSERT(this->hasInval());
 
     fPaint.reset();
     fPaint.setAntiAlias(fAntiAlias);
@@ -29,6 +30,8 @@ void PaintNode::onRevalidate(InvalidationController*, const SkMatrix&) {
     fPaint.setStrokeCap(fStrokeCap);
 
     this->onApplyToPaint(&fPaint);
+
+    return SkRect::MakeEmpty();
 }
 
 } // namespace sksg

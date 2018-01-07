@@ -10,8 +10,11 @@
 #include "SkColor.h"
 #include "SkottyPriv.h"
 #include "SkPath.h"
+#include "SkSGPath.h"
 #include "SkSGRect.h"
 #include "SkSGTransform.h"
+
+#include <cmath>
 
 namespace  skotty {
 
@@ -166,13 +169,13 @@ void CompositeRRect::apply() {
     auto rr = SkRRect::MakeRectXY(SkRect::MakeXYWH(fPosition.x() - fSize.width() / 2,
                                                    fPosition.y() - fSize.height() / 2,
                                                    fSize.width(), fSize.height()),
-                                  fRadius,
-                                  fRadius);
+                                  fRadius.width(),
+                                  fRadius.height());
    fRRectNode->setRRect(rr);
 }
 
-CompositeTransform::CompositeTransform(sk_sp<sksg::RenderNode> wrapped_node)
-    : fTransformNode(sksg::Transform::Make(std::move(wrapped_node), SkMatrix::I())) {}
+CompositeTransform::CompositeTransform(sk_sp<sksg::Matrix> matrix)
+    : fMatrixNode(std::move(matrix)) {}
 
 void CompositeTransform::apply() {
     SkMatrix t = SkMatrix::MakeTrans(-fAnchorPoint.x(), -fAnchorPoint.y());
@@ -182,7 +185,39 @@ void CompositeTransform::apply() {
     t.postTranslate(fPosition.x(), fPosition.y());
     // TODO: skew
 
-    fTransformNode->setMatrix(t);
+    fMatrixNode->setMatrix(t);
+}
+
+CompositePolyStar::CompositePolyStar(sk_sp<sksg::Path> wrapped_node, Type t)
+    : fPathNode(std::move(wrapped_node))
+    , fType(t) {}
+
+void CompositePolyStar::apply() {
+    const auto count = SkScalarTruncToInt(fPointCount);
+    const auto arc   = SK_ScalarPI * 2 / count;
+
+    const auto pt_on_circle = [](const SkPoint& c, SkScalar r, SkScalar a) {
+        return SkPoint::Make(c.x() + r * std::cos(a),
+                             c.y() + r * std::sin(a));
+    };
+
+    // TODO: inner/outer "roundness"?
+
+    SkPath poly;
+
+    auto angle = SkDegreesToRadians(fRotation);
+    poly.moveTo(pt_on_circle(fPosition, fOuterRadius, angle));
+
+    for (int i = 0; i < count; ++i) {
+        if (fType == Type::kStar) {
+            poly.lineTo(pt_on_circle(fPosition, fInnerRadius, angle + arc * 0.5f));
+        }
+        angle += arc;
+        poly.lineTo(pt_on_circle(fPosition, fOuterRadius, angle));
+    }
+
+    poly.close();
+    fPathNode->setPath(poly);
 }
 
 } // namespace skotty

@@ -18,8 +18,14 @@ void Path::onDraw(SkCanvas* canvas, const SkPaint& paint) const {
     canvas->drawPath(fPath, paint);
 }
 
-SkRect Path::onComputeBounds() const {
+SkRect Path::onRevalidate(InvalidationController*, const SkMatrix&) {
+    SkASSERT(this->hasInval());
+
     return fPath.computeTightBounds();
+}
+
+SkPath Path::onAsPath() const {
+    return fPath;
 }
 
 } // namespace sksg

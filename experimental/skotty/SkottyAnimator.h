@@ -8,6 +8,8 @@
 #ifndef SkottyAnimator_DEFINED
 #define SkottyAnimator_DEFINED
 
+#include "SkCubicMap.h"
+#include "SkMakeUnique.h"
 #include "SkottyPriv.h"
 #include "SkottyProperties.h"
 #include "SkTArray.h"
@@ -25,17 +27,68 @@ public:
     virtual void tick(SkMSec) = 0;
 
 protected:
-    AnimatorBase()  = default;
+    AnimatorBase() = default;
+
+    // Compute a cubic-Bezier-interpolated t relative to [t0..t1].
+    static float ComputeLocalT(float t, float t0, float t1,
+                               const SkCubicMap*);
 };
 
 // Describes a keyframe interpolation interval (v0@t0) -> (v1@t1).
 // TODO: add interpolation params.
 template <typename T>
 struct KeyframeInterval {
-    T     fV0,
-          fV1;
-    float fT0 = 0,
-          fT1 = 0;
+    // Start/end values.
+    T       fV0,
+            fV1;
+
+    // Start/end times.
+    float   fT0 = 0,
+            fT1 = 0;
+
+    // Initialized for non-linear lerp.
+    std::unique_ptr<SkCubicMap> fCubicMap;
+
+    // Parse the current interval AND back-fill prev interval t1.
+    bool parse(const Json::Value& k, KeyframeInterval* prev) {
+        SkASSERT(k.isObject());
+
+        fT0 = fT1 = ParseScalar(k["t"], SK_ScalarMin);
+        if (fT0 == SK_ScalarMin) {
+            return false;
+        }
+
+        if (prev) {
+            if (prev->fT1 >= fT0) {
+                LOG("!! Dropping out-of-order key frame (t: %f < t: %f)\n", fT0, prev->fT1);
+                return false;
+            }
+            // Back-fill t1 in prev interval.  Note: we do this even if we end up discarding
+            // the current interval (to support "t"-only final frames).
+            prev->fT1 = fT0;
+        }
+
+        if (!T::Parse(k["s"], &fV0) ||
+            !T::Parse(k["e"], &fV1) ||
+            fV0.cardinality() != fV1.cardinality() ||
+            (prev && fV0.cardinality() != prev->fV0.cardinality())) {
+            return false;
+        }
+
+        // default is linear lerp
+        static constexpr SkPoint kDefaultC0 = { 0, 0 },
+                                 kDefaultC1 = { 1, 1 };
+        const auto c0 = ParsePoint(k["i"], kDefaultC0),
+                   c1 = ParsePoint(k["o"], kDefaultC1);
+
+        if (c0 != kDefaultC0 || c1 != kDefaultC1) {
+            fCubicMap = skstd::make_unique<SkCubicMap>();
+            // TODO: why do we have to plug these inverted?
+            fCubicMap->setPts(c1, c0);
+        }
+
+        return true;
+    }
 
     void lerp(float t, T*) const;
 };
@@ -49,10 +102,9 @@ public:
 
     void tick(SkMSec t) override {
         const auto& frame = this->findInterval(t);
-        const auto rel_t = (t - frame.fT0) / (frame.fT1 - frame.fT0);
 
         ValT val;
-        frame.lerp(SkTPin<float>(rel_t, 0, 1), &val);
+        frame.lerp(ComputeLocalT(t, frame.fT0, frame.fT1, frame.fCubicMap.get()), &val);
 
         fFunc(fTarget, val.template as<AttrT>());
     }
@@ -80,36 +132,19 @@ Animator<ValT, AttrT, NodeT>::Make(const Json::Value& frames,
         return nullptr;
 
     SkTArray<KeyframeInterval<ValT>> intervals;
+    intervals.reserve(frames.size());
+
     for (const auto& frame : frames) {
         if (!frame.isObject())
             return nullptr;
 
-        const auto t = ParseScalar(frame["t"], SK_ScalarMin);
-        if (t == SK_ScalarMin)
-            break;
-
-        auto* prev_interval = intervals.empty() ? nullptr : &intervals.back();
-        if (prev_interval) {
-            if (prev_interval->fT0 >= t) {
-                LOG("!! Ignoring out-of-order key frame (t: %f < t: %f)\n", t, prev_interval->fT0);
-                continue;
-            }
-            // Back-fill the prev interval t1.
-            prev_interval->fT1 = t;
-        }
-
         auto& curr_interval = intervals.push_back();
-        if (!ValT::Parse(frame["s"], &curr_interval.fV0) ||
-            !ValT::Parse(frame["e"], &curr_interval.fV1) ||
-            curr_interval.fV0.cardinality() != curr_interval.fV1.cardinality() ||
-            (prev_interval &&
-             curr_interval.fV0.cardinality() != prev_interval->fV0.cardinality())) {
+        auto* prev_interval = intervals.count() > 1 ? &intervals.fromBack(1) : nullptr;
+        if (!curr_interval.parse(frame, prev_interval)) {
             // Invalid frame, or "t"-only frame.
             intervals.pop_back();
             continue;
         }
-
-        curr_interval.fT0 = curr_interval.fT1 = t;
     }
 
     // If we couldn't determine a t1 for the last interval, discard it.

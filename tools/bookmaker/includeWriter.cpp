@@ -486,7 +486,7 @@ void IncludeWriter::enumSizeItems(const Definition& child) {
     int longestValue = 0;
     int valueLen = 0;
     const char* lastEnd = nullptr;
-    SkASSERT(child.fChildren.size() == 1 || child.fChildren.size() == 2);
+//    SkASSERT(child.fChildren.size() == 1 || child.fChildren.size() == 2);
     auto brace = child.fChildren[0];
     if (KeyWord::kClass == brace->fKeyWord) {
         brace = brace->fChildren[0];
@@ -585,6 +585,9 @@ void IncludeWriter::enumSizeItems(const Definition& child) {
 
 // walk children and output complete method doxygen description
 void IncludeWriter::methodOut(const Definition* method, const Definition& child) {
+    if (string::npos != method->fName.find("validate")) {
+        SkDebugf("");
+    }
     if (fPendingMethod) {
         fIndent -= 4;
         fPendingMethod = false;
@@ -682,7 +685,7 @@ Definition* IncludeWriter::structMemberOut(const Definition* memberStart, const 
     const char* commentStart = nullptr;
     ptrdiff_t commentLen = 0;
     string name(child.fContentStart, (int) (child.fContentEnd - child.fContentStart));
-    bool isShort;
+    bool isShort = false;
     Definition* commentBlock = nullptr;
     for (auto memberDef : fBmhStructDef->fChildren)  {
         if (memberDef->fName.length() - name.length() == memberDef->fName.find(name)) {
@@ -899,7 +902,7 @@ bool IncludeWriter::populate(Definition* def, ParentPair* prevPair, RootDefiniti
     // skip include comment
     // if there is a series of same named methods, write one set of comments, then write all methods
     string methodName;
-    const Definition* method;
+    const Definition* method = nullptr;
     const Definition* clonedMethod = nullptr;
     const Definition* memberStart = nullptr;
     const Definition* memberEnd = nullptr;
@@ -1076,12 +1079,22 @@ bool IncludeWriter::populate(Definition* def, ParentPair* prevPair, RootDefiniti
             const char* bodyEnd = fDeferComment ? fDeferComment->fContentStart - 1 :
                     fAttrDeprecated ? fAttrDeprecated->fContentStart - 1 :
                     child.fContentStart;
+            if (Definition::Type::kBracket == def->fType && Bracket::kDebugCode == def->fBracket) {
+                auto tokenIter = def->fParent->fTokens.begin();
+                std::advance(tokenIter, def->fParentIndex - 1);
+                Definition* prior = &*tokenIter;
+                if (Definition::Type::kBracket == def->fType &&
+                        Bracket::kSlashStar == prior->fBracket) {
+                    bodyEnd = prior->fContentStart - 1;
+                }
+            }
             // FIXME: roll end-trimming into writeBlockTrim call
             while (fStart < bodyEnd && ' ' >= bodyEnd[-1]) {
                 --bodyEnd;
             }
             int blockSize = (int) (bodyEnd - fStart);
             if (blockSize) {
+                string debugstr(fStart, blockSize);
                 this->writeBlock(blockSize, fStart);
             }
             startDef = &child;
@@ -1445,7 +1458,22 @@ bool IncludeWriter::populate(BmhParser& bmhParser) {
         this->lfcr();
         this->writePending();
         fclose(fOut);
-        SkDebugf("wrote %s\n", fileName.c_str());
+        fflush(fOut);
+        size_t slash = fFileName.find_last_of('/');
+        if (string::npos == slash) {
+            slash = 0;
+        }
+        size_t back = fFileName.find_last_of('\\');
+        if (string::npos == back) {
+            back = 0;
+        }
+        string dir = fFileName.substr(0, SkTMax(slash, back) + 1);
+        string readname = dir + fileName;
+        if (this->writtenFileDiffers(fileName, readname)) {
+            SkDebugf("wrote updated %s\n", fileName.c_str());
+        } else {
+            remove(fileName.c_str());
+        }
     }
     return allPassed;
 }
@@ -1693,7 +1721,7 @@ IncludeWriter::Wrote IncludeWriter::rewriteBlock(int size, const char* data, Phr
     int lastPrintable = 0;
     int lastSpace = -1;
     char c = 0;
-    char last;
+    char last = 0;
     bool embeddedIndirection = false;
     bool embeddedSymbol = false;
     bool hasLower = false;

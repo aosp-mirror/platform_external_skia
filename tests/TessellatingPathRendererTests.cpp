@@ -406,6 +406,28 @@ static SkPath create_path_26() {
     return path;
 }
 
+// A path which results in non-finite points when stroked and bevelled for AA.
+static SkPath create_path_27() {
+     SkPath path;
+     path.moveTo(8.5027233009104409507e+37, 1.7503381025241130639e+37);
+     path.lineTo(7.0923661737711584874e+37, 1.4600074517285415699e+37);
+     path.lineTo(7.0848733446033294691e+37, 1.4584649744781838604e+37);
+     path.lineTo(-2.0473916115129349496e+37, -4.2146796450364162012e+36);
+     path.lineTo(2.0473912312177548811e+37, 4.2146815465123165435e+36);
+     return path;
+}
+
+// AA stroking this path produces intersection failures on bevelling.
+// This should skip the point, but not assert.
+static SkPath create_path_28() {
+    SkPath path;
+    path.moveTo(-7.5952312625177475154e+21, -2.6819185100266674911e+24);
+    path.lineTo(  1260.3787841796875,   1727.7947998046875);
+    path.lineTo(  1260.5567626953125,   1728.0386962890625);
+    path.lineTo(1.1482511310557754163e+21, 4.054538502765980051e+23);
+    path.lineTo(-7.5952312625177475154e+21, -2.6819185100266674911e+24);
+    return path;
+}
 static std::unique_ptr<GrFragmentProcessor> create_linear_gradient_processor(GrContext* ctx) {
 
     SkPoint pts[2] = { {0, 0}, {1, 1} };
@@ -495,5 +517,7 @@ DEF_GPUTEST_FOR_ALL_CONTEXTS(TessellatingPathRendererTests, reporter, ctxInfo) {
     test_path(ctx, rtc.get(), create_path_24());
     test_path(ctx, rtc.get(), create_path_25(), SkMatrix(), GrAAType::kCoverage);
     test_path(ctx, rtc.get(), create_path_26(), SkMatrix(), GrAAType::kCoverage);
+    test_path(ctx, rtc.get(), create_path_27(), SkMatrix(), GrAAType::kCoverage);
+    test_path(ctx, rtc.get(), create_path_28(), SkMatrix(), GrAAType::kCoverage);
 }
 #endif

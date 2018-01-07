@@ -7,33 +7,41 @@
 
 #include "SkSGNode.h"
 
+#include "SkSGInvalidationController.h"
+
 namespace sksg {
 
 class Node::ScopedFlag {
 public:
     ScopedFlag(Node* node, uint32_t flag)
         : fNode(node)
-        , fFlag(flag) {
-        SkASSERT(!(fNode->fFlags & fFlag));
-        fNode->fFlags |= fFlag;
+        , fFlag(flag)
+        , fWasSet(node->fFlags & flag) {
+        node->fFlags |= flag;
     }
     ~ScopedFlag() {
-        fNode->fFlags &= ~fFlag;;
+        if (!fWasSet) {
+            fNode->fFlags &= ~fFlag;;
+        }
     }
+
+    bool wasSet() const { return fWasSet; }
 
 private:
     Node*    fNode;
     uint32_t fFlag;
+    bool     fWasSet;
 };
 
-#define TRAVERSAL_GUARD                     \
-    if (this->fFlags & kInTraversal_Flag) { \
-        return;                             \
-    }                                       \
-    ScopedFlag traversal_guard(this, kInTraversal_Flag);
+#define TRAVERSAL_GUARD                                  \
+    ScopedFlag traversal_guard(this, kInTraversal_Flag); \
+    if (traversal_guard.wasSet())                        \
+        return
 
-Node::Node()
+Node::Node(uint32_t invalTraits)
     : fInvalReceiver(nullptr)
+    , fBounds(SkRect::MakeLargestS32())
+    , fInvalTraits(invalTraits)
     , fFlags(kInvalidated_Flag) {}
 
 Node::~Node() {
@@ -92,26 +100,51 @@ void Node::forEachInvalReceiver(Func&& func) const {
     }
 }
 
-void Node::invalidate() {
-    TRAVERSAL_GUARD
+void Node::invalidate(bool damageBubbling) {
+    TRAVERSAL_GUARD;
 
-    if (this->isInvalidated()) {
+    if (this->hasInval() && (!damageBubbling || (fFlags & kDamage_Flag))) {
+        // All done.
         return;
     }
 
+    if (damageBubbling && !(fInvalTraits & kBubbleDamage_Trait)) {
+        // Found a damage receiver.
+        fFlags |= kDamage_Flag;
+        damageBubbling = false;
+    }
+
     fFlags |= kInvalidated_Flag;
+
     forEachInvalReceiver([&](Node* receiver) {
-        receiver->invalidate();
+        receiver->invalidate(damageBubbling);
     });
 }
 
-void Node::revalidate(InvalidationController* ic, const SkMatrix& ctm) {
-    TRAVERSAL_GUARD
+const SkRect& Node::revalidate(InvalidationController* ic, const SkMatrix& ctm) {
+    TRAVERSAL_GUARD fBounds;
 
-    if (this->isInvalidated()) {
-        this->onRevalidate(ic, ctm);
-        fFlags &= ~kInvalidated_Flag;
+    if (!this->hasInval()) {
+        return fBounds;
     }
+
+    SkRect prevBounds;
+    if (fFlags & kDamage_Flag) {
+        prevBounds = fBounds;
+    }
+
+    fBounds = this->onRevalidate(ic, ctm);
+
+    if (fFlags & kDamage_Flag) {
+        ic->inval(prevBounds, ctm);
+        if (fBounds != prevBounds) {
+            ic->inval(fBounds, ctm);
+        }
+    }
+
+    fFlags &= ~(kInvalidated_Flag | kDamage_Flag);
+
+    return fBounds;
 }
 
 } // namespace sksg

@@ -10,20 +10,61 @@
 #include "SkCanvas.h"
 
 namespace sksg {
+// Matrix nodes don't generate damage on their own, but via aggregation ancestor Transform nodes.
+Matrix::Matrix(const SkMatrix& m, sk_sp<Matrix> parent)
+    : INHERITED(kBubbleDamage_Trait)
+    , fParent(std::move(parent))
+    , fLocalMatrix(m) {
+    if (fParent) {
+        fParent->addInvalReceiver(this);
+    }
+}
 
-Transform::Transform(sk_sp<RenderNode> child, const SkMatrix& matrix)
+Matrix::~Matrix() {
+    if (fParent) {
+        fParent->removeInvalReceiver(this);
+    }
+}
+
+SkRect Matrix::onRevalidate(InvalidationController* ic, const SkMatrix& ctm) {
+    fTotalMatrix = fLocalMatrix;
+
+    if (fParent) {
+        fParent->revalidate(ic, ctm);
+        fTotalMatrix.postConcat(fParent->getTotalMatrix());
+    }
+
+    return SkRect::MakeEmpty();
+}
+
+Transform::Transform(sk_sp<RenderNode> child, sk_sp<Matrix> matrix)
     : INHERITED(std::move(child))
-    , fMatrix(matrix) {}
+    , fMatrix(std::move(matrix)) {
+    fMatrix->addInvalReceiver(this);
+}
+
+Transform::~Transform() {
+    fMatrix->removeInvalReceiver(this);
+}
 
 void Transform::onRender(SkCanvas* canvas) const {
-    SkAutoCanvasRestore acr(canvas, !fMatrix.isIdentity());
-    canvas->concat(fMatrix);
+    const auto& m = fMatrix->getTotalMatrix();
+    SkAutoCanvasRestore acr(canvas, !m.isIdentity());
+    canvas->concat(m);
     this->INHERITED::onRender(canvas);
 }
 
-void Transform::onRevalidate(InvalidationController* ic, const SkMatrix& ctm) {
-    const auto localCTM = SkMatrix::Concat(ctm, fMatrix);
-    this->INHERITED::onRevalidate(ic, localCTM);
+SkRect Transform::onRevalidate(InvalidationController* ic, const SkMatrix& ctm) {
+    SkASSERT(this->hasInval());
+
+    // We don't care about matrix reval results.
+    fMatrix->revalidate(ic, ctm);
+
+    const auto& m = fMatrix->getTotalMatrix();
+    auto bounds = this->INHERITED::onRevalidate(ic, SkMatrix::Concat(ctm, m));
+    m.mapRect(&bounds);
+
+    return bounds;
 }
 
 } // namespace sksg

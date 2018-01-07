@@ -30,7 +30,8 @@ public:
 protected:
     void onDraw(SkCanvas*, const SkPaint&) const override;
 
-    SkRect onComputeBounds() const override;
+    SkRect onRevalidate(InvalidationController*, const SkMatrix&) override;
+    SkPath onAsPath() const override;
 
 private:
     explicit Path(const SkPath&);
