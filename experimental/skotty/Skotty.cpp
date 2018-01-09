@@ -12,15 +12,19 @@
 #include "SkottyPriv.h"
 #include "SkottyProperties.h"
 #include "SkData.h"
+#include "SkImage.h"
 #include "SkMakeUnique.h"
+#include "SkOSPath.h"
 #include "SkPaint.h"
 #include "SkPath.h"
 #include "SkPoint.h"
 #include "SkSGColor.h"
 #include "SkSGDraw.h"
-#include "SkSGInvalidationController.h"
 #include "SkSGGroup.h"
+#include "SkSGImage.h"
+#include "SkSGInvalidationController.h"
 #include "SkSGMerge.h"
+#include "SkSGOpacityEffect.h"
 #include "SkSGPath.h"
 #include "SkSGRect.h"
 #include "SkSGTransform.h"
@@ -42,6 +46,7 @@ namespace {
 using AssetMap = SkTHashMap<SkString, const Json::Value*>;
 
 struct AttachContext {
+    const ResourceProvider&                  fResources;
     const AssetMap&                          fAssets;
     SkTArray<std::unique_ptr<AnimatorBase>>& fAnimators;
 };
@@ -60,25 +65,33 @@ bool AttachProperty(const Json::Value& jprop, AttachContext* ctx, const sk_sp<No
     if (!jprop.isObject())
         return false;
 
-    if (!ParseBool(jprop["a"], false)) {
-        // Static property.
+    const auto& jpropA = jprop["a"];
+    const auto& jpropK = jprop["k"];
+
+    // Older Json versions don't have an "a" animation marker.
+    // For those, we attempt to parse both ways.
+    if (jpropA.isNull() || !ParseBool(jpropA, "false")) {
         ValueT val;
-        if (!ValueT::Parse(jprop["k"], &val)) {
-            return LogFail(jprop, "Could not parse static property");
+        if (ValueTraits<ValueT>::Parse(jpropK, &val)) {
+            // Static property.
+            apply(node, ValueTraits<ValueT>::template As<AttrT>(val));
+            return true;
         }
 
-        apply(node, val.template as<AttrT>());
-    } else {
-        // Keyframe property.
-        using AnimatorT = Animator<ValueT, AttrT, NodeT>;
-        auto animator = AnimatorT::Make(jprop["k"], node, std::move(apply));
-
-        if (!animator) {
-            return LogFail(jprop, "Could not instantiate keyframe animator");
+        if (!jpropA.isNull()) {
+            return LogFail(jprop, "Could not parse (explicit) static property");
         }
-
-        ctx->fAnimators.push_back(std::move(animator));
     }
+
+    // Keyframe property.
+    using AnimatorT = Animator<ValueT, AttrT, NodeT>;
+    auto animator = AnimatorT::Make(jpropK, node, std::move(apply));
+
+    if (!animator) {
+        return LogFail(jprop, "Could not parse keyframed property");
+    }
+
+    ctx->fAnimators.push_back(std::move(animator));
 
     return true;
 }
@@ -126,6 +139,31 @@ sk_sp<sksg::Matrix> AttachMatrix(const Json::Value& t, AttachContext* ctx,
     }
 
     return matrix;
+}
+
+sk_sp<sksg::RenderNode> AttachOpacity(const Json::Value& jtransform, AttachContext* ctx,
+                                      sk_sp<sksg::RenderNode> childNode) {
+    if (!jtransform.isObject() || !childNode)
+        return childNode;
+
+    // This is more peeky than other attachers, because we want to avoid redundant opacity
+    // nodes for the extremely common case of static opaciy == 100.
+    const auto& opacity = jtransform["o"];
+    if (opacity.isObject() &&
+        !ParseBool(opacity["a"], true) &&
+        ParseScalar(opacity["k"], -1) == 100) {
+        // Ignoring static full opacity.
+        return childNode;
+    }
+
+    auto opacityNode = sksg::OpacityEffect::Make(childNode);
+    AttachProperty<ScalarValue, SkScalar>(opacity, ctx, opacityNode,
+        [](const sk_sp<sksg::OpacityEffect>& node, const SkScalar& o) {
+            // BM opacity is [0..100]
+            node->setOpacity(o * 0.01f);
+        });
+
+    return opacityNode;
 }
 
 sk_sp<sksg::RenderNode> AttachShape(const Json::Value&, AttachContext* ctx);
@@ -500,6 +538,7 @@ sk_sp<sksg::RenderNode> AttachShape(const Json::Value& shapeArray, AttachContext
                 xformed_group = sksg::Transform::Make(std::move(xformed_group),
                                                       std::move(matrix));
             }
+            xformed_group = AttachOpacity(s, ctx, std::move(xformed_group));
         } break;
         }
     }
@@ -542,11 +581,43 @@ sk_sp<sksg::RenderNode> AttachSolidLayer(const Json::Value& layer, AttachContext
     return nullptr;
 }
 
-sk_sp<sksg::RenderNode> AttachImageLayer(const Json::Value& layer, AttachContext*) {
+sk_sp<sksg::RenderNode> AttachImageAsset(const Json::Value& jimage, AttachContext* ctx) {
+    SkASSERT(jimage.isObject());
+
+    const auto name = ParseString(jimage["p"], ""),
+               path = ParseString(jimage["u"], "");
+    if (name.isEmpty())
+        return nullptr;
+
+    // TODO: plumb resource paths explicitly to ResourceProvider?
+    const auto resName    = path.isEmpty() ? name : SkOSPath::Join(path.c_str(), name.c_str());
+    const auto resStream  = ctx->fResources.openStream(resName.c_str());
+    if (!resStream || !resStream->hasLength()) {
+        LOG("!! Could not load image resource: %s\n", resName.c_str());
+        return nullptr;
+    }
+
+    // TODO: non-intrisic image sizing
+    return sksg::Image::Make(
+        SkImage::MakeFromEncoded(SkData::MakeFromStream(resStream.get(), resStream->getLength())));
+}
+
+sk_sp<sksg::RenderNode> AttachImageLayer(const Json::Value& layer, AttachContext* ctx) {
     SkASSERT(layer.isObject());
 
-    LOG("?? Image layer stub\n");
-    return nullptr;
+    auto refId = ParseString(layer["refId"], "");
+    if (refId.isEmpty()) {
+        LOG("!! Image layer missing refId\n");
+        return nullptr;
+    }
+
+    const auto* jimage = ctx->fAssets.find(refId);
+    if (!jimage) {
+        LOG("!! Image asset not found: '%s'\n", refId.c_str());
+        return nullptr;
+    }
+
+    return AttachImageAsset(**jimage, ctx);
 }
 
 sk_sp<sksg::RenderNode> AttachNullLayer(const Json::Value& layer, AttachContext*) {
@@ -650,10 +721,11 @@ sk_sp<sksg::RenderNode> AttachLayer(const Json::Value& jlayer,
 
     auto layer       = gLayerAttachers[type](jlayer, layerCtx->fCtx);
     auto layerMatrix = layerCtx->AttachLayerMatrix(jlayer);
+    auto transformed = layerMatrix
+            ? sksg::Transform::Make(std::move(layer), std::move(layerMatrix))
+            : layer;
 
-    return layerMatrix
-        ? sksg::Transform::Make(std::move(layer), std::move(layerMatrix))
-        : layer;
+    return AttachOpacity(jlayer["ks"], layerCtx->fCtx, std::move(transformed));
 }
 
 sk_sp<sksg::RenderNode> AttachComposition(const Json::Value& comp, AttachContext* ctx) {
@@ -691,7 +763,7 @@ sk_sp<sksg::RenderNode> AttachComposition(const Json::Value& comp, AttachContext
 
 } // namespace
 
-std::unique_ptr<Animation> Animation::Make(SkStream* stream) {
+std::unique_ptr<Animation> Animation::Make(SkStream* stream, const ResourceProvider& res) {
     if (!stream->hasLength()) {
         // TODO: handle explicit buffering?
         LOG("!! cannot parse streaming content\n");
@@ -725,10 +797,37 @@ std::unique_ptr<Animation> Animation::Make(SkStream* stream) {
         return nullptr;
     }
 
-    return std::unique_ptr<Animation>(new Animation(std::move(version), size, fps, json));
+    return std::unique_ptr<Animation>(new Animation(res, std::move(version), size, fps, json));
 }
 
-Animation::Animation(SkString version, const SkSize& size, SkScalar fps, const Json::Value& json)
+std::unique_ptr<Animation> Animation::MakeFromFile(const char path[], const ResourceProvider* res) {
+    class DirectoryResourceProvider final : public ResourceProvider {
+    public:
+        explicit DirectoryResourceProvider(SkString dir) : fDir(std::move(dir)) {}
+
+        std::unique_ptr<SkStream> openStream(const char resource[]) const override {
+            const auto resPath = SkOSPath::Join(fDir.c_str(), resource);
+            return SkStream::MakeFromFile(resPath.c_str());
+        }
+
+    private:
+        const SkString fDir;
+    };
+
+    const auto jsonStream =  SkStream::MakeFromFile(path);
+    if (!jsonStream)
+        return nullptr;
+
+    std::unique_ptr<ResourceProvider> defaultProvider;
+    if (!res) {
+        defaultProvider = skstd::make_unique<DirectoryResourceProvider>(SkOSPath::Dirname(path));
+    }
+
+    return Make(jsonStream.get(), res ? *res : *defaultProvider);
+}
+
+Animation::Animation(const ResourceProvider& resources,
+                     SkString version, const SkSize& size, SkScalar fps, const Json::Value& json)
     : fVersion(std::move(version))
     , fSize(size)
     , fFrameRate(fps)
@@ -744,7 +843,7 @@ Animation::Animation(SkString version, const SkSize& size, SkScalar fps, const J
         assets.set(ParseString(asset["id"], ""), &asset);
     }
 
-    AttachContext ctx = { assets, fAnimators };
+    AttachContext ctx = { resources, assets, fAnimators };
     fDom = AttachComposition(json, &ctx);
 
     LOG("** Attached %d animators\n", fAnimators.count());
@@ -752,7 +851,7 @@ Animation::Animation(SkString version, const SkSize& size, SkScalar fps, const J
 
 Animation::~Animation() = default;
 
-void Animation::render(SkCanvas* canvas) const {
+void Animation::render(SkCanvas* canvas, const SkRect* dstR) const {
     if (!fDom)
         return;
 
@@ -760,6 +859,12 @@ void Animation::render(SkCanvas* canvas) const {
     fDom->revalidate(&ic, SkMatrix::I());
 
     // TODO: proper inval
+    SkAutoCanvasRestore restore(canvas, true);
+    const SkRect srcR = SkRect::MakeSize(this->size());
+    if (dstR) {
+        canvas->concat(SkMatrix::MakeRectToRect(srcR, *dstR, SkMatrix::kCenter_ScaleToFit));
+    }
+    canvas->clipRect(srcR);
     fDom->render(canvas);
 
     if (!fShowInval)

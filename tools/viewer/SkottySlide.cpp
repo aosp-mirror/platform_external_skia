@@ -10,7 +10,6 @@
 #include "SkAnimTimer.h"
 #include "SkCanvas.h"
 #include "Skotty.h"
-#include "SkStream.h"
 
 SkottySlide::SkottySlide(const SkString& name, const SkString& path)
     : fPath(path) {
@@ -18,8 +17,7 @@ SkottySlide::SkottySlide(const SkString& name, const SkString& path)
 }
 
 void SkottySlide::load(SkScalar, SkScalar) {
-    auto stream = SkStream::MakeFromFile(fPath.c_str());
-    fAnimation  = skotty::Animation::Make(stream.get());
+    fAnimation  = skotty::Animation::MakeFromFile(fPath.c_str());
     fTimeBase   = 0; // force a time reset
 
     if (fAnimation) {
@@ -44,12 +42,8 @@ SkISize SkottySlide::getDimensions() const {
 void SkottySlide::draw(SkCanvas* canvas) {
     if (fAnimation) {
         SkAutoCanvasRestore acr(canvas, true);
-        const auto animationBounds = SkRect::Make(fAnimation->size().toCeil());
-        canvas->concat(SkMatrix::MakeRectToRect(animationBounds,
-                                                SkRect::Make(canvas->imageInfo().bounds()),
-                                                SkMatrix::kCenter_ScaleToFit));
-        canvas->clipRect(animationBounds);
-        fAnimation->render(canvas);
+        const SkRect dstR = SkRect::Make(canvas->imageInfo().bounds());
+        fAnimation->render(canvas, &dstR);
     }
 }
 

@@ -15,6 +15,7 @@
 
 #include "GrClip.h"
 #include "GrContext.h"
+#include "GrContextPriv.h"
 #include "GrRenderTargetContext.h"
 #include "GrFragmentProcessor.h"
 #include "GrCoordTransform.h"
@@ -57,8 +58,10 @@ public:
         desc.fHeight = kSize;
         desc.fConfig = kConfig;
 
-        sk_sp<GrTextureProxy> dataProxy = GrSurfaceProxy::MakeDeferred(
-                context->resourceProvider(), desc, SkBudgeted::kYes, data, 0);
+        GrProxyProvider* proxyProvider = context->contextPriv().proxyProvider();
+
+        sk_sp<GrTextureProxy> dataProxy =
+                GrSurfaceProxy::MakeDeferred(proxyProvider, desc, SkBudgeted::kYes, data, 0);
         if (!dataProxy) {
             return false;
         }
