@@ -3,7 +3,7 @@ use_relative_paths = True
 deps = {
   "buildtools"                          : "https://chromium.googlesource.com/chromium/buildtools.git@505de88083136eefd056e5ee4ca0f01fe9b33de8",
   "common"                              : "https://skia.googlesource.com/common.git@9737551d7a52c3db3262db5856e6bcd62c462b92",
-  "third_party/externals/angle2"        : "https://chromium.googlesource.com/angle/angle.git@0690e1aa31d4e0c9f1ab641e5c0dab75a79c026e",
+  "third_party/externals/angle2"        : "https://chromium.googlesource.com/angle/angle.git@c74ec1a5bbbd12541d19075b0d91a02f7e30bb14",
   "third_party/externals/dng_sdk"       : "https://android.googlesource.com/platform/external/dng_sdk.git@96443b262250c390b0caefbf3eed8463ba35ecae",
   "third_party/externals/expat"         : "https://android.googlesource.com/platform/external/expat.git@android-6.0.1_r55",
   "third_party/externals/freetype"      : "https://skia.googlesource.com/third_party/freetype2.git@447a0b62634802d8acdb56008cff5ff4e50be244",
@@ -15,6 +15,7 @@ deps = {
   "third_party/externals/libjpeg-turbo" : "https://github.com/libjpeg-turbo/libjpeg-turbo.git@1.5.3",
   "third_party/externals/libpng"        : "https://skia.googlesource.com/third_party/libpng.git@v1.6.33",
   "third_party/externals/libwebp"       : "https://chromium.googlesource.com/webm/libwebp.git@v0.6.0",
+  "third_party/externals/lua"           : "https://github.com/lua/lua@v5-3-4",
   "third_party/externals/microhttpd"    : "https://android.googlesource.com/platform/external/libmicrohttpd@748945ec6f1c67b7efc934ab0808e1d32f2fb98d",
   "third_party/externals/piex"          : "https://android.googlesource.com/platform/external/piex.git@8f540f64b6c170a16fb7e6e52d61819705c1522a",
   "third_party/externals/sdl"           : "https://skia.googlesource.com/third_party/sdl@5d7cfcca344034aff9327f77fc181ae3754e7a90",
