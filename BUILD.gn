@@ -1384,6 +1384,7 @@ if (skia_enable_tools) {
       "experimental/sksg/SkSGNode.cpp",
       "experimental/sksg/SkSGPaintNode.cpp",
       "experimental/sksg/SkSGRenderNode.cpp",
+      "experimental/sksg/effects/SkSGMaskEffect.cpp",
       "experimental/sksg/effects/SkSGOpacityEffect.cpp",
       "experimental/sksg/effects/SkSGTransform.cpp",
       "experimental/sksg/geometry/SkSGMerge.cpp",
@@ -1456,6 +1457,7 @@ if (skia_enable_tools) {
       "tools/bookmaker/includeWriter.cpp",
       "tools/bookmaker/mdOut.cpp",
       "tools/bookmaker/parserCommon.cpp",
+      "tools/bookmaker/selfCheck.cpp",
       "tools/bookmaker/spellCheck.cpp",
     ]
     deps = [
@@ -1698,6 +1700,8 @@ if (skia_enable_tools) {
       "fuzz/FuzzPathop.cpp",
       "fuzz/FuzzScaleToSides.cpp",
       "fuzz/fuzz.cpp",
+      "fuzz/oss_fuzz/FuzzRegionDeserialize.cpp",
+      "fuzz/oss_fuzz/FuzzRegionSetPath.cpp",
       "tools/UrlDataManager.cpp",
       "tools/debugger/SkDebugCanvas.cpp",
       "tools/debugger/SkDrawCommand.cpp",

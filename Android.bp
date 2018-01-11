@@ -1059,6 +1059,7 @@ cc_test {
         "experimental/sksg/SkSGNode.cpp",
         "experimental/sksg/SkSGPaintNode.cpp",
         "experimental/sksg/SkSGRenderNode.cpp",
+        "experimental/sksg/effects/SkSGMaskEffect.cpp",
         "experimental/sksg/effects/SkSGOpacityEffect.cpp",
         "experimental/sksg/effects/SkSGTransform.cpp",
         "experimental/sksg/geometry/SkSGMerge.cpp",
@@ -1974,6 +1975,7 @@ cc_test {
         "experimental/sksg/SkSGNode.cpp",
         "experimental/sksg/SkSGPaintNode.cpp",
         "experimental/sksg/SkSGRenderNode.cpp",
+        "experimental/sksg/effects/SkSGMaskEffect.cpp",
         "experimental/sksg/effects/SkSGOpacityEffect.cpp",
         "experimental/sksg/effects/SkSGTransform.cpp",
         "experimental/sksg/geometry/SkSGMerge.cpp",
@@ -2373,5 +2375,9 @@ cc_test {
         "tools/trace/SkChromeTracingTracer.cpp",
         "tools/trace/SkDebugfTracer.cpp",
         "tools/trace/SkEventTracingPriv.cpp",
+    ],
+
+    data: [
+        "resources/*",
     ],
 }
