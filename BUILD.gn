@@ -774,6 +774,7 @@ component("skia") {
     "src/android/SkBitmapRegionCodec.cpp",
     "src/android/SkBitmapRegionDecoder.cpp",
     "src/codec/SkAndroidCodec.cpp",
+    "src/codec/SkAnimatedImage.cpp",
     "src/codec/SkBmpBaseCodec.cpp",
     "src/codec/SkBmpCodec.cpp",
     "src/codec/SkBmpMaskCodec.cpp",
@@ -1392,6 +1393,7 @@ if (skia_enable_tools) {
       "experimental/sksg/geometry/SkSGRect.cpp",
       "experimental/sksg/geometry/SkSGTrimEffect.cpp",
       "experimental/sksg/paint/SkSGColor.cpp",
+      "experimental/sksg/paint/SkSGGradient.cpp",
     ]
     deps = [
       ":skia",
