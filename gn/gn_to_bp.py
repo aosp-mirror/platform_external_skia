@@ -197,6 +197,10 @@ cc_test {
     srcs: [
         $nanobench_srcs
     ],
+
+    data: [
+        "resources/*",
+    ],
 }''')
 
 # We'll run GN to get the main source lists and include directories for Skia.
@@ -264,6 +268,7 @@ cflags = cflags.union([
     "-DSKIA_DLL",
     "-DSKIA_IMPLEMENTATION=1",
     "-DATRACE_TAG=ATRACE_TAG_VIEW",
+    "-DSK_PRINT_CODEC_MESSAGES",
 ])
 cflags_cc.add("-fexceptions")
 

@@ -774,6 +774,7 @@ component("skia") {
     "src/android/SkBitmapRegionCodec.cpp",
     "src/android/SkBitmapRegionDecoder.cpp",
     "src/codec/SkAndroidCodec.cpp",
+    "src/codec/SkAnimatedImage.cpp",
     "src/codec/SkBmpBaseCodec.cpp",
     "src/codec/SkBmpCodec.cpp",
     "src/codec/SkBmpMaskCodec.cpp",
@@ -1384,6 +1385,7 @@ if (skia_enable_tools) {
       "experimental/sksg/SkSGNode.cpp",
       "experimental/sksg/SkSGPaintNode.cpp",
       "experimental/sksg/SkSGRenderNode.cpp",
+      "experimental/sksg/effects/SkSGMaskEffect.cpp",
       "experimental/sksg/effects/SkSGOpacityEffect.cpp",
       "experimental/sksg/effects/SkSGTransform.cpp",
       "experimental/sksg/geometry/SkSGMerge.cpp",
@@ -1391,6 +1393,7 @@ if (skia_enable_tools) {
       "experimental/sksg/geometry/SkSGRect.cpp",
       "experimental/sksg/geometry/SkSGTrimEffect.cpp",
       "experimental/sksg/paint/SkSGColor.cpp",
+      "experimental/sksg/paint/SkSGGradient.cpp",
     ]
     deps = [
       ":skia",
@@ -1456,6 +1459,7 @@ if (skia_enable_tools) {
       "tools/bookmaker/includeWriter.cpp",
       "tools/bookmaker/mdOut.cpp",
       "tools/bookmaker/parserCommon.cpp",
+      "tools/bookmaker/selfCheck.cpp",
       "tools/bookmaker/spellCheck.cpp",
     ]
     deps = [
@@ -1698,6 +1702,8 @@ if (skia_enable_tools) {
       "fuzz/FuzzPathop.cpp",
       "fuzz/FuzzScaleToSides.cpp",
       "fuzz/fuzz.cpp",
+      "fuzz/oss_fuzz/FuzzRegionDeserialize.cpp",
+      "fuzz/oss_fuzz/FuzzRegionSetPath.cpp",
       "tools/UrlDataManager.cpp",
       "tools/debugger/SkDebugCanvas.cpp",
       "tools/debugger/SkDrawCommand.cpp",

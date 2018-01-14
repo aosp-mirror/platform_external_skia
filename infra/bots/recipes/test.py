@@ -672,6 +672,7 @@ def dm_flags(api, bot):
     match.append('~XfermodeImageFilterCroppedInput_Gpu')
     match.append('~GrDefaultPathRendererTest') #skia:7244
     match.append('~GrMSAAPathRendererTest') #skia:7244
+    match.append('~SkImage_makeNonTextureImage')
 
   if (('RadeonR9M470X' in bot or 'RadeonHD7770' in bot) and 'ANGLE' in bot):
     # skia:7096
@@ -896,6 +897,8 @@ TEST_BUILDERS = [
   'Test-Android-Clang-NVIDIA_Shield-GPU-TegraX1-arm64-Debug-All-Android',
   'Test-Android-Clang-NVIDIA_Shield-GPU-TegraX1-arm64-Debug-All-Android_CCPR',
   'Test-Android-Clang-Nexus5-GPU-Adreno330-arm-Release-All-Android',
+  ('Test-Android-Clang-Nexus5x-GPU-Adreno418-arm64-Debug-All'
+   '-Android_ASAN'),
   ('Test-Android-Clang-Nexus5x-GPU-Adreno418-arm64-Debug-All'
    '-Android_NoGPUThreads'),
   'Test-Android-Clang-Nexus7-CPU-Tegra3-arm-Release-All-Android',

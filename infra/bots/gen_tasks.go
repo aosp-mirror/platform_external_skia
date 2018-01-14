@@ -371,8 +371,6 @@ func defaultSwarmDimensions(parts map[string]string) []string {
 		} else if d["os"] == DEFAULT_OS_MAC {
 			// Mac CPU bots.
 			d["cpu"] = "x86-64-E5-2697_v2"
-			// skia:7408
-			d["cert"] = "2"
 		}
 	}
 
@@ -851,9 +849,14 @@ func doUpload(name string) bool {
 // test generates a Test task. Returns the name of the last task in the
 // generated chain of tasks, which the Job should add as a dependency.
 func test(b *specs.TasksCfgBuilder, name string, parts map[string]string, compileTaskName string, pkgs []*specs.CipdPackage) string {
+	deps := []string{compileTaskName}
+	if strings.Contains(name, "Android_ASAN") {
+		deps = append(deps, isolateCIPDAsset(b, ISOLATE_NDK_LINUX_NAME))
+	}
+
 	s := &specs.TaskSpec{
 		CipdPackages:     pkgs,
-		Dependencies:     []string{compileTaskName},
+		Dependencies:     deps,
 		Dimensions:       swarmDimensions(parts),
 		ExecutionTimeout: 4 * time.Hour,
 		Expiration:       20 * time.Hour,
@@ -1177,7 +1180,7 @@ func process(b *specs.TasksCfgBuilder, name string) {
 		!strings.Contains(name, "-CT_") &&
 		!strings.Contains(name, "Housekeeper-PerCommit-Isolate") {
 		compile(b, compileTaskName, compileTaskParts)
-		if (parts["role"] == "Calmbench") {
+		if parts["role"] == "Calmbench" {
 			compile(b, compileParentName, compileParentParts)
 		}
 	}
@@ -1382,4 +1385,3 @@ func (s *JobNameSchema) MakeJobName(parts map[string]string) (string, error) {
 	}
 	return strings.Join(rvParts, s.Sep), nil
 }
-
