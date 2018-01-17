@@ -530,10 +530,14 @@ def dm_flags(api, bot):
     match.append('~WritePixels')
 
   if 'Chromecast' in bot:
-    # skia:6581
-    match.append('~matrixconvolution')
-    match.append('~blur_image_filter')
-    match.append('~blur_0.01')
+    if 'GPU' in bot:
+      # skia:6687
+      match.append('~matrixconvolution')
+      match.append('~blur_image_filter')
+      match.append('~blur_0.01')
+      match.append('~lighting')
+      match.append('~imageblur2')
+      match.append('~animated-image-blurs')
     # skia:7497
     match.append('~readpixels') # dies with "Caught signal 7 [Bus error]"
     match.append('~F16Stages')
