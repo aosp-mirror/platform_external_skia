@@ -134,13 +134,13 @@ cc_library_static {
 
     srcs: [
         "src/android/SkAndroidFrameworkUtils.cpp",
+        "src/android/SkAnimatedImage.cpp",
         "src/android/SkBitmapRegionCodec.cpp",
         "src/android/SkBitmapRegionDecoder.cpp",
         "src/c/sk_effects.cpp",
         "src/c/sk_paint.cpp",
         "src/c/sk_surface.cpp",
         "src/codec/SkAndroidCodec.cpp",
-        "src/codec/SkAnimatedImage.cpp",
         "src/codec/SkBmpBaseCodec.cpp",
         "src/codec/SkBmpCodec.cpp",
         "src/codec/SkBmpMaskCodec.cpp",
@@ -1422,6 +1422,7 @@ cc_test {
         "gm/xform_image_gen.cpp",
         "gm/yuvtorgbeffect.cpp",
         "tests/AAClipTest.cpp",
+        "tests/AndroidCodecTest.cpp",
         "tests/AnnotationTest.cpp",
         "tests/ApplyGammaTest.cpp",
         "tests/ArenaAllocTest.cpp",
