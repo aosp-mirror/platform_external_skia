@@ -989,7 +989,7 @@ cc_test {
     ],
 
     local_include_dirs: [
-        "experimental/skotty/",
+        "experimental/skottie/",
         "experimental/sksg/",
         "experimental/sksg/effects/",
         "experimental/sksg/geometry/",
@@ -1049,9 +1049,9 @@ cc_test {
         "dm/DMGpuTestProcs.cpp",
         "dm/DMJsonWriter.cpp",
         "dm/DMSrcSink.cpp",
-        "experimental/skotty/Skotty.cpp",
-        "experimental/skotty/SkottyAnimator.cpp",
-        "experimental/skotty/SkottyProperties.cpp",
+        "experimental/skottie/Skottie.cpp",
+        "experimental/skottie/SkottieAnimator.cpp",
+        "experimental/skottie/SkottieProperties.cpp",
         "experimental/sksg/SkSGDraw.cpp",
         "experimental/sksg/SkSGEffectNode.cpp",
         "experimental/sksg/SkSGGeometryNode.cpp",
