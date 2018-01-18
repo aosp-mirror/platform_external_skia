@@ -131,8 +131,10 @@ void GrTextureProxy::setUniqueKey(GrProxyProvider* proxyProvider, const GrUnique
     SkASSERT(key.isValid());
     SkASSERT(!fUniqueKey.isValid()); // proxies can only ever get one uniqueKey
 
-    if (fTarget && !fTarget->getUniqueKey().isValid()) {
-        fTarget->resourcePriv().setUniqueKey(key);
+    if (fTarget) {
+        if (!fTarget->getUniqueKey().isValid()) {
+            fTarget->resourcePriv().setUniqueKey(key);
+        }
         SkASSERT(fTarget->getUniqueKey() == key);
     }
 
@@ -148,7 +150,6 @@ void GrTextureProxy::clearUniqueKey() {
 #ifdef SK_DEBUG
 void GrTextureProxy::validateLazyTexture(const GrTexture* texture) {
     SkASSERT(!texture->asRenderTarget());
-    SkASSERT(GrMipMapped::kNo == this->mipMapped());
 }
 #endif
 

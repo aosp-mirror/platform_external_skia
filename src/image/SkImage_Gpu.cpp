@@ -156,7 +156,7 @@ GrBackendObject SkImage_Gpu::onGetTextureHandle(bool flushPendingGrContextIO,
                                                 GrSurfaceOrigin* origin) const {
     SkASSERT(fProxy);
 
-    if (!fProxy->instantiate(fContext->resourceProvider())) {
+    if (!fProxy->instantiate(fContext->contextPriv().resourceProvider())) {
         return 0;
     }
 
@@ -180,7 +180,7 @@ GrTexture* SkImage_Gpu::onGetTexture() const {
         return nullptr;
     }
 
-    if (!proxy->instantiate(fContext->resourceProvider())) {
+    if (!proxy->instantiate(fContext->contextPriv().resourceProvider())) {
         return nullptr;
     }
 
@@ -284,15 +284,12 @@ static sk_sp<SkImage> new_wrapped_texture_common(GrContext* ctx,
         return nullptr;
     }
 
-    sk_sp<GrTexture> tex = ctx->resourceProvider()->wrapBackendTexture(backendTex, ownership);
-    if (!tex) {
+    GrProxyProvider* proxyProvider = ctx->contextPriv().proxyProvider();
+    sk_sp<GrTextureProxy> proxy = proxyProvider->createWrappedTextureProxy(
+                                        backendTex, origin, ownership, releaseProc, releaseCtx);
+    if (!proxy) {
         return nullptr;
     }
-    if (releaseProc) {
-        tex->setRelease(releaseProc, releaseCtx);
-    }
-
-    sk_sp<GrTextureProxy> proxy(GrSurfaceProxy::MakeWrapped(std::move(tex), origin));
 
     return sk_make_sp<SkImage_Gpu>(ctx, kNeedNewImageUniqueID,
                                    at, std::move(proxy), std::move(colorSpace), SkBudgeted::kNo);
@@ -585,7 +582,7 @@ sk_sp<SkImage> SkImage::MakeCrossContextFromEncoded(GrContext* context, sk_sp<Sk
         return codecImage;
     }
 
-    if (!proxy->instantiate(context->resourceProvider())) {
+    if (!proxy->instantiate(context->contextPriv().resourceProvider())) {
         return codecImage;
     }
     sk_sp<GrTexture> texture = sk_ref_sp(proxy->priv().peekTexture());

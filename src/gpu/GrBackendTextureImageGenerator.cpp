@@ -10,9 +10,11 @@
 #include "GrContext.h"
 #include "GrContextPriv.h"
 #include "GrGpu.h"
+#include "GrProxyProvider.h"
 #include "GrRenderTargetContext.h"
 #include "GrResourceCache.h"
 #include "GrResourceProvider.h"
+#include "GrResourceProviderPriv.h"
 #include "GrSemaphore.h"
 #include "GrTexture.h"
 #include "GrTexturePriv.h"
@@ -43,7 +45,7 @@ GrBackendTextureImageGenerator::Make(sk_sp<GrTexture> texture, GrSurfaceOrigin o
     // Attach our texture to this context's resource cache. This ensures that deletion will happen
     // in the correct thread/context. This adds the only ref to the texture that will persist from
     // this point. That ref will be released when the generator's RefHelper is freed.
-    context->getResourceCache()->insertCrossContextGpuResource(texture.get());
+    context->contextPriv().getResourceCache()->insertCrossContextGpuResource(texture.get());
 
     GrBackendTexture backendTexture = texture->getBackendTexture();
 
@@ -63,6 +65,7 @@ GrBackendTextureImageGenerator::GrBackendTextureImageGenerator(const SkImageInfo
     , fRefHelper(new RefHelper(texture, owningContextID))
     , fSemaphore(std::move(semaphore))
     , fBackendTexture(backendTex)
+    , fConfig(backendTex.config())
     , fSurfaceOrigin(origin) { }
 
 GrBackendTextureImageGenerator::~GrBackendTextureImageGenerator() {
@@ -89,7 +92,7 @@ sk_sp<GrTextureProxy> GrBackendTextureImageGenerator::onGenerateTexture(
         return nullptr;
     }
 
-    sk_sp<GrTexture> tex;
+    auto proxyProvider = context->contextPriv().proxyProvider();
 
     uint32_t expectedID = SK_InvalidGenID;
     if (!fRefHelper->fBorrowingContextID.compare_exchange(&expectedID, context->uniqueID())) {
@@ -97,38 +100,75 @@ sk_sp<GrTextureProxy> GrBackendTextureImageGenerator::onGenerateTexture(
             // Some other context is currently borrowing the texture. We aren't allowed to use it.
             return nullptr;
         }
-    } else {
-        if (fSemaphore && !fSemaphore->hasSubmittedWait()) {
-            context->getGpu()->waitSemaphore(fSemaphore);
-        }
-    }
-
-    if (fRefHelper->fBorrowedTexture) {
-        // If a client re-draws the same image multiple times, the texture we return will be cached
-        // and re-used. If they draw a subset, though, we may be re-called. In that case, we want
-        // to re-use the borrowed texture we've previously created.
-        tex = sk_ref_sp(fRefHelper->fBorrowedTexture);
-        SkASSERT(tex);
-    } else {
-        // We just gained access to the texture. If we're on the original context, we could use the
-        // original texture, but we'd have no way of detecting that it's no longer in-use. So we
-        // always make a wrapped copy, where the release proc informs us that the context is done
-        // with it. This is unfortunate - we'll have two texture objects referencing the same GPU
-        // object. However, no client can ever see the original texture, so this should be safe.
-        tex = context->resourceProvider()->wrapBackendTexture(fBackendTexture,
-                                                              kBorrow_GrWrapOwnership);
-        if (!tex) {
-            return nullptr;
-        }
-        fRefHelper->fBorrowedTexture = tex.get();
-
-        tex->setRelease(ReleaseRefHelper_TextureReleaseProc, fRefHelper);
-        fRefHelper->ref();
     }
 
     SkASSERT(fRefHelper->fBorrowingContextID == context->uniqueID());
 
-    sk_sp<GrTextureProxy> proxy = GrSurfaceProxy::MakeWrapped(std::move(tex), fSurfaceOrigin);
+    GrSurfaceDesc desc;
+    desc.fOrigin = fSurfaceOrigin;
+    desc.fWidth = fBackendTexture.width();
+    desc.fHeight = fBackendTexture.height();
+    desc.fConfig = fConfig;
+    GrMipMapped mipMapped = fBackendTexture.hasMipMaps() ? GrMipMapped::kYes : GrMipMapped::kNo;
+
+    // Must make copies of member variables to capture in the lambda since this image generator may
+    // be deleted before we actuallly execute the lambda.
+    GrSurfaceOrigin surfaceOrigin = fSurfaceOrigin;
+    sk_sp<GrSemaphore> semaphore = fSemaphore;
+    GrBackendTexture backendTexture = fBackendTexture;
+    RefHelper* refHelper = fRefHelper;
+    refHelper->ref();
+
+    sk_sp<GrTextureProxy> proxy = proxyProvider->createLazyProxy(
+            [refHelper, semaphore, backendTexture, surfaceOrigin]
+            (GrResourceProvider* resourceProvider, GrSurfaceOrigin* outOrigin) {
+                if (!resourceProvider) {
+                    // If we get here then we never created a texture to pass the refHelper ref off
+                    // to. Thus we must unref it ourselves.
+                    refHelper->unref();
+                    return sk_sp<GrTexture>();
+                }
+
+                if (semaphore && !semaphore->hasSubmittedWait()) {
+                    resourceProvider->priv().gpu()->waitSemaphore(semaphore);
+                }
+
+                sk_sp<GrTexture> tex;
+                if (refHelper->fBorrowedTexture) {
+                    // If a client re-draws the same image multiple times, the texture we return
+                    // will be cached and re-used. If they draw a subset, though, we may be
+                    // re-called. In that case, we want to re-use the borrowed texture we've
+                    // previously created.
+                    tex = sk_ref_sp(refHelper->fBorrowedTexture);
+                    SkASSERT(tex);
+                    // The texture is holding onto a ref to the refHelper so since we have a ref to
+                    // the texture we don't need to hold a ref to the refHelper. This unref's the
+                    // ref we grabbed on refHelper in the lambda capture for this proxy.
+                    refHelper->unref();
+                } else {
+                    // We just gained access to the texture. If we're on the original context, we
+                    // could use the original texture, but we'd have no way of detecting that it's
+                    // no longer in-use. So we always make a wrapped copy, where the release proc
+                    // informs us that the context is done with it. This is unfortunate - we'll have
+                    // two texture objects referencing the same GPU object. However, no client can
+                    // ever see the original texture, so this should be safe.
+                    tex = resourceProvider->wrapBackendTexture(backendTexture,
+                                                               kBorrow_GrWrapOwnership);
+                    if (!tex) {
+                        refHelper->unref();
+                        return sk_sp<GrTexture>();
+                    }
+                    refHelper->fBorrowedTexture = tex.get();
+
+                    // By setting this release proc on the texture we are passing our ref on the
+                    // refHelper to the texture.
+                    tex->setRelease(ReleaseRefHelper_TextureReleaseProc, refHelper);
+                }
+
+                *outOrigin = surfaceOrigin;
+                return tex;
+
+            }, desc, mipMapped, SkBackingFit::kExact, SkBudgeted::kNo);
 
     if (0 == origin.fX && 0 == origin.fY &&
         info.width() == fBackendTexture.width() && info.height() == fBackendTexture.height() &&

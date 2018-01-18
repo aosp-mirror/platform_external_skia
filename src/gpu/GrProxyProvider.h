@@ -32,7 +32,7 @@ public:
      * Assigns a unique key to a proxy. The proxy will be findable via this key using
      * findProxyByUniqueKey(). It is an error if an existing proxy already has a key.
      */
-    void assignUniqueKeyToProxy(const GrUniqueKey&, GrTextureProxy*);
+    bool assignUniqueKeyToProxy(const GrUniqueKey&, GrTextureProxy*);
 
     /*
      * Sets the unique key of the provided proxy to the unique key of the surface. The surface must
@@ -87,7 +87,6 @@ public:
                                             SkDestinationSurfaceColorMode mipColorMode =
                                                             SkDestinationSurfaceColorMode::kLegacy);
 
-
     /*
      * Create a mipmapped texture proxy without any data.
      *
@@ -103,10 +102,17 @@ public:
     sk_sp<GrTextureProxy> createProxy(const GrSurfaceDesc&, SkBackingFit, SkBudgeted,
                                       uint32_t flags = 0);
 
+    // These match the definitions in SkImage & GrTexture.h, for whence they came
+    typedef void* ReleaseContext;
+    typedef void (*ReleaseProc)(ReleaseContext);
+
     /*
      * Create a texture proxy that wraps a (non-renderable) backend texture.
      */
-    sk_sp<GrTextureProxy> createWrappedTextureProxy(const GrBackendTexture&, GrSurfaceOrigin);
+    sk_sp<GrTextureProxy> createWrappedTextureProxy(const GrBackendTexture&, GrSurfaceOrigin,
+                                                    GrWrapOwnership = kBorrow_GrWrapOwnership,
+                                                    ReleaseProc = nullptr,
+                                                    ReleaseContext = nullptr);
 
     /*
      * Create a texture proxy that wraps a backend texture and is both texture-able and renderable
@@ -127,6 +133,30 @@ public:
     sk_sp<GrSurfaceProxy> createWrappedRenderTargetProxy(const GrBackendTexture& tex,
                                                          GrSurfaceOrigin origin,
                                                          int sampleCnt);
+
+    using LazyInstantiateCallback = std::function<sk_sp<GrTexture>(GrResourceProvider*,
+                                                                   GrSurfaceOrigin* outOrigin)>;
+
+    enum class Renderable : bool {
+        kNo = false,
+        kYes = true
+    };
+
+    /**
+     * Creates a texture proxy that will be instantiated by a user-supplied callback during flush.
+     * (Stencil is not supported by this method.) The width and height must either both be greater
+     * than 0 or both less than or equal to zero. A non-positive value is a signal that the width
+     * and height are currently unknown.
+     *
+     * When called, the callback must be able to cleanup any resources that it captured at creation.
+     * It also must support being passed in a null GrResourceProvider. When this happens, the
+     * callback should cleanup any resources it captured and return an empty sk_sp<GrTextureProxy>.
+     */
+    sk_sp<GrTextureProxy> createLazyProxy(LazyInstantiateCallback&&, const GrSurfaceDesc&,
+                                          GrMipMapped, SkBackingFit, SkBudgeted);
+
+    sk_sp<GrTextureProxy> createFullyLazyProxy(LazyInstantiateCallback&&,
+                                               Renderable, GrPixelConfig);
 
     // 'proxy' is about to be used as a texture src or drawn to. This query can be used to
     // determine if it is going to need a texture domain or a full clear.
@@ -165,6 +195,10 @@ public:
     void removeAllUniqueKeys();
 
 private:
+    friend class GrAHardwareBufferImageGenerator; // for createWrapped
+
+    sk_sp<GrTextureProxy> createWrapped(sk_sp<GrTexture> tex, GrSurfaceOrigin origin);
+
     struct UniquelyKeyedProxyHashTraits {
         static const GrUniqueKey& GetKey(const GrTextureProxy& p) { return p.getUniqueKey(); }
 

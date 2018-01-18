@@ -83,6 +83,11 @@ GrSurfaceProxy::GrSurfaceProxy(sk_sp<GrSurface> surface, GrSurfaceOrigin origin,
 }
 
 GrSurfaceProxy::~GrSurfaceProxy() {
+    if (fLazyInstantiateCallback) {
+        // We have an uninstantiated lazy proxy. Call fLazyInstantiateCallback with a nullptr for
+        // the GrResourceProvider to signal the callback should clean itself up.
+        this->fLazyInstantiateCallback(nullptr, nullptr);
+    }
     // For this to be deleted the opList that held a ref on it (if there was one) must have been
     // deleted. Which would have cleared out this back pointer.
     SkASSERT(!fLastOpList);
@@ -221,59 +226,6 @@ GrRenderTargetOpList* GrSurfaceProxy::getLastRenderTargetOpList() {
 
 GrTextureOpList* GrSurfaceProxy::getLastTextureOpList() {
     return fLastOpList ? fLastOpList->asTextureOpList() : nullptr;
-}
-
-sk_sp<GrTextureProxy> GrSurfaceProxy::MakeWrapped(sk_sp<GrTexture> tex, GrSurfaceOrigin origin) {
-    if (!tex) {
-        return nullptr;
-    }
-
-    if (tex->getUniqueKey().isValid()) {
-        // The proxy may already be in the hash. Thus we need to look for it first before creating
-        // new one.
-        GrProxyProvider* provider = tex->getContext()->contextPriv().proxyProvider();
-        sk_sp<GrTextureProxy> proxy = provider->findProxyByUniqueKey(tex->getUniqueKey(), origin);
-        if (proxy) {
-            return proxy;
-        }
-    }
-
-    if (tex->asRenderTarget()) {
-        return sk_sp<GrTextureProxy>(new GrTextureRenderTargetProxy(std::move(tex), origin));
-    } else {
-        return sk_sp<GrTextureProxy>(new GrTextureProxy(std::move(tex), origin));
-    }
-}
-
-sk_sp<GrTextureProxy> GrSurfaceProxy::MakeLazy(LazyInstantiateCallback&& callback,
-                                               const GrSurfaceDesc& desc,
-                                               GrMipMapped mipMapped,
-                                               SkBackingFit fit,
-                                               SkBudgeted budgeted) {
-    SkASSERT((desc.fWidth <= 0 && desc.fHeight <= 0) ||
-             (desc.fWidth > 0 && desc.fHeight > 0));
-    uint32_t flags = GrResourceProvider::kNoPendingIO_Flag;
-    return sk_sp<GrTextureProxy>(SkToBool(kRenderTarget_GrSurfaceFlag & desc.fFlags) ?
-                                 new GrTextureRenderTargetProxy(std::move(callback), desc,
-                                                                mipMapped, fit, budgeted, flags) :
-                                 new GrTextureProxy(std::move(callback), desc, mipMapped, fit,
-                                                    budgeted, flags));
-}
-
-sk_sp<GrTextureProxy> GrSurfaceProxy::MakeFullyLazy(LazyInstantiateCallback&& callback,
-                                                    Renderable renderable, GrPixelConfig config) {
-    GrSurfaceDesc desc;
-    if (Renderable::kYes == renderable) {
-        desc.fFlags = kRenderTarget_GrSurfaceFlag;
-    }
-    desc.fOrigin = kTopLeft_GrSurfaceOrigin;
-    desc.fWidth = -1;
-    desc.fHeight = -1;
-    desc.fConfig = config;
-    desc.fSampleCnt = 0;
-
-    return MakeLazy(std::move(callback), desc, GrMipMapped::kNo, SkBackingFit::kApprox,
-                    SkBudgeted::kYes);
 }
 
 int GrSurfaceProxy::worstCaseWidth() const {
