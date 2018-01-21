@@ -325,18 +325,23 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
         shaderCaps->fShaderDerivativeSupport = ctxInfo.version() >= GR_GL_VER(3, 0) ||
             ctxInfo.hasExtension("GL_OES_standard_derivatives");
 
-        if (ctxInfo.version() >= GR_GL_VER(3,2)) {
-            shaderCaps->fGeometryShaderSupport = true;
-        } else if (ctxInfo.hasExtension("GL_EXT_geometry_shader")) {
-            shaderCaps->fGeometryShaderSupport = true;
-            shaderCaps->fGeometryShaderExtensionString = "GL_EXT_geometry_shader";
+        // Mali has support for geometry shaders, but in practice with ccpr they are slower than the
+        // backup impl that only uses vertex shaders.
+        if (kARM_GrGLVendor != ctxInfo.vendor()) {
+            if (ctxInfo.version() >= GR_GL_VER(3,2)) {
+                shaderCaps->fGeometryShaderSupport = true;
+            } else if (ctxInfo.hasExtension("GL_EXT_geometry_shader")) {
+                shaderCaps->fGeometryShaderSupport = true;
+                shaderCaps->fGeometryShaderExtensionString = "GL_EXT_geometry_shader";
+            }
+            if (shaderCaps->fGeometryShaderSupport && kQualcomm_GrGLDriver == ctxInfo.driver()) {
+                // Qualcomm driver @103.0 has been observed to crash compiling ccpr geometry
+                // shaders. @127.0 is the earliest verified driver to not crash.
+                shaderCaps->fGeometryShaderSupport =
+                        ctxInfo.driverVersion() >= GR_GL_DRIVER_VER(127,0);
+            }
+            shaderCaps->fGSInvocationsSupport = shaderCaps->fGeometryShaderSupport;
         }
-        if (shaderCaps->fGeometryShaderSupport && kQualcomm_GrGLDriver == ctxInfo.driver()) {
-            // Qualcomm driver @103.0 has been observed to crash compiling ccpr geometry shaders.
-            // @127.0 is the earliest verified driver to not crash.
-            shaderCaps->fGeometryShaderSupport = ctxInfo.driverVersion() >= GR_GL_DRIVER_VER(127,0);
-        }
-        shaderCaps->fGSInvocationsSupport = shaderCaps->fGeometryShaderSupport;
 
         shaderCaps->fIntegerSupport = ctxInfo.version() >= GR_GL_VER(3, 0) &&
             ctxInfo.glslGeneration() >= k330_GrGLSLGeneration; // We use this value for GLSL ES 3.0.
@@ -390,11 +395,6 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
          kImagination_GrGLVendor == ctxInfo.vendor() ||
          kQualcomm_GrGLVendor == ctxInfo.vendor())) {
         fPreferClientSideDynamicBuffers = true;
-    }
-
-    if (kARM_GrGLVendor == ctxInfo.vendor()) {
-        // Mali GPUs have rendering issues with CCPR. Blacklisting until we look into workarounds.
-        fBlacklistCoverageCounting = true;
     }
 
     if (!contextOptions.fAvoidStencilBuffers) {
@@ -716,6 +716,13 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
 
     this->applyOptionsOverrides(contextOptions);
     shaderCaps->applyOptionsOverrides(contextOptions);
+
+    // After applying overrides, check for geometry shader support on ANGLE/Skylake. The ccpr
+    // vertex-shader implementation does not work on this platform.
+    if (kANGLE_GrGLRenderer == ctxInfo.renderer() &&
+        GrGLANGLERenderer::kSkylake == ctxInfo.angleRenderer()) {
+        fBlacklistCoverageCounting = !fShaderCaps->geometryShaderSupport();
+    }
 }
 
 const char* get_glsl_version_decl_string(GrGLStandard standard, GrGLSLGeneration generation,
@@ -2130,7 +2137,7 @@ void GrGLCaps::initConfigTable(const GrContextOptions& contextOptions,
     // Gallium llvmpipe renderer on ES 3.0 does not have R8 so we use Alpha for
     // kAlpha_8_GrPixelConfig. Alpha8 is not a valid signed internal format so we must use the base
     // internal format for that config when doing TexImage calls.
-    if (kGalliumLLVM_GrGLRenderer == ctxInfo.renderer() && textureRedSupport) {
+    if (kGalliumLLVM_GrGLRenderer == ctxInfo.renderer() && !textureRedSupport) {
         SkASSERT(fConfigTable[kAlpha_8_GrPixelConfig].fFormats.fBaseInternalFormat ==
                  fConfigTable[kAlpha_8_as_Alpha_GrPixelConfig].fFormats.fBaseInternalFormat);
         fConfigTable[kAlpha_8_GrPixelConfig].fFormats.fInternalFormatTexImage =

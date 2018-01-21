@@ -403,8 +403,10 @@ void SkGpuDevice::drawRRect(const SkRRect& rrect, const SkPaint& paint) {
     }
 
     SkMaskFilter* mf = paint.getMaskFilter();
-    if (mf && mf->asFragmentProcessor(nullptr)) {
-        mf = nullptr; // already handled in SkPaintToGrPaint
+    if (mf) {
+        if (mf->hasFragmentProcessor()) {
+            mf = nullptr; // already handled in SkPaintToGrPaint
+        }
     }
 
     GrStyle style(paint);
@@ -1586,8 +1588,7 @@ void SkGpuDevice::drawShadow(const SkPath& path, const SkDrawShadowRec& rec) {
     ASSERT_SINGLE_OWNER
     GR_CREATE_TRACE_MARKER_CONTEXT("SkGpuDevice", "drawShadow", fContext.get());
 
-    GrColor color = SkColorToPremulGrColor(rec.fColor);
-    if (!fRenderTargetContext->drawFastShadow(this->clip(), color, this->ctm(), path, rec)) {
+    if (!fRenderTargetContext->drawFastShadow(this->clip(), this->ctm(), path, rec)) {
         // failed to find an accelerated case
         this->INHERITED::drawShadow(path, rec);
     }

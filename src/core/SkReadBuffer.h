@@ -77,6 +77,7 @@ public:
         k2PtConicalNoFlip_Version          = 58,
         kRemovePictureImageFilterLocalSpace = 59,
         kRemoveHeaderFlags_Version         = 60,
+        kTwoColorDrawShadow_Version        = 61,
     };
 
     /**
@@ -134,7 +135,7 @@ public:
     void readRegion(SkRegion* region);
 
     void readPath(SkPath* path);
-    virtual void readPaint(SkPaint* paint) { paint->unflatten(*this); }
+    virtual bool readPaint(SkPaint* paint) { return paint->unflatten(*this); }
 
     SkFlattenable* readFlattenable(SkFlattenable::Type);
     template <typename T> sk_sp<T> readFlattenable() {

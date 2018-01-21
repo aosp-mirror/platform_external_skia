@@ -57,13 +57,6 @@ static float set_error_code(gmkb::Error* error_out, gmkb::Error error) {
     return FLT_MAX;
 }
 
-static SkPixmap to_pixmap(const SkBitmap& bitmap) {
-    SkPixmap pixmap;
-    SkAssertResult(bitmap.peekPixels(&pixmap));
-    return pixmap;
-}
-
-
 static bool WritePixmapToFile(const SkPixmap& pixmap, const char* path) {
     SkFILEWStream wStream(path);
     SkPngEncoder::Options options;
@@ -101,7 +94,7 @@ static SkBitmap ReadPngRgba8888FromFile(skqp::AssetManager* assetManager, const 
         SkImageInfo info = SkImageInfo::Make(size.width(), size.height(), kColorType, kAlphaType);
         bitmap.allocPixels(info);
         SkASSERT(bitmap.rowBytes() == (unsigned)bitmap.width() * sizeof(uint32_t));
-        if (SkCodec::kSuccess != codec->getPixels(to_pixmap(bitmap))) {
+        if (SkCodec::kSuccess != codec->getPixels(bitmap.pixmap())) {
             bitmap.reset();
         }
     }
@@ -175,6 +168,7 @@ float Check(const uint32_t* pixels,
         gErrors.push_back(Run{SkString(backend), SkString(name), 0, 0});
     }
     if (report_directory_path && badness > 0 && report_directory_path[0] != '\0') {
+        sk_mkdir(report_directory_path);
         if (!backend) {
             backend = "skia";
         }
@@ -193,7 +187,7 @@ float Check(const uint32_t* pixels,
             errors[i] = error > 0 ? 0xFF000000 + (unsigned)error : 0x00000000;
         }
         error_path = SkOSPath::Join(report_subdirectory.c_str(), PATH_ERR_PNG);
-        SkAssertResult(WritePixmapToFile(to_pixmap(errorBitmap), error_path.c_str()));
+        SkAssertResult(WritePixmapToFile(errorBitmap.pixmap(), error_path.c_str()));
 
         SkString report_path = SkOSPath::Join(report_subdirectory.c_str(), PATH_REPORT);
 
@@ -226,6 +220,7 @@ bool MakeReport(const char* report_directory_path) {
         }
     }
 
+    sk_mkdir(report_directory_path);
     SkFILEWStream out(SkOSPath::Join(report_directory_path, PATH_REPORT).c_str());
     if (!out.isValid()) {
         return false;

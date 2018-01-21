@@ -182,7 +182,7 @@ inline bool GrDrawOpAtlas::updatePlot(GrDeferredUploadTarget* target, AtlasID* i
     // If our most recent upload has already occurred then we have to insert a new
     // upload. Otherwise, we already have a scheduled upload that hasn't yet ocurred.
     // This new update will piggy back on that previously scheduled update.
-    if (plot->lastUploadToken() < target->nextTokenToFlush()) {
+    if (plot->lastUploadToken() < target->tokenTracker()->nextTokenToFlush()) {
         // With c+14 we could move sk_sp into lamba to only ref once.
         sk_sp<Plot> plotsp(SkRef(plot));
 
@@ -244,7 +244,8 @@ bool GrDrawOpAtlas::addToAtlas(AtlasID* id, GrDeferredUploadTarget* target, int 
     for (unsigned int pageIdx = 0; pageIdx < fNumPages; ++pageIdx) {
         Plot* plot = fPages[pageIdx].fPlotList.tail();
         SkASSERT(plot);
-        if ((fNumPages == this->maxPages() && plot->lastUseToken() < target->nextTokenToFlush()) ||
+        if ((fNumPages == this->maxPages() &&
+             plot->lastUseToken() < target->tokenTracker()->nextTokenToFlush()) ||
             plot->flushesSinceLastUsed() >= kRecentlyUsedCount) {
             this->processEvictionAndResetRects(plot);
             SkASSERT(GrBytesPerPixel(fProxies[pageIdx]->config()) == plot->bpp());
@@ -277,7 +278,7 @@ bool GrDrawOpAtlas::addToAtlas(AtlasID* id, GrDeferredUploadTarget* target, int 
     Plot* plot = nullptr;
     for (int pageIdx = (int)(fNumPages-1); pageIdx >= 0; --pageIdx) {
         Plot* currentPlot = fPages[pageIdx].fPlotList.tail();
-        if (currentPlot->lastUseToken() != target->nextDrawToken()) {
+        if (currentPlot->lastUseToken() != target->tokenTracker()->nextDrawToken()) {
             plot = currentPlot;
             break;
         }
@@ -463,18 +464,9 @@ bool GrDrawOpAtlas::createNewPage() {
     desc.fHeight = fTextureHeight;
     desc.fConfig = fPixelConfig;
 
-    // We don't want to flush the context so we claim we're in the middle of flushing so as to
-    // guarantee we do not recieve a texture with pending IO
-    // TODO: Determine how to avoid having to do this. (https://bug.skia.org/4156)
-    static const uint32_t kFlags = GrResourceProvider::kNoPendingIO_Flag;
-    // MDB TODO: for now, wrap an instantiated texture. Having the deferred instantiation
-    // possess the correct properties (e.g., no pendingIO) should fall out of the system but
-    // should receive special attention.
-    // Note: When switching over to the deferred proxy, use the kExact flag to create
-    // the atlas and assert that the width & height are powers of 2.
-    // DDL TODO: remove this use of createInstantitateProxy & convert it to a testing-only method.
-    fProxies[fNumPages] = proxyProvider->createInstantiatedProxy(desc, SkBackingFit::kApprox,
-                                                                 SkBudgeted::kYes, kFlags);
+    SkASSERT(SkIsPow2(fTextureWidth) && SkIsPow2(fTextureHeight));
+    fProxies[fNumPages] = proxyProvider->createProxy(desc, SkBackingFit::kExact, SkBudgeted::kYes,
+                                                     GrResourceProvider::kNoPendingIO_Flag);
     if (!fProxies[fNumPages]) {
         return false;
     }

@@ -273,8 +273,6 @@ void SkPictureRecord::fillRestoreOffsetPlaceholdersForCurrentStackLevel(uint32_t
         // assert that the final offset value points to a save verb
         uint32_t opSize;
         DrawType drawOp = peek_op_and_size(&fWriter, -offset, &opSize);
-        SkASSERT(SAVE_LAYER_SAVEFLAGS_DEPRECATED != drawOp);
-        SkASSERT(SAVE_LAYER_SAVELAYERFLAGS_DEPRECATED_JAN_2016 != drawOp);
         SkASSERT(SAVE == drawOp || SAVE_LAYER_SAVELAYERREC == drawOp);
     }
 #endif
@@ -795,9 +793,8 @@ void SkPictureRecord::onDrawShadowRec(const SkPath& path, const SkDrawShadowRec&
     fWriter.writePoint3(rec.fZPlaneParams);
     fWriter.writePoint3(rec.fLightPos);
     fWriter.writeScalar(rec.fLightRadius);
-    fWriter.writeScalar(rec.fAmbientAlpha);
-    fWriter.writeScalar(rec.fSpotAlpha);
-    fWriter.write32(rec.fColor);
+    fWriter.write32(rec.fAmbientColor);
+    fWriter.write32(rec.fSpotColor);
     fWriter.write32(rec.fFlags);
 
     this->validate(initialOffset, size);
