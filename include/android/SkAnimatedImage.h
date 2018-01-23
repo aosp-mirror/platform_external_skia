@@ -67,6 +67,14 @@ public:
     bool isRunning() const { return fRunning && !fFinished; }
 
     /**
+     *  Whether the animation completed.
+     *
+     *  Returns true after all repetitions are complete, or an error stops the
+     *  animation. Gets reset to false if the animation is restarted.
+     */
+    bool isFinished() const { return fFinished; }
+
+    /**
      *  Update the current time. If the image is animating, this may decode
      *  a new frame.
      *
@@ -75,6 +83,17 @@ public:
      *      show, and -1.0 if the animation is not running.
      */
     double update(double msecs);
+
+    /**
+     *  Change the repetition count.
+     *
+     *  By default, the image will repeat the number of times indicated in the
+     *  encoded data.
+     *
+     *  Use SkCodec::kRepetitionCountInfinite for infinite, and 0 to show all
+     *  frames once and then stop.
+     */
+    void setRepetitionCount(int count);
 
 protected:
     SkRect onGetBounds() override;
@@ -95,6 +114,7 @@ private:
     const SkImageInfo               fDecodeInfo;
     const SkIRect                   fCropRect;
     const sk_sp<SkPicture>          fPostProcess;
+    const int                       fFrameCount;
     const bool                      fSimple;     // no crop, scale, or postprocess
     SkMatrix                        fMatrix;     // used only if !fSimple
 
@@ -104,9 +124,15 @@ private:
     double                          fRemainingMS;
     Frame                           fActiveFrame;
     Frame                           fRestoreFrame;
+    int                             fRepetitionCount;
+    int                             fRepetitionsCompleted;
 
     SkAnimatedImage(std::unique_ptr<SkAndroidCodec>, SkISize scaledSize,
             SkImageInfo decodeInfo, SkIRect cropRect, sk_sp<SkPicture> postProcess);
+    SkAnimatedImage(std::unique_ptr<SkAndroidCodec>);
+
+    int computeNextFrame(int current, bool* animationEnded);
+    double finish();
 
     typedef SkDrawable INHERITED;
 };
