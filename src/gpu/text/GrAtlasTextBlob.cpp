@@ -13,6 +13,7 @@
 #include "SkColorFilter.h"
 #include "SkDrawFilter.h"
 #include "SkGlyphCache.h"
+#include "SkMaskFilterBase.h"
 #include "SkTextBlobRunIterator.h"
 #include "ops/GrAtlasTextOp.h"
 
@@ -49,7 +50,7 @@ sk_sp<GrAtlasTextBlob> GrAtlasTextBlob::Make(GrMemoryPool* pool, int glyphCount,
 
 SkGlyphCache* GrAtlasTextBlob::setupCache(int runIndex,
                                           const SkSurfaceProps& props,
-                                          uint32_t scalerContextFlags,
+                                          SkScalerContextFlags scalerContextFlags,
                                           const SkPaint& skPaint,
                                           const SkMatrix* viewMatrix) {
     GrAtlasTextBlob::Run* run = &fRuns[runIndex];
@@ -58,7 +59,8 @@ SkGlyphCache* GrAtlasTextBlob::setupCache(int runIndex,
     SkAutoDescriptor* desc = run->fOverrideDescriptor.get() ? run->fOverrideDescriptor.get() :
                                                               &run->fDescriptor;
     SkScalerContextEffects effects;
-    skPaint.getScalerContextDescriptor(&effects, desc, props, scalerContextFlags, viewMatrix);
+    SkScalerContext::CreateDescriptorAndEffectsUsingPaint(
+        skPaint, &props, scalerContextFlags, viewMatrix, desc, &effects);
     run->fTypeface.reset(SkSafeRef(skPaint.getTypeface()));
     run->fPathEffect = sk_ref_sp(effects.fPathEffect);
     run->fMaskFilter = sk_ref_sp(effects.fMaskFilter);
@@ -152,7 +154,7 @@ void GrAtlasTextBlob::appendBigGlyph(GrGlyph* glyph, SkGlyphCache* cache, const 
 }
 
 bool GrAtlasTextBlob::mustRegenerate(const GrTextUtils::Paint& paint,
-                                     const SkMaskFilter::BlurRec& blurRec,
+                                     const SkMaskFilterBase::BlurRec& blurRec,
                                      const SkMatrix& viewMatrix, SkScalar x, SkScalar y) {
     // If we have LCD text then our canonical color will be set to transparent, in this case we have
     // to regenerate the blob on any color change

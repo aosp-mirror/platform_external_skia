@@ -605,8 +605,9 @@ void GrStencilAndCoverTextContext::TextRun::draw(GrContext* ctx,
 
 SkGlyphCache* GrStencilAndCoverTextContext::TextRun::getGlyphCache() const {
     if (!fDetachedGlyphCache) {
-        fDetachedGlyphCache = fFont.detachCache(nullptr, SkPaint::kNone_ScalerContextFlags,
-                                                nullptr);
+        fDetachedGlyphCache = SkGlyphCache::DetachCacheUsingPaint(fFont, nullptr,
+                                                                  SkScalerContextFlags::kNone,
+                                                                  nullptr);
     }
     return fDetachedGlyphCache;
 }

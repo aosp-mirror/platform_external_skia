@@ -238,7 +238,6 @@ cc_library_static {
         "src/core/SkExecutor.cpp",
         "src/core/SkFDot6Constants.cpp",
         "src/core/SkFlattenable.cpp",
-        "src/core/SkFlattenableSerialization.cpp",
         "src/core/SkFont.cpp",
         "src/core/SkFontDescriptor.cpp",
         "src/core/SkFontLCDConfig.cpp",

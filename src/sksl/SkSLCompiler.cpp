@@ -200,8 +200,7 @@ Compiler::Compiler(Flags flags)
     fIRGenerator->fSymbolTable->add(skArgsName, std::unique_ptr<Symbol>(skArgs));
 
     std::vector<std::unique_ptr<ProgramElement>> ignored;
-    fIRGenerator->convertProgram(Program::kFragment_Kind, SKSL_INCLUDE, strlen(SKSL_INCLUDE),
-                                 *fTypes, &ignored);
+    fIRGenerator->convertProgram(SKSL_INCLUDE, strlen(SKSL_INCLUDE), *fTypes, &ignored);
     fIRGenerator->fSymbolTable->markAllFunctionsBuiltin();
     if (fErrorCount) {
         printf("Unexpected errors: %s\n", fErrorText.c_str());
@@ -713,7 +712,8 @@ void Compiler::simplifyExpression(DefinitionMap& definitions,
                     }
                     else if (is_constant(*bin->fLeft, 0)) {
                         if (bin->fLeft->fType.kind() == Type::kScalar_Kind &&
-                            bin->fRight->fType.kind() == Type::kVector_Kind) {
+                            bin->fRight->fType.kind() == Type::kVector_Kind &&
+                            !bin->fRight->hasSideEffects()) {
                             // 0 * float4(x) -> float4(0)
                             vectorize_left(&b, iter, outUpdated, outNeedsRescan);
                         } else {
@@ -739,7 +739,8 @@ void Compiler::simplifyExpression(DefinitionMap& definitions,
                     }
                     else if (is_constant(*bin->fRight, 0)) {
                         if (bin->fLeft->fType.kind() == Type::kVector_Kind &&
-                            bin->fRight->fType.kind() == Type::kScalar_Kind) {
+                            bin->fRight->fType.kind() == Type::kScalar_Kind &&
+                            !bin->fLeft->hasSideEffects()) {
                             // float4(x) * 0 -> float4(0)
                             vectorize_right(&b, iter, outUpdated, outNeedsRescan);
                         } else {
@@ -805,7 +806,8 @@ void Compiler::simplifyExpression(DefinitionMap& definitions,
                         }
                     } else if (is_constant(*bin->fLeft, 0)) {
                         if (bin->fLeft->fType.kind() == Type::kScalar_Kind &&
-                            bin->fRight->fType.kind() == Type::kVector_Kind) {
+                            bin->fRight->fType.kind() == Type::kVector_Kind &&
+                            !bin->fRight->hasSideEffects()) {
                             // 0 / float4(x) -> float4(0)
                             vectorize_left(&b, iter, outUpdated, outNeedsRescan);
                         } else {
@@ -1162,19 +1164,19 @@ std::unique_ptr<Program> Compiler::convertProgram(Program::Kind kind, String tex
     std::vector<std::unique_ptr<ProgramElement>> elements;
     switch (kind) {
         case Program::kVertex_Kind:
-            fIRGenerator->convertProgram(kind, SKSL_VERT_INCLUDE, strlen(SKSL_VERT_INCLUDE),
-                                         *fTypes, &elements);
+            fIRGenerator->convertProgram(SKSL_VERT_INCLUDE, strlen(SKSL_VERT_INCLUDE), *fTypes,
+                                         &elements);
             break;
         case Program::kFragment_Kind:
-            fIRGenerator->convertProgram(kind, SKSL_FRAG_INCLUDE, strlen(SKSL_FRAG_INCLUDE),
-                                         *fTypes, &elements);
+            fIRGenerator->convertProgram(SKSL_FRAG_INCLUDE, strlen(SKSL_FRAG_INCLUDE), *fTypes,
+                                         &elements);
             break;
         case Program::kGeometry_Kind:
-            fIRGenerator->convertProgram(kind, SKSL_GEOM_INCLUDE, strlen(SKSL_GEOM_INCLUDE),
-                                         *fTypes, &elements);
+            fIRGenerator->convertProgram(SKSL_GEOM_INCLUDE, strlen(SKSL_GEOM_INCLUDE), *fTypes,
+                                         &elements);
             break;
         case Program::kFragmentProcessor_Kind:
-            fIRGenerator->convertProgram(kind, SKSL_FP_INCLUDE, strlen(SKSL_FP_INCLUDE), *fTypes,
+            fIRGenerator->convertProgram(SKSL_FP_INCLUDE, strlen(SKSL_FP_INCLUDE), *fTypes,
                                          &elements);
             break;
     }
@@ -1186,7 +1188,7 @@ std::unique_ptr<Program> Compiler::convertProgram(Program::Kind kind, String tex
     }
     std::unique_ptr<String> textPtr(new String(std::move(text)));
     fSource = textPtr.get();
-    fIRGenerator->convertProgram(kind, textPtr->c_str(), textPtr->size(), *fTypes, &elements);
+    fIRGenerator->convertProgram(textPtr->c_str(), textPtr->size(), *fTypes, &elements);
     if (!fErrorCount) {
         for (auto& element : elements) {
             if (element->fKind == ProgramElement::kFunction_Kind) {
