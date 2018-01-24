@@ -8,21 +8,36 @@
 #ifndef SkScalerContext_DEFINED
 #define SkScalerContext_DEFINED
 
+#include <memory>
+
 #include "SkGlyph.h"
 #include "SkMask.h"
+#include "SkMaskFilter.h"
 #include "SkMaskGamma.h"
 #include "SkMatrix.h"
 #include "SkPaint.h"
 #include "SkTypeface.h"
+#include "SkWriteBuffer.h"
 
+class SkAutoDescriptor;
 class SkDescriptor;
 class SkMaskFilter;
 class SkPathEffect;
+
+enum SkScalerContextFlags : uint32_t {
+    kNone                      = 0,
+    kFakeGamma                 = 1 << 0,
+    kBoostContrast             = 1 << 1,
+    kFakeGammaAndBoostContrast = kFakeGamma | kBoostContrast,
+};
 
 struct SkScalerContextEffects {
     SkScalerContextEffects() : fPathEffect(nullptr), fMaskFilter(nullptr) {}
     SkScalerContextEffects(SkPathEffect* pe, SkMaskFilter* mf)
         : fPathEffect(pe), fMaskFilter(mf) {}
+    explicit SkScalerContextEffects(const SkPaint& paint)
+        : fPathEffect(paint.getPathEffect())
+        , fMaskFilter(paint.getMaskFilter()) {}
 
     SkPathEffect*   fPathEffect;
     SkMaskFilter*   fMaskFilter;
@@ -101,7 +116,7 @@ struct SkScalerContextRec {
     // Warning: when adding members note that the size of this structure
     // must be a multiple of 4. SkDescriptor requires that its arguments be
     // multiples of four and this structure is put in an SkDescriptor in
-    // SkPaint::MakeRec.
+    // SkPaint::MakeRecAndEffects.
 
     void    getMatrixFrom2x2(SkMatrix*) const;
     void    getLocalMatrix(SkMatrix*) const;
@@ -260,9 +275,21 @@ public:
     static bool   GetGammaLUTData(SkScalar contrast, SkScalar paintGamma, SkScalar deviceGamma,
                                   uint8_t* data);
 
-    static void MakeRec(const SkPaint&, const SkSurfaceProps* surfaceProps,
-                        const SkMatrix*, SkScalerContextRec* rec);
-    static inline void PostMakeRec(const SkPaint&, SkScalerContextRec*);
+    static void MakeRecAndEffects(const SkPaint& paint,
+                                  const SkSurfaceProps* surfaceProps,
+                                  const SkMatrix* deviceMatrix,
+                                  SkScalerContextFlags scalerContextFlags,
+                                  SkScalerContextRec* rec,
+                                  SkScalerContextEffects* effects);
+
+    static SkDescriptor* AutoDescriptorGivenRecAndEffects(
+        const SkScalerContextRec& rec,
+        const SkScalerContextEffects& effects,
+        SkAutoDescriptor* ad);
+
+    static std::unique_ptr<SkDescriptor> DescriptorGivenRecAndEffects(
+        const SkScalerContextRec& rec,
+        const SkScalerContextEffects& effects);
 
     static SkMaskGamma::PreBlend GetMaskPreBlend(const SkScalerContextRec& rec);
 
@@ -277,6 +304,12 @@ public:
     *  As an example, the identity matrix will return kX_SkAxisAlignment
     */
     SkAxisAlignment computeAxisAlignmentForHText();
+
+    static SkDescriptor* CreateDescriptorAndEffectsUsingPaint(
+        const SkPaint& paint, const SkSurfaceProps* surfaceProps,
+        SkScalerContextFlags scalerContextFlags,
+        const SkMatrix* deviceMatrix, SkAutoDescriptor* ad,
+        SkScalerContextEffects* effects);
 
 protected:
     SkScalerContextRec fRec;
