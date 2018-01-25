@@ -349,6 +349,7 @@ cc_library_static {
         "src/core/SkTime.cpp",
         "src/core/SkTypeface.cpp",
         "src/core/SkTypefaceCache.cpp",
+        "src/core/SkTypeface_remote.cpp",
         "src/core/SkUnPreMultiply.cpp",
         "src/core/SkUtils.cpp",
         "src/core/SkVertState.cpp",
