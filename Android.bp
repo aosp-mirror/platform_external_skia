@@ -1049,6 +1049,7 @@ cc_test {
         "dm/DMSrcSink.cpp",
         "experimental/skottie/Skottie.cpp",
         "experimental/skottie/SkottieAnimator.cpp",
+        "experimental/skottie/SkottieParser.cpp",
         "experimental/skottie/SkottieProperties.cpp",
         "experimental/sksg/SkSGDraw.cpp",
         "experimental/sksg/SkSGEffectNode.cpp",
