@@ -277,20 +277,12 @@ bool GrContext::init(const GrContextOptions& options) {
             new GrDrawingManager(this, prcOptions, atlasTextContextOptions, &fSingleOwner));
 
     GrDrawOpAtlas::AllowMultitexturing allowMultitexturing;
-    switch (options.fAllowMultipleGlyphCacheTextures) {
-        case GrContextOptions::Enable::kDefault:
-#ifdef SK_BUILD_FOR_IOS
-            allowMultitexturing = GrDrawOpAtlas::AllowMultitexturing::kNo;
-#else
-            allowMultitexturing = GrDrawOpAtlas::AllowMultitexturing::kYes;
-#endif
-            break;
-        case GrContextOptions::Enable::kNo:
-            allowMultitexturing = GrDrawOpAtlas::AllowMultitexturing::kNo;
-            break;
-        case GrContextOptions::Enable::kYes:
-            allowMultitexturing = GrDrawOpAtlas::AllowMultitexturing::kYes;
-            break;
+    if (GrContextOptions::Enable::kNo == options.fAllowMultipleGlyphCacheTextures ||
+        // multitexturing supported only if range can represent the index + texcoords fully
+        !(fCaps->shaderCaps()->floatIs32Bits() || fCaps->shaderCaps()->integerSupport())) {
+        allowMultitexturing = GrDrawOpAtlas::AllowMultitexturing::kNo;
+    } else {
+        allowMultitexturing = GrDrawOpAtlas::AllowMultitexturing::kYes;
     }
     fAtlasGlyphCache = new GrAtlasGlyphCache(this, options.fGlyphCacheTextureMaximumBytes,
                                              allowMultitexturing);
@@ -806,24 +798,6 @@ void GrContextPriv::flushSurfaceIO(GrSurfaceProxy* proxy) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-int GrContext::getRecommendedSampleCount(GrPixelConfig config,
-                                         SkScalar dpi) const {
-    ASSERT_SINGLE_OWNER
-
-    if (!this->caps()->isConfigRenderable(config, true)) {
-        return 0;
-    }
-    int chosenSampleCount = 0;
-    if (fGpu->caps()->shaderCaps()->pathRenderingSupport()) {
-        if (dpi >= 250.0f) {
-            chosenSampleCount = 4;
-        } else {
-            chosenSampleCount = 16;
-        }
-    }
-    int supportedSampleCount = fGpu->caps()->getSampleCount(chosenSampleCount, config);
-    return chosenSampleCount <= supportedSampleCount ? supportedSampleCount : 0;
-}
 
 sk_sp<GrSurfaceContext> GrContextPriv::makeWrappedSurfaceContext(sk_sp<GrSurfaceProxy> proxy,
                                                                  sk_sp<SkColorSpace> colorSpace) {
