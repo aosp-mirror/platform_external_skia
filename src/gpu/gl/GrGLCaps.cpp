@@ -117,13 +117,6 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
         fTextureBarrierSupport = ctxInfo.hasExtension("GL_NV_texture_barrier");
     }
 
-    if (kGL_GrGLStandard == standard) {
-        fSampleLocationsSupport = version >= GR_GL_VER(3,2) ||
-                                  ctxInfo.hasExtension("GL_ARB_texture_multisample");
-    } else {
-        fSampleLocationsSupport = version >= GR_GL_VER(3,1);
-    }
-
     fImagingSupport = kGL_GrGLStandard == standard &&
                       ctxInfo.hasExtension("GL_ARB_imaging");
 
@@ -730,35 +723,6 @@ void GrGLCaps::initGLSL(const GrGLContextInfo& ctxInfo, const GrGLInterface* gli
         }
     }
 
-    if (kGL_GrGLStandard == standard) {
-        shaderCaps->fMultisampleInterpolationSupport =
-                ctxInfo.glslGeneration() >= k400_GrGLSLGeneration;
-    } else {
-        if (ctxInfo.glslGeneration() >= k320es_GrGLSLGeneration) {
-            shaderCaps->fMultisampleInterpolationSupport = true;
-        } else if (ctxInfo.hasExtension("GL_OES_shader_multisample_interpolation")) {
-            shaderCaps->fMultisampleInterpolationSupport = true;
-            shaderCaps->fMultisampleInterpolationExtensionString =
-                "GL_OES_shader_multisample_interpolation";
-        }
-    }
-
-    if (kGL_GrGLStandard == standard) {
-        shaderCaps->fSampleVariablesSupport = ctxInfo.glslGeneration() >= k400_GrGLSLGeneration;
-    } else {
-        if (ctxInfo.glslGeneration() >= k320es_GrGLSLGeneration) {
-            shaderCaps->fSampleVariablesSupport = true;
-        } else if (ctxInfo.hasExtension("GL_OES_sample_variables")) {
-            shaderCaps->fSampleVariablesSupport = true;
-            shaderCaps->fSampleVariablesExtensionString = "GL_OES_sample_variables";
-        }
-    }
-
-    if (shaderCaps->fSampleVariablesSupport &&
-        ctxInfo.hasExtension("GL_NV_sample_mask_override_coverage")) {
-        shaderCaps->fSampleMaskOverrideCoverageSupport = true;
-    }
-
     shaderCaps->fVersionDeclString = get_glsl_version_decl_string(standard,
                                                                   shaderCaps->fGLSLGeneration,
                                                                   fIsCoreProfile);
@@ -1012,19 +976,10 @@ void GrGLCaps::initFSAASupport(const GrContextOptions& contextOptions, const GrG
         fMSFBOType = kNone_MSFBOType;
     }
 
-    if (GrGLCaps::kES_IMG_MsToTexture_MSFBOType == fMSFBOType) {
-        GR_GL_GetIntegerv(gli, GR_GL_MAX_SAMPLES_IMG, &fMaxStencilSampleCount);
-    } else if (GrGLCaps::kNone_MSFBOType != fMSFBOType) {
-        GR_GL_GetIntegerv(gli, GR_GL_MAX_SAMPLES, &fMaxStencilSampleCount);
-    }
     // We only have a use for raster multisample if there is coverage modulation from mixed samples.
     if (fUsesMixedSamples && ctxInfo.hasExtension("GL_EXT_raster_multisample")) {
         GR_GL_GetIntegerv(gli, GR_GL_MAX_RASTER_SAMPLES, &fMaxRasterSamples);
-        // This is to guard against platforms that may not support as many samples for
-        // glRasterSamples as they do for framebuffers.
-        fMaxStencilSampleCount = SkTMin(fMaxStencilSampleCount, fMaxRasterSamples);
     }
-    fMaxColorSampleCount = fMaxStencilSampleCount;
 }
 
 void GrGLCaps::initBlendEqationSupport(const GrGLContextInfo& ctxInfo) {
@@ -1989,10 +1944,19 @@ void GrGLCaps::initConfigTable(const GrContextOptions& contextOptions,
                     delete[] temp;
                 }
             } else {
-                static const int kDefaultSamples[] = {0,1,2,4,8};
+                // Fake out the table using some semi-standard counts up to the max allowed sample
+                // count.
+                int maxSampleCnt = 0;
+                if (GrGLCaps::kES_IMG_MsToTexture_MSFBOType == fMSFBOType) {
+                    GR_GL_GetIntegerv(gli, GR_GL_MAX_SAMPLES_IMG, &maxSampleCnt);
+                } else if (GrGLCaps::kNone_MSFBOType != fMSFBOType) {
+                    GR_GL_GetIntegerv(gli, GR_GL_MAX_SAMPLES, &maxSampleCnt);
+                }
+
+                static constexpr int kDefaultSamples[] = {0, 1, 2, 4, 8};
                 int count = SK_ARRAY_COUNT(kDefaultSamples);
                 for (; count > 0; --count) {
-                    if (kDefaultSamples[count-1] <= fMaxColorSampleCount) {
+                    if (kDefaultSamples[count - 1] <= maxSampleCnt) {
                         break;
                     }
                 }
@@ -2296,12 +2260,6 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
     // TODO: Once this is fixed we can update the check here to look at a driver version number too.
     if (kAdreno5xx_GrGLRenderer == ctxInfo.renderer()) {
         shaderCaps->fFBFetchSupport = false;
-    }
-
-    // Pre-361 NVIDIA has a bug with NV_sample_mask_override_coverage.
-    if (kNVIDIA_GrGLDriver == ctxInfo.driver() &&
-        ctxInfo.driverVersion() < GR_GL_DRIVER_VER(361,00)) {
-        shaderCaps->fSampleMaskOverrideCoverageSupport = false;
     }
 
     // Adreno GPUs have a tendency to drop tiles when there is a divide-by-zero in a shader

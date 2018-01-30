@@ -50,7 +50,6 @@ GrCaps::GrCaps(const GrContextOptions& options) {
     fGpuTracingSupport = false;
     fOversizedStencilSupport = false;
     fTextureBarrierSupport = false;
-    fSampleLocationsSupport = false;
     fMultisampleDisableSupport = false;
     fInstanceAttribSupport = false;
     fUsesMixedSamples = false;
@@ -70,8 +69,6 @@ GrCaps::GrCaps(const GrContextOptions& options) {
     fMaxVertexAttributes = 0;
     fMaxRenderTargetSize = 1;
     fMaxTextureSize = 1;
-    fMaxColorSampleCount = 0;
-    fMaxStencilSampleCount = 0;
     fMaxRasterSamples = 0;
     fMaxWindowRectangles = 0;
 
@@ -157,7 +154,6 @@ void GrCaps::dumpJSON(SkJSONWriter* writer) const {
     writer->appendBool("Gpu Tracing Support", fGpuTracingSupport);
     writer->appendBool("Oversized Stencil Support", fOversizedStencilSupport);
     writer->appendBool("Texture Barrier Support", fTextureBarrierSupport);
-    writer->appendBool("Sample Locations Support", fSampleLocationsSupport);
     writer->appendBool("Multisample disable support", fMultisampleDisableSupport);
     writer->appendBool("Instance Attrib Support", fInstanceAttribSupport);
     writer->appendBool("Uses Mixed Samples", fUsesMixedSamples);
@@ -180,8 +176,6 @@ void GrCaps::dumpJSON(SkJSONWriter* writer) const {
     writer->appendS32("Max Vertex Attributes", fMaxVertexAttributes);
     writer->appendS32("Max Texture Size", fMaxTextureSize);
     writer->appendS32("Max Render Target Size", fMaxRenderTargetSize);
-    writer->appendS32("Max Color Sample Count", fMaxColorSampleCount);
-    writer->appendS32("Max Stencil Sample Count", fMaxStencilSampleCount);
     writer->appendS32("Max Raster Samples", fMaxRasterSamples);
     writer->appendS32("Max Window Rectangles", fMaxWindowRectangles);
     writer->appendS32("Max Clip Analytic Fragment Processors", fMaxClipAnalyticFPs);
