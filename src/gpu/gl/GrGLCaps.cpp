@@ -117,6 +117,13 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
         fTextureBarrierSupport = ctxInfo.hasExtension("GL_NV_texture_barrier");
     }
 
+    if (kGL_GrGLStandard == standard) {
+        fSampleLocationsSupport = version >= GR_GL_VER(3,2) ||
+                                  ctxInfo.hasExtension("GL_ARB_texture_multisample");
+    } else {
+        fSampleLocationsSupport = version >= GR_GL_VER(3,1);
+    }
+
     fImagingSupport = kGL_GrGLStandard == standard &&
                       ctxInfo.hasExtension("GL_ARB_imaging");
 
@@ -721,6 +728,35 @@ void GrGLCaps::initGLSL(const GrGLContextInfo& ctxInfo, const GrGLInterface* gli
             shaderCaps->fNoPerspectiveInterpolationExtensionString =
                 "GL_NV_shader_noperspective_interpolation";
         }
+    }
+
+    if (kGL_GrGLStandard == standard) {
+        shaderCaps->fMultisampleInterpolationSupport =
+                ctxInfo.glslGeneration() >= k400_GrGLSLGeneration;
+    } else {
+        if (ctxInfo.glslGeneration() >= k320es_GrGLSLGeneration) {
+            shaderCaps->fMultisampleInterpolationSupport = true;
+        } else if (ctxInfo.hasExtension("GL_OES_shader_multisample_interpolation")) {
+            shaderCaps->fMultisampleInterpolationSupport = true;
+            shaderCaps->fMultisampleInterpolationExtensionString =
+                "GL_OES_shader_multisample_interpolation";
+        }
+    }
+
+    if (kGL_GrGLStandard == standard) {
+        shaderCaps->fSampleVariablesSupport = ctxInfo.glslGeneration() >= k400_GrGLSLGeneration;
+    } else {
+        if (ctxInfo.glslGeneration() >= k320es_GrGLSLGeneration) {
+            shaderCaps->fSampleVariablesSupport = true;
+        } else if (ctxInfo.hasExtension("GL_OES_sample_variables")) {
+            shaderCaps->fSampleVariablesSupport = true;
+            shaderCaps->fSampleVariablesExtensionString = "GL_OES_sample_variables";
+        }
+    }
+
+    if (shaderCaps->fSampleVariablesSupport &&
+        ctxInfo.hasExtension("GL_NV_sample_mask_override_coverage")) {
+        shaderCaps->fSampleMaskOverrideCoverageSupport = true;
     }
 
     shaderCaps->fVersionDeclString = get_glsl_version_decl_string(standard,
@@ -2262,6 +2298,12 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
         shaderCaps->fFBFetchSupport = false;
     }
 
+    // Pre-361 NVIDIA has a bug with NV_sample_mask_override_coverage.
+    if (kNVIDIA_GrGLDriver == ctxInfo.driver() &&
+        ctxInfo.driverVersion() < GR_GL_DRIVER_VER(361,00)) {
+        shaderCaps->fSampleMaskOverrideCoverageSupport = false;
+    }
+
     // Adreno GPUs have a tendency to drop tiles when there is a divide-by-zero in a shader
     shaderCaps->fDropsTileOnZeroDivide = kQualcomm_GrGLVendor == ctxInfo.vendor();
 
@@ -2459,6 +2501,8 @@ bool validate_sized_format(GrGLenum format, SkColorType ct, GrPixelConfig* confi
                 *config = kSRGBA_8888_GrPixelConfig;
             }
             break;
+        case kRGB_888x_SkColorType:
+            return false;
         case kBGRA_8888_SkColorType:
             if (GR_GL_RGBA8 == format) {
                 if (kGL_GrGLStandard == standard) {
@@ -2472,6 +2516,10 @@ bool validate_sized_format(GrGLenum format, SkColorType ct, GrPixelConfig* confi
                 *config = kSBGRA_8888_GrPixelConfig;
             }
             break;
+        case kRGBA_1010102_SkColorType:
+            return false;
+        case kRGB_101010x_SkColorType:
+            return false;
         case kGray_8_SkColorType:
             if (GR_GL_LUMINANCE8 == format) {
                 *config = kGray_8_as_Lum_GrPixelConfig;
