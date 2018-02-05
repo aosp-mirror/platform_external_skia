@@ -46,28 +46,6 @@ GrResourceProvider::GrResourceProvider(GrGpu* gpu, GrResourceCache* cache, GrSin
     fQuadIndexBufferKey = gQuadIndexBufferKey;
 }
 
-bool validate_desc(const GrSurfaceDesc& desc, const GrCaps& caps, int levelCount = 0) {
-    if (desc.fWidth <= 0 || desc.fHeight <= 0) {
-        return false;
-    }
-    if (!caps.isConfigTexturable(desc.fConfig)) {
-        return false;
-    }
-    if (desc.fFlags & kRenderTarget_GrSurfaceFlag) {
-        if (!caps.isConfigRenderable(desc.fConfig, desc.fSampleCnt > 0)) {
-            return false;
-        }
-    } else {
-        if (desc.fSampleCnt) {
-            return false;
-        }
-    }
-    if (levelCount > 1 && (GrPixelConfigIsSint(desc.fConfig) || !caps.mipMapSupport())) {
-        return false;
-    }
-    return true;
-}
-
 sk_sp<GrTexture> GrResourceProvider::createTexture(const GrSurfaceDesc& desc, SkBudgeted budgeted,
                                                    const GrMipLevel texels[], int mipLevelCount,
                                                    SkDestinationSurfaceColorMode mipColorMode) {
@@ -79,7 +57,8 @@ sk_sp<GrTexture> GrResourceProvider::createTexture(const GrSurfaceDesc& desc, Sk
         return nullptr;
     }
 
-    if (!validate_desc(desc, *fCaps, mipLevelCount)) {
+    GrMipMapped mipMapped = mipLevelCount > 1 ? GrMipMapped::kYes : GrMipMapped::kNo;
+    if (!fCaps->validateSurfaceDesc(desc, mipMapped)) {
         return nullptr;
     }
 
@@ -113,6 +92,7 @@ static bool make_info(int w, int h, GrPixelConfig config, SkImageInfo* ii) {
 
 sk_sp<GrTexture> GrResourceProvider::createTexture(const GrSurfaceDesc& desc,
                                                    SkBudgeted budgeted,
+                                                   SkBackingFit fit,
                                                    const GrMipLevel& mipLevel) {
     ASSERT_SINGLE_OWNER
 
@@ -124,7 +104,7 @@ sk_sp<GrTexture> GrResourceProvider::createTexture(const GrSurfaceDesc& desc,
         return nullptr;
     }
 
-    if (!validate_desc(desc, *fCaps)) {
+    if (!fCaps->validateSurfaceDesc(desc, GrMipMapped::kNo)) {
         return nullptr;
     }
 
@@ -137,7 +117,7 @@ sk_sp<GrTexture> GrResourceProvider::createTexture(const GrSurfaceDesc& desc,
         // DDL TODO: remove this use of createInstantiatedProxy and convert it to a testing-only
         // method.
         sk_sp<GrTextureProxy> proxy = proxyProvider->createInstantiatedProxy(desc,
-                                                                             SkBackingFit::kExact,
+                                                                             fit,
                                                                              budgeted);
         if (proxy) {
             sk_sp<GrSurfaceContext> sContext = context->contextPriv().makeWrappedSurfaceContext(
@@ -156,12 +136,11 @@ sk_sp<GrTexture> GrResourceProvider::createTexture(const GrSurfaceDesc& desc,
 sk_sp<GrTexture> GrResourceProvider::createTexture(const GrSurfaceDesc& desc, SkBudgeted budgeted,
                                                    uint32_t flags) {
     ASSERT_SINGLE_OWNER
-
     if (this->isAbandoned()) {
         return nullptr;
     }
 
-    if (!validate_desc(desc, *fCaps)) {
+    if (!fCaps->validateSurfaceDesc(desc, GrMipMapped::kNo)) {
         return nullptr;
     }
 
@@ -182,7 +161,7 @@ sk_sp<GrTexture> GrResourceProvider::createApproxTexture(const GrSurfaceDesc& de
         return nullptr;
     }
 
-    if (!validate_desc(desc, *fCaps)) {
+    if (!fCaps->validateSurfaceDesc(desc, GrMipMapped::kNo)) {
         return nullptr;
     }
 
@@ -211,7 +190,7 @@ sk_sp<GrTexture> GrResourceProvider::refScratchTexture(const GrSurfaceDesc& desc
                                                        uint32_t flags) {
     ASSERT_SINGLE_OWNER
     SkASSERT(!this->isAbandoned());
-    SkASSERT(validate_desc(desc, *fCaps));
+    SkASSERT(fCaps->validateSurfaceDesc(desc, GrMipMapped::kNo));
 
     // We could make initial clears work with scratch textures but it is a rare case so we just opt
     // to fall back to making a new texture.

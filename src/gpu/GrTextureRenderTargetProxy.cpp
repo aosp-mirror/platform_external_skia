@@ -9,6 +9,7 @@
 
 #include "GrCaps.h"
 #include "GrTexture.h"
+#include "GrTexturePriv.h"
 #include "GrRenderTarget.h"
 #include "GrSurfaceProxyPriv.h"
 
@@ -53,7 +54,11 @@ GrTextureRenderTargetProxy::GrTextureRenderTargetProxy(sk_sp<GrSurface> surf,
 }
 
 size_t GrTextureRenderTargetProxy::onUninstantiatedGpuMemorySize() const {
-    int colorSamplesPerPixel = this->numColorSamples() + 1;
+    int colorSamplesPerPixel = this->numColorSamples();
+    if (colorSamplesPerPixel > 1) {
+        // Add one to account for the resolve buffer.
+        ++colorSamplesPerPixel += 1;
+    }
 
     // TODO: do we have enough information to improve this worst case estimate?
     return GrSurface::ComputeSize(this->config(), this->width(), this->height(),
@@ -61,6 +66,9 @@ size_t GrTextureRenderTargetProxy::onUninstantiatedGpuMemorySize() const {
 }
 
 bool GrTextureRenderTargetProxy::instantiate(GrResourceProvider* resourceProvider) {
+    if (LazyState::kNot != this->lazyInstantiationState()) {
+        return false;
+    }
     static constexpr GrSurfaceFlags kFlags = kRenderTarget_GrSurfaceFlag;
 
     const GrUniqueKey& key = this->getUniqueKey();
@@ -97,10 +105,14 @@ sk_sp<GrSurface> GrTextureRenderTargetProxy::createSurface(
 }
 
 #ifdef SK_DEBUG
-void GrTextureRenderTargetProxy::validateLazyTexture(const GrTexture* texture) {
-    SkASSERT(texture->asRenderTarget());
-    SkASSERT(texture->asRenderTarget()->numStencilSamples() == this->numStencilSamples());
-    SkASSERT(GrMipMapped::kNo == this->mipMapped());
+void GrTextureRenderTargetProxy::validateLazySurface(const GrSurface* surface) {
+    // Anything checked here should also be checking the GrTextureProxy version
+    SkASSERT(surface->asTexture());
+    SkASSERT(surface->asTexture()->texturePriv().mipMapped() == this->mipMapped());
+
+    // Anything checked here should also be checking the GrRenderTargetProxy version
+    SkASSERT(surface->asRenderTarget());
+    SkASSERT(surface->asRenderTarget()->numStencilSamples() == this->numStencilSamples());
 }
 #endif
 

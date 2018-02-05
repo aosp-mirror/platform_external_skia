@@ -38,6 +38,7 @@
 #include "GrResourceCache.h"
 #include "GrTest.h"
 #include "GrTexture.h"
+#include "SkGr.h"
 #endif
 
 using namespace sk_gpu_test;
@@ -486,6 +487,29 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(SkImage_drawAbandonedGpuImage, reporter, c
     surface->getCanvas()->drawImage(image, 0, 0);
 }
 
+DEF_GPUTEST_FOR_RENDERING_CONTEXTS(GrContext_colorTypeSupportedAsImage, reporter, ctxInfo) {
+    for (int ct = 0; ct < kLastEnum_SkColorType; ++ct) {
+        static constexpr int kSize = 10;
+        SkColorType colorType = static_cast<SkColorType>(ct);
+        bool can = ctxInfo.grContext()->colorTypeSupportedAsImage(colorType);
+        auto* gpu = ctxInfo.grContext()->contextPriv().getGpu();
+        GrBackendTexture backendTex = gpu->createTestingOnlyBackendTexture(
+                nullptr, kSize, kSize, colorType, false, GrMipMapped::kNo);
+        auto img =
+                SkImage::MakeFromTexture(ctxInfo.grContext(), backendTex, kTopLeft_GrSurfaceOrigin,
+                                         colorType, kOpaque_SkAlphaType, nullptr);
+        REPORTER_ASSERT(reporter, can == SkToBool(img),
+                        "%d, colorTypeSupportedAsImage:%d, actual:%d, ct:%d", can, SkToBool(img),
+                        colorType);
+
+        img.reset();
+        ctxInfo.grContext()->flush();
+        if (backendTex.isValid()) {
+            gpu->deleteTestingOnlyBackendTexture(&backendTex);
+        }
+    }
+}
+
 #endif
 
 class EmptyGenerator : public SkImageGenerator {
@@ -891,8 +915,18 @@ static void test_cross_context_image(skiatest::Reporter* reporter, const GrConte
                     ctx, GrSamplerState::ClampNearest(), nullptr, &texColorSpace, nullptr);
             REPORTER_ASSERT(reporter, proxySecondRef);
 
-            // Releae all refs from the original context
+            // Release first ref from the original context
             proxy.reset(nullptr);
+
+            // We released one proxy but not the other from the current borrowing context. Make sure
+            // a new context is still not able to borrow the texture.
+            otherTestContext->makeCurrent();
+            otherProxy = as_IB(refImg)->asTextureProxyRef(otherCtx, GrSamplerState::ClampNearest(),
+                                                          nullptr, &texColorSpace, nullptr);
+            REPORTER_ASSERT(reporter, !otherProxy);
+
+            // Release second ref from the original context
+            testContext->makeCurrent();
             proxySecondRef.reset(nullptr);
 
             // Now we should be able to borrow the texture from the other context

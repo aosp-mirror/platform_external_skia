@@ -61,7 +61,10 @@ GrTextureProxy::~GrTextureProxy() {
 }
 
 bool GrTextureProxy::instantiate(GrResourceProvider* resourceProvider) {
-    if (!this->instantiateImpl(resourceProvider, 0, /* needsStencil = */ false,
+    if (LazyState::kNot != this->lazyInstantiationState()) {
+        return false;
+    }
+    if (!this->instantiateImpl(resourceProvider, 1, /* needsStencil = */ false,
                                kNone_GrSurfaceFlags, fMipMapped, fMipColorMode,
                                fUniqueKey.isValid() ? &fUniqueKey : nullptr)) {
         return false;
@@ -73,7 +76,7 @@ bool GrTextureProxy::instantiate(GrResourceProvider* resourceProvider) {
 }
 
 sk_sp<GrSurface> GrTextureProxy::createSurface(GrResourceProvider* resourceProvider) const {
-    sk_sp<GrSurface> surface= this->createSurfaceImpl(resourceProvider, 0,
+    sk_sp<GrSurface> surface= this->createSurfaceImpl(resourceProvider, 1,
                                                       /* needsStencil = */ false,
                                                       kNone_GrSurfaceFlags,
                                                       fMipMapped, fMipColorMode);
@@ -148,8 +151,12 @@ void GrTextureProxy::clearUniqueKey() {
 }
 
 #ifdef SK_DEBUG
-void GrTextureProxy::validateLazyTexture(const GrTexture* texture) {
-    SkASSERT(!texture->asRenderTarget());
+void GrTextureProxy::validateLazySurface(const GrSurface* surface) {
+    SkASSERT(!surface->asRenderTarget());
+
+    // Anything that is checked here should be duplicated in GrTextureRenderTargetProxy's version
+    SkASSERT(surface->asTexture());
+    SkASSERT(surface->asTexture()->texturePriv().mipMapped() == this->mipMapped());
 }
 #endif
 
