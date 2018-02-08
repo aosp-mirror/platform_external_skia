@@ -83,19 +83,9 @@ public:
     void copyOpListsFromDDL(const SkDeferredDisplayList*, GrRenderTargetProxy* newDest);
 
 private:
-    GrDrawingManager(GrContext* context,
-                     const GrPathRendererChain::Options& optionsForPathRendererChain,
-                     const GrAtlasTextContext::Options& optionsForAtlasTextContext,
-                     GrSingleOwner* singleOwner)
-            : fContext(context)
-            , fOptionsForPathRendererChain(optionsForPathRendererChain)
-            , fOptionsForAtlasTextContext(optionsForAtlasTextContext)
-            , fSingleOwner(singleOwner)
-            , fAbandoned(false)
-            , fAtlasTextContext(nullptr)
-            , fPathRendererChain(nullptr)
-            , fSoftwarePathRenderer(nullptr)
-            , fFlushing(false) {}
+    GrDrawingManager(GrContext*, const GrPathRendererChain::Options&,
+                     const GrAtlasTextContext::Options&, GrSingleOwner*,
+                     GrContextOptions::Enable sortRenderTargets);
 
     void abandon();
     void cleanup();
@@ -142,6 +132,7 @@ private:
 
     GrTokenTracker                    fTokenTracker;
     bool                              fFlushing;
+    bool                              fSortRenderTargets;
 
     SkTArray<GrOnFlushCallbackObject*> fOnFlushCBObjects;
 };
