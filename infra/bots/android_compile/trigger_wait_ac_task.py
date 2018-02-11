@@ -141,12 +141,11 @@ def TriggerAndWait(options):
                ' Android tree is currently broken. Marking this bot as '
                'successful')
         print
-        print 'With patch logs are here: %s' % ret["WithPatchLog"]
-        print 'No patch logs are here: %s' % ret["NoPatchLog"]
+        print 'With patch logs are here: %s' % ret["withpatch_log"]
+        print 'No patch logs are here: %s' % ret["nopatch_log"]
         return 0
 
-    sys.stdout.write('.')
-    sys.stdout.flush()
+    print '.'
     time.sleep(POLLING_FREQUENCY_SECS)
 
 

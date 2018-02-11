@@ -31,6 +31,41 @@
 #include "GrTracing.h"
 #include "text/GrAtlasTextContext.h"
 
+// Turn on/off the sorting of opLists at flush time
+#ifndef SK_DISABLE_RENDER_TARGET_SORTING
+   #define SK_DISABLE_RENDER_TARGET_SORTING
+#endif
+
+#ifdef SK_DISABLE_RENDER_TARGET_SORTING
+static const bool kDefaultSortRenderTargets = false;
+#else
+static const bool kDefaultSortRenderTargets = true;
+#endif
+
+GrDrawingManager::GrDrawingManager(GrContext* context,
+                                   const GrPathRendererChain::Options& optionsForPathRendererChain,
+                                   const GrAtlasTextContext::Options& optionsForAtlasTextContext,
+                                   GrSingleOwner* singleOwner,
+                                   GrContextOptions::Enable sortRenderTargets)
+        : fContext(context)
+        , fOptionsForPathRendererChain(optionsForPathRendererChain)
+        , fOptionsForAtlasTextContext(optionsForAtlasTextContext)
+        , fSingleOwner(singleOwner)
+        , fAbandoned(false)
+        , fAtlasTextContext(nullptr)
+        , fPathRendererChain(nullptr)
+        , fSoftwarePathRenderer(nullptr)
+        , fFlushing(false) {
+
+    if (GrContextOptions::Enable::kNo == sortRenderTargets) {
+        fSortRenderTargets = false;
+    } else if (GrContextOptions::Enable::kYes == sortRenderTargets) {
+        fSortRenderTargets = true;
+    } else {
+        fSortRenderTargets = kDefaultSortRenderTargets;
+    }
+}
+
 void GrDrawingManager::cleanup() {
     for (int i = 0; i < fOpLists.count(); ++i) {
         // no opList should receive a new command after this
@@ -115,11 +150,10 @@ GrSemaphoresSubmitted GrDrawingManager::internalFlush(GrSurfaceProxy*,
     }
 #endif
 
-#ifndef SK_DISABLE_RENDER_TARGET_SORTING
-    SkDEBUGCODE(bool result =)
-                        SkTTopoSort<GrOpList, GrOpList::TopoSortTraits>(&fOpLists);
-    SkASSERT(result);
-#endif
+    if (fSortRenderTargets) {
+        SkDEBUGCODE(bool result =) SkTTopoSort<GrOpList, GrOpList::TopoSortTraits>(&fOpLists);
+        SkASSERT(result);
+    }
 
     GrGpu* gpu = fContext->contextPriv().getGpu();
 
@@ -179,21 +213,14 @@ GrSemaphoresSubmitted GrDrawingManager::internalFlush(GrSurfaceProxy*,
             alloc.markEndOfOpList(i);
         }
 
-#ifdef SK_DISABLE_EXPLICIT_GPU_RESOURCE_ALLOCATION
-        startIndex = 0;
-        stopIndex = fOpLists.count();
-#else
         GrResourceAllocator::AssignError error = GrResourceAllocator::AssignError::kNoError;
-        while (alloc.assign(&startIndex, &stopIndex, &error))
-#endif
-        {
-#ifndef SK_DISABLE_EXPLICIT_GPU_RESOURCE_ALLOCATION
+        while (alloc.assign(&startIndex, &stopIndex, &error)) {
             if (GrResourceAllocator::AssignError::kFailedProxyInstantiation == error) {
                 for (int i = startIndex; i < stopIndex; ++i) {
                     fOpLists[i]->purgeOpsWithUninstantiatedProxies();
                 }
             }
-#endif
+
             if (this->executeOpLists(startIndex, stopIndex, &flushState)) {
                 flushed = true;
             }
@@ -221,6 +248,7 @@ GrSemaphoresSubmitted GrDrawingManager::internalFlush(GrSurfaceProxy*,
 bool GrDrawingManager::executeOpLists(int startIndex, int stopIndex, GrOpFlushState* flushState) {
     SkASSERT(startIndex <= stopIndex && stopIndex <= fOpLists.count());
 
+    GrResourceProvider* resourceProvider = fContext->contextPriv().resourceProvider();
     bool anyOpListsExecuted = false;
 
     for (int i = startIndex; i < stopIndex; ++i) {
@@ -228,15 +256,19 @@ bool GrDrawingManager::executeOpLists(int startIndex, int stopIndex, GrOpFlushSt
              continue;
         }
 
-#ifdef SK_DISABLE_EXPLICIT_GPU_RESOURCE_ALLOCATION
-        if (!fOpLists[i]->instantiate(fContext->contextPriv().resourceProvider())) {
-            SkDebugf("OpList failed to instantiate.\n");
-            fOpLists[i] = nullptr;
-            continue;
+        if (resourceProvider->explicitlyAllocateGPUResources()) {
+            if (!fOpLists[i]->isInstantiated()) {
+                // If the backing surface wasn't allocated drop the draw of the entire opList.
+                fOpLists[i] = nullptr;
+                continue;
+            }
+        } else {
+            if (!fOpLists[i]->instantiate(resourceProvider)) {
+                SkDebugf("OpList failed to instantiate.\n");
+                fOpLists[i] = nullptr;
+                continue;
+            }
         }
-#else
-        SkASSERT(fOpLists[i]->isInstantiated());
-#endif
 
         // TODO: handle this instantiation via lazy surface proxies?
         // Instantiate all deferred proxies (being built on worker threads) so we can upload them
@@ -311,7 +343,7 @@ GrSemaphoresSubmitted GrDrawingManager::prepareSurfaceForExternalIO(
     GrSurface* surface = proxy->priv().peekSurface();
 
     if (gpu && surface->asRenderTarget()) {
-        gpu->resolveRenderTarget(surface->asRenderTarget(), proxy->origin());
+        gpu->resolveRenderTarget(surface->asRenderTarget());
     }
     return result;
 }

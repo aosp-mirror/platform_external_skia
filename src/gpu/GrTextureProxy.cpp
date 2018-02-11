@@ -26,10 +26,10 @@ GrTextureProxy::GrTextureProxy(const GrSurfaceDesc& srcDesc, SkBackingFit fit, S
 }
 
 // Lazy-callback version
-GrTextureProxy::GrTextureProxy(LazyInstantiateCallback&& callback, const GrSurfaceDesc& desc,
-                               GrMipMapped mipMapped, SkBackingFit fit, SkBudgeted budgeted,
-                               uint32_t flags)
-        : INHERITED(std::move(callback), desc, fit, budgeted, flags)
+GrTextureProxy::GrTextureProxy(LazyInstantiateCallback&& callback, LazyInstantiationType lazyType,
+                               const GrSurfaceDesc& desc, GrMipMapped mipMapped, SkBackingFit fit,
+                               SkBudgeted budgeted, uint32_t flags)
+        : INHERITED(std::move(callback), lazyType, desc, fit, budgeted, flags)
         , fMipMapped(mipMapped)
         , fMipColorMode(SkDestinationSurfaceColorMode::kLegacy)
         , fProxyProvider(nullptr)
@@ -95,10 +95,8 @@ void GrTextureProxyPriv::setDeferredUploader(std::unique_ptr<GrDeferredProxyUplo
 }
 
 void GrTextureProxyPriv::scheduleUpload(GrOpFlushState* flushState) {
-    SkASSERT(fTextureProxy->fDeferredUploader);
-
-    // Instantiate might have failed
-    if (fTextureProxy->fTarget) {
+    // The texture proxy's contents may already have been uploaded or instantiation may have failed
+    if (fTextureProxy->fDeferredUploader && fTextureProxy->fTarget) {
         fTextureProxy->fDeferredUploader->scheduleUpload(flushState, fTextureProxy);
     }
 }
@@ -120,9 +118,16 @@ GrSamplerState::Filter GrTextureProxy::highestFilterMode() const {
     return GrSamplerState::Filter::kMipMap;
 }
 
+GrMipMapped GrTextureProxy::mipMapped() const {
+    if (this->priv().isInstantiated()) {
+        return this->priv().peekTexture()->texturePriv().mipMapped();
+    }
+    return fMipMapped;
+}
+
 size_t GrTextureProxy::onUninstantiatedGpuMemorySize() const {
     return GrSurface::ComputeSize(this->config(), this->width(), this->height(), 1,
-                                  this->mipMapped(), !this->priv().isExact());
+                                  this->texPriv().proxyMipMapped(), !this->priv().isExact());
 }
 
 void GrTextureProxy::setUniqueKey(GrProxyProvider* proxyProvider, const GrUniqueKey& key) {
@@ -151,7 +156,8 @@ void GrTextureProxy::validateLazySurface(const GrSurface* surface) {
 
     // Anything that is checked here should be duplicated in GrTextureRenderTargetProxy's version
     SkASSERT(surface->asTexture());
-    SkASSERT(surface->asTexture()->texturePriv().mipMapped() == this->mipMapped());
+    SkASSERT(GrMipMapped::kNo == this->texPriv().proxyMipMapped() ||
+             GrMipMapped::kYes == surface->asTexture()->texturePriv().mipMapped());
 }
 #endif
 

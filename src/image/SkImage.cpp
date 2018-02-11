@@ -215,11 +215,11 @@ sk_sp<SkImage> SkImage::MakeFromBitmap(const SkBitmap& bm) {
     return SkMakeImageFromRasterBitmap(bm, kIfMutable_SkCopyPixelsMode);
 }
 
-bool SkImage::asLegacyBitmap(SkBitmap* bitmap, LegacyBitmapMode mode) const {
-    return as_IB(this)->onAsLegacyBitmap(bitmap, mode);
+bool SkImage::asLegacyBitmap(SkBitmap* bitmap, LegacyBitmapMode ) const {
+    return as_IB(this)->onAsLegacyBitmap(bitmap);
 }
 
-bool SkImage_Base::onAsLegacyBitmap(SkBitmap* bitmap, LegacyBitmapMode mode) const {
+bool SkImage_Base::onAsLegacyBitmap(SkBitmap* bitmap) const {
     // As the base-class, all we can do is make a copy (regardless of mode).
     // Subclasses that want to be more optimal should override.
     SkImageInfo info = this->onImageInfo().makeColorType(kN32_SkColorType).makeColorSpace(nullptr);
@@ -231,9 +231,7 @@ bool SkImage_Base::onAsLegacyBitmap(SkBitmap* bitmap, LegacyBitmapMode mode) con
         return false;
     }
 
-    if (kRO_LegacyBitmapMode == mode) {
-        bitmap->setImmutable();
-    }
+    bitmap->setImmutable();
     return true;
 }
 
@@ -345,34 +343,9 @@ sk_sp<SkImage> SkImage::makeRasterImage() const {
 
 #if !SK_SUPPORT_GPU
 
-sk_sp<SkImage> MakeTextureFromMipMap(GrContext*, const SkImageInfo&, const GrMipLevel texels[],
-                                     int mipLevelCount, SkBudgeted, SkDestinationSurfaceColorMode) {
-    return nullptr;
-}
-
 sk_sp<SkImage> SkImage::MakeFromTexture(GrContext* ctx,
                                         const GrBackendTexture& tex, GrSurfaceOrigin origin,
                                         SkAlphaType at, sk_sp<SkColorSpace> cs,
-                                        TextureReleaseProc releaseP, ReleaseContext releaseC) {
-    return nullptr;
-}
-
-size_t SkImage::getDeferredTextureImageData(const GrContextThreadSafeProxy&,
-                                            const DeferredTextureImageUsageParams[],
-                                            int paramCnt, void* buffer,
-                                            SkColorSpace* dstColorSpace,
-                                            SkColorType dstColorType) const {
-    return 0;
-}
-
-sk_sp<SkImage> SkImage::MakeFromDeferredTextureImageData(GrContext* context, const void*,
-                                                         SkBudgeted) {
-    return nullptr;
-}
-
-sk_sp<SkImage> SkImage::MakeFromTexture(GrContext* ctx,
-                                        const GrBackendTexture& tex, GrSurfaceOrigin origin,
-                                        SkColorType ct, SkAlphaType at, sk_sp<SkColorSpace> cs,
                                         TextureReleaseProc releaseP, ReleaseContext releaseC) {
     return nullptr;
 }
@@ -418,13 +391,6 @@ sk_sp<SkImage> SkImage::makeTextureImage(GrContext*, SkColorSpace* dstColorSpace
 }
 
 #endif
-
-///////////////////////////////////////////////////////////////////////////////////////////////////
-
-sk_sp<SkImage> MakeTextureFromMipMap(GrContext*, const SkImageInfo&, const GrMipLevel texels[],
-                                     int mipLevelCount, SkBudgeted) {
-    return nullptr;
-}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 

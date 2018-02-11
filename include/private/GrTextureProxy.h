@@ -29,7 +29,12 @@ public:
 
     GrSamplerState::Filter highestFilterMode() const;
 
-    GrMipMapped mipMapped() const { return fMipMapped; }
+    // If we are instantiated and have a target, return the mip state of that target. Otherwise
+    // returns the proxy's mip state from creation time. This is useful for lazy proxies which may
+    // claim to not need mips at creation time, but the instantiation happens to give us a mipped
+    // target. In that case we should use that for our benefit to avoid possible copies/mip
+    // generation later.
+    GrMipMapped mipMapped() const;
 
     /**
      * Return the texture proxy's unique key. It will be invalid if the proxy doesn't have one.
@@ -80,8 +85,8 @@ protected:
     //
     // The minimal knowledge version is used for CCPR where we are generating an atlas but we do not
     // know the final size until flush time.
-    GrTextureProxy(LazyInstantiateCallback&&, const GrSurfaceDesc& desc, GrMipMapped,
-                   SkBackingFit fit, SkBudgeted budgeted, uint32_t flags);
+    GrTextureProxy(LazyInstantiateCallback&&, LazyInstantiationType, const GrSurfaceDesc& desc,
+                   GrMipMapped, SkBackingFit fit, SkBudgeted budgeted, uint32_t flags);
 
     // Wrapped version
     GrTextureProxy(sk_sp<GrSurface>, GrSurfaceOrigin);

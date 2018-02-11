@@ -689,14 +689,12 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ImageReadPixels_Gpu, reporter, ctxInfo) {
 #endif
 
 static void check_legacy_bitmap(skiatest::Reporter* reporter, const SkImage* image,
-                                const SkBitmap& bitmap, SkImage::LegacyBitmapMode mode) {
+                                const SkBitmap& bitmap) {
     REPORTER_ASSERT(reporter, image->width() == bitmap.width());
     REPORTER_ASSERT(reporter, image->height() == bitmap.height());
     REPORTER_ASSERT(reporter, image->alphaType() == bitmap.alphaType());
 
-    if (SkImage::kRO_LegacyBitmapMode == mode) {
-        REPORTER_ASSERT(reporter, bitmap.isImmutable());
-    }
+    REPORTER_ASSERT(reporter, bitmap.isImmutable());
 
     REPORTER_ASSERT(reporter, bitmap.getPixels());
 
@@ -706,14 +704,14 @@ static void check_legacy_bitmap(skiatest::Reporter* reporter, const SkImage* ima
     REPORTER_ASSERT(reporter, imageColor == *bitmap.getAddr32(0, 0));
 }
 
-static void test_legacy_bitmap(skiatest::Reporter* reporter, const SkImage* image, SkImage::LegacyBitmapMode mode) {
+static void test_legacy_bitmap(skiatest::Reporter* reporter, const SkImage* image) {
     if (!image) {
         ERRORF(reporter, "Failed to create image.");
         return;
     }
     SkBitmap bitmap;
-    REPORTER_ASSERT(reporter, image->asLegacyBitmap(&bitmap, mode));
-    check_legacy_bitmap(reporter, image, bitmap, mode);
+    REPORTER_ASSERT(reporter, image->asLegacyBitmap(&bitmap));
+    check_legacy_bitmap(reporter, image, bitmap);
 
     // Test subsetting to exercise the rowBytes logic.
     SkBitmap tmp;
@@ -723,41 +721,29 @@ static void test_legacy_bitmap(skiatest::Reporter* reporter, const SkImage* imag
     REPORTER_ASSERT(reporter, subsetImage.get());
 
     SkBitmap subsetBitmap;
-    REPORTER_ASSERT(reporter, subsetImage->asLegacyBitmap(&subsetBitmap, mode));
-    check_legacy_bitmap(reporter, subsetImage.get(), subsetBitmap, mode);
+    REPORTER_ASSERT(reporter, subsetImage->asLegacyBitmap(&subsetBitmap));
+    check_legacy_bitmap(reporter, subsetImage.get(), subsetBitmap);
 }
 DEF_TEST(ImageLegacyBitmap, reporter) {
-    const SkImage::LegacyBitmapMode modes[] = {
-        SkImage::kRO_LegacyBitmapMode,
-        SkImage::kRW_LegacyBitmapMode,
-    };
-    for (auto& mode : modes) {
-        sk_sp<SkImage> image(create_image());
-        test_legacy_bitmap(reporter, image.get(), mode);
+    sk_sp<SkImage> image(create_image());
+    test_legacy_bitmap(reporter, image.get());
 
-        image = create_data_image();
-        test_legacy_bitmap(reporter, image.get(), mode);
+    image = create_data_image();
+    test_legacy_bitmap(reporter, image.get());
 
-        RasterDataHolder dataHolder;
-        image = create_rasterproc_image(&dataHolder);
-        test_legacy_bitmap(reporter, image.get(), mode);
-        image.reset();
-        REPORTER_ASSERT(reporter, 1 == dataHolder.fReleaseCount);
+    RasterDataHolder dataHolder;
+    image = create_rasterproc_image(&dataHolder);
+    test_legacy_bitmap(reporter, image.get());
+    image.reset();
+    REPORTER_ASSERT(reporter, 1 == dataHolder.fReleaseCount);
 
-        image = create_codec_image();
-        test_legacy_bitmap(reporter, image.get(), mode);
-    }
+    image = create_codec_image();
+    test_legacy_bitmap(reporter, image.get());
 }
 #if SK_SUPPORT_GPU
 DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ImageLegacyBitmap_Gpu, reporter, ctxInfo) {
-    const SkImage::LegacyBitmapMode modes[] = {
-        SkImage::kRO_LegacyBitmapMode,
-        SkImage::kRW_LegacyBitmapMode,
-    };
-    for (auto& mode : modes) {
-        sk_sp<SkImage> image(create_gpu_image(ctxInfo.grContext()));
-        test_legacy_bitmap(reporter, image.get(), mode);
-    }
+    sk_sp<SkImage> image(create_gpu_image(ctxInfo.grContext()));
+    test_legacy_bitmap(reporter, image.get());
 }
 #endif
 
@@ -1031,179 +1017,6 @@ DEF_GPUTEST(SkImage_MakeCrossContextFromPixmapRelease, reporter, options) {
     });
 }
 
-static void check_images_same(skiatest::Reporter* reporter, const SkImage* a, const SkImage* b) {
-    if (a->width() != b->width() || a->height() != b->height()) {
-        ERRORF(reporter, "Images must have the same size");
-        return;
-    }
-    if (a->alphaType() != b->alphaType()) {
-        ERRORF(reporter, "Images must have the same alpha type");
-        return;
-    }
-
-    SkImageInfo info = SkImageInfo::MakeN32Premul(a->width(), a->height());
-    SkAutoPixmapStorage apm;
-    SkAutoPixmapStorage bpm;
-
-    apm.alloc(info);
-    bpm.alloc(info);
-
-    if (!a->readPixels(apm, 0, 0)) {
-        ERRORF(reporter, "Could not read image a's pixels");
-        return;
-    }
-    if (!b->readPixels(bpm, 0, 0)) {
-        ERRORF(reporter, "Could not read image b's pixels");
-        return;
-    }
-
-    for (auto y = 0; y < info.height(); ++y) {
-        for (auto x = 0; x < info.width(); ++x) {
-            uint32_t pixelA = *apm.addr32(x, y);
-            uint32_t pixelB = *bpm.addr32(x, y);
-            if (pixelA != pixelB) {
-                ERRORF(reporter, "Expected image pixels to be the same. At %d,%d 0x%08x != 0x%08x",
-                       x, y, pixelA, pixelB);
-                return;
-            }
-        }
-    }
-}
-
-DEF_GPUTEST_FOR_RENDERING_CONTEXTS(DeferredTextureImage, reporter, ctxInfo) {
-    GrContext* context = ctxInfo.grContext();
-    sk_gpu_test::TestContext* testContext = ctxInfo.testContext();
-    sk_sp<GrContextThreadSafeProxy> proxy = context->threadSafeProxy();
-
-    GrContextFactory otherFactory;
-    ContextInfo otherContextInfo = otherFactory.getContextInfo(ctxInfo.type());
-
-    testContext->makeCurrent();
-    REPORTER_ASSERT(reporter, proxy);
-    auto createLarge = [context] {
-        return create_image_large(context->caps()->maxTextureSize());
-    };
-    struct {
-        std::function<sk_sp<SkImage> ()>                      fImageFactory;
-        std::vector<SkImage::DeferredTextureImageUsageParams> fParams;
-        sk_sp<SkColorSpace>                                   fColorSpace;
-        SkColorType                                           fColorType;
-        SkFilterQuality                                       fExpectedQuality;
-        int                                                   fExpectedScaleFactor;
-        bool                                                  fExpectation;
-    } testCases[] = {
-        { create_image,          {{SkMatrix::I(), kNone_SkFilterQuality, 0}},
-          nullptr, kN32_SkColorType, kNone_SkFilterQuality, 1, true },
-        { create_codec_image,    {{SkMatrix::I(), kNone_SkFilterQuality, 0}},
-          nullptr, kN32_SkColorType, kNone_SkFilterQuality, 1, true },
-        { create_data_image,     {{SkMatrix::I(), kNone_SkFilterQuality, 0}},
-          nullptr, kN32_SkColorType, kNone_SkFilterQuality, 1, true },
-        { create_picture_image,  {{SkMatrix::I(), kNone_SkFilterQuality, 0}},
-          nullptr, kN32_SkColorType, kNone_SkFilterQuality, 1, false },
-        { [context] { return create_gpu_image(context); },
-          {{SkMatrix::I(), kNone_SkFilterQuality, 0}},
-          nullptr, kN32_SkColorType, kNone_SkFilterQuality, 1, false },
-        // Create a texture image in a another GrContext.
-        { [testContext, otherContextInfo] {
-            otherContextInfo.testContext()->makeCurrent();
-            sk_sp<SkImage> otherContextImage = create_gpu_image(otherContextInfo.grContext());
-            testContext->makeCurrent();
-            return otherContextImage;
-          }, {{SkMatrix::I(), kNone_SkFilterQuality, 0}},
-          nullptr, kN32_SkColorType, kNone_SkFilterQuality, 1, false },
-        // Create an image that is too large to upload.
-        { createLarge, {{SkMatrix::I(), kNone_SkFilterQuality, 0}},
-          nullptr, kN32_SkColorType, kNone_SkFilterQuality, 1, false },
-        // Create an image that is too large, but is scaled to an acceptable size.
-        { createLarge, {{SkMatrix::I(), kMedium_SkFilterQuality, 4}},
-          nullptr, kN32_SkColorType, kMedium_SkFilterQuality, 16, true},
-        // Create an image with multiple low filter qualities, make sure we round up.
-        { createLarge, {{SkMatrix::I(), kNone_SkFilterQuality, 4},
-                        {SkMatrix::I(), kMedium_SkFilterQuality, 4}},
-          nullptr, kN32_SkColorType, kMedium_SkFilterQuality, 16, true},
-        // Create an image with multiple prescale levels, make sure we chose the minimum scale.
-        { createLarge, {{SkMatrix::I(), kMedium_SkFilterQuality, 5},
-                        {SkMatrix::I(), kMedium_SkFilterQuality, 4}},
-          nullptr, kN32_SkColorType, kMedium_SkFilterQuality, 16, true},
-        // Create a images which are decoded to a 4444 backing.
-        { create_image,       {{SkMatrix::I(), kNone_SkFilterQuality, 0}},
-          nullptr, kARGB_4444_SkColorType, kNone_SkFilterQuality, 1, true },
-        { create_codec_image, {{SkMatrix::I(), kNone_SkFilterQuality, 0}},
-          nullptr, kARGB_4444_SkColorType, kNone_SkFilterQuality, 1, true },
-        { create_data_image,  {{SkMatrix::I(), kNone_SkFilterQuality, 0}},
-          nullptr, kARGB_4444_SkColorType, kNone_SkFilterQuality, 1, true },
-        // Valid SkColorSpace and SkColorType.
-        { create_data_image,  {{SkMatrix::I(), kNone_SkFilterQuality, 0}},
-          SkColorSpace::MakeSRGB(), kN32_SkColorType, kNone_SkFilterQuality, 1, true },
-        // Invalid SkColorSpace and SkColorType.
-        { create_data_image,  {{SkMatrix::I(), kNone_SkFilterQuality, 0}},
-          SkColorSpace::MakeSRGB(), kARGB_4444_SkColorType, kNone_SkFilterQuality, 1, false },
-    };
-
-
-    for (auto testCase : testCases) {
-        sk_sp<SkImage> image(testCase.fImageFactory());
-        if (!image) {
-            ERRORF(reporter, "Failed to create image!");
-            continue;
-        }
-
-        size_t size = image->getDeferredTextureImageData(*proxy, testCase.fParams.data(),
-                                                         static_cast<int>(testCase.fParams.size()),
-                                                         nullptr, testCase.fColorSpace.get(),
-                                                         testCase.fColorType);
-        static const char *const kFS[] = { "fail", "succeed" };
-        if (SkToBool(size) != testCase.fExpectation) {
-            ERRORF(reporter,  "This image was expected to %s but did not.",
-                   kFS[testCase.fExpectation]);
-        }
-        if (size) {
-            void* buffer = sk_malloc_throw(size);
-            void* misaligned = reinterpret_cast<void*>(reinterpret_cast<intptr_t>(buffer) + 3);
-            if (image->getDeferredTextureImageData(*proxy, testCase.fParams.data(),
-                                                   static_cast<int>(testCase.fParams.size()),
-                                                   misaligned, testCase.fColorSpace.get(),
-                                                   testCase.fColorType)) {
-                ERRORF(reporter, "Should fail when buffer is misaligned.");
-            }
-            if (!image->getDeferredTextureImageData(*proxy, testCase.fParams.data(),
-                                                    static_cast<int>(testCase.fParams.size()),
-                                                    buffer, testCase.fColorSpace.get(),
-                                                   testCase.fColorType)) {
-                ERRORF(reporter, "deferred image size succeeded but creation failed.");
-            } else {
-                for (auto budgeted : { SkBudgeted::kNo, SkBudgeted::kYes }) {
-                    sk_sp<SkImage> newImage(
-                        SkImage::MakeFromDeferredTextureImageData(context, buffer, budgeted));
-                    REPORTER_ASSERT(reporter, newImage != nullptr);
-                    if (newImage) {
-                        // Scale the image in software for comparison.
-                        SkImageInfo scaled_info = SkImageInfo::MakeN32(
-                                                    image->width() / testCase.fExpectedScaleFactor,
-                                                    image->height() / testCase.fExpectedScaleFactor,
-                                                    image->alphaType());
-                        SkAutoPixmapStorage scaled;
-                        scaled.alloc(scaled_info);
-                        image->scalePixels(scaled, testCase.fExpectedQuality);
-                        sk_sp<SkImage> scaledImage = SkImage::MakeRasterCopy(scaled);
-                        check_images_same(reporter, scaledImage.get(), newImage.get());
-                    }
-                    // The other context should not be able to create images from texture data
-                    // created by the original context.
-                    sk_sp<SkImage> newImage2(SkImage::MakeFromDeferredTextureImageData(
-                        otherContextInfo.grContext(), buffer, budgeted));
-                    REPORTER_ASSERT(reporter, !newImage2);
-                    testContext->makeCurrent();
-                }
-            }
-            sk_free(buffer);
-        }
-
-        testContext->makeCurrent();
-        context->flush();
-    }
-}
-
 static uint32_t GetIdForBackendObject(GrContext* ctx, GrBackendObject object) {
     if (!object) {
         return 0;
@@ -1352,7 +1165,7 @@ DEF_TEST(Image_makeColorSpace, r) {
     sk_sp<SkImage> srgbImage = SkImage::MakeFromBitmap(srgbBitmap);
     sk_sp<SkImage> p3Image = srgbImage->makeColorSpace(p3, SkTransferFunctionBehavior::kIgnore);
     SkBitmap p3Bitmap;
-    bool success = p3Image->asLegacyBitmap(&p3Bitmap, SkImage::kRO_LegacyBitmapMode);
+    bool success = p3Image->asLegacyBitmap(&p3Bitmap);
     REPORTER_ASSERT(r, success);
     REPORTER_ASSERT(r, almost_equal(0x28, SkGetPackedR32(*p3Bitmap.getAddr32(0, 0))));
     REPORTER_ASSERT(r, almost_equal(0x40, SkGetPackedG32(*p3Bitmap.getAddr32(0, 0))));
@@ -1361,7 +1174,7 @@ DEF_TEST(Image_makeColorSpace, r) {
     sk_sp<SkImage> adobeImage = srgbImage->makeColorSpace(adobeGamut,
                                                           SkTransferFunctionBehavior::kIgnore);
     SkBitmap adobeBitmap;
-    success = adobeImage->asLegacyBitmap(&adobeBitmap, SkImage::kRO_LegacyBitmapMode);
+    success = adobeImage->asLegacyBitmap(&adobeBitmap);
     REPORTER_ASSERT(r, success);
     REPORTER_ASSERT(r, almost_equal(0x21, SkGetPackedR32(*adobeBitmap.getAddr32(0, 0))));
     REPORTER_ASSERT(r, almost_equal(0x31, SkGetPackedG32(*adobeBitmap.getAddr32(0, 0))));
@@ -1369,7 +1182,7 @@ DEF_TEST(Image_makeColorSpace, r) {
 
     srgbImage = GetResourceAsImage("images/1x1.png");
     p3Image = srgbImage->makeColorSpace(p3, SkTransferFunctionBehavior::kIgnore);
-    success = p3Image->asLegacyBitmap(&p3Bitmap, SkImage::kRO_LegacyBitmapMode);
+    success = p3Image->asLegacyBitmap(&p3Bitmap);
     REPORTER_ASSERT(r, success);
     REPORTER_ASSERT(r, almost_equal(0x8B, SkGetPackedR32(*p3Bitmap.getAddr32(0, 0))));
     REPORTER_ASSERT(r, almost_equal(0x82, SkGetPackedG32(*p3Bitmap.getAddr32(0, 0))));

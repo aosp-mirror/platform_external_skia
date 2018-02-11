@@ -504,60 +504,6 @@ public:
                                   const SkIRect& clipBounds, SkIRect* outSubset,
                                   SkIPoint* offset) const;
 
-    /** Drawing params for which a deferred texture image data should be optimized. */
-    struct DeferredTextureImageUsageParams {
-        DeferredTextureImageUsageParams(const SkMatrix matrix, const SkFilterQuality quality,
-                                        int preScaleMipLevel)
-            : fMatrix(matrix), fQuality(quality), fPreScaleMipLevel(preScaleMipLevel) {}
-        SkMatrix        fMatrix;
-        SkFilterQuality fQuality;
-        int             fPreScaleMipLevel;
-    };
-
-    /**
-     * This method allows clients to capture the data necessary to turn a SkImage into a texture-
-     * backed image. If the original image is codec-backed this will decode into a format optimized
-     * for the context represented by the proxy. This method is thread safe with respect to the
-     * GrContext whence the proxy came. Clients allocate and manage the storage of the deferred
-     * texture data and control its lifetime. No cleanup is required, thus it is safe to simply free
-     * the memory out from under the data.
-     *
-     * The same method is used both for getting the size necessary for pre-uploaded texture data
-     * and for retrieving the data. The params array represents the set of draws over which to
-     * optimize the pre-upload data.
-     *
-     * When called with a null buffer this returns the size that the client must allocate in order
-     * to create deferred texture data for this image (or zero if this is an inappropriate
-     * candidate). The buffer allocated by the client should be 8 byte aligned.
-     *
-     * When buffer is not null this fills in the deferred texture data for this image in the
-     * provided buffer (assuming this is an appropriate candidate image and the buffer is
-     * appropriately aligned). Upon success the size written is returned, otherwise 0.
-     *
-     * dstColorSpace is the color space of the surface where this texture will ultimately be used.
-     * If the method determines that mip-maps are needed, this helps determine the correct strategy
-     * for building them (gamma-correct or not).
-     *
-     * dstColorType is the color type of the surface where this texture will ultimately be used.
-     * This determines the format with which the image will be uploaded to the GPU. If dstColorType
-     * does not support color spaces (low bit depth types such as ARGB_4444), then dstColorSpace
-     * must be null.
-     */
-    size_t getDeferredTextureImageData(const GrContextThreadSafeProxy& contextThreadSafeProxy,
-                            const DeferredTextureImageUsageParams deferredTextureImageUsageParams[],
-                            int paramCnt,
-                            void* buffer,
-                            SkColorSpace* dstColorSpace = nullptr,
-                            SkColorType dstColorType = kN32_SkColorType) const;
-
-    /**
-     * Returns a texture-backed image from data produced in SkImage::getDeferredTextureImageData.
-     * The context must be the context that provided the proxy passed to
-     * getDeferredTextureImageData.
-     */
-    static sk_sp<SkImage> MakeFromDeferredTextureImageData(GrContext* context, const void* data,
-                                                           SkBudgeted budgeted);
-
     typedef std::function<void(GrBackendTexture)> BackendTextureReleaseProc;
 
     /**
@@ -583,22 +529,22 @@ public:
 
 
     // Helper functions to convert to SkBitmap
-
+    // TODO: enum LegacyBitmapMode to be deprecated; keeping enum until callers are revised to omit
+    // parameter
     enum LegacyBitmapMode {
         kRO_LegacyBitmapMode,
-        kRW_LegacyBitmapMode,
     };
 
     /**
      *  Attempt to create a bitmap with the same pixels as the image. The result will always be
      *  a raster-backed bitmap (texture-backed bitmaps are DEPRECATED, and not supported here).
      *
-     *  If the mode is kRO (read-only), the resulting bitmap will be marked as immutable.
+     *  The resulting bitmap will be marked as immutable.
      *
      *  On succcess, returns true. On failure, returns false and the bitmap parameter will be reset
      *  to empty.
      */
-    bool asLegacyBitmap(SkBitmap* bitmap, LegacyBitmapMode legacyBitmapMode) const;
+    bool asLegacyBitmap(SkBitmap* bitmap, LegacyBitmapMode legacyBitmapMode = kRO_LegacyBitmapMode) const;
 
     /**
      *  Returns true if the image is backed by an image-generator or other src that creates
@@ -625,10 +571,6 @@ public:
 private:
     SkImage(int width, int height, uint32_t uniqueID);
     friend class SkImage_Base;
-
-    static sk_sp<SkImage> MakeTextureFromMipMap(GrContext*, const SkImageInfo&,
-                                                const GrMipLevel texels[], int mipLevelCount,
-                                                SkBudgeted, SkDestinationSurfaceColorMode);
 
     const int       fWidth;
     const int       fHeight;

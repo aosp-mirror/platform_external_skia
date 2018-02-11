@@ -89,19 +89,6 @@ public:
                                              SkBackingFit fit);
 
     /*
-     * Create a mipmapped texture proxy with data.
-     *
-     * @param desc          Description of the texture properties.
-     * @param budgeted      Does the texture count against the resource cache budget?
-     * @param texels        A contiguous array of mipmap levels
-     * @param mipLevelCount The amount of elements in the texels array
-     */
-    sk_sp<GrTextureProxy> createMipMapProxy(const GrSurfaceDesc&, SkBudgeted,
-                                            const GrMipLevel texels[], int mipLevelCount,
-                                            SkDestinationSurfaceColorMode mipColorMode =
-                                                            SkDestinationSurfaceColorMode::kLegacy);
-
-    /*
      * Create a mipmapped texture proxy without any data.
      *
      * Like the call above but there are no texels to upload. A texture proxy is returned that
@@ -156,7 +143,6 @@ public:
 
     using LazyInstantiateCallback = std::function<sk_sp<GrSurface>(GrResourceProvider*,
                                                                    GrSurfaceOrigin* outOrigin)>;
-
     enum class Textureable : bool {
         kNo = false,
         kYes = true
@@ -227,6 +213,12 @@ public:
     int numUniqueKeyProxies_TestOnly() const;
 
     void removeAllUniqueKeys();
+
+    /**
+     * Helper function for callers who are wrapping a bitmap into an SkImage so they know whether or
+     * not that bitmap should be copied or not.
+     */
+    bool mutableBitmapsNeedCopy() const { return !SkToBool(fResourceProvider); }
 
 private:
     friend class GrAHardwareBufferImageGenerator; // for createWrapped

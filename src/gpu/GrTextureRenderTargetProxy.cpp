@@ -10,6 +10,7 @@
 #include "GrCaps.h"
 #include "GrTexture.h"
 #include "GrTexturePriv.h"
+#include "GrTextureProxyPriv.h"
 #include "GrRenderTarget.h"
 #include "GrSurfaceProxyPriv.h"
 
@@ -29,16 +30,17 @@ GrTextureRenderTargetProxy::GrTextureRenderTargetProxy(const GrCaps& caps,
 
 // Lazy-callback version
 GrTextureRenderTargetProxy::GrTextureRenderTargetProxy(LazyInstantiateCallback&& callback,
+                                                       LazyInstantiationType lazyType,
                                                        const GrSurfaceDesc& desc,
                                                        GrMipMapped mipMapped,
                                                        SkBackingFit fit,
                                                        SkBudgeted budgeted,
                                                        uint32_t flags)
-        : GrSurfaceProxy(std::move(callback), desc, fit, budgeted, flags)
+        : GrSurfaceProxy(std::move(callback), lazyType, desc, fit, budgeted, flags)
         // Since we have virtual inheritance, we initialize GrSurfaceProxy directly. Send null
         // callbacks to the texture and RT proxies simply to route to the appropriate constructors.
-        , GrTextureProxy(LazyInstantiateCallback(), desc, mipMapped, fit, budgeted, flags)
-        , GrRenderTargetProxy(LazyInstantiateCallback(), desc, fit, budgeted, flags) {
+        , GrTextureProxy(LazyInstantiateCallback(), lazyType, desc, mipMapped, fit, budgeted, flags)
+        , GrRenderTargetProxy(LazyInstantiateCallback(), lazyType, desc, fit, budgeted, flags) {
 }
 
 // Wrapped version
@@ -62,7 +64,8 @@ size_t GrTextureRenderTargetProxy::onUninstantiatedGpuMemorySize() const {
 
     // TODO: do we have enough information to improve this worst case estimate?
     return GrSurface::ComputeSize(this->config(), this->width(), this->height(),
-                                  colorSamplesPerPixel, this->mipMapped(), !this->priv().isExact());
+                                  colorSamplesPerPixel, this->texPriv().proxyMipMapped(),
+                                  !this->priv().isExact());
 }
 
 bool GrTextureRenderTargetProxy::instantiate(GrResourceProvider* resourceProvider) {
@@ -108,7 +111,8 @@ sk_sp<GrSurface> GrTextureRenderTargetProxy::createSurface(
 void GrTextureRenderTargetProxy::validateLazySurface(const GrSurface* surface) {
     // Anything checked here should also be checking the GrTextureProxy version
     SkASSERT(surface->asTexture());
-    SkASSERT(surface->asTexture()->texturePriv().mipMapped() == this->mipMapped());
+    SkASSERT(GrMipMapped::kNo == this->texPriv().proxyMipMapped() ||
+             GrMipMapped::kYes == surface->asTexture()->texturePriv().mipMapped());
 
     // Anything checked here should also be checking the GrRenderTargetProxy version
     SkASSERT(surface->asRenderTarget());

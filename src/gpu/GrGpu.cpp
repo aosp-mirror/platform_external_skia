@@ -202,6 +202,18 @@ bool GrGpu::getReadPixelsInfo(GrSurface* srcSurface, GrSurfaceOrigin srcOrigin,
     SkASSERT(srcSurface);
     SkASSERT(kGpuPrefersDraw_DrawPreference != *drawPreference);
 
+    // Default values for intermediate draws. The intermediate texture config matches the src's
+    // config, is approx sized to the read rect, no swizzling or spoofing of the dst config.
+    tempDrawInfo->fTempSurfaceDesc.fFlags = kRenderTarget_GrSurfaceFlag;
+    tempDrawInfo->fTempSurfaceDesc.fWidth = width;
+    tempDrawInfo->fTempSurfaceDesc.fHeight = height;
+    tempDrawInfo->fTempSurfaceDesc.fSampleCnt = 1;
+    tempDrawInfo->fTempSurfaceDesc.fOrigin = kTopLeft_GrSurfaceOrigin; // no CPU y-flip for TL.
+    tempDrawInfo->fTempSurfaceDesc.fConfig = srcSurface->config();
+    tempDrawInfo->fTempSurfaceFit = SkBackingFit::kApprox;
+    tempDrawInfo->fSwizzle = GrSwizzle::RGBA();
+    tempDrawInfo->fReadConfig = readConfig;
+
     // We currently do not support reading into the packed formats 565 or 4444 as they are not
     // required to have read back support on all devices and backends.
     if (kRGB_565_GrPixelConfig == readConfig || kRGBA_4444_GrPixelConfig == readConfig) {
@@ -233,6 +245,17 @@ bool GrGpu::getWritePixelsInfo(GrSurface* dstSurface, GrSurfaceOrigin dstOrigin,
     SkASSERT(tempDrawInfo);
     SkASSERT(dstSurface);
     SkASSERT(kGpuPrefersDraw_DrawPreference != *drawPreference);
+
+    // Default values for intermediate draws. The intermediate texture config matches the dst's
+    // config, is approx sized to the write rect, no swizzling or sppofing of the src config.
+    tempDrawInfo->fTempSurfaceDesc.fFlags = kNone_GrSurfaceFlags;
+    tempDrawInfo->fTempSurfaceDesc.fConfig = srcConfig;
+    tempDrawInfo->fTempSurfaceDesc.fWidth = width;
+    tempDrawInfo->fTempSurfaceDesc.fHeight = height;
+    tempDrawInfo->fTempSurfaceDesc.fSampleCnt = 1;
+    tempDrawInfo->fTempSurfaceDesc.fOrigin = kTopLeft_GrSurfaceOrigin; // no CPU y-flip for TL.
+    tempDrawInfo->fSwizzle = GrSwizzle::RGBA();
+    tempDrawInfo->fWriteConfig = srcConfig;
 
     if (!this->onGetWritePixelsInfo(dstSurface, dstOrigin, width, height, srcConfig, drawPreference,
                                     tempDrawInfo)) {
@@ -300,7 +323,7 @@ bool GrGpu::writePixels(GrSurface* surface, GrSurfaceOrigin origin,
     if (this->onWritePixels(surface, origin, left, top, width, height, config,
                             texels, mipLevelCount)) {
         SkIRect rect = SkIRect::MakeXYWH(left, top, width, height);
-        this->didWriteToSurface(surface, &rect, mipLevelCount);
+        this->didWriteToSurface(surface, origin, &rect, mipLevelCount);
         fStats.incTextureUploads();
         return true;
     }
@@ -333,7 +356,7 @@ bool GrGpu::transferPixels(GrTexture* texture,
     if (this->onTransferPixels(texture, left, top, width, height, config,
                                transferBuffer, offset, rowBytes)) {
         SkIRect rect = SkIRect::MakeXYWH(left, top, width, height);
-        this->didWriteToSurface(texture, &rect);
+        this->didWriteToSurface(texture, kTopLeft_GrSurfaceOrigin, &rect);
         fStats.incTransfersToTexture();
 
         return true;
@@ -341,17 +364,24 @@ bool GrGpu::transferPixels(GrTexture* texture,
     return false;
 }
 
-void GrGpu::resolveRenderTarget(GrRenderTarget* target, GrSurfaceOrigin origin) {
+void GrGpu::resolveRenderTarget(GrRenderTarget* target) {
     SkASSERT(target);
     this->handleDirtyContext();
-    this->onResolveRenderTarget(target, origin);
+    this->onResolveRenderTarget(target);
 }
 
-void GrGpu::didWriteToSurface(GrSurface* surface, const SkIRect* bounds, uint32_t mipLevels) const {
+void GrGpu::didWriteToSurface(GrSurface* surface, GrSurfaceOrigin origin, const SkIRect* bounds,
+                              uint32_t mipLevels) const {
     SkASSERT(surface);
     // Mark any MIP chain and resolve buffer as dirty if and only if there is a non-empty bounds.
     if (nullptr == bounds || !bounds->isEmpty()) {
         if (GrRenderTarget* target = surface->asRenderTarget()) {
+            SkIRect flippedBounds;
+            if (kBottomLeft_GrSurfaceOrigin == origin && bounds) {
+                flippedBounds = {bounds->fLeft, surface->height() - bounds->fBottom,
+                                 bounds->fRight, surface->height() - bounds->fTop};
+                bounds = &flippedBounds;
+            }
             target->flagAsNeedingResolve(bounds);
         }
         GrTexture* texture = surface->asTexture();
