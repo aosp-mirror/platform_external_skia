@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# Copyright 2016 Google Inc.
+# Copyright 2017 Google Inc.
 #
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
@@ -12,15 +12,14 @@
 import argparse
 import subprocess
 
-GO_URL = "https://storage.googleapis.com/golang/go1.9.4.linux-amd64.tar.gz"
+VERSION = "v1.8.2"
+URL = "https://github.com/ninja-build/ninja/releases/download/%s/ninja-win.zip"
 
 def create_asset(target_dir):
   """Create the asset."""
-  p1 = subprocess.Popen(["curl", GO_URL], stdout=subprocess.PIPE)
-  p2 = subprocess.Popen(["tar", "-C", target_dir, "-xzf" "-"], stdin=p1.stdout)
-  p1.stdout.close()  # Allow p1 to receive a SIGPIPE if p2 exits.
-  _,_ = p2.communicate()
-
+  subprocess.check_call(["curl", "-L", URL % VERSION, "-o", "ninja-win.zip"])
+  subprocess.check_call(["unzip", "ninja-win.zip", "-d", target_dir])
+  subprocess.check_call(["rm", "ninja-win.zip"])
 
 def main():
   parser = argparse.ArgumentParser()

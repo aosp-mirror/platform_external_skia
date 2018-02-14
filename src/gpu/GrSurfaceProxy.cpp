@@ -87,7 +87,7 @@ GrSurfaceProxy::~GrSurfaceProxy() {
     if (fLazyInstantiateCallback) {
         // We call the callback with a null GrResourceProvider to signal that the lambda should
         // clean itself up if it is holding onto any captured objects.
-        this->fLazyInstantiateCallback(nullptr, nullptr);
+        this->fLazyInstantiateCallback(nullptr);
     }
     // For this to be deleted the opList that held a ref on it (if there was one) must have been
     // deleted. Which would have cleared out this back pointer.
@@ -114,9 +114,9 @@ bool GrSurfaceProxyPriv::AttachStencilIfNeeded(GrResourceProvider* resourceProvi
 sk_sp<GrSurface> GrSurfaceProxy::createSurfaceImpl(
                                                 GrResourceProvider* resourceProvider,
                                                 int sampleCnt, bool needsStencil,
-                                                GrSurfaceFlags flags, GrMipMapped mipMapped,
-                                                SkDestinationSurfaceColorMode mipColorMode) const {
+                                                GrSurfaceFlags flags, GrMipMapped mipMapped) const {
     SkASSERT(GrSurfaceProxy::LazyState::kNot == this->lazyInstantiationState());
+    SkASSERT(!fTarget);
     SkASSERT(GrMipMapped::kNo == mipMapped);
     GrSurfaceDesc desc;
     desc.fFlags = flags;
@@ -139,8 +139,6 @@ sk_sp<GrSurface> GrSurfaceProxy::createSurfaceImpl(
         return nullptr;
     }
 
-    surface->asTexture()->texturePriv().setMipColorMode(mipColorMode);
-
     if (!GrSurfaceProxyPriv::AttachStencilIfNeeded(resourceProvider, surface.get(), needsStencil)) {
         return nullptr;
     }
@@ -162,7 +160,6 @@ void GrSurfaceProxy::assign(sk_sp<GrSurface> surface) {
 
 bool GrSurfaceProxy::instantiateImpl(GrResourceProvider* resourceProvider, int sampleCnt,
                                      bool needsStencil, GrSurfaceFlags flags, GrMipMapped mipMapped,
-                                     SkDestinationSurfaceColorMode mipColorMode,
                                      const GrUniqueKey* uniqueKey) {
     SkASSERT(LazyState::kNot == this->lazyInstantiationState());
     if (fTarget) {
@@ -173,7 +170,7 @@ bool GrSurfaceProxy::instantiateImpl(GrResourceProvider* resourceProvider, int s
     }
 
     sk_sp<GrSurface> surface = this->createSurfaceImpl(resourceProvider, sampleCnt, needsStencil,
-                                                       flags, mipMapped, mipColorMode);
+                                                       flags, mipMapped);
     if (!surface) {
         return false;
     }
@@ -278,11 +275,17 @@ sk_sp<GrTextureProxy> GrSurfaceProxy::Copy(GrContext* context,
     dstDesc.fHeight = srcRect.height();
     dstDesc.fConfig = src->config();
 
+    // We use an ephemeral surface context to make the copy. Here it isn't clear what color space
+    // to tag it with. That's ok because GrSurfaceContext::copy doesn't do any color space
+    // conversions. However, if the pixel config is sRGB then the passed color space here must
+    // have sRGB gamma or GrSurfaceContext creation fails. See skbug.com/7611 about making this
+    // with the correct color space information and returning the context to the caller.
+    sk_sp<SkColorSpace> colorSpace;
+    if (GrPixelConfigIsSRGB(dstDesc.fConfig)) {
+        colorSpace = SkColorSpace::MakeSRGB();
+    }
     sk_sp<GrSurfaceContext> dstContext(context->contextPriv().makeDeferredSurfaceContext(
-                                                                            dstDesc,
-                                                                            mipMapped,
-                                                                            SkBackingFit::kExact,
-                                                                            budgeted));
+            dstDesc, mipMapped, SkBackingFit::kExact, budgeted, std::move(colorSpace)));
     if (!dstContext) {
         return nullptr;
     }
@@ -350,26 +353,14 @@ void GrSurfaceProxyPriv::exactify() {
 bool GrSurfaceProxyPriv::doLazyInstantiation(GrResourceProvider* resourceProvider) {
     SkASSERT(GrSurfaceProxy::LazyState::kNot != fProxy->lazyInstantiationState());
 
-    GrSurfaceOrigin* outOrigin;
-    if (GrSurfaceProxy::LazyState::kPartially == fProxy->lazyInstantiationState()) {
-        // In the partially instantiated case, we set the origin on the SurfaceProxy at creation
-        // time (via a GrSurfaceDesc). In the lambda, the creation of the texture never needs to
-        // know the origin, and it also can't change or have any effect on it. Thus we just pass in
-        // nullptr in this case since it should never be set.
-        outOrigin = nullptr;
-    } else {
-        outOrigin = &fProxy->fOrigin;
-    }
-
-    sk_sp<GrSurface> surface = fProxy->fLazyInstantiateCallback(resourceProvider, outOrigin);
+    sk_sp<GrSurface> surface = fProxy->fLazyInstantiateCallback(resourceProvider);
     if (GrSurfaceProxy::LazyInstantiationType::kSingleUse == fProxy->fLazyInstantiationType) {
-        fProxy->fLazyInstantiateCallback(nullptr, nullptr);
+        fProxy->fLazyInstantiateCallback(nullptr);
         fProxy->fLazyInstantiateCallback = nullptr;
     }
     if (!surface) {
         fProxy->fWidth = 0;
         fProxy->fHeight = 0;
-        fProxy->fOrigin = kTopLeft_GrSurfaceOrigin;
         return false;
     }
 

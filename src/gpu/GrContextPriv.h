@@ -38,7 +38,9 @@ public:
     sk_sp<GrSurfaceContext> makeDeferredSurfaceContext(const GrSurfaceDesc&,
                                                        GrMipMapped,
                                                        SkBackingFit,
-                                                       SkBudgeted);
+                                                       SkBudgeted,
+                                                       sk_sp<SkColorSpace> colorSpace = nullptr,
+                                                       const SkSurfaceProps* = nullptr);
 
     sk_sp<GrTextureContext> makeBackendTextureContext(const GrBackendTexture& tex,
                                                       GrSurfaceOrigin origin,
@@ -65,6 +67,7 @@ public:
                                                                  const SkSurfaceProps* = nullptr);
 
     bool disableGpuYUVConversion() const { return fContext->fDisableGpuYUVConversion; }
+    bool sharpenMipmappedTextures() const { return fContext->fSharpenMipmappedTextures; }
 
     /**
      * Call to ensure all drawing to the context has been issued to the

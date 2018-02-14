@@ -136,7 +136,7 @@ sk_sp<GrTextureProxy> GrBackendTextureImageGenerator::onGenerateTexture(
 
     sk_sp<GrTextureProxy> proxy = proxyProvider->createLazyProxy(
             [refHelper, releaseProcHelper, semaphore, backendTexture]
-            (GrResourceProvider* resourceProvider, GrSurfaceOrigin* /*outOrigin*/) {
+            (GrResourceProvider* resourceProvider) {
                 if (!resourceProvider) {
                     return sk_sp<GrTexture>();
                 }
@@ -184,10 +184,14 @@ sk_sp<GrTextureProxy> GrBackendTextureImageGenerator::onGenerateTexture(
         // because Vulkan will want to do the copy as a draw. All other copies would require a
         // layout change in Vulkan and we do not change the layout of borrowed images.
         GrMipMapped mipMapped = willNeedMipMaps ? GrMipMapped::kYes : GrMipMapped::kNo;
+        sk_sp<SkColorSpace> colorSpace;
+        if (GrPixelConfigIsSRGB(desc.fConfig)) {
+            colorSpace = SkColorSpace::MakeSRGB();
+        }
 
         sk_sp<GrRenderTargetContext> rtContext(context->makeDeferredRenderTargetContext(
-                SkBackingFit::kExact, info.width(), info.height(), proxy->config(), nullptr, 1,
-                mipMapped, proxy->origin(), nullptr, SkBudgeted::kYes));
+                SkBackingFit::kExact, info.width(), info.height(), proxy->config(),
+                std::move(colorSpace), 1, mipMapped, proxy->origin(), nullptr, SkBudgeted::kYes));
 
         if (!rtContext) {
             return nullptr;

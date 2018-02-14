@@ -919,7 +919,9 @@ cc_defaults {
         instrumentation: true,
         profile_file: "skia/skia.profdata",
         benchmarks: ["hwui", "skia"],
-        enable_profile_use: true,
+        // Bugs: http://b/73127367, http://b/73257154, http://b/73249590
+        // Turn off PGO for Skia until toolchain bug is fixed.
+        enable_profile_use: false,
     },
 }
 
@@ -1350,6 +1352,7 @@ cc_test {
         "gm/rrects.cpp",
         "gm/samplerstress.cpp",
         "gm/savelayer.cpp",
+        "gm/scaledemoji.cpp",
         "gm/scaledstrokes.cpp",
         "gm/shadermaskfilter.cpp",
         "gm/shadertext.cpp",
@@ -2272,6 +2275,7 @@ cc_test {
         "gm/rrects.cpp",
         "gm/samplerstress.cpp",
         "gm/savelayer.cpp",
+        "gm/scaledemoji.cpp",
         "gm/scaledstrokes.cpp",
         "gm/shadermaskfilter.cpp",
         "gm/shadertext.cpp",

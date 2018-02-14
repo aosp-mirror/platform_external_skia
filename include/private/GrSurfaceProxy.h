@@ -361,8 +361,7 @@ protected:
         // Note: this ctor pulls a new uniqueID from the same pool at the GrGpuResources
     }
 
-    using LazyInstantiateCallback = std::function<sk_sp<GrSurface>(GrResourceProvider*,
-                                                                   GrSurfaceOrigin* outOrigin)>;
+    using LazyInstantiateCallback = std::function<sk_sp<GrSurface>(GrResourceProvider*)>;
 
     // Lazy-callback version
     GrSurfaceProxy(LazyInstantiateCallback&& callback, LazyInstantiationType lazyType,
@@ -391,12 +390,10 @@ protected:
     void assign(sk_sp<GrSurface> surface);
 
     sk_sp<GrSurface> createSurfaceImpl(GrResourceProvider*, int sampleCnt, bool needsStencil,
-                                       GrSurfaceFlags flags, GrMipMapped mipMapped,
-                                       SkDestinationSurfaceColorMode mipColorMode) const;
+                                       GrSurfaceFlags flags, GrMipMapped mipMapped) const;
 
     bool instantiateImpl(GrResourceProvider* resourceProvider, int sampleCnt, bool needsStencil,
-                         GrSurfaceFlags flags, GrMipMapped mipMapped,
-                         SkDestinationSurfaceColorMode mipColorMode, const GrUniqueKey*);
+                         GrSurfaceFlags flags, GrMipMapped mipMapped, const GrUniqueKey*);
 
 private:
     // For wrapped resources, 'fConfig', 'fWidth', 'fHeight', and 'fOrigin; will always be filled in
