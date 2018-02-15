@@ -67,6 +67,10 @@ Having generated your build files, run Ninja to compile and link Skia.
     ninja -C out/Cached
     ninja -C out/RTTI
 
+If some header files are missing, install the corresponding dependencies
+
+    tools/install_dependencies.sh
+
 Android
 -------
 
@@ -231,6 +235,9 @@ Windows
 Skia can build on Windows with Visual Studio 2017 or Visual Studio 2015 Update 3.
 If GN is unable to locate either of those, it will print an error message. In that
 case, you can pass your `VC` path to GN via `win_vc`.
+
+Skia can be compiled with the free [Build Tools for Visual Studio
+2017](https://www.visualstudio.com/downloads/#build-tools-for-visual-studio-2017).
 
 The bots use a packaged 2017 toolchain, which Googlers can download like this:
 
