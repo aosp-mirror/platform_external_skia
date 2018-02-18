@@ -734,22 +734,6 @@ void GrGLCaps::initGLSL(const GrGLContextInfo& ctxInfo, const GrGLInterface* gli
         }
     }
 
-    if (kGL_GrGLStandard == standard) {
-        shaderCaps->fSampleVariablesSupport = ctxInfo.glslGeneration() >= k400_GrGLSLGeneration;
-    } else {
-        if (ctxInfo.glslGeneration() >= k320es_GrGLSLGeneration) {
-            shaderCaps->fSampleVariablesSupport = true;
-        } else if (ctxInfo.hasExtension("GL_OES_sample_variables")) {
-            shaderCaps->fSampleVariablesSupport = true;
-            shaderCaps->fSampleVariablesExtensionString = "GL_OES_sample_variables";
-        }
-    }
-
-    if (shaderCaps->fSampleVariablesSupport &&
-        ctxInfo.hasExtension("GL_NV_sample_mask_override_coverage")) {
-        shaderCaps->fSampleMaskOverrideCoverageSupport = true;
-    }
-
     shaderCaps->fVersionDeclString = get_glsl_version_decl_string(standard,
                                                                   shaderCaps->fGLSLGeneration,
                                                                   fIsCoreProfile);
@@ -1334,7 +1318,6 @@ void GrGLCaps::initConfigTable(const GrContextOptions& contextOptions,
 
     // Correctness workarounds.
     bool disableTextureRedForMesa = false;
-    bool disableBGRATexStorageForDriver = false;
     bool disableSRGBForX86PowerVR = false;
     bool disableSRGBWriteControlForAdreno4xx = false;
     bool disableR8TexStorageForANGLEGL = false;
@@ -1351,12 +1334,6 @@ void GrGLCaps::initConfigTable(const GrContextOptions& contextOptions,
             isX86PowerVR = true;
         }
 #endif
-        // Adreno 3xx, 4xx, 5xx, and NexusPlayer all fail if we try to use TexStorage with BGRA
-        disableBGRATexStorageForDriver = kAdreno3xx_GrGLRenderer == ctxInfo.renderer() ||
-                                         kAdreno4xx_GrGLRenderer == ctxInfo.renderer() ||
-                                         kAdreno5xx_GrGLRenderer == ctxInfo.renderer() ||
-                                         isX86PowerVR;
-
         // NexusPlayer has strange bugs with sRGB (skbug.com/4148). This is a targeted fix to
         // blacklist that device (and any others that might be sharing the same driver).
         disableSRGBForX86PowerVR = isX86PowerVR;
@@ -1442,6 +1419,12 @@ void GrGLCaps::initConfigTable(const GrContextOptions& contextOptions,
         GR_GL_BGRA;
     fConfigTable[kBGRA_8888_GrPixelConfig].fFormats.fExternalType  = GR_GL_UNSIGNED_BYTE;
     fConfigTable[kBGRA_8888_GrPixelConfig].fFormatType = kNormalizedFixedPoint_FormatType;
+
+   // TexStorage requires using a sized internal format and BGRA8 is only supported if we have the
+   // GL_APPLE_texture_format_BGRA8888 extension or if we have GL_EXT_texutre_storage and
+   // GL_EXT_texture_format_BGRA8888.
+    bool supportsBGRATexStorage = false;
+
     if (kGL_GrGLStandard == standard) {
         fConfigTable[kBGRA_8888_GrPixelConfig].fFormats.fBaseInternalFormat = GR_GL_RGBA;
         fConfigTable[kBGRA_8888_GrPixelConfig].fFormats.fSizedInternalFormat = GR_GL_RGBA8;
@@ -1450,6 +1433,8 @@ void GrGLCaps::initConfigTable(const GrContextOptions& contextOptions,
             fConfigTable[kBGRA_8888_GrPixelConfig].fFlags = ConfigInfo::kTextureable_Flag |
                                                             allRenderFlags;
         }
+        // Since we are using RGBA8 we can use tex storage.
+        supportsBGRATexStorage = true;
     } else {
         fConfigTable[kBGRA_8888_GrPixelConfig].fFormats.fBaseInternalFormat = GR_GL_BGRA;
         fConfigTable[kBGRA_8888_GrPixelConfig].fFormats.fSizedInternalFormat = GR_GL_BGRA8;
@@ -1464,10 +1449,15 @@ void GrGLCaps::initConfigTable(const GrContextOptions& contextOptions,
             if (version >= GR_GL_VER(3,0)) {
                 // The APPLE extension doesn't make this renderable.
                 fConfigTable[kBGRA_8888_GrPixelConfig].fFlags = ConfigInfo::kTextureable_Flag;
+                supportsBGRATexStorage = true;
             }
         } else if (ctxInfo.hasExtension("GL_EXT_texture_format_BGRA8888")) {
             fConfigTable[kBGRA_8888_GrPixelConfig].fFlags = ConfigInfo::kTextureable_Flag |
                                                             nonMSAARenderFlags;
+
+            if (ctxInfo.hasExtension("GL_EXT_texture_storage")) {
+                supportsBGRATexStorage = true;
+            }
             if (ctxInfo.hasExtension("GL_CHROMIUM_renderbuffer_format_BGRA8888") &&
                 (this->usesMSAARenderBuffers() || this->fMSFBOType == kMixedSamples_MSFBOType)) {
                 fConfigTable[kBGRA_8888_GrPixelConfig].fFlags |=
@@ -1476,7 +1466,7 @@ void GrGLCaps::initConfigTable(const GrContextOptions& contextOptions,
         }
     }
 
-    if (texStorageSupported && !disableBGRATexStorageForDriver) {
+    if (texStorageSupported && supportsBGRATexStorage) {
         fConfigTable[kBGRA_8888_GrPixelConfig].fFlags |= ConfigInfo::kCanUseTexStorage_Flag;
     }
     fConfigTable[kBGRA_8888_GrPixelConfig].fSwizzle = GrSwizzle::RGBA();
@@ -1890,7 +1880,7 @@ void GrGLCaps::initConfigTable(const GrContextOptions& contextOptions,
     //     ES 2.0: the extension makes BGRA an external format but not an internal format.
     //     ES 3.0: the extension explicitly states GL_BGRA8 is not a valid internal format for
     //             glTexImage (just for glTexStorage).
-    if (useSizedTexFormats && this->bgraIsInternalFormat())  {
+    if (useSizedTexFormats && this->bgraIsInternalFormat()) {
         fConfigTable[kBGRA_8888_GrPixelConfig].fFormats.fInternalFormatTexImage = GR_GL_BGRA;
     }
 
@@ -2267,12 +2257,6 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
     // TODO: Once this is fixed we can update the check here to look at a driver version number too.
     if (kAdreno5xx_GrGLRenderer == ctxInfo.renderer()) {
         shaderCaps->fFBFetchSupport = false;
-    }
-
-    // Pre-361 NVIDIA has a bug with NV_sample_mask_override_coverage.
-    if (kNVIDIA_GrGLDriver == ctxInfo.driver() &&
-        ctxInfo.driverVersion() < GR_GL_DRIVER_VER(361,00)) {
-        shaderCaps->fSampleMaskOverrideCoverageSupport = false;
     }
 
     // Adreno GPUs have a tendency to drop tiles when there is a divide-by-zero in a shader

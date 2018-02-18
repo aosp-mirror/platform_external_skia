@@ -59,10 +59,6 @@ def dm_flags(api, bot):
   if '-x86-' in bot and not 'NexusPlayer' in bot:
     args.extend(['--threads', '4'])
 
-  # Temporarily serialize the NexusPlayer Test bots to help diagnose skia:7614.
-  if 'NexusPlayer' in bot:
-    args.extend(['--threads', '0'])
-
   # Nexus7 runs out of memory due to having 4 cores and only 1G RAM.
   if 'CPU' in bot and 'Nexus7' in bot:
     args.extend(['--threads', '2'])
@@ -139,9 +135,12 @@ def dm_flags(api, bot):
     elif 'ChromeOS' in bot:
       gl_prefix = 'gles'
 
-    configs.extend([gl_prefix, gl_prefix + 'dft', gl_prefix + 'srgb'])
-    if sample_count is not '':
-      configs.append(gl_prefix + 'msaa' + sample_count)
+    if 'NativeFonts' in bot:
+      configs.append(gl_prefix)
+    else:
+      configs.extend([gl_prefix, gl_prefix + 'dft', gl_prefix + 'srgb'])
+      if sample_count is not '':
+        configs.append(gl_prefix + 'msaa' + sample_count)
 
     # The NP produces a long error stream when we run with MSAA. The Tegra3 just
     # doesn't support it.
@@ -951,6 +950,7 @@ TEST_BUILDERS = [
   'Test-Mac-Clang-MacBookAir7.2-GPU-IntelHD6000-x86_64-Debug-All',
   'Test-Mac-Clang-MacMini7.1-CPU-AVX-x86_64-Release-All',
   'Test-Mac-Clang-MacMini7.1-GPU-IntelIris5100-x86_64-Debug-All-CommandBuffer',
+  'Test-Mac-Clang-MacBook10.1-GPU-IntelHD615-x86_64-Release-All-NativeFonts',
   'Test-Ubuntu16-Clang-NUC5PPYH-GPU-IntelHD405-x86_64-Debug-All',
   'Test-Ubuntu16-Clang-NUC5PPYH-GPU-IntelHD405-x86_64-Release-All-Vulkan',
   'Test-Ubuntu16-Clang-NUC7i5BNK-GPU-IntelIris640-x86_64-Debug-All-Vulkan',

@@ -189,7 +189,9 @@ void SkSVGNode::onSetAttribute(SkSVGAttribute attr, const SkSVGValue& v) {
         }
         break;
     default:
+#if defined(SK_VERBOSE_SVG_PARSING)
         SkDebugf("attribute ID <%d> ignored for node <%d>\n", attr, fTag);
+#endif
         break;
     }
 }
