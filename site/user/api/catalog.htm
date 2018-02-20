@@ -2703,17 +2703,24 @@
         "stdout": "left: 2e+38 right: 3e+38 centerX: inf safe mid x: 2.5e+38\\n"
     },
         "SkRect_contains": {
+    "code": "void draw(SkCanvas* canvas) {\n    SkRect rect = { 30, 50, 40, 60 };\n    SkPoint tests[] = { { 30, 50 }, { 39, 49 }, { 29, 59 } };\n    for (auto contained : tests) {\n        SkDebugf(\"rect: (%g, %g, %g, %g) %s (%g, %g)\\n\",\n                 rect.left(), rect.top(), rect.right(), rect.bottom(),\n                 rect.contains(contained.x(), contained.y()) ? \"contains\" : \"does not contain\",\n                 contained.x(), contained.y());\n    }\n}",
+    "hash": "85be528a78945a6dc4f7dccb80a80746",
+    "file": "SkRect_Reference",
+    "name": "SkRect::contains()",
+        "stdout": "rect: (30, 50, 40, 60) contains (30, 50)\\nrect: (30, 50, 40, 60) does not contain (39, 49)\\nrect: (30, 50, 40, 60) does not contain (29, 59)\\n"
+    },
+        "SkRect_contains_2": {
     "code": "void draw(SkCanvas* canvas) {\n    SkRect rect = { 30, 50, 40, 60 };\n    SkRect tests[] = { { 30, 50, 31, 51}, { 39, 49, 40, 50}, { 29, 59, 30, 60} };\n    for (auto contained : tests) {\n        SkDebugf(\"rect: (%g, %g, %g, %g) %s (%g, %g, %g, %g)\\n\",\n                 rect.left(), rect.top(), rect.right(), rect.bottom(),\n                 rect.contains(contained) ? \"contains\" : \"does not contain\",\n                 contained.left(), contained.top(), contained.right(), contained.bottom());\n    }\n}",
     "hash": "92f9e6aa5bb76791139a24cf7d8df99e",
     "file": "SkRect_Reference",
-    "name": "SkRect::contains()",
+    "name": "SkRect::contains_2",
         "stdout": "rect: (30, 50, 40, 60) contains (30, 50, 31, 51)\\nrect: (30, 50, 40, 60) does not contain (39, 49, 40, 50)\\nrect: (30, 50, 40, 60) does not contain (29, 59, 30, 60)\\n"
     },
-        "SkRect_contains_2": {
+        "SkRect_contains_3": {
     "code": "void draw(SkCanvas* canvas) {\n    SkRect rect = { 30, 50, 40, 60 };\n    SkIRect tests[] = { { 30, 50, 31, 51}, { 39, 49, 40, 50}, { 29, 59, 30, 60} };\n    for (auto contained : tests) {\n        SkDebugf(\"rect: (%g, %g, %g, %g) %s (%d, %d, %d, %d)\\n\",\n                 rect.left(), rect.top(), rect.right(), rect.bottom(),\n                 rect.contains(contained) ? \"contains\" : \"does not contain\",\n                 contained.left(), contained.top(), contained.right(), contained.bottom());\n    }\n}",
     "hash": "dd58b699551dd44026a2c6386be27d88",
     "file": "SkRect_Reference",
-    "name": "SkRect::contains_2",
+    "name": "SkRect::contains_3",
         "stdout": "rect: (30, 50, 40, 60) contains (30, 50, 31, 51)\\nrect: (30, 50, 40, 60) does not contain (39, 49, 40, 50)\\nrect: (30, 50, 40, 60) does not contain (29, 59, 30, 60)\\n"
     },
         "SkRect_dump": {
@@ -6351,18 +6358,18 @@
     "name": "SkPath::isConvex"
 },
     "SkPath_isOval": {
-    "code": "void draw(SkCanvas* canvas) {\n    SkPaint paint;\n    SkPath path;\n    path.addOval({20, 20, 220, 220}, SkPath::kCW_Direction, 1);\n    SkRect bounds;\n    SkPath::Direction direction;\n    unsigned start;\n    path.isOval(&bounds, &direction, &start);\n    paint.setColor(0xFF9FBFFF);\n    canvas->drawRect(bounds, paint);\n    paint.setColor(0x3f000000);\n    canvas->drawPath(path, paint);\n    paint.setColor(SK_ColorBLACK);\n    canvas->rotate(start * 90, bounds.centerX(), bounds.centerY());\n    char startText = '0' + start;\n    paint.setTextSize(20);\n    canvas->drawText(&startText, 1, bounds.centerX(), bounds.fTop + 20, paint);\n    paint.setStyle(SkPaint::kStroke_Style);\n    paint.setStrokeWidth(4);\n    path.reset();\n    path.addArc(bounds, -90, SkPath::kCW_Direction == direction ? 90 : -90);\n    path.rLineTo(20, -20); \n    canvas->drawPath(path, paint);\n}\n",
+    "code": "void draw(SkCanvas* canvas) {\n    SkPaint paint;\n    SkPath path;\n    path.addOval({20, 20, 220, 220});\n    SkRect bounds;\n    if (path.isOval(&bounds)) {\n        paint.setColor(0xFF9FBFFF);\n        canvas->drawRect(bounds, paint);\n    }\n    paint.setColor(0x3f000000);\n    canvas->drawPath(path, paint);\n}\n",
     "width": 256,
     "height": 256,
-    "hash": "4fc7b86c9b772c5e85af480524267bde",
+    "hash": "a51256952b183ee0f7004f2c87cbbf5b",
     "file": "SkPath_Reference",
     "name": "SkPath::isOval"
 },
     "SkPath_isRRect": {
-    "code": "void draw(SkCanvas* canvas) {\n    SkPaint paint;\n    SkPath path;\n    path.addRRect(SkRRect::MakeRectXY({20, 20, 220, 220}, 30, 50), SkPath::kCCW_Direction, 3);\n    SkRRect rrect;\n    SkPath::Direction direction;\n    unsigned start;\n    path.isRRect(&rrect, &direction, &start);\n    const SkRect& bounds = rrect.rect();\n    paint.setColor(0xFF9FBFFF);\n    canvas->drawRect(bounds, paint);\n    paint.setColor(0x3f000000);\n    canvas->drawPath(path, paint);\n    paint.setColor(SK_ColorBLACK);\n    canvas->rotate(start * 90, bounds.centerX(), bounds.centerY());\n    char startText = '0' + start;\n    paint.setTextSize(20);\n    canvas->drawText(&startText, 1, bounds.centerX(), bounds.fTop + 20, paint);\n    paint.setStyle(SkPaint::kStroke_Style);\n    paint.setStrokeWidth(4);\n    path.reset();\n    path.addArc(bounds, -90, SkPath::kCW_Direction == direction ? 90 : -90);\n    path.rLineTo(20, -20); \n    canvas->drawPath(path, paint);\n}\n",
+    "code": "void draw(SkCanvas* canvas) {\n    SkPaint paint;\n    SkPath path;\n    path.addRRect(SkRRect::MakeRectXY({20, 20, 220, 220}, 30, 50));\n    SkRRect rrect;\n    if (path.isRRect(&rrect)) {\n        const SkRect& bounds = rrect.rect();\n        paint.setColor(0xFF9FBFFF);\n        canvas->drawRect(bounds, paint);\n    }\n    paint.setColor(0x3f000000);\n    canvas->drawPath(path, paint);\n}\n",
     "width": 256,
     "height": 256,
-    "hash": "f2b7e57a385e6604475c99ec8daa2697",
+    "hash": "2aa939b90d96aff436b145a96305132c",
     "file": "SkPath_Reference",
     "name": "SkPath::isRRect"
 },
