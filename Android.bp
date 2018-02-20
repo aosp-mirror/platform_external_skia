@@ -1797,6 +1797,11 @@ cc_test {
         "tools/trace/SkDebugfTracer.cpp",
         "tools/trace/SkEventTracingPriv.cpp",
     ],
+
+    shared_libs: [
+        "libbinder",
+        "libutils",
+    ],
 }
 
 cc_test {
