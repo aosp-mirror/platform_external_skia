@@ -48,8 +48,8 @@ its top, it is considered empty.
 | <a href="#SkIRect_bottom">bottom</a> | returns larger bounds in y, if sorted |
 | <a href="#SkIRect_centerX">centerX</a> | returns midpoint in x |
 | <a href="#SkIRect_centerY">centerY</a> | returns midpoint in y |
-| <a href="#SkIRect_contains">contains</a> | returns true if points are equal or inside |
-| <a href="#SkIRect_containsNoEmptyCheck">containsNoEmptyCheck</a> | returns true if points are equal or inside skips empty check |
+| <a href="#SkIRect_contains">contains</a> | returns true if <a href="SkIPoint_Reference#IPoint">IPoint</a> (x, y) is equal or inside |
+| <a href="#SkIRect_containsNoEmptyCheck">containsNoEmptyCheck</a> | returns true if contains unsorted <a href="#IRect">IRect</a> |
 | <a href="#SkIRect_height">height</a> | returns span in y |
 | <a href="#SkIRect_height64">height64</a> | returns span in y as int64_t |
 | <a href="#SkIRect_inset">inset</a> | moves the sides symmetrically about the center |
@@ -1507,9 +1507,9 @@ describes an area: <a href="#SkIRect_fLeft">fLeft</a> is less than <a href="#SkI
 | --- | --- |
 | <a href="#SkIRect_Intersects">Intersects</a> | returns true if areas overlap |
 | <a href="#SkIRect_IntersectsNoEmptyCheck">IntersectsNoEmptyCheck</a> | returns true if areas overlap skips empty check |
-| <a href="#SkIRect_contains">contains</a> | returns true if points are equal or inside |
+| <a href="#SkIRect_contains">contains</a> | returns true if <a href="SkIPoint_Reference#IPoint">IPoint</a> (x, y) is equal or inside |
 |  | <a href="#SkIRect_contains">contains(int32 t x, int32 t y)</a> const |
-| <a href="#SkIRect_containsNoEmptyCheck">containsNoEmptyCheck</a> | returns true if points are equal or inside skips empty check |
+| <a href="#SkIRect_containsNoEmptyCheck">containsNoEmptyCheck</a> | returns true if contains unsorted <a href="#IRect">IRect</a> |
 |  | <a href="#SkIRect_containsNoEmptyCheck">containsNoEmptyCheck(int32 t left, int32 t top, int32 t right, int32 t bottom)</a> const |
 | <a href="#SkIRect_intersect">intersect</a> | sets to shared area; returns true if not empty |
 |  | <a href="#SkIRect_intersect">intersect(const SkIRect& r)</a> |
@@ -1585,9 +1585,9 @@ returns true if constructed area is completely enclosed by <a href="#IRect">IRec
 ### Parameters
 
 <table>  <tr>    <td><a name="SkIRect_contains_x"> <code><strong>x </strong></code> </a></td> <td>
-test <a href="SkPoint_Reference#Point">Point</a> x-coordinate</td>
+test <a href="SkIPoint_Reference#IPoint">IPoint</a> x-coordinate</td>
   </tr>  <tr>    <td><a name="SkIRect_contains_y"> <code><strong>y </strong></code> </a></td> <td>
-test <a href="SkPoint_Reference#Point">Point</a> y-coordinate</td>
+test <a href="SkIPoint_Reference#IPoint">IPoint</a> y-coordinate</td>
   </tr>
 </table>
 
@@ -1611,7 +1611,7 @@ rect: (30, 50, 40, 60) does not contain (30, 60)
 
 ### See Also
 
-<a href="#SkIRect_containsNoEmptyCheck">containsNoEmptyCheck</a><sup><a href="#SkIRect_containsNoEmptyCheck_2">[2]</a></sup> <a href="SkRect_Reference#SkRect_contains">SkRect::contains</a><sup><a href="SkRect_Reference#SkRect_contains_2">[2]</a></sup>
+<a href="#SkIRect_containsNoEmptyCheck">containsNoEmptyCheck</a><sup><a href="#SkIRect_containsNoEmptyCheck_2">[2]</a></sup> <a href="SkRect_Reference#SkRect_contains">SkRect::contains</a><sup><a href="SkRect_Reference#SkRect_contains_2">[2]</a></sup><sup><a href="SkRect_Reference#SkRect_contains_3">[3]</a></sup>
 
 ---
 
@@ -1660,7 +1660,7 @@ rect: (30, 50, 40, 60) does not contain (29, 59, 30, 60)
 
 ### See Also
 
-<a href="#SkIRect_containsNoEmptyCheck">containsNoEmptyCheck</a><sup><a href="#SkIRect_containsNoEmptyCheck_2">[2]</a></sup> <a href="SkRect_Reference#SkRect_contains">SkRect::contains</a><sup><a href="SkRect_Reference#SkRect_contains_2">[2]</a></sup>
+<a href="#SkIRect_containsNoEmptyCheck">containsNoEmptyCheck</a><sup><a href="#SkIRect_containsNoEmptyCheck_2">[2]</a></sup> <a href="SkRect_Reference#SkRect_contains">SkRect::contains</a><sup><a href="SkRect_Reference#SkRect_contains_2">[2]</a></sup><sup><a href="SkRect_Reference#SkRect_contains_3">[3]</a></sup>
 
 ---
 
@@ -1702,7 +1702,7 @@ rect: (30, 50, 40, 60) does not contain (29, 59, 30, 60)
 
 ### See Also
 
-<a href="#SkIRect_containsNoEmptyCheck">containsNoEmptyCheck</a><sup><a href="#SkIRect_containsNoEmptyCheck_2">[2]</a></sup> <a href="SkRect_Reference#SkRect_contains">SkRect::contains</a><sup><a href="SkRect_Reference#SkRect_contains_2">[2]</a></sup>
+<a href="#SkIRect_containsNoEmptyCheck">containsNoEmptyCheck</a><sup><a href="#SkIRect_containsNoEmptyCheck_2">[2]</a></sup> <a href="SkRect_Reference#SkRect_contains">SkRect::contains</a><sup><a href="SkRect_Reference#SkRect_contains_2">[2]</a></sup><sup><a href="SkRect_Reference#SkRect_contains_3">[3]</a></sup>
 
 ---
 
@@ -1744,7 +1744,7 @@ rect: (30, 50, 40, 60) does not contain (29, 59, 30, 60)
 
 ### See Also
 
-<a href="#SkIRect_containsNoEmptyCheck">containsNoEmptyCheck</a><sup><a href="#SkIRect_containsNoEmptyCheck_2">[2]</a></sup> <a href="SkRect_Reference#SkRect_contains">SkRect::contains</a><sup><a href="SkRect_Reference#SkRect_contains_2">[2]</a></sup>
+<a href="#SkIRect_containsNoEmptyCheck">containsNoEmptyCheck</a><sup><a href="#SkIRect_containsNoEmptyCheck_2">[2]</a></sup> <a href="SkRect_Reference#SkRect_contains">SkRect::contains</a><sup><a href="SkRect_Reference#SkRect_contains_2">[2]</a></sup><sup><a href="SkRect_Reference#SkRect_contains_3">[3]</a></sup>
 
 ---
 
@@ -1796,7 +1796,7 @@ rect: (30, 50, 40, 60) does not contain (29, 59, 30, 60)
 
 ### See Also
 
-<a href="#SkIRect_contains">contains</a><sup><a href="#SkIRect_contains_2">[2]</a></sup><sup><a href="#SkIRect_contains_3">[3]</a></sup><sup><a href="#SkIRect_contains_4">[4]</a></sup> <a href="SkRect_Reference#SkRect_contains">SkRect::contains</a><sup><a href="SkRect_Reference#SkRect_contains_2">[2]</a></sup>
+<a href="#SkIRect_contains">contains</a><sup><a href="#SkIRect_contains_2">[2]</a></sup><sup><a href="#SkIRect_contains_3">[3]</a></sup><sup><a href="#SkIRect_contains_4">[4]</a></sup> <a href="SkRect_Reference#SkRect_contains">SkRect::contains</a><sup><a href="SkRect_Reference#SkRect_contains_2">[2]</a></sup><sup><a href="SkRect_Reference#SkRect_contains_3">[3]</a></sup>
 
 ---
 
@@ -1838,7 +1838,7 @@ rect: (30, 50, 40, 60) does not contain (29, 59, 30, 60)
 
 ### See Also
 
-<a href="#SkIRect_contains">contains</a><sup><a href="#SkIRect_contains_2">[2]</a></sup><sup><a href="#SkIRect_contains_3">[3]</a></sup><sup><a href="#SkIRect_contains_4">[4]</a></sup> <a href="SkRect_Reference#SkRect_contains">SkRect::contains</a><sup><a href="SkRect_Reference#SkRect_contains_2">[2]</a></sup>
+<a href="#SkIRect_contains">contains</a><sup><a href="#SkIRect_contains_2">[2]</a></sup><sup><a href="#SkIRect_contains_3">[3]</a></sup><sup><a href="#SkIRect_contains_4">[4]</a></sup> <a href="SkRect_Reference#SkRect_contains">SkRect::contains</a><sup><a href="SkRect_Reference#SkRect_contains_2">[2]</a></sup><sup><a href="SkRect_Reference#SkRect_contains_3">[3]</a></sup>
 
 ---
 

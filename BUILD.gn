@@ -1401,6 +1401,7 @@ if (skia_enable_tools) {
       "experimental/sksg/geometry/SkSGGeometryTransform.cpp",
       "experimental/sksg/geometry/SkSGMerge.cpp",
       "experimental/sksg/geometry/SkSGPath.cpp",
+      "experimental/sksg/geometry/SkSGPlane.cpp",
       "experimental/sksg/geometry/SkSGRect.cpp",
       "experimental/sksg/geometry/SkSGText.cpp",
       "experimental/sksg/geometry/SkSGTrimEffect.cpp",
@@ -1946,13 +1947,13 @@ if (skia_enable_tools) {
         bundle_ios_data = true
       }
       sources = [
+        "tools/viewer/BisectSlide.cpp",
         "tools/viewer/GMSlide.cpp",
         "tools/viewer/ImGuiLayer.cpp",
         "tools/viewer/ImageSlide.cpp",
         "tools/viewer/SKPSlide.cpp",
         "tools/viewer/SampleSlide.cpp",
         "tools/viewer/SkottieSlide.cpp",
-        "tools/viewer/SkottieSlide2.cpp",
         "tools/viewer/SlideDir.cpp",
         "tools/viewer/StatsLayer.cpp",
         "tools/viewer/Viewer.cpp",

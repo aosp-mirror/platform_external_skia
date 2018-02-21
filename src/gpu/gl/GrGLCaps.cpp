@@ -721,19 +721,6 @@ void GrGLCaps::initGLSL(const GrGLContextInfo& ctxInfo, const GrGLInterface* gli
         }
     }
 
-    if (kGL_GrGLStandard == standard) {
-        shaderCaps->fMultisampleInterpolationSupport =
-                ctxInfo.glslGeneration() >= k400_GrGLSLGeneration;
-    } else {
-        if (ctxInfo.glslGeneration() >= k320es_GrGLSLGeneration) {
-            shaderCaps->fMultisampleInterpolationSupport = true;
-        } else if (ctxInfo.hasExtension("GL_OES_shader_multisample_interpolation")) {
-            shaderCaps->fMultisampleInterpolationSupport = true;
-            shaderCaps->fMultisampleInterpolationExtensionString =
-                "GL_OES_shader_multisample_interpolation";
-        }
-    }
-
     shaderCaps->fVersionDeclString = get_glsl_version_decl_string(standard,
                                                                   shaderCaps->fGLSLGeneration,
                                                                   fIsCoreProfile);
@@ -2409,6 +2396,20 @@ void GrGLCaps::onApplyOptionsOverrides(const GrContextOptions& options) {
     if (options.fDoManualMipmapping) {
         fDoManualMipmapping = true;
     }
+}
+
+bool GrGLCaps::onIsMixedSamplesSupportedForRT(const GrBackendRenderTarget& backendRT) const {
+    const GrGLFramebufferInfo* fbInfo = backendRT.getGLFramebufferInfo();
+    SkASSERT(fbInfo);
+    // Mixed samples are not supported for FBO 0;
+    return fbInfo->fFBOID != 0;
+}
+
+bool GrGLCaps::onIsWindowRectanglesSupportedForRT(const GrBackendRenderTarget& backendRT) const {
+    const GrGLFramebufferInfo* fbInfo = backendRT.getGLFramebufferInfo();
+    SkASSERT(fbInfo);
+    // Window Rectangles are not supported for FBO 0;
+    return fbInfo->fFBOID != 0;
 }
 
 int GrGLCaps::getRenderTargetSampleCount(int requestedCount, GrPixelConfig config) const {

@@ -39,7 +39,9 @@ SkInternalAtlasTextContext::~SkInternalAtlasTextContext() {
     if (fDistanceFieldAtlas.fProxy) {
 #ifdef SK_DEBUG
         auto atlasGlyphCache = fGrContext->contextPriv().getAtlasGlyphCache();
-        SkASSERT(1 == atlasGlyphCache->getAtlasPageCount(kA8_GrMaskFormat));
+        unsigned int numProxies;
+        atlasGlyphCache->getProxies(kA8_GrMaskFormat, &numProxies);
+        SkASSERT(1 == numProxies);
 #endif
         fRenderer->deleteTexture(fDistanceFieldAtlas.fTextureHandle);
     }
@@ -86,8 +88,10 @@ void SkInternalAtlasTextContext::recordDraw(const void* srcVertexData, int glyph
 void SkInternalAtlasTextContext::flush() {
     auto* atlasGlyphCache = fGrContext->contextPriv().getAtlasGlyphCache();
     if (!fDistanceFieldAtlas.fProxy) {
-        SkASSERT(1 == atlasGlyphCache->getAtlasPageCount(kA8_GrMaskFormat));
-        fDistanceFieldAtlas.fProxy = atlasGlyphCache->getProxies(kA8_GrMaskFormat)->get();
+        unsigned int numProxies;
+        fDistanceFieldAtlas.fProxy = atlasGlyphCache->getProxies(kA8_GrMaskFormat,
+                                                                 &numProxies)->get();
+        SkASSERT(1 == numProxies);
         fDistanceFieldAtlas.fTextureHandle =
                 fRenderer->createTexture(SkAtlasTextRenderer::AtlasFormat::kA8,
                                          fDistanceFieldAtlas.fProxy->width(),
@@ -95,8 +99,8 @@ void SkInternalAtlasTextContext::flush() {
     }
     GrDeferredTextureUploadWritePixelsFn writePixelsFn =
             [this](GrTextureProxy* proxy, int left, int top, int width, int height,
-                   GrPixelConfig config, const void* data, size_t rowBytes) -> bool {
-        SkASSERT(kAlpha_8_GrPixelConfig == config);
+                   GrColorType colorType, const void* data, size_t rowBytes) -> bool {
+        SkASSERT(GrColorType::kAlpha_8 == colorType);
         SkASSERT(proxy == this->fDistanceFieldAtlas.fProxy);
         void* handle = fDistanceFieldAtlas.fTextureHandle;
         this->fRenderer->setTextureData(handle, data, left, top, width, height, rowBytes);

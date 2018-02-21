@@ -1070,6 +1070,7 @@ cc_test {
         "experimental/sksg/geometry/SkSGGeometryTransform.cpp",
         "experimental/sksg/geometry/SkSGMerge.cpp",
         "experimental/sksg/geometry/SkSGPath.cpp",
+        "experimental/sksg/geometry/SkSGPlane.cpp",
         "experimental/sksg/geometry/SkSGRect.cpp",
         "experimental/sksg/geometry/SkSGText.cpp",
         "experimental/sksg/geometry/SkSGTrimEffect.cpp",
@@ -1509,7 +1510,6 @@ cc_test {
         "tests/GpuDrawPathTest.cpp",
         "tests/GpuLayerCacheTest.cpp",
         "tests/GpuRectanizerTest.cpp",
-        "tests/GpuSampleLocationsTest.cpp",
         "tests/GrAllocatorTest.cpp",
         "tests/GrCCPRTest.cpp",
         "tests/GrContextAbandonTest.cpp",
@@ -1797,6 +1797,11 @@ cc_test {
         "tools/trace/SkDebugfTracer.cpp",
         "tools/trace/SkEventTracingPriv.cpp",
     ],
+
+    shared_libs: [
+        "libbinder",
+        "libutils",
+    ],
 }
 
 cc_test {
@@ -1993,6 +1998,7 @@ cc_test {
         "experimental/sksg/geometry/SkSGGeometryTransform.cpp",
         "experimental/sksg/geometry/SkSGMerge.cpp",
         "experimental/sksg/geometry/SkSGPath.cpp",
+        "experimental/sksg/geometry/SkSGPlane.cpp",
         "experimental/sksg/geometry/SkSGRect.cpp",
         "experimental/sksg/geometry/SkSGText.cpp",
         "experimental/sksg/geometry/SkSGTrimEffect.cpp",

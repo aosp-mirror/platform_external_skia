@@ -76,6 +76,10 @@ GrDrawOpAtlas::Plot::Plot(int pageIndex, int plotIndex, uint64_t genID, int offX
         , fDirty(false)
 #endif
 {
+    // We expect the allocated dimensions to be a multiple of 4 bytes
+    SkASSERT(((width*fBytesPerPixel) & 0x3) == 0);
+    // The padding for faster uploads only works for 1, 2 and 4 byte texels
+    SkASSERT(fBytesPerPixel != 3 && fBytesPerPixel <= 4);
     fDirtyRect.setEmpty();
 }
 
@@ -136,10 +140,19 @@ void GrDrawOpAtlas::Plot::uploadToTexture(GrDeferredTextureUploadWritePixelsFn& 
     TRACE_EVENT0("skia.gpu", TRACE_FUNC);
     size_t rowBytes = fBytesPerPixel * fWidth;
     const unsigned char* dataPtr = fData;
+    // Clamp to 4-byte aligned boundaries
+    unsigned int clearBits = 0x3 / fBytesPerPixel;
+    fDirtyRect.fLeft &= ~clearBits;
+    fDirtyRect.fRight += clearBits;
+    fDirtyRect.fRight &= ~clearBits;
+    SkASSERT(fDirtyRect.fRight <= fWidth);
+    // Set up dataPtr
     dataPtr += rowBytes * fDirtyRect.fTop;
     dataPtr += fBytesPerPixel * fDirtyRect.fLeft;
+    // TODO: Make GrDrawOpAtlas store a GrColorType rather than GrPixelConfig.
+    auto colorType = GrPixelConfigToColorType(fConfig);
     writePixels(proxy, fOffset.fX + fDirtyRect.fLeft, fOffset.fY + fDirtyRect.fTop,
-                fDirtyRect.width(), fDirtyRect.height(), fConfig, dataPtr, rowBytes);
+                fDirtyRect.width(), fDirtyRect.height(), colorType, dataPtr, rowBytes);
     fDirtyRect.setEmpty();
     SkDEBUGCODE(fDirty = false;)
 }
@@ -181,7 +194,7 @@ GrDrawOpAtlas::GrDrawOpAtlas(GrContext* context, GrPixelConfig config, int width
     SkASSERT(fPlotWidth * numPlotsX == fTextureWidth);
     SkASSERT(fPlotHeight * numPlotsY == fTextureHeight);
 
-    SkDEBUGCODE(fNumPlots = numPlotsX * numPlotsY;)
+    fNumPlots = numPlotsX * numPlotsY;
 
     this->createNewPage();
 }
@@ -412,11 +425,11 @@ void GrDrawOpAtlas::compact(GrDeferredUploadToken startTokenForNextFlush) {
 #endif
         }
 
-        // Count recently used plots in the last page and evict them if there's available space
-        // in earlier pages. Since we prioritize uploading to the first pages, this will eventually
+        // Count recently used plots in the last page and evict any that are no longer in use.
+        // Since we prioritize uploading to the first pages, this will eventually
         // clear out usage of this page unless we have a large need.
         plotIter.init(fPages[lastPageIndex].fPlotList, PlotList::Iter::kHead_IterStart);
-        int usedPlots = 0;
+        unsigned int usedPlots = 0;
 #ifdef DUMP_ATLAS_DATA
         if (gDumpAtlasData) {
             SkDebugf("page %d: ", lastPageIndex);
@@ -436,14 +449,6 @@ void GrDrawOpAtlas::compact(GrDeferredUploadToken startTokenForNextFlush) {
             // If this plot was used recently
             if (plot->flushesSinceLastUsed() <= kRecentlyUsedCount) {
                 usedPlots++;
-                // see if there's room in an earlier page and if so evict.
-                // We need to be somewhat harsh here so that one plot that is consistently in use
-                // doesn't end up locking the page in memory.
-                if (availablePlots.count() > 0) {
-                    this->processEvictionAndResetRects(plot);
-                    this->processEvictionAndResetRects(availablePlots.back());
-                    availablePlots.pop_back();
-                }
             } else if (plot->lastUseToken() != GrDeferredUploadToken::AlreadyFlushedToken()) {
                 // otherwise if aged out just evict it.
                 this->processEvictionAndResetRects(plot);
@@ -455,6 +460,33 @@ void GrDrawOpAtlas::compact(GrDeferredUploadToken startTokenForNextFlush) {
             SkDebugf("\n");
         }
 #endif
+
+        // If recently used plots in the last page are using less than a quarter of the page, try
+        // to evict them if there's available space in earlier pages. Since we prioritize uploading
+        // to the first pages, this will eventually clear out usage of this page unless we have a
+        // large need.
+        if (availablePlots.count() && usedPlots && usedPlots <= fNumPlots / 4) {
+            plotIter.init(fPages[lastPageIndex].fPlotList, PlotList::Iter::kHead_IterStart);
+            while (Plot* plot = plotIter.get()) {
+                // If this plot was used recently
+                if (plot->flushesSinceLastUsed() <= kRecentlyUsedCount) {
+                    // See if there's room in an earlier page and if so evict.
+                    // We need to be somewhat harsh here so that a handful of plots that are
+                    // consistently in use don't end up locking the page in memory.
+                    if (availablePlots.count() > 0) {
+                        this->processEvictionAndResetRects(plot);
+                        this->processEvictionAndResetRects(availablePlots.back());
+                        availablePlots.pop_back();
+                        --usedPlots;
+                    }
+                    if (!usedPlots || !availablePlots.count()) {
+                        break;
+                    }
+                }
+                plotIter.next();
+            }
+        }
+
         // If none of the plots in the last page have been used recently, delete it.
         if (!usedPlots) {
 #ifdef DUMP_ATLAS_DATA

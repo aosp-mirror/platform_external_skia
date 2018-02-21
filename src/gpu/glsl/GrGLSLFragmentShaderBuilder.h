@@ -25,20 +25,6 @@ public:
     virtual ~GrGLSLFragmentBuilder() {}
 
     /**
-     * Use of these features may require a GLSL extension to be enabled. Shaders may not compile
-     * if code is added that uses one of these features without calling enableFeature()
-     */
-    enum GLSLFeature {
-        kMultisampleInterpolation_GLSLFeature
-    };
-
-    /**
-     * If the feature is supported then true is returned and any necessary #extension declarations
-     * are added to the shaders. If the feature is not supported then false will be returned.
-     */
-    virtual bool enableFeature(GLSLFeature) = 0;
-
-    /**
      * This returns a variable name to access the 2D, perspective correct version of the coords in
      * the fragment shader. The passed in coordinates must either be of type kHalf2 or kHalf3. If
      * the coordinates are 3-dimensional, it a perspective divide into is emitted into the
@@ -67,16 +53,6 @@ public:
 
         kLast_Coordinates = kGLSLWindow_Coordinates
     };
-
-    /**
-     * Appends the offset from the center of the pixel to a specified sample.
-     *
-     * @param sampleIdx      GLSL expression of the sample index.
-     * @param Coordinates    Coordinate space in which to emit the offset.
-     *
-     * A processor must call setWillUseSampleLocations in its constructor before using this method.
-     */
-    virtual void appendOffsetToSample(const char* sampleIdx, Coordinates) = 0;
 
     /**
      * Fragment procs with child procs should call these functions before/after calling emitCode
@@ -123,11 +99,9 @@ public:
     GrGLSLFragmentShaderBuilder(GrGLSLProgramBuilder* program);
 
     // Shared GrGLSLFragmentBuilder interface.
-    bool enableFeature(GLSLFeature) override;
     virtual SkString ensureCoords2D(const GrShaderVar&) override;
 
     // GrGLSLFPFragmentBuilder interface.
-    void appendOffsetToSample(const char* sampleIdx, Coordinates) override;
     const SkString& getMangleString() const override { return fMangleString; }
     void onBeforeChildProcEmitCode() override;
     void onAfterChildProcEmitCode() override;
@@ -149,10 +123,8 @@ private:
 #ifdef SK_DEBUG
     // As GLSLProcessors emit code, there are some conditions we need to verify.  We use the below
     // state to track this.  The reset call is called per processor emitted.
-    GrProcessor::RequiredFeatures usedProcessorFeatures() const { return fUsedProcessorFeatures; }
     bool hasReadDstColor() const { return fHasReadDstColor; }
     void resetVerification() {
-        fUsedProcessorFeatures = GrProcessor::kNone_RequiredFeatures;
         fHasReadDstColor = false;
     }
 #endif
@@ -163,7 +135,6 @@ private:
     GrSurfaceOrigin getSurfaceOrigin() const;
 
     void onFinalize() override;
-    void defineSampleOffsetArray(const char* name, const SkMatrix&);
 
     static const char* kDstColorName;
 
@@ -191,13 +162,11 @@ private:
     bool fHasCustomColorOutput;
     int fCustomColorOutputIndex;
     bool fHasSecondaryOutput;
-    uint8_t fUsedSampleOffsetArrays;
     bool fForceHighPrecision;
 
 #ifdef SK_DEBUG
     // some state to verify shaders and effects are consistent, this is reset between effects by
     // the program creator
-    GrProcessor::RequiredFeatures fUsedProcessorFeatures;
     bool fHasReadDstColor;
 #endif
 

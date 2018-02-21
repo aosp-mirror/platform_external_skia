@@ -154,42 +154,56 @@ public:
     /** Info struct returned by getReadPixelsInfo about performing intermediate draws before
         reading pixels for performance or correctness. */
     struct ReadPixelTempDrawInfo {
-        /** If the GrGpu is requesting that the caller do a draw to an intermediate surface then
-            this is descriptor for the temp surface. The draw should always be a rect with
-            dst 0,0,w,h. */
+        /**
+         * If the GrGpu is requesting that the caller do a draw to an intermediate surface then
+         * this is descriptor for the temp surface. The draw should always be a rect with dst
+         * 0,0,w,h.
+         */
         GrSurfaceDesc   fTempSurfaceDesc;
-        /** Indicates whether there is a performance advantage to using an exact match texture
-            (in terms of width and height) for the intermediate texture instead of approximate. */
+        /**
+         * Indicates whether there is a performance advantage to using an exact match texture
+         * (in terms of width and height) for the intermediate texture instead of approximate.
+         */
         SkBackingFit    fTempSurfaceFit;
-        /** Swizzle to apply during the draw. This is used to compensate for either feature or
-            performance limitations in the underlying 3D API. */
+        /**
+         * Swizzle to apply during the draw. This is used to compensate for either feature or
+         * performance limitations in the underlying 3D API.
+         */
         GrSwizzle       fSwizzle;
-        /** The config that should be used to read from the temp surface after the draw. This may be
-            different than the original read config in order to compensate for swizzling. The
-            read data will effectively be in the original read config. */
-        GrPixelConfig   fReadConfig;
+        /**
+         * The color type that should be used to read from the temp surface after the draw. This
+         * may be different than the original read color type in order to compensate for swizzling.
+         * The read data will effectively be in the original color type. The original gamma
+         * encoding is always used.
+         */
+        GrColorType     fReadColorType;
     };
 
     /** Describes why an intermediate draw must/should be performed before readPixels. */
     enum DrawPreference {
-        /** On input means that the caller would proceed without draw if the GrGpu doesn't request
-            one.
-            On output means that the GrGpu is not requesting a draw. */
+        /**
+         * On input means that the caller would proceed without draw if the GrGpu doesn't request
+         * one. On output means that the GrGpu is not requesting a draw.
+         */
         kNoDraw_DrawPreference,
-        /** Means that the client would prefer a draw for performance of the readback but
-            can satisfy a straight readPixels call on the inputs without an intermediate draw.
-            getReadPixelsInfo will never set the draw preference to this value but may leave
-            it set. */
+        /**
+         * Means that the client would prefer a draw for performance of the readback but
+         * can satisfy a straight readPixels call on the inputs without an intermediate draw.
+         * getReadPixelsInfo will never set the draw preference to this value but may leave
+         * it set.
+         */
         kCallerPrefersDraw_DrawPreference,
-        /** On output means that GrGpu would prefer a draw for performance of the readback but
-            can satisfy a straight readPixels call on the inputs without an intermediate draw. The
-            caller of getReadPixelsInfo should never specify this on intput. */
+        /**
+         * On output means that GrGpu would prefer a draw for performance of the readback but
+         * can satisfy a straight readPixels call on the inputs without an intermediate draw. The
+         * caller of getReadPixelsInfo should never specify this on intput.
+         */
         kGpuPrefersDraw_DrawPreference,
-        /** On input means that the caller requires a draw to do a transformation and there is no
-            CPU fallback.
-            On output means that GrGpu can only satisfy the readPixels request if the intermediate
-            draw is performed.
-          */
+        /**
+         * On input means that the caller requires a draw to do a transformation and there is no
+         * CPU fallback. On output means that GrGpu can only satisfy the readPixels request if the
+         * intermediate draw is performed.
+         */
         kRequireDraw_DrawPreference
     };
 
@@ -199,25 +213,33 @@ public:
      * that would allow a successful readPixels call. The passed width, height, and rowBytes,
      * must be non-zero and already reflect clipping to the src bounds.
      */
-    bool getReadPixelsInfo(GrSurface*, GrSurfaceOrigin, int width,
-                           int height, size_t rowBytes, GrPixelConfig,
-                           GrSRGBConversion, DrawPreference*, ReadPixelTempDrawInfo*);
+    bool getReadPixelsInfo(GrSurface*, GrSurfaceOrigin, int width, int height, size_t rowBytes,
+                           GrColorType, GrSRGBConversion, DrawPreference*, ReadPixelTempDrawInfo*);
 
-    /** Info struct returned by getWritePixelsInfo about performing an intermediate draw in order
-        to write pixels to a GrSurface for either performance or correctness reasons. */
+    /**
+     * Info struct returned by getWritePixelsInfo about performing an intermediate draw in order
+     * to write pixels to a GrSurface for either performance or correctness reasons.
+     */
     struct WritePixelTempDrawInfo {
-        /** If the GrGpu is requesting that the caller upload to an intermediate surface and draw
-            that to the dst then this is the descriptor for the intermediate surface. The caller
-            should upload the pixels such that the upper left pixel of the upload rect is at 0,0 in
-            the intermediate surface.*/
+        /**
+         * If the GrGpu is requesting that the caller upload to an intermediate surface and draw
+         * that to the dst then this is the descriptor for the intermediate surface. The caller
+         * should upload the pixels such that the upper left pixel of the upload rect is at 0,0 in
+         * the intermediate surface
+         */
         GrSurfaceDesc   fTempSurfaceDesc;
-        /** Swizzle to apply during the draw. This is used to compensate for either feature or
-            performance limitations in the underlying 3D API. */
+        /**
+         * Swizzle to apply during the draw. This is used to compensate for either feature or
+         * performance limitations in the underlying 3D API.
+         */
         GrSwizzle       fSwizzle;
-        /** The config that should be specified when uploading the *original* data to the temp
-            surface before the draw. This may be different than the original src data config in
-            order to compensate for swizzling that will occur when drawing. */
-        GrPixelConfig   fWriteConfig;
+        /**
+         * The color type that should be specified when uploading the *original* data to the temp
+         * surface before the draw. This may be different than the original src color type in
+         * order to compensate for swizzling that will occur when drawing. The original gamma
+         * encoding is always used.
+         */
+        GrColorType     fWriteColorType;
     };
 
     /**
@@ -226,9 +248,8 @@ public:
      * that would allow a successful transfer of the src pixels to the dst. The passed width,
      * height, and rowBytes, must be non-zero and already reflect clipping to the dst bounds.
      */
-    bool getWritePixelsInfo(GrSurface*, GrSurfaceOrigin, int width, int height,
-                            GrPixelConfig, GrSRGBConversion, DrawPreference*,
-                            WritePixelTempDrawInfo*);
+    bool getWritePixelsInfo(GrSurface*, GrSurfaceOrigin, int width, int height, GrColorType,
+                            GrSRGBConversion, DrawPreference*, WritePixelTempDrawInfo*);
 
     /**
      * Reads a rectangle of pixels from a render target. No sRGB/linear conversions are performed.
@@ -238,7 +259,7 @@ public:
      * @param top           top edge of the rectangle to read (inclusive)
      * @param width         width of rectangle to read in pixels.
      * @param height        height of rectangle to read in pixels.
-     * @param dstConfig     the pixel config of the destination buffer
+     * @param dstColorType  the color type of the destination buffer.
      * @param buffer        memory to read the rectangle into.
      * @param rowBytes      the number of bytes between consecutive rows. Zero
      *                      means rows are tightly packed.
@@ -250,7 +271,7 @@ public:
      *              target is currently set.
      */
     bool readPixels(GrSurface* surface, GrSurfaceOrigin, int left, int top, int width, int height,
-                    GrPixelConfig dstConfig, void* buffer, size_t rowBytes);
+                    GrColorType dstColorType, void* buffer, size_t rowBytes);
 
     /**
      * Updates the pixels in a rectangle of a surface.  No sRGB/linear conversions are performed.
@@ -260,21 +281,20 @@ public:
      * @param top           top edge of the rectangle to write (inclusive)
      * @param width         width of rectangle to write in pixels.
      * @param height        height of rectangle to write in pixels.
-     * @param srcConfig     the pixel config of the source buffer
+     * @param srcColorType  the color type of the source buffer.
      * @param texels        array of mipmap levels containing texture data
      * @param mipLevelCount number of levels in 'texels'
      */
-    bool writePixels(GrSurface* surface, GrSurfaceOrigin origin,
-                     int left, int top, int width, int height,
-                     GrPixelConfig srcConfig,
-                     const GrMipLevel texels[], int mipLevelCount);
+    bool writePixels(GrSurface* surface, GrSurfaceOrigin origin, int left, int top, int width,
+                     int height, GrColorType srcColorType, const GrMipLevel texels[],
+                     int mipLevelCount);
 
     /**
      * This function is a shim which creates a SkTArray<GrMipLevel> of size 1.
      * It then calls writePixels with that SkTArray.
      */
-    bool writePixels(GrSurface*, GrSurfaceOrigin, int left, int top, int width,
-                     int height, GrPixelConfig, const void* buffer, size_t rowBytes);
+    bool writePixels(GrSurface*, GrSurfaceOrigin, int left, int top, int width, int height,
+                     GrColorType, const void* buffer, size_t rowBytes);
 
     /**
      * Updates the pixels in a rectangle of a texture using a buffer
@@ -287,14 +307,14 @@ public:
      * @param top              top edge of the rectangle to write (inclusive)
      * @param width            width of rectangle to write in pixels.
      * @param height           height of rectangle to write in pixels.
-     * @param bufferConfig     the pixel config of the source buffer
+     * @param bufferColorType  the color type of the transfer buffer's pixel data
      * @param transferBuffer   GrBuffer to read pixels from (type must be "kXferCpuToGpu")
      * @param offset           offset from the start of the buffer
      * @param rowBytes         number of bytes between consecutive rows in the buffer. Zero
      *                         means rows are tightly packed.
      */
     bool transferPixels(GrTexture* texture, int left, int top, int width, int height,
-                        GrPixelConfig bufferConfig, GrBuffer* transferBuffer, size_t offset,
+                        GrColorType bufferColorType, GrBuffer* transferBuffer, size_t offset,
                         size_t rowBytes);
 
     // After the client interacts directly with the 3D context state the GrGpu
@@ -320,33 +340,6 @@ public:
                      GrSurface* src, GrSurfaceOrigin srcOrigin,
                      const SkIRect& srcRect,
                      const SkIPoint& dstPoint);
-
-    struct MultisampleSpecs {
-        MultisampleSpecs(uint8_t uniqueID, int effectiveSampleCnt, const SkPoint* locations)
-            : fUniqueID(uniqueID),
-              fEffectiveSampleCnt(effectiveSampleCnt),
-              fSampleLocations(locations) {}
-
-        // Nonzero ID that uniquely identifies these multisample specs.
-        uint8_t          fUniqueID;
-        // The actual number of samples the GPU will run. NOTE: this value can be greater than the
-        // the render target's sample count.
-        int              fEffectiveSampleCnt;
-        // If sample locations are supported, points to the subpixel locations at which the GPU will
-        // sample. Pixel center is at (.5, .5), and (0, 0) indicates the top left corner.
-        const SkPoint*   fSampleLocations;
-    };
-
-    // Finds a render target's multisample specs. The pipeline is only needed in case we need to
-    // flush the draw state prior to querying multisample info. The pipeline is not expected to
-    // affect the multisample information itself.
-    const MultisampleSpecs& queryMultisampleSpecs(const GrPipeline&);
-
-    // Finds the multisample specs with a given unique id.
-    const MultisampleSpecs& getMultisampleSpecs(uint8_t uniqueID) {
-        SkASSERT(uniqueID > 0 && uniqueID < fMultisampleSpecs.count());
-        return fMultisampleSpecs[uniqueID];
-    }
 
     // Creates a GrGpuRTCommandBuffer which GrOpLists send draw commands to instead of directly
     // to the Gpu object.
@@ -561,30 +554,24 @@ private:
     }
 
     virtual bool onGetReadPixelsInfo(GrSurface*, GrSurfaceOrigin, int width, int height,
-                                     size_t rowBytes, GrPixelConfig, DrawPreference*,
+                                     size_t rowBytes, GrColorType, DrawPreference*,
                                      ReadPixelTempDrawInfo*) = 0;
     virtual bool onGetWritePixelsInfo(GrSurface*, GrSurfaceOrigin, int width, int height,
-                                      GrPixelConfig, DrawPreference*, WritePixelTempDrawInfo*) = 0;
+                                      GrColorType, DrawPreference*, WritePixelTempDrawInfo*) = 0;
 
     // overridden by backend-specific derived class to perform the surface read
-    virtual bool onReadPixels(GrSurface*, GrSurfaceOrigin,
-                              int left, int top,
-                              int width, int height,
-                              GrPixelConfig,
-                              void* buffer,
-                              size_t rowBytes) = 0;
+    virtual bool onReadPixels(GrSurface*, GrSurfaceOrigin, int left, int top, int width, int height,
+                              GrColorType, void* buffer, size_t rowBytes) = 0;
 
     // overridden by backend-specific derived class to perform the surface write
-    virtual bool onWritePixels(GrSurface*, GrSurfaceOrigin,
-                               int left, int top, int width, int height,
-                               GrPixelConfig config,
-                               const GrMipLevel texels[], int mipLevelCount) = 0;
+    virtual bool onWritePixels(GrSurface*, GrSurfaceOrigin, int left, int top, int width,
+                               int height, GrColorType, const GrMipLevel texels[],
+                               int mipLevelCount) = 0;
 
     // overridden by backend-specific derived class to perform the texture transfer
-    virtual bool onTransferPixels(GrTexture*,
-                                  int left, int top, int width, int height,
-                                  GrPixelConfig config, GrBuffer* transferBuffer,
-                                  size_t offset, size_t rowBytes) = 0;
+    virtual bool onTransferPixels(GrTexture*, int left, int top, int width, int height,
+                                  GrColorType colorType, GrBuffer* transferBuffer, size_t offset,
+                                  size_t rowBytes) = 0;
 
     // overridden by backend-specific derived class to perform the resolve
     virtual void onResolveRenderTarget(GrRenderTarget* target) = 0;
@@ -593,11 +580,6 @@ private:
     virtual bool onCopySurface(GrSurface* dst, GrSurfaceOrigin dstOrigin,
                                GrSurface* src, GrSurfaceOrigin srcOrigin,
                                const SkIRect& srcRect, const SkIPoint& dstPoint) = 0;
-
-    // overridden by backend specific derived class to perform the multisample queries
-    virtual void onQueryMultisampleSpecs(GrRenderTarget*, GrSurfaceOrigin rtOrigin,
-                                         const GrStencilSettings&,
-                                         int* effectiveSampleCnt, SamplePattern*) = 0;
 
     virtual void onFinishFlush(bool insertedSemaphores) = 0;
 
@@ -609,18 +591,10 @@ private:
         ++fResetTimestamp;
     }
 
-    struct SamplePatternComparator {
-        bool operator()(const SamplePattern&, const SamplePattern&) const;
-    };
-
-    typedef std::map<SamplePattern, uint8_t, SamplePatternComparator> MultisampleSpecsIdMap;
-
-    ResetTimestamp                         fResetTimestamp;
-    uint32_t                               fResetBits;
-    MultisampleSpecsIdMap                  fMultisampleSpecsIdMap;
-    SkSTArray<1, MultisampleSpecs, true>   fMultisampleSpecs;
+    ResetTimestamp fResetTimestamp;
+    uint32_t fResetBits;
     // The context owns us, not vice-versa, so this ptr is not ref'ed by Gpu.
-    GrContext*                             fContext;
+    GrContext* fContext;
 
     friend class GrPathRendering;
     typedef SkRefCnt INHERITED;
