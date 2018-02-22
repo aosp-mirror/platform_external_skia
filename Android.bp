@@ -285,6 +285,7 @@ cc_library_static {
         "src/core/SkPathEffect.cpp",
         "src/core/SkPathMeasure.cpp",
         "src/core/SkPathRef.cpp",
+        "src/core/SkPath_serial.cpp",
         "src/core/SkPicture.cpp",
         "src/core/SkPictureData.cpp",
         "src/core/SkPictureFlat.cpp",

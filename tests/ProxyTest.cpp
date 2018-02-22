@@ -199,6 +199,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(WrappedProxyTest, reporter, ctxInfo) {
         for (auto colorType : { kAlpha_8_SkColorType, kRGBA_8888_SkColorType }) {
             for (auto numSamples : {1, 4}) {
                 GrPixelConfig config = SkImageInfo2GrPixelConfig(colorType, nullptr, caps);
+                SkASSERT(kUnknown_GrPixelConfig != config);
                 int supportedNumSamples = caps.getRenderTargetSampleCount(numSamples, config);
 
                 if (!supportedNumSamples) {
@@ -206,6 +207,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(WrappedProxyTest, reporter, ctxInfo) {
                 }
 
                 // External on-screen render target.
+                // Tests createWrappedRenderTargetProxy with a GrBackendRenderTarget
                 {
                     GrGLFramebufferInfo fboInfo;
                     fboInfo.fFBOID = 0;
@@ -222,16 +224,17 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(WrappedProxyTest, reporter, ctxInfo) {
                                        supportedNumSamples, SkBackingFit::kExact, 0);
                 }
 
+                // Tests createWrappedRenderTargetProxy with a GrBackendTexture
                 {
                     GrBackendTexture backendTex =
                             gpu->createTestingOnlyBackendTexture(nullptr, kWidthHeight,
                                                                  kWidthHeight, colorType, true,
                                                                  GrMipMapped::kNo);
-
                     sk_sp<GrSurfaceProxy> sProxy =
-                            proxyProvider->createWrappedTextureProxy(backendTex, origin,
-                                                                     supportedNumSamples);
+                            proxyProvider->createWrappedRenderTargetProxy(backendTex, origin,
+                                                                          supportedNumSamples);
                     if (!sProxy) {
+                        gpu->deleteTestingOnlyBackendTexture(&backendTex);
                         continue;  // This can fail on Mesa
                     }
 
@@ -246,6 +249,33 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(WrappedProxyTest, reporter, ctxInfo) {
                     gpu->deleteTestingOnlyBackendTexture(&backendTex);
                 }
 
+                // Tests createWrappedTextureProxy that is only renderable
+                {
+                    GrBackendTexture backendTex =
+                            gpu->createTestingOnlyBackendTexture(nullptr, kWidthHeight,
+                                                                 kWidthHeight, colorType, true,
+                                                                 GrMipMapped::kNo);
+
+                    sk_sp<GrSurfaceProxy> sProxy =
+                            proxyProvider->createWrappedTextureProxy(backendTex, origin,
+                                                                     supportedNumSamples);
+                    if (!sProxy) {
+                        gpu->deleteTestingOnlyBackendTexture(&backendTex);
+                        continue;  // This can fail on Mesa
+                    }
+
+                    check_surface(reporter, sProxy.get(), origin,
+                                  kWidthHeight, kWidthHeight,
+                                  backendTex.testingOnly_getPixelConfig(), SkBudgeted::kNo);
+                    check_rendertarget(reporter, caps, resourceProvider,
+                                       sProxy->asRenderTargetProxy(),
+                                       supportedNumSamples, SkBackingFit::kExact,
+                                       caps.maxWindowRectangles());
+
+                    gpu->deleteTestingOnlyBackendTexture(&backendTex);
+                }
+
+                // Tests createWrappedTextureProxy that is only textureable
                 {
                     // Internal offscreen texture
                     GrBackendTexture backendTex =
@@ -258,6 +288,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(WrappedProxyTest, reporter, ctxInfo) {
                                                                      kBorrow_GrWrapOwnership,
                                                                      nullptr, nullptr);
                     if (!sProxy) {
+                        gpu->deleteTestingOnlyBackendTexture(&backendTex);
                         continue;
                     }
 
