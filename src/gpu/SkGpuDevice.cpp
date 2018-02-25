@@ -32,7 +32,7 @@
 #include "SkPathEffect.h"
 #include "SkPicture.h"
 #include "SkPictureData.h"
-#include "SkRRect.h"
+#include "SkRRectPriv.h"
 #include "SkRasterClip.h"
 #include "SkReadPixelsRec.h"
 #include "SkRecord.h"
@@ -159,6 +159,9 @@ sk_sp<GrRenderTargetContext> SkGpuDevice::MakeRenderTargetContext(
     }
 
     GrPixelConfig config = SkImageInfo2GrPixelConfig(origInfo, *context->caps());
+    if (kUnknown_GrPixelConfig == config) {
+        return nullptr;
+    }
     // This method is used to create SkGpuDevice's for SkSurface_Gpus. In this case
     // they need to be exact.
     return context->makeDeferredRenderTargetContext(
@@ -415,7 +418,7 @@ void SkGpuDevice::drawRRect(const SkRRect& rrect, const SkPaint& paint) {
 
         SkRRect devRRect;
         if (rrect.transform(this->ctm(), &devRRect)) {
-            if (devRRect.allCornersCircular()) {
+            if (SkRRectPriv::AllCornersCircular(devRRect)) {
                 if (mf->canFilterMaskGPU(devRRect, this->devClipBounds(), this->ctm(), nullptr)) {
                     if (mf->directFilterRRectMaskGPU(this->context(), fRenderTargetContext.get(),
                                                      std::move(grPaint), this->clip(), this->ctm(),
