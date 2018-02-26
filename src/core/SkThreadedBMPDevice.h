@@ -170,9 +170,11 @@ private:
     SkExecutor* fExecutor = nullptr;
     std::unique_ptr<SkExecutor> fInternalExecutor;
 
+    SkSTArenaAlloc<8 << 10> fAlloc; // so we can allocate memory that lives until flush
+
     DrawQueue fQueue;
 
-    friend struct SkInitOnceData;   // to access DrawElement
+    friend struct SkInitOnceData;   // to access DrawElement and DrawState
     friend class SkDraw;            // to access DrawState
 
     typedef SkBitmapDevice INHERITED;
@@ -183,6 +185,11 @@ private:
 struct SkInitOnceData {
     SkArenaAlloc* fAlloc;
     SkThreadedBMPDevice::DrawElement* fElement;
+
+    void setEmptyDrawFn() {
+        fElement->setDrawFn([](SkArenaAlloc* threadAlloc, const SkThreadedBMPDevice::DrawState& ds,
+                               const SkIRect& tileBounds){});
+    }
 };
 
 #endif // SkThreadedBMPDevice_DEFINED
