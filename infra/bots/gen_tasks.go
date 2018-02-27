@@ -213,9 +213,11 @@ func defaultSwarmDimensions(parts map[string]string) []string {
 		if os == "Win10" {
 			// Transition to new Win image by model name.
 			_, ok = map[string]bool{
+				"AlphaR2":       true,
 				"NUC5i7RYH":     true,
 				"NUC6i5SYK":     true,
 				"NUCD34010WYKH": true,
+				"ShuttleC":      true,
 			}[parts["model"]]
 			if ok {
 				d["os"] = "Windows-10-16299.248"
