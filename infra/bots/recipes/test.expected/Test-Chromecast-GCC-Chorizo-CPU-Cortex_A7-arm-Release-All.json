@@ -495,8 +495,6 @@
       "_",
       "GrShape",
       "--match",
-      "~readpixels",
-      "~SkRasterPipeline_tail",
       "~GM_animated-image-blurs",
       "~verylarge",
       "~ImageFilterBlurLargeImage",

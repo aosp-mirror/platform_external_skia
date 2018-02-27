@@ -1482,6 +1482,7 @@ cc_test {
         "tests/DiscardableMemoryTest.cpp",
         "tests/DrawBitmapRectTest.cpp",
         "tests/DrawFilterTest.cpp",
+        "tests/DrawOpAtlasTest.cpp",
         "tests/DrawPathTest.cpp",
         "tests/DrawTextTest.cpp",
         "tests/DynamicHashTest.cpp",

@@ -23,6 +23,7 @@ GrVkCaps::GrVkCaps(const GrContextOptions& contextOptions, const GrVkInterface* 
     fMustSubmitCommandsBeforeCopyOp = false;
     fMustSleepOnTearDown  = false;
     fNewCBOnPipelineChange = false;
+    fCanUseWholeSizeOnFlushMappedMemory = true;
 
     /**************************************************************************
     * GrDrawTargetCaps fields
@@ -101,12 +102,17 @@ void GrVkCaps::init(const GrContextOptions& contextOptions, const GrVkInterface*
         fMustSubmitCommandsBeforeCopyOp = true;
     }
 
-    if (kQualcomm_VkVendor != properties.vendorID) {
+    if (kQualcomm_VkVendor != properties.vendorID &&
+        kARM_VkVendor != properties.vendorID) {
         fSupportsCopiesAsDraws = true;
     }
 
     if (fSupportsCopiesAsDraws) {
         fCrossContextTextureSupport = true;
+    }
+
+    if (kARM_VkVendor == properties.vendorID) {
+        fInstanceAttribSupport = false;
     }
 
 #if defined(SK_BUILD_FOR_WIN)
@@ -181,6 +187,10 @@ void GrVkCaps::initGrCaps(const VkPhysicalDeviceProperties& properties,
     // Current workaround is to use a different secondary command buffer for each new VkPipeline.
     if (kAMD_VkVendor == properties.vendorID) {
         fNewCBOnPipelineChange = true;
+    }
+
+    if (kIntel_VkVendor == properties.vendorID) {
+        fCanUseWholeSizeOnFlushMappedMemory = false;
     }
 
 #if defined(SK_CPU_X86)

@@ -526,9 +526,7 @@ def dm_flags(api, bot):
       match.append('~lighting')
       match.append('~imageblur2')
       match.append('~animated-image-blurs')
-    # skia:7497
-    match.append('~readpixels') # dies with "Caught signal 7 [Bus error]"
-    match.append('~SkRasterPipeline_tail')
+      match.append('~textblobrandomfont')
     # Blacklisted to avoid OOM (we see DM just end with "broken pipe")
     match.append('~GM_animated-image-blurs')
     match.append('~verylarge')
