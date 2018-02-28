@@ -64,21 +64,123 @@ SkASSERT(!(P) || !((P)->priv().peekTexture()) || (P)->priv().peekTexture()->getC
 
 class SK_API GrDirectContext : public GrContext {
 public:
-    GrDirectContext(GrBackend backend) : INHERITED(backend) { }
+    GrDirectContext(GrBackend backend)
+            : INHERITED(backend)
+            , fFullAtlasManager(nullptr) {
+    }
+
+    ~GrDirectContext() override {
+        this->flush();
+
+        delete fFullAtlasManager;
+    }
+
+    void abandonContext() override {
+        INHERITED::abandonContext();
+        fFullAtlasManager->freeAll();
+    }
+
+    void releaseResourcesAndAbandonContext() override {
+        INHERITED::releaseResourcesAndAbandonContext();
+        fFullAtlasManager->freeAll();
+    }
+
+    void freeGpuResources() override {
+        this->flush();
+        fFullAtlasManager->freeAll();
+
+        INHERITED::freeGpuResources();
+    }
 
 protected:
+    bool init(const GrContextOptions& options) override {
+        if (!INHERITED::init(options)) {
+            return false;
+        }
+
+        GrDrawOpAtlas::AllowMultitexturing allowMultitexturing;
+        if (GrContextOptions::Enable::kNo == options.fAllowMultipleGlyphCacheTextures ||
+            // multitexturing supported only if range can represent the index + texcoords fully
+            !(fCaps->shaderCaps()->floatIs32Bits() || fCaps->shaderCaps()->integerSupport())) {
+            allowMultitexturing = GrDrawOpAtlas::AllowMultitexturing::kNo;
+        } else {
+            allowMultitexturing = GrDrawOpAtlas::AllowMultitexturing::kYes;
+        }
+
+        GrGlyphCache* glyphCache = this->contextPriv().getGlyphCache();
+        GrProxyProvider* proxyProvider = this->contextPriv().proxyProvider();
+
+        fFullAtlasManager = new GrAtlasManager(proxyProvider, glyphCache,
+                                               options.fGlyphCacheTextureMaximumBytes,
+                                               allowMultitexturing);
+        this->contextPriv().addOnFlushCallbackObject(fFullAtlasManager);
+
+        glyphCache->setGlyphSizeLimit(fFullAtlasManager->getGlyphSizeLimit());
+        return true;
+    }
+
+    GrRestrictedAtlasManager* onGetRestrictedAtlasManager() override { return fFullAtlasManager; }
+    GrAtlasManager* onGetFullAtlasManager() override { return fFullAtlasManager; }
 
 private:
+    GrAtlasManager* fFullAtlasManager;
+
     typedef GrContext INHERITED;
 };
 
+/**
+ * The DDL Context is the one in effect during DDL Recording. It isn't backed by a GrGPU and
+ * cannot allocate any GPU resources.
+ */
 class SK_API GrDDLContext : public GrContext {
 public:
-    GrDDLContext(GrContextThreadSafeProxy* proxy) : INHERITED(proxy) {}
+    GrDDLContext(GrContextThreadSafeProxy* proxy)
+            : INHERITED(proxy)
+            , fRestrictedAtlasManager(nullptr) {
+    }
+
+    ~GrDDLContext() override {
+        // The GrDDLContext doesn't actually own the fRestrictedAtlasManager so don't delete it
+    }
+
+    void abandonContext() override {
+        SkASSERT(0); // abandoning in a DDL Recorder doesn't make a whole lot of sense
+        INHERITED::abandonContext();
+    }
+
+    void releaseResourcesAndAbandonContext() override {
+        SkASSERT(0); // abandoning in a DDL Recorder doesn't make a whole lot of sense
+        INHERITED::releaseResourcesAndAbandonContext();
+    }
+
+    void freeGpuResources() override {
+        SkASSERT(0); // freeing resources in a DDL Recorder doesn't make a whole lot of sense
+        INHERITED::freeGpuResources();
+    }
 
 protected:
+    bool init(const GrContextOptions& options) override {
+        if (!INHERITED::init(options)) {
+            return false;
+        }
+
+        // DDL TODO: in DDL-mode grab a GrRestrictedAtlasManager from the thread-proxy and
+        // do not add an onFlushCB
+        return true;
+    }
+
+    GrRestrictedAtlasManager* onGetRestrictedAtlasManager() override {
+        return fRestrictedAtlasManager;
+    }
+
+    GrAtlasManager* onGetFullAtlasManager() override {
+        SkASSERT(0);   // the DDL Recorders should never invoke this
+        return nullptr;
+    }
 
 private:
+    GrRestrictedAtlasManager* fRestrictedAtlasManager;
+
     typedef GrContext INHERITED;
 };
 
@@ -179,7 +281,7 @@ sk_sp<GrContext> GrContext::MakeMetal(void* device, void* queue) {
 }
 
 sk_sp<GrContext> GrContext::MakeMetal(void* device, void* queue, const GrContextOptions& options) {
-    sk_sp<GrContext> context(new GrContext(kMetal_GrBackend));
+    sk_sp<GrContext> context(new GrDirectContext(kMetal_GrBackend));
 
     context->fGpu = GrMtlTrampoline::MakeGpu(context.get(), options, device, queue);
     if (!context->fGpu) {
@@ -218,7 +320,7 @@ GrContext::GrContext(GrBackend backend)
     fResourceCache = nullptr;
     fResourceProvider = nullptr;
     fProxyProvider = nullptr;
-    fAtlasGlyphCache = nullptr;
+    fGlyphCache = nullptr;
 }
 
 GrContext::GrContext(GrContextThreadSafeProxy* proxy)
@@ -228,7 +330,7 @@ GrContext::GrContext(GrContextThreadSafeProxy* proxy)
     fResourceCache = nullptr;
     fResourceProvider = nullptr;
     fProxyProvider = nullptr;
-    fAtlasGlyphCache = nullptr;
+    fGlyphCache = nullptr;
 }
 
 bool GrContext::init(const GrContextOptions& options) {
@@ -285,17 +387,7 @@ bool GrContext::init(const GrContextOptions& options) {
     fDrawingManager.reset(new GrDrawingManager(this, prcOptions, atlasTextContextOptions,
                                                &fSingleOwner, options.fSortRenderTargets));
 
-    GrDrawOpAtlas::AllowMultitexturing allowMultitexturing;
-    if (GrContextOptions::Enable::kNo == options.fAllowMultipleGlyphCacheTextures ||
-        // multitexturing supported only if range can represent the index + texcoords fully
-        !(fCaps->shaderCaps()->floatIs32Bits() || fCaps->shaderCaps()->integerSupport())) {
-        allowMultitexturing = GrDrawOpAtlas::AllowMultitexturing::kNo;
-    } else {
-        allowMultitexturing = GrDrawOpAtlas::AllowMultitexturing::kYes;
-    }
-    fAtlasGlyphCache = new GrAtlasGlyphCache(fProxyProvider, options.fGlyphCacheTextureMaximumBytes,
-                                             allowMultitexturing);
-    this->contextPriv().addOnFlushCallbackObject(fAtlasGlyphCache);
+    fGlyphCache = new GrGlyphCache;
 
     fTextBlobCache.reset(new GrTextBlobCache(TextBlobCacheOverBudgetCB,
                                              this, this->uniqueID(), SkToBool(fGpu)));
@@ -312,10 +404,6 @@ bool GrContext::init(const GrContextOptions& options) {
 GrContext::~GrContext() {
     ASSERT_SINGLE_OWNER
 
-    if (fGpu) {
-        this->flush();
-    }
-
     if (fDrawingManager) {
         fDrawingManager->cleanup();
     }
@@ -327,7 +415,7 @@ GrContext::~GrContext() {
     delete fResourceProvider;
     delete fResourceCache;
     delete fProxyProvider;
-    delete fAtlasGlyphCache;
+    delete fGlyphCache;
 }
 
 sk_sp<GrContextThreadSafeProxy> GrContext::threadSafeProxy() {
@@ -386,7 +474,7 @@ void GrContext::abandonContext() {
 
     fGpu->disconnect(GrGpu::DisconnectType::kAbandon);
 
-    fAtlasGlyphCache->freeAll();
+    fGlyphCache->freeAll();
     fTextBlobCache->freeAll();
 }
 
@@ -405,7 +493,7 @@ void GrContext::releaseResourcesAndAbandonContext() {
 
     fGpu->disconnect(GrGpu::DisconnectType::kCleanup);
 
-    fAtlasGlyphCache->freeAll();
+    fGlyphCache->freeAll();
     fTextBlobCache->freeAll();
 }
 
@@ -417,9 +505,7 @@ void GrContext::resetContext(uint32_t state) {
 void GrContext::freeGpuResources() {
     ASSERT_SINGLE_OWNER
 
-    this->flush();
-
-    fAtlasGlyphCache->freeAll();
+    fGlyphCache->freeAll();
 
     fDrawingManager->freeGpuResources();
 
@@ -871,6 +957,9 @@ bool GrContextPriv::readSurfacePixels(GrSurfaceContext* src, int left, int top, 
                                                           GrMipMapped::kNo,
                                                           tempDrawInfo.fTempSurfaceDesc.fOrigin);
         if (tempRTC) {
+            // Adding discard to appease vulkan validation warning about loading uninitialized data
+            // on draw
+            tempRTC->discard();
             SkMatrix textureMatrix = SkMatrix::MakeTrans(SkIntToScalar(left), SkIntToScalar(top));
             sk_sp<GrTextureProxy> proxy = src->asTextureProxyRef();
             auto fp = GrSimpleTextureEffect::Make(std::move(proxy), textureMatrix);
@@ -965,10 +1054,7 @@ bool GrContextPriv::writeSurfacePixels2(GrSurfaceContext* dst, int left, int top
         return false;
     }
 
-    auto dstRTProxy = dstProxy->asRenderTargetProxy();
-    if (dstRTProxy &&
-        !fContext->caps()->renderTargetWritePixelsSupported(SkToBool(dstProxy->asTextureProxy()),
-                                                            dstRTProxy->numColorSamples())) {
+    if (!fContext->caps()->surfaceSupportsWritePixels(dstSurface)) {
         GrSurfaceDesc desc;
         desc.fConfig = dstProxy->config();
         desc.fWidth = width;
@@ -989,14 +1075,7 @@ bool GrContextPriv::writeSurfacePixels2(GrSurfaceContext* dst, int left, int top
                                        srcColorSpace, buffer, rowBytes, pixelOpsFlags)) {
             return false;
         }
-        GrPaint paint;
-        paint.setAllowSRGBInputs(true);
-        paint.addColorTextureProcessor(std::move(tempProxy), SkMatrix::I());
-        paint.setPorterDuffXPFactory(SkBlendMode::kSrc);
-        dst->asRenderTargetContext()->drawRect(GrNoClip(), std::move(paint), GrAA::kNo,
-                                               SkMatrix::MakeTrans(left, top),
-                                               SkRect::MakeIWH(width, height));
-        return true;
+        return dst->copy(tempProxy.get(), SkIRect::MakeWH(width, height), {left, top});
     }
 
     // TODO: Make GrSurfaceContext know its alpha type and pass src buffer's alpha type.
