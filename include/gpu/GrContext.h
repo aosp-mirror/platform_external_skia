@@ -16,7 +16,7 @@
 #include "../private/GrSingleOwner.h"
 #include "GrContextOptions.h"
 
-class GrAtlasManager;
+class GrAtlasGlyphCache;
 class GrBackendFormat;
 class GrBackendSemaphore;
 class GrContextPriv;
@@ -25,7 +25,6 @@ class GrDrawingManager;
 struct GrDrawOpAtlasConfig;
 class GrFragmentProcessor;
 struct GrGLInterface;
-class GrGlyphCache;
 class GrGpu;
 class GrIndexBuffer;
 struct GrMockOptions;
@@ -36,7 +35,6 @@ class GrRenderTargetContext;
 class GrResourceEntry;
 class GrResourceCache;
 class GrResourceProvider;
-class GrRestrictedAtlasManager;
 class GrSamplerState;
 class GrSurfaceProxy;
 class GrSwizzle;
@@ -128,7 +126,7 @@ public:
      * The typical use case for this function is that the underlying 3D context was lost and further
      * API calls may crash.
      */
-    virtual void abandonContext();
+    void abandonContext();
 
     /**
      * This is similar to abandonContext() however the underlying 3D context is not yet lost and
@@ -139,7 +137,7 @@ public:
      * but can't guarantee that GrContext will be destroyed first (perhaps because it may be ref'ed
      * elsewhere by either the client or Skia objects).
      */
-    virtual void releaseResourcesAndAbandonContext();
+    void releaseResourcesAndAbandonContext();
 
     ///////////////////////////////////////////////////////////////////////////
     // Resource Cache
@@ -184,7 +182,7 @@ public:
      * Frees GPU created by the context. Can be called to reduce GPU memory
      * pressure.
      */
-    virtual void freeGpuResources();
+    void freeGpuResources();
 
     /**
      * Purge all the unlocked resources from the cache.
@@ -359,22 +357,16 @@ protected:
     GrContext(GrContextThreadSafeProxy*);
     GrContext(GrBackend);
 
-    virtual bool init(const GrContextOptions&); // init must be called after either constructor.
-
-    virtual GrAtlasManager* onGetFullAtlasManager() = 0;
-    virtual GrRestrictedAtlasManager* onGetRestrictedAtlasManager() = 0;
-
-    sk_sp<const GrCaps>                     fCaps;
-
 private:
     sk_sp<GrGpu>                            fGpu;
+    sk_sp<const GrCaps>                     fCaps;
     GrResourceCache*                        fResourceCache;
     GrResourceProvider*                     fResourceProvider;
     GrProxyProvider*                        fProxyProvider;
 
     sk_sp<GrContextThreadSafeProxy>         fThreadSafeProxy;
 
-    GrGlyphCache*                           fGlyphCache;
+    GrAtlasGlyphCache*                      fAtlasGlyphCache;
     std::unique_ptr<GrTextBlobCache>        fTextBlobCache;
 
     bool                                    fDisableGpuYUVConversion;
@@ -409,6 +401,8 @@ private:
 
     // TODO: have the GrClipStackClip use renderTargetContexts and rm this friending
     friend class GrContextPriv;
+
+    bool init(const GrContextOptions&); // init must be called after either constructor.
 
     /**
      * These functions create premul <-> unpremul effects. If the second argument is 'true', they
