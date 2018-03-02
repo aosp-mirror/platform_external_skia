@@ -159,13 +159,6 @@ void GrVkCaps::applyDriverCorrectnessWorkarounds(const VkPhysicalDevicePropertie
     // GrShaderCaps workarounds
     ////////////////////////////////////////////////////////////////////////////
 
-    if (kAMD_VkVendor == properties.vendorID) {
-        // Currently DualSourceBlending is not working on AMD. vkCreateGraphicsPipeline fails when
-        // using a draw with dual source. Looking into whether it is driver bug or issue with our
-        // SPIR-V. Bug skia:6405
-        fShaderCaps->fDualSourceBlendingSupport = false;
-    }
-
     if (kImagination_VkVendor == properties.vendorID) {
         fShaderCaps->fAtan2ImplementedAsAtanYOverX = true;
     }
@@ -489,7 +482,10 @@ bool validate_image_info(VkFormat format, SkColorType ct, GrPixelConfig* config)
             }
             break;
         case kRGBA_1010102_SkColorType:
-            return false;
+            if (VK_FORMAT_A2B10G10R10_UNORM_PACK32 == format) {
+                *config = kRGBA_1010102_GrPixelConfig;
+            }
+            break;
         case kRGB_101010x_SkColorType:
             return false;
         case kGray_8_SkColorType:

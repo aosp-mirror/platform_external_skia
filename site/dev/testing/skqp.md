@@ -6,41 +6,10 @@ with a abbreviated Git hash that points at the commit in the Skia repository it
 was built with.
 
 These are universal APKs that contain native libraries for armeabi-v7a,
-arm64-v8a, x86, and x86\_64 architectures. The most recent is listed first:
+arm64-v8a, x86, and x86\_64 architectures. The most recent is listed first.
 
-<!--
-#!/bin/sh
-BRANCH=origin/skqp/dev
-for commit in $(git log $BRANCH -30 -\-format=%H) ; do
-    U='https://storage.googleapis.com/skia-skqp/skqp-universal-'
-    URL="${U}$(git log -1 -\-format=%h $commit).apk"
-    if [ 200 -ne "$(curl -s -o /dev/null -w "%{http_code}" "$URL")" ] ; then
-        continue
-    fi
-    TZ='' git log \
-        -\-date='format-local:%Y-%m-%d %H:%M:%S %Z' -1 $commit \
-        -\-format="  * [\`%h\`](${U}%h.apk)%n    | \`%cd\` | %<(50,trunc)%s"
-done
--->
-
-  * [`186ccf5147`](https://storage.googleapis.com/skia-skqp/skqp-universal-186ccf5147.apk)
-    | `2018-03-01 19:01:32 UTC` | SkQP: turn on VkMakeCopyPipelineTest
-  * [`4e8d3a4bb0`](https://storage.googleapis.com/skia-skqp/skqp-universal-4e8d3a4bb0.apk)
-    | `2018-03-01 17:20:13 UTC` | Add unit test the explicit tests create a GrVkCo..
-  * [`4f0c60f256`](https://storage.googleapis.com/skia-skqp/skqp-universal-4f0c60f256.apk)
-    | `2018-02-28 21:11:06 UTC` | Cherry-pick sequence of Vulkan Fixes.
-  * [`120ffdd88c`](https://storage.googleapis.com/skia-skqp/skqp-universal-120ffdd88c.apk)
-    | `2018-02-23 19:08:26 UTC` | SkQP:  do test filtering correctly
-  * [`5eff3287c9`](https://storage.googleapis.com/skia-skqp/skqp-universal-5eff3287c9.apk)
-    | `2018-02-22 14:00:28 UTC` | Remove branch lookup from skqp-dev
-  * [`103b402a29`](https://storage.googleapis.com/skia-skqp/skqp-universal-103b402a29.apk)
-    | `2018-02-21 20:56:10 UTC` | SkQP: run a single test
-  * [`38efb0d355`](https://storage.googleapis.com/skia-skqp/skqp-universal-38efb0d355.apk)
-    | `2018-02-20 20:48:45 UTC` | Add SKQP bot to build universal APK to master
-  * [`d69db48840`](https://storage.googleapis.com/skia-skqp/skqp-universal-d69db48840.apk)
-    | `2018-02-13 21:07:09 UTC` | SkQP: relax five tests
-  * [`337919990b`](https://storage.googleapis.com/skia-skqp/skqp-universal-337919990b.apk)
-    | `2018-02-13 19:33:12 UTC` | SkQP:  debug option, and fix a bug
+The listing can be found here:
+[https://storage.googleapis.com/skia-skqp/apklist](https://storage.googleapis.com/skia-skqp/apklist)
 
 To run tests:
 
@@ -50,7 +19,7 @@ To run tests:
 
 Monitor the output with:
 
-    adb logcat org.skia.skqp skia "*:S"
+    adb logcat org.skia.skqp skia DEBUG "*:S"
 
 Note the test's output path on the device.  It will look something like this:
 

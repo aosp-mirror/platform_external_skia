@@ -98,7 +98,13 @@ public:
 
 protected:
     bool init(const GrContextOptions& options) override {
-        if (!INHERITED::init(options)) {
+        SkASSERT(fCaps);  // should've been set in ctor
+        SkASSERT(!fThreadSafeProxy);
+
+        fThreadSafeProxy.reset(new GrContextThreadSafeProxy(fCaps, this->uniqueID(),
+                                                            fBackend, options));
+
+        if (!INHERITED::initCommon(options)) {
             return false;
         }
 
@@ -138,9 +144,11 @@ private:
  */
 class SK_API GrDDLContext : public GrContext {
 public:
-    GrDDLContext(GrContextThreadSafeProxy* proxy)
-            : INHERITED(proxy)
+    GrDDLContext(sk_sp<GrContextThreadSafeProxy> proxy)
+            : INHERITED(proxy->fBackend, proxy->fContextUniqueID)
             , fRestrictedAtlasManager(nullptr) {
+        fCaps = proxy->fCaps;
+        fThreadSafeProxy = std::move(proxy);
     }
 
     ~GrDDLContext() override {
@@ -164,7 +172,10 @@ public:
 
 protected:
     bool init(const GrContextOptions& options) override {
-        if (!INHERITED::init(options)) {
+        SkASSERT(fCaps);  // should've been set in ctor
+        SkASSERT(fThreadSafeProxy); // should've been set in the ctor
+
+        if (!INHERITED::initCommon(options)) {
             return false;
         }
 
@@ -203,6 +214,7 @@ GrContext* GrContext::Create(GrBackend backend, GrBackendContext backendContext,
         return nullptr;
     }
 
+    context->fCaps = context->fGpu->refCaps();
     if (!context->init(options)) {
         return nullptr;
     }
@@ -223,6 +235,8 @@ sk_sp<GrContext> GrContext::MakeGL(sk_sp<const GrGLInterface> interface,
     if (!context->fGpu) {
         return nullptr;
     }
+
+    context->fCaps = context->fGpu->refCaps();
     if (!context->init(options)) {
         return nullptr;
     }
@@ -251,6 +265,8 @@ sk_sp<GrContext> GrContext::MakeMock(const GrMockOptions* mockOptions,
     if (!context->fGpu) {
         return nullptr;
     }
+
+    context->fCaps = context->fGpu->refCaps();
     if (!context->init(options)) {
         return nullptr;
     }
@@ -271,6 +287,8 @@ sk_sp<GrContext> GrContext::MakeVulkan(sk_sp<const GrVkBackendContext> backendCo
     if (!context->fGpu) {
         return nullptr;
     }
+
+    context->fCaps = context->fGpu->refCaps();
     if (!context->init(options)) {
         return nullptr;
     }
@@ -307,7 +325,7 @@ static int32_t next_id() {
     return id;
 }
 
-sk_sp<GrContext> GrContextPriv::MakeDDL(GrContextThreadSafeProxy* proxy) {
+sk_sp<GrContext> GrContextPriv::MakeDDL(sk_sp<GrContextThreadSafeProxy> proxy) {
     sk_sp<GrContext> context(new GrDDLContext(proxy));
 
     // Note: we aren't creating a Gpu here. This causes the resource provider & cache to
@@ -318,27 +336,19 @@ sk_sp<GrContext> GrContextPriv::MakeDDL(GrContextThreadSafeProxy* proxy) {
     return context;
 }
 
-GrContext::GrContext(GrBackend backend)
-        : fUniqueID(next_id())
-        , fBackend(backend) {
+GrContext::GrContext(GrBackend backend, int32_t id)
+        : fBackend(backend)
+        , fUniqueID(SK_InvalidGenID == id ? next_id() : id) {
     fResourceCache = nullptr;
     fResourceProvider = nullptr;
     fProxyProvider = nullptr;
     fGlyphCache = nullptr;
 }
 
-GrContext::GrContext(GrContextThreadSafeProxy* proxy)
-        : fCaps(proxy->fCaps)
-        , fUniqueID(proxy->fContextUniqueID)
-        , fBackend(proxy->fBackend) {
-    fResourceCache = nullptr;
-    fResourceProvider = nullptr;
-    fProxyProvider = nullptr;
-    fGlyphCache = nullptr;
-}
-
-bool GrContext::init(const GrContextOptions& options) {
+bool GrContext::initCommon(const GrContextOptions& options) {
     ASSERT_SINGLE_OWNER
+    SkASSERT(fCaps);  // needs to have been initialized by derived classes
+    SkASSERT(fThreadSafeProxy); // needs to have been initialized by derived classes
 
     if (fGpu) {
         fCaps = fGpu->refCaps();
@@ -352,11 +362,6 @@ bool GrContext::init(const GrContextOptions& options) {
     if (fResourceCache) {
         fResourceCache->setProxyProvider(fProxyProvider);
     }
-
-    // DDL TODO: we need to think through how the task group & persistent cache
-    // get passed on to/shared between all the DDLRecorders created with this context.
-    fThreadSafeProxy.reset(new GrContextThreadSafeProxy(fCaps, this->uniqueID(), fBackend,
-                                                        options));
 
     fDisableGpuYUVConversion = options.fDisableGpuYUVConversion;
     fSharpenMipmappedTextures = options.fSharpenMipmappedTextures;
@@ -396,6 +401,8 @@ bool GrContext::init(const GrContextOptions& options) {
     fTextBlobCache.reset(new GrTextBlobCache(TextBlobCacheOverBudgetCB,
                                              this, this->uniqueID(), SkToBool(fGpu)));
 
+    // DDL TODO: we need to think through how the task group & persistent cache
+    // get passed on to/shared between all the DDLRecorders created with this context.
     if (options.fExecutor) {
         fTaskGroup = skstd::make_unique<SkTaskGroup>(*options.fExecutor);
     }
@@ -623,6 +630,7 @@ static bool valid_premul_config(GrPixelConfig config) {
         case kBGRA_8888_GrPixelConfig:          return true;
         case kSRGBA_8888_GrPixelConfig:         return true;
         case kSBGRA_8888_GrPixelConfig:         return true;
+        case kRGBA_1010102_GrPixelConfig:       return true;
         case kRGBA_float_GrPixelConfig:         return true;
         case kRG_float_GrPixelConfig:           return false;
         case kAlpha_half_GrPixelConfig:         return false;
@@ -639,17 +647,18 @@ static bool valid_premul_config(GrPixelConfig config) {
 
 static bool valid_premul_color_type(GrColorType ct) {
     switch (ct) {
-        case GrColorType::kUnknown:     return false;
-        case GrColorType::kAlpha_8:     return false;
-        case GrColorType::kRGB_565:     return false;
-        case GrColorType::kABGR_4444:   return true;
-        case GrColorType::kRGBA_8888:   return true;
-        case GrColorType::kBGRA_8888:   return true;
-        case GrColorType::kGray_8:      return false;
-        case GrColorType::kAlpha_F16:   return false;
-        case GrColorType::kRGBA_F16:    return true;
-        case GrColorType::kRG_F32:      return false;
-        case GrColorType::kRGBA_F32:    return true;
+        case GrColorType::kUnknown:      return false;
+        case GrColorType::kAlpha_8:      return false;
+        case GrColorType::kRGB_565:      return false;
+        case GrColorType::kABGR_4444:    return true;
+        case GrColorType::kRGBA_8888:    return true;
+        case GrColorType::kBGRA_8888:    return true;
+        case GrColorType::kRGBA_1010102: return true;
+        case GrColorType::kGray_8:       return false;
+        case GrColorType::kAlpha_F16:    return false;
+        case GrColorType::kRGBA_F16:     return true;
+        case GrColorType::kRG_F32:       return false;
+        case GrColorType::kRGBA_F32:     return true;
     }
     SK_ABORT("Invalid GrColorType");
     return false;
@@ -1314,6 +1323,7 @@ static inline GrPixelConfig GrPixelConfigFallback(GrPixelConfig config) {
         case kRGB_565_GrPixelConfig:
         case kRGBA_4444_GrPixelConfig:
         case kBGRA_8888_GrPixelConfig:
+        case kRGBA_1010102_GrPixelConfig:
             return kRGBA_8888_GrPixelConfig;
         case kSBGRA_8888_GrPixelConfig:
             return kSRGBA_8888_GrPixelConfig;
