@@ -14,6 +14,7 @@
 #include "GrRectanizer.h"
 #include "GrProxyProvider.h"
 #include "GrResourceProvider.h"
+#include "GrSurfaceProxyPriv.h"
 #include "GrTexture.h"
 #include "GrTracing.h"
 
@@ -303,7 +304,7 @@ bool GrDrawOpAtlas::addToAtlas(GrResourceProvider* resourceProvider,
     // Try to find a plot that we can perform an inline upload to.
     // We prioritize this upload in reverse order of pages to counterbalance the order above.
     Plot* plot = nullptr;
-    for (int pageIdx = (int)(fNumActivePages-1); pageIdx >= 0; --pageIdx) {
+    for (int pageIdx = ((int)fNumActivePages)-1; pageIdx >= 0; --pageIdx) {
         Plot* currentPlot = fPages[pageIdx].fPlotList.tail();
         if (currentPlot->lastUseToken() != target->tokenTracker()->nextDrawToken()) {
             plot = currentPlot;
@@ -336,8 +337,8 @@ bool GrDrawOpAtlas::addToAtlas(GrResourceProvider* resourceProvider,
     // With c+14 we could move sk_sp into lambda to only ref once.
     sk_sp<Plot> plotsp(SkRef(newPlot.get()));
 
-    SkASSERT(fProxies[pageIdx]->priv().isInstantiated());
     GrTextureProxy* proxy = fProxies[pageIdx].get();
+    SkASSERT(proxy->priv().isInstantiated());
 
     GrDeferredUploadToken lastUploadToken = target->addInlineUpload(
             [plotsp, proxy](GrDeferredTextureUploadWritePixelsFn& writePixels) {
@@ -565,8 +566,8 @@ inline void GrDrawOpAtlas::deactivateLastPage() {
     int numPlotsY = fTextureHeight/fPlotHeight;
 
     fPages[lastPageIndex].fPlotList.reset();
-    for (int y = numPlotsY - 1, r = 0; y >= 0; --y, ++r) {
-        for (int x = numPlotsX - 1, c = 0; x >= 0; --x, ++c) {
+    for (int r = 0; r < numPlotsY; ++r) {
+        for (int c = 0; c < numPlotsX; ++c) {
             uint32_t plotIndex = r * numPlotsX + c;
 
             Plot* currPlot = fPages[lastPageIndex].fPlotArray[plotIndex].get();
