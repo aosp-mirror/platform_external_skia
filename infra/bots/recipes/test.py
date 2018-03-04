@@ -212,6 +212,17 @@ def dm_flags(api, bot):
     if 'Vulkan' in bot:
       configs = ['vk']
 
+    # Test 1010102 on our Linux/NVIDIA bots
+    if 'QuadroP400' in bot and api.vars.is_linux:
+      if 'Vulkan' in bot:
+        configs.append('vk1010102')
+        # Decoding transparent images to 1010102 just looks bad
+        blacklist('vk1010102 image _ _')
+      else:
+        configs.append('gl1010102')
+        # Decoding transparent images to 1010102 just looks bad
+        blacklist('gl1010102 image _ _')
+
     if 'ChromeOS' in bot:
       # Just run GLES for now - maybe add gles_msaa4 in the future
       configs = ['gles']
@@ -522,23 +533,24 @@ def dm_flags(api, bot):
   if 'Chromecast' in bot:
     if 'GPU' in bot:
       # skia:6687
-      match.append('~matrixconvolution')
-      match.append('~blur_image_filter')
-      match.append('~blur_0.01')
-      match.append('~lighting')
-      match.append('~imageblur2')
       match.append('~animated-image-blurs')
+      match.append('~blur_0.01')
+      match.append('~blur_image_filter')
+      match.append('~imageblur2')
+      match.append('~lighting')
+      match.append('~longpathdash')
+      match.append('~matrixconvolution')
       match.append('~textblobmixedsizes_df')
       match.append('~textblobrandomfont')
     # Blacklisted to avoid OOM (we see DM just end with "broken pipe")
-    match.append('~GM_animated-image-blurs')
-    match.append('~verylarge')
-    match.append('~ImageFilterBlurLargeImage')
-    match.append('~TextBlobCache')
     match.append('~bigbitmaprect_')
-    match.append('~savelayer_clipmask')
     match.append('~DrawBitmapRect')
     match.append('~drawbitmaprect')
+    match.append('~GM_animated-image-blurs')
+    match.append('~ImageFilterBlurLargeImage')
+    match.append('~savelayer_clipmask')
+    match.append('~TextBlobCache')
+    match.append('~verylarge')
 
   if 'GalaxyS6' in bot:
     match.append('~SpecialImage') # skia:6338
@@ -620,7 +632,6 @@ def dm_flags(api, bot):
     blacklist(['vk', 'gm', '_', 'aarectmodes'])
     blacklist(['vk', 'gm', '_', 'aaxfermodes'])
     blacklist(['vk', 'gm', '_', 'arithmode'])
-    blacklist(['vk', 'gm', '_', 'bitmapfilters'])
     blacklist(['vk', 'gm', '_', 'composeshader'])
     blacklist(['vk', 'gm', '_', 'composeshader_alpha'])
     blacklist(['vk', 'gm', '_', 'composeshader_bitmap'])
@@ -628,7 +639,6 @@ def dm_flags(api, bot):
     blacklist(['vk', 'gm', '_', 'dont_clip_to_layer'])
     blacklist(['vk', 'gm', '_', 'dftext'])
     blacklist(['vk', 'gm', '_', 'drawregionmodes'])
-    blacklist(['vk', 'gm', '_', 'emboss'])
     blacklist(['vk', 'gm', '_', 'filterfastbounds'])
     blacklist(['vk', 'gm', '_', 'fontcache'])
     blacklist(['vk', 'gm', '_', 'fontmgr_iter'])
@@ -658,10 +668,7 @@ def dm_flags(api, bot):
     blacklist(['vk', 'gm', '_', 'resizeimagefilter'])
     blacklist(['vk', 'gm', '_', 'rotate_imagefilter'])
     blacklist(['vk', 'gm', '_', 'savelayer_lcdtext'])
-    blacklist(['vk', 'gm', '_', 'scaled_tilemodes_npot'])
-    blacklist(['vk', 'gm', '_', 'scaled_tilemodes'])
     blacklist(['vk', 'gm', '_', 'shadermaskfilter_image'])
-    blacklist(['vk', 'gm', '_', 'shadertext'])
     blacklist(['vk', 'gm', '_', 'srcmode'])
     blacklist(['vk', 'gm', '_', 'surfaceprops'])
     blacklist(['vk', 'gm', '_', 'textblobgeometrychange'])
@@ -671,8 +678,6 @@ def dm_flags(api, bot):
     blacklist(['vk', 'gm', '_', 'textblobrandomfont'])
     blacklist(['vk', 'gm', '_', 'textfilter_color'])
     blacklist(['vk', 'gm', '_', 'textfilter_image'])
-    blacklist(['vk', 'gm', '_', 'tilemodes'])
-    blacklist(['vk', 'gm', '_', 'tilemodes_npot'])
     blacklist(['vk', 'gm', '_', 'typefacerendering'])
     blacklist(['vk', 'gm', '_', 'varied_text_clipped_lcd'])
     blacklist(['vk', 'gm', '_', 'varied_text_ignorable_clip_lcd'])
@@ -1126,6 +1131,8 @@ def GenTests(api):
                                      'svg', 'VERSION'),
         api.path['start_dir'].join('tmp', 'uninteresting_hashes.txt')
     ) +
+    api.step_data('get swarming bot id',
+                  stdout=api.raw_io.output('build123-m2--device5')) +
     api.step_data('push [START_DIR]/skia/resources/* '+
                   '/sdcard/revenge_of_the_skiabot/resources', retcode=1)
   )
