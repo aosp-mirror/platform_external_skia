@@ -8,7 +8,6 @@
 #ifndef SkTypeface_DEFINED
 #define SkTypeface_DEFINED
 
-#include "../private/SkBitmaskEnum.h"
 #include "../private/SkOnce.h"
 #include "../private/SkWeakRefCnt.h"
 #include "SkFontArguments.h"
@@ -365,7 +364,9 @@ private:
     };
     static SkFontStyle FromOldStyle(Style oldStyle);
     static SkTypeface* GetDefaultTypeface(Style style = SkTypeface::kNormal);
-    friend class GrPathRendering;  // GetDefaultTypeface
+    static SkTypeface* NormalizeTypeface(SkTypeface* typeface) {
+        return typeface != nullptr ? typeface : SkTypeface::GetDefaultTypeface();
+    }
     friend class SkGlyphCache;     // GetDefaultTypeface
     friend class SkPaint;          // GetDefaultTypeface
     friend class SkScalerContext;  // GetDefaultTypeface
