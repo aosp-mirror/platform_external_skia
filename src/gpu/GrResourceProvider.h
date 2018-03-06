@@ -68,13 +68,13 @@ public:
      */
     sk_sp<GrTexture> createTexture(const GrSurfaceDesc&, SkBudgeted, uint32_t flags = 0);
 
-    sk_sp<GrTexture> createTexture(const GrSurfaceDesc&, SkBudgeted,
+    sk_sp<GrTexture> createTexture(const GrSurfaceDesc&, SkBudgeted, GrSurfaceOrigin texelsOrigin,
                                    const GrMipLevel texels[], int mipLevelCount,
                                    SkDestinationSurfaceColorMode mipColorMode);
 
     // Create a potentially loose fit texture with the provided data
     sk_sp<GrTexture> createTexture(const GrSurfaceDesc&, SkBudgeted, SkBackingFit,
-                                   const GrMipLevel&);
+                                   GrSurfaceOrigin mipLevelOrigin, const GrMipLevel&);
 
     ///////////////////////////////////////////////////////////////////////////
     // Wrapped Backend Surfaces
@@ -170,9 +170,6 @@ public:
      * is not supported.
      */
     sk_sp<GrPath> createPath(const SkPath&, const GrStyle&);
-    sk_sp<GrPathRange> createPathRange(GrPathRange::PathGenerator*, const GrStyle&);
-    sk_sp<GrPathRange> createGlyphs(const SkTypeface*, const SkScalerContextEffects&,
-                                    const SkDescriptor*, const GrStyle&);
 
     /** These flags govern which scratch resources we are allowed to return */
     enum Flags {

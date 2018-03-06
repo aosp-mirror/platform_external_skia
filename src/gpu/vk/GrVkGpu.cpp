@@ -763,7 +763,8 @@ bool GrVkGpu::uploadTexDataOptimal(GrVkTexture* tex, GrSurfaceOrigin texOrigin, 
 
 ////////////////////////////////////////////////////////////////////////////////
 sk_sp<GrTexture> GrVkGpu::onCreateTexture(const GrSurfaceDesc& desc, SkBudgeted budgeted,
-                                          const GrMipLevel texels[], int mipLevelCount) {
+                                          GrSurfaceOrigin texelsOrigin, const GrMipLevel texels[],
+                                          int mipLevelCount) {
     bool renderTarget = SkToBool(desc.fFlags & kRenderTarget_GrSurfaceFlag);
 
     VkFormat pixelFormat;
@@ -824,7 +825,7 @@ sk_sp<GrTexture> GrVkGpu::onCreateTexture(const GrSurfaceDesc& desc, SkBudgeted 
 
     auto colorType = GrPixelConfigToColorType(desc.fConfig);
     if (mipLevelCount) {
-        if (!this->uploadTexDataOptimal(tex.get(), desc.fOrigin, 0, 0, desc.fWidth, desc.fHeight,
+        if (!this->uploadTexDataOptimal(tex.get(), texelsOrigin, 0, 0, desc.fWidth, desc.fHeight,
                                         colorType, texels, mipLevelCount)) {
             tex->unref();
             return nullptr;
@@ -891,7 +892,6 @@ sk_sp<GrTexture> GrVkGpu::onWrapBackendTexture(const GrBackendTexture& backendTe
 
     GrSurfaceDesc surfDesc;
     surfDesc.fFlags = kNone_GrSurfaceFlags;
-    surfDesc.fOrigin = kTopLeft_GrSurfaceOrigin; // Not actually used in the following
     surfDesc.fWidth = backendTex.width();
     surfDesc.fHeight = backendTex.height();
     surfDesc.fConfig = backendTex.config();
@@ -909,7 +909,6 @@ sk_sp<GrTexture> GrVkGpu::onWrapRenderableBackendTexture(const GrBackendTexture&
 
     GrSurfaceDesc surfDesc;
     surfDesc.fFlags = kRenderTarget_GrSurfaceFlag;
-    surfDesc.fOrigin = kBottomLeft_GrSurfaceOrigin; // Not actually used in the following
     surfDesc.fWidth = backendTex.width();
     surfDesc.fHeight = backendTex.height();
     surfDesc.fConfig = backendTex.config();
@@ -938,7 +937,6 @@ sk_sp<GrRenderTarget> GrVkGpu::onWrapBackendRenderTarget(const GrBackendRenderTa
 
     GrSurfaceDesc desc;
     desc.fFlags = kRenderTarget_GrSurfaceFlag;
-    desc.fOrigin = kBottomLeft_GrSurfaceOrigin; // Not actually used in the following
     desc.fWidth = backendRT.width();
     desc.fHeight = backendRT.height();
     desc.fConfig = backendRT.config();
@@ -966,7 +964,6 @@ sk_sp<GrRenderTarget> GrVkGpu::onWrapBackendTextureAsRenderTarget(const GrBacken
 
     GrSurfaceDesc desc;
     desc.fFlags = kRenderTarget_GrSurfaceFlag;
-    desc.fOrigin = kBottomLeft_GrSurfaceOrigin; // Not actually used in the following
     desc.fWidth = tex.width();
     desc.fHeight = tex.height();
     desc.fConfig = tex.config();
@@ -1026,7 +1023,7 @@ void GrVkGpu::generateMipmap(GrVkTexture* tex, GrSurfaceOrigin texOrigin) {
             return;
         }
         // change the new image's layout so we can blit to it
-        tex->setImageLayout(this, VK_IMAGE_LAYOUT_GENERAL,
+        tex->setImageLayout(this, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                             VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, false);
 
         // Blit original image to top level of new image
@@ -1043,7 +1040,7 @@ void GrVkGpu::generateMipmap(GrVkTexture* tex, GrSurfaceOrigin texOrigin) {
                                      VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                                      tex->resource(),
                                      tex->image(),
-                                     VK_IMAGE_LAYOUT_GENERAL,
+                                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                                      1,
                                      &blitRegion,
                                      VK_FILTER_LINEAR);
@@ -1051,7 +1048,7 @@ void GrVkGpu::generateMipmap(GrVkTexture* tex, GrSurfaceOrigin texOrigin) {
         oldResource->unref(this);
     } else {
         // change layout of the layers so we can write to them.
-        tex->setImageLayout(this, VK_IMAGE_LAYOUT_GENERAL,
+        tex->setImageLayout(this, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                             VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, false);
     }
 
@@ -1063,8 +1060,8 @@ void GrVkGpu::generateMipmap(GrVkTexture* tex, GrSurfaceOrigin texOrigin) {
         nullptr,                                         // pNext
         VK_ACCESS_TRANSFER_WRITE_BIT,                    // srcAccessMask
         VK_ACCESS_TRANSFER_READ_BIT,                     // dstAccessMask
-        VK_IMAGE_LAYOUT_GENERAL,                         // oldLayout
-        VK_IMAGE_LAYOUT_GENERAL,                         // newLayout
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,            // oldLayout
+        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,            // newLayout
         VK_QUEUE_FAMILY_IGNORED,                         // srcQueueFamilyIndex
         VK_QUEUE_FAMILY_IGNORED,                         // dstQueueFamilyIndex
         tex->image(),                                    // image
@@ -1090,13 +1087,24 @@ void GrVkGpu::generateMipmap(GrVkTexture* tex, GrSurfaceOrigin texOrigin) {
         blitRegion.dstOffsets[0] = { 0, 0, 0 };
         blitRegion.dstOffsets[1] = { width, height, 1 };
         fCurrentCmdBuffer->blitImage(this,
-                                     *tex,
-                                     *tex,
+                                     tex->resource(),
+                                     tex->image(),
+                                     VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                     tex->resource(),
+                                     tex->image(),
+                                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                                      1,
                                      &blitRegion,
                                      VK_FILTER_LINEAR);
         ++mipLevel;
     }
+    // This barrier logically is not needed, but it changes the final level to the same layout as
+    // all the others, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL. This makes tracking of the layouts and
+    // future layout changes easier.
+    imageMemoryBarrier.subresourceRange.baseMipLevel = mipLevel - 1;
+    this->addImageMemoryBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                false, &imageMemoryBarrier);
+    tex->updateImageLayout(VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
