@@ -21,6 +21,7 @@
 #include "GrRenderTargetContext.h"
 #include "GrStyle.h"
 #include "SkBlurMaskFilter.h"
+#include "SkBlurPriv.h"
 #include "SkGpuBlurUtils.h"
 #include "SkRRectPriv.h"
 #include "GrFragmentProcessor.h"
@@ -52,7 +53,8 @@ public:
                 proxyProvider->findOrCreateProxyByUniqueKey(key, kBottomLeft_GrSurfaceOrigin));
         if (!mask) {
             // TODO: this could be approx but the texture coords will need to be updated
-            sk_sp<GrRenderTargetContext> rtc(context->makeDeferredRenderTargetContextWithFallback(
+            sk_sp<GrRenderTargetContext> rtc(
+                context->contextPriv().makeDeferredRenderTargetContextWithFallback(
                     SkBackingFit::kExact, size.fWidth, size.fHeight, kAlpha_8_GrPixelConfig,
                     nullptr));
             if (!rtc) {
