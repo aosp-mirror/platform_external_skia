@@ -73,8 +73,8 @@ public:
      * DDL TODO: need to refine ownership semantics of 'srcData' if we're in completely
      * deferred mode
      */
-    sk_sp<GrTextureProxy> createTextureProxy(const GrSurfaceDesc&, GrSurfaceOrigin, SkBudgeted,
-                                             const void* srcData, size_t rowBytes);
+    sk_sp<GrTextureProxy> createTextureProxy(const GrSurfaceDesc&, SkBudgeted, const void* srcData,
+                                             size_t rowBytes);
 
     /*
      * Create an un-mipmapped texture proxy with data. The SkImage must be a raster backend image.
@@ -83,7 +83,6 @@ public:
      */
     sk_sp<GrTextureProxy> createTextureProxy(sk_sp<SkImage> srcImage,
                                              GrSurfaceFlags flags,
-                                             GrSurfaceOrigin origin,
                                              int sampleCnt,
                                              SkBudgeted budgeted,
                                              SkBackingFit fit);
@@ -121,30 +120,28 @@ public:
     /*
      * Create a texture proxy that wraps a (non-renderable) backend texture.
      */
-    sk_sp<GrTextureProxy> createWrappedTextureProxy(const GrBackendTexture&, GrSurfaceOrigin,
-                                                    GrWrapOwnership = kBorrow_GrWrapOwnership,
-                                                    ReleaseProc = nullptr,
-                                                    ReleaseContext = nullptr);
+    sk_sp<GrTextureProxy> wrapBackendTexture(const GrBackendTexture&, GrSurfaceOrigin,
+                                             GrWrapOwnership = kBorrow_GrWrapOwnership,
+                                             ReleaseProc = nullptr, ReleaseContext = nullptr);
 
     /*
      * Create a texture proxy that wraps a backend texture and is both texture-able and renderable
      */
-    sk_sp<GrTextureProxy> createWrappedTextureProxy(const GrBackendTexture&,
-                                                    GrSurfaceOrigin,
-                                                    int sampleCnt);
+    sk_sp<GrTextureProxy> wrapRenderableBackendTexture(const GrBackendTexture&,
+                                                       GrSurfaceOrigin,
+                                                       int sampleCnt);
 
     /*
      * Create a render target proxy that wraps a backend rendertarget
      */
-    sk_sp<GrSurfaceProxy> createWrappedRenderTargetProxy(const GrBackendRenderTarget&,
-                                                         GrSurfaceOrigin);
+    sk_sp<GrSurfaceProxy> wrapBackendRenderTarget(const GrBackendRenderTarget&, GrSurfaceOrigin);
 
     /*
-     * Create a render target proxy that wraps a backend texture?
+     * Create a render target proxy that wraps a backend texture
      */
-    sk_sp<GrSurfaceProxy> createWrappedRenderTargetProxy(const GrBackendTexture& tex,
-                                                         GrSurfaceOrigin origin,
-                                                         int sampleCnt);
+    sk_sp<GrSurfaceProxy> wrapBackendTextureAsRenderTarget(const GrBackendTexture& tex,
+                                                           GrSurfaceOrigin origin,
+                                                           int sampleCnt);
 
     using LazyInstantiateCallback = std::function<sk_sp<GrSurface>(GrResourceProvider*)>;
     enum class Textureable : bool {

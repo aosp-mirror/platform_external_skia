@@ -8,8 +8,8 @@
 #ifndef SkRasterPipeline_opts_DEFINED
 #define SkRasterPipeline_opts_DEFINED
 
-#include "../../jumper/SkJumper.h"
-#include "../../jumper/SkJumper_misc.h"
+#include "../jumper/SkJumper.h"
+#include "../jumper/SkJumper_misc.h"
 
 #if !defined(__clang__)
     #define JUMPER_IS_SCALAR
@@ -2298,7 +2298,18 @@ STAGE(bilerp_clamp_8888, SkJumper_GatherCtx* ctx) {
 }
 
 namespace lowp {
-#if defined(__clang__)
+#if defined(JUMPER_IS_SCALAR)
+    // If we're not compiled by Clang, or otherwise switched into scalar mode (old Clang, manually),
+    // we don't generate lowp stages.  All these nullptrs will tell SkJumper.cpp to always use the
+    // highp float pipeline.
+    #define M(st) static void (*st)(void) = nullptr;
+        SK_RASTER_PIPELINE_STAGES(M)
+    #undef M
+    static void (*just_return)(void) = nullptr;
+
+    static void start_pipeline(size_t,size_t,size_t,size_t, void**) {}
+
+#else  // We are compiling vector code with Clang... let's make some lowp stages!
 
 #if defined(__AVX2__)
     using U8  = uint8_t  __attribute__((ext_vector_type(16)));
@@ -3266,16 +3277,7 @@ static NotImplemented
         apply_vector_mask,
         bilerp_clamp_8888;
 
-#else  // We're not Clang, so define all null lowp stages.
-
-    #define M(st) static void (*st)(void) = nullptr;
-        SK_RASTER_PIPELINE_STAGES(M)
-    #undef M
-    static void (*just_return)(void) = nullptr;
-
-    static void start_pipeline(size_t,size_t,size_t,size_t, void**) {}
-
-#endif//defined(__clang__)  for lowp stages
+#endif//defined(JUMPER_IS_SCALAR) controlling whether we build lowp stages
 }  // namespace lowp
 
 }  // namespace SK_OPTS_NS

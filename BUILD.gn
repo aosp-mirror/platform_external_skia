@@ -322,6 +322,14 @@ opts("hsw") {
       "-mfma",
     ]
   }
+
+  # Oddly, clang-cl doesn't recognize this as a valid flag.
+  # If it ever does, it'd nice to move this up with -mavx2 and co.
+  if (is_clang && !is_win) {
+    # This flag lets Clang generate FMAs when it sees a mul-then-add.  It's optional,
+    # but nice to have, generating slightly better code for paths without explicit FMAs.
+    cflags += [ "-ffp-contract=fast" ]
+  }
 }
 
 # Any feature of Skia that requires third-party code should be optional and use this template.
@@ -1180,6 +1188,7 @@ if (skia_enable_tools) {
       sources = [
         "tools/gpu/GrContextFactory.cpp",
         "tools/gpu/GrTest.cpp",
+        "tools/gpu/ProxyUtils.cpp",
         "tools/gpu/TestContext.cpp",
         "tools/gpu/atlastext/GLTestAtlasTextRenderer.cpp",
         "tools/gpu/gl/GLTestContext.cpp",
