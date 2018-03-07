@@ -17,6 +17,7 @@
 #include "SkGraphics.h"
 #include "SkMakeUnique.h"
 #include "SkMaskFilterBase.h"
+#include "SkPaintPriv.h"
 #include "SkTextMapStateProc.h"
 
 #include "ops/GrMeshDrawOp.h"
@@ -103,7 +104,7 @@ void GrAtlasTextContext::drawTextBlob(GrContext* context, GrTextUtils::Target* t
                                       const SkTextBlob* blob, SkScalar x, SkScalar y,
                                       SkDrawFilter* drawFilter, const SkIRect& clipBounds) {
     // If we have been abandoned, then don't draw
-    if (context->abandoned()) {
+    if (context->contextPriv().abandoned()) {
         return;
     }
 
@@ -317,7 +318,7 @@ void GrAtlasTextContext::drawText(GrContext* context, GrTextUtils::Target* targe
                                   const SkMatrix& viewMatrix, const SkSurfaceProps& props,
                                   const char text[], size_t byteLength, SkScalar x, SkScalar y,
                                   const SkIRect& regionClipBounds) {
-    if (context->abandoned()) {
+    if (context->contextPriv().abandoned()) {
         return;
     }
 
@@ -344,7 +345,7 @@ void GrAtlasTextContext::drawPosText(GrContext* context, GrTextUtils::Target* ta
                                      int scalarsPerPosition, const SkPoint& offset,
                                      const SkIRect& regionClipBounds) {
     GrTextUtils::Paint paint(&skPaint, &target->colorSpaceInfo());
-    if (context->abandoned()) {
+    if (context->contextPriv().abandoned()) {
         return;
     }
 
@@ -692,8 +693,9 @@ void GrAtlasTextContext::drawDFText(GrAtlasTextBlob* blob, int runIndex,
     // passed-in scaler context flags. (It's only used when we fall-back to bitmap text).
     SkScalerContext::CreateDescriptorAndEffectsUsingPaint(
         skPaint, &props, SkScalerContextFlags::kNone, nullptr, &desc, &effects);
+    auto typeface = SkPaintPriv::GetTypefaceOrDefault(skPaint);
     SkGlyphCache* origPaintCache =
-            SkGlyphCache::DetachCache(skPaint.getTypeface(), effects, desc.getDesc());
+            SkGlyphCache::DetachCache(typeface, effects, desc.getDesc());
 
     SkTArray<SkScalar> positions;
 
@@ -939,7 +941,7 @@ GR_DRAW_OP_TEST_DEFINE(GrAtlasTextOp) {
     }
 
     // Setup dummy SkPaint / GrPaint / GrRenderTargetContext
-    sk_sp<GrRenderTargetContext> rtc(context->makeDeferredRenderTargetContext(
+    sk_sp<GrRenderTargetContext> rtc(context->contextPriv().makeDeferredRenderTargetContext(
         SkBackingFit::kApprox, 1024, 1024, kRGBA_8888_GrPixelConfig, nullptr));
 
     SkMatrix viewMatrix = GrTest::TestMatrixInvertible(random);
