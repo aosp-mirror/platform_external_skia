@@ -401,6 +401,7 @@ cc_library_static {
         "src/effects/SkTableMaskFilter.cpp",
         "src/effects/SkTileImageFilter.cpp",
         "src/effects/SkToSRGBColorFilter.cpp",
+        "src/effects/SkTrimPathEffect.cpp",
         "src/effects/SkXfermodeImageFilter.cpp",
         "src/gpu/GrAHardwareBufferImageGenerator.cpp",
         "src/gpu/GrAuditTrail.cpp",
