@@ -468,6 +468,12 @@ public:
      */
     virtual void deleteTestingOnlyBackendTexture(GrBackendTexture*) = 0;
 
+    /**
+     * Flushes all work to the gpu and forces the GPU to wait until all the gpu work has completed.
+     * This is for testing purposes only.
+     */
+    virtual void testingOnly_flushGpuAndSync() = 0;
+
     // width and height may be larger than rt (if underlying API allows it).
     // Returns nullptr if compatible sb could not be created, otherwise the caller owns the ref on
     // the GrStencilAttachment.
@@ -480,9 +486,9 @@ public:
     // Determines whether a texture will need to be rescaled in order to be used with the
     // GrSamplerState. This variation is called when the caller will create a new texture using the
     // resource provider from a non-texture src (cpu-backed image, ...).
-    bool isACopyNeededForTextureParams(int width, int height, const GrSamplerState&,
-                                       GrTextureProducer::CopyParams*,
-                                       SkScalar scaleAdjust[2]) const;
+    static bool IsACopyNeededForTextureParams(const GrCaps*, int width, int height,
+                                              const GrSamplerState&, GrTextureProducer::CopyParams*,
+                                              SkScalar scaleAdjust[2]);
 
     // Like the above but this variation should be called when the caller is not creating the
     // original texture but rather was handed the original texture. It adds additional checks
@@ -491,8 +497,8 @@ public:
     bool isACopyNeededForTextureParams(GrTextureProxy* proxy, const GrSamplerState& params,
                                        GrTextureProducer::CopyParams* copyParams,
                                        SkScalar scaleAdjust[2]) const {
-        if (this->isACopyNeededForTextureParams(proxy->width(), proxy->height(), params,
-                                                copyParams, scaleAdjust)) {
+        if (IsACopyNeededForTextureParams(this->caps(), proxy->width(), proxy->height(), params,
+                                          copyParams, scaleAdjust)) {
             return true;
         }
         return this->onIsACopyNeededForTextureParams(proxy, params, copyParams, scaleAdjust);
