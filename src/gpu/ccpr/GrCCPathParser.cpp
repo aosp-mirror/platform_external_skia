@@ -514,15 +514,10 @@ void GrCCPathParser::drawCoverageCount(GrOpFlushState* flushState, CoverageCount
     if (batchTotalCounts.fTriangles) {
         this->drawRenderPass(flushState, pipeline, batchID, RenderPass::kTriangles,
                              WindMethod::kCrossProduct, &PrimitiveTallies::fTriangles, drawBounds);
-        this->drawRenderPass(flushState, pipeline, batchID, RenderPass::kTriangleCorners,
-                             WindMethod::kCrossProduct, &PrimitiveTallies::fTriangles, drawBounds);
     }
 
     if (batchTotalCounts.fWoundTriangles) {
         this->drawRenderPass(flushState, pipeline, batchID, RenderPass::kTriangles,
-                             WindMethod::kInstanceData, &PrimitiveTallies::fWoundTriangles,
-                             drawBounds);
-        this->drawRenderPass(flushState, pipeline, batchID, RenderPass::kTriangleCorners,
                              WindMethod::kInstanceData, &PrimitiveTallies::fWoundTriangles,
                              drawBounds);
     }
@@ -530,14 +525,10 @@ void GrCCPathParser::drawCoverageCount(GrOpFlushState* flushState, CoverageCount
     if (batchTotalCounts.fQuadratics) {
         this->drawRenderPass(flushState, pipeline, batchID, RenderPass::kQuadratics,
                              WindMethod::kCrossProduct, &PrimitiveTallies::fQuadratics, drawBounds);
-        this->drawRenderPass(flushState, pipeline, batchID, RenderPass::kQuadraticCorners,
-                             WindMethod::kCrossProduct, &PrimitiveTallies::fQuadratics, drawBounds);
     }
 
     if (batchTotalCounts.fCubics) {
         this->drawRenderPass(flushState, pipeline, batchID, RenderPass::kCubics,
-                             WindMethod::kCrossProduct, &PrimitiveTallies::fCubics, drawBounds);
-        this->drawRenderPass(flushState, pipeline, batchID, RenderPass::kCubicCorners,
                              WindMethod::kCrossProduct, &PrimitiveTallies::fCubics, drawBounds);
     }
 }
@@ -596,9 +587,8 @@ void GrCCPathParser::drawRenderPass(GrOpFlushState* flushState, const GrPipeline
     SkASSERT(totalInstanceCount == batch.fTotalPrimitiveCounts.*instanceType);
 
     if (!fMeshesScratchBuffer.empty()) {
-        SkASSERT(flushState->rtCommandBuffer());
-        flushState->rtCommandBuffer()->draw(pipeline, proc, fMeshesScratchBuffer.begin(),
-                                            fDynamicStatesScratchBuffer.begin(),
-                                            fMeshesScratchBuffer.count(), SkRect::Make(drawBounds));
+        proc.draw(flushState, pipeline, fMeshesScratchBuffer.begin(),
+                  fDynamicStatesScratchBuffer.begin(), fMeshesScratchBuffer.count(),
+                  SkRect::Make(drawBounds));
     }
 }
