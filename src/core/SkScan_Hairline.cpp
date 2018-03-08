@@ -144,20 +144,25 @@ void SkScan::HairLineRgn(const SkPoint array[], int arrayCount, const SkRegion* 
 
 // we don't just draw 4 lines, 'cause that can leave a gap in the bottom-right
 // and double-hit the top-left.
-void SkScan::HairRect(const SkRect& origRect, const SkRasterClip& clip, SkBlitter* blitter) {
-    SkRect rect = origRect;
-    // clip against a slightly larger clip, to get us into "int" range. Need it slightly
-    // larger since we're a hairline, and may draw outside of our bounds.
-    if (!rect.intersect(SkRect::Make(clip.getBounds()).makeOutset(1, 1))) {
-        return;
-    }
-
+void SkScan::HairRect(const SkRect& rect, const SkRasterClip& clip, SkBlitter* blitter) {
     SkAAClipBlitterWrapper wrapper;
     SkBlitterClipper clipper;
-    const SkIRect r = SkIRect::MakeLTRB(SkScalarFloorToInt(rect.fLeft),
-                                        SkScalarFloorToInt(rect.fTop),
-                                        SkScalarFloorToInt(rect.fRight) + 1,
-                                        SkScalarFloorToInt(rect.fBottom) + 1);
+    // Create the enclosing bounds of the hairrect. i.e. we will stroke the interior of r.
+    SkIRect r = SkIRect::MakeLTRB(SkScalarFloorToInt(rect.fLeft),
+                                  SkScalarFloorToInt(rect.fTop),
+                                  SkScalarFloorToInt(rect.fRight + 1),
+                                  SkScalarFloorToInt(rect.fBottom + 1));
+
+    // Note: r might be crazy big, if rect was huge, possibly getting pinned to max/min s32.
+    // We need to trim it back to something reasonable before we can query its width etc.
+    // since r.fRight - r.fLeft might wrap around to negative even if fRight > fLeft.
+    //
+    // We outset the clip bounds by 1 before intersecting, since r is being stroked and not filled
+    // so we don't want to pin an edge of it to the clip. The intersect's job is mostly to just
+    // get the actual edge values into a reasonable range (e.g. so width() can't overflow).
+    if (!r.intersect(clip.getBounds().makeOutset(1, 1))) {
+        return;
+    }
 
     if (clip.quickReject(r)) {
         return;
