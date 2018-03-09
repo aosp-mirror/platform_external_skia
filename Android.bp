@@ -485,6 +485,7 @@ cc_library_static {
         "src/gpu/GrTextureProducer.cpp",
         "src/gpu/GrTextureProxy.cpp",
         "src/gpu/GrTextureRenderTargetProxy.cpp",
+        "src/gpu/GrUninstantiateProxyTracker.cpp",
         "src/gpu/GrXferProcessor.cpp",
         "src/gpu/GrYUVProvider.cpp",
         "src/gpu/SkGpuDevice.cpp",
