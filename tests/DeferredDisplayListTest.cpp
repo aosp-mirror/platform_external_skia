@@ -42,9 +42,9 @@ static GrBackendFormat create_backend_format(GrContext* context, SkColorType col
         if (kRGBA_8888_SkColorType == colorType) {
             VkFormat format =  caps->srgbSupport() ? VK_FORMAT_R8G8B8A8_SRGB
                                                    : VK_FORMAT_R8G8B8A8_UNORM;
-            return GrBackendFormat::MakeVK(format);
+            return GrBackendFormat::MakeVk(format);
         } else if (kRGBA_F16_SkColorType == colorType) {
-            return GrBackendFormat::MakeVK(VK_FORMAT_R16G16B16A16_SFLOAT);
+            return GrBackendFormat::MakeVk(VK_FORMAT_R16G16B16A16_SFLOAT);
         }
         break;
 #endif
@@ -178,14 +178,14 @@ public:
             context, *backend, fOrigin, fSampleCount, fColorType, nullptr, nullptr);
 
         if (!surface) {
-            gpu->deleteTestingOnlyBackendTexture(backend);
+            gpu->deleteTestingOnlyBackendTexture(*backend);
             return nullptr;
         }
 
         return surface;
     }
 
-    void cleanUpBackEnd(GrContext* context, GrBackendTexture* backend) const {
+    void cleanUpBackEnd(GrContext* context, const GrBackendTexture& backend) const {
         GrGpu* gpu = context->contextPriv().getGpu();
 
         gpu->deleteTestingOnlyBackendTexture(backend);
@@ -301,7 +301,7 @@ DEF_GPUTEST_FOR_ALL_CONTEXTS(DDLSurfaceCharacterizationTest, reporter, ctxInfo) 
             REPORTER_ASSERT(reporter, !s->draw(ddl.get()));
 
             s = nullptr;
-            params.cleanUpBackEnd(context, &backend);
+            params.cleanUpBackEnd(context, backend);
         }
     }
 
@@ -368,7 +368,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(DDLWrapBackendTest, reporter, ctxInfo) {
 
     sk_sp<SkSurface> s = params.make(context);
     if (!s) {
-        gpu->deleteTestingOnlyBackendTexture(&backendTex);
+        gpu->deleteTestingOnlyBackendTexture(backendTex);
         return;
     }
 
@@ -379,13 +379,13 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(DDLWrapBackendTest, reporter, ctxInfo) {
 
     SkCanvas* canvas = recorder->getCanvas();
     if (!canvas) {
-        gpu->deleteTestingOnlyBackendTexture(&backendTex);
+        gpu->deleteTestingOnlyBackendTexture(backendTex);
         return;
     }
 
     GrContext* deferredContext = canvas->getGrContext();
     if (!deferredContext) {
-        gpu->deleteTestingOnlyBackendTexture(&backendTex);
+        gpu->deleteTestingOnlyBackendTexture(backendTex);
         return;
     }
 
@@ -401,7 +401,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(DDLWrapBackendTest, reporter, ctxInfo) {
                                      TextureReleaseChecker::Release, &releaseChecker);
     REPORTER_ASSERT(reporter, !image);
 
-    gpu->deleteTestingOnlyBackendTexture(&backendTex);
+    gpu->deleteTestingOnlyBackendTexture(backendTex);
 }
 
 

@@ -71,10 +71,34 @@ GrBackendTexture CreateBackendTexture(GrBackend backend, int width, int height,
         }
         case kMock_GrBackend: {
             GrMockTextureInfo* mockInfo = (GrMockTextureInfo*)(handle);
-            return GrBackendTexture(width, height, config, mipMapped, *mockInfo);
+            return GrBackendTexture(width, height, mipMapped, *mockInfo);
         }
         default:
             return GrBackendTexture();
+    }
+}
+
+GrBackendFormat CreateBackendFormatFromTexture(const GrBackendTexture& tex) {
+    switch (tex.backend()) {
+#ifdef SK_VULKAN
+        case kVulkan_GrBackend: {
+            const GrVkImageInfo* vkInfo = tex.getVkImageInfo();
+            SkASSERT(vkInfo);
+            return GrBackendFormat::MakeVk(vkInfo->fFormat);
+        }
+#endif
+        case kOpenGL_GrBackend: {
+            const GrGLTextureInfo* glInfo = tex.getGLTextureInfo();
+            SkASSERT(glInfo);
+            return GrBackendFormat::MakeGL(glInfo->fFormat, glInfo->fTarget);
+        }
+        case kMock_GrBackend: {
+            const GrMockTextureInfo* mockInfo = tex.getMockTextureInfo();
+            SkASSERT(mockInfo);
+            return GrBackendFormat::MakeMock(mockInfo->fConfig);
+        }
+        default:
+            return GrBackendFormat();
     }
 }
 

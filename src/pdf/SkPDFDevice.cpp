@@ -209,8 +209,7 @@ public:
         fEntries[0].fClipStack = existingClipStack;
     }
 
-    void updateClip(const SkClipStack& clipStack,
-                    const SkPoint& translation, const SkRect& bounds);
+    void updateClip(const SkClipStack& clipStack, const SkIRect& bounds);
     void updateMatrix(const SkMatrix& matrix);
     void updateDrawingState(const SkPDFDevice::GraphicStateEntry& state);
 
@@ -283,56 +282,11 @@ bool apply_clip(SkClipOp op, const SkPath& u, const SkPath& v, SkPath* r)  {
     }
 }
 
-/* Uses Path Ops to calculate a vector SkPath clip from a clip stack.
- * Returns true if successful, or false if not successful.
- * If successful, the resulting clip is stored in outClipPath.
- * If not successful, outClipPath is undefined, and a fallback method
- * should be used.
- */
-static bool get_clip_stack_path(const SkMatrix& transform,
-                                const SkClipStack& clipStack,
-                                const SkRect& bounds,
-                                SkPath* outClipPath) {
-    outClipPath->reset();
-    outClipPath->setFillType(SkPath::kInverseWinding_FillType);
-
-    const SkClipStack::Element* clipEntry;
-    SkClipStack::Iter iter;
-    iter.reset(clipStack, SkClipStack::Iter::kBottom_IterStart);
-    for (clipEntry = iter.next(); clipEntry; clipEntry = iter.next()) {
-        SkPath entryPath;
-        if (SkClipStack::Element::DeviceSpaceType::kEmpty == clipEntry->getDeviceSpaceType()) {
-            outClipPath->reset();
-            outClipPath->setFillType(SkPath::kInverseWinding_FillType);
-            continue;
-        } else {
-            clipEntry->asDeviceSpacePath(&entryPath);
-        }
-        entryPath.transform(transform);
-        if (!apply_clip(clipEntry->getOp(), *outClipPath, entryPath, outClipPath)) {
-            return false;
-        }
-    }
-
-    if (outClipPath->isInverseFillType()) {
-        // The bounds are slightly outset to ensure this is correct in the
-        // face of floating-point accuracy and possible SkRegion bitmap
-        // approximations.
-        SkRect clipBounds = bounds;
-        clipBounds.outset(SK_Scalar1, SK_Scalar1);
-        if (!calculate_inverse_path(clipBounds, *outClipPath, outClipPath)) {
-            return false;
-        }
-    }
-    return true;
-}
-
 // TODO(vandebo): Take advantage of SkClipStack::getSaveCount(), the PDF
 // graphic state stack, and the fact that we can know all the clips used
 // on the page to optimize this.
 void GraphicStackState::updateClip(const SkClipStack& clipStack,
-                                   const SkPoint& translation,
-                                   const SkRect& bounds) {
+                                   const SkIRect& bounds) {
     if (clipStack == currentEntry()->fClipStack) {
         return;
     }
@@ -347,11 +301,16 @@ void GraphicStackState::updateClip(const SkClipStack& clipStack,
 
     currentEntry()->fClipStack = clipStack;
 
-    SkMatrix transform;
-    transform.setTranslate(translation.fX, translation.fY);
-
     SkPath clipPath;
-    if (get_clip_stack_path(transform, clipStack, bounds, &clipPath)) {
+    (void)clipStack.asPath(&clipPath);
+
+    // The bounds are slightly outset to ensure this is correct in the
+    // face of floating-point accuracy and possible SkRegion bitmap
+    // approximations.
+    SkPath clipBoundsPath;
+    clipBoundsPath.addRect(SkRect::Make(bounds.makeOutset(1, 1)));
+
+    if (Op(clipPath, clipBoundsPath, kIntersect_SkPathOp, &clipPath)) {
         SkPDFUtils::EmitPath(clipPath, SkPaint::kFill_Style, fContentStream);
         SkPath::FillType clipFill = clipPath.getFillType();
         NOT_IMPLEMENTED(clipFill == SkPath::kInverseEvenOdd_FillType, false);
@@ -599,6 +558,9 @@ void SkPDFDevice::drawAnnotation(const SkRect& rect, const char key[], SkData* v
 }
 
 void SkPDFDevice::drawPaint(const SkPaint& srcPaint) {
+    if (this->hasEmptyClip()) {
+        return;
+    }
     SkPaint newPaint = srcPaint;
     remove_color_filter(&newPaint);
     replace_srcmode_on_opaque_paint(&newPaint);
@@ -636,6 +598,9 @@ void SkPDFDevice::drawPoints(SkCanvas::PointMode mode,
                              size_t count,
                              const SkPoint* points,
                              const SkPaint& srcPaint) {
+    if (this->hasEmptyClip()) {
+        return;
+    }
     SkPaint passedPaint = srcPaint;
     remove_color_filter(&passedPaint);
     replace_srcmode_on_opaque_paint(&passedPaint);
@@ -650,9 +615,6 @@ void SkPDFDevice::drawPoints(SkCanvas::PointMode mode,
     // We only use this when there's a path effect because of the overhead
     // of multiple calls to setUpContentEntry it causes.
     if (passedPaint.getPathEffect()) {
-        if (this->cs().isEmpty(this->bounds())) {
-            return;
-        }
         draw_points(mode, count, points, passedPaint,
                     this->devClipBounds(), this->ctm(), this);
         return;
@@ -760,6 +722,9 @@ static sk_sp<SkPDFDict> create_link_named_dest(const SkData* nameData,
 
 void SkPDFDevice::drawRect(const SkRect& rect,
                            const SkPaint& srcPaint) {
+    if (this->hasEmptyClip()) {
+        return;
+    }
     SkPaint paint = srcPaint;
     remove_color_filter(&paint);
     replace_srcmode_on_opaque_paint(&paint);
@@ -767,9 +732,6 @@ void SkPDFDevice::drawRect(const SkRect& rect,
     r.sort();
 
     if (paint.getPathEffect() || paint.getMaskFilter()) {
-        if (this->cs().isEmpty(this->bounds())) {
-            return;
-        }
         SkPath path;
         path.addRect(r);
         this->drawPath(path, paint, nullptr, true);
@@ -786,6 +748,9 @@ void SkPDFDevice::drawRect(const SkRect& rect,
 
 void SkPDFDevice::drawRRect(const SkRRect& rrect,
                             const SkPaint& srcPaint) {
+    if (this->hasEmptyClip()) {
+        return;
+    }
     SkPaint paint = srcPaint;
     remove_color_filter(&paint);
     replace_srcmode_on_opaque_paint(&paint);
@@ -796,6 +761,9 @@ void SkPDFDevice::drawRRect(const SkRRect& rrect,
 
 void SkPDFDevice::drawOval(const SkRect& oval,
                            const SkPaint& srcPaint) {
+    if (this->hasEmptyClip()) {
+        return;
+    }
     SkPaint paint = srcPaint;
     remove_color_filter(&paint);
     replace_srcmode_on_opaque_paint(&paint);
@@ -890,6 +858,9 @@ void SkPDFDevice::internalDrawPath(const SkClipStack& clipStack,
                                    const SkPaint& srcPaint,
                                    const SkMatrix* prePathMatrix,
                                    bool pathIsMutable) {
+    if (clipStack.isEmpty(this->bounds())) {
+        return;
+    }
     SkPaint paint = srcPaint;
     remove_color_filter(&paint);
     replace_srcmode_on_opaque_paint(&paint);
@@ -1389,7 +1360,7 @@ void SkPDFDevice::internalDrawText(
     if (0 == sourceByteCount || !sourceText || srcPaint.getTextSize() <= 0) {
         return;
     }
-    if (this->cs().isEmpty(this->bounds())) {
+    if (this->hasEmptyClip()) {
         return;
     }
     NOT_IMPLEMENTED(srcPaint.isVerticalText(), false);
@@ -1679,7 +1650,7 @@ void SkPDFDevice::drawTextBlob(const SkTextBlob* blob, SkScalar x, SkScalar y,
 }
 
 void SkPDFDevice::drawVertices(const SkVertices*, SkBlendMode, const SkPaint&) {
-    if (this->cs().isEmpty(this->bounds())) {
+    if (this->hasEmptyClip()) {
         return;
     }
     // TODO: implement drawVertices
@@ -1776,8 +1747,7 @@ std::unique_ptr<SkStreamAsset> SkPDFDevice::content() const {
 
     GraphicStackState gsState(fExistingClipStack, &buffer);
     for (const auto& entry : fContentEntries) {
-        gsState.updateClip(entry.fState.fClipStack,
-                {0, 0}, SkRect::Make(this->bounds()));
+        gsState.updateClip(entry.fState.fClipStack, this->bounds());
         gsState.updateMatrix(entry.fState.fMatrix);
         gsState.updateDrawingState(entry.fState);
 
@@ -1805,7 +1775,7 @@ bool SkPDFDevice::handleInversePath(const SkPath& origPath,
         return false;
     }
 
-    if (this->cs().isEmpty(this->bounds())) {
+    if (this->hasEmptyClip()) {
         return false;
     }
 
@@ -2284,6 +2254,9 @@ void SkPDFDevice::internalDrawImageRect(SkKeyedImage imageSubset,
                                         const SkRect& dst,
                                         const SkPaint& srcPaint,
                                         const SkMatrix& ctm) {
+    if (this->hasEmptyClip()) {
+        return;
+    }
     if (!imageSubset) {
         return;
     }
@@ -2531,6 +2504,9 @@ void SkPDFDevice::internalDrawImageRect(SkKeyedImage imageSubset,
 
 void SkPDFDevice::drawSpecial(SkSpecialImage* srcImg, int x, int y, const SkPaint& paint,
                               SkImage* clipImage, const SkMatrix& clipMatrix) {
+    if (this->hasEmptyClip()) {
+        return;
+    }
     SkASSERT(!srcImg->isTextureBacked());
 
     //TODO: clipImage support
