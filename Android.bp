@@ -783,7 +783,6 @@ cc_library_static {
         "src/utils/SkCanvasStack.cpp",
         "src/utils/SkCanvasStateUtils.cpp",
         "src/utils/SkDashPath.cpp",
-        "src/utils/SkDumpCanvas.cpp",
         "src/utils/SkEventTracer.cpp",
         "src/utils/SkFloatToDecimal.cpp",
         "src/utils/SkFrontBufferedStream.cpp",
