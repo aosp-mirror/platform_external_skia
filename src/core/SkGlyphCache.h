@@ -45,6 +45,11 @@ public:
     /**  Return a glyph that has no information if it is not already filled out. */
     SkGlyph* getRawGlyphByID(SkPackedGlyphID);
 
+    /** Return the Strike's SkArenaAlloc. */
+    SkArenaAlloc* getAlloc() {
+        return &fAlloc;
+    }
+
     /** Returns a glyph with valid fAdvance and fDevKern fields. The remaining fields may be
         valid, but that is not guaranteed. If you require those, call getUnicharMetrics or
         getGlyphIDMetrics instead.
@@ -280,26 +285,23 @@ private:
 class SkAutoGlyphCache : public SkExclusiveStrikePtr {
 public:
     SkAutoGlyphCache() = default;
+
     SkAutoGlyphCache(SkGlyphCache* cache) : INHERITED(cache) {}
-    SkAutoGlyphCache(SkTypeface* typeface, const SkScalerContextEffects& effects,
-                     const SkDescriptor* desc)
-        : INHERITED(SkGlyphCache::FindOrCreateStrikeExclusive(*desc, effects, *typeface)) {}
+
     /** deprecated: always enables fake gamma */
     SkAutoGlyphCache(const SkPaint& paint,
                      const SkSurfaceProps* surfaceProps,
                      const SkMatrix* matrix)
-        : INHERITED(
-        SkGlyphCache::FindOrCreateStrikeExclusive(
-            paint, surfaceProps,
-            SkScalerContextFlags::kFakeGammaAndBoostContrast, matrix))
-    {}
+        : INHERITED(SkGlyphCache::FindOrCreateStrikeExclusive(
+            paint, surfaceProps, SkScalerContextFlags::kFakeGammaAndBoostContrast, matrix)) {}
+
     SkAutoGlyphCache(const SkPaint& paint,
                      const SkSurfaceProps* surfaceProps,
                      SkScalerContextFlags scalerContextFlags,
                      const SkMatrix* matrix)
-        : INHERITED(
-            SkGlyphCache::FindOrCreateStrikeExclusive(
+        : INHERITED(SkGlyphCache::FindOrCreateStrikeExclusive(
                 paint, surfaceProps, scalerContextFlags, matrix)) {}
+
 private:
     using INHERITED = SkExclusiveStrikePtr;
 };
