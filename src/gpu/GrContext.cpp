@@ -24,6 +24,7 @@
 #include "GrSurfaceProxyPriv.h"
 #include "GrTexture.h"
 #include "GrTextureContext.h"
+#include "GrTextureStripAtlas.h"
 #include "GrTracing.h"
 #include "SkConvertPixels.h"
 #include "SkDeferredDisplayList.h"
@@ -34,15 +35,7 @@
 #include "SkTaskGroup.h"
 #include "SkUnPreMultiplyPriv.h"
 #include "effects/GrConfigConversionEffect.h"
-#include "gl/GrGLGpu.h"
-#include "mock/GrMockGpu.h"
 #include "text/GrTextBlobCache.h"
-#ifdef SK_METAL
-#include "mtl/GrMtlTrampoline.h"
-#endif
-#ifdef SK_VULKAN
-#include "vk/GrVkGpu.h"
-#endif
 
 #define ASSERT_OWNED_PROXY(P) \
 SkASSERT(!(P) || !((P)->priv().peekTexture()) || (P)->priv().peekTexture()->getContext() == this)
@@ -62,260 +55,6 @@ SkASSERT(!(P) || !((P)->priv().peekTexture()) || (P)->priv().peekTexture()->getC
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class SK_API GrDirectContext : public GrContext {
-public:
-    GrDirectContext(GrBackend backend)
-            : INHERITED(backend)
-            , fFullAtlasManager(nullptr) {
-    }
-
-    ~GrDirectContext() override {
-        // this if-test protects against the case where the context is being destroyed
-        // before having been fully created
-        if (this->contextPriv().getGpu()) {
-            this->flush();
-        }
-
-        delete fFullAtlasManager;
-    }
-
-    void abandonContext() override {
-        INHERITED::abandonContext();
-        fFullAtlasManager->freeAll();
-    }
-
-    void releaseResourcesAndAbandonContext() override {
-        INHERITED::releaseResourcesAndAbandonContext();
-        fFullAtlasManager->freeAll();
-    }
-
-    void freeGpuResources() override {
-        this->flush();
-        fFullAtlasManager->freeAll();
-
-        INHERITED::freeGpuResources();
-    }
-
-protected:
-    bool init(const GrContextOptions& options) override {
-        SkASSERT(fCaps);  // should've been set in ctor
-        SkASSERT(!fThreadSafeProxy);
-
-        fThreadSafeProxy.reset(new GrContextThreadSafeProxy(fCaps, this->uniqueID(),
-                                                            fBackend, options));
-
-        if (!INHERITED::initCommon(options)) {
-            return false;
-        }
-
-        GrDrawOpAtlas::AllowMultitexturing allowMultitexturing;
-        if (GrContextOptions::Enable::kNo == options.fAllowMultipleGlyphCacheTextures ||
-            // multitexturing supported only if range can represent the index + texcoords fully
-            !(fCaps->shaderCaps()->floatIs32Bits() || fCaps->shaderCaps()->integerSupport())) {
-            allowMultitexturing = GrDrawOpAtlas::AllowMultitexturing::kNo;
-        } else {
-            allowMultitexturing = GrDrawOpAtlas::AllowMultitexturing::kYes;
-        }
-
-        GrGlyphCache* glyphCache = this->contextPriv().getGlyphCache();
-        GrProxyProvider* proxyProvider = this->contextPriv().proxyProvider();
-
-        fFullAtlasManager = new GrAtlasManager(proxyProvider, glyphCache,
-                                               options.fGlyphCacheTextureMaximumBytes,
-                                               allowMultitexturing);
-        this->contextPriv().addOnFlushCallbackObject(fFullAtlasManager);
-
-        SkASSERT(glyphCache->getGlyphSizeLimit() == fFullAtlasManager->getGlyphSizeLimit());
-        return true;
-    }
-
-    GrRestrictedAtlasManager* onGetRestrictedAtlasManager() override { return fFullAtlasManager; }
-    GrAtlasManager* onGetFullAtlasManager() override { return fFullAtlasManager; }
-
-private:
-    GrAtlasManager* fFullAtlasManager;
-
-    typedef GrContext INHERITED;
-};
-
-/**
- * The DDL Context is the one in effect during DDL Recording. It isn't backed by a GrGPU and
- * cannot allocate any GPU resources.
- */
-class SK_API GrDDLContext : public GrContext {
-public:
-    GrDDLContext(sk_sp<GrContextThreadSafeProxy> proxy)
-            : INHERITED(proxy->fBackend, proxy->fContextUniqueID)
-            , fRestrictedAtlasManager(nullptr) {
-        fCaps = proxy->fCaps;
-        fThreadSafeProxy = std::move(proxy);
-    }
-
-    ~GrDDLContext() override {
-        // The GrDDLContext doesn't actually own the fRestrictedAtlasManager so don't delete it
-    }
-
-    void abandonContext() override {
-        SkASSERT(0); // abandoning in a DDL Recorder doesn't make a whole lot of sense
-        INHERITED::abandonContext();
-    }
-
-    void releaseResourcesAndAbandonContext() override {
-        SkASSERT(0); // abandoning in a DDL Recorder doesn't make a whole lot of sense
-        INHERITED::releaseResourcesAndAbandonContext();
-    }
-
-    void freeGpuResources() override {
-        SkASSERT(0); // freeing resources in a DDL Recorder doesn't make a whole lot of sense
-        INHERITED::freeGpuResources();
-    }
-
-protected:
-    bool init(const GrContextOptions& options) override {
-        SkASSERT(fCaps);  // should've been set in ctor
-        SkASSERT(fThreadSafeProxy); // should've been set in the ctor
-
-        if (!INHERITED::initCommon(options)) {
-            return false;
-        }
-
-        // DDL TODO: in DDL-mode grab a GrRestrictedAtlasManager from the thread-proxy and
-        // do not add an onFlushCB
-        return true;
-    }
-
-    GrRestrictedAtlasManager* onGetRestrictedAtlasManager() override {
-        return fRestrictedAtlasManager;
-    }
-
-    GrAtlasManager* onGetFullAtlasManager() override {
-        SkASSERT(0);   // the DDL Recorders should never invoke this
-        return nullptr;
-    }
-
-private:
-    GrRestrictedAtlasManager* fRestrictedAtlasManager;
-
-    typedef GrContext INHERITED;
-};
-
-GrContext* GrContext::Create(GrBackend backend, GrBackendContext backendContext) {
-    GrContextOptions defaultOptions;
-    return Create(backend, backendContext, defaultOptions);
-}
-
-GrContext* GrContext::Create(GrBackend backend, GrBackendContext backendContext,
-                             const GrContextOptions& options) {
-
-    sk_sp<GrContext> context(new GrDirectContext(backend));
-
-    context->fGpu = GrGpu::Make(backend, backendContext, options, context.get());
-    if (!context->fGpu) {
-        return nullptr;
-    }
-
-    context->fCaps = context->fGpu->refCaps();
-    if (!context->init(options)) {
-        return nullptr;
-    }
-
-    return context.release();
-}
-
-sk_sp<GrContext> GrContext::MakeGL(sk_sp<const GrGLInterface> interface) {
-    GrContextOptions defaultOptions;
-    return MakeGL(std::move(interface), defaultOptions);
-}
-
-sk_sp<GrContext> GrContext::MakeGL(sk_sp<const GrGLInterface> interface,
-                                   const GrContextOptions& options) {
-    sk_sp<GrContext> context(new GrDirectContext(kOpenGL_GrBackend));
-
-    context->fGpu = GrGLGpu::Make(std::move(interface), options, context.get());
-    if (!context->fGpu) {
-        return nullptr;
-    }
-
-    context->fCaps = context->fGpu->refCaps();
-    if (!context->init(options)) {
-        return nullptr;
-    }
-    return context;
-}
-
-sk_sp<GrContext> GrContext::MakeGL(const GrGLInterface* interface) {
-    return MakeGL(sk_ref_sp(interface));
-}
-
-sk_sp<GrContext> GrContext::MakeGL(const GrGLInterface* interface,
-                                   const GrContextOptions& options) {
-    return MakeGL(sk_ref_sp(interface), options);
-}
-
-sk_sp<GrContext> GrContext::MakeMock(const GrMockOptions* mockOptions) {
-    GrContextOptions defaultOptions;
-    return MakeMock(mockOptions, defaultOptions);
-}
-
-sk_sp<GrContext> GrContext::MakeMock(const GrMockOptions* mockOptions,
-                                     const GrContextOptions& options) {
-    sk_sp<GrContext> context(new GrDirectContext(kMock_GrBackend));
-
-    context->fGpu = GrMockGpu::Make(mockOptions, options, context.get());
-    if (!context->fGpu) {
-        return nullptr;
-    }
-
-    context->fCaps = context->fGpu->refCaps();
-    if (!context->init(options)) {
-        return nullptr;
-    }
-    return context;
-}
-
-#ifdef SK_VULKAN
-sk_sp<GrContext> GrContext::MakeVulkan(sk_sp<const GrVkBackendContext> backendContext) {
-    GrContextOptions defaultOptions;
-    return MakeVulkan(std::move(backendContext), defaultOptions);
-}
-
-sk_sp<GrContext> GrContext::MakeVulkan(sk_sp<const GrVkBackendContext> backendContext,
-                                       const GrContextOptions& options) {
-    sk_sp<GrContext> context(new GrDirectContext(kVulkan_GrBackend));
-
-    context->fGpu = GrVkGpu::Make(std::move(backendContext), options, context.get());
-    if (!context->fGpu) {
-        return nullptr;
-    }
-
-    context->fCaps = context->fGpu->refCaps();
-    if (!context->init(options)) {
-        return nullptr;
-    }
-    return context;
-}
-#endif
-
-#ifdef SK_METAL
-sk_sp<GrContext> GrContext::MakeMetal(void* device, void* queue) {
-    GrContextOptions defaultOptions;
-    return MakeMetal(device, queue, defaultOptions);
-}
-
-sk_sp<GrContext> GrContext::MakeMetal(void* device, void* queue, const GrContextOptions& options) {
-    sk_sp<GrContext> context(new GrDirectContext(kMetal_GrBackend));
-
-    context->fGpu = GrMtlTrampoline::MakeGpu(context.get(), options, device, queue);
-    if (!context->fGpu) {
-        return nullptr;
-    }
-    if (!context->init(options)) {
-        return nullptr;
-    }
-    return context;
-}
-#endif
-
 static int32_t gNextID = 1;
 static int32_t next_id() {
     int32_t id;
@@ -323,17 +62,6 @@ static int32_t next_id() {
         id = sk_atomic_inc(&gNextID);
     } while (id == SK_InvalidGenID);
     return id;
-}
-
-sk_sp<GrContext> GrContextPriv::MakeDDL(sk_sp<GrContextThreadSafeProxy> proxy) {
-    sk_sp<GrContext> context(new GrDDLContext(proxy));
-
-    // Note: we aren't creating a Gpu here. This causes the resource provider & cache to
-    // also not be created
-    if (!context->init(proxy->fOptions)) {
-        return nullptr;
-    }
-    return context;
 }
 
 GrContext::GrContext(GrBackend backend, int32_t id)
@@ -362,6 +90,8 @@ bool GrContext::initCommon(const GrContextOptions& options) {
     if (fResourceCache) {
         fResourceCache->setProxyProvider(fProxyProvider);
     }
+
+    fTextureStripAtlasManager.reset(new GrTextureStripAtlasManager);
 
     fDisableGpuYUVConversion = options.fDisableGpuYUVConversion;
     fSharpenMipmappedTextures = options.fSharpenMipmappedTextures;
@@ -419,10 +149,7 @@ GrContext::~GrContext() {
         fDrawingManager->cleanup();
     }
 
-    for (int i = 0; i < fCleanUpData.count(); ++i) {
-        (*fCleanUpData[i].fFunc)(this, fCleanUpData[i].fInfo);
-    }
-
+    fTextureStripAtlasManager = nullptr;
     delete fResourceProvider;
     delete fResourceCache;
     delete fProxyProvider;
@@ -472,6 +199,7 @@ SkSurfaceCharacterization GrContextThreadSafeProxy::createCharacterization(
 void GrContext::abandonContext() {
     ASSERT_SINGLE_OWNER
 
+    fTextureStripAtlasManager->abandon();
     fProxyProvider->abandon();
     fResourceProvider->abandon();
 
@@ -492,6 +220,7 @@ void GrContext::abandonContext() {
 void GrContext::releaseResourcesAndAbandonContext() {
     ASSERT_SINGLE_OWNER
 
+    fTextureStripAtlasManager->abandon();
     fProxyProvider->abandon();
     fResourceProvider->abandon();
 

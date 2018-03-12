@@ -87,6 +87,7 @@ private:
     bool onCombineIfPossible(GrOp* other, const GrCaps& caps) override { return false; }
     void onPrepare(GrOpFlushState*) override {}
     void onExecute(GrOpFlushState*) override;
+    void drawRenderPass(GrOpFlushState*, RenderPass);
 
     CCPRGeometryView* fView;
 
@@ -238,18 +239,26 @@ void CCPRGeometryView::updateGpuData() {
 }
 
 void CCPRGeometryView::Op::onExecute(GrOpFlushState* state) {
+    this->drawRenderPass(state, fView->fRenderPass);
+
+    RenderPass cornerPass = RenderPass((int)fView->fRenderPass + 1);
+    if (GrCCCoverageProcessor::DoesRenderPass(cornerPass, state->caps())) {
+        this->drawRenderPass(state, cornerPass);
+    }
+}
+
+void CCPRGeometryView::Op::drawRenderPass(GrOpFlushState* state, RenderPass renderPass) {
     GrResourceProvider* rp = state->resourceProvider();
     GrContext* context = state->gpu()->getContext();
     GrGLGpu* glGpu = kOpenGL_GrBackend == context->contextPriv().getBackend()
                              ? static_cast<GrGLGpu*>(state->gpu())
                              : nullptr;
 
-    GrCCCoverageProcessor proc(rp, fView->fRenderPass,
-                               GrCCCoverageProcessor::WindMethod::kCrossProduct);
+    GrCCCoverageProcessor proc(rp, renderPass, GrCCCoverageProcessor::WindMethod::kCrossProduct);
     SkDEBUGCODE(proc.enableDebugVisualizations(kDebugBloat));
 
     SkSTArray<1, GrMesh> mesh;
-    if (RenderPass::kCubics == fView->fRenderPass) {
+    if (RenderPass::kCubics == renderPass) {
         sk_sp<GrBuffer> instBuff(rp->createBuffer(
                 fView->fQuadPointInstances.count() * sizeof(QuadPointInstance),
                 kVertex_GrBufferType, kDynamic_GrAccessPattern,
@@ -280,7 +289,8 @@ void CCPRGeometryView::Op::onExecute(GrOpFlushState* state) {
 
     if (!mesh.empty()) {
         SkASSERT(1 == mesh.count());
-        proc.draw(state, pipeline, mesh.begin(), nullptr, 1, this->bounds());
+        GrGpuRTCommandBuffer* cmdBuff = state->rtCommandBuffer();
+        cmdBuff->draw(pipeline, proc, mesh.begin(), nullptr, 1, this->bounds());
     }
 
     if (glGpu) {
@@ -338,7 +348,7 @@ bool CCPRGeometryView::onQuery(SkEvent* evt) {
     SkUnichar unichar;
     if (SampleCode::CharQ(*evt, &unichar)) {
         if (unichar >= '1' && unichar <= '3') {
-            fRenderPass = RenderPass(unichar - '1');
+            fRenderPass = RenderPass((unichar - '1') * 2);
             this->updateAndInval();
             return true;
         }

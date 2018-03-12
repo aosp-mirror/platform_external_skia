@@ -942,11 +942,13 @@ sk_sp<GrRenderTarget> GrVkGpu::onWrapBackendRenderTarget(const GrBackendRenderTa
     desc.fSampleCnt = 1;
 
     sk_sp<GrVkRenderTarget> tgt = GrVkRenderTarget::MakeWrappedRenderTarget(this, desc, info);
-    if (tgt && backendRT.stencilBits()) {
-        if (!createStencilAttachmentForRenderTarget(tgt.get(), desc.fWidth, desc.fHeight)) {
-            return nullptr;
-        }
+
+    // We don't allow the client to supply a premade stencil buffer. We always create one if needed.
+    SkASSERT(!backendRT.stencilBits());
+    if (tgt) {
+        SkASSERT(tgt->canAttemptStencilAttachment());
     }
+
     return tgt;
 }
 
@@ -1181,6 +1183,7 @@ bool copy_testing_data(GrVkGpu* gpu, void* srcData, const GrVkAlloc& alloc, size
     return true;
 }
 
+#if GR_TEST_UTILS
 GrBackendTexture GrVkGpu::createTestingOnlyBackendTexture(void* srcData, int w, int h,
                                                           GrPixelConfig config,
                                                           bool isRenderTarget,
@@ -1499,15 +1502,28 @@ bool GrVkGpu::isTestingOnlyBackendTexture(const GrBackendTexture& tex) const {
     return false;
 }
 
-void GrVkGpu::deleteTestingOnlyBackendTexture(GrBackendTexture* tex) {
-    SkASSERT(kVulkan_GrBackend == tex->fBackend);
+void GrVkGpu::deleteTestingOnlyBackendTexture(const GrBackendTexture& tex) {
+    SkASSERT(kVulkan_GrBackend == tex.fBackend);
 
-    if (const auto* info = tex->getVkImageInfo()) {
+    if (const auto* info = tex.getVkImageInfo()) {
         // something in the command buffer may still be using this, so force submit
         this->submitCommandBuffer(kForce_SyncQueue);
         GrVkImage::DestroyImageInfo(this, const_cast<GrVkImageInfo*>(info));
     }
 }
+
+GrBackendRenderTarget GrVkGpu::createTestingOnlyBackendRenderTarget(int w, int h, GrColorType,
+                                                                    GrSRGBEncoded) {
+    return GrBackendRenderTarget();
+}
+
+void GrVkGpu::deleteTestingOnlyBackendRenderTarget(const GrBackendRenderTarget&) {}
+
+
+void GrVkGpu::testingOnly_flushGpuAndSync() {
+    this->submitCommandBuffer(kForce_SyncQueue);
+}
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 

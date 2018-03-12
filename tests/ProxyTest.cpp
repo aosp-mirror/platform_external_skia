@@ -48,12 +48,17 @@ static void check_rendertarget(skiatest::Reporter* reporter,
     REPORTER_ASSERT(reporter, rtProxy->numStencilSamples() == numSamples);
 
     GrSurfaceProxy::UniqueID idBefore = rtProxy->uniqueID();
+    bool preinstantiated = rtProxy->priv().isInstantiated();
     REPORTER_ASSERT(reporter, rtProxy->instantiate(provider));
     GrRenderTarget* rt = rtProxy->priv().peekRenderTarget();
 
     REPORTER_ASSERT(reporter, rtProxy->uniqueID() == idBefore);
     // Deferred resources should always have a different ID from their instantiated rendertarget
-    REPORTER_ASSERT(reporter, rtProxy->uniqueID().asUInt() != rt->uniqueID().asUInt());
+    if (preinstantiated) {
+        REPORTER_ASSERT(reporter, rtProxy->uniqueID().asUInt() == rt->uniqueID().asUInt());
+    } else {
+        REPORTER_ASSERT(reporter, rtProxy->uniqueID().asUInt() != rt->uniqueID().asUInt());
+    }
 
     if (SkBackingFit::kExact == fit) {
         REPORTER_ASSERT(reporter, rt->width() == rtProxy->width());
@@ -76,12 +81,17 @@ static void check_texture(skiatest::Reporter* reporter,
                           SkBackingFit fit) {
     GrSurfaceProxy::UniqueID idBefore = texProxy->uniqueID();
 
+    bool preinstantiated = texProxy->priv().isInstantiated();
     REPORTER_ASSERT(reporter, texProxy->instantiate(provider));
     GrTexture* tex = texProxy->priv().peekTexture();
 
     REPORTER_ASSERT(reporter, texProxy->uniqueID() == idBefore);
     // Deferred resources should always have a different ID from their instantiated texture
-    REPORTER_ASSERT(reporter, texProxy->uniqueID().asUInt() != tex->uniqueID().asUInt());
+    if (preinstantiated) {
+        REPORTER_ASSERT(reporter, texProxy->uniqueID().asUInt() == tex->uniqueID().asUInt());
+    } else {
+        REPORTER_ASSERT(reporter, texProxy->uniqueID().asUInt() != tex->uniqueID().asUInt());
+    }
 
     if (SkBackingFit::kExact == fit) {
         REPORTER_ASSERT(reporter, tex->width() == texProxy->width());
@@ -233,7 +243,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(WrappedProxyTest, reporter, ctxInfo) {
                     sk_sp<GrSurfaceProxy> sProxy = proxyProvider->wrapBackendTextureAsRenderTarget(
                             backendTex, origin, supportedNumSamples);
                     if (!sProxy) {
-                        gpu->deleteTestingOnlyBackendTexture(&backendTex);
+                        gpu->deleteTestingOnlyBackendTexture(backendTex);
                         continue;  // This can fail on Mesa
                     }
 
@@ -245,7 +255,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(WrappedProxyTest, reporter, ctxInfo) {
                                        supportedNumSamples, SkBackingFit::kExact,
                                        caps.maxWindowRectangles());
 
-                    gpu->deleteTestingOnlyBackendTexture(&backendTex);
+                    gpu->deleteTestingOnlyBackendTexture(backendTex);
                 }
 
                 // Tests wrapBackendTexture that is only renderable
@@ -258,7 +268,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(WrappedProxyTest, reporter, ctxInfo) {
                     sk_sp<GrSurfaceProxy> sProxy = proxyProvider->wrapRenderableBackendTexture(
                             backendTex, origin, supportedNumSamples);
                     if (!sProxy) {
-                        gpu->deleteTestingOnlyBackendTexture(&backendTex);
+                        gpu->deleteTestingOnlyBackendTexture(backendTex);
                         continue;  // This can fail on Mesa
                     }
 
@@ -270,7 +280,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(WrappedProxyTest, reporter, ctxInfo) {
                                        supportedNumSamples, SkBackingFit::kExact,
                                        caps.maxWindowRectangles());
 
-                    gpu->deleteTestingOnlyBackendTexture(&backendTex);
+                    gpu->deleteTestingOnlyBackendTexture(backendTex);
                 }
 
                 // Tests wrapBackendTexture that is only textureable
@@ -284,7 +294,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(WrappedProxyTest, reporter, ctxInfo) {
                     sk_sp<GrSurfaceProxy> sProxy = proxyProvider->wrapBackendTexture(
                             backendTex, origin, kBorrow_GrWrapOwnership, nullptr, nullptr);
                     if (!sProxy) {
-                        gpu->deleteTestingOnlyBackendTexture(&backendTex);
+                        gpu->deleteTestingOnlyBackendTexture(backendTex);
                         continue;
                     }
 
@@ -294,7 +304,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(WrappedProxyTest, reporter, ctxInfo) {
                     check_texture(reporter, resourceProvider, sProxy->asTextureProxy(),
                                   SkBackingFit::kExact);
 
-                    gpu->deleteTestingOnlyBackendTexture(&backendTex);
+                    gpu->deleteTestingOnlyBackendTexture(backendTex);
                 }
             }
         }

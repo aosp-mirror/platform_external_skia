@@ -130,7 +130,7 @@ func deriveCompileTaskName(jobName string, parts map[string]string) string {
 		ec := []string{}
 		if val := parts["extra_config"]; val != "" {
 			ec = strings.Split(val, "_")
-			ignore := []string{"Skpbench", "AbandonGpuContext", "PreAbandonGpuContext", "Valgrind", "ReleaseAndAbandonGpuContext", "CCPR", "FSAA", "FAAA", "FDAA", "NativeFonts", "GDI", "NoGPUThreads"}
+			ignore := []string{"Skpbench", "AbandonGpuContext", "PreAbandonGpuContext", "Valgrind", "ReleaseAndAbandonGpuContext", "CCPR", "FSAA", "FAAA", "FDAA", "NativeFonts", "GDI", "NoGPUThreads", "ProcDump"}
 			keep := make([]string, 0, len(ec))
 			for _, part := range ec {
 				if !util.In(part, ignore) {
@@ -213,9 +213,16 @@ func defaultSwarmDimensions(parts map[string]string) []string {
 			glog.Fatalf("Entry %q not found in OS mapping.", os)
 		}
 		if os == "Win10" && parts["model"] == "Golo" {
-			// Golo/MTV lab bots have Windows 10 version 1703, whereas Skolo bots have Windows 10 version
-			// 1709.
-			d["os"] = "Windows-10-15063"
+			// ChOps-owned machines have different Windows images than Skolo machines.
+			d["os"], ok = map[string]string{
+				// MTV lab bots with Quadro GPU have Windows 10 v1703.
+				"QuadroP400": "Windows-10-15063",
+				// Golo bots with GT610 have Windows 10 v1709, but a slightly different version than Skolo.
+				"GT610": "Windows-10-16299.125",
+			}[parts["cpu_or_gpu_value"]]
+			if !ok {
+				glog.Fatalf("Entry %q not found in Win10 Golo OS mapping.", parts["cpu_or_gpu_value"])
+			}
 		}
 	} else {
 		d["os"] = DEFAULT_OS_DEBIAN
@@ -294,12 +301,12 @@ func defaultSwarmDimensions(parts map[string]string) []string {
 		} else {
 			if strings.Contains(parts["os"], "Win") {
 				gpu, ok := map[string]string{
-					"GT610":         "10de:104a-22.21.13.8205",
+					"GT610":         "10de:104a-23.21.13.8813",
 					"GTX1070":       "10de:1ba1-23.21.13.9101",
 					"GTX660":        "10de:11c0-23.21.13.9101",
 					"GTX960":        "10de:1401-23.21.13.9101",
 					"IntelHD4400":   "8086:0a16-20.19.15.4835",
-					"IntelIris540":  "8086:1926-21.20.16.4590",
+					"IntelIris540":  "8086:1926-21.20.16.4839",
 					"IntelIris6100": "8086:162b-20.19.15.4835",
 					"RadeonHD7770":  "1002:683d-23.20.15017.4003",
 					"RadeonR9M470X": "1002:6646-23.20.15017.4003",
@@ -1286,6 +1293,9 @@ func process(b *specs.TasksCfgBuilder, name string) {
 				pkgs = append(pkgs, b.MustGetCipdPackageFromAsset("linux_vulkan_intel_driver_debug"))
 			}
 		}
+	}
+	if strings.Contains(name, "ProcDump") {
+		pkgs = append(pkgs, b.MustGetCipdPackageFromAsset("procdump_win"))
 	}
 
 	// Test bots.

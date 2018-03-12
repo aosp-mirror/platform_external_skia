@@ -25,9 +25,7 @@
 class GrAtlasManager;
 struct GrDistanceFieldAdjustTable;
 struct GrGlyph;
-class GrGlyphCache;
 class GrMemoryPool;
-class GrRestrictedAtlasManager;
 
 class SkDrawFilter;
 class SkTextBlob;
@@ -170,11 +168,11 @@ public:
         run.fOverrideDescriptor.reset(new SkAutoDescriptor);
     }
 
-    SkGlyphCache* setupCache(int runIndex,
-                             const SkSurfaceProps& props,
-                             SkScalerContextFlags scalerContextFlags,
-                             const SkPaint& skPaint,
-                             const SkMatrix* viewMatrix);
+    SkExclusiveStrikePtr setupCache(int runIndex,
+                                    const SkSurfaceProps& props,
+                                    SkScalerContextFlags scalerContextFlags,
+                                    const SkPaint& skPaint,
+                                    const SkMatrix* viewMatrix);
 
     // Appends a glyph to the blob.  If the glyph is too large, the glyph will be appended
     // as a path.
@@ -206,7 +204,7 @@ public:
     bool mustRegenerate(const GrTextUtils::Paint&, const SkMaskFilterBase::BlurRec& blurRec,
                         const SkMatrix& viewMatrix, SkScalar x, SkScalar y);
 
-    void flush(GrRestrictedAtlasManager*, GrTextUtils::Target*, const SkSurfaceProps& props,
+    void flush(GrTextUtils::Target*, const SkSurfaceProps& props,
                const GrDistanceFieldAdjustTable* distanceAdjustTable,
                const GrTextUtils::Paint& paint, const GrClip& clip,
                const SkMatrix& viewMatrix, const SkIRect& clipBounds, SkScalar x,
@@ -282,7 +280,7 @@ public:
                                           const SkMatrix& viewMatrix, SkScalar x, SkScalar y,
                                           const GrTextUtils::Paint&, const SkSurfaceProps&,
                                           const GrDistanceFieldAdjustTable*,
-                                          GrRestrictedAtlasManager*, GrTextUtils::Target*);
+                                          GrTextUtils::Target*);
 
 private:
     GrAtlasTextBlob()
@@ -519,7 +517,7 @@ private:
             const Run::SubRunInfo& info, int glyphCount, uint16_t run, uint16_t subRun,
             const SkMatrix& viewMatrix, SkScalar x, SkScalar y, const SkIRect& clipRect,
             const GrTextUtils::Paint&, const SkSurfaceProps&,
-            const GrDistanceFieldAdjustTable*, GrRestrictedAtlasManager* , GrTextUtils::Target*);
+            const GrDistanceFieldAdjustTable*, GrTextUtils::Target*);
 
     struct StrokeInfo {
         SkScalar fFrameWidth;
@@ -607,7 +605,7 @@ private:
     GrDeferredUploadTarget* fUploadTarget;
     GrGlyphCache* fGlyphCache;
     GrAtlasManager* fFullAtlasManager;
-    SkAutoGlyphCache* fLazyCache;
+    SkExclusiveStrikePtr* fLazyCache;
     Run* fRun;
     Run::SubRunInfo* fSubRun;
     GrColor fColor;

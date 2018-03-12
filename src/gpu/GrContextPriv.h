@@ -186,19 +186,19 @@ public:
 
     GrResourceCache* getResourceCache() { return fContext->fResourceCache; }
 
+    GrTextureStripAtlasManager* textureStripAtlasManager() {
+        return fContext->fTextureStripAtlasManager.get();
+    }
+
     GrGpu* getGpu() { return fContext->fGpu.get(); }
     const GrGpu* getGpu() const { return fContext->fGpu.get(); }
 
     GrGlyphCache* getGlyphCache() { return fContext->fGlyphCache; }
     GrTextBlobCache* getTextBlobCache() { return fContext->fTextBlobCache.get(); }
 
-    GrRestrictedAtlasManager* getRestrictedAtlasManager() {
-        return fContext->onGetRestrictedAtlasManager();
-    }
-
     // This accessor should only ever be called by the GrOpFlushState.
-    GrAtlasManager* getFullAtlasManager() {
-        return fContext->onGetFullAtlasManager();
+    GrAtlasManager* getAtlasManager() {
+        return fContext->onGetAtlasManager();
     }
 
     void moveOpListsToDDL(SkDeferredDisplayList*);

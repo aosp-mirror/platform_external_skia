@@ -74,8 +74,10 @@ public:
         return fProxy->fLazyInstantiationType;
     }
 
-    void testingOnly_setLazyInstantiationType(GrSurfaceProxy::LazyInstantiationType lazyType) {
-        fProxy->fLazyInstantiationType = lazyType;
+    bool isSafeToUninstantiate() const {
+        return SkToBool(fProxy->fTarget) &&
+               SkToBool(fProxy->fLazyInstantiateCallback) &&
+               GrSurfaceProxy::LazyInstantiationType::kUninstantiate == lazyInstantiationType();
     }
 
     static bool AttachStencilIfNeeded(GrResourceProvider*, GrSurface*, bool needsStencil);

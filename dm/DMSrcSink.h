@@ -14,6 +14,7 @@
 #include "SkBitmap.h"
 #include "SkBitmapRegionDecoder.h"
 #include "SkCanvas.h"
+#include "SkCommonFlagsConfig.h"
 #include "SkData.h"
 #include "SkMultiPictureDocument.h"
 #include "SkPicture.h"
@@ -335,11 +336,11 @@ public:
     SinkFlags flags() const override { return SinkFlags{ SinkFlags::kNull, SinkFlags::kDirect }; }
 };
 
-
 class GPUSink : public Sink {
 public:
     GPUSink(sk_gpu_test::GrContextFactory::ContextType,
-            sk_gpu_test::GrContextFactory::ContextOverrides, int samples, bool diText,
+            sk_gpu_test::GrContextFactory::ContextOverrides,
+            SkCommandLineConfigGpu::SurfType surfType, int samples, bool diText,
             SkColorType colorType, SkAlphaType alphaType, sk_sp<SkColorSpace> colorSpace,
             bool threaded, const GrContextOptions& grCtxOptions);
 
@@ -347,6 +348,12 @@ public:
     Error onDraw(const Src&, SkBitmap*, SkWStream*, SkString*,
                  const GrContextOptions& baseOptions) const;
 
+    sk_gpu_test::GrContextFactory::ContextType contextType() const { return fContextType; }
+    const sk_gpu_test::GrContextFactory::ContextOverrides& contextOverrides() {
+        return fContextOverrides;
+    }
+    SkCommandLineConfigGpu::SurfType surfType() const { return fSurfType; }
+    bool useDIText() const { return fUseDIText; }
     bool serial() const override { return !fThreaded; }
     const char* fileExtension() const override { return "png"; }
     SinkFlags flags() const override {
@@ -359,6 +366,7 @@ public:
 private:
     sk_gpu_test::GrContextFactory::ContextType        fContextType;
     sk_gpu_test::GrContextFactory::ContextOverrides   fContextOverrides;
+    SkCommandLineConfigGpu::SurfType                  fSurfType;
     int                                               fSampleCount;
     bool                                              fUseDIText;
     SkColorType                                       fColorType;
@@ -371,7 +379,8 @@ private:
 class GPUThreadTestingSink : public GPUSink {
 public:
     GPUThreadTestingSink(sk_gpu_test::GrContextFactory::ContextType,
-                         sk_gpu_test::GrContextFactory::ContextOverrides, int samples, bool diText,
+                         sk_gpu_test::GrContextFactory::ContextOverrides,
+                         SkCommandLineConfigGpu::SurfType surfType, int samples, bool diText,
                          SkColorType colorType, SkAlphaType alphaType,
                          sk_sp<SkColorSpace> colorSpace, bool threaded,
                          const GrContextOptions& grCtxOptions);

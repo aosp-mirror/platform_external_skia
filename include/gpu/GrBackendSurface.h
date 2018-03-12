@@ -26,7 +26,7 @@ public:
     }
 
 #ifdef SK_VULKAN
-    static GrBackendFormat MakeVK(VkFormat format) {
+    static GrBackendFormat MakeVk(VkFormat format) {
         return GrBackendFormat(format);
     }
 #endif
@@ -113,12 +113,6 @@ public:
 
     GrBackendTexture(int width,
                      int height,
-                     GrPixelConfig config,
-                     const GrMockTextureInfo& mockInfo);
-
-    GrBackendTexture(int width,
-                     int height,
-                     GrPixelConfig config,
                      GrMipMapped,
                      const GrMockTextureInfo& mockInfo);
 
@@ -194,12 +188,20 @@ public:
                           const GrGLFramebufferInfo& glInfo);
 
 #ifdef SK_VULKAN
+    /** Deprecated, use version that does not take stencil bits. */
     GrBackendRenderTarget(int width,
                           int height,
                           int sampleCnt,
                           int stencilBits,
                           const GrVkImageInfo& vkInfo);
+    GrBackendRenderTarget(int width, int height, int sampleCnt, const GrVkImageInfo& vkInfo);
 #endif
+
+    GrBackendRenderTarget(int width,
+                          int height,
+                          int sampleCnt,
+                          int stencilBits,
+                          const GrMockRenderTargetInfo& mockInfo);
 
     int width() const { return fWidth; }
     int height() const { return fHeight; }
@@ -216,6 +218,8 @@ public:
     // it returns nullptr
     const GrVkImageInfo* getVkImageInfo() const;
 #endif
+
+    const GrMockRenderTargetInfo* getMockRenderTargetInfo() const;
 
     // Returns true if the backend texture has been initialized.
     bool isValid() const { return fConfig != kUnknown_GrPixelConfig; }
@@ -247,6 +251,7 @@ private:
 #ifdef SK_VULKAN
         GrVkImageInfo   fVkInfo;
 #endif
+        GrMockRenderTargetInfo fMockInfo;
     };
 };
 

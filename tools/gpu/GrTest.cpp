@@ -71,10 +71,34 @@ GrBackendTexture CreateBackendTexture(GrBackend backend, int width, int height,
         }
         case kMock_GrBackend: {
             GrMockTextureInfo* mockInfo = (GrMockTextureInfo*)(handle);
-            return GrBackendTexture(width, height, config, mipMapped, *mockInfo);
+            return GrBackendTexture(width, height, mipMapped, *mockInfo);
         }
         default:
             return GrBackendTexture();
+    }
+}
+
+GrBackendFormat CreateBackendFormatFromTexture(const GrBackendTexture& tex) {
+    switch (tex.backend()) {
+#ifdef SK_VULKAN
+        case kVulkan_GrBackend: {
+            const GrVkImageInfo* vkInfo = tex.getVkImageInfo();
+            SkASSERT(vkInfo);
+            return GrBackendFormat::MakeVk(vkInfo->fFormat);
+        }
+#endif
+        case kOpenGL_GrBackend: {
+            const GrGLTextureInfo* glInfo = tex.getGLTextureInfo();
+            SkASSERT(glInfo);
+            return GrBackendFormat::MakeGL(glInfo->fFormat, glInfo->fTarget);
+        }
+        case kMock_GrBackend: {
+            const GrMockTextureInfo* mockInfo = tex.getMockTextureInfo();
+            SkASSERT(mockInfo);
+            return GrBackendFormat::MakeMock(mockInfo->fConfig);
+        }
+        default:
+            return GrBackendFormat();
     }
 }
 
@@ -93,7 +117,7 @@ void GrContextPriv::setTextBlobCacheLimit_ForTesting(size_t bytes) {
 }
 
 void GrContextPriv::setTextContextAtlasSizes_ForTesting(const GrDrawOpAtlasConfig* configs) {
-    GrAtlasManager* atlasManager = this->getFullAtlasManager();
+    GrAtlasManager* atlasManager = this->getAtlasManager();
     if (atlasManager) {
         atlasManager->setAtlasSizes_ForTesting(configs);
     }
@@ -150,10 +174,13 @@ void GrContextPriv::printGpuStats() const {
 }
 
 sk_sp<SkImage> GrContextPriv::getFontAtlasImage_ForTesting(GrMaskFormat format, unsigned int index) {
-    auto restrictedAtlasManager = this->getRestrictedAtlasManager();
+    auto atlasManager = this->getAtlasManager();
+    if (!atlasManager) {
+        return nullptr;
+    }
 
     unsigned int numProxies;
-    const sk_sp<GrTextureProxy>* proxies = restrictedAtlasManager->getProxies(format, &numProxies);
+    const sk_sp<GrTextureProxy>* proxies = atlasManager->getProxies(format, &numProxies);
     if (index >= numProxies || !proxies[index]) {
         return nullptr;
     }

@@ -448,12 +448,12 @@ public:
     Stats* stats() { return &fStats; }
     void dumpJSON(SkJSONWriter*) const;
 
+#if GR_TEST_UTILS
     /** Creates a texture directly in the backend API without wrapping it in a GrTexture. This is
         only to be used for testing (particularly for testing the methods that import an externally
         created texture into Skia. Must be matched with a call to deleteTestingOnlyTexture(). */
     GrBackendTexture createTestingOnlyBackendTexture(void* pixels, int w, int h, SkColorType,
                                                      bool isRenderTarget, GrMipMapped);
-
     /** Older version based on GrPixelConfig. Currently the preferred one above devolves to this. */
     virtual GrBackendTexture createTestingOnlyBackendTexture(
                                                       void* pixels, int w, int h,
@@ -466,7 +466,25 @@ public:
      * Frees a texture created by createTestingOnlyBackendTexture(). If ownership of the backend
      * texture has been transferred to a GrContext using adopt semantics this should not be called.
      */
-    virtual void deleteTestingOnlyBackendTexture(GrBackendTexture*) = 0;
+    virtual void deleteTestingOnlyBackendTexture(const GrBackendTexture&) = 0;
+
+    virtual GrBackendRenderTarget createTestingOnlyBackendRenderTarget(int w, int h, GrColorType,
+                                                                       GrSRGBEncoded) = 0;
+
+    virtual void deleteTestingOnlyBackendRenderTarget(const GrBackendRenderTarget&) = 0;
+
+    // This is only to be used in GL-specific tests.
+    virtual const GrGLContext* glContextForTesting() const { return nullptr; }
+
+    // This is only to be used by testing code
+    virtual void resetShaderCacheForTesting() const {}
+
+    /**
+     * Flushes all work to the gpu and forces the GPU to wait until all the gpu work has completed.
+     * This is for testing purposes only.
+     */
+    virtual void testingOnly_flushGpuAndSync() = 0;
+#endif
 
     // width and height may be larger than rt (if underlying API allows it).
     // Returns nullptr if compatible sb could not be created, otherwise the caller owns the ref on
@@ -480,9 +498,9 @@ public:
     // Determines whether a texture will need to be rescaled in order to be used with the
     // GrSamplerState. This variation is called when the caller will create a new texture using the
     // resource provider from a non-texture src (cpu-backed image, ...).
-    bool isACopyNeededForTextureParams(int width, int height, const GrSamplerState&,
-                                       GrTextureProducer::CopyParams*,
-                                       SkScalar scaleAdjust[2]) const;
+    static bool IsACopyNeededForTextureParams(const GrCaps*, int width, int height,
+                                              const GrSamplerState&, GrTextureProducer::CopyParams*,
+                                              SkScalar scaleAdjust[2]);
 
     // Like the above but this variation should be called when the caller is not creating the
     // original texture but rather was handed the original texture. It adds additional checks
@@ -491,18 +509,12 @@ public:
     bool isACopyNeededForTextureParams(GrTextureProxy* proxy, const GrSamplerState& params,
                                        GrTextureProducer::CopyParams* copyParams,
                                        SkScalar scaleAdjust[2]) const {
-        if (this->isACopyNeededForTextureParams(proxy->width(), proxy->height(), params,
-                                                copyParams, scaleAdjust)) {
+        if (IsACopyNeededForTextureParams(this->caps(), proxy->width(), proxy->height(), params,
+                                          copyParams, scaleAdjust)) {
             return true;
         }
         return this->onIsACopyNeededForTextureParams(proxy, params, copyParams, scaleAdjust);
     }
-
-    // This is only to be used in GL-specific tests.
-    virtual const GrGLContext* glContextForTesting() const { return nullptr; }
-
-    // This is only to be used by testing code
-    virtual void resetShaderCacheForTesting() const {}
 
     void handleDirtyContext() {
         if (fResetBits) {

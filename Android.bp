@@ -417,7 +417,9 @@ cc_library_static {
         "src/gpu/GrColorSpaceInfo.cpp",
         "src/gpu/GrColorSpaceXform.cpp",
         "src/gpu/GrContext.cpp",
+        "src/gpu/GrDDLContext.cpp",
         "src/gpu/GrDefaultGeoProcFactory.cpp",
+        "src/gpu/GrDirectContext.cpp",
         "src/gpu/GrDistanceFieldGenFromVector.cpp",
         "src/gpu/GrDrawOpAtlas.cpp",
         "src/gpu/GrDrawOpTest.cpp",
@@ -483,6 +485,7 @@ cc_library_static {
         "src/gpu/GrTextureProducer.cpp",
         "src/gpu/GrTextureProxy.cpp",
         "src/gpu/GrTextureRenderTargetProxy.cpp",
+        "src/gpu/GrUninstantiateProxyTracker.cpp",
         "src/gpu/GrXferProcessor.cpp",
         "src/gpu/GrYUVProvider.cpp",
         "src/gpu/SkGpuDevice.cpp",
@@ -780,7 +783,6 @@ cc_library_static {
         "src/utils/SkCanvasStack.cpp",
         "src/utils/SkCanvasStateUtils.cpp",
         "src/utils/SkDashPath.cpp",
-        "src/utils/SkDumpCanvas.cpp",
         "src/utils/SkEventTracer.cpp",
         "src/utils/SkFloatToDecimal.cpp",
         "src/utils/SkFrontBufferedStream.cpp",
@@ -917,11 +919,9 @@ cc_defaults {
     name: "skia_pgo",
     pgo: {
         instrumentation: true,
-        profile_file: "skia/skia.profdata",
+        profile_file: "hwui/hwui.profdata",
         benchmarks: ["hwui", "skia"],
-        // Bugs: http://b/73127367, http://b/73257154, http://b/73249590
-        // Turn off PGO for Skia until toolchain bug is fixed.
-        enable_profile_use: false,
+        enable_profile_use: true,
     },
 }
 
@@ -1646,6 +1646,7 @@ cc_test {
         "tests/PremulAlphaRoundTripTest.cpp",
         "tests/PrimitiveProcessorTest.cpp",
         "tests/ProcessorTest.cpp",
+        "tests/PromiseImageTest.cpp",
         "tests/ProxyConversionTest.cpp",
         "tests/ProxyRefTest.cpp",
         "tests/ProxyTest.cpp",
@@ -1719,7 +1720,6 @@ cc_test {
         "tests/SwizzlerTest.cpp",
         "tests/TArrayTest.cpp",
         "tests/TDPQueueTest.cpp",
-        "tests/TLSTest.cpp",
         "tests/TableColorFilterTest.cpp",
         "tests/TemplatesTest.cpp",
         "tests/TessellatingPathRendererTests.cpp",

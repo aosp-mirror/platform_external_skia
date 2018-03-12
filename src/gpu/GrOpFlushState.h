@@ -12,6 +12,7 @@
 #include "GrAppliedClip.h"
 #include "GrBufferAllocPool.h"
 #include "GrDeferredUpload.h"
+#include "GrUninstantiateProxyTracker.h"
 #include "SkArenaAlloc.h"
 #include "SkArenaAllocList.h"
 #include "ops/GrMeshDrawOp.h"
@@ -94,7 +95,11 @@ public:
 
     // At this point we know we're flushing so full access to the GrAtlasManager is required (and
     // permissible).
-    GrAtlasManager* fullAtlasManager() const final;
+    GrAtlasManager* atlasManager() const final;
+
+    GrUninstantiateProxyTracker* uninstantiateProxyTracker() {
+        return &fUninstantiateProxyTracker;
+    }
 
 private:
     /** GrMeshDrawOp::Target override. */
@@ -150,6 +155,9 @@ private:
     SkArenaAllocList<Draw>::Iter fCurrDraw;
     int fCurrMesh;
     SkArenaAllocList<InlineUpload>::Iter fCurrUpload;
+
+    // Used to track the proxies that need to be uninstantiated after we finish a flush
+    GrUninstantiateProxyTracker fUninstantiateProxyTracker;
 };
 
 #endif

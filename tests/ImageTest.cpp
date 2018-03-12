@@ -505,7 +505,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(GrContext_colorTypeSupportedAsImage, reporter
         img.reset();
         ctxInfo.grContext()->flush();
         if (backendTex.isValid()) {
-            gpu->deleteTestingOnlyBackendTexture(&backendTex);
+            gpu->deleteTestingOnlyBackendTexture(backendTex);
         }
     }
 }
@@ -838,7 +838,7 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(SkImage_NewFromTextureRelease, reporter, c
     refImg.reset(nullptr); // force a release of the image
     REPORTER_ASSERT(reporter, 1 == releaseChecker.fReleaseCount);
 
-    gpu->deleteTestingOnlyBackendTexture(&backendTex);
+    gpu->deleteTestingOnlyBackendTexture(backendTex);
 }
 
 static void test_cross_context_image(skiatest::Reporter* reporter, const GrContextOptions& options,
@@ -939,13 +939,9 @@ static void test_cross_context_image(skiatest::Reporter* reporter, const GrConte
             otherTestContext->makeCurrent();
             canvas->flush();
 
-            // This readPixels call is needed for Vulkan to make sure the ReleaseProc is called.
-            // Even though we flushed above, this does not guarantee the command buffer will finish
-            // which is when we call the ReleaseProc. The readPixels forces a CPU sync so we know
-            // that the command buffer has finished and we've called the ReleaseProc.
-            SkBitmap bitmap;
-            bitmap.allocPixels(info);
-            canvas->readPixels(bitmap, 0, 0);
+            // This is specifically here for vulkan to guarantee the command buffer will finish
+            // which is when we call the ReleaseProc.
+            otherCtx->contextPriv().getGpu()->testingOnly_flushGpuAndSync();
         }
 
         // Case #6: Verify that only one context can be using the image at a time
