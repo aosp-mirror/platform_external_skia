@@ -64,6 +64,7 @@ cc_library_static {
         "-Wno-abstract-vbase-init",
         "-Wno-c++98-compat",
         "-Wno-c++98-compat-pedantic",
+        "-Wno-noexcept-type",
         "-Wno-undefined-func-template",
         "-Wno-weak-vtables",
         "-Wnon-virtual-dtor",
