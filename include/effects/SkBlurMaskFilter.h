@@ -18,12 +18,6 @@ class SkRRect;
 
 class SK_API SkBlurMaskFilter {
 public:
-    /**
-     *  If radius > 0, return the corresponding sigma, else return 0. Use this to convert from the
-     *  (legacy) idea of specify the blur "radius" to the standard notion of specifying its sigma.
-     */
-    static SkScalar ConvertRadiusToSigma(SkScalar radius);
-
     enum BlurFlags {
         kNone_BlurFlag              = 0x00,
         /** The blur layer's radius is not affected by transforms */
@@ -63,8 +57,6 @@ public:
     static sk_sp<SkMaskFilter> MakeEmboss(SkScalar blurSigma, const SkScalar direction[3],
                                           SkScalar ambient, SkScalar specular);
 #endif
-
-    SK_DECLARE_FLATTENABLE_REGISTRAR_GROUP()
 
 private:
     SkBlurMaskFilter(); // can't be instantiated

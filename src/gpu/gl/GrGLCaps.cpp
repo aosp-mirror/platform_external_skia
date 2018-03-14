@@ -583,6 +583,11 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
     } else if (version >= GR_GL_VER(3, 0)) {
         fProgramBinarySupport = true;
     }
+    if (fProgramBinarySupport) {
+        GrGLint count;
+        GR_GL_GetIntegerv(gli, GR_GL_NUM_SHADER_BINARY_FORMATS, &count);
+        fProgramBinarySupport = count > 0;
+    }
 
     // Requires fTextureRedSupport, fTextureSwizzleSupport, msaa support, ES compatibility have
     // already been detected.
@@ -1991,8 +1996,10 @@ void GrGLCaps::initConfigTable(const GrContextOptions& contextOptions,
     for (int i = 0; i < kGrPixelConfigCnt; ++i) {
         // Make sure we didn't set renderable and not blittable or renderable with msaa and not
         // renderable.
-        SkASSERT(!((ConfigInfo::kRenderable_Flag) && !(ConfigInfo::kFBOColorAttachment_Flag)));
-        SkASSERT(!((ConfigInfo::kRenderableWithMSAA_Flag) && !(ConfigInfo::kRenderable_Flag)));
+        SkASSERT(!((fConfigTable[i].fFlags & ConfigInfo::kRenderable_Flag) &&
+                  !(fConfigTable[i].fFlags & ConfigInfo::kFBOColorAttachment_Flag)));
+        SkASSERT(!((fConfigTable[i].fFlags & ConfigInfo::kRenderableWithMSAA_Flag) &&
+                  !(fConfigTable[i].fFlags & ConfigInfo::kRenderable_Flag)));
         SkASSERT(defaultEntry.fFormats.fBaseInternalFormat !=
                  fConfigTable[i].fFormats.fBaseInternalFormat);
         SkASSERT(defaultEntry.fFormats.fSizedInternalFormat !=

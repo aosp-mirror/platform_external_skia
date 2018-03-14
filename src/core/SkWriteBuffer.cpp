@@ -9,7 +9,7 @@
 #include "SkBitmap.h"
 #include "SkData.h"
 #include "SkDeduper.h"
-#include "SkPaint.h"
+#include "SkPaintPriv.h"
 #include "SkPixelRef.h"
 #include "SkPtrRecorder.h"
 #include "SkStream.h"
@@ -150,8 +150,10 @@ void SkBinaryWriteBuffer::writeImage(const SkImage* image) {
     if (!sk_64_isS32(size)) {
         size = 0;   // too big to store
     }
-    this->write32(SkToS32(size));           // writing 0 signals failure
-    this->writePad32(data->data(), size);   // does nothing if size == 0
+    this->write32(SkToS32(size));   // writing 0 signals failure
+    if (size) {
+        this->writePad32(data->data(), size);
+    }
 }
 
 void SkBinaryWriteBuffer::writeTypeface(SkTypeface* obj) {
@@ -187,7 +189,7 @@ void SkBinaryWriteBuffer::writeTypeface(SkTypeface* obj) {
 }
 
 void SkBinaryWriteBuffer::writePaint(const SkPaint& paint) {
-    paint.flatten(*this);
+    SkPaintPriv::Flatten(paint, *this);
 }
 
 SkFactorySet* SkBinaryWriteBuffer::setFactoryRecorder(SkFactorySet* rec) {

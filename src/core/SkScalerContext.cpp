@@ -29,37 +29,6 @@
 #include "SkTextFormatParams.h"
 #include "SkWriteBuffer.h"
 
-void SkGlyph::toMask(SkMask* mask) const {
-    SkASSERT(mask);
-
-    mask->fImage = (uint8_t*)fImage;
-    mask->fBounds.set(fLeft, fTop, fLeft + fWidth, fTop + fHeight);
-    mask->fRowBytes = this->rowBytes();
-    mask->fFormat = static_cast<SkMask::Format>(fMaskFormat);
-}
-
-size_t SkGlyph::computeImageSize() const {
-    const size_t size = this->rowBytes() * fHeight;
-
-    switch (fMaskFormat) {
-        case SkMask::k3D_Format:
-            return 3 * size;
-        default:
-            return size;
-    }
-}
-
-void SkGlyph::zeroMetrics() {
-    fAdvanceX = 0;
-    fAdvanceY = 0;
-    fWidth    = 0;
-    fHeight   = 0;
-    fTop      = 0;
-    fLeft     = 0;
-    fRsbDelta = 0;
-    fLsbDelta = 0;
-}
-
 ///////////////////////////////////////////////////////////////////////////////
 
 #ifdef SK_DEBUG
@@ -772,7 +741,11 @@ bool SkScalerContextRec::computeMatrices(PreMatrixScale preMatrixScale, SkVector
     return true;
 }
 
-SkAxisAlignment SkScalerContext::computeAxisAlignmentForHText() {
+SkAxisAlignment SkScalerContext::computeAxisAlignmentForHText() const {
+    return fRec.computeAxisAlignmentForHText();
+}
+
+SkAxisAlignment SkScalerContextRec::computeAxisAlignmentForHText() const {
     // Why fPost2x2 can be used here.
     // getSingleMatrix multiplies in getLocalMatrix, which consists of
     // * fTextSize (a scale, which has no effect)
@@ -781,11 +754,11 @@ SkAxisAlignment SkScalerContext::computeAxisAlignmentForHText() {
     // In other words, making the text bigger, stretching it along the
     // horizontal axis, or fake italicizing it does not move the baseline.
 
-    if (0 == fRec.fPost2x2[1][0]) {
+    if (0 == fPost2x2[1][0]) {
         // The x axis is mapped onto the x axis.
         return kX_SkAxisAlignment;
     }
-    if (0 == fRec.fPost2x2[0][0]) {
+    if (0 == fPost2x2[0][0]) {
         // The x axis is mapped onto the y axis.
         return kY_SkAxisAlignment;
     }

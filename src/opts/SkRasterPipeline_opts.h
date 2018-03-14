@@ -2487,6 +2487,11 @@ static void start_pipeline(const size_t x0,     const size_t y0,
 SI U16 div255(U16 v) {
 #if 0
     return (v+127)/255;  // The ideal rounding divide by 255.
+#elif 1 && defined(__ARM_NEON)
+    // With NEON we can compute (v+127)/255 as (v + ((v+128)>>8) + 128)>>8
+    // just as fast as we can do the approximation below, so might as well be correct!
+    // First we compute v + ((v+128)>>8), then one more round of (...+128)>>8 to finish up.
+    return vrshrq_n_u16(vrsraq_n_u16(v, v, 8), 8);
 #else
     return (v+255)/256;  // A good approximation of (v+127)/255.
 #endif
@@ -2828,21 +2833,21 @@ SI void store(T* ptr, size_t tail, V v) {
     }
 
     template<>
-    F gather(const float* p, U32 ix) {
+    F gather(const float* ptr, U32 ix) {
         __m256i lo, hi;
         split(ix, &lo, &hi);
 
-        return join<F>(_mm256_i32gather_ps(p, lo, 4),
-                       _mm256_i32gather_ps(p, hi, 4));
+        return join<F>(_mm256_i32gather_ps(ptr, lo, 4),
+                       _mm256_i32gather_ps(ptr, hi, 4));
     }
 
     template<>
-    U32 gather(const uint32_t* p, U32 ix) {
+    U32 gather(const uint32_t* ptr, U32 ix) {
         __m256i lo, hi;
         split(ix, &lo, &hi);
 
-        return join<U32>(_mm256_i32gather_epi32(p, lo, 4),
-                         _mm256_i32gather_epi32(p, hi, 4));
+        return join<U32>(_mm256_i32gather_epi32(ptr, lo, 4),
+                         _mm256_i32gather_epi32(ptr, hi, 4));
     }
 #else
     template <typename V, typename T>
