@@ -249,6 +249,7 @@ cc_library_static {
         "src/core/SkGaussFilter.cpp",
         "src/core/SkGeometry.cpp",
         "src/core/SkGlobalInitialization_core.cpp",
+        "src/core/SkGlyph.cpp",
         "src/core/SkGlyphCache.cpp",
         "src/core/SkGpuBlurUtils.cpp",
         "src/core/SkGraphics.cpp",
