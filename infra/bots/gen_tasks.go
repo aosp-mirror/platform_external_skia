@@ -252,12 +252,6 @@ func defaultSwarmDimensions(parts map[string]string) []string {
 			}
 			d["device_type"] = deviceInfo[0]
 			d["device_os"] = deviceInfo[1]
-			// TODO(kjlubick): Remove the python dimension after we have removed the
-			// Nexus5x devices from the local lab (on Monday, Dec 11, 2017 should be fine).
-			d["python"] = "2.7.9" // This indicates a RPI, e.g. in Skolo.  Golo is 2.7.12
-			if parts["model"] == "Nexus5x" {
-				d["python"] = "2.7.12"
-			}
 		} else if strings.Contains(parts["os"], "iOS") {
 			device, ok := map[string]string{
 				"iPadMini4": "iPad5,1",
@@ -379,12 +373,8 @@ func defaultSwarmDimensions(parts map[string]string) []string {
 		} else if d["os"] == DEFAULT_OS_WIN {
 			// Windows CPU bots.
 			d["cpu"] = "x86-64-Haswell_GCE"
-			// Use many-core machines for Build tasks on Win GCE, except for Goma.
-			if strings.Contains(parts["extra_config"], "Goma") {
-				d["machine_type"] = "n1-standard-16"
-			} else {
-				d["machine_type"] = "n1-highcpu-64"
-			}
+			// Use many-core machines for Build tasks on Win GCE.
+			d["machine_type"] = "n1-highcpu-64"
 		} else if d["os"] == DEFAULT_OS_MAC {
 			// Mac CPU bots.
 			d["cpu"] = "x86-64-E5-2697_v2"
