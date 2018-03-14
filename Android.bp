@@ -8,7 +8,6 @@ cc_library_static {
         "-DSKIA_DLL",
         "-DSKIA_IMPLEMENTATION=1",
         "-DSK_PRINT_CODEC_MESSAGES",
-        "-DSK_SUPPORT_LEGACY_BLURMASKFILTER",
         "-D_FORTIFY_SOURCE=1",
         "-Wall",
         "-Werror",
