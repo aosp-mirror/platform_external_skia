@@ -479,24 +479,6 @@
         "Build-Win-Clang-x86_64-Debug-ANGLE"
       ]
     },
-    "Build-Win-Clang-x86_64-Debug-ANGLE_Goma": {
-      "priority": 0.8,
-      "tasks": [
-        "Build-Win-Clang-x86_64-Debug-ANGLE_Goma"
-      ]
-    },
-    "Build-Win-Clang-x86_64-Debug-Goma": {
-      "priority": 0.8,
-      "tasks": [
-        "Build-Win-Clang-x86_64-Debug-Goma"
-      ]
-    },
-    "Build-Win-Clang-x86_64-Debug-GomaNoFallback": {
-      "priority": 0.8,
-      "tasks": [
-        "Build-Win-Clang-x86_64-Debug-GomaNoFallback"
-      ]
-    },
     "Build-Win-Clang-x86_64-Debug-UBSAN": {
       "priority": 0.8,
       "tasks": [
@@ -507,12 +489,6 @@
       "priority": 0.8,
       "tasks": [
         "Build-Win-Clang-x86_64-Debug-Vulkan"
-      ]
-    },
-    "Build-Win-Clang-x86_64-Debug-Vulkan_Goma": {
-      "priority": 0.8,
-      "tasks": [
-        "Build-Win-Clang-x86_64-Debug-Vulkan_Goma"
       ]
     },
     "Build-Win-Clang-x86_64-Release": {
@@ -527,18 +503,6 @@
         "Build-Win-Clang-x86_64-Release-ANGLE"
       ]
     },
-    "Build-Win-Clang-x86_64-Release-ANGLE_Goma": {
-      "priority": 0.8,
-      "tasks": [
-        "Build-Win-Clang-x86_64-Release-ANGLE_Goma"
-      ]
-    },
-    "Build-Win-Clang-x86_64-Release-Goma": {
-      "priority": 0.8,
-      "tasks": [
-        "Build-Win-Clang-x86_64-Release-Goma"
-      ]
-    },
     "Build-Win-Clang-x86_64-Release-UBSAN": {
       "priority": 0.8,
       "tasks": [
@@ -549,12 +513,6 @@
       "priority": 0.8,
       "tasks": [
         "Build-Win-Clang-x86_64-Release-Vulkan"
-      ]
-    },
-    "Build-Win-Clang-x86_64-Release-Vulkan_Goma": {
-      "priority": 0.8,
-      "tasks": [
-        "Build-Win-Clang-x86_64-Release-Vulkan_Goma"
       ]
     },
     "Build-Win-MSVC-x86-Debug": {
@@ -1458,22 +1416,10 @@
         "Perf-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-ANGLE"
       ]
     },
-    "Perf-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-ANGLE_Goma": {
-      "priority": 0.8,
-      "tasks": [
-        "Perf-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-ANGLE_Goma"
-      ]
-    },
     "Perf-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-Vulkan": {
       "priority": 0.8,
       "tasks": [
         "Perf-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-Vulkan"
-      ]
-    },
-    "Perf-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-Vulkan_Goma": {
-      "priority": 0.8,
-      "tasks": [
-        "Perf-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-Vulkan_Goma"
       ]
     },
     "Perf-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Release-All": {
@@ -2680,6 +2626,18 @@
         "Upload-Test-Ubuntu17-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-Coverage"
       ]
     },
+    "Test-Ubuntu17-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-DDL1": {
+      "priority": 0.8,
+      "tasks": [
+        "Upload-Test-Ubuntu17-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-DDL1"
+      ]
+    },
+    "Test-Ubuntu17-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-DDL3": {
+      "priority": 0.8,
+      "tasks": [
+        "Upload-Test-Ubuntu17-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-DDL3"
+      ]
+    },
     "Test-Ubuntu17-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-Vulkan": {
       "priority": 0.8,
       "tasks": [
@@ -2806,22 +2764,10 @@
         "Upload-Test-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-ANGLE"
       ]
     },
-    "Test-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-ANGLE_Goma": {
-      "priority": 0.8,
-      "tasks": [
-        "Upload-Test-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-ANGLE_Goma"
-      ]
-    },
     "Test-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-Vulkan": {
       "priority": 0.8,
       "tasks": [
         "Upload-Test-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-Vulkan"
-      ]
-    },
-    "Test-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-Vulkan_Goma": {
-      "priority": 0.8,
-      "tasks": [
-        "Upload-Test-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-Vulkan_Goma"
       ]
     },
     "Test-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-Vulkan_ProcDump": {
@@ -5381,7 +5327,7 @@
         {
           "name": "skia/bots/clang_win",
           "path": "clang_win",
-          "version": "version:4"
+          "version": "version:2"
         }
       ],
       "dependencies": [
@@ -5415,7 +5361,7 @@
         {
           "name": "skia/bots/clang_win",
           "path": "clang_win",
-          "version": "version:4"
+          "version": "version:2"
         }
       ],
       "dependencies": [
@@ -5449,7 +5395,7 @@
         {
           "name": "skia/bots/clang_win",
           "path": "clang_win",
-          "version": "version:4"
+          "version": "version:2"
         }
       ],
       "dependencies": [
@@ -5483,7 +5429,7 @@
         {
           "name": "skia/bots/clang_win",
           "path": "clang_win",
-          "version": "version:4"
+          "version": "version:2"
         }
       ],
       "dependencies": [
@@ -5512,114 +5458,12 @@
       "isolate": "compile_skia.isolate",
       "priority": 0.8
     },
-    "Build-Win-Clang-x86_64-Debug-ANGLE_Goma": {
-      "cipd_packages": [
-        {
-          "name": "skia/bots/clang_win",
-          "path": "clang_win",
-          "version": "version:4"
-        }
-      ],
-      "dependencies": [
-        "Housekeeper-PerCommit-IsolateWinToolchain"
-      ],
-      "dimensions": [
-        "cpu:x86-64-Haswell_GCE",
-        "gpu:none",
-        "machine_type:n1-standard-16",
-        "os:Windows-2016Server-14393",
-        "pool:Skia"
-      ],
-      "extra_args": [
-        "--workdir",
-        "../../..",
-        "compile",
-        "repository=<(REPO)",
-        "buildername=Build-Win-Clang-x86_64-Debug-ANGLE_Goma",
-        "swarm_out_dir=${ISOLATED_OUTDIR}",
-        "revision=<(REVISION)",
-        "patch_repo=<(PATCH_REPO)",
-        "patch_storage=<(PATCH_STORAGE)",
-        "patch_issue=<(ISSUE)",
-        "patch_set=<(PATCHSET)"
-      ],
-      "isolate": "compile_skia.isolate",
-      "priority": 0.8
-    },
-    "Build-Win-Clang-x86_64-Debug-Goma": {
-      "cipd_packages": [
-        {
-          "name": "skia/bots/clang_win",
-          "path": "clang_win",
-          "version": "version:4"
-        }
-      ],
-      "dependencies": [
-        "Housekeeper-PerCommit-IsolateWinToolchain"
-      ],
-      "dimensions": [
-        "cpu:x86-64-Haswell_GCE",
-        "gpu:none",
-        "machine_type:n1-standard-16",
-        "os:Windows-2016Server-14393",
-        "pool:Skia"
-      ],
-      "extra_args": [
-        "--workdir",
-        "../../..",
-        "compile",
-        "repository=<(REPO)",
-        "buildername=Build-Win-Clang-x86_64-Debug-Goma",
-        "swarm_out_dir=${ISOLATED_OUTDIR}",
-        "revision=<(REVISION)",
-        "patch_repo=<(PATCH_REPO)",
-        "patch_storage=<(PATCH_STORAGE)",
-        "patch_issue=<(ISSUE)",
-        "patch_set=<(PATCHSET)"
-      ],
-      "isolate": "compile_skia.isolate",
-      "priority": 0.8
-    },
-    "Build-Win-Clang-x86_64-Debug-GomaNoFallback": {
-      "cipd_packages": [
-        {
-          "name": "skia/bots/clang_win",
-          "path": "clang_win",
-          "version": "version:4"
-        }
-      ],
-      "dependencies": [
-        "Housekeeper-PerCommit-IsolateWinToolchain"
-      ],
-      "dimensions": [
-        "cpu:x86-64-Haswell_GCE",
-        "gpu:none",
-        "machine_type:n1-standard-16",
-        "os:Windows-2016Server-14393",
-        "pool:Skia"
-      ],
-      "extra_args": [
-        "--workdir",
-        "../../..",
-        "compile",
-        "repository=<(REPO)",
-        "buildername=Build-Win-Clang-x86_64-Debug-GomaNoFallback",
-        "swarm_out_dir=${ISOLATED_OUTDIR}",
-        "revision=<(REVISION)",
-        "patch_repo=<(PATCH_REPO)",
-        "patch_storage=<(PATCH_STORAGE)",
-        "patch_issue=<(ISSUE)",
-        "patch_set=<(PATCHSET)"
-      ],
-      "isolate": "compile_skia.isolate",
-      "priority": 0.8
-    },
     "Build-Win-Clang-x86_64-Debug-UBSAN": {
       "cipd_packages": [
         {
           "name": "skia/bots/clang_win",
           "path": "clang_win",
-          "version": "version:4"
+          "version": "version:2"
         }
       ],
       "dependencies": [
@@ -5653,7 +5497,7 @@
         {
           "name": "skia/bots/clang_win",
           "path": "clang_win",
-          "version": "version:4"
+          "version": "version:2"
         }
       ],
       "dependencies": [
@@ -5683,47 +5527,12 @@
       "isolate": "compile_skia.isolate",
       "priority": 0.8
     },
-    "Build-Win-Clang-x86_64-Debug-Vulkan_Goma": {
-      "cipd_packages": [
-        {
-          "name": "skia/bots/clang_win",
-          "path": "clang_win",
-          "version": "version:4"
-        }
-      ],
-      "dependencies": [
-        "Housekeeper-PerCommit-IsolateWinToolchain",
-        "Housekeeper-PerCommit-IsolateWinVulkanSDK"
-      ],
-      "dimensions": [
-        "cpu:x86-64-Haswell_GCE",
-        "gpu:none",
-        "machine_type:n1-standard-16",
-        "os:Windows-2016Server-14393",
-        "pool:Skia"
-      ],
-      "extra_args": [
-        "--workdir",
-        "../../..",
-        "compile",
-        "repository=<(REPO)",
-        "buildername=Build-Win-Clang-x86_64-Debug-Vulkan_Goma",
-        "swarm_out_dir=${ISOLATED_OUTDIR}",
-        "revision=<(REVISION)",
-        "patch_repo=<(PATCH_REPO)",
-        "patch_storage=<(PATCH_STORAGE)",
-        "patch_issue=<(ISSUE)",
-        "patch_set=<(PATCHSET)"
-      ],
-      "isolate": "compile_skia.isolate",
-      "priority": 0.8
-    },
     "Build-Win-Clang-x86_64-Release": {
       "cipd_packages": [
         {
           "name": "skia/bots/clang_win",
           "path": "clang_win",
-          "version": "version:4"
+          "version": "version:2"
         }
       ],
       "dependencies": [
@@ -5757,7 +5566,7 @@
         {
           "name": "skia/bots/clang_win",
           "path": "clang_win",
-          "version": "version:4"
+          "version": "version:2"
         }
       ],
       "dependencies": [
@@ -5786,80 +5595,12 @@
       "isolate": "compile_skia.isolate",
       "priority": 0.8
     },
-    "Build-Win-Clang-x86_64-Release-ANGLE_Goma": {
-      "cipd_packages": [
-        {
-          "name": "skia/bots/clang_win",
-          "path": "clang_win",
-          "version": "version:4"
-        }
-      ],
-      "dependencies": [
-        "Housekeeper-PerCommit-IsolateWinToolchain"
-      ],
-      "dimensions": [
-        "cpu:x86-64-Haswell_GCE",
-        "gpu:none",
-        "machine_type:n1-standard-16",
-        "os:Windows-2016Server-14393",
-        "pool:Skia"
-      ],
-      "extra_args": [
-        "--workdir",
-        "../../..",
-        "compile",
-        "repository=<(REPO)",
-        "buildername=Build-Win-Clang-x86_64-Release-ANGLE_Goma",
-        "swarm_out_dir=${ISOLATED_OUTDIR}",
-        "revision=<(REVISION)",
-        "patch_repo=<(PATCH_REPO)",
-        "patch_storage=<(PATCH_STORAGE)",
-        "patch_issue=<(ISSUE)",
-        "patch_set=<(PATCHSET)"
-      ],
-      "isolate": "compile_skia.isolate",
-      "priority": 0.8
-    },
-    "Build-Win-Clang-x86_64-Release-Goma": {
-      "cipd_packages": [
-        {
-          "name": "skia/bots/clang_win",
-          "path": "clang_win",
-          "version": "version:4"
-        }
-      ],
-      "dependencies": [
-        "Housekeeper-PerCommit-IsolateWinToolchain"
-      ],
-      "dimensions": [
-        "cpu:x86-64-Haswell_GCE",
-        "gpu:none",
-        "machine_type:n1-standard-16",
-        "os:Windows-2016Server-14393",
-        "pool:Skia"
-      ],
-      "extra_args": [
-        "--workdir",
-        "../../..",
-        "compile",
-        "repository=<(REPO)",
-        "buildername=Build-Win-Clang-x86_64-Release-Goma",
-        "swarm_out_dir=${ISOLATED_OUTDIR}",
-        "revision=<(REVISION)",
-        "patch_repo=<(PATCH_REPO)",
-        "patch_storage=<(PATCH_STORAGE)",
-        "patch_issue=<(ISSUE)",
-        "patch_set=<(PATCHSET)"
-      ],
-      "isolate": "compile_skia.isolate",
-      "priority": 0.8
-    },
     "Build-Win-Clang-x86_64-Release-UBSAN": {
       "cipd_packages": [
         {
           "name": "skia/bots/clang_win",
           "path": "clang_win",
-          "version": "version:4"
+          "version": "version:2"
         }
       ],
       "dependencies": [
@@ -5893,7 +5634,7 @@
         {
           "name": "skia/bots/clang_win",
           "path": "clang_win",
-          "version": "version:4"
+          "version": "version:2"
         }
       ],
       "dependencies": [
@@ -5913,41 +5654,6 @@
         "compile",
         "repository=<(REPO)",
         "buildername=Build-Win-Clang-x86_64-Release-Vulkan",
-        "swarm_out_dir=${ISOLATED_OUTDIR}",
-        "revision=<(REVISION)",
-        "patch_repo=<(PATCH_REPO)",
-        "patch_storage=<(PATCH_STORAGE)",
-        "patch_issue=<(ISSUE)",
-        "patch_set=<(PATCHSET)"
-      ],
-      "isolate": "compile_skia.isolate",
-      "priority": 0.8
-    },
-    "Build-Win-Clang-x86_64-Release-Vulkan_Goma": {
-      "cipd_packages": [
-        {
-          "name": "skia/bots/clang_win",
-          "path": "clang_win",
-          "version": "version:4"
-        }
-      ],
-      "dependencies": [
-        "Housekeeper-PerCommit-IsolateWinToolchain",
-        "Housekeeper-PerCommit-IsolateWinVulkanSDK"
-      ],
-      "dimensions": [
-        "cpu:x86-64-Haswell_GCE",
-        "gpu:none",
-        "machine_type:n1-standard-16",
-        "os:Windows-2016Server-14393",
-        "pool:Skia"
-      ],
-      "extra_args": [
-        "--workdir",
-        "../../..",
-        "compile",
-        "repository=<(REPO)",
-        "buildername=Build-Win-Clang-x86_64-Release-Vulkan_Goma",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -6605,8 +6311,7 @@
         "device_os:MOB30Q",
         "device_type:sprout",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -6640,8 +6345,7 @@
         "device_os:MOB30Q",
         "device_type:sprout",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -6675,8 +6379,7 @@
         "device_os:NRD90M_G920TUVU5FQK1",
         "device_type:zerofltetmo",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -6710,8 +6413,7 @@
         "device_os:NRD90M_G920TUVU5FQK1",
         "device_type:zerofltetmo",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -6745,8 +6447,7 @@
         "device_os:NRD90M_G930AUCS4BQC2",
         "device_type:heroqlteatt",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -6780,8 +6481,7 @@
         "device_os:NRD90M_G930AUCS4BQC2",
         "device_type:heroqlteatt",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -6815,8 +6515,7 @@
         "device_os:NRD90M_G930FXXU1DQAS",
         "device_type:herolte",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -6850,8 +6549,7 @@
         "device_os:NRD90M_G930FXXU1DQAS",
         "device_type:herolte",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -6885,8 +6583,7 @@
         "device_os:NPJ25.93-14",
         "device_type:athene",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -6920,8 +6617,7 @@
         "device_os:NPJ25.93-14",
         "device_type:athene",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -6955,8 +6651,7 @@
         "device_os:NRD90M_1915764_848",
         "device_type:foster",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -6990,8 +6685,7 @@
         "device_os:NRD90M_1915764_848",
         "device_type:foster",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -7025,8 +6719,7 @@
         "device_os:NRD90M_1915764_848",
         "device_type:foster",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -7060,8 +6753,7 @@
         "device_os:NRD90M_1915764_848",
         "device_type:foster",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -7095,8 +6787,7 @@
         "device_os:M4B30Z_3437181",
         "device_type:hammerhead",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -7130,8 +6821,7 @@
         "device_os:M4B30Z_3437181",
         "device_type:hammerhead",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -7165,8 +6855,7 @@
         "device_os:M4B30Z_3437181",
         "device_type:hammerhead",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -7200,8 +6889,7 @@
         "device_os:M4B30Z_3437181",
         "device_type:hammerhead",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -7235,8 +6923,7 @@
         "device_os:OPR6.170623.023",
         "device_type:bullhead",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.12"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -7270,8 +6957,7 @@
         "device_os:OPR6.170623.023",
         "device_type:bullhead",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.12"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -7305,8 +6991,7 @@
         "device_os:OPR6.170623.023",
         "device_type:bullhead",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.12"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -7340,8 +7025,7 @@
         "device_os:OPR6.170623.023",
         "device_type:bullhead",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.12"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -7375,8 +7059,7 @@
         "device_os:OPR6.170623.023",
         "device_type:bullhead",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.12"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -7410,8 +7093,7 @@
         "device_os:OPR6.170623.023",
         "device_type:bullhead",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.12"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -7445,8 +7127,7 @@
         "device_os:OPR6.170623.023",
         "device_type:bullhead",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.12"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -7480,8 +7161,7 @@
         "device_os:OPR6.170623.023",
         "device_type:bullhead",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.12"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -7515,8 +7195,7 @@
         "device_os:OPR6.170623.023",
         "device_type:bullhead",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.12"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -7550,8 +7229,7 @@
         "device_os:OPR6.170623.023",
         "device_type:bullhead",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.12"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -7585,8 +7263,7 @@
         "device_os:OPR6.170623.023",
         "device_type:bullhead",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.12"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -7620,8 +7297,7 @@
         "device_os:OPR6.170623.023",
         "device_type:bullhead",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.12"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -7655,8 +7331,7 @@
         "device_os:LMY47V_1836172",
         "device_type:grouper",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -7690,8 +7365,7 @@
         "device_os:LMY47V_1836172",
         "device_type:grouper",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -7725,8 +7399,7 @@
         "device_os:LMY47V_1836172",
         "device_type:grouper",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -7760,8 +7433,7 @@
         "device_os:LMY47V_1836172",
         "device_type:grouper",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -7795,8 +7467,7 @@
         "device_os:OPR6.170623.021",
         "device_type:fugu",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 21600000000000,
       "expiration_ns": 72000000000000,
@@ -7830,8 +7501,7 @@
         "device_os:OPR6.170623.021",
         "device_type:fugu",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 21600000000000,
       "expiration_ns": 72000000000000,
@@ -7865,8 +7535,7 @@
         "device_os:OPR6.170623.021",
         "device_type:fugu",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 21600000000000,
       "expiration_ns": 72000000000000,
@@ -7900,8 +7569,7 @@
         "device_os:OPR6.170623.021",
         "device_type:fugu",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -7935,8 +7603,7 @@
         "device_os:OPR6.170623.021",
         "device_type:fugu",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -7970,8 +7637,7 @@
         "device_os:OPM1.171019.016",
         "device_type:sailfish",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -8005,8 +7671,7 @@
         "device_os:OPM1.171019.016",
         "device_type:sailfish",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -8040,8 +7705,7 @@
         "device_os:OPM1.171019.016",
         "device_type:sailfish",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -8073,8 +7737,7 @@
         "device_os:OPM1.171019.016",
         "device_type:sailfish",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -8106,8 +7769,7 @@
         "device_os:OPM1.171019.016",
         "device_type:sailfish",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -8141,8 +7803,7 @@
         "device_os:OPM1.171019.016",
         "device_type:sailfish",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -8174,8 +7835,7 @@
         "device_os:OPM1.171019.016",
         "device_type:sailfish",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -8209,8 +7869,7 @@
         "device_os:OPD1.170816.023",
         "device_type:taimen",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -8244,8 +7903,7 @@
         "device_os:OPD1.170816.023",
         "device_type:taimen",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -8279,8 +7937,7 @@
         "device_os:OPD1.170816.023",
         "device_type:taimen",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -8314,8 +7971,7 @@
         "device_os:OPD1.170816.023",
         "device_type:taimen",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -8347,8 +8003,7 @@
         "device_os:OPR1.170623.034",
         "device_type:dragon",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -8380,8 +8035,7 @@
         "device_os:OPR1.170623.034",
         "device_type:dragon",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -8413,8 +8067,7 @@
         "device_os:OPR1.170623.034",
         "device_type:dragon",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -8854,8 +8507,7 @@
         "device_os:1.30_109591",
         "device_type:chorizo",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -8887,8 +8539,7 @@
         "device_os:1.30_109591",
         "device_type:chorizo",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -8920,8 +8571,7 @@
         "device_os:1.30_109591",
         "device_type:chorizo",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -8953,8 +8603,7 @@
         "device_os:1.30_109591",
         "device_type:chorizo",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -11619,8 +11268,8 @@
         "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
-        "gpu:10de:104a-23.21.13.8813",
-        "os:Windows-10-16299.125",
+        "gpu:10de:104a-23.21.13.9101",
+        "os:Windows-10-16299.309",
         "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
@@ -11666,8 +11315,8 @@
         "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
-        "gpu:10de:104a-23.21.13.8813",
-        "os:Windows-10-16299.125",
+        "gpu:10de:104a-23.21.13.9101",
+        "os:Windows-10-16299.309",
         "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
@@ -11713,8 +11362,8 @@
         "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
-        "gpu:10de:104a-23.21.13.8813",
-        "os:Windows-10-16299.125",
+        "gpu:10de:104a-23.21.13.9101",
+        "os:Windows-10-16299.309",
         "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
@@ -11760,8 +11409,8 @@
         "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
-        "gpu:10de:1cb3-22.21.13.8205",
-        "os:Windows-10-15063",
+        "gpu:10de:1cb3-23.21.13.9103",
+        "os:Windows-10-16299.309",
         "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
@@ -11807,8 +11456,8 @@
         "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
-        "gpu:10de:1cb3-22.21.13.8205",
-        "os:Windows-10-15063",
+        "gpu:10de:1cb3-23.21.13.9103",
+        "os:Windows-10-16299.309",
         "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
@@ -11819,53 +11468,6 @@
         "perf",
         "repository=<(REPO)",
         "buildername=Perf-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-ANGLE",
-        "swarm_out_dir=${ISOLATED_OUTDIR}",
-        "revision=<(REVISION)",
-        "patch_repo=<(PATCH_REPO)",
-        "patch_storage=<(PATCH_STORAGE)",
-        "patch_issue=<(ISSUE)",
-        "patch_set=<(PATCHSET)"
-      ],
-      "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia_bundled_win.isolate",
-      "max_attempts": 1,
-      "priority": 0.8
-    },
-    "Perf-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-ANGLE_Goma": {
-      "cipd_packages": [
-        {
-          "name": "skia/bots/skimage",
-          "path": "skimage",
-          "version": "version:34"
-        },
-        {
-          "name": "skia/bots/skp",
-          "path": "skp",
-          "version": "version:116"
-        },
-        {
-          "name": "skia/bots/svg",
-          "path": "svg",
-          "version": "version:9"
-        }
-      ],
-      "dependencies": [
-        "Build-Win-Clang-x86_64-Debug-ANGLE_Goma",
-        "Housekeeper-PerCommit-BundleRecipes"
-      ],
-      "dimensions": [
-        "gpu:10de:1cb3-22.21.13.8205",
-        "os:Windows-10-15063",
-        "pool:Skia"
-      ],
-      "execution_timeout_ns": 14400000000000,
-      "expiration_ns": 72000000000000,
-      "extra_args": [
-        "--workdir",
-        "../../..",
-        "perf",
-        "repository=<(REPO)",
-        "buildername=Perf-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-ANGLE_Goma",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -11901,8 +11503,8 @@
         "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
-        "gpu:10de:1cb3-22.21.13.8205",
-        "os:Windows-10-15063",
+        "gpu:10de:1cb3-23.21.13.9103",
+        "os:Windows-10-16299.309",
         "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
@@ -11913,53 +11515,6 @@
         "perf",
         "repository=<(REPO)",
         "buildername=Perf-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-Vulkan",
-        "swarm_out_dir=${ISOLATED_OUTDIR}",
-        "revision=<(REVISION)",
-        "patch_repo=<(PATCH_REPO)",
-        "patch_storage=<(PATCH_STORAGE)",
-        "patch_issue=<(ISSUE)",
-        "patch_set=<(PATCHSET)"
-      ],
-      "io_timeout_ns": 2400000000000,
-      "isolate": "perf_skia_bundled_win.isolate",
-      "max_attempts": 1,
-      "priority": 0.8
-    },
-    "Perf-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-Vulkan_Goma": {
-      "cipd_packages": [
-        {
-          "name": "skia/bots/skimage",
-          "path": "skimage",
-          "version": "version:34"
-        },
-        {
-          "name": "skia/bots/skp",
-          "path": "skp",
-          "version": "version:116"
-        },
-        {
-          "name": "skia/bots/svg",
-          "path": "svg",
-          "version": "version:9"
-        }
-      ],
-      "dependencies": [
-        "Build-Win-Clang-x86_64-Debug-Vulkan_Goma",
-        "Housekeeper-PerCommit-BundleRecipes"
-      ],
-      "dimensions": [
-        "gpu:10de:1cb3-22.21.13.8205",
-        "os:Windows-10-15063",
-        "pool:Skia"
-      ],
-      "execution_timeout_ns": 14400000000000,
-      "expiration_ns": 72000000000000,
-      "extra_args": [
-        "--workdir",
-        "../../..",
-        "perf",
-        "repository=<(REPO)",
-        "buildername=Perf-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-Vulkan_Goma",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -11995,8 +11550,8 @@
         "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
-        "gpu:10de:1cb3-22.21.13.8205",
-        "os:Windows-10-15063",
+        "gpu:10de:1cb3-23.21.13.9103",
+        "os:Windows-10-16299.309",
         "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
@@ -12042,8 +11597,8 @@
         "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
-        "gpu:10de:1cb3-22.21.13.8205",
-        "os:Windows-10-15063",
+        "gpu:10de:1cb3-23.21.13.9103",
+        "os:Windows-10-16299.309",
         "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
@@ -12089,8 +11644,8 @@
         "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
-        "gpu:10de:1cb3-22.21.13.8205",
-        "os:Windows-10-15063",
+        "gpu:10de:1cb3-23.21.13.9103",
+        "os:Windows-10-16299.309",
         "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
@@ -13928,8 +13483,8 @@
         "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
-        "gpu:10de:1cb3-22.21.13.8205",
-        "os:Windows-10-15063",
+        "gpu:10de:1cb3-23.21.13.9103",
+        "os:Windows-10-16299.309",
         "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
@@ -13975,8 +13530,8 @@
         "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
-        "gpu:10de:1cb3-22.21.13.8205",
-        "os:Windows-10-15063",
+        "gpu:10de:1cb3-23.21.13.9103",
+        "os:Windows-10-16299.309",
         "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
@@ -14022,8 +13577,8 @@
         "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
-        "gpu:10de:1cb3-22.21.13.8205",
-        "os:Windows-10-15063",
+        "gpu:10de:1cb3-23.21.13.9103",
+        "os:Windows-10-16299.309",
         "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
@@ -14069,8 +13624,8 @@
         "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
-        "gpu:10de:1cb3-22.21.13.8205",
-        "os:Windows-10-15063",
+        "gpu:10de:1cb3-23.21.13.9103",
+        "os:Windows-10-16299.309",
         "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
@@ -14921,8 +14476,7 @@
         "device_os:MOB30Q",
         "device_type:sprout",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -14957,8 +14511,7 @@
         "device_os:MOB30Q",
         "device_type:sprout",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -14993,8 +14546,7 @@
         "device_os:NRD90M_G920TUVU5FQK1",
         "device_type:zerofltetmo",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -15029,8 +14581,7 @@
         "device_os:NRD90M_G920TUVU5FQK1",
         "device_type:zerofltetmo",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -15065,8 +14616,7 @@
         "device_os:NRD90M_G920TUVU5FQK1",
         "device_type:zerofltetmo",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -15101,8 +14651,7 @@
         "device_os:NRD90M_G930AUCS4BQC2",
         "device_type:heroqlteatt",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -15137,8 +14686,7 @@
         "device_os:NRD90M_G930AUCS4BQC2",
         "device_type:heroqlteatt",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -15173,8 +14721,7 @@
         "device_os:NRD90M_G930FXXU1DQAS",
         "device_type:herolte",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -15209,8 +14756,7 @@
         "device_os:NRD90M_G930FXXU1DQAS",
         "device_type:herolte",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -15245,8 +14791,7 @@
         "device_os:NPJ25.93-14",
         "device_type:athene",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -15281,8 +14826,7 @@
         "device_os:NPJ25.93-14",
         "device_type:athene",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -15317,8 +14861,7 @@
         "device_os:NRD90M_1915764_848",
         "device_type:foster",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -15353,8 +14896,7 @@
         "device_os:NRD90M_1915764_848",
         "device_type:foster",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -15389,8 +14931,7 @@
         "device_os:NRD90M_1915764_848",
         "device_type:foster",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -15425,8 +14966,7 @@
         "device_os:NRD90M_1915764_848",
         "device_type:foster",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -15461,8 +15001,7 @@
         "device_os:NRD90M_1915764_848",
         "device_type:foster",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -15497,8 +15036,7 @@
         "device_os:M4B30Z_3437181",
         "device_type:hammerhead",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -15533,8 +15071,7 @@
         "device_os:M4B30Z_3437181",
         "device_type:hammerhead",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -15569,8 +15106,7 @@
         "device_os:M4B30Z_3437181",
         "device_type:hammerhead",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -15605,8 +15141,7 @@
         "device_os:M4B30Z_3437181",
         "device_type:hammerhead",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -15641,8 +15176,7 @@
         "device_os:OPR6.170623.023",
         "device_type:bullhead",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.12"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -15677,8 +15211,7 @@
         "device_os:OPR6.170623.023",
         "device_type:bullhead",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.12"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -15714,8 +15247,7 @@
         "device_os:OPR6.170623.023",
         "device_type:bullhead",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.12"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -15750,8 +15282,7 @@
         "device_os:OPR6.170623.023",
         "device_type:bullhead",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.12"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -15786,8 +15317,7 @@
         "device_os:OPR6.170623.023",
         "device_type:bullhead",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.12"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -15823,8 +15353,7 @@
         "device_os:OPR6.170623.023",
         "device_type:bullhead",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.12"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -15859,8 +15388,7 @@
         "device_os:OPR6.170623.023",
         "device_type:bullhead",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.12"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -15895,8 +15423,7 @@
         "device_os:OPR6.170623.023",
         "device_type:bullhead",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.12"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -15931,8 +15458,7 @@
         "device_os:OPR6.170623.023",
         "device_type:bullhead",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.12"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -15967,8 +15493,7 @@
         "device_os:OPR6.170623.023",
         "device_type:bullhead",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.12"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -16003,8 +15528,7 @@
         "device_os:OPR6.170623.023",
         "device_type:bullhead",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.12"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -16040,8 +15564,7 @@
         "device_os:OPR6.170623.023",
         "device_type:bullhead",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.12"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -16077,8 +15600,7 @@
         "device_os:OPR6.170623.023",
         "device_type:bullhead",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.12"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -16113,8 +15635,7 @@
         "device_os:OPR6.170623.023",
         "device_type:bullhead",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.12"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -16149,8 +15670,7 @@
         "device_os:OPR6.170623.023",
         "device_type:bullhead",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.12"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -16185,8 +15705,7 @@
         "device_os:OPR6.170623.023",
         "device_type:bullhead",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.12"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -16221,8 +15740,7 @@
         "device_os:OPR6.170623.023",
         "device_type:bullhead",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.12"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -16257,8 +15775,7 @@
         "device_os:OPR6.170623.023",
         "device_type:bullhead",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.12"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -16293,8 +15810,7 @@
         "device_os:OPR6.170623.023",
         "device_type:bullhead",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.12"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -16329,8 +15845,7 @@
         "device_os:OPR6.170623.023",
         "device_type:bullhead",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.12"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -16365,8 +15880,7 @@
         "device_os:OPR6.170623.023",
         "device_type:bullhead",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.12"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -16402,8 +15916,7 @@
         "device_os:OPR6.170623.023",
         "device_type:bullhead",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.12"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -16439,8 +15952,7 @@
         "device_os:OPR6.170623.023",
         "device_type:bullhead",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.12"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -16475,8 +15987,7 @@
         "device_os:OPR6.170623.023",
         "device_type:bullhead",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.12"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -16511,8 +16022,7 @@
         "device_os:OPR6.170623.023",
         "device_type:bullhead",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.12"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -16547,8 +16057,7 @@
         "device_os:OPR6.170623.023",
         "device_type:bullhead",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.12"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -16583,8 +16092,7 @@
         "device_os:OPR6.170623.023",
         "device_type:bullhead",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.12"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -16619,8 +16127,7 @@
         "device_os:LMY47V_1836172",
         "device_type:grouper",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -16655,8 +16162,7 @@
         "device_os:LMY47V_1836172",
         "device_type:grouper",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -16691,8 +16197,7 @@
         "device_os:LMY47V_1836172",
         "device_type:grouper",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -16727,8 +16232,7 @@
         "device_os:LMY47V_1836172",
         "device_type:grouper",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -16763,8 +16267,7 @@
         "device_os:OPR6.170623.021",
         "device_type:fugu",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 21600000000000,
       "expiration_ns": 72000000000000,
@@ -16799,8 +16302,7 @@
         "device_os:OPR6.170623.021",
         "device_type:fugu",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -16835,8 +16337,7 @@
         "device_os:OPR6.170623.021",
         "device_type:fugu",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 21600000000000,
       "expiration_ns": 72000000000000,
@@ -16871,8 +16372,7 @@
         "device_os:OPR6.170623.021",
         "device_type:fugu",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 21600000000000,
       "expiration_ns": 72000000000000,
@@ -16907,8 +16407,7 @@
         "device_os:OPR6.170623.021",
         "device_type:fugu",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -16943,8 +16442,7 @@
         "device_os:OPR6.170623.021",
         "device_type:fugu",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -16979,8 +16477,7 @@
         "device_os:OPM1.171019.016",
         "device_type:sailfish",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -17015,8 +16512,7 @@
         "device_os:OPM1.171019.016",
         "device_type:sailfish",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -17051,8 +16547,7 @@
         "device_os:OPM1.171019.016",
         "device_type:sailfish",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -17087,8 +16582,7 @@
         "device_os:OPM1.171019.016",
         "device_type:sailfish",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -17123,8 +16617,7 @@
         "device_os:OPM1.171019.016",
         "device_type:sailfish",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -17159,8 +16652,7 @@
         "device_os:OPD1.170816.023",
         "device_type:taimen",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -17195,8 +16687,7 @@
         "device_os:OPD1.170816.023",
         "device_type:taimen",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -17231,8 +16722,7 @@
         "device_os:OPD1.170816.023",
         "device_type:taimen",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -17267,8 +16757,7 @@
         "device_os:OPD1.170816.023",
         "device_type:taimen",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -17721,8 +17210,7 @@
         "device_os:1.30_109591",
         "device_type:chorizo",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -17755,8 +17243,7 @@
         "device_os:1.30_109591",
         "device_type:chorizo",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -17789,8 +17276,7 @@
         "device_os:1.30_109591",
         "device_type:chorizo",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -17823,8 +17309,7 @@
         "device_os:1.30_109591",
         "device_type:chorizo",
         "os:Android",
-        "pool:Skia",
-        "python:2.7.9"
+        "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
@@ -20941,6 +20426,102 @@
       "max_attempts": 1,
       "priority": 0.8
     },
+    "Test-Ubuntu17-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-DDL1": {
+      "cipd_packages": [
+        {
+          "name": "skia/bots/skimage",
+          "path": "skimage",
+          "version": "version:34"
+        },
+        {
+          "name": "skia/bots/skp",
+          "path": "skp",
+          "version": "version:116"
+        },
+        {
+          "name": "skia/bots/svg",
+          "path": "svg",
+          "version": "version:9"
+        }
+      ],
+      "dependencies": [
+        "Build-Debian9-Clang-x86_64-Debug",
+        "Housekeeper-PerCommit-BundleRecipes"
+      ],
+      "dimensions": [
+        "gpu:10de:1cb3-384.59",
+        "os:Ubuntu-17.04",
+        "pool:Skia"
+      ],
+      "execution_timeout_ns": 14400000000000,
+      "expiration_ns": 72000000000000,
+      "extra_args": [
+        "--workdir",
+        "../../..",
+        "test",
+        "repository=<(REPO)",
+        "buildbucket_build_id=<(BUILDBUCKET_BUILD_ID)",
+        "buildername=Test-Ubuntu17-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-DDL1",
+        "swarm_out_dir=${ISOLATED_OUTDIR}",
+        "revision=<(REVISION)",
+        "patch_repo=<(PATCH_REPO)",
+        "patch_storage=<(PATCH_STORAGE)",
+        "patch_issue=<(ISSUE)",
+        "patch_set=<(PATCHSET)"
+      ],
+      "io_timeout_ns": 2400000000000,
+      "isolate": "test_skia_bundled_unix.isolate",
+      "max_attempts": 1,
+      "priority": 0.8
+    },
+    "Test-Ubuntu17-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-DDL3": {
+      "cipd_packages": [
+        {
+          "name": "skia/bots/skimage",
+          "path": "skimage",
+          "version": "version:34"
+        },
+        {
+          "name": "skia/bots/skp",
+          "path": "skp",
+          "version": "version:116"
+        },
+        {
+          "name": "skia/bots/svg",
+          "path": "svg",
+          "version": "version:9"
+        }
+      ],
+      "dependencies": [
+        "Build-Debian9-Clang-x86_64-Debug",
+        "Housekeeper-PerCommit-BundleRecipes"
+      ],
+      "dimensions": [
+        "gpu:10de:1cb3-384.59",
+        "os:Ubuntu-17.04",
+        "pool:Skia"
+      ],
+      "execution_timeout_ns": 14400000000000,
+      "expiration_ns": 72000000000000,
+      "extra_args": [
+        "--workdir",
+        "../../..",
+        "test",
+        "repository=<(REPO)",
+        "buildbucket_build_id=<(BUILDBUCKET_BUILD_ID)",
+        "buildername=Test-Ubuntu17-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-DDL3",
+        "swarm_out_dir=${ISOLATED_OUTDIR}",
+        "revision=<(REVISION)",
+        "patch_repo=<(PATCH_REPO)",
+        "patch_storage=<(PATCH_STORAGE)",
+        "patch_issue=<(ISSUE)",
+        "patch_set=<(PATCHSET)"
+      ],
+      "io_timeout_ns": 2400000000000,
+      "isolate": "test_skia_bundled_unix.isolate",
+      "max_attempts": 1,
+      "priority": 0.8
+    },
     "Test-Ubuntu17-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-Vulkan": {
       "cipd_packages": [
         {
@@ -21821,8 +21402,8 @@
         "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
-        "gpu:10de:104a-23.21.13.8813",
-        "os:Windows-10-16299.125",
+        "gpu:10de:104a-23.21.13.9101",
+        "os:Windows-10-16299.309",
         "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
@@ -21869,8 +21450,8 @@
         "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
-        "gpu:10de:104a-23.21.13.8813",
-        "os:Windows-10-16299.125",
+        "gpu:10de:104a-23.21.13.9101",
+        "os:Windows-10-16299.309",
         "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
@@ -21917,8 +21498,8 @@
         "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
-        "gpu:10de:104a-23.21.13.8813",
-        "os:Windows-10-16299.125",
+        "gpu:10de:104a-23.21.13.9101",
+        "os:Windows-10-16299.309",
         "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
@@ -21965,8 +21546,8 @@
         "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
-        "gpu:10de:1cb3-22.21.13.8205",
-        "os:Windows-10-15063",
+        "gpu:10de:1cb3-23.21.13.9103",
+        "os:Windows-10-16299.309",
         "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
@@ -22013,8 +21594,8 @@
         "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
-        "gpu:10de:1cb3-22.21.13.8205",
-        "os:Windows-10-15063",
+        "gpu:10de:1cb3-23.21.13.9103",
+        "os:Windows-10-16299.309",
         "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
@@ -22026,54 +21607,6 @@
         "repository=<(REPO)",
         "buildbucket_build_id=<(BUILDBUCKET_BUILD_ID)",
         "buildername=Test-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-ANGLE",
-        "swarm_out_dir=${ISOLATED_OUTDIR}",
-        "revision=<(REVISION)",
-        "patch_repo=<(PATCH_REPO)",
-        "patch_storage=<(PATCH_STORAGE)",
-        "patch_issue=<(ISSUE)",
-        "patch_set=<(PATCHSET)"
-      ],
-      "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia_bundled_win.isolate",
-      "max_attempts": 1,
-      "priority": 0.8
-    },
-    "Test-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-ANGLE_Goma": {
-      "cipd_packages": [
-        {
-          "name": "skia/bots/skimage",
-          "path": "skimage",
-          "version": "version:34"
-        },
-        {
-          "name": "skia/bots/skp",
-          "path": "skp",
-          "version": "version:116"
-        },
-        {
-          "name": "skia/bots/svg",
-          "path": "svg",
-          "version": "version:9"
-        }
-      ],
-      "dependencies": [
-        "Build-Win-Clang-x86_64-Debug-ANGLE_Goma",
-        "Housekeeper-PerCommit-BundleRecipes"
-      ],
-      "dimensions": [
-        "gpu:10de:1cb3-22.21.13.8205",
-        "os:Windows-10-15063",
-        "pool:Skia"
-      ],
-      "execution_timeout_ns": 14400000000000,
-      "expiration_ns": 72000000000000,
-      "extra_args": [
-        "--workdir",
-        "../../..",
-        "test",
-        "repository=<(REPO)",
-        "buildbucket_build_id=<(BUILDBUCKET_BUILD_ID)",
-        "buildername=Test-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-ANGLE_Goma",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -22109,8 +21642,8 @@
         "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
-        "gpu:10de:1cb3-22.21.13.8205",
-        "os:Windows-10-15063",
+        "gpu:10de:1cb3-23.21.13.9103",
+        "os:Windows-10-16299.309",
         "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
@@ -22122,54 +21655,6 @@
         "repository=<(REPO)",
         "buildbucket_build_id=<(BUILDBUCKET_BUILD_ID)",
         "buildername=Test-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-Vulkan",
-        "swarm_out_dir=${ISOLATED_OUTDIR}",
-        "revision=<(REVISION)",
-        "patch_repo=<(PATCH_REPO)",
-        "patch_storage=<(PATCH_STORAGE)",
-        "patch_issue=<(ISSUE)",
-        "patch_set=<(PATCHSET)"
-      ],
-      "io_timeout_ns": 2400000000000,
-      "isolate": "test_skia_bundled_win.isolate",
-      "max_attempts": 1,
-      "priority": 0.8
-    },
-    "Test-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-Vulkan_Goma": {
-      "cipd_packages": [
-        {
-          "name": "skia/bots/skimage",
-          "path": "skimage",
-          "version": "version:34"
-        },
-        {
-          "name": "skia/bots/skp",
-          "path": "skp",
-          "version": "version:116"
-        },
-        {
-          "name": "skia/bots/svg",
-          "path": "svg",
-          "version": "version:9"
-        }
-      ],
-      "dependencies": [
-        "Build-Win-Clang-x86_64-Debug-Vulkan_Goma",
-        "Housekeeper-PerCommit-BundleRecipes"
-      ],
-      "dimensions": [
-        "gpu:10de:1cb3-22.21.13.8205",
-        "os:Windows-10-15063",
-        "pool:Skia"
-      ],
-      "execution_timeout_ns": 14400000000000,
-      "expiration_ns": 72000000000000,
-      "extra_args": [
-        "--workdir",
-        "../../..",
-        "test",
-        "repository=<(REPO)",
-        "buildbucket_build_id=<(BUILDBUCKET_BUILD_ID)",
-        "buildername=Test-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-Vulkan_Goma",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",
@@ -22210,8 +21695,8 @@
         "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
-        "gpu:10de:1cb3-22.21.13.8205",
-        "os:Windows-10-15063",
+        "gpu:10de:1cb3-23.21.13.9103",
+        "os:Windows-10-16299.309",
         "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
@@ -22258,8 +21743,8 @@
         "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
-        "gpu:10de:1cb3-22.21.13.8205",
-        "os:Windows-10-15063",
+        "gpu:10de:1cb3-23.21.13.9103",
+        "os:Windows-10-16299.309",
         "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
@@ -22306,8 +21791,8 @@
         "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
-        "gpu:10de:1cb3-22.21.13.8205",
-        "os:Windows-10-15063",
+        "gpu:10de:1cb3-23.21.13.9103",
+        "os:Windows-10-16299.309",
         "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
@@ -22354,8 +21839,8 @@
         "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
-        "gpu:10de:1cb3-22.21.13.8205",
-        "os:Windows-10-15063",
+        "gpu:10de:1cb3-23.21.13.9103",
+        "os:Windows-10-16299.309",
         "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
@@ -22402,8 +21887,8 @@
         "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
-        "gpu:10de:1cb3-22.21.13.8205",
-        "os:Windows-10-15063",
+        "gpu:10de:1cb3-23.21.13.9103",
+        "os:Windows-10-16299.309",
         "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
@@ -22455,8 +21940,8 @@
         "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
-        "gpu:10de:1cb3-22.21.13.8205",
-        "os:Windows-10-15063",
+        "gpu:10de:1cb3-23.21.13.9103",
+        "os:Windows-10-16299.309",
         "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
@@ -24429,8 +23914,8 @@
         "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
-        "gpu:10de:1cb3-22.21.13.8205",
-        "os:Windows-10-15063",
+        "gpu:10de:1cb3-23.21.13.9103",
+        "os:Windows-10-16299.309",
         "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
@@ -24477,8 +23962,8 @@
         "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
-        "gpu:10de:1cb3-22.21.13.8205",
-        "os:Windows-10-15063",
+        "gpu:10de:1cb3-23.21.13.9103",
+        "os:Windows-10-16299.309",
         "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
@@ -24525,8 +24010,8 @@
         "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
-        "gpu:10de:1cb3-22.21.13.8205",
-        "os:Windows-10-15063",
+        "gpu:10de:1cb3-23.21.13.9103",
+        "os:Windows-10-16299.309",
         "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
@@ -24573,8 +24058,8 @@
         "Housekeeper-PerCommit-BundleRecipes"
       ],
       "dimensions": [
-        "gpu:10de:1cb3-22.21.13.8205",
-        "os:Windows-10-15063",
+        "gpu:10de:1cb3-23.21.13.9103",
+        "os:Windows-10-16299.309",
         "pool:Skia"
       ],
       "execution_timeout_ns": 14400000000000,
@@ -31973,6 +31458,60 @@
       "isolate": "upload_coverage_results.isolate",
       "priority": 0.8
     },
+    "Upload-Test-Ubuntu17-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-DDL1": {
+      "dependencies": [
+        "Test-Ubuntu17-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-DDL1"
+      ],
+      "dimensions": [
+        "cpu:x86-64-Haswell_GCE",
+        "gpu:none",
+        "os:Debian-9.2",
+        "pool:Skia"
+      ],
+      "extra_args": [
+        "--workdir",
+        "../../..",
+        "upload_dm_results",
+        "repository=<(REPO)",
+        "buildername=Test-Ubuntu17-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-DDL1",
+        "swarm_out_dir=${ISOLATED_OUTDIR}",
+        "revision=<(REVISION)",
+        "patch_repo=<(PATCH_REPO)",
+        "patch_storage=<(PATCH_STORAGE)",
+        "patch_issue=<(ISSUE)",
+        "patch_set=<(PATCHSET)",
+        "gs_bucket=skia-infra-gm"
+      ],
+      "isolate": "upload_dm_results.isolate",
+      "priority": 0.8
+    },
+    "Upload-Test-Ubuntu17-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-DDL3": {
+      "dependencies": [
+        "Test-Ubuntu17-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-DDL3"
+      ],
+      "dimensions": [
+        "cpu:x86-64-Haswell_GCE",
+        "gpu:none",
+        "os:Debian-9.2",
+        "pool:Skia"
+      ],
+      "extra_args": [
+        "--workdir",
+        "../../..",
+        "upload_dm_results",
+        "repository=<(REPO)",
+        "buildername=Test-Ubuntu17-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-DDL3",
+        "swarm_out_dir=${ISOLATED_OUTDIR}",
+        "revision=<(REVISION)",
+        "patch_repo=<(PATCH_REPO)",
+        "patch_storage=<(PATCH_STORAGE)",
+        "patch_issue=<(ISSUE)",
+        "patch_set=<(PATCHSET)",
+        "gs_bucket=skia-infra-gm"
+      ],
+      "isolate": "upload_dm_results.isolate",
+      "priority": 0.8
+    },
     "Upload-Test-Ubuntu17-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-Vulkan": {
       "dependencies": [
         "Test-Ubuntu17-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-Vulkan"
@@ -32386,33 +31925,6 @@
       "isolate": "upload_dm_results.isolate",
       "priority": 0.8
     },
-    "Upload-Test-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-ANGLE_Goma": {
-      "dependencies": [
-        "Test-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-ANGLE_Goma"
-      ],
-      "dimensions": [
-        "cpu:x86-64-Haswell_GCE",
-        "gpu:none",
-        "os:Debian-9.2",
-        "pool:Skia"
-      ],
-      "extra_args": [
-        "--workdir",
-        "../../..",
-        "upload_dm_results",
-        "repository=<(REPO)",
-        "buildername=Test-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-ANGLE_Goma",
-        "swarm_out_dir=${ISOLATED_OUTDIR}",
-        "revision=<(REVISION)",
-        "patch_repo=<(PATCH_REPO)",
-        "patch_storage=<(PATCH_STORAGE)",
-        "patch_issue=<(ISSUE)",
-        "patch_set=<(PATCHSET)",
-        "gs_bucket=skia-infra-gm"
-      ],
-      "isolate": "upload_dm_results.isolate",
-      "priority": 0.8
-    },
     "Upload-Test-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-Vulkan": {
       "dependencies": [
         "Test-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-Vulkan"
@@ -32429,33 +31941,6 @@
         "upload_dm_results",
         "repository=<(REPO)",
         "buildername=Test-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-Vulkan",
-        "swarm_out_dir=${ISOLATED_OUTDIR}",
-        "revision=<(REVISION)",
-        "patch_repo=<(PATCH_REPO)",
-        "patch_storage=<(PATCH_STORAGE)",
-        "patch_issue=<(ISSUE)",
-        "patch_set=<(PATCHSET)",
-        "gs_bucket=skia-infra-gm"
-      ],
-      "isolate": "upload_dm_results.isolate",
-      "priority": 0.8
-    },
-    "Upload-Test-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-Vulkan_Goma": {
-      "dependencies": [
-        "Test-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-Vulkan_Goma"
-      ],
-      "dimensions": [
-        "cpu:x86-64-Haswell_GCE",
-        "gpu:none",
-        "os:Debian-9.2",
-        "pool:Skia"
-      ],
-      "extra_args": [
-        "--workdir",
-        "../../..",
-        "upload_dm_results",
-        "repository=<(REPO)",
-        "buildername=Test-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-Vulkan_Goma",
         "swarm_out_dir=${ISOLATED_OUTDIR}",
         "revision=<(REVISION)",
         "patch_repo=<(PATCH_REPO)",

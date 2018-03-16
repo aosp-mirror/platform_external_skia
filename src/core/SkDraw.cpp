@@ -511,6 +511,9 @@ void SkDraw::drawPoints(SkCanvas::PointMode mode, size_t count,
                 n = MAX_DEV_PTS;
             }
             matrix->mapPoints(devPts, pts, n);
+            if (!SkScalarsAreFinite(&devPts[0].fX, n * 2)) {
+                return;
+            }
             proc(rec, devPts, n, bltr);
             pts += n - backup;
             SkASSERT(SkToInt(count) >= n);
@@ -1540,7 +1543,8 @@ void SkDraw::drawText(const char text[], size_t byteLength, SkScalar x, SkScalar
         return;
     }
 
-    SkAutoGlyphCache cache(paint, props, this->scalerContextFlags(), fMatrix);
+    auto cache = SkGlyphCache::FindOrCreateStrikeExclusive(
+            paint, props, this->scalerContextFlags(), fMatrix);
 
     // The Blitter Choose needs to be live while using the blitter below.
     SkAutoBlitterChoose    blitterChooser(fDst, *fMatrix, paint);
@@ -1571,7 +1575,8 @@ void SkDraw::drawPosText_asPaths(const char text[], size_t byteLength, const SkS
     SkPaint::GlyphCacheProc glyphCacheProc = SkPaint::GetGlyphCacheProc(paint.getTextEncoding(),
                                                                         paint.isDevKernText(),
                                                                         true);
-    SkAutoGlyphCache cache(paint, props, this->scalerContextFlags(), nullptr);
+    auto cache = SkGlyphCache::FindOrCreateStrikeExclusive(
+            paint, props, this->scalerContextFlags(), nullptr);
 
     const char*        stop = text + byteLength;
     SkTextAlignProc    alignProc(paint.getTextAlign());
@@ -1618,7 +1623,8 @@ void SkDraw::drawPosText(const char text[], size_t byteLength, const SkScalar po
         return;
     }
 
-    SkAutoGlyphCache cache(paint, props, this->scalerContextFlags(), fMatrix);
+    auto cache = SkGlyphCache::FindOrCreateStrikeExclusive(
+            paint, props, this->scalerContextFlags(), fMatrix);
 
     // The Blitter Choose needs to be live while using the blitter below.
     SkAutoBlitterChoose    blitterChooser(fDst, *fMatrix, paint);

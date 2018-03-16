@@ -138,17 +138,24 @@ public:
     // Returns true if the backend texture has been initialized.
     bool isValid() const { return fConfig != kUnknown_GrPixelConfig; }
 
+    /**
+     * Create a GrBackendFormat object that matches this texture
+     */
+    GrBackendFormat format() const;
+
     GrPixelConfig testingOnly_getPixelConfig() const;
 
 private:
     // Friending for access to the GrPixelConfig
     friend class SkImage;
+    friend class SkImage_Gpu;
     friend class SkSurface;
     friend class GrBackendTextureImageGenerator;
     friend class GrProxyProvider;
     friend class GrGpu;
     friend class GrGLGpu;
     friend class GrVkGpu;
+    friend class PromiseImageHelper;
     GrPixelConfig config() const { return fConfig; }
 
     int fWidth;         //<! width in pixels

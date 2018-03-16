@@ -28,6 +28,7 @@ public:
     ~SkImage_Gpu() override;
 
     SkImageInfo onImageInfo() const override;
+    SkColorType onColorType() const override;
     SkAlphaType onAlphaType() const override { return fAlphaType; }
 
     bool getROPixels(SkBitmap*, SkColorSpace* dstColorSpace, CachingHint) const override;
@@ -112,6 +113,12 @@ public:
                                              TextureFulfillProc textureFulfillProc,
                                              TextureReleaseProc textureReleaseProc,
                                              TextureContext textureContext);
+
+    /** Implementation of MakeFromYUVTexturesCopy and MakeFromNV12TexturesCopy */
+    static sk_sp<SkImage> MakeFromYUVTexturesCopyImpl(
+            GrContext* ctx, SkYUVColorSpace colorSpace, bool nv12,
+            const GrBackendTexture yuvBackendTextures[], GrSurfaceOrigin origin,
+            sk_sp<SkColorSpace> imageColorSpace);
 
     bool onIsValid(GrContext*) const override;
 
