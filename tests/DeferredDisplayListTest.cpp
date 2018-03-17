@@ -406,6 +406,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(DDLWrapBackendTest, reporter, ctxInfo) {
 
 static void dummy_fulfill_proc(void*, GrBackendTexture*) { SkASSERT(0); }
 static void dummy_release_proc(void*) { SkASSERT(0); }
+static void dummy_done_proc(void*) { SkASSERT(0); }
 
 // Test out the behavior of an invalid DDLRecorder
 DEF_GPUTEST_FOR_RENDERING_CONTEXTS(DDLInvalidRecorder, reporter, ctxInfo) {
@@ -439,11 +440,28 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(DDLInvalidRecorder, reporter, ctxInfo) {
                                                            kPremul_SkAlphaType, nullptr,
                                                            dummy_fulfill_proc,
                                                            dummy_release_proc,
+                                                           dummy_done_proc,
                                                            nullptr);
         REPORTER_ASSERT(reporter, !image);
     }
 
 }
 
+// Ensure that flushing while DDL recording doesn't cause a crash
+DEF_GPUTEST_FOR_RENDERING_CONTEXTS(DDLFlushWhileRecording, reporter, ctxInfo) {
+    GrContext* context = ctxInfo.grContext();
+
+    SkImageInfo ii = SkImageInfo::MakeN32Premul(32, 32);
+    sk_sp<SkSurface> s = SkSurface::MakeRenderTarget(context, SkBudgeted::kNo, ii);
+
+    SkSurfaceCharacterization characterization;
+    SkAssertResult(s->characterize(&characterization));
+
+    SkDeferredDisplayListRecorder recorder(characterization);
+    SkCanvas* canvas = recorder.getCanvas();
+
+    canvas->flush();
+    canvas->getGrContext()->flush();
+}
 
 #endif

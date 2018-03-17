@@ -55,11 +55,10 @@ public:
 
             "layout(set = 1, binding = 0) uniform sampler2D uTextureSampler;"
             "layout(location = 1) in half2 vTexCoord;"
-            "layout(location = 0, index = 0) out half4 fsColorOut;"
 
             "// Copy Program FS\n"
             "void main() {"
-            "fsColorOut = texture(uTextureSampler, vTexCoord);"
+            "sk_FragColor = texture(uTextureSampler, vTexCoord);"
             "}";
 
         SkSL::Program::Settings settings;
@@ -178,10 +177,6 @@ public:
 DEF_GPUTEST_FOR_VULKAN_CONTEXT(VkMakeCopyPipelineTest, reporter, ctxInfo) {
     GrContext* context = ctxInfo.grContext();
     GrVkGpu* gpu = static_cast<GrVkGpu*>(context->contextPriv().getGpu());
-
-    if (!gpu->vkCaps().supportsCopiesAsDraws()) {
-        return;
-    }
 
     TestVkCopyProgram copyProgram;
     copyProgram.test(gpu, reporter);
