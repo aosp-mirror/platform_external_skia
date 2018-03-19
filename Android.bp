@@ -1734,6 +1734,7 @@ cc_test {
         "tests/TextBlobCacheTest.cpp",
         "tests/TextBlobTest.cpp",
         "tests/TextureProxyTest.cpp",
+        "tests/TextureStripAtlasManagerTest.cpp",
         "tests/Time.cpp",
         "tests/ToSRGBColorFilter.cpp",
         "tests/TopoSortTest.cpp",
