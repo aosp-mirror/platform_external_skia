@@ -40,11 +40,13 @@ void SkPathMeasure_segTo(const SkPoint pts[], unsigned segType,
     SkASSERT(startT <= stopT);
 
     if (startT == stopT) {
-        /* if the dash as a zero-length on segment, add a corresponding zero-length line.
-           The stroke code will add end caps to zero length lines as appropriate */
-        SkPoint lastPt;
-        SkAssertResult(dst->getLastPt(&lastPt));
-        dst->lineTo(lastPt);
+        if (!dst->isEmpty()) {
+            /* if the dash as a zero-length on segment, add a corresponding zero-length line.
+               The stroke code will add end caps to zero length lines as appropriate */
+            SkPoint lastPt;
+            SkAssertResult(dst->getLastPt(&lastPt));
+            dst->lineTo(lastPt);
+        }
         return;
     }
 
@@ -667,7 +669,7 @@ bool SkPathMeasure::getSegment(SkScalar startD, SkScalar stopD, SkPath* dst,
 }
 
 bool SkPathMeasure::isClosed() {
-    (void)this->getLength();
+    (void)this->getLength();    // make sure we measure the current contour
     return fIsClosed;
 }
 
@@ -675,7 +677,8 @@ bool SkPathMeasure::isClosed() {
     we're done with the path.
 */
 bool SkPathMeasure::nextContour() {
-    fLength = -1;
+    (void)this->getLength();    // make sure we measure the current contour
+    fLength = -1;               // now signal that we should build the next set of segments
     return this->getLength() > 0;
 }
 

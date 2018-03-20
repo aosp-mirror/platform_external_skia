@@ -39,11 +39,12 @@ void GrTextureStripAtlasManager::abandon() {
     this->deleteAllAtlases();
 }
 
-GrTextureStripAtlas* GrTextureStripAtlasManager::getAtlas(const GrTextureStripAtlas::Desc& desc) {
+sk_sp<GrTextureStripAtlas> GrTextureStripAtlasManager::refAtlas(
+                                                          const GrTextureStripAtlas::Desc& desc) {
     AtlasEntry* entry = fAtlasCache.find(desc);
     if (!entry) {
         // TODO: Does the AtlasEntry need a copy of the Desc if the GrTextureStripAtlas has one?
-        entry = new AtlasEntry(desc, new GrTextureStripAtlas(desc));
+        entry = new AtlasEntry(desc, sk_sp<GrTextureStripAtlas>(new GrTextureStripAtlas(desc)));
 
         fAtlasCache.add(entry);
     }
@@ -219,7 +220,7 @@ void GrTextureStripAtlas::lockTexture(GrContext* context) {
         texDesc.fConfig = fDesc.fConfig;
 
         proxy = proxyProvider->createProxy(texDesc, kTopLeft_GrSurfaceOrigin, SkBackingFit::kExact,
-                                           SkBudgeted::kYes, GrResourceProvider::kNoPendingIO_Flag);
+                                           SkBudgeted::kYes, GrInternalSurfaceFlags::kNoPendingIO);
         if (!proxy) {
             return;
         }
