@@ -350,24 +350,18 @@ sk_sp<SkImage> SkImage::MakeFromTexture(GrContext* ctx,
 
 sk_sp<SkImage> SkImage::MakeFromAdoptedTexture(GrContext* ctx,
                                                const GrBackendTexture& tex, GrSurfaceOrigin origin,
-                                               SkAlphaType at, sk_sp<SkColorSpace> cs) {
-    if (!ctx->contextPriv().resourceProvider()) {
+                                               SkColorType ct, SkAlphaType at,
+                                               sk_sp<SkColorSpace> cs) {
+    if (!ctx || !ctx->contextPriv().resourceProvider()) {
         // We have a DDL context and we don't support adopted textures for them.
         return nullptr;
     }
-    return new_wrapped_texture_common(ctx, tex, origin, at, std::move(cs), kAdopt_GrWrapOwnership,
-                                      nullptr, nullptr);
-}
-
-sk_sp<SkImage> SkImage::MakeFromAdoptedTexture(GrContext* ctx,
-                                               const GrBackendTexture& tex, GrSurfaceOrigin origin,
-                                               SkColorType ct, SkAlphaType at,
-                                               sk_sp<SkColorSpace> cs) {
     GrBackendTexture texCopy = tex;
     if (!validate_backend_texture(ctx, texCopy, &texCopy.fConfig, ct, at, cs)) {
         return nullptr;
     }
-    return MakeFromAdoptedTexture(ctx, texCopy, origin, at, cs);
+    return new_wrapped_texture_common(ctx, texCopy, origin, at, std::move(cs),
+                                      kAdopt_GrWrapOwnership, nullptr, nullptr);
 }
 
 sk_sp<SkImage> SkImage_Gpu::MakeFromYUVTexturesCopyImpl(
@@ -383,12 +377,9 @@ sk_sp<SkImage> SkImage_Gpu::MakeFromYUVTexturesCopyImpl(
     };
     auto ct = nv12 ? kRGBA_8888_SkColorType : kAlpha_8_SkColorType;
     for (int i = 0; i < (nv12 ? 2 : 3); ++i) {
-        if (yuvBackendTextures[i].fConfig == kUnknown_GrPixelConfig) {
-            if (!validate_backend_texture(ctx, yuvBackendTextures[i],
-                                          &yuvBackendTextures[i].fConfig, ct, kPremul_SkAlphaType,
-                                          nullptr)) {
-                return nullptr;
-            }
+        if (!validate_backend_texture(ctx, yuvBackendTextures[i], &yuvBackendTextures[i].fConfig,
+                                      ct, kPremul_SkAlphaType, nullptr)) {
+            return nullptr;
         }
     }
     sk_sp<GrTextureProxy> yProxy = proxyProvider->wrapBackendTexture(yuvBackendTextures[0], origin);

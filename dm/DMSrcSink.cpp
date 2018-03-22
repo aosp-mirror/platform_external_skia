@@ -1881,7 +1881,8 @@ Error GPUSink::onDraw(const Src& src, SkBitmap* dst, SkWStream*, SkString* log,
         canvas->getGrContext()->contextPriv().dumpGpuStats(log);
 #endif
     }
-    if (info.colorType() == kRGB_565_SkColorType || info.colorType() == kARGB_4444_SkColorType) {
+    if (info.colorType() == kRGB_565_SkColorType || info.colorType() == kARGB_4444_SkColorType ||
+        info.colorType() == kRGB_888x_SkColorType) {
         // We don't currently support readbacks into these formats on the GPU backend. Convert to
         // 32 bit.
         info = SkImageInfo::Make(size.width(), size.height(), kRGBA_8888_SkColorType,
@@ -2091,6 +2092,7 @@ Error SVGSink::draw(const Src& src, SkBitmap*, SkWStream* dst, SkString*) const 
                                       xmlWriter.get())
                             .get());
 #else
+    (void)fPageIndex;
     return Error("SVG sink is disabled.");
 #endif // SK_XML
 }
