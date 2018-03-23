@@ -84,8 +84,8 @@ sk_sp<GrTextureProxy> GrUploadBitmapToTextureProxy(GrProxyProvider* proxyProvide
     // In non-ddl we will always instantiate right away. Thus we never want to copy the SkBitmap
     // even if it's mutable. In ddl, if the bitmap is mutable then we must make a copy since the
     // upload of the data to the gpu can happen at anytime and the bitmap may change by then.
-    SkCopyPixelsMode cpyMode = proxyProvider->mutableBitmapsNeedCopy() ? kIfMutable_SkCopyPixelsMode
-                                                                       : kNever_SkCopyPixelsMode;
+    SkCopyPixelsMode cpyMode = proxyProvider->recordingDDL() ? kIfMutable_SkCopyPixelsMode
+                                                             : kNever_SkCopyPixelsMode;
     sk_sp<SkImage> image = SkMakeImageFromRasterBitmap(bitmap, cpyMode);
 
     return proxyProvider->createTextureProxy(std::move(image), kNone_GrSurfaceFlags, 1,
@@ -160,8 +160,8 @@ sk_sp<GrTextureProxy> GrMakeCachedBitmapProxy(GrProxyProvider* proxyProvider,
     // In non-ddl we will always instantiate right away. Thus we never want to copy the SkBitmap
     // even if its mutable. In ddl, if the bitmap is mutable then we must make a copy since the
     // upload of the data to the gpu can happen at anytime and the bitmap may change by then.
-    SkCopyPixelsMode cpyMode = proxyProvider->mutableBitmapsNeedCopy() ? kIfMutable_SkCopyPixelsMode
-                                                                       : kNever_SkCopyPixelsMode;
+    SkCopyPixelsMode cpyMode = proxyProvider->recordingDDL() ? kIfMutable_SkCopyPixelsMode
+                                                             : kNever_SkCopyPixelsMode;
     sk_sp<SkImage> image = SkMakeImageFromRasterBitmap(bitmap, cpyMode);
 
     if (!image) {
@@ -205,7 +205,10 @@ sk_sp<GrTextureProxy> GrMakeCachedImageProxy(GrProxyProvider* proxyProvider,
                                                   SkBudgeted::kYes, fit);
         if (proxy && originalKey.isValid()) {
             proxyProvider->assignUniqueKeyToProxy(originalKey, proxy.get());
-            if (const SkBitmap* bm = as_IB(srcImage.get())->onPeekBitmap()) {
+            const SkBitmap* bm = as_IB(srcImage.get())->onPeekBitmap();
+            // When recording DDLs we do not want to install change listeners because doing
+            // so isn't threadsafe.
+            if (bm && !proxyProvider->recordingDDL()) {
                 GrInstallBitmapUniqueKeyInvalidator(originalKey, bm->pixelRef());
             }
         }
@@ -261,7 +264,7 @@ GrPixelConfig SkImageInfo2GrPixelConfig(const SkColorType type, SkColorSpace* cs
         // TODO: We're checking for srgbSupport, but we can then end up picking sBGRA as our pixel
         // config (which may not be supported). We need a better test here.
         case kRGB_888x_SkColorType:
-            return kUnknown_GrPixelConfig;
+            return kRGB_888_GrPixelConfig;
         case kBGRA_8888_SkColorType:
             return (caps.srgbSupport() && cs && cs->gammaCloseToSRGB())
                    ? kSBGRA_8888_GrPixelConfig : kBGRA_8888_GrPixelConfig;
@@ -283,49 +286,14 @@ GrPixelConfig SkImageInfo2GrPixelConfig(const SkImageInfo& info, const GrCaps& c
 }
 
 bool GrPixelConfigToColorType(GrPixelConfig config, SkColorType* ctOut) {
-    SkColorType ct;
-    switch (config) {
-        case kAlpha_8_GrPixelConfig: // fall through
-        case kAlpha_8_as_Alpha_GrPixelConfig: // fall through
-        case kAlpha_8_as_Red_GrPixelConfig:
-            ct = kAlpha_8_SkColorType;
-            break;
-        case kGray_8_GrPixelConfig: // fall through
-        case kGray_8_as_Lum_GrPixelConfig: // fall through
-        case kGray_8_as_Red_GrPixelConfig:
-            ct = kGray_8_SkColorType;
-            break;
-        case kRGB_565_GrPixelConfig:
-            ct = kRGB_565_SkColorType;
-            break;
-        case kRGBA_4444_GrPixelConfig:
-            ct = kARGB_4444_SkColorType;
-            break;
-        case kRGBA_8888_GrPixelConfig:
-            ct = kRGBA_8888_SkColorType;
-            break;
-        case kBGRA_8888_GrPixelConfig:
-            ct = kBGRA_8888_SkColorType;
-            break;
-        case kSRGBA_8888_GrPixelConfig:
-            ct = kRGBA_8888_SkColorType;
-            break;
-        case kSBGRA_8888_GrPixelConfig:
-            ct = kBGRA_8888_SkColorType;
-            break;
-        case kRGBA_1010102_GrPixelConfig:
-            ct = kRGBA_1010102_SkColorType;
-            break;
-        case kRGBA_half_GrPixelConfig:
-            ct = kRGBA_F16_SkColorType;
-            break;
-        default:
-            return false;
+    SkColorType ct = GrColorTypeToSkColorType(GrPixelConfigToColorType(config));
+    if (kUnknown_SkColorType != ct) {
+        if (ctOut) {
+            *ctOut = ct;
+        }
+        return true;
     }
-    if (ctOut) {
-        *ctOut = ct;
-    }
-    return true;
+    return false;
 }
 
 GrPixelConfig GrRenderableConfigForColorSpace(const SkColorSpace* colorSpace) {

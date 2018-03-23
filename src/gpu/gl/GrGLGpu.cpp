@@ -776,7 +776,7 @@ bool GrGLGpu::onWritePixels(GrSurface* surface, GrSurfaceOrigin origin, int left
                                srcAsConfig, texels, mipLevelCount);
 }
 
-// For GL_[UN]PACK_ALIGNMENT.
+// For GL_[UN]PACK_ALIGNMENT. TODO: This really wants to be GrColorType.
 static inline GrGLint config_alignment(GrPixelConfig config) {
     switch (config) {
         case kAlpha_8_GrPixelConfig:
@@ -793,6 +793,7 @@ static inline GrGLint config_alignment(GrPixelConfig config) {
         case kRGBA_half_GrPixelConfig:
             return 2;
         case kRGBA_8888_GrPixelConfig:
+        case kRGB_888_GrPixelConfig:  // We're really talking about GrColorType::kRGB_888x here.
         case kBGRA_8888_GrPixelConfig:
         case kSRGBA_8888_GrPixelConfig:
         case kSBGRA_8888_GrPixelConfig:
@@ -4551,30 +4552,6 @@ GrGLAttribArrayState* GrGLGpu::HWVertexArrayState::bindInternalVertexArray(GrGLG
         attribState = &fDefaultVertexArrayAttribState;
     }
     return attribState;
-}
-
-bool GrGLGpu::onIsACopyNeededForTextureParams(GrTextureProxy* proxy,
-                                              const GrSamplerState& textureParams,
-                                              GrTextureProducer::CopyParams* copyParams,
-                                              SkScalar scaleAdjust[2]) const {
-    const GrTexture* texture = proxy->priv().peekTexture();
-    if (!texture) {
-        // The only way to get and EXTERNAL or RECTANGLE texture in Ganesh is to wrap them.
-        // In that case the proxy should already be instantiated.
-        return false;
-    }
-
-    if (textureParams.isRepeated() || GrSamplerState::Filter::kMipMap == textureParams.filter()) {
-        const GrGLTexture* glTexture = static_cast<const GrGLTexture*>(texture);
-        if (GR_GL_TEXTURE_EXTERNAL == glTexture->target() ||
-            GR_GL_TEXTURE_RECTANGLE == glTexture->target()) {
-            copyParams->fFilter = GrSamplerState::Filter::kNearest;
-            copyParams->fWidth = texture->width();
-            copyParams->fHeight = texture->height();
-            return true;
-        }
-    }
-    return false;
 }
 
 void GrGLGpu::onFinishFlush(bool insertedSemaphore) {

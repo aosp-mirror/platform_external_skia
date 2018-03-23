@@ -303,7 +303,7 @@ opts("sse42") {
 opts("avx") {
   enabled = is_x86
   sources = skia_opts.avx_sources
-  if (!is_clang && is_win) {
+  if (is_win) {
     cflags = [ "/arch:AVX" ]
   } else {
     cflags = [ "-mavx" ]
@@ -313,14 +313,10 @@ opts("avx") {
 opts("hsw") {
   enabled = is_x86
   sources = skia_opts.hsw_sources
-  if (!is_clang && is_win) {
+  if (is_win) {
     cflags = [ "/arch:AVX2" ]
   } else {
-    cflags = [
-      "-mavx2",
-      "-mf16c",
-      "-mfma",
-    ]
+    cflags = [ "-march=haswell" ]
   }
 
   # Oddly, clang-cl doesn't recognize this as a valid flag.
@@ -1281,7 +1277,11 @@ if (skia_enable_tools) {
       "tools/debugger/SkObjectParser.cpp",
       "tools/fonts/SkRandomScalerContext.cpp",
       "tools/fonts/SkTestFontMgr.cpp",
-      "tools/fonts/SkTestScalerContext.cpp",
+      "tools/fonts/SkTestFontMgr.h",
+      "tools/fonts/SkTestSVGTypeface.cpp",
+      "tools/fonts/SkTestSVGTypeface.h",
+      "tools/fonts/SkTestTypeface.cpp",
+      "tools/fonts/SkTestTypeface.h",
       "tools/fonts/sk_tool_utils_font.cpp",
       "tools/picture_utils.cpp",
       "tools/random_parse_path.cpp",
@@ -1301,6 +1301,7 @@ if (skia_enable_tools) {
     }
     deps = [
       ":common_flags",
+      ":experimental_svg_model",
       ":flags",
       "//third_party/libpng",
     ]
@@ -1331,15 +1332,13 @@ if (skia_enable_tools) {
     }
     deps = [
       ":experimental_sksg",
+      ":experimental_svg_model",
       ":flags",
       ":skia",
       ":tool_utils",
       "//third_party/libpng",
       "//third_party/zlib",
     ]
-    if (skia_use_expat) {
-      deps += [ ":experimental_svg_model" ]
-    }
     public_deps = [
       ":gpu_tool_utils",  # Test.h #includes headers from this target.
     ]
@@ -1375,35 +1374,39 @@ if (skia_enable_tools) {
   }
 
   test_lib("experimental_svg_model") {
-    public_include_dirs = [ "experimental/svg/model" ]
-    sources = [
-      "experimental/svg/model/SkSVGAttribute.cpp",
-      "experimental/svg/model/SkSVGAttributeParser.cpp",
-      "experimental/svg/model/SkSVGCircle.cpp",
-      "experimental/svg/model/SkSVGClipPath.cpp",
-      "experimental/svg/model/SkSVGContainer.cpp",
-      "experimental/svg/model/SkSVGDOM.cpp",
-      "experimental/svg/model/SkSVGEllipse.cpp",
-      "experimental/svg/model/SkSVGGradient.cpp",
-      "experimental/svg/model/SkSVGLine.cpp",
-      "experimental/svg/model/SkSVGLinearGradient.cpp",
-      "experimental/svg/model/SkSVGNode.cpp",
-      "experimental/svg/model/SkSVGPath.cpp",
-      "experimental/svg/model/SkSVGPattern.cpp",
-      "experimental/svg/model/SkSVGPoly.cpp",
-      "experimental/svg/model/SkSVGRadialGradient.cpp",
-      "experimental/svg/model/SkSVGRect.cpp",
-      "experimental/svg/model/SkSVGRenderContext.cpp",
-      "experimental/svg/model/SkSVGSVG.cpp",
-      "experimental/svg/model/SkSVGShape.cpp",
-      "experimental/svg/model/SkSVGStop.cpp",
-      "experimental/svg/model/SkSVGTransformableNode.cpp",
-      "experimental/svg/model/SkSVGUse.cpp",
-      "experimental/svg/model/SkSVGValue.cpp",
-    ]
-    deps = [
-      ":skia",
-    ]
+    public_include_dirs = []
+    if (skia_use_expat) {
+      public_include_dirs += [ "experimental/svg/model" ]
+      sources = [
+        "experimental/svg/model/SkSVGAttribute.cpp",
+        "experimental/svg/model/SkSVGAttributeParser.cpp",
+        "experimental/svg/model/SkSVGCircle.cpp",
+        "experimental/svg/model/SkSVGClipPath.cpp",
+        "experimental/svg/model/SkSVGContainer.cpp",
+        "experimental/svg/model/SkSVGDOM.cpp",
+        "experimental/svg/model/SkSVGEllipse.cpp",
+        "experimental/svg/model/SkSVGGradient.cpp",
+        "experimental/svg/model/SkSVGLine.cpp",
+        "experimental/svg/model/SkSVGLinearGradient.cpp",
+        "experimental/svg/model/SkSVGNode.cpp",
+        "experimental/svg/model/SkSVGPath.cpp",
+        "experimental/svg/model/SkSVGPattern.cpp",
+        "experimental/svg/model/SkSVGPoly.cpp",
+        "experimental/svg/model/SkSVGRadialGradient.cpp",
+        "experimental/svg/model/SkSVGRect.cpp",
+        "experimental/svg/model/SkSVGRenderContext.cpp",
+        "experimental/svg/model/SkSVGSVG.cpp",
+        "experimental/svg/model/SkSVGShape.cpp",
+        "experimental/svg/model/SkSVGStop.cpp",
+        "experimental/svg/model/SkSVGTransformableNode.cpp",
+        "experimental/svg/model/SkSVGUse.cpp",
+        "experimental/svg/model/SkSVGValue.cpp",
+      ]
+      deps = [
+        ":skia",
+        ":xml",
+      ]
+    }
   }
 
   test_lib("experimental_sksg") {
@@ -1666,6 +1669,17 @@ if (skia_enable_tools) {
     assert_no_deps = [
       # tool_utils requires the output of this app.
       ":tool_utils",
+    ]
+  }
+
+  test_app("create_test_font_color") {
+    sources = [
+      "tools/fonts/create_test_font_color.cpp",
+    ]
+    deps = [
+      ":flags",
+      ":skia",
+      ":tool_utils"
     ]
   }
 

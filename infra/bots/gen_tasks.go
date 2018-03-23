@@ -303,11 +303,6 @@ func defaultSwarmDimensions(parts map[string]string) []string {
 				}
 				d["gpu"] = gpu
 
-				// TODO(dogben): Upgrade QuadroP400 drivers on Win2k8.
-				if parts["os"] == "Win2k8" && parts["cpu_or_gpu_value"] == "QuadroP400" {
-					d["gpu"] = "10de:1cb3-22.21.13.8205"
-				}
-
 				// Specify cpu dimension for NUCs and ShuttleCs. We temporarily have two
 				// types of machines with a GTX960.
 				cpu, ok := map[string]string{
@@ -673,7 +668,7 @@ func updateMetaConfig(b *specs.TasksCfgBuilder, name string) string {
 // generated chain of tasks, which the Job should add as a dependency.
 func ctSKPs(b *specs.TasksCfgBuilder, name string) string {
 	b.MustAddTask(name, &specs.TaskSpec{
-		CipdPackages: []*specs.CipdPackage{},
+		CipdPackages: []*specs.CipdPackage{b.MustGetCipdPackageFromAsset("clang_linux")},
 		Dimensions: []string{
 			"pool:SkiaCT",
 			fmt.Sprintf("os:%s", DEFAULT_OS_LINUX_GCE),

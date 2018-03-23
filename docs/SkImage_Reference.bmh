@@ -355,29 +355,6 @@ for (int quality : { 100, 50, 10, 1} ) {
 #Method static sk_sp<SkImage> MakeFromTexture(GrContext* context,
                                           const GrBackendTexture& backendTexture,
                                           GrSurfaceOrigin origin,
-                                          SkAlphaType alphaType,
-                                          sk_sp<SkColorSpace> colorSpace)
-#Deprecated
-#Method ##
-
-# ------------------------------------------------------------------------------
-
-#Method static sk_sp<SkImage> MakeFromTexture(GrContext* context,
-                                          const GrBackendTexture& backendTexture,
-                                          GrSurfaceOrigin origin,
-                                          SkAlphaType alphaType,
-                                          sk_sp<SkColorSpace> colorSpace,
-                                          TextureReleaseProc textureReleaseProc,
-                                          ReleaseContext releaseContext)
-
-#Deprecated
-#Method ##
-
-# ------------------------------------------------------------------------------
-
-#Method static sk_sp<SkImage> MakeFromTexture(GrContext* context,
-                                          const GrBackendTexture& backendTexture,
-                                          GrSurfaceOrigin origin,
                                           SkColorType colorType,
                                           SkAlphaType alphaType,
                                           sk_sp<SkColorSpace> colorSpace)
@@ -578,16 +555,6 @@ if (source.peekPixels(&pixmap)) {
 
 #SeeAlso MakeCrossContextFromEncoded
 
-#Method ##
-
-# ------------------------------------------------------------------------------
-
-#Method static sk_sp<SkImage> MakeFromAdoptedTexture(GrContext* context,
-                                                 const GrBackendTexture& backendTexture,
-                                                 GrSurfaceOrigin surfaceOrigin,
-                                                 SkAlphaType alphaType = kPremul_SkAlphaType,
-                                                 sk_sp<SkColorSpace> colorSpace = nullptr)
-#Deprecated
 #Method ##
 
 # ------------------------------------------------------------------------------
@@ -1285,7 +1252,8 @@ auto drawImage = [=](sk_sp<SkImage> image, const char* label) -> void {
 };
 sk_sp<SkImage> bitmapImage(SkImage::MakeFromBitmap(source));
 sk_sp<SkImage> textureImage(SkImage::MakeFromTexture(canvas->getGrContext(), backEndTexture,
-                            kTopLeft_GrSurfaceOrigin, kOpaque_SkAlphaType, nullptr));
+                            kTopLeft_GrSurfaceOrigin, kN32_SkColorType, kOpaque_SkAlphaType,
+                            nullptr));
 drawImage(image, "image");
 canvas->translate(image->width(), 0);
 drawImage(bitmapImage, "source");
@@ -1335,7 +1303,8 @@ auto drawImage = [=](sk_sp<SkImage> image, const char* label) -> void {
 };
 sk_sp<SkImage> bitmapImage(SkImage::MakeFromBitmap(source));
 sk_sp<SkImage> textureImage(SkImage::MakeFromTexture(canvas->getGrContext(), backEndTexture,
-                            kTopLeft_GrSurfaceOrigin, kOpaque_SkAlphaType, nullptr));
+                            kTopLeft_GrSurfaceOrigin, kN32_SkColorType, kOpaque_SkAlphaType,
+                            nullptr));
 drawImage(image, "image");
 canvas->translate(image->width(), 0);
 drawImage(bitmapImage, "source");
@@ -1379,7 +1348,7 @@ SkString str;
 int y = -10;
 for (auto origin : { kTopLeft_GrSurfaceOrigin, kBottomLeft_GrSurfaceOrigin } ) {
     sk_sp<SkImage> srcImage(SkImage::MakeFromTexture(context,
-            backEndTexture, origin, kPremul_SkAlphaType, nullptr));
+            backEndTexture, origin, kN32_SkColorType, kPremul_SkAlphaType, nullptr));
     GrSurfaceOrigin readBackOrigin;
     GrBackendObject readBackHandle = srcImage->getTextureHandle(false, &readBackOrigin);
     str.printf("readBackHandle: 0x%lx", readBackHandle);
@@ -1410,7 +1379,8 @@ for (auto origin : { kTopLeft_GrSurfaceOrigin, kBottomLeft_GrSurfaceOrigin } ) {
     drawImage(image, "image");
     canvas->translate(image->width(), 0);
     sk_sp<SkImage> textureImage(SkImage::MakeFromTexture(canvas->getGrContext(), backEndTexture,
-                                kTopLeft_GrSurfaceOrigin, kOpaque_SkAlphaType, nullptr));
+                                kTopLeft_GrSurfaceOrigin, kN32_SkColorType, kOpaque_SkAlphaType,
+                                nullptr));
     drawImage(textureImage, "backEndTexture");
 ##
 
@@ -1755,7 +1725,8 @@ Returns nullptr if Image contents are not encoded.
         sk_sp<SkImage> image;
     } tests[] = { { "image", image }, { "bitmap", SkImage::MakeFromBitmap(source) },
           { "texture", SkImage::MakeFromTexture(canvas->getGrContext(), backEndTexture,
-                            kTopLeft_GrSurfaceOrigin, kOpaque_SkAlphaType, nullptr) } };
+                            kTopLeft_GrSurfaceOrigin, kN32_SkColorType, kOpaque_SkAlphaType,
+                            nullptr) } };
     SkString string;
     SkPaint paint;
     for (const auto& test : tests ) {
@@ -1796,7 +1767,8 @@ whether the image is opaque.
         sk_sp<SkImage> image;
     } tests[] = { { "image", image }, { "bitmap", SkImage::MakeFromBitmap(source) },
           { "texture", SkImage::MakeFromTexture(canvas->getGrContext(), backEndTexture,
-                            kTopLeft_GrSurfaceOrigin, kOpaque_SkAlphaType, nullptr) } };
+                            kTopLeft_GrSurfaceOrigin, kN32_SkColorType, kOpaque_SkAlphaType,
+                            nullptr) } };
     SkString string;
     SkPaint paint;
     for (const auto& test : tests ) {
@@ -1877,7 +1849,8 @@ GrContext.
     sk_sp<SkImage> bitmapImage(SkImage::MakeFromBitmap(source));
     GrContext* context = canvas->getGrContext();
     sk_sp<SkImage> textureImage(SkImage::MakeFromTexture(context, backEndTexture,
-                                kTopLeft_GrSurfaceOrigin, kOpaque_SkAlphaType, nullptr));
+                                kTopLeft_GrSurfaceOrigin, kN32_SkColorType, kOpaque_SkAlphaType,
+                                nullptr));
     drawImage(image, context, "image");
     canvas->translate(image->width(), 0);
     drawImage(bitmapImage, context, "source");
@@ -1918,7 +1891,8 @@ Returns nullptr if backed by GPU_Texture and copy fails.
     };
     sk_sp<SkImage> bitmapImage(SkImage::MakeFromBitmap(source));
     sk_sp<SkImage> textureImage(SkImage::MakeFromTexture(canvas->getGrContext(), backEndTexture,
-                                kTopLeft_GrSurfaceOrigin, kOpaque_SkAlphaType, nullptr));
+                                kTopLeft_GrSurfaceOrigin, kN32_SkColorType, kOpaque_SkAlphaType,
+                                nullptr));
     drawImage(image, "image");
     canvas->translate(image->width(), 0);
     drawImage(bitmapImage, "source");
@@ -1960,7 +1934,8 @@ Returns nullptr if copy, decode, or pixel read fails.
     };
     sk_sp<SkImage> bitmapImage(SkImage::MakeFromBitmap(source));
     sk_sp<SkImage> textureImage(SkImage::MakeFromTexture(canvas->getGrContext(), backEndTexture,
-                                kTopLeft_GrSurfaceOrigin, kOpaque_SkAlphaType, nullptr));
+                                kTopLeft_GrSurfaceOrigin, kN32_SkColorType, kOpaque_SkAlphaType,
+                                nullptr));
     drawImage(image, "image");
     canvas->translate(image->width(), 0);
     drawImage(bitmapImage, "source");
@@ -2155,7 +2130,8 @@ Bitmap write did not succeed.
         return;
     }
     sk_sp<SkImage> textureImage(SkImage::MakeFromTexture(grContext, backEndTexture,
-                                kTopLeft_GrSurfaceOrigin, kOpaque_SkAlphaType, nullptr));
+                                kTopLeft_GrSurfaceOrigin, kN32_SkColorType, kOpaque_SkAlphaType,
+                                nullptr));
     canvas->drawImage(textureImage, 45, 45);
     if (textureImage->asLegacyBitmap(&bitImage, SkImage::kRO_LegacyBitmapMode)) {
         canvas->drawBitmap(bitImage, 90, 90);
@@ -2227,7 +2203,8 @@ void draw(SkCanvas* canvas) {
     };
     sk_sp<SkImage> bitmapImage(SkImage::MakeFromBitmap(source));
     sk_sp<SkImage> textureImage(SkImage::MakeFromTexture(canvas->getGrContext(), backEndTexture,
-                                kTopLeft_GrSurfaceOrigin, kOpaque_SkAlphaType, nullptr));
+                                kTopLeft_GrSurfaceOrigin, kN32_SkColorType, kOpaque_SkAlphaType,
+                                nullptr));
     drawImage(image, "image");
     canvas->translate(image->width(), 0);
     drawImage(bitmapImage, "source");

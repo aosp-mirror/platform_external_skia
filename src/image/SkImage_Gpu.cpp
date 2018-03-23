@@ -28,6 +28,7 @@
 #include "GrTexture.h"
 #include "GrTexturePriv.h"
 #include "GrTextureProxy.h"
+#include "gl/GrGLDefines.h"
 #include "effects/GrNonlinearColorSpaceXformEffect.h"
 #include "effects/GrYUVtoRGBEffect.h"
 #include "SkCanvas.h"
@@ -320,17 +321,6 @@ static sk_sp<SkImage> new_wrapped_texture_common(GrContext* ctx,
                                    at, std::move(proxy), std::move(colorSpace), SkBudgeted::kNo);
 }
 
-sk_sp<SkImage> SkImage::MakeFromTexture(GrContext* ctx,
-                                        const GrBackendTexture& tex, GrSurfaceOrigin origin,
-                                        SkAlphaType at, sk_sp<SkColorSpace> cs,
-                                        TextureReleaseProc releaseP, ReleaseContext releaseC) {
-    if (!ctx) {
-        return nullptr;
-    }
-    return new_wrapped_texture_common(ctx, tex, origin, at, std::move(cs), kBorrow_GrWrapOwnership,
-                                      releaseP, releaseC);
-}
-
 bool validate_backend_texture(GrContext* ctx, const GrBackendTexture& tex, GrPixelConfig* config,
                               SkColorType ct, SkAlphaType at, sk_sp<SkColorSpace> cs) {
     // TODO: Create a SkImageColorInfo struct for color, alpha, and color space so we don't need to
@@ -354,29 +344,24 @@ sk_sp<SkImage> SkImage::MakeFromTexture(GrContext* ctx,
     if (!validate_backend_texture(ctx, texCopy, &texCopy.fConfig, ct, at, cs)) {
         return nullptr;
     }
-    return MakeFromTexture(ctx, texCopy, origin, at, cs, releaseP, releaseC);
-}
-
-sk_sp<SkImage> SkImage::MakeFromAdoptedTexture(GrContext* ctx,
-                                               const GrBackendTexture& tex, GrSurfaceOrigin origin,
-                                               SkAlphaType at, sk_sp<SkColorSpace> cs) {
-    if (!ctx->contextPriv().resourceProvider()) {
-        // We have a DDL context and we don't support adopted textures for them.
-        return nullptr;
-    }
-    return new_wrapped_texture_common(ctx, tex, origin, at, std::move(cs), kAdopt_GrWrapOwnership,
-                                      nullptr, nullptr);
+    return new_wrapped_texture_common(ctx, texCopy, origin, at, std::move(cs),
+                                      kBorrow_GrWrapOwnership, releaseP, releaseC);
 }
 
 sk_sp<SkImage> SkImage::MakeFromAdoptedTexture(GrContext* ctx,
                                                const GrBackendTexture& tex, GrSurfaceOrigin origin,
                                                SkColorType ct, SkAlphaType at,
                                                sk_sp<SkColorSpace> cs) {
+    if (!ctx || !ctx->contextPriv().resourceProvider()) {
+        // We have a DDL context and we don't support adopted textures for them.
+        return nullptr;
+    }
     GrBackendTexture texCopy = tex;
     if (!validate_backend_texture(ctx, texCopy, &texCopy.fConfig, ct, at, cs)) {
         return nullptr;
     }
-    return MakeFromAdoptedTexture(ctx, texCopy, origin, at, cs);
+    return new_wrapped_texture_common(ctx, texCopy, origin, at, std::move(cs),
+                                      kAdopt_GrWrapOwnership, nullptr, nullptr);
 }
 
 sk_sp<SkImage> SkImage_Gpu::MakeFromYUVTexturesCopyImpl(
@@ -392,12 +377,9 @@ sk_sp<SkImage> SkImage_Gpu::MakeFromYUVTexturesCopyImpl(
     };
     auto ct = nv12 ? kRGBA_8888_SkColorType : kAlpha_8_SkColorType;
     for (int i = 0; i < (nv12 ? 2 : 3); ++i) {
-        if (yuvBackendTextures[i].fConfig == kUnknown_GrPixelConfig) {
-            if (!validate_backend_texture(ctx, yuvBackendTextures[i],
-                                          &yuvBackendTextures[i].fConfig, ct, kPremul_SkAlphaType,
-                                          nullptr)) {
-                return nullptr;
-            }
+        if (!validate_backend_texture(ctx, yuvBackendTextures[i], &yuvBackendTextures[i].fConfig,
+                                      ct, kPremul_SkAlphaType, nullptr)) {
+            return nullptr;
         }
     }
     sk_sp<GrTextureProxy> yProxy = proxyProvider->wrapBackendTexture(yuvBackendTextures[0], origin);
@@ -627,6 +609,17 @@ private:
     sk_sp<GrReleaseProcHelper> fDoneHelper;
 };
 
+static GrInternalSurfaceFlags get_flags_from_format(const GrBackendFormat& backendFormat) {
+    if (const GrGLenum* target = backendFormat.getGLTarget()) {
+        if (GR_GL_TEXTURE_RECTANGLE == *target || GR_GL_TEXTURE_EXTERNAL == *target) {
+            return GrInternalSurfaceFlags::kDoesNotSupportMipMaps |
+                   GrInternalSurfaceFlags::kIsClampOnly;
+        }
+    }
+
+    return GrInternalSurfaceFlags::kNone;
+}
+
 sk_sp<SkImage> SkImage_Gpu::MakePromiseTexture(GrContext* context,
                                                const GrBackendFormat& backendFormat,
                                                int width,
@@ -671,6 +664,8 @@ sk_sp<SkImage> SkImage_Gpu::MakePromiseTexture(GrContext* context,
     PromiseImageHelper promiseHelper(textureFulfillProc, textureReleaseProc, promiseDoneProc,
                                      textureContext);
 
+    GrInternalSurfaceFlags formatFlags = get_flags_from_format(backendFormat);
+
     sk_sp<GrTextureProxy> proxy = proxyProvider->createLazyProxy(
             [promiseHelper, config] (GrResourceProvider* resourceProvider) mutable {
                 if (!resourceProvider) {
@@ -679,7 +674,7 @@ sk_sp<SkImage> SkImage_Gpu::MakePromiseTexture(GrContext* context,
                 }
 
                 return promiseHelper.getTexture(resourceProvider, config);
-            }, desc, origin, mipMapped, GrInternalSurfaceFlags::kNone, SkBackingFit::kExact,
+            }, desc, origin, mipMapped, formatFlags, SkBackingFit::kExact,
                SkBudgeted::kNo, GrSurfaceProxy::LazyInstantiationType::kUninstantiate);
 
     if (!proxy) {
@@ -761,9 +756,12 @@ sk_sp<SkImage> SkImage::MakeCrossContextFromPixmap(GrContext* context, const SkP
 
         if (SkImageInfoIsValid(pixmap.info(), colorMode)) {
             ATRACE_ANDROID_FRAMEWORK("Upload Texture [%ux%u]", pixmap.width(), pixmap.height());
-            GrSurfaceDesc desc = GrImageInfoToSurfaceDesc(pixmap.info(), *proxyProvider->caps());
-            proxy = proxyProvider->createTextureProxy(desc, SkBudgeted::kYes, pixmap.addr(),
-                                                      pixmap.rowBytes());
+            // We don't need a release proc on the data in pixmap since we know we are in a
+            // GrContext that has a resource provider. Thus the createTextureProxy call will
+            // immediately upload the data.
+            sk_sp<SkImage> image = SkImage::MakeFromRaster(pixmap, nullptr, nullptr);
+            proxy = proxyProvider->createTextureProxy(std::move(image), kNone_GrSurfaceFlags, 1,
+                                                      SkBudgeted::kYes, SkBackingFit::kExact);
         }
     }
 
