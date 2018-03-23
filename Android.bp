@@ -430,7 +430,6 @@ cc_library_static {
         "src/gpu/GrFragmentProcessor.cpp",
         "src/gpu/GrGpu.cpp",
         "src/gpu/GrGpuCommandBuffer.cpp",
-        "src/gpu/GrGpuFactory.cpp",
         "src/gpu/GrGpuResource.cpp",
         "src/gpu/GrGpuResourceRef.cpp",
         "src/gpu/GrImageTextureMaker.cpp",
