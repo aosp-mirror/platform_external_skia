@@ -50,6 +50,9 @@ declare_args() {
 
   skia_skqp_enable_driver_correctness_workarounds = false
   skia_skqp_global_error_tolerance = 0
+
+  skia_llvm_path = ""
+  skia_llvm_lib = "LLVM"
 }
 declare_args() {
   skia_use_dng_sdk = !is_fuchsia && skia_use_libjpeg_turbo && skia_use_zlib
@@ -171,6 +174,9 @@ config("skia_private") {
     "src/xml",
     "third_party/gif",
   ]
+  if (skia_llvm_path != "") {
+    include_dirs += [ "$skia_llvm_path/include" ]
+  }
 
   defines = [ "SK_GAMMA_APPLY_TO_A8" ]
   if (is_android) {
@@ -199,6 +205,12 @@ config("skia_private") {
   }
   if (!is_official_build) {
     defines += [ "GR_TEST_UTILS=1" ]
+  }
+  if (skia_llvm_path != "") {
+    defines += [ "SK_LLVM_AVAILABLE" ]
+    include_dirs += [ "$skia_llvm_path/include" ]
+    libs += [ skia_llvm_lib ]
+    lib_dirs += [ "$skia_llvm_path/lib/" ]
   }
 }
 
@@ -1278,11 +1290,7 @@ if (skia_enable_tools) {
       "tools/debugger/SkObjectParser.cpp",
       "tools/fonts/SkRandomScalerContext.cpp",
       "tools/fonts/SkTestFontMgr.cpp",
-      "tools/fonts/SkTestFontMgr.h",
-      "tools/fonts/SkTestSVGTypeface.cpp",
-      "tools/fonts/SkTestSVGTypeface.h",
-      "tools/fonts/SkTestTypeface.cpp",
-      "tools/fonts/SkTestTypeface.h",
+      "tools/fonts/SkTestScalerContext.cpp",
       "tools/fonts/sk_tool_utils_font.cpp",
       "tools/picture_utils.cpp",
       "tools/random_parse_path.cpp",
@@ -1302,7 +1310,6 @@ if (skia_enable_tools) {
     }
     deps = [
       ":common_flags",
-      ":experimental_svg_model",
       ":flags",
       "//third_party/libpng",
     ]
@@ -1671,17 +1678,6 @@ if (skia_enable_tools) {
     assert_no_deps = [
       # tool_utils requires the output of this app.
       ":tool_utils",
-    ]
-  }
-
-  test_app("create_test_font_color") {
-    sources = [
-      "tools/fonts/create_test_font_color.cpp",
-    ]
-    deps = [
-      ":flags",
-      ":skia",
-      ":tool_utils"
     ]
   }
 
