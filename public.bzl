@@ -246,9 +246,9 @@ BASE_SRCS_ALL = struct(
         "src/pdf/SkDocument_PDF_None.cpp",  # We use src/pdf/SkPDFDocument.cpp.
         "src/gpu/gl/GrGLMakeNativeInterface_none.cpp",
 
-        # Exclude files that don't compile with the current DEFINES.
-        "src/svg/**/*",  # Depends on XML.
-        "src/xml/**/*",
+        # Exclude files that don't compile everywhere.
+        "src/svg/**/*",  # Depends on xml, SkJpegCodec, and SkPngCodec.
+        "src/xml/**/*",  # Avoid dragging in expat when not needed.
 
         # Conflicting dependencies among Lua versions. See cl/107087297.
         "src/utils/SkLua*",
@@ -393,23 +393,18 @@ def skia_srcs(os_conditions):
 INCLUDES = [
     "include/android",
     "include/c",
-    "include/client/android",
     "include/codec",
     "include/config",
     "include/core",
     "include/effects",
     "include/encode",
     "include/gpu",
-    "include/images",
     "include/pathops",
-    "include/pipe",
     "include/ports",
     "include/private",
+    "include/svg",
     "include/utils",
     "include/utils/mac",
-    "include/utils/win",
-    "include/svg",
-    "include/xml",
     "src/codec",
     "src/core",
     "src/gpu",
@@ -417,8 +412,8 @@ INCLUDES = [
     "src/images",
     "src/lazy",
     "src/opts",
-    "src/ports",
     "src/pdf",
+    "src/ports",
     "src/sfnt",
     "src/shaders",
     "src/sksl",
@@ -434,16 +429,23 @@ DM_SRCS_ALL = struct(
     include = [
         "dm/*.cpp",
         "dm/*.h",
+        "experimental/svg/model/*.cpp",
+        "experimental/svg/model/*.h",
         "gm/*.c",
         "gm/*.cpp",
         "gm/*.h",
+        "src/xml/*.cpp",
         "tests/*.cpp",
         "tests/*.h",
+        "tools/ios_utils.h",
+        "tools/BinaryAsset.h",
         "tools/BigPathBench.inc",
         "tools/CrashHandler.cpp",
         "tools/CrashHandler.h",
         "tools/ProcStats.cpp",
         "tools/ProcStats.h",
+        "tools/Registry.h",
+        "tools/ResourceFactory.h",
         "tools/Resources.cpp",
         "tools/Resources.h",
         "tools/SkJSONCPP.h",
@@ -470,6 +472,7 @@ DM_SRCS_ALL = struct(
         "tools/picture_utils.h",
         "tools/random_parse_path.cpp",
         "tools/random_parse_path.h",
+        "tools/sk_pixel_iter.h",
         "tools/sk_tool_utils.cpp",
         "tools/sk_tool_utils.h",
         "tools/timer/*.cpp",
