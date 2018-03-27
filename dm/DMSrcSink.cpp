@@ -47,7 +47,6 @@
 #include "SkRandom.h"
 #include "SkRecordDraw.h"
 #include "SkRecorder.h"
-#include "SkSVGCanvas.h"
 #include "SkStream.h"
 #include "SkSurfaceCharacterization.h"
 #include "SkSwizzler.h"
@@ -66,6 +65,7 @@
 #endif
 
 #if defined(SK_XML)
+    #include "SkSVGCanvas.h"
     #include "SkSVGDOM.h"
     #include "SkXMLWriter.h"
 #endif
@@ -2669,6 +2669,7 @@ Error ViaDDL::draw(const Src& src, SkBitmap* bitmap, SkWStream* stream, SkString
                     // DDL TODO: remove the cleanUpVRAM method and use the release & done
                     // callbacks.
                     GrGpu* gpu = context->contextPriv().getGpu();
+                    context->flush();
                     gpu->testingOnly_flushGpuAndSync();
 
                     helper.cleanUpVRAM(context);
