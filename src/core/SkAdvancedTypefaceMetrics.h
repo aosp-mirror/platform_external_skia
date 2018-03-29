@@ -26,6 +26,8 @@ struct SkAdvancedTypefaceMetrics {
     SkAdvancedTypefaceMetrics& operator=(const SkAdvancedTypefaceMetrics&) = delete;
     ~SkAdvancedTypefaceMetrics() {}
 
+    // The PostScript name of the font. See `FontName` and `BaseFont` in PDF standard.
+    SkString fPostScriptName;
     SkString fFontName;
 
     // These enum values match the values used in the PDF file format.
@@ -66,6 +68,7 @@ struct SkAdvancedTypefaceMetrics {
     int16_t fDescent = 0;      // Max depth below baseline (negative).
     int16_t fStemV = 0;        // Thickness of dominant vertical stem.
     int16_t fCapHeight = 0;    // Height (from baseline) of top of flat capitals.
+    int16_t fXHeight = 0;      // Height (from baseline) of the top of lowercase letter x.
 
     SkIRect fBBox = {0, 0, 0, 0};  // The bounding box of all glyphs (in font units).
 
