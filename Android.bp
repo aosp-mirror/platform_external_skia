@@ -705,6 +705,7 @@ cc_library_static {
         "src/pathops/SkPathOpsWinding.cpp",
         "src/pathops/SkPathWriter.cpp",
         "src/pathops/SkReduceOrder.cpp",
+        "src/pdf/SkClusterator.cpp",
         "src/pdf/SkDeflate.cpp",
         "src/pdf/SkJpegInfo.cpp",
         "src/pdf/SkKeyedImage.cpp",
