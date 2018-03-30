@@ -188,6 +188,21 @@ public:
      */
     void purgeUnlockedResources(size_t bytesToPurge, bool preferScratchResources);
 
+    /**
+     * This entry point is intended for instances where an app has been backgrounded or
+     * suspended.
+     * If 'scratchResourcesOnly' is true all unlocked scratch resources will be purged but the
+     * unlocked resources with persistent data will remain. If 'scratchResourcesOnly' is false
+     * then all unlocked resources will be purged.
+     * In either case, after the unlocked resources are purged a separate pass will be made to
+     * ensure that resource usage is under budget (i.e., even if 'scratchResourcesOnly' is true
+     * some resources with persistent data may be purged to be under budget).
+     *
+     * @param scratchResourcesOnly   If true only unlocked scratch resources will be purged prior
+     *                               enforcing the budget requirements.
+     */
+    void purgeUnlockedResources(bool scratchResourcesOnly);
+
     /** Access the context capabilities */
     const GrCaps* caps() const { return fCaps.get(); }
 
@@ -332,7 +347,7 @@ private:
  * Can be used to perform actions related to the generating GrContext in a thread safe manner. The
  * proxy does not access the 3D API (e.g. OpenGL) that backs the generating GrContext.
  */
-class GrContextThreadSafeProxy : public SkRefCnt {
+class SK_API GrContextThreadSafeProxy : public SkRefCnt {
 public:
     bool matches(GrContext* context) const { return context->uniqueID() == fContextUniqueID; }
 

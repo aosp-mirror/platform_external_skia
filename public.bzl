@@ -267,6 +267,9 @@ BASE_SRCS_ALL = struct(
 
         # Atlas text
         "src/atlastext/*",
+
+        # Not time for skcms in Google3 yet.
+        "src/core/SkColorSpaceXform_skcms.cpp",
     ],
 )
 
@@ -402,7 +405,6 @@ INCLUDES = [
     "include/pathops",
     "include/ports",
     "include/private",
-    "include/svg",
     "include/utils",
     "include/utils/mac",
     "src/codec",
@@ -459,8 +461,10 @@ DM_SRCS_ALL = struct(
         "tools/fonts/SkRandomScalerContext.h",
         "tools/fonts/SkTestFontMgr.cpp",
         "tools/fonts/SkTestFontMgr.h",
-        "tools/fonts/SkTestScalerContext.cpp",
-        "tools/fonts/SkTestScalerContext.h",
+        "tools/fonts/SkTestSVGTypeface.cpp",
+        "tools/fonts/SkTestSVGTypeface.h",
+        "tools/fonts/SkTestTypeface.cpp",
+        "tools/fonts/SkTestTypeface.h",
         "tools/fonts/sk_tool_utils_font.cpp",
         "tools/fonts/test_font_monospace.inc",
         "tools/fonts/test_font_sans_serif.inc",
@@ -483,7 +487,6 @@ DM_SRCS_ALL = struct(
     exclude = [
         "tests/FontMgrAndroidParserTest.cpp",  # Android-only.
         "tests/skia_test.cpp",  # Old main.
-        "tests/SVGDeviceTest.cpp",
         "tools/gpu/atlastext/*",
         "tools/gpu/gl/angle/*",
         "tools/gpu/gl/egl/*",
