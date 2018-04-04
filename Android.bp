@@ -344,6 +344,7 @@ cc_library_static {
         "src/core/SkStroke.cpp",
         "src/core/SkStrokeRec.cpp",
         "src/core/SkStrokerPriv.cpp",
+        "src/core/SkSurfaceCharacterization.cpp",
         "src/core/SkSwizzle.cpp",
         "src/core/SkTLS.cpp",
         "src/core/SkTSearch.cpp",
