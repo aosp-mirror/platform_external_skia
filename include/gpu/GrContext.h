@@ -59,9 +59,6 @@ public:
      */
     static sk_sp<GrContext> MakeGL(sk_sp<const GrGLInterface>, const GrContextOptions&);
     static sk_sp<GrContext> MakeGL(sk_sp<const GrGLInterface>);
-    // Deprecated
-    static sk_sp<GrContext> MakeGL(const GrGLInterface*);
-    static sk_sp<GrContext> MakeGL(const GrGLInterface*, const GrContextOptions&);
 
 #ifdef SK_VULKAN
     static sk_sp<GrContext> MakeVulkan(sk_sp<const GrVkBackendContext>, const GrContextOptions&);
@@ -205,6 +202,16 @@ public:
 
     /** Access the context capabilities */
     const GrCaps* caps() const { return fCaps.get(); }
+
+    /**
+     * Gets the maximum supported texture size.
+     */
+    int maxTextureSize() const;
+
+    /**
+     * Gets the maximum supported render target size.
+     */
+    int maxRenderTargetSize() const;
 
     /**
      * Can a SkImage be created with the given color type.
