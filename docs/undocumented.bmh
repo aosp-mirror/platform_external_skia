@@ -708,6 +708,15 @@ FT_Load_Glyph
 
 #Topic Texture
 #Class GrBackendTexture
+    #Method bool isValid() const
+    ##
+##
+##
+
+#Topic RenderTarget
+#Class GrBackendRenderTarget
+    #Method bool isValid() const
+    ##
 ##
 ##
 
