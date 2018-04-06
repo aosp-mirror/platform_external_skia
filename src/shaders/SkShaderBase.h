@@ -173,12 +173,6 @@ public:
         return this->onMakeColorSpace(xformer);
     }
 
-    bool isRasterPipelineOnly(const SkMatrix& ctm) const {
-        // We always use RP when perspective is present.
-        return ctm.hasPerspective() || fLocalMatrix.hasPerspective()
-                                    || this->onIsRasterPipelineOnly(ctm);
-    }
-
     struct StageRec {
         SkRasterPipeline*   fPipeline;
         SkArenaAlloc*       fAlloc;
@@ -205,7 +199,7 @@ public:
         return nullptr;
     }
 
-    SK_TO_STRING_VIRT()
+    virtual void toString(SkString* str) const;
 
     SK_DEFINE_FLATTENABLE_TYPE(SkShaderBase)
     SK_DECLARE_FLATTENABLE_REGISTRAR_GROUP()
@@ -240,8 +234,6 @@ protected:
 
     // Default impl creates shadercontext and calls that (not very efficient)
     virtual bool onAppendStages(const StageRec&) const;
-
-    virtual bool onIsRasterPipelineOnly(const SkMatrix& ctm) const { return false; }
 
 private:
     // This is essentially const, but not officially so it can be modified in constructors.

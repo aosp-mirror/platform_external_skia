@@ -158,10 +158,12 @@ void SkScalerContext::getMetrics(SkGlyph* glyph) {
 
 SK_ERROR:
     // draw nothing 'cause we failed
-    glyph->fLeft    = 0;
-    glyph->fTop     = 0;
-    glyph->fWidth   = 0;
-    glyph->fHeight  = 0;
+    glyph->fLeft     = 0;
+    glyph->fTop      = 0;
+    glyph->fWidth    = 0;
+    glyph->fHeight   = 0;
+    glyph->fLsbDelta = 0;
+    glyph->fRsbDelta = 0;
     // put a valid value here, in case it was earlier set to
     // MASK_FORMAT_JUST_ADVANCE
     glyph->fMaskFormat = fRec.fMaskFormat;
@@ -500,8 +502,8 @@ void SkScalerContext::getImage(const SkGlyph& origGlyph) {
     }
 }
 
-void SkScalerContext::getPath(SkPackedGlyphID glyphID, SkPath* path) {
-    this->internalGetPath(glyphID, nullptr, path, nullptr);
+bool SkScalerContext::getPath(SkPackedGlyphID glyphID, SkPath* path) {
+    return this->internalGetPath(glyphID, nullptr, path, nullptr);
 }
 
 void SkScalerContext::getFontMetrics(SkPaint::FontMetrics* fm) {
@@ -518,8 +520,7 @@ SkUnichar SkScalerContext::generateGlyphToChar(uint16_t glyph) {
 bool SkScalerContext::internalGetPath(SkPackedGlyphID glyphID, SkPath* fillPath,
                                       SkPath* devPath, SkMatrix* fillToDevMatrix) {
     SkPath  path;
-    generatePath(glyphID.code(), &path);
-    if (path.isEmpty()) {
+    if (!generatePath(glyphID.code(), &path)) {
         return false;
     }
 
@@ -675,8 +676,10 @@ bool SkScalerContextRec::computeMatrices(PreMatrixScale preMatrixScale, SkVector
     // All underlying ports have issues with zero text size, so use the matricies to zero.
     // If one of the scale factors is less than 1/256 then an EM filling square will
     // never affect any pixels.
+    // If there are any nonfinite numbers in the matrix, bail out and set the matrices to zero.
     if (SkScalarAbs(GA.get(SkMatrix::kMScaleX)) <= SK_ScalarNearlyZero ||
-        SkScalarAbs(GA.get(SkMatrix::kMScaleY)) <= SK_ScalarNearlyZero)
+        SkScalarAbs(GA.get(SkMatrix::kMScaleY)) <= SK_ScalarNearlyZero ||
+        !GA.isFinite())
     {
         s->fX = SK_Scalar1;
         s->fY = SK_Scalar1;
@@ -788,7 +791,10 @@ protected:
         glyph->zeroMetrics();
     }
     void generateImage(const SkGlyph& glyph) override {}
-    void generatePath(SkGlyphID glyph, SkPath* path) override {}
+    bool generatePath(SkGlyphID glyph, SkPath* path) override {
+        path->reset();
+        return false;
+    }
     void generateFontMetrics(SkPaint::FontMetrics* metrics) override {
         if (metrics) {
             sk_bzero(metrics, sizeof(*metrics));

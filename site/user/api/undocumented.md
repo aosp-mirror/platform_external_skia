@@ -126,6 +126,9 @@ SkPMColor SkPreMultiplyARGB(U8CPU a, U8CPU r, U8CPU g, U8CPU b)
   <tr>
     <td><a name="SK_ColorWHITE"> <code><strong>SK_ColorWHITE </strong></code> </a></td><td>0xFFFFFFFF </td><td></td>
   </tr>
+  <tr>
+    <td><a name="SK_ColorTRANSPARENT"> <code><strong>SK_ColorTRANSPARENT </strong></code> </a></td><td>0x00000000</td><td></td>
+  </tr>
 </table>
 
 ## <a name="Alpha"></a> Alpha
@@ -792,6 +795,19 @@ static std::unique_ptr&lt;SkCanvas&gt; MakeCanvas(std::unique_ptr&lt;SkRasterHan
 
 # <a name="SkRegion"></a> Class SkRegion
 
+# <a name="RenderTarget"></a> RenderTarget
+
+# <a name="GrBackendRenderTarget"></a> Class GrBackendRenderTarget
+
+<a name="GrBackendRenderTarget_isValid"></a>
+## isValid
+
+<pre style="padding: 1em 1em 1em 1em;width: 62.5em; background-color: #f0f0f0">
+bool isValid() const
+</pre>
+
+---
+
 # <a name="Render_Target"></a> Render Target
 
 # <a name="GrRenderTarget"></a> Class GrRenderTarget
@@ -906,6 +922,15 @@ Topic
 # <a name="Texture"></a> Texture
 
 # <a name="GrBackendTexture"></a> Class GrBackendTexture
+
+<a name="GrBackendTexture_isValid"></a>
+## isValid
+
+<pre style="padding: 1em 1em 1em 1em;width: 62.5em; background-color: #f0f0f0">
+bool isValid() const
+</pre>
+
+---
 
 # <a name="Transfer_Mode"></a> Transfer Mode
 

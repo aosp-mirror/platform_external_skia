@@ -28,7 +28,7 @@ public:
     static sk_sp<SkShader> Make(sk_sp<SkPicture>, TileMode, TileMode, const SkMatrix*,
                                 const SkRect*);
 
-    SK_TO_STRING_OVERRIDE()
+    void toString(SkString* str) const override;
     SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkPictureShader)
 
 #if SK_SUPPORT_GPU
@@ -41,7 +41,6 @@ protected:
     bool onAppendStages(const StageRec&) const override;
     Context* onMakeContext(const ContextRec&, SkArenaAlloc*) const override;
     sk_sp<SkShader> onMakeColorSpace(SkColorSpaceXformer* xformer) const override;
-    bool onIsRasterPipelineOnly(const SkMatrix&) const override;
 
 private:
     SkPictureShader(sk_sp<SkPicture>, TileMode, TileMode, const SkMatrix*, const SkRect*,

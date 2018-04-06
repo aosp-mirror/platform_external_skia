@@ -165,6 +165,41 @@ GrBackendFormat GrBackendTexture::format() const {
     }
 }
 
+#if GR_TEST_UTILS
+bool GrBackendTexture::TestingOnly_Equals(const GrBackendTexture& t0, const GrBackendTexture& t1) {
+    if (!t0.isValid() || !t1.isValid()) {
+        return false; // two invalid backend textures are not considered equal
+    }
+
+    if (t0.fWidth != t1.fWidth ||
+        t0.fHeight != t1.fHeight ||
+        t0.fConfig != t1.fConfig ||
+        t0.fMipMapped != t1.fMipMapped ||
+        t0.fBackend != t1.fBackend) {
+        return false;
+    }
+
+    switch (t0.fBackend) {
+    case kOpenGL_GrBackend:
+        return t0.fGLInfo == t1.fGLInfo;
+    case kMock_GrBackend:
+        return t0.fMockInfo == t1.fMockInfo;
+    case kVulkan_GrBackend:
+#ifdef SK_VULKAN
+        return t0.fVkInfo == t1.fVkInfo;
+#else
+        // fall through
+#endif
+    case kMetal_GrBackend: // fall through
+    default:
+        return false;
+    }
+
+    SkASSERT(0);
+    return false;
+}
+#endif
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #ifdef SK_VULKAN
@@ -255,3 +290,40 @@ const GrMockRenderTargetInfo* GrBackendRenderTarget::getMockRenderTargetInfo() c
     }
     return nullptr;
 }
+
+#if GR_TEST_UTILS
+bool GrBackendRenderTarget::TestingOnly_Equals(const GrBackendRenderTarget& r0,
+                                               const GrBackendRenderTarget& r1) {
+    if (!r0.isValid() || !r1.isValid()) {
+        return false; // two invalid backend rendertargets are not considered equal
+    }
+
+    if (r0.fWidth != r1.fWidth ||
+        r0.fHeight != r1.fHeight ||
+        r0.fSampleCnt != r1.fSampleCnt ||
+        r0.fStencilBits != r1.fStencilBits ||
+        r0.fConfig != r1.fConfig ||
+        r0.fBackend != r1.fBackend) {
+        return false;
+    }
+
+    switch (r0.fBackend) {
+    case kOpenGL_GrBackend:
+        return r0.fGLInfo == r1.fGLInfo;
+    case kMock_GrBackend:
+        return r0.fMockInfo == r1.fMockInfo;
+    case kVulkan_GrBackend:
+#ifdef SK_VULKAN
+        return r0.fVkInfo == r1.fVkInfo;
+#else
+        // fall through
+#endif
+    case kMetal_GrBackend: // fall through
+    default:
+        return false;
+    }
+
+    SkASSERT(0);
+    return false;
+}
+#endif

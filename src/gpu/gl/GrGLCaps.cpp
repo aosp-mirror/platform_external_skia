@@ -759,17 +759,14 @@ void GrGLCaps::initGLSL(const GrGLContextInfo& ctxInfo, const GrGLInterface* gli
     }
 
     if (ctxInfo.hasExtension("GL_OES_EGL_image_external")) {
-        // We should check that we're using ES2 shading language, or have the ESSL3 extension,
-        // but we found at least one device that breaks that rule. So, we enable support via the
-        // ES2 extension if the ES2 extension is missing. This could fail if a device only supports
-        // external images in ES2, but that seems unlikely? (skbug.com/7713)
-        shaderCaps->fExternalTextureSupport = true;
-        if (ctxInfo.hasExtension("GL_OES_EGL_image_external_essl3") ||
-            ctxInfo.hasExtension("OES_EGL_image_external_essl3")) {
-            // At least one driver has been found that has this extension without the "GL_" prefix.
-            shaderCaps->fExternalTextureExtensionString = "GL_OES_EGL_image_external_essl3";
-        } else {
+        if (ctxInfo.glslGeneration() == k110_GrGLSLGeneration) {
+            shaderCaps->fExternalTextureSupport = true;
             shaderCaps->fExternalTextureExtensionString = "GL_OES_EGL_image_external";
+        } else if (ctxInfo.hasExtension("GL_OES_EGL_image_external_essl3") ||
+                   ctxInfo.hasExtension("OES_EGL_image_external_essl3")) {
+            // At least one driver has been found that has this extension without the "GL_" prefix.
+            shaderCaps->fExternalTextureSupport = true;
+            shaderCaps->fExternalTextureExtensionString = "GL_OES_EGL_image_external_essl3";
         }
     }
 
@@ -2158,7 +2155,7 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
     // 340.96 and 367.57.
     if (kGL_GrGLStandard == ctxInfo.standard() &&
         ctxInfo.driver() == kNVIDIA_GrGLDriver &&
-        ctxInfo.driverVersion() < GR_GL_DRIVER_VER(367, 57)) {
+        ctxInfo.driverVersion() < GR_GL_DRIVER_VER(367, 57, 0)) {
         fClearTextureSupport = false;
     }
 
@@ -2177,7 +2174,7 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
     // Qualcomm driver @103.0 has been observed to crash compiling ccpr geometry
     // shaders. @127.0 is the earliest verified driver to not crash.
     if (kQualcomm_GrGLDriver == ctxInfo.driver() &&
-        ctxInfo.driverVersion() < GR_GL_DRIVER_VER(127,0)) {
+        ctxInfo.driverVersion() < GR_GL_DRIVER_VER(127, 0, 0)) {
         shaderCaps->fGeometryShaderSupport = false;
     }
 
@@ -2194,7 +2191,7 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
     // did not reproduce on a Nexus7 2013 with a 320 running Android M with driver 127.0. It's
     // unclear whether this really affects a wide range of devices.
     if (ctxInfo.renderer() == kAdreno3xx_GrGLRenderer &&
-        ctxInfo.driverVersion() > GR_GL_DRIVER_VER(127, 0)) {
+        ctxInfo.driverVersion() > GR_GL_DRIVER_VER(127, 0, 0)) {
         fMapBufferType = kNone_MapBufferType;
         fMapBufferFlags = kNone_MapFlags;
     }
@@ -2236,7 +2233,10 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
     // full screen clears
     // crbug.com/773107 - On MacBook Pros, a wide range of Intel GPUs don't always
     // perform full screen clears.
-    if (kIntel_GrGLVendor == ctxInfo.vendor()) {
+    // Update on 4/4/2018 - This appears to be fixed on driver 10.30.12 on a macOS 10.13.2 on a
+    // Retina MBP Early 2015 with Iris 6100. It is possibly fixed on earlier drivers as well.
+    if (kIntel_GrGLVendor == ctxInfo.vendor() &&
+        ctxInfo.driverVersion() < GR_GL_DRIVER_VER(10, 30, 12)) {
         fUseDrawToClearColor = true;
     }
 #endif
@@ -2251,7 +2251,7 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
 
     if (kAdreno4xx_GrGLRenderer == ctxInfo.renderer()) {
         // This is known to be fixed sometime between driver 145.0 and 219.0
-        if (ctxInfo.driverVersion() <= GR_GL_DRIVER_VER(219, 0)) {
+        if (ctxInfo.driverVersion() <= GR_GL_DRIVER_VER(219, 0, 0)) {
             fUseDrawToClearStencilClip = true;
         }
         fDisallowTexSubImageForUnormConfigTexturesEverBoundToFBO = true;
@@ -2266,7 +2266,7 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
     // - A Nexus 7 2013 (Adreno 320) running Android 4 with driver 53.0
     // The particular lines that get dropped from test images varies across different devices.
     if (kAdreno3xx_GrGLRenderer == ctxInfo.renderer() &&
-        ctxInfo.driverVersion() > GR_GL_DRIVER_VER(53, 0)) {
+        ctxInfo.driverVersion() > GR_GL_DRIVER_VER(53, 0, 0)) {
         fRequiresCullFaceEnableDisableWhenDrawingLinesAfterNonLines = true;
     }
 
@@ -2324,12 +2324,6 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
         gsSupport &= !contextOptions.fSuppressGeometryShaders;
 #endif
         fBlacklistCoverageCounting = !gsSupport;
-    }
-    // Currently the extension is advertised but fb fetch is broken on 500 series Adrenos like the
-    // Galaxy S7.
-    // TODO: Once this is fixed we can update the check here to look at a driver version number too.
-    if (kAdreno5xx_GrGLRenderer == ctxInfo.renderer()) {
-        shaderCaps->fFBFetchSupport = false;
     }
 
     // Adreno GPUs have a tendency to drop tiles when there is a divide-by-zero in a shader
@@ -2436,7 +2430,7 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
 
     // Non-coherent advanced blend has an issue on NVIDIA pre 337.00.
     if (kNVIDIA_GrGLDriver == ctxInfo.driver() &&
-        ctxInfo.driverVersion() < GR_GL_DRIVER_VER(337,00) &&
+        ctxInfo.driverVersion() < GR_GL_DRIVER_VER(337, 00, 0) &&
         kAdvanced_BlendEquationSupport == fBlendEquationSupport) {
         fBlendEquationSupport = kBasic_BlendEquationSupport;
         shaderCaps->fAdvBlendEqInteraction = GrShaderCaps::kNotSupported_AdvBlendEqInteraction;
@@ -2444,7 +2438,7 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
 
     if (this->advancedBlendEquationSupport()) {
         if (kNVIDIA_GrGLDriver == ctxInfo.driver() &&
-            ctxInfo.driverVersion() < GR_GL_DRIVER_VER(355,00)) {
+            ctxInfo.driverVersion() < GR_GL_DRIVER_VER(355, 00, 0)) {
             // Blacklist color-dodge and color-burn on pre-355.00 NVIDIA.
             fAdvBlendEqBlacklist |= (1 << kColorDodge_GrBlendEquation) |
                                     (1 << kColorBurn_GrBlendEquation);
@@ -2467,6 +2461,17 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
          kChromium_GrGLDriver == ctxInfo.driver())) {
             fDiscardRenderTargetSupport = false;
             fInvalidateFBType = kNone_InvalidateFBType;
+    }
+
+    // Various Samsung devices (Note4, S7, ...) don't advertise the image_external_essl3 extension,
+    // (only the base image_external extension), but do support it, and require that it be enabled
+    // to work with ESSL3. This has been seen on both Mali and Adreno devices. skbug.com/7713
+    if (ctxInfo.hasExtension("GL_OES_EGL_image_external") &&
+        ctxInfo.glslGeneration() >= k330_GrGLSLGeneration &&
+        !shaderCaps->fExternalTextureSupport &&  // i.e. Missing the _essl3 extension
+        (kARM_GrGLVendor == ctxInfo.vendor() || kQualcomm_GrGLVendor == ctxInfo.vendor())) {
+        shaderCaps->fExternalTextureSupport = true;
+        shaderCaps->fExternalTextureExtensionString = "GL_OES_EGL_image_external_essl3";
     }
 }
 

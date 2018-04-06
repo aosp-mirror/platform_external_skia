@@ -6,6 +6,7 @@
  */
 
 #include "SkLocalMatrixShader.h"
+#include "SkTLazy.h"
 
 #if SK_SUPPORT_GPU
 #include "GrFragmentProcessor.h"
@@ -42,14 +43,14 @@ void SkLocalMatrixShader::flatten(SkWriteBuffer& buffer) const {
 SkShaderBase::Context* SkLocalMatrixShader::onMakeContext(
     const ContextRec& rec, SkArenaAlloc* alloc) const
 {
-    ContextRec newRec(rec);
-    SkMatrix tmp;
+    SkTCopyOnFirstWrite<SkMatrix> lm(this->getLocalMatrix());
     if (rec.fLocalMatrix) {
-        tmp.setConcat(*rec.fLocalMatrix, this->getLocalMatrix());
-        newRec.fLocalMatrix = &tmp;
-    } else {
-        newRec.fLocalMatrix = &this->getLocalMatrix();
+        lm.writable()->preConcat(*rec.fLocalMatrix);
     }
+
+    ContextRec newRec(rec);
+    newRec.fLocalMatrix = lm;
+
     return as_SB(fProxyShader)->makeContext(newRec, alloc);
 }
 
@@ -65,16 +66,16 @@ SkImage* SkLocalMatrixShader::onIsAImage(SkMatrix* outMatrix, enum TileMode* mod
 }
 
 bool SkLocalMatrixShader::onAppendStages(const StageRec& rec) const {
-    SkMatrix tmp;
+    SkTCopyOnFirstWrite<SkMatrix> lm(this->getLocalMatrix());
     if (rec.fLocalM) {
-        tmp.setConcat(*rec.fLocalM, this->getLocalMatrix());
+        lm.writable()->preConcat(*rec.fLocalM);
     }
+
     StageRec newRec = rec;
-    newRec.fLocalM = rec.fLocalM ? &tmp : &this->getLocalMatrix();
+    newRec.fLocalM = lm;
     return as_SB(fProxyShader)->appendStages(newRec);
 }
 
-#ifndef SK_IGNORE_TO_STRING
 void SkLocalMatrixShader::toString(SkString* str) const {
     str->append("SkLocalMatrixShader: (");
 
@@ -84,7 +85,6 @@ void SkLocalMatrixShader::toString(SkString* str) const {
 
     str->append(")");
 }
-#endif
 
 sk_sp<SkShader> SkShader::makeWithLocalMatrix(const SkMatrix& localMatrix) const {
     if (localMatrix.isIdentity()) {

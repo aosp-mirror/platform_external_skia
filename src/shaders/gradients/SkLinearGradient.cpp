@@ -55,7 +55,9 @@ void SkLinearGradient::flatten(SkWriteBuffer& buffer) const {
 SkShaderBase::Context* SkLinearGradient::onMakeContext(
     const ContextRec& rec, SkArenaAlloc* alloc) const
 {
-    return CheckedMakeContext<LinearGradient4fContext>(alloc, *this, rec);
+    return fTileMode != kDecal_TileMode
+        ? CheckedMakeContext<LinearGradient4fContext>(alloc, *this, rec)
+        : nullptr;
 }
 
 SkShaderBase::Context* SkLinearGradient::onMakeBurstPipelineContext(
@@ -212,7 +214,6 @@ std::unique_ptr<GrFragmentProcessor> SkLinearGradient::asFragmentProcessor(
 
 #endif
 
-#ifndef SK_IGNORE_TO_STRING
 void SkLinearGradient::toString(SkString* str) const {
     str->append("SkLinearGradient (");
 
@@ -223,4 +224,4 @@ void SkLinearGradient::toString(SkString* str) const {
 
     str->append(")");
 }
-#endif
+

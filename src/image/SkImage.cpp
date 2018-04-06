@@ -29,6 +29,7 @@
 #include "GrContext.h"
 #include "SkImage_Gpu.h"
 #endif
+#include "GrBackendSurface.h"
 
 SkImage::SkImage(int width, int height, uint32_t uniqueID)
     : fWidth(width)
@@ -167,6 +168,13 @@ GrBackendObject SkImage::getTextureHandle(bool flushPendingGrContextIO,
     return as_IB(this)->onGetTextureHandle(flushPendingGrContextIO, origin);
 }
 
+#if GR_TEST_UTILS
+GrBackendTexture SkImage::getBackendTexture(bool flushPendingGrContextIO,
+                                            GrSurfaceOrigin* origin) const {
+    return as_IB(this)->onGetBackendTexture(flushPendingGrContextIO, origin);
+}
+#endif
+
 bool SkImage::isValid(GrContext* context) const {
     if (context && context->contextPriv().abandoned()) {
         return false;
@@ -181,6 +189,13 @@ GrTexture* SkImage::getTexture() const { return nullptr; }
 bool SkImage::isTextureBacked() const { return false; }
 
 GrBackendObject SkImage::getTextureHandle(bool, GrSurfaceOrigin*) const { return 0; }
+
+#if GR_TEST_UTILS
+GrBackendTexture SkImage::getBackendTexture(bool flushPendingGrContextIO,
+                                            GrSurfaceOrigin* origin) const {
+    return GrBackendTexture(); // invalid
+}
+#endif
 
 bool SkImage::isValid(GrContext* context) const {
     if (context) {
@@ -202,6 +217,11 @@ SkImage_Base::~SkImage_Base() {
     if (fAddedToCache.load()) {
         SkNotifyBitmapGenIDIsStale(this->uniqueID());
     }
+}
+
+GrBackendTexture SkImage_Base::onGetBackendTexture(bool flushPendingGrContextIO,
+                                                   GrSurfaceOrigin* origin) const {
+    return GrBackendTexture(); // invalid
 }
 
 bool SkImage::readPixels(const SkPixmap& pmap, int srcX, int srcY, CachingHint chint) const {

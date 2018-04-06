@@ -28,7 +28,6 @@
  SK_BUILD_FOR_ANDROID_FRAMEWORK # ditto
  SK_BUILD_FOR_MAC # ditto
  SK_BUILD_FOR_IOS # ditto
- SK_IGNORE_TO_STRING #  ditto
  SK_SUPPORT_GPU # ditto
  SK_HAS_JPEG_LIBRARY # ditto
  SK_HAS_PNG_LIBRARY # ditto
@@ -124,6 +123,8 @@ FT_Load_Glyph
     #Const SK_ColorRED 0xFFFF0000 
     ##
     #Const SK_ColorWHITE 0xFFFFFFFF 
+    ##
+    #Const SK_ColorTRANSPARENT 0x00000000
     ##
     #Subtopic Alpha
         #Alias Alpha
@@ -706,6 +707,15 @@ FT_Load_Glyph
 
 #Topic Texture
 #Class GrBackendTexture
+    #Method bool isValid() const
+    ##
+##
+##
+
+#Topic RenderTarget
+#Class GrBackendRenderTarget
+    #Method bool isValid() const
+    ##
 ##
 ##
 

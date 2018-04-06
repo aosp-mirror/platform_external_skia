@@ -36,6 +36,8 @@ public:
     virtual std::tuple<size_t, IOResult> read(void*, size_t) = 0;
     IOResult writeSkData(const SkData&);
     sk_sp<SkData> readSkData();
+    IOResult writeVector(const std::vector<uint8_t>&);
+    IOResult readVector(std::vector<uint8_t>*);
 };
 
 class SkScalerContextRecDescriptor {
@@ -98,6 +100,7 @@ class SkStrikeCacheDifferenceSpec {
 public:
     StrikeDifferences& findStrikeDifferences(const SkDescriptor& desc, SkFontID typefaceID);
     int strikeCount() const { return fDescriptorToDifferencesMap.size(); }
+    size_t sizeBytes() const;
     template <typename PerStrike, typename PerGlyph>
     void iterateDifferences(PerStrike perStrike, PerGlyph perGlyph) const;
 
@@ -200,7 +203,7 @@ public:
         const SkTypefaceProxy&, const SkScalerContextRec&, SkPaint::FontMetrics*);
     void generateMetricsAndImage(
         const SkTypefaceProxy&, const SkScalerContextRec&, SkArenaAlloc*, SkGlyph*);
-    void generatePath(
+    bool generatePath(
         const SkTypefaceProxy&, const SkScalerContextRec&, SkGlyphID glyph, SkPath* path);
     SkTypeface* lookupTypeface(SkFontID id);
 
@@ -211,6 +214,8 @@ private:
     SkTHashMap<SkFontID, sk_sp<SkTypefaceProxy>> fMapIdToTypeface;
 
     SkRemoteStrikeTransport* const fTransport;
+
+    std::vector<uint8_t> fBuffer;
 };
 
 #endif  // SkRemoteGlyphCache_DEFINED

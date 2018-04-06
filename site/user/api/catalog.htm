@@ -574,34 +574,6 @@
     "name": "SkCanvas::restoreToCount",
         "stdout": "depth = 1\\ndepth = 3\\ndepth = 1\\n"
     },
-        "SkIPoint16_Make": {
-    "code": "void draw(SkCanvas* canvas) {\n    SkIPoint16 pt1 = {45, 66};\n    SkIPoint16 pt2 = SkIPoint16::Make(45, 66);\n    SkDebugf(\"pt1.fX %c= pt2.fX\\n\", pt1.fX == pt2.fX ? '=' : '!');\n    SkDebugf(\"pt1.fY %c= pt2.fY\\n\", pt1.fY == pt2.fY ? '=' : '!');\n}",
-    "hash": "d815ca04fbf22b5acec6f85b6351f362",
-    "file": "SkIPoint16_Reference",
-    "name": "SkIPoint16::Make",
-        "stdout": "pt1.fX == pt2.fX\\npt1.fY == pt2.fY\\n"
-    },
-        "SkIPoint16_set": {
-    "code": "void draw(SkCanvas* canvas) {\n    SkIPoint16 pt1, pt2 = { SK_MinS16, SK_MaxS16 };\n    pt1.set(SK_MinS16, SK_MaxS16);\n    SkDebugf(\"pt1.fX %c= pt2.fX\\n\", pt1.fX == pt2.fX ? '=' : '!');\n    SkDebugf(\"pt1.fY %c= pt2.fY\\n\", pt1.fY == pt2.fY ? '=' : '!');\n}",
-    "hash": "abff78d3f2d97b1284ccb13d0c56b6c8",
-    "file": "SkIPoint16_Reference",
-    "name": "SkIPoint16::set()",
-        "stdout": "pt1.fX == pt2.fX\\npt1.fY == pt2.fY\\n"
-    },
-        "SkIPoint16_x": {
-    "code": "void draw(SkCanvas* canvas) {\n    SkIPoint16 pt1 = {45, 66};\n    SkDebugf(\"pt1.fX %c= pt1.x()\\n\", pt1.fX == pt1.x() ? '=' : '!');\n}",
-    "hash": "f7fd3b3674f042869de3582ab793dbf7",
-    "file": "SkIPoint16_Reference",
-    "name": "SkIPoint16::x()",
-        "stdout": "pt1.fX == pt1.x()\\n"
-    },
-        "SkIPoint16_y": {
-    "code": "void draw(SkCanvas* canvas) {\n    SkIPoint16 pt1 = {45, 66};\n    SkDebugf(\"pt1.fY %c= pt1.y()\\n\", pt1.fY == pt1.y() ? '=' : '!');\n}",
-    "hash": "3662cedaf1e9924a401f794902da3b1f",
-    "file": "SkIPoint16_Reference",
-    "name": "SkIPoint16::y()",
-        "stdout": "pt1.fY == pt1.y()\\n"
-    },
         "SkIPoint_Make": {
     "code": "void draw(SkCanvas* canvas) {\n    SkIPoint pt1 = {45, 66};\n    SkIPoint pt2 = SkIPoint::Make(45, 66);\n    SkDebugf(\"pt1 %c= pt2\\n\", pt1 == pt2 ? '=' : '!');\n}",
     "hash": "e5cf5159525bd3140f288a95fe641fae",
@@ -798,6 +770,13 @@
     "name": "SkIRect::height()",
         "stdout": "unsorted height: -5\\nlarge height: -5\\n"
     },
+        "SkIRect_height64": {
+    "code": "void draw(SkCanvas* canvas) {\n    SkIRect large = { 1, -2147483647, 2, 2147483644 };\n    SkDebugf(\"height: %d height64: %lld\\n\", large.height(), large.height64());\n}",
+    "hash": "02dd98716e54bbd8c2f0ff23b7ef98cf",
+    "file": "SkIRect_Reference",
+    "name": "SkIRect::height64",
+        "stdout": "height: -5 height64: 4294967291\\n"
+    },
         "SkIRect_inset": {
     "code": "void draw(SkCanvas* canvas) {\n    SkIRect rect = { 10, 14, 50, 73 };\n    rect.inset(5, 13);\n    SkDebugf(\"rect: %d, %d, %d, %d\\n\", rect.fLeft, rect.fTop, rect.fRight, rect.fBottom);\n}",
     "hash": "9debaded1aa8bdf5077a4de0b3015b8f",
@@ -845,6 +824,13 @@
     "hash": "edaad064b6de249b7a7c768dfa000adc",
     "file": "SkIRect_Reference",
     "name": "SkIRect::isEmpty",
+        "stdout": "rect: {20, 40, 10, 50} is empty\\nsorted: {10, 40, 20, 50} is not empty\\nrect: {20, 40, 20, 50} is empty\\nsorted: {20, 40, 20, 50} is empty\\n"
+    },
+        "SkIRect_isEmpty64": {
+    "code": "void draw(SkCanvas* canvas) {\n    SkIRect tests[] = {{20, 40, 10, 50}, {20, 40, 20, 50}};\n    for (auto rect : tests) {\n        SkDebugf(\"rect: {%d, %d, %d, %d} is\" \"%s empty\\n\", rect.left(), rect.top(), rect.right(),\n                rect.bottom(), rect.isEmpty64() ? \"\" : \" not\");\n        rect.sort();\n        SkDebugf(\"sorted: {%d, %d, %d, %d} is\" \"%s empty\\n\", rect.left(), rect.top(), rect.right(),\n                rect.bottom(), rect.isEmpty64() ? \"\" : \" not\");\n    }\n}",
+    "hash": "eb905faa1084ccab3ad0605df4c27ea4",
+    "file": "SkIRect_Reference",
+    "name": "SkIRect::isEmpty64",
         "stdout": "rect: {20, 40, 10, 50} is empty\\nsorted: {10, 40, 20, 50} is not empty\\nrect: {20, 40, 20, 50} is empty\\nsorted: {20, 40, 20, 50} is empty\\n"
     },
         "SkIRect_join": {
@@ -1000,6 +986,13 @@
     "file": "SkIRect_Reference",
     "name": "SkIRect::width()",
         "stdout": "unsorted width: -5\\nlarge width: -5\\n"
+    },
+        "SkIRect_width64": {
+    "code": "void draw(SkCanvas* canvas) {\n    SkIRect large = { -2147483647, 1, 2147483644, 2 };\n    SkDebugf(\"width: %d width64: %lld\\n\", large.width(), large.width64());\n}",
+    "hash": "63977f97999bbd6eecfdcc7575d75492",
+    "file": "SkIRect_Reference",
+    "name": "SkIRect::width64",
+        "stdout": "width: -5 width64: 4294967291\\n"
     },
         "SkIRect_x": {
     "code": "void draw(SkCanvas* canvas) {\n    SkIRect unsorted = { 15, 5, 10, 25 };\n    SkDebugf(\"unsorted.fLeft: %d unsorted.x(): %d\\n\", unsorted.fLeft, unsorted.x());\n    SkIRect sorted = unsorted.makeSorted();\n    SkDebugf(\"sorted.fLeft: %d sorted.x(): %d\\n\", sorted.fLeft, sorted.x());\n}",
@@ -5229,6 +5222,14 @@
     "hash": "30cee813f6aa476b0a9c8a24283e53a3",
     "file": "SkImage_Reference",
     "name": "SkImage::encodeToData_2"
+},
+    "SkImage_getBackendTexture": {
+    "code": "void draw(SkCanvas* canvas) {\n    GrContext* grContext = canvas->getGrContext();\n    if (!grContext) {\n        canvas->drawString(\"GPU only!\", 20, 40, SkPaint());\n        return;\n    }\n    sk_sp<SkImage> imageFromBackend = SkImage::MakeFromAdoptedTexture(grContext, backEndTexture,\n            kBottomLeft_GrSurfaceOrigin, kRGBA_8888_SkColorType, kOpaque_SkAlphaType);\n    GrBackendTexture textureFromImage = imageFromBackend->getBackendTexture(false);\n    if (!textureFromImage.isValid()) {\n        return;\n    }\n    sk_sp<SkImage> imageFromTexture = SkImage::MakeFromAdoptedTexture(grContext, textureFromImage,\n            kTopLeft_GrSurfaceOrigin, kRGBA_8888_SkColorType, kOpaque_SkAlphaType);\n    canvas->drawImage(imageFromTexture, 0, 0);\n    canvas->drawImage(imageFromBackend, 128, 128);\n}",
+    "width": 256,
+    "height": 256,
+    "hash": "d093aad721261f421c4bef4a296aab48",
+    "file": "SkImage_Reference",
+    "name": "SkImage::getBackendTexture"
 },
     "SkImage_getTextureHandle": {
     "code": "void draw(SkCanvas* canvas) {\n    GrContext* context = canvas->getGrContext();\n    if (!context) {\n       return;\n    }\n    SkPaint paint;\n    paint.setAntiAlias(true);\n    SkString str;\n    int y = -10;\n    for (auto origin : { kTopLeft_GrSurfaceOrigin, kBottomLeft_GrSurfaceOrigin } ) {\n        sk_sp<SkImage> srcImage(SkImage::MakeFromTexture(context,\n                backEndTexture, origin, kN32_SkColorType, kPremul_SkAlphaType, nullptr));\n        GrSurfaceOrigin readBackOrigin;\n        GrBackendObject readBackHandle = srcImage->getTextureHandle(false, &readBackOrigin);\n        str.printf(\"readBackHandle: 0x%lx\", readBackHandle);\n        canvas->drawString(str, 5, y += 30, paint);\n        canvas->drawImage(srcImage, 80, y += 10);\n        str.printf(\"origin: k%s_GrSurfaceOrigin\", readBackOrigin ? \"BottomLeft\" : \"TopLeft\");\n        canvas->drawString(str, 5, y += srcImage->height() + 10, paint);\n    }\n}",

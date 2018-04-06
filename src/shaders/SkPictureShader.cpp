@@ -280,11 +280,6 @@ sk_sp<SkShader> SkPictureShader::refBitmapShader(const SkMatrix& viewMatrix,
     return tileShader;
 }
 
-bool SkPictureShader::onIsRasterPipelineOnly(const SkMatrix& ctm) const {
-    return SkImageShader::IsRasterPipelineOnly(ctm, kN32_SkColorType, kPremul_SkAlphaType,
-                                               fTmx, fTmy, this->getLocalMatrix());
-}
-
 bool SkPictureShader::onAppendStages(const StageRec& rec) const {
     // Keep bitmapShader alive by using alloc instead of stack memory
     auto& bitmapShader = *rec.fAlloc->make<sk_sp<SkShader>>();
@@ -352,7 +347,6 @@ void SkPictureShader::PictureShaderContext::shadeSpan(int x, int y, SkPMColor ds
     fBitmapShaderContext->shadeSpan(x, y, dstC, count);
 }
 
-#ifndef SK_IGNORE_TO_STRING
 void SkPictureShader::toString(SkString* str) const {
     static const char* gTileModeName[SkShader::kTileModeCount] = {
         "clamp", "repeat", "mirror"
@@ -368,7 +362,6 @@ void SkPictureShader::toString(SkString* str) const {
 
     this->INHERITED::toString(str);
 }
-#endif
 
 #if SK_SUPPORT_GPU
 std::unique_ptr<GrFragmentProcessor> SkPictureShader::asFragmentProcessor(

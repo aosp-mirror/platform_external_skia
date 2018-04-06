@@ -419,13 +419,6 @@ bool SkGradientShaderBase::isOpaque() const {
     return fColorsAreOpaque && (this->getTileMode() != SkShader::kDecal_TileMode);
 }
 
-bool SkGradientShaderBase::onIsRasterPipelineOnly(const SkMatrix& ctm) const {
-    if (this->getTileMode() == SkShader::kDecal_TileMode) {
-        return true;
-    }
-    return this->INHERITED::onIsRasterPipelineOnly(ctm);
-}
-
 static unsigned rounded_divide(unsigned numer, unsigned denom) {
     return (numer + (denom >> 1)) / denom;
 }
@@ -635,7 +628,6 @@ void SkGradientShaderBase::commonAsAGradient(GradientInfo* info) const {
     }
 }
 
-#ifndef SK_IGNORE_TO_STRING
 void SkGradientShaderBase::toString(SkString* str) const {
 
     str->appendf("%d colors: ", fColorCount);
@@ -667,7 +659,6 @@ void SkGradientShaderBase::toString(SkString* str) const {
 
     this->INHERITED::toString(str);
 }
-#endif
 
 ///////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////

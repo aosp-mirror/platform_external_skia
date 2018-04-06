@@ -207,6 +207,16 @@ public:
     const GrCaps* caps() const { return fCaps.get(); }
 
     /**
+     * Gets the maximum supported texture size.
+     */
+    int maxTextureSize() const;
+
+    /**
+     * Gets the maximum supported render target size.
+     */
+    int maxRenderTargetSize() const;
+
+    /**
      * Can a SkImage be created with the given color type.
      */
     bool colorTypeSupportedAsImage(SkColorType) const;
@@ -409,6 +419,7 @@ private:
     friend class GrDirectContext; // To construct this object
     friend class GrContextPriv;   // for access to 'fOptions' in MakeDDL
     friend class GrDDLContext;    // to implement the GrDDLContext ctor (access to all members)
+    friend class SkSurfaceCharacterization; // for access to 'fContextUniqueID' for operator==
 
     typedef SkRefCnt INHERITED;
 };

@@ -177,16 +177,16 @@ SkSurfaceCharacterization GrContextThreadSafeProxy::createCharacterization(
         return SkSurfaceCharacterization(); // return an invalid characterization
     }
 
-    if (!SkSurface_Gpu::Valid(ii)) {
-        return SkSurfaceCharacterization(); // return an invalid characterization
-    }
-
     if (!fCaps->mipMapSupport()) {
         isMipMapped = false;
     }
 
     GrPixelConfig config = kUnknown_GrPixelConfig;
     if (!fCaps->getConfigFromBackendFormat(backendFormat, ii.colorType(), &config)) {
+        return SkSurfaceCharacterization(); // return an invalid characterization
+    }
+
+    if (!SkSurface_Gpu::Valid(fCaps.get(), config, ii.colorSpace())) {
         return SkSurfaceCharacterization(); // return an invalid characterization
     }
 
@@ -207,11 +207,11 @@ SkSurfaceCharacterization GrContextThreadSafeProxy::createCharacterization(
     }
 
     return SkSurfaceCharacterization(sk_ref_sp<GrContextThreadSafeProxy>(this),
-                                     cacheMaxResourceBytes,
-                                     origin, ii.width(), ii.height(), config, FSAAType, sampleCnt,
+                                     cacheMaxResourceBytes, ii,
+                                     origin, config, FSAAType, sampleCnt,
                                      SkSurfaceCharacterization::Textureable(true),
                                      SkSurfaceCharacterization::MipMapped(isMipMapped),
-                                     ii.refColorSpace(), surfaceProps);
+                                     surfaceProps);
 }
 
 void GrContext::abandonContext() {
@@ -307,6 +307,10 @@ size_t GrContext::getResourceCachePurgeableBytes() const {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+
+int GrContext::maxTextureSize() const { return this->caps()->maxTextureSize(); }
+
+int GrContext::maxRenderTargetSize() const { return this->caps()->maxRenderTargetSize(); }
 
 bool GrContext::colorTypeSupportedAsImage(SkColorType colorType) const {
     GrPixelConfig config = SkImageInfo2GrPixelConfig(colorType, nullptr, *this->caps());
