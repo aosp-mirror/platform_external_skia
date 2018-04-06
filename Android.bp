@@ -371,7 +371,6 @@ cc_library_static {
         "src/effects/Sk2DPathEffect.cpp",
         "src/effects/SkAlphaThresholdFilter.cpp",
         "src/effects/SkArithmeticImageFilter.cpp",
-        "src/effects/SkBlurMaskFilter.cpp",
         "src/effects/SkColorFilterImageFilter.cpp",
         "src/effects/SkColorMatrix.cpp",
         "src/effects/SkColorMatrixFilter.cpp",
