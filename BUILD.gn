@@ -688,6 +688,9 @@ optional("pdf") {
   deps = [
     "//third_party/zlib",
   ]
+  if (skia_use_libjpeg_turbo) {
+    deps += [ ":jpeg"]
+  }
   sources = skia_pdf_sources
   sources_when_disabled = [ "src/pdf/SkDocument_PDF_None.cpp" ]
 
@@ -1767,6 +1770,7 @@ if (skia_enable_tools) {
       "fuzz/FuzzParsePath.cpp",
       "fuzz/FuzzPathMeasure.cpp",
       "fuzz/FuzzPathop.cpp",
+      "fuzz/FuzzRegionOp.cpp",
       "fuzz/fuzz.cpp",
       "fuzz/oss_fuzz/FuzzAnimatedImage.cpp",
       "fuzz/oss_fuzz/FuzzImage.cpp",
