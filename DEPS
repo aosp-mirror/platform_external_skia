@@ -3,7 +3,7 @@ use_relative_paths = True
 deps = {
   "buildtools"                          : "https://chromium.googlesource.com/chromium/buildtools.git@505de88083136eefd056e5ee4ca0f01fe9b33de8",
   "common"                              : "https://skia.googlesource.com/common.git@9737551d7a52c3db3262db5856e6bcd62c462b92",
-  "third_party/externals/angle2"        : "https://chromium.googlesource.com/angle/angle.git@6c7ab7fe8d8c23e5cbbd2a2b70aa0ba8baa1f4d7",
+  "third_party/externals/angle2"        : "https://chromium.googlesource.com/angle/angle.git@6c59e4a156c360942e401180a109cfab9544e255",
   "third_party/externals/dng_sdk"       : "https://android.googlesource.com/platform/external/dng_sdk.git@96443b262250c390b0caefbf3eed8463ba35ecae",
   "third_party/externals/expat"         : "https://android.googlesource.com/platform/external/expat.git@android-6.0.1_r55",
   "third_party/externals/freetype"      : "https://skia.googlesource.com/third_party/freetype2.git@fa6da7bf6dcbcfa22d2464259ad1cccee3233189",
@@ -20,7 +20,7 @@ deps = {
   "third_party/externals/piex"          : "https://android.googlesource.com/platform/external/piex.git@bb217acdca1cc0c16b704669dd6f91a1b509c406",
   "third_party/externals/sdl"           : "https://skia.googlesource.com/third_party/sdl@5d7cfcca344034aff9327f77fc181ae3754e7a90",
   "third_party/externals/sfntly"        : "https://chromium.googlesource.com/external/github.com/googlei18n/sfntly.git@b18b09b6114b9b7fe6fc2f96d8b15e8a72f66916",
-  "third_party/externals/skcms"         : "https://skia.googlesource.com/skcms@8a727815db8826f1e03473b15c4b5624b24bfabd",
+  "third_party/externals/skcms"         : "https://skia.googlesource.com/skcms@16a9cebffa3487c593bf7a8a298ce9052106f07d",
   "third_party/externals/spirv-headers" : "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Headers.git@661ad91124e6af2272afd00f804d8aa276e17107",
   "third_party/externals/spirv-tools"   : "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Tools.git@e9e4393b1c5aad7553c05782acefbe32b42644bd",
  #"third_party/externals/v8"            : "https://chromium.googlesource.com/v8/v8.git@5f1ae66d5634e43563b2d25ea652dfb94c31a3b4",
