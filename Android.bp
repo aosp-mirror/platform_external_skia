@@ -1737,6 +1737,7 @@ cc_test {
         "tests/SwizzlerTest.cpp",
         "tests/TArrayTest.cpp",
         "tests/TDPQueueTest.cpp",
+        "tests/TLazyTest.cpp",
         "tests/TableColorFilterTest.cpp",
         "tests/TemplatesTest.cpp",
         "tests/TessellatingPathRendererTests.cpp",
