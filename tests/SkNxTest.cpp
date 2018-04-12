@@ -424,6 +424,19 @@ DEF_TEST(Sk4f_Load2, r) {
     REPORTER_ASSERT(r, y[3] == 7);
 }
 
+DEF_TEST(Sk2f_Load2, r) {
+    float xy[4] = { 0,1,2,3 };
+
+    Sk2f x,y;
+    Sk2f::Load2(xy, &x,&y);
+
+    REPORTER_ASSERT(r, x[0] == 0);
+    REPORTER_ASSERT(r, x[1] == 2);
+
+    REPORTER_ASSERT(r, y[0] == 1);
+    REPORTER_ASSERT(r, y[1] == 3);
+}
+
 DEF_TEST(Sk2f_Store2, r) {
     Sk2f p0{0, 2};
     Sk2f p1{1, 3};
@@ -464,6 +477,18 @@ DEF_TEST(Sk2f_Store4, r) {
     REPORTER_ASSERT(r, dst[5] == 5);
     REPORTER_ASSERT(r, dst[6] == 6);
     REPORTER_ASSERT(r, dst[7] == 7);
+}
+
+DEF_TEST(Sk4f_minmax, r) {
+    REPORTER_ASSERT(r,  3 == Sk4f(0,1,2,3).max());
+    REPORTER_ASSERT(r,  2 == Sk4f(1,-5,2,-1).max());
+    REPORTER_ASSERT(r, -1 == Sk4f(-2,-1,-6,-3).max());
+    REPORTER_ASSERT(r,  3 == Sk4f(3,2,1,0).max());
+
+    REPORTER_ASSERT(r,  0 == Sk4f(0,1,2,3).min());
+    REPORTER_ASSERT(r, -5 == Sk4f(1,-5,2,-1).min());
+    REPORTER_ASSERT(r, -6 == Sk4f(-2,-1,-6,-3).min());
+    REPORTER_ASSERT(r,  0 == Sk4f(3,2,1,0).min());
 }
 
 DEF_TEST(SkNf_anyTrue_allTrue, r) {
