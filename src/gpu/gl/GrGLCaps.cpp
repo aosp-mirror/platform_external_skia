@@ -2314,9 +2314,13 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
         fDrawArraysBaseVertexIsBroken = true;
     }
 
+    // Blacklisting CCPR on ANGLE while we investigate http://skbug.com/7805.
+    if (kANGLE_GrGLRenderer == ctxInfo.renderer()) {
+        fBlacklistCoverageCounting = true;
+    }
+
     // The ccpr vertex-shader implementation does not work on this platform. Only allow CCPR with
     // GS.
-
     if (kANGLE_GrGLRenderer == ctxInfo.renderer() &&
         GrGLANGLERenderer::kSkylake == ctxInfo.angleRenderer()) {
         bool gsSupport = fShaderCaps->geometryShaderSupport();
@@ -2555,10 +2559,10 @@ GrColorType GrGLCaps::supportedReadPixelsColorType(GrPixelConfig config,
 }
 
 bool GrGLCaps::onIsWindowRectanglesSupportedForRT(const GrBackendRenderTarget& backendRT) const {
-    const GrGLFramebufferInfo* fbInfo = backendRT.getGLFramebufferInfo();
-    SkASSERT(fbInfo);
+    GrGLFramebufferInfo fbInfo;
+    SkAssertResult(backendRT.getGLFramebufferInfo(&fbInfo));
     // Window Rectangles are not supported for FBO 0;
-    return fbInfo->fFBOID != 0;
+    return fbInfo.fFBOID != 0;
 }
 
 int GrGLCaps::getRenderTargetSampleCount(int requestedCount, GrPixelConfig config) const {
@@ -2663,20 +2667,20 @@ bool validate_sized_format(GrGLenum format, SkColorType ct, GrPixelConfig* confi
 
 bool GrGLCaps::validateBackendTexture(const GrBackendTexture& tex, SkColorType ct,
                                       GrPixelConfig* config) const {
-    const GrGLTextureInfo* texInfo = tex.getGLTextureInfo();
-    if (!texInfo) {
+    GrGLTextureInfo texInfo;
+    if (!tex.getGLTextureInfo(&texInfo)) {
         return false;
     }
-    return validate_sized_format(texInfo->fFormat, ct, config, fStandard);
+    return validate_sized_format(texInfo.fFormat, ct, config, fStandard);
 }
 
 bool GrGLCaps::validateBackendRenderTarget(const GrBackendRenderTarget& rt, SkColorType ct,
                                            GrPixelConfig* config) const {
-    const GrGLFramebufferInfo* fbInfo = rt.getGLFramebufferInfo();
-    if (!fbInfo) {
+    GrGLFramebufferInfo fbInfo;
+    if (!rt.getGLFramebufferInfo(&fbInfo)) {
         return false;
     }
-    return validate_sized_format(fbInfo->fFormat, ct, config, fStandard);
+    return validate_sized_format(fbInfo.fFormat, ct, config, fStandard);
 }
 
 bool GrGLCaps::getConfigFromBackendFormat(const GrBackendFormat& format, SkColorType ct,

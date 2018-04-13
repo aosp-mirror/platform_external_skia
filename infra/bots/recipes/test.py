@@ -239,12 +239,14 @@ def dm_flags(api, bot):
 
     # DDL is a GPU-only feature
     if 'DDL1' in bot:
-      # Just run gl for now but render the large skps
-      configs = ['gl']
+      # This bot generates gl and vk comparison images for the large skps
+      configs = [c for c in configs if c == 'gl' or c == 'vk']
       args.extend(['--skpViewportSize', "2048"])
+      args.extend(['--pr', '~ccpr', '~small'])
     if 'DDL3' in bot:
-      # Just run ddl-gl for now but render the large skps
-      configs = ['ddl-gl']
+      # This bot generates the ddl-gl and ddl-vk images for the
+      # large skps and the gms
+      configs = ['ddl-' + c for c in configs if c == 'gl' or c == 'vk']
       args.extend(['--skpViewportSize', "2048"])
 
   tf = api.vars.builder_cfg.get('test_filter')
@@ -280,15 +282,8 @@ def dm_flags(api, bot):
     args.remove('image')
     args.remove('colorImage')
 
-  if 'DDL1' in bot:
-    # The DDL1 bot just renders large skp images as a baseline for full DDL
-    args.remove('tests')
-    args.remove('gm')
-    args.remove('image')
-    args.remove('colorImage')
-    args.remove('svg')
-  elif 'DDL3' in bot:
-    # The DDL3 bot renders large skps and gms in full DDL mode
+  if 'DDL' in bot:
+    # The DDL bots just render the large skps and the gms
     args.remove('tests')
     args.remove('image')
     args.remove('colorImage')
@@ -561,8 +556,10 @@ def dm_flags(api, bot):
 
   if 'DDL3' in bot:
     match.append('~shadermaskfilter_image') # skia:7751
-    match.append('~imagefilterscropped')    # skia:7751
-    match.append('~animated-image-blurs')   # skia:7751
+    match.append('~persp_shaders_bw')       # skia:7751
+    match.append('~persp_shaders_aa')       # skia:7751
+    match.append('~imagefilterscropped')    # skia:7755
+    match.append('~animated-image-blurs')   # skia:7755
 
   if 'Chromecast' in bot:
     if 'GPU' in bot:
@@ -738,6 +735,9 @@ def dm_flags(api, bot):
   if 'Mac' in bot and 'IntelHD615' in bot:
     # skia:7603
     match.append('~^GrMeshTest$')
+
+  if api.vars.internal_hardware_label == 1:
+    match.append('~skbug6653') # skia:6653
 
   if blacklisted:
     args.append('--blacklist')

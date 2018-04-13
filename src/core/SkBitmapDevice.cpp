@@ -23,6 +23,21 @@
 #include "SkTLazy.h"
 #include "SkVertices.h"
 
+struct Bounder {
+    SkRect  fBounds;
+    bool    fHasBounds;
+
+    Bounder(const SkRect& r, const SkPaint& paint) {
+        if ((fHasBounds = paint.canComputeFastBounds())) {
+            fBounds = paint.computeFastBounds(r, &fBounds);
+        }
+    }
+
+    bool hasBounds() const { return fHasBounds; }
+    const SkRect* bounds() const { return fHasBounds ? &fBounds : nullptr; }
+    operator const SkRect* () const { return this->bounds(); }
+};
+
 class SkDrawTiler {
     enum {
         // 8K is 1 too big, since 8K << supersample == 32768 which is too big for SkFixed
@@ -31,6 +46,7 @@ class SkDrawTiler {
 
     SkBitmapDevice* fDevice;
     SkPixmap        fRootPixmap;
+    SkIRect         fSrcBounds;
 
     // Used for tiling and non-tiling
     SkDraw          fDraw;
@@ -43,14 +59,31 @@ class SkDrawTiler {
     bool            fDone, fNeedsTiling;
 
 public:
-    SkDrawTiler(SkBitmapDevice* dev) : fDevice(dev) {
+    static bool NeedsTiling(SkBitmapDevice* dev) {
+        return dev->width() > kMaxDim || dev->height() > kMaxDim;
+    }
+
+    SkDrawTiler(SkBitmapDevice* dev, const SkRect* bounds) : fDevice(dev) {
+        fDone = false;
+
         // we need fDst to be set, and if we're actually drawing, to dirty the genID
         if (!dev->accessPixels(&fRootPixmap)) {
             // NoDrawDevice uses us (why?) so we have to catch this case w/ no pixels
             fRootPixmap.reset(dev->imageInfo(), nullptr, 0);
         }
 
-        fDone = false;
+        if (bounds) {
+            SkRect devBounds;
+            dev->ctm().mapRect(&devBounds, *bounds);
+            if (devBounds.intersect(SkRect::MakeIWH(fRootPixmap.width(), fRootPixmap.height()))) {
+                fSrcBounds = devBounds.roundOut();
+            } else {
+                fDone = true;
+            }
+        } else {
+            fSrcBounds = SkIRect::MakeWH(fRootPixmap.width(), fRootPixmap.height());
+        }
+
         fNeedsTiling = !fRootPixmap.bounds().isEmpty() &&  // empty pixmap map fail extractSubset?
                         (fRootPixmap.width() > kMaxDim || fRootPixmap.height() > kMaxDim);
 
@@ -58,7 +91,8 @@ public:
             // fDraw.fDst is reset each time in setupTileDraw()
             fDraw.fMatrix = &fTileMatrix;
             fDraw.fRC = &fTileRC;
-            fOrigin.set(-kMaxDim, 0); // we'll step/increase it before using it
+            // we'll step/increase it before using it
+            fOrigin.set(fSrcBounds.fLeft - kMaxDim, fSrcBounds.fTop);
         } else {
             fDraw.fDst = fRootPixmap;
             fDraw.fMatrix = &dev->ctm();
@@ -98,15 +132,15 @@ private:
         SkASSERT(fNeedsTiling);
 
         // We do fRootPixmap.width() - kMaxDim instead of fOrigin.fX + kMaxDim to avoid overflow.
-        if (fOrigin.fX >= fRootPixmap.width() - kMaxDim) {    // too far
-            fOrigin.fX = 0;
+        if (fOrigin.fX >= fSrcBounds.fRight - kMaxDim) {    // too far
+            fOrigin.fX = fSrcBounds.fLeft;
             fOrigin.fY += kMaxDim;
         } else {
             fOrigin.fX += kMaxDim;
         }
         // fDone = next origin will be invalid.
-        fDone = fOrigin.fX >= fRootPixmap.width() - kMaxDim &&
-                fOrigin.fY >= fRootPixmap.height() - kMaxDim;
+        fDone = fOrigin.fX >= fSrcBounds.fRight - kMaxDim &&
+                fOrigin.fY >= fSrcBounds.fBottom - kMaxDim;
 
         SkIRect bounds = SkIRect::MakeXYWH(fOrigin.x(), fOrigin.y(), kMaxDim, kMaxDim);
         SkASSERT(!bounds.isEmpty());
@@ -122,14 +156,31 @@ private:
     }
 };
 
-#define LOOP_TILER(code)                                    \
-    SkDrawTiler priv_tiler(this);                           \
+// Passing a bounds allows the tiler to only visit the dst-tiles that might intersect the
+// drawing. If null is passed, the tiler has to visit everywhere. The bounds is expected to be
+// in local coordinates, as the tiler itself will transform that into device coordinates.
+//
+#define LOOP_TILER(code, boundsPtr)                         \
+    SkDrawTiler priv_tiler(this, boundsPtr);                \
     while (const SkDraw* priv_draw = priv_tiler.next()) {   \
         priv_draw->code;                                    \
     }
 #define TILER_X(x)  (x) - priv_tiler.curr_x()
 #define TILER_Y(y)  (y) - priv_tiler.curr_y()
 
+// Helper to create an SkDraw from a device
+class SkBitmapDevice::BDDraw : public SkDraw {
+public:
+    BDDraw(SkBitmapDevice* dev) {
+        // we need fDst to be set, and if we're actually drawing, to dirty the genID
+        if (!dev->accessPixels(&fDst)) {
+            // NoDrawDevice uses us (why?) so we have to catch this case w/ no pixels
+            fDst.reset(dev->imageInfo(), nullptr, 0);
+        }
+        fMatrix = &dev->ctm();
+        fRC = &dev->fRCStack.rc();
+    }
+};
 
 class SkColorTable;
 
@@ -282,16 +333,16 @@ bool SkBitmapDevice::onReadPixels(const SkPixmap& pm, int x, int y) {
 ///////////////////////////////////////////////////////////////////////////////
 
 void SkBitmapDevice::drawPaint(const SkPaint& paint) {
-    LOOP_TILER( drawPaint(paint))
+    BDDraw(this).drawPaint(paint);
 }
 
 void SkBitmapDevice::drawPoints(SkCanvas::PointMode mode, size_t count,
                                 const SkPoint pts[], const SkPaint& paint) {
-    LOOP_TILER( drawPoints(mode, count, pts, paint, nullptr))
+    LOOP_TILER( drawPoints(mode, count, pts, paint, nullptr), nullptr)
 }
 
 void SkBitmapDevice::drawRect(const SkRect& r, const SkPaint& paint) {
-    LOOP_TILER( drawRect(r, paint))
+    LOOP_TILER( drawRect(r, paint), Bounder(r, paint))
 }
 
 void SkBitmapDevice::drawOval(const SkRect& oval, const SkPaint& paint) {
@@ -311,14 +362,26 @@ void SkBitmapDevice::drawRRect(const SkRRect& rrect, const SkPaint& paint) {
     // required to override drawRRect.
     this->drawPath(path, paint, nullptr, true);
 #else
-    LOOP_TILER( drawRRect(rrect, paint))
+    LOOP_TILER( drawRRect(rrect, paint), Bounder(rrect.getBounds(), paint))
 #endif
 }
 
 void SkBitmapDevice::drawPath(const SkPath& path,
                               const SkPaint& paint, const SkMatrix* prePathMatrix,
                               bool pathIsMutable) {
-    SkDrawTiler tiler(this);
+    const SkRect* bounds = nullptr;
+    SkRect storage;
+    if (SkDrawTiler::NeedsTiling(this)) {
+        if (!path.isInverseFillType()) {
+            if (prePathMatrix) {
+                prePathMatrix->mapRect(&storage, path.getBounds());
+                bounds = &storage;
+            } else {
+                bounds = &path.getBounds();
+            }
+        }
+    }
+    SkDrawTiler tiler(this, bounds ? Bounder(*bounds, paint).bounds() : nullptr);
     if (tiler.needsTiling()) {
         pathIsMutable = false;
     }
@@ -336,7 +399,20 @@ void SkBitmapDevice::drawBitmap(const SkBitmap& bitmap, SkScalar x, SkScalar y,
 
 void SkBitmapDevice::drawBitmap(const SkBitmap& bitmap, const SkMatrix& matrix,
                                 const SkRect* dstOrNull, const SkPaint& paint) {
-    LOOP_TILER( drawBitmap(bitmap, matrix, dstOrNull, paint))
+    // are we ever given a dst-rect AND have a maskfilter (which might change the bounds)?
+    SkASSERT(!dstOrNull || !paint.getMaskFilter());
+
+    const SkRect* bounds = dstOrNull;
+    SkRect storage;
+    if (!bounds && SkDrawTiler::NeedsTiling(this)) {
+        matrix.mapRect(&storage, SkRect::MakeIWH(bitmap.width(), bitmap.height()));
+        Bounder b(storage, paint);
+        if (b.hasBounds()) {
+            storage = *b.bounds();
+            bounds = &storage;
+        }
+    }
+    LOOP_TILER(drawBitmap(bitmap, matrix, dstOrNull, paint), bounds);
 }
 
 static inline bool CanApplyDstMatrixAsCTM(const SkMatrix& m, const SkPaint& paint) {
@@ -460,25 +536,25 @@ void SkBitmapDevice::drawBitmapRect(const SkBitmap& bitmap,
 }
 
 void SkBitmapDevice::drawSprite(const SkBitmap& bitmap, int x, int y, const SkPaint& paint) {
-    LOOP_TILER( drawSprite(bitmap, TILER_X(x), TILER_Y(y), paint))
+    BDDraw(this).drawSprite(bitmap, x, y, paint);
 }
 
 void SkBitmapDevice::drawText(const void* text, size_t len,
                               SkScalar x, SkScalar y, const SkPaint& paint) {
-    LOOP_TILER( drawText((const char*)text, len, x, y, paint, &fSurfaceProps))
+    LOOP_TILER( drawText((const char*)text, len, x, y, paint, &fSurfaceProps), nullptr)
 }
 
 void SkBitmapDevice::drawPosText(const void* text, size_t len, const SkScalar xpos[],
                                  int scalarsPerPos, const SkPoint& offset, const SkPaint& paint) {
     LOOP_TILER( drawPosText((const char*)text, len, xpos, scalarsPerPos, offset, paint,
-                            &fSurfaceProps))
+                            &fSurfaceProps), nullptr)
 }
 
 void SkBitmapDevice::drawVertices(const SkVertices* vertices, SkBlendMode bmode,
                                   const SkPaint& paint) {
-    LOOP_TILER( drawVertices(vertices->mode(), vertices->vertexCount(), vertices->positions(),
-                             vertices->texCoords(), vertices->colors(), bmode,
-                             vertices->indices(), vertices->indexCount(), paint))
+    BDDraw(this).drawVertices(vertices->mode(), vertices->vertexCount(), vertices->positions(),
+                              vertices->texCoords(), vertices->colors(), bmode,
+                              vertices->indices(), vertices->indexCount(), paint);
 }
 
 void SkBitmapDevice::drawDevice(SkBaseDevice* device, int x, int y, const SkPaint& origPaint) {
@@ -487,11 +563,9 @@ void SkBitmapDevice::drawDevice(SkBaseDevice* device, int x, int y, const SkPain
     // todo: can we unify with similar adjustment in SkGpuDevice?
     SkTCopyOnFirstWrite<SkPaint> paint(origPaint);
     if (paint->getMaskFilter()) {
-        paint.writable()->setMaskFilter(paint->getMaskFilter()->makeWithLocalMatrix(this->ctm()));
+        paint.writable()->setMaskFilter(paint->getMaskFilter()->makeWithMatrix(this->ctm()));
     }
-
-    LOOP_TILER( drawSprite(static_cast<SkBitmapDevice*>(device)->fBitmap,
-                           TILER_X(x), TILER_Y(y), *paint))
+    this->drawSprite(static_cast<SkBitmapDevice*>(device)->fBitmap, x, y, *paint);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -548,7 +622,7 @@ void SkBitmapDevice::drawSpecial(SkSpecialImage* src, int x, int y, const SkPain
     }
 
     if (paint->getMaskFilter()) {
-        paint.writable()->setMaskFilter(paint->getMaskFilter()->makeWithLocalMatrix(this->ctm()));
+        paint.writable()->setMaskFilter(paint->getMaskFilter()->makeWithMatrix(this->ctm()));
     }
 
     if (!clipImage) {

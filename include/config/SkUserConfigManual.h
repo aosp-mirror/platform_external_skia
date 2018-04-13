@@ -17,6 +17,8 @@
   // Disable these Ganesh features
   #define SK_DISABLE_EXPLICIT_GPU_RESOURCE_ALLOCATION
   #define SK_DISABLE_RENDER_TARGET_SORTING
+  // Allow getTextureHandle, etc. until Android is updated
+  #define SK_SUPPORT_LEGACY_BACKEND_OBJECTS
 
   // Legacy flags
   #define SK_IGNORE_GPU_DITHER
@@ -33,4 +35,5 @@
   #define SK_COLOR_SPACE_XFORM_LEGACY_PIPELINE
   #define SK_SUPPORT_LEGACY_RECTMAKELARGEST
   #define SK_SUPPORT_LEGACY_AA_CHOICE
+  #define SK_SUPPORT_LEGACY_PATH_DAA_BIT
 #endif // SkUserConfigManual_DEFINED

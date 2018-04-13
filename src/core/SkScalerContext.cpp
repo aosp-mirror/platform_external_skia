@@ -21,8 +21,10 @@
 #include "SkMatrix22.h"
 #include "SkPaintPriv.h"
 #include "SkPathEffect.h"
+#include "SkPathPriv.h"
 #include "SkRasterClip.h"
 #include "SkReadBuffer.h"
+#include "SkRectPriv.h"
 #include "SkStroke.h"
 #include "SkStrokeRec.h"
 #include "SkSurfacePriv.h"
@@ -85,7 +87,7 @@ void SkScalerContext::getMetrics(SkGlyph* glyph) {
             generateAdvance(glyph);
 
             const SkIRect ir = devPath.getBounds().roundOut();
-            if (ir.isEmpty() || !ir.is16Bit()) {
+            if (ir.isEmpty() || !SkRectPriv::Is16Bit(ir)) {
                 goto SK_ERROR;
             }
             glyph->fLeft    = ir.fLeft;
@@ -143,7 +145,7 @@ void SkScalerContext::getMetrics(SkGlyph* glyph) {
 
         src.fImage = nullptr;  // only want the bounds from the filter
         if (as_MFB(fMaskFilter)->filterMask(&dst, src, matrix, nullptr)) {
-            if (dst.fBounds.isEmpty() || !dst.fBounds.is16Bit()) {
+            if (dst.fBounds.isEmpty() || !SkRectPriv::Is16Bit(dst.fBounds)) {
                 goto SK_ERROR;
             }
             SkASSERT(dst.fImage == nullptr);
@@ -444,6 +446,10 @@ void SkScalerContext::getImage(const SkGlyph& origGlyph) {
         } else {
             SkASSERT(SkMask::kARGB32_Format != origGlyph.fMaskFormat);
             SkASSERT(SkMask::kARGB32_Format != mask.fFormat);
+#ifndef SK_SUPPORT_LEGACY_PATH_DAA_BIT
+            // DAA would have over coverage issues with small stroke_and_fill (crbug.com/821353)
+            SkPathPriv::SetIsBadForDAA(devPath, fRec.fFrameWidth > 0 && fRec.fFrameWidth <= 2);
+#endif
             generateMask(mask, devPath, fPreBlend);
         }
     }

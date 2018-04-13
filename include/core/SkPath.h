@@ -1626,6 +1626,7 @@ private:
     mutable SkAtomic<Convexity, sk_memory_order_relaxed> fConvexity;
     mutable SkAtomic<uint8_t, sk_memory_order_relaxed>   fFirstDirection;// SkPathPriv::FirstDirection
     SkBool8                                              fIsVolatile;
+    SkBool8                                              fIsBadForDAA = false;
 
     /** Resets all fields other than fPathRef to their initial 'empty' values.
      *  Assumes the caller has already emptied fPathRef.
@@ -1674,7 +1675,7 @@ private:
     SkDEBUGCODE(void validateRef() const { fPathRef->validate(); } )
 
     bool isRectContour(bool allowPartial, int* currVerb, const SkPoint** pts,
-                       bool* isClosed, Direction* direction) const;
+                       bool* isClosed, Direction* direction, SkRect* rect) const;
 
     // called by stroker to see if all points (in the last contour) are equal and worthy of a cap
     bool isZeroLengthSincePoint(int startPtIndex) const;

@@ -497,12 +497,12 @@ void GrGLGpu::onResetContext(uint32_t resetBits) {
 
 static bool check_backend_texture(const GrBackendTexture& backendTex, const GrGLCaps& caps,
                                   GrGLTexture::IDDesc* idDesc) {
-    const GrGLTextureInfo* info = backendTex.getGLTextureInfo();
-    if (!info || !info->fID) {
+    GrGLTextureInfo info;
+    if (!backendTex.getGLTextureInfo(&info) || !info.fID) {
         return false;
     }
 
-    idDesc->fInfo = *info;
+    idDesc->fInfo = info;
 
     if (GR_GL_TEXTURE_EXTERNAL == idDesc->fInfo.fTarget) {
         if (!caps.shaderCaps()->externalTextureSupport()) {
@@ -593,13 +593,13 @@ sk_sp<GrTexture> GrGLGpu::onWrapRenderableBackendTexture(const GrBackendTexture&
 }
 
 sk_sp<GrRenderTarget> GrGLGpu::onWrapBackendRenderTarget(const GrBackendRenderTarget& backendRT) {
-    const GrGLFramebufferInfo* info = backendRT.getGLFramebufferInfo();
-    if (!info) {
+    GrGLFramebufferInfo info;
+    if (!backendRT.getGLFramebufferInfo(&info)) {
         return nullptr;
     }
 
     GrGLRenderTarget::IDDesc idDesc;
-    idDesc.fRTFBOID = info->fFBOID;
+    idDesc.fRTFBOID = info.fFBOID;
     idDesc.fMSColorRenderbufferID = 0;
     idDesc.fTexFBOID = GrGLRenderTarget::kUnresolvableFBOID;
     idDesc.fRTFBOOwnership = GrBackendObjectOwnership::kBorrowed;
@@ -618,16 +618,13 @@ sk_sp<GrRenderTarget> GrGLGpu::onWrapBackendRenderTarget(const GrBackendRenderTa
 
 sk_sp<GrRenderTarget> GrGLGpu::onWrapBackendTextureAsRenderTarget(const GrBackendTexture& tex,
                                                                   int sampleCnt) {
-    const GrGLTextureInfo* info = tex.getGLTextureInfo();
-    if (!info || !info->fID) {
+    GrGLTextureInfo info;
+    if (!tex.getGLTextureInfo(&info) || !info.fID) {
         return nullptr;
     }
 
-    GrGLTextureInfo texInfo;
-    texInfo = *info;
-
-    if (GR_GL_TEXTURE_RECTANGLE != texInfo.fTarget &&
-        GR_GL_TEXTURE_2D != texInfo.fTarget) {
+    if (GR_GL_TEXTURE_RECTANGLE != info.fTarget &&
+        GR_GL_TEXTURE_2D != info.fTarget) {
         // Only texture rectangle and texture 2d are supported. We do not check whether texture
         // rectangle is supported by Skia - if the caller provided us with a texture rectangle,
         // we assume the necessary support exists.
@@ -642,7 +639,7 @@ sk_sp<GrRenderTarget> GrGLGpu::onWrapBackendTextureAsRenderTarget(const GrBacken
     surfDesc.fSampleCnt = this->caps()->getRenderTargetSampleCount(sampleCnt, tex.config());
 
     GrGLRenderTarget::IDDesc rtIDDesc;
-    if (!this->createRenderTargetObjects(surfDesc, texInfo, &rtIDDesc)) {
+    if (!this->createRenderTargetObjects(surfDesc, info, &rtIDDesc)) {
         return nullptr;
     }
     return GrGLRenderTarget::MakeWrapped(this, surfDesc, rtIDDesc, 0);
@@ -4349,6 +4346,10 @@ GrBackendTexture GrGLGpu::createTestingOnlyBackendTexture(const void* pixels, in
         return GrBackendTexture();  // invalid
     }
 
+    if (w > this->caps()->maxTextureSize() || h > this->caps()->maxTextureSize()) {
+        return GrBackendTexture();  // invalid
+    }
+
     // Currently we don't support uploading pixel data when mipped.
     if (pixels && GrMipMapped::kYes == mipMapped) {
         return GrBackendTexture();  // invalid
@@ -4413,13 +4414,13 @@ GrBackendTexture GrGLGpu::createTestingOnlyBackendTexture(const void* pixels, in
 bool GrGLGpu::isTestingOnlyBackendTexture(const GrBackendTexture& tex) const {
     SkASSERT(kOpenGL_GrBackend == tex.backend());
 
-    const GrGLTextureInfo* info = tex.getGLTextureInfo();
-    if (!info) {
+    GrGLTextureInfo info;
+    if (!tex.getGLTextureInfo(&info)) {
         return false;
     }
 
     GrGLboolean result;
-    GL_CALL_RET(result, IsTexture(info->fID));
+    GL_CALL_RET(result, IsTexture(info.fID));
 
     return (GR_GL_TRUE == result);
 }
@@ -4427,14 +4428,18 @@ bool GrGLGpu::isTestingOnlyBackendTexture(const GrBackendTexture& tex) const {
 void GrGLGpu::deleteTestingOnlyBackendTexture(const GrBackendTexture& tex) {
     SkASSERT(kOpenGL_GrBackend == tex.backend());
 
-    if (const auto* info = tex.getGLTextureInfo()) {
-        GL_CALL(DeleteTextures(1, &info->fID));
+    GrGLTextureInfo info;
+    if (tex.getGLTextureInfo(&info)) {
+        GL_CALL(DeleteTextures(1, &info.fID));
     }
 }
 
 GrBackendRenderTarget GrGLGpu::createTestingOnlyBackendRenderTarget(int w, int h,
                                                                     GrColorType colorType,
                                                                     GrSRGBEncoded srgbEncoded) {
+    if (w > this->caps()->maxRenderTargetSize() || h > this->caps()->maxRenderTargetSize()) {
+        return GrBackendRenderTarget();  // invalid
+    }
     this->handleDirtyContext();
     auto config = GrColorTypeToPixelConfig(colorType, srgbEncoded);
     GrGLenum colorBufferFormat;
@@ -4502,9 +4507,10 @@ GrBackendRenderTarget GrGLGpu::createTestingOnlyBackendRenderTarget(int w, int h
 
 void GrGLGpu::deleteTestingOnlyBackendRenderTarget(const GrBackendRenderTarget& backendRT) {
     SkASSERT(kOpenGL_GrBackend == backendRT.backend());
-    if (auto info = backendRT.getGLFramebufferInfo()) {
-        if (info->fFBOID) {
-            GL_CALL(DeleteFramebuffers(1, &info->fFBOID));
+    GrGLFramebufferInfo info;
+    if (backendRT.getGLFramebufferInfo(&info)) {
+        if (info.fFBOID) {
+            GL_CALL(DeleteFramebuffers(1, &info.fFBOID));
         }
     }
 }

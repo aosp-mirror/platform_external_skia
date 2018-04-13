@@ -202,7 +202,7 @@ func defaultSwarmDimensions(parts map[string]string) []string {
 			"Ubuntu16":   "Ubuntu-16.10",
 			"Ubuntu17":   "Ubuntu-17.04",
 			"Win":        DEFAULT_OS_WIN,
-			"Win10":      "Windows-10-16299.248",
+			"Win10":      "Windows-10-16299.371",
 			"Win2k8":     "Windows-2008ServerR2-SP1",
 			"Win2016":    DEFAULT_OS_WIN,
 			"Win7":       "Windows-7-SP1",
@@ -234,10 +234,10 @@ func defaultSwarmDimensions(parts map[string]string) []string {
 				"Nexus5":          {"hammerhead", "M4B30Z_3437181"},
 				"Nexus5x":         {"bullhead", "OPR6.170623.023"},
 				"Nexus7":          {"grouper", "LMY47V_1836172"}, // 2012 Nexus 7
-				"NexusPlayer":     {"fugu", "OPR6.170623.021"},
+				"NexusPlayer":     {"fugu", "OPR2.170623.027"},
 				"Pixel":           {"sailfish", "OPM1.171019.016"},
 				"Pixel2XL":        {"taimen", "OPM1.171019.021"},
-				"PixelC":          {"dragon", "OPR1.170623.034"},
+				"PixelC":          {"dragon", "OPM1.171019.026"},
 			}[parts["model"]]
 			if !ok {
 				glog.Fatalf("Entry %q not found in Android mapping.", parts["model"])
@@ -292,7 +292,7 @@ func defaultSwarmDimensions(parts map[string]string) []string {
 					"GTX660":        "10de:11c0-23.21.13.9101",
 					"GTX960":        "10de:1401-23.21.13.9101",
 					"IntelHD4400":   "8086:0a16-20.19.15.4835",
-					"IntelIris540":  "8086:1926-21.20.16.4839",
+					"IntelIris540":  "8086:1926-23.20.16.4982",
 					"IntelIris6100": "8086:162b-20.19.15.4835",
 					"RadeonHD7770":  "1002:683d-23.20.15017.4003",
 					"RadeonR9M470X": "1002:6646-23.20.15017.4003",

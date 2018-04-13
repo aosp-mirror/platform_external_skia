@@ -10,6 +10,7 @@
 #include "gl/GrGLUtil.h"
 
 #ifdef SK_VULKAN
+#include "vk/GrVkImageLayout.h"
 #include "vk/GrVkTypes.h"
 #include "vk/GrVkUtil.h"
 #endif
@@ -67,13 +68,21 @@ const GrPixelConfig* GrBackendFormat::getMockFormat() const {
 GrBackendTexture::GrBackendTexture(int width,
                                    int height,
                                    const GrVkImageInfo& vkInfo)
+        : GrBackendTexture(width, height, vkInfo,
+                           sk_sp<GrVkImageLayout>(new GrVkImageLayout(vkInfo.fImageLayout))) {}
+
+GrBackendTexture::GrBackendTexture(int width,
+                                   int height,
+                                   const GrVkImageInfo& vkInfo,
+                                   sk_sp<GrVkImageLayout> layout)
         : fIsValid(true)
         , fWidth(width)
         , fHeight(height)
         , fConfig(GrVkFormatToPixelConfig(vkInfo.fFormat))
         , fMipMapped(GrMipMapped(vkInfo.fLevelCount > 1))
         , fBackend(kVulkan_GrBackend)
-        , fVkInfo(vkInfo) {}
+        , fVkInfo(vkInfo, layout.release()) {
+}
 #endif
 
 #if GR_TEST_UTILS
@@ -122,47 +131,118 @@ GrBackendTexture::GrBackendTexture(int width,
         , fBackend(kMock_GrBackend)
         , fMockInfo(mockInfo) {}
 
+GrBackendTexture::~GrBackendTexture() {
+    this->cleanup();
+}
+
+void GrBackendTexture::cleanup() {
 #ifdef SK_VULKAN
-const GrVkImageInfo* GrBackendTexture::getVkImageInfo() const {
     if (this->isValid() && kVulkan_GrBackend == fBackend) {
-        return &fVkInfo;
+        fVkInfo.cleanup();
+    }
+#endif
+}
+
+GrBackendTexture::GrBackendTexture(const GrBackendTexture& that) : fIsValid(false) {
+    *this = that;
+}
+
+GrBackendTexture& GrBackendTexture::operator=(const GrBackendTexture& that) {
+    if (!that.isValid()) {
+        this->cleanup();
+        fIsValid = false;
+        return *this;
+    }
+    fWidth = that.fWidth;
+    fHeight = that.fHeight;
+    fConfig = that.fConfig;
+    fMipMapped = that.fMipMapped;
+    fBackend = that.fBackend;
+
+    switch (that.fBackend) {
+        case kOpenGL_GrBackend:
+            fGLInfo = that.fGLInfo;
+            break;
+#ifdef SK_VULKAN
+        case kVulkan_GrBackend:
+            fVkInfo.assign(that.fVkInfo, this->isValid());
+            break;
+#endif
+#ifdef SK_METAL
+        case kMetal_GrBackend:
+            break;
+#endif
+        case kMock_GrBackend:
+            fMockInfo = that.fMockInfo;
+            break;
+        default:
+            SK_ABORT("Unknown GrBackend");
+    }
+    fIsValid = that.fIsValid;
+    return *this;
+}
+
+#ifdef SK_VULKAN
+bool GrBackendTexture::getVkImageInfo(GrVkImageInfo* outInfo) const {
+    if (this->isValid() && kVulkan_GrBackend == fBackend) {
+        *outInfo = fVkInfo.snapImageInfo();
+        return true;
+    }
+    return false;
+}
+
+void GrBackendTexture::setVkImageLayout(VkImageLayout layout) {
+    if (this->isValid() && kVulkan_GrBackend == fBackend) {
+        fVkInfo.setImageLayout(layout);
+    }
+}
+
+sk_sp<GrVkImageLayout> GrBackendTexture::getGrVkImageLayout() const {
+    if (this->isValid() && kVulkan_GrBackend == fBackend) {
+        return fVkInfo.getGrVkImageLayout();
     }
     return nullptr;
 }
 #endif
 
-const GrGLTextureInfo* GrBackendTexture::getGLTextureInfo() const {
+bool GrBackendTexture::getGLTextureInfo(GrGLTextureInfo* outInfo) const {
     if (this->isValid() && kOpenGL_GrBackend == fBackend) {
-        return &fGLInfo;
+        *outInfo = fGLInfo;
+        return true;
     }
-    return nullptr;
+    return false;
 }
 
-const GrMockTextureInfo* GrBackendTexture::getMockTextureInfo() const {
+bool GrBackendTexture::getMockTextureInfo(GrMockTextureInfo* outInfo) const {
     if (this->isValid() && kMock_GrBackend == fBackend) {
-        return &fMockInfo;
+        *outInfo = fMockInfo;
+        return true;
     }
-    return nullptr;
+    return false;
 }
 
 GrBackendFormat GrBackendTexture::format() const {
+    if (!this->isValid()) {
+        return GrBackendFormat();
+    }
+
     switch (this->backend()) {
 #ifdef SK_VULKAN
         case kVulkan_GrBackend: {
-            const GrVkImageInfo* vkInfo = this->getVkImageInfo();
-            SkASSERT(vkInfo);
-            return GrBackendFormat::MakeVk(vkInfo->fFormat);
+            GrVkImageInfo vkInfo;
+            SkAssertResult(this->getVkImageInfo(&vkInfo));
+            return GrBackendFormat::MakeVk(vkInfo.fFormat);
         }
 #endif
         case kOpenGL_GrBackend: {
-            const GrGLTextureInfo* glInfo = this->getGLTextureInfo();
-            SkASSERT(glInfo);
-            return GrBackendFormat::MakeGL(glInfo->fFormat, glInfo->fTarget);
+            GrGLTextureInfo glInfo;
+            SkAssertResult(this->getGLTextureInfo(&glInfo));
+            return GrBackendFormat::MakeGL(glInfo.fFormat, glInfo.fTarget);
         }
         case kMock_GrBackend: {
-            const GrMockTextureInfo* mockInfo = this->getMockTextureInfo();
-            SkASSERT(mockInfo);
-            return GrBackendFormat::MakeMock(mockInfo->fConfig);
+            GrMockTextureInfo mockInfo;
+            SkAssertResult(this->getMockTextureInfo(&mockInfo));
+            return GrBackendFormat::MakeMock(mockInfo.fConfig);
         }
         default:
             return GrBackendFormat();
@@ -221,6 +301,14 @@ GrBackendRenderTarget::GrBackendRenderTarget(int width,
                                              int height,
                                              int sampleCnt,
                                              const GrVkImageInfo& vkInfo)
+        : GrBackendRenderTarget(width, height, sampleCnt, vkInfo,
+                                sk_sp<GrVkImageLayout>(new GrVkImageLayout(vkInfo.fImageLayout))) {}
+
+GrBackendRenderTarget::GrBackendRenderTarget(int width,
+                                             int height,
+                                             int sampleCnt,
+                                             const GrVkImageInfo& vkInfo,
+                                             sk_sp<GrVkImageLayout> layout)
         : fIsValid(true)
         , fWidth(width)
         , fHeight(height)
@@ -228,7 +316,7 @@ GrBackendRenderTarget::GrBackendRenderTarget(int width,
         , fStencilBits(0)  // We always create stencil buffers internally for vulkan
         , fConfig(GrVkFormatToPixelConfig(vkInfo.fFormat))
         , fBackend(kVulkan_GrBackend)
-        , fVkInfo(vkInfo) {}
+        , fVkInfo(vkInfo, layout.release()) {}
 #endif
 
 #if GR_TEST_UTILS
@@ -276,27 +364,95 @@ GrBackendRenderTarget::GrBackendRenderTarget(int width,
         , fConfig(mockInfo.fConfig)
         , fMockInfo(mockInfo) {}
 
+GrBackendRenderTarget::~GrBackendRenderTarget() {
+    this->cleanup();
+}
+
+void GrBackendRenderTarget::cleanup() {
 #ifdef SK_VULKAN
-const GrVkImageInfo* GrBackendRenderTarget::getVkImageInfo() const {
-    if (kVulkan_GrBackend == fBackend) {
-        return &fVkInfo;
+    if (this->isValid() && kVulkan_GrBackend == fBackend) {
+        fVkInfo.cleanup();
+    }
+#endif
+}
+
+GrBackendRenderTarget::GrBackendRenderTarget(const GrBackendRenderTarget& that) : fIsValid(false) {
+    *this = that;
+}
+
+GrBackendRenderTarget& GrBackendRenderTarget::operator=(const GrBackendRenderTarget& that) {
+    if (!that.isValid()) {
+        this->cleanup();
+        fIsValid = false;
+        return *this;
+    }
+    fWidth = that.fWidth;
+    fHeight = that.fHeight;
+    fSampleCnt = that.fSampleCnt;
+    fStencilBits = that.fStencilBits;
+    fConfig = that.fConfig;
+    fBackend = that.fBackend;
+
+    switch (that.fBackend) {
+        case kOpenGL_GrBackend:
+            fGLInfo = that.fGLInfo;
+            break;
+#ifdef SK_VULKAN
+        case kVulkan_GrBackend:
+            fVkInfo.assign(that.fVkInfo, this->isValid());
+            break;
+#endif
+#ifdef SK_METAL
+        case kMetal_GrBackend:
+            break;
+#endif
+        case kMock_GrBackend:
+            fMockInfo = that.fMockInfo;
+            break;
+        default:
+            SK_ABORT("Unknown GrBackend");
+    }
+    fIsValid = that.fIsValid;
+    return *this;
+}
+
+#ifdef SK_VULKAN
+bool GrBackendRenderTarget::getVkImageInfo(GrVkImageInfo* outInfo) const {
+    if (this->isValid() && kVulkan_GrBackend == fBackend) {
+        *outInfo = fVkInfo.snapImageInfo();
+        return true;
+    }
+    return false;
+}
+
+void GrBackendRenderTarget::setVkImageLayout(VkImageLayout layout) {
+    if (this->isValid() && kVulkan_GrBackend == fBackend) {
+        fVkInfo.setImageLayout(layout);
+    }
+}
+
+sk_sp<GrVkImageLayout> GrBackendRenderTarget::getGrVkImageLayout() const {
+    if (this->isValid() && kVulkan_GrBackend == fBackend) {
+        return fVkInfo.getGrVkImageLayout();
     }
     return nullptr;
 }
 #endif
 
-const GrGLFramebufferInfo* GrBackendRenderTarget::getGLFramebufferInfo() const {
-    if (kOpenGL_GrBackend == fBackend) {
-        return &fGLInfo;
+bool GrBackendRenderTarget::getGLFramebufferInfo(GrGLFramebufferInfo* outInfo) const {
+    if (this->isValid() && kOpenGL_GrBackend == fBackend) {
+        *outInfo = fGLInfo;
+        return true;
     }
-    return nullptr;
+    return false;
 }
 
-const GrMockRenderTargetInfo* GrBackendRenderTarget::getMockRenderTargetInfo() const {
-    if (kMock_GrBackend == fBackend) {
-        return &fMockInfo;
+bool GrBackendRenderTarget::getMockRenderTargetInfo(GrMockRenderTargetInfo* outInfo) const {
+    if (this->isValid() && kMock_GrBackend == fBackend) {
+        *outInfo = fMockInfo;
+        return true;
     }
-    return nullptr;
+    return false;
 }
 
 #if GR_TEST_UTILS

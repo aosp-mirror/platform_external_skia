@@ -163,17 +163,17 @@ GrTexture* SkImage::getTexture() const {
 
 bool SkImage::isTextureBacked() const { return SkToBool(as_IB(this)->peekProxy()); }
 
+#ifdef SK_SUPPORT_LEGACY_BACKEND_OBJECTS
 GrBackendObject SkImage::getTextureHandle(bool flushPendingGrContextIO,
                                           GrSurfaceOrigin* origin) const {
     return as_IB(this)->onGetTextureHandle(flushPendingGrContextIO, origin);
 }
+#endif
 
-#if GR_TEST_UTILS
 GrBackendTexture SkImage::getBackendTexture(bool flushPendingGrContextIO,
                                             GrSurfaceOrigin* origin) const {
     return as_IB(this)->onGetBackendTexture(flushPendingGrContextIO, origin);
 }
-#endif
 
 bool SkImage::isValid(GrContext* context) const {
     if (context && context->contextPriv().abandoned()) {
@@ -188,14 +188,14 @@ GrTexture* SkImage::getTexture() const { return nullptr; }
 
 bool SkImage::isTextureBacked() const { return false; }
 
+#ifdef SK_SUPPORT_LEGACY_BACKEND_OBJECTS
 GrBackendObject SkImage::getTextureHandle(bool, GrSurfaceOrigin*) const { return 0; }
+#endif
 
-#if GR_TEST_UTILS
 GrBackendTexture SkImage::getBackendTexture(bool flushPendingGrContextIO,
                                             GrSurfaceOrigin* origin) const {
     return GrBackendTexture(); // invalid
 }
-#endif
 
 bool SkImage::isValid(GrContext* context) const {
     if (context) {

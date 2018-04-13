@@ -428,6 +428,7 @@ public:
     static const BackendHandleAccess kDiscardWrite_TextureHandleAccess =
             kDiscardWrite_BackendHandleAccess;
 
+#ifdef SK_SUPPORT_LEGACY_BACKEND_OBJECTS
     /** Returns the GPU back-end reference of the texture used by SkSurface, or zero
         if SkSurface is not backed by a GPU texture.
 
@@ -439,27 +440,8 @@ public:
         @return                     GPU texture reference
     */
     GrBackendObject getTextureHandle(BackendHandleAccess backendHandleAccess);
+#endif
 
-    /** Returns true and stores the GPU back-end reference of the render target used
-        by SkSurface in backendObject.
-
-        Return false if SkSurface is not backed by a GPU render target, and leaves
-        backendObject unchanged.
-
-        The returned render target handle is only valid until the next draw into SkSurface,
-        or when SkSurface is deleted.
-
-        In OpenGL this returns the frame buffer object ID.
-
-        @param backendObject        GPU intermediate memory buffer
-        @param backendHandleAccess  one of:  kFlushRead_BackendHandleAccess,
-                                    kFlushWrite_BackendHandleAccess, kDiscardWrite_BackendHandleAccess
-        @return                     true if SkSurface is backed by GPU texture
-    */
-    bool getRenderTargetHandle(GrBackendObject* backendObject,
-                               BackendHandleAccess backendHandleAccess);
-
-#if GR_TEST_UTILS
     /** Retrieves the backend texture. If Surface has no backend texture, an invalid
         object is returned. Call GrBackendTexture::isValid to determine if the result
         is valid.
@@ -486,7 +468,6 @@ public:
         @return                     GPU render target reference; invalid on failure
     */
     GrBackendRenderTarget getBackendRenderTarget(BackendHandleAccess backendHandleAccess);
-#endif
 
     /** Returns SkCanvas that draws into SkSurface. Subsequent calls return the same SkCanvas.
         SkCanvas returned is managed and owned by SkSurface, and is deleted when SkSurface
