@@ -149,7 +149,8 @@ void SkThreadedBMPDevice::drawPath(const SkPath& path, const SkPaint& paint,
         const SkMatrix* prePathMatrix, bool pathIsMutable) {
     SkRect drawBounds = path.isInverseFillType() ? SkRectPriv::MakeLargest()
                                                  : get_fast_bounds(path.getBounds(), paint);
-    if (path.countVerbs() < 4) { // when path is small, init-once has too much overhead
+    // when path is small, init-once has too much overhead; init-once also can't handle mask filter
+    if (path.countVerbs() < 4 || paint.getMaskFilter()) {
         fQueue.push(drawBounds, [=](SkArenaAlloc*, const DrawState& ds, const SkIRect& tileBounds) {
             TileDraw(ds, tileBounds).drawPath(path, paint, prePathMatrix, false);
         });
@@ -159,6 +160,15 @@ void SkThreadedBMPDevice::drawPath(const SkPath& path, const SkPaint& paint,
             elem->getDraw().drawPath(path, paint, prePathMatrix, false, false, nullptr, &data);
         });
     }
+}
+
+SkBitmap SkThreadedBMPDevice::snapBitmap(const SkBitmap& bitmap) {
+    // We can't use bitmap.isImmutable() because it could be temporarily immutable
+    // TODO(liyuqian): use genID to reduce the copy frequency
+    SkBitmap snap;
+    snap.allocPixels(bitmap.info());
+    bitmap.readPixels(snap.pixmap());
+    return snap;
 }
 
 void SkThreadedBMPDevice::drawBitmap(const SkBitmap& bitmap, const SkMatrix& matrix,
@@ -173,16 +183,18 @@ void SkThreadedBMPDevice::drawBitmap(const SkBitmap& bitmap, const SkMatrix& mat
         clonedDstOrNull = fAlloc.make<SkRect>(*dstOrNull);
     }
 
+    SkBitmap snap = this->snapBitmap(bitmap);
     fQueue.push(drawBounds, [=](SkArenaAlloc*, const DrawState& ds, const SkIRect& tileBounds){
-        TileDraw(ds, tileBounds).drawBitmap(bitmap, matrix, clonedDstOrNull, paint);
+        TileDraw(ds, tileBounds).drawBitmap(snap, matrix, clonedDstOrNull, paint);
     });
 }
 
 void SkThreadedBMPDevice::drawSprite(const SkBitmap& bitmap, int x, int y, const SkPaint& paint) {
     SkRect drawBounds = SkRect::MakeXYWH(x, y, bitmap.width(), bitmap.height());
+    SkBitmap snap = this->snapBitmap(bitmap);
     fQueue.push<false>(drawBounds, [=](SkArenaAlloc*, const DrawState& ds,
                                        const SkIRect& tileBounds){
-        TileDraw(ds, tileBounds).drawSprite(bitmap, x, y, paint);
+        TileDraw(ds, tileBounds).drawSprite(snap, x, y, paint);
     });
 }
 

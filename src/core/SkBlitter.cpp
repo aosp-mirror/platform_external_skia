@@ -81,13 +81,11 @@ void SkBlitter::blitFatAntiRect(const SkRect& rect) {
 }
 
 void SkBlitter::blitCoverageDeltas(SkCoverageDeltaList* deltas, const SkIRect& clip,
-                                   bool isEvenOdd, bool isInverse, bool isConvex,
-                                   SkArenaAlloc* alloc) {
-    // We cannot use blitter to allocate the storage because the same blitter might be used across
-    // many threads.
-    int      runSize    = clip.width() + 1; // +1 so we can set runs[clip.width()] = 0
-    int16_t* runs       = alloc->makeArrayDefault<int16_t>(runSize);
-    SkAlpha* alphas     = alloc->makeArrayDefault<SkAlpha>(runSize);
+                                   bool isEvenOdd, bool isInverse, bool isConvex) {
+    int         runSize = clip.width() + 1; // +1 so we can set runs[clip.width()] = 0
+    void*       storage = this->allocBlitMemory(runSize * (sizeof(int16_t) + sizeof(SkAlpha)));
+    int16_t*    runs    = reinterpret_cast<int16_t*>(storage);
+    SkAlpha*    alphas  = reinterpret_cast<SkAlpha*>(runs + runSize);
     runs[clip.width()]  = 0; // we must set the last run to 0 so blitAntiH can stop there
 
     bool canUseMask = !deltas->forceRLE() &&
@@ -110,7 +108,16 @@ void SkBlitter::blitCoverageDeltas(SkCoverageDeltaList* deltas, const SkIRect& c
         // This is such an important optimization that will bring ~2x speedup for benches like
         // path_fill_small_long_line and path_stroke_small_sawtooth.
         if (canUseMask && !deltas->sorted(y) && deltas->count(y) << 3 >= clip.width()) {
+#ifdef SK_SUPPORT_LEGACY_THREADED_DAA_BUGS
             SkIRect rowIR = SkIRect::MakeLTRB(clip.fLeft, y, clip.fRight, y + 1);
+#else
+            // Note that deltas->left()/right() may be different than clip.fLeft/fRight because in
+            // the threaded backend, deltas are generated in the initFn with full clip, while
+            // blitCoverageDeltas is called in drawFn with a subclip. For inverse fill, the clip
+            // might be wider than deltas' bounds (which is clippedIR).
+            SkIRect rowIR = SkIRect::MakeLTRB(SkTMin(clip.fLeft, deltas->left()), y,
+                                              SkTMax(clip.fRight, deltas->right()), y + 1);
+#endif
             SkSTArenaAlloc<SkCoverageDeltaMask::MAX_SIZE> alloc;
             SkCoverageDeltaMask mask(&alloc, rowIR);
             for(int i = 0; i < deltas->count(y); ++i) {
