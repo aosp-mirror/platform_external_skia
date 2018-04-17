@@ -339,6 +339,7 @@ cc_library_static {
         "src/core/SkSpriteBlitter_ARGB32.cpp",
         "src/core/SkSpriteBlitter_RGB565.cpp",
         "src/core/SkStream.cpp",
+        "src/core/SkStrikeCache.cpp",
         "src/core/SkString.cpp",
         "src/core/SkStringUtils.cpp",
         "src/core/SkStroke.cpp",
