@@ -6,20 +6,20 @@
  */
 
 #include "SkGlyphCache.h"
+
 #include "SkGraphics.h"
 #include "SkMutex.h"
 #include "SkOnce.h"
-#include "SkPaintPriv.h"
 #include "SkPath.h"
 #include "SkTemplates.h"
 #include "SkTypeface.h"
 #include <cctype>
 
 SkGlyphCache::SkGlyphCache(
-        const SkDescriptor& desc,
-        std::unique_ptr<SkScalerContext> scaler,
-        const SkPaint::FontMetrics& fontMetrics)
-    : Node{desc}
+    const SkDescriptor& desc,
+    std::unique_ptr<SkScalerContext> scaler,
+    const SkPaint::FontMetrics& fontMetrics)
+    : fDesc{desc}
     , fScalerContext{std::move(scaler)}
     , fFontMetrics(fontMetrics)
 {
@@ -33,6 +33,10 @@ SkGlyphCache::~SkGlyphCache() {
             delete g->fPathData->fPath;
         }
     });
+}
+
+const SkDescriptor& SkGlyphCache::getDescriptor() const {
+    return *fDesc.getDesc();
 }
 
 SkGlyphCache::CharGlyphRec* SkGlyphCache::getCharGlyphRec(SkPackedUnicharID packedUnicharID) {
@@ -387,38 +391,6 @@ void SkGlyphCache::dump() const {
     SkDebugf("%s\n", msg.c_str());
 }
 
-SkExclusiveStrikePtr SkGlyphCache::FindStrikeExclusive(const SkDescriptor& desc) {
-    return SkStrikeCache::FindStrikeExclusive(desc);
-}
-
-SkExclusiveStrikePtr SkGlyphCache::FindOrCreateStrikeExclusive(
-    const SkDescriptor& desc, const SkScalerContextEffects& effects, const SkTypeface& typeface)
-{
-    auto cache = SkGlyphCache::FindStrikeExclusive(desc);
-    if (cache == nullptr) {
-        auto scaler = SkStrikeCache::CreateScalerContext(desc, effects, typeface);
-        cache = SkStrikeCache::CreateStrikeExclusive(desc, std::move(scaler));
-    }
-    return cache;
-}
-
-SkExclusiveStrikePtr SkGlyphCache::FindOrCreateStrikeExclusive(
-    const SkPaint& paint,
-    const SkSurfaceProps* surfaceProps,
-    SkScalerContextFlags scalerContextFlags,
-    const SkMatrix* deviceMatrix)
-{
-    SkAutoDescriptor ad;
-    SkScalerContextEffects effects;
-
-    auto desc = SkScalerContext::CreateDescriptorAndEffectsUsingPaint(
-        paint, surfaceProps, scalerContextFlags, deviceMatrix, &ad, &effects);
-
-    auto tf = SkPaintPriv::GetTypefaceOrDefault(paint);
-
-    return FindOrCreateStrikeExclusive(*desc, effects, *tf);
-}
-
 #ifdef SK_DEBUG
 
 void SkGlyphCache::validate() const {
@@ -432,23 +404,6 @@ void SkGlyphCache::validate() const {
         }
     }
 #endif
-}
-
-void SkStrikeCache::validate() const {
-    size_t computedBytes = 0;
-    int computedCount = 0;
-
-    const SkGlyphCache* head = fHead;
-    while (head != nullptr) {
-        computedBytes += head->fMemoryUsed;
-        computedCount += 1;
-        head = head->fNext;
-    }
-
-    SkASSERTF(fCacheCount == computedCount, "fCacheCount: %d, computedCount: %d", fCacheCount,
-              computedCount);
-    SkASSERTF(fTotalMemoryUsed == computedBytes, "fTotalMemoryUsed: %d, computedBytes: %d",
-              fTotalMemoryUsed, computedBytes);
 }
 
 #endif
