@@ -98,16 +98,12 @@ public:
     explicit SkDngHost(dng_memory_allocator* allocater) : dng_host(allocater) {}
 
     void PerformAreaTask(dng_area_task& task, const dng_rect& area) override {
-        // The area task gets split up into max_tasks sub-tasks. The max_tasks is defined by the
-        // dng-sdks default implementation of dng_area_task::MaxThreads() which returns 8 or 32
-        // sub-tasks depending on the architecture.
-        const int maxTasks = static_cast<int>(task.MaxThreads());
-
         SkTaskGroup taskGroup;
 
         // tileSize is typically 256x256
         const dng_point tileSize(task.FindTileSize(area));
-        const std::vector<dng_rect> taskAreas = compute_task_areas(maxTasks, area, tileSize);
+        const std::vector<dng_rect> taskAreas = compute_task_areas(this->PerformAreaTaskThreads(),
+                                                                   area, tileSize);
         const int numTasks = static_cast<int>(taskAreas.size());
 
         SkMutex mutex;
@@ -130,15 +126,25 @@ public:
         taskGroup.wait();
         task.Finish(numTasks);
 
-        // Currently we only re-throw the first catched exception.
+        // We only re-throw the first exception.
         if (!exceptions.empty()) {
             Throw_dng_error(exceptions.front().ErrorCode(), nullptr, nullptr);
         }
     }
 
     uint32 PerformAreaTaskThreads() override {
-        // FIXME: Need to get the real amount of available threads used in the SkTaskGroup.
+#ifdef SK_BUILD_FOR_ANDROID
+        // According to https://codereview.chromium.org/1634763002/diff/20001/src/codec/SkRawCodec.cpp#newcode71,
+        // having more tasks than CPU threads typically helps performance due
+        // to uneven task runtime. Today's Android devices tend to only have two
+        // cores, so above two should be enough. Too many threads raises the risk
+        // of running out of memory, as each task may allocate a large amount of
+        // memory, so keep this low. This value allows a marlin to decode a
+        // memory-intensive dng file successfully.
+        return 4;
+#else
         return kMaxMPThreads;
+#endif
     }
 
 private:
@@ -159,21 +165,6 @@ bool safe_add_to_size_t(T arg1, T arg2, size_t* result) {
     }
     return false;
 }
-
-class SkDngMemoryAllocator : public dng_memory_allocator {
-public:
-    ~SkDngMemoryAllocator() override {}
-
-    dng_memory_block* Allocate(uint32 size) override {
-        // To avoid arbitary allocation requests which might lead to out-of-memory, limit the
-        // amount of memory that can be allocated at once. The memory limit is based on experiments
-        // and supposed to be sufficient for all valid DNG images.
-        if (size > 300 * 1024 * 1024) {  // 300 MB
-            ThrowMemoryFull();
-        }
-        return dng_memory_allocator::Allocate(size);
-    }
-};
 
 bool is_asset_stream(const SkStream& stream) {
     return stream.hasLength() && stream.hasPosition();
@@ -617,7 +608,7 @@ private:
                                            SkEncodedInfo::kOpaque_Alpha, 8))
     {}
 
-    SkDngMemoryAllocator fAllocator;
+    dng_memory_allocator fAllocator;
     std::unique_ptr<SkRawStream> fStream;
     std::unique_ptr<dng_host> fHost;
     std::unique_ptr<dng_info> fInfo;
