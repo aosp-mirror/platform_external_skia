@@ -81,12 +81,12 @@ public:
                 dev->ctm().mapRect(&devBounds, *bounds);
                 if (devBounds.intersect(SkRect::Make(clipR))) {
                     fSrcBounds = devBounds.roundOut();
+                    // Check again, now that we have computed srcbounds.
+                    fNeedsTiling = fSrcBounds.right() > kMaxDim || fSrcBounds.bottom() > kMaxDim;
                 } else {
                     fNeedsTiling = false;
                     fDone = true;
                 }
-                // Check again, now that we have computed srcbounds.
-                fNeedsTiling = fSrcBounds.right() > kMaxDim || fSrcBounds.bottom() > kMaxDim;
             } else {
                 fSrcBounds = clipR;
             }
@@ -428,6 +428,9 @@ static inline bool CanApplyDstMatrixAsCTM(const SkMatrix& m, const SkPaint& pain
 void SkBitmapDevice::drawBitmapRect(const SkBitmap& bitmap,
                                     const SkRect* src, const SkRect& dst,
                                     const SkPaint& paint, SkCanvas::SrcRectConstraint constraint) {
+    SkASSERT(dst.isFinite());
+    SkASSERT(dst.isSorted());
+
     SkMatrix    matrix;
     SkRect      bitmapBounds, tmpSrc, tmpDst;
     SkBitmap    tmpBitmap;
@@ -456,6 +459,9 @@ void SkBitmapDevice::drawBitmapRect(const SkBitmap& bitmap,
             }
             // recompute dst, based on the smaller tmpSrc
             matrix.mapRect(&tmpDst, tmpSrc);
+            if (!tmpDst.isFinite()) {
+                return;
+            }
             dstPtr = &tmpDst;
         }
     }
@@ -544,12 +550,7 @@ class SkBitmapDeviceFilteredSurfaceProps {
 public:
     SkBitmapDeviceFilteredSurfaceProps(const SkBitmap& bitmap, const SkPaint& paint,
                                        const SkSurfaceProps& surfaceProps) {
-        if (kN32_SkColorType != bitmap.colorType() ||
-            paint.getPathEffect() ||
-            paint.isFakeBoldText() ||
-            paint.getStyle() != SkPaint::kFill_Style ||
-            !paint.isSrcOver())
-        {
+        if (kN32_SkColorType != bitmap.colorType() || !paint.isSrcOver()) {
             SkSurfaceProps* newPaint = fLazy.init(surfaceProps.flags(), kUnknown_SkPixelGeometry);
             fSurfaceProps = newPaint;
         } else {

@@ -13,6 +13,7 @@
 
 #include "SkDevice.h"
 #include "SkFindAndPlaceGlyph.h"
+#include "SkStrikeCache.h"
 #include "SkTypeface_remote.h"
 
 template <typename T>
@@ -135,7 +136,7 @@ SkStrikeDifferences::SkStrikeDifferences(
         : fTypefaceID{typefaceID}
         , fDesc{std::move(desc)} { }
 
-void SkStrikeDifferences::operator()(uint16_t glyphID, SkIPoint pos) {
+void SkStrikeDifferences::add(uint16_t glyphID, SkIPoint pos) {
     SkPackedGlyphID packedGlyphID{glyphID, pos.x(), pos.y()};
     fGlyphIDs->add(packedGlyphID);
 }
@@ -324,9 +325,9 @@ void SkTextBlobCacheDiffCanvas::processGlyphRun(
     auto desc = SkScalerContext::AutoDescriptorGivenRecAndEffects(rec, effects, &ad);
 
     auto typefaceID = SkTypefaceProxy::DownCast(runPaint.getTypeface())->remoteTypefaceID();
-    auto& addGlyph = fStrikeCacheDiff->findStrikeDifferences(*desc, typefaceID);
+    auto& diffs = fStrikeCacheDiff->findStrikeDifferences(*desc, typefaceID);
 
-    auto cache = SkGlyphCache::FindStrikeExclusive(*desc);
+    auto cache = SkStrikeCache::FindStrikeExclusive(*desc);
     bool isSubpixel = SkToBool(rec.fFlags & SkScalerContext::kSubpixelPositioning_Flag);
     SkAxisAlignment axisAlignment = SkAxisAlignment::kNone_SkAxisAlignment;
     if (it.positioning() == SkTextBlob::kHorizontal_Positioning) {
@@ -346,7 +347,7 @@ void SkTextBlobCacheDiffCanvas::processGlyphRun(
             continue;
         }
 
-        addGlyph(glyphs[index], subPixelPos);
+        diffs.add(glyphs[index], subPixelPos);
     }
 }
 
@@ -480,10 +481,10 @@ static void update_caches_from_strikes_data(SkStrikeClient *client,
 
         // TODO: implement effects handling.
         SkScalerContextEffects effects;
-        auto strike = SkGlyphCache::FindStrikeExclusive(*desc);
+        auto strike = SkStrikeCache::FindStrikeExclusive(*desc);
         if (strike == nullptr) {
-            auto scaler = SkGlyphCache::CreateScalerContext(*desc, effects, *tf);
-            strike = SkGlyphCache::CreateStrikeExclusive(*desc, std::move(scaler), fontMetrics);
+            auto scaler = SkStrikeCache::CreateScalerContext(*desc, effects, *tf);
+            strike = SkStrikeCache::CreateStrikeExclusive(*desc, std::move(scaler), fontMetrics);
         }
         for (int j = 0; j < spec->glyphCount; j++) {
             auto glyph = deserializer->read<SkGlyph>();

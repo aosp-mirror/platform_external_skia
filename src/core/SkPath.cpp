@@ -435,7 +435,7 @@ FIXME: Allow colinear quads and cubics to be treated like lines.
 FIXME: If the API passes fill-only, return true if the filled stroke
        is a rectangle, though the caller failed to close the path.
 
- first,last,next direction state-machine:
+ directions values:
     0x1 is set if the segment is horizontal
     0x2 is set if the segment is moving to the right or down
  thus:
@@ -450,20 +450,19 @@ static int rect_make_dir(SkScalar dx, SkScalar dy) {
 bool SkPath::isRectContour(bool allowPartial, int* currVerb, const SkPoint** ptsPtr,
         bool* isClosed, Direction* direction, SkRect* rect) const {
     int corners = 0;
+    SkPoint closeXY;  // used to determine if final line falls on a diagonal
     SkPoint lineStart;  // used to construct line from previous point
     const SkPoint* firstPt = nullptr; // first point in the rect (last of first moves)
     const SkPoint* lastPt = nullptr;  // last point in the rect (last of lines or first if closed)
+    SkPoint firstCorner;
+    SkPoint thirdCorner;
     const SkPoint* pts = *ptsPtr;
     const SkPoint* savePts = nullptr; // used to allow caller to iterate through a pair of rects
     lineStart.set(0, 0);
-    int firstDirection = 0;
-    int lastDirection = 0;
-    int nextDirection = 0;
+    signed char directions[] = {-1, -1, -1, -1, -1};  // -1 to 3; -1 is uninitialized
     bool closedOrMoved = false;
-    bool addedLine = false;
     bool autoClose = false;
     bool insertClose = false;
-    bool accumulatingRect = false;
     int verbCnt = fPathRef->countVerbs();
     while (*currVerb < verbCnt && (!allowPartial || !autoClose)) {
         uint8_t verb = insertClose ? (uint8_t) kClose_Verb : fPathRef->atVerb(*currVerb);
@@ -472,9 +471,8 @@ bool SkPath::isRectContour(bool allowPartial, int* currVerb, const SkPoint** pts
                 savePts = pts;
                 autoClose = true;
                 insertClose = false;
-                accumulatingRect = false;
             case kLine_Verb: {
-                if (accumulatingRect) {
+                if (kClose_Verb != verb) {
                     lastPt = pts;
                 }
                 SkPoint lineEnd = kClose_Verb == verb ? *firstPt : *pts++;
@@ -485,39 +483,49 @@ bool SkPath::isRectContour(bool allowPartial, int* currVerb, const SkPoint** pts
                 if (lineStart == lineEnd) {
                     break; // single point on side OK
                 }
-                addedLine = true;
-                nextDirection = rect_make_dir(lineDelta.fX, lineDelta.fY);
+                int nextDirection = rect_make_dir(lineDelta.fX, lineDelta.fY); // 0 to 3
                 if (0 == corners) {
-                    firstDirection = nextDirection;
-                    lineStart = lineEnd;
+                    directions[0] = nextDirection;
                     corners = 1;
                     closedOrMoved = false;
+                    lineStart = lineEnd;
                     break;
                 }
                 if (closedOrMoved) {
                     return false; // closed followed by a line
                 }
-                if (autoClose && nextDirection == firstDirection) {
+                if (autoClose && nextDirection == directions[0]) {
                     break; // colinear with first
                 }
                 closedOrMoved = autoClose;
-                if (lastDirection != nextDirection) {
-                    if (++corners > 4) {
-                        return false; // too many direction changes
+                if (directions[corners - 1] == nextDirection) {
+                    if (3 == corners && kLine_Verb == verb) {
+                        thirdCorner = lineEnd;
                     }
-                }
-                lineStart = lineEnd;
-                if (lastDirection == nextDirection) {
+                    lineStart = lineEnd;
                     break; // colinear segment
                 }
-                // Possible values for corners are 2, 3, and 4.
-                // When corners == 3, nextDirection opposes firstDirection.
-                // Otherwise, nextDirection at corner 2 opposes corner 4.
-                int turn = firstDirection ^ (corners - 1);
-                int directionCycle = 3 == corners ? 0 : nextDirection ^ turn;
-                if ((directionCycle ^ turn) != nextDirection) {
-                    return false; // direction didn't follow cycle
+                directions[corners++] = nextDirection;
+                // opposite lines must point in opposite directions; xoring them should equal 2
+                switch (corners) {
+                    case 2:
+                        firstCorner = lineStart;
+                        break;
+                    case 3:
+                        if ((directions[0] ^ directions[2]) != 2) {
+                            return false;
+                        }
+                        thirdCorner = lineEnd;
+                        break;
+                    case 4:
+                        if ((directions[1] ^ directions[3]) != 2) {
+                            return false;
+                        }
+                        break;
+                    default:
+                        return false; // too many direction changes
                 }
+                lineStart = lineEnd;
                 break;
             }
             case kQuad_Verb:
@@ -525,16 +533,18 @@ bool SkPath::isRectContour(bool allowPartial, int* currVerb, const SkPoint** pts
             case kCubic_Verb:
                 return false; // quadratic, cubic not allowed
             case kMove_Verb:
-                if (allowPartial && !autoClose && firstDirection) {
+                if (allowPartial && !autoClose && directions[0] >= 0) {
                     insertClose = true;
                     *currVerb -= 1;  // try move again afterwards
                     goto addMissingClose;
                 }
-                if (!addedLine) {
+                if (!corners) {
                     firstPt = pts;
-                    accumulatingRect = true;
                 } else {
-                    accumulatingRect = false;
+                    closeXY = *firstPt - *lastPt;
+                    if (closeXY.fX && closeXY.fY) {
+                        return false;   // we're diagonal, abort
+                    }
                 }
                 lineStart = *pts++;
                 closedOrMoved = true;
@@ -544,7 +554,6 @@ bool SkPath::isRectContour(bool allowPartial, int* currVerb, const SkPoint** pts
                 break;
         }
         *currVerb += 1;
-        lastDirection = nextDirection;
 addMissingClose:
         ;
     }
@@ -552,40 +561,24 @@ addMissingClose:
     if (corners < 3 || corners > 4) {
         return false;
     }
-    SkPoint closeXY = *firstPt - *lastPt;
-    // If autoClose, check if close generates diagonal
-    bool result = 4 == corners && (closeXY.isZero() || (autoClose && (!closeXY.fX || !closeXY.fY)));
-    if (!result) {
-        // check if we are just an incomplete rectangle, in which case we can
-        // return true, but not claim to be closed.
-        // e.g.
-        //    3 sided rectangle
-        //    4 sided but the last edge is not long enough to reach the start
-        //
-        if (closeXY.fX && closeXY.fY) {
-            return false;   // we're diagonal, abort (can we ever reach this?)
-        }
-        int closeDirection = rect_make_dir(closeXY.fX, closeXY.fY);
-        // make sure the close-segment doesn't double-back on itself
-        if (3 == corners || closeDirection == lastDirection) {
-            result = true;
-            autoClose = false;  // we are not closed
-        }
-    }
     if (savePts) {
         *ptsPtr = savePts;
     }
-    if (result && rect) {
-        ptrdiff_t count = lastPt - firstPt + 1;
-        rect->set(firstPt, (int) count);
+    // check if close generates diagonal
+    closeXY = *firstPt - *lastPt;
+    if (closeXY.fX && closeXY.fY) {
+        return false;
     }
-    if (result && isClosed) {
+    if (rect) {
+        rect->set(firstCorner, thirdCorner);
+    }
+    if (isClosed) {
         *isClosed = autoClose;
     }
-    if (result && direction) {
-        *direction = firstDirection == ((lastDirection + 1) & 3) ? kCCW_Direction : kCW_Direction;
+    if (direction) {
+        *direction = directions[0] == ((directions[1] + 1) & 3) ? kCW_Direction : kCCW_Direction;
     }
-    return result;
+    return true;
 }
 
 bool SkPath::isRect(SkRect* rect, bool* isClosed, Direction* direction) const {

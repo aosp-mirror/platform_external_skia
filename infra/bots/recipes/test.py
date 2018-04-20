@@ -209,6 +209,12 @@ def dm_flags(api, bot):
       if sample_count is not '':
         configs.append('angle_d3d11_es2_msaa' + sample_count)
         configs.append('angle_d3d11_es3_msaa' + sample_count)
+      if 'GTX' in bot or 'Quadro' in bot:
+        # See skia:7823 and chromium:693090.
+        configs.append('angle_gl_es3')
+        if sample_count is not '':
+          configs.append('angle_gl_es2_msaa' + sample_count)
+          configs.append('angle_gl_es3_msaa' + sample_count)
 
     # Vulkan bot *only* runs the vk config.
     if 'Vulkan' in bot:
@@ -256,8 +262,8 @@ def dm_flags(api, bot):
     if len(parts) == 3:
       args.extend(['--shard', parts[1]])
       args.extend(['--shards', parts[2]])
-    else:
-      raise Exception('Invalid task name - bad shards') #pragma: nocover
+    else: # pragma: nocover
+      raise Exception('Invalid task name - bad shards: %s' % tf)
 
   args.append('--config')
   args.extend(configs)
@@ -554,10 +560,6 @@ def dm_flags(api, bot):
     match.append('~WritePixels')  # skia:4711
     match.append('~PremulAlphaRoundTrip_Gpu')  # skia:7501
 
-  if 'DDL3' in bot:
-    match.append('~persp_shaders_bw')       # skia:7751
-    match.append('~persp_shaders_aa')       # skia:7751
-
   if 'Chromecast' in bot:
     if 'GPU' in bot:
       # skia:6687
@@ -790,6 +792,7 @@ def test_steps(api):
   use_hash_file = False
   if api.vars.upload_dm_results:
     host_dm_dir = str(api.vars.dm_dir)
+    api.flavor.create_clean_host_dir(api.vars.test_dir)
     device_dm_dir = str(api.flavor.device_dirs.dm_dir)
     if host_dm_dir != device_dm_dir:
       api.flavor.create_clean_device_dir(device_dm_dir)
@@ -1156,7 +1159,7 @@ def GenTests(api):
     ) +
     api.step_data('dm', retcode=1) +
     api.step_data('pull /sdcard/revenge_of_the_skiabot/dm_out '+
-                  '[CUSTOM_[SWARM_OUT_DIR]]/dm', retcode=1)
+                  '[START_DIR]/[SWARM_OUT_DIR]/dm', retcode=1)
   )
 
   yield (

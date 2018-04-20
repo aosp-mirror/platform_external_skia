@@ -1251,10 +1251,14 @@ bool GrVkGpu::createTestingOnlyVkImage(GrPixelConfig config, int w, int h, bool 
         mipLevels = SkMipMap::ComputeLevelCount(w, h) + 1;
     }
 
+    // sRGB format images may need to be aliased to linear for various reasons (legacy mode):
+    VkImageCreateFlags createFlags = GrVkFormatIsSRGB(pixelFormat, nullptr)
+        ? VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT : 0;
+
     const VkImageCreateInfo imageCreateInfo = {
             VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,  // sType
             nullptr,                              // pNext
-            0,                                    // VkImageCreateFlags
+            createFlags,                          // VkImageCreateFlags
             VK_IMAGE_TYPE_2D,                     // VkImageType
             pixelFormat,                          // VkFormat
             {(uint32_t)w, (uint32_t)h, 1},        // VkExtent3D
@@ -1916,11 +1920,6 @@ bool GrVkGpu::onCopySurface(GrSurface* dst, GrSurfaceOrigin dstOrigin,
     } else {
         SkASSERT(src->asTexture());
         srcImage = static_cast<GrVkTexture*>(src->asTexture());
-    }
-
-    // For borrowed textures, we *only* want to copy using draws (to avoid layout changes)
-    if (srcImage->isBorrowed()) {
-        return false;
     }
 
     if (can_copy_image(dst, dstOrigin, src, srcOrigin, this)) {

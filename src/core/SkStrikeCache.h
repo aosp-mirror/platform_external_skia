@@ -8,9 +8,12 @@
 #ifndef SkStrikeCache_DEFINED
 #define SkStrikeCache_DEFINED
 
+#include "SkDescriptor.h"
 #include "SkSpinlock.h"
+#include "SkTemplates.h"
 
 class SkGlyphCache;
+class SkTraceMemoryDump;
 
 #ifndef SK_DEFAULT_FONT_CACHE_COUNT_LIMIT
     #define SK_DEFAULT_FONT_CACHE_COUNT_LIMIT   2048
@@ -26,28 +29,89 @@ class SkGlyphCache;
 
 ///////////////////////////////////////////////////////////////////////////////
 
-class SkStrikeCache {
+class SkStrikePinner {
 public:
-    SkStrikeCache() {
-        fHead = nullptr;
-        fTotalMemoryUsed = 0;
-        fCacheSizeLimit = SK_DEFAULT_FONT_CACHE_LIMIT;
-        fCacheCount = 0;
-        fCacheCountLimit = SK_DEFAULT_FONT_CACHE_COUNT_LIMIT;
-        fPointSizeLimit = SK_DEFAULT_FONT_CACHE_POINT_SIZE_LIMIT;
-    }
+    virtual ~SkStrikePinner() = default;
+    virtual bool canDelete() = 0;
+};
 
+class SkStrikeCache {
+    struct Node;
+
+public:
+    SkStrikeCache() = default;
     ~SkStrikeCache();
 
-    static void AttachCache(SkGlyphCache* cache);
+    class ExclusiveStrikePtr {
+    public:
+        explicit ExclusiveStrikePtr(Node*);
+        ExclusiveStrikePtr();
+        ExclusiveStrikePtr(const ExclusiveStrikePtr&) = delete;
+        ExclusiveStrikePtr& operator = (const ExclusiveStrikePtr&) = delete;
+        ExclusiveStrikePtr(ExclusiveStrikePtr&&);
+        ExclusiveStrikePtr& operator = (ExclusiveStrikePtr&&);
+        ~ExclusiveStrikePtr();
 
-    mutable SkSpinlock     fLock;
+        SkGlyphCache* get() const;
+        SkGlyphCache* operator -> () const;
+        SkGlyphCache& operator *  () const;
+        explicit operator bool () const;
+        friend bool operator == (const ExclusiveStrikePtr&, const ExclusiveStrikePtr&);
+        friend bool operator == (const ExclusiveStrikePtr&, decltype(nullptr));
+        friend bool operator == (decltype(nullptr), const ExclusiveStrikePtr&);
 
-    SkGlyphCache* internalGetHead() const { return fHead; }
-    SkGlyphCache* internalGetTail() const;
+    private:
+        Node* fNode;
+    };
 
-    size_t getTotalMemoryUsed() const;
+    static ExclusiveStrikePtr FindStrikeExclusive(const SkDescriptor&);
+
+    static ExclusiveStrikePtr CreateStrikeExclusive(
+            const SkDescriptor& desc,
+            std::unique_ptr<SkScalerContext> scaler,
+            SkPaint::FontMetrics* maybeMetrics = nullptr,
+            std::unique_ptr<SkStrikePinner> = nullptr);
+
+    static ExclusiveStrikePtr FindOrCreateStrikeExclusive(
+            const SkDescriptor& desc,
+            const SkScalerContextEffects& effects,
+            const SkTypeface& typeface);
+
+    static ExclusiveStrikePtr FindOrCreateStrikeExclusive(
+            const SkPaint& paint,
+            const SkSurfaceProps* surfaceProps,
+            SkScalerContextFlags scalerContextFlags,
+            const SkMatrix* deviceMatrix);
+
+    static ExclusiveStrikePtr FindOrCreateStrikeExclusive(const SkPaint& paint);
+
+    static std::unique_ptr<SkScalerContext> CreateScalerContext(
+            const SkDescriptor&, const SkScalerContextEffects&, const SkTypeface&);
+
+    static void PurgeAll();
+
+    static void Dump();
+
+    // Dump memory usage statistics of all the attaches caches in the process using the
+    // SkTraceMemoryDump interface.
+    static void DumpMemoryStatistics(SkTraceMemoryDump* dump);
+
+    // call when a glyphcache is available for caching (i.e. not in use)
+    void attachNode(Node* node);
+    ExclusiveStrikePtr findStrikeExclusive(const SkDescriptor&);
+
+    void purgeAll(); // does not change budget
+
+    int getCacheCountLimit() const;
+    int setCacheCountLimit(int limit);
     int getCacheCountUsed() const;
+
+    size_t getCacheSizeLimit() const;
+    size_t setCacheSizeLimit(size_t limit);
+    size_t getTotalMemoryUsed() const;
+
+    int  getCachePointSizeLimit() const;
+    int  setCachePointSizeLimit(int limit);
 
 #ifdef SK_DEBUG
     void validate() const;
@@ -55,36 +119,31 @@ public:
     void validate() const {}
 #endif
 
-    int getCacheCountLimit() const;
-    int setCacheCountLimit(int limit);
-
-    size_t  getCacheSizeLimit() const;
-    size_t  setCacheSizeLimit(size_t limit);
-
-    int  getCachePointSizeLimit() const;
-    int  setCachePointSizeLimit(int limit);
-
-    void purgeAll(); // does not change budget
-
-    // call when a glyphcache is available for caching (i.e. not in use)
-    void attachCacheToHead(SkGlyphCache*);
-
-    // can only be called when the mutex is already held
-    void internalDetachCache(SkGlyphCache*);
-    void internalAttachCacheToHead(SkGlyphCache*);
-
 private:
-    SkGlyphCache* fHead;
-    size_t  fTotalMemoryUsed;
-    size_t  fCacheSizeLimit;
-    int32_t fCacheCountLimit;
-    int32_t fCacheCount;
-    int32_t fPointSizeLimit;
+    static void Attach(Node* node);
+
+    // The following methods can only be called when mutex is already held.
+    Node* internalGetHead() const { return fHead; }
+    Node* internalGetTail() const;
+    void internalDetachCache(Node*);
+    void internalAttachToHead(Node*);
 
     // Checkout budgets, modulated by the specified min-bytes-needed-to-purge,
     // and attempt to purge caches to match.
     // Returns number of bytes freed.
     size_t internalPurge(size_t minBytesNeeded = 0);
+
+    void forEachStrike(std::function<void(const SkGlyphCache&)> visitor) const;
+
+    mutable SkSpinlock fLock;
+    Node*              fHead{nullptr};
+    size_t             fTotalMemoryUsed{0};
+    size_t             fCacheSizeLimit{SK_DEFAULT_FONT_CACHE_LIMIT};
+    int32_t            fCacheCountLimit{SK_DEFAULT_FONT_CACHE_COUNT_LIMIT};
+    int32_t            fCacheCount{0};
+    int32_t            fPointSizeLimit{SK_DEFAULT_FONT_CACHE_POINT_SIZE_LIMIT};
 };
+
+using SkExclusiveStrikePtr = SkStrikeCache::ExclusiveStrikePtr;
 
 #endif  // SkStrikeCache_DEFINED
