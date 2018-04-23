@@ -425,6 +425,7 @@ cc_library_static {
         "src/gpu/GrDrawOpAtlas.cpp",
         "src/gpu/GrDrawOpTest.cpp",
         "src/gpu/GrDrawingManager.cpp",
+        "src/gpu/GrDriverBugWorkarounds.cpp",
         "src/gpu/GrFixedClip.cpp",
         "src/gpu/GrFragmentProcessor.cpp",
         "src/gpu/GrGpu.cpp",

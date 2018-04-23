@@ -710,6 +710,9 @@ func compile(b *specs.TasksCfgBuilder, name string, parts map[string]string) str
 			}
 			task.CipdPackages = append(task.CipdPackages, b.MustGetCipdPackageFromAsset("mips64el_toolchain_linux"))
 		}
+		if strings.Contains(name, "SwiftShader") {
+			task.CipdPackages = append(task.CipdPackages, b.MustGetCipdPackageFromAsset("cmake_linux"))
+		}
 	} else if strings.Contains(name, "Win") {
 		task.Dependencies = append(task.Dependencies, isolateCIPDAsset(b, ISOLATE_WIN_TOOLCHAIN_NAME))
 		if strings.Contains(name, "Clang") {
@@ -755,16 +758,6 @@ func recreateSKPs(b *specs.TasksCfgBuilder, name string) string {
 	task.CipdPackages = append(task.CipdPackages, b.MustGetCipdPackageFromAsset("go"))
 	task.ExecutionTimeout = 4 * time.Hour
 	task.IoTimeout = 4 * time.Hour // With kitchen, step logs don't count toward IoTimeout.
-	b.MustAddTask(name, task)
-	return name
-}
-
-// updateMetaConfig generates a UpdateMetaConfig task. Returns the name of the
-// last task in the generated chain of tasks, which the Job should add as a
-// dependency.
-func updateMetaConfig(b *specs.TasksCfgBuilder, name string) string {
-	task := kitchenTask(name, "update_meta_config", "swarm_recipe.isolate", SERVICE_ACCOUNT_UPDATE_META_CONFIG, linuxGceDimensions(), nil, OUTPUT_NONE)
-	task.CipdPackages = append(task.CipdPackages, CIPD_PKGS_GIT...)
 	b.MustAddTask(name, task)
 	return name
 }
@@ -1078,11 +1071,6 @@ func process(b *specs.TasksCfgBuilder, name string) {
 		deps = append(deps, recreateSKPs(b, name))
 	}
 
-	// UpdateMetaConfig bot.
-	if strings.Contains(name, "UpdateMetaConfig") {
-		deps = append(deps, updateMetaConfig(b, name))
-	}
-
 	// CT bots.
 	if strings.Contains(name, "-CT_") {
 		deps = append(deps, ctSKPs(b, name))
@@ -1122,7 +1110,6 @@ func process(b *specs.TasksCfgBuilder, name string) {
 		name != "Housekeeper-PerCommit-CheckGeneratedFiles" &&
 		!strings.Contains(name, "Android_Framework") &&
 		!strings.Contains(name, "RecreateSKPs") &&
-		!strings.Contains(name, "UpdateMetaConfig") &&
 		!strings.Contains(name, "-CT_") &&
 		!strings.Contains(name, "Housekeeper-PerCommit-Isolate") {
 		compile(b, compileTaskName, compileTaskParts)

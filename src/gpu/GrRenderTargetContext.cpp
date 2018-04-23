@@ -503,7 +503,7 @@ void GrRenderTargetContext::drawRect(const GrClip& clip,
     AutoCheckFlush acf(this->drawingManager());
 
     const SkStrokeRec& stroke = style->strokeRec();
-    if (stroke.getStyle() == SkStrokeRec::kFill_Style) {
+    if (stroke.getStyle() == SkStrokeRec::kFill_Style && !paint.numCoverageFragmentProcessors()) {
         // Check if this is a full RT draw and can be replaced with a clear. We don't bother
         // checking cases where the RT is fully inside a stroke.
         SkRect rtRect = fRenderTargetProxy->getBoundsRect();
@@ -1162,7 +1162,8 @@ bool GrRenderTargetContext::drawFilledDRRect(const GrClip& clip,
             SkStrokeRec stroke(SkStrokeRec::kFill_InitStyle);
             stroke.setStrokeStyle(outerR - innerR);
             auto op = GrOvalOpFactory::MakeOvalOp(std::move(paint), viewMatrix, circleBounds,
-                                                  stroke, this->caps()->shaderCaps());
+                                                  GrStyle(stroke, nullptr),
+                                                  this->caps()->shaderCaps());
             if (op) {
                 this->addDrawOp(clip, std::move(op));
                 return true;
@@ -1294,28 +1295,25 @@ void GrRenderTargetContext::drawOval(const GrClip& clip,
     SkDEBUGCODE(this->validate();)
     GR_CREATE_TRACE_MARKER_CONTEXT("GrRenderTargetContext", "drawOval", fContext);
 
-    if (oval.isEmpty()) {
-       return;
+    if (oval.isEmpty() && !style.pathEffect()) {
+        return;
     }
 
-    SkASSERT(!style.pathEffect()); // this should've been devolved to a path in SkGpuDevice
-
     AutoCheckFlush acf(this->drawingManager());
-    const SkStrokeRec& stroke = style.strokeRec();
 
     GrAAType aaType = this->chooseAAType(aa, GrAllowMixedSamples::kNo);
     if (GrAAType::kCoverage == aaType) {
         const GrShaderCaps* shaderCaps = fContext->caps()->shaderCaps();
-        std::unique_ptr<GrDrawOp> op =
-                GrOvalOpFactory::MakeOvalOp(std::move(paint), viewMatrix, oval, stroke, shaderCaps);
-        if (op) {
+        if (auto op = GrOvalOpFactory::MakeOvalOp(std::move(paint), viewMatrix, oval, style,
+                                                  shaderCaps)) {
             this->addDrawOp(clip, std::move(op));
             return;
         }
     }
 
-    this->drawShapeUsingPathRenderer(clip, std::move(paint), aa, viewMatrix,
-                                     GrShape(SkRRect::MakeOval(oval), style));
+    this->drawShapeUsingPathRenderer(
+            clip, std::move(paint), aa, viewMatrix,
+            GrShape(SkRRect::MakeOval(oval), SkPath::kCW_Direction, 2, false, style));
 }
 
 void GrRenderTargetContext::drawArc(const GrClip& clip,
