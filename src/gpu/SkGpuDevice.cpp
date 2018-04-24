@@ -509,14 +509,6 @@ void SkGpuDevice::drawRegion(const SkRegion& region, const SkPaint& paint) {
 void SkGpuDevice::drawOval(const SkRect& oval, const SkPaint& paint) {
     ASSERT_SINGLE_OWNER
     GR_CREATE_TRACE_MARKER_CONTEXT("SkGpuDevice", "drawOval", fContext.get());
-    // Presumably the path effect warps this to something other than an oval
-    if (paint.getPathEffect()) {
-        SkPath path;
-        path.setIsVolatile(true);
-        path.addOval(oval);
-        this->drawPath(path, paint, nullptr, true);
-        return;
-    }
 
     if (paint.getMaskFilter()) {
         // The RRect path can handle special case blurring
@@ -1358,6 +1350,15 @@ void SkGpuDevice::drawImageRect(const SkImage* image, const SkRect* src, const S
     }
 }
 
+// When drawing nine-patches or n-patches, cap the filter quality at kBilerp.
+static GrSamplerState::Filter compute_lattice_filter_mode(const SkPaint& paint) {
+    if (paint.getFilterQuality() == kNone_SkFilterQuality) {
+        return GrSamplerState::Filter::kNearest;
+    }
+
+    return GrSamplerState::Filter::kBilerp;
+}
+
 void SkGpuDevice::drawProducerNine(GrTextureProducer* producer,
                                    const SkIRect& center, const SkRect& dst, const SkPaint& paint) {
     GR_CREATE_TRACE_MARKER_CONTEXT("SkGpuDevice", "drawProducerNine", fContext.get());
@@ -1379,7 +1380,7 @@ void SkGpuDevice::drawProducerNine(GrTextureProducer* producer,
         return;
     }
 
-    static const GrSamplerState::Filter kMode = GrSamplerState::Filter::kNearest;
+    const GrSamplerState::Filter kMode = compute_lattice_filter_mode(paint);
     auto fp = producer->createFragmentProcessor(
             SkMatrix::I(), SkRect::MakeIWH(producer->width(), producer->height()),
             GrTextureProducer::kNo_FilterConstraint, true, &kMode,
@@ -1434,7 +1435,7 @@ void SkGpuDevice::drawProducerLattice(GrTextureProducer* producer,
                                       const SkPaint& paint) {
     GR_CREATE_TRACE_MARKER_CONTEXT("SkGpuDevice", "drawProducerLattice", fContext.get());
 
-    static const GrSamplerState::Filter kMode = GrSamplerState::Filter::kNearest;
+    const GrSamplerState::Filter kMode = compute_lattice_filter_mode(paint);
     std::unique_ptr<GrFragmentProcessor> fp(producer->createFragmentProcessor(
             SkMatrix::I(), SkRect::MakeIWH(producer->width(), producer->height()),
             GrTextureProducer::kNo_FilterConstraint, true, &kMode,

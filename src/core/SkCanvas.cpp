@@ -1578,12 +1578,10 @@ SkRect SkCanvas::getLocalClipBounds() const {
     }
 
     SkRect bounds;
-    SkRect r;
     // adjust it outwards in case we are antialiasing
-    const int inset = 1;
+    const int margin = 1;
 
-    r.iset(ibounds.fLeft - inset, ibounds.fTop - inset,
-           ibounds.fRight + inset, ibounds.fBottom + inset);
+    SkRect r = SkRect::Make(ibounds.makeOutset(margin, margin));
     inverse.mapRect(&bounds, r);
     return bounds;
 }
@@ -1725,6 +1723,29 @@ void SkCanvas::drawImageRect(const SkImage* image, const SkRect& dst, const SkPa
                         constraint);
 }
 
+namespace {
+class NoneOrLowQualityFilterPaint : SkNoncopyable {
+public:
+    NoneOrLowQualityFilterPaint(const SkPaint* origPaint) {
+        if (origPaint && origPaint->getFilterQuality() > kLow_SkFilterQuality) {
+            fLazyPaint.set(*origPaint);
+            fLazyPaint.get()->setFilterQuality(kLow_SkFilterQuality);
+            fPaint = fLazyPaint.get();
+        } else {
+            fPaint = origPaint;
+        }
+    }
+
+    const SkPaint* get() const {
+        return fPaint;
+    }
+
+private:
+    const SkPaint* fPaint;
+    SkLazyPaint fLazyPaint;
+};
+} // namespace
+
 void SkCanvas::drawImageNine(const SkImage* image, const SkIRect& center, const SkRect& dst,
                              const SkPaint* paint) {
     TRACE_EVENT0("skia", TRACE_FUNC);
@@ -1733,7 +1754,8 @@ void SkCanvas::drawImageNine(const SkImage* image, const SkIRect& center, const 
         return;
     }
     if (SkLatticeIter::Valid(image->width(), image->height(), center)) {
-        this->onDrawImageNine(image, center, dst, paint);
+        NoneOrLowQualityFilterPaint lowPaint(paint);
+        this->onDrawImageNine(image, center, dst, lowPaint.get());
     } else {
         this->drawImageRect(image, dst, paint);
     }
@@ -1755,7 +1777,8 @@ void SkCanvas::drawImageLattice(const SkImage* image, const Lattice& lattice, co
     }
 
     if (SkLatticeIter::Valid(image->width(), image->height(), latticePlusBounds)) {
-        this->onDrawImageLattice(image, latticePlusBounds, dst, paint);
+        NoneOrLowQualityFilterPaint lowPaint(paint);
+        this->onDrawImageLattice(image, latticePlusBounds, dst, lowPaint.get());
     } else {
         this->drawImageRect(image, dst, paint);
     }
@@ -1796,7 +1819,8 @@ void SkCanvas::drawBitmapNine(const SkBitmap& bitmap, const SkIRect& center, con
         return;
     }
     if (SkLatticeIter::Valid(bitmap.width(), bitmap.height(), center)) {
-        this->onDrawBitmapNine(bitmap, center, dst, paint);
+        NoneOrLowQualityFilterPaint lowPaint(paint);
+        this->onDrawBitmapNine(bitmap, center, dst, lowPaint.get());
     } else {
         this->drawBitmapRect(bitmap, dst, paint);
     }
@@ -1817,7 +1841,8 @@ void SkCanvas::drawBitmapLattice(const SkBitmap& bitmap, const Lattice& lattice,
     }
 
     if (SkLatticeIter::Valid(bitmap.width(), bitmap.height(), latticePlusBounds)) {
-        this->onDrawBitmapLattice(bitmap, latticePlusBounds, dst, paint);
+        NoneOrLowQualityFilterPaint lowPaint(paint);
+        this->onDrawBitmapLattice(bitmap, latticePlusBounds, dst, lowPaint.get());
     } else {
         this->drawBitmapRect(bitmap, dst, paint);
     }

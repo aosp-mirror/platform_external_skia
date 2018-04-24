@@ -83,7 +83,11 @@ def dm_flags(api, bot):
       'Chromecast' in bot):
     args.append('--ignoreSigInt')
 
-  if api.vars.builder_cfg.get('cpu_or_gpu') == 'CPU':
+  if 'SwiftShader' in api.vars.extra_tokens:
+    configs.extend(['gles', 'glesdft'])
+    args.append('--disableDriverCorrectnessWorkarounds')
+
+  elif api.vars.builder_cfg.get('cpu_or_gpu') == 'CPU':
     args.append('--nogpu')
 
     # These are the canonical configs that we would ideally run on all bots. We
@@ -254,6 +258,7 @@ def dm_flags(api, bot):
       # large skps and the gms
       configs = ['ddl-' + c for c in configs if c == 'gl' or c == 'vk']
       args.extend(['--skpViewportSize', "2048"])
+      args.extend(['--gpuThreads', "0"])
 
   tf = api.vars.builder_cfg.get('test_filter')
   if 'All' != tf:
@@ -705,6 +710,10 @@ def dm_flags(api, bot):
     # skia:7096
     match.append('~PinnedImageTest')
 
+  if 'ANGLE' in bot:
+    # skia:7835
+    match.append('~BlurMaskBiggerThanDest')
+
   if 'IntelIris540' in bot and 'ANGLE' in bot:
     for config in ['angle_d3d9_es2', 'angle_d3d11_es2', 'angle_gl_es2']:
       # skia:6103
@@ -965,6 +974,7 @@ TEST_BUILDERS = [
    '-SK_USE_DISCARDABLE_SCALEDIMAGECACHE'),
   ('Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Release-All'
    '-SK_FORCE_RASTER_PIPELINE_BLITTER'),
+  'Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Release-All-SwiftShader',
   'Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Release-All-TSAN',
   'Test-Debian9-GCC-GCE-CPU-AVX2-x86-Debug-All',
   'Test-Debian9-GCC-GCE-CPU-AVX2-x86_64-Debug-All',
