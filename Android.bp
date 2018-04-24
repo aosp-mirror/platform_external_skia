@@ -131,6 +131,7 @@ cc_library_static {
         "src/utils/win/",
         "src/xml/",
         "third_party/gif/",
+        "third_party/skcms",
     ],
 
     srcs: [
@@ -208,6 +209,7 @@ cc_library_static {
         "src/core/SkColorSpaceXform.cpp",
         "src/core/SkColorSpaceXformCanvas.cpp",
         "src/core/SkColorSpaceXform_A2B.cpp",
+        "src/core/SkColorSpaceXform_skcms.cpp",
         "src/core/SkColorSpaceXformer.cpp",
         "src/core/SkColorSpace_A2B.cpp",
         "src/core/SkColorSpace_ICC.cpp",
@@ -827,6 +829,7 @@ cc_library_static {
         "src/xps/SkXPSDevice.cpp",
         "src/xps/SkXPSDocument.cpp",
         "third_party/gif/SkGifImageReader.cpp",
+        "third_party/skcms/skcms.c",
     ],
 
     arch: {
