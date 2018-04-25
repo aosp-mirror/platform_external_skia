@@ -1087,12 +1087,12 @@ void GLSLCodeGenerator::writeVarDeclarations(const VarDeclarations& decl, bool g
             if (fProgram.fSettings.fCaps->externalTextureExtensionString()) {
                 fHeader.writeText("#extension ");
                 fHeader.writeText(fProgram.fSettings.fCaps->externalTextureExtensionString());
-                fHeader.writeText(" : require\n");
+                fHeader.writeText(" : enable\n");
             }
             if (fProgram.fSettings.fCaps->secondExternalTextureExtensionString()) {
                 fHeader.writeText("#extension ");
                 fHeader.writeText(fProgram.fSettings.fCaps->secondExternalTextureExtensionString());
-                fHeader.writeText(" : require\n");
+                fHeader.writeText(" : enable\n");
             }
             fFoundExternalSamplerDecl = true;
         }
@@ -1246,9 +1246,9 @@ void GLSLCodeGenerator::writeReturnStatement(const ReturnStatement& r) {
 void GLSLCodeGenerator::writeHeader() {
     this->write(fProgram.fSettings.fCaps->versionDeclString());
     this->writeLine();
-    for (const auto& e : fProgram.fElements) {
-        if (e->fKind == ProgramElement::kExtension_Kind) {
-            this->writeExtension((Extension&) *e);
+    for (const auto& e : fProgram) {
+        if (e.fKind == ProgramElement::kExtension_Kind) {
+            this->writeExtension((Extension&) e);
         }
     }
     if (!fProgram.fSettings.fCaps->canUseFragCoord()) {
@@ -1340,8 +1340,8 @@ bool GLSLCodeGenerator::generateCode() {
     }
     StringStream body;
     fOut = &body;
-    for (const auto& e : fProgram.fElements) {
-        this->writeProgramElement(*e);
+    for (const auto& e : fProgram) {
+        this->writeProgramElement(e);
     }
     fOut = rawOut;
 
