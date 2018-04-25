@@ -394,7 +394,7 @@ def dm_flags(api, bot):
     # Android and iOS. skia:5438
     blacklist('_ test _ GrShape')
 
-  if api.vars.internal_hardware_label == 1:
+  if api.vars.internal_hardware_label == '1':
     # skia:7046
     blacklist('_ test _ WritePixelsNonTexture_Gpu')
     blacklist('_ test _ WritePixelsNonTextureMSAA_Gpu')
@@ -403,7 +403,7 @@ def dm_flags(api, bot):
     blacklist('_ test _ GrSurfaceRenderability')
     blacklist('_ test _ ES2BlendWithNoTexture')
 
-  if api.vars.internal_hardware_label == 2:
+  if api.vars.internal_hardware_label == '2':
     # skia:7160
     blacklist('_ test _ SRGBReadWritePixels')
     blacklist('_ test _ SRGBMipMap')
@@ -647,6 +647,9 @@ def dm_flags(api, bot):
   if 'Vulkan' in bot and api.vars.is_linux and 'IntelIris640' in bot:
     match.extend(['~VkHeapTests']) # skia:6245
 
+  if api.vars.is_linux and 'IntelIris640' in bot:
+    match.extend(['~GLPrograms']) # skia:7849
+
   if 'Vulkan' in bot and api.vars.is_linux and 'IntelHD405' in bot:
     # skia:7322
     blacklist(['vk', 'gm', '_', 'skbug_257'])
@@ -747,7 +750,7 @@ def dm_flags(api, bot):
     # skia:7603
     match.append('~^GrMeshTest$')
 
-  if api.vars.internal_hardware_label == 1:
+  if api.vars.internal_hardware_label == '1':
     match.append('~skbug6653') # skia:6653
 
   if blacklisted:
@@ -1181,7 +1184,7 @@ def GenTests(api):
                    revision='abc123',
                    path_config='kitchen',
                    swarm_out_dir='[SWARM_OUT_DIR]',
-                   internal_hardware_label=1) +
+                   internal_hardware_label='1') +
     api.path.exists(
         api.path['start_dir'].join('skia'),
         api.path['start_dir'].join('skia', 'infra', 'bots', 'assets',
@@ -1201,7 +1204,7 @@ def GenTests(api):
                    revision='abc123',
                    path_config='kitchen',
                    swarm_out_dir='[SWARM_OUT_DIR]',
-                   internal_hardware_label=2) +
+                   internal_hardware_label='2') +
     api.path.exists(
         api.path['start_dir'].join('skia'),
         api.path['start_dir'].join('skia', 'infra', 'bots', 'assets',

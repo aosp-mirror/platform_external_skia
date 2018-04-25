@@ -380,6 +380,10 @@ func defaultSwarmDimensions(parts map[string]string) []string {
 			// ChOps-owned machines have Windows 10 v1709, but a slightly different version than Skolo.
 			d["os"] = "Windows-10-16299.309"
 		}
+		if d["os"] == DEFAULT_OS_WIN {
+			// TODO(dogben): Temporarily add image dimension during upgrade.
+			d["image"] = "windows-server-2016-dc-v20171114"
+		}
 	} else {
 		d["os"] = DEFAULT_OS_DEBIAN
 	}
@@ -892,7 +896,7 @@ func test(b *specs.TasksCfgBuilder, name string, parts map[string]string, compil
 	if iid != nil {
 		extraProps["internal_hardware_label"] = strconv.Itoa(*iid)
 	}
-	task := kitchenTask(name, recipe, "test_skia_bundled.isolate", "", swarmDimensions(parts), nil, OUTPUT_TEST)
+	task := kitchenTask(name, recipe, "test_skia_bundled.isolate", "", swarmDimensions(parts), extraProps, OUTPUT_TEST)
 	task.CipdPackages = append(task.CipdPackages, pkgs...)
 	task.Dependencies = append(task.Dependencies, compileTaskName)
 	if strings.Contains(name, "Android_ASAN") {

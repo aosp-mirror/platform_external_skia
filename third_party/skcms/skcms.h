@@ -38,6 +38,11 @@ typedef struct skcms_TransferFunction {
     float g, a,b,c,d,e,f;
 } skcms_TransferFunction;
 
+// A transfer function that's cheaper to evaluate than skcms_TransferFunction.
+typedef struct skcms_PolyTF {
+    float A,B,C,D;
+} skcms_PolyTF;
+
 // Unified representation of 'curv' or 'para' tag data, or a 1D table from 'mft1' or 'mft2'
 typedef union skcms_Curve {
     struct {
@@ -73,12 +78,6 @@ typedef struct skcms_A2B {
     skcms_Curve     output_curves[3];
 } skcms_A2B;
 
-// A specialized approximation for transfer functions with gamma between 1 and 3.
-//     f(x) = sign(x) * (A|x|^3 + B|x|^2 + (1-A-B)|x|)
-typedef struct skcms_TF13 {
-    float A,B;
-} skcms_TF13;
-
 typedef struct skcms_ICCProfile {
     const uint8_t* buffer;
 
@@ -104,9 +103,9 @@ typedef struct skcms_ICCProfile {
     bool                   has_A2B;
     skcms_A2B              A2B;
 
-    // If has_trc, we may be able to approximate the curves more efficiently.
-    bool   has_tf13[3];
-    skcms_TF13 tf13[3];
+    // If the profile has_trc, we may be able to approximate those curves with skcms_PolyTF.
+    bool     has_poly_tf[3];
+    skcms_PolyTF poly_tf[3];
 } skcms_ICCProfile;
 
 // The sRGB color profile is so commonly used that we offer a canonical skcms_ICCProfile for it.
@@ -130,12 +129,6 @@ void skcms_OptimizeForSpeed(skcms_ICCProfile*);
 
 bool skcms_ApproximateCurve(const skcms_Curve* curve, skcms_TransferFunction* approx,
                             float* max_error);
-
-bool skcms_ApproximateCurve13(const skcms_Curve* curve, skcms_TF13* approx, float* max_error);
-
-// What is the best single transfer function to use for the given profile? Note that there is
-// no real upper bound on the error of this transfer function.
-skcms_TransferFunction skcms_BestSingleCurve(const skcms_ICCProfile*);
 
 typedef struct skcms_ICCTag {
     uint32_t       signature;
@@ -214,6 +207,12 @@ bool skcms_Transform(const void*             src,
 // rewrite it with approximations where reasonable or by pulling from fallback
 // (e.g. skcms_sRGB_profile) where not.
 void skcms_EnsureUsableAsDestination(skcms_ICCProfile* profile, const skcms_ICCProfile* fallback);
+
+// If profile cannot be used as a destination profile with a single parametric transfer function,
+// (ie for rasterization), rewrite it with approximations where reasonable or by pulling from
+// fallback (e.g. skcms_sRGB_profile) where not.
+void skcms_EnsureUsableAsDestinationWithSingleCurve(skcms_ICCProfile* profile,
+                                                    const skcms_ICCProfile* fallback);
 
 #ifdef __cplusplus
 }

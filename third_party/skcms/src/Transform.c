@@ -6,6 +6,7 @@
  */
 
 #include "../skcms.h"
+#include "GaussNewton.h"
 #include "LinearAlgebra.h"
 #include "Macros.h"
 #include "PortableMath.h"
@@ -16,7 +17,10 @@
 #include <stdint.h>
 #include <string.h>
 
-#if defined(SKCMS_PROFILE)
+extern bool g_skcms_dump_profile;
+bool g_skcms_dump_profile = false;
+
+#if !defined(NDEBUG) && defined(__clang__)
     // Basic profiling tools to time each Op.  Not at all thread safe.
 
     #include <stdio.h>
@@ -47,22 +51,25 @@
         }
     }
 
-    static Op profile_next_op(Op op) {
-        static uint64_t start    = 0;
-        static uint64_t* current = NULL;
+    static inline Op profile_next_op(Op op) {
+        if (__builtin_expect(g_skcms_dump_profile, false)) {
+            static uint64_t start    = 0;
+            static uint64_t* current = NULL;
 
-        if (!current) {
-            atexit(profile_dump_stats);
-        } else {
-            *current += now() - start;
+            if (!current) {
+                atexit(profile_dump_stats);
+            } else {
+                *current += now() - start;
+            }
+
+            current = &counts[op];
+            start   = now();
         }
-
-        current = &counts[op];
-        start   = now();
         return op;
     }
 #else
     static inline Op profile_next_op(Op op) {
+        (void)g_skcms_dump_profile;
         return op;
     }
 #endif
@@ -314,9 +321,9 @@ typedef struct {
     const void* arg;
 } OpAndArg;
 
-static OpAndArg select_tf13_op(const skcms_TF13* tf, int channel) {
-    static const Op ops[] = { Op_tf13_r, Op_tf13_g, Op_tf13_b };
-    return (OpAndArg){ ops[channel], tf };
+static OpAndArg select_poly_tf_op(const skcms_PolyTF* tf, int channel) {
+    static const Op ops[] = { Op_poly_tf_r, Op_poly_tf_g, Op_poly_tf_b };
+    return (OpAndArg){ops[channel], tf};
 }
 
 static OpAndArg select_curve_op(const skcms_Curve* curve, int channel) {
@@ -518,12 +525,10 @@ bool skcms_Transform(const void*             src,
 
         } else if (srcProfile->has_trc && srcProfile->has_toXYZD50) {
             for (int i = 0; i < 3; i++) {
-                // Favor Op_noop (identity curve) over anything else,
-                // and select_tf_op() over over select_curve_op() when possible.
                 OpAndArg oa = select_curve_op(&srcProfile->trc[i], i);
                 if (oa.op != Op_noop) {
-                    if (srcProfile->has_tf13[i]) {
-                        oa = select_tf13_op(&srcProfile->tf13[i], i);
+                    if (srcProfile->has_poly_tf[i]) {
+                        oa = select_poly_tf_op(&srcProfile->poly_tf[i], i);
                     }
                     *ops++  = oa.op;
                     *args++ = oa.arg;
@@ -645,5 +650,48 @@ void skcms_EnsureUsableAsDestination(skcms_ICCProfile* profile, const skcms_ICCP
     }
 
     *profile = ok;
+    assert_usable_as_destination(profile);
+}
+
+static float max_roundtrip_error(const skcms_TransferFunction* inv_tf, const skcms_Curve* curve) {
+    int N = curve->table_entries ? (int)curve->table_entries : 256;
+    const float x_scale = 1.0f / (N - 1);
+    float err = 0;
+    for (int i = 0; i < N; i++) {
+        float x = i * x_scale,
+              y = skcms_eval_curve(x, curve);
+        err = fmaxf_(err, fabsf_(x - skcms_TransferFunction_eval(inv_tf, y)));
+    }
+    return err;
+}
+
+void skcms_EnsureUsableAsDestinationWithSingleCurve(skcms_ICCProfile* profile,
+                                                    const skcms_ICCProfile* fallback) {
+    // Operate on a copy of profile, so we can choose the best TF for the original curves
+    skcms_ICCProfile result = *profile;
+    skcms_EnsureUsableAsDestination(&result, fallback);
+
+    int best_tf = 0;
+    float min_max_error = INFINITY_;
+    const skcms_ICCProfile* ref = profile->has_trc ? profile : fallback;
+    for (int i = 0; i < 3; i++) {
+        skcms_TransferFunction inv;
+        skcms_TransferFunction_invert(&result.trc[i].parametric, &inv);
+
+        float err = 0;
+        for (int j = 0; j < 3; ++j) {
+            err = fmaxf_(err, max_roundtrip_error(&inv, &ref->trc[j]));
+        }
+        if (min_max_error > err) {
+            min_max_error = err;
+            best_tf = i;
+        }
+    }
+
+    for (int i = 0; i < 3; i++) {
+        result.trc[i].parametric = result.trc[best_tf].parametric;
+    }
+
+    *profile = result;
     assert_usable_as_destination(profile);
 }
