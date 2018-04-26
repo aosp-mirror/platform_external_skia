@@ -405,7 +405,7 @@ func defaultSwarmDimensions(parts map[string]string) []string {
 		}
 		if d["os"] == DEFAULT_OS_WIN {
 			// TODO(dogben): Temporarily add image dimension during upgrade.
-			d["image"] = "windows-server-2016-dc-v20171114"
+			d["image"] = "windows-server-2016-dc-v20180410"
 		}
 	} else {
 		d["os"] = DEFAULT_OS_DEBIAN
@@ -823,6 +823,7 @@ func ctSKPs(b *specs.TasksCfgBuilder, name string) string {
 // by hand.
 func checkGeneratedFiles(b *specs.TasksCfgBuilder, name string) string {
 	task := kitchenTask(name, "check_generated_files", "swarm_recipe.isolate", SERVICE_ACCOUNT_COMPILE, linuxGceDimensions(), nil, OUTPUT_NONE)
+	task.Caches = append(task.Caches, CACHES_WORKDIR...)
 	b.MustAddTask(name, task)
 	return name
 }
@@ -832,7 +833,6 @@ func checkGeneratedFiles(b *specs.TasksCfgBuilder, name string) string {
 func housekeeper(b *specs.TasksCfgBuilder, name, compileTaskName string) string {
 	task := kitchenTask(name, "housekeeper", "swarm_recipe.isolate", SERVICE_ACCOUNT_HOUSEKEEPER, linuxGceDimensions(), nil, OUTPUT_NONE)
 	usesGit(task, name)
-	task.Caches = append(task.Caches, CACHES_WORKDIR...)
 	task.CipdPackages = append(task.CipdPackages, b.MustGetCipdPackageFromAsset("go"))
 	task.Dependencies = append(task.Dependencies, compileTaskName)
 	b.MustAddTask(name, task)
@@ -843,6 +843,7 @@ func housekeeper(b *specs.TasksCfgBuilder, name, compileTaskName string) string 
 // in the generated chain of tasks, which the Job should add as a dependency.
 func bookmaker(b *specs.TasksCfgBuilder, name, compileTaskName string) string {
 	task := kitchenTask(name, "bookmaker", "swarm_recipe.isolate", SERVICE_ACCOUNT_BOOKMAKER, linuxGceDimensions(), nil, OUTPUT_NONE)
+	task.Caches = append(task.Caches, CACHES_WORKDIR...)
 	task.CipdPackages = append(task.CipdPackages, CIPD_PKGS_GIT...)
 	task.CipdPackages = append(task.CipdPackages, b.MustGetCipdPackageFromAsset("go"))
 	task.Dependencies = append(task.Dependencies, compileTaskName)
