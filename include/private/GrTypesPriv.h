@@ -867,6 +867,8 @@ enum class GrInternalSurfaceFlags {
     // Surface-level
     kNoPendingIO           = 1 << 0,
 
+    kSurfaceMask           = kNoPendingIO,
+
     // Texture-only flags
 
     // This flag is set when the internal texture target doesn't support mipmaps (e.g.,
@@ -880,6 +882,8 @@ enum class GrInternalSurfaceFlags {
     // create resources with this limitation - this flag will only appear on resources passed
     // into Ganesh.
     kIsClampOnly           = 1 << 2,
+
+    kTextureMask           = kDoesNotSupportMipMaps | kIsClampOnly,
 
     // RT-only
 
@@ -896,7 +900,12 @@ enum class GrInternalSurfaceFlags {
     // For wrapped resources1
     //    this is disabled for FBO0
     //    but, otherwise, is enabled whenever GrCaps reports window rect support
-    kWindowRectsSupport    = 1 << 4
+    kWindowRectsSupport    = 1 << 4,
+
+    // This flag is for use with GL only. It tells us that the internal render target wraps FBO 0.
+    kGLRTFBOIDIs0          = 1 << 5,
+
+    kRenderTargetMask      = kMixedSampled | kWindowRectsSupport | kGLRTFBOIDIs0,
 };
 GR_MAKE_BITFIELD_CLASS_OPS(GrInternalSurfaceFlags)
 
@@ -938,12 +947,11 @@ enum class GpuPathRenderers {
     kNone              = 0, // Always use sofware masks and/or GrDefaultPathRenderer.
     kDashLine          = 1 << 0,
     kStencilAndCover   = 1 << 1,
-    kMSAA              = 1 << 2,
-    kAAConvex          = 1 << 3,
-    kAALinearizing     = 1 << 4,
-    kSmall             = 1 << 5,
-    kCoverageCounting  = 1 << 6,
-    kTessellating      = 1 << 7,
+    kAAConvex          = 1 << 2,
+    kAALinearizing     = 1 << 3,
+    kSmall             = 1 << 4,
+    kCoverageCounting  = 1 << 5,
+    kTessellating      = 1 << 6,
 
     kAll               = (kTessellating | (kTessellating - 1)),
     kDefault           = kAll

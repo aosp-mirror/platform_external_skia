@@ -189,6 +189,15 @@ void SkThreadedBMPDevice::drawBitmap(const SkBitmap& bitmap, const SkMatrix& mat
     });
 }
 
+void SkThreadedBMPDevice::drawBitmapRect(const SkBitmap& bitmap, const SkRect* src,
+        const SkRect& dst, const SkPaint& paint, SkCanvas::SrcRectConstraint constraint) {
+    // SkBitmapDevice::drawBitmapRect may use shader and drawRect. In that case, we need to snap
+    // the bitmap here because we won't go into SkThreadedBMPDevice::drawBitmap.
+    SkBitmap snap = this->snapBitmap(bitmap);
+    this->SkBitmapDevice::drawBitmapRect(snap, src, dst, paint, constraint);
+}
+
+
 void SkThreadedBMPDevice::drawSprite(const SkBitmap& bitmap, int x, int y, const SkPaint& paint) {
     SkRect drawBounds = SkRect::MakeXYWH(x, y, bitmap.width(), bitmap.height());
     SkBitmap snap = this->snapBitmap(bitmap);
@@ -211,7 +220,7 @@ void SkThreadedBMPDevice::drawText(const void* text, size_t len, SkScalar x, SkS
 void SkThreadedBMPDevice::drawPosText(const void* text, size_t len, const SkScalar xpos[],
         int scalarsPerPos, const SkPoint& offset, const SkPaint& paint) {
     char* clonedText = this->cloneArray((const char*)text, len);
-    SkScalar* clonedXpos = this->cloneArray(xpos, len * scalarsPerPos);
+    SkScalar* clonedXpos = this->cloneArray(xpos, paint.countText(text, len) * scalarsPerPos);
     SkRect drawBounds = SkRectPriv::MakeLargest(); // TODO tighter drawBounds
     fQueue.push(drawBounds, [=](SkArenaAlloc*, const DrawState& ds, const SkIRect& tileBounds){
         TileDraw(ds, tileBounds).drawPosText(clonedText, len, clonedXpos, scalarsPerPos, offset,

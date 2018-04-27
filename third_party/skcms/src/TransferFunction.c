@@ -23,6 +23,20 @@ float skcms_TransferFunction_eval(const skcms_TransferFunction* tf, float x) {
                              : powf_(tf->a * x + tf->b, tf->g) + tf->e);
 }
 
+bool skcms_TransferFunction_isValid(const skcms_TransferFunction* tf) {
+    // Reject obviously malformed inputs
+    if (!isfinitef_(tf->a + tf->b + tf->c + tf->d + tf->e + tf->f + tf->g)) {
+        return false;
+    }
+
+    // All of these parameters should be non-negative
+    if (tf->a < 0 || tf->c < 0 || tf->d < 0 || tf->g < 0) {
+        return false;
+    }
+
+    return true;
+}
+
 // TODO: Adjust logic here? This still assumes that purely linear inputs will have D > 1, which
 // we never generate. It also emits inverted linear using the same formulation. Standardize on
 // G == 1 here, too?
@@ -44,21 +58,22 @@ bool skcms_TransferFunction_invert(const skcms_TransferFunction* src, skcms_Tran
     // original - parameters are enclosed in square brackets.
     skcms_TransferFunction tf_inv = { 0, 0, 0, 0, 0, 0, 0 };
 
-    // Reject obviously malformed inputs
-    if (!isfinitef_(src->a + src->b + src->c + src->d + src->e + src->f + src->g)) {
+    // This rejects obviously malformed inputs, as well as decreasing functions
+    if (!skcms_TransferFunction_isValid(src)) {
         return false;
     }
 
+    // There are additional constraints to be invertible
     bool has_nonlinear = (src->d <= 1);
     bool has_linear = (src->d > 0);
 
-    // Is the linear section decreasing or not invertible?
-    if (has_linear && src->c <= 0) {
+    // Is the linear section not invertible?
+    if (has_linear && src->c == 0) {
         return false;
     }
 
-    // Is the nonlinear section decreasing or not invertible?
-    if (has_nonlinear && (src->a <= 0 || src->g <= 0)) {
+    // Is the nonlinear section not invertible?
+    if (has_nonlinear && (src->a == 0 || src->g == 0)) {
         return false;
     }
 
@@ -128,7 +143,7 @@ bool skcms_TransferFunction_invert(const skcms_TransferFunction* src, skcms_Tran
 //    ∂tf/∂b =  g(ax + b)^(g-1)
 //           -  g(ad + b)^(g-1)
 
-static float eval_nonlinear(float x, const void* ctx, const float P[4]) {
+static float eval_nonlinear(float x, const void* ctx, const float P[3]) {
     const skcms_TransferFunction* tf = (const skcms_TransferFunction*)ctx;
 
     const float g = P[0],  a = P[1],  b = P[2],
@@ -143,7 +158,7 @@ static float eval_nonlinear(float x, const void* ctx, const float P[4]) {
          - powf_(D, g)
          + c*d + f;
 }
-static void grad_nonlinear(float x, const void* ctx, const float P[4], float dfdP[4]) {
+static void grad_nonlinear(float x, const void* ctx, const float P[3], float dfdP[3]) {
     const skcms_TransferFunction* tf = (const skcms_TransferFunction*)ctx;
 
     const float g = P[0], a = P[1], b = P[2],
@@ -161,7 +176,7 @@ static void grad_nonlinear(float x, const void* ctx, const float P[4], float dfd
             -   g*powf_(D, g-1);
 }
 
-int skcms_fit_linear(const skcms_Curve* curve, int N, float tol, skcms_TransferFunction* tf) {
+int skcms_fit_linear(const skcms_Curve* curve, int N, float tol, float* c, float* d, float* f) {
     assert(N > 1);
     // We iteratively fit the first points to the TF's linear piece.
     // We want the cx + f line to pass through the first and last points we fit exactly.
@@ -176,7 +191,7 @@ int skcms_fit_linear(const skcms_Curve* curve, int N, float tol, skcms_TransferF
     const float x_scale = 1.0f / (N - 1);
 
     int lin_points = 1;
-    tf->f = skcms_eval_curve(0, curve);
+    *f = skcms_eval_curve(0, curve);
 
     float slope_min = -INFINITY_;
     float slope_max = +INFINITY_;
@@ -184,8 +199,8 @@ int skcms_fit_linear(const skcms_Curve* curve, int N, float tol, skcms_TransferF
         float x = i * x_scale;
         float y = skcms_eval_curve(x, curve);
 
-        float slope_max_i = (y + tol - tf->f) / x,
-              slope_min_i = (y - tol - tf->f) / x;
+        float slope_max_i = (y + tol - *f) / x,
+              slope_min_i = (y - tol - *f) / x;
         if (slope_max_i < slope_min || slope_max < slope_min_i) {
             // Slope intervals would no longer overlap.
             break;
@@ -193,21 +208,21 @@ int skcms_fit_linear(const skcms_Curve* curve, int N, float tol, skcms_TransferF
         slope_max = fminf_(slope_max, slope_max_i);
         slope_min = fmaxf_(slope_min, slope_min_i);
 
-        float cur_slope = (y - tf->f) / x;
+        float cur_slope = (y - *f) / x;
         if (slope_min <= cur_slope && cur_slope <= slope_max) {
             lin_points = i + 1;
-            tf->c = cur_slope;
+            *c = cur_slope;
         }
     }
 
     // Set D to the last point that met our tolerance.
-    tf->d = (lin_points - 1) * x_scale;
+    *d = (lin_points - 1) * x_scale;
     return lin_points;
 }
 
 // Fit the points in [start,N) to the non-linear piece of tf, or return false if we can't.
 static bool fit_nonlinear(const skcms_Curve* curve, int start, int N, skcms_TransferFunction* tf) {
-    float P[4] = { tf->g, tf->a, tf->b, 0 };
+    float P[3] = { tf->g, tf->a, tf->b };
 
     // No matter where we start, x_scale should always represent N even steps from 0 to 1.
     const float x_scale = 1.0f / (N-1);
@@ -267,7 +282,7 @@ bool skcms_ApproximateCurve(const skcms_Curve* curve,
     const float kTolerances[] = { 1.5f / 65535.0f, 1.0f / 512.0f };
     for (int t = 0; t < ARRAY_COUNT(kTolerances); t++) {
         skcms_TransferFunction tf;
-        int L = skcms_fit_linear(curve, N, kTolerances[t], &tf);
+        int L = skcms_fit_linear(curve, N, kTolerances[t], &tf.c, &tf.d, &tf.f);
 
         if (L == N) {
             // If the entire data set was linear, move the coefficients to the nonlinear portion
@@ -320,48 +335,4 @@ bool skcms_ApproximateCurve(const skcms_Curve* curve,
         }
     }
     return isfinitef_(*max_error);
-}
-
-static float max_error_over_curve(const skcms_TransferFunction* tf, const skcms_Curve* curve) {
-    int N = curve->table_entries ? (int)curve->table_entries : 256;
-    const float x_scale = 1.0f / (N - 1);
-    float err = 0;
-    for (int i = 0; i < N; i++) {
-        float x = i * x_scale;
-        err = fmaxf_(err, fabsf_(skcms_eval_curve(x, curve) - skcms_TransferFunction_eval(tf, x)));
-    }
-    return err;
-}
-
-skcms_TransferFunction skcms_BestSingleCurve(const skcms_ICCProfile* profile) {
-    if (!profile || !profile->has_trc) {
-        return skcms_sRGB_profile.trc[0].parametric;
-    }
-
-    skcms_TransferFunction tf[3];
-    for (int i = 0; i < 3; ++i) {
-        if (profile->trc[i].table_entries) {
-            float max_error;
-            if (!skcms_ApproximateCurve(&profile->trc[i], &tf[i], &max_error)) {
-                return skcms_sRGB_profile.trc[0].parametric;
-            }
-        } else {
-            tf[i] = profile->trc[i].parametric;
-        }
-    }
-
-    int best_tf = 0;
-    float min_max_error = INFINITY_;
-    for (int i = 0; i < 3; ++i) {
-        float err = 0;
-        for (int j = 0; j < 3; ++j) {
-            err = fmaxf_(err, max_error_over_curve(&tf[i], &profile->trc[j]));
-        }
-        if (min_max_error > err) {
-            min_max_error = err;
-            best_tf = i;
-        }
-    }
-
-    return tf[best_tf];
 }

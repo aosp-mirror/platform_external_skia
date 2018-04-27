@@ -394,7 +394,7 @@ def dm_flags(api, bot):
     # Android and iOS. skia:5438
     blacklist('_ test _ GrShape')
 
-  if api.vars.internal_hardware_label == 1:
+  if api.vars.internal_hardware_label == '1':
     # skia:7046
     blacklist('_ test _ WritePixelsNonTexture_Gpu')
     blacklist('_ test _ WritePixelsNonTextureMSAA_Gpu')
@@ -403,7 +403,7 @@ def dm_flags(api, bot):
     blacklist('_ test _ GrSurfaceRenderability')
     blacklist('_ test _ ES2BlendWithNoTexture')
 
-  if api.vars.internal_hardware_label == 2:
+  if api.vars.internal_hardware_label == '2':
     # skia:7160
     blacklist('_ test _ SRGBReadWritePixels')
     blacklist('_ test _ SRGBMipMap')
@@ -518,11 +518,6 @@ def dm_flags(api, bot):
     blacklist('_ image _ interlaced3.png')
     for raw_ext in r:
       blacklist('_ image _ .%s' % raw_ext)
-
-  if 'IntelHD405' in bot and 'Ubuntu16' in bot:
-    # skia:6331
-    blacklist(['glmsaa8',   'image', 'gen_codec_gpu', 'abnormal.wbmp'])
-    blacklist(['glesmsaa4', 'image', 'gen_codec_gpu', 'abnormal.wbmp'])
 
   if 'Nexus5' in bot and 'GPU' in bot:
     # skia:5876
@@ -641,9 +636,14 @@ def dm_flags(api, bot):
                   '~^SpecialImage_DeferredGpu$',
                   '~^SpecialImage_Gpu$',
                   '~^SurfaceSemaphores$'])
+    # skia:7837
+    match.append('~BlurMaskBiggerThanDest')
 
   if 'Vulkan' in bot and api.vars.is_linux and 'IntelIris640' in bot:
     match.extend(['~VkHeapTests']) # skia:6245
+
+  if api.vars.is_linux and 'IntelIris640' in bot:
+    match.extend(['~GLPrograms']) # skia:7849
 
   if 'Vulkan' in bot and api.vars.is_linux and 'IntelHD405' in bot:
     # skia:7322
@@ -745,7 +745,7 @@ def dm_flags(api, bot):
     # skia:7603
     match.append('~^GrMeshTest$')
 
-  if api.vars.internal_hardware_label == 1:
+  if api.vars.internal_hardware_label == '1':
     match.append('~skbug6653') # skia:6653
 
   if blacklisted:
@@ -976,6 +976,10 @@ TEST_BUILDERS = [
    '-SK_FORCE_RASTER_PIPELINE_BLITTER'),
   'Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Release-All-SwiftShader',
   'Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Release-All-TSAN',
+  'Test-Debian9-Clang-NUC5PPYH-GPU-IntelHD405-x86_64-Debug-All',
+  'Test-Debian9-Clang-NUC5PPYH-GPU-IntelHD405-x86_64-Release-All-Vulkan',
+  'Test-Debian9-Clang-NUC7i5BNK-GPU-IntelIris640-x86_64-Debug-All-Vulkan',
+  'Test-Debian9-Clang-NUCDE3815TYKHE-GPU-IntelBayTrail-x86_64-Debug-All',
   'Test-Debian9-GCC-GCE-CPU-AVX2-x86-Debug-All',
   'Test-Debian9-GCC-GCE-CPU-AVX2-x86_64-Debug-All',
   'Test-Mac-Clang-MacBook10.1-GPU-IntelHD615-x86_64-Debug-All',
@@ -983,10 +987,6 @@ TEST_BUILDERS = [
   'Test-Mac-Clang-MacMini7.1-CPU-AVX-x86_64-Release-All',
   'Test-Mac-Clang-MacMini7.1-GPU-IntelIris5100-x86_64-Debug-All-CommandBuffer',
   'Test-Mac-Clang-MacBook10.1-GPU-IntelHD615-x86_64-Release-All-NativeFonts',
-  'Test-Ubuntu16-Clang-NUC5PPYH-GPU-IntelHD405-x86_64-Debug-All',
-  'Test-Ubuntu16-Clang-NUC5PPYH-GPU-IntelHD405-x86_64-Release-All-Vulkan',
-  'Test-Ubuntu16-Clang-NUC7i5BNK-GPU-IntelIris640-x86_64-Debug-All-Vulkan',
-  'Test-Ubuntu16-Clang-NUCDE3815TYKHE-GPU-IntelBayTrail-x86_64-Debug-All',
   'Test-Ubuntu17-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-Vulkan_Coverage',
   ('Test-Ubuntu17-GCC-Golo-GPU-QuadroP400-x86_64-Release-All'
    '-Valgrind_AbandonGpuContext_SK_CPU_LIMIT_SSE41'),
@@ -1179,7 +1179,7 @@ def GenTests(api):
                    revision='abc123',
                    path_config='kitchen',
                    swarm_out_dir='[SWARM_OUT_DIR]',
-                   internal_hardware_label=1) +
+                   internal_hardware_label='1') +
     api.path.exists(
         api.path['start_dir'].join('skia'),
         api.path['start_dir'].join('skia', 'infra', 'bots', 'assets',
@@ -1199,7 +1199,7 @@ def GenTests(api):
                    revision='abc123',
                    path_config='kitchen',
                    swarm_out_dir='[SWARM_OUT_DIR]',
-                   internal_hardware_label=2) +
+                   internal_hardware_label='2') +
     api.path.exists(
         api.path['start_dir'].join('skia'),
         api.path['start_dir'].join('skia', 'infra', 'bots', 'assets',

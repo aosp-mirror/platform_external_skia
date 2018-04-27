@@ -108,6 +108,24 @@ var (
 	// Defines the structure of job names.
 	jobNameSchema *JobNameSchema
 
+	// Named caches used by tasks.
+	CACHES_GIT = []*specs.Cache{
+		&specs.Cache{
+			Name: "git",
+			Path: "cache/git",
+		},
+		&specs.Cache{
+			Name: "git_cache",
+			Path: "cache/git_cache",
+		},
+	}
+	CACHES_WORKDIR = []*specs.Cache{
+		&specs.Cache{
+			Name: "work",
+			Path: "cache/work",
+		},
+	}
+
 	// TODO(borenet): Roll these versions automatically!
 	CIPD_PKGS_PYTHON = []*specs.CipdPackage{
 		&specs.CipdPackage{
@@ -222,6 +240,12 @@ func kitchenTask(name, recipe, isolate, serviceAccount string, dimensions []stri
 		outputs = []string{outputDir}
 	}
 	return &specs.TaskSpec{
+		Caches: []*specs.Cache{
+			&specs.Cache{
+				Name: "vpython",
+				Path: "cache/vpython",
+			},
+		},
 		CipdPackages: cipd,
 		Command: []string{
 			"./kitchen${EXECUTABLE_SUFFIX}", "cook",
@@ -363,7 +387,6 @@ func defaultSwarmDimensions(parts map[string]string) []string {
 			"Debian9":    DEFAULT_OS_DEBIAN,
 			"Mac":        DEFAULT_OS_MAC,
 			"Ubuntu14":   DEFAULT_OS_UBUNTU,
-			"Ubuntu16":   "Ubuntu-16.10",
 			"Ubuntu17":   "Ubuntu-17.04",
 			"Win":        DEFAULT_OS_WIN,
 			"Win10":      "Windows-10-16299.371",
@@ -379,6 +402,10 @@ func defaultSwarmDimensions(parts map[string]string) []string {
 		if os == "Win10" && parts["model"] == "Golo" {
 			// ChOps-owned machines have Windows 10 v1709, but a slightly different version than Skolo.
 			d["os"] = "Windows-10-16299.309"
+		}
+		if d["os"] == DEFAULT_OS_WIN {
+			// TODO(dogben): Temporarily add image dimension during upgrade.
+			d["image"] = "windows-server-2016-dc-v20180410"
 		}
 	} else {
 		d["os"] = DEFAULT_OS_DEBIAN
@@ -458,8 +485,8 @@ func defaultSwarmDimensions(parts map[string]string) []string {
 					"IntelHD4400":   "8086:0a16-20.19.15.4835",
 					"IntelIris540":  "8086:1926-23.20.16.4982",
 					"IntelIris6100": "8086:162b-20.19.15.4835",
-					"RadeonHD7770":  "1002:683d-23.20.15017.4003",
-					"RadeonR9M470X": "1002:6646-23.20.15017.4003",
+					"RadeonHD7770":  "1002:683d-23.20.15033.5003",
+					"RadeonR9M470X": "1002:6646-23.20.15033.5003",
 					"QuadroP400":    "10de:1cb3-23.21.13.9103",
 				}[parts["cpu_or_gpu_value"]]
 				if !ok {
@@ -660,11 +687,20 @@ func getIsolatedCIPDDeps(parts map[string]string) []string {
 	return deps
 }
 
+// usesGit adds attributes to tasks which use git.
+func usesGit(t *specs.TaskSpec, name string) {
+	t.Caches = append(t.Caches, CACHES_GIT...)
+	if !strings.Contains(name, "NoDEPS") {
+		t.Caches = append(t.Caches, CACHES_WORKDIR...)
+	}
+	t.CipdPackages = append(t.CipdPackages, CIPD_PKGS_GIT...)
+}
+
 // compile generates a compile task. Returns the name of the last task in the
 // generated chain of tasks, which the Job should add as a dependency.
 func compile(b *specs.TasksCfgBuilder, name string, parts map[string]string) string {
 	task := kitchenTask(name, "compile", "swarm_recipe.isolate", SERVICE_ACCOUNT_COMPILE, swarmDimensions(parts), nil, OUTPUT_BUILD)
-	task.CipdPackages = append(task.CipdPackages, CIPD_PKGS_GIT...)
+	usesGit(task, name)
 
 	// Android bots require a toolchain.
 	if strings.Contains(name, "Android") {
@@ -724,6 +760,9 @@ func compile(b *specs.TasksCfgBuilder, name string, parts map[string]string) str
 	}
 
 	task.MaxAttempts = 1
+	if strings.Contains(name, "Win") {
+		task.MaxAttempts = 2
+	}
 
 	// Add the task.
 	b.MustAddTask(name, task)
@@ -755,6 +794,7 @@ func compile(b *specs.TasksCfgBuilder, name string, parts map[string]string) str
 // dependency.
 func recreateSKPs(b *specs.TasksCfgBuilder, name string) string {
 	task := kitchenTask(name, "recreate_skps", "swarm_recipe.isolate", SERVICE_ACCOUNT_RECREATE_SKPS, linuxGceDimensions(), nil, OUTPUT_NONE)
+	task.CipdPackages = append(task.CipdPackages, CIPD_PKGS_GIT...)
 	task.CipdPackages = append(task.CipdPackages, b.MustGetCipdPackageFromAsset("go"))
 	task.ExecutionTimeout = 4 * time.Hour
 	task.IoTimeout = 4 * time.Hour // With kitchen, step logs don't count toward IoTimeout.
@@ -770,7 +810,7 @@ func ctSKPs(b *specs.TasksCfgBuilder, name string) string {
 		fmt.Sprintf("os:%s", DEFAULT_OS_LINUX_GCE),
 	}
 	task := kitchenTask(name, "ct_skps", "skia_repo.isolate", SERVICE_ACCOUNT_CT_SKPS, dims, nil, OUTPUT_NONE)
-	task.CipdPackages = append(task.CipdPackages, CIPD_PKGS_GIT...)
+	usesGit(task, name)
 	task.CipdPackages = append(task.CipdPackages, b.MustGetCipdPackageFromAsset("clang_linux"))
 	task.ExecutionTimeout = 24 * time.Hour
 	task.IoTimeout = 24 * time.Hour
@@ -783,6 +823,7 @@ func ctSKPs(b *specs.TasksCfgBuilder, name string) string {
 // by hand.
 func checkGeneratedFiles(b *specs.TasksCfgBuilder, name string) string {
 	task := kitchenTask(name, "check_generated_files", "swarm_recipe.isolate", SERVICE_ACCOUNT_COMPILE, linuxGceDimensions(), nil, OUTPUT_NONE)
+	task.Caches = append(task.Caches, CACHES_WORKDIR...)
 	b.MustAddTask(name, task)
 	return name
 }
@@ -791,7 +832,7 @@ func checkGeneratedFiles(b *specs.TasksCfgBuilder, name string) string {
 // in the generated chain of tasks, which the Job should add as a dependency.
 func housekeeper(b *specs.TasksCfgBuilder, name, compileTaskName string) string {
 	task := kitchenTask(name, "housekeeper", "swarm_recipe.isolate", SERVICE_ACCOUNT_HOUSEKEEPER, linuxGceDimensions(), nil, OUTPUT_NONE)
-	task.CipdPackages = append(task.CipdPackages, CIPD_PKGS_GIT...)
+	usesGit(task, name)
 	task.CipdPackages = append(task.CipdPackages, b.MustGetCipdPackageFromAsset("go"))
 	task.Dependencies = append(task.Dependencies, compileTaskName)
 	b.MustAddTask(name, task)
@@ -802,6 +843,8 @@ func housekeeper(b *specs.TasksCfgBuilder, name, compileTaskName string) string 
 // in the generated chain of tasks, which the Job should add as a dependency.
 func bookmaker(b *specs.TasksCfgBuilder, name, compileTaskName string) string {
 	task := kitchenTask(name, "bookmaker", "swarm_recipe.isolate", SERVICE_ACCOUNT_BOOKMAKER, linuxGceDimensions(), nil, OUTPUT_NONE)
+	task.Caches = append(task.Caches, CACHES_WORKDIR...)
+	task.CipdPackages = append(task.CipdPackages, CIPD_PKGS_GIT...)
 	task.CipdPackages = append(task.CipdPackages, b.MustGetCipdPackageFromAsset("go"))
 	task.Dependencies = append(task.Dependencies, compileTaskName)
 	task.ExecutionTimeout = 2 * time.Hour
@@ -826,7 +869,7 @@ func androidFrameworkCompile(b *specs.TasksCfgBuilder, name string) string {
 // generated chain of tasks, which the Job should add as a dependency.
 func infra(b *specs.TasksCfgBuilder, name string) string {
 	task := kitchenTask(name, "infra", "swarm_recipe.isolate", SERVICE_ACCOUNT_COMPILE, linuxGceDimensions(), nil, OUTPUT_NONE)
-	task.CipdPackages = append(task.CipdPackages, CIPD_PKGS_GIT...)
+	usesGit(task, name)
 	task.CipdPackages = append(task.CipdPackages, b.MustGetCipdPackageFromAsset("go"))
 	b.MustAddTask(name, task)
 	return name
@@ -844,7 +887,7 @@ func getParentRevisionName(compileTaskName string, parts map[string]string) stri
 // generated chain of tasks, which the Job should add as a dependency.
 func calmbench(b *specs.TasksCfgBuilder, name string, parts map[string]string, compileTaskName, compileParentName string) string {
 	task := kitchenTask(name, "calmbench", "calmbench.isolate", "", swarmDimensions(parts), nil, OUTPUT_PERF)
-	task.CipdPackages = append(task.CipdPackages, CIPD_PKGS_GIT...)
+	usesGit(task, name)
 	task.CipdPackages = append(task.CipdPackages, b.MustGetCipdPackageFromAsset("go"))
 	task.Dependencies = append(task.Dependencies, compileTaskName, compileParentName, ISOLATE_SKP_NAME, ISOLATE_SVG_NAME)
 	task.MaxAttempts = 1
@@ -892,7 +935,7 @@ func test(b *specs.TasksCfgBuilder, name string, parts map[string]string, compil
 	if iid != nil {
 		extraProps["internal_hardware_label"] = strconv.Itoa(*iid)
 	}
-	task := kitchenTask(name, recipe, "test_skia_bundled.isolate", "", swarmDimensions(parts), nil, OUTPUT_TEST)
+	task := kitchenTask(name, recipe, "test_skia_bundled.isolate", "", swarmDimensions(parts), extraProps, OUTPUT_TEST)
 	task.CipdPackages = append(task.CipdPackages, pkgs...)
 	task.Dependencies = append(task.Dependencies, compileTaskName)
 	if strings.Contains(name, "Android_ASAN") {
@@ -976,7 +1019,7 @@ func coverage(b *specs.TasksCfgBuilder, name string, parts map[string]string, co
 		"gs_bucket": CONFIG.GsBucketCoverage,
 	}
 	uploadTask := kitchenTask(uploadName, "upload_coverage_results", "swarm_recipe.isolate", SERVICE_ACCOUNT_UPLOAD_COVERAGE, linuxGceDimensions(), extraProps, OUTPUT_NONE)
-	uploadTask.CipdPackages = append(uploadTask.CipdPackages, CIPD_PKGS_GIT...)
+	usesGit(uploadTask, uploadName)
 	uploadTask.CipdPackages = append(uploadTask.CipdPackages, CIPD_PKGS_GSUTIL...)
 	// We need clang_linux to get access to the llvm-profdata and llvm-cov binaries
 	// which are used to deal with the raw coverage data output by the Test step.
@@ -1047,6 +1090,38 @@ func perf(b *specs.TasksCfgBuilder, name string, parts map[string]string, compil
 	return name
 }
 
+// Run the presubmit.
+func presubmit(b *specs.TasksCfgBuilder, name string) string {
+	extraProps := map[string]string{
+		"category":         "cq",
+		"patch_gerrit_url": "https://skia-review.googlesource.com",
+		"patch_project":    "skia",
+		"patch_ref":        fmt.Sprintf("refs/changes/%s/%s/%s", specs.PLACEHOLDER_ISSUE_SHORT, specs.PLACEHOLDER_ISSUE, specs.PLACEHOLDER_PATCHSET),
+		"reason":           "CQ",
+		"repo_name":        "skia",
+	}
+	task := kitchenTask(name, "run_presubmit", "empty.isolate", SERVICE_ACCOUNT_COMPILE, linuxGceDimensions(), extraProps, OUTPUT_NONE)
+
+	replaceArg := func(key, value string) {
+		found := false
+		for idx, arg := range task.Command {
+			if arg == key {
+				task.Command[idx+1] = value
+				found = true
+			}
+		}
+		if !found {
+			task.Command = append(task.Command, key, value)
+		}
+	}
+	replaceArg("-repository", "https://chromium.googlesource.com/chromium/tools/build")
+	replaceArg("-revision", "HEAD")
+	usesGit(task, name)
+	task.Dependencies = []string{} // No bundled recipes for this one.
+	b.MustAddTask(name, task)
+	return name
+}
+
 // process generates tasks and jobs for the given job name.
 func process(b *specs.TasksCfgBuilder, name string) {
 	deps := []string{}
@@ -1108,6 +1183,7 @@ func process(b *specs.TasksCfgBuilder, name string) {
 		name != "Housekeeper-PerCommit-BundleRecipes" &&
 		name != "Housekeeper-PerCommit-InfraTests" &&
 		name != "Housekeeper-PerCommit-CheckGeneratedFiles" &&
+		name != "Housekeeper-OnDemand-Presubmit" &&
 		!strings.Contains(name, "Android_Framework") &&
 		!strings.Contains(name, "RecreateSKPs") &&
 		!strings.Contains(name, "-CT_") &&
@@ -1124,6 +1200,9 @@ func process(b *specs.TasksCfgBuilder, name string) {
 	}
 	if name == "Housekeeper-PerCommit-CheckGeneratedFiles" {
 		deps = append(deps, checkGeneratedFiles(b, name))
+	}
+	if name == "Housekeeper-OnDemand-Presubmit" {
+		deps = append(deps, presubmit(b, name))
 	}
 	if strings.Contains(name, "Bookmaker") {
 		deps = append(deps, bookmaker(b, name, compileTaskName))
@@ -1192,6 +1271,8 @@ func process(b *specs.TasksCfgBuilder, name string) {
 		j.Trigger = specs.TRIGGER_WEEKLY
 	} else if strings.Contains(name, "Flutter") || strings.Contains(name, "PDFium") || strings.Contains(name, "CommandBuffer") {
 		j.Trigger = specs.TRIGGER_MASTER_ONLY
+	} else if strings.Contains(name, "-OnDemand-") || strings.Contains(name, "Android_Framework") {
+		j.Trigger = specs.TRIGGER_ON_DEMAND
 	}
 	b.MustAddJob(name, j)
 }

@@ -8,6 +8,8 @@
 #ifndef SkStrikeCache_DEFINED
 #define SkStrikeCache_DEFINED
 
+#include <unordered_map>
+
 #include "SkDescriptor.h"
 #include "SkSpinlock.h"
 #include "SkTemplates.h"
@@ -28,6 +30,24 @@ class SkTraceMemoryDump;
 #endif
 
 ///////////////////////////////////////////////////////////////////////////////
+
+struct SkDescriptorMapOperators {
+    size_t operator()(const SkDescriptor* key) const {
+        return key->getChecksum();
+    }
+
+    bool operator()(const SkDescriptor* lhs, const SkDescriptor* rhs) const {
+        return *lhs == *rhs;
+    }
+};
+
+template <typename T>
+using SkDescriptorMap =
+        std::unordered_map<
+                const SkDescriptor*,
+                T,
+                SkDescriptorMapOperators,
+                SkDescriptorMapOperators>;
 
 class SkStrikePinner {
 public:
@@ -124,7 +144,7 @@ private:
 
     // The following methods can only be called when mutex is already held.
     Node* internalGetHead() const { return fHead; }
-    Node* internalGetTail() const;
+    Node* internalGetTail() const { return fTail; }
     void internalDetachCache(Node*);
     void internalAttachToHead(Node*);
 
@@ -137,6 +157,7 @@ private:
 
     mutable SkSpinlock fLock;
     Node*              fHead{nullptr};
+    Node*              fTail{nullptr};
     size_t             fTotalMemoryUsed{0};
     size_t             fCacheSizeLimit{SK_DEFAULT_FONT_CACHE_LIMIT};
     int32_t            fCacheCountLimit{SK_DEFAULT_FONT_CACHE_COUNT_LIMIT};

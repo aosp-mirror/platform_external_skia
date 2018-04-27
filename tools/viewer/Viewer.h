@@ -100,6 +100,7 @@ private:
     void drawImGui();
 
     void changeZoomLevel(float delta);
+    void preTouchMatrixChanged();
     SkMatrix computePreTouchMatrix();
     SkMatrix computeMatrix();
     SkPoint mapEvent(float x, float y);
@@ -141,6 +142,7 @@ private:
 
     // transform data
     SkScalar               fZoomLevel;
+    SkScalar               fRotation;
 
     sk_app::CommandSet     fCommands;
 
@@ -155,6 +157,9 @@ private:
 
     // identity unless the window initially scales the content to fit the screen.
     SkMatrix               fDefaultMatrix;
+
+    bool                   fPerspective;
+    SkPoint                fPerspectivePoints[4];
 
     SkTArray<std::function<void(void)>> fDeferredActions;
 

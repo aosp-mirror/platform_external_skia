@@ -596,11 +596,11 @@ public:
     */
     int saveLayerAlpha(const SkRect* bounds, U8CPU alpha);
 
-    /** \enum
+    /** \enum SaveLayerFlagsSet
         SaveLayerFlags provides options that may be used in any combination in SaveLayerRec,
         defining how layer allocated by saveLayer() operates.
     */
-    enum {
+    enum SaveLayerFlagsSet {
         /** Creates layer for LCD text. Flag is ignored if layer SkPaint contains
             SkImageFilter or SkColorFilter.
         */
@@ -608,6 +608,8 @@ public:
 
         /** Initializes layer with the contents of the previous layer. */
         kInitWithPrevious_SaveLayerFlag       = 1 << 2,
+
+        kMaskAgainstCoverage_EXPERIMENTAL_DONT_USE_SaveLayerFlag  = 1 << 3,
 
 #ifdef SK_SUPPORT_LEGACY_CLIPTOLAYERFLAG
         /** To be deprecated soon. */
@@ -2637,12 +2639,12 @@ private:
     SkDeque     fMCStack;
     // points to top of stack
     MCRec*      fMCRec;
+
     // the first N recs that can fit here mean we won't call malloc
-    enum {
-        kMCRecSize      = 128,  // most recent measurement
-        kMCRecCount     = 32,   // common depth for save/restores
-        kDeviceCMSize   = 224,  // most recent measurement
-    };
+    static constexpr int kMCRecSize      = 128;  // most recent measurement
+    static constexpr int kMCRecCount     = 32;   // common depth for save/restores
+    static constexpr int kDeviceCMSize   = 224;  // most recent measurement
+
     intptr_t fMCRecStorage[kMCRecSize * kMCRecCount / sizeof(intptr_t)];
     intptr_t fDeviceCMStorage[kDeviceCMSize / sizeof(intptr_t)];
 

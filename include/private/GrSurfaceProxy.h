@@ -420,20 +420,6 @@ protected:
     bool instantiateImpl(GrResourceProvider* resourceProvider, int sampleCnt, bool needsStencil,
                          GrSurfaceDescFlags descFlags, GrMipMapped, const GrUniqueKey*);
 
-    void setHasMixedSamples() {
-        SkASSERT(this->asRenderTargetProxy());
-        fSurfaceFlags |= GrInternalSurfaceFlags::kMixedSampled;
-    }
-    bool hasMixedSamples() const { return fSurfaceFlags & GrInternalSurfaceFlags::kMixedSampled; }
-
-    void setSupportsWindowRects() {
-        SkASSERT(this->asRenderTargetProxy());
-        fSurfaceFlags |= GrInternalSurfaceFlags::kWindowRectsSupport;
-    }
-    bool supportsWindowRects() const {
-        return fSurfaceFlags & GrInternalSurfaceFlags::kWindowRectsSupport;
-    }
-
     // In many cases these flags aren't actually known until the proxy has been instantiated.
     // However, Ganesh frequently needs to change its behavior based on these settings. For
     // internally create proxies we will know these properties ahead of time. For wrapped
@@ -464,7 +450,9 @@ private:
     // we make lazy proxies and instantiate them immediately.
     // Note: This is ignored if fLazyInstantiateCallback is null.
     LazyInstantiationType  fLazyInstantiationType;
-    SkDEBUGCODE(virtual void validateLazySurface(const GrSurface*) = 0;)
+
+    SkDEBUGCODE(void validateSurface(const GrSurface*);)
+    SkDEBUGCODE(virtual void onValidateSurface(const GrSurface*) = 0;)
 
     static const size_t kInvalidGpuMemorySize = ~static_cast<size_t>(0);
     SkDEBUGCODE(size_t getRawGpuMemorySize_debugOnly() const { return fGpuMemorySize; })

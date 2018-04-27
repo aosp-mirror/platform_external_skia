@@ -1024,10 +1024,15 @@ bool GrRenderTargetContext::drawFastShadow(const GrClip& clip,
             // set a large inset to force a fill
             devSpaceInsetWidth = ambientRRect.width();
         }
+        // the fraction of the blur we want to apply is devSpaceInsetWidth/devSpaceAmbientBlur,
+        // which is just 1/umbraRecipAlpha.
+        SkScalar blurClamp = SkScalarInvert(umbraRecipAlpha);
+
         std::unique_ptr<GrDrawOp> op = GrShadowRRectOp::Make(ambientColor, viewMatrix,
                                                              ambientRRect,
                                                              devSpaceAmbientBlur,
-                                                             devSpaceInsetWidth);
+                                                             devSpaceInsetWidth,
+                                                             blurClamp);
         SkASSERT(op);
         this->addDrawOp(clip, std::move(op));
     }
@@ -1105,7 +1110,7 @@ bool GrRenderTargetContext::drawFastShadow(const GrClip& clip,
                 maxOffset = SkScalarSqrt(SkTMax(SkPointPriv::LengthSqd(upperLeftOffset),
                                                 SkPointPriv::LengthSqd(lowerRightOffset))) + dr;
             }
-            insetWidth += maxOffset;
+            insetWidth += SkTMax(blurOutset, maxOffset);
         }
 
         // Outset the shadow rrect to the border of the penumbra
@@ -1348,10 +1353,9 @@ void GrRenderTargetContext::drawArc(const GrClip& clip,
             return;
         }
     }
-    SkPath path;
-    SkPathPriv::CreateDrawArcPath(&path, oval, startAngle, sweepAngle, useCenter,
-                                  style.isSimpleFill());
-    this->drawShapeUsingPathRenderer(clip, std::move(paint), aa, viewMatrix, GrShape(path, style));
+    this->drawShapeUsingPathRenderer(
+            clip, std::move(paint), aa, viewMatrix,
+            GrShape::MakeArc(oval, startAngle, sweepAngle, useCenter, style));
 }
 
 void GrRenderTargetContext::drawImageLattice(const GrClip& clip,

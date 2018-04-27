@@ -188,7 +188,7 @@ static bool read_curve_para(const uint8_t* buf, uint32_t size,
             curve->parametric.f = read_big_fixed(paraTag->parameters + 24);
             break;
     }
-    return true;
+    return skcms_TransferFunction_isValid(&curve->parametric);
 }
 
 typedef struct {
@@ -611,10 +611,10 @@ static bool read_a2b(const skcms_ICCTag* tag, skcms_A2B* a2b, bool pcs_is_xyz) {
         if (curve && curve->table_entries && curve->table_entries <= (uint32_t)INT_MAX) {
             int N = (int)curve->table_entries;
 
-            skcms_TransferFunction tf;
-            if (N == skcms_fit_linear(curve, N, 1.0f/(2*N), &tf)
-                && tf.c == 1.0f
-                && tf.f == 0.0f) {
+            float c,d,f;
+            if (N == skcms_fit_linear(curve, N, 1.0f/(2*N), &c,&d,&f)
+                && c == 1.0f
+                && f == 0.0f) {
                 curve->table_entries = 0;
                 curve->table_8       = NULL;
                 curve->table_16      = NULL;
@@ -806,6 +806,13 @@ const skcms_ICCProfile skcms_sRGB_profile = {
         { 0.222488403f, 0.716873169f, 0.060607910f },
         { 0.013916016f, 0.097076416f, 0.714096069f },
     }},
+
+    .has_poly_tf = { true, true, true },
+    .poly_tf = {
+       {0.293833881617f, 0.704207003117f, (float)(1/12.92), 0.04045f},
+       {0.293833881617f, 0.704207003117f, (float)(1/12.92), 0.04045f},
+       {0.293833881617f, 0.704207003117f, (float)(1/12.92), 0.04045f},
+    },
 };
 
 const skcms_ICCProfile skcms_XYZD50_profile = {

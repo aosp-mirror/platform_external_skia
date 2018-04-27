@@ -19,6 +19,14 @@ public:
         , fDstProfile(dstProfile)
         , fPremulFormat(premulFormat) {
         skcms_EnsureUsableAsDestination(&fDstProfile, &skcms_sRGB_profile);
+
+    #ifndef SK_DONT_OPTIMIZE_SRC_PROFILES_FOR_SPEED
+        skcms_OptimizeForSpeed(&fSrcProfile);
+    #endif
+    #ifndef SK_DONT_OPTIMIZE_DST_PROFILES_FOR_SPEED
+        // (This doesn't do anything yet, but we'd sure like it to.)
+        skcms_OptimizeForSpeed(&fDstProfile);
+    #endif
     }
 
     bool apply(ColorFormat, void*, ColorFormat, const void*, int, SkAlphaType) const override;
@@ -67,7 +75,7 @@ static bool cs_to_profile(const SkColorSpace* cs, skcms_ICCProfile* profile) {
         return skcms_Parse(cs->profileData()->data(), cs->profileData()->size(), profile);
     }
 
-    SkMatrix44 toXYZ;
+    SkMatrix44 toXYZ(SkMatrix44::kUninitialized_Constructor);
     SkColorSpaceTransferFn tf;
     if (cs->toXYZD50(&toXYZ) && cs->isNumericalTransferFn(&tf)) {
         memset(profile, 0, sizeof(*profile));
@@ -125,12 +133,23 @@ sk_sp<SkColorSpace> SkColorSpace::Make(const skcms_ICCProfile* profile) {
         return nullptr;
     }
 
-    skcms_TransferFunction tf = skcms_BestSingleCurve(profile);
-    SkColorSpaceTransferFn skia_tf;
-    memcpy(&skia_tf, &tf, sizeof(skia_tf));
-
     SkMatrix44 toXYZD50(SkMatrix44::kUninitialized_Constructor);
     toXYZD50.set3x3RowMajorf(&profile->toXYZD50.vals[0][0]);
+    if (!toXYZD50.invert(nullptr)) {
+        return nullptr;
+    }
+
+    const skcms_Curve* trc = profile->trc;
+    if (trc[0].table_entries ||
+        trc[1].table_entries ||
+        trc[2].table_entries ||
+        memcmp(&trc[0].parametric, &trc[1].parametric, sizeof(trc[0].parametric)) ||
+        memcmp(&trc[0].parametric, &trc[2].parametric, sizeof(trc[0].parametric))) {
+        return nullptr;
+    }
+
+    SkColorSpaceTransferFn skia_tf;
+    memcpy(&skia_tf, &profile->trc[0].parametric, sizeof(skia_tf));
 
     return SkColorSpace::MakeRGB(skia_tf, toXYZD50);
 }

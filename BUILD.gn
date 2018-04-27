@@ -30,7 +30,7 @@ declare_args() {
   skia_use_zlib = true
   skia_use_metal = false
   skia_use_libheif = is_skia_dev_build
-  skia_use_skcms = is_skia_dev_build
+  skia_use_skcms = true
 
   skia_android_serial = ""
   skia_enable_discrete_gpu = true
@@ -54,6 +54,8 @@ declare_args() {
 
   skia_llvm_path = ""
   skia_llvm_lib = "LLVM"
+
+  skia_tools_require_resources = false
 }
 declare_args() {
   skia_use_dng_sdk = !is_fuchsia && skia_use_libjpeg_turbo && skia_use_zlib
@@ -743,7 +745,7 @@ optional("skcms") {
 
   public_defines = [ "SK_USE_SKCMS" ]
   deps = [
-    "//third_party/skcms",
+    "third_party/skcms",
   ]
   sources = [
     "src/core/SkColorSpaceXform_skcms.cpp",
@@ -1343,6 +1345,10 @@ if (skia_enable_tools) {
     if (is_ios) {
       sources += [ "tools/ios_utils.m" ]
       libs += [ "Foundation.framework" ]
+    }
+    defines = []
+    if (skia_tools_require_resources) {
+      defines += [ "SK_TOOLS_REQUIRE_RESOURCES" ]
     }
     deps = [
       ":common_flags",

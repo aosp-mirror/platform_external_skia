@@ -176,7 +176,9 @@ Viewer::Viewer(int argc, char** argv, void* platformData)
     // Our UI can only tweak gamma (currently), so start out gamma-only
     , fColorSpaceTransferFn(g2Dot2_TransferFn)
     , fZoomLevel(0.0f)
+    , fRotation(0.0f)
     , fGestureDevice(GestureDevice::kNone)
+    , fPerspective(false)
     , fTileCnt(0)
     , fThreadCnt(0)
 {
@@ -186,7 +188,6 @@ Viewer::Viewer(int argc, char** argv, void* platformData)
     gPathRendererNames[GpuPathRenderers::kDefault] =
             "Default Ganesh Behavior (best path renderer, not including CCPR)";
     gPathRendererNames[GpuPathRenderers::kStencilAndCover] = "NV_path_rendering";
-    gPathRendererNames[GpuPathRenderers::kMSAA] = "Sample shading";
     gPathRendererNames[GpuPathRenderers::kSmall] = "Small paths (cached sdf or alpha masks)";
     gPathRendererNames[GpuPathRenderers::kCoverageCounting] = "Coverage counting";
     gPathRendererNames[GpuPathRenderers::kTessellating] = "Tessellating";
@@ -494,6 +495,10 @@ Viewer::Viewer(int argc, char** argv, void* platformData)
         this->listNames();
     }
 
+    fPerspectivePoints[0].set(0, 0);
+    fPerspectivePoints[1].set(1, 0);
+    fPerspectivePoints[2].set(0, 1);
+    fPerspectivePoints[3].set(1, 1);
     fAnimTimer.run();
 
     auto gamutImage = GetResourceAsImage("images/gamut.png");
@@ -861,8 +866,11 @@ void Viewer::setupCurrentSlide() {
 void Viewer::changeZoomLevel(float delta) {
     fZoomLevel += delta;
     fZoomLevel = SkScalarPin(fZoomLevel, MIN_ZOOM_LEVEL, MAX_ZOOM_LEVEL);
+    this->preTouchMatrixChanged();
+}
 
-    // Update the trans limit as the zoom level changes.
+void Viewer::preTouchMatrixChanged() {
+    // Update the trans limit as the transform changes.
     const SkISize slideSize = fSlides[fCurrentSlide]->getDimensions();
     const SkRect slideBounds = SkRect::MakeIWH(slideSize.width(), slideSize.height());
     const SkRect windowRect = SkRect::MakeIWH(fWindow->width(), fWindow->height());
@@ -874,6 +882,24 @@ SkMatrix Viewer::computePreTouchMatrix() {
     SkScalar zoomScale = (fZoomLevel < 0) ? SK_Scalar1 / (SK_Scalar1 - fZoomLevel)
                                           : SK_Scalar1 + fZoomLevel;
     m.preScale(zoomScale, zoomScale);
+
+    const SkISize slideSize = fSlides[fCurrentSlide]->getDimensions();
+    m.preRotate(fRotation, slideSize.width() * 0.5f, slideSize.height() * 0.5f);
+
+    if (fPerspective) {
+        SkScalar w = fWindow->width(), h = fWindow->height();
+        SkPoint orthoPts[4] = { { 0, 0 }, { w, 0 }, { 0, h }, { w, h } };
+        SkPoint perspPts[4] = {
+            { fPerspectivePoints[0].fX * w, fPerspectivePoints[0].fY * h },
+            { fPerspectivePoints[1].fX * w, fPerspectivePoints[1].fY * h },
+            { fPerspectivePoints[2].fX * w, fPerspectivePoints[2].fY * h },
+            { fPerspectivePoints[3].fX * w, fPerspectivePoints[3].fY * h }
+        };
+        SkMatrix persp;
+        persp.setPolyToPoly(orthoPts, perspPts, 4);
+        m.postConcat(persp);
+    }
+
     return m;
 }
 
@@ -1200,7 +1226,6 @@ static void ImGui_Primaries(SkColorSpacePrimaries* primaries, SkPaint* gamutPain
     // Magic numbers are pixel locations of the origin and upper-right corner.
     drawList->AddImage(gamutPaint, pos, ImVec2(pos.x + size.x, pos.y + size.y),
                        ImVec2(242, 61), ImVec2(1897, 1922));
-    ImVec2 endPos = ImGui::GetCursorPos();
 
     // Primary markers
     ImVec2 r = ImGui_DragPrimary("R", &primaries->fRX, &primaries->fRY, pos, size);
@@ -1216,7 +1241,65 @@ static void ImGui_Primaries(SkColorSpacePrimaries* primaries, SkPaint* gamutPain
     drawList->AddTriangle(r, g, b, 0xFFFFFFFF);
 
     // Re-position cursor immediate after the diagram for subsequent controls
-    ImGui::SetCursorPos(endPos);
+    ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + size.y));
+}
+
+static ImVec2 ImGui_DragPoint(const char* label, SkPoint* p,
+                              const ImVec2& pos, const ImVec2& size, bool* dragging) {
+    // Transform points ([0, 0] - [1.0, 1.0]) to screen coords
+    ImVec2 center(pos.x + p->fX * size.x, pos.y + p->fY * size.y);
+
+    // Invisible 10x10 button
+    ImGui::SetCursorScreenPos(ImVec2(center.x - 5, center.y - 5));
+    ImGui::InvisibleButton(label, ImVec2(10, 10));
+
+    if (ImGui::IsItemActive() && ImGui::IsMouseDragging()) {
+        ImGuiIO& io = ImGui::GetIO();
+        // Normalized mouse position, relative to our gamut box
+        ImVec2 mousePosXY((io.MousePos.x - pos.x) / size.x, (io.MousePos.y - pos.y) / size.y);
+        // Clamp to edge of box
+        p->fX = SkTPin(mousePosXY.x, 0.0f, 1.0f);
+        p->fY = SkTPin(mousePosXY.y, 0.0f, 1.0f);
+        *dragging = true;
+    }
+
+    // Return screen coordinates for the caller. We could just return center here, but we'd have
+    // one frame of lag during drag.
+    return ImVec2(pos.x + p->fX * size.x, pos.y + p->fY * size.y);
+}
+
+static bool ImGui_DragQuad(SkPoint* pts) {
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+    // Fit our image/canvas to the available width, and scale the height to maintain aspect ratio.
+    float canvasWidth = SkTMax(ImGui::GetContentRegionAvailWidth(), 50.0f);
+    ImVec2 size = ImVec2(canvasWidth, canvasWidth);
+    ImVec2 pos = ImGui::GetCursorScreenPos();
+
+    // Background rectangle
+    drawList->AddRectFilled(pos, ImVec2(pos.x + size.x, pos.y + size.y), IM_COL32(0, 0, 0, 128));
+
+    // Corner markers
+    bool dragging = false;
+    ImVec2 tl = ImGui_DragPoint("TL", pts + 0, pos, size, &dragging);
+    ImVec2 tr = ImGui_DragPoint("TR", pts + 1, pos, size, &dragging);
+    ImVec2 bl = ImGui_DragPoint("BL", pts + 2, pos, size, &dragging);
+    ImVec2 br = ImGui_DragPoint("BR", pts + 3, pos, size, &dragging);
+
+    // Draw markers and quad
+    drawList->AddCircle(tl, 5.0f, 0xFFFFFFFF);
+    drawList->AddCircle(tr, 5.0f, 0xFFFFFFFF);
+    drawList->AddCircle(bl, 5.0f, 0xFFFFFFFF);
+    drawList->AddCircle(br, 5.0f, 0xFFFFFFFF);
+    drawList->AddLine(tl, tr, 0xFFFFFFFF);
+    drawList->AddLine(tr, br, 0xFFFFFFFF);
+    drawList->AddLine(br, bl, 0xFFFFFFFF);
+    drawList->AddLine(bl, tl, 0xFFFFFFFF);
+
+    ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + size.y));
+    ImGui::Spacing();
+
+    return dragging;
 }
 
 void Viewer::drawImGui() {
@@ -1323,9 +1406,6 @@ void Viewer::drawImGui() {
                         if (ctx->caps()->shaderCaps()->pathRenderingSupport()) {
                             prButton(GpuPathRenderers::kStencilAndCover);
                         }
-                        if (ctx->caps()->sampleShadingSupport()) {
-                            prButton(GpuPathRenderers::kMSAA);
-                        }
                         prButton(GpuPathRenderers::kTessellating);
                         prButton(GpuPathRenderers::kNone);
                     } else {
@@ -1339,6 +1419,27 @@ void Viewer::drawImGui() {
                         prButton(GpuPathRenderers::kNone);
                     }
                     ImGui::TreePop();
+                }
+            }
+
+            if (ImGui::CollapsingHeader("Transform")) {
+                float zoom = fZoomLevel;
+                if (ImGui::SliderFloat("Zoom", &zoom, MIN_ZOOM_LEVEL, MAX_ZOOM_LEVEL)) {
+                    fZoomLevel = zoom;
+                    this->preTouchMatrixChanged();
+                    paramsChanged = true;
+                }
+                float deg = fRotation;
+                if (ImGui::SliderFloat("Rotate", &deg, -30, 360, "%.0f deg")) {
+                    fRotation = deg;
+                    this->preTouchMatrixChanged();
+                    paramsChanged = true;
+                }
+                if (ImGui::Checkbox("Perspective", &fPerspective)) {
+                    this->preTouchMatrixChanged();
+                }
+                if (ImGui_DragQuad(fPerspectivePoints)) {
+                    this->preTouchMatrixChanged();
                 }
             }
 
@@ -1646,9 +1747,6 @@ void Viewer::updateUIState() {
         prState[kOptions].append(gPathRendererNames[GpuPathRenderers::kAll]);
         if (ctx->caps()->shaderCaps()->pathRenderingSupport()) {
             prState[kOptions].append(gPathRendererNames[GpuPathRenderers::kStencilAndCover]);
-        }
-        if (ctx->caps()->sampleShadingSupport()) {
-            prState[kOptions].append(gPathRendererNames[GpuPathRenderers::kMSAA]);
         }
         prState[kOptions].append(gPathRendererNames[GpuPathRenderers::kTessellating]);
         prState[kOptions].append(gPathRendererNames[GpuPathRenderers::kNone]);
