@@ -15,6 +15,9 @@ CONFIG_RELEASE = 'Release'
 
 class SkiaVarsApi(recipe_api.RecipeApi):
 
+  override_checkout_root = None
+  override_gclient_cache = None
+
   def setup(self):
     """Prepare the variables."""
     # Setup
@@ -57,7 +60,9 @@ class SkiaVarsApi(recipe_api.RecipeApi):
     if self.persistent_checkout:
       self.checkout_root = self.cache_dir.join('work')
       self.gclient_cache = self.cache_dir.join('git')
-
+    if self.override_checkout_root:
+      self.checkout_root = self.override_checkout_root
+      self.gclient_cache = self.override_gclient_cache
       # got_revision is filled in after checkout steps.
       self.got_revision = None
     else:

@@ -239,7 +239,7 @@ func kitchenTask(name, recipe, isolate, serviceAccount string, dimensions []stri
 	if outputDir != OUTPUT_NONE {
 		outputs = []string{outputDir}
 	}
-	return &specs.TaskSpec{
+	task := &specs.TaskSpec{
 		Caches: []*specs.Cache{
 			&specs.Cache{
 				Name: "vpython",
@@ -284,6 +284,8 @@ func kitchenTask(name, recipe, isolate, serviceAccount string, dimensions []stri
 		Priority:       0.8,
 		ServiceAccount: serviceAccount,
 	}
+	timeout(task, time.Hour)
+	return task
 }
 
 // internalHardwareLabel returns the internal ID for the bot, if any.
@@ -301,6 +303,8 @@ func linuxGceDimensions() []string {
 		// Specify CPU to avoid running builds on bots with a more unique CPU.
 		"cpu:x86-64-Haswell_GCE",
 		"gpu:none",
+		// Currently all Linux GCE tasks run on 16-CPU machines.
+		"machine_type:n1-standard-16",
 		fmt.Sprintf("os:%s", DEFAULT_OS_LINUX_GCE),
 		fmt.Sprintf("pool:%s", CONFIG.Pool),
 	}
@@ -470,6 +474,8 @@ func defaultSwarmDimensions(parts map[string]string) []string {
 			d["cpu"] = cpu
 			if parts["model"] == "GCE" && d["os"] == DEFAULT_OS_DEBIAN {
 				d["os"] = DEFAULT_OS_LINUX_GCE
+				// Currently all Linux GCE tasks run on 16-CPU machines.
+				d["machine_type"] = "n1-standard-16"
 			}
 			if parts["model"] == "GCE" && d["os"] == DEFAULT_OS_WIN {
 				// Use normal-size machines for Test and Perf tasks on Win GCE.
@@ -696,6 +702,12 @@ func usesGit(t *specs.TaskSpec, name string) {
 	t.CipdPackages = append(t.CipdPackages, CIPD_PKGS_GIT...)
 }
 
+// timeout sets the timeout(s) for this task.
+func timeout(task *specs.TaskSpec, timeout time.Duration) {
+	task.ExecutionTimeout = timeout
+	task.IoTimeout = timeout // With kitchen, step logs don't count toward IoTimeout.
+}
+
 // compile generates a compile task. Returns the name of the last task in the
 // generated chain of tasks, which the Job should add as a dependency.
 func compile(b *specs.TasksCfgBuilder, name string, parts map[string]string) string {
@@ -730,6 +742,8 @@ func compile(b *specs.TasksCfgBuilder, name string, parts map[string]string) str
 			task.CipdPackages = append(task.CipdPackages, b.MustGetCipdPackageFromAsset("armhf_sysroot"))
 			task.CipdPackages = append(task.CipdPackages, b.MustGetCipdPackageFromAsset("chromebook_arm_gles"))
 		}
+	} else if strings.Contains(name, "CommandBuffer") {
+		timeout(task, 2*time.Hour)
 	} else if strings.Contains(name, "Debian") {
 		if strings.Contains(name, "Clang") {
 			task.CipdPackages = append(task.CipdPackages, b.MustGetCipdPackageFromAsset("clang_linux"))
@@ -796,8 +810,7 @@ func recreateSKPs(b *specs.TasksCfgBuilder, name string) string {
 	task := kitchenTask(name, "recreate_skps", "swarm_recipe.isolate", SERVICE_ACCOUNT_RECREATE_SKPS, linuxGceDimensions(), nil, OUTPUT_NONE)
 	task.CipdPackages = append(task.CipdPackages, CIPD_PKGS_GIT...)
 	task.CipdPackages = append(task.CipdPackages, b.MustGetCipdPackageFromAsset("go"))
-	task.ExecutionTimeout = 4 * time.Hour
-	task.IoTimeout = 4 * time.Hour // With kitchen, step logs don't count toward IoTimeout.
+	timeout(task, 4*time.Hour)
 	b.MustAddTask(name, task)
 	return name
 }
@@ -812,8 +825,7 @@ func ctSKPs(b *specs.TasksCfgBuilder, name string) string {
 	task := kitchenTask(name, "ct_skps", "skia_repo.isolate", SERVICE_ACCOUNT_CT_SKPS, dims, nil, OUTPUT_NONE)
 	usesGit(task, name)
 	task.CipdPackages = append(task.CipdPackages, b.MustGetCipdPackageFromAsset("clang_linux"))
-	task.ExecutionTimeout = 24 * time.Hour
-	task.IoTimeout = 24 * time.Hour
+	timeout(task, 24*time.Hour)
 	task.MaxAttempts = 1
 	b.MustAddTask(name, task)
 	return name
@@ -847,8 +859,7 @@ func bookmaker(b *specs.TasksCfgBuilder, name, compileTaskName string) string {
 	task.CipdPackages = append(task.CipdPackages, CIPD_PKGS_GIT...)
 	task.CipdPackages = append(task.CipdPackages, b.MustGetCipdPackageFromAsset("go"))
 	task.Dependencies = append(task.Dependencies, compileTaskName)
-	task.ExecutionTimeout = 2 * time.Hour
-	task.IoTimeout = 2 * time.Hour
+	timeout(task, 2*time.Hour)
 	b.MustAddTask(name, task)
 	return name
 }
@@ -858,9 +869,8 @@ func bookmaker(b *specs.TasksCfgBuilder, name, compileTaskName string) string {
 // should add as a dependency.
 func androidFrameworkCompile(b *specs.TasksCfgBuilder, name string) string {
 	task := kitchenTask(name, "android_compile", "swarm_recipe.isolate", SERVICE_ACCOUNT_COMPILE, linuxGceDimensions(), nil, OUTPUT_NONE)
-	task.ExecutionTimeout = 1 * time.Hour
-	task.IoTimeout = 1 * time.Hour
 	task.MaxAttempts = 1
+	timeout(task, time.Hour)
 	b.MustAddTask(name, task)
 	return name
 }
@@ -947,23 +957,19 @@ func test(b *specs.TasksCfgBuilder, name string, parts map[string]string, compil
 	if deps := getIsolatedCIPDDeps(parts); len(deps) > 0 {
 		task.Dependencies = append(task.Dependencies, deps...)
 	}
-	task.ExecutionTimeout = 4 * time.Hour
 	task.Expiration = 20 * time.Hour
-	task.IoTimeout = 4 * time.Hour
 	task.MaxAttempts = 1
+	timeout(task, 4*time.Hour)
 	if strings.Contains(parts["extra_config"], "Valgrind") {
-		task.ExecutionTimeout = 9 * time.Hour
+		timeout(task, 9*time.Hour)
 		task.Expiration = 48 * time.Hour
-		task.IoTimeout = 9 * time.Hour
 		task.CipdPackages = append(task.CipdPackages, b.MustGetCipdPackageFromAsset("valgrind"))
 		task.Dimensions = append(task.Dimensions, "valgrind:1")
 	} else if strings.Contains(parts["extra_config"], "MSAN") {
-		task.ExecutionTimeout = 9 * time.Hour
-		task.IoTimeout = 9 * time.Hour
+		timeout(task, 9*time.Hour)
 	} else if parts["arch"] == "x86" && parts["configuration"] == "Debug" {
 		// skia:6737
-		task.ExecutionTimeout = 6 * time.Hour
-		task.IoTimeout = 6 * time.Hour
+		timeout(task, 6*time.Hour)
 	}
 	b.MustAddTask(name, task)
 
@@ -1003,10 +1009,10 @@ func coverage(b *specs.TasksCfgBuilder, name string, parts map[string]string, co
 		task := kitchenTask(n, "test", "test_skia_bundled.isolate", "", swarmDimensions(parts), nil, OUTPUT_COVERAGE)
 		task.CipdPackages = append(task.CipdPackages, pkgs...)
 		task.Dependencies = append(task.Dependencies, compileTaskName)
-		task.ExecutionTimeout = 4 * time.Hour
+
 		task.Expiration = 20 * time.Hour
-		task.IoTimeout = 4 * time.Hour
 		task.MaxAttempts = 1
+		timeout(task, 4*time.Hour)
 		if deps := getIsolatedCIPDDeps(parts); len(deps) > 0 {
 			task.Dependencies = append(task.Dependencies, deps...)
 		}
@@ -1047,27 +1053,23 @@ func perf(b *specs.TasksCfgBuilder, name string, parts map[string]string, compil
 	task := kitchenTask(name, recipe, isolate, "", swarmDimensions(parts), nil, OUTPUT_PERF)
 	task.CipdPackages = append(task.CipdPackages, pkgs...)
 	task.Dependencies = append(task.Dependencies, compileTaskName)
-	task.ExecutionTimeout = 4 * time.Hour
 	task.Expiration = 20 * time.Hour
-	task.IoTimeout = 4 * time.Hour
 	task.MaxAttempts = 1
+	timeout(task, 4*time.Hour)
 	if deps := getIsolatedCIPDDeps(parts); len(deps) > 0 {
 		task.Dependencies = append(task.Dependencies, deps...)
 	}
 
 	if strings.Contains(parts["extra_config"], "Valgrind") {
-		task.ExecutionTimeout = 9 * time.Hour
+		timeout(task, 9*time.Hour)
 		task.Expiration = 48 * time.Hour
-		task.IoTimeout = 9 * time.Hour
 		task.CipdPackages = append(task.CipdPackages, b.MustGetCipdPackageFromAsset("valgrind"))
 		task.Dimensions = append(task.Dimensions, "valgrind:1")
 	} else if strings.Contains(parts["extra_config"], "MSAN") {
-		task.ExecutionTimeout = 9 * time.Hour
-		task.IoTimeout = 9 * time.Hour
+		timeout(task, 9*time.Hour)
 	} else if parts["arch"] == "x86" && parts["configuration"] == "Debug" {
 		// skia:6737
-		task.ExecutionTimeout = 6 * time.Hour
-		task.IoTimeout = 6 * time.Hour
+		timeout(task, 6*time.Hour)
 	}
 	iid := internalHardwareLabel(parts)
 	if iid != nil {
