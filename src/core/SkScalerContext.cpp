@@ -106,6 +106,15 @@ void SkScalerContext::getMetrics(SkGlyph* glyph) {
         }
     }
 
+    // for now we have separate cache entries for devkerning on and off
+    // in the future we might share caches, but make our measure/draw
+    // code make the distinction. Thus we zap the values if the caller
+    // has not asked for them.
+    if ((fRec.fFlags & SkScalerContext::kDevKernText_Flag) == 0) {
+        // no devkern, so zap the fields
+        glyph->fLsbDelta = glyph->fRsbDelta = 0;
+    }
+
     // if either dimension is empty, zap the image bounds of the glyph
     if (0 == glyph->fWidth || 0 == glyph->fHeight) {
         glyph->fWidth   = 0;
@@ -153,6 +162,8 @@ SK_ERROR:
     glyph->fTop      = 0;
     glyph->fWidth    = 0;
     glyph->fHeight   = 0;
+    glyph->fLsbDelta = 0;
+    glyph->fRsbDelta = 0;
     // put a valid value here, in case it was earlier set to
     // MASK_FORMAT_JUST_ADVANCE
     glyph->fMaskFormat = fRec.fMaskFormat;
@@ -817,8 +828,7 @@ void SkScalerContext::MakeRecAndEffects(const SkPaint& paint,
                                         const SkMatrix* deviceMatrix,
                                         SkScalerContextFlags scalerContextFlags,
                                         SkScalerContextRec* rec,
-                                        SkScalerContextEffects* effects,
-                                        bool enableTypefaceFiltering) {
+                                        SkScalerContextEffects* effects) {
     SkASSERT(deviceMatrix == nullptr || !deviceMatrix->hasPerspective());
 
     SkTypeface* typeface = SkPaintPriv::GetTypefaceOrDefault(paint);
@@ -873,6 +883,10 @@ void SkScalerContext::MakeRecAndEffects(const SkPaint& paint,
             strokeWidth += extra;
         }
 #endif
+    }
+
+    if (paint.isDevKernText()) {
+        flags |= SkScalerContext::kDevKernText_Flag;
     }
 
     if (style != SkPaint::kFill_Style && strokeWidth > 0) {
@@ -964,9 +978,7 @@ void SkScalerContext::MakeRecAndEffects(const SkPaint& paint,
     // cache. This way if we're asking for something that they will ignore,
     // they can modify our rec up front, so we don't create duplicate cache
     // entries.
-    if (enableTypefaceFiltering) {
-        typeface->onFilterRec(rec);
-    }
+    typeface->onFilterRec(rec);
 
     if (!SkToBool(scalerContextFlags & SkScalerContextFlags::kFakeGamma)) {
         rec->ignoreGamma();

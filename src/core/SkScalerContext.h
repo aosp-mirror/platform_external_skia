@@ -135,8 +135,8 @@ public:
                    fPost2x2[0][1], fPost2x2[1][0], fPost2x2[1][1]);
         msg.appendf("  frame %g miter %g format %d join %d cap %d flags %#hx\n",
                    fFrameWidth, fMiterLimit, fMaskFormat, fStrokeJoin, fStrokeCap, fFlags);
-        msg.appendf("  lum bits %x, device gamma %d, paint gamma %d contrast %d\n", fLumBits,
-                    fDeviceGamma, fPaintGamma, fContrast);
+        msg.appendf("  lum bits %x, device gamma %d, paint gamma %d contrast %d\n",
+                    fLumBits, fDeviceGamma, fPaintGamma, fContrast);
         return msg;
     }
 
@@ -224,7 +224,7 @@ class SkScalerContext {
 public:
     enum Flags {
         kFrameAndFill_Flag        = 0x0001,
-        kUnused                   = 0x0002,
+        kDevKernText_Flag         = 0x0002,
         kEmbeddedBitmapText_Flag  = 0x0004,
         kEmbolden_Flag            = 0x0008,
         kSubpixelPositioning_Flag = 0x0010,
@@ -310,8 +310,7 @@ public:
                                   const SkMatrix* deviceMatrix,
                                   SkScalerContextFlags scalerContextFlags,
                                   SkScalerContextRec* rec,
-                                  SkScalerContextEffects* effects,
-                                  bool enableTypefaceFiltering = true);
+                                  SkScalerContextEffects* effects);
 
     static SkDescriptor*  MakeDescriptorForPaths(SkFontID fontID,
                                                  SkAutoDescriptor* ad);
