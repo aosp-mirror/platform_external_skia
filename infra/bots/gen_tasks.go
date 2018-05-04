@@ -225,6 +225,7 @@ func kitchenTask(name, recipe, isolate, serviceAccount string, dimensions []stri
 		"buildbucket_build_id": specs.PLACEHOLDER_BUILDBUCKET_BUILD_ID,
 		"buildername":          name,
 		"patch_issue":          specs.PLACEHOLDER_ISSUE,
+		"patch_ref":            specs.PLACEHOLDER_PATCH_REF,
 		"patch_repo":           specs.PLACEHOLDER_PATCH_REPO,
 		"patch_set":            specs.PLACEHOLDER_PATCHSET,
 		"patch_storage":        specs.PLACEHOLDER_PATCH_STORAGE,
@@ -539,12 +540,12 @@ func defaultSwarmDimensions(parts map[string]string) []string {
 				}
 			} else if strings.Contains(parts["os"], "ChromeOS") {
 				version, ok := map[string]string{
-					"MaliT604":           "9901.12.0",
-					"MaliT764":           "10172.0.0",
-					"MaliT860":           "10172.0.0",
-					"PowerVRGX6250":      "10176.5.0",
-					"TegraK1":            "10172.0.0",
-					"IntelHDGraphics615": "10032.17.0",
+					"MaliT604":           "10575.22.0",
+					"MaliT764":           "10575.22.0",
+					"MaliT860":           "10575.22.0",
+					"PowerVRGX6250":      "10575.22.0",
+					"TegraK1":            "10575.22.0",
+					"IntelHDGraphics615": "10575.22.0",
 				}[parts["cpu_or_gpu_value"]]
 				if !ok {
 					glog.Fatalf("Entry %q not found in ChromeOS GPU mapping.", parts["cpu_or_gpu_value"])
@@ -1098,7 +1099,7 @@ func presubmit(b *specs.TasksCfgBuilder, name string) string {
 		"category":         "cq",
 		"patch_gerrit_url": "https://skia-review.googlesource.com",
 		"patch_project":    "skia",
-		"patch_ref":        fmt.Sprintf("refs/changes/%s/%s/%s", specs.PLACEHOLDER_ISSUE_SHORT, specs.PLACEHOLDER_ISSUE, specs.PLACEHOLDER_PATCHSET),
+		"patch_ref":        specs.PLACEHOLDER_PATCH_REF,
 		"reason":           "CQ",
 		"repo_name":        "skia",
 	}

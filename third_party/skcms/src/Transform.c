@@ -622,37 +622,6 @@ static void assert_usable_as_destination(const skcms_ICCProfile* profile) {
 #endif
 }
 
-void skcms_EnsureUsableAsDestination(skcms_ICCProfile* profile, const skcms_ICCProfile* fallback) {
-    assert_usable_as_destination(fallback);
-    skcms_ICCProfile ok = *fallback;
-
-    skcms_Matrix3x3 fromXYZD50;
-    if (profile->has_toXYZD50 && skcms_Matrix3x3_invert(&profile->toXYZD50, &fromXYZD50)) {
-        ok.toXYZD50 = profile->toXYZD50;
-    }
-
-    for (int i = 0; profile->has_trc && i < 3; i++) {
-        skcms_TransferFunction inv;
-        if (profile->trc[i].table_entries == 0
-                && skcms_TransferFunction_invert(&profile->trc[i].parametric, &inv)) {
-            ok.trc[i] = profile->trc[i];
-            continue;
-        }
-
-        // Note there's a little gap here that we could fill by allowing fitting
-        // parametric curves to non-invertible parametric curves.
-
-        float max_error;
-        if (skcms_ApproximateCurve(&profile->trc[i], &ok.trc[i].parametric, &max_error)) {
-            // Parametric curves from skcms_ApproximateCurve() are guaranteed to be invertible.
-            ok.trc[i].table_entries = 0;
-        }
-    }
-
-    *profile = ok;
-    assert_usable_as_destination(profile);
-}
-
 static float max_roundtrip_error(const skcms_TransferFunction* inv_tf, const skcms_Curve* curve) {
     int N = curve->table_entries ? (int)curve->table_entries : 256;
     const float x_scale = 1.0f / (N - 1);
@@ -665,22 +634,54 @@ static float max_roundtrip_error(const skcms_TransferFunction* inv_tf, const skc
     return err;
 }
 
-void skcms_EnsureUsableAsDestinationWithSingleCurve(skcms_ICCProfile* profile,
-                                                    const skcms_ICCProfile* fallback) {
+bool skcms_MakeUsableAsDestination(skcms_ICCProfile* profile) {
+    skcms_Matrix3x3 fromXYZD50;
+    if (!profile->has_trc || !profile->has_toXYZD50
+        || !skcms_Matrix3x3_invert(&profile->toXYZD50, &fromXYZD50)) {
+        return false;
+    }
+
+    skcms_TransferFunction tf[3];
+    for (int i = 0; i < 3; i++) {
+        skcms_TransferFunction inv;
+        if (profile->trc[i].table_entries == 0
+            && skcms_TransferFunction_invert(&profile->trc[i].parametric, &inv)) {
+            tf[i] = profile->trc[i].parametric;
+            continue;
+        }
+
+        float max_error;
+        // Parametric curves from skcms_ApproximateCurve() are guaranteed to be invertible.
+        if (!skcms_ApproximateCurve(&profile->trc[i], &tf[i], &max_error)) {
+            return false;
+        }
+    }
+
+    for (int i = 0; i < 3; ++i) {
+        profile->trc[i].table_entries = 0;
+        profile->trc[i].parametric = tf[i];
+    }
+
+    assert_usable_as_destination(profile);
+    return true;
+}
+
+bool skcms_MakeUsableAsDestinationWithSingleCurve(skcms_ICCProfile* profile) {
     // Operate on a copy of profile, so we can choose the best TF for the original curves
     skcms_ICCProfile result = *profile;
-    skcms_EnsureUsableAsDestination(&result, fallback);
+    if (!skcms_MakeUsableAsDestination(&result)) {
+        return false;
+    }
 
     int best_tf = 0;
     float min_max_error = INFINITY_;
-    const skcms_ICCProfile* ref = profile->has_trc ? profile : fallback;
     for (int i = 0; i < 3; i++) {
         skcms_TransferFunction inv;
         skcms_TransferFunction_invert(&result.trc[i].parametric, &inv);
 
         float err = 0;
         for (int j = 0; j < 3; ++j) {
-            err = fmaxf_(err, max_roundtrip_error(&inv, &ref->trc[j]));
+            err = fmaxf_(err, max_roundtrip_error(&inv, &profile->trc[j]));
         }
         if (min_max_error > err) {
             min_max_error = err;
@@ -694,4 +695,5 @@ void skcms_EnsureUsableAsDestinationWithSingleCurve(skcms_ICCProfile* profile,
 
     *profile = result;
     assert_usable_as_destination(profile);
+    return true;
 }

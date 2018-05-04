@@ -18,8 +18,6 @@ public:
         : fSrcProfile(srcProfile)
         , fDstProfile(dstProfile)
         , fPremulFormat(premulFormat) {
-        skcms_EnsureUsableAsDestination(&fDstProfile, &skcms_sRGB_profile);
-
     #ifndef SK_DONT_OPTIMIZE_SRC_PROFILES_FOR_SPEED
         skcms_OptimizeForSpeed(&fSrcProfile);
     #endif
@@ -119,6 +117,10 @@ std::unique_ptr<SkColorSpaceXform> MakeSkcmsXform(SkColorSpace* src, SkColorSpac
         return nullptr;
     }
 
+    if (!skcms_MakeUsableAsDestination(&dstProfile)) {
+        return nullptr;
+    }
+
     skcms_AlphaFormat premulFormat = SkTransferFunctionBehavior::kRespect == premulBehavior
             ? skcms_AlphaFormat_PremulLinear : skcms_AlphaFormat_PremulAsEncoded;
     return skstd::make_unique<SkColorSpaceXform_skcms>(srcProfile, dstProfile, premulFormat);
@@ -133,7 +135,7 @@ sk_sp<SkColorSpace> SkColorSpace::Make(const skcms_ICCProfile* profile) {
         return nullptr;
     }
 
-    if (skcms_ApproximatelyEqualProfiles(profile, &skcms_sRGB_profile)) {
+    if (skcms_ApproximatelyEqualProfiles(profile, skcms_sRGB_profile())) {
         return SkColorSpace::MakeSRGB();
     }
 
