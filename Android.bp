@@ -999,7 +999,6 @@ cc_test {
     ],
 
     local_include_dirs: [
-        "experimental/skottie/",
         "experimental/sksg/",
         "experimental/sksg/effects/",
         "experimental/sksg/geometry/",
@@ -1059,11 +1058,6 @@ cc_test {
         "dm/DMGpuTestProcs.cpp",
         "dm/DMJsonWriter.cpp",
         "dm/DMSrcSink.cpp",
-        "experimental/skottie/Skottie.cpp",
-        "experimental/skottie/SkottieAdapter.cpp",
-        "experimental/skottie/SkottieAnimator.cpp",
-        "experimental/skottie/SkottieParser.cpp",
-        "experimental/skottie/SkottieValue.cpp",
         "experimental/sksg/SkSGDraw.cpp",
         "experimental/sksg/SkSGEffectNode.cpp",
         "experimental/sksg/SkSGGeometryNode.cpp",
