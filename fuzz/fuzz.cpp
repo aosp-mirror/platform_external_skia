@@ -28,6 +28,10 @@
 #include "SkSLCompiler.h"
 #endif
 
+#if defined(SK_ENABLE_SKOTTIE)
+#include "Skottie.h"
+#endif
+
 #include <iostream>
 #include <map>
 #include <regex>
@@ -58,6 +62,7 @@ DEFINE_string2(type, t, "", "How to interpret --bytes, one of:\n"
                             "region_set_path\n"
                             "skp\n"
                             "sksl2glsl\n"
+                            "skottie_json\n"
                             "textblob");
 
 static int fuzz_file(SkString path, SkString type);
@@ -82,6 +87,10 @@ static void print_api_names();
 
 #if SK_SUPPORT_GPU
 static void fuzz_sksl2glsl(sk_sp<SkData>);
+#endif
+
+#if defined(SK_ENABLE_SKOTTIE)
+static void fuzz_skottie_json(sk_sp<SkData>);
 #endif
 
 int main(int argc, char** argv) {
@@ -158,6 +167,10 @@ static int fuzz_file(SkString path, SkString type) {
         fuzz_img(bytes, 0, option);
         return 0;
     }
+    if (type.equals("filter_fuzz")) {
+        fuzz_filter_fuzz(bytes);
+        return 0;
+    }
     if (type.equals("path_deserialize")) {
         fuzz_path_deserialize(bytes);
         return 0;
@@ -174,12 +187,14 @@ static int fuzz_file(SkString path, SkString type) {
         fuzz_skpipe(bytes);
         return 0;
     }
-    if (type.equals("skp")) {
-        fuzz_skp(bytes);
+#if defined(SK_ENABLE_SKOTTIE)
+    if (type.equals("skottie_json")) {
+        fuzz_skottie_json(bytes);
         return 0;
     }
-    if (type.equals("filter_fuzz")) {
-        fuzz_filter_fuzz(bytes);
+#endif
+    if (type.equals("skp")) {
+        fuzz_skp(bytes);
         return 0;
     }
     if (type.equals("textblob")) {
@@ -256,6 +271,15 @@ static SkString try_auto_detect(SkString path, SkString* name) {
 
     return SkString("");
 }
+
+#if defined(SK_ENABLE_SKOTTIE)
+void FuzzSkottieJSON(sk_sp<SkData> bytes);
+
+static void fuzz_skottie_json(sk_sp<SkData> bytes){
+    FuzzSkottieJSON(bytes);
+    SkDebugf("[terminated] Done animating!\n");
+}
+#endif
 
 // This adds up the first 1024 bytes and returns it as an 8 bit integer.  This allows afl-fuzz to
 // deterministically excercise different paths, or *options* (such as different scaling sizes or

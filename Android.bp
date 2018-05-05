@@ -621,6 +621,7 @@ cc_library_static {
         "src/gpu/text/GrAtlasTextContext.cpp",
         "src/gpu/text/GrDistanceFieldAdjustTable.cpp",
         "src/gpu/text/GrGlyphCache.cpp",
+        "src/gpu/text/GrSDFMaskFilter.cpp",
         "src/gpu/text/GrTextBlobCache.cpp",
         "src/gpu/text/GrTextUtils.cpp",
         "src/gpu/vk/GrVkBackendContext.cpp",
@@ -998,7 +999,6 @@ cc_test {
     ],
 
     local_include_dirs: [
-        "experimental/skottie/",
         "experimental/sksg/",
         "experimental/sksg/effects/",
         "experimental/sksg/geometry/",
@@ -1058,11 +1058,6 @@ cc_test {
         "dm/DMGpuTestProcs.cpp",
         "dm/DMJsonWriter.cpp",
         "dm/DMSrcSink.cpp",
-        "experimental/skottie/Skottie.cpp",
-        "experimental/skottie/SkottieAdapter.cpp",
-        "experimental/skottie/SkottieAnimator.cpp",
-        "experimental/skottie/SkottieParser.cpp",
-        "experimental/skottie/SkottieValue.cpp",
         "experimental/sksg/SkSGDraw.cpp",
         "experimental/sksg/SkSGEffectNode.cpp",
         "experimental/sksg/SkSGGeometryNode.cpp",

@@ -5,16 +5,24 @@
 
 DEPS = [
   'core',
+  'recipe_engine/file',
   'recipe_engine/path',
   'recipe_engine/properties',
+  'run',
+  'vars',
 ]
 
 
 def RunSteps(api):
+  api.vars.setup()
   bot_update = True
   if 'NoDEPS' in api.properties['buildername']:
     bot_update = False
-  api.core.setup(bot_update=bot_update)
+  if bot_update:
+    api.core.checkout_bot_update()
+  else:
+    api.core.checkout_git()
+  api.file.ensure_directory('makedirs tmp_dir', api.vars.tmp_dir)
 
 
 def GenTests(api):
@@ -58,45 +66,6 @@ def GenTests(api):
           buildername=buildername,
           gerrit_project='skia',
           gerrit_url='https://skia-review.googlesource.com/',
-      )
-  )
-
-  buildername = ('Test-Win10-Clang-NUC6i5SYK-GPU-IntelIris540-x86_64-' +
-                 'Debug-All-ANGLE')
-  yield (
-      api.test('no_persistent_checkout') +
-      api.properties(buildername=buildername,
-                     repository='https://skia.googlesource.com/skia.git',
-                     revision='abc123',
-                     path_config='kitchen',
-                     swarm_out_dir='[SWARM_OUT_DIR]') +
-      api.properties(patch_storage='gerrit') +
-      api.properties.tryserver(
-          buildername=buildername,
-          gerrit_project='skia',
-          gerrit_url='https://skia-review.googlesource.com/',
-      )
-    )
-
-  buildername = 'Build-Debian9-GCC-x86_64-Release-PDFium'
-  yield (
-      api.test('pdfium_trybot') +
-      api.properties(
-          repository='https://skia.googlesource.com/skia.git',
-          buildername=buildername,
-          path_config='kitchen',
-          swarm_out_dir='[SWARM_OUT_DIR]',
-          revision='abc123',
-          patch_issue=500,
-          patch_set=1,
-          patch_storage='gerrit') +
-      api.properties.tryserver(
-          buildername=buildername,
-          gerrit_project='skia',
-          gerrit_url='https://skia-review.googlesource.com/',
-      ) +
-      api.path.exists(
-          api.path['start_dir'].join('tmp', 'uninteresting_hashes.txt')
       )
   )
 

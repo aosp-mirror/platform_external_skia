@@ -12,7 +12,6 @@ void SkGlyph::initWithGlyphID(SkPackedGlyphID glyph_id) {
     fImage          = nullptr;
     fPathData       = nullptr;
     fMaskFormat     = MASK_FORMAT_UNKNOWN;
-    fForceBW        = 0;
 }
 
 void SkGlyph::toMask(SkMask* mask) const {
@@ -42,6 +41,7 @@ static size_t format_alignment(SkMask::Format format) {
         case SkMask::kBW_Format:
         case SkMask::kA8_Format:
         case SkMask::k3D_Format:
+        case SkMask::kSDF_Format:
             return alignof(uint8_t);
         case SkMask::kARGB32_Format:
             return alignof(uint32_t);

@@ -9,6 +9,7 @@
 DEPS = [
   'core',
   'recipe_engine/context',
+  'recipe_engine/file',
   'recipe_engine/json',
   'recipe_engine/path',
   'recipe_engine/platform',
@@ -27,10 +28,15 @@ def build_targets_from_builder_dict(builder_dict):
 
 
 def RunSteps(api):
-  bot_update=True
+  api.vars.setup()
+
+  # Check out code.
   if 'NoDEPS' in api.properties['buildername']:
-    bot_update = False
-  api.core.setup(bot_update=bot_update)
+    api.core.checkout_git()
+  else:
+    api.core.checkout_bot_update()
+  api.file.ensure_directory('makedirs tmp_dir', api.vars.tmp_dir)
+  api.flavor.setup()
 
   build_targets = build_targets_from_builder_dict(api.vars.builder_cfg)
 
@@ -82,8 +88,6 @@ TEST_BUILDERS = [
   'Build-Debian9-GCC-x86_64-Debug-NoGPU',
   'Build-Debian9-GCC-x86_64-Release-ANGLE',
   'Build-Debian9-GCC-x86_64-Release-Flutter_Android',
-  'Build-Debian9-GCC-x86_64-Release-PDFium',
-  'Build-Debian9-GCC-x86_64-Release-PDFium_SkiaPaths',
   'Build-Debian9-GCC-x86_64-Release-Shared',
   'Build-Mac-Clang-arm64-Debug-Android',
   'Build-Mac-Clang-arm64-Debug-iOS',
@@ -151,29 +155,6 @@ def GenTests(api):
           api.path['start_dir'].join('tmp', 'uninteresting_hashes.txt')
       )
     )
-
-  buildername = 'Build-Debian9-GCC-x86_64-Release-PDFium'
-  yield (
-      api.test('pdfium_trybot') +
-      api.properties(
-          repository='https://skia.googlesource.com/skia.git',
-          buildername=buildername,
-          path_config='kitchen',
-          swarm_out_dir='[SWARM_OUT_DIR]',
-          revision='abc123',
-          patch_issue=500,
-          patch_repo='https://skia.googlesource.com/skia.git',
-          patch_set=1,
-          patch_storage='gerrit') +
-      api.properties.tryserver(
-          buildername=buildername,
-          gerrit_project='skia',
-          gerrit_url='https://skia-review.googlesource.com/',
-      ) +
-      api.path.exists(
-          api.path['start_dir'].join('tmp', 'uninteresting_hashes.txt')
-      )
-  )
 
   buildername = 'Build-Debian9-GCC-x86_64-Release-Flutter_Android'
   yield (
