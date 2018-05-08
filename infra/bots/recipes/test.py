@@ -105,10 +105,13 @@ def dm_flags(api, bot):
       configs.extend(['lite-8888'])              # Experimental display list.
       configs.extend(['gbr-8888'])
 
-      if '64' in bot:
+      if 'SAN' in bot:
         configs.extend(['t8888'])
 
     configs.extend(mode + '-8888' for mode in ['serialize', 'tiles_rt', 'pic'])
+
+    if 'T8888' in bot:
+      configs = ['t8888']
 
     # This bot only differs from vanilla CPU bots in 8888 config.
     if 'SK_FORCE_RASTER_PIPELINE_BLITTER' in bot:
@@ -293,6 +296,11 @@ def dm_flags(api, bot):
     args.remove('tests')
 
   if 'NativeFonts' in bot:  # images won't exercise native font integration :)
+    args.remove('image')
+    args.remove('colorImage')
+
+  if 'T8888' in bot:
+    args.remove('tests')
     args.remove('image')
     args.remove('colorImage')
 
@@ -954,6 +962,7 @@ TEST_BUILDERS = [
   'Test-Android-Clang-NVIDIA_Shield-GPU-TegraX1-arm64-Debug-All-Android',
   'Test-Android-Clang-NVIDIA_Shield-GPU-TegraX1-arm64-Debug-All-Android_CCPR',
   'Test-Android-Clang-Nexus5-GPU-Adreno330-arm-Release-All-Android',
+  'Test-Android-Clang-Nexus5x-CPU-Snapdragon808-arm-Release-All-Android_ASAN',
   'Test-Android-Clang-Nexus5x-GPU-Adreno418-arm-Debug-All-Android_ASAN',
   'Test-Android-Clang-Nexus5x-GPU-Adreno418-arm64-Debug-All-Android_ASAN',
   ('Test-Android-Clang-Nexus5x-GPU-Adreno418-arm64-Debug-All'
@@ -964,6 +973,10 @@ TEST_BUILDERS = [
   'Test-Android-Clang-NexusPlayer-GPU-PowerVR-x86-Release-All-Android_Vulkan',
   'Test-Android-Clang-Pixel-GPU-Adreno530-arm64-Debug-All-Android_CCPR',
   'Test-Android-Clang-Pixel-GPU-Adreno530-arm64-Debug-All-Android_Vulkan',
+  ('Test-Android-Clang-Pixel2XL-GPU-Adreno540-arm64-Debug-All'
+   '-Android_DDL1_Vulkan'),
+  ('Test-Android-Clang-Pixel2XL-GPU-Adreno540-arm64-Debug-All'
+   '-Android_DDL3_Vulkan'),
   'Test-ChromeOS-Clang-ASUSChromebookFlipC100-GPU-MaliT764-arm-Debug-All',
   ('Test-ChromeOS-Clang-AcerChromebookR13Convertible-GPU-PowerVRGX6250-'
    'arm-Debug-All'),
@@ -974,6 +987,7 @@ TEST_BUILDERS = [
   'Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-All-MSAN',
   ('Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-All'
    '-SK_USE_DISCARDABLE_SCALEDIMAGECACHE'),
+  'Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-All-T8888',
   ('Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Release-All'
    '-SK_FORCE_RASTER_PIPELINE_BLITTER'),
   'Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Release-All-SwiftShader',
