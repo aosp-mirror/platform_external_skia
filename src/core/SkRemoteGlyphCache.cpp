@@ -381,10 +381,7 @@ void SkTextBlobCacheDiffCanvas::processGlyphRun(
 
     bool isSubpixel =
             SkToBool(deviceSpecificRec.fFlags & SkScalerContext::kSubpixelPositioning_Flag);
-    SkAxisAlignment axisAlignment = SkAxisAlignment::kNone_SkAxisAlignment;
-    if (it.positioning() == SkTextBlob::kHorizontal_Positioning) {
-        axisAlignment = deviceSpecificRec.computeAxisAlignmentForHText();
-    }
+    SkAxisAlignment axisAlignment = deviceSpecificRec.computeAxisAlignmentForHText();
     auto pos = it.pos();
     const uint16_t* glyphs = it.glyphs();
     for (uint32_t index = 0; index < it.glyphCount(); index++) {
@@ -720,7 +717,7 @@ void SkStrikeClient::generatePath(const SkTypefaceProxy& typefaceProxy,
                                   const SkScalerContextRec& rec,
                                   SkGlyphID glyphID,
                                   SkPath* path) {
-    TRACE_EVENT1("skia", "generateMetricsAndImage", "rec", TRACE_STR_COPY(rec.dump().c_str()));
+    TRACE_EVENT1("skia", "generatePath", "rec", TRACE_STR_COPY(rec.dump().c_str()));
     SkDebugf("generatePath: %s\n", rec.dump().c_str());
     SkStrikeCache::Dump();
     SkDEBUGFAIL("GlyphCacheMiss");
