@@ -130,7 +130,18 @@ public:
     /**
      *  Create an SkColorSpace from a parsed (skcms) ICC profile.
      */
-    static sk_sp<SkColorSpace> Make(const skcms_ICCProfile*);
+    static sk_sp<SkColorSpace> Make(const skcms_ICCProfile&);
+
+    // TODO: cleanup in Chromium
+    static inline sk_sp<SkColorSpace> Make(const skcms_ICCProfile* p) {
+        SkASSERT(p);
+        return SkColorSpace::Make(*p);
+    }
+
+    /**
+     *  Convert this color space to an skcms ICC profile struct.
+     */
+    void toProfile(skcms_ICCProfile*) const;
 
     /**
      *  Types of colorspaces.
@@ -247,11 +258,8 @@ public:
      */
     static bool Equals(const SkColorSpace* src, const SkColorSpace* dst);
 
-    /**
-     *  If this color space was constructed from an ICC profile, return that profile data.
-     *  Otherise, return nullptr.
-     */
-    const SkData* profileData() const { return this->onProfileData(); }
+    virtual bool nonlinearBlending() const { return false; }
+    virtual sk_sp<SkColorSpace> makeNonlinearBlending() const { return nullptr; }
 
 private:
     virtual const SkMatrix44* onToXYZD50() const = 0;

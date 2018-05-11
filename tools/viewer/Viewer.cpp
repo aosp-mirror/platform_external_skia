@@ -75,6 +75,8 @@ DEFINE_string(bisect, "", "Path to a .skp or .svg file to bisect.");
 
 DECLARE_int32(threads)
 
+DEFINE_string2(file, f, "", "Open a single file for viewing.");
+
 const char* kBackendTypeStrings[sk_app::Window::kBackendTypeCount] = {
     "OpenGL",
 #if SK_ANGLE && defined(SK_BUILD_FOR_WIN)
@@ -531,48 +533,6 @@ Viewer::Viewer(int argc, char** argv, void* platformData)
 void Viewer::initSlides() {
     fAllSlideNames = Json::Value(Json::arrayValue);
 
-    // Bisect slide.
-    if (!FLAGS_bisect.isEmpty()) {
-        sk_sp<BisectSlide> bisect = BisectSlide::Create(FLAGS_bisect[0]);
-        if (bisect && !SkCommandLineFlags::ShouldSkip(FLAGS_match, bisect->getName().c_str())) {
-            if (FLAGS_bisect.count() >= 2) {
-                for (const char* ch = FLAGS_bisect[1]; *ch; ++ch) {
-                    bisect->onChar(*ch);
-                }
-            }
-            fSlides.push_back(std::move(bisect));
-        }
-    }
-
-    // GMs
-    int firstGM = fSlides.count();
-    const skiagm::GMRegistry* gms(skiagm::GMRegistry::Head());
-    while (gms) {
-        std::unique_ptr<skiagm::GM> gm(gms->factory()(nullptr));
-
-        if (!SkCommandLineFlags::ShouldSkip(FLAGS_match, gm->getName())) {
-            sk_sp<Slide> slide(new GMSlide(gm.release()));
-            fSlides.push_back(std::move(slide));
-        }
-
-        gms = gms->next();
-    }
-    // reverse gms
-    int numGMs = fSlides.count() - firstGM;
-    for (int i = 0; i < numGMs/2; ++i) {
-        std::swap(fSlides[firstGM + i], fSlides[fSlides.count() - i - 1]);
-    }
-
-    // samples
-    const SkViewRegister* reg = SkViewRegister::Head();
-    while (reg) {
-        sk_sp<Slide> slide(new SampleSlide(reg->factory()));
-        if (!SkCommandLineFlags::ShouldSkip(FLAGS_match, slide->getName().c_str())) {
-            fSlides.push_back(slide);
-        }
-        reg = reg->next();
-    }
-
     using SlideFactory = sk_sp<Slide>(*)(const SkString& name, const SkString& path);
     static const struct {
         const char*                            fExtension;
@@ -614,6 +574,68 @@ void Viewer::initSlides() {
             fSlides.push_back(std::move(slide));
         }
     };
+
+    if (!FLAGS_file.isEmpty()) {
+        // single file mode
+        const SkString file(FLAGS_file[0]);
+
+        if (sk_exists(file.c_str(), kRead_SkFILE_Flag)) {
+            for (const auto& sinfo : gExternalSlidesInfo) {
+                if (file.endsWith(sinfo.fExtension)) {
+                    addSlide(SkOSPath::Basename(file.c_str()), file, sinfo.fFactory);
+                    return;
+                }
+            }
+
+            fprintf(stderr, "Unsupported file type \"%s\"\n", file.c_str());
+        } else {
+            fprintf(stderr, "Cannot read \"%s\"\n", file.c_str());
+        }
+
+        return;
+    }
+
+    // Bisect slide.
+    if (!FLAGS_bisect.isEmpty()) {
+        sk_sp<BisectSlide> bisect = BisectSlide::Create(FLAGS_bisect[0]);
+        if (bisect && !SkCommandLineFlags::ShouldSkip(FLAGS_match, bisect->getName().c_str())) {
+            if (FLAGS_bisect.count() >= 2) {
+                for (const char* ch = FLAGS_bisect[1]; *ch; ++ch) {
+                    bisect->onChar(*ch);
+                }
+            }
+            fSlides.push_back(std::move(bisect));
+        }
+    }
+
+    // GMs
+    int firstGM = fSlides.count();
+    const skiagm::GMRegistry* gms(skiagm::GMRegistry::Head());
+    while (gms) {
+        std::unique_ptr<skiagm::GM> gm(gms->factory()(nullptr));
+
+        if (!SkCommandLineFlags::ShouldSkip(FLAGS_match, gm->getName())) {
+            sk_sp<Slide> slide(new GMSlide(gm.release()));
+            fSlides.push_back(std::move(slide));
+        }
+
+        gms = gms->next();
+    }
+    // reverse gms
+    int numGMs = fSlides.count() - firstGM;
+    for (int i = 0; i < numGMs/2; ++i) {
+        std::swap(fSlides[firstGM + i], fSlides[fSlides.count() - i - 1]);
+    }
+
+    // samples
+    const SkViewRegister* reg = SkViewRegister::Head();
+    while (reg) {
+        sk_sp<Slide> slide(new SampleSlide(reg->factory()));
+        if (!SkCommandLineFlags::ShouldSkip(FLAGS_match, slide->getName().c_str())) {
+            fSlides.push_back(slide);
+        }
+        reg = reg->next();
+    }
 
     for (const auto& info : gExternalSlidesInfo) {
         for (const auto& flag : info.fFlags) {
@@ -691,27 +713,27 @@ void Viewer::updateTitle() {
     }
 
     SkPaintTitleUpdater paintTitle(&title);
-    if (fPaintOverrides.fFlags & SkPaint::kAntiAlias_Flag) {
-        if (fPaint.isAntiAlias()) {
-            paintTitle.append("Antialias");
-        } else {
-            paintTitle.append("Alias");
+    auto paintFlag = [this, &paintTitle](SkPaint::Flags flag, bool (SkPaint::* isFlag)() const,
+                                         const char* on, const char* off)
+    {
+        if (fPaintOverrides.fFlags & flag) {
+            paintTitle.append((fPaint.*isFlag)() ? on : off);
         }
-    }
-    if (fPaintOverrides.fFlags & SkPaint::kLCDRenderText_Flag) {
-        if (fPaint.isLCDRenderText()) {
-            paintTitle.append("LCD");
-        } else {
-            paintTitle.append("lcd");
-        }
-    }
-    if (fPaintOverrides.fFlags & SkPaint::kSubpixelText_Flag) {
-        if (fPaint.isSubpixelText()) {
-            paintTitle.append("Subpixel Glyphs");
-        } else {
-            paintTitle.append("Pixel Glyphs");
-        }
-    }
+    };
+
+    paintFlag(SkPaint::kAntiAlias_Flag, &SkPaint::isAntiAlias, "Antialias", "Alias");
+    paintFlag(SkPaint::kDither_Flag, &SkPaint::isDither, "DITHER", "No Dither");
+    paintFlag(SkPaint::kFakeBoldText_Flag, &SkPaint::isFakeBoldText, "Fake Bold", "No Fake Bold");
+    paintFlag(SkPaint::kLinearText_Flag, &SkPaint::isLinearText, "Linear Text", "Non-Linear Text");
+    paintFlag(SkPaint::kSubpixelText_Flag, &SkPaint::isSubpixelText, "Subpixel Text", "Pixel Text");
+    paintFlag(SkPaint::kLCDRenderText_Flag, &SkPaint::isLCDRenderText, "LCD", "lcd");
+    paintFlag(SkPaint::kEmbeddedBitmapText_Flag, &SkPaint::isEmbeddedBitmapText,
+              "Bitmap Text", "No Bitmap Text");
+    paintFlag(SkPaint::kAutoHinting_Flag, &SkPaint::isAutohinted,
+              "Force Autohint", "No Force Autohint");
+    paintFlag(SkPaint::kVerticalText_Flag, &SkPaint::isVerticalText,
+              "Vertical Text", "No Vertical Text");
+
     if (fPaintOverrides.fHinting) {
         switch (fPaint.getHinting()) {
             case SkPaint::kNo_Hinting:
@@ -999,15 +1021,35 @@ public:
         if (fPaintOverrides->fHinting) {
             paint->writable()->setHinting(fPaint->getHinting());
         }
+
         if (fPaintOverrides->fFlags & SkPaint::kAntiAlias_Flag) {
             paint->writable()->setAntiAlias(fPaint->isAntiAlias());
         }
-        if (fPaintOverrides->fFlags & SkPaint::kLCDRenderText_Flag) {
-            paint->writable()->setLCDRenderText(fPaint->isLCDRenderText());
+        if (fPaintOverrides->fFlags & SkPaint::kDither_Flag) {
+            paint->writable()->setDither(fPaint->isDither());
+        }
+        if (fPaintOverrides->fFlags & SkPaint::kFakeBoldText_Flag) {
+            paint->writable()->setFakeBoldText(fPaint->isFakeBoldText());
+        }
+        if (fPaintOverrides->fFlags & SkPaint::kLinearText_Flag) {
+            paint->writable()->setLinearText(fPaint->isLinearText());
         }
         if (fPaintOverrides->fFlags & SkPaint::kSubpixelText_Flag) {
             paint->writable()->setSubpixelText(fPaint->isSubpixelText());
         }
+        if (fPaintOverrides->fFlags & SkPaint::kLCDRenderText_Flag) {
+            paint->writable()->setLCDRenderText(fPaint->isLCDRenderText());
+        }
+        if (fPaintOverrides->fFlags & SkPaint::kEmbeddedBitmapText_Flag) {
+            paint->writable()->setEmbeddedBitmapText(fPaint->isEmbeddedBitmapText());
+        }
+        if (fPaintOverrides->fFlags & SkPaint::kAutoHinting_Flag) {
+            paint->writable()->setAutohinted(fPaint->isAutohinted());
+        }
+        if (fPaintOverrides->fFlags & SkPaint::kVerticalText_Flag) {
+            paint->writable()->setVerticalText(fPaint->isVerticalText());
+        }
+
         return true;
     }
     SkPaint* fPaint;
@@ -1144,9 +1186,6 @@ void Viewer::onPaint(SkCanvas* canvas) {
     fCommands.drawHelp(canvas);
 
     this->drawImGui();
-
-    // Update the FPS
-    this->updateUIState();
 }
 
 SkPoint Viewer::mapEvent(float x, float y) {
@@ -1549,37 +1588,65 @@ void Viewer::drawImGui() {
                     paramsChanged = true;
                 }
 
-                int subpixelAAIdx = 0;
-                if (fPaintOverrides.fFlags & SkPaint::kLCDRenderText_Flag) {
-                    subpixelAAIdx = fPaint.isLCDRenderText() ? 2 : 1;
-                }
-                if (ImGui::Combo("Subpixel Anti-Alias", &subpixelAAIdx,
-                                 "Default\0lcd\0LCD\0\0"))
+                auto paintFlag = [this, &paramsChanged](const char* label, const char* items,
+                                                        SkPaint::Flags flag,
+                                                        bool (SkPaint::* isFlag)() const,
+                                                        void (SkPaint::* setFlag)(bool) )
                 {
-                    if (subpixelAAIdx == 0) {
-                        fPaintOverrides.fFlags &= ~SkPaint::kLCDRenderText_Flag;
-                    } else {
-                        fPaintOverrides.fFlags |= SkPaint::kLCDRenderText_Flag;
-                        fPaint.setLCDRenderText(subpixelAAIdx == 2);
+                    int itemIndex = 0;
+                    if (fPaintOverrides.fFlags & flag) {
+                        itemIndex = (fPaint.*isFlag)() ? 2 : 1;
                     }
-                    paramsChanged = true;
-                }
+                    if (ImGui::Combo(label, &itemIndex, items)) {
+                        if (itemIndex == 0) {
+                            fPaintOverrides.fFlags &= ~flag;
+                        } else {
+                            fPaintOverrides.fFlags |= flag;
+                            (fPaint.*setFlag)(itemIndex == 2);
+                        }
+                        paramsChanged = true;
+                    }
+                };
 
-                int subpixelPositionIdx = 0;
-                if (fPaintOverrides.fFlags & SkPaint::kSubpixelText_Flag) {
-                    subpixelPositionIdx = fPaint.isSubpixelText() ? 2 : 1;
-                }
-                if (ImGui::Combo("Subpixel Position Glyphs", &subpixelPositionIdx,
-                                 "Default\0Pixel Glyphs\0Subpixel Glyphs\0\0"))
-                {
-                    if (subpixelPositionIdx == 0) {
-                        fPaintOverrides.fFlags &= ~SkPaint::kSubpixelText_Flag;
-                    } else {
-                        fPaintOverrides.fFlags |= SkPaint::kSubpixelText_Flag;
-                        fPaint.setSubpixelText(subpixelPositionIdx == 2);
-                    }
-                    paramsChanged = true;
-                }
+                paintFlag("Dither",
+                          "Default\0No Dither\0Dither\0\0",
+                          SkPaint::kDither_Flag,
+                          &SkPaint::isDither, &SkPaint::setDither);
+
+                paintFlag("Fake Bold Glyphs",
+                          "Default\0No Fake Bold\0Fake Bold\0\0",
+                          SkPaint::kFakeBoldText_Flag,
+                          &SkPaint::isFakeBoldText, &SkPaint::setFakeBoldText);
+
+                paintFlag("Linear Text",
+                          "Default\0No Linear Text\0Linear Text\0\0",
+                          SkPaint::kLinearText_Flag,
+                          &SkPaint::isLinearText, &SkPaint::setLinearText);
+
+                paintFlag("Subpixel Position Glyphs",
+                          "Default\0Pixel Text\0Subpixel Text\0\0",
+                          SkPaint::kSubpixelText_Flag,
+                          &SkPaint::isSubpixelText, &SkPaint::setSubpixelText);
+
+                paintFlag("Subpixel Anti-Alias",
+                          "Default\0lcd\0LCD\0\0",
+                          SkPaint::kLCDRenderText_Flag,
+                          &SkPaint::isLCDRenderText, &SkPaint::setLCDRenderText);
+
+                paintFlag("Embedded Bitmap Text",
+                          "Default\0No Embedded Bitmaps\0Embedded Bitmaps\0\0",
+                          SkPaint::kEmbeddedBitmapText_Flag,
+                          &SkPaint::isEmbeddedBitmapText, &SkPaint::setEmbeddedBitmapText);
+
+                paintFlag("Force Auto-Hinting",
+                          "Default\0No Force Auto-Hinting\0Force Auto-Hinting\0\0",
+                          SkPaint::kAutoHinting_Flag,
+                          &SkPaint::isAutohinted, &SkPaint::setAutohinted);
+
+                paintFlag("Vertical Text",
+                          "Default\0No Vertical Text\0Vertical Text\0\0",
+                          SkPaint::kVerticalText_Flag,
+                          &SkPaint::isVerticalText, &SkPaint::setVerticalText);
             }
 
             if (fShowSlidePicker) {
@@ -1811,24 +1878,12 @@ void Viewer::updateUIState() {
         softkeyState[kOptions].append(Json::Value(softkey.c_str()));
     }
 
-    // FPS state
-    Json::Value fpsState(Json::objectValue);
-    fpsState[kName] = kFpsStateName;
-    double animTime = fStatsLayer.getLastTime(fAnimateTimer);
-    double paintTime = fStatsLayer.getLastTime(fPaintTimer);
-    double flushTime = fStatsLayer.getLastTime(fFlushTimer);
-    fpsState[kValue] = SkStringPrintf("%8.3lf ms\n\nA %8.3lf\nP %8.3lf\nF%8.3lf",
-                                      animTime + paintTime + flushTime,
-                                      animTime, paintTime, flushTime).c_str();
-    fpsState[kOptions] = Json::Value(Json::arrayValue);
-
     Json::Value state(Json::arrayValue);
     state.append(slideState);
     state.append(backendState);
     state.append(msaaState);
     state.append(prState);
     state.append(softkeyState);
-    state.append(fpsState);
 
     fWindow->setUIState(state.toStyledString().c_str());
 }

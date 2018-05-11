@@ -52,7 +52,12 @@ namespace skottie {
 
 namespace {
 
-using AssetMap = SkTHashMap<SkString, json::ValueRef>;
+struct AssetInfo {
+    json::ValueRef fAsset;
+    mutable bool   fIsAttaching; // Used for cycle detection
+};
+
+using AssetMap = SkTHashMap<SkString, AssetInfo>;
 
 struct AttachContext {
     const ResourceProvider& fResources;
@@ -63,7 +68,7 @@ struct AttachContext {
 
 bool LogFail(const json::ValueRef& json, const char* msg) {
     const auto dump = json.toString();
-    LOG("!! %s: %s", msg, dump.c_str());
+    LOG("!! %s: %s\n", msg, dump.c_str());
     return false;
 }
 
@@ -124,22 +129,17 @@ sk_sp<sksg::RenderNode> AttachOpacity(const json::ValueRef& jtransform, AttachCo
     if (!jtransform.isObject() || !childNode)
         return childNode;
 
-    // This is more peeky than other attachers, because we want to avoid redundant opacity
-    // nodes for the extremely common case of static opaciy == 100.
-    const auto& opacity = jtransform["o"];
-    if (opacity.isObject() &&
-        !opacity["a"].toDefault(true) &&
-        opacity["k"].toDefault<int>(-1) == 100) {
-        // Ignoring static full opacity.
-        return childNode;
-    }
-
+    static constexpr ScalarValue kNoopOpacity = 100;
     auto opacityNode = sksg::OpacityEffect::Make(childNode);
-    BindProperty<ScalarValue>(opacity, &ctx->fAnimators,
+
+    if (!BindProperty<ScalarValue>(jtransform["o"], &ctx->fAnimators,
         [opacityNode](const ScalarValue& o) {
             // BM opacity is [0..100]
             opacityNode->setOpacity(o * 0.01f);
-        });
+        }, &kNoopOpacity)) {
+        // We can ignore static full opacity.
+        return childNode;
+    }
 
     return std::move(opacityNode);
 }
@@ -276,7 +276,7 @@ sk_sp<sksg::Color> AttachColor(const json::ValueRef& obj, AttachContext* ctx) {
 sk_sp<sksg::Gradient> AttachGradient(const json::ValueRef& obj, AttachContext* ctx) {
     SkASSERT(obj.isObject());
 
-    const auto& stops = obj["g"];
+    const auto stops = obj["g"];
     if (!stops.isObject())
         return nullptr;
 
@@ -528,11 +528,8 @@ const ShapeInfo* FindShapeInfo(const json::ValueRef& shape) {
         { "tr", ShapeType::kTransform     , 0 }, // transform -> Inline handler
     };
 
-    if (!shape.isObject())
-        return nullptr;
-
-    const auto type = shape["ty"].toDefault(SkString());
-    if (type.isEmpty())
+    SkString type;
+    if (!shape["ty"].to(&type) || type.isEmpty())
         return nullptr;
 
     const auto* info = bsearch(type.c_str(),
@@ -594,7 +591,7 @@ sk_sp<sksg::RenderNode> AttachShape(const json::ValueRef& jshape, AttachShapeCon
         const auto s = jshape[jshape.size() - 1 - i];
         const auto* info = FindShapeInfo(s);
         if (!info) {
-            LogFail(s.isObject() ? s["ty"] : s, "Unknown shape");
+            LogFail(s["ty"], "Unknown shape");
             continue;
         }
 
@@ -764,37 +761,51 @@ sk_sp<sksg::RenderNode> AttachNestedAnimation(const char* path, AttachContext* c
     return sk_make_sp<SkottieSGAdapter>(std::move(animation));
 }
 
-sk_sp<sksg::RenderNode> AttachCompLayer(const json::ValueRef& jlayer, AttachContext* ctx,
-                                        float* time_bias, float* time_scale) {
-    SkASSERT(jlayer.isObject());
+sk_sp<sksg::RenderNode> AttachAssetRef(const json::ValueRef& jlayer, AttachContext* ctx,
+    sk_sp<sksg::RenderNode>(*attach_proc)(const json::ValueRef& comp, AttachContext* ctx)) {
 
-    SkString refId;
-    if (!jlayer["refId"].to(&refId) || refId.isEmpty()) {
-        LOG("!! Comp layer missing refId\n");
+    const auto refId = jlayer["refId"].toDefault(SkString());
+    if (refId.isEmpty()) {
+        LOG("!! Layer missing refId\n");
         return nullptr;
-    }
-
-    const auto start_time = jlayer["st"].toDefault(0.0f),
-             stretch_time = jlayer["sr"].toDefault(1.0f);
-
-    *time_bias = -start_time;
-    *time_scale = 1 / stretch_time;
-    if (SkScalarIsNaN(*time_scale)) {
-        *time_scale = 1;
     }
 
     if (refId.startsWith("$")) {
         return AttachNestedAnimation(refId.c_str() + 1, ctx);
     }
 
-    const auto* comp = ctx->fAssets.find(refId);
-    if (!comp) {
-        LOG("!! Pre-comp not found: '%s'\n", refId.c_str());
+    const auto* asset_info = ctx->fAssets.find(refId);
+    if (!asset_info) {
+        LOG("!! Asset not found: '%s'\n", refId.c_str());
         return nullptr;
     }
 
-    // TODO: cycle detection
-    return AttachComposition(*comp, ctx);
+    if (asset_info->fIsAttaching) {
+        LOG("!! Asset cycle detected for: '%s'\n", refId.c_str());
+        return nullptr;
+    }
+
+    asset_info->fIsAttaching = true;
+    auto asset = attach_proc(asset_info->fAsset, ctx);
+    asset_info->fIsAttaching = false;
+
+    return asset;
+}
+
+sk_sp<sksg::RenderNode> AttachCompLayer(const json::ValueRef& jlayer, AttachContext* ctx,
+                                        float* time_bias, float* time_scale) {
+    SkASSERT(jlayer.isObject());
+
+    const auto start_time = jlayer["st"].toDefault(0.0f),
+             stretch_time = jlayer["sr"].toDefault(1.0f);
+
+    *time_bias = -start_time;
+    *time_scale = sk_ieee_float_divide(1, stretch_time);
+    if (SkScalarIsNaN(*time_scale)) {
+        *time_scale = 1;
+    }
+
+    return AttachAssetRef(jlayer, ctx, AttachComposition);
 }
 
 sk_sp<sksg::RenderNode> AttachSolidLayer(const json::ValueRef& jlayer, AttachContext*,
@@ -839,23 +850,11 @@ sk_sp<sksg::RenderNode> AttachImageAsset(const json::ValueRef& jimage, AttachCon
         SkImage::MakeFromEncoded(SkData::MakeFromStream(resStream.get(), resStream->getLength())));
 }
 
-sk_sp<sksg::RenderNode> AttachImageLayer(const json::ValueRef& layer, AttachContext* ctx,
+sk_sp<sksg::RenderNode> AttachImageLayer(const json::ValueRef& jlayer, AttachContext* ctx,
                                          float*, float*) {
-    SkASSERT(layer.isObject());
+    SkASSERT(jlayer.isObject());
 
-    SkString refId;
-    if (!layer["refId"].to(&refId) || refId.isEmpty()) {
-        LOG("!! Image layer missing refId\n");
-        return nullptr;
-    }
-
-    const auto* jimage = ctx->fAssets.find(refId);
-    if (!jimage) {
-        LOG("!! Image asset not found: '%s'\n", refId.c_str());
-        return nullptr;
-    }
-
-    return AttachImageAsset(*jimage, ctx);
+    return AttachAssetRef(jlayer, ctx, AttachImageAsset);
 }
 
 sk_sp<sksg::RenderNode> AttachNullLayer(const json::ValueRef& layer, AttachContext*, float*, float*) {
@@ -894,34 +893,14 @@ sk_sp<sksg::RenderNode> AttachTextLayer(const json::ValueRef& layer, AttachConte
 
 struct AttachLayerContext {
     AttachLayerContext(const json::ValueRef& jlayers, AttachContext* ctx)
-        : fLayerList(jlayers), fCtx(ctx) {}
+        : fLayerList(jlayers), fCtx(ctx) {
+        SkASSERT(fLayerList.isArray());
+    }
 
-    const json::ValueRef                   fLayerList;
+    const json::ValueRef                 fLayerList;
     AttachContext*                       fCtx;
     SkTHashMap<int, sk_sp<sksg::Matrix>> fLayerMatrixMap;
     sk_sp<sksg::RenderNode>              fCurrentMatte;
-
-    sk_sp<sksg::Matrix> AttachParentLayerMatrix(const json::ValueRef& jlayer) {
-        SkASSERT(jlayer.isObject());
-        SkASSERT(fLayerList.isArray());
-
-        const auto parent_index = jlayer["parent"].toDefault<int>(-1);
-        if (parent_index < 0)
-            return nullptr;
-
-        if (auto* m = fLayerMatrixMap.find(parent_index))
-            return *m;
-
-        sk_sp<sksg::Matrix> matrix;
-        for (const json::ValueRef l : fLayerList) {
-            if (l["ind"].toDefault<int>(-1) == parent_index) {
-                matrix = this->AttachLayerMatrix(l);
-                break;
-            }
-        }
-
-        return nullptr;
-    }
 
     sk_sp<sksg::Matrix> AttachLayerMatrix(const json::ValueRef& jlayer) {
         SkASSERT(jlayer.isObject());
@@ -933,15 +912,38 @@ struct AttachLayerContext {
         if (auto* m = fLayerMatrixMap.find(layer_index))
             return *m;
 
+        return this->AttachLayerMatrixImpl(jlayer, layer_index);
+    }
+
+private:
+    sk_sp<sksg::Matrix> AttachParentLayerMatrix(const json::ValueRef& jlayer, int layer_index) {
+        SkASSERT(jlayer.isObject());
+
+        const auto parent_index = jlayer["parent"].toDefault<int>(-1);
+        if (parent_index < 0 || parent_index == layer_index)
+            return nullptr;
+
+        if (auto* m = fLayerMatrixMap.find(parent_index))
+            return *m;
+
+        for (const json::ValueRef l : fLayerList) {
+            if (l["ind"].toDefault<int>(-1) == parent_index) {
+                return this->AttachLayerMatrixImpl(l, parent_index);
+            }
+        }
+
+        return nullptr;
+    }
+
+    sk_sp<sksg::Matrix> AttachLayerMatrixImpl(const json::ValueRef& jlayer, int layer_index) {
+        SkASSERT(!fLayerMatrixMap.find(layer_index));
+
         // Add a stub entry to break recursion cycles.
         fLayerMatrixMap.set(layer_index, nullptr);
 
-        auto parent_matrix = this->AttachParentLayerMatrix(jlayer);
+        auto parent_matrix = this->AttachParentLayerMatrix(jlayer, layer_index);
 
-        return *fLayerMatrixMap.set(layer_index,
-                                    AttachMatrix(jlayer["ks"],
-                                                 fCtx,
-                                                 this->AttachParentLayerMatrix(jlayer)));
+        return *fLayerMatrixMap.set(layer_index, AttachMatrix(jlayer["ks"], fCtx, parent_matrix));
     }
 };
 
@@ -1273,7 +1275,7 @@ Animation::Animation(const ResourceProvider& resources,
     AssetMap assets;
     for (const json::ValueRef asset : json["assets"]) {
         if (asset.isObject()) {
-            assets.set(asset["id"].toDefault(SkString()), asset);
+            assets.set(asset["id"].toDefault(SkString()), { asset, false });
         }
     }
 
