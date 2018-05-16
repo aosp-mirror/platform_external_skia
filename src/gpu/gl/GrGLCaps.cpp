@@ -2473,6 +2473,8 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
     // given 1 << 15 or more instances.
     if (kPowerVRRogue_GrGLRenderer == ctxInfo.renderer()) {
         fMaxInstancesPerDrawArraysWithoutCrashing = 0x7fff;
+    } else if (fDriverBugWorkarounds.disallow_large_instanced_draw) {
+        fMaxInstancesPerDrawArraysWithoutCrashing = 0x4000000;
     }
 
     // Texture uploads sometimes seem to be ignored to textures bound to FBOS on Tegra3.
@@ -2784,7 +2786,11 @@ int GrGLCaps::getRenderTargetSampleCount(int requestedCount, GrPixelConfig confi
 
     for (int i = 0; i < count; ++i) {
         if (fConfigTable[config].fColorSampleCounts[i] >= requestedCount) {
-            return fConfigTable[config].fColorSampleCounts[i];
+            int count = fConfigTable[config].fColorSampleCounts[i];
+            if (fDriverBugWorkarounds.max_msaa_sample_count_4) {
+                count = SkTMin(count, 4);
+            }
+            return count;
         }
     }
     return 0;
