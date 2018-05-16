@@ -14,6 +14,7 @@ cc_library_static {
         "-Weverything",
         "-Wextra",
         "-Winit-self",
+        "-Wno-bad-function-cast",
         "-Wno-cast-align",
         "-Wno-cast-qual",
         "-Wno-conversion",
