@@ -54,6 +54,7 @@ def compile_fn(api, out_dir):
     't', 'depot_tools', 'win_toolchain', 'vs_files',
     'a9e1098bba66d2acccc377d5ee81265910f29272'))
   win_vulkan_sdk = str(api.vars.slave_dir.join('win_vulkan_sdk'))
+  moltenvk = str(api.vars.slave_dir.join('moltenvk'))
 
   cc, cxx = None, None
   extra_cflags = []
@@ -140,7 +141,7 @@ def compile_fn(api, out_dir):
   if 'SwiftShader' in extra_tokens:
     swiftshader_root = api.vars.skia_dir.join('third_party', 'externals',
                                               'swiftshader')
-    swiftshader_out = api.vars.skia_out.join('swiftshader_out')
+    swiftshader_out = out_dir.join('swiftshader_out')
     compile_swiftshader(api, swiftshader_root, cc, cxx, swiftshader_out)
     args['skia_use_egl'] = 'true'
     extra_cflags.extend([
@@ -200,6 +201,8 @@ def compile_fn(api, out_dir):
       args['skia_vulkan_sdk'] = '"%s"' % linux_vulkan_sdk
     if 'Win' in os:
       args['skia_vulkan_sdk'] = '"%s"' % win_vulkan_sdk
+    if 'MoltenVK' in extra_tokens:
+      args['skia_moltenvk_path'] = '"%s"' % moltenvk
   if 'Metal' in extra_tokens:
     args['skia_use_metal'] = 'true'
   if 'iOS' in extra_tokens:
@@ -276,5 +279,5 @@ def compile_fn(api, out_dir):
 def copy_extra_build_products(api, src, dst):
   if 'SwiftShader' in api.vars.extra_tokens:
     util.copy_whitelisted_build_products(api,
-        api.vars.skia_out.join('swiftshader_out'),
+        src.join('swiftshader_out'),
         api.vars.swarming_out_dir.join('out', 'swiftshader_out'))

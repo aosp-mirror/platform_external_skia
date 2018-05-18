@@ -85,7 +85,7 @@ public:
                                             sk_sp<SkColorSpace>*,
                                             SkScalar scaleAdjust[2]) const override;
 #endif
-    SkData* onRefEncoded() const override;
+    sk_sp<SkData> onRefEncoded() const override;
     sk_sp<SkImage> onMakeSubset(const SkIRect&) const override;
     bool getROPixels(SkBitmap*, SkColorSpace* dstColorSpace, CachingHint) const override;
     bool onIsLazyGenerated() const override { return true; }
@@ -568,7 +568,7 @@ bool SkImage_Lazy::onReadPixels(const SkImageInfo& dstInfo, void* dstPixels, siz
     return false;
 }
 
-SkData* SkImage_Lazy::onRefEncoded() const {
+sk_sp<SkData> SkImage_Lazy::onRefEncoded() const {
     ScopedGenerator generator(fSharedGenerator);
     return generator->refEncodedData();
 }

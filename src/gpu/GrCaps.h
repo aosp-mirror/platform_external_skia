@@ -273,6 +273,8 @@ public:
     virtual bool getConfigFromBackendFormat(const GrBackendFormat& format, SkColorType ct,
                                             GrPixelConfig*) const = 0;
 
+    const GrDriverBugWorkarounds& workarounds() const { return fDriverBugWorkarounds; }
+
 protected:
     /** Subclasses must call this at the end of their constructors in order to apply caps
         overrides requested by the client. Note that overrides will only reduce the caps never
@@ -331,6 +333,8 @@ protected:
     int fMaxWindowRectangles;
     int fMaxClipAnalyticFPs;
 
+    GrDriverBugWorkarounds fDriverBugWorkarounds;
+
 private:
     virtual void onApplyOptionsOverrides(const GrContextOptions&) {}
     virtual void onDumpJSON(SkJSONWriter*) const {}
@@ -343,8 +347,6 @@ private:
 
     bool fSuppressPrints : 1;
     bool fWireframeMode  : 1;
-
-    GrDriverBugWorkarounds fDriverBugWorkarounds;
 
     typedef SkRefCnt INHERITED;
 };

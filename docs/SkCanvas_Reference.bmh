@@ -1,12 +1,6 @@
 #Topic Canvas
 #Alias Canvas_Reference
 
-#Subtopic Overview
-    #Subtopic Subtopic
-    #Populate
-    ##
-##
-
 #Class SkCanvas
 
 Canvas provides an interface for drawing, and how the drawing is clipped and transformed.
@@ -30,6 +24,10 @@ destination.
 Canvas can be constructed to draw to Bitmap without first creating Raster_Surface.
 This approach may be deprecated in the future.
 
+#Subtopic Overview
+#Populate
+##
+
 #Subtopic Related_Function
 #Populate
 ##
@@ -38,7 +36,11 @@ This approach may be deprecated in the future.
 #Populate
 ##
 
-#Subtopic Class_or_Struct
+#Subtopic Struct
+#Populate
+##
+
+#Subtopic Typedef
 #Populate
 ##
 
@@ -181,7 +183,7 @@ void draw(SkCanvas* ) {
             height,
             pixels[0],  // top-left of the bitmap
             sizeof(pixels[0]));  // byte width of the each row
-    // write a premultiplied value for white into all pixels in the bitmap
+    // write a Premultiplied value for white into all pixels in the bitmap
     canvas->clear(SK_ColorWHITE);
     SkPMColor pmWhite = pixels[0][0];  // the Premultiplied format may vary
     SkPaint paint;  // by default, draws black
@@ -262,9 +264,9 @@ void draw(SkCanvas* canvas) {
 
 #Method SkCanvas(int width, int height, const SkSurfaceProps* props = nullptr)
 
-#Line # no Surface, set dimensions, Surface_Properties ##
+#Line # creates with no Surface, set dimensions, Surface_Properties ##
 Creates Canvas of the specified dimensions without a Surface.
-Used by Subclasses with custom implementations for draw methods.
+Used by Subclasses with custom implementations for draw member functions.
 
 If props equals nullptr, Surface_Properties are created with
 Surface_Properties_Legacy_Font_Host settings, which choose the pixel striping
@@ -365,7 +367,7 @@ The actual output depends on the installed fonts.
 ##
 
 #EnumClass ColorBehavior
-#Line # Android framework only ##
+#Line # exists for Android framework only ##
 #Private
 Android framework only.
 ##
@@ -376,16 +378,16 @@ Android framework only.
     };
 ##
 #Const kLegacy 0
+#Line # placeholder ##
     Is a placeholder to allow specialized constructor; has no meaning.
 ##
 ##
 
 #Method SkCanvas(const SkBitmap& bitmap, ColorBehavior behavior)
 
-#Line # Android framework only ##
-#Private
+#Line # exists for Android framework only ##
+
 Android framework only.
-##
 
 #Param bitmap    specifies a bitmap for the canvas to draw into ##
 #Param behavior  specializes this constructor; value is unused ##
@@ -978,7 +980,7 @@ Does not copy, and returns false if:
 #Description
     Canvas returned by Raster_Surface has Premultiplied pixel values.
     clear() takes Unpremultiplied input with Color_Alpha equal 0x80
-    and Color_RGB equal 0x55, 0xAA, 0xFF. Color_RGB is multiplied by Color_Alpha
+    and RGB equal 0x55, 0xAA, 0xFF. RGB is multiplied by Color_Alpha
     to generate Premultiplied value 0x802B5580. readPixels converts pixel back
     to Unpremultiplied value 0x8056A9FF, introducing error.
 ##
@@ -1045,7 +1047,7 @@ Does not copy, and returns false if:
 #Example
     #Description
         clear() takes Unpremultiplied input with Color_Alpha equal 0x80
-        and Color_RGB equal 0x55, 0xAA, 0xFF. Color_RGB is multiplied by Color_Alpha
+        and RGB equal 0x55, 0xAA, 0xFF. RGB is multiplied by Color_Alpha
         to generate Premultiplied value 0x802B5580.
     ##
     void draw(SkCanvas* canvas) {
@@ -1108,7 +1110,7 @@ Does not copy, and returns false if:
 #Example
     #Description
         clear() takes Unpremultiplied input with Color_Alpha equal 0x80
-        and Color_RGB equal 0x55, 0xAA, 0xFF. Color_RGB is multiplied by Color_Alpha
+        and RGB equal 0x55, 0xAA, 0xFF. RGB is multiplied by Color_Alpha
         to generate Premultiplied value 0x802B5580.
     ##
 void draw(SkCanvas* canvas) {
@@ -1673,11 +1675,6 @@ Call restoreToCount with returned value to restore this and subsequent saves.
 
 ##
 
-#ToDo
-add new markup to associate typedef SaveLayerFlags with Enum so that, for
-documentation purposes, this enum is named rather than anonymous
-##
-
 #Enum SaveLayerFlagsSet
 #Line # sets SaveLayerRec options ##
 #Code
@@ -1691,20 +1688,29 @@ documentation purposes, this enum is named rather than anonymous
     typedef uint32_t SaveLayerFlags;
 ##
 
+
+#Typedef uint32_t SaveLayerFlags
+#Line # options for SaveLayerRec ##
+
 SaveLayerFlags provides options that may be used in any combination in SaveLayerRec,
-defining how Layer allocated by saveLayer operates.
+defining how Layer allocated by saveLayer operates. It may be set to zero,
+kPreserveLCDText_SaveLayerFlag, kInitWithPrevious_SaveLayerFlag, or both flags.
+
+##
 
 #Const kPreserveLCDText_SaveLayerFlag 2
+#Line # creates Layer for LCD text ##
   Creates Layer for LCD text. Flag is ignored if Layer Paint contains
   Image_Filter or Color_Filter.
 ##
 
 #Const kInitWithPrevious_SaveLayerFlag 4
+#Line # initializes with previous contents ##
   Initializes Layer with the contents of the previous Layer.
 ##
 
 #Const kMaskAgainstCoverage_EXPERIMENTAL_DONT_USE_SaveLayerFlag 8
-  Experimental -- don't use
+#Experimental  do not use
 ##
 
 #Const kDontClipToLayer_Legacy_SaveLayerFlag 0x80000000
@@ -1739,12 +1745,14 @@ void draw(SkCanvas* canvas) {
 
 #Enum ##
 
-#Typedef uint32_t SaveLayerFlags
-
-##
+#Subtopic SaveLayerRec
+#Line # contains the state used to create the Layer ##
 
 #Struct SaveLayerRec
 #Line # contains the state used to create the Layer ##
+
+SaveLayerRec contains the state used to create the Layer.
+
 #Code
     struct SaveLayerRec {
         SaveLayerRec*(...
@@ -1756,38 +1764,50 @@ void draw(SkCanvas* canvas) {
     };
 ##
 
-SaveLayerRec contains the state used to create the Layer.
+#Subtopic Overview
+#Populate
+##
+
+#Subtopic Member
+#Populate
+##
 
 #Member const SkRect*           fBounds
+#Line # hints at Layer size limit ##
     fBounds is used as a hint to limit the size of Layer; may be nullptr.
     fBounds suggests but does not define Layer size. To clip drawing to
     a specific rectangle, use clipRect.
 ##
 
 #Member const SkPaint*          fPaint
+#Line # modifies overlay ##
     fPaint modifies how Layer overlays the prior Layer; may be nullptr.
     Color_Alpha, Blend_Mode, Color_Filter, Draw_Looper, Image_Filter, and
     Mask_Filter affect Layer draw.
 ##
 
 #Member const SkImageFilter*    fBackdrop
+#Line # applies Image_Filter to prior Layer ##
     fBackdrop applies Image_Filter to the prior Layer when copying to the Layer;
     may be nullptr. Use kInitWithPrevious_SaveLayerFlag to copy the
     prior Layer without an Image_Filter.
 ##
 
 #Member const SkImage*          fClipMask
+#Line # clips Layer with Mask_Alpha ##
   restore() clips Layer by the Color_Alpha channel of fClipMask when
   Layer is copied to Device. fClipMask may be nullptr.    .
 ##
 
 #Member const SkMatrix*         fClipMatrix
+#Line # transforms Mask_Alpha used to clip ##
   fClipMatrix transforms fClipMask before it clips Layer. If
   fClipMask describes a translucent gradient, it may be scaled and rotated
   without introducing artifacts. fClipMatrix may be nullptr.
 ##
 
 #Member SaveLayerFlags          fSaveLayerFlags
+#Line # preserves LCD Text, creates with prior Layer contents ##
     fSaveLayerFlags are used to create Layer without transparency,
     create Layer for LCD text, and to create Layer with the
     contents of the previous Layer.
@@ -1796,7 +1816,7 @@ SaveLayerRec contains the state used to create the Layer.
 #Example
 #Height 160
 #Description
-Canvas Layer captures a red Anti-aliased circle and a blue Aliased circle scaled
+Canvas Layer captures a red Anti_Aliased circle and a blue Aliased circle scaled
 up by four. After drawing another red circle without scaling on top, the Layer is
 transferred to the main canvas.
 ##
@@ -1817,8 +1837,12 @@ void draw(SkCanvas* canvas) {
 }
 ##
 
-#Method SaveLayerRec()
+#Subtopic Constructor
+#Populate
+##
 
+#Method SaveLayerRec()
+#Line # constructs SaveLayerRec ##
 Sets fBounds, fPaint, and fBackdrop to nullptr. Clears fSaveLayerFlags.
 
 #Return  empty SaveLayerRec ##
@@ -1902,9 +1926,7 @@ Sets fBounds, fPaint, fBackdrop, and fSaveLayerFlags.
                      const SkImage* clipMask, const SkMatrix* clipMatrix,
                      SaveLayerFlags saveLayerFlags)
 
-#Experimental
-Not ready for general use.
-##
+#Experimental  not ready
 
 Sets fBounds, fPaint, fBackdrop, fClipMask, fClipMatrix, and fSaveLayerFlags.
 clipMatrix uses Color_Alpha channel of image, transformed by clipMatrix, to clip
@@ -1932,6 +1954,8 @@ Implementation is not complete; has no effect if Device is GPU-backed.
 ##
 
 #Struct ##
+
+#Subtopic ##
 
 #Method int saveLayer(const SaveLayerRec& layerRec)
 
@@ -2318,14 +2342,14 @@ prior Clip to form the replacement Clip. Use SkClipOp::kDifference
 to subtract Path from Clip; use SkClipOp::kIntersect to intersect Path
 with Clip.
 
-A clipping Path may be Anti-aliased; if Path, after transformation, is
-composed of horizontal and vertical lines, clearing Anti-alias allows whole pixels
+A clipping Path may be Anti_Aliased; if Path, after transformation, is
+composed of horizontal and vertical lines, clearing Anti_Alias allows whole pixels
 to either be inside or outside the clip. The fastest drawing has a Aliased,
 rectangular clip.
 
-If clipping Path has Anti-alias set, clip may partially clip a pixel, requiring
+If clipping Path has Anti_Alias set, clip may partially clip a pixel, requiring
 that drawing blend partially with the destination along the edge. A rotated
-rectangular Anti-aliased clip looks smoother but draws slower.
+rectangular Anti_Aliased clip looks smoother but draws slower.
 
 Clip can combine with Rect and Round_Rect primitives; like
 Path, these are transformed by Matrix before they are combined with Clip.
@@ -2336,10 +2360,10 @@ and is unaffected by Matrix.
 #Example
 #Height 90
     #Description
-        Draw a red circle with an Aliased clip and an Anti-aliased clip.
+        Draw a red circle with an Aliased clip and an Anti_Aliased clip.
         Use an image filter to zoom into the pixels drawn.
         The edge of the Aliased clip fully draws pixels in the red circle.
-        The edge of the Anti-aliased clip partially draws pixels in the red circle.
+        The edge of the Anti_Aliased clip partially draws pixels in the red circle.
     ##
     SkPaint redPaint, scalePaint;
     redPaint.setAntiAlias(true);
@@ -2368,12 +2392,12 @@ and is unaffected by Matrix.
 #In Clip
 #Line # combines Clip with Rect ##
 Replace Clip with the intersection or difference of Clip and rect,
-with an Aliased or Anti-aliased clip edge. rect is transformed by Matrix
+with an Aliased or Anti_Aliased clip edge. rect is transformed by Matrix
 before it is combined with Clip.
 
 #Param  rect  Rect to combine with Clip ##
 #Param  op    Clip_Op to apply to Clip ##
-#Param  doAntiAlias  true if Clip is to be Anti-aliased ##
+#Param  doAntiAlias  true if Clip is to be Anti_Aliased ##
 
 #Example
 #Height 128
@@ -2433,13 +2457,13 @@ rect is transformed by Matrix
 before it is combined with Clip.
 
 #Param  rect   Rect to combine with Clip ##
-#Param  doAntiAlias  true if Clip is to be Anti-aliased ##
+#Param  doAntiAlias  true if Clip is to be Anti_Aliased ##
 
 #Example
 #Height 133
     #Description
         A circle drawn in pieces looks uniform when drawn Aliased.
-        The same circle pieces blend with pixels more than once when Anti-aliased,
+        The same circle pieces blend with pixels more than once when Anti_Aliased,
         visible as a thin pair of lines through the right circle.
     ##
 void draw(SkCanvas* canvas) {
@@ -2469,7 +2493,7 @@ void draw(SkCanvas* canvas) {
 #Method void androidFramework_setDeviceClipRestriction(const SkIRect& rect)
 
 #In Clip
-#Line # for use by Android framework ##
+#Line # exists for use by Android framework ##
 Sets the maximum clip rectangle, which can be set by clipRect, clipRRect and
 clipPath and intersect the current clip with the specified rect.
 The maximum clip affects only future clipping operations; it is not retroactive.
@@ -2491,13 +2515,13 @@ This is private API to be used only by Android framework.
 #In Clip
 #Line # combines Clip with Round_Rect ##
 Replace Clip with the intersection or difference of Clip and rrect,
-with an Aliased or Anti-aliased clip edge.
+with an Aliased or Anti_Aliased clip edge.
 rrect is transformed by Matrix
 before it is combined with Clip.
 
 #Param  rrect  Round_Rect to combine with Clip ##
 #Param  op  Clip_Op to apply to Clip ##
-#Param  doAntiAlias  true if Clip is to be Anti-aliased ##
+#Param  doAntiAlias  true if Clip is to be Anti_Aliased ##
 
 #Example
 #Height 128
@@ -2546,11 +2570,11 @@ void draw(SkCanvas* canvas) {
 
 #In Clip
 Replace Clip with the intersection of Clip and rrect,
-with an Aliased or Anti-aliased clip edge.
+with an Aliased or Anti_Aliased clip edge.
 rrect is transformed by Matrix before it is combined with Clip.
 
 #Param  rrect  Round_Rect to combine with Clip ##
-#Param  doAntiAlias  true if Clip is to be Anti-aliased ##
+#Param  doAntiAlias  true if Clip is to be Anti_Aliased ##
 
 #Example
 #Height 128
@@ -2572,14 +2596,14 @@ void draw(SkCanvas* canvas) {
 #In Clip
 #Line # combines Clip with Path ##
 Replace Clip with the intersection or difference of Clip and path,
-with an Aliased or Anti-aliased clip edge. Path_Fill_Type determines if path
+with an Aliased or Anti_Aliased clip edge. Path_Fill_Type determines if path
 describes the area inside or outside its contours; and if Path_Contour overlaps
 itself or another Path_Contour, whether the overlaps form part of the area.
 path is transformed by Matrix before it is combined with Clip.
 
 #Param  path  Path to combine with Clip ##
 #Param  op  Clip_Op to apply to Clip ##
-#Param  doAntiAlias  true if Clip is to be Anti-aliased ##
+#Param  doAntiAlias  true if Clip is to be Anti_Aliased ##
 
 #Example
 #Description
@@ -2663,7 +2687,7 @@ itself or another Path_Contour, whether the overlaps form part of the area.
 path is transformed by Matrix before it is combined with Clip.
 
 #Param  path  Path to combine with Clip ##
-#Param  doAntiAlias  true if Clip is to be Anti-aliased ##
+#Param  doAntiAlias  true if Clip is to be Anti_Aliased ##
 
 #Example
 #Height 212
@@ -2700,10 +2724,7 @@ void draw(SkCanvas* canvas) {
 #Method void setAllowSimplifyClip(bool allow)
 
 #In Clip
-#Line # experimental ##
-#Experimental
-Only used for testing.
-##
+#Experimental  testing
 
 Set to simplify clip stack using PathOps.
 
@@ -2828,7 +2849,7 @@ Return bounds of Clip, transformed by inverse of Matrix. If Clip is empty,
 return SkRect::MakeEmpty, where all Rect sides equal zero.
 
 Rect returned is outset by one to account for partial pixel coverage if Clip
-is Anti-aliased.
+is Anti_Aliased.
 
 #Return  bounds of Clip in local coordinates ##
 
@@ -2874,7 +2895,7 @@ Return bounds of Clip, transformed by inverse of Matrix. If Clip is empty,
 return false, and set bounds to SkRect::MakeEmpty, where all Rect sides equal zero.
 
 bounds is outset by one to account for partial pixel coverage if Clip
-is Anti-aliased.
+is Anti_Aliased.
 
 #Param bounds  Rect of Clip in local coordinates ##
 
@@ -3001,9 +3022,9 @@ Unlike getLocalClipBounds, bounds is not outset.
 #In Draw
 #Line # fills Clip with Color and Blend_Mode ##
 Fill Clip with Color color.
-mode determines how Color_ARGB is combined with destination.
+mode determines how ARGB is combined with destination.
 
-#Param color    Unpremultiplied Color_ARGB ##
+#Param color    Unpremultiplied ARGB ##
 #Param mode  SkBlendMode used to combine source color and destination ##
 
 #Example
@@ -3026,7 +3047,7 @@ mode determines how Color_ARGB is combined with destination.
 Fill Clip with Color color using SkBlendMode::kSrc.
 This has the effect of replacing all pixels contained by Clip with color.
 
-#Param color    Unpremultiplied Color_ARGB ##
+#Param color    Unpremultiplied ARGB ##
 
 #Example
 void draw(SkCanvas* canvas) {
@@ -3116,15 +3137,15 @@ Selects if an array of points are drawn as discrete points, as lines, or as
 an open polygon.
 
 #Const kPoints_PointMode 0
-    Draw each point separately.
+#Line # draw each point separately ##
 ##
 
 #Const kLines_PointMode 1
-    Draw each pair of points as a line segment.
+#Line # draw each pair of points as a line segment ##
 ##
 
 #Const kPolygon_PointMode 2
-    Draw the array of points as a open polygon.
+#Line # draw the array of points as a open polygon ##
 ##
 
 #Example
@@ -3931,12 +3952,14 @@ it cannot read outside the bounds, when sampling near the edge of source Rect.
 SrcRectConstraint specifies whether an Image_Filter is allowed to read pixels
 outside source Rect.
 
-#Const kStrict_SrcRectConstraint
+#Const kStrict_SrcRectConstraint 0
+#Line # sample only inside bounds; slower ##
     Requires Image_Filter to respect source Rect,
     sampling only inside of its bounds, possibly with a performance penalty.
 ##
 
-#Const kFast_SrcRectConstraint
+#Const kFast_SrcRectConstraint 1
+#Line # sample outside bounds; faster ##
     Permits Image_Filter to sample outside of source Rect
     by half the width of Image_Filter, permitting it to run faster but with
     error at the image edges.
@@ -4313,9 +4336,7 @@ are larger than dst; center and four sides are scaled to fit remaining space, if
 
 Additionally transform draw using Clip, Matrix, and optional Paint paint.
 
-If Paint paint is supplied, apply Color_Filter, Color_Alpha, Image_Filter,
-Blend_Mode, and Draw_Looper. If image is kAlpha_8_SkColorType, apply Shader.
-If paint contains Mask_Filter, generate mask from image bounds.
+#paint_as_used_by_draw_lattice_or_draw_nine(image)#
 
 If generated mask extends beyond image bounds, replicate image edge colors, just
 as Shader made from SkImage::makeShader with SkShader::kClamp_TileMode set
@@ -4663,6 +4684,14 @@ void draw(SkCanvas* canvas) {
 
 # ------------------------------------------------------------------------------
 
+#PhraseDef paint_as_used_by_draw_lattice_or_draw_nine(bitmap_or_image)
+If Paint paint is supplied, apply Color_Filter, Color_Alpha, Image_Filter,
+Blend_Mode, and Draw_Looper. If #bitmap_or_image# is kAlpha_8_SkColorType, apply Shader.
+If paint contains Mask_Filter, generate mask from #bitmap_or_image# bounds. If paint
+Filter_Quality set to kNone_SkFilterQuality, disable pixel filtering. For all
+other values of paint Filter_Quality, use kLow_SkFilterQuality to filter pixels.
+##
+
 #Method void drawBitmapNine(const SkBitmap& bitmap, const SkIRect& center, const SkRect& dst,
                         const SkPaint* paint = nullptr)
 #In Draw_Image
@@ -4677,9 +4706,7 @@ space, if any.
 
 Additionally transform draw using Clip, Matrix, and optional Paint paint.
 
-If Paint paint is supplied, apply Color_Filter, Color_Alpha, Image_Filter,
-Blend_Mode, and Draw_Looper. If bitmap is kAlpha_8_SkColorType, apply Shader.
-If paint contains Mask_Filter, generate mask from bitmap bounds.
+#paint_as_used_by_draw_lattice_or_draw_nine(bitmap)#
 
 If generated mask extends beyond bitmap bounds, replicate bitmap edge colors,
 just as Shader made from SkShader::MakeBitmapShader with
@@ -4733,8 +4760,20 @@ void draw(SkCanvas* canvas) {
 ##
 
 # ------------------------------------------------------------------------------
+#Subtopic Lattice
+#Line # divides Bitmap or Image into a rectangular grid ##
+
 #Struct Lattice
 #Line # divides Bitmap or Image into a rectangular grid ##
+
+Lattice divides Bitmap or Image into a rectangular grid.
+Grid entries on even columns and even rows are fixed; these entries are
+always drawn at their original size if the destination is large enough.
+If the destination side is too small to hold the fixed entries, all fixed
+entries are proportionately scaled down to fit.
+The grid entries not on even columns and rows are scaled to fit the
+remaining space, if any.
+
 #Code
     struct Lattice {
         enum RectType ...
@@ -4749,15 +4788,16 @@ void draw(SkCanvas* canvas) {
     };
 ##
 
-    Lattice divides Bitmap or Image into a rectangular grid.
-    Grid entries on even columns and even rows are fixed; these entries are
-    always drawn at their original size if the destination is large enough.
-    If the destination side is too small to hold the fixed entries, all fixed
-    entries are proportionately scaled down to fit.
-    The grid entries not on even columns and rows are scaled to fit the
-    remaining space, if any.
+#Subtopic Overview
+#Populate
+##
+
+#Subtopic Constant
+#Populate
+##
 
     #Enum RectType
+    #Line # optional setting per rectangular grid entry ##
         #Code
             enum RectType : uint8_t {
                 kDefault = 0,
@@ -4770,19 +4810,24 @@ void draw(SkCanvas* canvas) {
         or to fill the grid entry with a color.
 
         #Const kDefault 0
-            Draws Bitmap into lattice rectangle.
+        #Line # draws Bitmap into lattice rectangle ##
         ##
 
         #Const kTransparent 1
-            Skips lattice rectangle by making it transparent.
+        #Line # skips lattice rectangle by making it transparent ##
         ##
 
         #Const kFixedColor 2
-            Draws one of fColors into lattice rectangle.
+        #Line # draws one of fColors into lattice rectangle ##
         ##
     ##
 
+#Subtopic Member
+#Populate
+##
+
     #Member const int*   fXDivs
+    #Line # x-coordinates dividing bitmap ##
         Array of x-coordinates that divide the bitmap vertically.
         Array entries must be unique, increasing, greater than or equal to
         fBounds left edge, and less than fBounds right edge.
@@ -4791,6 +4836,7 @@ void draw(SkCanvas* canvas) {
     ##
 
     #Member const int*   fYDivs
+    #Line # y-coordinates dividing bitmap ##
         Array of y-coordinates that divide the bitmap horizontally.
         Array entries must be unique, increasing, greater than or equal to
         fBounds top edge, and less than fBounds bottom edge.
@@ -4799,6 +4845,7 @@ void draw(SkCanvas* canvas) {
     ##
 
     #Member const RectType* fRectTypes
+    #Line # array of fill types ##
         Optional array of fill types, one per rectangular grid entry:
         array length must be
     #Formula
@@ -4813,21 +4860,25 @@ void draw(SkCanvas* canvas) {
     ##
 
     #Member int   fXCount
+    #Line # number of x-coordinates ##
         Number of entries in fXDivs array; one less than the number of
         horizontal divisions.
     ##
 
     #Member int   fYCount
+    #Line # number of y-coordinates ##
         Number of entries in fYDivs array; one less than the number of vertical
         divisions.
     ##
 
     #Member const SkIRect*   fBounds
+    #Line # source bounds to draw from ##
        Optional subset IRect source to draw from.
        If nullptr, source bounds is dimensions of Bitmap or Image.
     ##
 
     #Member const SkColor*   fColors
+    #Line # array of colors ##
        Optional array of colors, one per rectangular grid entry.
        Array length must be
        #Formula
@@ -4857,9 +4908,7 @@ dimension. All other grid elements scale to fill the available space, if any.
 
 Additionally transform draw using Clip, Matrix, and optional Paint paint.
 
-If Paint paint is supplied, apply Color_Filter, Color_Alpha, Image_Filter,
-Blend_Mode, and Draw_Looper. If bitmap is kAlpha_8_SkColorType, apply Shader.
-If paint contains Mask_Filter, generate mask from bitmap bounds.
+#paint_as_used_by_draw_lattice_or_draw_nine(bitmap)#
 
 If generated mask extends beyond bitmap bounds, replicate bitmap edge colors,
 just as Shader made from SkShader::MakeBitmapShader with
@@ -4938,9 +4987,7 @@ dimension. All other grid elements scale to fill the available space, if any.
 
 Additionally transform draw using Clip, Matrix, and optional Paint paint.
 
-If Paint paint is supplied, apply Color_Filter, Color_Alpha, Image_Filter,
-Blend_Mode, and Draw_Looper. If bitmap is kAlpha_8_SkColorType, apply Shader.
-If paint contains Mask_Filter, generate mask from bitmap bounds.
+#paint_as_used_by_draw_lattice_or_draw_nine(image)#
 
 If generated mask extends beyond bitmap bounds, replicate bitmap edge colors,
 just as Shader made from SkShader::MakeBitmapShader with
@@ -4992,6 +5039,8 @@ void draw(SkCanvas* canvas) {
 #SeeAlso drawBitmapLattice drawImage drawImageNine Lattice
 
 ##
+
+#Subtopic Lattice ##
 
 #Subtopic Draw_Image ##
 
@@ -5063,9 +5112,8 @@ void draw(SkCanvas* canvas) {
 #In Draw_Text
 #In Draw
 #Line # draws null terminated string at (x, y) using font advance ##
-Draw null terminated string, with origin at (x, y), using Clip, Matrix, and
-Paint paint. Note that this per-glyph xform does not affect the shader (if present)
-on the paint, just the glyph's geometry.
+Draws null terminated string, with origin at (x, y), using Clip, Matrix, and
+Paint paint.
 
 string meaning depends on Paint_Text_Encoding; by default, strings are encoded
 as UTF-8. Other values of Paint_Text_Encoding are unlikely to produce the desired
@@ -5087,6 +5135,7 @@ filled 12 point black Glyphs.
 #Param  paint    text size, blend, color, and so on, used to draw ##
 
 #Example
+#Height 48
    SkPaint paint;
    canvas->drawString("a small hello", 20, 20, paint);
 ##
@@ -5281,20 +5330,22 @@ filled 12 point black Glyphs.
 
 Draw text on Path path, using Clip, Matrix, and Paint paint.
 
-Origin of text is at beginning of path offset by matrix, if provided, before it
-is mapped to path. If the path section corresponding the glyph advance is
-curved, the glyph is drawn curved to match; control points in the glyph are
-mapped to projected points parallel to the path. If the text advance is larger
-than the path length, the excess text is clipped.
+Origin of text is at beginning of path offset by matrix, if not nullptr.
+matrix also transforms text before text is mapped to path. If the path section
+corresponding the glyph advance is curved, the glyph is drawn curved to match;
+control points in the glyph are mapped to projected points parallel to the path.
+If the text advance is larger than the path length, the excess text is clipped.
 
 text meaning depends on Paint_Text_Encoding; by default, text is encoded as
 UTF-8. Origin meaning depends on Paint_Text_Align and Paint_Vertical_Text; by
 default text positions the first glyph left side bearing at origin x and its
-baseline at origin y. Text size is affected by Matrix and Paint_Text_Size.
+baseline at origin y. Text size is affected by matrix parameter, Canvas_Matrix,
+and Paint_Text_Size.
 
 All elements of paint: Path_Effect, Mask_Filter, Shader,
 Color_Filter, Image_Filter, and Draw_Looper; apply to text. By default, draws
-filled 12 point black Glyphs.
+filled 12 point black Glyphs. Canvas Matrix does effect paint Shader, but
+matrix parameter does not.
 
 #Param  text         character code points or Glyphs drawn ##
 #Param  byteLength   byte length of text array ##
@@ -5391,7 +5442,7 @@ Draw Text_Blob blob at (x, y), using Clip, Matrix, and Paint paint.
 
 blob contains Glyphs, their positions, and paint attributes specific to text:
 Typeface, Paint_Text_Size, Paint_Text_Scale_X, Paint_Text_Skew_X,
-Paint_Text_Align, Paint_Hinting, Anti-alias, Paint_Fake_Bold,
+Paint_Text_Align, Paint_Hinting, Anti_Alias, Paint_Fake_Bold,
 Font_Embedded_Bitmaps, Full_Hinting_Spacing, LCD_Text, Linear_Text,
 Subpixel_Text, and Paint_Vertical_Text.
 
@@ -5444,7 +5495,7 @@ Draw Text_Blob blob at (x, y), using Clip, Matrix, and Paint paint.
 
 blob contains Glyphs, their positions, and paint attributes specific to text:
 Typeface, Paint_Text_Size, Paint_Text_Scale_X, Paint_Text_Skew_X,
-Paint_Text_Align, Paint_Hinting, Anti-alias, Paint_Fake_Bold,
+Paint_Text_Align, Paint_Hinting, Anti_Alias, Paint_Fake_Bold,
 Font_Embedded_Bitmaps, Full_Hinting_Spacing, LCD_Text, Linear_Text,
 Subpixel_Text, and Paint_Vertical_Text.
 
@@ -5848,7 +5899,7 @@ void draw(SkCanvas* canvas) {
 #Line # draws sprites using Clip, Matrix, and Paint ##
 
 Draw a set of sprites from atlas, using Clip, Matrix, and optional Paint paint.
-paint uses Anti-alias, Color_Alpha, Color_Filter, Image_Filter, and Blend_Mode
+paint uses Anti_Alias, Color_Alpha, Color_Filter, Image_Filter, and Blend_Mode
 to draw, if present. For each entry in the array, Rect tex locates sprite in
 atlas, and RSXform xform transforms it into destination space.
 
@@ -5889,7 +5940,7 @@ void draw(SkCanvas* canvas) {
                    const SkPaint* paint)
 
 Draw a set of sprites from atlas, using Clip, Matrix, and optional Paint paint.
-paint uses Anti-alias, Color_Alpha, Color_Filter, Image_Filter, and Blend_Mode
+paint uses Anti_Alias, Color_Alpha, Color_Filter, Image_Filter, and Blend_Mode
 to draw, if present. For each entry in the array, Rect tex locates sprite in
 atlas, and RSXform xform transforms it into destination space.
 
@@ -5932,7 +5983,7 @@ void draw(SkCanvas* canvas) {
                    const SkRect* cullRect, const SkPaint* paint)
 
 Draw a set of sprites from atlas, using Clip, Matrix, and optional Paint paint.
-paint uses Anti-alias, Color_Alpha, Color_Filter, Image_Filter, and Blend_Mode
+paint uses Anti_Alias, Color_Alpha, Color_Filter, Image_Filter, and Blend_Mode
 to draw, if present. For each entry in the array, Rect tex locates sprite in
 atlas, and RSXform xform transforms it into destination space.
 
@@ -5968,7 +6019,7 @@ void draw(SkCanvas* canvas) {
                    int count, const SkRect* cullRect, const SkPaint* paint)
 
 Draw a set of sprites from atlas, using Clip, Matrix, and optional Paint paint.
-paint uses Anti-alias, Color_Alpha, Color_Filter, Image_Filter, and Blend_Mode
+paint uses Anti_Alias, Color_Alpha, Color_Filter, Image_Filter, and Blend_Mode
 to draw, if present. For each entry in the array, Rect tex locates sprite in
 atlas, and RSXform xform transforms it into destination space.
 

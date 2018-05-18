@@ -47,6 +47,15 @@ class SkiaApi(recipe_api.RecipeApi):
 
     # Initial cleanup.
     gclient_cfg = self.m.gclient.make_config(**cfg_kwargs)
+
+    # Add chromium first because of skbug.com/7917.
+    if self.m.vars.need_chromium_checkout:
+      chromium = gclient_cfg.solutions.add()
+      chromium.name = 'src'
+      chromium.managed = False
+      chromium.url = 'https://chromium.googlesource.com/chromium/src.git'
+      chromium.revision = 'origin/master'
+
     main_repo = self.m.properties['repository']
     if self.m.vars.need_flutter_checkout:
       main_repo = 'https://github.com/flutter/engine.git'
@@ -95,13 +104,6 @@ class SkiaApi(recipe_api.RecipeApi):
       self.m.file.remove('remove %s' % entries_file,
                          entries_file)
 
-    if self.m.vars.need_chromium_checkout:
-      chromium = gclient_cfg.solutions.add()
-      chromium.name = 'src'
-      chromium.managed = False
-      chromium.url = 'https://chromium.googlesource.com/chromium/src.git'
-      chromium.revision = 'origin/lkcr'
-
     # Run bot_update.
     if patch_repo != self.m.properties['repository']:
       # TODO(borenet): bot_update uses the 'repository' property to determine
@@ -129,7 +131,7 @@ class SkiaApi(recipe_api.RecipeApi):
     self.m.vars.got_revision = (
         update_step.presentation.properties['got_revision'])
 
-    if self.m.vars.need_chromium_checkout:
+    if self.m.vars.need_chromium_checkout or self.m.vars.need_flutter_checkout:
       with self.m.context(cwd=self.m.vars.checkout_root,
                           env=self.m.vars.gclient_env):
         self.m.gclient.runhooks()

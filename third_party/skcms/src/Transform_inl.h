@@ -25,6 +25,10 @@
 //    NS(id): a macro that returns unique identifiers
 //    ATTR:   an __attribute__ to apply to functions
 
+#if defined(__ARM_FEATURE_FP16_VECTOR_ARITHMETIC)
+    // TODO(mtklein): this build supports FP16 compute
+#endif
+
 #if defined(__ARM_NEON)
     #include <arm_neon.h>
 #elif defined(__SSE__)
@@ -221,16 +225,18 @@ SI ATTR F NS(approx_exp2_)(F x) {
 #define approx_exp2 NS(approx_exp2_)
 
 SI ATTR F NS(approx_pow_)(F x, float y) {
-    // Handling all the integral powers first increases our precision a little.
+#if defined(SKCMS_LEGACY_POWF)
     F r = F1;
     while (y >= 1.0f) {
         r *= x;
         y -= 1.0f;
     }
-
-    // TODO: The rest of this could perhaps be specialized further knowing 0 <= y < 1.
-    assert (0 <= y && y < 1);
-    return (F)if_then_else((x == F0) | (x == F1), x, r * approx_exp2(approx_log2(x) * y));
+    return (F)if_then_else((x == F0) | (x == F1), x
+                                                , r * approx_exp2(approx_log2(x) * y));
+#else
+    return (F)if_then_else((x == F0) | (x == F1), x
+                                                , approx_exp2(approx_log2(x) * y));
+#endif
 }
 #define approx_pow NS(approx_pow_)
 
@@ -245,13 +251,6 @@ SI ATTR F NS(apply_transfer_function_)(const skcms_TransferFunction* tf, F x) {
     return sign * (F)if_then_else(x < tf->d, linear, nonlinear);
 }
 #define apply_transfer_function NS(apply_transfer_function_)
-
-SI ATTR F NS(apply_poly_tf_)(const skcms_PolyTF* tf, F x) {
-    // TODO: handle x<0
-    return (F)if_then_else(x < tf->D, tf->C*x
-                                    , tf->A*(x*x*x-1) + tf->B*(x*x-1) + 1);
-}
-#define apply_poly_tf NS(apply_poly_tf_)
 
 // Strided loads and stores of N values, starting from p.
 #if N == 1
@@ -853,10 +852,6 @@ static void NS(exec_ops)(const Op* ops, const void** args,
             case Op_tf_g:{ g = apply_transfer_function(*args++, g); } break;
             case Op_tf_b:{ b = apply_transfer_function(*args++, b); } break;
             case Op_tf_a:{ a = apply_transfer_function(*args++, a); } break;
-
-            case Op_poly_tf_r:{ r = apply_poly_tf(*args++, r); } break;
-            case Op_poly_tf_g:{ g = apply_poly_tf(*args++, g); } break;
-            case Op_poly_tf_b:{ b = apply_poly_tf(*args++, b); } break;
 
             case Op_table_8_r: { r = NS(table_8_ )(*args++, r); } break;
             case Op_table_8_g: { g = NS(table_8_ )(*args++, g); } break;

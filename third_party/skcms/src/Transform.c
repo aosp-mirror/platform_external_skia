@@ -6,7 +6,7 @@
  */
 
 #include "../skcms.h"
-#include "GaussNewton.h"
+#include "Curve.h"
 #include "LinearAlgebra.h"
 #include "Macros.h"
 #include "PortableMath.h"
@@ -321,11 +321,6 @@ typedef struct {
     const void* arg;
 } OpAndArg;
 
-static OpAndArg select_poly_tf_op(const skcms_PolyTF* tf, int channel) {
-    static const Op ops[] = { Op_poly_tf_r, Op_poly_tf_g, Op_poly_tf_b };
-    return (OpAndArg){ops[channel], tf};
-}
-
 static OpAndArg select_curve_op(const skcms_Curve* curve, int channel) {
     static const struct { Op parametric, table_8, table_16; } ops[] = {
         { Op_tf_r, Op_table_8_r, Op_table_16_r },
@@ -442,6 +437,8 @@ bool skcms_Transform(const void*             src,
         // Photoshop creates CMYK images as inverse CMYK.
         // These happen to be the only ones we've _ever_ seen.
         *ops++ = Op_invert;
+        // With CMYK, ignore the alpha type, to avoid changing K or conflating CMY with K.
+        srcAlpha = skcms_AlphaFormat_Unpremul;
     }
 
     if (srcAlpha == skcms_AlphaFormat_Opaque) {
@@ -516,9 +513,6 @@ bool skcms_Transform(const void*             src,
             for (int i = 0; i < 3; i++) {
                 OpAndArg oa = select_curve_op(&srcProfile->trc[i], i);
                 if (oa.op != Op_noop) {
-                    if (srcProfile->has_poly_tf[i]) {
-                        oa = select_poly_tf_op(&srcProfile->poly_tf[i], i);
-                    }
                     *ops++  = oa.op;
                     *args++ = oa.arg;
                 }
@@ -611,18 +605,6 @@ static void assert_usable_as_destination(const skcms_ICCProfile* profile) {
 #endif
 }
 
-static float max_roundtrip_error(const skcms_TransferFunction* inv_tf, const skcms_Curve* curve) {
-    int N = curve->table_entries ? (int)curve->table_entries : 256;
-    const float x_scale = 1.0f / (N - 1);
-    float err = 0;
-    for (int i = 0; i < N; i++) {
-        float x = i * x_scale,
-              y = skcms_eval_curve(x, curve);
-        err = fmaxf_(err, fabsf_(x - skcms_TransferFunction_eval(inv_tf, y)));
-    }
-    return err;
-}
-
 bool skcms_MakeUsableAsDestination(skcms_ICCProfile* profile) {
     skcms_Matrix3x3 fromXYZD50;
     if (!profile->has_trc || !profile->has_toXYZD50
@@ -670,7 +652,7 @@ bool skcms_MakeUsableAsDestinationWithSingleCurve(skcms_ICCProfile* profile) {
 
         float err = 0;
         for (int j = 0; j < 3; ++j) {
-            err = fmaxf_(err, max_roundtrip_error(&inv, &profile->trc[j]));
+            err = fmaxf_(err, skcms_MaxRoundtripError(&profile->trc[j], &inv));
         }
         if (min_max_error > err) {
             min_max_error = err;
