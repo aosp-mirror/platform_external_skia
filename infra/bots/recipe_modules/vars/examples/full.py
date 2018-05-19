@@ -11,35 +11,18 @@ DEPS = [
 
 
 def RunSteps(api):
-  if 'Override' in api.properties['buildername']:
-    api.vars.override_checkout_root = api.path['start_dir']
-    api.vars.override_gclient_cache = api.path['start_dir']
   api.vars.setup()
   info = [
-    api.vars.upload_dm_results,
-    api.vars.upload_perf_results,
     api.vars.swarming_bot_id,
     api.vars.swarming_task_id,
   ]
   if api.vars.is_linux:
-    assert len(info) == 4  # Make pylint happy.
+    assert len(info) == 2  # Make pylint happy.
 
 
 TEST_BUILDERS = [
-  'Build-Debian9-Clang-x86_64-Release-NoDEPS',
-  'Build-Debian9-Clang-x86_64-Release-Override',
-  'Build-Debian9-Clang-x86_64-Release-ParentRevision',
   'Build-Debian9-Clang-x86_64-Release-SKNX_NO_SIMD',
-  'Build-Debian9-GCC-x86_64-Release-Flutter_Android',
-  'Build-Mac-Clang-x86_64-Debug-CommandBuffer',
-  'Build-Win-Clang-x86_64-Release-Vulkan',
   'Housekeeper-Weekly-RecreateSKPs',
-  'Perf-Chromecast-GCC-Chorizo-CPU-Cortex_A7-arm-Debug-All',
-  'Perf-Debian9-Clang-GCE-CPU-AVX2-x86_64-Release-All-ASAN',
-  'Perf-Ubuntu14-GCC-GCE-CPU-AVX2-x86_64-Release-All-CT_BENCH_1k_SKPs',
-  'Upload-Test-Ubuntu17-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-Coverage',
-  'Calmbench-Debian9-Clang-GCE-CPU-AVX2-x86_64-Release-All',
-  'Calmbench-Ubuntu17-Clang-Golo-GPU-QuadroP400-x86_64-Release-All'
 ]
 
 

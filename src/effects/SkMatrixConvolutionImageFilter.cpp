@@ -90,6 +90,9 @@ sk_sp<SkFlattenable> SkMatrixConvolutionImageFilter::CreateProc(SkReadBuffer& bu
     if (!buffer.validate(kernelArea == count)) {
         return nullptr;
     }
+    if (!buffer.validateCanReadN<SkScalar>(count)) {
+        return nullptr;
+    }
     SkAutoSTArray<16, SkScalar> kernel(count);
     if (!buffer.readScalarArray(kernel.get(), count)) {
         return nullptr;
@@ -103,6 +106,9 @@ sk_sp<SkFlattenable> SkMatrixConvolutionImageFilter::CreateProc(SkReadBuffer& bu
     TileMode tileMode = buffer.read32LE(kLast_TileMode);
     bool convolveAlpha = buffer.readBool();
 
+    if (!buffer.isValid()) {
+        return nullptr;
+    }
     return Make(kernelSize, kernel.get(), gain, bias, kernelOffset, tileMode,
                 convolveAlpha, common.getInput(0), &common.cropRect());
 }
@@ -229,7 +235,16 @@ void SkMatrixConvolutionImageFilter::filterInteriorPixels(const SkBitmap& src,
                                                           SkIVector& offset,
                                                           const SkIRect& rect,
                                                           const SkIRect& bounds) const {
-    filterPixels<UncheckedPixelFetcher>(src, result, offset, rect, bounds);
+    switch (fTileMode) {
+        case kRepeat_TileMode:
+            // In repeat mode, we still need to wrap the samples around the src
+            filterPixels<RepeatPixelFetcher>(src, result, offset, rect, bounds);
+            break;
+        case kClamp_TileMode:
+        case kClampToBlack_TileMode:
+            filterPixels<UncheckedPixelFetcher>(src, result, offset, rect, bounds);
+            break;
+    }
 }
 
 void SkMatrixConvolutionImageFilter::filterBorderPixels(const SkBitmap& src,
@@ -388,10 +403,18 @@ sk_sp<SkSpecialImage> SkMatrixConvolutionImageFilter::onFilterImage(SkSpecialIma
     dstBounds.offset(-inputOffset);
     srcBounds.offset(-inputOffset);
 
-    SkIRect interior = SkIRect::MakeXYWH(dstBounds.left() + fKernelOffset.fX,
-                                         dstBounds.top() + fKernelOffset.fY,
-                                         dstBounds.width() - fKernelSize.fWidth + 1,
-                                         dstBounds.height() - fKernelSize.fHeight + 1);
+    SkIRect interior;
+    if (kRepeat_TileMode == fTileMode) {
+        // In repeat mode, the filterPixels calls will wrap around
+        // so we just need to render 'dstBounds'
+        interior = dstBounds;
+    } else {
+        interior = SkIRect::MakeXYWH(dstBounds.left() + fKernelOffset.fX,
+                                     dstBounds.top() + fKernelOffset.fY,
+                                     dstBounds.width() - fKernelSize.fWidth + 1,
+                                     dstBounds.height() - fKernelSize.fHeight + 1);
+    }
+
     SkIRect top = SkIRect::MakeLTRB(dstBounds.left(), dstBounds.top(),
                                     dstBounds.right(), interior.top());
     SkIRect bottom = SkIRect::MakeLTRB(dstBounds.left(), interior.bottom(),
@@ -436,12 +459,12 @@ SkIRect SkMatrixConvolutionImageFilter::onFilterNodeBounds(const SkIRect& src, c
 
     SkIRect dst = src;
     int w = fKernelSize.width() - 1, h = fKernelSize.height() - 1;
-    dst.fRight = Sk32_sat_add(dst.fRight, w);
-    dst.fBottom = Sk32_sat_add(dst.fBottom, h);
+
     if (kReverse_MapDirection == dir) {
-        dst.offset(-fKernelOffset);
+        dst.adjust(-fKernelOffset.fX, -fKernelOffset.fY,
+                   w - fKernelOffset.fX, h - fKernelOffset.fY);
     } else {
-        dst.offset(fKernelOffset - SkIPoint::Make(w, h));
+        dst.adjust(fKernelOffset.fX - w, fKernelOffset.fY - h, fKernelOffset.fX, fKernelOffset.fY);
     }
     return dst;
 }

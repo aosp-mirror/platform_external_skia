@@ -43,24 +43,14 @@ public:
         SkPoint fTextureCoords;
         GrColor fColor;
     };
-    struct AAVertex {
-        SkPoint fPosition;
-        SkPoint fTextureCoords;
+    struct AAVertex : public Vertex {
         SkPoint3 fEdges[4];
-        GrColor fColor;
     };
-    struct MultiTextureVertex {
-        SkPoint fPosition;
+    struct MultiTextureVertex : Vertex {
         int fTextureIdx;
-        SkPoint fTextureCoords;
-        GrColor fColor;
     };
-    struct AAMultiTextureVertex {
-        SkPoint fPosition;
-        int fTextureIdx;
-        SkPoint fTextureCoords;
+    struct AAMultiTextureVertex : MultiTextureVertex {
         SkPoint3 fEdges[4];
-        GrColor fColor;
     };
 
     // Maximum number of textures supported by this op. Must also be checked against the caps
@@ -243,7 +233,6 @@ private:
                              const GrSamplerState::Filter filters[], const GrShaderCaps& caps)
             : INHERITED(kTextureGeometryProcessor_ClassID), fColorSpaceXform(std::move(csxf)) {
         SkASSERT(proxyCnt > 0 && samplerCnt >= proxyCnt);
-        fPositions = this->addVertexAttrib("position", kFloat2_GrVertexAttribType);
         fSamplers[0].reset(std::move(proxies[0]), filters[0]);
         this->addTextureSampler(&fSamplers[0]);
         for (int i = 1; i < proxyCnt; ++i) {
@@ -252,6 +241,11 @@ private:
             new (&fSamplers[i]) TextureSampler(std::move(proxies[i]), filters[i]);
             this->addTextureSampler(&fSamplers[i]);
         }
+
+        fPositions = this->addVertexAttrib("position", kFloat2_GrVertexAttribType);
+        fTextureCoords = this->addVertexAttrib("textureCoords", kFloat2_GrVertexAttribType);
+        fColors = this->addVertexAttrib("color", kUByte4_norm_GrVertexAttribType);
+
         if (samplerCnt > 1) {
             // Here we initialize any extra samplers by repeating the last one samplerCnt - proxyCnt
             // times.
@@ -264,26 +258,67 @@ private:
             fTextureIdx = this->addVertexAttrib("textureIdx", kInt_GrVertexAttribType);
         }
 
-        fTextureCoords = this->addVertexAttrib("textureCoords", kFloat2_GrVertexAttribType);
         if (coverageAA) {
             fAAEdges[0] = this->addVertexAttrib("aaEdge0", kFloat3_GrVertexAttribType);
             fAAEdges[1] = this->addVertexAttrib("aaEdge1", kFloat3_GrVertexAttribType);
             fAAEdges[2] = this->addVertexAttrib("aaEdge2", kFloat3_GrVertexAttribType);
             fAAEdges[3] = this->addVertexAttrib("aaEdge3", kFloat3_GrVertexAttribType);
         }
-        fColors = this->addVertexAttrib("color", kUByte4_norm_GrVertexAttribType);
     }
 
     Attribute fPositions;
-    Attribute fTextureIdx;
-    Attribute fTextureCoords;
     Attribute fColors;
+    Attribute fTextureCoords;
+    Attribute fTextureIdx;
     Attribute fAAEdges[4];
     sk_sp<GrColorSpaceXform> fColorSpaceXform;
     TextureSampler fSamplers[1];
 
     typedef GrGeometryProcessor INHERITED;
 };
+
+// This computes the four edge equations for a quad, then outsets them and computes a new quad
+// as the intersection points of the outset edges. 'x' and 'y' contain the original points as input
+// and the outset points as output. 'a', 'b', and 'c' are the edge equation coefficients on output.
+static void compute_quad_edges_and_outset_vertices(Sk4f* x, Sk4f* y, Sk4f* a, Sk4f* b, Sk4f* c) {
+    static constexpr auto fma = SkNx_fma<4, float>;
+    // These rotate the points/edge values either clockwise or counterclockwise assuming tri strip
+    // order.
+    auto nextCW  = [](const Sk4f& v) { return SkNx_shuffle<2, 0, 3, 1>(v); };
+    auto nextCCW = [](const Sk4f& v) { return SkNx_shuffle<1, 3, 0, 2>(v); };
+
+    auto xnext = nextCCW(*x);
+    auto ynext = nextCCW(*y);
+    *a = ynext - *y;
+    *b = *x - xnext;
+    *c = fma(xnext, *y,  -ynext * *x);
+    Sk4f invNormLengths = (*a * *a + *b * *b).rsqrt();
+    // Make sure the edge equations have their normals facing into the quad in device space.
+    auto test = fma(*a, nextCW(*x), fma(*b, nextCW(*y), *c));
+    if ((test < Sk4f(0)).anyTrue()) {
+        invNormLengths = -invNormLengths;
+    }
+    *a *= invNormLengths;
+    *b *= invNormLengths;
+    *c *= invNormLengths;
+
+    // Here is the outset. This makes our edge equations compute coverage without requiring a
+    // half pixel offset and is also used to compute the bloated quad that will cover all
+    // pixels.
+    *c += Sk4f(0.5f);
+
+    // Reverse the process to compute the points of the bloated quad from the edge equations.
+    // This time the inputs don't have 1s as their third coord and we want to homogenize rather
+    // than normalize.
+    auto anext = nextCW(*a);
+    auto bnext = nextCW(*b);
+    auto cnext = nextCW(*c);
+    *x = fma(bnext, *c, -*b * cnext);
+    *y = fma(*a, cnext, -anext * *c);
+    auto ic = (fma(anext, *b, -bnext * *a)).invert();
+    *x *= ic;
+    *y *= ic;
+}
 
 namespace {
 // This is a class soley so it can be partially specialized (functions cannot be).
@@ -308,58 +343,17 @@ template<typename Vertex> class VertexAAHandler<GrAA::kYes, Vertex> {
 public:
     static void AssignPositionsAndTexCoords(Vertex* vertices, const GrQuad& quad,
                                             const SkRect& texRect) {
-        // We compute the four edge equations for quad, then outset them and compute a new quad
-        // as the intersection points of the outset edges.
-
-        // GrQuad is in tristip order but we want the points to be in a fan order, so swap 2 and 3.
-        Sk4f xs = SkNx_shuffle<0, 1, 3, 2>(quad.x4f());
-        Sk4f ys = SkNx_shuffle<0, 1, 3, 2>(quad.y4f());
-        Sk4f xsrot = SkNx_shuffle<1, 2, 3, 0>(xs);
-        Sk4f ysrot = SkNx_shuffle<1, 2, 3, 0>(ys);
-        Sk4f normXs = ysrot - ys;
-        Sk4f normYs = xs - xsrot;
-        Sk4f ds = xsrot * ys - ysrot * xs;
-        Sk4f invNormLengths = (normXs * normXs + normYs * normYs).rsqrt();
-        float test = normXs[0] * xs[2] + normYs[0] * ys[2] + ds[0];
-        // Make sure the edge equations have their normals facing into the quad in device space
-        if (test < 0) {
-            invNormLengths = -invNormLengths;
-        }
-        normXs *= invNormLengths;
-        normYs *= invNormLengths;
-        ds *= invNormLengths;
-
-        // Here is the bloat. This makes our edge equations compute coverage without requiring a
-        // half pixel offset and is also used to compute the bloated quad that will cover all
-        // pixels.
-        ds += Sk4f(0.5f);
+        auto x = quad.x4f();
+        auto y = quad.y4f();
+        Sk4f a, b, c;
+        compute_quad_edges_and_outset_vertices(&x, &y, &a, &b, &c);
 
         for (int i = 0; i < 4; ++i) {
+            vertices[i].fPosition = {x[i], y[i]};
             for (int j = 0; j < 4; ++j) {
-                vertices[j].fEdges[i].fX = normXs[i];
-                vertices[j].fEdges[i].fY = normYs[i];
-                vertices[j].fEdges[i].fZ = ds[i];
+                vertices[i].fEdges[j]  = {a[j], b[j], c[j]};
             }
         }
-
-        // Reverse the process to compute the points of the bloated quad from the edge equations.
-        // This time the inputs don't have 1s as their third coord and we want to homogenize rather
-        // than normalize the output since we need a GrQuad with 2D points.
-        xsrot = SkNx_shuffle<3, 0, 1, 2>(normXs);
-        ysrot = SkNx_shuffle<3, 0, 1, 2>(normYs);
-        Sk4f dsrot = SkNx_shuffle<3, 0, 1, 2>(ds);
-        xs = ysrot * ds - normYs * dsrot;
-        ys = normXs * dsrot - xsrot * ds;
-        ds = xsrot * normYs - ysrot * normXs;
-        ds = ds.invert();
-        xs *= ds;
-        ys *= ds;
-
-        // Go back to tri strip order when writing out the bloated quad to vertex positions.
-        vertices[0].fPosition = {xs[0], ys[0]};
-        vertices[1].fPosition = {xs[1], ys[1]};
-        vertices[3].fPosition = {xs[2], ys[2]};
-        vertices[2].fPosition = {xs[3], ys[3]};
 
         AssignTexCoords(vertices, quad, texRect);
     }
