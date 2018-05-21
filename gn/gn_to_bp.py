@@ -16,6 +16,7 @@ import tempfile
 
 tool_cflags = [
     '-Wno-unused-parameter',
+    '-Wno-unused-variable',
 ]
 
 # It's easier to maintain one list instead of separate lists.
@@ -57,6 +58,7 @@ cc_library {
     cflags: [
         "-fexceptions",
         "-Wno-unused-parameter",
+        "-Wno-unused-variable",
         "-U_FORTIFY_SOURCE",
         "-D_FORTIFY_SOURCE=1",
         "-DSKIA_IMPLEMENTATION=1",
