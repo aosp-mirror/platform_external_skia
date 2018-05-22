@@ -1734,7 +1734,8 @@ public:
         SkBlendMode, and SkDrawLooper. If bitmap is kAlpha_8_SkColorType, apply SkShader.
         If paint contains SkMaskFilter, generate mask from bitmap bounds. If paint's
         SkFilterQuality is higher than kLow_SkFilterQuality, it will be treated as if it
-        were kLow_SkFilterQuality.
+        were kLow_SkFilterQuality. Any SkMaskFilter on the paint is ignored as is the paint's
+        antialiasing state.
 
         If generated mask extends beyond bitmap bounds, replicate bitmap edge colors,
         just as SkShader made from SkShader::MakeBitmapShader with
@@ -1836,7 +1837,8 @@ public:
         SkBlendMode, and SkDrawLooper. If bitmap is kAlpha_8_SkColorType, apply SkShader.
         If paint contains SkMaskFilter, generate mask from bitmap bounds. If paint's
         SkFilterQuality is higher than kLow_SkFilterQuality, it will be treated as if it
-        were kLow_SkFilterQuality.
+        were kLow_SkFilterQuality. Any SkMaskFilter on the paint is ignored as is the paint's
+        antialiasing state.
 
         If generated mask extends beyond bitmap bounds, replicate bitmap edge colors,
         just as SkShader made from SkShader::MakeBitmapShader with
@@ -1866,7 +1868,8 @@ public:
         SkBlendMode, and SkDrawLooper. If bitmap is kAlpha_8_SkColorType, apply SkShader.
         If paint contains SkMaskFilter, generate mask from bitmap bounds. If paint's
         SkFilterQuality is higher than kLow_SkFilterQuality, it will be treated as if it
-        were kLow_SkFilterQuality.
+        were kLow_SkFilterQuality. Any SkMaskFilter on the paint is ignored as is the paint's
+        antialiasing state.
 
         If generated mask extends beyond bitmap bounds, replicate bitmap edge colors,
         just as SkShader made from SkShader::MakeBitmapShader with
@@ -1961,8 +1964,8 @@ public:
         described by byteLength of text.
 
         text meaning depends on SkPaint::TextEncoding; by default, text is encoded as
-        UTF-8. pos elements' meaning depends on SkPaint::Align and SkPaint vertical text;
-        by default each glyph left side bearing is positioned at x and its
+        UTF-8. pos elements' meaning depends on SkPaint vertical text;
+        by each glyph left side bearing is positioned at x and its
         baseline is positioned at y. Text size is affected by SkMatrix and
         SkPaint text size.
 
@@ -1986,8 +1989,8 @@ public:
         must match the number of glyphs described by byteLength of text.
 
         text meaning depends on SkPaint::TextEncoding; by default, text is encoded as
-        UTF-8. xpos elements' meaning depends on SkPaint::Align and SkPaint vertical text;
-        by default each glyph left side bearing is positioned at an xpos element and
+        UTF-8. xpos elements' meaning depends SkPaint vertical text;
+        each glyph left side bearing is positioned at an xpos element and
         its baseline is positioned at constY. Text size is affected by SkMatrix and
         SkPaint text size.
 
