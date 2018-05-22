@@ -1489,6 +1489,7 @@ cc_test {
         "tests/ColorSpaceXformTest.cpp",
         "tests/ColorTest.cpp",
         "tests/CopySurfaceTest.cpp",
+        "tests/DFPathRendererTest.cpp",
         "tests/DashPathEffectTest.cpp",
         "tests/DataRefTest.cpp",
         "tests/DefaultPathRendererTest.cpp",
