@@ -1041,6 +1041,7 @@ cc_test {
         "tests/",
         "third_party/gif/",
         "third_party/skcms",
+        "third_party/skcms/",
         "tools/",
         "tools/debugger/",
         "tools/flags/",
