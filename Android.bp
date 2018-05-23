@@ -1909,7 +1909,6 @@ cc_test {
         "bench/CmapBench.cpp",
         "bench/CodecBench.cpp",
         "bench/ColorCanvasDrawBitmapBench.cpp",
-        "bench/ColorCodecBench.cpp",
         "bench/ColorFilterBench.cpp",
         "bench/ColorPrivBench.cpp",
         "bench/ControlBench.cpp",
