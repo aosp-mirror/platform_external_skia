@@ -83,4 +83,41 @@ SkColorSpaceXformSteps::SkColorSpaceXformSteps(SkColorSpace* src, SkAlphaType sr
 
     // Step II) if dst has linear blending, encode back using dst transfer function before storing
     this->late_encode = !dstNL;
+
+    // Fill out all the transfer functions we'll use:
+    SkColorSpaceTransferFn srcTF, dstTF;
+    SkAssertResult(src->isNumericalTransferFn(&srcTF));
+    SkAssertResult(dst->isNumericalTransferFn(&dstTF));
+    this->srcTFInv = srcTF.invert();
+    this->dstTF    = dstTF;
+    this->dstTFInv = dstTF.invert();
+
+    // If we linearize then immediately reencode with the same transfer function, skip both.
+    if ( this->linearize_src   &&
+        !this->late_unpremul   &&
+        !this->gamut_transform &&
+         this->early_encode    &&
+        0 == memcmp(&srcTF, &dstTF, sizeof(SkColorSpaceTransferFn)))
+    {
+        this->linearize_src = false;
+        this->early_encode  = false;
+    }
+
+    // Skip unpremul...premul if there are no non-linear operations between.
+    if ( this->early_unpremul &&
+        !this->linearize_src  &&
+        !this->early_encode   &&
+         this->premul)
+    {
+        this->early_unpremul = false;
+        this->premul         = false;
+    }
+
+    if ( this->late_unpremul &&
+        !this->early_encode  &&
+         this->premul)
+    {
+        this->late_unpremul = false;
+        this->premul        = false;
+    }
 }
