@@ -439,9 +439,9 @@ func defaultSwarmDimensions(parts map[string]string) []string {
 				"Nexus5x":         {"bullhead", "OPR6.170623.023"},
 				"Nexus7":          {"grouper", "LMY47V_1836172"}, // 2012 Nexus 7
 				"NexusPlayer":     {"fugu", "OPR2.170623.027"},
-				"Pixel":           {"sailfish", "OPM1.171019.016"},
-				"Pixel2XL":        {"taimen", "OPM1.171019.021"},
-				"PixelC":          {"dragon", "OPM1.171019.026"},
+				"Pixel":           {"sailfish", "OPM4.171019.016.B1"},
+				"Pixel2XL":        {"taimen", "OPM4.171019.016.B1"},
+				"PixelC":          {"dragon", "OPM4.171019.016.C1"},
 			}[parts["model"]]
 			if !ok {
 				glog.Fatalf("Entry %q not found in Android mapping.", parts["model"])
@@ -459,6 +459,13 @@ func defaultSwarmDimensions(parts map[string]string) []string {
 				glog.Fatalf("Entry %q not found in iOS mapping.", parts["model"])
 			}
 			d["device"] = device
+		} else if strings.Contains(parts["extra_config"], "SwiftShader") {
+			if parts["model"] != "GCE" || d["os"] != DEFAULT_OS_DEBIAN || parts["cpu_or_gpu_value"] != "SwiftShader" {
+				glog.Fatalf("Please update defaultSwarmDimensions for SwiftShader %s %s %s.", parts["os"], parts["model"], parts["cpu_or_gpu_value"])
+			}
+			d["cpu"] = "x86-64-Haswell_GCE"
+			d["os"] = DEFAULT_OS_LINUX_GCE
+			d["machine_type"] = MACHINE_TYPE_SMALL
 		} else if parts["cpu_or_gpu"] == "CPU" {
 			modelMapping, ok := map[string]map[string]string{
 				"AVX": {

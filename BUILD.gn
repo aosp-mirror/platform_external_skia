@@ -68,7 +68,8 @@ declare_args() {
   } else if (is_fuchsia) {
     skia_use_vulkan = fuchsia_use_vulkan
   } else {
-    skia_use_vulkan = skia_vulkan_sdk != "" || skia_moltenvk_path != ""
+    skia_use_vulkan = (defined(skia_vulkan_sdk) && skia_vulkan_sdk != "") ||
+                      (defined(skia_moltenvk_path) && skia_moltenvk_path != "")
   }
 
   if (is_ios) {
@@ -95,7 +96,6 @@ skia_public_includes = [
   "include/effects",
   "include/encode",
   "include/gpu",
-  "include/gpu/gl",
   "include/atlastext",
   "include/pathops",
   "include/ports",
@@ -104,14 +104,8 @@ skia_public_includes = [
   "include/utils/mac",
 ]
 
-if (skia_use_vulkan) {
-  skia_public_includes += [ "include/gpu/vk" ]
-}
 if (skia_enable_atlas_text) {
   skia_public_includes += [ "include/atlastext" ]
-}
-if (skia_use_metal) {
-  skia_public_includes += [ "include/gpu/mtl" ]
 }
 
 # Skia public API, generally provided by :skia.
@@ -1538,6 +1532,7 @@ if (skia_enable_tools) {
         "src/utils/SkLuaCanvas.cpp",
       ]
       deps = [
+        ":skshaper",
         "//third_party/lua",
       ]
     }
@@ -1631,6 +1626,7 @@ if (skia_enable_tools) {
         ":gpu_tool_utils",
         ":skia",
         ":tests",
+        ":third_party_skcms",
         ":tool_utils",
         "//third_party/jsoncpp",
         "//third_party/libpng",

@@ -28,6 +28,7 @@ class Serializer;
 class SkDescriptor;
 class SkGlyphCache;
 struct SkPackedGlyphID;
+enum SkScalerContextFlags : uint32_t;
 class SkScalerContextRecDescriptor;
 class SkTextBlobRunIterator;
 class SkTypefaceProxy;
@@ -51,8 +52,17 @@ using SkDescriptorSet =
 // which will be serialized and renderered using the SkStrikeClient.
 class SK_API SkTextBlobCacheDiffCanvas : public SkNoDrawCanvas {
 public:
+    struct SK_API Settings {
+        Settings();
+        ~Settings();
+
+        bool fContextSupportsDistanceFieldText = true;
+        SkScalar fMinDistanceFieldFontSize = -1.f;
+        SkScalar fMaxDistanceFieldFontSize = -1.f;
+    };
     SkTextBlobCacheDiffCanvas(int width, int height, const SkMatrix& deviceMatrix,
-                              const SkSurfaceProps& props, SkStrikeServer* strikeserver);
+                              const SkSurfaceProps& props, SkStrikeServer* strikeserver,
+                              Settings settings = Settings());
     ~SkTextBlobCacheDiffCanvas() override;
 
 protected:
@@ -70,10 +80,13 @@ private:
                          const SkTextBlobRunIterator& it,
                          const SkPaint& runPaint);
     void processGlyphRunForPaths(const SkTextBlobRunIterator& it, const SkPaint& runPaint);
+    void processGlyphRunForDFT(const SkTextBlobRunIterator& it, const SkPaint& runPaint,
+                               SkScalerContextFlags flags);
 
     const SkMatrix fDeviceMatrix;
     const SkSurfaceProps fSurfaceProps;
     SkStrikeServer* const fStrikeServer;
+    const Settings fSettings;
 };
 
 using SkDiscardableHandleId = uint32_t;
@@ -161,7 +174,7 @@ public:
     };
 
     SkGlyphCacheState* getOrCreateCache(const SkPaint&, const SkSurfaceProps*, const SkMatrix*,
-                                        SkScalerContextRec* deviceRec,
+                                        SkScalerContextFlags flags, SkScalerContextRec* deviceRec,
                                         SkScalerContextEffects* effects);
 
 private:
@@ -176,6 +189,14 @@ private:
 
 class SK_API SkStrikeClient {
 public:
+    enum CacheMissType : uint32_t {
+        kFontMetrics,
+        kGlyphMetrics,
+        kGlyphImage,
+        kGlyphPath,
+        kLast = kGlyphPath
+    };
+
     // An interface to delete handles that may be pinned by the remote server.
     class DiscardableHandleManager : public SkRefCnt {
     public:
@@ -184,6 +205,8 @@ public:
         // Returns true if the handle was unlocked and can be safely deleted. Once
         // successful, subsequent attempts to delete the same handle are invalid.
         virtual bool deleteHandle(SkDiscardableHandleId) = 0;
+
+        virtual void NotifyCacheMiss(CacheMissType) {}
     };
 
     SkStrikeClient(sk_sp<DiscardableHandleManager>);
@@ -198,19 +221,6 @@ public:
     // is rasterized.
     // Returns false if the data is invalid.
     bool readStrikeData(const volatile void* memory, size_t memorySize);
-
-    // TODO: Remove these since we don't support pulling this data on-demand.
-    void generateFontMetrics(const SkTypefaceProxy& typefaceProxy,
-                             const SkScalerContextRec& rec,
-                             SkPaint::FontMetrics* metrics);
-    void generateMetricsAndImage(const SkTypefaceProxy& typefaceProxy,
-                                 const SkScalerContextRec& rec,
-                                 SkArenaAlloc* alloc,
-                                 SkGlyph* glyph);
-    void generatePath(const SkTypefaceProxy& typefaceProxy,
-                      const SkScalerContextRec& rec,
-                      SkGlyphID glyphID,
-                      SkPath* path);
 
 private:
     class DiscardableStrikePinner;

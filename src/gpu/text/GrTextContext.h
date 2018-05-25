@@ -25,7 +25,7 @@ class SkGlyph;
 /*
  * Renders text using some kind of an atlas, ie BitmapText or DistanceField text
  */
-class GrAtlasTextContext {
+class GrTextContext {
 public:
     struct Options {
         /**
@@ -42,7 +42,7 @@ public:
         bool fDistanceFieldVerticesAlwaysHaveW = false;
     };
 
-    static std::unique_ptr<GrAtlasTextContext> Make(const Options& options);
+    static std::unique_ptr<GrTextContext> Make(const Options& options);
 
     void drawText(GrContext*, GrTextUtils::Target*, const GrClip&, const SkPaint&,
                   const SkMatrix& viewMatrix, const SkSurfaceProps&, const char text[],
@@ -55,13 +55,25 @@ public:
                       const SkMatrix& viewMatrix, const SkSurfaceProps&, const SkTextBlob*,
                       SkScalar x, SkScalar y, SkDrawFilter*, const SkIRect& clipBounds);
 
-    std::unique_ptr<GrDrawOp> createOp_TestingOnly(GrContext*, GrAtlasTextContext*,
+    std::unique_ptr<GrDrawOp> createOp_TestingOnly(GrContext*, GrTextContext*,
                                                    GrRenderTargetContext*, const SkPaint&,
                                                    const SkMatrix& viewMatrix, const char* text,
                                                    int x, int y);
 
+    static void SanitizeOptions(Options* options);
+    static bool CanDrawAsDistanceFields(const SkPaint& skPaint, const SkMatrix& viewMatrix,
+                                        const SkSurfaceProps& props,
+                                        bool contextSupportsDistanceFieldText,
+                                        const Options& options);
+    static void InitDistanceFieldPaint(GrAtlasTextBlob* blob,
+                                       SkPaint* skPaint,
+                                       const SkMatrix& viewMatrix,
+                                       const Options& options,
+                                       SkScalar* textRatio,
+                                       SkScalerContextFlags* flags);
+
 private:
-    GrAtlasTextContext(const Options& options);
+    GrTextContext(const Options& options);
 
     class FallbackTextHelper {
     public:
@@ -73,8 +85,8 @@ private:
             , fTextSize(pathPaint.getTextSize())
             , fMaxTextSize(glyphCache->getGlyphSizeLimit())
             , fTextRatio(textRatio)
-            , fScaledFallbackTextSize(fMaxTextSize)
-            , fUseScaledFallback(false) {
+            , fTransformedFallbackTextSize(fMaxTextSize)
+            , fUseTransformedFallback(false) {
             fMaxScale = viewMatrix.getMaxScale();
         }
 
@@ -90,9 +102,9 @@ private:
         SkScalar fTextSize;
         SkScalar fMaxTextSize;
         SkScalar fTextRatio;
-        SkScalar fScaledFallbackTextSize;
+        SkScalar fTransformedFallbackTextSize;
         SkScalar fMaxScale;
-        bool fUseScaledFallback;
+        bool fUseTransformedFallback;
     };
 
     // sets up the descriptor on the blob and returns a detached cache.  Client must attach
@@ -158,9 +170,6 @@ private:
                                       const SkPoint& offset);
 
     // functions for appending distance field text
-    bool canDrawAsDistanceFields(const SkPaint& skPaint, const SkMatrix& viewMatrix,
-                                 const SkSurfaceProps& props, const GrShaderCaps& caps) const;
-
     void drawDFText(GrAtlasTextBlob* blob, int runIndex, GrGlyphCache*, const SkSurfaceProps&,
                     const GrTextUtils::Paint& paint, SkScalerContextFlags scalerContextFlags,
                     const SkMatrix& viewMatrix, const char text[], size_t byteLength, SkScalar x,
@@ -173,14 +182,9 @@ private:
                        size_t byteLength, const SkScalar pos[], int scalarsPerPosition,
                        const SkPoint& offset) const;
 
-    void initDistanceFieldPaint(GrAtlasTextBlob* blob,
-                                SkPaint* skPaint,
-                                SkScalar* textRatio,
-                                const SkMatrix& viewMatrix) const;
-
     static void BmpAppendGlyph(GrAtlasTextBlob*, int runIndex, GrGlyphCache*,
                                sk_sp<GrTextStrike>*, const SkGlyph&, SkScalar sx, SkScalar sy,
-                               GrColor color, SkGlyphCache*, SkScalar textRatio);
+                               GrColor color, SkGlyphCache*, SkScalar textRatio, bool needsXform);
 
     static void DfAppendGlyph(GrAtlasTextBlob*, int runIndex, GrGlyphCache*,
                               sk_sp<GrTextStrike>*, const SkGlyph&, SkScalar sx, SkScalar sy,
@@ -190,9 +194,7 @@ private:
 
     sk_sp<const GrDistanceFieldAdjustTable> fDistanceAdjustTable;
 
-    SkScalar fMinDistanceFieldFontSize;
-    SkScalar fMaxDistanceFieldFontSize;
-    bool fDistanceFieldVerticesAlwaysHaveW;
+    Options fOptions;
 
 #if GR_TEST_UTILS
     static const SkScalerContextFlags kTextBlobOpScalerContextFlags =

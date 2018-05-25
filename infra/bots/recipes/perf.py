@@ -11,7 +11,6 @@ import os
 
 
 DEPS = [
-  'core',
   'env',
   'flavor',
   'recipe_engine/file',
@@ -207,7 +206,9 @@ def nanobench_flags(api, bot):
     verbose = True
   if 'IntelHD405' in bot and api.vars.is_linux and 'Vulkan' in bot:
     # skia:7322
+    match.append('~desk_carsvg.skp_1')
     match.append('~desk_tiger8svg.skp_1')
+    match.append('~desk_wowwiki.skp')
     match.append('~keymobi_sfgate.skp_1')
     match.append('~keymobi_techcrunch_com.skp_1.1')
     match.append('~keymobi_techcrunch.skp_1.1')

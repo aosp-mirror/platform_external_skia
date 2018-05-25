@@ -31,7 +31,7 @@ class SkDrawFilter;
 class SkTextBlob;
 class SkTextBlobRunIterator;
 
-// With this flag enabled, the GrAtlasTextContext will, as a sanity check, regenerate every blob
+// With this flag enabled, the GrTextContext will, as a sanity check, regenerate every blob
 // that comes in to verify the integrity of its cache
 #define CACHE_SANITY_CHECK 0
 
@@ -55,7 +55,7 @@ public:
 
     class VertexRegenerator;
 
-    static sk_sp<GrAtlasTextBlob> Make(GrMemoryPool*, int glyphCount, int runCount);
+    static sk_sp<GrAtlasTextBlob> Make(int glyphCount, int runCount);
 
     /**
      * We currently force regeneration of a blob if old or new matrix differ in having perspective.
@@ -106,22 +106,15 @@ public:
     }
 
     void operator delete(void* p) {
-        GrAtlasTextBlob* blob = reinterpret_cast<GrAtlasTextBlob*>(p);
-        if (blob->fPool) {
-            blob->fPool->release(p);
-        } else {
-            ::operator delete(p);
-        }
+        ::operator delete(p);
     }
+
     void* operator new(size_t) {
         SK_ABORT("All blobs are created by placement new.");
         return sk_malloc_throw(0);
     }
 
     void* operator new(size_t, void* p) { return p; }
-    void operator delete(void* target, void* placement) {
-        ::operator delete(target, placement);
-    }
 
     bool hasDistanceField() const { return SkToBool(fTextType & kHasDistanceField_TextType); }
     bool hasBitmap() const { return SkToBool(fTextType & kHasBitmap_TextType); }
@@ -146,6 +139,13 @@ public:
         subRun.setUseLCDText(hasLCD);
         subRun.setAntiAliased(isAntiAlias);
         subRun.setDrawAsDistanceFields();
+        subRun.setHasWCoord(hasWCoord);
+    }
+
+    // sets the last subrun of runIndex to use w values
+    void setSubRunHasW(int runIndex, bool hasWCoord) {
+        Run& run = fRuns[runIndex];
+        Run::SubRunInfo& subRun = run.fSubRunInfo.back();
         subRun.setHasWCoord(hasWCoord);
     }
 
@@ -188,15 +188,14 @@ public:
     void appendPathGlyph(int runIndex, const SkPath& path,
                          SkScalar x, SkScalar y, SkScalar scale, bool preTransformed);
 
-    static size_t GetVertexStride(GrMaskFormat maskFormat, bool isDistanceFieldWithWCoord) {
+    static size_t GetVertexStride(GrMaskFormat maskFormat, bool hasWCoord) {
         switch (maskFormat) {
             case kA8_GrMaskFormat:
-                return isDistanceFieldWithWCoord ? kGrayTextDFPerspectiveVASize : kGrayTextVASize;
+                return hasWCoord ? kGrayTextDFPerspectiveVASize : kGrayTextVASize;
             case kARGB_GrMaskFormat:
-                SkASSERT(!isDistanceFieldWithWCoord);
-                return kColorTextVASize;
+                return hasWCoord ? kColorTextPerspectiveVASize : kColorTextVASize;
             default:
-                SkASSERT(!isDistanceFieldWithWCoord);
+                SkASSERT(!hasWCoord);
                 return kLCDTextVASize;
         }
     }
@@ -244,6 +243,7 @@ public:
 
     // position + local coord
     static const size_t kColorTextVASize = sizeof(SkPoint) + sizeof(SkIPoint16);
+    static const size_t kColorTextPerspectiveVASize = sizeof(SkPoint3) + sizeof(SkIPoint16);
     static const size_t kGrayTextVASize = sizeof(SkPoint) + sizeof(GrColor) + sizeof(SkIPoint16);
     static const size_t kGrayTextDFPerspectiveVASize =
             sizeof(SkPoint3) + sizeof(GrColor) + sizeof(SkIPoint16);
@@ -267,6 +267,8 @@ public:
     }
 
     const Key& key() const { return fKey; }
+
+    size_t size() const { return fSize; }
 
     ~GrAtlasTextBlob() {
         for (int i = 0; i < fRunCount; i++) {
@@ -320,7 +322,7 @@ private:
      * many SubRuns as it has glyphs, ie if a run alternates between color emoji and A8.  In
      * practice, the vast majority of runs have only a single subrun.
      *
-     * Finally, for runs where the entire thing is too large for the GrAtlasTextContext to
+     * Finally, for runs where the entire thing is too large for the GrTextContext to
      * handle, we have a bit to mark the run as flushable via rendering as paths or as scaled
      * glyphs. It would be a bit expensive to figure out ahead of time whether or not a run
      * can flush in this manner, so we always allocate vertices for the run, regardless of
@@ -432,11 +434,11 @@ private:
                 fFlags  = hasW ? (fFlags | kHasWCoord_Flag) : fFlags & ~kHasWCoord_Flag;
             }
             bool hasWCoord() const { return SkToBool(fFlags & kHasWCoord_Flag); }
-            void setHasScaledGlyphs(bool hasScaledGlyphs) {
-                fFlags  = hasScaledGlyphs ? (fFlags | kHasScaledGlyphs_Flag)
-                                          : fFlags & ~kHasScaledGlyphs_Flag;
+            void setNeedsTransform(bool needsTransform) {
+                fFlags  = needsTransform ? (fFlags | kNeedsTransform_Flag)
+                                          : fFlags & ~kNeedsTransform_Flag;
             }
-            bool hasScaledGlyphs() const { return SkToBool(fFlags & kHasScaledGlyphs_Flag); }
+            bool needsTransform() const { return SkToBool(fFlags & kNeedsTransform_Flag); }
 
         private:
             enum Flag {
@@ -444,7 +446,7 @@ private:
                 kUseLCDText_Flag = 0x02,
                 kAntiAliased_Flag = 0x04,
                 kHasWCoord_Flag = 0x08,
-                kHasScaledGlyphs_Flag = 0x10
+                kNeedsTransform_Flag = 0x10
             };
 
             GrDrawOpAtlas::BulkUseTokenUpdater fBulkUseToken;
@@ -533,7 +535,6 @@ private:
     char* fVertices;
     GrGlyph** fGlyphs;
     Run* fRuns;
-    GrMemoryPool* fPool;   // this will be null when DDLs are being recorded
     SkMaskFilterBase::BlurRec fBlurRec;
     StrokeInfo fStrokeInfo;
     Key fKey;

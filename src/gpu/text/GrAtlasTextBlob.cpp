@@ -19,7 +19,7 @@
 #include "SkTextToPathIter.h"
 #include "ops/GrAtlasTextOp.h"
 
-sk_sp<GrAtlasTextBlob> GrAtlasTextBlob::Make(GrMemoryPool* pool, int glyphCount, int runCount) {
+sk_sp<GrAtlasTextBlob> GrAtlasTextBlob::Make(int glyphCount, int runCount) {
     // We allocate size for the GrAtlasTextBlob itself, plus size for the vertices array,
     // and size for the glyphIds array.
     size_t verticesCount = glyphCount * kVerticesPerGlyph * kMaxVASize;
@@ -28,12 +28,8 @@ sk_sp<GrAtlasTextBlob> GrAtlasTextBlob::Make(GrMemoryPool* pool, int glyphCount,
                   glyphCount * sizeof(GrGlyph**) +
                   sizeof(GrAtlasTextBlob::Run) * runCount;
 
-    void* allocation;
-    if (pool) {
-        allocation = pool->allocate(size);
-    } else {
-        allocation = ::operator new (size);
-    }
+    void* allocation = ::operator new (size);
+
     if (CACHE_SANITY_CHECK) {
         sk_bzero(allocation, size);
     }
@@ -51,7 +47,6 @@ sk_sp<GrAtlasTextBlob> GrAtlasTextBlob::Make(GrMemoryPool* pool, int glyphCount,
         new (&cacheBlob->fRuns[i]) GrAtlasTextBlob::Run;
     }
     cacheBlob->fRunCount = runCount;
-    cacheBlob->fPool = pool;
     return cacheBlob;
 }
 
@@ -113,10 +108,8 @@ void GrAtlasTextBlob::appendGlyph(int runIndex,
     run.fInitialized = true;
 
     bool hasW = subRun->hasWCoord();
-    // DF glyphs drawn in perspective must always have a w coord.
-    SkASSERT(hasW || !subRun->drawAsDistanceFields() || !fInitialViewMatrix.hasPerspective());
-    // Non-DF glyphs should never have a w coord.
-    SkASSERT(!hasW || subRun->drawAsDistanceFields());
+    // glyphs drawn in perspective must always have a w coord.
+    SkASSERT(hasW || !fInitialViewMatrix.hasPerspective());
 
     size_t vertexStride = GetVertexStride(format, hasW);
 
@@ -153,7 +146,7 @@ void GrAtlasTextBlob::appendGlyph(int runIndex,
     subRun->appendVertices(vertexStride);
     fGlyphs[subRun->glyphEndIndex()] = glyph;
     subRun->glyphAppended();
-    subRun->setHasScaledGlyphs(SK_Scalar1 != scale);
+    subRun->setNeedsTransform(!preTransformed);
 }
 
 void GrAtlasTextBlob::appendPathGlyph(int runIndex, const SkPath& path, SkScalar x, SkScalar y,
@@ -263,7 +256,7 @@ inline std::unique_ptr<GrAtlasTextOp> GrAtlasTextBlob::makeOp(
                 props, info.isAntiAliased(), info.hasUseLCDText());
     } else {
         op = GrAtlasTextOp::MakeBitmap(std::move(grPaint), format, glyphCount,
-                                       info.hasScaledGlyphs());
+                                       info.needsTransform());
     }
     GrAtlasTextOp::Geometry& geometry = op->geometry();
     geometry.fViewMatrix = viewMatrix;
@@ -352,9 +345,9 @@ void GrAtlasTextBlob::flush(GrTextUtils::Target* target, const SkSurfaceProps& p
             SkRect rtBounds = SkRect::MakeWH(target->width(), target->height());
             SkRRect clipRRect;
             GrAA aa;
-            // We can clip geometrically if we're not using SDFs or scaled glyphs,
+            // We can clip geometrically if we're not using SDFs or transformed glyphs,
             // and we have an axis-aligned rectangular non-AA clip
-            if (!info.drawAsDistanceFields() && !info.hasScaledGlyphs() &&
+            if (!info.drawAsDistanceFields() && !info.needsTransform() &&
                 clip.isRRect(rtBounds, &clipRRect, &aa) &&
                 clipRRect.isRect() && GrAA::kNo == aa) {
                 skipClip = true;
@@ -402,7 +395,6 @@ std::unique_ptr<GrDrawOp> GrAtlasTextBlob::test_makeOp(
 
 void GrAtlasTextBlob::AssertEqual(const GrAtlasTextBlob& l, const GrAtlasTextBlob& r) {
     SkASSERT_RELEASE(l.fSize == r.fSize);
-    SkASSERT_RELEASE(l.fPool == r.fPool);
 
     SkASSERT_RELEASE(l.fBlurRec.fSigma == r.fBlurRec.fSigma);
     SkASSERT_RELEASE(l.fBlurRec.fStyle == r.fBlurRec.fStyle);

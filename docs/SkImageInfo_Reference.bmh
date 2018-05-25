@@ -1037,6 +1037,7 @@ with studio range of 16 to 235 range for components.
 
 # ------------------------------------------------------------------------------
 
+
 #Struct SkImageInfo
 
 Describes pixel dimensions and encoding. Bitmap, Image, PixMap, and Surface

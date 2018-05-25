@@ -12,15 +12,23 @@
 #include "ccpr/GrCCPerFlushResources.h"
 #include "ccpr/GrCoverageCountingPathRenderer.h"
 
-GrCCDrawPathsOp::GrCCDrawPathsOp(GrCoverageCountingPathRenderer* ccpr, GrPaint&& paint,
-                                 const SkIRect& clipIBounds, const SkMatrix& viewMatrix,
+static bool has_coord_transforms(const GrPaint& paint) {
+    GrFragmentProcessor::Iter iter(paint);
+    while (const GrFragmentProcessor* fp = iter.next()) {
+        if (!fp->coordTransforms().empty()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+GrCCDrawPathsOp::GrCCDrawPathsOp(GrPaint&& paint, const SkIRect& clipIBounds, const SkMatrix& m,
                                  const SkPath& path, const SkRect& devBounds)
         : GrDrawOp(ClassID())
-        , fCCPR(ccpr)
         , fSRGBFlags(GrPipeline::SRGBFlagsFromPaint(paint))
-        , fDraws({clipIBounds, viewMatrix, path, paint.getColor(), nullptr})
+        , fViewMatrixIfUsingLocalCoords(has_coord_transforms(paint) ? m : SkMatrix::I())
+        , fDraws({clipIBounds, m, path, paint.getColor(), nullptr})
         , fProcessors(std::move(paint)) {
-    SkDEBUGCODE(fCCPR->incrDrawOpCount_debugOnly());
     SkDEBUGCODE(fBaseInstance = -1);
     // FIXME: intersect with clip bounds to (hopefully) improve batching.
     // (This is nontrivial due to assumptions in generating the octagon cover geometry.)
@@ -28,17 +36,15 @@ GrCCDrawPathsOp::GrCCDrawPathsOp(GrCoverageCountingPathRenderer* ccpr, GrPaint&&
 }
 
 GrCCDrawPathsOp::~GrCCDrawPathsOp() {
-    if (fOwningRTPendingPaths) {
+    if (fOwningPerOpListPaths) {
         // Remove CCPR's dangling pointer to this Op before deleting it.
-        fOwningRTPendingPaths->fDrawOps.remove(this);
+        fOwningPerOpListPaths->fDrawOps.remove(this);
     }
-    SkDEBUGCODE(fCCPR->decrDrawOpCount_debugOnly());
 }
 
 GrDrawOp::RequiresDstTexture GrCCDrawPathsOp::finalize(const GrCaps& caps,
                                                        const GrAppliedClip* clip,
                                                        GrPixelConfigIsClamped dstIsClamped) {
-    SkASSERT(!fCCPR->isFlushing_debugOnly());
     // There should only be one single path draw in this Op right now.
     SkASSERT(1 == fNumDraws);
     GrProcessorSet::Analysis analysis =
@@ -49,19 +55,17 @@ GrDrawOp::RequiresDstTexture GrCCDrawPathsOp::finalize(const GrCaps& caps,
 
 bool GrCCDrawPathsOp::onCombineIfPossible(GrOp* op, const GrCaps& caps) {
     GrCCDrawPathsOp* that = op->cast<GrCCDrawPathsOp>();
-    SkASSERT(fCCPR == that->fCCPR);
-    SkASSERT(!fCCPR->isFlushing_debugOnly());
-    SkASSERT(fOwningRTPendingPaths);
+    SkASSERT(fOwningPerOpListPaths);
     SkASSERT(fNumDraws);
-    SkASSERT(!that->fOwningRTPendingPaths || that->fOwningRTPendingPaths == fOwningRTPendingPaths);
+    SkASSERT(!that->fOwningPerOpListPaths || that->fOwningPerOpListPaths == fOwningPerOpListPaths);
     SkASSERT(that->fNumDraws);
 
-    if (this->getFillType() != that->getFillType() || fSRGBFlags != that->fSRGBFlags ||
-        fProcessors != that->fProcessors) {
+    if (fSRGBFlags != that->fSRGBFlags || fProcessors != that->fProcessors ||
+        fViewMatrixIfUsingLocalCoords != that->fViewMatrixIfUsingLocalCoords) {
         return false;
     }
 
-    fDraws.append(std::move(that->fDraws), &fOwningRTPendingPaths->fAllocator);
+    fDraws.append(std::move(that->fDraws), &fOwningPerOpListPaths->fAllocator);
     this->joinBounds(*that);
 
     SkDEBUGCODE(fNumDraws += that->fNumDraws);
@@ -69,10 +73,11 @@ bool GrCCDrawPathsOp::onCombineIfPossible(GrOp* op, const GrCaps& caps) {
     return true;
 }
 
-void GrCCDrawPathsOp::wasRecorded(GrRenderTargetOpList* opList) {
-    SkASSERT(!fOwningRTPendingPaths);
-    fOwningRTPendingPaths = fCCPR->lookupRTPendingPaths(opList);
-    fOwningRTPendingPaths->fDrawOps.addToTail(this);
+void GrCCDrawPathsOp::wasRecorded(GrCCPerOpListPaths* owningPerOpListPaths) {
+    SkASSERT(1 == fNumDraws);
+    SkASSERT(!fOwningPerOpListPaths);
+    owningPerOpListPaths->fDrawOps.addToTail(this);
+    fOwningPerOpListPaths = owningPerOpListPaths;
 }
 
 int GrCCDrawPathsOp::countPaths(GrCCPathParser::PathStats* stats) const {
@@ -89,46 +94,42 @@ void GrCCDrawPathsOp::setupResources(GrCCPerFlushResources* resources,
     const GrCCAtlas* currentAtlas = nullptr;
     SkASSERT(fNumDraws > 0);
     SkASSERT(-1 == fBaseInstance);
-    fBaseInstance = resources->pathInstanceCount();
+    fBaseInstance = resources->nextPathInstanceIdx();
 
     for (const SingleDraw& draw : fDraws) {
-        // addPathToAtlas gives us two tight bounding boxes: one in device space, as well as a
+        // renderPathInAtlas gives us two tight bounding boxes: one in device space, as well as a
         // second one rotated an additional 45 degrees. The path vertex shader uses these two
         // bounding boxes to generate an octagon that circumscribes the path.
         SkRect devBounds, devBounds45;
         int16_t atlasOffsetX, atlasOffsetY;
-        GrCCAtlas* atlas = resources->addPathToAtlas(*onFlushRP->caps(), draw.fClipIBounds,
-                                                     draw.fMatrix, draw.fPath, &devBounds,
-                                                     &devBounds45, &atlasOffsetX, &atlasOffsetY);
+        GrCCAtlas* atlas = resources->renderPathInAtlas(*onFlushRP->caps(), draw.fClipIBounds,
+                                                        draw.fMatrix, draw.fPath, &devBounds,
+                                                        &devBounds45, &atlasOffsetX, &atlasOffsetY);
         if (!atlas) {
             SkDEBUGCODE(++fNumSkippedInstances);
             continue;
         }
         if (currentAtlas != atlas) {
             if (currentAtlas) {
-                this->addAtlasBatch(currentAtlas, resources->pathInstanceCount());
+                this->addAtlasBatch(currentAtlas, resources->nextPathInstanceIdx());
             }
             currentAtlas = atlas;
         }
 
-        const SkMatrix& m = draw.fMatrix;
-        resources->appendDrawPathInstance(
-                devBounds,
-                devBounds45,
-                {{m.getScaleX(), m.getSkewY(), m.getSkewX(), m.getScaleY()}},
-                {{m.getTranslateX(), m.getTranslateY()}},
-                {{atlasOffsetX, atlasOffsetY}},
-                draw.fColor);
+        resources->appendDrawPathInstance().set(draw.fPath.getFillType(), devBounds, devBounds45,
+                                                atlasOffsetX, atlasOffsetY, draw.fColor);
     }
 
-    SkASSERT(resources->pathInstanceCount() == fBaseInstance + fNumDraws - fNumSkippedInstances);
+    SkASSERT(resources->nextPathInstanceIdx() == fBaseInstance + fNumDraws - fNumSkippedInstances);
     if (currentAtlas) {
-        this->addAtlasBatch(currentAtlas, resources->pathInstanceCount());
+        this->addAtlasBatch(currentAtlas, resources->nextPathInstanceIdx());
     }
 }
 
 void GrCCDrawPathsOp::onExecute(GrOpFlushState* flushState) {
-    const GrCCPerFlushResources* resources = fCCPR->getPerFlushResources();
+    SkASSERT(fOwningPerOpListPaths);
+
+    const GrCCPerFlushResources* resources = fOwningPerOpListPaths->fFlushResources.get();
     if (!resources) {
         return;  // Setup failed.
     }
@@ -154,7 +155,8 @@ void GrCCDrawPathsOp::onExecute(GrOpFlushState* flushState) {
         }
 
         GrCCPathProcessor pathProc(flushState->resourceProvider(),
-                                   sk_ref_sp(batch.fAtlas->textureProxy()), this->getFillType());
+                                   sk_ref_sp(batch.fAtlas->textureProxy()),
+                                   fViewMatrixIfUsingLocalCoords);
         pathProc.drawPaths(flushState, pipeline, resources->indexBuffer(),
                            resources->vertexBuffer(), resources->instanceBuffer(),
                            baseInstance, batch.fEndInstanceIdx, this->bounds());

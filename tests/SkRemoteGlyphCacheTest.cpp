@@ -15,10 +15,14 @@
 #include "SkTypeface_remote.h"
 #include "Test.h"
 
+#if SK_SUPPORT_GPU
+#include "text/GrTextContext.h"
+#endif
+
 class DiscardableManager : public SkStrikeServer::DiscardableHandleManager,
                            public SkStrikeClient::DiscardableHandleManager {
 public:
-    DiscardableManager() = default;
+    DiscardableManager() { sk_bzero(&fCacheMissCount, sizeof(fCacheMissCount)); }
     ~DiscardableManager() override = default;
 
     // Server implementation.
@@ -35,6 +39,7 @@ public:
 
     // Client implementation.
     bool deleteHandle(SkDiscardableHandleId id) override { return id <= fLastDeletedHandleId; }
+    void NotifyCacheMiss(SkStrikeClient::CacheMissType type) override { fCacheMissCount[type]++; }
 
     void unlockAll() { fLockedHandles.reset(); }
     void unlockAndDeleteAll() {
@@ -43,11 +48,13 @@ public:
     }
     const SkTHashSet<SkDiscardableHandleId>& lockedHandles() const { return fLockedHandles; }
     SkDiscardableHandleId handleCount() { return fNextHandleId; }
+    int cacheMissCount(SkStrikeClient::CacheMissType type) { return fCacheMissCount[type]; }
 
 private:
     SkDiscardableHandleId fNextHandleId = 0u;
     SkDiscardableHandleId fLastDeletedHandleId = 0u;
     SkTHashSet<SkDiscardableHandleId> fLockedHandles;
+    int fCacheMissCount[SkStrikeClient::CacheMissType::kLast + 1u];
 };
 
 sk_sp<SkTextBlob> buildTextBlob(sk_sp<SkTypeface> tf, int glyphCount) {
@@ -79,14 +86,26 @@ sk_sp<SkTextBlob> buildTextBlob(sk_sp<SkTypeface> tf, int glyphCount) {
         }                                                                                \
     }
 
-SkBitmap RasterBlob(sk_sp<SkTextBlob> blob, int width, int height, const SkPaint& paint) {
-    auto surface = SkSurface::MakeRasterN32Premul(width, height);
+#if SK_SUPPORT_GPU
+SkTextBlobCacheDiffCanvas::Settings MakeSettings(GrContext* context) {
+    SkTextBlobCacheDiffCanvas::Settings settings;
+    settings.fContextSupportsDistanceFieldText = context->supportsDistanceFieldText();
+    return settings;
+}
+
+SkBitmap RasterBlob(sk_sp<SkTextBlob> blob, int width, int height, const SkPaint& paint,
+                    GrContext* context, const SkMatrix* matrix = nullptr) {
+    const SkImageInfo info =
+            SkImageInfo::Make(width, height, kN32_SkColorType, kPremul_SkAlphaType);
+    auto surface = SkSurface::MakeRenderTarget(context, SkBudgeted::kNo, info);
+    if (matrix) surface->getCanvas()->concat(*matrix);
     surface->getCanvas()->drawTextBlob(blob.get(), 0u, 0u, paint);
     SkBitmap bitmap;
     bitmap.allocN32Pixels(width, height);
     surface->readPixels(bitmap, 0, 0);
     return bitmap;
 }
+#endif
 
 DEF_TEST(SkRemoteGlyphCache_TypefaceSerialization, reporter) {
     sk_sp<DiscardableManager> discardableManager = sk_make_sp<DiscardableManager>();
@@ -98,11 +117,15 @@ DEF_TEST(SkRemoteGlyphCache_TypefaceSerialization, reporter) {
 
     auto client_tf = client.deserializeTypeface(tf_data->data(), tf_data->size());
     REPORTER_ASSERT(reporter, client_tf);
-    REPORTER_ASSERT(reporter, SkTypefaceProxy::DownCast(client_tf.get())->remoteTypefaceID() ==
+    REPORTER_ASSERT(reporter, static_cast<SkTypefaceProxy*>(client_tf.get())->remoteTypefaceID() ==
                                       server_tf->uniqueID());
+
+    // Must unlock everything on termination, otherwise valgrind complains about memory leaks.
+    discardableManager->unlockAndDeleteAll();
 }
 
-DEF_TEST(SkRemoteGlyphCache_StrikeSerialization, reporter) {
+#if SK_SUPPORT_GPU
+DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SkRemoteGlyphCache_StrikeSerialization, reporter, ctxInfo) {
     sk_sp<DiscardableManager> discardableManager = sk_make_sp<DiscardableManager>();
     SkStrikeServer server(discardableManager.get());
     SkStrikeClient client(discardableManager);
@@ -115,7 +138,8 @@ DEF_TEST(SkRemoteGlyphCache_StrikeSerialization, reporter) {
     int glyphCount = 10;
     auto serverBlob = buildTextBlob(serverTf, glyphCount);
     const SkSurfaceProps props(SkSurfaceProps::kLegacyFontHost_InitType);
-    SkTextBlobCacheDiffCanvas cache_diff_canvas(10, 10, SkMatrix::I(), props, &server);
+    SkTextBlobCacheDiffCanvas cache_diff_canvas(10, 10, SkMatrix::I(), props, &server,
+                                                MakeSettings(ctxInfo.grContext()));
     cache_diff_canvas.drawTextBlob(serverBlob.get(), 0, 0, paint);
 
     std::vector<uint8_t> serverStrikeData;
@@ -127,10 +151,14 @@ DEF_TEST(SkRemoteGlyphCache_StrikeSerialization, reporter) {
                     client.readStrikeData(serverStrikeData.data(), serverStrikeData.size()));
     auto clientBlob = buildTextBlob(clientTf, glyphCount);
 
-    SkBitmap expected = RasterBlob(serverBlob, 10, 10, paint);
-    SkBitmap actual = RasterBlob(clientBlob, 10, 10, paint);
+    SkBitmap expected = RasterBlob(serverBlob, 10, 10, paint, ctxInfo.grContext());
+    SkBitmap actual = RasterBlob(clientBlob, 10, 10, paint, ctxInfo.grContext());
     COMPARE_BLOBS(expected, actual, reporter);
+
+    // Must unlock everything on termination, otherwise valgrind complains about memory leaks.
+    discardableManager->unlockAndDeleteAll();
 }
+#endif
 
 DEF_TEST(SkRemoteGlyphCache_StrikeLockingServer, reporter) {
     sk_sp<DiscardableManager> discardableManager = sk_make_sp<DiscardableManager>();
@@ -161,6 +189,9 @@ DEF_TEST(SkRemoteGlyphCache_StrikeLockingServer, reporter) {
     cache_diff_canvas.drawTextBlob(serverBlob.get(), 0, 0, paint);
     REPORTER_ASSERT(reporter, discardableManager->handleCount() == 1u);
     REPORTER_ASSERT(reporter, discardableManager->lockedHandles().count() == 1u);
+
+    // Must unlock everything on termination, otherwise valgrind complains about memory leaks.
+    discardableManager->unlockAndDeleteAll();
 }
 
 DEF_TEST(SkRemoteGlyphCache_StrikeDeletionServer, reporter) {
@@ -186,6 +217,9 @@ DEF_TEST(SkRemoteGlyphCache_StrikeDeletionServer, reporter) {
     discardableManager->unlockAndDeleteAll();
     cache_diff_canvas.drawTextBlob(serverBlob.get(), 0, 0, paint);
     REPORTER_ASSERT(reporter, discardableManager->handleCount() == 2u);
+
+    // Must unlock everything on termination, otherwise valgrind complains about memory leaks.
+    discardableManager->unlockAndDeleteAll();
 }
 
 DEF_TEST(SkRemoteGlyphCache_StrikePinningClient, reporter) {
@@ -222,6 +256,9 @@ DEF_TEST(SkRemoteGlyphCache_StrikePinningClient, reporter) {
     discardableManager->unlockAndDeleteAll();
     SkGraphics::PurgeFontCache();
     REPORTER_ASSERT(reporter, clientTf->unique());
+
+    // Must unlock everything on termination, otherwise valgrind complains about memory leaks.
+    discardableManager->unlockAndDeleteAll();
 }
 
 DEF_TEST(SkRemoteGlyphCache_ClientMemoryAccounting, reporter) {
@@ -248,9 +285,13 @@ DEF_TEST(SkRemoteGlyphCache_ClientMemoryAccounting, reporter) {
     REPORTER_ASSERT(reporter,
                     client.readStrikeData(serverStrikeData.data(), serverStrikeData.size()));
     SkStrikeCache::Validate();
+
+    // Must unlock everything on termination, otherwise valgrind complains about memory leaks.
+    discardableManager->unlockAndDeleteAll();
 }
 
-DEF_TEST(SkRemoteGlyphCache_DrawTextAsPath, reporter) {
+#if SK_SUPPORT_GPU
+DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SkRemoteGlyphCache_DrawTextAsPath, reporter, ctxInfo) {
     sk_sp<DiscardableManager> discardableManager = sk_make_sp<DiscardableManager>();
     SkStrikeServer server(discardableManager.get());
     SkStrikeClient client(discardableManager);
@@ -266,7 +307,8 @@ DEF_TEST(SkRemoteGlyphCache_DrawTextAsPath, reporter) {
     int glyphCount = 10;
     auto serverBlob = buildTextBlob(serverTf, glyphCount);
     const SkSurfaceProps props(SkSurfaceProps::kLegacyFontHost_InitType);
-    SkTextBlobCacheDiffCanvas cache_diff_canvas(10, 10, SkMatrix::I(), props, &server);
+    SkTextBlobCacheDiffCanvas cache_diff_canvas(10, 10, SkMatrix::I(), props, &server,
+                                                MakeSettings(ctxInfo.grContext()));
     cache_diff_canvas.drawTextBlob(serverBlob.get(), 0, 0, paint);
 
     std::vector<uint8_t> serverStrikeData;
@@ -278,8 +320,90 @@ DEF_TEST(SkRemoteGlyphCache_DrawTextAsPath, reporter) {
                     client.readStrikeData(serverStrikeData.data(), serverStrikeData.size()));
     auto clientBlob = buildTextBlob(clientTf, glyphCount);
 
-    SkBitmap expected = RasterBlob(serverBlob, 10, 10, paint);
-    SkBitmap actual = RasterBlob(clientBlob, 10, 10, paint);
+    SkBitmap expected = RasterBlob(serverBlob, 10, 10, paint, ctxInfo.grContext());
+    SkBitmap actual = RasterBlob(clientBlob, 10, 10, paint, ctxInfo.grContext());
     COMPARE_BLOBS(expected, actual, reporter);
     SkStrikeCache::Validate();
+
+    // Must unlock everything on termination, otherwise valgrind complains about memory leaks.
+    discardableManager->unlockAndDeleteAll();
 }
+#endif
+
+#if SK_SUPPORT_GPU
+DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SkRemoteGlyphCache_DrawTextAsDFT, reporter, ctxInfo) {
+    sk_sp<DiscardableManager> discardableManager = sk_make_sp<DiscardableManager>();
+    SkStrikeServer server(discardableManager.get());
+    SkStrikeClient client(discardableManager);
+    SkPaint paint;
+
+    // A perspective transform forces fallback to dft.
+    SkMatrix matrix = SkMatrix::I();
+    matrix[SkMatrix::kMPersp0] = 0.5f;
+    REPORTER_ASSERT(reporter, matrix.hasPerspective());
+    SkSurfaceProps surfaceProps(0, kUnknown_SkPixelGeometry);
+    GrTextContext::Options options;
+    GrTextContext::SanitizeOptions(&options);
+    REPORTER_ASSERT(reporter, GrTextContext::CanDrawAsDistanceFields(
+                                      paint, matrix, surfaceProps, true, options));
+
+    // Server.
+    auto serverTf = SkTypeface::MakeFromName("monospace", SkFontStyle());
+    auto serverTfData = server.serializeTypeface(serverTf.get());
+
+    int glyphCount = 10;
+    auto serverBlob = buildTextBlob(serverTf, glyphCount);
+    const SkSurfaceProps props(SkSurfaceProps::kLegacyFontHost_InitType);
+    SkTextBlobCacheDiffCanvas cache_diff_canvas(10, 10, SkMatrix::I(), props, &server,
+                                                MakeSettings(ctxInfo.grContext()));
+    cache_diff_canvas.concat(matrix);
+    cache_diff_canvas.drawTextBlob(serverBlob.get(), 0, 0, paint);
+
+    std::vector<uint8_t> serverStrikeData;
+    server.writeStrikeData(&serverStrikeData);
+
+    // Client.
+    auto clientTf = client.deserializeTypeface(serverTfData->data(), serverTfData->size());
+    REPORTER_ASSERT(reporter,
+                    client.readStrikeData(serverStrikeData.data(), serverStrikeData.size()));
+    auto clientBlob = buildTextBlob(clientTf, glyphCount);
+
+    SkBitmap expected = RasterBlob(serverBlob, 10, 10, paint, ctxInfo.grContext(), &matrix);
+    SkBitmap actual = RasterBlob(clientBlob, 10, 10, paint, ctxInfo.grContext(), &matrix);
+    COMPARE_BLOBS(expected, actual, reporter);
+    SkStrikeCache::Validate();
+
+    // Must unlock everything on termination, otherwise valgrind complains about memory leaks.
+    discardableManager->unlockAndDeleteAll();
+}
+
+DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SkRemoteGlyphCache_CacheMissReporting, reporter, ctxInfo) {
+    sk_sp<DiscardableManager> discardableManager = sk_make_sp<DiscardableManager>();
+    SkStrikeServer server(discardableManager.get());
+    SkStrikeClient client(discardableManager);
+
+    auto serverTf = SkTypeface::MakeFromName("monospace", SkFontStyle());
+    auto tfData = server.serializeTypeface(serverTf.get());
+    auto clientTf = client.deserializeTypeface(tfData->data(), tfData->size());
+    REPORTER_ASSERT(reporter, clientTf);
+    int glyphCount = 10;
+    auto clientBlob = buildTextBlob(clientTf, glyphCount);
+
+    // Raster the client-side blob without the glyph data, we should get cache miss notifications.
+    SkPaint paint;
+    SkMatrix matrix = SkMatrix::I();
+    RasterBlob(clientBlob, 10, 10, paint, ctxInfo.grContext(), &matrix);
+    REPORTER_ASSERT(reporter,
+                    discardableManager->cacheMissCount(SkStrikeClient::kFontMetrics) == 1);
+    REPORTER_ASSERT(reporter,
+                    discardableManager->cacheMissCount(SkStrikeClient::kGlyphMetrics) == 10);
+
+    // There shouldn't be any image or path requests, since we mark the glyph as empty on a cache
+    // miss.
+    REPORTER_ASSERT(reporter, discardableManager->cacheMissCount(SkStrikeClient::kGlyphImage) == 0);
+    REPORTER_ASSERT(reporter, discardableManager->cacheMissCount(SkStrikeClient::kGlyphPath) == 0);
+
+    // Must unlock everything on termination, otherwise valgrind complains about memory leaks.
+    discardableManager->unlockAndDeleteAll();
+}
+#endif

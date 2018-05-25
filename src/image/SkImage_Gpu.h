@@ -23,7 +23,7 @@ class GrTexture;
 
 class SkImage_Gpu : public SkImage_Base {
 public:
-    SkImage_Gpu(GrContext*, uint32_t uniqueID, SkAlphaType, sk_sp<GrTextureProxy>,
+    SkImage_Gpu(sk_sp<GrContext>, uint32_t uniqueID, SkAlphaType, sk_sp<GrTextureProxy>,
                 sk_sp<SkColorSpace>, SkBudgeted);
     ~SkImage_Gpu() override;
 
@@ -34,7 +34,7 @@ public:
     bool getROPixels(SkBitmap*, SkColorSpace* dstColorSpace, CachingHint) const override;
     sk_sp<SkImage> onMakeSubset(const SkIRect&) const override;
 
-    GrContext* context() const override { return fContext; }
+    GrContext* context() const override { return fContext.get(); }
     GrTextureProxy* peekProxy() const override {
         return fProxy.get();
     }
@@ -125,15 +125,18 @@ public:
                                              TextureContext textureContext);
 
     /** Implementation of MakeFromYUVTexturesCopy and MakeFromNV12TexturesCopy */
-    static sk_sp<SkImage> MakeFromYUVTexturesCopyImpl(
-            GrContext* ctx, SkYUVColorSpace colorSpace, bool nv12,
-            const GrBackendTexture yuvBackendTextures[], GrSurfaceOrigin origin,
-            sk_sp<SkColorSpace> imageColorSpace);
+    static sk_sp<SkImage> MakeFromYUVATexturesCopyImpl(GrContext* ctx,
+                                                       SkYUVColorSpace colorSpace,
+                                                       const GrBackendTexture yuvaTextures[],
+                                                       SkYUVAIndex yuvaIndices[4],
+                                                       SkISize size,
+                                                       GrSurfaceOrigin origin,
+                                                       sk_sp<SkColorSpace> imageColorSpace);
 
     bool onIsValid(GrContext*) const override;
 
 private:
-    GrContext*             fContext;
+    sk_sp<GrContext>       fContext;
     sk_sp<GrTextureProxy>  fProxy;
     const SkAlphaType      fAlphaType;
     const SkBudgeted       fBudgeted;

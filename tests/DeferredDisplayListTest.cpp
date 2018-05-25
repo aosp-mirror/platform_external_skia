@@ -13,7 +13,6 @@
 #include "GrContext.h"
 #include "GrContextFactory.h"
 #include "GrContextPriv.h"
-#include "GrGLTypes.h"
 #include "GrGpu.h"
 #include "GrRenderTargetContext.h"
 #include "GrRenderTargetProxy.h"
@@ -40,6 +39,7 @@
 #include "Test.h"
 #include "gl/GrGLCaps.h"
 #include "gl/GrGLDefines.h"
+#include "gl/GrGLTypes.h"
 
 #ifdef SK_VULKAN
 #include "vk/GrVkDefines.h"

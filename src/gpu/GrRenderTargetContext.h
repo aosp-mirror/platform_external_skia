@@ -150,7 +150,8 @@ public:
      */
     void drawTexture(const GrClip& clip, sk_sp<GrTextureProxy>, GrSamplerState::Filter, GrColor,
                      const SkRect& srcRect, const SkRect& dstRect, GrAA aa,
-                     const SkMatrix& viewMatrix, sk_sp<GrColorSpaceXform>);
+                     SkCanvas::SrcRectConstraint, const SkMatrix& viewMatrix,
+                     sk_sp<GrColorSpaceXform>);
 
     /**
      * Draw a roundrect using a paint.
@@ -435,7 +436,7 @@ private:
 
     // These perform processing specific to Gr[Mesh]DrawOp-derived ops before recording them into
     // the op list. They return the id of the opList to which the op was added, or 0, if it was
-    // dropped (e.g., due to clipping).
+    // dropped (e.g., due to clipping or being combined).
     uint32_t addDrawOp(const GrClip&, std::unique_ptr<GrDrawOp>);
 
     // Makes a copy of the proxy if it is necessary for the draw and places the texture that should

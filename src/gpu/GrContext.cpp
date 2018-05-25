@@ -116,27 +116,27 @@ bool GrContext::initCommon(const GrContextOptions& options) {
         prcOptions.fGpuPathRenderers &= ~GpuPathRenderers::kCoverageCounting;
     }
 
-    GrAtlasTextContext::Options atlasTextContextOptions;
-    atlasTextContextOptions.fMaxDistanceFieldFontSize = options.fGlyphsAsPathsFontSize;
-    atlasTextContextOptions.fMinDistanceFieldFontSize = options.fMinDistanceFieldFontSize;
-    atlasTextContextOptions.fDistanceFieldVerticesAlwaysHaveW = false;
+    GrTextContext::Options textContextOptions;
+    textContextOptions.fMaxDistanceFieldFontSize = options.fGlyphsAsPathsFontSize;
+    textContextOptions.fMinDistanceFieldFontSize = options.fMinDistanceFieldFontSize;
+    textContextOptions.fDistanceFieldVerticesAlwaysHaveW = false;
 #if SK_SUPPORT_ATLAS_TEXT
     if (GrContextOptions::Enable::kYes == options.fDistanceFieldGlyphVerticesAlwaysHaveW) {
-        atlasTextContextOptions.fDistanceFieldVerticesAlwaysHaveW = true;
+        textContextOptions.fDistanceFieldVerticesAlwaysHaveW = true;
     }
 #endif
 
     bool explicitlyAllocatingResources = fResourceProvider
                                             ? fResourceProvider->explicitlyAllocateGPUResources()
                                             : false;
-    fDrawingManager.reset(new GrDrawingManager(this, prcOptions, atlasTextContextOptions,
+    fDrawingManager.reset(new GrDrawingManager(this, prcOptions, textContextOptions,
                                                &fSingleOwner, explicitlyAllocatingResources,
                                                options.fSortRenderTargets));
 
     fGlyphCache = new GrGlyphCache(fCaps.get(), options.fGlyphCacheTextureMaximumBytes);
 
     fTextBlobCache.reset(new GrTextBlobCache(TextBlobCacheOverBudgetCB,
-                                             this, this->uniqueID(), SkToBool(fGpu)));
+                                             this, this->uniqueID()));
 
     // DDL TODO: we need to think through how the task group & persistent cache
     // get passed on to/shared between all the DDLRecorders created with this context.
@@ -1512,6 +1512,10 @@ bool GrContext::validPMUPMConversionExists() {
 
     // The PM<->UPM tests fail or succeed together so we only need to check one.
     return fPMUPMConversionsRoundTrip;
+}
+
+bool GrContext::supportsDistanceFieldText() const {
+    return fCaps->shaderCaps()->supportsDistanceFieldText();
 }
 
 //////////////////////////////////////////////////////////////////////////////
