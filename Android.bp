@@ -129,6 +129,7 @@ cc_library_static {
         "src/xml/",
         "third_party/gif/",
         "third_party/skcms",
+        "third_party/vulkanmemoryallocator/",
     ],
 
     srcs: [
@@ -624,6 +625,7 @@ cc_library_static {
         "src/gpu/text/GrTextBlobCache.cpp",
         "src/gpu/text/GrTextContext.cpp",
         "src/gpu/text/GrTextUtils.cpp",
+        "src/gpu/vk/GrVkAMDMemoryAllocator.cpp",
         "src/gpu/vk/GrVkBackendContext.cpp",
         "src/gpu/vk/GrVkBuffer.cpp",
         "src/gpu/vk/GrVkBufferView.cpp",
