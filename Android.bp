@@ -1571,7 +1571,6 @@ cc_test {
         "tests/MessageBusTest.cpp",
         "tests/MetaDataTest.cpp",
         "tests/MipMapTest.cpp",
-        "tests/NonlinearBlendingTest.cpp",
         "tests/OSPathTest.cpp",
         "tests/OffsetSimplePolyTest.cpp",
         "tests/OnFlushCallbackTest.cpp",
