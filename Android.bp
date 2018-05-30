@@ -31,6 +31,7 @@ cc_library_static {
         "-Wno-global-constructors",
         "-Wno-implicit-fallthrough",
         "-Wno-maybe-uninitialized",
+        "-Wno-missing-field-initializers",
         "-Wno-missing-noreturn",
         "-Wno-missing-prototypes",
         "-Wno-missing-variable-declarations",
@@ -45,6 +46,7 @@ cc_library_static {
         "-Wno-shift-sign-overflow",
         "-Wno-signed-enum-bitfield",
         "-Wno-switch-enum",
+        "-Wno-thread-safety-analysis",
         "-Wno-undef",
         "-Wno-unknown-warning-option",
         "-Wno-unreachable-code",
@@ -54,6 +56,7 @@ cc_library_static {
         "-Wno-unused-member-function",
         "-Wno-unused-parameter",
         "-Wno-unused-template",
+        "-Wno-unused-variable",
         "-Wno-zero-as-null-pointer-constant",
         "-Wpointer-arith",
         "-Wsign-compare",
@@ -129,6 +132,7 @@ cc_library_static {
         "src/xml/",
         "third_party/gif/",
         "third_party/skcms",
+        "third_party/vulkanmemoryallocator/",
     ],
 
     srcs: [
@@ -624,6 +628,7 @@ cc_library_static {
         "src/gpu/text/GrTextBlobVertexRegenerator.cpp",
         "src/gpu/text/GrTextContext.cpp",
         "src/gpu/text/GrTextUtils.cpp",
+        "src/gpu/vk/GrVkAMDMemoryAllocator.cpp",
         "src/gpu/vk/GrVkBackendContext.cpp",
         "src/gpu/vk/GrVkBuffer.cpp",
         "src/gpu/vk/GrVkBufferView.cpp",
@@ -829,6 +834,7 @@ cc_library_static {
         "src/xps/SkXPSDocument.cpp",
         "third_party/gif/SkGifImageReader.cpp",
         "third_party/skcms/skcms.c",
+        "third_party/vulkanmemoryallocator/GrVulkanMemoryAllocator.cpp",
     ],
 
     arch: {
