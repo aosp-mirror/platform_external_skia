@@ -1768,7 +1768,6 @@ cc_test {
         "tests/UtilsTest.cpp",
         "tests/VerticesTest.cpp",
         "tests/VkBackendSurfaceTest.cpp",
-        "tests/VkHeapTests.cpp",
         "tests/VkMakeCopyPipelineTest.cpp",
         "tests/VkUploadPixelsTests.cpp",
         "tests/VkWrapTests.cpp",
