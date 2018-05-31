@@ -12,7 +12,6 @@
 
 #include "vk/GrVkDefines.h"
 #include "vk/GrVkInterface.h"
-#include "vk/GrVkMemoryAllocator.h"
 
 enum GrVkExtensionFlags {
     kEXT_debug_report_GrVkExtensionFlag    = 0x0001,
@@ -46,8 +45,6 @@ struct SK_API GrVkBackendContext : public SkRefCnt {
     uint32_t                   fExtensions;
     uint32_t                   fFeatures;
     sk_sp<const GrVkInterface> fInterface;
-    sk_sp<GrVkMemoryAllocator> fMemoryAllocator;
-
     /**
      * Controls whether this object destroys the instance and device upon destruction. The default
      * is temporarily 'true' to avoid breaking existing clients but will be changed to 'false'.
