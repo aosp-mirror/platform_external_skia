@@ -125,7 +125,7 @@ public:
     void getGLSLProcessorKey(const GrShaderCaps&, GrProcessorKeyBuilder* b) const override {
         b->add32(GrColorSpaceXform::XformKey(fColorSpaceXform.get()));
         uint32_t x = this->usesCoverageEdgeAA() ? 0 : 1;
-        x |= kFloat3_GrVertexAttribType == fPositions.fType ? 0 : 2;
+        x |= kFloat3_GrVertexAttribType == fPositions.type() ? 0 : 2;
         x |= fDomain.isInitialized() ? 4 : 0;
         b->add32(x);
     }
@@ -148,7 +148,7 @@ public:
                 const auto& textureGP = args.fGP.cast<TextureGeometryProcessor>();
                 fColorSpaceXformHelper.emitCode(
                         args.fUniformHandler, textureGP.fColorSpaceXform.get());
-                if (kFloat2_GrVertexAttribType == textureGP.fPositions.fType) {
+                if (kFloat2_GrVertexAttribType == textureGP.fPositions.type()) {
                     args.fVaryingHandler->setNoPerspective();
                 }
                 args.fVaryingHandler->emitAttributes(textureGP);
@@ -175,7 +175,7 @@ public:
                 }
                 if (textureGP.numTextureSamplers() > 1) {
                     // If this changes to float, reconsider Interpolation::kMustBeFlat.
-                    SkASSERT(kInt_GrVertexAttribType == textureGP.fTextureIdx.fType);
+                    SkASSERT(kInt_GrVertexAttribType == textureGP.fTextureIdx.type());
                     SkASSERT(args.fShaderCaps->integerSupport());
                     args.fFragBuilder->codeAppend("int texIdx;");
                     args.fVaryingHandler->addPassThroughAttribute(&textureGP.fTextureIdx, "texIdx",
@@ -209,7 +209,7 @@ public:
                     if (!args.fShaderCaps->interpolantsAreInaccurate()) {
                         GrGLSLVarying aaDistVarying(kFloat4_GrSLType,
                                                     GrGLSLVarying::Scope::kVertToFrag);
-                        if (kFloat3_GrVertexAttribType == textureGP.fPositions.fType) {
+                        if (kFloat3_GrVertexAttribType == textureGP.fPositions.type()) {
                             args.fVaryingHandler->addVarying("aaDists", &aaDistVarying);
                             // The distance from edge equation e to homogenous point p=sk_Position
                             // is e.x*p.x/p.wx + e.y*p.y/p.w + e.z. However, we want screen space
@@ -219,9 +219,9 @@ public:
                             args.fVertBuilder->codeAppendf(
                                     R"(%s = float4(dot(aaEdge0, %s), dot(aaEdge1, %s),
                                                    dot(aaEdge2, %s), dot(aaEdge3, %s));)",
-                                    aaDistVarying.vsOut(), textureGP.fPositions.fName,
-                                    textureGP.fPositions.fName, textureGP.fPositions.fName,
-                                    textureGP.fPositions.fName);
+                                    aaDistVarying.vsOut(), textureGP.fPositions.name(),
+                                    textureGP.fPositions.name(), textureGP.fPositions.name(),
+                                    textureGP.fPositions.name());
                             mulByFragCoordW = true;
                         } else {
                             args.fVaryingHandler->addVarying("aaDists", &aaDistVarying);
@@ -230,9 +230,9 @@ public:
                                                    dot(aaEdge1.xy, %s.xy) + aaEdge1.z,
                                                    dot(aaEdge2.xy, %s.xy) + aaEdge2.z,
                                                    dot(aaEdge3.xy, %s.xy) + aaEdge3.z);)",
-                                    aaDistVarying.vsOut(), textureGP.fPositions.fName,
-                                    textureGP.fPositions.fName, textureGP.fPositions.fName,
-                                    textureGP.fPositions.fName);
+                                    aaDistVarying.vsOut(), textureGP.fPositions.name(),
+                                    textureGP.fPositions.name(), textureGP.fPositions.name(),
+                                    textureGP.fPositions.name());
                         }
                         aaDistName = aaDistVarying.fsIn();
                     } else {
@@ -709,15 +709,28 @@ __attribute__((no_sanitize("float-cast-overflow")))
             , fFinalized(0)
             , fAllowSRGBInputs(allowSRGBInputs ? 1 : 0) {
         SkASSERT(aaType != GrAAType::kMixedSamples);
-
-        const Draw& draw = fDraws.emplace_back(srcRect, 0, GrPerspQuad(dstRect, viewMatrix),
-                                               constraint, color);
         fPerspective = viewMatrix.hasPerspective();
-        fDomain = (bool)draw.domain();
-        SkRect bounds;
-        bounds = draw.quad().bounds();
+        auto quad = GrPerspQuad(dstRect, viewMatrix);
+        auto bounds = quad.bounds();
+#ifndef SK_DONT_DROP_UNNECESSARY_AA_IN_TEXTURE_OP
+        if (GrAAType::kCoverage == this->aaType() && viewMatrix.rectStaysRect()) {
+            // Disable coverage AA when rect falls on integers in device space.
+            auto is_int = [](float f) { return f == sk_float_floor(f); };
+            if (is_int(bounds.fLeft) && is_int(bounds.fTop) && is_int(bounds.fRight) &&
+                is_int(bounds.fBottom)) {
+                fAAType = static_cast<unsigned>(GrAAType::kNone);
+                // We may have had a strict constraint with nearest filter soley due to possible AA
+                // bloat. In that case it's no longer necessary.
+                if (constraint == SkCanvas::kStrict_SrcRectConstraint &&
+                    filter == GrSamplerState::Filter::kNearest) {
+                    constraint = SkCanvas::kFast_SrcRectConstraint;
+                }
+            }
+        }
+#endif
+        const auto& draw = fDraws.emplace_back(srcRect, 0, quad, constraint, color);
         this->setBounds(bounds, HasAABloat::kNo, IsZeroArea::kNo);
-
+        fDomain = static_cast<bool>(draw.domain());
         fMaxApproxDstPixelArea = RectSizeAsSizeT(bounds);
     }
 

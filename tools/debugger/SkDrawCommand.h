@@ -60,6 +60,8 @@ public:
         kDrawTextOnPath_OpType,
         kDrawTextRSXform_OpType,
         kDrawVertices_OpType,
+        kDrawAtlas_OpType,
+        kDrawDrawable_OpType,
         kEndDrawPicture_OpType,
         kRestore_OpType,
         kSave_OpType,
@@ -91,12 +93,6 @@ public:
     virtual bool render(SkCanvas* canvas) const { return false; }
 
     virtual Json::Value toJSON(UrlDataManager& urlDataManager) const;
-
-    /* Converts a JSON representation of a command into a newly-allocated SkDrawCommand object. It
-     * is the caller's responsibility to delete this object. This method may return null if an error
-     * occurs.
-     */
-    static SkDrawCommand* fromJSON(Json::Value& command, UrlDataManager& urlDataManager);
 
     static const char* GetCommandString(OpType type);
 
@@ -131,7 +127,6 @@ class SkRestoreCommand : public SkDrawCommand {
 public:
     SkRestoreCommand();
     void execute(SkCanvas* canvas) const override;
-    static SkRestoreCommand* fromJSON(Json::Value& command, UrlDataManager& urlDataManager);
 
 private:
     typedef SkDrawCommand INHERITED;
@@ -142,7 +137,6 @@ public:
     SkClearCommand(SkColor color);
     void execute(SkCanvas* canvas) const override;
     Json::Value toJSON(UrlDataManager& urlDataManager) const override;
-    static SkClearCommand* fromJSON(Json::Value& command, UrlDataManager& urlDataManager);
 
 private:
     SkColor fColor;
@@ -156,7 +150,6 @@ public:
     void execute(SkCanvas* canvas) const override;
     bool render(SkCanvas* canvas) const override;
     Json::Value toJSON(UrlDataManager& urlDataManager) const override;
-    static SkClipPathCommand* fromJSON(Json::Value& command, UrlDataManager& urlDataManager);
 
 private:
     SkPath   fPath;
@@ -171,7 +164,6 @@ public:
     SkClipRegionCommand(const SkRegion& region, SkClipOp op);
     void execute(SkCanvas* canvas) const override;
     Json::Value toJSON(UrlDataManager& urlDataManager) const override;
-    static SkClipRegionCommand* fromJSON(Json::Value& command, UrlDataManager& urlDataManager);
 
 private:
     SkRegion fRegion;
@@ -185,11 +177,6 @@ public:
     SkClipRectCommand(const SkRect& rect, SkClipOp op, bool doAA);
     void execute(SkCanvas* canvas) const override;
     Json::Value toJSON(UrlDataManager& urlDataManager) const override;
-    static SkClipRectCommand* fromJSON(Json::Value& command, UrlDataManager& urlDataManager);
-
-    const SkRect& rect() const { return fRect; }
-    SkClipOp op() const { return fOp; }
-    bool doAA() const { return fDoAA; }
 
 private:
     SkRect   fRect;
@@ -205,11 +192,6 @@ public:
     void execute(SkCanvas* canvas) const override;
     bool render(SkCanvas* canvas) const override;
     Json::Value toJSON(UrlDataManager& urlDataManager) const override;
-    static SkClipRRectCommand* fromJSON(Json::Value& command, UrlDataManager& urlDataManager);
-
-    const SkRRect& rrect() const { return fRRect; }
-    SkClipOp op() const { return fOp; }
-    bool doAA() const { return fDoAA; }
 
 private:
     SkRRect  fRRect;
@@ -224,7 +206,6 @@ public:
     SkConcatCommand(const SkMatrix& matrix);
     void execute(SkCanvas* canvas) const override;
     Json::Value toJSON(UrlDataManager& urlDataManager) const override;
-    static SkConcatCommand* fromJSON(Json::Value& command, UrlDataManager& urlDataManager);
 
 private:
     SkMatrix fMatrix;
@@ -237,7 +218,6 @@ public:
     SkDrawAnnotationCommand(const SkRect&, const char key[], sk_sp<SkData> value);
     void execute(SkCanvas* canvas) const override;
     Json::Value toJSON(UrlDataManager& urlDataManager) const override;
-    static SkDrawAnnotationCommand* fromJSON(Json::Value& command, UrlDataManager& urlDataManager);
 
 private:
     SkRect          fRect;
@@ -254,14 +234,12 @@ public:
     void execute(SkCanvas* canvas) const override;
     bool render(SkCanvas* canvas) const override;
     Json::Value toJSON(UrlDataManager& urlDataManager) const override;
-    static SkDrawBitmapCommand* fromJSON(Json::Value& command, UrlDataManager& urlDataManager);
 
 private:
-    SkBitmap fBitmap;
-    SkScalar fLeft;
-    SkScalar fTop;
-    SkPaint  fPaint;
-    SkPaint* fPaintPtr;
+    SkBitmap         fBitmap;
+    SkScalar         fLeft;
+    SkScalar         fTop;
+    SkTLazy<SkPaint> fPaint;
 
     typedef SkDrawCommand INHERITED;
 };
@@ -273,8 +251,6 @@ public:
     void execute(SkCanvas* canvas) const override;
     bool render(SkCanvas* canvas) const override;
     Json::Value toJSON(UrlDataManager& urlDataManager) const override;
-    static SkDrawBitmapLatticeCommand* fromJSON(Json::Value& command,
-                                                UrlDataManager& urlDataManager);
 
 private:
     SkBitmap          fBitmap;
@@ -292,14 +268,12 @@ public:
     void execute(SkCanvas* canvas) const override;
     bool render(SkCanvas* canvas) const override;
     Json::Value toJSON(UrlDataManager& urlDataManager) const override;
-    static SkDrawBitmapNineCommand* fromJSON(Json::Value& command, UrlDataManager& urlDataManager);
 
 private:
-    SkBitmap fBitmap;
-    SkIRect  fCenter;
-    SkRect   fDst;
-    SkPaint  fPaint;
-    SkPaint* fPaintPtr;
+    SkBitmap         fBitmap;
+    SkIRect          fCenter;
+    SkRect           fDst;
+    SkTLazy<SkPaint> fPaint;
 
     typedef SkDrawCommand INHERITED;
 };
@@ -312,34 +286,12 @@ public:
     void execute(SkCanvas* canvas) const override;
     bool render(SkCanvas* canvas) const override;
     Json::Value toJSON(UrlDataManager& urlDataManager) const override;
-    static SkDrawBitmapRectCommand* fromJSON(Json::Value& command, UrlDataManager& urlDataManager);
-
-    const SkBitmap& bitmap() const { return fBitmap; }
-
-    // The non-const 'paint' method allows modification of this object's
-    // SkPaint. For this reason the ctor and setPaint method make a local copy.
-    // The 'fPaintPtr' member acts a signal that the local SkPaint is valid
-    // (since only an SkPaint* is passed into the ctor).
-    const SkPaint* paint() const { return fPaintPtr; }
-    SkPaint* paint() { return fPaintPtr; }
-
-    void setPaint(const SkPaint& paint) { fPaint = paint; fPaintPtr = &fPaint; }
-
-    const SkRect* srcRect() const { return fSrc.isEmpty() ? nullptr : &fSrc; }
-    void setSrcRect(const SkRect& src) { fSrc = src; }
-
-    const SkRect& dstRect() const { return fDst; }
-    void setDstRect(const SkRect& dst) { fDst = dst; }
-
-    SkCanvas::SrcRectConstraint constraint() const { return fConstraint; }
-    void setConstraint(SkCanvas::SrcRectConstraint constraint) { fConstraint = constraint; }
 
 private:
     SkBitmap                      fBitmap;
-    SkRect                        fSrc;
+    SkTLazy<SkRect>               fSrc;
     SkRect                        fDst;
-    SkPaint                       fPaint;
-    SkPaint*                      fPaintPtr;
+    SkTLazy<SkPaint>              fPaint;
     SkCanvas::SrcRectConstraint   fConstraint;
 
     typedef SkDrawCommand INHERITED;
@@ -351,7 +303,6 @@ public:
     void execute(SkCanvas* canvas) const override;
     bool render(SkCanvas* canvas) const override;
     Json::Value toJSON(UrlDataManager& urlDataManager) const override;
-    static SkDrawImageCommand* fromJSON(Json::Value& command, UrlDataManager& urlDataManager);
 
 private:
     sk_sp<const SkImage> fImage;
@@ -369,8 +320,6 @@ public:
     void execute(SkCanvas* canvas) const override;
     bool render(SkCanvas* canvas) const override;
     Json::Value toJSON(UrlDataManager& urlDataManager) const override;
-    static SkDrawImageLatticeCommand* fromJSON(Json::Value& command,
-                                               UrlDataManager& urlDataManager);
 
 private:
     sk_sp<const SkImage>        fImage;
@@ -388,14 +337,12 @@ public:
     void execute(SkCanvas* canvas) const override;
     bool render(SkCanvas* canvas) const override;
     Json::Value toJSON(UrlDataManager& urlDataManager) const override;
-    static SkDrawImageNineCommand* fromJSON(Json::Value& command, UrlDataManager& urlDataManager);
 
 private:
     sk_sp<const SkImage> fImage;
     SkIRect              fCenter;
     SkRect               fDst;
-    SkPaint              fPaint;
-    SkPaint*             fPaintPtr;
+    SkTLazy<SkPaint>     fPaint;
 
     typedef SkDrawCommand INHERITED;
 };
@@ -407,7 +354,6 @@ public:
     void execute(SkCanvas* canvas) const override;
     bool render(SkCanvas* canvas) const override;
     Json::Value toJSON(UrlDataManager& urlDataManager) const override;
-    static SkDrawImageRectCommand* fromJSON(Json::Value& command, UrlDataManager& urlDataManager);
 
 private:
     sk_sp<const SkImage>        fImage;
@@ -425,7 +371,6 @@ public:
     void execute(SkCanvas* canvas) const override;
     bool render(SkCanvas* canvas) const override;
     Json::Value toJSON(UrlDataManager& urlDataManager) const override;
-    static SkDrawOvalCommand* fromJSON(Json::Value& command, UrlDataManager& urlDataManager);
 
 private:
     SkRect  fOval;
@@ -441,7 +386,6 @@ public:
     void execute(SkCanvas* canvas) const override;
     bool render(SkCanvas* canvas) const override;
     Json::Value toJSON(UrlDataManager& urlDataManager) const override;
-    static SkDrawArcCommand* fromJSON(Json::Value& command, UrlDataManager& urlDataManager);
 
 private:
     SkRect   fOval;
@@ -459,7 +403,6 @@ public:
     void execute(SkCanvas* canvas) const override;
     bool render(SkCanvas* canvas) const override;
     Json::Value toJSON(UrlDataManager& urlDataManager) const override;
-    static SkDrawPaintCommand* fromJSON(Json::Value& command, UrlDataManager& urlDataManager);
 
 private:
     SkPaint fPaint;
@@ -473,7 +416,6 @@ public:
     void execute(SkCanvas* canvas) const override;
     bool render(SkCanvas* canvas) const override;
     Json::Value toJSON(UrlDataManager& urlDataManager) const override;
-    static SkDrawPathCommand* fromJSON(Json::Value& command, UrlDataManager& urlDataManager);
 
 private:
     SkPath   fPath;
@@ -515,16 +457,13 @@ class SkDrawPointsCommand : public SkDrawCommand {
 public:
     SkDrawPointsCommand(SkCanvas::PointMode mode, size_t count, const SkPoint pts[],
                         const SkPaint& paint);
-    ~SkDrawPointsCommand() override { delete [] fPts; }
     void execute(SkCanvas* canvas) const override;
     bool render(SkCanvas* canvas) const override;
     Json::Value toJSON(UrlDataManager& urlDataManager) const override;
-    static SkDrawPointsCommand* fromJSON(Json::Value& command, UrlDataManager& urlDataManager);
 
 private:
     SkCanvas::PointMode fMode;
-    size_t              fCount;
-    SkPoint*            fPts;
+    SkTDArray<SkPoint>  fPts;
     SkPaint             fPaint;
 
     typedef SkDrawCommand INHERITED;
@@ -536,7 +475,6 @@ public:
     void execute(SkCanvas* canvas) const override;
     bool render(SkCanvas* canvas) const override;
     Json::Value toJSON(UrlDataManager& urlDataManager) const override;
-    static SkDrawRegionCommand* fromJSON(Json::Value& command, UrlDataManager& urlDataManager);
 
 private:
     SkRegion fRegion;
@@ -549,17 +487,14 @@ class SkDrawTextCommand : public SkDrawCommand {
 public:
     SkDrawTextCommand(const void* text, size_t byteLength, SkScalar x, SkScalar y,
                       const SkPaint& paint);
-    ~SkDrawTextCommand() override { delete [] fText; }
     void execute(SkCanvas* canvas) const override;
     Json::Value toJSON(UrlDataManager& urlDataManager) const override;
-    static SkDrawTextCommand* fromJSON(Json::Value& command, UrlDataManager& urlDataManager);
 
 private:
-    char*    fText;
-    size_t   fByteLength;
-    SkScalar fX;
-    SkScalar fY;
-    SkPaint  fPaint;
+    sk_sp<SkData> fText;
+    SkScalar      fX;
+    SkScalar      fY;
+    SkPaint       fPaint;
 
     typedef SkDrawCommand INHERITED;
 };
@@ -568,16 +503,13 @@ class SkDrawPosTextCommand : public SkDrawCommand {
 public:
     SkDrawPosTextCommand(const void* text, size_t byteLength, const SkPoint pos[],
                          const SkPaint& paint);
-    ~SkDrawPosTextCommand() override { delete [] fPos; delete [] fText; }
     void execute(SkCanvas* canvas) const override;
     Json::Value toJSON(UrlDataManager& urlDataManager) const override;
-    static SkDrawPosTextCommand* fromJSON(Json::Value& command, UrlDataManager& urlDataManager);
 
 private:
-    char*    fText;
-    size_t   fByteLength;
-    SkPoint* fPos;
-    SkPaint  fPaint;
+    sk_sp<SkData>      fText;
+    SkTDArray<SkPoint> fPos;
+    SkPaint            fPaint;
 
     typedef SkDrawCommand INHERITED;
 };
@@ -586,17 +518,14 @@ class SkDrawTextOnPathCommand : public SkDrawCommand {
 public:
     SkDrawTextOnPathCommand(const void* text, size_t byteLength, const SkPath& path,
                             const SkMatrix* matrix, const SkPaint& paint);
-    ~SkDrawTextOnPathCommand() override { delete [] fText; }
     void execute(SkCanvas* canvas) const override;
     Json::Value toJSON(UrlDataManager& urlDataManager) const override;
-    static SkDrawTextOnPathCommand* fromJSON(Json::Value& command, UrlDataManager& urlDataManager);
 
 private:
-    char*    fText;
-    size_t   fByteLength;
-    SkPath   fPath;
-    SkMatrix fMatrix;
-    SkPaint  fPaint;
+    sk_sp<SkData>     fText;
+    SkPath            fPath;
+    SkTLazy<SkMatrix> fMatrix;
+    SkPaint           fPaint;
 
     typedef SkDrawCommand INHERITED;
 };
@@ -605,18 +534,14 @@ class SkDrawTextRSXformCommand : public SkDrawCommand {
 public:
     SkDrawTextRSXformCommand(const void* text, size_t byteLength, const SkRSXform[],
                              const SkRect*, const SkPaint& paint);
-    ~SkDrawTextRSXformCommand() override { delete[] fText; delete[] fXform; }
     void execute(SkCanvas* canvas) const override;
     Json::Value toJSON(UrlDataManager& urlDataManager) const override;
-    static SkDrawTextRSXformCommand* fromJSON(Json::Value& command, UrlDataManager& urlDataManager);
 
 private:
-    char*       fText;
-    size_t      fByteLength;
-    SkRSXform*  fXform;
-    SkRect*     fCull;
-    SkRect      fCullStorage;
-    SkPaint     fPaint;
+    sk_sp<SkData>        fText;
+    SkTDArray<SkRSXform> fXform;
+    SkTLazy<SkRect>      fCull;
+    SkPaint              fPaint;
 
     typedef SkDrawCommand INHERITED;
 };
@@ -625,17 +550,14 @@ class SkDrawPosTextHCommand : public SkDrawCommand {
 public:
     SkDrawPosTextHCommand(const void* text, size_t byteLength, const SkScalar xpos[],
                           SkScalar constY, const SkPaint& paint);
-    ~SkDrawPosTextHCommand() override { delete [] fXpos; delete [] fText; }
     void execute(SkCanvas* canvas) const override;
     Json::Value toJSON(UrlDataManager& urlDataManager) const override;
-    static SkDrawPosTextHCommand* fromJSON(Json::Value& command, UrlDataManager& urlDataManager);
 
 private:
-    SkScalar* fXpos;
-    char*     fText;
-    size_t    fByteLength;
-    SkScalar  fConstY;
-    SkPaint   fPaint;
+    sk_sp<SkData>       fText;
+    SkTDArray<SkScalar> fXpos;
+    SkScalar            fConstY;
+    SkPaint             fPaint;
 
     typedef SkDrawCommand INHERITED;
 };
@@ -647,7 +569,6 @@ public:
     void execute(SkCanvas* canvas) const override;
     bool render(SkCanvas* canvas) const override;
     Json::Value toJSON(UrlDataManager& urlDataManager) const override;
-    static SkDrawTextBlobCommand* fromJSON(Json::Value& command, UrlDataManager& urlDataManager);
 
 private:
     sk_sp<SkTextBlob> fBlob;
@@ -665,7 +586,6 @@ public:
                        const SkPaint& paint);
     void execute(SkCanvas* canvas) const override;
     Json::Value toJSON(UrlDataManager& urlDataManager) const override;
-    static SkDrawPatchCommand* fromJSON(Json::Value& command, UrlDataManager& urlDataManager);
 
 private:
     SkPoint fCubics[12];
@@ -685,10 +605,7 @@ public:
     SkDrawRectCommand(const SkRect& rect, const SkPaint& paint);
     void execute(SkCanvas* canvas) const override;
     Json::Value toJSON(UrlDataManager& urlDataManager) const override;
-    static SkDrawRectCommand* fromJSON(Json::Value& command, UrlDataManager& urlDataManager);
 
-    const SkRect& rect() const   { return fRect; }
-    const SkPaint& paint() const { return fPaint; }
 private:
     SkRect  fRect;
     SkPaint fPaint;
@@ -702,7 +619,6 @@ public:
     void execute(SkCanvas* canvas) const override;
     bool render(SkCanvas* canvas) const override;
     Json::Value toJSON(UrlDataManager& urlDataManager) const override;
-    static SkDrawRRectCommand* fromJSON(Json::Value& command, UrlDataManager& urlDataManager);
 
 private:
     SkRRect fRRect;
@@ -718,7 +634,6 @@ public:
     void execute(SkCanvas* canvas) const override;
     bool render(SkCanvas* canvas) const override;
     Json::Value toJSON(UrlDataManager& urlDataManager) const override;
-    static SkDrawDRRectCommand* fromJSON(Json::Value& command, UrlDataManager& urlDataManager);
 
 private:
     SkRRect fOuter;
@@ -742,11 +657,29 @@ private:
     typedef SkDrawCommand INHERITED;
 };
 
+class SkDrawAtlasCommand : public SkDrawCommand {
+public:
+    SkDrawAtlasCommand(const SkImage*, const SkRSXform[], const SkRect[], const SkColor[], int,
+                       SkBlendMode, const SkRect*, const SkPaint*);
+
+    void execute(SkCanvas* canvas) const override;
+
+private:
+    sk_sp<const SkImage> fImage;
+    SkTDArray<SkRSXform> fXform;
+    SkTDArray<SkRect>    fTex;
+    SkTDArray<SkColor>   fColors;
+    SkBlendMode          fBlendMode;
+    SkTLazy<SkRect>      fCull;
+    SkTLazy<SkPaint>     fPaint;
+
+    typedef SkDrawCommand INHERITED;
+};
+
 class SkSaveCommand : public SkDrawCommand {
 public:
     SkSaveCommand();
     void execute(SkCanvas* canvas) const override;
-    static SkSaveCommand* fromJSON(Json::Value& command, UrlDataManager& urlDataManager);
 
 private:
     typedef SkDrawCommand INHERITED;
@@ -755,19 +688,14 @@ private:
 class SkSaveLayerCommand : public SkDrawCommand {
 public:
     SkSaveLayerCommand(const SkCanvas::SaveLayerRec&);
-    ~SkSaveLayerCommand() override;
     void execute(SkCanvas* canvas) const override;
     Json::Value toJSON(UrlDataManager& urlDataManager) const override;
-    static SkSaveLayerCommand* fromJSON(Json::Value& command, UrlDataManager& urlDataManager);
-
-    const SkPaint* paint() const { return fPaintPtr; }
 
 private:
-    SkRect               fBounds;
-    SkPaint              fPaint;
-    SkPaint*             fPaintPtr;
-    const SkImageFilter* fBackdrop;
-    uint32_t       fSaveLayerFlags;
+    SkTLazy<SkRect>            fBounds;
+    SkTLazy<SkPaint>           fPaint;
+    sk_sp<const SkImageFilter> fBackdrop;
+    uint32_t                   fSaveLayerFlags;
 
     typedef SkDrawCommand INHERITED;
 };
@@ -777,7 +705,6 @@ public:
     SkSetMatrixCommand(const SkMatrix& matrix);
     void execute(SkCanvas* canvas) const override;
     Json::Value toJSON(UrlDataManager& urlDataManager) const override;
-    static SkSetMatrixCommand* fromJSON(Json::Value& command, UrlDataManager& urlDataManager);
 
 private:
     SkMatrix fMatrix;
@@ -791,7 +718,6 @@ public:
     void execute(SkCanvas* canvas) const override;
     bool render(SkCanvas* canvas) const override;
     Json::Value toJSON(UrlDataManager& urlDataManager) const override;
-    static SkDrawShadowCommand* fromJSON(Json::Value& command, UrlDataManager& urlDataManager);
 
 private:
     SkPath           fPath;
@@ -799,5 +725,16 @@ private:
 
     typedef SkDrawCommand INHERITED;
 };
-#endif
 
+class SkDrawDrawableCommand : public SkDrawCommand {
+public:
+    SkDrawDrawableCommand(SkDrawable*, const SkMatrix*);
+    void execute(SkCanvas* canvas) const override;
+
+private:
+    sk_sp<SkDrawable> fDrawable;
+    SkTLazy<SkMatrix> fMatrix;
+
+    typedef SkDrawCommand INHERITED;
+};
+#endif

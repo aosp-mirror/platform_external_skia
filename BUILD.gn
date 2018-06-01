@@ -30,7 +30,6 @@ declare_args() {
   skia_use_zlib = true
   skia_use_metal = false
   skia_use_libheif = is_skia_dev_build
-  skia_use_skcms = true
 
   skia_android_serial = ""
   skia_enable_discrete_gpu = true
@@ -60,8 +59,6 @@ declare_args() {
   skia_use_sfntly = skia_use_icu
   skia_enable_atlas_text = is_skia_dev_build && skia_enable_gpu
 
-  skia_use_legacy_gpu_pixel_ops = is_skia_dev_build && is_win  # Arbitrary to keep old code path tested until deletion.
-
   if (is_android) {
     skia_use_vulkan = defined(ndk_api) && ndk_api >= 24
   } else if (is_fuchsia) {
@@ -81,8 +78,8 @@ if (defined(skia_settings)) {
   import(skia_settings)
 }
 
-# Our tools require static linking (they use non-exported symbols).
-skia_enable_tools = skia_enable_tools && !is_component_build
+# Our tools require static linking (they use non-exported symbols), and the GPU backend.
+skia_enable_tools = skia_enable_tools && !is_component_build && skia_enable_gpu
 
 fontmgr_android_enabled = skia_use_expat && skia_use_freetype
 
@@ -615,15 +612,13 @@ optional("gpu") {
     # they want. For example this would allow us to remove the fuchsia specific vulkan code in our
     # vulkan files.
     public_deps += [ "third_party/vulkan" ]
+    deps += [ "third_party/vulkanmemoryallocator" ]
     sources += skia_vk_sources
     if (skia_enable_vulkan_debug_layers) {
       public_defines += [ "SK_ENABLE_VK_LAYERS" ]
     }
   }
 
-  if (skia_use_legacy_gpu_pixel_ops) {
-    public_defines += [ "SK_LEGACY_GPU_PIXEL_OPS" ]
-  }
   if (skia_enable_spirv_validation) {
     deps += [ "//third_party/spirv-tools" ]
     public_defines += [ "SK_ENABLE_SPIRV_VALIDATION" ]
@@ -723,12 +718,7 @@ optional("raw") {
 }
 
 import("third_party/skcms/skcms.gni")
-config("third_party_skcms_public") {
-  include_dirs = [ "third_party/skcms" ]
-}
-source_set("third_party_skcms") {
-  public_configs = [ ":third_party_skcms_public" ]
-
+source_set("skcms") {
   cflags = []
   if (!is_win || is_clang) {
     cflags += [
@@ -741,18 +731,6 @@ source_set("third_party_skcms") {
     "third_party/skcms/skcms.h",
   ]
   sources = rebase_path(skcms_sources, ".", "third_party/skcms")
-}
-
-optional("skcms") {
-  enabled = skia_use_skcms
-
-  public_defines = [ "SK_USE_SKCMS" ]
-  deps = [
-    ":third_party_skcms",
-  ]
-  sources = [
-    "src/core/SkColorSpaceXform_skcms.cpp",
-  ]
 }
 
 optional("typeface_freetype") {
@@ -1012,16 +990,23 @@ if (skia_enable_tools) {
     public_configs = [ ":skia.h_config" ]
     skia_h = "$target_gen_dir/skia.h"
     script = "gn/find_headers.py"
-    args = [ rebase_path("//bin/gn") ] + [ rebase_path("//") ] +
-           [ rebase_path(skia_h, root_build_dir) ] +
-           rebase_path(skia_public_includes)
+
+    # TODO: would be cool to not hard-code these here, but how?
+    module_public_includes = [
+      "modules/sksg/include",
+      "modules/skottie/include",
+    ]
+    args =
+        [ rebase_path("//bin/gn") ] + [ rebase_path("//") ] +
+        [ rebase_path(skia_h, root_build_dir) ] +
+        rebase_path(skia_public_includes) + rebase_path(module_public_includes)
     depfile = "$skia_h.deps"
     outputs = [
       skia_h,
     ]
   }
 
-  if (skia_enable_gpu && target_cpu == "x64") {
+  if (target_cpu == "x64") {
     executable("fiddle") {
       libs = []
       sources = [
@@ -1040,21 +1025,21 @@ if (skia_enable_tools) {
         ":gpu_tool_utils",
         ":skia",
         ":skia.h",
+        "modules/skottie",
       ]
     }
   }
 
-  if (skia_enable_gpu) {
-    source_set("public_headers_warnings_check") {
-      sources = [
-        "tools/public_headers_warnings_check.cpp",
-      ]
-      configs -= [ "//gn:warnings_except_public_headers" ]
-      deps = [
-        ":skia",
-        ":skia.h",
-      ]
-    }
+  source_set("public_headers_warnings_check") {
+    sources = [
+      "tools/public_headers_warnings_check.cpp",
+    ]
+    configs -= [ "//gn:warnings_except_public_headers" ]
+    deps = [
+      ":skia",
+      ":skia.h",
+      "modules/skottie",
+    ]
   }
 
   template("test_lib") {
@@ -1236,62 +1221,60 @@ if (skia_enable_tools) {
 
   test_lib("gpu_tool_utils") {
     public_include_dirs = []
-    if (skia_enable_gpu) {
-      public_defines = []
-      public_include_dirs += [ "tools/gpu" ]
+    public_defines = []
+    public_include_dirs += [ "tools/gpu" ]
 
-      deps = []
-      sources = [
-        "tools/gpu/GrContextFactory.cpp",
-        "tools/gpu/GrTest.cpp",
-        "tools/gpu/ProxyUtils.cpp",
-        "tools/gpu/TestContext.cpp",
-        "tools/gpu/atlastext/GLTestAtlasTextRenderer.cpp",
-        "tools/gpu/gl/GLTestContext.cpp",
-        "tools/gpu/gl/command_buffer/GLTestContext_command_buffer.cpp",
-        "tools/gpu/gl/debug/DebugGLTestContext.cpp",
-        "tools/gpu/gl/debug/GrBufferObj.cpp",
-        "tools/gpu/gl/debug/GrFrameBufferObj.cpp",
-        "tools/gpu/gl/debug/GrProgramObj.cpp",
-        "tools/gpu/gl/debug/GrShaderObj.cpp",
-        "tools/gpu/gl/debug/GrTextureObj.cpp",
-        "tools/gpu/gl/debug/GrTextureUnitObj.cpp",
-        "tools/gpu/gl/null/NullGLTestContext.cpp",
-        "tools/gpu/mock/MockTestContext.cpp",
+    deps = []
+    sources = [
+      "tools/gpu/GrContextFactory.cpp",
+      "tools/gpu/GrTest.cpp",
+      "tools/gpu/ProxyUtils.cpp",
+      "tools/gpu/TestContext.cpp",
+      "tools/gpu/atlastext/GLTestAtlasTextRenderer.cpp",
+      "tools/gpu/gl/GLTestContext.cpp",
+      "tools/gpu/gl/command_buffer/GLTestContext_command_buffer.cpp",
+      "tools/gpu/gl/debug/DebugGLTestContext.cpp",
+      "tools/gpu/gl/debug/GrBufferObj.cpp",
+      "tools/gpu/gl/debug/GrFrameBufferObj.cpp",
+      "tools/gpu/gl/debug/GrProgramObj.cpp",
+      "tools/gpu/gl/debug/GrShaderObj.cpp",
+      "tools/gpu/gl/debug/GrTextureObj.cpp",
+      "tools/gpu/gl/debug/GrTextureUnitObj.cpp",
+      "tools/gpu/gl/null/NullGLTestContext.cpp",
+      "tools/gpu/mock/MockTestContext.cpp",
+    ]
+    libs = []
+
+    if (is_android || skia_use_egl) {
+      sources += [ "tools/gpu/gl/egl/CreatePlatformGLTestContext_egl.cpp" ]
+    } else if (is_ios) {
+      sources += [ "tools/gpu/gl/iOS/CreatePlatformGLTestContext_iOS.mm" ]
+      libs += [ "OpenGLES.framework" ]
+    } else if (is_linux) {
+      sources += [ "tools/gpu/gl/glx/CreatePlatformGLTestContext_glx.cpp" ]
+      libs += [ "X11" ]
+    } else if (is_mac) {
+      sources += [ "tools/gpu/gl/mac/CreatePlatformGLTestContext_mac.cpp" ]
+    } else if (is_win) {
+      sources += [ "tools/gpu/gl/win/CreatePlatformGLTestContext_win.cpp" ]
+      libs += [
+        "Gdi32.lib",
+        "OpenGL32.lib",
       ]
-      libs = []
+    }
 
-      if (is_android || skia_use_egl) {
-        sources += [ "tools/gpu/gl/egl/CreatePlatformGLTestContext_egl.cpp" ]
-      } else if (is_ios) {
-        sources += [ "tools/gpu/gl/iOS/CreatePlatformGLTestContext_iOS.mm" ]
-        libs += [ "OpenGLES.framework" ]
-      } else if (is_linux) {
-        sources += [ "tools/gpu/gl/glx/CreatePlatformGLTestContext_glx.cpp" ]
-        libs += [ "X11" ]
-      } else if (is_mac) {
-        sources += [ "tools/gpu/gl/mac/CreatePlatformGLTestContext_mac.cpp" ]
-      } else if (is_win) {
-        sources += [ "tools/gpu/gl/win/CreatePlatformGLTestContext_win.cpp" ]
-        libs += [
-          "Gdi32.lib",
-          "OpenGL32.lib",
-        ]
-      }
+    cflags_objcc = [ "-fobjc-arc" ]
 
-      cflags_objcc = [ "-fobjc-arc" ]
-
-      if (skia_use_angle) {
-        deps += [ "//third_party/angle2" ]
-        sources += [ "tools/gpu/gl/angle/GLTestContext_angle.cpp" ]
-      }
-      if (skia_use_vulkan) {
-        sources += [ "tools/gpu/vk/VkTestContext.cpp" ]
-        sources += [ "tools/gpu/vk/VkTestUtils.cpp" ]
-      }
-      if (skia_use_metal) {
-        sources += [ "tools/gpu/mtl/MtlTestContext.mm" ]
-      }
+    if (skia_use_angle) {
+      deps += [ "//third_party/angle2" ]
+      sources += [ "tools/gpu/gl/angle/GLTestContext_angle.cpp" ]
+    }
+    if (skia_use_vulkan) {
+      sources += [ "tools/gpu/vk/VkTestContext.cpp" ]
+      sources += [ "tools/gpu/vk/VkTestUtils.cpp" ]
+    }
+    if (skia_use_metal) {
+      sources += [ "tools/gpu/mtl/MtlTestContext.mm" ]
     }
   }
 
@@ -1324,6 +1307,8 @@ if (skia_enable_tools) {
     sources = [
       "tools/AndroidSkDebugToStdOut.cpp",
       "tools/CrashHandler.cpp",
+      "tools/DDLPromiseImageHelper.cpp",
+      "tools/DDLTileHelper.cpp",
       "tools/LsanSuppressions.cpp",
       "tools/ProcStats.cpp",
       "tools/Resources.cpp",
@@ -1379,6 +1364,7 @@ if (skia_enable_tools) {
       ":gpu_tool_utils",
       ":skia",
       ":tool_utils",
+      "modules/skottie",
       "modules/sksg",
     ]
   }
@@ -1394,7 +1380,6 @@ if (skia_enable_tools) {
       ":experimental_svg_model",
       ":flags",
       ":skia",
-      ":third_party_skcms",
       ":tool_utils",
       "modules/sksg:tests",
       "//third_party/libpng",
@@ -1474,7 +1459,7 @@ if (skia_enable_tools) {
         "src/utils/SkLuaCanvas.cpp",
       ]
       deps = [
-        ":skshaper",
+        "modules/skshaper",
         "//third_party/lua",
       ]
     }
@@ -1535,11 +1520,11 @@ if (skia_enable_tools) {
         ":experimental_svg_model",
         ":flags",
         ":gm",
-        ":skshaper",
         ":tool_utils",
         ":views",
         ":xml",
         "modules/sksg:samples",
+        "modules/skshaper",
       ]
 
       if (skia_use_lua) {
@@ -1566,7 +1551,6 @@ if (skia_enable_tools) {
         ":gpu_tool_utils",
         ":skia",
         ":tests",
-        ":third_party_skcms",
         ":tool_utils",
         "modules/skottie",
         "modules/sksg",
@@ -1615,47 +1599,25 @@ if (skia_enable_tools) {
     ]
   }
 
-  if (skia_enable_gpu) {
-    test_app("skpbench") {
-      sources = [
-        "tools/skpbench/skpbench.cpp",
-      ]
-      deps = [
-        ":flags",
-        ":gpu_tool_utils",
-        ":skia",
-        ":tool_utils",
-      ]
-    }
-  }
-
-  test_lib("skshaper") {
-    public_include_dirs = [ "tools/shape" ]
-    deps = [
-      ":skia",
+  test_app("skpbench") {
+    sources = [
+      "tools/skpbench/skpbench.cpp",
     ]
-
-    if (target_cpu == "wasm") {
-      sources = [
-        "tools/shape/SkShaper_primitive.cpp",
-      ]
-    } else {
-      sources = [
-        "tools/shape/SkShaper_harfbuzz.cpp",
-      ]
-      deps += [
-        "//third_party/harfbuzz",
-        "//third_party/icu",
-      ]
-    }
+    deps = [
+      ":flags",
+      ":gpu_tool_utils",
+      ":skia",
+      ":tool_utils",
+    ]
   }
+
   test_app("sktexttopdf") {
     sources = [
-      "tools/shape/using_skia_and_harfbuzz.cpp",
+      "tools/using_skia_and_harfbuzz.cpp",
     ]
     deps = [
       ":skia",
-      ":skshaper",
+      "modules/skshaper",
     ]
   }
 
@@ -1825,7 +1787,7 @@ if (skia_enable_tools) {
     ]
   }
 
-  if (!is_win && skia_enable_gpu) {
+  if (!is_win) {
     test_lib("skqp_lib") {
       public_include_dirs = [ "tools/skqp" ]
       defines =
@@ -1858,7 +1820,7 @@ if (skia_enable_tools) {
       ]
     }
   }
-  if (is_android && skia_enable_gpu) {
+  if (is_android) {
     test_app("skqp_app") {
       is_shared_library = true
       sources = [
@@ -1893,138 +1855,134 @@ if (skia_enable_tools) {
     ]
   }
 
-  if (skia_enable_gpu) {
-    test_lib("sk_app") {
-      public_include_dirs = [ "tools/sk_app" ]
-      sources = [
-        "tools/sk_app/CommandSet.cpp",
-        "tools/sk_app/GLWindowContext.cpp",
-        "tools/sk_app/Window.cpp",
+  test_lib("sk_app") {
+    public_include_dirs = [ "tools/sk_app" ]
+    sources = [
+      "tools/sk_app/CommandSet.cpp",
+      "tools/sk_app/GLWindowContext.cpp",
+      "tools/sk_app/Window.cpp",
+    ]
+    libs = []
+
+    if (is_android) {
+      sources += [
+        "tools/sk_app/android/GLWindowContext_android.cpp",
+        "tools/sk_app/android/RasterWindowContext_android.cpp",
+        "tools/sk_app/android/Window_android.cpp",
+        "tools/sk_app/android/main_android.cpp",
+        "tools/sk_app/android/surface_glue_android.cpp",
       ]
-      libs = []
-
-      if (is_android) {
-        sources += [
-          "tools/sk_app/android/GLWindowContext_android.cpp",
-          "tools/sk_app/android/RasterWindowContext_android.cpp",
-          "tools/sk_app/android/Window_android.cpp",
-          "tools/sk_app/android/main_android.cpp",
-          "tools/sk_app/android/surface_glue_android.cpp",
-        ]
-        libs += [ "android" ]
-      } else if (is_linux) {
-        sources += [
-          "tools/sk_app/unix/GLWindowContext_unix.cpp",
-          "tools/sk_app/unix/RasterWindowContext_unix.cpp",
-          "tools/sk_app/unix/Window_unix.cpp",
-          "tools/sk_app/unix/keysym2ucs.c",
-          "tools/sk_app/unix/main_unix.cpp",
-        ]
-        libs += [
-          "GL",
-          "X11",
-        ]
-      } else if (is_win) {
-        sources += [
-          "tools/sk_app/win/GLWindowContext_win.cpp",
-          "tools/sk_app/win/RasterWindowContext_win.cpp",
-          "tools/sk_app/win/Window_win.cpp",
-          "tools/sk_app/win/main_win.cpp",
-        ]
-        if (skia_use_angle) {
-          sources += [ "tools/sk_app/win/ANGLEWindowContext_win.cpp" ]
-        }
-      } else if (is_mac) {
-        sources += [
-          "tools/sk_app/mac/GLWindowContext_mac.cpp",
-          "tools/sk_app/mac/RasterWindowContext_mac.cpp",
-          "tools/sk_app/mac/Window_mac.cpp",
-          "tools/sk_app/mac/main_mac.cpp",
-        ]
-        libs += [
-          "QuartzCore.framework",
-          "Cocoa.framework",
-          "Foundation.framework",
-        ]
-      } else if (is_ios) {
-        sources += [
-          "tools/sk_app/ios/GLWindowContext_ios.cpp",
-          "tools/sk_app/ios/RasterWindowContext_ios.cpp",
-          "tools/sk_app/ios/Window_ios.cpp",
-          "tools/sk_app/ios/main_ios.cpp",
-        ]
-      }
-
-      if (skia_use_vulkan) {
-        sources += [ "tools/sk_app/VulkanWindowContext.cpp" ]
-        if (is_android) {
-          sources += [ "tools/sk_app/android/VulkanWindowContext_android.cpp" ]
-        } else if (is_linux) {
-          sources += [ "tools/sk_app/unix/VulkanWindowContext_unix.cpp" ]
-          libs += [ "X11-xcb" ]
-        } else if (is_win) {
-          sources += [ "tools/sk_app/win/VulkanWindowContext_win.cpp" ]
-        }
-      }
-
-      deps = [
-        ":gpu_tool_utils",
-        ":skia",
-        ":tool_utils",
-        ":views",
+      libs += [ "android" ]
+    } else if (is_linux) {
+      sources += [
+        "tools/sk_app/unix/GLWindowContext_unix.cpp",
+        "tools/sk_app/unix/RasterWindowContext_unix.cpp",
+        "tools/sk_app/unix/Window_unix.cpp",
+        "tools/sk_app/unix/keysym2ucs.c",
+        "tools/sk_app/unix/main_unix.cpp",
       ]
-      if (is_android) {
-        deps += [ "//third_party/native_app_glue" ]
-      } else if (is_mac || is_ios) {
-        deps += [ "//third_party/libsdl" ]
-      }
+      libs += [
+        "GL",
+        "X11",
+      ]
+    } else if (is_win) {
+      sources += [
+        "tools/sk_app/win/GLWindowContext_win.cpp",
+        "tools/sk_app/win/RasterWindowContext_win.cpp",
+        "tools/sk_app/win/Window_win.cpp",
+        "tools/sk_app/win/main_win.cpp",
+      ]
       if (skia_use_angle) {
-        deps += [ "//third_party/angle2" ]
+        sources += [ "tools/sk_app/win/ANGLEWindowContext_win.cpp" ]
       }
+    } else if (is_mac) {
+      sources += [
+        "tools/sk_app/mac/GLWindowContext_mac.cpp",
+        "tools/sk_app/mac/RasterWindowContext_mac.cpp",
+        "tools/sk_app/mac/Window_mac.cpp",
+        "tools/sk_app/mac/main_mac.cpp",
+      ]
+      libs += [
+        "QuartzCore.framework",
+        "Cocoa.framework",
+        "Foundation.framework",
+      ]
+    } else if (is_ios) {
+      sources += [
+        "tools/sk_app/ios/GLWindowContext_ios.cpp",
+        "tools/sk_app/ios/RasterWindowContext_ios.cpp",
+        "tools/sk_app/ios/Window_ios.cpp",
+        "tools/sk_app/ios/main_ios.cpp",
+      ]
+    }
+
+    if (skia_use_vulkan) {
+      sources += [ "tools/sk_app/VulkanWindowContext.cpp" ]
+      if (is_android) {
+        sources += [ "tools/sk_app/android/VulkanWindowContext_android.cpp" ]
+      } else if (is_linux) {
+        sources += [ "tools/sk_app/unix/VulkanWindowContext_unix.cpp" ]
+        libs += [ "X11-xcb" ]
+      } else if (is_win) {
+        sources += [ "tools/sk_app/win/VulkanWindowContext_win.cpp" ]
+      }
+    }
+
+    deps = [
+      ":gpu_tool_utils",
+      ":skia",
+      ":tool_utils",
+      ":views",
+    ]
+    if (is_android) {
+      deps += [ "//third_party/native_app_glue" ]
+    } else if (is_mac || is_ios) {
+      deps += [ "//third_party/libsdl" ]
+    }
+    if (skia_use_angle) {
+      deps += [ "//third_party/angle2" ]
     }
   }
 
-  if (skia_enable_gpu) {
-    test_app("viewer") {
-      is_shared_library = is_android
-      if (is_ios) {
-        bundle_ios_data = true
-      }
-      sources = [
-        "tools/viewer/BisectSlide.cpp",
-        "tools/viewer/GMSlide.cpp",
-        "tools/viewer/ImGuiLayer.cpp",
-        "tools/viewer/ImageSlide.cpp",
-        "tools/viewer/SKPSlide.cpp",
-        "tools/viewer/SampleSlide.cpp",
-        "tools/viewer/SkottieSlide.cpp",
-        "tools/viewer/SlideDir.cpp",
-        "tools/viewer/StatsLayer.cpp",
-        "tools/viewer/SvgSlide.cpp",
-        "tools/viewer/Viewer.cpp",
-      ]
-      libs = []
-
-      include_dirs = []
-      deps = [
-        ":experimental_svg_model",
-        ":flags",
-        ":gm",
-        ":gpu_tool_utils",
-        ":samples",
-        ":sk_app",
-        ":skia",
-        ":tool_utils",
-        ":views",
-        "modules/skottie",
-        "modules/sksg",
-        "//third_party/imgui",
-        "//third_party/jsoncpp",
-      ]
+  test_app("viewer") {
+    is_shared_library = is_android
+    if (is_ios) {
+      bundle_ios_data = true
     }
+    sources = [
+      "tools/viewer/BisectSlide.cpp",
+      "tools/viewer/GMSlide.cpp",
+      "tools/viewer/ImGuiLayer.cpp",
+      "tools/viewer/ImageSlide.cpp",
+      "tools/viewer/SKPSlide.cpp",
+      "tools/viewer/SampleSlide.cpp",
+      "tools/viewer/SkottieSlide.cpp",
+      "tools/viewer/SlideDir.cpp",
+      "tools/viewer/StatsLayer.cpp",
+      "tools/viewer/SvgSlide.cpp",
+      "tools/viewer/Viewer.cpp",
+    ]
+    libs = []
+
+    include_dirs = []
+    deps = [
+      ":experimental_svg_model",
+      ":flags",
+      ":gm",
+      ":gpu_tool_utils",
+      ":samples",
+      ":sk_app",
+      ":skia",
+      ":tool_utils",
+      ":views",
+      "modules/skottie",
+      "modules/sksg",
+      "//third_party/imgui",
+      "//third_party/jsoncpp",
+    ]
   }
 
-  if (skia_enable_gpu && !skia_use_angle && (is_linux || is_win || is_mac)) {
+  if (!skia_use_angle && (is_linux || is_win || is_mac)) {
     test_app("HelloWorld") {
       sources = [
         "example/HelloWorld.cpp",
@@ -2043,7 +2001,7 @@ if (skia_enable_tools) {
     }
   }
 
-  if (skia_enable_gpu && (is_linux || is_mac || is_ios)) {
+  if (is_linux || is_mac || is_ios) {
     test_app("SkiaSDLExample") {
       sources = [
         "example/SkiaSDLExample.cpp",

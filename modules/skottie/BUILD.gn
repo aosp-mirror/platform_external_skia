@@ -17,12 +17,19 @@ config("public_config") {
 source_set("skottie") {
   if (skia_enable_skottie) {
     public_configs = [ ":public_config" ]
+    public = [
+      "include/Skottie.h",
+    ]
     sources = [
       "src/Skottie.cpp",
       "src/SkottieAdapter.cpp",
+      "src/SkottieAdapter.h",
       "src/SkottieAnimator.cpp",
+      "src/SkottieAnimator.h",
       "src/SkottieJson.cpp",
+      "src/SkottieJson.h",
       "src/SkottieValue.cpp",
+      "src/SkottieValue.h",
     ]
     configs += [ "../../:skia_private" ]
     deps = [
@@ -41,9 +48,13 @@ source_set("fuzz") {
     sources = [
       "fuzz/FuzzSkottieJSON.cpp",
     ]
+
     deps = [
+      "../..:skia",
+    ]
+
+    public_deps = [
       ":skottie",
-      "../..:skia",  # TODO: refactor to make this nicer
     ]
   }
 }

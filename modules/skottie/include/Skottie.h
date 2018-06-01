@@ -42,15 +42,33 @@ public:
                fAnimatorCount;
     };
 
-    static sk_sp<Animation> Make(SkStream*, const ResourceProvider&, Stats* = nullptr);
+    static sk_sp<Animation> Make(SkStream*, const ResourceProvider* = nullptr, Stats* = nullptr);
     static sk_sp<Animation> MakeFromFile(const char path[], const ResourceProvider* = nullptr,
                                          Stats* = nullptr);
 
     ~Animation() override;
 
-    void render(SkCanvas*, const SkRect* dst = nullptr) const;
+    /**
+     * Draws the current animation frame.
+     *
+     * @param canvas   destination canvas
+     * @param dst      optional destination rect
+     */
+    void render(SkCanvas* canvas, const SkRect* dst = nullptr) const;
 
-    void animationTick(SkMSec);
+    /**
+     * Updates the animation state for |t|.
+     *
+     * @param t   normalized [0..1] frame selector, where 0 == inPoint and 1 == outPoint.
+     */
+    void seek(SkScalar t);
+
+    /**
+     * Returns the animation duration in seconds.
+     */
+    SkScalar duration() const {
+        return (fOutPoint - fInPoint) / fFrameRate;
+    }
 
     const SkString& version() const { return fVersion;   }
     const SkSize&      size() const { return fSize;      }

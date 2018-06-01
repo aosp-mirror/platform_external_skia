@@ -8,8 +8,6 @@
 #include "SkTypes.h"
 #include "Test.h"
 
-#if SK_SUPPORT_GPU
-
 #include <array>
 #include <vector>
 #include "GrCaps.h"
@@ -330,15 +328,15 @@ class GLSLMeshTestProcessor : public GrGLSLGeometryProcessor {
 
         GrGLSLVertexBuilder* v = args.fVertBuilder;
         if (!mp.fInstanceLocation) {
-            v->codeAppendf("float2 vertex = %s;", mp.fVertex->fName);
+            v->codeAppendf("float2 vertex = %s;", mp.fVertex->name());
         } else {
             if (mp.fVertex) {
-                v->codeAppendf("float2 offset = %s;", mp.fVertex->fName);
+                v->codeAppendf("float2 offset = %s;", mp.fVertex->name());
             } else {
                 v->codeAppend ("float2 offset = float2(sk_VertexID / 2, sk_VertexID % 2);");
             }
-            v->codeAppendf("float2 vertex = %s + offset * %i;",
-                           mp.fInstanceLocation->fName, kBoxSize);
+            v->codeAppendf("float2 vertex = %s + offset * %i;", mp.fInstanceLocation->name(),
+                           kBoxSize);
         }
         gpArgs->fPositionVar.set(kFloat2_GrSLType, "vertex");
 
@@ -406,5 +404,3 @@ static void run_test(const char* testName, skiatest::Reporter* reporter,
         }
     }
 }
-
-#endif

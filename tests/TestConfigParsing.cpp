@@ -39,7 +39,6 @@ DEF_TEST(ParseConfigs_Gpu, reporter) {
     REPORTER_ASSERT(reporter, configs.count() == 1);
     REPORTER_ASSERT(reporter, configs[0]->getTag().equals("gl"));
     REPORTER_ASSERT(reporter, configs[0]->getViaParts().count() == 0);
-#if SK_SUPPORT_GPU
     REPORTER_ASSERT(reporter, configs[0]->asConfigGpu());
     REPORTER_ASSERT(reporter, configs[0]->asConfigGpu()->getContextType() ==
                                       GrContextFactory::kGL_ContextType);
@@ -50,7 +49,6 @@ DEF_TEST(ParseConfigs_Gpu, reporter) {
     REPORTER_ASSERT(reporter, configs[0]->asConfigGpu()->getColorSpace() == nullptr);
     REPORTER_ASSERT(reporter, configs[0]->asConfigGpu()->getSurfType() ==
                                       SkCommandLineConfigGpu::SurfType::kDefault);
-#endif
 }
 
 DEF_TEST(ParseConfigs_OutParam, reporter) {
@@ -105,8 +103,6 @@ DEF_TEST(ParseConfigs_DefaultConfigs, reporter) {
         "glsrgb",
         "glmsaa4",
         "vk",
-        "glwide",
-        "glnarrow",
         "glnostencils",
         "mock",
         "mtl",
@@ -127,7 +123,6 @@ DEF_TEST(ParseConfigs_DefaultConfigs, reporter) {
         REPORTER_ASSERT(reporter, configs[i]->getTag().equals(config1[i]));
         REPORTER_ASSERT(reporter, configs[i]->getViaParts().count() == 0);
     }
-#if SK_SUPPORT_GPU
     REPORTER_ASSERT(reporter, !configs[0]->asConfigGpu());
     REPORTER_ASSERT(reporter, !configs[1]->asConfigGpu());
     REPORTER_ASSERT(reporter, configs[2]->asConfigGpu());
@@ -176,41 +171,29 @@ DEF_TEST(ParseConfigs_DefaultConfigs, reporter) {
 #ifdef SK_VULKAN
     REPORTER_ASSERT(reporter, configs[28]->asConfigGpu());
 #endif
-    REPORTER_ASSERT(reporter, configs[29]->asConfigGpu()->getColorType() == kRGBA_F16_SkColorType);
-    REPORTER_ASSERT(reporter, configs[29]->asConfigGpu()->getColorSpace());
-    REPORTER_ASSERT(reporter, configs[29]->asConfigGpu()->getColorSpace()->gammaIsLinear());
-    const SkMatrix44* config41XYZ = configs[29]->asConfigGpu()->getColorSpace()->toXYZD50();
-    SkASSERT(config41XYZ);
-    REPORTER_ASSERT(reporter, *config41XYZ != *srgbXYZ);
-    REPORTER_ASSERT(reporter, configs[30]->asConfigGpu()->getColorType() == kRGBA_F16_SkColorType);
-    REPORTER_ASSERT(reporter, configs[30]->asConfigGpu()->getColorSpace());
-    REPORTER_ASSERT(reporter, configs[30]->asConfigGpu()->getColorSpace()->gammaIsLinear());
-    REPORTER_ASSERT(reporter, *configs[30]->asConfigGpu()->getColorSpace()->toXYZD50() !=
-                    *srgbColorSpace->toXYZD50());
-    REPORTER_ASSERT(reporter, configs[31]->asConfigGpu()->getContextType() ==
+    REPORTER_ASSERT(reporter, configs[29]->asConfigGpu()->getContextType() ==
                               GrContextFactory::kGL_ContextType);
-    REPORTER_ASSERT(reporter, SkToBool(configs[31]->asConfigGpu()->getContextOverrides() &
+    REPORTER_ASSERT(reporter, SkToBool(configs[29]->asConfigGpu()->getContextOverrides() &
                               SkCommandLineConfigGpu::ContextOverrides::kAvoidStencilBuffers));
-    REPORTER_ASSERT(reporter, configs[32]->asConfigGpu()->getContextType() ==
+    REPORTER_ASSERT(reporter, configs[30]->asConfigGpu()->getContextType() ==
                               GrContextFactory::kMock_ContextType);
 
-    REPORTER_ASSERT(reporter, configs[34]->asConfigGpu()->getContextType() ==
+    REPORTER_ASSERT(reporter, configs[32]->asConfigGpu()->getContextType() ==
                               GrContextFactory::kGL_ContextType);
-    REPORTER_ASSERT(reporter, configs[34]->asConfigGpu()->getColorType() == kARGB_4444_SkColorType);
-    REPORTER_ASSERT(reporter, configs[34]->asConfigGpu()->getAlphaType() == kPremul_SkAlphaType);
-    REPORTER_ASSERT(reporter, configs[35]->asConfigGpu()->getContextType() ==
+    REPORTER_ASSERT(reporter, configs[32]->asConfigGpu()->getColorType() == kARGB_4444_SkColorType);
+    REPORTER_ASSERT(reporter, configs[32]->asConfigGpu()->getAlphaType() == kPremul_SkAlphaType);
+    REPORTER_ASSERT(reporter, configs[33]->asConfigGpu()->getContextType() ==
                               GrContextFactory::kGL_ContextType);
-    REPORTER_ASSERT(reporter, configs[35]->asConfigGpu()->getColorType() == kRGB_565_SkColorType);
-    REPORTER_ASSERT(reporter, configs[35]->asConfigGpu()->getAlphaType() == kOpaque_SkAlphaType);
-    REPORTER_ASSERT(reporter, configs[36]->asConfigGpu());
-    REPORTER_ASSERT(reporter, configs[36]->asConfigGpu()->getTestThreading());
-    REPORTER_ASSERT(reporter, configs[37]->asConfigGpu());
-    REPORTER_ASSERT(reporter, configs[37]->asConfigGpu()->getColorType() ==
+    REPORTER_ASSERT(reporter, configs[33]->asConfigGpu()->getColorType() == kRGB_565_SkColorType);
+    REPORTER_ASSERT(reporter, configs[33]->asConfigGpu()->getAlphaType() == kOpaque_SkAlphaType);
+    REPORTER_ASSERT(reporter, configs[34]->asConfigGpu());
+    REPORTER_ASSERT(reporter, configs[34]->asConfigGpu()->getTestThreading());
+    REPORTER_ASSERT(reporter, configs[35]->asConfigGpu());
+    REPORTER_ASSERT(reporter, configs[35]->asConfigGpu()->getColorType() ==
                               kRGBA_1010102_SkColorType);
-    REPORTER_ASSERT(reporter, configs[38]->asConfigGpu());
-    REPORTER_ASSERT(reporter, configs[38]->asConfigGpu()->getSurfType() ==
+    REPORTER_ASSERT(reporter, configs[36]->asConfigGpu());
+    REPORTER_ASSERT(reporter, configs[36]->asConfigGpu()->getSurfType() ==
                                       SkCommandLineConfigGpu::SurfType::kBackendRenderTarget);
-#endif
 }
 
 DEF_TEST(ParseConfigs_ExtendedGpuConfigsCorrect, reporter) {
@@ -233,7 +216,6 @@ DEF_TEST(ParseConfigs_ExtendedGpuConfigsCorrect, reporter) {
     for (int i = 0; i < config1.count(); ++i) {
         REPORTER_ASSERT(reporter, configs[i]->getTag().equals(config1[i]));
     }
-#if SK_SUPPORT_GPU
     REPORTER_ASSERT(reporter, configs[0]->asConfigGpu()->getContextType() ==
                     GrContextFactory::kGL_ContextType);
     REPORTER_ASSERT(reporter, configs[0]->asConfigGpu()->getUseNVPR());
@@ -276,7 +258,6 @@ DEF_TEST(ParseConfigs_ExtendedGpuConfigsCorrect, reporter) {
                    GrContextFactory::kMock_ContextType);
     REPORTER_ASSERT(reporter, configs[9]->asConfigGpu()->getSurfType() ==
                                       SkCommandLineConfigGpu::SurfType::kBackendTexture);
-#endif
 }
 
 DEF_TEST(ParseConfigs_ExtendedGpuConfigsIncorrect, reporter) {
@@ -303,9 +284,7 @@ DEF_TEST(ParseConfigs_ExtendedGpuConfigsIncorrect, reporter) {
     for (int i = 0; i < config1.count(); ++i) {
         REPORTER_ASSERT(reporter, configs[i]->getTag().equals(config1[i]));
         REPORTER_ASSERT(reporter, configs[i]->getBackend().equals(config1[i]));
-#if SK_SUPPORT_GPU
         REPORTER_ASSERT(reporter, !configs[i]->asConfigGpu());
-#endif
     }
 }
 
@@ -322,16 +301,11 @@ DEF_TEST(ParseConfigs_ExtendedGpuConfigsSurprises, reporter) {
     REPORTER_ASSERT(reporter, configs.count() == config1.count());
     for (int i = 0; i < config1.count(); ++i) {
         REPORTER_ASSERT(reporter, configs[i]->getTag().equals(config1[i]));
-#if SK_SUPPORT_GPU
         REPORTER_ASSERT(reporter, configs[i]->getBackend().equals("gpu"));
         REPORTER_ASSERT(reporter, configs[i]->asConfigGpu());
-#else
-        REPORTER_ASSERT(reporter, configs[i]->getBackend().equals(config1[i]));
-#endif
     }
 }
 
-#if SK_SUPPORT_GPU
 DEF_TEST(ParseConfigs_ViaParsing, reporter) {
     SkCommandLineFlags::StringArray config1 = make_string_array({
         "a-b-c-8888",
@@ -362,7 +336,6 @@ DEF_TEST(ParseConfigs_ViaParsing, reporter) {
         }
     }
 }
-#endif
 
 DEF_TEST(ParseConfigs_ViaParsingExtendedForm, reporter) {
     SkCommandLineFlags::StringArray config1 = make_string_array({
@@ -378,13 +351,8 @@ DEF_TEST(ParseConfigs_ViaParsingExtendedForm, reporter) {
         const char* backend;
         const char* vias[3];
     } expectedConfigs[] = {
-#if SK_SUPPORT_GPU
         {"gpu", {"zz", "qq", nullptr}},
         {"gpu", {"abc", "nbc", "cbs"}},
-#else
-        {"gpu[api=gles]", {"zz", "qq", nullptr}},
-        {"gpu[api=angle_d3d9_es2,samples=1]", {"abc", "nbc", "cbs"}},
-#endif
         {"gpu[api=gl", {"a", nullptr, nullptr}}, // Missing bracket makes this is not extended
                                                  // form but via still works as expected.
         {"angle_gl_es2[api=gles]", {"abc", "def", nullptr}}  // This is not extended form.
@@ -404,10 +372,8 @@ DEF_TEST(ParseConfigs_ViaParsingExtendedForm, reporter) {
                             configs[i]->getViaParts()[j].equals(expectedConfigs[i].vias[j]));
         }
     }
-#if SK_SUPPORT_GPU
     REPORTER_ASSERT(reporter, configs[0]->asConfigGpu());
     REPORTER_ASSERT(reporter, configs[1]->asConfigGpu());
     REPORTER_ASSERT(reporter, !configs[2]->asConfigGpu());
     REPORTER_ASSERT(reporter, !configs[3]->asConfigGpu());
-#endif
 }

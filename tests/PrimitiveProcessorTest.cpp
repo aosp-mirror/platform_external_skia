@@ -10,7 +10,6 @@
 #include "SkTypes.h"
 #include "Test.h"
 
-#if SK_SUPPORT_GPU
 #include "GrContext.h"
 #include "GrContextPriv.h"
 #include "GrGeometryProcessor.h"
@@ -73,7 +72,8 @@ private:
                     void onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) override {
                         const GP& gp = args.fGP.cast<GP>();
                         args.fVaryingHandler->emitAttributes(gp);
-                        this->writeOutputPosition(args.fVertBuilder, gpArgs, gp.getAttrib(0).fName);
+                        this->writeOutputPosition(args.fVertBuilder, gpArgs,
+                                                  gp.getAttrib(0).name());
                         GrGLSLFPFragmentBuilder* fragBuilder = args.fFragBuilder;
                         fragBuilder->codeAppendf("%s = half4(1);", args.fOutputColor);
                         fragBuilder->codeAppendf("%s = half4(1);", args.fOutputCoverage);
@@ -154,4 +154,3 @@ DEF_GPUTEST_FOR_ALL_CONTEXTS(VertexAttributeCount, reporter, ctxInfo) {
     REPORTER_ASSERT(reporter, gpu->stats()->numFailedDraws() == 1);
 #endif
 }
-#endif

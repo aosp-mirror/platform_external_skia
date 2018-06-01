@@ -8,8 +8,6 @@
 #include "SkTypes.h"
 #include "Test.h"
 
-#if SK_SUPPORT_GPU
-
 #include "GrContext.h"
 #include "GrColor.h"
 #include "GrGeometryProcessor.h"
@@ -90,7 +88,7 @@ class GLSLPipelineDynamicStateTestProcessor : public GrGLSLGeometryProcessor {
         varyingHandler->addPassThroughAttribute(&mp.fColor, args.fOutputColor);
 
         GrGLSLVertexBuilder* v = args.fVertBuilder;
-        v->codeAppendf("float2 vertex = %s;", mp.fVertex.fName);
+        v->codeAppendf("float2 vertex = %s;", mp.fVertex.name());
         gpArgs->fPositionVar.set(kFloat2_GrSLType, "vertex");
 
         GrGLSLFPFragmentBuilder* f = args.fFragBuilder;
@@ -218,5 +216,3 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(GrPipelineDynamicStateTest, reporter, ctxInfo
         }
     }
 }
-
-#endif

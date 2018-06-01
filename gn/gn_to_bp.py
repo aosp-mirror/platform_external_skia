@@ -247,9 +247,13 @@ gn_to_bp_utils.GrabDependentValues(js, '//:nanobench', 'sources',
                                    nanobench_srcs, 'skia')
 
 # skcms is a little special, kind of a second-party library.
-srcs          .add("third_party/skcms/skcms.c")
 local_includes.add("third_party/skcms")
 dm_includes   .add("third_party/skcms")
+
+# need to manually include the vulkanmemoryallocator headers. If HWUI ever needs
+# direct access to the allocator we need to add it to export_includes as well.
+srcs.add("third_party/vulkanmemoryallocator/GrVulkanMemoryAllocator.cpp")
+local_includes.add("third_party/vulkanmemoryallocator/")
 
 # No need to list headers.
 srcs            = {s for s in srcs           if not s.endswith('.h')}

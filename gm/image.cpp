@@ -16,9 +16,7 @@
 #include "SkStream.h"
 #include "SkSurface.h"
 
-#if SK_SUPPORT_GPU
 #include "GrContext.h"
-#endif
 
 static void drawContents(SkSurface* surface, SkColor fillC) {
     SkSize size = SkSize::Make(SkIntToScalar(surface->width()),
@@ -152,11 +150,8 @@ protected:
         SkImageInfo info = SkImageInfo::MakeN32Premul(W, H);
         sk_sp<SkSurface> surf0(SkSurface::MakeRasterDirect(info, fBuffer, RB));
         sk_sp<SkSurface> surf1(SkSurface::MakeRaster(info));
-        sk_sp<SkSurface> surf2;  // gpu
-
-#if SK_SUPPORT_GPU
-        surf2 = SkSurface::MakeRenderTarget(canvas->getGrContext(), SkBudgeted::kNo, info);
-#endif
+        sk_sp<SkSurface> surf2(SkSurface::MakeRenderTarget(canvas->getGrContext(),
+                                                           SkBudgeted::kNo, info));
 
         test_surface(canvas, surf0.get(), true);
         canvas->translate(80, 0);
@@ -398,4 +393,37 @@ DEF_SIMPLE_GM(scalepixels_unpremul, canvas, 1080, 280) {
         draw_pixmap(canvas, pm2, 10, 10);
         canvas->translate(pm2.width() + 10.0f, 0);
     }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+static sk_sp<SkImage> make_lazy_image(SkSurface* surf) {
+    surf->getCanvas()->drawCircle(100, 100, 100, SkPaint());
+    auto data = surf->makeImageSnapshot()->encodeToData();
+    return SkImage::MakeFromEncoded(data);
+}
+
+#include "SkWriteBuffer.h"
+#include "SkReadBuffer.h"
+static sk_sp<SkImage> serial_deserial(SkImage* img) {
+    SkBinaryWriteBuffer writer;
+    writer.writeImage(img);
+    size_t length = writer.bytesWritten();
+    auto data = SkData::MakeUninitialized(length);
+    writer.writeToMemory(data->writable_data());
+
+    SkReadBuffer reader(data->data(), length);
+    return reader.readImage();
+}
+
+DEF_SIMPLE_GM(image_subset, canvas, 440, 220) {
+    SkImageInfo info = SkImageInfo::MakeN32Premul(200, 200, nullptr);
+    auto surf = sk_tool_utils::makeSurface(canvas, info, nullptr);
+    auto img = make_lazy_image(surf.get());
+
+    canvas->drawImage(img, 10, 10, nullptr);
+    auto sub = img->makeSubset({100, 100, 200, 200});
+    canvas->drawImage(sub, 220, 10);
+    sub = serial_deserial(sub.get());
+    canvas->drawImage(sub, 220+110, 10);
 }
