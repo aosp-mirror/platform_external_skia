@@ -165,12 +165,6 @@ private:
     GrBuffer* onCreateBuffer(size_t size, GrBufferType type, GrAccessPattern,
                              const void* data) override;
 
-    bool onGetReadPixelsInfo(GrSurface*, GrSurfaceOrigin, int width, int height, size_t rowBytes,
-                             GrColorType, DrawPreference*, ReadPixelTempDrawInfo*) override;
-
-    bool onGetWritePixelsInfo(GrSurface*, GrSurfaceOrigin, int width, int height, GrColorType,
-                              DrawPreference*, WritePixelTempDrawInfo*) override;
-
     bool onReadPixels(GrSurface* surface, GrSurfaceOrigin, int left, int top, int width, int height,
                       GrColorType, void* buffer, size_t rowBytes) override;
 
