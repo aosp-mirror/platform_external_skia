@@ -62,7 +62,7 @@ using AssetMap = SkTHashMap<SkString, AssetInfo>;
 struct AttachContext {
     const ResourceProvider& fResources;
     const AssetMap&         fAssets;
-    const float             fFrameRate;
+    const float             fDuration;
     sksg::AnimatorList&     fAnimators;
 };
 
@@ -724,21 +724,21 @@ sk_sp<sksg::RenderNode> AttachNestedAnimation(const char* path, AttachContext* c
 
     class SkottieAnimatorAdapter final : public sksg::Animator {
     public:
-        SkottieAnimatorAdapter(sk_sp<Animation> animation, float frameRate)
+        SkottieAnimatorAdapter(sk_sp<Animation> animation, float time_scale)
             : fAnimation(std::move(animation))
-            , fFrameRate(frameRate) {
+            , fTimeScale(time_scale) {
             SkASSERT(fAnimation);
-            SkASSERT(fFrameRate > 0);
         }
 
     protected:
         void onTick(float t) {
-            fAnimation->seek(t * fFrameRate / fAnimation->frameRate());
+            // TODO: we prolly need more sophisticated timeline mapping for nested animations.
+            fAnimation->seek(t * fTimeScale);
         }
 
     private:
         const sk_sp<Animation> fAnimation;
-        const float            fFrameRate;
+        const float            fTimeScale;
     };
 
     const auto resStream  = ctx->fResources.openStream(path);
@@ -753,8 +753,10 @@ sk_sp<sksg::RenderNode> AttachNestedAnimation(const char* path, AttachContext* c
         return nullptr;
     }
 
-    ctx->fAnimators.push_back(skstd::make_unique<SkottieAnimatorAdapter>(animation,
-                                                                         ctx->fFrameRate));
+
+    ctx->fAnimators.push_back(
+        skstd::make_unique<SkottieAnimatorAdapter>(animation,
+                                                   animation->duration() / ctx->fDuration));
 
     return sk_make_sp<SkottieSGAdapter>(std::move(animation));
 }
@@ -1051,7 +1053,7 @@ sk_sp<sksg::RenderNode> AttachLayer(const json::ValueRef& jlayer, AttachLayerCon
     sksg::AnimatorList layer_animators;
     AttachContext local_ctx = { layerCtx->fCtx->fResources,
                                 layerCtx->fCtx->fAssets,
-                                layerCtx->fCtx->fFrameRate,
+                                layerCtx->fCtx->fDuration,
                                 layer_animators};
 
     // Layer attachers may adjust these.
@@ -1229,7 +1231,7 @@ sk_sp<Animation> Animation::Make(SkStream* stream, const ResourceProvider* provi
         std::unique_ptr<SkStream> openStream(const char[]) const { return nullptr; }
     };
 
-    const NullResourceProvider null_provider;
+    NullResourceProvider null_provider;
     const auto anim = sk_sp<Animation>(new Animation(provider ? *provider : null_provider,
                                                      std::move(version), size, fps, json, stats));
     const auto t2 = SkTime::GetMSecs();
@@ -1283,7 +1285,7 @@ Animation::Animation(const ResourceProvider& resources,
     }
 
     sksg::AnimatorList animators;
-    AttachContext ctx = { resources, assets, fFrameRate, animators };
+    AttachContext ctx = { resources, assets, this->duration(), animators };
     auto root = AttachComposition(json, &ctx);
 
     stats->fAnimatorCount = animators.size();
