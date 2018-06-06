@@ -1749,7 +1749,6 @@ cc_test {
         "tests/TemplatesTest.cpp",
         "tests/TessellatingPathRendererTests.cpp",
         "tests/Test.cpp",
-        "tests/TestConfigParsing.cpp",
         "tests/TestTest.cpp",
         "tests/TestUtils.cpp",
         "tests/TextBlobCacheTest.cpp",
