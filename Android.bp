@@ -2012,7 +2012,6 @@ cc_test {
         "bench/WritePixelsBench.cpp",
         "bench/WriterBench.cpp",
         "bench/nanobench.cpp",
-        "bench/pack_int_uint16_t_Bench.cpp",
         "experimental/svg/model/SkSVGAttribute.cpp",
         "experimental/svg/model/SkSVGAttributeParser.cpp",
         "experimental/svg/model/SkSVGCircle.cpp",
