@@ -8,8 +8,6 @@
 #ifndef SkArenaAlloc_DEFINED
 #define SkArenaAlloc_DEFINED
 
-#include "SkRefCnt.h"
-#include "SkTFitsIn.h"
 #include "SkTypes.h"
 #include <cstddef>
 #include <new>
@@ -28,14 +26,14 @@
 // Examples:
 //
 //   char block[mostCasesSize];
-//   SkArenaAlloc arena(block, almostAllCasesSize);
+//   SkArenaAlloc arena(block, mostCasesSize);
 //
 // If mostCasesSize is too large for the stack, you can use the following pattern.
 //
 //   std::unique_ptr<char[]> block{new char[mostCasesSize]};
 //   SkArenaAlloc arena(block.get(), mostCasesSize, almostAllCasesSize);
 //
-// If the program only sometimes allocates memory, use the following.
+// If the program only sometimes allocates memory, use the following pattern.
 //
 //   SkArenaAlloc arena(nullptr, 0, almostAllCasesSize);
 //
@@ -44,7 +42,7 @@
 //
 //   class Foo {
 //       char storage[mostCasesSize];
-//       SkArenaAlloc arena (storage, almostAllCasesSize);
+//       SkArenaAlloc arena (storage, mostCasesSize);
 //   };
 //
 // In addition, the system is optimized to handle POD data including arrays of PODs (where
@@ -53,25 +51,16 @@
 // For arrays of non-POD objects there is a per array overhead of typically 8 bytes. There is an
 // addition overhead when switching from POD data to non-POD data of typically 8 bytes.
 //
-// You can track memory use by adding SkArenaAlloc::kTrack as the last parameter to any constructor.
-//
-//   char storage[someNumber];
-//   SkArenaAlloc alloc{storage, SkArenaAlloc::kTrack};
-//
-// This will print out a line for every destructor or reset call that has the total memory
-// allocated, the total slop (the unused portion of a block), and the slop of the last block.
-//
 // If additional blocks are needed they are increased exponentially. This strategy bounds the
 // recursion of the RunDtorsOnBlock to be limited to O(log size-of-memory). Block size grow using
 // the Fibonacci sequence which means that for 2^32 memory there are 48 allocations, and for 2^48
 // there are 71 allocations.
 class SkArenaAlloc {
 public:
-    enum Tracking {kDontTrack, kTrack};
-    SkArenaAlloc(char* block, size_t size, size_t, Tracking tracking = kDontTrack);
+    SkArenaAlloc(char* block, size_t blockSize, size_t extraSize);
 
-    SkArenaAlloc(size_t extraSize, Tracking tracking = kDontTrack)
-        : SkArenaAlloc(nullptr, 0, extraSize, tracking)
+    SkArenaAlloc(size_t extraSize)
+        : SkArenaAlloc(nullptr, 0, extraSize)
     {}
 
     ~SkArenaAlloc();
@@ -81,7 +70,7 @@ public:
         uint32_t size      = SkTo<uint32_t>(sizeof(T));
         uint32_t alignment = SkTo<uint32_t>(alignof(T));
         char* objStart;
-        if (skstd::is_trivially_destructible<T>::value) {
+        if (std::is_trivially_destructible<T>::value) {
             objStart = this->allocObject(size, alignment);
             fCursor = objStart + size;
         } else {
@@ -101,15 +90,6 @@ public:
 
         // This must be last to make objects with nested use of this allocator work.
         return new(objStart) T(std::forward<Args>(args)...);
-    }
-
-    template <typename T, typename... Args>
-    sk_sp<T> makeSkSp(Args&&... args) {
-        SkASSERT(SkTFitsIn<uint32_t>(sizeof(T)));
-
-        // The arena takes a ref for itself to account for the destructor. The sk_sp count can't
-        // become zero or the sk_sp will try to call free on the pointer.
-        return sk_sp<T>(SkRef(this->make<T>(std::forward<Args>(args)...)));
     }
 
     template <typename T>
@@ -184,7 +164,7 @@ private:
         uint32_t arraySize = SkTo<uint32_t>(count * sizeof(T));
         uint32_t alignment = SkTo<uint32_t>(alignof(T));
 
-        if (skstd::is_trivially_destructible<T>::value) {
+        if (std::is_trivially_destructible<T>::value) {
             objStart = this->allocObject(arraySize, alignment);
             fCursor = objStart + arraySize;
         } else {
@@ -224,10 +204,6 @@ private:
     const uint32_t fFirstSize;
     const uint32_t fExtraSize;
 
-    // Track some useful stats. Track stats if fTotalSlop is >= 0;
-    uint32_t       fTotalAlloc { 0};
-    int32_t        fTotalSlop  {-1};
-
     // Use the Fibonacci sequence as the growth factor for block size. The size of the block
     // allocated is fFib0 * fExtraSize. Using 2 ^ n * fExtraSize had too much slop for Android.
     uint32_t       fFib0 {1}, fFib1 {1};
@@ -238,8 +214,8 @@ private:
 template <size_t InlineStorageSize>
 class SkSTArenaAlloc : public SkArenaAlloc {
 public:
-    explicit SkSTArenaAlloc(size_t extraSize = InlineStorageSize, Tracking tracking = kDontTrack)
-        : INHERITED(fInlineStorage, InlineStorageSize, extraSize, tracking) {}
+    explicit SkSTArenaAlloc(size_t extraSize = InlineStorageSize)
+        : INHERITED(fInlineStorage, InlineStorageSize, extraSize) {}
 
 private:
     char fInlineStorage[InlineStorageSize];

@@ -44,9 +44,6 @@ public:
 
     static std::unique_ptr<GrTextContext> Make(const Options& options);
 
-    void drawText(GrContext*, GrTextUtils::Target*, const GrClip&, const SkPaint&,
-                  const SkMatrix& viewMatrix, const SkSurfaceProps&, const char text[],
-                  size_t byteLength, SkScalar x, SkScalar y, const SkIRect& regionClipBounds);
     void drawPosText(GrContext*, GrTextUtils::Target*, const GrClip&, const SkPaint&,
                      const SkMatrix& viewMatrix, const SkSurfaceProps&, const char text[],
                      size_t byteLength, const SkScalar pos[], int scalarsPerPosition,
@@ -72,27 +69,27 @@ public:
                                        SkScalar* textRatio,
                                        SkScalerContextFlags* flags);
 
-private:
-    GrTextContext(const Options& options);
-
     class FallbackTextHelper {
     public:
         FallbackTextHelper(const SkMatrix& viewMatrix,
                            const SkPaint& pathPaint,
-                           const GrGlyphCache* glyphCache,
+                           SkScalar maxTextSize,
                            SkScalar textRatio)
-            : fViewMatrix(viewMatrix)
-            , fTextSize(pathPaint.getTextSize())
-            , fMaxTextSize(glyphCache->getGlyphSizeLimit())
-            , fTextRatio(textRatio)
-            , fTransformedFallbackTextSize(fMaxTextSize)
-            , fUseTransformedFallback(false) {
+                : fViewMatrix(viewMatrix)
+                , fTextSize(pathPaint.getTextSize())
+                , fMaxTextSize(maxTextSize)
+                , fTextRatio(textRatio)
+                , fTransformedFallbackTextSize(fMaxTextSize)
+                , fUseTransformedFallback(false) {
             fMaxScale = viewMatrix.getMaxScale();
         }
 
         void appendText(const SkGlyph& glyph, int count, const char* text, SkPoint glyphPos);
         void drawText(GrTextBlob* blob, int runIndex, GrGlyphCache*, const SkSurfaceProps&,
                       const GrTextUtils::Paint&, SkScalerContextFlags);
+
+        void initializeForDraw(SkPaint* paint, SkScalar* textRatio, SkMatrix* matrix) const;
+        const SkTDArray<char>& fallbackText() const { return fFallbackTxt; }
 
     private:
         SkTDArray<char> fFallbackTxt;
@@ -106,6 +103,9 @@ private:
         SkScalar fMaxScale;
         bool fUseTransformedFallback;
     };
+
+private:
+    GrTextContext(const Options& options);
 
     // sets up the descriptor on the blob and returns a detached cache.  Client must attach
     static SkColor ComputeCanonicalColor(const SkPaint&, bool lcd);
@@ -123,15 +123,6 @@ private:
 
     static bool HasLCD(const SkTextBlob*);
 
-    sk_sp<GrTextBlob> makeDrawTextBlob(GrTextBlobCache*, GrGlyphCache*,
-                                            const GrShaderCaps&,
-                                            const GrTextUtils::Paint&,
-                                            SkScalerContextFlags scalerContextFlags,
-                                            const SkMatrix& viewMatrix,
-                                            const SkSurfaceProps&,
-                                            const char text[], size_t byteLength,
-                                            SkScalar x, SkScalar y) const;
-
     sk_sp<GrTextBlob> makeDrawPosTextBlob(GrTextBlobCache*, GrGlyphCache*,
                                                const GrShaderCaps&,
                                                const GrTextUtils::Paint&,
@@ -144,22 +135,11 @@ private:
                                                const SkPoint& offset) const;
 
     // Functions for appending BMP text to GrTextBlob
-    static void DrawBmpText(GrTextBlob*, int runIndex, GrGlyphCache*,
-                            const SkSurfaceProps&, const GrTextUtils::Paint& paint,
-                            SkScalerContextFlags scalerContextFlags, const SkMatrix& viewMatrix,
-                            const char text[], size_t byteLength, SkScalar x, SkScalar y);
-
     static void DrawBmpPosText(GrTextBlob*, int runIndex, GrGlyphCache*,
                                const SkSurfaceProps&, const GrTextUtils::Paint& paint,
                                SkScalerContextFlags scalerContextFlags, const SkMatrix& viewMatrix,
                                const char text[], size_t byteLength, const SkScalar pos[],
                                int scalarsPerPosition, const SkPoint& offset);
-
-    static void DrawBmpTextAsPaths(GrTextBlob*, int runIndex, GrGlyphCache*,
-                                   const SkSurfaceProps&, const GrTextUtils::Paint& paint,
-                                   SkScalerContextFlags scalerContextFlags,
-                                   const SkMatrix& viewMatrix, const char text[],
-                                   size_t byteLength, SkScalar x, SkScalar y);
 
     static void DrawBmpPosTextAsPaths(GrTextBlob*, int runIndex, GrGlyphCache*,
                                       const SkSurfaceProps&, const GrTextUtils::Paint& paint,
@@ -170,11 +150,6 @@ private:
                                       const SkPoint& offset);
 
     // functions for appending distance field text
-    void drawDFText(GrTextBlob* blob, int runIndex, GrGlyphCache*, const SkSurfaceProps&,
-                    const GrTextUtils::Paint& paint, SkScalerContextFlags scalerContextFlags,
-                    const SkMatrix& viewMatrix, const char text[], size_t byteLength, SkScalar x,
-                    SkScalar y) const;
-
     void drawDFPosText(GrTextBlob* blob, int runIndex, GrGlyphCache*,
                        const SkSurfaceProps&, const GrTextUtils::Paint& paint,
                        SkScalerContextFlags scalerContextFlags,

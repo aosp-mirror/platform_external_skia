@@ -479,10 +479,12 @@ struct EdgeList {
 };
 
 struct Event {
-    Event(Edge* edge, const SkPoint& point, uint8_t alpha)
-      : fEdge(edge), fPoint(point), fAlpha(alpha), fPrev(nullptr), fNext(nullptr) {
+    Event(Edge* edge, bool isOuterBoundary, const SkPoint& point, uint8_t alpha)
+      : fEdge(edge), fIsOuterBoundary(isOuterBoundary), fPoint(point), fAlpha(alpha)
+      , fPrev(nullptr), fNext(nullptr) {
     }
     Edge* fEdge;
+    bool  fIsOuterBoundary;
     SkPoint fPoint;
     uint8_t fAlpha;
     Event* fPrev;
@@ -496,7 +498,7 @@ bool compare(Event* const& e1, Event* const& e2) {
 
 struct EventList : public SkTDPQueue<Event*, &compare> {};
 
-void create_event(Edge* e, EventList* events, SkArenaAlloc& alloc) {
+void create_event(Edge* e, bool isOuterBoundary, EventList* events, SkArenaAlloc& alloc) {
     Edge bisector1(e->fTop, e->fTop->fPartner, 1, Edge::Type::kConnector);
     Edge bisector2(e->fBottom, e->fBottom->fPartner, 1, Edge::Type::kConnector);
     SkPoint p;
@@ -504,7 +506,7 @@ void create_event(Edge* e, EventList* events, SkArenaAlloc& alloc) {
     if (bisector1.intersect(bisector2, &p, &alpha)) {
         LOG("found overlap edge %g -> %g, will collapse to %g,%g alpha %d\n",
             e->fTop->fID, e->fBottom->fID, p.fX, p.fY, alpha);
-        e->fEvent = alloc.make<Event>(e, p, alpha);
+        e->fEvent = alloc.make<Event>(e, isOuterBoundary, p, alpha);
         events->insert(e->fEvent);
     }
 }
@@ -1173,6 +1175,16 @@ bool nearly_flat(Comparator& c, Edge* edge) {
     return fabs(primaryDiff) < std::numeric_limits<float>::epsilon();
 }
 
+SkPoint clamp(SkPoint p, SkPoint min, SkPoint max, Comparator& c) {
+    if (c.sweep_lt(p, min)) {
+        return min;
+    } else if (c.sweep_lt(max, p)) {
+        return max;
+    } else {
+        return p;
+    }
+}
+
 bool check_for_intersection(Edge* edge, Edge* other, EdgeList* activeEdges, Vertex** current,
                             VertexList* mesh, Comparator& c, SkArenaAlloc& alloc) {
     if (!edge || !other) {
@@ -1189,15 +1201,13 @@ bool check_for_intersection(Edge* edge, Edge* other, EdgeList* activeEdges, Vert
         while (top && c.sweep_lt(p, top->fPoint)) {
             top = top->fPrev;
         }
-        if (c.sweep_lt(p, edge->fTop->fPoint) && !nearly_flat(c, edge)) {
-            v = edge->fTop;
-        } else if (c.sweep_lt(edge->fBottom->fPoint, p) && !nearly_flat(c, edge)) {
-            v = edge->fBottom;
-        } else if (c.sweep_lt(p, other->fTop->fPoint) && !nearly_flat(c, other)) {
-            v = other->fTop;
-        } else if (c.sweep_lt(other->fBottom->fPoint, p) && !nearly_flat(c, other)) {
-            v = other->fBottom;
-        } else if (p == edge->fTop->fPoint) {
+        if (!nearly_flat(c, edge)) {
+            p = clamp(p, edge->fTop->fPoint, edge->fBottom->fPoint, c);
+        }
+        if (!nearly_flat(c, other)) {
+            p = clamp(p, other->fTop->fPoint, other->fBottom->fPoint, c);
+        }
+        if (p == edge->fTop->fPoint) {
             v = edge->fTop;
         } else if (p == edge->fBottom->fPoint) {
             v = edge->fBottom;
@@ -1691,7 +1701,15 @@ void Event::apply(VertexList* mesh, Comparator& c, SkArenaAlloc& alloc) {
 
     // Since the destination has multiple partners, give it none.
     dest->fPartner = nullptr;
-    disconnect(fEdge);
+
+    // Disconnect all collapsed edges except outer boundaries.
+    // Those are required to preserve shape coverage and winding correctness.
+    if (!fIsOuterBoundary) {
+        disconnect(fEdge);
+    } else {
+        LOG("edge %g -> %g is outer boundary; not disconnecting.\n",
+            fEdge->fTop->fID, fEdge->fBottom->fID);
+    }
 
     // If top still has some connected edges, set its partner to dest.
     top->fPartner = top->fFirstEdgeAbove || top->fFirstEdgeBelow ? dest : nullptr;
@@ -1738,7 +1756,10 @@ bool collapse_overlap_regions(VertexList* mesh, Comparator& c, SkArenaAlloc& all
             }
             e->fOverlap = e->fOverlap || is_overlap_edge(e);
             if (e->fOverlap) {
-                create_event(e, &events, alloc);
+                // If this edge borders a zero-winding area, it's a boundary; don't disconnect it.
+                bool isOuterBoundary = e->fType == Edge::Type::kOuter &&
+                                       (!prev || prev->fWinding == 0 || e->fWinding == 0);
+                create_event(e, isOuterBoundary, &events, alloc);
             }
             insert_edge(e, prev, &activeEdges);
             prev = e;
@@ -2095,8 +2116,8 @@ int get_contour_count(const SkPath& path, SkScalar tolerance) {
     return contourCnt;
 }
 
-int count_points(Poly* polys, SkPath::FillType fillType) {
-    int count = 0;
+int64_t count_points(Poly* polys, SkPath::FillType fillType) {
+    int64_t count = 0;
     for (Poly* poly = polys; poly; poly = poly->fNext) {
         if (apply_fill_type(fillType, poly) && poly->fCount >= 3) {
             count += (poly->fCount - 2) * (TESSELLATOR_WIREFRAME ? 6 : 3);
@@ -2105,8 +2126,8 @@ int count_points(Poly* polys, SkPath::FillType fillType) {
     return count;
 }
 
-int count_outer_mesh_points(const VertexList& outerMesh) {
-    int count = 0;
+int64_t count_outer_mesh_points(const VertexList& outerMesh) {
+    int64_t count = 0;
     for (Vertex* v = outerMesh.fHead; v; v = v->fNext) {
         for (Edge* e = v->fFirstEdgeBelow; e; e = e->fNextEdgeBelow) {
             count += TESSELLATOR_WIREFRAME ? 12 : 6;
@@ -2148,13 +2169,14 @@ int PathToTriangles(const SkPath& path, SkScalar tolerance, const SkRect& clipBo
     Poly* polys = path_to_polys(path, tolerance, clipBounds, contourCnt, alloc, antialias,
                                 isLinear, &outerMesh);
     SkPath::FillType fillType = antialias ? SkPath::kWinding_FillType : path.getFillType();
-    int count = count_points(polys, fillType);
+    int64_t count64 = count_points(polys, fillType);
     if (antialias) {
-        count += count_outer_mesh_points(outerMesh);
+        count64 += count_outer_mesh_points(outerMesh);
     }
-    if (0 == count) {
+    if (0 == count64 || count64 > SK_MaxS32) {
         return 0;
     }
+    int count = count64;
 
     void* verts = vertexAllocator->lock(count);
     if (!verts) {
@@ -2188,11 +2210,12 @@ int PathToVertices(const SkPath& path, SkScalar tolerance, const SkRect& clipBou
     Poly* polys = path_to_polys(path, tolerance, clipBounds, contourCnt, alloc, false, &isLinear,
                                 nullptr);
     SkPath::FillType fillType = path.getFillType();
-    int count = count_points(polys, fillType);
-    if (0 == count) {
+    int64_t count64 = count_points(polys, fillType);
+    if (0 == count64 || count64 > SK_MaxS32) {
         *verts = nullptr;
         return 0;
     }
+    int count = count64;
 
     *verts = new GrTessellator::WindingVertex[count];
     GrTessellator::WindingVertex* vertsEnd = *verts;

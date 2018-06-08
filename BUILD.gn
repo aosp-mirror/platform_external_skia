@@ -655,6 +655,9 @@ optional("jpeg") {
   deps = [
     "//third_party/libjpeg-turbo:libjpeg",
   ]
+  public = [
+    "include/encode/SkJpegEncoder.h",
+  ]
   sources = [
     "src/codec/SkJpegCodec.cpp",
     "src/codec/SkJpegDecoderMgr.cpp",
@@ -1509,6 +1512,14 @@ if (skia_enable_tools) {
       ":tool_utils",
       "//third_party/jsoncpp",
     ]
+  }
+
+  if (is_linux) {
+    test_app("skottie_tool") {
+      deps = [
+        "modules/skottie:tool",
+      ]
+    }
   }
 
   if (target_cpu != "wasm") {

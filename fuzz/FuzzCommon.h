@@ -60,3 +60,4 @@ void FuzzPath(Fuzz* fuzz, SkPath* path, int maxOps);
 void BuildPath(Fuzz* fuzz, SkPath* path, int last_verb);
 
 #endif
+
