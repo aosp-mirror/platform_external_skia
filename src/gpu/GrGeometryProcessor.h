@@ -19,14 +19,15 @@
  */
 class GrGeometryProcessor : public GrPrimitiveProcessor {
 public:
-    GrGeometryProcessor()
-        : fWillUseGeoShader(false)
+    GrGeometryProcessor(ClassID classID)
+        : INHERITED(classID)
+        , fWillUseGeoShader(false)
         , fLocalCoordsType(kUnused_LocalCoordsType)
         , fSampleShading(0.0) {}
 
-    bool willUseGeoShader() const override { return fWillUseGeoShader; }
+    bool willUseGeoShader() const final { return fWillUseGeoShader; }
 
-    bool hasExplicitLocalCoords() const override {
+    bool hasExplicitLocalCoords() const final {
         return kHasExplicit_LocalCoordsType == fLocalCoordsType;
     }
 
@@ -35,9 +36,7 @@ public:
      * instance, if sampleShading is 0.5 in MSAA16 mode, the fragment shader will run a minimum of
      * 8 times per pixel. The default value is zero.
      */
-    float getSampleShading() const override {
-        return fSampleShading;
-    }
+    float getSampleShading() const final { return fSampleShading; }
 
 protected:
     void setWillUseGeoShader() { fWillUseGeoShader = true; }

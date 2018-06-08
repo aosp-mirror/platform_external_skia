@@ -9,7 +9,7 @@
 
 #include "GrGpuCommandBuffer.h"
 #include "GrOpFlushState.h"
-#include "GrResourceProvider.h"
+#include "GrProxyProvider.h"
 
 GrClearOp::GrClearOp(const GrFixedClip& clip, GrColor color, GrSurfaceProxy* proxy)
         : INHERITED(ClassID())
@@ -23,7 +23,7 @@ GrClearOp::GrClearOp(const GrFixedClip& clip, GrColor color, GrSurfaceProxy* pro
             fClip = GrFixedClip(SkIRect::MakeEmpty());
         }
 
-        if (GrResourceProvider::IsFunctionallyExact(proxy) && fClip.scissorRect() == rtRect) {
+        if (GrProxyProvider::IsFunctionallyExact(proxy) && fClip.scissorRect() == rtRect) {
             fClip.disableScissor();
         }
     }
@@ -32,7 +32,6 @@ GrClearOp::GrClearOp(const GrFixedClip& clip, GrColor color, GrSurfaceProxy* pro
 }
 
 void GrClearOp::onExecute(GrOpFlushState* state) {
-    SkASSERT(state->drawOpArgs().fRenderTarget);
-
-    state->commandBuffer()->clear(state->drawOpArgs().fRenderTarget, fClip, fColor);
+    SkASSERT(state->rtCommandBuffer());
+    state->rtCommandBuffer()->clear(fClip, fColor);
 }

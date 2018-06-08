@@ -20,7 +20,6 @@
 #include "SkArenaAlloc.h"
 #include "SkCoreBlitters.h"
 #include "SkColorSpaceXform.h"
-#include "SkColorSpace_Base.h"
 
 struct Matrix43 {
     float fMat[12];    // column major
@@ -56,8 +55,9 @@ static SkScan::HairRCProc ChooseHairProc(bool doAntiAlias) {
     return doAntiAlias ? SkScan::AntiHairLine : SkScan::HairLine;
 }
 
-static bool texture_to_matrix(const VertState& state, const SkPoint verts[],
-                              const SkPoint texs[], SkMatrix* matrix) {
+static bool SK_WARN_UNUSED_RESULT
+texture_to_matrix(const VertState& state, const SkPoint verts[], const SkPoint texs[],
+                  SkMatrix* matrix) {
     SkPoint src[3], dst[3];
 
     src[0] = texs[state.f0];
@@ -80,22 +80,15 @@ public:
     SK_TO_STRING_OVERRIDE()
 
     // For serialization.  This will never be called.
-    Factory getFactory() const override { sk_throw(); return nullptr; }
+    Factory getFactory() const override { SK_ABORT("not reached"); return nullptr; }
 
 protected:
     Context* onMakeContext(const ContextRec& rec, SkArenaAlloc* alloc) const override {
         return nullptr;
     }
-    bool onAppendStages(SkRasterPipeline* pipeline, SkColorSpace* dstCS, SkArenaAlloc* alloc,
-                        const SkMatrix&, const SkPaint&, const SkMatrix*) const override {
-        pipeline->append(SkRasterPipeline::seed_shader);
-        pipeline->append(SkRasterPipeline::matrix_4x3, &fM43);
-        // In theory we should never need to clamp. However, either due to imprecision in our
-        // matrix43, or the scan converter passing us pixel centers that in fact are not within
-        // the triangle, we do see occasional (slightly) out-of-range values, so we add these
-        // clamp stages. It would be nice to find a way to detect when these are not needed.
-        pipeline->append(SkRasterPipeline::clamp_0);
-        pipeline->append(SkRasterPipeline::clamp_a);
+    bool onAppendStages(const StageRec& rec) const override {
+        rec.fPipeline->append_seed_shader();
+        rec.fPipeline->append(SkRasterPipeline::matrix_4x3, &fM43);
         return true;
     }
 
@@ -116,9 +109,9 @@ void SkTriColorShader::toString(SkString* str) const {
 }
 #endif
 
-static bool update_tricolor_matrix(const SkMatrix& ctmInv,
-                                   const SkPoint pts[], const SkPM4f colors[],
-                                   int index0, int index1, int index2, Matrix43* result) {
+static bool SK_WARN_UNUSED_RESULT
+update_tricolor_matrix(const SkMatrix& ctmInv, const SkPoint pts[], const SkPM4f colors[],
+                       int index0, int index1, int index2, Matrix43* result) {
     SkMatrix m, im;
     m.reset();
     m.set(0, pts[index1].fX - pts[index0].fX);
@@ -164,7 +157,7 @@ static SkPM4f* convert_colors(const SkColor src[], int count, SkColorSpace* devi
         }
     } else {
         auto srcCS = SkColorSpace::MakeSRGB();
-        auto dstCS = as_CSB(deviceCS)->makeLinearGamma();
+        auto dstCS = deviceCS->makeLinearGamma();
         SkColorSpaceXform::Apply(dstCS.get(), SkColorSpaceXform::kRGBA_F32_ColorFormat, dst,
                                  srcCS.get(), SkColorSpaceXform::kBGRA_8888_ColorFormat, src,
                                  count, SkColorSpaceXform::kPremul_AlphaOp);
@@ -279,7 +272,9 @@ void SkDraw::drawVertices(SkVertices::VertexMode vmode, int count,
                 SkMatrix tmpCtm;
                 if (textures) {
                     SkMatrix localM;
-                    texture_to_matrix(state, vertices, textures, &localM);
+                    if (!texture_to_matrix(state, vertices, textures, &localM)) {
+                        continue;
+                    }
                     tmpCtm = SkMatrix::Concat(*fMatrix, localM);
                     ctm = &tmpCtm;
                 }

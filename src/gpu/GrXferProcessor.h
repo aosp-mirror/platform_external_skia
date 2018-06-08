@@ -189,8 +189,9 @@ public:
     }
 
 protected:
-    GrXferProcessor();
-    GrXferProcessor(bool willReadDstColor, bool hasMixedSamples, GrProcessorAnalysisCoverage);
+    GrXferProcessor(ClassID classID);
+    GrXferProcessor(ClassID classID, bool willReadDstColor, bool hasMixedSamples,
+                    GrProcessorAnalysisCoverage);
 
 private:
     /**
@@ -219,7 +220,7 @@ private:
     bool fDstReadUsesMixedSamples;
     bool fIsLCD;
 
-    typedef GrFragmentProcessor INHERITED;
+    typedef GrProcessor INHERITED;
 };
 
 /**
@@ -243,9 +244,13 @@ private:
 // since these objects have no need for destructors. However, GCC and clang throw a warning when a
 // class has virtual functions and a non-virtual destructor. We suppress that warning here and
 // for the subclasses.
-#if defined(__GNUC__) || defined(__clang)
+#if defined(__GNUC__)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wnon-virtual-dtor"
+#endif
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wnon-virtual-dtor"
 #endif
 class GrXPFactory {
 public:
@@ -287,12 +292,14 @@ public:
                                                           const GrProcessorAnalysisColor&,
                                                           GrProcessorAnalysisCoverage,
                                                           bool hasMixedSamples,
-                                                          const GrCaps& caps);
+                                                          const GrCaps& caps,
+                                                          GrPixelConfigIsClamped dstIsClamped);
 
     static AnalysisProperties GetAnalysisProperties(const GrXPFactory*,
                                                     const GrProcessorAnalysisColor&,
                                                     const GrProcessorAnalysisCoverage&,
-                                                    const GrCaps&);
+                                                    const GrCaps&,
+                                                    GrPixelConfigIsClamped);
 
 protected:
     constexpr GrXPFactory() {}
@@ -301,7 +308,8 @@ private:
     virtual sk_sp<const GrXferProcessor> makeXferProcessor(const GrProcessorAnalysisColor&,
                                                            GrProcessorAnalysisCoverage,
                                                            bool hasMixedSamples,
-                                                           const GrCaps&) const = 0;
+                                                           const GrCaps&,
+                                                           GrPixelConfigIsClamped) const = 0;
 
     /**
      * Subclass analysis implementation. This should not return kNeedsDstInTexture as that will be
@@ -309,10 +317,14 @@ private:
      */
     virtual AnalysisProperties analysisProperties(const GrProcessorAnalysisColor&,
                                                   const GrProcessorAnalysisCoverage&,
-                                                  const GrCaps&) const = 0;
+                                                  const GrCaps&,
+                                                  GrPixelConfigIsClamped) const = 0;
 };
-#if defined(__GNUC__) || defined(__clang)
+#if defined(__GNUC__)
 #pragma GCC diagnostic pop
+#endif
+#if defined(__clang__)
+#pragma clang diagnostic pop
 #endif
 
 GR_MAKE_BITFIELD_CLASS_OPS(GrXPFactory::AnalysisProperties);

@@ -5,13 +5,12 @@
  * found in the LICENSE file.
  */
 
+#include "SkAndroidCodec.h"
 #include "SkBitmap.h"
 #include "SkCodec.h"
-#include "SkCommonFlags.h"
-#include "SkImageEncoder.h"
-#include "SkOSPath.h"
 #include "SkStream.h"
 
+#include "CodecPriv.h"
 #include "Resources.h"
 #include "Test.h"
 #include "sk_tool_utils.h"
@@ -19,38 +18,23 @@
 #include <initializer_list>
 #include <vector>
 
-static void write_bm(const char* name, const SkBitmap& bm) {
-    if (FLAGS_writePath.isEmpty()) {
-        return;
-    }
-
-    SkString filename = SkOSPath::Join(FLAGS_writePath[0], name);
-    filename.appendf(".png");
-    SkFILEWStream file(filename.c_str());
-    if (!SkEncodeImage(&file, bm, SkEncodedImageFormat::kPNG, 100)) {
-        SkDebugf("failed to write '%s'\n", filename.c_str());
-    }
-}
-
 DEF_TEST(Codec_trunc, r) {
-    sk_sp<SkData> data(GetResourceAsData("box.gif"));
+    sk_sp<SkData> data(GetResourceAsData("images/box.gif"));
     if (!data) {
         return;
     }
-    data = SkData::MakeSubset(data.get(), 0, 23);
-    std::unique_ptr<SkCodec> codec(SkCodec::NewFromData(data));
-    codec->getFrameInfo();
+    SkCodec::MakeFromData(SkData::MakeSubset(data.get(), 0, 23))->getFrameInfo();
 }
 
 // 565 does not support alpha, but there is no reason for it not to support an
 // animated image with a frame that has alpha but then blends onto an opaque
 // frame making the result opaque. Test that we can decode such a frame.
 DEF_TEST(Codec_565, r) {
-    sk_sp<SkData> data(GetResourceAsData("blendBG.webp"));
+    sk_sp<SkData> data(GetResourceAsData("images/blendBG.webp"));
     if (!data) {
         return;
     }
-    std::unique_ptr<SkCodec> codec(SkCodec::NewFromData(std::move(data)));
+    std::unique_ptr<SkCodec> codec(SkCodec::MakeFromData(std::move(data)));
     auto info = codec->getInfo().makeColorType(kRGB_565_SkColorType);
     SkBitmap bm;
     bm.allocPixels(info);
@@ -80,31 +64,31 @@ DEF_TEST(Codec_frames, r) {
         // One less than fFramecount, since the first frame is always
         // independent.
         std::vector<int>                              fRequiredFrames;
-        // Same, since the first frame should match getInfo.
-        std::vector<SkAlphaType>                      fAlphaTypes;
+        // Same, since the first frame should match getInfo
+        std::vector<SkAlphaType>                      fAlphas;
         // The size of this one should match fFrameCount for animated, empty
         // otherwise.
         std::vector<int>                              fDurations;
         int                                           fRepetitionCount;
         std::vector<SkCodecAnimation::DisposalMethod> fDisposalMethods;
     } gRecs[] = {
-        { "required.gif", 7,
-            { 0, 1, 1, SkCodec::kNone, 4, 4 },
-            { kOpaque, kUnpremul, kUnpremul, kOpaque, kOpaque, kOpaque },
+        { "images/required.gif", 7,
+            { 0, 1, 2, 3, 4, 5 },
+            { kOpaque, kUnpremul, kUnpremul, kUnpremul, kUnpremul, kUnpremul },
             { 100, 100, 100, 100, 100, 100, 100 },
             0,
             { kKeep, kRestoreBG, kKeep, kKeep, kKeep, kRestoreBG, kKeep } },
-        { "alphabetAnim.gif", 13,
+        { "images/alphabetAnim.gif", 13,
             { SkCodec::kNone, 0, 0, 0, 0, 5, 6, SkCodec::kNone,
-              SkCodec::kNone, SkCodec::kNone, 10, 11 },
+              SkCodec::kNone, 9, 10, 11 },
             { kUnpremul, kUnpremul, kUnpremul, kUnpremul, kUnpremul, kUnpremul,
-              kUnpremul, kUnpremul, kUnpremul, kOpaque, kOpaque, kUnpremul },
+              kUnpremul, kUnpremul, kUnpremul, kUnpremul, kUnpremul, kUnpremul },
             { 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100 },
             0,
             { kKeep, kRestorePrev, kRestorePrev, kRestorePrev, kRestorePrev,
               kRestoreBG, kKeep, kRestoreBG, kRestoreBG, kKeep, kKeep,
               kRestoreBG, kKeep } },
-        { "randPixelsAnim2.gif", 4,
+        { "images/randPixelsAnim2.gif", 4,
             // required frames
             { 0, 0, 1 },
             // alphas
@@ -114,9 +98,9 @@ DEF_TEST(Codec_frames, r) {
             // repetition count
             0,
             { kKeep, kKeep, kRestorePrev, kKeep } },
-        { "randPixelsAnim.gif", 13,
+        { "images/randPixelsAnim.gif", 13,
             // required frames
-            { SkCodec::kNone, 1, 2, 3, 4, 3, 6, 7, 7, 7, 9, 9 },
+            { 0, 1, 2, 3, 4, 3, 6, 7, 7, 7, 9, 9 },
             { kUnpremul, kUnpremul, kUnpremul, kUnpremul, kUnpremul, kUnpremul,
               kUnpremul, kUnpremul, kUnpremul, kUnpremul, kUnpremul, kUnpremul },
             // durations
@@ -126,34 +110,34 @@ DEF_TEST(Codec_frames, r) {
             { kKeep, kKeep, kKeep, kKeep, kRestoreBG, kRestoreBG, kRestoreBG,
               kRestoreBG, kRestorePrev, kRestoreBG, kRestorePrev, kRestorePrev,
               kRestorePrev,  } },
-        { "box.gif", 1, {}, {}, {}, 0, { kKeep } },
-        { "color_wheel.gif", 1, {}, {}, {}, 0, { kKeep } },
-        { "test640x479.gif", 4, { 0, 1, 2 },
+        { "images/box.gif", 1, {}, {}, {}, 0, { kKeep } },
+        { "images/color_wheel.gif", 1, {}, {}, {}, 0, { kKeep } },
+        { "images/test640x479.gif", 4, { 0, 1, 2 },
                 { kOpaque, kOpaque, kOpaque },
                 { 200, 200, 200, 200 },
                 SkCodec::kRepetitionCountInfinite,
                 { kKeep, kKeep, kKeep, kKeep } },
-        { "colorTables.gif", 2, { 0 }, { kOpaque }, { 1000, 1000 }, 5,
+        { "images/colorTables.gif", 2, { 0 }, { kOpaque }, { 1000, 1000 }, 5,
                 { kKeep, kKeep } },
 
-        { "arrow.png",  1, {}, {}, {}, 0, {} },
-        { "google_chrome.ico", 1, {}, {}, {}, 0, {} },
-        { "brickwork-texture.jpg", 1, {}, {}, {}, 0, {} },
+        { "images/arrow.png",  1, {}, {}, {}, 0, {} },
+        { "images/google_chrome.ico", 1, {}, {}, {}, 0, {} },
+        { "images/brickwork-texture.jpg", 1, {}, {}, {}, 0, {} },
 #if defined(SK_CODEC_DECODES_RAW) && (!defined(_WIN32))
-        { "dng_with_preview.dng", 1, {}, {}, {}, 0, {} },
+        { "images/dng_with_preview.dng", 1, {}, {}, {}, 0, {} },
 #endif
-        { "mandrill.wbmp", 1, {}, {}, {}, 0, {} },
-        { "randPixels.bmp", 1, {}, {}, {}, 0, {} },
-        { "yellow_rose.webp", 1, {}, {}, {}, 0, {} },
-        { "webp-animated.webp", 3, { 0, 1 }, { kOpaque, kOpaque },
+        { "images/mandrill.wbmp", 1, {}, {}, {}, 0, {} },
+        { "images/randPixels.bmp", 1, {}, {}, {}, 0, {} },
+        { "images/yellow_rose.webp", 1, {}, {}, {}, 0, {} },
+        { "images/webp-animated.webp", 3, { 0, 1 }, { kOpaque, kOpaque },
             { 1000, 500, 1000 }, SkCodec::kRepetitionCountInfinite,
             { kKeep, kKeep, kKeep } },
-        { "blendBG.webp", 7, { 0, SkCodec::kNone, SkCodec::kNone, SkCodec::kNone,
+        { "images/blendBG.webp", 7, { 0, SkCodec::kNone, SkCodec::kNone, SkCodec::kNone,
                                4, 4 },
             { kOpaque, kOpaque, kUnpremul, kOpaque, kUnpremul, kUnpremul },
             { 525, 500, 525, 437, 609, 729, 444 }, 7,
             { kKeep, kKeep, kKeep, kKeep, kKeep, kKeep, kKeep } },
-        { "required.webp", 7,
+        { "images/required.webp", 7,
             { 0, 1, 1, SkCodec::kNone, 4, 4 },
             { kOpaque, kUnpremul, kUnpremul, kOpaque, kOpaque, kOpaque },
             { 100, 100, 100, 100, 100, 100, 100 },
@@ -175,7 +159,7 @@ DEF_TEST(Codec_frames, r) {
             continue;
         }
 
-        std::unique_ptr<SkCodec> codec(SkCodec::NewFromData(data));
+        std::unique_ptr<SkCodec> codec(SkCodec::MakeFromData(data));
         if (!codec) {
             ERRORF(r, "Failed to create an SkCodec from '%s'", rec.fName);
             continue;
@@ -206,9 +190,9 @@ DEF_TEST(Codec_frames, r) {
                 continue;
             }
 
-            if (rec.fAlphaTypes.size() + 1 != static_cast<size_t>(expected)) {
-                ERRORF(r, "'%s' has wrong number entries in fAlphaTypes; expected: %i\tactual: %i",
-                       rec.fName, expected - 1, rec.fAlphaTypes.size());
+            if (rec.fAlphas.size() + 1 != static_cast<size_t>(expected)) {
+                ERRORF(r, "'%s' has wrong number entries in fAlphas; expected: %i\tactual: %i",
+                       rec.fName, expected - 1, rec.fAlphas.size());
                 continue;
             }
 
@@ -227,7 +211,7 @@ DEF_TEST(Codec_frames, r) {
 
         for (auto mode : { TestMode::kVector, TestMode::kIndividual }) {
             // Re-create the codec to reset state and test parsing.
-            codec.reset(SkCodec::NewFromData(data));
+            codec = SkCodec::MakeFromData(data);
 
             int frameCount;
             std::vector<SkCodec::FrameInfo> frameInfos;
@@ -270,18 +254,19 @@ DEF_TEST(Codec_frames, r) {
                            rec.fName, i, rec.fDurations[i], frameInfo.fDuration);
                 }
 
-                auto to_string = [](SkAlphaType type) {
-                    switch (type) {
+                auto to_string = [](SkAlphaType alpha) {
+                    switch (alpha) {
                         case kUnpremul_SkAlphaType:
                             return "unpremul";
                         case kOpaque_SkAlphaType:
                             return "opaque";
                         default:
-                            return "other";
+                            SkASSERT(false);
+                            return "unknown";
                     }
                 };
 
-                auto expectedAlpha = 0 == i ? codec->getInfo().alphaType() : rec.fAlphaTypes[i-1];
+                auto expectedAlpha = 0 == i ? codec->getInfo().alphaType() : rec.fAlphas[i-1];
                 auto alpha = frameInfo.fAlphaType;
                 if (expectedAlpha != alpha) {
                     ERRORF(r, "%s's frame %i has wrong alpha type! expected: %s\tactual: %s",
@@ -384,6 +369,55 @@ DEF_TEST(Codec_frames, r) {
                     }
                 }
             }
+        }
+    }
+}
+
+// Verify that a webp image can be animated scaled down. This image has a
+// kRestoreBG frame, so it is an interesting image to test. After decoding that
+// frame, we have to erase its rectangle. The rectangle has to be adjusted
+// based on the scaled size.
+DEF_TEST(AndroidCodec_animated, r) {
+    if (GetResourcePath().isEmpty()) {
+        return;
+    }
+
+    const char* file = "images/required.webp";
+    sk_sp<SkData> data(GetResourceAsData(file));
+    if (!data) {
+        ERRORF(r, "Missing %s", file);
+        return;
+    }
+
+    auto codec = SkAndroidCodec::MakeFromCodec(SkCodec::MakeFromData(std::move(data)));
+    if (!codec) {
+        ERRORF(r, "Failed to decode %s", file);
+        return;
+    }
+
+    auto info = codec->getInfo().makeAlphaType(kPremul_SkAlphaType);
+
+    for (int sampleSize : { 8, 32, 100 }) {
+        auto dimensions = codec->codec()->getScaledDimensions(1.0f / sampleSize);
+        info = info.makeWH(dimensions.width(), dimensions.height());
+        SkBitmap bm;
+        bm.allocPixels(info);
+
+        SkCodec::Options options;
+        for (int i = 0; i < codec->codec()->getFrameCount(); ++i) {
+            SkCodec::FrameInfo frameInfo;
+            REPORTER_ASSERT(r, codec->codec()->getFrameInfo(i, &frameInfo));
+            if (5 == i) {
+                REPORTER_ASSERT(r, frameInfo.fDisposalMethod
+                        == SkCodecAnimation::DisposalMethod::kRestoreBGColor);
+            }
+            options.fFrameIndex = i;
+            options.fPriorFrame = i - 1;
+            info = info.makeAlphaType(frameInfo.fAlphaType);
+
+            const auto result = codec->codec()->getPixels(info, bm.getPixels(), bm.rowBytes(),
+                                                          &options);
+            REPORTER_ASSERT(r, result == SkCodec::kSuccess);
         }
     }
 }

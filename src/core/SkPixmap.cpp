@@ -7,17 +7,20 @@
 
 #include "SkBitmap.h"
 #include "SkCanvas.h"
-#include "SkColorPriv.h"
+#include "SkColorData.h"
 #include "SkConvertPixels.h"
 #include "SkData.h"
 #include "SkImageInfoPriv.h"
+#include "SkImageShader.h"
 #include "SkHalf.h"
 #include "SkMask.h"
 #include "SkNx.h"
 #include "SkPM4f.h"
-#include "SkPixmap.h"
+#include "SkPixmapPriv.h"
 #include "SkReadPixelsRec.h"
 #include "SkSurface.h"
+#include "SkTemplates.h"
+#include "SkUnPreMultiply.h"
 #include "SkUtils.h"
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
@@ -115,6 +118,14 @@ bool SkPixmap::erase(SkColor color, const SkIRect& inArea) const {
     int height = area.height();
     const int width = area.width();
     const int rowBytes = this->rowBytes();
+
+    if (color == 0
+          && width == this->rowBytesAsPixels()
+          && inArea == this->bounds()) {
+        // All formats represent SkColor(0) as byte 0.
+        memset(this->writable_addr(), 0, (int64_t)height * rowBytes);
+        return true;
+    }
 
     switch (this->colorType()) {
         case kGray_8_SkColorType: {
@@ -219,33 +230,65 @@ bool SkPixmap::erase(const SkColor4f& origColor, const SkIRect* subset) const {
     return true;
 }
 
-bool SkPixmap::scalePixels(const SkPixmap& dst, SkFilterQuality quality) const {
+bool SkPixmap::scalePixels(const SkPixmap& actualDst, SkFilterQuality quality) const {
+    // We may need to tweak how we interpret these just a little below, so we make copies.
+    SkPixmap src = *this,
+             dst = actualDst;
+
     // Can't do anthing with empty src or dst
-    if (this->width() <= 0 || this->height() <= 0 || dst.width() <= 0 || dst.height() <= 0) {
+    if (src.width() <= 0 || src.height() <= 0 ||
+        dst.width() <= 0 || dst.height() <= 0) {
         return false;
     }
 
     // no scaling involved?
-    if (dst.width() == this->width() && dst.height() == this->height()) {
-        return this->readPixels(dst);
+    if (src.width() == dst.width() && src.height() == dst.height()) {
+        return src.readPixels(dst);
+    }
+
+    // If src and dst are both unpremul, we'll fake them out to appear as if premul.
+    bool clampAsIfUnpremul = false;
+    if (src.alphaType() == kUnpremul_SkAlphaType &&
+        dst.alphaType() == kUnpremul_SkAlphaType) {
+        src.reset(src.info().makeAlphaType(kPremul_SkAlphaType), src.addr(), src.rowBytes());
+        dst.reset(dst.info().makeAlphaType(kPremul_SkAlphaType), dst.addr(), dst.rowBytes());
+
+        // In turn, we'll need to tell the image shader to clamp to [0,1] instead
+        // of the usual [0,a] when using a bicubic scaling (kHigh_SkFilterQuality)
+        // or a gamut transformation.
+        clampAsIfUnpremul = true;
     }
 
     SkBitmap bitmap;
-    if (!bitmap.installPixels(*this)) {
+    if (!bitmap.installPixels(src)) {
         return false;
     }
-    bitmap.setIsVolatile(true); // so we don't try to cache it
+    bitmap.setImmutable();        // Don't copy when we create an image.
+    bitmap.setIsVolatile(true);   // Disable any caching.
 
-    auto surface(SkSurface::MakeRasterDirect(dst.info(), dst.writable_addr(), dst.rowBytes()));
-    if (!surface) {
+    SkMatrix scale = SkMatrix::MakeRectToRect(SkRect::Make(src.bounds()),
+                                              SkRect::Make(dst.bounds()),
+                                              SkMatrix::kFill_ScaleToFit);
+
+    // We'll create a shader to do this draw so we have control over the bicubic clamp.
+    sk_sp<SkShader> shader = SkImageShader::Make(SkImage::MakeFromBitmap(bitmap),
+                                                 SkShader::kClamp_TileMode,
+                                                 SkShader::kClamp_TileMode,
+                                                 &scale,
+                                                 clampAsIfUnpremul);
+
+    sk_sp<SkSurface> surface = SkSurface::MakeRasterDirect(dst.info(),
+                                                           dst.writable_addr(),
+                                                           dst.rowBytes());
+    if (!shader || !surface) {
         return false;
     }
 
     SkPaint paint;
-    paint.setFilterQuality(quality);
     paint.setBlendMode(SkBlendMode::kSrc);
-    surface->getCanvas()->drawBitmapRect(bitmap, SkRect::MakeIWH(dst.width(), dst.height()),
-                                         &paint);
+    paint.setFilterQuality(quality);
+    paint.setShader(std::move(shader));
+    surface->getCanvas()->drawPaint(paint);
     return true;
 }
 
@@ -373,3 +416,96 @@ bool SkPixmap::computeIsOpaque() const {
     }
     return false;
 }
+
+//////////////////////////////////////////////////////////////////////////////////////////////////
+
+static bool draw_orientation(const SkPixmap& dst, const SkPixmap& src, unsigned flags) {
+    auto surf = SkSurface::MakeRasterDirect(dst.info(), dst.writable_addr(), dst.rowBytes());
+    if (!surf) {
+        return false;
+    }
+
+    SkBitmap bm;
+    bm.installPixels(src);
+
+    SkMatrix m;
+    m.setIdentity();
+
+    SkScalar W = SkIntToScalar(src.width());
+    SkScalar H = SkIntToScalar(src.height());
+    if (flags & SkPixmapPriv::kSwapXY) {
+        SkMatrix s;
+        s.setAll(0, 1, 0, 1, 0, 0, 0, 0, 1);
+        m.postConcat(s);
+        SkTSwap(W, H);
+    }
+    if (flags & SkPixmapPriv::kMirrorX) {
+        m.postScale(-1, 1);
+        m.postTranslate(W, 0);
+    }
+    if (flags & SkPixmapPriv::kMirrorY) {
+        m.postScale(1, -1);
+        m.postTranslate(0, H);
+    }
+    SkPaint p;
+    p.setBlendMode(SkBlendMode::kSrc);
+    surf->getCanvas()->concat(m);
+    surf->getCanvas()->drawBitmap(bm, 0, 0, &p);
+    return true;
+}
+
+bool SkPixmapPriv::Orient(const SkPixmap& dst, const SkPixmap& src, OrientFlags flags) {
+    SkASSERT((flags & ~(kMirrorX | kMirrorY | kSwapXY)) == 0);
+    if (src.colorType() != dst.colorType()) {
+        return false;
+    }
+    // note: we just ignore alphaType and colorSpace for this transformation
+
+    int w = src.width();
+    int h = src.height();
+    if (flags & kSwapXY) {
+        SkTSwap(w, h);
+    }
+    if (dst.width() != w || dst.height() != h) {
+        return false;
+    }
+    if (w == 0 || h == 0) {
+        return true;
+    }
+
+    // check for aliasing to self
+    if (src.addr() == dst.addr()) {
+        return flags == 0;
+    }
+    return draw_orientation(dst, src, flags);
+}
+
+#define kMirrorX    SkPixmapPriv::kMirrorX
+#define kMirrorY    SkPixmapPriv::kMirrorY
+#define kSwapXY     SkPixmapPriv::kSwapXY
+
+static constexpr uint8_t gOrientationFlags[] = {
+    0,                              // kTopLeft_SkEncodedOrigin
+    kMirrorX,                       // kTopRight_SkEncodedOrigin
+    kMirrorX | kMirrorY,            // kBottomRight_SkEncodedOrigin
+               kMirrorY,            // kBottomLeft_SkEncodedOrigin
+                          kSwapXY,  // kLeftTop_SkEncodedOrigin
+    kMirrorX            | kSwapXY,  // kRightTop_SkEncodedOrigin
+    kMirrorX | kMirrorY | kSwapXY,  // kRightBottom_SkEncodedOrigin
+               kMirrorY | kSwapXY,  // kLeftBottom_SkEncodedOrigin
+};
+
+SkPixmapPriv::OrientFlags SkPixmapPriv::OriginToOrient(SkEncodedOrigin o) {
+    unsigned io = static_cast<int>(o) - 1;
+    SkASSERT(io < SK_ARRAY_COUNT(gOrientationFlags));
+    return static_cast<SkPixmapPriv::OrientFlags>(gOrientationFlags[io]);
+}
+
+bool SkPixmapPriv::ShouldSwapWidthHeight(SkEncodedOrigin o) {
+    return SkToBool(OriginToOrient(o) & kSwapXY);
+}
+
+SkImageInfo SkPixmapPriv::SwapWidthHeight(const SkImageInfo& info) {
+    return info.makeWH(info.height(), info.width());
+}
+

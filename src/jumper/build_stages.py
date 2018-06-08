@@ -9,7 +9,7 @@ import re
 import subprocess
 import sys
 
-clang         = 'clang-4.0'
+clang         = 'clang-5.0'
 objdump       = 'gobjdump'
 ccache        = 'ccache'
 stages        = 'src/jumper/SkJumper_stages.cpp'
@@ -28,7 +28,7 @@ generated_win = sys.argv[7] if len(sys.argv) > 7 else generated_win
 clang = [ccache, clang, '-x', 'c++']
 
 
-cflags = ['-std=c++11', '-Os', '-DJUMPER',
+cflags = ['-std=c++11', '-Os', '-DJUMPER_IS_OFFLINE',
           '-momit-leaf-frame-pointer', '-ffp-contract=fast',
           '-fno-exceptions', '-fno-rtti', '-fno-unwind-tables']
 
@@ -48,13 +48,18 @@ subprocess.check_call(clang + cflags + sse2 + win + x86 +
                       ['-c', stages] +
                       ['-o', 'win_x86_sse2.o'])
 
-ssse3 = ['-mssse3', '-mno-sse4.1']
-subprocess.check_call(clang + cflags + ssse3 +
+subprocess.check_call(clang + cflags + sse2 +
                       ['-c', stages_lowp] +
-                      ['-o', 'lowp_ssse3.o'])
-subprocess.check_call(clang + cflags + ssse3 + win +
+                      ['-o', 'lowp_sse2.o'])
+subprocess.check_call(clang + cflags + sse2 + win +
                       ['-c', stages_lowp] +
-                      ['-o', 'win_lowp_ssse3.o'])
+                      ['-o', 'win_lowp_sse2.o'])
+subprocess.check_call(clang + cflags + sse2 + x86 +
+                      ['-c', stages_lowp] +
+                      ['-o', 'x86_lowp_sse2.o'])
+subprocess.check_call(clang + cflags + sse2 + win + x86 +
+                      ['-c', stages_lowp] +
+                      ['-o', 'win_x86_lowp_sse2.o'])
 
 sse41 = ['-msse4.1']
 subprocess.check_call(clang + cflags + sse41 +
@@ -63,6 +68,13 @@ subprocess.check_call(clang + cflags + sse41 +
 subprocess.check_call(clang + cflags + sse41 + win +
                       ['-c', stages] +
                       ['-o', 'win_sse41.o'])
+
+subprocess.check_call(clang + cflags + sse41 +
+                      ['-c', stages_lowp] +
+                      ['-o', 'lowp_sse41.o'])
+subprocess.check_call(clang + cflags + sse41 + win +
+                      ['-c', stages_lowp] +
+                      ['-o', 'win_lowp_sse41.o'])
 
 avx = ['-mavx']
 subprocess.check_call(clang + cflags + avx +
@@ -79,6 +91,7 @@ subprocess.check_call(clang + cflags + hsw +
 subprocess.check_call(clang + cflags + hsw + win +
                       ['-c', stages] +
                       ['-o', 'win_hsw.o'])
+
 subprocess.check_call(clang + cflags + hsw +
                       ['-c', stages_lowp] +
                       ['-o', 'lowp_hsw.o'])
@@ -86,18 +99,26 @@ subprocess.check_call(clang + cflags + hsw + win +
                       ['-c', stages_lowp] +
                       ['-o', 'win_lowp_hsw.o'])
 
-aarch64 = [ '--target=aarch64' ]
-subprocess.check_call(clang + cflags + aarch64 +
+skx = ['-march=skylake-avx512']
+subprocess.check_call(clang + cflags + skx +
                       ['-c', stages] +
-                      ['-o', 'aarch64.o'])
+                      ['-o', 'skx.o'])
 
-vfp4 = [
-    '--target=armv7a-linux-gnueabihf',
-    '-mfpu=neon-vfpv4',
-]
-subprocess.check_call(clang + cflags + vfp4 +
-                      ['-c', stages] +
-                      ['-o', 'vfp4.o'])
+# Merge x86-64 object files to deduplicate constants.
+# (No other platform has more than one specialization.)
+subprocess.check_call(['ld', '-r', '-o', 'merged.o',
+                       'skx.o', 'hsw.o', 'avx.o', 'sse41.o', 'sse2.o',
+                       'lowp_hsw.o', 'lowp_sse41.o', 'lowp_sse2.o'])
+subprocess.check_call(['ld', '-r', '-o', 'win_merged.o',
+                       'win_hsw.o', 'win_avx.o', 'win_sse41.o', 'win_sse2.o',
+                       'win_lowp_hsw.o', 'win_lowp_sse41.o', 'win_lowp_sse2.o'])
+
+subprocess.check_call(['ld', '-r', '-o', 'x86_merged.o',
+                       'x86_sse2.o',
+                       'x86_lowp_sse2.o'])
+subprocess.check_call(['ld', '-r', '-o', 'win_x86_merged.o',
+                       'win_x86_sse2.o',
+                       'win_x86_lowp_sse2.o'])
 
 def parse_object_file(dot_o, directive, target=None):
   globl, hidden, label, comment, align = \
@@ -128,6 +149,7 @@ def parse_object_file(dot_o, directive, target=None):
                    '--insn-width=11',
                    '-j', '.text',
                    '-j', '.literal4',
+                   '-j', '.literal8',
                    '-j', '.literal16',
                    '-j', '.const',
                    dot_o]
@@ -191,6 +213,7 @@ print '#if defined(__MACH__)'
 print '    #define HIDDEN .private_extern'
 print '    #define FUNCTION(name)'
 print '    #define BALIGN4  .align 2'
+print '    #define BALIGN8  .align 3'
 print '    #define BALIGN16 .align 4'
 print '    #define BALIGN32 .align 5'
 print '#else'
@@ -198,36 +221,19 @@ print '    .section .note.GNU-stack,"",%progbits'
 print '    #define HIDDEN .hidden'
 print '    #define FUNCTION(name) .type name,%function'
 print '    #define BALIGN4  .balign 4'
+print '    #define BALIGN8  .balign 8'
 print '    #define BALIGN16 .balign 16'
 print '    #define BALIGN32 .balign 32'
 print '#endif'
 
 print '.text'
-print '#if defined(__aarch64__)'
-print 'BALIGN4'
-parse_object_file('aarch64.o', '.long')
-
-print '#elif defined(__arm__)'
-print 'BALIGN4'
-parse_object_file('vfp4.o', '.long', target='elf32-littlearm')
-
-print '#elif defined(__x86_64__)'
+print '#if defined(__x86_64__)'
 print 'BALIGN32'
-parse_object_file('hsw.o',   '.byte')
-print 'BALIGN32'
-parse_object_file('avx.o',   '.byte')
-print 'BALIGN32'
-parse_object_file('sse41.o', '.byte')
-print 'BALIGN32'
-parse_object_file('sse2.o',  '.byte')
-print 'BALIGN32'
-parse_object_file('lowp_hsw.o',  '.byte')
-print 'BALIGN32'
-parse_object_file('lowp_ssse3.o',  '.byte')
+parse_object_file('merged.o', '.byte')
 
 print '#elif defined(__i386__)'
 print 'BALIGN32'
-parse_object_file('x86_sse2.o', '.byte')
+parse_object_file('x86_merged.o', '.byte')
 
 print '#endif'
 
@@ -243,23 +249,13 @@ print '''; Copyright 2017 Google Inc.
 print 'IFDEF RAX'
 print "_text32 SEGMENT ALIGN(32) 'CODE'"
 print 'ALIGN 32'
-parse_object_file('win_hsw.o',   'DB')
-print 'ALIGN 32'
-parse_object_file('win_avx.o',   'DB')
-print 'ALIGN 32'
-parse_object_file('win_sse41.o', 'DB')
-print 'ALIGN 32'
-parse_object_file('win_sse2.o',  'DB')
-print 'ALIGN 32'
-parse_object_file('win_lowp_hsw.o',  'DB')
-print 'ALIGN 32'
-parse_object_file('win_lowp_ssse3.o',  'DB')
+parse_object_file('win_merged.o',   'DB')
 
 print 'ELSE'
 print '.MODEL FLAT,C'
 print "_text32 SEGMENT ALIGN(32) 'CODE'"
 print 'ALIGN 32'
-parse_object_file('win_x86_sse2.o', 'DB')
+parse_object_file('win_x86_merged.o', 'DB')
 
 print 'ENDIF'
 print 'END'

@@ -33,7 +33,7 @@ class SkSurface;
 struct SkPoint;
 
 ///////////////////////////////////////////////////////////////////////////////
-class SK_API SkBitmapDevice : public SkBaseDevice {
+class SkBitmapDevice : public SkBaseDevice {
 public:
     /**
      *  Construct a new device with the specified bitmap as its backend. It is
@@ -120,8 +120,8 @@ protected:
 
     ///////////////////////////////////////////////////////////////////////////
 
-    bool onReadPixels(const SkImageInfo&, void*, size_t, int x, int y) override;
-    bool onWritePixels(const SkImageInfo&, const void*, size_t, int, int) override;
+    bool onReadPixels(const SkPixmap&, int x, int y) override;
+    bool onWritePixels(const SkPixmap&, int, int) override;
     bool onPeekPixels(SkPixmap*) override;
     bool onAccessPixels(SkPixmap*) override;
 

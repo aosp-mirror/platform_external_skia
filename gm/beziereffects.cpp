@@ -18,6 +18,8 @@
 #include "GrTest.h"
 #include "SkColorPriv.h"
 #include "SkGeometry.h"
+#include "SkPoint3.h"
+#include "SkPointPriv.h"
 #include "effects/GrBezierEffect.h"
 #include "ops/GrMeshDrawOp.h"
 
@@ -27,10 +29,15 @@ class BezierTestOp : public GrMeshDrawOp {
 public:
     FixedFunctionFlags fixedFunctionFlags() const override { return FixedFunctionFlags::kNone; }
 
-    RequiresDstTexture finalize(const GrCaps& caps, const GrAppliedClip* clip) override {
+    RequiresDstTexture finalize(const GrCaps& caps, const GrAppliedClip* clip,
+                                GrPixelConfigIsClamped dstIsClamped) override {
         auto analysis = fProcessorSet.finalize(fColor, GrProcessorAnalysisCoverage::kSingleChannel,
-                                               clip, false, caps, &fColor);
+                                               clip, false, caps, dstIsClamped, &fColor);
         return analysis.requiresDstTexture() ? RequiresDstTexture::kYes : RequiresDstTexture::kNo;
+    }
+
+    void visitProxies(const VisitProxyFunc& func) const override {
+        fProcessorSet.visitProxies(func);
     }
 
 protected:
@@ -43,8 +50,8 @@ protected:
         this->setBounds(rect, HasAABloat::kYes, IsZeroArea::kNo);
     }
 
-    const GrPipeline* makePipeline(Target* target) const {
-        return target->makePipeline(0, &fProcessorSet);
+    const GrPipeline* makePipeline(Target* target) {
+        return target->makePipeline(0, std::move(fProcessorSet), target->detachAppliedClip());
     }
 
     const GrGeometryProcessor* gp() const { return fGeometryProcessor.get(); }
@@ -78,7 +85,7 @@ private:
     BezierCubicTestOp(sk_sp<GrGeometryProcessor> gp, const SkRect& rect, GrColor color)
             : INHERITED(std::move(gp), rect, color, ClassID()) {}
 
-    void onPrepareDraws(Target* target) const override {
+    void onPrepareDraws(Target* target) override {
         QuadHelper helper;
         size_t vertexStride = this->gp()->getVertexStride();
         SkASSERT(vertexStride == sizeof(SkPoint));
@@ -87,7 +94,7 @@ private:
             return;
         }
         SkRect rect = this->rect();
-        pts[0].setRectFan(rect.fLeft, rect.fTop, rect.fRight, rect.fBottom, vertexStride);
+        SkPointPriv::SetRectTriStrip(pts, rect.fLeft, rect.fTop, rect.fRight, rect.fBottom, vertexStride);
         helper.recordDraw(target, this->gp(), this->makePipeline(target));
     }
 
@@ -152,9 +159,9 @@ protected:
                 {rand.nextRangeF(0.f, w), rand.nextRangeF(0.f, h)},
                 {rand.nextRangeF(0.f, w), rand.nextRangeF(0.f, h)}
             };
-            for(GrPrimitiveEdgeType edgeType : {kFillBW_GrProcessorEdgeType,
-                                                kFillAA_GrProcessorEdgeType,
-                                                kHairlineAA_GrProcessorEdgeType}) {
+            for(GrClipEdgeType edgeType : {GrClipEdgeType::kFillBW,
+                                           GrClipEdgeType::kFillAA,
+                                           GrClipEdgeType::kHairlineAA}) {
                 SkScalar x = col * w;
                 SkScalar y = row * h;
                 SkPoint controlPts[] = {
@@ -253,7 +260,7 @@ private:
         float   fKLM[4]; // The last value is ignored. The effect expects a vec4f.
     };
 
-    void onPrepareDraws(Target* target) const override {
+    void onPrepareDraws(Target* target) override {
         QuadHelper helper;
         size_t vertexStride = this->gp()->getVertexStride();
         SkASSERT(vertexStride == sizeof(Vertex));
@@ -262,11 +269,11 @@ private:
             return;
         }
         SkRect rect = this->rect();
-        verts[0].fPosition.setRectFan(rect.fLeft, rect.fTop, rect.fRight, rect.fBottom,
-                                      sizeof(Vertex));
+        SkPointPriv::SetRectTriStrip(&verts[0].fPosition, rect.fLeft, rect.fTop, rect.fRight,
+                                     rect.fBottom, sizeof(Vertex));
         for (int v = 0; v < 4; ++v) {
-            SkScalar pt3[3] = {verts[v].fPosition.x(), verts[v].fPosition.y(), 1.f};
-            fKLM.mapHomogeneousPoints(verts[v].fKLM, pt3, 1);
+            SkPoint3 pt3 = {verts[v].fPosition.x(), verts[v].fPosition.y(), 1.f};
+            fKLM.mapHomogeneousPoints((SkPoint3* ) verts[v].fKLM, &pt3, 1);
         }
         helper.recordDraw(target, this->gp(), this->makePipeline(target));
     }
@@ -336,9 +343,9 @@ protected:
                 {rand.nextRangeF(0.f, w), rand.nextRangeF(0.f, h)}
             };
             SkScalar weight = rand.nextRangeF(0.f, 2.f);
-            for(int edgeType = 0; edgeType < kGrProcessorEdgeTypeCnt; ++edgeType) {
+            for(int edgeType = 0; edgeType < kGrClipEdgeTypeCnt; ++edgeType) {
                 sk_sp<GrGeometryProcessor> gp;
-                GrPrimitiveEdgeType et = (GrPrimitiveEdgeType)edgeType;
+                GrClipEdgeType et = (GrClipEdgeType)edgeType;
                 gp = GrConicEffect::Make(color, SkMatrix::I(), et,
                                          *context->caps(), SkMatrix::I(), false);
                 if (!gp) {
@@ -467,7 +474,7 @@ private:
         float   fKLM[4]; // The last value is ignored. The effect expects a vec4f.
     };
 
-    void onPrepareDraws(Target* target) const override {
+    void onPrepareDraws(Target* target) override {
         QuadHelper helper;
         size_t vertexStride = this->gp()->getVertexStride();
         SkASSERT(vertexStride == sizeof(Vertex));
@@ -476,8 +483,8 @@ private:
             return;
         }
         SkRect rect = this->rect();
-        verts[0].fPosition.setRectFan(rect.fLeft, rect.fTop, rect.fRight, rect.fBottom,
-                                      sizeof(Vertex));
+        SkPointPriv::SetRectTriStrip(&verts[0].fPosition, rect.fLeft, rect.fTop, rect.fRight,
+                                     rect.fBottom, sizeof(Vertex));
         fDevToUV.apply<4, sizeof(Vertex), sizeof(SkPoint)>(verts);
         helper.recordDraw(target, this->gp(), this->makePipeline(target));
     }
@@ -544,9 +551,9 @@ protected:
                 {rand.nextRangeF(0.f, w), rand.nextRangeF(0.f, h)},
                 {rand.nextRangeF(0.f, w), rand.nextRangeF(0.f, h)}
             };
-            for(int edgeType = 0; edgeType < kGrProcessorEdgeTypeCnt; ++edgeType) {
+            for(int edgeType = 0; edgeType < kGrClipEdgeTypeCnt; ++edgeType) {
                 sk_sp<GrGeometryProcessor> gp;
-                GrPrimitiveEdgeType et = (GrPrimitiveEdgeType)edgeType;
+                GrClipEdgeType et = (GrClipEdgeType)edgeType;
                 gp = GrQuadEffect::Make(color, SkMatrix::I(), et,
                                         *context->caps(), SkMatrix::I(), false);
                 if (!gp) {

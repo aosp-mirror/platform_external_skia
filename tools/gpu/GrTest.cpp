@@ -26,10 +26,11 @@
 #include "SkMathPriv.h"
 #include "SkString.h"
 #include "ops/GrMeshDrawOp.h"
-#include "text/GrAtlasGlyphCache.h"
+#include "text/GrGlyphCache.h"
 #include "text/GrTextBlobCache.h"
 
 namespace GrTest {
+
 void SetupAlwaysEvictAtlas(GrContext* context) {
     // These sizes were selected because they allow each atlas to hold a single plot and will thus
     // stress the atlas
@@ -37,22 +38,16 @@ void SetupAlwaysEvictAtlas(GrContext* context) {
     GrDrawOpAtlasConfig configs[3];
     configs[kA8_GrMaskFormat].fWidth = dim;
     configs[kA8_GrMaskFormat].fHeight = dim;
-    configs[kA8_GrMaskFormat].fLog2Width = SkNextLog2(dim);
-    configs[kA8_GrMaskFormat].fLog2Height = SkNextLog2(dim);
     configs[kA8_GrMaskFormat].fPlotWidth = dim;
     configs[kA8_GrMaskFormat].fPlotHeight = dim;
 
     configs[kA565_GrMaskFormat].fWidth = dim;
     configs[kA565_GrMaskFormat].fHeight = dim;
-    configs[kA565_GrMaskFormat].fLog2Width = SkNextLog2(dim);
-    configs[kA565_GrMaskFormat].fLog2Height = SkNextLog2(dim);
     configs[kA565_GrMaskFormat].fPlotWidth = dim;
     configs[kA565_GrMaskFormat].fPlotHeight = dim;
 
     configs[kARGB_GrMaskFormat].fWidth = dim;
     configs[kARGB_GrMaskFormat].fHeight = dim;
-    configs[kARGB_GrMaskFormat].fLog2Width = SkNextLog2(dim);
-    configs[kARGB_GrMaskFormat].fLog2Height = SkNextLog2(dim);
     configs[kARGB_GrMaskFormat].fPlotWidth = dim;
     configs[kARGB_GrMaskFormat].fPlotHeight = dim;
 
@@ -60,18 +55,31 @@ void SetupAlwaysEvictAtlas(GrContext* context) {
 }
 
 GrBackendTexture CreateBackendTexture(GrBackend backend, int width, int height,
-                                      GrPixelConfig config, GrBackendObject handle) {
+                                      GrPixelConfig config, GrMipMapped mipMapped,
+                                      GrBackendObject handle) {
+    switch (backend) {
 #ifdef SK_VULKAN
-    if (kVulkan_GrBackend == backend) {
-        GrVkImageInfo* vkInfo = (GrVkImageInfo*)(handle);
-        return GrBackendTexture(width, height, *vkInfo);
-    }
+        case kVulkan_GrBackend: {
+            GrVkImageInfo* vkInfo = (GrVkImageInfo*)(handle);
+            SkASSERT((GrMipMapped::kYes == mipMapped) == (vkInfo->fLevelCount > 1));
+            return GrBackendTexture(width, height, *vkInfo);
+        }
 #endif
-    SkASSERT(kOpenGL_GrBackend == backend);
-    GrGLTextureInfo* glInfo = (GrGLTextureInfo*)(handle);
-    return GrBackendTexture(width, height, config, *glInfo);
+        case kOpenGL_GrBackend: {
+            GrGLTextureInfo* glInfo = (GrGLTextureInfo*)(handle);
+            SkASSERT(glInfo->fFormat);
+            return GrBackendTexture(width, height, mipMapped, *glInfo);
+        }
+        case kMock_GrBackend: {
+            GrMockTextureInfo* mockInfo = (GrMockTextureInfo*)(handle);
+            return GrBackendTexture(width, height, config, mipMapped, *mockInfo);
+        }
+        default:
+            return GrBackendTexture();
+    }
 }
-};
+
+}  // namespace GrTest
 
 bool GrSurfaceProxy::isWrapped_ForTesting() const {
     return SkToBool(fTarget);
@@ -86,7 +94,10 @@ void GrContext::setTextBlobCacheLimit_ForTesting(size_t bytes) {
 }
 
 void GrContext::setTextContextAtlasSizes_ForTesting(const GrDrawOpAtlasConfig* configs) {
-    fAtlasGlyphCache->setAtlasSizes_ForTesting(configs);
+    GrAtlasManager* atlasManager = this->contextPriv().getFullAtlasManager();
+    if (atlasManager) {
+        atlasManager->setAtlasSizes_ForTesting(configs);
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -139,17 +150,18 @@ void GrContext::printGpuStats() const {
     SkDebugf("%s", out.c_str());
 }
 
-sk_sp<SkImage> GrContext::getFontAtlasImage_ForTesting(GrMaskFormat format) {
-    GrAtlasGlyphCache* cache = this->getAtlasGlyphCache();
+sk_sp<SkImage> GrContext::getFontAtlasImage_ForTesting(GrMaskFormat format, unsigned int index) {
+    auto restrictedAtlasManager = this->contextPriv().getRestrictedAtlasManager();
 
-    sk_sp<GrTextureProxy> proxy = cache->getProxy(format);
-    if (!proxy) {
+    unsigned int numProxies;
+    const sk_sp<GrTextureProxy>* proxies = restrictedAtlasManager->getProxies(format, &numProxies);
+    if (index >= numProxies || !proxies[index]) {
         return nullptr;
     }
 
-    SkASSERT(proxy->priv().isExact());
+    SkASSERT(proxies[index]->priv().isExact());
     sk_sp<SkImage> image(new SkImage_Gpu(this, kNeedNewImageUniqueID, kPremul_SkAlphaType,
-                                         std::move(proxy), nullptr, SkBudgeted::kNo));
+                                         proxies[index], nullptr, SkBudgeted::kNo));
     return image;
 }
 
@@ -173,6 +185,16 @@ void GrGpu::Stats::dumpKeyValuePairs(SkTArray<SkString>* keys, SkTArray<double>*
 }
 
 #endif
+
+GrBackendTexture GrGpu::createTestingOnlyBackendTexture(void* pixels, int w, int h,
+                                                        SkColorType colorType, bool isRenderTarget,
+                                                        GrMipMapped mipMapped) {
+    GrPixelConfig config = SkImageInfo2GrPixelConfig(colorType, nullptr, *this->caps());
+    if (kUnknown_GrPixelConfig == config) {
+        return GrBackendTexture();
+    }
+    return this->createTestingOnlyBackendTexture(pixels, w, h, config, isRenderTarget, mipMapped);
+}
 
 #if GR_CACHE_STATS
 void GrResourceCache::getStats(Stats* stats) const {
@@ -245,7 +267,17 @@ int GrResourceCache::countUniqueKeysWithTag(const char* tag) const {
 #define ASSERT_SINGLE_OWNER \
     SkDEBUGCODE(GrSingleOwner::AutoEnforce debug_SingleOwner(fRenderTargetContext->singleOwner());)
 
+
+uint32_t GrRenderTargetContextPriv::testingOnly_getOpListID() {
+    return fRenderTargetContext->getOpList()->uniqueID();
+}
+
 uint32_t GrRenderTargetContextPriv::testingOnly_addDrawOp(std::unique_ptr<GrDrawOp> op) {
+    return this->testingOnly_addDrawOp(GrNoClip(), std::move(op));
+}
+
+uint32_t GrRenderTargetContextPriv::testingOnly_addDrawOp(const GrClip& clip,
+                                                          std::unique_ptr<GrDrawOp> op) {
     ASSERT_SINGLE_OWNER
     if (fRenderTargetContext->drawingManager()->wasAbandoned()) {
         return SK_InvalidUniqueID;
@@ -253,7 +285,7 @@ uint32_t GrRenderTargetContextPriv::testingOnly_addDrawOp(std::unique_ptr<GrDraw
     SkDEBUGCODE(fRenderTargetContext->validate());
     GR_AUDIT_TRAIL_AUTO_FRAME(fRenderTargetContext->fAuditTrail,
                               "GrRenderTargetContext::testingOnly_addDrawOp");
-    return fRenderTargetContext->addDrawOp(GrNoClip(), std::move(op));
+    return fRenderTargetContext->addDrawOp(clip, std::move(op));
 }
 
 #undef ASSERT_SINGLE_OWNER
@@ -276,6 +308,16 @@ void GrDrawingManager::testingOnly_removeOnFlushCallbackObject(GrOnFlushCallback
             fOnFlushCBObjects.begin();
     SkASSERT(n < fOnFlushCBObjects.count());
     fOnFlushCBObjects.removeShuffle(n);
+}
+
+//////////////////////////////////////////////////////////////////////////////
+
+GrPixelConfig GrBackendTexture::testingOnly_getPixelConfig() const {
+    return fConfig;
+}
+
+GrPixelConfig GrBackendRenderTarget::testingOnly_getPixelConfig() const {
+    return fConfig;
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -305,32 +347,34 @@ DRAW_OP_TEST_EXTERN(SmallPathOp);
 DRAW_OP_TEST_EXTERN(RegionOp);
 DRAW_OP_TEST_EXTERN(RRectOp);
 DRAW_OP_TEST_EXTERN(TesselatingPathOp);
+DRAW_OP_TEST_EXTERN(TextureOp);
 
 void GrDrawRandomOp(SkRandom* random, GrRenderTargetContext* renderTargetContext, GrPaint&& paint) {
     GrContext* context = renderTargetContext->surfPriv().getContext();
     using MakeDrawOpFn = std::unique_ptr<GrDrawOp>(GrPaint&&, SkRandom*, GrContext*, GrFSAAType);
     static constexpr MakeDrawOpFn* gFactories[] = {
-        DRAW_OP_TEST_ENTRY(AAConvexPathOp),
-        DRAW_OP_TEST_ENTRY(AAFillRectOp),
-        DRAW_OP_TEST_ENTRY(AAFlatteningConvexPathOp),
-        DRAW_OP_TEST_ENTRY(AAHairlineOp),
-        DRAW_OP_TEST_ENTRY(AAStrokeRectOp),
-        DRAW_OP_TEST_ENTRY(CircleOp),
-        DRAW_OP_TEST_ENTRY(DashOp),
-        DRAW_OP_TEST_ENTRY(DefaultPathOp),
-        DRAW_OP_TEST_ENTRY(DIEllipseOp),
-        DRAW_OP_TEST_ENTRY(EllipseOp),
-        DRAW_OP_TEST_ENTRY(GrAtlasTextOp),
-        DRAW_OP_TEST_ENTRY(GrDrawAtlasOp),
-        DRAW_OP_TEST_ENTRY(GrDrawVerticesOp),
-        DRAW_OP_TEST_ENTRY(NonAAFillRectOp),
-        DRAW_OP_TEST_ENTRY(NonAALatticeOp),
-        DRAW_OP_TEST_ENTRY(NonAAStrokeRectOp),
-        DRAW_OP_TEST_ENTRY(ShadowRRectOp),
-        DRAW_OP_TEST_ENTRY(SmallPathOp),
-        DRAW_OP_TEST_ENTRY(RegionOp),
-        DRAW_OP_TEST_ENTRY(RRectOp),
-        DRAW_OP_TEST_ENTRY(TesselatingPathOp),
+            DRAW_OP_TEST_ENTRY(AAConvexPathOp),
+            DRAW_OP_TEST_ENTRY(AAFillRectOp),
+            DRAW_OP_TEST_ENTRY(AAFlatteningConvexPathOp),
+            DRAW_OP_TEST_ENTRY(AAHairlineOp),
+            DRAW_OP_TEST_ENTRY(AAStrokeRectOp),
+            DRAW_OP_TEST_ENTRY(CircleOp),
+            DRAW_OP_TEST_ENTRY(DashOp),
+            DRAW_OP_TEST_ENTRY(DefaultPathOp),
+            DRAW_OP_TEST_ENTRY(DIEllipseOp),
+            DRAW_OP_TEST_ENTRY(EllipseOp),
+            DRAW_OP_TEST_ENTRY(GrAtlasTextOp),
+            DRAW_OP_TEST_ENTRY(GrDrawAtlasOp),
+            DRAW_OP_TEST_ENTRY(GrDrawVerticesOp),
+            DRAW_OP_TEST_ENTRY(NonAAFillRectOp),
+            DRAW_OP_TEST_ENTRY(NonAALatticeOp),
+            DRAW_OP_TEST_ENTRY(NonAAStrokeRectOp),
+            DRAW_OP_TEST_ENTRY(ShadowRRectOp),
+            DRAW_OP_TEST_ENTRY(SmallPathOp),
+            DRAW_OP_TEST_ENTRY(RegionOp),
+            DRAW_OP_TEST_ENTRY(RRectOp),
+            DRAW_OP_TEST_ENTRY(TesselatingPathOp),
+            DRAW_OP_TEST_ENTRY(TextureOp),
     };
 
     static constexpr size_t kTotal = SK_ARRAY_COUNT(gFactories);

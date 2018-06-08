@@ -12,13 +12,15 @@
 #endif
 
 #if SK_SUPPORT_GPU
-sk_sp<GrFragmentProcessor> SkLocalMatrixShader::asFragmentProcessor(const AsFPArgs& args) const {
+std::unique_ptr<GrFragmentProcessor> SkLocalMatrixShader::asFragmentProcessor(
+        const GrFPArgs& args) const {
     SkMatrix tmp = this->getLocalMatrix();
     if (args.fLocalMatrix) {
         tmp.preConcat(*args.fLocalMatrix);
     }
-    return as_SB(fProxyShader)->asFragmentProcessor(AsFPArgs(
-        args.fContext, args.fViewMatrix, &tmp, args.fFilterQuality, args.fDstColorSpace));
+    return as_SB(fProxyShader)
+            ->asFragmentProcessor(GrFPArgs(args.fContext, args.fViewMatrix, &tmp,
+                                           args.fFilterQuality, args.fDstColorSpaceInfo));
 }
 #endif
 
@@ -62,18 +64,14 @@ SkImage* SkLocalMatrixShader::onIsAImage(SkMatrix* outMatrix, enum TileMode* mod
     return image;
 }
 
-bool SkLocalMatrixShader::onAppendStages(SkRasterPipeline* p,
-                                         SkColorSpace* dst,
-                                         SkArenaAlloc* scratch,
-                                         const SkMatrix& ctm,
-                                         const SkPaint& paint,
-                                         const SkMatrix* localM) const {
+bool SkLocalMatrixShader::onAppendStages(const StageRec& rec) const {
     SkMatrix tmp;
-    if (localM) {
-        tmp.setConcat(*localM, this->getLocalMatrix());
+    if (rec.fLocalM) {
+        tmp.setConcat(*rec.fLocalM, this->getLocalMatrix());
     }
-    return as_SB(fProxyShader)->appendStages(p, dst, scratch, ctm, paint,
-                                             localM ? &tmp : &this->getLocalMatrix());
+    StageRec newRec = rec;
+    newRec.fLocalM = rec.fLocalM ? &tmp : &this->getLocalMatrix();
+    return as_SB(fProxyShader)->appendStages(newRec);
 }
 
 #ifndef SK_IGNORE_TO_STRING

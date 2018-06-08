@@ -63,8 +63,10 @@ bool SkPictureImageGenerator::onGetPixels(const SkImageInfo& info, void* pixels,
     bool useXformCanvas =
             SkTransferFunctionBehavior::kIgnore == opts.fBehavior && info.colorSpace();
 
+    SkSurfaceProps props(0, kUnknown_SkPixelGeometry);
     SkImageInfo canvasInfo = useXformCanvas ? info.makeColorSpace(nullptr) : info;
-    std::unique_ptr<SkCanvas> canvas = SkCanvas::MakeRasterDirect(canvasInfo, pixels, rowBytes);
+    std::unique_ptr<SkCanvas> canvas = SkCanvas::MakeRasterDirect(canvasInfo, pixels, rowBytes,
+                                                                  &props);
     if (!canvas) {
         return false;
     }
@@ -102,15 +104,18 @@ SkImageGenerator::MakeFromPicture(const SkISize& size, sk_sp<SkPicture> picture,
 #if SK_SUPPORT_GPU
 sk_sp<GrTextureProxy> SkPictureImageGenerator::onGenerateTexture(
         GrContext* ctx, const SkImageInfo& info, const SkIPoint& origin,
-        SkTransferFunctionBehavior behavior) {
+        SkTransferFunctionBehavior behavior, bool willNeedMipMaps) {
     SkASSERT(ctx);
     bool useXformCanvas = SkTransferFunctionBehavior::kIgnore == behavior && info.colorSpace();
 
     //
     // TODO: respect the usage, by possibly creating a different (pow2) surface
     //
+    SkSurfaceProps props(0, kUnknown_SkPixelGeometry);
     SkImageInfo surfaceInfo = useXformCanvas ? info.makeColorSpace(nullptr) : info;
-    sk_sp<SkSurface> surface(SkSurface::MakeRenderTarget(ctx, SkBudgeted::kYes, surfaceInfo));
+    sk_sp<SkSurface> surface(SkSurface::MakeRenderTarget(ctx, SkBudgeted::kYes, surfaceInfo,
+                                                         0, kTopLeft_GrSurfaceOrigin, &props,
+                                                         willNeedMipMaps));
     if (!surface) {
         return nullptr;
     }
@@ -130,6 +135,8 @@ sk_sp<GrTextureProxy> SkPictureImageGenerator::onGenerateTexture(
     if (!image) {
         return nullptr;
     }
-    return as_IB(image)->asTextureProxyRef();
+    sk_sp<GrTextureProxy> proxy = as_IB(image)->asTextureProxyRef();
+    SkASSERT(!willNeedMipMaps || GrMipMapped::kYes == proxy->mipMapped());
+    return proxy;
 }
 #endif

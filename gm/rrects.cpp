@@ -83,7 +83,7 @@ protected:
 #endif
 
 #if SK_SUPPORT_GPU
-        int lastEdgeType = (kEffect_Type == fType) ? kLast_GrProcessorEdgeType: 0;
+        int lastEdgeType = (kEffect_Type == fType) ? (int) GrClipEdgeType::kLast: 0;
 #else
         int lastEdgeType = 0;
 #endif
@@ -105,8 +105,9 @@ protected:
 #if SK_SUPPORT_GPU
                         SkRRect rrect = fRRects[curRRect];
                         rrect.offset(SkIntToScalar(x), SkIntToScalar(y));
-                        GrPrimitiveEdgeType edgeType = (GrPrimitiveEdgeType) et;
-                        sk_sp<GrFragmentProcessor> fp(GrRRectEffect::Make(edgeType, rrect));
+                        GrClipEdgeType edgeType = (GrClipEdgeType) et;
+                        const auto& caps = *renderTargetContext->caps()->shaderCaps();
+                        auto fp = GrRRectEffect::Make(edgeType, rrect, caps);
                         if (fp) {
                             GrPaint grPaint;
                             grPaint.setXPFactory(GrPorterDuffXPFactory::Get(SkBlendMode::kSrc));

@@ -11,13 +11,14 @@
 #include "GrResourceKey.h"
 #include "GrResourceProvider.h"
 #include "GrSimpleMeshDrawOpHelper.h"
+#include "SkPointPriv.h"
 #include "SkStrokeRec.h"
 
 GR_DECLARE_STATIC_UNIQUE_KEY(gMiterIndexBufferKey);
 GR_DECLARE_STATIC_UNIQUE_KEY(gBevelIndexBufferKey);
 
 static void set_inset_fan(SkPoint* pts, size_t stride, const SkRect& r, SkScalar dx, SkScalar dy) {
-    pts->setRectFan(r.fLeft + dx, r.fTop + dy, r.fRight - dx, r.fBottom - dy, stride);
+    SkPointPriv::SetRectFan(pts, r.fLeft + dx, r.fTop + dy, r.fRight - dx, r.fBottom - dy, stride);
 }
 
 // We support all hairlines, bevels, and miters, but not round joins. Also, check whether the miter
@@ -171,6 +172,10 @@ public:
 
     const char* name() const override { return "AAStrokeRect"; }
 
+    void visitProxies(const VisitProxyFunc& func) const override {
+        fHelper.visitProxies(func);
+    }
+
     SkString dumpInfo() const override {
         SkString string;
         for (const auto& info : fRects) {
@@ -191,13 +196,15 @@ public:
 
     FixedFunctionFlags fixedFunctionFlags() const override { return fHelper.fixedFunctionFlags(); }
 
-    RequiresDstTexture finalize(const GrCaps& caps, const GrAppliedClip* clip) override {
-        return fHelper.xpRequiresDstTexture(caps, clip, GrProcessorAnalysisCoverage::kSingleChannel,
+    RequiresDstTexture finalize(const GrCaps& caps, const GrAppliedClip* clip,
+                                GrPixelConfigIsClamped dstIsClamped) override {
+        return fHelper.xpRequiresDstTexture(caps, clip, dstIsClamped,
+                                            GrProcessorAnalysisCoverage::kSingleChannel,
                                             &fRects.back().fColor);
     }
 
 private:
-    void onPrepareDraws(Target*) const override;
+    void onPrepareDraws(Target*) override;
 
     static const int kMiterIndexCnt = 3 * 24;
     static const int kMiterVertexCnt = 16;
@@ -207,7 +214,7 @@ private:
     static const int kBevelVertexCnt = 24;
     static const int kNumBevelRectsInIndexBuffer = 256;
 
-    static const GrBuffer* GetIndexBuffer(GrResourceProvider* resourceProvider, bool miterStroke);
+    static sk_sp<const GrBuffer> GetIndexBuffer(GrResourceProvider*, bool miterStroke);
 
     const SkMatrix& viewMatrix() const { return fViewMatrix; }
     bool miterStroke() const { return fMiterStroke; }
@@ -246,7 +253,7 @@ private:
 
 }  // anonymous namespace
 
-void AAStrokeRectOp::onPrepareDraws(Target* target) const {
+void AAStrokeRectOp::onPrepareDraws(Target* target) {
     sk_sp<GrGeometryProcessor> gp(create_stroke_rect_gp(fHelper.compatibleWithAlphaAsCoverage(),
                                                         this->viewMatrix(),
                                                         fHelper.usesLocalCoords()));
@@ -266,8 +273,7 @@ void AAStrokeRectOp::onPrepareDraws(Target* target) const {
     int indicesPerInstance = this->miterStroke() ? kMiterIndexCnt : kBevelIndexCnt;
     int instanceCount = fRects.count();
 
-    const sk_sp<const GrBuffer> indexBuffer(
-            GetIndexBuffer(target->resourceProvider(), this->miterStroke()));
+    sk_sp<const GrBuffer> indexBuffer = GetIndexBuffer(target->resourceProvider(), this->miterStroke());
     PatternHelper helper(GrPrimitiveType::kTriangles);
     void* vertices =
             helper.init(target, vertexStride, indexBuffer.get(),
@@ -295,8 +301,8 @@ void AAStrokeRectOp::onPrepareDraws(Target* target) const {
     helper.recordDraw(target, gp.get(), fHelper.makePipeline(target));
 }
 
-const GrBuffer* AAStrokeRectOp::GetIndexBuffer(GrResourceProvider* resourceProvider,
-                                               bool miterStroke) {
+sk_sp<const GrBuffer> AAStrokeRectOp::GetIndexBuffer(GrResourceProvider* resourceProvider,
+                                                     bool miterStroke) {
     if (miterStroke) {
         // clang-format off
         static const uint16_t gMiterIndices[] = {
@@ -489,9 +495,9 @@ void AAStrokeRectOp::generateAAStrokeRectGeometry(void* vertices,
         } else {
             // When the interior rect has become degenerate we smoosh to a single point
             SkASSERT(devInside.fLeft == devInside.fRight && devInside.fTop == devInside.fBottom);
-            fan2Pos->setRectFan(devInside.fLeft, devInside.fTop, devInside.fRight,
+            SkPointPriv::SetRectFan(fan2Pos, devInside.fLeft, devInside.fTop, devInside.fRight,
                                 devInside.fBottom, vertexStride);
-            fan3Pos->setRectFan(devInside.fLeft, devInside.fTop, devInside.fRight,
+            SkPointPriv::SetRectFan(fan3Pos, devInside.fLeft, devInside.fTop, devInside.fRight,
                                 devInside.fBottom, vertexStride);
         }
     } else {
@@ -513,9 +519,9 @@ void AAStrokeRectOp::generateAAStrokeRectGeometry(void* vertices,
         } else {
             // When the interior rect has become degenerate we smoosh to a single point
             SkASSERT(devInside.fLeft == devInside.fRight && devInside.fTop == devInside.fBottom);
-            fan2Pos->setRectFan(devInside.fLeft, devInside.fTop, devInside.fRight,
+            SkPointPriv::SetRectFan(fan2Pos, devInside.fLeft, devInside.fTop, devInside.fRight,
                                 devInside.fBottom, vertexStride);
-            fan3Pos->setRectFan(devInside.fLeft, devInside.fTop, devInside.fRight,
+            SkPointPriv::SetRectFan(fan3Pos, devInside.fLeft, devInside.fTop, devInside.fRight,
                                 devInside.fBottom, vertexStride);
         }
     }

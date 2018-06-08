@@ -8,46 +8,49 @@
 #define GrMockTexture_DEFINED
 
 #include "GrMockGpu.h"
+#include "GrRenderTarget.h"
 #include "GrTexture.h"
 #include "GrTexturePriv.h"
 #include "mock/GrMockTypes.h"
 
 class GrMockTexture : public GrTexture {
 public:
-    GrMockTexture(GrMockGpu* gpu, SkBudgeted budgeted, const GrSurfaceDesc& desc, bool hasMipLevels,
-                  const GrMockTextureInfo& info)
-            : GrMockTexture(gpu, desc, hasMipLevels, info) {
+    GrMockTexture(GrMockGpu* gpu, SkBudgeted budgeted, const GrSurfaceDesc& desc,
+                  GrMipMapsStatus mipMapsStatus, const GrMockTextureInfo& info)
+            : GrMockTexture(gpu, desc, mipMapsStatus, info) {
         this->registerWithCache(budgeted);
     }
-    ~GrMockTexture() override {
-        if (fReleaseProc) {
-            fReleaseProc(fReleaseCtx);
-        }
-    }
+    ~GrMockTexture() override {}
+
     GrBackendObject getTextureHandle() const override {
         return reinterpret_cast<GrBackendObject>(&fInfo);
     }
+    GrBackendTexture getBackendTexture() const override {
+        return GrBackendTexture(this->width(), this->height(), this->config(),
+                                this->texturePriv().mipMapped(), fInfo);
+    }
+
     void textureParamsModified() override {}
-    void setRelease(ReleaseProc proc, ReleaseCtx ctx) override {
-        fReleaseProc = proc;
-        fReleaseCtx = ctx;
+    void setRelease(sk_sp<GrReleaseProcHelper> releaseHelper) override {
+        fReleaseHelper = std::move(releaseHelper);
     }
 
 protected:
     // constructor for subclasses
-    GrMockTexture(GrMockGpu* gpu, const GrSurfaceDesc& desc, bool hasMipLevels,
+    GrMockTexture(GrMockGpu* gpu, const GrSurfaceDesc& desc, GrMipMapsStatus mipMapsStatus,
                   const GrMockTextureInfo& info)
             : GrSurface(gpu, desc)
-            , INHERITED(gpu, desc, kITexture2DSampler_GrSLType, GrSamplerParams::kMipMap_FilterMode,
-                        hasMipLevels)
-            , fInfo(info)
-            , fReleaseProc(nullptr)
-            , fReleaseCtx(nullptr) {}
+            , INHERITED(gpu, desc, kTexture2DSampler_GrSLType, GrSamplerState::Filter::kMipMap,
+                        mipMapsStatus)
+            , fInfo(info) {}
+
+    bool onStealBackendTexture(GrBackendTexture*, SkImage::BackendTextureReleaseProc*) override {
+        return false;
+    }
 
 private:
-    GrMockTextureInfo fInfo;
-    ReleaseProc fReleaseProc;
-    ReleaseCtx fReleaseCtx;
+    GrMockTextureInfo          fInfo;
+    sk_sp<GrReleaseProcHelper> fReleaseHelper;
 
     typedef GrTexture INHERITED;
 };
@@ -55,14 +58,19 @@ private:
 class GrMockTextureRenderTarget : public GrMockTexture, public GrRenderTarget {
 public:
     GrMockTextureRenderTarget(GrMockGpu* gpu, SkBudgeted budgeted, const GrSurfaceDesc& desc,
-                              bool hasMipLevels, const GrMockTextureInfo& texInfo)
+                              GrMipMapsStatus mipMapsStatus, const GrMockTextureInfo& texInfo)
             : GrSurface(gpu, desc)
-            , GrMockTexture(gpu, desc, hasMipLevels, texInfo)
+            , GrMockTexture(gpu, desc, mipMapsStatus, texInfo)
             , GrRenderTarget(gpu, desc) {
         this->registerWithCache(budgeted);
     }
     ResolveType getResolveType() const override { return kCanResolve_ResolveType; }
     GrBackendObject getRenderTargetHandle() const override { return 0; }
+
+    GrBackendRenderTarget getBackendRenderTarget() const override {
+        return GrBackendRenderTarget(); // invalid
+    }
+
     bool canAttemptStencilAttachment() const override { return true; }
     bool completeStencilAttachment() override { return true; }
     GrTexture* asTexture() override { return this; }
@@ -82,15 +90,20 @@ private:
     }
 
     size_t onGpuMemorySize() const override {
+        int numColorSamples = this->numColorSamples();
+        if (numColorSamples > 1) {
+            // Add one to account for the resolve buffer.
+            ++numColorSamples;
+        }
         return GrSurface::ComputeSize(this->config(), this->width(), this->height(),
-                                      this->numStencilSamples(),
-                                      this->texturePriv().hasMipMaps());
+                                      numColorSamples,
+                                      this->texturePriv().mipMapped());
     }
 
     void computeScratchKey(GrScratchKey* key) const override {
         GrTexturePriv::ComputeScratchKey(this->config(), this->width(), this->height(),
-                                         this->origin(), true, this->numStencilSamples(),
-                                         this->texturePriv().hasMipMaps(), key);
+                                         true, this->numStencilSamples(),
+                                         this->texturePriv().mipMapped(), key);
     }
 };
 

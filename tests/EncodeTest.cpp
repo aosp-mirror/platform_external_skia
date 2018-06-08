@@ -9,6 +9,7 @@
 #include "Test.h"
 
 #include "SkBitmap.h"
+#include "SkColorPriv.h"
 #include "SkEncodedImageFormat.h"
 #include "SkImage.h"
 #include "SkJpegEncoder.h"
@@ -47,7 +48,7 @@ static std::unique_ptr<SkEncoder> make(SkEncodedImageFormat format, SkWStream* d
 
 static void test_encode(skiatest::Reporter* r, SkEncodedImageFormat format) {
     SkBitmap bitmap;
-    bool success = GetResourceAsBitmap("mandrill_128.png", &bitmap);
+    bool success = GetResourceAsBitmap("images/mandrill_128.png", &bitmap);
     if (!success) {
         return;
     }
@@ -132,7 +133,7 @@ static inline bool almost_equals(const SkBitmap& a, const SkBitmap& b, int toler
 
 DEF_TEST(Encode_JpegDownsample, r) {
     SkBitmap bitmap;
-    bool success = GetResourceAsBitmap("mandrill_128.png", &bitmap);
+    bool success = GetResourceAsBitmap("images/mandrill_128.png", &bitmap);
     if (!success) {
         return;
     }
@@ -164,9 +165,9 @@ DEF_TEST(Encode_JpegDownsample, r) {
     REPORTER_ASSERT(r, data1->size() < data2->size());
 
     SkBitmap bm0, bm1, bm2;
-    SkImage::MakeFromEncoded(data0)->asLegacyBitmap(&bm0, SkImage::kRO_LegacyBitmapMode);
-    SkImage::MakeFromEncoded(data1)->asLegacyBitmap(&bm1, SkImage::kRO_LegacyBitmapMode);
-    SkImage::MakeFromEncoded(data2)->asLegacyBitmap(&bm2, SkImage::kRO_LegacyBitmapMode);
+    SkImage::MakeFromEncoded(data0)->asLegacyBitmap(&bm0);
+    SkImage::MakeFromEncoded(data1)->asLegacyBitmap(&bm1);
+    SkImage::MakeFromEncoded(data2)->asLegacyBitmap(&bm2);
     REPORTER_ASSERT(r, almost_equals(bm0, bm1, 60));
     REPORTER_ASSERT(r, almost_equals(bm1, bm2, 60));
 }
@@ -244,7 +245,7 @@ static void testPngComments(const SkPixmap& src, SkPngEncoder::Options& options,
 
 DEF_TEST(Encode_PngOptions, r) {
     SkBitmap bitmap;
-    bool success = GetResourceAsBitmap("mandrill_128.png", &bitmap);
+    bool success = GetResourceAsBitmap("images/mandrill_128.png", &bitmap);
     if (!success) {
         return;
     }
@@ -278,16 +279,16 @@ DEF_TEST(Encode_PngOptions, r) {
     REPORTER_ASSERT(r, data1->size() < data2->size());
 
     SkBitmap bm0, bm1, bm2;
-    SkImage::MakeFromEncoded(data0)->asLegacyBitmap(&bm0, SkImage::kRO_LegacyBitmapMode);
-    SkImage::MakeFromEncoded(data1)->asLegacyBitmap(&bm1, SkImage::kRO_LegacyBitmapMode);
-    SkImage::MakeFromEncoded(data2)->asLegacyBitmap(&bm2, SkImage::kRO_LegacyBitmapMode);
+    SkImage::MakeFromEncoded(data0)->asLegacyBitmap(&bm0);
+    SkImage::MakeFromEncoded(data1)->asLegacyBitmap(&bm1);
+    SkImage::MakeFromEncoded(data2)->asLegacyBitmap(&bm2);
     REPORTER_ASSERT(r, almost_equals(bm0, bm1, 0));
     REPORTER_ASSERT(r, almost_equals(bm0, bm2, 0));
 }
 
 DEF_TEST(Encode_WebpOptions, r) {
     SkBitmap bitmap;
-    bool success = GetResourceAsBitmap("google_chrome.ico", &bitmap);
+    bool success = GetResourceAsBitmap("images/google_chrome.ico", &bitmap);
     if (!success) {
         return;
     }
@@ -329,10 +330,10 @@ DEF_TEST(Encode_WebpOptions, r) {
     REPORTER_ASSERT(r, data2->size() > data3->size());
 
     SkBitmap bm0, bm1, bm2, bm3;
-    SkImage::MakeFromEncoded(data0)->asLegacyBitmap(&bm0, SkImage::kRO_LegacyBitmapMode);
-    SkImage::MakeFromEncoded(data1)->asLegacyBitmap(&bm1, SkImage::kRO_LegacyBitmapMode);
-    SkImage::MakeFromEncoded(data2)->asLegacyBitmap(&bm2, SkImage::kRO_LegacyBitmapMode);
-    SkImage::MakeFromEncoded(data3)->asLegacyBitmap(&bm3, SkImage::kRO_LegacyBitmapMode);
+    SkImage::MakeFromEncoded(data0)->asLegacyBitmap(&bm0);
+    SkImage::MakeFromEncoded(data1)->asLegacyBitmap(&bm1);
+    SkImage::MakeFromEncoded(data2)->asLegacyBitmap(&bm2);
+    SkImage::MakeFromEncoded(data3)->asLegacyBitmap(&bm3);
     REPORTER_ASSERT(r, almost_equals(bm0, bm1, 0));
     REPORTER_ASSERT(r, almost_equals(bm0, bm2, 90));
     REPORTER_ASSERT(r, almost_equals(bm2, bm3, 45));

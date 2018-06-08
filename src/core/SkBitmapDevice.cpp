@@ -43,13 +43,17 @@ static bool valid_for_bitmap_device(const SkImageInfo& info,
 
     switch (info.colorType()) {
         case kAlpha_8_SkColorType:
-            break;
-        case kRGB_565_SkColorType:
-            canonicalAlphaType = kOpaque_SkAlphaType;
-            break;
-        case kN32_SkColorType:
-            break;
+        case kARGB_4444_SkColorType:
+        case kRGBA_8888_SkColorType:
+        case kBGRA_8888_SkColorType:
+        case kRGBA_1010102_SkColorType:
         case kRGBA_F16_SkColorType:
+            break;
+        case kGray_8_SkColorType:
+        case kRGB_565_SkColorType:
+        case kRGB_888x_SkColorType:
+        case kRGB_101010x_SkColorType:
+            canonicalAlphaType = kOpaque_SkAlphaType;
             break;
         default:
             return false;
@@ -150,23 +154,21 @@ bool SkBitmapDevice::onPeekPixels(SkPixmap* pmap) {
     return false;
 }
 
-bool SkBitmapDevice::onWritePixels(const SkImageInfo& srcInfo, const void* srcPixels,
-                                   size_t srcRowBytes, int x, int y) {
+bool SkBitmapDevice::onWritePixels(const SkPixmap& pm, int x, int y) {
     // since we don't stop creating un-pixeled devices yet, check for no pixels here
     if (nullptr == fBitmap.getPixels()) {
         return false;
     }
 
-    if (fBitmap.writePixels(SkPixmap(srcInfo, srcPixels, srcRowBytes), x, y)) {
+    if (fBitmap.writePixels(pm, x, y)) {
         fBitmap.notifyPixelsChanged();
         return true;
     }
     return false;
 }
 
-bool SkBitmapDevice::onReadPixels(const SkImageInfo& dstInfo, void* dstPixels, size_t dstRowBytes,
-                                  int x, int y) {
-    return fBitmap.readPixels(dstInfo, dstPixels, dstRowBytes, x, y);
+bool SkBitmapDevice::onReadPixels(const SkPixmap& pm, int x, int y) {
+    return fBitmap.readPixels(pm, x, y);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -373,9 +375,16 @@ void SkBitmapDevice::drawVertices(const SkVertices* vertices, SkBlendMode bmode,
                               vertices->indices(), vertices->indexCount(), paint);
 }
 
-void SkBitmapDevice::drawDevice(SkBaseDevice* device, int x, int y, const SkPaint& paint) {
-    SkASSERT(!paint.getImageFilter());
-    BDDraw(this).drawSprite(static_cast<SkBitmapDevice*>(device)->fBitmap, x, y, paint);
+void SkBitmapDevice::drawDevice(SkBaseDevice* device, int x, int y, const SkPaint& origPaint) {
+    SkASSERT(!origPaint.getImageFilter());
+
+    // todo: can we unify with similar adjustment in SkGpuDevice?
+    SkTCopyOnFirstWrite<SkPaint> paint(origPaint);
+    if (paint->getMaskFilter()) {
+        paint.writable()->setMaskFilter(paint->getMaskFilter()->makeWithLocalMatrix(this->ctm()));
+    }
+
+    BDDraw(this).drawSprite(static_cast<SkBitmapDevice*>(device)->fBitmap, x, y, *paint);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -429,6 +438,10 @@ void SkBitmapDevice::drawSpecial(SkSpecialImage* src, int x, int y, const SkPain
         paint.writable()->setImageFilter(nullptr);
         x += offset.x();
         y += offset.y();
+    }
+
+    if (paint->getMaskFilter()) {
+        paint.writable()->setMaskFilter(paint->getMaskFilter()->makeWithLocalMatrix(this->ctm()));
     }
 
     if (!clipImage) {
@@ -521,7 +534,6 @@ SkImageFilterCache* SkBitmapDevice::getImageFilterCache() {
 
 bool SkBitmapDevice::onShouldDisableLCD(const SkPaint& paint) const {
     if (kN32_SkColorType != fBitmap.colorType() ||
-        paint.getRasterizer() ||
         paint.getPathEffect() ||
         paint.isFakeBoldText() ||
         paint.getStyle() != SkPaint::kFill_Style ||

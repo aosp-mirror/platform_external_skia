@@ -17,7 +17,7 @@
 #include "GrTextureProxy.h"
 #include "SkDraw.h"
 #include "SkGr.h"
-#include "SkMaskFilter.h"
+#include "SkMaskFilterBase.h"
 #include "SkPaint.h"
 #include "SkTLazy.h"
 
@@ -42,8 +42,7 @@ static bool draw_mask(GrRenderTargetContext* renderTargetContext,
     SkMatrix matrix = SkMatrix::MakeTrans(-SkIntToScalar(maskRect.fLeft),
                                           -SkIntToScalar(maskRect.fTop));
     matrix.preConcat(viewMatrix);
-    paint.addCoverageFragmentProcessor(GrSimpleTextureEffect::Make(std::move(mask),
-                                                                   nullptr, matrix));
+    paint.addCoverageFragmentProcessor(GrSimpleTextureEffect::Make(std::move(mask), matrix));
 
     renderTargetContext->fillRectWithLocalMatrix(clip, std::move(paint), GrAA::kNo, SkMatrix::I(),
                                                  SkRect::Make(maskRect), inverse);
@@ -66,7 +65,7 @@ static bool sw_draw_with_mask_filter(GrContext* context,
     }
     SkAutoMaskFreeImage autoSrc(srcM.fImage);
 
-    if (!filter->filterMask(&dstM, srcM, viewMatrix, nullptr)) {
+    if (!as_MFB(filter)->filterMask(&dstM, srcM, viewMatrix, nullptr)) {
         return false;
     }
     // this will free-up dstM when we're done (allocated in filterMask())
@@ -86,6 +85,7 @@ static bool sw_draw_with_mask_filter(GrContext* context,
 
     sk_sp<GrSurfaceContext> sContext = context->contextPriv().makeDeferredSurfaceContext(
                                                         desc,
+                                                        GrMipMapped::kNo,
                                                         SkBackingFit::kApprox,
                                                         SkBudgeted::kYes);
     if (!sContext) {
@@ -110,7 +110,7 @@ static sk_sp<GrTextureProxy> create_mask_GPU(GrContext* context,
                                              int sampleCnt) {
     if (GrAA::kNo == aa) {
         // Don't need MSAA if mask isn't AA
-        sampleCnt = 0;
+        sampleCnt = 1;
     }
 
     sk_sp<GrRenderTargetContext> rtContext(context->makeDeferredRenderTargetContextWithFallback(
@@ -144,7 +144,7 @@ static void draw_path_with_mask_filter(GrContext* context,
                                        GrPaint&& paint,
                                        GrAA aa,
                                        const SkMatrix& viewMatrix,
-                                       const SkMaskFilter* maskFilter,
+                                       const SkMaskFilterBase* maskFilter,
                                        const GrStyle& style,
                                        const SkPath* path,
                                        bool pathIsMutable) {
@@ -252,7 +252,7 @@ void GrBlurUtils::drawPathWithMaskFilter(GrContext* context,
                                          const GrStyle& style,
                                          bool pathIsMutable) {
     draw_path_with_mask_filter(context, renderTargetContext, clip, std::move(paint), aa, viewMatrix,
-                               mf, style, &path, pathIsMutable);
+                               as_MFB(mf), style, &path, pathIsMutable);
 }
 
 void GrBlurUtils::drawPathWithMaskFilter(GrContext* context,
@@ -292,12 +292,13 @@ void GrBlurUtils::drawPathWithMaskFilter(GrContext* context,
     SkDEBUGCODE(prePathMatrix = (const SkMatrix*)0x50FF8001;)
 
     GrPaint grPaint;
-    if (!SkPaintToGrPaint(context, renderTargetContext, paint, viewMatrix, &grPaint)) {
+    if (!SkPaintToGrPaint(context, renderTargetContext->colorSpaceInfo(), paint, viewMatrix,
+                          &grPaint)) {
         return;
     }
-    GrAA aa = GrBoolToAA(paint.isAntiAlias());
-    SkMaskFilter* mf = paint.getMaskFilter();
-    if (mf && !mf->asFragmentProcessor(nullptr)) {
+    GrAA aa = GrAA(paint.isAntiAlias());
+    SkMaskFilterBase* mf = as_MFB(paint.getMaskFilter());
+    if (mf && !mf->hasFragmentProcessor()) {
         // The MaskFilter wasn't already handled in SkPaintToGrPaint
         draw_path_with_mask_filter(context, renderTargetContext, clip, std::move(grPaint), aa,
                                    viewMatrix, mf, style, path, pathIsMutable);

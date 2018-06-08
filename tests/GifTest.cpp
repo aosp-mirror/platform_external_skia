@@ -195,7 +195,7 @@ DEF_TEST(Gif, reporter) {
     // Likewise, incremental decoding should succeed here.
     {
         sk_sp<SkData> data = SkData::MakeWithoutCopy(gGIFDataNoColormap, 31);
-        std::unique_ptr<SkCodec> codec(SkCodec::NewFromData(data));
+        std::unique_ptr<SkCodec> codec(SkCodec::MakeFromData(data));
         REPORTER_ASSERT(reporter, codec);
         if (codec) {
             auto info = codec->getInfo().makeColorType(kN32_SkColorType);
@@ -225,14 +225,13 @@ DEF_TEST(Gif, reporter) {
 // Regression test for decoding a gif image with sampleSize of 4, which was
 // previously crashing.
 DEF_TEST(Gif_Sampled, r) {
-    std::unique_ptr<SkFILEStream> stream(
-            new SkFILEStream(GetResourcePath("test640x479.gif").c_str()));
-    REPORTER_ASSERT(r, stream->isValid());
-    if (!stream->isValid()) {
+    auto data = GetResourceAsData("images/test640x479.gif");
+    REPORTER_ASSERT(r, data);
+    if (!data) {
         return;
     }
-
-    std::unique_ptr<SkAndroidCodec> codec(SkAndroidCodec::NewFromStream(stream.release()));
+    std::unique_ptr<SkStreamAsset> stream(new SkMemoryStream(std::move(data)));
+    std::unique_ptr<SkAndroidCodec> codec(SkAndroidCodec::MakeFromStream(std::move(stream)));
     REPORTER_ASSERT(r, codec);
     if (!codec) {
         return;
@@ -251,26 +250,26 @@ DEF_TEST(Gif_Sampled, r) {
 // If a GIF file is truncated before the header for the first image is defined,
 // we should not create an SkCodec.
 DEF_TEST(Codec_GifTruncated, r) {
-    sk_sp<SkData> data(GetResourceAsData("test640x479.gif"));
+    sk_sp<SkData> data(GetResourceAsData("images/test640x479.gif"));
     if (!data) {
         return;
     }
 
     // This is right before the header for the first image.
     data = SkData::MakeSubset(data.get(), 0, 446);
-    std::unique_ptr<SkCodec> codec(SkCodec::NewFromData(data));
+    std::unique_ptr<SkCodec> codec(SkCodec::MakeFromData(data));
     REPORTER_ASSERT(r, !codec);
 }
 
 DEF_TEST(Codec_GifTruncated2, r) {
-    sk_sp<SkData> data(GetResourceAsData("box.gif"));
+    sk_sp<SkData> data(GetResourceAsData("images/box.gif"));
     if (!data) {
         return;
     }
 
     // This is after the header, but before the color table.
     data = SkData::MakeSubset(data.get(), 0, 23);
-    std::unique_ptr<SkCodec> codec(SkCodec::NewFromData(data));
+    std::unique_ptr<SkCodec> codec(SkCodec::MakeFromData(data));
     if (!codec) {
         ERRORF(r, "Failed to create codec with partial data");
         return;

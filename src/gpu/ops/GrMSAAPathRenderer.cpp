@@ -23,7 +23,7 @@
 #include "glsl/GrGLSLGeometryProcessor.h"
 #include "glsl/GrGLSLProgramDataManager.h"
 #include "glsl/GrGLSLUtil.h"
-#include "glsl/GrGLSLVertexShaderBuilder.h"
+#include "glsl/GrGLSLVertexGeoBuilder.h"
 #include "ops/GrMeshDrawOp.h"
 #include "ops/GrRectOpFactory.h"
 
@@ -140,23 +140,23 @@ public:
             varyingHandler->emitAttributes(qp);
             varyingHandler->addPassThroughAttribute(qp.inColor(), args.fOutputColor);
 
-            GrGLSLVertToFrag uv(kVec2f_GrSLType);
-            varyingHandler->addVarying("uv", &uv, kHigh_GrSLPrecision);
+            GrGLSLVarying uv(kFloat2_GrSLType);
+            varyingHandler->addVarying("uv", &uv);
             vsBuilder->codeAppendf("%s = %s;", uv.vsOut(), qp.inUV()->fName);
 
             // Setup position
-            this->setupPosition(vsBuilder, uniformHandler, gpArgs, qp.inPosition()->fName,
-                                qp.viewMatrix(), &fViewMatrixUniform);
+            this->writeOutputPosition(vsBuilder, uniformHandler, gpArgs, qp.inPosition()->fName,
+                                      qp.viewMatrix(), &fViewMatrixUniform);
 
             // emit transforms
-            this->emitTransforms(vsBuilder, varyingHandler, uniformHandler, gpArgs->fPositionVar,
-                                 qp.inPosition()->fName, SkMatrix::I(),
+            this->emitTransforms(vsBuilder, varyingHandler, uniformHandler,
+                                 qp.inPosition()->asShaderVar(), SkMatrix::I(),
                                  args.fFPCoordTransformHandler);
 
-            GrGLSLPPFragmentBuilder* fsBuilder = args.fFragBuilder;
+            GrGLSLFPFragmentBuilder* fsBuilder = args.fFragBuilder;
             fsBuilder->codeAppendf("if (%s.x * %s.x >= %s.y) discard;", uv.fsIn(), uv.fsIn(),
                                                                         uv.fsIn());
-            fsBuilder->codeAppendf("%s = vec4(1.0);", args.fOutputCoverage);
+            fsBuilder->codeAppendf("%s = half4(1.0);", args.fOutputCoverage);
         }
 
         static inline void GenKey(const GrGeometryProcessor& gp,
@@ -197,12 +197,11 @@ public:
 
 private:
     MSAAQuadProcessor(const SkMatrix& viewMatrix)
-        : fViewMatrix(viewMatrix) {
-        this->initClassID<MSAAQuadProcessor>();
-        fInPosition = &this->addVertexAttrib("inPosition", kVec2f_GrVertexAttribType,
-                                             kHigh_GrSLPrecision);
-        fInUV = &this->addVertexAttrib("inUV", kVec2f_GrVertexAttribType, kHigh_GrSLPrecision);
-        fInColor = &this->addVertexAttrib("inColor", kVec4ub_GrVertexAttribType);
+        : INHERITED(kMSAAQuadProcessor_ClassID)
+        , fViewMatrix(viewMatrix) {
+        fInPosition = &this->addVertexAttrib("inPosition", kFloat2_GrVertexAttribType);
+        fInUV = &this->addVertexAttrib("inUV", kFloat2_GrVertexAttribType);
+        fInColor = &this->addVertexAttrib("inColor", kUByte4_norm_GrVertexAttribType);
         this->setSampleShading(1.0f);
     }
 
@@ -222,6 +221,7 @@ private:
 
 public:
     DEFINE_OP_CLASS_ID
+
     static std::unique_ptr<GrDrawOp> Make(GrPaint&& paint, const SkPath& path, GrAAType aaType,
                                           const SkMatrix& viewMatrix, const SkRect& devBounds,
                                           const GrUserStencilSettings* stencilSettings) {
@@ -242,6 +242,10 @@ public:
     }
 
     const char* name() const override { return "MSAAPathOp"; }
+
+    void visitProxies(const VisitProxyFunc& func) const override {
+        fHelper.visitProxies(func);
+    }
 
     SkString dumpInfo() const override {
         SkString string;
@@ -270,8 +274,10 @@ public:
 
     FixedFunctionFlags fixedFunctionFlags() const override { return fHelper.fixedFunctionFlags(); }
 
-    RequiresDstTexture finalize(const GrCaps& caps, const GrAppliedClip* clip) override {
-        return fHelper.xpRequiresDstTexture(caps, clip, GrProcessorAnalysisCoverage::kNone,
+    RequiresDstTexture finalize(const GrCaps& caps, const GrAppliedClip* clip,
+                                GrPixelConfigIsClamped dstIsClamped) override {
+        return fHelper.xpRequiresDstTexture(caps, clip, dstIsClamped,
+                                            GrProcessorAnalysisCoverage::kNone,
                                             &fPaths.front().fColor);
     }
 
@@ -329,7 +335,7 @@ private:
         *outQuadPointCount = quadPointCount;
     }
 
-    void onPrepareDraws(Target* target) const override {
+    void onPrepareDraws(Target* target) override {
         if (fMaxLineVertices == 0) {
             SkASSERT(fMaxQuadVertices == 0);
             return;
@@ -362,7 +368,7 @@ private:
         SkDEBUGCODE(quads.verticesEnd = quads.vertices + fMaxQuadVertices;)
 
         const GrBuffer* lineIndexBuffer = nullptr;
-        int firstLineIndex;
+        int firstLineIndex = 0;
         if (fIsIndexed) {
             lines.indices =
                     target->makeIndexSpace(3 * fMaxLineVertices, &lineIndexBuffer, &firstLineIndex);
@@ -631,20 +637,25 @@ bool GrMSAAPathRenderer::internalDrawPath(GrRenderTargetContext* renderTargetCon
     }
 
     SkRect devBounds;
-    GetPathDevBounds(path, renderTargetContext->width(), renderTargetContext->height(), viewMatrix,
-                     &devBounds);
+    GetPathDevBounds(path,
+                     renderTargetContext->asRenderTargetProxy()->worstCaseWidth(),
+                     renderTargetContext->asRenderTargetProxy()->worstCaseHeight(),
+                     viewMatrix, &devBounds);
 
     SkASSERT(passes[0]);
     {  // First pass
         bool firstPassIsStencil = stencilOnly || passes[1];
         // If we have a cover pass then we ignore the paint in the first pass and apply it in the
         // second.
-        GrPaint::MoveOrNew firstPassPaint(paint, firstPassIsStencil);
+        std::unique_ptr<GrDrawOp> op;
         if (firstPassIsStencil) {
-            firstPassPaint.paint().setXPFactory(GrDisableColorXPFactory::Get());
+            GrPaint stencilPaint;
+            stencilPaint.setXPFactory(GrDisableColorXPFactory::Get());
+            op = MSAAPathOp::Make(std::move(stencilPaint), path, aaType, viewMatrix, devBounds,
+                                  passes[0]);
+        } else {
+            op = MSAAPathOp::Make(std::move(paint), path, aaType, viewMatrix, devBounds, passes[0]);
         }
-        std::unique_ptr<GrDrawOp> op = MSAAPathOp::Make(std::move(firstPassPaint), path, aaType,
-                                                        viewMatrix, devBounds, passes[0]);
         if (!op) {
             return false;
         }
@@ -679,15 +690,18 @@ bool GrMSAAPathRenderer::internalDrawPath(GrRenderTargetContext* renderTargetCon
     return true;
 }
 
-bool GrMSAAPathRenderer::onCanDrawPath(const CanDrawPathArgs& args) const {
+GrPathRenderer::CanDrawPath GrMSAAPathRenderer::onCanDrawPath(const CanDrawPathArgs& args) const {
     // If we aren't a single_pass_shape, we require stencil buffers.
     if (!single_pass_shape(*args.fShape) && args.fCaps->avoidStencilBuffers()) {
-        return false;
+        return CanDrawPath::kNo;
     }
     // This path renderer only fills and relies on MSAA for antialiasing. Stroked shapes are
     // handled by passing on the original shape and letting the caller compute the stroked shape
     // which will have a fill style.
-    return args.fShape->style().isSimpleFill() && (GrAAType::kCoverage != args.fAAType);
+    if (!args.fShape->style().isSimpleFill() || GrAAType::kCoverage == args.fAAType) {
+        return CanDrawPath::kNo;
+    }
+    return CanDrawPath::kYes;
 }
 
 bool GrMSAAPathRenderer::onDrawPath(const DrawPathArgs& args) {

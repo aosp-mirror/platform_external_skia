@@ -60,13 +60,13 @@ protected:
 
         int y = kPad;
         int x = kPad;
-        constexpr GrPrimitiveEdgeType kEdgeTypes[] = {
-            kFillAA_GrProcessorEdgeType,
-            kInverseFillAA_GrProcessorEdgeType,
+        constexpr GrClipEdgeType kEdgeTypes[] = {
+            GrClipEdgeType::kFillAA,
+            GrClipEdgeType::kInverseFillAA,
         };
         SkRect testBounds = SkRect::MakeIWH(fTestWidth, fTestHeight);
         for (size_t et = 0; et < SK_ARRAY_COUNT(kEdgeTypes); ++et) {
-            GrPrimitiveEdgeType edgeType = kEdgeTypes[et];
+            GrClipEdgeType edgeType = kEdgeTypes[et];
             canvas->save();
                 canvas->translate(SkIntToScalar(x), SkIntToScalar(y));
 
@@ -77,7 +77,8 @@ protected:
 
                 SkRRect rrect = fRRect;
                 rrect.offset(SkIntToScalar(x + kGap), SkIntToScalar(y + kGap));
-                sk_sp<GrFragmentProcessor> fp(GrRRectEffect::Make(edgeType, rrect));
+                const auto& caps = *renderTargetContext->caps()->shaderCaps();
+                auto fp = GrRRectEffect::Make(edgeType, rrect, caps);
                 SkASSERT(fp);
                 if (fp) {
                     GrPaint grPaint;

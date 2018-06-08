@@ -7,8 +7,9 @@
 
 #include "SkMatrixConvolutionImageFilter.h"
 #include "SkBitmap.h"
-#include "SkColorPriv.h"
+#include "SkColorData.h"
 #include "SkColorSpaceXformer.h"
+#include "SkImageFilterPriv.h"
 #include "SkReadBuffer.h"
 #include "SkSpecialImage.h"
 #include "SkWriteBuffer.h"
@@ -79,6 +80,7 @@ sk_sp<SkImageFilter> SkMatrixConvolutionImageFilter::Make(const SkISize& kernelS
 
 sk_sp<SkFlattenable> SkMatrixConvolutionImageFilter::CreateProc(SkReadBuffer& buffer) {
     SK_IMAGEFILTER_UNFLATTEN_COMMON(common, 1);
+
     SkISize kernelSize;
     kernelSize.fWidth = buffer.readInt();
     kernelSize.fHeight = buffer.readInt();
@@ -97,8 +99,10 @@ sk_sp<SkFlattenable> SkMatrixConvolutionImageFilter::CreateProc(SkReadBuffer& bu
     SkIPoint kernelOffset;
     kernelOffset.fX = buffer.readInt();
     kernelOffset.fY = buffer.readInt();
-    TileMode tileMode = (TileMode)buffer.readInt();
+
+    TileMode tileMode = buffer.read32LE(kLast_TileMode);
     bool convolveAlpha = buffer.readBool();
+
     return Make(kernelSize, kernel.get(), gain, bias, kernelOffset, tileMode,
                 convolveAlpha, common.getInput(0), &common.cropRect());
 }
@@ -316,15 +320,15 @@ sk_sp<SkSpecialImage> SkMatrixConvolutionImageFilter::onFilterImage(SkSpecialIma
         offset->fY = bounds.top();
         bounds.offset(-inputOffset);
 
-        sk_sp<GrFragmentProcessor> fp(GrMatrixConvolutionEffect::Make(std::move(inputProxy),
-                                                                      bounds,
-                                                                      fKernelSize,
-                                                                      fKernel,
-                                                                      fGain,
-                                                                      fBias,
-                                                                      fKernelOffset,
-                                                                      convert_tilemodes(fTileMode),
-                                                                      fConvolveAlpha));
+        auto fp = GrMatrixConvolutionEffect::Make(std::move(inputProxy),
+                                                  bounds,
+                                                  fKernelSize,
+                                                  fKernel,
+                                                  fGain,
+                                                  fBias,
+                                                  fKernelOffset,
+                                                  convert_tilemodes(fTileMode),
+                                                  fConvolveAlpha);
         if (!fp) {
             return nullptr;
         }
@@ -399,8 +403,8 @@ SkIRect SkMatrixConvolutionImageFilter::onFilterNodeBounds(const SkIRect& src, c
                                                            MapDirection direction) const {
     SkIRect dst = src;
     int w = fKernelSize.width() - 1, h = fKernelSize.height() - 1;
-    dst.fRight += w;
-    dst.fBottom += h;
+    dst.fRight = Sk32_sat_add(dst.fRight, w);
+    dst.fBottom = Sk32_sat_add(dst.fBottom, h);
     if (kReverse_MapDirection == direction) {
         dst.offset(-fKernelOffset);
     } else {

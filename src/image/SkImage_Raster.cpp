@@ -10,9 +10,9 @@
 #include "SkBitmapProcShader.h"
 #include "SkCanvas.h"
 #include "SkColorSpaceXform_Base.h"
-#include "SkColorSpaceXformImageGenerator.h"
 #include "SkColorSpaceXformPriv.h"
 #include "SkColorTable.h"
+#include "SkConvertPixels.h"
 #include "SkData.h"
 #include "SkImageInfoPriv.h"
 #include "SkImagePriv.h"
@@ -56,12 +56,12 @@ public:
         if (kUnknown_SkColorType == info.colorType()) {
             return false;
         }
-        if (rowBytes < info.minRowBytes()) {
+        if (!info.validRowBytes(rowBytes)) {
             return false;
         }
 
-        size_t size = info.getSafeSize(rowBytes);
-        if (0 == size) {
+        size_t size = info.computeByteSize(rowBytes);
+        if (SkImageInfo::ByteSizeOverflowed(size)) {
             return false;
         }
 
@@ -87,8 +87,8 @@ public:
     const SkBitmap* onPeekBitmap() const override { return &fBitmap; }
 
 #if SK_SUPPORT_GPU
-    sk_sp<GrTextureProxy> asTextureProxyRef(GrContext*, const GrSamplerParams&,
-                                            SkColorSpace*, sk_sp<SkColorSpace>*,
+    sk_sp<GrTextureProxy> asTextureProxyRef(GrContext*, const GrSamplerState&, SkColorSpace*,
+                                            sk_sp<SkColorSpace>*,
                                             SkScalar scaleAdjust[2]) const override;
 #endif
 
@@ -97,7 +97,7 @@ public:
 
     SkPixelRef* getPixelRef() const { return fBitmap.pixelRef(); }
 
-    bool onAsLegacyBitmap(SkBitmap*, LegacyBitmapMode) const override;
+    bool onAsLegacyBitmap(SkBitmap*) const override;
 
     SkImage_Raster(const SkBitmap& bm, bool bitmapMayBeMutable = false)
         : INHERITED(bm.width(), bm.height(),
@@ -170,7 +170,7 @@ bool SkImage_Raster::getROPixels(SkBitmap* dst, SkColorSpace* dstColorSpace, Cac
 
 #if SK_SUPPORT_GPU
 sk_sp<GrTextureProxy> SkImage_Raster::asTextureProxyRef(GrContext* context,
-                                                        const GrSamplerParams& params,
+                                                        const GrSamplerState& params,
                                                         SkColorSpace* dstColorSpace,
                                                         sk_sp<SkColorSpace>* texColorSpace,
                                                         SkScalar scaleAdjust[2]) const {
@@ -178,17 +178,12 @@ sk_sp<GrTextureProxy> SkImage_Raster::asTextureProxyRef(GrContext* context,
         return nullptr;
     }
 
-    if (texColorSpace) {
-        *texColorSpace = sk_ref_sp(fBitmap.colorSpace());
-    }
-
     uint32_t uniqueID;
     sk_sp<GrTextureProxy> tex = this->refPinnedTextureProxy(&uniqueID);
     if (tex) {
-        GrTextureAdjuster adjuster(context, fPinnedProxy,
-                                   fBitmap.alphaType(), fBitmap.bounds(),
-                                   fPinnedUniqueID, fBitmap.colorSpace());
-        return adjuster.refTextureProxySafeForParams(params, nullptr, scaleAdjust);
+        GrTextureAdjuster adjuster(context, fPinnedProxy, fBitmap.alphaType(), fPinnedUniqueID,
+                                   fBitmap.colorSpace());
+        return adjuster.refTextureProxyForParams(params, dstColorSpace, texColorSpace, scaleAdjust);
     }
 
     return GrRefCachedBitmapTextureProxy(context, fBitmap, params, scaleAdjust);
@@ -214,8 +209,8 @@ bool SkImage_Raster::onPinAsTexture(GrContext* ctx) const {
     } else {
         SkASSERT(fPinnedCount == 0);
         SkASSERT(fPinnedUniqueID == 0);
-        fPinnedProxy = GrRefCachedBitmapTextureProxy(ctx, fBitmap,
-                                                     GrSamplerParams::ClampNoFilter(), nullptr);
+        fPinnedProxy = GrRefCachedBitmapTextureProxy(ctx, fBitmap, GrSamplerState::ClampNearest(),
+                                                     nullptr);
         if (!fPinnedProxy) {
             return false;
         }
@@ -239,17 +234,24 @@ void SkImage_Raster::onUnpinAsTexture(GrContext* ctx) const {
 #endif
 
 sk_sp<SkImage> SkImage_Raster::onMakeSubset(const SkIRect& subset) const {
-    // TODO : could consider heurist of sharing pixels, if subset is pretty close to complete
-
-    SkImageInfo info = SkImageInfo::MakeN32(subset.width(), subset.height(), fBitmap.alphaType());
-    auto surface(SkSurface::MakeRaster(info));
-    if (!surface) {
+    SkImageInfo info = fBitmap.info().makeWH(subset.width(), subset.height());
+    SkBitmap bitmap;
+    if (!bitmap.tryAllocPixels(info)) {
         return nullptr;
     }
-    surface->getCanvas()->clear(0);
-    surface->getCanvas()->drawImage(this, SkIntToScalar(-subset.x()), SkIntToScalar(-subset.y()),
-                                    nullptr);
-    return surface->makeImageSnapshot();
+
+    void* dst = bitmap.getPixels();
+    void* src = fBitmap.getAddr(subset.x(), subset.y());
+    if (!dst || !src) {
+        SkDEBUGFAIL("SkImage_Raster::onMakeSubset with nullptr src or dst");
+        return nullptr;
+    }
+
+    SkRectMemcpy(dst, bitmap.rowBytes(), src, fBitmap.rowBytes(), bitmap.rowBytes(),
+                 subset.height());
+
+    bitmap.setImmutable();
+    return MakeFromBitmap(bitmap);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -317,54 +319,22 @@ sk_sp<SkImage> SkMakeImageFromRasterBitmap(const SkBitmap& bm, SkCopyPixelsMode 
     return SkMakeImageFromRasterBitmapPriv(bm, cpm, kNeedNewImageUniqueID);
 }
 
-sk_sp<SkImage> SkMakeImageInColorSpace(const SkBitmap& bm, sk_sp<SkColorSpace> dstCS, uint32_t id,
-                                       SkCopyPixelsMode cpm) {
-    if (!SkImageInfoIsValidAllowNumericalCS(bm.info()) || !bm.getPixels() ||
-            bm.rowBytes() < bm.info().minRowBytes() || !dstCS) {
-        return nullptr;
-    }
-
-    sk_sp<SkColorSpace> srcCS = bm.info().refColorSpace();
-    if (!srcCS) {
-        // Treat nullptr as sRGB.
-        srcCS = SkColorSpace::MakeSRGB();
-    }
-
-    sk_sp<SkImage> image = nullptr;
-
-    // For the Android use case, this is very likely to be true.
-    if (SkColorSpace::Equals(srcCS.get(), dstCS.get())) {
-        SkASSERT(kNeedNewImageUniqueID == id || bm.getGenerationID() == id);
-        image = SkMakeImageFromRasterBitmapPriv(bm, cpm, id);
-    } else {
-        image = SkImage::MakeFromGenerator(SkColorSpaceXformImageGenerator::Make(bm, dstCS, cpm,
-                                                                                 id));
-    }
-
-    // If the caller suplied an id, we must propagate that to the image we return
-    SkASSERT(kNeedNewImageUniqueID == id || image->uniqueID() == id);
-    return image;
-}
-
 const SkPixelRef* SkBitmapImageGetPixelRef(const SkImage* image) {
     return ((const SkImage_Raster*)image)->getPixelRef();
 }
 
-bool SkImage_Raster::onAsLegacyBitmap(SkBitmap* bitmap, LegacyBitmapMode mode) const {
-    if (kRO_LegacyBitmapMode == mode) {
-        // When we're a snapshot from a surface, our bitmap may not be marked immutable
-        // even though logically always we are, but in that case we can't physically share our
-        // pixelref since the caller might call setImmutable() themselves
-        // (thus changing our state).
-        if (fBitmap.isImmutable()) {
-            bitmap->setInfo(fBitmap.info(), fBitmap.rowBytes());
-            bitmap->setPixelRef(sk_ref_sp(fBitmap.pixelRef()),
-                                fBitmap.pixelRefOrigin().x(),
-                                fBitmap.pixelRefOrigin().y());
-            return true;
-        }
+bool SkImage_Raster::onAsLegacyBitmap(SkBitmap* bitmap) const {
+    // When we're a snapshot from a surface, our bitmap may not be marked immutable
+    // even though logically always we are, but in that case we can't physically share our
+    // pixelref since the caller might call setImmutable() themselves
+    // (thus changing our state).
+    if (fBitmap.isImmutable()) {
+        SkIPoint origin = fBitmap.pixelRefOrigin();
+        bitmap->setInfo(fBitmap.info(), fBitmap.rowBytes());
+        bitmap->setPixelRef(sk_ref_sp(fBitmap.pixelRef()), origin.x(), origin.y());
+        return true;
     }
-    return this->INHERITED::onAsLegacyBitmap(bitmap, mode);
+    return this->INHERITED::onAsLegacyBitmap(bitmap);
 }
 
 ///////////////////////////////////////////////////////////////////////////////

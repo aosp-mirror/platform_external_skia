@@ -132,6 +132,8 @@ public:
 
     SkPDFCanon* getCanon() const;
 
+    SkIRect bounds() const { return this->imageInfo().bounds(); }
+
     // It is important to not confuse GraphicStateEntry with SkPDFGraphicState, the
     // later being our representation of an object in the PDF file.
     struct GraphicStateEntry {
@@ -210,7 +212,8 @@ private:
 
     void init();
     void cleanUp();
-    sk_sp<SkPDFObject> makeFormXObjectFromDevice();
+    // Set alpha to true if making a transparency group form x-objects.
+    sk_sp<SkPDFObject> makeFormXObjectFromDevice(bool alpha = false);
 
     void drawFormXObjectWithMask(int xObjectIndex,
                                  sk_sp<SkPDFObject> mask,

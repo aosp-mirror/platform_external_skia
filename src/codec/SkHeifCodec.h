@@ -11,10 +11,20 @@
 #include "SkCodec.h"
 #include "SkColorSpace.h"
 #include "SkColorSpaceXform.h"
+#include "SkEncodedOrigin.h"
 #include "SkImageInfo.h"
 #include "SkSwizzler.h"
 #include "SkStream.h"
-#include "HeifDecoderAPI.h"
+
+#if !defined(__has_include)
+    #define __has_include(x) 0
+#endif
+
+#if __has_include("HeifDecoderAPI.h")
+    #include "HeifDecoderAPI.h"
+#else
+    #include "SkStubHeifDecoderAPI.h"
+#endif
 
 class SkHeifCodec : public SkCodec {
 public:
@@ -22,9 +32,8 @@ public:
 
     /*
      * Assumes IsHeif was called and returned true.
-     * Takes ownership of the stream.
      */
-    static SkCodec* NewFromStream(SkStream*, Result*);
+    static std::unique_ptr<SkCodec> MakeFromStream(std::unique_ptr<SkStream>, Result*);
 
 protected:
 
@@ -38,13 +47,19 @@ protected:
         return SkEncodedImageFormat::kHEIF;
     }
 
+    bool conversionSupported(const SkImageInfo&, SkColorType, bool,
+                             const SkColorSpace*) const override {
+        // This class checks for conversion after creating colorXform.
+        return true;
+    }
+
 private:
     /*
      * Creates an instance of the decoder
      * Called only by NewFromStream
      */
     SkHeifCodec(int width, int height, const SkEncodedInfo&,
-            HeifDecoder*, sk_sp<SkColorSpace>, Origin);
+            HeifDecoder*, sk_sp<SkColorSpace>, SkEncodedOrigin);
 
     /*
      * Checks if the conversion between the input image and the requested output

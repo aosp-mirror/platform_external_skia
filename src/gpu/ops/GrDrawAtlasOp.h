@@ -33,14 +33,19 @@ public:
 
     const char* name() const override { return "DrawAtlasOp"; }
 
+    void visitProxies(const VisitProxyFunc& func) const override {
+        fHelper.visitProxies(func);
+    }
+
     SkString dumpInfo() const override;
 
     FixedFunctionFlags fixedFunctionFlags() const override;
 
-    RequiresDstTexture finalize(const GrCaps& caps, const GrAppliedClip* clip) override;
+    RequiresDstTexture finalize(const GrCaps& caps, const GrAppliedClip* clip,
+                                GrPixelConfigIsClamped dstIsClamped) override;
 
 private:
-    void onPrepareDraws(Target*) const override;
+    void onPrepareDraws(Target*) override;
 
     GrColor color() const { return fColor; }
     const SkMatrix& viewMatrix() const { return fViewMatrix; }

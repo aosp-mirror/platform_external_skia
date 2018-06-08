@@ -11,6 +11,9 @@
 #include "ops/GrMeshDrawOp.h"
 #include "text/GrAtlasTextContext.h"
 #include "text/GrDistanceFieldAdjustTable.h"
+#include "text/GrGlyphCache.h"
+
+class SkAtlasTextTarget;
 
 class GrAtlasTextOp final : public GrMeshDrawOp {
 public:
@@ -28,19 +31,21 @@ public:
     typedef GrAtlasTextBlob Blob;
     struct Geometry {
         SkMatrix fViewMatrix;
-        Blob* fBlob;
+        SkIRect  fClipRect;
+        Blob*    fBlob;
         SkScalar fX;
         SkScalar fY;
-        int fRun;
-        int fSubRun;
-        GrColor fColor;
+        uint16_t fRun;
+        uint16_t fSubRun;
+        GrColor  fColor;
     };
 
-    static std::unique_ptr<GrAtlasTextOp> MakeBitmap(GrPaint&& paint, GrMaskFormat maskFormat,
-                                                     int glyphCount, GrAtlasGlyphCache* fontCache) {
-        std::unique_ptr<GrAtlasTextOp> op(new GrAtlasTextOp(std::move(paint)));
+    static std::unique_ptr<GrAtlasTextOp> MakeBitmap(
+                                GrPaint&& paint, GrMaskFormat maskFormat,
+                                int glyphCount, GrRestrictedAtlasManager* restrictedAtlasManager) {
+        std::unique_ptr<GrAtlasTextOp> op(new GrAtlasTextOp(restrictedAtlasManager,
+                                                            std::move(paint)));
 
-        op->fFontCache = fontCache;
         switch (maskFormat) {
             case kA8_GrMaskFormat:
                 op->fMaskType = kGrayscaleCoverageMask_MaskType;
@@ -55,18 +60,17 @@ public:
         op->fNumGlyphs = glyphCount;
         op->fGeoCount = 1;
         op->fLuminanceColor = 0;
-        op->fFontCache = fontCache;
         return op;
     }
 
     static std::unique_ptr<GrAtlasTextOp> MakeDistanceField(
-            GrPaint&& paint, int glyphCount, GrAtlasGlyphCache* fontCache,
+            GrPaint&& paint, int glyphCount, GrRestrictedAtlasManager* restrictedAtlasManager,
             const GrDistanceFieldAdjustTable* distanceAdjustTable,
             bool useGammaCorrectDistanceTable, SkColor luminanceColor, bool isLCD, bool useBGR,
             bool isAntiAliased) {
-        std::unique_ptr<GrAtlasTextOp> op(new GrAtlasTextOp(std::move(paint)));
+        std::unique_ptr<GrAtlasTextOp> op(new GrAtlasTextOp(restrictedAtlasManager,
+                                                            std::move(paint)));
 
-        op->fFontCache = fontCache;
         op->fMaskType = !isAntiAliased ? kAliasedDistanceField_MaskType
                                        : isLCD ? (useBGR ? kLCDBGRDistanceField_MaskType
                                                          : kLCDDistanceField_MaskType)
@@ -84,29 +88,43 @@ public:
     // init() so the op can initialize itself
     Geometry& geometry() { return fGeoData[0]; }
 
-    void init() {
-        const Geometry& geo = fGeoData[0];
-        fColor = geo.fColor;
-        SkRect bounds;
-        geo.fBlob->computeSubRunBounds(&bounds, geo.fRun, geo.fSubRun, geo.fViewMatrix, geo.fX,
-                                       geo.fY);
-        // We don't have tight bounds on the glyph paths in device space. For the purposes of bounds
-        // we treat this as a set of non-AA rects rendered with a texture.
-        this->setBounds(bounds, HasAABloat::kNo, IsZeroArea::kNo);
-    }
+    /** Called after this->geometry() has been configured. */
+    void init();
 
     const char* name() const override { return "AtlasTextOp"; }
+
+    void visitProxies(const VisitProxyFunc& func) const override;
 
     SkString dumpInfo() const override;
 
     FixedFunctionFlags fixedFunctionFlags() const override;
 
-    RequiresDstTexture finalize(const GrCaps& caps, const GrAppliedClip* clip) override;
+    RequiresDstTexture finalize(const GrCaps& caps, const GrAppliedClip* clip,
+                                GrPixelConfigIsClamped dstIsClamped) override;
+
+    enum MaskType {
+        kGrayscaleCoverageMask_MaskType,
+        kLCDCoverageMask_MaskType,
+        kColorBitmapMask_MaskType,
+        kAliasedDistanceField_MaskType,
+        kGrayscaleDistanceField_MaskType,
+        kLCDDistanceField_MaskType,
+        kLCDBGRDistanceField_MaskType,
+    };
+
+    MaskType maskType() const { return fMaskType; }
+
+    void finalizeForTextTarget(uint32_t color, const GrCaps&);
+    void executeForTextTarget(SkAtlasTextTarget*);
 
 private:
-    GrAtlasTextOp(GrPaint&& paint)
+    // The minimum number of Geometry we will try to allocate.
+    static constexpr auto kMinGeometryAllocated = 12;
+
+    GrAtlasTextOp(GrRestrictedAtlasManager* restrictedAtlasManager, GrPaint&& paint)
             : INHERITED(ClassID())
-            , fColor(paint.getColor())
+            , fRestrictedAtlasManager(restrictedAtlasManager)
+            , fGeoDataAllocSize(kMinGeometryAllocated)
             , fSRGBFlags(GrPipeline::SRGBFlagsFromPaint(paint))
             , fProcessors(std::move(paint)) {}
 
@@ -119,7 +137,7 @@ private:
         int fVertexOffset;
     };
 
-    void onPrepareDraws(Target* target) const override;
+    void onPrepareDraws(Target*) override;
 
     GrMaskFormat maskFormat() const {
         switch (fMaskType) {
@@ -152,33 +170,17 @@ private:
 
     inline void flush(GrMeshDrawOp::Target* target, FlushInfo* flushInfo) const;
 
-    GrColor color() const { return fColor; }
-    const SkMatrix& viewMatrix() const { return fGeoData[0].fViewMatrix; }
+    GrColor color() const { SkASSERT(fGeoCount > 0); return fGeoData[0].fColor; }
     bool usesLocalCoords() const { return fUsesLocalCoords; }
     int numGlyphs() const { return fNumGlyphs; }
 
     bool onCombineIfPossible(GrOp* t, const GrCaps& caps) override;
 
-    // TODO just use class params
-    sk_sp<GrGeometryProcessor> setupDfProcessor(const SkMatrix& viewMatrix, SkColor luminanceColor,
-                                                GrColor color, sk_sp<GrTextureProxy> proxy) const;
+    sk_sp<GrGeometryProcessor> setupDfProcessor(GrRestrictedAtlasManager*) const;
 
-
-    // The minimum number of Geometry we will try to allocate.
-    enum { kMinGeometryAllocated = 4 };
-
-    enum MaskType {
-        kGrayscaleCoverageMask_MaskType,
-        kLCDCoverageMask_MaskType,
-        kColorBitmapMask_MaskType,
-        kAliasedDistanceField_MaskType,
-        kGrayscaleDistanceField_MaskType,
-        kLCDDistanceField_MaskType,
-        kLCDBGRDistanceField_MaskType,
-    };
-
+    GrRestrictedAtlasManager* fRestrictedAtlasManager;
     SkAutoSTMalloc<kMinGeometryAllocated, Geometry> fGeoData;
-    GrColor fColor;
+    int fGeoDataAllocSize;
     uint32_t fSRGBFlags;
     GrProcessorSet fProcessors;
     bool fUsesLocalCoords;
@@ -186,35 +188,13 @@ private:
     int fGeoCount;
     int fNumGlyphs;
     MaskType fMaskType;
-    GrAtlasGlyphCache* fFontCache;
     // Distance field properties
     sk_sp<const GrDistanceFieldAdjustTable> fDistanceAdjustTable;
     SkColor fLuminanceColor;
     bool fUseGammaCorrectDistanceTable;
-
-    friend class GrBlobRegenHelper;  // Needs to trigger flushes
+    uint32_t fDFGPFlags = 0;
 
     typedef GrMeshDrawOp INHERITED;
-};
-
-/*
- * A simple helper class to abstract the interface GrAtlasTextBlob needs to regenerate itself.
- * It'd be nicer if this was nested, but we need to forward declare it in GrAtlasTextBlob.h
- */
-class GrBlobRegenHelper {
-public:
-    GrBlobRegenHelper(const GrAtlasTextOp* op, GrMeshDrawOp::Target* target,
-                      GrAtlasTextOp::FlushInfo* flushInfo)
-            : fOp(op), fTarget(target), fFlushInfo(flushInfo) {}
-
-    void flush();
-
-    void incGlyphCount(int glyphCount = 1) { fFlushInfo->fGlyphsToFlush += glyphCount; }
-
-private:
-    const GrAtlasTextOp* fOp;
-    GrMeshDrawOp::Target* fTarget;
-    GrAtlasTextOp::FlushInfo* fFlushInfo;
 };
 
 #endif

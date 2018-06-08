@@ -12,12 +12,13 @@
 #include "GrPathRange.h"
 #include "GrPipeline.h"
 
-class SkDescriptor;
-class SkTypeface;
 class GrGpu;
 class GrPath;
 class GrStencilSettings;
 class GrStyle;
+struct SkScalerContextEffects;
+class SkDescriptor;
+class SkTypeface;
 
 /**
  * Abstract class wrapping HW path rendering API.
@@ -60,7 +61,7 @@ public:
                 return 6;
 
             default:
-                SkFAIL("Unknown path transform type");
+                SK_ABORT("Unknown path transform type");
                 return 0;
         }
     }
@@ -132,20 +133,20 @@ public:
     /** None of these params are optional, pointers used just to avoid making copies. */
     struct StencilPathArgs {
         StencilPathArgs(bool useHWAA,
-                        GrRenderTarget* renderTarget,
+                        GrRenderTargetProxy* proxy,
                         const SkMatrix* viewMatrix,
                         const GrScissorState* scissor,
                         const GrStencilSettings* stencil)
             : fUseHWAA(useHWAA)
-            , fRenderTarget(renderTarget)
+            , fProxy(proxy)
             , fViewMatrix(viewMatrix)
             , fScissor(scissor)
             , fStencil(stencil) {
         }
-        bool fUseHWAA;
-        GrRenderTarget* fRenderTarget;
-        const SkMatrix* fViewMatrix;
-        const GrScissorState* fScissor;
+        bool                     fUseHWAA;
+        GrRenderTargetProxy*     fProxy;
+        const SkMatrix*          fViewMatrix;
+        const GrScissorState*    fScissor;
         const GrStencilSettings* fStencil;
     };
 

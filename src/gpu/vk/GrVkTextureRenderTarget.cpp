@@ -7,7 +7,6 @@
 
 #include "GrVkTextureRenderTarget.h"
 
-#include "GrRenderTargetPriv.h"
 #include "GrTexturePriv.h"
 #include "GrVkGpu.h"
 #include "GrVkImageView.h"
@@ -26,12 +25,14 @@ GrVkTextureRenderTarget::GrVkTextureRenderTarget(GrVkGpu* gpu,
                                                  const GrVkImageView* texView,
                                                  const GrVkImageInfo& msaaInfo,
                                                  const GrVkImageView* colorAttachmentView,
-                                                 const GrVkImageView* resolveAttachmentView)
+                                                 const GrVkImageView* resolveAttachmentView,
+                                                 GrMipMapsStatus mipMapsStatus,
+                                                 GrBackendObjectOwnership ownership)
         : GrSurface(gpu, desc)
-        , GrVkImage(info, GrVkImage::kNot_Wrapped)
-        , GrVkTexture(gpu, desc, info, texView, GrVkImage::kNot_Wrapped)
+        , GrVkImage(info, ownership)
+        , GrVkTexture(gpu, desc, info, texView, mipMapsStatus, ownership)
         , GrVkRenderTarget(gpu, desc, info, msaaInfo, colorAttachmentView,
-                           resolveAttachmentView, GrVkImage::kNot_Wrapped) {
+                           resolveAttachmentView, GrBackendObjectOwnership::kOwned) {
     this->registerWithCache(budgeted);
 }
 
@@ -40,11 +41,13 @@ GrVkTextureRenderTarget::GrVkTextureRenderTarget(GrVkGpu* gpu,
                                                  const GrSurfaceDesc& desc,
                                                  const GrVkImageInfo& info,
                                                  const GrVkImageView* texView,
-                                                 const GrVkImageView* colorAttachmentView)
+                                                 const GrVkImageView* colorAttachmentView,
+                                                 GrMipMapsStatus mipMapsStatus,
+                                                 GrBackendObjectOwnership ownership)
         : GrSurface(gpu, desc)
-        , GrVkImage(info, GrVkImage::kNot_Wrapped)
-        , GrVkTexture(gpu, desc, info, texView, GrVkImage::kNot_Wrapped)
-        , GrVkRenderTarget(gpu, desc, info, colorAttachmentView, GrVkImage::kNot_Wrapped) {
+        , GrVkImage(info, ownership)
+        , GrVkTexture(gpu, desc, info, texView, mipMapsStatus, ownership)
+        , GrVkRenderTarget(gpu, desc, info, colorAttachmentView, GrBackendObjectOwnership::kOwned) {
     this->registerWithCache(budgeted);
 }
 
@@ -55,12 +58,13 @@ GrVkTextureRenderTarget::GrVkTextureRenderTarget(GrVkGpu* gpu,
                                                  const GrVkImageInfo& msaaInfo,
                                                  const GrVkImageView* colorAttachmentView,
                                                  const GrVkImageView* resolveAttachmentView,
-                                                 GrVkImage::Wrapped wrapped)
+                                                 GrMipMapsStatus mipMapsStatus,
+                                                 GrBackendObjectOwnership ownership)
         : GrSurface(gpu, desc)
-        , GrVkImage(info, wrapped)
-        , GrVkTexture(gpu, desc, info, texView, wrapped)
+        , GrVkImage(info, ownership)
+        , GrVkTexture(gpu, desc, info, texView, mipMapsStatus, ownership)
         , GrVkRenderTarget(gpu, desc, info, msaaInfo, colorAttachmentView,
-                           resolveAttachmentView, wrapped) {
+                           resolveAttachmentView, ownership) {
     this->registerWithCacheWrapped();
 }
 
@@ -69,20 +73,22 @@ GrVkTextureRenderTarget::GrVkTextureRenderTarget(GrVkGpu* gpu,
                                                  const GrVkImageInfo& info,
                                                  const GrVkImageView* texView,
                                                  const GrVkImageView* colorAttachmentView,
-                                                 GrVkImage::Wrapped wrapped)
+                                                 GrMipMapsStatus mipMapsStatus,
+                                                 GrBackendObjectOwnership ownership)
         : GrSurface(gpu, desc)
-        , GrVkImage(info, wrapped)
-        , GrVkTexture(gpu, desc, info, texView, wrapped)
-        , GrVkRenderTarget(gpu, desc, info, colorAttachmentView, wrapped) {
+        , GrVkImage(info, ownership)
+        , GrVkTexture(gpu, desc, info, texView, mipMapsStatus, ownership)
+        , GrVkRenderTarget(gpu, desc, info, colorAttachmentView, ownership) {
     this->registerWithCacheWrapped();
 }
-
 
 sk_sp<GrVkTextureRenderTarget> GrVkTextureRenderTarget::Make(GrVkGpu* gpu,
                                                              const GrSurfaceDesc& desc,
                                                              const GrVkImageInfo& info,
+                                                             GrMipMapsStatus mipMapsStatus,
                                                              SkBudgeted budgeted,
-                                                             GrVkImage::Wrapped wrapped) {
+                                                             GrBackendObjectOwnership ownership,
+                                                             bool isWrapped) {
     VkImage image = info.fImage;
     // Create the texture ImageView
     const GrVkImageView* imageView = GrVkImageView::Create(gpu, image, info.fFormat,
@@ -100,7 +106,7 @@ sk_sp<GrVkTextureRenderTarget> GrVkTextureRenderTarget::Make(GrVkGpu* gpu,
     // create msaa surface if necessary
     GrVkImageInfo msInfo;
     const GrVkImageView* resolveAttachmentView = nullptr;
-    if (desc.fSampleCnt) {
+    if (desc.fSampleCnt > 1) {
         GrVkImage::ImageDesc msImageDesc;
         msImageDesc.fImageType = VK_IMAGE_TYPE_2D;
         msImageDesc.fFormat = pixelFormat;
@@ -139,7 +145,7 @@ sk_sp<GrVkTextureRenderTarget> GrVkTextureRenderTarget::Make(GrVkGpu* gpu,
     const GrVkImageView* colorAttachmentView = GrVkImageView::Create(gpu, colorImage, pixelFormat,
                                                                      GrVkImageView::kColor_Type, 1);
     if (!colorAttachmentView) {
-        if (desc.fSampleCnt) {
+        if (desc.fSampleCnt > 1) {
             resolveAttachmentView->unref(gpu);
             GrVkImage::DestroyImageInfo(gpu, &msInfo);
         }
@@ -148,31 +154,35 @@ sk_sp<GrVkTextureRenderTarget> GrVkTextureRenderTarget::Make(GrVkGpu* gpu,
     }
 
     sk_sp<GrVkTextureRenderTarget> texRT;
-    if (desc.fSampleCnt) {
-        if (GrVkImage::kNot_Wrapped == wrapped) {
+    if (desc.fSampleCnt > 1) {
+        if (!isWrapped) {
             texRT = sk_sp<GrVkTextureRenderTarget>(new GrVkTextureRenderTarget(
                                                       gpu, budgeted, desc,
                                                       info, imageView, msInfo,
                                                       colorAttachmentView,
-                                                      resolveAttachmentView));
+                                                      resolveAttachmentView, mipMapsStatus,
+                                                      ownership));
         } else {
             texRT = sk_sp<GrVkTextureRenderTarget>(new GrVkTextureRenderTarget(
                                                         gpu, desc,
                                                         info, imageView, msInfo,
                                                         colorAttachmentView,
-                                                        resolveAttachmentView, wrapped));
+                                                        resolveAttachmentView, mipMapsStatus,
+                                                        ownership));
         }
     } else {
-        if (GrVkImage::kNot_Wrapped == wrapped) {
+        if (!isWrapped) {
             texRT = sk_sp<GrVkTextureRenderTarget>(new GrVkTextureRenderTarget(
                                                         gpu, budgeted, desc,
                                                         info, imageView,
-                                                        colorAttachmentView));
+                                                        colorAttachmentView, mipMapsStatus,
+                                                        ownership));
         } else {
             texRT = sk_sp<GrVkTextureRenderTarget>(new GrVkTextureRenderTarget(
                                                         gpu, desc,
                                                         info, imageView,
-                                                        colorAttachmentView, wrapped));
+                                                        colorAttachmentView, mipMapsStatus,
+                                                        ownership));
         }
     }
     return texRT;
@@ -182,7 +192,8 @@ sk_sp<GrVkTextureRenderTarget>
 GrVkTextureRenderTarget::CreateNewTextureRenderTarget(GrVkGpu* gpu,
                                                       SkBudgeted budgeted,
                                                       const GrSurfaceDesc& desc,
-                                                      const GrVkImage::ImageDesc& imageDesc) {
+                                                      const GrVkImage::ImageDesc& imageDesc,
+                                                      GrMipMapsStatus mipMapsStatus) {
     SkASSERT(imageDesc.fUsageFlags & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
     SkASSERT(imageDesc.fUsageFlags & VK_IMAGE_USAGE_SAMPLED_BIT);
 
@@ -191,7 +202,8 @@ GrVkTextureRenderTarget::CreateNewTextureRenderTarget(GrVkGpu* gpu,
         return nullptr;
     }
 
-    sk_sp<GrVkTextureRenderTarget> trt = Make(gpu, desc, info, budgeted, GrVkImage::kNot_Wrapped);
+    sk_sp<GrVkTextureRenderTarget> trt = Make(gpu, desc, info, mipMapsStatus, budgeted,
+                                              GrBackendObjectOwnership::kOwned, false);
     if (!trt) {
         GrVkImage::DestroyImageInfo(gpu, &info);
     }
@@ -202,22 +214,25 @@ GrVkTextureRenderTarget::CreateNewTextureRenderTarget(GrVkGpu* gpu,
 sk_sp<GrVkTextureRenderTarget>
 GrVkTextureRenderTarget::MakeWrappedTextureRenderTarget(GrVkGpu* gpu,
                                                         const GrSurfaceDesc& desc,
-                                                        GrWrapOwnership ownership,
+                                                        GrWrapOwnership wrapOwnership,
                                                         const GrVkImageInfo* info) {
     SkASSERT(info);
     // Wrapped textures require both image and allocation (because they can be mapped)
     SkASSERT(VK_NULL_HANDLE != info->fImage && VK_NULL_HANDLE != info->fAlloc.fMemory);
 
-    GrVkImage::Wrapped wrapped = kBorrow_GrWrapOwnership == ownership ? GrVkImage::kBorrowed_Wrapped
-                                                                      : GrVkImage::kAdopted_Wrapped;
+    GrMipMapsStatus mipMapsStatus = info->fLevelCount > 1 ? GrMipMapsStatus::kDirty
+                                                          : GrMipMapsStatus::kNotAllocated;
 
-    return Make(gpu, desc, *info, SkBudgeted::kNo, wrapped);
+    GrBackendObjectOwnership ownership = kBorrow_GrWrapOwnership == wrapOwnership
+            ? GrBackendObjectOwnership::kBorrowed : GrBackendObjectOwnership::kOwned;
+
+    return Make(gpu, desc, *info, mipMapsStatus, SkBudgeted::kNo, ownership, true);
 }
 
 bool GrVkTextureRenderTarget::updateForMipmap(GrVkGpu* gpu, const GrVkImageInfo& newInfo) {
     VkFormat pixelFormat;
     GrPixelConfigToVkFormat(this->config(), &pixelFormat);
-    if (this->numStencilSamples()) {
+    if (this->numStencilSamples() > 1) {
         const GrVkImageView* resolveAttachmentView =
                 GrVkImageView::Create(gpu,
                                       newInfo.fImage,
@@ -247,9 +262,12 @@ bool GrVkTextureRenderTarget::updateForMipmap(GrVkGpu* gpu, const GrVkImageInfo&
 }
 
 size_t GrVkTextureRenderTarget::onGpuMemorySize() const {
-    // The plus 1 is to account for the resolve texture.
-    int numColorSamples = this->numColorSamples() + 1;
+    int numColorSamples = this->numColorSamples();
+    if (numColorSamples > 1) {
+        // Add one to account for the resolve VkImage.
+        ++numColorSamples;
+    }
     return GrSurface::ComputeSize(this->config(), this->width(), this->height(),
                                   numColorSamples,  // TODO: this still correct?
-                                  this->texturePriv().hasMipMaps());
+                                  this->texturePriv().mipMapped());
 }

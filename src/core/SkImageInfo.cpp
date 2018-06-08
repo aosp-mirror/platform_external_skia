@@ -5,9 +5,27 @@
  * found in the LICENSE file.
  */
 
-#include "SkImageInfo.h"
+#include "SkImageInfoPriv.h"
+#include "SkSafeMath.h"
 #include "SkReadBuffer.h"
 #include "SkWriteBuffer.h"
+
+int SkColorTypeBytesPerPixel(SkColorType ct) {
+    switch (ct) {
+        case kUnknown_SkColorType:      return 0;
+        case kAlpha_8_SkColorType:      return 1;
+        case kRGB_565_SkColorType:      return 2;
+        case kARGB_4444_SkColorType:    return 2;
+        case kRGBA_8888_SkColorType:    return 4;
+        case kBGRA_8888_SkColorType:    return 4;
+        case kRGB_888x_SkColorType:     return 4;
+        case kRGBA_1010102_SkColorType: return 4;
+        case kRGB_101010x_SkColorType:  return 4;
+        case kGray_8_SkColorType:       return 1;
+        case kRGBA_F16_SkColorType:     return 8;
+    }
+    return 0;
+}
 
 // These values must be constant over revisions, though they can be renamed to reflect if/when
 // they are deprecated.
@@ -21,61 +39,87 @@ enum Stored_SkColorType {
     kIndex_8_Stored_SkColorType_DEPRECATED  = 6,
     kGray_8_Stored_SkColorType              = 7,
     kRGBA_F16_Stored_SkColorType            = 8,
-
-    kLast_Stored_SkColorType                = kRGBA_F16_Stored_SkColorType,
-};
-
-// Index with Stored_SkColorType
-const SkColorType gStoredToLive[] = {
-    kUnknown_SkColorType,
-    kAlpha_8_SkColorType,
-    kRGB_565_SkColorType,
-    kARGB_4444_SkColorType,
-    kRGBA_8888_SkColorType,
-    kBGRA_8888_SkColorType,
-    kUnknown_SkColorType,       // was kIndex_8
-    kGray_8_SkColorType,
-    kRGBA_F16_SkColorType,
-};
-
-// Index with SkColorType
-const Stored_SkColorType gLiveToStored[] = {
-    kUnknown_Stored_SkColorType,
-    kAlpha_8_Stored_SkColorType,
-    kRGB_565_Stored_SkColorType,
-    kARGB_4444_Stored_SkColorType,
-    kRGBA_8888_Stored_SkColorType,
-    kBGRA_8888_Stored_SkColorType,
-    kGray_8_Stored_SkColorType,
-    kRGBA_F16_Stored_SkColorType,
+    kRGB_888x_Stored_SkColorType            = 9,
+    kRGBA_1010102_Stored_SkColorType        = 10,
+    kRGB_101010x_Stored_SkColorType         = 11,
 };
 
 static uint8_t live_to_stored(unsigned ct) {
-    static_assert(SK_ARRAY_COUNT(gLiveToStored) == (kLastEnum_SkColorType + 1), "");
-
-    if (ct >= SK_ARRAY_COUNT(gLiveToStored)) {
-        ct = kUnknown_SkColorType;
+    switch (ct) {
+        case kUnknown_SkColorType:      return kUnknown_Stored_SkColorType;
+        case kAlpha_8_SkColorType:      return kAlpha_8_Stored_SkColorType;
+        case kRGB_565_SkColorType:      return kRGB_565_Stored_SkColorType;
+        case kARGB_4444_SkColorType:    return kARGB_4444_Stored_SkColorType;
+        case kRGBA_8888_SkColorType:    return kRGBA_8888_Stored_SkColorType;
+        case kRGB_888x_SkColorType:     return kRGB_888x_Stored_SkColorType;
+        case kBGRA_8888_SkColorType:    return kBGRA_8888_Stored_SkColorType;
+        case kRGBA_1010102_SkColorType: return kRGBA_1010102_Stored_SkColorType;
+        case kRGB_101010x_SkColorType:  return kRGB_101010x_Stored_SkColorType;
+        case kGray_8_SkColorType:       return kGray_8_Stored_SkColorType;
+        case kRGBA_F16_SkColorType:     return kRGBA_F16_Stored_SkColorType;
     }
-    return gLiveToStored[ct];
+    return kUnknown_Stored_SkColorType;
 }
 
 static SkColorType stored_to_live(unsigned stored) {
-    static_assert(SK_ARRAY_COUNT(gStoredToLive) == (kLast_Stored_SkColorType + 1), "");
-
-    if (stored >= SK_ARRAY_COUNT(gStoredToLive)) {
-        stored = kUnknown_Stored_SkColorType;
+    switch (stored) {
+        case kUnknown_Stored_SkColorType:            return kUnknown_SkColorType;
+        case kAlpha_8_Stored_SkColorType:            return kAlpha_8_SkColorType;
+        case kRGB_565_Stored_SkColorType:            return kRGB_565_SkColorType;
+        case kARGB_4444_Stored_SkColorType:          return kARGB_4444_SkColorType;
+        case kRGBA_8888_Stored_SkColorType:          return kRGBA_8888_SkColorType;
+        case kRGB_888x_Stored_SkColorType:           return kRGB_888x_SkColorType;
+        case kBGRA_8888_Stored_SkColorType:          return kBGRA_8888_SkColorType;
+        case kRGBA_1010102_Stored_SkColorType:       return kRGBA_1010102_SkColorType;
+        case kRGB_101010x_Stored_SkColorType:        return kRGB_101010x_SkColorType;
+        case kIndex_8_Stored_SkColorType_DEPRECATED: return kUnknown_SkColorType;
+        case kGray_8_Stored_SkColorType:             return kGray_8_SkColorType;
+        case kRGBA_F16_Stored_SkColorType:           return kRGBA_F16_SkColorType;
     }
-    return gStoredToLive[stored];
+    return kUnknown_SkColorType;
+}
+
+bool SkColorTypeIsAlwaysOpaque(SkColorType ct) {
+    switch (ct) {
+        case kRGB_565_SkColorType:
+        case kRGB_888x_SkColorType:
+        case kRGB_101010x_SkColorType:
+        case kGray_8_SkColorType:
+            return true;
+        default:
+            break;
+    }
+    return false;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
+int SkImageInfo::bytesPerPixel() const { return SkColorTypeBytesPerPixel(fColorType); }
+
+int SkImageInfo::shiftPerPixel() const { return SkColorTypeShiftPerPixel(fColorType); }
+
+size_t SkImageInfo::computeOffset(int x, int y, size_t rowBytes) const {
+    SkASSERT((unsigned)x < (unsigned)fWidth);
+    SkASSERT((unsigned)y < (unsigned)fHeight);
+    return SkColorTypeComputeOffset(fColorType, x, y, rowBytes);
+}
+
+size_t SkImageInfo::computeByteSize(size_t rowBytes) const {
+    if (0 == fHeight) {
+        return 0;
+    }
+    SkSafeMath safe;
+    size_t bytes = safe.add(safe.mul(fHeight - 1, rowBytes),
+                            safe.mul(fWidth, this->bytesPerPixel()));
+    return safe ? bytes : SK_MaxSizeT;
+}
+
 static bool alpha_type_is_valid(SkAlphaType alphaType) {
-    return (alphaType >= 0) && (alphaType <= kLastEnum_SkAlphaType);
+    return (alphaType >= kUnknown_SkAlphaType) && (alphaType <= kLastEnum_SkAlphaType);
 }
 
 static bool color_type_is_valid(SkColorType colorType) {
-    return (colorType >= 0) && (colorType <= kLastEnum_SkColorType);
+    return (colorType >= kUnknown_SkColorType) && (colorType <= kLastEnum_SkColorType);
 }
 
 SkImageInfo SkImageInfo::MakeS32(int width, int height, SkAlphaType at) {
@@ -135,13 +179,16 @@ bool SkColorTypeValidateAlphaType(SkColorType colorType, SkAlphaType alphaType,
         case kARGB_4444_SkColorType:
         case kRGBA_8888_SkColorType:
         case kBGRA_8888_SkColorType:
+        case kRGBA_1010102_SkColorType:
         case kRGBA_F16_SkColorType:
             if (kUnknown_SkAlphaType == alphaType) {
                 return false;
             }
             break;
-        case kRGB_565_SkColorType:
         case kGray_8_SkColorType:
+        case kRGB_565_SkColorType:
+        case kRGB_888x_SkColorType:
+        case kRGB_101010x_SkColorType:
             alphaType = kOpaque_SkAlphaType;
             break;
         default:

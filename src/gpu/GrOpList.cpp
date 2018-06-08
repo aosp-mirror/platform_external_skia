@@ -8,7 +8,9 @@
 #include "GrOpList.h"
 
 #include "GrContext.h"
+#include "GrDeferredProxyUploader.h"
 #include "GrSurfaceProxy.h"
+#include "GrTextureProxyPriv.h"
 
 #include "SkAtomics.h"
 
@@ -30,31 +32,56 @@ GrOpList::GrOpList(GrResourceProvider* resourceProvider,
     fTarget.setProxy(sk_ref_sp(surfaceProxy), kWrite_GrIOType);
     fTarget.get()->setLastOpList(this);
 
-    // MDB TODO: remove this! We are currently moving to having all the ops that target
-    // the RT as a dest (e.g., clear, etc.) rely on the opList's 'fTarget' pointer
-    // for the IO Ref. This works well but until they are all swapped over (and none
-    // are pre-emptively instantiating proxies themselves) we need to instantiate
-    // here so that the GrSurfaces are created in an order that preserves the GrSurface
-    // re-use assumptions.
-    fTarget.get()->instantiate(resourceProvider);
+    if (resourceProvider && !resourceProvider->explicitlyAllocateGPUResources()) {
+        // MDB TODO: remove this! We are currently moving to having all the ops that target
+        // the RT as a dest (e.g., clear, etc.) rely on the opList's 'fTarget' pointer
+        // for the IO Ref. This works well but until they are all swapped over (and none
+        // are pre-emptively instantiating proxies themselves) we need to instantiate
+        // here so that the GrSurfaces are created in an order that preserves the GrSurface
+        // re-use assumptions.
+        fTarget.get()->instantiate(resourceProvider);
+    }
+
     fTarget.markPendingIO();
 }
 
 GrOpList::~GrOpList() {
-    this->reset();
+    if (fTarget.get() && this == fTarget.get()->getLastOpList()) {
+        // Ensure the target proxy doesn't keep hold of a dangling back pointer.
+        fTarget.get()->setLastOpList(nullptr);
+    }
 }
 
 bool GrOpList::instantiate(GrResourceProvider* resourceProvider) {
     return SkToBool(fTarget.get()->instantiate(resourceProvider));
 }
 
-void GrOpList::reset() {
+void GrOpList::endFlush() {
     if (fTarget.get() && this == fTarget.get()->getLastOpList()) {
         fTarget.get()->setLastOpList(nullptr);
     }
 
     fTarget.reset();
+    fDeferredProxies.reset();
     fAuditTrail = nullptr;
+}
+
+void GrOpList::instantiateDeferredProxies(GrResourceProvider* resourceProvider) {
+    for (int i = 0; i < fDeferredProxies.count(); ++i) {
+        if (resourceProvider->explicitlyAllocateGPUResources()) {
+            SkASSERT(fDeferredProxies[i]->priv().isInstantiated());
+        } else {
+            fDeferredProxies[i]->instantiate(resourceProvider);
+        }
+    }
+}
+
+void GrOpList::prepare(GrOpFlushState* flushState) {
+    for (int i = 0; i < fDeferredProxies.count(); ++i) {
+        fDeferredProxies[i]->texPriv().scheduleUpload(flushState);
+    }
+
+    this->onPrepare(flushState);
 }
 
 // Add a GrOpList-based dependency
@@ -65,7 +92,7 @@ void GrOpList::addDependency(GrOpList* dependedOn) {
         return;  // don't add duplicate dependencies
     }
 
-    *fDependencies.push() = dependedOn;
+    fDependencies.push_back(dependedOn);
 }
 
 // Convert from a GrSurface-based dependency to a GrOpList one
@@ -84,6 +111,16 @@ void GrOpList::addDependency(GrSurfaceProxy* dependedOn, const GrCaps& caps) {
             opList->makeClosed(caps);
         }
     }
+
+    if (GrTextureProxy* textureProxy = dependedOn->asTextureProxy()) {
+        if (textureProxy->texPriv().isDeferred()) {
+            fDeferredProxies.push_back(textureProxy);
+        }
+    }
+}
+
+bool GrOpList::isInstantiated() const {
+    return fTarget.get()->priv().isInstantiated();
 }
 
 #ifdef SK_DEBUG

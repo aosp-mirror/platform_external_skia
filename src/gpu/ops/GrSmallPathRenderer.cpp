@@ -7,18 +7,17 @@
  */
 
 #include "GrSmallPathRenderer.h"
-
 #include "GrBuffer.h"
 #include "GrContext.h"
 #include "GrDistanceFieldGenFromVector.h"
 #include "GrDrawOpTest.h"
-#include "GrOpFlushState.h"
+#include "GrQuad.h"
 #include "GrResourceProvider.h"
-#include "GrSWMaskHelper.h"
 #include "GrSimpleMeshDrawOpHelper.h"
 #include "SkAutoMalloc.h"
+#include "SkAutoPixmapStorage.h"
 #include "SkDistanceFieldGen.h"
-#include "SkPathOps.h"
+#include "SkRasterClip.h"
 #include "effects/GrBitmapTextGeoProc.h"
 #include "effects/GrDistanceFieldGeoProc.h"
 #include "ops/GrMeshDrawOp.h"
@@ -82,46 +81,45 @@ GrSmallPathRenderer::~GrSmallPathRenderer() {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-bool GrSmallPathRenderer::onCanDrawPath(const CanDrawPathArgs& args) const {
+GrPathRenderer::CanDrawPath GrSmallPathRenderer::onCanDrawPath(const CanDrawPathArgs& args) const {
     if (!args.fCaps->shaderCaps()->shaderDerivativeSupport()) {
-        return false;
+        return CanDrawPath::kNo;
     }
     // If the shape has no key then we won't get any reuse.
     if (!args.fShape->hasUnstyledKey()) {
-        return false;
+        return CanDrawPath::kNo;
     }
     // This only supports filled paths, however, the caller may apply the style to make a filled
     // path and try again.
     if (!args.fShape->style().isSimpleFill()) {
-        return false;
+        return CanDrawPath::kNo;
     }
     // This does non-inverse coverage-based antialiased fills.
     if (GrAAType::kCoverage != args.fAAType) {
-        return false;
+        return CanDrawPath::kNo;
     }
     // TODO: Support inverse fill
     if (args.fShape->inverseFilled()) {
-        return false;
-    }
-    // currently don't support perspective
-    if (args.fViewMatrix->hasPerspective()) {
-        return false;
+        return CanDrawPath::kNo;
     }
 
     // Only support paths with bounds within kMaxDim by kMaxDim,
     // scaled to have bounds within kMaxSize by kMaxSize.
     // The goal is to accelerate rendering of lots of small paths that may be scaling.
-    SkScalar scaleFactors[2];
-    if (!args.fViewMatrix->getMinMaxScales(scaleFactors)) {
-        return false;
+    SkScalar scaleFactors[2] = { 1, 1 };
+    if (!args.fViewMatrix->hasPerspective() && !args.fViewMatrix->getMinMaxScales(scaleFactors)) {
+        return CanDrawPath::kNo;
     }
     SkRect bounds = args.fShape->styledBounds();
     SkScalar minDim = SkMinScalar(bounds.width(), bounds.height());
     SkScalar maxDim = SkMaxScalar(bounds.width(), bounds.height());
     SkScalar minSize = minDim * SkScalarAbs(scaleFactors[0]);
     SkScalar maxSize = maxDim * SkScalarAbs(scaleFactors[1]);
+    if (maxDim > kMaxDim || kMinSize > minSize || maxSize > kMaxSize) {
+        return CanDrawPath::kNo;
+    }
 
-    return maxDim <= kMaxDim && kMinSize <= minSize && maxSize <= kMaxSize;
+    return CanDrawPath::kYes;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -165,21 +163,10 @@ public:
         // only use distance fields on desktop and Android framework to save space in the atlas
         fUsesDistanceField = this->bounds().width() > kMaxMIP || this->bounds().height() > kMaxMIP;
 #endif
-        fViewMatrix = viewMatrix;
-        SkVector translate = SkVector::Make(0, 0);
-        if (!fUsesDistanceField) {
-            // In this case we don't apply a view matrix, so we need to remove the non-subpixel
-            // translation and add it back when we generate the quad for the path
-            SkScalar translateX = viewMatrix.getTranslateX();
-            SkScalar translateY = viewMatrix.getTranslateY();
-            translate = SkVector::Make(SkScalarFloorToScalar(translateX),
-                                       SkScalarFloorToScalar(translateY));
-            // Only store the fractional part of the translation in the view matrix
-            fViewMatrix.setTranslateX(translateX - translate.fX);
-            fViewMatrix.setTranslateY(translateY - translate.fY);
-        }
+        // always use distance fields if in perspective
+        fUsesDistanceField = fUsesDistanceField || viewMatrix.hasPerspective();
 
-        fShapes.emplace_back(Entry{color, shape, translate});
+        fShapes.emplace_back(Entry{color, shape, viewMatrix});
 
         fAtlas = atlas;
         fShapeCache = shapeCache;
@@ -189,6 +176,16 @@ public:
     }
 
     const char* name() const override { return "SmallPathOp"; }
+
+    void visitProxies(const VisitProxyFunc& func) const override {
+        fHelper.visitProxies(func);
+
+        const sk_sp<GrTextureProxy>* proxies = fAtlas->getProxies();
+        for (uint32_t i = 0; i < fAtlas->numActivePages(); ++i) {
+            SkASSERT(proxies[i]);
+            func(proxies[i].get());
+        }
+    }
 
     SkString dumpInfo() const override {
         SkString string;
@@ -202,8 +199,10 @@ public:
 
     FixedFunctionFlags fixedFunctionFlags() const override { return fHelper.fixedFunctionFlags(); }
 
-    RequiresDstTexture finalize(const GrCaps& caps, const GrAppliedClip* clip) override {
-        return fHelper.xpRequiresDstTexture(caps, clip, GrProcessorAnalysisCoverage::kSingleChannel,
+    RequiresDstTexture finalize(const GrCaps& caps, const GrAppliedClip* clip,
+                                GrPixelConfigIsClamped dstIsClamped) override {
+        return fHelper.xpRequiresDstTexture(caps, clip, dstIsClamped,
+                                            GrProcessorAnalysisCoverage::kSingleChannel,
                                             &fShapes.front().fColor);
     }
 
@@ -217,42 +216,49 @@ private:
         int fInstancesToFlush;
     };
 
-    void onPrepareDraws(Target* target) const override {
+    void onPrepareDraws(Target* target) override {
         int instanceCount = fShapes.count();
-        const SkMatrix& ctm = this->viewMatrix();
 
         FlushInfo flushInfo;
         flushInfo.fPipeline = fHelper.makePipeline(target);
         // Setup GrGeometryProcessor
-        GrDrawOpAtlas* atlas = fAtlas;
+        const SkMatrix& ctm = fShapes[0].fViewMatrix;
         if (fUsesDistanceField) {
-            GrSamplerParams params(SkShader::kClamp_TileMode, GrSamplerParams::kBilerp_FilterMode);
-
             uint32_t flags = 0;
+            // Still need to key off of ctm to pick the right shader for the transformed quad
             flags |= ctm.isScaleTranslate() ? kScaleOnly_DistanceFieldEffectFlag : 0;
             flags |= ctm.isSimilarity() ? kSimilarity_DistanceFieldEffectFlag : 0;
             flags |= fGammaCorrect ? kGammaCorrect_DistanceFieldEffectFlag : 0;
 
-            flushInfo.fGeometryProcessor = GrDistanceFieldPathGeoProc::Make(
-                    this->color(), this->viewMatrix(), atlas->getProxy(), params, flags,
-                    fHelper.usesLocalCoords());
-        } else {
-            GrSamplerParams params(SkShader::kClamp_TileMode, GrSamplerParams::kNone_FilterMode);
-
+            const SkMatrix* matrix;
             SkMatrix invert;
-            if (fHelper.usesLocalCoords()) {
-                if (!this->viewMatrix().invert(&invert)) {
+            if (ctm.hasPerspective()) {
+                matrix = &ctm;
+            } else if (fHelper.usesLocalCoords()) {
+                if (!ctm.invert(&invert)) {
                     SkDebugf("Could not invert viewmatrix\n");
                     return;
                 }
-                // for local coords, we need to add the translation back in that we removed
-                // from the stored view matrix
-                invert.preTranslate(-fShapes[0].fTranslate.fX, -fShapes[0].fTranslate.fY);
+                matrix = &invert;
+            } else {
+                matrix = &SkMatrix::I();
+            }
+            flushInfo.fGeometryProcessor = GrDistanceFieldPathGeoProc::Make(
+                    *matrix, fAtlas->getProxies(), fAtlas->numActivePages(),
+                    GrSamplerState::ClampBilerp(), flags);
+        } else {
+            SkMatrix invert;
+            if (fHelper.usesLocalCoords()) {
+                if (!ctm.invert(&invert)) {
+                    SkDebugf("Could not invert viewmatrix\n");
+                    return;
+                }
             }
 
-            flushInfo.fGeometryProcessor =
-                    GrBitmapTextGeoProc::Make(this->color(), atlas->getProxy(), params,
-                                              kA8_GrMaskFormat, invert, fHelper.usesLocalCoords());
+            flushInfo.fGeometryProcessor = GrBitmapTextGeoProc::Make(
+                    this->color(), fAtlas->getProxies(), fAtlas->numActivePages(),
+                    GrSamplerState::ClampNearest(), kA8_GrMaskFormat, invert,
+                    fHelper.usesLocalCoords());
         }
 
         // allocate vertices
@@ -265,7 +271,7 @@ private:
                                                  &vertexBuffer,
                                                  &flushInfo.fVertexOffset);
         flushInfo.fVertexBuffer.reset(SkRef(vertexBuffer));
-        flushInfo.fIndexBuffer.reset(target->resourceProvider()->refQuadIndexBuffer());
+        flushInfo.fIndexBuffer = target->resourceProvider()->refQuadIndexBuffer();
         if (!vertices || !flushInfo.fIndexBuffer) {
             SkDebugf("Could not allocate vertices\n");
             return;
@@ -278,11 +284,19 @@ private:
             const Entry& args = fShapes[i];
 
             ShapeData* shapeData;
-            SkScalar maxScale;
             if (fUsesDistanceField) {
                 // get mip level
-                maxScale = SkScalarAbs(this->viewMatrix().getMaxScale());
+                SkScalar maxScale;
                 const SkRect& bounds = args.fShape.bounds();
+                if (args.fViewMatrix.hasPerspective()) {
+                    // approximate the scale since we can't get it from the matrix
+                    SkRect xformedBounds;
+                    args.fViewMatrix.mapRect(&xformedBounds, bounds);
+                    maxScale = SkScalarAbs(SkTMax(xformedBounds.width() / bounds.width(),
+                                                  xformedBounds.height() / bounds.height()));
+                } else {
+                    maxScale = SkScalarAbs(args.fViewMatrix.getMaxScale());
+                }
                 SkScalar maxDim = SkMaxScalar(bounds.width(), bounds.height());
                 // We try to create the DF at a 2^n scaled path resolution (1/2, 1, 2, 4, etc.)
                 // In the majority of cases this will yield a crisper rendering.
@@ -318,7 +332,7 @@ private:
                 // check to see if df path is cached
                 ShapeData::Key key(args.fShape, SkScalarCeilToInt(desiredDimension));
                 shapeData = fShapeCache->find(key);
-                if (nullptr == shapeData || !atlas->hasID(shapeData->fID)) {
+                if (nullptr == shapeData || !fAtlas->hasID(shapeData->fID)) {
                     // Remove the stale cache entry
                     if (shapeData) {
                         fShapeCache->remove(shapeData->fKey);
@@ -330,7 +344,7 @@ private:
                     shapeData = new ShapeData;
                     if (!this->addDFPathToAtlas(target,
                                                 &flushInfo,
-                                                atlas,
+                                                fAtlas,
                                                 shapeData,
                                                 args.fShape,
                                                 SkScalarCeilToInt(desiredDimension),
@@ -341,9 +355,9 @@ private:
                 }
             } else {
                 // check to see if bitmap path is cached
-                ShapeData::Key key(args.fShape, this->viewMatrix());
+                ShapeData::Key key(args.fShape, args.fViewMatrix);
                 shapeData = fShapeCache->find(key);
-                if (nullptr == shapeData || !atlas->hasID(shapeData->fID)) {
+                if (nullptr == shapeData || !fAtlas->hasID(shapeData->fID)) {
                     // Remove the stale cache entry
                     if (shapeData) {
                         fShapeCache->remove(shapeData->fKey);
@@ -353,27 +367,25 @@ private:
 
                     shapeData = new ShapeData;
                     if (!this->addBMPathToAtlas(target,
-                                              &flushInfo,
-                                              atlas,
-                                              shapeData,
-                                              args.fShape,
-                                              this->viewMatrix())) {
+                                                &flushInfo,
+                                                fAtlas,
+                                                shapeData,
+                                                args.fShape,
+                                                args.fViewMatrix)) {
                         delete shapeData;
                         continue;
                     }
                 }
-                maxScale = 1;
             }
 
-            atlas->setLastUseToken(shapeData->fID, target->nextDrawToken());
+            auto uploadTarget = target->deferredUploadTarget();
+            fAtlas->setLastUseToken(shapeData->fID, uploadTarget->tokenTracker()->nextDrawToken());
 
-            this->writePathVertices(target,
-                                    atlas,
+            this->writePathVertices(fAtlas,
                                     offset,
                                     args.fColor,
                                     vertexStride,
-                                    maxScale,
-                                    args.fTranslate,
+                                    args.fViewMatrix,
                                     shapeData);
             offset += kVerticesPerQuad * vertexStride;
             flushInfo.fInstancesToFlush++;
@@ -385,6 +397,8 @@ private:
     bool addDFPathToAtlas(GrMeshDrawOp::Target* target, FlushInfo* flushInfo,
                           GrDrawOpAtlas* atlas, ShapeData* shapeData, const GrShape& shape,
                           uint32_t dimension, SkScalar scale) const {
+        auto resourceProvider = target->resourceProvider();
+
         const SkRect& bounds = shape.bounds();
 
         // generate bounding rect for bitmap draw
@@ -408,11 +422,13 @@ private:
         int width = devPathBounds.width() + 2*intPad;
         int height = devPathBounds.height() + 2*intPad;
         devPathBounds = SkIRect::MakeWH(width, height);
+        SkScalar translateX = intPad - dx;
+        SkScalar translateY = intPad - dy;
 
         // draw path to bitmap
         SkMatrix drawMatrix;
         drawMatrix.setScale(scale, scale);
-        drawMatrix.postTranslate(intPad - dx, intPad - dy);
+        drawMatrix.postTranslate(translateX, translateY);
 
         SkASSERT(devPathBounds.fLeft == 0);
         SkASSERT(devPathBounds.fTop == 0);
@@ -441,7 +457,7 @@ private:
                                                   devPathBounds.height()))) {
                 return false;
             }
-            sk_bzero(dst.writable_addr(), dst.getSafeSize());
+            sk_bzero(dst.writable_addr(), dst.computeByteSize());
 
             // rasterize path
             SkPaint paint;
@@ -470,9 +486,12 @@ private:
         // add to atlas
         SkIPoint16 atlasLocation;
         GrDrawOpAtlas::AtlasID id;
-        if (!atlas->addToAtlas(&id, target, width, height, dfStorage.get(), &atlasLocation)) {
+        auto uploadTarget = target->deferredUploadTarget();
+        if (!atlas->addToAtlas(resourceProvider, &id, uploadTarget, width, height,
+                               dfStorage.get(), &atlasLocation)) {
             this->flush(target, flushInfo);
-            if (!atlas->addToAtlas(&id, target, width, height, dfStorage.get(), &atlasLocation)) {
+            if (!atlas->addToAtlas(resourceProvider, &id, uploadTarget, width, height,
+                                   dfStorage.get(), &atlasLocation)) {
                 return false;
             }
         }
@@ -481,15 +500,24 @@ private:
         shapeData->fKey.set(shape, dimension);
         shapeData->fID = id;
 
-        // set the bounds rect to the original bounds
-        shapeData->fBounds = bounds;
+        shapeData->fBounds = SkRect::Make(devPathBounds);
+        shapeData->fBounds.offset(-translateX, -translateY);
+        shapeData->fBounds.fLeft /= scale;
+        shapeData->fBounds.fTop /= scale;
+        shapeData->fBounds.fRight /= scale;
+        shapeData->fBounds.fBottom /= scale;
 
-        // set up path to texture coordinate transform
-        shapeData->fScale = scale;
-        dx -= SK_DistanceFieldPad + kAntiAliasPad;
-        dy -= SK_DistanceFieldPad + kAntiAliasPad;
-        shapeData->fTranslate.fX = atlasLocation.fX - dx;
-        shapeData->fTranslate.fY = atlasLocation.fY - dy;
+        // We pack the 2bit page index in the low bit of the u and v texture coords
+        uint16_t pageIndex = GrDrawOpAtlas::GetPageIndexFromID(id);
+        SkASSERT(pageIndex < 4);
+        uint16_t uBit = (pageIndex >> 1) & 0x1;
+        uint16_t vBit = pageIndex & 0x1;
+        shapeData->fTextureCoords.set((atlasLocation.fX+SK_DistanceFieldPad) << 1 | uBit,
+                                      (atlasLocation.fY+SK_DistanceFieldPad) << 1 | vBit,
+                                      (atlasLocation.fX+SK_DistanceFieldPad+
+                                       devPathBounds.width()) << 1 | uBit,
+                                      (atlasLocation.fY+SK_DistanceFieldPad+
+                                       devPathBounds.height()) << 1 | vBit);
 
         fShapeCache->add(shapeData);
         fShapeList->addToTail(shapeData);
@@ -502,6 +530,8 @@ private:
     bool addBMPathToAtlas(GrMeshDrawOp::Target* target, FlushInfo* flushInfo,
                           GrDrawOpAtlas* atlas, ShapeData* shapeData, const GrShape& shape,
                           const SkMatrix& ctm) const {
+        auto resourceProvider = target->resourceProvider();
+
         const SkRect& bounds = shape.bounds();
         if (bounds.isEmpty()) {
             return false;
@@ -539,7 +569,7 @@ private:
                                               devPathBounds.height()))) {
             return false;
         }
-        sk_bzero(dst.writable_addr(), dst.getSafeSize());
+        sk_bzero(dst.writable_addr(), dst.computeByteSize());
 
         // rasterize path
         SkPaint paint;
@@ -561,11 +591,12 @@ private:
         // add to atlas
         SkIPoint16 atlasLocation;
         GrDrawOpAtlas::AtlasID id;
-        if (!atlas->addToAtlas(&id, target, dst.width(), dst.height(), dst.addr(),
-                               &atlasLocation)) {
+        auto uploadTarget = target->deferredUploadTarget();
+        if (!atlas->addToAtlas(resourceProvider, &id, uploadTarget, dst.width(), dst.height(),
+                               dst.addr(), &atlasLocation)) {
             this->flush(target, flushInfo);
-            if (!atlas->addToAtlas(&id, target, dst.width(), dst.height(), dst.addr(),
-                                   &atlasLocation)) {
+            if (!atlas->addToAtlas(resourceProvider, &id, uploadTarget, dst.width(), dst.height(),
+                                   dst.addr(), &atlasLocation)) {
                 return false;
             }
         }
@@ -574,14 +605,17 @@ private:
         shapeData->fKey.set(shape, ctm);
         shapeData->fID = id;
 
-        // set the bounds rect to the original bounds
         shapeData->fBounds = SkRect::Make(devPathBounds);
         shapeData->fBounds.offset(-translateX, -translateY);
 
-        // set up path to texture coordinate transform
-        shapeData->fScale = SK_Scalar1;
-        shapeData->fTranslate.fX = atlasLocation.fX + translateX;
-        shapeData->fTranslate.fY = atlasLocation.fY + translateY;
+        // We pack the 2bit page index in the low bit of the u and v texture coords
+        uint16_t pageIndex = GrDrawOpAtlas::GetPageIndexFromID(id);
+        SkASSERT(pageIndex < 4);
+        uint16_t uBit = (pageIndex >> 1) & 0x1;
+        uint16_t vBit = pageIndex & 0x1;
+        shapeData->fTextureCoords.set(atlasLocation.fX << 1 | uBit, atlasLocation.fY << 1 | vBit,
+                                      (atlasLocation.fX+width) << 1 | uBit,
+                                      (atlasLocation.fY+height) << 1 | vBit);
 
         fShapeCache->add(shapeData);
         fShapeList->addToTail(shapeData);
@@ -591,30 +625,45 @@ private:
         return true;
     }
 
-    void writePathVertices(GrDrawOp::Target* target,
-                           GrDrawOpAtlas* atlas,
+    void writePathVertices(GrDrawOpAtlas* atlas,
                            intptr_t offset,
                            GrColor color,
                            size_t vertexStride,
-                           SkScalar maxScale,
-                           const SkVector& preTranslate,
+                           const SkMatrix& ctm,
                            const ShapeData* shapeData) const {
         SkPoint* positions = reinterpret_cast<SkPoint*>(offset);
 
         SkRect bounds = shapeData->fBounds;
-        if (fUsesDistanceField) {
-            // outset bounds to include ~1 pixel of AA in device space
-            SkScalar outset = SkScalarInvert(maxScale);
-            bounds.outset(outset, outset);
+        SkRect translatedBounds(bounds);
+        if (!fUsesDistanceField) {
+            translatedBounds.offset(SkScalarTruncToScalar(ctm.get(SkMatrix::kMTransX)),
+                                  SkScalarTruncToScalar(ctm.get(SkMatrix::kMTransY)));
         }
 
         // vertex positions
         // TODO make the vertex attributes a struct
-        positions->setRectFan(bounds.left() + preTranslate.fX,
-                              bounds.top() + preTranslate.fY,
-                              bounds.right() + preTranslate.fX,
-                              bounds.bottom() + preTranslate.fY,
-                              vertexStride);
+        if (fUsesDistanceField && !ctm.hasPerspective()) {
+            GrQuad quad;
+            quad.setFromMappedRect(translatedBounds, ctm);
+            intptr_t positionOffset = offset;
+            SkPoint* position = (SkPoint*)positionOffset;
+            *position = quad.point(0);
+            positionOffset += vertexStride;
+            position = (SkPoint*)positionOffset;
+            *position = quad.point(1);
+            positionOffset += vertexStride;
+            position = (SkPoint*)positionOffset;
+            *position = quad.point(2);
+            positionOffset += vertexStride;
+            position = (SkPoint*)positionOffset;
+            *position = quad.point(3);
+        } else {
+            SkPointPriv::SetRectTriStrip(positions, translatedBounds.left(),
+                                       translatedBounds.top(),
+                                       translatedBounds.right(),
+                                       translatedBounds.bottom(),
+                                       vertexStride);
+        }
 
         // colors
         for (int i = 0; i < kVerticesPerQuad; i++) {
@@ -623,34 +672,10 @@ private:
         }
 
         // set up texture coordinates
-        SkScalar texLeft = bounds.fLeft;
-        SkScalar texTop = bounds.fTop;
-        SkScalar texRight = bounds.fRight;
-        SkScalar texBottom = bounds.fBottom;
-
-        // transform original path's bounds to texture space
-        SkScalar scale = shapeData->fScale;
-        const SkVector& translate = shapeData->fTranslate;
-        texLeft *= scale;
-        texTop *= scale;
-        texRight *= scale;
-        texBottom *= scale;
-        texLeft += translate.fX;
-        texTop += translate.fY;
-        texRight += translate.fX;
-        texBottom += translate.fY;
-
-        // convert texcoords to unsigned short format
-        sk_sp<GrTextureProxy> proxy = atlas->getProxy();
-
-        // The proxy must be functionally exact for this normalization to work correctly
-        SkASSERT(GrResourceProvider::IsFunctionallyExact(proxy.get()));
-        SkScalar uFactor = 65535.f / proxy->width();
-        SkScalar vFactor = 65535.f / proxy->height();
-        uint16_t l = (uint16_t)(texLeft*uFactor);
-        uint16_t t = (uint16_t)(texTop*vFactor);
-        uint16_t r = (uint16_t)(texRight*uFactor);
-        uint16_t b = (uint16_t)(texBottom*vFactor);
+        uint16_t l = shapeData->fTextureCoords.fLeft;
+        uint16_t t = shapeData->fTextureCoords.fTop;
+        uint16_t r = shapeData->fTextureCoords.fRight;
+        uint16_t b = shapeData->fTextureCoords.fBottom;
 
         // set vertex texture coords
         intptr_t textureCoordOffset = offset + sizeof(SkPoint) + sizeof(GrColor);
@@ -664,14 +689,27 @@ private:
         textureCoordOffset += vertexStride;
         textureCoords = (uint16_t*)textureCoordOffset;
         textureCoords[0] = r;
-        textureCoords[1] = b;
+        textureCoords[1] = t;
         textureCoordOffset += vertexStride;
         textureCoords = (uint16_t*)textureCoordOffset;
         textureCoords[0] = r;
-        textureCoords[1] = t;
+        textureCoords[1] = b;
     }
 
     void flush(GrMeshDrawOp::Target* target, FlushInfo* flushInfo) const {
+        GrGeometryProcessor* gp = flushInfo->fGeometryProcessor.get();
+        if (gp->numTextureSamplers() != (int)fAtlas->numActivePages()) {
+            // During preparation the number of atlas pages has increased.
+            // Update the proxies used in the GP to match.
+            if (fUsesDistanceField) {
+                reinterpret_cast<GrDistanceFieldPathGeoProc*>(gp)->addNewProxies(
+                    fAtlas->getProxies(), fAtlas->numActivePages(), GrSamplerState::ClampBilerp());
+            } else {
+                reinterpret_cast<GrBitmapTextGeoProc*>(gp)->addNewProxies(
+                    fAtlas->getProxies(), fAtlas->numActivePages(), GrSamplerState::ClampNearest());
+            }
+        }
+
         if (flushInfo->fInstancesToFlush) {
             GrMesh mesh(GrPrimitiveType::kTriangles);
             int maxInstancesPerDraw =
@@ -687,7 +725,6 @@ private:
     }
 
     GrColor color() const { return fShapes[0].fColor; }
-    const SkMatrix& viewMatrix() const { return fViewMatrix; }
     bool usesDistanceField() const { return fUsesDistanceField; }
 
     bool onCombineIfPossible(GrOp* t, const GrCaps& caps) override {
@@ -700,14 +737,26 @@ private:
             return false;
         }
 
-        // TODO We can position on the cpu for distance field paths
-        if (!this->viewMatrix().cheapEqualTo(that->viewMatrix())) {
+        const SkMatrix& thisCtm = this->fShapes[0].fViewMatrix;
+        const SkMatrix& thatCtm = that->fShapes[0].fViewMatrix;
+
+        if (thisCtm.hasPerspective() != thatCtm.hasPerspective()) {
             return false;
         }
 
-        if (!this->usesDistanceField() && fHelper.usesLocalCoords() &&
-            !this->fShapes[0].fTranslate.equalsWithinTolerance(that->fShapes[0].fTranslate)) {
+        // We can position on the cpu unless we're in perspective,
+        // but also need to make sure local matrices are identical
+        if ((thisCtm.hasPerspective() || fHelper.usesLocalCoords()) &&
+            !thisCtm.cheapEqualTo(thatCtm)) {
             return false;
+        }
+
+        // Depending on the ctm we may have a different shader for SDF paths
+        if (this->usesDistanceField()) {
+            if (thisCtm.isScaleTranslate() != thatCtm.isScaleTranslate() ||
+                thisCtm.isSimilarity() != thatCtm.isSimilarity()) {
+                return false;
+            }
         }
 
         fShapes.push_back_n(that->fShapes.count(), that->fShapes.begin());
@@ -715,13 +764,12 @@ private:
         return true;
     }
 
-    SkMatrix fViewMatrix;
     bool fUsesDistanceField;
 
     struct Entry {
         GrColor  fColor;
         GrShape  fShape;
-        SkVector fTranslate;
+        SkMatrix fViewMatrix;
     };
 
     SkSTArray<1, Entry> fShapes;
@@ -742,10 +790,11 @@ bool GrSmallPathRenderer::onDrawPath(const DrawPathArgs& args) {
     SkASSERT(!args.fShape->isEmpty());
     SkASSERT(args.fShape->hasUnstyledKey());
     if (!fAtlas) {
-        fAtlas = GrDrawOpAtlas::Make(args.fContext,
+        fAtlas = GrDrawOpAtlas::Make(args.fContext->contextPriv().proxyProvider(),
                                      kAlpha_8_GrPixelConfig,
                                      ATLAS_TEXTURE_WIDTH, ATLAS_TEXTURE_HEIGHT,
                                      NUM_PLOTS_X, NUM_PLOTS_Y,
+                                     GrDrawOpAtlas::AllowMultitexturing::kYes,
                                      &GrSmallPathRenderer::HandleEviction,
                                      (void*)this);
         if (!fAtlas) {
@@ -811,9 +860,11 @@ GR_DRAW_OP_TEST_DEFINE(SmallPathOp) {
     if (context->uniqueID() != gTestStruct.fContextID) {
         gTestStruct.fContextID = context->uniqueID();
         gTestStruct.reset();
-        gTestStruct.fAtlas = GrDrawOpAtlas::Make(context, kAlpha_8_GrPixelConfig,
+        gTestStruct.fAtlas = GrDrawOpAtlas::Make(context->contextPriv().proxyProvider(),
+                                                 kAlpha_8_GrPixelConfig,
                                                  ATLAS_TEXTURE_WIDTH, ATLAS_TEXTURE_HEIGHT,
                                                  NUM_PLOTS_X, NUM_PLOTS_Y,
+                                                 GrDrawOpAtlas::AllowMultitexturing::kYes,
                                                  &PathTestStruct::HandleEviction,
                                                  (void*)&gTestStruct);
     }
