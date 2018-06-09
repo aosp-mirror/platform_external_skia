@@ -1472,7 +1472,6 @@ cc_test {
         "tests/BlitMaskClip.cpp",
         "tests/BlitMaskTest.cpp",
         "tests/BlurTest.cpp",
-        "tests/CPlusPlusEleven.cpp",
         "tests/CTest.cpp",
         "tests/CachedDataTest.cpp",
         "tests/CachedDecodingPixelRefTest.cpp",
