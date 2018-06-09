@@ -793,14 +793,9 @@ __attribute__((no_sanitize("float-cast-overflow")))
             ih[t] = 1.f / texture->height();
         }
 
-#if defined(_MSC_VER) && _MSC_VER <= 1910
-#   define MAYBE_CONSTEXPR const
-#else
-#   define MAYBE_CONSTEXPR constexpr
-#endif
         using TessFn =
                 decltype(&TextureOp::tess<SkPoint, MultiTexture::kNo, Domain::kNo, GrAA::kNo>);
-        static MAYBE_CONSTEXPR TessFn kTessFns[] = {
+        static constexpr TessFn kTessFns[] = {
                 &TextureOp::tess<SkPoint,  MultiTexture::kNo,  Domain::kNo,  GrAA::kNo>,
                 &TextureOp::tess<SkPoint,  MultiTexture::kNo,  Domain::kNo,  GrAA::kYes>,
                 &TextureOp::tess<SkPoint,  MultiTexture::kNo,  Domain::kYes, GrAA::kNo>,
@@ -818,7 +813,6 @@ __attribute__((no_sanitize("float-cast-overflow")))
                 &TextureOp::tess<SkPoint3, MultiTexture::kYes, Domain::kYes, GrAA::kNo>,
                 &TextureOp::tess<SkPoint3, MultiTexture::kYes, Domain::kYes, GrAA::kYes>,
         };
-#undef MAYBE_CONSTEXPR
         int tessFnIdx = 0;
         tessFnIdx |= coverageAA      ? 0x1 : 0x0;
         tessFnIdx |= fDomain         ? 0x2 : 0x0;
@@ -1052,10 +1046,16 @@ GR_DRAW_OP_TEST_DEFINE(TextureOp) {
     desc.fHeight = random->nextULessThan(90) + 10;
     desc.fWidth = random->nextULessThan(90) + 10;
     auto origin = random->nextBool() ? kTopLeft_GrSurfaceOrigin : kBottomLeft_GrSurfaceOrigin;
-    SkBackingFit fit = random->nextBool() ? SkBackingFit::kApprox : SkBackingFit::kExact;
+    GrMipMapped mipMapped = random->nextBool() ? GrMipMapped::kYes : GrMipMapped::kNo;
+    SkBackingFit fit = SkBackingFit::kExact;
+    if (mipMapped == GrMipMapped::kNo) {
+        fit = random->nextBool() ? SkBackingFit::kApprox : SkBackingFit::kExact;
+    }
 
     GrProxyProvider* proxyProvider = context->contextPriv().proxyProvider();
-    sk_sp<GrTextureProxy> proxy = proxyProvider->createProxy(desc, origin, fit, SkBudgeted::kNo);
+    sk_sp<GrTextureProxy> proxy = proxyProvider->createProxy(desc, origin, mipMapped, fit,
+                                                             SkBudgeted::kNo,
+                                                             GrInternalSurfaceFlags::kNone);
 
     SkRect rect = GrTest::TestRect(random);
     SkRect srcRect;
@@ -1067,6 +1067,10 @@ GR_DRAW_OP_TEST_DEFINE(TextureOp) {
     GrColor color = SkColorToPremulGrColor(random->nextU());
     GrSamplerState::Filter filter = (GrSamplerState::Filter)random->nextULessThan(
             static_cast<uint32_t>(GrSamplerState::Filter::kMipMap) + 1);
+    while (mipMapped == GrMipMapped::kNo && filter == GrSamplerState::Filter::kMipMap) {
+        filter = (GrSamplerState::Filter)random->nextULessThan(
+                static_cast<uint32_t>(GrSamplerState::Filter::kMipMap) + 1);
+    }
     auto csxf = GrTest::TestColorXform(random);
     GrAAType aaType = GrAAType::kNone;
     if (random->nextBool()) {

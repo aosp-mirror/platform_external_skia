@@ -626,7 +626,8 @@ private:
                 kPipelineFlags, GrProcessorSet::MakeEmptySet(), target->detachAppliedClip());
 
         GrMesh mesh(GrPrimitiveType::kTriangles);
-        mesh.setIndexed(indexBuffer, fIndexCount, firstIndex, 0, fVertCount - 1);
+        mesh.setIndexed(indexBuffer, fIndexCount, firstIndex, 0, fVertCount - 1,
+                        GrPrimitiveRestart::kNo);
         mesh.setVertexData(vertexBuffer, firstVertex);
         target->draw(gp.get(), pipeline, mesh);
     }
@@ -690,7 +691,10 @@ GR_DRAW_OP_TEST_DEFINE(ShadowRRectOp) {
     SkScalar rotate = random->nextSScalar1() * 360.f;
     SkScalar translateX = random->nextSScalar1() * 1000.f;
     SkScalar translateY = random->nextSScalar1() * 1000.f;
-    SkScalar scale = random->nextSScalar1() * 100.f;
+    SkScalar scale;
+    do {
+        scale = random->nextSScalar1() * 100.f;
+    } while (scale == 0);
     SkMatrix viewMatrix;
     viewMatrix.setRotate(rotate);
     viewMatrix.postTranslate(translateX, translateY);

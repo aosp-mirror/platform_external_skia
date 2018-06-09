@@ -1150,6 +1150,8 @@ public:
         fParent = def;
     }
 
+    char* FindDateTime(char* buffer, int size);
+
     void indentIn(IndentKind kind) {
         fIndent += 4;
         fIndentStack.emplace_back(kind, fIndent);
@@ -1218,7 +1220,7 @@ public:
         fParent = fParent->fParent;
     }
 
-    const char* ReadToBuffer(string filename, int* size);
+    char* ReadToBuffer(string filename, int* size);
 
     virtual void reset() = 0;
 
@@ -1970,6 +1972,7 @@ public:
     void checkEnumLengths(const Definition& child, string enumName, ItemLength* length) const;
 	void constOut(const Definition* memberStart, const Definition* bmhConst);
     void constSizeMembers(const RootDefinition* root);
+    bool defineOut(const Definition& );
     bool descriptionOut(const Definition* def, SkipFirstLine , Phrase );
     void enumHeaderOut(RootDefinition* root, const Definition& child);
     string enumMemberComment(const Definition* currentEnumItem, const Definition& child) const;
@@ -2037,6 +2040,7 @@ public:
     void structOut(const Definition* root, const Definition& child,
             const char* commentStart, const char* commentEnd);
     void structSizeMembers(const Definition& child);
+    bool writeHeader(std::pair<const string, Definition>& );
 private:
     vector<const Definition* > fICSStack;
     BmhParser* fBmhParser;

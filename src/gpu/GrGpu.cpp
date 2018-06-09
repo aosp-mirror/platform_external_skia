@@ -45,18 +45,36 @@ void GrGpu::disconnect(DisconnectType) {}
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool GrGpu::IsACopyNeededForTextureParams(const GrCaps* caps, GrTextureProxy* texProxy,
-                                          int width, int height,
-                                          const GrSamplerState& textureParams,
-                                          GrTextureProducer::CopyParams* copyParams,
-                                          SkScalar scaleAdjust[2]) {
+bool GrGpu::IsACopyNeededForRepeatWrapMode(const GrCaps* caps, GrTextureProxy* texProxy,
+                                           int width, int height,
+                                           GrSamplerState::Filter filter,
+                                           GrTextureProducer::CopyParams* copyParams,
+                                           SkScalar scaleAdjust[2]) {
+    if (!caps->npotTextureTileSupport() &&
+        (!SkIsPow2(width) || !SkIsPow2(height))) {
+        SkASSERT(scaleAdjust);
+        copyParams->fWidth = GrNextPow2(width);
+        copyParams->fHeight = GrNextPow2(height);
+        SkASSERT(scaleAdjust);
+        scaleAdjust[0] = ((SkScalar)copyParams->fWidth) / width;
+        scaleAdjust[1] = ((SkScalar)copyParams->fHeight) / height;
+        switch (filter) {
+        case GrSamplerState::Filter::kNearest:
+            copyParams->fFilter = GrSamplerState::Filter::kNearest;
+            break;
+        case GrSamplerState::Filter::kBilerp:
+        case GrSamplerState::Filter::kMipMap:
+            // We are only ever scaling up so no reason to ever indicate kMipMap.
+            copyParams->fFilter = GrSamplerState::Filter::kBilerp;
+            break;
+        }
+        return true;
+    }
 
     if (texProxy) {
         // If the texture format itself doesn't support repeat wrap mode or mipmapping (and
         // those capabilities are required) force a copy.
-        if ((textureParams.isRepeated() && texProxy->texPriv().isClampOnly()) ||
-            (GrSamplerState::Filter::kMipMap == textureParams.filter() &&
-                                                    texProxy->texPriv().doesNotSupportMipMaps())) {
+        if (texProxy->texPriv().isClampOnly()) {
             copyParams->fFilter = GrSamplerState::Filter::kNearest;
             copyParams->fWidth = texProxy->width();
             copyParams->fHeight = texProxy->height();
@@ -64,26 +82,23 @@ bool GrGpu::IsACopyNeededForTextureParams(const GrCaps* caps, GrTextureProxy* te
         }
     }
 
-    if (textureParams.isRepeated() && !caps->npotTextureTileSupport() &&
-        (!SkIsPow2(width) || !SkIsPow2(height))) {
-        SkASSERT(scaleAdjust);
-        copyParams->fWidth = GrNextPow2(width);
-        copyParams->fHeight = GrNextPow2(height);
-        SkASSERT(scaleAdjust);
-        scaleAdjust[0] = ((SkScalar) copyParams->fWidth) / width;
-        scaleAdjust[1] = ((SkScalar) copyParams->fHeight) / height;
-        switch (textureParams.filter()) {
-            case GrSamplerState::Filter::kNearest:
-                copyParams->fFilter = GrSamplerState::Filter::kNearest;
-                break;
-            case GrSamplerState::Filter::kBilerp:
-            case GrSamplerState::Filter::kMipMap:
-                // We are only ever scaling up so no reason to ever indicate kMipMap.
-                copyParams->fFilter = GrSamplerState::Filter::kBilerp;
-                break;
-        }
+    return false;
+}
+
+bool GrGpu::IsACopyNeededForMips(const GrCaps* caps, const GrTextureProxy* texProxy,
+                                 GrSamplerState::Filter filter,
+                                 GrTextureProducer::CopyParams* copyParams) {
+    SkASSERT(texProxy);
+    bool willNeedMips = GrSamplerState::Filter::kMipMap == filter && caps->mipMapSupport();
+    // If the texture format itself doesn't support mipmapping (and those capabilities are required)
+    // force a copy.
+    if (willNeedMips && texProxy->mipMapped() == GrMipMapped::kNo) {
+        copyParams->fFilter = GrSamplerState::Filter::kNearest;
+        copyParams->fWidth = texProxy->width();
+        copyParams->fHeight = texProxy->height();
         return true;
     }
+
     return false;
 }
 
@@ -138,13 +153,7 @@ sk_sp<GrTexture> GrGpu::wrapBackendTexture(const GrBackendTexture& backendTex,
         backendTex.height() > this->caps()->maxTextureSize()) {
         return nullptr;
     }
-    sk_sp<GrTexture> tex = this->onWrapBackendTexture(backendTex, ownership);
-    if (tex && !backendTex.hasMipMaps()) {
-        // Ganesh will not ever allocate mipmaps for a wrapped resource. By setting this flag here,
-        // it will be propagated to any proxy that wraps this texture.
-        tex->texturePriv().setDoesNotSupportMipMaps();
-    }
-    return tex;
+    return this->onWrapBackendTexture(backendTex, ownership);
 }
 
 sk_sp<GrTexture> GrGpu::wrapRenderableBackendTexture(const GrBackendTexture& backendTex,
@@ -163,11 +172,6 @@ sk_sp<GrTexture> GrGpu::wrapRenderableBackendTexture(const GrBackendTexture& bac
         return nullptr;
     }
     sk_sp<GrTexture> tex = this->onWrapRenderableBackendTexture(backendTex, sampleCnt, ownership);
-    if (tex && !backendTex.hasMipMaps()) {
-        // Ganesh will not ever allocate mipmaps for a wrapped resource. By setting this flag here,
-        // it will be propagated to any proxy that wraps this texture.
-        tex->texturePriv().setDoesNotSupportMipMaps();
-    }
     SkASSERT(!tex || tex->asRenderTarget());
     return tex;
 }
