@@ -5,17 +5,20 @@
  * found in the LICENSE file.
  */
 
-#include <new>
+#include "SkPictureData.h"
 
 #include "SkAutoMalloc.h"
 #include "SkImageGenerator.h"
 #include "SkMakeUnique.h"
-#include "SkPictureData.h"
 #include "SkPictureRecord.h"
+#include "SkPicturePriv.h"
 #include "SkReadBuffer.h"
 #include "SkTextBlob.h"
 #include "SkTypeface.h"
 #include "SkWriteBuffer.h"
+#include "SkTo.h"
+
+#include <new>
 
 #if SK_SUPPORT_GPU
 #include "GrContext.h"
@@ -232,7 +235,7 @@ void SkPictureData::flatten(SkWriteBuffer& buffer) const {
     if (!fPictures.empty()) {
         write_tag_size(buffer, SK_PICT_PICTURE_TAG, fPictures.count());
         for (const auto& pic : fPictures) {
-            pic->flatten(buffer);
+            SkPicturePriv::Flatten(pic, buffer);
         }
     }
 
@@ -440,7 +443,7 @@ void SkPictureData::parseBufferTag(SkReadBuffer& buffer, uint32_t tag, uint32_t 
             fOpData = std::move(data);
         } break;
         case SK_PICT_PICTURE_TAG:
-            new_array_from_buffer(buffer, size, fPictures, SkPicture::MakeFromBuffer);
+            new_array_from_buffer(buffer, size, fPictures, SkPicturePriv::MakeFromBuffer);
             break;
         case SK_PICT_DRAWABLE_TAG:
             new_array_from_buffer(buffer, size, fDrawables, create_drawable_from_buffer);

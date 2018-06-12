@@ -17,14 +17,16 @@
 #include "SkImageFilter.h"
 #include "SkMaskFilter.h"
 #include "SkNullCanvas.h"
+#include "SkOSFile.h"
 #include "SkPathEffect.h"
+#include "SkPicturePriv.h"
 #include "SkPictureRecorder.h"
 #include "SkPoint3.h"
 #include "SkRSXform.h"
 #include "SkRegion.h"
 #include "SkSurface.h"
+#include "SkTo.h"
 #include "SkTypeface.h"
-#include "SkOSFile.h"
 
 // EFFECTS
 #include "Sk1DPathEffect.h"
@@ -1734,7 +1736,7 @@ DEF_FUZZ(RasterN32CanvasViaSerialization, fuzz) {
     sk_sp<SkData> data = pic->serialize();
     if (!data) { fuzz->signalBug(); }
     SkReadBuffer rb(data->data(), data->size());
-    auto deserialized = SkPicture::MakeFromBuffer(rb);
+    auto deserialized = SkPicturePriv::MakeFromBuffer(rb);
     if (!deserialized) { fuzz->signalBug(); }
     auto surface = SkSurface::MakeRasterN32Premul(kCanvasSize.width(), kCanvasSize.height());
     SkASSERT(surface && surface->getCanvas());

@@ -597,6 +597,7 @@ cc_library_static {
         "src/gpu/ops/GrAAStrokeRectOp.cpp",
         "src/gpu/ops/GrAtlasTextOp.cpp",
         "src/gpu/ops/GrClearOp.cpp",
+        "src/gpu/ops/GrClearStencilClipOp.cpp",
         "src/gpu/ops/GrCopySurfaceOp.cpp",
         "src/gpu/ops/GrDashLinePathRenderer.cpp",
         "src/gpu/ops/GrDashOp.cpp",

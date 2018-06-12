@@ -5,16 +5,19 @@
  * found in the LICENSE file.
  */
 
+#include "SkPicture.h"
+
 #include "SkAtomics.h"
 #include "SkImageGenerator.h"
 #include "SkMathPriv.h"
-#include "SkPicture.h"
 #include "SkPictureCommon.h"
 #include "SkPictureData.h"
 #include "SkPicturePlayback.h"
+#include "SkPicturePriv.h"
 #include "SkPictureRecord.h"
 #include "SkPictureRecorder.h"
 #include "SkSerialProcs.h"
+#include "SkTo.h"
 
 // When we read/write the SkPictInfo via a stream, we have a sentinel byte right after the info.
 // Note: in the read/write buffer versions, we have a slightly different convention:
@@ -198,9 +201,9 @@ sk_sp<SkPicture> SkPicture::MakeFromStream(SkStream* stream, const SkDeserialPro
     return nullptr;
 }
 
-sk_sp<SkPicture> SkPicture::MakeFromBuffer(SkReadBuffer& buffer) {
+sk_sp<SkPicture> SkPicturePriv::MakeFromBuffer(SkReadBuffer& buffer) {
     SkPictInfo info;
-    if (!BufferIsSKP(&buffer, &info)) {
+    if (!SkPicture::BufferIsSKP(&buffer, &info)) {
         return nullptr;
     }
     // size should be 0, 1, or negative
@@ -218,7 +221,7 @@ sk_sp<SkPicture> SkPicture::MakeFromBuffer(SkReadBuffer& buffer) {
         return nullptr;
     }
    std::unique_ptr<SkPictureData> data(SkPictureData::CreateFromBuffer(buffer, info));
-    return Forwardport(info, data.get(), &buffer);
+    return SkPicture::Forwardport(info, data.get(), &buffer);
 }
 
 SkPictureData* SkPicture::backport() const {
@@ -296,15 +299,15 @@ void SkPicture::serialize(SkWStream* stream, const SkSerialProcs* procsPtr,
     }
 }
 
-void SkPicture::flatten(SkWriteBuffer& buffer) const {
-    SkPictInfo info = this->createHeader();
-    std::unique_ptr<SkPictureData> data(this->backport());
+void SkPicturePriv::Flatten(const sk_sp<const SkPicture> picture, SkWriteBuffer& buffer) {
+    SkPictInfo info = picture->createHeader();
+    std::unique_ptr<SkPictureData> data(picture->backport());
 
     buffer.writeByteArray(&info.fMagic, sizeof(info.fMagic));
     buffer.writeUInt(info.getVersion());
     buffer.writeRect(info.fCullRect);
 
-    if (auto custom = custom_serialize(this, buffer.fProcs)) {
+    if (auto custom = custom_serialize(picture.get(), buffer.fProcs)) {
         int32_t size = SkToS32(custom->size());
         buffer.write32(-size);    // negative for custom format
         buffer.writePad32(custom->data(), size);
