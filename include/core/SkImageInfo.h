@@ -22,7 +22,9 @@
 #include "SkMath.h"
 #include "SkRect.h"
 #include "SkSize.h"
+
 #include "../private/SkTFitsIn.h"
+#include "../private/SkTo.h"
 
 class SkReadBuffer;
 class SkWriteBuffer;
@@ -249,7 +251,7 @@ public:
     */
     static SkImageInfo MakeN32(int width, int height, SkAlphaType at,
                                sk_sp<SkColorSpace> cs = nullptr) {
-        return Make(width, height, kN32_SkColorType, at, cs);
+        return Make(width, height, kN32_SkColorType, at, std::move(cs));
     }
 
     /** Creates SkImageInfo from integral dimensions width and height, kN32_SkColorType,
@@ -282,7 +284,7 @@ public:
         @return        created SkImageInfo
     */
     static SkImageInfo MakeN32Premul(int width, int height, sk_sp<SkColorSpace> cs = nullptr) {
-        return Make(width, height, kN32_SkColorType, kPremul_SkAlphaType, cs);
+        return Make(width, height, kN32_SkColorType, kPremul_SkAlphaType, std::move(cs));
     }
 
     /** Creates SkImageInfo from integral dimensions width and height, kN32_SkColorType,
@@ -553,7 +555,7 @@ public:
         and rowBytes. rowBytes is assumed to be at least as large as minRowBytes().
 
         Returns zero if height is zero.
-        Returns SK_MaxSizeT if answer exceeds the range of size_t.
+        Returns SIZE_MAX if answer exceeds the range of size_t.
 
         @param rowBytes  size of pixel row or larger
         @return          memory required by pixel buffer
@@ -564,7 +566,7 @@ public:
         SkColorType. Uses minRowBytes() to compute bytes for pixel row.
 
         Returns zero if height is zero.
-        Returns SK_MaxSizeT if answer exceeds the range of size_t.
+        Returns SIZE_MAX if answer exceeds the range of size_t.
 
         @return  least memory required by pixel buffer
     */
@@ -572,14 +574,14 @@ public:
         return this->computeByteSize(this->minRowBytes());
     }
 
-    /** Returns true if byteSize equals SK_MaxSizeT. computeByteSize() and
-        computeMinByteSize() return SK_MaxSizeT if size_t can not hold buffer size.
+    /** Returns true if byteSize equals SIZE_MAX. computeByteSize() and
+        computeMinByteSize() return SIZE_MAX if size_t can not hold buffer size.
 
         @param byteSize  result of computeByteSize() or computeMinByteSize()
         @return          true if computeByteSize() or computeMinByteSize() result exceeds size_t
     */
     static bool ByteSizeOverflowed(size_t byteSize) {
-        return SK_MaxSizeT == byteSize;
+        return SIZE_MAX == byteSize;
     }
 
     /** Returns true if rowBytes is smaller than width times pixel size.

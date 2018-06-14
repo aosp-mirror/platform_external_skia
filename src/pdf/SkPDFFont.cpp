@@ -5,6 +5,8 @@
  * found in the LICENSE file.
  */
 
+#include "SkPDFFont.h"
+
 #include "SkData.h"
 #include "SkGlyphCache.h"
 #include "SkMacros.h"
@@ -12,7 +14,6 @@
 #include "SkPDFCanon.h"
 #include "SkPDFConvertType1FontStream.h"
 #include "SkPDFDevice.h"
-#include "SkPDFFont.h"
 #include "SkPDFMakeCIDGlyphWidthsArray.h"
 #include "SkPDFMakeToUnicodeCmap.h"
 #include "SkPDFUtils.h"
@@ -20,6 +21,7 @@
 #include "SkRefCnt.h"
 #include "SkScalar.h"
 #include "SkStream.h"
+#include "SkTo.h"
 #include "SkTypes.h"
 #include "SkUtils.h"
 
@@ -147,7 +149,7 @@ const SkAdvancedTypefaceMetrics* SkPDFFont::GetMetrics(SkTypeface* typeface,
         return ptr->get();  // canon retains ownership.
     }
     int count = typeface->countGlyphs();
-    if (count <= 0 || count > 1 + SK_MaxU16) {
+    if (count <= 0 || count > 1 + UINT16_MAX) {
         // Cache nullptr to skip this check.  Use SkSafeUnref().
         canon->fTypefaceMetrics.set(id, nullptr);
         return nullptr;

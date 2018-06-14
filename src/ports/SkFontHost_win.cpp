@@ -20,21 +20,21 @@
 #include "SkMakeUnique.h"
 #include "SkMaskGamma.h"
 #include "SkMatrix22.h"
-#include "SkOnce.h"
 #include "SkOTTable_OS_2.h"
 #include "SkOTTable_maxp.h"
 #include "SkOTTable_name.h"
 #include "SkOTUtils.h"
+#include "SkOnce.h"
 #include "SkPath.h"
 #include "SkSFNTHeader.h"
 #include "SkStream.h"
 #include "SkString.h"
 #include "SkTemplates.h"
-#include "SkTypeface_win.h"
+#include "SkTo.h"
 #include "SkTypefaceCache.h"
+#include "SkTypeface_win.h"
 #include "SkUtils.h"
 
-#include "SkTypes.h"
 #include <tchar.h>
 #include <usp10.h>
 #include <objbase.h>
@@ -169,7 +169,7 @@ static unsigned calculateGlyphCount(HDC hdc, const LOGFONT& lf) {
 
     // Binary search for glyph count.
     static const MAT2 mat2 = {{0, 1}, {0, 0}, {0, 0}, {0, 1}};
-    int32_t max = SK_MaxU16 + 1;
+    int32_t max = UINT16_MAX + 1;
     int32_t min = 0;
     GLYPHMETRICS gm;
     while (min < max) {

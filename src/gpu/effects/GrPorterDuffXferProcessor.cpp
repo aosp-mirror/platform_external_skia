@@ -14,6 +14,7 @@
 #include "GrProcessorAnalysis.h"
 #include "GrTypes.h"
 #include "GrXferProcessor.h"
+#include "SkTo.h"
 #include "glsl/GrGLSLBlend.h"
 #include "glsl/GrGLSLFragmentShaderBuilder.h"
 #include "glsl/GrGLSLProgramDataManager.h"
@@ -618,7 +619,7 @@ private:
 
 class GLPDLCDXferProcessor : public GrGLSLXferProcessor {
 public:
-    GLPDLCDXferProcessor(const GrProcessor&) : fLastAlpha(SK_MaxU32) {}
+    GLPDLCDXferProcessor(const GrProcessor&) : fLastAlpha(UINT32_MAX) {}
 
     ~GLPDLCDXferProcessor() override {}
 

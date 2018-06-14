@@ -96,36 +96,16 @@ typedef int S16CPU;
  */
 typedef unsigned U16CPU;
 
-#include "../private/SkTFitsIn.h"
-template <typename D, typename S> constexpr D SkTo(S s) {
-    return SkASSERT(SkTFitsIn<D>(s)),
-           static_cast<D>(s);
-}
-#define SkToS8(x)    SkTo<int8_t>(x)
-#define SkToU8(x)    SkTo<uint8_t>(x)
-#define SkToS16(x)   SkTo<int16_t>(x)
-#define SkToU16(x)   SkTo<uint16_t>(x)
-#define SkToS32(x)   SkTo<int32_t>(x)
-#define SkToU32(x)   SkTo<uint32_t>(x)
-#define SkToInt(x)   SkTo<int>(x)
-#define SkToUInt(x)  SkTo<unsigned>(x)
-#define SkToSizeT(x) SkTo<size_t>(x)
-
 /** Returns 0 or 1 based on the condition
 */
 #define SkToBool(cond)  ((cond) != 0)
 
-#define SK_MaxS16   32767
-#define SK_MinS16   -32767
-#define SK_MaxU16   0xFFFF
-#define SK_MinU16   0
-#define SK_MaxS32   0x7FFFFFFF
+#define SK_MaxS16   INT16_MAX
+#define SK_MinS16   -SK_MaxS16
+#define SK_MaxS32   INT32_MAX
 #define SK_MinS32   -SK_MaxS32
-#define SK_MaxU32   0xFFFFFFFF
-#define SK_MinU32   0
-#define SK_NaN32    ((int) (1U << 31))
-#define SK_MaxSizeT SIZE_MAX
-static constexpr int64_t SK_MaxS64 = 0x7FFFFFFFFFFFFFFF;
+#define SK_NaN32    INT32_MIN
+static constexpr int64_t SK_MaxS64 = INT64_MAX;
 static constexpr int64_t SK_MinS64 = -SK_MaxS64;
 
 static inline constexpr int32_t SkLeftShift(int32_t value, int32_t shift) {
