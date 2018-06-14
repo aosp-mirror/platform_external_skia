@@ -96,11 +96,6 @@ typedef int S16CPU;
  */
 typedef unsigned U16CPU;
 
-/**
- *  Meant to be a small version of bool, for storage purposes. Will be 0 or 1
- */
-typedef uint8_t SkBool8;
-
 #include "../private/SkTFitsIn.h"
 template <typename D, typename S> constexpr D SkTo(S s) {
     return SkASSERT(SkTFitsIn<D>(s)),
@@ -235,6 +230,10 @@ template <typename T> constexpr const T& SkTMin(const T& a, const T& b) {
 
 template <typename T> constexpr const T& SkTMax(const T& a, const T& b) {
     return (b < a) ? a : b;
+}
+
+template <typename T> constexpr const T& SkTClamp(const T& x, const T& lo, const T& hi) {
+    return (x < lo) ? lo : SkTMin(x, hi);
 }
 
 static inline int32_t SkFastMin32(int32_t value, int32_t max) {
