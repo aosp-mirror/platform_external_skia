@@ -11,6 +11,7 @@
 #include "GrTextureProxy.h"
 #include "SkPath.h"
 
+struct GrCCPerFlushResourceSpecs;
 class GrCCAtlas;
 class GrCCPerFlushResources;
 class GrOnFlushResourceProvider;
@@ -55,6 +56,7 @@ public:
         return fPathDevIBounds;
     }
 
+    void accountForOwnPath(GrCCPerFlushResourceSpecs*) const;
     void renderPathInAtlas(GrCCPerFlushResources*, GrOnFlushResourceProvider*);
 
     const SkVector& atlasScale() const { SkASSERT(fHasAtlasTransform); return fAtlasScale; }
@@ -67,8 +69,7 @@ private:
     SkIRect fAccessRect;
 
     const GrCCAtlas* fAtlas = nullptr;
-    int16_t fAtlasOffsetX;
-    int16_t fAtlasOffsetY;
+    SkIVector fDevToAtlasOffset;  // Translation from device space to location in atlas.
     SkDEBUGCODE(bool fHasAtlas = false);
 
     SkVector fAtlasScale;

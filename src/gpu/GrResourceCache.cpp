@@ -5,7 +5,6 @@
  * found in the LICENSE file.
  */
 
-
 #include "GrResourceCache.h"
 
 #include "GrCaps.h"
@@ -18,6 +17,7 @@
 #include "SkMessageBus.h"
 #include "SkOpts.h"
 #include "SkTSort.h"
+#include "SkTo.h"
 
 DECLARE_SKMESSAGEBUS_MESSAGE(GrUniqueKeyInvalidatedMessage);
 
@@ -410,29 +410,6 @@ void GrResourceCache::notifyCntReachedZero(GrGpuResource* resource, uint32_t fla
     resource->cacheAccess().release();
     // We should at least free this resource, perhaps dependent resources as well.
     SkASSERT(this->getResourceCount() < beforeCount);
-    this->validate();
-}
-
-void GrResourceCache::didChangeGpuMemorySize(const GrGpuResource* resource, size_t oldSize) {
-    SkASSERT(resource);
-    SkASSERT(this->isInCache(resource));
-
-    ptrdiff_t delta = resource->gpuMemorySize() - oldSize;
-
-    fBytes += delta;
-#if GR_CACHE_STATS
-    fHighWaterBytes = SkTMax(fBytes, fHighWaterBytes);
-#endif
-    if (SkBudgeted::kYes == resource->resourcePriv().isBudgeted()) {
-        fBudgetedBytes += delta;
-        TRACE_COUNTER2("skia.gpu.cache", "skia budget", "used",
-                       fBudgetedBytes, "free", fMaxBytes - fBudgetedBytes);
-#if GR_CACHE_STATS
-        fBudgetedHighWaterBytes = SkTMax(fBudgetedBytes, fBudgetedHighWaterBytes);
-#endif
-    }
-
-    this->purgeAsNeeded();
     this->validate();
 }
 

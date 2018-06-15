@@ -16,7 +16,6 @@
 #include "GrPipeline.h"
 #include "GrRenderTargetPriv.h"
 #include "GrTexturePriv.h"
-
 #include "GrVkAMDMemoryAllocator.h"
 #include "GrVkCommandBuffer.h"
 #include "GrVkGpuCommandBuffer.h"
@@ -33,14 +32,12 @@
 #include "GrVkTextureRenderTarget.h"
 #include "GrVkTransferBuffer.h"
 #include "GrVkVertexBuffer.h"
-
 #include "SkConvertPixels.h"
 #include "SkMipMap.h"
-
+#include "SkSLCompiler.h"
+#include "SkTo.h"
 #include "vk/GrVkInterface.h"
 #include "vk/GrVkTypes.h"
-
-#include "SkSLCompiler.h"
 
 #if !defined(SK_BUILD_FOR_WIN)
 #include <unistd.h>
@@ -359,12 +356,7 @@ bool GrVkGpu::onWritePixels(GrSurface* surface, int left, int top, int width, in
         success = this->uploadTexDataLinear(vkTex, left, top, width, height, srcColorType,
                                             texels[0].fPixels, texels[0].fRowBytes);
     } else {
-        int currentMipLevels = vkTex->texturePriv().maxMipMapLevel() + 1;
-        if (mipLevelCount > currentMipLevels) {
-            if (!vkTex->reallocForMipmap(this, mipLevelCount)) {
-                return false;
-            }
-        }
+        SkASSERT(mipLevelCount <= vkTex->texturePriv().maxMipMapLevel() + 1);
         success = this->uploadTexDataOptimal(vkTex, left, top, width, height, srcColorType, texels,
                                              mipLevelCount);
     }
@@ -932,49 +924,11 @@ void GrVkGpu::generateMipmap(GrVkTexture* tex, GrSurfaceOrigin texOrigin) {
 
     // SkMipMap doesn't include the base level in the level count so we have to add 1
     uint32_t levelCount = SkMipMap::ComputeLevelCount(tex->width(), tex->height()) + 1;
-    if (levelCount != tex->mipLevels()) {
-        const GrVkResource* oldResource = tex->resource();
-        oldResource->ref();
-        // grab handle to the original image resource
-        VkImage oldImage = tex->image();
+    SkASSERT(levelCount == tex->mipLevels());
 
-        // change the original image's layout so we can copy from it
-        tex->setImageLayout(this, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                            VK_ACCESS_TRANSFER_READ_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, false);
-
-        if (!tex->reallocForMipmap(this, levelCount)) {
-            oldResource->unref(this);
-            return;
-        }
-        // change the new image's layout so we can blit to it
-        tex->setImageLayout(this, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                            VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, false);
-
-        // Blit original image to top level of new image
-        blitRegion.srcSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
-        blitRegion.srcOffsets[0] = { 0, 0, 0 };
-        blitRegion.srcOffsets[1] = { width, height, 1 };
-        blitRegion.dstSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
-        blitRegion.dstOffsets[0] = { 0, 0, 0 };
-        blitRegion.dstOffsets[1] = { width, height, 1 };
-
-        fCurrentCmdBuffer->blitImage(this,
-                                     oldResource,
-                                     oldImage,
-                                     VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                                     tex->resource(),
-                                     tex->image(),
-                                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                                     1,
-                                     &blitRegion,
-                                     VK_FILTER_LINEAR);
-
-        oldResource->unref(this);
-    } else {
-        // change layout of the layers so we can write to them.
-        tex->setImageLayout(this, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                            VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, false);
-    }
+    // change layout of the layers so we can write to them.
+    tex->setImageLayout(this, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                        VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, false);
 
     // setup memory barrier
     SkASSERT(GrVkFormatIsSupported(tex->imageFormat()));

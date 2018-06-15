@@ -7,7 +7,6 @@
 
 #include "GrGLGpu.h"
 
-#include <cmath>
 #include "../private/GrGLSL.h"
 #include "GrBackendSemaphore.h"
 #include "GrBackendSurface.h"
@@ -35,9 +34,12 @@
 #include "SkSLCompiler.h"
 #include "SkStrokeRec.h"
 #include "SkTemplates.h"
+#include "SkTo.h"
 #include "SkTraceEvent.h"
 #include "SkTypes.h"
 #include "builders/GrGLShaderStringBuilder.h"
+
+#include <cmath>
 
 #define GL_CALL(X) GR_GL_CALL(this->glInterface(), X)
 #define GL_CALL_RET(RET, X) GR_GL_CALL_RET(this->glInterface(), RET, X)
@@ -2905,8 +2907,6 @@ void GrGLGpu::generateMipmaps(const GrSamplerState& params, GrGLTexture* texture
     }
 
     texture->texturePriv().markMipMapsClean();
-    texture->texturePriv().setMaxMipMapLevel(SkMipMap::ComputeLevelCount(
-        texture->width(), texture->height()));
 
     // We have potentially set lots of state on the texture. Easiest to dirty it all:
     texture->textureParamsModified();
@@ -3849,28 +3849,7 @@ bool GrGLGpu::generateMipmap(GrGLTexture* texture, GrSurfaceOrigin textureOrigin
     int width = texture->width();
     int height = texture->height();
     int levelCount = SkMipMap::ComputeLevelCount(width, height) + 1;
-
-    // Define all mips, if we haven't previously done so:
-    if (0 == texture->texturePriv().maxMipMapLevel()) {
-        GrGLenum internalFormat;
-        GrGLenum externalFormat;
-        GrGLenum externalType;
-        if (!this->glCaps().getTexImageFormats(texture->config(), texture->config(),
-                                               &internalFormat, &externalFormat, &externalType)) {
-            return false;
-        }
-
-        this->unbindCpuToGpuXferBuffer();
-
-        for (GrGLint level = 1; level < levelCount; ++level) {
-            // Define the next mip:
-            width = SkTMax(1, width / 2);
-            height = SkTMax(1, height / 2);
-            GL_ALLOC_CALL(this->glInterface(), TexImage2D(GR_GL_TEXTURE_2D, level, internalFormat,
-                                                          width, height, 0,
-                                                          externalFormat, externalType, nullptr));
-        }
-    }
+    SkASSERT(levelCount == texture->texturePriv().maxMipMapLevel() + 1);
 
     // Create (if necessary), then bind temporary FBO:
     if (0 == fTempDstFBOID) {

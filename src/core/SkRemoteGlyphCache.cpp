@@ -668,6 +668,8 @@ void SkStrikeServer::SkGlyphCacheState::writePendingGlyphs(Serializer* serialize
         SkGlyph stationaryGlyph = *glyph;
         stationaryGlyph.fImage = serializer->allocate(imageSize, stationaryGlyph.formatAlignment());
         fContext->getImage(stationaryGlyph);
+        // TODO: Generating the image can change the mask format, do we need to update it in the
+        // serialized glyph?
     }
     fPendingGlyphImages.clear();
 
@@ -801,6 +803,7 @@ bool SkStrikeClient::readStrikeData(const volatile void* memory, size_t memorySi
                     *client_desc, std::move(scaler), &fontMetrics,
                     skstd::make_unique<DiscardableStrikePinner>(spec.discardableHandleId,
                                                                 fDiscardableHandleManager));
+            static_cast<SkScalerContextProxy*>(strike->getScalerContext())->initCache(strike.get());
         }
 
         size_t glyphImagesCount = 0u;
@@ -810,10 +813,14 @@ bool SkStrikeClient::readStrikeData(const volatile void* memory, size_t memorySi
             if (!deserializer.read<SkGlyph>(&glyph)) READ_FAILURE
 
             SkGlyph* allocatedGlyph = strike->getRawGlyphByID(glyph.getPackedID());
-            // Don't override the path, if the glyph has one.
-            auto* glyphPath = allocatedGlyph->fPathData;
-            *allocatedGlyph = glyph;
-            allocatedGlyph->fPathData = glyphPath;
+
+            // Update the glyph unless it's already got an image (from fallback),
+            // preserving any path that might be present.
+            if (allocatedGlyph->fImage == nullptr) {
+                auto* glyphPath = allocatedGlyph->fPathData;
+                *allocatedGlyph = glyph;
+                allocatedGlyph->fPathData = glyphPath;
+            }
 
             bool tooLargeForAtlas = false;
 #if SK_SUPPORT_GPU
@@ -827,9 +834,8 @@ bool SkStrikeClient::readStrikeData(const volatile void* memory, size_t memorySi
             if (imageSize == 0u) continue;
 
             auto* image = deserializer.read(imageSize, allocatedGlyph->formatAlignment());
-            if (!image ||
-                !strike->initializeImage(image, imageSize, allocatedGlyph))
-                READ_FAILURE
+            if (!image) READ_FAILURE
+            strike->initializeImage(image, imageSize, allocatedGlyph);
         }
 
         size_t glyphPathsCount = 0u;
@@ -839,10 +845,14 @@ bool SkStrikeClient::readStrikeData(const volatile void* memory, size_t memorySi
             if (!deserializer.read<SkGlyph>(&glyph)) READ_FAILURE
 
             SkGlyph* allocatedGlyph = strike->getRawGlyphByID(glyph.getPackedID());
-            // Don't override the image, if the glyph has one.
-            auto* glyphImage = allocatedGlyph->fImage;
-            *allocatedGlyph = glyph;
-            allocatedGlyph->fImage = glyphImage;
+
+            // Update the glyph unless it's already got a path (from fallback),
+            // preserving any image that might be present.
+            if (allocatedGlyph->fPathData == nullptr) {
+                auto* glyphImage = allocatedGlyph->fImage;
+                *allocatedGlyph = glyph;
+                allocatedGlyph->fImage = glyphImage;
+            }
 
             if (!read_path(&deserializer, allocatedGlyph, strike.get())) READ_FAILURE
         }

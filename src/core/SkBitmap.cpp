@@ -5,8 +5,9 @@
  * found in the LICENSE file.
  */
 
-#include "SkAtomics.h"
 #include "SkBitmap.h"
+
+#include "SkAtomics.h"
 #include "SkColorData.h"
 #include "SkConvertPixels.h"
 #include "SkData.h"
@@ -23,6 +24,7 @@
 #include "SkRect.h"
 #include "SkScalar.h"
 #include "SkTemplates.h"
+#include "SkTo.h"
 #include "SkUnPreMultiply.h"
 #include "SkWriteBuffer.h"
 #include "SkWritePixelsRec.h"
@@ -648,8 +650,8 @@ bool SkBitmap::peekPixels(SkPixmap* pmap) const {
 
 #ifdef SK_DEBUG
 void SkImageInfo::validate() const {
-    SkASSERT(fWidth >= 0);
-    SkASSERT(fHeight >= 0);
+    SkASSERT(fDimensions.width() >= 0);
+    SkASSERT(fDimensions.height() >= 0);
     SkASSERT(SkColorTypeIsValid(fColorType));
     SkASSERT(SkAlphaTypeIsValid(fAlphaType));
 }

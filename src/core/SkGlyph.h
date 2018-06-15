@@ -12,6 +12,7 @@
 #include "SkChecksum.h"
 #include "SkFixed.h"
 #include "SkMask.h"
+#include "SkTo.h"
 #include "SkTypes.h"
 
 class SkPath;
@@ -85,6 +86,12 @@ struct SkPackedID {
         return SkChecksum::CheapMix(fID);
     }
 
+    SkString dump() const {
+        SkString str;
+        str.appendf("code: %d, x: %d, y:%d", code(), getSubXFixed(), getSubYFixed());
+        return str;
+    }
+
 private:
     static unsigned ID2SubX(uint32_t id) {
         return id >> (kSubShift + kSubShiftX);
@@ -143,8 +150,8 @@ class SkGlyph {
 
 public:
     static const SkFixed kSubpixelRound = SK_FixedHalf >> SkPackedID::kSubBits;
-    void*       fImage;
-    PathData*   fPathData;
+    void* fImage;
+    PathData* fPathData;
     float       fAdvanceX, fAdvanceY;
 
     uint16_t    fWidth, fHeight;
@@ -195,7 +202,9 @@ public:
 
     void toMask(SkMask* mask) const;
 
-    void copyImageData(const SkGlyph& from, SkArenaAlloc* alloc) {
+    /** Returns the size allocated on the arena.
+     */
+    size_t copyImageData(const SkGlyph& from, SkArenaAlloc* alloc) {
         fMaskFormat = from.fMaskFormat;
         fWidth = from.fWidth;
         fHeight = from.fHeight;
@@ -205,8 +214,13 @@ public:
 
         if (from.fImage != nullptr) {
             auto imageSize = this->allocImage(alloc);
+            SkASSERT(imageSize == from.computeImageSize());
+
             memcpy(fImage, from.fImage, imageSize);
+            return imageSize;
         }
+
+        return 0u;
     }
 
     class HashTraits {

@@ -35,8 +35,8 @@ void GrCCClipPath::init(GrProxyProvider* proxyProvider,
                 SkASSERT(kTopLeft_GrSurfaceOrigin == textureProxy->origin());
 
                 fAtlasScale = {1.f / textureProxy->width(), 1.f / textureProxy->height()};
-                fAtlasTranslate = {fAtlasOffsetX * fAtlasScale.x(),
-                                   fAtlasOffsetY * fAtlasScale.y()};
+                fAtlasTranslate.set(fDevToAtlasOffset.fX * fAtlasScale.x(),
+                                    fDevToAtlasOffset.fY * fAtlasScale.y());
                 SkDEBUGCODE(fHasAtlasTransform = true);
 
                 return sk_ref_sp(textureProxy->priv().peekTexture());
@@ -48,12 +48,23 @@ void GrCCClipPath::init(GrProxyProvider* proxyProvider,
     fAccessRect = accessRect;
 }
 
+void GrCCClipPath::accountForOwnPath(GrCCPerFlushResourceSpecs* resourceSpecs) const {
+    SkASSERT(this->isInitialized());
+
+    ++resourceSpecs->fNumClipPaths;
+    resourceSpecs->fParsingPathStats.statPath(fDeviceSpacePath);
+
+    SkIRect ibounds;
+    if (ibounds.intersect(fAccessRect, fPathDevIBounds)) {
+        resourceSpecs->fAtlasSpecs.accountForSpace(ibounds.width(), ibounds.height());
+    }
+}
+
 void GrCCClipPath::renderPathInAtlas(GrCCPerFlushResources* resources,
                                      GrOnFlushResourceProvider* onFlushRP) {
     SkASSERT(this->isInitialized());
     SkASSERT(!fHasAtlas);
-    fAtlas = resources->renderDeviceSpacePathInAtlas(*onFlushRP->caps(), fAccessRect,
-                                                     fDeviceSpacePath, fPathDevIBounds,
-                                                     &fAtlasOffsetX, &fAtlasOffsetY);
+    fAtlas = resources->renderDeviceSpacePathInAtlas(fAccessRect, fDeviceSpacePath, fPathDevIBounds,
+                                                     &fDevToAtlasOffset);
     SkDEBUGCODE(fHasAtlas = true);
 }

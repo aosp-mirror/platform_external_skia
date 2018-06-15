@@ -18,14 +18,15 @@
 #include "SkDWriteFontFileStream.h"
 #include "SkFontDescriptor.h"
 #include "SkFontStream.h"
+#include "SkOTTable_OS_2.h"
 #include "SkOTTable_fvar.h"
 #include "SkOTTable_head.h"
 #include "SkOTTable_hhea.h"
-#include "SkOTTable_OS_2.h"
 #include "SkOTTable_post.h"
 #include "SkOTUtils.h"
 #include "SkScalerContext.h"
 #include "SkScalerContext_win_dw.h"
+#include "SkTo.h"
 #include "SkTypeface_win_dw.h"
 #include "SkUtils.h"
 
@@ -182,6 +183,55 @@ SkTypeface::LocalizedStrings* DWriteFontTypeface::onCreateFamilyNameIterator() c
         nameIter = new LocalizedStrings_IDWriteLocalizedStrings(familyNames.release());
     }
     return nameIter;
+}
+
+int DWriteFontTypeface::onGetVariationDesignPosition(SkFontArguments::VariationPosition::Coordinate coordinates[],
+    int coordinateCount) const {
+
+#if defined(NTDDI_WIN10_RS3) && NTDDI_VERSION >= NTDDI_WIN10_RS3
+
+    SkTScopedComPtr<IDWriteFontFace5> fontFace5;
+    if (FAILED(fDWriteFontFace->QueryInterface(&fontFace5))) {
+        return -1;
+    }
+
+    // Return 0 if the font is not variable font.
+    if (!fontFace5->HasVariations()) {
+        return 0;
+    }
+
+    UINT32 fontAxisCount = fontFace5->GetFontAxisValueCount();
+    SkTScopedComPtr<IDWriteFontResource> fontResource;
+    HR_GENERAL(fontFace5->GetFontResource(&fontResource), nullptr, -1);
+    int variableAxisCount = 0;
+    for (UINT32 i = 0; i < fontAxisCount; ++i) {
+        if (fontResource->GetFontAxisAttributes(i) & DWRITE_FONT_AXIS_ATTRIBUTES_VARIABLE) {
+            variableAxisCount++;
+        }
+    }
+
+    if (!coordinates || !coordinateCount || !variableAxisCount) {
+        return variableAxisCount;
+    }
+
+    SkAutoSTMalloc<8, DWRITE_FONT_AXIS_VALUE> fontAxisValue(fontAxisCount);
+    HR_GENERAL(fontFace5->GetFontAxisValues(fontAxisValue.get(), fontAxisCount), nullptr, -1);
+    UINT32 minCount = SkMin32(variableAxisCount, SkTo<UINT32>(coordinateCount));
+    UINT32 coordinatesIndex = 0;
+
+    for (UINT32 axisIndex = 0; axisIndex < fontAxisCount; ++axisIndex) {
+        if (fontResource->GetFontAxisAttributes(axisIndex) & DWRITE_FONT_AXIS_ATTRIBUTES_VARIABLE) {
+            coordinates[coordinatesIndex].axis = SkEndian_SwapBE32(fontAxisValue[axisIndex].axisTag);
+            coordinates[coordinatesIndex].value = fontAxisValue[axisIndex].value;
+            if (++coordinatesIndex == minCount) break;
+        }
+    }
+
+    return variableAxisCount;
+
+#endif
+
+    return -1;
 }
 
 int DWriteFontTypeface::onGetTableTags(SkFontTableTag tags[]) const {

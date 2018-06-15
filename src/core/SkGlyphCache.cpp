@@ -154,13 +154,7 @@ SkGlyph* SkGlyphCache::lookupByPackedGlyphID(SkPackedGlyphID packedGlyphID, Metr
         glyph = this->allocateNewGlyph(packedGlyphID, type);
     } else {
         if (type == kFull_MetricsType && glyph->isJustAdvance()) {
-           fScalerContext->getMetrics(glyph);
-
-           // Just in case someone allocated an image in the getMetrics call, be sure to account
-           // for the memory used.
-           if (glyph->fImage != nullptr) {
-               fMemoryUsed += glyph->computeImageSize();
-           }
+            fScalerContext->getMetrics(glyph);
         }
     }
     return glyph;
@@ -207,20 +201,20 @@ const void* SkGlyphCache::findImage(const SkGlyph& glyph) {
     return glyph.fImage;
 }
 
-bool SkGlyphCache::initializeImage(const volatile void* data, size_t size, SkGlyph* glyph) {
-    if (glyph->fImage) return false;
+void SkGlyphCache::initializeImage(const volatile void* data, size_t size, SkGlyph* glyph) {
+    // Don't overwrite the image if we already have one. We could have used a fallback if the
+    // glyph was missing earlier.
+    if (glyph->fImage) return;
 
     if (glyph->fWidth > 0 && glyph->fWidth < kMaxGlyphWidth) {
         size_t allocSize = glyph->allocImage(&fAlloc);
         // check that alloc() actually succeeded
         if (glyph->fImage) {
             SkAssertResult(size == allocSize);
-            memcpy(glyph->fImage, const_cast<const void*>(data), size);
+            memcpy(glyph->fImage, const_cast<const void*>(data), allocSize);
             fMemoryUsed += size;
         }
     }
-
-    return true;
 }
 
 const SkPath* SkGlyphCache::findPath(const SkGlyph& glyph) {
@@ -243,7 +237,9 @@ const SkPath* SkGlyphCache::findPath(const SkGlyph& glyph) {
 }
 
 bool SkGlyphCache::initializePath(SkGlyph* glyph, const volatile void* data, size_t size) {
-    if (glyph->fPathData) return false;
+    // Don't overwrite the path if we already have one. We could have used a fallback if the
+    // glyph was missing earlier.
+    if (glyph->fPathData) return true;
 
     if (glyph->fWidth) {
         SkGlyph::PathData* pathData = fAlloc.make<SkGlyph::PathData>();
@@ -259,6 +255,29 @@ bool SkGlyphCache::initializePath(SkGlyph* glyph, const volatile void* data, siz
     }
 
     return true;
+}
+
+bool SkGlyphCache::belongsToCache(const SkGlyph* glyph) const {
+    return glyph && fGlyphMap.find(glyph->getPackedID()) == glyph;
+}
+
+const SkGlyph* SkGlyphCache::getCachedGlyphAnySubPix(SkGlyphID glyphID,
+                                                     SkPackedGlyphID vetoID) const {
+    for (SkFixed subY = 0; subY < SK_Fixed1; subY += SK_FixedQuarter) {
+        for (SkFixed subX = 0; subX < SK_Fixed1; subX += SK_FixedQuarter) {
+            SkPackedGlyphID packedGlyphID{glyphID, subX, subY};
+            if (packedGlyphID == vetoID) continue;
+            if (const auto* glyph = fGlyphMap.find(packedGlyphID)) {
+                return glyph;
+            }
+        }
+    }
+
+    return nullptr;
+}
+
+void SkGlyphCache::initializeGlyphFromFallback(SkGlyph* glyph, const SkGlyph& fallback) {
+    fMemoryUsed += glyph->copyImageData(fallback, &fAlloc);
 }
 
 #include "../pathops/SkPathOpsCubic.h"

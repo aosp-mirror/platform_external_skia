@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2006 The Android Open Source Project
  *
@@ -10,6 +9,7 @@
 #ifndef SkMath_DEFINED
 #define SkMath_DEFINED
 
+#include "../private/SkTo.h"
 #include "SkTypes.h"
 
 // 64bit -> 32bit utilities
@@ -22,18 +22,6 @@ static inline int64_t sk_64_mul(int64_t a, int64_t b) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-
-/**
- *  Computes numer1 * numer2 / denom in full 64 intermediate precision.
- *  It is an error for denom to be 0. There is no special handling if
- *  the result overflows 32bits.
- */
-static inline int32_t SkMulDiv(int32_t numer1, int32_t numer2, int32_t denom) {
-    SkASSERT(denom);
-
-    int64_t tmp = sk_64_mul(numer1, numer2) / denom;
-    return SkTo<int32_t>(tmp);
-}
 
 /**
  *  Return the integer square root of value, with a bias of bitBias

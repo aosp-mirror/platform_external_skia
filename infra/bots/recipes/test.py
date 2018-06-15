@@ -618,9 +618,6 @@ def dm_flags(api, bot):
     match.append('~SpecialImage') # skia:6338
     match.append('~skbug6653') # skia:6653
 
-  if 'GalaxyS7_G930A' in bot:
-    match.append('~WritePixels') # skia:6427
-
   if 'MSAN' in bot:
     match.extend(['~Once', '~Shared'])  # Not sure what's up with these tests.
 
@@ -669,6 +666,10 @@ def dm_flags(api, bot):
                   '~^SurfaceSemaphores$'])
     # skia:7837
     match.append('~BlurMaskBiggerThanDest')
+
+  if 'Vulkan' in bot and 'GalaxyS7_G930FD' in bot:
+    # skia:8064
+    match.append('~^WritePixelsNonTexture_Gpu$')
 
   if 'Vulkan' in bot and api.vars.is_linux and 'IntelIris640' in bot:
     match.extend(['~VkHeapTests']) # skia:6245
@@ -737,6 +738,10 @@ def dm_flags(api, bot):
     blacklist(['vk', 'gm', '_', 'textfilter_image'])
     blacklist(['vk', 'gm', '_', 'varied_text_clipped_lcd'])
     blacklist(['vk', 'gm', '_', 'varied_text_ignorable_clip_lcd'])
+
+  if 'Vulkan' in bot and 'GTX660' in bot and 'Win' in bot:
+    # skbug.com/8047
+    match.append('~FloatingPointTextureTest$')
 
   if 'MoltenVK' in bot:
     # skbug.com/7959
@@ -988,7 +993,8 @@ def RunSteps(api):
 TEST_BUILDERS = [
   'Test-Android-Clang-AndroidOne-GPU-Mali400MP2-arm-Release-All-Android',
   'Test-Android-Clang-GalaxyS6-GPU-MaliT760-arm64-Debug-All-Android',
-  'Test-Android-Clang-GalaxyS7_G930A-GPU-Adreno530-arm64-Debug-All-Android',
+  ('Test-Android-Clang-GalaxyS7_G930FD-GPU-MaliT880-arm64-Release-All'
+   '-Android_Vulkan'),
   'Test-Android-Clang-NVIDIA_Shield-GPU-TegraX1-arm64-Debug-All-Android_CCPR',
   'Test-Android-Clang-Nexus5-GPU-Adreno330-arm-Release-All-Android',
   'Test-Android-Clang-Nexus5x-GPU-Adreno418-arm-Debug-All-Android_ASAN',
@@ -1033,6 +1039,7 @@ TEST_BUILDERS = [
   'Test-Win10-Clang-NUC6i5SYK-GPU-IntelIris540-x86_64-Debug-All-ANGLE',
   'Test-Win10-Clang-NUC6i5SYK-GPU-IntelIris540-x86_64-Debug-All-Vulkan',
   'Test-Win10-Clang-NUCD34010WYKH-GPU-IntelHD4400-x86_64-Release-All-ANGLE',
+  'Test-Win10-Clang-ShuttleA-GPU-GTX660-x86_64-Release-All-Vulkan',
   'Test-Win10-Clang-ShuttleC-GPU-GTX960-x86_64-Debug-All-ANGLE',
   'Test-Win10-Clang-ZBOX-GPU-GTX1070-x86_64-Debug-All-Vulkan',
   'Test-Win2016-Clang-GCE-CPU-AVX2-x86_64-Debug-All-FAAA',

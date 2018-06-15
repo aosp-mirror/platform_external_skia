@@ -17,6 +17,7 @@
 // IWYU pragma: end_exports
 
 #include <string.h>
+#include <utility>
 
 /** \file SkTypes.h
 */
@@ -33,8 +34,6 @@
     an exception or otherwise exit.
 */
 SK_API extern void sk_abort_no_print(void);
-
-#define SK_INIT_TO_AVOID_WARNING    = 0
 
 #ifndef SkDebugf
     SK_API void SkDebugf(const char format[], ...);
@@ -77,54 +76,7 @@ SK_API extern void sk_abort_no_print(void);
     #define SkAssertResult(cond)         if (cond) {} do {} while(false)
 #endif
 
-// some clients (e.g. third_party/WebKit/Source/platform/fonts/FontCustomPlatformData.h)
-// depend on SkString forward declaration below. Remove this once dependencies are fixed.
-class SkString;
-
-/*
- *  Usage:  SK_MACRO_CONCAT(a, b)   to construct the symbol ab
- *
- *  SK_MACRO_CONCAT_IMPL_PRIV just exists to make this work. Do not use directly
- *
- */
-#define SK_MACRO_CONCAT(X, Y)           SK_MACRO_CONCAT_IMPL_PRIV(X, Y)
-#define SK_MACRO_CONCAT_IMPL_PRIV(X, Y)  X ## Y
-
-/*
- *  Usage: SK_MACRO_APPEND_LINE(foo)    to make foo123, where 123 is the current
- *                                      line number. Easy way to construct
- *                                      unique names for local functions or
- *                                      variables.
- */
-#define SK_MACRO_APPEND_LINE(name)  SK_MACRO_CONCAT(name, __LINE__)
-
-/**
- * For some classes, it's almost always an error to instantiate one without a name, e.g.
- *   {
- *       SkAutoMutexAcquire(&mutex);
- *       <some code>
- *   }
- * In this case, the writer meant to hold mutex while the rest of the code in the block runs,
- * but instead the mutex is acquired and then immediately released.  The correct usage is
- *   {
- *       SkAutoMutexAcquire lock(&mutex);
- *       <some code>
- *   }
- *
- * To prevent callers from instantiating your class without a name, use SK_REQUIRE_LOCAL_VAR
- * like this:
- *   class classname {
- *       <your class>
- *   };
- *   #define classname(...) SK_REQUIRE_LOCAL_VAR(classname)
- *
- * This won't work with templates, and you must inline the class' constructors and destructors.
- * Take a look at SkAutoFree and SkAutoMalloc in this file for examples.
- */
-#define SK_REQUIRE_LOCAL_VAR(classname) \
-    static_assert(false, "missing name for " #classname)
-
-///////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 /**
  *  Fast type for unsigned 8 bits. Use for parameter passing and local
@@ -144,26 +96,6 @@ typedef int S16CPU;
  */
 typedef unsigned U16CPU;
 
-/**
- *  Meant to be a small version of bool, for storage purposes. Will be 0 or 1
- */
-typedef uint8_t SkBool8;
-
-#include "../private/SkTFitsIn.h"
-template <typename D, typename S> constexpr D SkTo(S s) {
-    return SkASSERT(SkTFitsIn<D>(s)),
-           static_cast<D>(s);
-}
-#define SkToS8(x)    SkTo<int8_t>(x)
-#define SkToU8(x)    SkTo<uint8_t>(x)
-#define SkToS16(x)   SkTo<int16_t>(x)
-#define SkToU16(x)   SkTo<uint16_t>(x)
-#define SkToS32(x)   SkTo<int32_t>(x)
-#define SkToU32(x)   SkTo<uint32_t>(x)
-#define SkToInt(x)   SkTo<int>(x)
-#define SkToUInt(x)  SkTo<unsigned>(x)
-#define SkToSizeT(x) SkTo<size_t>(x)
-
 /** Returns 0 or 1 based on the condition
 */
 #define SkToBool(cond)  ((cond) != 0)
@@ -181,11 +113,11 @@ template <typename D, typename S> constexpr D SkTo(S s) {
 static constexpr int64_t SK_MaxS64 = 0x7FFFFFFFFFFFFFFF;
 static constexpr int64_t SK_MinS64 = -SK_MaxS64;
 
-static inline int32_t SkLeftShift(int32_t value, int32_t shift) {
+static inline constexpr int32_t SkLeftShift(int32_t value, int32_t shift) {
     return (int32_t) ((uint32_t) value << shift);
 }
 
-static inline int64_t SkLeftShift(int64_t value, int32_t shift) {
+static inline constexpr int64_t SkLeftShift(int64_t value, int32_t shift) {
     return (int64_t) ((uint64_t) value << shift);
 }
 
@@ -195,30 +127,29 @@ static inline int64_t SkLeftShift(int64_t value, int32_t shift) {
 template <typename T, size_t N> char (&SkArrayCountHelper(T (&array)[N]))[N];
 #define SK_ARRAY_COUNT(array) (sizeof(SkArrayCountHelper(array)))
 
-// Can be used to bracket data types that must be dense, e.g. hash keys.
-#if defined(__clang__)  // This should work on GCC too, but GCC diagnostic pop didn't seem to work!
-    #define SK_BEGIN_REQUIRE_DENSE _Pragma("GCC diagnostic push") \
-                                   _Pragma("GCC diagnostic error \"-Wpadded\"")
-    #define SK_END_REQUIRE_DENSE   _Pragma("GCC diagnostic pop")
-#else
-    #define SK_BEGIN_REQUIRE_DENSE
-    #define SK_END_REQUIRE_DENSE
-#endif
+////////////////////////////////////////////////////////////////////////////////
 
-#define SkAlign2(x)     (((x) + 1) >> 1 << 1)
-#define SkIsAlign2(x)   (0 == ((x) & 1))
+template <typename T> static constexpr T SkAlign2(T x) { return (x + 1) >> 1 << 1; }
+template <typename T> static constexpr T SkAlign4(T x) { return (x + 3) >> 2 << 2; }
+template <typename T> static constexpr T SkAlign8(T x) { return (x + 7) >> 3 << 3; }
 
-#define SkAlign4(x)     (((x) + 3) >> 2 << 2)
-#define SkIsAlign4(x)   (0 == ((x) & 3))
+template <typename T> static constexpr bool SkIsAlign2(T x) { return 0 == (x & 1); }
+template <typename T> static constexpr bool SkIsAlign4(T x) { return 0 == (x & 3); }
+template <typename T> static constexpr bool SkIsAlign8(T x) { return 0 == (x & 7); }
 
-#define SkAlign8(x)     (((x) + 7) >> 3 << 3)
-#define SkIsAlign8(x)   (0 == ((x) & 7))
-
-#define SkAlignPtr(x)   (sizeof(void*) == 8 ?   SkAlign8(x) :   SkAlign4(x))
-#define SkIsAlignPtr(x) (sizeof(void*) == 8 ? SkIsAlign8(x) : SkIsAlign4(x))
+template <typename T> static constexpr T SkAlignPtr(T x) {
+    return sizeof(void*) == 8 ? SkAlign8(x) : SkAlign4(x);
+}
+template <typename T> static constexpr bool SkIsAlignPtr(T x) {
+    return sizeof(void*) == 8 ? SkIsAlign8(x) : SkIsAlign4(x);
+}
 
 typedef uint32_t SkFourByteTag;
-#define SkSetFourByteTag(a, b, c, d)    (((a) << 24) | ((b) << 16) | ((c) << 8) | (d))
+static inline constexpr SkFourByteTag SkSetFourByteTag(char a, char b, char c, char d) {
+    return (((uint8_t)a << 24) | ((uint8_t)b << 16) | ((uint8_t)c << 8) | (uint8_t)d);
+}
+
+////////////////////////////////////////////////////////////////////////////////
 
 /** 32 bit integer to hold a unicode value
 */
@@ -242,13 +173,6 @@ typedef uint32_t SkMSec;
 /** The unique IDs in Skia reserve 0 has an invalid marker.
  */
 #define SK_InvalidUniqueID  0
-
-/****************************************************************************
-    The rest of these only build with C++
-*/
-#ifdef __cplusplus
-
-#include <utility>
 
 /** Generic swap function. Classes with efficient swaps should specialize this function to take
     their fast path. This function is used by SkTSort. */
@@ -291,6 +215,10 @@ template <typename T> constexpr const T& SkTMin(const T& a, const T& b) {
 
 template <typename T> constexpr const T& SkTMax(const T& a, const T& b) {
     return (b < a) ? a : b;
+}
+
+template <typename T> constexpr const T& SkTClamp(const T& x, const T& lo, const T& hi) {
+    return (x < lo) ? lo : SkTMin(x, hi);
 }
 
 static inline int32_t SkFastMin32(int32_t value, int32_t max) {
@@ -356,7 +284,5 @@ public:
     SkNoncopyable(const SkNoncopyable&) = delete;
     SkNoncopyable& operator=(const SkNoncopyable&) = delete;
 };
-
-#endif /* C++ */
 
 #endif
