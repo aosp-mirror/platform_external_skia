@@ -10,6 +10,7 @@
 #include "GrGpuCommandBuffer.h"
 #include "GrOnFlushResourceProvider.h"
 #include "GrTexture.h"
+#include "ccpr/GrCCPerFlushResources.h"
 #include "glsl/GrGLSLFragmentShaderBuilder.h"
 #include "glsl/GrGLSLGeometryProcessor.h"
 #include "glsl/GrGLSLProgramBuilder.h"
@@ -64,6 +65,9 @@ static constexpr uint16_t kOctoIndicesAsTris[] = {
 
 GR_DECLARE_STATIC_UNIQUE_KEY(gIndexBufferKey);
 
+constexpr GrPrimitiveProcessor::Attribute GrCCPathProcessor::kInstanceAttribs[];
+constexpr GrPrimitiveProcessor::Attribute GrCCPathProcessor::kEdgeNormsAttrib;
+
 sk_sp<const GrBuffer> GrCCPathProcessor::FindIndexBuffer(GrOnFlushResourceProvider* onFlushRP) {
     GR_DEFINE_STATIC_UNIQUE_KEY(gIndexBufferKey);
     if (onFlushRP->caps()->usePrimitiveRestart()) {
@@ -81,24 +85,19 @@ GrCCPathProcessor::GrCCPathProcessor(GrResourceProvider* resourceProvider,
         : INHERITED(kGrCCPathProcessor_ClassID)
         , fAtlasAccess(std::move(atlas), GrSamplerState::Filter::kNearest,
                        GrSamplerState::WrapMode::kClamp, kFragment_GrShaderFlag) {
-    this->addInstanceAttrib("devbounds", kFloat4_GrVertexAttribType);
-    this->addInstanceAttrib("devbounds45", kFloat4_GrVertexAttribType);
-    this->addInstanceAttrib("dev_to_atlas_offset", kInt2_GrVertexAttribType);
-    this->addInstanceAttrib("color", kUByte4_norm_GrVertexAttribType);
+    this->setInstanceAttributeCnt(kNumInstanceAttribs);
+    // Check that instance attributes exactly match Instance struct layout.
+    SkASSERT(!strcmp(this->instanceAttribute(0).name(), "devbounds"));
+    SkASSERT(!strcmp(this->instanceAttribute(1).name(), "devbounds45"));
+    SkASSERT(!strcmp(this->instanceAttribute(2).name(), "dev_to_atlas_offset"));
+    SkASSERT(!strcmp(this->instanceAttribute(3).name(), "color"));
+    SkASSERT(this->debugOnly_instanceAttributeOffset(0) == offsetof(Instance, fDevBounds));
+    SkASSERT(this->debugOnly_instanceAttributeOffset(1) == offsetof(Instance, fDevBounds45));
+    SkASSERT(this->debugOnly_instanceAttributeOffset(2) == offsetof(Instance, fDevToAtlasOffset));
+    SkASSERT(this->debugOnly_instanceAttributeOffset(3) == offsetof(Instance, fColor));
+    SkASSERT(this->debugOnly_instanceStride() == sizeof(Instance));
 
-    SkASSERT(offsetof(Instance, fDevBounds) ==
-             this->getInstanceAttrib(InstanceAttribs::kDevBounds).offsetInRecord());
-    SkASSERT(offsetof(Instance, fDevBounds45) ==
-             this->getInstanceAttrib(InstanceAttribs::kDevBounds45).offsetInRecord());
-    SkASSERT(offsetof(Instance, fDevToAtlasOffset) ==
-             this->getInstanceAttrib(InstanceAttribs::kDevToAtlasOffset).offsetInRecord());
-    SkASSERT(offsetof(Instance, fColor) ==
-             this->getInstanceAttrib(InstanceAttribs::kColor).offsetInRecord());
-    SkASSERT(sizeof(Instance) == this->getInstanceStride());
-
-    GR_STATIC_ASSERT(4 == kNumInstanceAttribs);
-
-    this->addVertexAttrib("edge_norms", kFloat4_GrVertexAttribType);
+    this->setVertexAttributeCnt(1);
 
     fAtlasAccess.instantiate(resourceProvider);
     this->addTextureSampler(&fAtlasAccess);
@@ -131,9 +130,8 @@ GrGLSLPrimitiveProcessor* GrCCPathProcessor::createGLSLInstance(const GrShaderCa
 }
 
 void GrCCPathProcessor::drawPaths(GrOpFlushState* flushState, const GrPipeline& pipeline,
-                                  const GrBuffer* indexBuffer, const GrBuffer* vertexBuffer,
-                                  GrBuffer* instanceBuffer, int baseInstance, int endInstance,
-                                  const SkRect& bounds) const {
+                                  const GrCCPerFlushResources& resources, int baseInstance,
+                                  int endInstance, const SkRect& bounds) const {
     const GrCaps& caps = flushState->caps();
     GrPrimitiveType primitiveType = caps.usePrimitiveRestart()
                                             ? GrPrimitiveType::kTriangleStrip
@@ -144,9 +142,10 @@ void GrCCPathProcessor::drawPaths(GrOpFlushState* flushState, const GrPipeline& 
     GrMesh mesh(primitiveType);
     auto enablePrimitiveRestart = GrPrimitiveRestart(flushState->caps().usePrimitiveRestart());
 
-    mesh.setIndexedInstanced(indexBuffer, numIndicesPerInstance, instanceBuffer,
-                             endInstance - baseInstance, baseInstance, enablePrimitiveRestart);
-    mesh.setVertexData(vertexBuffer);
+    mesh.setIndexedInstanced(resources.indexBuffer(), numIndicesPerInstance,
+                             resources.instanceBuffer(), endInstance - baseInstance, baseInstance,
+                             enablePrimitiveRestart);
+    mesh.setVertexData(resources.vertexBuffer());
 
     flushState->rtCommandBuffer()->draw(pipeline, *this, &mesh, nullptr, 1, bounds);
 }
@@ -169,7 +168,7 @@ void GLSLPathProcessor::onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) {
     GrGLSLVarying texcoord(kFloat3_GrSLType);
     GrGLSLVarying color(kHalf4_GrSLType);
     varyingHandler->addVarying("texcoord", &texcoord);
-    varyingHandler->addPassThroughAttribute(&proc.getInstanceAttrib(InstanceAttribs::kColor),
+    varyingHandler->addPassThroughAttribute(proc.getInstanceAttrib(InstanceAttribs::kColor),
                                             args.fOutputColor, Interpolation::kCanBeFlat);
 
     // The vertex shader bloats and intersects the devBounds and devBounds45 rectangles, in order to

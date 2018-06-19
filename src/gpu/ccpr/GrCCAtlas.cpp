@@ -9,8 +9,10 @@
 
 #include "GrCaps.h"
 #include "GrOnFlushResourceProvider.h"
+#include "GrProxyProvider.h"
 #include "GrRectanizer_skyline.h"
 #include "GrRenderTargetContext.h"
+#include "GrTexture.h"
 #include "GrTextureProxy.h"
 #include "SkMakeUnique.h"
 #include "SkMathPriv.h"
@@ -44,9 +46,12 @@ private:
     GrRectanizerSkyline fRectanizer;
 };
 
-GrCCAtlas::GrCCAtlas(const Specs& specs)
+GrCCAtlas::GrCCAtlas(GrPixelConfig pixelConfig, const Specs& specs, const GrCaps& caps)
         : fMaxTextureSize(SkTMax(SkTMax(specs.fMinHeight, specs.fMinWidth),
                                  specs.fMaxPreferredTextureSize)) {
+    // Caller should have cropped any paths to the destination render target instead of asking for
+    // an atlas larger than maxRenderTargetSize.
+    SkASSERT(fMaxTextureSize <= caps.maxTextureSize());
     SkASSERT(specs.fMaxPreferredTextureSize > 0);
 
     // Begin with the first pow2 dimensions whose area is theoretically large enough to contain the
@@ -66,14 +71,28 @@ GrCCAtlas::GrCCAtlas(const Specs& specs)
     }
 
     fTopNode = skstd::make_unique<Node>(nullptr, 0, 0, fWidth, fHeight);
+
+    fTextureProxy = GrProxyProvider::MakeFullyLazyProxy(
+            [this, pixelConfig](GrResourceProvider* resourceProvider) {
+                    if (!resourceProvider) {
+                        return sk_sp<GrTexture>();
+                    }
+                    GrSurfaceDesc desc;
+                    desc.fFlags = kRenderTarget_GrSurfaceFlag;
+                    desc.fWidth = fWidth;
+                    desc.fHeight = fHeight;
+                    desc.fConfig = pixelConfig;
+                    return resourceProvider->createTexture(desc, SkBudgeted::kYes);
+            },
+            GrProxyProvider::Renderable::kYes, kTextureOrigin, pixelConfig, caps);
 }
 
 GrCCAtlas::~GrCCAtlas() {
 }
 
 bool GrCCAtlas::addRect(const SkIRect& devIBounds, SkIVector* offset) {
-    // This can't be called anymore once makeClearedTextureProxy() has been called.
-    SkASSERT(!fTextureProxy);
+    // This can't be called anymore once makeRenderTargetContext() has been called.
+    SkASSERT(!fTextureProxy->priv().isInstantiated());
 
     SkIPoint16 location;
     if (!this->internalPlaceRect(devIBounds.width(), devIBounds.height(), &location)) {
@@ -112,43 +131,73 @@ bool GrCCAtlas::internalPlaceRect(int w, int h, SkIPoint16* loc) {
     return true;
 }
 
-sk_sp<GrRenderTargetContext> GrCCAtlas::initInternalTextureProxy(
-        GrOnFlushResourceProvider* onFlushRP, GrPixelConfig config) {
-    SkASSERT(!fTextureProxy);
+void GrCCAtlas::setUserBatchID(int id) {
+    // This can't be called anymore once makeRenderTargetContext() has been called.
+    SkASSERT(!fTextureProxy->priv().isInstantiated());
+    fUserBatchID = id;
+}
+
+static uint32_t next_atlas_unique_id() {
+    static int32_t nextID;
+    return sk_atomic_inc(&nextID);
+}
+
+const GrUniqueKey& GrCCAtlas::getOrAssignUniqueKey(GrOnFlushResourceProvider* onFlushRP) {
+    static const GrUniqueKey::Domain kAtlasDomain = GrUniqueKey::GenerateDomain();
+
+    if (!fUniqueKey.isValid()) {
+        GrUniqueKey::Builder builder(&fUniqueKey, kAtlasDomain, 1, "CCPR Atlas");
+        builder[0] = next_atlas_unique_id();
+        builder.finish();
+
+        if (fTextureProxy->priv().isInstantiated()) {
+            onFlushRP->assignUniqueKeyToProxy(fUniqueKey, fTextureProxy.get());
+        }
+    }
+    return fUniqueKey;
+}
+
+sk_sp<GrCCAtlas::CachedAtlasInfo> GrCCAtlas::refOrMakeCachedAtlasInfo() {
+    if (!fCachedAtlasInfo) {
+        fCachedAtlasInfo = sk_make_sp<CachedAtlasInfo>();
+    }
+    return fCachedAtlasInfo;
+}
+
+sk_sp<GrRenderTargetContext> GrCCAtlas::makeRenderTargetContext(
+        GrOnFlushResourceProvider* onFlushRP) {
+    SkASSERT(!fTextureProxy->priv().isInstantiated());  // This method should only be called once.
     // Caller should have cropped any paths to the destination render target instead of asking for
     // an atlas larger than maxRenderTargetSize.
     SkASSERT(SkTMax(fHeight, fWidth) <= fMaxTextureSize);
     SkASSERT(fMaxTextureSize <= onFlushRP->caps()->maxRenderTargetSize());
 
-    GrSurfaceDesc desc;
-    desc.fFlags = kRenderTarget_GrSurfaceFlag;
-    desc.fWidth = fWidth;
-    desc.fHeight = fHeight;
-    desc.fConfig = config;
     sk_sp<GrRenderTargetContext> rtc =
-            onFlushRP->makeRenderTargetContext(desc, kTextureOrigin, nullptr, nullptr);
+            onFlushRP->makeRenderTargetContext(fTextureProxy, nullptr, nullptr);
     if (!rtc) {
         SkDebugf("WARNING: failed to allocate a %ix%i atlas. Some paths will not be drawn.\n",
                  fWidth, fHeight);
         return nullptr;
     }
 
+    if (fUniqueKey.isValid()) {
+        onFlushRP->assignUniqueKeyToProxy(fUniqueKey, fTextureProxy.get());
+    }
+
     SkIRect clearRect = SkIRect::MakeSize(fDrawBounds);
     rtc->clear(&clearRect, 0, GrRenderTargetContext::CanClearFullscreen::kYes);
-
-    fTextureProxy = sk_ref_sp(rtc->asTextureProxy());
     return rtc;
 }
 
-GrCCAtlas* GrCCAtlasStack::addRect(const SkIRect& devIBounds, SkIVector* offset) {
+GrCCAtlas* GrCCAtlasStack::addRect(const SkIRect& devIBounds, SkIVector* devToAtlasOffset) {
     GrCCAtlas* retiredAtlas = nullptr;
-    if (fAtlases.empty() || !fAtlases.back().addRect(devIBounds, offset)) {
+    if (fAtlases.empty() || !fAtlases.back().addRect(devIBounds, devToAtlasOffset)) {
         // The retired atlas is out of room and can't grow any bigger.
         retiredAtlas = !fAtlases.empty() ? &fAtlases.back() : nullptr;
-        fAtlases.emplace_back(fSpecs);
+        fAtlases.emplace_back(fPixelConfig, fSpecs, *fCaps);
         SkASSERT(devIBounds.width() <= fSpecs.fMinWidth);
         SkASSERT(devIBounds.height() <= fSpecs.fMinHeight);
-        SkAssertResult(fAtlases.back().addRect(devIBounds, offset));
+        SkAssertResult(fAtlases.back().addRect(devIBounds, devToAtlasOffset));
     }
     return retiredAtlas;
 }

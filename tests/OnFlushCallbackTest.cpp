@@ -110,11 +110,10 @@ private:
             return;
         }
 
-        size_t vertexStride = gp->getVertexStride();
-
-        SkASSERT(fHasLocalRect
-                    ? vertexStride == sizeof(GrDefaultGeoProcFactory::PositionColorLocalCoordAttr)
-                    : vertexStride == sizeof(GrDefaultGeoProcFactory::PositionColorAttr));
+        size_t vertexStride = fHasLocalRect
+                                      ? sizeof(GrDefaultGeoProcFactory::PositionColorLocalCoordAttr)
+                                      : sizeof(GrDefaultGeoProcFactory::PositionColorAttr);
+        SkASSERT(vertexStride == gp->debugOnly_vertexStride());
 
         const GrBuffer* indexBuffer;
         int firstIndex;
@@ -300,7 +299,7 @@ public:
             return fAtlasProxy;
         }
 
-        fAtlasProxy = proxyProvider->createFullyLazyProxy(
+        fAtlasProxy = GrProxyProvider::MakeFullyLazyProxy(
                 [](GrResourceProvider* resourceProvider) {
                     if (!resourceProvider) {
                         return sk_sp<GrTexture>();
@@ -319,7 +318,8 @@ public:
                 },
                 GrProxyProvider::Renderable::kYes,
                 kBottomLeft_GrSurfaceOrigin,
-                kRGBA_8888_GrPixelConfig);
+                kRGBA_8888_GrPixelConfig,
+                *proxyProvider->caps());
         return fAtlasProxy;
     }
 

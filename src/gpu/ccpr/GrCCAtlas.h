@@ -9,6 +9,8 @@
 #define GrCCAtlas_DEFINED
 
 #include "GrAllocator.h"
+#include "GrNonAtomicRef.h"
+#include "GrResourceKey.h"
 #include "GrTypes.h"
 #include "GrTypesPriv.h"
 #include "SkRefCnt.h"
@@ -18,6 +20,7 @@ class GrOnFlushResourceProvider;
 class GrRenderTargetContext;
 class GrTextureProxy;
 struct SkIPoint16;
+struct SkIRect;
 
 /**
  * This class implements a dynamic size GrRectanizer that grows until it reaches the implementation-
@@ -43,8 +46,10 @@ public:
         void accountForSpace(int width, int height);
     };
 
-    GrCCAtlas(const Specs&);
+    GrCCAtlas(GrPixelConfig, const Specs&, const GrCaps&);
     ~GrCCAtlas();
+
+    GrTextureProxy* textureProxy() const { return fTextureProxy.get(); }
 
     // Attempts to add a rect to the atlas. If successful, returns the integer offset from
     // device-space pixels where the path will be drawn, to atlas pixels where its mask resides.
@@ -53,15 +58,29 @@ public:
 
     // This is an optional space for the caller to jot down which user-defined batch to use when
     // they render the content of this atlas.
-    void setUserBatchID(int id) { SkASSERT(!fTextureProxy); fUserBatchID = id; }
+    void setUserBatchID(int id);
     int getUserBatchID() const { return fUserBatchID; }
 
-    // Creates our texture proxy for the atlas and returns a pre-cleared GrRenderTargetContext that
-    // the caller may use to render the content. After this call, it is no longer valid to call
-    // addRect() or setUserBatchID().
-    sk_sp<GrRenderTargetContext> initInternalTextureProxy(GrOnFlushResourceProvider*,
-                                                          GrPixelConfig);
-    GrTextureProxy* textureProxy() const { return fTextureProxy.get(); }
+    // Manages a unique resource cache key that gets assigned to the atlas texture. The unique key
+    // does not get assigned to the texture proxy until it is instantiated.
+    const GrUniqueKey& getOrAssignUniqueKey(GrOnFlushResourceProvider*);
+    const GrUniqueKey& uniqueKey() const { return fUniqueKey; }
+
+    // An object for simple bookkeeping on the atlas texture once it has a unique key. In practice,
+    // we use it to track the percentage of the original atlas pixels that could still ever
+    // potentially be reused (i.e., those which still represent an extant path). When the percentage
+    // of useful pixels drops below 50%, the entire texture is purged from the resource cache.
+    struct CachedAtlasInfo : public GrNonAtomicRef<CachedAtlasInfo> {
+        int fNumPathPixels = 0;
+        int fNumInvalidatedPathPixels = 0;
+        bool fIsPurgedFromResourceCache = false;
+    };
+    sk_sp<CachedAtlasInfo> refOrMakeCachedAtlasInfo();
+
+    // Instantiates our texture proxy for the atlas and returns a pre-cleared GrRenderTargetContext
+    // that the caller may use to render the content. After this call, it is no longer valid to call
+    // addRect(), setUserBatchID(), or this method again.
+    sk_sp<GrRenderTargetContext> makeRenderTargetContext(GrOnFlushResourceProvider*);
 
 private:
     class Node;
@@ -74,6 +93,12 @@ private:
     SkISize fDrawBounds = {0, 0};
 
     int fUserBatchID;
+
+    // Not every atlas will have a unique key -- a mainline CCPR one won't if we don't stash any
+    // paths, and only the first atlas in the stack is eligible to be stashed.
+    GrUniqueKey fUniqueKey;
+
+    sk_sp<CachedAtlasInfo> fCachedAtlasInfo;
     sk_sp<GrTextureProxy> fTextureProxy;
 };
 
@@ -83,7 +108,8 @@ private:
  */
 class GrCCAtlasStack {
 public:
-    GrCCAtlasStack(const GrCCAtlas::Specs& specs) : fSpecs(specs) {}
+    GrCCAtlasStack(GrPixelConfig pixelConfig, const GrCCAtlas::Specs& specs, const GrCaps* caps)
+            : fPixelConfig(pixelConfig), fSpecs(specs), fCaps(caps) {}
 
     bool empty() const { return fAtlases.empty(); }
     const GrCCAtlas& front() const { SkASSERT(!this->empty()); return fAtlases.front(); }
@@ -106,10 +132,12 @@ public:
     // atlas, so it was retired and a new one was added to the stack. The return value is the
     // newly-retired atlas. The caller should call setUserBatchID() on the retired atlas before
     // moving on.
-    GrCCAtlas* addRect(const SkIRect& devIBounds, SkIVector* offset);
+    GrCCAtlas* addRect(const SkIRect& devIBounds, SkIVector* devToAtlasOffset);
 
 private:
+    const GrPixelConfig fPixelConfig;
     const GrCCAtlas::Specs fSpecs;
+    const GrCaps* const fCaps;
     GrSTAllocator<4, GrCCAtlas> fAtlases;
 };
 

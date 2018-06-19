@@ -12,12 +12,11 @@
 #include "GrTexture.h"
 #include "ccpr/GrCCPerFlushResources.h"
 
-void GrCCClipPath::init(GrProxyProvider* proxyProvider,
-                        const SkPath& deviceSpacePath, const SkIRect& accessRect,
-                        int rtWidth, int rtHeight) {
+void GrCCClipPath::init(const SkPath& deviceSpacePath, const SkIRect& accessRect, int rtWidth,
+                        int rtHeight, const GrCaps& caps) {
     SkASSERT(!this->isInitialized());
 
-    fAtlasLazyProxy = proxyProvider->createFullyLazyProxy(
+    fAtlasLazyProxy = GrProxyProvider::MakeFullyLazyProxy(
             [this](GrResourceProvider* resourceProvider) {
                 if (!resourceProvider) {
                     return sk_sp<GrTexture>();
@@ -41,22 +40,23 @@ void GrCCClipPath::init(GrProxyProvider* proxyProvider,
 
                 return sk_ref_sp(textureProxy->priv().peekTexture());
             },
-            GrProxyProvider::Renderable::kYes, kTopLeft_GrSurfaceOrigin, kAlpha_half_GrPixelConfig);
+            GrProxyProvider::Renderable::kYes, kTopLeft_GrSurfaceOrigin, kAlpha_half_GrPixelConfig,
+            caps);
 
     fDeviceSpacePath = deviceSpacePath;
     fDeviceSpacePath.getBounds().roundOut(&fPathDevIBounds);
     fAccessRect = accessRect;
 }
 
-void GrCCClipPath::accountForOwnPath(GrCCPerFlushResourceSpecs* resourceSpecs) const {
+void GrCCClipPath::accountForOwnPath(GrCCPerFlushResourceSpecs* specs) const {
     SkASSERT(this->isInitialized());
 
-    ++resourceSpecs->fNumClipPaths;
-    resourceSpecs->fParsingPathStats.statPath(fDeviceSpacePath);
+    ++specs->fNumClipPaths;
+    specs->fRenderedPathStats.statPath(fDeviceSpacePath);
 
     SkIRect ibounds;
     if (ibounds.intersect(fAccessRect, fPathDevIBounds)) {
-        resourceSpecs->fAtlasSpecs.accountForSpace(ibounds.width(), ibounds.height());
+        specs->fRenderedAtlasSpecs.accountForSpace(ibounds.width(), ibounds.height());
     }
 }
 
