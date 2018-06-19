@@ -39,6 +39,8 @@
 #include "SkTo.h"
 #include "SkUtils.h"
 
+#include <utility>
+
 static SkPaint make_paint_with_image(
     const SkPaint& origPaint, const SkBitmap& bitmap, SkMatrix* matrix = nullptr) {
     SkPaint paint(origPaint);
@@ -870,7 +872,8 @@ static SkScalar fast_len(const SkVector& vec) {
     SkScalar x = SkScalarAbs(vec.fX);
     SkScalar y = SkScalarAbs(vec.fY);
     if (x < y) {
-        SkTSwap(x, y);
+        using std::swap;
+        swap(x, y);
     }
     return x + SkScalarHalf(y);
 }
@@ -1377,28 +1380,6 @@ bool SkDraw::ShouldDrawTextAsPaths(const SkPaint& paint, const SkMatrix& ctm, Sk
     SkMatrix textM;
     SkPaintPriv::MakeTextMatrix(&textM, paint);
     return SkPaint::TooBigToUseCache(ctm, textM, sizeLimit);
-}
-
-void SkDraw::drawText_asPaths(const char text[], size_t byteLength, SkScalar x, SkScalar y,
-                              const SkPaint& paint) const {
-    SkDEBUGCODE(this->validate();)
-
-    SkTextToPathIter iter(text, byteLength, paint, true);
-
-    SkMatrix    matrix;
-    matrix.setScale(iter.getPathScale(), iter.getPathScale());
-    matrix.postTranslate(x, y);
-
-    const SkPath* iterPath;
-    SkScalar xpos, prevXPos = 0;
-
-    while (iter.next(&iterPath, &xpos)) {
-        matrix.postTranslate(xpos - prevXPos, 0);
-        if (iterPath) {
-            this->drawPath(*iterPath, iter.getPaint(), &matrix, false);
-        }
-        prevXPos = xpos;
-    }
 }
 
 // disable warning : local variable used without having been initialized
