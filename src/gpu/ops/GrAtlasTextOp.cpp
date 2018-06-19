@@ -8,6 +8,7 @@
 #include "GrAtlasTextOp.h"
 
 #include "GrContext.h"
+#include "GrContextPriv.h"
 #include "GrMemoryPool.h"
 #include "GrOpFlushState.h"
 #include "GrResourceProvider.h"
@@ -27,7 +28,9 @@ std::unique_ptr<GrAtlasTextOp> GrAtlasTextOp::MakeBitmap(GrContext* context,
                                                          GrMaskFormat maskFormat,
                                                          int glyphCount,
                                                          bool needsTransform) {
-        std::unique_ptr<GrAtlasTextOp> op(new GrAtlasTextOp(std::move(paint)));
+        GrOpMemoryPool* pool = context->contextPriv().opMemoryPool();
+
+        std::unique_ptr<GrAtlasTextOp> op = pool->allocate<GrAtlasTextOp>(std::move(paint));
 
         switch (maskFormat) {
             case kA8_GrMaskFormat:
@@ -57,7 +60,9 @@ std::unique_ptr<GrAtlasTextOp> GrAtlasTextOp::MakeDistanceField(
                                             const SkSurfaceProps& props,
                                             bool isAntiAliased,
                                             bool useLCD) {
-        std::unique_ptr<GrAtlasTextOp> op(new GrAtlasTextOp(std::move(paint)));
+        GrOpMemoryPool* pool = context->contextPriv().opMemoryPool();
+
+        std::unique_ptr<GrAtlasTextOp> op = pool->allocate<GrAtlasTextOp>(std::move(paint));
 
         bool isBGR = SkPixelGeometryIsBGR(props.pixelGeometry());
         bool isLCD = useLCD && SkPixelGeometryIsH(props.pixelGeometry());
@@ -307,8 +312,8 @@ void GrAtlasTextOp::onPrepareDraws(Target* target) {
     }
 
     flushInfo.fGlyphsToFlush = 0;
-    size_t vertexStride = flushInfo.fGeometryProcessor->getVertexStride();
-    SkASSERT(vertexStride == GrTextBlob::GetVertexStride(maskFormat, vmPerspective));
+    size_t vertexStride = GrTextBlob::GetVertexStride(maskFormat, vmPerspective);
+    SkASSERT(vertexStride == flushInfo.fGeometryProcessor->debugOnly_vertexStride());
 
     int glyphCount = this->numGlyphs();
     const GrBuffer* vertexBuffer;
