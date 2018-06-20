@@ -270,6 +270,9 @@ BASE_SRCS_ALL = struct(
 
         # Not time for skcms in Google3 yet.
         "src/core/SkColorSpaceXform_skcms.cpp",
+
+        # Compute backend not yet even hooked into Skia.
+	"src/compute/**/*",
     ],
 )
 
@@ -308,6 +311,7 @@ BASE_SRCS_UNIX = struct(
         "src/ports/SkFontMgr_fontconfig.cpp",
         "src/ports/SkFontMgr_fontconfig_factory.cpp",
         "src/ports/SkGlobalInitialization_none.cpp",
+        "src/ports/SkGlobalInitialization_none_imagefilters.cpp",
         "src/ports/SkImageGenerator_none.cpp",
         "src/ports/SkTLS_none.cpp",
     ],
@@ -337,6 +341,7 @@ BASE_SRCS_ANDROID = struct(
         "src/ports/SkFontMgr_custom_empty_factory.cpp",
         "src/ports/SkFontMgr_empty_factory.cpp",
         "src/ports/SkGlobalInitialization_none.cpp",
+        "src/ports/SkGlobalInitialization_none_imagefilters.cpp",
         "src/ports/SkImageGenerator_none.cpp",
         "src/ports/SkTLS_none.cpp",
     ],
@@ -369,6 +374,7 @@ BASE_SRCS_IOS = struct(
         "src/ports/SkFontMgr_custom_empty_factory.cpp",
         "src/ports/SkFontMgr_empty_factory.cpp",
         "src/ports/SkGlobalInitialization_none.cpp",
+        "src/ports/SkGlobalInitialization_none_imagefilters.cpp",
         "src/ports/SkImageGenerator_none.cpp",
         "src/ports/SkTLS_none.cpp",
     ],
