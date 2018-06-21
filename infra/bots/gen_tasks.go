@@ -456,7 +456,6 @@ func defaultSwarmDimensions(parts map[string]string) []string {
 				"NexusPlayer":     {"fugu", "OPR2.170623.027"},
 				"Pixel":           {"sailfish", "OPM4.171019.016.B1"},
 				"Pixel2XL":        {"taimen", "OPM4.171019.016.B1"},
-				"PixelC":          {"dragon", "OPM4.171019.016.C1"},
 			}[parts["model"]]
 			if !ok {
 				glog.Fatalf("Entry %q not found in Android mapping.", parts["model"])
@@ -630,8 +629,10 @@ func relpath(f string) string {
 
 // bundleRecipes generates the task to bundle and isolate the recipes.
 func bundleRecipes(b *specs.TasksCfgBuilder) string {
+	pkgs := append([]*specs.CipdPackage{}, CIPD_PKGS_GIT...)
+	pkgs = append(pkgs, CIPD_PKGS_PYTHON...)
 	b.MustAddTask(BUNDLE_RECIPES_NAME, &specs.TaskSpec{
-		CipdPackages: CIPD_PKGS_GIT,
+		CipdPackages: pkgs,
 		Command: []string{
 			"/bin/bash", "skia/infra/bots/bundle_recipes.sh", specs.PLACEHOLDER_ISOLATED_OUTDIR,
 		},
