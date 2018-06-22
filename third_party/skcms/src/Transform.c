@@ -354,6 +354,9 @@ static OpAndArg select_curve_op(const skcms_Curve* curve, int channel) {
 
 static size_t bytes_per_pixel(skcms_PixelFormat fmt) {
     switch (fmt >> 1) {   // ignore rgb/bgr
+        case skcms_PixelFormat_A_8           >> 1: return  1;
+        case skcms_PixelFormat_G_8           >> 1: return  1;
+        case skcms_PixelFormat_ABGR_4444     >> 1: return  2;
         case skcms_PixelFormat_RGB_565       >> 1: return  2;
         case skcms_PixelFormat_RGB_888       >> 1: return  3;
         case skcms_PixelFormat_RGBA_8888     >> 1: return  4;
@@ -404,9 +407,12 @@ bool skcms_Transform(const void*             src,
     }
     int n = (int)nz;
 
-    // Both profiles can be null if we're just doing format conversion, otherwise both are needed
-    if (!dstProfile != !srcProfile) {
-        return false;
+    // Null profiles default to sRGB. Passing null for both is handy when doing format conversion.
+    if (!srcProfile) {
+        srcProfile = skcms_sRGB_profile();
+    }
+    if (!dstProfile) {
+        dstProfile = skcms_sRGB_profile();
     }
 
     // We can't transform in place unless the PixelFormats are the same size.
@@ -427,6 +433,9 @@ bool skcms_Transform(const void*             src,
 
     switch (srcFmt >> 1) {
         default: return false;
+        case skcms_PixelFormat_A_8           >> 1: *ops++ = Op_load_a8;       break;
+        case skcms_PixelFormat_G_8           >> 1: *ops++ = Op_load_g8;       break;
+        case skcms_PixelFormat_ABGR_4444     >> 1: *ops++ = Op_load_4444;     break;
         case skcms_PixelFormat_RGB_565       >> 1: *ops++ = Op_load_565;      break;
         case skcms_PixelFormat_RGB_888       >> 1: *ops++ = Op_load_888;      break;
         case skcms_PixelFormat_RGBA_8888     >> 1: *ops++ = Op_load_8888;     break;
@@ -441,8 +450,16 @@ bool skcms_Transform(const void*             src,
     if (srcFmt & 1) {
         *ops++ = Op_swap_rb;
     }
+    skcms_ICCProfile gray_dst_profile;
+    if ((dstFmt >> 1) == (skcms_PixelFormat_G_8 >> 1)) {
+        // When transforming to gray, stop at XYZ (by setting toXYZ to identity), then transform
+        // luminance (Y) by the destination transfer function.
+        gray_dst_profile = *dstProfile;
+        skcms_SetXYZD50(&gray_dst_profile, &skcms_XYZD50_profile()->toXYZD50);
+        dstProfile = &gray_dst_profile;
+    }
 
-    if (srcProfile && srcProfile->data_color_space == skcms_Signature_CMYK) {
+    if (srcProfile->data_color_space == skcms_Signature_CMYK) {
         // Photoshop creates CMYK images as inverse CMYK.
         // These happen to be the only ones we've _ever_ seen.
         *ops++ = Op_invert;
@@ -582,6 +599,9 @@ bool skcms_Transform(const void*             src,
     }
     switch (dstFmt >> 1) {
         default: return false;
+        case skcms_PixelFormat_A_8           >> 1: *ops++ = Op_store_a8;       break;
+        case skcms_PixelFormat_G_8           >> 1: *ops++ = Op_store_g8;       break;
+        case skcms_PixelFormat_ABGR_4444     >> 1: *ops++ = Op_store_4444;     break;
         case skcms_PixelFormat_RGB_565       >> 1: *ops++ = Op_store_565;      break;
         case skcms_PixelFormat_RGB_888       >> 1: *ops++ = Op_store_888;      break;
         case skcms_PixelFormat_RGBA_8888     >> 1: *ops++ = Op_store_8888;     break;

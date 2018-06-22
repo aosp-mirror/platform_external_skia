@@ -66,8 +66,7 @@ class AndroidFlavor(default.DefaultFlavor):
     self.disable_for_nanobench = {
       'Nexus5x': range(0, 4),
       'Pixel': range(0, 2),
-      'Pixel2XL': range(0, 4),
-      'PixelC': range(0, 2)
+      'Pixel2XL': range(0, 4)
     }
 
     self.gpu_scaling = {
@@ -524,7 +523,18 @@ wait_for_device()
     """ % self.ADB_BINARY, args=[host, device], infra_step=True)
 
   def copy_directory_contents_to_host(self, device, host):
-    self._adb('pull %s %s' % (device, host), 'pull', device, host)
+    # TODO(borenet): When all of our devices are on Android 6.0 and up, we can
+    # switch to using tar to zip up the results before pulling.
+    with self.m.step.nest('adb pull'):
+      with self.m.tempfile.temp_dir('adb_pull') as tmp:
+        self._adb('pull %s' % device, 'pull', device, tmp)
+        paths = self.m.file.glob_paths(
+            'list pulled files',
+            tmp,
+            self.m.path.basename(device) + self.m.path.sep + '*',
+            test_data=['%d.png' % i for i in (1, 2)])
+        for p in paths:
+          self.m.file.copy('copy %s' % self.m.path.basename(p), p, host)
 
   def read_file_on_device(self, path, **kwargs):
     rv = self._adb('read %s' % path,

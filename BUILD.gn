@@ -26,6 +26,7 @@ declare_args() {
   skia_use_libpng = true
   skia_use_libwebp = !is_fuchsia
   skia_use_lua = is_skia_dev_build && !is_ios
+  skia_use_opencl = false
   skia_use_piex = !is_win
   skia_use_zlib = true
   skia_use_metal = false
@@ -34,6 +35,7 @@ declare_args() {
   skia_android_serial = ""
   skia_enable_discrete_gpu = true
   skia_enable_effects = true
+  skia_enable_effects_imagefilters = true
   skia_enable_flutter_defines = false
   skia_enable_fontmgr_empty = false
   skia_enable_gpu = true
@@ -371,7 +373,15 @@ optional("effects") {
   ]
   sources =
       skia_effects_sources + [ "src/ports/SkGlobalInitialization_default.cpp" ]
-  sources_when_disabled = [ "src/ports/SkGlobalInitialization_none.cpp" ]
+  if (skia_enable_effects_imagefilters) {
+    sources += skia_effects_imagefilter_sources
+  } else {
+    sources += [ "src/ports/SkGlobalInitialization_none_imagefilters.cpp" ]
+  }
+  sources_when_disabled = [
+    "src/ports/SkGlobalInitialization_none.cpp",
+    "src/ports/SkGlobalInitialization_none_imagefilters.cpp",
+  ]
 }
 
 optional("fontmgr_android") {
@@ -591,10 +601,7 @@ optional("gpu") {
     libs += [ "EGL" ]
   } else if (is_linux) {
     sources += [ "src/gpu/gl/glx/GrGLMakeNativeInterface_glx.cpp" ]
-    libs += [
-      "GL",
-      "GLU",
-    ]
+    libs += [ "GL" ]
   } else if (is_mac) {
     sources += [ "src/gpu/gl/mac/GrGLMakeNativeInterface_mac.cpp" ]
   } else if (is_ios) {
@@ -1256,7 +1263,10 @@ if (skia_enable_tools) {
       libs += [ "OpenGLES.framework" ]
     } else if (is_linux) {
       sources += [ "tools/gpu/gl/glx/CreatePlatformGLTestContext_glx.cpp" ]
-      libs += [ "X11" ]
+      libs += [
+        "GLU",
+        "X11",
+      ]
     } else if (is_mac) {
       sources += [ "tools/gpu/gl/mac/CreatePlatformGLTestContext_mac.cpp" ]
     } else if (is_win) {
@@ -1392,7 +1402,6 @@ if (skia_enable_tools) {
     ]
     public_deps = [
       ":gpu_tool_utils",  # Test.h #includes headers from this target.
-      "modules/skjson:tests",
     ]
   }
 
@@ -1406,9 +1415,6 @@ if (skia_enable_tools) {
       ":gpu_tool_utils",
       ":skia",
       ":tool_utils",
-    ]
-    public_deps = [
-      "modules/skjson:bench",
     ]
   }
 
@@ -1542,6 +1548,7 @@ if (skia_enable_tools) {
         ":xml",
         "modules/sksg:samples",
         "modules/skshaper",
+        "//third_party/Nima-Cpp",
       ]
 
       if (skia_use_lua) {
@@ -1571,6 +1578,7 @@ if (skia_enable_tools) {
         ":tool_utils",
         "modules/skottie",
         "modules/sksg",
+        "//third_party/Nima-Cpp",
         "//third_party/jsoncpp",
         "//third_party/libpng",
       ]
@@ -1679,7 +1687,6 @@ if (skia_enable_tools) {
     deps = [
       ":flags",
       ":skia",
-      "//third_party/jsoncpp",
     ]
   }
 
@@ -1736,6 +1743,7 @@ if (skia_enable_tools) {
       "fuzz/oss_fuzz/FuzzAnimatedImage.cpp",
       "fuzz/oss_fuzz/FuzzImage.cpp",
       "fuzz/oss_fuzz/FuzzImageFilterDeserialize.cpp",
+      "fuzz/oss_fuzz/FuzzJSON.cpp",
       "fuzz/oss_fuzz/FuzzPathDeserialize.cpp",
       "fuzz/oss_fuzz/FuzzRegionDeserialize.cpp",
       "fuzz/oss_fuzz/FuzzRegionSetPath.cpp",
@@ -1750,7 +1758,6 @@ if (skia_enable_tools) {
       ":flags",
       ":gpu_tool_utils",
       ":skia",
-      "modules/skjson:fuzz",
       "modules/skottie:fuzz",
       "//third_party/jsoncpp",
       "//third_party/libpng",
@@ -1995,9 +2002,63 @@ if (skia_enable_tools) {
       ":views",
       "modules/skottie",
       "modules/sksg",
+      "//third_party/Nima-Cpp",
       "//third_party/imgui",
-      "//third_party/jsoncpp",
     ]
+  }
+
+  if (is_android) {
+    test_app("arcore") {
+      is_shared_library = true
+      configs = [
+        ":skia_public",
+        "gn:default",
+      ]
+
+      # For internship expedience, yes, we're rebuilding Skia rather than depending on :skia.
+      # At the moment there's no way to use Skia and Skottie/SkShaper unless they're in the same .so.
+      sources = []
+      sources += skia_core_sources
+      sources += skia_utils_sources
+      sources += skia_xps_sources
+      sources += [
+        "src/android/SkAndroidFrameworkUtils.cpp",
+        "src/android/SkAnimatedImage.cpp",
+        "src/android/SkBitmapRegionCodec.cpp",
+        "src/android/SkBitmapRegionDecoder.cpp",
+        "src/codec/SkAndroidCodec.cpp",
+        "src/codec/SkBmpBaseCodec.cpp",
+        "src/codec/SkBmpCodec.cpp",
+        "src/codec/SkBmpMaskCodec.cpp",
+        "src/codec/SkBmpRLECodec.cpp",
+        "src/codec/SkBmpStandardCodec.cpp",
+        "src/codec/SkCodec.cpp",
+        "src/codec/SkCodecImageGenerator.cpp",
+        "src/codec/SkColorTable.cpp",
+        "src/codec/SkGifCodec.cpp",
+        "src/codec/SkMaskSwizzler.cpp",
+        "src/codec/SkMasks.cpp",
+        "src/codec/SkSampledCodec.cpp",
+        "src/codec/SkSampler.cpp",
+        "src/codec/SkStreamBuffer.cpp",
+        "src/codec/SkSwizzler.cpp",
+        "src/codec/SkWbmpCodec.cpp",
+        "src/images/SkImageEncoder.cpp",
+        "src/ports/SkDiscardableMemory_none.cpp",
+        "src/ports/SkImageGenerator_skia.cpp",
+        "src/ports/SkMemory_malloc.cpp",
+        "src/ports/SkOSFile_stdio.cpp",
+        "src/sfnt/SkOTTable_name.cpp",
+        "src/sfnt/SkOTUtils.cpp",
+        "src/utils/mac/SkStream_mac.cpp",
+        "third_party/gif/SkGifImageReader.cpp",
+      ]
+      deps = [
+        ":tool_utils",
+        "modules/skottie",
+        "modules/skshaper",
+      ]
+    }
   }
 
   if (!skia_use_angle && (is_linux || is_win || is_mac)) {
@@ -2115,6 +2176,18 @@ if (skia_enable_tools) {
       outputs = [
         "$root_out_dir/gdbserver",
       ]
+    }
+  }
+
+  if (skia_use_opencl) {
+    test_app("hello-opencl") {
+      sources = [
+        "src/compute/common/cl/assert_cl.c",
+        "src/compute/common/cl/find_cl.c",
+        "tools/hello-opencl.cpp",
+      ]
+      include_dirs = [ "src/compute/common" ]
+      libs = [ "OpenCL" ]
     }
   }
 }

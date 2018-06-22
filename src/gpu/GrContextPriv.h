@@ -13,9 +13,9 @@
 #include "text/GrAtlasManager.h"
 
 class GrBackendRenderTarget;
+class GrOpMemoryPool;
 class GrOnFlushCallbackObject;
 class GrSemaphore;
-class GrSkSLFPFactory;
 class GrSurfaceProxy;
 class GrTextureContext;
 
@@ -32,6 +32,9 @@ public:
     static sk_sp<GrContext> MakeDDL(const sk_sp<GrContextThreadSafeProxy>&);
 
     const GrCaps* caps() const { return fContext->fCaps.get(); }
+
+    sk_sp<GrOpMemoryPool> refOpMemoryPool();
+    GrOpMemoryPool* opMemoryPool();
 
     GrDrawingManager* drawingManager() { return fContext->fDrawingManager.get(); }
 
@@ -277,10 +280,6 @@ public:
     GrAuditTrail* getAuditTrail() { return &fContext->fAuditTrail; }
 
     GrContextOptions::PersistentCache* getPersistentCache() { return fContext->fPersistentCache; }
-
-    GrSkSLFPFactory* getFPFactory(size_t index);
-
-    void setFPFactory(size_t index, GrSkSLFPFactory* factory);
 
     /** This is only useful for debug purposes */
     SkDEBUGCODE(GrSingleOwner* debugSingleOwner() const { return &fContext->fSingleOwner; } )

@@ -61,7 +61,13 @@ def nanobench_flags(api, bot):
     configs.extend(['8888', 'nonrendering'])
 
     if '-GCE-' in bot:
-      configs += [ 'f16' ]
+      configs += [
+          'f16',
+          'srgb',
+          'esrgb',
+          'narrow',
+          'enarrow',
+      ]
 
   elif api.vars.builder_cfg.get('cpu_or_gpu') == 'GPU':
     args.append('--nocpu')
@@ -134,9 +140,9 @@ def nanobench_flags(api, bot):
   args.append('--config')
   args.extend(configs)
 
-  # By default, we test with GPU threading enabled. Leave PixelC devices
-  # running without threads, just to get some coverage of that code path.
-  if 'PixelC' in bot:
+  # By default, we test with GPU threading enabled, unless specifically
+  # disabled.
+  if 'NoGPUThreads' in bot:
     args.extend(['--gpuThreads', '0'])
 
   if 'Valgrind' in bot:
@@ -337,7 +343,7 @@ def perf_steps(api):
   if upload_perf_results(b):
     api.file.ensure_directory(
         'makedirs perf_dir',
-        api.path.dirname(api.flavor.host_dirs.perf_data_dir))
+        api.flavor.host_dirs.perf_data_dir)
     api.flavor.copy_directory_contents_to_host(
         api.flavor.device_dirs.perf_data_dir,
         api.flavor.host_dirs.perf_data_dir)
@@ -366,8 +372,9 @@ def RunSteps(api):
 
 TEST_BUILDERS = [
   'Perf-Android-Clang-Nexus5-GPU-Adreno330-arm-Debug-All-Android',
+  ('Perf-Android-Clang-Nexus5x-GPU-Adreno418-arm64-Release-All-'
+   'Android_NoGPUThreads'),
   'Perf-Android-Clang-NexusPlayer-GPU-PowerVR-x86-Release-All-Android_Vulkan',
-  'Perf-Android-Clang-PixelC-GPU-TegraX1-arm64-Release-All-Android_Skpbench',
   'Perf-ChromeOS-Clang-ASUSChromebookFlipC100-GPU-MaliT764-arm-Release-All',
   'Perf-Chromecast-GCC-Chorizo-CPU-Cortex_A7-arm-Debug-All',
   'Perf-Chromecast-GCC-Chorizo-GPU-Cortex_A7-arm-Release-All',

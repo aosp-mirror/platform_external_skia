@@ -149,6 +149,14 @@ var (
 		},
 	}
 
+	CIPD_PKGS_CPYTHON = []*specs.CipdPackage{
+		&specs.CipdPackage{
+			Name:    "infra/python/cpython/${platform}",
+			Path:    "cipd_bin_packages",
+			Version: "version:2.7.14.chromium14",
+		},
+	}
+
 	CIPD_PKGS_KITCHEN = append([]*specs.CipdPackage{
 		&specs.CipdPackage{
 			Name:    "infra/tools/luci/kitchen/${platform}",
@@ -166,7 +174,7 @@ var (
 		&specs.CipdPackage{
 			Name:    "infra/git/${platform}",
 			Path:    "cipd_bin_packages",
-			Version: "version:2.17.0.chromium15",
+			Version: "version:2.17.1.chromium15",
 		},
 		&specs.CipdPackage{
 			Name:    "infra/tools/git/${platform}",
@@ -187,9 +195,6 @@ var (
 			Version: "version:4.28",
 		},
 	}
-
-	RECIPE_BUNDLE_UNIX = "recipe_bundle/recipes"
-	RECIPE_BUNDLE_WIN  = "recipe_bundle/recipes.bat"
 
 	// Flags.
 	builderNameSchemaFile = flag.String("builder_name_schema", "", "Path to the builder_name_schema.json file. If not specified, uses infra/bots/recipe_modules/builder_name_schema/builder_name_schema.json from this repo.")
@@ -235,6 +240,9 @@ func kitchenTask(name, recipe, isolate, serviceAccount string, dimensions []stri
 		serviceAccount = alternateServiceAccount(serviceAccount)
 	}
 	cipd := append([]*specs.CipdPackage{}, CIPD_PKGS_KITCHEN...)
+	if strings.Contains(name, "Win") {
+		cipd = append(cipd, CIPD_PKGS_CPYTHON...)
+	}
 	properties := map[string]string{
 		"buildbucket_build_id": specs.PLACEHOLDER_BUILDBUCKET_BUILD_ID,
 		"buildername":          name,
@@ -448,7 +456,6 @@ func defaultSwarmDimensions(parts map[string]string) []string {
 				"NexusPlayer":     {"fugu", "OPR2.170623.027"},
 				"Pixel":           {"sailfish", "OPM4.171019.016.B1"},
 				"Pixel2XL":        {"taimen", "OPM4.171019.016.B1"},
-				"PixelC":          {"dragon", "OPM4.171019.016.C1"},
 			}[parts["model"]]
 			if !ok {
 				glog.Fatalf("Entry %q not found in Android mapping.", parts["model"])
@@ -622,8 +629,10 @@ func relpath(f string) string {
 
 // bundleRecipes generates the task to bundle and isolate the recipes.
 func bundleRecipes(b *specs.TasksCfgBuilder) string {
+	pkgs := append([]*specs.CipdPackage{}, CIPD_PKGS_GIT...)
+	pkgs = append(pkgs, CIPD_PKGS_PYTHON...)
 	b.MustAddTask(BUNDLE_RECIPES_NAME, &specs.TaskSpec{
-		CipdPackages: CIPD_PKGS_GIT,
+		CipdPackages: pkgs,
 		Command: []string{
 			"/bin/bash", "skia/infra/bots/bundle_recipes.sh", specs.PLACEHOLDER_ISOLATED_OUTDIR,
 		},
@@ -805,9 +814,6 @@ func compile(b *specs.TasksCfgBuilder, name string, parts map[string]string) str
 	}
 
 	task.MaxAttempts = 1
-	if strings.Contains(name, "Win") {
-		task.MaxAttempts = 2
-	}
 
 	// Add the task.
 	b.MustAddTask(name, task)

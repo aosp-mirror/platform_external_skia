@@ -832,7 +832,7 @@ Converts ARGB to its <a href='#HSV'>HSV</a> components. <a href='#Alpha'>Alpha</
 
 ### Example
 
-<div><fiddle-embed name="7d7e427e2b181c651abad5732bc46cf7"></fiddle-embed></div>
+<div><fiddle-embed name="1e0370f12c8aab5b84f9e824074f1e5a"></fiddle-embed></div>
 
 ### See Also
 

@@ -12,6 +12,7 @@
 #include "GrContextPriv.h"
 #include "GrDrawingManager.h"
 #include "GrGpu.h"
+#include "GrMemoryPool.h"
 #include "GrProxyProvider.h"
 #include "GrRenderTargetContext.h"
 #include "GrRenderTargetProxy.h"
@@ -36,9 +37,7 @@
 #include "SkTaskGroup.h"
 #include "SkUnPreMultiplyPriv.h"
 #include "effects/GrConfigConversionEffect.h"
-#include "effects/GrSkSLFP.h"
 #include "text/GrTextBlobCache.h"
-#include <unordered_map>
 
 #define ASSERT_OWNED_PROXY(P) \
 SkASSERT(!(P) || !((P)->priv().peekTexture()) || (P)->priv().peekTexture()->getContext() == this)
@@ -154,9 +153,6 @@ GrContext::~GrContext() {
 
     if (fDrawingManager) {
         fDrawingManager->cleanup();
-    }
-    if (fFPFactories != nullptr) {
-        delete fFPFactories;
     }
 
     fTextureStripAtlasManager = nullptr;
@@ -816,6 +812,22 @@ void GrContextPriv::flushSurfaceIO(GrSurfaceProxy* proxy) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+sk_sp<GrOpMemoryPool> GrContextPriv::refOpMemoryPool() {
+    if (!fContext->fOpMemoryPool) {
+        // DDL TODO: should the size of the memory pool be decreased in DDL mode? CPU-side memory
+        // consumed in DDL mode vs. normal mode for a single skp might be a good metric of wasted
+        // memory.
+        fContext->fOpMemoryPool = sk_sp<GrOpMemoryPool>(new GrOpMemoryPool(16384, 16384));
+    }
+
+    SkASSERT(fContext->fOpMemoryPool);
+    return fContext->fOpMemoryPool;
+}
+
+GrOpMemoryPool* GrContextPriv::opMemoryPool() {
+    return this->refOpMemoryPool().get();
+}
+
 sk_sp<GrSurfaceContext> GrContextPriv::makeWrappedSurfaceContext(sk_sp<GrSurfaceProxy> proxy,
                                                                  sk_sp<SkColorSpace> colorSpace,
                                                                  const SkSurfaceProps* props) {
@@ -1027,20 +1039,6 @@ sk_sp<GrRenderTargetContext> GrContextPriv::makeDeferredRenderTargetContext(
     renderTargetContext->discard();
 
     return renderTargetContext;
-}
-
-GrSkSLFPFactory* GrContextPriv::getFPFactory(size_t index) {
-    if (!fContext->fFPFactories) {
-        return nullptr;
-    }
-    return fContext->fFPFactories->get(index);
-}
-
-void GrContextPriv::setFPFactory(size_t index, GrSkSLFPFactory* factory) {
-    if (!fContext->fFPFactories) {
-        fContext->fFPFactories = new GrSkSLFPFactoryCache();
-    }
-    fContext->fFPFactories->set(index, std::unique_ptr<GrSkSLFPFactory>(factory));
 }
 
 bool GrContextPriv::abandoned() const {

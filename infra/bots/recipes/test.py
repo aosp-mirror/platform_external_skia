@@ -44,7 +44,8 @@ def dm_flags(api, bot):
   blacklisted = []
 
   def blacklist(quad):
-    config, src, options, name = quad.split(' ') if type(quad) is str else quad
+    config, src, options, name = (
+        quad.split(' ') if isinstance(quad, str) else quad)
     if (config == '_' or
         config in configs or
         (config[0] == '~' and config[1:] in configs)):
@@ -93,7 +94,6 @@ def dm_flags(api, bot):
   # is ignored and dm will keep attempting to proceed until we actually
   # exhaust the available resources.
   if ('NexusPlayer' in bot or
-      'PixelC' in bot or
       'Chromecast' in bot):
     args.append('--ignoreSigInt')
 
@@ -115,11 +115,13 @@ def dm_flags(api, bot):
     if '-GCE-' in bot and 'x86_64' in bot:
       configs.extend(['g8'])
       configs.extend(['565'])
-      configs.extend(['f16'])
       configs.extend(['lite-8888'])              # Experimental display list.
       configs.extend(['gbr-8888'])
-      configs.extend(['srgbnl'])
+      configs.extend(['f16'])
+      configs.extend(['srgb'])
       configs.extend(['esrgb'])
+      configs.extend(['narrow'])
+      configs.extend(['enarrow'])
 
       if 'SAN' in bot:
         configs.extend(['t8888'])
@@ -590,6 +592,7 @@ def dm_flags(api, bot):
   if 'AndroidOne' in bot:
     match.append('~WritePixels')  # skia:4711
     match.append('~PremulAlphaRoundTrip_Gpu')  # skia:7501
+    match.append('~ReimportImageTextureWithMipLevels')  # skia:8090
 
   if 'Chromecast' in bot:
     if 'GPU' in bot:
@@ -1182,8 +1185,7 @@ def GenTests(api):
   )
 
   builder = 'Test-Android-Clang-Nexus7-GPU-Tegra3-arm-Debug-All-Android'
-  retry_step_name = ('pull /sdcard/revenge_of_the_skiabot/dm_out '
-                     '[START_DIR]/[SWARM_OUT_DIR]/dm')
+  retry_step_name = 'adb pull.pull /sdcard/revenge_of_the_skiabot/dm_out'
   yield (
     api.test('failed_pull') +
     api.properties(buildername=builder,

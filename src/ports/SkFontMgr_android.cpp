@@ -98,6 +98,22 @@ public:
         return skstd::make_unique<SkFontData>(this->makeStream(), fIndex,
                                               fAxes.begin(), fAxes.count());
     }
+    sk_sp<SkTypeface> onMakeClone(const SkFontArguments& args) const override {
+        std::unique_ptr<SkFontData> data = this->cloneFontData(args);
+        if (!data) {
+            return nullptr;
+        }
+        return sk_make_sp<SkTypeface_AndroidSystem>(fPathName,
+                                                    fFile,
+                                                    fIndex,
+                                                    data->getAxis(),
+                                                    data->getAxisCount(),
+                                                    this->fontStyle(),
+                                                    this->isFixedPitch(),
+                                                    fFamilyName,
+                                                    fLang,
+                                                    fVariantStyle);
+    }
 
     const SkString fPathName;
     int fIndex;
@@ -134,6 +150,17 @@ public:
 
     std::unique_ptr<SkFontData> onMakeFontData() const override {
         return skstd::make_unique<SkFontData>(*fData);
+    }
+
+    sk_sp<SkTypeface> onMakeClone(const SkFontArguments& args) const override {
+        std::unique_ptr<SkFontData> data = this->cloneFontData(args);
+        if (!data) {
+            return nullptr;
+        }
+        return sk_make_sp<SkTypeface_AndroidStream>(std::move(data),
+                                                    this->fontStyle(),
+                                                    this->isFixedPitch(),
+                                                    fFamilyName);
     }
 
 private:

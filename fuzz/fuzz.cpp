@@ -53,13 +53,11 @@ static constexpr char g_type_message[] = "How to interpret --bytes, one of:\n"
                                          "image_decode\n"
                                          "image_mode\n"
                                          "image_scale\n"
+                                         "json\n"
                                          "path_deserialize\n"
                                          "pipe\n"
                                          "region_deserialize\n"
                                          "region_set_path\n"
-#if defined(SK_ENABLE_SKJSON)
-                                         "skjson\n"
-#endif
                                          "skp\n"
                                          "sksl2glsl\n"
 #if defined(SK_ENABLE_SKOTTIE)
@@ -79,6 +77,7 @@ static void fuzz_filter_fuzz(sk_sp<SkData>);
 static void fuzz_img2(sk_sp<SkData>);
 static void fuzz_animated_img(sk_sp<SkData>);
 static void fuzz_img(sk_sp<SkData>, uint8_t, uint8_t);
+static void fuzz_json(sk_sp<SkData>);
 static void fuzz_path_deserialize(sk_sp<SkData>);
 static void fuzz_region_deserialize(sk_sp<SkData>);
 static void fuzz_region_set_path(sk_sp<SkData>);
@@ -90,10 +89,6 @@ static void print_api_names();
 
 #if SK_SUPPORT_GPU
 static void fuzz_sksl2glsl(sk_sp<SkData>);
-#endif
-
-#if defined(SK_ENABLE_SKJSON)
-static void fuzz_skjson(sk_sp<SkData>);
 #endif
 
 #if defined(SK_ENABLE_SKOTTIE)
@@ -156,6 +151,10 @@ static int fuzz_file(SkString path, SkString type) {
         fuzz_color_deserialize(bytes);
         return 0;
     }
+    if (type.equals("filter_fuzz")) {
+        fuzz_filter_fuzz(bytes);
+        return 0;
+    }
     if (type.equals("image_decode")) {
         fuzz_img2(bytes);
         return 0;
@@ -170,8 +169,8 @@ static int fuzz_file(SkString path, SkString type) {
         fuzz_img(bytes, 0, option);
         return 0;
     }
-    if (type.equals("filter_fuzz")) {
-        fuzz_filter_fuzz(bytes);
+    if (type.equals("json")) {
+        fuzz_json(bytes);
         return 0;
     }
     if (type.equals("path_deserialize")) {
@@ -190,12 +189,6 @@ static int fuzz_file(SkString path, SkString type) {
         fuzz_skpipe(bytes);
         return 0;
     }
-#if defined(SK_ENABLE_SKJSON)
-    if (type.equals("skjson")) {
-        fuzz_skjson(bytes);
-        return 0;
-    }
-#endif
 #if defined(SK_ENABLE_SKOTTIE)
     if (type.equals("skottie_json")) {
         fuzz_skottie_json(bytes);
@@ -231,9 +224,11 @@ static std::map<std::string, std::string> cf_api_map = {
     {"api_raster_n32_canvas", "RasterN32Canvas"},
     {"jpeg_encoder", "JPEGEncoder"},
     {"png_encoder", "PNGEncoder"},
+    {"skia_pathop_fuzzer", "Pathop"},
     {"webp_encoder", "WEBPEncoder"}
 };
 
+// maps clusterfuzz/oss-fuzz -> Skia's name
 static std::map<std::string, std::string> cf_map = {
     {"animated_image_decode", "animated_image_decode"},
     {"image_decode", "image_decode"},
@@ -242,6 +237,7 @@ static std::map<std::string, std::string> cf_map = {
     {"path_deserialize", "path_deserialize"},
     {"region_deserialize", "region_deserialize"},
     {"region_set_path", "region_set_path"},
+    {"skjson", "json"},
     {"textblob_deserialize", "textblob"}
 };
 
@@ -252,15 +248,10 @@ static SkString try_auto_detect(SkString path, SkString* name) {
 
     if (std::regex_search(path.c_str(), m, clusterfuzz)) {
         std::string type = m.str(2);
-        if (type.find("api_") != std::string::npos || type.find("_encoder") != std::string::npos) {
-            if (cf_api_map.find(type) != cf_api_map.end()) {
-                *name = SkString(cf_api_map[type].c_str());  //probably wrong
-                return SkString("api");
-            } else {
-                SkDebugf("Unrecognized api name %s\n", type.c_str());
-                print_api_names();
-                return SkString("");
-            }
+
+        if (cf_api_map.find(type) != cf_api_map.end()) {
+            *name = SkString(cf_api_map[type].c_str());
+            return SkString("api");
         } else {
             if (cf_map.find(type) != cf_map.end()) {
                 return SkString(cf_map[type].c_str());
@@ -281,14 +272,12 @@ static SkString try_auto_detect(SkString path, SkString* name) {
     return SkString("");
 }
 
-#if defined(SK_ENABLE_SKJSON)
-void FuzzSkJSON(sk_sp<SkData> bytes);
+void FuzzJSON(sk_sp<SkData> bytes);
 
-static void fuzz_skjson(sk_sp<SkData> bytes){
-    FuzzSkJSON(bytes);
+static void fuzz_json(sk_sp<SkData> bytes){
+    FuzzJSON(bytes);
     SkDebugf("[terminated] Done parsing!\n");
 }
-#endif
 
 #if defined(SK_ENABLE_SKOTTIE)
 void FuzzSkottieJSON(sk_sp<SkData> bytes);

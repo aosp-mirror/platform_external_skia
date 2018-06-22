@@ -10,6 +10,7 @@
 #include "GrContext.h"
 #include "GrContextPriv.h"
 #include "GrGpu.h"
+#include "GrMemoryPool.h"
 #include "GrOnFlushResourceProvider.h"
 #include "GrOpList.h"
 #include "GrRenderTargetContext.h"
@@ -18,14 +19,16 @@
 #include "GrResourceProvider.h"
 #include "GrSoftwarePathRenderer.h"
 #include "GrSurfaceProxyPriv.h"
+#include "GrTexture.h"
 #include "GrTextureContext.h"
 #include "GrTextureOpList.h"
+#include "GrTexturePriv.h"
 #include "GrTextureProxy.h"
 #include "GrTextureProxyPriv.h"
+#include "GrTracing.h"
 #include "SkDeferredDisplayList.h"
 #include "SkSurface_Gpu.h"
 #include "SkTTopoSort.h"
-#include "GrTracing.h"
 #include "ccpr/GrCoverageCountingPathRenderer.h"
 #include "text/GrTextContext.h"
 
@@ -236,6 +239,15 @@ GrSemaphoresSubmitted GrDrawingManager::internalFlush(GrSurfaceProxy*,
 #endif
     fOpLists.reset();
 
+#ifdef SK_DEBUG
+    // In non-DDL mode this checks that all the flushed ops have been freed from the memory pool.
+    // When we move to partial flushes this assert will no longer be valid.
+    // In DDL mode this check is somewhat superfluous since the memory for most of the ops/opLists
+    // will be stored in the DDL's GrOpMemoryPools.
+    GrOpMemoryPool* opMemoryPool = fContext->contextPriv().opMemoryPool();
+    opMemoryPool->isEmpty();
+#endif
+
     GrSemaphoresSubmitted result = gpu->finishFlush(numSemaphores, backendSemaphores);
 
     flushState.uninstantiateProxyTracker()->uninstantiateAllProxies();
@@ -367,9 +379,19 @@ GrSemaphoresSubmitted GrDrawingManager::prepareSurfaceForExternalIO(
     }
 
     GrSurface* surface = proxy->priv().peekSurface();
-    if (surface->asRenderTarget()) {
-        gpu->resolveRenderTarget(surface->asRenderTarget());
+    if (auto* rt = surface->asRenderTarget()) {
+        gpu->resolveRenderTarget(rt);
     }
+#if 0
+    // This is temporarily is disabled. See comment in SkImage_Gpu.cpp,
+    // new_wrapped_texture_common().
+    if (auto* tex = surface->asTexture()) {
+        if (tex->texturePriv().mipMapped() == GrMipMapped::kYes &&
+            tex->texturePriv().mipMapsAreDirty()) {
+            gpu->regenerateMipMapLevels(tex);
+        }
+    }
+#endif
     return result;
 }
 
@@ -383,7 +405,9 @@ void GrDrawingManager::moveOpListsToDDL(SkDeferredDisplayList* ddl) {
         fOpLists[i]->makeClosed(*fContext->contextPriv().caps());
     }
 
-    ddl->fOpLists = std::move(fOpLists);
+    SkASSERT(ddl->fOpLists.empty());
+    ddl->fOpLists.swap(fOpLists);
+
     if (fPathRendererChain) {
         if (auto ccpr = fPathRendererChain->getCoverageCountingPathRenderer()) {
             ddl->fPendingPaths = ccpr->detachPendingPaths();
@@ -420,6 +444,7 @@ sk_sp<GrRenderTargetOpList> GrDrawingManager::newRTOpList(GrRenderTargetProxy* r
 
     sk_sp<GrRenderTargetOpList> opList(new GrRenderTargetOpList(
                                                         resourceProvider,
+                                                        fContext->contextPriv().refOpMemoryPool(),
                                                         rtp,
                                                         fContext->contextPriv().getAuditTrail()));
     SkASSERT(rtp->getLastOpList() == opList.get());
@@ -442,6 +467,7 @@ sk_sp<GrTextureOpList> GrDrawingManager::newTextureOpList(GrTextureProxy* textur
     }
 
     sk_sp<GrTextureOpList> opList(new GrTextureOpList(fContext->contextPriv().resourceProvider(),
+                                                      fContext->contextPriv().refOpMemoryPool(),
                                                       textureProxy,
                                                       fContext->contextPriv().getAuditTrail()));
 

@@ -54,7 +54,7 @@ public:
         constexpr const char* name() const { return fName; }
         constexpr GrVertexAttribType type() const { return fType; }
 
-        constexpr size_t size() const { return GrVertexAttribTypeSize(fType); }
+        inline constexpr size_t size() const;
         constexpr size_t sizeAlign4() const { return SkAlign4(this->size()); }
 
         GrShaderVar asShaderVar() const {
@@ -146,5 +146,62 @@ private:
     int fInstanceAttributeCnt = 0;
     typedef GrProcessor INHERITED;
 };
+
+//////////////////////////////////////////////////////////////////////////////
+
+/**
+ * Returns the size of the attrib type in bytes.
+ * This was moved from include/private/GrTypesPriv.h in service of Skia dependents that build
+ * with C++11.
+ */
+static constexpr inline size_t GrVertexAttribTypeSize(GrVertexAttribType type) {
+    switch (type) {
+        case kFloat_GrVertexAttribType:
+            return sizeof(float);
+        case kFloat2_GrVertexAttribType:
+            return 2 * sizeof(float);
+        case kFloat3_GrVertexAttribType:
+            return 3 * sizeof(float);
+        case kFloat4_GrVertexAttribType:
+            return 4 * sizeof(float);
+        case kHalf_GrVertexAttribType:
+            return sizeof(float);
+        case kHalf2_GrVertexAttribType:
+            return 2 * sizeof(float);
+        case kHalf3_GrVertexAttribType:
+            return 3 * sizeof(float);
+        case kHalf4_GrVertexAttribType:
+            return 4 * sizeof(float);
+        case kInt2_GrVertexAttribType:
+            return 2 * sizeof(int32_t);
+        case kInt3_GrVertexAttribType:
+            return 3 * sizeof(int32_t);
+        case kInt4_GrVertexAttribType:
+            return 4 * sizeof(int32_t);
+        case kUByte_norm_GrVertexAttribType:
+            return 1 * sizeof(char);
+        case kUByte4_norm_GrVertexAttribType:
+            return 4 * sizeof(char);
+        case kShort2_GrVertexAttribType:
+            return 2 * sizeof(int16_t);
+        case kUShort2_GrVertexAttribType: // fall through
+        case kUShort2_norm_GrVertexAttribType:
+            return 2 * sizeof(uint16_t);
+        case kInt_GrVertexAttribType:
+            return sizeof(int32_t);
+        case kUint_GrVertexAttribType:
+            return sizeof(uint32_t);
+    }
+    // GCC fails because SK_ABORT evaluates to non constexpr. clang and cl.exe think this is
+    // unreachable and don't complain.
+#if defined(__clang__) || !defined(__GNUC__)
+    SK_ABORT("Unsupported type conversion");
+#endif
+    return 0;
+}
+
+constexpr size_t GrPrimitiveProcessor::Attribute::size() const {
+    return GrVertexAttribTypeSize(fType);
+}
 
 #endif
