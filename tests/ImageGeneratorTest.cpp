@@ -12,6 +12,12 @@
 #include "SkImageInfoPriv.h"
 #include "Test.h"
 
+#if defined(SK_BUILD_FOR_MAC) || defined(SK_BUILD_FOR_IOS)
+    #include "SkImageGeneratorCG.h"
+#elif defined(SK_BUILD_FOR_WIN)
+    #include "SkImageGeneratorWIC.h"
+#endif
+
 static bool gMyFactoryWasCalled;
 
 static std::unique_ptr<SkImageGenerator> my_factory(sk_sp<SkData>) {
@@ -36,6 +42,14 @@ static void test_imagegenerator_factory(skiatest::Reporter* reporter) {
     gen = SkImageGenerator::MakeFromEncoded(data);
     REPORTER_ASSERT(reporter, nullptr == gen);
     REPORTER_ASSERT(reporter, gMyFactoryWasCalled);
+
+    // This just verifies that the signatures match.
+#if defined(SK_BUILD_FOR_MAC) || defined(SK_BUILD_FOR_IOS)
+    SkGraphics::SetImageGeneratorFromEncodedDataFactory(SkImageGeneratorCG::MakeFromEncodedCG);
+#elif defined(SK_BUILD_FOR_WIN)
+    SkGraphics::SetImageGeneratorFromEncodedDataFactory(SkImageGeneratorWIC::MakeFromEncodedWIC);
+#endif
+
     SkGraphics::SetImageGeneratorFromEncodedDataFactory(prev);
 }
 
@@ -90,11 +104,13 @@ DEF_TEST(PictureImageGenerator, reporter) {
         { kRGBA_8888_SkColorType, kPremul_SkAlphaType, kRGBA_8888_SkColorType == kN32_SkColorType },
         { kBGRA_8888_SkColorType, kPremul_SkAlphaType, kBGRA_8888_SkColorType == kN32_SkColorType },
         { kRGBA_F16_SkColorType,  kPremul_SkAlphaType, true },
+        { kRGBA_F32_SkColorType,  kPremul_SkAlphaType, true },
         { kRGBA_1010102_SkColorType, kPremul_SkAlphaType, true },
 
         { kRGBA_8888_SkColorType, kUnpremul_SkAlphaType, false },
         { kBGRA_8888_SkColorType, kUnpremul_SkAlphaType, false },
         { kRGBA_F16_SkColorType,  kUnpremul_SkAlphaType, false },
+        { kRGBA_F32_SkColorType,  kUnpremul_SkAlphaType, false },
         { kRGBA_1010102_SkColorType, kUnpremul_SkAlphaType, false },
     };
 
@@ -104,7 +120,7 @@ DEF_TEST(PictureImageGenerator, reporter) {
                                                  SkImage::BitDepth::kU8, colorspace);
 
     // worst case for all requests
-    SkAutoMalloc storage(100 * 100 * SkColorTypeBytesPerPixel(kRGBA_F16_SkColorType));
+    SkAutoMalloc storage(100 * 100 * SkColorTypeBytesPerPixel(kRGBA_F32_SkColorType));
 
     for (const auto& rec : recs) {
         SkImageInfo info = SkImageInfo::Make(100, 100, rec.fColorType, rec.fAlphaType, colorspace);
