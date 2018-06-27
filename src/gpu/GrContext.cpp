@@ -104,6 +104,9 @@ bool GrContext::initCommon(const GrContextOptions& options) {
 #if GR_TEST_UTILS
     prcOptions.fGpuPathRenderers = options.fGpuPathRenderers;
 #endif
+    if (options.fDisableCoverageCountingPaths) {
+        prcOptions.fGpuPathRenderers &= ~GpuPathRenderers::kCoverageCounting;
+    }
     if (options.fDisableDistanceFieldPaths) {
         prcOptions.fGpuPathRenderers &= ~GpuPathRenderers::kSmall;
     }
@@ -250,6 +253,11 @@ void GrContext::abandonContext() {
 
     fGlyphCache->freeAll();
     fTextBlobCache->freeAll();
+}
+
+bool GrContext::abandoned() const {
+    ASSERT_SINGLE_OWNER
+    return fDrawingManager->wasAbandoned();
 }
 
 void GrContext::releaseResourcesAndAbandonContext() {
@@ -1007,7 +1015,7 @@ sk_sp<GrRenderTargetContext> GrContextPriv::makeDeferredRenderTargetContext(
                                                         const SkSurfaceProps* surfaceProps,
                                                         SkBudgeted budgeted) {
     SkASSERT(sampleCnt > 0);
-    if (this->abandoned()) {
+    if (fContext->abandoned()) {
         return nullptr;
     }
 
@@ -1039,11 +1047,6 @@ sk_sp<GrRenderTargetContext> GrContextPriv::makeDeferredRenderTargetContext(
     renderTargetContext->discard();
 
     return renderTargetContext;
-}
-
-bool GrContextPriv::abandoned() const {
-    ASSERT_SINGLE_OWNER_PRIV
-    return fContext->fDrawingManager->wasAbandoned();
 }
 
 std::unique_ptr<GrFragmentProcessor> GrContext::createPMToUPMEffect(
