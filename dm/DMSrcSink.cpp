@@ -954,9 +954,8 @@ Error ImageGenSrc::draw(SkCanvas* canvas) const {
 #if defined(SK_BUILD_FOR_MAC) || defined(SK_BUILD_FOR_IOS)
             gen = SkImageGeneratorCG::MakeFromEncodedCG(encoded);
 #elif defined(SK_BUILD_FOR_WIN)
-            gen.reset(SkImageGeneratorWIC::NewFromEncodedWIC(encoded.get()));
+            gen = SkImageGeneratorWIC::MakeFromEncodedWIC(encoded);
 #endif
-
             if (!gen) {
                 return "Could not create platform image generator.";
             }
@@ -1564,7 +1563,7 @@ Error GPUSink::onDraw(const Src& src, SkBitmap* dst, SkWStream*, SkString* log,
     } else if (FLAGS_releaseAndAbandonGpuContext) {
         factory.releaseResourcesAndAbandonContexts();
     }
-    if (!context->contextPriv().abandoned()) {
+    if (!context->abandoned()) {
         surface.reset();
         if (backendTexture.isValid()) {
             context->contextPriv().getGpu()->deleteTestingOnlyBackendTexture(backendTexture);

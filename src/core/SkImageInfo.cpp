@@ -23,26 +23,10 @@ int SkColorTypeBytesPerPixel(SkColorType ct) {
         case kRGB_101010x_SkColorType:  return 4;
         case kGray_8_SkColorType:       return 1;
         case kRGBA_F16_SkColorType:     return 8;
+        case kRGBA_F32_SkColorType:     return 16;
     }
     return 0;
 }
-
-// These values must be constant over revisions, though they can be renamed to reflect if/when
-// they are deprecated.
-enum Stored_SkColorType {
-    kUnknown_Stored_SkColorType             = 0,
-    kAlpha_8_Stored_SkColorType             = 1,
-    kRGB_565_Stored_SkColorType             = 2,
-    kARGB_4444_Stored_SkColorType           = 3,
-    kRGBA_8888_Stored_SkColorType           = 4,
-    kBGRA_8888_Stored_SkColorType           = 5,
-    kIndex_8_Stored_SkColorType_DEPRECATED  = 6,
-    kGray_8_Stored_SkColorType              = 7,
-    kRGBA_F16_Stored_SkColorType            = 8,
-    kRGB_888x_Stored_SkColorType            = 9,
-    kRGBA_1010102_Stored_SkColorType        = 10,
-    kRGB_101010x_Stored_SkColorType         = 11,
-};
 
 bool SkColorTypeIsAlwaysOpaque(SkColorType ct) {
     return !(kAlpha_SkColorTypeComponentFlag & SkColorTypeComponentFlags(ct));
@@ -91,6 +75,7 @@ bool SkColorTypeValidateAlphaType(SkColorType colorType, SkAlphaType alphaType,
         case kBGRA_8888_SkColorType:
         case kRGBA_1010102_SkColorType:
         case kRGBA_F16_SkColorType:
+        case kRGBA_F32_SkColorType:
             if (kUnknown_SkAlphaType == alphaType) {
                 return false;
             }
