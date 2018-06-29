@@ -36,7 +36,6 @@
 #include "SkMipMap.h"
 #include "SkSLCompiler.h"
 #include "SkTo.h"
-
 #include "vk/GrVkInterface.h"
 #include "vk/GrVkTypes.h"
 
@@ -50,57 +49,97 @@
 #define VK_CALL_RET(RET, X) GR_VK_CALL_RET(this->vkInterface(), RET, X)
 #define VK_CALL_ERRCHECK(X) GR_VK_CALL_ERRCHECK(this->vkInterface(), X)
 
-sk_sp<GrGpu> GrVkGpu::Make(const GrVkBackendContext& backendContext,
-                           const GrContextOptions& options, GrContext* context) {
-    if (backendContext.fInstance == VK_NULL_HANDLE ||
-        backendContext.fPhysicalDevice == VK_NULL_HANDLE ||
-        backendContext.fDevice == VK_NULL_HANDLE ||
-        backendContext.fQueue == VK_NULL_HANDLE) {
-        return nullptr;
+#ifdef SK_ENABLE_VK_LAYERS
+VKAPI_ATTR VkBool32 VKAPI_CALL DebugReportCallback(
+    VkDebugReportFlagsEXT       flags,
+    VkDebugReportObjectTypeEXT  objectType,
+    uint64_t                    object,
+    size_t                      location,
+    int32_t                     messageCode,
+    const char*                 pLayerPrefix,
+    const char*                 pMessage,
+    void*                       pUserData) {
+    if (flags & VK_DEBUG_REPORT_ERROR_BIT_EXT) {
+        SkDebugf("Vulkan error [%s]: code: %d: %s\n", pLayerPrefix, messageCode, pMessage);
+        return VK_TRUE; // skip further layers
+    } else if (flags & VK_DEBUG_REPORT_WARNING_BIT_EXT) {
+        SkDebugf("Vulkan warning [%s]: code: %d: %s\n", pLayerPrefix, messageCode, pMessage);
+    } else if (flags & VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT) {
+        SkDebugf("Vulkan perf warning [%s]: code: %d: %s\n", pLayerPrefix, messageCode, pMessage);
+    } else {
+        SkDebugf("Vulkan info/debug [%s]: code: %d: %s\n", pLayerPrefix, messageCode, pMessage);
     }
-    if (!backendContext.fInterface ||
-        !backendContext.fInterface->validate()) {
+    return VK_FALSE;
+}
+#endif
+
+sk_sp<GrGpu> GrVkGpu::Make(sk_sp<const GrVkBackendContext> backendContext,
+                           const GrContextOptions& options, GrContext* context) {
+    if (!backendContext) {
         return nullptr;
     }
 
-    return sk_sp<GrGpu>(new GrVkGpu(context, options, backendContext));
+    if (!backendContext->fInterface->validate(backendContext->fExtensions)) {
+        return nullptr;
+    }
+
+    return sk_sp<GrGpu>(new GrVkGpu(context, options, std::move(backendContext)));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 GrVkGpu::GrVkGpu(GrContext* context, const GrContextOptions& options,
-                 const GrVkBackendContext& backendContext)
+                 sk_sp<const GrVkBackendContext> backendCtx)
         : INHERITED(context)
-        , fInterface(std::move(backendContext.fInterface))
-        , fMemoryAllocator(backendContext.fMemoryAllocator)
-        , fInstance(backendContext.fInstance)
-        , fDevice(backendContext.fDevice)
-        , fQueue(backendContext.fQueue)
+        , fBackendContext(std::move(backendCtx))
+        , fMemoryAllocator(fBackendContext->fMemoryAllocator)
+        , fDevice(fBackendContext->fDevice)
+        , fQueue(fBackendContext->fQueue)
         , fResourceProvider(this)
         , fDisconnected(false) {
-    SkASSERT(!backendContext.fOwnsInstanceAndDevice);
+#ifdef SK_ENABLE_VK_LAYERS
+    fCallback = VK_NULL_HANDLE;
+    if (fBackendContext->fExtensions & kEXT_debug_report_GrVkExtensionFlag) {
+        // Setup callback creation information
+        VkDebugReportCallbackCreateInfoEXT callbackCreateInfo;
+        callbackCreateInfo.sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CREATE_INFO_EXT;
+        callbackCreateInfo.pNext = nullptr;
+        callbackCreateInfo.flags = VK_DEBUG_REPORT_ERROR_BIT_EXT |
+                                   VK_DEBUG_REPORT_WARNING_BIT_EXT |
+                                   //VK_DEBUG_REPORT_INFORMATION_BIT_EXT |
+                                   //VK_DEBUG_REPORT_DEBUG_BIT_EXT |
+                                   VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT;
+        callbackCreateInfo.pfnCallback = &DebugReportCallback;
+        callbackCreateInfo.pUserData = nullptr;
+
+        // Register the callback
+        GR_VK_CALL_ERRCHECK(this->vkInterface(),
+                            CreateDebugReportCallbackEXT(fBackendContext->fInstance,
+                                                         &callbackCreateInfo, nullptr, &fCallback));
+    }
+#endif
 
     if (!fMemoryAllocator) {
         // We were not given a memory allocator at creation
-        fMemoryAllocator.reset(new GrVkAMDMemoryAllocator(backendContext.fPhysicalDevice,
-                                                          fDevice, backendContext.fInterface));
+        fMemoryAllocator.reset(new GrVkAMDMemoryAllocator(fBackendContext->fPhysicalDevice,
+                                                          fDevice, fBackendContext->fInterface));
     }
 
     fCompiler = new SkSL::Compiler();
 
-    fVkCaps.reset(new GrVkCaps(options, this->vkInterface(), backendContext.fPhysicalDevice,
-                               backendContext.fFeatures));
+    fVkCaps.reset(new GrVkCaps(options, this->vkInterface(), fBackendContext->fPhysicalDevice,
+                               fBackendContext->fFeatures, fBackendContext->fExtensions));
     fCaps.reset(SkRef(fVkCaps.get()));
 
-    VK_CALL(GetPhysicalDeviceProperties(backendContext.fPhysicalDevice, &fPhysDevProps));
-    VK_CALL(GetPhysicalDeviceMemoryProperties(backendContext.fPhysicalDevice, &fPhysDevMemProps));
+    VK_CALL(GetPhysicalDeviceProperties(fBackendContext->fPhysicalDevice, &fPhysDevProps));
+    VK_CALL(GetPhysicalDeviceMemoryProperties(fBackendContext->fPhysicalDevice, &fPhysDevMemProps));
 
     const VkCommandPoolCreateInfo cmdPoolInfo = {
         VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,      // sType
         nullptr,                                         // pNext
         VK_COMMAND_POOL_CREATE_TRANSIENT_BIT |
         VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT, // CmdPoolCreateFlags
-        backendContext.fGraphicsQueueIndex,              // queueFamilyIndex
+        fBackendContext->fGraphicsQueueIndex,            // queueFamilyIndex
     };
     GR_VK_CALL_ERRCHECK(this->vkInterface(), CreateCommandPool(fDevice, &cmdPoolInfo, nullptr,
                                                                &fCmdPool));
@@ -160,11 +199,12 @@ void GrVkGpu::destroyResources() {
         VK_CALL(DestroyCommandPool(fDevice, fCmdPool, nullptr));
     }
 
-    fMemoryAllocator.reset();
+#ifdef SK_ENABLE_VK_LAYERS
+    if (fCallback) {
+        VK_CALL(DestroyDebugReportCallbackEXT(fBackendContext->fInstance, fCallback, nullptr));
+    }
+#endif
 
-    fQueue = VK_NULL_HANDLE;
-    fDevice = VK_NULL_HANDLE;
-    fInstance = VK_NULL_HANDLE;
 }
 
 GrVkGpu::~GrVkGpu() {
@@ -195,6 +235,9 @@ void GrVkGpu::disconnect(DisconnectType type) {
         }
         fSemaphoresToWaitOn.reset();
         fSemaphoresToSignal.reset();
+#ifdef SK_ENABLE_VK_LAYERS
+        fCallback = VK_NULL_HANDLE;
+#endif
         fCurrentCmdBuffer = nullptr;
         fCmdPool = VK_NULL_HANDLE;
         fDisconnected = true;

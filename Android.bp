@@ -631,6 +631,7 @@ cc_library_static {
         "src/gpu/text/GrTextContext.cpp",
         "src/gpu/text/GrTextUtils.cpp",
         "src/gpu/vk/GrVkAMDMemoryAllocator.cpp",
+        "src/gpu/vk/GrVkBackendContext.cpp",
         "src/gpu/vk/GrVkBuffer.cpp",
         "src/gpu/vk/GrVkBufferView.cpp",
         "src/gpu/vk/GrVkCaps.cpp",
