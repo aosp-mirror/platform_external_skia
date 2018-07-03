@@ -839,7 +839,7 @@ cc_library_static {
         "src/xps/SkXPSDevice.cpp",
         "src/xps/SkXPSDocument.cpp",
         "third_party/gif/SkGifImageReader.cpp",
-        "third_party/skcms/skcms.c",
+        "third_party/skcms/skcms.cc",
         "third_party/vulkanmemoryallocator/GrVulkanMemoryAllocator.cpp",
     ],
 
