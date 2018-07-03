@@ -839,12 +839,7 @@ cc_library_static {
         "src/xps/SkXPSDevice.cpp",
         "src/xps/SkXPSDocument.cpp",
         "third_party/gif/SkGifImageReader.cpp",
-        "third_party/skcms/src/Curve.c",
-        "third_party/skcms/src/ICCProfile.c",
-        "third_party/skcms/src/LinearAlgebra.c",
-        "third_party/skcms/src/PortableMath.c",
-        "third_party/skcms/src/TransferFunction.c",
-        "third_party/skcms/src/Transform.c",
+        "third_party/skcms/skcms.c",
         "third_party/vulkanmemoryallocator/GrVulkanMemoryAllocator.cpp",
     ],
 
