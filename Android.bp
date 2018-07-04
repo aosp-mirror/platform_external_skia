@@ -1645,6 +1645,7 @@ cc_test {
         "tests/PixelRefTest.cpp",
         "tests/Point3Test.cpp",
         "tests/PointTest.cpp",
+        "tests/PolyUtilsTest.cpp",
         "tests/PremulAlphaRoundTripTest.cpp",
         "tests/PrimitiveProcessorTest.cpp",
         "tests/ProcessorTest.cpp",
