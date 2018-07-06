@@ -838,7 +838,7 @@ storage of <a href='undocumented#Raster_Surface'>Raster Surface</a></td>
 
 ### Example
 
-<div><fiddle-embed name="dd92db963af190e849894038f39b598a"><div>The actual output depends on the installed fonts.
+<div><fiddle-embed name="ca37b4231b21eb8296cb19ba9e0c781b"><div>The actual output depends on the installed fonts.
 </div>
 
 #### Example Output
@@ -1243,7 +1243,7 @@ does not have <a href='undocumented#Surface_Properties'>Surface Properties</a>, 
 
 ### Example
 
-<div><fiddle-embed name="0ab5c7af272685f2ce177cc79e6b9457">
+<div><fiddle-embed name="1ce28351444b41ab2b8e3128a4b9b9c2">
 
 #### Example Output
 
@@ -2422,7 +2422,7 @@ contents of the previous <a href='#Layer'>Layer</a>.
 
 ### Example
 
-<div><fiddle-embed name="ee8c0b120234e27364f8c9a786cf8f89"><div><a href='#Canvas'>Canvas</a> <a href='#Layer'>Layer</a> captures a red <a href='SkPaint_Reference#Anti_Alias'>Anti Aliased</a> circle and a blue <a href='undocumented#Alias'>Aliased</a> circle scaled
+<div><fiddle-embed name="fe80fd80b98a20823db7fb9a077243c7"><div><a href='#Canvas'>Canvas</a> <a href='#Layer'>Layer</a> captures a red <a href='SkPaint_Reference#Anti_Alias'>Anti Aliased</a> circle and a blue <a href='undocumented#Alias'>Aliased</a> circle scaled
 up by four. After drawing another red circle without scaling on top, the <a href='#Layer'>Layer</a> is
 transferred to the main canvas.
 </div></fiddle-embed></div>
@@ -2543,7 +2543,7 @@ may be nullptr</td>
 
 ### Example
 
-<div><fiddle-embed name="9b7fa2fe855642ffff6538829db15328">
+<div><fiddle-embed name="30d70aec4de17c831dba71e03dc9664a">
 
 #### Example Output
 
@@ -3019,7 +3019,7 @@ before it is combined with <a href='#Clip'>Clip</a>.
 
 ### Example
 
-<div><fiddle-embed name="6a614faa0fbcf19958b5559c19b02d0f"></fiddle-embed></div>
+<div><fiddle-embed name="babd0e12db21a88c74d4e88aa40268ab"></fiddle-embed></div>
 
 ### See Also
 
@@ -3798,6 +3798,14 @@ device bounds empty = true
   <tr>
     <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '></td>
     <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '><a href='#SkCanvas_drawVertices_2'>drawVertices(const sk sp&lt;SkVertices&gt;& vertices, SkBlendMode mode, const SkPaint& paint)</a></td>
+  </tr>
+  <tr style='background-color: #f0f0f0; '>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '></td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '><a href='#SkCanvas_drawVertices_3'>drawVertices(const SkVertices* vertices, const SkMatrix* bones, int boneCount, SkBlendMode mode, const SkPaint& paint)</a></td>
+  </tr>
+  <tr>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '></td>
+    <td style='text-align: left; border: 2px solid #dddddd; padding: 8px; '><a href='#SkCanvas_drawVertices_4'>drawVertices(const sk sp&lt;SkVertices&gt;& vertices, const SkMatrix* bones, int boneCount, SkBlendMode mode, const SkPaint& paint)</a></td>
   </tr>
 </table>
 
@@ -6507,7 +6515,95 @@ contains <a href='undocumented#Shader'>Shader</a>, <a href='SkBlendMode_Referenc
 
 ### Example
 
-<div><fiddle-embed name="94e32538646d5f1299c427e473f9ec87"></fiddle-embed></div>
+<div><fiddle-embed name="e8bdae9bea3227758989028424fcac3d"></fiddle-embed></div>
+
+### See Also
+
+<a href='#SkCanvas_drawPatch'>drawPatch</a><sup><a href='#SkCanvas_drawPatch_2'>[2]</a></sup> <a href='#SkCanvas_drawPicture'>drawPicture</a><sup><a href='#SkCanvas_drawPicture_2'>[2]</a></sup><sup><a href='#SkCanvas_drawPicture_3'>[3]</a></sup><sup><a href='#SkCanvas_drawPicture_4'>[4]</a></sup>
+
+---
+
+<a name='SkCanvas_drawVertices_3'></a>
+
+<pre style="padding: 1em 1em 1em 1em; width: 62.5em;background-color: #f0f0f0">
+void <a href='#SkCanvas_drawVertices'>drawVertices</a>(const <a href='undocumented#SkVertices'>SkVertices</a>* vertices, const <a href='SkMatrix_Reference#SkMatrix'>SkMatrix</a>* bones, int boneCount, <a href='SkBlendMode_Reference#SkBlendMode'>SkBlendMode</a> mode,
+                  const <a href='SkPaint_Reference#SkPaint'>SkPaint</a>& paint)
+</pre>
+
+<a href='#Draw'>Draw</a> <a href='undocumented#Vertices'>Vertices</a> <a href='#SkCanvas_drawVertices_3_vertices'>vertices</a>, a triangle mesh, using <a href='#Clip'>Clip</a> and <a href='#Matrix'>Matrix</a>. Bone data is used to
+deform <a href='#SkCanvas_drawVertices_3_vertices'>vertices</a> with bone weights.
+If <a href='undocumented#Texs'>Vertices Texs</a> and <a href='undocumented#Colors'>Vertices Colors</a> are defined in <a href='#SkCanvas_drawVertices_3_vertices'>vertices</a>, and <a href='SkPaint_Reference#Paint'>Paint</a> <a href='#SkCanvas_drawVertices_3_paint'>paint</a>
+contains <a href='undocumented#Shader'>Shader</a>, <a href='SkBlendMode_Reference#Blend_Mode'>Blend Mode</a> <a href='#SkCanvas_drawVertices_3_mode'>mode</a> combines <a href='undocumented#Colors'>Vertices Colors</a> with <a href='undocumented#Shader'>Shader</a>.
+The first element of <a href='#SkCanvas_drawVertices_3_bones'>bones</a> should be an object to world space transformation matrix that
+will be applied before performing mesh deformations. If no such transformation is needed,
+it should be the identity matrix.
+
+### Parameters
+
+<table>  <tr>    <td><a name='SkCanvas_drawVertices_3_vertices'><code><strong>vertices</strong></code></a></td>
+    <td>triangle mesh to draw</td>
+  </tr>
+  <tr>    <td><a name='SkCanvas_drawVertices_3_bones'><code><strong>bones</strong></code></a></td>
+    <td>bone matrix data</td>
+  </tr>
+  <tr>    <td><a name='SkCanvas_drawVertices_3_boneCount'><code><strong>boneCount</strong></code></a></td>
+    <td>number of bone matrices</td>
+  </tr>
+  <tr>    <td><a name='SkCanvas_drawVertices_3_mode'><code><strong>mode</strong></code></a></td>
+    <td>combines <a href='undocumented#Colors'>Vertices Colors</a> with <a href='undocumented#Shader'>Shader</a>, if both are present</td>
+  </tr>
+  <tr>    <td><a name='SkCanvas_drawVertices_3_paint'><code><strong>paint</strong></code></a></td>
+    <td>specifies the <a href='undocumented#Shader'>Shader</a>, used as <a href='undocumented#Vertices'>Vertices</a> texture, may be nullptr</td>
+  </tr>
+</table>
+
+### Example
+
+<div><fiddle-embed name="7db6ad6b01931d713d7390736239001b"></fiddle-embed></div>
+
+### See Also
+
+<a href='#SkCanvas_drawPatch'>drawPatch</a><sup><a href='#SkCanvas_drawPatch_2'>[2]</a></sup> <a href='#SkCanvas_drawPicture'>drawPicture</a><sup><a href='#SkCanvas_drawPicture_2'>[2]</a></sup><sup><a href='#SkCanvas_drawPicture_3'>[3]</a></sup><sup><a href='#SkCanvas_drawPicture_4'>[4]</a></sup>
+
+---
+
+<a name='SkCanvas_drawVertices_4'></a>
+
+<pre style="padding: 1em 1em 1em 1em; width: 62.5em;background-color: #f0f0f0">
+void <a href='#SkCanvas_drawVertices'>drawVertices</a>(const <a href='undocumented#sk_sp'>sk sp</a>&lt;<a href='undocumented#SkVertices'>SkVertices</a>&gt;& vertices, const <a href='SkMatrix_Reference#SkMatrix'>SkMatrix</a>* bones, int boneCount,
+                  <a href='SkBlendMode_Reference#SkBlendMode'>SkBlendMode</a> mode, const <a href='SkPaint_Reference#SkPaint'>SkPaint</a>& paint)
+</pre>
+
+<a href='#Draw'>Draw</a> <a href='undocumented#Vertices'>Vertices</a> <a href='#SkCanvas_drawVertices_4_vertices'>vertices</a>, a triangle mesh, using <a href='#Clip'>Clip</a> and <a href='#Matrix'>Matrix</a>. Bone data is used to
+deform <a href='#SkCanvas_drawVertices_4_vertices'>vertices</a> with bone weights.
+If <a href='undocumented#Texs'>Vertices Texs</a> and <a href='undocumented#Colors'>Vertices Colors</a> are defined in <a href='#SkCanvas_drawVertices_4_vertices'>vertices</a>, and <a href='SkPaint_Reference#Paint'>Paint</a> <a href='#SkCanvas_drawVertices_4_paint'>paint</a>
+contains <a href='undocumented#Shader'>Shader</a>, <a href='SkBlendMode_Reference#Blend_Mode'>Blend Mode</a> <a href='#SkCanvas_drawVertices_4_mode'>mode</a> combines <a href='undocumented#Colors'>Vertices Colors</a> with <a href='undocumented#Shader'>Shader</a>.
+The first element of <a href='#SkCanvas_drawVertices_4_bones'>bones</a> should be an object to world space transformation matrix that
+will be applied before performing mesh deformations. If no such transformation is needed,
+it should be the identity matrix.
+
+### Parameters
+
+<table>  <tr>    <td><a name='SkCanvas_drawVertices_4_vertices'><code><strong>vertices</strong></code></a></td>
+    <td>triangle mesh to draw</td>
+  </tr>
+  <tr>    <td><a name='SkCanvas_drawVertices_4_bones'><code><strong>bones</strong></code></a></td>
+    <td>bone matrix data</td>
+  </tr>
+  <tr>    <td><a name='SkCanvas_drawVertices_4_boneCount'><code><strong>boneCount</strong></code></a></td>
+    <td>number of bone matrices</td>
+  </tr>
+  <tr>    <td><a name='SkCanvas_drawVertices_4_mode'><code><strong>mode</strong></code></a></td>
+    <td>combines <a href='undocumented#Colors'>Vertices Colors</a> with <a href='undocumented#Shader'>Shader</a>, if both are present</td>
+  </tr>
+  <tr>    <td><a name='SkCanvas_drawVertices_4_paint'><code><strong>paint</strong></code></a></td>
+    <td>specifies the <a href='undocumented#Shader'>Shader</a>, used as <a href='undocumented#Vertices'>Vertices</a> texture, may be nullptr</td>
+  </tr>
+</table>
+
+### Example
+
+<div><fiddle-embed name="cc1fc7f3462abc79ec6dec3405e2812d"></fiddle-embed></div>
 
 ### See Also
 
@@ -6567,7 +6663,7 @@ may be nullptr</td>
 
 ### See Also
 
-SeeAlso <a href='#SkCanvas_drawVertices'>drawVertices</a><sup><a href='#SkCanvas_drawVertices_2'>[2]</a></sup> <a href='#SkCanvas_drawPicture'>drawPicture</a><sup><a href='#SkCanvas_drawPicture_2'>[2]</a></sup><sup><a href='#SkCanvas_drawPicture_3'>[3]</a></sup><sup><a href='#SkCanvas_drawPicture_4'>[4]</a></sup>
+SeeAlso <a href='#SkCanvas_drawVertices'>drawVertices</a><sup><a href='#SkCanvas_drawVertices_2'>[2]</a></sup><sup><a href='#SkCanvas_drawVertices_3'>[3]</a></sup><sup><a href='#SkCanvas_drawVertices_4'>[4]</a></sup> <a href='#SkCanvas_drawPicture'>drawPicture</a><sup><a href='#SkCanvas_drawPicture_2'>[2]</a></sup><sup><a href='#SkCanvas_drawPicture_3'>[3]</a></sup><sup><a href='#SkCanvas_drawPicture_4'>[4]</a></sup>
 
 ---
 
@@ -6623,7 +6719,7 @@ may be nullptr</td>
 
 ### See Also
 
-SeeAlso <a href='#SkCanvas_drawVertices'>drawVertices</a><sup><a href='#SkCanvas_drawVertices_2'>[2]</a></sup> <a href='#SkCanvas_drawPicture'>drawPicture</a><sup><a href='#SkCanvas_drawPicture_2'>[2]</a></sup><sup><a href='#SkCanvas_drawPicture_3'>[3]</a></sup><sup><a href='#SkCanvas_drawPicture_4'>[4]</a></sup>
+SeeAlso <a href='#SkCanvas_drawVertices'>drawVertices</a><sup><a href='#SkCanvas_drawVertices_2'>[2]</a></sup><sup><a href='#SkCanvas_drawVertices_3'>[3]</a></sup><sup><a href='#SkCanvas_drawVertices_4'>[4]</a></sup> <a href='#SkCanvas_drawPicture'>drawPicture</a><sup><a href='#SkCanvas_drawPicture_2'>[2]</a></sup><sup><a href='#SkCanvas_drawPicture_3'>[3]</a></sup><sup><a href='#SkCanvas_drawPicture_4'>[4]</a></sup>
 
 ---
 

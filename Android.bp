@@ -839,7 +839,7 @@ cc_library_static {
         "src/xps/SkXPSDevice.cpp",
         "src/xps/SkXPSDocument.cpp",
         "third_party/gif/SkGifImageReader.cpp",
-        "third_party/skcms/skcms.c",
+        "third_party/skcms/skcms.cc",
         "third_party/vulkanmemoryallocator/GrVulkanMemoryAllocator.cpp",
     ],
 
@@ -1645,6 +1645,7 @@ cc_test {
         "tests/PixelRefTest.cpp",
         "tests/Point3Test.cpp",
         "tests/PointTest.cpp",
+        "tests/PolyUtilsTest.cpp",
         "tests/PremulAlphaRoundTripTest.cpp",
         "tests/PrimitiveProcessorTest.cpp",
         "tests/ProcessorTest.cpp",

@@ -1359,7 +1359,11 @@ GrBackendTexture GrVkGpu::createTestingOnlyBackendTexture(const void* srcData, i
                                         &info)) {
         return {};
     }
-    return GrBackendTexture(w, h, info);
+    GrBackendTexture beTex = GrBackendTexture(w, h, info);
+    // Lots of tests don't go through Skia's public interface which will set the config so for
+    // testing we make sure we set a config here.
+    beTex.setPixelConfig(config);
+    return beTex;
 }
 
 bool GrVkGpu::isTestingOnlyBackendTexture(const GrBackendTexture& tex) const {
@@ -1409,7 +1413,11 @@ GrBackendRenderTarget GrVkGpu::createTestingOnlyBackendRenderTarget(int w, int h
                                         &info)) {
         return {};
     }
-    return {w, h, 1, 0, info};
+    GrBackendRenderTarget beRT = GrBackendRenderTarget(w, h, 1, 0, info);
+    // Lots of tests don't go through Skia's public interface which will set the config so for
+    // testing we make sure we set a config here.
+    beRT.setPixelConfig(config);
+    return beRT;
 }
 
 void GrVkGpu::deleteTestingOnlyBackendRenderTarget(const GrBackendRenderTarget& rt) {
@@ -1786,7 +1794,7 @@ bool GrVkGpu::onReadPixels(GrSurface* surface, int left, int top, int width, int
     }
 
     size_t transBufferRowBytes = bpp * region.imageExtent.width;
-    size_t imageRows = bpp * region.imageExtent.height;
+    size_t imageRows = region.imageExtent.height;
     GrVkTransferBuffer* transferBuffer =
             static_cast<GrVkTransferBuffer*>(this->createBuffer(transBufferRowBytes * imageRows,
                                                                 kXferGpuToCpu_GrBufferType,

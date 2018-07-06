@@ -1305,7 +1305,14 @@ void GrRenderTargetContext::drawOval(const GrClip& clip,
     SkDEBUGCODE(this->validate();)
     GR_CREATE_TRACE_MARKER_CONTEXT("GrRenderTargetContext", "drawOval", fContext);
 
+    const SkStrokeRec& stroke = style.strokeRec();
+
     if (oval.isEmpty() && !style.pathEffect()) {
+        if (stroke.getStyle() == SkStrokeRec::kFill_Style) {
+            return;
+        }
+
+        this->drawRect(clip, std::move(paint), aa, viewMatrix, oval, &style);
         return;
     }
 
@@ -1598,7 +1605,7 @@ bool GrRenderTargetContextPriv::drawAndStencilPath(const GrHardClip& clip,
                                       &viewMatrix,
                                       &shape,
                                       aaType,
-                                      fRenderTargetContext->colorSpaceInfo().isGammaCorrect()};
+                                      fRenderTargetContext->colorSpaceInfo().isLinearlyBlended()};
     pr->drawPath(args);
     return true;
 }
@@ -1694,7 +1701,7 @@ void GrRenderTargetContext::drawShapeUsingPathRenderer(const GrClip& clip,
                                       &viewMatrix,
                                       canDrawArgs.fShape,
                                       aaType,
-                                      this->colorSpaceInfo().isGammaCorrect()};
+                                      this->colorSpaceInfo().isLinearlyBlended()};
     pr->drawPath(args);
 }
 
