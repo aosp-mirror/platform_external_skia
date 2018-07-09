@@ -2228,7 +2228,7 @@ defined. Safer than operator[]; internal cache is always maintained.
 
 ### Example
 
-<div><fiddle-embed name="1d400a92ca826cc89bcb88ea051f28c8">
+<div><fiddle-embed name="33b029064e8d1928e42a587c953d0e4e">
 
 #### Example Output
 
@@ -3097,7 +3097,7 @@ Matrix * T(dx, dy) = | D E F | | 0 1 dy | = | D E D*dx+E*dy+F |
 
 ### Example
 
-<div><fiddle-embed name="f75a9b629aa6c51ed888f8799b5ba5f7"></fiddle-embed></div>
+<div><fiddle-embed name="3edbdea8e43d06086abf33ec4a9b415b"></fiddle-embed></div>
 
 ### See Also
 
@@ -3203,7 +3203,7 @@ Matrix * S(sx, sy) = | D E F | |  0 sy  0 | = | D*sx E*sy F |
 
 ### Example
 
-<div><fiddle-embed name="3edbdea8e43d06086abf33ec4a9b415b"></fiddle-embed></div>
+<div><fiddle-embed name="e37a94a53c959951b059fcd624639ef6"></fiddle-embed></div>
 
 ### See Also
 
@@ -3316,7 +3316,7 @@ Matrix * R(degrees, px, py) = | D E F | | s  c 0 | = | Dc+Es -Ds+Ec F |
 
 ### Example
 
-<div><fiddle-embed name="c43d70606b4ee464d2befbcf448c5e73"></fiddle-embed></div>
+<div><fiddle-embed name="5acd49bd931c79a808dd6c7cc0e92f72"></fiddle-embed></div>
 
 ### See Also
 
@@ -4240,7 +4240,7 @@ Affine 3x2 matrices in column major order are used by OpenGL and XPS.
 
 ### Example
 
-<div><fiddle-embed name="4606ae1be792d6bc46d496432f050ee9">
+<div><fiddle-embed name="e10adbd0bcc940c5d4d872db0e78e892">
 
 #### Example Output
 

@@ -566,7 +566,7 @@ This safely casts <a href='#SkPoint_iset_2_p'>p</a>.<a href='#SkPoint_fX'>fX</a>
 
 ### Example
 
-<div><fiddle-embed name="12b7164a769e232bb772f19c59600ee7">
+<div><fiddle-embed name="7cdea37741d50f0594c6244eb07fd175">
 
 #### Example Output
 
@@ -865,7 +865,7 @@ true if (x, y) length is not zero or nearly zero
 
 ### Example
 
-<div><fiddle-embed name="f56039b94c702c2704c8c5100e623aca"></fiddle-embed></div>
+<div><fiddle-embed name="3e4f147d143a388802484bf0d26534c2"></fiddle-embed></div>
 
 ### See Also
 

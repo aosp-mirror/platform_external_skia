@@ -2002,7 +2002,7 @@ Returns true if <a href='#SkPaint_Flags'>Flags</a> <a href='#SkPaint_kLCDRenderT
 
 ### Example
 
-<div><fiddle-embed name="68e1fd95dd2fd06a333899d2bd2396b9">
+<div><fiddle-embed name="bca6379ccef62cb081b10db7381deb27">
 
 #### Example Output
 
@@ -3873,7 +3873,7 @@ Increases <a href='undocumented#Path_Effect'>Path Effect</a> <a href='undocument
 
 ### Example
 
-<div><fiddle-embed name="f56039b94c702c2704c8c5100e623aca">
+<div><fiddle-embed name="7cdea37741d50f0594c6244eb07fd175">
 
 #### Example Output
 

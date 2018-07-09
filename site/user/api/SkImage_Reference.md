@@ -1382,7 +1382,7 @@ pixel height in <a href='#Image'>Image</a>
 
 ### Example
 
-<div><fiddle-embed name="6e563cb8351d34bd8af555a51bcd7a96"></fiddle-embed></div>
+<div><fiddle-embed name="187e1d9228e2e4341ef820bd77b6fda9"></fiddle-embed></div>
 
 ### See Also
 
@@ -1540,7 +1540,7 @@ is drawn, depending on the capabilities of the <a href='SkSurface_Reference#Surf
 
 ### Example
 
-<div><fiddle-embed name="73092d4d06faecea3c204d852a4dd8a8"></fiddle-embed></div>
+<div><fiddle-embed name="4468d573f42af6f5e234be10a5453bb2"></fiddle-embed></div>
 
 ### See Also
 
@@ -2300,7 +2300,7 @@ partial or full <a href='#Image'>Image</a>, or nullptr
 
 ### Example
 
-<div><fiddle-embed name="b2479df0d9cf296ff64ac31e36684557"></fiddle-embed></div>
+<div><fiddle-embed name="4082f66a42df11bb20462b232b156bb6"></fiddle-embed></div>
 
 ### See Also
 

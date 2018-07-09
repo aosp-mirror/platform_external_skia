@@ -1458,7 +1458,7 @@ that <a href='#SkPath_setFillType_ft'>ft</a> is legal, values outside of <a href
 
 ### Example
 
-<div><fiddle-embed name="4468d573f42af6f5e234be10a5453bb2"><div>If empty <a href='#Path'>Path</a> is set to inverse <a href='#SkPath_FillType'>FillType</a>, it fills all pixels.
+<div><fiddle-embed name="b4a91cd7f50b2a0a0d1bec6d0ac823d2"><div>If empty <a href='#Path'>Path</a> is set to inverse <a href='#SkPath_FillType'>FillType</a>, it fills all pixels.
 </div></fiddle-embed></div>
 
 ### See Also
@@ -2279,7 +2279,7 @@ Returns the number of points in <a href='#Path'>Path</a>.
 
 ### Example
 
-<div><fiddle-embed name="bca6379ccef62cb081b10db7381deb27">
+<div><fiddle-embed name="187a7ae77a8176e417181411988534b6">
 
 #### Example Output
 
@@ -3017,7 +3017,7 @@ Adds <a href='undocumented#Line'>Line</a> from <a href='#Last_Point'>Last Point<
 
 ### Example
 
-<div><fiddle-embed name="9f046f407b01b759cb737d702a994620"></fiddle-embed></div>
+<div><fiddle-embed name="41001546a7f7927d08e5a818bcc304f5"></fiddle-embed></div>
 
 ### See Also
 
@@ -3830,7 +3830,7 @@ larger of Arc pair</td>
 
 ### Example
 
-<div><fiddle-embed name="f56039b94c702c2704c8c5100e623aca"><div><a href='#Arc'>Arc</a> begins at top of <a href='undocumented#Oval'>Oval</a> pair and ends at bottom. <a href='#Arc'>Arc</a> can take four routes to get there.
+<div><fiddle-embed name="8e40c546eecd9cc213200717240898ba"><div><a href='#Arc'>Arc</a> begins at top of <a href='undocumented#Oval'>Oval</a> pair and ends at bottom. <a href='#Arc'>Arc</a> can take four routes to get there.
 Two routes are large, and two routes are counterclockwise. The one route both large
 and counterclockwise is blue.
 </div></fiddle-embed></div>
@@ -5322,7 +5322,7 @@ Returns zero if <a href='#Path'>Path</a> contains no <a href='undocumented#Line'
 
 ### Example
 
-<div><fiddle-embed name="4606ae1be792d6bc46d496432f050ee9">
+<div><fiddle-embed name="657a3f3e11acafea92b84d6bb0c13633">
 
 #### Example Output
 
@@ -6242,7 +6242,7 @@ next <a href='#SkPath_Verb'>Verb</a> from <a href='#Verb_Array'>Verb Array</a>
 
 ### Example
 
-<div><fiddle-embed name="eb5fa5bea23059ce538e883502f828f5">
+<div><fiddle-embed name="3edbdea8e43d06086abf33ec4a9b415b">
 
 #### Example Output
 

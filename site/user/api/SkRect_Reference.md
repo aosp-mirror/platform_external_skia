@@ -1307,7 +1307,7 @@ midpoint in y
 
 ### Example
 
-<div><fiddle-embed name="4468d573f42af6f5e234be10a5453bb2">
+<div><fiddle-embed name="ebeeafafeb8fe39d5ffc9115b02c2340">
 
 #### Example Output
 
@@ -1701,7 +1701,7 @@ Very large values in <a href='#SkRect_set_src'>src</a> may lose precision.
 
 ### Example
 
-<div><fiddle-embed name="a10ad8d97062bc3f40942f47e5108917">
+<div><fiddle-embed name="cf0da15f48aa54fd1889e7f913601710">
 
 #### Example Output
 
@@ -3062,7 +3062,7 @@ May produce incorrect results if <a href='#Rect'>Rect</a> or <a href='#SkRect_jo
 
 ### Example
 
-<div><fiddle-embed name="102d014d7f753db2a9b9ee08893aaf11"><div>Since <a href='#Rect'>Rect</a> is not sorted, first result is not useful.
+<div><fiddle-embed name="a476548d0001296afd8e58c1eba1b70b"><div>Since <a href='#Rect'>Rect</a> is not sorted, first result is not useful.
 </div>
 
 #### Example Output
