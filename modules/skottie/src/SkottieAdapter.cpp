@@ -68,7 +68,7 @@ void PolyStarAdapter::apply() {
 
     SkPath poly;
 
-    auto angle = SkDegreesToRadians(fRotation);
+    auto angle = SkDegreesToRadians(fRotation - 90);
     poly.moveTo(pt_on_circle(fPosition, fOuterRadius, angle));
     poly.incReserve(fType == Type::kStar ? count * 2 : count);
 
@@ -94,7 +94,10 @@ void GradientAdapter::apply() {
     // |fColorStops| holds |fStopCount| x [ pos, r, g, g ] + ? x [ pos, alpha ]
 
     if (fColorStops.size() < fStopCount * 4 || ((fColorStops.size() - fStopCount * 4) % 2)) {
-        SkDebugf("!! Invalid gradient stop array size: %zu", fColorStops.size());
+        // apply() may get called before the stops are set, so only log when we have some stops.
+        if (!fColorStops.empty()) {
+            SkDebugf("!! Invalid gradient stop array size: %zu\n", fColorStops.size());
+        }
         return;
     }
 
