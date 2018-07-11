@@ -283,15 +283,6 @@ enum class GrAllowMixedSamples : bool { kNo = false, kYes = true };
 GrAAType GrChooseAAType(GrAA, GrFSAAType, GrAllowMixedSamples, const GrCaps&);
 
 /**
- * Some pixel configs are inherently clamped to [0,1], while others can hold values outside of that
- * range. This is important for blending - the latter category may require manual clamping.
- */
-enum class GrPixelConfigIsClamped : bool {
-    kNo = false,   // F16 or F32
-    kYes = true,  // Any UNORM type
-};
-
-/**
  * Types of shader-language-specific boxed variables we can create. (Currently only GrGLShaderVars,
  * but should be applicable to other shader languages.)
  */
@@ -982,39 +973,6 @@ static inline GrSRGBEncoded GrPixelConfigIsSRGBEncoded(GrPixelConfig config) {
 static inline bool GrPixelConfigIsSRGB(GrPixelConfig config) {
     return GrSRGBEncoded::kYes == GrPixelConfigIsSRGBEncoded(config);
 }
-// Takes a config and returns the equivalent config with the R and B order
-// swapped if such a config exists. Otherwise, kUnknown_GrPixelConfig
-static inline GrPixelConfig GrPixelConfigSwapRAndB(GrPixelConfig config) {
-    switch (config) {
-        case kBGRA_8888_GrPixelConfig:
-            return kRGBA_8888_GrPixelConfig;
-        case kRGBA_8888_GrPixelConfig:
-            return kBGRA_8888_GrPixelConfig;
-        case kSBGRA_8888_GrPixelConfig:
-            return kSRGBA_8888_GrPixelConfig;
-        case kSRGBA_8888_GrPixelConfig:
-            return kSBGRA_8888_GrPixelConfig;
-        case kUnknown_GrPixelConfig:
-        case kAlpha_8_GrPixelConfig:
-        case kAlpha_8_as_Alpha_GrPixelConfig:
-        case kAlpha_8_as_Red_GrPixelConfig:
-        case kGray_8_GrPixelConfig:
-        case kGray_8_as_Lum_GrPixelConfig:
-        case kGray_8_as_Red_GrPixelConfig:
-        case kRGB_565_GrPixelConfig:
-        case kRGBA_4444_GrPixelConfig:
-        case kRGB_888_GrPixelConfig:
-        case kRGBA_1010102_GrPixelConfig:
-        case kRGBA_float_GrPixelConfig:
-        case kRG_float_GrPixelConfig:
-        case kAlpha_half_GrPixelConfig:
-        case kAlpha_half_as_Red_GrPixelConfig:
-        case kRGBA_half_GrPixelConfig:
-            return kUnknown_GrPixelConfig;
-    }
-    SK_ABORT("Invalid pixel config");
-    return kUnknown_GrPixelConfig;
-}
 
 static inline size_t GrBytesPerPixel(GrPixelConfig config) {
     switch (config) {
@@ -1108,64 +1066,6 @@ static inline bool GrPixelConfigIsAlphaOnly(GrPixelConfig config) {
     return false;
 }
 
-static inline bool GrPixelConfigIsFloatingPoint(GrPixelConfig config) {
-    switch (config) {
-        case kRGBA_float_GrPixelConfig:
-        case kRG_float_GrPixelConfig:
-        case kAlpha_half_GrPixelConfig:
-        case kAlpha_half_as_Red_GrPixelConfig:
-        case kRGBA_half_GrPixelConfig:
-            return true;
-        case kUnknown_GrPixelConfig:
-        case kAlpha_8_GrPixelConfig:
-        case kAlpha_8_as_Alpha_GrPixelConfig:
-        case kAlpha_8_as_Red_GrPixelConfig:
-        case kGray_8_GrPixelConfig:
-        case kGray_8_as_Lum_GrPixelConfig:
-        case kGray_8_as_Red_GrPixelConfig:
-        case kRGB_565_GrPixelConfig:
-        case kRGBA_4444_GrPixelConfig:
-        case kRGBA_8888_GrPixelConfig:
-        case kRGB_888_GrPixelConfig:
-        case kBGRA_8888_GrPixelConfig:
-        case kSRGBA_8888_GrPixelConfig:
-        case kSBGRA_8888_GrPixelConfig:
-        case kRGBA_1010102_GrPixelConfig:
-            return false;
-    }
-    SK_ABORT("Invalid pixel config");
-    return false;
-}
-
-static inline bool GrPixelConfigIsUnorm(GrPixelConfig config) {
-    switch (config) {
-        case kAlpha_8_GrPixelConfig:
-        case kAlpha_8_as_Alpha_GrPixelConfig:
-        case kAlpha_8_as_Red_GrPixelConfig:
-        case kGray_8_GrPixelConfig:
-        case kGray_8_as_Lum_GrPixelConfig:
-        case kGray_8_as_Red_GrPixelConfig:
-        case kRGB_565_GrPixelConfig:
-        case kRGBA_4444_GrPixelConfig:
-        case kRGBA_8888_GrPixelConfig:
-        case kRGB_888_GrPixelConfig:
-        case kBGRA_8888_GrPixelConfig:
-        case kSRGBA_8888_GrPixelConfig:
-        case kSBGRA_8888_GrPixelConfig:
-        case kRGBA_1010102_GrPixelConfig:
-            return true;
-        case kUnknown_GrPixelConfig:
-        case kAlpha_half_GrPixelConfig:
-        case kAlpha_half_as_Red_GrPixelConfig:
-        case kRGBA_float_GrPixelConfig:
-        case kRG_float_GrPixelConfig:
-        case kRGBA_half_GrPixelConfig:
-            return false;
-    }
-    SK_ABORT("Invalid pixel config.");
-    return false;
-}
-
 /**
  * Precision qualifier that should be used with a sampler.
  */
@@ -1197,11 +1097,6 @@ static inline GrSLPrecision GrSLSamplerPrecision(GrPixelConfig config) {
     }
     SK_ABORT("Unexpected type");
     return kHigh_GrSLPrecision;
-}
-
-static inline GrPixelConfigIsClamped GrGetPixelConfigIsClamped(GrPixelConfig config) {
-    return GrPixelConfigIsFloatingPoint(config) ? GrPixelConfigIsClamped::kNo
-                                                : GrPixelConfigIsClamped::kYes;
 }
 
 /**
