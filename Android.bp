@@ -1027,6 +1027,7 @@ cc_test {
         "include/svg/",
         "include/utils/",
         "include/utils/mac/",
+        "modules/skottie/include/",
         "modules/sksg/include/",
         "src/c/",
         "src/codec/",

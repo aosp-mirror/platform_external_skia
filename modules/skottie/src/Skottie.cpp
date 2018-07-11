@@ -77,20 +77,24 @@ bool LogFail(const skjson::Value& json, const char* msg) {
 
 sk_sp<sksg::Matrix> AttachMatrix(const skjson::ObjectValue& t, AttachContext* ctx,
                                  sk_sp<sksg::Matrix> parentMatrix) {
+    static const VectorValue g_default_vec_0   = {  0,   0},
+                             g_default_vec_100 = {100, 100};
+
     auto matrix = sksg::Matrix::Make(SkMatrix::I(), std::move(parentMatrix));
     auto adapter = sk_make_sp<TransformAdapter>(matrix);
-    auto anchor_attached = BindProperty<VectorValue>(t["a"], &ctx->fAnimators,
+
+    auto bound = BindProperty<VectorValue>(t["a"], &ctx->fAnimators,
             [adapter](const VectorValue& a) {
                 adapter->setAnchorPoint(ValueTraits<VectorValue>::As<SkPoint>(a));
-            });
-    auto position_attached = BindProperty<VectorValue>(t["p"], &ctx->fAnimators,
+            }, g_default_vec_0);
+    bound |= BindProperty<VectorValue>(t["p"], &ctx->fAnimators,
             [adapter](const VectorValue& p) {
                 adapter->setPosition(ValueTraits<VectorValue>::As<SkPoint>(p));
-            });
-    auto scale_attached = BindProperty<VectorValue>(t["s"], &ctx->fAnimators,
+            }, g_default_vec_0);
+    bound |= BindProperty<VectorValue>(t["s"], &ctx->fAnimators,
             [adapter](const VectorValue& s) {
                 adapter->setScale(ValueTraits<VectorValue>::As<SkVector>(s));
-            });
+            }, g_default_vec_100);
 
     const auto* jrotation = &t["r"];
     if (jrotation->is<skjson::NullValue>()) {
@@ -98,30 +102,20 @@ sk_sp<sksg::Matrix> AttachMatrix(const skjson::ObjectValue& t, AttachContext* ct
         // we can still make use of rz.
         jrotation = &t["rz"];
     }
-    auto rotation_attached = BindProperty<ScalarValue>(*jrotation, &ctx->fAnimators,
+    bound |= BindProperty<ScalarValue>(*jrotation, &ctx->fAnimators,
             [adapter](const ScalarValue& r) {
                 adapter->setRotation(r);
-            });
-    auto skew_attached = BindProperty<ScalarValue>(t["sk"], &ctx->fAnimators,
+            }, 0.0f);
+    bound |= BindProperty<ScalarValue>(t["sk"], &ctx->fAnimators,
             [adapter](const ScalarValue& sk) {
                 adapter->setSkew(sk);
-            });
-    auto skewaxis_attached = BindProperty<ScalarValue>(t["sa"], &ctx->fAnimators,
+            }, 0.0f);
+    bound |= BindProperty<ScalarValue>(t["sa"], &ctx->fAnimators,
             [adapter](const ScalarValue& sa) {
                 adapter->setSkewAxis(sa);
-            });
+            }, 0.0f);
 
-    if (!anchor_attached &&
-        !position_attached &&
-        !scale_attached &&
-        !rotation_attached &&
-        !skew_attached &&
-        !skewaxis_attached) {
-        LogFail(t, "Could not parse transform");
-        return nullptr;
-    }
-
-    return matrix;
+    return bound ? matrix : nullptr;
 }
 
 sk_sp<sksg::RenderNode> AttachOpacity(const skjson::ObjectValue& jtransform, AttachContext* ctx,
@@ -129,14 +123,13 @@ sk_sp<sksg::RenderNode> AttachOpacity(const skjson::ObjectValue& jtransform, Att
     if (!childNode)
         return nullptr;
 
-    static constexpr ScalarValue kNoopOpacity = 100;
     auto opacityNode = sksg::OpacityEffect::Make(childNode);
 
     if (!BindProperty<ScalarValue>(jtransform["o"], &ctx->fAnimators,
         [opacityNode](const ScalarValue& o) {
             // BM opacity is [0..100]
             opacityNode->setOpacity(o * 0.01f);
-        }, &kNoopOpacity)) {
+        }, 100.0f)) {
         // We can ignore static full opacity.
         return childNode;
     }
@@ -170,7 +163,7 @@ sk_sp<sksg::GeometryNode> AttachRRectGeometry(const skjson::ObjectValue& jrect,
 
     auto p_attached = BindProperty<VectorValue>(jrect["p"], &ctx->fAnimators,
         [adapter](const VectorValue& p) {
-                adapter->setPosition(ValueTraits<VectorValue>::As<SkPoint>(p));
+            adapter->setPosition(ValueTraits<VectorValue>::As<SkPoint>(p));
         });
     auto s_attached = BindProperty<VectorValue>(jrect["s"], &ctx->fAnimators,
         [adapter](const VectorValue& s) {
@@ -376,11 +369,21 @@ sk_sp<sksg::PaintNode> AttachGradientStroke(const skjson::ObjectValue& jstroke,
     return AttachStroke(jstroke, ctx, AttachPaint(jstroke, ctx, AttachGradient(jstroke, ctx)));
 }
 
+sk_sp<sksg::Merge> Merge(std::vector<sk_sp<sksg::GeometryNode>>&& geos, sksg::Merge::Mode mode) {
+    std::vector<sksg::Merge::Rec> merge_recs;
+    merge_recs.reserve(geos.size());
+
+    for (const auto& geo : geos) {
+        merge_recs.push_back(
+            {std::move(geo), merge_recs.empty() ? sksg::Merge::Mode::kMerge : mode});
+    }
+
+    return sksg::Merge::Make(std::move(merge_recs));
+}
+
 std::vector<sk_sp<sksg::GeometryNode>> AttachMergeGeometryEffect(
         const skjson::ObjectValue& jmerge, AttachContext*,
         std::vector<sk_sp<sksg::GeometryNode>>&& geos) {
-    std::vector<sk_sp<sksg::GeometryNode>> merged;
-
     static constexpr sksg::Merge::Mode gModes[] = {
         sksg::Merge::Mode::kMerge,      // "mm": 1
         sksg::Merge::Mode::kUnion,      // "mm": 2
@@ -391,7 +394,9 @@ std::vector<sk_sp<sksg::GeometryNode>> AttachMergeGeometryEffect(
 
     const auto mode = gModes[SkTPin<int>(ParseDefault<int>(jmerge["mm"], 1) - 1,
                                          0, SK_ARRAY_COUNT(gModes) - 1)];
-    merged.push_back(sksg::Merge::Make(std::move(geos), mode));
+
+    std::vector<sk_sp<sksg::GeometryNode>> merged;
+    merged.push_back(Merge(std::move(geos), mode));
 
     return merged;
 }
@@ -410,7 +415,7 @@ std::vector<sk_sp<sksg::GeometryNode>> AttachTrimGeometryEffect(
 
     std::vector<sk_sp<sksg::GeometryNode>> inputs;
     if (mode == Mode::kMerged) {
-        inputs.push_back(sksg::Merge::Make(std::move(geos), sksg::Merge::Mode::kMerge));
+        inputs.push_back(Merge(std::move(geos), sksg::Merge::Mode::kMerge));
     } else {
         inputs = std::move(geos);
     }
@@ -661,7 +666,7 @@ sk_sp<sksg::RenderNode> AttachShape(const skjson::ArrayValue* jshape, AttachShap
 
             // If we still have multiple geos, reduce using 'merge'.
             auto geo = drawGeos.size() > 1
-                ? sksg::Merge::Make(std::move(drawGeos), sksg::Merge::Mode::kMerge)
+                ? Merge(std::move(drawGeos), sksg::Merge::Mode::kMerge)
                 : drawGeos[0];
 
             SkASSERT(geo);
@@ -974,17 +979,22 @@ private:
 };
 
 struct MaskInfo {
-    SkBlendMode fBlendMode;
-    bool        fInvertGeometry;
+    SkBlendMode       fBlendMode;      // used when masking with layers/blending
+    sksg::Merge::Mode fMergeMode;      // used when clipping
+    bool              fInvertGeometry;
 };
 
 const MaskInfo* GetMaskInfo(char mode) {
-    static constexpr MaskInfo k_add_info = { SkBlendMode::kSrcOver   , false };
-    static constexpr MaskInfo k_int_info = { SkBlendMode::kSrcIn     , false };
+    static constexpr MaskInfo k_add_info =
+        { SkBlendMode::kSrcOver   , sksg::Merge::Mode::kUnion     , false };
+    static constexpr MaskInfo k_int_info =
+        { SkBlendMode::kSrcIn     , sksg::Merge::Mode::kIntersect , false };
     // AE 'subtract' is the same as 'intersect' + inverted geometry
     // (draws the opacity-adjusted paint *outside* the shape).
-    static constexpr MaskInfo k_sub_info = { SkBlendMode::kSrcIn     , true  };
-    static constexpr MaskInfo k_dif_info = { SkBlendMode::kDifference, false };
+    static constexpr MaskInfo k_sub_info =
+        { SkBlendMode::kSrcIn     , sksg::Merge::Mode::kIntersect , true  };
+    static constexpr MaskInfo k_dif_info =
+        { SkBlendMode::kDifference, sksg::Merge::Mode::kDifference, false };
 
     switch (mode) {
     case 'a': return &k_add_info;
@@ -1003,13 +1013,13 @@ sk_sp<sksg::RenderNode> AttachMask(const skjson::ArrayValue* jmask,
     if (!jmask) return childNode;
 
     struct MaskRecord {
-        sk_sp<sksg::Path>  mask_path;
-        sk_sp<sksg::Color> mask_paint;
+        sk_sp<sksg::Path>  mask_path;  // for clipping and masking
+        sk_sp<sksg::Color> mask_paint; // for masking
+        sksg::Merge::Mode  merge_mode; // for clipping
     };
 
     SkSTArray<4, MaskRecord, true> mask_stack;
 
-    const SkScalar full_opacity = 100;
     bool has_opacity = false;
 
     for (const skjson::ObjectValue* m : *jmask) {
@@ -1053,19 +1063,34 @@ sk_sp<sksg::RenderNode> AttachMask(const skjson::ArrayValue* jmask,
         has_opacity |= BindProperty<ScalarValue>((*m)["o"], &ctx->fAnimators,
             [mask_paint](const ScalarValue& o) {
                 mask_paint->setOpacity(o * 0.01f);
-        }, &full_opacity);
+        }, 100.0f);
 
-        mask_stack.push_back({mask_path, mask_paint});
+        mask_stack.push_back({mask_path, mask_paint, mask_info->fMergeMode});
     }
 
     if (mask_stack.empty())
         return childNode;
 
-    if (mask_stack.count() == 1 && !has_opacity) {
-        // Single, fully-opaque mask => clip path.
-        return sksg::ClipEffect::Make(std::move(childNode),
-                                      std::move(mask_stack.front().mask_path),
-                                      true);
+    // If the masks are fully opaque, we can clip.
+    if (!has_opacity) {
+        sk_sp<sksg::GeometryNode> clip_node;
+
+        if (mask_stack.count() == 1) {
+            // Single path -> just clip.
+            clip_node = std::move(mask_stack.front().mask_path);
+        } else {
+            // Multiple clip paths -> merge.
+            std::vector<sksg::Merge::Rec> merge_recs;
+            merge_recs.reserve(SkToSizeT(mask_stack.count()));
+
+            for (const auto& mask : mask_stack) {
+                const auto mode = merge_recs.empty() ? sksg::Merge::Mode::kMerge : mask.merge_mode;
+                merge_recs.push_back({std::move(mask.mask_path), mode});
+            }
+            clip_node = sksg::Merge::Make(std::move(merge_recs));
+        }
+
+        return sksg::ClipEffect::Make(std::move(childNode), std::move(clip_node), true);
     }
 
     auto mask_group = sksg::Group::Make();
@@ -1081,6 +1106,10 @@ sk_sp<sksg::RenderNode> AttachMask(const skjson::ArrayValue* jmask,
 sk_sp<sksg::RenderNode> AttachLayer(const skjson::ObjectValue* jlayer,
                                     AttachLayerContext* layerCtx) {
     if (!jlayer) return nullptr;
+
+    if (!(*jlayer)["ef"].is<skjson::NullValue>()) {
+        LOG("?? Unsupported layer effect.\n");
+    }
 
     using LayerAttacher = sk_sp<sksg::RenderNode> (*)(const skjson::ObjectValue&, AttachContext*);
     static constexpr LayerAttacher gLayerAttachers[] = {

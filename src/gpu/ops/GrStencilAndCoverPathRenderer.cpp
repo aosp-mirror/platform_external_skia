@@ -14,6 +14,7 @@
 #include "GrPath.h"
 #include "GrRenderTargetContextPriv.h"
 #include "GrResourceProvider.h"
+#include "GrShape.h"
 #include "GrStencilClip.h"
 #include "GrStencilPathOp.h"
 #include "GrStyle.h"
@@ -108,7 +109,7 @@ bool GrStencilAndCoverPathRenderer::onDrawPath(const DrawPathArgs& args) {
                                GrAATypeIsHW(args.fAAType), true, &appliedClip, &devBounds)) {
             return true;
         }
-        GrStencilClip stencilClip(true);
+        GrStencilClip stencilClip(appliedClip.stencilStackID());
         if (appliedClip.scissorState().enabled()) {
             stencilClip.fixedClip().setScissor(appliedClip.scissorState().rect());
         }

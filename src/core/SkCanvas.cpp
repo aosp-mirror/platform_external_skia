@@ -1715,6 +1715,7 @@ void SkCanvas::drawVertices(const sk_sp<SkVertices>& vertices, const SkMatrix* b
                             SkBlendMode mode, const SkPaint& paint) {
     TRACE_EVENT0("skia", TRACE_FUNC);
     RETURN_ON_NULL(vertices);
+    SkASSERT(boneCount <= 100);
     this->onDrawVerticesObject(vertices.get(), bones, boneCount, mode, paint);
 }
 
@@ -1722,6 +1723,7 @@ void SkCanvas::drawVertices(const SkVertices* vertices, const SkMatrix* bones, i
                             SkBlendMode mode, const SkPaint& paint) {
     TRACE_EVENT0("skia", TRACE_FUNC);
     RETURN_ON_NULL(vertices);
+    SkASSERT(boneCount <= 100);
     this->onDrawVerticesObject(vertices, bones, boneCount, mode, paint);
 }
 
@@ -2645,12 +2647,10 @@ void SkCanvas::onDrawPatch(const SkPoint cubics[12], const SkColor colors[4],
         return;
     }
 
-    const bool interpColorsLinearly = (this->imageInfo().colorSpace() != nullptr);
-
     LOOPER_BEGIN(paint, SkDrawFilter::kPath_Type, nullptr)
 
     while (iter.next()) {
-        iter.fDevice->drawPatch(cubics, colors, texCoords, bmode, interpColorsLinearly, paint);
+        iter.fDevice->drawPatch(cubics, colors, texCoords, bmode, paint);
     }
 
     LOOPER_END
