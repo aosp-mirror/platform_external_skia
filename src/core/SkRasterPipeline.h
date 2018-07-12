@@ -42,7 +42,7 @@
     M(force_opaque) M(force_opaque_dst)                            \
     M(set_rgb) M(swap_rb)                                          \
     M(from_srgb) M(to_srgb)                                        \
-    M(black_color) M(white_color) M(uniform_color)                 \
+    M(black_color) M(white_color) M(uniform_color) M(unbounded_uniform_color) \
     M(seed_shader) M(dither)                                       \
     M(load_a8)   M(load_a8_dst)   M(store_a8)   M(gather_a8)       \
     M(load_g8)   M(load_g8_dst)                 M(gather_g8)       \
@@ -69,8 +69,7 @@
     M(matrix_translate) M(matrix_scale_translate)                  \
     M(matrix_2x3) M(matrix_3x3) M(matrix_3x4) M(matrix_4x5) M(matrix_4x3) \
     M(matrix_perspective)                                          \
-    M(parametric_r) M(parametric_g) M(parametric_b)                \
-    M(parametric_a) M(gamma) M(gamma_dst)                          \
+    M(parametric) M(gamma)                                         \
     M(mirror_x)   M(repeat_x)                                      \
     M(mirror_y)   M(repeat_y)                                      \
     M(decal_x)    M(decal_y)   M(decal_x_and_y)                    \

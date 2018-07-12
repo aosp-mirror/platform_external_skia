@@ -35,15 +35,14 @@ sk_sp<GrTextureProxy> GrImageTextureMaker::refOriginalTextureProxy(bool willBeMi
 void GrImageTextureMaker::makeCopyKey(const CopyParams& stretch, GrUniqueKey* paramsCopyKey,
                                       SkColorSpace* dstColorSpace) {
     if (fOriginalKey.isValid() && SkImage::kAllow_CachingHint == fCachingHint) {
-        SkImageCacherator::CachedFormat cacheFormat =
-                fCacher->chooseCacheFormat(dstColorSpace, this->context()->contextPriv().caps());
+        SkImageCacherator::CachedFormat cacheFormat = SkImageCacherator::kLegacy_CachedFormat;
         GrUniqueKey cacheKey;
         fCacher->makeCacheKeyFromOrigKey(fOriginalKey, cacheFormat, &cacheKey);
         MakeCopyKeyFromOrigKey(cacheKey, stretch, paramsCopyKey);
     }
 }
 
-void GrImageTextureMaker::didCacheCopy(const GrUniqueKey& copyKey) {
+void GrImageTextureMaker::didCacheCopy(const GrUniqueKey& copyKey, uint32_t contextUniqueID) {
     as_IB(fClient)->notifyAddedToCache();
 }
 

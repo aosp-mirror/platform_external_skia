@@ -110,21 +110,26 @@ GR_STATIC_ASSERT(sizeof(VkFence) <= sizeof(sk_gpu_test::PlatformFence));
 class VkTestContextImpl : public sk_gpu_test::VkTestContext {
 public:
     static VkTestContext* Create(VkTestContext* sharedContext) {
-        sk_sp<const GrVkBackendContext> backendContext;
+        GrVkBackendContext backendContext;
+        bool ownsContext = true;
+        VkDebugReportCallbackEXT debugCallback = VK_NULL_HANDLE;
         if (sharedContext) {
             backendContext = sharedContext->getVkBackendContext();
+            // We always delete the parent context last so make sure the child does not think they
+            // own the vulkan context.
+            ownsContext = false;
         } else {
             PFN_vkGetInstanceProcAddr instProc;
             PFN_vkGetDeviceProcAddr devProc;
             if (!sk_gpu_test::LoadVkLibraryAndGetProcAddrFuncs(&instProc, &devProc)) {
                 return nullptr;
             }
-            backendContext.reset(GrVkBackendContext::Create(instProc, devProc));
+            if (!sk_gpu_test::CreateVkBackendContext(instProc, devProc, &backendContext,
+                                                     &debugCallback)) {
+                return nullptr;
+            }
         }
-        if (!backendContext) {
-            return nullptr;
-        }
-        return new VkTestContextImpl(std::move(backendContext));
+        return new VkTestContextImpl(backendContext, ownsContext, debugCallback);
     }
 
     ~VkTestContextImpl() override { this->teardown(); }
@@ -143,14 +148,26 @@ public:
 protected:
     void teardown() override {
         INHERITED::teardown();
-        fVk.reset(nullptr);
+        fVk.fMemoryAllocator.reset();
+        if (fOwnsContext) {
+            GR_VK_CALL(this->vk(), DeviceWaitIdle(fVk.fDevice));
+            GR_VK_CALL(this->vk(), DestroyDevice(fVk.fDevice, nullptr));
+#ifdef SK_ENABLE_VK_LAYERS
+            if (fDebugCallback != VK_NULL_HANDLE) {
+                GR_VK_CALL(this->vk(), DestroyDebugReportCallbackEXT(fVk.fInstance, fDebugCallback,
+                                                                     nullptr));
+            }
+#endif
+            GR_VK_CALL(this->vk(), DestroyInstance(fVk.fInstance, nullptr));
+        }
     }
 
 private:
-    VkTestContextImpl(sk_sp<const GrVkBackendContext> backendContext)
-            : VkTestContext(std::move(backendContext)) {
-        fFenceSync.reset(new VkFenceSync(fVk->fInterface, fVk->fDevice, fVk->fQueue,
-                                         fVk->fGraphicsQueueIndex));
+    VkTestContextImpl(const GrVkBackendContext& backendContext, bool ownsContext,
+                      VkDebugReportCallbackEXT debugCallback)
+            : VkTestContext(backendContext, ownsContext, debugCallback) {
+        fFenceSync.reset(new VkFenceSync(fVk.fInterface, fVk.fDevice, fVk.fQueue,
+                                         fVk.fGraphicsQueueIndex));
     }
 
     void onPlatformMakeCurrent() const override {}

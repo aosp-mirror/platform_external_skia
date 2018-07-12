@@ -109,12 +109,11 @@ GrCCDrawPathsOp::SingleDraw::~SingleDraw() {
 }
 
 GrDrawOp::RequiresDstTexture GrCCDrawPathsOp::finalize(const GrCaps& caps,
-                                                       const GrAppliedClip* clip,
-                                                       GrPixelConfigIsClamped dstIsClamped) {
+                                                       const GrAppliedClip* clip) {
     SkASSERT(1 == fNumDraws);  // There should only be one single path draw in this Op right now.
     GrProcessorSet::Analysis analysis =
             fProcessors.finalize(fDraws.head().fColor, GrProcessorAnalysisCoverage::kSingleChannel,
-                                 clip, false, caps, dstIsClamped, &fDraws.head().fColor);
+                                 clip, false, caps, &fDraws.head().fColor);
     return RequiresDstTexture(analysis.requiresDstTexture());
 }
 
@@ -252,7 +251,8 @@ void GrCCDrawPathsOp::setupResources(GrOnFlushResourceProvider* onFlushRP,
                 GrCCAtlas* atlas =
                         resources->copyPathToCachedAtlas(*cacheEntry, doEvenOddFill, &newOffset);
                 cacheEntry->updateToCachedAtlas(atlas->getOrAssignUniqueKey(onFlushRP),
-                                                newOffset, atlas->refOrMakeCachedAtlasInfo());
+                                                onFlushRP->contextUniqueID(), newOffset,
+                                                atlas->refOrMakeCachedAtlasInfo());
                 this->recordInstance(atlas->textureProxy(), resources->nextPathInstanceIdx());
                 resources->appendDrawPathInstance().set(*cacheEntry, draw.fCachedMaskShift,
                                                         draw.fColor);
@@ -297,8 +297,9 @@ void GrCCDrawPathsOp::setupResources(GrOnFlushResourceProvider* onFlushRP,
 
                 const GrUniqueKey& atlasKey =
                         resources->nextAtlasToStash()->getOrAssignUniqueKey(onFlushRP);
-                cacheEntry->initAsStashedAtlas(atlasKey, devToAtlasOffset, devBounds, devBounds45,
-                                               devIBounds, draw.fCachedMaskShift);
+                cacheEntry->initAsStashedAtlas(atlasKey, onFlushRP->contextUniqueID(),
+                                               devToAtlasOffset, devBounds, devBounds45, devIBounds,
+                                               draw.fCachedMaskShift);
                 // Remember this atlas in case we encounter the path again during the same flush.
                 cacheEntry->setCurrFlushAtlas(atlas);
             }

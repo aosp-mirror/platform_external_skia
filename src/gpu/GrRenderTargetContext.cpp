@@ -846,6 +846,8 @@ void GrRenderTargetContext::drawVertices(const GrClip& clip,
                                          GrPaint&& paint,
                                          const SkMatrix& viewMatrix,
                                          sk_sp<SkVertices> vertices,
+                                         const SkMatrix bones[],
+                                         int boneCount,
                                          GrPrimitiveType* overridePrimType) {
     ASSERT_SINGLE_OWNER
     RETURN_IF_ABANDONED
@@ -857,7 +859,7 @@ void GrRenderTargetContext::drawVertices(const GrClip& clip,
     SkASSERT(vertices);
     GrAAType aaType = this->chooseAAType(GrAA::kNo, GrAllowMixedSamples::kNo);
     std::unique_ptr<GrDrawOp> op = GrDrawVerticesOp::Make(
-            fContext, std::move(paint), std::move(vertices), viewMatrix, aaType,
+            fContext, std::move(paint), std::move(vertices), bones, boneCount, viewMatrix, aaType,
             this->colorSpaceInfo().refColorSpaceXformFromSRGB(), overridePrimType);
     this->addDrawOp(clip, std::move(op));
 }
@@ -1761,11 +1763,8 @@ uint32_t GrRenderTargetContext::addDrawOp(const GrClip& clip, std::unique_ptr<Gr
         this->setNeedsStencil();
     }
 
-    GrPixelConfigIsClamped dstIsClamped =
-            GrGetPixelConfigIsClamped(this->colorSpaceInfo().config());
     GrXferProcessor::DstProxy dstProxy;
-    if (GrDrawOp::RequiresDstTexture::kYes == op->finalize(*this->caps(), &appliedClip,
-                                                           dstIsClamped)) {
+    if (GrDrawOp::RequiresDstTexture::kYes == op->finalize(*this->caps(), &appliedClip)) {
         if (!this->setupDstProxy(this->asRenderTargetProxy(), clip, op->bounds(), &dstProxy)) {
             fContext->contextPriv().opMemoryPool()->release(std::move(op));
             return SK_InvalidUniqueID;
