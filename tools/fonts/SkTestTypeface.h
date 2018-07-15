@@ -40,7 +40,6 @@ struct SkTestFontData {
     const SkPaint::FontMetrics& fMetrics;
     const char* fName;
     SkFontStyle fStyle;
-    sk_sp<SkTestFont> fCachedFont;
 };
 
 class SkTestFont : public SkRefCnt {
@@ -100,6 +99,12 @@ protected:
 
     int onGetVariationDesignPosition(SkFontArguments::VariationPosition::Coordinate coordinates[],
                                      int coordinateCount) const override
+    {
+        return 0;
+    }
+
+    int onGetVariationDesignParameters(SkFontParameters::Variation::Axis parameters[],
+                                       int parameterCount) const override
     {
         return 0;
     }

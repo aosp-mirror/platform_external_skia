@@ -1042,7 +1042,6 @@ static bool dump_png(SkBitmap bitmap, const char* path, const char* md5) {
     options.fComments         = SkDataTable::MakeCopyArrays((const void**)comments, lengths, 4);
     options.fFilterFlags      = SkPngEncoder::FilterFlag::kNone;
     options.fZLibLevel        = 1;
-    options.fUnpremulBehavior = SkTransferFunctionBehavior::kIgnore;
     return SkPngEncoder::Encode(&dst, pm, options);
 }
 
@@ -1409,13 +1408,12 @@ int main(int argc, char** argv) {
     parallel.wait();
     gDefinitelyThreadSafeWork.wait();
 
+    // At this point we're back in single-threaded land.
+
     // We'd better have run everything.
     SkASSERT(gPending == 0);
     // Make sure we've flushed all our results to disk.
     JsonWriter::DumpJson();
-
-    // At this point we're back in single-threaded land.
-    sk_tool_utils::release_portable_typefaces();
 
     if (gFailures.count() > 0) {
         info("Failures:\n");

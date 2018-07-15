@@ -15,9 +15,8 @@
 #include "SkSurfaceProps.h"
 
 class SkBitmap;
-class SkDrawFilter;
 struct SkDrawShadowRec;
-class SkGlyphRun;
+class SkGlyphRunList;
 class SkGlyphRunBuilder;
 class SkImageFilterCache;
 struct SkIRect;
@@ -155,8 +154,7 @@ protected:
 
     /** These are called inside the per-device-layer loop for each draw call.
      When these are called, we have already applied any saveLayer operations,
-     and are handling any looping from the paint, and any effects from the
-     DrawFilter.
+     and are handling any looping from the paint.
      */
     virtual void drawPaint(const SkPaint& paint) = 0;
     virtual void drawPoints(SkCanvas::PointMode mode, size_t count,
@@ -224,14 +222,13 @@ protected:
      *  Does not handle text decoration.
      *  Decorations (underline and stike-thru) will be handled by SkCanvas.
      */
-    virtual void drawGlyphRun(const SkPaint& paint, SkGlyphRun* glyphRun);
+    virtual void drawGlyphRunList(const SkPaint& paint, SkGlyphRunList* glyphRunList);
     virtual void drawVertices(const SkVertices*, const SkMatrix* bones, int boneCount, SkBlendMode,
                               const SkPaint&) = 0;
     virtual void drawShadow(const SkPath&, const SkDrawShadowRec&);
 
     // default implementation unrolls the blob runs.
-    virtual void drawTextBlob(const SkTextBlob*, SkScalar x, SkScalar y,
-                              const SkPaint& paint, SkDrawFilter* drawFilter);
+    virtual void drawTextBlob(const SkTextBlob*, SkScalar x, SkScalar y, const SkPaint& paint);
     // default implementation calls drawVertices
     virtual void drawPatch(const SkPoint cubics[12], const SkColor colors[4],
                            const SkPoint texCoords[4], SkBlendMode, const SkPaint& paint);

@@ -943,7 +943,6 @@ Does not copy, and returns false if:
 # Canvas pixels are not readable; for instance, Canvas is document-based. ##
 # dstRowBytes is too small to contain one row of pixels. ##
 ##
-.
 
 #Param dstInfo  width, height, Color_Type, and Alpha_Type of dstPixels ##
 #Param dstPixels  storage for pixels; dstInfo.height() times dstRowBytes, or larger ##
@@ -1037,7 +1036,6 @@ Does not copy, and returns false if:
 # Pixmap pixels could not be allocated. ##
 # pixmap.rowBytes() is too small to contain one row of pixels. ##
 ##
-.
 
 #Param pixmap  storage for pixels copied from Canvas ##
 #Param srcX    offset into readable pixels on x-axis; may be negative ##
@@ -1101,7 +1099,6 @@ Does not copy, and returns false if:
 # bitmap pixels could not be allocated. ##
 # bitmap.rowBytes() is too small to contain one row of pixels. ##
 ##
-.
 
 #Param bitmap  storage for pixels copied from Canvas ##
 #Param srcX    offset into readable pixels on x-axis; may be negative ##
@@ -1165,7 +1162,6 @@ Does not copy, and returns false if:
 # Canvas pixels are not writable; for instance, Canvas is document-based. ##
 # rowBytes is too small to contain one row of pixels. ##
 ##
-.
 
 #Param info  width, height, Color_Type, and Alpha_Type of pixels ##
 #Param pixels  pixels to copy, of size info.height() times rowBytes, or larger ##
@@ -1225,7 +1221,6 @@ Does not copy, and returns false if:
 # Canvas pixels are not writable; for instance, Canvas is document based. ##
 # bitmap pixels are inaccessible; for instance, bitmap wraps a texture. ##
 ##
-.
 
 #Param bitmap  contains pixels copied to Canvas ##
 #Param x       offset into Canvas writable pixels in x; may be negative ##
@@ -1265,10 +1260,9 @@ to implement windows and views. The initial state has an identity matrix and and
 an infinite clip. Even with a wide-open clip, drawing is constrained by the
 bounds of the Canvas Surface or Device.
 
-Canvas savable state consists of Clip, Matrix, and Draw_Filter.
+Canvas savable state consists of Clip and Matrix.
 Clip describes the area that may be drawn to.
 Matrix transforms the geometry.
-Draw_Filter (deprecated on most platforms) modifies the paint before drawing.
 
 save(), saveLayer, saveLayerPreserveLCDTextRequests, and saveLayerAlpha
 save state and return the depth of the stack.
@@ -1332,9 +1326,9 @@ void draw(SkCanvas* canvas) {
 
 #In State_Stack
 #Line # saves Clip and Matrix on stack ##
-Saves Matrix, Clip, and Draw_Filter (Draw_Filter deprecated on most platforms).
-Calling restore() discards changes to Matrix, Clip, and Draw_Filter,
-restoring the Matrix, Clip, and Draw_Filter to their state when save() was called.
+Saves Matrix and Clip.
+Calling restore() discards changes to Matrix and Clip,
+restoring the Matrix and Clip to their state when save() was called.
 
 Matrix may be changed by translate(), scale(), rotate(), skew(), concat(), setMatrix,
 and resetMatrix. Clip may be changed by clipRect, clipRRect, clipPath, clipRegion.
@@ -1376,7 +1370,7 @@ void draw(SkCanvas* canvas) {
 
 #In State_Stack
 #Line # restores changes to Clip and Matrix, pops save stack ##
-Removes changes to Matrix, Clip, and Draw_Filter since Canvas state was
+Removes changes to Matrix and Clip since Canvas state was
 last saved. The state is removed from the stack.
 
 Does nothing if the stack is empty.
@@ -1400,7 +1394,7 @@ void draw(SkCanvas* canvas) {
 
 #In State_Stack
 #Line # returns depth of stack containing Clip and Matrix ##
-Returns the number of saved states, each containing: Matrix, Clip, and Draw_Filter.
+Returns the number of saved states, each containing: Matrix and Clip.
 Equals the number of save() calls less the number of restore() calls plus one.
 The save count of a new canvas is one.
 
@@ -1432,7 +1426,7 @@ depth = 1
 
 #In State_Stack
 #Line # restores changes to Clip and Matrix to given depth ##
-Restores state to Matrix, Clip, and Draw_Filter values when save(), saveLayer,
+Restores state to Matrix and Clip values when save(), saveLayer,
 saveLayerPreserveLCDTextRequests, or saveLayerAlpha returned saveCount.
 
 Does nothing if saveCount is greater than state stack count.
@@ -1485,10 +1479,8 @@ Color_Alpha, Color_Filter, Image_Filter, and Blend_Mode.
 
 #In Layer
 #Line # saves Clip and Matrix on stack; creates Layer ##
-Saves Matrix, Clip, and Draw_Filter (Draw_Filter deprecated on most platforms),
-and allocates a Bitmap for subsequent drawing.
-Calling restore() discards changes to Matrix, Clip, and Draw_Filter,
-and draws the Bitmap.
+Saves Matrix and Clip, and allocates a Bitmap for subsequent drawing.
+Calling restore() discards changes to Matrix and Clip, and draws the Bitmap.
 
 Matrix may be changed by translate(), scale(), rotate(), skew(), concat(),
 setMatrix, and resetMatrix. Clip may be changed by clipRect, clipRRect,
@@ -1539,10 +1531,8 @@ void draw(SkCanvas* canvas) {
 #Method int saveLayer(const SkRect& bounds, const SkPaint* paint)
 
 #In Layer
-Saves Matrix, Clip, and Draw_Filter (Draw_Filter deprecated on most platforms),
-and allocates a Bitmap for subsequent drawing.
-Calling restore() discards changes to Matrix, Clip, and Draw_Filter,
-and draws the Bitmap.
+Saves Matrix and Clip, and allocates a Bitmap for subsequent drawing.
+Calling restore() discards changes to Matrix and Clip, and draws the Bitmap.
 
 Matrix may be changed by translate(), scale(), rotate(), skew(), concat(),
 setMatrix, and resetMatrix. Clip may be changed by clipRect, clipRRect,
@@ -1595,12 +1585,10 @@ void draw(SkCanvas* canvas) {
 
 #In Layer
 #Line # saves Clip and Matrix on stack; creates Layer for LCD text ##
-Saves Matrix, Clip, and Draw_Filter (Draw_Filter deprecated on most platforms),
-and allocates a Bitmap for subsequent drawing.
+Saves Matrix and Clip, and allocates a Bitmap for subsequent drawing.
 LCD_Text is preserved when the Layer is drawn to the prior Layer.
 
-Calling restore() discards changes to Matrix, Clip, and Draw_Filter,
-and draws Layer.
+Calling restore() discards changes to Matrix and Clip, and draws Layer.
 
 Matrix may be changed by translate(), scale(), rotate(), skew(), concat(),
 setMatrix, and resetMatrix. Clip may be changed by clipRect, clipRRect,
@@ -1654,10 +1642,9 @@ incorrect blending.
 
 #In Layer
 #Line # saves Clip and Matrix on stack; creates Layer; sets opacity ##
-Saves Matrix, Clip, and Draw_Filter (Draw_Filter deprecated on most platforms),
-and allocates Bitmap for subsequent drawing.
+Saves Matrix and Clip, and allocates Bitmap for subsequent drawing.
 
-Calling restore() discards changes to Matrix, Clip, and Draw_Filter,
+Calling restore() discards changes to Matrix and Clip,
 and blends Layer with alpha opacity onto prior Layer.
 
 Matrix may be changed by translate(), scale(), rotate(), skew(), concat(),
@@ -1976,10 +1963,9 @@ Implementation is not complete; has no effect if Device is GPU-backed.
 #Method int saveLayer(const SaveLayerRec& layerRec)
 
 #In Layer
-Saves Matrix, Clip, and Draw_Filter (Draw_Filter deprecated on most platforms),
-and allocates Bitmap for subsequent drawing.
+Saves Matrix and Clip, and allocates Bitmap for subsequent drawing.
 
-Calling restore() discards changes to Matrix, Clip, and Draw_Filter,
+Calling restore() discards changes to Matrix and Clip,
 and blends Bitmap with Color_Alpha opacity onto the prior Layer.
 
 Matrix may be changed by translate(), scale(), rotate(), skew(), concat(),
@@ -6319,14 +6305,6 @@ Document_PDF, use annotations.
 
 #SeeAlso SkPicture SkDocument
 
-##
-
-#Method SkDrawFilter* getDrawFilter() const
-#Deprecated soon
-##
-
-#Method virtual SkDrawFilter* setDrawFilter(SkDrawFilter* filter)
-#Deprecated soon
 ##
 
 # ------------------------------------------------------------------------------

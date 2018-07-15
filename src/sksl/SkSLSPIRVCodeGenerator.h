@@ -69,7 +69,7 @@ public:
     : INHERITED(program, errors, out)
     , fContext(*context)
     , fDefaultLayout(MemoryLayout::k140_Standard)
-    , fCapabilities(1 << SpvCapabilityShader)
+    , fCapabilities(0)
     , fIdCount(1)
     , fBoolTrue(0)
     , fBoolFalse(0)
@@ -96,7 +96,6 @@ private:
         kMix_SpecialIntrinsic,
         kMod_SpecialIntrinsic,
         kSubpassLoad_SpecialIntrinsic,
-        kTexelFetch_SpecialIntrinsic,
         kTexture_SpecialIntrinsic,
     };
 
@@ -212,7 +211,12 @@ private:
     SpvId foldToBool(SpvId id, const Type& operandType, SpvOp op, OutputStream& out);
 
     SpvId writeMatrixComparison(const Type& operandType, SpvId lhs, SpvId rhs, SpvOp_ floatOperator,
-                                SpvOp_ intOperator, OutputStream& out);
+                                SpvOp_ intOperator, SpvOp_ vectorMergeOperator,
+                                SpvOp_ mergeOperator, OutputStream& out);
+
+    SpvId writeComponentwiseMatrixBinary(const Type& operandType, SpvId lhs, SpvId rhs,
+                                         SpvOp_ floatOperator, SpvOp_ intOperator,
+                                         OutputStream& out);
 
     SpvId writeBinaryOperation(const Type& resultType, const Type& operandType, SpvId lhs,
                                SpvId rhs, SpvOp_ ifFloat, SpvOp_ ifInt, SpvOp_ ifUInt,

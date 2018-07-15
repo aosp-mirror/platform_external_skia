@@ -27,7 +27,6 @@
 #include "GrVkRenderPass.h"
 #include "GrVkResourceProvider.h"
 #include "GrVkSemaphore.h"
-#include "GrVkTexelBuffer.h"
 #include "GrVkTexture.h"
 #include "GrVkTextureRenderTarget.h"
 #include "GrVkTransferBuffer.h"
@@ -57,20 +56,32 @@ sk_sp<GrGpu> GrVkGpu::Make(const GrVkBackendContext& backendContext,
         backendContext.fQueue == VK_NULL_HANDLE) {
         return nullptr;
     }
-    if (!backendContext.fInterface ||
-        !backendContext.fInterface->validate(backendContext.fExtensions)) {
+    sk_sp<const GrVkInterface> interface;
+    if (backendContext.fGetProc) {
+        interface.reset(new GrVkInterface(backendContext.fGetProc,
+                                          backendContext.fInstance,
+                                          backendContext.fDevice,
+                                          backendContext.fExtensions));
+    } else {
+        if (!backendContext.fInterface) {
+            return nullptr;
+        }
+        interface = backendContext.fInterface;
+    }
+    SkASSERT(interface);
+    if (!interface->validate(backendContext.fExtensions)) {
         return nullptr;
     }
 
-    return sk_sp<GrGpu>(new GrVkGpu(context, options, backendContext));
+    return sk_sp<GrGpu>(new GrVkGpu(context, options, backendContext, interface));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 GrVkGpu::GrVkGpu(GrContext* context, const GrContextOptions& options,
-                 const GrVkBackendContext& backendContext)
+                 const GrVkBackendContext& backendContext, sk_sp<const GrVkInterface> interface)
         : INHERITED(context)
-        , fInterface(std::move(backendContext.fInterface))
+        , fInterface(std::move(interface))
         , fMemoryAllocator(backendContext.fMemoryAllocator)
         , fInstance(backendContext.fInstance)
         , fDevice(backendContext.fDevice)
@@ -82,7 +93,7 @@ GrVkGpu::GrVkGpu(GrContext* context, const GrContextOptions& options,
     if (!fMemoryAllocator) {
         // We were not given a memory allocator at creation
         fMemoryAllocator.reset(new GrVkAMDMemoryAllocator(backendContext.fPhysicalDevice,
-                                                          fDevice, backendContext.fInterface));
+                                                          fDevice, fInterface));
     }
 
     fCompiler = new SkSL::Compiler();
@@ -263,11 +274,6 @@ GrBuffer* GrVkGpu::onCreateBuffer(size_t size, GrBufferType type, GrAccessPatter
             SkASSERT(kDynamic_GrAccessPattern == accessPattern ||
                      kStream_GrAccessPattern == accessPattern);
             buff = GrVkTransferBuffer::Create(this, size, GrVkBuffer::kCopyWrite_Type);
-            break;
-        case kTexel_GrBufferType:
-            SkASSERT(kDynamic_GrAccessPattern == accessPattern ||
-                     kStatic_GrAccessPattern == accessPattern);
-            buff = GrVkTexelBuffer::Create(this, size, kDynamic_GrAccessPattern == accessPattern);
             break;
         case kDrawIndirect_GrBufferType:
             SK_ABORT("DrawIndirect Buffers not supported  in vulkan backend.");
