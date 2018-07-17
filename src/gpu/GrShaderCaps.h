@@ -84,6 +84,8 @@ public:
 
     bool halfIs32Bits() const { return fHalfIs32Bits; }
 
+    bool unsignedSupport() const { return fUnsignedSupport; }
+
     AdvBlendEqInteraction advBlendEqInteraction() const { return fAdvBlendEqInteraction; }
 
     bool mustEnableAdvBlendEqs() const {
@@ -117,9 +119,6 @@ public:
 
     // If false, SkSL uses a workaround so that sk_FragCoord doesn't actually query gl_FragCoord
     bool canUseFragCoord() const { return fCanUseFragCoord; }
-
-    // If true interpolated vertex shader outputs are inaccurate.
-    bool interpolantsAreInaccurate() const { return fInterpolantsAreInaccurate; }
 
     // If true, short ints can't represent every integer in the 16-bit two's complement range as
     // required by the spec. SKSL will always emit full ints.
@@ -255,6 +254,7 @@ private:
     bool fFPManipulationSupport             : 1;
     bool fFloatIs32Bits                     : 1;
     bool fHalfIs32Bits                      : 1;
+    bool fUnsignedSupport                   : 1;
 
     // Used for specific driver bug work arounds
     bool fCanUseAnyFunctionInShader                   : 1;
@@ -267,7 +267,6 @@ private:
     bool fMustObfuscateUniformColor                   : 1;
     bool fMustGuardDivisionEvenAfterExplicitZeroCheck : 1;
     bool fCanUseFragCoord                             : 1;
-    bool fInterpolantsAreInaccurate                   : 1;
     bool fIncompleteShortIntPrecision                 : 1;
 
     const char* fVersionDeclString;
