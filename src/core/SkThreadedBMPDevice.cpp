@@ -226,12 +226,21 @@ void SkThreadedBMPDevice::drawVertices(const SkVertices* vertices, const SkMatri
                                        int boneCount, SkBlendMode bmode, const SkPaint& paint) {
     const sk_sp<SkVertices> verts = sk_ref_sp(vertices);  // retain vertices until flush
     SkRect drawBounds = SkRectPriv::MakeLargest(); // TODO tighter drawBounds
+
+    // Make a copy of the bone matrices.
+    SkMatrix* clonedBones = this->cloneArray(bones, boneCount);
+
+    // Make the bone matrices thread-safe.
+    for (int i = 0; i < boneCount; i ++) {
+        clonedBones[i].getType();
+    }
+
     fQueue.push(drawBounds, [=](SkArenaAlloc*, const DrawState& ds, const SkIRect& tileBounds){
         TileDraw(ds, tileBounds).drawVertices(verts->mode(), verts->vertexCount(),
                                               verts->positions(), verts->texCoords(),
                                               verts->colors(), verts->boneIndices(),
                                               verts->boneWeights(), bmode, verts->indices(),
-                                              verts->indexCount(), paint, bones, boneCount);
+                                              verts->indexCount(), paint, clonedBones, boneCount);
     });
 }
 
