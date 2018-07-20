@@ -1980,6 +1980,7 @@ cc_test {
         "bench/TileImageFilterBench.cpp",
         "bench/TopoSortBench.cpp",
         "bench/VertBench.cpp",
+        "bench/VertexColorSpaceBench.cpp",
         "bench/WritePixelsBench.cpp",
         "bench/WriterBench.cpp",
         "bench/nanobench.cpp",
