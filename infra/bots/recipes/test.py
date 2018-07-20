@@ -150,6 +150,9 @@ def dm_flags(api, bot):
     if 'Chromecast' in bot:
       configs = ['8888']
 
+    if 'Lottie' in bot:
+      configs = ['8888']
+
   elif api.vars.builder_cfg.get('cpu_or_gpu') == 'GPU':
     args.append('--nocpu')
 
@@ -285,6 +288,9 @@ def dm_flags(api, bot):
       configs = ['ddl-' + c for c in configs if c == 'gl' or c == 'vk']
       args.extend(['--skpViewportSize', "2048"])
       args.extend(['--gpuThreads', "0"])
+
+    if 'Lottie' in bot:
+      configs = ['gl']
 
   tf = api.vars.builder_cfg.get('test_filter')
   if 'All' != tf:
@@ -439,16 +445,6 @@ def dm_flags(api, bot):
     # is fairly slow and not platform-specific. So we just disable it on all of
     # Android and iOS. skia:5438
     blacklist('_ test _ GrShape')
-
-  if api.vars.internal_hardware_label == '1':
-    # skia:7046
-    blacklist('_ test _ EGLImageTest')
-    blacklist('_ test _ ES2BlendWithNoTexture')
-    blacklist('_ test _ GrSurfaceRenderability')
-    blacklist('_ test _ WritePixelsMSAA_Gpu')
-    blacklist('_ test _ WritePixelsNonTextureMSAA_Gpu')
-    blacklist('_ test _ WritePixelsNonTexture_Gpu')
-    blacklist('_ test _ WritePixels_Gpu')
 
   if api.vars.internal_hardware_label == '2':
     # skia:7160
@@ -811,9 +807,6 @@ def dm_flags(api, bot):
     # skia:7603
     match.append('~^GrMeshTest$')
 
-  if api.vars.internal_hardware_label == '1':
-    match.append('~skbug6653') # skia:6653
-
   if blacklisted:
     args.append('--blacklist')
     args.extend(blacklisted)
@@ -1058,6 +1051,7 @@ TEST_BUILDERS = [
    '-Valgrind_PreAbandonGpuContext_SK_CPU_LIMIT_SSE41'),
   'Test-Ubuntu17-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-DDL1',
   'Test-Ubuntu17-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-DDL3',
+  'Test-Ubuntu17-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-Lottie',
   'Test-Win10-Clang-AlphaR2-GPU-RadeonR9M470X-x86_64-Debug-All-ANGLE',
   ('Test-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Release-All'
    '-ReleaseAndAbandonGpuContext'),
@@ -1230,26 +1224,6 @@ def GenTests(api):
     api.step_data(retry_step_name, retcode=1) +
     api.step_data(retry_step_name + ' (attempt 2)', retcode=1) +
     api.step_data(retry_step_name + ' (attempt 3)', retcode=1)
-  )
-
-  yield (
-    api.test('internal_bot_1') +
-    api.properties(buildername=builder,
-                   buildbucket_build_id='123454321',
-                   revision='abc123',
-                   path_config='kitchen',
-                   swarm_out_dir='[SWARM_OUT_DIR]',
-                   internal_hardware_label='1') +
-    api.path.exists(
-        api.path['start_dir'].join('skia'),
-        api.path['start_dir'].join('skia', 'infra', 'bots', 'assets',
-                                     'skimage', 'VERSION'),
-        api.path['start_dir'].join('skia', 'infra', 'bots', 'assets',
-                                     'skp', 'VERSION'),
-        api.path['start_dir'].join('skia', 'infra', 'bots', 'assets',
-                                     'svg', 'VERSION'),
-        api.path['start_dir'].join('tmp', 'uninteresting_hashes.txt')
-    )
   )
 
   yield (
