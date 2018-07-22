@@ -11,7 +11,6 @@ DEPS = [
   'flavor',
   'recipe_engine/context',
   'recipe_engine/file',
-  'recipe_engine/json',
   'recipe_engine/path',
   'recipe_engine/platform',
   'recipe_engine/properties',
@@ -151,6 +150,9 @@ def dm_flags(api, bot):
     if 'Chromecast' in bot:
       configs = ['8888']
 
+    if 'Lottie' in bot:
+      configs = ['8888']
+
   elif api.vars.builder_cfg.get('cpu_or_gpu') == 'GPU':
     args.append('--nocpu')
 
@@ -249,7 +251,7 @@ def dm_flags(api, bot):
     # Test 1010102 on our Linux/NVIDIA bots and the persistent cache config
     # on the GL bots.
     if ('QuadroP400' in bot and 'PreAbandonGpuContext' not in bot and
-        api.vars.is_linux):
+        'TSAN' not in bot and api.vars.is_linux):
       if 'Vulkan' in bot:
         configs.append('vk1010102')
         # Decoding transparent images to 1010102 just looks bad
@@ -287,6 +289,9 @@ def dm_flags(api, bot):
       args.extend(['--skpViewportSize', "2048"])
       args.extend(['--gpuThreads', "0"])
 
+    if 'Lottie' in bot:
+      configs = ['gl']
+
   tf = api.vars.builder_cfg.get('test_filter')
   if 'All' != tf:
     # Expected format: shard_XX_YY
@@ -301,7 +306,7 @@ def dm_flags(api, bot):
   args.extend(configs)
 
   # Run tests, gms, and image decoding tests everywhere.
-  args.extend('--src tests gm image colorImage svg skp'.split(' '))
+  args.extend('--src tests gm image lottie colorImage svg skp'.split(' '))
   if api.vars.builder_cfg.get('cpu_or_gpu') == 'GPU':
     # Don't run the 'svgparse_*' svgs on GPU.
     blacklist('_ svg _ svgparse_')
@@ -325,15 +330,30 @@ def dm_flags(api, bot):
     args.remove('image')
     args.remove('colorImage')
 
+  def remove_from_args(arg):
+    if arg in args:
+      args.remove(arg)
+
   if 'DDL' in bot:
     # The DDL bots just render the large skps and the gms
-    args.remove('tests')
-    args.remove('image')
-    args.remove('colorImage')
-    args.remove('svg')
+    remove_from_args('tests')
+    remove_from_args('image')
+    remove_from_args('colorImage')
+    remove_from_args('svg')
   else:
     # Currently, only the DDL bots render skps
-    args.remove('skp')
+    remove_from_args('skp')
+
+  if 'Lottie' in api.vars.builder_cfg.get('extra_config', ''):
+    # Only run the lotties on Lottie bots.
+    remove_from_args('tests')
+    remove_from_args('gm')
+    remove_from_args('image')
+    remove_from_args('colorImage')
+    remove_from_args('svg')
+    remove_from_args('skp')
+  else:
+    remove_from_args('lottie')
 
   # TODO: ???
   blacklist('f16 _ _ dstreadshuffle')
@@ -425,16 +445,6 @@ def dm_flags(api, bot):
     # is fairly slow and not platform-specific. So we just disable it on all of
     # Android and iOS. skia:5438
     blacklist('_ test _ GrShape')
-
-  if api.vars.internal_hardware_label == '1':
-    # skia:7046
-    blacklist('_ test _ EGLImageTest')
-    blacklist('_ test _ ES2BlendWithNoTexture')
-    blacklist('_ test _ GrSurfaceRenderability')
-    blacklist('_ test _ WritePixelsMSAA_Gpu')
-    blacklist('_ test _ WritePixelsNonTextureMSAA_Gpu')
-    blacklist('_ test _ WritePixelsNonTexture_Gpu')
-    blacklist('_ test _ WritePixels_Gpu')
 
   if api.vars.internal_hardware_label == '2':
     # skia:7160
@@ -672,6 +682,10 @@ def dm_flags(api, bot):
                   '~^SurfaceSemaphores$'])
     # skia:7837
     match.append('~BlurMaskBiggerThanDest')
+    # skia:8166
+    match.extend(['~SkRemoteGlyphCache_DrawTextXY',
+                  '~SkRemoteGlyphCache_DrawTextAsPath',
+                  '~SkRemoteGlyphCache_StrikeSerialization'])
 
   if 'Vulkan' in bot and 'GalaxyS7_G930FD' in bot:
     # skia:8064
@@ -796,9 +810,6 @@ def dm_flags(api, bot):
   if 'Mac' in bot and 'IntelHD615' in bot:
     # skia:7603
     match.append('~^GrMeshTest$')
-
-  if api.vars.internal_hardware_label == '1':
-    match.append('~skbug6653') # skia:6653
 
   if blacklisted:
     args.append('--blacklist')
@@ -948,6 +959,8 @@ def test_steps(api):
     ] + properties
 
     args.extend(['--svgs', api.flavor.device_dirs.svg_dir])
+    if 'Lottie' in api.vars.builder_cfg.get('extra_config', ''):
+      args.extend(['--lotties', api.flavor.device_dirs.lotties_dir])
 
   args.append('--key')
   args.extend(key_params(api))
@@ -988,8 +1001,10 @@ def RunSteps(api):
     try:
       if 'Chromecast' in api.vars.builder_name:
         api.flavor.install(resources=True, skps=True)
+      elif 'Lottie' in api.vars.builder_name:
+        api.flavor.install(resources=True, lotties=True)
       else:
-        api.flavor.install_everything()
+        api.flavor.install(skps=True, images=True, svgs=True, resources=True)
       test_steps(api)
     finally:
       api.flavor.cleanup_steps()
@@ -1020,6 +1035,7 @@ TEST_BUILDERS = [
   ('Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-All'
    '-SK_USE_DISCARDABLE_SCALEDIMAGECACHE'),
   'Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Debug-All-T8888',
+  'Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Release-All-Lottie',
   ('Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Release-All'
    '-SK_FORCE_RASTER_PIPELINE_BLITTER'),
   'Test-Debian9-Clang-GCE-CPU-AVX2-x86_64-Release-All-TSAN',
@@ -1039,6 +1055,7 @@ TEST_BUILDERS = [
    '-Valgrind_PreAbandonGpuContext_SK_CPU_LIMIT_SSE41'),
   'Test-Ubuntu17-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-DDL1',
   'Test-Ubuntu17-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-DDL3',
+  'Test-Ubuntu17-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-Lottie',
   'Test-Win10-Clang-AlphaR2-GPU-RadeonR9M470X-x86_64-Debug-All-ANGLE',
   ('Test-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Release-All'
    '-ReleaseAndAbandonGpuContext'),
@@ -1211,26 +1228,6 @@ def GenTests(api):
     api.step_data(retry_step_name, retcode=1) +
     api.step_data(retry_step_name + ' (attempt 2)', retcode=1) +
     api.step_data(retry_step_name + ' (attempt 3)', retcode=1)
-  )
-
-  yield (
-    api.test('internal_bot_1') +
-    api.properties(buildername=builder,
-                   buildbucket_build_id='123454321',
-                   revision='abc123',
-                   path_config='kitchen',
-                   swarm_out_dir='[SWARM_OUT_DIR]',
-                   internal_hardware_label='1') +
-    api.path.exists(
-        api.path['start_dir'].join('skia'),
-        api.path['start_dir'].join('skia', 'infra', 'bots', 'assets',
-                                     'skimage', 'VERSION'),
-        api.path['start_dir'].join('skia', 'infra', 'bots', 'assets',
-                                     'skp', 'VERSION'),
-        api.path['start_dir'].join('skia', 'infra', 'bots', 'assets',
-                                     'svg', 'VERSION'),
-        api.path['start_dir'].join('tmp', 'uninteresting_hashes.txt')
-    )
   )
 
   yield (

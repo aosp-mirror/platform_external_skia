@@ -7,6 +7,7 @@
 
 #include "GrMtlGpu.h"
 
+#include "GrMtlGpuCommandBuffer.h"
 #include "GrMtlTexture.h"
 #include "GrMtlTextureRenderTarget.h"
 #include "GrMtlUtil.h"
@@ -95,6 +96,18 @@ GrMtlGpu::GrMtlGpu(GrContext* context, const GrContextOptions& options,
     fCaps = fMtlCaps;
 
     fCmdBuffer = [fQueue commandBuffer];
+}
+
+GrGpuRTCommandBuffer* GrMtlGpu::createCommandBuffer(
+            GrRenderTarget* renderTarget, GrSurfaceOrigin origin,
+            const GrGpuRTCommandBuffer::LoadAndStoreInfo& colorInfo,
+            const GrGpuRTCommandBuffer::StencilLoadAndStoreInfo& stencilInfo) {
+    return new GrMtlGpuRTCommandBuffer(this, renderTarget, origin, colorInfo, stencilInfo);
+}
+
+GrGpuTextureCommandBuffer* GrMtlGpu::createCommandBuffer(GrTexture* texture,
+                                                         GrSurfaceOrigin origin) {
+    return new GrMtlGpuTextureCommandBuffer(this, texture, origin);
 }
 
 void GrMtlGpu::submitCommandBuffer(SyncQueue sync) {
@@ -513,6 +526,25 @@ void GrMtlGpu::testingOnly_flushGpuAndSync() {
     this->submitCommandBuffer(kForce_SyncQueue);
 }
 #endif // GR_TEST_UTILS
+
+bool GrMtlGpu::onWritePixels(GrSurface* surface, int left, int top, int width, int height,
+                             GrColorType srcColorType, const GrMipLevel texels[],
+                             int mipLevelCount) {
+    GrMtlTexture* mtlTexture = static_cast<GrMtlTexture*>(surface->asTexture());
+    if (!mtlTexture) {
+        return false;
+    }
+    if (!mipLevelCount) {
+        return false;
+    }
+#ifdef SK_DEBUG
+    for (int i = 0; i < mipLevelCount; i++) {
+        SkASSERT(texels[i].fPixels);
+    }
+#endif
+    return this->uploadToTexture(mtlTexture, left, top, width, height, srcColorType, texels,
+                                 mipLevelCount);
+}
 
 bool GrMtlGpu::onReadPixels(GrSurface* surface, int left, int top, int width, int height,
                             GrColorType dstColorType, void* buffer, size_t rowBytes) {

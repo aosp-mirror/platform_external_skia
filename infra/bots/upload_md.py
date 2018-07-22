@@ -33,7 +33,7 @@ def main():
   with git_utils.NewGitCheckout(repository=SKIA_REPO):
     with git_utils.GitBranch(branch_name='update_md_files',
                              commit_msg=COMMIT_MSG,
-                             commit_queue=True,
+                             commit_queue=False,
                              upload=False,
                              cc_list=CC_LIST) as git_branch:
       # Run bookmaker binary.
@@ -61,7 +61,7 @@ def main():
           sys.exit(1)
       if diff_files:
         subprocess.check_call(['git', 'add', '-u'])
-        git_branch.commit_and_upload(True)
+        git_branch.commit_and_upload(False)
       else:
         print 'No changes so nothing to upload.'
 

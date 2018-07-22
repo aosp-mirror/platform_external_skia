@@ -762,16 +762,22 @@ static void push_codec_srcs(Path path) {
 }
 
 template <typename T>
-void gather_file_srcs(const SkCommandLineFlags::StringArray& flags, const char* ext) {
+void gather_file_srcs(const SkCommandLineFlags::StringArray& flags, const char* ext,
+                      const char* src_name = nullptr) {
+    if (!src_name) {
+        // With the exception of Lottie files, the source name is the extension.
+        src_name = ext;
+    }
+
     for (int i = 0; i < flags.count(); i++) {
         const char* path = flags[i];
         if (sk_isdir(path)) {
             SkOSFile::Iter it(path, ext);
             for (SkString file; it.next(&file); ) {
-                push_src(ext, "", new T(SkOSPath::Join(path, file.c_str())));
+                push_src(src_name, "", new T(SkOSPath::Join(path, file.c_str())));
             }
         } else {
-            push_src(ext, "", new T(path));
+            push_src(src_name, "", new T(path));
         }
     }
 }
@@ -784,7 +790,7 @@ static bool gather_srcs() {
     gather_file_srcs<SKPSrc>(FLAGS_skps, "skp");
     gather_file_srcs<MSKPSrc>(FLAGS_mskps, "mskp");
 #if defined(SK_ENABLE_SKOTTIE)
-    gather_file_srcs<SkottieSrc>(FLAGS_jsons, "json");
+    gather_file_srcs<SkottieSrc>(FLAGS_lotties, "json", "lottie");
 #endif
 #if defined(SK_XML)
     gather_file_srcs<SVGSrc>(FLAGS_svgs, "svg");
@@ -940,6 +946,9 @@ static sk_sp<SkColorSpace> rgb_to_gbr() {
 static Sink* create_via(const SkString& tag, Sink* wrapped) {
 #define VIA(t, via, ...) if (tag.equals(t)) { return new via(__VA_ARGS__); }
     VIA("gbr",       ViaCSXform,           wrapped, rgb_to_gbr(), true);
+    VIA("p3",        ViaCSXform,           wrapped,
+                     SkColorSpace::MakeRGB(SkColorSpace::kSRGB_RenderTargetGamma,
+                                           SkColorSpace::kDCIP3_D65_Gamut), false);
     VIA("lite",      ViaLite,              wrapped);
     VIA("pipe",      ViaPipe,              wrapped);
 #ifdef TEST_VIA_SVG
@@ -1176,10 +1185,9 @@ struct Task {
                             const char* ext,
                             SkStream* data, size_t len,
                             const SkBitmap* bitmap) {
-        bool gammaCorrect = false;
-        if (bitmap) {
-            gammaCorrect = SkToBool(bitmap->info().colorSpace());
-        }
+        bool gammaCorrect = bitmap &&
+                            bitmap->info().colorSpace() &&
+                            bitmap->info().colorSpace()->gammaIsLinear();
 
         JsonWriter::BitmapResult result;
         result.name          = task.src->name();

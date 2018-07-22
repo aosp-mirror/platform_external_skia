@@ -65,13 +65,9 @@ public:
     GrGpuRTCommandBuffer* createCommandBuffer(
                                     GrRenderTarget*, GrSurfaceOrigin,
                                     const GrGpuRTCommandBuffer::LoadAndStoreInfo&,
-                                    const GrGpuRTCommandBuffer::StencilLoadAndStoreInfo&) override {
-        return nullptr;
-    }
+                                    const GrGpuRTCommandBuffer::StencilLoadAndStoreInfo&) override;
 
-    GrGpuTextureCommandBuffer* createCommandBuffer(GrTexture*, GrSurfaceOrigin) override {
-        return nullptr;
-    }
+    GrGpuTextureCommandBuffer* createCommandBuffer(GrTexture*, GrSurfaceOrigin) override;
 
     GrFence SK_WARN_UNUSED_RESULT insertFence() override { return 0; }
     bool waitFence(GrFence, uint64_t) override { return true; }
@@ -117,9 +113,7 @@ private:
                       void* buffer, size_t rowBytes) override;
 
     bool onWritePixels(GrSurface*, int left, int top, int width, int height, GrColorType,
-                       const GrMipLevel[], int) override {
-        return false;
-    }
+                       const GrMipLevel[], int mipLevelCount) override;
 
     bool onTransferPixels(GrTexture*,
                           int left, int top, int width, int height,
