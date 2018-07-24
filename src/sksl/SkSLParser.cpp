@@ -77,10 +77,11 @@ private:
     Parser* fParser;
 };
 
-std::unordered_map<String, Parser::LayoutToken> Parser::layoutTokens;
+std::unordered_map<String, Parser::LayoutToken>* Parser::layoutTokens;
 
 void Parser::InitLayoutMap() {
-    #define TOKEN(name, text) layoutTokens[text] = LayoutToken::name;
+    layoutTokens = new std::unordered_map<String, LayoutToken>;
+    #define TOKEN(name, text) (*layoutTokens)[text] = LayoutToken::name;
     TOKEN(LOCATION,                     "location");
     TOKEN(OFFSET,                       "offset");
     TOKEN(BINDING,                      "binding");
@@ -745,8 +746,8 @@ Layout Parser::layout() {
         for (;;) {
             Token t = this->nextToken();
             String text = this->text(t);
-            auto found = layoutTokens.find(text);
-            if (found != layoutTokens.end()) {
+            auto found = layoutTokens->find(text);
+            if (found != layoutTokens->end()) {
                 switch (found->second) {
                     case LayoutToken::LOCATION:
                         location = this->layoutInt();
