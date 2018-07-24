@@ -784,7 +784,6 @@ cc_library_static {
         "src/sksl/SkSLIRGenerator.cpp",
         "src/sksl/SkSLInterpreter.cpp",
         "src/sksl/SkSLJIT.cpp",
-        "src/sksl/SkSLLayoutLexer.cpp",
         "src/sksl/SkSLLexer.cpp",
         "src/sksl/SkSLMetalCodeGenerator.cpp",
         "src/sksl/SkSLParser.cpp",
