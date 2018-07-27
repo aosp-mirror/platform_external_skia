@@ -54,8 +54,6 @@ const char* GrGLSLTypeString(const GrShaderCaps* shaderCaps, GrSLType t) {
             return "samplerExternalOES";
         case kTexture2DRectSampler_GrSLType:
             return "sampler2DRect";
-        case kBufferSampler_GrSLType:
-            return "samplerBuffer";
         case kBool_GrSLType:
             return "bool";
         case kInt_GrSLType:
@@ -101,10 +99,6 @@ const char* GrGLSLTypeString(const GrShaderCaps* shaderCaps, GrSLType t) {
             return "ubyte3";
         case kUByte4_GrSLType:
             return "ubyte4";
-        case kTexture2D_GrSLType:
-            return "texture2D";
-        case kSampler_GrSLType:
-            return "sampler";
     }
     SK_ABORT("Unknown shader var type.");
     return ""; // suppress warning
