@@ -13,15 +13,18 @@
 
 #include "SkDevice.h"
 #include "SkDraw.h"
+#include "SkFindAndPlaceGlyph.h"
 #include "SkGlyphCache.h"
 #include "SkMSAN.h"
 #include "SkMakeUnique.h"
 #include "SkMatrix.h"
 #include "SkPaint.h"
 #include "SkPaintPriv.h"
+#include "SkPathEffect.h"
+#include "SkRasterClip.h"
 #include "SkStrikeCache.h"
 #include "SkTextBlob.h"
-#include "SkTextBlobRunIterator.h"
+#include "SkTextBlobPriv.h"
 #include "SkTo.h"
 #include "SkUtils.h"
 
@@ -39,7 +42,7 @@ static SkTypeface::Encoding convert_encoding(SkPaint::TextEncoding encoding) {
 // -- SkGlyphRun -----------------------------------------------------------------------------------
 SkGlyphRun::SkGlyphRun(SkPaint&& runPaint,
                        SkSpan<const uint16_t> denseIndices,
-                       SkSpan<SkPoint> positions,
+                       SkSpan<const SkPoint> positions,
                        SkSpan<const SkGlyphID> glyphIDs,
                        SkSpan<const SkGlyphID> uniqueGlyphIDs,
                        SkSpan<const char> text,
@@ -60,7 +63,7 @@ void SkGlyphRun::eachGlyphToGlyphRun(SkGlyphRun::PerGlyph perGlyph) {
     SkGlyphRun run{
         std::move(paint),
         SkSpan<const uint16_t>{},  // No dense indices for now.
-        SkSpan<SkPoint>{&point, 1},
+        SkSpan<const SkPoint>{&point, 1},
         SkSpan<const SkGlyphID>{&glyphID, 1},
         SkSpan<const SkGlyphID>{},
         SkSpan<const char>{},
@@ -74,13 +77,7 @@ void SkGlyphRun::eachGlyphToGlyphRun(SkGlyphRun::PerGlyph perGlyph) {
         point = fPositions[i];
         perGlyph(&run, runPaint);
     }
-
 }
-
-void SkGlyphRun::mapPositions(const SkMatrix& matrix) {
-    matrix.mapPoints(fPositions.data(), fPositions.data(), (int)fPositions.size());
-}
-
 
 void SkGlyphRun::temporaryShuntToDrawPosText(SkBaseDevice* device, SkPoint origin) {
 
@@ -102,6 +99,213 @@ void SkGlyphRun::temporaryShuntToCallback(TemporaryShuntCallback callback) {
 void SkGlyphRun::filloutGlyphsAndPositions(SkGlyphID* glyphIDs, SkPoint* positions) {
     memcpy(glyphIDs, fGlyphIDs.data(), fGlyphIDs.size_bytes());
     memcpy(positions, fPositions.data(), fPositions.size_bytes());
+}
+
+// -- SkGlyphRunListDrawer -------------------------------------------------------------------------
+SkGlyphRunListDrawer::SkGlyphRunListDrawer(
+        const SkSurfaceProps& props, SkColorType colorType, SkScalerContextFlags flags)
+        : fDeviceProps{props}
+        , fBitmapFallbackProps{SkSurfaceProps{props.flags(), kUnknown_SkPixelGeometry}}
+        , fColorType{colorType}
+        , fScalerContextFlags{flags} {}
+
+bool SkGlyphRunListDrawer::ShouldDrawAsPath(const SkPaint& paint, const SkMatrix& matrix) {
+    // hairline glyphs are fast enough so we don't need to cache them
+    if (SkPaint::kStroke_Style == paint.getStyle() && 0 == paint.getStrokeWidth()) {
+        return true;
+    }
+
+    // we don't cache perspective
+    if (matrix.hasPerspective()) {
+        return true;
+    }
+
+    SkMatrix textM;
+    SkPaintPriv::MakeTextMatrix(&textM, paint);
+    return SkPaint::TooBigToUseCache(matrix, textM, 1024);
+}
+
+bool SkGlyphRunListDrawer::ensureBitmapBuffers(size_t runSize) {
+    if (runSize > fMaxRunSize) {
+        fPositions.reset(runSize);
+        fMaxRunSize = runSize;
+    }
+
+    return true;
+}
+
+void SkGlyphRunListDrawer::drawGlyphRunAsPaths(
+        const SkGlyphRun& glyphRun, SkPoint origin,
+        const SkSurfaceProps& props, PerPath perPath) const {
+    // setup our std paint, in hopes of getting hits in the cache
+    const SkPaint& origPaint = glyphRun.paint();
+    SkPaint paint(glyphRun.paint());
+    SkScalar matrixScale = paint.setupForAsPaths();
+
+    SkMatrix matrix;
+    matrix.setScale(matrixScale, matrixScale);
+
+    // Temporarily jam in kFill, so we only ever ask for the raw outline from the cache.
+    paint.setStyle(SkPaint::kFill_Style);
+    paint.setPathEffect(nullptr);
+
+    auto cache = SkStrikeCache::FindOrCreateStrikeExclusive(
+            paint, &props, fScalerContextFlags, nullptr);
+
+    // Now restore the original settings, so we "draw" with whatever style/stroking.
+    paint.setStyle(origPaint.getStyle());
+    paint.setPathEffect(origPaint.refPathEffect());
+
+    auto eachGlyph = [perPath{std::move(perPath)}, origin, &cache, &matrix]
+            (SkGlyphID glyphID, SkPoint position) {
+        const SkGlyph& glyph = cache->getGlyphIDMetrics(glyphID);
+        if (glyph.fWidth > 0) {
+            const SkPath* path = cache->findPath(glyph);
+            if (path != nullptr) {
+                SkPoint loc = position + origin;
+                matrix[SkMatrix::kMTransX] = loc.fX;
+                matrix[SkMatrix::kMTransY] = loc.fY;
+                perPath(*path, matrix);
+            }
+        }
+    };
+
+    glyphRun.forEachGlyphAndPosition(eachGlyph);
+}
+
+static bool prepare_mask(
+        SkGlyphCache* cache, const SkGlyph& glyph, SkPoint position, SkMask* mask) {
+    if (glyph.fWidth == 0) { return false; }
+
+    // Prevent glyphs from being drawn outside of or straddling the edge of device space.
+    // Comparisons written a little weirdly so that NaN coordinates are treated safely.
+    auto gt = [](float a, int b) { return !(a <= (float)b); };
+    auto lt = [](float a, int b) { return !(a >= (float)b); };
+    if (gt(position.fX, INT_MAX - (INT16_MAX + SkTo<int>(UINT16_MAX))) ||
+        lt(position.fX, INT_MIN - (INT16_MIN + 0 /*UINT16_MIN*/)) ||
+        gt(position.fY, INT_MAX - (INT16_MAX + SkTo<int>(UINT16_MAX))) ||
+        lt(position.fY, INT_MIN - (INT16_MIN + 0 /*UINT16_MIN*/))) {
+        return false;
+    }
+
+    int left = SkScalarFloorToInt(position.fX);
+    int top  = SkScalarFloorToInt(position.fY);
+
+    left += glyph.fLeft;
+    top  += glyph.fTop;
+
+    int right   = left + glyph.fWidth;
+    int bottom  = top  + glyph.fHeight;
+
+    mask->fBounds.set(left, top, right, bottom);
+    SkASSERT(!mask->fBounds.isEmpty());
+
+    uint8_t* bits = (uint8_t*)(cache->findImage(glyph));
+    if (nullptr == bits) {
+        return false;  // can't rasterize glyph
+    }
+
+    mask->fImage    = bits;
+    mask->fRowBytes = glyph.rowBytes();
+    mask->fFormat   = static_cast<SkMask::Format>(glyph.fMaskFormat);
+
+    return true;
+}
+
+void SkGlyphRunListDrawer::drawGlyphRunAsSubpixelMask(
+        SkGlyphCache* cache, const SkGlyphRun& glyphRun,
+        SkPoint origin, const SkMatrix& deviceMatrix,
+        PerMask perMask) {
+    auto runSize = glyphRun.runSize();
+    if (this->ensureBitmapBuffers(runSize)) {
+        // Add rounding and origin.
+        SkMatrix matrix = deviceMatrix;
+        SkAxisAlignment axisAlignment = cache->getScalerContext()->computeAxisAlignmentForHText();
+        SkPoint rounding = SkFindAndPlaceGlyph::SubpixelPositionRounding(axisAlignment);
+        matrix.preTranslate(origin.x(), origin.y());
+        matrix.postTranslate(rounding.x(), rounding.y());
+        matrix.mapPoints(fPositions, glyphRun.positions().data(), runSize);
+
+        const SkPoint* positionCursor = fPositions;
+        for (auto glyphID : glyphRun.shuntGlyphsIDs()) {
+            auto position = *positionCursor++;
+            if (SkScalarsAreFinite(position.fX, position.fY)) {
+                SkFixed lookupX = SkScalarToFixed(SkScalarFraction(position.fX)),
+                        lookupY = SkScalarToFixed(SkScalarFraction(position.fY));
+
+                // Snap to a given axis if alignment is requested.
+                if (axisAlignment == kX_SkAxisAlignment ) {
+                    lookupY = 0;
+                } else if (axisAlignment == kY_SkAxisAlignment) {
+                    lookupX = 0;
+                }
+
+                const SkGlyph& glyph = cache->getGlyphIDMetrics(glyphID, lookupX, lookupY);
+                SkMask mask;
+                if (prepare_mask(cache, glyph, position, &mask)) {
+                    perMask(mask);
+                }
+            }
+        }
+    }
+}
+
+void SkGlyphRunListDrawer::drawGlyphRunAsFullpixelMask(
+        SkGlyphCache* cache, const SkGlyphRun& glyphRun,
+        SkPoint origin, const SkMatrix& deviceMatrix,
+        PerMask perMask) {
+    auto runSize = glyphRun.runSize();
+    if (this->ensureBitmapBuffers(runSize)) {
+
+        // Add rounding and origin.
+        SkMatrix matrix = deviceMatrix;
+        matrix.preTranslate(origin.x(), origin.y());
+        matrix.postTranslate(SK_ScalarHalf, SK_ScalarHalf);
+        matrix.mapPoints(fPositions, glyphRun.positions().data(), runSize);
+
+        const SkPoint* positionCursor = fPositions;
+        for (auto glyphID : glyphRun.shuntGlyphsIDs()) {
+            auto position = *positionCursor++;
+            if (SkScalarsAreFinite(position.fX, position.fY)) {
+                const SkGlyph& glyph = cache->getGlyphIDMetrics(glyphID);
+                SkMask mask;
+                if (prepare_mask(cache, glyph, position, &mask)) {
+                    perMask(mask);
+                }
+            }
+        }
+    }
+}
+
+void SkGlyphRunListDrawer::drawForBitmap(
+        const SkGlyphRunList& glyphRunList, const SkMatrix& deviceMatrix,
+        PerMaskCreator perMaskCreator, PerPathCreator perPathCreator) {
+
+    SkPoint origin = glyphRunList.origin();
+    for (auto& glyphRun : glyphRunList) {
+        SkSTArenaAlloc<3332> alloc;
+        // The bitmap blitters can only draw lcd text to a N32 bitmap in srcOver. Otherwise,
+        // convert the lcd text into A8 text. The props communicates this to the scaler.
+        auto& props = (kN32_SkColorType == fColorType && glyphRun.paint().isSrcOver())
+                    ? fDeviceProps
+                    : fBitmapFallbackProps;
+        auto paint = glyphRun.paint();
+        if (ShouldDrawAsPath(glyphRun.paint(), deviceMatrix)) {
+            auto perPath = perPathCreator(paint, &alloc);
+            this->drawGlyphRunAsPaths(glyphRun, origin, props, perPath);
+        } else {
+            auto cache = SkStrikeCache::FindOrCreateStrikeExclusive(
+                    paint, &props, fScalerContextFlags, &deviceMatrix);
+            auto perMask = perMaskCreator(paint, &alloc);
+            if (cache->isSubpixel()) {
+                this->drawGlyphRunAsSubpixelMask(
+                        cache.get(), glyphRun, origin, deviceMatrix, perMask);
+            } else {
+                this->drawGlyphRunAsFullpixelMask(
+                        cache.get(), glyphRun, origin, deviceMatrix, perMask);
+            }
+        }
+    }
 }
 
 // -- SkGlyphRunList -------------------------------------------------------------------------------
@@ -214,7 +418,7 @@ void SkGlyphRunBuilder::drawTextAtOrigin(
         this->initialize(glyphIDs.size());
     }
 
-    auto positions = SkSpan<SkPoint>{fPositions, glyphIDs.size()};
+    auto positions = SkSpan<const SkPoint>{fPositions, glyphIDs.size()};
 
     // Every glyph is at the origin.
     sk_bzero((void *)positions.data(), positions.size_bytes());
@@ -261,7 +465,7 @@ void SkGlyphRunBuilder::drawPosText(const SkPaint& paint, const void* bytes,
     if (!glyphIDs.empty()) {
         this->initialize(glyphIDs.size());
         this->simplifyDrawPosText(paint, glyphIDs, pos,
-                fUniqueGlyphIDIndices, fUniqueGlyphIDs, fPositions);
+                fUniqueGlyphIDIndices, fUniqueGlyphIDs);
     }
 
     this->makeGlyphRunList(paint, nullptr, SkPoint::Make(0, 0));
@@ -299,14 +503,14 @@ void SkGlyphRunBuilder::drawTextBlob(const SkPaint& paint, const SkTextBlob& blo
 
         size_t uniqueGlyphIDsSize = 0;
         switch (it.positioning()) {
-            case SkTextBlob::kDefault_Positioning: {
+            case SkTextBlobRunIterator::kDefault_Positioning: {
                 uniqueGlyphIDsSize = this->simplifyDrawText(
                         runPaint, glyphIDs, offset,
                         currentDenseIndices, currentUniqueGlyphIDs, currentPositions,
                         text, clusters);
             }
                 break;
-            case SkTextBlob::kHorizontal_Positioning: {
+            case SkTextBlobRunIterator::kHorizontal_Positioning: {
                 auto constY = offset.y();
                 uniqueGlyphIDsSize = this->simplifyDrawPosTextH(
                         runPaint, glyphIDs, it.pos(), constY,
@@ -314,14 +518,12 @@ void SkGlyphRunBuilder::drawTextBlob(const SkPaint& paint, const SkTextBlob& blo
                         text, clusters);
             }
                 break;
-            case SkTextBlob::kFull_Positioning:
+            case SkTextBlobRunIterator::kFull_Positioning:
                 uniqueGlyphIDsSize = this->simplifyDrawPosText(
                         runPaint, glyphIDs, (const SkPoint*)it.pos(),
-                        currentDenseIndices, currentUniqueGlyphIDs, currentPositions,
+                        currentDenseIndices, currentUniqueGlyphIDs,
                         text, clusters);
                 break;
-            default:
-                SK_ABORT("unhandled positioning mode");
         }
 
         currentDenseIndices += runSize;
@@ -332,8 +534,8 @@ void SkGlyphRunBuilder::drawTextBlob(const SkPaint& paint, const SkTextBlob& blo
     this->makeGlyphRunList(paint, &blob, origin);
 }
 
-SkGlyphRunList* SkGlyphRunBuilder::useGlyphRunList() {
-    return &fGlyphRunList;
+const SkGlyphRunList& SkGlyphRunBuilder::useGlyphRunList() {
+    return fGlyphRunList;
 }
 
 void SkGlyphRunBuilder::initialize(size_t totalRunSize) {
@@ -391,7 +593,7 @@ SkSpan<const SkGlyphID> SkGlyphRunBuilder::addDenseAndUnique(
 void SkGlyphRunBuilder::makeGlyphRun(
         const SkPaint& runPaint,
         SkSpan<const SkGlyphID> glyphIDs,
-        SkSpan<SkPoint> positions,
+        SkSpan<const SkPoint> positions,
         SkSpan<const uint16_t> uniqueGlyphIDIndices,
         SkSpan<const SkGlyphID> uniqueGlyphIDs,
         SkSpan<const char> text,
@@ -461,7 +663,7 @@ size_t SkGlyphRunBuilder::simplifyDrawText(
         this->makeGlyphRun(
                 paint,
                 glyphIDs,
-                SkSpan<SkPoint>{positions, runSize},
+                SkSpan<const SkPoint>{positions, runSize},
                 SkSpan<const uint16_t>{uniqueGlyphIDIndicesBuffer, runSize},
                 unqiueGlyphIDs,
                 text,
@@ -476,35 +678,20 @@ size_t SkGlyphRunBuilder::simplifyDrawPosTextH(
         const SkScalar* xpos, SkScalar constY,
         uint16_t* uniqueGlyphIDIndicesBuffer, SkGlyphID* uniqueGlyphIDsBuffer, SkPoint* positions,
         SkSpan<const char> text, SkSpan<const uint32_t> clusters) {
-    auto runSize = glyphIDs.size();
 
     auto posCursor = positions;
     for (auto x : SkSpan<const SkScalar>{xpos, glyphIDs.size()}) {
         *posCursor++ = SkPoint::Make(x, constY);
     }
 
-    // The dense indices are not used by the rest of the stack yet.
-    SkSpan<const SkGlyphID> uniqueGlyphIDs;
-    #ifdef SK_DEBUG
-        uniqueGlyphIDs = this->addDenseAndUnique(
-                paint, glyphIDs, uniqueGlyphIDIndicesBuffer, uniqueGlyphIDsBuffer);
-    #endif
-
-    this->makeGlyphRun(
-            paint,
-            glyphIDs,
-            SkSpan<SkPoint>{positions, runSize},
-            SkSpan<const SkGlyphID>{uniqueGlyphIDIndicesBuffer, runSize},
-            uniqueGlyphIDs,
-            text,
-            clusters);
-
-    return uniqueGlyphIDs.size();
+    return simplifyDrawPosText(paint, glyphIDs, positions,
+            uniqueGlyphIDIndicesBuffer, uniqueGlyphIDsBuffer,
+            text, clusters);
 }
 
 size_t SkGlyphRunBuilder::simplifyDrawPosText(
         const SkPaint& paint, SkSpan<const SkGlyphID> glyphIDs, const SkPoint* pos,
-        uint16_t* uniqueGlyphIDIndicesBuffer, SkGlyphID* uniqueGlyphIDsBuffer, SkPoint* positions,
+        uint16_t* uniqueGlyphIDIndicesBuffer, SkGlyphID* uniqueGlyphIDsBuffer,
         SkSpan<const char> text, SkSpan<const uint32_t> clusters) {
     auto runSize = glyphIDs.size();
 
@@ -515,15 +702,12 @@ size_t SkGlyphRunBuilder::simplifyDrawPosText(
                 paint, glyphIDs, uniqueGlyphIDIndicesBuffer, uniqueGlyphIDsBuffer);
     #endif
 
-    memcpy(positions, pos, runSize * sizeof(SkPoint));
-
-
     // TODO: when using the unique glyph system have a guard that there are actually glyphs like
     // drawText above.
     this->makeGlyphRun(
             paint,
             glyphIDs,
-            SkSpan<SkPoint>{positions, runSize},
+            SkSpan<const SkPoint>{pos, runSize},
             SkSpan<const SkGlyphID>{uniqueGlyphIDIndicesBuffer, runSize},
             uniqueGlyphIDs,
             text,

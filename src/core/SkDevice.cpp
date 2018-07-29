@@ -26,7 +26,7 @@
 #include "SkShader.h"
 #include "SkSpecialImage.h"
 #include "SkTLazy.h"
-#include "SkTextBlobRunIterator.h"
+#include "SkTextBlobPriv.h"
 #include "SkTextToPathIter.h"
 #include "SkTo.h"
 #include "SkUtils.h"
@@ -153,24 +153,22 @@ void SkBaseDevice::drawTextBlob(const SkTextBlob* blob, SkScalar x, SkScalar y,
         it.applyFontToPaint(&runPaint);
 
         switch (it.positioning()) {
-        case SkTextBlob::kDefault_Positioning: {
+        case SkTextBlobRunIterator::kDefault_Positioning: {
             auto origin = SkPoint::Make(x + offset.x(), y + offset.y());
             SkGlyphRunBuilder builder;
             builder.drawText(runPaint, (const char*) it.glyphs(), textLen, origin);
             auto glyphRunList = builder.useGlyphRunList();
-            glyphRunList->temporaryShuntToDrawPosText(this, SkPoint::Make(0, 0));
+            glyphRunList.temporaryShuntToDrawPosText(this, SkPoint::Make(0, 0));
         }
         break;
-        case SkTextBlob::kHorizontal_Positioning:
+        case SkTextBlobRunIterator::kHorizontal_Positioning:
             this->drawPosText(it.glyphs(), textLen, it.pos(), 1,
                               SkPoint::Make(x, y + offset.y()), runPaint);
             break;
-        case SkTextBlob::kFull_Positioning:
+        case SkTextBlobRunIterator::kFull_Positioning:
             this->drawPosText(it.glyphs(), textLen, it.pos(), 2,
                               SkPoint::Make(x, y), runPaint);
             break;
-        default:
-            SK_ABORT("unhandled positioning mode");
         }
     }
 }
@@ -239,8 +237,8 @@ void SkBaseDevice::drawImageLattice(const SkImage* image,
     }
 }
 
-void SkBaseDevice::drawGlyphRunList(SkGlyphRunList* glyphRunList) {
-    glyphRunList->temporaryShuntToDrawPosText(this, SkPoint::Make(0, 0));
+void SkBaseDevice::drawGlyphRunList(const SkGlyphRunList& glyphRunList) {
+    glyphRunList.temporaryShuntToDrawPosText(this, SkPoint::Make(0, 0));
 }
 
 void SkBaseDevice::drawBitmapLattice(const SkBitmap& bitmap,
@@ -491,7 +489,7 @@ void SkBaseDevice::drawGlyphRunRSXform(SkGlyphRun* run, const SkRSXform* xform) 
         ctm.setConcat(originalCTM, ctm);
         this->setCTM(ctm);
         SkGlyphRunList glyphRunList{glyphRun};
-        this->drawGlyphRunList(&glyphRunList);
+        this->drawGlyphRunList(glyphRunList);
     };
     run->eachGlyphToGlyphRun(perGlyph);
     run->mutablePaint()->setShader(shader);

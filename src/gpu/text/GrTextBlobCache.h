@@ -12,7 +12,7 @@
 #include "SkMessageBus.h"
 #include "SkRefCnt.h"
 #include "SkTArray.h"
-#include "SkTextBlobRunIterator.h"
+#include "SkTextBlobPriv.h"
 #include "SkTHash.h"
 
 class GrTextBlobCache {
@@ -56,18 +56,18 @@ public:
         return cacheBlob;
     }
 
-    sk_sp<GrTextBlob> makeBlob(SkGlyphRunList* glyphRunList) {
-        return GrTextBlob::Make(glyphRunList->totalGlyphCount(), glyphRunList->size());
+    sk_sp<GrTextBlob> makeBlob(const SkGlyphRunList& glyphRunList) {
+        return GrTextBlob::Make(glyphRunList.totalGlyphCount(), glyphRunList.size());
     }
 
-    sk_sp<GrTextBlob> makeCachedBlob(SkGlyphRunList* glyphRunList,
+    sk_sp<GrTextBlob> makeCachedBlob(const SkGlyphRunList& glyphRunList,
                                      const GrTextBlob::Key& key,
                                      const SkMaskFilterBase::BlurRec& blurRec,
                                      const SkPaint& paint) {
         sk_sp<GrTextBlob> cacheBlob(makeBlob(glyphRunList));
         cacheBlob->setupKey(key, blurRec, paint);
         this->add(cacheBlob);
-        glyphRunList->temporaryShuntBlobNotifyAddedToCache(fUniqueID);
+        glyphRunList.temporaryShuntBlobNotifyAddedToCache(fUniqueID);
         return cacheBlob;
     }
 
