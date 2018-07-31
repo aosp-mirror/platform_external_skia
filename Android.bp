@@ -433,7 +433,6 @@ cc_library_static {
         "src/gpu/GrGpu.cpp",
         "src/gpu/GrGpuCommandBuffer.cpp",
         "src/gpu/GrGpuResource.cpp",
-        "src/gpu/GrGpuResourceRef.cpp",
         "src/gpu/GrImageTextureMaker.cpp",
         "src/gpu/GrMemoryPool.cpp",
         "src/gpu/GrOnFlushResourceProvider.cpp",
