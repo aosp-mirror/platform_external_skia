@@ -330,6 +330,17 @@ enum GrSLType {
     kTexture2DRectSampler_GrSLType,
 };
 
+/**
+ * The type of texture. Backends other than GL currently only use the 2D value but the type must
+ * still be known at the API-neutral layer as it used to determine whether MIP maps, renderability,
+ * and sampling parameters are legal for proxies that will be instantiated with wrapped textures.
+ */
+enum class GrTextureType {
+    k2D,
+    kRectangle,
+    kExternal
+};
+
 enum GrShaderType {
     kVertex_GrShaderType,
     kGeometry_GrShaderType,
@@ -477,6 +488,33 @@ static inline int GrSLTypeVecLength(GrSLType type) {
     }
     SK_ABORT("Unexpected type");
     return -1;
+}
+
+static inline GrSLType GrSLCombinedSamplerTypeForTextureType(GrTextureType type) {
+    switch (type) {
+        case GrTextureType::k2D:
+            return kTexture2DSampler_GrSLType;
+        case GrTextureType::kRectangle:
+            return kTexture2DRectSampler_GrSLType;
+        case GrTextureType::kExternal:
+            return kTextureExternalSampler_GrSLType;
+    }
+    SK_ABORT("Unexpected texture type");
+    return kTexture2DSampler_GrSLType;
+}
+
+/** Rectangle and external textures ony support the clamp wrap mode and do not support MIP maps. */
+static inline bool GrTextureTypeHasRestrictedSampling(GrTextureType type) {
+    switch (type) {
+        case GrTextureType::k2D:
+            return false;
+        case GrTextureType::kRectangle:
+            return true;
+        case GrTextureType::kExternal:
+            return true;
+    }
+    SK_ABORT("Unexpected texture type");
+    return false;
 }
 
 static inline bool GrSLTypeIsCombinedSamplerType(GrSLType type) {
@@ -826,17 +864,6 @@ enum class GrInternalSurfaceFlags {
     kNoPendingIO                    = 1 << 0,
 
     kSurfaceMask                    = kNoPendingIO,
-
-    // Texture-only flags
-
-    // This flag is for GL only. It says that the GL texture we will use has a target which is
-    // either GL_TEXTURE_RECTANGLE or GL_GL_TEXTURE_EXTERNAL. We use this information to make
-    // decisions about various rendering capabilites (e.g. is clamp the only supported wrap mode).
-    // Note: Ganesh does not internally create these types of textures so they will only occur on
-    // resources passed into Ganesh.
-    kIsGLTextureRectangleOrExternal = 1 << 1,
-
-    kTextureMask                    = kIsGLTextureRectangleOrExternal,
 
     // RT-only
 

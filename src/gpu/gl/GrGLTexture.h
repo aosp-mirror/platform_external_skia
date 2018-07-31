@@ -31,6 +31,9 @@ public:
         GrGLTextureInfo             fInfo;
         GrBackendObjectOwnership    fOwnership;
     };
+
+    static GrTextureType TextureTypeFromTarget(GrGLenum textureTarget);
+
     GrGLTexture(GrGLGpu*, SkBudgeted, const GrSurfaceDesc&, const IDDesc&, GrMipMapsStatus);
 
     ~GrGLTexture() override {
@@ -58,9 +61,9 @@ public:
         fTexParamsTimestamp = timestamp;
     }
 
-    GrGLuint textureID() const { return fInfo.fID; }
+    GrGLuint textureID() const { return fID; }
 
-    GrGLenum target() const { return fInfo.fTarget; }
+    GrGLenum target() const;
 
     bool hasBaseLevelBeenBoundToFBO() const { return fBaseLevelHasBeenBoundToFBO; }
     void baseLevelWasBoundToFBO() { fBaseLevelHasBeenBoundToFBO = true; }
@@ -96,9 +99,8 @@ private:
 
     TexParams                       fTexParams;
     GrGpu::ResetTimestamp           fTexParamsTimestamp;
-    // Holds the texture target and ID. A pointer to this may be shared to external clients for
-    // direct interaction with the GL object.
-    GrGLTextureInfo                 fInfo;
+    GrGLuint                        fID;
+    GrGLenum                        fFormat;
     GrBackendObjectOwnership        fTextureIDOwnership;
     bool                            fBaseLevelHasBeenBoundToFBO = false;
 

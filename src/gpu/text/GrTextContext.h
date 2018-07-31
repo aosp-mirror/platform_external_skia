@@ -178,10 +178,7 @@ private:
                                const char text[], size_t byteLength, const SkScalar pos[],
                                int scalarsPerPosition, const SkPoint& offset);
 
-    static void DrawBmpGlyphRun(GrTextBlob*, int runIndex, GrGlyphCache*,
-                                const SkSurfaceProps&, const GrTextUtils::Paint& paint,
-                                SkScalerContextFlags scalerContextFlags, const SkMatrix& viewMatrix,
-                                const SkGlyphRun& glyphRun, const SkPoint& offset);
+
 
     static void DrawBmpPosTextAsPaths(GrTextBlob*, int runIndex, GrGlyphCache*,
                                       const SkSurfaceProps&, const GrTextUtils::Paint& paint,
@@ -199,11 +196,6 @@ private:
                        size_t byteLength, const SkScalar pos[], int scalarsPerPosition,
                        const SkPoint& offset) const;
 
-    void drawDFGlyphRun(GrTextBlob* blob, int runIndex, GrGlyphCache*,
-                       const SkSurfaceProps&, const GrTextUtils::Paint& paint,
-                       SkScalerContextFlags scalerContextFlags,
-                       const SkMatrix& viewMatrix, const SkGlyphRun& glyphRun,
-                       const SkPoint& offset) const;
 
     static void BmpAppendGlyph(GrTextBlob*, int runIndex, GrGlyphCache*,
                                sk_sp<GrTextStrike>*, const SkGlyph&, SkScalar sx, SkScalar sy,
