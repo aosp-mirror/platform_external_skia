@@ -821,6 +821,7 @@ cc_library_static {
         "src/utils/SkShadowUtils.cpp",
         "src/utils/SkThreadUtils_pthread.cpp",
         "src/utils/SkThreadUtils_win.cpp",
+        "src/utils/SkUTF.cpp",
         "src/utils/SkWhitelistTypefaces.cpp",
         "src/utils/mac/SkCreateCGImageRef.cpp",
         "src/utils/mac/SkStream_mac.cpp",
