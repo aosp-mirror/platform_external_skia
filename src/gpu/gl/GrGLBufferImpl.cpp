@@ -24,7 +24,7 @@ GrGLBufferImpl::GrGLBufferImpl(GrGLGpu* gpu, const Desc& desc, GrGLenum bufferTy
         if (gpu->caps()->mustClearUploadedBufferData()) {
             fCPUData = sk_calloc_throw(desc.fSizeInBytes);
         } else {
-            fCPUData = sk_malloc_flags(desc.fSizeInBytes, SK_MALLOC_THROW);
+            fCPUData = sk_malloc_throw(desc.fSizeInBytes);
         }
         fGLSizeInBytes = 0;
     } else {
