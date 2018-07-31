@@ -8,6 +8,7 @@
 #include "SkMathPriv.h"
 #include "SkFloatBits.h"
 #include "SkFloatingPoint.h"
+#include "SkSafeMath.h"
 #include "SkScalar.h"
 
 const uint32_t gIEEENotANumber = 0x7FFFFFFF;
@@ -136,8 +137,6 @@ int32_t SkSqrtBits(int32_t x, int count) {
     return root;
 }
 
-///////////////////////////////////////////////////////////////////////////////
-
 float SkScalarSinCos(float radians, float* cosValue) {
     float sinValue = sk_float_sin(radians);
 
@@ -152,4 +151,19 @@ float SkScalarSinCos(float radians, float* cosValue) {
         sinValue = 0;
     }
     return sinValue;
+}
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+size_t SkSafeMath::Add(size_t x, size_t y) {
+    SkSafeMath tmp;
+    size_t sum = tmp.add(x, y);
+    return tmp.ok() ? sum : SK_MaxSizeT;
+}
+
+size_t SkSafeMath::Mul(size_t x, size_t y) {
+    SkSafeMath tmp;
+    size_t prod = tmp.mul(x, y);
+    return tmp.ok() ? prod : SK_MaxSizeT;
 }
