@@ -521,6 +521,7 @@ DEFINES_ALL = [
     "SK_USE_FREETYPE_EMBOLDEN",
     # Turn on a few Google3-specific build fixes.
     "GOOGLE3",
+    "SK_SUPPORT_LEGACY_MALLOC_PORTING_LAYER",
 ]
 
 ################################################################################

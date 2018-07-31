@@ -380,7 +380,7 @@ protected:
             fMemArray = preAllocStorage;
         } else {
             fAllocCount = SkMax32(fCount, fReserveCount);
-            fMemArray = sk_malloc_throw(fAllocCount * sizeof(T));
+            fMemArray = sk_malloc_throw(fAllocCount, sizeof(T));
         }
 
         this->copy(array);
@@ -449,7 +449,7 @@ private:
             if (fAllocCount == fReserveCount && fPreAllocMemArray) {
                 newMemArray = (char*) fPreAllocMemArray;
             } else {
-                newMemArray = (char*) sk_malloc_throw(fAllocCount*sizeof(T));
+                newMemArray = (char*) sk_malloc_throw(fAllocCount, sizeof(T));
             }
 
             this->move(newMemArray);
