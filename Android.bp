@@ -522,6 +522,7 @@ cc_library_static {
         "src/gpu/effects/GrCustomXfermode.cpp",
         "src/gpu/effects/GrDisableColorXP.cpp",
         "src/gpu/effects/GrDistanceFieldGeoProc.cpp",
+        "src/gpu/effects/GrDynamicTextureStripAtlas.cpp",
         "src/gpu/effects/GrEllipseEffect.cpp",
         "src/gpu/effects/GrGaussianConvolutionFragmentProcessor.cpp",
         "src/gpu/effects/GrLumaColorFilterEffect.cpp",
