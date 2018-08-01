@@ -90,7 +90,6 @@ cc_library_static {
         "include/svg/",
         "include/utils/",
         "include/utils/mac/",
-        "platform_tools/android/vulkan",
     ],
 
     local_include_dirs: [
@@ -109,7 +108,6 @@ cc_library_static {
         "include/svg/",
         "include/utils/",
         "include/utils/mac/",
-        "platform_tools/android/vulkan",
         "src/c/",
         "src/codec/",
         "src/core/",
@@ -1050,6 +1048,7 @@ cc_test {
         "tests/",
         "third_party/gif/",
         "third_party/skcms",
+        "third_party/vulkan/",
         "tools/",
         "tools/debugger/",
         "tools/flags/",
@@ -1855,6 +1854,7 @@ cc_test {
         "src/utils/win/",
         "src/xml/",
         "third_party/gif/",
+        "third_party/vulkan/",
         "tools/",
         "tools/debugger/",
         "tools/flags/",

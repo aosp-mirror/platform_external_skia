@@ -36,6 +36,7 @@
 #include "SkMipMap.h"
 #include "SkSLCompiler.h"
 #include "SkTo.h"
+
 #include "vk/GrVkTypes.h"
 
 #include <utility>
@@ -43,6 +44,10 @@
 #if !defined(SK_BUILD_FOR_WIN)
 #include <unistd.h>
 #endif // !defined(SK_BUILD_FOR_WIN)
+
+#if defined(SK_BUILD_FOR_WIN) && defined(SK_DEBUG)
+#include "SkLeanWindows.h"
+#endif
 
 #define VK_CALL(X) GR_VK_CALL(this->vkInterface(), X)
 #define VK_CALL_RET(RET, X) GR_VK_CALL_RET(this->vkInterface(), RET, X)
@@ -60,13 +65,27 @@ sk_sp<GrGpu> GrVkGpu::Make(const GrVkBackendContext& backendContext,
         return nullptr;
     }
 
-    sk_sp<const GrVkInterface> interface(new GrVkInterface(backendContext.fGetProc,
-                                         backendContext.fInstance,
-                                         backendContext.fDevice,
-                                         backendContext.fExtensions));
+    sk_sp<const GrVkInterface> interface;
 
-    if (!interface->validate(backendContext.fExtensions)) {
-        return nullptr;
+    if (backendContext.fVkExtensions) {
+        interface.reset(new GrVkInterface(backendContext.fGetProc,
+                                          backendContext.fInstance,
+                                          backendContext.fDevice,
+                                          backendContext.fVkExtensions));
+        if (!interface->validate(backendContext.fVkExtensions)) {
+            return nullptr;
+        }
+    } else {
+        // None of our current GrVkExtension flags actually affect the vulkan backend so we just
+        // make an empty GrVkExtensions and pass that to the GrVkInterface.
+        GrVkExtensions extensions;
+        interface.reset(new GrVkInterface(backendContext.fGetProc,
+                                          backendContext.fInstance,
+                                          backendContext.fDevice,
+                                          &extensions));
+        if (!interface->validate(&extensions)) {
+            return nullptr;
+        }
     }
 
     return sk_sp<GrGpu>(new GrVkGpu(context, options, backendContext, interface));
@@ -95,7 +114,7 @@ GrVkGpu::GrVkGpu(GrContext* context, const GrContextOptions& options,
     fCompiler = new SkSL::Compiler();
 
     fVkCaps.reset(new GrVkCaps(options, this->vkInterface(), backendContext.fPhysicalDevice,
-                               backendContext.fFeatures, backendContext.fExtensions));
+                               backendContext.fFeatures));
     fCaps.reset(SkRef(fVkCaps.get()));
 
     VK_CALL(GetPhysicalDeviceProperties(backendContext.fPhysicalDevice, &fPhysDevProps));
