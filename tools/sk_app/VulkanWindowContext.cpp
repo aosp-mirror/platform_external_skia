@@ -12,6 +12,7 @@
 #include "SkSurface.h"
 #include "VulkanWindowContext.h"
 
+#include "vk/GrVkExtensions.h"
 #include "vk/GrVkImage.h"
 #include "vk/GrVkUtil.h"
 #include "vk/GrVkTypes.h"
@@ -49,15 +50,24 @@ VulkanWindowContext::VulkanWindowContext(const DisplayParams& params,
 void VulkanWindowContext::initializeContext() {
     // any config code here (particularly for msaa)?
 
+    PFN_vkGetInstanceProcAddr getInstanceProc = fGetInstanceProcAddr;
+    PFN_vkGetDeviceProcAddr getDeviceProc = fGetDeviceProcAddr;
+    auto getProc = [getInstanceProc, getDeviceProc](const char* proc_name,
+                                                    VkInstance instance, VkDevice device) {
+        if (device != VK_NULL_HANDLE) {
+            return getDeviceProc(device, proc_name);
+        }
+        return getInstanceProc(instance, proc_name);
+    };
     GrVkBackendContext backendContext;
-    if (!sk_gpu_test::CreateVkBackendContext(fGetInstanceProcAddr, fGetDeviceProcAddr,
-                                             &backendContext, &fDebugCallback,
+    GrVkExtensions extensions;
+    if (!sk_gpu_test::CreateVkBackendContext(getProc, &backendContext, &extensions, &fDebugCallback,
                                              &fPresentQueueIndex, fCanPresentFn)) {
         return;
     }
 
-    if (!(backendContext.fExtensions & kKHR_surface_GrVkExtensionFlag) ||
-        !(backendContext.fExtensions & kKHR_swapchain_GrVkExtensionFlag)) {
+    if (!extensions.hasExtension(VK_KHR_SURFACE_EXTENSION_NAME) ||
+        !extensions.hasExtension(VK_KHR_SWAPCHAIN_EXTENSION_NAME)) {
         return;
     }
 
@@ -67,7 +77,7 @@ void VulkanWindowContext::initializeContext() {
     fGraphicsQueueIndex = backendContext.fGraphicsQueueIndex;
     fGraphicsQueue = backendContext.fQueue;
     fInterface.reset(new GrVkInterface(backendContext.fGetProc, fInstance, fDevice,
-                                       backendContext.fExtensions));
+                                       &extensions));
 
     GET_PROC(DestroyInstance);
     GET_PROC(DestroySurfaceKHR);

@@ -189,8 +189,7 @@ protected:
 
 private:
     // This class is used to manage conversion of refs to pending reads/writes.
-    friend class GrSurfaceProxyRef;
-    template <typename, GrIOType> friend class GrPendingIOResource;
+    template <typename> friend class GrProxyRef;
 
     void didRemoveRefOrPendingIO() const {
         if (0 == fPendingReads && 0 == fPendingWrites && 0 == fRefCnt) {
@@ -332,6 +331,21 @@ public:
      */
     virtual GrRenderTargetProxy* asRenderTargetProxy() { return nullptr; }
     virtual const GrRenderTargetProxy* asRenderTargetProxy() const { return nullptr; }
+
+    bool isInstantiated() const { return SkToBool(fTarget); }
+
+    // If the proxy is already instantiated, return its backing GrTexture; if not, return null.
+    GrSurface* peekSurface() const { return fTarget; }
+
+    // If this is a texture proxy and the proxy is already instantiated, return its backing
+    // GrTexture; if not, return null.
+    GrTexture* peekTexture() const { return fTarget ? fTarget->asTexture() : nullptr; }
+
+    // If this is a render target proxy and the proxy is already instantiated, return its backing
+    // GrRenderTarget; if not, return null.
+    GrRenderTarget* peekRenderTarget() const {
+        return fTarget ? fTarget->asRenderTarget() : nullptr;
+    }
 
     /**
      * Does the resource count against the resource budget?

@@ -16,6 +16,5 @@
   #define SK_PDF_USE_SFNTLY
   #define SK_SUPPORT_PDF
   #define SK_VULKAN
-  #define SK_VULKAN_HEADER "Skia_Vulkan_Android.h"
   #define SK_XML
 #endif//SkUserConfig_DEFINED

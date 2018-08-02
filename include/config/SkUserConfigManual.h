@@ -37,4 +37,5 @@
 
   // While working on updating skias vulkan interface
   #define SK_SUPPORT_LEGACY_VULKAN_INTERFACE
+  #define SK_SUPPORT_LEGACY_AAA_CHOICE
 #endif // SkUserConfigManual_DEFINED

@@ -10,7 +10,9 @@
 
 #include "SkRefCnt.h"
 
-#include "vk/GrVkDefines.h"
+#include "vk/GrVkBackendContext.h"
+#include "vk/GrVkTypes.h"
+#include "vk/GrVkExtensions.h"
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -35,34 +37,14 @@ private:
     typedef SkRefCnt INHERITED;
 
 public:
-    // TODO: This matches the definition of GrVkGetProc in GrVkTypes. Once we switch clients to
-    // using that and make GrVkInterface private, we can remove this GetProc.
-    using GetProc = std::function<PFN_vkVoidFunction(
-        const char*, // function name
-        VkInstance,  // instance or VK_NULL_HANDLE
-        VkDevice     // device or VK_NULL_HANDLE
-        )>;
-
-    // This is typically vkGetInstanceProcAddr.
-    using GetInstanceProc = std::function<PFN_vkVoidFunction(VkInstance, const char*)>;
-
-    // This is typically vkGetDeviceProcAddr.
-    using GetDeviceProc = std::function<PFN_vkVoidFunction(VkDevice, const char*)>;
-
-    GrVkInterface(GetProc getProc,
+    GrVkInterface(GrVkGetProc getProc,
                   VkInstance instance,
                   VkDevice device,
-                  uint32_t extensionFlags);
-
-    GrVkInterface(const GetInstanceProc&,
-                  const GetDeviceProc&,
-                  VkInstance instance,
-                  VkDevice device,
-                  uint32_t extensionFlags);
+                  const GrVkExtensions*);
 
     // Validates that the GrVkInterface supports its advertised standard. This means the necessary
     // function pointers have been initialized for Vulkan version.
-    bool validate(uint32_t extensionFlags) const;
+    bool validate(const GrVkExtensions*) const;
 
     /**
      * The function pointers are in a struct so that we can have a compiler generated assignment
@@ -209,7 +191,6 @@ public:
         VkPtr<PFN_vkDebugReportMessageEXT> fDebugReportMessageEXT;
         VkPtr<PFN_vkDestroyDebugReportCallbackEXT> fDestroyDebugReportCallbackEXT;
     } fFunctions;
-
 };
 
 #endif
