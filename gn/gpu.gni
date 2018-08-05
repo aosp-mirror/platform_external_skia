@@ -125,7 +125,6 @@ skia_gpu_sources = [
   "$_src/gpu/GrPathUtils.cpp",
   "$_src/gpu/GrPathUtils.h",
   "$_src/gpu/GrPendingIOResource.h",
-  "$_src/gpu/GrPendingProgramElement.h",
   "$_src/gpu/GrOnFlushResourceProvider.cpp",
   "$_src/gpu/GrOnFlushResourceProvider.h",
   "$_src/gpu/GrPipeline.cpp",
@@ -136,7 +135,6 @@ skia_gpu_sources = [
   "$_src/gpu/GrProcessorSet.h",
   "$_src/gpu/GrProgramDesc.cpp",
   "$_src/gpu/GrProgramDesc.h",
-  "$_src/gpu/GrProgramElement.h",
   "$_src/gpu/GrProcessor.cpp",
   "$_src/gpu/GrProcessor.h",
   "$_src/gpu/GrProcessorAnalysis.cpp",
@@ -358,6 +356,8 @@ skia_gpu_sources = [
   "$_src/gpu/effects/GrBicubicEffect.h",
   "$_src/gpu/effects/GrBitmapTextGeoProc.cpp",
   "$_src/gpu/effects/GrBitmapTextGeoProc.h",
+  "$_src/gpu/effects/GrDDLTextureStripAtlas.cpp",
+  "$_src/gpu/effects/GrDDLTextureStripAtlas.h",
   "$_src/gpu/effects/GrDisableColorXP.cpp",
   "$_src/gpu/effects/GrDisableColorXP.h",
   "$_src/gpu/effects/GrDistanceFieldGeoProc.cpp",
@@ -624,6 +624,8 @@ skia_vk_sources = [
 
 skia_metal_sources = [
   "$_include/gpu/mtl/GrMtlTypes.h",
+  "$_src/gpu/mtl/GrMtlBuffer.h",
+  "$_src/gpu/mtl/GrMtlBuffer.mm",
   "$_src/gpu/mtl/GrMtlCaps.h",
   "$_src/gpu/mtl/GrMtlCaps.mm",
   "$_src/gpu/mtl/GrMtlCopyManager.h",

@@ -8,7 +8,6 @@
 #ifndef GrVkBackendContext_DEFINED
 #define GrVkBackendContext_DEFINED
 
-#include <functional>
 #include "GrVkTypes.h"
 #include "SkRefCnt.h"
 #include "vk/GrVkMemoryAllocator.h"
@@ -29,13 +28,8 @@ enum GrVkFeatureFlags {
     kGeometryShader_GrVkFeatureFlag    = 0x0001,
     kDualSrcBlend_GrVkFeatureFlag      = 0x0002,
     kSampleRateShading_GrVkFeatureFlag = 0x0004,
+    kIgnoreAllFlags_GrVkFeatureFlag    = 0x0008,
 };
-
-using GrVkGetProc = std::function<PFN_vkVoidFunction(
-        const char*, // function name
-        VkInstance,  // instance or VK_NULL_HANDLE
-        VkDevice     // device or VK_NULL_HANDLE
-        )>;
 
 // The BackendContext contains all of the base Vulkan objects needed by the GrVkGpu. The assumption
 // is that the client will set these up and pass them to the GrVkGpu constructor. The VkDevice
@@ -51,10 +45,12 @@ struct SK_API GrVkBackendContext {
     VkDevice                   fDevice;
     VkQueue                    fQueue;
     uint32_t                   fGraphicsQueueIndex;
-    uint32_t                   fMinAPIVersion;
-    uint32_t                   fExtensions = 0;
+    uint32_t                   fMinAPIVersion; // Deprecated. Set fInstanceVersion instead.
+    uint32_t                   fInstanceVersion = 0;
+    uint32_t                   fExtensions = 0; // Deprecated. Use fVkExtensions instead.
     const GrVkExtensions*      fVkExtensions = nullptr;
-    uint32_t                   fFeatures = 0;
+    uint32_t                   fFeatures = kIgnoreAllFlags_GrVkFeatureFlag;
+    VkPhysicalDeviceFeatures   fDeviceFeatures;
     sk_sp<GrVkMemoryAllocator> fMemoryAllocator;
     GrVkGetProc                fGetProc = nullptr;
     // This is deprecated and should be set to false. The client is responsible for managing the

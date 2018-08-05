@@ -41,9 +41,9 @@ void* GrMeshDrawOp::PatternHelper::init(Target* target, size_t vertexStride,
 }
 
 void GrMeshDrawOp::PatternHelper::recordDraw(
-        Target* target, const GrGeometryProcessor* gp, const GrPipeline* pipeline,
+        Target* target, sk_sp<const GrGeometryProcessor> gp, const GrPipeline* pipeline,
         const GrPipeline::FixedDynamicState* fixedDynamicState) {
-    target->draw(gp, pipeline, fixedDynamicState, fMesh);
+    target->draw(std::move(gp), pipeline, fixedDynamicState, fMesh);
 }
 
 void* GrMeshDrawOp::QuadHelper::init(Target* target, size_t vertexStride, int quadsToDraw) {
@@ -58,4 +58,27 @@ void* GrMeshDrawOp::QuadHelper::init(Target* target, size_t vertexStride, int qu
 
 void GrMeshDrawOp::onExecute(GrOpFlushState* state) {
     state->executeDrawsAndUploadsForMeshDrawOp(this->uniqueID(), this->bounds());
+}
+
+//////////////////////////////////////////////////////////////////////////////
+
+GrMeshDrawOp::Target::PipelineAndFixedDynamicState GrMeshDrawOp::Target::makePipeline(
+        uint32_t pipelineFlags, GrProcessorSet&& processorSet, GrAppliedClip&& clip,
+        int numPrimProcTextures) {
+    GrPipeline::InitArgs pipelineArgs;
+    pipelineArgs.fFlags = pipelineFlags;
+    pipelineArgs.fProxy = this->proxy();
+    pipelineArgs.fDstProxy = this->dstProxy();
+    pipelineArgs.fCaps = &this->caps();
+    pipelineArgs.fResourceProvider = this->resourceProvider();
+    GrPipeline::FixedDynamicState* fixedDynamicState = nullptr;
+    if (clip.scissorState().enabled() || numPrimProcTextures) {
+        fixedDynamicState = this->allocFixedDynamicState(clip.scissorState().rect());
+        if (numPrimProcTextures) {
+            fixedDynamicState->fPrimitiveProcessorTextures =
+                    this->allocPrimitiveProcessorTextureArray(numPrimProcTextures);
+        }
+    }
+    return {this->allocPipeline(pipelineArgs, std::move(processorSet), std::move(clip)),
+            fixedDynamicState};
 }

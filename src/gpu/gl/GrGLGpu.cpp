@@ -1674,6 +1674,33 @@ void GrGLGpu::flushMinSampleShading(float minSampleShading) {
     }
 }
 
+void GrGLGpu::generateMipmapsForProcessorTextures(const GrPrimitiveProcessor& primProc,
+                                                  const GrPipeline& pipeline,
+                                                  const GrTextureProxy* const primProcTextures[]) {
+    auto genLevelsIfNeeded = [this](GrTexture* tex, const GrSamplerState& sampler) {
+        SkASSERT(tex);
+        if (sampler.filter() == GrSamplerState::Filter::kMipMap &&
+            tex->texturePriv().mipMapped() == GrMipMapped::kYes &&
+            tex->texturePriv().mipMapsAreDirty()) {
+            SkASSERT(this->caps()->mipMapSupport());
+            this->regenerateMipMapLevels(static_cast<GrGLTexture*>(tex));
+        }
+    };
+
+    for (int i = 0; i < primProc.numTextureSamplers(); ++i) {
+        GrTexture* tex = primProcTextures[i]->peekTexture();
+        genLevelsIfNeeded(tex, primProc.textureSampler(i).samplerState());
+    }
+
+    GrFragmentProcessor::Iter iter(pipeline);
+    while (const GrFragmentProcessor* fp = iter.next()) {
+        for (int i = 0; i < fp->numTextureSamplers(); ++i) {
+            const auto& textureSampler = fp->textureSampler(i);
+            genLevelsIfNeeded(textureSampler.peekTexture(), textureSampler.samplerState());
+        }
+    }
+}
+
 bool GrGLGpu::flushGLState(const GrPrimitiveProcessor& primProc,
                            const GrPipeline& pipeline,
                            const GrPipeline::FixedDynamicState* fixedDynamicState,
@@ -1683,8 +1710,11 @@ bool GrGLGpu::flushGLState(const GrPrimitiveProcessor& primProc,
         GrCapsDebugf(this->caps(), "Failed to create program!\n");
         return false;
     }
-
-    program->generateMipmaps(primProc, pipeline);
+    const GrTextureProxy* const* primProcProxies = nullptr;
+    if (fixedDynamicState) {
+        primProcProxies = fixedDynamicState->fPrimitiveProcessorTextures;
+    }
+    this->generateMipmapsForProcessorTextures(primProc, pipeline, primProcProxies);
 
     GrXferProcessor::BlendInfo blendInfo;
     pipeline.getXferProcessor().getBlendInfo(&blendInfo);
@@ -1701,7 +1731,7 @@ bool GrGLGpu::flushGLState(const GrPrimitiveProcessor& primProc,
         this->flushBlend(blendInfo, swizzle);
     }
 
-    fHWProgram->setData(primProc, pipeline);
+    fHWProgram->updateUniformsAndTextureBindings(primProc, pipeline, primProcProxies);
 
     GrGLRenderTarget* glRT = static_cast<GrGLRenderTarget*>(pipeline.renderTarget());
     GrStencilSettings stencil;

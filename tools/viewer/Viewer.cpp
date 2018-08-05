@@ -1670,19 +1670,17 @@ void Viewer::drawImGui() {
                         const char* name;
                         SkMetaData::Type type;
                         int count;
-                        bool found = false;
-                        while ((name = iter.next(&type, &count)) != nullptr && found == false) {
+                        while ((name = iter.next(&type, &count)) != nullptr) {
                             if (type == SkMetaData::kScalar_Type) {
                                 float val[3];
                                 SkASSERT(count == 3);
                                 controls.findScalars(name, &count, val);
                                 if (ImGui::SliderFloat(name, &val[0], val[1], val[2])) {
                                     controls.setScalars(name, 3, val);
-                                    fSlides[fCurrentSlide]->onSetControls(controls);
-                                    found = paramsChanged = true;
                                 }
                             }
                         }
+                        fSlides[fCurrentSlide]->onSetControls(controls);
                     }
                 }
             }
@@ -1840,7 +1838,12 @@ void Viewer::onIdle() {
     fStatsLayer.endTiming(fAnimateTimer);
 
     ImGuiIO& io = ImGui::GetIO();
-    if (animateWantsInval || fStatsLayer.getActive() || fRefresh || io.MetricsActiveWindows) {
+    // ImGui always has at least one "active" window, which is the default "Debug" window. It may
+    // not be visible, though. So we need to redraw if there is at least one visible window, or
+    // more than one active window. Newly created windows are active but not visible for one frame
+    // while they determine their layout and sizing.
+    if (animateWantsInval || fStatsLayer.getActive() || fRefresh ||
+        io.MetricsActiveWindows > 1 || io.MetricsRenderWindows > 0) {
         fWindow->inval();
     }
 }

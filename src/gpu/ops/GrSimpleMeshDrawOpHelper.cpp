@@ -135,20 +135,28 @@ GrPipeline::InitArgs GrSimpleMeshDrawOpHelper::pipelineInitArgs(
 }
 
 auto GrSimpleMeshDrawOpHelper::internalMakePipeline(GrMeshDrawOp::Target* target,
-                                                    const GrPipeline::InitArgs& args)
+                                                    const GrPipeline::InitArgs& args,
+                                                    int numPrimitiveProcessorProxies)
         -> PipelineAndFixedDynamicState {
     // A caller really should only call this once as the processor set and applied clip get
     // moved into the GrPipeline.
     SkASSERT(!fMadePipeline);
     SkDEBUGCODE(fMadePipeline = true);
     auto clip = target->detachAppliedClip();
-    auto* dynamicState = target->allocFixedDynamicState(clip.scissorState().rect());
+    GrPipeline::FixedDynamicState* fixedDynamicState = nullptr;
+    if (clip.scissorState().enabled() || numPrimitiveProcessorProxies) {
+        fixedDynamicState = target->allocFixedDynamicState(clip.scissorState().rect());
+        if (numPrimitiveProcessorProxies) {
+            fixedDynamicState->fPrimitiveProcessorTextures =
+                    target->allocPrimitiveProcessorTextureArray(numPrimitiveProcessorProxies);
+        }
+    }
     if (fProcessors) {
         return {target->allocPipeline(args, std::move(*fProcessors), std::move(clip)),
-                dynamicState};
+                fixedDynamicState};
     } else {
         return {target->allocPipeline(args, GrProcessorSet::MakeEmptySet(), std::move(clip)),
-                dynamicState};
+                fixedDynamicState};
     }
 }
 
@@ -173,11 +181,12 @@ bool GrSimpleMeshDrawOpHelperWithStencil::isCompatible(
            fStencilSettings == that.fStencilSettings;
 }
 
-auto GrSimpleMeshDrawOpHelperWithStencil::makePipeline(GrMeshDrawOp::Target* target)
+auto GrSimpleMeshDrawOpHelperWithStencil::makePipeline(GrMeshDrawOp::Target* target,
+                                                       int numPrimitiveProcessorTextures)
         -> PipelineAndFixedDynamicState {
     auto args = INHERITED::pipelineInitArgs(target);
     args.fUserStencil = fStencilSettings;
-    return this->internalMakePipeline(target, args);
+    return this->internalMakePipeline(target, args, numPrimitiveProcessorTextures);
 }
 
 SkString GrSimpleMeshDrawOpHelperWithStencil::dumpInfo() const {

@@ -12,7 +12,6 @@
 #include "GrDrawOp.h"
 #include "GrGeometryProcessor.h"
 #include "GrMesh.h"
-#include "GrPendingProgramElement.h"
 
 class GrAtlasManager;
 class GrCaps;
@@ -41,7 +40,7 @@ protected:
                    int indicesPerRepetition, int repeatCount);
 
         /** Call after init() to issue draws to the GrMeshDrawOp::Target.*/
-        void recordDraw(Target*, const GrGeometryProcessor*, const GrPipeline*,
+        void recordDraw(Target*, sk_sp<const GrGeometryProcessor>, const GrPipeline*,
                         const GrPipeline::FixedDynamicState*);
 
     private:
@@ -78,7 +77,7 @@ public:
     virtual ~Target() {}
 
     /** Adds a draw of a mesh. */
-    virtual void draw(const GrGeometryProcessor*, const GrPipeline*,
+    virtual void draw(sk_sp<const GrGeometryProcessor>, const GrPipeline*,
                       const GrPipeline::FixedDynamicState*, const GrMesh&) = 0;
 
     /**
@@ -132,10 +131,19 @@ public:
         return this->pipelineArena()->make<GrPipeline>(std::forward<Args>(args)...);
     }
 
-    template <typename... Args>
-    GrPipeline::FixedDynamicState* allocFixedDynamicState(Args&... args) {
-        return this->pipelineArena()->make<GrPipeline::FixedDynamicState>(
-                std::forward<Args>(args)...);
+    GrPipeline::FixedDynamicState* allocFixedDynamicState(const SkIRect& rect,
+                                                          int numPrimitiveProcessorTextures = 0) {
+        auto result = this->pipelineArena()->make<GrPipeline::FixedDynamicState>(rect);
+        if (numPrimitiveProcessorTextures) {
+            result->fPrimitiveProcessorTextures =
+                    this->allocPrimitiveProcessorTextureArray(numPrimitiveProcessorTextures);
+        }
+        return result;
+    }
+
+    GrTextureProxy** allocPrimitiveProcessorTextureArray(int n) {
+        SkASSERT(n > 0);
+        return this->pipelineArena()->makeArrayDefault<GrTextureProxy*>(n);
     }
 
     // Once we have C++17 structured bindings make this just be a tuple because then we can do:
@@ -144,24 +152,16 @@ public:
     //      std::tie(flushInfo.fPipeline, flushInfo.fFixedState) = target->makePipeline(...);
     struct PipelineAndFixedDynamicState {
         const GrPipeline* fPipeline;
-        const GrPipeline::FixedDynamicState* fFixedDynamicState;
+        GrPipeline::FixedDynamicState* fFixedDynamicState;
     };
 
     /**
      * Helper that makes a pipeline targeting the op's render target that incorporates the op's
      * GrAppliedClip and uses a fixed dynamic state.
      */
-    PipelineAndFixedDynamicState makePipeline(uint32_t pipelineFlags, GrProcessorSet&& processorSet,
-                                              GrAppliedClip&& clip) {
-        GrPipeline::InitArgs pipelineArgs;
-        pipelineArgs.fFlags = pipelineFlags;
-        pipelineArgs.fProxy = this->proxy();
-        pipelineArgs.fDstProxy = this->dstProxy();
-        pipelineArgs.fCaps = &this->caps();
-        pipelineArgs.fResourceProvider = this->resourceProvider();
-        const auto* state = this->allocFixedDynamicState(clip.scissorState().rect());
-        return {this->allocPipeline(pipelineArgs, std::move(processorSet), std::move(clip)), state};
-    }
+    PipelineAndFixedDynamicState makePipeline(uint32_t pipelineFlags, GrProcessorSet&&,
+                                              GrAppliedClip&&,
+                                              int numPrimitiveProcessorTextures = 0);
 
     virtual GrRenderTargetProxy* proxy() const = 0;
 

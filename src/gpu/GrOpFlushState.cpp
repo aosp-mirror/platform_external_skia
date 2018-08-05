@@ -104,7 +104,7 @@ GrDeferredUploadToken GrOpFlushState::addASAPUpload(GrDeferredTextureUploadFn&& 
     return fTokenTracker->nextTokenToFlush();
 }
 
-void GrOpFlushState::draw(const GrGeometryProcessor* gp, const GrPipeline* pipeline,
+void GrOpFlushState::draw(sk_sp<const GrGeometryProcessor> gp, const GrPipeline* pipeline,
                           const GrPipeline::FixedDynamicState* fixedDynamicState,
                           const GrMesh& mesh) {
     SkASSERT(fOpArgs);
@@ -129,7 +129,10 @@ void GrOpFlushState::draw(const GrGeometryProcessor* gp, const GrPipeline* pipel
     auto& draw = fDraws.append(&fArena);
     GrDeferredUploadToken token = fTokenTracker->issueDrawToken();
 
-    draw.fGeometryProcessor.reset(gp);
+    for (int i = 0; i < gp->numTextureSamplers(); ++i) {
+        fixedDynamicState->fPrimitiveProcessorTextures[i]->addPendingRead();
+    }
+    draw.fGeometryProcessor = std::move(gp);
     draw.fPipeline = pipeline;
     draw.fFixedDynamicState = fixedDynamicState;
     draw.fDynamicStateArrays = nullptr;
