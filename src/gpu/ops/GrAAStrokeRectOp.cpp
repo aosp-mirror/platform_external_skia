@@ -282,11 +282,11 @@ void AAStrokeRectOp::onPrepareDraws(Target* target) {
     int indicesPerInstance = this->miterStroke() ? kMiterIndexCnt : kBevelIndexCnt;
     int instanceCount = fRects.count();
 
-    sk_sp<const GrBuffer> indexBuffer =
-            GetIndexBuffer(target->resourceProvider(), this->miterStroke());
-    PatternHelper helper(target, GrPrimitiveType::kTriangles, vertexStride, indexBuffer.get(),
-                         verticesPerInstance, indicesPerInstance, instanceCount);
-    void* vertices = helper.vertices();
+    sk_sp<const GrBuffer> indexBuffer = GetIndexBuffer(target->resourceProvider(), this->miterStroke());
+    PatternHelper helper(GrPrimitiveType::kTriangles);
+    void* vertices =
+            helper.init(target, vertexStride, indexBuffer.get(),
+                        verticesPerInstance, indicesPerInstance, instanceCount);
     if (!vertices || !indexBuffer) {
         SkDebugf("Could not allocate vertices\n");
         return;
@@ -308,7 +308,7 @@ void AAStrokeRectOp::onPrepareDraws(Target* target) {
                                            fHelper.compatibleWithAlphaAsCoverage());
     }
     auto pipe = fHelper.makePipeline(target);
-    helper.recordDraw(target, std::move(gp), pipe.fPipeline, pipe.fFixedDynamicState);
+    helper.recordDraw(target, gp.get(), pipe.fPipeline, pipe.fFixedDynamicState);
 }
 
 sk_sp<const GrBuffer> AAStrokeRectOp::GetIndexBuffer(GrResourceProvider* resourceProvider,

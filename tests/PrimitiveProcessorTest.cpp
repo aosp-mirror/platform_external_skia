@@ -105,14 +105,14 @@ private:
             typedef GrGeometryProcessor INHERITED;
         };
         sk_sp<GrGeometryProcessor> gp(new GP(fNumAttribs));
+        QuadHelper helper;
         size_t vertexStride = fNumAttribs * GrVertexAttribTypeSize(kFloat2_GrVertexAttribType);
         SkASSERT(vertexStride == gp->debugOnly_vertexStride());
-        QuadHelper helper(target, vertexStride, 1);
-        SkPoint* vertices = reinterpret_cast<SkPoint*>(helper.vertices());
+        SkPoint* vertices = reinterpret_cast<SkPoint*>(helper.init(target, vertexStride, 1));
         SkPointPriv::SetRectTriStrip(vertices, 0.f, 0.f, 1.f, 1.f, vertexStride);
         auto pipe = target->makePipeline(0, GrProcessorSet::MakeEmptySet(),
                                          target->detachAppliedClip());
-        helper.recordDraw(target, std::move(gp), pipe.fPipeline, pipe.fFixedDynamicState);
+        helper.recordDraw(target, gp.get(), pipe.fPipeline, pipe.fFixedDynamicState);
     }
 
     int fNumAttribs;

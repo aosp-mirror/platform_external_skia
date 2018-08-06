@@ -261,7 +261,7 @@ void GrDrawVerticesOp::drawVolatile(Target* target) {
                       indices);
 
     // Draw the vertices.
-    this->drawVertices(target, std::move(gp), vertexBuffer, firstVertex, indexBuffer, firstIndex);
+    this->drawVertices(target, gp.get(), vertexBuffer, firstVertex, indexBuffer, firstIndex);
 }
 
 void GrDrawVerticesOp::drawNonVolatile(Target* target) {
@@ -298,7 +298,7 @@ void GrDrawVerticesOp::drawNonVolatile(Target* target) {
 
     // Draw using the cached buffers if possible.
     if (vertexBuffer && (!this->isIndexed() || indexBuffer)) {
-        this->drawVertices(target, std::move(gp), vertexBuffer.get(), 0, indexBuffer.get(), 0);
+        this->drawVertices(target, gp.get(), vertexBuffer.get(), 0, indexBuffer.get(), 0);
         return;
     }
 
@@ -353,7 +353,7 @@ void GrDrawVerticesOp::drawNonVolatile(Target* target) {
     rp->assignUniqueKeyToResource(indexKey, indexBuffer.get());
 
     // Draw the vertices.
-    this->drawVertices(target, std::move(gp), vertexBuffer.get(), 0, indexBuffer.get(), 0);
+    this->drawVertices(target, gp.get(), vertexBuffer.get(), 0, indexBuffer.get(), 0);
 }
 
 void GrDrawVerticesOp::fillBuffers(bool hasColorAttribute,
@@ -465,21 +465,22 @@ void GrDrawVerticesOp::fillBuffers(bool hasColorAttribute,
 }
 
 void GrDrawVerticesOp::drawVertices(Target* target,
-                                    sk_sp<const GrGeometryProcessor> gp,
+                                    GrGeometryProcessor* gp,
                                     const GrBuffer* vertexBuffer,
                                     int firstVertex,
                                     const GrBuffer* indexBuffer,
                                     int firstIndex) {
-    GrMesh* mesh = target->allocMesh(this->primitiveType());
+    GrMesh mesh(this->primitiveType());
     if (this->isIndexed()) {
-        mesh->setIndexed(indexBuffer, fIndexCount, firstIndex, 0, fVertexCount - 1,
-                         GrPrimitiveRestart::kNo);
+        mesh.setIndexed(indexBuffer, fIndexCount,
+                        firstIndex, 0, fVertexCount - 1,
+                        GrPrimitiveRestart::kNo);
     } else {
-        mesh->setNonIndexedNonInstanced(fVertexCount);
+        mesh.setNonIndexedNonInstanced(fVertexCount);
     }
-    mesh->setVertexData(vertexBuffer, firstVertex);
+    mesh.setVertexData(vertexBuffer, firstVertex);
     auto pipe = fHelper.makePipeline(target);
-    target->draw(std::move(gp), pipe.fPipeline, pipe.fFixedDynamicState, mesh);
+    target->draw(gp, pipe.fPipeline, pipe.fFixedDynamicState, mesh);
 }
 
 bool GrDrawVerticesOp::onCombineIfPossible(GrOp* t, const GrCaps& caps) {

@@ -627,11 +627,11 @@ private:
         auto pipe = target->makePipeline(kPipelineFlags, GrProcessorSet::MakeEmptySet(),
                                          target->detachAppliedClip());
 
-        GrMesh* mesh = target->allocMesh(GrPrimitiveType::kTriangles);
-        mesh->setIndexed(indexBuffer, fIndexCount, firstIndex, 0, fVertCount - 1,
-                         GrPrimitiveRestart::kNo);
-        mesh->setVertexData(vertexBuffer, firstVertex);
-        target->draw(std::move(gp), pipe.fPipeline, pipe.fFixedDynamicState, mesh);
+        GrMesh mesh(GrPrimitiveType::kTriangles);
+        mesh.setIndexed(indexBuffer, fIndexCount, firstIndex, 0, fVertCount - 1,
+                        GrPrimitiveRestart::kNo);
+        mesh.setVertexData(vertexBuffer, firstVertex);
+        target->draw(gp.get(), pipe.fPipeline, pipe.fFixedDynamicState, mesh);
     }
 
     bool onCombineIfPossible(GrOp* t, const GrCaps& caps) override {

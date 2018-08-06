@@ -130,9 +130,9 @@ void GrDrawAtlasOp::onPrepareDraws(Target* target) {
             sizeof(SkPoint) + sizeof(SkPoint) + (this->hasColors() ? sizeof(GrColor) : 0);
     SkASSERT(vertexStride == gp->debugOnly_vertexStride());
 
+    QuadHelper helper;
     int numQuads = this->quadCount();
-    QuadHelper helper(target, vertexStride, numQuads);
-    void* verts = helper.vertices();
+    void* verts = helper.init(target, vertexStride, numQuads);
     if (!verts) {
         SkDebugf("Could not allocate vertices\n");
         return;
@@ -147,7 +147,7 @@ void GrDrawAtlasOp::onPrepareDraws(Target* target) {
         vertPtr += allocSize;
     }
     auto pipe = fHelper.makePipeline(target);
-    helper.recordDraw(target, std::move(gp), pipe.fPipeline, pipe.fFixedDynamicState);
+    helper.recordDraw(target, gp.get(), pipe.fPipeline, pipe.fFixedDynamicState);
 }
 
 bool GrDrawAtlasOp::onCombineIfPossible(GrOp* t, const GrCaps& caps) {

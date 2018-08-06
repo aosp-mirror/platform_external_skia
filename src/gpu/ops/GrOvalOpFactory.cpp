@@ -1470,12 +1470,12 @@ private:
             vertices += circle_type_to_vert_count(circle.fStroked) * vertexStride;
         }
 
-        GrMesh* mesh = target->allocMesh(GrPrimitiveType::kTriangles);
-        mesh->setIndexed(indexBuffer, fIndexCount, firstIndex, 0, fVertCount - 1,
-                         GrPrimitiveRestart::kNo);
-        mesh->setVertexData(vertexBuffer, firstVertex);
+        GrMesh mesh(GrPrimitiveType::kTriangles);
+        mesh.setIndexed(indexBuffer, fIndexCount, firstIndex, 0, fVertCount - 1,
+                        GrPrimitiveRestart::kNo);
+        mesh.setVertexData(vertexBuffer, firstVertex);
         auto pipe = fHelper.makePipeline(target);
-        target->draw(std::move(gp), pipe.fPipeline, pipe.fFixedDynamicState, mesh);
+        target->draw(gp.get(), pipe.fPipeline, pipe.fFixedDynamicState, mesh);
     }
 
     bool onCombineIfPossible(GrOp* t, const GrCaps& caps) override {
@@ -1786,12 +1786,12 @@ private:
             vertices += circle_type_to_vert_count(true) * kVertexStride;
         }
 
-        GrMesh* mesh = target->allocMesh(GrPrimitiveType::kTriangles);
-        mesh->setIndexed(indexBuffer, fIndexCount, firstIndex, 0, fVertCount - 1,
-                         GrPrimitiveRestart::kNo);
-        mesh->setVertexData(vertexBuffer, firstVertex);
+        GrMesh mesh(GrPrimitiveType::kTriangles);
+        mesh.setIndexed(indexBuffer, fIndexCount, firstIndex, 0, fVertCount - 1,
+                        GrPrimitiveRestart::kNo);
+        mesh.setVertexData(vertexBuffer, firstVertex);
         auto pipe = fHelper.makePipeline(target);
-        target->draw(std::move(gp), pipe.fPipeline, pipe.fFixedDynamicState, mesh);
+        target->draw(gp.get(), pipe.fPipeline, pipe.fFixedDynamicState, mesh);
     }
 
     bool onCombineIfPossible(GrOp* t, const GrCaps& caps) override {
@@ -1984,9 +1984,10 @@ private:
         // Setup geometry processor
         sk_sp<GrGeometryProcessor> gp(new EllipseGeometryProcessor(fStroked, localMatrix));
 
+        QuadHelper helper;
         SkASSERT(sizeof(EllipseVertex) == gp->debugOnly_vertexStride());
-        QuadHelper helper(target, sizeof(EllipseVertex), fEllipses.count());
-        EllipseVertex* verts = reinterpret_cast<EllipseVertex*>(helper.vertices());
+        EllipseVertex* verts = reinterpret_cast<EllipseVertex*>(
+                helper.init(target, sizeof(EllipseVertex), fEllipses.count()));
         if (!verts) {
             return;
         }
@@ -2039,7 +2040,7 @@ private:
             verts += kVerticesPerQuad;
         }
         auto pipe = fHelper.makePipeline(target);
-        helper.recordDraw(target, std::move(gp), pipe.fPipeline, pipe.fFixedDynamicState);
+        helper.recordDraw(target, gp.get(), pipe.fPipeline, pipe.fFixedDynamicState);
     }
 
     bool onCombineIfPossible(GrOp* t, const GrCaps& caps) override {
@@ -2218,8 +2219,9 @@ private:
                 new DIEllipseGeometryProcessor(this->viewMatrix(), this->style()));
 
         SkASSERT(sizeof(DIEllipseVertex) == gp->debugOnly_vertexStride());
-        QuadHelper helper(target, sizeof(DIEllipseVertex), fEllipses.count());
-        DIEllipseVertex* verts = reinterpret_cast<DIEllipseVertex*>(helper.vertices());
+        QuadHelper helper;
+        DIEllipseVertex* verts = reinterpret_cast<DIEllipseVertex*>(
+                helper.init(target, sizeof(DIEllipseVertex), fEllipses.count()));
         if (!verts) {
             return;
         }
@@ -2272,7 +2274,7 @@ private:
             verts += kVerticesPerQuad;
         }
         auto pipe = fHelper.makePipeline(target);
-        helper.recordDraw(target, std::move(gp), pipe.fPipeline, pipe.fFixedDynamicState);
+        helper.recordDraw(target, gp.get(), pipe.fPipeline, pipe.fFixedDynamicState);
     }
 
     bool onCombineIfPossible(GrOp* t, const GrCaps& caps) override {
@@ -2723,12 +2725,12 @@ private:
             currStartVertex += rrect_type_to_vert_count(rrect.fType);
         }
 
-        GrMesh* mesh = target->allocMesh(GrPrimitiveType::kTriangles);
-        mesh->setIndexed(indexBuffer, fIndexCount, firstIndex, 0, fVertCount - 1,
-                         GrPrimitiveRestart::kNo);
-        mesh->setVertexData(vertexBuffer, firstVertex);
+        GrMesh mesh(GrPrimitiveType::kTriangles);
+        mesh.setIndexed(indexBuffer, fIndexCount, firstIndex, 0, fVertCount - 1,
+                        GrPrimitiveRestart::kNo);
+        mesh.setVertexData(vertexBuffer, firstVertex);
         auto pipe = fHelper.makePipeline(target);
-        target->draw(std::move(gp), pipe.fPipeline, pipe.fFixedDynamicState, mesh);
+        target->draw(gp.get(), pipe.fPipeline, pipe.fFixedDynamicState, mesh);
     }
 
     bool onCombineIfPossible(GrOp* t, const GrCaps& caps) override {
@@ -2925,10 +2927,10 @@ private:
         sk_sp<const GrBuffer> indexBuffer = get_rrect_index_buffer(
                 fStroked ? kStroke_RRectType : kFill_RRectType, target->resourceProvider());
 
-        PatternHelper helper(target, GrPrimitiveType::kTriangles, sizeof(EllipseVertex),
-                             indexBuffer.get(), kVertsPerStandardRRect, indicesPerInstance,
-                             fRRects.count());
-        EllipseVertex* verts = reinterpret_cast<EllipseVertex*>(helper.vertices());
+        PatternHelper helper(GrPrimitiveType::kTriangles);
+        EllipseVertex* verts = reinterpret_cast<EllipseVertex*>(
+                helper.init(target, sizeof(EllipseVertex), indexBuffer.get(),
+                            kVertsPerStandardRRect, indicesPerInstance, fRRects.count()));
         if (!verts || !indexBuffer) {
             SkDebugf("Could not allocate vertices\n");
             return;
@@ -2995,7 +2997,7 @@ private:
             }
         }
         auto pipe = fHelper.makePipeline(target);
-        helper.recordDraw(target, std::move(gp), pipe.fPipeline, pipe.fFixedDynamicState);
+        helper.recordDraw(target, gp.get(), pipe.fPipeline, pipe.fFixedDynamicState);
     }
 
     bool onCombineIfPossible(GrOp* t, const GrCaps& caps) override {

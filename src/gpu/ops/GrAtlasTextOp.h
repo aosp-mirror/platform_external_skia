@@ -107,7 +107,7 @@ private:
         sk_sp<const GrBuffer> fIndexBuffer;
         sk_sp<GrGeometryProcessor> fGeometryProcessor;
         const GrPipeline* fPipeline;
-        GrPipeline::FixedDynamicState* fFixedDynamicState;
+        const GrPipeline::FixedDynamicState* fFixedDynamicState;
         int fGlyphsToFlush;
         int fVertexOffset;
     };

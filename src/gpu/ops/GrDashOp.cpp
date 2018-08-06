@@ -625,6 +625,7 @@ private:
             return;
         }
 
+        QuadHelper helper;
         size_t vertexStride;
         if (fullDash) {
             vertexStride =
@@ -633,8 +634,7 @@ private:
             vertexStride = sizeof(SkPoint);
         }
         SkASSERT(vertexStride == gp->debugOnly_vertexStride());
-        QuadHelper helper(target, vertexStride, totalRectCount);
-        void* vertices = helper.vertices();
+        void* vertices = helper.init(target, vertexStride, totalRectCount);
         if (!vertices) {
             return;
         }
@@ -696,7 +696,7 @@ private:
         }
         auto pipe = target->makePipeline(pipelineFlags, std::move(fProcessorSet),
                                          target->detachAppliedClip());
-        helper.recordDraw(target, std::move(gp), pipe.fPipeline, pipe.fFixedDynamicState);
+        helper.recordDraw(target, gp.get(), pipe.fPipeline, pipe.fFixedDynamicState);
     }
 
     bool onCombineIfPossible(GrOp* t, const GrCaps& caps) override {
